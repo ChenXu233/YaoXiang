@@ -141,12 +141,14 @@ main()
     );
 }
 
-/// native 导出作值保持**零参 Call**（#492 面；本批不动，形态逐字节不变）。
+/// native 导出作值**不走**本判据的两条路径——#492 给它自己的形态。
 ///
-/// use std.io.{println} 的 println 是 native 导出。它作值的正确表示（原生函数
-/// 作一等值）属独立待裁项——本判据必须把它排除在外，否则会把 #492 提前半修。
+/// use std.io.{println} 的 println 是 native 导出：既不是 MakeClosure（`#479`
+/// 代码路径——translator 按名查函数表，原生函数没有表项），也不再是零参 Call
+/// （#493 之前的静默不动作）。#492 把它物化为 ConstValue::NativeFn 承载的
+/// **原生函数值**——本判据必须把它排除在外，否则两条判据会互相覆盖。
 #[test]
-fn test_native_std_export_alias_value_keeps_zero_arg_call() {
+fn test_native_std_export_alias_value_is_not_closure_nor_zero_arg_call() {
     // Arrange
     let ir = compile_ir(
         "use std.io.{println}
@@ -160,13 +162,13 @@ main()
     // Act
     let (closures, zero_arg_calls) = alias_value_shapes(&ir, "main");
 
-    // Assert
+    // Assert：两条路径都不该命中（形态由 #492 的原生函数值常量承载）
     assert!(
-        zero_arg_calls.iter().any(|name| name == "std.io.println"),
-        "native 导出作值必须保持零参 Call(std.io.println)，实际零参调用={zero_arg_calls:?}",
+        !zero_arg_calls.iter().any(|name| name == "std.io.println"),
+        "native 导出作值不得落零参 Call（静默不动作），实际零参调用={zero_arg_calls:?}",
     );
     assert!(
         !closures.iter().any(|name| name == "std.io.println"),
-        "native 导出作值不得被本判据物化（#492 范围），实际闭包={closures:?}",
+        "native 导出作值不得物化为 MakeClosure（函数表里没有 native 体），实际闭包={closures:?}",
     );
 }

@@ -622,6 +622,7 @@ fn dump_const_detail(constant: &crate::middle::core::ir::ConstValue) -> &'static
         crate::middle::core::ir::ConstValue::Char(_) => "char",
         crate::middle::core::ir::ConstValue::String(_) => "String",
         crate::middle::core::ir::ConstValue::Bytes(_) => "bytes",
+        crate::middle::core::ir::ConstValue::NativeFn(_) => "nativefn",
         crate::middle::core::ir::ConstValue::LibraryRef { .. }
         | crate::middle::core::ir::ConstValue::ExternRef { .. } => todo!(),
     }

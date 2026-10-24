@@ -239,6 +239,8 @@ pub(crate) fn format_value_with_prefix(
         RuntimeValue::Struct { fields, .. } => prefix_fn(&format!("struct@{}", fields.raw())),
         RuntimeValue::Enum { variant_id, .. } => prefix_fn(&format!("enum::v{}", variant_id)),
         RuntimeValue::Function(_) => prefix_fn("function"),
+        // #492：原生函数值的打印口径与闭包一致（不泄漏内部名字，避免行为面意外）
+        RuntimeValue::NativeFunction(_) => prefix_fn("function"),
         RuntimeValue::Arc(inner) => prefix_fn(&format!("arc({})", inner)),
         RuntimeValue::Weak(_) => prefix_fn("weak(...)"),
         RuntimeValue::Async(_) => prefix_fn("async"),

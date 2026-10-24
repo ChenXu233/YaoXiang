@@ -1,0 +1,23 @@
+// 03-modules/native_fn_value.yx
+// 覆盖: RFC-036 §4（std native 导出）；RFC-029 §2 `use path.{item}` 内联导入；
+//       #492（原生函数作一等值：物化为可调用值并真的执行）
+// 验证: 单参原生函数作值后 `f("hello")` 真的打印；再赋值一次经间接调用仍可执行。
+//       修复前该别名被降成零参 `Call`——`f("hello")` 变成「以零实参调用 println」，
+//       stdout 空、exit 0、零诊断（静默不动作）。
+//       本文件的 stdout 由语料差分（tests/baselines/corpus-parity.jsonl 的 run.stdout）
+//       机检——记录里必须是这两行，静默回归即差分。
+// 状态: ✅ 可运行
+
+use std.io.{println}
+
+main: () -> Void = {
+    // 值位置：原生函数本身，不是一次调用
+    f = println
+    f("hello")
+
+    // 经间接调用：值再传递一次仍可执行
+    g = f
+    g("indirect hello")
+}
+
+main()

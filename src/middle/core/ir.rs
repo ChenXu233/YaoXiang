@@ -755,6 +755,13 @@ pub enum ConstValue {
         lib: String,
         symbol: String,
     },
+    /// 原生函数作值（#492）：按限定名引用的原生导出（std 内建）。
+    ///
+    /// IR/字节码只承载**名字**——原生函数的身份就是它在 FFI 注册表里的限定名；
+    /// 运行时物化为 [`crate::backends::common::RuntimeValue::NativeFunction`]，
+    /// `CallDyn` 按名分发。FFI 元数据（mechanism/lib/symbol）不在这里复制第二份：
+    /// 直接调用仍由 codegen 的元数据缓存解析（`CallNative` 同一来源）。
+    NativeFn(String),
 }
 
 impl PartialEq for ConstValue {
@@ -780,6 +787,7 @@ impl PartialEq for ConstValue {
                     lib: r1,
                 },
             ) => l0 == r0 && l1 == r1,
+            (Self::NativeFn(l0), Self::NativeFn(r0)) => l0 == r0,
             (
                 Self::ExternRef {
                     mechanism: l0,
@@ -813,6 +821,7 @@ impl std::hash::Hash for ConstValue {
             Self::Char(c) => c.hash(state),
             Self::String(s) => s.hash(state),
             Self::Bytes(b) => b.hash(state),
+            Self::NativeFn(name) => name.hash(state),
             Self::LibraryRef { mechanism, lib } => {
                 mechanism.hash(state);
                 lib.hash(state);

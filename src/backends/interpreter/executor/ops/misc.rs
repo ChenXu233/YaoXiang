@@ -75,6 +75,8 @@ impl Interpreter {
                     RuntimeValue::Struct { .. } => "Struct",
                     RuntimeValue::Enum { .. } => "Enum",
                     RuntimeValue::Function(_) => "Function",
+                    // #492：原生函数值与闭包同为函数类值（type_of 口径一致）
+                    RuntimeValue::NativeFunction(_) => "Function",
                     RuntimeValue::Arc(_) => "Arc",
                     RuntimeValue::Weak(_) => "Weak",
                     RuntimeValue::Async(_) => "Async",

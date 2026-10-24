@@ -214,6 +214,20 @@ impl Interpreter {
                         *dst,
                     ))?;
                     return Ok(StepOutcome::Continue);
+                } else if let RuntimeValue::NativeFunction(name) = closure_val {
+                    // #492：原生函数作值——按名分发到 FFI 注册表。非 FFI（std 内建）
+                    // 的 mechanism 为空串，与 `CallNative`「无元数据」同口径。
+                    let mut call_args = Vec::with_capacity(args.len());
+                    for r in args {
+                        call_args.push(self.force_slot(fi, *r)?);
+                    }
+                    let result =
+                        self.call_native_with_ffi_meta(name.as_ref(), "", "", "", &call_args)?;
+                    if let Some(dst_reg) = dst {
+                        self.call_stack[fi].set_slot(dst_reg.index() as usize, result);
+                    }
+                    self.call_stack[fi].advance();
+                    return Ok(StepOutcome::Continue);
                 } else {
                     if let Some(dst_reg) = dst {
                         self.call_stack[fi].set_slot(dst_reg.index() as usize, RuntimeValue::Void);

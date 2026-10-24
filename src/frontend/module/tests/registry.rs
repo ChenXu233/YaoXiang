@@ -57,3 +57,31 @@ fn test_is_yx_std_export_discriminates_pure_yx_and_native_modules() {
         "未注册的导出名不得被当作纯 yx 导出（判据只认注册表里标记过的名字）",
     );
 }
+
+/// #492：原生函数导出的判据面——std 的 native Function 导出答「是」，
+/// 纯 yx 实现、native 常量、未注册名一律答「否」。
+#[test]
+fn test_is_native_fn_export_discriminates_native_fn_from_constant_and_yx() {
+    // Arrange
+    let registry = ModuleRegistry::with_std();
+
+    // Act
+    let native_fn = registry.is_native_fn_export("std.io.println");
+    let native_tool_from_mixed = registry.is_native_fn_export("std.result.is_ok");
+    let yx_fn = registry.is_native_fn_export("std.json.parse");
+    let native_constant = registry.is_native_fn_export("std.math.PI");
+    let unknown = registry.is_native_fn_export("std.io.no_such_fn");
+
+    // Assert：对象是 native 导出、类别是 Function、且不是纯 yx 实现
+    assert!(native_fn, "std.io.println 是 native 函数导出，必须判为真",);
+    assert!(
+        native_tool_from_mixed,
+        "std.result.is_ok 是混合面里的 native 函数导出，必须判为真",
+    );
+    assert!(!yx_fn, "std.json.parse 是纯 yx 实现，不得判为原生函数导出",);
+    assert!(
+        !native_constant,
+        "std.math.PI 是 native 常量（不是函数），不得判为原生函数导出",
+    );
+    assert!(!unknown, "未注册的导出名不得判为原生函数导出",);
+}

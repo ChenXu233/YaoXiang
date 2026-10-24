@@ -510,6 +510,8 @@ impl Interpreter {
                 ConstValue::Char(c) => RuntimeValue::Char((*c) as u32),
                 ConstValue::String(s) => RuntimeValue::String(s.as_str().into()),
                 ConstValue::Bytes(b) => RuntimeValue::Bytes(b.as_slice().into()),
+                // #492：原生函数作值——名字即身份（运行时按名分发到 FFI 注册表）
+                ConstValue::NativeFn(name) => RuntimeValue::NativeFunction(name.as_str().into()),
                 ConstValue::LibraryRef { .. } | ConstValue::ExternRef { .. } => todo!(),
             })
             .expect("constant index out of bounds")

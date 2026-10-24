@@ -798,13 +798,13 @@ impl AstToIrGenerator {
             .and_then(|qualified| self.global_slot_layout.get(qualified).copied())
     }
 
-    /// `use lib.{f}` 的别名目标是否是**函数代码**——函数表里可物化成闭包的可调用体。
+    /// 模块限定导出是否是**函数代码**——函数表里可物化成闭包的可调用体。
     ///
-    /// 值路径的别名兜底臂把「不在跨文件值绑定布局里的别名」一律当 native 常量
-    /// 零参调用（`std.math.PI` 即此形态）。但函数定义（lambda/块绑定）同样不进
-    /// 值绑定布局——它按名进函数表，是**代码**而不是常量（#479：`f = greet`
-    /// 装进了 greet() 的返回值，f() 得 void）。函数代码物化为 MakeClosure，
-    /// 与 `lib.greet` 作值的 #396/#348 表示一致。
+    /// 值路径的兜底臂把「不在跨文件值绑定布局里的导出」一律当 native 常量零参
+    /// 调用（`std.math.PI` 即此形态）。但函数定义（lambda/块绑定）同样不进值绑定
+    /// 布局——它按名进函数表，是**代码**而不是常量（#479：`f = greet` 装进了
+    /// greet() 的返回值，f() 得 void）。函数代码物化为 MakeClosure，与
+    /// `lib.greet` 作值的 #396/#348 表示一致。
     ///
     /// 判据落到**导出粒度**（#493）：模块来源不再单独决定结果。
     /// - 用户/vendor 模块的 `Function` 导出是代码；
@@ -813,9 +813,8 @@ impl AstToIrGenerator {
     ///   按限定名进函数表。此前 `ModuleSource::Std` 一刀切把它们误判成 native
     ///   常量：别名被降成零参 `Call`，非泛型静默拿到被调体的返回值，泛型直接
     ///   运行期 E6007；
-    /// - native 导出不是：`use std.io.{println}` + `f = println` 是既有独立
-    ///   形态（#492 待裁项），本判据不覆盖它，仍走原零参调用臂、行为逐字节不变。
-    fn alias_targets_code_function(
+    /// - native 导出不是（#492 给它们自己的形态，见 `emit_module_export_value`）。
+    fn qualified_export_is_code(
         &self,
         qualified: &str,
     ) -> bool {
@@ -834,6 +833,59 @@ impl AstToIrGenerator {
         // std 面按导出粒度再判一次**实现来源**（native vs 嵌入 yx 定义）；
         // 用户/vendor 导出不需要这次追问（它们的导出都是本仓源码）。
         module.source != ModuleSource::Std || self.registry.is_yx_std_export(qualified)
+    }
+
+    /// **模块导出作值**的判据与发射点——值位置只有这一份实现（#479 / #493 / #492）。
+    ///
+    /// 三条别名/成员路径（`use lib.{f}` 的别名、`lib.f` 的命名空间成员、
+    /// `io.println` 的模块变量成员）都经此处，按导出**实现来源**分流：
+    ///
+    /// - 函数代码（用户/vendor 导出 + 纯 yx 实现的 std 导出）→ `MakeClosure`：
+    ///   函数值是一等值。零参 `Call` 会把被调体的返回值装进变量（静默错值、
+    ///   exit 0）；泛型纯 yx 导出更会直接运行期 E6007。
+    /// - 原生函数导出 → **原生函数值**（`ConstValue::NativeFn`）：原生函数没有
+    ///   IR 函数体，`MakeClosure` 按名查函数表必然落空；经 `CallDyn` 间接调用时
+    ///   按名分发到 FFI 注册表（#492）。
+    /// - 其余 native 名（native 常量，如 `std.math.PI`）→ 零参调用：既有成功
+    ///   形态，行为逐字节不变。
+    ///
+    /// 返回 `false` 表示该限定名不属上述三类，调用方按自己的既有分支继续。
+    fn emit_module_export_value(
+        &mut self,
+        qualified: &str,
+        result_reg: usize,
+        span: Span,
+        instructions: &mut Vec<Instruction>,
+    ) -> bool {
+        if self.qualified_export_is_code(qualified) {
+            instructions.push(Instruction::MakeClosure {
+                dst: Operand::Local(result_reg),
+                func: qualified.to_string(),
+                env: vec![],
+                def: None,
+                span,
+            });
+            return true;
+        }
+        if self.registry.is_native_fn_export(qualified) {
+            instructions.push(Instruction::Load {
+                dst: Operand::Local(result_reg),
+                src: Operand::Const(ConstValue::NativeFn(qualified.to_string())),
+                span,
+            });
+            return true;
+        }
+        if self.registry.is_native_name(qualified) {
+            instructions.push(Instruction::Call {
+                dst: Some(Operand::Local(result_reg)),
+                func: Operand::Const(ConstValue::String(qualified.to_string())),
+                args: vec![],
+                span,
+                def: None,
+            });
+            return true;
+        }
+        false
     }
 
     /// 查找变量的类型
@@ -2759,6 +2811,8 @@ impl AstToIrGenerator {
                                 ConstValue::Char(c) => c.to_string(),
                                 ConstValue::Void => String::new(),
                                 ConstValue::Bytes(b) => format!("{:?}", b),
+                                // #492：原生函数值不是可格式化常量，退回运行时求值
+                                ConstValue::NativeFn(_) => return None,
                                 ConstValue::LibraryRef { .. } | ConstValue::ExternRef { .. } => {
                                     // FFI types cannot be formatted at compile time
                                     return None;
@@ -6754,26 +6808,14 @@ impl AstToIrGenerator {
                 src: Operand::Global(slot),
                 span: *var_span,
             });
-        } else if let Some(alias) = self.use_aliases.get(var_name) {
-            // 别名不落在值绑定布局里，两种目标必须按**实现来源**分开（#479 / #493）：
-            // - 函数代码（用户模块导出 + 纯 yx 实现的 std 导出）物化为 MakeClosure
-            //   （函数值是一等值）。零参 `Call` 会把被调体的返回值装进变量——
-            //   `f = greet` 之后 `f()` 得 void（静默错值、exit 0）；泛型纯 yx
-            //   导出（`f = std.list.map`）则直接运行期 E6007。
-            // - native 常量（如 PI）保持零参调用；native 函数作值（`f = println`）
-            //   是既有独立形态，本批不动（判据见 alias_targets_code_function）。
-            if self.alias_targets_code_function(alias) {
-                instructions.push(Instruction::MakeClosure {
-                    dst: Operand::Local(result_reg),
-                    func: alias.clone(),
-                    env: vec![],
-                    def: None,
-                    span: *var_span,
-                });
-            } else {
+        } else if let Some(alias) = self.use_aliases.get(var_name).cloned() {
+            // 三条实现来源的判据与发射点只有一份（emit_module_export_value）：
+            // 代码 → MakeClosure、原生函数 → 原生函数值、native 常量 → 零参调用。
+            // 别名未命中上述三类时按既有零参调用兜底（与修复前同形态）。
+            if !self.emit_module_export_value(&alias, result_reg, *var_span, instructions) {
                 instructions.push(Instruction::Call {
                     dst: Some(Operand::Local(result_reg)),
-                    func: Operand::Const(ConstValue::String(alias.clone())),
+                    func: Operand::Const(ConstValue::String(alias)),
                     args: vec![],
                     span: *var_span,
                     def: None,
@@ -6843,14 +6885,9 @@ impl AstToIrGenerator {
                 });
                 return Ok(());
             }
-            if self.registry.is_native_name(&qualified) {
-                instructions.push(Instruction::Call {
-                    dst: Some(Operand::Local(result_reg)),
-                    func: Operand::Const(ConstValue::String(qualified.clone())),
-                    args: vec![],
-                    span: *span,
-                    def: None,
-                });
+            // ②③ 同一判据（emit_module_export_value）：native 常量 → 零参调用；
+            // 纯 yx 实现的 std 导出 → MakeClosure；原生函数 → 原生函数值（#492）。
+            if self.emit_module_export_value(&qualified, result_reg, *span, instructions) {
                 return Ok(());
             }
             if let Some(def) = self.registry.symbols().def(&qualified) {
@@ -6886,17 +6923,19 @@ impl AstToIrGenerator {
                     None
                 }
             } {
-                // 模块变量方法调用：生成函数调用
-                // 例如：io.println -> Call("std.io.println", [args])
-                // 这里我们处理的是非调用场景的字段访问（如 io.println 作为值）
-                // 生成零参数调用
-                instructions.push(Instruction::Call {
-                    dst: Some(Operand::Local(result_reg)),
-                    func: Operand::Const(ConstValue::String(full_path)),
-                    args: vec![],
-                    span: *span,
-                    def: None,
-                });
+                // 模块变量成员作值（`io.println` / `json.parse`）：与 `use lib.{f}`
+                // 别名同一判据（emit_module_export_value）——代码 → MakeClosure、
+                // 原生函数 → 原生函数值（#492）、native 常量 → 零参调用。此前一律
+                // 生成零参调用：原生函数作值时 stdout 空、exit 0、零诊断。
+                if !self.emit_module_export_value(&full_path, result_reg, *span, instructions) {
+                    instructions.push(Instruction::Call {
+                        dst: Some(Operand::Local(result_reg)),
+                        func: Operand::Const(ConstValue::String(full_path)),
+                        args: vec![],
+                        span: *span,
+                        def: None,
+                    });
+                }
             } else if field == "length"
                 && matches!(
                     self.get_expr_mono_type(expr),

@@ -1,0 +1,25 @@
+// 03-modules/native_fn_member_value.yx
+// 覆盖: RFC-029 §2（`use std.io` 后的模块**成员**访问 `io.println`）；#492
+// 验证: 模块成员作值与 `use lib.{f}` 别名作值同权——原生成员（io.println）物化为
+//       原生函数值后间接调用真的打印；纯 yx 成员（json.parse）物化为闭包，返回值
+//       参与值断言。修复前两条都落零参调用：原生成员 stdout 空 + exit 0（静默不
+//       动作），纯 yx 成员静默拿到被调体的返回值。
+// 状态: ✅ 可运行
+
+use std.assert
+use std.io
+use std.json
+use std.result
+
+main: () -> Void = {
+    // 原生成员作值（成员访问形态，与别名形态共用同一判据）
+    p = io.println
+    p("member hello")
+
+    // 纯 yx 成员作值
+    q = json.parse
+    r = q("true")
+    assert.assert(result.is_ok(r), "json.parse as member value parses true")
+}
+
+main()

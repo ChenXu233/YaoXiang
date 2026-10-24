@@ -1,0 +1,18 @@
+module
+  fn main() -> Void
+    slot[0] f : Int(64) @depth1
+    slot[1] g : Int(64) @depth1
+    locals_total=5
+    Load %0 <- nativefn(std.io.println)
+    Load %1 <- string("hello")
+    Load %2 <- %0
+    CallDyn %3 <- %2 [%1]
+    Load %3 <- %0
+    Load %2 <- string("indirect hello")
+    Load %4 <- %3
+    CallDyn %1 <- %4 [%2]
+    Drop %0
+    Drop %3
+    Ret %1
+  init (locals=0)
+    Call %0 <- string("main") [] (def=d0)

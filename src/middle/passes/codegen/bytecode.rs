@@ -381,6 +381,12 @@ impl BytecodeFile {
                     writer.write_all(&(bytes.len() as u32).to_le_bytes())?;
                     writer.write_all(bytes)?;
                 }
+                // #492 原生函数作值：名字按字符串段写入（运行时按名分发）
+                ConstValue::NativeFn(name) => {
+                    writer.write_all(&[7])?;
+                    writer.write_all(&(name.len() as u32).to_le_bytes())?;
+                    writer.write_all(name.as_bytes())?;
+                }
                 ConstValue::LibraryRef { .. } | ConstValue::ExternRef { .. } => todo!(),
             }
         }
@@ -535,6 +541,11 @@ impl BytecodeFile {
                     let mut bytes = vec![0u8; len];
                     reader.read_exact(&mut bytes)?;
                     ConstValue::Bytes(bytes)
+                }
+                // #492 原生函数作值
+                7 => {
+                    let s = read_string(reader)?;
+                    ConstValue::NativeFn(s)
                 }
                 _ => {
                     return Err(io::Error::new(

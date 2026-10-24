@@ -303,6 +303,33 @@ impl ModuleRegistry {
             .is_some_and(|module| module.is_yx_defined_export(export_name))
     }
 
+    /// 限定名导出是否是**原生函数**导出（#492：原生函数作值）。
+    ///
+    /// 判据 = 已注册的 native 导出（ModuleRegistry::is_native_name）**且** 不是纯 yx
+    /// 实现（ModuleRegistry::is_yx_std_export 的补集）**且** 类别是 Function。
+    /// 三个来源都是既有判据，这里只做组合，不在别处再写一份名字判断。
+    ///
+    /// native **常量**（std.math.PI）不算：它们作值的既有表示是零参调用臂，
+    /// 行为必须逐字节不变。
+    pub fn is_native_fn_export(
+        &self,
+        full_path: &str,
+    ) -> bool {
+        if !self.is_native_name(full_path) || self.is_yx_std_export(full_path) {
+            return false;
+        }
+        let Some((module_path, export_name)) = full_path.rsplit_once('.') else {
+            return false;
+        };
+        matches!(
+            self.modules
+                .get(module_path)
+                .and_then(|module| module.exports.get(export_name))
+                .map(|export| &export.kind),
+            Some(ExportKind::Function)
+        )
+    }
+
     /// 检查名称是否是 std 子模块（如 io, math, net, concurrent）
     pub fn is_std_submodule(
         &self,
