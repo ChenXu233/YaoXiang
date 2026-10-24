@@ -170,15 +170,21 @@ fn capture_check(
         .arg(file)
         .output()
         .unwrap_or_else(|e| panic!("spawn check 失败 {}: {e}", file.display()));
-    let stderr = String::from_utf8_lossy(&output.stderr);
+    let stderr = strip_ansi(&String::from_utf8_lossy(&output.stderr));
     json!({
         "exit": output.status.code().unwrap_or(-1),
         "diagnostics": parse_diagnostics(&stderr, manifest),
     })
 }
 
-/// run 步捕获：退出码 + 按行排序的 stdout/stderr（07 表规则）。
-/// stderr 先做仓库路径归一（栈回溯跨 checkout/跨平台可比）。
+/// run 步捕获：退出码 + stdout + **结构化**诊断 + 崩溃标记行（07 表规则）。
+///
+/// 与 check 步同口径：诊断只记 `[码, 文件, 行]`，**渲染文案不入库**。
+/// 文案的上游是 `locales/*.json`，而它会被自动翻译 bot 改写——把渲染结果钉进
+/// 基线，等于让翻译改一次措辞就打红一次门禁（2026-10-24 实例：i18n 提交改写
+/// W1007 的 `template`，两轮 CI 红且看起来像代码回归）。
+/// 因此 stderr 只保留**崩溃标记行**（panic / ICE / 回溯头），其余视为渲染产物丢弃；
+/// 「文案有没有写对」由 locales 单测、`yx explain` 展示快照与生成物对账承担。
 fn capture_run(
     binary: &Path,
     manifest: &Path,
@@ -194,14 +200,59 @@ fn capture_run(
         .arg(file)
         .output()
         .unwrap_or_else(|e| panic!("spawn run 失败 {}: {e}", file.display()));
+    let stderr = strip_ansi(&String::from_utf8_lossy(&output.stderr));
     json!({
         "exit": output.status.code().unwrap_or(-1),
         "stdout": sorted_lines(&String::from_utf8_lossy(&output.stdout)),
-        "stderr": sorted_lines(&scrub_repo_paths(
-            &String::from_utf8_lossy(&output.stderr),
-            manifest,
-        )),
+        "diagnostics": parse_diagnostics(&stderr, manifest),
+        "stderr": crash_lines(&stderr, manifest),
     })
+}
+
+/// 去掉 ANSI SGR 颜色码（`ESC [ … m`）：run 步 stderr 带颜色，解析诊断码前先剥。
+fn strip_ansi(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut chars = text.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c == '\u{1b}' {
+            if chars.peek() == Some(&'[') {
+                chars.next();
+                while let Some(&n) = chars.peek() {
+                    chars.next();
+                    if n.is_ascii_alphabetic() {
+                        break;
+                    }
+                }
+            }
+            continue;
+        }
+        out.push(c);
+    }
+    out
+}
+
+/// stderr 里的**崩溃标记行**：只保留 panic / ICE / 回溯头这类「机器可判定」的
+/// 异常信号，渲染出来的诊断正文、help、栈回溯正文一律不入库（见 capture_run 注释）。
+fn crash_lines(
+    stderr: &str,
+    manifest: &Path,
+) -> Vec<String> {
+    const MARKERS: &[&str] = &[
+        "panicked at",
+        "RUST_BACKTRACE",
+        "internal compiler error",
+        "INTERNAL ERROR",
+        "stack backtrace:",
+    ];
+    let mut out: Vec<String> = stderr
+        .lines()
+        .map(|l| scrub_pointer(l.trim_end_matches('\r')))
+        .filter(|l| MARKERS.iter().any(|m| l.contains(m)))
+        .map(|l| scrub_repo_paths(&l, manifest))
+        .collect();
+    out.sort();
+    out.dedup();
+    out
 }
 
 /// 按行切分、去空行、回车符剥离、指针归一、排序（并发交错只归并顺序）。
@@ -256,16 +307,26 @@ fn parse_diagnostics(
     for line in stderr.lines() {
         let trimmed = line.trim_start();
         if let Some(code) = parse_diag_head(trimmed) {
+            // 上一条诊断没等到位置就遇到了下一条 ⇒ 按「无位置」收口
+            if let Some(code) = pending_code.take() {
+                out.push(json!([code, "", 0]));
+            }
             pending_code = Some(code);
             continue;
         }
-        if let Some(code) = pending_code.take() {
-            if let Some(rest) = trimmed.strip_prefix("-->") {
-                let (file, line) = parse_location(rest.trim(), manifest);
-                out.push(json!([code, file, line]));
-            } else {
-                out.push(json!([code, "", 0]));
-            }
+        let Some(code) = pending_code.clone() else {
+            continue;
+        };
+        if let Some(rest) = trimmed.strip_prefix("-->") {
+            let (file, line) = parse_location(rest.trim(), manifest);
+            out.push(json!([code, file, line]));
+            pending_code = None;
+            continue;
+        }
+        // 空行 = 该诊断块结束：不再往前找位置
+        if trimmed.is_empty() {
+            out.push(json!([code, "", 0]));
+            pending_code = None;
         }
     }
     if let Some(code) = pending_code.take() {
