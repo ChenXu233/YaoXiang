@@ -2,6 +2,7 @@
 //!
 //! 包含 bytecode、ir 等核心模块的单元测试。
 
+pub mod alias_fn_value;
 pub mod batch_method_bind;
 pub mod bytecode;
 pub mod corpus;

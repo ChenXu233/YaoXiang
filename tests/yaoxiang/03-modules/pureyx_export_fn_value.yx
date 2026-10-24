@@ -1,0 +1,24 @@
+// 03-modules/pureyx_export_fn_value.yx
+// 覆盖: RFC-036 §4（嵌入纯 YaoXiang std 模块 std.json 与用户模块同走前端管道）；
+//       RFC-029 §2 `use path.{item}` 内联导入；#493（纯 yx std 导出作值）
+// 验证: 非泛型纯 yx std 导出作值 → 函数值。顶层重绑 `f = parse` 后间接调用必须
+//       进入 parse 本体并返回正确结果；修复前该别名被降成零参 `Call`，变量里装的
+//       是 parse 零实参调用的返回值（静默错值、exit 0、零诊断）。
+// 状态: ✅ 可运行
+
+use std.assert
+use std.json.{parse, stringify}
+use std.result
+
+main: () -> Void = {
+    // 值位置：解析函数本身，不是一次调用
+    f = parse
+
+    r = f("true")
+    assert.assert(result.is_ok(r), "f(\"true\") 应解析成功（间接调用进入 parse 本体）")
+
+    j = result.unwrap(r)
+    assert.assert(stringify(j) == "true", "f(\"true\") 往返序列化应为 true")
+}
+
+main()

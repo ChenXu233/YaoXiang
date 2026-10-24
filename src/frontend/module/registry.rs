@@ -282,6 +282,27 @@ impl ModuleRegistry {
         false
     }
 
+    /// 限定名导出是否**纯 yx 实现**（导出粒度，#493）。
+    ///
+    /// 数据源唯一：嵌入 YaoXiang 源（crate::std::yx_sources）里定义的导出集，
+    /// 由 `register_std_modules` 在注册时逐名标记；未标记者
+    /// （native 导出、用户模块导出、未知路径）一律 false。
+    ///
+    /// 为什么必须按导出粒度：std.result 是 native（is_ok/unwrap…）与纯 yx
+    /// （Result 类型 + Try 方法）的混合面，而嵌入模块本身也带
+    /// ModuleSource::Std——模块粒度区分不了「这一条导出是谁实现的」。
+    pub fn is_yx_std_export(
+        &self,
+        full_path: &str,
+    ) -> bool {
+        let Some((module_path, export_name)) = full_path.rsplit_once('.') else {
+            return false;
+        };
+        self.modules
+            .get(module_path)
+            .is_some_and(|module| module.is_yx_defined_export(export_name))
+    }
+
     /// 检查名称是否是 std 子模块（如 io, math, net, concurrent）
     pub fn is_std_submodule(
         &self,
@@ -342,13 +363,26 @@ impl ModuleRegistry {
             REGISTERING_EMBEDDED.with(|f| f.set(true));
             for (file, _) in crate::std::yx_sources::STD_YX_FILES {
                 let use_path = file.strip_suffix(".yx").unwrap_or(file).replace('/', ".");
-                if let Some(info) = crate::std::yx_sources::embedded_std_module_info(&use_path) {
+                if let Some(mut info) = crate::std::yx_sources::embedded_std_module_info(&use_path)
+                {
+                    // 导出粒度判据的数据源（#493）：嵌入源里定义的每个导出都是
+                    // **纯 yx 实现**——先整体标记，再走下面的合并/注册（两条分支
+                    // 都带着标记走）。标记只在这里产生（见 ModuleInfo::mark_yx_defined_export）。
+                    let yx_defined: Vec<String> = info.exports.keys().cloned().collect();
+                    for name in &yx_defined {
+                        info.mark_yx_defined_export(name);
+                    }
                     // 同名路径的 native 模块（如 std.result 已有 is_ok/unwrap 等
                     // native 导出）：**表面合并**而非整体覆盖——yx 导出与 native
                     // 导出按名字并集，同名冲突 yx 优先（纯 YaoXiang 定义是权威
                     // 表面），方法绑定同规则。注册顺序在 native 之后，直接
                     // insert 会把 native 导出整个顶掉（result.is_ok 报 E1042）。
                     if let Some(existing) = self.modules.get_mut(&info.path) {
+                        // 标记随表面合并一起来：is_yx_std_export 必须能对
+                        // std.result 里的 yx 导出说「是」、对 native 导出说「否」。
+                        for name in &yx_defined {
+                            existing.mark_yx_defined_export(name);
+                        }
                         for (name, export) in info.exports {
                             existing.exports.insert(name, export);
                         }

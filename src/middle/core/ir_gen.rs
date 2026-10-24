@@ -798,19 +798,24 @@ impl AstToIrGenerator {
             .and_then(|qualified| self.global_slot_layout.get(qualified).copied())
     }
 
-    /// `use lib.{f}` 的别名目标是否**用户模块的导出函数**——即函数表里的代码。
+    /// `use lib.{f}` 的别名目标是否是**函数代码**——函数表里可物化成闭包的可调用体。
     ///
     /// 值路径的别名兜底臂把「不在跨文件值绑定布局里的别名」一律当 native 常量
-    /// 零参调用（`std.math.PI` 即此形态）。但用户模块的函数定义（lambda/块绑定）
-    /// 同样不进值绑定布局——它按名进函数表，是**代码**而不是常量（#479：
-    /// `f = greet` 装进了 greet() 的返回值，f() 得 void）。判据用模块来源把
-    /// std 排除在外，并要求导出类别是 Function：只有这两条同时成立才物化为
-    /// 函数值（MakeClosure，与 `lib.greet` 作值的 #396/#348 表示一致）。
+    /// 零参调用（`std.math.PI` 即此形态）。但函数定义（lambda/块绑定）同样不进
+    /// 值绑定布局——它按名进函数表，是**代码**而不是常量（#479：`f = greet`
+    /// 装进了 greet() 的返回值，f() 得 void）。函数代码物化为 MakeClosure，
+    /// 与 `lib.greet` 作值的 #396/#348 表示一致。
     ///
-    /// std 函数作值（`use std.io.{println}` + `f = println`）是既有独立形态，
-    /// 本判据**不覆盖**它：`ModuleSource::Std` 排除后仍走原零参调用臂，行为
-    /// 与本修复前逐字节一致（该形态要新诊断码，属独立待裁项）。
-    fn alias_targets_user_function(
+    /// 判据落到**导出粒度**（#493）：模块来源不再单独决定结果。
+    /// - 用户/vendor 模块的 `Function` 导出是代码；
+    /// - **纯 yx 实现**的 std 导出同样是代码——`std.json.parse` / `std.list.map`
+    ///   定义在嵌入源里（`src/std/yx_sources.rs`），与用户模块走同一前端管道、
+    ///   按限定名进函数表。此前 `ModuleSource::Std` 一刀切把它们误判成 native
+    ///   常量：别名被降成零参 `Call`，非泛型静默拿到被调体的返回值，泛型直接
+    ///   运行期 E6007；
+    /// - native 导出不是：`use std.io.{println}` + `f = println` 是既有独立
+    ///   形态（#492 待裁项），本判据不覆盖它，仍走原零参调用臂、行为逐字节不变。
+    fn alias_targets_code_function(
         &self,
         qualified: &str,
     ) -> bool {
@@ -820,13 +825,15 @@ impl AstToIrGenerator {
         let Some(module) = self.registry.get(module_path) else {
             return false;
         };
-        if module.source == ModuleSource::Std {
-            return false;
-        }
-        matches!(
+        if !matches!(
             module.exports.get(export_name).map(|export| &export.kind),
             Some(ExportKind::Function)
-        )
+        ) {
+            return false;
+        }
+        // std 面按导出粒度再判一次**实现来源**（native vs 嵌入 yx 定义）；
+        // 用户/vendor 导出不需要这次追问（它们的导出都是本仓源码）。
+        module.source != ModuleSource::Std || self.registry.is_yx_std_export(qualified)
     }
 
     /// 查找变量的类型
@@ -6748,13 +6755,14 @@ impl AstToIrGenerator {
                 span: *var_span,
             });
         } else if let Some(alias) = self.use_aliases.get(var_name) {
-            // 别名不落在值绑定布局里，两种目标必须分开（#479）：
-            // - 用户模块的导出函数是**代码**：物化为 MakeClosure（函数值是一等值）。
-            //   零参 `Call` 会把 greet() 的返回值装进变量——`f = greet` 之后
-            //   `f()` 得 void（静默错值、exit 0）。
-            // - std 原生常量（如 PI）保持零参调用；std 原生函数作值（`f = println`）
-            //   是既有独立形态，本批不动（判据见 alias_targets_user_function）。
-            if self.alias_targets_user_function(alias) {
+            // 别名不落在值绑定布局里，两种目标必须按**实现来源**分开（#479 / #493）：
+            // - 函数代码（用户模块导出 + 纯 yx 实现的 std 导出）物化为 MakeClosure
+            //   （函数值是一等值）。零参 `Call` 会把被调体的返回值装进变量——
+            //   `f = greet` 之后 `f()` 得 void（静默错值、exit 0）；泛型纯 yx
+            //   导出（`f = std.list.map`）则直接运行期 E6007。
+            // - native 常量（如 PI）保持零参调用；native 函数作值（`f = println`）
+            //   是既有独立形态，本批不动（判据见 alias_targets_code_function）。
+            if self.alias_targets_code_function(alias) {
                 instructions.push(Instruction::MakeClosure {
                     dst: Operand::Local(result_reg),
                     func: alias.clone(),
