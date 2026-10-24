@@ -944,3 +944,65 @@
 > 5. **本批未触及的既有欠账**（不在本队范围，原样转出）：3.8（native 对用户函数名的遮蔽）、3.12（运行时模式间的执行器配置传播）、3.18（跨模块类型身份，前置待 P6）、0.5.2（pre-commit / CI 接线 + 资源档实测校准）、#489 ureq 3 迁移。
 
 > **十四、CI 门禁结论（AGENTS 第 13 条①，定时核对 2026-10-23 回填）**：末笔 push tip = `5c0a47570`（本批收口文档提交）→ CI **39907068941 success**、Deploy Docs **39907068812 success**，覆盖本批四笔修复（`eb4124cf0` / `14e9b2704` / `96638ec9f` / `06ac6d687`）与文档收口。覆盖关系（第 10 条③）：`06ac6d687` 自身那一轮 CI **39797917813 cancelled**、`8a83485ef` 那一轮 **39906194379 cancelled**，均按「连推取消前一轮、以后继结论计」处理，分别由 `43cc68ee6` 的 **39904034164 success** 与 tip 的 success 承接。**本批无失败 job。**
+
+---
+
+## P4 4.10 多文件语义缺口 收口（轮 2：4.10.6 / 4.10.7 / 4.10.8，2026-10-24）
+
+> **轮次性质**：三个三级任务全部来自上一轮批次复审判决引出的「未覆盖分支」（登记于 `09`，issue [#491](https://github.com/ChenXu233/YaoXiang/issues/491) / [#492](https://github.com/ChenXu233/YaoXiang/issues/492) / [#493](https://github.com/ChenXu233/YaoXiang/issues/493)）。用户 2026-10-23 裁决：4.10.6 = 编译期 W 码告警且**不得静默**（W 的语义三条待斟酌）、4.10.7 = **真正支持**原生函数作值（不加码）、4.10.8 = C 类可直接修。本轮无新增三级任务，三级计数仍 182。
+
+> **一、交付与判决（三笔提交，均已推送）**：
+>
+> | 任务 | 提交 | 规模 | 判据落点 |
+> | --- | --- | --- | --- |
+> | 4.10.8（#493） | `5a2fa8829` | 12 文件 +474/−24 | 判据从「模块来源」改为**导出粒度**：`ModuleInfo` 纯 yx 导出名集（写入点唯一在 `register_std_modules` 合并嵌入源处）+ `ModuleRegistry::is_yx_std_export`；`alias_targets_user_function` 更名 `alias_targets_code_function` |
+> | 4.10.6（#491） | `28c70a518` | 24 文件 +619/−18 | **W1007**；检出复用 4.10.4 的 Tarjan SCC（出参 `InitOrder{order, import_cycles}`，不新增第二份环检测），Linking 臂每环一条诊断、锚真实 `use` 语句，值边信息进 help |
+> | 4.10.7（#492） | `19deb87d3` | 26 文件 +649/−57 | `ConstValue::NativeFn(限定名)`（常量池 tag 7）+ `RuntimeValue::NativeFunction`；判据 `ModuleRegistry::is_native_fn_export`；发射收敛到 `ir_gen::emit_module_export_value` 一处、三条入口共用 |
+>
+> 批次整体：**53 文件 +1716/−73**。
+
+> **二、取证轮（t1）推翻了什么**：本轮第一件事是只读取证，它把两条假设各打散一次。
+>
+> 1. **#493 不是单一形态**：非泛型纯 yx 导出作值（`use std.json.{parse}`）此前**静默** `unknown(void)` / exit 0 / 零诊断；泛型纯 yx 导出（`std.list.map`）此前**运行期 E6007**、check 仍零诊断；「作返回值」是**编译期 E1012**（纯 yx 与原生同形，非本条专有）。原契约只点名 `std.list.map`，据此在开工前补全为两条终态。
+> 2. **判据不能按模块粒度**：嵌入的纯 yx std 模块**也带** `ModuleSource::Std`，且 `std.result` 是 native（`is_ok`/`unwrap`）与纯 yx（`Result` 类型 + Try 方法）的**混合面**——模块粒度必然判错，判据必须落到导出粒度。
+> 3. **环信息当时取不到**：`init_topological_order` 只返回置换，SCC 在函数内被丢弃；warnings 通道零改动可用；W1007 空闲；**语料真实导入环 = 0 例**（385 个 `.yx` / 82 条边 / 0 个多成员 SCC、0 自环）⇒ 新码误报面 0。
+> 4. **「环内读未初始化值」可静态点名**：`GlobalSlot.name` 是限定名、`ModuleIR.init_file_ids` 逐条指令记所属单元 ⇒ merged IR 的 init 段单趟即可比出「读侧 `Load{src: Global}` 早于该槽首条 `Store{dst: Global}` 且跨单元」。**这条事实改变了 4.10.6 的落地形态**：原本按「只报环存在」定稿，改为「红线仍是环存在，但有能力就把被违反的边与槽名并入同一条码的 help」——这正是用户说的「W 的语义还得斟酌」的答案。实测 help 文案：`环内值依赖与 use 顺序相反：zlib 读取 zother.o_val 时 zother 尚未初始化（被违反的边：zother 导入 zlib）…`。
+
+> **三、4.10.6 的语义三条（定稿，取代 `09` 原文的「待斟酌」）**：① 告警对象 =「**存在环**」（静态事实，含环路径）；「环内读未初始化值」不单独建码，只作精确信息并入同一条码的 help。② **不新增** `#[allow]` 一类抑制机制——现有出口只有 W 默认非阻断与 `check --deny-warnings` 升级；抑制等于把要消灭的静默请回来。③ 按「**确定事实**」级登记，与 W1001–W1006 同级；**查证结果**：码表只有 `span_exempt` 一个布尔（`src/util/diagnostic/codes/mod.rs`），RFC-013 无「证据等级」表——所谓证据等级是文档约定，不是数据结构，故本条不新增字段。
+
+> **四、基线**：`tests/baselines/corpus-parity.jsonl` **350 → 356 行**，新增恰 6 行且与三笔提交**一一对应**（2 = #493、1 = #491、3 = #492），既有 350 行**零字段变更、零删除**，无重复行——这一条由验证轮在它被掐断前完成并留下原始输出。IR 快照：既有 348 条零漂移，新增 5 条（#493 两条、#492 三条）。语料夹具备注：`global_init_cycle_err.yx` 头部的「状态: 待测试」与基线不符（基线早已记录它产出 E3019），本轮改为与事实一致的措辞，并刻意写成单行以免行号平移。
+
+> **五、验证（队长自查，独立验证轮未完成——见第六节）**：
+>
+> | 项目 | 结果 |
+> | --- | --- |
+> | `cargo test --lib`（跳过计划内的 2 条） | **2825 passed / 0 failed / 1 ignored** |
+> | 独占测试 `test_multi_file_cross_unit_pathological_recursion_within_ci_budget_reports_e3005` | 单独跑 **1 passed** |
+> | `cargo clippy --all --all-features --all-targets -- -D warnings` | **exit 0** |
+> | 四门禁（`check-docs-truth` / `check-boundary` / `check-fanout` / `check-docs-refs`） | 全 **exit 0**（docs-refs：1130 个跟踪文件无不可解析引用） |
+> | `gen-error-code-docs.py` + `git diff --quiet` | **exit 0**（生成器幂等） |
+> | rebase 到 `origin/dev`（13 笔依赖升级）后复跑 | 同上，**2825 passed / 0 failed** |
+>
+> **机械可逆变异（AGENTS 第 10 条②）**——判据能否失败，靠把实现改坏：
+>
+> | 变异 | 打点 | 结果 |
+> | --- | --- | --- |
+> | M1 | `src/driver/helpers.rs` 把出参 `import_cycles` 置空 | 4 条环测试 **3 红**（自环/锚点/被违反边），无环那条仍绿；`apply -R` 还原后 blob 与 `HEAD` 一致、树 CLEAN |
+> | M2 | `src/frontend/module/registry.rs` 的 `is_native_fn_export` 恒 `false` | 5 条 native 值测试 **2 红**（别名/成员物化），另 3 条仍绿；还原后 blob 一致、树 CLEAN |
+>
+> **口径说明**：本轮**没有**独立的异模型验证轮——它的任务在执行中被编排层切断（第六节）。上表是队长自查，与「异家族独立验证」**不等价**，只是当前可得的最强证据；实现者各自的先红后绿（机械可逆补丁 + 还原后 sha256 比对）另有留档。
+
+> **六、编排事故（必记）**：本轮用 AgentTeams 编排，五个角色（取证 / 两个实现 / 验证 / 复审 / 收口）。**t1–t4 全部收口并推送后，编排层在 t5（独立验证）执行中途整体消失**——`agent_teams_*` 工具组从会话工具表移除、成员列表只剩队长、任务板清空；同时一个后台验证子任务报失败。**后果**：独立验证、异家族复审、收口三个环节全部缺失，改由队长自查补齐。**未受影响**：三笔提交在消失前已完成并留本地，工作树干净。**教训**：编排层是外部依赖，收口不能把它当唯一保障——**每个任务收口时就把证据落进任务 output / 提交信息**（本轮实现者做到了，所以事故后仍能复核），而验证证据如果只存在批次树与成员上下文里，事故一到就等于没有。
+
+> **七、契约缺陷两例（我方，均为 `inScope` 写窄）**：① `t3` 的 `outOfScope` 仍含 `tests/baselines/`，与加进去的 `inScope` 自相矛盾 ⇒ `update_task` 的 `changedPaths` 校验按出界拒收该路径，实现者只能把它从 `changedPaths` 摘掉、在 evidence 里说明。② `t4` 的 `inScope` 未覆盖 6 个**机械必需**路径：`src/backends/common/value.rs`（值枚举的家）、`src/lib.rs` 与 `src/std/io.rs`（穷尽 `match` 补臂）、三份 `docs/src/reference/error-code/*.md`（生成器行号平移）。**三个实现任务里犯了两回**，故已提出在 AGENTS 第 6 条追加两条模板项（新枚举/指令/常量池条目 ⇒ 定义家 + 全部穷尽匹配点；改 IR 或语料行为 ⇒ 基线两项），**待用户裁决后落文**。
+
+> **八、队长自己的三处判断错误（留证免重复）**：① 断言「`check-commit-msg.py` 白名单里没有 `driver`」——**错**，`scripts/hooks/check-commit-msg.py` 的 `VALID_SCOPES` 明确含 `driver`；这是从上一批被拒的两个 scope（`ir_gen` / `cli`）外推、未查证的结果。② 初版契约只点名 `std.list.map` 一条终态，漏掉真正静默的非泛型形态（t1 纠正）。③ `inScope` 模板两次写窄（第七节）。
+
+> **九、遗留与登记**：
+>
+> 1. **待用户裁决（不在本轮做）**：`E1012`「作返回值」丢一层函数类型（`get_parser: () -> ((s: &String) -> Result) = () => { return parse }` ⇒ expected `fn(&string) -> Result`、found `fn() -> fn(&string) -> Result`；**原生导出同形**，故非 4.10.8 专有）；`E6007`「type mismatch」在「环内读未初始化全局」上仍误导（本轮按契约不改文案，W1007 已在同一份编译期输出里说清结构原因）；AGENTS 第 6 条追加 ⑤⑥。
+> 2. **环的「正确性」问题（用户 2026-10-23 追问，本轮只取证不改）**：线性序在环上**必然**违反至少一条边（拓扑序存在的充要条件是无环），4.10.4 给的是**确定性**不是正确性。三条路的成本事实已实测：**禁环** = 小（但要先区分值边 / 类型边 / 函数边，否则误伤良性环）；**SCC 内惰性求值** = 跨层大改（IR + 字节码 + opcode + 降级器 + 解释器 + 新错误码 + 新运行期状态），是唯一能「构造上正确」且环外行为不变的方案；**显式初始化序** = 语法层零新关键字（`use` 的书写顺序信息已在手但未被使用）、语义层中—大。三者都属 D 类，须单独裁决。
+> 3. **未覆盖面**：报废的验证轮原本还要做的「变异轮全量」「LSP / check 双形态分别探针」「多包 workspace 形态」未完成；本轮变异只覆盖 M1 / M2 两个方向。
+> 4. **环境事实**：本机 `testsuite.py run full` 在 `full` 通道下因**预算不足**（独占测试需 8.11 GiB、当时预算 7.17 GiB）**拒绝执行任何波**（exit 2，不静默跳过）——满足设计意图；改为「batch 波手跑 + 独占测试单独跑」，两条都给结果。
+
+> **十、CI 门禁结论（AGENTS 第 13 条）**：三笔修复已推送（tip `19deb87d3`），**不在会话里等 run**；结论（run id + conclusion + 覆盖关系）由后续统一核对环节回填本节。
