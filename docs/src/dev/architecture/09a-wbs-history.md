@@ -1030,8 +1030,9 @@
 >    | --- | --- | --- | --- |
 >    | F1 | #492（`ir_gen.rs:7009` 命名空间常量臂仍直发零参 `Call`、绕过 `emit_module_export_value` 三路判据 ⇒「发射收敛到一处」的表述对该臂不成立；实测该臂对原生函数**不可达**，无用户可见缺陷） | low | **已在案**：`09` 的 3.6.6 行 / issue [#494](https://github.com/ChenXu233/YaoXiang/issues/494) 已登记该残余点，下一轮 3.6.6 收敛时改走新判据（或写明它只服务 native 常量） |
 >    | F2 | #491（W1007 的告警面 =「存在环」，宽于裁决 A 点名的触发面 ⇒ **原先成功的良性环**（函数互导、无值边）也新增可见告警；W 默认非阻断、退出码不变，但 `check --deny-warnings` 无抑制口） | medium | **部分已库 + D 类面待用户裁决**：告警面定稿已由第三节登记（不判实现违规），但「改变原先成功程序的可观察行为」须与 E6007 文案 / E1012 一并提交用户裁决 |
->    | F3 | #491（W1007 模板对良性环附带「读取尚未初始化的顶层值会在运行期报 E6007」从句——**该从句为修复前的模板文案**，修复后改为「环内先后只按路径字典序作确定性约定（非语义保证）」；而无值边的环该后果本就不发生——实测良性环 run exit 0、零 E6007） | low | **已入库**（提交 `40f8c0ec5`：模板改写落 `locales` 六份 + 生成器重跑 `docs/src/reference/error-code/index.md` 与 `docs/src/reference/warning-code/warning-codes.md`，两条生成物随代码同提交入库（AGENTS 第 10 条⑤，禁手改生成物）；另带 1 条良性环钉测试 `src/driver/tests/import_cycle.rs` 与语料基线 1 行 numstat 1 增 1 删） |
+>    | F3 | #491（W1007 模板对良性环附带「读取尚未初始化的顶层值会在运行期报 E6007」从句——**该从句为修复前的模板文案**，修复后改为「环内先后只按路径字典序作确定性约定（非语义保证）」；而无值边的环该后果本就不发生——实测良性环 run exit 0、零 E6007） | low | **已入库**（提交 `8206aca0f`——推送前的本地哈希 `40f8c0ec5`，`pull --rebase` 后重写；模板改写落 `locales` 六份 + 生成器重跑 `docs/src/reference/error-code/index.md` 与 `docs/src/reference/warning-code/warning-codes.md`，两条生成物随代码同提交入库（AGENTS 第 10 条⑤，禁手改生成物）；另带 1 条良性环钉测试 `src/driver/tests/import_cycle.rs` 与语料基线 1 行 numstat 1 增 1 删） |
 >    | F4 | #493 + 收口（登记文档的符号名与行号过期：`alias_targets_code_function` 二次更名、`ir_gen.rs` 六个行号平移） | low | **本轮收口已订正**（见第七节末的「登记准确性订正」） |
+>    | F3 计数注记 | 同上（F3 修复新增 1 条 lib 测试） | — | 本表 **5.1 的 2826** 是冻结 revision `73a9d3b6f` 上的实测值；F3 修复（`8206aca0f`）新增 1 条 lib 测试，故其后 tip 的 lib 计数为 **2827 passed / 0 failed / 2 ignored**（两处 0 failed 一致） |
 >
 >    F1 / F2 / F3 的定位与实测证据见复审轮 t6 的任务记录；**本节只登记处置状态，不重写其证据**。
 
