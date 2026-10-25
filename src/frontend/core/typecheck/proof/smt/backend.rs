@@ -37,6 +37,23 @@
 //! 调用链 termination / ownership / predicate 串行不嵌套。禁令由
 //! [`with_shared_solver`] 的同线程重入检测机制化：违反时 panic 而非挂死。
 //!
+//! # 观测账的读写面契约（WBS 4.4.4；2026-10-24 用户裁决 ① 保留）
+//!
+//! [`ConsumerStats`] / `CONSUMER_STATS` 是**可观测判据的载体**，不是业务状态。
+//! 三条契约：
+//!
+//! 1. **写入面**：生产路径**每次经共享口获取求解器**记一次原子累加
+//!    （`with_shared_solver` → `record_consumer_use`：`acquisitions` +1，
+//!    `hits`/`misses` 按后端缓存计数增量累加）。
+//! 2. **读取面只有** `proof/smt/tests/shared.rs`——生产代码**零调用**
+//!    （`shared_solver_consumer_stats` 的调用点全仓仅此一处）。
+//! 3. [`SolverConsumer::ALL`] 是**测试专用常量**，生产代码不得依赖。
+//!
+//! 为什么保留：4.4.2（D58 共享单例）的验收判据以这份读数为载体——「三点共享
+//! 同一实例、命中率按消费点可观测」只能靠它证明；删掉它就得同时改写 4.4.2 的
+//! 验收判据，故用户 2026-10-24 裁决 ① 保留，并把上面三条固化为契约
+//! （issue [#475](https://github.com/ChenXu233/YaoXiang/issues/475)）。
+
 use std::cell::Cell;
 use std::sync::{LazyLock, Mutex};
 
@@ -140,6 +157,9 @@ impl SolverConsumer {
     ///
     /// 顺序即 `TypeChecker::check_module` 里的实际执行顺序（见 02 §S5），
     /// 供探针/报告按序输出。
+    ///
+    /// **测试专用常量**：生产代码不得依赖本常量（使用点全仓只在
+    /// `proof/smt/tests/shared.rs`）——契约见模块头「观测账的读写面契约」。
     pub const ALL: [SolverConsumer; 3] = [
         SolverConsumer::Predicate,
         SolverConsumer::Termination,
@@ -170,6 +190,10 @@ impl SolverConsumer {
 /// `hits`/`misses` 是**进入共享口期间**后端缓存计数的增量（一次获取可能
 /// 发出多条查询——终止判定在一次获取里跑完所有测度义务），故
 /// `hits + misses` 不小于 `acquisitions` 恒成立。
+///
+/// 写入面 = 每次经共享口获取求解器记一次；读取面**只有**
+/// `proof/smt/tests/shared.rs`（生产代码零调用）——契约见模块头
+/// 「观测账的读写面契约」。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct ConsumerStats {
     /// 经共享口进入求解器的次数
@@ -191,6 +215,9 @@ static SHARED_SOLVER: LazyLock<Mutex<Option<Box<dyn Solver>>>> =
 ///
 /// 与 [`SHARED_SOLVER`] 分开上锁：观测计数是纯增量，不参与求解串行化。
 /// 锁序单向（先求解器锁、后观测锁），读取口只取观测锁，无环。
+///
+/// 生产侧**零读取**：唯一读取口 `shared_solver_consumer_stats` 的调用点全仓
+/// 只在 `proof/smt/tests/shared.rs`——契约见模块头「观测账的读写面契约」。
 static CONSUMER_STATS: Mutex<[ConsumerStats; 3]> = Mutex::new(
     [ConsumerStats {
         acquisitions: 0,
@@ -301,6 +328,10 @@ pub fn shared_solver_cache_stats() -> Option<(u64, u64)> {
 /// 与 [`shared_solver_cache_stats`] 的差别：这里只统计**经共享口**发生的
 /// 求解，且按消费点分开；两者共同构成「三点共享同一实例」的读数
 /// （三点增量之和 = 共享实例计数器的增量，前提是没有绕过获取口的直接调用）。
+///
+/// 本函数是观测账的**唯一读取口**：按契约，调用方**只有**
+/// `proof/smt/tests/shared.rs`，生产代码不得调用——见模块头
+/// 「观测账的读写面契约」。
 pub fn shared_solver_consumer_stats(consumer: SolverConsumer) -> ConsumerStats {
     let stats = CONSUMER_STATS
         .lock()
