@@ -1062,3 +1062,45 @@
 > **代价（已接受）**：语料层不再承担「运行期文案措辞」的回归；该职责回到 `locales` 单测、`yx explain` 展示快照与错误码生成物对账。**新增码时若只改文案，语料基线不再变动**——这是设计目标，不是覆盖退化。
 
 > **登记**：issue [#502](https://github.com/ChenXu233/YaoXiang/issues/502)；WBS `0.5.3`（P0，不阻塞主线）；三级计数 183 → 184。
+
+---
+
+## P4 4.9 引用池正确实现（RFC-029f 修正）— 轮 4 收口（4.9.8，issue #465）
+
+> **一、批次构成与轮次**：WBS 二级任务 `4.9`（引用池正确实现，RFC-029f 修正）下的第 8 个三级任务 `4.9.8`，issue [#465](https://github.com/ChenXu233/YaoXiang/issues/465)——跨单元同名类型经**内联别名** / 模块限定引入时，方法派发落到**裸名归属单元**（静默错值，D59 **C 类**）。轮次链 = 实现 → 独立验证 → 异家族复审（**needs_revision**，5 条 findings）→ 修复轮（R1–R4）→ 复审轮 2（**pass**，无新增可达同族漏修）。本轮收口后 WBS `4.9` 的八个三级任务全部完成，二级看板**整体勾选**。
+
+> **二、最终口径（取代修复前的表述）**：
+>
+> - **判别实验定死机制 = D20 决议覆盖 + 裸名前缀**（不是 `type_bindings` 短名键碰撞）：入口单元方法调用点的 `type_bindings` 在本形态为空，两处调用都命中 `overload_resolutions` 且值为**定义侧裸名** `Temp.tag`，随后由 `qualify_names` 的别名前缀把裸名前缀解析到**裸名提供者**——与 issue 的 8 组对照一致（赢家 = 裸名属主，与 import 顺序、a 侧有无调用点无关）。
+> - **归属判定唯一在 `imported_type_owner`**（`src/middle/core/ir_gen.rs:1232`）：三条判据按序 = ① 权威限定名**精确命中即返回、不再解析**（注册表模块键是权威身份）② 本地名 → `use_aliases` ③ 命名空间前缀 → `Resolver::resolve_namespace`；**调用点只有一处** = `method_dispatch_name` 内的两处（接收者两种形态）。
+> - **`method_dispatch_name`（`:1265`）的生产调用点 5 处**：绑定臂（`:8318`）/ 决议臂（`:8379`）/ 裸名臂（`:8532`）/ **Index 臂（`:6444`）** / **二元接口臂（`:7858`）**——`:7858` 是**全部「接口驱动二元运算」的共享臂**（Equal + Add/Subtract/Multiply/Divide/Modulo）：另建「同名 `Temp` 各实现 `Add`」的夹具实测 `u + u` 由修复前 `3.0` 转 `20.0`，即算术族此前同样被本修复关闭。
+> - **写出名来源** = 注解原文 / 构造器名（局部与顶层绑定同链记录）；`constructor_written_type_name`（`:1188`）已改为**纯语法提取**（只记录、不判定）。
+> - **029f 侧表述已按实测更正**：`:7858` 在 029f 的对应表格里不再只标注「Equal 臂」，而是写明它是**全部「接口驱动二元运算」的共享臂**（Equal + Add/Subtract/Multiply/Divide/Modulo）。
+> - **钉测试**：驱动级 **10 条**（`src/driver/tests/method_dispatch.rs`，结构层读合并 IR 的调用名 + 行为层读解释器全局槽位值）+ 集成 **5 条**（`tests/integration/multifile.rs`），**全为值级断言**；issue 的 8 组对照现已全部入库可复跑。
+> - **基线**：语料 356 行**零 diff**、IR 快照 216 文件**零漂移**（只改调用名归属，不改 IR 形状）；错误码生成物（`E1xxx` / `E8xxx`）为纯行号平移，由生成器再生、**未手改**。
+
+> **三、门禁（收口 revision 的冻结树实测）**：`cargo test --lib` **2837 passed / 0 failed / 2 ignored**；语料基线 356 行零 diff；IR 快照 216 文件零漂移；`cargo fmt --check` 与 `clippy -D warnings` 全 0；`check-docs-truth` / `check-docs-refs` / `check-boundary` / `check-fanout` 全 0；错误码生成器重跑后工作树干净。**如实声明**：`python scripts/dev/testsuite.py run fast` 在批次验证树内**结构性空跑 0 波**——其源文件扫描器跳过路径含 `target/` 的目录段，而批次树按规程就建在仓库内的 `target/` 产物目录下；本轮的实质覆盖由 `cargo test --lib` 承担，**不得**把该次 `run fast` 写成「全绿波次通过」。
+
+> **四、修复轮 R1–R4（异家族复审 findings 的处置）**：
+>
+> - **R1（high）算子接口两臂只修了半边**：Index / Equal 此前用 typecheck 过来的**短类型名**拼调用名、不经归因 ⇒ 两单元同名类型的算子实现互相落错单元（实测 `u[0]` 得 `3.0`、`u == t` 得 `true`，应 `20.0` / `false`）。修复后两臂同经 `method_dispatch_name`；**本地类型两形态逐字节不变**（钉 `test_local_type_operator_arms_keep_own_dispatch` + 语料 `operator_index.yx` / `struct_equality.yx` 全绿）。
+> - **R2（medium）判据非单一源 + 已限定名被二次解析**：上一版 `constructor_written_type_name` 产出**权威限定名**，`imported_type_owner` 又把它过一遍 `resolve_namespace`，首段被命名空间别名表改写 ⇒ 类型导出判定失败、回落裸名（实测 `y = 3.0`）。现在构造器只做纯语法提取、归属判定收敛到一处且**权威限定名精确命中即返回、不再解析**；钉 `test_multifile_qualified_module_key_not_rewritten_by_namespace_alias`（模块键 `p.q` + 未使用的 `use other as p`）。
+> - **R3（medium）文档表述与实测不符**：修复前记录的「`check` 0 error / 0 warning」与实测不符——issue 给出的清单形态（`[package]` 只有 `name`、缺 `version`）下 `check` 实为 **2 条 `W1002`**（`a.yx:1:1` / `b.yx:1:1`），补上 `version` 才是 0 warning。已按实情改写，并**如实写明根因在清单解析路径**（不在死代码判据本身）。
+> - **R4（low）8 组对照只钉了 3 组**：补钉 5 组值级用例——`use` 顺序对调 / 两单元方法体对调（值跟单元走）/ **裸名属主改为字典序靠后的 `z.yx`**（证明赢家来自 `use` 面而非排序）/ 只调别名侧 / 同文件两类型阴性对照 ⇒ 8 组对照全部入库。
+> - **R5（low）契约面矛盾**：修复轮的契约把错误码生成物划到 `outOfScope`，而实际改动包含生成物（纯行号平移）——属**契约缺陷**而非实现缺陷，登记备查。
+
+> **五、变异核验（机械可逆）**：关闭 `method_dispatch_name` 的归因 ⇒ 7 条跨单元用例翻红（含算子两臂与 4 组对照）、3 条本地 / 阴性对照仍绿；恢复「旧构造器产限定名 + 去掉精确命中」⇒ R2 的钉用例翻红。两次补丁 `git apply -R` 后与被变异文件**逐字节一致**，`git status` 干净。
+
+> **六、残余边界（登记，不在本轮修）**：① 写出名不可得时（函数返回值 / 字段 / 容器元素流入的接收者）回落裸名；② 内联别名 × 同名重载沿用 4.9.7 的候选收窄规则（`#k` 的跨单元精确性不变）；③ 跨单元值绑定转手（`use M.{v}`）无本地写出名，同样回落裸名；④ **清单解析失败 / 缺必填字段时静默退化**——已登记为 `3.23.1` / issue [#503](https://github.com/ChenXu233/YaoXiang/issues/503)；⑤ 算子接口方法在跨单元夹具里仍被报 `W1005`（死代码分析未把算子派发计为调用）——**尚未登记为三级任务，待用户批准**；⑥ `Try`（`?`）四方法派发面当前被 typecheck 的 `E1082` 挡住（硬错非静默），上游一旦放开「导入的用户 `Try` 类型」即成静默错派；⑦ `to_string` 零开销面当前不可达。⑤–⑦ 三条**同族观察**与 ④ 的处置方式不同，**均未登记为 WBS 任务**，待用户批准后再定编号。
+
+> **七、批次验证树清理（收口 gc）**：收口时按规程 `python scripts/dev/scratch.py gc` 回收本批三棵批次验证树（另有两名成员遗留的持有锁，持有者任务已结束，按 `release --force` 先解锁再回收），共释放约 15.9 GB；回收后 `status` = 「没有批次树」，`git worktree list` 只剩主挂载，仓库外无本批新增目录。
+
+---
+
+## P3 本轮新增登记（2026-10-25 用户批准）：3.23.1 与 3.18.2
+
+> **一、3.23.1 清单解析失败 / 缺必填字段的静默退化**（WBS 二级 `3.23`「清单解析失败 / 缺必填字段的静默退化」下的唯一三级任务，issue [#503](https://github.com/ChenXu233/YaoXiang/issues/503)）：`yaoxiang.toml` 解析失败（非法 TOML）或缺必填字段（如 `[package] version`）时，CLI **不报清单错误**、静默退化为单文件语义 ⇒ 跨文件引用池失效 ⇒ 两个都被入口引用的类型被误报 `W1002`×2，且 `check` 仍退出 0；pre-fix 与 4.9.8 修复后逐条相同 ⇒ **先于 #465、与本修复无关**。根因在清单解析路径（`src/driver/helpers.rs:727` 的清单反序列化以 `.ok()` 吞错；`src/package/manifest.rs:28` 的 `version` 为必填字段），不在死代码判据本身。D59 **D 类**，**语义待裁**（甲 报错并退出 / 乙 继续但发 W 码 / 丙 维持现状）——终态判据待裁决后定稿。证据细节留在 issue 里。
+>
+> **二、3.18.2 导入类型的注解身份**（WBS 二级 `3.18` 下的第二个三级任务，issue [#504](https://github.com/ChenXu233/YaoXiang/issues/504)）：`make_b: () -> TempB` + `u: TempB = make_b()` ⇒ `E1012` + `E1002`、退出码 1，双二进制（修复前 / 4.9.8 修复后）逐条一致；归因同 `3.18` 的 MonoType 裸名义名族；分类待队内定（疑 D 类）。证据细节留在 issue 里。
+>
+> **三、计数同步**：`09` 定位表「二级」69 → **70**（追加 `3.23` 的来源说明）、「三级」185 → **187**（追加 `3.23.1` 与 `3.18.2`）。
