@@ -1162,3 +1162,25 @@
 > **过程注记**：①**契约缺陷追认**（AGENTS 第 6 条同型复发）：契约 inScope 未圈进 `src/lib.rs`、`src/lsp/analysis.rs` 与四个直驱测试文件（orchestrator 三个 + bytecode_load 等），均为签名扩链 E0061 的机械必需面——「扩签名」类任务的 inScope 应先 grep 全部调用点再写。②复审 low 备案归位 [#503](https://github.com/ChenXu233/YaoXiang/issues/503)：`main.rs` 的 `toml::from_str::<ProjectConfig>(...).unwrap_or_default()` 在清单解析失败时静默回退全默认（含 `runtime.*`），与 #503 登记的「解析失败静默退化」同族，既有债非本提交引入，不另立 issue。
 
 > **登记**：issue [#471](https://github.com/ChenXu233/YaoXiang/issues/471) 已关闭；WBS `3.21` 下余 3.21.2（#469，D 类待用户裁决——裁决四件套已呈）与 3.21.4（#470）。
+
+## P3 3.21 收口（轮 3：3.21.2 诊断外显保真三处，2026-10-25）
+
+> **触发**：issue [#469](https://github.com/ChenXu233/YaoXiang/issues/469)（2026-10-18 发版前审计登记，WBS 3.21.2）。D59 **D 类**（对外文本面）——用户 2026-10-25 裁决四件套后批准**三处全修各取甲案**（help 入 locales / E4018 两小点一起修 / 绑定失败错误类型登记）。
+
+> **改法**（提交 `df89d6ee`，rebase 前本地 `c2701f3c`，30 文件 +616/−172）：①**help 全量入 locales**——新增 per-site 参数化 help 键机制：builder 加 `with_help_key`（键驱动，与成品串 `with_help` 区分）与 `param_from_key`（段标题类用户可见文字随 message 同语言渲染），复用 `I18nRegistry` 同一管线与回退链（请求语言→en→zh），`render_str` 收 `&str` 避免运行时键查询的 `Box::leak` 累积；全仓 grep `with_help` 实迁 **6 处**（issue 点名 E1010 缺必需形参 / E1110 两处，补查 E5001 vendor / E1002 借用与二元两形态 / W1007 值边四处），zh 用原硬编文案、en 真翻译、ja/ru/zh-classical/zh-x-miao 英文占位（回退链生效，真翻译待补）。②**E4018**——六语言 template 改 `{constraint}{counterexample}`（反例段标题移出主模板入 `E4018.counterexample.section` 键），空 assignments 段整体缺席、有值经键渲染；`ConstExpr::UnOp` 的 Neg/Int 字面量按值打印（`-3`），其余保持结构直印（未扩散）。③**级联抑制**——`check_var_stmt` 包装在 Err 路径把被绑名以既有底部类型 `MonoType::Never` 登记（守卫：scope 无此名才登记防覆盖重赋值、排除方法绑定），配三处 Never 短路（`infer_binary` 结果取另一侧 / `FieldAccess` 短路 / `classify_mono` 记 ValueCopy 防 E2014 顶替级联）——CLI 实测 E1014 形态 4 errors 收敛 1。
+
+> **证据（三段判据链，2026-10-25）**：
+>
+> | 环节 | 判据 | 结果 |
+> | --- | --- | --- |
+> | 实现轮 | 三处各红测试（help 无硬编中文 / 无空反例段 + `-3` 渲染 / 级联总数 1） | 三红转三绿（红态输出留档实现报告） |
+> | 实现轮门禁 | fmt / 全量 clippy / `testsuite run fast` / markers / docs-truth / boundary / fanout / docs-refs | 8 项全 exit 0（一轮过） |
+> | 独立验证 | 三处验收复测（en 无中文字符计数 0、zh 中文含缺失形参名、双语插值正确；空段缺席 / `-3` 按值 / 有值段保留；c4g 总数 1、真未定义引用仍报） | PASS |
+> | 独立验证 | 变异可逆（删毒化登记块） | 级联测试红（`[E1014,E2014]` left 2 ≠ right 1）、还原 blob 逐字节一致、trial 后按第 9 条新规重建 |
+> | 独立验证 | 语料 / 快照 / 生成器 | 356 行零字节差异（再生后基线复测零漂）/ 7 绿 / 重跑 diff 静默 |
+> | 复审 | 九项（机制无第二套、毒化守卫、六文件键集机械比对、基线双向再生无夹带、既有测试期望为强负断言同步、D 类批准范围对照） | APPROVE（批准范围外仅 zh.json 缩进修正与 E4018 probe 记录连带两处无害项） |
+> | 基线 | `corpus-parity.jsonl` 同批再生，9 条目漂移逐条人工 review | 全部正向（7 级联 E1001 消失主错误保留 + 2 行号归因修正），主预期码零丢失 |
+
+> **过程注记**：①毒化静默边界代价（复审实测确认）：毒化变量参与**与根因无关**的类型错误运算也被静默（`b + "str"` 无诊断）——甲案（毒化 + vacuous 短路）已批设计的内在代价，记录于 [#509](https://github.com/ChenXu233/YaoXiang/issues/509) 供后续权衡。②Never 短路判据在两个既有遍历器各一份拷贝（注释互指，两遍历器并行是既有架构）——t8 F1 同型漂移风险，连同 message 位中文残留 4 处、help 键回退链护栏缺口、四语言占位待译均归 [#509](https://github.com/ChenXu233/YaoXiang/issues/509)。③复审过程留档：其前两次 trial 因在批次树 cwd 内嵌套调用 `scratch.py build`（相对路径找不到批次）产生假阳性「判据抓到了」，改 cargo 直构建重做并以第三次结果为准——**批次树内跑命令用 cargo 直调或回主仓调 scratch.py** 的操作教训一并记入。④复审收尾 `scratch.py gc` 顺带回收三棵已 release 的存量批次树（3.21.1/3.21.2/3.21.3，约 19.7 GB），status 终态干净。
+
+> **登记**：issue [#469](https://github.com/ChenXu233/YaoXiang/issues/469) 已关闭；遗留 [#509](https://github.com/ChenXu233/YaoXiang/issues/509)；WBS `3.21` 下仅余 3.21.4（#470，生成物散文与 W1090 事实矛盾）。
