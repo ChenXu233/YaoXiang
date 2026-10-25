@@ -757,7 +757,7 @@
   "E4018": {
     "title": "精化谓词违反喵~",
     "message": "呜喵~ 精化类型约束被证伪了喵...",
-    "template": "呜喵~ 精化谓词违反：{constraint} 喵~ nya~{counterexample}",
+    "template": "精化谓词违反喵~：{constraint}{counterexample}",
     "help": "谓词被证伪了喵——存在使约束为假的赋值喵~ 请主人检查变量值或放宽约束呐~"
   },
   "E4018.counterexample.section": "\n\nCounterexample:\n{assignments}",

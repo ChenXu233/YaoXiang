@@ -844,7 +844,7 @@
   "E4018": {
     "title": "Refinement predicate violation",
     "message": "Refinement type constraint falsified",
-    "template": "Refinement predicate violation: {constraint}{counterexample}",
+    "template": "Refinement predicate violated: {constraint}{counterexample}",
     "help": "Predicate falsified — there exists an assignment that makes the constraint false. Please check variable values or relax the constraint."
   },
   "E4018.counterexample.section": "\n\nCounterexample:\n{assignments}",

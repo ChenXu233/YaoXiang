@@ -736,7 +736,7 @@
   "E4018": {
     "title": "精化谓词违犯",
     "message": "精化类型之约束已被证伪",
-    "template": "精化谓词违犯：{constraint}{counterexample}",
+    "template": "精化谓词有违：{constraint}{counterexample}",
     "help": "谓词已证为伪——有赋值致约束为假。请审变量之值，或宽其约束。"
   },
   "E4018.counterexample.section": "\n\nCounterexample:\n{assignments}",
