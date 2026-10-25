@@ -2820,9 +2820,25 @@ impl<'a> ExpressionInferrer<'a> {
     ///
     /// 形参名对应的是**值形参**（不含接收者位 self）：接收者由字段访问形态提供，
     /// 不是实参，也不可能被命名实参指定。
+    /// #452 规则⑥ / #466：候选形参名表与命名实参是否**名字相容**——
+    /// 非空名表要求每个命名实参名都在其中；空名表 = 名字不可用，不构成
+    /// 不相容证据（宁可不按名匹配，也不拿错位名字匹配）。
+    ///
+    /// 决议循环（候选淘汰）与回退路径的形参名选择（零命中调用）共用——
+    /// 两处各写一份正是「按名筛候选」判据分叉的入口（#466 就是分叉后
+    /// 回退侧只认首候选名表导致的误拒）。
+    fn names_support_named_args(
+        names: &[String],
+        named_args: &[(String, crate::frontend::core::parser::ast::Expr)],
+    ) -> bool {
+        names.is_empty() || named_args.iter().all(|(n, _)| names.iter().any(|p| p == n))
+    }
+
     /// #452 / F1：把候选形参表按**元数**分组（元数 = 值形参数 = 形参表长度 - 1），
-    /// 每组取首候选的形参名作代表（同元数下形参名以声明为准；名字互不相同的
-    /// 同元数候选会在调用点被拒绝，不会走到这里）。
+    /// 每组取首候选的形参名作代表。**只用于元数结算**：组内首个非空名表给出
+    /// 该元数的形参长度；同名下同元数候选的**名字可能互不相同**（#466），
+    /// 名字层面的判定（按名筛候选 / 未知名报错）不得以本函数的输出为据，
+    /// 须走 [`Self::names_support_named_args`] 与全候选名并集。
     ///
     /// **空表 = 名字不可用**（泛型方法声明里的类型级形参被剥离后名字表对不齐，
     /// 登记时留空；见 `add_method_overload_with_params`）：这种条目不构成元数
@@ -2840,6 +2856,63 @@ impl<'a> ExpressionInferrer<'a> {
             out.push((arity, names.clone()));
         }
         out
+    }
+
+    /// #466：回退路径（决议零命中 / 决议表缺席）的形参名与签名选择。
+    ///
+    /// `lists` 是候选声明期形参名表（含接收者位），`cands` 是同序的候选签名表
+    /// （三张平行表同源，见 `append_overload_group`）。返回（候选形参名，
+    /// 相容候选的签名）——签名仅在「元数相符且名字相容的候选唯一」时给出，
+    /// 供逐参类型检查把 E1002 归因到用户所用名字所在的候选。
+    ///
+    /// 选择规则（调用点注释①–④的落点）：
+    /// - 单候选：名字即它的（缺参/超参形态不按实参数筛，那一格也要有名字上下文）；
+    /// - 元数相符组（空名表不构成元数证据）内按 [`Self::names_support_named_args`]
+    ///   筛：唯一相容 ⇒ 名字与签名都随它；全不相容（名字存在于其它元数的候选）
+    ///   ⇒ 取该组首候选的名字；多个相容且名字全同 ⇒ 取之（同形参名不同类型的
+    ///   常规重载）；多个相容而名字互异 ⇒ 名字不可判定，返回 None 不猜；
+    /// - 无元数相符组（缺参/超参）：取首个非空名表，让元数结算（E1010）有上下文。
+    fn fallback_named_arg_context(
+        lists: &[Vec<String>],
+        cands: Option<&Vec<MonoType>>,
+        total_args: usize,
+        named_args: &[(String, crate::frontend::core::parser::ast::Expr)],
+    ) -> (Option<Vec<String>>, Option<MonoType>) {
+        if lists.len() == 1 {
+            return (lists.first().cloned(), None);
+        }
+        let matching: Vec<usize> = lists
+            .iter()
+            .enumerate()
+            .filter(|(_, l)| !l.is_empty() && l.len() - 1 == total_args)
+            .map(|(i, _)| i)
+            .collect();
+        if matching.is_empty() {
+            return (lists.iter().find(|l| !l.is_empty()).cloned(), None);
+        }
+        let compatible: Vec<usize> = matching
+            .iter()
+            .copied()
+            .filter(|&i| Self::names_support_named_args(&lists[i], named_args))
+            .collect();
+        match compatible.as_slice() {
+            // 全不相容：名字存在于其它元数的候选——E1014 报在元数相符的重载上
+            [] => (Some(lists[matching[0]].clone()), None),
+            // 唯一相容：名字与签名都随它（E1002 的归因候选由此定）
+            [only] => (
+                Some(lists[*only].clone()),
+                cands.and_then(|c| c.get(*only)).cloned(),
+            ),
+            // 多个相容：名字全同才可信
+            many @ [first, ..] => {
+                let names = &lists[*first];
+                if many.iter().all(|&i| &lists[i] == names) {
+                    (Some(names.clone()), None)
+                } else {
+                    (None, None)
+                }
+            }
+        }
     }
 
     /// 方法调用的实参绑定：收敛到共享判据 `arg_binding::bind_args_to_params`
@@ -4798,15 +4871,12 @@ impl<'a> ExpressionInferrer<'a> {
                             // 没有这个名字的候选直接淘汰（形参表为空 = 名字不可用，
                             // 不淘汰）。命名实参必须计入匹配，否则纯命名调用会静默
                             // 落到「默认绑定」（第一个候选），与用户写的名字无关。
+                            // #466：判据收敛到共享的 `names_support_named_args`。
                             let names: &[String] = cand_names
                                 .and_then(|l| l.get(i))
                                 .map(Vec::as_slice)
                                 .unwrap_or(&[]);
-                            if !names.is_empty()
-                                && named_args
-                                    .iter()
-                                    .any(|(n, _)| !names.iter().any(|p| p == n))
-                            {
+                            if !Self::names_support_named_args(names, named_args) {
                                 continue;
                             }
                             // 逐调用 fresh 化（共享 pass2 变量会跨调用串型）
@@ -4984,7 +5054,6 @@ impl<'a> ExpressionInferrer<'a> {
             Some(MonoType::Fn { params, .. }) if !params.is_empty() => Some(params.len()),
             _ => None,
         };
-        let mono_func_ty = selected_overload.unwrap_or(mono_func_ty);
 
         // #452：命名实参 → 方法形参槽位的绑定。返回**逐实参的形参位**：位置实参占
         // 前导槽位、命名实参按名入槽。冲突 / 未知名 / 重复命名 / 命名后接位置实参 /
@@ -4993,37 +5062,77 @@ impl<'a> ExpressionInferrer<'a> {
         // 判定出的形参表元数（值形参数）——元数结算的权威值；不用 positions 的最大
         // 下标推（超出形参表的实参也会推出同样大的下标，见 p10 超参形态）
         let mut bound_arity: Option<usize> = None;
+        // #466：决议零命中但命名实参唯一相容某候选时，该候选的签名——
+        // 逐参类型检查的归因上下文随它（E1002 报「expected <该候选形参类型>」），
+        // 不随默认绑定的末候选：名字所在的候选才是用户写的那个重载。
+        let mut fallback_sig: Option<MonoType> = None;
         if let Some(key) = &method_key {
+            // #466：未知名预检（名称优先于元数与槽位绑定）——名字不在**任何**
+            // 候选的形参表里时，E1010/槽位错配都是误导，先报 E1014；available
+            // 列出全部候选形参名的并集——只列首候选（旧预检读元数组首候选名表）
+            // 会把用户往错误的重载上引（#466 复现即被 `(available: n)` 误导）。
+            // 名字可用的候选一个都没有（全空表）⇒ 无可信名字来源，不检。
+            if let Some(lists) = self
+                .method_overload_param_names
+                .as_ref()
+                .and_then(|m| m.get(key))
+            {
+                if lists.iter().any(|l| !l.is_empty()) {
+                    let mut known: Vec<&str> = Vec::new();
+                    for name in lists.iter().flat_map(|l| l.iter().skip(1)) {
+                        if !name.is_empty() && !known.contains(&name.as_str()) {
+                            known.push(name.as_str());
+                        }
+                    }
+                    if let Some((bad, _)) = named_args
+                        .iter()
+                        .find(|(n, _)| !known.contains(&n.as_str()))
+                    {
+                        return Err(ErrorCodeDefinition::unknown_argument(
+                            key,
+                            bad,
+                            &known.join(", "),
+                        )
+                        .at(span)
+                        .build());
+                    }
+                }
+            }
             // 名字来源（按可信度）：① 决议选中的候选（多候选时唯一可信）；
-            // ② 全部候选同元数 ⇒ 该元数唯一，取首候选形参名；
-            // ③ 恰有一条候选的元数与实参数相符 ⇒ 取它的形参名；
-            // ④ 该键下只有一条候选签名（缺参/超参正是要报的形态，不能拿实参数
-            //    去筛形参表，否则「缺参」这一格永远筛不到名字）；
-            // ⑤ 其余（多候选且元数互不相同、实参数又与任一都不符）留空不猜。
+            // ② 该键下只有一条候选签名（缺参/超参正是要报的形态，不能拿实参数
+            //    去筛形参表，否则「缺参」这一格永远筛不到名字）⇒ 取它的名字；
+            // ③ 元数与实参数相符的候选中按 [`Self::names_support_named_args`]
+            //    筛（与决议循环同一判据）：唯一相容 ⇒ 名字与签名都随它；
+            //    全不相容（名字存在于其它元数的候选）⇒ 取该元数组首候选的
+            //    名字，E1014 报在元数相符的重载上；多个相容且名字全同 ⇒ 取之；
+            //    多个相容而名字互异 ⇒ 名字不可判定，留空不猜；
+            // ④ 其余（无元数相符组——缺参/超参）⇒ 取首个非空名表，让元数结算
+            //    （E1010 的期望元数）有上下文。
             //
             // #452 / F1：②③④ 是「多候选但无一命中」路径的落点——决议零命中时
             // 名字不随签名带出，若就此留空，逐参类型检查与元数结算会被整段跳过，
             // 命名实参调用在编译期静默通过（实测 run 打印错值 / void）。
-            let names: Option<Vec<String>> = selected_param_names.or_else(|| {
-                let lists = self
-                    .method_overload_param_names
-                    .as_ref()
-                    .and_then(|m| m.get(key))?;
-                let groups = Self::candidate_arity_groups(lists);
-                // ① 全部候选名字可用且同元数 ⇒ 该元数唯一，取首候选形参名
-                if groups.len() == lists.len() && groups.len() == 1 {
-                    return groups.first().map(|(_, names)| names.clone());
+            let names: Option<Vec<String>> = match selected_param_names {
+                Some(names) => Some(names),
+                None => {
+                    let lists = self
+                        .method_overload_param_names
+                        .as_ref()
+                        .and_then(|m| m.get(key));
+                    match lists {
+                        None => None,
+                        Some(lists) => {
+                            let total_args = arg_types.len() + named_args.len();
+                            let cands = self.method_overloads.as_ref().and_then(|m| m.get(key));
+                            let (names, sig) = Self::fallback_named_arg_context(
+                                lists, cands, total_args, named_args,
+                            );
+                            fallback_sig = sig;
+                            names
+                        }
+                    }
                 }
-                // ② 恰有一组候选的元数与实参数相符 ⇒ 取它的形参名
-                let total_args = arg_types.len() + named_args.len();
-                let mut exact = groups
-                    .iter()
-                    .filter(|(arity, _)| *arity == total_args)
-                    .map(|(_, names)| names);
-                let first = exact.next()?;
-                // 元数与实参数相符的候选不止一组时名字不可判定，宁可不按名匹配
-                exact.next().is_none().then(|| first.clone())
-            });
+            };
             if let Some(names) = names {
                 // 空表 = 名字不可用（登记期对不齐留空）：此时**只能**从选中候选的
                 // 签名结算元数，不能把空表读成「元数 0」
@@ -5039,6 +5148,7 @@ impl<'a> ExpressionInferrer<'a> {
                 }
             }
         }
+        let mono_func_ty = selected_overload.or(fallback_sig).unwrap_or(mono_func_ty);
 
         // 两层调用：Container(Int)(42, 43) —— func 是泛型类型构造调用，
         // 内层已完成实例化（func_ty 是具体 Struct），外层实参是构造参数。
@@ -5569,26 +5679,8 @@ impl<'a> ExpressionInferrer<'a> {
                 },
             });
             let total_args = arg_types.len() + named_args.len();
-            // 名称优先于元数：名字不在候选形参表里时，「实参个数」这个描述是
-            // 误导的（用户写了 1 个实参，但那个名字根本不存在）——先报 E1014。
-            let unknown = bind_names.and_then(|names| {
-                named_args
-                    .iter()
-                    .map(|(n, _)| n.as_str())
-                    .find(|n| !names.iter().any(|p| p == n))
-            });
-            if let Some(name) = unknown {
-                return Err(ErrorCodeDefinition::unknown_argument(
-                    method_key,
-                    name,
-                    &bind_names
-                        .map(|names| names.iter().skip(1).cloned().collect::<Vec<_>>())
-                        .unwrap_or_default()
-                        .join(", "),
-                )
-                .at(span)
-                .build());
-            }
+            // #466：未知名的预检已前移到槽位绑定之前（全候选名并集版）——
+            // 这里只结算元数；名字层面的判定不得再以元数组首候选名表为据。
             if let Some(expected) = expected_arity {
                 if total_args != expected {
                     return Err(ErrorCodeDefinition::argument_count_mismatch(

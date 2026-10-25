@@ -1,4 +1,5 @@
 //! #452：命名实参纳入方法级重载决议（WBS 3.14.1）
+//! #466：同元数多候选下命名实参按名命中**任一**候选（WBS 3.14.2）
 //!
 //! 规范来源:
 //! - RFC-011a §3（方法级重载：调用点按 实参兼容 + 期望返回 决议候选）
@@ -29,6 +30,9 @@ Temp.pick: (self: &Temp, n: Int, a: Int) -> Int = (self, n, a) => { return n * 1
 
 struct Probe {
     diagnostics: Vec<String>,
+    /// 已渲染的完整消息（与 diagnostics 同序）——#466 的红态判据要断言
+    /// E1014 的 available 列表与 E1002 的归因类型，只看码不够。
+    messages: Vec<String>,
     call_targets: Vec<String>,
     slot_values: Vec<String>,
     exec_error: Option<String>,
@@ -51,6 +55,11 @@ fn probe(source: &str) -> Probe {
         .diagnostics
         .iter()
         .map(|d| d.code.clone())
+        .collect();
+    let messages: Vec<String> = type_result
+        .diagnostics
+        .iter()
+        .map(|d| d.message.clone())
         .collect();
     let mut generator =
         AstToIrGenerator::new_with_type_result(&type_result, ModuleRegistry::with_std(), None);
@@ -84,6 +93,7 @@ fn probe(source: &str) -> Probe {
     // 诊断非空（含 IR 生成期诊断）时短路：后续阶段的前提不成立。
     // IR 生成期诊断同样并入 diagnostics——调用点错误可能只在这一侧响亮。
     let mut diagnostics = diagnostics;
+    let mut messages = messages;
     if ir.is_err() {
         diagnostics.extend(
             ir.as_ref()
@@ -91,10 +101,17 @@ fn probe(source: &str) -> Probe {
                 .map(|errors| errors.iter().map(|d| d.code.clone()).collect::<Vec<_>>())
                 .unwrap_or_default(),
         );
+        messages.extend(
+            ir.as_ref()
+                .err()
+                .map(|errors| errors.iter().map(|d| d.message.clone()).collect::<Vec<_>>())
+                .unwrap_or_default(),
+        );
     }
     if !diagnostics.is_empty() {
         return Probe {
             diagnostics,
+            messages,
             call_targets,
             slot_values: Vec::new(),
             exec_error: None,
@@ -115,6 +132,7 @@ fn probe(source: &str) -> Probe {
         .collect();
     Probe {
         diagnostics,
+        messages,
         call_targets,
         slot_values,
         exec_error,
@@ -297,4 +315,100 @@ fn test_named_args_overload_with_mixed_arguments_selects_by_both() {
         p.diagnostics
     );
     assert_value(&source, "Int(102)", "重载 + 混合实参");
+}
+
+// ── #466 验收矩阵 9：同元数候选、形参名互不相同——按名命中任一候选 ──
+#[test]
+fn test_named_args_same_arity_overload_selects_nonfirst_candidate() {
+    // Arrange：两个**同元数**（1 值形参）候选，形参名互不相同（n / s）——
+    // 次候选的名字曾被旧链路只认首候选名表而误拒（E1014 available: n）。
+    let source = "Temp: Type = { v: Int }\n\
+         Temp.pick: (self: &Temp, n: Int) -> Int = (self, n) => n * 2\n\
+         Temp.pick: (self: &Temp, s: String) -> String = (self, s) => s + \"!\"\n\
+         main: () -> String = {\n    t = Temp(1)\n    return t.pick(s = \"hi\")\n}\n\
+         r: String = main()"
+        .to_string();
+    // Act / Assert：次候选（String）必须被选中并真算出 "hi!"（值级 oracle）
+    assert_value(&source, "String(\"hi!\")", "命名实参命中非首候选");
+}
+
+// ── #466 验收矩阵 9b：与声明序无关（对调后失败侧不得对调） ──────────
+#[test]
+fn test_named_args_same_arity_overload_selects_by_name_regardless_of_order() {
+    // Arrange：声明序对调（String 候选在前）——旧缺陷与声明序强相关
+    //（对调后失败侧随之对调），修复后两个方向都必须按名命中各自候选。
+    let swapped_int = format!(
+        "Temp: Type = {{ v: Int }}\n\
+         Temp.pick: (self: &Temp, s: String) -> String = (self, s) => s + \"!\"\n\
+         Temp.pick: (self: &Temp, n: Int) -> Int = (self, n) => n * 2\n\
+         main: () -> Int = {{\n    t = Temp(1)\n    return t.pick(n = 21)\n}}\n{TAIL}"
+    );
+    let swapped_str = "Temp: Type = { v: Int }\n\
+         Temp.pick: (self: &Temp, s: String) -> String = (self, s) => s + \"!\"\n\
+         Temp.pick: (self: &Temp, n: Int) -> Int = (self, n) => n * 2\n\
+         main: () -> String = {\n    t = Temp(1)\n    return t.pick(s = \"hi\")\n}\n\
+         r: String = main()"
+        .to_string();
+    // Act / Assert：对调后两个名字都必须命中各自的候选
+    assert_value(&swapped_int, "Int(42)", "对调序：首候选名字（n）");
+    assert_value(&swapped_str, "String(\"hi!\")", "对调序：次候选名字（s）");
+}
+
+// ── #466 验收矩阵 10：名字不存在于任何候选 → E1014，available 列全候选 ──
+#[test]
+fn test_named_args_unknown_name_reports_union_of_all_candidates() {
+    // Arrange：q 不在任何候选的形参表里——available 只列首候选（n）会把
+    // 用户往错误的重载上引；正确行为是列出全部候选的形参名并集。
+    let source = format!(
+        "Temp: Type = {{ v: Int }}\n\
+         Temp.pick: (self: &Temp, n: Int) -> Int = (self, n) => n * 2\n\
+         Temp.pick: (self: &Temp, s: String) -> String = (self, s) => s + \"!\"\n\
+         main: () -> Int = {{\n    t = Temp(1)\n    return t.pick(q = 1)\n}}\n{TAIL}"
+    );
+    // Act
+    let p = probe(&source);
+    // Assert
+    assert!(
+        p.diagnostics.contains(&"E1014".to_string()),
+        "未知名必须报 E1014：{:?}",
+        p.diagnostics
+    );
+    assert!(
+        p.messages.iter().any(|m| m.contains("(available: n, s)")),
+        "available 必须列出全部候选的形参名并集（n, s），实际消息：{:?}",
+        p.messages
+    );
+}
+
+// ── #466 验收矩阵 11：类型错误归因到名字所在的候选（关联缺陷） ──────
+#[test]
+fn test_named_args_type_error_attributed_to_name_matching_candidate() {
+    // Arrange：n 只属于 Int 候选——旧链路把类型错误归因到不含该名字的
+    // String 候选（E1002 Expected type 'string'），修复后归因到 Int 候选。
+    let source = format!(
+        "Temp: Type = {{ v: Int }}\n\
+         Temp.pick: (self: &Temp, n: Int) -> Int = (self, n) => n * 2\n\
+         Temp.pick: (self: &Temp, s: String) -> String = (self, s) => s + \"!\"\n\
+         main: () -> Int = {{\n    t = Temp(1)\n    return t.pick(n = true)\n}}\n{TAIL}"
+    );
+    // Act
+    let p = probe(&source);
+    // Assert：报 E1002 且期望类型是 int（n 所在的候选），不是 string
+    assert!(
+        p.diagnostics.contains(&"E1002".to_string()),
+        "类型不符必须报 E1002：{:?}",
+        p.diagnostics
+    );
+    assert!(
+        p.messages.iter().any(|m| m.contains("Expected type 'int")),
+        "归因必须是 n 所在的 Int 候选（expected int…），实际消息：{:?}",
+        p.messages
+    );
+    assert!(
+        p.messages
+            .iter()
+            .all(|m| !m.contains("Expected type 'string'")),
+        "不得归因到不含 n 的 String 候选（expected string），实际消息：{:?}",
+        p.messages
+    );
 }

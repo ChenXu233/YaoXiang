@@ -542,6 +542,19 @@ impl AstToIrGenerator {
         full_path: &str,
         leaf: &str,
     ) -> Option<crate::frontend::core::typecheck::environment::ExportParamInfo> {
+        // #466：先查**全名/混编名**键——重载候选的形参名按混编名精确登记，
+        // 叶子名键在同名重载下末次覆盖，会让决议命中的候选拿错名字表。
+        // 非重载路径全名不在本表（fn_param_names 只登记本模块定义），落回叶名。
+        if let Some(names) = self.fn_param_names.get(full_path) {
+            let names = names.clone();
+            let required_min = names.len();
+            return Some(
+                crate::frontend::core::typecheck::environment::ExportParamInfo {
+                    names,
+                    required_min,
+                },
+            );
+        }
         if let Some(names) = self.fn_param_names.get(leaf) {
             let names = names.clone();
             let required_min = names.len();
@@ -2049,6 +2062,15 @@ impl AstToIrGenerator {
         } else {
             format!("{base_name}#{counted}")
         };
+
+        // #466：重载候选的形参名按**混编名**精确登记——叶子名键（Assign 臂
+        // 的登记）在同名重载下末次覆盖，决议命中 `Temp.pick` 的调用会按末候选
+        // `Temp.pick#1` 的形参名绑定（E1014 available: 错候选）。混编名与候选
+        // 一一对应，调用点按决议出的名字查（`lookup_param_info` 先全名后叶名）。
+        if !params.is_empty() {
+            let names: Vec<String> = params.iter().map(|p| p.name.clone()).collect();
+            self.fn_param_names.insert(func_name.clone(), names);
+        }
 
         // 注册方法到 type_bindings，使方法调用脱糖能找到绑定
         let binding_entry = ast::TypeBodyBinding {
