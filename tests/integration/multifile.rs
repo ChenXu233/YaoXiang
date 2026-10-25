@@ -450,6 +450,107 @@ main = () => {
     // Act & Assert
     run_project_ok(&[("a.yx", a), ("b.yx", b), ("main.yx", main)], "main.yx");
 }
+/// WBS 4.9.8 修复轮 R1 / issue #465（先红后绿，值级断言）：**算子接口**两臂
+/// （Index / Equal）同样必须派发到定义单元。修复前 `u[0]` 走 a 的 `v+1.0`（3.0）、
+/// `u == t` 走 a 的 `true`——两臂拼调用名时用的是 typecheck 过来的短类型名。
+#[test]
+fn test_multifile_cross_unit_same_named_type_operator_arms_dispatch_to_defining_unit() {
+    // Arrange - 两单元同名类型各带 Index / Equal（a = v+1/true、b = v*10/false）
+    let a = r#"
+Temp: Type = { v: Float, Index(Temp, Int, Float), Equal(Temp, Temp) }
+
+Temp.index: (self: &Temp, key: &Int) -> Float = (self, key) => {
+    self.v + 1.0
+}
+
+Temp.equal: (self: &Temp, other: &Temp) -> Bool = (self, other) => {
+    true
+}
+"#;
+    let b = r#"
+Temp: Type = { v: Float, Index(Temp, Int, Float), Equal(Temp, Temp) }
+
+Temp.index: (self: &Temp, key: &Int) -> Float = (self, key) => {
+    self.v * 10.0
+}
+
+Temp.equal: (self: &Temp, other: &Temp) -> Bool = (self, other) => {
+    false
+}
+"#;
+    let main = r#"
+use std.assert
+use a.{Temp}
+use b.{Temp as TempB}
+
+main = () => {
+    t = Temp(1.0)
+    u = TempB(2.0)
+    x: Float = u[0]
+    same: Bool = u == t
+    rev: Bool = t == u
+    assert.assert(x == 20.0, "u[0] 必须走 b.Temp.index（v*10）")
+    assert.assert(!same, "u == t（左操作数 = b 侧）必须走 b.Temp.equal（false）")
+    assert.assert(rev, "t == u（左操作数 = a 侧）必须走 a.Temp.equal（true）")
+}
+"#;
+
+    // Act & Assert
+    run_project_ok(&[("a.yx", a), ("b.yx", b), ("main.yx", main)], "main.yx");
+}
+
+/// WBS 4.9.8 修复轮 R2 / issue #465（先红后绿）：**已限定名不得二次解析**。
+///
+/// 模块键 `p.q`（`p/q.yx`）+ 入口另有一个未使用的模块别名 `use other as p` ⇒
+/// 修复前归属判定把权威限定名 `p.q.Temp` 再过一遍命名空间解析，首段 `p` 被别名表
+/// 改写成 `other` ⇒ 类型导出判定失败 ⇒ 回落裸名前缀 ⇒ `u.tag()` 走 a（3.0）。
+#[test]
+fn test_multifile_qualified_module_key_not_rewritten_by_namespace_alias() {
+    // Arrange - 裸名属主 a 与 p.q 各定义同名类型；`use other as p` 是未使用的别名
+    let a = r#"
+Temp: Type = { v: Float }
+
+Temp.tag: (self: &Temp) -> Float = (self) => {
+    self.v + 1.0
+}
+"#;
+    let other = r#"
+Filler: Type = { z: Int }
+"#;
+    let pq = r#"
+Temp: Type = { v: Float }
+
+Temp.tag: (self: &Temp) -> Float = (self) => {
+    self.v * 10.0
+}
+"#;
+    let main = r#"
+use std.assert
+use a.{Temp}
+use p.q.{Temp as TempQ}
+use other as p
+
+main = () => {
+    t = Temp(1.0)
+    u = TempQ(2.0)
+    x: Float = t.tag()
+    y: Float = u.tag()
+    assert.assert(x == 2.0, "a.Temp.tag -> v+1")
+    assert.assert(y == 20.0, "p.q.Temp.tag -> v*10（限定名不得被别名二次解析）")
+}
+"#;
+
+    // Act & Assert
+    run_project_ok(
+        &[
+            ("a.yx", a),
+            ("other.yx", other),
+            ("p/q.yx", pq),
+            ("main.yx", main),
+        ],
+        "main.yx",
+    );
+}
 #[test]
 fn test_multifile_subdir_entry_imports_project_root_module() {
     // Arrange - 入口在 tests/ 子目录，lib 在项目根（yaoxiang.toml 标记项目根）

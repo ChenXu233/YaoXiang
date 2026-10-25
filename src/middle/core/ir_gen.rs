@@ -1190,11 +1190,14 @@ impl AstToIrGenerator {
         }
     }
 
-    /// 构造器表达式**写出**的类型名：`T(..)` 的本地名 / `ns.T(..)` 的限定名。
+    /// 构造器表达式**写出**的类型名——**纯语法提取**，不做单元归属判定。
     ///
-    /// 判据只用两张既有表：本单元声明的类型（`declared_type_names`）与导入名表
-    /// （`use_aliases` / 命名空间解析），最终以注册表的**类型导出**为准
-    /// （[`Self::is_type_export`]）——同名的函数/常量导出不算类型构造。
+    /// `T(..)` → `T`；`ns.T(..)` / `ns.sub.T(..)` → 调用点原样的点分写法。
+    /// 「这个名字是不是类型、属于哪个单元」一律交给
+    /// [`Self::imported_type_owner`]（**唯一**归属判定点）——此处只记录用户写出的
+    /// 名字，避免同一判定在两处各做一遍（WBS 4.9.8 修复轮 R2 / issue #465：上一版
+    /// 在这里产出「权威限定名」再被归属判定二次解析，首段经命名空间别名表改写，
+    /// 权威名丢失）。
     fn constructor_written_type_name(
         &self,
         expr: &ast::Expr,
@@ -1203,17 +1206,15 @@ impl AstToIrGenerator {
             return None;
         };
         match func.as_ref() {
-            ast::Expr::Var(name, _) => {
-                if self.declared_type_names.contains(name) {
-                    return Some(name.clone());
-                }
-                let qualified = self.use_aliases.get(name)?;
-                self.is_type_export(qualified).then(|| qualified.clone())
-            }
+            ast::Expr::Var(name, _) => Some(name.clone()),
             ast::Expr::FieldAccess { .. } => {
                 let (head, fields) = flatten_namespace(func)?;
-                let qualified = self.resolver().resolve_namespace(head, &fields);
-                self.is_type_export(&qualified).then_some(qualified)
+                Some(
+                    std::iter::once(head)
+                        .chain(fields)
+                        .collect::<Vec<_>>()
+                        .join("."),
+                )
             }
             _ => None,
         }
@@ -1230,12 +1231,15 @@ impl AstToIrGenerator {
             .unwrap_or(false)
     }
 
-    /// 把「写出的类型名」解析成**别的单元**的类型限定名（本单元自有类型 → None）。
+    /// 把「写出的名字」解析成**别的单元**的类型限定名（本单元自有类型 → None）。
     ///
-    /// 两种写法归一：
-    /// - 本地名（`TempB`）→ 导入名表 `use_aliases`（`use b.{Temp as TempB}` 的条目）；
-    /// - 限定名（`b.Temp` / `bb.Temp`）→ [`Resolver`] 的命名空间解析（与调用名
-    ///   限定化同一实现，不另起路径解析）。
+    /// **归属判定的唯一来源**（WBS 4.9.8 修复轮 R2）。三条判据按序，命中即返回：
+    /// 1. **权威限定名**（`b.Temp` / `p.q.Temp`）：注册表里就存在该模块与该类型导出
+    ///    ⇒ **原样返回，绝不再解析**。模块键是权威身份，命名空间别名表不得改写它
+    ///    （R2 实测：`use other as p` 会把 `p.q.Temp` 二次解析成 `other.q.Temp`）；
+    /// 2. **本地名**（`TempB`）→ 导入名表 `use_aliases`（`use b.{Temp as TempB}` 的条目）；
+    /// 3. **命名空间前缀写法**（`io.X` / 用户模块别名 `m.T`）→ [`Resolver`] 的命名空间
+    ///    解析（与调用名限定化同一实现，不另起路径解析）。
     ///
     /// 解析结果必须是注册表的类型导出；否则不给归属（宁可不限定，不回错单元）。
     fn imported_type_owner(
@@ -1247,12 +1251,20 @@ impl AstToIrGenerator {
         if self.declared_type_names.contains(written) {
             return None;
         }
-        if let Some((head, rest)) = written.split_once('.') {
-            let fields: Vec<&str> = rest.split('.').collect();
-            let qualified = self.resolver().resolve_namespace(head, &fields);
-            return self.is_type_export(&qualified).then_some(qualified);
+        // ① 权威限定名：精确命中即用，不再过命名空间/别名解析
+        if self.is_type_export(written) {
+            return Some(written.to_string());
         }
-        let qualified = self.use_aliases.get(written)?.clone();
+        // ② 本地名 → 导入名表（含 `use M.{T as X}` 的内联别名条目）
+        if let Some(qualified) = self.use_aliases.get(written) {
+            if self.is_type_export(qualified) {
+                return Some(qualified.clone());
+            }
+        }
+        // ③ 命名空间前缀写法（std 子模块 / 用户模块别名）
+        let (head, rest) = written.split_once('.')?;
+        let fields: Vec<&str> = rest.split('.').collect();
+        let qualified = self.resolver().resolve_namespace(head, &fields);
         self.is_type_export(&qualified).then_some(qualified)
     }
 
@@ -6448,9 +6460,13 @@ impl AstToIrGenerator {
                 } else {
                     short_name
                 };
+            // WBS 4.9.8 修复轮 R1 / issue #465：算子接口派发与普通方法调用同一判据——
+            // 接收者是导入类型时把裸类型前缀换成它的定义单元限定名（`Temp.index`
+            // → `b.Temp.index`），否则同名类型的算子实现互相落错单元（静默错值）。
+            let dispatch_name = self.method_dispatch_name(expr, &func_name);
             instructions.push(Instruction::Call {
                 dst: Some(Operand::Local(result_reg)),
-                func: Operand::Const(ConstValue::String(func_name)),
+                func: Operand::Const(ConstValue::String(dispatch_name)),
                 args: vec![Operand::Local(src_reg), Operand::Local(index_reg)],
                 span: *span,
                 def: None,
@@ -7859,9 +7875,12 @@ impl AstToIrGenerator {
                     } else {
                         short_name
                     };
+                    // WBS 4.9.8 修复轮 R1 / issue #465：同 Index 臂——接收者（左操作数）
+                    // 是导入类型时按定义单元限定派发名，本地类型行为不变。
+                    let dispatch_name = self.method_dispatch_name(left, &func_name);
                     instructions.push(Instruction::Call {
                         dst: Some(Operand::Local(result_reg)),
-                        func: Operand::Const(ConstValue::String(func_name)),
+                        func: Operand::Const(ConstValue::String(dispatch_name)),
                         args: vec![Operand::Local(left_reg), Operand::Local(right_reg)],
                         span: self.cur_span,
                         def: None,
