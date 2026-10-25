@@ -69,19 +69,19 @@ fn make_declared_project(files: &[(&str, &str)]) -> (tempfile::TempDir, PathBuf)
 /// `Temp.other` 没有（:8）；b.yx 的同名同序 `Temp.to` 没有（:4）。入口只用
 /// `use a.{Temp}` 命名类型，`use b` 只把 b 带进编译集 ⇒ 调用方拼不出 b 的类型名
 /// （这正是「跨单元同名同序的未调用定义」此前漏报的形态）。
-const CROSS_UNIT_A: &str = "// a.yx —— 被调用的 Temp.to（:4）+ 未被调用的 Temp.other（:8）\nTemp: Type = { v: Float }\n\nTemp.to: (self: &Temp) -> Float = (self) => {\n    self.v\n}\n\nTemp.other: (self: &Temp) -> Float = (self) => {\n    self.v\n}\n";
+const CROSS_UNIT_A: &str = "// a.yx —— 被调用的 Temp.to（:4）+ 未被调用的 Temp.other（:8）\nTemp: Type = { v: Float }\n\nTemp.to: (self: &Temp) -> Float = (self) => {\n    self.v + 1.0\n}\n\nTemp.other: (self: &Temp) -> Float = (self) => {\n    self.v\n}\n";
 
 /// 同名同序、无调用点的 `Temp.to`（:4）——b 只被入口的 `use b` 带进编译集。
-const CROSS_UNIT_B: &str = "// b.yx —— 同名同序、无调用点的 Temp.to（:4）\nTemp: Type = { v: Float }\n\nTemp.to: (self: &Temp) -> Float = (self) => {\n    self.v\n}\n";
+const CROSS_UNIT_B: &str = "// b.yx —— 同名同序、无调用点的 Temp.to（:4）\nTemp: Type = { v: Float }\n\nTemp.to: (self: &Temp) -> Float = (self) => {\n    self.v * 10.0\n}\n";
 
 /// ④ 的入口：类型只经 a 的裸名命名，b 只进编译集（拼不出 b 的类型名）。
-const CROSS_UNIT_MAIN_BARE: &str = "// main.yx —— 只用 a 的 Temp 命名类型；use b 只把 b 带进编译集\nuse std.assert\nuse a.{Temp}\nuse b\n\nmain = () => {\n    t = Temp(1.0)\n    x: Float = t.to()\n    assert.assert(x == 1.0, \"a.to\")\n}\n";
+const CROSS_UNIT_MAIN_BARE: &str = "// main.yx —— 只用 a 的 Temp 命名类型；use b 只把 b 带进编译集\nuse std.assert\nuse a.{Temp}\nuse b\n\nmain = () => {\n    t = Temp(1.0)\n    x: Float = t.to()\n    assert.assert(x == 2.0, \"a.to -> v+1\")\n}\n";
 
 /// ⑤ 的入口（内联别名形态）：a 经裸名、b 经 `TempB` 别名——两侧都被调用。
-const CROSS_UNIT_MAIN_ALIAS: &str = "// main.yx —— 两个类型各自被调用：a 经裸名、b 经内联别名\nuse std.assert\nuse a.{Temp}\nuse b.{Temp as TempB}\n\nmain = () => {\n    t = Temp(1.0)\n    x: Float = t.to()\n    u = TempB(2.0)\n    y: Float = u.to()\n    assert.assert(x == 1.0, \"a.to\")\n    assert.assert(y == 2.0, \"b.to\")\n}\n";
+const CROSS_UNIT_MAIN_ALIAS: &str = "// main.yx —— 两个类型各自被调用：a 经裸名、b 经内联别名\nuse std.assert\nuse a.{Temp}\nuse b.{Temp as TempB}\n\nmain = () => {\n    t = Temp(1.0)\n    x: Float = t.to()\n    u = TempB(2.0)\n    y: Float = u.to()\n    assert.assert(x == 2.0, \"a.to -> v+1\")\n    assert.assert(y == 20.0, \"b.to -> v*10\")\n}\n";
 
 /// ⑤ 的入口（模块限定构造形态）：a 经裸名、b 经 `b.Temp(..)`——两侧都被调用。
-const CROSS_UNIT_MAIN_QUALIFIED: &str = "// main.yx —— 两个类型各自被调用：a 经裸名、b 经模块限定构造\nuse std.assert\nuse a.{Temp}\nuse b\n\nmain = () => {\n    t = Temp(1.0)\n    x: Float = t.to()\n    u = b.Temp(2.0)\n    y: Float = u.to()\n    assert.assert(x == 1.0, \"a.to\")\n    assert.assert(y == 2.0, \"b.to\")\n}\n";
+const CROSS_UNIT_MAIN_QUALIFIED: &str = "// main.yx —— 两个类型各自被调用：a 经裸名、b 经模块限定构造\nuse std.assert\nuse a.{Temp}\nuse b\n\nmain = () => {\n    t = Temp(1.0)\n    x: Float = t.to()\n    u = b.Temp(2.0)\n    y: Float = u.to()\n    assert.assert(x == 2.0, \"a.to -> v+1\")\n    assert.assert(y == 20.0, \"b.to -> v*10\")\n}\n";
 
 /// ⑥ 的定义侧：三个同名候选（声明序 0/1/2 → :4 / :8 / :12）+ 未被调用的 other（:16）。
 const CROSS_UNIT_OVERLOAD_A: &str = "// a.yx —— 三个同名候选，只命中声明序 0（:4）；other 未被调用（:16）\nTemp: Type = { v: Float }\n\nTemp.to: (self: &Temp, n: Int) -> Int = (self, n) => {\n    n\n}\n\nTemp.to: (self: &Temp, s: String) -> String = (self, s) => {\n    s\n}\n\nTemp.to: (self: &Temp, f: Float) -> Float = (self, f) => {\n    f\n}\n\nTemp.other: (self: &Temp) -> Float = (self) => {\n    self.v\n}\n";

@@ -482,7 +482,7 @@ fn test_driver_run_multi_file_init_calls_use_qualified_names() {
 /// 多文件产物跑完 codegen + 解释器后，**全部**全局槽位的值（调试字符串）。
 /// 槽位号由 `allocate_global_slots` 按单元发现序分配，本组用例不依赖具体号，
 /// 故取全集断言「值出现过」。
-fn run_merged_slot_values(module: crate::middle::ModuleIR) -> Vec<String> {
+pub(super) fn run_merged_slot_values(module: crate::middle::ModuleIR) -> Vec<String> {
     let mut ctx = crate::middle::passes::codegen::CodegenContext::new(module);
     let file = ctx.generate().expect("codegen must succeed");
     let bytecode_module = crate::middle::bytecode::BytecodeModule::from(file);

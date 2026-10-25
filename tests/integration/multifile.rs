@@ -335,6 +335,121 @@ main = () => {
     run_project_ok(&[("lib.yx", lib), ("main.yx", main)], "main.yx");
 }
 
+/// WBS 4.9.8 / issue #465（先红后绿，值级断言）：两个编译单元各自定义同名类型
+/// `Temp` 与同名方法 `Temp.tag`（实现可区分：a = v+1.0、b = v*10.0），入口用内联
+/// 别名引入 b 的类型。构造一向正确，但派发名此前取「裸名归属单元」⇒ `u.tag()`
+/// 走 a 的 `v+1.0`（得 3.0）。修复后按接收者**写出的类型名**归因到定义单元 b。
+#[test]
+fn test_multifile_cross_unit_same_named_type_alias_dispatches_to_defining_unit() {
+    // Arrange - a / b 各自同名类型 + 同名方法，入口经 `use b.{Temp as TempB}` 引入 b
+    let a = r#"
+Temp: Type = { v: Float }
+
+Temp.tag: (self: &Temp) -> Float = (self) => {
+    self.v + 1.0
+}
+"#;
+    let b = r#"
+Temp: Type = { v: Float }
+
+Temp.tag: (self: &Temp) -> Float = (self) => {
+    self.v * 10.0
+}
+"#;
+    let main = r#"
+use std.assert
+use a.{Temp}
+use b.{Temp as TempB}
+
+main = () => {
+    t = Temp(1.0)
+    u = TempB(2.0)
+    x: Float = t.tag()
+    y: Float = u.tag()
+    assert.assert(x == 2.0, "a.Temp.tag -> v+1")
+    assert.assert(y == 20.0, "b.Temp.tag -> v*10（派发必须落定义单元 b）")
+}
+"#;
+
+    // Act & Assert - 编译到执行全链：两个实例各走各自单元的实现
+    run_project_ok(&[("a.yx", a), ("b.yx", b), ("main.yx", main)], "main.yx");
+}
+
+/// WBS 4.9.8 / issue #465（模块限定构造形态）：`b.Temp(..)` 之后的 `.tag()` 同样
+/// 必须派发到 b 单元（与内联别名同一归因判据的另一条写出形态）。
+#[test]
+fn test_multifile_cross_unit_same_named_type_qualified_dispatches_to_defining_unit() {
+    // Arrange - 整体导入 `use b`，类型用限定名构造
+    let a = r#"
+Temp: Type = { v: Float }
+
+Temp.tag: (self: &Temp) -> Float = (self) => {
+    self.v + 1.0
+}
+"#;
+    let b = r#"
+Temp: Type = { v: Float }
+
+Temp.tag: (self: &Temp) -> Float = (self) => {
+    self.v * 10.0
+}
+"#;
+    let main = r#"
+use std.assert
+use a.{Temp}
+use b
+
+main = () => {
+    t = Temp(1.0)
+    u = b.Temp(2.0)
+    x: Float = t.tag()
+    y: Float = u.tag()
+    assert.assert(x == 2.0, "a.Temp.tag -> v+1")
+    assert.assert(y == 20.0, "b.Temp.tag -> v*10（限定构造同样归定义单元）")
+}
+"#;
+
+    // Act & Assert
+    run_project_ok(&[("a.yx", a), ("b.yx", b), ("main.yx", main)], "main.yx");
+}
+
+/// WBS 4.9.8 / issue #465 阴性对照：两单元类型名不同 ⇒ 派发各归其位（本次归因改动
+/// 不得让「本来就正确」的跨单元方法调用串味）。
+#[test]
+fn test_multifile_cross_unit_distinct_type_names_still_dispatch_correctly() {
+    // Arrange - b 的类型叫 Other
+    let a = r#"
+Temp: Type = { v: Float }
+
+Temp.tag: (self: &Temp) -> Float = (self) => {
+    self.v + 1.0
+}
+"#;
+    let b = r#"
+Other: Type = { v: Float }
+
+Other.tag: (self: &Other) -> Float = (self) => {
+    self.v * 10.0
+}
+"#;
+    let main = r#"
+use std.assert
+use a.{Temp}
+use b.{Other}
+
+main = () => {
+    t = Temp(1.0)
+    u = Other(2.0)
+    x: Float = t.tag()
+    y: Float = u.tag()
+    assert.assert(x == 2.0, "a.Temp.tag -> v+1")
+    assert.assert(y == 20.0, "Other.tag -> v*10")
+}
+"#;
+
+    // Act & Assert
+    run_project_ok(&[("a.yx", a), ("b.yx", b), ("main.yx", main)], "main.yx");
+}
 #[test]
 fn test_multifile_subdir_entry_imports_project_root_module() {
     // Arrange - 入口在 tests/ 子目录，lib 在项目根（yaoxiang.toml 标记项目根）

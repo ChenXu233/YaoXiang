@@ -100,6 +100,13 @@ fn get_type_fallback_string(mono_type: &MonoType) -> String {
 #[derive(Debug, Clone)]
 struct SymbolEntry {
     local_idx: usize,
+    /// 该变量绑定时**写出**的类型名（`x: TempB = ..` 的注解原文，或构造器调用
+    /// `TempB(..)` / `ns.Temp(..)` 写出的名字）。WBS 4.9.8 / issue #465：
+    /// `MonoType` 对导入类型只留**定义侧裸名**，两单元的同名类型分不出来；
+    /// 「这个名字是从哪个单元带进来的」在本单元唯一有据的是 `use` 面
+    /// （[`AstToIrGenerator::imported_type_owner`]）——故把写出名留在符号表里，
+    /// 方法派发时据此归因到定义单元。
+    written_type: Option<String>,
 }
 
 /// AST 到 IR 的生成器
@@ -121,6 +128,10 @@ pub struct AstToIrGenerator {
     temp_floor: usize,
     /// 局部变量类型追踪（用于错误消息中显示实际类型）
     local_var_types: HashMap<String, String>,
+    /// 顶层绑定**写出**的类型名（Script 形态的 `t = Temp(1.0)` 是全局槽位，
+    /// 与块内局部变量走同一条派发归因链——WBS 4.9.8 / issue #465）。
+    /// 键 = 本文件的绑定名（不含模块限定）。
+    global_written_types: HashMap<String, String>,
     /// FFI 库绑定
     ffi_libs: Vec<crate::middle::core::ir::FfiLibBinding>,
     /// FFI 绑定 — 不透明类型或外部函数
@@ -339,6 +350,7 @@ impl AstToIrGenerator {
             temp_high_water: 0,
             temp_floor: 0,
             local_var_types: HashMap::new(),
+            global_written_types: HashMap::new(),
             ffi_libs: Vec::new(),
             ffi_bindings: Vec::new(),
             next_lib_id: 0,
@@ -724,7 +736,13 @@ impl AstToIrGenerator {
             &local_idx.to_string()
         );
         if let Some(scope) = self.symbols.last_mut() {
-            scope.insert(name.to_string(), SymbolEntry { local_idx });
+            scope.insert(
+                name.to_string(),
+                SymbolEntry {
+                    local_idx,
+                    written_type: None,
+                },
+            );
         }
         // 把源码名写进当前函数的槽位表：槽位可能尚未扩展到 local_idx
         // （临时寄存器先于具名变量分配），先补齐空槽。
@@ -1100,6 +1118,176 @@ impl AstToIrGenerator {
         } else {
             t
         }
+    }
+
+    /// 记下局部变量**写出**的类型名（注解原文或构造器名）。
+    ///
+    /// 只记「用户写出来的名字」，不重判类型：`x: TempB` 记 `TempB`，
+    /// `u = TempB(2.0)` 记 `TempB`，`u = b.Temp(2.0)` 记 `b.Temp`。
+    /// 「这个名字属于哪个单元」的判定只在 [`Self::imported_type_owner`] 一处。
+    fn note_local_written_type(
+        &mut self,
+        name: &str,
+        written: &str,
+    ) {
+        for scope in self.symbols.iter_mut().rev() {
+            if let Some(entry) = scope.get_mut(name) {
+                entry.written_type = Some(written.to_string());
+                return;
+            }
+        }
+    }
+
+    /// 形参写出的类型名（注解原文）——与局部变量走同一条派发归因链。
+    fn note_param_written_types(
+        &mut self,
+        params: &[ast::Param],
+    ) {
+        let written: Vec<(String, String)> = params
+            .iter()
+            .filter_map(|p| {
+                let ty = p.ty.as_ref().and_then(Self::written_type_name_of)?;
+                Some((p.name.clone(), ty.to_string()))
+            })
+            .collect();
+        for (name, ty) in written {
+            self.note_local_written_type(&name, &ty);
+        }
+    }
+
+    /// 局部变量写出类型名的查找（作用域由符号表本身给出）。
+    fn local_written_type(
+        &self,
+        name: &str,
+    ) -> Option<&str> {
+        for scope in self.symbols.iter().rev() {
+            if let Some(entry) = scope.get(name) {
+                return entry.written_type.as_deref();
+            }
+        }
+        None
+    }
+
+    /// 变量写出的类型名：先查局部作用域，再查本文件顶层绑定位。
+    fn binding_written_type(
+        &self,
+        name: &str,
+    ) -> Option<&str> {
+        self.local_written_type(name)
+            .or_else(|| self.global_written_types.get(name).map(String::as_str))
+    }
+
+    /// 类型注解里**写出**的类型名：`Temp` / `TempB` / `&TempB` → 名字部分。
+    /// 内建类型、函数类型、结构体字面量返回 None（不是「某个单元的类型名」）。
+    fn written_type_name_of(ty: &ast::Type) -> Option<&str> {
+        match ty {
+            ast::Type::Name { name, .. } | ast::Type::Generic { name, .. } => Some(name.as_str()),
+            ast::Type::Ref { inner, .. }
+            | ast::Type::Ptr(inner)
+            | ast::Type::Paren(inner)
+            | ast::Type::NamedParen { inner, .. } => Self::written_type_name_of(inner),
+            _ => None,
+        }
+    }
+
+    /// 构造器表达式**写出**的类型名：`T(..)` 的本地名 / `ns.T(..)` 的限定名。
+    ///
+    /// 判据只用两张既有表：本单元声明的类型（`declared_type_names`）与导入名表
+    /// （`use_aliases` / 命名空间解析），最终以注册表的**类型导出**为准
+    /// （[`Self::is_type_export`]）——同名的函数/常量导出不算类型构造。
+    fn constructor_written_type_name(
+        &self,
+        expr: &ast::Expr,
+    ) -> Option<String> {
+        let ast::Expr::Call { func, .. } = expr else {
+            return None;
+        };
+        match func.as_ref() {
+            ast::Expr::Var(name, _) => {
+                if self.declared_type_names.contains(name) {
+                    return Some(name.clone());
+                }
+                let qualified = self.use_aliases.get(name)?;
+                self.is_type_export(qualified).then(|| qualified.clone())
+            }
+            ast::Expr::FieldAccess { .. } => {
+                let (head, fields) = flatten_namespace(func)?;
+                let qualified = self.resolver().resolve_namespace(head, &fields);
+                self.is_type_export(&qualified).then_some(qualified)
+            }
+            _ => None,
+        }
+    }
+
+    /// 「这个限定名是**类型导出**」——注册表导出面的唯一判据。
+    fn is_type_export(
+        &self,
+        qualified: &str,
+    ) -> bool {
+        self.registry
+            .resolve_export(qualified)
+            .map(|export| matches!(export.kind, ExportKind::Type))
+            .unwrap_or(false)
+    }
+
+    /// 把「写出的类型名」解析成**别的单元**的类型限定名（本单元自有类型 → None）。
+    ///
+    /// 两种写法归一：
+    /// - 本地名（`TempB`）→ 导入名表 `use_aliases`（`use b.{Temp as TempB}` 的条目）；
+    /// - 限定名（`b.Temp` / `bb.Temp`）→ [`Resolver`] 的命名空间解析（与调用名
+    ///   限定化同一实现，不另起路径解析）。
+    ///
+    /// 解析结果必须是注册表的类型导出；否则不给归属（宁可不限定，不回错单元）。
+    fn imported_type_owner(
+        &self,
+        written: &str,
+    ) -> Option<String> {
+        let written = Self::strip_ref_prefix(written);
+        // 本单元自有类型：裸名就是定义侧名字，限定化留给 `qualify_names`
+        if self.declared_type_names.contains(written) {
+            return None;
+        }
+        if let Some((head, rest)) = written.split_once('.') {
+            let fields: Vec<&str> = rest.split('.').collect();
+            let qualified = self.resolver().resolve_namespace(head, &fields);
+            return self.is_type_export(&qualified).then_some(qualified);
+        }
+        let qualified = self.use_aliases.get(written)?.clone();
+        self.is_type_export(&qualified).then_some(qualified)
+    }
+
+    /// 方法派发名的**唯一判据**：把「定义侧名字」的裸类型前缀按接收者所属单元
+    /// 限定化（`Temp.tag` → `b.Temp.tag`），使跨单元同名类型的方法落回各自单元。
+    ///
+    /// `definition_name` 的形态有三处生产者（RFC-004 绑定 / D20 重载决议 / 裸名
+    /// 推导），前缀一律是 typecheck 与 `type_bindings` 共用的**定义侧裸类型名**；
+    /// 三者都经本函数产出最终调用名，判据只此一份（D3）。
+    /// 接收者类型名与定义名前缀对不上时原样返回（不是这个类型的方法面）。
+    fn method_dispatch_name(
+        &self,
+        recv: &ast::Expr,
+        definition_name: &str,
+    ) -> String {
+        let owner = match recv {
+            ast::Expr::Var(name, _) => self
+                .binding_written_type(name)
+                .and_then(|written| self.imported_type_owner(written)),
+            _ => self
+                .constructor_written_type_name(recv)
+                .and_then(|written| self.imported_type_owner(&written)),
+        };
+        let Some(owner) = owner else {
+            return definition_name.to_string();
+        };
+        let Some((prefix, rest)) = definition_name.split_once('.') else {
+            return definition_name.to_string();
+        };
+        // 定义侧前缀是裸类型名；只有它就是接收者类型的叶子名时才替换
+        // （重载混编序 `#k` 原样保留——决议选的是**候选序**，单元由接收者定）。
+        if owner.rsplit('.').next() != Some(prefix) {
+            return definition_name.to_string();
+        }
+        format!("{owner}.{rest}")
     }
 
     /// 获取下一个临时寄存器编号
@@ -2110,6 +2298,7 @@ impl AstToIrGenerator {
             // 注册参数到符号表
             self.register_local(&param.name, i);
         }
+        self.note_param_written_types(params);
 
         // 记录局部变量起始位置（在参数之后）
         let local_var_start = params.len();
@@ -2266,6 +2455,7 @@ impl AstToIrGenerator {
 
             self.register_local(&param.name, i);
         }
+        self.note_param_written_types(params);
 
         // 记录局部变量起始位置（在参数之后）
         let local_var_start = params.len();
@@ -2516,6 +2706,7 @@ impl AstToIrGenerator {
         for (i, param) in layer.params.iter().enumerate() {
             self.register_local(&param.name, env_count + i);
         }
+        self.note_param_written_types(&layer.params);
 
         // next_temp 起始 = 参数总数
         self.next_temp = env_count + layer.params.len();
@@ -3062,6 +3253,18 @@ impl AstToIrGenerator {
             }
         };
 
+        // WBS 4.9.8 / issue #465：顶层绑定同样记下**写出**的类型名（注解原文
+        // 优先，否则构造器名）——Script 形态的顶层 `t = Temp(1.0)` 是全局槽位，
+        // 与块内局部变量走同一条派发归因链。必须在生成初始化指令**之前**登记：
+        // 初始化里的 `t.tag()` 就是消费点（同一语句内的自引用不在本判据面）。
+        let written = type_annotation
+            .and_then(Self::written_type_name_of)
+            .map(str::to_string)
+            .or_else(|| initializer.and_then(|e| self.constructor_written_type_name(e)));
+        if let Some(written) = written {
+            self.global_written_types.insert(name.to_string(), written);
+        }
+
         // 生成初始化指令：求值 init 表达式，写入槽位。
         // 无 init 的绑定保留零初始化语义（C 风格默认值）。
         // 旧实现（E3007）要求 init 必须是编译期常量；T2 后改为运行时求值，
@@ -3194,6 +3397,7 @@ impl AstToIrGenerator {
 
             self.register_local(&param.name, i);
         }
+        self.note_param_written_types(params);
 
         // 记录局部变量起始位置
         let local_var_start = params.len();
@@ -3526,6 +3730,13 @@ impl AstToIrGenerator {
                 }
                 // 普通变量
                 let initializer = value.as_ref().map(|v| v.as_ref());
+                // WBS 4.9.8 / issue #465：记下**写出**的类型名（注解原文优先，
+                // 否则取构造器名），供方法调用派发归因到定义单元。
+                let written_type = type_annotation
+                    .as_ref()
+                    .and_then(Self::written_type_name_of)
+                    .map(str::to_string)
+                    .or_else(|| initializer.and_then(|e| self.constructor_written_type_name(e)));
                 if let Some(type_ann) = type_annotation {
                     let mono: MonoType = type_ann.clone().into();
                     let type_name = mono.type_name();
@@ -3571,6 +3782,9 @@ impl AstToIrGenerator {
                     self.register_local(&name, idx);
                     idx
                 };
+                if let Some(written) = written_type {
+                    self.note_local_written_type(&name, &written);
+                }
                 if let Some(expr) = initializer {
                     // #299 §2：字面量上下文落点——Array 注解直接作用于 List 字面量时，
                     // 生成定长数组构造而非 List。禁止隐式 List→Array 转换：仅字面量种子直接落 Array。
@@ -5186,6 +5400,7 @@ impl AstToIrGenerator {
         for (i, param) in params.iter().enumerate() {
             self.register_local(&param.name, env_count + i);
         }
+        self.note_param_written_types(params);
 
         // 记录局部变量起始位置
         let local_var_start = env_count + params.len();
@@ -7530,6 +7745,10 @@ impl AstToIrGenerator {
                     if inferred != "<unknown>" {
                         self.local_var_types.insert(var_name.clone(), inferred);
                     }
+                    // WBS 4.9.8 / issue #465：赋值的**写出**类型名（构造器形态）
+                    if let Some(written) = self.constructor_written_type_name(right) {
+                        self.note_local_written_type(var_name, &written);
+                    }
 
                     // 统一走 Store — 消除 Var→Var 走 Move 的特殊情况
                     instructions.push(Instruction::Store {
@@ -8098,10 +8317,12 @@ impl AstToIrGenerator {
                     } else {
                         binding.function.clone()
                     };
+                    // WBS 4.9.8 / #465：接收者是导入类型时，派发名按定义单元限定
+                    let dispatch_name = self.method_dispatch_name(expr, &func_name);
 
                     instructions.push(Instruction::Call {
                         dst: Some(Operand::Local(result_reg)),
-                        func: Operand::Const(ConstValue::String(func_name)),
+                        func: Operand::Const(ConstValue::String(dispatch_name)),
                         args: final_args,
                         span: *span,
                         def: None,
@@ -8156,9 +8377,12 @@ impl AstToIrGenerator {
                             self.generate_expr_ir(arg_expr, r, instructions, constants)?;
                             call_args.push(Operand::Local(r));
                         }
+                        // WBS 4.9.8 / #465：决议给的是**定义侧裸名**（`Temp.tag`）；
+                        // 接收者是导入类型时把类型前缀换成它的定义单元限定名。
+                        let dispatch_name = self.method_dispatch_name(expr, &mangled);
                         instructions.push(Instruction::Call {
                             dst: Some(Operand::Local(result_reg)),
-                            func: Operand::Const(ConstValue::String(mangled)),
+                            func: Operand::Const(ConstValue::String(dispatch_name)),
                             args: call_args,
                             span: *span,
                             def: None,
@@ -8307,9 +8531,11 @@ impl AstToIrGenerator {
 
                         let final_args: Vec<Operand> = arg_regs.clone();
 
+                        // WBS 4.9.8 / #465：普通方法调用同样按接收者的定义单元限定
+                        let dispatch_name = self.method_dispatch_name(expr, &func_name);
                         instructions.push(Instruction::Call {
                             dst: Some(Operand::Local(result_reg)),
-                            func: Operand::Const(ConstValue::String(func_name)),
+                            func: Operand::Const(ConstValue::String(dispatch_name)),
                             args: final_args,
                             span: *span,
                             def: None,
