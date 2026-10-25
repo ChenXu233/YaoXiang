@@ -33,11 +33,13 @@ use super::unit::Unit;
 ///
 /// 移植自 pipeline.rs:349-389。词法扫描失败返回 Ok（真正的错误由
 /// parse 阶段报告）。`registry` 与入口 IR 生成共用（共享 SymbolTable），
-/// 保证 DefId 一致（#94）。
+/// 保证 DefId 一致（#94）。`config` 透传给 `compile_embedded_module`
+/// （#471：嵌入 std 的单态化闸门与入口程序同源，不另设默认）。
 pub(in crate::driver) fn merge_embedded_std_ir(
     source: &str,
     ir: &mut ModuleIR,
     registry: &ModuleRegistry,
+    config: &crate::frontend::config::CompileConfig,
 ) -> Result<(), Diagnostic> {
     let mut use_paths = crate::frontend::module::orchestrator::scan_use_paths(source);
     // `for x in xs` 的脱糖会调用迭代协议 `std.list.iter/has_next/next`，
@@ -56,7 +58,9 @@ pub(in crate::driver) fn merge_embedded_std_ir(
         }
         // 嵌入 std 模块：编译独立 IR 并合并（去重——入口可能多处 use 同一模块）
         let embedded = match crate::frontend::module::orchestrator::compile_embedded_module(
-            &use_path, registry,
+            &use_path,
+            registry,
+            config.clone(),
         ) {
             Ok(m) => m,
             Err(e) => {

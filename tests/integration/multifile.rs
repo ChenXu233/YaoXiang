@@ -1149,7 +1149,11 @@ fn test_multifile_namespace_qualified_fn_value_call_emits_call_dyn() {
     .expect("write main");
 
     // Act
-    let (ir, _diagnostics) = compile_project(&dir.path().join("main.yx")).expect("compile project");
+    let (ir, _diagnostics) = compile_project(
+        &dir.path().join("main.yx"),
+        yaoxiang::frontend::CompileConfig::default(),
+    )
+    .expect("compile project");
 
     // Assert
     let mut has_call_dyn = false;

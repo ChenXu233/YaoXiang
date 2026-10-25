@@ -101,7 +101,11 @@ fn test_member_ref_resolves_to_member_root() {
         "use utils;\n\nmain = () => { print(utils.two) }\n",
     );
 
-    let files = check_project(&root.join("packages/core/src/main.yx")).unwrap();
+    let files = check_project(
+        &root.join("packages/core/src/main.yx"),
+        crate::frontend::config::CompileConfig::default(),
+    )
+    .unwrap();
     assert!(!has_e5001(&files), "成员引用应解析到 utils 包根");
 }
 
@@ -119,7 +123,11 @@ fn test_strict_visibility_undeclared_vendor_pkg_not_resolvable() {
     )
     .unwrap();
     entry_src(&root, "core", "use regex;\n\nmain = () => { 0 }\n");
-    let files = check_project(&root.join("packages/core/src/main.yx")).unwrap();
+    let files = check_project(
+        &root.join("packages/core/src/main.yx"),
+        crate::frontend::config::CompileConfig::default(),
+    )
+    .unwrap();
     assert!(
         has_e5001(&files),
         "未声明的 vendor 包必须不可见（防幽灵依赖）"
@@ -131,7 +139,11 @@ fn test_strict_visibility_undeclared_vendor_pkg_not_resolvable() {
         "[package]\nname = \"core\"\nversion = \"0.1.0\"\n\n[dependencies]\nregex = \"^1.0\"\n",
     )
     .unwrap();
-    let files = check_project(&root.join("packages/core/src/main.yx")).unwrap();
+    let files = check_project(
+        &root.join("packages/core/src/main.yx"),
+        crate::frontend::config::CompileConfig::default(),
+    )
+    .unwrap();
     assert!(!has_e5001(&files), "声明后应从共享 vendor 解析");
 }
 
@@ -155,7 +167,11 @@ fn test_other_members_vendor_deps_not_visible_by_default() {
     .unwrap();
     entry_src(&root, "core", "use regex;\n\nmain = () => { 0 }\n");
 
-    let files = check_project(&root.join("packages/core/src/main.yx")).unwrap();
+    let files = check_project(
+        &root.join("packages/core/src/main.yx"),
+        crate::frontend::config::CompileConfig::default(),
+    )
+    .unwrap();
     assert!(has_e5001(&files), "其他成员的依赖对本成员不可见");
 }
 
@@ -183,7 +199,11 @@ fn test_path_dep_resolves_by_path() {
         "use bar;\n\nmain = () => { print(bar.one) }\n",
     );
 
-    let files = check_project(&root.join("packages/core/src/main.yx")).unwrap();
+    let files = check_project(
+        &root.join("packages/core/src/main.yx"),
+        crate::frontend::config::CompileConfig::default(),
+    )
+    .unwrap();
     assert!(
         !has_e5001(&files),
         "path 依赖应按路径解析（总纲：本地模块延伸）"

@@ -232,7 +232,10 @@ fn test_e5001_install_hint_when_pkg_missing_from_vendor() {
     .unwrap();
 
     // Act
-    let result = super::super::check_project(&root.join("src").join("main.yx"));
+    let result = super::super::check_project(
+        &root.join("src").join("main.yx"),
+        crate::frontend::config::CompileConfig::default(),
+    );
 
     // Assert - E5001 的 help 提到 yaoxiang install
     match result {
@@ -261,7 +264,10 @@ fn test_vendor_lock_inconsistent_blocks_check() {
     fs::write(root.join("src").join("main.yx"), "main = { 0 }\n").unwrap();
 
     // Act
-    let result = super::super::check_project(&root.join("src").join("main.yx"));
+    let result = super::super::check_project(
+        &root.join("src").join("main.yx"),
+        crate::frontend::config::CompileConfig::default(),
+    );
 
     // Assert - 前置一致性错误（不进 typecheck）
     let Err(err) = result else {
@@ -286,7 +292,10 @@ fn test_consistent_vendor_project_checks_clean() {
     .unwrap();
 
     // Act
-    let result = super::super::check_project(&root.join("src").join("main.yx"));
+    let result = super::super::check_project(
+        &root.join("src").join("main.yx"),
+        crate::frontend::config::CompileConfig::default(),
+    );
 
     // Assert - 无 E5001、无一一致性错误
     match result {
@@ -321,7 +330,11 @@ fn test_local_module_shadows_dependency_with_w1006() {
     .unwrap();
 
     // Act
-    let files = super::super::check_project(&root.join("src").join("main.yx")).unwrap();
+    let files = super::super::check_project(
+        &root.join("src").join("main.yx"),
+        crate::frontend::config::CompileConfig::default(),
+    )
+    .unwrap();
 
     // Assert - 本地胜出（f() = 2 语义由解析路径保证：main 引用的是 src/foo）
     // 且发射 W1006
@@ -352,7 +365,11 @@ fn test_dependency_resolves_when_no_local_shadow() {
     .unwrap();
 
     // Act
-    let files = super::super::check_project(&root.join("src").join("main.yx")).unwrap();
+    let files = super::super::check_project(
+        &root.join("src").join("main.yx"),
+        crate::frontend::config::CompileConfig::default(),
+    )
+    .unwrap();
 
     // Assert - 无 W1006
     let w1006 = files
@@ -376,7 +393,11 @@ fn test_no_shadow_warning_without_vendor_dir() {
     .unwrap();
 
     // Act
-    let files = super::super::check_project(&root.join("src").join("main.yx")).unwrap();
+    let files = super::super::check_project(
+        &root.join("src").join("main.yx"),
+        crate::frontend::config::CompileConfig::default(),
+    )
+    .unwrap();
 
     // Assert - 无 W1006（没有依赖被遮蔽）
     let w1006 = files

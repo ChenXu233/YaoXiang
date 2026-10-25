@@ -35,7 +35,12 @@ pub(crate) fn analyze_document(
     if let Some(p) = &path {
         use crate::frontend::module::orchestrator;
         if orchestrator::find_project_root(p).is_some() {
-            match orchestrator::analyze_source_in_project(p, content) {
+            match orchestrator::analyze_source_in_project(
+                p,
+                content,
+                // #471：LSP 不读 yaoxiang.toml（mono 贯通只做 run 链），保持默认
+                CompileConfig::default(),
+            ) {
                 Ok(analysis) => {
                     debug!(
                         "项目分析完成: {} ({} 条诊断)",

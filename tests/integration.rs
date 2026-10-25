@@ -50,6 +50,10 @@ mod cli;
 #[path = "integration/cli_e2e.rs"]
 mod cli_e2e;
 
+/// #471（WBS 3.21.3）：yaoxiang.toml `[mono]` 节贯通到单态化深度闸（端到端）
+#[path = "integration/mono_config.rs"]
+mod mono_config;
+
 /// RFC-039 WBS 3.6.1：局部函数类型值按名调用走间接调用（先红后绿）
 #[path = "integration/fn_value_call.rs"]
 mod fn_value_call;

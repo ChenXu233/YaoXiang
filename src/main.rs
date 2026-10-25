@@ -493,7 +493,15 @@ fn main() -> Result<()> {
                 0 // 0 = auto-detect
             };
 
-            match run_file_with_diagnostics(&file, &runtime_mode, workers) {
+            // #471：[mono] 节贯通到编译配置——run 链把 toml 读到的单态化闸门
+            //（max_depth 等）传入编排；其余 CompileConfig 字段保持默认（本轮
+            // 只贯通 mono 通路，行为面逐字节不变）
+            let compile_config = yaoxiang::frontend::CompileConfig {
+                mono: project_config.mono,
+                ..Default::default()
+            };
+
+            match run_file_with_diagnostics(&file, &runtime_mode, workers, compile_config) {
                 Ok(RunOutcome::Completed) => {}
                 // #476（D 类对外面，取值 1）：rootless 形态下定义了 main 却未调用——
                 // 顶层语句已跑、main 的体从未运行。既有两行提示已由

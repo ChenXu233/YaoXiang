@@ -123,7 +123,14 @@ pub enum OrchestratorError {
 /// 本注释不抄录清单（副本会随阶段增补腐烂：3.4.8 ② 追加 mono 时此处曾是
 /// 一份过期副本）；各阶段的执行体见 `crate::driver` 的阶段臂。错误侧的外部
 /// 契约（`OrchestratorError` 各 variant 的渲染与退出码）逐字节不变。
-pub fn compile_project(entry: &Path) -> Result<(ModuleIR, FileDiagnostics), OrchestratorError> {
+///
+/// `config` 是 `Program` 的编译配置（单态化/死代码闸门等），由调用方灌入：
+/// run 链传 yaoxiang.toml 读到的配置（#471），无配置来源的调用方传
+/// `CompileConfig::default()` 保持既有行为。
+pub fn compile_project(
+    entry: &Path,
+    config: crate::frontend::config::CompileConfig,
+) -> Result<(ModuleIR, FileDiagnostics), OrchestratorError> {
     let program = crate::driver::Program::new(
         crate::driver::ProgramKind::MultiFile,
         // 占位入口单元：Discovery 臂沿 use 图重建完整单元集（key 同
@@ -133,7 +140,7 @@ pub fn compile_project(entry: &Path) -> Result<(ModuleIR, FileDiagnostics), Orch
             entry.to_path_buf(),
             "",
         )],
-        crate::frontend::config::CompileConfig::default(),
+        config,
     );
     let outcome = crate::driver::Driver::new()
         .run(program)
@@ -177,7 +184,10 @@ pub fn compile_project(entry: &Path) -> Result<(ModuleIR, FileDiagnostics), Orch
 /// vendor/发现/解析失败仍经 `OrchestratorError` 硬中止（4.10.1 怪癖
 /// 保留，driver 侧测试钉板）。文件内诊断顺序归一为阶段拓扑序
 ///（2026-10-09 用户裁决，02 §1 修订注记 #4）。
-pub fn check_project(entry: &Path) -> Result<FileDiagnostics, OrchestratorError> {
+pub fn check_project(
+    entry: &Path,
+    config: crate::frontend::config::CompileConfig,
+) -> Result<FileDiagnostics, OrchestratorError> {
     let program = crate::driver::Program::new(
         crate::driver::ProgramKind::Check,
         // 占位入口单元：Discovery 臂沿 use 图重建完整单元集
@@ -186,7 +196,7 @@ pub fn check_project(entry: &Path) -> Result<FileDiagnostics, OrchestratorError>
             entry.to_path_buf(),
             "",
         )],
-        crate::frontend::config::CompileConfig::default(),
+        config,
     );
     let outcome = crate::driver::Driver::new()
         .run(program)
@@ -222,6 +232,7 @@ pub struct LspAnalysis {
 pub fn analyze_source_in_project(
     path: &Path,
     source: &str,
+    config: crate::frontend::config::CompileConfig,
 ) -> Result<LspAnalysis, OrchestratorError> {
     let program = crate::driver::Program::new(
         crate::driver::ProgramKind::Lsp,
@@ -232,7 +243,7 @@ pub fn analyze_source_in_project(
             path.to_path_buf(),
             source,
         )],
-        crate::frontend::config::CompileConfig::default(),
+        config,
     );
     let outcome = crate::driver::Driver::new()
         .run(program)
@@ -275,8 +286,9 @@ pub fn analyze_source_in_project(
 pub fn check_source_in_project(
     path: &Path,
     source: &str,
+    config: crate::frontend::config::CompileConfig,
 ) -> Result<Vec<Diagnostic>, OrchestratorError> {
-    Ok(analyze_source_in_project(path, source)?.diagnostics)
+    Ok(analyze_source_in_project(path, source, config)?.diagnostics)
 }
 
 /// RFC-014 §项目模式前置检查（2026-09-15 决议）。
@@ -1010,6 +1022,7 @@ pub(crate) fn scan_use_refs(source: &str) -> Vec<UsePathRef> {
 pub fn compile_embedded_module(
     key: &str,
     registry: &ModuleRegistry,
+    config: crate::frontend::config::CompileConfig,
 ) -> Result<ModuleIR, OrchestratorError> {
     let source =
         crate::std::yx_sources::embedded_std_source(key).ok_or_else(|| OrchestratorError::Io {
@@ -1023,7 +1036,7 @@ pub fn compile_embedded_module(
             format!("<{}>", key.replace('.', "/")),
             source,
         )],
-        crate::frontend::config::CompileConfig::default(),
+        config,
     )
     .with_shared_registry(registry.clone());
     let outcome = crate::driver::Driver::new()

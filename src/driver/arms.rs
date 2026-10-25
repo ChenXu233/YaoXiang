@@ -984,7 +984,12 @@ impl Driver {
                 }
             }
         };
-        if let Err(e) = merge_embedded_std_ir(&program.units[0].source, &mut ir, &registry) {
+        if let Err(e) = merge_embedded_std_ir(
+            &program.units[0].source,
+            &mut ir,
+            &registry,
+            &program.config,
+        ) {
             errors.push(PipelineError::TypeCheck(e));
             failed_stages.push(Stage::IrGeneration);
             return Ok(());

@@ -365,6 +365,8 @@ pub enum RunOutcome {
 ///
 /// # 参数
 /// - `file`: 源文件路径
+/// - `config`: 编译配置（单态化/死代码闸门）——run 链由 CLI 从 yaoxiang.toml
+///   读出后传入（#471）；无配置来源的调用方传 `CompileConfig::default()`
 ///
 /// # 返回
 /// 成功返回本次运行的结局 [`RunOutcome`]（rootless 形态下「定义了 `main` 却未调用」
@@ -374,6 +376,7 @@ pub fn run_file_with_diagnostics(
     file: &std::path::PathBuf,
     runtime_mode: &str,
     workers: usize,
+    config: crate::frontend::config::CompileConfig,
 ) -> anyhow::Result<RunOutcome> {
     use crate::middle::passes::codegen::CodegenContext;
 
@@ -417,14 +420,15 @@ pub fn run_file_with_diagnostics(
     // entry_function 门控都以无项目根为开关。产物统一为 ModuleIR，复用下方
     // 同一套 codegen + 执行路径（保留 runtime/workers 配置）。
     let script_mode = !in_yaoxiang_project(file);
-    let (module, warnings) = match crate::frontend::module::orchestrator::compile_project(file) {
-        Ok(built) => built,
-        Err(e) => {
-            // 结构化诊断按其来源文件渲染，不再包成 E8001
-            render_orchestrator_error(&e);
-            return Err(anyhow::anyhow!("Compilation failed"));
-        }
-    };
+    let (module, warnings) =
+        match crate::frontend::module::orchestrator::compile_project(file, config) {
+            Ok(built) => built,
+            Err(e) => {
+                // 结构化诊断按其来源文件渲染，不再包成 E8001
+                render_orchestrator_error(&e);
+                return Err(anyhow::anyhow!("Compilation failed"));
+            }
+        };
     // WBS 3.4.6：编译期警告按定义文件渲染到 stderr（非阻断——退出码仍由
     // 执行结果决定）。与 `yaoxiang check` 同源：同一 `TextEmitter` + 同一
     // 逐文件通道，本函数只做输出，不做任何过滤判决。
@@ -775,7 +779,11 @@ pub fn check_files_with_diagnostics(files: &[std::path::PathBuf]) -> anyhow::Res
         if seen.contains(entry) {
             continue;
         }
-        let per_file = orchestrator::check_project(entry).map_err(|e| anyhow::anyhow!("{}", e))?;
+        // #471：check 链的 toml 贯通不在本轮范围（issue 验收只验 run），此处
+        // 显式传默认配置保持既有行为；将来贯通时由 check 命令链灌入
+        let per_file =
+            orchestrator::check_project(entry, crate::frontend::config::CompileConfig::default())
+                .map_err(|e| anyhow::anyhow!("{}", e))?;
         for (path, diagnostics) in per_file {
             if !seen.insert(path.clone()) {
                 continue;

@@ -169,6 +169,11 @@ pub struct ProjectConfig {
     /// Tool configuration ([tool.*] extension namespace, RFC-015)
     #[serde(default)]
     pub tool: ToolConfig,
+    /// 单态化配置（[mono] 节，#471）。schema 唯一家是
+    /// `frontend::config::MonoConfig`（CompileConfig 同款），此处只引用不复制
+    /// ——两处定义会在默认值上分叉（禁令三）。
+    #[serde(default)]
+    pub mono: crate::frontend::config::MonoConfig,
 }
 
 /// [tool.*] 扩展命名空间（RFC-015）

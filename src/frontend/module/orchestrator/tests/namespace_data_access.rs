@@ -47,7 +47,11 @@ fn test_namespace_typed_member_access_is_clean() {
     );
 
     // Act
-    let files = check_project(&tmp.path().join("main.yx")).expect("check project");
+    let files = check_project(
+        &tmp.path().join("main.yx"),
+        crate::frontend::config::CompileConfig::default(),
+    )
+    .expect("check project");
 
     // Assert：typecheck 侧不应有任何诊断（IR 降级由集成测试真跑验证）
     assert!(
@@ -66,7 +70,11 @@ fn test_namespace_missing_member_reports_e1043() {
     );
 
     // Act
-    let files = check_project(&tmp.path().join("main.yx")).expect("check project");
+    let files = check_project(
+        &tmp.path().join("main.yx"),
+        crate::frontend::config::CompileConfig::default(),
+    )
+    .expect("check project");
 
     // Assert：模块语义报 E1043（不再报 struct 语义的 E1042）
     let codes = all_codes(&files);
@@ -89,7 +97,11 @@ fn test_namespace_function_as_value_is_clean() {
     );
 
     // Act
-    let files = check_project(&tmp.path().join("main.yx")).expect("check project");
+    let files = check_project(
+        &tmp.path().join("main.yx"),
+        crate::frontend::config::CompileConfig::default(),
+    )
+    .expect("check project");
 
     // Assert
     assert!(
@@ -108,7 +120,11 @@ fn test_std_submodule_missing_member_reports_e1043() {
     );
 
     // Act
-    let files = check_project(&tmp.path().join("main.yx")).expect("check project");
+    let files = check_project(
+        &tmp.path().join("main.yx"),
+        crate::frontend::config::CompileConfig::default(),
+    )
+    .expect("check project");
 
     // Assert：std 子模块同样是模块语义
     let codes = all_codes(&files);
@@ -129,7 +145,11 @@ fn test_namespace_unannotated_member_access_is_clean() {
     );
 
     // Act
-    let files = check_project(&tmp.path().join("main.yx")).expect("check project");
+    let files = check_project(
+        &tmp.path().join("main.yx"),
+        crate::frontend::config::CompileConfig::default(),
+    )
+    .expect("check project");
 
     // Assert：typecheck 全链无诊断（取值执行由集成测试真跑验证）
     assert!(
@@ -149,7 +169,11 @@ fn test_unannotated_forward_reference_still_exported() {
     );
 
     // Act
-    let files = check_project(&tmp.path().join("main.yx")).expect("check project");
+    let files = check_project(
+        &tmp.path().join("main.yx"),
+        crate::frontend::config::CompileConfig::default(),
+    )
+    .expect("check project");
 
     // Assert
     assert!(
@@ -174,7 +198,11 @@ fn test_unannotated_cross_module_initializer_exported() {
     .expect("write other.yx");
 
     // Act
-    let files = check_project(&tmp.path().join("main.yx")).expect("check project");
+    let files = check_project(
+        &tmp.path().join("main.yx"),
+        crate::frontend::config::CompileConfig::default(),
+    )
+    .expect("check project");
 
     // Assert：lib 自身与导入方全链无诊断（执行级验证见 multifile 集成测试）
     assert!(
