@@ -436,7 +436,7 @@ scope 里的提供模块」的候选组）——单点在 `visible_method_overlo
 |------|--------|------|----------|
 | 派发名来源 | 派发名 = **定义侧裸类型名** + 方法名（`Temp.tag`）。typecheck 的 `MonoType` 对导入类型只留定义侧裸名（`Temp`），两单元的同名类型在类型层不可区分 | 派发名先按**接收者写出的类型名**归因到定义单元：`Temp.tag` → `b.Temp.tag`（写出名 → 导入面 → 定义单元限定名）。**方法调用与算子接口（Index / Equal）同一判据** | `src/middle/core/ir_gen.rs:1265`（`method_dispatch_name`，**唯一判据**）、`:1232`（`imported_type_owner`：`use_aliases` + `Resolver::resolve_namespace` + 注册表 `ExportKind::Type` 单一来源；**权威限定名精确命中即返回、不再解析**）、`:1188`（`constructor_written_type_name`，纯语法提取）、`:1169`（`written_type_name_of`，注解写出名） |
 | 写出名的记录 | 无此概念：`ir_gen` 只按 `MonoType` 的裸名派发 | 局部变量记在符号表条目（`SymbolEntry.written_type`，作用域自随符号表）；顶层绑定记在逐单元表（`global_written_types`，Script 形态 `t = Temp(1.0)` 是全局槽位）；形参注解同链记录 | `src/middle/core/ir_gen.rs:1115`（`note_local_written_type`）、`:1129`（`note_param_written_types`）、`:1159`（`binding_written_type`：先局部后顶层）、`:109`（`SymbolEntry.written_type` 字段）、`:3255`（顶层登记点） |
-| 五处生产路径 | 三条方法命名路径（RFC-004 绑定 / D20 重载决议 / 裸名推导）各产各的名字；两个算子接口臂（Index → `Type.index`、Equal → `Type.equal`）另拼短类型名，完全绕过归因（修复轮 R1 实测） | 五条路径都经 `method_dispatch_name` 产出最终调用名（判据只此一份，D3） | `src/middle/core/ir_gen.rs:8318`（绑定臂）、`:8379`（决议臂）、`:8532`（裸名臂）、`:6444`（Index 臂）、`:7858`（Equal 臂） |
+| 五处生产路径 | 三条方法命名路径（RFC-004 绑定 / D20 重载决议 / 裸名推导）各产各的名字；两个算子接口臂（Index → `Type.index`、Equal → `Type.equal`）另拼短类型名，完全绕过归因（修复轮 R1 实测） | 五条路径都经 `method_dispatch_name` 产出最终调用名（判据只此一份，D3） | `src/middle/core/ir_gen.rs:8318`（绑定臂）、`:8379`（决议臂）、`:8532`（裸名臂）、`:6444`（Index 臂）、`:7858`（**二元接口共享臂**：Equal + Add/Subtract/Multiply/Divide/Modulo） |
 
 **机制判别（判别实验，先于修复）**：issue #465 列了两条候选机制——(a) `type_bindings` 以**短类型名**键控，
 同名单元互相覆盖；(b) D20 决议覆盖 `binding.function`。在本形态上只有 (b) 成立：入口单元的 `type_bindings`
@@ -467,6 +467,9 @@ scope 里的提供模块」的候选组）——单点在 `visible_method_overlo
   `u == t` 得 `true`（应 `20.0` / `false`），`check` 退出 0。现在两臂同经 `method_dispatch_name`
   （`:6444` / `:7858`），修复后 `20.0` / `false`；**本地类型两形态逐字节不变**（钉
   `test_local_type_operator_arms_keep_own_dispatch` + 语料 `operator_index.yx` / `struct_equality.yx` 全绿）。
+  复核轮实测：`:7858` 是**全部「接口驱动二元运算」的共享臂**（Equal + Add/Subtract/Multiply/Divide/
+  Modulo）——两单元同名类型上的 `u + u` 修复前 `3.0`、修复后 `20.0`，算术五族随同一处判据同修；
+  本节原表把它记作「Equal 臂」低估了覆盖面，已按实修订。
 - **R2 归属判定单点 + 不二次解析**：上一版 `constructor_written_type_name` 产出**权威限定名**
   （`p.q.Temp`），`imported_type_owner` 又把它过一遍 `resolve_namespace`，首段被命名空间别名表改写
   （`use other as p` ⇒ `other.q.Temp`）⇒ 类型导出判定失败 ⇒ 回落裸名（实测 `y = 3.0`）。现在构造器只做
