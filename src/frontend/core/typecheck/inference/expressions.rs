@@ -815,6 +815,21 @@ impl<'a> ExpressionInferrer<'a> {
         right: &MonoType,
         span: crate::util::span::Span,
     ) -> Result<MonoType> {
+        // 底部类型 vacuous（issue #469 处 3）：绑定失败毒化登记（`Never` 占位）
+        // 或不可达表达式里的运算不施加任何类型约束——unify 的爆炸原理
+        // （`solver.rs` 的 `Never <: T`）在运算位的同款延伸。毒化的引用参与
+        // 算术/比较时必须静默通过，否则 E1001 消了、E1002 又冒出来。
+        // 结果取另一侧的具体形态；两侧都是 Never 时无信息可依，取 fresh 推迟。
+        let left_never = matches!(left, MonoType::Never);
+        let right_never = matches!(right, MonoType::Never);
+        if left_never || right_never {
+            return Ok(match (left_never, right_never) {
+                (true, true) => self.solver.new_var(),
+                (true, false) => right.clone(),
+                (false, true) => left.clone(),
+                (false, false) => unreachable!("上方 if 已排除"),
+            });
+        }
         match op {
             BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Div => {
                 // RFC-009 读透明：借用值参与算术按 inner 类型判定（读穿透）
@@ -3574,6 +3589,15 @@ impl<'a> ExpressionInferrer<'a> {
                         };
                         return Ok(fn_ty);
                     }
+                }
+
+                // 底部类型 vacuous（issue #469 处 3）：毒化登记（`Never` 占位）的
+                // 变量上取字段不施加约束——与 infer_binary 的 Never 短路同款，
+                // 防止 E1001 消了、E1053「non-struct type 'never'」又冒出来
+                // （实测 generic_ctor_type_mismatch_err 语料的 `a.value`）。
+                // 字段类型无信息可依，取 fresh 推迟。
+                if matches!(resolved, MonoType::Never) {
+                    return Ok(self.solver.new_var());
                 }
 
                 match resolved {

@@ -203,7 +203,13 @@ impl fmt::Display for ConstExpr {
             ConstExpr::Lit(v) => write!(f, "{}", v),
             ConstExpr::Var(v) => write!(f, "{}", v),
             ConstExpr::BinOp { op, left, right } => write!(f, "({} {} {})", left, op, right),
-            ConstExpr::UnOp { op, expr } => write!(f, "{}({})", op, expr),
+            ConstExpr::UnOp { op, expr } => match expr.as_ref() {
+                // 负号作用于整数字面量按值打印（issue #469 处 2b）：
+                // 诊断里 `-3` 不应显示成 AST 形态的 `-(3)`。
+                // 只折这一种常量值形态；非字面量表达式仍按结构直印。
+                ConstExpr::Lit(ConstValue::Int(n)) if *op == UnOp::Neg => write!(f, "-{n}"),
+                other => write!(f, "{}({})", op, other),
+            },
             ConstExpr::Call { func, args } => {
                 write!(f, "{}(", func)?;
                 for (i, arg) in args.iter().enumerate() {

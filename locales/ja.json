@@ -179,6 +179,8 @@
     "example": "x: Int = \"hello\";",
     "error_output": "error[E1002]: 型の不一致\n --> example.yx:1:12\n  |\n1 | x: Int = \"hello\";\n  |            ^ 'Int' が必要ですが、'String' が見つかりました"
   },
+  "E1002.borrowed_arith.help": "The left side reads as '{l}' and the right side as '{r}'; when a borrow (&T) participates in arithmetic its inner type is used — to operate on a container, index into it (e.g. v[0]) or dereference it (*t) first",
+  "E1002.binop_mismatch.help": "The left and right types are '{l}' and '{r}', which do not support this operator; check whether a conversion is missing or an operand is wrong",
   "E1003": {
     "title": "未知の型",
     "message": "参照された型が存在しません",
@@ -195,6 +197,7 @@
     "example": "add(1, 2, 3);",
     "error_output": "error[E1010]: 引数の数が一致しません\n --> example.yx:1:1\n  |\n1 | add(1, 2, 3);\n  |     ^ 関数は 2 個の引数を期待していますが、3 個見つかりました"
   },
+  "E1010.missing_named.help": "Missing required parameters: {missing} (named arguments fill slots by parameter name and do not occupy leading positions)",
   "E1011": {
     "title": "引数の型が一致しません",
     "message": "引数の型チェックに失敗しました",
@@ -525,6 +528,7 @@
     "example": "use foo::bar;",
     "error_output": "error[E5001]: モジュールが見つかりません\n --> example.yx:1:5\n  |\n1 | use foo::bar;\n  |     ^ モジュール 'foo' が見つかりません"
   },
+  "E5001.vendor_missing.help": "Dependency package '{pkg}' is not installed in .yaoxiang/vendor/; run `yaoxiang install`",
   "E5002": {
     "title": "インポートエラー",
     "message": "モジュールのインポートに失敗しました",
@@ -772,9 +776,13 @@
   "E4018": {
     "title": "精化述語違反",
     "message": "精化型制約が反証されました",
-    "template": "精化述語違反：{constraint}\n\n反例：\n{counterexample}",
+    "template": "精化述語違反：{constraint}{counterexample}",
     "help": "述語が反証されました——制約を偽にする代入が存在します。変数の値を確認するか、制約を緩和してください。"
   },
+  "E4018.counterexample.section": "\n\nCounterexample:\n{assignments}",
+  "E4018.no_free_var.note": "\n\n(The constraint has no free variables; the annotation itself is unsatisfiable.)",
+  "E4018.proof_false.note": "\n\n(Proof function returned false; no concrete counterexample.)",
+  "E4018.proof_error.note": "\n\n(Proof function failed to execute; no concrete counterexample.)",
   "E4019": {
     "title": "型等式が成立しません",
     "message": "型等式が証明パイプライン内で反証されました",
@@ -1203,5 +1211,6 @@
     "help": "初期化順序は use 依存のトポロジカル順で決まります。循環内の前後関係は「循環内パス辞書順」という決定性のための取り決めだけで、意味的な保証ではありません。循環を断ち切る（use を循環の外へ移す、または値を関数による遅延評価にする）と順序が判定可能になります。E3019 は単一ユニット内のトップレベル束縛間の循環を扱い、本コードはモジュール間のインポート循環を扱います。",
     "example": "// zlib.yx: use zother.{o_val}\n// zother.yx: use zlib.{z_val}\n// => zlib → zother → zlib：両モジュールが相互にインポートしています。サイクル内の順序はパスの辞書順による規約にすぎません",
     "error_output": "warning[W1007]: モジュールインポートサイクル zlib → zother → zlib：サイクル内の初期化順序は判定不能。サイクル内の順序はパスの辞書順による決定的な規約にすぎない（意味的保証なし）\n --> zother.yx:2:1\n  |\n2 | use zlib.{z_val}\n  | ^^^^^^^^^^^^^^^^^\n  |\nhelp: サイクル内の値依存関係が use の順序と逆になっています：zlib が zother.o_val を読み込む時点では zother がまだ初期化されていません（違反された辺：zother が zlib をインポートするため、トポロジカル順序では zlib が先に置かれます）。初期化順序は use の依存関係に従いますが、サイクル内では値依存関係を同時に満たすことはできません——サイクルを壊すか、このトップレベル値を遅延評価する関数に変更してください"
-  }
+  },
+  "W1007.value_edge.help": "The value dependency runs against the use order: {reader} reads {slot} while {owner} is not yet initialized (violated edge: {owner} imports {reader}; the topological order therefore places {reader} first). Initialization follows use dependencies; inside a cycle both cannot hold — break the cycle, or defer the top-level value behind a function."
 }

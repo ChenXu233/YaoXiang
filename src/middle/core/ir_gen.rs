@@ -2090,15 +2090,12 @@ impl AstToIrGenerator {
                     // 那会把用户写法错误变成编译器进程 panic（#451，D59 A 类：
                     // 实测 `exit=101`）；此处编译期拒绝并指明补全写法。
                     let Some(method_type) = type_annotation.as_ref() else {
+                        // help 不在此硬编（issue #469 处 1）：E1110 的参数化模板
+                        // 已在 locales 六语言就位（{type}/{method} 由码表 param 供值）
                         return Err(ErrorCodeDefinition::method_binding_without_signature(
-                            &type_name,
-                            &name,
+                            &type_name, &name,
                         )
                         .at(stmt.span)
-                        .with_help(format!(
-                            "补上签名标注：`{type_name}.{name}: (self: &{type_name}, ...) -> 返回类型 = 函数体`；\
-                             要复用现成函数则写 `{type_name}.{name}: (…) -> 返回类型 = 函数名[位置]`"
-                        ))
                         .build());
                     };
                     self.generate_method_ir(

@@ -176,6 +176,8 @@
     "example": "x: Int = \"hello\";",
     "error_output": "error[E1002]: type mismatch\n --> example.yx:1:12\n  |\n1 | x: Int = \"hello\";\n  |            ^ expected 'Int', found 'String'"
   },
+  "E1002.borrowed_arith.help": "The left side reads as '{l}' and the right side as '{r}'; when a borrow (&T) participates in arithmetic its inner type is used — to operate on a container, index into it (e.g. v[0]) or dereference it (*t) first",
+  "E1002.binop_mismatch.help": "The left and right types are '{l}' and '{r}', which do not support this operator; check whether a conversion is missing or an operand is wrong",
   "E1003": {
     "title": "Unknown type",
     "message": "The referenced type does not exist",
@@ -192,6 +194,7 @@
     "example": "add(1, 2, 3);",
     "error_output": "error[E1010]: argument count mismatch\n --> example.yx:1:1\n  |\n1 | add(1, 2, 3);\n  |     ^ function expected 2 arguments, found 3"
   },
+  "E1010.missing_named.help": "Missing required parameters: {missing} (named arguments fill slots by parameter name and do not occupy leading positions)",
   "E1011": {
     "title": "argument type mismatch",
     "message": "argument type check failed",
@@ -551,6 +554,7 @@
     "example": "use foo::bar;",
     "error_output": "error[E5001]: module not found\n --> example.yx:1:5\n  |\n1 | use foo::bar;\n  |     ^ module 'foo' not found"
   },
+  "E5001.vendor_missing.help": "Dependency package '{pkg}' is not installed in .yaoxiang/vendor/; run `yaoxiang install`",
   "E5002": {
     "title": "Import error",
     "message": "Failed to import module",
@@ -840,9 +844,13 @@
   "E4018": {
     "title": "Refinement predicate violation",
     "message": "Refinement type constraint falsified",
-    "template": "Refinement predicate violation: {constraint}\n\nCounterexample:\n{counterexample}",
+    "template": "Refinement predicate violation: {constraint}{counterexample}",
     "help": "Predicate falsified — there exists an assignment that makes the constraint false. Please check variable values or relax the constraint."
   },
+  "E4018.counterexample.section": "\n\nCounterexample:\n{assignments}",
+  "E4018.no_free_var.note": "\n\n(The constraint has no free variables; the annotation itself is unsatisfiable.)",
+  "E4018.proof_false.note": "\n\n(Proof function returned false; no concrete counterexample.)",
+  "E4018.proof_error.note": "\n\n(Proof function failed to execute; no concrete counterexample.)",
   "E4019": {
     "title": "Type equality does not hold",
     "message": "Type equality falsified within the proof pipeline",
@@ -1201,5 +1209,6 @@
     "help": "Initialization order follows the topological order of use dependencies; inside a cycle the only rule is the deterministic path-lexicographic tie-break, which is not a semantic guarantee. Break the cycle (move one use out of the cycle, or defer the value behind a function) to make the order decidable. E3019 covers cycles between top-level bindings inside one unit; this code covers import cycles between modules.",
     "example": "// zlib.yx: use zother.{o_val}\n// zother.yx: use zlib.{z_val}\n// => zlib → zother → zlib: the two modules import each other; the order within the cycle follows a deterministic convention based only on lexicographic path order",
     "error_output": "warning[W1007]: Module import cycle zlib → zother → zlib: initialization order within the cycle cannot be determined; the order within the cycle follows a deterministic convention based only on lexicographic path order (not a semantic guarantee)\n --> zother.yx:2:1\n  |\n2 | use zlib.{z_val}\n  | ^^^^^^^^^^^^^^^^^\n  |\nhelp: The value dependency within the cycle is opposite to the use order: when zlib reads zother.o_val, zother has not yet been initialized (the violated edge: zother imports zlib, so the topological order places zlib first). Initialization order follows use dependencies; value dependencies cannot all be satisfied within the cycle—break the cycle, or change that top-level value to a function for deferred evaluation"
-  }
+  },
+  "W1007.value_edge.help": "The value dependency runs against the use order: {reader} reads {slot} while {owner} is not yet initialized (violated edge: {owner} imports {reader}; the topological order therefore places {reader} first). Initialization follows use dependencies; inside a cycle both cannot hold — break the cycle, or defer the top-level value behind a function."
 }

@@ -1389,6 +1389,10 @@ impl OwnershipChecker {
             // 之后 `double(6)` 报 E2014——把函数当成 Linear（一次性）类型，
             // 与「函数可任意次调用」的直觉和高阶编程直接冲突。
             MonoType::Fn { .. } => CopySemantics::Dup,
+            // #469 处 3：绑定失败毒化登记（以底部类型 `Never` 占位）的变量没有
+            // 运行时值，一切所有权操作 vacuous——按值语义放行，不参与 move/drop
+            // 判定。否则毒化修掉 E1001 级联后，E2014 又会从所有权层冒出来。
+            MonoType::Never => CopySemantics::ValueCopy,
             // #398：struct / tuple 的组合派生在 classify_mono_deep 里处理
             //（需要 env 展开具名类型，本函数只认叶子）。
             _ => CopySemantics::Move,

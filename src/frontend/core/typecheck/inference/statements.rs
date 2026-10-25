@@ -700,9 +700,11 @@ impl StatementChecker {
                 // use 首段 = 包名；该包在 vendor 中无目录 → 视为缺依赖
                 let pkg = path.split('.').next().unwrap_or(path);
                 if !vendor_root.join(format!("{pkg}-")).exists() {
-                    builder = builder.with_help(format!(
-                        "依赖包 '{pkg}' 未安装到 .yaoxiang/vendor/，运行 `yaoxiang install`"
-                    ));
+                    // help 走 locales per-site 键（issue #469 处 1）：文案随
+                    // error_lang() 渲染，{pkg} 插值，不在发射点硬编成品串
+                    builder = builder
+                        .param("pkg", pkg)
+                        .with_help_key("E5001.vendor_missing.help");
                 }
             }
             return Err(Box::new(builder.build()));
@@ -2116,6 +2118,51 @@ impl StatementChecker {
 
         out
     }
+    /// 检查变量声明/赋值语句（绑定失败毒化层）。
+    ///
+    /// issue #469 处 3：致命 RHS 错误（E1014/E1107/E1002…）使该语句的绑定
+    /// 不发生，后续引用逐处报 E1001 Unknown variable——同一根因的级联噪声。
+    /// 绑定失败时把被绑名以**错误类型**（既有底部类型 `Never`）登记进环境：
+    /// 后续引用命中该登记不再报未定义，也不产生新的误导诊断——`unify` 的
+    /// 爆炸原理（solver）、`infer_binary` 的 Never 短路、所有权层对 Never 的
+    /// 值语义放行三处共同保证「毒值传播但静默」。
+    /// 已有绑定的重赋值失败不覆盖旧类型；方法绑定不进变量作用域，不毒化。
+    #[allow(clippy::too_many_arguments)]
+    fn check_var_stmt(
+        &mut self,
+        name: &str,
+        type_annotation: Option<&crate::frontend::core::parser::ast::Type>,
+        prelude_stmts: &[Stmt],
+        initializer: Option<&Expr>,
+        is_mut: bool,
+        stmt_span: crate::util::span::Span,
+        name_span: crate::util::span::Span,
+        is_method_binding: bool,
+    ) -> Result<(), Box<Diagnostic>> {
+        match self.check_var_stmt_inner(
+            name,
+            type_annotation,
+            prelude_stmts,
+            initializer,
+            is_mut,
+            stmt_span,
+            name_span,
+            is_method_binding,
+        ) {
+            Ok(v) => Ok(v),
+            Err(e) => {
+                if !is_method_binding && self.scope.get_var_info(name).is_none() {
+                    self.scope.add_var(
+                        name.to_string(),
+                        PolyType::mono(MonoType::Never),
+                        is_mut,
+                        name_span,
+                    );
+                }
+                Err(e)
+            }
+        }
+    }
     /// 检查变量语句
     ///
     /// 处理 Binding 类型的变量声明。
@@ -2124,7 +2171,7 @@ impl StatementChecker {
     /// 不是变量声明/赋值——不适用 spec §4.3（否则 `Point.get_x = f[0]`
     /// 会被当成对变量 `get_x` 的重赋值）。
     #[allow(clippy::too_many_arguments)]
-    fn check_var_stmt(
+    fn check_var_stmt_inner(
         &mut self,
         name: &str,
         type_annotation: Option<&crate::frontend::core::parser::ast::Type>,
@@ -2795,6 +2842,21 @@ impl StatementChecker {
                 // 其他二元运算：直接处理
                 let left_ty = self.check_expr(left)?;
 
+                // 底部类型 vacuous（issue #469 处 3）：绑定失败毒化登记（`Never`
+                // 占位）的变量参与运算不施加类型约束——与 infer_binary 的 Never
+                // 短路同款（两个遍历器、同一判据，见该函数注释）。结果取另一侧
+                // 的具体形态；两侧都是 Never 时无信息可依，取 fresh 推迟。
+                let left_never = matches!(left_ty, MonoType::Never);
+                let right_never = matches!(right_ty, MonoType::Never);
+                if left_never || right_never {
+                    return Ok(match (left_never, right_never) {
+                        (true, true) => self.solver.new_var(),
+                        (true, false) => right_ty,
+                        (false, true) => left_ty,
+                        (false, false) => unreachable!("上方 if 已排除"),
+                    });
+                }
+
                 match op {
                     BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Div => {
                         // RFC-009 读透明：借用值参与算术按 inner 类型判定（读穿透）
@@ -2892,18 +2954,14 @@ impl StatementChecker {
                             // ——读者看到的是借用后的读视图类型，但很可能以为是
                             // “Vec 和 Int 不能相加”，而实际该做的是取元素或解引用。
                             // 这里针对“一侧是借用”的情形给出具体提示。
+                            // help 走 locales per-site 键（issue #469 处 1）：
+                            // {l}/{r} 插值，不在发射点硬编成品串。
                             let borrowed = matches!(left_ty, MonoType::Ref { .. })
                                 || matches!(right_ty, MonoType::Ref { .. });
-                            let help = if borrowed {
-                                format!(
-                                    "左侧读作 '{l}'、右侧读作 '{r}'；借用（&T）参与算术时按内部类型判定，\
-                                     若想对容器运算请先取元素（如 v[0]）或解引用（*t）"
-                                )
+                            let help_key: &'static str = if borrowed {
+                                "E1002.borrowed_arith.help"
                             } else {
-                                format!(
-                                    "左右类型分别为 '{l}' 和 '{r}'，二者不支持该运算符；\
-                                         检查是否少了转换或写错了操作数"
-                                )
+                                "E1002.binop_mismatch.help"
                             };
                             Err(Box::new(
                                 ErrorCodeDefinition::type_mismatch(
@@ -2911,7 +2969,9 @@ impl StatementChecker {
                                     &format!("{l} 与 {r}"),
                                 )
                                 .at(*span)
-                                .with_help(help)
+                                .param("l", format!("{l}"))
+                                .param("r", format!("{r}"))
+                                .with_help_key(help_key)
                                 .build(),
                             ))
                         }

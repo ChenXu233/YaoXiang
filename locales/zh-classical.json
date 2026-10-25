@@ -139,6 +139,8 @@
     "example": "x: Int = \"hello\";",
     "error_output": "error[E1002]: 类型不匹配\n --> example.yx:1:12\n  |\n1 | x: Int = \"hello\";\n  |            ^ 期望 'Int'，得 'String'"
   },
+  "E1002.borrowed_arith.help": "The left side reads as '{l}' and the right side as '{r}'; when a borrow (&T) participates in arithmetic its inner type is used — to operate on a container, index into it (e.g. v[0]) or dereference it (*t) first",
+  "E1002.binop_mismatch.help": "The left and right types are '{l}' and '{r}', which do not support this operator; check whether a conversion is missing or an operand is wrong",
   "E1003": {
     "title": "未知类型",
     "message": "所引类型不存在",
@@ -155,6 +157,7 @@
     "example": "add(1, 2, 3);",
     "error_output": "error[E1010]: 参数之数不契\n --> example.yx:1:1\n  |\n1 | add(1, 2, 3);\n  |     ^ 函数冀 2 参数，得 3"
   },
+  "E1010.missing_named.help": "Missing required parameters: {missing} (named arguments fill slots by parameter name and do not occupy leading positions)",
   "E1011": {
     "title": "参数之型不契",
     "message": "参数之型审验有乖",
@@ -485,6 +488,7 @@
     "example": "use foo::bar;",
     "error_output": "error[E5001]: 模块未获\n --> example.yx:1:5\n  |\n1 | use foo::bar;\n  |     ^ 模块'foo'未获"
   },
+  "E5001.vendor_missing.help": "Dependency package '{pkg}' is not installed in .yaoxiang/vendor/; run `yaoxiang install`",
   "E5002": {
     "title": "导入有讹",
     "message": "导入模块未成",
@@ -732,9 +736,13 @@
   "E4018": {
     "title": "精化谓词违犯",
     "message": "精化类型之约束已被证伪",
-    "template": "精化谓词违犯：{constraint}\n\n反例：\n{counterexample}",
+    "template": "精化谓词违犯：{constraint}{counterexample}",
     "help": "谓词已证为伪——有赋值致约束为假。请审变量之值，或宽其约束。"
   },
+  "E4018.counterexample.section": "\n\nCounterexample:\n{assignments}",
+  "E4018.no_free_var.note": "\n\n(The constraint has no free variables; the annotation itself is unsatisfiable.)",
+  "E4018.proof_false.note": "\n\n(Proof function returned false; no concrete counterexample.)",
+  "E4018.proof_error.note": "\n\n(Proof function failed to execute; no concrete counterexample.)",
   "E4019": {
     "title": "类型等式不立",
     "message": "类型等式于证明管道内已被证伪",
@@ -1209,5 +1217,6 @@
     "help": "初始化之序依 use 依赖之拓扑序而定；环内先后唯「环内路径字典序」为定之约，非语义之保。破其环（移一环上之 use 出环，或改为函数延迟求值）则序可判。E3019 判一单元内顶层绑定之环，本码判模块间导入之环。",
     "example": "// zlib.yx: use zother.{o_val}\n// zother.yx: use zlib.{z_val}\n// => zlib → zother → zlib：两模块彼此导入，环中先后仅依路径字典序作约定",
     "error_output": "warning[W1007]: 模块导入环 zlib → zother → zlib：环中初始化次序不可判定；环中先后仅依路径字典序作确定性约定（非语义保证）\n --> zother.yx:2:1\n  |\n2 | use zlib.{z_val}\n  | ^^^^^^^^^^^^^^^^^\n  |\nhelp: 环中值依赖与 use 次序相逆：zlib 读 zother.o_val 时，zother 尚未初始化（所违之边：zother 导入 zlib，拓扑序据此置 zlib 于前）。初始化次序依 use 依赖而定，环中值依赖无法同时满足——破此环，或将该顶层值改为函数，以延迟求值"
-  }
+  },
+  "W1007.value_edge.help": "The value dependency runs against the use order: {reader} reads {slot} while {owner} is not yet initialized (violated edge: {owner} imports {reader}; the topological order therefore places {reader} first). Initialization follows use dependencies; inside a cycle both cannot hold — break the cycle, or defer the top-level value behind a function."
 }

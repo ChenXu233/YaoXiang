@@ -1729,8 +1729,24 @@ fn warn_import_cycles(
         };
         let builder =
             ErrorCodeDefinition::module_import_cycle(&cycle_text(units, cycle)).at(anchor.span);
+        // 值边命中时的 help：把「被违反的边 + 被读槽名」写进同一诊断。
+        // help 走 locales per-site 键（issue #469 处 1）：模板与通用 help 同源，
+        // {reader}/{slot}/{owner} 插值，不在发射点硬编成品串；同一事实不新增码。
         let diagnostic = match &violation {
-            Some(v) => builder.with_help(cycle_value_help(units, v)).build(),
+            Some(v) => {
+                let key = |i: usize| {
+                    units
+                        .get(i)
+                        .map(|u| u.key.to_string())
+                        .unwrap_or("?".into())
+                };
+                builder
+                    .param("reader", key(v.reader))
+                    .param("slot", v.slot.clone())
+                    .param("owner", key(v.owner))
+                    .with_help_key("W1007.value_edge.help")
+                    .build()
+            }
             None => builder.build(),
         };
         if let Some(us) = unit_states.get_mut(anchor.importer) {
@@ -1800,26 +1816,4 @@ fn cycle_text(
     };
     names.push(first);
     names.join(" → ")
-}
-
-/// 值边命中时的 help：把「被违反的边 + 被读槽名」写进同一诊断。
-///
-/// 与既有 `with_help` 调用点同款（typecheck / obligations）：补充句由构造点
-/// 给出，模板与通用 help 仍由 locales 提供——同一事实不新增码，也不新增字段。
-fn cycle_value_help(
-    units: &[Unit],
-    violation: &CycleViolation,
-) -> String {
-    let key = |i: usize| units.get(i).map(|u| u.key.as_str()).unwrap_or("?");
-    format!(
-        "环内值依赖与 use 顺序相反：{} 读取 {} 时 {} 尚未初始化（被违反的边：{} 导入 {}，\
-         拓扑序据此把 {} 排在前面）。初始化顺序按 use 依赖排，环内无法同时满足值依赖——\
-         打破环，或把该顶层值改为函数延迟求值",
-        key(violation.reader),
-        violation.slot,
-        key(violation.owner),
-        key(violation.owner),
-        key(violation.reader),
-        key(violation.reader),
-    )
 }

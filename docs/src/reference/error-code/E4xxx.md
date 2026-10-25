@@ -24,7 +24,7 @@ description: '泛型约束、特质系统与常量求值相关的错误。'
 | `E4011` | 常量溢出 | `Generic` | 否 | `常量表达式溢出` | ✅ 4 处 |
 | `E4012` | 常量递归过深 | `Generic` | 否 | `常量求值超出最大递归深度 {limit}` | ✅ 1 处 |
 | `E4014` | 常量求值失败 | `Generic` | 是 | `无法求值常量表达式：{reason}` | ✅ 10 处 |
-| `E4018` | 精化谓词违反 | `Generic` | 是 | `精化谓词违反：{constraint}  反例： {counterexample}` | ✅ 6 处 |
+| `E4018` | 精化谓词违反 | `Generic` | 是 | `精化谓词违反：{constraint}{counterexample}` | ✅ 6 处 |
 | `E4019` | 类型等式不成立 | `Generic` | 否 | `类型等式不成立：期望 {expected}，实际 {found}` | ✅ 1 处 |
 | `E4020` | 需要证明函数 | `Generic` | 否 | `需要证明函数来验证约束` | ✅ 1 处 |
 | `E4021` | 循环终止性无法自动证明 | `Generic` | 否 | `无法自动证明循环终止：未找到有效的递减度量` | ✅ 1 处 |
@@ -124,10 +124,10 @@ description: '泛型约束、特质系统与常量求值相关的错误。'
 - **类别**：`Generic`
 - **span 豁免**：是
 - **构造函数**：`ErrorCodeDefinition::refinement_violated(constraint)`
-- **模板**：`精化谓词违反：{constraint}  反例： {counterexample}`
+- **模板**：`精化谓词违反：{constraint}{counterexample}`
 - **消息**：精化类型约束被证伪
 - **帮助**：谓词被证伪——存在使约束为假的赋值。请检查变量值或放宽约束。
-- **发射点**：`src/frontend/proof_execution.rs:48`、`src/frontend/proof_execution.rs:58`、`src/frontend/core/typecheck/checker.rs:5243` 等 6 处
+- **发射点**：`src/frontend/proof_execution.rs:49`、`src/frontend/proof_execution.rs:59`、`src/frontend/core/typecheck/checker.rs:5245` 等 6 处
 
 ### E4019：类型等式不成立
 
@@ -137,7 +137,7 @@ description: '泛型约束、特质系统与常量求值相关的错误。'
 - **模板**：`类型等式不成立：期望 {expected}，实际 {found}`
 - **消息**：类型等式在证明管道内证伪
 - **帮助**：检查组件的类型计算或提供证明函数。
-- **发射点**：`src/frontend/core/typecheck/proof/verdict.rs:141`
+- **发射点**：`src/frontend/core/typecheck/proof/verdict.rs:146`
 - **源码注释名**：类型等式不成立（证明管道内）
 
 ### E4020：需要证明函数
@@ -148,7 +148,7 @@ description: '泛型约束、特质系统与常量求值相关的错误。'
 - **模板**：`需要证明函数来验证约束`
 - **消息**：约束无法在编译期证明，需要提供证明函数
 - **帮助**：添加证明函数或提供运行时检查
-- **发射点**：`src/frontend/core/typecheck/proof/verdict.rs:288`
+- **发射点**：`src/frontend/core/typecheck/proof/verdict.rs:293`
 - **源码注释名**：需要证明函数来验证约束
 
 ### E4021：循环终止性无法自动证明
@@ -159,7 +159,7 @@ description: '泛型约束、特质系统与常量求值相关的错误。'
 - **模板**：`无法自动证明循环终止：未找到有效的递减度量`
 - **消息**：编译器无法为该循环合成递减度量，无法自动证明其终止
 - **帮助**：这是编译器自动推理的覆盖边界，并非程序错误。请改用带明确递减变量的循环形式（如每轮减小一个有下界的计数变量），或参考 RFC-027 §7 的度量策略与覆盖范围。
-- **发射点**：`src/frontend/core/typecheck/proof/verdict.rs:284`
+- **发射点**：`src/frontend/core/typecheck/proof/verdict.rs:289`
 
 ### E4022：测度不成立
 
@@ -169,5 +169,5 @@ description: '泛型约束、特质系统与常量求值相关的错误。'
 - **模板**：`测度不成立：此调用点无法证明测度严格递减  反例： {counterexample}`
 - **消息**：该递归调用点的测度未能严格递减，无法证明递归终止（已附反例）
 - **帮助**：这是精化类型主张的终止性义务：带 `Terminates` 测度的递归函数，每个递归调用点都必须证明测度严格递减。反例给出了一组使递减不成立的取值。请检查测度选择是否恰当，或补充分支守卫使递归路径上的下降成立。参考 RFC-027a。
-- **发射点**：`src/frontend/core/typecheck/proof/verdict.rs:126`
+- **发射点**：`src/frontend/core/typecheck/proof/verdict.rs:131`
 - **源码注释名**：测度不成立（RFC-027a §义务生成）

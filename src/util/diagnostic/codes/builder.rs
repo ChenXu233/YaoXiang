@@ -47,6 +47,19 @@ pub struct DiagnosticBuilder {
     related: Vec<Diagnostic>,
     severity: Option<Severity>,
     help_override: Option<String>,
+    /// help 改从该 locales 平键渲染（per-call-site 模板，`with_help_key` 登记）。
+    ///
+    /// 同一错误码在不同发射点可能需要**不同形态**的 help（如 E1010 的
+    /// 「缺必需形参」形态带缺失形参名列表，与通用「检查参数数量」不同句）。
+    /// 键与错误码条目同住 locales JSON（字符串值，形如 `E1010.missing_named.help`），
+    /// 渲染与回退链复用 [`I18nRegistry`] 同一管线——不引入第二套文案机制。
+    help_key: Option<&'static str>,
+    /// 值来自 locales 平键模板的参数（`param_from_key` 登记）。
+    ///
+    /// build 时用已收集的 params 渲染该键，结果作为对应 param 的值。用于
+    /// E4018 反例段这类「段标题等用户可见文字」——它们必须在 locales 里，
+    /// 随 message 同语言渲染，而不是在发射点硬编。
+    template_params: Vec<(&'static str, &'static str)>,
 }
 
 impl DiagnosticBuilder {
@@ -59,6 +72,8 @@ impl DiagnosticBuilder {
             related: Vec::new(),
             severity: None,
             help_override: None,
+            help_key: None,
+            template_params: Vec::new(),
         }
     }
 
@@ -82,6 +97,32 @@ impl DiagnosticBuilder {
         value: impl Into<String>,
     ) -> Self {
         self.params.push((key, value.into()));
+        self
+    }
+
+    /// 登记一个「值来自 locales 平键模板」的参数（issue #469 处 1/处 2 机制）。
+    ///
+    /// `build` 时用已收集的参数渲染 `template_key`，结果作为 `key` 的参数值。
+    /// 用户可见的段标题 / 补充说明（如 E4018 的反例段标题）由此与 message
+    /// 同语言渲染，发射点不得硬编任何语言的成品串。
+    pub fn param_from_key(
+        mut self,
+        key: &'static str,
+        template_key: &'static str,
+    ) -> Self {
+        self.template_params.push((key, template_key));
+        self
+    }
+
+    /// help 改从该 locales 平键模板渲染（同码多 help 形态的 per-site 键）。
+    ///
+    /// 与 [`Self::with_help`] 的区别：`with_help` 接收**成品串**（发射点语言
+    /// 固定）；本方法接收**键**，文案留在 locales、随 `error_lang()` 渲染。
+    pub fn with_help_key(
+        mut self,
+        key: &'static str,
+    ) -> Self {
+        self.help_key = Some(key);
         self
     }
 
@@ -122,12 +163,21 @@ impl DiagnosticBuilder {
             .get_template(self.code)
             .unwrap_or("Internal error: missing i18n template");
 
+        // param_from_key 登记的参数：用已收集参数渲染 locales 平键模板，
+        // 产物并入参数表（校验与渲染都用完整参数表）
+        let mut params = self.params.clone();
+        for (key, template_key) in &self.template_params {
+            if let Some(rendered) = i18n.render_key(template_key, &self.params) {
+                params.push((key, rendered));
+            }
+        }
+
         // 在 debug 模式下保持原有行为（会 panic）
         if cfg!(debug_assertions) {
-            self.validate_params(template);
+            self.validate_params(template, &params);
         } else {
             // release 下回落：检查缺失参数并返回 E8001 (避免进程崩溃)
-            let missing = self.find_missing_params(template);
+            let missing = self.find_missing_params(template, &params);
             if !missing.is_empty() {
                 let message = format!(
                     "Internal diagnostic error: missing template parameter(s) for '{}'. template='{}', missing={:?}",
@@ -135,7 +185,7 @@ impl DiagnosticBuilder {
                 );
                 let help = format!(
                     "Please report this issue. Available params: {:?}",
-                    self.params.iter().map(|(k, _)| *k).collect::<Vec<_>>()
+                    params.iter().map(|(k, _)| *k).collect::<Vec<_>>()
                 );
 
                 let mut diagnostic =
@@ -153,13 +203,17 @@ impl DiagnosticBuilder {
         let message = if template.is_empty() {
             // 对于 E1090 等特殊错误码，从 zen_message 获取消息
             i18n.get_zen_message(self.code)
-                .unwrap_or_else(|| i18n.render(template, &self.params))
+                .unwrap_or_else(|| i18n.render(template, &params))
         } else {
-            i18n.render(template, &self.params)
+            i18n.render(template, &params)
         };
-        let help = match &self.help_override {
-            Some(h) => h.clone(),
-            None => i18n.render_help(self.code, &self.params),
+        let help = match (&self.help_override, &self.help_key) {
+            // with_help 成品串覆盖（调用点明确知道自己要什么）优先级最高
+            (Some(h), _) => h.clone(),
+            // with_help_key：per-call-site 键，文案在 locales（issue #469 处 1）
+            (None, Some(key)) => i18n.render_key(key, &params).unwrap_or_default(),
+            // 默认：该码在 locales 的 help 模板
+            (None, None) => i18n.render_help(self.code, &params),
         };
 
         // #324：span 强制——显式 .at() > walk 上下文自动填 > 都没有则按模式处理
@@ -231,9 +285,10 @@ impl DiagnosticBuilder {
     fn find_missing_params(
         &self,
         template: &str,
+        params: &[(&'static str, String)],
     ) -> Vec<String> {
         let param_keys: std::collections::HashSet<&'static str> =
-            self.params.iter().map(|(k, _)| *k).collect();
+            params.iter().map(|(k, _)| *k).collect();
 
         let mut chars = template.chars().peekable();
         let mut missing = Vec::new();
@@ -260,14 +315,15 @@ impl DiagnosticBuilder {
     fn validate_params(
         &self,
         template: &str,
+        params: &[(&'static str, String)],
     ) {
-        let missing = self.find_missing_params(template);
+        let missing = self.find_missing_params(template, params);
         if !missing.is_empty() {
             panic!(
                 "Missing parameter(s) {:?} for error code '{}'. Available: {:?}",
                 missing,
                 self.code,
-                self.params.iter().map(|(k, _)| *k).collect::<Vec<_>>()
+                params.iter().map(|(k, _)| *k).collect::<Vec<_>>()
             );
         }
     }
@@ -285,6 +341,8 @@ pub struct ErrorInfo<'a> {
 /// i18n 展示文案注册表（编译期从 JSON 加载，运行时零查表）
 #[derive(Debug, Clone)]
 pub struct I18nRegistry {
+    /// 本注册表的语言代码（`render_key` 的回退链以此为起点）
+    lang: &'static str,
     /// 消息模板（含 {param} 占位符）
     templates: HashMap<&'static str, &'static str>,
     /// 标题
@@ -335,6 +393,7 @@ fn build_registry(lang: &str) -> I18nRegistry {
     }
 
     I18nRegistry {
+        lang: to_static_string(lang.to_string()),
         templates,
         titles,
         helps,
@@ -463,6 +522,35 @@ impl I18nRegistry {
         template: &'static str,
         params: &[(&'static str, String)],
     ) -> String {
+        Self::render_str(template, params)
+    }
+
+    /// 渲染 locales 平键模板（per-call-site 键，如 `E1010.missing_named.help`）。
+    ///
+    /// 键与错误码条目同住 locale JSON（字符串值），加载与渲染复用同一管线；
+    /// 回退方向与错误码条目的 [`Self::fallbacks`] 一致（请求语言 → en → zh）。
+    /// 键在整条回退链上都不存在时返回 `None`（调用方按缺参策略兜底）。
+    pub fn render_key(
+        &self,
+        key: &str,
+        params: &[(&'static str, String)],
+    ) -> Option<String> {
+        for lang in [self.lang, "en", "zh"] {
+            if let Some(template) = crate::util::i18n::translation_for(lang, key) {
+                return Some(Self::render_str(&template, params));
+            }
+        }
+        None
+    }
+
+    /// 模板渲染算法（参数占位 `{key}` 替换，缺参占位符保留原样）。
+    ///
+    /// [`Self::render`] 与 [`Self::render_key`] 共用；独立成关联函数是因为
+    /// `render_key` 的模板来自运行时查询（`String`，非 `'static`）。
+    pub fn render_str(
+        template: &str,
+        params: &[(&'static str, String)],
+    ) -> String {
         let mut result = String::with_capacity(template.len() + 64);
         let mut chars = template.chars().peekable();
         let param_map: HashMap<&str, &str> = params.iter().map(|(k, v)| (*k, v.as_str())).collect();
@@ -521,6 +609,7 @@ mod fallback_tests {
             titles.insert(*code, *code);
         }
         I18nRegistry {
+            lang: "zh",
             templates,
             titles,
             helps: HashMap::new(),
