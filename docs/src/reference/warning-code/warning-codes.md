@@ -7,7 +7,7 @@ description: '编译器警告码及说明'
 
  本页由 `scripts/docs/gen-error-code-docs.py` 从 `src/util/diagnostic/codes/` 的 `define_codes!` 注册表与 `locales/zh.json` 生成，请勿手工编辑。改文案请改 `locales/*.json`，改码表请改 `define_codes!`，然后重跑 `python scripts/docs/gen-error-code-docs.py`。
 
-警告码以 `W` 开头，不会阻止编译，但提示代码中可能存在的问题。当前注册表共 **12** 个警告码，完整索引见[错误码首页](../error-code/index.md)。
+警告码以 `W` 开头，提示代码中可能存在的问题；默认发射级别为 warn，不会阻止编译。例外：`W1090` 的发射级别为 error（2026-10-13 用户裁决的同码升 E，见其条目说明），触发即计入 error_count 并改变退出码，会阻止编译。当前注册表共 **12** 个警告码，完整索引见[错误码首页](../error-code/index.md)。
 
 ## 配置
 
@@ -149,7 +149,7 @@ dead-code = "warn"
 ## 与错误码的区别
 
 - **错误（`E` 前缀）**：阻止编译，必须修复。
-- **警告（`W` 前缀）**：提示潜在问题，可选择修复。
+- **警告（`W` 前缀）**：提示潜在问题；默认发射级别为 warn，可选择修复。例外：`W1090` 发射级别为 error，触发即计入 error_count 并改变退出码，会阻止编译，必须修复（见其条目说明）。
 
 ## 死代码告警的判定口径
 
