@@ -1118,3 +1118,24 @@
 > **四、3.18.3 三条未收敛的短名派发臂**（WBS 二级 `3.18` 下的第三个三级任务，issue [#506](https://github.com/ChenXu233/YaoXiang/issues/506)）：`src/middle/core/ir_gen.rs:8769` 的零开销 `to_string` 派发与 `:6828-6870` 的 `Try` 四方法派发仍按**短类型名**拼调用名；当前分别**不可达**（用户结构体的 `to_string` 实测仍走兜底 repr）与被 typecheck `E1082` 硬错挡住 ⇒ 无用户可见缺陷，但**放开任一前置即成静默错派**；终态要求「放开之前两处必须同经 `method_dispatch_name` 或给出书面理由」+ 不可达性钉测试。
 >
 > **五、计数同步**：`09` 定位表「二级」69 → **70**（追加 `3.23` 的来源说明）、「三级」185 → **189**（`3.23.1` / `3.18.2` / `3.20.3` / `3.18.3`）。
+
+## P3 3.21 收口（轮 1：3.21.1 一元取负 i64::MIN 溢出，2026-10-25）
+
+> **触发**：issue [#468](https://github.com/ChenXu233/YaoXiang/issues/468)（2026-10-18 发版前审计登记，WBS 3.21.1）：`-9223372036854775808` 字面量或对持有 `i64::MIN` 的变量取负，解释器直接 panic（exit 101）而非诊断；二元溢出已由 #281 走 checked 报 E6007，一元漏在通道外。D59 **C 类**（崩溃）——顺路修通道，无需语义裁决。
+
+> **改法**（提交 `cfb3442d`，2026-10-25 推送）：`src/backends/interpreter/executor/ops/arith.rs` 的 `UnaryOp::Neg` / `RuntimeValue::Int` 臂由裸 `-n` 改 `checked_neg`，溢出经 `ExecutorError::runtime("integer overflow in \`-{n}\`", capture_stack())` 报 **E6007**——与 #281 二元样板（`executor.rs` 的 `int_op`）同码同构造、带栈回溯。`tests/integration/execution.rs` 新增五形态测试：i64::MIN 字面量 / 变量两形态断言「E6007 + 栈帧 + 无 panicked」（先红后绿），MAX 取负、普通值、MAX+1 二元三对照锁定既有行为。**编译期同类路径不改动**：`eval/evaluator.rs:471` 与 `eval/const_eval.rs:423` 的取负操作数是 `ConstValue::Int(i128)`，字面量路径值域内取负在 i128 域永不溢出；经 saturating 算术链触达 `i128::MIN` 的理论形态另立 [#507](https://github.com/ChenXu233/YaoXiang/issues/507) 备案（未实测，先实证可达性再修）。
+
+> **证据（三段判据链，2026-10-25）**：
+>
+> | 环节 | 判据 | 结果 |
+> | --- | --- | --- |
+> | 实现轮门禁 | `cargo fmt --check` / 全量 `clippy -D warnings` / `testsuite run fast` / `markers --check` / `check-docs-truth` / `check-boundary` / `check-fanout` / `check-docs-refs` | 8 项全 exit 0（脚本以命令退出码裁决，一轮通过） |
+> | 独立验证 | 批次树冻结 `cfb3442d` 五形态复测（E6007 + 栈 + 非零退出 + 无 panicked / 三对照不变） | PASS（重建二进制上复跑确认） |
+> | 独立验证 | 变异可逆证明：`checked_neg` 打回 `-n`（`scratch.py trial` 机械 apply→跑→还原） | 新测试 2 FAILED + panic 形态 exit 101（判据能失败）；还原后 blob 与 HEAD 逐字节一致、`git status` 干净 |
+> | 独立验证 | 语料差分 / IR 快照 / 错误码生成器再生 | 356/356 零差异、快照测试绿、生成器再生 `git diff --quiet` = 0 |
+> | 复审 | 冻结 revision 只读复审（正确性对照 #281 样板 / issue 验收三条对账 / 测试合规 / 红线 / inScope / D59 分类） | APPROVE，2 条 low 备案（见下） |
+> | pre-commit | 全钩子链 | `cargo audit` 因网络故障跳过（内部 git 库与系统 git 网络栈不同），按既定模式离线补扫：1352 条 advisory 扫 268 依赖，仅 1 条已 allow 的 yanked 警告 |
+
+> **过程注记**：① 验证轮发现 `scratch.py trial` 的变异跑测会把批次树 dev 档**二进制**重编为变异版（源码机械还原不含构建产物）——本次已重建后在正确二进制上复跑全部量测；**建议固化为批次约定：trial 之后必须 `scratch.py build` 再做后续量测**（是否写入 AGENTS 待用户裁决）。② 复审 low 备案之一：溢出文案在 `n == i64::MIN` 时渲染为 `--9223372036854775808`（双负号）——与二元样板「操作数原样回显」惯例一致，纯观感不阻塞，留待文案统一时一并处理。③ 编排注记：实现 / 验证 / 复审三轮均为独立子代理实例（同模型家族 GLM-5.3-Flash——AGENTS 第 7 条「不同模型家族」在当前环境不可满足，以冻结 revision 量测 + 从零读码替代独立性，如实登记）。
+
+> **登记**：issue [#468](https://github.com/ChenXu233/YaoXiang/issues/468) 已关闭；遗留 [#507](https://github.com/ChenXu233/YaoXiang/issues/507)（编译期 i128 取负理论形态，P3）；WBS `3.21` 二级下余 3.21.2（#469，D 类待裁）/ 3.21.3（#471）/ 3.21.4（#470）。
