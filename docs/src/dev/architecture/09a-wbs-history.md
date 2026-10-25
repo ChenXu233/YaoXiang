@@ -1139,3 +1139,26 @@
 > **过程注记**：① 验证轮发现 `scratch.py trial` 的变异跑测会把批次树 dev 档**二进制**重编为变异版（源码机械还原不含构建产物）——本次已重建后在正确二进制上复跑全部量测；**建议固化为批次约定：trial 之后必须 `scratch.py build` 再做后续量测**（是否写入 AGENTS 待用户裁决）。② 复审 low 备案之一：溢出文案在 `n == i64::MIN` 时渲染为 `--9223372036854775808`（双负号）——与二元样板「操作数原样回显」惯例一致，纯观感不阻塞，留待文案统一时一并处理。③ 编排注记：实现 / 验证 / 复审三轮均为独立子代理实例（同模型家族 GLM-5.3-Flash——AGENTS 第 7 条「不同模型家族」在当前环境不可满足，以冻结 revision 量测 + 从零读码替代独立性，如实登记）。
 
 > **登记**：issue [#468](https://github.com/ChenXu233/YaoXiang/issues/468) 已关闭；遗留 [#507](https://github.com/ChenXu233/YaoXiang/issues/507)（编译期 i128 取负理论形态，P3）；WBS `3.21` 二级下余 3.21.2（#469，D 类待裁）/ 3.21.3（#471）/ 3.21.4（#470）。
+
+## P3 3.21 收口（轮 2：3.21.3 mono 配置贯通，2026-10-25）
+
+> **触发**：issue [#471](https://github.com/ChenXu233/YaoXiang/issues/471)（2026-10-18 发版前审计登记，WBS 3.21.3）：`mono.max_depth` 无法从 `yaoxiang.toml` 配置——Run 臂只读 `runtime.*`，`[mono]` 节被 serde 静默忽略，3.10.1 的抬高闸门档在 `run` 上不可复现。D59 **C 类**（静默不动作）。
+
+> **改法**（提交 `a8ad0530`，2026-10-25 推送，19 文件 +334/−53）：`util::config::ProjectConfig` 加 `#[serde(default)] mono: frontend::config::MonoConfig`（schema 唯一家不复制默认值，util 引 frontend 已有先例不构成新反向依赖）；`compile_project` / `check_project` / `analyze_source_in_project` / `compile_embedded_module` 四编排入口扩签名收 `CompileConfig`（未新增第二入口），全部调用方显式迁移——生产链路仅 run 链注入 toml 配置，其余传 `default` 保持行为不变；check 命令链与 LSP 的 mono 贯通明确不在本轮（接线点留注释）。新增 `tests/integration/mono_config.rs`（150 档闸门平移先红后绿 / 无节默认 100 守卫 / 显式 100 与省略节逐字节一致）；5000 档由手动 CLI 探针实测（`(5000，当前 5001)`），不进默认套件（72.6s / 15.6GB，与 `mono_cross_unit` 的 ignore 档同一取舍）。
+
+> **证据（三段判据链，2026-10-25）**：
+>
+> | 环节 | 判据 | 结果 |
+> | --- | --- | --- |
+> | 实现轮 | 红态复现缺陷本体：toml 写 `max_depth = 150` 被静默忽略、报 `(100，当前 101)`；修后同测试绿（3 passed） | 先红后绿 |
+> | 实现轮门禁 | fmt / 全量 clippy / `testsuite run fast` / markers / docs-truth / boundary / fanout / docs-refs | 8 项全 exit 0（一轮过） |
+> | 独立验证 | 批次树三形态（150 档平移 / 无节默认 / 显式 100 逐字节一致 md5 相同）+ 选做 5000 档 | PASS（非零退出无 panic，重建二进制上复跑） |
+> | 独立验证 | 变异可逆：Run 臂 mono 透传打回断供（`scratch.py trial`） | 新测试红（闸门回 100）、机械还原 blob 一致；trial 后按第 9 条新规重建再量测 |
+> | 独立验证 | 双 revision 默认档对照（`a8ad0530^` vs `a8ad0530`）无节探针 stderr/stdout | 逐字节一致 |
+> | 独立验证 | 语料 / IR 快照 / 错误码生成器 | 零差异 / 绿 / 重跑零新增 diff |
+> | 复审 | 九项只读审查（通路 file:line 闭合、调用点迁移无漏网、D0、禁令三、生成物平移、验收对账、测试合规、D59 分类） | APPROVE |
+> | pre-commit | 全钩子链 | scope 首选 `cli` 不在合法表被 check-commit-msg 挡下，按 main.rs 惯例改 `util` 后全过；`cargo audit` 网络故障按既定模式 SKIP（本批零依赖变更） |
+
+> **过程注记**：①**契约缺陷追认**（AGENTS 第 6 条同型复发）：契约 inScope 未圈进 `src/lib.rs`、`src/lsp/analysis.rs` 与四个直驱测试文件（orchestrator 三个 + bytecode_load 等），均为签名扩链 E0061 的机械必需面——「扩签名」类任务的 inScope 应先 grep 全部调用点再写。②复审 low 备案归位 [#503](https://github.com/ChenXu233/YaoXiang/issues/503)：`main.rs` 的 `toml::from_str::<ProjectConfig>(...).unwrap_or_default()` 在清单解析失败时静默回退全默认（含 `runtime.*`），与 #503 登记的「解析失败静默退化」同族，既有债非本提交引入，不另立 issue。
+
+> **登记**：issue [#471](https://github.com/ChenXu233/YaoXiang/issues/471) 已关闭；WBS `3.21` 下余 3.21.2（#469，D 类待用户裁决——裁决四件套已呈）与 3.21.4（#470）。
