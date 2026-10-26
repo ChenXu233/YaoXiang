@@ -1381,6 +1381,13 @@ impl<'a> ExpressionInferrer<'a> {
                         .build());
                     }
                 };
+                // WBS 3.20.2：变体解构消费的是该类型的**变体集**——变体集
+                // 随 use 导入成文（register_type_payload 写入 sum_types），
+                // 和类型名经成员监视集回指到导入（note_import_use），于是
+                // `match some(v) / none()` 算作消费了 `use std.option`，
+                // 不再误报 W1003（docs/src/reference/stdlib/weak.md 自然
+                // 写法；变体名不走 Var 解析臂，此臂是它唯一的语义消费点）
+                self.note_import_use(&sum_name);
                 let Some(vdef) = variants.iter().find(|v| &v.name == variant) else {
                     return Err(ErrorCodeDefinition::field_not_found(variant, &sum_name)
                         .at(span)

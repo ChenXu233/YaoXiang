@@ -48,7 +48,7 @@ dead-code = "warn"
 - **span 豁免**：否
 - **模板**：`未使用的函数：'{name}'`
 - **帮助**：函数从未被引用，考虑移除或添加调用；被包内其它文件引用时不报此警告
-- **发射点**：`src/frontend/core/typecheck/passes/dead_code.rs:861`
+- **发射点**：`src/frontend/core/typecheck/passes/dead_code.rs:869`
 
 ### W1002：未使用的私有类型
 
@@ -56,7 +56,7 @@ dead-code = "warn"
 - **span 豁免**：否
 - **模板**：`未使用的类型：'{name}'`
 - **帮助**：类型从未被引用，考虑移除或使用该类型；被包内其它文件引用时不报此警告
-- **发射点**：`src/frontend/core/typecheck/passes/dead_code.rs:862`
+- **发射点**：`src/frontend/core/typecheck/passes/dead_code.rs:870`
 
 ### W1003：未使用的导入
 
@@ -72,7 +72,7 @@ dead-code = "warn"
 - **span 豁免**：否
 - **模板**：`未使用的变量：'{name}'`
 - **帮助**：变量从未被引用，考虑移除或使用该变量；被包内其它文件引用时不报此警告
-- **发射点**：`src/frontend/core/typecheck/passes/dead_code.rs:863`
+- **发射点**：`src/frontend/core/typecheck/passes/dead_code.rs:871`
 
 ### W1005：未使用的私有方法
 
@@ -80,7 +80,7 @@ dead-code = "warn"
 - **span 豁免**：否
 - **模板**：`未使用的方法：'{name}'`
 - **帮助**：方法从未被引用，考虑移除或添加调用；被包内其它文件引用时不报此警告
-- **发射点**：`src/frontend/core/typecheck/passes/dead_code.rs:864`
+- **发射点**：`src/frontend/core/typecheck/passes/dead_code.rs:872`
 
 ### W1006：本地模块遮蔽依赖包
 

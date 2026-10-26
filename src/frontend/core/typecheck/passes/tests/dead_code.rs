@@ -5,6 +5,8 @@
 //! RFC-029g: `pub` 关键字已删除；未引用的顶层绑定一律参与判定，
 //! 唯一豁免口是包内引用池（RFC-029f，跨文件消费者不可见）
 
+use crate::frontend::core::lexer::tokenize;
+use crate::frontend::core::parser::parse;
 use crate::frontend::core::typecheck::passes::dead_code::{DeadCodeAnalyzer, DeadCodeWarning};
 use crate::frontend::core::parser::ast::{Block, Module, PlanId, Stmt, StmtKind, Expr, Type};
 use crate::util::span::Span;
@@ -1022,6 +1024,87 @@ fn test_no_project_refs_keeps_file_local_judgement() {
             .iter()
             .any(|w| w.code == "W1001" && w.message.contains("orphan_fn")),
         "无引用池时未引用的顶层绑定应报 W1001，实际: {:?}",
+        warnings
+    );
+}
+
+/// 解析源码为模块（语法必须正确，否则测试本身有错）
+fn parse_module(source: &str) -> Module {
+    let tokens = tokenize(source).expect("测试源码词法不应失败");
+    let parse_result = parse(&tokens);
+    assert!(
+        !parse_result.has_errors,
+        "测试源码语法必须正确（否则无法区分 bug 与测试写错）: {:?}",
+        parse_result.errors
+    );
+    parse_result.module
+}
+
+/// WBS 3.20.1：单表达式体 lambda 的合成体语句是
+/// `StmtKind::Return(Some(expr))`（parser/pratt/led.rs 就地合成的糖）——
+/// 可达集走查必须收集其中的引用，否则「顶层函数仅被闭包引用」的
+/// 自然写法（docs/src/reference/stdlib/test.md 的 t_add）误报 W1001。
+#[test]
+fn test_fn_referenced_only_in_lambda_expr_body_not_reported_w1001() {
+    // Arrange: 照 test.md 自然形态的最小同构——helper 仅在
+    // 闭包 `() => helper()` 内被引用；dead_fn 全程无引用作守卫
+    let ast = parse_module(
+        r#"
+main = () => {
+    sink([("add", () => helper())])
+}
+helper = () => 42
+sink = (v) => println("x")
+dead_fn = () => 43
+"#,
+    );
+
+    // Act
+    let mut analyzer = DeadCodeAnalyzer::new();
+    let warnings = analyzer.analyze(&ast);
+
+    // Assert
+    assert!(
+        warnings
+            .iter()
+            .all(|w| !(w.code == "W1001" && w.message.contains("helper"))),
+        "仅被闭包表达式体引用的 helper 不应报 W1001，实际: {:?}",
+        warnings
+    );
+    assert!(
+        warnings
+            .iter()
+            .any(|w| w.code == "W1001" && w.message.contains("dead_fn")),
+        "守卫：真正无引用的 dead_fn 仍应报 W1001，实际: {:?}",
+        warnings
+    );
+}
+
+/// 块体 lambda（`() => { helper() }`）与表达式体走同一判据：闭包体内
+/// 引用使被引定义可达，不得因体形态不同而分歧。
+#[test]
+fn test_fn_referenced_in_lambda_block_body_not_reported_w1001() {
+    // Arrange: 闭包用块体形态引用 helper
+    let ast = parse_module(
+        r#"
+main = () => {
+    sink([("add", () => { helper() })])
+}
+helper = () => 42
+sink = (v) => println("x")
+"#,
+    );
+
+    // Act
+    let mut analyzer = DeadCodeAnalyzer::new();
+    let warnings = analyzer.analyze(&ast);
+
+    // Assert
+    assert!(
+        warnings
+            .iter()
+            .all(|w| !(w.code == "W1001" && w.message.contains("helper"))),
+        "块体闭包内引用的 helper 不应报 W1001，实际: {:?}",
         warnings
     );
 }

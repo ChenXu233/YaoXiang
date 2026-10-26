@@ -727,6 +727,14 @@ impl DeadCodeAnalyzer {
                         collect_from_block(branch, referenced);
                     }
                 }
+                // 单表达式体 lambda 的合成体语句：parser 对 `() => expr`
+                // 就地合成 `Return(Some(expr))` 糖（pratt/led.rs「Single
+                // expression body」臂），不经 StmtKind::Expr——漏收会让
+                // 闭包体内的引用整体丢失，仅被闭包引用的定义误报 W1001
+                //（WBS 3.20.1：docs/src/reference/stdlib/test.md 的 t_add）
+                StmtKind::Return(Some(expr)) => {
+                    collect_from_expr(expr, referenced);
+                }
                 _ => {}
             }
         }

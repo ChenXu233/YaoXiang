@@ -17,10 +17,10 @@
 {"expectation":"behavior","file":"src/std/tests/result_ops.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
 {"expectation":"behavior","file":"src/std/tests/string_ops.yx","run":{"diagnostics":[["W1003","src/std/tests/string_ops.yx",8]],"exit":0,"stderr":[],"stdout":[]}}
 {"expectation":"behavior","file":"src/std/tests/test_assertions.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"src/std/tests/test_suite.yx","run":{"diagnostics":[["W1001","src/std/tests/test_suite.yx",14],["W1001","src/std/tests/test_suite.yx",21],["W1001","src/std/tests/test_suite.yx",28]],"exit":0,"stderr":[],"stdout":[]}}
-{"check":{"diagnostics":[["W1001","src/std/tests/test_suite_fail.yx",15],["W1001","src/std/tests/test_suite_fail.yx",20],["W1003","src/std/tests/test_suite_fail.yx",12]],"exit":0},"expectation":"runtime-error","file":"src/std/tests/test_suite_fail.yx","run":{"diagnostics":[["E6005","<std/test>",113],["W1001","src/std/tests/test_suite_fail.yx",15],["W1001","src/std/tests/test_suite_fail.yx",20],["W1003","src/std/tests/test_suite_fail.yx",12]],"exit":1,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"src/std/tests/test_suite.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"check":{"diagnostics":[["W1003","src/std/tests/test_suite_fail.yx",12]],"exit":0},"expectation":"runtime-error","file":"src/std/tests/test_suite_fail.yx","run":{"diagnostics":[["E6005","<std/test>",113],["W1003","src/std/tests/test_suite_fail.yx",12]],"exit":1,"stderr":[],"stdout":[]}}
 {"expectation":"behavior","file":"src/std/tests/time_ops.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"src/std/tests/weak_ops.yx","run":{"diagnostics":[["W1003","src/std/tests/weak_ops.yx",9]],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"src/std/tests/weak_ops.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
 {"expectation":"behavior","file":"tests/yaoxiang/00-smoke/hello.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
 {"expectation":"behavior","file":"tests/yaoxiang/01-syntax/basics/bitwise_ops.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":["BITWISE_OPS_OK"]}}
 {"expectation":"behavior","file":"tests/yaoxiang/01-syntax/basics/comments.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
@@ -121,7 +121,7 @@
 {"expectation":"behavior","file":"tests/yaoxiang/02-type-system/sum-types/sum_type.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":["EQ_OK","NE_OK","ZERO_PAYLOAD_EQ_OK"]}}
 {"expectation":"behavior","file":"tests/yaoxiang/02-type-system/sum-types/sum_type_equality_forms.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
 {"expectation":"behavior","file":"tests/yaoxiang/02-type-system/sum-types/sum_type_match.yx","run":{"diagnostics":[["W1001","tests/yaoxiang/02-type-system/sum-types/sum_type_match.yx",13]],"exit":0,"stderr":[],"stdout":["42","bad","is-ok"]}}
-{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/sum-types/sum_type_native_match.yx","run":{"diagnostics":[["W1003","tests/yaoxiang/02-type-system/sum-types/sum_type_native_match.yx",10]],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/sum-types/sum_type_native_match.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
 {"expectation":"behavior","file":"tests/yaoxiang/02-type-system/sum-types/try_methods.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
 {"expectation":"behavior","file":"tests/yaoxiang/02-type-system/sum-types/user_try_type.yx","run":{"diagnostics":[["W1005","tests/yaoxiang/02-type-system/sum-types/user_try_type.yx",17],["W1005","tests/yaoxiang/02-type-system/sum-types/user_try_type.yx",24],["W1005","tests/yaoxiang/02-type-system/sum-types/user_try_type.yx",31],["W1005","tests/yaoxiang/02-type-system/sum-types/user_try_type.yx",38]],"exit":0,"stderr":[],"stdout":[]}}
 {"expectation":"behavior","file":"tests/yaoxiang/02-type-system/termination/bare_loop_needs_no_termination_proof.yx","run":{"diagnostics":[["W1004","tests/yaoxiang/02-type-system/termination/bare_loop_needs_no_termination_proof.yx",18],["W1004","tests/yaoxiang/02-type-system/termination/bare_loop_needs_no_termination_proof.yx",19],["W1004","tests/yaoxiang/02-type-system/termination/bare_loop_needs_no_termination_proof.yx",27],["W1004","tests/yaoxiang/02-type-system/termination/bare_loop_needs_no_termination_proof.yx",28]],"exit":0,"stderr":[],"stdout":[]}}
