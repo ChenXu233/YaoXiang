@@ -4,7 +4,7 @@
 //!
 //! 1. **发现**：从入口文件所在目录递归收集所有 `.yx` 文件
 //! 2. **签名提取**：对每个文件跑 pass1（类型）+ pass2（签名），提取顶层绑定的真实 `MonoType`
-//! 3. **构建 Registry**：用户模块（`ModuleSource::User`）+ std，合并为预构建注册表
+//! 3. **Registry**：用户模块（`ModuleSource::User`）+ std 合并为预构建注册表——构建由 Driver 的 `registry` 臂承担（`src/driver/arms.rs:1298`）；本模块只提供 `extract_module_info` 等构件（旧 `build_registry` 链于 2026-10-26 随零调用者清账删除）
 //! 4. **逐文件类型检查**：每个文件带着完整 Registry 独立 typecheck——强制模块边界
 //!    （必须 `use` 才能访问其他文件的绑定，`use` 保持 record 解构语义）
 //! 5. **逐文件 IR 生成 + IR 层链接**：每个文件独立生成 `ModuleIR`（预注册跨文件的

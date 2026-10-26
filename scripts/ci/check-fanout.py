@@ -15,11 +15,17 @@ check-fanout.py —— 禁令三（该重构不补丁）门禁：同义重复 / 
                          面（标定依据见下文「C 判据的重定基」）：
                          - 12 个 Stage 变体的**臂调用形态**（self.<臂>(…)，臂名
                            由 Driver::dispatch 的穷尽 match 派生，单一源）；
-                         - 其中 6 个变体另有可在 Driver 之外调用的**共享原语**：
-                           Parsing / Typecheck / ProofExecution /
-                           DeadCodeAnalysis / IrGeneration / Monomorphization；
-                         - Codegen / Exec 两类执行层原语（无对应 Stage 变体）。
-                         其余 6 个变体分三类，不能笼统说成「只有臂形态」：
+                         - 12 个变体中 **10 个**另有可在 Driver 之外调用的**共享原语**
+                           （键与臂形态同键合并）：6 个原有（Parsing / Typecheck /
+                           ProofExecution / DeadCodeAnalysis / IrGeneration /
+                           Monomorphization）+ 2026-10-26 裁决 D1-A 收录的 3 个
+                           （VendorConsistency / Discovery / RoleClassification）
+                           + 同日复审 F1 补收的 Registry；
+                         - Codegen / Exec 两类执行层原语（无对应 Stage 变体）；
+                         - 剩余 2 个变体（GlobalSlotAlloc / Linking）的阶段实现是 Driver
+                           **内私有**（见下 (a)），Driver 之外无处可调。
+                         下表按性质分三类说明这 6 个变体（该划分成形于 D1-A / F1 收录之前；
+                         其中 4 个现已补收共享原语，2 个仍是臂内私有）：
                          (a) GlobalSlotAlloc / Linking 的阶段实现是 Driver **内私有**
                          （pub(in crate::driver)：src/driver/helpers.rs 的
                          allocate_global_slots、link_module_irs），Driver 之外无处可调；
@@ -207,8 +213,11 @@ SHARED_STAGE_PRIMITIVES = {
     # （driver/arms.rs:1298 的 registry()），但 Driver 外仍留有可直接调用的**构件**
     # ——extract_module_info（orchestrator.rs:1058，把单文件 AST 转成 registry 条目，
     # 即 Registry 阶段「签名收集」的产出面）与 ModuleRegistry::with_std（容器构造）。
-    # 只收前者：后者是纯数据结构构造，在 typecheck / resolver / 测试等 30+ 处出现，
-    # 当阶段标记会把「建一个注册表」误判成阶段接线；该形态属**已知未覆盖面**，
+    # 只收前者：后者是纯数据结构构造，2026-10-26 实测 src/ 内 26 处 / 21 个文件
+    # （/tests/ 目录 16 处 / 13 文件；其余 10 处 / 8 文件里有 3 处落在文件的
+    # `#[cfg(test)] mod tests` 内 ⇒ 生产代码 7 处 / 6 文件；FfiRegistry::with_std
+    # 另 8 处不计入）。当阶段标记会把「建一个注册表」误判成阶段接线；该形态属
+    # **已知未覆盖面**，
     # 靠 review 兜底（详见 docstring「收录口径」与 (c) 段）。
     'Registry': re.compile(r'\bextract_module_info\s*\('),
 }
@@ -330,7 +339,7 @@ CHAR_LIT_RE = re.compile(r"^'(\\\\.|[^\\\\'])" + "'")
 
 def sanitize(line):
     """剥掉行注释与字符串/字符/原始字符串字面量（花括号可能藏在这些地方，
-    orchestrator.rs:1312 的注释 {x} 曾把函数边界检测整段吞掉）。
+    orchestrator.rs:925 的注释 {x} 曾把函数边界检测整段吞掉）。
     局限：跨行块注释 /* */ 不处理（本仓以 // 文档注释为主）。"""
     out = []
     i = 0

@@ -734,7 +734,7 @@ impl StatementChecker {
                 // #414：同名绑定直接报错（RFC-029 §导入冲突）
                 self.ensure_import_name_free(module_alias, path, path_span)?;
                 // 模块限定键登记（限定调用的实例化请求用，见字段注释）：
-                // use 路径即该模块的 module_key（orchestrator::discover 以
+                // use 路径即该模块的 module_key（orchestrator::discover_with_used 以
                 // use 路径作 DiscoveredFile.module_key，ir_gen 的限定名前缀同源）
                 self.module_namespaces
                     .insert(module_alias.to_string(), path.to_string());
