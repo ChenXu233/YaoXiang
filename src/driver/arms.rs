@@ -515,6 +515,17 @@ impl Driver {
                 continue;
             }
             let mut analyzer = DeadCodeAnalyzer::new();
+            // 算子派发组（WBS 3.20.3 / issue #505）：单文件形态无跨单元归因
+            // ——派发点与定义同处本单元，直接从本单元 typecheck 产物读取；
+            // 命中的 `Type.method` 组整组按活，未命中照报 W1005
+            if let Some(tr) = us.type_result.as_ref() {
+                analyzer.set_operator_dispatched_groups(
+                    tr.operator_dispatches
+                        .iter()
+                        .map(|d| format!("{}.{}", d.type_name, d.method))
+                        .collect(),
+                );
+            }
             let found = analyzer.analyze(ast);
             // 结构化警告诊断（severity 由 builder 按 W 前缀推导，#321 M2）
             warnings.extend(analyzer.to_diagnostics(&found));
@@ -679,6 +690,16 @@ impl Driver {
                     .unwrap_or_default(),
             );
             analyzer.set_resolved_groups(resolved_marks.groups.clone());
+            // 算子派发组（WBS 3.20.3 / issue #505）：`u[0]` / `u == t` 的
+            // 具名决议按定义单元归因后喂给分析器——命中的 `Type.method`
+            // 组整组按活；未命中 ⇒ 未被调用的算子方法照报 W1005
+            analyzer.set_operator_dispatched_groups(
+                resolved_marks
+                    .operator_by_unit
+                    .get(&unit_key)
+                    .cloned()
+                    .unwrap_or_default(),
+            );
             match us.role {
                 Some(FileRole::Bin | FileRole::Internal) => {
                     analyzer.set_exempt_pub(consumed_names());

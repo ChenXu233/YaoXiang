@@ -66,7 +66,7 @@
 {"expectation":"behavior","file":"tests/yaoxiang/02-type-system/aggregates/range_identity.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
 {"expectation":"behavior","file":"tests/yaoxiang/02-type-system/aggregates/range_in_list.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
 {"expectation":"behavior","file":"tests/yaoxiang/02-type-system/aggregates/string_index.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/aggregates/struct_equality.yx","run":{"diagnostics":[["W1005","tests/yaoxiang/02-type-system/aggregates/struct_equality.yx",22]],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/aggregates/struct_equality.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
 {"expectation":"behavior","file":"tests/yaoxiang/02-type-system/aggregates/structs.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
 {"expectation":"behavior","file":"tests/yaoxiang/02-type-system/aggregates/tuple_index_field.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
 {"expectation":"behavior","file":"tests/yaoxiang/02-type-system/aggregates/tuples.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
@@ -86,7 +86,7 @@
 {"expectation":"behavior","file":"tests/yaoxiang/02-type-system/generics/fn_const_generic.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
 {"expectation":"behavior","file":"tests/yaoxiang/02-type-system/generics/fn_const_generic_lowercase.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
 {"expectation":"behavior","file":"tests/yaoxiang/02-type-system/generics/generic_constructor.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/generics/generic_container_index.yx","run":{"diagnostics":[["W1005","tests/yaoxiang/02-type-system/generics/generic_container_index.yx",20]],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/generics/generic_container_index.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
 {"expectation":"behavior","file":"tests/yaoxiang/02-type-system/generics/generic_method_binding.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
 {"expectation":"behavior","file":"tests/yaoxiang/02-type-system/generics/generic_slot_alignment.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
 {"expectation":"behavior","file":"tests/yaoxiang/02-type-system/generics/generic_types.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
@@ -99,8 +99,8 @@
 {"expectation":"behavior","file":"tests/yaoxiang/02-type-system/interfaces/interface_instantiate.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
 {"expectation":"behavior","file":"tests/yaoxiang/02-type-system/interfaces/interface_rebind_dispatch.yx","run":{"diagnostics":[["W1003","tests/yaoxiang/02-type-system/interfaces/interface_rebind_dispatch.yx",8]],"exit":0,"stderr":[],"stdout":[]}}
 {"expectation":"behavior","file":"tests/yaoxiang/02-type-system/interfaces/interfaces.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/interfaces/operator_index.yx","run":{"diagnostics":[["W1005","tests/yaoxiang/02-type-system/interfaces/operator_index.yx",17]],"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/interfaces/operator_interfaces.yx","run":{"diagnostics":[["W1001","tests/yaoxiang/02-type-system/interfaces/operator_interfaces.yx",23],["W1005","tests/yaoxiang/02-type-system/interfaces/operator_interfaces.yx",15],["W1005","tests/yaoxiang/02-type-system/interfaces/operator_interfaces.yx",19]],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/interfaces/operator_index.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/interfaces/operator_interfaces.yx","run":{"diagnostics":[["W1001","tests/yaoxiang/02-type-system/interfaces/operator_interfaces.yx",23]],"exit":0,"stderr":[],"stdout":[]}}
 {"expectation":"behavior","file":"tests/yaoxiang/02-type-system/name-resolution/std_name_shadowing.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
 {"expectation":"behavior","file":"tests/yaoxiang/02-type-system/patterns/match_call_scrutinee.yx","run":{"diagnostics":[["W1001","tests/yaoxiang/02-type-system/patterns/match_call_scrutinee.yx",13],["W1001","tests/yaoxiang/02-type-system/patterns/match_call_scrutinee.yx",20],["W1002","tests/yaoxiang/02-type-system/patterns/match_call_scrutinee.yx",27],["W1004","tests/yaoxiang/02-type-system/patterns/match_call_scrutinee.yx",32],["W1004","tests/yaoxiang/02-type-system/patterns/match_call_scrutinee.yx",39],["W1004","tests/yaoxiang/02-type-system/patterns/match_call_scrutinee.yx",46],["W1004","tests/yaoxiang/02-type-system/patterns/match_call_scrutinee.yx",53],["W1004","tests/yaoxiang/02-type-system/patterns/match_call_scrutinee.yx",58],["W1004","tests/yaoxiang/02-type-system/patterns/match_call_scrutinee.yx",65],["W1004","tests/yaoxiang/02-type-system/patterns/match_call_scrutinee.yx",66]],"exit":0,"stderr":[],"stdout":[]}}
 {"expectation":"behavior","file":"tests/yaoxiang/02-type-system/patterns/pattern_or_guard.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}

@@ -930,6 +930,11 @@ pub(in crate::driver) fn collect_compilation_refs(
 pub(in crate::driver) struct MethodMarks {
     pub by_unit: HashMap<String, HashSet<(String, usize)>>,
     pub groups: HashSet<String>,
+    /// 定义单元键 → 该单元内被**算子派发**命中的 `Type.method` 组
+    /// （WBS 3.20.3 / issue #505；整组——派发名不分重载候选）。
+    /// 来源是 `TypeCheckResult::operator_dispatches`（RFC-011b span 键控
+    /// 派发点，与 D20 重载决议表平行互不重叠的义务通道）。
+    pub operator_by_unit: HashMap<String, HashSet<String>>,
 }
 
 /// 记录方单元的**类型名面**：定义侧裸类型名 → 该单元能拼出这个名字的模块键集合
@@ -1008,6 +1013,23 @@ pub(in crate::driver) fn resolved_method_marks(
                     .insert((base.clone(), ordinal));
             }
             marks.groups.insert(base);
+        }
+        // 算子派发（WBS 3.20.3 / issue #505）：`u[0]` / `u == t` 的具名决议
+        // `{type_name, method}` 同样按**定义单元**归因——归因面与 overload
+        // 条目同一套（`typed_owners` 的可能归属并入 + 记录方自身）；派发名
+        // `Type.method` 不分重载候选 ⇒ 记**整组**，分析器按组命中判活。
+        for dispatch in &result.operator_dispatches {
+            let base = format!("{}.{}", dispatch.type_name, dispatch.method);
+            let mut defining: HashSet<String> =
+                owners.get(&dispatch.type_name).cloned().unwrap_or_default();
+            defining.insert(recorder_unit.clone());
+            for key in defining {
+                marks
+                    .operator_by_unit
+                    .entry(key)
+                    .or_default()
+                    .insert(base.clone());
+            }
         }
     }
     marks

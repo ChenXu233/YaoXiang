@@ -1108,3 +1108,110 @@ sink = (v) => println("x")
         warnings
     );
 }
+
+/// WBS 3.20.3 / issue #505：算子派发命中的方法组**整组按活**——
+/// `u[0]` / `u == t` 的具名决议（`OperatorDispatch`）不产生 D20 重载决议
+/// 条目，AST 引用收集里也没有 `index`/`equal` 短名 ⇒ 修复前两方法误报
+/// W1005（红态实测）。driver 把派发组喂进来后不得再报。
+#[test]
+fn test_operator_dispatched_group_keeps_methods_alive_w1005() {
+    // Arrange: 类型体内接口声明 + 两方法定义 + main 只写算子表达式
+    //（AST 引用里没有 index/equal 短名——派发决议在 typecheck 侧）
+    let ast = parse_module(
+        r#"
+Temp: Type = {
+    v: Float,
+    Index(Temp, Int, Float),
+    Equal(Temp, Temp),
+}
+Temp.index: (self: &Temp, key: &Int) -> Float = (self, key) => {
+    self.v + 1.0
+}
+Temp.equal: (self: &Temp, other: &Temp) -> Bool = (self, other) => {
+    true
+}
+main = () => {
+    u = Temp(19.0)
+    println(u[0])
+    println(u == u)
+}
+"#,
+    );
+
+    // Act: 不喂派发组（修复前形态）→ 对照；喂派发组 → 修复后形态
+    let mut analyzer = DeadCodeAnalyzer::new();
+    let before = analyzer.analyze(&ast);
+    let mut analyzer = DeadCodeAnalyzer::new();
+    analyzer.set_operator_dispatched_groups(StdHashSet::from([
+        "Temp.index".to_string(),
+        "Temp.equal".to_string(),
+    ]));
+    let after = analyzer.analyze(&ast);
+
+    // Assert: 修复前两方法各报一条 W1005（红态本身也在断言里钉住）；
+    // 喂入派发组后两条全部消失
+    let before_hits: Vec<&str> = before
+        .iter()
+        .filter(|w| w.code == "W1005")
+        .map(|w| {
+            if w.message.contains("Temp.index") {
+                "Temp.index"
+            } else {
+                "Temp.equal"
+            }
+        })
+        .collect();
+    assert!(
+        before_hits.contains(&"Temp.index") && before_hits.contains(&"Temp.equal"),
+        "无派发组时 index/equal 应各报一条 W1005（红态基线），实际: {before:?}"
+    );
+    assert!(
+        after.iter().all(|w| w.code != "W1005"),
+        "算子派发命中的方法组不得报 W1005，实际: {after:?}"
+    );
+}
+
+/// WBS 3.20.3 / issue #505 守卫（不得放宽判据）：接口声明了、方法定义了，
+/// 但**没有**算子派发作用于该类型 ⇒ 两方法仍须如实报 W1005——派发组为空时
+/// 判定与修复前完全一致。
+#[test]
+fn test_operator_interface_declared_without_dispatch_still_reports_w1005() {
+    // Arrange: 同构类型与方法，main 只读字段（无 u[0] / u == t）
+    let ast = parse_module(
+        r#"
+Temp: Type = {
+    v: Float,
+    Index(Temp, Int, Float),
+    Equal(Temp, Temp),
+}
+Temp.index: (self: &Temp, key: &Int) -> Float = (self, key) => {
+    self.v + 1.0
+}
+Temp.equal: (self: &Temp, other: &Temp) -> Bool = (self, other) => {
+    true
+}
+main = () => {
+    u = Temp(1.0)
+    println(u.v)
+}
+"#,
+    );
+
+    // Act: 派发组为空（接口从未被算子使用）
+    let mut analyzer = DeadCodeAnalyzer::new();
+    let warnings = analyzer.analyze(&ast);
+
+    // Assert: 两方法照报 W1005
+    assert!(
+        warnings
+            .iter()
+            .any(|w| w.code == "W1005" && w.message.contains("Temp.index")),
+        "无算子派发时 Temp.index 仍应报 W1005，实际: {warnings:?}"
+    );
+    assert!(
+        warnings
+            .iter()
+            .any(|w| w.code == "W1005" && w.message.contains("Temp.equal")),
+        "无算子派发时 Temp.equal 仍应报 W1005，实际: {warnings:?}"
+    );
+}

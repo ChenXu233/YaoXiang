@@ -42,6 +42,13 @@ pub struct DeadCodeAnalyzer {
     /// （`RefPool::field_names` 全局平铺）对它们不成立，判定不因同名兄弟的
     /// 跨文件同名引用而放宽（宁漏报方向仍保留给无决议记录的组）
     resolved_groups: HashSet<String>,
+    /// 被**算子派发**命中的方法名组（`Type.method` 基名，全局；WBS 3.20.3 /
+    /// issue #505）：`u[0]` / `u == t` 在 typecheck 侧的具名决议是
+    /// `OperatorDispatch { type_name, method }`（独立于 D20 重载决议的义务
+    /// 通道，driver 从 `TypeCheckResult::operator_dispatches` 解析后传入）。
+    /// 派发名不分重载候选 ⇒ 组内**全部声明**按活判定；组未命中时其余判定
+    /// 原样——接口声明了但算子从未作用于该类型 ⇒ 照报 W1005（守卫不放宽）
+    operator_dispatched: HashSet<String>,
 }
 
 /// 符号定义
@@ -215,6 +222,7 @@ impl DeadCodeAnalyzer {
             cross_file_refs: HashSet::new(),
             resolved_methods: HashSet::new(),
             resolved_groups: HashSet::new(),
+            operator_dispatched: HashSet::new(),
         }
     }
 
@@ -254,6 +262,17 @@ impl DeadCodeAnalyzer {
         groups: HashSet<String>,
     ) {
         self.resolved_groups = groups;
+    }
+
+    /// 设置「被算子派发命中的方法名组」（`Type.method` 基名，全局集合；
+    /// WBS 3.20.3 / issue #505）：driver 从 `TypeCheckResult::operator_dispatches`
+    /// （RFC-011b span 键控派发点）解析后传入。命中 ⇒ 组内全部声明按活判定；
+    /// 未命中 ⇒ 其余判定原样（未被调用的算子方法照报 W1005）。
+    pub fn set_operator_dispatched_groups(
+        &mut self,
+        groups: HashSet<String>,
+    ) {
+        self.operator_dispatched = groups;
     }
 
     /// 该名字组是否有决议记录（决定逐候选还是回落短名共判）——
@@ -792,7 +811,13 @@ impl DeadCodeAnalyzer {
                         let k = ordinal.entry(def.name.clone()).or_insert(0);
                         let this = *k;
                         *k += 1;
-                        if self.method_group_has_marks(&def.name) {
+                        // WBS 3.20.3 / issue #505：算子派发命中**整组**——算子
+                        // 调用点不产生 D20 重载决议条目（`operator_dispatches`
+                        // 是独立义务通道），派发名 `Type.method` 不分重载候选，
+                        // 故组内全部声明按活判定
+                        if self.operator_dispatched.contains(&def.name) {
+                            true
+                        } else if self.method_group_has_marks(&def.name) {
                             self.resolved_methods.contains(&(def.name.clone(), this))
                         } else {
                             let short = def.name.rsplit('.').next().unwrap_or(&def.name);
@@ -830,8 +855,8 @@ impl DeadCodeAnalyzer {
 
         for def in &self.all_defs {
             let name = &def.name;
-            let marked_group =
-                matches!(def.kind, SymbolKind::Method) && self.method_group_has_marks(name);
+            // 声明序推进先于任何判定分支：同组后续声明的序号不得因本条提前
+            // 判活而错位
             let this_decl = match def.kind {
                 SymbolKind::Method => {
                     let k = ordinal.entry(def.name.clone()).or_insert(0);
@@ -841,6 +866,13 @@ impl DeadCodeAnalyzer {
                 }
                 _ => 0,
             };
+            // 算子派发命中的组整组按活（WBS 3.20.3 / issue #505）；
+            // 未命中时照走原判定（未被调用的算子方法不得被豁免）
+            if matches!(def.kind, SymbolKind::Method) && self.operator_dispatched.contains(name) {
+                continue;
+            }
+            let marked_group =
+                matches!(def.kind, SymbolKind::Method) && self.method_group_has_marks(name);
             if marked_group {
                 // 逐候选：决议命中**本单元这条定义** ⇒ 活；未命中 ⇒ 判死
                 // （WBS 4.9.7 / #464：跨单元同名同序不被兄弟的调用豁免）
