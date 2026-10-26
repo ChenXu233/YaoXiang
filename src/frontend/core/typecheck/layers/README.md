@@ -16,7 +16,7 @@
 
 | 序 | 调用点（符号锚；括号内为现树行号） | 证明入口 | 返回 |
 |----|-----------------------------------|----------|------|
-| 1 | `check_module_impl` 的精化走查起点 `collect_refined_binding_checks`（`:1240`） | `predicate::check_predicate`（三个站点 `:5229` / `:5382` / `:5503`，分别由 `revalidate_refined` / `check_call_arg_refinements` / `check_return_refinement` 调用） | `ProofResult` |
+| 1 | `check_module_impl` 的精化走查起点 `collect_refined_binding_checks`（`checker/refinement.rs`） | `predicate::check_predicate`（三个站点，分别由 `revalidate_refined` / `check_call_arg_refinements` / `check_return_refinement` 调用，均在 `checker/refinement.rs`） | `ProofResult` |
 | 2 | `check_module_impl` 的终止检查块（`:1263`–`:1284`）：闭包内 `TerminationChecker::new()`（`:1272`）→ `check_module` → `count_unjudged_obligations`（`:1278`） | `termination::TerminationChecker` | `Vec<ProofResult>` |
 | 3 | `check_module_impl` 的所有权检查块（`:1296`–`:1340`）：`check_ownership`（`:1303`） | `ownership::check_ownership` | `(Vec<ProofResult>, ReleasePlan, HashSet<String>)` |
 | 4 | `check_module_impl` 尾部 `env.solver().solve()`（`:1343`） | 类型约束求解器 `TypeConstraintSolver`——**不在 `layers/`** | — |
@@ -38,7 +38,7 @@
 它当下的身份是**共享类型比较工具 + 一个仅测试使用的证明入口**，不是被顺序调用的层。
 
 **跨模块共享助手**：第 1 步的精化走查会调用 `termination` 的纯函数——`negate_guard`
-（`checker.rs:4963`）、`substitute_const_expr`（`checker.rs:5092` / `:5352` / `:5490`）；
+（`checker/refinement.rs`，原 `checker.rs:4963`）、`substitute_const_expr`（`checker/refinement.rs` 三处，原 `checker.rs:5092/5352/5490`）；
 即 `termination` 同时充当工具库。
 
 **规则**：

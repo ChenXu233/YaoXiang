@@ -335,20 +335,20 @@ P10 其余清理与状态修正             06 §S2/S3/S4/S5/S6
 
 来源：RFC 定义 + `01-routing.md` 目录树 + 硬约束（`collect_used_in_type` 的 `pub(crate)` 路径不得变）
 
-- [ ] **5.1 `include!` → 真 `mod`**（2 个三级任务）
-- [ ] **5.2 拆出 `refinement`**（2 个三级任务）
-- [ ] **5.3 拆出 `annotations`**（2 个三级任务）
+- [x] **5.1 `include!` → 真 `mod`**（2 个三级任务；2026-10-26 完成）
+- [x] **5.2 拆出 `refinement`**（2 个三级任务；2026-10-26 完成）
+- [x] **5.3 拆出 `annotations`**（2 个三级任务；2026-10-26 完成）
 
 | 二级 | 三级 | 前置 | 验收 |
 | --- | --- | --- | --- |
-| 5.1 `include!` → 真 `mod` | 5.1.1 `checker.rs:5618` 的 `include!` 改为真 `mod` 声明 | P4 完成 | C1 zero-diff；`semantic_tokens.rs` 获得模块身份 |
+| 5.1 `include!` → 真 `mod` | 5.1.1 `checker.rs` 末尾的 `include!` 改为真 `mod` 声明（行锚不写死，实测当时在文件末行） | P4 完成 | C1 zero-diff；`semantic_tokens.rs` 获得模块身份 |
 | | 5.1.2 补 `use super::*` 或逐项引入（`include!` 时代隐式继承作用域） | 5.1.1 | `cargo build` 绿 |
 | 5.2 拆出 `refinement` | 5.2.1 迁出精化块（原 `checker.rs` 的三段非连续区间；现为 `checker/refinement.rs` 单文件，含 `ReturnRefinement` / `RefinedWalkCtx`），保留面与 6 个跨界共享项原地不动 | 5.1.1 | C1 zero-diff |
-| | 5.2.2 精化入口收口为「`&self` + 返回诊断」，**不脱 impl**：`collect_refined_binding_checks`（现 `checker/refinement.rs`，`pub(super)`）不再借 `&mut self` 隐式写错误通道，诊断集合作为返回值上抛，写入点唯一落在唯一调用方 `check_module_impl`（`checker.rs`，符号定位）。**不脱 impl 的理由**：该族字段面只有 `self.env`（纯技术面脱 impl 可行），但「入口与走查全转自由函数」会连带生产 9 处 + 测试 1 处调用点（`resolve_type_annotation` 的 6 处注解路径调用、`collect_param_refinements` 的 3 处等），并制造「保留面（签名收集）→ refinement」反向依赖——与该步要消除耦合的意图相反 | 5.2.1 | C1 zero-diff；四条**符号判据**：① 签名不含 `&mut self` ② 函数体零 `env.errors` ③ 诊断写入点唯一在调用方 ④ 入口仍 1 处 |
+| | 5.2.2 精化入口收口为「`&self` + 返回诊断」，**不脱 impl**：`collect_refined_binding_checks`（现 `checker/refinement.rs`，`pub(super)`）不再借 `&mut self` 隐式写错误通道，诊断集合作为返回值上抛，写入点唯一落在唯一调用方 `check_module_impl`（`checker.rs`，符号定位）。**不脱 impl 的理由**：该族字段面只有 `self.env`（纯技术面脱 impl 可行），但「入口与走查全转自由函数」会连带外移这些调用点：`resolve_type_annotation` 生产 8 处（6 处注解路径 + `refined_walk_stmt` + `collect_refined_var_names_in_stmt`）、`collect_param_refinements` 生产 2 处 + 测试 1 处，并制造「保留面（签名收集）→ refinement」反向依赖——与该步要消除耦合的意图相反 | 5.2.1 | C1 zero-diff；四条**符号判据**：① 签名不含 `&mut self` ② 函数体零 `env.errors` ③ **入口返回的**诊断写入点唯一在调用方 ④ 入口仍 1 处 |
 | 5.3 拆出 `annotations` | 5.3.1 迁出注解校验族 10 项（现 `checker/annotations.rs` 单文件；`check_annotation_type_names` 为 `pub(super)` 入口，其余 9 项族内私有，`is_predicate_head` 为族内自由函数） | 5.2.2 | C1 zero-diff |
 | | 5.3.2 **`collect_used_in_type`（`pub(crate)`）保持 `pub(crate)` 且在 `checker` 模块路径下**：它是**共享面**函数（被 `collect_function_signature` 与 `inference/statements.rs:16` 两侧消费），5.3.1 按实测**未迁移它** ⇒ 「零调用方改动」判据**本已满足**，故**不新增** `pub(crate) use annotations::*;` 再导出。**约束保留**：若将来把它随族迁走（归入 annotations 或其它后续批次），必须在 `checker.rs` 加 `pub(crate) use annotations::*;` 再导出，使该 import 一字不改 | 5.3.1 | **零调用方改动**是本步的硬验收：`git diff src/frontend/core/typecheck/inference/statements.rs` 为空 |
 
-**硬约束**：`collect_used_in_type` 被 `inference/statements.rs:16` 跨模块使用。做法是 `pub(crate) use` 再导出，让拆分成为**纯搬迁**。
+**硬约束**：`collect_used_in_type` 被 `inference/statements.rs:16` 跨模块使用。**若**该函数将来随注解族迁走，**则**须在 `checker.rs` 加 `pub(crate) use annotations::*;` 再导出，使该 import 一字不改；5.3 按实测**未迁**它，故本批未新增再导出（判据本已满足）。
 
 **只拆确证的大块。** 不拆只有 200–400 行的模块——增加导航成本、降低内聚性、零解耦收益。其余子模块（signatures / type_defs / imports）待文件长回 1,500 行再拆。
 

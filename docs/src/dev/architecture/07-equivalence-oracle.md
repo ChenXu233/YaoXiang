@@ -165,7 +165,7 @@ fn test_multifile_proof_obligation_not_dropped() {
 | 测试 | 断言 | 拦住的缺陷 |
 | --- | --- | --- |
 | `test_program_stage_coverage` | 每个 `Program::stages()` ⊆ `Stage::ALL` 且等于期望数组 | 未来漏接阶段 |
-| `test_no_silent_pass_on_unproven` | `ProofResult::Unproven` 在任一模式下必产诊断 | `checker.rs:5179/5318/5448` 的 extend 分支 |
+| `test_no_silent_pass_on_unproven` | `ProofResult::Unproven` 在任一模式下必产诊断 | `checker/refinement.rs` 三处 `extend` 分支（原 `checker.rs:5179/5318/5448`） |
 | `test_release_plan_spans_consumed` | ownership 产出的 `PlanId` 集合 ⊆ IR 构造消费的集合（**按结构身份结算，无白名单**） | `ReleasePlan` span 键静默丢 Drop（历史形态；键迁移后由消费台账 + `W1090` 兜底） |
 | `test_overload_resolutions_consumed` | 语料逐文件：重载决议产出 ⊆ 消费，且**证据面地板** `examined ≥ 1` / 被真实消费 `≥ 2` | 决议条目被静默丢弃（回落到默认绑定的静默错答） |
 | `test_obligations_drained` | 任何 `Obligations` 字段在全仓无消费点时 CI 失败 | 本类缺陷的整个类别 |

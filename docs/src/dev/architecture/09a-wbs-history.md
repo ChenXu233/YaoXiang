@@ -1248,3 +1248,38 @@
 > **遗留与过程注记**：①**3.20.4 新登记**（issue [#510](https://github.com/ChenXu233/YaoXiang/issues/510)）：泛型约束形参的算子派发（`T: Add` 形参经 mono 具名化，typecheck 后的死代码分析不可见）仍误报——修它需消费 mono 改写产物（第三条通路），注入点设计需先裁决；t1 未用放宽手法（把 `T.add` 也算命中）掩盖，夹具 `constrained_generic_ops.yx` 的现存 W1005 被基线钉住。②**整组豁免 × D20 逐候选叠加边界**：同一 `(Type, method)` 组既有普通重载调用又有算子派发时，死候选被整组豁免掩盖——与运行时按名 Call 的 RFC-011a 历史债同源（派发通道与运行时都无法分辨「候选是否被调用」），宁漏报方向合规、非判据放宽；何时收敛取决于 RFC-011a 签名分发债的清偿。③**测试基建观察（待用户裁决是否登记改进）**：`src/driver/tests/ref_pool.rs` 的 `assert_warnings` helper（4.9 系列既有，非本批引入）——`forbidden` 参数是 `(code, line)` 精确对的存在性断言，**行号写错 ⇒ contains 永假 ⇒ 断言永真 ⇒ 静默空转**（t1 首跑假绿即踩此坑）；改进方向 = forbidden 语义升级为「该文件不得含该 code 的任何条目」或 forbidden 行号与诊断集反向对账。④跨单元「不同名」类型（`a.Temp`/`b.Box`）的守卫形态未写（t1 仅单文件守卫 + analyzer 级验证）——同名近似（`typed_owners` 可能归属都豁免）与 4.9.7 既有口径一致故不阻断，随 3.20.4 一并考虑。
 
 > **登记**：issue [#505](https://github.com/ChenXu233/YaoXiang/issues/505) 已关闭；新三级 **3.20.4**（#510）登记待排期（三级计数 189 → 190）；3.20 组至此 3.20.1–3.20.3 完成、3.20.4 在册。
+
+## P5 checker 文件内拆分收口（5.1 / 5.2 / 5.3，2026-10-26）
+
+> **触发**：WBS P5 三个二级任务（原缺口 G1「P5 无任何施工步骤」的补齐）：`include!` → 真 `mod`、拆出 `refinement`、拆出 `annotations`。判据 C1 zero-diff。**本批按 AGENTS 第 3 条「加框」把三个二级任务并进一支队**——同一文件、同一条依赖链（5.1.1 → 5.2.1 → 5.2.2 → 5.3.1）、同一判据；用户 2026-10-26 批准。若按「一队一二级」拆三队，5.1 那两行改动要单独养一支队，而真正的工作是「把约 3,700 行搬进三个子模块」这一个连续动作。
+
+> **轮次构成（14 个任务）**：t1 勘察（只读）→ 5.1 / 5.2.1 / 5.2.2 / 5.3 各「实现 + 独立验证 + 异家族复审」→ 收口。实现 `deepseek-v4.1-flash-oc`；验证 `glm-5.3-flash`；复审先后为 `MiniMax-M3.1-Flash` → `glm-5.3` → `kimi-k3.1-pro`（前两者分别遇 TRANSPORT 与 429，见「执行环境事故」）。
+
+> **终态形状**：`checker.rs` 5736 → **4167** 行（余 3 个 `mod` 声明与编排方法）；新增 `checker/refinement.rs` 1107、`checker/annotations.rs` 470；`checker/semantic_tokens.rs` 1553（原 1535 + 作用域头 + rustfmt 重排）。四文件合计 7297 行。
+
+> **四轮判据（每轮独立在冻结 revision 上量测）**：
+>
+> | 轮次 | 形状 | 生成物 | 反向对照 |
+> | --- | --- | --- | --- |
+> | 5.1 | `include!` → `mod semantic_tokens;` + `use super::*` + 入口 `pub(super)`；B1 库存清零 | 零漂移 | 删 `use super::*;` → build exit 101（136 errors） |
+> | 5.2.1 | 迁 22 项（方法 15 + 类型/常量 3 + 自由函数 4）；保留面 13 项与共享 6 项原地 | 3 文件 4 行 / 6 个发射点 token | `self.env` → `self.envv` → build exit 101（E0609） |
+> | 5.2.2 | `&mut self` → `&self` + 返回诊断；7 插入 / 7 删除 | 42 行，`:N` 归一残留 0 | 漏传 `module` 实参 → build exit 101（E0061） |
+> | 5.3 | 迁注解族 10 项；`collect_used_in_type` 不迁、零再导出 | 19 行（17 纯平移 + 2 路径行号） | t12 报告文本丢失，未留存（见「执行环境事故」） |
+>
+> 每轮共同：语料 356 行 / 76950 字节 sha256 `48c2b40a…` 逐字节等值；IR 快照 204 张零漂移且脚本输出含「1 passed」；`cargo test --lib` 2845 passed / 0 failed / 2 ignored（四轮同数）；`check-boundary` 的 `pub(crate)` 全程 **167 未增**、B1 库存 0；fmt / clippy / docs-truth / docs-refs / fanout（默认模式）/ 生成器零漂移 全 exit 0。子模块入口一律 `pub(super)`（`collect_semantic_tokens` / `collect_refined_binding_checks` / `check_annotation_type_names` 三处），不放大到 `pub(crate)`。
+
+> **5.2.2 为什么不是 WBS 原文的形态**：原文写「`&mut self` → `(module, &mut TypeEnvironment, &mut Vec<ProofFunctionCall>)`，调用点仅 1235」。实测：该 impl 块 78 处 `self.`、入口生产调用点 3 处 + 测试 1 处；「脱 impl」要求整片走查方法一并转自由函数，连带 `resolve_type_annotation`（生产 8 处）与 `collect_param_refinements`（生产 2 处 + 测试 1 处）外移，并制造「保留面（签名收集）→ refinement」反向依赖——与该步要消除的耦合方向相反。故改取 **B′**：入口改 `&self` + `-> Vec<Diagnostic>`，诊断写入点搬到唯一调用方 `check_module_impl`，7 插入 / 7 删除即消除「以 `&mut self` 隐式写错误通道」。`#263` 的缓冲注释即该隐式通道的旁证。
+
+> **t1 勘察对 WBS 前提的三处推翻**（判据一律改用符号）：① WBS 行锚全失准（`:5618` 已是 `RefinedWalkCtx` 字段、`3441–3661` 已属类型定义面、5.2.2 的「1235」实为 `:1240`）；② 混装块 `3843–5571` 里「应归 annotations 的项 = 0」——`resolve_type_annotation` 的调用方是 6 处注解路径 : 1 处走查 : 1 处走查，属跨界共享；③ 5.2.1 不能整块搬——该块 1729 行含 **437 行保留代码**（`auto_derive_traits`、`collect_refined_var_names` 族、`collect_termination_measures` 族、`terminates_measure` 等）。最终边界：annotations 10 项 / refinement 22 项 / 共享 6 项 / 保留 79 项。
+
+> **三条契约缺陷（队长写错，记录在案）**：① t11 的 acceptance 要求更正 09 的 5.3.2 行，`inScope` 却没圈 `09-execution-wbs.md` ⇒ 改文档与 `changedPaths` 校验互斥（实现者停在原地提问，没有硬凑）；② t11 任务书正文照 WBS 旧行锚列了 7 个自由函数，与 objective/acceptance 的「10 项、`collect_used_in_type` 不迁」冲突（实现者按契约执行，判断正确）；③ 5.2.2 原文的调用点计数失真。共同教训：**行锚与调用点计数不能凭旧文档写契约，必须先量**。
+
+> **两条文档事实缺陷（同样是我方）**：① `01-routing.md` 一度写入 `semantic_tokens.rs` 1537 行——它是「格式化前 1535+2」的中间态，**任何 revision 都未持有该数字**，由复审用 `wc -l` 抓出后改为 1553；② 5.2.2 那笔提交（`:recycle: refactor(typecheck): 精化入口收口为 &self + 返回诊断`）的信息写「check-fanout 0（13 处均既有登记项）」，实测该 revision 为 report-only、库存 9 / 违规 9、全输出无「13」——不改写历史，改由收口提交的信息加一行更正并在此登记正确数字。
+
+> **文档行锚清算（32 处 / 7 文件）**：P5 把代码搬出 `checker.rs` 后，`checker.rs:<行>` 形式的引用**失去对象**（例：`02` 的六处 `Unproven` 分支锚、`01` 的 layers 调用点、`layers/README` 的三个 `check_predicate` 站点与 `substitute_const_expr` 站点）。一律改成**符号**（函数名 / 模块名），不再写新数字——P5 本身就是三次连续搬运，数字锚必然再漂。`check-docs-truth` 与 `check-docs-refs` 都不校验源码行锚，这一批全靠复审发现。
+
+> **执行环境事故（不粉饰）**：本批三次进程级失败（两次收尾阶段上下文/步数耗尽、一次三例 `TRANSPORT: Stream ended without finish_reason`），以及 GLM 路由 5 小时额度耗尽（`429 [1308]`，当日 15:37:53 重置）。后果：t12（5.3 独立验证）任务侧 completed 但**报告文本丢失**，改由队长在收口时重跑同一套门禁复现数字（与 t6/t9 同值），而不是假装报告还在。所有失败均未污染工作树：`HEAD` 与提交始终干净；成员不推送、不清理，清理与收口归队长。另：`pull --rebase` 时与上游 `3.20.3/3.20.4` 的提交在**生成物**上冲突，逐笔以「重跑生成器」解冲突（而非手改行号），故每笔提交的生成物与当时代码自洽。
+
+> **遗留**：① `check-fanout.py --strict` 9 处（全在 `driver/`，父提交同判据同 9 处 ⇒ 既有欠账，非本批引入），是否登记 WBS 行待用户裁决；② `check-snapshot-drift.sh` 文案写「204 快照」而实际 216 个 `.snap`（早于本批）；③ `02-stage-contract.md` 中「仅行号平移、指向仍留在 `checker.rs` 的逻辑」的历史引文未逐一重取（本批只修**已指错对象**的那些）；④ 批次树 `gc` 后清零。
+
+> **计数**：本批不新增二级/三级任务 ⇒ 09 顶部计数表不变。
