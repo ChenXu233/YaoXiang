@@ -33,14 +33,24 @@ check-fanout.py —— 禁令三（该重构不补丁）门禁：同义重复 / 
                          盲区可复算——把这四类原语（ensure_vendor_consistency(、
                          discover( / discover_with_used(、build_registry( /
                          build_registry_from(、roles::classify(）临时加进标记表，
-                         现存函数里会多出且**仅**多出 2 条 ≥2 阶段接线：
-                         frontend/module/orchestrator.rs 的 build_registry
-                         （discover( + build_registry_from( → Discovery/Registry）与
-                         driver/helpers.rs 的 collect_package_refs
-                         （orchestrator::discover_with_used( + parse →
-                         Discovery/PARSE/RoleClassification）；接线点实测 7 → 9、
-                         违规 0 → 2（要么登记进 KNOWN_WIRING_SITES 让库存 6 → 8，
-                         要么重构这两处）。是否收录属口径扩张，是用户裁决项。
+                         现存函数里会多出且**仅**多出 2 条 ≥2 阶段接线（接线点实测
+                         7 → 9、违规 0 → 2）。但两处性质不同，不能一律当「待清库存」：
+                         - driver/helpers.rs 的 collect_package_refs
+                           （orchestrator::discover_with_used( + parse →
+                           Discovery/PARSE/RoleClassification）：**活代码**，
+                           src/driver/arms.rs:626 在调用它 ⇒ 真·跨阶段接线，属待清对象；
+                         - frontend/module/orchestrator.rs 的 build_registry
+                           （discover( + build_registry_from( → Discovery/Registry）：
+                           仓库内**零调用者**，其私有助手 build_registry_from 只被它
+                           调用（:381），而 driver/arms.rs 的 Registry 臂自己建表
+                           （ModuleRegistry::with_std + extract_module_info +
+                           registry.register），不调这两个函数 ⇒ **死代码候选**，
+                           正确处置是删除 / 弃用，**不是**登记成遗留库存。它经
+                           src/lib.rs 的 pub mod frontend → frontend/mod.rs 的
+                           pub mod module → frontend/module/mod.rs 的
+                           pub mod orchestrator 暴露为库目标公开项，删除涉及对外 API
+                           面，故本判据只陈述性质、不处置它。
+                         是否把四类共享原语收进本表属口径扩张，是未决裁决。
                          遗留库存登记在
                          KNOWN_WIRING_SITES（6 条）；重定基清掉的陈旧库存登记
                          在 RETIRED_WIRING_SITES 并以 [进展] 打印（13 条）；
