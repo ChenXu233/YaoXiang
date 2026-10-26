@@ -86,7 +86,7 @@ src/
 │   │   └── bounds.rs              #     BoundsChecker
 │   ├── check/                     #   模块级检查（现 checker.rs 拆分后）
 │   │   ├── mod.rs                 #     TypeChecker 编排
-│   │   ├── annotations.rs         #     注解类型名校验 + is_predicate_head
+│   │   ├── annotations.rs         #     注解类型名校验 + is_predicate_head（现 checker 的真子模块）
 │   │   ├── signatures.rs          #     collect_function_signature
 │   │   ├── type_defs.rs           #     add_type_definition
 │   │   ├── imports.rs             #     导入导出 / 未使用导入
@@ -211,7 +211,7 @@ src/
 | `frontend/core/parser/pratt/`（手写 match 分派，两套 BP 阶梯） | `frontend/parser/grammar/` + 单套优先级表 | 05 |
 | `frontend/core/parser/ast.rs`（1166 行：`Expr`/`StmtKind`/`Type`/`Pattern` 定义） | 拆迁顶层 `ast/`（`expr`/`stmt`/`type_`/`pattern`） | 03 / D1 |
 | `frontend/core/parser/statements/declarations.rs`（1015 行，8-10 段职责） | `frontend/parser/` 拆分 + 删 120 行死旧语法 | 05 |
-| `typecheck/checker.rs`（4633 行 + 真子模块 `checker/refinement.rs` 1107 行、`checker/semantic_tokens.rs` 1553 行） | `sema/check/` + `sema/refine/`；`include!` 改真 `mod`（5.1 已完成）、精化块迁子模块与入口收口（5.2 已完成：入口为 `&self` + 返回诊断，不再隐式写错误通道） | 02 / 05 |
+| `typecheck/checker.rs`（4167 行 + 三个真子模块 `checker/annotations.rs` 470 行、`checker/refinement.rs` 1107 行、`checker/semantic_tokens.rs` 1553 行） | `sema/check/` + `sema/refine/`；`include!` 改真 `mod`（5.1 已完成）、精化块迁子模块与入口收口（5.2 已完成：入口为 `&self` + 返回诊断）、注解族迁子模块（5.3 已完成，`collect_used_in_type` 属共享面留在原处、无需再导出） | 02 / 05 |
 | `typecheck/checker/semantic_tokens.rs`（1553 行，已是 `checker` 的真子模块） | `sema/check/semantic_tokens.rs` | 02 |
 | `typecheck/inference/expressions.rs`（5525 行） | `sema/infer/{call/,expr,stmt}.rs` | 05 / 04 |
 | `typecheck/inference/statements.rs`（2887 行） | `sema/infer/stmt.rs` + `sema/infer/mod.rs` | 05 |
@@ -231,7 +231,7 @@ src/
 
 **目录改名不是目的。** 变更分两类：
 
-- **必须改的内部结构**：`middle/core/ir_gen.rs`（8448 行）、`typecheck/checker.rs`（4633 行 + 真子模块 1107 / 1553 行）、`typecheck/inference/expressions.rs`（5525 行）这三个文件的**内部结构**。
+- **必须改的内部结构**：`middle/core/ir_gen.rs`（8448 行）、`typecheck/checker.rs`（4167 行 + 真子模块 470 / 1107 / 1553 行）、`typecheck/inference/expressions.rs`（5525 行）这三个文件的**内部结构**。
 - **目录层级：改名。** `typecheck/` → `sema/`、`middle/core/` → `middle/ir/`、`parser/ast.rs` 拆迁顶层 `ast/`（`Type` 定义入 `type_.rs`）、opcode 词表迁 `middle/bytecode/`，随 P5/P6 一并完成（决议 D1）。**不分阶段、不设"可选"。** 理由：目录名是职责的第一眼信号——`middle/core/` 里同时放着 `ir.rs`、`ir_gen.rs`、`bytecode.rs` 三件事，名字已经失效；AST 被全层消费，放 `frontend/` 下会误导下游路径。边界由 CI 检查保证，但**检查规则引用的是目录职责表，职责表必须与实际目录名一致**，否则 `check-boundary.py` 无从判断代码是否放对位置。
 
 ### 命名约定
