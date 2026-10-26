@@ -1228,3 +1228,23 @@
 > **基线与过程注记**：①语料再生 4 条记录 8 行全部为误报 W 码消失（`test_suite.yx` W1001×3、`test_suite_fail.yx` W1001×2、`weak_ops.yx` W1003、`sum_type_native_match.yx` W1003），**`test_suite_fail` 的真阳性 W1003（`use std.result` 确实无人用）保留在基线**——修复不误伤真阳性的活证据；文档示例不在语料范围（语料 = `tests/yaoxiang/**`、`src/std/tests/**`、multifile main，示例走 stdlib_docs 门禁——口径澄清实现轮已核）。②复审 3 条 low：Union 臂失败路径（field_not_found 等）在打点之后才 return Err——失败时已标使用，但伴随 E 码、非阻断通道、且「写了变体名即尝试消费」语义可辩护；新增 4 测试的判据引用（WBS 号/文档路径）可解析但未直引 warning-codes.md 章节（轻微规范缺口）；提交信息「闭包表达式体」未完整陈述 Return 臂顺路覆盖显式 `return expr;` 语句的同源历史漏收（漏报方向无夹带）——本注记即补述。③`spawn/analysis.rs` 的同名收集器经核实为独立读写分析且已处理 Return，无同类缺陷。
 
 > **登记**：WBS 3.20.1 / 3.20.2 已完成（无独立 issue 锚，判据落本表与 WBS）；3.20 组仅余 3.20.3（issue [#505](https://github.com/ChenXu233/YaoXiang/issues/505)，算子方法 W1005）。
+
+## P3 3.20 收口（轮 2：3.20.3 算子派发可达性 + 登记 3.20.4，2026-10-26）
+
+> **触发**：issue [#505](https://github.com/ChenXu233/YaoXiang/issues/505)（2026-10-25 登记，WBS 3.20.3）：算子接口方法被算子表达式**实际派发调用**（run 值正确 20.0/false）仍报 W1005——可达性不计算子派发。
+
+> **改法**（提交 `ef4cbbd8`，7 文件 +308/−13）：根因实证——算子表达式的具名决议走 `OperatorDispatch` 义务通道（`TypeCheckResult::operator_dispatches`，RFC-011b span 键控，产点 `expressions.rs` 四处 + `statements.rs` 两处），与死代码分析消费的 D20 重载决议表（`overload_resolutions`）是 `obligations.rs` 里的**两条独立义务**、互不相通；方法组无决议记录回落短名共判，而 AST 只有 `u[0]`/`u==t`、无 `index`/`equal` 标识符 ⇒ 误报。修法 = driver 解析 `operator_dispatches` 按既有 `typed_owners` 归因到定义单元，analyzer 新增「派发组整组命中」（派发名不分重载候选 ⇒ 组内全部声明按活）；方法名映射复用 Layer 0 SPECS（`OperatorDispatch.method` 的产物），不生造第二份；Script 与 Check/MultiFile 双臂接线。
+
+> **证据（三段判据链，2026-10-26）**：
+>
+> | 环节 | 判据 | 结果 |
+> | --- | --- | --- |
+> | 实现轮 | 单文件（2 条 W1005）与跨单元（4 条）双形态红转绿 + run 值不变（20.0/false）+ 守卫（接口声明但算子未作用仍报） | 红态机械还原实测（t1 自查修正过一次 forbidden 行号错位导致的假绿并在红态复验翻红） |
+> | 实现轮门禁 | fmt / 全量 clippy / testsuite fast / markers / CI 四脚本 | 8 项全 exit 0（一轮过） |
+> | 独立验证 | 双形态值级+诊断集双断言、守卫、泛型残留行为与登记一致、变异可逆（还原派发接线后恰好主验收测试红）、零漂四项 | PASS（一次 trial 后测试二进制复用变异期产物假红，强制重编后全绿、树内容 blob 核实始终为冻结 rev） |
+> | 复审 | 断链三环逐点核实、两臂接线完整、整组按活有据、4.9.6/4.9.7 逐候选零改动、基线无夹带、变异实验独立复核红绿真实性 | APPROVE（3 条 low 收口提醒，见下） |
+> | 基线 | 语料 4 处 W1005 消失逐夹具归因（Vec3.equal / Box.index / Grid.index / Point.add+multiply——按条目计 5 条、按夹具计 4 处），同提交再生；IR 快照零漂移 | 全部真实派发夹具 |
+
+> **遗留与过程注记**：①**3.20.4 新登记**（issue [#510](https://github.com/ChenXu233/YaoXiang/issues/510)）：泛型约束形参的算子派发（`T: Add` 形参经 mono 具名化，typecheck 后的死代码分析不可见）仍误报——修它需消费 mono 改写产物（第三条通路），注入点设计需先裁决；t1 未用放宽手法（把 `T.add` 也算命中）掩盖，夹具 `constrained_generic_ops.yx` 的现存 W1005 被基线钉住。②**整组豁免 × D20 逐候选叠加边界**：同一 `(Type, method)` 组既有普通重载调用又有算子派发时，死候选被整组豁免掩盖——与运行时按名 Call 的 RFC-011a 历史债同源（派发通道与运行时都无法分辨「候选是否被调用」），宁漏报方向合规、非判据放宽；何时收敛取决于 RFC-011a 签名分发债的清偿。③**测试基建观察（待用户裁决是否登记改进）**：`src/driver/tests/ref_pool.rs` 的 `assert_warnings` helper（4.9 系列既有，非本批引入）——`forbidden` 参数是 `(code, line)` 精确对的存在性断言，**行号写错 ⇒ contains 永假 ⇒ 断言永真 ⇒ 静默空转**（t1 首跑假绿即踩此坑）；改进方向 = forbidden 语义升级为「该文件不得含该 code 的任何条目」或 forbidden 行号与诊断集反向对账。④跨单元「不同名」类型（`a.Temp`/`b.Box`）的守卫形态未写（t1 仅单文件守卫 + analyzer 级验证）——同名近似（`typed_owners` 可能归属都豁免）与 4.9.7 既有口径一致故不阻断，随 3.20.4 一并考虑。
+
+> **登记**：issue [#505](https://github.com/ChenXu233/YaoXiang/issues/505) 已关闭；新三级 **3.20.4**（#510）登记待排期（三级计数 189 → 190）；3.20 组至此 3.20.1–3.20.3 完成、3.20.4 在册。
