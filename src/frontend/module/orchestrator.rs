@@ -376,25 +376,6 @@ pub(crate) fn entry_module_key(entry: &Path) -> String {
     }
 }
 
-pub fn build_registry(entry: &Path) -> Result<ModuleRegistry, OrchestratorError> {
-    let files = discover(entry)?;
-    build_registry_from(&files)
-}
-
-fn build_registry_from(files: &[DiscoveredFile]) -> Result<ModuleRegistry, OrchestratorError> {
-    let mut registry = ModuleRegistry::with_std();
-    for file in files {
-        let ast = parse_file(&file.path, &file.source)?;
-        let mut info = extract_module_info(&file.module_key, &ast);
-        // 来源标记：vendor 依赖目录下的文件是 Vendor（与本地 User 区分）
-        if is_vendor_path(&file.path) {
-            info.source = ModuleSource::Vendor;
-        }
-        registry.register(info);
-    }
-    Ok(registry)
-}
-
 /// 路径是否位于某个项目的 `.yaoxiang/vendor/` 下。
 pub(crate) fn is_vendor_path(path: &Path) -> bool {
     let mut prev = None;
@@ -406,15 +387,6 @@ pub(crate) fn is_vendor_path(path: &Path) -> bool {
         prev = Some(name.to_string());
     }
     false
-}
-
-/// 从入口沿 `use` 追踪发现可达模块（#247/RFC-036：替代目录递归——
-/// 不相关文件的编译错误不再阻塞运行，测试文件的进程隔离才成立）。
-///
-/// 解析双根：`use a.b` 先按**导入者所在目录**解析，未命中再按**项目根**
-/// （最近的 yaoxiang.toml 祖先）解析。模块键 = use 路径，与解析自哪个根无关。
-pub(crate) fn discover(entry: &Path) -> Result<Vec<DiscoveredFile>, OrchestratorError> {
-    discover_with_used(entry).map(|(files, _, _)| files)
 }
 
 /// 遮蔽事件：文件路径、use 路径、use 的 span、被遮蔽的包名

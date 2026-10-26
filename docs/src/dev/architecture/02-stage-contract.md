@@ -435,7 +435,8 @@ pub enum StageScope { PerModule, Project }
 >    AST 产物——初稿次序会逼 Registry 臂「隐藏 parse」，让阶段表对数据流
 >    撒谎；且多文件 parse 因此从 2 次降为 1 次。附带的现状如实登记：多文件
 >    路径 parse 错误曾是硬中止（`build_registry_from` 的 `?` 传播，与
->    CollectAll 语义的张力登记为 WBS 4.10.1）——**4.10.1 已修复**
+>    CollectAll 语义的张力登记为 WBS 4.10.1；`build_registry_from` 已于
+>    2026-10-26 随零调用者清账删除，此处保留历史叙述）——**4.10.1 已修复**
 >    （2026-10-09 用户裁决 rust 式收集语义 + 方案 B）：Check 路径 parse
 >    失败降级为逐文件诊断收集、带病文件退出编译单元（不进 registry，
 >    导入方报 E5001）；MultiFile 路径保留硬中止（FailFast 下坏文件产不出
@@ -1024,7 +1025,7 @@ impl Driver {
 | `lsp::run_diagnostics`（`lsp/handlers/diagnostics.rs:146`） | 项目内改走 `Program { kind: Lsp, aggregation: CollectAll }`；单文件分支的**手工 lex→parse→… 序列删除**，改调 `Program { kind: SingleFile, aggregation: CollectAll }` |
 | `check_files_with_diagnostics`（`diagnostic/mod.rs:565`） | `standalone` 分支（`614-616` → `check_single_file` `623-661`）删除，统一走 `Program { kind: Check }` |
 
-**`check_project` 与 `compile_project` 的重复度（约 40% 共享 / 60% 分叉）**。共享的是：vendor 一致性核对、文件发现、`build_registry_from`、`all_method_bindings`、解析循环、逐文件 checker 装配、结果处理。分叉的是上表 11 项中的第 2/3/4/5/7/8/9/10/11 项。**这 40% 的共享骨架正是 `Driver` 的价值区间**——分叉的 60% 全部是「阶段集合不同」或「聚合模式不同」，而这恰好是 `Program` 的两个字段能完整表达的。
+**`check_project` 与 `compile_project` 的重复度（约 40% 共享 / 60% 分叉）**。共享的是：vendor 一致性核对、文件发现、`build_registry_from`（已于 2026-10-26 随零调用者清账删除，此处保留历史叙述）、`all_method_bindings`、解析循环、逐文件 checker 装配、结果处理。分叉的是上表 11 项中的第 2/3/4/5/7/8/9/10/11 项。**这 40% 的共享骨架正是 `Driver` 的价值区间**——分叉的 60% 全部是「阶段集合不同」或「聚合模式不同」，而这恰好是 `Program` 的两个字段能完整表达的。
 
 ### 4. 失败语义：`Continue` / `Abort` / `Warn`
 
