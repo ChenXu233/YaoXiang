@@ -19,10 +19,28 @@ check-fanout.py —— 禁令三（该重构不补丁）门禁：同义重复 / 
                            Parsing / Typecheck / ProofExecution /
                            DeadCodeAnalysis / IrGeneration / Monomorphization；
                          - Codegen / Exec 两类执行层原语（无对应 Stage 变体）。
-                         其余 6 个变体（VendorConsistency / Discovery / Registry /
-                         RoleClassification / GlobalSlotAlloc / Linking）的实现
-                         就在 Driver 臂内、唯一调用点是 dispatch，除臂形态外没有
-                         第二个可调的接线形态。
+                         其余 6 个变体分两类，不能笼统说成「只有臂形态」：
+                         (a) GlobalSlotAlloc / Linking 的阶段实现是 Driver **内私有**
+                         （pub(in crate::driver)：src/driver/helpers.rs 的
+                         allocate_global_slots、link_module_irs），Driver 之外无处可调；
+                         (b) VendorConsistency / Discovery / Registry /
+                         RoleClassification 的阶段实现是 Driver **之外**的共享原语
+                         （src/frontend/module/orchestrator.rs 的
+                         ensure_vendor_consistency / discover、discover_with_used /
+                         build_registry、build_registry_from；src/frontend/module/
+                         roles.rs 的 classify）。本表**只**收录这四类的臂形态，它们的
+                         共享原语形态是**已知未覆盖（待裁决）**的盲区。
+                         盲区可复算——把这四类原语（ensure_vendor_consistency(、
+                         discover( / discover_with_used(、build_registry( /
+                         build_registry_from(、roles::classify(）临时加进标记表，
+                         现存函数里会多出且**仅**多出 2 条 ≥2 阶段接线：
+                         frontend/module/orchestrator.rs 的 build_registry
+                         （discover( + build_registry_from( → Discovery/Registry）与
+                         driver/helpers.rs 的 collect_package_refs
+                         （orchestrator::discover_with_used( + parse →
+                         Discovery/PARSE/RoleClassification）；接线点实测 7 → 9、
+                         违规 0 → 2（要么登记进 KNOWN_WIRING_SITES 让库存 6 → 8，
+                         要么重构这两处）。是否收录属口径扩张，是用户裁决项。
                          遗留库存登记在
                          KNOWN_WIRING_SITES（6 条）；重定基清掉的陈旧库存登记
                          在 RETIRED_WIRING_SITES 并以 [进展] 打印（13 条）；
@@ -77,8 +95,10 @@ C 判据的重定基（2026-10-26）。
      否则「补了 3 条臂形态」仍能被另外两个变体的组合绕过。派生表还要与
      src/driver/*.rs 的 fn 定义对账：臂方法改名或 dispatch 结构变了就报警（见
      stage_arm_markers() 的守护），不静默漏判。阶段形态表每次运行时从源码**重取**
-     （不落盘快照，故不会与源码漂移）；最近一次重取：2026-10-26（12/12 臂形态
-     派生 + 8 个共享原语）。
+     （不落盘快照，故不会与源码漂移），最近一次重取：2026-10-26。
+     覆盖范围要说准，别读成全覆盖：**臂形态 12/12 派生（单一源）；共享原语只覆盖
+     6 个变体，另 4 个变体的共享原语形态未收录**（见上条盲区说明，已知未覆盖、
+     待裁决）。
   6. 被测体**不含函数签名**：签名行会自匹配阶段正则（fn check_project( 命中 TC
      的 check_project、fn parse( 命中 Parsing 形态），把一个纯声明虚报成一个
      阶段。函数边界仍由 fn_ranges() 的花括号配对求出，只把签名段切掉。
@@ -514,7 +534,8 @@ def main():
     dispatch = dispatch_points(markers)
     print('== C 入口接线点（函数内跨 ≥2 阶段手工接线；判据重定基 2026-10-26：'
           '库存 %d 处 / 已清理 %d 条 / 声明式调度点 %d 处；'
-          '阶段标记 %d 键 = 共享原语 %d + dispatch 派生的臂形态）=='
+          '阶段标记 %d 键 = 共享原语 %d + 6 个变体专有的臂形态（另 6 个变体的臂形态'
+          '并入对应共享原语键））=='
           % (len(KNOWN_WIRING_SITES), len(RETIRED_WIRING_SITES),
              len(DECLARED_DISPATCH_POINTS), len(markers), len(SHARED_STAGE_PRIMITIVES)))
     for p in marker_problems:
