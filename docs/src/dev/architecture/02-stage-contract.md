@@ -567,6 +567,8 @@ impl Obligations {
 >
 > 红名单 3 → **0**——三条清账任务已于 2026-10-13 全部落地：
 >
+> 注：以下行锚记录 **2026-10-22 当时**的文件状态；P5（2026-10-26）把 checker 拆成 `checker.rs` + `checker/{semantic_tokens,refinement,annotations}.rs` 后，`checker.rs` 行号整体前移，下列锚点不再对应现文件，仅作历史引证。
+>
 > - **3.4.4 `variant_ctor_calls` → 删字段**。其声明职责（「ir_gen 生成 CreateVariant」）由 IR 侧
 >   就地形态检测等价兑现：`src/middle/core/ir_gen.rs:7448 fn detect_variant_ctor_call`（同一 AST 形态
 >   `FieldAccess{Call(Var)/Var}` + 从 `sum_type_variants` 取声明序），调用点 `:7496` 将整个 Call 换成
@@ -1199,7 +1201,7 @@ pub enum Aggregation {
 | `check_single_file`（`diagnostic/mod.rs:621-661`）删除 | `yaoxiang check` 在项目内外行为一致 |
 | LSP 手工阶段序列删除 | LSP 与 CLI 对同一文件给出相同诊断集 |
 | **`test_multifile_proof_obligation_not_dropped` 转绿** | 漏洞已修 |
-| `checker.rs:1313` 空 match 臂修复 | `test_no_silent_pass_on_unproven`：`Unproven` 在任一模式下必产诊断 |
+| ownership 层 `Unproven` 空 match 臂修复（原 `checker.rs:1313`） | `test_no_silent_pass_on_unproven`：`Unproven` 在任一模式下必产诊断 |
 | `predicate.rs:34-36` `.expect()` 改为诊断 | 移除 Z3 环境下不再 panic |
 
 **回滚点**：漏洞修复与结构合并**分两个 commit**。若结构合并出问题，可只回滚结构 commit、保留漏洞修复 commit——此时 `test_multifile_proof_obligation_not_dropped` 保持绿；反向（保留结构、回滚修复）会转红，是不可接受的中间态，禁止合入。

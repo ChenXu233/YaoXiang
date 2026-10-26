@@ -19,4 +19,4 @@ echo "$output" | grep -q "1 passed" || {
     echo "check-snapshot-drift: FAIL（判据测试未执行——过滤名失效？）"
     exit 1
 }
-echo "check-snapshot-drift: PASS（204 快照零漂移）"
+echo "check-snapshot-drift: PASS（216 快照零漂移）"
