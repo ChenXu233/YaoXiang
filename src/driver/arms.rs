@@ -29,7 +29,8 @@ use crate::util::span::Span;
 use super::obligations::{Obligation, IR_GENERATION_DELIVERED};
 use super::helpers::{
     aggregate_instantiation_requests, allocate_global_slots, ast_has_main,
-    collect_compilation_refs, collect_package_refs, init_topological_order, is_bin_role,
+    collect_compilation_refs, collect_package_refs, declared_type_param_names,
+    expand_dispatch_groups, generic_instantiation_map, init_topological_order, is_bin_role,
     link_module_irs, merge_embedded_std_ir, resolved_method_marks, role_context, ImportCycle,
     InitOrder,
 };
@@ -517,14 +518,20 @@ impl Driver {
             let mut analyzer = DeadCodeAnalyzer::new();
             // 算子派发组（WBS 3.20.3 / issue #505）：单文件形态无跨单元归因
             // ——派发点与定义同处本单元，直接从本单元 typecheck 产物读取；
-            // 命中的 `Type.method` 组整组按活，未命中照报 W1005
+            // 命中的 `Type.method` 组整组按活，未命中照报 W1005。
+            // WBS 3.20.4 / issue #510：派发名可能是**约束形参名**（泛型体内
+            // `a + b` ⇒ 组 "T.add"）——单文件形态的实例化请求就在同一份
+            // type_result 里，按映射（形参名 → 具体类型名）展开成具体类型组
+            // 再喂分析器（映射/展开逻辑单点在 helpers.rs，两臂共用）。
             if let Some(tr) = us.type_result.as_ref() {
-                analyzer.set_operator_dispatched_groups(
+                let fn_type_params = declared_type_param_names(std::iter::once((ast, tr)));
+                let inst_map = generic_instantiation_map(std::iter::once(tr), &fn_type_params);
+                analyzer.set_operator_dispatched_groups(expand_dispatch_groups(
                     tr.operator_dispatches
                         .iter()
-                        .map(|d| format!("{}.{}", d.type_name, d.method))
-                        .collect(),
-                );
+                        .map(|d| format!("{}.{}", d.type_name, d.method)),
+                    &inst_map,
+                ));
             }
             let found = analyzer.analyze(ast);
             // 结构化警告诊断（severity 由 builder 按 W 前缀推导，#321 M2）

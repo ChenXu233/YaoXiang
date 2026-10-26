@@ -389,3 +389,150 @@ fn test_operator_dispatch_cross_unit_run_values_unchanged() {
         "u == t 必须派发 b.Temp.equal（false）: {values:?}"
     );
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// WBS 3.20.4 / issue #510：约束泛型实例化后的算子派发不得报 W1005
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// 判据（issue #510，D 类：删误报即改变警告面）：
+// ① `sum: (T: Add) -> (a: T, b: T) -> T`（体内 `a + b` ⇒ Call "T.add"）以
+//    Int 与 Vec3 各实例化调用一次（run 值正确）⇒ `Vec3.add` 不报 W1005。
+//    根因：typecheck 记录的派发名是**约束形参名**（OperatorDispatch
+//    {type_name:"T"} ⇒ 组 "T.add"），`T → Vec3` 的具名化发生在 mono 特化
+//    （middle 层），死代码分析（typecheck 后）看不到实例化；
+// ② 守卫（不得借修复放宽）：sum 定义但从未被调用（无实例化请求）⇒
+//    Vec3.add 仍须如实报 W1005；
+// ③ 值级：实例化派发的运行值保持 Int(3) / Float(5.0)（修复只动警告面，
+//    修前修后都绿；修复若改变行为则在此翻红）。
+//
+// 红态（修复前，实测）：单文件 check 报 W1005@Vec3.add 定义行（语料
+// tests/yaoxiang/02-type-system/generics/constrained_generic_ops.yx :19，
+// tests/baselines/corpus-parity.jsonl 同记 W1005@19、exit 0）；跨单元
+// （lib.yx + main.yx + 清单）同样报 lib.yx :9。run 值始终正确——方法
+// 确实被调用，警告为误报。
+
+/// issue #510 单文件主验收夹具：Vec3 + Vec3.add（:10）+ 约束泛型 sum（:14），
+/// main 以 Int 与 Vec3 各调用一次 sum。
+const CONSTRAINED_SINGLE: &str = "use std.assert\n\nVec3: Type = {\n    x: Float,\n    y: Float,\n    z: Float,\n    Add(Vec3, Vec3, Vec3),\n}\n\nVec3.add: (self: &Vec3, other: &Vec3) -> Vec3 = (self, other) => {\n    return Vec3(self.x + other.x, self.y + other.y, self.z + other.z)\n}\n\nsum: (T: Add) -> (a: T, b: T) -> T = a + b\n\nmain: () -> Void = {\n    i = sum(1, 2)\n    assert.assert(i == 3, \"Int\")\n\n    a = Vec3(1.0, 2.0, 3.0)\n    b = Vec3(4.0, 5.0, 6.0)\n    v = sum(a, b)\n    assert.assert(v.x == 5.0, \"Vec3\")\n}\n";
+
+/// ② 守卫夹具：与主验收同构，但 main 从不调用 sum（无任何实例化请求）。
+const CONSTRAINED_GUARD: &str = "use std.assert\n\nVec3: Type = {\n    x: Float,\n    y: Float,\n    z: Float,\n    Add(Vec3, Vec3, Vec3),\n}\n\nVec3.add: (self: &Vec3, other: &Vec3) -> Vec3 = (self, other) => {\n    return Vec3(self.x + other.x, self.y + other.y, self.z + other.z)\n}\n\nsum: (T: Add) -> (a: T, b: T) -> T = a + b\n\nmain: () -> Void = {\n    a = Vec3(1.0, 2.0, 3.0)\n    println(a.x)\n}\n";
+
+/// issue #510 跨单元夹具的定义侧：Vec3 + Vec3.add（:9）+ 约束泛型 sum（:13）。
+const CONSTRAINED_LIB: &str = "// lib.yx —— Vec3、Vec3.add（:9）与约束泛型 sum（:13），被 main 单元实例化\nVec3: Type = {\n    x: Float,\n    y: Float,\n    z: Float,\n    Add(Vec3, Vec3, Vec3),\n}\n\nVec3.add: (self: &Vec3, other: &Vec3) -> Vec3 = (self, other) => {\n    return Vec3(self.x + other.x, self.y + other.y, self.z + other.z)\n}\n\nsum: (T: Add) -> (a: T, b: T) -> T = a + b\n";
+
+/// 跨单元入口（check 用）：Int 与 Vec3 各实例化一次 sum（调用点在别的单元）。
+const CONSTRAINED_MAIN: &str = "// main.yx —— Int 与 Vec3 各实例化一次 sum（调用点在别的单元）\nuse std.assert\nuse lib.{Vec3, sum}\n\nmain = () => {\n    i = sum(1, 2)\n    assert.assert(i == 3, \"Int\")\n\n    a = Vec3(1.0, 2.0, 3.0)\n    b = Vec3(4.0, 5.0, 6.0)\n    v = sum(a, b)\n    assert.assert(v.x == 5.0, \"Vec3\")\n}\n";
+
+/// 跨单元入口（值级用）：Script 顶层绑定，槽位可观察 Int(3) / Float(5.0)。
+const CONSTRAINED_SCRIPT_MAIN: &str = "use lib.{Vec3, sum}\n\na = Vec3(1.0, 2.0, 3.0)\nb = Vec3(4.0, 5.0, 6.0)\ni = sum(1, 2)\nv = sum(a, b)\nvx = v.x\n";
+
+/// 单文件值级夹具：Script 顶层绑定（同构定义就地展开）。
+const CONSTRAINED_SCRIPT_SINGLE: &str = "Vec3: Type = {\n    x: Float,\n    y: Float,\n    z: Float,\n    Add(Vec3, Vec3, Vec3),\n}\n\nVec3.add: (self: &Vec3, other: &Vec3) -> Vec3 = (self, other) => {\n    return Vec3(self.x + other.x, self.y + other.y, self.z + other.z)\n}\n\nsum: (T: Add) -> (a: T, b: T) -> T = a + b\n\na = Vec3(1.0, 2.0, 3.0)\nb = Vec3(4.0, 5.0, 6.0)\ni = sum(1, 2)\nv = sum(a, b)\nvx = v.x\n";
+
+/// ① 单文件主验收：`T: Add` 约束泛型以 Int 与 Vec3 实例化调用 ⇒ Vec3.add
+/// 不报 W1005（修复前报 1 条，红态实测）。rootless 单文件语义。
+#[test]
+fn test_constrained_generic_dispatched_method_not_reported_unused_single_file() {
+    // Arrange：issue #510 语料夹具同构（Vec3 + Vec3.add + sum + 两次实例化调用）
+    let (_dir, entry) = make_rootless_project(&[("main.yx", CONSTRAINED_SINGLE)]);
+
+    // Act
+    let outcome = run_check(&entry).expect("check 必须返回产物");
+
+    // Assert：Vec3.add 被泛型实例化派发调用 ⇒ 诊断集不含 W1005
+    let codes = check_codes(&outcome, "main.yx");
+    assert!(
+        !codes.iter().any(|c| c == "W1005"),
+        "约束泛型实例化调用过的 Vec3.add 不得报 W1005，实际: {codes:?}"
+    );
+}
+
+/// ① 跨单元主验收：sum 与 Vec3 在 lib 单元、调用点在 main 单元 ⇒ check 不报
+/// lib.yx 的 Vec3.add W1005（修复前报 1 条，红态实测）。清单带 `[run].main`
+/// 声明面 ⇒ 警告面覆盖包内文件；实例化请求记在**调用方**单元的
+/// TypeCheckResult 里，映射必须跨单元聚合才能救活定义侧。
+#[test]
+fn test_constrained_generic_dispatched_method_not_reported_unused_cross_unit() {
+    // Arrange：issue #510 跨单元形态（lib.yx + main.yx + 声明面清单）
+    let (_dir, entry) =
+        make_declared_project(&[("lib.yx", CONSTRAINED_LIB), ("main.yx", CONSTRAINED_MAIN)]);
+
+    // Act
+    let outcome = run_check(&entry).expect("check 必须返回产物");
+
+    // Assert：lib.yx 的 Vec3.add（:9）被泛型实例化派发调用 ⇒ 不报 W1005
+    assert_warnings(&outcome, "lib.yx", &[], &[("W1005", 9)]);
+}
+
+/// ② 守卫（不得放宽判据）：sum 定义了但 main 从不调用（无实例化请求）⇒
+/// Vec3.add 仍须如实报 W1005（:10）。修复前修复后都必须绿——翻红即修复
+/// 把判据放宽成「全部方法豁免」。
+#[test]
+fn test_constrained_generic_without_instantiation_still_reports_unused_method() {
+    // Arrange：与单文件主验收同构，去掉全部 sum 调用点
+    let (_dir, entry) = make_rootless_project(&[("main.yx", CONSTRAINED_GUARD)]);
+
+    // Act
+    let outcome = run_check(&entry).expect("check 必须返回产物");
+
+    // Assert：无实例化请求 ⇒ 展开不出具体类型组 ⇒ Vec3.add 照报 W1005
+    assert_warnings(&outcome, "main.yx", &[("W1005", 10)], &[]);
+}
+
+/// ③ 值级（单文件）：实例化派发的运行值保持 Int(3) / Float(5.0)——修复只动
+/// 警告面，不触 IR 与派发（修前修后都绿；修复若改变行为则在此翻红）。
+#[test]
+fn test_constrained_generic_dispatch_single_file_run_values_unchanged() {
+    // Arrange：rootless Script 形态（顶层绑定即程序体，值进全局槽位可观察）
+    let (_dir, entry) = make_script_project(&[("main.yx", CONSTRAINED_SCRIPT_SINGLE)]);
+
+    // Act
+    let outcome = run_multi(&entry).expect("driver run failed");
+
+    // Assert：编译无故障，槽位值含 Int(3) 与 Float(5.0)
+    assert!(
+        outcome.failure.is_none(),
+        "单文件约束泛型派发不得编译失败: {:?}",
+        outcome.failure
+    );
+    let values = run_merged_slot_values(outcome.module.expect("must produce IR"));
+    assert!(
+        values.iter().any(|v| v == "Int(3)"),
+        "sum(1, 2) 必须实例化派发 Int 侧加法（= 3）: {values:?}"
+    );
+    assert!(
+        values.iter().any(|v| v == "Float(5.0)"),
+        "sum(a, b).x 必须实例化派发 Vec3.add（x = 1.0 + 4.0 = 5.0）: {values:?}"
+    );
+}
+
+/// ③ 值级（跨单元）：调用点在别的单元的实例化派发同样保持 Int(3) / Float(5.0)
+/// ——跨单元实例化必须真正被单态化并执行（修前修后都绿）。
+#[test]
+fn test_constrained_generic_dispatch_cross_unit_run_values_unchanged() {
+    // Arrange：lib 单元持定义、main 单元顶层绑定调用（Script 形态）
+    let (_dir, entry) = make_script_project(&[
+        ("lib.yx", CONSTRAINED_LIB),
+        ("main.yx", CONSTRAINED_SCRIPT_MAIN),
+    ]);
+
+    // Act
+    let outcome = run_multi(&entry).expect("driver run failed");
+
+    // Assert：编译无故障，槽位值含 Int(3) 与 Float(5.0)
+    assert!(
+        outcome.failure.is_none(),
+        "跨单元约束泛型派发不得编译失败: {:?}",
+        outcome.failure
+    );
+    let values = run_merged_slot_values(outcome.module.expect("must produce IR"));
+    assert!(
+        values.iter().any(|v| v == "Int(3)"),
+        "跨单元 sum(1, 2) 必须实例化派发 Int 侧加法（= 3）: {values:?}"
+    );
+    assert!(
+        values.iter().any(|v| v == "Float(5.0)"),
+        "跨单元 sum(a, b).x 必须实例化派发 Vec3.add（x = 5.0）: {values:?}"
+    );
+}

@@ -7,8 +7,9 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use crate::frontend::core::lexer;
-use crate::frontend::core::parser::ast::{Expr, StmtKind};
+use crate::frontend::core::parser::ast::{classify_generic_params, Expr, GenericParamKind, StmtKind};
 use crate::frontend::core::parser::{self, Module};
+use crate::frontend::core::typecheck::operator_interfaces;
 use crate::frontend::core::typecheck::passes::dead_code::DeadCodeAnalyzer;
 use crate::frontend::core::typecheck::TypeCheckResult;
 use crate::frontend::core::types::mono::MonoType;
@@ -989,6 +990,20 @@ pub(in crate::driver) fn resolved_method_marks(
     type_results: &[Option<&TypeCheckResult>],
 ) -> MethodMarks {
     let module_keys: HashSet<String> = units.iter().map(|u| u.key.clone()).collect();
+    // WBS 3.20.4 / issue #510：先**第一遍扫全部 type_results** 建全局实例化
+    // 映射（形参名 → 具体类型名）——实例化请求记在**调用方**单元的
+    // TypeCheckResult 里，派发记录（约束形参名）在**定义方**单元：映射必须
+    // 跨单元聚合，派发循环里才能把 "T.add" 展开成 "Vec3.add" 再归因。
+    // 形参名表从**全部单元的 AST** 提取一并传入：跨单元兜底路径的请求不带
+    // type_params（探针实测 params=[]），名字只能回定义单元的声明里取。
+    let fn_type_params = declared_type_param_names(
+        type_results
+            .iter()
+            .enumerate()
+            .filter_map(|(i, r)| Some((asts.get(i).and_then(|a| a.as_ref())?, (*r)?))),
+    );
+    let inst_map =
+        generic_instantiation_map(type_results.iter().filter_map(|r| *r), &fn_type_params);
     let mut marks = MethodMarks::default();
     for (i, result) in type_results.iter().enumerate() {
         let Some(result) = result else { continue };
@@ -1018,10 +1033,19 @@ pub(in crate::driver) fn resolved_method_marks(
         // `{type_name, method}` 同样按**定义单元**归因——归因面与 overload
         // 条目同一套（`typed_owners` 的可能归属并入 + 记录方自身）；派发名
         // `Type.method` 不分重载候选 ⇒ 记**整组**，分析器按组命中判活。
-        for dispatch in &result.operator_dispatches {
-            let base = format!("{}.{}", dispatch.type_name, dispatch.method);
-            let mut defining: HashSet<String> =
-                owners.get(&dispatch.type_name).cloned().unwrap_or_default();
+        //
+        // WBS 3.20.4 / issue #510：派发名可能是**约束形参名**（泛型体内
+        // `a + b` ⇒ 组 "T.add"）——先按实例化映射（上方跨单元聚合的
+        // `inst_map`）展开成具体类型组（原组保留），再逐组走同一套归因：
+        // 展开出的 "Vec3.add" 以其自身类型名查 `owners` 归到定义单元，
+        // 原 "T.add" 照旧归记录方。
+        let dispatch_bases = result
+            .operator_dispatches
+            .iter()
+            .map(|d| format!("{}.{}", d.type_name, d.method));
+        for base in expand_dispatch_groups(dispatch_bases, &inst_map) {
+            let type_name = base.split('.').next().unwrap_or(&base);
+            let mut defining: HashSet<String> = owners.get(type_name).cloned().unwrap_or_default();
             defining.insert(recorder_unit.clone());
             for key in defining {
                 marks
@@ -1033,6 +1057,140 @@ pub(in crate::driver) fn resolved_method_marks(
         }
     }
     marks
+}
+
+/// 形参名 → 已见具体类型名集合的**实例化映射**（WBS 3.20.4 / issue #510，
+/// 映射构建的**单点**，两臂共用）。
+///
+/// typecheck 记录的算子派发名是**约束形参名**（`OperatorDispatch{type_name:"T"}`
+/// ⇒ 组 "T.add"），而 `T → Vec3` 的具名化发生在 mono 特化（middle 层）——死代码
+/// 分析在 typecheck 后运行，看不到实例化。但 typecheck 自己已记录全部实例化：
+/// `TypeCheckResult::instantiation_requests` 的每条请求带 `generic_id.type_params`
+/// （形参名表）与 `type_args`（实参表），按位 zip 即 形参名 → 实参类型名。
+/// 同一形参多次实例化（sum@Int、sum@Vec3）取并集；跨泛型同名形参也取并集
+/// （都表示「这个名字被绑定过的具体类型面」）。
+///
+/// `fn_type_params`（函数名 → 形参名表，见 [`declared_type_param_names`]）服务
+/// **跨单元兜底路径**的请求：限定/花括号导入的调用走签名形态反推
+/// （expressions.rs 的 `collect_instantiation_request` 第二条路径），发出的请求
+/// `type_params` 为**空**（探针实测 params=[]）——此时按函数名查表补名再 zip。
+/// 函数名做**尾段**匹配（`lib.sum` → `sum`）：AST 表按绑定裸名建，两种调用
+/// 形态都命中；同名跨模块的短名误配方向 = 展开出多余组 ⇒ 至多漏报 W1005
+/// （宁漏报方向，登记为边界）。
+///
+/// 聚合口径由调用方决定：**调用点在别的单元时请求记在那里的 type_result 里**
+/// ——编排臂必须传全部单元的 TypeCheckResult（跨单元聚合），单文件臂传本单元
+/// 一条（单文件形态无跨单元）。
+///
+/// 只收**具体类型实参**（Struct/Enum/Int/Float/Bool/Char 值形态）；
+/// `MonoType::Generic`/`TypeRef` 等符号化实参不入映射——嵌套泛型深链不求值
+/// （issue #510 登记边界）。`MonoType::type_name()` 的行为（`types/mono.rs`）：
+/// Struct → 裸名（"Vec3"）、`Int(64)` → "int64"——展开出的 "int64.add" 无用户
+/// 方法定义，组不命中任何定义，天然无害。
+pub(in crate::driver) fn generic_instantiation_map<'a>(
+    type_results: impl IntoIterator<Item = &'a TypeCheckResult>,
+    fn_type_params: &HashMap<String, Vec<String>>,
+) -> HashMap<String, HashSet<String>> {
+    let mut map: HashMap<String, HashSet<String>> = HashMap::new();
+    for result in type_results {
+        for request in &result.instantiation_requests {
+            let from_request = request.generic_id.type_params();
+            let params: &[String] = if from_request.is_empty() {
+                let bare = request
+                    .generic_id
+                    .name()
+                    .rsplit('.')
+                    .next()
+                    .unwrap_or(request.generic_id.name());
+                match fn_type_params.get(bare) {
+                    Some(names) => names.as_slice(),
+                    None => continue,
+                }
+            } else {
+                from_request
+            };
+            for (param, arg) in params.iter().zip(request.type_args()) {
+                let concrete = match arg {
+                    MonoType::Struct(_)
+                    | MonoType::Enum(_)
+                    | MonoType::Bool
+                    | MonoType::Char
+                    | MonoType::Int(_)
+                    | MonoType::Float(_) => arg.type_name(),
+                    _ => continue,
+                };
+                map.entry(param.clone()).or_default().insert(concrete);
+            }
+        }
+    }
+    map
+}
+
+/// 泛型函数名（绑定裸名）→ 声明序类型形参名表，从**定义单元的 AST** 提取
+/// （WBS 3.20.4 / issue #510）。
+///
+/// 为什么需要第二来源：形参名随导出携带的登记口（`checker.rs::collect_signatures`
+/// 的 Assign 臂）只认 `(T: Type)`（MetaType）形态，约束泛型 `(T: Add)`
+/// （`Type::Name` 约束名）不入表 ⇒ 导出面不带 ⇒ 跨单元请求的
+/// `generic_id.type_params` 为空（探针实测），单一 zip 通路展不开。这里回到
+/// 声明现场补读：判据用**现成单点** `ast::classify_generic_params`（与
+/// typecheck 侧同一函数，语义不复制），is_trait 闭包按其调用点同源判据组装
+/// （`trait_table.has_trait` + 内建算子接口 `operator_interfaces::spec`——
+/// checker.rs 处理 `(T: Add)` 的同一对来源）。
+///
+/// 只扫顶层 `Assign`（`sum: (T: Add) -> … = …` 是顶层泛型绑定的承载形态，
+/// `signature_params` 即第一组括号段）；普通值绑定的该段为空、值参数类型名
+/// （`Vec3` 等）不满足 Type/ trait 判据 ⇒ 分类不出 Type 参数，天然无条目。
+pub(in crate::driver) fn declared_type_param_names<'a>(
+    units: impl IntoIterator<Item = (&'a Module, &'a TypeCheckResult)>
+) -> HashMap<String, Vec<String>> {
+    let mut out: HashMap<String, Vec<String>> = HashMap::new();
+    for (ast, result) in units {
+        let is_trait = |name: &str| {
+            result.trait_table.has_trait(name) || operator_interfaces::spec(name).is_some()
+        };
+        for stmt in &ast.items {
+            if let StmtKind::Assign {
+                target,
+                signature_params,
+                ..
+            } = &stmt.kind
+            {
+                if let Expr::Var(name, _) = target.as_ref() {
+                    let names: Vec<String> = classify_generic_params(signature_params, &is_trait)
+                        .into_iter()
+                        .filter(|p| matches!(p.kind, GenericParamKind::Type))
+                        .map(|p| p.name)
+                        .collect();
+                    if !names.is_empty() {
+                        out.entry(name.clone()).or_insert(names);
+                    }
+                }
+            }
+        }
+    }
+    out
+}
+
+/// 派发组按实例化映射展开（WBS 3.20.4 / issue #510，展开逻辑的**单点**，
+/// 两臂共用）：组 "{P}.{m}" 若 P 在映射中 ⇒ 追加全部 "{X}.{m}"（X ∈ map[P]）；
+/// **原组保留**——用户类型可能真叫 "T"，且展开是追加不是替换。
+pub(in crate::driver) fn expand_dispatch_groups(
+    groups: impl IntoIterator<Item = String>,
+    map: &HashMap<String, HashSet<String>>,
+) -> HashSet<String> {
+    let mut expanded = HashSet::new();
+    for group in groups {
+        expanded.insert(group.clone());
+        if let Some((param, method)) = group.split_once('.') {
+            if let Some(type_names) = map.get(param) {
+                for type_name in type_names {
+                    expanded.insert(format!("{type_name}.{method}"));
+                }
+            }
+        }
+    }
+    expanded
 }
 
 /// `Type.method#k` → `(Type.method, k)`；无 `#` 后缀 ⇒ 声明序 0

@@ -80,7 +80,7 @@
 {"expectation":"behavior","file":"tests/yaoxiang/02-type-system/generics/const_generic_assert.yx","run":{"diagnostics":[["W1002","tests/yaoxiang/02-type-system/generics/const_generic_assert.yx",8]],"exit":0,"stderr":[],"stdout":[]}}
 {"expectation":"behavior","file":"tests/yaoxiang/02-type-system/generics/const_generic_instantiate.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
 {"expectation":"behavior","file":"tests/yaoxiang/02-type-system/generics/const_generic_lt_le_bound.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/generics/constrained_generic_ops.yx","run":{"diagnostics":[["W1005","tests/yaoxiang/02-type-system/generics/constrained_generic_ops.yx",19]],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/generics/constrained_generic_ops.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
 {"expectation":"behavior","file":"tests/yaoxiang/02-type-system/generics/explicit_type_args.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
 {"expectation":"behavior","file":"tests/yaoxiang/02-type-system/generics/fallen_const_value_param.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
 {"expectation":"behavior","file":"tests/yaoxiang/02-type-system/generics/fn_const_generic.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
