@@ -1283,3 +1283,33 @@
 > **遗留**：① `check-fanout.py --strict` 9 处（全在 `driver/`，父提交同判据同 9 处 ⇒ 既有欠账，非本批引入），是否登记 WBS 行待用户裁决；② `check-snapshot-drift.sh` 文案写「204 快照」而实际 216 个 `.snap`（早于本批）；③ `02-stage-contract.md` 中「仅行号平移、指向仍留在 `checker.rs` 的逻辑」的历史引文未逐一重取（本批只修**已指错对象**的那些）；④ 批次树 `gc` 后清零。
 
 > **计数**：本批不新增二级/三级任务 ⇒ 09 顶部计数表不变。
+
+## P9 判据 C 接线点重定基收口（9.12.1 / 9.12.2，2026-10-26）
+
+> **登记误标（我方）**：P5 收口实录把 `check-fanout.py --strict` 的 9 处违规列为「遗留」，同日登记为 9.12，标题写成「清存量同名多定义」——**写错了**。`--strict` 的违规只来自判据 C（入口接线）；A 判据（同名函数多定义，181 条）是 report-only，永远不会让 `--strict` 红。收口时更正标题与正文。
+
+> **根因**：`STAGE_MARKERS` 是 2026-10-06 按 P4 之前「六条路径各自手工接线」的现状标定的，注释明写「P4 统一 Driver 后本表随库存一起删除」。P4 落地后词表与 19 条 `KNOWN_WIRING_SITES` 都没退休 —— 于是判据把 Driver **自己的阶段表**判成违规（`Stage::DeadCodeAnalysis` 变体名、`slug` 字符串表、`state.rs` 依赖表），与禁令三判据 C 的规则文本（「新增第 N 个入口**而非登记进声明式阶段表** → 违规」）正好相反。这是「门禁长期红、被人为绕过」的典型形态，故处置是**重定基判据**，不是补白名单。
+
+> **9 处的实际构成（逐行查了命中行）**：4 处是真接线（`driver/arms.rs` 的 `parsing_single_file` / `parsing_check` / `parsing_lsp` 与 `driver/helpers.rs` 的 `collect_package_refs`，各一次 `tokenize` + `parse`）；4 处命中的是**阶段词汇表本身**（`driver/mod.rs` 的 `dispatch` 臂、`driver/stage.rs` 的 `scope` 谓词与 `slug` 表、`driver/state.rs` 的依赖表）；1 处是 `frontend/module/orchestrator.rs` 的 `#[cfg(test)] mod` 单元测试（原 `is_test_path` 只豁免 `/tests/` 目录，不覆盖 `src/` 内嵌测试模块）。
+
+> **四项判据修正（口径变化，逐项有依据）**：① **LEX 并入 `Parsing`** —— `src/driver/stage.rs` 与 02 §目标设计 1 都写明 `Parsing` =「词法 + 语法分析（lex → parse）」，词法不是独立阶段，同一函数内 tokenize + parse 只算一个阶段；② **DEADCODE / MONO 只认调用形态** —— 原正则 `dead_code|DeadCode` 会把 `Stage::DeadCodeAnalysis` 这类词汇表当成阶段调用；③ **`#[cfg(test)] mod` 豁免** 以**花括号配对**求模块行范围（不用关键字回看）；④ **12 个变体的臂形态改为派生** —— 从 `Stage::ALL` 取变体、从 `dispatch` 的穷尽 match 取 `self.<臂>(`，单一源 + 三条 fail-loud 守护（变体源失效 / 变体在 match 里找不到臂 / 派生臂名在 `src/driver/*.rs` 里没有 `fn` 定义），`dispatch` 另单列 `DECLARED_DISPATCH_POINTS`（输出标记 `[调度点]`，不计违规）。
+
+> **附带修掉的虚报**：`fn_ranges` 把函数签名行算进被测体，于是 `fn check_project(` 的函数名自匹配 TC 正则、凭空多出一个阶段（`check_project` / `check_source_in_project` 两条退役理由因此不实）。新增 `fn_body` 切掉签名段；实测「≥2 阶段 → <2 阶段」的函数减少量为 **0**，即这次修根因没有顺手放掉任何真接线（由复审用四种口径独立重算确认，非复述实现者）。
+
+> **13 条退役库存的分类（实测，非推断）**：函数已删除 5 条（`frontend/pipeline.rs` 的 `run_typecheck` / `run_ir_generation`、`orchestrator` 的 `collect_project_refs`、`lsp` 的 `update_semantic_db` / `run_diagnostics`）；函数仍存但已不再直接调用阶段原语 5 条（`pipeline.rs run`、`orchestrator compile_project` / `compile_embedded_module` / `check_project` / `check_source_in_project`）；仅因 LEX 并入 `Parsing` 而降为单阶段 3 条（`lib.rs eval_code`、`orchestrator parse_file`、`lsp/handlers/completion.rs document_symbol_items`）。最终库存 = 6 条，接线点实测 = 7 处（6 库存 + 1 调度点）。
+
+> **复审链四轮，每轮都抓到真问题**：轮 1 `needs_revision`（medium）——词表不认 driver 阶段臂的调用形态，`self.parsing(` + `self.typecheck(` 的手工两阶段接线**实测为绿**（真逃逸，不是措辞问题）；轮 2 `needs_revision`（medium）——「其余 6 个变体除臂形态外没有第二个可调形态」不实：VendorConsistency / Discovery / Registry / RoleClassification 的阶段实现是 Driver **之外**的共享原语；轮 3 `needs_revision`（low）——盲区段把「活接线」与「死代码候选」并列成同一处置菜单；轮 4 **pass**，无 finding。轮 2 另独立验证了「派生失效必须 fail-loud」（四种破坏各造一次全部 exit 1，不存在「退化空表却仍全绿」）。
+
+> **变异证据**：独立验证侧 5 条负控（driver 外新接线 / driver 内非 dispatch / 删调度点登记 / 删库存条目 / 登记失效），复审侧逐条用自己的补丁复跑全部 exit 1 并机械还原（`git status` 干净 + blob 与 HEAD 一致）；复审另自造 3 个实现者与验证者都没用过的形态。判据没有变成「改绿就算」——每轮都要求「你能不能再造一个应红的」。
+
+> **队长自己的四处缺陷（不粉饰）**：① 派工写「13 条里 10 条函数已不存在」是从脚本 `[进展] … 已消失` 标签反推的，而该标签只表示「不再被判为接线点」，实测分类是 5 / 5 / 3；发现后 amend 了验证任务的 acceptance，没有让验证者背假 finding。② 自动生成的 repair 任务 `inScope` 里混进了 findings 文本被切出的**伪路径**（`PROOF/DEADCODE/MONO`、`PARSE/TC`、`Codegen/Exec`）与禁改文件，直接下发会让 `changedPaths` 校验当场失败——由队长重写为单一脚本路径。③ 派工文本里写了「用户裁决 A′」这种**会话私有代号**，成员如实抄进脚本 docstring，违反元规则①（仓库内不可解析）——复审抓出后改为四处可解析依据（禁令三判据 C / 02 §目标设计 1 / `stage.rs` 的 `Parsing` 注释 / 09 的 9.12 行）。④ **9.12 登记提交只追加了「+1 = 9.12 / +1 = 9.12.1」的日期注记，没有同步行首总数**（仍留 70 / 190），收口时一并补正（含本批新增的 9.12.2 ⇒ 71 / 192）。前三条都是「凭标签与旧文档写契约」的同一个病，与本批要修的判据错误同源。
+
+> **流程偏差（记录，不掩饰）**：一次变异试验没走 `scratch.py trial` 批次树，而是在主仓工作树用 difflib 生成补丁 → `git apply` → 跑门禁 → `git apply -R` → blob 对账。复审判定「机械可逆的实质等效」并接受，同时记两条注记：绕开「探针/独立检出一律走批次树」的约定、且无「变异前树必须干净」的前置检查与 `apply -R` 失败兜底。其余各轮均在批次树的冻结 revision 上量测。
+
+> **环境事故**：复审成员的路由两次 `TRANSPORT: Stream ended without finish_reason`（收尾轮与后续消息），用户手动复活成员后继续；两次均未产生未收口的 attempt、未污染工作树。另有一次评审循环撞运行时上限（三轮 `needs_revision` 后由系统升级），队长按「先向用户报、不自行再开一轮」处置，用户复活成员后才继续。
+
+> **门禁（最终字节上）**：`check-fanout.py --strict` exit 0（违规 0、库存 6、接线点 7）、report-only exit 0；`check-boundary.py` exit 0（`pub(crate)` 167、违规 0）；`check-docs-truth.py` / `check-docs-refs.py` exit 0；重跑 `gen-error-code-docs.py` 后 `git diff --quiet` exit 0；A 段 181 条同名定义、B 段六族文件数（BinOp 58 / UnOp 31 / MonoType 120 / ConstValue 78 / Literal 54 / bytecode 运算符 10）与改动前一致。Rust 侧门禁（fmt / clippy / test / 语料 / 快照）本批不适用——四笔改动只碰 `scripts/ci/check-fanout.py`，`git show --name-only` 可证。
+
+> **遗留（登记为 9.12.2，未决）**：① 4 个变体的共享原语未收录进词表（是否收录属**未决裁决**，实测收录会新暴露且仅暴露 2 处）；② `build_registry` 是零调用者的死代码重复（`driver/arms.rs` 的 Registry 臂自建表、不调它），但它是 lib 目标公开项，删除属**对外 API 面变更**，须单独裁决；③ `collect_package_refs` 是活代码的真接线，收录后需登记库存或重构。
+
+> **计数**：本批新增三级任务 9.12.2 ⇒ 三级 190 → 192（含补正的 9.12.1 漏计 1 条）；二级 70 → 71（同上，9.12 登记时漏计）。
