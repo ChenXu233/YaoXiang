@@ -5733,4 +5733,4 @@ fn collect_assigned_in_expr(
     }
 }
 
-include!("checker/semantic_tokens.rs");
+mod semantic_tokens;

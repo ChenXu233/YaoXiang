@@ -1,3 +1,5 @@
+use super::*;
+
 impl TypeChecker {
     fn semantic_token_type_for_export(
         export: &crate::frontend::module::Export
@@ -410,7 +412,7 @@ impl TypeChecker {
         }
     }
 
-    fn collect_semantic_tokens(
+    pub(super) fn collect_semantic_tokens(
         &mut self,
         module: &Module,
     ) {
@@ -450,7 +452,7 @@ impl TypeChecker {
                     ..
                 } => {
                     let Some((name, type_name)) = target.receiver_parts() else {
-                    continue
+                        continue;
                     };
                     // RFC-010a 附录D：非 Fn 注解的块绑定是**块值**而非函数
                     let is_fn_binding =
@@ -466,7 +468,10 @@ impl TypeChecker {
                     } else {
                         (Vec::new(), Vec::new())
                     };
-                    let generic_params = crate::frontend::core::parser::ast::extract_generic_param_names(signature_params);
+                    let generic_params =
+                        crate::frontend::core::parser::ast::extract_generic_param_names(
+                            signature_params,
+                        );
                     let is_method = type_name.is_some();
                     if is_method {
                         self.semantic_db.add_token(
@@ -661,7 +666,8 @@ impl TypeChecker {
                 }
                 StmtKind::DestructureAssign { names, rhs, .. } => {
                     for name in names {
-                        let is_declaration = declared.entry(0).or_default().insert(name.name.clone());
+                        let is_declaration =
+                            declared.entry(0).or_default().insert(name.name.clone());
                         let modifiers = if is_declaration {
                             vec![SemanticTokenModifier::Declaration]
                         } else {
@@ -689,8 +695,7 @@ impl TypeChecker {
                         &mut imported_module_roots,
                     );
                 }
-                StmtKind::If { .. } | StmtKind::Error(_) => {
-                }
+                StmtKind::If { .. } | StmtKind::Error(_) => {}
                 StmtKind::TypeDefinition {
                     name,
                     signature_params,
@@ -698,7 +703,9 @@ impl TypeChecker {
                     ..
                 } => {
                     let generic_params =
-                        crate::frontend::core::parser::ast::extract_generic_param_names(signature_params);
+                        crate::frontend::core::parser::ast::extract_generic_param_names(
+                            signature_params,
+                        );
                     // 类型定义 → Type (定义)
                     let mut modifiers = vec![SemanticTokenModifier::Declaration];
                     if !generic_params.is_empty() {
@@ -717,7 +724,6 @@ impl TypeChecker {
 
                     // 类型定义体中的类型引用
                     self.collect_type_tokens(&fp, definition);
-
                 }
                 StmtKind::Return(expr_opt) => {
                     if let Some(expr) = expr_opt {
@@ -764,9 +770,12 @@ impl TypeChecker {
                     _ => stmt.span,
                 };
                 // 非 Lambda value → 变量
-                let is_lambda = value.as_ref().is_some_and(|v| matches!(v.as_ref(), Expr::Lambda { .. } | Expr::Block(..)));
+                let is_lambda = value
+                    .as_ref()
+                    .is_some_and(|v| matches!(v.as_ref(), Expr::Lambda { .. } | Expr::Block(..)));
                 if !is_lambda {
-                    let is_declaration = declared.entry(scope_idx).or_default().insert(name.clone());
+                    let is_declaration =
+                        declared.entry(scope_idx).or_default().insert(name.clone());
                     let modifiers = if is_declaration {
                         vec![SemanticTokenModifier::Declaration]
                     } else {
@@ -966,7 +975,10 @@ impl TypeChecker {
             }
             StmtKind::DestructureAssign { names, rhs, .. } => {
                 for name in names {
-                    let is_declaration = declared.entry(scope_idx).or_default().insert(name.name.clone());
+                    let is_declaration = declared
+                        .entry(scope_idx)
+                        .or_default()
+                        .insert(name.name.clone());
                     let modifiers = if is_declaration {
                         vec![SemanticTokenModifier::Declaration]
                     } else {
@@ -1005,7 +1017,6 @@ impl TypeChecker {
         constructor_names: &HashSet<String>,
         imported_module_roots: &mut HashSet<String>,
     ) {
-
         match expr {
             Expr::Var(name, span) => {
                 // 判断是函数引用还是变量引用
@@ -1446,9 +1457,16 @@ impl TypeChecker {
                     );
                 }
             }
-            Expr::ListComp { element, generators, .. } => {
+            Expr::ListComp {
+                element,
+                generators,
+                ..
+            } => {
                 for gen in generators {
-                    declared.entry(scope_idx).or_default().insert(gen.var.clone());
+                    declared
+                        .entry(scope_idx)
+                        .or_default()
+                        .insert(gen.var.clone());
                     self.semantic_db.add_token(
                         file_path,
                         semantic_db::SemanticToken {

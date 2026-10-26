@@ -9,7 +9,7 @@ check-boundary.py —— 禁令二判据 C（边界侵蚀）门禁
 引入阶段：P0（report-only，默认退出码恒 0）；P9 统一转硬（CI 改为 --strict）。
 
 检查项（对应 01 §依赖方向规范的七行规则）：
-  B1 禁止 include!               现状 1 处（checker.rs:5618，P5 消除）
+  B1 禁止 include!               现状 0 处（WBS 5.1 已消除：checker.rs 改真 `mod`）
   B2 L2 不得依赖 L3/L4           现状 2 处（03 §2.4，P6 消除）
   B3 L3/L4 不得 use L2 行为      数据路径豁免：parser::ast（D1 顶层域）、
                                  lexer::tokens（字面量/Token 数据）；测试目录豁免。
@@ -46,7 +46,8 @@ L4_DIRS = ('backends/', 'std/')
 L2_DATA_PREFIXES = ('parser::ast', 'lexer::tokens', 'lexer::TokenKind', 'lexer::Token', 'lexer::Literal')
 
 # ---- 现状库存（2026-10-06 实测登记；消除后从表中移除，新增即违规）----
-KNOWN_INCLUDE = {'frontend/core/typecheck/checker.rs': 1}
+# WBS 5.1：checker.rs 的 include!("checker/semantic_tokens.rs") 已改真 `mod`，库存清零。
+KNOWN_INCLUDE = {}
 KNOWN_L2_CROSS = {
     'frontend/core/parser/ast.rs': 1,                 # :930 operator_interfaces::spec 调用点
     'frontend/core/parser/statements/declarations.rs': 1,  # :509 同上
@@ -159,7 +160,7 @@ def main():
     print('扫描范围: src/（%d 个 .rs）\n' % len(files))
 
     # ---- B1 include! ----
-    print('== B1 include!（库存 %d 处，P5 消除）==' % sum(KNOWN_INCLUDE.values()))
+    print('== B1 include!（库存 %d 处，WBS 5.1 已消除）==' % sum(KNOWN_INCLUDE.values()))
     for f in files:
         rp = rel(f)
         hits, ex = count_hits(f, RE_INCLUDE)
