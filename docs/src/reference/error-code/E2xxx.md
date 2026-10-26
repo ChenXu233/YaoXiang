@@ -187,7 +187,7 @@ description: '语义分析阶段产生的错误，涵盖作用域、变量生命
 - **构造函数**：`ErrorCodeDefinition::refined_constraint_violated(assigned, var, constraint, counterexample)`
 - **模板**：`对 '{assigned}' 赋值后，'{var}' 不再满足精化类型约束：{constraint}（反例：{counterexample}）`
 - **帮助**：精化类型标注要求依赖变量在相关赋值之后仍然满足谓词约束。请调整赋值使约束成立，或放宽类型标注。
-- **发射点**：`src/frontend/core/typecheck/checker.rs:5258`
+- **发射点**：`src/frontend/core/typecheck/checker/refinement.rs:644`
 - **源码注释名**：精化类型约束违反（赋值后依赖变量 VC 被 SMT 证伪——
 
 ### E2031：精化约束无法证明
@@ -197,7 +197,7 @@ description: '语义分析阶段产生的错误，涵盖作用域、变量生命
 - **构造函数**：`ErrorCodeDefinition::refined_unproven(assigned, var, constraint)`
 - **模板**：`对 '{assigned}' 赋值后，'{var}' 的精化类型约束：{constraint} 在证明内核内无法静态证明`
 - **帮助**：RFC-027 要求所有精化约束在编译期得到证明——证不出即编译错误。请改写约束使其实参可静态取值（字面量或字面量可折叠的表达式），或提供返回 Type 的证明函数参与编译期执行。
-- **发射点**：`src/frontend/core/typecheck/checker.rs:5279`、`src/frontend/core/typecheck/checker.rs:5422`、`src/frontend/core/typecheck/checker.rs:5561`
+- **发射点**：`src/frontend/core/typecheck/checker/refinement.rs:665`、`src/frontend/core/typecheck/checker/refinement.rs:808`、`src/frontend/core/typecheck/checker/refinement.rs:947`
 - **源码注释名**：精化约束无法证明（RFC-027 §4/§9：Unproven → 编译错误 + 未解命题，
 
 ### E2090：无效签名
