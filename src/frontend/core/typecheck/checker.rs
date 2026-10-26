@@ -1237,7 +1237,8 @@ impl TypeChecker {
         // Phase 2.5: 检查精化类型绑定
         // 遍历所有语句，对变量绑定的精化类型执行证明检查
         let mut proof_calls = Vec::new();
-        self.collect_refined_binding_checks(module, &mut proof_calls);
+        let refined_diags = self.collect_refined_binding_checks(module, &mut proof_calls);
+        self.env.errors.extend_errors(refined_diags);
 
         // 收集 body_checker 中累积的错误（收集模式下产生的）
         if let Some(ref mut bc) = self.body_checker {

@@ -51,14 +51,14 @@ impl TypeChecker {
     ///   当前机制的已知边界——精确处刑需假设注入 + 路径条件（RFC-027 §6
     ///   Floyd-Hoare 全貌，随数据流推理落地，#377 同盘）
     pub(super) fn collect_refined_binding_checks(
-        &mut self,
+        &self,
         module: &Module,
         proof_calls: &mut Vec<crate::frontend::core::typecheck::proof::verdict::ProofFunctionCall>,
-    ) {
+    ) -> Vec<Diagnostic> {
         let mut shared_ctx =
             crate::frontend::core::typecheck::proof::context::ProofContext::new(&self.env);
-        // #263：shared_ctx 持有 &self.env，精化解析诊断先汇入 sink，
-        // 待 shared_ctx 释放后再写入 env.errors
+        // 精化解析诊断汇入本地 sink，由调用方（check_module_impl）统一写入——
+        // 入口不再借 &mut self 隐式写错误通道，写入点唯一且在调用处可见。
         let mut refined_diags = Vec::new();
         {
             let mut ctx = RefinedWalkCtx {
@@ -73,8 +73,7 @@ impl TypeChecker {
             self.refined_walk_stmts(&module.items, &mut module_unit, &mut ctx);
         }
 
-        // #263：精化解析诊断汇入（shared_ctx 已不再被使用，借用结束）
-        self.env.errors.extend_errors(refined_diags);
+        refined_diags
     }
 
     /// 精化走查：一个语句列表 = 一个词法块。

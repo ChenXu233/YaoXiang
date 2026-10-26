@@ -64,7 +64,7 @@ dead-code = "warn"
 - **span 豁免**：否
 - **模板**：`未使用的导入：'{name}'`
 - **帮助**：考虑移除未使用的导入
-- **发射点**：`src/frontend/core/typecheck/checker.rs:3298`
+- **发射点**：`src/frontend/core/typecheck/checker.rs:3299`
 
 ### W1004：未使用的私有变量
 
@@ -104,7 +104,7 @@ dead-code = "warn"
 - **span 豁免**：否
 - **模板**：`const 泛型约束无法求值: \`{constraint}\``
 - **帮助**：确保 const 参数是编译期常量
-- **发射点**：`src/frontend/core/typecheck/checker.rs:1547`
+- **发射点**：`src/frontend/core/typecheck/checker.rs:1548`
 
 ### W1080：编译期证明降级
 
@@ -120,7 +120,7 @@ dead-code = "warn"
 - **span 豁免**：否
 - **模板**：`{count} 条终止性测度义务未判定（SMT 求解器不可用）`
 - **帮助**：安装 Z3 求解器后重新检查，以获得终止性判定；「未判定」不等于「不终止」，但义务的判定被跳过了
-- **发射点**：`src/frontend/core/typecheck/checker.rs:1534`
+- **发射点**：`src/frontend/core/typecheck/checker.rs:1535`
 
 ### W1082：所有权分析降级
 
@@ -128,7 +128,7 @@ dead-code = "warn"
 - **span 豁免**：否
 - **模板**：`所有权分析降级：本次编译没有函数体检查器（类型账本与调用点所有权表缺失），所有权判定按空账本进行、不检测借用冲突`
 - **帮助**：这是编译器内部的阶段契约缺陷，不是你的程序写错了：所有权层运行时拿不到函数体检查器提供的类型账本与调用点所有权表，于是「什么都不冲突」地放行——借用冲突检查被整体跳过。请把这条诊断连同最小复现程序报成 issue。
-- **发射点**：`src/frontend/core/typecheck/checker.rs:1620`
+- **发射点**：`src/frontend/core/typecheck/checker.rs:1621`
 
 ### W1090：义务已产出但无消费者
 
