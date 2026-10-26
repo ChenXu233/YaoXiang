@@ -400,7 +400,8 @@ pub(crate) type ShadowEvent = (PathBuf, String, crate::util::span::Span, String)
 /// pub(crate)：同 `ShadowEvent` 的过渡性放宽（4.2.2）
 pub(crate) type Discovery = (Vec<DiscoveredFile>, HashSet<PathBuf>, Vec<ShadowEvent>);
 
-/// 同 [`discover`]，附带 use 边信息：被 ≥1 个文件 `use` 的文件路径集合
+/// 同 `discover_with_used` 的前身 `discover`（2026-10-26 随零调用者清账删除），
+/// 附带 use 边信息：被 ≥1 个文件 `use` 的文件路径集合
 /// （canonical 化，与发现文件路径同口径比对）——角色推断的 Lib 信号（RFC-029f）；
 /// 以及本地模块遮蔽依赖包事件（RFC-014 §项目模式，W1006）。
 ///

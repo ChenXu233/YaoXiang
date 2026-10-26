@@ -34,27 +34,48 @@ check-fanout.py —— 禁令三（该重构不补丁）门禁：同义重复 / 
                          它是**活代码**（src/driver/arms.rs:626 在调用它）⇒ 真·跨阶段
                          接线、属待清对象，已登记进 KNOWN_WIRING_SITES（库存 6 → 7）；
                          未见第二处新增，故不存在额外登记。
-                         (c) Registry 变体在 2026-10-26 之后已**没有** Driver 外原语：
-                         它唯一的外部形态是 frontend/module/orchestrator.rs 的
-                         build_registry（discover( + build_registry_from( → Discovery/
-                         Registry），仓库内**零调用者**（唯一调用点就在它自己的函数体
-                         内），私有助手 build_registry_from 也只被它调用；而
-                         driver/arms.rs 的 Registry 臂自己建表（ModuleRegistry::with_std
-                         + extract_module_info + registry.register），不调这两个函数。
-                         该链经 src/lib.rs 的 pub mod frontend → frontend/mod.rs 的
-                         pub mod module → frontend/module/mod.rs 的
-                         pub mod orchestrator 暴露为库目标公开项，删除涉及对外 API 面，
-                         故其处置由用户裁决（2026-10-26 D2-A = 删除）；删除后 Registry
-                         只剩臂形态，本表**不**为它设共享原语键。
-                         收录口径（为什么只收这三个）：判据是「该阶段的实现在 Driver
-                         之外有可被调用的形态」，不是「凡构造该阶段数据的函数都收」。
-                         反例取 extract_module_info（orchestrator.rs:1057 区段）：它是
-                         **构造 registry 条目的助手**——把一个文件的 AST 转成一个
-                         ModuleInfo；它自己既不驱动 Registry 阶段、也不构成入口式接线，
-                         接线点在其调用方（driver/arms.rs 的 Registry 臂）。收它会把这个
-                         助手的每个调用方都染成 Registry 阶段，与「阶段原语 = 阶段的实现
-                         形态」这条标定冲突，也与 (c) 的结论矛盾（会凭空造出 Driver 外
-                         Registry 形态）。
+                         (c) Registry 的阶段实现**主体在 Driver 臂内**：driver/arms.rs:1298
+                         的 registry() 自建表（ModuleRegistry::with_std + 逐单元
+                         extract_module_info + registry.register）。Driver 之外只剩**构件**：
+                         src/frontend/module/orchestrator.rs:1058 的 extract_module_info
+                         （把单文件 AST 转成 registry 条目——即 Registry 阶段「签名收集」
+                         的产出面）与 ModuleRegistry::with_std（容器构造）。本表按下面
+                         「收录口径」R2 收录前者（键 Registry），后者不判。
+                         历史（保留下结论所依据的事实）：该变体曾经的 Driver 外**整体**形态
+                         是零调用者的 build_registry 链（build_registry /
+                         build_registry_from / discover），2026-10-26 用户裁决 D2-A 删除；
+                         它经 src/lib.rs 的 pub mod frontend → frontend/mod.rs 的
+                         pub mod module → frontend/module/mod.rs 的 pub mod orchestrator
+                         属 lib 目标公开项，故删除须先裁决。删除后**不等于**「Driver 外再
+                         无 registry 形态」——构件仍在，这正是本条要收的对象。
+                         收录口径（可判定规则；三处 D1-A 收录与本条 F1 补收都按它判）：
+                         先排除一条**不能用**的判据——「凡构造该阶段数据的函数就不收」。它已被
+                         表内 5 项直接证伪：PARSE 收 parse_file（解析入口）、TC 收
+                         TypeChecker::new、DEADCODE 收 DeadCodeAnalyzer、MONO 收
+                         Monomorphizer、IRGEN 收 AstToIrGenerator——都是构造/持有型符号。
+                         判定改用下面三条：
+                         R1 收录 = 该阶段的**阶段实现形态**在 Driver 之外有可被调用的符号
+                            （臂形态之外的第二形态）；纯**声明**（阶段词汇表、依赖表）不收。
+                         R2 阶段主体在臂内、Driver 外只剩「构造该阶段数据」的构件时，收**能
+                            代表该阶段产出的那一个**：Registry → extract_module_info（它就是
+                            Registry 阶段签名收集的产出），不收纯容器构造
+                            （ModuleRegistry::with_std）。
+                         R3 若重建注册表绕开这两者（自建 struct 逐字段拼装、或换别名接收者
+                            调 extract_module_info），本判据**抓不到**，如实登记为**已知未覆盖
+                            面**，靠 review 兜底（与「局限」段同一纪律：不拿「无可收原语」当
+                            覆盖结论）。
+                         按 R1-R3 复算：(b) 三类的 Driver 外实现整体在外面（发现、角色推断、
+                         vendor 校验都是模块级函数）⇒ 收；(c) Registry 的主体在臂内、外面只剩
+                         构件 ⇒ 按 R2 收 extract_module_info 一处。
+                         R2「不收」的可复核反例（唯一生产调用方不在 Driver 外）：
+                         - is_vendor_path（orchestrator.rs:380）：生产调用点全在 Driver 侧
+                           （arms.rs:1317、helpers.rs:820、obligations.rs:638）⇒ 收它只是给
+                           臂内已有接线换标签，属 R2 的「构件」；
+                         - scan_use_refs（orchestrator.rs:904）：调用点是 Driver 的 helpers.rs:204
+                           与已收录原语内部（discover_with_used、scan_use_paths 之调用方
+                           helpers.rs:44）；且它自己体内调 tokenize（PARSE 形态）——把它当
+                           Discovery 标记会把「词法级扫描助手」本身判成跨阶段接线
+                           （PARSE+Discovery），属误报。
                          遗留库存登记在
                          KNOWN_WIRING_SITES（7 条）；重定基清掉的陈旧库存登记
                          在 RETIRED_WIRING_SITES 并以 [进展] 打印（13 条）；
@@ -111,10 +132,12 @@ C 判据的重定基（2026-10-26）。
      stage_arm_markers() 的守护），不静默漏判。阶段形态表每次运行时从源码**重取**
      （不落盘快照，故不会与源码漂移），最近一次重取：2026-10-26。
      覆盖范围要说准，别读成全覆盖：**臂形态 12/12 派生（单一源）；共享原语覆盖
-     9 个变体**（6 个原有 + 2026-10-26 裁决 D1-A 收录的 VendorConsistency /
-     Discovery / RoleClassification）；另 3 个变体（Registry / GlobalSlotAlloc /
-     Linking）**没有**可收的 Driver 外原语——GlobalSlotAlloc / Linking 的实现是 Driver
-     内私有，Registry 的外部形态（build_registry 链）已于 2026-10-26 删除（见上条 (a)(c)）。
+     10 个变体**（6 个原有 + 2026-10-26 裁决 D1-A 收录的 VendorConsistency /
+     Discovery / RoleClassification + 同轮复审 F1 补收的 Registry）；另 2 个变体
+     （GlobalSlotAlloc / Linking）的阶段实现是 Driver 内私有，没有可收的 Driver 外形态。
+     Registry 的 Driver 外收录面**只到 extract_module_info 构件**：ModuleRegistry::
+     with_std 裸建表与「自建 struct 逐字段拼装注册表」都**不判**，属已知未覆盖面（见
+     上条 (c) 与「收录口径」R2/R3）——这是如实登记的缺口，不是全覆盖。
   6. 被测体**不含函数签名**：签名行会自匹配阶段正则（fn check_project( 命中 TC
      的 check_project、fn parse( 命中 Parsing 形态），把一个纯声明虚报成一个
      阶段。函数边界仍由 fn_ranges() 的花括号配对求出，只把签名段切掉。
@@ -132,14 +155,14 @@ ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 SRC = os.path.join(ROOT, 'src')
 
 # 阶段原语标记分两层（标定依据见模块 docstring「C 判据的重定基」）：
-# ① 共享阶段原语（本表）—— 可在 Driver 之外被调用的阶段实现调用形态，11 个键：
+# ① 共享阶段原语（本表）—— 可在 Driver 之外被调用的阶段实现调用形态，12 个键：
 #    6 个 Stage 变体的实现原语（PARSE / TC / PROOF / DEADCODE / IRGEN / MONO）
 #    + Codegen / Exec 两类执行层原语（无对应 Stage 变体）
 #    + 2026-10-26 裁决 D1-A 补收的 3 个变体（VendorConsistency / Discovery /
-#      RoleClassification，补收前属于「已知未覆盖」盲区）。
-#    Registry 变体**不在此表**：它唯一的 Driver 外形态就是零调用者的
-#    build_registry 链，2026-10-26 已随清账删除；删除后该变体只剩臂形态
-#    （driver/arms.rs:1298 的 Registry 臂自建表），由派生臂标记覆盖。
+#      RoleClassification，补收前属于「已知未覆盖」盲区）
+#    + 同日复审 F1 补收的 Registry：阶段主体在 Driver 臂内（driver/arms.rs:1298），
+#      外面只剩构件——收 extract_module_info（Registry 阶段签名收集的产出面），
+#      ModuleRegistry::with_std 裸建表不判（已知未覆盖面，见 docstring「收录口径」）。
 # ② 阶段臂形态 —— 12 个 Stage 变体的 self.<臂>(…)，运行时从 Driver::dispatch 的
 #    穷尽 match **派生**（单一源，见 stage_arm_markers()）；臂名不手写：只补点对点
 #    的几条臂，换个变体组合照样能绕过（2026-10-26 复审的负控即如此）。
@@ -172,19 +195,32 @@ SHARED_STAGE_PRIMITIVES = {
     # 局限：标记是**文本**匹配，只认符号名与 ( 之间的形态。改用接收者别名
     # （use roles::classify as rc; rc( ）或把调用藏进包装函数后再调包装名，都抓不到
     # ——那类形态靠 review 兜底，不进本表的自动判据。
+    # RoleClassification 按 2026-10-26 复审 F2 **收紧**为限定形态 roles::classify(
+    # （仓内两处调用点都是它）：原裸名 \bclassify( 会与其它模块同名助手（如
+    # formatter/rules/sort_imports.rs 的 classify_import、typecheck/inference/scope.rs
+    # 的 classify_binding 一类命名族）以子串/前缀形态相撞，属已知误报面；收紧后
+    # 「use roles::classify 后只写 classify(」不再被咬，落在上面同一条已知局限里。
     'VendorConsistency': re.compile(r'\bensure_vendor_consistency\s*\('),
     'Discovery': re.compile(r'\bdiscover_with_used\s*\('),
-    'RoleClassification': re.compile(r'\bclassify\s*\('),
+    'RoleClassification': re.compile(r'\broles::classify\s*\('),
+    # 2026-10-26 复审 F1 补收：Registry 的阶段实现**主体**在 Driver 臂内
+    # （driver/arms.rs:1298 的 registry()），但 Driver 外仍留有可直接调用的**构件**
+    # ——extract_module_info（orchestrator.rs:1058，把单文件 AST 转成 registry 条目，
+    # 即 Registry 阶段「签名收集」的产出面）与 ModuleRegistry::with_std（容器构造）。
+    # 只收前者：后者是纯数据结构构造，在 typecheck / resolver / 测试等 30+ 处出现，
+    # 当阶段标记会把「建一个注册表」误判成阶段接线；该形态属**已知未覆盖面**，
+    # 靠 review 兜底（详见 docstring「收录口径」与 (c) 段）。
+    'Registry': re.compile(r'\bextract_module_info\s*\('),
 }
 
 # 阶段臂形态的键归属：Stage 变体 → 合并后标记表（stage_markers()）里的键。
-# 9 个有共享原语的变体并入既有键（同一阶段不出现两个键）：6 个（Parsing /
+# 10 个有共享原语的变体并入既有键（同一阶段不出现两个键）：6 个（Parsing /
 # Typecheck / ProofExecution / DeadCodeAnalysis / IrGeneration / Monomorphization）
 # + 2026-10-26 裁决 D1-A 补收的 3 个（VendorConsistency / Discovery /
-# RoleClassification）。其余 3 个变体（Registry / GlobalSlotAlloc / Linking）的实现
-# 只在 Driver 臂内、唯一调用点是 dispatch，除臂形态外没有第二个可调的接线形态，
-# 键即变体名。Registry 之所以落在「其余 3 个」里，是因为它**曾经**有 Driver 外
-# 形态（build_registry 链），2026-10-26 删除后归零（见上表注释）。
+# RoleClassification）+ 同日复审 F1 补收的 Registry。其余 2 个变体（GlobalSlotAlloc /
+# Linking）的实现是 Driver 内私有、唯一调用点是 dispatch，除臂形态外没有第二个可调
+# 的接线形态，键即变体名。Registry 的键名仍是变体名，但**有**共享原语形态
+# （extract_module_info，见上表注释与 docstring (c)）。
 ARM_KEY_OF_VARIANT = {
     'Parsing': 'PARSE',
     'Typecheck': 'TC',
@@ -205,8 +241,10 @@ STAGE_SOURCE = ('driver/stage.rs', 'pub const ALL')
 DISPATCH_SOURCE = ('driver/mod.rs', 'dispatch')
 
 # 遗留接线点库存（2026-10-26 重定基后剩 6 条；同日晚些时候的裁决 D1-A 收录三类
-# 共享原语后新暴露 1 条（collect_package_refs），现为 7 条。每条都是「仍在跨 ≥2
-# 阶段、但尚未收进 Driver」的入口式接线，属待清欠账而非合规范）。
+# 共享原语后新暴露 1 条（collect_package_refs），现为 7 条。同轮复审 F1 补收
+# Registry（extract_module_info）后实测**无新增**——接线点仍 8、库存仍 7；该补收
+# 只让「Driver 外重建 registry」从「不被判」变成「被判」，不改现存基线。
+# 每条都是「仍在跨 ≥2 阶段、但尚未收进 Driver」的入口式接线，属待清欠账而非合规范）。
 # 形态：{(文件, 函数名): 阶段集合}；未登记的接线点 = 违规。
 # 阶段集合只作登记留档，报告里的 [阶段/…] 一律取**当次实测**值。
 KNOWN_WIRING_SITES = {
