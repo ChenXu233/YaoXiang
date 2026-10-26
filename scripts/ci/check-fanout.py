@@ -4,24 +4,53 @@
 check-fanout.py —— 禁令三（该重构不补丁）门禁：同义重复 / 扇出 / 入口接线
 
 规则本体：docs/src/dev/coding-rules.md 第一部分·禁令三（判据 A/B/C）
+  判据 C 原文：「新增"第 N 个入口 / 表项"而非登记进声明式阶段表 → 违规」。
 入口清单权威：RFC-039 §1.1（5 个手工接线入口的 11 处不一致）
 任务来源：docs/src/dev/architecture/09-execution-wbs.md §P0 任务 0.2.2
 引入阶段：P0（report-only，默认退出码恒 0）；P9 统一转硬（CI 改为 --strict）。
 
 判据实现：
-  C. 入口接线（主检查）   函数体内直接调用 ≥2 个不同阶段原语（词法/语法/类型
-                         检查/证明/死代码/单态化/IR/代码生成/执行）即判定为
-                         「手工接线的入口」。现状库存登记在 KNOWN_WIRING_SITES
-                         （2026-10-06 实测，对应 RFC-039 §1.1 的 5 入口 +
-                         LSP/eval/embedded 等），P4 统一 Driver 后清零。
+  C. 入口接线（主检查）   函数体内直接调用 ≥2 个不同阶段原语即判定为
+                         「手工接线的入口」（阶段原语按**调用形态**标定，与
+                         Stage 的阶段语义一一对应；标定依据见下文
+                         「C 判据的重定基」）。遗留库存登记在
+                         KNOWN_WIRING_SITES（6 条）；重定基清掉的陈旧库存登记
+                         在 RETIRED_WIRING_SITES 并以 [进展] 打印（13 条）；
+                         P4 建成的声明式调度点登记在 DECLARED_DISPATCH_POINTS
+                         并以 [调度点] 打印（不计违规）。
                          新增未登记的接线点 → 违规（验收：故意新增第 6 个
-                         入口式接线必须红）。测试目录豁免。
+                         入口式接线必须红）。
+                         豁免：/tests/ 目录；src 内 #[cfg(test)] mod 模块
+                         （范围由**花括号配对**求出）。
   A. 同义重复（报告）     同名函数定义出现在 ≥2 个生产文件中（启发式；
                          变体后缀规避如 name_used_as_type_in 由 review 兜底，
                          已登记于 01 路由表 C）。常见助手名按停用表过滤。
   B. 扇出（报告/可选 diff） 默认打印概念族触点文件数基线；
                          --diff <git-ref> 模式下，改动文件集与任一概念族
                          交集 ≥3 → 疑似「一次修改同步改 ≥3 处同义映射」。
+
+C 判据的重定基（2026-10-26，用户裁决 A′）：
+  旧标定（2026-10-06）是照 P4「统一 Driver」**之前**「六条路径各自手工接线」的
+  现状写死的，注释里那句「P4 统一 Driver 后本表随库存一起删除」一直没有兑现，
+  于是它把 Driver 自己的阶段表判成了违规（--strict 的 9 处全部属于这一类）。
+  P4 之后阶段不再由各入口手工串接，而由 src/driver/stage.rs 的 Stage 阶段表加
+  Driver::dispatch 的穷尽 match 声明式驱动。判据因此对齐四点：
+  1. Parsing = 「词法 + 语法分析（lex → parse）」——src/driver/stage.rs 的
+     Stage::Parsing 文档注释与
+     docs/src/dev/architecture/02-stage-contract.md §目标设计 1 的阶段表同此
+     定义。故 LEX **不是**独立阶段：同一函数内 tokenize + parse 只算 Parsing
+     一个阶段。
+  2. 死代码族 / 单态化只认**调用形态**：Stage::DeadCodeAnalysis、
+     Stage::Monomorphization、"dead-code-analysis" 这类阶段词汇表，以及
+     driver/state.rs 的阶段依赖表，都是**声明**而不是接线，不再命中。
+  3. src 内 #[cfg(test)] mod 里的函数是测试而不是入口——豁免范围由**花括号
+     配对**求出（先 sanitize 再计数），不做「向上 N 行找关键字」的关键字回看：
+     回看没有下边界，会整段误豁免或漏豁免。
+  4. Driver::dispatch 是 02 §目标设计 1 指定的强制机制（Stage 是编译期可穷举
+     枚举，新增变体时 dispatch 的穷尽 match 编译不过——即「登记进声明式阶段
+     表」这件事的执行侧），它**就是**判据要求的形态，故单独登记、打印
+     [调度点]、不计违规；它**不进** KNOWN_WIRING_SITES（那张表的语义是「待清
+     遗留库存」，方向相反）。
 
 退出码：0 = report-only（默认）；--strict 且违规 > 0 → 1（P9 启用）。
 """
@@ -35,47 +64,77 @@ from collections import defaultdict
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 SRC = os.path.join(ROOT, 'src')
 
-# 阶段原语标记（按现状代码的调用形态标定；P4 统一 Driver 后本表随库存一起删除）
+# 阶段原语标记 —— 按**调用形态**标定，与 Stage 的阶段语义一一对应。
+# 标定依据见模块 docstring「C 判据的重定基」（2026-10-26 重定基）。
+# - PARSE 含词法：Stage::Parsing 的定义就是「词法 + 语法分析（lex → parse）」，
+#   故 tokenize 与 parse 同属 Parsing，一个函数里两者并存只算 1 个阶段
+#   （重定基前的 LEX/PARSE 两标记会把单阶段函数判成跨阶段接线）。
+# - DEADCODE / MONO 只认调用形态：Stage::DeadCodeAnalysis、
+#   Stage::Monomorphization、"dead-code-analysis" 这类**阶段词汇表**以及阶段
+#   依赖表不是接线；旧的字面匹配（dead_code / monomorph）会把它们算进去。
 STAGE_MARKERS = {
-    'LEX': re.compile(r'\btokenize\s*\(|Lexer::new|\brun_lexing\b'),
-    'PARSE': re.compile(r'parser::parse\(|\bparse_module\(|\brun_parsing\b|\bparse_file\(|Parser::new|\bparse\(&'),
+    'PARSE': re.compile(
+        r'\btokenize\s*\(|Lexer::new|\brun_lexing\b'
+        r'|parser::parse\(|\bparse_module\(|\brun_parsing\b'
+        r'|\bparse_file\(|Parser::new|\bparse\(&'),
     'TC': re.compile(r'check_module|TypeChecker::new|\brun_typecheck\b|check_source_in_project|\bcheck_project\b|check_single_file'),
     'PROOF': re.compile(r'run_proof_execution|proof_execution'),
-    'DEADCODE': re.compile(r'dead_code|DeadCode'),
-    'MONO': re.compile(r'[Mm]onomorph'),
+    'DEADCODE': re.compile(r'dead_code_analysis\(|DeadCodeAnalyzer'),
+    'MONO': re.compile(r'monomorphization\(|monomorphize\(|Monomorphizer::'),
     'IRGEN': re.compile(r'AstToIrGenerator|run_ir_generation|generate_module_ir|generate_ir|ir_gen::'),
     'CODEGEN': re.compile(r'CodegenContext|BytecodeModule::from|BytecodeFile|Translator::new'),
     'EXEC': re.compile(r'Interpreter::new|execute_module|\.execute\('),
 }
 
-# 现状接线点库存（2026-10-06 实测登记；P4 统一 Driver 后清零）
-# 形态：{(文件, 函数名): 阶段集合}；未登记的接线点 = 违规
+# 遗留接线点库存（2026-10-26 重定基后剩 6 条；每条都是「仍在跨 ≥2 阶段、但
+# 尚未收进 Driver」的入口式接线，属待清欠账而非合规范）。
+# 形态：{(文件, 函数名): 阶段集合}；未登记的接线点 = 违规。
+# 阶段集合只作登记留档，报告里的 [阶段/…] 一律取**当次实测**值。
 KNOWN_WIRING_SITES = {
-    # RFC-039 §1.1 五入口及其阶段包装方法（P4 统一 Driver 时清零）
-    ('lib.rs', 'eval_code'): {'LEX', 'PARSE'},
+    # 库入口：编码 + 执行（Driver 之外的 library/CLI 收尾路径）
     ('lib.rs', 'run_with_source_name'): {'CODEGEN', 'EXEC'},
     ('lib.rs', 'run_project'): {'CODEGEN', 'EXEC'},
-    ('frontend/pipeline.rs', 'run'): {'LEX', 'PARSE', 'TC', 'PROOF', 'IRGEN'},
-    ('frontend/pipeline.rs', 'run_typecheck'): {'TC', 'DEADCODE'},
-    ('frontend/pipeline.rs', 'run_ir_generation'): {'IRGEN', 'MONO'},
-    # 2026-10-06 P3：证明执行机制共享化，从 pipeline.rs 移入 proof_execution.rs
-    #（orchestrator 四入口同调，02 §漏洞修复——库存随之迁移而非新增）
+    # 证明执行机制共享化后的唯一实现（orchestrator 多入口曾同调，02 §漏洞修复）
     ('frontend/proof_execution.rs', 'execute_single_proof_fn'): {'CODEGEN', 'EXEC', 'IRGEN'},
-    ('frontend/validate.rs', 'validate_source'): {'LEX', 'PARSE', 'TC'},
-    # 2026-10-06 P3：四入口补齐 proof_execution 消费点（PROOF 阶段入列）
-    ('frontend/module/orchestrator.rs', 'compile_project'): {'PARSE', 'TC', 'PROOF', 'IRGEN'},
-    ('frontend/module/orchestrator.rs', 'check_project'): {'PARSE', 'TC', 'DEADCODE', 'PROOF'},
-    ('frontend/module/orchestrator.rs', 'check_source_in_project'): {'LEX', 'PARSE', 'TC', 'PROOF'},
-    ('frontend/module/orchestrator.rs', 'collect_project_refs'): {'LEX', 'PARSE', 'DEADCODE'},
-    ('frontend/module/orchestrator.rs', 'compile_embedded_module'): {'PARSE', 'TC', 'PROOF', 'IRGEN'},
-    ('frontend/module/orchestrator.rs', 'parse_file'): {'LEX', 'PARSE'},
-    # LSP 手工阶段序列（P4 的 4.2.6 消除）
-    ('lsp/server.rs', 'update_semantic_db'): {'LEX', 'PARSE', 'TC'},
-    ('lsp/handlers/completion.rs', 'document_symbol_items'): {'LEX', 'PARSE'},
-    ('lsp/handlers/diagnostics.rs', 'run_diagnostics'): {'LEX', 'PARSE', 'TC'},
+    ('frontend/validate.rs', 'validate_source'): {'PARSE', 'TC'},
     # REPL 与嵌入 std（归 P4 ProgramKind / 06 D 节裁决）
     ('repl/eval.rs', 'evaluate'): {'CODEGEN', 'EXEC'},
-    ('std/yx_sources.rs', 'embedded_std_module_info'): {'LEX', 'PARSE', 'TC'},
+    ('std/yx_sources.rs', 'embedded_std_module_info'): {'PARSE', 'TC'},
+}
+
+# 2026-10-26 重定基清掉的 13 条陈旧库存（P4「统一 Driver」之后的实测结果）。
+# 它们**不再**参与违规判定，但报告必须如实打印 [进展]：库存表悄悄删条目而不留
+# 痕，等于把「清零」写成既成事实。若其中某条重新命中 ≥2 阶段（库存回归），判为
+# 违规——回归的接线点必须重新登记，不能借清理之名洗成合规。
+# 形态：{(文件, 函数名): 清理原因}。
+RETIRED_WIRING_SITES = {
+    # ① 函数已不存在：P4 把它们并进 Driver，入口侧已无此函数
+    ('frontend/pipeline.rs', 'run_typecheck'): '函数已不存在（P4 并入 Driver）',
+    ('frontend/pipeline.rs', 'run_ir_generation'): '函数已不存在（P4 并入 Driver）',
+    ('frontend/module/orchestrator.rs', 'collect_project_refs'): '函数已不存在（P4 并入 Driver）',
+    ('lsp/server.rs', 'update_semantic_db'): '函数已不存在（4.6.1 LSP 语义数据管线统一）',
+    ('lsp/handlers/diagnostics.rs', 'run_diagnostics'): '函数已不存在（4.2.6 LSP 单文件兜底统一）',
+    # ② 函数仍在，但已不再直接调用阶段原语（改为委托 Driver）——实测 0/1 阶段
+    ('frontend/pipeline.rs', 'run'): '函数仍在，已不再直接调用阶段原语（委托 Driver）',
+    ('frontend/module/orchestrator.rs', 'compile_project'): '函数仍在，已不再直接调用阶段原语（委托 Driver）',
+    ('frontend/module/orchestrator.rs', 'compile_embedded_module'): '函数仍在，已不再直接调用阶段原语（委托 Driver）',
+    ('frontend/module/orchestrator.rs', 'check_project'): '函数仍在，只剩 Typecheck 1 个阶段（委托 Driver）',
+    ('frontend/module/orchestrator.rs', 'check_source_in_project'): '函数仍在，只剩 Typecheck 1 个阶段（委托 Driver）',
+    # ③ 消除 LEX（并入 PARSE）后只剩 Parsing 1 个阶段
+    ('lib.rs', 'eval_code'): '只剩 Parsing 1 个阶段（LEX 并入 PARSE）',
+    ('frontend/module/orchestrator.rs', 'parse_file'): '只剩 Parsing 1 个阶段（LEX 并入 PARSE）',
+    ('lsp/handlers/completion.rs', 'document_symbol_items'): '只剩 Parsing 1 个阶段（LEX 并入 PARSE）',
+}
+
+# 声明式调度点（**不是**遗留库存，不计违规）。
+# 依据 docs/src/dev/architecture/02-stage-contract.md §目标设计 1：Stage 是编译期
+# 可穷举的枚举、禁止运行期注册，「新增变体时 dispatch 的穷尽 match 编译不过」正是
+# 这条约束的强制机制——Driver::dispatch 对 Stage 的穷尽 match 就是判据 C 所说
+# 「登记进声明式阶段表」的执行侧。把它塞进 KNOWN_WIRING_SITES 会被读成「待清
+# 欠账」，方向相反，故另立一张表。
+# 形态：{(文件, 函数名): 登记理由}。
+DECLARED_DISPATCH_POINTS = {
+    ('driver/mod.rs', 'dispatch'): 'P4 建成的唯一阶段调度者；穷尽 match = 声明式阶段表的执行侧',
 }
 
 # 判据 A 停用表：通用助手名不参与同名重复报告
@@ -98,12 +157,14 @@ CONCEPT_FAMILIES = {
 B_FANOUT_MIN = 3
 
 FN_RE = re.compile(r'\bfn\s+([A-Za-z_]\w*)')
+MOD_DECL_RE = re.compile(r'^\s*(?:pub(?:\s*\([^)]*\))?\s+)?mod\s+([A-Za-z_]\w*)')
+ATTR_LINE_RE = re.compile(r'^\s*#\[')
 CHAR_LIT_RE = re.compile(r"^'(\\\\.|[^\\\\'])" + "'")
 
 
 def sanitize(line):
     """剥掉行注释与字符串/字符/原始字符串字面量（花括号可能藏在这些地方，
-    orchestrator.rs:1312 的注释 `{x}` 曾把函数边界检测整段吞掉）。
+    orchestrator.rs:1312 的注释 {x} 曾把函数边界检测整段吞掉）。
     局限：跨行块注释 /* */ 不处理（本仓以 // 文档注释为主）。"""
     out = []
     i = 0
@@ -192,20 +253,84 @@ def fn_ranges(lines):
     return out
 
 
+def cfg_test_mod_ranges(lines):
+    """src 内 #[cfg(test)] mod … { … } 模块的行范围（0 基，含两端）。
+
+    范围由**花括号配对**求出：先逐行 sanitize（剥注释/字符串，避免 {x} 这类注释
+    把边界吞掉），再从 mod 声明行起累计 { / } 深度，回到 0 的那一行即模块末行。
+    **不做**「向上 N 行找 #[cfg(test)]」的关键字回看——那种判法没有下边界，注释里
+    出现过的关键字、或与 mod 相隔很远的属性都会造成整段误豁免。
+
+    属性链：mod 声明行上方紧邻的连续属性行（#[…]）里必须有一条恰为
+    #[cfg(test)]。#[cfg(test)] mod foo;（外置文件形态）没有花括号，不产生范围
+    ——该文件里的函数由自身模块内的 #[cfg(test)] 或 /tests/ 目录规则覆盖。
+    """
+    san = [sanitize(x) for x in lines]
+    ranges = []
+    for i, line in enumerate(san):
+        if not MOD_DECL_RE.match(line):
+            continue
+        is_test_mod = False
+        j = i - 1
+        while j >= 0 and ATTR_LINE_RE.match(san[j]):
+            if san[j].strip().replace(' ', '') == '#[cfg(test)]':
+                is_test_mod = True
+            j -= 1
+        if not is_test_mod:
+            continue
+        depth = 0
+        opened = False
+        for k in range(i, len(san)):
+            depth += san[k].count('{') - san[k].count('}')
+            if '{' in san[k]:
+                opened = True
+            if opened and depth <= 0:
+                ranges.append((i, k))
+                break
+    return ranges
+
+
 def wiring_sites():
-    """函数内 ≥2 个不同阶段标记 → [(file, line, fn, stages)]。测试目录豁免。"""
+    """函数内 ≥2 个不同阶段标记 → [(file, line, fn, stages)]。
+    豁免：/tests/ 目录；src 内 #[cfg(test)] mod 模块内的函数（花括号配对求范围）。"""
     sites = []
     for f in rs_files():
         rp = rel(f)
         if is_test_path(rp):
             continue
         lines = read(f).split('\n')
+        san = [sanitize(x) for x in lines]
+        test_mods = cfg_test_mod_ranges(lines)
         for name, s, e in fn_ranges(lines):
-            body = '\n'.join(sanitize(x) for x in lines[s:e + 1])
+            if any(lo <= s <= hi for lo, hi in test_mods):
+                continue
+            body = '\n'.join(san[s:e + 1])
             stages = sorted(k for k, rx in STAGE_MARKERS.items() if rx.search(body))
             if len(stages) >= 2:
                 sites.append((rp, s + 1, name, stages))
     return sites
+
+
+def dispatch_points():
+    """声明的调度点实测 → [(file, line, fn, stages, reason, found)]；不计违规。
+
+    登记失效（文件或函数找不到）是**声明与事实不符**，按违规处理：豁免表本身也
+    必须被实测约束，否则它会变成第二张「写死不兑现」的表。"""
+    out = []
+    for (rp, name), reason in sorted(DECLARED_DISPATCH_POINTS.items()):
+        f = os.path.join(SRC, rp)
+        hit = None
+        if os.path.isfile(f):
+            lines = read(f).split('\n')
+            for fn, s, e in fn_ranges(lines):
+                if fn != name:
+                    continue
+                body = '\n'.join(sanitize(x) for x in lines[s:e + 1])
+                hit = (s + 1, sorted(k for k, rx in STAGE_MARKERS.items() if rx.search(body)))
+                break
+        out.append((rp, hit[0] if hit else 0, name, hit[1] if hit else [],
+                    reason, hit is not None))
+    return out
 
 
 def main():
@@ -223,9 +348,21 @@ def main():
 
     # ---- C 入口接线 ----
     sites = wiring_sites()
-    print('== C 入口接线点（函数内跨 ≥2 阶段手工接线；库存 %d 处，P4 清零）==' % len(KNOWN_WIRING_SITES))
+    dispatch = dispatch_points()
+    print('== C 入口接线点（函数内跨 ≥2 阶段手工接线；判据重定基 2026-10-26：'
+          '库存 %d 处 / 已清理 %d 条 / 声明式调度点 %d 处）=='
+          % (len(KNOWN_WIRING_SITES), len(RETIRED_WIRING_SITES), len(DECLARED_DISPATCH_POINTS)))
+    for rp, line, name, stages, reason, found in dispatch:
+        if found:
+            print('  [调度点] %s:%d %s  [%s]  %s' % (rp, line, name, '/'.join(stages) or '—', reason))
+        else:
+            msg = '%s %s  声明式调度点登记失效（文件或函数不存在）' % (rp, name)
+            violations.append(msg)
+            print('  [违规] ' + msg)
     for rp, line, name, stages in sites:
         key = (rp, name)
+        if key in DECLARED_DISPATCH_POINTS:
+            continue  # 已在 [调度点] 段打印，不计违规
         if key in KNOWN_WIRING_SITES:
             print('  [库存] %s:%d %s  [%s]' % (rp, line, name, '/'.join(stages)))
         else:
@@ -234,6 +371,15 @@ def main():
     for (rp, name) in KNOWN_WIRING_SITES:
         if not any((s[0], s[2]) == (rp, name) for s in sites):
             print('  [进展] %s %s 已消失（可从库存移除）' % (rp, name))
+    for (rp, name), reason in sorted(RETIRED_WIRING_SITES.items()):
+        site = next((s for s in sites if (s[0], s[2]) == (rp, name)), None)
+        if site is None:
+            print('  [进展] %s %s 已消失（2026-10-26 重定基移出库存：%s）' % (rp, name, reason))
+        else:
+            msg = '%s:%d %s  库存回归（重定基已移出的库存重新命中 [%s]）' % (
+                rp, site[1], name, '/'.join(site[3]))
+            violations.append(msg)
+            print('  [违规] ' + msg)
     print()
 
     # ---- A 同名函数多定义 ----
@@ -277,7 +423,8 @@ def main():
     print()
 
     print('== 汇总 ==')
-    print('接线点实测 %d 处（库存 %d）' % (len(sites), len(KNOWN_WIRING_SITES)))
+    print('接线点实测 %d 处（库存 %d 处；已清理 %d 条；声明式调度点 %d 处不计违规）'
+          % (len(sites), len(KNOWN_WIRING_SITES), len(RETIRED_WIRING_SITES), len(dispatch)))
     print('违规：%d 处' % len(violations))
     for v in violations:
         print('  ' + v)
