@@ -1313,3 +1313,31 @@
 > **遗留（登记为 9.12.2，未决）**：① 4 个变体的共享原语未收录进词表（是否收录属**未决裁决**，实测收录会新暴露且仅暴露 2 处）；② `build_registry` 是零调用者的死代码重复（`driver/arms.rs` 的 Registry 臂自建表、不调它），但它是 lib 目标公开项，删除属**对外 API 面变更**，须单独裁决；③ `collect_package_refs` 是活代码的真接线，收录后需登记库存或重构。
 
 > **计数**：本批新增三级任务 9.12.2 ⇒ 三级 190 → 192（含补正的 9.12.1 漏计 1 条）；二级 70 → 71（同上，9.12 登记时漏计）。
+
+## P9 判据 C 覆盖面扩张与 `build_registry` 清账（9.12.2，2026-10-26）
+
+> **裁决**：用户 2026-10-26 就两个互不耦合的决策给出 **D1-A（收录 4 个变体的 Driver 外阶段共享原语）+ D2-A（删除零调用者的 `build_registry` 链）**。裁决书写明 D1 只改门禁的看法、不动代码与 API，D2 才是对外 API 面变更（`build_registry` 因 `pub mod frontend` → `pub mod orchestrator` 属 lib 目标公开项），因此两者独立评估、执行顺序为**先删后收**（这样新暴露只剩一处，库存落在 7 而不是 8）。
+
+> **删除面（D2-A）**：删 `orchestrator::build_registry`（原 `:379-382`）与私有 `build_registry_from`（原 `:384-396`）。**连带删 `discover`**（原 `:416-418`）——它唯一的调用点就在 `build_registry` 体内，删后即零调用者，`-D warnings` 会因 dead_code 直接报错；这一点在契约里事先写明，不是实现时临时扩大范围。保留：`DiscoveredFile` / `Discovery` 类型 / `extract_module_info` / `parse_file` / `is_vendor_path`（各有其它使用者）。Driver 的 `registry` 臂（`src/driver/arms.rs`）自建表、不调被删函数 ⇒ 行为中性。
+
+> **收录面（D1-A）**：删除后仍存在的 Driver 外阶段原语——VendorConsistency ← `ensure_vendor_consistency`、Discovery ← `discover_with_used`、RoleClassification ← `roles::classify`、Registry ← `extract_module_info`。两条口径要点：① `roles::classify` 必须用**限定形态**，裸名 `classify` 会误伤其它模块的同名助手（复审用「无关 `classify` + `tokenize`」探针实测复现过误判）；② 不用裸 `.register(`（仓内多处同名），`ModuleRegistry::with_std` 这类精确形态可用。收录后新暴露**恰一处**：`collect_package_refs`（`driver/helpers.rs:1057`，活代码、`driver/arms.rs:626` 调用），登记为库存 **6 → 7**，接线点 **7 → 8**。
+
+> **判据自身的诚实性修正**：轮 1 复审抓到「Registry 变体零覆盖 + docstring 三处断言不实」——`build_registry` 删掉后，脚本却断言「Registry 已没有 Driver 外原语」，而 `extract_module_info` 与 `ModuleRegistry::with_std` 仍在。处置取**补标记**而不是改断言（改断言只是把洞写进文字）：只补键不加探针时 `--strict` 逐项不变（无副作用），补键后「Driver 外重建 registry」的探针由 exit 0 转 exit 1。同一轮还把「收录口径」改写成可判定的 R1–R3，并**删掉那条被表内 5 项证伪的规则**（「凡构造该阶段数据的函数就不收」——PARSE 收 `parse_file`、TC 收 `TypeChecker::new`、DEADCODE 收 `DeadCodeAnalyzer`、MONO 收 `Monomorphizer`、IRGEN 收 `AstToIrGenerator` 都是构造器形态）；反例换成 `is_vendor_path` / `scan_use_refs`。
+
+> **覆盖面数字**：判据头部改为派生计算后的 **14 键 = 共享原语 12 + 2 个变体专有臂键（GlobalSlotAlloc / Linking）**，另 10 个变体的臂形态并入共享原语键；开头段与「覆盖范围」段统一为 **10 + 2**（原先「6 个变体另有共享原语 / 其余 6 个变体分三类」的旧划分已删除）。
+
+> **失实注释与陈旧数字（同一批清掉）**：`orchestrator.rs:7` 模块头不再声称本模块构建 Registry（改为「构建由 Driver 的 `registry` 臂承担」+ 保留删除日期）；`statements.rs:737` 改指 `discover_with_used`；`orchestrator.rs:403` 的 `[discover]` 悬空 intra-doc 链接改为文字引用；脚本里 `orchestrator.rs:1312 → :925` 的陈旧行号（经核：父提交时该注释在 `:952`，`1312` 早已越界，**非本批引入**）与 `ModuleRegistry::with_std` 的「30+ 处」未实测数字一并改为实测值（**26 处 / 21 文件；`/tests/` 16 处 13 文件；其余 10 处 8 文件里 3 处落在生产文件的 `#[cfg(test)] mod` 内 ⇒ 生产 7 处 6 文件**）。`docs/src/en/**` 的翻译副本不手改，由 auto-translate bot 在推送后再生。
+
+> **复审链**：轮 1 `needs_revision`（1 medium：Registry 零覆盖 + 三处断言不实；2 low：裸名 `classify` 过宽、悬空 doc 链接）→ 修复轮 → 轮 2 **pass**（复审用**自造探针**独立复现，未复用实现者的探针；F1 补键后违规行 `[Discovery/PARSE/Registry]` 由它自己构造）。随后把两处失实注释与脚本里三处失真表述（F4/F5/F6/F8）并成一轮清理 → 窄复审 **pass**：该轮用**剥掉 docstring 后比对 AST** 的强口径证明判据逻辑零夹带（非注释语句 254/254 逐条相同、词表 pattern 值级全同、运行期 `stage_markers` / `wiring_sites` / `dispatch_points` 结果全等），并独立复算了 F6 的四个数字。
+
+> **行为中性证据**：语料差分 356 行**逐字节一致**（sha256 与父提交相同）、IR 快照 216 张**零漂移**、`cargo test --lib` **2855 passed / 0 failed / 2 ignored**（测试数不减）、`cargo fmt --check` 与 `clippy --all --all-features --all-targets -D warnings` exit 0、`check-boundary` exit 0（`pub(crate)` **167 → 166**，即删掉 `discover` 的必然结果）、`check-docs-truth` / `check-docs-refs` / `gen-error-code-docs` 零漂移全 exit 0。A 段同名定义 **181 → 180**：删掉 `build_registry` 后「`build_registry`: 2 个文件」这条同名条目退出名单，是删除的直接结果（父提交实测 181、当前 180，差值恰为该条）。
+
+> **队长自己的两处契约缺陷（不粉饰）**：① 我在实现契约里写「A 段 181 条不变」，但删除必然让「`build_registry`: 2 个文件」退出同名名单 ⇒ 正确预期是 180；验证者按实测报 180 并给出对账，没有迁就我的错误预期。② F4（两处失实注释）的归属在**看板 acceptance 与派工消息之间自相矛盾**（一边算给本修复轮、一边说归另外两个任务），实现者按「修复面超出 inScope 就停下报告」处理——判断正确，是我的契约缺陷；随后单独开窄任务补做，并要求**原地替换不增删行**，以免把上一轮刚校正的行号再次推漂。
+
+> **偏差登记（不改写历史）**：修复轮那笔提交的信息里写 `extract_module_info（:1057…）`，而该 commit **自身 revision** 上是 `:1058`（同一笔里在 `orchestrator.rs` 插入一行所致）——违反「行号必须在被引用的 revision 上重取」。处置：**不改写该提交**（改写会换掉复审已绑定的 sha、使其 `pass` 失效），改为在此登记；脚本 docstring 内的行号已同步为 `:1058`。
+
+> **未修的两条非阻塞观察（如实留着）**：① `orchestrator.rs:7` 新写的「本模块只提供 `extract_module_info` 等构件」作用域是第 3 条（Registry），字面可能被读成模块级断言，复审建议改成「在 Registry 一节…」；② 同一模块头第 1 条「**发现**：从入口文件所在目录递归收集所有 `.yx` 文件」是**本批之前**就与实现（沿 `use` BFS）不符的旧描述。两条均非阻塞、未在本批处理。
+
+> **过程偏差**：本轮无成员进程级失败（复审成员此前两次 `TRANSPORT` 是上一批的事）；实现者首次 amend 被 `commit-msg` 钩子拒（scope 不接受 `docs(frontend,ci)` 多值），改为 `docs(ci)` 通过，**未跳钩子**。
+
+> **计数**：本批不新增二级/三级任务（9.12.2 已于前批登记）⇒ 09 顶部计数表不变（二级 71 / 三级 192）。另记一处自查：上一批把 9.12 勾成完成时，其三级 9.12.2 尚未做，存在过一段「二级已勾、三级未收口」的不一致，本批收口后该不一致自动消解。
