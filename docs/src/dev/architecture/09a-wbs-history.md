@@ -1205,3 +1205,26 @@
 > **过程注记**：①t2 在主工作树量测而非批次树——替代路径依据：HEAD 恰为冻结 revision 且树干净（量测前后各核一次）、所跑为纯脚本与 npm 构建不依赖 cargo 产物、生成器重跑 diff 空证明未改文件；如实报告非隐瞒，注记认可但**后续批次仍默认走批次树**（零 cargo 依赖的纯文档任务可援引本例）。②第四处同族矛盾（`docs/src/dev/architecture/01-routing.md:264` 手写「不计入错误数」对 W1090 为假）超出「只改生成器三处」范围未修，遗留登记 [#509](https://github.com/ChenXu233/YaoXiang/issues/509)；`013-error-code-specification.md` 经查已自洽（例外同段登记，无需动）。③`cargo audit` 钩子全程网络故障 SKIP（本组四轮一致，零依赖变更）。
 
 > **3.21 整组归档（2026-10-25）**：四个三级任务同日全部完成——3.21.1（`cfb3442d`，#468 取负溢出）、3.21.2（`df89d6ee`，#469 诊断外显三处，D 类经用户批准）、3.21.3（`a8ad0530`，#471 mono 配置贯通）、3.21.4（`3b6df553`，#470 生成器散文）；每轮均「实现门禁全绿 → 独立验证 PASS（含变异可逆）→ 独立复审 APPROVE」三段判据链，遗留集中 [#507](https://github.com/ChenXu233/YaoXiang/issues/507) / [#509](https://github.com/ChenXu233/YaoXiang/issues/509) / [#503](https://github.com/ChenXu233/YaoXiang/issues/503)（关联证据）；本地门禁全绿，各批 CI 结论按覆盖关系核对登记（执行面在跑的并入发版前统一核对，见各 issue 收口评论）。批次树已 gc 清零。
+
+## P3 3.20 收口（轮 1：3.20.1 W1001 闭包引用 + 3.20.2 W1003 变体解构导入，2026-10-25）
+
+> **触发**：WBS 3.20.1 / 3.20.2（2026-10-21 登记，来源 = 3.4.6 施工期暴露的两个既有 W 码误报；修复方向经用户 2026-10-19 裁决丙预先批准，回滚义务绑定两任务——修好后恢复 test.md / weak.md 被改写绕行的示例并再生基线）。
+
+> **改法**（提交 `4c3c8260`，10 文件 +190/−37，两误报双修一笔提交）：①**W1001**——根因比登记描述深一层：`Expr::Lambda` 臂本就递归闭包体，漏点在 parser 对单表达式体闭包 `() => expr` 合成的 `StmtKind::Return` 糖语句（`pratt/led.rs:410-419`）在 `collect_from_stmt` 的六臂 match 中无对应臂、落入 `_ => {}` 致表达式体闭包内引用整体丢失（实测佐证：最小形态 `() => helper()` 报、块体 `() => { helper() }` 不报）；修法 = `dead_code.rs:735` 补 `Return(Some(expr))` 收集臂（+8 行）。②**W1003**——根因：match 变体名走 `check_pattern` 的 Union 臂逐变体比对 sum_types、从不经 `Expr::Var` 解析，语义层唯一导入使用打点 `note_import_use` 接不上，语法兜底收到的 some/none/v 与导入本地名 option 集合成员连不上；修法 = Union 臂解析出和类型后 `note_import_use(&sum_name)`（`expressions.rs:1390`，+7 行），沿既有成员监视集回流链（`watch_import_members` → `imported_used` → `drain_import_tracking` → 三层并集）算作消费。
+
+> **回滚义务（已执行）**：`weak.md` 删 `probe = Option(Int).some(7)` 绕行，与 3.4.6 前形态（`git show 1725d021^`）**逐字节一致**；`test.md` 删主函数直调绕行恢复闭包引用自然形态。**一处有据偏离**：`test.md` 的 `use std.assert` 不恢复——实测 3.4.6 前原文跑 check 报 `W1003 unused import: 'assert'`（该示例只经 `use std.test` 用 `test.assert_eq`，std.assert 真未被消费），3.4.6 删它是**真修**而非误报绕行；恢复会重引入真 W1003 并打破文档示例门禁（`stdlib_docs.rs:116` stderr 非空即红）。复审两半论证均实测复核同意。
+
+> **证据（三段判据链，2026-10-25）**：
+>
+> | 环节 | 判据 | 结果 |
+> | --- | --- | --- |
+> | 实现轮 | 两处各红转绿 + 守卫 + 负控 | W1001 红测试修前 FAILED（输出含实际 W1001 诊断）修后绿，真未使用守卫保留；W1003 红测试修前 FAILED 修后绿且 diagnostics 空（改判后仍可编译），真未使用守卫保留，删导入仍 E1002（前置未削弱） |
+> | 实现轮门禁 | fmt / 全量 clippy / testsuite fast / markers / CI 四脚本 | 8 项全 exit 0（一轮过；首轮工作流因 testsuite stdout 262KB 超 world.run 256KB 上限 errored——改 `python -c` 包装只回传尾部 3000 字符后修正，实现者工作零成本缓存复用） |
+> | 独立验证 | 批次树两处三支复测（误报消失 / 守卫真阳性 / 负控）+ 文档示例端到端（7 块 0/0） | PASS |
+> | 独立验证 | 变异可逆（两修复合一补丁 revert） | 恰好两个红转绿测试 FAILED、apply -R 还原 blob 与 HEAD 逐一一致、trial 后重建 |
+> | 独立验证 | 零漂四项（语料 356 零差异 / 快照绿 / 生成器干净树 diff=0 / stdlib_docs 门禁绿） | 全过 |
+> | 复审 | 修复语义 / 回滚核实 / 基线对账 / 红线 / 漏报风险 | APPROVE（3 条 low，见下） |
+
+> **基线与过程注记**：①语料再生 4 条记录 8 行全部为误报 W 码消失（`test_suite.yx` W1001×3、`test_suite_fail.yx` W1001×2、`weak_ops.yx` W1003、`sum_type_native_match.yx` W1003），**`test_suite_fail` 的真阳性 W1003（`use std.result` 确实无人用）保留在基线**——修复不误伤真阳性的活证据；文档示例不在语料范围（语料 = `tests/yaoxiang/**`、`src/std/tests/**`、multifile main，示例走 stdlib_docs 门禁——口径澄清实现轮已核）。②复审 3 条 low：Union 臂失败路径（field_not_found 等）在打点之后才 return Err——失败时已标使用，但伴随 E 码、非阻断通道、且「写了变体名即尝试消费」语义可辩护；新增 4 测试的判据引用（WBS 号/文档路径）可解析但未直引 warning-codes.md 章节（轻微规范缺口）；提交信息「闭包表达式体」未完整陈述 Return 臂顺路覆盖显式 `return expr;` 语句的同源历史漏收（漏报方向无夹带）——本注记即补述。③`spawn/analysis.rs` 的同名收集器经核实为独立读写分析且已处理 Return，无同类缺陷。
+
+> **登记**：WBS 3.20.1 / 3.20.2 已完成（无独立 issue 锚，判据落本表与 WBS）；3.20 组仅余 3.20.3（issue [#505](https://github.com/ChenXu233/YaoXiang/issues/505)，算子方法 W1005）。
