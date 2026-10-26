@@ -11,9 +11,19 @@ check-fanout.py —— 禁令三（该重构不补丁）门禁：同义重复 / 
 
 判据实现：
   C. 入口接线（主检查）   函数体内直接调用 ≥2 个不同阶段原语即判定为
-                         「手工接线的入口」（阶段原语按**调用形态**标定，与
-                         Stage 的阶段语义一一对应；标定依据见下文
-                         「C 判据的重定基」）。遗留库存登记在
+                         「手工接线的入口」。阶段原语按**调用形态**标定，覆盖
+                         面（标定依据见下文「C 判据的重定基」）：
+                         - 12 个 Stage 变体的**臂调用形态**（self.<臂>(…)，臂名
+                           由 Driver::dispatch 的穷尽 match 派生，单一源）；
+                         - 其中 6 个变体另有可在 Driver 之外调用的**共享原语**：
+                           Parsing / Typecheck / ProofExecution /
+                           DeadCodeAnalysis / IrGeneration / Monomorphization；
+                         - Codegen / Exec 两类执行层原语（无对应 Stage 变体）。
+                         其余 6 个变体（VendorConsistency / Discovery / Registry /
+                         RoleClassification / GlobalSlotAlloc / Linking）的实现
+                         就在 Driver 臂内、唯一调用点是 dispatch，除臂形态外没有
+                         第二个可调的接线形态。
+                         遗留库存登记在
                          KNOWN_WIRING_SITES（6 条）；重定基清掉的陈旧库存登记
                          在 RETIRED_WIRING_SITES 并以 [进展] 打印（13 条）；
                          P4 建成的声明式调度点登记在 DECLARED_DISPATCH_POINTS
@@ -22,6 +32,8 @@ check-fanout.py —— 禁令三（该重构不补丁）门禁：同义重复 / 
                          入口式接线必须红）。
                          豁免：/tests/ 目录；src 内 #[cfg(test)] mod 模块
                          （范围由**花括号配对**求出）。
+                         被测体不含函数签名：签名行会自匹配阶段正则（fn
+                         check_project( 命中 TC 的 check_project），虚报阶段。
   A. 同义重复（报告）     同名函数定义出现在 ≥2 个生产文件中（启发式；
                          变体后缀规避如 name_used_as_type_in 由 review 兜底，
                          已登记于 01 路由表 C）。常见助手名按停用表过滤。
@@ -29,12 +41,22 @@ check-fanout.py —— 禁令三（该重构不补丁）门禁：同义重复 / 
                          --diff <git-ref> 模式下，改动文件集与任一概念族
                          交集 ≥3 → 疑似「一次修改同步改 ≥3 处同义映射」。
 
-C 判据的重定基（2026-10-26，用户裁决 A′）：
+C 判据的重定基（2026-10-26）。
+  依据（均为仓库内可解析出处）：docs/src/dev/coding-rules.md 禁令三判据 C
+  「新增"第 N 个入口 / 表项"而非登记进声明式阶段表 → 违规」、
+  docs/src/dev/architecture/02-stage-contract.md §目标设计 1、
+  src/driver/stage.rs 的 Stage::Parsing 文档注释、
+  docs/src/dev/architecture/09-execution-wbs.md 的 9.12 行。
   旧标定（2026-10-06）是照 P4「统一 Driver」**之前**「六条路径各自手工接线」的
   现状写死的，注释里那句「P4 统一 Driver 后本表随库存一起删除」一直没有兑现，
-  于是它把 Driver 自己的阶段表判成了违规（--strict 的 9 处全部属于这一类）。
+  于是它把 Driver 自己的阶段表判成了违规。--strict 的 9 处按位置实测：8 处在
+  src/driver/，第 9 处是 frontend/module/orchestrator.rs 的 #[cfg(test)] 测试
+  函数（由新增的 cfg(test) 豁免消解）。那 8 处按成因分两半：4 处是阶段表 /
+  依赖表声明（stage.rs 的 scope、slug，state.rs 的 data_dependencies，mod.rs 的
+  dispatch），4 处是把 Parsing 拆成 LEX/PARSE 两阶段造成的单阶段误判
+  （parsing_single_file / parsing_check / parsing_lsp / collect_package_refs）。
   P4 之后阶段不再由各入口手工串接，而由 src/driver/stage.rs 的 Stage 阶段表加
-  Driver::dispatch 的穷尽 match 声明式驱动。判据因此对齐四点：
+  Driver::dispatch 的穷尽 match 声明式驱动。判据因此对齐以下各点：
   1. Parsing = 「词法 + 语法分析（lex → parse）」——src/driver/stage.rs 的
      Stage::Parsing 文档注释与
      docs/src/dev/architecture/02-stage-contract.md §目标设计 1 的阶段表同此
@@ -51,6 +73,15 @@ C 判据的重定基（2026-10-26，用户裁决 A′）：
      表」这件事的执行侧），它**就是**判据要求的形态，故单独登记、打印
      [调度点]、不计违规；它**不进** KNOWN_WIRING_SITES（那张表的语义是「待清
      遗留库存」，方向相反）。
+  5. 12 个变体的臂调用形态**不手写**：从 dispatch 的穷尽 match 派生（单一源），
+     否则「补了 3 条臂形态」仍能被另外两个变体的组合绕过。派生表还要与
+     src/driver/*.rs 的 fn 定义对账：臂方法改名或 dispatch 结构变了就报警（见
+     stage_arm_markers() 的守护），不静默漏判。阶段形态表每次运行时从源码**重取**
+     （不落盘快照，故不会与源码漂移）；最近一次重取：2026-10-26（12/12 臂形态
+     派生 + 8 个共享原语）。
+  6. 被测体**不含函数签名**：签名行会自匹配阶段正则（fn check_project( 命中 TC
+     的 check_project、fn parse( 命中 Parsing 形态），把一个纯声明虚报成一个
+     阶段。函数边界仍由 fn_ranges() 的花括号配对求出，只把签名段切掉。
 
 退出码：0 = report-only（默认）；--strict 且违规 > 0 → 1（P9 启用）。
 """
@@ -64,15 +95,21 @@ from collections import defaultdict
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 SRC = os.path.join(ROOT, 'src')
 
-# 阶段原语标记 —— 按**调用形态**标定，与 Stage 的阶段语义一一对应。
-# 标定依据见模块 docstring「C 判据的重定基」（2026-10-26 重定基）。
+# 阶段原语标记分两层（标定依据见模块 docstring「C 判据的重定基」）：
+# ① 共享阶段原语（本表）—— 可在 Driver 之外被调用的阶段实现调用形态，8 个键：
+#    6 个 Stage 变体的实现原语（PARSE / TC / PROOF / DEADCODE / IRGEN / MONO）
+#    + Codegen / Exec 两类执行层原语（无对应 Stage 变体）。
+# ② 阶段臂形态 —— 12 个 Stage 变体的 self.<臂>(…)，运行时从 Driver::dispatch 的
+#    穷尽 match **派生**（单一源，见 stage_arm_markers()）；臂名不手写：只补点对点
+#    的几条臂，换个变体组合照样能绕过（2026-10-26 复审的负控即如此）。
+# 约定：
 # - PARSE 含词法：Stage::Parsing 的定义就是「词法 + 语法分析（lex → parse）」，
 #   故 tokenize 与 parse 同属 Parsing，一个函数里两者并存只算 1 个阶段
 #   （重定基前的 LEX/PARSE 两标记会把单阶段函数判成跨阶段接线）。
-# - DEADCODE / MONO 只认调用形态：Stage::DeadCodeAnalysis、
+# - DEADCODE / MONO 的共享原语只认调用形态：Stage::DeadCodeAnalysis、
 #   Stage::Monomorphization、"dead-code-analysis" 这类**阶段词汇表**以及阶段
 #   依赖表不是接线；旧的字面匹配（dead_code / monomorph）会把它们算进去。
-STAGE_MARKERS = {
+SHARED_STAGE_PRIMITIVES = {
     'PARSE': re.compile(
         r'\btokenize\s*\(|Lexer::new|\brun_lexing\b'
         r'|parser::parse\(|\bparse_module\(|\brun_parsing\b'
@@ -85,6 +122,29 @@ STAGE_MARKERS = {
     'CODEGEN': re.compile(r'CodegenContext|BytecodeModule::from|BytecodeFile|Translator::new'),
     'EXEC': re.compile(r'Interpreter::new|execute_module|\.execute\('),
 }
+
+# 阶段臂形态的键归属：Stage 变体 → 合并后标记表（stage_markers()）里的键。
+# 6 个有共享原语的变体并入既有键（同一阶段不出现两个键）；其余 6 个变体的实现
+# 只在 Driver 臂内、唯一调用点是 dispatch，除臂形态外没有第二个可调的接线形态，
+# 键即变体名。
+ARM_KEY_OF_VARIANT = {
+    'Parsing': 'PARSE',
+    'Typecheck': 'TC',
+    'ProofExecution': 'PROOF',
+    'DeadCodeAnalysis': 'DEADCODE',
+    'IrGeneration': 'IRGEN',
+    'Monomorphization': 'MONO',
+    'VendorConsistency': 'VendorConsistency',
+    'Discovery': 'Discovery',
+    'Registry': 'Registry',
+    'RoleClassification': 'RoleClassification',
+    'GlobalSlotAlloc': 'GlobalSlotAlloc',
+    'Linking': 'Linking',
+}
+
+# 派生源（单一源）：变体清单来自 Stage::ALL，臂名来自 dispatch 的穷尽 match。
+STAGE_SOURCE = ('driver/stage.rs', 'pub const ALL')
+DISPATCH_SOURCE = ('driver/mod.rs', 'dispatch')
 
 # 遗留接线点库存（2026-10-26 重定基后剩 6 条；每条都是「仍在跨 ≥2 阶段、但
 # 尚未收进 Driver」的入口式接线，属待清欠账而非合规范）。
@@ -112,14 +172,17 @@ RETIRED_WIRING_SITES = {
     ('frontend/pipeline.rs', 'run_typecheck'): '函数已不存在（P4 并入 Driver）',
     ('frontend/pipeline.rs', 'run_ir_generation'): '函数已不存在（P4 并入 Driver）',
     ('frontend/module/orchestrator.rs', 'collect_project_refs'): '函数已不存在（P4 并入 Driver）',
-    ('lsp/server.rs', 'update_semantic_db'): '函数已不存在（4.6.1 LSP 语义数据管线统一）',
+    ('lsp/server.rs', 'update_semantic_db'): 'lsp/server.rs 内该函数已不存在（同名存活者在 src/lsp/world.rs）',
     ('lsp/handlers/diagnostics.rs', 'run_diagnostics'): '函数已不存在（4.2.6 LSP 单文件兜底统一）',
     # ② 函数仍在，但已不再直接调用阶段原语（改为委托 Driver）——实测 0/1 阶段
+    # （下一个条目的 check_project / check_source_in_project 早前显示「只剩
+    # Typecheck 1 个阶段」是签名自匹配造成的虚报：TC 的 check_project 命中的是
+    # 它们自己的 fn 签名行；2026-10-26 修根因后被测体不含签名，实测 0 阶段。）
     ('frontend/pipeline.rs', 'run'): '函数仍在，已不再直接调用阶段原语（委托 Driver）',
     ('frontend/module/orchestrator.rs', 'compile_project'): '函数仍在，已不再直接调用阶段原语（委托 Driver）',
     ('frontend/module/orchestrator.rs', 'compile_embedded_module'): '函数仍在，已不再直接调用阶段原语（委托 Driver）',
-    ('frontend/module/orchestrator.rs', 'check_project'): '函数仍在，只剩 Typecheck 1 个阶段（委托 Driver）',
-    ('frontend/module/orchestrator.rs', 'check_source_in_project'): '函数仍在，只剩 Typecheck 1 个阶段（委托 Driver）',
+    ('frontend/module/orchestrator.rs', 'check_project'): '函数仍在，已不再直接调用阶段原语（委托 Driver）',
+    ('frontend/module/orchestrator.rs', 'check_source_in_project'): '函数仍在，已不再直接调用阶段原语（委托 Driver）',
     # ③ 消除 LEX（并入 PARSE）后只剩 Parsing 1 个阶段
     ('lib.rs', 'eval_code'): '只剩 Parsing 1 个阶段（LEX 并入 PARSE）',
     ('frontend/module/orchestrator.rs', 'parse_file'): '只剩 Parsing 1 个阶段（LEX 并入 PARSE）',
@@ -253,6 +316,18 @@ def fn_ranges(lines):
     return out
 
 
+def fn_body(san, s, e):
+    """被测体 = 函数体**去掉签名段**（首个 { 之前的部分）。
+
+    签名若计入被测体，函数名会自匹配阶段正则：fn check_project( 命中 TC 的
+    check_project、fn parse( 命中 Parsing 的 parse 形态、fn typecheck_single_file(
+    命中 TC 的 check_single_file 子串——把纯声明虚报成阶段。边界仍由
+    fn_ranges() 的花括号配对给出（san 须是已 sanitize 的行），这里只切签名。"""
+    text = '\n'.join(san[s:e + 1])
+    i = text.find('{')
+    return text[i + 1:] if i >= 0 else text
+
+
 def cfg_test_mod_ranges(lines):
     """src 内 #[cfg(test)] mod … { … } 模块的行范围（0 基，含两端）。
 
@@ -290,9 +365,95 @@ def cfg_test_mod_ranges(lines):
     return ranges
 
 
-def wiring_sites():
+def stage_variants():
+    """src/driver/stage.rs 的 Stage::ALL 变体清单（判据 C 的变体单一源）。"""
+    p = os.path.join(SRC, *STAGE_SOURCE[0].split('/'))
+    text = read(p)
+    i = text.find(STAGE_SOURCE[1])
+    if i < 0:
+        return []
+    seg = text[i:]
+    j = seg.find('];')
+    if j >= 0:
+        seg = seg[:j]
+    return re.findall(r'Stage::([A-Za-z_]\w*)', seg)
+
+
+def dispatch_arms():
+    """从 Driver::dispatch 的穷尽 match 派生 {Stage 变体: 臂方法名}。
+
+    按 「Stage::<变体>」 的出现位置切段，段内第一个 「self.<臂>(」 即该变体的臂。
+    臂名因此只有一个来源；dispatch 换结构（match 以外）时派生表会空，由
+    stage_arm_markers() 的守护报警，而不是静默漏判。"""
+    p = os.path.join(SRC, *DISPATCH_SOURCE[0].split('/'))
+    lines = read(p).split('\n')
+    san = [sanitize(x) for x in lines]
+    body = ''
+    for name, s, e in fn_ranges(lines):
+        if name == DISPATCH_SOURCE[1]:
+            body = fn_body(san, s, e)
+            break
+    arms = {}
+    hits = [(m.start(), m.group(1)) for m in re.finditer(r'Stage::([A-Za-z_]\w*)', body)]
+    for k, (pos, variant) in enumerate(hits):
+        seg = body[pos:hits[k + 1][0]] if k + 1 < len(hits) else body[pos:]
+        arm = re.search(r'self\.([A-Za-z_]\w*)\(', seg)
+        if arm:
+            arms[variant] = arm.group(1)
+    return arms
+
+
+def stage_arm_markers():
+    """派生的臂形态标记 + 与源码对账 → (markers, problems)。
+
+    守护（fail-loud；任一不满足都是「声明与事实不符」，按违规处理——否则判据会
+    静默漏判）：
+      1) Stage::ALL 能解析出变体清单；
+      2) 每个变体在 dispatch 的 match 里都有臂；
+      3) 每个派生臂名在 src/driver/*.rs 里都有 fn 定义（臂方法改名即报警）。"""
+    variants = stage_variants()
+    arms = dispatch_arms()
+    problems = []
+    markers = {}
+    if not variants:
+        problems.append('%s：解析不到 Stage::ALL 的变体清单（判据 C 失去变体单一源）'
+                        % STAGE_SOURCE[0])
+    driver_dir = os.path.join(SRC, 'driver')
+    defined = set()
+    for fn in sorted(os.listdir(driver_dir)):
+        if fn.endswith('.rs'):
+            defined |= set(re.findall(r'\bfn\s+([A-Za-z_]\w*)', read(os.path.join(driver_dir, fn))))
+    for v in variants:
+        arm = arms.get(v)
+        if not arm:
+            problems.append('Stage::%s 在 %s 的 match 里找不到臂（臂被改名 / dispatch 改了结构）'
+                            % (v, DISPATCH_SOURCE[0]))
+            continue
+        if arm not in defined:
+            problems.append('Stage::%s 的臂 %s 在 src/driver/*.rs 里没有 fn 定义（臂方法改名）'
+                            % (v, arm))
+        key = ARM_KEY_OF_VARIANT.get(v, v)
+        rx = re.compile(r'self\.' + re.escape(arm) + r'\w*\s*\(')
+        markers[key] = re.compile(markers[key].pattern + '|' + rx.pattern) if key in markers else rx
+    return markers, problems
+
+
+def stage_markers():
+    """完整标记表 = 共享阶段原语 + 从 dispatch 派生的 12 个变体臂形态。"""
+    arm_markers, problems = stage_arm_markers()
+    markers = dict(SHARED_STAGE_PRIMITIVES)
+    for key, rx in arm_markers.items():
+        if key in markers:
+            markers[key] = re.compile(markers[key].pattern + '|' + rx.pattern)
+        else:
+            markers[key] = rx
+    return markers, problems
+
+
+def wiring_sites(markers):
     """函数内 ≥2 个不同阶段标记 → [(file, line, fn, stages)]。
-    豁免：/tests/ 目录；src 内 #[cfg(test)] mod 模块内的函数（花括号配对求范围）。"""
+    豁免：/tests/ 目录；src 内 #[cfg(test)] mod 模块内的函数（花括号配对求范围）。
+    被测体经 fn_body() 去掉签名段（签名自匹配会虚报阶段）。"""
     sites = []
     for f in rs_files():
         rp = rel(f)
@@ -304,14 +465,14 @@ def wiring_sites():
         for name, s, e in fn_ranges(lines):
             if any(lo <= s <= hi for lo, hi in test_mods):
                 continue
-            body = '\n'.join(san[s:e + 1])
-            stages = sorted(k for k, rx in STAGE_MARKERS.items() if rx.search(body))
+            body = fn_body(san, s, e)
+            stages = sorted(k for k, rx in markers.items() if rx.search(body))
             if len(stages) >= 2:
                 sites.append((rp, s + 1, name, stages))
     return sites
 
 
-def dispatch_points():
+def dispatch_points(markers):
     """声明的调度点实测 → [(file, line, fn, stages, reason, found)]；不计违规。
 
     登记失效（文件或函数找不到）是**声明与事实不符**，按违规处理：豁免表本身也
@@ -322,11 +483,12 @@ def dispatch_points():
         hit = None
         if os.path.isfile(f):
             lines = read(f).split('\n')
+            san = [sanitize(x) for x in lines]
             for fn, s, e in fn_ranges(lines):
                 if fn != name:
                     continue
-                body = '\n'.join(sanitize(x) for x in lines[s:e + 1])
-                hit = (s + 1, sorted(k for k, rx in STAGE_MARKERS.items() if rx.search(body)))
+                body = fn_body(san, s, e)
+                hit = (s + 1, sorted(k for k, rx in markers.items() if rx.search(body)))
                 break
         out.append((rp, hit[0] if hit else 0, name, hit[1] if hit else [],
                     reason, hit is not None))
@@ -347,11 +509,18 @@ def main():
     print('扫描范围: src/（%d 个 .rs）\n' % len(files))
 
     # ---- C 入口接线 ----
-    sites = wiring_sites()
-    dispatch = dispatch_points()
+    markers, marker_problems = stage_markers()
+    sites = wiring_sites(markers)
+    dispatch = dispatch_points(markers)
     print('== C 入口接线点（函数内跨 ≥2 阶段手工接线；判据重定基 2026-10-26：'
-          '库存 %d 处 / 已清理 %d 条 / 声明式调度点 %d 处）=='
-          % (len(KNOWN_WIRING_SITES), len(RETIRED_WIRING_SITES), len(DECLARED_DISPATCH_POINTS)))
+          '库存 %d 处 / 已清理 %d 条 / 声明式调度点 %d 处；'
+          '阶段标记 %d 键 = 共享原语 %d + dispatch 派生的臂形态）=='
+          % (len(KNOWN_WIRING_SITES), len(RETIRED_WIRING_SITES),
+             len(DECLARED_DISPATCH_POINTS), len(markers), len(SHARED_STAGE_PRIMITIVES)))
+    for p in marker_problems:
+        msg = '判据 C 标记守护：%s' % p
+        violations.append(msg)
+        print('  [违规] ' + msg)
     for rp, line, name, stages, reason, found in dispatch:
         if found:
             print('  [调度点] %s:%d %s  [%s]  %s' % (rp, line, name, '/'.join(stages) or '—', reason))
