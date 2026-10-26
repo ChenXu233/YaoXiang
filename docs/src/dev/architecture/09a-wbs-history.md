@@ -1341,3 +1341,28 @@
 > **过程偏差**：本轮无成员进程级失败（复审成员此前两次 `TRANSPORT` 是上一批的事）；实现者首次 amend 被 `commit-msg` 钩子拒（scope 不接受 `docs(frontend,ci)` 多值），改为 `docs(ci)` 通过，**未跳钩子**。
 
 > **计数**：本批不新增二级/三级任务（9.12.2 已于前批登记）⇒ 09 顶部计数表不变（二级 71 / 三级 192）。另记一处自查：上一批把 9.12 勾成完成时，其三级 9.12.2 尚未做，存在过一段「二级已勾、三级未收口」的不一致，本批收口后该不一致自动消解。
+
+## P3 3.20 收口（轮 3：3.20.4 泛型派发具名化 + 整组归档，2026-10-26）
+
+> **触发**：issue [#510](https://github.com/ChenXu233/YaoXiang/issues/510)（2026-10-26 登记，WBS 3.20.4）：`sum: (T: Add) -> (a: T, b: T) -> T` 以 `Int`/`Vec3` 实例化（run 值正确）时 `Vec3.add` 仍报 W1005——typecheck 记录的派发名是约束形参名（组 `"T.add"`），具名化在 mono 特化，死代码分析不可见。
+
+> **通路裁决（用户 2026-10-26 批准甲案）**：裁决前调查推翻了登记文案「修它需消费 mono 改写产物」的前提——typecheck 期已持有全部实例化：`InstantiationRequest.type_args: Vec<MonoType>`（instance.rs:20）+ `GenericFunctionId.type_params: Vec<String>`（instance.rs:345）。三案比选（甲 = driver 死代码臂内映射展开；乙 = 消费 mono 产物/管线后移——违 3.4.8 ③「CHECK 形态 mono 成功产物不消费不外发」+ 跨层红线；丙 = typecheck 内即时具名化——时序不可能，实例化请求来自调用点、晚于泛型体检查），甲案胜出：零管线改动、零跨层、复用 3.20.3 注入缝。
+
+> **改法**（提交 `c94bb869`，7 文件 +329/−17）：driver 死代码臂建「形参名 → 具体类型名」映射，把派发组 `"T.add"` 展开成具体组（`Vec3.add`/`int64.add`…，原组保留）再喂 `set_operator_dispatched_groups`；只收值形态实参（Struct/Enum/Int/Float/Bool/Char），符号化实参（Generic/TypeRef）不入映射。三个单点函数（`generic_instantiation_map` / `declared_type_param_names` / `expand_dispatch_groups`，helpers.rs）两臂共用：编排臂 `resolved_method_marks` 两遍扫（先跨单元聚合建映射，派发循环展开后逐组走既有 owners 归因），单文件臂同构接线。**机制缺口修补**：跨单元兜底路径的请求 `params=[]`（t1 探针实测）⇒ 消费侧扫定义单元 AST 补名（复用 `ast::classify_generic_params` 单点，is_trait 与 checker.rs:1520-1526 同源：`has_trait || operator_interfaces::spec`）；上游登记口缺陷（checker.rs:466-477 Assign 臂只认 `(T: Type)` 不认 `(T: Add)` ⇒ `Export::type_params` 为 None）属 D/E 类**未修**——修它会让跨单元请求切到声明名路径、mono 特化匹配随之改变。
+
+> **证据（判据链，2026-10-26）**：
+>
+> | 环节 | 判据 | 结果 |
+> | --- | --- | --- |
+> | 实现轮 | 先红后绿三组：单文件（夹具形态，红态 W1005@19 留档）、跨单元（临时项目）、守卫（sum 未调用 ⇒ 无请求 ⇒ 仍报）+ 值级×2（Int(3)/Float(5.0)）；3.20.3 既有 18 测试逐字节不变（纯追加 147 行） | 修前 2 FAILED（输出留档）→ 修后 18/18 绿；真二进制双夹具 check 0 warning、run exit 0 |
+> | 实现轮门禁 | fmt / 全量 clippy / testsuite fast / markers / CI 四脚本 | 8 项全 exit 0（一轮过） |
+> | 基线 | 语料再生恰 1 行（constrained_generic_ops 的 W1005@19 → 空，exit/stdout/stderr 不变）；IR 快照零漂移 | 逐条核对无夹带 |
+> | 独立验证（t2） | 批次树三组复测（值级+诊断集双断言）、守卫、深链边界与登记一致、变异可逆（还原展开接线恰红 + blob 机械还原 + trial 后重建）、零漂四项 | **FAIL——唯一失败项 = 错误码生成物欠账**（见下）；其余全过 |
+> | 复审（t3） | 数据链只用前端产物、两臂闭合、单点无复制、同源判据核实、守卫边界、过滤谓词对照 MonoType 全变体、归因口径与 3.20.3 一致、红绿独立复现、基线对账、测试合规 | **REQUEST_CHANGES（high = 同款欠账）**；主体判定成立：`c1adca7b^`+新测试补丁 2 条未修先红、trial blob 机械还原、`pub(crate)` 167 未增 |
+> | 队长补修 | 重跑生成器 → 5 处行号平移（E0010/E0011 `arms.rs:92→93`、E8001 `helpers.rs:68→69`、W1006 `653→660`、W1007 `1752→1759`，计数无更正）→ amend 并入 → 幂等复核 | `git diff --quiet` exit 0；rebase 后复验仍幂等；t2/t3 判定迁移依据 = amend 仅追加生成物、代码与被验 revision 逐字节一致 |
+
+> **六条边界登记（不改码，全部宁漏报方向）**：① 嵌套泛型深链——符号化实参不求值，`g(x) = sum(x, x)` 形态仍可能误报；② 短名尾段误配——补名按函数名尾段查表且 first-wins（`or_insert` 不合并），跨模块同名泛型错配方向 = 展开多余组 ⇒ 至多漏报；③ 兜底路径实参序——反推 type_args 按位去重，声明序与位序不一致的签名可错挂（同前，漏报方向；arity 不齐 zip 截断）；④ 块内 FnDef 形态——补名只扫顶层 Assign（当前无块内泛型派发场景证据）；⑤ Ref 形态实参不入映射——t3 探针（`sum(&a, &b)`）实测 check 过、run **E6006**（mono 按形参名改写与登记名 `Vec3.add` 不符）＝既有深层缺陷，伴生 W1005 残留 → [#512](https://github.com/ChenXu233/YaoXiang/issues/512)；⑥ 同名形参跨函数并集漏报——t3 探针（union_leak：`f` 体内派发但从不调用 + `g` 无派发但以 Vec3 实例化）实证从未派发的方法可被并集豁免——与 3.20.3「整组按活」同构（派发通道无法分辨个体），非判据放宽。
+
+> **契约缺陷（队长写错，记录在案）**：t1 契约写「不改诊断发射点 ⇒ 不用重跑错误码生成器」——误。AGENTS 验证⑤原文即含「行号平移」：import/注释引起的发射点行号平移同样必须再生生成物。本批 t1 门禁清单漏「重跑生成器 + `git diff --quiet`」一项，导致 t2 抓到时已提交（本地 `c1adca7b`，amend 为 `17201560`，rebase 后终值 `c94bb869`——三值代码逐字节一致，差异仅生成物与提交位）。**后续批次 t1/t2 门禁固定含此项**。与 #470 批次的教训合并：生成器幂等必须作为独立门禁项存在，不能依附于「是否改了发射点」的主观判断。
+
+> **登记**：issue [#510](https://github.com/ChenXu233/YaoXiang/issues/510) 已关闭（实现 `c94bb869`）；新遗留 [#511](https://github.com/ChenXu233/YaoXiang/issues/511)（上游登记口 D/E 类，修前须用户裁决）与 [#512](https://github.com/ChenXu233/YaoXiang/issues/512)（Ref 形态 E6006 既有深层缺陷）备案不占号；**3.20 组四任务（3.20.1–3.20.4）全部收口，2026-10-26 归档**（回滚义务已于轮 1 执行）——归档条件满足：全部三级收口、提交已推送、CI 按第 13 条交由后代 run 覆盖并入发版前统一核对。
