@@ -1,193 +1,198 @@
-{"expectation":"behavior","file":"src/std/tests/assert_ops.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"src/std/tests/concurrent_ops.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"src/std/tests/convert_ops.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"src/std/tests/dict_ops.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"src/std/tests/error_codes.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"src/std/tests/fs_ops.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"src/std/tests/io_ops.yx","run":{"exit":0,"stderr":[],"stdout":["io_ops: print/println smoke"]}}
-{"expectation":"behavior","file":"src/std/tests/json_ops.yx","run":{"exit":0,"stderr":["提示：当前以 script 模式运行（文件不在 yaoxiang 项目内），顶层语句即程序主体，不会自动执行 main。","提示：文件中定义的 main 未被调用——如需运行，请在文件中显式调用 main()，或使用 `yaoxiang init` 建项目后运行。"],"stdout":[]}}
-{"expectation":"behavior","file":"src/std/tests/list_item_borrow.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"src/std/tests/list_ops.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"src/std/tests/math_ops.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"check":{"diagnostics":[],"exit":0},"expectation":"runtime-error","file":"src/std/tests/net_http_error.yx","run":{"exit":1,"stderr":["\u001b[31merror\u001b[0m [\u001b[1mE6007\u001b[0m] Runtime error: http_get failed for 'not a url': Bad URL: failed to parse URL: RelativeUrlWithoutBase: relative URL without a base","     │                 ^","  16 │     net.http_get(\"not a url\", dict.new(), 5)","  at __yx_module_init (src/std/tests/net_http_error.yx:19:5)","  at net_http_error.main (src/std/tests/net_http_error.yx:16:17)"," --> src/std/tests/net_http_error.yx:16:17","Runtime error","help: See the error message for details","stack trace:"],"stdout":[]}}
-{"expectation":"behavior","file":"src/std/tests/net_ops.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"src/std/tests/os_ops.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"src/std/tests/range_ops.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"src/std/tests/range_result_step0.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"src/std/tests/result_ops.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"src/std/tests/string_ops.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"src/std/tests/test_assertions.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"src/std/tests/test_suite.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"check":{"diagnostics":[["W1001","src/std/tests/test_suite_fail.yx",15],["W1001","src/std/tests/test_suite_fail.yx",20],["W1003","src/std/tests/test_suite_fail.yx",12]],"exit":0},"expectation":"runtime-error","file":"src/std/tests/test_suite_fail.yx","run":{"exit":1,"stderr":["\u001b[31merror\u001b[0m [\u001b[1mE6005\u001b[0m] assertion failed: 1 of 2 test(s) failed","     │                  ^","  [FAIL] always_fails: Expected 2, got 1","  at __yx_module_init (src/std/tests/test_suite_fail.yx:33:5)","  at std.test.suite (<std/test>:113:18)","  at test_suite_fail.main (src/std/tests/test_suite_fail.yx:27:15)"," --> <std/test>:113:18"," 113 │     assert.assert(failed == 0, f\"{failed} of {total} test(s) failed{report}\")","Runtime error","help: fix the assertion condition or provide valid input","stack trace:"],"stdout":[]}}
-{"expectation":"behavior","file":"src/std/tests/time_ops.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"src/std/tests/weak_ops.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/00-smoke/hello.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/01-syntax/basics/bitwise_ops.yx","run":{"exit":0,"stderr":[],"stdout":["BITWISE_OPS_OK"]}}
-{"expectation":"behavior","file":"tests/yaoxiang/01-syntax/basics/comments.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/01-syntax/basics/float_comparison.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/01-syntax/basics/fstrings.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/01-syntax/basics/literals.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/01-syntax/basics/logical_not.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/01-syntax/basics/logical_ops.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/01-syntax/basics/modulo_math.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/01-syntax/basics/operators.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/01-syntax/basics/shift_ops.yx","run":{"exit":0,"stderr":[],"stdout":["SHIFT_OPS_OK"]}}
-{"expectation":"behavior","file":"tests/yaoxiang/01-syntax/basics/statement-termination.yx","run":{"exit":0,"stderr":[],"stdout":["1","10","10"]}}
-{"expectation":"behavior","file":"tests/yaoxiang/01-syntax/basics/top_level_init_expression.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/01-syntax/basics/typed_vars.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/01-syntax/basics/variables.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/01-syntax/control-flow/break_continue.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/01-syntax/control-flow/for.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/01-syntax/control-flow/if_else.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/01-syntax/control-flow/if_expression.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/01-syntax/control-flow/list_comp.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/01-syntax/control-flow/match.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/01-syntax/control-flow/pattern_matching.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/01-syntax/control-flow/top_level_for.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/01-syntax/control-flow/while.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/01-syntax/control-flow/while_body_nested.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/01-syntax/control-flow/while_mut_assign.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/01-syntax/functions/closures.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/01-syntax/functions/definitions.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/01-syntax/functions/lambdas.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/01-syntax/functions/named_arguments.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/01-syntax/operators/in_operator.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/01-syntax/operators/range_compound_bound.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/01-syntax/operators/range_equality.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/01-syntax/operators/range_value.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/aggregates/array_fn_boundary.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/aggregates/array_literal.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/aggregates/builtin_container_ctor.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/aggregates/container_index_write.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/aggregates/dict_literal.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/aggregates/dicts.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/aggregates/lists.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/aggregates/pattern_destructure.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/aggregates/range_identity.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/aggregates/range_in_list.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/aggregates/string_index.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/aggregates/struct_equality.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/aggregates/structs.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/aggregates/tuple_index_field.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/aggregates/tuples.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/functions/closure_arg_inference.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/functions/closures.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/functions/curry_tail_expr.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/functions/curry_value_fix.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/functions/method_block_tail_expr.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/functions/method_call_args.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/functions/method_overload.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/generics/const_generic_assert.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/generics/const_generic_instantiate.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/generics/const_generic_lt_le_bound.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/generics/constrained_generic_ops.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/generics/explicit_type_args.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/generics/fallen_const_value_param.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/generics/fn_const_generic.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/generics/fn_const_generic_lowercase.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/generics/generic_constructor.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/generics/generic_container_index.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/generics/generic_method_binding.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/generics/generic_slot_alignment.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/generics/generic_types.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/generics/generics.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/generics/generics_matrix.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/generics/monomorphization.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/interfaces/associated_type_in_body.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/interfaces/interface_dynamic_dispatch.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/interfaces/interface_inheritance.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/interfaces/interface_instantiate.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/interfaces/interface_rebind_dispatch.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/interfaces/interfaces.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/interfaces/operator_index.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/interfaces/operator_interfaces.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/name-resolution/std_name_shadowing.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/patterns/match_call_scrutinee.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/patterns/pattern_or_guard.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/refinement/call_arg_evidence.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/refinement/refined_dependent_module_scope.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/refinement/refined_dependent_revalidate.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/refinement/refined_param_arg_form.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/refinement/refined_param_uses_base_type.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/refinement/refined_variable_uses_base_type.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/refinement/return_refinement.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/refinement/return_refinement_arg_expr.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/runtime/assert_runtime.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/runtime/deep_recursion_within_limit.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/sum-types/option.yx","run":{"exit":0,"stderr":[],"stdout":["option roundtrip ok"]}}
-{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/sum-types/option_try.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/sum-types/question_propagation.yx","run":{"exit":0,"stderr":[],"stdout":["question_propagation_ok"]}}
-{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/sum-types/result.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/sum-types/sum_type.yx","run":{"exit":0,"stderr":[],"stdout":["EQ_OK","NE_OK","ZERO_PAYLOAD_EQ_OK"]}}
-{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/sum-types/sum_type_equality_forms.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/sum-types/sum_type_match.yx","run":{"exit":0,"stderr":[],"stdout":["42","bad","is-ok"]}}
-{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/sum-types/sum_type_native_match.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/sum-types/try_methods.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/sum-types/user_try_type.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/termination/bare_loop_needs_no_termination_proof.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/termination/explicit_termination_measure.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/termination/explicit_termination_measure_loop.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/termination/flag_loop_guarded_exit.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/termination/measure_decreasing.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/termination/rank_function_dual_variable_loop.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/termination/while_block_value.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"check":{"diagnostics":[],"exit":0},"expectation":"runtime-error","file":"tests/yaoxiang/02-type-system/termination/while_zero_iteration_void_err.yx","run":{"exit":1,"stderr":["\u001b[31merror\u001b[0m [\u001b[1mE6007\u001b[0m] Runtime error: type mismatch in comparison Eq: Void vs Int(0)","     │     ^^^^^^","  32 │     assert.assert(last == 0, \"零迭代 while 的值：残留形态，应在使用点响亮失败\")","  at __yx_module_init (tests/yaoxiang/02-type-system/termination/while_zero_iteration_void_err.yx:35:5)","  at while_zero_iteration_void_err.main (tests/yaoxiang/02-type-system/termination/while_zero_iteration_void_err.yx:32:5)"," --> tests/yaoxiang/02-type-system/termination/while_zero_iteration_void_err.yx:32:5","Runtime error","help: See the error message for details","stack trace:"],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/03-modules/alias_group_module.yx","run":{"exit":0,"stderr":[],"stdout":["group alias ok"]}}
-{"expectation":"behavior","file":"tests/yaoxiang/03-modules/alias_multi.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/03-modules/alias_std_module.yx","run":{"exit":0,"stderr":[],"stdout":["std module alias ok"]}}
-{"expectation":"behavior","file":"tests/yaoxiang/03-modules/grouped_use_type_payload.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/03-modules/imports.yx","run":{"exit":0,"stderr":[],"stdout":["module_import_ok"]}}
-{"expectation":"behavior","file":"tests/yaoxiang/03-modules/native_arity_range.yx","run":{"exit":0,"stderr":[],"stdout":["none_opt built enum::v1","variadic args ok"]}}
-{"expectation":"behavior","file":"tests/yaoxiang/03-modules/pureyx_ns_arity.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/03-semantics/assignment_semantics.yx","run":{"exit":0,"stderr":[],"stdout":["assignment_semantics ok"]}}
-{"expectation":"behavior","file":"tests/yaoxiang/03-semantics/binding_fn_vs_block.yx","run":{"exit":0,"stderr":[],"stdout":["binding fn vs block ok"]}}
-{"expectation":"behavior","file":"tests/yaoxiang/03-semantics/empty_block_semantics.yx","run":{"exit":0,"stderr":[],"stdout":["empty_block_semantics: ok"]}}
-{"expectation":"behavior","file":"tests/yaoxiang/03-semantics/fn_value_first_class.yx","run":{"exit":0,"stderr":[],"stdout":["fn value first class ok"]}}
-{"expectation":"behavior","file":"tests/yaoxiang/03-semantics/fn_value_reuse.yx","run":{"exit":0,"stderr":[],"stdout":["fn value reuse ok"]}}
-{"expectation":"behavior","file":"tests/yaoxiang/03-semantics/paren_return_fn.yx","run":{"exit":0,"stderr":[],"stdout":["paren return fn ok"]}}
-{"expectation":"behavior","file":"tests/yaoxiang/03-semantics/return_stmt_semantics.yx","run":{"exit":0,"stderr":[],"stdout":["99"]}}
-{"expectation":"behavior","file":"tests/yaoxiang/03-semantics/rfc010a_block_value.yx","run":{"exit":0,"stderr":[],"stdout":["assign tail","rfc010a block value ok"]}}
-{"expectation":"behavior","file":"tests/yaoxiang/03-semantics/tail_expr_and_return.yx","run":{"exit":0,"stderr":[],"stdout":["side effect ok"]}}
-{"expectation":"behavior","file":"tests/yaoxiang/03-semantics/time_semantics.yx","run":{"exit":0,"stderr":[],"stdout":["time semantics ok"]}}
-{"expectation":"behavior","file":"tests/yaoxiang/03-semantics/top_level_binding.yx","run":{"exit":0,"stderr":[],"stdout":["top_level_binding ok"]}}
-{"expectation":"behavior","file":"tests/yaoxiang/03-semantics/top_level_control_flow.yx","run":{"exit":0,"stderr":[],"stdout":["top_level_control_flow ok","顶层 if 分支"]}}
-{"expectation":"behavior","file":"tests/yaoxiang/03-semantics/unsafe_block_value.yx","run":{"exit":0,"stderr":[],"stdout":["opaque type ok","unsafe block value ok"]}}
-{"expectation":"behavior","file":"tests/yaoxiang/04-concurrency/spawn_basic.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/04-concurrency/spawn_capture.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/04-concurrency/spawn_capture_standard.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/04-concurrency/spawn_destructure.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/04-concurrency/spawn_for.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/04-concurrency/spawn_mut_accumulator.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/04-concurrency/spawn_ref.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/04-concurrency/spawn_return_no_closure.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/04-concurrency/spawn_return_simple.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/04-concurrency/spawn_simple.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/04-concurrency/spawn_tail_expr.yx","run":{"exit":0,"stderr":[],"stdout":["spawn tail expr ok"]}}
-{"expectation":"behavior","file":"tests/yaoxiang/04-concurrency/spawn_tuple.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/04-concurrency/test_destructure.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/05-ownership/auto_borrow_free_fn.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/05-ownership/borrow_capture.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/05-ownership/borrow_immutable.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/05-ownership/borrow_mutable.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/05-ownership/borrow_return.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/05-ownership/chained_receiver_reuse.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/05-ownership/field_write_back.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/05-ownership/loop_borrow_guarded_write.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/05-ownership/loop_borrow_reuse.yx","run":{"exit":0,"stderr":[],"stdout":["unknown(2)loop_borrow_reuse_ok"]}}
-{"expectation":"behavior","file":"tests/yaoxiang/05-ownership/method_receiver_autoborrow.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/05-ownership/move_basic.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/05-ownership/nested_token_scope.yx","run":{"exit":0,"stderr":[],"stdout":["1"]}}
-{"expectation":"behavior","file":"tests/yaoxiang/05-ownership/ownership_deep.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/05-ownership/primitive_value_copy.yx","run":{"exit":0,"stderr":[],"stdout":["7","7"]}}
-{"expectation":"behavior","file":"tests/yaoxiang/05-ownership/ref_shared.yx","run":{"exit":0,"stderr":[],"stdout":["ref shared ok"]}}
-{"expectation":"behavior","file":"tests/yaoxiang/05-ownership/string_dup.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/05-ownership/struct_dup.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/05-ownership/token_dup_copy.yx","run":{"exit":0,"stderr":[],"stdout":["7"]}}
-{"expectation":"behavior","file":"tests/yaoxiang/05-ownership/token_in_struct.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"src/std/tests/assert_ops.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"src/std/tests/concurrent_ops.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"src/std/tests/convert_ops.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"src/std/tests/dict_ops.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"src/std/tests/error_codes.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"src/std/tests/fs_ops.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"src/std/tests/io_ops.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":["io_ops: print/println smoke"]}}
+{"expectation":"behavior","file":"src/std/tests/json_ops.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"src/std/tests/list_item_borrow.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"src/std/tests/list_ops.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"src/std/tests/math_ops.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"check":{"diagnostics":[],"exit":0},"expectation":"runtime-error","file":"src/std/tests/net_http_error.yx","run":{"diagnostics":[["E6007","src/std/tests/net_http_error.yx",16]],"exit":1,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"src/std/tests/net_ops.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"src/std/tests/os_ops.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"src/std/tests/range_ops.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"src/std/tests/range_result_step0.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"src/std/tests/result_ops.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"src/std/tests/string_ops.yx","run":{"diagnostics":[["W1003","src/std/tests/string_ops.yx",8]],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"src/std/tests/test_assertions.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"src/std/tests/test_suite.yx","run":{"diagnostics":[["W1001","src/std/tests/test_suite.yx",14],["W1001","src/std/tests/test_suite.yx",21],["W1001","src/std/tests/test_suite.yx",28]],"exit":0,"stderr":[],"stdout":[]}}
+{"check":{"diagnostics":[["W1001","src/std/tests/test_suite_fail.yx",15],["W1001","src/std/tests/test_suite_fail.yx",20],["W1003","src/std/tests/test_suite_fail.yx",12]],"exit":0},"expectation":"runtime-error","file":"src/std/tests/test_suite_fail.yx","run":{"diagnostics":[["E6005","<std/test>",113],["W1001","src/std/tests/test_suite_fail.yx",15],["W1001","src/std/tests/test_suite_fail.yx",20],["W1003","src/std/tests/test_suite_fail.yx",12]],"exit":1,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"src/std/tests/time_ops.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"src/std/tests/weak_ops.yx","run":{"diagnostics":[["W1003","src/std/tests/weak_ops.yx",9]],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/00-smoke/hello.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/01-syntax/basics/bitwise_ops.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":["BITWISE_OPS_OK"]}}
+{"expectation":"behavior","file":"tests/yaoxiang/01-syntax/basics/comments.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/01-syntax/basics/float_comparison.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/01-syntax/basics/fstrings.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/01-syntax/basics/literals.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/01-syntax/basics/logical_not.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/01-syntax/basics/logical_ops.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/01-syntax/basics/modulo_math.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/01-syntax/basics/operators.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/01-syntax/basics/shift_ops.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":["SHIFT_OPS_OK"]}}
+{"expectation":"behavior","file":"tests/yaoxiang/01-syntax/basics/statement-termination.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":["1","10","10"]}}
+{"expectation":"behavior","file":"tests/yaoxiang/01-syntax/basics/top_level_init_expression.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/01-syntax/basics/typed_vars.yx","run":{"diagnostics":[["W1004","tests/yaoxiang/01-syntax/basics/typed_vars.yx",12]],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/01-syntax/basics/variables.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/01-syntax/control-flow/break_continue.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/01-syntax/control-flow/for.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/01-syntax/control-flow/if_else.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/01-syntax/control-flow/if_expression.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/01-syntax/control-flow/list_comp.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/01-syntax/control-flow/match.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/01-syntax/control-flow/pattern_matching.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/01-syntax/control-flow/top_level_for.yx","run":{"diagnostics":[["W1003","tests/yaoxiang/01-syntax/control-flow/top_level_for.yx",9],["W1004","tests/yaoxiang/01-syntax/control-flow/top_level_for.yx",12]],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/01-syntax/control-flow/while.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/01-syntax/control-flow/while_body_nested.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/01-syntax/control-flow/while_mut_assign.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/01-syntax/functions/closures.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/01-syntax/functions/definitions.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/01-syntax/functions/lambdas.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/01-syntax/functions/named_arguments.yx","run":{"diagnostics":[["W1003","tests/yaoxiang/01-syntax/functions/named_arguments.yx",6]],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/01-syntax/operators/in_operator.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/01-syntax/operators/range_compound_bound.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/01-syntax/operators/range_equality.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/01-syntax/operators/range_value.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/aggregates/array_fn_boundary.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/aggregates/array_literal.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/aggregates/builtin_container_ctor.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/aggregates/container_index_write.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/aggregates/dict_literal.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/aggregates/dicts.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/aggregates/lists.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/aggregates/pattern_destructure.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/aggregates/range_identity.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/aggregates/range_in_list.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/aggregates/string_index.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/aggregates/struct_equality.yx","run":{"diagnostics":[["W1005","tests/yaoxiang/02-type-system/aggregates/struct_equality.yx",22]],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/aggregates/structs.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/aggregates/tuple_index_field.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/aggregates/tuples.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/functions/closure_arg_inference.yx","run":{"diagnostics":[["W1001","tests/yaoxiang/02-type-system/functions/closure_arg_inference.yx",12],["W1001","tests/yaoxiang/02-type-system/functions/closure_arg_inference.yx",16],["W1001","tests/yaoxiang/02-type-system/functions/closure_arg_inference.yx",20],["W1004","tests/yaoxiang/02-type-system/functions/closure_arg_inference.yx",23],["W1004","tests/yaoxiang/02-type-system/functions/closure_arg_inference.yx",27],["W1004","tests/yaoxiang/02-type-system/functions/closure_arg_inference.yx",31]],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/functions/closures.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/functions/curry_tail_expr.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/functions/curry_value_fix.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/functions/method_block_tail_expr.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/functions/method_call_args.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/functions/method_overload.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/generics/const_generic_assert.yx","run":{"diagnostics":[["W1002","tests/yaoxiang/02-type-system/generics/const_generic_assert.yx",8]],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/generics/const_generic_instantiate.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/generics/const_generic_lt_le_bound.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/generics/constrained_generic_ops.yx","run":{"diagnostics":[["W1005","tests/yaoxiang/02-type-system/generics/constrained_generic_ops.yx",19]],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/generics/explicit_type_args.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/generics/fallen_const_value_param.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/generics/fn_const_generic.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/generics/fn_const_generic_lowercase.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/generics/generic_constructor.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/generics/generic_container_index.yx","run":{"diagnostics":[["W1005","tests/yaoxiang/02-type-system/generics/generic_container_index.yx",20]],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/generics/generic_method_binding.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/generics/generic_slot_alignment.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/generics/generic_types.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/generics/generics.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/generics/generics_matrix.yx","run":{"diagnostics":[["W1003","tests/yaoxiang/02-type-system/generics/generics_matrix.yx",12]],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/generics/monomorphization.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/interfaces/associated_type_in_body.yx","run":{"diagnostics":[["W1002","tests/yaoxiang/02-type-system/interfaces/associated_type_in_body.yx",20]],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/interfaces/interface_dynamic_dispatch.yx","run":{"diagnostics":[["W1005","tests/yaoxiang/02-type-system/interfaces/interface_dynamic_dispatch.yx",22],["W1005","tests/yaoxiang/02-type-system/interfaces/interface_dynamic_dispatch.yx",30]],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/interfaces/interface_inheritance.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/interfaces/interface_instantiate.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/interfaces/interface_rebind_dispatch.yx","run":{"diagnostics":[["W1003","tests/yaoxiang/02-type-system/interfaces/interface_rebind_dispatch.yx",8]],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/interfaces/interfaces.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/interfaces/operator_index.yx","run":{"diagnostics":[["W1005","tests/yaoxiang/02-type-system/interfaces/operator_index.yx",17]],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/interfaces/operator_interfaces.yx","run":{"diagnostics":[["W1001","tests/yaoxiang/02-type-system/interfaces/operator_interfaces.yx",23],["W1005","tests/yaoxiang/02-type-system/interfaces/operator_interfaces.yx",15],["W1005","tests/yaoxiang/02-type-system/interfaces/operator_interfaces.yx",19]],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/name-resolution/std_name_shadowing.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/patterns/match_call_scrutinee.yx","run":{"diagnostics":[["W1001","tests/yaoxiang/02-type-system/patterns/match_call_scrutinee.yx",13],["W1001","tests/yaoxiang/02-type-system/patterns/match_call_scrutinee.yx",20],["W1002","tests/yaoxiang/02-type-system/patterns/match_call_scrutinee.yx",27],["W1004","tests/yaoxiang/02-type-system/patterns/match_call_scrutinee.yx",32],["W1004","tests/yaoxiang/02-type-system/patterns/match_call_scrutinee.yx",39],["W1004","tests/yaoxiang/02-type-system/patterns/match_call_scrutinee.yx",46],["W1004","tests/yaoxiang/02-type-system/patterns/match_call_scrutinee.yx",53],["W1004","tests/yaoxiang/02-type-system/patterns/match_call_scrutinee.yx",58],["W1004","tests/yaoxiang/02-type-system/patterns/match_call_scrutinee.yx",65],["W1004","tests/yaoxiang/02-type-system/patterns/match_call_scrutinee.yx",66]],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/patterns/pattern_or_guard.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/refinement/call_arg_evidence.yx","run":{"diagnostics":[["W1001","tests/yaoxiang/02-type-system/refinement/call_arg_evidence.yx",16],["W1001","tests/yaoxiang/02-type-system/refinement/call_arg_evidence.yx",19],["W1001","tests/yaoxiang/02-type-system/refinement/call_arg_evidence.yx",22],["W1002","tests/yaoxiang/02-type-system/refinement/call_arg_evidence.yx",14],["W1004","tests/yaoxiang/02-type-system/refinement/call_arg_evidence.yx",34],["W1004","tests/yaoxiang/02-type-system/refinement/call_arg_evidence.yx",38],["W1004","tests/yaoxiang/02-type-system/refinement/call_arg_evidence.yx",39],["W1004","tests/yaoxiang/02-type-system/refinement/call_arg_evidence.yx",43]],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/refinement/refined_dependent_module_scope.yx","run":{"diagnostics":[["W1002","tests/yaoxiang/02-type-system/refinement/refined_dependent_module_scope.yx",11],["W1004","tests/yaoxiang/02-type-system/refinement/refined_dependent_module_scope.yx",14],["W1004","tests/yaoxiang/02-type-system/refinement/refined_dependent_module_scope.yx",16]],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/refinement/refined_dependent_revalidate.yx","run":{"diagnostics":[["W1001","tests/yaoxiang/02-type-system/refinement/refined_dependent_revalidate.yx",14],["W1001","tests/yaoxiang/02-type-system/refinement/refined_dependent_revalidate.yx",22],["W1001","tests/yaoxiang/02-type-system/refinement/refined_dependent_revalidate.yx",35],["W1002","tests/yaoxiang/02-type-system/refinement/refined_dependent_revalidate.yx",12],["W1004","tests/yaoxiang/02-type-system/refinement/refined_dependent_revalidate.yx",45]],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/refinement/refined_param_arg_form.yx","run":{"diagnostics":[["W1001","tests/yaoxiang/02-type-system/refinement/refined_param_arg_form.yx",20],["W1001","tests/yaoxiang/02-type-system/refinement/refined_param_arg_form.yx",23],["W1002","tests/yaoxiang/02-type-system/refinement/refined_param_arg_form.yx",17]],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/refinement/refined_param_uses_base_type.yx","run":{"diagnostics":[["W1001","tests/yaoxiang/02-type-system/refinement/refined_param_uses_base_type.yx",21],["W1001","tests/yaoxiang/02-type-system/refinement/refined_param_uses_base_type.yx",24],["W1001","tests/yaoxiang/02-type-system/refinement/refined_param_uses_base_type.yx",27],["W1001","tests/yaoxiang/02-type-system/refinement/refined_param_uses_base_type.yx",28],["W1002","tests/yaoxiang/02-type-system/refinement/refined_param_uses_base_type.yx",18]],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/refinement/refined_variable_uses_base_type.yx","run":{"diagnostics":[["W1002","tests/yaoxiang/02-type-system/refinement/refined_variable_uses_base_type.yx",10],["W1004","tests/yaoxiang/02-type-system/refinement/refined_variable_uses_base_type.yx",13],["W1004","tests/yaoxiang/02-type-system/refinement/refined_variable_uses_base_type.yx",14],["W1004","tests/yaoxiang/02-type-system/refinement/refined_variable_uses_base_type.yx",18],["W1004","tests/yaoxiang/02-type-system/refinement/refined_variable_uses_base_type.yx",23]],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/refinement/return_refinement.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/refinement/return_refinement_arg_expr.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/runtime/assert_runtime.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/runtime/deep_recursion_within_limit.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/sum-types/option.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":["option roundtrip ok"]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/sum-types/option_try.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/sum-types/question_propagation.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":["question_propagation_ok"]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/sum-types/result.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/sum-types/sum_type.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":["EQ_OK","NE_OK","ZERO_PAYLOAD_EQ_OK"]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/sum-types/sum_type_equality_forms.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/sum-types/sum_type_match.yx","run":{"diagnostics":[["W1001","tests/yaoxiang/02-type-system/sum-types/sum_type_match.yx",13]],"exit":0,"stderr":[],"stdout":["42","bad","is-ok"]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/sum-types/sum_type_native_match.yx","run":{"diagnostics":[["W1003","tests/yaoxiang/02-type-system/sum-types/sum_type_native_match.yx",10]],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/sum-types/try_methods.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/sum-types/user_try_type.yx","run":{"diagnostics":[["W1005","tests/yaoxiang/02-type-system/sum-types/user_try_type.yx",17],["W1005","tests/yaoxiang/02-type-system/sum-types/user_try_type.yx",24],["W1005","tests/yaoxiang/02-type-system/sum-types/user_try_type.yx",31],["W1005","tests/yaoxiang/02-type-system/sum-types/user_try_type.yx",38]],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/termination/bare_loop_needs_no_termination_proof.yx","run":{"diagnostics":[["W1004","tests/yaoxiang/02-type-system/termination/bare_loop_needs_no_termination_proof.yx",18],["W1004","tests/yaoxiang/02-type-system/termination/bare_loop_needs_no_termination_proof.yx",19],["W1004","tests/yaoxiang/02-type-system/termination/bare_loop_needs_no_termination_proof.yx",27],["W1004","tests/yaoxiang/02-type-system/termination/bare_loop_needs_no_termination_proof.yx",28]],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/termination/explicit_termination_measure.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/termination/explicit_termination_measure_loop.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/termination/flag_loop_guarded_exit.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/termination/measure_decreasing.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/termination/rank_function_dual_variable_loop.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/termination/while_block_value.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"check":{"diagnostics":[],"exit":0},"expectation":"runtime-error","file":"tests/yaoxiang/02-type-system/termination/while_zero_iteration_void_err.yx","run":{"diagnostics":[["E6007","tests/yaoxiang/02-type-system/termination/while_zero_iteration_void_err.yx",32]],"exit":1,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/03-modules/alias_group_module.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":["group alias ok"]}}
+{"expectation":"behavior","file":"tests/yaoxiang/03-modules/alias_multi.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/03-modules/alias_std_module.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":["std module alias ok"]}}
+{"expectation":"behavior","file":"tests/yaoxiang/03-modules/grouped_use_type_payload.yx","run":{"diagnostics":[["W1003","tests/yaoxiang/03-modules/grouped_use_type_payload.yx",8]],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/03-modules/imports.yx","run":{"diagnostics":[["W1003","tests/yaoxiang/03-modules/imports.yx",8],["W1003","tests/yaoxiang/03-modules/imports.yx",8],["W1003","tests/yaoxiang/03-modules/imports.yx",8]],"exit":0,"stderr":[],"stdout":["module_import_ok"]}}
+{"expectation":"behavior","file":"tests/yaoxiang/03-modules/native_arity_range.yx","run":{"diagnostics":[["W1001","tests/yaoxiang/03-modules/native_arity_range.yx",14],["W1004","tests/yaoxiang/03-modules/native_arity_range.yx",22],["W1004","tests/yaoxiang/03-modules/native_arity_range.yx",33],["W1004","tests/yaoxiang/03-modules/native_arity_range.yx",34],["W1004","tests/yaoxiang/03-modules/native_arity_range.yx",41]],"exit":0,"stderr":[],"stdout":["none_opt built enum::v1","variadic args ok"]}}
+{"expectation":"behavior","file":"tests/yaoxiang/03-modules/native_fn_member_value.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":["member hello"]}}
+{"expectation":"behavior","file":"tests/yaoxiang/03-modules/native_fn_value.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":["hello","indirect hello"]}}
+{"expectation":"behavior","file":"tests/yaoxiang/03-modules/native_fn_value_return.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":["via param"]}}
+{"expectation":"behavior","file":"tests/yaoxiang/03-modules/pureyx_export_fn_value.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/03-modules/pureyx_generic_export_fn_value.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/03-modules/pureyx_ns_arity.yx","run":{"diagnostics":[["W1004","tests/yaoxiang/03-modules/pureyx_ns_arity.yx",11],["W1004","tests/yaoxiang/03-modules/pureyx_ns_arity.yx",14],["W1004","tests/yaoxiang/03-modules/pureyx_ns_arity.yx",17],["W1004","tests/yaoxiang/03-modules/pureyx_ns_arity.yx",20]],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/03-semantics/assignment_semantics.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":["assignment_semantics ok"]}}
+{"expectation":"behavior","file":"tests/yaoxiang/03-semantics/binding_fn_vs_block.yx","run":{"diagnostics":[["W1001","tests/yaoxiang/03-semantics/binding_fn_vs_block.yx",38]],"exit":0,"stderr":[],"stdout":["binding fn vs block ok"]}}
+{"expectation":"behavior","file":"tests/yaoxiang/03-semantics/empty_block_semantics.yx","run":{"diagnostics":[["W1001","tests/yaoxiang/03-semantics/empty_block_semantics.yx",15],["W1001","tests/yaoxiang/03-semantics/empty_block_semantics.yx",65],["W1004","tests/yaoxiang/03-semantics/empty_block_semantics.yx",20]],"exit":0,"stderr":[],"stdout":["empty_block_semantics: ok"]}}
+{"expectation":"behavior","file":"tests/yaoxiang/03-semantics/fn_value_first_class.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":["fn value first class ok"]}}
+{"expectation":"behavior","file":"tests/yaoxiang/03-semantics/fn_value_reuse.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":["fn value reuse ok"]}}
+{"expectation":"behavior","file":"tests/yaoxiang/03-semantics/paren_return_fn.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":["paren return fn ok"]}}
+{"expectation":"behavior","file":"tests/yaoxiang/03-semantics/return_stmt_semantics.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":["99"]}}
+{"expectation":"behavior","file":"tests/yaoxiang/03-semantics/rfc010a_block_value.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":["assign tail","rfc010a block value ok"]}}
+{"expectation":"behavior","file":"tests/yaoxiang/03-semantics/tail_expr_and_return.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":["side effect ok"]}}
+{"expectation":"behavior","file":"tests/yaoxiang/03-semantics/time_semantics.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":["time semantics ok"]}}
+{"expectation":"behavior","file":"tests/yaoxiang/03-semantics/top_level_binding.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":["top_level_binding ok"]}}
+{"expectation":"behavior","file":"tests/yaoxiang/03-semantics/top_level_control_flow.yx","run":{"diagnostics":[["W1004","tests/yaoxiang/03-semantics/top_level_control_flow.yx",10],["W1004","tests/yaoxiang/03-semantics/top_level_control_flow.yx",16],["W1004","tests/yaoxiang/03-semantics/top_level_control_flow.yx",22]],"exit":0,"stderr":[],"stdout":["top_level_control_flow ok","顶层 if 分支"]}}
+{"expectation":"behavior","file":"tests/yaoxiang/03-semantics/unsafe_block_value.yx","run":{"diagnostics":[["W1001","tests/yaoxiang/03-semantics/unsafe_block_value.yx",40]],"exit":0,"stderr":[],"stdout":["opaque type ok","unsafe block value ok"]}}
+{"expectation":"behavior","file":"tests/yaoxiang/04-concurrency/spawn_basic.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/04-concurrency/spawn_capture.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/04-concurrency/spawn_capture_standard.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/04-concurrency/spawn_destructure.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/04-concurrency/spawn_for.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/04-concurrency/spawn_mut_accumulator.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/04-concurrency/spawn_ref.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/04-concurrency/spawn_return_no_closure.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/04-concurrency/spawn_return_simple.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/04-concurrency/spawn_simple.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/04-concurrency/spawn_tail_expr.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":["spawn tail expr ok"]}}
+{"expectation":"behavior","file":"tests/yaoxiang/04-concurrency/spawn_tuple.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/04-concurrency/test_destructure.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/05-ownership/auto_borrow_free_fn.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/05-ownership/borrow_capture.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/05-ownership/borrow_immutable.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/05-ownership/borrow_mutable.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/05-ownership/borrow_return.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/05-ownership/chained_receiver_reuse.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/05-ownership/field_write_back.yx","run":{"diagnostics":[["W1005","tests/yaoxiang/05-ownership/field_write_back.yx",9]],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/05-ownership/loop_borrow_guarded_write.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/05-ownership/loop_borrow_reuse.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":["unknown(2)loop_borrow_reuse_ok"]}}
+{"expectation":"behavior","file":"tests/yaoxiang/05-ownership/method_receiver_autoborrow.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/05-ownership/move_basic.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/05-ownership/nested_token_scope.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":["1"]}}
+{"expectation":"behavior","file":"tests/yaoxiang/05-ownership/ownership_deep.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/05-ownership/primitive_value_copy.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":["7","7"]}}
+{"expectation":"behavior","file":"tests/yaoxiang/05-ownership/ref_shared.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":["ref shared ok"]}}
+{"expectation":"behavior","file":"tests/yaoxiang/05-ownership/string_dup.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/05-ownership/struct_dup.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/05-ownership/token_dup_copy.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":["7"]}}
+{"expectation":"behavior","file":"tests/yaoxiang/05-ownership/token_in_struct.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
 {"check":{"diagnostics":[["E1002","tests/yaoxiang/06-compile-errors/call-args/method_arg_type_err.yx",17]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/call-args/method_arg_type_err.yx"}
 {"check":{"diagnostics":[["E1010","tests/yaoxiang/06-compile-errors/call-args/method_extra_arg_err.yx",18]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/call-args/method_extra_arg_err.yx"}
 {"check":{"diagnostics":[["E1010","tests/yaoxiang/06-compile-errors/call-args/method_missing_arg_err.yx",17]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/call-args/method_missing_arg_err.yx"}
-{"check":{"diagnostics":[["E1001","tests/yaoxiang/06-compile-errors/call-args/method_overload_ambiguous_err.yx",20],["E1107","tests/yaoxiang/06-compile-errors/call-args/method_overload_ambiguous_err.yx",19]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/call-args/method_overload_ambiguous_err.yx"}
+{"check":{"diagnostics":[["E1107","tests/yaoxiang/06-compile-errors/call-args/method_overload_ambiguous_err.yx",19]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/call-args/method_overload_ambiguous_err.yx"}
 {"check":{"diagnostics":[["E2018","tests/yaoxiang/06-compile-errors/call-args/method_receiver_conflict_err.yx",18]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/call-args/method_receiver_conflict_err.yx"}
 {"check":{"diagnostics":[["E1111","tests/yaoxiang/06-compile-errors/call-args/named_arg_duplicate_err.yx",16]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/call-args/named_arg_duplicate_err.yx"}
 {"check":{"diagnostics":[["E1010","tests/yaoxiang/06-compile-errors/call-args/named_arg_missing_err.yx",15]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/call-args/named_arg_missing_err.yx"}
@@ -202,21 +207,21 @@
 {"check":{"diagnostics":[["E1102","tests/yaoxiang/06-compile-errors/control-flow/if_body_break_outside_err.yx",11]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/control-flow/if_body_break_outside_err.yx"}
 {"check":{"diagnostics":[["E0010","tests/yaoxiang/06-compile-errors/control-flow/question_mark_as_param_type.yx",10],["E0012","tests/yaoxiang/06-compile-errors/control-flow/question_mark_as_param_type.yx",10]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/control-flow/question_mark_as_param_type.yx"}
 {"check":{"diagnostics":[["E1082","tests/yaoxiang/06-compile-errors/control-flow/question_nonresult_expr_err.yx",11],["W1001","tests/yaoxiang/06-compile-errors/control-flow/question_nonresult_expr_err.yx",10]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/control-flow/question_nonresult_expr_err.yx"}
-{"check":{"diagnostics":[["E1001","tests/yaoxiang/06-compile-errors/control-flow/question_nonresult_return_err.yx",13],["E1081","tests/yaoxiang/06-compile-errors/control-flow/question_nonresult_return_err.yx",12],["W1003","tests/yaoxiang/06-compile-errors/control-flow/question_nonresult_return_err.yx",8]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/control-flow/question_nonresult_return_err.yx"}
+{"check":{"diagnostics":[["E1081","tests/yaoxiang/06-compile-errors/control-flow/question_nonresult_return_err.yx",12],["W1003","tests/yaoxiang/06-compile-errors/control-flow/question_nonresult_return_err.yx",8]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/control-flow/question_nonresult_return_err.yx"}
 {"check":{"diagnostics":[["E1002","tests/yaoxiang/06-compile-errors/control-flow/spawn_body_type_err.yx",12]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/control-flow/spawn_body_type_err.yx"}
 {"check":{"diagnostics":[["E1109","tests/yaoxiang/06-compile-errors/control-flow/top_level_return_bare_err.yx",10]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/control-flow/top_level_return_bare_err.yx"}
 {"check":{"diagnostics":[["E1109","tests/yaoxiang/06-compile-errors/control-flow/top_level_return_block_value_err.yx",10],["W1001","tests/yaoxiang/06-compile-errors/control-flow/top_level_return_block_value_err.yx",10]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/control-flow/top_level_return_block_value_err.yx"}
 {"check":{"diagnostics":[["E1109","tests/yaoxiang/06-compile-errors/control-flow/top_level_return_err.yx",10]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/control-flow/top_level_return_err.yx"}
 {"check":{"diagnostics":[["E1109","tests/yaoxiang/06-compile-errors/control-flow/top_level_return_if_block_err.yx",10]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/control-flow/top_level_return_if_block_err.yx"}
 {"check":{"diagnostics":[["E1109","tests/yaoxiang/06-compile-errors/control-flow/top_level_return_unsafe_err.yx",11]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/control-flow/top_level_return_unsafe_err.yx"}
-{"check":{"diagnostics":[["E1001","tests/yaoxiang/06-compile-errors/control-flow/while_assign_tail_is_void_err.yx",17],["E1002","tests/yaoxiang/06-compile-errors/control-flow/while_assign_tail_is_void_err.yx",14]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/control-flow/while_assign_tail_is_void_err.yx"}
-{"check":{"diagnostics":[["E1001","tests/yaoxiang/06-compile-errors/control-flow/while_body_type_err.yx",15],["E1002","tests/yaoxiang/06-compile-errors/control-flow/while_body_type_err.yx",14]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/control-flow/while_body_type_err.yx"}
+{"check":{"diagnostics":[["E1002","tests/yaoxiang/06-compile-errors/control-flow/while_assign_tail_is_void_err.yx",14]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/control-flow/while_assign_tail_is_void_err.yx"}
+{"check":{"diagnostics":[["E1002","tests/yaoxiang/06-compile-errors/control-flow/while_body_type_err.yx",14]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/control-flow/while_body_type_err.yx"}
 {"check":{"diagnostics":[["E1094","tests/yaoxiang/06-compile-errors/generics/fallen_const_type_param_err.yx",9]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/generics/fallen_const_type_param_err.yx"}
 {"check":{"diagnostics":[["E1002","tests/yaoxiang/06-compile-errors/generics/generic_ctor_const_infer_err.yx",15]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/generics/generic_ctor_const_infer_err.yx"}
 {"check":{"diagnostics":[["E1010","tests/yaoxiang/06-compile-errors/generics/generic_ctor_extra_arg_err.yx",11]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/generics/generic_ctor_extra_arg_err.yx"}
 {"check":{"diagnostics":[["E1010","tests/yaoxiang/06-compile-errors/generics/generic_ctor_missing_arg_err.yx",11]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/generics/generic_ctor_missing_arg_err.yx"}
-{"check":{"diagnostics":[["E1001","tests/yaoxiang/06-compile-errors/generics/generic_ctor_type_mismatch_err.yx",14],["E1002","tests/yaoxiang/06-compile-errors/generics/generic_ctor_type_mismatch_err.yx",13]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/generics/generic_ctor_type_mismatch_err.yx"}
-{"check":{"diagnostics":[["E1001","tests/yaoxiang/06-compile-errors/generics/generic_infer_mismatch_err.yx",14],["E1002","tests/yaoxiang/06-compile-errors/generics/generic_infer_mismatch_err.yx",13]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/generics/generic_infer_mismatch_err.yx"}
+{"check":{"diagnostics":[["E1002","tests/yaoxiang/06-compile-errors/generics/generic_ctor_type_mismatch_err.yx",13]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/generics/generic_ctor_type_mismatch_err.yx"}
+{"check":{"diagnostics":[["E1002","tests/yaoxiang/06-compile-errors/generics/generic_infer_mismatch_err.yx",13]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/generics/generic_infer_mismatch_err.yx"}
 {"check":{"diagnostics":[["E1100","tests/yaoxiang/06-compile-errors/interfaces/interface_duplicate_impl.yx",22]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/interfaces/interface_duplicate_impl.yx"}
 {"check":{"diagnostics":[["E1101","tests/yaoxiang/06-compile-errors/interfaces/interface_elem_mismatch.yx",25],["W1003","tests/yaoxiang/06-compile-errors/interfaces/interface_elem_mismatch.yx",8],["W1005","tests/yaoxiang/06-compile-errors/interfaces/interface_elem_mismatch.yx",18]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/interfaces/interface_elem_mismatch.yx"}
 {"check":{"diagnostics":[["E1101","tests/yaoxiang/06-compile-errors/interfaces/interface_elem_not_impl.yx",28],["W1003","tests/yaoxiang/06-compile-errors/interfaces/interface_elem_not_impl.yx",9],["W1005","tests/yaoxiang/06-compile-errors/interfaces/interface_elem_not_impl.yx",20]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/interfaces/interface_elem_not_impl.yx"}
@@ -269,23 +274,23 @@
 {"check":{"diagnostics":[["E4018","",0]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/refinement/refined_dependent_folded_rhs_violates_err.yx"}
 {"check":{"diagnostics":[["E4018","",0]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/refinement/refined_dependent_init_violates_err.yx"}
 {"check":{"diagnostics":[["E4018","",0]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/refinement/refined_dependent_reassign_violates_err.yx"}
-{"check":{"diagnostics":[["E4018","",0]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/refinement/refined_param_arg_violates_err.yx"}
-{"check":{"diagnostics":[["E4018","",0],["W1001","tests/yaoxiang/06-compile-errors/refinement/return_refinement_arg_expr_err.yx",14],["W1002","tests/yaoxiang/06-compile-errors/refinement/return_refinement_arg_expr_err.yx",12]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/refinement/return_refinement_arg_expr_err.yx"}
+{"check":{"diagnostics":[["E4018","tests/yaoxiang/06-compile-errors/refinement/refined_param_arg_violates_err.yx",18]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/refinement/refined_param_arg_violates_err.yx"}
+{"check":{"diagnostics":[["E4018","tests/yaoxiang/06-compile-errors/refinement/return_refinement_arg_expr_err.yx",15],["W1001","tests/yaoxiang/06-compile-errors/refinement/return_refinement_arg_expr_err.yx",14],["W1002","tests/yaoxiang/06-compile-errors/refinement/return_refinement_arg_expr_err.yx",12]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/refinement/return_refinement_arg_expr_err.yx"}
 {"check":{"diagnostics":[["E4018","",0],["W1001","tests/yaoxiang/06-compile-errors/refinement/return_refinement_multi_arg_literal_err.yx",14],["W1002","tests/yaoxiang/06-compile-errors/refinement/return_refinement_multi_arg_literal_err.yx",12]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/refinement/return_refinement_multi_arg_literal_err.yx"}
 {"check":{"diagnostics":[["E2031","tests/yaoxiang/06-compile-errors/refinement/return_refinement_multi_arg_predicate_err.yx",17],["W1001","tests/yaoxiang/06-compile-errors/refinement/return_refinement_multi_arg_predicate_err.yx",16],["W1002","tests/yaoxiang/06-compile-errors/refinement/return_refinement_multi_arg_predicate_err.yx",14]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/refinement/return_refinement_multi_arg_predicate_err.yx"}
 {"check":{"diagnostics":[["E1001","tests/yaoxiang/06-compile-errors/refinement/return_refinement_undeclared_var_err.yx",14],["W1001","tests/yaoxiang/06-compile-errors/refinement/return_refinement_undeclared_var_err.yx",14],["W1002","tests/yaoxiang/06-compile-errors/refinement/return_refinement_undeclared_var_err.yx",12]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/refinement/return_refinement_undeclared_var_err.yx"}
 {"check":{"diagnostics":[["E4018","",0]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/refinement/return_refinement_violated_err.yx"}
-{"check":{"diagnostics":[],"exit":0},"expectation":"runtime-error","file":"tests/yaoxiang/06-compile-errors/runtime/array_neg_index_err.yx","run":{"exit":1,"stderr":["\u001b[31merror\u001b[0m [\u001b[1mE6003\u001b[0m] array index out of bounds: valid range is 0..3, found -1","Runtime error","help: ensure the index is within the array bounds"],"stdout":[]}}
-{"check":{"diagnostics":[],"exit":0},"expectation":"runtime-error","file":"tests/yaoxiang/06-compile-errors/runtime/dict_missing_key_e6008.yx","run":{"exit":1,"stderr":["\u001b[31merror\u001b[0m [\u001b[1mE6008\u001b[0m] key not found: nope","     │          ^","  14 │     v = d[\"nope\"]","  at __yx_module_init (tests/yaoxiang/06-compile-errors/runtime/dict_missing_key_e6008.yx:17:5)","  at dict_missing_key_e6008.main (tests/yaoxiang/06-compile-errors/runtime/dict_missing_key_e6008.yx:14:10)"," --> tests/yaoxiang/06-compile-errors/runtime/dict_missing_key_e6008.yx:14:10","Runtime error","help: use dict.has to check if the key exists before indexing","stack trace:"],"stdout":[]}}
-{"check":{"diagnostics":[],"exit":0},"expectation":"runtime-error","file":"tests/yaoxiang/06-compile-errors/runtime/div_zero.yx","run":{"exit":1,"stderr":["\u001b[31merror\u001b[0m [\u001b[1mE6001\u001b[0m] expression 1 / 0 divides by zero","     │           ^","  13 │     c = a / b","  at __yx_module_init (tests/yaoxiang/06-compile-errors/runtime/div_zero.yx:17:5)","  at div_zero.main (tests/yaoxiang/06-compile-errors/runtime/div_zero.yx:13:11)"," --> tests/yaoxiang/06-compile-errors/runtime/div_zero.yx:13:11","Runtime error","help: add a check to prevent division by zero","stack trace:"],"stdout":[]}}
-{"check":{"diagnostics":[],"exit":0},"expectation":"runtime-error","file":"tests/yaoxiang/06-compile-errors/runtime/index_oob_read.yx","run":{"exit":1,"stderr":["\u001b[31merror\u001b[0m [\u001b[1mE6003\u001b[0m] array index out of bounds: valid range is 0..3, found 5","     │                     ^","  12 │     io.println(items[5])","  at __yx_module_init (tests/yaoxiang/06-compile-errors/runtime/index_oob_read.yx:15:5)","  at index_oob_read.main (tests/yaoxiang/06-compile-errors/runtime/index_oob_read.yx:12:21)"," --> tests/yaoxiang/06-compile-errors/runtime/index_oob_read.yx:12:21","Runtime error","help: ensure the index is within the array bounds","stack trace:"],"stdout":[]}}
-{"check":{"diagnostics":[],"exit":0},"expectation":"runtime-error","file":"tests/yaoxiang/06-compile-errors/runtime/index_write_out_of_bounds_err.yx","run":{"exit":1,"stderr":["\u001b[31merror\u001b[0m [\u001b[1mE6003\u001b[0m] array index out of bounds: valid range is 0..3, found 5 (i)","     │     ^","  11 │     a[i] = 99","  at __yx_module_init (tests/yaoxiang/06-compile-errors/runtime/index_write_out_of_bounds_err.yx:15:5)","  at index_write_out_of_bounds_err.main (tests/yaoxiang/06-compile-errors/runtime/index_write_out_of_bounds_err.yx:11:5)"," --> tests/yaoxiang/06-compile-errors/runtime/index_write_out_of_bounds_err.yx:11:5","Runtime error","help: ensure the index is within the array bounds","stack trace:"],"stdout":[]}}
-{"check":{"diagnostics":[],"exit":0},"expectation":"runtime-error","file":"tests/yaoxiang/06-compile-errors/runtime/int_overflow.yx","run":{"exit":1,"stderr":["\u001b[31merror\u001b[0m [\u001b[1mE6007\u001b[0m] Runtime error: integer overflow in `9223372036854775807 + 1`","     │     ^","  12 │     b = a + 1","  at __yx_module_init (tests/yaoxiang/06-compile-errors/runtime/int_overflow.yx:16:5)","  at int_overflow.main (tests/yaoxiang/06-compile-errors/runtime/int_overflow.yx:12:5)"," --> tests/yaoxiang/06-compile-errors/runtime/int_overflow.yx:12:5","Runtime error","help: See the error message for details","stack trace:"],"stdout":[]}}
-{"check":{"diagnostics":[["W1004","tests/yaoxiang/06-compile-errors/runtime/list_remove_at_oob_err.yx",14]],"exit":0},"expectation":"runtime-error","file":"tests/yaoxiang/06-compile-errors/runtime/list_remove_at_oob_err.yx","run":{"exit":1,"stderr":["\u001b[31merror\u001b[0m [\u001b[1mE6003\u001b[0m] array index out of bounds: valid range is 0..3, found 5 (index)","  at __yx_module_init (tests/yaoxiang/06-compile-errors/runtime/list_remove_at_oob_err.yx:14:19)","  at std.list.remove_at(int64) (tests/yaoxiang/06-compile-errors/runtime/list_remove_at_oob_err.yx:157:17)"," --> tests/yaoxiang/06-compile-errors/runtime/list_remove_at_oob_err.yx:157:17","Runtime error","help: ensure the index is within the array bounds","stack trace:"],"stdout":[]}}
-{"check":{"diagnostics":[],"exit":0},"expectation":"runtime-error","file":"tests/yaoxiang/06-compile-errors/runtime/range_dynamic_step0_err.yx","run":{"exit":1,"stderr":["\u001b[31merror\u001b[0m [\u001b[1mE6007\u001b[0m] Runtime error: Range step must be non-zero (for/in consumption)","     │     ^^^","  13 │     for i in r {","  at __yx_module_init (tests/yaoxiang/06-compile-errors/runtime/range_dynamic_step0_err.yx:18:5)","  at range_dynamic_step0_err.main (tests/yaoxiang/06-compile-errors/runtime/range_dynamic_step0_err.yx:13:5)"," --> tests/yaoxiang/06-compile-errors/runtime/range_dynamic_step0_err.yx:13:5","Runtime error","help: See the error message for details","stack trace:"],"stdout":[]}}
-{"check":{"diagnostics":[],"exit":0},"expectation":"runtime-error","file":"tests/yaoxiang/06-compile-errors/runtime/stack_overflow_e6004.yx","run":{"exit":1,"stderr":["\u001b[31merror\u001b[0m [\u001b[1mE6004\u001b[0m] stack overflow: recursion depth exceeded limit 1024","     │             ^","  31 │     return f(n + 1) + 1","  at __yx_module_init (tests/yaoxiang/06-compile-errors/runtime/stack_overflow_e6004.yx:39:5)","  at stack_overflow_e6004.f (tests/yaoxiang/06-compile-errors/runtime/stack_overflow_e6004.yx:31:13)","  at stack_overflow_e6004.f (tests/yaoxiang/06-compile-errors/runtime/stack_overflow_e6004.yx:31:13)","  at stack_overflow_e6004.f (tests/yaoxiang/06-compile-errors/runtime/stack_overflow_e6004.yx:31:13)","  at stack_overflow_e6004.f (tests/yaoxiang/06-compile-errors/runtime/stack_overflow_e6004.yx:31:13)","  at stack_overflow_e6004.f (tests/yaoxiang/06-compile-errors/runtime/stack_overflow_e6004.yx:31:13)","  at stack_overflow_e6004.f (tests/yaoxiang/06-compile-errors/runtime/stack_overflow_e6004.yx:31:13)","  at stack_overflow_e6004.f (tests/yaoxiang/06-compile-errors/runtime/stack_overflow_e6004.yx:31:13)","  at stack_overflow_e6004.f (tests/yaoxiang/06-compile-errors/runtime/stack_overflow_e6004.yx:31:13)","  at stack_overflow_e6004.f (tests/yaoxiang/06-compile-errors/runtime/stack_overflow_e6004.yx:31:13)","  at stack_overflow_e6004.f (tests/yaoxiang/06-compile-errors/runtime/stack_overflow_e6004.yx:31:13)","  at stack_overflow_e6004.f (tests/yaoxiang/06-compile-errors/runtime/stack_overflow_e6004.yx:31:13)","  at stack_overflow_e6004.f (tests/yaoxiang/06-compile-errors/runtime/stack_overflow_e6004.yx:31:13)","  at stack_overflow_e6004.f (tests/yaoxiang/06-compile-errors/runtime/stack_overflow_e6004.yx:31:13)","  at stack_overflow_e6004.f (tests/yaoxiang/06-compile-errors/runtime/stack_overflow_e6004.yx:31:13)","  at stack_overflow_e6004.f (tests/yaoxiang/06-compile-errors/runtime/stack_overflow_e6004.yx:31:13)","  at stack_overflow_e6004.f (tests/yaoxiang/06-compile-errors/runtime/stack_overflow_e6004.yx:31:13)","  at stack_overflow_e6004.f (tests/yaoxiang/06-compile-errors/runtime/stack_overflow_e6004.yx:31:13)","  at stack_overflow_e6004.f (tests/yaoxiang/06-compile-errors/runtime/stack_overflow_e6004.yx:31:13)","  at stack_overflow_e6004.f (tests/yaoxiang/06-compile-errors/runtime/stack_overflow_e6004.yx:31:13)","  at stack_overflow_e6004.f (tests/yaoxiang/06-compile-errors/runtime/stack_overflow_e6004.yx:31:13)","  at stack_overflow_e6004.f (tests/yaoxiang/06-compile-errors/runtime/stack_overflow_e6004.yx:31:13)","  at stack_overflow_e6004.f (tests/yaoxiang/06-compile-errors/runtime/stack_overflow_e6004.yx:31:13)","  at stack_overflow_e6004.main (tests/yaoxiang/06-compile-errors/runtime/stack_overflow_e6004.yx:36:20)","  … 省略 1000 帧 …"," --> tests/yaoxiang/06-compile-errors/runtime/stack_overflow_e6004.yx:31:13","Runtime error","help: reduce recursion depth or use iteration","stack trace:"],"stdout":[]}}
-{"check":{"diagnostics":[],"exit":0},"expectation":"runtime-error","file":"tests/yaoxiang/06-compile-errors/runtime/string_neg_index_err.yx","run":{"exit":1,"stderr":["\u001b[31merror\u001b[0m [\u001b[1mE6003\u001b[0m] array index out of bounds: valid range is 0..5, found -1","     │                 ^","  13 │     io.println(s[-1])","  at __yx_module_init (tests/yaoxiang/06-compile-errors/runtime/string_neg_index_err.yx:16:5)","  at string_neg_index_err.main (tests/yaoxiang/06-compile-errors/runtime/string_neg_index_err.yx:13:17)"," --> tests/yaoxiang/06-compile-errors/runtime/string_neg_index_err.yx:13:17","Runtime error","help: ensure the index is within the array bounds","stack trace:"],"stdout":[]}}
-{"check":{"diagnostics":[["W1004","tests/yaoxiang/06-compile-errors/runtime/top_level_index_oob.yx",13],["W1004","tests/yaoxiang/06-compile-errors/runtime/top_level_index_oob.yx",14]],"exit":0},"expectation":"runtime-error","file":"tests/yaoxiang/06-compile-errors/runtime/top_level_index_oob.yx","run":{"exit":1,"stderr":["\u001b[31merror\u001b[0m [\u001b[1mE6003\u001b[0m] array index out of bounds: valid range is 0..3, found 5 (top_level_index_oob.i)","     │        ^","  15 │ print(a[i])","  at __yx_module_init (tests/yaoxiang/06-compile-errors/runtime/top_level_index_oob.yx:15:8)"," --> tests/yaoxiang/06-compile-errors/runtime/top_level_index_oob.yx:15:8","Runtime error","help: ensure the index is within the array bounds","stack trace:"],"stdout":[]}}
+{"check":{"diagnostics":[],"exit":0},"expectation":"runtime-error","file":"tests/yaoxiang/06-compile-errors/runtime/array_neg_index_err.yx","run":{"diagnostics":[["E6003","",0]],"exit":1,"stderr":[],"stdout":[]}}
+{"check":{"diagnostics":[],"exit":0},"expectation":"runtime-error","file":"tests/yaoxiang/06-compile-errors/runtime/dict_missing_key_e6008.yx","run":{"diagnostics":[["E6008","tests/yaoxiang/06-compile-errors/runtime/dict_missing_key_e6008.yx",14]],"exit":1,"stderr":[],"stdout":[]}}
+{"check":{"diagnostics":[],"exit":0},"expectation":"runtime-error","file":"tests/yaoxiang/06-compile-errors/runtime/div_zero.yx","run":{"diagnostics":[["E6001","tests/yaoxiang/06-compile-errors/runtime/div_zero.yx",13]],"exit":1,"stderr":[],"stdout":[]}}
+{"check":{"diagnostics":[],"exit":0},"expectation":"runtime-error","file":"tests/yaoxiang/06-compile-errors/runtime/index_oob_read.yx","run":{"diagnostics":[["E6003","tests/yaoxiang/06-compile-errors/runtime/index_oob_read.yx",12]],"exit":1,"stderr":[],"stdout":[]}}
+{"check":{"diagnostics":[],"exit":0},"expectation":"runtime-error","file":"tests/yaoxiang/06-compile-errors/runtime/index_write_out_of_bounds_err.yx","run":{"diagnostics":[["E6003","tests/yaoxiang/06-compile-errors/runtime/index_write_out_of_bounds_err.yx",11]],"exit":1,"stderr":[],"stdout":[]}}
+{"check":{"diagnostics":[],"exit":0},"expectation":"runtime-error","file":"tests/yaoxiang/06-compile-errors/runtime/int_overflow.yx","run":{"diagnostics":[["E6007","tests/yaoxiang/06-compile-errors/runtime/int_overflow.yx",12]],"exit":1,"stderr":[],"stdout":[]}}
+{"check":{"diagnostics":[["W1004","tests/yaoxiang/06-compile-errors/runtime/list_remove_at_oob_err.yx",14]],"exit":0},"expectation":"runtime-error","file":"tests/yaoxiang/06-compile-errors/runtime/list_remove_at_oob_err.yx","run":{"diagnostics":[["E6003","tests/yaoxiang/06-compile-errors/runtime/list_remove_at_oob_err.yx",157],["W1004","tests/yaoxiang/06-compile-errors/runtime/list_remove_at_oob_err.yx",14]],"exit":1,"stderr":[],"stdout":[]}}
+{"check":{"diagnostics":[],"exit":0},"expectation":"runtime-error","file":"tests/yaoxiang/06-compile-errors/runtime/range_dynamic_step0_err.yx","run":{"diagnostics":[["E6007","tests/yaoxiang/06-compile-errors/runtime/range_dynamic_step0_err.yx",13]],"exit":1,"stderr":[],"stdout":[]}}
+{"check":{"diagnostics":[],"exit":0},"expectation":"runtime-error","file":"tests/yaoxiang/06-compile-errors/runtime/stack_overflow_e6004.yx","run":{"diagnostics":[["E6004","tests/yaoxiang/06-compile-errors/runtime/stack_overflow_e6004.yx",31]],"exit":1,"stderr":[],"stdout":[]}}
+{"check":{"diagnostics":[],"exit":0},"expectation":"runtime-error","file":"tests/yaoxiang/06-compile-errors/runtime/string_neg_index_err.yx","run":{"diagnostics":[["E6003","tests/yaoxiang/06-compile-errors/runtime/string_neg_index_err.yx",13]],"exit":1,"stderr":[],"stdout":[]}}
+{"check":{"diagnostics":[["W1004","tests/yaoxiang/06-compile-errors/runtime/top_level_index_oob.yx",13],["W1004","tests/yaoxiang/06-compile-errors/runtime/top_level_index_oob.yx",14]],"exit":0},"expectation":"runtime-error","file":"tests/yaoxiang/06-compile-errors/runtime/top_level_index_oob.yx","run":{"diagnostics":[["E6003","tests/yaoxiang/06-compile-errors/runtime/top_level_index_oob.yx",15],["W1004","tests/yaoxiang/06-compile-errors/runtime/top_level_index_oob.yx",13],["W1004","tests/yaoxiang/06-compile-errors/runtime/top_level_index_oob.yx",14]],"exit":1,"stderr":[],"stdout":[]}}
 {"check":{"diagnostics":[["E4021","tests/yaoxiang/06-compile-errors/termination/flag_loop_guard_rewrites_counter_err.yx",19]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/termination/flag_loop_guard_rewrites_counter_err.yx"}
 {"check":{"diagnostics":[["E4021","tests/yaoxiang/06-compile-errors/termination/flag_loop_guard_sets_counter_after_clear_err.yx",19]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/termination/flag_loop_guard_sets_counter_after_clear_err.yx"}
 {"check":{"diagnostics":[["E4021","tests/yaoxiang/06-compile-errors/termination/flag_loop_guard_sets_counter_err.yx",19]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/termination/flag_loop_guard_sets_counter_err.yx"}
@@ -314,35 +319,38 @@
 {"check":{"diagnostics":[["E1002","tests/yaoxiang/06-compile-errors/types/range_step_zero_err.yx",9]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/types/range_step_zero_err.yx"}
 {"check":{"diagnostics":[["E0018","tests/yaoxiang/06-compile-errors/types/ref_keyword_bug.yx",14]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/types/ref_keyword_bug.yx"}
 {"check":{"diagnostics":[["E1105","tests/yaoxiang/06-compile-errors/types/sum_type_field_err.yx",15]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/types/sum_type_field_err.yx"}
-{"check":{"diagnostics":[["E1001","tests/yaoxiang/06-compile-errors/types/type_def_in_local_err.yx",12],["E1001","tests/yaoxiang/06-compile-errors/types/type_def_in_local_err.yx",13],["E1071","tests/yaoxiang/06-compile-errors/types/type_def_in_local_err.yx",11]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/types/type_def_in_local_err.yx"}
+{"check":{"diagnostics":[["E1001","tests/yaoxiang/06-compile-errors/types/type_def_in_local_err.yx",12],["E1071","tests/yaoxiang/06-compile-errors/types/type_def_in_local_err.yx",11]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/types/type_def_in_local_err.yx"}
 {"check":{"diagnostics":[["E1003","tests/yaoxiang/06-compile-errors/types/unknown_type_in_field_err.yx",15],["W1002","tests/yaoxiang/06-compile-errors/types/unknown_type_in_field_err.yx",13]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/types/unknown_type_in_field_err.yx"}
 {"check":{"diagnostics":[["E1003","tests/yaoxiang/06-compile-errors/types/unknown_type_in_param_err.yx",14]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/types/unknown_type_in_param_err.yx"}
 {"check":{"diagnostics":[["E1003","tests/yaoxiang/06-compile-errors/types/value_name_as_type_err.yx",10]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/types/value_name_as_type_err.yx"}
-{"expectation":"behavior","file":"tests/yaoxiang/99-demos/auto_borrow.yx","run":{"exit":0,"stderr":[],"stdout":["3.0"]}}
-{"expectation":"behavior","file":"tests/yaoxiang/99-demos/borrow_conflict_basic.yx","run":{"exit":0,"stderr":[],"stdout":["1.0","struct@<ptr>"]}}
-{"expectation":"behavior","file":"tests/yaoxiang/99-demos/closure_concurrency.yx","run":{"exit":0,"stderr":[],"stdout":["(200, 300)"]}}
-{"expectation":"behavior","file":"tests/yaoxiang/99-demos/compare_autoborrow.yx","run":{"exit":0,"stderr":[],"stdout":["25.0"]}}
-{"expectation":"behavior","file":"tests/yaoxiang/99-demos/compare_concurrency.yx","run":{"exit":0,"stderr":[],"stdout":["arc(100)"]}}
-{"expectation":"behavior","file":"tests/yaoxiang/99-demos/compare_lifetime.yx","run":{"exit":0,"stderr":[],"stdout":["1.0"]}}
-{"expectation":"behavior","file":"tests/yaoxiang/99-demos/compare_rust_side_by_side.yx","run":{"exit":0,"stderr":[],"stdout":["3.0"]}}
-{"expectation":"behavior","file":"tests/yaoxiang/99-demos/complex_data_structure.yx","run":{"exit":0,"stderr":[],"stdout":["60"]}}
-{"expectation":"behavior","file":"tests/yaoxiang/99-demos/error_move_after_use.yx","run":{"exit":0,"stderr":[],"stdout":["42"]}}
-{"expectation":"behavior","file":"tests/yaoxiang/99-demos/linked_list.yx","run":{"exit":0,"stderr":[],"stdout":["30"]}}
-{"expectation":"behavior","file":"tests/yaoxiang/99-demos/resource_raii.yx","run":{"exit":0,"stderr":[],"stdout":["closing file","opening file"]}}
-{"expectation":"behavior","file":"tests/yaoxiang/99-demos/spawn_pipeline.yx","run":{"exit":0,"stderr":[],"stdout":["30","Alice","Beijing"]}}
-{"expectation":"behavior","file":"tests/yaoxiang/99-demos/token_view_pattern.yx","run":{"exit":0,"stderr":[],"stdout":["42"]}}
-{"expectation":"behavior","file":"tests/yaoxiang/99-demos/tree_structure.yx","run":{"exit":0,"stderr":[],"stdout":["30"]}}
-{"expectation":"behavior","file":"tests/yaoxiang-multifile/cross-file-method/main.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang-multifile/for-loop-no-use-std-list/main.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/99-demos/auto_borrow.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":["3.0"]}}
+{"expectation":"behavior","file":"tests/yaoxiang/99-demos/borrow_conflict_basic.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":["1.0","struct@<ptr>"]}}
+{"expectation":"behavior","file":"tests/yaoxiang/99-demos/closure_concurrency.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":["(200, 300)"]}}
+{"expectation":"behavior","file":"tests/yaoxiang/99-demos/compare_autoborrow.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":["25.0"]}}
+{"expectation":"behavior","file":"tests/yaoxiang/99-demos/compare_concurrency.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":["arc(100)"]}}
+{"expectation":"behavior","file":"tests/yaoxiang/99-demos/compare_lifetime.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":["1.0"]}}
+{"expectation":"behavior","file":"tests/yaoxiang/99-demos/compare_rust_side_by_side.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":["3.0"]}}
+{"expectation":"behavior","file":"tests/yaoxiang/99-demos/complex_data_structure.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":["60"]}}
+{"expectation":"behavior","file":"tests/yaoxiang/99-demos/error_move_after_use.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":["42"]}}
+{"expectation":"behavior","file":"tests/yaoxiang/99-demos/linked_list.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":["30"]}}
+{"expectation":"behavior","file":"tests/yaoxiang/99-demos/resource_raii.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":["closing file","opening file"]}}
+{"expectation":"behavior","file":"tests/yaoxiang/99-demos/spawn_pipeline.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":["30","Alice","Beijing"]}}
+{"expectation":"behavior","file":"tests/yaoxiang/99-demos/token_view_pattern.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":["42"]}}
+{"expectation":"behavior","file":"tests/yaoxiang/99-demos/tree_structure.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":["30"]}}
+{"expectation":"behavior","file":"tests/yaoxiang-multifile/cross-file-method/main.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang-multifile/for-loop-no-use-std-list/main.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"check":{"diagnostics":[["W1007","tests/yaoxiang-multifile/import-cycle-reads-before-init/zother.yx",2]],"exit":0},"expectation":"runtime-error","file":"tests/yaoxiang-multifile/import-cycle-reads-before-init/main.yx","run":{"diagnostics":[["E6007","",0],["W1007","tests/yaoxiang-multifile/import-cycle-reads-before-init/zother.yx",2]],"exit":1,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang-multifile/init-order-dep-fn-reads-own-value/main.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang-multifile/init-order-entry-reads-dep-value/main.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
 {"check":{"diagnostics":[["E0012","tests/yaoxiang-multifile/parse-error-in-collect-all/lib.yx",3],["E5001","tests/yaoxiang-multifile/parse-error-in-collect-all/main.yx",14]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang-multifile/parse-error-in-collect-all/main.yx"}
 {"check":{"diagnostics":[["E4018","",0],["W1001","tests/yaoxiang-multifile/proof-obligation-honored/main.yx",15],["W1002","tests/yaoxiang-multifile/proof-obligation-honored/main.yx",13]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang-multifile/proof-obligation-honored/main.yx"}
-{"expectation":"behavior","file":"tests/yaoxiang-multifile/ref-pool-compile-set/main.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang-multifile/ref-pool-cross-unit-method/main.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang-multifile/ref-pool-cross-unit-name-owner/main.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang-multifile/ref-pool-import-use/main.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang-multifile/ref-pool-module-identity/main.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang-multifile/ref-pool-test-pool/main.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang-multifile/subdirectory-module/main.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang-multifile/ref-pool-compile-set/main.yx","run":{"diagnostics":[["W1001","tests/yaoxiang-multifile/ref-pool-compile-set/lib.yx",4]],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang-multifile/ref-pool-cross-unit-method/main.yx","run":{"diagnostics":[["W1002","tests/yaoxiang-multifile/ref-pool-cross-unit-method/b.yx",4],["W1005","tests/yaoxiang-multifile/ref-pool-cross-unit-method/a.yx",8],["W1005","tests/yaoxiang-multifile/ref-pool-cross-unit-method/b.yx",6]],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang-multifile/ref-pool-cross-unit-name-owner/main.yx","run":{"diagnostics":[["W1002","tests/yaoxiang-multifile/ref-pool-cross-unit-name-owner/a.yx",3],["W1002","tests/yaoxiang-multifile/ref-pool-cross-unit-name-owner/b.yx",2],["W1005","tests/yaoxiang-multifile/ref-pool-cross-unit-name-owner/a.yx",9],["W1005","tests/yaoxiang-multifile/ref-pool-cross-unit-name-owner/b.yx",5]],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang-multifile/ref-pool-import-use/main.yx","run":{"diagnostics":[["W1001","tests/yaoxiang-multifile/ref-pool-import-use/a.yx",4],["W1001","tests/yaoxiang-multifile/ref-pool-import-use/a.yx",6],["W1003","tests/yaoxiang-multifile/ref-pool-import-use/main.yx",7]],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang-multifile/ref-pool-module-identity/main.yx","run":{"diagnostics":[["W1001","tests/yaoxiang-multifile/ref-pool-module-identity/lib.yx",2]],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang-multifile/ref-pool-test-pool/main.yx","run":{"diagnostics":[["W1001","tests/yaoxiang-multifile/ref-pool-test-pool/src/util.yx",2]],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang-multifile/subdirectory-module/main.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
 {"check":{"diagnostics":[["E1001","tests/yaoxiang-multifile/type-error-in-lib/lib.yx",2]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang-multifile/type-error-in-lib/main.yx"}
-{"expectation":"behavior","file":"tests/yaoxiang-multifile/use-constant/main.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang-multifile/use-type-and-function/main.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang-multifile/use-constant/main.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang-multifile/use-type-and-function/main.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}

@@ -204,7 +204,9 @@ parse_string: (cs: &Vec(String), src: &String, i: Int) -> Result(StrSpanned, Err
                         adv = 2
                     }
                     if e == "u" {
-                        u = parse_uchar(cs, j)
+                        // j 是反斜杠位置；parse_uchar→hex4 的契约要求从 'u' 处开始读
+                        // 4 位十六进制（见本文件 hex4 的注释），故传 j + 1。
+                        u = parse_uchar(cs, j + 1)
                         if result.is_err(u) {
                             errmsg = "invalid \\u escape"
                             errpos = j

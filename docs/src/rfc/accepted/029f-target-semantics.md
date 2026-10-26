@@ -421,3 +421,77 @@ scope 里的提供模块」的候选组）——单点在 `visible_method_overlo
 `ref-pool-cross-unit-method/`）→ 348 行（注入面修复轮，新夹具 `ref-pool-cross-unit-name-owner/`），
 每笔只 +1 条 behavior 记录、既有行逐字节不变（基线 `tests/baselines/corpus-parity.jsonl` 在
 `e9675c9dd` 共 348 行）。
+
+### 跨单元同名类型的方法派发归因（WBS 4.9.8 / issue #465）—— 修正状态（2026-10-25）
+
+> 现象：两个编译单元各自定义**同名类型** `Temp` 与同名方法 `Temp.tag`（实现可区分：a = `v + 1.0`、
+> b = `v * 10.0`），入口用裸名引入 a（`use a.{Temp}`）、再用**内联别名**（`use b.{Temp as TempB}`）或
+> **模块限定构造**（`b.Temp(..)`）引入 b。两侧**构造都正确**（字段值对），但 `u.tag()` 派发到 a 的实现；
+> `run` 退出 1（断言失败）——静默错值（D59 C 类）。`check` 的警告面取决于**清单是否可读**：issue 给出的
+> 清单形态（`[package]` 只有 `name`、缺 `version`）实为 **2 条 `W1002 unused type`**（`a.yx:1:1` /
+> `b.yx:1:1`），补上 `version` 才是 0 warning；清单解析失败 / 缺必填字段时**静默退化**（残余边界 4），
+> 与死代码判据本身无关。
+
+| 环节 | 原缺陷 | 现状 | 落地代码 |
+|------|--------|------|----------|
+| 派发名来源 | 派发名 = **定义侧裸类型名** + 方法名（`Temp.tag`）。typecheck 的 `MonoType` 对导入类型只留定义侧裸名（`Temp`），两单元的同名类型在类型层不可区分 | 派发名先按**接收者写出的类型名**归因到定义单元：`Temp.tag` → `b.Temp.tag`（写出名 → 导入面 → 定义单元限定名）。**方法调用与算子接口（Index / Equal）同一判据** | `src/middle/core/ir_gen.rs:1265`（`method_dispatch_name`，**唯一判据**）、`:1232`（`imported_type_owner`：`use_aliases` + `Resolver::resolve_namespace` + 注册表 `ExportKind::Type` 单一来源；**权威限定名精确命中即返回、不再解析**）、`:1188`（`constructor_written_type_name`，纯语法提取）、`:1169`（`written_type_name_of`，注解写出名） |
+| 写出名的记录 | 无此概念：`ir_gen` 只按 `MonoType` 的裸名派发 | 局部变量记在符号表条目（`SymbolEntry.written_type`，作用域自随符号表）；顶层绑定记在逐单元表（`global_written_types`，Script 形态 `t = Temp(1.0)` 是全局槽位）；形参注解同链记录 | `src/middle/core/ir_gen.rs:1115`（`note_local_written_type`）、`:1129`（`note_param_written_types`）、`:1159`（`binding_written_type`：先局部后顶层）、`:109`（`SymbolEntry.written_type` 字段）、`:3255`（顶层登记点） |
+| 五处生产路径 | 三条方法命名路径（RFC-004 绑定 / D20 重载决议 / 裸名推导）各产各的名字；两个算子接口臂（Index → `Type.index`、Equal → `Type.equal`）另拼短类型名，完全绕过归因（修复轮 R1 实测） | 五条路径都经 `method_dispatch_name` 产出最终调用名（判据只此一份，D3） | `src/middle/core/ir_gen.rs:8318`（绑定臂）、`:8379`（决议臂）、`:8532`（裸名臂）、`:6444`（Index 臂）、`:7858`（**二元接口共享臂**：Equal + Add/Subtract/Multiply/Divide/Modulo） |
+
+**机制判别（判别实验，先于修复）**：issue #465 列了两条候选机制——(a) `type_bindings` 以**短类型名**键控，
+同名单元互相覆盖；(b) D20 决议覆盖 `binding.function`。在本形态上只有 (b) 成立：入口单元的 `type_bindings`
+为空（类型体里没有内联外部绑定），两处方法调用都命中 `overload_resolutions`，决议名都是**定义侧裸名**
+`Temp.tag`；随后 `qualify_names` 按别名前缀把裸名前缀 `Temp` 解析到**裸名提供者** a（`use a.{Temp}`），
+于是两个调用点同落 `a.Temp.tag`——与 issue 的 8 组对照一致（赢家 = 裸名属主；与 import 顺序、与是否有 a 侧
+调用点无关；两单元类型名不同或同文件两类型时正确）。机制 (a) 在本形态不活跃（`seed_cross_file_types` 只登记
+类型体**内联**绑定的短名，与方法语句形态无关）。
+
+**对外可观察变化（C 类：旧行为非成功 ⇒ 顺路修）**：修复前静默错值的程序现在走各自定义单元的实现；
+无同名类型的跨单元方法调用与两组阴性对照（类型名不同 / 同文件两类型）行为不变。判据全部为**值级**：
+两个单元的方法体改成可区分（`+1.0` / `*10.0`）后断言 `2.0` / `20.0`——修复前同一夹具得 `2.0` / `3.0`
+（`CROSS_UNIT_A/B` 此前两单元实现完全相同，对该缺陷是盲的）。
+
+**判据与漂移（本批实测，含修复轮）**：驱动级钉测试 **10 条**（内联别名 / 模块限定构造 / 算子两臂 / 本地类型
+对照 / 8 组对照中的 5 组 / 阴性对照，`src/driver/tests/method_dispatch.rs`，结构层读**合并 IR 的调用名**、
+行为层读解释器全局槽位值）+ 集成值级断言 **5 条**（`tests/integration/multifile.rs`，含 R1 算子形态与 R2
+`p.q` + 别名形态）；
+变异核验：把 `method_dispatch_name` 的归因关掉（原样返回定义侧名字）⇒ 新增的两条同名类型用例翻红
+（调用名回到 `a.Temp.tag` ×2），阴性对照与既有 159 条驱动级用例不回归；补丁机械可逆（`git apply -R` 后
+与被变异文件逐字节一致）。语料基线 `tests/baselines/corpus-parity.jsonl` **356 行零漂移**、IR 快照 216 条零漂移
+（本改动只改调用名归属，不改 IR 形状，也不新增诊断码 / warning）。
+
+**修复轮（R1–R4，2026-10-25；来源 = 异家族复审对冻结基线的 needs_revision）**：
+
+- **R1 算子接口两臂**：Index / Equal 派发此前用 typecheck 过来的**短类型名**拼调用名（`Temp.index` /
+  `Temp.equal`），不经归因 ⇒ 两单元同名类型的算子实现互相落错单元。实测（冻结基线）：`u[0]` 得 `3.0`、
+  `u == t` 得 `true`（应 `20.0` / `false`），`check` 退出 0。现在两臂同经 `method_dispatch_name`
+  （`:6444` / `:7858`），修复后 `20.0` / `false`；**本地类型两形态逐字节不变**（钉
+  `test_local_type_operator_arms_keep_own_dispatch` + 语料 `operator_index.yx` / `struct_equality.yx` 全绿）。
+  复核轮实测：`:7858` 是**全部「接口驱动二元运算」的共享臂**（Equal + Add/Subtract/Multiply/Divide/
+  Modulo）——两单元同名类型上的 `u + u` 修复前 `3.0`、修复后 `20.0`，算术五族随同一处判据同修；
+  本节原表把它记作「Equal 臂」低估了覆盖面，已按实修订。
+- **R2 归属判定单点 + 不二次解析**：上一版 `constructor_written_type_name` 产出**权威限定名**
+  （`p.q.Temp`），`imported_type_owner` 又把它过一遍 `resolve_namespace`，首段被命名空间别名表改写
+  （`use other as p` ⇒ `other.q.Temp`）⇒ 类型导出判定失败 ⇒ 回落裸名（实测 `y = 3.0`）。现在构造器只做
+  **纯语法提取**（写出名原样），`imported_type_owner` 是唯一判定点，且**权威限定名精确命中即返回、
+  不再解析**（`:1232`）。钉：`test_multifile_qualified_module_key_not_rewritten_by_namespace_alias`
+  （模块键 `p.q` + 未使用的 `use other as p`，先红后绿）。
+- **R3 文档更正**：本节原先「`check` 0 error / 0 warning」的表述与实测不符——issue 清单缺 `version` 时
+  `check` 报 2 条 `W1002`。已按实情改写并登记为残余边界 4；清单解析失败 / 缺字段的**静默退化**本身
+  是另一处缺陷（不在本批修）。
+- **R4 8 组对照补钉**：驱动级新增 5 组值级用例——`use` 顺序对调、两单元方法体对调（值跟单元走：
+  `10.0` / `3.0`）、**裸名属主改为字典序靠后的 `z.yx`**（证明赢家来自 `use` 面而非排序）、只调别名侧、
+  同文件两类型阴性对照；连同原有 3 条，8 组对照现在全部入库可复跑。
+- **变异核验**（机械可逆，`git apply -R` 后逐字节一致）：M1 关闭 `method_dispatch_name` 归因 ⇒ 7 条跨单元
+  用例翻红（含算子两臂与 4 组对照）、3 条本地/阴性对照仍绿；M3 恢复「旧构造器 + 去精确命中」⇒ R2 用例翻红。
+**残余边界（登记，宁缺不猜；逐条为实测或代码面可读出的事实）**：
+
+1. **写出名不可得时回落裸名**（与修复前一致）：类型经函数返回值、字段、容器元素流入的接收者没有写出名可依
+   ——例如 `u = make_b()`（返回 b 单元类型的跨单元函数）之后的 `u.tag()` 仍按裸名前缀解析。
+2. **内联别名 × 同名重载**：typecheck 的候选注入面仍按 4.9.7 收窄规则（规则②：内联别名 / 模块限定形态不注入），
+   派发只替换类型前缀、保留决议的 `#k` 混编序——`#k` 的跨单元精确性不变（同 4.9.7 残留面④）。
+3. **跨单元值绑定转手**：`use M.{v}` 引入的实例（类型由定义单元记录）没有本地写出名，同样回落裸名。
+4. **清单解析失败 / 缺必填字段时静默退化**（实测）：`[package]` 缺 `version`（issue #465 给出的清单形态）时，
+   `check` 报 2 条 `W1002 unused type`（`a.yx:1:1` / `b.yx:1:1`）——两个类型都被入口引用，属**误报**；
+   补上 `version` 即 0 条，清单是**非法 TOML** 时同样静默退化。根因在清单解析失败的静默退化路径，
+   不在死代码判据本身（登记；另开 WBS 任务 / issue 由队长办，本批不修）。

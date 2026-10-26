@@ -106,7 +106,7 @@ fn orchestrator_error_codes(e: &OrchestratorError) -> Vec<String> {
 
 /// 多文件 run 路径（compile_project，路径 3a）的错误诊断码集；编译通过为空集。
 fn compile_project_error_codes(entry: &Path) -> Vec<String> {
-    match compile_project(entry) {
+    match compile_project(entry, yaoxiang::frontend::CompileConfig::default()) {
         Ok(_) => Vec::new(),
         Err(e) => orchestrator_error_codes(&e),
     }
@@ -114,7 +114,7 @@ fn compile_project_error_codes(entry: &Path) -> Vec<String> {
 
 /// 多文件 check 路径（check_project，路径 3b）的错误诊断码集（收集全部模式）。
 fn check_project_error_codes(entry: &Path) -> Vec<String> {
-    match check_project(entry) {
+    match check_project(entry, yaoxiang::frontend::CompileConfig::default()) {
         Ok(files) => {
             let mut codes: Vec<String> = files
                 .iter()

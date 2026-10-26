@@ -39,20 +39,25 @@ fn expected_stages(kind: ProgramKind) -> &'static [Stage] {
             IrGeneration,
             Monomorphization,
         ],
-        // compile_project：vendor → discover → parse → registry → typecheck/proof
-        // → slot alloc → IR → link → mono（现状无角色分类/死代码——
-        // 决策 B1，2026-10-09：死代码警告不进 compile 路径，02 §运行时行为
-        // 那行过期描述已修；C3：Registry 消费 Parsing 产物故排其后）
+        // compile_project：vendor → discover → parse → registry → 角色分类 →
+        // typecheck → 死代码族 → proof → slot alloc → IR → link → mono
+        //（C3：Registry 消费 Parsing 产物故排其后）
         //
         // 3.4.8 ②（2026-10-10）：尾部加 Monomorphization——多文件下的
         // 单态化消费 Linking 产物（merged IR 是全程序唯一完整函数表），
         // 故排 Linking 之后；单文件表不动（那里 mono 仍消费单元 IR）
+        //
+        // 3.4.6（2026-10-19 用户裁决）：RoleClassification + DeadCodeAnalysis
+        // 进表——警告面与 CHECK 归一（决策 B1「死代码族警告不进 compile
+        // 路径」就此撤销）。位置遵 Stage::ALL 拓扑序，与 CHECK 表同序。
         ProgramKind::MultiFile => &[
             VendorConsistency,
             Discovery,
             Parsing,
             Registry,
+            RoleClassification,
             Typecheck,
+            DeadCodeAnalysis,
             ProofExecution,
             GlobalSlotAlloc,
             IrGeneration,

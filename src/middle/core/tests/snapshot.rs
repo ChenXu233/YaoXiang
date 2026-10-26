@@ -115,6 +115,15 @@ fn test_ir_snapshots_stable() {
 }
 
 /// 快照更新模式：显式人工动作（07 §128 流程第 1 步），不参与常态套件。
+///
+/// `cost:` 标记（#486 第 1 项）：`mode=manual` —— 显式人工动作，`fast`/`full` 两条
+/// 通道都不得执行它（跑一次就会重写全部入库快照）。
+///
+/// 数值来源：比对模式 `test_ir_snapshots_stable`（同一语料、同一条生成序列）
+/// 2026-10-21 本机实测 **46.4 MiB 峰值工作集 / 18.1 s**（直接跑测试二进制，
+/// 30 ms 采样 PeakWorkingSetSize）；更新模式只把「比对」换成「写盘」，取同量级
+/// 加余量，**未在更新路径上实测**，故 `source=extrapolated`。
+// cost: peak=96MiB time=25s mode=manual source=extrapolated@corpus-348-ir-gen-compare-mode
 #[test]
 #[ignore = "快照更新是显式人工动作：UPDATE_SNAPSHOTS=1 cargo test --lib snapshot -- --ignored"]
 fn test_update_ir_snapshots_via_env_guard() {

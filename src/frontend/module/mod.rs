@@ -23,7 +23,10 @@ pub mod resolver;
 pub mod roles;
 pub mod symbol;
 
-use std::collections::HashMap;
+#[cfg(test)]
+mod tests;
+
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
 use crate::frontend::core::typecheck::environment::MethodOverloadCandidates;
@@ -155,6 +158,17 @@ pub struct ModuleInfo {
     /// `method_bindings` 同一处导出；std 模块的构造路径不填此表（候选面
     /// 当前只覆盖用户单元，WBS 4.9.7 的登记边界）。
     pub method_overloads: HashMap<String, MethodOverloadCandidates>,
+    /// **纯 yx 实现**的导出名集（RFC-036 §4）：该模块里由嵌入 YaoXiang 源
+    /// （`crate::std::yx_sources` 的 `STD_YX_FILES`）**定义**的导出。
+    ///
+    /// native 导出不进本集合，且一个模块可能两者兼有——`std.result` 就是
+    /// native（`is_ok`/`unwrap` 等工具族）与纯 yx（`Result` 类型 + Try 方法）
+    /// 的混合面。因此「导出是不是代码」只能**按名字逐项**问（#493），模块
+    /// 粒度或 `ModuleSource` 粒度都会判错：嵌入模块同样带 `ModuleSource::Std`。
+    ///
+    /// 写入点唯一：`registry::ModuleRegistry::register_std_modules` 在把嵌入
+    /// 模块导出并入表面时逐个标记；读取点唯一：`ModuleRegistry::is_yx_std_export`。
+    yx_defined_exports: HashSet<String>,
     /// 子模块名称列表
     pub submodules: Vec<String>,
     /// 模块的**定义文件**（WBS 4.6.1）：Registry 臂按 `DiscoveredFile` 填
@@ -174,6 +188,7 @@ impl ModuleInfo {
             path,
             source,
             exports: HashMap::new(),
+            yx_defined_exports: HashSet::new(),
             method_bindings: HashMap::new(),
             method_overloads: HashMap::new(),
             submodules: Vec::new(),
@@ -197,6 +212,25 @@ impl ModuleInfo {
         if !self.submodules.contains(&name) {
             self.submodules.push(name);
         }
+    }
+
+    /// 登记一个**纯 yx 实现**的导出名（见 `ModuleInfo` 的 `yx_defined_exports`）。
+    ///
+    /// 只应由嵌入 std 模块的注册路径调用——集合的语义是「定义来自嵌入 yx 源」，
+    /// 不是「我猜它是函数」。
+    pub fn mark_yx_defined_export(
+        &mut self,
+        name: &str,
+    ) {
+        self.yx_defined_exports.insert(name.to_string());
+    }
+
+    /// 该导出是否**纯 yx 实现**（导出粒度；native 导出返回 false）。
+    pub fn is_yx_defined_export(
+        &self,
+        name: &str,
+    ) -> bool {
+        self.yx_defined_exports.contains(name)
     }
 
     /// 获取导出项

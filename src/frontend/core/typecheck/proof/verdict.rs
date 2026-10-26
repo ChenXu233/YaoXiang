@@ -94,18 +94,23 @@ impl DisproofModel {
     pub fn into_diagnostic(self) -> Diagnostic {
         match self.kind {
             DisproofKind::PredicateViolation => {
-                let counterexample = if self.assignments.is_empty() {
-                    "  (no variable assignments)".to_string()
+                // issue #469 处 2a：反例段（标题 + 内容）整体由 locales 的
+                // per-site 键渲染（`E4018.counterexample.section`），模型未绑定
+                // 值时该参数为空串——模板占位符渲染为空，段整体缺席。
+                let mut builder = ErrorCodeDefinition::refinement_violated(&self.constraint);
+                if self.assignments.is_empty() {
+                    builder = builder.param("counterexample", "");
                 } else {
-                    self.assignments
+                    let assignments = self
+                        .assignments
                         .iter()
                         .map(|(k, v)| format!("  {} = {}", k, v))
                         .collect::<Vec<_>>()
-                        .join("\n")
-                };
-
-                let mut builder = ErrorCodeDefinition::refinement_violated(&self.constraint)
-                    .param("counterexample", &counterexample);
+                        .join("\n");
+                    builder = builder
+                        .param("assignments", assignments)
+                        .param_from_key("counterexample", "E4018.counterexample.section");
+                }
 
                 if let Some(span) = self.span {
                     builder = builder.at(span);

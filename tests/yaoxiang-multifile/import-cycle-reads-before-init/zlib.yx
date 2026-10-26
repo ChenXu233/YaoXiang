@@ -1,0 +1,4 @@
+// zlib.yx —— 环成员：init 读 zother.o_val（值依赖要求 zother 先初始化）
+use zother.{o_val}
+
+z_val: Int = o_val + 1

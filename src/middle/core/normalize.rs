@@ -95,6 +95,7 @@ fn fmt_const(c: &ConstValue) -> String {
         ConstValue::Char(ch) => format!("char({})", ch.escape_debug()),
         ConstValue::String(s) => format!("string({:?})", s),
         ConstValue::Bytes(b) => format!("bytes({b:?})"),
+        ConstValue::NativeFn(name) => format!("nativefn({name})"),
         ConstValue::LibraryRef { mechanism, lib } => format!("libref({mechanism},{lib})"),
         ConstValue::ExternRef {
             mechanism,

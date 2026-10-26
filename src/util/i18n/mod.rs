@@ -194,6 +194,18 @@ pub fn error_entries(lang: &str) -> Option<&'static HashMap<String, ErrorEntry>>
     ERROR_ENTRIES.get(lang)
 }
 
+/// 查某语言下 locales 顶层字符串键的模板（issue #469 处 1/处 2 机制）。
+///
+/// 诊断的 per-call-site help / 段模板（键形如 `E1010.missing_named.help`）与
+/// 错误码条目同住 locale JSON，经此读取后由 `I18nRegistry::render_str` 渲染。
+/// 该语言无此键时返回 `None`，由调用方的回退链决定下一语言。
+pub fn translation_for(
+    lang: &str,
+    key: &str,
+) -> Option<String> {
+    TRANSLATIONS.get(lang).and_then(|m| m.get(key)).cloned()
+}
+
 /// Get all available language codes
 pub fn available_langs() -> Vec<&'static str> {
     TRANSLATIONS.keys().map(|s| s.as_str()).collect()

@@ -106,6 +106,12 @@ locales/.i18n-cache.json
 # 多会话 agent 协作工作区（rfc027-followups 等）
 .agent-teams/
 
+# pre-commit 缓存目录：HOME 未设时框架把它落在 <仓库>/~/.cache/pre-commit，
+# 不加这条会被 git add -A 扫进仓库。
+# 注意：规则要写成 ~/.cache/ 而不是 ~/ ——后者会把文档里合法的用户主目录引用
+# （~/.yaoxiang/、~/.cargo/ 等）一并匹配上。
+~/.cache/
+
 # 文档门禁（scripts/ci/check-docs-*.py）的运行产物。
 # 报告在 CI 里作为 artifact 上传，不入库。
 scripts/ci/_docs-*.txt

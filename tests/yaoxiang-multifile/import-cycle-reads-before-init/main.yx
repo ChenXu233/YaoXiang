@@ -1,0 +1,17 @@
+// import-cycle-reads-before-init/main.yx
+// 覆盖: #491（WBS 4.10.5）模块导入环 —— 环内初始化顺序不可判定，编译期发 W1007
+// 验证: 编译集的 use 依赖图存在环 main → zlib → zother → zlib 时，check 退出码
+//       仍为 0，但 stderr 带 W1007，消息含环路径 zlib → zother → zlib；run 的
+//       退出码同样不变（仍在 __yx_module_init 里因 zlib 读到尚未初始化的
+//       zother.o_val 报运行期 E6007）。警告不阻断、不改退出码——只把「环 /
+//       初始化顺序」这个真实结构原因摊在编译期输出里（用户 2026-10-23 裁决 A）
+// 状态: ✅ 可运行
+// expect: runtime-error E6007
+
+use std.assert
+use zlib.{z_val}
+use zother.{o_val}
+
+main = () => {
+    assert.assert(z_val + o_val > 0, "环内两个顶层值都已初始化（本夹具预期运行期失败，见头部指令）")
+}

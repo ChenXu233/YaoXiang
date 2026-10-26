@@ -1,0 +1,3 @@
+[package]
+name = "init-order-dep-fn-reads-own-value"
+version = "0.1.0"

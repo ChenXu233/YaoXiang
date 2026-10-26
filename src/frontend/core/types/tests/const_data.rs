@@ -126,3 +126,24 @@ fn test_un_op_classification() {
     assert!(UnOp::Not.is_logical());
     assert!(UnOp::BitNot.is_bitwise());
 }
+
+#[test]
+fn test_const_expr_neg_int_literal_displays_by_value() {
+    // Arrange：`-5` 的常量表达式形态 = UnOp::Neg 应用于 Int 字面量
+    // （精化约束代入负字面量实参时的实际 AST 形态，issue #469 处 2b）
+    let expr = crate::frontend::core::types::ConstExpr::UnOp {
+        op: UnOp::Neg,
+        expr: Box::new(crate::frontend::core::types::ConstExpr::Lit(
+            ConstValue::Int(5),
+        )),
+    };
+
+    // Act
+    let rendered = format!("{expr}");
+
+    // Assert：负号数值字面量按值打印，不按 AST 形态直印成 -(5)
+    assert_eq!(
+        rendered, "-5",
+        "UnOp::Neg 应用于 Int 字面量必须按值打印（issue #469 处 2b 判据：-3 > 0 形态）"
+    );
+}

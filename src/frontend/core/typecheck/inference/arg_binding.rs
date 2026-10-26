@@ -119,13 +119,13 @@ pub fn bind_args_to_params(
         .collect();
     if !missing_names.is_empty() {
         let value_count = total_params.saturating_sub(recv_offset);
+        // help 走 locales per-site 键（issue #469 处 1）：同一次编译的 help
+        // 语言必须一致，缺失形参名经 {missing} 插值进模板，不在发射点硬编成品串。
         return Err(
             ErrorCodeDefinition::argument_count_mismatch(key, value_count, provided)
                 .at(call_span)
-                .with_help(format!(
-                    "缺少必需形参：{}（命名实参只按形参名入槽，不占前导位置）",
-                    missing_names.join(", ")
-                ))
+                .param("missing", missing_names.join(", "))
+                .with_help_key("E1010.missing_named.help")
                 .build(),
         );
     }

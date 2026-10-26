@@ -7,8 +7,13 @@
 //! - `globals`：模块级绑定（顶层变量/函数名/类型名），所有代码可见
 //! - `param_scopes`：函数/lambda 参数层，跨函数边界累积可见（柯里化固化）
 //! - `local_scopes`：局部变量层（函数体一层 + 嵌套块层），进入函数时推新层
-//!   查找顺序 local → param → global，天然实现「闭包不捕获外层局部变量」：
 //!   外层函数的局部变量不在当前 local 链上，参数链与全局链才是跨边界通道。
+//!
+//! **捕获屏障**（RFC-009 §2.3）：参数链跨边界可见是给**柯里化固化**用的，
+//! 但**函数定义体**（嵌套函数）不得借此读外层帧的值——检查函数定义体期间
+//! 用 [`ScopeManager::enter_capture_barrier`] 把外层帧的值参数挡在链外
+//! （编译期名/类型参数不挡：它们不进运行时帧）。挡掉后按「未解析变量」
+//! 走上层既有的 E1001 判定，与「捕获外层局部变量」同码同文案。
 
 use std::collections::HashMap;
 
@@ -79,8 +84,10 @@ impl ScopeManager {
         // 前向引用占位（pass2 预注册、声明语句未执行）与导入名
         // （`use` 来的 std 导出 / 跨模块符号）都**不算本文件的现有绑定**：
         // 否则顶层 `mut i = 0` 误报 E2013；`ok = ...`（撞 `std.result.ok`）误报 E2010。
+        // 屏障无关口径：赋值/声明判定要看见「外层帧的那个绑定」才判得出
+        // E2010 / E2013，否则会静默变成新声明（见 get_var_info_impl）。
         let info = self
-            .get_var_info(name)
+            .get_var_info_unbarriered(name)
             .filter(|v| !v.forward_declared && !v.imported);
         let in_current = info.is_some() && self.var_in_current_scope(name);
         let anywhere = info.is_some();
@@ -144,6 +151,12 @@ pub struct VarInfo {
     /// 程序自身声明。否则用户写 `ok = ...`（撞 `std.result.ok` 构造器）
     /// 会被误判为重赋值不可变变量 → 误报 E2010。
     pub imported: bool,
+    /// 是否为**编译期名**（类型参数）：只有编译期身份，没有运行时帧槽位。
+    ///
+    /// 判据用途见 [`ScopeManager::enter_capture_barrier`]：嵌套函数体引用
+    /// 外层帧的**值**参数要拒（RFC-009 §2.3 隐式捕获），而类型参数不进运行时
+    /// 帧、不构成捕获，故不受捕获屏障遮挡。
+    pub compile_time_only: bool,
 }
 
 /// 语义定义事件：绑定期单点采集，由 TypeChecker 排空进 SemanticDB（#433/D55）。
@@ -192,6 +205,14 @@ pub struct ScopeManager {
     local_scopes: Vec<HashMap<String, VarInfo>>,
     /// 被 enter_fn 移出的外层局部层栈（嵌套函数支持）
     saved_local_scopes: Vec<Vec<HashMap<String, VarInfo>>>,
+    /// 参数链的**捕获屏障**：索引 < 本值的参数层属于**外层函数帧**，其**值**
+    /// 绑定对当前函数体不可见（引用它 = 隐式捕获，上层按未解析变量报 E1001）。
+    ///
+    /// 为什么只挡参数链：局部链在 `enter_fn` 时已整体移出（`saved_local_scopes`），
+    /// 外层局部本就不在链上；参数链是唯一的「跨函数边界可见」通道（为柯里化
+    /// 固化而设），而**嵌套函数定义**不该借它读对方帧里的值（RFC-009 §2.3：
+    /// Lambda 不隐式捕获外层变量）。编译期名（类型参数）不受遮挡——它不进帧。
+    param_barrier: usize,
     /// 当前正在检查的语句的键（span 起始 offset）——供 type_ledger 定位变量归属
     current_stmt_key: usize,
     /// 变量类型账本：(定义所在语句的 span offset, 变量名) → 推断类型。
@@ -221,6 +242,7 @@ impl ScopeManager {
             param_scopes: Vec::new(),
             local_scopes: Vec::new(),
             saved_local_scopes: Vec::new(),
+            param_barrier: 0,
             current_stmt_key: 0,
             type_ledger: HashMap::new(),
             fn_context: None,
@@ -306,6 +328,28 @@ impl ScopeManager {
         &self.type_ledger
     }
 
+    /// 进入一层**捕获屏障**：把当前参数链深度记为屏障（< 该深度的参数层属于
+    /// 外层函数帧），返回旧值供 [`Self::restore_capture_barrier`] 恢复。
+    ///
+    /// 调用时机：检查**函数定义体**之前、`enter_fn` **之前**——此后压入的
+    /// 参数层（本函数自己的参数）索引 ≥ 屏障，照常可见。
+    ///
+    /// 不用于 lambda 表达式体：表达式 lambda 的捕获是 #254 已交付机制
+    /// （创建点固化），行为不变。
+    pub fn enter_capture_barrier(&mut self) -> usize {
+        let prev = self.param_barrier;
+        self.param_barrier = self.param_scopes.len();
+        prev
+    }
+
+    /// 恢复捕获屏障（函数体检查结束时与 [`Self::enter_capture_barrier`] 配对）
+    pub fn restore_capture_barrier(
+        &mut self,
+        prev: usize,
+    ) {
+        self.param_barrier = prev;
+    }
+
     /// 进入函数体（函数定义 / lambda 表达式）：
     /// 外层函数的局部层整体移出（闭包不捕获），新局部层 + 新参数层（跨边界固化可见）。
     pub fn enter_fn(&mut self) {
@@ -354,6 +398,7 @@ impl ScopeManager {
             definition_span,
             forward_declared: false,
             imported: false,
+            compile_time_only: false,
         };
         if self.local_scopes.is_empty() {
             self.globals.insert(name, info);
@@ -381,6 +426,7 @@ impl ScopeManager {
             definition_span,
             forward_declared: true,
             imported: false,
+            compile_time_only: false,
         };
         if self.local_scopes.is_empty() {
             self.globals.insert(name, info);
@@ -404,6 +450,7 @@ impl ScopeManager {
             definition_span,
             forward_declared: false,
             imported: true,
+            compile_time_only: false,
         };
         if self.local_scopes.is_empty() {
             self.globals.insert(name, info);
@@ -420,6 +467,30 @@ impl ScopeManager {
         is_mut: bool,
         definition_span: Span,
     ) {
+        self.add_param_kind(name, poly, is_mut, definition_span, false);
+    }
+
+    /// 添加**类型参数**（`f: (T: Type) -> ...` 的 T）：同样进参数链（体内类型
+    /// 位置引用它要能解析），但标记为[编译期名](VarInfo::compile_time_only)——
+    /// 它没有运行时帧槽位，故嵌套函数体引用它**不构成**对外层帧的取值。
+    pub fn add_type_param(
+        &mut self,
+        name: String,
+        poly: PolyType,
+        definition_span: Span,
+    ) {
+        self.add_param_kind(name, poly, false, definition_span, true);
+    }
+
+    /// 参数链入链的唯一实现（值参数与类型参数共用；`compile_time_only` 是差异点）
+    fn add_param_kind(
+        &mut self,
+        name: String,
+        poly: PolyType,
+        is_mut: bool,
+        definition_span: Span,
+        compile_time_only: bool,
+    ) {
         self.type_ledger
             .insert((self.current_stmt_key, name.clone()), poly.clone());
         self.record_binding(&name, &poly, definition_span);
@@ -429,6 +500,7 @@ impl ScopeManager {
             definition_span,
             forward_declared: false,
             imported: false,
+            compile_time_only,
         };
         if let Some(scope) = self.param_scopes.last_mut() {
             scope.insert(name, info);
@@ -446,21 +518,55 @@ impl ScopeManager {
     }
 
     /// 获取变量完整信息（含可变性）：局部 → 参数 → 全局
+    ///
+    /// 参数链上「外层函数帧」的**值**绑定被捕获屏障挡住（见
+    /// [`Self::enter_capture_barrier`]）：按未解析返回，让上层发出与
+    /// 「未知变量」同码同文案的 E1001。编译期名（类型参数）不挡。
+    ///
+    /// 这是**读值**口径（表达式求值 / 语句读）。声明与赋值判定另走
+    /// 屏障无关的 [`Self::get_var_info_unbarriered`]，见其注释。
     pub fn get_var_info(
         &self,
         name: &str,
+    ) -> Option<&VarInfo> {
+        self.get_var_info_impl(name, true)
+    }
+
+    /// 完整信息查询的实现（`respect_param_barrier` 决定是否套捕获屏障）。
+    ///
+    /// **声明与赋值判定传 `false`**（spec §4.3 的「沿作用域链向外查找」）：
+    /// 屏障只表达「读值层面外层帧不可见」，不是「那个绑定不存在」。若让屏障
+    /// 参与赋值判定，`n = 5`（n 是外层参数）会从 E2010 变成「静默新声明」，
+    /// 而 ir_gen 并无对应的槽位落实——等于新开一条静默通道。
+    fn get_var_info_impl(
+        &self,
+        name: &str,
+        respect_param_barrier: bool,
     ) -> Option<&VarInfo> {
         for scope in self.local_scopes.iter().rev() {
             if let Some(info) = scope.get(name) {
                 return Some(info);
             }
         }
-        for scope in self.param_scopes.iter().rev() {
-            if let Some(info) = scope.get(name) {
-                return Some(info);
+        for (idx, scope) in self.param_scopes.iter().enumerate().rev() {
+            let Some(info) = scope.get(name) else {
+                continue;
+            };
+            if respect_param_barrier && idx < self.param_barrier && !info.compile_time_only {
+                // 外层帧的值参数：读它要取对方帧槽位 = 隐式捕获（RFC-009 §2.3）。
+                continue;
             }
+            return Some(info);
         }
         self.globals.get(name)
+    }
+
+    /// 屏障无关的完整信息查询（声明/赋值判定专用，见 [`Self::get_var_info_impl`]）
+    fn get_var_info_unbarriered(
+        &self,
+        name: &str,
+    ) -> Option<&VarInfo> {
+        self.get_var_info_impl(name, false)
     }
 
     /// 检查变量是否可变（局部 → 参数 → 全局）
@@ -546,7 +652,8 @@ impl ScopeManager {
         &self,
         name: &str,
     ) -> bool {
-        self.get_var_info(name).is_some()
+        // 声明口径（如 for 变量遮蔽检查）：同 classify_binding，屏障无关。
+        self.get_var_info_unbarriered(name).is_some()
     }
 
     /// 是否在模块级（三链全空 = 无函数边界、无块层，#295）

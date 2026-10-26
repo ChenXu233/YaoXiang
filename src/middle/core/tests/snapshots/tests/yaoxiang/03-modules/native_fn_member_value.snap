@@ -1,0 +1,24 @@
+module
+  fn main() -> Void
+    slot[0] p : Int(64) @depth1
+    slot[1] q : Int(64) @depth1
+    slot[2] r : Int(64) @depth1
+    locals_total=7
+    Load %0 <- nativefn(std.io.println)
+    Load %1 <- string("member hello")
+    Load %2 <- %0
+    CallDyn %3 <- %2 [%1]
+    MakeClosure %3 <- std.json.parse env=[] (def=d0)
+    Load %2 <- string("true")
+    Load %4 <- %3
+    CallDyn %1 <- %4 [%2]
+    Load %5 <- %1
+    Call %4 <- string("std.result.is_ok") [%5] (def=d1)
+    Load %6 <- string("json.parse as member value parses true")
+    Call %2 <- string("std.assert.assert") [%4, %6] (def=d2)
+    Drop %0
+    Drop %3
+    Drop %1
+    Ret %2
+  init (locals=0)
+    Call %0 <- string("main") [] (def=d3)

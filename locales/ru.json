@@ -179,6 +179,8 @@
     "example": "x: Int = \"hello\";",
     "error_output": "error[E1002]: несоответствие типов\n --> example.yx:1:12\n  |\n1 | x: Int = \"hello\";\n  |            ^ ожидается 'Int', найдено 'String'"
   },
+  "E1002.borrowed_arith.help": "The left side reads as '{l}' and the right side as '{r}'; when a borrow (&T) participates in arithmetic its inner type is used — to operate on a container, index into it (e.g. v[0]) or dereference it (*t) first",
+  "E1002.binop_mismatch.help": "The left and right types are '{l}' and '{r}', which do not support this operator; check whether a conversion is missing or an operand is wrong",
   "E1003": {
     "title": "Неизвестный тип",
     "message": "Используемый тип не существует",
@@ -195,6 +197,7 @@
     "example": "add(1, 2, 3);",
     "error_output": "error[E1010]: несоответствие количества аргументов\n --> example.yx:1:1\n  |\n1 | add(1, 2, 3);\n  |     ^ функция ожидает 2 аргумента, найдено 3"
   },
+  "E1010.missing_named.help": "Missing required parameters: {missing} (named arguments fill slots by parameter name and do not occupy leading positions)",
   "E1011": {
     "title": "Несоответствие типа аргумента",
     "message": "Проверка типа аргумента не пройдена",
@@ -525,6 +528,7 @@
     "example": "use foo::bar;",
     "error_output": "error[E5001]: Модуль не найден\n --> example.yx:1:5\n  |\n1 | use foo::bar;\n  |     ^ Модуль 'foo' не найден"
   },
+  "E5001.vendor_missing.help": "Dependency package '{pkg}' is not installed in .yaoxiang/vendor/; run `yaoxiang install`",
   "E5002": {
     "title": "Ошибка импорта",
     "message": "Не удалось импортировать модуль",
@@ -772,9 +776,13 @@
   "E4018": {
     "title": "Нарушение предиката уточнения",
     "message": "Ограничение уточнённого типа опровергнуто",
-    "template": "Нарушение предиката уточнения: {constraint}\n\nКонтрпример:\n{counterexample}",
+    "template": "Нарушение предиката уточнения: {constraint}{counterexample}",
     "help": "Предикат опровергнут — существует присваивание, при котором ограничение ложно. Проверьте значения переменных или ослабьте ограничения."
   },
+  "E4018.counterexample.section": "\n\nCounterexample:\n{assignments}",
+  "E4018.no_free_var.note": "\n\n(The constraint has no free variables; the annotation itself is unsatisfiable.)",
+  "E4018.proof_false.note": "\n\n(Proof function returned false; no concrete counterexample.)",
+  "E4018.proof_error.note": "\n\n(Proof function failed to execute; no concrete counterexample.)",
   "E4019": {
     "title": "Равенство типов не выполняется",
     "message": "Равенство типов опровергнуто в конвейере доказательства",
@@ -1195,5 +1203,14 @@
     "help": "Это дефект контракта между фазами внутри компилятора, а не ошибка в вашей программе: уровень владения при работе не получает книгу типов и таблицу владения в точках вызова, которые предоставляет проверщик тел функций, поэтому всё пропускается «как будто без конфликтов» — проверка конфликтов заимствования пропущена целиком. Пожалуйста, сообщите об этой диагностике вместе с минимальным воспроизводящим примером в виде issue.",
     "example": "// Возникает только при нарушении порядка фаз (сначала отрабатывает владение, затем создаётся проверщик тел функций)",
     "error_output": "warning[W1082]: Деградация анализа владения\n --> example.yx:1:1\n  |\n1 | main: () -> Void = {}\n  | ^ Деградация анализа владения: в текущей компиляции отсутствует проверщик тел функций (нет книги типов и таблицы владения в точках вызова), определение владения выполняется по пустой книге, конфликты заимствования не проверяются"
-  }
+  },
+  "W1007": {
+    "title": "Циклический импорт модулей",
+    "message": "Между модулями набора компиляции есть цикл импорта; порядок инициализации внутри цикла не определён",
+    "template": "Циклический импорт модулей {cycle}: порядок инициализации внутри цикла нельзя определить; внутри цикла действует лишь детерминированное соглашение о лексикографическом порядке путей (без семантических гарантий)",
+    "help": "Порядок инициализации определяется топологическим порядком зависимостей use; внутри цикла действует только детерминированное соглашение (лексикографический порядок путей), и это не семантическая гарантия. Разорвите цикл (вынесите один use из цикла или отложите значение в функцию), чтобы порядок стал определённым. E3019 относится к циклам между привязками верхнего уровня внутри одного модуля; этот код — к циклам импорта между модулями.",
+    "example": "// zlib.yx: use zother.{o_val}\n// zother.yx: use zlib.{z_val}\n// => zlib → zother → zlib: модули импортируют друг друга; внутри цикла действует только соглашение о лексикографическом порядке путей",
+    "error_output": "warning[W1007]: циклический импорт модулей zlib → zother → zlib: порядок инициализации внутри цикла нельзя определить; внутри цикла действует лишь детерминированное соглашение о лексикографическом порядке путей (без семантических гарантий)\n --> zother.yx:2:1\n  |\n2 | use zlib.{z_val}\n  | ^^^^^^^^^^^^^^^^^\n  |\nhelp: зависимость по значению внутри цикла противоречит порядку use: когда zlib читает zother.o_val, модуль zother ещё не инициализирован (нарушенное ребро: zother импортирует zlib, поэтому при топологической сортировке zlib окажется перед zother). Порядок инициализации определяется зависимостями use, но в цикле невозможно одновременно удовлетворить все зависимости по значениям — разорвите цикл или превратите это значение верхнего уровня в функцию с ленивым вычислением"
+  },
+  "W1007.value_edge.help": "The value dependency runs against the use order: {reader} reads {slot} while {owner} is not yet initialized (violated edge: {owner} imports {reader}; the topological order therefore places {reader} first). Initialization follows use dependencies; inside a cycle both cannot hold — break the cycle, or defer the top-level value behind a function."
 }

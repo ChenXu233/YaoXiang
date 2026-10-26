@@ -1,0 +1,30 @@
+module
+  fn main() -> Void
+    slot[0] f : Int(64) @depth1
+    slot[1] r : Int(64) @depth1
+    slot[2] j : Int(64) @depth1
+    locals_total=9
+    MakeClosure %0 <- std.json.parse env=[] (def=d0)
+    Load %1 <- string("true")
+    Load %2 <- %0
+    CallDyn %3 <- %2 [%1]
+    Load %4 <- %3
+    Call %2 <- string("std.result.is_ok") [%4] (def=d1)
+    Load %5 <- string("f(\"true\") 应解析成功（间接调用进入 parse 本体）")
+    Call %1 <- string("std.assert.assert") [%2, %5] (def=d2)
+    Drop %3
+    Load %2 <- %3
+    Call %1 <- string("std.result.unwrap") [%2] (def=d3)
+    Drop %3
+    Load %6 <- %1
+    Call %5 <- string("std.json.stringify") [%6] (def=d4)
+    Load %7 <- string("true")
+    Eq %4 <- %5, %7
+    Load %8 <- string("f(\"true\") 往返序列化应为 true")
+    Call %2 <- string("std.assert.assert") [%4, %8] (def=d2)
+    Drop %0
+    Drop %1
+    Drop %3
+    Ret %2
+  init (locals=0)
+    Call %0 <- string("main") [] (def=d5)

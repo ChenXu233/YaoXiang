@@ -109,7 +109,7 @@ RFC-039 给出**为什么**重构与**按什么顺序**做；本文给出 L1 的
 > **复核注记（WBS 3.4.3，2026-10-07 逐格核对）**：本表是 `9e02e4db` 基线的诊断快照，留存不改。P3 落地后的现状差异：
 >
 > - **第 1 行已修复**：proof_execution 五入口共用 `frontend/proof_execution.rs` 同一实现（pipeline + orchestrator 四入口），唯一消费者缺陷不存。
-> - **第 2/4/5 行现状不变**（多文件 `run` 仍不输出 W1003、不跑死代码族）→ 归 WBS 3.4.6（前置 4.2.1）。
+> - **第 2/4/5 行已修复**（WBS 3.4.6，2026-10-19 用户裁决「做」）：多文件 `run` 现输出 W1003 与死代码族警告，四路径（单文件 run / 多文件 run / 单文件 check / 多文件 check）的 W 码集合归一——判据单一源在 `dead_code_analysis` 臂的共用实现上。
 > - **第 6 行**（单态化单文件独占）→ 归 WBS 3.4.8（前置 4.1.3，潜在风险未证缺陷）。
 > - **第 7 行** check_module / check_module_collect_all 双入口 → 归 4.2.7（Aggregation 参数驱动）。
 > - 代码侧引用的「#434 裁决」此前 docs 零登记——已补登为 RFC-039 **D57**。
@@ -1098,7 +1098,7 @@ pub enum Aggregation {
 | 场景 | 改造前 | 改造后 |
 | --- | --- | --- |
 | `yaoxiang run app.yx`（单文件） | 5 阶段 | 同 5 阶段 + `assert_drained()` 结算（**4.10.3 修订，2026-10-15**：CLI `run` 对 standalone 不再走本管线——统一改走 `compile_project`（MULTI_FILE 阶段表），Script 语义由 rootless 驱动；本行现仅描述 `lib::run_file` / `Compiler::compile` 库路径） |
-| `yaoxiang run`（多文件） | 无 proof_execution、无 W1001/W1002/W1003 | proof_execution 已在 P3 止血接入；**警告面维持不新增**（决策 B1，2026-10-09：死代码族警告不进 compile 路径——池语义正被 4.9 判缺陷修正，归一警告面留待 4.9 之后再议；本行初稿「新增警告输出」作废） |
+| `yaoxiang run`（多文件） | 无 proof_execution、无 W1001/W1002/W1003 | proof_execution 已在 P3 止血接入；**死代码族警告与 W1003 / W1004 / W1005 / W1006 现经同一判据进入 MultiFile `run` 路径**——多文件 `run` 的 W 码集合与单文件 `check` 归一（`dead_code_analysis` 臂按「非 pipeline 通道」分派，Check / Lsp / MultiFile 共用同一实现，无第二份判据；`typecheck_orchestrated` 的 FailFast 分支暂存 `result.warnings` 交该臂外发） |
 | `yaoxiang check`（多文件） | 无 proof_execution | 已在 P3 止血接入 |
 | LSP（项目内） | 无 proof_execution | 已在 P3 止血接入 |
 | Z3 未安装 + 单文件 | `predicate.rs:35` **panic** | 改为 `Abort` + E 级诊断（**这是行为变更，见兼容性**） |

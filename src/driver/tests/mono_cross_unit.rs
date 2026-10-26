@@ -275,9 +275,19 @@ const PATHOLOGICAL_CI_DEPTH: usize = 2600;
 
 /// 3.10.1 判据（CI 预算档）：病态泛型递归在越过旧崩点的深度上仍必须**编译期**
 /// 终止于 E3005，且报出配置上限与当前深度——不是耗尽原生栈崩进程。
+///
+/// `cost:` 标记（#486 第 1 项）：峰值 8.11 GiB = 5000 档实测 15.6 GiB × 2600/5000
+/// （3.19 MiB/层线性外推，**峰值未实测**；time=15s 为 2026-10-21 本机独占波实测 wall clock）。
+/// `mode=exclusive` 表示这一档的内存装不下第二个实例——测试体开头据此取跨进程独占锁
+/// （`test_support::exclusive_lock`），预算通道（`scripts/dev/testsuite.py`）据此把它
+/// 从批量波里剔除、独占一波执行。
+// cost: peak=8307MiB time=15s mode=exclusive source=extrapolated@issue-449-5000-tier-ratio
 #[test]
 fn test_multi_file_cross_unit_pathological_recursion_within_ci_budget_reports_e3005() {
-    // Arrange：同一病态夹具，深度上限抬到 CI 预算内的 PATHOLOGICAL_CI_DEPTH
+    // Arrange：先拿独占锁（见上方 cost 标记），再抬深度上限到 CI 预算内的 PATHOLOGICAL_CI_DEPTH
+    let _exclusive = crate::util::test_support::exclusive_lock(
+        "test_multi_file_cross_unit_pathological_recursion_within_ci_budget_reports_e3005",
+    );
     let (_dir, entry) = make_script_project(PATHOLOGICAL_FILES);
     let mono = MonoConfig {
         max_depth: PATHOLOGICAL_CI_DEPTH,
@@ -318,10 +328,18 @@ fn test_multi_file_cross_unit_pathological_recursion_within_ci_budget_reports_e3
 /// 16 GB 的 GitHub 托管 runner 会被 OOM 杀掉（表现是测试作业被取消），故不进默认套件。
 /// 显式运行：
 /// `cargo test --lib --all-features driver::tests::mono_cross_unit::test_multi_file_cross_unit_pathological_recursion_at_5000 -- --ignored --exact`
+///
+/// `cost:` 标记（#486 第 1 项）：峰值 15.6 GiB / 72.6 s 为 issue #449 的**实测**（2026-10-13）。
+/// `mode=exclusive`：15.6 GiB 装不下第二个实例——测试体开头取跨进程独占锁，手工并跑两路时
+/// 后来者等待而不是把自己的 15.6 GiB 叠上去。
+// cost: peak=15974MiB time=72.6s mode=exclusive source=measured@2026-10-13
 #[test]
 #[ignore = "5000 档实测 72.6 s / 15.6 GB，会 OOM 掉 16 GB 的 CI runner；默认套件由 PATHOLOGICAL_CI_DEPTH 档覆盖（issue #449）"]
 fn test_multi_file_cross_unit_pathological_recursion_at_5000_reports_e3005() {
-    // Arrange：同一病态夹具，深度上限抬到 5000（总数上限保持默认）
+    // Arrange：先拿独占锁（见上方 cost 标记），再把深度上限抬到 5000（总数上限保持默认）
+    let _exclusive = crate::util::test_support::exclusive_lock(
+        "test_multi_file_cross_unit_pathological_recursion_at_5000_reports_e3005",
+    );
     let (_dir, entry) = make_script_project(PATHOLOGICAL_FILES);
     let mono = MonoConfig {
         max_depth: 5000,

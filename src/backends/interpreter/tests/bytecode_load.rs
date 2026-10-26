@@ -152,8 +152,13 @@ fn test_run_yx_file_uses_source_compile_path() {
     let path = PathBuf::from("/nonexistent/path/file.yx");
 
     // Act
-    let err = crate::util::diagnostic::run_file_with_diagnostics(&path, "embedded", 0)
-        .expect_err("expected error for nonexistent .yx file");
+    let err = crate::util::diagnostic::run_file_with_diagnostics(
+        &path,
+        "embedded",
+        0,
+        crate::frontend::config::CompileConfig::default(),
+    )
+    .expect_err("expected error for nonexistent .yx file");
 
     // Assert
     let msg = format!("{}", err);
@@ -177,8 +182,13 @@ fn test_run_file_with_yxbc_magic_uses_bytecode_load_path() {
     std::fs::write(&path, &data).expect("write file");
 
     // Act
-    let err = crate::util::diagnostic::run_file_with_diagnostics(&path, "embedded", 0)
-        .expect_err("expected error for file with YXBC magic");
+    let err = crate::util::diagnostic::run_file_with_diagnostics(
+        &path,
+        "embedded",
+        0,
+        crate::frontend::config::CompileConfig::default(),
+    )
+    .expect_err("expected error for file with YXBC magic");
 
     // Assert
     let msg = format!("{}", err);

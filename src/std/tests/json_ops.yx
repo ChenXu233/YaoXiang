@@ -75,7 +75,6 @@ check_unicode: () -> () = {
     hi = string.concat(hi, d)
     mut lo = string.concat(bs, u)
     lo = string.concat(lo, d)
-    lo = string.concat(lo, d)
     lo = string.concat(lo, de)
     lo = string.concat(lo, d0)
     lo = string.concat(lo, d0)
@@ -84,10 +83,17 @@ check_unicode: () -> () = {
     bmp = string.concat(bmp, d0)
     bmp = string.concat(bmp, de)
     bmp = string.concat(bmp, d9)
+    // 尾随的 '9'（\u0039）：此前这一段漏掉了，导致断言 c2 == 0x39 永远对不上
+    mut n9 = string.concat(bs, u)
+    n9 = string.concat(n9, d0)
+    n9 = string.concat(n9, d0)
+    n9 = string.concat(n9, d3)
+    n9 = string.concat(n9, d9)
 
     mut uni_src = string.concat(q, bmp)
     uni_src = string.concat(uni_src, hi)
     uni_src = string.concat(uni_src, lo)
+    uni_src = string.concat(uni_src, n9)
     uni_src = string.concat(uni_src, q)
 
     runi = json.parse(uni_src)
@@ -119,7 +125,9 @@ check_errors: () -> () = {
     assert.assert(result.is_err(rbad), "invalid literal rejected")
     e = result.unwrap_err(rbad)
     m = result.message(e)
-    assert.assert(string.contains(m, "2"), "error message carries position")
+    // 位置判据要精确：`{"a": tru}` 的非法字面量从第 7 列开始（1 基）
+    assert.assert(string.contains(m, "line 1"), "error message carries line")
+    assert.assert(string.contains(m, "column 7"), "error message carries column")
 
     runterm = json.parse("\"abc")
     assert.assert(result.is_err(runterm), "unterminated string rejected")
@@ -148,3 +156,7 @@ main: () -> Void = {
     check_errors()
     check_roundtrip()
 }
+
+// 本文件此前从未调用 `main`：script 模式下顶层语句即程序主体，这些断言一次都没
+// 执行过，退出码恒 0（#476 之前被当作「通过」）。显式调用后它才是真判据。
+main()

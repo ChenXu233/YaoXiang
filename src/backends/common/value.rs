@@ -117,6 +117,8 @@ pub enum ValueType {
     Enum(TypeId),
     /// Function type
     Function(FunctionId),
+    /// 原生函数值（#492）：按限定名引用的原生导出（std 内建）
+    NativeFunction,
     /// Reference type (ref T) - thread-safe Arc
     Ref(Box<ValueType>),
     /// Arc reference (same as Ref in runtime)
@@ -295,6 +297,16 @@ pub enum RuntimeValue {
     /// Function closure (captures environment)
     Function(FunctionValue),
 
+    /// 原生函数值（#492）：按限定名引用的原生导出（std 内建）。
+    ///
+    /// 与 [`RuntimeValue::Function`] 并列而不是复用它——原生函数没有 IR 函数体，
+    /// `FunctionId`（函数表索引）对它无意义；**名字**（FFI 注册表里的限定名）就是
+    /// 它的运行时身份，`CallDyn` 据此按名分发。IR/字节码侧由
+    /// [`crate::middle::core::ir::ConstValue::NativeFn`] 承载同一个名字，
+    /// 「某个导出是不是原生函数」只由
+    /// `ModuleRegistry::is_native_fn_export` 判一次。
+    NativeFunction(Arc<str>),
+
     /// Thread-safe reference count (ref T keyword runtime representation)
     Arc(Arc<RuntimeValue>),
 
@@ -362,6 +374,7 @@ impl RuntimeValue {
             RuntimeValue::Struct { type_id, .. } => ValueType::Struct(*type_id),
             RuntimeValue::Enum { type_id, .. } => ValueType::Enum(*type_id),
             RuntimeValue::Function(f) => ValueType::Function(f.func_id),
+            RuntimeValue::NativeFunction(_) => ValueType::NativeFunction,
             RuntimeValue::Arc(inner) => ValueType::Arc(Box::new(inner.value_type(_heap))),
             RuntimeValue::Weak(_) => ValueType::Weak(Box::new(ValueType::Void)),
             RuntimeValue::Async(v) => ValueType::Async(Box::new(v.value_type.clone())),
@@ -441,6 +454,8 @@ impl RuntimeValue {
             RuntimeValue::Char(c) => RuntimeValue::Char(*c),
             RuntimeValue::String(s) => RuntimeValue::String(s.clone()),
             RuntimeValue::Bytes(b) => RuntimeValue::Bytes(b.clone()),
+            // #492：原生函数值是不可变身份（名字共享），克隆即复制名字
+            RuntimeValue::NativeFunction(name) => RuntimeValue::NativeFunction(name.clone()),
             RuntimeValue::Tuple(_)
             | RuntimeValue::Array(_)
             | RuntimeValue::List(_)
@@ -501,6 +516,8 @@ impl RuntimeValue {
             RuntimeValue::Char(c) => RuntimeValue::Char(*c),
             RuntimeValue::String(s) => RuntimeValue::String(s.clone()),
             RuntimeValue::Bytes(b) => RuntimeValue::Bytes(b.clone()),
+            // #492：原生函数值是不可变身份（名字共享），克隆即复制名字
+            RuntimeValue::NativeFunction(name) => RuntimeValue::NativeFunction(name.clone()),
             RuntimeValue::Range { start, end, step } => RuntimeValue::Range {
                 start: *start,
                 end: *end,
@@ -692,6 +709,7 @@ impl fmt::Display for RuntimeValue {
                 write!(f, "enum::v{}", variant_id)
             }
             RuntimeValue::Function(_) => write!(f, "function"),
+            RuntimeValue::NativeFunction(name) => write!(f, "nativefn<{}>", name),
             RuntimeValue::Arc(inner) => write!(f, "arc({})", inner),
             RuntimeValue::Weak(_) => write!(f, "weak(...)"),
             RuntimeValue::Async(_) => write!(f, "async"),
@@ -757,6 +775,7 @@ impl PartialEq for RuntimeValue {
                 },
             ) => t1 == t2 && v1 == v2 && p1 == p2,
             (RuntimeValue::Function(f1), RuntimeValue::Function(f2)) => f1 == f2,
+            (RuntimeValue::NativeFunction(n1), RuntimeValue::NativeFunction(n2)) => n1 == n2,
             (RuntimeValue::Arc(a), RuntimeValue::Arc(b)) => a == b,
             // Weak equality is based on pointer identity
             (RuntimeValue::Weak(a), RuntimeValue::Weak(b)) => a.ptr_eq(b),
@@ -843,6 +862,7 @@ impl Hash for RuntimeValue {
                 variant_id.hash(state);
             }
             RuntimeValue::Function(func) => func.func_id.hash(state),
+            RuntimeValue::NativeFunction(name) => name.as_ref().hash(state),
             RuntimeValue::Arc(inner) => {
                 core::mem::discriminant(&**inner).hash(state);
             }

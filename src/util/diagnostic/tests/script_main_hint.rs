@@ -16,8 +16,12 @@ fn compile_and_check(src: &str) -> bool {
     let dir = tempfile::tempdir().expect("create tempdir");
     let path = dir.path().join("t.yx");
     std::fs::write(&path, src).expect("write fixture");
-    let module = crate::frontend::module::orchestrator::compile_project(&path)
-        .unwrap_or_else(|e| panic!("compile failed:\nSource:\n{src}\nError:\n{e:?}"));
+    // WBS 3.4.6：compile_project 同时返回逐文件警告——本判定只看 IR
+    let (module, _warnings) = crate::frontend::module::orchestrator::compile_project(
+        &path,
+        crate::frontend::config::CompileConfig::default(),
+    )
+    .unwrap_or_else(|e| panic!("compile failed:\nSource:\n{src}\nError:\n{e:?}"));
     crate::util::diagnostic::script_main_never_called(&module, "t.main")
 }
 

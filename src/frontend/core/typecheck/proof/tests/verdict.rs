@@ -132,9 +132,12 @@ fn test_into_diagnostic_predicate_violation_empty_assignments() {
         diag.code, "E4018",
         "Empty assignments must still produce E4018 error"
     );
+    // issue #469 处 2a：模型未绑定值时反例段整体缺席（此前输出悬空的
+    // "Counterexample:" 标题 + "(no variable assignments)" 占位）。
+    // 断言双语段标题都不出现——段标题现在只随有值反例一起由 locales 渲染。
     assert!(
-        diag.message.contains("no variable assignments"),
-        "Empty assignments must indicate '(no variable assignments)'. Got: '{}'",
+        !diag.message.contains("Counterexample:") && !diag.message.contains("反例："),
+        "模型未绑定值时不得输出反例段（issue #469 处 2a）. Got: '{}'",
         diag.message
     );
 }

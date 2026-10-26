@@ -335,6 +335,222 @@ main = () => {
     run_project_ok(&[("lib.yx", lib), ("main.yx", main)], "main.yx");
 }
 
+/// WBS 4.9.8 / issue #465（先红后绿，值级断言）：两个编译单元各自定义同名类型
+/// `Temp` 与同名方法 `Temp.tag`（实现可区分：a = v+1.0、b = v*10.0），入口用内联
+/// 别名引入 b 的类型。构造一向正确，但派发名此前取「裸名归属单元」⇒ `u.tag()`
+/// 走 a 的 `v+1.0`（得 3.0）。修复后按接收者**写出的类型名**归因到定义单元 b。
+#[test]
+fn test_multifile_cross_unit_same_named_type_alias_dispatches_to_defining_unit() {
+    // Arrange - a / b 各自同名类型 + 同名方法，入口经 `use b.{Temp as TempB}` 引入 b
+    let a = r#"
+Temp: Type = { v: Float }
+
+Temp.tag: (self: &Temp) -> Float = (self) => {
+    self.v + 1.0
+}
+"#;
+    let b = r#"
+Temp: Type = { v: Float }
+
+Temp.tag: (self: &Temp) -> Float = (self) => {
+    self.v * 10.0
+}
+"#;
+    let main = r#"
+use std.assert
+use a.{Temp}
+use b.{Temp as TempB}
+
+main = () => {
+    t = Temp(1.0)
+    u = TempB(2.0)
+    x: Float = t.tag()
+    y: Float = u.tag()
+    assert.assert(x == 2.0, "a.Temp.tag -> v+1")
+    assert.assert(y == 20.0, "b.Temp.tag -> v*10（派发必须落定义单元 b）")
+}
+"#;
+
+    // Act & Assert - 编译到执行全链：两个实例各走各自单元的实现
+    run_project_ok(&[("a.yx", a), ("b.yx", b), ("main.yx", main)], "main.yx");
+}
+
+/// WBS 4.9.8 / issue #465（模块限定构造形态）：`b.Temp(..)` 之后的 `.tag()` 同样
+/// 必须派发到 b 单元（与内联别名同一归因判据的另一条写出形态）。
+#[test]
+fn test_multifile_cross_unit_same_named_type_qualified_dispatches_to_defining_unit() {
+    // Arrange - 整体导入 `use b`，类型用限定名构造
+    let a = r#"
+Temp: Type = { v: Float }
+
+Temp.tag: (self: &Temp) -> Float = (self) => {
+    self.v + 1.0
+}
+"#;
+    let b = r#"
+Temp: Type = { v: Float }
+
+Temp.tag: (self: &Temp) -> Float = (self) => {
+    self.v * 10.0
+}
+"#;
+    let main = r#"
+use std.assert
+use a.{Temp}
+use b
+
+main = () => {
+    t = Temp(1.0)
+    u = b.Temp(2.0)
+    x: Float = t.tag()
+    y: Float = u.tag()
+    assert.assert(x == 2.0, "a.Temp.tag -> v+1")
+    assert.assert(y == 20.0, "b.Temp.tag -> v*10（限定构造同样归定义单元）")
+}
+"#;
+
+    // Act & Assert
+    run_project_ok(&[("a.yx", a), ("b.yx", b), ("main.yx", main)], "main.yx");
+}
+
+/// WBS 4.9.8 / issue #465 阴性对照：两单元类型名不同 ⇒ 派发各归其位（本次归因改动
+/// 不得让「本来就正确」的跨单元方法调用串味）。
+#[test]
+fn test_multifile_cross_unit_distinct_type_names_still_dispatch_correctly() {
+    // Arrange - b 的类型叫 Other
+    let a = r#"
+Temp: Type = { v: Float }
+
+Temp.tag: (self: &Temp) -> Float = (self) => {
+    self.v + 1.0
+}
+"#;
+    let b = r#"
+Other: Type = { v: Float }
+
+Other.tag: (self: &Other) -> Float = (self) => {
+    self.v * 10.0
+}
+"#;
+    let main = r#"
+use std.assert
+use a.{Temp}
+use b.{Other}
+
+main = () => {
+    t = Temp(1.0)
+    u = Other(2.0)
+    x: Float = t.tag()
+    y: Float = u.tag()
+    assert.assert(x == 2.0, "a.Temp.tag -> v+1")
+    assert.assert(y == 20.0, "Other.tag -> v*10")
+}
+"#;
+
+    // Act & Assert
+    run_project_ok(&[("a.yx", a), ("b.yx", b), ("main.yx", main)], "main.yx");
+}
+/// WBS 4.9.8 修复轮 R1 / issue #465（先红后绿，值级断言）：**算子接口**两臂
+/// （Index / Equal）同样必须派发到定义单元。修复前 `u[0]` 走 a 的 `v+1.0`（3.0）、
+/// `u == t` 走 a 的 `true`——两臂拼调用名时用的是 typecheck 过来的短类型名。
+#[test]
+fn test_multifile_cross_unit_same_named_type_operator_arms_dispatch_to_defining_unit() {
+    // Arrange - 两单元同名类型各带 Index / Equal（a = v+1/true、b = v*10/false）
+    let a = r#"
+Temp: Type = { v: Float, Index(Temp, Int, Float), Equal(Temp, Temp) }
+
+Temp.index: (self: &Temp, key: &Int) -> Float = (self, key) => {
+    self.v + 1.0
+}
+
+Temp.equal: (self: &Temp, other: &Temp) -> Bool = (self, other) => {
+    true
+}
+"#;
+    let b = r#"
+Temp: Type = { v: Float, Index(Temp, Int, Float), Equal(Temp, Temp) }
+
+Temp.index: (self: &Temp, key: &Int) -> Float = (self, key) => {
+    self.v * 10.0
+}
+
+Temp.equal: (self: &Temp, other: &Temp) -> Bool = (self, other) => {
+    false
+}
+"#;
+    let main = r#"
+use std.assert
+use a.{Temp}
+use b.{Temp as TempB}
+
+main = () => {
+    t = Temp(1.0)
+    u = TempB(2.0)
+    x: Float = u[0]
+    same: Bool = u == t
+    rev: Bool = t == u
+    assert.assert(x == 20.0, "u[0] 必须走 b.Temp.index（v*10）")
+    assert.assert(!same, "u == t（左操作数 = b 侧）必须走 b.Temp.equal（false）")
+    assert.assert(rev, "t == u（左操作数 = a 侧）必须走 a.Temp.equal（true）")
+}
+"#;
+
+    // Act & Assert
+    run_project_ok(&[("a.yx", a), ("b.yx", b), ("main.yx", main)], "main.yx");
+}
+
+/// WBS 4.9.8 修复轮 R2 / issue #465（先红后绿）：**已限定名不得二次解析**。
+///
+/// 模块键 `p.q`（`p/q.yx`）+ 入口另有一个未使用的模块别名 `use other as p` ⇒
+/// 修复前归属判定把权威限定名 `p.q.Temp` 再过一遍命名空间解析，首段 `p` 被别名表
+/// 改写成 `other` ⇒ 类型导出判定失败 ⇒ 回落裸名前缀 ⇒ `u.tag()` 走 a（3.0）。
+#[test]
+fn test_multifile_qualified_module_key_not_rewritten_by_namespace_alias() {
+    // Arrange - 裸名属主 a 与 p.q 各定义同名类型；`use other as p` 是未使用的别名
+    let a = r#"
+Temp: Type = { v: Float }
+
+Temp.tag: (self: &Temp) -> Float = (self) => {
+    self.v + 1.0
+}
+"#;
+    let other = r#"
+Filler: Type = { z: Int }
+"#;
+    let pq = r#"
+Temp: Type = { v: Float }
+
+Temp.tag: (self: &Temp) -> Float = (self) => {
+    self.v * 10.0
+}
+"#;
+    let main = r#"
+use std.assert
+use a.{Temp}
+use p.q.{Temp as TempQ}
+use other as p
+
+main = () => {
+    t = Temp(1.0)
+    u = TempQ(2.0)
+    x: Float = t.tag()
+    y: Float = u.tag()
+    assert.assert(x == 2.0, "a.Temp.tag -> v+1")
+    assert.assert(y == 20.0, "p.q.Temp.tag -> v*10（限定名不得被别名二次解析）")
+}
+"#;
+
+    // Act & Assert
+    run_project_ok(
+        &[
+            ("a.yx", a),
+            ("other.yx", other),
+            ("p/q.yx", pq),
+            ("main.yx", main),
+        ],
+        "main.yx",
+    );
+}
 #[test]
 fn test_multifile_subdir_entry_imports_project_root_module() {
     // Arrange - 入口在 tests/ 子目录，lib 在项目根（yaoxiang.toml 标记项目根）
@@ -767,4 +983,204 @@ main = () => {
     run_project_ok(&[("lib.yx", lib), ("main.yx", main)], "main.yx");
 
     // Assert：yx 侧 assert.assert(lib.b == 3) 已在执行中验证
+}
+
+/// WBS 3.6.2：跨文件导入的**函数类型值**按名调用走间接调用。
+///
+/// `f = double` 是值绑定（占 lib 的全局槽位、不进函数表）。调用点此前被当成
+/// 静态函数名，运行期按 `lib.f` 查扁平函数表落空（`E6006 Native function not
+/// found: lib.f`）；修复后调用形态判据经 `use_alias_value_slot` 认出它是值，
+/// 发射 `LoadGlobal` + `CallDyn`。
+#[test]
+fn test_multifile_imported_fn_value_call_by_name_uses_indirect_call() {
+    // Arrange：lib 导出函数类型值 f；main 由 use 导入后按名调用
+    let lib = r#"
+double: (x: Int) -> Int = (x) => x * 2
+
+f = double
+"#;
+    let main = r#"
+use std.assert
+use lib.{f}
+
+main = () => {
+    assert.assert(f(3) == 6, "imported function value called by name must run the bound function")
+}
+"#;
+
+    // Act
+    let result = run_project(&[("lib.yx", lib), ("main.yx", main)], "main.yx");
+
+    // Assert
+    assert!(
+        result.is_ok(),
+        "跨文件导入的函数类型值按名调用应走间接调用（此前 E6006 Native function not found: lib.f）：{result:?}"
+    );
+}
+
+/// WBS 3.6.2：`use lib.{f as g}` 内联别名形态——别名解析到同一个跨文件值，
+/// 调用同样走间接调用。
+#[test]
+fn test_multifile_imported_fn_value_call_by_name_with_as_alias_uses_indirect_call() {
+    // Arrange：main 用 `as g` 给导入的函数类型值起别名，再按别名调用
+    let lib = r#"
+double: (x: Int) -> Int = (x) => x * 2
+
+f = double
+"#;
+    let main = r#"
+use std.assert
+use lib.{f as g}
+
+main = () => {
+    assert.assert(g(3) == 6, "aliased import of a function value must run the bound function")
+}
+"#;
+
+    // Act
+    let result = run_project(&[("lib.yx", lib), ("main.yx", main)], "main.yx");
+
+    // Assert
+    assert!(
+        result.is_ok(),
+        "`use lib.{{f as g}}` 的函数类型值按名调用应走间接调用（此前 E6006 lib.f）：{result:?}"
+    );
+}
+
+/// WBS 3.6.2 回归防线：导入的**函数定义**（进函数表）不因值臂扩展被当成值，
+/// 仍按名静态调用。
+#[test]
+fn test_multifile_imported_function_definition_still_calls_statically() {
+    // Arrange：lib 导出函数 double 与值绑定 f；main 只导入函数定义
+    let lib = r#"
+double: (x: Int) -> Int = (x) => x * 2
+
+f = double
+"#;
+    let main = r#"
+use std.assert
+use lib.{double}
+
+main = () => {
+    assert.assert(double(3) == 6, "imported function definition must still call statically")
+}
+"#;
+
+    // Act
+    let result = run_project(&[("lib.yx", lib), ("main.yx", main)], "main.yx");
+
+    // Assert
+    assert!(
+        result.is_ok(),
+        "导入的函数定义仍须走静态调用（值臂不得误伤函数表条目）：{result:?}"
+    );
+}
+
+/// WBS 3.6.4：`use lib`（整体导入）后的**限定名调用** `lib.f(3)`——`f` 是函数
+/// 类型值（占全局槽位、不进函数表）。此前走 FieldAccess callee 的命名空间分支
+/// 发射静态 `Call "lib.f"`，运行期按扁平函数表查名落空（`E6006 Native function
+/// not found: lib.f`）；修复后限定名若落在值绑定槽位则 `LoadGlobal` + `CallDyn`。
+///
+/// 同项目内保留三条对照：命名空间**数据**访问 `lib.v`、命名空间**静态函数**
+/// 调用 `lib.add`、方法调用 `p.get_x()`——值臂不得误伤任何一条。
+#[test]
+fn test_multifile_namespace_qualified_fn_value_call_uses_indirect_call() {
+    // Arrange：lib 导出函数类型值 f、数据 v、函数定义 add、带方法的类型 Point
+    let lib = r#"
+double: (x: Int) -> Int = (x) => x * 2
+
+f = double
+
+v: Int = 5
+
+add: (a: Int, b: Int) -> Int = (a, b) => a + b
+
+Point: Type = { x: Int }
+
+Point.get_x: (self: &Point) -> Int = (self) => self.x
+"#;
+    let main = r#"
+use std.assert
+use lib
+use lib.{Point}
+
+main = () => {
+    assert.assert(lib.f(3) == 6, "namespace-qualified function value call must run the bound function")
+    assert.assert(lib.v == 5, "namespace data access must still read the global slot")
+    assert.assert(lib.add(3, 4) == 7, "namespace function definition must still call statically")
+    p = Point(7)
+    assert.assert(p.get_x() == 7, "method call must still dispatch through the method path")
+}
+"#;
+
+    // Act
+    let result = run_project(&[("lib.yx", lib), ("main.yx", main)], "main.yx");
+
+    // Assert
+    assert!(
+        result.is_ok(),
+        "use lib 整体导入后的限定名调用 lib.f(3) 应走间接调用（此前 E6006 Native function not found: lib.f）：{result:?}"
+    );
+}
+
+/// WBS 3.6.4 产物判据：该调用点的 IR 形态是 `LoadGlobal` + `CallDyn`，
+/// 且不存在以 `lib.f` 为名字的静态 `Call`（那正是运行期 E6006 的来源）。
+#[test]
+fn test_multifile_namespace_qualified_fn_value_call_emits_call_dyn() {
+    use yaoxiang::frontend::module::orchestrator::compile_project;
+    use yaoxiang::middle::core::ir::{ConstValue, FunctionBody, Instruction, Operand};
+
+    // Arrange：与行为测试同一项目形态
+    let dir = tempfile::tempdir().expect("create tempdir");
+    std::fs::write(
+        dir.path().join("yaoxiang.toml"),
+        "[package]\nname = \"t\"\nversion = \"0.1.0\"\n",
+    )
+    .expect("write manifest");
+    std::fs::write(
+        dir.path().join("lib.yx"),
+        "double: (x: Int) -> Int = (x) => x * 2\n\nf = double\n",
+    )
+    .expect("write lib");
+    std::fs::write(
+        dir.path().join("main.yx"),
+        "use std.assert\nuse lib\n\nmain = () => {\n    assert.assert(lib.f(3) == 6, \"namespace call\")\n}\n",
+    )
+    .expect("write main");
+
+    // Act
+    let (ir, _diagnostics) = compile_project(
+        &dir.path().join("main.yx"),
+        yaoxiang::frontend::CompileConfig::default(),
+    )
+    .expect("compile project");
+
+    // Assert
+    let mut has_call_dyn = false;
+    let mut static_calls: Vec<String> = Vec::new();
+    for func in &ir.functions {
+        let FunctionBody::Code { blocks, .. } = &func.body else {
+            continue;
+        };
+        for block in blocks {
+            for instr in &block.instructions {
+                match instr {
+                    Instruction::CallDyn { .. } => has_call_dyn = true,
+                    Instruction::Call {
+                        func: Operand::Const(ConstValue::String(name)),
+                        ..
+                    } => static_calls.push(name.clone()),
+                    _ => {}
+                }
+            }
+        }
+    }
+    assert!(
+        has_call_dyn,
+        "限定名调用函数类型值应发射 CallDyn（间接调用），实际静态调用: {static_calls:?}"
+    );
+    assert!(
+        !static_calls.iter().any(|name| name == "lib.f"),
+        "不得再以 lib.f 为名字发静态 Call（运行期会 E6006 Native function not found）：{static_calls:?}"
+    );
 }

@@ -169,8 +169,15 @@ pub fn run_file(path: &Path) -> Result<()> {
 /// 入口文件的 `main` 函数为程序入口。
 #[cfg(not(target_arch = "wasm32"))]
 pub fn run_project(entry: &Path) -> Result<()> {
-    let module = frontend::module::orchestrator::compile_project(entry)
-        .map_err(|e| anyhow::anyhow!("Project compilation failed: {}", e))?;
+    // WBS 3.4.6：compile_project 同时返回逐文件警告——本入口是库路径，
+    // 没有诊断渲染职责（面向用户的渲染唯一在
+    // `util::diagnostic::run_file_with_diagnostics`）。库路径无 yaoxiang.toml
+    // 读取职责（#471：toml 灌入在 CLI run 链），显式传默认配置。
+    let (module, _warnings) = frontend::module::orchestrator::compile_project(
+        entry,
+        crate::frontend::config::CompileConfig::default(),
+    )
+    .map_err(|e| anyhow::anyhow!("Project compilation failed: {}", e))?;
     let mut ctx = crate::middle::passes::codegen::CodegenContext::new(module);
     ctx.set_generate_debug_info(true);
     ctx.set_keep_debug_info(true);
@@ -619,6 +626,7 @@ fn dump_const_detail(constant: &crate::middle::core::ir::ConstValue) -> &'static
         crate::middle::core::ir::ConstValue::Char(_) => "char",
         crate::middle::core::ir::ConstValue::String(_) => "String",
         crate::middle::core::ir::ConstValue::Bytes(_) => "bytes",
+        crate::middle::core::ir::ConstValue::NativeFn(_) => "nativefn",
         crate::middle::core::ir::ConstValue::LibraryRef { .. }
         | crate::middle::core::ir::ConstValue::ExternRef { .. } => todo!(),
     }

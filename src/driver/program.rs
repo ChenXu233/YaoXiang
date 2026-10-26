@@ -57,12 +57,20 @@ const SINGLE_FILE_STAGES: &[Stage] = &[
     Stage::Monomorphization,
 ];
 
+// 3.4.6（2026-10-19 用户裁决）：MULTI_FILE 补 `RoleClassification` +
+// `DeadCodeAnalysis`——警告面与 CHECK 归一（同一份判据、同一个外发通道）。
+// 此前 compile 路径没有这两阶段，多文件 `run` 恒零 W 码（02 §11 处阶段
+// 覆盖不一致表第 2/4/5 行）。位置遵 `Stage::ALL` 拓扑序：角色分类消费
+// Discovery 的 `used_by` 与 Parsing 的 AST，死代码分析消费角色 + AST，
+// 故二者排在 Typecheck 之前（与 CHECK 表同序）。
 const MULTI_FILE_STAGES: &[Stage] = &[
     Stage::VendorConsistency,
     Stage::Discovery,
     Stage::Parsing,
     Stage::Registry,
+    Stage::RoleClassification,
     Stage::Typecheck,
+    Stage::DeadCodeAnalysis,
     Stage::ProofExecution,
     Stage::GlobalSlotAlloc,
     Stage::IrGeneration,

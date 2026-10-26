@@ -19,6 +19,7 @@ use crate::frontend::module::registry::ModuleRegistry;
 use crate::frontend::module::roles::{self, FileRole};
 use crate::frontend::module::ModuleSource;
 use crate::frontend::pipeline::PipelineError;
+use crate::middle::core::ir::{Instruction, Operand};
 use crate::middle::core::ir_gen::AstToIrGenerator;
 use crate::middle::passes::mono::Monomorphizer;
 use crate::middle::ModuleIR;
@@ -28,8 +29,9 @@ use crate::util::span::Span;
 use super::obligations::{Obligation, IR_GENERATION_DELIVERED};
 use super::helpers::{
     aggregate_instantiation_requests, allocate_global_slots, ast_has_main,
-    collect_compilation_refs, collect_package_refs, is_bin_role, link_module_irs,
-    merge_embedded_std_ir, resolved_method_marks, role_context,
+    collect_compilation_refs, collect_package_refs, init_topological_order, is_bin_role,
+    link_module_irs, merge_embedded_std_ir, resolved_method_marks, role_context, ImportCycle,
+    InitOrder,
 };
 use super::state::{DriverError, SkipReason, SkippedStage, State, UnitState};
 use super::{Aggregation, Driver, ProgramKind, Stage, Unit};
@@ -286,10 +288,13 @@ impl Driver {
     /// `check_module_collect_all`）。
     ///
     /// 双通道：MultiFile 首错经 `OrchestratorError::TypeCheck` 即返
-    /// （compile_project 现状；`result.warnings` 丢弃——决策 B1）；Check
-    /// （4.2.2）诊断进逐文件收集通道并**继续**下一文件（CollectAll），
-    /// 警告暂存，由 DeadCodeAnalysis 臂按项目内门控外发（check_project
-    /// 现状：类型失败文件的警告同样流出）。
+    /// （compile_project 契约：错误即返）；typecheck 警告不再丢弃——无错
+    /// 文件的警告暂存到 `UnitState::typecheck_warnings`，由 DeadCodeAnalysis
+    /// 臂按项目内门控外发，**警告面与 CHECK 归一**（决策 B1「死代码族警告
+    /// 不进 compile 路径」已由 WBS 3.4.6 撤销，2026-10-19 用户裁决）。
+    /// Check（4.2.2）诊断进逐文件收集通道并**继续**下一文件（CollectAll），
+    /// 警告同走上述暂存与外发（check_project 现状：类型失败文件的警告同样
+    /// 流出）。
     pub(super) fn typecheck_orchestrated(
         &self,
         state: &mut State,
@@ -410,6 +415,9 @@ impl Driver {
                 failed_stages.push(Stage::Typecheck);
                 return;
             }
+            // 3.4.6：typecheck 警告暂存，交 DeadCodeAnalysis 臂按项目内门控外发
+            //（与单文件臂 arms.rs:277 同一落点、同一消费端）。
+            us.typecheck_warnings = std::mem::take(&mut result.warnings);
             us.type_result = Some(result);
         }
         // 外部定义面（4.6.1）：Lsp 形态把**非目标文件**的顶层导出定义
@@ -464,15 +472,21 @@ impl Driver {
 
     /// `Stage::DeadCodeAnalysis` 臂（Project 作用域，臂内逐单元）。
     ///
-    /// 移植自 pipeline.rs:275-278 / 288-299。门控
-    /// `dead_code.enabled && !has_errors` 原样保留；开关关闭时连暂存的
-    /// typecheck 警告一并丢弃（现状耦合），并记录 ConfigDisabled 跳过。
-    /// 警告顺序 = 死代码警告在前、typecheck 警告在后（与 pipeline 一致）。
+    /// 单文件形态（`SingleFile`/`WasmPlayground`/`Embedded`）移植自
+    /// pipeline.rs:275-278 / 288-299。门控 `dead_code.enabled && !has_errors`
+    /// 原样保留；开关关闭时连暂存的 typecheck 警告一并丢弃（现状耦合），
+    /// 并记录 ConfigDisabled 跳过。警告顺序 = 死代码警告在前、typecheck
+    /// 警告在后（与 pipeline 一致）。
+    ///
+    /// **编排形态（Check / Lsp / MultiFile）走同一份实现**
+    /// （`dead_code_analysis_check`）：角色感知 + 引用池 + W1006 遮蔽 + W1003
+    /// 未使用导入是一套判据，形态只决定 sink 落在哪条通道（见该函数）。
+    /// 3.4.6 之前 MultiFile 没有本阶段——警告面在 compile 路径整块缺失。
     pub(super) fn dead_code_analysis(
         &self,
         state: &mut State,
     ) {
-        if matches!(state.program.kind, ProgramKind::Check) {
+        if !state.uses_pipeline_channel() {
             return self.dead_code_analysis_check(state);
         }
         let State {
@@ -508,16 +522,23 @@ impl Driver {
         }
     }
 
-    /// Check 形态（4.2.2）：移植自 check_project 主循环的逐文件警告装配。
-    /// 与单文件形态的三处现状差异（即 check_project 与 pipeline 的既有
-    /// 差异，警告面归一是 B1/4.9 的既定缓议）：
-    /// - 无 `config.dead_code.enabled` 门控（check 不读该开关）；
+    /// 编排形态（Check / Lsp / MultiFile）的逐文件警告装配——**唯一实现**：
+    /// 角色感知 + 引用池是一套判据，形态只决定 sink 落在哪条通道。
+    ///
+    /// 与单文件形态的三处差异（`SingleFile` 保留 pipeline 的旧语义）：
+    /// - 无 `config.dead_code.enabled` 门控（编排形态不读该开关）；
     /// - 不按 `typecheck_failed` 跳过（死代码只看 AST，与类型错误并存）；
     /// - 角色感知分析器（RFC-029f：Test 不参与；Bin/Internal 按
     ///   `set_exempt_pub`、Lib 按 `set_cross_file_refs` 接**编译集**引用池，
     ///   Script 不接池——4.9.3），W1006 遮蔽事件 / W1003 未使用导入 /
     ///   死代码警告仅对 **本项目文件**外发（vendor/嵌入 std 的内部警告
     ///   不混入消费方）。
+    ///
+    /// sink 分流（3.4.6）：Check / Lsp / MultiFile 一律进 `us.check_diagnostics`
+    /// ——`Diagnostic` 不携带文件身份（`util/diagnostic/error.rs` 的 span 无
+    /// file 字段），逐文件载体是唯一能把 W 码渲染到定义文件的外发形态。
+    /// 消费端按形态取：Check/Lsp 经 `DriverOutcome.check_diagnostics`，
+    /// MultiFile 由 `compile_project` 以同一形态外发。
     pub(super) fn dead_code_analysis_check(
         &self,
         state: &mut State,
@@ -963,7 +984,12 @@ impl Driver {
                 }
             }
         };
-        if let Err(e) = merge_embedded_std_ir(&program.units[0].source, &mut ir, &registry) {
+        if let Err(e) = merge_embedded_std_ir(
+            &program.units[0].source,
+            &mut ir,
+            &registry,
+            &program.config,
+        ) {
             errors.push(PipelineError::TypeCheck(e));
             failed_stages.push(Stage::IrGeneration);
             return Ok(());
@@ -1334,10 +1360,18 @@ impl Driver {
             );
             // 入口存在性（#388 定案 check 半边判据）：声明面入口必须有
             // main 绑定（值/函数皆可）；声明面之外的文件不查——Lib/
-            // Internal/Test 不要求 main（被 check ≠ 被当程序跑）
-            if surfaces
-                .as_ref()
-                .is_some_and(|s| s.bins.contains(&file_canon))
+            // Internal/Test 不要求 main（被 check ≠ 被当程序跑）。
+            //
+            // 3.4.6：本臂自 MultiFile 起也参与 compile 路径，故注入必须按形态
+            // 门控到 Check/Lsp——compile 路径的同类校验在 Linking 臂
+            //（`bin_missing_main`，判据同 surfaces 语义下的入口存在性），
+            // 不门控即同一缺失双报（与 3.4.8 ③ 把入口校验留在 Linking 的
+            // 「纯合并」决定同一条理由）。
+            let check_channel = matches!(program.kind, ProgramKind::Check | ProgramKind::Lsp);
+            if check_channel
+                && surfaces
+                    .as_ref()
+                    .is_some_and(|s| s.bins.contains(&file_canon))
                 && !ast_has_main(ast)
             {
                 // 无源码位置的文件级诊断用占位 span（原 entry_span 语义）
@@ -1409,19 +1443,50 @@ impl Driver {
                 }
             }
         }
+        // #467：初始化序列按 `use` 依赖拓扑序拼接，不按发现序（路径字典序）。
+        // 顺序判据（含「无依赖信息 / 导入环 / 入口最后」的确定性约定）见
+        // helpers::init_topological_order；依赖边取自单元源码里与发现期同一条
+        // use 扫描，与「本臂已消费的 AST」无关，故在 take 各单元 IR 之前求序。
+        // #491：本函数同时给出导入环（成员数 ≥2 的强连通分量）——环的检出就是
+        // 4.10.4 已经在做的那次 Tarjan SCC，Linking 臂只消费、不另建判据。
+        let InitOrder {
+            order: unit_order,
+            import_cycles,
+        } = init_topological_order(&state.program.units);
         let mut irs: Vec<(String, ModuleIR)> = Vec::new();
+        // 单元下标 → 文件表下标：没有 IR 的单元（parse/typecheck 失败）没有可
+        // 拼接的初始化段，自然不进文件表，也不参与执行序。
+        let mut file_of_unit: Vec<Option<usize>> = vec![None; state.program.units.len()];
         for (i, us) in state.units.iter_mut().enumerate() {
             if let Some(ir) = us.ir.take() {
+                file_of_unit[i] = Some(irs.len());
                 irs.push((state.program.units[i].path.display().to_string(), ir));
             }
         }
-        let mut merged = match link_module_irs(irs, &state.entry_key) {
+        // 拓扑序（单元下标）→ 执行序（文件表下标）：投影是单射，故结果仍是
+        // 0..irs.len() 的置换——link_module_irs 的入参契约（不丢任何初始化段）。
+        let init_order: Vec<usize> = unit_order
+            .iter()
+            .filter_map(|&unit_idx| file_of_unit[unit_idx])
+            .collect();
+        let mut merged = match link_module_irs(irs, &state.entry_key, &init_order) {
             Ok(merged) => merged,
             Err(e) => {
                 state.fail_with(Stage::Linking, e);
                 return;
             }
         };
+        // #491 / W1007：模块导入环**不得静默**（用户 2026-10-23 裁决 A）。事实来源 =
+        // 上面那次 SCC（本处不新增环检测），精确信息取自刚拼好的 merged IR 的
+        // init 段。警告落逐文件收集通道（与 W1006/W1003 同一 sink，3.4.6）：环诊断
+        // 带 `use` 语句 span，故不需要 span 豁免。
+        warn_import_cycles(
+            &state.program.units,
+            &merged,
+            &import_cycles,
+            &file_of_unit,
+            &mut state.units,
+        );
         // #413 / 4.10.3：entry_function 按 is_bin_role 门控——Script（无项目根）
         // 无入口概念（顶层语句即程序主体），自动调 main 会与显式 main() 双跑
         //（#356）。link_module_irs 只看绑定存在性、不看角色；角色门控归本臂
@@ -1576,4 +1641,179 @@ fn visible_method_overloads(
         }
     }
     merged
+}
+
+// ---------------------------------------------------------------------------
+// #491 / W1007：模块导入环告警
+// ---------------------------------------------------------------------------
+
+/// 环内「读未初始化顶层值」的值边（#491 的精确信息，可选）。
+struct CycleViolation {
+    /// 读侧单元（`init` 段里 `Load{src: Global(k)}` 的所属单元）
+    reader: usize,
+    /// 写侧单元（槽位 k 的首条 `Store` 的所属单元，即槽位所有者）
+    owner: usize,
+    /// 被读槽的限定名（`GlobalSlot.name`，多文件下形如 `zother.o_val`）
+    slot: String,
+}
+
+/// 把导入环写成 W1007 并落逐文件收集通道（#491）。
+///
+/// 判据（用户 2026-10-23 裁决 A）：
+/// - **底线是「存在环」**——`cycles` 非空就报，不看本次运行是否真的读到未
+///   初始化值（那是运行期 E6007 的事，两者不是同一判据）；
+/// - 环信息来自 4.10.4 的 Tarjan SCC（`init_topological_order` 出参），本函数
+///   **不做环检测**，也不新造通道（sink = `UnitState.check_diagnostics`，与
+///   W1003/W1006 同一处）；
+/// - 精确信息（可选）：环内读侧 `Load{src: Global(k)}` 早于该槽位首条
+///   `Store{dst: Global(k)}` 且读写跨单元时，把「被违反的边 + 被读槽名」并入
+///   **同一诊断**的 help——同一码、同一发射点，不新增第二个 W 码。
+///
+/// 每个环只报一条（锚在环内一条真实 `use` 边，有值边时优先锚被违反的那条）：
+/// 环是**多文件共同**的事实，按环报一次即可；逐文件重报同一环只是把同一句话
+/// 抄 N 份，还会把警告计数放大成环长的函数。
+fn warn_import_cycles(
+    units: &[Unit],
+    merged: &ModuleIR,
+    cycles: &[ImportCycle],
+    file_of_unit: &[Option<usize>],
+    unit_states: &mut [UnitState],
+) {
+    if cycles.is_empty() {
+        return;
+    }
+    // 文件表下标 → 单元下标（`file_of_unit` 的逆映射；Linking 臂按构造是单射）
+    let mut unit_of_file: Vec<usize> = vec![usize::MAX; merged.source_files.len()];
+    for (unit_idx, file_idx) in file_of_unit.iter().enumerate() {
+        if let Some(file) = *file_idx {
+            if let Some(slot) = unit_of_file.get_mut(file) {
+                *slot = unit_idx;
+            }
+        }
+    }
+    // init 段单趟：各槽位的**首条写**下标 + 全部读（#491 值边扫描的数据面）
+    let mut first_store: HashMap<usize, usize> = HashMap::new();
+    let mut loads: Vec<(usize, usize)> = Vec::new(); // (init 下标, 槽位号)
+    for (idx, instr) in merged.init.iter().enumerate() {
+        match instr {
+            Instruction::Store {
+                dst: Operand::Global(slot),
+                ..
+            } => {
+                first_store.entry(*slot).or_insert(idx);
+            }
+            Instruction::Load {
+                src: Operand::Global(slot),
+                ..
+            } => loads.push((idx, *slot)),
+            _ => {}
+        }
+    }
+
+    for cycle in cycles {
+        let violation =
+            find_cycle_value_violation(cycle, merged, &first_store, &loads, &unit_of_file);
+        // 锚点：优先被违反的边（写侧导入读侧——正是它把读侧排到前面），否则
+        // 环内首条 `use` 边（任一成员都真实参与环）
+        let anchor = violation
+            .as_ref()
+            .and_then(|v| {
+                cycle
+                    .edges
+                    .iter()
+                    .find(|e| e.importer == v.owner && e.imported == v.reader)
+            })
+            .or_else(|| cycle.edges.first());
+        let Some(anchor) = anchor else {
+            continue; // 无 `use` 边不可能成环（防御：边集与 SCC 同源）
+        };
+        let builder =
+            ErrorCodeDefinition::module_import_cycle(&cycle_text(units, cycle)).at(anchor.span);
+        // 值边命中时的 help：把「被违反的边 + 被读槽名」写进同一诊断。
+        // help 走 locales per-site 键（issue #469 处 1）：模板与通用 help 同源，
+        // {reader}/{slot}/{owner} 插值，不在发射点硬编成品串；同一事实不新增码。
+        let diagnostic = match &violation {
+            Some(v) => {
+                let key = |i: usize| {
+                    units
+                        .get(i)
+                        .map(|u| u.key.to_string())
+                        .unwrap_or("?".into())
+                };
+                builder
+                    .param("reader", key(v.reader))
+                    .param("slot", v.slot.clone())
+                    .param("owner", key(v.owner))
+                    .with_help_key("W1007.value_edge.help")
+                    .build()
+            }
+            None => builder.build(),
+        };
+        if let Some(us) = unit_states.get_mut(anchor.importer) {
+            us.check_diagnostics.push(diagnostic);
+        }
+    }
+}
+
+/// 环内值边的单趟比对：读下标早于该槽位首条写下标，且读写分属环内两个单元。
+///
+/// 取**首个**命中的读（按 init 序）——同一环里多个值边违反是同一个结构事实，
+/// 一次说清一条即可，不必把整条 init 序抄进诊断。
+fn find_cycle_value_violation(
+    cycle: &ImportCycle,
+    merged: &ModuleIR,
+    first_store: &HashMap<usize, usize>,
+    loads: &[(usize, usize)],
+    unit_of_file: &[usize],
+) -> Option<CycleViolation> {
+    let unit_of_init = |idx: usize| -> Option<usize> {
+        let file = *merged.init_file_ids.get(idx)?;
+        unit_of_file.get(file).copied().filter(|&u| u != usize::MAX)
+    };
+    for &(load_idx, slot) in loads {
+        let Some(&store_idx) = first_store.get(&slot) else {
+            continue;
+        };
+        // 写先于读 = 这个序是对的；只有「读早于首条写」才是事实
+        if store_idx <= load_idx {
+            continue;
+        }
+        let (Some(reader), Some(owner)) = (unit_of_init(load_idx), unit_of_init(store_idx)) else {
+            continue;
+        };
+        // 跨单元才谈得上「导入环造成的序矛盾」：同单元内读写先后属该单元自己的
+        // init 序（#467 的另一面，不是环）
+        if reader == owner || !cycle.path.contains(&reader) || !cycle.path.contains(&owner) {
+            continue;
+        }
+        let slot = merged
+            .globals
+            .iter()
+            .find(|g| g.index == slot)
+            .map(|g| g.name.clone())
+            .unwrap_or_else(|| format!("#{slot}"));
+        return Some(CycleViolation {
+            reader,
+            owner,
+            slot,
+        });
+    }
+    None
+}
+
+/// 环路径文案：`a → b → a`（`use` 方向，末项回到首项）。
+fn cycle_text(
+    units: &[Unit],
+    cycle: &ImportCycle,
+) -> String {
+    let mut names: Vec<&str> = cycle
+        .path
+        .iter()
+        .map(|&i| units.get(i).map(|u| u.key.as_str()).unwrap_or("?"))
+        .collect();
+    let Some(&first) = names.first() else {
+        return String::new();
+    };
+    names.push(first);
+    names.join(" → ")
 }

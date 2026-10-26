@@ -5239,9 +5239,11 @@ impl TypeChecker {
                     // 且**不**展示反例：bindings 里那个变量与闭合约束无关，展示
                     // 它（实测 `y=Int(5)`）会把人引向 RHS。
                     if refined_free_vars(refined).is_empty() {
+                        // 说明文字走 locales per-site 键（issue #469 处 1/2a）：
+                        // 与 message 同语言渲染，不在发射点硬编成品串
                         ctx.diags.push(
                             ErrorCodeDefinition::refinement_violated(&constraint.to_string())
-                                .param("counterexample", "（约束不含自由变量，注解自身不成立）")
+                                .param_from_key("counterexample", "E4018.no_free_var.note")
                                 .build(),
                         );
                     } else {
@@ -5390,18 +5392,23 @@ impl TypeChecker {
             match outcome {
                 ProofResult::Proved => {}
                 ProofResult::Disproved(model) => {
-                    let counterexample = model
-                        .assignments
-                        .iter()
-                        .map(|(k, v)| format!("  {k} = {v}"))
-                        .collect::<Vec<_>>()
-                        .join("\n");
-                    ctx.diags.push(
-                        ErrorCodeDefinition::refinement_violated(&model.constraint)
-                            .param("counterexample", &counterexample)
-                            .at(*span)
-                            .build(),
-                    );
+                    // issue #469 处 2a：反例段由 locales per-site 键渲染；模型未绑定
+                    // 值时参数为空串——段整体缺席，不再输出悬空的「反例：」标题
+                    let mut builder = ErrorCodeDefinition::refinement_violated(&model.constraint);
+                    if model.assignments.is_empty() {
+                        builder = builder.param("counterexample", "");
+                    } else {
+                        let assignments = model
+                            .assignments
+                            .iter()
+                            .map(|(k, v)| format!("  {k} = {v}"))
+                            .collect::<Vec<_>>()
+                            .join("\n");
+                        builder = builder
+                            .param("assignments", assignments)
+                            .param_from_key("counterexample", "E4018.counterexample.section");
+                    }
+                    ctx.diags.push(builder.at(*span).build());
                 }
                 // 具名证明函数形态的约束（`IsPositive(b)`）当下判不出真假：
                 // 交由 pipeline 编译并执行证明函数，返回 false 即 E4018。
@@ -5507,18 +5514,23 @@ impl TypeChecker {
         ) {
             ProofResult::Proved => {}
             ProofResult::Disproved(model) => {
-                let counterexample = model
-                    .assignments
-                    .iter()
-                    .map(|(k, v)| format!("  {k} = {v}"))
-                    .collect::<Vec<_>>()
-                    .join("\n");
-                ctx.diags.push(
-                    ErrorCodeDefinition::refinement_violated(&model.constraint)
-                        .param("counterexample", &counterexample)
-                        .at(span)
-                        .build(),
-                );
+                // issue #469 处 2a：反例段由 locales per-site 键渲染；模型未绑定
+                // 值时参数为空串——段整体缺席（与形参位同一形态）
+                let mut builder = ErrorCodeDefinition::refinement_violated(&model.constraint);
+                if model.assignments.is_empty() {
+                    builder = builder.param("counterexample", "");
+                } else {
+                    let assignments = model
+                        .assignments
+                        .iter()
+                        .map(|(k, v)| format!("  {k} = {v}"))
+                        .collect::<Vec<_>>()
+                        .join("\n");
+                    builder = builder
+                        .param("assignments", assignments)
+                        .param_from_key("counterexample", "E4018.counterexample.section");
+                }
+                ctx.diags.push(builder.at(span).build());
             }
             ProofResult::Unproven {
                 proof_calls: calls, ..

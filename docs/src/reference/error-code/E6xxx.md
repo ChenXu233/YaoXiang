@@ -33,7 +33,7 @@ description: '程序运行期（VM / std 原生函数）产生的错误。'
 - **模板**：`表达式 {expr} 除以零`
 - **消息**：试图除以零
 - **帮助**：添加检查以防止除以零
-- **发射点**：`src/backends/interpreter/executor/executor.rs:946`、`src/backends/interpreter/executor/executor.rs:955`、`src/backends/mod.rs:180` 等 8 处
+- **发射点**：`src/backends/interpreter/executor/executor.rs:948`、`src/backends/interpreter/executor/executor.rs:957`、`src/backends/mod.rs:180` 等 8 处
 
 ### E6003：数组索引越界
 

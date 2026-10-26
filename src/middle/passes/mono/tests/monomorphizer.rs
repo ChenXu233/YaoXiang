@@ -1733,3 +1733,27 @@ fn test_deep_nested_type_operations_survive_default_stack() {
     drop(cloned);
     drop(ty);
 }
+
+/// #492 不变量：原生函数作值的**常量形态不是按名调用目标**。
+///
+/// `uncovered_call_targets` 只把 `Call`/`TailCall`/`MakeClosure` 的按名目标算
+/// 「未覆盖」（进而保留原件）。原生函数没有 IR 函数体——把它计成按名调用目标，
+/// 保留逻辑会去找一个不存在的原件；不计则它随指令留在 IR 里，运行时按名分发。
+#[test]
+fn test_native_fn_const_is_not_a_by_name_call_target() {
+    // Arrange：原生函数作值的 IR 形态（#492 的单一常量形态）
+    let instr = Instruction::Load {
+        dst: Operand::Local(0),
+        src: Operand::Const(ConstValue::NativeFn("std.io.println".to_string())),
+        span: Span::dummy(),
+    };
+
+    // Act
+    let target = Monomorphizer::by_name_call_target(&instr);
+
+    // Assert
+    assert!(
+        target.is_none(),
+        "原生函数值常量不得被计为按名调用目标，实际: {target:?}",
+    );
+}

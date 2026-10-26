@@ -34,8 +34,19 @@ impl Interpreter {
             BytecodeInstr::UnaryOp { dst, src, op } => {
                 let val = self.force_slot(fi, *src)?;
                 let result = match (op, val) {
+                    // #468：一元取负走 checked 路径——i64::MIN 取负溢出报
+                    // E6007（与二元溢出 #281 同码同构造），不再 panic。
                     (crate::middle::bytecode::UnaryOp::Neg, RuntimeValue::Int(n)) => {
-                        RuntimeValue::Int(-n)
+                        match n.checked_neg() {
+                            Some(v) => RuntimeValue::Int(v),
+                            None => {
+                                let stack = self.capture_stack();
+                                return Err(ExecutorError::runtime(
+                                    format!("integer overflow in `-{n}`"),
+                                    stack,
+                                ));
+                            }
+                        }
                     }
                     (crate::middle::bytecode::UnaryOp::Neg, RuntimeValue::Float(f)) => {
                         RuntimeValue::Float(-f)

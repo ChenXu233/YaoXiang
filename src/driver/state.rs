@@ -48,8 +48,10 @@ pub struct SkippedStage {
 /// CompilationResult 无法表达 OrchestratorError 契约）：
 /// - SingleFile/WasmPlayground：`result`（pipeline 契约；IR 在 `result.ir`）；
 /// - MultiFile：`module`（Linking 产物）+ `failure`（OrchestratorError
-///   契约）；Check/Lsp：`check_diagnostics`（逐文件收集通道，4.2.2/
-///   4.2.3——Lsp 由调用方过滤到目标文件）；Embedded 随 4.2.4 落地。
+///   契约）+ `check_diagnostics`（**仅 W 码警告面**，3.4.6：警告按定义文件
+///   归属，`Diagnostic` 不携带文件身份，逐文件载体是唯一可渲染形态）；
+///   Check/Lsp：`check_diagnostics`（逐文件收集通道，4.2.2/4.2.3——Lsp
+///   由调用方过滤到目标文件）；Embedded 随 4.2.4 落地。
 #[derive(Debug)]
 pub struct DriverOutcome {
     /// 编译结果（诊断集与 pipeline 时代逐字节相同，C2 判据）
@@ -62,7 +64,10 @@ pub struct DriverOutcome {
     pub failure: Option<OrchestratorError>,
     /// 逐文件诊断收集（Check 契约：`Vec<(文件, 该文件诊断)>`，每个发现文件
     /// 都有条目——干净文件为空 Vec；4.2.2）。故障路径（failure 为 Some）
-    /// 同样带出已收集条目——故障不清空收集（3.4.8 ③）
+    /// 同样带出已收集条目——故障不清空收集（3.4.8 ③）。
+    ///
+    /// 3.4.6：MultiFile 也填本字段（只装 W 码警告——错误仍走 `failure`
+    /// 契约），故 compile 与 check 两条路径的警告面同源同形。
     pub check_diagnostics: Vec<(PathBuf, Vec<Diagnostic>)>,
     /// 语义数据面（WBS 4.6.1）：仅 CollectAll 形态（LSP 项目内 / LSP 单文件
     /// 兜底）填充——目标文件的全量语义信息 + 非目标文件的顶层导出定义面；
@@ -350,11 +355,15 @@ impl State {
         }
     }
 
-    /// 取走 Check/Lsp 的逐文件收集条目——每个发现文件一条（干净文件为空
-    /// Vec，check_project 契约；Lsp 由调用方过滤到目标文件），其余形态
-    /// 恒空。成功路径与故障路径共用本实现。
+    /// 取走逐文件收集条目——每个发现文件一条（干净文件为空 Vec，
+    /// check_project 契约；Lsp 由调用方过滤到目标文件）。成功路径与故障
+    /// 路径共用本实现。
+    ///
+    /// 3.4.6：MultiFile 也在册（只装 W 码警告——错误走 `failure` 契约），
+    /// 使 compile 与 check 的警告面同源同形；单文件形态（pipeline 通道）
+    /// 仍恒空——那里的警告面是 `CompilationResult.warnings`。
     fn take_check_diagnostics(&mut self) -> Vec<(PathBuf, Vec<Diagnostic>)> {
-        if !matches!(self.program.kind, ProgramKind::Check | ProgramKind::Lsp) {
+        if self.uses_pipeline_channel() || matches!(self.program.kind, ProgramKind::Embedded) {
             return Vec::new();
         }
         // 字段级分借：program.units（元信息）与 units（阶段产物）互不重叠

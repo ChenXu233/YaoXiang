@@ -392,7 +392,7 @@ def build_index(entries, locale_codes, emissions, std_codes) -> str:
                 ["`E6xxx`", "`Runtime`", "运行时错误（VM 与 std 原生函数）", str(_count(entries, "E6"))],
                 ["`E7xxx`", "`Io`", "I/O 与系统错误", str(_count(entries, "E7"))],
                 ["`E8xxx`", "`Internal`", "内部编译器错误（编译器自身的缺陷）", str(_count(entries, "E8"))],
-                ["`W1xxx`", "`Warning`", "警告（不阻止编译）", str(_count(entries, "W1"))],
+                ["`W1xxx`", "`Warning`", "警告（码族属 W，默认发射级别 warn 不阻止编译；例外 `W1090` 发射级别为 error，会阻止编译）", str(_count(entries, "W1"))],
             ],
         ),
         "",
@@ -738,7 +738,9 @@ def build_warnings(entries, locale_codes, emissions) -> str:
         "",
         GEN_NOTE,
         "",
-        "警告码以 `W` 开头，不会阻止编译，但提示代码中可能存在的问题。"
+        "警告码以 `W` 开头，提示代码中可能存在的问题；默认发射级别为 warn，不会阻止编译。"
+        "例外：`W1090` 的发射级别为 error（2026-10-13 用户裁决的同码升 E，见其条目说明），"
+        "触发即计入 error_count 并改变退出码，会阻止编译。"
         f"当前注册表共 **{len(w_entries)}** 个警告码，完整索引见[错误码首页](../error-code/index.md)。",
         "",
         "## 配置",
@@ -809,7 +811,9 @@ def build_warnings(entries, locale_codes, emissions) -> str:
         "## 与错误码的区别",
         "",
         "- **错误（`E` 前缀）**：阻止编译，必须修复。",
-        "- **警告（`W` 前缀）**：提示潜在问题，可选择修复。",
+        "- **警告（`W` 前缀）**：提示潜在问题；默认发射级别为 warn，可选择修复。"
+        "例外：`W1090` 发射级别为 error，触发即计入 error_count 并改变退出码，"
+        "会阻止编译，必须修复（见其条目说明）。",
         "",
         "## 死代码告警的判定口径",
         "",

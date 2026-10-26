@@ -16,6 +16,16 @@ define_codes!(W1XXX, {
     // W1006 本地模块遮蔽依赖包（RFC-014 §项目模式：本地最高优先级，
     // 覆盖 vendor 中同名依赖时提示；--deny-shadowing 可升级为错误）
     ("W1006", Warning, false, module_shadows_dependency(module: &str, dependency: &str) => .param("module", module) .param("dependency", dependency)),
+    // W1007 模块导入环（#491）：编译集的 `use` 依赖图里存在环（成员数 ≥2 的
+    // 强连通分量）时，环内初始化顺序**不可判定**——读尚未初始化的顶层值会在
+    // 运行期报 E6007，而这类程序在 4.10.4 之前只按「环内路径字典序」静默排序
+    // （用户 2026-10-23 裁决 A：不得静默）。
+    // **检出单源** = `driver::helpers::init_topological_order` 里那次 Tarjan SCC
+    // （4.10.4 为初始化序已经算过，本码只消费它的出参，不新增第二份环检测）。
+    // 不并入 E3019：E3019 判**一个单元内**顶层绑定之间的初始化引用成环，本码判
+    // **模块之间**的导入成环——两类问题修法不同（前者改初始化表达式，后者拆 use）。
+    // span 不豁免：定位落在环内一条真实 `use` 语句上（`UsePathRef.span`）。
+    ("W1007", Warning, false, module_import_cycle(cycle: &str) => .param("cycle", cycle)),
     // W1063
     ("W1063", Warning, false, const_generic_unevaluable(constraint: &str) => .param("constraint", constraint)),
     // W1081 终止性测度义务未判定（WBS 3.4.2：无求解器时 Unjudged 不再静默——

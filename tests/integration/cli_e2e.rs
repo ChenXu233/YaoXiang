@@ -1703,8 +1703,8 @@ fn test_e2e_run_standalone_top_level_script_executes() {
 }
 
 #[test]
-fn test_e2e_run_standalone_uncalled_main_hints_without_executing() {
-    // Arrange - 无 manifest：定义 main 但从不调用（#413 提示钉板）
+fn test_e2e_run_standalone_uncalled_main_hints_then_exits_one() {
+    // Arrange - 无 manifest：定义 main 但从不调用（#413 提示钉板 + #476 退出码）
     let tmp = TempDir::new().unwrap();
     let src = tmp.path().join("hint.yx");
     std::fs::write(&src, "main = () => {\n    print(\"MAIN_RAN\")\n}\n").unwrap();
@@ -1712,19 +1712,57 @@ fn test_e2e_run_standalone_uncalled_main_hints_without_executing() {
     // Act
     let (code, stdout, stderr) = run_yx(&["run", src.to_str().unwrap()], tmp.path());
 
-    // Assert - #413 T4：Script 不自动执行 main + 显式提示（钉板不动）
-    assert_eq!(code, 0, "无错误的 script 应零退出；stderr: {stderr}");
+    // Assert - #413 T4：Script 不自动执行 main + 显式两行提示（文案逐字钉死）
     assert!(
         !stdout.contains("MAIN_RAN"),
         "Script 不得自动执行 main（#356 防双跑）；stdout: {stdout}"
     );
+    let hint_first = "提示：当前以 script 模式运行（文件不在 yaoxiang 项目内），顶层语句即程序主体，不会自动执行 main。";
+    let hint_second = "提示：文件中定义的 main 未被调用——如需运行，请在文件中显式调用 main()，或使用 `yaoxiang init` 建项目后运行。";
     assert!(
-        stderr.contains("script 模式运行"),
-        "#413 提示不得消失（钉板）；stderr: {stderr}"
+        stderr.contains(hint_first),
+        "#413 第一行提示不得改动（逐字钉板）；stderr: {stderr}"
     );
     assert!(
-        stderr.contains("main 未被调用"),
-        "#413 第二行提示不得消失（钉板）；stderr: {stderr}"
+        stderr.contains(hint_second),
+        "#413 第二行提示不得改动（逐字钉板）；stderr: {stderr}"
+    );
+    let hint_line_count = stderr.lines().filter(|l| l.starts_with("提示：")).count();
+    assert_eq!(
+        hint_line_count, 2,
+        "#476：只保留既有两行提示，不得新增第二条诊断；stderr: {stderr}"
+    );
+    // Assert - #476：main 的体从未运行不是成功——以 1 结束（与运行期错误同族）
+    assert_eq!(
+        code, 1,
+        "#476：定义 main 未调用应以退出码 1 结束（此前为假成功的 0）；stdout: {stdout}\nstderr: {stderr}"
+    );
+}
+
+/// #476 的反向判据：值型 main 的块体**已在初始化期求值**（#422 对账），它的效果
+/// 已经发生，不得被「未调用」误判成退出码 1。
+#[test]
+fn test_e2e_run_standalone_value_main_evaluated_at_init_exits_zero() {
+    // Arrange - 无 manifest：值型块体 main（初始化期求值，非惰性 lambda）
+    let tmp = TempDir::new().unwrap();
+    let src = tmp.path().join("value_main.yx");
+    std::fs::write(&src, "main = {\n    print(\"VALUE_MAIN\")\n}\n").unwrap();
+
+    // Act
+    let (code, stdout, stderr) = run_yx(&["run", src.to_str().unwrap()], tmp.path());
+
+    // Assert - 初始化期求值即执行：输出可见、无提示、退出码 0
+    assert_eq!(
+        code, 0,
+        "值型 main 已在初始化期求值，不得被判「未调用」而退出 1；stderr: {stderr}"
+    );
+    assert!(
+        stdout.contains("VALUE_MAIN"),
+        "值型 main 的块体应在初始化期执行并输出；stdout: {stdout}"
+    );
+    assert!(
+        !stderr.contains("提示："),
+        "值型 main 不应触发提示；stderr: {stderr}"
     );
 }
 #[test]

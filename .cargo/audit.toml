@@ -1,0 +1,12 @@
+# cargo-audit 配置：这里为什么有一条 ignore，以及它什么时候必须删掉。
+#
+# RUSTSEC-2026-0381（webpki-roots：打包根证书信任了已被 distrust 的 emSign 中间证书）
+# 命中的是 webpki-roots 0.26.11——由 ureq 2.12.1 传递引入。0.26 线没有修复版本（0.26.12 不存在），
+# ureq 也没有更新的 2.x；真正的修法是迁移到 ureq 3.x，属依赖面变更，另行排期。
+# 同批可修的另外两条已一并升级：
+#   rustls-webpki 0.103.15 -> 0.103.16（RUSTSEC-2026-0382）
+#   webpki-roots  1.0.9    -> 1.0.10   （RUSTSEC-2026-0381 的 1.0 线）
+#
+# 移除条件（硬性）：ureq 迁移到 >= 3 之后删除下面的 ignore；若届时仍红，不得延长期限，须先修依赖。
+[advisories]
+ignore = ["RUSTSEC-2026-0381"]

@@ -1,0 +1,31 @@
+// 03-modules/native_fn_value_return.yx
+// 覆盖: RFC-036 §4（std native 导出）；RFC-029 §2 `use path.{item}`；#492
+// 验证: 原生函数作值的其余三个面——多参（std.assert.assert 两个实参都送达）、
+//       有返回值（std.string.concat 的返回值参与值断言）、作参数（原生函数值
+//       传给另一函数后经间接调用执行）。断言以返回值为准，stdout 只作补充。
+// 状态: ✅ 可运行
+
+use std.assert
+use std.assert.{assert as check}
+use std.io.{println}
+use std.string.{concat}
+
+apply1: (f: (String) -> Void, s: String) -> Void = {
+    f(s)
+}
+
+main: () -> Void = {
+    // 多参：条件与消息都送达（任一实参丢失都会让断言变红）
+    c = check
+    c(true, "multi-arg native fn value ok")
+
+    // 有返回值：返回值参与值断言
+    k = concat
+    s = k("a", "b")
+    assert.assert(s == "ab", "concat via function value returns ab")
+
+    // 作参数传给另一函数，函数体内经间接调用执行
+    apply1(println, "via param")
+}
+
+main()

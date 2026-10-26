@@ -459,7 +459,12 @@ impl StatementChecker {
                 let arg_types: Vec<MonoType> =
                     args.iter().map(|a| MonoType::from(a.clone())).collect();
                 // 含未绑定类型参数（TypeRef）时不做结构体展开，保持 Generic 形态。
-                if arg_types.iter().any(contains_unresolved_param) {
+                // 但**构造器引用**（`Box` / `Vec` 这类类型构造器名）不是未绑定参数：
+                // 它们是类型实参本身，必须展开成与值侧同形的记录形态。
+                if arg_types.iter().any(|t| {
+                    contains_unresolved_param(t)
+                        && !super::expressions::is_ctor_reference(t, &self.generic_type_defs)
+                }) {
                     return None;
                 }
                 match TypeEnvironment::instantiate_generic_type(def, &arg_types) {
@@ -470,7 +475,13 @@ impl StatementChecker {
                                 .iter()
                                 .map(|c| (*name_span, c.clone())),
                         );
-                        Some(inst.ty)
+                        // 构造器变量头部（`F(A)`）的类型：实例化产物里的具体应用
+                        // （`Box(Int)`）展开成记录形态，与注解/值侧同形。
+                        Some(super::expressions::instantiate_with_ctor_heads(
+                            inst.ty,
+                            def,
+                            &self.generic_type_defs,
+                        ))
                     }
                     Err(_) => None,
                 }
@@ -689,9 +700,11 @@ impl StatementChecker {
                 // use 首段 = 包名；该包在 vendor 中无目录 → 视为缺依赖
                 let pkg = path.split('.').next().unwrap_or(path);
                 if !vendor_root.join(format!("{pkg}-")).exists() {
-                    builder = builder.with_help(format!(
-                        "依赖包 '{pkg}' 未安装到 .yaoxiang/vendor/，运行 `yaoxiang install`"
-                    ));
+                    // help 走 locales per-site 键（issue #469 处 1）：文案随
+                    // error_lang() 渲染，{pkg} 插值，不在发射点硬编成品串
+                    builder = builder
+                        .param("pkg", pkg)
+                        .with_help_key("E5001.vendor_missing.help");
                 }
             }
             return Err(Box::new(builder.build()));
@@ -867,6 +880,17 @@ impl StatementChecker {
         definition_span: crate::util::span::Span,
     ) {
         self.scope.add_param(name, poly, is_mut, definition_span);
+    }
+
+    /// 添加**类型参数**（编译期名）：体内类型位置可解析，但不占运行时帧槽位。
+    /// 嵌套函数体引用它不算「从外层帧取值」，故不受捕获屏障遮挡。
+    pub fn add_type_param(
+        &mut self,
+        name: String,
+        poly: PolyType,
+        definition_span: crate::util::span::Span,
+    ) {
+        self.scope.add_type_param(name, poly, definition_span);
     }
 
     /// 变量类型账本（#256）：移交给所有权检查做 Move/Dup 分类
@@ -1054,6 +1078,13 @@ impl StatementChecker {
         let prev_fn_context = self.scope.fn_context().map(str::to_owned);
         self.scope.set_fn_context(Some(name.to_string()));
 
+        // RFC-009 §2.3 捕获屏障：函数定义体不得借参数链读**外层帧**的值
+        // （外层参数 / 语句绑定值）。屏障按当前参数链深度定格——此后 enter_fn
+        // 压入的本函数参数层在屏障之上，照常可见；类型参数（编译期名）不挡。
+        // 挡掉后由上层既有的「未解析变量」判定发 E1001（与捕获外层块局部同码同文案）。
+        // 作用域：只有**函数定义体**；lambda 表达式体走 #254 创建点固化，行为不变。
+        let saved_param_barrier = self.scope.enter_capture_barrier();
+
         // 创建函数作用域（#295 三链模型：参数层 + 新局部层，外层函数局部变量不可见）
         self.scope.enter_fn();
 
@@ -1102,20 +1133,22 @@ impl StatementChecker {
 
         // 类型参数进参数链（与值级签名同一批新鲜变量）：体内值位置引用
         // `Result(T, E)` 的 T/E 由此解析为类型级值。IR 层变体构造擦除类型位，
-        // 不产生运行时形态。
+        // 不产生运行时形态。登记为**编译期名**：嵌套函数体引用外层类型参数
+        // 不构成对外层帧的取值，故不被捕获屏障遮挡（`add_type_param`）。
         for (tp_name, tp_ty) in type_param_vars {
             if !params.iter().any(|p| &p.name == tp_name) {
-                self.add_param(
+                self.add_type_param(
                     tp_name.clone(),
                     PolyType::mono(tp_ty.clone()),
-                    false,
                     crate::util::span::Span::default(),
                 );
             }
         }
 
-        // #295：函数体推断期间，外层函数的局部变量不可见（函数不捕获外层局部变量），
-        // 本函数参数与全局可见（三链模型天然实现，无需额外标志）。
+        // #295：函数体推断期间，外层函数的局部变量不可见（函数不捕获外层局部变量）。
+        // 外层函数的**参数**同样在读值意义上不可见——由上面的捕获屏障实现（RFC-009
+        // §2.3）；本函数参数与全局/模块级名照常可见。类型参数（编译期名）不受遮挡。
+        // 例外：lambda **表达式**体（#254 创建点固化）不走本屏障，行为保持原样。
 
         if self.collect_all_errors {
             // 收集模式：收集所有错误，不短路
@@ -1143,6 +1176,7 @@ impl StatementChecker {
 
             // 退出函数作用域
             self.scope.exit_fn();
+            self.scope.restore_capture_barrier(saved_param_barrier);
             self.is_top_level = was_top_level;
             self.loop_depth = saved_loop_depth;
             self.scope.set_fn_context(prev_fn_context);
@@ -1174,6 +1208,7 @@ impl StatementChecker {
 
             // 退出函数作用域
             self.scope.exit_fn();
+            self.scope.restore_capture_barrier(saved_param_barrier);
             self.is_top_level = was_top_level;
             self.loop_depth = saved_loop_depth;
             self.scope.set_fn_context(prev_fn_context);
@@ -2083,6 +2118,51 @@ impl StatementChecker {
 
         out
     }
+    /// 检查变量声明/赋值语句（绑定失败毒化层）。
+    ///
+    /// issue #469 处 3：致命 RHS 错误（E1014/E1107/E1002…）使该语句的绑定
+    /// 不发生，后续引用逐处报 E1001 Unknown variable——同一根因的级联噪声。
+    /// 绑定失败时把被绑名以**错误类型**（既有底部类型 `Never`）登记进环境：
+    /// 后续引用命中该登记不再报未定义，也不产生新的误导诊断——`unify` 的
+    /// 爆炸原理（solver）、`infer_binary` 的 Never 短路、所有权层对 Never 的
+    /// 值语义放行三处共同保证「毒值传播但静默」。
+    /// 已有绑定的重赋值失败不覆盖旧类型；方法绑定不进变量作用域，不毒化。
+    #[allow(clippy::too_many_arguments)]
+    fn check_var_stmt(
+        &mut self,
+        name: &str,
+        type_annotation: Option<&crate::frontend::core::parser::ast::Type>,
+        prelude_stmts: &[Stmt],
+        initializer: Option<&Expr>,
+        is_mut: bool,
+        stmt_span: crate::util::span::Span,
+        name_span: crate::util::span::Span,
+        is_method_binding: bool,
+    ) -> Result<(), Box<Diagnostic>> {
+        match self.check_var_stmt_inner(
+            name,
+            type_annotation,
+            prelude_stmts,
+            initializer,
+            is_mut,
+            stmt_span,
+            name_span,
+            is_method_binding,
+        ) {
+            Ok(v) => Ok(v),
+            Err(e) => {
+                if !is_method_binding && self.scope.get_var_info(name).is_none() {
+                    self.scope.add_var(
+                        name.to_string(),
+                        PolyType::mono(MonoType::Never),
+                        is_mut,
+                        name_span,
+                    );
+                }
+                Err(e)
+            }
+        }
+    }
     /// 检查变量语句
     ///
     /// 处理 Binding 类型的变量声明。
@@ -2091,7 +2171,7 @@ impl StatementChecker {
     /// 不是变量声明/赋值——不适用 spec §4.3（否则 `Point.get_x = f[0]`
     /// 会被当成对变量 `get_x` 的重赋值）。
     #[allow(clippy::too_many_arguments)]
-    fn check_var_stmt(
+    fn check_var_stmt_inner(
         &mut self,
         name: &str,
         type_annotation: Option<&crate::frontend::core::parser::ast::Type>,
@@ -2762,6 +2842,21 @@ impl StatementChecker {
                 // 其他二元运算：直接处理
                 let left_ty = self.check_expr(left)?;
 
+                // 底部类型 vacuous（issue #469 处 3）：绑定失败毒化登记（`Never`
+                // 占位）的变量参与运算不施加类型约束——与 infer_binary 的 Never
+                // 短路同款（两个遍历器、同一判据，见该函数注释）。结果取另一侧
+                // 的具体形态；两侧都是 Never 时无信息可依，取 fresh 推迟。
+                let left_never = matches!(left_ty, MonoType::Never);
+                let right_never = matches!(right_ty, MonoType::Never);
+                if left_never || right_never {
+                    return Ok(match (left_never, right_never) {
+                        (true, true) => self.solver.new_var(),
+                        (true, false) => right_ty,
+                        (false, true) => left_ty,
+                        (false, false) => unreachable!("上方 if 已排除"),
+                    });
+                }
+
                 match op {
                     BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Div => {
                         // RFC-009 读透明：借用值参与算术按 inner 类型判定（读穿透）
@@ -2859,18 +2954,14 @@ impl StatementChecker {
                             // ——读者看到的是借用后的读视图类型，但很可能以为是
                             // “Vec 和 Int 不能相加”，而实际该做的是取元素或解引用。
                             // 这里针对“一侧是借用”的情形给出具体提示。
+                            // help 走 locales per-site 键（issue #469 处 1）：
+                            // {l}/{r} 插值，不在发射点硬编成品串。
                             let borrowed = matches!(left_ty, MonoType::Ref { .. })
                                 || matches!(right_ty, MonoType::Ref { .. });
-                            let help = if borrowed {
-                                format!(
-                                    "左侧读作 '{l}'、右侧读作 '{r}'；借用（&T）参与算术时按内部类型判定，\
-                                     若想对容器运算请先取元素（如 v[0]）或解引用（*t）"
-                                )
+                            let help_key: &'static str = if borrowed {
+                                "E1002.borrowed_arith.help"
                             } else {
-                                format!(
-                                    "左右类型分别为 '{l}' 和 '{r}'，二者不支持该运算符；\
-                                         检查是否少了转换或写错了操作数"
-                                )
+                                "E1002.binop_mismatch.help"
                             };
                             Err(Box::new(
                                 ErrorCodeDefinition::type_mismatch(
@@ -2878,7 +2969,9 @@ impl StatementChecker {
                                     &format!("{l} 与 {r}"),
                                 )
                                 .at(*span)
-                                .with_help(help)
+                                .param("l", format!("{l}"))
+                                .param("r", format!("{r}"))
+                                .with_help_key(help_key)
                                 .build(),
                             ))
                         }

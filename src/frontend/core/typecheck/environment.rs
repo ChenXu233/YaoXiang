@@ -229,13 +229,13 @@ pub struct TypeEnvironment {
     pub native_signatures: HashMap<String, MonoType>,
     /// Native 函数 arity 区间表（#387）：按签名 `?`（可选）/`...`（变参）标记
     /// 解析出的 [min, max]。Key 与 native_signatures 同（全限定名 + 短名）；
-    /// max=None 表示变参不设上限。手注 FFI 签名（add_native_signature 路径）
-    /// 无表项——检查层对无表项的 native 维持旧宽容。
+    /// max=None 表示变参不设上限。手注 FFI 签名（[`Self::add_native_signature`]
+    /// 路径）无表项——检查层对无表项的 native 维持旧宽容（#456 只补齐了形参名表，
+    /// arity 区间仍不灌，故元数判定维持原口径）。
     ///
-    /// **已知限制（#454 复审 F4，未修）**：`add_native_signature` 只灌
-    /// `native_signatures`，不灌 `native_param_names` ⇒ 走这条路径注册的宿主
-    /// 嵌入函数上，命名实参仍会被静默丢弃（`?454` 之后的 std 原生导出已修）。
-    /// 仓内零调用者，属宿主嵌入面待办；修法与 std 导出同构（补一张形参名表）。
+    /// 形参名表（[`Self::native_param_names`]）与签名表**同键同源**：手注 FFI 与
+    /// std 导出都经 `signature::export_signature_param_info` 灌装（#456 已修，
+    /// 此前手注路径缺这张表 ⇒ 命名实参被静默丢弃）。
     pub native_arity: HashMap<String, (usize, Option<usize>)>,
     /// #454 / t14：原生导出的**形参名 + 必需下限**（全限定名 + 短名）。
     /// 与 native_signatures / native_arity 同源灌装（同一签名串、同一解析入口
@@ -657,7 +657,34 @@ impl TypeEnvironment {
     }
 
     /// 替换类型参数：将 TypeRef(param_name) 替换为具体的类型实参
+    ///
+    /// 两步合成（复审轮 1 F2）：先做 TypeRef 结构遍历，再对结果按
+    /// 「构造器参数名 → 实参构造器名」改名——头部改名只有共享实现
+    /// `types::substitute::substitute_ctor_heads` 一处，本函数不再内联。
     pub(crate) fn replace_type_params(
+        ty: &MonoType,
+        param_names: &[String],
+        args: &[MonoType],
+    ) -> MonoType {
+        // 构造器变量（高阶类型参数）在**应用头部**：`F(A)` 的 F 绑定实参表
+        // 对应位的真实构造器名（`Vec` / `Box`），不是普通类型实参的同位替换
+        // （WBS 3.5.1「合一器在头部位置匹配构造器变量」）。
+        let head_map: HashMap<String, String> = param_names
+            .iter()
+            .enumerate()
+            .filter_map(|(i, n)| {
+                args.get(i)
+                    .and_then(crate::frontend::core::types::substitute::ctor_head_name)
+                    .map(|head| (n.clone(), head))
+            })
+            .collect();
+        let walked = Self::replace_type_params_walk(ty, param_names, args);
+        crate::frontend::core::types::substitute::substitute_ctor_heads(&walked, &head_map)
+    }
+
+    /// `replace_type_params` 的结构遍历体：只替换 TypeRef 参数位，
+    /// 头部改名由调用方交给共享实现 `substitute_ctor_heads`（F2）。
+    fn replace_type_params_walk(
         ty: &MonoType,
         param_names: &[String],
         args: &[MonoType],
@@ -679,7 +706,7 @@ impl TypeEnvironment {
                     .map(|(name, field_ty)| {
                         (
                             name.clone(),
-                            Self::replace_type_params(field_ty, param_names, args),
+                            Self::replace_type_params_walk(field_ty, param_names, args),
                         )
                     })
                     .collect();
@@ -698,16 +725,16 @@ impl TypeEnvironment {
             } => {
                 let new_params: Vec<MonoType> = params
                     .iter()
-                    .map(|p| Self::replace_type_params(p, param_names, args))
+                    .map(|p| Self::replace_type_params_walk(p, param_names, args))
                     .collect();
-                let new_ret = Self::replace_type_params(return_type, param_names, args);
+                let new_ret = Self::replace_type_params_walk(return_type, param_names, args);
                 MonoType::Fn {
                     params: new_params,
                     return_type: Box::new(new_ret),
                 }
             }
             MonoType::Generic { name, args } if name == "Range" && args.len() == 1 => {
-                let new_elem = Self::replace_type_params(&args[0], param_names, args);
+                let new_elem = Self::replace_type_params_walk(&args[0], param_names, args);
                 MonoType::Generic {
                     name: "Range".into(),
                     args: vec![new_elem],
@@ -719,7 +746,7 @@ impl TypeEnvironment {
             } => {
                 let new_args = generic_args
                     .iter()
-                    .map(|a| Self::replace_type_params(a, param_names, args))
+                    .map(|a| Self::replace_type_params_walk(a, param_names, args))
                     .collect();
                 MonoType::Generic {
                     name: name.clone(),
@@ -731,7 +758,7 @@ impl TypeEnvironment {
             // impl `(self: &Dog)` 比较时 expected 侧内层仍是不变元 → E1099 误报。
             MonoType::Ref { mutable, inner } => MonoType::Ref {
                 mutable: *mutable,
-                inner: Box::new(Self::replace_type_params(inner, param_names, args)),
+                inner: Box::new(Self::replace_type_params_walk(inner, param_names, args)),
             },
             _ => ty.clone(),
         }
@@ -957,13 +984,39 @@ impl TypeEnvironment {
         self.trait_table.get_impl(trait_name, for_type)
     }
 
-    /// 注册 native 函数签名
+    /// 注册 native 函数签名（宿主嵌入 / 手注 FFI 路径）。
+    ///
+    /// 入参是**签名串**——与 stdlib 导出注册（`add_native_function_types`）同源：
+    /// 同一个串既解析出函数类型，又经 [`signature::export_signature_param_info`]
+    /// 灌装「形参名 + 必需下限」表。命名实参的按名绑定、未知名/重复命名判定、
+    /// 「可选位允许缺席」都只从那张表取（`arg_binding::bind_args_to_params` 是判据
+    /// 唯一实现），本函数**不得**自己解析形参名。
+    ///
+    /// 此前该 API 收 `MonoType`、只灌签名表：经它注册的宿主原生函数上命名实参
+    /// 既不入槽也不报错（#456，D59 C 类静默不动作）。零在仓调用者，故同步改签名；
+    /// 只拿得到 `MonoType` 的调用方应在自己那侧解析出签名串后再走本 API。
+    ///
+    /// 键与 `native_signatures` 完全一致（同一 `name`）——两张表必须同键，
+    /// 否则消费者按同一个名字查两张表会得到一半事实。
     pub fn add_native_signature(
         &mut self,
         name: &str,
-        sig: MonoType,
-    ) {
-        self.native_signatures.insert(name.to_string(), sig);
+        signature: &str,
+    ) -> crate::util::diagnostic::Result<()> {
+        let fn_ty = crate::frontend::core::typecheck::signature::parse_signature(signature, self)?;
+        self.native_signatures.insert(name.to_string(), fn_ty);
+        if let Some((names, required_min)) =
+            crate::frontend::core::typecheck::signature::export_signature_param_info(signature)
+        {
+            self.native_param_names.insert(
+                name.to_string(),
+                ExportParamInfo {
+                    names,
+                    required_min,
+                },
+            );
+        }
+        Ok(())
     }
 
     /// 获取 native 函数签名

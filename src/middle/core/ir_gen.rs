@@ -12,6 +12,7 @@
 use crate::frontend::core::lexer::tokens::Literal;
 use crate::frontend::core::parser::ast::{self, Expr};
 use crate::frontend::module::registry::ModuleRegistry;
+use crate::frontend::module::ModuleSource;
 use crate::frontend::module::resolver::Resolver;
 use crate::frontend::module::symbol::{DefKind, SymbolTable};
 use crate::frontend::module::ExportKind;
@@ -99,6 +100,13 @@ fn get_type_fallback_string(mono_type: &MonoType) -> String {
 #[derive(Debug, Clone)]
 struct SymbolEntry {
     local_idx: usize,
+    /// 该变量绑定时**写出**的类型名（`x: TempB = ..` 的注解原文，或构造器调用
+    /// `TempB(..)` / `ns.Temp(..)` 写出的名字）。WBS 4.9.8 / issue #465：
+    /// `MonoType` 对导入类型只留**定义侧裸名**，两单元的同名类型分不出来；
+    /// 「这个名字是从哪个单元带进来的」在本单元唯一有据的是 `use` 面
+    /// （[`AstToIrGenerator::imported_type_owner`]）——故把写出名留在符号表里，
+    /// 方法派发时据此归因到定义单元。
+    written_type: Option<String>,
 }
 
 /// AST 到 IR 的生成器
@@ -120,6 +128,10 @@ pub struct AstToIrGenerator {
     temp_floor: usize,
     /// 局部变量类型追踪（用于错误消息中显示实际类型）
     local_var_types: HashMap<String, String>,
+    /// 顶层绑定**写出**的类型名（Script 形态的 `t = Temp(1.0)` 是全局槽位，
+    /// 与块内局部变量走同一条派发归因链——WBS 4.9.8 / issue #465）。
+    /// 键 = 本文件的绑定名（不含模块限定）。
+    global_written_types: HashMap<String, String>,
     /// FFI 库绑定
     ffi_libs: Vec<crate::middle::core::ir::FfiLibBinding>,
     /// FFI 绑定 — 不透明类型或外部函数
@@ -338,6 +350,7 @@ impl AstToIrGenerator {
             temp_high_water: 0,
             temp_floor: 0,
             local_var_types: HashMap::new(),
+            global_written_types: HashMap::new(),
             ffi_libs: Vec::new(),
             ffi_bindings: Vec::new(),
             next_lib_id: 0,
@@ -506,76 +519,22 @@ impl AstToIrGenerator {
             .unwrap_or(name)
     }
 
-    /// #452：把方法调用的实参按**形参声明序**放回槽位（含接收者位下标 0）。
+    /// 共享判据给出的「逐实参形参位」→ **按形参槽位序**重排的实参下标。
     ///
-    /// 位置实参占前导槽位（第 i 个 → 形参 1+i），命名实参按名入槽；命名后接
-    /// 位置实参、同一槽位重复指定、名字不在形参表里一律报错——**不得静默丢弃
-    /// 命名实参**（丢弃即换一种静默：实参进了调用但落错槽位，运行期才炸）。
+    /// #452 / #456：实参绑定的**判定**只有一处——`typecheck::inference::arg_binding::
+    /// `bind_args_to_params`（位置占前导槽、命名按名入槽、未知名/争槽/命名后接位置/
+    /// 重复命名/缺参六条规则全在那边）。本函数**只搬运**：把「逐实参的形参位」
+    /// 转成 IR 侧要的「按槽位序的实参序」，不判位、不判名、不判可选位。
     ///
-    /// 返回逐槽的实参序（`Some(k)`：k < 位置实参数 → `args[k]`，否则
-    /// `named_args[k - 位置实参数]`；`None` = 该槽空缺）。槽位下标与 typecheck
-    /// 侧 `bind_named_args` 同坐标系（全形参表，含接收者位）。
-    /// `key` 是诊断里要显示的真名（调用点传方法键或决议出的混编名叶子段）——
-    /// 此前硬编 `"<method>"`、或拿 `names.first()`（= 接收者位 self）冒名，
-    /// 用户看到的是 "Function self has no parameter named z"（F3）。
-    fn build_arg_slots(
-        key: &str,
-        names: &[String],
-        args: &[Expr],
-        named_args: &[(String, Expr)],
-        span: &Span,
-    ) -> crate::util::diagnostic::Result<Vec<Option<usize>>> {
-        if names.is_empty() {
-            if named_args.is_empty() {
-                return Ok((0..args.len()).map(Some).collect());
-            }
-            // 形参名不可得：能力不足要**响亮**，不许把命名实参悄悄丢掉
-            return Err(ErrorCodeDefinition::unknown_argument(
-                key,
-                &named_args[0].0,
-                "（形参名表不可得）",
-            )
-            .at(*span)
-            .build());
-        }
-        let mut slots: Vec<Option<usize>> = vec![None; names.len()];
-        for i in 0..args.len() {
-            if 1 + i < slots.len() {
-                slots[1 + i] = Some(i);
-            }
-        }
-        if let (Some(last), Some((first_named_name, first_named))) =
-            (args.last(), named_args.first())
-        {
-            if first_named.span().start.offset < last.span().start.offset {
-                // 顺序非法（非重复）：一个形参收到多个实参 / 位置实参写在命名实参之后（E1111）
-                return Err(
-                    ErrorCodeDefinition::argument_order_invalid(key, first_named_name)
-                        .at(*span)
-                        .build(),
-                );
-            }
-        }
-        for (i, (name, _)) in named_args.iter().enumerate() {
-            let Some(slot) = names
-                .iter()
-                .position(|p| p == name)
-                .filter(|slot| *slot > 0)
-            else {
-                return Err(
-                    ErrorCodeDefinition::unknown_argument(key, name, &names.join(", "))
-                        .at(*span)
-                        .build(),
-                );
-            };
-            if slots[slot].is_some() {
-                return Err(ErrorCodeDefinition::argument_order_invalid(key, name)
-                    .at(*span)
-                    .build());
-            }
-            slots[slot] = Some(args.len() + i);
-        }
-        Ok(slots)
+    /// 此前 ir_gen 另有一份 `build_arg_slots`（约 60 行）在同一条生产路径上重判，
+    /// 与共享判据已经分歧（同一语义两个码：用户函数重复命名 E1015、方法/原生路径
+    /// E1010/E1111）——本次合并后全仓只剩共享判据一处（#456）。
+    ///
+    /// 槽位不重复由判据保证（同槽冲突已在那侧拒绝），故排序无并列。
+    fn slot_order_arg_indices(positions: &[usize]) -> Vec<usize> {
+        let mut order: Vec<usize> = (0..positions.len()).collect();
+        order.sort_by_key(|&arg_idx| positions[arg_idx]);
+        order
     }
 
     /// 查一个函数的**声明期形参名 + 必需下限**（供命名参数重排与「可选位放行」）。
@@ -595,6 +554,19 @@ impl AstToIrGenerator {
         full_path: &str,
         leaf: &str,
     ) -> Option<crate::frontend::core::typecheck::environment::ExportParamInfo> {
+        // #466：先查**全名/混编名**键——重载候选的形参名按混编名精确登记，
+        // 叶子名键在同名重载下末次覆盖，会让决议命中的候选拿错名字表。
+        // 非重载路径全名不在本表（fn_param_names 只登记本模块定义），落回叶名。
+        if let Some(names) = self.fn_param_names.get(full_path) {
+            let names = names.clone();
+            let required_min = names.len();
+            return Some(
+                crate::frontend::core::typecheck::environment::ExportParamInfo {
+                    names,
+                    required_min,
+                },
+            );
+        }
         if let Some(names) = self.fn_param_names.get(leaf) {
             let names = names.clone();
             let required_min = names.len();
@@ -695,11 +667,22 @@ impl AstToIrGenerator {
         layers
     }
 
-    /// 该类型注解是否为 `Type`（元类型）——即类型参数，编译期擦除。
+    /// 该类型注解是否为**类型位**——编译期擦除，不占运行时参数位。
+    ///
+    /// 两类：具体元类型 `Type`（`T: Type`），以及**高阶类型参数**的标注
+    /// `(T: Type) -> Type`（构造器变量，RFC-010 元类型层级的 Type1/Type2+）。
+    /// 后者此前被当成值层，`(F: (T: Type) -> Type, A: Type) -> (x: A) -> A`
+    /// 的 curry 外壳被保留，构造器类型实参对应的值级函数永不生成
+    /// （运行期返回值是闭包而非调用结果）。判据委托 parser 的
+    /// `is_type_level_fn`——与声明侧类型参数分类同一实现，不内联第二份。
     fn is_type_param_ann(ty: &ast::Type) -> bool {
         match ty {
             ast::Type::MetaType { .. } => true,
             ast::Type::Name { name, .. } => name == "Type",
+            ast::Type::Fn {
+                params,
+                return_type,
+            } => crate::frontend::core::parser::ast::is_type_level_fn(params, return_type),
             _ => false,
         }
     }
@@ -753,7 +736,13 @@ impl AstToIrGenerator {
             &local_idx.to_string()
         );
         if let Some(scope) = self.symbols.last_mut() {
-            scope.insert(name.to_string(), SymbolEntry { local_idx });
+            scope.insert(
+                name.to_string(),
+                SymbolEntry {
+                    local_idx,
+                    written_type: None,
+                },
+            );
         }
         // 把源码名写进当前函数的槽位表：槽位可能尚未扩展到 local_idx
         // （临时寄存器先于具名变量分配），先补齐空槽。
@@ -819,6 +808,115 @@ impl AstToIrGenerator {
             }
         }
         None
+    }
+
+    /// `use lib.{v}` / `use lib.{v as w}` 的本地名解析到的**跨文件全局槽位**。
+    ///
+    /// 两表联查的唯一实现：`use_aliases`（本地名 → 限定名）取限定名，
+    /// `global_slot_layout`（限定名 → 槽位号）取槽位。变量求值路径
+    /// （[`Self::generate_var_expr_ir`] 的别名臂）与调用形态判据
+    /// （[`Self::is_static_fn_name`]）**同经此处**——同一解析规则只有一份，
+    /// 两条路径不会各自猜一个答案。
+    ///
+    /// 布局只收**值绑定**（`allocate_global_slots` 的判据：非函数），故导入的
+    /// 函数定义（`use lib.{double}`）不命中此路——它按名进函数表，仍是静态调用。
+    fn use_alias_value_slot(
+        &self,
+        name: &str,
+    ) -> Option<usize> {
+        self.use_aliases
+            .get(name)
+            .and_then(|qualified| self.global_slot_layout.get(qualified).copied())
+    }
+
+    /// 模块限定导出是否是**函数代码**——函数表里可物化成闭包的可调用体。
+    ///
+    /// 值路径的兜底臂把「不在跨文件值绑定布局里的导出」一律当 native 常量零参
+    /// 调用（`std.math.PI` 即此形态）。但函数定义（lambda/块绑定）同样不进值绑定
+    /// 布局——它按名进函数表，是**代码**而不是常量（#479：`f = greet` 装进了
+    /// greet() 的返回值，f() 得 void）。函数代码物化为 MakeClosure，与
+    /// `lib.greet` 作值的 #396/#348 表示一致。
+    ///
+    /// 判据落到**导出粒度**（#493）：模块来源不再单独决定结果。
+    /// - 用户/vendor 模块的 `Function` 导出是代码；
+    /// - **纯 yx 实现**的 std 导出同样是代码——`std.json.parse` / `std.list.map`
+    ///   定义在嵌入源里（`src/std/yx_sources.rs`），与用户模块走同一前端管道、
+    ///   按限定名进函数表。此前 `ModuleSource::Std` 一刀切把它们误判成 native
+    ///   常量：别名被降成零参 `Call`，非泛型静默拿到被调体的返回值，泛型直接
+    ///   运行期 E6007；
+    /// - native 导出不是（#492 给它们自己的形态，见 `emit_module_export_value`）。
+    fn qualified_export_is_code(
+        &self,
+        qualified: &str,
+    ) -> bool {
+        let Some((module_path, export_name)) = qualified.rsplit_once('.') else {
+            return false;
+        };
+        let Some(module) = self.registry.get(module_path) else {
+            return false;
+        };
+        if !matches!(
+            module.exports.get(export_name).map(|export| &export.kind),
+            Some(ExportKind::Function)
+        ) {
+            return false;
+        }
+        // std 面按导出粒度再判一次**实现来源**（native vs 嵌入 yx 定义）；
+        // 用户/vendor 导出不需要这次追问（它们的导出都是本仓源码）。
+        module.source != ModuleSource::Std || self.registry.is_yx_std_export(qualified)
+    }
+
+    /// **模块导出作值**的判据与发射点——值位置只有这一份实现（#479 / #493 / #492）。
+    ///
+    /// 三条别名/成员路径（`use lib.{f}` 的别名、`lib.f` 的命名空间成员、
+    /// `io.println` 的模块变量成员）都经此处，按导出**实现来源**分流：
+    ///
+    /// - 函数代码（用户/vendor 导出 + 纯 yx 实现的 std 导出）→ `MakeClosure`：
+    ///   函数值是一等值。零参 `Call` 会把被调体的返回值装进变量（静默错值、
+    ///   exit 0）；泛型纯 yx 导出更会直接运行期 E6007。
+    /// - 原生函数导出 → **原生函数值**（`ConstValue::NativeFn`）：原生函数没有
+    ///   IR 函数体，`MakeClosure` 按名查函数表必然落空；经 `CallDyn` 间接调用时
+    ///   按名分发到 FFI 注册表（#492）。
+    /// - 其余 native 名（native 常量，如 `std.math.PI`）→ 零参调用：既有成功
+    ///   形态，行为逐字节不变。
+    ///
+    /// 返回 `false` 表示该限定名不属上述三类，调用方按自己的既有分支继续。
+    fn emit_module_export_value(
+        &mut self,
+        qualified: &str,
+        result_reg: usize,
+        span: Span,
+        instructions: &mut Vec<Instruction>,
+    ) -> bool {
+        if self.qualified_export_is_code(qualified) {
+            instructions.push(Instruction::MakeClosure {
+                dst: Operand::Local(result_reg),
+                func: qualified.to_string(),
+                env: vec![],
+                def: None,
+                span,
+            });
+            return true;
+        }
+        if self.registry.is_native_fn_export(qualified) {
+            instructions.push(Instruction::Load {
+                dst: Operand::Local(result_reg),
+                src: Operand::Const(ConstValue::NativeFn(qualified.to_string())),
+                span,
+            });
+            return true;
+        }
+        if self.registry.is_native_name(qualified) {
+            instructions.push(Instruction::Call {
+                dst: Some(Operand::Local(result_reg)),
+                func: Operand::Const(ConstValue::String(qualified.to_string())),
+                args: vec![],
+                span,
+                def: None,
+            });
+            return true;
+        }
+        false
     }
 
     /// 查找变量的类型
@@ -1020,6 +1118,188 @@ impl AstToIrGenerator {
         } else {
             t
         }
+    }
+
+    /// 记下局部变量**写出**的类型名（注解原文或构造器名）。
+    ///
+    /// 只记「用户写出来的名字」，不重判类型：`x: TempB` 记 `TempB`，
+    /// `u = TempB(2.0)` 记 `TempB`，`u = b.Temp(2.0)` 记 `b.Temp`。
+    /// 「这个名字属于哪个单元」的判定只在 [`Self::imported_type_owner`] 一处。
+    fn note_local_written_type(
+        &mut self,
+        name: &str,
+        written: &str,
+    ) {
+        for scope in self.symbols.iter_mut().rev() {
+            if let Some(entry) = scope.get_mut(name) {
+                entry.written_type = Some(written.to_string());
+                return;
+            }
+        }
+    }
+
+    /// 形参写出的类型名（注解原文）——与局部变量走同一条派发归因链。
+    fn note_param_written_types(
+        &mut self,
+        params: &[ast::Param],
+    ) {
+        let written: Vec<(String, String)> = params
+            .iter()
+            .filter_map(|p| {
+                let ty = p.ty.as_ref().and_then(Self::written_type_name_of)?;
+                Some((p.name.clone(), ty.to_string()))
+            })
+            .collect();
+        for (name, ty) in written {
+            self.note_local_written_type(&name, &ty);
+        }
+    }
+
+    /// 局部变量写出类型名的查找（作用域由符号表本身给出）。
+    fn local_written_type(
+        &self,
+        name: &str,
+    ) -> Option<&str> {
+        for scope in self.symbols.iter().rev() {
+            if let Some(entry) = scope.get(name) {
+                return entry.written_type.as_deref();
+            }
+        }
+        None
+    }
+
+    /// 变量写出的类型名：先查局部作用域，再查本文件顶层绑定位。
+    fn binding_written_type(
+        &self,
+        name: &str,
+    ) -> Option<&str> {
+        self.local_written_type(name)
+            .or_else(|| self.global_written_types.get(name).map(String::as_str))
+    }
+
+    /// 类型注解里**写出**的类型名：`Temp` / `TempB` / `&TempB` → 名字部分。
+    /// 内建类型、函数类型、结构体字面量返回 None（不是「某个单元的类型名」）。
+    fn written_type_name_of(ty: &ast::Type) -> Option<&str> {
+        match ty {
+            ast::Type::Name { name, .. } | ast::Type::Generic { name, .. } => Some(name.as_str()),
+            ast::Type::Ref { inner, .. }
+            | ast::Type::Ptr(inner)
+            | ast::Type::Paren(inner)
+            | ast::Type::NamedParen { inner, .. } => Self::written_type_name_of(inner),
+            _ => None,
+        }
+    }
+
+    /// 构造器表达式**写出**的类型名——**纯语法提取**，不做单元归属判定。
+    ///
+    /// `T(..)` → `T`；`ns.T(..)` / `ns.sub.T(..)` → 调用点原样的点分写法。
+    /// 「这个名字是不是类型、属于哪个单元」一律交给
+    /// [`Self::imported_type_owner`]（**唯一**归属判定点）——此处只记录用户写出的
+    /// 名字，避免同一判定在两处各做一遍（WBS 4.9.8 修复轮 R2 / issue #465：上一版
+    /// 在这里产出「权威限定名」再被归属判定二次解析，首段经命名空间别名表改写，
+    /// 权威名丢失）。
+    fn constructor_written_type_name(
+        &self,
+        expr: &ast::Expr,
+    ) -> Option<String> {
+        let ast::Expr::Call { func, .. } = expr else {
+            return None;
+        };
+        match func.as_ref() {
+            ast::Expr::Var(name, _) => Some(name.clone()),
+            ast::Expr::FieldAccess { .. } => {
+                let (head, fields) = flatten_namespace(func)?;
+                Some(
+                    std::iter::once(head)
+                        .chain(fields)
+                        .collect::<Vec<_>>()
+                        .join("."),
+                )
+            }
+            _ => None,
+        }
+    }
+
+    /// 「这个限定名是**类型导出**」——注册表导出面的唯一判据。
+    fn is_type_export(
+        &self,
+        qualified: &str,
+    ) -> bool {
+        self.registry
+            .resolve_export(qualified)
+            .map(|export| matches!(export.kind, ExportKind::Type))
+            .unwrap_or(false)
+    }
+
+    /// 把「写出的名字」解析成**别的单元**的类型限定名（本单元自有类型 → None）。
+    ///
+    /// **归属判定的唯一来源**（WBS 4.9.8 修复轮 R2）。三条判据按序，命中即返回：
+    /// 1. **权威限定名**（`b.Temp` / `p.q.Temp`）：注册表里就存在该模块与该类型导出
+    ///    ⇒ **原样返回，绝不再解析**。模块键是权威身份，命名空间别名表不得改写它
+    ///    （R2 实测：`use other as p` 会把 `p.q.Temp` 二次解析成 `other.q.Temp`）；
+    /// 2. **本地名**（`TempB`）→ 导入名表 `use_aliases`（`use b.{Temp as TempB}` 的条目）；
+    /// 3. **命名空间前缀写法**（`io.X` / 用户模块别名 `m.T`）→ [`Resolver`] 的命名空间
+    ///    解析（与调用名限定化同一实现，不另起路径解析）。
+    ///
+    /// 解析结果必须是注册表的类型导出；否则不给归属（宁可不限定，不回错单元）。
+    fn imported_type_owner(
+        &self,
+        written: &str,
+    ) -> Option<String> {
+        let written = Self::strip_ref_prefix(written);
+        // 本单元自有类型：裸名就是定义侧名字，限定化留给 `qualify_names`
+        if self.declared_type_names.contains(written) {
+            return None;
+        }
+        // ① 权威限定名：精确命中即用，不再过命名空间/别名解析
+        if self.is_type_export(written) {
+            return Some(written.to_string());
+        }
+        // ② 本地名 → 导入名表（含 `use M.{T as X}` 的内联别名条目）
+        if let Some(qualified) = self.use_aliases.get(written) {
+            if self.is_type_export(qualified) {
+                return Some(qualified.clone());
+            }
+        }
+        // ③ 命名空间前缀写法（std 子模块 / 用户模块别名）
+        let (head, rest) = written.split_once('.')?;
+        let fields: Vec<&str> = rest.split('.').collect();
+        let qualified = self.resolver().resolve_namespace(head, &fields);
+        self.is_type_export(&qualified).then_some(qualified)
+    }
+
+    /// 方法派发名的**唯一判据**：把「定义侧名字」的裸类型前缀按接收者所属单元
+    /// 限定化（`Temp.tag` → `b.Temp.tag`），使跨单元同名类型的方法落回各自单元。
+    ///
+    /// `definition_name` 的形态有三处生产者（RFC-004 绑定 / D20 重载决议 / 裸名
+    /// 推导），前缀一律是 typecheck 与 `type_bindings` 共用的**定义侧裸类型名**；
+    /// 三者都经本函数产出最终调用名，判据只此一份（D3）。
+    /// 接收者类型名与定义名前缀对不上时原样返回（不是这个类型的方法面）。
+    fn method_dispatch_name(
+        &self,
+        recv: &ast::Expr,
+        definition_name: &str,
+    ) -> String {
+        let owner = match recv {
+            ast::Expr::Var(name, _) => self
+                .binding_written_type(name)
+                .and_then(|written| self.imported_type_owner(written)),
+            _ => self
+                .constructor_written_type_name(recv)
+                .and_then(|written| self.imported_type_owner(&written)),
+        };
+        let Some(owner) = owner else {
+            return definition_name.to_string();
+        };
+        let Some((prefix, rest)) = definition_name.split_once('.') else {
+            return definition_name.to_string();
+        };
+        // 定义侧前缀是裸类型名；只有它就是接收者类型的叶子名时才替换
+        // （重载混编序 `#k` 原样保留——决议选的是**候选序**，单元由接收者定）。
+        if owner.rsplit('.').next() != Some(prefix) {
+            return definition_name.to_string();
+        }
+        format!("{owner}.{rest}")
     }
 
     /// 获取下一个临时寄存器编号
@@ -1810,15 +2090,12 @@ impl AstToIrGenerator {
                     // 那会把用户写法错误变成编译器进程 panic（#451，D59 A 类：
                     // 实测 `exit=101`）；此处编译期拒绝并指明补全写法。
                     let Some(method_type) = type_annotation.as_ref() else {
+                        // help 不在此硬编（issue #469 处 1）：E1110 的参数化模板
+                        // 已在 locales 六语言就位（{type}/{method} 由码表 param 供值）
                         return Err(ErrorCodeDefinition::method_binding_without_signature(
-                            &type_name,
-                            &name,
+                            &type_name, &name,
                         )
                         .at(stmt.span)
-                        .with_help(format!(
-                            "补上签名标注：`{type_name}.{name}: (self: &{type_name}, ...) -> 返回类型 = 函数体`；\
-                             要复用现成函数则写 `{type_name}.{name}: (…) -> 返回类型 = 函数名[位置]`"
-                        ))
                         .build());
                     };
                     self.generate_method_ir(
@@ -1983,6 +2260,15 @@ impl AstToIrGenerator {
             format!("{base_name}#{counted}")
         };
 
+        // #466：重载候选的形参名按**混编名**精确登记——叶子名键（Assign 臂
+        // 的登记）在同名重载下末次覆盖，决议命中 `Temp.pick` 的调用会按末候选
+        // `Temp.pick#1` 的形参名绑定（E1014 available: 错候选）。混编名与候选
+        // 一一对应，调用点按决议出的名字查（`lookup_param_info` 先全名后叶名）。
+        if !params.is_empty() {
+            let names: Vec<String> = params.iter().map(|p| p.name.clone()).collect();
+            self.fn_param_names.insert(func_name.clone(), names);
+        }
+
         // 注册方法到 type_bindings，使方法调用脱糖能找到绑定
         let binding_entry = ast::TypeBodyBinding {
             name: method_name.to_string(),
@@ -2021,6 +2307,7 @@ impl AstToIrGenerator {
             // 注册参数到符号表
             self.register_local(&param.name, i);
         }
+        self.note_param_written_types(params);
 
         // 记录局部变量起始位置（在参数之后）
         let local_var_start = params.len();
@@ -2177,6 +2464,7 @@ impl AstToIrGenerator {
 
             self.register_local(&param.name, i);
         }
+        self.note_param_written_types(params);
 
         // 记录局部变量起始位置（在参数之后）
         let local_var_start = params.len();
@@ -2427,6 +2715,7 @@ impl AstToIrGenerator {
         for (i, param) in layer.params.iter().enumerate() {
             self.register_local(&param.name, env_count + i);
         }
+        self.note_param_written_types(&layer.params);
 
         // next_temp 起始 = 参数总数
         self.next_temp = env_count + layer.params.len();
@@ -2744,6 +3033,8 @@ impl AstToIrGenerator {
                                 ConstValue::Char(c) => c.to_string(),
                                 ConstValue::Void => String::new(),
                                 ConstValue::Bytes(b) => format!("{:?}", b),
+                                // #492：原生函数值不是可格式化常量，退回运行时求值
+                                ConstValue::NativeFn(_) => return None,
                                 ConstValue::LibraryRef { .. } | ConstValue::ExternRef { .. } => {
                                     // FFI types cannot be formatted at compile time
                                     return None;
@@ -2971,6 +3262,18 @@ impl AstToIrGenerator {
             }
         };
 
+        // WBS 4.9.8 / issue #465：顶层绑定同样记下**写出**的类型名（注解原文
+        // 优先，否则构造器名）——Script 形态的顶层 `t = Temp(1.0)` 是全局槽位，
+        // 与块内局部变量走同一条派发归因链。必须在生成初始化指令**之前**登记：
+        // 初始化里的 `t.tag()` 就是消费点（同一语句内的自引用不在本判据面）。
+        let written = type_annotation
+            .and_then(Self::written_type_name_of)
+            .map(str::to_string)
+            .or_else(|| initializer.and_then(|e| self.constructor_written_type_name(e)));
+        if let Some(written) = written {
+            self.global_written_types.insert(name.to_string(), written);
+        }
+
         // 生成初始化指令：求值 init 表达式，写入槽位。
         // 无 init 的绑定保留零初始化语义（C 风格默认值）。
         // 旧实现（E3007）要求 init 必须是编译期常量；T2 后改为运行时求值，
@@ -3103,6 +3406,7 @@ impl AstToIrGenerator {
 
             self.register_local(&param.name, i);
         }
+        self.note_param_written_types(params);
 
         // 记录局部变量起始位置
         let local_var_start = params.len();
@@ -3435,6 +3739,13 @@ impl AstToIrGenerator {
                 }
                 // 普通变量
                 let initializer = value.as_ref().map(|v| v.as_ref());
+                // WBS 4.9.8 / issue #465：记下**写出**的类型名（注解原文优先，
+                // 否则取构造器名），供方法调用派发归因到定义单元。
+                let written_type = type_annotation
+                    .as_ref()
+                    .and_then(Self::written_type_name_of)
+                    .map(str::to_string)
+                    .or_else(|| initializer.and_then(|e| self.constructor_written_type_name(e)));
                 if let Some(type_ann) = type_annotation {
                     let mono: MonoType = type_ann.clone().into();
                     let type_name = mono.type_name();
@@ -3480,6 +3791,9 @@ impl AstToIrGenerator {
                     self.register_local(&name, idx);
                     idx
                 };
+                if let Some(written) = written_type {
+                    self.note_local_written_type(&name, &written);
+                }
                 if let Some(expr) = initializer {
                     // #299 §2：字面量上下文落点——Array 注解直接作用于 List 字面量时，
                     // 生成定长数组构造而非 List。禁止隐式 List→Array 转换：仅字面量种子直接落 Array。
@@ -4900,6 +5214,21 @@ impl AstToIrGenerator {
             .type_name()
     }
 
+    /// 该调用点是否为**静态调用**——callee 是函数表里的一个名字（代码），而非某个值。
+    ///
+    /// 名字解析与 [`Self::generate_var_expr_ir`] 同一条优先级（局部变量 → 全局
+    /// 槽位 → `use` 引入的跨文件值 → …）：命中就是**变量**，调用必须走 `CallDyn`
+    /// （间接调用，机制已在：闭包表达式路径即此）；全未命中才是函数表条目，按名 `Call`。
+    ///
+    /// 两条臂都是「值被当成函数名」的实证缺陷（WBS 3.6.1 / 3.6.2）：
+    /// - 顶层值绑定（`f = double`，查 [`Self::lookup_global`]）：它不是局部变量、
+    ///   却在 typecheck 的 bindings 里（类型是 `Fn`），于是被当成函数名。而函数表
+    ///   里没有叫 `f` 的代码——`f = double` 不进函数表，只占一个全局槽位（由
+    ///   `register_global_slots` 预分配，见其注释）。按名 `Call` 在运行期查扁平
+    ///   函数表落空，报 `E6006 Native function not found: f`。
+    /// - `use lib.{f}` / `use lib.{f as g}` 导入的函数类型值（查
+    ///   [`Self::use_alias_value_slot`]）：别名解析到的是对方单元的全局槽位，函数表
+    ///   里同样没有这个值，按名 `Call` 报 `E6006 Native function not found: lib.f`。
     fn is_static_fn_name(
         &self,
         func: &ast::Expr,
@@ -4907,6 +5236,17 @@ impl AstToIrGenerator {
         match func {
             ast::Expr::Var(name, _) => {
                 if self.lookup_local(name).is_some() {
+                    return false;
+                }
+                // 顶层值绑定是变量不是代码：与 `generate_var_expr_ir` 的
+                // 「局部 → 全局」优先级一致，走间接调用。
+                if self.lookup_global(name).is_some() {
+                    return false;
+                }
+                // 跨文件导入的值（`use lib.{f}` / `use lib.{f as g}`）：别名落在
+                // 跨文件值绑定槽位即是变量。联查与值路径同经 `use_alias_value_slot`
+                // ——同一实现，两条路径不会各猜一个答案。
+                if self.use_alias_value_slot(name).is_some() {
                     return false;
                 }
                 self.lookup_var_type(name).is_some()
@@ -5069,6 +5409,7 @@ impl AstToIrGenerator {
         for (i, param) in params.iter().enumerate() {
             self.register_local(&param.name, env_count + i);
         }
+        self.note_param_written_types(params);
 
         // 记录局部变量起始位置
         let local_var_start = env_count + params.len();
@@ -6116,9 +6457,13 @@ impl AstToIrGenerator {
                 } else {
                     short_name
                 };
+            // WBS 4.9.8 修复轮 R1 / issue #465：算子接口派发与普通方法调用同一判据——
+            // 接收者是导入类型时把裸类型前缀换成它的定义单元限定名（`Temp.index`
+            // → `b.Temp.index`），否则同名类型的算子实现互相落错单元（静默错值）。
+            let dispatch_name = self.method_dispatch_name(expr, &func_name);
             instructions.push(Instruction::Call {
                 dst: Some(Operand::Local(result_reg)),
-                func: Operand::Const(ConstValue::String(func_name)),
+                func: Operand::Const(ConstValue::String(dispatch_name)),
                 args: vec![Operand::Local(src_reg), Operand::Local(index_reg)],
                 span: *span,
                 def: None,
@@ -6704,20 +7049,23 @@ impl AstToIrGenerator {
                 src: Operand::Global(global_idx),
                 span: *var_span,
             });
-        } else if let Some(alias) = self.use_aliases.get(var_name) {
-            // T5：`use lib.{value}` 的别名先看是否落在全局布局里
-            // （跨文件顶层绑定）——是则走 LoadGlobal。
-            // 否则是 std 原生常量（如 PI），按限定名调用 native handler。
-            if let Some(&slot) = self.global_slot_layout.get(alias) {
-                instructions.push(Instruction::Load {
-                    dst: Operand::Local(result_reg),
-                    src: Operand::Global(slot),
-                    span: *var_span,
-                });
-            } else {
+        } else if let Some(slot) = self.use_alias_value_slot(var_name) {
+            // T5：`use lib.{value}`（含 `as` 别名）引入的跨文件顶层值 → 读全局槽位。
+            // 别名 → 限定名 → 槽位这两表联查归 `use_alias_value_slot`——调用形态
+            // 判据（`is_static_fn_name`）读同一实现，两条路径不会各猜一个答案。
+            instructions.push(Instruction::Load {
+                dst: Operand::Local(result_reg),
+                src: Operand::Global(slot),
+                span: *var_span,
+            });
+        } else if let Some(alias) = self.use_aliases.get(var_name).cloned() {
+            // 三条实现来源的判据与发射点只有一份（emit_module_export_value）：
+            // 代码 → MakeClosure、原生函数 → 原生函数值、native 常量 → 零参调用。
+            // 别名未命中上述三类时按既有零参调用兜底（与修复前同形态）。
+            if !self.emit_module_export_value(&alias, result_reg, *var_span, instructions) {
                 instructions.push(Instruction::Call {
                     dst: Some(Operand::Local(result_reg)),
-                    func: Operand::Const(ConstValue::String(alias.clone())),
+                    func: Operand::Const(ConstValue::String(alias)),
                     args: vec![],
                     span: *var_span,
                     def: None,
@@ -6787,14 +7135,9 @@ impl AstToIrGenerator {
                 });
                 return Ok(());
             }
-            if self.registry.is_native_name(&qualified) {
-                instructions.push(Instruction::Call {
-                    dst: Some(Operand::Local(result_reg)),
-                    func: Operand::Const(ConstValue::String(qualified.clone())),
-                    args: vec![],
-                    span: *span,
-                    def: None,
-                });
+            // ②③ 同一判据（emit_module_export_value）：native 常量 → 零参调用；
+            // 纯 yx 实现的 std 导出 → MakeClosure；原生函数 → 原生函数值（#492）。
+            if self.emit_module_export_value(&qualified, result_reg, *span, instructions) {
                 return Ok(());
             }
             if let Some(def) = self.registry.symbols().def(&qualified) {
@@ -6830,17 +7173,19 @@ impl AstToIrGenerator {
                     None
                 }
             } {
-                // 模块变量方法调用：生成函数调用
-                // 例如：io.println -> Call("std.io.println", [args])
-                // 这里我们处理的是非调用场景的字段访问（如 io.println 作为值）
-                // 生成零参数调用
-                instructions.push(Instruction::Call {
-                    dst: Some(Operand::Local(result_reg)),
-                    func: Operand::Const(ConstValue::String(full_path)),
-                    args: vec![],
-                    span: *span,
-                    def: None,
-                });
+                // 模块变量成员作值（`io.println` / `json.parse`）：与 `use lib.{f}`
+                // 别名同一判据（emit_module_export_value）——代码 → MakeClosure、
+                // 原生函数 → 原生函数值（#492）、native 常量 → 零参调用。此前一律
+                // 生成零参调用：原生函数作值时 stdout 空、exit 0、零诊断。
+                if !self.emit_module_export_value(&full_path, result_reg, *span, instructions) {
+                    instructions.push(Instruction::Call {
+                        dst: Some(Operand::Local(result_reg)),
+                        func: Operand::Const(ConstValue::String(full_path)),
+                        args: vec![],
+                        span: *span,
+                        def: None,
+                    });
+                }
             } else if field == "length"
                 && matches!(
                     self.get_expr_mono_type(expr),
@@ -7413,6 +7758,10 @@ impl AstToIrGenerator {
                     if inferred != "<unknown>" {
                         self.local_var_types.insert(var_name.clone(), inferred);
                     }
+                    // WBS 4.9.8 / issue #465：赋值的**写出**类型名（构造器形态）
+                    if let Some(written) = self.constructor_written_type_name(right) {
+                        self.note_local_written_type(var_name, &written);
+                    }
 
                     // 统一走 Store — 消除 Var→Var 走 Move 的特殊情况
                     instructions.push(Instruction::Store {
@@ -7523,9 +7872,12 @@ impl AstToIrGenerator {
                     } else {
                         short_name
                     };
+                    // WBS 4.9.8 修复轮 R1 / issue #465：同 Index 臂——接收者（左操作数）
+                    // 是导入类型时按定义单元限定派发名，本地类型行为不变。
+                    let dispatch_name = self.method_dispatch_name(left, &func_name);
                     instructions.push(Instruction::Call {
                         dst: Some(Operand::Local(result_reg)),
-                        func: Operand::Const(ConstValue::String(func_name)),
+                        func: Operand::Const(ConstValue::String(dispatch_name)),
                         args: vec![Operand::Local(left_reg), Operand::Local(right_reg)],
                         span: self.cur_span,
                         def: None,
@@ -7783,6 +8135,35 @@ impl AstToIrGenerator {
                     arg_regs.push(Operand::Local(arg_reg));
                 }
                 let method_function_name = self.resolve_field_path(expr, field);
+
+                // WBS 3.6.4：命名空间限定名若落在**跨文件全局槽位**，它是顶层值绑定
+                // （函数类型值），不是函数表条目——按名 `Call` 在运行期查扁平函数表
+                // 落空（`E6006 Native function not found: lib.f`）。改走间接调用：
+                // 读槽位 → `CallDyn`。限定名解析与槽位查询与
+                // `generate_field_access_expr_ir` 的命名空间数据访问**同一分支**
+                // （`resolve_namespace_data_access` + `global_slot_layout` 两表联查），
+                // 调用机制与闭包/函数值调用同一实现（`CallDyn`），不新增解析表。
+                if named_args.is_empty() {
+                    if let Some(slot) = self
+                        .resolve_namespace_data_access(expr, field)
+                        .and_then(|qualified| self.global_slot_layout.get(&qualified))
+                        .copied()
+                    {
+                        let func_reg = self.next_temp_reg();
+                        instructions.push(Instruction::Load {
+                            dst: Operand::Local(func_reg),
+                            src: Operand::Global(slot),
+                            span: *span,
+                        });
+                        instructions.push(Instruction::CallDyn {
+                            dst: Some(Operand::Local(result_reg)),
+                            func: Operand::Local(func_reg),
+                            args: arg_regs,
+                            span: *span,
+                        });
+                        return Ok(());
+                    }
+                }
                 if !named_args.is_empty() {
                     let leaf = method_function_name
                         .rsplit('.')
@@ -7884,20 +8265,29 @@ impl AstToIrGenerator {
                             } else {
                                 field.as_str()
                             };
-                            let slots =
-                                Self::build_arg_slots(diag_key, &names, args, named_args, span)?;
-                            for slot in slots.iter() {
-                                let arg_expr = match slot {
-                                    Some(slot) => {
-                                        if *slot < args.len() {
-                                            &args[*slot]
-                                        } else {
-                                            &named_args[*slot - args.len()].1
-                                        }
-                                    }
-                                    // 空槽说明给出诊断的 typecheck 侧未跑（本路径
-                                    // 只在 typecheck 通过后才到）——维持旧形态
-                                    None => continue,
+                            // #456：绑定**判定**走共享判据（形参表[0] 是接收者位，
+                            // 实参从槽 1 起）；本处只按槽位序搬运实参。
+                            //
+                            // `optional` 全置 true = 只重放**槽位绑定**（②未知名 / ③争槽 /
+                            // ④命名后接位置 / ⑤重复命名），不在 IR 侧重判⑥「缺参」：
+                            // 元数与缺参归 typecheck。RFC-004 绑定路径的实参是**被绑函数**
+                            // 调用的一部分，IR 按形参名表重建调用序时区分不了「缺席的接收者」
+                            // 与「缺席的必需位」；旧实现同样以空槽跳过，注释即「诊断归
+                            // typecheck」。
+                            let positions = crate::frontend::core::typecheck::inference::arg_binding::bind_args_to_params(
+                                diag_key,
+                                &names,
+                                args,
+                                named_args,
+                                1, // 方法形态：param_names[0] 是接收者位
+                                &vec![true; names.len()],
+                                *span,
+                            )?;
+                            for arg_pos in Self::slot_order_arg_indices(&positions) {
+                                let arg_expr = if arg_pos < args.len() {
+                                    &args[arg_pos]
+                                } else {
+                                    &named_args[arg_pos - args.len()].1
                                 };
                                 let arg_reg = self.next_temp_reg();
                                 self.generate_expr_ir(arg_expr, arg_reg, instructions, constants)?;
@@ -7943,10 +8333,12 @@ impl AstToIrGenerator {
                     } else {
                         binding.function.clone()
                     };
+                    // WBS 4.9.8 / #465：接收者是导入类型时，派发名按定义单元限定
+                    let dispatch_name = self.method_dispatch_name(expr, &func_name);
 
                     instructions.push(Instruction::Call {
                         dst: Some(Operand::Local(result_reg)),
-                        func: Operand::Const(ConstValue::String(func_name)),
+                        func: Operand::Const(ConstValue::String(dispatch_name)),
                         args: final_args,
                         span: *span,
                         def: None,
@@ -7971,28 +8363,42 @@ impl AstToIrGenerator {
                             .map(|info| info.names)
                             .unwrap_or_default();
                         // F3：诊断用决议出的真实方法名（叶子段），不再硬编 <method>
-                        let ordered_args =
-                            Self::build_arg_slots(&leaf, &names, args, named_args, span)?;
+                        // #456：绑定**判定**走共享判据（接收者占槽 0，实参从 1 起）；
+                        // 本处只按槽位序搬运实参。
+                        //
+                        // `optional` 全置 true：同上一处——IR 只重放槽位绑定，不重判
+                        // ⑥「缺参」。这里形参名表来自**声明**（同名重载取最后一条），
+                        // 而调用按 typecheck 决议出的候选（元数可能更小）发实参；
+                        // 按声明表重判缺参会把合法决议误报 E1010（`t.pick2(a = 2)`
+                        // 命中一元候选、声明表是二元那条的实测）。
+                        let positions = crate::frontend::core::typecheck::inference::arg_binding::bind_args_to_params(
+                            &leaf,
+                            &names,
+                            args,
+                            named_args,
+                            1, // 方法形态：param_names[0] 是接收者位
+                            &vec![true; names.len()],
+                            *span,
+                        )?;
                         let obj_reg = self.next_temp_reg();
                         self.generate_expr_ir(expr, obj_reg, instructions, constants)?;
                         let mut call_args = vec![Operand::Local(obj_reg)];
-                        for slot in ordered_args.iter() {
-                            let Some(slot) = *slot else {
-                                // 空槽：诊断归 typecheck（它保证决议通过即无空槽）
-                                continue;
-                            };
-                            let arg_expr = if slot < args.len() {
-                                &args[slot]
+                        for arg_pos in Self::slot_order_arg_indices(&positions) {
+                            let arg_expr = if arg_pos < args.len() {
+                                &args[arg_pos]
                             } else {
-                                &named_args[slot - args.len()].1
+                                &named_args[arg_pos - args.len()].1
                             };
                             let r = self.next_temp_reg();
                             self.generate_expr_ir(arg_expr, r, instructions, constants)?;
                             call_args.push(Operand::Local(r));
                         }
+                        // WBS 4.9.8 / #465：决议给的是**定义侧裸名**（`Temp.tag`）；
+                        // 接收者是导入类型时把类型前缀换成它的定义单元限定名。
+                        let dispatch_name = self.method_dispatch_name(expr, &mangled);
                         instructions.push(Instruction::Call {
                             dst: Some(Operand::Local(result_reg)),
-                            func: Operand::Const(ConstValue::String(mangled)),
+                            func: Operand::Const(ConstValue::String(dispatch_name)),
                             args: call_args,
                             span: *span,
                             def: None,
@@ -8141,9 +8547,11 @@ impl AstToIrGenerator {
 
                         let final_args: Vec<Operand> = arg_regs.clone();
 
+                        // WBS 4.9.8 / #465：普通方法调用同样按接收者的定义单元限定
+                        let dispatch_name = self.method_dispatch_name(expr, &func_name);
                         instructions.push(Instruction::Call {
                             dst: Some(Operand::Local(result_reg)),
-                            func: Operand::Const(ConstValue::String(func_name)),
+                            func: Operand::Const(ConstValue::String(dispatch_name)),
                             args: final_args,
                             span: *span,
                             def: None,

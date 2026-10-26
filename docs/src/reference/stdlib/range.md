@@ -26,7 +26,6 @@ use std.range
 
 ```yaoxiang
 use std.assert
-use std.list
 use std.range
 use std.result
 
@@ -60,7 +59,6 @@ main: () -> Void = {
 
 ```yaoxiang
 use std.assert
-use std.list
 
 main: () -> Void = {
     nums = [1, 2, 3]

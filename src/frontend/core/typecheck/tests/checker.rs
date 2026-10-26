@@ -761,3 +761,99 @@ main = {
         "健康路径的类型账本来自 body_checker，不应为空"
     );
 }
+
+// ── issue #469 处 3：致命绑定错误后的级联 E1001 抑制 ──────────────
+//
+// 判据（issue #469）：E1014（命名实参名错）使该语句左侧绑定失败后，
+// 后续引用不得再级联 E1001 Unknown variable——同一根因只报一条诊断；
+// 真正的未定义引用（独立 E1001 场景）行为不变。
+
+#[test]
+fn test_failed_binding_error_type_suppresses_cascading_e1001() {
+    // #324：这些 API 生产上运行于类型检查 walk 内（guard 覆盖），单测直调需模拟 walk 上下文
+    let _walk_guard = crate::util::diagnostic::push_current_span(crate::util::span::Span::dummy());
+    // Arrange：E1014 形态（issue #469 c4g 样例）——`b` 绑定失败，随后两处引用 `b`
+    let source = r#"
+Temp: Type = { v: Int }
+Temp.pick: (self: &Temp, n: Int) -> Int = (self, n) => { return n }
+main: () -> Void = {
+    t = Temp(1)
+    b = t.pick(s = 1)
+    r = b
+    q = b
+}
+main()
+"#;
+
+    // Act
+    let result = check_source_for_refined(source);
+
+    // Assert
+    let e1001_count = result
+        .diagnostics
+        .iter()
+        .filter(|d| d.code == "E1001")
+        .count();
+    assert_eq!(
+        e1001_count,
+        0,
+        "绑定失败的毒化登记必须抑制后续引用的级联 E1001（issue #469 处 3）。实际诊断: {:?}",
+        result
+            .diagnostics
+            .iter()
+            .map(|d| &d.code)
+            .collect::<Vec<_>>()
+    );
+    let e1014_count = result
+        .diagnostics
+        .iter()
+        .filter(|d| d.code == "E1014")
+        .count();
+    assert_eq!(
+        e1014_count,
+        1,
+        "E1014 本身必须恰好报一次（根因诊断不增不减）. 实际诊断: {:?}",
+        result
+            .diagnostics
+            .iter()
+            .map(|d| &d.code)
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        result.diagnostics.len(),
+        1,
+        "同一根因只报一条诊断：E1014 之后不得出现任何级联（E1001/E2014 等）。实际诊断: {:?}",
+        result
+            .diagnostics
+            .iter()
+            .map(|d| &d.code)
+            .collect::<Vec<_>>()
+    );
+}
+
+#[test]
+fn test_genuinely_undefined_variable_still_reports_e1001() {
+    // #324：这些 API 生产上运行于类型检查 walk 内（guard 覆盖），单测直调需模拟 walk 上下文
+    let _walk_guard = crate::util::diagnostic::push_current_span(crate::util::span::Span::dummy());
+    // Arrange：`y` 从未定义——这是真正的未定义引用，与绑定失败毒化无关
+    let source = r#"
+main: () -> Void = {
+    x = y + 1
+}
+main()
+"#;
+
+    // Act
+    let result = check_source_for_refined(source);
+
+    // Assert
+    assert!(
+        result.diagnostics.iter().any(|d| d.code == "E1001"),
+        "独立的未定义引用必须保持报 E1001（毒化登记不得吞掉真实错误）。实际诊断: {:?}",
+        result
+            .diagnostics
+            .iter()
+            .map(|d| &d.code)
+            .collect::<Vec<_>>()
+    );
+}

@@ -118,6 +118,14 @@ jobs:
       - name: Check docs structure (orphan / frontmatter / dead link)
         run: python3 scripts/ci/check-docs-orphan.py
 
+      # 文档里引用的路径必须任何人都能解析（AGENTS 元规则 ① / 第 10 条④）。
+      # 2026-10-21 审计发现：09 / 09a / CHANGELOG / 分支维护指南里有 24 处把
+      # 工作区内被 .gitignore 排除的目录（clone 后不存在）
+      # 当作证据出处，外部贡献者一条数字都复核不了。本门禁用 git check-ignore
+      # 机械判定「被忽略路径 + 具体子路径」的引用，命中即红。
+      - name: Check doc references are resolvable (no workspace-only paths)
+        run: python3 scripts/ci/check-docs-refs.py
+
       - name: Upload reports
         if: always()
         uses: actions/upload-artifact@v7
@@ -126,6 +134,7 @@ jobs:
           path: |
             scripts/ci/_docs-truth-report.txt
             scripts/ci/_docs-orphan-report.txt
+            scripts/ci/_docs-refs-report.txt
           if-no-files-found: ignore
 
   concepts:

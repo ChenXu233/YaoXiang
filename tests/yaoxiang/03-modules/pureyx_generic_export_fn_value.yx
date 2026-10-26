@@ -1,0 +1,24 @@
+// 03-modules/pureyx_generic_export_fn_value.yx
+// 覆盖: RFC-036 §4（嵌入 std.list 泛型导出）；RFC-029 §2 `use path.{item}`；
+//       #493（纯 yx std 导出作值）。
+// 验证: 泛型纯 yx std 导出作值 → 函数值。顶层重绑 `f = map` 后间接调用必须返回
+//       正确结果；修复前该别名被降成零参 `Call`，泛型参数以 Void 进体，运行期报
+//       E6007（length is not defined for this value type）。
+// 状态: ✅ 可运行
+
+use std.assert
+use std.list.{map}
+
+main: () -> Void = {
+    // 值位置：泛型函数本身，不是一次调用
+    f = map
+
+    v = [1, 2, 3]
+    doubled = f(v, x => x * 2)
+
+    assert.assert(doubled[0] == 2, "f(v, x => x*2)[0] == 2")
+    assert.assert(doubled[1] == 4, "f(v, x => x*2)[1] == 4")
+    assert.assert(doubled[2] == 6, "f(v, x => x*2)[2] == 6")
+}
+
+main()

@@ -1,0 +1,16 @@
+// init-order-entry-reads-dep-value/main.yx
+// 覆盖: #467（WBS 4.10.4）多文件初始化顺序 —— 入口顶层绑定读**被依赖单元**的顶层值
+// 验证: 初始化按 use 依赖拓扑序执行（zlib 先于 main）。修复前入口先初始化，
+//       copied 得到 void，主函数里的 Eq 比较报运行期 E6007（Void vs Int(41)）；
+//       修复后 copied = 41，断言通过、退出码 0
+// 状态: ✅ 可运行
+
+use std.assert
+use zlib.{base}
+
+// 入口单元的 init 段：读取被依赖单元的顶层值
+copied: Int = base
+
+main = () => {
+    assert.assert(copied == 41, "入口顶层 copied 必须读到 zlib.base=41（被依赖单元先初始化，#467）")
+}
