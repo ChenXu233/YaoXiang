@@ -376,8 +376,8 @@ P10 其余清理与状态修正             06 §S2/S3/S4/S5/S6
 | 6.2 字节码类型统一 | 6.2.1 三处改 `MonoType` | `bytecode.rs:812/814/854`、`image.rs:44` | C3 + `dump_bytecode` 定向对拍 |
 | | 6.2.2 删 `From<MonoType> for IrType` | `bytecode.rs:2352-2390` | 同上 |
 | | 6.2.3 `type_table` 元素类型改 `MonoType` | `image.rs:44` | 同上 |
-| 6.3 死变体删除 | 6.3.1 删 11 个变体 + 清 match 臂 + 兜底 | `ast.rs`、`mono.rs:699-708`、`types.rs:836` | C3 + `cargo build` 绿 |
-| | 6.3.2 **必须与 6.3.1 同批**改写反向桥 | `passes/mono/function.rs:507-529`（`mono_to_ast_type` 重建其中 7 个） | 泛型替换定向对拍，否则**静默改行为** |
+| 6.3 死变体删除 | 6.3.1 删 13 个变体 + 清 match 臂 + 兜底（03 §5.2 表体口径：Int/Float/Char/String/Bytes/Bool/Void/Union/Enum/Option/Result/Sum/AssocType） | `ast.rs`、`mono.rs:699-708`、`types.rs:836` | C3 + `cargo build` 绿 |
+| | 6.3.2 **必须与 6.3.1 同批**改写反向桥与 AST→AST 重建 | `passes/mono/function.rs:507-529`（`mono_to_ast_type` 重建其中 7 个）+ AST→AST 重建 10 点：`substitute_type_ast`（320-497）与 `substitute_type_in_ast`（499-657）里的 `Union`/`Option`/`Result`/`Sum`/`AssocType` 各 2（03 §2.2.2） | 泛型替换定向对拍，否则**静默改行为**；AST→AST 10 点不改则直接不编译 |
 | 6.4 parser 数据流 | 6.4.1 新增 `probe.rs` | 新建 | C3 |
 | | 6.4.2 改 `parser_state.rs:46-58` | — | 同上 |
 | | 6.4.3 删 `operator_interfaces::spec()` 调用（**2 处**：`declarations.rs:509`、`ast.rs:930`） | — | 同上 |

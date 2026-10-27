@@ -8,7 +8,7 @@
 
 把当前并行的多套类型表示收敛为一套，并消除由此派生的四类负担：
 
-- **13 个生产零构造的 `ast::Type` 变体**（`ast.rs:427-541` 的 26 变体中，见 2.2）
+- **13 个 parser 前向零构造的 `ast::Type` 变体**（`ast.rs:427-541` 的 26 变体中，见 2.2；"前向"口径 = 不扣反向桥与 AST→AST 重建点）
 - **一张手写的类型名同义词表**（`mono.rs:618-643`，见 2.3）
 - **parser 对 typecheck 层的真实反向依赖**（2 处，见 2.4）
 - **一个生产零构造的表达式变体** `Expr::FnDef`（`ast.rs:37-43`，见 2.6）
@@ -103,39 +103,41 @@ MonoType::Struct(_) | MonoType::Enum(_) | MonoType::Ref { .. }
 
 同时 `IrType::String` / `IrType::Bytes` 指向的 `ast::Type::String`（`ast.rs:435`）与 `ast::Type::Bytes`（`ast.rs:436`）正是 2.2 要删的死变体——**有损桥接的两端都指向死代码**。
 
-### 2.2 生产零构造变体
+### 2.2 parser 前向零构造变体
 
-**判定口径**：构造点扫描范围为 `src/` 全量，排除 `tests/` 与 `*/tests/*`。`ast::Type` 的 26 个变体中，以下 13 个在生产代码中**只有 match 臂、没有构造点**：
+**判定口径**：构造点扫描范围为 `src/` 全量，排除 `tests/` 与 `*/tests/*`。**构造点 = 表达式位置的 `Type::<变体>` 路径**（模式位置不计），并按**三类分列、不得混算**：① **parser 前向**（parser → AST）；② **AST→AST 重建**（`middle/passes/mono/function.rs` 的两个替换函数）；③ **反向桥**（`From<MonoType> for IrType` 与 `mono_to_ast_type`）。
 
-| 变体 | 定义 | 全部生产命中 |
+`ast::Type` 的 26 个变体中，以下 13 个在 **parser 前向**方向零构造（后两类重建点见 2.2.1 / 2.2.2）：
+
+| 变体 | 定义 | parser 前向构造点 |
 | --- | --- | --- |
-| `Int(usize)` | `ast.rs:432` | `mono.rs:699`（臂） |
-| `Float(usize)` | `ast.rs:433` | `mono.rs:700`（臂） |
-| `Char` | `ast.rs:434` | `mono.rs:701`（臂） |
-| `String` | `ast.rs:435` | `mono.rs:702`（臂） |
-| `Bytes` | `ast.rs:436` | `mono.rs:703`（臂） |
-| `Bool` | `ast.rs:437` | `mono.rs:707`（臂） |
-| `Void` | `ast.rs:438` | `mono.rs:708`（臂）、`types.rs:836`（**唯一构造点**） |
-| `Enum(Vec<String>)` | `ast.rs:449` | `mono.rs:747`（臂） |
-| `Union(Vec<(String, Option<Type>)>)` | `ast.rs:448` | `mono.rs:743`（臂） |
-| `Option(Box<Type>)` | `ast.rs:455` | `mono.rs:770`（臂） |
-| `Result(Box<Type>, Box<Type>)` | `ast.rs:456` | `mono.rs:771`（臂） |
-| `Sum(Vec<Type>)` | `ast.rs:472` | `mono.rs:814`（臂） |
-| `AssocType { .. }` | `ast.rs:463-471` | `mono.rs:781-786`（臂）、`formatter/handlers/types.rs:84`（臂）、`semantic_tokens.rs:228`（臂）——**当前代码中未找到生产构造点** |
+| `Int(usize)` | `ast.rs:432` | 无（`mono.rs:699` 是 match 臂） |
+| `Float(usize)` | `ast.rs:433` | 无（`mono.rs:700` 是 match 臂） |
+| `Char` | `ast.rs:434` | 无（`mono.rs:701` 是 match 臂） |
+| `String` | `ast.rs:435` | 无（`mono.rs:702` 是 match 臂） |
+| `Bytes` | `ast.rs:436` | 无（`mono.rs:703` 是 match 臂） |
+| `Bool` | `ast.rs:437` | 无（`mono.rs:707` 是 match 臂） |
+| `Void` | `ast.rs:438` | `types.rs:836`（**唯一前向点 = 错误兜底** `_ => (Vec::new(), Type::Void)`，已逐条登记豁免；随 6.4 #12 消除） |
+| `Enum(Vec<String>)` | `ast.rs:449` | 无（`mono.rs:747` 是 match 臂） |
+| `Union(Vec<(String, Option<Type>)>)` | `ast.rs:448` | 无（`mono.rs:743` 是 match 臂）；AST→AST 重建 2 点见 2.2.2 |
+| `Option(Box<Type>)` | `ast.rs:455` | 无（`mono.rs:770` 是 match 臂）；AST→AST 重建 2 点见 2.2.2 |
+| `Result(Box<Type>, Box<Type>)` | `ast.rs:456` | 无（`mono.rs:771` 是 match 臂）；AST→AST 重建 2 点见 2.2.2 |
+| `Sum(Vec<Type>)` | `ast.rs:472` | 无（`mono.rs:814` 是 match 臂）；AST→AST 重建 2 点见 2.2.2 |
+| `AssocType { .. }` | `ast.rs:463-471` | 无（`mono.rs:781-786`、`formatter/handlers/types.rs:84`、`semantic_tokens.rs:230` 均为 match 臂）；**AST→AST 生产重建点 2 处**：`function.rs:456`（`substitute_type_ast`）与 `function.rs:623`（`substitute_type_in_ast`），随 6.3 同批改写；**D8 不变** |
 
 根因链条可完整复核：
 
 1. **parser 把所有原始类型都表示成 `Type::Name { name }`**——`src/frontend/core/parser/statements/types.rs:162-165` 的回退臂直接返回 `Some(Type::Name { name, span: name_span })`。
 2. **`Result` / `Option` 不 lower 成专用节点**——`types.rs:392-396` 注释明写：「RFC-010: Result/Option 不 lower 成专用 AST 节点……与用户自定义泛型类型走同一 `Type::Generic` 路径。类型表示仍为 `Generic{"Result"/"Option", args}`」。
-3. **`Type::Void` 唯一构造点是错误兜底**——`types.rs:836` 的 `_ => (Vec::new(), Type::Void)`，位于一个返回 `(Vec<Param>, Type)` 的 match 末尾。
+3. **`Type::Void` 唯一前向构造点是错误兜底**——`types.rs:836` 的 `_ => (Vec::new(), Type::Void)`，位于一个返回 `(Vec<Param>, Type)` 的 match 末尾。
 
 `NamedStruct`（`ast.rs:443-447`）与 `Literal`（`ast.rs:476-482`）、`MetaType`（`ast.rs:497-504`）有生产构造点：`types.rs:364`、`types.rs:571`、`types.rs:100` 与 `declarations.rs:573`，不属于死变体。
 
-**这 13 个变体在测试代码中有构造点**（`src/frontend/core/types/tests/mono.rs:27-40`、`97`、`119-145`、`221`；`src/frontend/core/typecheck/inference/tests/statements.rs:81`、`366`、`525`、`567`、`591`、`620`）。因此本文的表述是"**生产零构造**"而非"全局零引用"。这些测试本身就是被测行为的固化——它们断言的正是"这些语法形态能被 lower 成什么 MonoType"，而这些形态 parser 永不产出。删除变体时这些测试须一并删除或改写。
+**这 13 个变体在测试代码中有构造点**（`src/frontend/core/types/tests/mono.rs:27-40`、`97`、`119-145`、`221`；`src/frontend/core/typecheck/inference/tests/statements.rs:81`、`366`、`525`、`567`、`591`、`620`）。因此本文的表述是"**parser 前向零构造**"：既不是"全局零引用"，也不是"生产零构造"——其中 11 项在另外两类（反向桥 / AST→AST 重建）确有生产构造点。这些测试本身就是被测行为的固化——它们断言的正是"这些语法形态能被 lower 成什么 MonoType"，而这些形态 parser 永不产出。删除变体时这些测试须一并删除或改写。
 
-#### 口径边界：反向桥会重建其中 7 个
+#### 2.2.1 口径边界（一）：反向桥会重建其中 7 个
 
-上表的"唯一构造点 / 无构造点"只在 **parser → AST 的前向构造**方向成立。反方向存在两处生产级 `MonoType → ast::Type` 重建，它们**实际构造出上表 7 个变体**：
+上表的"前向零构造"只在 **parser → AST 的前向构造**方向成立。反方向存在两处生产级 `MonoType → ast::Type` 重建，它们**实际构造出上表 7 个变体**：
 
 | 反向桥 | 位置 | 重建的 13 变体成员 |
 | --- | --- | --- |
@@ -163,6 +165,20 @@ match mono {
 - `bytecode.rs` 那一处随 6.3 的 #28（删除 `From<MonoType> for IrType` 整个 impl）一并消失，不构成额外成本。
 - `function.rs:507-529` **不在任何一条现有改动项的覆盖范围内**。它是一个 `MonoType → AstType` 的类型名反解器（注释标注 `#299`），把 `String` / `Bytes` 从 `Generic` 按名字反解回专用变体。删掉 `ast::Type::String` / `Bytes` 后这两条 guard 分支必须改写；删掉 `Int` / `Float` / `Bool` / `Char` / `Void` 后 `_` 臂的行为会变（原本落进 `_` 的部分类型会静默改走 `AstType::Name`）。这是 6.3 补充的第 47 项。
 - **对门禁的直接后果**：一个只扫前向构造点的 T1 会把上述 7 个变体判为"有构造点"，从而把它们从可删除名单中排除。T1 必须显式地把反向桥纳入统计口径，否则门禁的结论与本文的处置表矛盾（见 5.7）。
+
+#### 2.2.2 口径边界（二）：AST→AST 重建（本文修订新增的第三类）
+
+`middle/passes/mono/function.rs` 的 `substitute_type_ast`（320-497）与 `substitute_type_in_ast`（499-655）是 **AST→AST** 的类型变量替换（把已有 AST 类型重造一份，**不是** `MonoType → AST`）。P6 T1 门禁实测（6.0.2 基线，2026-10-27）：**15 变体 / 28 点**，其中属于上面 13 名单的有 **5 变体 / 10 点**：
+
+| 变体 | AST→AST 重建点 |
+| --- | --- |
+| `Union` | `377`、`606` |
+| `Option` | `427`、`600` |
+| `Result` | `431`、`602` |
+| `Sum` | `467`、`632` |
+| `AssocType` | `456`、`623` |
+
+**6.3 删这 5 个变体时必须同批改写这 10 点**（09 的 6.3.2 已登记），否则删变体后这些臂直接不编译。
 
 ### 2.3 手写同义词表
 
@@ -346,29 +362,29 @@ ir::Type 别名删除, BytecodeFunction.params / type_table 改用 MonoType
 
 ### 5.2 26 变体逐个处置表
 
-> 处置分类：**删除**（生产零构造）、**保留**（生产有构造点）、**迁移**（语义归位到别的节点）。
+> 处置分类：**删除**（parser 前向零构造）、**保留**（前向有构造点）、**迁移**（语义归位到别的节点）。
 
 | # | 变体 | 定义行 | 处置 | 理由 |
 | --- | --- | --- | --- | --- |
 | 1 | `Name { name, span }` | `ast.rs:428-431` | **保留**（加强） | parser 的**唯一**原始类型出口（`types.rs:162-165`）。删除 12 个原始类型变体后，所有原始类型都走它。需新增"名字的语义种类"标注（见 5.3） |
-| 2 | `Int(usize)` | `ast.rs:432` | **删除** | 生产零构造（`mono.rs:699` 为唯一臂）。位宽由 `from_builtin_name` 的 `Name` 路径承载 |
-| 3 | `Float(usize)` | `ast.rs:433` | **删除** | 生产零构造（`mono.rs:700`） |
-| 4 | `Char` | `ast.rs:434` | **删除** | 生产零构造（`mono.rs:701`） |
-| 5 | `String` | `ast.rs:435` | **删除** | 生产零构造（`mono.rs:702`）。**注意**：`bytecode.rs:2372` 的 `IrType::String` 消费它，删除后该臂必须改写 |
-| 6 | `Bytes` | `ast.rs:436` | **删除** | 生产零构造（`mono.rs:703-706`）。同上有 `bytecode.rs:2373` 消费 |
-| 7 | `Bool` | `ast.rs:437` | **删除** | 生产零构造（`mono.rs:707`） |
-| 8 | `Void` | `ast.rs:438` | **删除** | 生产唯一构造是错误兜底 `types.rs:836`。该兜底随 5.6 的错误路径改造一并消除 |
+| 2 | `Int(usize)` | `ast.rs:432` | **删除** | parser 前向零构造（`mono.rs:699` 为 match 臂）。位宽由 `from_builtin_name` 的 `Name` 路径承载 |
+| 3 | `Float(usize)` | `ast.rs:433` | **删除** | parser 前向零构造（`mono.rs:700` 为 match 臂） |
+| 4 | `Char` | `ast.rs:434` | **删除** | parser 前向零构造（`mono.rs:701` 为 match 臂） |
+| 5 | `String` | `ast.rs:435` | **删除** | parser 前向零构造（`mono.rs:702` 为 match 臂）。**注意**：`bytecode.rs:2372` 的 `IrType::String` 消费它，删除后该臂必须改写 |
+| 6 | `Bytes` | `ast.rs:436` | **删除** | parser 前向零构造（`mono.rs:703-706` 为 match 臂）。同上有 `bytecode.rs:2373` 消费 |
+| 7 | `Bool` | `ast.rs:437` | **删除** | parser 前向零构造（`mono.rs:707` 为 match 臂） |
+| 8 | `Void` | `ast.rs:438` | **删除** | parser 前向唯一构造点 = 错误兜底 `types.rs:836`（`_ => (Vec::new(), Type::Void)`，已逐条登记豁免）。该兜底随 6.4 的错误路径改造一并消除 |
 | 9 | `Struct { body }` | `ast.rs:439-442` | **保留** | 有生产消费（`mono.rs:709`、`checker.rs:3167` 等） |
 | 10 | `NamedStruct { name, name_span, fields }` | `ast.rs:443-447` | **保留** | 有生产构造点 `types.rs:364` |
-| 11 | `Union(Vec<(String, Option<Type>)>)` | `ast.rs:448` | **删除** | 生产零构造（`mono.rs:743-746`） |
-| 12 | `Enum(Vec<String>)` | `ast.rs:449` | **删除** | 生产零构造（`mono.rs:747`）。枚举走 `Struct` + `TypeBodyItem`，与 `mono.rs:2378` 的 `MonoType::Enum(_) => IrType::Void` 无关 |
+| 11 | `Union(Vec<(String, Option<Type>)>)` | `ast.rs:448` | **删除** | parser 前向零构造（`mono.rs:743-746` 为 match 臂）；AST→AST 重建 2 点（`function.rs:377`/`606`）随 6.3.2 同批改写 |
+| 12 | `Enum(Vec<String>)` | `ast.rs:449` | **删除** | parser 前向零构造（`mono.rs:747` 为 match 臂）；三类合计为 0（唯一全局零构造变体）。枚举走 `Struct` + `TypeBodyItem`，与 `mono.rs:2378` 的 `MonoType::Enum(_) => IrType::Void` 无关 |
 | 13 | `Tuple(Vec<Type>)` | `ast.rs:450` | **保留** | `bytecode.rs:2374` 消费 |
 | 14 | `Fn { params, return_type }` | `ast.rs:451-454` | **保留** | `bytecode.rs:2366` 消费；**字段重塑 `params: Vec<Type>` → `Vec<Param>`（名字与类型同栖）随 6.8.1（D54）**——`Assign.signature_params` 的名字由此承接（见 6.5.2） |
-| 15 | `Option(Box<Type>)` | `ast.rs:455` | **删除** | 生产零构造（`mono.rs:770`）。`types.rs:392-396` 已说明走 `Generic` 路径 |
-| 16 | `Result(Box<Type>, Box<Type>)` | `ast.rs:456` | **删除** | 生产零构造（`mono.rs:771`）。同上 |
+| 15 | `Option(Box<Type>)` | `ast.rs:455` | **删除** | parser 前向零构造（`mono.rs:770` 为 match 臂）；AST→AST 重建 2 点（`function.rs:427`/`600`）随 6.3.2 同批改写。`types.rs:392-396` 已说明走 `Generic` 路径 |
+| 16 | `Result(Box<Type>, Box<Type>)` | `ast.rs:456` | **删除** | parser 前向零构造（`mono.rs:771` 为 match 臂）；AST→AST 重建 2 点（`function.rs:431`/`602`）随 6.3.2 同批改写 |
 | 17 | `Generic { name, name_span, args }` | `ast.rs:457-461` | **保留** | `Result` / `Option` / `String` / `Bytes` 的实际表示都走它（`types.rs:397-399`） |
-| 18 | `AssocType { host_type, assoc_name, assoc_name_span, assoc_args }` | `ast.rs:463-471` | **删除** | 生产零构造（全仓唯一构造在测试 `types/tests/mono.rs:178`；语法层没有产出它的 `::` 路径）。未来若启用关联类型语法，由届时的新提案重新定义（决议 D8） |
-| 19 | `Sum(Vec<Type>)` | `ast.rs:472` | **删除** | 生产零构造（`mono.rs:814`） |
+| 18 | `AssocType { host_type, assoc_name, assoc_name_span, assoc_args }` | `ast.rs:463-471` | **删除** | parser 前向零构造（语法层没有产出它的 `::` 路径）；**AST→AST 生产重建点 2 处**：`function.rs:456`（`substitute_type_ast`）与 `function.rs:623`（`substitute_type_in_ast`），随 6.3 同批改写（6.3.2 登记）。**D8 不变**：口径按前向，未来若启用关联类型语法，由届时的新提案重新定义 |
+| 19 | `Sum(Vec<Type>)` | `ast.rs:472` | **删除** | parser 前向零构造（`mono.rs:814` 为 match 臂）；AST→AST 重建 2 点（`function.rs:467`/`632`）随 6.3.2 同批改写 |
 | 20 | `Literal { name, name_span, base_type }` | `ast.rs:476-482` | **保留** | 有生产构造点 `types.rs:571`；RFC-027 const generics |
 | 21 | `Ptr(Box<Type>)` | `ast.rs:485` | **保留** | unsafe 块内的裸指针类型 |
 | 22 | `Ref { mutable, inner, span }` | `ast.rs:488-492` | **保留** | 借用记号 |
@@ -377,11 +393,11 @@ ir::Type 别名删除, BytecodeFunction.params / type_table 改用 MonoType
 | 25 | `Paren(Box<Type>)` | `ast.rs:518` | **保留** | RFC-004 柯里化的层终止符，`split_curry` 依赖其存在性 |
 | 26 | `NamedParen { param, param_span, inner }` | `ast.rs:533-540` | **迁移** | 语义（binder 名）归位到类型检查器，AST 只保留语法。详见 5.6 |
 
-**净效果：26 → 14 变体**（删 12、迁 1、保留 13）。
+**净效果：26 → 13 变体**（删 13、迁 1、留 12）。
 
-> **删变体前必须先处置反向桥**：2.2 记录的 `function.rs:507-529` 会重建本表第 2-8 项中的 7 个。删除顺序上它必须与 #1-#8 同批处理，否则该函数的 `_` 臂会静默改变行为（见 6.3 的 #47）。
+> **删变体前必须先处置反向桥与 AST→AST 重建**：2.2 记录的 `function.rs:507-529`（`mono_to_ast_type`）会重建本表第 2-8 项中的 7 个；此外 2.2.2 记录的 AST→AST 重建在 13 名单内有 5 变体 / 10 点（Union/Option/Result/Sum/AssocType 各 2）。两类重建点都必须与 6.3.1 同批处理，否则要么静默改行为（见 6.3 #47），要么直接不编译。
 
-> **`AssocType` 的处理方式**：按 D8 直接删除（5.2 表第 18 项）。T1 门禁（5.7）在未改动代码上的首次报告**必须独立复现这一结论**——若报告显示 `AssocType` 存在生产构造点，说明本节核实有误，**正确动作是回到 RFC 决议表改 D8 并说明原因**，不是把变体留在白名单里。
+> **`AssocType` 的处理方式**：**D8 不变**，按 D8 直接删除（5.2 表第 18 项）。判定**口径按 parser 前向**：前向零构造成立（语法层没有产出 `::` 关联类型的路径），因此不需要改 D8、也不进白名单。**AST→AST 生产重建点 2 处**（`function.rs:456` 的 `substitute_type_ast`、`function.rs:623` 的 `substitute_type_in_ast`）已在 6.3.2 登记，随 6.3 同批改写。T1 门禁（5.7）的三类分列已复现该结论（6.0.1 提交实测 26/26 逐变体一致）。
 
 ### 5.3 `NameKind` 与同义词表消除
 
@@ -546,7 +562,7 @@ declarations.rs:498-511 与 ast.rs:930 改为
 
 | # | 检查 | 输入 | 失败条件 | 治法 |
 | --- | --- | --- | --- | --- |
-| **T1 零构造变体** | 扫描 `src/frontend/core/parser/ast.rs` 的 `pub enum Type`（及 `Expr` / `StmtKind` / `BinOp` / `UnOp`）变体清单；在 `src/` 下统计每个变体的**构造点**（排除 `tests/` 与 `*/tests/*`），**并单独标记反向桥中的重建点** | 变体清单 + 命中表 | 某变体**零构造点**且不在显式白名单内 | 删变体，或移入白名单并注明理由 |
+| **T1 构造点分列** | 扫描 `src/frontend/core/parser/ast.rs` 的 `pub enum Type` 变体清单；在 `src/` 下按**三类分列**统计每个变体的构造点（① parser 前向 ② AST→AST 重建 ③ 反向桥重建；排除 `tests/` 与 `*/tests/*`） | 变体清单 + 三类命中表 | ① 某变体**前向零构造**且未登记；② 已登记变体出现前向构造点；③ 登记的通配臂兜底豁免点**未命中**；④ 存在**未登记的通配臂兜底点**（兜底豁免逐条登记，不得泛化到所有通配臂） | 删变体；或登记理由 / 删除失效登记（见 5.2 与 `REGISTERED_ZERO_FORWARD`） |
 | **T2 同义词表与全仓名字清单一致** | `types/mono.rs` 的 `from_builtin_name` match 表 + `ast.rs:838-843` `CONST_PARAM_TYPES` + `src/lsp/world.rs:176` 的 LSP 内置类型名清单 | 三张表 | 某个类型名在一张表中存在而另一张不认（按各自语义的映射规则比对） | `type-tables --fix` 双向补齐 |
 | **T3 内置类型名与 RFC-011 文档一致** | `from_builtin_name` 的规范名集合 + `docs/src/rfc/accepted/011-generic-type-system.md` 的类型表 | 两张表 | 码表区间/名字与注册表不一致 | `cargo run --manifest-path tools/type-tables/Cargo.toml -- --fix` |
 | **T4 `Type → MonoType` 穷尽性** | `Type` 变体清单 vs `types/lower.rs` 的 match 臂 | 两张表 | 有变体无对应臂，或有臂无对应变体 | 补臂 / 删臂 |
@@ -559,7 +575,7 @@ declarations.rs:498-511 与 ast.rs:930 改为
    - **首选**：给 `tools/type-tables` 引入 `syn`（仅该 crate，根 crate 不动）。`syn` 是标准做法，且门禁 crate 独立于编译器。
    - **退路**：复用已有的 `tools/extract_arm.py`（仓库内既有 Python 工具）的行级启发式——构造点位于 `= ` 右侧或函数实参位，match 臂位于 `=>` 左侧。用 `=>` 出现次数近似判断。
    - **保守起点**：T1 首次上线时**只报告不失败**（`cargo:warning`），取一次全量基线确认启发式无误后再改为 `panic!`。这与"CI 门禁初期会红、需要先建立基线"的处理一致。
-2. **反向桥的构造点必须单独归类**。2.2 记录了 `bytecode.rs:2353-2390` 与 `function.rs:507-529` 两处 `MonoType → ast::Type` 重建。若 T1 把它们的重建点与 parser 的前向构造混为一谈，`Int` / `Float` / `Bool` / `Char` / `Void` / `String` / `Bytes` 七个变体会被判为"有构造点"而免于删除，与 5.2 的处置表直接矛盾。T1 的报告须把两类构造点分列，并在白名单机制中要求对反向桥重建单独说明。
+2. **反向桥与 AST→AST 重建点必须单独归类**。2.2 记录了 `bytecode.rs:2353-2390` 与 `function.rs:507-529` 两处 `MonoType → ast::Type` 重建；2.2.2 记录了 `function.rs` 两个替换函数的 AST→AST 重建（15 变体 / 28 点，13 名单内 5 变体 / 10 点）。若 T1 把它们与前向构造混为一谈，`Int` / `Float` / `Bool` / `Char` / `Void` / `String` / `Bytes` 以及 `Union` / `Option` / `Result` / `Sum` / `AssocType` 会被判为"有构造点"而免于删除，与 5.2 的处置表直接矛盾。T1 的报告须把三类构造点分列，且**兜底豁免只作用于逐条登记的条目**（当前仅 `Void` 的 parser 错误兜底 `types.rs:836`），不得泛化到所有通配臂。
 
 **门禁覆盖面**：`build.rs` 中新增 `type_tables::validate(root, &entries)` 调用，位置紧邻 `build.rs:19-37` 现有块之后，沿用 `panic!("类型表校验失败（{} 项 error ...）", ...)` 形态。
 
@@ -584,7 +600,7 @@ declarations.rs:498-511 与 ast.rs:930 改为
 
 **本文不改变任何运行时行为。** 依据：
 
-1. 删除的 11 个变体在生产代码中无**前向**构造点 → 无源码可产出它们（反向桥的处置见 6.3 的 #47/#28）。
+1. 删除的 13 个变体在 **parser 前向**方向无构造点（`Void` 的 1 个前向点是错误兜底，已逐条登记豁免）→ parser 不产出它们（反向桥与 AST→AST 重建的处置见 6.3 的 #28 / #47 与 6.3.2 的 10 点）。
 2. `ir::Type` 是 `ast::Type` 的别名 → 把它改回 `MonoType` 不改变类型集合，只改变**载体**。
 3. `From<MonoType> for IrType` 的**损失**（8 变体 → `Void`）在改动后不再发生——这**可能**改变某些程序的行为（原本丢失的类型现在保留了）。**这是唯一的行为变化方向，且是修复而非回归**，但必须由 07 第三层语料差分确认无回归。
 
@@ -619,7 +635,7 @@ declarations.rs:498-511 与 ast.rs:930 改为
 | 15 | `src/frontend/core/parser/statements/declarations.rs` | `472` | 删 `signature_params` 实参 | 随 #4 |
 | 16 | `src/frontend/core/parser/pratt/mod.rs` | `47` | 删 `Expr::FnDef` 臂 | 随 #3 |
 | 17 | `src/frontend/core/parser/pratt/led.rs` | `466` | 保留（是参数列表捞回点，随 5.5 改为直接读 Lambda） | 随 #3 |
-| 18 | `src/frontend/core/types/mono.rs` | `699-708`、`743-747`、`770-771`、`814` | 删 11 个 match 臂 | 随 #1 |
+| 18 | `src/frontend/core/types/mono.rs` | `699-708`、`743-747`、`770-771`、`814` | 删 13 个 match 臂（13 个删除变体各 1 个） | 随 #1 |
 | 19 | `src/frontend/core/types/mono.rs` | `620-642` | 砍同义词（大小写别名、`i64` 类缩写、`"()"`） | 收敛 |
 | 20 | `src/frontend/core/types/mono.rs` | `627` | `DateTime` 别名保留 | 保留 |
 | 21 | `src/frontend/core/types/lower.rs` | 新增 | 迁移 `From<Type> for MonoType`（现于 `mono.rs:692-830`）为唯一转换点 | 新增 |
@@ -677,10 +693,10 @@ declarations.rs:498-511 与 ast.rs:930 改为
 
 | 阶段 | 内容 | 验收判据 | 回滚点 |
 | --- | --- | --- | --- |
-| **0. 门禁先行** | 新建 `tools/type-tables`，实现 T1/T2/T3，T1 首版**只报告不失败**。在**未改动**的代码上取全量基线 | T1 报告准确列出 13 个零构造变体（含 `AssocType` 的定性结论），并**分列出 2.2 记录的反向桥重建点**；T2/T3 全绿或给出可修清单 | 无代码改动，无需回滚 |
+| **0. 门禁先行** | 新建 `tools/type-tables`，实现 T1/T2/T3，T1 首版**只报告不失败**。在**未改动**的代码上取全量基线 | T1 报告准确列出 13 个 **parser 前向零构造**变体（含 `AssocType` 的定性：前向 0 / AST→AST 2，D8 不变），并**分列 2.2 的反向桥重建点与 2.2.2 的 AST→AST 重建点**；前向零构造 13 与全局零构造 1（仅 `Enum`）分开报；T2/T3 全绿或给出可修清单 | 无代码改动，无需回滚 |
 | **1. 名称规范化** | 统计语料中非规范类型名；`from_builtin_name`（`mono.rs:620-642`）砍同义词，移入 lexer 别名表。**同步核实 `classify_generic_params` 用的是 `signature_params` 还是 `Lambda.params`** | C3：全语料诊断集与阶段 0 基线**逐条相同** | 单独 commit，可 revert |
 | **2. 字节码类型统一** | 改 `bytecode.rs:812`/`814`/`854`、`image.rs:44` 为 `MonoType`；删 `From<MonoType> for IrType`（`bytecode.rs:2352-2390`） | C3 + 定向 `dump_bytecode` 对拍（6.2 表格逐项） | 单独 commit，可 revert |
-| **3. 死变体删除** | 按 5.2 表删 11 个变体；清 `mono.rs:699-708` 等 match 臂、`types.rs:836` 兜底；**同批处理 `function.rs:507-529`（#47）**；同步 `types/tests/mono.rs` | C3 + `cargo build` 全绿（穷尽 match 强制补全所有臂）+ 泛型替换定向对拍（6.4 末行） | 单独 commit，可 revert |
+| **3. 死变体删除** | 按 5.2 表删 13 个变体；清 `mono.rs:699-708` 等 match 臂、`types.rs:836` 兜底；**同批处理 `function.rs:507-529`（#47）与 AST→AST 10 点（6.3.2）**；同步 `types/tests/mono.rs` | C3 + `cargo build` 全绿（穷尽 match 强制补全所有臂）+ 泛型替换定向对拍（6.4 末行） | 单独 commit，可 revert |
 | **4. parser 数据流** | 新增 `probe.rs`；改 `parser_state.rs:46-58`；改 `declarations.rs:498-511` 与 `ast.rs:930`（#48）；`types.rs:162-165` 定 `NameKind`；合并两份 `name_used_as_type*`（#49） | C3 + **新增断言**：`grep 'typecheck' src/frontend/core/parser/` 应为 0 | 单独 commit，可 revert |
 | **5. AST 死变体与专用字段** | 删 `Expr::FnDef`（16 处）+ `Assign.signature_params`；`NamedParen` 语义迁移 | C3 + `tests/integration/` 18 模块全绿 | 分两个 commit（FnDef / signature_params） |
 | **6. 门禁转硬** | T1 从 warning 改为 `panic!`；T4 降级为 CI 断言 | `cargo build` 在故意引入一个零构造变体时**必须失败**（红测试先行） | 单独 commit |

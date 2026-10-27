@@ -20,9 +20,12 @@ cargo run --manifest-path tools/type-tables/Cargo.toml -- --report --root <仓�
 ## T1 构造点分列（`ast::Type`）
 
 **构造点 = 表达式位置的 `Type::<变体>` 路径**（`Expr::Path` / `Expr::Struct`）。模式位置（match
-臂左侧、`matches!` 第 2 参、`if let`、参数模式）不计；宏体不解析；`tests` 目录与
-`#[cfg(test)] mod tests` 整棵排除。识别为 `ast::Type` 的限定名：`Type` / `AstType` / `IrType`，
-以及文件内 import 了 `Type as T` 时的 `T`。
+臂左侧、`matches!` 第 2 参、`if let`、参数模式）不计；宏体不解析；`tests` 目录整棵排除，
+内联测试模块**按 cfg 谓词判定**（只有「要求 `test` 成立才能编译」的模块才排除：`cfg(test)` /
+`all(test, …)`；`cfg(not(test))` 与 `cfg(feature = "test")` 仍会扫描）。识别为 `ast::Type`
+的限定名：基础名 `Type`，以及**本文件按 `use` 声明解析出的别名**（如 `use …::ast::Type as AstType`、
+再导出 `use …::ir::Type as IrType`）；泛型形参同名时以形参为准（遮蔽，`fn f<T>()` 里的 `T::X`
+不是 `ast::Type`）。
 
 三类**不得混算**：
 
@@ -32,12 +35,14 @@ cargo run --manifest-path tools/type-tables/Cargo.toml -- --report --root <仓�
 3. **反向桥**——A：`middle/core/bytecode.rs` 的 `impl From<MonoType> for IrType`；
    B：`function.rs` 的嵌套 fn `mono_to_ast_type`。
 
-两个数字分开报：**前向零构造**（第 1 类为 0）与**全局零构造**（三类合计为 0）。
-`Void` 的唯一前向点是 `_ => (…, Type::Void)` 错误兜底（03 §5.2 #8 / 6.4 #12 消除），
-按「通配 match 臂内的兜底点」结构性识别并单列，故它仍计入前向零构造但保留原始计数。
+两个数字分开报：**前向零构造**（有效前向计数为 0）与**全局零构造**（三类合计为 0）。
 
-已登记的前向零构造变体清单在 `src/t1.rs` 的 `REGISTERED_ZERO_FORWARD`：6.6 转硬后，
-**新增前向零构造变体必须删除或在此登记理由**（03 §5.7 的白名单机制）。
+**兜底豁免逐条登记（F1）**：前向有效计数 = 原始前向点数 − **已登记**的通配臂兜底豁免点数。
+豁免只在 `REGISTERED_ZERO_FORWARD` 里显式登记（当前只有 `Void` 的
+`parser/statements/types.rs` 错误兜底 `_ => (…, Type::Void)`，03 §5.2 #8 / 6.4 #12 消除）；
+**未登记的通配臂构造点照常计入前向**——否则死变体的真实构造点会隐身，门禁仍报「名单一致」。
+T1.7 用同一口径核对四项：未登记的零构造变体、登记但已不成立、登记豁免点未命中（兜底点消失后
+须同步删登记）、未登记的兜底点。6.6 转硬后，**新增零构造变体必须删除或在此登记理由**（03 §5.7）。
 
 ## T2 三表一致
 
