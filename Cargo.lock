@@ -1974,6 +1974,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e421abadd41a4225275504ea4d6566923418b7f05506fbc9c0fe86ba7396114b"
 
 [[package]]
+name = "type-tables"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "serde_json",
+ "syn 2.0.117",
+]
+
+[[package]]
 name = "typed-path"
 version = "0.12.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2397,6 +2406,7 @@ dependencies = [
  "toml",
  "tracing",
  "tracing-subscriber",
+ "type-tables",
  "ureq",
  "urlencoding",
  "web-time",

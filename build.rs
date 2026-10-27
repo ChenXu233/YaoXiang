@@ -16,6 +16,19 @@ fn main() {
     println!("cargo:rerun-if-changed={}", code_tables::RFC013_REL);
     println!("cargo:rerun-if-changed=src/util/diagnostic/codes");
     println!("cargo:rerun-if-changed=src/std/result.rs");
+    // P6 6.0.1：类型表门禁 T1 的扫描面——变体定义、三类构造点与反向桥点变化都要重跑。
+    // 路径常量单一源在 type_tables（与 code_tables::RFC013_REL 同一形态，避免双份漂移）。
+    for path in [
+        type_tables::AST_REL,
+        type_tables::MONO_REL,
+        type_tables::LSP_REL,
+        type_tables::RFC011_REL,
+        type_tables::BYTECODE_REL,
+        type_tables::FUNCTION_REL,
+        type_tables::SCAN_ROOT_REL,
+    ] {
+        println!("cargo:rerun-if-changed={path}");
+    }
 
     // #325/#326：构建期权威校验（解析/校验/比对逻辑单一实现于 tools/code-tables lib）——
     // 注册码唯一性、段位、zh 完备性、locales 孤立、RFC-013 码表区间一致性；
@@ -53,6 +66,12 @@ fn main() {
   "
             )
         );
+    }
+
+    // P6 6.0.1 类型表门禁 T1（`ast::Type` 构造点三类分列 + 零构造清单）——
+    // 首版**只报告**：逐条 cargo:warning，不 panic、不使构建失败；6.6「门禁转硬」才改 panic。
+    for warning in type_tables::build_warnings(root) {
+        println!("cargo:warning={warning}");
     }
 
     let _target_os = env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();

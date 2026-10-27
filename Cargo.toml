@@ -1,6 +1,6 @@
 [workspace]
 members = ["benches/shootout/runner", "tools/yx"]
-exclude = ["wasm", "tools/setup-z3", "tools/code-tables"]
+exclude = ["wasm", "tools/setup-z3", "tools/code-tables", "tools/type-tables"]
 resolver = "2"
 
 # RFC-037：工具链单一版本源（引擎 yaoxiang-rs 与前门 yx 同版本发布）
@@ -141,3 +141,4 @@ web-time = "1"
 
 [build-dependencies]
 code-tables = { path = "tools/code-tables" }
+type-tables = { path = "tools/type-tables" }

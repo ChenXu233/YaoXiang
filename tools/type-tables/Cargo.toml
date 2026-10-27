@@ -1,0 +1,21 @@
+[package]
+name = "type-tables"
+version = "0.1.0"
+edition = "2021"
+description = "类型表生成期门禁 T1/T2/T3（P6 / RFC-039 §5.7）"
+
+[lib]
+name = "type_tables"
+path = "src/lib.rs"
+
+[[bin]]
+name = "type-tables"
+path = "src/main.rs"
+
+[dependencies]
+# 与 tools/code-tables 对称的文本/JSON 处理依赖
+serde_json = "1.0.150"
+# T1 需要语法级区分「构造点」与「模式臂」：syn 只允许出现在本 crate
+syn = { version = "2", features = ["full", "visit"] }
+# 取行号（syn 的 span 定位依赖 proc-macro2 的 span-locations）
+proc-macro2 = { version = "1", features = ["span-locations"] }
