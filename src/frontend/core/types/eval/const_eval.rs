@@ -494,13 +494,19 @@ impl ConstGenericEval {
                     }
                 };
 
-                // 基础类型大小表
+                // 基础类型大小表（WBS 6.1.2：只收内置名，且**不是**内置名的清单——
+                // 清单在 `MonoType::from_builtin_name`；本表不覆盖的名字一律报
+                // Unknown type，不猜大小）。
+                //
+                // 此前有 `"Uint"` 臂：它不是内置类型名（`MonoType` 无无符号变体），
+                // 留着等于让 `sizeof(Uint)` 对一个任何类型标注都写不出的名字返回
+                // 8 字节——静默给错答案。无符号语义按 SPEC §2.1 用 `Int` 加下界约定。
                 let size = match type_name {
-                    "Void" => 0,
+                    "Void" | "()" => 0,
                     "Never" => 0,
                     "Bool" => 1,
                     "Char" => 4,
-                    "Int" | "Uint" | "Float" | "String" => 8,
+                    "Int" | "Float" | "String" => 8,
                     _ => {
                         return Some(Err(ErrorCodeDefinition::const_eval_failed(&format!(
                             "Unknown type: {}",

@@ -21,6 +21,16 @@ use syn::{Expr, ExprLit, ImplItem, Item, Lit, Pat};
 use crate::dispositions::{self, Disposition};
 use crate::{AST_REL, LSP_REL, MONO_REL};
 
+/// WBS 6.1.2（2026-10-27 定稿）删除的 22 个内置名「实现内拼写」。
+///
+/// 它们是 T2 的**常驻哨兵**：只要 `from_builtin_name` 再次接受其中任何一个，
+/// 本报告就在「T2.5 已删除拼写」一节报**未登记漂移**（无处置可登记——那是
+/// 回退，不是待办）。同一条判据在 `types/tests/mono.rs` 有对应的单元用例。
+pub const REMOVED_SPELLINGS: &[&str] = &[
+    "int", "int64", "i64", "datetime", "int32", "i32", "int16", "i16", "int8", "i8", "float",
+    "float64", "f64", "float32", "f32", "bool", "char", "string", "str", "bytes", "void", "never",
+];
+
 /// `from_builtin_name` 的一个 match 臂
 #[derive(Debug, Clone)]
 pub struct BuiltinArm {
@@ -56,6 +66,8 @@ pub struct NameTableReport {
     pub lsp: Vec<String>,
     pub lsp_line: usize,
     pub differences: Vec<Difference>,
+    /// 被 `from_builtin_name` 重新接受的、WBS 6.1.2 已删除的拼写（应为空）
+    pub removed_accepted: Vec<String>,
 }
 
 impl NameTableReport {
@@ -111,7 +123,12 @@ impl NameTableReport {
                 }
             ));
         }
-        out.push_str("  （6.0 勘察 §5.3 记「23 个可删别名拼写」；机械计数为 25——差额 = 臂内的 Int64 / Float64 两个写法）\n");
+        out.push_str("  权威清单（WBS 6.1.2 / SPEC §2.1）：15 个内置名 + DateTime 临时兼容别名。\n");
+        out.push_str("  15 名 = Never / Void / () / Bool / Int / Int8 / Int16 / Int32 / Int64 /\n");
+        out.push_str("          Float / Float32 / Float64 / Char / String / Bytes（() 是 Void 的类型写法）。\n");
+        out.push_str("  DateTime 注记：不属内置名，只是 std 层语义别名——src/std/time.rs 与\n");
+        out.push_str("  src/std/interfaces/time.yx 的签名串仍在用；迁出属 P10 S11（issue #513），\n");
+        out.push_str("  故 LSP 清单（C）刻意不收录它，对应 T2.C2 差异已登记。\n");
         out.push_str(&format!(
             "B `CONST_PARAM_TYPES`（:{}）：{} 项 —— {}\n",
             self.const_param_line,
@@ -186,12 +203,35 @@ impl NameTableReport {
             }
         }
         out.push('\n');
+
+        out.push_str("T2.5 已删除拼写哨兵（WBS 6.1.2 定稿删除的 22 个实现内拼写）\n");
+        out.push_str(&format!(
+            "  检查 {} 条；被 from_builtin_name 重新接受 {} 条\n",
+            REMOVED_SPELLINGS.len(),
+            self.removed_accepted.len()
+        ));
+        if self.removed_accepted.is_empty() {
+            out.push_str("  结论：全绿——22 个拼写均不被解析表接受\n\n");
+        } else {
+            out.push_str(&format!(
+                "  结论：**报红**——{} 被重新接受。那是回退（不是待办）：删掉对应 match 臂；\n",
+                self.removed_accepted.join(", ")
+            ));
+            out.push_str("        同一条判据在 src/frontend/core/types/tests/mono.rs 有单元用例。\n\n");
+        }
+
         out.push_str("T2.4 结论：");
-        if self.differences.is_empty() {
+        if !self.removed_accepted.is_empty() {
+            out.push_str(&format!(
+                "**报红**——{} 条已删除拼写被重新接受（见 T2.5），三表一致性结论不成立\n\n",
+                self.removed_accepted.len()
+            ));
+        } else if self.differences.is_empty() {
             out.push_str("全绿（三表逐名一致）\n\n");
         } else if self.unlisted() == 0 {
             out.push_str(&format!(
-                "非全绿：{} 条差异，全部已登记处置（6.1 落地后应转全绿）\n\n",
+                "非全绿：{} 条差异，全部已登记处置（WBS 6.1.2 后剩余两类：\
+                 CONST_PARAM_TYPES 的大写位宽缩写留给 6.2 名称统一；DateTime 待 P10 S11 迁出）\n\n",
                 self.differences.len()
             ));
         } else {
@@ -258,6 +298,8 @@ pub fn check(root: &Path) -> Result<NameTableReport, String> {
         }
     }
 
+    let removed_accepted = deprecated_acceptances(&accepted);
+
     Ok(NameTableReport {
         builtin,
         const_param,
@@ -265,7 +307,20 @@ pub fn check(root: &Path) -> Result<NameTableReport, String> {
         lsp,
         lsp_line,
         differences,
+        removed_accepted,
     })
+}
+
+/// WBS 6.1.2 的哨兵：解析表重新接受的已删除拼写（应为空）。
+///
+/// 单独成函数是为了能对「判据能红」做单元测试——`check()` 要读仓库文件，
+/// 测不到「加回一个拼写会怎样」。
+fn deprecated_acceptances(accepted: &BTreeSet<String>) -> Vec<String> {
+    REMOVED_SPELLINGS
+        .iter()
+        .filter(|name| accepted.contains(**name))
+        .map(|name| (*name).to_string())
+        .collect()
 }
 
 fn parse_file(path: &Path) -> Result<syn::File, String> {
@@ -407,4 +462,69 @@ fn parse_lsp_builtin_types(root: &Path) -> Result<(Vec<String>, usize), String> 
     collector
         .found
         .ok_or_else(|| format!("{LSP_REL} 中未找到 let builtin_types = [...] 清单"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // WBS 6.1.2 的哨兵必须能红能绿：把 22 个拼写之一加回解析表，本门禁就要报红。
+    #[test]
+    fn test_deprecated_acceptances_flags_reintroduced_spelling() {
+        // Arrange：解析表接受了规范名 + 一个已删除拼写
+        let mut accepted: BTreeSet<String> = BTreeSet::new();
+        accepted.insert("Int".to_string());
+        accepted.insert("int".to_string());
+
+        // Act
+        let flagged = deprecated_acceptances(&accepted);
+
+        // Assert：只有已删除的那个被点名
+        assert_eq!(
+            flagged,
+            vec!["int".to_string()],
+            "把 int 加回 from_builtin_name 必须被哨兵抓到"
+        );
+    }
+
+    #[test]
+    fn test_deprecated_acceptances_silent_on_canonical_only_table() {
+        // Arrange：只有 15 个规范名 + DateTime 临时别名
+        let accepted: BTreeSet<String> = [
+            "Never", "Void", "()", "Bool", "Int", "Int8", "Int16", "Int32", "Int64", "Float",
+            "Float32", "Float64", "Char", "String", "Bytes", "DateTime",
+        ]
+        .iter()
+        .map(|name| (*name).to_string())
+        .collect();
+
+        // Act
+        let flagged = deprecated_acceptances(&accepted);
+
+        // Assert：无回退
+        assert!(
+            flagged.is_empty(),
+            "规范名 + DateTime 不应触发哨兵，实际 {flagged:?}"
+        );
+    }
+
+    // 口径自校验：22 个拼写一个不多一个不少，且都不在规范名集合内。
+    #[test]
+    fn test_removed_spellings_list_is_the_agreed_twenty_two() {
+        assert_eq!(
+            REMOVED_SPELLINGS.len(),
+            22,
+            "2026-10-27 定稿删除的拼写数是 22"
+        );
+        let canonical = [
+            "Never", "Void", "()", "Bool", "Int", "Int8", "Int16", "Int32", "Int64", "Float",
+            "Float32", "Float64", "Char", "String", "Bytes", "DateTime",
+        ];
+        for name in REMOVED_SPELLINGS {
+            assert!(
+                !canonical.contains(name),
+                "{name} 不能同时是规范名与已删除拼写"
+            );
+        }
+    }
 }

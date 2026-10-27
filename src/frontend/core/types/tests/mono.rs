@@ -684,3 +684,81 @@ fn test_mono_type_result_variant() {
         "Result type_name should contain 'Result'"
     );
 }
+
+// ─── WBS 6.1.2 / SPEC §2.1：内置类型名表（15 名 + 临时兼容别名 DateTime）───
+//
+// 下面三个用例共同钉住 MonoType::from_builtin_name 的接受面：少一个规范名、
+// 或多回任何一个已删除的拼写，都会变红。
+
+#[test]
+fn test_from_builtin_name_accepts_the_fifteen_canonical_names() {
+    // Arrange：SPEC §2.1 的 15 个内置类型名（"()" 是 Void 的类型写法）
+    let expectations: Vec<(&str, MonoType)> = vec![
+        ("Never", MonoType::Never),
+        ("Void", MonoType::Void),
+        ("()", MonoType::Void),
+        ("Bool", MonoType::Bool),
+        ("Int", MonoType::Int(64)),
+        ("Int8", MonoType::Int(8)),
+        ("Int16", MonoType::Int(16)),
+        ("Int32", MonoType::Int(32)),
+        ("Int64", MonoType::Int(64)),
+        ("Float", MonoType::Float(64)),
+        ("Float32", MonoType::Float(32)),
+        ("Float64", MonoType::Float(64)),
+        ("Char", MonoType::Char),
+        ("String", MonoType::make_string()),
+        (
+            "Bytes",
+            MonoType::Generic {
+                name: "Bytes".into(),
+                args: vec![],
+            },
+        ),
+    ];
+
+    // Act + Assert：逐个名字解析到期望的 MonoType
+    for (name, expected) in &expectations {
+        assert_eq!(
+            MonoType::from_builtin_name(name),
+            Some(expected.clone()),
+            "内置名 {name} 应解析为 {expected:?}"
+        );
+    }
+}
+
+#[test]
+fn test_from_builtin_name_rejects_the_twenty_two_removed_spellings() {
+    // Arrange：2026-10-27 定稿删除的 22 个实现内拼写
+    let removed = [
+        "int", "int64", "i64", "datetime", "int32", "i32", "int16", "i16", "int8", "i8", "float",
+        "float64", "f64", "float32", "f32", "bool", "char", "string", "str", "bytes", "void",
+        "never",
+    ];
+
+    // Act + Assert：任何一个被加回解析表，本用例立即变红
+    for name in removed {
+        assert_eq!(
+            MonoType::from_builtin_name(name),
+            None,
+            "拼写 {name} 已随 WBS 6.1.2 删除，不得再被当作内置类型名"
+        );
+    }
+}
+
+#[test]
+fn test_from_builtin_name_keeps_datetime_as_compat_alias() {
+    // Arrange：DateTime 是 std 层语义别名（src/std/time.rs 的签名串仍在用），
+    // 迁出内置名表属 P10 S11（issue #513）
+    // Act
+    let upper = MonoType::from_builtin_name("DateTime");
+    let lower = MonoType::from_builtin_name("datetime");
+
+    // Assert：只保留大写形态，且归一为时间戳的运行时表示 Int(64)
+    assert_eq!(
+        upper,
+        Some(MonoType::Int(64)),
+        "DateTime 应归一为 Int(64)（#338 连带修复）"
+    );
+    assert_eq!(lower, None, "小写 datetime 已删除，不是兼容别名的形态");
+}

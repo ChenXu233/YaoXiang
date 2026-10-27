@@ -837,31 +837,50 @@ impl MonoType {
         }
     }
     /// 将内置类型名解析为具体 MonoType。
+    ///
+    /// **「哪些名字是内置类型名」的唯一真相源**（WBS 6.1.2 / 03 §5.3）。
+    /// 接受面 = 定稿的 15 个名字（`Never` / `Void` / `()` / `Bool` / `Int` /
+    /// `Int8` / `Int16` / `Int32` / `Int64` / `Float` / `Float32` / `Float64` /
+    /// `Char` / `String` / `Bytes`）+ 临时兼容别名 `DateTime`。
+    ///
+    /// `()` 是 `Void` 的**类型写法**（标准库签名串里形如 `() -> Void`），与 `Void`
+    /// 同臂；它不是另一个类型。
+    ///
     /// 返回 None 表示非内置名（用户自定义类型）。
+    ///
+    /// **实现内拼写一律不再接受**——2026-10-27 定稿删除的 22 个拼写：`int` /
+    /// `int64` / `i64` / `datetime` / `int32` / `i32` / `int16` / `i16` /
+    /// `int8` / `i8` / `float` / `float64` / `f64` / `float32` / `f32` /
+    /// `bool` / `char` / `string` / `str` / `bytes` / `void` / `never`。它们在
+    /// 类型位置落成用户类型 `TypeRef`，由 `TypeEnvironment::resolves_type_name`
+    /// 报未知类型（不静默放行）。把其中任何一个加回本表，`types/tests/mono.rs`
+    /// 的负向用例立即变红。
+    ///
+    /// `DateTime` **不属内置名**，只是 **std 层语义别名**：`src/std/interfaces/time.yx`
+    /// 与 `src/std/time.rs` 的签名串仍写 `DateTime`（`now` / `parse_time`），运行时
+    /// 它就是 `RuntimeValue::Int`（#338 连带修复）。把它迁出内置名表、改由 std 侧
+    /// 承载属 P10 S11（issue #513）——届时删除本臂。
     pub fn from_builtin_name(name: &str) -> Option<MonoType> {
         match name {
-            "Int" | "int" | "Int64" | "int64" | "i64" => Some(MonoType::Int(64)),
-            // DateTime 是**时间戳的别名**，不是独立类型。
-            //
-            // 运行时本就是 `RuntimeValue::Int`（`native_now` 直接返回 Int），
-            // 所有访问器也已声明 `(dt: Int)`；此前只在 `now` / `parse_time` 的
-            // 签名串里叫 `DateTime`，使 `now()` 的返回值传不进 `format_time`
-            // 与任何访问器（#338 连带问题）。归一到 Int 即可全线打通。
-            "DateTime" | "datetime" => Some(MonoType::Int(64)),
-            "Int32" | "int32" | "i32" => Some(MonoType::Int(32)),
-            "Int16" | "int16" | "i16" => Some(MonoType::Int(16)),
-            "Int8" | "int8" | "i8" => Some(MonoType::Int(8)),
-            "Float" | "float" | "Float64" | "float64" | "f64" => Some(MonoType::Float(64)),
-            "Float32" | "float32" | "f32" => Some(MonoType::Float(32)),
-            "Bool" | "bool" => Some(MonoType::Bool),
-            "Char" | "char" => Some(MonoType::Char),
-            "String" | "string" | "str" => Some(MonoType::make_string()),
-            "Bytes" | "bytes" => Some(MonoType::Generic {
+            "Never" => Some(MonoType::Never),
+            "Void" | "()" => Some(MonoType::Void),
+            "Bool" => Some(MonoType::Bool),
+            "Int" => Some(MonoType::Int(64)),
+            "Int8" => Some(MonoType::Int(8)),
+            "Int16" => Some(MonoType::Int(16)),
+            "Int32" => Some(MonoType::Int(32)),
+            "Int64" => Some(MonoType::Int(64)),
+            "Float" => Some(MonoType::Float(64)),
+            "Float32" => Some(MonoType::Float(32)),
+            "Float64" => Some(MonoType::Float(64)),
+            "Char" => Some(MonoType::Char),
+            "String" => Some(MonoType::make_string()),
+            "Bytes" => Some(MonoType::Generic {
                 name: "Bytes".into(),
                 args: vec![],
             }),
-            "Void" | "void" | "()" => Some(MonoType::Void),
-            "Never" | "never" => Some(MonoType::Never),
+            // 临时兼容别名：待 P10 S11（issue #513）迁出，届时删除本臂。
+            "DateTime" => Some(MonoType::Int(64)),
             _ => None,
         }
     }

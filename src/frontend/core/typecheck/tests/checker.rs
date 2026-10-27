@@ -246,12 +246,20 @@ fn test_type_checker_has_builtin_types() {
     // Act
     let env = checker.env();
 
-    // Assert - 检查内置类型是否存在
-    assert!(env.types.contains_key("int"), "should have int type");
-    assert!(env.types.contains_key("float"), "should have float type");
-    assert!(env.types.contains_key("bool"), "should have bool type");
-    assert!(env.types.contains_key("string"), "should have string type");
-    assert!(env.types.contains_key("void"), "should have void type");
+    // Assert - 内置名由 `MonoType::from_builtin_name` 单源解析（WBS 6.1.2），
+    // 类型表里不再登记小写拼写副本；故断言「可解析」而不是「types 表里有键」
+    assert!(env.resolves_type_name("Int"), "内置名 Int 应可解析");
+    assert!(env.resolves_type_name("Bool"), "内置名 Bool 应可解析");
+    assert!(env.resolves_type_name("String"), "内置名 String 应可解析");
+    assert!(env.resolves_type_name("Void"), "内置名 Void 应可解析");
+    assert!(
+        !env.resolves_type_name("int"),
+        "小写拼写 int 不是类型名（WBS 6.1.2 已删除该别名）"
+    );
+    assert!(
+        !env.resolves_type_name("string"),
+        "小写拼写 string 不是类型名（WBS 6.1.2 已删除该别名）"
+    );
 }
 
 #[test]

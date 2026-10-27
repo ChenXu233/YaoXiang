@@ -673,14 +673,20 @@ fn test_eval_builtin_sizeof_char() {
 }
 
 #[test]
-fn test_eval_builtin_sizeof_uint() {
+fn test_eval_builtin_sizeof_uint_rejected() {
+    // Arrange：Uint 不是内置类型名（WBS 6.1.2 定稿的 15 名里没有无符号族）
     let e = ConstGenericEval::new();
-    assert_eval_eq(
-        e.eval(&ConstExpr::Call {
-            func: "sizeof".to_string(),
-            args: vec![ConstExpr::NamedVar("Uint".to_string())],
-        }),
-        ConstValue::Int(8),
+
+    // Act：sizeof 拿到一个任何类型标注都写不出的名字
+    let result = e.eval(&ConstExpr::Call {
+        func: "sizeof".to_string(),
+        args: vec![ConstExpr::NamedVar("Uint".to_string())],
+    });
+
+    // Assert：必须报错，不得静默给出字节数
+    assert!(
+        result.is_err(),
+        "sizeof(Uint) 必须报 Unknown type，实际返回 {result:?}"
     );
 }
 

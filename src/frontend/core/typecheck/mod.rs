@@ -135,24 +135,15 @@ fn check_module_inner(
 }
 
 /// 添加内置类型到环境
+///
+/// **不含标量内置名**（WBS 6.1.2）：`Int` / `Bool` / `String` … 由
+/// `MonoType::from_builtin_name` 单源解析（`TypeEnvironment::resolves_type_name`
+/// 第一条就是查它）。此处曾登记 `int` / `float` / `bool` / `string` / `void` /
+/// `never` / `char` 七个小写拼写，等于在类型表里留了第二份别名表——名字虽能
+/// 解析，却与解析表给的 `MonoType` 不一致（`int` 登记的是 `Int(32)`，
+/// `from_builtin_name("Int")` 给 `Int(64)`）。删除后小写拼写在类型位置一律
+/// 落成未知类型，与 SPEC §2.1 的 15 名清单一致。
 pub fn add_builtin_types(env: &mut environment::TypeEnvironment) {
-    env.types
-        .insert("int".to_string(), PolyType::mono(MonoType::Int(32)));
-    env.types
-        .insert("float".to_string(), PolyType::mono(MonoType::Float(64)));
-    env.types
-        .insert("bool".to_string(), PolyType::mono(MonoType::Bool));
-    env.types.insert(
-        "string".to_string(),
-        PolyType::mono(MonoType::make_string()),
-    );
-    env.types
-        .insert("void".to_string(), PolyType::mono(MonoType::Void));
-    env.types
-        .insert("never".to_string(), PolyType::mono(MonoType::Never));
-    env.types
-        .insert("char".to_string(), PolyType::mono(MonoType::Char));
-
     // RFC-024: 内置资源类型
     for resource_type in &["FilePath", "HttpUrl", "DBUrl", "Console"] {
         env.types.insert(
