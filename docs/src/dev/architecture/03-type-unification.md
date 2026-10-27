@@ -125,6 +125,8 @@ MonoType::Struct(_) | MonoType::Enum(_) | MonoType::Ref { .. }
 | `Sum(Vec<Type>)` | `ast.rs:472` | 无（`mono.rs:814` 是 match 臂）；AST→AST 重建 2 点见 2.2.2 |
 | `AssocType { .. }` | `ast.rs:463-471` | 无（`mono.rs:781-786`、`formatter/handlers/types.rs:84`、`semantic_tokens.rs:230` 均为 match 臂）；**AST→AST 生产重建点 2 处**：`function.rs:456`（`substitute_type_ast`）与 `function.rs:623`（`substitute_type_in_ast`），随 6.3 同批改写；**D8 不变** |
 
+> **定义列的行锚漂移登记（P6 6.0 实测，2026-10-27）**：本表与 5.2 表的「定义」列写于 2026-10-05；其后 `ast::Type` 枚举前新增了 17 行（`pub enum Type` 由 427 移到 444），故**全部 26 个变体的定义行统一 +17**（如 `Int` 由 432 → 449、`NamedParen` 由 533-540 → 550-557）。本轮只**登记**该漂移、不改表体；后续引用一律以 `ast::Type` 符号锚为准。
+
 根因链条可完整复核：
 
 1. **parser 把所有原始类型都表示成 `Type::Name { name }`**——`src/frontend/core/parser/statements/types.rs:162-165` 的回退臂直接返回 `Some(Type::Name { name, span: name_span })`。
@@ -182,31 +184,33 @@ match mono {
 
 ### 2.3 手写同义词表
 
-`MonoType::from_builtin_name`（`src/frontend/core/types/mono.rs:618-643`）用一张字符串表把类型名映射到 `MonoType`：
+`MonoType::from_builtin_name`（`src/frontend/core/types/mono.rs`，实测 841-867 / **13 臂**）用一张字符串表把类型名映射到 `MonoType`：
 
 ```
-"Int" | "int" | "Int64" | "int64" | "i64"  => Some(MonoType::Int(64)),   // :620
-"DateTime" | "datetime"                     => Some(MonoType::Int(64)),   // :627
-"Int32" | "int32" | "i32"                   => Some(MonoType::Int(32)),   // :628
+"Int" | "int" | "Int64" | "int64" | "i64"  => Some(MonoType::Int(64)),   // :843
+"DateTime" | "datetime"                     => Some(MonoType::Int(64)),   // :850
+"Int32" | "int32" | "i32"                   => Some(MonoType::Int(32)),   // :851
 ...
-"Void" | "void" | "()"                      => Some(MonoType::Void),      // :640
+"Void" | "void" | "()"                      => Some(MonoType::Void),      // :863
 ```
 
 **这张表存在的唯一理由是弥合 AST 层的不一致**：因为 `Type::Int(64)` 与 `Type::Name { name: "Int" }` 在 AST 层语义等价却类型不同（且 parser 只产出后者），`from_builtin_name` 才必须同时接受大小写、缩写、带符号名与 `DateTime` 别名。`"()"` 出现在 `Void` 行尤其说明问题——它在配合 `types.rs:836` 的 `Type::Void` 兜底。
 
 同一份"哪些名字是内置类型名"的知识在仓库里共有七处副本，彼此无任何一致性校验：
 
-| # | 位置 | 形态 |
+| # | 位置（**2026-10-27 实测**；本节文稿写于 2026-10-05，原行号已漂） | 形态 |
 | --- | --- | --- |
-| 1 | `mono.rs:618-643` `from_builtin_name` | 字符串 match，名字 → `MonoType` |
-| 2 | `bytecode.rs:2371-2376` | 字符串 match，抄了 `"String"` / `"Bytes"` / `"Tuple"` 三个 |
-| 3 | `ast.rs:838-843` `CONST_PARAM_TYPES` | 15 个 const 泛型参数名（`"Int"` / `"Bool"` / `"Float"` / `"I8"`…`"F64"` / `"Char"` / `"String"`）的 `&[&str]` 常量 |
-| 4 | `src/lsp/world.rs:176` | LSP 侧的内置类型名清单 |
-| 5 | `const_data.rs:401-408` `ConstKind::from_ast_type_name` | 字符串 match，名字 → `ConstKind`。**覆盖与第 1 项不一致**：不收小写与 `i64` / `i32` 系别名（2026-10-06 P0 门禁登记） |
-| 6 | `eval/const_eval.rs:498-511` `eval_builtin` 的大小表 | 字符串 match，名字 → 字节大小。含 `"Uint"` 臂，而第 1 项根本没有 `Uint` 映射——**死臂，表漂移的活证据** |
-| 7 | `middle/passes/codegen/bytecode.rs:744-756` `to_type_id` | 字符串 match，内置名 → 序列化类型 ID。`"Set" => 25` 与 typecheck 侧"Set 除名"（`inference/expressions.rs:2917-2918`，#300 决策 4）矛盾 |
+| 1 | `MonoType::from_builtin_name`（`src/frontend/core/types/mono.rs`，实测 841-867 / **13 臂**） | 字符串 match，名字 → `MonoType` |
+| 2 | `src/middle/core/bytecode.rs:2371-2376` | 字符串 match，抄了 `"String"` / `"Bytes"` / `"Tuple"` 三个 |
+| 3 | `CONST_PARAM_TYPES`（`src/frontend/core/parser/ast.rs`，实测 855-858） | 15 个 const 泛型参数名（`"Int"` / `"Bool"` / `"Float"` / `"I8"`…`"F64"` / `"Char"` / `"String"`）的 `&[&str]` 常量 |
+| 4 | `src/lsp/world.rs:178-181` | LSP 侧的内置类型名清单（15 个） |
+| 5 | `ConstKind::from_ast_type_name`（`src/frontend/core/types/const_data.rs`，实测 407） | 字符串 match，名字 → `ConstKind`。**覆盖与第 1 项不一致**：不收小写与 `i64` / `i32` 系别名（2026-10-06 P0 门禁登记） |
+| 6 | `eval_builtin` 的基础类型大小表（`src/frontend/core/types/eval/const_eval.rs`，实测 497-512；`"Int"` / `"Uint"` / `"Float"` / `"String"` → 8 在 503） | 字符串 match，名字 → 字节大小。含 `"Uint"` 臂，而第 1 项根本没有 `Uint` 映射——**死臂，表漂移的活证据** |
+| 7 | `to_type_id`（`src/middle/passes/codegen/bytecode.rs`，实测 735-775；`"Set" => 25` 在 762） | 字符串 match，内置名 → 序列化类型 ID。`"Set" => 25` 与 typecheck 侧"Set 除名"（`inference/expressions.rs:2917-2918`，#300 决策 4）矛盾 |
 
-第 3 项 `CONST_PARAM_TYPES` 被 `ast.rs:912` 的 `extract_generic_param_names` 用来判定 const 泛型参数——它枚举的是"可作 const 参数的类型名"，与 `from_builtin_name` 的全集是**部分重叠但不同一**的关系，且无任何机制保证两者同步。第 4 项是 LSP 语法高亮/悬停的第四份副本，同样无校验（T2 的比对范围纳入它）。
+> **行锚漂移登记（P6 6.0 实测，2026-10-27）**：本节七处副本的**行号全部已漂**（第 1 项漂 +223、其余各漂 2–9 行不等），但**条目数与内容未变**（第 1 项 13 臂、第 3 / 4 项各 15 条）。后续引用一律以**符号锚 + 入库路径**为准；本表行号仅供定位。第 1 项的臂数与第 5 / 6 / 7 项的漂移活证据（`Uint` 死臂、`Set` 与 typecheck 侧矛盾）**均仍在**，本节未改代码。
+
+第 3 项 `CONST_PARAM_TYPES` 被 `extract_generic_param_names`（`src/frontend/core/parser/ast.rs`，实测 932）用来判定 const 泛型参数——它枚举的是"可作 const 参数的类型名"，与 `from_builtin_name` 的全集是**部分重叠但不同一**的关系，且无任何机制保证两者同步。第 4 项是 LSP 语法高亮/悬停的第四份副本，同样无校验（T2 的比对范围纳入它）。
 
 第 5–7 项由 `check-concepts.py`（P0，[09](09-execution-wbs.md) §0.2.1）于 2026-10-06 首跑登记：第 5 项是第二张类型名同义词表；第 6 / 7 项与第 1–4 项同根（内置名 → 语义 / ID 的字符串键表），用途不同但漂移同险。同次门禁还在 typecheck / eval / middle 侧命中 11 处内置容器名的字符串分派（`"List" | "Vec" | "Array"` ×4、`"String" | "Bytes"` ×4 等）——**不在本节也不在 5.4 的 parser 数据流覆盖范围内**，清单与处置登记在 [06-cleanup-inventory.md](06-cleanup-inventory.md) §G3，归 P6 扩展核实项。
 
@@ -401,7 +405,7 @@ ir::Type 别名删除, BytecodeFunction.params / type_table 改用 MonoType
 
 ### 5.3 `NameKind` 与同义词表消除
 
-**问题**：`Type::Name { name: String }` 用一个无差别的字符串承载了至少 4 种语义——具体类型 / 类型变量 / 约束名（运算符接口）/ 谓词名。`declarations.rs:498-499` 需要判定"是不是谓词"、`declarations.rs:508-511` 需要判定"是不是运算符接口"、`ast.rs:930` 需要判定"是不是运算符接口"、`declarations.rs:42-80` 与 `ast.rs:847-885` 两份 `name_used_as_type*` 需要判定"是不是类型引用"，全靠字符串比较。
+**问题**：`Type::Name { name: String }` 用一个无差别的字符串承载了至少 4 种语义——具体类型 / 类型变量 / 约束名（运算符接口）/ 谓词名。`src/frontend/core/parser/statements/declarations.rs:500-501` 需要判定"是不是谓词"、同文件 `510-512` 需要判定"是不是运算符接口"、`src/frontend/core/parser/ast.rs:971` 需要判定"是不是运算符接口"、同文件 `name_used_as_type_in`（实测 864）与 `declarations.rs:42` 的 `name_used_as_type` 两份 `name_used_as_type*` 需要判定"是不是类型引用"，全靠字符串比较。
 
 **提案：给 `Type::Name` 增加一个 `kind` 字段，由 parser 一次性定种。**
 
@@ -426,29 +430,29 @@ enum NameKind {
 
 **同义词表的处置**：
 
-`from_builtin_name`（`mono.rs:618-643`）**保留，但语义降级**。改造前它是"弥合 AST 层两种等价表示"的消歧器；改造后 `Type::Int(64)` 已删除，"Int" 只有一条表示路径，它就退化为**唯一的名字→类型解析表**。
+`MonoType::from_builtin_name`（`src/frontend/core/types/mono.rs`，实测 841-867 / **13 臂**）**保留，但语义降级**。改造前它是"弥合 AST 层两种等价表示"的消歧器；改造后 `Type::Int(64)` 已删除，"Int" 只有一条表示路径，它就退化为**唯一的名字→类型解析表**。
 
 保留它的具体理由（不能删）：
 
-- `"DateTime" | "datetime" => Some(MonoType::Int(64))`（`mono.rs:627`）的注释记录了一个真实修复（#338 连带问题：`now()` 的返回值传不进 `format_time`）。这是**别名**语义，与 `Int`/`int` 的大小写别名不是同一回事。
+- `"DateTime" | "datetime" => Some(MonoType::Int(64))`（`src/frontend/core/types/mono.rs:850`）的注释记录了一个真实修复（#338 连带问题：`now()` 的返回值传不进 `format_time`）。这是**别名**语义，与 `Int`/`int` 的大小写别名不是同一回事。
 - 它是标准库类型名与语言内置名的**唯一切点**。
 
 但表内的**冗余可以砍**。改造后 parser 只会产出规范大小写（`Int` / `Int32` / `Float` / `Bool` / ...），因此：
 
-| 类别 | 现状（`mono.rs:620-642`） | 目标 |
+| 类别 | 现状（`src/frontend/core/types/mono.rs:843-864`） | 目标 |
 | --- | --- | --- |
 | 大小写别名（`"int"` / `"i64"` / `"int64"`） | 保留 | **删除**——parser 规范化后不会产出 |
 | 缩写别名（`"i64"` / `"i32"` / `"f64"`） | 保留 | **移到 lexer 层**（`src/frontend/core/lexer/state.rs` 关键字表登记为 `Int` 的等价写法），`from_builtin_name` 只认规范名 |
-| `DateTime` 别名 | 保留（`mono.rs:627`） | **保留**——语义别名，附注释 |
-| `"()"` （`mono.rs:640`） | 保留 | **删除**——`Type::Void` 兜底（`types.rs:836`）删除后无处产生 |
+| `DateTime` 别名 | 保留（`mono.rs:850`） | **保留**——语义别名，附注释 |
+| `"()"` （`mono.rs:863`） | 保留 | **删除**——`Type::Void` 兜底（`src/frontend/core/parser/statements/types.rs:836`）删除后无处产生 |
 
-**净效果**：`from_builtin_name` 从 12 个 match 臂收敛为约 6 个规范名，语义从"消歧表"变为"解析表"，且**成为类型名的单一事实源**（5.7 门禁校验它）。
+**净效果**：`from_builtin_name` 从 **13 个 match 臂**收敛为 **13 个规范名**——**臂数不降**（每个规范名仍需各自一条臂），砍掉的是 **25 个别名拼写**；语义从"消歧表"变为"解析表"，且**成为类型名的单一事实源**（5.7 门禁校验它）。**别名计数口径**：以**机械计数 25** 为准（臂内 `Int64` / `Float64` 与其余大小写、缩写别名一并计入）；若只数「与规范名大小写不同的写法」则为 23，差额恰为臂内 `Int64` / `Float64` 两项——两种口径指向同一张表，**别名的删除面不受口径影响**。
 
-**两份 `name_used_as_type*` 的合并**：2.4 记录的两份重复实现必须合并为一份，否则 `NameKind` 提供的定种信息会被两份各自独立的字符串比较逻辑绕开。合并后的实现放在 `parser/ast.rs`（数据源在 `Type` 附近），`declarations.rs` 改为调用它；`is_predicate` 短路改为读 `NameKind::Predicate`，`Struct` / `NamedStruct` 的字段递归按 `ast.rs:871-882` 的版本（较新、修复更全）取。
+**两份 `name_used_as_type*` 的合并**：2.4 记录的两份重复实现必须合并为一份，否则 `NameKind` 提供的定种信息会被两份各自独立的字符串比较逻辑绕开。合并后的实现放在 `parser/ast.rs`（数据源在 `Type` 附近），`declarations.rs` 改为调用它；`is_predicate` 短路改为读 `NameKind::Predicate`，`Struct` / `NamedStruct` 的字段递归按 `ast.rs:894-905` 的版本（较新、修复更全）取。
 
-**`CONST_PARAM_TYPES` 的归属**：`ast.rs:838-841` 的 const 泛型参数名表与 `from_builtin_name` 的全集部分重叠（见 2.3）。`NameKind::Builtin` 引入后，`ast.rs:912` 的判定可改为"`kind == Builtin` 且该名字在 const 参数可接受集合内"，把两份知识显式接上；const 参数的子集定义随 T2 门禁校验（见 5.7）。
+**`CONST_PARAM_TYPES` 的归属**：`CONST_PARAM_TYPES`（`src/frontend/core/parser/ast.rs`，实测 855-858）的 const 泛型参数名表与 `from_builtin_name` 的全集部分重叠（见 2.3）。`NameKind::Builtin` 引入后，`extract_generic_param_names`（同文件，实测 932）的判定可改为"`kind == Builtin` 且该名字在 const 参数可接受集合内"，把两份知识显式接上；const 参数的子集定义随 T2 门禁校验（见 5.7）。
 
-> **设计判断**：`.yx` 语料中若存在写 `i64` / `int` 的类型标注，把它们规范化到 `Int` 会改变这些文件的**诊断位置**（不改变诊断码）。按 C3 判据这是允许的（消息与顺序可规范化），但需在阶段 1 记录基线。
+> **设计判断**：`.yx` 语料中若存在写 `i64` / `int` 的类型标注，把它们规范化到 `Int` 会改变这些文件的**诊断位置**（不改变诊断码）。按 C3 判据这是允许的（消息与顺序可规范化），但需在阶段 1 记录基线。**实测（P6 6.0，2026-10-27）**：`tests/yaoxiang`（316 个 `.yx`）+ `tests/yaoxiang-multifile` + `src/std` 全量扫描——非规范名在**真实类型位 0 处**；原始词命中 16 处经逐条裁决 = 字符串 12 + 注释 4（`i64` / `f64` 两处都在注释里）。故 6.1 的名称规范化**不改变任何语料的诊断位置**，**无需再生基线**。
 
 ### 5.4 谓词/类型名的数据流
 
