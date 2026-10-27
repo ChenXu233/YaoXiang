@@ -1388,3 +1388,13 @@
 > **遗留（转入下一轮契约输入，不在本批处理）**：① **T1 的 `Void` 兜底豁免登记须随 6.3 同步删除**——`Type::Void` 变体删除后该登记转为 stale，门禁随即红；② **T3 的比对对象待 6.6 裁决**——RFC-011 **没有**内置类型名表，当前口径是取表格 inline-code token（5 个），6.6 转硬前须在「改文档源 / 降级 report-only / 删除并并入 T2」之间三选一，**不得直接转硬**；③ `substitute_type_ast` / `substitute_type_in_ast` 的行号区间**由 AST 派生**，文档与散文不得写死行号；④ 09 的 P6 行锚已按本轮实测改为**符号优先**（类型 / 函数名 + 入库路径），数值行号只保留仍有效的若干处。
 
 > **计数**：本批不新增二级/三级任务 ⇒ 09 顶部计数表不变（二级 71 / 三级 192）。6.0 的两个三级任务已在 09 勾选完成，证据取**实测数字**而非提交号（`pull --rebase` 会重写本地哈希）。
+
+## P10 S11 登记（DateTime 迁出内置类型名，2026-10-27）
+
+> **触发**：P6 6.1 的内置类型名定稿（15 名：`Never` / `Void` / `()` / `Bool` / `Int` / `Int8` / `Int16` / `Int32` / `Int64` / `Float` / `Float32` / `Float64` / `Char` / `String` / `Bytes`）把 `DateTime` 排除在外。`DateTime` 是 `std.time` 的语义别名（`Int`），最终由标准库提供，不能留在 `MonoType::from_builtin_name` 里。
+
+> **为何 6.1.2 不删**：6.1–6.7 的硬验收要求 `git diff --stat tests/ src/std/` 为空，而 `src/std/interfaces/time.yx` 与 `src/std/time.rs` 仍使用 `DateTime`；同批删除会改 std + 文档 + 基线。故 6.1.2 只保留**临时兼容别名**（仅大写 `DateTime`；小写 `datetime` 随 22 个别名同批删除），SPEC 内置表不写它并注明「待迁出」。
+
+> **登记**：P10 S11（二级 +1、三级 +1 = S11.1），出处 issue [#513](https://github.com/ChenXu233/YaoXiang/issues/513)。**删除保证**：issue #513 是唯一出处；S11.1 未完成前不得关闭。验收 = `grep -rn DateTime src/std` 归零 + 旧写法明确未知类型诊断 + std 编译/测试通过 + 语料/快照按新签名再生并人工 review。
+
+> **计数**：09 顶部二级 71 → 72、三级 192 → 193（本条登记即两处 +1）。
