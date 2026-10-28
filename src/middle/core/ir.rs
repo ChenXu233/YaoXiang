@@ -1,6 +1,10 @@
 //! Intermediate Representation
 
-pub use crate::frontend::core::parser::ast::Type;
+// 6.2.2：不再把 ast::Type 以 pub use 再导出为 IR 层的类型名——IR 层仍有三处载体持有
+// ast::Type（Instruction::Cast.target_type / Instruction::TypeTest.ty /
+// FunctionBody::TypeDecl.definition），改用私有导入 + 全名写清，
+// 既不对外再导出 ast::Type，也不掩盖这几处尚未收敛的跨层引用。
+use crate::frontend::core::parser::ast;
 use std::collections::HashMap;
 
 use crate::frontend::core::typecheck::MonoType;
@@ -318,12 +322,12 @@ pub enum Instruction {
     Cast {
         dst: Operand,
         src: Operand,
-        target_type: Type,
+        target_type: ast::Type,
         span: Span,
     },
     TypeTest {
         src: Operand,
-        ty: Type,
+        ty: ast::Type,
         span: Span,
     },
     /// Spawn a new task (for cycle detection: track args and result)
@@ -644,7 +648,7 @@ pub enum FunctionBody {
         locals: Vec<LocalSlot>,
     },
     /// 返回值是类型 → {} 是类型字面量
-    TypeDecl { definition: Type },
+    TypeDecl { definition: ast::Type },
 }
 
 /// 局部变量槽位：类型 + 源码名 + 作用域深度。

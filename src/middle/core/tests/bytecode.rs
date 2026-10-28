@@ -5,11 +5,10 @@
 //! - Register and label Display formatting
 //! - Borrow/Release opcode and size mapping
 //! - Borrow/Release round-trip encode-decode via `build_and_decode`
-//! - MonoType::Ref -> IrType::Void conversion
+//! - 解码保真：Ref / Struct 型不被塌缩（type_table 原样搬运，6.2.2）
 
 use crate::middle::core::bytecode::{BinaryOp, BytecodeInstr, BytecodeModule, CompareOp, Label, Reg};
 use std::collections::HashMap;
-use crate::middle::core::ir::Type as IrType;
 use crate::backends::common::opcode;
 use crate::frontend::core::typecheck::MonoType;
 use crate::middle::passes::codegen::bytecode::BytecodeInstruction;
@@ -53,6 +52,21 @@ fn build_and_decode_typed(
         debug_section: None,
     };
     BytecodeModule::from(file)
+}
+
+/// Helper: Point 结构体类型（字段 x/y: i64）——解码保真测试夹具。
+fn point_struct_type() -> MonoType {
+    MonoType::Struct(crate::frontend::core::typecheck::StructType {
+        name: "Point".to_string(),
+        fields: vec![
+            ("x".to_string(), MonoType::Int(64)),
+            ("y".to_string(), MonoType::Int(64)),
+        ],
+        methods: HashMap::new(),
+        field_mutability: vec![false, false],
+        field_has_default: vec![false, false],
+        interfaces: vec![],
+    })
 }
 
 /// Helper: assert that the single decoded instruction is `Borrow`
@@ -923,37 +937,80 @@ fn test_borrow_release_combined_roundtrip() {
     assert_release_instr(&instrs[1], Reg(5));
 }
 
-// MonoType::Ref -> IrType Conversion
+// ── 6.2.2 解码保真：Ref / Struct 不得被塌缩 ─────────────────────
 
+/// 解码产物 `BytecodeModule.type_table` 必须原样保留不可变 `Ref(i64)`。
+///
+/// 回归防线：6.2.2 之前解码期把 MonoType 降级重建为 ast::Type，Ref 会被塌成 Void——
+/// 「函数确实返回 Void」与「类型在解码期丢失」因此无法区分。
 #[test]
-fn test_ref_type_maps_to_void_ir_type() {
-    // Arrange
+fn test_decode_preserves_immutable_ref_in_type_table() {
+    // Arrange: 类型表放不可变 Ref(i64)（有损降级时代会塌成 Void）
     let ref_ty = MonoType::Ref {
         mutable: false,
         inner: Box::new(MonoType::Int(64)),
     };
+
     // Act
-    let ir_type: IrType = ref_ty.into();
-    // Assert: Ref is ZST, should map to Void
+    let module = build_and_decode_typed(vec![], vec![], MonoType::Void, vec![ref_ty.clone()]);
+
+    // Assert: 解码不得把 Ref 坍缩为 Void
     assert!(
-        matches!(ir_type, IrType::Void),
-        "Immutable Ref<i64> should map to IrType::Void (ZST has no runtime repr)"
+        matches!(module.type_table[0], MonoType::Ref { mutable: false, .. }),
+        "解码不得把 Ref 坍缩为 Void：type_table[0] = {:?}",
+        module.type_table[0]
+    );
+    assert_eq!(
+        module.type_table,
+        vec![ref_ty],
+        "解码不得把 Ref 坍缩为 Void：类型表应原样保留不可变 Ref(i64)"
     );
 }
 
+/// 可变 `Ref(String)` 同样必须原样保留（String 走 Generic 表示，一并覆盖）。
 #[test]
-fn test_ref_type_mutable_maps_to_void_ir_type() {
+fn test_decode_preserves_mutable_ref_in_type_table() {
     // Arrange
     let ref_ty = MonoType::Ref {
         mutable: true,
         inner: Box::new(MonoType::make_string()),
     };
+
     // Act
-    let ir_type: IrType = ref_ty.into();
-    // Assert: Ref is ZST regardless of mutability
+    let module = build_and_decode_typed(vec![], vec![], MonoType::Void, vec![ref_ty.clone()]);
+
+    // Assert: 解码不得把 Ref 坍缩为 Void（可变性也必须保留）
     assert!(
-        matches!(ir_type, IrType::Void),
-        "Mutable Ref<String> should map to IrType::Void (ZST has no runtime repr)"
+        matches!(module.type_table[0], MonoType::Ref { mutable: true, .. }),
+        "解码不得把 Ref 坍缩为 Void：type_table[0] = {:?}",
+        module.type_table[0]
+    );
+    assert_eq!(
+        module.type_table,
+        vec![ref_ty],
+        "解码不得把 Ref 坍缩为 Void：类型表应原样保留可变 Ref(String)"
+    );
+}
+
+/// 结构体类型同样必须原样保留（Struct 是另一类「无 ast::Type 对应形态」的类型）。
+#[test]
+fn test_decode_preserves_struct_in_type_table() {
+    // Arrange: Point 结构体（字段 x/y: i64）
+    let struct_ty = point_struct_type();
+
+    // Act
+    let module = build_and_decode_typed(vec![], vec![], MonoType::Void, vec![struct_ty.clone()]);
+
+    // Assert: 解码不得把 Struct 坍缩为 Void
+    assert!(
+        matches!(module.type_table[0], MonoType::Struct(_)),
+        "解码不得把 Struct 坍缩为 Void：type_table[0] = {:?}",
+        module.type_table[0]
+    );
+    assert_eq!(
+        module.type_table,
+        vec![struct_ty],
+        "解码不得把 Struct 坍缩为 Void：类型表应原样保留 Point"
     );
 }
 
@@ -961,9 +1018,10 @@ fn test_ref_type_mutable_maps_to_void_ir_type() {
 
 /// 解码产物 `BytecodeModule` 的签名与类型表必须与 `BytecodeFile` 逐字段相等。
 ///
-/// 历史：解码经 `From<MonoType> for IrType` 重建，Ref/Struct/Enum/TypeVar/
+/// 历史：解码期曾把 MonoType 降级重建为 ast::Type，Ref/Struct/Enum/TypeVar/
 /// TypeRef/Union/Intersection/AssocType 与非 String|Bytes|Tuple 的 Generic
-/// 都被塌成 Void（有损桥接表见 docs/src/dev/architecture/03-type-unification.md §2.1）——类型表与函数签名因此丢失结构。
+/// 都被塌成 Void（有损桥接表见 docs/src/dev/architecture/03-type-unification.md §2.1）——
+/// 该降级桥已于 6.2.2 删除，类型表与函数签名不再丢结构。
 #[test]
 fn test_decode_preserves_ref_struct_generic_signature_types() {
     // Arrange: 三类「有损桥会塌成 Void」的类型——&i64、Point 结构体、Vec(i64)
@@ -971,17 +1029,7 @@ fn test_decode_preserves_ref_struct_generic_signature_types() {
         mutable: false,
         inner: Box::new(MonoType::Int(64)),
     };
-    let struct_ty = MonoType::Struct(crate::frontend::core::typecheck::StructType {
-        name: "Point".to_string(),
-        fields: vec![
-            ("x".to_string(), MonoType::Int(64)),
-            ("y".to_string(), MonoType::Int(64)),
-        ],
-        methods: HashMap::new(),
-        field_mutability: vec![false, false],
-        field_has_default: vec![false, false],
-        interfaces: vec![],
-    });
+    let struct_ty = point_struct_type();
     let generic_ty = MonoType::make_list(MonoType::Int(64));
 
     // Act

@@ -70,17 +70,31 @@ fn test_constant_pool_types() {
 
 #[test]
 fn test_ir_types() {
-    use yaoxiang::middle::Type as IrType;
+    use yaoxiang::frontend::core::MonoType;
 
-    // Test that various IR types can be created
-    let _int_type = IrType::Int;
-    let _float_type = IrType::Float;
-    let _bool_type = IrType::Bool;
-    let _void_type = IrType::Void;
-    let _string_type = IrType::String;
+    // Arrange: 字节码/IR 的类型载体已是 MonoType（6.2 载体统一）
+    let int_ty = MonoType::Int(64);
+    let float_ty = MonoType::Float(64);
+    let bool_ty = MonoType::Bool;
+    let void_ty = MonoType::Void;
+    let string_ty = MonoType::make_string();
 
-    // These should all be constructible (just check they compile)
-    // Note: IrType may not implement PartialEq, so we just test construction
+    // Assert: 可构造且按值判等（MonoType 已 derive PartialEq），互不相等
+    assert_eq!(int_ty, MonoType::Int(64), "Int(64) 应与同构字面量相等");
+    assert_eq!(
+        float_ty,
+        MonoType::Float(64),
+        "Float(64) 应与同构字面量相等"
+    );
+    assert_eq!(bool_ty, MonoType::Bool, "Bool 应与自身相等");
+    assert_eq!(void_ty, MonoType::Void, "Void 应与自身相等");
+    assert_eq!(
+        string_ty,
+        MonoType::make_string(),
+        "make_string() 应产出相等的 Generic(String)"
+    );
+    assert_ne!(int_ty, void_ty, "Int(64) 不应等于 Void");
+    assert_ne!(string_ty, int_ty, "String 不应等于 Int(64)");
 }
 
 #[test]
