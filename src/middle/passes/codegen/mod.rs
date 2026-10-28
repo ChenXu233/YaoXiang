@@ -303,12 +303,6 @@ impl CodegenContext {
     ) -> MonoType {
         match ast_type {
             Type::Name { name, .. } => MonoType::TypeRef(name.clone()),
-            Type::Int(n) => MonoType::Int(*n),
-            Type::Float(n) => MonoType::Float(*n),
-            Type::Char => MonoType::Char,
-            Type::String => MonoType::make_string(),
-            Type::Bool => MonoType::Bool,
-            Type::Void => MonoType::Void,
             Type::Tuple(types) => {
                 MonoType::make_tuple(types.iter().map(|t| self.type_from_ast(t)).collect())
             }
@@ -320,10 +314,6 @@ impl CodegenContext {
                 params: params.iter().map(|t| self.type_from_ast(t)).collect(),
                 return_type: Box::new(self.type_from_ast(return_type)),
             },
-            Type::Option(inner) => MonoType::make_option(self.type_from_ast(inner)),
-            Type::Result(ok, err) => {
-                MonoType::make_result(self.type_from_ast(ok), self.type_from_ast(err))
-            }
             Type::Generic { name, args, .. } => MonoType::TypeRef(format!(
                 "{}({})",
                 name,

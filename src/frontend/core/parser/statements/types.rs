@@ -816,23 +816,33 @@ pub(crate) fn parse_binding_positions(state: &mut ParserState<'_>) -> Result<Vec
 
 /// 从函数类型中提取参数和返回类型
 fn extract_fn_type_info(ty: &Type) -> (Vec<Param>, Type) {
-    match ty {
-        Type::Fn {
-            params,
-            return_type,
-        } => {
-            let param_list = params
-                .iter()
-                .enumerate()
-                .map(|(i, p)| Param {
-                    name: format!("arg{}", i),
-                    ty: Some(p.clone()),
-                    is_mut: false,
-                    span: Span::dummy(),
-                })
-                .collect();
-            (param_list, *return_type.clone())
-        }
-        _ => (Vec::new(), Type::Void),
-    }
+    // 非 Fn 形态：签名位的返回类型仍是 Void。Void 专用变体已随 WBS 6.3 删除，
+    // 这里用它的**类型写法** "()"（from_builtin_name 与 Void 同臂，见
+    // types/mono.rs）：既保留原语义，也让 formatter 输出与删除前逐字相同。
+    // 用 if-let 而非 match 通配臂：T1 门禁把「通配臂内的构造点」单列为
+    // 未登记兜底（03 §5.7），此处不是错误兜底语义，不应触发该告警。
+    let Type::Fn {
+        params,
+        return_type,
+    } = ty
+    else {
+        return (
+            Vec::new(),
+            Type::Name {
+                name: "()".to_string(),
+                span: Span::dummy(),
+            },
+        );
+    };
+    let param_list = params
+        .iter()
+        .enumerate()
+        .map(|(i, p)| Param {
+            name: format!("arg{}", i),
+            ty: Some(p.clone()),
+            is_mut: false,
+            span: Span::dummy(),
+        })
+        .collect();
+    (param_list, *return_type.clone())
 }

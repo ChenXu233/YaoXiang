@@ -23,9 +23,6 @@ pub struct ResolvedConstParams {
 pub fn ast_type_to_const_kind(ty: &Type) -> ConstKind {
     let name = match ty {
         Type::Name { name, .. } => Some(name.as_str()),
-        Type::Int(_) => Some("Int"),
-        Type::Float(_) => Some("Float"),
-        Type::Bool => Some("Bool"),
         _ => None,
     };
     name.and_then(ConstKind::from_ast_type_name)

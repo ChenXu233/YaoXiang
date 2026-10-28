@@ -158,6 +158,14 @@ use crate::frontend::core::parser::ast::{
 use crate::frontend::core::typecheck::TypeCheckResult;
 use crate::util::span::Span;
 
+/// 内建类型在 AST 里的唯一写法：Name（WBS 6.3 删除了 Int/Float/… 专用变体）。
+fn builtin_ty(name: &str) -> AstType {
+    AstType::Name {
+        name: name.to_string(),
+        span: Span::dummy(),
+    }
+}
+
 /// 构造一个最小的 Module AST，包含一个简单的证明函数。
 ///
 /// 生成的 AST 结构：
@@ -174,13 +182,13 @@ fn make_proof_fn_module(
 ) -> Module {
     let param = Param {
         name: "x".into(),
-        ty: Some(AstType::Int(64)),
+        ty: Some(builtin_ty("Int64")),
         is_mut: false,
         span: Span::dummy(),
     };
 
     let return_type = AstType::Fn {
-        params: vec![AstType::Int(64)],
+        params: vec![builtin_ty("Int64")],
         return_type: Box::new(AstType::MetaType {
             name_span: Span::dummy(),
             args: vec![],
@@ -389,7 +397,7 @@ fn make_proof_fn_typedef_module(
 ) -> Module {
     let param = Param {
         name: "x".into(),
-        ty: Some(AstType::Int(64)),
+        ty: Some(builtin_ty("Int64")),
         is_mut: false,
         span: Span::dummy(),
     };

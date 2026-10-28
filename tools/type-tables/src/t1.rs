@@ -1,37 +1,25 @@
 //! T1：`ast::Type` 的构造点分列与零构造清单。
 //!
-//! 三个数字必须分开报（03 §5.7 + 6.0 勘察的裁决）：
-//! - **前向零构造**（parser 前向计数为 0，扣除**已登记**的通配臂兜底豁免后）= 13 个：
-//!   Int / Float / Char / String / Bytes / Bool / Void / Union / Enum / Option / Result / Sum / AssocType
-//! - **全局零构造**（三类合计为 0）= 1 个：仅 `Enum`
-//! - 反向桥重建（A: `From<MonoType> for IrType` 9 变体；B: `mono_to_ast_type` 8 变体）单独分列
+//! 三个数字必须分开报（03 §5.7 + 6.0 勘察的裁决）：前向零构造 / 全局零构造 / 反向桥重建。
 //!
-//! **兜底豁免是逐条登记的（F1）**：只有 `REGISTERED_ZERO_FORWARD` 里显式登记的兜底点才从
-//! 前向计数里扣除（当前只有 `Void` 的 `parser/statements/types.rs` 错误兜底；
-//! 03 §5.2 #8 / 6.4 #12 消除）。未登记的通配臂构造点**照常计入前向**——否则死变体的真实
-//! 构造点会隐身，门禁仍报「名单一致」。
+//! **WBS 6.3 之后的现状**：03 §5.2 的 13 个死变体已删除，`ast::Type` 收敛为 13 变体，
+//! 因此 `REGISTERED_ZERO_FORWARD` 与 `DEAD_VARIANTS_03` 均为空表——**不再有零构造变体**。
+//! 空表不是「门禁失效」：登记机制（`RegisteredZeroVariant` / `FallbackExemption`）与
+//! 注入式核对（`*_with(registry)`）保留，供 6.6 转硬后对新增变体重新登记。
+//!
+//! **兜底豁免是逐条登记的（F1）**：只有登记表里显式登记的兜底点才从前向计数里扣除；
+//! 未登记的通配臂构造点**照常计入前向**——否则真实构造点会隐身，门禁仍报「名单一致」。
 
 use std::collections::BTreeSet;
 
 use crate::baseline;
 use crate::scan::{ScanResult, Site, SiteClass, VariantDecl};
 
-/// 03 §5.2 的删除名单（前向口径的零构造变体，13 个）——用于「13 名单内」的交叉统计。
-pub const DEAD_VARIANTS_03: &[&str] = &[
-    "Int",
-    "Float",
-    "Char",
-    "String",
-    "Bytes",
-    "Bool",
-    "Void",
-    "Union",
-    "Enum",
-    "Option",
-    "Result",
-    "Sum",
-    "AssocType",
-];
+/// 03 §5.2 的删除名单（前向口径的零构造变体）。
+///
+/// **WBS 6.3 已把这 13 个变体从 `ast::Type` 删除**，故此表清空：它只服务于
+/// 「13 名单内」的交叉统计（T1.5 的标记），清空后该类统计恒为 0 变体 / 0 点。
+pub const DEAD_VARIANTS_03: &[&str] = &[];
 
 /// 一条**已登记的通配臂兜底豁免**（1 条 = 1 点）。
 ///
@@ -52,79 +40,13 @@ pub struct RegisteredZeroVariant {
     pub exemptions: &'static [FallbackExemption],
 }
 
-/// Void 的错误兜底：`_ => (Vec::new(), Type::Void)`（03 §5.2 #8，6.4 #12 消除）
-const VOID_FALLBACK: &[FallbackExemption] = &[FallbackExemption {
-    file: "src/frontend/core/parser/statements/types.rs",
-    why: "03 §5.2 #8 / 6.4 #12：parser 错误兜底 _ => (Vec::new(), Type::Void)，6.4 消除后本豁免随之删除",
-}];
-
-pub const REGISTERED_ZERO_FORWARD: &[RegisteredZeroVariant] = &[
-    RegisteredZeroVariant {
-        name: "Int",
-        reason: "03 §5.2 #2：位宽由 from_builtin_name 的 Name 路径承载",
-        exemptions: &[],
-    },
-    RegisteredZeroVariant {
-        name: "Float",
-        reason: "03 §5.2 #3：同 Int，位宽由 Name 路径承载",
-        exemptions: &[],
-    },
-    RegisteredZeroVariant {
-        name: "Char",
-        reason: "03 §5.2 #4：走 Name 路径",
-        exemptions: &[],
-    },
-    RegisteredZeroVariant {
-        name: "String",
-        reason: "03 §5.2 #5：已由 Generic{name:String} 表示；反向桥 A/B 各 1 点随 6.2/6.3 改写",
-        exemptions: &[],
-    },
-    RegisteredZeroVariant {
-        name: "Bytes",
-        reason: "03 §5.2 #6：已由 Generic{name:Bytes} 表示；反向桥 A/B 各 1 点随 6.2/6.3 改写",
-        exemptions: &[],
-    },
-    RegisteredZeroVariant {
-        name: "Bool",
-        reason: "03 §5.2 #7：走 Name 路径",
-        exemptions: &[],
-    },
-    RegisteredZeroVariant {
-        name: "Void",
-        reason: "03 §5.2 #8：唯一前向点是错误兜底（已逐条登记，随 6.4 #12 消除）",
-        exemptions: VOID_FALLBACK,
-    },
-    RegisteredZeroVariant {
-        name: "Union",
-        reason: "03 §5.2 #11：合成类型走 Struct/Ptr；AST→AST 重建 2 点随 6.3 改写",
-        exemptions: &[],
-    },
-    RegisteredZeroVariant {
-        name: "Enum",
-        reason: "03 §5.2 #12：枚举走 Struct + TypeBodyItem；唯一全局零构造变体",
-        exemptions: &[],
-    },
-    RegisteredZeroVariant {
-        name: "Option",
-        reason: "03 §5.2 #15：走 Generic 路径；AST→AST 重建 2 点随 6.3 改写",
-        exemptions: &[],
-    },
-    RegisteredZeroVariant {
-        name: "Result",
-        reason: "03 §5.2 #16：走 Generic 路径；AST→AST 重建 2 点随 6.3 改写",
-        exemptions: &[],
-    },
-    RegisteredZeroVariant {
-        name: "Sum",
-        reason: "03 §5.2 #19：合成类型走 Struct；AST→AST 重建 2 点随 6.3 改写",
-        exemptions: &[],
-    },
-    RegisteredZeroVariant {
-        name: "AssocType",
-        reason: "03 §5.2 #18 / D8：语法层无 :: 关联类型产出路径；前向零构造、AST→AST 2 点（口径按前向，不加豁免）",
-        exemptions: &[],
-    },
-];
+/// 前向零构造变体的登记表（白名单 + 逐条兜底豁免）。
+///
+/// **WBS 6.3 清空**：13 个死变体已从 `ast::Type` 删除，实测前向零构造为 0 个，
+/// 故本表为空——旧登记（含 `Void` 的 `parser/statements/types.rs` 错误兜底豁免）
+/// 全部失效并已删除，否则 T1.7 会报「登记但已不成立」与「豁免未命中」。
+/// 6.6 转硬后若新增前向零构造变体，在此登记理由（兜底点还须逐条给 `FallbackExemption`）。
+pub const REGISTERED_ZERO_FORWARD: &[RegisteredZeroVariant] = &[];
 
 /// 单变体的三类计数
 #[derive(Debug, Clone)]
@@ -248,9 +170,17 @@ impl ForwardReport {
 
     /// 逐条登记项的命中情况（按登记表顺序；每条登记只消费一个点）
     pub fn exemption_outcomes(&self) -> Vec<ExemptionOutcome<'_>> {
+        self.exemption_outcomes_with(REGISTERED_ZERO_FORWARD)
+    }
+
+    /// 同上，登记表可注入（6.3 之后生产登记表为空，机制仍须可测）
+    fn exemption_outcomes_with(
+        &self,
+        registry: &'static [RegisteredZeroVariant],
+    ) -> Vec<ExemptionOutcome<'_>> {
         let mut consumed: BTreeSet<(String, usize)> = BTreeSet::new();
         let mut out = Vec::new();
-        for registered in REGISTERED_ZERO_FORWARD {
+        for registered in registry {
             let stats = self.stats.iter().find(|s| s.name == registered.name);
             for entry in registered.exemptions {
                 let hit = stats.and_then(|s| {
@@ -278,7 +208,15 @@ impl ForwardReport {
         &self,
         stats: &VariantStats,
     ) -> usize {
-        self.exemption_outcomes()
+        self.exempt_count_with(stats, REGISTERED_ZERO_FORWARD)
+    }
+
+    fn exempt_count_with(
+        &self,
+        stats: &VariantStats,
+        registry: &'static [RegisteredZeroVariant],
+    ) -> usize {
+        self.exemption_outcomes_with(registry)
             .iter()
             .filter(|outcome| outcome.variant == stats.name && outcome.site.is_some())
             .count()
@@ -289,14 +227,31 @@ impl ForwardReport {
         &self,
         stats: &VariantStats,
     ) -> usize {
-        stats.forward_raw().saturating_sub(self.exempt_count(stats))
+        self.forward_effective_with(stats, REGISTERED_ZERO_FORWARD)
+    }
+
+    fn forward_effective_with(
+        &self,
+        stats: &VariantStats,
+        registry: &'static [RegisteredZeroVariant],
+    ) -> usize {
+        stats
+            .forward_raw()
+            .saturating_sub(self.exempt_count_with(stats, registry))
     }
 
     /// 前向零构造（扣除已登记豁免后为 0）
     pub fn forward_zero(&self) -> Vec<&VariantStats> {
+        self.forward_zero_with(REGISTERED_ZERO_FORWARD)
+    }
+
+    fn forward_zero_with(
+        &self,
+        registry: &'static [RegisteredZeroVariant],
+    ) -> Vec<&VariantStats> {
         self.stats
             .iter()
-            .filter(|stats| self.forward_effective(stats) == 0)
+            .filter(|stats| self.forward_effective_with(stats, registry) == 0)
             .collect()
     }
 
@@ -307,8 +262,15 @@ impl ForwardReport {
 
     /// 未被豁免的通配臂兜底点（这些照常计入前向 → 变体不得算前向零构造）
     pub fn unregistered_fallbacks(&self) -> Vec<&Site> {
+        self.unregistered_fallbacks_with(REGISTERED_ZERO_FORWARD)
+    }
+
+    fn unregistered_fallbacks_with(
+        &self,
+        registry: &'static [RegisteredZeroVariant],
+    ) -> Vec<&Site> {
         let consumed: BTreeSet<(String, usize)> = self
-            .exemption_outcomes()
+            .exemption_outcomes_with(registry)
             .iter()
             .filter_map(|outcome| outcome.site)
             .map(|site| (site.file.clone(), site.line))
@@ -322,34 +284,38 @@ impl ForwardReport {
 
     /// T1.7 白名单核对（渲染、--json、build.rs 告警共用）
     pub fn whitelist_check(&self) -> WhitelistCheck {
+        self.whitelist_check_with(REGISTERED_ZERO_FORWARD)
+    }
+
+    /// 同上，登记表可注入（生产登记表为空时仍可验证豁免/失效机制）
+    fn whitelist_check_with(
+        &self,
+        registry: &'static [RegisteredZeroVariant],
+    ) -> WhitelistCheck {
         let measured_zero: Vec<String> = self
-            .forward_zero()
+            .forward_zero_with(registry)
             .iter()
             .map(|stats| stats.name.clone())
             .collect();
         let mut check = WhitelistCheck {
-            registered: REGISTERED_ZERO_FORWARD.len(),
+            registered: registry.len(),
             unregistered: measured_zero
                 .iter()
-                .filter(|name| {
-                    !REGISTERED_ZERO_FORWARD
-                        .iter()
-                        .any(|r| r.name == name.as_str())
-                })
+                .filter(|name| !registry.iter().any(|r| r.name == name.as_str()))
                 .cloned()
                 .collect(),
-            broken: REGISTERED_ZERO_FORWARD
+            broken: registry
                 .iter()
                 .filter(
                     |registered| match self.stats.iter().find(|s| s.name == registered.name) {
-                        Some(stats) => self.forward_effective(stats) > 0,
+                        Some(stats) => self.forward_effective_with(stats, registry) > 0,
                         None => true,
                     },
                 )
                 .map(|registered| registered.name.to_string())
                 .collect(),
             stale_exemptions: self
-                .exemption_outcomes()
+                .exemption_outcomes_with(registry)
                 .iter()
                 .filter(|outcome| outcome.site.is_none())
                 .map(|outcome| format!("{}({})", outcome.variant, outcome.entry.file))
@@ -397,8 +363,15 @@ impl ForwardReport {
         out.push_str(
             "  1) parser 前向        ：不在下面任何重建位置的构造点（当前全部落在 parser）\n",
         );
-        out.push_str("  2) AST→AST 重建       ：middle/passes/mono/function.rs 的 substitute_type_ast（320-497）\n");
-        out.push_str("                          与 substitute_type_in_ast（499-655）——把已有 AST 类型重造一份\n");
+        out.push_str(
+            "  2) AST→AST 重建       ：middle/passes/mono/function.rs 的 substitute_type_ast\n",
+        );
+        out.push_str(
+            "                          与 substitute_type_in_ast——把已有 AST 类型重造一份\n",
+        );
+        out.push_str(
+            "                          （区间由 AST 派生，不在散文里写死行号，见 WBS 6.6）\n",
+        );
         out.push_str(
             "  3) 反向桥 A           ：middle/core/bytecode.rs 的 impl From<MonoType> for IrType\n",
         );
@@ -408,7 +381,7 @@ impl ForwardReport {
         out.push_str(
             "「前向零构造」= 前向有效计数为 0 = 原始前向点数 − **已登记**的通配臂兜底豁免点数；\n",
         );
-        out.push_str("         豁免逐条登记在 REGISTERED_ZERO_FORWARD（当前只有 Void 的 parser 错误兜底），\n");
+        out.push_str("         豁免逐条登记在 REGISTERED_ZERO_FORWARD（WBS 6.3 后为空表：零构造变体已删除），\n");
         out.push_str(
             "         未登记的兜底点不予豁免、照常计入前向；登记失效（兜底点消失）由 T1.7 报警。\n",
         );
@@ -535,7 +508,7 @@ impl ForwardReport {
             ));
         }
         out.push_str(&format!(
-            "反向桥 B（fn mono_to_ast_type，{} 499-655 内嵌套 fn）：\n",
+            "反向桥 B（fn mono_to_ast_type，{} 的 substitute_type_in_ast 内嵌套 fn）：\n",
             crate::FUNCTION_REL
         ));
         let b: Vec<&VariantStats> = self
@@ -571,7 +544,7 @@ impl ForwardReport {
             .filter(|stats| !stats.ast_to_ast.is_empty())
             .collect();
         out.push_str(&format!(
-            "  变体 {} 个 / 点 {} 个（03 与 09 均未登记这一类；6.3 删变体时必须同批改写）\n",
+            "  变体 {} 个 / 点 {} 个（6.3 已删除 5 变体 / 10 点；本列是剩余重建点）\n",
             c.len(),
             c.iter().map(|stats| stats.ast_to_ast.len()).sum::<usize>()
         ));
@@ -595,7 +568,7 @@ impl ForwardReport {
         }
         let dead_points: usize = self.dead_list_points().iter().map(|(_, n)| *n).sum();
         out.push_str(&format!(
-            "  其中 13 名单内：{} 个变体 / {} 点（Union/Option/Result/Sum/AssocType 各 2）\n\n",
+            "  其中 WBS 6.3 删除名单（DEAD_VARIANTS_03，已清空）：{} 个变体 / {} 点\n\n",
             self.dead_list_points().len(),
             dead_points
         ));
@@ -677,7 +650,7 @@ impl ForwardReport {
             .count();
         let dead_points: usize = self.dead_list_points().iter().map(|(_, n)| *n).sum();
         out.push(format!(
-            "type-tables T1（只报告，6.6 才转硬）：扫描 {} 个非测试 .rs；ast::Type {} 变体；前向零构造 {}；全局零构造 {}〔{}〕；反向桥 A {} 变体；反向桥 B {} 变体；AST→AST 重建 {} 变体（13 名单内 {} 点）",
+            "type-tables T1（只报告，6.6 才转硬）：扫描 {} 个非测试 .rs；ast::Type {} 变体；前向零构造 {}；全局零构造 {}〔{}〕；反向桥 A {} 变体；反向桥 B {} 变体；AST→AST 重建 {} 变体（6.3 删除名单内 {} 点）",
             self.scanned_files,
             self.stats.len(),
             check.measured_zero.len(),
@@ -794,6 +767,25 @@ impl ForwardReport {
 mod tests {
     use super::*;
 
+    /// 生产登记表已随 WBS 6.3 清空（不再有零构造变体）；机制测试用合成登记表：
+    /// Void 带一条兜底豁免（验命中/失效），Int 无豁免（验「登记但已不成立」）。
+    const TEST_FALLBACK: &[FallbackExemption] = &[FallbackExemption {
+        file: "src/frontend/core/parser/statements/types.rs",
+        why: "test-only：验证兜底豁免命中与失效报警",
+    }];
+    const TEST_REGISTRY: &[RegisteredZeroVariant] = &[
+        RegisteredZeroVariant {
+            name: "Void",
+            reason: "test-only",
+            exemptions: TEST_FALLBACK,
+        },
+        RegisteredZeroVariant {
+            name: "Int",
+            reason: "test-only（无豁免）",
+            exemptions: &[],
+        },
+    ];
+
     fn variant(
         name: &str,
         line: usize,
@@ -858,12 +850,15 @@ mod tests {
         // Assert
         assert_eq!(stats.forward_raw(), 1, "原始前向计数应保留兜底点");
         assert_eq!(
-            report.forward_effective(stats),
+            report.forward_effective_with(stats, TEST_REGISTRY),
             0,
             "已登记的兜底点应被豁免（有效计数 0）"
         );
         assert!(
-            report.whitelist_check().stale_exemptions.is_empty(),
+            report
+                .whitelist_check_with(TEST_REGISTRY)
+                .stale_exemptions
+                .is_empty(),
             "命中登记项时不得报「豁免未命中」"
         );
     }
@@ -879,16 +874,16 @@ mod tests {
 
         // Act
         let stats = &report.stats[0];
-        let check = report.whitelist_check();
+        let check = report.whitelist_check_with(TEST_REGISTRY);
 
         // Assert
         assert_eq!(
-            report.forward_effective(stats),
+            report.forward_effective_with(stats, TEST_REGISTRY),
             1,
             "Int 未登记豁免点，通配臂里的 Type::Int 必须计入前向（否则门禁漏报真实构造点）"
         );
         assert!(
-            report.forward_zero().is_empty(),
+            report.forward_zero_with(TEST_REGISTRY).is_empty(),
             "Int 有真实前向构造点，不得再列为「前向零构造」"
         );
         assert!(
@@ -912,7 +907,7 @@ mod tests {
         let report = report(vec![variant("Void", 455)], Vec::new());
 
         // Act
-        let check = report.whitelist_check();
+        let check = report.whitelist_check_with(TEST_REGISTRY);
 
         // Assert
         assert_eq!(

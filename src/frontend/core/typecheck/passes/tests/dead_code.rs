@@ -115,13 +115,16 @@ fn make_binding(
 }
 
 /// 构造一个类型定义语句（`Name: Type = ...` 的真实语法形态，#321）
-/// definition 用原生类型——不引用自身（自引用会被收集成使用，污染判定）
+/// definition 用内建类型名（Name）——不引用自身（自引用会被收集成使用，污染判定）
 fn make_type_def(name: &str) -> Stmt {
     Stmt {
         kind: StmtKind::TypeDefinition {
             name: name.to_string(),
             signature_params: vec![],
-            definition: Type::Int(64),
+            definition: Type::Name {
+                name: "Int64".to_string(),
+                span: Span::dummy(),
+            },
         },
         span: Span::dummy(),
         plan_id: PlanId::UNPLANNED,

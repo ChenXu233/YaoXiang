@@ -446,13 +446,6 @@ pub enum Type {
         name: String,
         span: Span,
     },
-    Int(usize),
-    Float(usize),
-    Char,
-    String,
-    Bytes,
-    Bool,
-    Void,
     Struct {
         /// 有序类型体项（字段/绑定/接口/表达式按源码顺序）
         body: Vec<TypeBodyItem>,
@@ -462,31 +455,16 @@ pub enum Type {
         name_span: Span,
         fields: Vec<StructField>,
     },
-    Union(Vec<(String, Option<Type>)>),
-    Enum(Vec<String>),
     Tuple(Vec<Type>),
     Fn {
         params: Vec<Type>,
         return_type: Box<Type>,
     },
-    Option(Box<Type>),
-    Result(Box<Type>, Box<Type>),
     Generic {
         name: String,
         name_span: Span,
         args: Vec<Type>,
     },
-    /// 关联类型访问（如 T::Item）
-    AssocType {
-        /// 宿主类型
-        host_type: Box<Type>,
-        /// 关联类型名称
-        assoc_name: String,
-        assoc_name_span: Span,
-        /// 关联类型参数（如果有关联类型也是泛型的）
-        assoc_args: Vec<Type>,
-    },
-    Sum(Vec<Type>),
     /// Literal type: a compile-time constant value used as a type
     /// e.g., "5" in `[n: Int](n: n)` - n is a literal type "5"
     /// Used for const generics with literal value parameters
@@ -635,14 +613,7 @@ impl Type {
                     }
                 }
             }
-            Type::Union(variants) => {
-                for (_, ty) in variants.iter() {
-                    if let Some(ty) = ty {
-                        ty.collect_name_refs(out);
-                    }
-                }
-            }
-            Type::Tuple(items) | Type::Sum(items) => {
+            Type::Tuple(items) => {
                 for ty in items {
                     ty.collect_name_refs(out);
                 }
@@ -656,26 +627,10 @@ impl Type {
                 }
                 return_type.collect_name_refs(out);
             }
-            Type::Option(inner) | Type::Ptr(inner) => inner.collect_name_refs(out),
-            Type::Result(ok, err) => {
-                ok.collect_name_refs(out);
-                err.collect_name_refs(out);
-            }
+            Type::Ptr(inner) => inner.collect_name_refs(out),
             Type::Generic { name, args, .. } => {
                 out.insert(name.clone());
                 for ty in args {
-                    ty.collect_name_refs(out);
-                }
-            }
-            Type::AssocType {
-                host_type,
-                assoc_name,
-                assoc_args,
-                ..
-            } => {
-                host_type.collect_name_refs(out);
-                out.insert(assoc_name.clone());
-                for ty in assoc_args {
                     ty.collect_name_refs(out);
                 }
             }
@@ -882,12 +837,9 @@ pub fn name_used_as_type_in(
             params.iter().any(|p| name_used_as_type_in(name, p))
                 || name_used_as_type_in(name, return_type)
         }
-        Type::Option(inner) | Type::Ptr(inner) => name_used_as_type_in(name, inner),
+        Type::Ptr(inner) => name_used_as_type_in(name, inner),
         Type::Ref { inner, .. } => name_used_as_type_in(name, inner),
-        Type::Result(a, b) => name_used_as_type_in(name, a) || name_used_as_type_in(name, b),
-        Type::Tuple(types) | Type::Sum(types) => {
-            types.iter().any(|t| name_used_as_type_in(name, t))
-        }
+        Type::Tuple(types) => types.iter().any(|t| name_used_as_type_in(name, t)),
         // 类型定义体：字段类型里的引用也算（`SafeArray = { data: Array(T, N) }`
         // 的 `N`）。此前缺这两个分支，const 泛型参数在定义体内被引用时
         // 判不出「被当类型用」，注解校验会把合法 const 参数误报未知名。

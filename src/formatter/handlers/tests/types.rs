@@ -57,89 +57,122 @@ fn anonymous_binding_type() -> Type {
     }
 }
 
+/// 内建标量在 AST 里只有 Name 一种写法（6.3 删除了 Int/Float/… 专用变体），
+/// 格式化必须原样输出名字，不得再造 i32 / i64 这类实现内拼写。
+fn name_type(name: &str) -> Type {
+    Type::Name {
+        name: name.to_string(),
+        span: Span::dummy(),
+    }
+}
+
 #[test]
 fn test_format_type_int() {
     assert_eq!(
-        format_type(&Type::Int(32), &default_ctx(), &default_source_map()),
-        "i32"
+        format_type(&name_type("Int32"), &default_ctx(), &default_source_map()),
+        "Int32",
+        "宽度显式内建名应原样输出"
     );
     assert_eq!(
-        format_type(&Type::Int(64), &default_ctx(), &default_source_map()),
-        "i64"
+        format_type(&name_type("Int64"), &default_ctx(), &default_source_map()),
+        "Int64",
+        "Int64 应原样输出（实现内拼写 i64 已删除）"
     );
 }
 
 #[test]
 fn test_format_type_float() {
     assert_eq!(
-        format_type(&Type::Float(32), &default_ctx(), &default_source_map()),
-        "f32"
+        format_type(&name_type("Float32"), &default_ctx(), &default_source_map()),
+        "Float32",
+        "Float32 应原样输出"
     );
     assert_eq!(
-        format_type(&Type::Float(64), &default_ctx(), &default_source_map()),
-        "f64"
+        format_type(&name_type("Float64"), &default_ctx(), &default_source_map()),
+        "Float64",
+        "Float64 应原样输出（实现内拼写 f64 已删除）"
     );
 }
 
 #[test]
 fn test_format_type_bool() {
     assert_eq!(
-        format_type(&Type::Bool, &default_ctx(), &default_source_map()),
-        "Bool"
+        format_type(&name_type("Bool"), &default_ctx(), &default_source_map()),
+        "Bool",
+        "Bool 应原样输出"
     );
 }
 
 #[test]
 fn test_format_type_string() {
     assert_eq!(
-        format_type(&Type::String, &default_ctx(), &default_source_map()),
-        "String"
+        format_type(&name_type("String"), &default_ctx(), &default_source_map()),
+        "String",
+        "String 应原样输出"
     );
 }
 
 #[test]
 fn test_format_type_char() {
     assert_eq!(
-        format_type(&Type::Char, &default_ctx(), &default_source_map()),
-        "Char"
+        format_type(&name_type("Char"), &default_ctx(), &default_source_map()),
+        "Char",
+        "Char 应原样输出"
     );
 }
 
 #[test]
 fn test_format_type_void() {
+    // "()" 是 Void 的类型写法；parser 产出的就是零元元组，格式化回 "()"。
+    let unit = Type::Tuple(vec![]);
     assert_eq!(
-        format_type(&Type::Void, &default_ctx(), &default_source_map()),
-        "()"
+        format_type(&unit, &default_ctx(), &default_source_map()),
+        "()",
+        "零元元组应格式化为 ()"
+    );
+    // 显式 Void 注解走 Name（6.3：专用变体已删）。
+    assert_eq!(
+        format_type(&name_type("Void"), &default_ctx(), &default_source_map()),
+        "Void",
+        "显式 Void 注解应原样输出"
     );
 }
 
 #[test]
 fn test_format_type_tuple() {
-    let ty = Type::Tuple(vec![Type::Int(32), Type::Bool]);
+    let ty = Type::Tuple(vec![name_type("Int32"), name_type("Bool")]);
     assert_eq!(
         format_type(&ty, &default_ctx(), &default_source_map()),
-        "(i32, Bool)"
+        "(Int32, Bool)",
+        "元组元素应逐个格式化"
     );
 }
 
 #[test]
 fn test_format_type_option() {
-    let ty = Type::Option(Box::new(Type::Int(32)));
+    // Option 在 AST 里是 Generic（parser 从不产出专用变体），格式化走通用泛型臂。
+    let ty = Type::Generic {
+        name: "Option".to_string(),
+        name_span: Span::dummy(),
+        args: vec![name_type("Int32")],
+    };
     assert_eq!(
         format_type(&ty, &default_ctx(), &default_source_map()),
-        "i32?"
+        "Option(Int32)",
+        "Option 应按通用泛型写法输出"
     );
 }
 
 #[test]
 fn test_format_type_fn() {
     let ty = Type::Fn {
-        params: vec![Type::Int(32), Type::Bool],
-        return_type: Box::new(Type::String),
+        params: vec![name_type("Int32"), name_type("Bool")],
+        return_type: Box::new(name_type("String")),
     };
     assert_eq!(
         format_type(&ty, &default_ctx(), &default_source_map()),
-        "(i32, Bool) -> String"
+        "(Int32, Bool) -> String",
+        "函数类型应格式化参数与返回"
     );
 }
 
@@ -147,12 +180,13 @@ fn test_format_type_fn() {
 fn test_format_type_ref() {
     let ty = Type::Ref {
         mutable: false,
-        inner: Box::new(Type::Int(32)),
+        inner: Box::new(name_type("Int32")),
         span: Span::dummy(),
     };
     assert_eq!(
         format_type(&ty, &default_ctx(), &default_source_map()),
-        "&i32"
+        "&Int32",
+        "不可变引用应格式化内层"
     );
 }
 
@@ -160,21 +194,23 @@ fn test_format_type_ref() {
 fn test_format_type_mut_ref() {
     let ty = Type::Ref {
         mutable: true,
-        inner: Box::new(Type::Int(32)),
+        inner: Box::new(name_type("Int32")),
         span: Span::dummy(),
     };
     assert_eq!(
         format_type(&ty, &default_ctx(), &default_source_map()),
-        "&mut i32"
+        "&mut Int32",
+        "可变引用应带 mut 前缀"
     );
 }
 
 #[test]
 fn test_format_type_ptr() {
-    let ty = Type::Ptr(Box::new(Type::Int(32)));
+    let ty = Type::Ptr(Box::new(name_type("Int32")));
     assert_eq!(
         format_type(&ty, &default_ctx(), &default_source_map()),
-        "*i32"
+        "*Int32",
+        "裸指针应带 * 前缀"
     );
 }
 
@@ -192,19 +228,27 @@ fn test_format_type_name() {
 
 #[test]
 fn test_format_type_enum() {
-    let ty = Type::Enum(vec!["A".to_string(), "B".to_string(), "C".to_string()]);
+    // 原 Enum 变体已删（枚举走 Struct + TypeBodyItem，见 03 §5.2 #12）；
+    // 这里覆盖原先走专用臂的 Bytes：现在同样落到 Name 臂。
     assert_eq!(
-        format_type(&ty, &default_ctx(), &default_source_map()),
-        "A | B | C"
+        format_type(&name_type("Bytes"), &default_ctx(), &default_source_map()),
+        "Bytes",
+        "Bytes 应原样输出（专用变体已删）"
     );
 }
 
 #[test]
 fn test_format_type_sum() {
-    let ty = Type::Sum(vec![Type::Int(32), Type::Bool]);
+    // 原 Sum 变体已删；Result 在 AST 里是 Generic，覆盖其格式化形态。
+    let ty = Type::Generic {
+        name: "Result".to_string(),
+        name_span: Span::dummy(),
+        args: vec![name_type("Int32"), name_type("String")],
+    };
     assert_eq!(
         format_type(&ty, &default_ctx(), &default_source_map()),
-        "i32 + Bool"
+        "Result(Int32, String)",
+        "Result 应按通用泛型写法输出"
     );
 }
 
@@ -260,20 +304,20 @@ fn test_format_struct_preserves_body_order() {
         span: Span::dummy(),
     };
     let body = vec![
-        TypeBodyItem::Field(StructField::new("x".to_string(), false, Type::Int(32))),
+        TypeBodyItem::Field(StructField::new("x".to_string(), false, name_type("Int32"))),
         TypeBodyItem::Expr(Type::Generic {
             name: "Assert".to_string(),
             name_span: Span::dummy(),
             args: vec![Type::ConstExpr(Box::new(gt_expr))],
         }),
-        TypeBodyItem::Field(StructField::new("y".to_string(), false, Type::Int(32))),
+        TypeBodyItem::Field(StructField::new("y".to_string(), false, name_type("Int32"))),
     ];
     let ty = Type::Struct { body };
 
     let result = format_type(&ty, &default_ctx(), &default_source_map());
 
     assert_eq!(
-        result, "{ x: i32, Assert(N > 0), y: i32 }",
+        result, "{ x: Int32, Assert(N > 0), y: Int32 }",
         "类型体项应保持声明顺序，匿名 Expr 项不得丢弃"
     );
 }
@@ -285,14 +329,14 @@ fn test_format_struct_merges_consecutive_interfaces() {
     let body = vec![
         TypeBodyItem::Interface("Eq".to_string()),
         TypeBodyItem::Interface("Hash".to_string()),
-        TypeBodyItem::Field(StructField::new("x".to_string(), false, Type::Int(32))),
+        TypeBodyItem::Field(StructField::new("x".to_string(), false, name_type("Int32"))),
     ];
     let ty = Type::Struct { body };
 
     let result = format_type(&ty, &default_ctx(), &default_source_map());
 
     assert_eq!(
-        result, "{ impl Eq, Hash, x: i32 }",
+        result, "{ impl Eq, Hash, x: Int32 }",
         "连续 Interface 项应合并为一个 impl 子句"
     );
 }

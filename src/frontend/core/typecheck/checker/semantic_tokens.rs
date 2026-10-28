@@ -201,13 +201,6 @@ impl TypeChecker {
                     }
                 }
             }
-            Type::Union(variants) => {
-                for (_name, maybe_ty) in variants {
-                    if let Some(t) = maybe_ty {
-                        self.collect_type_tokens(file_path, t);
-                    }
-                }
-            }
             Type::Tuple(types) => {
                 for t in types {
                     self.collect_type_tokens(file_path, t);
@@ -221,36 +214,6 @@ impl TypeChecker {
                     self.collect_type_tokens(file_path, t);
                 }
                 self.collect_type_tokens(file_path, return_type);
-            }
-            Type::Option(inner) => self.collect_type_tokens(file_path, inner),
-            Type::Result(ok, err) => {
-                self.collect_type_tokens(file_path, ok);
-                self.collect_type_tokens(file_path, err);
-            }
-            Type::AssocType {
-                host_type,
-                assoc_name,
-                assoc_name_span,
-                assoc_args,
-            } => {
-                self.collect_type_tokens(file_path, host_type);
-                self.semantic_db.add_token(
-                    file_path,
-                    semantic_db::SemanticToken {
-                        name: assoc_name.clone(),
-                        token_type: semantic_db::SemanticTokenType::Type,
-                        modifiers: vec![],
-                        span: *assoc_name_span,
-                    },
-                );
-                for t in assoc_args {
-                    self.collect_type_tokens(file_path, t);
-                }
-            }
-            Type::Sum(types) => {
-                for t in types {
-                    self.collect_type_tokens(file_path, t);
-                }
             }
             Type::Literal {
                 name,
@@ -283,15 +246,7 @@ impl TypeChecker {
                     self.collect_type_tokens(file_path, t);
                 }
             }
-            Type::Int(_)
-            | Type::Float(_)
-            | Type::Char
-            | Type::String
-            | Type::Bytes
-            | Type::Bool
-            | Type::Void
-            | Type::Enum(_)
-            | Type::ConstExpr(_) => {}
+            Type::ConstExpr(_) => {}
             Type::Ref { inner, .. } => self.collect_type_tokens(file_path, inner),
         }
     }

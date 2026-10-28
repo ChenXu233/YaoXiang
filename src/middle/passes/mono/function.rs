@@ -323,16 +323,11 @@ impl FunctionMonomorphizer for super::Monomorphizer {
         type_map: &HashMap<usize, MonoType>,
     ) -> AstType {
         match ty {
-            // 基本类型直接返回
-            AstType::Name { .. }
-            | AstType::Int(_)
-            | AstType::Float(_)
-            | AstType::Char
-            | AstType::String
-            | AstType::Bytes
-            | AstType::Bool
-            | AstType::Void
-            | AstType::Enum(_) => ty.clone(),
+            // 无类型参数可替换的叶子：直接返回。
+            //
+            // 6.3 删掉的 Int/Float/Char/String/Bytes/Bool/Void/Enum 不再需要臂——
+            // parser 前向零构造，且回写桥（mono_to_ast_type）已改产 `Name`。
+            AstType::Name { .. } => ty.clone(),
 
             // 结构体：递归替换字段类型
             AstType::Struct { body } => AstType::Struct {
@@ -373,19 +368,6 @@ impl FunctionMonomorphizer for super::Monomorphizer {
                     .collect(),
             },
 
-            // 联合类型
-            AstType::Union(members) => AstType::Union(
-                members
-                    .iter()
-                    .map(|(name, ty)| {
-                        (
-                            name.clone(),
-                            ty.as_ref().map(|t| self.substitute_type_ast(t, type_map)),
-                        )
-                    })
-                    .collect(),
-            ),
-
             // 元组：递归替换元素类型
             AstType::Tuple(types) => AstType::Tuple(
                 types
@@ -422,17 +404,6 @@ impl FunctionMonomorphizer for super::Monomorphizer {
                 inner: Box::new(self.substitute_type_ast(inner, type_map)),
             },
 
-            // Option：替换内部类型
-            AstType::Option(inner) => {
-                AstType::Option(Box::new(self.substitute_type_ast(inner, type_map)))
-            }
-
-            // Result：替换 Ok 和 Err 类型
-            AstType::Result(ok, err) => AstType::Result(
-                Box::new(self.substitute_type_ast(ok, type_map)),
-                Box::new(self.substitute_type_ast(err, type_map)),
-            ),
-
             // 泛型类型：替换类型参数
             AstType::Generic {
                 name,
@@ -446,30 +417,6 @@ impl FunctionMonomorphizer for super::Monomorphizer {
                     .map(|t| self.substitute_type_ast(t, type_map))
                     .collect(),
             },
-
-            // 关联类型：递归替换
-            AstType::AssocType {
-                host_type,
-                assoc_name,
-                assoc_name_span,
-                assoc_args,
-            } => AstType::AssocType {
-                host_type: Box::new(self.substitute_type_ast(host_type, type_map)),
-                assoc_name: assoc_name.clone(),
-                assoc_name_span: *assoc_name_span,
-                assoc_args: assoc_args
-                    .iter()
-                    .map(|t| self.substitute_type_ast(t, type_map))
-                    .collect(),
-            },
-
-            // Sum 类型
-            AstType::Sum(types) => AstType::Sum(
-                types
-                    .iter()
-                    .map(|t| self.substitute_type_ast(t, type_map))
-                    .collect(),
-            ),
 
             // 字面量类型：替换基础类型
             AstType::Literal {
@@ -508,21 +455,46 @@ impl FunctionMonomorphizer for super::Monomorphizer {
             mono: &MonoType,
             span: crate::util::span::Span,
         ) -> AstType {
+            // 内建标量：回写**规范名**（from_builtin_name 认得的拼写）。
+            // 不能用 type_name()——那是诊断展示用的小写内部名（int64 / void /
+            // string），6.1 删掉小写拼写后会落成 TypeRef，静默丢掉类型身份
+            // （WBS 6.3；03 §6.3 #47 的口径更正）。
+            if let Some(name) = mono.canonical_name() {
+                return AstType::Name {
+                    name: name.to_string(),
+                    span,
+                };
+            }
             match mono {
-                MonoType::Int(n) => AstType::Int(*n),
-                MonoType::Float(n) => AstType::Float(*n),
-                MonoType::Bool => AstType::Bool,
-                MonoType::Char => AstType::Char,
-                MonoType::Void => AstType::Void,
                 MonoType::TypeRef(name) => AstType::Name {
                     name: name.clone(),
                     span,
                 },
-                // #299：String/Bytes 等容器类型现为 Generic，经 type_name 反解回 AstType
-                MonoType::Generic { name, .. } if name == "String" => AstType::String,
-                MonoType::Generic { name, .. } if name == "Bytes" => AstType::Bytes,
-                _ => AstType::Name {
-                    name: mono.type_name(),
+                // 容器/元组/任意泛型实例：AST 侧唯一表示就是 Generic。
+                // Option/Result 自 parser 起即走 Generic（见
+                // statements/types.rs:392-396）；Tuple 走 Generic 与
+                // From<Tuple> 的 make_tuple 结果逐字相同（含空元组边界）。
+                MonoType::Generic { name, args } => AstType::Generic {
+                    name: name.clone(),
+                    name_span: span,
+                    args: args.iter().map(|a| mono_to_ast_type(a, span)).collect(),
+                },
+                MonoType::Ref { mutable, inner } => AstType::Ref {
+                    mutable: *mutable,
+                    inner: Box::new(mono_to_ast_type(inner, span)),
+                    span,
+                },
+                MonoType::Fn {
+                    params,
+                    return_type,
+                } => AstType::Fn {
+                    params: params.iter().map(|p| mono_to_ast_type(p, span)).collect(),
+                    return_type: Box::new(mono_to_ast_type(return_type, span)),
+                },
+                // 其余（Struct/Enum/TypeVar/Literal/Union/...）保持既有有损兜底：
+                // 6.3 只删死变体，不扩面改这些类型的回写形态。
+                other => AstType::Name {
+                    name: other.type_name(),
                     span,
                 },
             }
@@ -596,45 +568,6 @@ impl FunctionMonomorphizer for super::Monomorphizer {
                     .map(|t| self.substitute_type_in_ast(t, name_map))
                     .collect(),
             },
-            AstType::Option(t) => {
-                AstType::Option(Box::new(self.substitute_type_in_ast(t, name_map)))
-            }
-            AstType::Result(ok, err) => AstType::Result(
-                Box::new(self.substitute_type_in_ast(ok, name_map)),
-                Box::new(self.substitute_type_in_ast(err, name_map)),
-            ),
-            AstType::Union(members) => AstType::Union(
-                members
-                    .iter()
-                    .map(|(name, ty)| {
-                        (
-                            name.clone(),
-                            ty.as_ref()
-                                .map(|t| self.substitute_type_in_ast(t, name_map)),
-                        )
-                    })
-                    .collect(),
-            ),
-            AstType::AssocType {
-                host_type,
-                assoc_name,
-                assoc_name_span,
-                assoc_args,
-            } => AstType::AssocType {
-                host_type: Box::new(self.substitute_type_in_ast(host_type, name_map)),
-                assoc_name: assoc_name.clone(),
-                assoc_name_span: *assoc_name_span,
-                assoc_args: assoc_args
-                    .iter()
-                    .map(|t| self.substitute_type_in_ast(t, name_map))
-                    .collect(),
-            },
-            AstType::Sum(types) => AstType::Sum(
-                types
-                    .iter()
-                    .map(|t| self.substitute_type_in_ast(t, name_map))
-                    .collect(),
-            ),
             AstType::Literal {
                 name,
                 name_span,

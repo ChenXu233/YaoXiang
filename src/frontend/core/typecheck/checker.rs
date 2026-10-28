@@ -3194,17 +3194,6 @@ fn detect_sum_type(
                     .all(|(a, p)| head_name(a) == Some(p.as_str()))
         };
         match ret {
-            // `Result(T, E)` 被 parser 特判为 Type::Result
-            Type::Result(a, b) => {
-                param_names.len() == 2
-                    && head_name(a) == param_names.first().map(|s| s.as_str())
-                    && head_name(b) == param_names.get(1).map(|s| s.as_str())
-            }
-            // `Option(T)` 特判为 Type::Option
-            Type::Option(inner) => {
-                param_names.len() == 1
-                    && head_name(inner) == param_names.first().map(|s| s.as_str())
-            }
             Type::Generic { name: n, args, .. } => n == name && params_match(args),
             // 非泛型：`Color` 或 `Self`
             Type::Name { name: n, .. } => param_names.is_empty() && (n == name || n == "Self"),
@@ -3339,15 +3328,11 @@ pub(crate) fn collect_used_in_type(
             }
             collect_used_in_type(return_type, candidates, found, is_predicate);
         }
-        Type::Option(inner) | Type::Ptr(inner) => {
+        Type::Ptr(inner) => {
             collect_used_in_type(inner, candidates, found, is_predicate);
         }
         Type::Ref { inner, .. } => collect_used_in_type(inner, candidates, found, is_predicate),
-        Type::Result(a, b) => {
-            collect_used_in_type(a, candidates, found, is_predicate);
-            collect_used_in_type(b, candidates, found, is_predicate);
-        }
-        Type::Tuple(types) | Type::Sum(types) => {
+        Type::Tuple(types) => {
             for t in types {
                 collect_used_in_type(t, candidates, found, is_predicate);
             }

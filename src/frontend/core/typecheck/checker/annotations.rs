@@ -374,17 +374,13 @@ impl TypeChecker {
                 }
                 Self::collect_unknown_type_names(return_type, generic_names, env, out);
             }
-            T::Tuple(items) | T::Sum(items) => {
+            T::Tuple(items) => {
                 for i in items {
                     Self::collect_unknown_type_names(i, generic_names, env, out);
                 }
             }
-            T::Option(inner) | T::Ptr(inner) => {
+            T::Ptr(inner) => {
                 Self::collect_unknown_type_names(inner, generic_names, env, out);
-            }
-            T::Result(ok, err) => {
-                Self::collect_unknown_type_names(ok, generic_names, env, out);
-                Self::collect_unknown_type_names(err, generic_names, env, out);
             }
             T::Ref { inner, .. } => {
                 Self::collect_unknown_type_names(inner, generic_names, env, out);
@@ -407,23 +403,6 @@ impl TypeChecker {
             T::NamedStruct { fields, .. } => {
                 for f in fields {
                     Self::collect_unknown_type_names(&f.ty, generic_names, env, out);
-                }
-            }
-            T::AssocType {
-                host_type,
-                assoc_args,
-                ..
-            } => {
-                Self::collect_unknown_type_names(host_type, generic_names, env, out);
-                for a in assoc_args {
-                    Self::collect_unknown_type_names(a, generic_names, env, out);
-                }
-            }
-            T::Union(members) => {
-                for (_, m) in members {
-                    if let Some(m) = m {
-                        Self::collect_unknown_type_names(m, generic_names, env, out);
-                    }
                 }
             }
             // ConstExpr（RFC-027 编译期值参数）：合法形态是**值表达式**

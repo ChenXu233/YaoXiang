@@ -72,11 +72,19 @@ fn int_lit(
     Expr::Lit(crate::frontend::core::lexer::tokens::Literal::Int(n), span)
 }
 
+/// 内建类型在 AST 里的唯一写法：Name（WBS 6.3 删除了 Int/Float/… 专用变体）。
+fn builtin_ty(name: &str) -> AstType {
+    AstType::Name {
+        name: name.to_string(),
+        span: Span::dummy(),
+    }
+}
+
 /// 单参函数类型 `(Int32) -> Int32`。
 fn int_fn_type() -> AstType {
     AstType::Fn {
-        params: vec![AstType::Int(32)],
-        return_type: Box::new(AstType::Int(32)),
+        params: vec![builtin_ty("Int32")],
+        return_type: Box::new(builtin_ty("Int32")),
     }
 }
 
@@ -84,7 +92,7 @@ fn int_fn_type() -> AstType {
 fn param(name: &str) -> crate::frontend::core::parser::ast::Param {
     crate::frontend::core::parser::ast::Param {
         name: name.to_string(),
-        ty: Some(AstType::Int(32)),
+        ty: Some(builtin_ty("Int32")),
         is_mut: false,
         span: Span::dummy(),
     }
@@ -114,11 +122,11 @@ fn nested_fn_module() -> Module {
         name: "inner".to_string(),
         params: vec![crate::frontend::core::parser::ast::Param {
             name: "y".to_string(),
-            ty: Some(AstType::Int(32)),
+            ty: Some(builtin_ty("Int32")),
             is_mut: false,
             span: Span::dummy(),
         }],
-        return_type: Some(AstType::Int(32)),
+        return_type: Some(builtin_ty("Int32")),
         body: Box::new(Block {
             stmts: vec![expr_stmt(var("y", Span::dummy()), Span::dummy())],
             span: Span::dummy(),
@@ -312,7 +320,7 @@ fn test_type_checker_reports_type_mismatch() {
     // 构造一个类型不匹配的 AST：将 Int 赋值给 String 变量
     let module = module(vec![assign_stmt(
         "x",
-        Some(AstType::String),
+        Some(builtin_ty("String")),
         int_lit(42, Span::dummy()),
         Span::dummy(),
     )]);
@@ -344,7 +352,7 @@ fn test_type_mismatch_diagnostic_carries_source_span() {
     );
     let module = module(vec![assign_stmt(
         "x",
-        Some(AstType::String),
+        Some(builtin_ty("String")),
         int_lit(42, real_span),
         real_span,
     )]);

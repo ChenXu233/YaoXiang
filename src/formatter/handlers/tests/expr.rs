@@ -230,11 +230,14 @@ fn test_format_cast() {
     let inner = Expr::Var("x".to_string(), Span::dummy());
     let expr = Expr::Cast {
         expr: Box::new(inner),
-        target_type: Type::Int(64),
+        target_type: Type::Name {
+            name: "Int64".to_string(),
+            span: Span::dummy(),
+        },
         span: Span::dummy(),
     };
     let result = format_expr(&expr, &ctx, &default_source_map());
-    assert_eq!(result, "x as i64");
+    assert_eq!(result, "x as Int64", "cast 目标类型应输出规范名");
 }
 
 #[test]
@@ -353,19 +356,25 @@ fn test_format_params_short() {
     let params = vec![
         Param {
             name: "x".to_string(),
-            ty: Some(Type::Int(64)),
+            ty: Some(Type::Name {
+                name: "Int64".to_string(),
+                span: Span::dummy(),
+            }),
             is_mut: false,
             span: Span::dummy(),
         },
         Param {
             name: "y".to_string(),
-            ty: Some(Type::Int(64)),
+            ty: Some(Type::Name {
+                name: "Int64".to_string(),
+                span: Span::dummy(),
+            }),
             is_mut: false,
             span: Span::dummy(),
         },
     ];
     let result = format_params(&params, &ctx, &default_source_map());
-    assert_eq!(result, "(x: i64, y: i64)");
+    assert_eq!(result, "(x: Int64, y: Int64)", "参数类型应原样输出规范名");
 }
 
 #[test]
@@ -377,13 +386,19 @@ fn test_format_params_long_wraps() {
     let params = vec![
         Param {
             name: "very_long_param_name".to_string(),
-            ty: Some(Type::Int(64)),
+            ty: Some(Type::Name {
+                name: "Int64".to_string(),
+                span: Span::dummy(),
+            }),
             is_mut: false,
             span: Span::dummy(),
         },
         Param {
             name: "another_long_param".to_string(),
-            ty: Some(Type::Int(64)),
+            ty: Some(Type::Name {
+                name: "Int64".to_string(),
+                span: Span::dummy(),
+            }),
             is_mut: false,
             span: Span::dummy(),
         },

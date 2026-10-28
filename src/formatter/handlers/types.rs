@@ -18,33 +18,14 @@ pub fn format_type(
         Type::NamedParen { param, inner, .. } => {
             format!("({}: {})", param, format_type(inner, ctx, source_map))
         }
+        // 内建标量/字符串一律由 parser 表示为 `Name`（6.3 删除了 Int/Float/…
+        // 专用变体），其文本就是名字本身——此处无需再分支。
         Type::Name { name, .. } => name.clone(),
-        Type::Int(size) => format!("i{}", size),
-        Type::Float(size) => format!("f{}", size),
-        Type::Char => "Char".to_string(),
-        Type::String => "String".to_string(),
-        Type::Bytes => "Bytes".to_string(),
-        Type::Bool => "Bool".to_string(),
-        Type::Void => "()".to_string(),
         Type::Struct { body } => format_struct_type(body, ctx, source_map),
         Type::NamedStruct { name, fields, .. } => {
             let fields_str = format_struct_fields(fields, ctx, source_map);
             format!("{} {{ {} }}", name, fields_str)
         }
-        Type::Union(variants) => {
-            let items: Vec<String> = variants
-                .iter()
-                .map(|(name, ty)| {
-                    if let Some(t) = ty {
-                        format!("{}({})", name, format_type(t, ctx, source_map))
-                    } else {
-                        name.clone()
-                    }
-                })
-                .collect();
-            items.join(" | ")
-        }
-        Type::Enum(variants) => variants.join(" | "),
         Type::Tuple(types) => {
             let items: Vec<String> = types
                 .iter()
@@ -66,48 +47,12 @@ pub fn format_type(
                 format_type(return_type, ctx, source_map)
             )
         }
-        Type::Option(inner) => format!("{}?", format_type(inner, ctx, source_map)),
-        Type::Result(ok, err) => {
-            format!(
-                "Result({}, {})",
-                format_type(ok, ctx, source_map),
-                format_type(err, ctx, source_map)
-            )
-        }
         Type::Generic { name, args, .. } => {
             let args_str: Vec<String> = args
                 .iter()
                 .map(|t| format_type(t, ctx, source_map))
                 .collect();
             format!("{}({})", name, args_str.join(", "))
-        }
-        Type::AssocType {
-            host_type,
-            assoc_name,
-            assoc_args,
-            ..
-        } => {
-            let base = format!(
-                "{}::{}",
-                format_type(host_type, ctx, source_map),
-                assoc_name
-            );
-            if assoc_args.is_empty() {
-                base
-            } else {
-                let args_str: Vec<String> = assoc_args
-                    .iter()
-                    .map(|t| format_type(t, ctx, source_map))
-                    .collect();
-                format!("{}({})", base, args_str.join(", "))
-            }
-        }
-        Type::Sum(types) => {
-            let items: Vec<String> = types
-                .iter()
-                .map(|t| format_type(t, ctx, source_map))
-                .collect();
-            items.join(" + ")
         }
         Type::Literal { name, .. } => name.clone(),
         Type::Ref { mutable, inner, .. } => {

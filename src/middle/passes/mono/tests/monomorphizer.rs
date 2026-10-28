@@ -1096,15 +1096,25 @@ fn test_specialize_generic_struct_substitutes_type_params() {
     assert_eq!(fields.len(), 2, "Pair 应有两个字段");
     assert_eq!(fields[0].name, "first", "第一个字段名应为 first");
     assert!(
-        matches!(&fields[0].ty, AstType::Int(64)),
-        "first 字段类型应为 Int(64)，实际为 {:?}",
+        matches!(&fields[0].ty, AstType::Name { name, .. } if name == "Int64"),
+        "first 字段类型应为规范名 Name(Int64)，实际为 {:?}",
         fields[0].ty
+    );
+    assert_eq!(
+        MonoType::from(fields[0].ty.clone()),
+        MonoType::Int(64),
+        "first 字段类型必须能还原回 Int(64)"
     );
     assert_eq!(fields[1].name, "second", "第二个字段名应为 second");
     assert!(
-        matches!(&fields[1].ty, AstType::Int(64)),
-        "second 字段类型应为 Int(64)，实际为 {:?}",
+        matches!(&fields[1].ty, AstType::Name { name, .. } if name == "Int64"),
+        "second 字段类型应为规范名 Name(Int64)，实际为 {:?}",
         fields[1].ty
+    );
+    assert_eq!(
+        MonoType::from(fields[1].ty.clone()),
+        MonoType::Int(64),
+        "second 字段类型必须能还原回 Int(64)"
     );
 }
 
@@ -1218,9 +1228,14 @@ fn test_specialize_type_lowercase_param_name() {
         panic!("body 应是 Field");
     };
     assert!(
-        matches!(&f.ty, AstType::String),
-        "小写参数名 t 应被替换为 String，实际为 {:?}",
+        matches!(&f.ty, AstType::Name { name, .. } if name == "String"),
+        "小写参数名 t 应被替换为规范名 Name(String)，实际为 {:?}",
         f.ty
+    );
+    assert_eq!(
+        MonoType::from(f.ty.clone()),
+        MonoType::make_string(),
+        "String 字段类型必须能还原回 Generic(String)"
     );
 }
 

@@ -471,7 +471,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **模板**：`'{name}' 要求编译期常量实参，但所给实参无法转换`
 - **消息**：精化类型实参无法转换为编译期常量表达式
 - **帮助**：谓词/证明函数实参必须是字面量、变量或单参数类型应用，否则精化约束无法生成
-- **发射点**：`src/frontend/core/typecheck/checker.rs:3618`、`src/frontend/core/typecheck/checker.rs:3666`、`src/frontend/core/typecheck/checker.rs:3694`
+- **发射点**：`src/frontend/core/typecheck/checker.rs:3603`、`src/frontend/core/typecheck/checker.rs:3651`、`src/frontend/core/typecheck/checker.rs:3679`
 - **源码注释名**：精化类型实参形态非法（RFC-027，#263）
 
 ### E1093：精化实参个数不匹配
@@ -482,7 +482,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **模板**：`'{name}' 期望 {expected} 个实参，实际 {found} 个`
 - **消息**：谓词/证明函数实参个数不匹配
 - **帮助**：实参个数必须与谓词声明一致，否则精化约束无法生成
-- **发射点**：`src/frontend/core/typecheck/checker.rs:3601`、`src/frontend/core/typecheck/checker.rs:3691`
+- **发射点**：`src/frontend/core/typecheck/checker.rs:3586`、`src/frontend/core/typecheck/checker.rs:3676`
 - **源码注释名**：精化类型参数数量不匹配
 
 ### E1094：未使用的编译期值参数

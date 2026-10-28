@@ -885,6 +885,37 @@ impl MonoType {
         }
     }
 
+    /// `from_builtin_name` 的**严格逆向**：内置单态类型 → 规范名拼写（WBS 6.3）。
+    ///
+    /// 只覆盖 `from_builtin_name` 的像：15 个规范名对应的 `MonoType`。其中
+    /// `Int` / `Float` / `()` 是**入参别名**（同一 `MonoType` 的另一种写法），
+    /// 回写恒取宽度显式形式（`Int64` / `Float64`）与 `Void`，保证产物唯一；
+    /// 三条别名的往返性由 `types/tests/mono.rs` 的逐名用例守住。
+    ///
+    /// 返回 `None` 表示该类型没有规范名（容器泛型、Tuple、Ref、Fn、Struct、
+    /// TypeVar 等）——调用方必须按**结构**回写（`Generic{..}` / `Tuple` / `Ref` /
+    /// `Fn`），或走既有的有损兜底。`DateTime` **永不在此出现**：它是 std 层
+    /// 单向别名（`from_builtin_name("DateTime")` → `Int(64)`），只入不出。
+    pub fn canonical_name(&self) -> Option<&'static str> {
+        match self {
+            MonoType::Never => Some("Never"),
+            MonoType::Void => Some("Void"),
+            MonoType::Bool => Some("Bool"),
+            MonoType::Int(8) => Some("Int8"),
+            MonoType::Int(16) => Some("Int16"),
+            MonoType::Int(32) => Some("Int32"),
+            MonoType::Int(64) => Some("Int64"),
+            MonoType::Float(32) => Some("Float32"),
+            MonoType::Float(64) => Some("Float64"),
+            MonoType::Char => Some("Char"),
+            MonoType::Generic { name, args } if args.is_empty() && name == "String" => {
+                Some("String")
+            }
+            MonoType::Generic { name, args } if args.is_empty() && name == "Bytes" => Some("Bytes"),
+            _ => None,
+        }
+    }
+
     /// 替换 MonoType 中的 TypeRef 名称为对应的类型变量
     ///
     /// 用于泛型函数类型推断：将 TypeRef("T") 替换为 solver 中的新类型变量。
@@ -938,16 +969,6 @@ impl From<ast::Type> for MonoType {
             ast::Type::Name { name, .. } => {
                 Self::from_builtin_name(&name).unwrap_or(MonoType::TypeRef(name))
             }
-            ast::Type::Int(n) => MonoType::Int(n),
-            ast::Type::Float(n) => MonoType::Float(n),
-            ast::Type::Char => MonoType::Char,
-            ast::Type::String => MonoType::make_string(),
-            ast::Type::Bytes => MonoType::Generic {
-                name: "Bytes".into(),
-                args: vec![],
-            },
-            ast::Type::Bool => MonoType::Bool,
-            ast::Type::Void => MonoType::Void,
             ast::Type::Struct { body } => {
                 let mut field_names = Vec::new();
                 let mut field_types = Vec::new();
@@ -982,14 +1003,6 @@ impl From<ast::Type> for MonoType {
                     interfaces,
                 })
             }
-            ast::Type::Union(variants) => MonoType::Enum(EnumType {
-                name: String::new(),
-                variants: variants.into_iter().map(|(n, _)| n).collect(),
-            }),
-            ast::Type::Enum(variants) => MonoType::Enum(EnumType {
-                name: String::new(),
-                variants,
-            }),
             ast::Type::Tuple(types) => {
                 // 零元素元组就是**单位类型**，与 `Void` 同义。
                 //
@@ -1009,10 +1022,6 @@ impl From<ast::Type> for MonoType {
                 params: params.into_iter().map(MonoType::from).collect(),
                 return_type: Box::new(MonoType::from(*return_type)),
             },
-            ast::Type::Option(t) => MonoType::make_option(MonoType::from(*t)),
-            ast::Type::Result(ok, err) => {
-                MonoType::make_result(MonoType::from(*ok), MonoType::from(*err))
-            }
             ast::Type::Generic { name, args, .. } => {
                 // #299：不再对 Option/Result/List/Dict/Set/Arc/Weak lower 成原生变体，统一走 Generic
                 MonoType::Generic {
@@ -1020,16 +1029,6 @@ impl From<ast::Type> for MonoType {
                     args: args.into_iter().map(MonoType::from).collect(),
                 }
             }
-            ast::Type::AssocType {
-                host_type,
-                assoc_name,
-                assoc_args,
-                ..
-            } => MonoType::AssocType {
-                host_type: Box::new(MonoType::from(*host_type)),
-                assoc_name,
-                assoc_args: assoc_args.into_iter().map(MonoType::from).collect(),
-            },
             // NamedStruct and Sum types (placeholder implementations)
             ast::Type::NamedStruct { name, fields, .. } => {
                 let (field_names, field_types, field_mutability) = fields
@@ -1052,17 +1051,6 @@ impl From<ast::Type> for MonoType {
                     field_has_default: Vec::new(),
                     interfaces: vec![],
                 })
-            }
-            ast::Type::Sum(types) => {
-                // Sum type - treat as union for now
-                MonoType::TypeRef(format!(
-                    "({})",
-                    types
-                        .iter()
-                        .map(|t| MonoType::from(t.clone()).type_name())
-                        .collect::<Vec<_>>()
-                        .join(" | ")
-                ))
             }
             ast::Type::Literal {
                 name, base_type, ..

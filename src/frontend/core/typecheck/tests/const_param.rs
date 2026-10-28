@@ -58,7 +58,13 @@ fn test_resolve_const_candidates_hit_builds_contiguous_index() {
                 span: Span::default(),
             },
         ),
-        const_param("M", Type::Bool),
+        const_param(
+            "M",
+            Type::Name {
+                name: "Bool".to_string(),
+                span: Span::default(),
+            },
+        ),
     ];
     let sig = vec![sig_param("N", None), sig_param("M", None)];
     let used: HashSet<String> = ["N".to_string(), "M".to_string()].into();
@@ -156,7 +162,13 @@ fn test_ast_type_to_const_kind_maps_annotation_forms() {
         "Name(Float) 应映射为 ConstKind::Float"
     );
     assert!(
-        matches!(ast_type_to_const_kind(&Type::Bool), ConstKind::Bool),
+        matches!(
+            ast_type_to_const_kind(&Type::Name {
+                name: "Bool".to_string(),
+                span: Span::default(),
+            }),
+            ConstKind::Bool
+        ),
         "Bool 应映射为 ConstKind::Bool"
     );
     let unknown_ty = Type::Name {

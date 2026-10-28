@@ -22,13 +22,19 @@ fn point_type_definition_stmt() -> Stmt {
                 body: vec![
                     ast::TypeBodyItem::Field(StructField {
                         name: "x".into(),
-                        ty: Type::Float(64),
+                        ty: Type::Name {
+                            name: "Float64".into(),
+                            span: Span::dummy(),
+                        },
                         is_mut: false,
                         default: None,
                     }),
                     ast::TypeBodyItem::Field(StructField {
                         name: "y".into(),
-                        ty: Type::Float(64),
+                        ty: Type::Name {
+                            name: "Float64".into(),
+                            span: Span::dummy(),
+                        },
                         is_mut: false,
                         default: None,
                     }),
@@ -436,12 +442,19 @@ fn test_type_name() {
 
 #[test]
 fn test_type_primitives() {
-    assert!(matches!(Type::Int(64), Type::Int(64)));
-    assert!(matches!(Type::Float(64), Type::Float(64)));
-    assert!(matches!(Type::Char, Type::Char));
-    assert!(matches!(Type::String, Type::String));
-    assert!(matches!(Type::Bool, Type::Bool));
-    assert!(matches!(Type::Void, Type::Void));
+    // WBS 6.3：内建标量不再有专用变体，parser 统一产出 Name。
+    for name in [
+        "Int", "Int64", "Float", "Float64", "Char", "String", "Bytes", "Bool", "Void",
+    ] {
+        let t = Type::Name {
+            name: name.into(),
+            span: Span::dummy(),
+        };
+        assert!(
+            matches!(&t, Type::Name { name: n, .. } if n == name),
+            "{name} 必须以 Name 表示"
+        );
+    }
 }
 
 #[test]
@@ -465,7 +478,16 @@ fn test_type_fn() {
 
 #[test]
 fn test_type_tuple() {
-    let t = Type::Tuple(vec![Type::Int(64), Type::Bool]);
+    let t = Type::Tuple(vec![
+        Type::Name {
+            name: "Int64".into(),
+            span: Span::dummy(),
+        },
+        Type::Name {
+            name: "Bool".into(),
+            span: Span::dummy(),
+        },
+    ]);
     if let Type::Tuple(ts) = &t {
         assert_eq!(ts.len(), 2);
     } else {
@@ -625,7 +647,10 @@ fn test_struct_field_with_default() {
     let field = StructField::with_default(
         "x".into(),
         false,
-        Type::Float(64),
+        Type::Name {
+            name: "Float64".into(),
+            span: Span::dummy(),
+        },
         Expr::Lit(Literal::Float(0.0), Span::dummy()),
     );
     assert_eq!(field.name, "x");
@@ -650,7 +675,10 @@ fn test_generic_param_const_kind() {
     let gp = GenericParam {
         name: "N".into(),
         kind: GenericParamKind::Const {
-            const_type: Box::new(Type::Int(64)),
+            const_type: Box::new(Type::Name {
+                name: "Int64".into(),
+                span: Span::dummy(),
+            }),
         },
         constraints: vec![],
     };
@@ -695,7 +723,10 @@ fn test_binding_kind_external() {
 fn test_binding_kind_anonymous() {
     let bk = BindingKind::Anonymous {
         params: vec![],
-        return_type: Box::new(Type::Void),
+        return_type: Box::new(Type::Name {
+            name: "Void".into(),
+            span: Span::dummy(),
+        }),
         positions: vec![0],
         body: Box::new(Expr::Lit(Literal::Int(0), Span::dummy())),
     };
@@ -843,7 +874,10 @@ fn test_expr_fndef() {
     let expr = Expr::FnDef {
         name: "add".into(),
         params: vec![],
-        return_type: Some(Type::Int(64)),
+        return_type: Some(Type::Name {
+            name: "Int64".into(),
+            span: Span::dummy(),
+        }),
         body: Box::new(Block {
             stmts: vec![],
             span: Span::dummy(),

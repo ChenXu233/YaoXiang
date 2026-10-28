@@ -66,12 +66,9 @@ fn name_used_as_type(
                 .any(|p| name_used_as_type(name, p, is_predicate))
                 || name_used_as_type(name, return_type, is_predicate)
         }
-        Type::Option(inner) | Type::Ptr(inner) => name_used_as_type(name, inner, is_predicate),
+        Type::Ptr(inner) => name_used_as_type(name, inner, is_predicate),
         Type::Ref { inner, .. } => name_used_as_type(name, inner, is_predicate),
-        Type::Result(a, b) => {
-            name_used_as_type(name, a, is_predicate) || name_used_as_type(name, b, is_predicate)
-        }
-        Type::Tuple(types) | Type::Sum(types) => types
+        Type::Tuple(types) => types
             .iter()
             .any(|t| name_used_as_type(name, t, is_predicate)),
         Type::Literal { name: n, .. } => n == name,

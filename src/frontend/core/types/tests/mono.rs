@@ -12,6 +12,14 @@ use std::collections::HashMap;
 
 // §3.2-§3.17: From<ast::Type> 转换
 
+/// 内建类型在 AST 里的唯一写法：Name（WBS 6.3 删除了 Int/Float/… 专用变体）。
+fn name_ty(name: &str) -> ast::Type {
+    ast::Type::Name {
+        name: name.to_string(),
+        span: Span::dummy(),
+    }
+}
+
 #[test]
 fn test_from_ast_type_name() {
     let ast_ty = ast::Type::Name {
@@ -24,20 +32,31 @@ fn test_from_ast_type_name() {
 
 #[test]
 fn test_from_ast_type_primitives() {
-    assert_eq!(MonoType::from(ast::Type::Int(32)), MonoType::Int(32));
-    assert_eq!(MonoType::from(ast::Type::Int(64)), MonoType::Int(64));
-    assert_eq!(MonoType::from(ast::Type::Float(64)), MonoType::Float(64));
-    assert_eq!(MonoType::from(ast::Type::Char), MonoType::Char);
-    assert_eq!(MonoType::from(ast::Type::String), MonoType::make_string());
+    assert_eq!(MonoType::from(name_ty("Int32")), MonoType::Int(32));
+    assert_eq!(MonoType::from(name_ty("Int64")), MonoType::Int(64));
     assert_eq!(
-        MonoType::from(ast::Type::Bytes),
+        MonoType::from(name_ty("Int")),
+        MonoType::Int(64),
+        "Int 是 Int64 的别名"
+    );
+    assert_eq!(MonoType::from(name_ty("Float64")), MonoType::Float(64));
+    assert_eq!(MonoType::from(name_ty("Char")), MonoType::Char);
+    assert_eq!(MonoType::from(name_ty("String")), MonoType::make_string());
+    assert_eq!(
+        MonoType::from(name_ty("Bytes")),
         MonoType::Generic {
             name: "Bytes".into(),
             args: vec![]
-        }
+        },
+        "Bytes 落 Generic，不再有专用变体"
     );
-    assert_eq!(MonoType::from(ast::Type::Bool), MonoType::Bool);
-    assert_eq!(MonoType::from(ast::Type::Void), MonoType::Void);
+    assert_eq!(MonoType::from(name_ty("Bool")), MonoType::Bool);
+    assert_eq!(MonoType::from(name_ty("Void")), MonoType::Void);
+    assert_eq!(
+        MonoType::from(name_ty("()")),
+        MonoType::Void,
+        "空括号是 Void 的类型写法"
+    );
 }
 
 #[test]
@@ -47,12 +66,12 @@ fn test_from_ast_type_struct() {
             ast::TypeBodyItem::Field(ast::StructField::new(
                 "x".to_string(),
                 false,
-                ast::Type::Float(64),
+                name_ty("Float64"),
             )),
             ast::TypeBodyItem::Field(ast::StructField::new(
                 "y".to_string(),
                 false,
-                ast::Type::Float(64),
+                name_ty("Float64"),
             )),
         ],
     };
@@ -69,7 +88,7 @@ fn test_from_ast_type_struct_with_defaults() {
         body: vec![ast::TypeBodyItem::Field(ast::StructField {
             name: "x".to_string(),
             is_mut: false,
-            ty: ast::Type::Float(64),
+            ty: name_ty("Float64"),
             default: Some(Box::new(ast::Expr::Lit(Literal::Float(0.0), Span::dummy()))),
         })],
     };
@@ -85,7 +104,7 @@ fn test_from_ast_type_named_struct() {
         fields: vec![ast::StructField::new(
             "x".to_string(),
             false,
-            ast::Type::Float(64),
+            name_ty("Float64"),
         )],
     };
     let mono: MonoType = ast_ty.into();
@@ -93,30 +112,16 @@ fn test_from_ast_type_named_struct() {
 }
 
 #[test]
-fn test_from_ast_type_union() {
-    let ast_ty = ast::Type::Union(vec![
-        (
-            "ok".to_string(),
-            Some(ast::Type::Name {
-                name: "T".to_string(),
-                span: Span::dummy(),
-            }),
-        ),
-        (
-            "err".to_string(),
-            Some(ast::Type::Name {
-                name: "E".to_string(),
-                span: Span::dummy(),
-            }),
-        ),
-    ]);
-    let mono: MonoType = ast_ty.into();
-    assert!(matches!(mono, MonoType::Enum(_)));
+fn test_from_ast_type_name_void_spellings() {
+    // Void 的两个写法（Void 与空括号）都落 MonoType::Void；6.3 删掉专用变体后
+    // 这条映射由 Name 路径承担（也是 types.rs 非 Fn 签名兜底的语义前提）。
+    assert_eq!(MonoType::from(name_ty("Void")), MonoType::Void);
+    assert_eq!(MonoType::from(name_ty("()")), MonoType::Void);
 }
 
 #[test]
 fn test_from_ast_type_tuple() {
-    let ast_ty = ast::Type::Tuple(vec![ast::Type::Int(32), ast::Type::String]);
+    let ast_ty = ast::Type::Tuple(vec![name_ty("Int32"), name_ty("String")]);
     let mono: MonoType = ast_ty.into();
     assert!(matches!(mono, MonoType::Generic { name, args } if name == "Tuple" && args.len() == 2));
 }
@@ -124,27 +129,36 @@ fn test_from_ast_type_tuple() {
 #[test]
 fn test_from_ast_type_fn() {
     let ast_ty = ast::Type::Fn {
-        params: vec![ast::Type::Int(32)],
-        return_type: Box::new(ast::Type::Bool),
+        params: vec![name_ty("Int32")],
+        return_type: Box::new(name_ty("Bool")),
     };
     let mono: MonoType = ast_ty.into();
     assert!(matches!(mono, MonoType::Fn { .. }));
 }
 
 #[test]
-fn test_from_ast_type_option() {
-    let ast_ty = ast::Type::Option(Box::new(ast::Type::Int(32)));
-    let mono: MonoType = ast_ty.into();
-    assert!(
-        matches!(mono, MonoType::Generic { name, args } if name == "Option" && args[0] == MonoType::Int(32))
-    );
+fn test_from_ast_type_empty_tuple_is_unit() {
+    // 零元元组 = 单位类型 = Void；parser 对空括号的产出就是 Type::Tuple(vec![])。
+    assert_eq!(MonoType::from(ast::Type::Tuple(vec![])), MonoType::Void);
 }
 
 #[test]
 fn test_from_ast_type_result() {
-    let ast_ty = ast::Type::Result(Box::new(ast::Type::Int(32)), Box::new(ast::Type::String));
+    // Result 的真实 AST 形态是 Generic（parser 不 lower 成专用节点）。
+    let ast_ty = ast::Type::Generic {
+        name: "Result".to_string(),
+        name_span: Span::dummy(),
+        args: vec![name_ty("Int32"), name_ty("String")],
+    };
     let mono: MonoType = ast_ty.into();
-    assert!(matches!(mono, MonoType::Generic { name, .. } if name == "Result"));
+    assert!(
+        matches!(
+            &mono,
+            MonoType::Generic { name, args }
+                if name == "Result" && args == &vec![MonoType::Int(32), MonoType::make_string()]
+        ),
+        "Result 应逐字保留名字与实参，实际 {mono:?}"
+    );
 }
 
 #[test]
@@ -152,7 +166,7 @@ fn test_from_ast_type_generic() {
     let ast_ty = ast::Type::Generic {
         name: "Option".to_string(),
         name_span: Span::dummy(),
-        args: vec![ast::Type::Int(32)],
+        args: vec![name_ty("Int32")],
     };
     let mono: MonoType = ast_ty.into();
     // #299：泛型不再 lower 成原生变体，保持 Generic
@@ -164,7 +178,7 @@ fn test_from_ast_type_generic_custom() {
     let ast_ty = ast::Type::Generic {
         name: "List".to_string(),
         name_span: Span::dummy(),
-        args: vec![ast::Type::Int(32)],
+        args: vec![name_ty("Int32")],
     };
     let mono: MonoType = ast_ty.into();
     // #299：泛型不再 lower 成原生变体，保持 Generic
@@ -174,25 +188,29 @@ fn test_from_ast_type_generic_custom() {
 }
 
 #[test]
-fn test_from_ast_type_assoc_type() {
-    let ast_ty = ast::Type::AssocType {
-        host_type: Box::new(ast::Type::Name {
-            name: "Iter".to_string(),
-            span: Span::dummy(),
-        }),
-        assoc_name: "Item".to_string(),
-        assoc_name_span: Span::dummy(),
-        assoc_args: vec![],
+fn test_from_ast_type_generic_tuple() {
+    // Tuple 的 AST 常态是 Generic（回写桥也用它），与 Tuple 变体经 make_tuple
+    // 的结果逐字相同。
+    let ast_ty = ast::Type::Generic {
+        name: "Tuple".to_string(),
+        name_span: Span::dummy(),
+        args: vec![name_ty("Int32"), name_ty("Bool")],
     };
     let mono: MonoType = ast_ty.into();
-    assert!(matches!(mono, MonoType::AssocType { .. }));
+    assert!(
+        matches!(
+            &mono,
+            MonoType::Generic { name, args } if name == "Tuple" && args.len() == 2
+        ),
+        "Generic(Tuple) 应原样保留，实际 {mono:?}"
+    );
 }
 
 #[test]
 fn test_from_ast_type_meta_type() {
     let ast_ty = ast::Type::MetaType {
         name_span: Span::dummy(),
-        args: vec![ast::Type::Int(32)],
+        args: vec![name_ty("Int32")],
     };
     let mono: MonoType = ast_ty.into();
     assert!(matches!(mono, MonoType::MetaType { .. }));
@@ -217,15 +235,14 @@ fn test_from_ast_type_meta_type_nested() {
 // §3.4: EnumType
 
 #[test]
-fn test_from_ast_type_sum() {
-    let ast_ty = ast::Type::Sum(vec![ast::Type::Int(32), ast::Type::String]);
-    let mono: MonoType = ast_ty.into();
-    assert!(matches!(mono, MonoType::TypeRef(n) if n.contains("|")));
+fn test_from_ast_type_name_never() {
+    // Never 同属 15 个规范名之一，走 Name 路径。
+    assert_eq!(MonoType::from(name_ty("Never")), MonoType::Never);
 }
 
 #[test]
 fn test_from_ast_type_ptr() {
-    let ast_ty = ast::Type::Ptr(Box::new(ast::Type::Int(32)));
+    let ast_ty = ast::Type::Ptr(Box::new(name_ty("Int32")));
     let mono: MonoType = ast_ty.into();
     assert!(matches!(mono, MonoType::TypeRef(n) if n.starts_with("*")));
 }
@@ -235,7 +252,7 @@ fn test_from_ast_type_literal() {
     let ast_ty = ast::Type::Literal {
         name: "5".to_string(),
         name_span: Span::dummy(),
-        base_type: Box::new(ast::Type::Int(64)),
+        base_type: Box::new(name_ty("Int64")),
     };
     let mono: MonoType = ast_ty.into();
     // Literal type preserves value as MonoType::Literal
@@ -497,6 +514,85 @@ fn test_universe_level_le() {
     assert!(!UniverseLevel::new("9").le(&UniverseLevel::new("3")));
     // 大层级
     assert!(UniverseLevel::new("999").le(&UniverseLevel::new("1000")));
+}
+
+// §3.18: canonical_name ↔ from_builtin_name 逐名互逆（WBS 6.3）
+
+/// 已定稿的 15 个内置类型名（from_builtin_name 的接受面）。
+const CANONICAL_NAMES: &[&str] = &[
+    "Never", "Void", "()", "Bool", "Int", "Int8", "Int16", "Int32", "Int64", "Float", "Float32",
+    "Float64", "Char", "String", "Bytes",
+];
+
+#[test]
+fn test_canonical_name_round_trips_all_builtin_names() {
+    // Arrange + Act + Assert：逐名往返（名 -> MonoType -> 规范名 -> MonoType）
+    for name in CANONICAL_NAMES {
+        // Arrange
+        let mono = MonoType::from_builtin_name(name)
+            .unwrap_or_else(|| panic!("内置名 {name} 应被 from_builtin_name 接受"));
+        // Act
+        let canonical = mono
+            .canonical_name()
+            .unwrap_or_else(|| panic!("{name} 的 MonoType 应有规范名：{mono:?}"));
+        // Assert
+        let round_tripped = MonoType::from_builtin_name(canonical)
+            .unwrap_or_else(|| panic!("规范名 {canonical} 应被 from_builtin_name 接受"));
+        assert_eq!(
+            round_tripped, mono,
+            "规范名 {canonical} 必须还原同一 MonoType"
+        );
+    }
+}
+
+#[test]
+fn test_canonical_name_uses_width_explicit_spellings() {
+    // 别名（Int/Float/空括号）只入不出：回写恒取唯一写法。
+    assert_eq!(MonoType::Int(64).canonical_name(), Some("Int64"));
+    assert_eq!(MonoType::Float(64).canonical_name(), Some("Float64"));
+    assert_eq!(MonoType::Void.canonical_name(), Some("Void"));
+    // DateTime 是 std 层单向别名：只允许 from_builtin_name 接受，永不写出。
+    assert_eq!(
+        MonoType::from_builtin_name("DateTime"),
+        Some(MonoType::Int(64)),
+        "DateTime 仍是接受面内的临时别名"
+    );
+    assert_ne!(
+        MonoType::Int(64).canonical_name(),
+        Some("DateTime"),
+        "DateTime 不得作为回写名（只入不出）"
+    );
+}
+
+#[test]
+fn test_canonical_name_rejects_structural_types() {
+    // 结构类型没有规范名：回写必须走结构（Generic/Tuple/Ref/Fn）或既有有损兜底。
+    assert_eq!(
+        MonoType::Generic {
+            name: "List".into(),
+            args: vec![MonoType::Int(64)]
+        }
+        .canonical_name(),
+        None
+    );
+    assert_eq!(
+        MonoType::make_tuple(vec![MonoType::Int(64)]).canonical_name(),
+        None
+    );
+    assert_eq!(MonoType::TypeRef("T".into()).canonical_name(), None);
+    assert_eq!(
+        MonoType::Ref {
+            mutable: false,
+            inner: Box::new(MonoType::Int(64))
+        }
+        .canonical_name(),
+        None
+    );
+    assert_eq!(
+        MonoType::Int(128).canonical_name(),
+        None,
+        "无 Int128 内置名（宽度超出 8/16/32/64 即无规范名）"
+    );
 }
 
 #[test]

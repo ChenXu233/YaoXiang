@@ -1047,16 +1047,6 @@ pub fn extract_const_param_info(param: &GenericParam) -> Option<(String, ConstKi
 pub fn ast_type_to_mono_type(ty: &Type) -> Option<MonoType> {
     match ty {
         Type::Name { name, .. } => Some(MonoType::TypeRef(name.clone())),
-        Type::Int(n) => Some(MonoType::Int(*n)),
-        Type::Float(n) => Some(MonoType::Float(*n)),
-        Type::Char => Some(MonoType::Char),
-        Type::String => Some(MonoType::make_string()),
-        Type::Bytes => Some(MonoType::Generic {
-            name: "Bytes".into(),
-            args: vec![],
-        }),
-        Type::Bool => Some(MonoType::Bool),
-        Type::Void => Some(MonoType::Void),
         _ => None,
     }
 }
