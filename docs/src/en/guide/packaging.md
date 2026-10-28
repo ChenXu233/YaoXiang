@@ -1,30 +1,30 @@
 ---
 title: 'Package Management System'
-description: 'YaoXiang package manager guide: dependency management, workspace, and publishing'
+description: 'YaoXiang Package Manager Guide: Dependency Management, Workspaces, and Publishing'
 ---
 
 # Package Management System
 
-YaoXiang has a built-in package manager, providing declarative dependency management, version
+YaoXiang provides a built-in package manager with declarative dependency management, version
 locking, and workspace support.
 
 ## Current Capabilities
 
-The availability of dependency sources is not uniform. **Read this table first**:
+Availability varies by dependency source. **Check this table before you begin**:
 
-| Source                | Declaration             | Status                                                               |
-| --------------------- | ----------------------- | -------------------------------------------------------------------- |
-| **Workspace members** | `{ workspace = "key" }` | ✅ Available, preferred for local multi-package                      |
-| **Git repository**    | `{ git = "<url>" }`     | ✅ Available, currently the only channel for cross-repo distribution |
-| Official registry     | `name = "1.0.0"`        | ⛔ **Not yet implemented**, see explanation below                    |
-| Local path            | `{ path = "../lib" }`   | ⚠️ Known issue, cannot `use` after install, see explanation below    |
+| Source               | Declaration             | Status                                                                       |
+| -------------------- | ----------------------- | ---------------------------------------------------------------------------- |
+| **Workspace member** | `{ workspace = "key" }` | ✅ Available; preferred for local multi-package projects                     |
+| **Git repository**   | `{ git = "<url>" }`     | ✅ Available; currently the only channel for cross-repository distribution   |
+| Official registry    | `name = "1.0.0"`        | ⛔ **Not yet implemented**; see below                                        |
+| Local path           | `{ path = "../lib" }`   | ⚠️ Known issue: it cannot be loaded with `use` after installation; see below |
 
-::: danger The official registry is not yet open RFC-014a has decided that the official registry
-server, authentication, and yank will be **postponed indefinitely**. Therefore:
+::: danger Official Registry Not Yet Available RFC-014a has resolved that the official registry
+server, authentication, and yank are **indefinitely postponed**. Therefore:
 
-- `yx publish` without arguments will fail directly
-- Although `yx add <bare-package-name>` writes to the manifest, the subsequent `yx install` will
-  necessarily fail:
+- Running `yx publish` without arguments fails immediately
+- `yx add <bare-package-name>` writes to the manifest, but the subsequent `yx install` is guaranteed
+  to fail:
 
 ```bash
 $ yx add http
@@ -36,23 +36,23 @@ $ yx install
 Error: Failed to install dependencies
 ```
 
-**For external dependencies, always use `--git`.** For publishing, use `yx publish --github`, see
+**Always use `--git` for external dependencies.** To publish, use `yx publish --github`; see
 [Publishing](#发布). :::
 
-::: warning Local path dependencies are currently unavailable `yx add --path` can write the
-dependency into `yaoxiang.toml` and `yaoxiang.lock`, but it will not place the package in the vendor
-directory, and subsequent `use <package-name>` will report E5001.
+::: warning Local Path Dependencies Are Currently Unavailable `yx add --path` can write the
+dependency to `yaoxiang.toml` and `yaoxiang.lock`, but it does not place the package in the vendor
+directory. A subsequent `use <package-name>` reports E5001.
 
-**For local multi-package projects, use [workspace](#工作空间) instead** — it is designed for this
-scenario with full functionality. This issue is documented separately. :::
+**For local multi-package projects, use [Workspaces](#工作空间) instead**—it was designed for this
+use case and is fully functional. This issue is tracked separately. :::
 
-## From Scratch: Local Multi-Package
+## Getting Started: Local Multi-Package Project
 
-The following workflow has been **fully tested end-to-end** and can be copied directly.
+The following workflow has been **tested from start to finish** and can be copied directly.
 
-### 1. Create the workspace root
+### 1. Create the Workspace Root
 
-The workspace root directory needs a `yaoxiang.toml`:
+The workspace root requires a `yaoxiang.toml`:
 
 ```bash
 mkdir my-project && cd my-project
@@ -64,24 +64,24 @@ mkdir my-project && cd my-project
 members = { }
 ```
 
-An empty `members` is allowed — `init` below will automatically register into it.
+An empty `members` is allowed—the `init` command below registers entries automatically.
 
-### 2. Create members in the root directory
+### 2. Create Members Under the Root
 
 ```bash
 yx init mylib --lib
 yx init app
 ```
 
-When `init` detects a workspace above, it **automatically registers** the member without needing to
-manually edit the root manifest:
+When `init` detects a workspace in an ancestor directory, it **automatically registers** the member,
+so there is no need to edit the root manifest manually:
 
 ```bash
 ✓ Registered to workspace (key 'mylib')
 ✓ Created library project 'mylib'
 ```
 
-After registration, the root manifest becomes:
+After registration, the root manifest looks like this:
 
 ```toml
 # my-project/yaoxiang.toml
@@ -92,11 +92,11 @@ mylib = "mylib/yaoxiang.toml"
 [workspace.dependencies]
 ```
 
-::: warning The value of `members` is the manifest file path The value of `members` must point to
-the `yaoxiang.toml` **file**, not the directory. Writing `"app"` will produce a misleading
+::: warning The `members` Values Are Manifest File Paths The values of `members` must point to
+`yaoxiang.toml` **files**, not directories. Using `"app"` produces the misleading
 `nested workspace is not supported` error. :::
 
-Confirm the registration result:
+Confirm the registration:
 
 ```bash
 $ yx workspace list
@@ -105,9 +105,9 @@ Workspace my-project (2 members)
   mylib 0.1.0  (mylib/yaoxiang.toml)
 ```
 
-### 3. Write the library implementation
+### 3. Implement the Library
 
-The `src/lib.yx` generated by `yx init --lib` **only contains comments and no code**, you need to
+The `src/lib.yx` generated by `yx init --lib` contains **only comments and no code**, so you need to
 fill it in yourself:
 
 ```yaoxiang
@@ -115,13 +115,13 @@ fill it in yourself:
 greet: () -> String = "hello from mylib"
 ```
 
-All top-level bindings are visible externally by default, no `pub` needed — see
+All top-level bindings are visible outside the package by default; no `pub` is required—see
 [Module System](modules#导出不需要-pub).
 
-### 4. The application declares the dependency
+### 4. Declare the Dependency in the Application
 
-Members reference sibling members using `{ workspace = "<key>" }`, where key is the name used at
-registration:
+A member references a sibling member with `{ workspace = "<key>" }`, where `key` is the name used
+during registration:
 
 ```toml
 # my-project/app/yaoxiang.toml
@@ -134,10 +134,10 @@ description = "demo app"
 mylib = { workspace = "mylib" }
 ```
 
-### 5. Install and run
+### 5. Install and Run
 
 ```bash
-# Run in workspace root
+# Run from the workspace root
 yx install
 
 $ yx install
@@ -164,18 +164,18 @@ $ yx run app/src/main.yx
 hello from mylib
 ```
 
-> `run` needs to be executed inside the project directory. Running `run` on a single `.yx` file
-> outside the project will silently produce no output.
+> `run` must be executed inside the project directory. Running `run` on an individual `.yx` file
+> from outside the project silently produces no output.
 
-## From Scratch: External Repository Dependencies
+## Getting Started: Depending on an External Repository
 
-For cross-repository or any Git source, use `--git`:
+Use `--git` for a dependency in another repository or any Git source:
 
 ```bash
 yx init app
 cd app
 
-# Add dependency
+# Add the dependency
 yx add some-lib --git https://github.com/example/some-lib
 
 # Install
@@ -186,8 +186,8 @@ $ yx install
   some-lib (0.1.0) [Installed]
 ```
 
-After installation, the package lands in `.yaoxiang/vendor/<package-name>-<version>/`, and you can
-`use` it:
+After installation, the package is placed in `.yaoxiang/vendor/<package>-<version>/` and can then be
+imported with `use`:
 
 <!-- docs-example: skip -->
 
@@ -195,20 +195,20 @@ After installation, the package lands in `.yaoxiang/vendor/<package-name>-<versi
 use some_lib
 ```
 
-### Specify version
+### Specify a Version
 
-The version uses the `-v` / `--version` option, **not a positional argument**:
+Versions are specified with the `-v` / `--version` option, **not as positional arguments**:
 
 ```bash
 yx add some-lib --git https://github.com/example/some-lib --version "^0.1.0"
 ```
 
-Writing `yx add some-lib 0.1.0` will report `unexpected argument`.
+Using `yx add some-lib 0.1.0` results in `unexpected argument`.
 
-### Pin to a branch or tag
+### Pin a Branch or Tag
 
-The ref is written in the **git URL's query string**, not by adding a `branch` field in the
-manifest:
+Specify the ref in the **query string of the Git URL**, rather than by adding a `branch` field to
+the manifest:
 
 ```bash
 yx add some-lib --git "https://github.com/example/some-lib?branch=dev"
@@ -216,26 +216,27 @@ yx add some-lib --git "https://github.com/example/some-lib?tag=v1.0.0"
 yx add some-lib --git "https://github.com/example/some-lib?rev=abc1234"
 ```
 
-Dependencies pinned this way will be reported as `pinned` by `yx outdated` and do not participate in
-version comparison.
+For dependencies pinned this way, `yx outdated` reports `pinned` and excludes them from version
+comparisons.
 
-::: warning The `branch` field in the manifest is invalid Writing
-`some-lib = { git = "...", branch = "dev" }` produces no error and has no effect — the dependency is
-still resolved by the default branch. The ref must go through the URL query string. :::
+::: warning The `branch` Field in the Manifest Does Not Work Writing
+`some-lib = { git = "...", branch = "dev" }` produces no error but also has no effect—the dependency
+is still resolved from the default branch. The ref must be specified through the URL query string.
+:::
 
-Supported version specs:
+Supported version specifications:
 
 | Syntax              | Meaning                              |
 | ------------------- | ------------------------------------ |
 | `1.0.0`             | Exact match (**not** caret)          |
 | `*`                 | Any version                          |
-| `^1.0.0`            | caret, allows minor version upgrades |
-| `~1.0.0`            | Allows patch version upgrades        |
-| `>=1.0.0`, `<2.0.0` | Upper and lower bounds               |
-| `1.*`               | Segment wildcard                     |
-| `>=1.2.3, <2.0.0`   | Comma combination                    |
+| `^1.0.0`            | Caret; allows minor-version upgrades |
+| `~1.0.0`            | Allows patch-version upgrades        |
+| `>=1.0.0`, `<2.0.0` | Lower and upper bounds               |
+| `1.*`               | Per-segment wildcard                 |
+| `>=1.2.3, <2.0.0`   | Comma-separated constraints          |
 
-`1.2` and `1` will be automatically completed to `1.2.0` and `1.0.0`.
+`1.2` and `1` are automatically expanded to `1.2.0` and `1.0.0`, respectively.
 
 ## Manifest Files
 
@@ -243,12 +244,12 @@ Supported version specs:
 
 ```toml
 [package]
-name = "my-project"          # required
-version = "0.1.0"           # required
-description = "项目描述"     # required when publishing
+name = "my-project"          # Required
+version = "0.1.0"           # Required
+description = "项目描述"     # Required when publishing
 authors = ["作者 <a@b.c>"]
 license = "MIT"
-repository = "https://github.com/org/repo"   # needed for --github publish
+repository = "https://github.com/org/repo"   # Required for --github publishing
 
 [dependencies]
 some-lib = { git = "https://github.com/example/some-lib", version = "^0.1.0" }
@@ -257,7 +258,7 @@ some-lib = { git = "https://github.com/example/some-lib", version = "^0.1.0" }
 test-utils = { git = "https://github.com/example/test-utils" }
 ```
 
-The workspace root uses the `[workspace]` section:
+The workspace root instead uses the `[workspace]` section:
 
 ```toml
 [workspace.members]
@@ -265,15 +266,15 @@ app = "app/yaoxiang.toml"
 mylib = "mylib/yaoxiang.toml"
 
 [workspace.dependencies]
-# Pin versions uniformly here, members inherit via { workspace = true }
+# Pin versions centrally here; members inherit them with { workspace = true }
 ```
 
 ### yaoxiang.lock
 
-Auto-generated by the package manager, **please commit to version control**:
+Automatically generated by the package manager; **commit it to version control**:
 
 ```toml
-# Auto-generated by YaoXiang package manager
+# Automatically generated by the YaoXiang package manager
 
 version = 1
 
@@ -284,17 +285,17 @@ source = "workspace"
 
 ### vendor Directory
 
-Dependencies land in the project's `.yaoxiang/vendor/`:
+Dependencies are placed under the project's `.yaoxiang/vendor/` directory:
 
 ```
 .yaoxiang/
 └── vendor/
-    ├── std/                  # Standard library interface files
-    └── some-lib-0.1.0/       # Third-party dependencies, directory name = <package-name>-<version>
+    ├── std/                  # Standard library interface file
+    └── some-lib-0.1.0/       # Third-party dependency; directory name = <package>-<version>
 ```
 
-The `.gitignore` generated by `init` already includes `.yaoxiang/`, no need to add it manually.
-Delete the entire `.yaoxiang/` and re-run `yx install` to rebuild.
+The `.gitignore` generated by `init` already contains `.yaoxiang/`, so there is no need to add it
+manually. Remove the entire `.yaoxiang/` directory and rerun `yx install` to rebuild it.
 
 ## Command Reference
 
@@ -304,10 +305,10 @@ Delete the entire `.yaoxiang/` and re-run `yx install` to rebuild.
 yx init [NAME] [--lib]
 ```
 
-When `NAME` is omitted, the current directory name is used. `--lib` generates a library project
-(`src/lib.yx`, **content is an empty shell**), otherwise it generates `src/main.yx`.
+If `NAME` is omitted, the current directory name is used. `--lib` generates a library project
+(`src/lib.yx`, **with an empty stub as its content**); otherwise, it generates `src/main.yx`.
 
-Outputs: `yaoxiang.toml`, `yaoxiang.lock`, `.gitignore`, `tests/`, `.yaoxiang/vendor/std/`.
+Outputs: `yaoxiang.toml`, `yaoxiang.lock`, `.gitignore`, `tests/`, and `.yaoxiang/vendor/std/`.
 
 ### yx add
 
@@ -315,23 +316,24 @@ Outputs: `yaoxiang.toml`, `yaoxiang.lock`, `.gitignore`, `tests/`, `.yaoxiang/ve
 yx add <DEP> [--git <GIT> | --path <PATH>] [-v <VERSION>] [-D]
 ```
 
-| Option          | Description                                                                |
-| --------------- | -------------------------------------------------------------------------- |
-| `--git <URL>`   | Git source, **cross-repository dependencies must be explicitly specified** |
-| `--path <P>`    | Local path (see known issue above)                                         |
-| `-v, --version` | Version spec                                                               |
-| `-D, --dev`     | Recorded in `dev-dependencies`                                             |
-| `--trust`       | Trust this package's `build.yx`                                            |
+| Option          | Description                                                                    |
+| --------------- | ------------------------------------------------------------------------------ |
+| `--git <URL>`   | Git source; **must be specified explicitly for cross-repository dependencies** |
+| `--path <P>`    | Local path (see the known issue above)                                         |
+| `-v, --version` | Version specification                                                          |
+| `-D, --dev`     | Record under `dev-dependencies`                                                |
+| `--trust`       | Trust this package's `build.yx`                                                |
 
-Without `--git` / `--path`, it falls to the not-yet-implemented registry source.
+Without `--git` or `--path`, the dependency falls back to the registry source, which is not yet
+implemented.
 
 ### yx install / update / rm / list
 
 ```bash
-yx install              # Parse by manifest, download, write lock file
-yx update [PKG]         # Without arguments, update all; with a package name, only update that package
-yx rm <DEP> [-D]        # Remove dependency
-yx list                 # List dependencies and sources
+yx install              # Resolve from the manifest, download dependencies, and write the lock file
+yx update [PKG]         # With no arguments, update all packages; with a package name, update only that package
+yx rm <DEP> [-D]        # Remove a dependency
+yx list                 # List dependencies and their sources
 ```
 
 ### yx outdated
@@ -340,13 +342,14 @@ yx list                 # List dependencies and sources
 yx outdated
 ```
 
-Check if dependencies have new versions. Currently works for the default branch of Git sources; path
-/ workspace sources are skipped; dependencies pinned to tag / branch / rev are reported as pinned.
+Checks whether dependencies have newer versions. It currently works for the default branch of Git
+sources; path / workspace sources are skipped, while dependencies pinned to a tag / branch / rev are
+reported as pinned.
 
 ### yx clean / yx cache clean
 
 ```bash
-yx clean         # Clean build artifacts and packages in vendor not referenced by the lock file
+yx clean         # Clean build artifacts and packages in vendor that are not referenced by the lock file
 yx cache clean   # Clear the global package cache
 ```
 
@@ -354,14 +357,14 @@ yx cache clean   # Clear the global package cache
 
 ```bash
 yx workspace list                  # List members
-yx workspace add <PATH> [--as KEY] # Register existing package as member
-yx workspace remove <KEY>          # Unregister (directory preserved)
+yx workspace add <PATH> [--as KEY] # Register an existing package as a member
+yx workspace remove <KEY>          # Unregister the member (the directory is retained)
 ```
 
-::: warning Command differences between root and member directories The workspace **root** manifest
-has no `[package]` section, so `list`, `outdated`, `update` will report `missing field package` in
-the root directory. These commands should be executed **inside the member directory**; `install`,
-`workspace`, `publish`, `cache`, `clean` are available in the root directory. :::
+::: warning Command Differences Between the Root and Member Directories The workspace **root**
+manifest has no `[package]` section, so `list`, `outdated`, and `update` report
+`missing field package` in the root directory. Run these commands **inside a member directory**;
+`install`, `workspace`, `publish`, `cache`, and `clean` are available in the root directory. :::
 
 ## Publishing
 
@@ -372,8 +375,8 @@ cd mylib
 yx publish --dry-run
 ```
 
-Prerequisite: `[package].description` is required, otherwise it will report
-`publishing requires [package] to provide description`.
+Prerequisite: `[package].description` is required; otherwise, the package manager reports the error
+`发布要求 [package] 提供 description`.
 
 ```bash
 $ yx publish --dry-run
@@ -382,32 +385,34 @@ No tests found.
 ✓ Packed mylib/target/yxpkg/mylib-0.1.0.yxpkg (SHA-256 47a2c83…)
 ```
 
-Flow: run `[tool.test]` tests (`--no-test` to skip) → materialize workspace references as `^version`
-→ package as `.yxpkg` → compute SHA-256. **Zero network requests throughout.**
+Process: run the `[tool.test]` tests (`--no-test` skips them) → materialize workspace references as
+`^version` → package the `.yxpkg` → calculate SHA-256. **The entire process makes zero network
+requests.**
 
-### Publishing to GitHub Release
+### Publishing to a GitHub Release
 
-This is the only currently available distribution channel:
+This is currently the only available distribution channel:
 
 ```bash
-# 1. Create and push the tag first — publish does not create it for you
+# 1. Create and push the tag first—publish does not create it
 git tag v0.1.0
 git push origin v0.1.0
 
-# 2. Configure the repository address
-#    Write [package].repository in yaoxiang.toml, or ensure a git remote origin exists
+# 2. Configure the repository URL
+#    Set [package].repository in yaoxiang.toml, or make sure the git remote origin exists
 
-# 3. Provide a token
+# 3. Provide the token
 export YX_GITHUB_TOKEN=<your-token>
 
 # 4. Publish
 yx publish --github
 ```
 
-The target repository uses `[package].repository` first, falling back to `git remote origin`. If a
-Release with the same name already exists, it will be rejected; **the tag must already exist**.
+The target repository is taken from `[package].repository` first, falling back to
+`git remote origin`. Publication is rejected if a Release with the same name already exists; **the
+tag must already exist**.
 
-Consumers import via Git source:
+Consumers can depend on it through a Git source:
 
 ```bash
 yx add mylib --git https://github.com/org/repo --version "^0.1.0"
@@ -415,30 +420,30 @@ yx add mylib --git https://github.com/org/repo --version "^0.1.0"
 
 ### Not Yet Available
 
-The following capabilities belong to the not-yet-implemented official registry, **do not write them
-into dependency declarations**: `yx publish` (bare), `yx login` / `logout`, `yank`, third-party
-registry, `--registry <url>`.
+The following capabilities belong to the official registry, which is not yet implemented, and **must
+not be included in dependency declarations**: bare `yx publish`, `yx login` / `logout`, `yank`,
+third-party registries, and `--registry <url>`.
 
 ## Troubleshooting
 
 ### `registry source not implemented`
 
-The dependency is a bare package name. Use `--git` to specify a Git source instead, see
-[External Repository Dependencies](#从零开始依赖外部仓库).
+The dependency is a bare package name. Use `--git` to specify a Git source; see
+[Depending on an External Repository](#从零开始依赖外部仓库).
 
 ### E5001: module not found
 
-1. Dependency not installed — run `yx install` in the workspace root or member directory
-2. Used a local path dependency — switch to workspace
-3. It's a module path issue, not a dependency issue — see
-   [Module System Troubleshooting](modules#排错)
+1. The dependency is not installed—run `yx install` in the workspace root or member directory.
+2. A local path dependency is being used—switch to a workspace.
+3. This is a module path issue rather than a dependency issue—see
+   [Module System Troubleshooting](modules#排错).
 
 ### `missing field package`
 
-You ran `list` / `outdated` / `update` in the workspace root directory. Go to the member directory
-to execute.
+You ran `list` / `outdated` / `update` in the workspace root directory. Run it again from a member
+directory.
 
 ### `nested workspace is not supported`
 
-The value of `[workspace.members]` is written as a directory. Change to the manifest file path, such
+The values of `[workspace.members]` point to directories. Change them to manifest file paths, such
 as `"app/yaoxiang.toml"`.
