@@ -358,7 +358,7 @@ P10 其余清理与状态修正             06 §S2/S3/S4/S5/S6
 
 - [x] **6.0 门禁先行**（2 个三级任务，2026-10-27 完成；实录见 [09a](./09a-wbs-history.md) §P6 6.0）
 - [x] **6.1 名称规范化**（3 个三级任务，2026-10-28 收口；内置名定稿 15 名、删 22 拼写，DateTime 迁出归 P10 S11；实录见 [09a](./09a-wbs-history.md) §P6 6.1）
-- [ ] **6.2 字节码类型统一**（3 个三级任务）
+- [x] **6.2 字节码类型统一**（3 个三级任务，2026-10-28 完成；实录见 [09a](./09a-wbs-history.md) §P6 6.2）
 - [ ] **6.3 死变体删除**（2 个三级任务）
 - [ ] **6.4 parser 数据流**（5 个三级任务）
 - [ ] **6.5 AST 死变体**（2 个三级任务）
@@ -373,10 +373,10 @@ P10 其余清理与状态修正             06 §S2/S3/S4/S5/S6
 | 6.1 名称规范化 | 6.1.1 统计语料非规范类型名出现次数 | `tests/yaoxiang/` | 决定能否直接删同义词（已完成，实录见 09a §P6 6.1） |
 | | 6.1.2 内置类型名定稿：15 名 + 删 22 个实现内拼写 | `MonoType::from_builtin_name`（`src/frontend/core/types/mono.rs`） | C3（已完成，实录见 09a §P6 6.1） |
 | | 6.1.3 核实 `classify_generic_params` 消费的参数列表 | `src/frontend/core/parser/ast.rs`（`classify_generic_params`） | 必须逐行核实，不能假定等价（已完成，实录见 09a §P6 6.1） |
-| 6.2 字节码类型统一 | 6.2.1 三处改 `MonoType` | `BytecodeFunction::params`（`src/middle/core/bytecode.rs:812`）、`BytecodeFunction::return_type`（同文件 :814）、`BytecodeModule::type_table`（同文件 :854）、`Image::type_table`（`src/backends/interpreter/image.rs:44`） | C3 + `dump_bytecode` 定向对拍 |
-| | 6.2.2 删 `From<MonoType> for IrType` | `impl From<MonoType> for IrType`（`src/middle/core/bytecode.rs`，实测 2353-2390） | 同上 |
-| | 6.2.3 `type_table` 元素类型改 `MonoType` | `Image::type_table`（`src/backends/interpreter/image.rs:44`） | 同上 |
-| 6.3 死变体删除 | 6.3.1 删 13 个变体 + 清 match 臂 + 兜底（03 §5.2 表体口径：Int/Float/Char/String/Bytes/Bool/Void/Union/Enum/Option/Result/Sum/AssocType） | `ast::Type`（`src/frontend/core/parser/ast.rs`）、`impl From<ast::Type> for MonoType`（`src/frontend/core/types/mono.rs`，实测 919-931）、`Type::Void` 错误兜底（`src/frontend/core/parser/statements/types.rs:836`） | C3 + `cargo build` 绿；**下一轮契约输入**：实际改写面 = 03 名单内 **5 变体 / 10 点**（`Union`/`Option`/`Result`/`Sum`/`AssocType` 各 2，见 6.3.2）；**T1 门禁的 `Void` 兜底豁免登记须随本项同步删除**（变体删除后该登记转为 stale，门禁随即红） |
+| 6.2 字节码类型统一 | 6.2.1 三处改 `MonoType` | `BytecodeFunction::params`（`src/middle/core/bytecode.rs:812`）、`BytecodeFunction::return_type`（同文件 :814）、`BytecodeModule::type_table`（同文件 :854）、`Image::type_table`（`src/backends/interpreter/image.rs:44`） | C3 + `dump_bytecode` 定向对拍（已完成，实录见 09a §P6 6.2） |
+| | 6.2.2 删 `From<MonoType> for IrType` | `impl From<MonoType> for IrType`（`src/middle/core/bytecode.rs`，实测 2353-2390） | 同上（已完成，实录见 09a §P6 6.2） |
+| | 6.2.3 `type_table` 元素类型改 `MonoType` | `Image::type_table`（`src/backends/interpreter/image.rs:44`） | 同上（已完成，实录见 09a §P6 6.2） |
+| 6.3 死变体删除 | 6.3.1 删 13 个变体 + 清 match 臂 + 兜底（03 §5.2 表体口径：Int/Float/Char/String/Bytes/Bool/Void/Union/Enum/Option/Result/Sum/AssocType） | `ast::Type`（`src/frontend/core/parser/ast.rs`）、`impl From<ast::Type> for MonoType`（`src/frontend/core/types/mono.rs`，实测 919-931）、`Type::Void` 错误兜底（`src/frontend/core/parser/statements/types.rs:836`） | C3 + `cargo build` 绿；**下一轮契约输入**：实际改写面 = 03 名单内 **5 变体 / 10 点**（`Union`/`Option`/`Result`/`Sum`/`AssocType` 各 2，见 6.3.2）；**T1 门禁的 `Void` 兜底豁免登记须随本项同步删除**（变体删除后该登记转为 stale，门禁随即红）；**6.2 之后 `ir.rs` 的 `Cast.target_type`（`:325`）、`TypeTest.ty`（`:330`）、`TypeDecl.definition`（`:651`）仍持 `ast::Type`**（6.2 只删别名、未改 IR 形状），删变体时须一并决定载体与 IR 形状影响（会动 IR 快照 / 语料基线） |
 | | 6.3.2 **必须与 6.3.1 同批**改写反向桥与 AST→AST 重建 | `mono_to_ast_type`（`src/middle/passes/mono/function.rs`，实测 505-529，重建其中 7 个）+ `substitute_type_ast` / `substitute_type_in_ast`（同文件的两个替换函数；**区间由 T1 门禁 AST 派生，勿在散文里写死行号**；实测 320-497 与 499-657）里的 `Union`/`Option`/`Result`/`Sum`/`AssocType` 各 2（03 §2.2.2） | 泛型替换定向对拍，否则**静默改行为**；AST→AST 10 点不改则直接不编译 |
 | 6.4 parser 数据流 | 6.4.1 新增 `probe.rs` | `src/frontend/core/parser/probe.rs`（新建） | C3 |
 | | 6.4.2 改 `ParserState` | `ParserState`（`src/frontend/core/parser/parser_state.rs`，实测 6 字段：`tokens` / `pos` / `errors` / `no_fat_arrow` / `predicate_names` / `next_plan_id`） | 同上 |
@@ -385,7 +385,7 @@ P10 其余清理与状态修正             06 §S2/S3/S4/S5/S6
 | | 6.4.5 `CONST_PARAM_TYPES`（`src/frontend/core/parser/ast.rs:855-858`）经 `NameKind::Builtin` 接线 | `extract_generic_param_names`（`src/frontend/core/parser/ast.rs`） | 同上 |
 | 6.5 AST 死变体 | 6.5.1 删 `Expr::FnDef` | `Expr::FnDef`（`src/frontend/core/parser/ast.rs`；实测 16 处引用 = 定义 1 + 消费 11 + 穷举臂 4） | `tests/integration/` 22 模块绿（**分 2 commit**） |
 | | 6.5.2 删 `Assign.signature_params` + `NamedParen` 迁移 | `StmtKind::Assign::signature_params`（`src/frontend/core/parser/ast.rs:263`）+ **同名字段 `StmtKind::TypeDefinition::signature_params`（同文件 :283）——两项同删**（只删 `Assign` 会留下 `TypeDefinition` 的同名字段）+ `Type::NamedParen` | 标注**语义风险** |
-| 6.6 门禁转硬 | 6.6.1 T1 由 warning 改 `panic!` | `tools/type-tables` | **故意引入零构造变体必须红**；**下一轮契约输入**：转硬前须先裁决 ① **T3 的比对对象**——RFC-011 没有内置类型名表，当前口径取表格 inline-code token 共 5 个，须在「改文档源 / 降级 report-only / 删除并并入 T2」之间三选一，**不得直接转硬**；② **T1 白名单机制**——`RegisteredZeroVariant` 的逐条豁免登记（当前仅 `Void` 的 parser 错误兜底一条），该登记随 6.3 删变体后须同步清账，否则门禁报 stale；③ `substitute_type_ast` / `substitute_type_in_ast` 的区间由 AST 派生，文档与散文不得写死行号 |
+| 6.6 门禁转硬 | 6.6.1 T1 由 warning 改 `panic!` | `tools/type-tables` | **故意引入零构造变体必须红**；**下一轮契约输入**：转硬前须先裁决 ① **T3 的比对对象**——RFC-011 没有内置类型名表，当前口径取表格 inline-code token 共 5 个，须在「改文档源 / 降级 report-only / 删除并并入 T2」之间三选一，**不得直接转硬**；② **T1 白名单机制**——`RegisteredZeroVariant` 的逐条豁免登记（当前仅 `Void` 的 parser 错误兜底一条），该登记随 6.3 删变体后须同步清账，否则门禁报 stale；③ `substitute_type_ast` / `substitute_type_in_ast` 的区间由 AST 派生，文档与散文不得写死行号；④ **T1 冻结基线 `bfe2f6ba3` 在 6.2 后对反向桥 A 列必然打 ✗（9→0）**——6.2.2 删掉反向桥 A 后 T1.6 对账必现差异，转硬（`panic!`）前须先刷新基线口径 |
 | 6.7 目录改名（D1，纯搬移批次） | 6.7.1 `typecheck/`→`sema/`；`middle/core/`→`middle/ir/`；`parser/ast.rs` 拆迁顶层 `ast/`；字节码域合并（两个 `bytecode.rs` → `bytecode/`）+ `opcode.rs` 迁 `middle/bytecode/` | 全仓 | **C1 快照 zero-diff**；独占 commit；越界 `use` 基线不回退 |
 | 6.8 标注检查模式与 Fn 参数表示（D54） | 6.8.1 `Type::Fn.params: Vec<Type>` → `Vec<Param>`（名字与类型同栖），与 6.5.2 删 `Assign.signature_params` 同批收口——6.5.2 只删旧表示，本项给出替代表示 | `Type::Fn`（`src/frontend/core/parser/ast.rs`，实测 468-471）、消费面约 20 文件（机械改） | C3（纯表示重塑批，对照未启用）；分独立 commit |
 | | 6.8.2 声明驱动的检查模式：参数类型按位驱动 lambda 头（与名字无关）、出口（尾表达式与 return）统一对照标注返回类型、非 lambda 值 infer+unify（与 `m: Int = "hello"` 同构）；红判据先行——u1–u4/v1–v5 探针入语料（先红后绿）；删 parser 名字合并段 | `src/frontend/core/typecheck/inference/statements.rs`（实测 1170-1914）+ `src/frontend/core/parser/statements/declarations.rs`（名字合并段，实测 337-376） | 对照启用批为**行为修复**：新诊断码、基线更新，不适用 C3；v1–v5 五种语法形态同一判定（消灭「同语义不同语法一红一绿」） |
