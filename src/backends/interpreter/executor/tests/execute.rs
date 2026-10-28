@@ -15,7 +15,7 @@ fn make_function(instrs: Vec<BytecodeInstr>) -> BytecodeFunction {
     BytecodeFunction {
         name: "test".to_string(),
         params: vec![],
-        return_type: crate::middle::core::ir::Type::Void,
+        return_type: crate::frontend::core::typecheck::MonoType::Void,
         local_count: 4,
         local_names: HashMap::new(),
         upvalue_count: 0,
@@ -102,7 +102,7 @@ fn spawn_two_tasks_module() -> crate::middle::bytecode::BytecodeModule {
     let task_a = BytecodeFunction {
         name: "task_a".to_string(),
         params: vec![],
-        return_type: crate::middle::core::ir::Type::Void,
+        return_type: crate::frontend::core::typecheck::MonoType::Void,
         local_count: 1,
         local_names: HashMap::new(),
         upvalue_count: 0,
@@ -122,7 +122,7 @@ fn spawn_two_tasks_module() -> crate::middle::bytecode::BytecodeModule {
     let task_b = BytecodeFunction {
         name: "task_b".to_string(),
         params: vec![],
-        return_type: crate::middle::core::ir::Type::Void,
+        return_type: crate::frontend::core::typecheck::MonoType::Void,
         local_count: 1,
         local_names: HashMap::new(),
         upvalue_count: 0,
@@ -143,7 +143,7 @@ fn spawn_two_tasks_module() -> crate::middle::bytecode::BytecodeModule {
     let main_func = BytecodeFunction {
         name: "main".to_string(),
         params: vec![],
-        return_type: crate::middle::core::ir::Type::Void,
+        return_type: crate::frontend::core::typecheck::MonoType::Void,
         local_count: 4,
         local_names: HashMap::new(),
         upvalue_count: 0,

@@ -6,7 +6,8 @@
 use yaoxiang::backends::common::{RuntimeValue, Heap, Handle, heap::HeapValue};
 use yaoxiang::backends::{ExecutorConfig, ExecutionState};
 use yaoxiang::middle::bytecode::{BytecodeModule, BytecodeFunction};
-use yaoxiang::middle::{ConstValue, Type};
+use yaoxiang::frontend::core::MonoType;
+use yaoxiang::middle::ConstValue;
 
 #[test]
 fn test_executor_config_default() {
@@ -81,8 +82,8 @@ fn test_bytecode_module_add_function() {
 
     let func = BytecodeFunction {
         name: "test_func".to_string(),
-        params: vec![Type::Int(0), Type::Int(0)],
-        return_type: Type::Int(0),
+        params: vec![MonoType::Int(0), MonoType::Int(0)],
+        return_type: MonoType::Int(0),
         local_count: 0,
         local_names: std::collections::HashMap::new(),
         upvalue_count: 0,

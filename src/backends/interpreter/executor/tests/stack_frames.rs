@@ -45,7 +45,7 @@ fn make_named_function(
     BytecodeFunction {
         name: name.to_string(),
         params: vec![],
-        return_type: crate::middle::core::ir::Type::Void,
+        return_type: crate::frontend::core::typecheck::MonoType::Void,
         local_count: 4,
         local_names: HashMap::new(),
         upvalue_count: 0,

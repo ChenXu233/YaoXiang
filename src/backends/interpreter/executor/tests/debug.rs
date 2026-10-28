@@ -26,7 +26,7 @@ fn make_module(
     let func_idx = module.add_function(BytecodeFunction {
         name: "main".to_string(),
         params: vec![],
-        return_type: crate::middle::core::ir::Type::Void,
+        return_type: crate::frontend::core::typecheck::MonoType::Void,
         local_count: 1,
         local_names: HashMap::new(),
         upvalue_count: 0,
@@ -99,7 +99,7 @@ fn module_with_callee(
     let callee = BytecodeFunction {
         name: "callee".to_string(),
         params: vec![],
-        return_type: crate::middle::core::ir::Type::Void,
+        return_type: crate::frontend::core::typecheck::MonoType::Void,
         local_count: 1,
         local_names: HashMap::new(),
         upvalue_count: 0,
@@ -114,7 +114,7 @@ fn module_with_callee(
     let main_idx = module.add_function(BytecodeFunction {
         name: "main".to_string(),
         params: vec![],
-        return_type: crate::middle::core::ir::Type::Void,
+        return_type: crate::frontend::core::typecheck::MonoType::Void,
         local_count: 1,
         local_names: HashMap::new(),
         upvalue_count: 0,

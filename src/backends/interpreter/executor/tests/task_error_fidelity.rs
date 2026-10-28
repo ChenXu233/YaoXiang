@@ -19,7 +19,7 @@ fn divide_by_zero_function() -> BytecodeFunction {
     BytecodeFunction {
         name: "boom".to_string(),
         params: vec![],
-        return_type: crate::middle::core::ir::Type::Void,
+        return_type: crate::frontend::core::typecheck::MonoType::Void,
         local_count: 4,
         local_names: HashMap::new(),
         upvalue_count: 0,
@@ -51,7 +51,7 @@ fn call_boom_function(boom_idx: u32) -> BytecodeFunction {
     BytecodeFunction {
         name: "main".to_string(),
         params: vec![],
-        return_type: crate::middle::core::ir::Type::Void,
+        return_type: crate::frontend::core::typecheck::MonoType::Void,
         local_count: 2,
         local_names: HashMap::new(),
         upvalue_count: 0,
@@ -74,7 +74,7 @@ fn countdown_function() -> BytecodeFunction {
     BytecodeFunction {
         name: "count_down".to_string(),
         params: vec![],
-        return_type: crate::middle::core::ir::Type::Void,
+        return_type: crate::frontend::core::typecheck::MonoType::Void,
         local_count: 8,
         local_names: HashMap::new(),
         upvalue_count: 0,

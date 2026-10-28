@@ -13,7 +13,7 @@ use crate::backends::common::RuntimeValue;
 use crate::backends::interpreter::executor::Interpreter;
 use crate::backends::Executor;
 use crate::middle::bytecode::{BytecodeFunction, BytecodeInstr, ConstValue, Reg, UnaryOp};
-use crate::middle::core::ir::Type;
+use crate::frontend::core::typecheck::MonoType;
 use std::collections::HashMap;
 
 /// 构造一个函数：r0 = const[val], r1 = !r0, return r1
@@ -21,7 +21,7 @@ fn make_not_function() -> BytecodeFunction {
     BytecodeFunction {
         name: "test_logical_not".to_string(),
         params: vec![],
-        return_type: Type::Bool,
+        return_type: MonoType::Bool,
         local_count: 2,
         local_names: HashMap::new(),
         upvalue_count: 0,

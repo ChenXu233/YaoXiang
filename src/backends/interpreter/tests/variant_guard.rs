@@ -9,7 +9,7 @@
 //! 值正确性（分发结果 == Woof/Meow）由 E2E interface_dynamic_dispatch.yx 覆盖。
 
 use crate::middle::bytecode::{BytecodeFunction, BytecodeInstr, BytecodeModule, ConstValue, Reg};
-use crate::middle::core::ir::Type;
+use crate::frontend::core::typecheck::MonoType;
 use std::collections::HashMap;
 
 /// Vec(Animal) 异构容器 + 变体分发，经字节码落盘/加载往返后执行正确。
@@ -26,7 +26,7 @@ fn unwrapped_variant_tag_module() -> BytecodeModule {
         functions: vec![BytecodeFunction {
             name: "main".to_string(),
             params: vec![],
-            return_type: Type::Void,
+            return_type: MonoType::Void,
             local_count: 4,
             local_names: HashMap::new(),
             upvalue_count: 0,

@@ -19,11 +19,24 @@ use crate::middle::passes::codegen::bytecode::BytecodeInstruction;
 /// Helper: build a minimal BytecodeFile with one function containing
 /// the given raw BytecodeInstructions, then decode via `From<BytecodeFile>`.
 fn build_and_decode(instrs: Vec<BytecodeInstruction>) -> BytecodeModule {
+    build_and_decode_typed(instrs, vec![], MonoType::Void, vec![])
+}
+
+/// Helper: 同上，但函数签名与类型表由调用方给定。
+///
+/// 6.2 载体统一：`BytecodeFile` 与 `BytecodeModule` 两侧同为 `MonoType`，
+/// 解码必须原样搬运（历史上经有损桥重建，Ref/Struct/Generic 会塌成 Void）。
+fn build_and_decode_typed(
+    instrs: Vec<BytecodeInstruction>,
+    params: Vec<MonoType>,
+    return_type: MonoType,
+    type_table: Vec<MonoType>,
+) -> BytecodeModule {
     use crate::middle::passes::codegen::bytecode as bcfile;
     let func = bcfile::FunctionCode {
         name: "test_fn".to_string(),
-        params: vec![],
-        return_type: crate::frontend::core::typecheck::MonoType::Void,
+        params,
+        return_type,
         instructions: instrs,
         local_count: 0,
         local_names: HashMap::new(),
@@ -31,7 +44,7 @@ fn build_and_decode(instrs: Vec<BytecodeInstruction>) -> BytecodeModule {
     };
     let file = bcfile::BytecodeFile {
         header: bcfile::FileHeader::default(),
-        type_table: vec![],
+        type_table,
         const_pool: vec![],
         code_section: bcfile::CodeSection {
             functions: vec![func],
@@ -941,6 +954,58 @@ fn test_ref_type_mutable_maps_to_void_ir_type() {
     assert!(
         matches!(ir_type, IrType::Void),
         "Mutable Ref<String> should map to IrType::Void (ZST has no runtime repr)"
+    );
+}
+
+// ── 6.2 载体统一：解码原样搬运签名与类型表 ──────────────────────
+
+/// 解码产物 `BytecodeModule` 的签名与类型表必须与 `BytecodeFile` 逐字段相等。
+///
+/// 历史：解码经 `From<MonoType> for IrType` 重建，Ref/Struct/Enum/TypeVar/
+/// TypeRef/Union/Intersection/AssocType 与非 String|Bytes|Tuple 的 Generic
+/// 都被塌成 Void（有损桥接表见 docs/src/dev/architecture/03-type-unification.md §2.1）——类型表与函数签名因此丢失结构。
+#[test]
+fn test_decode_preserves_ref_struct_generic_signature_types() {
+    // Arrange: 三类「有损桥会塌成 Void」的类型——&i64、Point 结构体、Vec(i64)
+    let ref_ty = MonoType::Ref {
+        mutable: false,
+        inner: Box::new(MonoType::Int(64)),
+    };
+    let struct_ty = MonoType::Struct(crate::frontend::core::typecheck::StructType {
+        name: "Point".to_string(),
+        fields: vec![
+            ("x".to_string(), MonoType::Int(64)),
+            ("y".to_string(), MonoType::Int(64)),
+        ],
+        methods: HashMap::new(),
+        field_mutability: vec![false, false],
+        field_has_default: vec![false, false],
+        interfaces: vec![],
+    });
+    let generic_ty = MonoType::make_list(MonoType::Int(64));
+
+    // Act
+    let module = build_and_decode_typed(
+        vec![],
+        vec![ref_ty.clone(), struct_ty.clone(), generic_ty.clone()],
+        ref_ty.clone(),
+        vec![struct_ty.clone(), generic_ty.clone()],
+    );
+
+    // Assert: 逐字段原样搬运（任一字段塌成 Void 即失败）
+    assert_eq!(
+        module.functions[0].params,
+        vec![ref_ty.clone(), struct_ty.clone(), generic_ty.clone()],
+        "解码后的形参应保持 &i64 / Point / Vec(i64) 原样，不得塌缩为 Void"
+    );
+    assert_eq!(
+        module.functions[0].return_type, ref_ty,
+        "解码后的返回类型应保持 &i64 原样，不得塌缩为 Void"
+    );
+    assert_eq!(
+        module.type_table,
+        vec![struct_ty, generic_ty],
+        "解码后的类型表应保持 Point / Vec(i64) 原样，不得塌缩为 Void"
     );
 }
 

@@ -19,7 +19,7 @@ fn make_function_with_locals(local_count: usize) -> BytecodeFunction {
     BytecodeFunction {
         name: "test".to_string(),
         params: vec![],
-        return_type: crate::middle::core::ir::Type::Void,
+        return_type: crate::frontend::core::typecheck::MonoType::Void,
         local_count,
         local_names: HashMap::new(),
         upvalue_count: 0,

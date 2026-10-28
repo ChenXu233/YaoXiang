@@ -15,7 +15,7 @@ use crate::backends::common::RuntimeValue;
 use crate::backends::interpreter::executor::Interpreter;
 use crate::backends::Executor;
 use crate::middle::bytecode::{BytecodeFunction, BytecodeInstr, CompareOp, ConstValue, Reg};
-use crate::middle::core::ir::Type;
+use crate::frontend::core::typecheck::MonoType;
 use std::collections::HashMap;
 
 /// 构造一个函数：r0 = const[lhs], r1 = const[rhs], r2 = r0 <op> r1, return r2
@@ -23,7 +23,7 @@ fn make_compare_function(op: CompareOp) -> BytecodeFunction {
     BytecodeFunction {
         name: "test_float_compare".to_string(),
         params: vec![],
-        return_type: Type::Bool,
+        return_type: MonoType::Bool,
         local_count: 3,
         local_names: HashMap::new(),
         upvalue_count: 0,
