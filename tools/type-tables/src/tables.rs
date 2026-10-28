@@ -123,11 +123,15 @@ impl NameTableReport {
                 }
             ));
         }
-        out.push_str("  权威清单（WBS 6.1.2 / SPEC §2.1）：15 个内置名 + DateTime 临时兼容别名。\n");
+        out.push_str(
+            "  权威清单（WBS 6.1.2 / SPEC §2.1）：15 个内置名 + DateTime 临时兼容别名。\n",
+        );
         out.push_str("  15 名 = Never / Void / () / Bool / Int / Int8 / Int16 / Int32 / Int64 /\n");
         out.push_str("          Float / Float32 / Float64 / Char / String / Bytes（() 是 Void 的类型写法）。\n");
         out.push_str("  DateTime 注记：不属内置名，只是 std 层语义别名——src/std/time.rs 与\n");
-        out.push_str("  src/std/interfaces/time.yx 的签名串仍在用；迁出属 P10 S11（issue #513），\n");
+        out.push_str(
+            "  src/std/interfaces/time.yx 的签名串仍在用；迁出属 P10 S11（issue #513），\n",
+        );
         out.push_str("  故 LSP 清单（C）刻意不收录它，对应 T2.C2 差异已登记。\n");
         out.push_str(&format!(
             "B `CONST_PARAM_TYPES`（:{}）：{} 项 —— {}\n",
@@ -217,7 +221,9 @@ impl NameTableReport {
                 "  结论：**报红**——{} 被重新接受。那是回退（不是待办）：删掉对应 match 臂；\n",
                 self.removed_accepted.join(", ")
             ));
-            out.push_str("        同一条判据在 src/frontend/core/types/tests/mono.rs 有单元用例。\n\n");
+            out.push_str(
+                "        同一条判据在 src/frontend/core/types/tests/mono.rs 有单元用例。\n\n",
+            );
         }
 
         out.push_str("T2.4 结论：");

@@ -112,7 +112,7 @@ fill it in yourself:
 
 ```yaoxiang
 // mylib/src/lib.yx
-greet: () -> string = "hello from mylib"
+greet: () -> String = "hello from mylib"
 ```
 
 All top-level bindings are visible externally by default, no `pub` needed — see

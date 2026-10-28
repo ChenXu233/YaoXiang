@@ -108,7 +108,7 @@ description: '泛型约束、特质系统与常量求值相关的错误。'
 - **构造函数**：`ErrorCodeDefinition::const_recursion_too_deep(limit)`
 - **模板**：`常量求值超出最大递归深度 {limit}`
 - **帮助**：简化常量表达式以减少递归。
-- **发射点**：`src/frontend/core/types/eval/const_eval.rs:540`
+- **发射点**：`src/frontend/core/types/eval/const_eval.rs:546`
 
 ### E4014：常量求值失败
 
