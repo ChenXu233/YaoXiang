@@ -1466,3 +1466,172 @@ grep -rEn --include=*.yx '(:|->|<)[[:space:]]*(int|int64|i64|datetime|int32|i32|
 > **遗留（转入下一轮契约输入，不在本批处理）**：① **T1 冻结基线须在 6.6 转硬前刷新**（反向桥 A 9→0 的对账差异，见上；已登记进 09 的 6.6 行）。② **`ir.rs` 三处 `ast::Type` 载体的处置留给 6.3**（删变体时须一并决定载体，改动会动 IR 快照与语料基线；已登记进 09 的 6.3 行）。③ **T1 的 `Void` 兜底豁免登记随 6.3 同步删除**（6.0 收口实录遗留①，仍在）。④ **T3 的比对对象待 6.6 裁决**（6.0 收口实录遗留②，仍在）。⑤ **`DateTime` 迁出**（P10 S11，issue [#513](https://github.com/ChenXu233/YaoXiang/issues/513)，6.1 收口实录遗留①，仍在）。
 
 > **计数**：本批不新增二级/三级任务 ⇒ 09 顶部计数表不变（二级 **72** / 三级 **193**）。6.2 的 3 个三级任务为既有登记，勾选不改变计数。
+
+## P6 6.3 死变体删除收口（6.3.1 / 6.3.2，2026-10-29）
+
+> **触发**：P6 6.2 收口后，6.3 的两个三级任务待收口——6.3.1 删 `ast::Type` 的 13 个死变体并清掉全部匹配臂与构造点（含 `src/frontend/core/parser/statements/types.rs` 的 `Type::Void` 错误兜底）；6.3.2 **必须与 6.3.1 同批**重写反向桥 B（`mono_to_ast_type`）与两份 AST→AST 替换（10 点）。**两者必须同批**：变体一删，两座桥上的重建臂就不可编译；只改桥不改变体，回写形态会静默改变。
+
+> **轮次**：本批 = 6.3 的两个三级任务（6.3.1 删变体 / 6.3.2 重写两座桥），工作单元依次为：勘察（改写面清单 + 规范名往返策略）→ 实现（6.3.1 + 6.3.2 一笔提交）→ 独立验证 → 对抗性复审 → 契约追认（错误码生成物随删随清）→ 本收口。
+
+> **判据**：C3（诊断码 / 消息 / 顺序不变）+ 03 §6.4 的硬验收（`git diff --stat tests/yaoxiang tests/baselines src/std/` 必须为空）。另加本批自身的两条载体判据：① **变体零残留**——13 个旧变体名在 `src/` 内零引用（含 `AstType` / `T` 两个 `use` 别名）；② **回写形态唯一**——反向桥 B 的产物必须是 `from_builtin_name` 认得的**规范名**（宽度显式），不得再落回诊断展示用的小写内部名。
+
+### 结论：`ast::Type` 26 → 13
+
+**删掉的 13 个变体**：`Int` / `Float` / `Char` / `String` / `Bytes` / `Bool` / `Void` / `Union` / `Enum` / `Option` / `Result` / `Sum` / `AssocType`。
+
+**现存的 13 个变体**：`Name` / `Struct` / `NamedStruct` / `Tuple` / `Fn` / `Generic` / `Literal` / `Ptr` / `Ref` / `MetaType` / `ConstExpr` / `Paren` / `NamedParen`。
+
+**零残留**：13 个旧变体名在 `src/` 内**零引用**，含两个 `use` 别名（`AstType` ← 2 文件、`T` ← 1 文件，即 `src/frontend/core/typecheck/checker/annotations.rs`）。复核命令：`git grep -n -E '\b(Type|AstType|T)::(Int|Float|Char|String|Bytes|Bool|Void|Union|Enum|Option|Result|Sum|AssocType)\b' -- src/`（零命中，`git grep` exit 1）。全仓其余命中只在 `docs/`（历史叙述）与 `tools/type-tables/`（门禁自测夹具里的模式字符串），**不是 `ast::Type` 引用**。
+
+**改写面（17 个 match 块，全部同批处置）**：删变体后，**穷尽 match**（无 `_` 兜底）由编译器强制补臂（不补即编译失败）；**带 `_` 兜底的 match** 则不报编译错、通配臂会把新形态静默吃掉——故两类都必须显式处置。
+
+| 兜底 | 站点 | 删前命中 | 处置 |
+| --- | --- | --- | --- |
+| 穷尽（编译期强制） | `format_type`（`src/formatter/handlers/types.rs`） | 13 臂 | 删 13 臂，内建标量一律走 `Type::Name` |
+| 穷尽（编译期强制） | `From<ast::Type> for MonoType`（`src/frontend/core/types/mono.rs`） | 13 臂 | 删 13 臂 |
+| 穷尽（编译期强制） | `collect_type_tokens`（`src/frontend/core/typecheck/checker/semantic_tokens.rs`） | 13 臂 | 删 13 臂 |
+| 穷尽（编译期强制） | `substitute_type_ast`（`src/middle/passes/mono/function.rs`） | 10 点 | 删 10 点（见下表） |
+| `_` 兜底（静默面） | `collect_name_refs`（`src/frontend/core/parser/ast.rs`） | `Union` / `Sum` / `Option` / `Result` / `AssocType` | 删臂（`Tuple` / `Ptr` 臂去掉 or-pattern 里的旧名） |
+| `_` 兜底（静默面） | `name_used_as_type_in`（`src/frontend/core/parser/ast.rs`） | `Option` / `Result` / `Sum` | 删臂 |
+| `_` 兜底（静默面） | `name_used_as_type`（`src/frontend/core/parser/statements/declarations.rs`） | `Option` / `Result` / `Sum` | 删臂 |
+| `_` 兜底（静默面） | `extract_fn_type_info`（`src/frontend/core/parser/statements/types.rs`） | `Void` 兜底 | `_ => (Vec::new(), Type::Void)` 改 let-else 显式返回 `Type::Name{"()"}` |
+| `_` 兜底（静默面） | `detect_sum_type` 的 `match ret`（`src/frontend/core/typecheck/checker.rs`） | `Result` / `Option` | 删臂 |
+| `_` 兜底（静默面） | `collect_used_in_type`（`src/frontend/core/typecheck/checker.rs`） | `Option` / `Result` / `Sum` | 删臂 |
+| `_` 兜底（静默面） | `collect_unknown_type_names`（`src/frontend/core/typecheck/checker/annotations.rs`，别名 `T`） | `Sum` / `Option` / `Result` / `AssocType` / `Union` | 删臂 |
+| `_` 兜底（静默面） | `const_param_kind`（`src/frontend/core/typecheck/const_param.rs`） | `Int` / `Float` / `Bool` | 删臂 |
+| `_` 兜底（静默面） | `extract_const_param_info`（`src/frontend/core/types/eval/const_eval.rs`） | `Int` / `Float` / `Char` / `String` / `Bytes` / `Bool` / `Void` | 删臂 |
+| `_` 兜底（静默面） | `satisfies_ast_type`（`src/frontend/core/types/trait_data.rs`） | `Int`…`Void` / `Option` / `Result` | 删臂 |
+| `_` 兜底（静默面） | `type_from_ast`（`src/middle/passes/codegen/mod.rs`） | `Int`…`Void` / `Option` / `Result` | 删臂 |
+| `_` 兜底（静默面） | `mono_to_ast_type`（反向桥 B，`src/middle/passes/mono/function.rs`） | 7 个内建标量臂 | 改写为 `canonical_name` + 结构回写（见下节） |
+| `_` 兜底（静默面） | `substitute_type_in_ast`（`src/middle/passes/mono/function.rs`） | 10 点 | 删 10 点，**保留原 `_ => ty.clone()`**（不新增兜底） |
+
+**未新增任何通配臂**：逐文件 `_` 臂计数改前与改后逐字一致，唯 `src/frontend/core/types/mono.rs` +1 = 新增 `canonical_name` 的 `_ => None`（`MonoType` 查表语义，**不是** `ast::Type` 构造兜底）。
+
+### 规范名往返口径（为何不能用 `type_name()`）
+
+反向桥 B 的职责是把 `MonoType` 回写成 `ast::Type`。6.3 之前它对 7 个内建标量各有一条专用臂（`Int` / `Float` / `Bool` / `Char` / `Void` / `String` / `Bytes`）；变体删除后这些臂没有了，**回写必须落到 `ast::Type` 的某个变体上**——只剩 `Name` 可用。
+
+**为何不能用 `type_name()`**：`MonoType::type_name()` 是**诊断展示用**的内部名（`int64` / `void` / `string` / `float64` …）。6.1.2 已把 22 个实现内拼写从 `from_builtin_name` 删除（含全部小写名），因此按 `type_name()` 回写出的 `Name{"int64"}` 在下游会被解析成**用户类型引用**（`TypeRef`）而不是内置标量——**类型身份静默丢失**（`Int64` 变成某个未声明的用户类型）。这不是格式差异，是语义降级。
+
+**采用的口径**：新增 `MonoType::canonical_name()`（`src/frontend/core/types/mono.rs`），作为 `from_builtin_name` 的**严格逆向**——
+
+- **覆盖范围 = `from_builtin_name` 的像**：15 个规范名对应的 `MonoType`；实现为 12 条臂（`Never` / `Void` / `Bool` / `Int8` / `Int16` / `Int32` / `Int64` / `Float32` / `Float64` / `Char` / `String` / `Bytes`）。
+- **宽度显式**：`Int` / `Float` 是**入参别名**（`from_builtin_name("Int")` → `Int(64)`、`"Float"` → `Float(64)`），回写恒取宽度显式形式 `Int64` / `Float64`，保证产物唯一；`()` 恒回写为 `Void`。
+- **`DateTime` 只入不出**：它是 std 层语义别名（`from_builtin_name("DateTime")` → `Int(64)`），`canonical_name` 永不产出（用例以 `assert_ne!` 钉死）。
+- **返回 `None` = 该类型没有规范名**（容器泛型 / `Tuple` / `Ref` / `Fn` / `Struct` / `TypeVar` …），调用方须按**结构**回写。
+
+**回写结构**：`mono_to_ast_type` 改为「先 `canonical_name`，再按结构回写」——`Generic { name, args }`（覆盖 `Option` / `Result` / `Tuple` / `List` / 任意泛型实例，逐字往返）、`Ref`、`Fn`；其余（`Struct` / `Enum` / `TypeVar` / `Literal` / `Union` / …）保持既有有损兜底 `Name { type_name() }`，**不扩面**（6.3 只删死变体，不改这些类型的回写形态）。**未改 `type_name()` 本身**。
+
+**往返覆盖**：① **leg A（15 名逐名往返）**——`from_builtin_name` → `canonical_name` → `from_builtin_name` 还原同一 `MonoType`，由仓内用例 `src/frontend/core/types/tests/mono.rs` 的 `test_canonical_name_round_trips_all_builtin_names` 覆盖（15 名全列）；另有 `test_canonical_name_uses_width_explicit_spellings`（宽度显式）与 `test_canonical_name_rejects_structural_types`（结构类型返回 `None`）两条。② **leg B（`mono_to_ast_type` 产物再 lower）**——回写出的 `ast::Type` 再经 `From<ast::Type> for MonoType` 还原，与原 `MonoType` 全等，见「残留风险」②。
+
+### 10 点处置表（AST→AST 重建）
+
+03 §2.2.2 登记的 AST→AST 重建在 6.3 名单内有 **5 变体 / 10 点**（`Union` / `Option` / `Result` / `Sum` / `AssocType` 各 2）。**全部删除**——变体已不存在，臂不可达。
+
+下表行号为**删前**位置，取自 6.3 的父提交（`:pencil: docs: auto-translate documentation`，2026-10-28；该 revision 亦记在 `tools/type-tables/src/baseline.rs` 的 `SCOUT_BASELINE_REV`）。变体删除后行号平移，故按 09 §6.3.2 的口径**以函数名定位、不在散文里写死行号**。
+
+| 变体 | `substitute_type_ast` | `substitute_type_in_ast` | 处置 |
+| --- | --- | --- | --- |
+| `Union` | 377 | 606 | 删臂 |
+| `Option` | 427 | 600 | 删臂 |
+| `Result` | 431 | 602 | 删臂 |
+| `AssocType` | 456 | 623 | 删臂 |
+| `Sum` | 467 | 632 | 删臂 |
+
+**两处替换函数的兜底口径不同**：`substitute_type_ast` 对 13 个现存变体**穷尽匹配、无 `_` 兜底**（删变体由编译器强制补臂，不存在「静默吃掉」的可能）；`substitute_type_in_ast` 保留其原有的 `_ => ty.clone()`——**本批未新增任何兜底**，删臂后「不再递归」也无行为差异（该节点已不可能出现）。
+
+**下游可达性（删臂不改可观测行为的依据）**：① `substitute_type_ast` 仅由 `substitute_instruction` 的 `Cast` / `TypeTest` 调用，而 `ir_gen` 从不构造 `Instruction::Cast` / `Instruction::TypeTest`（全仓只有 IR 定义、mono 改写与 normalize / verify 消费）；② `substitute_type_in_ast` 仅由 `specialize_type`（`src/middle/passes/mono/mod.rs`）调用，语料 393 个 `.yx` 中 `类型名(...)` 特化 `TypeDecl` **0 例**。故 10 点当前**无生产可达路径**。
+
+### T1 门禁清账
+
+6.0 收口时登记在 T1 门禁上的死变体名单与兜底豁免，随 6.3 的删除**同批清账**（否则门禁立即报 stale）：
+
+| 清账项 | 处置 |
+| --- | --- |
+| `VOID_FALLBACK`（`tools/type-tables/src/t1.rs` 的 `FallbackExemption` 常量） | **删除**——`Void` 变体已不存在，兜底点改为 `Type::Name{"()"}`（不再是通配臂构造点） |
+| `REGISTERED_ZERO_FORWARD`（13 条 `RegisteredZeroVariant`） | **清空为 `&[]`**——13 个死变体已删，实测前向零构造为 0 |
+| `DEAD_VARIANTS_03`（03 §5.2 的 13 个死变体名单） | **清空为 `&[]`** |
+| `SCOUT_BASELINE` / `SCOUT_BASELINE_REV`（`tools/type-tables/src/baseline.rs`） | **刷新**——基线由 26 行收敛为现存 13 变体行，冻结 revision 换到 6.3 的父提交 |
+| `tools/type-tables/README.md` 与 `t1.rs` 的口径文案 | 同步改为「6.3 之后登记表为空；机制保留且可注入（`*_with(registry)`）供单测覆盖」 |
+
+**清账后的 `--report` 实测**（`cargo run --manifest-path tools/type-tables/Cargo.toml -- --report`，exit 0）：
+
+| 项 | 实测值 |
+| --- | --- |
+| T1.1 扫描面 | 非测试 `.rs` **287** 个；`ast::Type` 变体 **13**（定义行 445–528）；别名解析 2 个（`AstType` ← 2 文件、`T` ← 1 文件） |
+| T1.3 前向零构造 | **0** |
+| T1.3b 全局零构造 | **0** |
+| T1.4 反向桥 A | 变体 **0** 个 / 点 **0** 个 |
+| T1.4 反向桥 B | 变体 **4** 个 / 点 **6** 个（`Name` 3 点 / `Generic` / `Ref` / `Fn` 各 1 点） |
+| T1.5 AST→AST | 变体 **10** 个 / 点 **18** 个（**剩余**重建点）；其中「WBS 6.3 删除名单」= 0 个变体 / 0 点 |
+| T1.6 基线对账 | **13 / 13 行一致**（扫描口径与冻结基线完全一致） |
+| T1.7 白名单核对 | 已登记 0 / 实测前向零构造 0 / 未登记 0 / 登记但已不成立 0 / 登记豁免点 0 条（命中 0）/ 未登记的通配臂兜底点 0 → **名单一致** |
+
+### 实测数字
+
+① **硬验收**——`git diff --stat -- tests/yaoxiang tests/baselines src/std/` 在 6.3 的父提交与落地态之间**为空**（语料层 / 基线层 / 标准库零差异）；`tests/` 侧同样零差异（见「直驱例外」）。
+
+② **语料差分 356/356、差异为空**——基线 `tests/baselines/corpus-parity.jsonl` 共 356 行；`cargo run --example corpus_probe` 的产物与基线逐字节相同，`check-corpus-parity.py` exit 0。
+
+③ **IR 快照 216 条零漂移**——`src/middle/core/tests/snapshots/` 下 216 个 `.snap`，全部在库未改。
+
+④ **dump 对拍 8/8 md5 逐字一致**——4 个泛型替换程序的 dump（`77dd7cf4` / `9131dd36` / `82f43780` + 对照 `c2a2de8d`）+ 4 件 `.42` 产物（`8ce5007f` / `99f2dce8` / `67cb94f4` / `41b22441`），与改动前逐字相同。
+
+⑤ **`cargo test --all` exit 0**——lib **2865 → 2868 passed**（+3 = 三条 `canonical_name` 用例）/ 0 failed / 2 ignored；integration **314** passed；其余测试二进制全绿；全仓 `#[test]` **3394 → 3397**（+3，**未删测试**）。
+
+⑥ **变异验证（判据可失败性）**——把 `canonical_name` 的 12 条臂小写化（生产变异），往返用例转红（exit 101）且全量 lib 4 failed；`git apply -R` 机械还原后该文件 blob 与 HEAD 逐字一致、`git status` CLEAN。
+
+> **提交（本地 dev，未推送）**：`:recycle: refactor(parser): ast::Type 26→13 变体并重写两座类型桥`（2026-10-28，28 files / +677 / −818）；本收口文档另起一笔 `:memo: docs(plan): 6.3 死变体删除收口`（2026-10-29，3 files）。按仓库约定提交号在 push 之后取（`pull --rebase` 会重写本地哈希），故此处只记提交主题与日期。
+
+### 门禁（实测，全部 exit 0）
+
+| # | 门禁 | 实测 |
+| --- | --- | --- |
+| ① | `cargo fmt --check --all` | exit 0 |
+| ② | `cargo clippy --all --all-features --all-targets -- -D warnings` | exit 0 |
+| ③ | `cargo test --all` | exit 0（lib 2868 passed / 0 failed / 2 ignored；integration 314 passed） |
+| ④ | 语料差分 | 356 / 356，差异为空（`check-corpus-parity.py` exit 0） |
+| ⑤ | IR 快照 | 216 条零漂移（`check-snapshot-drift.sh` PASS） |
+| ⑥ | 义务账本 | PASS（13 必填 / 13 全填 / 红名单 0 / 非义务登记 8）+ 自测 5 项全 PASS |
+| ⑦ | 边界 + 扇出 + 概念 | 违规 0（`pub(crate)` 计数 **166**）；`check-boundary` / `check-fanout` / `check-concepts` 全 exit 0 |
+| ⑧ | 文档门禁 | `check-docs-truth` 诊断码 **157 / 157**；`check-docs-orphan` 文档站 md 176 篇 / 索引覆盖 173 篇；`check-docs-refs` 1145 个跟踪文本文件、6076 个路径状 token、无不可解析引用；`check-docs-examples` 抽取 258 个代码块、失败 0 |
+| ⑨ | 错误码生成器幂等 | 重跑 `python scripts/docs/gen-error-code-docs.py` 后 `git diff --quiet` exit 0 |
+
+另：`check-ir-verifier.sh` PASS（全语料 `verify_loose` 绿，校验面非空）；`cd docs && npm run docs:build` exit 0（VitePress 真构建，AGENTS.md 第 10 条⑨）。
+
+### 错误码生成物（随删随清）
+
+`src/frontend/core/typecheck/checker.rs` 删臂使该文件行数平移，两个精化类诊断码的发射点随之漂移；错误码文档由生成器**位置敏感**地产出，故必须重跑生成器并随提交再生（AGENTS.md 第 10 条⑤ 的机械必需面）：
+
+| 诊断码 | 删前发射点 | 删后发射点 |
+| --- | --- | --- |
+| `E1092`（精化类型实参形态非法） | `checker.rs:3618` / `:3666` / `:3694` | `checker.rs:3603` / `:3651` / `:3679` |
+| `E1093`（精化实参个数不匹配） | `checker.rs:3601` / `:3691` | `checker.rs:3586` / `:3676` |
+
+再生范围 = `docs/src/reference/error-code/E1xxx.md` **2 行**（两个发射点行）；生成器复跑幂等。
+
+### 直驱例外
+
+**无**。`tests/yaoxiang` / `tests/baselines` / `src/std` 三段零差异，`tests/` 侧同样零差异；全仓 `#[test]` 由 3394 增至 3397，变化全部落在 `src/` 内的 10 个测试模块（`src/frontend/core/types/tests/mono.rs` 等）——**未删测试、未放宽断言**。
+
+### 残留风险（转入下一轮契约输入）
+
+① **`Name{"()"}` 兜底语法可达 + `semantic_tokens` 的 dummy token**——`src/frontend/core/parser/statements/types.rs` 的非 Fn 签名兜底现为 let-else 显式返回 `Type::Name{"()"}`（formatter 输出逐字不变）；该路径**语法可达**（非 Fn 类型出现在绑定位置），`semantic_tokens` 的 `Name` 臂会比旧的 `Void` 臂（空操作）多记一枚 dummy-span token（`add_token` 无 span 过滤）。语料 393 个 `.yx` 中该形态 **0 命中**，formatter / 诊断 / dump **零漂移**。**随 6.4 的错误路径改造一并消除**（已登记进 09 的 6.4 行「下一轮契约输入」）。
+
+② **leg B 往返覆盖未入库**——反向桥 B（`mono_to_ast_type`）的产物再 `From` 回 `MonoType` 的**全链往返**，目前只有**验证树内**的探针测试覆盖（随验证树清理一并删除、未入库）；仓内只覆盖 `Int64` 单点。**转硬前须另立实现侧小任务把该往返测试正式入库**（已登记进 09 的 6.6 行「下一轮契约输入」）。
+
+③ **值位 `.yx` 探针的 `E1002`**——值位探针在 6.3 的父提交与落地态**同报 `E1002`**，诊断逐字节一致 ⇒ 属**预存语言限制**（非本批引入）；该形态的往返覆盖因此改用 IR 层探针完成（15 个规范名 + 结构类型）。
+
+④ **`ir.rs` 三处 `ast::Type` 载体未动**——6.3 只删变体、**未改 IR 形状**（IR 快照 216 条与语料基线 356 行零漂移）；`Instruction::Cast { target_type }`（`src/middle/core/ir.rs:325`）、`Instruction::TypeTest { ty }`（同文件 `:330`）、`FunctionBody::TypeDecl { definition }`（同文件 `:651`）仍持 `ast::Type`。载体处置留 6.4（改动会动 IR 快照与语料基线），已登记进 09 的 6.4 行「下一轮契约输入」。
+
+### 过程注记（三条）
+
+① **实现轮的契约把 `docs/` 划进 outOfScope，漏了生成物**——错误码生成物 `docs/src/reference/error-code/E1xxx.md` 随 `checker.rs` 删臂的行号平移而必须再生，属 AGENTS.md 第 6 条契约规则①「机械必需面」；经**契约追认**后并入同一提交（生成器复跑幂等）。
+
+② **勘察清单漏了别名 `T`**——`src/frontend/core/typecheck/checker/annotations.rs` 用 `use …::ast::Type as T`，其 5 处 `T::` 命中不在勘察阶段的「201 行」清单内；实现轮已一并处置。**后续契约的「死变体清单」口径须含别名扫描**（T1 门禁的别名解析早已登记「`T` ← 1 文件」）。
+
+③ **提交 amend 时改写了正文**——实现轮在 amend 时删掉了正文中「未纳入本提交」这类与事实不符的表述。
+
+### 计数
+
+本批不新增二级/三级任务 ⇒ 09 顶部计数表不变（二级 **72** / 三级 **193**）。6.3 的 2 个三级任务为既有登记，勾选不改变计数。

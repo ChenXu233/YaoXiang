@@ -184,7 +184,7 @@ match mono {
 | `Sum` | `467`、`632` |
 | `AssocType` | `456`、`623` |
 
-**6.3 删这 5 个变体时必须同批改写这 10 点**（09 的 6.3.2 已登记），否则删变体后这些臂直接不编译。
+**6.3 删这 5 个变体时必须同批改写这 10 点**（09 的 6.3.2 已登记），否则删变体后这些臂直接不编译。**已实施（WBS 6.3.2，2026-10-29）**：10 点全删，处置表见 [09a](./09a-wbs-history.md) §P6 6.3。
 
 ### 2.3 手写同义词表
 
@@ -369,6 +369,8 @@ ir::Type 别名删除, BytecodeFunction.params / type_table 改用 MonoType
 **明确不做的事**：不把 `Type` 从 `parser/ast.rs` 搬到 `sema/types/`。本阶段只在 `types/` 下新增 `lower.rs` 作为唯一转换点，`Type` 的定义位置不动；目录改名按 D1 在 P6 收尾作为独立搬移批次执行——届时 `Type` 的家是顶层 `ast/type_.rs`（AST 顶层域），`sema/types/` 是 `MonoType` 工作表示的家。
 
 ### 5.2 26 变体逐个处置表
+
+> **已落地（WBS 6.3，2026-10-29）**：本表的 13 个「删除」项**已全部实施**——`ast::Type` 由 26 变体收敛为 13 变体（删 13、迁 1、留 12）；两座类型桥（反向桥 B `mono_to_ast_type` 与两份 AST→AST 替换）**同批**改写。实测数字、10 点处置表与判据见 [09a](./09a-wbs-history.md) §P6 6.3。
 
 > 处置分类：**删除**（parser 前向零构造）、**保留**（前向有构造点）、**迁移**（语义归位到别的节点）。
 
@@ -603,7 +605,7 @@ declarations.rs:498-511 与 ast.rs:930 改为
 | 类型推断（`inference/`） | **无影响**。inference 全程消费 `MonoType`，不接触 `ast::Type` 变体 |
 | 求解器（`types/solver.rs`） | **无影响**。`pub fn unify`（`solver.rs:411`）、`types/substitute.rs:112` 的 `substitute`、`types/mono.rs:649` 的 `substitute` 均在 `MonoType` 上操作 |
 | 常量求值（`types/eval/`） | **无影响**。`eval/const_eval.rs`（1128 行）、`eval/dependent_types.rs`（`check_structural_termination` 在 `478`）、`eval/reducer.rs:572` 的 `unify` 都在 `MonoType` 上 |
-| 单态化（`middle/passes/mono/`） | **需改**。`mono/function.rs:358`、`362`、`451`、`456`、`554`、`558`、`618`、`623` 8 处 match `AstType::NamedStruct` / `AstType::AssocType`——`AssocType` 的处置若定为删除，这 8 处需同步。**另需改 `function.rs:507-529` 的 `mono_to_ast_type`**（见 6.3 的 #47） |
+| 单态化（`middle/passes/mono/`） | **已改（WBS 6.3，2026-10-29）**。`mono/function.rs:358`、`362`、`451`、`456`、`554`、`558`、`618`、`623` 8 处 match `AstType::NamedStruct` / `AstType::AssocType`——`AssocType` 的处置定为删除，这 8 处已同步。**`function.rs:507-529` 的 `mono_to_ast_type` 亦已改**（见 6.3 的 #47，改用 `canonical_name` + 结构回写） |
 | IR 构造（`middle/core/ir_gen.rs`） | **需改**。`ir_gen.rs:1266`、`1399` 的 `ast::Type::NamedStruct` match；`ir_gen.rs:1380` 的 `let params: Vec<MonoType> = signature_params`（这是 `signature_params` 的另一个消费点，5.6 需一并核实） |
 | 字节码序列化（`middle/passes/codegen/bytecode.rs`） | **需改**。`codegen/bytecode.rs:492-495` 的 `type_id_to_monotype`、`351-352` 的编码循环、`632` 的组装 |
 | 解释器（`backends/interpreter/`） | **需改**。`image.rs:44` 的 `type_table: Vec<ir::Type>` 改 `Vec<MonoType>`；`repl/eval.rs:369-370` 按 `type_table` 下标格式化类型名，元素类型变化会影响 `{:?}` 的输出格式 |
@@ -615,7 +617,7 @@ declarations.rs:498-511 与 ast.rs:930 改为
 
 **本文不改变任何运行时行为。** 依据：
 
-1. 删除的 13 个变体在 **parser 前向**方向无构造点（`Void` 的 1 个前向点是错误兜底，已逐条登记豁免）→ parser 不产出它们（反向桥与 AST→AST 重建的处置见 6.3 的 #28 / #47 与 6.3.2 的 10 点）。
+1. 删除的 13 个变体在 **parser 前向**方向无构造点（`Void` 的 1 个前向点是错误兜底——**WBS 6.3 已把该兜底改为 `Type::Name{"()"}` 并清掉门禁豁免登记**，故现无前向构造点）→ parser 不产出它们（反向桥与 AST→AST 重建的处置见 6.3 的 #28 / #47 与 6.3.2 的 10 点，均已实施）。
 2. `ir::Type` 是 `ast::Type` 的别名 → 把它改回 `MonoType` 不改变类型集合，只改变**载体**。
 3. `From<MonoType> for IrType` 的**损失**（8 变体 → `Void`）在改动后不再发生——这**可能**改变某些程序的行为（原本丢失的类型现在保留了）。**这是唯一的行为变化方向，且是修复而非回归**，但必须由 07 第三层语料差分确认无回归。
 
@@ -633,7 +635,7 @@ declarations.rs:498-511 与 ast.rs:930 改为
 
 | # | 文件 | 行号 | 改动 | 类别 |
 | --- | --- | --- | --- | --- |
-| 1 | `src/frontend/core/parser/ast.rs` | `435-438`、`448-449`、`455-456`、`472` | 删除 `String`/`Bytes`/`Bool`/`Void`/`Union`/`Enum`/`Option`/`Result`/`Sum`/`Int`/`Float` 变体 | 纯删除 |
+| 1 | `src/frontend/core/parser/ast.rs` | `435-438`、`448-449`、`455-456`、`472` | 删除 `String`/`Bytes`/`Bool`/`Void`/`Union`/`Enum`/`Option`/`Result`/`Sum`/`Int`/`Float` 变体（**已完成：WBS 6.3.1，2026-10-29**——13 个变体全删，`ast::Type` 收敛为 13 变体） | 纯删除 |
 | 2 | `src/frontend/core/parser/ast.rs` | `428-431` | `Name` 增加 `kind: NameKind` 字段 | 数据流 |
 | 3 | `src/frontend/core/parser/ast.rs` | `37-43` | 删除 `Expr::FnDef` | 纯删除 |
 | 4 | `src/frontend/core/parser/ast.rs` | `244-245` | 删除 `Assign.signature_params` | 纯删除 |
@@ -644,13 +646,13 @@ declarations.rs:498-511 与 ast.rs:930 改为
 | 9 | `src/frontend/core/parser/parser_state.rs` | `46-58` | 增加 `probe` 字段与访问器 | 数据流 |
 | 10 | `src/frontend/core/parser/statements/types.rs` | `162-165` | 用 `state.probe()` 定 `NameKind` | 数据流 |
 | 11 | `src/frontend/core/parser/statements/types.rs` | `392-396` | 注释更新（`Result`/`Option` 走 `Generic`，已与事实一致，仅补变体删除说明） | 文档 |
-| 12 | `src/frontend/core/parser/statements/types.rs` | `836` | 删 `_ => (Vec::new(), Type::Void)` 兜底，改为显式错误返回 | 行为 |
+| 12 | `src/frontend/core/parser/statements/types.rs` | `836` | 删 `_ => (Vec::new(), Type::Void)` 兜底，改为显式错误返回——**WBS 6.3.1 已把兜底改为 let-else 显式返回 `Type::Name{"()"}`**（`Void` 变体已删；语义与 formatter 输出逐字不变），**「改为显式错误返回」这一半留 6.4 的错误路径改造**（该路径语法可达，`semantic_tokens` 的 `Name` 臂会多记一枚 dummy-span token；语料 0 命中，零漂移） | 行为 |
 | 13 | `src/frontend/core/parser/statements/declarations.rs` | `498-499` | 删 `n == "Terminates"`，改 `state.probe().is_predicate(n)` | 反向依赖 |
 | 14 | `src/frontend/core/parser/statements/declarations.rs` | `508-511` | 删 `typecheck::operator_interfaces::spec()` 调用 | 反向依赖 |
 | 15 | `src/frontend/core/parser/statements/declarations.rs` | `472` | 删 `signature_params` 实参 | 随 #4 |
 | 16 | `src/frontend/core/parser/pratt/mod.rs` | `47` | 删 `Expr::FnDef` 臂 | 随 #3 |
 | 17 | `src/frontend/core/parser/pratt/led.rs` | `466` | 保留（是参数列表捞回点，随 5.5 改为直接读 Lambda） | 随 #3 |
-| 18 | `src/frontend/core/types/mono.rs` | `699-708`、`743-747`、`770-771`、`814` | 删 13 个 match 臂（13 个删除变体各 1 个） | 随 #1 |
+| 18 | `src/frontend/core/types/mono.rs` | `699-708`、`743-747`、`770-771`、`814` | 删 13 个 match 臂（13 个删除变体各 1 个）（**已完成：WBS 6.3.1，2026-10-29**） | 随 #1 |
 | 19 | `src/frontend/core/types/mono.rs` | `620-642` | 砍同义词（大小写别名、`i64` 类缩写、`"()"`） | 收敛 |
 | 20 | `src/frontend/core/types/mono.rs` | `627` | `DateTime` 别名保留 | 保留 |
 | 21 | `src/frontend/core/types/lower.rs` | 新增 | 迁移 `From<Type> for MonoType`（现于 `mono.rs:692-830`）为唯一转换点 | 新增 |
@@ -662,7 +664,7 @@ declarations.rs:498-511 与 ast.rs:930 改为
 | 27 | `src/middle/core/bytecode.rs` | `2346` | `type_table` 转换改 `.collect()`（元素已同型）——实际改法是**删掉转换、原样搬运**（**已完成：WBS 6.2.1，2026-10-28**） | 随 #26 |
 | 28 | `src/middle/core/bytecode.rs` | 原 `2352-2390`（**已删除**） | **删除** `From<MonoType> for IrType` 整个 impl（**已完成：WBS 6.2.2，2026-10-28**） | 纯删除 |
 | 29 | `src/backends/interpreter/image.rs` | `44` | `type_table` 改 `Vec<MonoType>`（**已完成：WBS 6.2.3，2026-10-28**） | 收敛 |
-| 30 | `src/middle/passes/mono/function.rs` | `358`-`623`（8 处） | `AstType::AssocType` 臂随门禁结论处理 | 待定 |
+| 30 | `src/middle/passes/mono/function.rs` | `358`-`623`（8 处） | `AstType::AssocType` 臂随门禁结论处理——**结论已定并实施：WBS 6.3.2 把 03 §2.2.2 登记的 5 变体 / 10 点（`Union`/`Option`/`Result`/`Sum`/`AssocType` 各 2）全部删除**，两座桥（`substitute_type_ast` / `substitute_type_in_ast`）同批改写 | 已完成（WBS 6.3.2，2026-10-29） |
 | 31 | `src/frontend/core/lexer/state.rs` / `tools/type-tables/` / `build.rs` | 新增 / `build.rs:19-37` 后 | 类型表门禁 T1-T3 | 门禁 |
 | 32 | `spawn/placement.rs` | `122` | 删 `Expr::FnDef` 臂 | 随 #3 |
 | 33 | `spawn/analysis.rs` | `912` | 同上 | 随 #3 |
@@ -679,7 +681,7 @@ declarations.rs:498-511 与 ast.rs:930 改为
 | 44 | `parser/tests/ast.rs` | `837-847` | 删 `Expr::FnDef` 测试 | 测试 |
 | 45 | `typecheck/tests/checker.rs` | `109-111` | 改写为 Lambda + Assign | 测试 |
 | 46 | `types/tests/mono.rs` | `27-40`、`97`、`119-145`、`221` | 删除 11 个死变体的 lower 断言 | 测试 |
-| 47 | `src/middle/passes/mono/function.rs` | `507-529` | `mono_to_ast_type` 删 `AstType::Int`/`Float`/`Bool`/`Char`/`Void`/`String`/`Bytes` 分支，统一走 `AstType::Name` + `mono.type_name()`。**必须与 #1 同批处理** | 收敛 |
+| 47 | `src/middle/passes/mono/function.rs` | `507-529` | `mono_to_ast_type` 删 `AstType::Int`/`Float`/`Bool`/`Char`/`Void`/`String`/`Bytes` 分支，统一走 `AstType::Name` + `mono.type_name()`。**必须与 #1 同批处理**——**口径已更正（已完成：WBS 6.3.2，2026-10-29）**：`mono.type_name()` 是诊断展示用的小写内部名（`int64` / `void` / `string`），6.1.2 删掉小写拼写后它会落成 `TypeRef`、**静默丢掉类型身份**，故实际改用新增的 `MonoType::canonical_name()`（`from_builtin_name` 的严格逆向，宽度显式）+ 结构回写（`Generic` / `Ref` / `Fn`） | 收敛 |
 | 48 | `src/frontend/core/parser/ast.rs` | `891`、`930` | `extract_generic_param_names` 签名增 `probe: &dyn TypeEnvProbe`；删 `typecheck::operator_interfaces::spec()` 调用改 `probe.is_constraint(name)`。调用方（含 `parser/tests/ast.rs`）传 `&NullProbe` | 反向依赖 |
 | 49 | `src/frontend/core/parser/statements/declarations.rs` | `42-80` | 删本文件内的 `name_used_as_type`，改为调用 `ast.rs` 的合并版；`is_predicate` 短路改读 `NameKind::Predicate` | 重复实现 |
 | 50 | `src/frontend/core/parser/ast.rs` | `912` | `CONST_PARAM_TYPES` 判定改经 `NameKind::Builtin` 接线（见 5.3） | 收敛 |
@@ -699,7 +701,7 @@ declarations.rs:498-511 与 ast.rs:930 改为
 | `("()")` 出现在类型位置 | 它不是 `Name` 形态的产物，而是 `Void` 的类型写法（标准库签名串写 `() -> Void`） | **保留**：`()` 与 `Void` 同臂，属定稿的 15 名之一 |
 | `dump_bytecode` 输出变化 | `type_table` 元素类型从 `ir::Type` 改 `MonoType`，`{:?}` 格式不同 | **C3 判据允许**（07 规定 `dump_bytecode` 仅在 C1/C2 阶段比对）。但需在阶段 2 记录输出 diff 供人工 review |
 | 有损桥接修复后行为变化 | 见 6.2 | 语料差分 + 定向 `dump_bytecode` 对拍 |
-| `mono_to_ast_type` 改写后类型替换结果变化 | `function.rs:507-529` 是单态化类型替换的出口（`substitute_type_in_ast:532-537` 把替换后的 `MonoType` 转回 `AstType`）。删变体后若走 `_` 臂，替换结果从 `AstType::Int(64)` 变为 `AstType::Name { name: "i64" }` 一类 | 阶段 3 定向对拍：选含泛型替换的语料，比对改动前后单态化产物的 `type_name()`。**不得假定 `{:?}` 输出等价** |
+| `mono_to_ast_type` 改写后类型替换结果变化 | `function.rs:507-529` 是单态化类型替换的出口（`substitute_type_in_ast:532-537` 把替换后的 `MonoType` 转回 `AstType`）。删变体后若走 `_` 臂，替换结果从 `AstType::Int(64)` 变为 `AstType::Name { name: "i64" }` 一类 | 阶段 3 定向对拍：选含泛型替换的语料，比对改动前后单态化产物的 `type_name()`。**不得假定 `{:?}` 输出等价**。**口径已更正（阶段 3 实测）**：判等不应用 `type_name()`——它是诊断展示用的小写内部名，比 `type_name()` 只能看出「都是 `int64`」，看不出「规范名是 `Int64` 还是 `i64`」；改判**规范名往返**（`from_builtin_name` ↔ `MonoType::canonical_name()` 逐名互逆）+ 回写产物的结构比对。WBS 6.3 实测：4 个泛型替换程序的 dump 与 `.42` 产物 md5 逐字与改动前一致 |
 | `.yx` 源码本身 | **零修改** | 本文不要求改任何语料或 std 源文件。这条是硬验收项 |
 
 **硬性验收条件**（**2026-10-27 口径修订，承 2026-10-26 裁决②**）：`git diff --stat tests/yaoxiang tests/baselines src/std/` 必须为空。`tests/` 下的**直驱测试文件**在**改动机械要求**时可修改，须逐项登记 **file / 行数 / 理由**，且**不得删测试、不得放宽断言**。原口径（`git diff --stat tests/ src/std/`）把整个 `tests/` 一刀切为零差异，本修订**只放宽直驱测试文件一档**，语料层（`tests/yaoxiang`）、基线层（`tests/baselines`）与标准库（`src/std/`）的零差异要求不变。**例外**：6.8.2 行为修复批单列一轮并单独裁决。
@@ -713,12 +715,12 @@ declarations.rs:498-511 与 ast.rs:930 改为
 | **0. 门禁先行** | 新建 `tools/type-tables`，实现 T1/T2/T3，T1 首版**只报告不失败**。在**未改动**的代码上取全量基线 | T1 报告准确列出 13 个 **parser 前向零构造**变体（含 `AssocType` 的定性：前向 0 / AST→AST 2，D8 不变），并**分列 2.2 的反向桥重建点与 2.2.2 的 AST→AST 重建点**；前向零构造 13 与全局零构造 1（仅 `Enum`）分开报；T2/T3 全绿或给出可修清单 | 无代码改动，无需回滚 |
 | **1. 名称规范化** | **已完成（WBS 6.1.2，2026-10-27）**：`from_builtin_name`（`mono.rs:839-886`）收敛为 15 名 + `DateTime` 临时别名，删除 22 个实现内拼写；`add_builtin_types` 的 7 个小写副本、LSP 清单的 `Uint` / `Int128`、`sizeof` 的 `Uint` 臂同批清理；**不设 lexer 别名表**（语料实测 0 处非规范名）。**同步核实 `classify_generic_params` 用的是 `signature_params` 还是 `Lambda.params`** | C3：全语料诊断集与阶段 0 基线**逐条相同** | 单独 commit，可 revert |
 | **2. 字节码类型统一** | **已完成（WBS 6.2，2026-10-28）**：四处载体改载 `MonoType`——`BytecodeFunction.params`（`bytecode.rs:814`）与 `return_type`（`:816`）、`BytecodeModule.type_table`（`:856`）、`Image.type_table`（`image.rs:44`）；删有损桥 `From<MonoType> for IrType`（原 `bytecode.rs:2352-2390`）与 `ir::Type` 再导出别名（`ir.rs:3` 的 `pub use` 降为私有 `use`）；解码改原样搬运（`bytecode.rs:2315`、`:2316`、`:2346`），此前 8 类 `MonoType` 变体塌缩为 `Void` 的静默信息损失不再发生 | C3 + 定向 `dump_bytecode` 对拍（6.2 表格逐项）——**实测全绿**（实录见 [09a](./09a-wbs-history.md) §P6 6.2） | 单独 commit，可 revert |
-| **3. 死变体删除** | 按 5.2 表删 13 个变体；清 `mono.rs:699-708` 等 match 臂、`types.rs:836` 兜底；**同批处理 `function.rs:507-529`（#47）与 AST→AST 10 点（6.3.2）**；同步 `types/tests/mono.rs` | C3 + `cargo build` 全绿（穷尽 match 强制补全所有臂）+ 泛型替换定向对拍（6.4 末行） | 单独 commit，可 revert |
+| **3. 死变体删除** | **已完成（WBS 6.3，2026-10-29）**：按 5.2 表删 13 个变体（`ast::Type` 26 → 13）；清 `mono.rs:699-708` 等 match 臂、`types.rs:836` 兜底（改 let-else 显式返回 `Type::Name{"()"}`）；**同批处理 `function.rs:507-529`（#47）与 AST→AST 10 点（6.3.2）**；同步 `types/tests/mono.rs`。**#47 的口径已更正**：原写的「统一走 `AstType::Name` + `mono.type_name()`」在 6.1 之后**失效**——`type_name()` 是诊断展示用的小写内部名（`int64` / `void` / `string`），6.1.2 删掉小写拼写后它会落成 `TypeRef`、**静默丢掉类型身份**；实际改用新增的 `MonoType::canonical_name()`（`from_builtin_name` 的严格逆向，宽度显式）+ 结构回写 | C3 + `cargo build` 全绿（穷尽 match 强制补全所有臂）+ 泛型替换定向对拍（6.4 末行）——**实测全绿**（实录见 [09a](./09a-wbs-history.md) §P6 6.3） | 单独 commit，可 revert |
 | **4. parser 数据流** | 新增 `probe.rs`；改 `parser_state.rs:46-58`；改 `declarations.rs:498-511` 与 `ast.rs:930`（#48）；`types.rs:162-165` 定 `NameKind`；合并两份 `name_used_as_type*`（#49） | C3 + **新增断言**：`grep 'typecheck' src/frontend/core/parser/` 应为 0 | 单独 commit，可 revert |
 | **5. AST 死变体与专用字段** | 删 `Expr::FnDef`（16 处）+ `Assign.signature_params`；`NamedParen` 语义迁移 | C3 + `tests/integration/` 18 模块全绿 | 分两个 commit（FnDef / signature_params） |
 | **6. 门禁转硬** | T1 从 warning 改为 `panic!`；T4 降级为 CI 断言 | `cargo build` 在故意引入一个零构造变体时**必须失败**（红测试先行） | 单独 commit |
 
-**依赖顺序**：0 → 1 → 2 → 3 → 4 → 5 → 6。**阶段 3 与 5 必须在阶段 2 之后**——阶段 2 落地前，字节码侧的反向桥 A（`bytecode.rs` 的 `From<MonoType> for IrType`）消费 `IrType::String` / `IrType::Bytes`，先删变体会破坏编译；该桥已于 6.2.2 删除，**阶段 3 删变体时的剩余改写面是反向桥 B**（`middle/passes/mono/function.rs` 的 `mono_to_ast_type`，仍按名字反解 `String` / `Bytes`）与 `middle/core/ir.rs` 的三处 `ast::Type` 载体。阶段 3 的 #47 必须与 #1 同批，否则 `mono_to_ast_type` 静默改行为。
+**依赖顺序**：0 → 1 → 2 → 3 → 4 → 5 → 6。**阶段 3 与 5 必须在阶段 2 之后**——阶段 2 落地前，字节码侧的反向桥 A（`bytecode.rs` 的 `From<MonoType> for IrType`）消费 `IrType::String` / `IrType::Bytes`，先删变体会破坏编译；该桥已于 6.2.2 删除，**阶段 3 删变体时的剩余改写面是反向桥 B**（`middle/passes/mono/function.rs` 的 `mono_to_ast_type`，仍按名字反解 `String` / `Bytes`）与 `middle/core/ir.rs` 的三处 `ast::Type` 载体。阶段 3 的 #47 必须与 #1 同批，否则 `mono_to_ast_type` 静默改行为。**阶段 3 已于 2026-10-29 完成（WBS 6.3）**：反向桥 B 已改用 `canonical_name` + 结构回写；`middle/core/ir.rs` 的三处 `ast::Type` 载体**未改**——6.3 只删变体、不改 IR 形状（IR 快照 216 条与语料基线 356 行零漂移），载体处置留阶段 4。
 
 **对下游的依赖**：本文全部阶段完成后，[04-ssa.md](04-ssa.md) 方可开工。此时 `BytecodeFunction.params`、`FunctionCode.params`、`type_table` 三者元素类型一致，SSA 的类型标注有唯一落点。
 
@@ -729,7 +731,7 @@ declarations.rs:498-511 与 ast.rs:930 改为
 | 0 | `cargo run --manifest-path tools/type-tables/Cargo.toml -- --report`，人工核对 T1 报告（**含反向桥重建点分列**） |
 | 1-5 | `cargo test`；`tests/yaoxiang/` 全量语料差分（07 第三层）；C3 判据逐条比对 |
 | 2 | 额外：6.2 表格中每个变体各构造一个 `.yx` 样本，改动前后 `dump_bytecode` 对拍 |
-| 3 | 额外：含泛型替换的语料，比对改动前后单态化产物的 `type_name()` |
+| 3 | 额外：含泛型替换的语料，比对改动前后单态化产物的 `type_name()`——**口径已更正（阶段 3 实测）**：`type_name()` 是诊断展示用的小写内部名，不足以判等；改判**规范名往返**（`from_builtin_name` ↔ `MonoType::canonical_name()` 逐名互逆）+ 回写产物的结构比对 |
 | 4 | 额外：`rg 'typecheck' src/frontend/core/parser/` 返回 0 |
 | 6 | 额外：故意写一个零构造变体，确认 `cargo build` 失败（红→绿） |
 
