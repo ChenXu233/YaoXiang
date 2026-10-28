@@ -356,8 +356,8 @@ P10 其余清理与状态修正             06 §S2/S3/S4/S5/S6
 
 来源：[03](03-type-unification.md) §实施要点 阶段 0–6，判据 C3。**阶段 0→6 严格串行。**
 
-- [x] **6.0 门禁先行**（2 个三级任务；**2026-10-27 完成**——6.0.1 新建 `tools/type-tables`（T1/T2/T3，T1 先只报告不失败）；6.0.2 在业务代码零改动上取全量基线并人工核对。**实测**：构造点 74 = 前向 25 + AST→AST 28 + 反向桥 21（反向桥 A 9 变体/12 点、反向桥 B 8 变体/9 点）；**前向零构造 13**、**全局零构造 1**（仅 `Enum`）；03 §2.2 名单内的 AST→AST 重建 = **5 变体/10 点**（`Union`/`Option`/`Result`/`Sum`/`AssocType` 各 2）——即 6.3 的实际改写面。
-- [x] **6.1 名称规范化**（3 个三级任务，**2026-10-28 收口登记**——6.1.1 语料非规范名重测：真实类型位 **0 处**；6.1.2 内置类型名定稿 **15 名** + 删 **22** 个实现内拼写（`DateTime` 只留大写临时兼容别名，迁出归 P10 S11 / issue #513）；6.1.3 逐行核实 `classify_generic_params` 消费的是 `signature_params`、**与 `extract_generic_param_names` 不等价**；判据 C3，语料 356/356 零漂移、IR 快照零漂移；证据与过程注记见 09a「P6 6.1 名称规范化收口」）
+- [x] **6.0 门禁先行**（2 个三级任务，2026-10-27 完成；实录见 [09a](./09a-wbs-history.md) §P6 6.0）
+- [x] **6.1 名称规范化**（3 个三级任务，2026-10-28 收口；内置名定稿 15 名、删 22 拼写，DateTime 迁出归 P10 S11；实录见 [09a](./09a-wbs-history.md) §P6 6.1）
 - [ ] **6.2 字节码类型统一**（3 个三级任务）
 - [ ] **6.3 死变体删除**（2 个三级任务）
 - [ ] **6.4 parser 数据流**（5 个三级任务）
@@ -368,11 +368,11 @@ P10 其余清理与状态修正             06 §S2/S3/S4/S5/S6
 
 | 二级 | 三级 | 文件:行 | 验收 |
 | --- | --- | --- | --- |
-| 6.0 门禁先行 | 6.0.1 新建 `tools/type-tables`，实现 T1/T2/T3，**T1 先只报告不失败** | `tools/type-tables/` | T1 准确列出 13 个前向零构造变体 **+ 反向桥重建点分列**（**2026-10-27 完成**——T1 三类分列：前向 25 + AST→AST 28 + 反向桥 21 = **构造点 74**；**前向零构造 13**、**全局零构造 1**（仅 `Enum`）；反向桥 A（`From<MonoType> for IrType`）9 变体/12 点、反向桥 B（`mono_to_ast_type`）8 变体/9 点；AST→AST 15 变体/28 点，其中 03 名单内 **5 变体/10 点**） |
-| | 6.0.2 在未改动代码上取全量基线 | — | 无代码改动（**2026-10-27 完成**——业务代码零改动（`git diff --stat -- src tests docs src/std` 为空）上取 T1/T2/T3 全量基线并逐条人工核对：T1 的 26 变体逐行与 6.0 勘察基线一致 26/26；T2 三表 13 臂（38 写法/25 别名）/15 项/15 项，差异 14 条全部登记处置；T3 差异 14 条全部登记处置，未登记 0） |
-| 6.1 名称规范化 | 6.1.1 统计语料非规范类型名出现次数 | `tests/yaoxiang/` | 决定能否直接删同义词（**2026-10-28 收口重测**——语料范围 = `tests/yaoxiang` 316 个 `.yx` + `tests/yaoxiang-multifile` 39 个 + `src/std` 38 个 = **393 个**；重测命令 ① `grep -rEn --include=*.yx -w 'int\|int64\|i64\|datetime\|int32\|i32\|int16\|i16\|int8\|i8\|float\|float64\|f64\|float32\|f32\|bool\|char\|string\|str\|bytes\|void\|never' tests/yaoxiang tests/yaoxiang-multifile src/std \| wc -l` 命中 **308 行**；类型位候选命令 ② `grep -rEn --include=*.yx '(:\|->\|<)[[:space:]]*(int\|int64\|i64\|datetime\|int32\|i32\|int16\|i16\|int8\|i8\|float\|float64\|f64\|float32\|f32\|bool\|char\|string\|str\|bytes\|void\|never)([^A-Za-z0-9_]\|$)' tests/yaoxiang tests/yaoxiang-multifile src/std` 只命中 **2 行**且逐行看**全在 `//` 注释内**（`tests/yaoxiang/06-compile-errors/runtime/int_overflow.yx:5` 的 `i64::MAX`、`tests/yaoxiang/99-demos/compare_rust_side_by_side.yx:17` 的 `-> f64`）⇒ **真实类型位 0 处**；308 行的其余命中逐条裁决 = 字符串字面量 / 注释 / `std.string` 模块名与命名空间访问 / `Json` 变体名 / `void` 字面量，**无一处是类型标注** ⇒ **无需再生基线**；2026-10-27 旧记「原始词命中 16 处 = 字符串 12 + 注释 4」是**窄口径**（只数整数/浮点族 14 个拼写、不计 `src/std` 的命名空间用法），本次按定稿的 22 个拼写全量重测，结论一致） |
-| | 6.1.2 `from_builtin_name` 砍同义词 → lexer 别名表 | `MonoType::from_builtin_name`（`src/frontend/core/types/mono.rs`，改造前实测 **13 臂 / 25 个别名拼写**；改造后 **15 臂 / 16 个写法 / 1 个别名**，`:863-886`） | C3；**2026-10-27 用户定稿、2026-10-28 收口登记**——内置类型名定稿 **15 个**（`Never` / `Void` / `()` / `Bool` / `Int` / `Int8` / `Int16` / `Int32` / `Int64` / `Float` / `Float32` / `Float64` / `Char` / `String` / `Bytes`），删除 **22 个**实现内拼写（`int` / `int64` / `i64` / `datetime` / `int32` / `i32` / `int16` / `i16` / `int8` / `i8` / `float` / `float64` / `f64` / `float32` / `f32` / `bool` / `char` / `string` / `str` / `bytes` / `void` / `never`），**不设 lexer 别名表**；`DateTime` **不属内置名**，因 6.1–6.7 的 `src/std` 零差异硬验收不允许同批迁出，6.1.2 只留**大写 `DateTime` 的临时兼容别名**（小写 `datetime` 随 22 拼写同批删除），SPEC 内置表不写它、注「待迁出」，**迁出由 P10 S11 负责**（issue [#513](https://github.com/ChenXu233/YaoXiang/issues/513)）；同批清理第二份别名表 `add_builtin_types` 的 7 个小写登记、LSP 清单的 `Uint` / `Int128`、`sizeof` 的 `Uint` 臂，SPEC §2.1 改为自包含权威表（删「完整表见 `from_builtin_name`」委托句）；判据 C3 语料 356/356 零漂移、IR 快照零漂移，独立验证与对抗性复审两轮均 PASS |
-| | 6.1.3 核实 `classify_generic_params` 消费哪个参数列表 | `classify_generic_params`（`src/frontend/core/parser/ast.rs:1009`）+ parser 的类型回退构造点（`src/frontend/core/parser/statements/types.rs`） | **必须逐行核实，不能假定等价**（**2026-10-28 逐行核实完成**——`classify_generic_params` 消费的是 `signature_params`：`StmtKind::Assign::signature_params`（`src/frontend/core/parser/ast.rs:263`）与 `StmtKind::TypeDefinition::signature_params`（同文件 `:283`）两个字段；消费点 `src/frontend/core/typecheck/inference/statements.rs:1799`、`src/frontend/core/typecheck/checker.rs:1520` 与 `:2866`、`src/driver/helpers.rs:1160`。**不是** `extract_generic_param_names`（同文件 `:932`）的产物（后者消费点 `src/middle/core/ir_gen.rs:1919` / `:2052` / `:3684`、`src/frontend/core/typecheck/checker/semantic_tokens.rs:472` / `:706`）⇒ **二者不等价**，四条可证差异：① trait 约束来源不同——`extract` 只认 `operator_interfaces::spec(name)`（`ast.rs:971`，静态封闭集合），`classify` 走 `is_trait` 回调（`ast.rs:1038`；调用点传入「trait 表有该名」**或**「内建算子接口有该名」，`inference/statements.rs:1800-1801`）⇒ `classify` 覆盖面更大；② `CONST_PARAM_TYPES` 判定不同——`extract` 另需「同一签名内被当类型引用」的启发式（`ast.rs:953-965`）才认，`classify` 直接判为 `Const`（`ast.rs:1029-1037`）；③ 元组多约束不同——`extract` 对 `Type::Tuple` 恒不认（`ast.rs:995`），`classify` 在「全部元素是 trait」时认作多约束 Type 参数（`ast.rs:1056-1069`）；④ 返回类型不同（`Vec<GenericParamName>` 无 kind vs `Vec<GenericParam>` 带 `GenericParamKind::Type` / `Const`）） |
+| 6.0 门禁先行 | 6.0.1 新建 `tools/type-tables`，实现 T1/T2/T3，**T1 先只报告不失败** | `tools/type-tables/` | T1 准确列出前向零构造变体 + 反向桥重建点分列（已完成，实录见 09a §P6 6.0） |
+| | 6.0.2 在未改动代码上取全量基线 | — | 无代码改动（已完成，实录见 09a §P6 6.0） |
+| 6.1 名称规范化 | 6.1.1 统计语料非规范类型名出现次数 | `tests/yaoxiang/` | 决定能否直接删同义词（已完成，实录见 09a §P6 6.1） |
+| | 6.1.2 内置类型名定稿：15 名 + 删 22 个实现内拼写 | `MonoType::from_builtin_name`（`src/frontend/core/types/mono.rs`） | C3（已完成，实录见 09a §P6 6.1） |
+| | 6.1.3 核实 `classify_generic_params` 消费的参数列表 | `src/frontend/core/parser/ast.rs`（`classify_generic_params`） | 必须逐行核实，不能假定等价（已完成，实录见 09a §P6 6.1） |
 | 6.2 字节码类型统一 | 6.2.1 三处改 `MonoType` | `BytecodeFunction::params`（`src/middle/core/bytecode.rs:812`）、`BytecodeFunction::return_type`（同文件 :814）、`BytecodeModule::type_table`（同文件 :854）、`Image::type_table`（`src/backends/interpreter/image.rs:44`） | C3 + `dump_bytecode` 定向对拍 |
 | | 6.2.2 删 `From<MonoType> for IrType` | `impl From<MonoType> for IrType`（`src/middle/core/bytecode.rs`，实测 2353-2390） | 同上 |
 | | 6.2.3 `type_table` 元素类型改 `MonoType` | `Image::type_table`（`src/backends/interpreter/image.rs:44`） | 同上 |
@@ -502,7 +502,7 @@ P10 其余清理与状态修正             06 §S2/S3/S4/S5/S6
 - [ ] **S8 文档更正形式收敛（就地改写，删修订注记）——2026-10-18 登记**（1 个三级任务；**归属阶段：P10；是否阻塞主线：否**）
 - [ ] **S9 发版前审计的抽象化收口**（2 个三级任务，2026-10-18 登记；**归属阶段：P10；是否阻塞主线：否**）
 - [ ] **S10 02 正文与事实对齐（行号锚 + 内容级过期）——2026-10-21 登记**（1 个三级任务；**归属阶段：P10；是否阻塞主线：否**）
-- [ ] **S11 DateTime 迁出内置类型名并落到 std.time**（1 个三级任务，issue [#513](https://github.com/ChenXu233/YaoXiang/issues/513)；2026-10-27 登记；**归属阶段：P10；是否阻塞主线：否**——6.1 定稿把 `DateTime` 排除出内置类型名（15 名清单），但 6.1–6.7 的 `src/std` 零差异硬验收不允许同批改 std，故 6.1.2 暂留临时兼容别名（仅大写），本任务负责迁出）
+- [ ] **S11 DateTime 迁出内置类型名并落到 std.time**（1 个三级任务，issue [#513](https://github.com/ChenXu233/YaoXiang/issues/513)；2026-10-27 登记；**归属阶段：P10；是否阻塞主线：否**）
 
 | 二级 | 三级 | 验收 |
 | --- | --- | --- |
@@ -517,7 +517,7 @@ P10 其余清理与状态修正             06 §S2/S3/S4/S5/S6
 | S9 发版前审计的抽象化收口（**2026-10-18 登记**；**归属阶段：P10；是否阻塞主线：否**） | S9.1 `typecheck/inference/statements.rs` 的上下文灌注块两份（`infer_statement` 两条分支各抄一份，字段顺序已漂移）；本次把新 setter 同时写进两块 ⇒ **本次新增 2 份**。抽共有 setter ≈ **−14 行** | issue [#473](https://github.com/ChenXu233/YaoXiang/issues/473) |
 | | S9.2 `MonoType` 全变体遍历两份手写副本（`frontend/core/types/mono.rs` 的 `type_name` 177 行 / `middle/passes/mono/instance.rs` 的 `type_name_hash` 157 行，均为本次新写）；加一个变体实测要动 **6 个文件**。**不建议合并这两个函数**（渲染 vs 哈希语义不同），只抽「子节点枚举」一份 | issue [#474](https://github.com/ChenXu233/YaoXiang/issues/474) |
 | S10 02 正文与事实对齐（行号锚 + 内容级过期）（**2026-10-21 登记**；**归属阶段：P10；是否阻塞主线：否**） | S10.1 把 `02-stage-contract.md` 的 7 组既有漂移就地改正：行号锚按现树重取，内容级过期改写为终态事实。**scope（7 组清单，原样落账于 [09a](./09a-wbs-history.md) §P4 4.4 收口「十二」）**：① §(a) 入口表 3a-3d / 5 / 5b；② `02:1016`；③ `02:360-361`（Z3 wasm 构件获取，#435）；④ `02:127` 机制指针；⑤ `02:128`；⑥ `02:334`；⑦ 改动清单表其余行。口径 = 均为 **pre-existing 漂移**（非 4.4 引入），映射由 t11 在 `657c3d5e3`（= 推送后 `e184d88b6`）上独立抽验；**本条的登记号由原拟的 S9 顺延为 S10**（S9 已由「发版前审计的抽象化收口」占用，编号须全文档唯一） | 7 组逐条改正后 `python scripts/ci/check-docs-truth.py` 通过；每处行号锚按现树重取（`git show <rev>:<file>` 复核）；改正后 `09` 顶部计数表与看板行数按 09a §十五 的自洽口径对账 |
-| S11 DateTime 迁出内置类型名（**2026-10-27 登记**；**归属阶段：P10；是否阻塞主线：否**） | S11.1 改 `src/std/interfaces/time.yx`（2 处签名）+ `src/std/time.rs`（2 条原生导出串）+ `docs/src/reference/stdlib/time.md` + `tests/yaoxiang/03-semantics/time_semantics.yx` 注释；删 `from_builtin_name` 的 `DateTime` 分支；定最终形态（std 类型别名 or 直接用 `Int`）；再生语料/IR 快照基线；T2 清单与负向测试更新；验收 = `grep -rn DateTime src/std` 归零 + 旧写法明确未知类型诊断 + std 编译/测试通过 | issue [#513](https://github.com/ChenXu233/YaoXiang/issues/513) |
+| S11 DateTime 迁出内置类型名（**2026-10-27 登记**；**归属阶段：P10；是否阻塞主线：否**） | S11.1 改 `src/std/interfaces/time.yx` 与 `src/std/time.rs` 的 4 处签名、`time.md` 与语料注释，删 `from_builtin_name` 的 DateTime，再生基线；验收 = `grep -rn DateTime src/std` 归零 + 旧写法明确诊断 | issue [#513](https://github.com/ChenXu233/YaoXiang/issues/513) |
 
 ## 实施要点：依赖与并行
 
