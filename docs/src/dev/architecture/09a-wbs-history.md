@@ -1398,3 +1398,37 @@
 > **登记**：P10 S11（二级 +1、三级 +1 = S11.1），出处 issue [#513](https://github.com/ChenXu233/YaoXiang/issues/513)。**删除保证**：issue #513 是唯一出处；S11.1 未完成前不得关闭。验收 = `grep -rn DateTime src/std` 归零 + 旧写法明确未知类型诊断 + std 编译/测试通过 + 语料/快照按新签名再生并人工 review。
 
 > **计数**：09 顶部二级 71 → 72、三级 192 → 193（本条登记即两处 +1）。
+
+## P6 6.1 名称规范化收口（6.1.1 / 6.1.2 / 6.1.3，2026-10-28）
+
+> **触发**：P6 6.0（门禁先行）收口后，6.1 的三个三级任务待收口——6.1.1 统计语料里的非规范类型名（决定能否**直接删同义词**、是否需要再生基线）、6.1.2 收敛 `MonoType::from_builtin_name` 的同义词表、6.1.3 核实 `classify_generic_params` 消费的是哪个参数列表（**必须逐行核实，不能假定等价**）。6.1.2 的名字清单属「登记/不登记 + 破坏性变更」决策点，须用户拍板，故本批先取定稿再动实现。
+
+> **定稿（用户 2026-10-27）**：内置类型名 **15 个**——`Never` / `Void` / `()` / `Bool` / `Int` / `Int8` / `Int16` / `Int32` / `Int64` / `Float` / `Float32` / `Float64` / `Char` / `String` / `Bytes`；删除 **22 个**实现内拼写——`int` / `int64` / `i64` / `datetime` / `int32` / `i32` / `int16` / `i16` / `int8` / `i8` / `float` / `float64` / `f64` / `float32` / `f32` / `bool` / `char` / `string` / `str` / `bytes` / `void` / `never`；**不设 lexer 别名表**（语料实测真实类型位 0 处，见 6.1.1）。`DateTime` **不属内置名**：它是 `std.time` 的语义别名（运行时就是 `RuntimeValue::Int`，#338 连带修复），最终由标准库提供；但 6.1–6.7 的 `src/std` 零差异硬验收不允许同批迁出（`src/std/interfaces/time.yx` 与 `src/std/time.rs` 的签名串仍写 `DateTime`），故 6.1.2 只留**大写 `DateTime` 的临时兼容别名**（小写 `datetime` 随 22 拼写同批删除），SPEC 内置表不写它并注「待迁出」。**迁出由 P10 S11 负责**（issue [#513](https://github.com/ChenXu233/YaoXiang/issues/513)）。
+
+> **轮次**：本批 = 6.1 的三个三级任务（6.1.1 语料统计 / 6.1.2 同义词表收敛 / 6.1.3 参数列表核实），共 5 个工作单元：6.1.1 统计与口径复核 → 6.1.2 实现（定稿 15 名 + 删 22 拼写 + 删第二份别名表 + SPEC §2.1 自包含）→ 独立验证 → 对抗性复审 → 本收口登记。
+
+> **判据**：C3（诊断码 / 消息 / 顺序不变）。实际落到三条可机械复核的判据：① **接受面**——15 个内置名在类型位置一律接受，22 个实现内拼写一律报未知类型（不得 panic、不得静默放行）；② **零漂移**——语料差分与 IR 快照相对基线**零差异**；③ **文档自包含**——SPEC §2.1（`docs/src/reference/language-spec/type-system.md`）本节即权威表，不再把名字清单委托给实现文件。
+
+> **门禁数字（实测）**：① **接受面**——15 名全接受（`Never` / `Void` / `Bool` / `Int` / `Int64` / `Float` / `Float64` / `Char` / `String` 走变量注解形态 rc=0；`Int8` / `Int16` / `Int32` / `Float32` / `Float64` / `Bytes` 走参数注解形态 rc=0，绕开字面量宽度收敛；`()` 走 `mut u: () = {}` rc=0；`DateTime` 临时别名 rc=0）；22 个拼写全拒：21 个报 `E1003 Unknown type: '<名>'`，`void` 在**词法层**被拒（`E0010 expected a type, found VoidLiteral`——`void` 是 `Void` 的字面量关键字，不是类型名）；负控 `Uint` / `Int128` / `Point` 均 `E1003`（与 SPEC §2.1 的无符号注记一致）。② **语料差分 356/356、差异为空**（基线 `tests/baselines/corpus-parity.jsonl` 356 行）；IR 快照 `test_ir_snapshots_stable` 1 passed / 0 failed；`cargo test --lib` 2863 passed / 0 failed。③ **T2 报告** `tools/type-tables --report` RC 0——T2.1 权威清单 = **15 臂 / 16 写法**（`DateTime` 别名臂在 `src/frontend/core/types/mono.rs:883`）、T2.3 差异 11 条**全部已登记**（C1 大写缩写留 6.2、C2 `DateTime` 留 P10 S11）、**T2.5「已删除拼写哨兵」= 检查 22 条 / 被重新接受 0 条**；`tools/type-tables` 单测 16 passed / 0 failed（含「22 名口径自校验」与「哨兵能红」两个用例）。④ **6.1.1 语料重测**（命令见下）= 393 个 `.yx`（`tests/yaoxiang` 316 + `tests/yaoxiang-multifile` 39 + `src/std` 38）里 22 个拼写命中 **308 行**，**真实类型位 0 处**。⑤ **硬验收**——`git diff --stat tests/yaoxiang tests/baselines src/std/` 为空；`tests/` 侧仅 `tests/formatter_integration.rs` 改了 **3 行**（2 处 `assert_format_eq` 的 `i64`→`Int64` + 1 行注释），属**机械要求**（被改的拼写要求期望类型名同步），未删测试、未放宽断言。
+
+> **6.1.1 重测命令（可复跑）**：
+
+```bash
+# ① 22 个定稿拼写在语料中的全部命中行（308 行）
+grep -rEn --include=*.yx -w 'int|int64|i64|datetime|int32|i32|int16|i16|int8|i8|float|float64|f64|float32|f32|bool|char|string|str|bytes|void|never' tests/yaoxiang tests/yaoxiang-multifile src/std | wc -l
+
+# ② 类型位候选（只有 2 行，且逐行看全在 // 注释内 ⇒ 代码里的真实类型位 0 处）
+grep -rEn --include=*.yx '(:|->|<)[[:space:]]*(int|int64|i64|datetime|int32|i32|int16|i16|int8|i8|float|float64|f64|float32|f32|bool|char|string|str|bytes|void|never)([^A-Za-z0-9_]|$)' tests/yaoxiang tests/yaoxiang-multifile src/std
+```
+
+> **6.1.1 逐条裁决（308 行）**：字符串字面量 + 注释 + `std.string` 模块名 / 命名空间访问（`use std.string`、`string.chars(...)`）+ `src/std/interfaces/convert.yx` 里 `int.to_string` / `float.to_string` / `bool.to_string` / `char.to_string` 的**命名空间限定方法名前缀** + `Json` 的变体名与变体构造（`bool` / `str`）+ `void` **字面量**（`Result(Void, String).ok(void)`）——**无一处是类型标注**。另：仓库里余下的 4 个 `benches/shootout/src/**/*.yx` 同扫，命中只有注释与模块名，类型位同为 0 处。**2026-10-27 旧记的「原始词命中 16 处 = 字符串 12 + 注释 4」是窄口径**（只数整数/浮点族 14 个拼写、不计 `src/std` 的命名空间用法），本次按定稿的 22 个拼写全量重测，**结论一致**（真实类型位 0 处 ⇒ 无需再生基线）。
+
+> **6.1.3 逐行核实结论**：`classify_generic_params`（`src/frontend/core/parser/ast.rs:1009`）消费的是 **`signature_params`**——`StmtKind::Assign::signature_params`（同文件 `:263`）与 `StmtKind::TypeDefinition::signature_params`（同文件 `:283`）两个字段；消费点 `src/frontend/core/typecheck/inference/statements.rs:1799`、`src/frontend/core/typecheck/checker.rs:1520` 与 `:2866`、`src/driver/helpers.rs:1160`。**不是** `extract_generic_param_names`（同文件 `:932`）的产物（后者消费点 `src/middle/core/ir_gen.rs:1919` / `:2052` / `:3684`、`src/frontend/core/typecheck/checker/semantic_tokens.rs:472` / `:706`）。**二者不等价**，四条可证差异：① trait 约束来源不同——`extract` 只认 `operator_interfaces::spec(name)`（`ast.rs:971`，静态封闭集合），`classify` 走 `is_trait` 回调（`ast.rs:1038`；调用点传入「trait 表有该名」**或**「内建算子接口有该名」，`inference/statements.rs:1800-1801`）⇒ `classify` 覆盖面更大；② `CONST_PARAM_TYPES` 判定不同——`extract` 另需「同一签名内被当类型引用」的启发式（`ast.rs:953-965`）才认，`classify` 直接判为 `Const`（`ast.rs:1029-1037`）；③ 元组多约束不同——`extract` 对 `Type::Tuple` 恒不认（`ast.rs:995`），`classify` 在「全部元素是 trait」时认作多约束 Type 参数（`ast.rs:1056-1069`）；④ 返回类型不同（`Vec<GenericParamName>` 无 kind vs `Vec<GenericParam>` 带 `GenericParamKind::Type` / `Const`）。
+
+> **硬验收口径修订（用户 2026-10-27，承 2026-10-26 裁决②）**：P6 的零差异硬验收口径由 `git diff --stat tests/ src/std/` 修订为 **`git diff --stat tests/yaoxiang tests/baselines src/std/` 必须为空**，并**新准**：`tests/` 下的**直驱测试文件**（驱动被改代码的测试，如 `tests/formatter_integration.rs`）在**改动机械要求**时可修改，须逐项登记 **file / 行数 / 理由**，且**不得删测试、不得放宽断言**。**修订关系**：2026-10-26 裁决② 定的原口径把整个 `tests/` 一刀切为零差异，与「直驱测试文件须随被改拼写同步更新」的现实冲突；本修订**只放宽直驱测试文件一档**，**语料层（`tests/yaoxiang`）、基线层（`tests/baselines`）与标准库（`src/std/`）的零差异要求不变**，6.8.2 行为修复批单列一轮并单独裁决的例外也**维持不变**。三处同步登记：09 的 P6 硬验收条、03 §6.4 硬性验收条件、本实录。首次适用 = 6.1.2（`tests/formatter_integration.rs` 3 行，见门禁数字⑤）。
+
+> **过程注记（三条，验证与复审轮实测）**：① **`scratch.py trial` 内的 bash 探针落到了 WSL**——trial 走 `git apply` 加命令执行，命令里的 bash 探针被 WSL 接管并以 **exit 127** 结束，判据**根本没触发**，首轮据此得出的「绿」是假绿；改用 **python 探针**后两门禁才真实转红。② **trial 之后必须先 `scratch.py build` 再量测**——`trial` 的机械还原只覆盖源码文件，变异版测试跑测已把批次树二进制重编，不重建则后续量测全部出自变异产物（AGENTS.md 第 9 条的固化条款）。③ **首轮 trial 未在补丁后重建**得出假绿（PASS），识别为方法错误后补「先 build 再探针」的脚本重做，两条负控才**真实转红**：负控 1 = 把 `int` 臂加回 → 该拼写重新被接受（rc=0）；负控 2 = 删掉 `Int` 臂 → `Int` 报 `E1003 Unknown type: 'Int'`。两次均 `git apply -R` 还原、还原后 blob 与 HEAD 逐字一致、`git status` CLEAN。
+
+> **遗留（转入下一轮契约输入，不在本批处理）**：① **`DateTime` 迁出**（P10 S11，issue [#513](https://github.com/ChenXu233/YaoXiang/issues/513)）——6.1.2 的临时兼容别名臂（`src/frontend/core/types/mono.rs:883`）在 S11.1 完成前不得删除；S11.1 的验收 = `grep -rn DateTime src/std` 归零 + 旧写法明确未知类型诊断 + std 编译/测试通过 + 语料/快照按新签名再生并人工 review。② **诊断文案的内部显示名**（复审轮的非阻断观察）——`E1002` / `E1012` 的文案里仍出现 `int8` / `int64` 这类**内部显示名**（`MonoType` 显示名呈现层的既有事实，`operator_type_display` 只覆盖部分路径），不在 6.1.2 的判据与改动面内，留 **6.2 及之后的名称统一轮**考虑。③ **「类型名解析须单源」的约束仍在**——`NameKind`（03 §5.3）与两份 `name_used_as_type*` 的合并属 6.4 / 6.5，本批不动；6.1.2 只删掉了 `add_builtin_types` 里那份**小写别名副本**。④ **门禁登记随 6.3 / 6.6 同步**——6.0 收口实录的遗留①（T1 的 `Void` 兜底豁免登记须随 6.3 删变体清账，否则门禁报 stale）与遗留②（T3 的比对对象待 6.6 裁决）**仍在**，本批不动；6.1.2 新增的 T2.5「已删除拼写哨兵」在 6.1–6.7 各轮持续生效。
+
+> **计数**：本批不新增二级/三级任务 ⇒ 09 顶部计数表不变（二级 **72** / 三级 **193**）。6.1 的 3 个三级任务为既有登记，勾选不改变计数；P10 S11 已在前一笔（2026-10-27）登记。

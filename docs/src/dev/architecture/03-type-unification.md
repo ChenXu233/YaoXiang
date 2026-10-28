@@ -458,6 +458,8 @@ enum NameKind {
 **`CONST_PARAM_TYPES` 的归属**：`CONST_PARAM_TYPES`（`src/frontend/core/parser/ast.rs`，实测 855-858）的 const 泛型参数名表与 `from_builtin_name` 的全集部分重叠（见 2.3）。`NameKind::Builtin` 引入后，`extract_generic_param_names`（同文件，实测 932）的判定可改为"`kind == Builtin` 且该名字在 const 参数可接受集合内"，把两份知识显式接上；const 参数的子集定义随 T2 门禁校验（见 5.7）。
 
 > **设计判断**：`.yx` 语料中若存在写 `i64` / `int` 的类型标注，把它们规范化到 `Int` 会改变这些文件的**诊断位置**（不改变诊断码）。按 C3 判据这是允许的（消息与顺序可规范化），但需在阶段 1 记录基线。**实测（P6 6.0，2026-10-27）**：`tests/yaoxiang`（316 个 `.yx`）+ `tests/yaoxiang-multifile` + `src/std` 全量扫描——非规范名在**真实类型位 0 处**；原始词命中 16 处经逐条裁决 = 字符串 12 + 注释 4（`i64` / `f64` 两处都在注释里）。故 6.1 的名称规范化**不改变任何语料的诊断位置**，**无需再生基线**。
+>
+> **重测（P6 6.1 收口，2026-10-28）**：6.1.1 按定稿的 **22 个**拼写重扫——2026-10-27 那一记是**窄口径**（只数整数/浮点族 14 个拼写、不计 `src/std` 的命名空间用法，故记「原始词命中 16 处 = 字符串 12 + 注释 4」）。重测范围 = `tests/yaoxiang` 316 个 `.yx` + `tests/yaoxiang-multifile` 39 个 + `src/std` 38 个 = **393 个**，命中 **308 行**；**类型位候选只 2 行且全在 `//` 注释内**（`tests/yaoxiang/06-compile-errors/runtime/int_overflow.yx:5` 的 `i64::MAX`、`tests/yaoxiang/99-demos/compare_rust_side_by_side.yx:17` 的 `-> f64`）⇒ **真实类型位仍为 0 处**；其余命中逐条裁决为字符串字面量 / 注释 / `std.string` 模块名与命名空间访问 / `Json` 变体名 / `void` 字面量，**无一处是类型标注**。重测命令见 [09](09-execution-wbs.md) 的 6.1.1 行与 09a「P6 6.1 名称规范化收口」。结论与 6.0 一致：6.1 的名称规范化**不改变任何语料的诊断位置**，**无需再生基线**。
 
 ### 5.4 谓词/类型名的数据流
 
@@ -694,7 +696,7 @@ declarations.rs:498-511 与 ast.rs:930 改为
 | `mono_to_ast_type` 改写后类型替换结果变化 | `function.rs:507-529` 是单态化类型替换的出口（`substitute_type_in_ast:532-537` 把替换后的 `MonoType` 转回 `AstType`）。删变体后若走 `_` 臂，替换结果从 `AstType::Int(64)` 变为 `AstType::Name { name: "i64" }` 一类 | 阶段 3 定向对拍：选含泛型替换的语料，比对改动前后单态化产物的 `type_name()`。**不得假定 `{:?}` 输出等价** |
 | `.yx` 源码本身 | **零修改** | 本文不要求改任何语料或 std 源文件。这条是硬验收项 |
 
-**硬性验收条件**：`git diff --stat tests/ src/std/` 必须为空（除多文件语料层与测试基线文件的新增）。
+**硬性验收条件**（**2026-10-27 口径修订，承 2026-10-26 裁决②**）：`git diff --stat tests/yaoxiang tests/baselines src/std/` 必须为空。`tests/` 下的**直驱测试文件**在**改动机械要求**时可修改，须逐项登记 **file / 行数 / 理由**，且**不得删测试、不得放宽断言**。原口径（`git diff --stat tests/ src/std/`）把整个 `tests/` 一刀切为零差异，本修订**只放宽直驱测试文件一档**，语料层（`tests/yaoxiang`）、基线层（`tests/baselines`）与标准库（`src/std/`）的零差异要求不变。**例外**：6.8.2 行为修复批单列一轮并单独裁决。
 
 ## 实施要点
 
