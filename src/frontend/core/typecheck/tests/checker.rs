@@ -116,17 +116,17 @@ fn int_identity_fn(name: &str) -> Stmt {
 }
 
 /// 嵌套函数定义夹具：`outer: (Int32) -> Int32 = (x) => { inner(x); x }`，
-/// 其中 `inner` 为体内 `FnDef`（`(y: Int32) -> Int32 = { y }`）。
+/// 其中 `inner` 是体内的 `Lambda`（`inner: (Int32) -> Int32 = (y) => { y }`
+/// 的函数值形态）。RFC-039 6.5 删除 FnDef 变体后，函数定义只有
+/// `Assign` + `Lambda` 一种表达式形态。
 fn nested_fn_module() -> Module {
-    let inner_fn = Expr::FnDef {
-        name: "inner".to_string(),
+    let inner_fn = Expr::Lambda {
         params: vec![crate::frontend::core::parser::ast::Param {
             name: "y".to_string(),
             ty: Some(builtin_ty("Int32")),
             is_mut: false,
             span: Span::dummy(),
         }],
-        return_type: Some(builtin_ty("Int32")),
         body: Box::new(Block {
             stmts: vec![expr_stmt(var("y", Span::dummy()), Span::dummy())],
             span: Span::dummy(),
@@ -475,7 +475,7 @@ fn test_type_checker_with_multiple_function_definitions() {
 
 #[test]
 fn test_type_checker_with_nested_function_definition() {
-    // Arrange: 外层函数内部定义一个 FnDef 表达式
+    // Arrange: 外层函数内部定义一个 Lambda（函数值）表达式
     let mut checker = TypeChecker::new("test");
     let module = nested_fn_module();
 

@@ -908,18 +908,6 @@ fn collect_reads_writes(
             );
         }
 
-        // 函数定义（闭包捕获的外层变量）
-        Expr::FnDef { body, .. } => {
-            collect_from_block(
-                body,
-                reads,
-                writes,
-                resource_vars,
-                trait_table,
-                local_var_types,
-            );
-        }
-
         // lambda（闭包捕获的外层变量）
         Expr::Lambda { body, .. } => {
             collect_from_block(

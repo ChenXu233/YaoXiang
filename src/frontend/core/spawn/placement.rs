@@ -119,7 +119,6 @@ impl SpawnPlacementChecker {
                     self.check_expr(val);
                 }
             }
-            Expr::FnDef { body, .. } => self.check_block(body),
             Expr::Lambda { body, .. } => self.check_block(body),
             Expr::If {
                 condition,

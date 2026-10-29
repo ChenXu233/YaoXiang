@@ -66,7 +66,7 @@ pub struct ExpressionInferrer<'a> {
     /// 约束求解器
     solver: &'a mut TypeConstraintSolver,
     /// 循环嵌套深度（#311）：while/for 体内才允许 break/continue。
-    /// 函数体（FnDef/Lambda）边界重置——闭包体不继承外层循环上下文；
+    /// 函数体（Lambda）边界重置——闭包体不继承外层循环上下文；
     /// spawn for 体是逐元素闭包执行，不计入可 break 的循环上下文。
     loop_depth: usize,
     /// 函数边界嵌套深度（RFC-010a 规则②）：0 = 模块初始化层（Script 顶层），
@@ -3868,111 +3868,6 @@ impl<'a> ExpressionInferrer<'a> {
                     }
                 }
                 self.infer_block(block, true, None)
-            }
-
-            // 函数定义
-            crate::frontend::core::parser::ast::Expr::FnDef {
-                name,
-                params,
-                return_type,
-                body,
-                span: fn_span,
-                ..
-            } => {
-                self.scope.enter_fn();
-                let result: Result<()> = (|| {
-                    for param in params {
-                        let param_ty = self.solver.new_var();
-                        self.add_param(
-                            param.name.clone(),
-                            PolyType::mono(param_ty),
-                            param.is_mut,
-                            param.span,
-                        );
-                    }
-
-                    let ret_mono: MonoType =
-                        return_type.clone().map_or(MonoType::Void, |t| t.into());
-                    // RFC-001: Result-returning functions implicitly wrap the final value in Ok(...),
-                    // so the body type is the Ok type (not Result[T, E]).
-                    let expected_body_ty = match &ret_mono {
-                        m if m.is_result() => {
-                            let args = m.generic_args().unwrap();
-                            args[0].clone()
-                        }
-                        _ => ret_mono.clone(),
-                    };
-
-                    // Enter a new `Result` context for this function body.
-                    let saved_result_err = self.result_err.take();
-                    self.result_err = match &ret_mono {
-                        m if m.is_result() => {
-                            let args = m.generic_args().unwrap();
-                            Some(args[1].clone())
-                        }
-                        _ => None,
-                    };
-
-                    // Save and set expected return type for return statement checking
-                    let saved_expected_ret = self.expected_return_type.take();
-                    self.expected_return_type = Some(expected_body_ty.clone());
-
-                    // #311：函数体是循环上下文边界——外层循环的 break/continue 不可跨入
-                    let saved_loop_depth = self.loop_depth;
-                    self.loop_depth = 0;
-                    // 函数边界（RFC-010a 规则②）：体内 return 退出本函数（E1109 判定）
-                    let saved_fn_depth = self.fn_depth;
-                    self.fn_depth += 1;
-
-                    let body_ty_res = self.infer_block(body, true, Some(&expected_body_ty));
-
-                    // Restore outer contexts
-                    self.expected_return_type = saved_expected_ret;
-                    self.result_err = saved_result_err;
-                    self.loop_depth = saved_loop_depth;
-                    self.fn_depth = saved_fn_depth;
-
-                    let body_ty = body_ty_res?;
-
-                    // RFC-010a 规则①：块值必须与声明的返回类型一致。
-                    // 此前 unify 结果被 `let _` 吞掉，类型不符静默通过、推迟到运行时
-                    // （如 `f: () -> Int = { "s" }` 编得过）。此处上报。
-                    // `Never` 是特例：`return` 在尾位置时块类型为 `Never`，
-                    // `Never <: T` 属实（爆炸原理），不算错。
-                    if return_type.is_some()
-                        && body_ty != MonoType::Never
-                        && self.solver.unify(&body_ty, &expected_body_ty).is_err()
-                    {
-                        return Err(ErrorCodeDefinition::type_mismatch(
-                            &format!("{}", expected_body_ty),
-                            &format!("{}", body_ty),
-                        )
-                        .at(body.span)
-                        .build());
-                    }
-
-                    Ok(())
-                })();
-                self.scope.exit_fn();
-                result?;
-
-                let param_types: Vec<MonoType> =
-                    params.iter().map(|_| self.solver.new_var()).collect();
-                let return_type_box =
-                    Box::new(return_type.clone().map_or(MonoType::Void, |t| t.into()));
-
-                let fn_type = MonoType::Fn {
-                    params: param_types,
-                    return_type: return_type_box,
-                };
-                self.scope.add_var(
-                    name.clone(),
-                    PolyType::mono(fn_type.clone()),
-                    false,
-                    *fn_span,
-                );
-
-                Ok(fn_type)
             }
 
             // Lambda 表达式

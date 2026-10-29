@@ -1355,55 +1355,9 @@ impl TypeChecker {
         }
         match &stmt.kind {
             crate::frontend::core::parser::ast::StmtKind::Expr(expr) => {
-                // 处理函数定义表达式
-                if let crate::frontend::core::parser::ast::Expr::FnDef {
-                    name,
-                    params,
-                    return_type,
-                    ..
-                } = expr.as_ref()
-                {
-                    let fn_ty = MonoType::Fn {
-                        params: params
-                            .iter()
-                            .map(|p| {
-                                p.ty.as_ref()
-                                    .map(|t| MonoType::from(t.clone()))
-                                    .unwrap_or_else(|| self.env.solver().new_var())
-                            })
-                            .collect(),
-                        return_type: Box::new(
-                            return_type
-                                .as_ref()
-                                .map(|t| MonoType::from(t.clone()))
-                                .unwrap_or_else(|| self.env.solver().new_var()),
-                        ),
-                    };
-
-                    // RFC-027: 解析类型标注中的编译期谓词（#263：诊断汇入后上报）
-                    let mut refined_diags = Vec::new();
-                    let fn_ty = match fn_ty {
-                        MonoType::Fn {
-                            params,
-                            return_type,
-                        } => MonoType::Fn {
-                            params: params
-                                .into_iter()
-                                .map(|p| self.resolve_type_annotation(&p, &mut refined_diags))
-                                .collect(),
-                            return_type: Box::new(
-                                self.resolve_type_annotation(&return_type, &mut refined_diags),
-                            ),
-                        },
-                        other => other,
-                    };
-                    let fn_ty = self.resolve_terminates_base(fn_ty);
-                    self.env.errors.extend_errors(refined_diags);
-
-                    self.env.add_var(name.clone(), PolyType::mono(fn_ty));
-                }
-                // 处理 Lambda 赋值 (name = (params) => body)
-                else if let crate::frontend::core::parser::ast::Expr::BinOp {
+                // 处理叠加在表达式语句上的赋值 (name = value)；
+                // 函数定义即 value 上的 Lambda（RFC-039 6.5）
+                if let crate::frontend::core::parser::ast::Expr::BinOp {
                     op: crate::frontend::core::parser::ast::BinOp::Assign,
                     left,
                     right,

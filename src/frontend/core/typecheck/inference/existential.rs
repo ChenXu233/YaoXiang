@@ -52,7 +52,6 @@ fn expr_span(expr: &Expr) -> crate::util::span::Span {
         Expr::BinOp { span, .. }
         | Expr::UnOp { span, .. }
         | Expr::Call { span, .. }
-        | Expr::FnDef { span, .. }
         | Expr::If { span, .. }
         | Expr::Match { span, .. }
         | Expr::While { span, .. }

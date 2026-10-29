@@ -1260,7 +1260,6 @@ impl OwnershipChecker {
             Expr::BinOp { span, .. }
             | Expr::UnOp { span, .. }
             | Expr::Call { span, .. }
-            | Expr::FnDef { span, .. }
             | Expr::If { span, .. }
             | Expr::Match { span, .. }
             | Expr::While { span, .. }
@@ -2315,7 +2314,7 @@ impl OwnershipChecker {
                 self.walk_expr(expr)
             }
 
-            // FnDef / Lambda / Lit / FString 等跳过
+            // Lambda / Lit / FString 等跳过
             _ => vec![],
         };
         // RFC-039 D20：本节点归属**当前语句**——释放边界落在哪条语句上，

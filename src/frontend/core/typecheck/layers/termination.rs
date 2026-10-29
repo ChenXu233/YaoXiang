@@ -760,17 +760,6 @@ impl<'a> TerminationChecker<'a> {
                 }
                 self.check_expr(iterable, is_never);
             }
-            Expr::FnDef {
-                name: _,
-                params,
-                body,
-                return_type,
-                ..
-            } => {
-                let param_names: Vec<String> = params.iter().map(|p| p.name.clone()).collect();
-                let fn_never = is_never || is_never_return_type(return_type.as_ref());
-                self.check_fn_body(&param_names, body, fn_never);
-            }
             Expr::Call { func, args, .. } => {
                 for a in args {
                     self.check_expr(a, is_never);
@@ -2040,18 +2029,6 @@ impl<'a> TerminationChecker<'a> {
 
     // ==================== 递归终止检查 ====================
 
-    /// 检查函数体
-    fn check_fn_body(
-        &mut self,
-        _param_names: &[String],
-        body: &ast::Block,
-        is_never: bool,
-    ) {
-        for s in &body.stmts {
-            self.check_stmt(s, is_never);
-        }
-    }
-
     /// 若该绑定带显式测度，进入其函数体上下文（RFC-027a §义务生成）。
     ///
     /// 返回**进入前**的上下文，供遍历结束后恢复——函数体可嵌套（lambda 套
@@ -2308,7 +2285,7 @@ fn is_never_return_type(ty: Option<&Type>) -> bool {
     match ty {
         // `name: () -> Never` — type_annotation 是 Fn 类型，取 return_type
         Some(Type::Fn { return_type, .. }) => is_type_never(return_type.as_ref()),
-        // `fn(): Never` — FnDef.return_type 是裸返回类型
+        // 裸类型注解（如 `name: Never`）——注解本身就是返回类型
         Some(t) => is_type_never(t),
         None => false,
     }

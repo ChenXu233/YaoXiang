@@ -5004,7 +5004,6 @@ impl AstToIrGenerator {
             ast::Expr::BinOp { span, .. } => *span,
             ast::Expr::UnOp { span, .. } => *span,
             ast::Expr::Call { span, .. } => *span,
-            ast::Expr::FnDef { span, .. } => *span,
             ast::Expr::If { span, .. } => *span,
             ast::Expr::Match { span, .. } => *span,
             ast::Expr::While { span, .. } => *span,
@@ -5811,7 +5810,6 @@ impl AstToIrGenerator {
             ast::Expr::BinOp { span, .. }
             | ast::Expr::UnOp { span, .. }
             | ast::Expr::Call { span, .. }
-            | ast::Expr::FnDef { span, .. }
             | ast::Expr::If { span, .. }
             | ast::Expr::Match { span, .. }
             | ast::Expr::While { span, .. }

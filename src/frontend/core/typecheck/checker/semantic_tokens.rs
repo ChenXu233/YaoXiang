@@ -1369,51 +1369,6 @@ impl TypeChecker {
                     imported_module_roots,
                 );
             }
-            Expr::FnDef {
-                name,
-                params,
-                return_type,
-                body,
-                span,
-                ..
-            } => {
-                self.semantic_db.add_token(
-                    file_path,
-                    semantic_db::SemanticToken {
-                        name: name.clone(),
-                        token_type: semantic_db::SemanticTokenType::Function,
-                        modifiers: vec![semantic_db::SemanticTokenModifier::Declaration],
-                        span: *span,
-                    },
-                );
-                for param in params {
-                    self.semantic_db.add_token(
-                        file_path,
-                        semantic_db::SemanticToken {
-                            name: param.name.clone(),
-                            token_type: semantic_db::SemanticTokenType::Parameter,
-                            modifiers: vec![semantic_db::SemanticTokenModifier::Declaration],
-                            span: param.span,
-                        },
-                    );
-                    if let Some(t) = &param.ty {
-                        self.collect_type_tokens(file_path, t);
-                    }
-                }
-                if let Some(t) = return_type {
-                    self.collect_type_tokens(file_path, t);
-                }
-                for s in &body.stmts {
-                    self.collect_stmt_tokens(
-                        file_path,
-                        s,
-                        scope_idx,
-                        declared,
-                        constructor_names,
-                        imported_module_roots,
-                    );
-                }
-            }
             Expr::ListComp {
                 element,
                 generators,

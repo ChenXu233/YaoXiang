@@ -502,14 +502,6 @@ impl DeadCodeAnalyzer {
                     collect_from_expr(expr, referenced);
                     collect_from_expr(index, referenced);
                 }
-                Expr::FnDef {
-                    name, params, body, ..
-                } => {
-                    referenced.bind(name.clone());
-                    referenced.insert(name.clone());
-                    collect_params_names_and_types(params, referenced);
-                    collect_from_block(body, referenced);
-                }
                 Expr::Lambda { params, body, .. } => {
                     collect_params_names_and_types(params, referenced);
                     collect_from_block(body, referenced);

@@ -1149,22 +1149,6 @@ pub(crate) fn extract_module_info(
                     }
                 }
             }
-            StmtKind::Expr(expr) => {
-                if let Expr::FnDef { name, .. } = expr.as_ref() {
-                    if let Some(ty) = lookup(&vars, name) {
-                        // FnDef 节点不携带名字标识符 span（当前 parser 也不产
-                        // 此变体——仅测试手工构造），定义位置空缺
-                        info.add_export(make_export(
-                            module_key,
-                            name,
-                            ExportKind::Function,
-                            ty,
-                            &fn_type_params,
-                            None,
-                        ));
-                    }
-                }
-            }
             _ => {}
         }
     }

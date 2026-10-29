@@ -40,13 +40,6 @@ pub fn format_expr(
             named_args,
             ..
         } => format_call(func, args, named_args, ctx, source_map),
-        Expr::FnDef {
-            name,
-            params,
-            return_type,
-            body,
-            span: _,
-        } => format_fn_def(name, params, return_type, body, ctx, source_map),
         Expr::If {
             condition,
             then_branch,
@@ -359,30 +352,6 @@ pub(crate) fn format_call(
         all_args.push(format!("{}={}", name, format_expr(expr, ctx, source_map)));
     }
     super::delimited::format_delimited_list("(", ")", &all_args, Some(&func_str), ctx)
-}
-
-/// 格式化函数定义（表达式形式）
-fn format_fn_def(
-    name: &str,
-    params: &[Param],
-    return_type: &Option<Type>,
-    body: &Block,
-    ctx: &FormatContext,
-    source_map: &SourceMap,
-) -> String {
-    let params_str = format_params(params, ctx, source_map);
-    let ret_str = if let Some(ty) = return_type {
-        format!(" -> {}", super::types::format_type(ty, ctx, source_map))
-    } else {
-        String::new()
-    };
-    format!(
-        "fn {}{}{} {}",
-        name,
-        params_str,
-        ret_str,
-        format_block(body, ctx, source_map)
-    )
 }
 
 /// 格式化参数列表

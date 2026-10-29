@@ -120,7 +120,7 @@ fn test_fn_mut_param() {
 }
 
 /// 旧函数定义语法的块体形态 `f: () -> Int = { 5 }`：带 Fn 注解的块被收编为
-/// `Lambda`（空参数表 + 块体），不构造已删除的 `Expr::FnDef`（RFC-039 6.5.1）。
+/// `Lambda`（空参数表 + 块体），不构造已删除的 FnDef 变体（RFC-039 6.5.1）。
 #[test]
 fn test_fn_block_body_with_fn_annotation_parses_to_lambda() {
     // Arrange

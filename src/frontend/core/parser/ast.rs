@@ -46,13 +46,6 @@ pub enum Expr {
         /// `OverloadResolutions::get`）。
         plan_id: PlanId,
     },
-    FnDef {
-        name: String,
-        params: Vec<Param>,
-        return_type: Option<Type>,
-        body: Box<Block>,
-        span: Span,
-    },
     If {
         condition: Box<Expr>,
         then_branch: Box<Block>,
@@ -1128,7 +1121,6 @@ impl Expr {
             Expr::BinOp { span, .. }
             | Expr::UnOp { span, .. }
             | Expr::Call { span, .. }
-            | Expr::FnDef { span, .. }
             | Expr::If { span, .. }
             | Expr::Match { span, .. }
             | Expr::While { span, .. }
