@@ -6,33 +6,40 @@
 //!   ownership）全部改走共享口；`default_solver()` 仅保留给测试与独立场景。
 //!   禁令：闭包内禁止再次获取（`Mutex` 不可重入，嵌套即死锁）。
 //! - WBS 4.4.2 验收：生产路径 `default_solver()` 调用点归零；缓存命中率
-//!   跨三消费点可观测（读取口 `shared_solver_consumer_stats` /
-//!   `shared_solver_cache_stats`）。
+//!   跨三消费点可观测（读取口 `shared_solver_thread_consumer_stats` /
+//!   `shared_solver_cache_stats`；进程累计口径的
+//!   `shared_solver_consumer_stats` 保留为该口径的读取口）。
 //! - RFC-027 §8：上层只依赖 `Solver::solve`；缓存计数是可选观测面。
 //!
 //! 「实测数字」的取法：`cargo test --lib shared -- --nocapture` 打印三消费点
 //! 的获取/命中/未命中。这些数字是「三点共享同一实例」的可复核证据——缓存
 //! 计数是**实例内**的（见 `z3_backend.rs`），三点若各自新建实例，跨点累计
-//! 不可能出现。
+//! 不可能出现。数字取自**当前线程的观测镜像**（`backend.rs` 的
+//! `THREAD_CONSUMER_STATS`，issue #514）：编译线程内「编译前 / 编译后」
+//! 差分，恰为本次编译的精确增量——进程累计口径的差分窗口会被并发落账
+//! 劈开（全量并发跑间歇红），线程口径天然免于该污染。
 
 use std::sync::mpsc;
 use std::time::Duration;
 
 use crate::frontend::core::typecheck::proof::smt::ast::{SMTCommand, SMTSort};
 use crate::frontend::core::typecheck::proof::smt::backend::{
-    default_solver, shared_solver_cache_stats, shared_solver_consumer_stats, with_shared_solver,
-    ConsumerStats, SolverConsumer,
+    default_solver, shared_solver_cache_stats, shared_solver_thread_consumer_stats,
+    with_shared_solver, ConsumerStats, SolverConsumer,
 };
 
 /// 探针超时上限：嵌套获取若退化成死锁，用例须**失败**而不是挂住 `cargo test`。
 const PROBE_TIMEOUT: Duration = Duration::from_secs(120);
 
-/// 三消费点的当前进程累计读数（按 `SolverConsumer::ALL` 顺序）。
-fn consumer_stats_snapshot() -> Vec<ConsumerStats> {
+/// 三消费点的**当前线程**观测镜像读数（按 `SolverConsumer::ALL` 顺序）。
+///
+/// 镜像只被当前线程写（`backend.rs` 的 `THREAD_CONSUMER_STATS`），线程内
+/// 差分不含其他测试线程的落账——这是判据②读数在并发下稳定的前提。
+fn thread_consumer_stats_snapshot() -> Vec<ConsumerStats> {
     SolverConsumer::ALL
         .iter()
         .copied()
-        .map(shared_solver_consumer_stats)
+        .map(shared_solver_thread_consumer_stats)
         .collect()
 }
 
@@ -178,26 +185,38 @@ if i == 11 { bump(p) }\n\
 ///
 /// 探针在子线程里跑编译、主线程带超时等待：三点在共享口上串行不嵌套
 /// （判据④）——嵌套会自锁，超时即失败，不挂死。
+///
+/// 读数源（issue #514）：两组读数全部在**编译线程内**、紧贴编译前后取，
+/// 经 channel 带回。三点读数取自当前线程的观测镜像（只含本线程落账），
+/// 实例读数的差分窗口是编译时长本身——共享实例的计数器单调递增，窗口内
+/// 其他线程的贡献只会让实例增量更大，比对方向（`>=`）不受影响。修前以
+/// 进程累计口径做差分：三点账的落账发生在实例计数累加之后（`backend.rs`
+/// 的 `with_shared_solver` 里 `drop(guard)` 之后），两读数的快照窗口可以把
+/// 其他测试的一笔获取劈开（进三点增量、不进实例增量），判据间歇失败——
+/// 修前实测 `cargo test --lib typecheck` 全量并发连续 3 轮全红（如
+/// 「实例增量 (4, 5) vs 三点之和 (4, 7)」）。
 #[test]
 fn test_shared_solver_serves_three_consumers_in_one_compilation() {
-    // Arrange — 三点基线 + 共享实例自身的累计计数
-    let before = consumer_stats_snapshot();
-    let total_before = shared_solver_cache_stats();
-
-    // Act — **一次**编译（子线程 + 超时保护）
+    // Act — **一次**编译（子线程 + 超时保护）；两组读数同线程紧贴编译前后取
     let (tx, rx) = mpsc::channel();
     std::thread::spawn(move || {
-        let _ = tx.send(check_source_once(THREE_CONSUMER_SOURCE));
+        let before = thread_consumer_stats_snapshot();
+        let total_before = shared_solver_cache_stats();
+        let diagnostics = check_source_once(THREE_CONSUMER_SOURCE);
+        let after = thread_consumer_stats_snapshot();
+        let total_after = shared_solver_cache_stats();
+        let _ = tx.send((diagnostics, before, total_before, after, total_after));
     });
-    let diagnostics = rx.recv_timeout(PROBE_TIMEOUT).unwrap_or_else(|_| {
-        panic!(
-            "三消费点须在一次编译内串行完成（D58：闭包内禁止再次获取），{PROBE_TIMEOUT:?} 内未返回"
-        )
-    });
+    let (diagnostics, before, total_before, after, total_after) = rx
+        .recv_timeout(PROBE_TIMEOUT)
+        .unwrap_or_else(|_| {
+            panic!(
+                "三消费点须在一次编译内串行完成（D58：闭包内禁止再次获取），{PROBE_TIMEOUT:?} 内未返回"
+            )
+        });
 
     // Assert — 编译干净，且三点各自经共享口拿到 hit/miss
     assert_eq!(diagnostics, 0, "探针源码应零诊断，否则读数形状漂了");
-    let after = consumer_stats_snapshot();
     let mut readout: Vec<String> = Vec::new();
     let mut hits_from_consumers = 0u64;
     let mut misses_from_consumers = 0u64;
@@ -228,7 +247,6 @@ fn test_shared_solver_serves_three_consumers_in_one_compilation() {
             consumer.name()
         );
     }
-    let total_after = shared_solver_cache_stats();
     if let (Some((hits_before, misses_before)), Some((hits_after, misses_after))) =
         (total_before, total_after)
     {
