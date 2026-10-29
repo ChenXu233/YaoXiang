@@ -15,13 +15,13 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 
 | 码号 | 中文名 | 类别 | span 豁免 | 模板 | 发射点 |
 | --- | --- | --- | --- | --- | --- |
-| `E1001` | 未知变量 | `TypeCheck` | 否 | `未知变量：'{name}'` | ✅ 5 处 |
-| `E1002` | 类型不匹配 | `TypeCheck` | 否 | `期望类型 '{expected}'，实际类型 '{found}'` | ✅ 85 处 |
+| `E1001` | 未知变量 | `TypeCheck` | 否 | `未知变量：'{name}'` | ✅ 4 处 |
+| `E1002` | 类型不匹配 | `TypeCheck` | 否 | `期望类型 '{expected}'，实际类型 '{found}'` | ✅ 76 处 |
 | `E1003` | 未知类型 | `TypeCheck` | 否 | `未知类型：'{type}'` | ✅ 3 处 |
 | `E1010` | 参数数量不匹配 | `TypeCheck` | 否 | `函数 '{func}' 期望 {expected} 个参数，找到 {found} 个` | ✅ 19 处 |
 | `E1011` | 参数类型不匹配 | `TypeCheck` | 否 | `参数类型不匹配：期望 '{expected}'，实际 '{found}'` | ⚠ 暂未发射 |
 | `E1012` | 返回类型不匹配 | `TypeCheck` | 否 | `返回类型不匹配：期望 '{expected}'，实际 '{found}'` | ✅ 2 处 |
-| `E1013` | 函数未找到 | `TypeCheck` | 否 | `函数未找到：'{func}'` | ✅ 4 处 |
+| `E1013` | 函数未找到 | `TypeCheck` | 否 | `函数未找到：'{func}'` | ✅ 3 处 |
 | `E1014` | 命名参数名未知 | `TypeCheck` | 否 | `函数 '{func}' 没有名为 '{name}' 的参数（可用：{params}）` | ✅ 2 处 |
 | `E1015` | 参数重复指定 | `TypeCheck` | 否 | `函数 '{func}' 的参数 '{name}' 被重复指定` | ✅ 1 处 |
 | `E1020` | 无法推断类型 | `TypeCheck` | 否 | `无法推断 '{expr}' 的类型` | ⚠ 暂未发射 |
@@ -32,7 +32,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 | `E1033` | 或模式绑定不一致 | `TypeCheck` | 否 | `或模式绑定不一致：\`\|\` 两侧必须绑定相同的名字集` | ✅ 1 处 |
 | `E1034` | 结构体模式缺字段 | `TypeCheck` | 否 | `结构体模式缺少字段 '{field}'（'{struct}' 的字段须完整覆盖）` | ✅ 1 处 |
 | `E1040` | 操作不支持 | `TypeCheck` | 否 | `类型 '{type}' 不支持操作 '{op}'` | ⚠ 暂未发射 |
-| `E1041` | 索引越界 | `TypeCheck` | 否 | `索引越界：有效范围是 0..{max}，找到 {index}` | ✅ 6 处 |
+| `E1041` | 索引越界 | `TypeCheck` | 否 | `索引越界：有效范围是 0..{max}，找到 {index}` | ✅ 5 处 |
 | `E1042` | 字段未找到 | `TypeCheck` | 否 | `在结构体 '{struct}' 中找不到字段 '{field}'` | ✅ 9 处 |
 | `E1043` | 模块成员未找到 | `TypeCheck` | 否 | `模块 '{module}' 没有导出 '{name}'` | ✅ 1 处 |
 | `E1050` | 需要布尔操作数 | `TypeCheck` | 否 | `逻辑运算需要布尔操作数，实际为 '{left}' 和 '{right}'` | ✅ 1 处 |
@@ -83,7 +83,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **模板**：`未知变量：'{name}'`
 - **消息**：引用的变量未定义
 - **帮助**：检查变量名是否拼写正确，或先定义它
-- **发射点**：`src/frontend/core/typecheck/checker/refinement.rs:449`、`src/frontend/core/typecheck/inference/expressions.rs:3269`、`src/frontend/core/typecheck/inference/statements.rs:2893` 等 5 处
+- **发射点**：`src/frontend/core/typecheck/checker/refinement.rs:449`、`src/frontend/core/typecheck/inference/expressions.rs:3269`、`src/frontend/core/typecheck/inference/statements.rs:2893` 等 4 处
 
 ### E1002：类型不匹配
 
@@ -93,7 +93,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **模板**：`期望类型 '{expected}'，实际类型 '{found}'`
 - **消息**：期望类型与实际类型不匹配
 - **帮助**：使用正确的类型或添加类型转换
-- **发射点**：`src/frontend/core/typecheck/inference/assignment.rs:103`、`src/frontend/core/typecheck/inference/assignment.rs:116`、`src/frontend/core/typecheck/inference/bounds.rs:311` 等 85 处
+- **发射点**：`src/frontend/core/typecheck/inference/assignment.rs:103`、`src/frontend/core/typecheck/inference/assignment.rs:116`、`src/frontend/core/typecheck/inference/bounds.rs:311` 等 76 处
 
 ### E1003：未知类型
 
@@ -143,7 +143,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **模板**：`函数未找到：'{func}'`
 - **消息**：调用了未定义的函数
 - **帮助**：检查函数名是否拼写正确
-- **发射点**：`src/backends/mod.rs:140`、`src/backends/interpreter/executor/debug.rs:145`、`src/backends/interpreter/executor/executor.rs:319` 等 4 处
+- **发射点**：`src/backends/mod.rs:140`、`src/backends/interpreter/executor/debug.rs:145`、`src/backends/interpreter/executor/executor.rs:319`
 
 ### E1014：命名参数名未知
 
@@ -260,7 +260,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **模板**：`索引越界：有效范围是 0..{max}，找到 {index}`
 - **消息**：数组/列表索引超出范围
 - **帮助**：确保索引在集合范围内
-- **发射点**：`src/backends/mod.rs:188`、`src/backends/interpreter/executor/ops/elem.rs:225`、`src/backends/interpreter/executor/ops/elem.rs:304` 等 6 处
+- **发射点**：`src/backends/mod.rs:188`、`src/backends/interpreter/executor/ops/elem.rs:225`、`src/backends/interpreter/executor/ops/elem.rs:304` 等 5 处
 - **源码注释名**：数组越界
 
 ### E1042：字段未找到

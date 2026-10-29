@@ -19,7 +19,7 @@ description: '词法分析器（Lexer）与语法分析器（Parser）阶段产�
 | `E0002` | 无效数字字面量 | `Lexer` | 否 | `无效数字字面量：'{literal}'` | ✅ 1 处 |
 | `E0003` | 未终止的字符串 | `Lexer` | 否 | `字符串从第 {line} 行开始未终止` | ⚠ 暂未发射 |
 | `E0004` | 无效字符字面量 | `Lexer` | 否 | `无效字符字面量：'{literal}'` | ⚠ 暂未发射 |
-| `E0010` | 期望的令牌 | `Parser` | 否 | `期望 {expected}，找到 {found}` | ✅ 22 处 |
+| `E0010` | 期望的令牌 | `Parser` | 否 | `期望 {expected}，找到 {found}` | ✅ 4 处 |
 | `E0011` | 意外的令牌 | `Parser` | 否 | `意外的令牌：'{token}'` | ✅ 18 处 |
 | `E0012` | 无效语法 | `Parser` | 否 | `无效语法：{reason}` | ✅ 13 处 |
 | `E0013` | 不匹配的括号 | `Parser` | 否 | `不匹配的 {bracket_type}：在第 {open_line} 行、第 {open_col} 列打开，未闭合` | ⚠ 暂未发射 |
@@ -77,7 +77,7 @@ description: '词法分析器（Lexer）与语法分析器（Parser）阶段产�
 - **模板**：`期望 {expected}，找到 {found}`
 - **消息**：解析器期望特定的令牌
 - **帮助**：检查语法并添加期望的令牌
-- **发射点**：`src/driver/arms.rs:93`、`src/frontend/compiler.rs:177`、`src/frontend/core/parser/mod.rs:59` 等 22 处
+- **发射点**：`src/frontend/core/parser/parser_state.rs:153`、`src/frontend/core/parser/statements/bindings.rs:132`、`src/frontend/core/parser/statements/bindings.rs:163` 等 4 处
 
 ### E0011：意外的令牌
 
