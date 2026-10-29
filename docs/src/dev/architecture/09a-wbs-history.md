@@ -1877,3 +1877,13 @@ WBS 的 6.4.3 行把 `src/middle/core/ir_gen.rs` 的 `is_constraint_param_ann` �
 > **流程教训（两条已固化）**：① 门禁清单固定含 `cargo test --test integration` 定向——testsuite fast 只盖 lib 面，前端语义改动必须直接跑 integration；② world.run 输出 256KB cap——cargo test 类大输出命令一律 python -c 包装截尾（t1r2 门禁脚本两次踩同一坑：#470 testsuite 262KB、#501 t1r2 lib 263KB）。均记入编排模板。
 
 > **登记**：issue [#501](https://github.com/ChenXu233/YaoXiang/issues/501) 已关闭（`7880ee17` + `f032582b`）；新遗留 [#514](https://github.com/ChenXu233/YaoXiang/issues/514)（shared solver 测试并发窗口，HEAD 既有）与 [#515](https://github.com/ChenXu233/YaoXiang/issues/515)（生成器 FN_CALL_RE_TMPL 无词边界，E1002 计数 84=83+1 修前既有）备案不占号；跨 WBS 备案：RFC-004 括号终止判定第三处 `ir_gen.rs:649` 未收敛到单点（t3 low，收敛属跨 WBS 待裁）。本批 flash 子代理通道经 provider 配额切换（individual-coding-plan 周配额耗尽 code 1310 → 按 用户指示切回免费 start-plan，AmendWorkflow 换轨零缓存损失）。
+
+## P3 3.23 收口（3.23.1 清单 E3024 非静默退化，2026-10-30）
+
+> **触发**：issue [#503](https://github.com/ChenXu233/YaoXiang/issues/503)（WBS 3.23.1）：清单存在但不可读时 `.ok()` 吞错 ⇒ 声明面静默置空 ⇒ 误报 W1002×2 且 check exit 0。登记时留「甲 报错退出 / 乙 继续但发 W 码」待裁——**用户 2026-10-30 全权委托（「由你做最佳决定」），队长裁决甲**：坏清单下声明面/角色分类/引用池全部建立在错误前提上，继续跑产出的一切结果不可信；与非法 .yx 源码同待遇。
+
+> **改法**（`81d86810`，19 文件 +415/−77）：role_context 三态化——NotFound = 合法单文件模式（行为不变）；可读 = 既有装配；存在但不可读 = E3024（新码，error 级，span_exempt 按 #324 契约）经 RoleClassification 臂注入并标记阶段失败，DeadCodeAnalysis 拓扑跳过（中止发生在退化之前）；Typecheck 等不依赖臂照跑。RoleContext 返回结构保持 helpers 纯函数（不生造第二诊断入口）。新码四步流程照 E1043 先例。四处既有测试坏清单夹具顺带修复（判据未动）。
+
+> **判据链**：t1 门禁 10 项 3 轮绿（生成器幂等两次抓再生欠账后复绿；红态 stash 机械回退复验 + 守卫钉未修分支——#505 批次教训⑥的应用）→ t2 **PASS**（五段判据链、变异可逆 blob 三态、修前红态与 t1 实录交叉吻合）→ t3 **REQUEST_CHANGES**（medium = t1 注释判据「可过 PackageManifest 必可过 ProjectConfig」被反例证伪：`[tool.test] patterns = "字符串"` 穿透 PackageManifest 而 ProjectConfig 解析失败仍静默吞——**声明与事实不符必须修**；修法取 (a) 注释改如实陈述并 amend 并入（`81d86810` 终值），判定迁移依据 = amend 仅注释；**ProjectConfig 静默面属既有降级，收窄属行为变更另行裁决**——登记为本组遗留待裁）→ 队长复核（四探针复验：E3024 + 0 W1002 + exit 1 / 守卫两形态逐字节不变；诊断通道设计）。
+
+> **登记**：issue [#503](https://github.com/ChenXu233/YaoXiang/issues/503) 已关闭（`81d86810`）；新遗留 [#516](https://github.com/ChenXu233/YaoXiang/issues/516)（scratch.py trial 无 finally 兜底——工具缺陷，t3 实测撞上）；**ProjectConfig 静默回退面**（`[tool.test]` 类型错误 ⇒ patterns 静默回退内建约定）留待用户裁决是否收窄；main.rs run 配置 unwrap_or_default（#471 登记关联面）维持不修待裁。提交信息表述更正：ref_pool.rs 是坏清单夹具修复的**第五处**且性质为 4.9.3 触发形态迁移（MANIFEST_UNPARSED → None），非「四处之一」。
