@@ -1940,6 +1940,14 @@ impl StatementChecker {
                 // 统一 → E1002。精化是编译期约束，不是运行时类型。
                 let fn_return_type = self.strip_refined_value_type(fn_return_type);
 
+                // RFC-004 括号语义：返回位注解是 `(T)` / `(r: P)` ⇔ 柯里链条
+                // 终止——声明的形态是「本函数返回一个 `T` 类型的**值**」。值级
+                // 分解时 `value_ret` 必须保持内层 Fn **整体**，不得被下方 while
+                // 剥层吸收为参数组（issue #501 形态 A：否则 expected 被剥到
+                // 最内层标量）。与 parser 的 paren_return 包装判定同源
+                //（`Type::is_paren_complete`）。
+                let paren_return_ann = return_type.is_paren_complete();
+
                 // 闭包包装形态：体的末位是单个 lambda 表达式语句
                 //（parser paren_return 包装的标记，declarations.rs）
                 let wrapped_closure = body.stmts.len() == 1
@@ -2000,8 +2008,12 @@ impl StatementChecker {
                     (substituted_params, substituted_ret)
                 };
 
-                // 值级形态：闭包包装 = 外层函数本体；否则取最内层 Fn
-                let (value_params, value_ret) = if wrapped_closure {
+                // 值级形态：闭包包装 = 外层函数本体；返回位括号声明的完整类型
+                //（RFC-004，链条终止）同样 = 外层函数本体——`value_ret` 保持
+                // 内层 Fn 整体（issue #501 形态 A/B）；否则（裸 Fn 链柯里：
+                // 平铺柯里、const 柯里、类型泛型柯里）体是最内层值函数，
+                // while 剥层照旧（generic_slot_alignment 回归实证背书）。
+                let (value_params, value_ret) = if wrapped_closure || paren_return_ann {
                     (registered_params.clone(), registered_ret.clone())
                 } else {
                     let mut vp = registered_params.clone();

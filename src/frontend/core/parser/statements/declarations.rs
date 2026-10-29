@@ -343,11 +343,7 @@ fn parse_assign_after_target(
                     // 括号同样声明「这是完整类型（值）」，链条到此终止。
                     let paren_return = matches!(
                         type_annotation.as_ref(),
-                        Some(Type::Fn { return_type, .. })
-                            if matches!(
-                                return_type.as_ref(),
-                                Type::Paren(_) | Type::NamedParen { .. }
-                            )
+                        Some(Type::Fn { return_type, .. }) if return_type.is_paren_complete()
                     );
                     if paren_return {
                         // 本函数自己的**值**参数个数 = 第一组签名参数中非类型参数的个数
@@ -376,7 +372,46 @@ fn parse_assign_after_target(
                             }
                             _ => false,
                         };
-                        if !own_params.is_empty() || !first_group_has_type_params {
+                        // 被返回值的参数组 = 声明返回位内层 Fn 的值参数个数
+                        //（`(x: Int) -> Int` 的 `(x: Int)` 组；类型参数位擦除不计）。
+                        // 内层不是 Fn（如 `-> (Int)`、`-> (&Float, &Point)`）时为
+                        // None——个数判据不适用，保持既有行为。
+                        let inner_fn_value_param_count = match type_annotation.as_ref() {
+                            Some(Type::Fn { return_type, .. }) => {
+                                let inner = match return_type.as_ref() {
+                                    Type::Paren(t) => Some(t.as_ref()),
+                                    Type::NamedParen { inner, .. } => Some(inner.as_ref()),
+                                    _ => None,
+                                };
+                                inner.and_then(|t| match t {
+                                    Type::Fn { params, .. } => Some(
+                                        params
+                                            .iter()
+                                            .filter(|t| !is_type_param_annotation(Some(t)))
+                                            .count(),
+                                    ),
+                                    _ => None,
+                                })
+                            }
+                            _ => None,
+                        };
+                        // 作者 lambda 的参数组与内层 Fn 参数组**不对齐**时，作者写
+                        // 的 lambda 就是外层函数本体——体里的 return / 尾表达式
+                        // 供给被返回的函数值，不再包装。包装会把它变成「被返回的
+                        // 值」，凭空多出一层与声明不符的函数形态（issue #501 形态
+                        // B：`() => { return inc }` 被包成 `() => () => { return inc }`，
+                        // g()(1) 的运行时形态与 E1012 的 found 口径同时错位）。
+                        // 对齐时（含内层非 Fn）保持既有包装：作者 lambda 即被返回
+                        // 的函数值（`mk: () -> ((a: Int) -> Int) = (a) => a + 1`、
+                        // `mk_block: () -> (() -> Int) = { () => 7 }`、运行时闭包
+                        // `make_adder: (a: Int) -> ((b: Int) -> Int) = (b) => a + b`）。
+                        let author_lambda_is_outer = matches!(
+                            inner_fn_value_param_count,
+                            Some(n) if n != lambda_params.len()
+                        );
+                        if !author_lambda_is_outer
+                            && (!own_params.is_empty() || !first_group_has_type_params)
+                        {
                             let inner = Expr::Lambda {
                                 params: merged,
                                 body: body.clone(),

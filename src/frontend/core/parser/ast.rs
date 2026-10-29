@@ -539,6 +539,16 @@ pub enum Type {
 }
 
 impl Type {
+    /// RFC-004 括号语义：`self` 是否为「括号声明的完整类型」（`Paren` / `NamedParen`）。
+    ///
+    /// 括号 = 柯里链条终止 = 该类型是函数的**值**，不是下一层参数组。
+    /// 两处共用同一判定，防止判据漂移：
+    /// - parser 的 paren_return 包装（`parser/statements/declarations.rs`）；
+    /// - typecheck 的值级分解（`typecheck/inference/statements.rs`，issue #501）。
+    pub fn is_paren_complete(&self) -> bool {
+        matches!(self, Type::Paren(_) | Type::NamedParen { .. })
+    }
+
     /// 从 Type::Struct 的 body 中提取字段引用（顺序保留）
     pub fn struct_fields(&self) -> Vec<&StructField> {
         match self {

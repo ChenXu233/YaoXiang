@@ -26,6 +26,7 @@ mod named_args_loud;
 mod native_param_names;
 mod nested_fn_capture;
 mod overload_resolutions;
+mod paren_return_decomposition;
 mod predicate_resolver;
 mod probe;
 mod rfc010;
