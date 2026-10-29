@@ -608,3 +608,33 @@ fn test_named_function_type_params_carry_names_and_types() {
         "返回类型应为 Int，got: {return_type:?}"
     );
 }
+/// 不变量（RFC-039 6.8.1 / 6.5.2）：`Type::Fn.params` 是形参的**唯一**表示——
+/// 名字与类型必须来自**同一个** `Param` 节点。用途：防「平行参数表示」
+/// （另开名字数组 / 第二结构）复活后名字与类型各来自不同节点、静默错配。
+#[test]
+fn test_type_fn_params_carry_name_and_type_on_same_node() {
+    // Arrange & Act：解析带类型的函数定义签名（RFC-010 统一语法）
+    let (params, return_type) = parse_fn_type_annotation("f: (a: Int, b: Int) -> Int = a + b");
+
+    // Assert：逐位断言「同一个 Param 同时给出名字与类型」
+    assert_eq!(params.len(), 2, "形参应为 2 个，got: {params:?}");
+    let expected = [("a", "Int"), ("b", "Int")];
+    for (i, (param, (want_name, want_ty))) in params.iter().zip(expected.iter()).enumerate() {
+        assert_eq!(
+            param.name.as_str(),
+            *want_name,
+            "第 {} 个形参名应为 {want_name}（名字必须与类型同节点），got: {param:?}",
+            i + 1
+        );
+        assert!(
+            matches!(param.ty.as_ref(), Some(Type::Name { name, .. }) if name == want_ty),
+            "第 {} 个形参的类型应为 {want_ty}（名字必须与类型同节点），got: {:?}",
+            i + 1,
+            param.ty
+        );
+    }
+    assert!(
+        matches!(&return_type, Type::Name { name, .. } if name == "Int"),
+        "返回类型应为 Int，got: {return_type:?}"
+    );
+}

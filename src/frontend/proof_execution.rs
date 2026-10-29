@@ -135,9 +135,7 @@ pub(super) fn execute_single_proof_fn(
                                     plan_id: crate::util::plan_id::PlanId::UNPLANNED,
                                 };
                                 return Some((
-                                    crate::frontend::core::parser::ast::signature_fn_params(
-                                        type_annotation.as_ref(),
-                                    ),
+                                    type_annotation.as_ref().map(crate::frontend::core::parser::ast::Type::fn_params_flat).unwrap_or_default(),
                                     vec![constraint_stmt],
                                     None,
                                 ));

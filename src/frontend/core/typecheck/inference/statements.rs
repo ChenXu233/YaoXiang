@@ -1464,9 +1464,10 @@ impl StatementChecker {
                 // Var 左值用名字自身 span；字段/方法绑定用语句 span（声明行）。
                 let def_span = name_span.unwrap_or(*stmt_span);
                 // 签名形参的唯一来源：注解里的 Type::Fn 链（6.5.2：不再有并行形参表）
-                let signature = crate::frontend::core::parser::ast::signature_fn_params(
-                    type_annotation.as_ref(),
-                );
+                let signature = type_annotation
+                    .as_ref()
+                    .map(crate::frontend::core::parser::ast::Type::fn_params_flat)
+                    .unwrap_or_default();
                 // 从 value 提取 Lambda params/body。
                 // RFC-010a 附录D：`name = { ... }` 无注解时按内容推断（块值是尾表达式）；
                 // 非 Fn 注解→块值（交给 check_var_stmt 按普通变量审）。
@@ -1824,7 +1825,9 @@ impl StatementChecker {
         name_span: crate::util::span::Span,
     ) -> Result<(), Box<Diagnostic>> {
         // 签名形参的唯一来源：注解里的 Type::Fn 链（6.5.2：不再有并行形参表）
-        let signature = crate::frontend::core::parser::ast::signature_fn_params(type_annotation);
+        let signature = type_annotation
+            .map(crate::frontend::core::parser::ast::Type::fn_params_flat)
+            .unwrap_or_default();
         // #353：记录绑定语句的位置，供尾表达式不符时指向它（而非体的末行）。
         // 真正该改的是注解所在的声明，不是体里那个（可能完全正确的）值。
         self.tail_annotation_span = Some(_span);

@@ -254,7 +254,7 @@ pub enum StmtKind {
     Assign {
         target: Box<Expr>,
         /// 类型标注；函数定义时它承载 `Type::Fn`——形参名与类型同栖在
-        /// `Type::Fn.params`（`signature_fn_params` 是取用入口）。
+        /// `Type::Fn.params`（`Type::fn_params_flat` 是唯一取用入口）。
         type_annotation: Option<Type>,
         value: Option<Box<Expr>>,
         is_mut: bool,
@@ -275,7 +275,7 @@ pub enum StmtKind {
         /// 类型名
         name: String,
         /// 声明签名：`(T: Type) -> Type`（`Point: Type` 记 `MetaType`）。
-        /// 泛型形参从 `Type::Fn` 载体取（`signature_fn_params`），与 `Assign`
+        /// 泛型形参从 `Type::Fn` 载体取（`Type::fn_params_flat`），与 `Assign`
         /// 的 `type_annotation` 同一表示——不再另存并行形参表。
         type_annotation: Option<Type>,
         /// 解析后的类型体（必有）
@@ -527,8 +527,9 @@ pub enum Type {
     /// - 语义与 `Paren` 同构：`MonoType` 层透明（只递归内层）、
     ///   `split_curry` 到此终止（括号声明“这是一个完整类型”），只多携带 binder 名。
     ///
-    /// 参数位的形参名仍照旧丢弃（由 `parse_fn_type_with_names` 的 `Param` 承载），
-    /// 本节点只用于类型位置的单具名括号形态。
+    /// 参数位的形参名归 `Type::Fn.params`（名字与类型同栖，RFC-039 6.8.1）；
+    /// 本节点只承载**返回位**单具名括号的 binder——那里没有 `->` 后的参数组，
+    /// 名字无处可栖，只能由语法节点携带、由类型检查器显式解释。
     NamedParen {
         /// 声明的具名（返回形式参数名）
         param: String,
@@ -804,10 +805,17 @@ impl Param {
 }
 
 /// `Debug` 手写（不 derive）：**无名形参**按其所承载的 `Type` 打印——与
-/// RFC-039 6.8.1 重塑前 `Type::Fn.params: Vec<Type>` 的 Debug 文本逐字一致。
-/// 规范化 IR 快照的 `type_decl` 行打印 AST 类型的 Debug 文本（
-/// `middle/core/normalize.rs`），纯表示重塑不得让快照文本漂移；有名形参
-/// 按完整结构打印（名字是语义，必须可见）。
+/// RFC-039 6.8.1 重塑前 `Type::Fn.params: Vec<Type>` 的 Debug 文本逐字一致；
+/// 有名形参按完整结构打印（名字是语义，必须可见）。
+///
+/// **为什么必须手写而不是再生基线**：规范化 IR 快照的 `type_decl` 行打印
+/// AST 类型的 `Debug` 文本（`middle/core/normalize.rs`），并已入库 216 条。
+/// 纯表示重塑（6.8.1）不改变 IR 语义，若靠 `UPDATE_SNAPSHOTS=1` 再生基线，
+/// 就会把「形参携带名字」这件事伪装成一次 IR 行为面变化，违反 07 §128
+/// 「漂移必须能说清来源」——复审时也无法区分「表示搬运」与「真实 IR 变化」。
+/// 故把文本一致性收在**打印边界**（此处 + `Type::without_fn_param_names`
+/// 在入 IR 前剥掉类型位形参名），而不是改写基线。无名形参的裸 `Type` 文本
+/// 正是旧 `Vec<Type>` 的文本，故快照零漂移。
 impl std::fmt::Debug for Param {
     fn fmt(
         &self,
@@ -983,15 +991,6 @@ impl Type {
         walk(self, &mut out);
         out
     }
-}
-
-/// 语句的类型标注 → 拍平的签名形参（`Option` 形态的唯一入口）。
-///
-/// 非 `Type::Fn` 标注（普通值绑定、`Point: Type` 的元类型标注）返回空。
-pub fn signature_fn_params(type_annotation: Option<&Type>) -> Vec<Param> {
-    type_annotation
-        .map(Type::fn_params_flat)
-        .unwrap_or_default()
 }
 
 /// Match arm

@@ -677,9 +677,10 @@ impl DeadCodeAnalyzer {
                         ty.collect_name_refs(&mut referenced.refs);
                     }
                     // 形参类型名同样算引用：从注解的 Type::Fn 链拍平（6.5.2）
-                    let signature = crate::frontend::core::parser::ast::signature_fn_params(
-                        type_annotation.as_ref(),
-                    );
+                    let signature = type_annotation
+                        .as_ref()
+                        .map(crate::frontend::core::parser::ast::Type::fn_params_flat)
+                        .unwrap_or_default();
                     for param in &signature {
                         if let Some(ty) = &param.ty {
                             ty.collect_name_refs(&mut referenced.refs);
@@ -707,9 +708,10 @@ impl DeadCodeAnalyzer {
                     ..
                 } => {
                     referenced.bind(name.clone());
-                    let signature = crate::frontend::core::parser::ast::signature_fn_params(
-                        type_annotation.as_ref(),
-                    );
+                    let signature = type_annotation
+                        .as_ref()
+                        .map(crate::frontend::core::parser::ast::Type::fn_params_flat)
+                        .unwrap_or_default();
                     for param in &signature {
                         if let Some(ty) = &param.ty {
                             ty.collect_name_refs(&mut referenced.refs);

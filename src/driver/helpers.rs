@@ -1224,9 +1224,10 @@ pub(in crate::driver) fn declared_type_param_names<'a>(
             {
                 if let Expr::Var(name, _) = target.as_ref() {
                     // 签名形参的唯一来源是 `Type::Fn` 链（6.5.2 删除并行形参表）。
-                    let params = crate::frontend::core::parser::ast::signature_fn_params(
-                        type_annotation.as_ref(),
-                    );
+                    let params = type_annotation
+                        .as_ref()
+                        .map(crate::frontend::core::parser::ast::Type::fn_params_flat)
+                        .unwrap_or_default();
                     let names: Vec<String> = classify_generic_params(&params, &is_trait)
                         .into_iter()
                         .filter(|p| matches!(p.kind, GenericParamKind::Type))

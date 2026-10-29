@@ -1920,7 +1920,10 @@ impl AstToIrGenerator {
                 use crate::frontend::core::types::mono::UniverseLevel;
 
                 // 泛型形参的唯一来源：声明注解的 Type::Fn 链（6.5.2）
-                let signature = ast::signature_fn_params(type_annotation.as_ref());
+                let signature = type_annotation
+                    .as_ref()
+                    .map(crate::frontend::core::parser::ast::Type::fn_params_flat)
+                    .unwrap_or_default();
 
                 // 提取泛型参数名。探针传 L3 语义实现：约束名 / 内置名定种必须以
                 // 类型环境的权威表为准，否则 `(T: Add)` 不登记为泛型参数、
@@ -2034,7 +2037,10 @@ impl AstToIrGenerator {
             } => {
                 use crate::frontend::core::parser::ast::Expr;
                 // 签名形参的唯一来源：注解的 Type::Fn 链（6.5.2）
-                let signature = ast::signature_fn_params(type_annotation.as_ref());
+                let signature = type_annotation
+                    .as_ref()
+                    .map(crate::frontend::core::parser::ast::Type::fn_params_flat)
+                    .unwrap_or_default();
                 let (name, type_name) = match target.as_ref() {
                     Expr::Var(n, _) => (n.clone(), None),
                     Expr::FieldAccess { expr, field, .. } => {
@@ -3599,7 +3605,10 @@ impl AstToIrGenerator {
             } => {
                 use crate::frontend::core::parser::ast::Expr;
                 // 签名形参的唯一来源：注解的 Type::Fn 链（6.5.2）
-                let signature = ast::signature_fn_params(type_annotation.as_ref());
+                let signature = type_annotation
+                    .as_ref()
+                    .map(crate::frontend::core::parser::ast::Type::fn_params_flat)
+                    .unwrap_or_default();
                 // 字段赋值：q.x = v / m.x = v（m 是 &mut 令牌）。
                 // Struct 运行时值是堆句柄，StoreField 原地写共享对象——
                 // 令牌与自动借用天然写回，无需 copy-back（#266）。

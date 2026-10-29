@@ -150,9 +150,10 @@ fn test_semantic_probe_and_default_probe_agree_on_same_source_const_param() {
             crate::frontend::core::parser::ast::StmtKind::Assign {
                 type_annotation, ..
             } => {
-                let params = crate::frontend::core::parser::ast::signature_fn_params(
-                    type_annotation.as_ref(),
-                );
+                let params = type_annotation
+                    .as_ref()
+                    .map(crate::frontend::core::parser::ast::Type::fn_params_flat)
+                    .unwrap_or_default();
                 if params.is_empty() {
                     None
                 } else {

@@ -425,9 +425,10 @@ impl TypeChecker {
                         (Vec::new(), Vec::new())
                     };
                     // 形参从注解的 Type::Fn 链拍平（6.5.2：不再有并行形参表）
-                    let signature = crate::frontend::core::parser::ast::signature_fn_params(
-                        type_annotation.as_ref(),
-                    );
+                    let signature = type_annotation
+                        .as_ref()
+                        .map(crate::frontend::core::parser::ast::Type::fn_params_flat)
+                        .unwrap_or_default();
                     let generic_params =
                         crate::frontend::core::parser::ast::extract_generic_param_names(
                             &signature,
@@ -664,9 +665,10 @@ impl TypeChecker {
                     ..
                 } => {
                     // 形参从注解的 Type::Fn 链拍平（6.5.2：不再有并行形参表）
-                    let signature = crate::frontend::core::parser::ast::signature_fn_params(
-                        type_annotation.as_ref(),
-                    );
+                    let signature = type_annotation
+                        .as_ref()
+                        .map(crate::frontend::core::parser::ast::Type::fn_params_flat)
+                        .unwrap_or_default();
                     let generic_params =
                         crate::frontend::core::parser::ast::extract_generic_param_names(
                             &signature,

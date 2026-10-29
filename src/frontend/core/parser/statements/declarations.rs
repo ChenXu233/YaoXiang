@@ -121,7 +121,7 @@ fn parse_assign_after_target(
     // ── 解析类型标注 ──
     // RFC-010: name: (a: Int, b: Int) -> Ret = body (参数名在签名中)
     // 特征: 冒号后面跟着函数类型 (param: Type, ...) -> Ret
-    let (type_annotation, fn_params) = if state.at(&TokenKind::Colon) {
+    let (type_annotation, is_fn_signature) = if state.at(&TokenKind::Colon) {
         state.bump(); // consume ':'
 
         if state.at(&TokenKind::LParen) {
@@ -158,16 +158,15 @@ fn parse_assign_after_target(
             state.restore_position(saved);
 
             if is_rfc010 {
-                let (fn_params_parsed, all_curry_params, return_type) =
-                    parse_fn_type_with_names(state)?;
+                let (fn_params_parsed, return_type) = parse_fn_type_with_names(state)?;
 
-                // 名字与类型同栖（RFC-039 6.8.1）：第一组形参原样进
-                // Type::Fn.params，名字不再另存旁路（6.5.2 已把并行形参表并入本载体）。
+                // 名字与类型同栖（RFC-039 6.8.1）：形参原样进 Type::Fn.params，
+                // 不再有第二份 curry 旁路（6.5.2 commit ③ 收敛返回值）。
                 let type_annotation = Type::Fn {
                     params: fn_params_parsed,
-                    return_type: return_type.clone(),
+                    return_type,
                 };
-                (Some(type_annotation), Some(all_curry_params))
+                (Some(type_annotation), true)
             } else {
                 // Check old function syntax: (Type, Type) -> Ret
                 let saved_check = state.save_position();
@@ -192,14 +191,14 @@ fn parse_assign_after_target(
                 }
 
                 let type_ann = parse_type_annotation_required(state)?;
-                (Some(type_ann), None)
+                (Some(type_ann), false)
             }
         } else {
             let type_ann = parse_type_annotation_required(state)?;
-            (Some(type_ann), None)
+            (Some(type_ann), false)
         }
     } else {
-        (None, None)
+        (None, false)
     };
 
     // 纯声明: `name: Type` 后无 `=`，直接跟换行/分号/新语句
@@ -265,8 +264,13 @@ fn parse_assign_after_target(
             }
         }
 
-        // Case 1: 有 fn_params (RFC-010 新语法)
-        if let Some(ref extracted_params) = fn_params {
+        // Case 1: RFC-010 函数签名（注解是 Type::Fn）
+        if is_fn_signature {
+            // 拍平的签名形参从注解的 Type::Fn 链取得（6.5.2：唯一来源）
+            let extracted_params = type_annotation
+                .as_ref()
+                .map(crate::frontend::core::parser::ast::Type::fn_params_flat)
+                .unwrap_or_default();
             let saved = state.save_position();
             let init = state.parse_expression(BP_LOWEST);
 
@@ -309,25 +313,21 @@ fn parse_assign_after_target(
                         }
                     }
 
-                    // 值参数对齐
+                    // 值参数对齐（按位置）：上面已校验签名与 lambda 的值参数
+                    // **逐位同名**且个数一致，故按位置取类型等价于按名查表。
+                    // 6.5.2 commit ③ 删掉「按名重建 HashMap」这层派生——名字
+                    // 曾同时存在于签名与 lambda 头两处，只需这一份位置对齐。
                     let merged: Vec<Param> = if value_params.is_empty() {
                         lambda_params.to_vec()
                     } else {
-                        let sig_by_name: std::collections::HashMap<&str, &Param> = extracted_params
-                            .iter()
-                            .map(|p| (p.name.as_str(), p))
-                            .collect();
                         lambda_params
                             .iter()
-                            .map(|lam| {
-                                let sig =
-                                    sig_by_name.get(lam.name.as_str()).copied().unwrap_or(lam);
-                                Param {
-                                    name: lam.name.clone(),
-                                    ty: sig.ty.clone(),
-                                    is_mut: lam.is_mut,
-                                    span: lam.span,
-                                }
+                            .zip(value_params.iter())
+                            .map(|(lam, sig)| Param {
+                                name: lam.name.clone(),
+                                ty: sig.ty.clone(),
+                                is_mut: lam.is_mut,
+                                span: lam.span,
                             })
                             .collect()
                     };

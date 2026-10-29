@@ -123,8 +123,10 @@ impl TypeChecker {
         let type_name_of = |t: &crate::frontend::core::parser::ast::Type| {
             crate::frontend::core::types::MonoType::from(t.clone()).type_name()
         };
-        let signature =
-            crate::frontend::core::parser::ast::signature_fn_params(type_annotation.as_ref());
+        let signature = type_annotation
+            .as_ref()
+            .map(crate::frontend::core::parser::ast::Type::fn_params_flat)
+            .unwrap_or_default();
         let sig = if !signature.is_empty() {
             signature
                 .iter()
@@ -465,9 +467,10 @@ impl TypeChecker {
                     {
                         // 参数位是 `(A: Type)` 形态即类型参数（同
                         // `StatementChecker` 的 classify_generic_params 判据）。
-                        let params = crate::frontend::core::parser::ast::signature_fn_params(
-                            type_annotation.as_ref(),
-                        );
+                        let params = type_annotation
+                            .as_ref()
+                            .map(crate::frontend::core::parser::ast::Type::fn_params_flat)
+                            .unwrap_or_default();
                         let names: Vec<String> = params
                             .iter()
                             // 类型参数的语法形态是 `A: Type`，解析为 `Type::MetaType`
@@ -1428,9 +1431,10 @@ impl TypeChecker {
             }) || (value.is_none() && type_annotation.is_some()) =>
             {
                 // 签名形参的唯一来源：注解里的 Type::Fn 链（6.5.2）
-                let signature = crate::frontend::core::parser::ast::signature_fn_params(
-                    type_annotation.as_ref(),
-                );
+                let signature = type_annotation
+                    .as_ref()
+                    .map(crate::frontend::core::parser::ast::Type::fn_params_flat)
+                    .unwrap_or_default();
                 // 从 target 提取 name 和 type_name
                 let (name, type_name) = match target.as_ref() {
                     crate::frontend::core::parser::ast::Expr::Var(n, _) => (n.clone(), None),
@@ -2831,7 +2835,9 @@ impl TypeChecker {
         span: crate::util::span::Span,
     ) {
         // 泛型形参从声明注解的 Type::Fn 链拍平（6.5.2：类型定义不再另存形参表）
-        let signature = crate::frontend::core::parser::ast::signature_fn_params(type_annotation);
+        let signature = type_annotation
+            .map(crate::frontend::core::parser::ast::Type::fn_params_flat)
+            .unwrap_or_default();
         let generic_params = classify_generic_params(
             &signature,
             // RFC-011b: 运算符接口名也是合法约束名（T: Add）——

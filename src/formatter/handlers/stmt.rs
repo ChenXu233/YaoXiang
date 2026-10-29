@@ -106,7 +106,10 @@ pub fn format_stmt(
             definition,
         } => {
             // 泛型形参从注解的 `Type::Fn` 链拍平（6.5.2：不再有并行形参表）。
-            let params = signature_fn_params(type_annotation.as_ref());
+            let params = type_annotation
+                .as_ref()
+                .map(crate::frontend::core::parser::ast::Type::fn_params_flat)
+                .unwrap_or_default();
             if params.is_empty() {
                 format!(
                     "{}: Type = {}",
@@ -138,7 +141,10 @@ fn format_assign(
     let target_str = format_expr(target, ctx, source_map);
 
     // 签名形参的唯一来源：注解的 `Type::Fn` 链（6.5.2 删并行形参表）。
-    let params = signature_fn_params(type_annotation.as_ref());
+    let params = type_annotation
+        .as_ref()
+        .map(crate::frontend::core::parser::ast::Type::fn_params_flat)
+        .unwrap_or_default();
     let type_str = format_type_annotation(type_annotation, &params, ctx, source_map);
 
     if let Some(val) = value {

@@ -204,7 +204,10 @@ fn test_type_def_generic() {
             kind
         );
     };
-    let params = crate::frontend::core::parser::ast::signature_fn_params(type_annotation.as_ref());
+    let params = type_annotation
+        .as_ref()
+        .map(crate::frontend::core::parser::ast::Type::fn_params_flat)
+        .unwrap_or_default();
     let generic_params = extract_generic_param_names(&params, &NullProbe);
 
     // Assert
@@ -280,7 +283,10 @@ fn test_type_fn_params_carry_signature_verbatim() {
     else {
         panic!("Expected StmtKind::Binding, got {:?}", kind);
     };
-    let params = crate::frontend::core::parser::ast::signature_fn_params(type_annotation.as_ref());
+    let params = type_annotation
+        .as_ref()
+        .map(crate::frontend::core::parser::ast::Type::fn_params_flat)
+        .unwrap_or_default();
 
     assert_eq!(
         params.len(),
@@ -602,7 +608,10 @@ fn test_type_def_generic_sum_type_recognized_as_struct() {
             kind
         );
     };
-    let params = crate::frontend::core::parser::ast::signature_fn_params(type_annotation.as_ref());
+    let params = type_annotation
+        .as_ref()
+        .map(crate::frontend::core::parser::ast::Type::fn_params_flat)
+        .unwrap_or_default();
     let generic_params = extract_generic_param_names(&params, &NullProbe);
 
     // Assert

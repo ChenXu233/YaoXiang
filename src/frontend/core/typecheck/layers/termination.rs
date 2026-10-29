@@ -621,9 +621,10 @@ impl<'a> TerminationChecker<'a> {
                 let child_never = is_never || is_never_return_type(type_annotation.as_ref());
                 // RFC-027a：带显式测度的函数体进上下文，使自递归调用可被识别。
                 // 形参名从注解的 `Type::Fn` 链拍平（6.5.2：不再有并行形参表）。
-                let signature = crate::frontend::core::parser::ast::signature_fn_params(
-                    type_annotation.as_ref(),
-                );
+                let signature = type_annotation
+                    .as_ref()
+                    .map(crate::frontend::core::parser::ast::Type::fn_params_flat)
+                    .unwrap_or_default();
                 let saved_ctx = self.enter_measured_fn(target, &signature);
                 if let Expr::Lambda { body, .. } = v.as_ref() {
                     self.check_stmts(&body.stmts, child_never);

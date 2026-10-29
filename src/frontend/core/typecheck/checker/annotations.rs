@@ -58,7 +58,9 @@ impl TypeChecker {
             } => (type_annotation.as_ref(), Some(definition)),
             _ => return,
         };
-        let params = crate::frontend::core::parser::ast::signature_fn_params(annotation_for_params);
+        let params = annotation_for_params
+            .map(crate::frontend::core::parser::ast::Type::fn_params_flat)
+            .unwrap_or_default();
         let type_annotation: Option<&T> = match &stmt.kind {
             StmtKind::Assign {
                 type_annotation, ..

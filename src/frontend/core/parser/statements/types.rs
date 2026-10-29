@@ -420,9 +420,7 @@ fn parse_constructor_type(
 /// Returns (Vec<Param>, return_type)
 /// This is for RFC-010 unified syntax: `name: (a: Int, b: Int) -> Ret = body`
 /// Also supports const generic literal types: `factorial: [n: Int](n: n) -> Int`
-pub fn parse_fn_type_with_names(
-    state: &mut ParserState<'_>
-) -> Option<(Vec<Param>, Vec<Param>, Box<Type>)> {
+pub fn parse_fn_type_with_names(state: &mut ParserState<'_>) -> Option<(Vec<Param>, Box<Type>)> {
     if !state.expect(&TokenKind::LParen) {
         return None;
     }
@@ -501,9 +499,9 @@ pub fn parse_fn_type_with_names(
     }
     // return_type 位置可能是另一组 curry（如 (n: N) -> Int）。
     // parse_type_annotation 会丢参数名，故自行检测 curry 组并递归收集带名参数。
-    // all_params = 第一组 + 后续各组（拍平带名），供调用方取全部 curry 组参数名
-    // （6.5.2 起由 `Type::fn_params_flat` 统一从 `Type::Fn` 链拍平，本返回值随之收敛）。
-    // return_type 保持嵌套 Type::Fn（纯类型），供 type_annotation 构建正确嵌套结构。
+    // 返回值收敛为**两元组**（6.5.2 commit ③）：第一组形参 + 返回类型；后续各组的
+    // 形参名与类型同栖在嵌套 `Type::Fn.params` 里，调用方经
+    // `Type::fn_params_flat` 拍平取得全部 curry 形参——不再旁路返回同一份数据。
     // 注意：必须前瞻到 `)` 之后确认是 `->` 才算 curry 组——
     // 返回类型本身可能是元组类型 (T, U)（#253），否则会把元组误判为 curry 参数组。
     let saved = state.save_position();
@@ -535,38 +533,30 @@ pub fn parse_fn_type_with_names(
     };
 
     if is_named_curry {
-        if let Some((inner_first, inner_all, inner_ret)) = parse_fn_type_with_names(state) {
-            let mut all_params = params.clone();
-            all_params.extend(inner_all);
+        if let Some((inner_params, inner_ret)) = parse_fn_type_with_names(state) {
             let nested_fn = Type::Fn {
-                params: inner_first,
+                params: inner_params,
                 return_type: inner_ret,
             };
-            return Some((params, all_params, Box::new(nested_fn)));
+            return Some((params, Box::new(nested_fn)));
         }
         state.restore_position(saved);
     }
     // RFC-004 括号语义：`-> ((a: Int) -> Int)` —— 外层括号声明“返回值是函数”，
-    // 链条到此终止（`split_curry` 遇 `Paren` 停下）。但 body lambda 仍需要
-    // 内层参数**名**对齐类型，而 `Type::Fn` 只存类型不存名（见上方说明），
-    // 故此处回扫一次收集带名参数，返回类型保持 `Paren`。
+    // 链条到此终止（`split_curry` 遇 `Paren` 停下）。内层参数名与类型同栖在
+    // 嵌套 `Type::Fn.params`（6.8.1），这里只需把带名的内层函数类型放进
+    // `Paren`，调用方拍平即可拿到它——返回类型保持 `Paren`。
     let saved_paren = state.save_position();
     if state.skip(&TokenKind::LParen) && state.at(&TokenKind::LParen) {
-        if let Some((inner_first, inner_all, inner_ret)) = parse_fn_type_with_names(state) {
+        if let Some((inner_params, inner_ret)) = parse_fn_type_with_names(state) {
             // 仅在全部内层参数都带类型时采用——否则 `((Int) -> Int)` 的 `Int`
             // 会被 parse_fn_type_with_names 误当作参数名（无名参数 ty=None）。
-            if inner_first.iter().all(|p| p.ty.is_some()) && state.skip(&TokenKind::RParen) {
-                let mut all_params = params.clone();
-                all_params.extend(inner_all);
+            if inner_params.iter().all(|p| p.ty.is_some()) && state.skip(&TokenKind::RParen) {
                 let inner_fn = Type::Fn {
-                    params: inner_first,
+                    params: inner_params,
                     return_type: inner_ret,
                 };
-                return Some((
-                    params,
-                    all_params,
-                    Box::new(Type::Paren(Box::new(inner_fn))),
-                ));
+                return Some((params, Box::new(Type::Paren(Box::new(inner_fn)))));
             }
         }
     }
@@ -574,8 +564,7 @@ pub fn parse_fn_type_with_names(
 
     // `->` 后返回类型必需：严格版，非法 token 报错而非静默吞掉整个签名（审计发现）
     let return_type = Box::new(parse_type_annotation_required(state)?);
-    let all_params = params.clone();
-    Some((params, all_params, return_type))
+    Some((params, return_type))
 }
 
 /// Wrap a type annotation as a literal type if it's a const parameter reference

@@ -318,11 +318,9 @@ pub fn name_used_as_type_in(   // ast.rs:847
 
 ### 2.7 语法节点替类型层保存语义
 
-**其一，`StmtKind::Assign` 携带 typechecker 专用字段。** `ast.rs:241-249` 的 `Assign` 变体含 `signature_params: Vec<Param>`（`ast.rs:244-245`），注释直言：
+**其一，`StmtKind::Assign` 曾携带 typechecker 专用字段（已修复：WBS 6.5.2 + 6.8.1，2026-10-30）。** 6.5.2 之前 `Assign` 变体含 `signature_params: Vec<Param>`（原 `ast.rs:244-245`），注释直言「签名第一组参数原样（含参数名），供 typechecker classify_generic_params 使用」——语句 AST 为类型检查器保留了一个专用槽位。
 
-> `/// 签名第一组参数原样（含参数名），供 typechecker classify_generic_params 使用`
-
-语句 AST 为类型检查器保留了一个专用槽位。构造点：`declarations.rs:472`。
+现行表示：形参名与类型**同栖**在类型标注的 `Type::Fn.params`（`Vec<Param>`），唯一取用入口是 `Type::fn_params_flat`（`ast.rs`）。`Assign` 不再另存形参表；`TypeDefinition` 改为携带声明签名 `type_annotation: Option<Type>`（与 `Assign` 同一载体）。
 
 **其二，表达式位置被当成参数列表。** `(a: Int, b: Int)` 在 `src/frontend/core/parser/pratt/nud.rs:505-514` 被解析为 **`Expr::Lambda { params, body: Box::new(Block { stmts: Vec::new(), .. }) }`**——一个**空 body 的 Lambda**。随后由 `src/frontend/core/parser/pratt/led.rs:466` 的 `Expr::Lambda { params, .. } => Some(params.clone())` 臂把它"捞回来"当作参数列表。
 
@@ -389,7 +387,7 @@ ir::Type 别名删除, BytecodeFunction.params / type_table 改用 MonoType
 | 11 | `Union(Vec<(String, Option<Type>)>)` | `ast.rs:448` | **删除** | parser 前向零构造（`mono.rs:743-746` 为 match 臂）；AST→AST 重建 2 点（`function.rs:377`/`606`）随 6.3.2 同批改写 |
 | 12 | `Enum(Vec<String>)` | `ast.rs:449` | **删除** | parser 前向零构造（`mono.rs:747` 为 match 臂）；三类合计为 0（唯一全局零构造变体）。枚举走 `Struct` + `TypeBodyItem`，与 `mono.rs:2378` 的 `MonoType::Enum(_) => IrType::Void` 无关 |
 | 13 | `Tuple(Vec<Type>)` | `ast.rs:450` | **保留** | `bytecode.rs:2374` 消费 |
-| 14 | `Fn { params, return_type }` | `ast.rs:451-454` | **保留** | `bytecode.rs:2366` 消费；**字段重塑 `params: Vec<Type>` → `Vec<Param>`（名字与类型同栖）随 6.8.1（D54）**——`Assign.signature_params` 的名字由此承接（见 6.5.2） |
+| 14 | `Fn { params, return_type }` | `ast.rs:451-454` | **保留** | `bytecode.rs:2366` 消费；**字段重塑 `params: Vec<Type>` → `Vec<Param>`（名字与类型同栖）随 6.8.1（D54）**——`Assign.signature_params` 的名字由此承接（见 6.5.2）。**已完成（WBS 6.8.1，2026-10-30）**：`Param` 增加 `anonymous`/`from_type`/`is_named`；无名形参（纯类型位）以空名字合成，本表「净效果」不变 |
 | 15 | `Option(Box<Type>)` | `ast.rs:455` | **删除** | parser 前向零构造（`mono.rs:770` 为 match 臂）；AST→AST 重建 2 点（`function.rs:427`/`600`）随 6.3.2 同批改写。`types.rs:392-396` 已说明走 `Generic` 路径 |
 | 16 | `Result(Box<Type>, Box<Type>)` | `ast.rs:456` | **删除** | parser 前向零构造（`mono.rs:771` 为 match 臂）；AST→AST 重建 2 点（`function.rs:431`/`602`）随 6.3.2 同批改写 |
 | 17 | `Generic { name, name_span, args }` | `ast.rs:457-461` | **保留** | `Result` / `Option` / `String` / `Bytes` 的实际表示都走它（`types.rs:397-399`） |
@@ -401,7 +399,7 @@ ir::Type 别名删除, BytecodeFunction.params / type_table 改用 MonoType
 | 23 | `MetaType { name_span, args }` | `ast.rs:497-504` | **保留** | 有生产构造点 `types.rs:100`、`declarations.rs:573`；RFC-010 |
 | 24 | `ConstExpr(Box<Expr>)` | `ast.rs:506` | **保留（并标记为仅编译期）** | 有生产构造点 `types.rs:160`。是 `Type` 中唯一嵌入 `Expr` 的变体，IR 层禁止携带（见 6.1） |
 | 25 | `Paren(Box<Type>)` | `ast.rs:518` | **保留** | RFC-004 柯里化的层终止符，`split_curry` 依赖其存在性 |
-| 26 | `NamedParen { param, param_span, inner }` | `ast.rs:533-540` | **迁移** | 语义（binder 名）归位到类型检查器，AST 只保留语法。详见 5.6 |
+| 26 | `NamedParen { param, param_span, inner }` | `ast.rs:533-540` | **迁移** | 语义（binder 名）归位到类型检查器，AST 只保留语法。详见 5.6。**已完成（WBS 6.5.2，2026-10-30）**：节点保留；`checker/refinement.rs` 显式提取 `param` 为 binder；`ast.rs` 注释改为「参数名归 `Type::Fn.params`，本节点只承载返回位 binder」 |
 
 **净效果：26 → 13 变体**（删 13、迁 1、留 12）。
 
@@ -547,17 +545,21 @@ declarations.rs:498-511 与 ast.rs:930 改为
 
 **风险与缓解**：`checker.rs:1642`、`inference/expressions.rs:3374` 这类**非穷举**的 `if let` 匹配在改造后变成永不匹配——不报错、不告警。缓解：类型表门禁（5.7）增加"零构造变体"检查，`Expr::FnDef` 删除后若有人重新写 `if let Expr::FnDef` 会直接编译失败（变体不存在），**这是编译期保证，无需门禁**。
 
-### 5.6 `signature_params` 与 `NamedParen` 的处置
+### 5.6 `signature_params` 与 `NamedParen` 的处置（已实施：WBS 6.5.2 + 6.8.1，2026-10-30）
 
-**`StmtKind::Assign.signature_params`（`ast.rs:244-245`）→ 删除。**
+**`StmtKind::Assign` / `StmtKind::TypeDefinition` 的 `signature_params: Vec<Param>` → 删除。**
 
-理由：它的存在理由（`ast.rs:244` 注释）是"供 typechecker `classify_generic_params` 使用"——**语句 AST 为类型检查器保留的专用槽位**。但 `declarations.rs:500-511` 的 `extracted_params` 在同一函数内已经算出了 `value_params`（已完成类型位/约束位过滤），把它随语句传下去是重复搬运。
+理由：它的存在理由（原 `ast.rs:244` 注释）是"供 typechecker `classify_generic_params` 使用"——**语句 AST 为类型检查器保留的专用槽位**，与形参的另一份表示重复搬运。
 
-改动：`ast.rs:244-245` 删字段 → `declarations.rs:472` 删实参 → `classify_generic_params` 的数据来源改为就地重算（它拿得到 `value: Option<Box<Expr>>` 里的 `Lambda.params`）。**净删除一行字段声明、一处构造、一条搬运路径。**
+**实施口径与本节初稿有一处关键差异**（经阶段 1 核实后修正）：初稿主张"数据来源改为就地重算 `Lambda.params`"，但 `Lambda.params` 是**已过滤**的值参数表（去掉类型位/约束位），而 `classify_generic_params` / `extract_generic_param_names` 需要**未过滤**的原始签名列表。故实际做法是先把名字搬进唯一载体、再删旧字段：
 
-> **风险**：`signature_params` 是**未经谓词过滤的原始**列表，而 `Lambda.params` 是**已过滤**的（`declarations.rs:500-511` 的 filter 去掉了类型位与约束位）。`classify_generic_params` 若依赖未过滤版本，改造后行为会变。**必须在阶段 1 核实 `classify_generic_params` 实际使用哪一份**，不能假定等价。
+1. 6.8.1 先把 `Type::Fn.params` 从 `Vec<Type>` 重塑为 `Vec<Param>`（名字与类型同栖，复用既有 `Param`——不新增第二结构、不用平行数组）；
+2. 6.5.2 再删两处 `signature_params`：`Assign` 从 `type_annotation` 取，`TypeDefinition` 改携声明签名 `type_annotation: Option<Type>`（与 `Assign` 同一载体）；
+3. 唯一取用入口 `Type::fn_params_flat` 从 `Type::Fn` 链拍平（curry 各组依次展开，`Paren`/`NamedParen` 视为透明）；`NamedParen` 的 binder 不在此列，由类型检查器显式解释（见下）。
 
-**`Type::NamedParen`（`ast.rs:533-540`）→ 保留节点，移出 binder 语义。**
+> **风险核实结论**：初稿担心的「未过滤 vs 已过滤」差异成立——但**不是问题**：拍平结果与旧 `signature_params` 逐位同源（同一批 `Param` 节点），故泛型分类结果不变；语料 356/356、IR 快照 216 零漂移、`cargo test --all` 全绿即为证据（实录见 [09a](./09a-wbs-history.md) §P6 6.5）。初稿"改用 `Lambda.params`"的方案会改变泛型分类结果，**未采用**。
+
+**`Type::NamedParen`（`ast.rs:533-540`）→ 保留节点，移出 binder 语义（已完成：6.5.2，2026-10-30）。**
 
 `ast.rs:519-532` 的注释记录了它存在的**充分理由**（见 2.7）：`(r: P(m))` 中若丢掉 `r`，类型检查器只能猜"约束里不在作用域的自由变量即返回值形参"，会**把未声明的 `m` 也当成 binder 静默代入**（注释标注为"实测缺陷"）。
 
@@ -606,7 +608,7 @@ declarations.rs:498-511 与 ast.rs:930 改为
 | 求解器（`types/solver.rs`） | **无影响**。`pub fn unify`（`solver.rs:411`）、`types/substitute.rs:112` 的 `substitute`、`types/mono.rs:649` 的 `substitute` 均在 `MonoType` 上操作 |
 | 常量求值（`types/eval/`） | **无影响**。`eval/const_eval.rs`（1128 行）、`eval/dependent_types.rs`（`check_structural_termination` 在 `478`）、`eval/reducer.rs:572` 的 `unify` 都在 `MonoType` 上 |
 | 单态化（`middle/passes/mono/`） | **已改（WBS 6.3，2026-10-29）**。`mono/function.rs:358`、`362`、`451`、`456`、`554`、`558`、`618`、`623` 8 处 match `AstType::NamedStruct` / `AstType::AssocType`——`AssocType` 的处置定为删除，这 8 处已同步。**`function.rs:507-529` 的 `mono_to_ast_type` 亦已改**（见 6.3 的 #47，改用 `canonical_name` + 结构回写） |
-| IR 构造（`middle/core/ir_gen.rs`） | **需改**。`ir_gen.rs:1266`、`1399` 的 `ast::Type::NamedStruct` match；`ir_gen.rs:1380` 的 `let params: Vec<MonoType> = signature_params`（这是 `signature_params` 的另一个消费点，5.6 需一并核实） |
+| IR 构造（`middle/core/ir_gen.rs`） | **已完成（WBS 6.5.2，2026-10-30）**。`named_struct` 的 match 已随 6.3 收敛；原先直接读 `signature_params` 的 `let params: Vec<MonoType>` 改为经 `Type::fn_params_flat` 拍平（5.6 的核实结论：未过滤列表，与旧字段同源） |
 | 字节码序列化（`middle/passes/codegen/bytecode.rs`） | **需改**。`codegen/bytecode.rs:492-495` 的 `type_id_to_monotype`、`351-352` 的编码循环、`632` 的组装 |
 | 解释器（`backends/interpreter/`） | **需改**。`image.rs:44` 的 `type_table: Vec<ir::Type>` 改 `Vec<MonoType>`；`repl/eval.rs:369-370` 按 `type_table` 下标格式化类型名，元素类型变化会影响 `{:?}` 的输出格式 |
 | RFC-027 编译期类型 | **需改**。`Type::ConstExpr` 保留但标记为**仅编译期**，`Type → MonoType`（`types/lower.rs`）后即消失，IR 层永不可见 |
@@ -638,9 +640,9 @@ declarations.rs:498-511 与 ast.rs:930 改为
 | 1 | `src/frontend/core/parser/ast.rs` | `435-438`、`448-449`、`455-456`、`472` | 删除 `String`/`Bytes`/`Bool`/`Void`/`Union`/`Enum`/`Option`/`Result`/`Sum`/`Int`/`Float` 变体（**已完成：WBS 6.3.1，2026-10-29**——13 个变体全删，`ast::Type` 收敛为 13 变体） | 纯删除 |
 | 2 | `src/frontend/core/parser/ast.rs` | `428-431` | `Name` 增加 `kind: NameKind` 字段 | 数据流 |
 | 3 | `src/frontend/core/parser/ast.rs` | `37-43` | 删除 `Expr::FnDef` | 纯删除 |
-| 4 | `src/frontend/core/parser/ast.rs` | `244-245` | 删除 `Assign.signature_params` | 纯删除 |
+| 4 | `src/frontend/core/parser/ast.rs` | `244-245` | 删除 `Assign.signature_params`（**已完成：WBS 6.5.2，2026-10-30**——同批删 `TypeDefinition` 同名字段，改携 `type_annotation`） | 纯删除 |
 | 5 | `src/frontend/core/parser/ast.rs` | `1026` | 删 `Expr::FnDef` or-pattern | 随 #3 |
-| 6 | `src/frontend/core/parser/ast.rs` | `519-532` | `NamedParen` 注释改为"语法提供 binder 名，语义解释在 `sema/`" | 文档 |
+| 6 | `src/frontend/core/parser/ast.rs` | `519-532` | `NamedParen` 注释改为"语法提供 binder 名，语义解释在 `sema/`"（**已完成：WBS 6.5.2，2026-10-30**——注释改为「参数名归 `Type::Fn.params`，本节点只承载返回位 binder」） | 文档 |
 | 7 | `src/frontend/core/parser/ast.rs` | `795-814` 后 | 新增 `pub enum NameKind` | 新增 |
 | 8 | `src/frontend/core/parser/probe.rs` | 新增 | `trait TypeEnvProbe` + `NullProbe`（**已完成：WBS 6.4.1，2026-10-29**——落地态另有 `BuiltinProbe` 与 `NameKind`，trait 方法为 `is_constraint` / `is_predicate` / `kind_of` / `knows_builtin_types`） | 新增 |
 | 9 | `src/frontend/core/parser/parser_state.rs` | `46-58` | 增加 `probe` 字段与访问器（**已完成：WBS 6.4.2，2026-10-29**——字段为 `&'a dyn TypeEnvProbe`，访问器为 `probe()` 与 `kind_of()`；`ParserState::new` 是唯一构造器，**40 个构造点全部接线**：生产 4 + 测试 36） | 数据流 |
@@ -649,7 +651,7 @@ declarations.rs:498-511 与 ast.rs:930 改为
 | 12 | `src/frontend/core/parser/statements/types.rs` | `836` | 删 `_ => (Vec::new(), Type::Void)` 兜底，改为显式错误返回——**WBS 6.3.1 已把兜底改为 let-else 显式返回 `Type::Name{"()"}`**（`Void` 变体已删；语义与 formatter 输出逐字不变），**「改为显式错误返回」这一半未做**——原计划留 6.4 的错误路径改造，但 **6.4 未接手该路径**（6.4 只做类型名依赖的注入化，`types.rs` 未改）⇒ **转入 6.5**（已登记进 09 的 6.5 行「下一轮契约输入」）。该路径语法可达（`semantic_tokens` 的 `Name` 臂会多记一枚 dummy-span token；语料 0 命中，零漂移） | 行为 |
 | 13 | `src/frontend/core/parser/statements/declarations.rs` | `498-499` | 删 `n == "Terminates"`，改 `state.probe().is_predicate(n)`（**已完成：WBS 6.4.3，2026-10-29**——落地态经 `ParserState::kind_of` 读 `NameKind::Predicate`：本遍已声明的谓词优先，其余交注入探针） | 反向依赖 |
 | 14 | `src/frontend/core/parser/statements/declarations.rs` | `508-511` | 删 `typecheck::operator_interfaces::spec()` 调用（**已完成：WBS 6.4.3，2026-10-29**——改走 `state.probe().is_constraint(n)`） | 反向依赖 |
-| 15 | `src/frontend/core/parser/statements/declarations.rs` | `472` | 删 `signature_params` 实参——**未做**：属 6.5.2「随 #4」，随 `Assign.signature_params` 一并删除 | 随 #4 |
+| 15 | `src/frontend/core/parser/statements/declarations.rs` | `472` | 删 `signature_params` 实参——**已完成（WBS 6.5.2，2026-10-30）**：全部构造点删除该字段；同批把名字合并段的 HashMap 名字表改为位置对齐（判据：前置校验已保证逐位同名） | 随 #4 |
 | 16 | `src/frontend/core/parser/pratt/mod.rs` | `47` | 删 `Expr::FnDef` 臂 | 随 #3 |
 | 17 | `src/frontend/core/parser/pratt/led.rs` | `466` | 保留（是参数列表捞回点，随 5.5 改为直接读 Lambda） | 随 #3 |
 | 18 | `src/frontend/core/types/mono.rs` | `699-708`、`743-747`、`770-771`、`814` | 删 13 个 match 臂（13 个删除变体各 1 个）（**已完成：WBS 6.3.1，2026-10-29**） | 随 #1 |
@@ -713,11 +715,11 @@ declarations.rs:498-511 与 ast.rs:930 改为
 | 阶段 | 内容 | 验收判据 | 回滚点 |
 | --- | --- | --- | --- |
 | **0. 门禁先行** | 新建 `tools/type-tables`，实现 T1/T2/T3，T1 首版**只报告不失败**。在**未改动**的代码上取全量基线 | T1 报告准确列出 13 个 **parser 前向零构造**变体（含 `AssocType` 的定性：前向 0 / AST→AST 2，D8 不变），并**分列 2.2 的反向桥重建点与 2.2.2 的 AST→AST 重建点**；前向零构造 13 与全局零构造 1（仅 `Enum`）分开报；T2/T3 全绿或给出可修清单 | 无代码改动，无需回滚 |
-| **1. 名称规范化** | **已完成（WBS 6.1.2，2026-10-27）**：`from_builtin_name`（`mono.rs:839-886`）收敛为 15 名 + `DateTime` 临时别名，删除 22 个实现内拼写；`add_builtin_types` 的 7 个小写副本、LSP 清单的 `Uint` / `Int128`、`sizeof` 的 `Uint` 臂同批清理；**不设 lexer 别名表**（语料实测 0 处非规范名）。**同步核实 `classify_generic_params` 用的是 `signature_params` 还是 `Lambda.params`** | C3：全语料诊断集与阶段 0 基线**逐条相同** | 单独 commit，可 revert |
+| **1. 名称规范化** | **已完成（WBS 6.1.2，2026-10-27）**：`from_builtin_name`（`mono.rs:839-886`）收敛为 15 名 + `DateTime` 临时别名，删除 22 个实现内拼写；`add_builtin_types` 的 7 个小写副本、LSP 清单的 `Uint` / `Int128`、`sizeof` 的 `Uint` 臂同批清理；**不设 lexer 别名表**（语料实测 0 处非规范名）。**同步核实 `classify_generic_params` 用的是 `signature_params` 还是 `Lambda.params`**（**已核实：用未过滤的原始签名列表；6.5.2 后由 `Type::fn_params_flat` 提供，见 5.6**） | C3：全语料诊断集与阶段 0 基线**逐条相同** | 单独 commit，可 revert |
 | **2. 字节码类型统一** | **已完成（WBS 6.2，2026-10-28）**：四处载体改载 `MonoType`——`BytecodeFunction.params`（`bytecode.rs:814`）与 `return_type`（`:816`）、`BytecodeModule.type_table`（`:856`）、`Image.type_table`（`image.rs:44`）；删有损桥 `From<MonoType> for IrType`（原 `bytecode.rs:2352-2390`）与 `ir::Type` 再导出别名（`ir.rs:3` 的 `pub use` 降为私有 `use`）；解码改原样搬运（`bytecode.rs:2315`、`:2316`、`:2346`），此前 8 类 `MonoType` 变体塌缩为 `Void` 的静默信息损失不再发生 | C3 + 定向 `dump_bytecode` 对拍（6.2 表格逐项）——**实测全绿**（实录见 [09a](./09a-wbs-history.md) §P6 6.2） | 单独 commit，可 revert |
 | **3. 死变体删除** | **已完成（WBS 6.3，2026-10-29）**：按 5.2 表删 13 个变体（`ast::Type` 26 → 13）；清 `mono.rs:699-708` 等 match 臂、`types.rs:836` 兜底（改 let-else 显式返回 `Type::Name{"()"}`）；**同批处理 `function.rs:507-529`（#47）与 AST→AST 10 点（6.3.2）**；同步 `types/tests/mono.rs`。**#47 的口径已更正**：原写的「统一走 `AstType::Name` + `mono.type_name()`」在 6.1 之后**失效**——`type_name()` 是诊断展示用的小写内部名（`int64` / `void` / `string`），6.1.2 删掉小写拼写后它会落成 `TypeRef`、**静默丢掉类型身份**；实际改用新增的 `MonoType::canonical_name()`（`from_builtin_name` 的严格逆向，宽度显式）+ 结构回写 | C3 + `cargo build` 全绿（穷尽 match 强制补全所有臂）+ 泛型替换定向对拍（6.4 末行）——**实测全绿**（实录见 [09a](./09a-wbs-history.md) §P6 6.3） | 单独 commit，可 revert |
 | **4. parser 数据流** | **已完成（WBS 6.4，2026-10-29）**：新增 `probe.rs`（`TypeEnvProbe` + `NullProbe` + `BuiltinProbe` + `NameKind`）；改 `parser_state.rs`（增 `probe` 字段与 `probe()` / `kind_of()` 访问器，**40 个构造点全部接线**＝生产 4 + 测试 36）；删 parser 侧 2 处 `operator_interfaces::spec()` 调用、middle 侧 1 处与 driver 侧 1 处改走窄入口 `is_constraint_name`（#48）；合并两份 `name_used_as_type*` 为 `ast.rs:848` 的单一实现（#49）；`CONST_PARAM_TYPES` 经 `NameKind::Builtin` 双知识接线（#50）。**未做**：`types.rs:162-165` 给 `Type::Name` 加 `kind` 字段（#10，字段化与本批 C3 面冲突）、`types.rs:836` 的兜底改显式错误返回（#12，转 6.5） | C3 + **新增断言**：`grep 'typecheck' src/frontend/core/parser/` 应为 0 ——**实测两条 grep（`typecheck` / `operator_interfaces`）均 0 命中**；语料 356/356、IR 快照 216 零漂移、`cargo test --all` exit 0（lib 2868 → 2875 passed，+7） | 单独 commit，可 revert |
-| **5. AST 死变体与专用字段** | 删 `Expr::FnDef`（16 处）+ `Assign.signature_params`；`NamedParen` 语义迁移 | C3 + `tests/integration/` 18 模块全绿 | 分两个 commit（FnDef / signature_params） |
+| **5. AST 死变体与专用字段** | 删 `Expr::FnDef`（16 处）+ `Assign.signature_params`；`NamedParen` 语义迁移。**6.5.2 + 6.8.1 部分已完成（2026-10-30）**：`Type::Fn.params` 重塑为 `Vec<Param>` → 删两处并行形参表 → 单一拍平入口 `Type::fn_params_flat`；`NamedParen` 保留为语法节点、binder 由类型检查器显式解释 | C3 + `tests/integration/` **22 模块**全绿（实测 22 个 .rs；原文写 18 为旧数）；formatter 参数位输出逐字不变 | 表示重塑 / 删旧表示 / 可维护性收敛 **三笔**各自可 revert（实录见 [09a](./09a-wbs-history.md) §P6 6.5） |
 | **6. 门禁转硬** | T1 从 warning 改为 `panic!`；T4 降级为 CI 断言 | `cargo build` 在故意引入一个零构造变体时**必须失败**（红测试先行） | 单独 commit |
 
 **依赖顺序**：0 → 1 → 2 → 3 → 4 → 5 → 6。**阶段 3 与 5 必须在阶段 2 之后**——阶段 2 落地前，字节码侧的反向桥 A（`bytecode.rs` 的 `From<MonoType> for IrType`）消费 `IrType::String` / `IrType::Bytes`，先删变体会破坏编译；该桥已于 6.2.2 删除，**阶段 3 删变体时的剩余改写面是反向桥 B**（`middle/passes/mono/function.rs` 的 `mono_to_ast_type`，仍按名字反解 `String` / `Bytes`）与 `middle/core/ir.rs` 的三处 `ast::Type` 载体。阶段 3 的 #47 必须与 #1 同批，否则 `mono_to_ast_type` 静默改行为。**阶段 3 已于 2026-10-29 完成（WBS 6.3）**：反向桥 B 已改用 `canonical_name` + 结构回写；`middle/core/ir.rs` 的三处 `ast::Type` 载体**未改**——6.3 只删变体、不改 IR 形状（IR 快照 216 条与语料基线 356 行零漂移），载体处置留阶段 4。
@@ -765,7 +767,7 @@ declarations.rs:498-511 与 ast.rs:930 改为
 - **阶段 2 可能有行为变化**。有损桥接修复后，8 个 `MonoType` 变体现在能看到真实类型而非 `Void`。方向是修复，但会改变依赖签名字节码的路径。这是本文最大的不确定性。
 - **`AssocType` 的定性依赖门禁准确性**。T1 若用行级启发式（`=>` 计数）而非 `syn`，可能误判。这是阶段 0 必须人工核对的原因。
 - **T1 漏算反向桥会使处置表与门禁互相矛盾**。2.2 已证明 7 个"死变体"在反向桥里有生产重建点。若 T1 不分列构造点方向，这 7 个会被判为"有构造点"而免于删除——门禁将成为删除工作的阻力而非保障。
-| **2. `signature_params` 删除有语义风险**。它携带**未过滤**的参数列表，而 `Lambda.params` 是**已过滤**的。若 `classify_generic_params` 依赖前者，改造会改变泛型分类结果。**必须先核实，不能假定等价**（ir_gen 侧 `ir_gen.rs:1380` 的 `signature_params` 消费点一并核实）。
+| **2. `signature_params` 删除有语义风险**（**已核实并解决：6.5.2，2026-10-30**）。它携带**未过滤**的参数列表，而 `Lambda.params` 是**已过滤**的。若 `classify_generic_params` 依赖前者，改造会改变泛型分类结果。**实测结论**：`classify_generic_params` / `extract_generic_param_names` 需要未过滤列表；拍平 `Type::Fn.params` 与旧 `signature_params` 同源（同一批 `Param` 节点），分类结果不变。改用 `Lambda.params` 的方案会改行为，**未采用**（语料 356/356、快照 216、`cargo test --all` 全绿）。
 | **3. 阶段 3 触及 `middle/passes/mono/function.rs`**。除 `AssocType` 的 8 处 match 外，`507-529` 的 `mono_to_ast_type` 是单态化类型替换的出口，改写后替换结果的 `type_name()` 可能变化（6.4 末行）。
 - **`.yx` 语料的非规范类型名可能非零**。若语料大量使用 `i64` / `int`，阶段 1 的"直接删同义词"不可行，退化为"移入 lexer 别名表"，`from_builtin_name` 的收敛幅度减小。（**实测为 0**：6.0 勘察见 5.3 末，故 WBS 6.1.2 直接删除别名、未走别名表路线。）
 - **门禁初期会红**。T1 首次上线若直接 `panic!` 会立刻阻塞编译。必须先只报告取基线。
@@ -795,7 +797,7 @@ declarations.rs:498-511 与 ast.rs:930 改为
 
 - `src/frontend/core/parser/ast.rs:427-541` — `ast::Type` 26 变体定义
 - `src/frontend/core/parser/ast.rs:519-540` — `Type::NamedParen` 的 binder 语义说明（删除会重引入缺陷的证据）
-- `src/frontend/core/parser/ast.rs:241-249` — `StmtKind::Assign.signature_params` 的 typechecker 专用字段
+- `src/frontend/core/parser/ast.rs` — `Param`（名字与类型同栖）与 `Type::fn_params_flat`（拍平入口）：6.5.2/6.8.1 之后的形参唯一表示
 - `src/frontend/core/parser/ast.rs:838-841` — `CONST_PARAM_TYPES`：const 泛型参数名的第三份副本
 - `src/frontend/core/parser/ast.rs:843-885` — `name_used_as_type_in`：`declarations.rs:42` 的重复实现（已分叉）
 - `src/frontend/core/parser/ast.rs:891`、`930` — `extract_generic_param_names` 与其中的越界调用
