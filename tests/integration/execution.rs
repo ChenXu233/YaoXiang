@@ -285,3 +285,76 @@ fn test_binary_int_overflow_still_reports_integer_overflow() {
         "binary overflow should keep reporting integer overflow with operands, got: {err}"
     );
 }
+
+/// #512 端到端：约束泛型以 **Ref 形态实参**实例化，mono 派发名归底类型。
+///
+/// `sum(&a, &b)`（a/b: Vec3）把 T 解成 `Ref{inner: Vec3}`；方法/背书登记名
+/// 一律按底类型（`Vec3.add` 的 `self: &Vec3` 是参数形态不是登记名），mono
+/// 改写必须剥 Ref 才能在合并函数表命中 `Vec3.add`——否则 run 报 E6006
+/// `&Vec3.add` not found（RFC-011 §5.2 约束泛型运算符派发，issue #512）。
+/// 值传形态（T=Vec3 / T=Int）是既有绿态的回归对照。
+#[test]
+fn test_constrained_generic_ref_args_dispatch_to_base_type_method() {
+    run_ok(
+        r#"
+use std.assert
+
+Vec3: Type = {
+    x: Float,
+    y: Float,
+    z: Float,
+    Add(Vec3, Vec3, Vec3),
+}
+
+Vec3.add: (self: &Vec3, other: &Vec3) -> Vec3 = (self, other) => {
+    return Vec3(self.x + other.x, self.y + other.y, self.z + other.z)
+}
+
+sum: (T: Add) -> (a: T, b: T) -> T = a + b
+
+main = () => {
+    a = Vec3(1.0, 2.0, 3.0)
+    b = Vec3(4.0, 5.0, 6.0)
+    by_ref = sum(&a, &b)
+    assert(by_ref.x == 5.0, "ref-shaped instantiation dispatches to Vec3.add")
+    by_value = sum(a, b)
+    assert(by_value.x == 5.0, "value-shaped instantiation still dispatches to Vec3.add")
+    assert(sum(1, 2) == 3, "Int instantiation still dispatches to native add")
+}
+        "#,
+    );
+}
+
+/// #512 端到端：`&mut` 形态实参走同一条剥 Ref 链。
+///
+/// `type_name` 对可变借用渲染 `&mut Vec3`，剥链不分可变性（函数表键空间
+/// 同样不存在 `&mut Type.add`），两侧同 `&mut` 的实例化派发归底类型
+/// （RFC-011 §5.2，issue #512）。
+#[test]
+fn test_constrained_generic_mut_ref_args_dispatch_to_base_type_method() {
+    run_ok(
+        r#"
+use std.assert
+
+Vec3: Type = {
+    x: Float,
+    y: Float,
+    z: Float,
+    Add(Vec3, Vec3, Vec3),
+}
+
+Vec3.add: (self: &Vec3, other: &Vec3) -> Vec3 = (self, other) => {
+    return Vec3(self.x + other.x, self.y + other.y, self.z + other.z)
+}
+
+sum: (T: Add) -> (a: T, b: T) -> T = a + b
+
+main = () => {
+    mut a = Vec3(1.0, 2.0, 3.0)
+    mut b = Vec3(4.0, 5.0, 6.0)
+    v = sum(&mut a, &mut b)
+    assert(v.x == 5.0, "mut-ref-shaped instantiation dispatches to Vec3.add")
+}
+        "#,
+    );
+}

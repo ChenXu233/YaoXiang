@@ -561,8 +561,19 @@ fn bind_template_self(
 /// 约束泛型运算符派发的具体类型显示名（mono 改写 `T.add` → `Vec3.add` /
 /// `Int.add` 与 E1106 诊断共用）：原语用规范大写名（与 FFI 背书条目一致），
 /// 用户类型用名义名。
+///
+/// Ref 形态实参剥到底类型（#512）：`sum(&a, &b)`（a/b: Vec3）实例化时
+/// T 解出 `Ref{inner: Vec3}`，而方法/背书登记名一律按**底类型**（`Vec3.add`
+/// 的接收者形态 `self: &Vec3` 是参数形态，不是登记名；原生条目同为
+/// Int/Float/String/Bool/Char）——合并函数表里不存在 `&Type.add` 键，
+/// 剥 Ref 只会把「找不到」变「找到」，不存在反向吞掉合法派发名的形态。
 pub fn operator_type_display(ty: &MonoType) -> String {
-    let tn = ty.type_name();
+    // 递归剥 Ref 链（`&mut &T` 等嵌套借用同底类型口径）
+    let mut cur = ty;
+    while let MonoType::Ref { inner, .. } = cur {
+        cur = inner;
+    }
+    let tn = cur.type_name();
     match tn.as_str() {
         "int64" => "Int".to_string(),
         "float64" => "Float".to_string(),
