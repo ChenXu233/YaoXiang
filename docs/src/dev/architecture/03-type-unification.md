@@ -502,12 +502,12 @@ declarations.rs:498-511 与 ast.rs:930 改为
 
 | 文件 | 改动 |
 | --- | --- |
-| `src/frontend/core/parser/probe.rs`（新增） | 定义 `trait TypeEnvProbe`，提供 `is_predicate` / `is_constraint` / `is_type_var` / `is_builtin_type` 四个纯查询方法。**trait 定义在 L2，实现由 L3 提供**——这是合法的依赖倒置 |
-| `src/frontend/core/parser/parser_state.rs:46-58` | `declare_predicate` / `is_predicate_name` 保留（供本遍累积），新增 `probe: Box<dyn TypeEnvProbe>` 字段与 `probe()` 访问器 |
+| `src/frontend/core/parser/probe.rs`（新增） | 定义 `trait TypeEnvProbe`，提供 `is_constraint` / `is_predicate` / `kind_of` / `knows_builtin_types` 四个纯查询方法。**trait 定义在 L2，实现由 L3 提供**——这是合法的依赖倒置。**落地态方法名以本表为准**（原设计写的 `is_type_var` / `is_builtin_type` 未采纳：类型变量的身份由**声明位**结构性决定、不由名字决定，故不设该判据；内置名定种改由 `kind_of` 给出，并增 `knows_builtin_types()` 声明本探针是否持有内置类型名表） |
+| `src/frontend/core/parser/parser_state.rs:46-58` | `declare_predicate` / `is_predicate_name` 保留（供本遍累积），新增 `probe: &'a dyn TypeEnvProbe` 字段与 `probe()` 访问器（**借用而非 `Box`**）。**落地态另增 `kind_of()` 访问器**——本遍已声明的谓词优先、其余交探针，是名字定种的唯一入口 |
 | `src/frontend/core/parser/statements/declarations.rs:498-499` | 删 `n == "Terminates"`；改为 `state.probe().is_predicate(n) \|\| state.is_predicate_name(n)` |
 | `src/frontend/core/parser/statements/declarations.rs:508-511` | 删 `crate::frontend::core::typecheck::operator_interfaces::spec(n)` 调用；改为 `state.probe().is_constraint(n)` |
 | `src/frontend/core/parser/ast.rs:930` | 删 `crate::frontend::core::typecheck::operator_interfaces::spec(name)` 调用。`ast.rs` 是 `Type` / `Expr` / `StmtKind` 的定义处，不应持有环境依赖——该函数需改为接收 `&dyn TypeEnvProbe` 参数（见下） |
-| 全部 5 个 parser 构造点（`parser.rs` 内的 `Parser::new` / `ParserState::new`） | 接收 `probe: Box<dyn TypeEnvProbe>` 参数。**默认实现 `NullProbe`（全返回 false）** 保证 parser 单元测试不受影响 |
+| 全部 **40 个** parser 构造点（`ParserState::new` 是唯一构造器；**生产 4 处 + 测试 36 处**） | 接收 `probe: &'a dyn TypeEnvProbe` 参数。**默认实现 `NullProbe`（全返回 false）** 保证 parser 单元测试不受影响；生产入口的默认探针是 `BuiltinProbe`（编译器内置封闭集），另有注入缝 `parse_with_probe` / `parse_expression_with_probe`。（**原设计的「5 个构造点」是勘察前的估计，实测 40 个**——`Parser::new` 不存在，构造器只有 `ParserState::new`） |
 
 **`extract_generic_param_names` 的签名问题**：`ast.rs:891` 的 `pub fn extract_generic_param_names(params: &[Param]) -> Vec<GenericParamName>` 是不接收任何上下文的自由函数。删除 `ast.rs:930` 的越界调用后它需要 `is_constraint` 判定，因此签名须增加 `probe: &dyn TypeEnvProbe`。调用方（含 `parser/tests/ast.rs`）同步改传 `&NullProbe`。
 
@@ -642,14 +642,14 @@ declarations.rs:498-511 与 ast.rs:930 改为
 | 5 | `src/frontend/core/parser/ast.rs` | `1026` | 删 `Expr::FnDef` or-pattern | 随 #3 |
 | 6 | `src/frontend/core/parser/ast.rs` | `519-532` | `NamedParen` 注释改为"语法提供 binder 名，语义解释在 `sema/`" | 文档 |
 | 7 | `src/frontend/core/parser/ast.rs` | `795-814` 后 | 新增 `pub enum NameKind` | 新增 |
-| 8 | `src/frontend/core/parser/probe.rs` | 新增 | `trait TypeEnvProbe` + `NullProbe` | 新增 |
-| 9 | `src/frontend/core/parser/parser_state.rs` | `46-58` | 增加 `probe` 字段与访问器 | 数据流 |
-| 10 | `src/frontend/core/parser/statements/types.rs` | `162-165` | 用 `state.probe()` 定 `NameKind` | 数据流 |
-| 11 | `src/frontend/core/parser/statements/types.rs` | `392-396` | 注释更新（`Result`/`Option` 走 `Generic`，已与事实一致，仅补变体删除说明） | 文档 |
-| 12 | `src/frontend/core/parser/statements/types.rs` | `836` | 删 `_ => (Vec::new(), Type::Void)` 兜底，改为显式错误返回——**WBS 6.3.1 已把兜底改为 let-else 显式返回 `Type::Name{"()"}`**（`Void` 变体已删；语义与 formatter 输出逐字不变），**「改为显式错误返回」这一半留 6.4 的错误路径改造**（该路径语法可达，`semantic_tokens` 的 `Name` 臂会多记一枚 dummy-span token；语料 0 命中，零漂移） | 行为 |
-| 13 | `src/frontend/core/parser/statements/declarations.rs` | `498-499` | 删 `n == "Terminates"`，改 `state.probe().is_predicate(n)` | 反向依赖 |
-| 14 | `src/frontend/core/parser/statements/declarations.rs` | `508-511` | 删 `typecheck::operator_interfaces::spec()` 调用 | 反向依赖 |
-| 15 | `src/frontend/core/parser/statements/declarations.rs` | `472` | 删 `signature_params` 实参 | 随 #4 |
+| 8 | `src/frontend/core/parser/probe.rs` | 新增 | `trait TypeEnvProbe` + `NullProbe`（**已完成：WBS 6.4.1，2026-10-29**——落地态另有 `BuiltinProbe` 与 `NameKind`，trait 方法为 `is_constraint` / `is_predicate` / `kind_of` / `knows_builtin_types`） | 新增 |
+| 9 | `src/frontend/core/parser/parser_state.rs` | `46-58` | 增加 `probe` 字段与访问器（**已完成：WBS 6.4.2，2026-10-29**——字段为 `&'a dyn TypeEnvProbe`，访问器为 `probe()` 与 `kind_of()`；`ParserState::new` 是唯一构造器，**40 个构造点全部接线**：生产 4 + 测试 36） | 数据流 |
+| 10 | `src/frontend/core/parser/statements/types.rs` | `162-165` | 用 `state.probe()` 定 `NameKind`（**未做**：6.4 只引入**定种枚举 + 探针查询**，**不动 `Type::Name` 的结构**——字段化会牵动全部生产/测试构造点，且要求反向桥 `mono_to_ast_type` 保真回写 `kind`，IR 快照与语料基线随之再生，与本批 C3 面（零漂移）冲突；`NameKind` 字段化留待出现第二个消费者时再评估） | 数据流 |
+| 11 | `src/frontend/core/parser/statements/types.rs` | `392-396` | 注释更新（`Result`/`Option` 走 `Generic`，已与事实一致，仅补变体删除说明）——**未做**：6.4 未改 `types.rs`（该文件的改动面在 6.3 的兜底改造），本行随 #10 一并留待后续批次 | 文档 |
+| 12 | `src/frontend/core/parser/statements/types.rs` | `836` | 删 `_ => (Vec::new(), Type::Void)` 兜底，改为显式错误返回——**WBS 6.3.1 已把兜底改为 let-else 显式返回 `Type::Name{"()"}`**（`Void` 变体已删；语义与 formatter 输出逐字不变），**「改为显式错误返回」这一半未做**——原计划留 6.4 的错误路径改造，但 **6.4 未接手该路径**（6.4 只做类型名依赖的注入化，`types.rs` 未改）⇒ **转入 6.5**（已登记进 09 的 6.5 行「下一轮契约输入」）。该路径语法可达（`semantic_tokens` 的 `Name` 臂会多记一枚 dummy-span token；语料 0 命中，零漂移） | 行为 |
+| 13 | `src/frontend/core/parser/statements/declarations.rs` | `498-499` | 删 `n == "Terminates"`，改 `state.probe().is_predicate(n)`（**已完成：WBS 6.4.3，2026-10-29**——落地态经 `ParserState::kind_of` 读 `NameKind::Predicate`：本遍已声明的谓词优先，其余交注入探针） | 反向依赖 |
+| 14 | `src/frontend/core/parser/statements/declarations.rs` | `508-511` | 删 `typecheck::operator_interfaces::spec()` 调用（**已完成：WBS 6.4.3，2026-10-29**——改走 `state.probe().is_constraint(n)`） | 反向依赖 |
+| 15 | `src/frontend/core/parser/statements/declarations.rs` | `472` | 删 `signature_params` 实参——**未做**：属 6.5.2「随 #4」，随 `Assign.signature_params` 一并删除 | 随 #4 |
 | 16 | `src/frontend/core/parser/pratt/mod.rs` | `47` | 删 `Expr::FnDef` 臂 | 随 #3 |
 | 17 | `src/frontend/core/parser/pratt/led.rs` | `466` | 保留（是参数列表捞回点，随 5.5 改为直接读 Lambda） | 随 #3 |
 | 18 | `src/frontend/core/types/mono.rs` | `699-708`、`743-747`、`770-771`、`814` | 删 13 个 match 臂（13 个删除变体各 1 个）（**已完成：WBS 6.3.1，2026-10-29**） | 随 #1 |
@@ -682,9 +682,9 @@ declarations.rs:498-511 与 ast.rs:930 改为
 | 45 | `typecheck/tests/checker.rs` | `109-111` | 改写为 Lambda + Assign | 测试 |
 | 46 | `types/tests/mono.rs` | `27-40`、`97`、`119-145`、`221` | 删除 11 个死变体的 lower 断言 | 测试 |
 | 47 | `src/middle/passes/mono/function.rs` | `507-529` | `mono_to_ast_type` 删 `AstType::Int`/`Float`/`Bool`/`Char`/`Void`/`String`/`Bytes` 分支，统一走 `AstType::Name` + `mono.type_name()`。**必须与 #1 同批处理**——**口径已更正（已完成：WBS 6.3.2，2026-10-29）**：`mono.type_name()` 是诊断展示用的小写内部名（`int64` / `void` / `string`），6.1.2 删掉小写拼写后它会落成 `TypeRef`、**静默丢掉类型身份**，故实际改用新增的 `MonoType::canonical_name()`（`from_builtin_name` 的严格逆向，宽度显式）+ 结构回写（`Generic` / `Ref` / `Fn`） | 收敛 |
-| 48 | `src/frontend/core/parser/ast.rs` | `891`、`930` | `extract_generic_param_names` 签名增 `probe: &dyn TypeEnvProbe`；删 `typecheck::operator_interfaces::spec()` 调用改 `probe.is_constraint(name)`。调用方（含 `parser/tests/ast.rs`）传 `&NullProbe` | 反向依赖 |
-| 49 | `src/frontend/core/parser/statements/declarations.rs` | `42-80` | 删本文件内的 `name_used_as_type`，改为调用 `ast.rs` 的合并版；`is_predicate` 短路改读 `NameKind::Predicate` | 重复实现 |
-| 50 | `src/frontend/core/parser/ast.rs` | `912` | `CONST_PARAM_TYPES` 判定改经 `NameKind::Builtin` 接线（见 5.3） | 收敛 |
+| 48 | `src/frontend/core/parser/ast.rs` | `891`、`930` | `extract_generic_param_names` 签名增 `probe: &dyn TypeEnvProbe`；删 `typecheck::operator_interfaces::spec()` 调用改 `probe.is_constraint(name)`。调用方（含 `parser/tests/ast.rs`）传 `&NullProbe`（**已完成：WBS 6.4.3，2026-10-29**——落地态签名见 `ast.rs:927`；生产调用方 `ir_gen.rs` 的 3 处传 `SemanticProbe`，其余传 `&NullProbe` / `&BuiltinProbe`） | 反向依赖 |
+| 49 | `src/frontend/core/parser/statements/declarations.rs` | `42-80` | 删本文件内的 `name_used_as_type`，改为调用 `ast.rs` 的合并版；`is_predicate` 短路改读 `NameKind::Predicate`（**已完成：WBS 6.4.4，2026-10-29**——合并后的单一实现在 `ast.rs:848`，覆盖头部判定 + 谓词短路 + Struct/NamedStruct 递归） | 重复实现 |
+| 50 | `src/frontend/core/parser/ast.rs` | `912` | `CONST_PARAM_TYPES` 判定改经 `NameKind::Builtin` 接线（见 5.3）（**已完成：WBS 6.4.5，2026-10-29**——双知识接线：`CONST_PARAM_TYPES.contains(name) && (kind_of == Builtin \|\| !knows_builtin_types())`；不持内置名表的探针回退单表判据 = 6.4 前行为） | 收敛 |
 
 > **6.2 已落地的 6 行（#23 / #25 / #26 / #27 / #28 / #29）**：WBS 6.2（2026-10-28 完成）把这 6 行一次做完——四处载体改载 `MonoType`（`bytecode.rs:814`、`:816`、`:856`；`image.rs:44`）、删有损桥 `From<MonoType> for IrType` 与 `ir::Type` 再导出别名、解码改原样搬运（`bytecode.rs:2315`、`:2316`、`:2346`）。**这几行的行号已按落地态重取**（原锚 `812` / `814` / `854` / `2339` / `2352-2390` 是改前位置）。实测数字与门禁结果见 [09a](./09a-wbs-history.md) §P6 6.2。
 
@@ -716,7 +716,7 @@ declarations.rs:498-511 与 ast.rs:930 改为
 | **1. 名称规范化** | **已完成（WBS 6.1.2，2026-10-27）**：`from_builtin_name`（`mono.rs:839-886`）收敛为 15 名 + `DateTime` 临时别名，删除 22 个实现内拼写；`add_builtin_types` 的 7 个小写副本、LSP 清单的 `Uint` / `Int128`、`sizeof` 的 `Uint` 臂同批清理；**不设 lexer 别名表**（语料实测 0 处非规范名）。**同步核实 `classify_generic_params` 用的是 `signature_params` 还是 `Lambda.params`** | C3：全语料诊断集与阶段 0 基线**逐条相同** | 单独 commit，可 revert |
 | **2. 字节码类型统一** | **已完成（WBS 6.2，2026-10-28）**：四处载体改载 `MonoType`——`BytecodeFunction.params`（`bytecode.rs:814`）与 `return_type`（`:816`）、`BytecodeModule.type_table`（`:856`）、`Image.type_table`（`image.rs:44`）；删有损桥 `From<MonoType> for IrType`（原 `bytecode.rs:2352-2390`）与 `ir::Type` 再导出别名（`ir.rs:3` 的 `pub use` 降为私有 `use`）；解码改原样搬运（`bytecode.rs:2315`、`:2316`、`:2346`），此前 8 类 `MonoType` 变体塌缩为 `Void` 的静默信息损失不再发生 | C3 + 定向 `dump_bytecode` 对拍（6.2 表格逐项）——**实测全绿**（实录见 [09a](./09a-wbs-history.md) §P6 6.2） | 单独 commit，可 revert |
 | **3. 死变体删除** | **已完成（WBS 6.3，2026-10-29）**：按 5.2 表删 13 个变体（`ast::Type` 26 → 13）；清 `mono.rs:699-708` 等 match 臂、`types.rs:836` 兜底（改 let-else 显式返回 `Type::Name{"()"}`）；**同批处理 `function.rs:507-529`（#47）与 AST→AST 10 点（6.3.2）**；同步 `types/tests/mono.rs`。**#47 的口径已更正**：原写的「统一走 `AstType::Name` + `mono.type_name()`」在 6.1 之后**失效**——`type_name()` 是诊断展示用的小写内部名（`int64` / `void` / `string`），6.1.2 删掉小写拼写后它会落成 `TypeRef`、**静默丢掉类型身份**；实际改用新增的 `MonoType::canonical_name()`（`from_builtin_name` 的严格逆向，宽度显式）+ 结构回写 | C3 + `cargo build` 全绿（穷尽 match 强制补全所有臂）+ 泛型替换定向对拍（6.4 末行）——**实测全绿**（实录见 [09a](./09a-wbs-history.md) §P6 6.3） | 单独 commit，可 revert |
-| **4. parser 数据流** | 新增 `probe.rs`；改 `parser_state.rs:46-58`；改 `declarations.rs:498-511` 与 `ast.rs:930`（#48）；`types.rs:162-165` 定 `NameKind`；合并两份 `name_used_as_type*`（#49） | C3 + **新增断言**：`grep 'typecheck' src/frontend/core/parser/` 应为 0 | 单独 commit，可 revert |
+| **4. parser 数据流** | **已完成（WBS 6.4，2026-10-29）**：新增 `probe.rs`（`TypeEnvProbe` + `NullProbe` + `BuiltinProbe` + `NameKind`）；改 `parser_state.rs`（增 `probe` 字段与 `probe()` / `kind_of()` 访问器，**40 个构造点全部接线**＝生产 4 + 测试 36）；删 parser 侧 2 处 `operator_interfaces::spec()` 调用、middle 侧 1 处与 driver 侧 1 处改走窄入口 `is_constraint_name`（#48）；合并两份 `name_used_as_type*` 为 `ast.rs:848` 的单一实现（#49）；`CONST_PARAM_TYPES` 经 `NameKind::Builtin` 双知识接线（#50）。**未做**：`types.rs:162-165` 给 `Type::Name` 加 `kind` 字段（#10，字段化与本批 C3 面冲突）、`types.rs:836` 的兜底改显式错误返回（#12，转 6.5） | C3 + **新增断言**：`grep 'typecheck' src/frontend/core/parser/` 应为 0 ——**实测两条 grep（`typecheck` / `operator_interfaces`）均 0 命中**；语料 356/356、IR 快照 216 零漂移、`cargo test --all` exit 0（lib 2868 → 2875 passed，+7） | 单独 commit，可 revert |
 | **5. AST 死变体与专用字段** | 删 `Expr::FnDef`（16 处）+ `Assign.signature_params`；`NamedParen` 语义迁移 | C3 + `tests/integration/` 18 模块全绿 | 分两个 commit（FnDef / signature_params） |
 | **6. 门禁转硬** | T1 从 warning 改为 `panic!`；T4 降级为 CI 断言 | `cargo build` 在故意引入一个零构造变体时**必须失败**（红测试先行） | 单独 commit |
 

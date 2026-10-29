@@ -1635,3 +1635,231 @@ grep -rEn --include=*.yx '(:|->|<)[[:space:]]*(int|int64|i64|datetime|int32|i32|
 ### 计数
 
 本批不新增二级/三级任务 ⇒ 09 顶部计数表不变（二级 **72** / 三级 **193**）。6.3 的 2 个三级任务为既有登记，勾选不改变计数。
+
+## P6 6.4 parser 数据流收口（6.4.1–6.4.5，2026-10-29）
+
+> **触发**：P6 6.3 收口后，6.4 的五个三级任务待收口——6.4.1 新增 `probe.rs`（类型环境探针的**接口**定义在 L2）、6.4.2 改 `ParserState`（增 `probe` 字段与访问器）、6.4.3 删 `operator_interfaces::spec()` 调用（parser 侧 2 处 + middle 侧 1 处）、6.4.4 合并两份 `name_used_as_type*`、6.4.5 让 `CONST_PARAM_TYPES` 经 `NameKind::Builtin` 接线。
+
+> **轮次**：勘察（改写面清单）→ 实现（6.4.1–6.4.5 一笔提交）→ 独立验证 → 对抗性复审 → **静态审计抓到真回归** → 修复轮 → 二次验证 → 二次复审 → 契约追认 → 本收口。
+
+> **判据**：C3（诊断码 / 消息 / 顺序不变）+ 03 §6.4 的硬验收（`git diff --stat tests/yaoxiang tests/baselines src/std/` 必须为空）。另加本批自身的两条载体判据：① **parser 内零类型层引用**——`grep -rn 'typecheck' src/frontend/core/parser/` 与 `grep -rn 'operator_interfaces' src/frontend/core/parser/` 均须 0 命中；② **判据可失败性**——三条变异试验各自使判据转红并机械还原。
+
+### 结论：parser 的类型名依赖改为注入式探针
+
+parser（L2）此前**直接调用**类型检查侧（L3）的运算符接口表来判定「约束名 / 谓词名」，构成 L2→L3 反向依赖（`scripts/ci/check-boundary.py` 的 B2 库存 2 处）。本轮按 03 §5.4 改为**注入式探针**：接口定义在 L2，实现由 L3 提供——依赖倒置。
+
+| 产物 | 位置 | 内容 |
+| --- | --- | --- |
+| 探针接口 | `src/frontend/core/parser/probe.rs` | `trait TypeEnvProbe`（`is_constraint` / `is_predicate` / `kind_of` / `knows_builtin_types` 四个纯查询方法，全部带默认实现）、`enum NameKind`（`Builtin` / `Constraint` / `Predicate` / `UserType`）、`NullProbe`（全 false）、`BuiltinProbe`（编译器内置封闭集） |
+| L3 实现 | `src/frontend/core/typecheck/probe.rs` | `SemanticProbe`（以运算符接口表 / 内置谓词判定 / `MonoType::from_builtin_name` 为权威来源）+ 两个窄入口 `is_constraint_name`（`:33`）/ `is_builtin_predicate_name`（`:25`） |
+| 注入点 | `src/frontend/core/parser/parser_state.rs` | `ParserState` 增 `probe` 字段（`:27`）+ `probe()`（`:60`）+ `kind_of()`（`:68`）两个访问器；构造器 `ParserState::new(tokens, probe)`（`:44`）显式收探针 |
+| 入口 | `src/frontend/core/parser/mod.rs` | `parse`（`:35`）= `parse_with_probe(tokens, &BuiltinProbe)`；`parse_expression`（`:94`）= `parse_expression_with_probe(tokens, &BuiltinProbe)`；注入缝 `parse_with_probe`（`:40`）/ `parse_expression_with_probe`（`:99`） |
+
+**其余五项改动**：
+
+1. parser 内两处 `operator_interfaces::spec()` 调用**删除**，改走探针（`probe.is_constraint(name)`）。
+2. parser 内 8 处提及 typecheck 的注释按事实改写（跨层描述改为「L3 的类型检查」等表述）。
+3. 两份 `name_used_as_type*` 合并为 `src/frontend/core/parser/ast.rs:848` 的**单一实现**（详见下节差异表）。
+4. `CONST_PARAM_TYPES` **15 → 5 名**（删 10 个 6.1 已废的实现内拼写），并经 `NameKind::Builtin` 接线（详见下节）。
+5. `Terminates` 的逐点字符串比较收敛为单一判定口：`typecheck/` 内 9 个判定点改调 `is_builtin_predicate_name`（`checker.rs` ×3、`checker/annotations.rs` ×2、`checker/refinement.rs` ×1、`environment.rs` ×1、`inference/statements.rs` ×2）；该目录内 `"Terminates"` 字面量命中由 **16 行降为 8 行**（新增的 1 行是判定表 `BUILTIN_PREDICATES`，其余 7 行是诊断文案、既有常量 `TERMINATES_PREDICATE` 与 2 个未归一的判定点 `checker.rs:4128` / `inference/statements.rs:1868`）。
+
+### probe 设计（trait / 三个实现 / 接入点）
+
+**trait 的四个方法**（`src/frontend/core/parser/probe.rs:45`）：
+
+| 方法 | 语义 | 默认实现 | L3 语义探针（`SemanticProbe`） |
+| --- | --- | --- | --- |
+| `is_constraint` | 该名字是否为**约束名**（运算符接口，`(T: Add)` 的 `Add`） | `false` | `typecheck::is_constraint_name` → 运算符接口表 |
+| `is_predicate` | 该名字是否为**编译期谓词**（`Terminates`） | `false` | `typecheck::is_builtin_predicate_name` → 内置谓词表 |
+| `kind_of` | 名字定种（`NameKind`） | `NameKind::UserType` | `MonoType::from_builtin_name` 命中 → `Builtin`；否则 `is_constraint_name` → `Constraint`；否则 `is_builtin_predicate_name` → `Predicate`；其余 `UserType` |
+| `knows_builtin_types` | 本探针是否**持有内置类型名表** | `false`（保守） | `true` |
+
+**三个实现**：
+
+- `NullProbe`（`parser/probe.rs:93`）——全 false；单元测试与「无类型环境」入口的基线。
+- `BuiltinProbe`（`parser/probe.rs:113`）——编译器**内置封闭集**的镜像：约束名 7 个（`CONSTRAINT_NAMES`，`:116`）+ 内置谓词名 1 个（`PREDICATE_NAMES`，`:121`）。**不是第二份权威表**：7 个约束名与 L3 运算符接口表逐名对账、内置谓词名与 L3 的内置谓词判定双向对账，由 L3 侧的对账用例守着（`typecheck/tests/probe.rs` 两条用例）。
+- `SemanticProbe`（`typecheck/probe.rs:41`）——L3 实现，权威来源 = 运算符接口表 / 内置谓词判定 / `MonoType::from_builtin_name`。
+
+**接入点**：
+
+- **字段**：`ParserState.probe: &'a dyn TypeEnvProbe`（`parser_state.rs:27`）——借用而非 `Box`，不引入所有权与生命周期外的额外约束。
+- **访问器**：`probe()`（`:60`）返回探针本身；`kind_of(name)`（`:68`）= **本遍已声明的谓词优先**（`predicate_names`）→ `NameKind::Predicate`，其余交探针——**定种的唯一入口**（`probe.kind_of` 不再被 parser 直接调用）。
+- **构造点 40 处** = 生产 **4** + 测试 **36**：
+
+| 类别 | 处数 | 位置 |
+| --- | --- | --- |
+| 生产 | 4 | `parser/mod.rs:44`（`parse_with_probe` 透传注入的探针）、`parser/mod.rs:103`（`parse_expression_with_probe` 同）、`parser/pratt/nud.rs:450`（f-string 插值重解析，透传外层探针）、`parser/statements/bindings.rs:107`（`parse_binding` 传 `&NullProbe`——该入口不接收环境） |
+| 测试 | 36 | `pratt/tests/led.rs` ×9、`pratt/tests/nud.rs` ×23、`statements/tests/types.rs` ×3、`tests/parser_state.rs` ×1 |
+
+> `parse_binding`（`parser/statements/bindings.rs:97`）虽在生产模块内，但**全仓唯一调用方是测试**（`parser/statements/tests/bindings.rs:310`）⇒ 其 `NullProbe` 构造点无生产影响。
+
+### spec() 处置表
+
+改前全仓 `operator_interfaces::spec()`（含别名形式 `ops::spec(`）的**调用点共 14 处**（不含 `operator_interfaces.rs:253` 的模块内自用与 `driver/helpers.rs:1138` 的文档注释提及）。本批逐处去向：
+
+| # | 改前位置 | 层 | 本批处置 | 替代判据 |
+| --- | --- | --- | --- | --- |
+| 1 | `src/frontend/core/parser/ast.rs:923`（`extract_generic_param_names`） | L2→L3 | **删除调用**，改走探针 | `probe.is_constraint(name)`（`parser/probe.rs:49`） |
+| 2 | `src/frontend/core/parser/statements/declarations.rs:508` | L2→L3 | **删除调用**，改走探针 | `state.probe().is_constraint(n)`（现 `declarations.rs:461`） |
+| 3 | `src/middle/core/ir_gen.rs:696`（`is_constraint_param_ann`） | L3→L3 | 改调窄入口 | `typecheck::is_constraint_name(name)`（现 `ir_gen.rs:697`） |
+| 4 | `src/driver/helpers.rs:1150`（`generic_instantiation_map` 的 is_trait 闭包） | L1→L3 | 改调窄入口 | `typecheck::is_constraint_name(name)`（现 `helpers.rs:1151`） |
+| 5–9 | `src/frontend/core/typecheck/checker.rs` ×5（改前 `:1525` / `:2228` / `:2341` / `:2451` / `:2870`） | L3→L3 | **本批未动** | 仍是 L3 内部直接查表（合法） |
+| 10 | `src/frontend/core/typecheck/inference/expressions.rs:1585`（`ops::spec(iface)` 别名形式） | L3→L3 | **本批未动** | 同上 |
+| 11–14 | `src/frontend/core/typecheck/inference/statements.rs` ×4（改前 `:1443` / `:1781` / `:1801` / `:2932`） | L3→L3 | **本批未动** | 同上 |
+
+**窄入口的等价性**：`is_constraint_name`（`typecheck/probe.rs:33`）的实现**逐字**是 `super::operator_interfaces::spec(name).is_some()` ⇒ 改调窄入口不改变任何判定结果，只把「摸表」收敛为「问一个名字是不是约束名」。
+
+**新增的窄入口只增不减**：L3 侧的 `is_constraint_name` 是本批**新增**的（第 3、4 处改调它）；`is_builtin_predicate_name`（`:25`）把 9 处 `"Terminates"` 逐点比较收敛为内置谓词名的**单一判定口**。
+
+### 「全仓 13 处」与实测数的对账
+
+WBS 的 6.4.3 行写「**全仓 13 处**」——**该口径少算 1 处**：
+
+| 分项 | WBS 计划口径 | 实测 | 差额 |
+| --- | --- | --- | --- |
+| parser 侧 | 2 | 2 | — |
+| typecheck 侧 | 10 | 10 | — |
+| middle 侧 | 1 | 1 | — |
+| **driver 侧** | **0（未计）** | **1**（`src/driver/helpers.rs:1150`） | **+1** |
+| 合计 | 13 | **14** | +1 |
+
+**差额来源**：`src/driver/helpers.rs:1150` 的 `operator_interfaces::spec(name).is_some()`（L1 编排层 → L3 类型层）——原计划的 grep 口径只搜了 `operator_interfaces::spec(` 的全限定写法，漏了经 `use` 引入后的短名调用。**该处本批已一并处置**（改调窄入口），故落地态 parser 内 0 处、driver 1 处改窄入口、middle 1 处改窄入口、typecheck 10 处保持。
+
+### name_used_as_type* 合并差异表
+
+改前有两份**同名同义、行为已分叉**的实现（03 §2.4 登记）：
+
+- `src/frontend/core/parser/ast.rs` 的 `name_used_as_type_in`（`pub`，无回调参数）
+- `src/frontend/core/parser/statements/declarations.rs` 的 `name_used_as_type`（模块私有，带 `is_predicate` 回调）
+
+**分叉三处 + 共同缺口**（下表即合并依据）：
+
+| 分叉点 | ast.rs 版 | declarations.rs 版 | 合并后的**正本**（`ast.rs:848` 的 `name_used_as_type`） |
+| --- | --- | --- | --- |
+| `Generic` 的**头部**（`F(A)` 的 `F`） | 判头部是否被当类型用 | 不判 | **采 ast.rs 版**（头部判定） |
+| **谓词短路**（`Terminates(b)` 的实参位是值） | 无 | 对整个 `Generic` 节点短路 `false` | **采 declarations.rs 版**（短路读 `NameKind::Predicate`） |
+| `Struct` / `NamedStruct` 的字段类型递归 | 有 | 落 `_ => false` | **采 ast.rs 版**（递归） |
+| `MetaType` / `ConstExpr` / `Paren` / `NamedParen` | 不处理 | 不处理 | **两版共同缺口，本批刻意不动** |
+
+**合并方式**：以 ast.rs 版为正本（其头部判定与 Struct 递归较完整），叠加上 declarations.rs 版的**谓词短路**；短路判据由「字符串回调」改为**读 `NameKind::Predicate`**（探针问答，非名字表）。declarations.rs 侧那份实现**删除**，改为调用 ast.rs 的合并版（`declarations.rs:466`）；L3 侧 `checker/annotations.rs` 也改调同一实现（`:87` / `:90` / `:93`），并按 L3 原口径传恒 `false` 的谓词闭包（`annotations.rs:69-93`）。
+
+**合并后的判定面扩大一处**（A 项）：类型位 lambda 形参的判定由 `[F, g]` 变为 `[g]`——合并版把 `Generic` 头部也算类型引用（这正是 ast.rs 版原有的更完整语义）。**对外零差异**：5 个 `.yx` 程序的 CLI 诊断在两个 revision 上逐字相同（判定面扩大不产生新的对外诊断）。
+
+**为何不补共同缺口**：补 `MetaType` / `ConstExpr` / `Paren` / `NamedParen` 会改变「const 参数是否被当类型用」的判定（进而改 IR 的 `generic_params` 与语料行为），属**语义修正**，须按 07 的分流判据另立一轮，不在 6.4 的 C3 面内。缺口已登记在 03 §5.3 与本节「残留风险」。
+
+### CONST_PARAM_TYPES 接线
+
+| 项 | 改前 | 改后 |
+| --- | --- | --- |
+| 常量名 | `CONST_PARAM_TYPES`（`ast.rs`） | 同名保留（**不新增概念**） |
+| 表内容 | 15 名：`Int` / `Bool` / `Float` / `Char` / `String` + `I8` / `I16` / `I32` / `I64` / `U8` / `U16` / `U32` / `U64` / `F32` / `F64` | **5 名**：`Int` / `Bool` / `Float` / `Char` / `String`（`ast.rs:825`） |
+| 删掉的 10 名 | 6.1.2 已删除的实现内拼写 | 留在表里会产生**无法 lower** 的 const 参数名（`Uint` 族在 `MonoType` 里没有变体，位宽缩写也不是内置名） |
+| 判定方式 | 直接查本表字符串 | **双知识接线**：`CONST_PARAM_TYPES.contains(name) && (probe.kind_of(name) == NameKind::Builtin \|\| !probe.knows_builtin_types())`（`ast.rs:961-964`） |
+
+**双知识的含义**：名字必须既在「const 参数可接受集合」内，又由探针确认为**内置名**（权威表在 L3 的 `MonoType::from_builtin_name`）。只查本表会绕开探针的定种；只查探针则会把 `Int8` 等规范名也当 const 参数候选（**拓宽登记 = 行为变更**）。规范名（`Int8` …）自始不在 const 参数的可接受集合里，**不进本表**。
+
+**`knows_builtin_types` 的存在理由**：L2 的默认探针（`BuiltinProbe` / `NullProbe`）拿不到内置名表，`kind_of` 永不返回 `Builtin`——若不放行，默认 `parse()` 入口对 `(N: Int)` 会**静默漏登记**。`knows_builtin_types() == false` 时按本表单表判定（= 6.4 前行为），L3 语义探针持有名表（覆写为 `true`），双知识仍全强度生效。
+
+**连带清账**：`tools/type-tables` 的 T2 门禁 dispositions 表删 **10 条 `T2.C1`** 登记（这 10 个拼写已在 6.1.2 清账，本批把 const 参数表的同 10 名一并删除 ⇒ 登记随之兑现）；清账后该表只剩 `DateTime` 的一条 `T2.C2`。
+
+### ir_gen 那处「跨层」的处置（层号更正）
+
+WBS 的 6.4.3 行把 `src/middle/core/ir_gen.rs` 的 `is_constraint_param_ann` 标为「**L3→L2 跨层反向依赖**」——**该层号标注有误**。
+
+- `scripts/ci/check-boundary.py` 的 `L3_DIRS` **同时含 `typecheck` 与 `middle`** ⇒ middle → typecheck 是 **L3→L3 同层**，RFC-039 四层模型下不构成反向依赖；实跑该门禁**违规 0 处**，CI 不旗标。
+- 该处本批的处置是**改调窄入口** `typecheck::is_constraint_name`（`ir_gen.rs:697`），并让 3 处 `extract_generic_param_names` 调用传 `SemanticProbe`（否则 `(T: Add)` 不登记 → E3018）。
+
+**门禁基线同步**：`scripts/ci/check-boundary.py` 的两张基线表随本批同步——B2（`L2→L3/L4` 反向依赖）库存清零；B6（parser 内硬编码类型/谓词名）由 `declarations.rs` 移到 `probe.rs`，库存仍 **2 处**（`ast.rs` 的 `CONST_PARAM_TYPES` 与 `probe.rs` 的 `PREDICATE_NAMES`）。豁免 **1 处**（L3 实现 L2 的判定接口，reason 已注明于 `typecheck/probe.rs:12-15`），违规 **0 处**，`pub(crate)` 计数 **165**。
+
+### grep = 0 证据
+
+改后（落地态）实测，**两条命令均 0 命中**（`grep` 无输出 = exit 1）：
+
+| 命令 | 结果 |
+| --- | --- |
+| `grep -rn 'typecheck' src/frontend/core/parser/` | 无输出（exit 1） |
+| `grep -rn 'operator_interfaces' src/frontend/core/parser/` | 无输出（exit 1） |
+
+**对照改前**：同一口径在 6.4 的父提交上命中 **10 处**（`ast.rs` 6、`pratt/nud.rs` 2、`statements/declarations.rs` 2——其中 **2 处代码调用 + 8 处注释**）。改前 parser 内的全部 `use crate::` 路径中亦含 typecheck 引用；改后枚举 parser 内全部 `use crate::` 路径，**无 typecheck / middle 引用**。
+
+### 回归与修复轮（首版真回归 → 方案 B）
+
+**首版（6.4.1–6.4.5 一笔提交）的真回归**：const 参数的 guard 要求 `probe.kind_of(name) == NameKind::Builtin`，而 L2 的默认探针（`BuiltinProbe` / `NullProbe`）**不持有内置类型名表**（`MonoType::from_builtin_name` 在 L3），`kind_of` 永不返回 `Builtin` ⇒ 默认 `parse()` 入口对 `(N: Int)` 这类 const 参数**静默漏登记**，与 6.4 之前不一致。
+
+**修法（方案 B）**：`trait TypeEnvProbe` 增 `knows_builtin_types()`（默认 `false` = 保守）；const 参数的 guard 改为 `CONST_PARAM_TYPES.contains(name) && (kind_of == Builtin || !knows_builtin_types())`——**不持表的探针回退单表判据**（= 6.4 前行为），L3 的 `SemanticProbe` 覆写为 `true`，双知识在全强度生效。
+
+**未选方案 A**（让 `BuiltinProbe.kind_of` 对内置名返回 `Builtin`）：L2 没有内置名表，A 只能拿 `CONST_PARAM_TYPES` 反推 `Builtin`——等于把 const 可接受集合冒充内置名全集（`Int8` / `Bool` 仍会是 `UserType`），在 L2 造第二份半个内置名源，且 `kind_of` 的语义继续失真。
+
+**先红后绿证据**：新增回归用例在修复前**实测红**（期望 `["N"]` 实得 `[]`），修复后绿；新增双探针同源对账用例绿。新增用例 7 条（`parser/tests/probe.rs` 3 条 + `typecheck/tests/probe.rs` 4 条）。
+
+### 实测数字
+
+① **硬验收**——`git diff --stat -- tests/yaoxiang tests/baselines src/std/` 在 6.4 的父提交与落地态之间**为空**（语料层 / 基线层 / 标准库零差异）；`tests/` 侧同样零差异（见「直驱例外」）。
+
+② **语料差分 356/356、差异为空**——基线 `tests/baselines/corpus-parity.jsonl` 共 356 行；`cargo run --example corpus_probe` 的产物与基线逐字节相同。
+
+③ **IR 快照 216 条零漂移**——`src/middle/core/tests/snapshots/` 下 216 个 `.snap` 全部在库未改。
+
+④ **`cargo test --all` exit 0**——lib **2868 → 2875 passed**（+7 = 本批新增的 7 条探针用例）/ 0 failed / 2 ignored；integration **314** passed；其余测试二进制全绿。测试集合对账：`git grep -c '#\[test\]' <rev> -- 'src/**'` 求和 **2871 → 2878**（+7，**removed 0**），全仓口径 **3399 → 3406**（+7）——**未删测试、未放宽断言**。
+
+⑤ **grep 判据**——见上节，两条命令均 0 命中。
+
+⑥ **变异验证（判据可失败性）**——三条变异各自使判据转红并**机械还原**（`git apply -R` 后逐文件 blob 与 HEAD 逐字一致、`git status` CLEAN）：
+
+| 变异 | 转红的判据 |
+| --- | --- |
+| M1 撤销 `knows_builtin_types` 回退（回到修复前的 guard） | 探针用例 2 FAILED（`parser::tests::probe` 期望 `["N"]` 实得 `[]`；`typecheck::tests::probe` 双探针对账 left `["N"]` / right `[]`） |
+| M2 在 parser 内插入 typecheck 引用 | grep 判据红（`grep -rn 'typecheck' src/frontend/core/parser/` 命中） |
+| M3 把 `SemanticProbe` 的 `knows_builtin_types` 改回 `false` | 1 FAILED（双探针对账用例） |
+
+> **提交（本地 dev，未推送）**：`:recycle: refactor(parser): 注入类型环境探针，parser 去除类型名依赖（P6 6.4）`（2026-10-29，32 files / +660 / −295）与 `:bug: fix(parser): 默认探针恢复 const 参数收编（6.4 修复轮）`（2026-10-29，6 files / +185 / −7）；本收口文档另起一笔 `:memo: docs(plan): 6.4 parser 数据流收口`。按仓库约定提交号在 push 之后取（`pull --rebase` 会重写本地哈希），故此处只记提交主题与日期。
+
+### 门禁（实测，全部 exit 0）
+
+| # | 门禁 | 实测 |
+| --- | --- | --- |
+| ① | `cargo fmt --check --all` | exit 0 |
+| ② | `cargo clippy --all --all-features --all-targets -- -D warnings` | exit 0 |
+| ③ | `cargo test --all` | exit 0（lib 2875 passed / 0 failed / 2 ignored；integration 314 passed） |
+| ④ | 语料差分 | 356 / 356，差异为空 |
+| ⑤ | IR 快照 | 216 条零漂移（`check-snapshot-drift.sh` PASS） |
+| ⑥ | 义务账本 | PASS |
+| ⑦ | 边界 + 扇出 + 概念 | 违规 0（`pub(crate)` 计数 **165**；B6 库存 2 处；豁免 1 处）；`check-fanout` 违规 0、库存 7 处（接线点实测 8 处）；`check-concepts` exit 0 |
+| ⑧ | 文档门禁 | `check-docs-truth` / `check-docs-orphan` / `check-docs-refs` / `check-docs-examples` 全 exit 0 |
+| ⑨ | 错误码生成器幂等 | 重跑 `python scripts/docs/gen-error-code-docs.py` 后 `git diff --quiet` exit 0 |
+
+**错误码生成物（随行号平移再生）**：本批改动了诊断码发射点所在文件的行数，故错误码文档由生成器**位置敏感**地产出，必须重跑生成器并随提交再生（AGENTS.md 第 10 条⑤ 的机械必需面）——`docs/src/reference/error-code/E0xxx.md`、`E1xxx.md`、`E2xxx.md`、`E8xxx.md` 与 `docs/src/reference/warning-code/warning-codes.md` 共 **5 个生成物**，逐项 diff 仅为发射点行号平移，**诊断码数量与文字未变**；生成器复跑幂等。
+
+### 直驱例外
+
+**无**。`tests/yaoxiang` / `tests/baselines` / `src/std` 三段零差异，`tests/` 侧同样零差异；全仓 `#[test]` 由 3399 增至 3406，变化全部落在 `src/` 内的两个新增测试模块（`src/frontend/core/parser/tests/probe.rs`、`src/frontend/core/typecheck/tests/probe.rs`）——**未删测试、未放宽断言**。
+
+### 残留风险（转入下一轮契约输入）
+
+① **`NullProbe` + 谓词应用路径无测试覆盖**（低危）——`NullProbe` 下 `ParserState::kind_of` 只看本遍已声明谓词，环境侧谓词不可见 ⇒ 谓词应用短路在纯 `NullProbe` 下不生效。生产入口不受影响（`parse` / `parse_expression` 默认 `BuiltinProbe`，`parse_binding` 的 `NullProbe` 构造点全仓仅测试调用）。**若未来把 `NullProbe` 用于生产或等价基线，先补谓词应用用例。**
+
+② **`NameKind` 未字段化**——03 §5.3 的目标形态是给 `Type::Name` 增 `kind` 字段、在构造点一次定死；本批只引入**定种枚举 + 探针查询**，不动 `Type::Name` 的结构（字段化会牵动全部构造点，且要求反向桥 `mono_to_ast_type` 保真回写 `kind`，IR 快照与语料基线随之再生——与本批 C3 面冲突）。当前定种信息只有一个消费者（`extract_generic_param_names` 的 const 参数判定），**字段化留待出现第二个消费者时再评估**。
+
+③ **`name_used_as_type` 的四个变体缺口**——`MetaType` / `ConstExpr` / `Paren` / `NamedParen` 两版原先都落 `_ => false`，合并版保持该缺口。补它们会改变「const 参数是否被当类型用」的判定（进而改 IR 的 `generic_params` 与语料行为），属**语义修正**，须另立一轮（07 的分流判据），不在 6.4 的 C3 面内。
+
+④ **两处陈旧注释**——`src/frontend/core/parser/probe.rs:44` 写「三个方法都带默认实现」，实为**四个**（增 `knows_builtin_types`）；`src/frontend/core/parser/statements/declarations.rs:450` 的注释仍称 `ParserState::is_predicate_app`，实际方法名是 `kind_of`。二者在 `src/` 内（不在本批收口文档的改动面内），留待下一轮实现侧一并修正。
+
+⑤ **9 个默认 `parse()` 入口尚未注入 `SemanticProbe`**——`parse()` 的 9 个生产调用点为：driver 的三个解析臂（`src/driver/arms.rs:82` / `:166` / `:205`）、前端编排的两处逐文件解析（`src/frontend/module/orchestrator.rs:1041` / `:1247`）、前端门面（`src/frontend/compiler.rs:173`）、库入口（`src/lib.rs:100`）、LSP 补全（`src/lsp/handlers/completion.rs:136`）、`src/std/` 的源码解析（`src/std/yx_sources.rs:51`）。它们目前走默认 `BuiltinProbe`（编译器内置封闭集的镜像），故 B6 仍有 2 处库存。注入缝已就位（`src/driver/helpers.rs:1246` 的 `parse_with_probe` 是生产用例），**后续批次可把这 9 个入口全部改为注入 `SemanticProbe` 后删除 `BuiltinProbe` 的内置封闭集**——但 `src/std/` 的源码解析属本批硬验收的**零差异**面，改签名须同批再生语料基线。
+
+⑥ **parser 的非 Fn 签名兜底仍在**——`src/frontend/core/parser/statements/types.rs` 的 `_ => (Vec::new(), Type::Void)` 兜底在 6.3 已改为 let-else 显式返回 `Type::Name{"()"}`（语义与 formatter 输出逐字不变），但该路径**语法可达**：`semantic_tokens` 的 `Name` 臂会比旧的 `Void` 臂（空操作）多记一枚 dummy-span token（语料 393 个 `.yx` 中该形态 0 命中，formatter / 诊断 / dump 零漂移）。**6.4 未接手该路径**（本批只做类型名依赖的注入化），须在 6.5 一并消除（不再由 parser 兜底产出伪类型）。
+
+⑦ **`ir.rs` 三处 `ast::Type` 载体未动**——`Instruction::Cast { target_type }`（`src/middle/core/ir.rs:325`）、`Instruction::TypeTest { ty }`（同文件 `:330`）、`FunctionBody::TypeDecl { definition }`（同文件 `:651`）仍持 `ast::Type`；6.3 只删变体、6.4 只做注入化，两批都**未改 IR 形状**（IR 快照 216 条与语料基线 356 行零漂移）。载体处置须另立一轮（改动会动 IR 快照 / 语料基线）。
+
+### 过程注记（四条）
+
+① **生成物再一次落在 outOfScope**——本批实现轮的契约把 `docs/` 划进 outOfScope，却含 5 个错误码生成物（随诊断码发射点行号平移必须再生，属 AGENTS.md 第 6 条契约规则①「机械必需面」）。**6.2 / 6.3 / 6.4 三批连续踩同一个坑**——后续契约须把「`docs/src/reference/error-code/` 与 `docs/src/reference/warning-code/` 的生成物」显式圈进 `inScope`（按路径前缀写，不得用散文限定）。
+
+② **首版提交里有假陈述**——首版 `parser/probe.rs` 的注释写「`is_constraint` / `is_predicate` 的判定与 6.4 之前逐字一致」，但该表述被当时的审计轮判为**假陈述**（`kind_of` 不含内置名，const 参数判定靠回退才一致），修复轮已改为按事实分述。
+
+③ **一次审计轮因 revision 变更而中止**——审计轮的结论（真回归）已被修复轮与二次验证吸收；其中止原因是冻结的 SHA 变更，**不是判据失败**。真回归本身由静态审计（读代码 + 读判据）发现，不依赖运行期探针。
+
+④ **本次收口对 09 的 6.4 行做了三处口径更正**——6.4.2 的字段清单（6 → 7 字段）、6.4.3 的调用点口径（「全仓 13 处」→ 计划口径 + 实测 14 处）与**层号**（middle → typecheck 是 L3→L3 同层，原写「L3→L2 跨层反向依赖」）、6.4.5 的行号锚点。这些是**事实性更正**，不是实测数字回填；数字与判据细节仍在本文。
+
+### 计数
+
+本批不新增二级/三级任务 ⇒ 09 顶部计数表不变（二级 **72** / 三级 **193**）。6.4 的 5 个三级任务为既有登记，勾选不改变计数。
