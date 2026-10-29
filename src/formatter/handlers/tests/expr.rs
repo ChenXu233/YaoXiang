@@ -21,9 +21,9 @@ fn default_source_map() -> SourceMap {
 }
 
 /// Helper: test_format_fn_signature_curried_grouping 的完整夹具与断言（逐条断言见函数体）。
-/// Fixture: curried 签名的 `signature_params = [T: Type, x: Int]`。
-fn curried_signature_params() -> Vec<Param> {
-    let signature_params = vec![
+/// Fixture: curried 签名的 `decl_params = [T: Type, x: Int]`。
+fn curried_decl_params() -> Vec<Param> {
+    let decl_params = vec![
         Param {
             name: "T".to_string(),
             ty: Some(Type::MetaType {
@@ -43,7 +43,7 @@ fn curried_signature_params() -> Vec<Param> {
             span: Span::dummy(),
         },
     ];
-    signature_params
+    decl_params
 }
 
 /// Fixture: curried 函数类型 `(Type) -> ((Int) -> Int)`。
@@ -723,18 +723,18 @@ fn test_format_error_placeholder() {
 
 #[test]
 fn test_format_fn_signature_curried_grouping() {
-    // Arrange — curried 泛型函数签名（signature_params 按嵌套 Fn 切分）
+    // Arrange — curried 泛型函数签名（decl_params 按嵌套 Fn 切分）
     let ctx = default_ctx();
-    let signature_params = curried_signature_params();
+    let decl_params = curried_decl_params();
     let fn_type = curried_fn_type();
 
-    // Act — 按嵌套 Fn 结构切分 signature_params
-    let result = format_fn_signature(&signature_params, &fn_type, &ctx, &default_source_map());
+    // Act — 按嵌套 Fn 结构切分 decl_params
+    let result = format_fn_signature(&decl_params, &fn_type, &ctx, &default_source_map());
 
     // Assert — 第一组给外层，第二组给内层，单层括号保证幂等
     assert_eq!(
         result, "(T: Type) -> (x: Int) -> Int",
-        "curried 签名应按嵌套 Fn 切分 signature_params：got {:?}",
+        "curried 签名应按嵌套 Fn 切分 decl_params：got {:?}",
         result
     );
 }

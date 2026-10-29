@@ -195,7 +195,7 @@ fn test_type_def_generic() {
     // Act
     let StmtKind::TypeDefinition {
         name,
-        signature_params,
+        type_annotation,
         ..
     } = &kind
     else {
@@ -204,7 +204,8 @@ fn test_type_def_generic() {
             kind
         );
     };
-    let generic_params = extract_generic_param_names(signature_params, &NullProbe);
+    let params = crate::frontend::core::parser::ast::signature_fn_params(type_annotation.as_ref());
+    let generic_params = extract_generic_param_names(&params, &NullProbe);
 
     // Assert
     assert_eq!(name, "Option", "类型名应为 Option");
@@ -269,30 +270,31 @@ fn test_expr_stmt_call() {
 }
 
 #[test]
-fn test_signature_params_stored_verbatim() {
-    // 覆盖: RFC-010 统一声明语法 — signature_params 原样存储签名第一组参数
+fn test_type_fn_params_carry_signature_verbatim() {
+    // 覆盖: RFC-010 统一声明语法 — 签名形参原样存于 Type::Fn.params（RFC-039 6.5.2）
     // 验证: 泛型与值参数混合签名 (T: Type, x: Int) 两项按序保留，名字与标注完整
     let kind = parse_stmt("foo: (T: Type, x: Int) -> Int = x");
     let StmtKind::Assign {
-        signature_params, ..
+        type_annotation, ..
     } = &kind
     else {
         panic!("Expected StmtKind::Binding, got {:?}", kind);
     };
+    let params = crate::frontend::core::parser::ast::signature_fn_params(type_annotation.as_ref());
 
     assert_eq!(
-        signature_params.len(),
+        params.len(),
         2,
         "签名第一组两个参数应原样保留（泛型 T 与值参数 x）"
     );
-    assert_eq!(signature_params[0].name, "T", "第一个参数应为 T");
+    assert_eq!(params[0].name, "T", "第一个参数应为 T");
     assert!(
-        matches!(signature_params[0].ty, Some(Type::MetaType { .. })),
+        matches!(params[0].ty, Some(Type::MetaType { .. })),
         "T 的标注应为 MetaType（Type 关键字）"
     );
-    assert_eq!(signature_params[1].name, "x", "第二个参数应为 x");
+    assert_eq!(params[1].name, "x", "第二个参数应为 x");
     assert!(
-        matches!(&signature_params[1].ty, Some(Type::Name { name, .. }) if name == "Int"),
+        matches!(&params[1].ty, Some(Type::Name { name, .. }) if name == "Int"),
         "x 的标注应为 Int"
     );
 }
@@ -590,7 +592,7 @@ fn test_type_def_generic_sum_type_recognized_as_struct() {
     // Act
     let StmtKind::TypeDefinition {
         name,
-        signature_params,
+        type_annotation,
         definition,
         ..
     } = &kind
@@ -600,7 +602,8 @@ fn test_type_def_generic_sum_type_recognized_as_struct() {
             kind
         );
     };
-    let generic_params = extract_generic_param_names(signature_params, &NullProbe);
+    let params = crate::frontend::core::parser::ast::signature_fn_params(type_annotation.as_ref());
+    let generic_params = extract_generic_param_names(&params, &NullProbe);
 
     // Assert
     assert_eq!(name, "Option", "类型名应为 Option");

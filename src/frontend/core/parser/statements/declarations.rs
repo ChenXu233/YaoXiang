@@ -162,7 +162,7 @@ fn parse_assign_after_target(
                     parse_fn_type_with_names(state)?;
 
                 // 名字与类型同栖（RFC-039 6.8.1）：第一组形参原样进
-                // Type::Fn.params，名字不再另存旁路（signature_params 在 commit 2 删除）。
+                // Type::Fn.params，名字不再另存旁路（6.5.2 已把并行形参表并入本载体）。
                 let type_annotation = Type::Fn {
                     params: fn_params_parsed,
                     return_type: return_type.clone(),
@@ -251,7 +251,7 @@ fn parse_assign_after_target(
                             return Some(Stmt {
                                 kind: StmtKind::TypeDefinition {
                                     name: name.clone(),
-                                    signature_params: fn_params.clone().unwrap_or_default(),
+                                    type_annotation: type_annotation.clone(),
                                     definition,
                                 },
                                 span,
@@ -436,7 +436,6 @@ fn parse_assign_after_target(
                                 kind: StmtKind::Assign {
                                     target: Box::new(target),
                                     type_annotation,
-                                    signature_params: extracted_params.clone(),
                                     value: Some(Box::new(value)),
                                     is_mut,
                                     span,
@@ -459,7 +458,6 @@ fn parse_assign_after_target(
                         kind: StmtKind::Assign {
                             target: Box::new(target),
                             type_annotation,
-                            signature_params: extracted_params.clone(),
                             value: Some(Box::new(value)),
                             is_mut,
                             span,
@@ -531,7 +529,6 @@ fn parse_assign_after_target(
                         kind: StmtKind::Assign {
                             target: Box::new(target),
                             type_annotation,
-                            signature_params: extracted_params.clone(),
                             value: Some(Box::new(value)),
                             is_mut,
                             span,
@@ -559,7 +556,7 @@ fn parse_assign_after_target(
                             return Some(Stmt {
                                 kind: StmtKind::TypeDefinition {
                                     name: "Type".to_string(),
-                                    signature_params: Vec::new(),
+                                    type_annotation: type_annotation.clone(),
                                     definition: Type::MetaType {
                                         name_span: Span::dummy(),
                                         args: Vec::new(),
@@ -578,7 +575,7 @@ fn parse_assign_after_target(
                 return Some(Stmt {
                     kind: StmtKind::TypeDefinition {
                         name: name.clone(),
-                        signature_params: Vec::new(),
+                        type_annotation: type_annotation.clone(),
                         definition,
                     },
                     span,
@@ -606,7 +603,6 @@ fn parse_assign_after_target(
             kind: StmtKind::Assign {
                 target: Box::new(target),
                 type_annotation,
-                signature_params: Vec::new(),
                 value: Some(Box::new(initializer)),
                 is_mut,
                 span,
@@ -841,7 +837,6 @@ pub fn parse_identifier_stmt(
             kind: StmtKind::Assign {
                 target: Box::new(target),
                 type_annotation: None,
-                signature_params: Vec::new(),
                 value: Some(Box::new(value)),
                 is_mut,
                 span,

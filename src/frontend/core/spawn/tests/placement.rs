@@ -38,7 +38,6 @@ fn var_stmt(name: &str) -> Stmt {
         kind: StmtKind::Assign {
             target: Box::new(Expr::Var(name.to_string(), Span::dummy())),
             type_annotation: None,
-            signature_params: vec![],
             value: None,
             is_mut: false,
             span: Span::dummy(),

@@ -327,7 +327,7 @@ struct LoopTargets {
 /// 一层 curry 签名
 ///
 /// 由 `split_curry` 从嵌套的 `Type::Fn` 拆出。
-/// `params` 是这层的参数（带名字），从拍平的 `signature_params` 切出。
+/// `params` 是这层的参数（带名字），从拍平的 curry 形参切出。
 /// `return_type` 是这层的返回类型：还有下一层时是 `Type::Fn`，最后一层是值类型。
 /// 一层 curry 签名
 struct CurryLayer {
@@ -606,7 +606,7 @@ impl AstToIrGenerator {
 
     ///
     /// 输入：`type_annotation` 是 `Type::Fn` 的嵌套结构（如 `(N: Int) -> (n: N) -> Int`）
-    /// 输入：`signature_params` 是拍平的所有 curry 参数（如 `[N: Int, n: N]`）
+    /// 输入：`curry_params` 是拍平的所有 curry 参数（如 `[N: Int, n: N]`）
     /// 输出：按层切分的 `CurryLayer` 列表
     ///
     /// 非 curry 函数（如 `(a: Int, b: Int) -> Int`）返回 1 个 layer，
@@ -614,7 +614,7 @@ impl AstToIrGenerator {
     #[allow(clippy::while_let_loop)]
     fn split_curry(
         type_ann: &ast::Type,
-        signature_params: &[ast::Param],
+        curry_params: &[ast::Param],
     ) -> Vec<CurryLayer> {
         let mut layers = Vec::new();
         // 用索引游标而非迭代器：Paren 分支需要把已取走的层参数“退回”。
@@ -628,8 +628,8 @@ impl AstToIrGenerator {
                     return_type,
                 } => {
                     let start = cursor;
-                    cursor = (cursor + type_params.len()).min(signature_params.len());
-                    let layer_params: Vec<ast::Param> = signature_params[start..cursor].to_vec();
+                    cursor = (cursor + type_params.len()).min(curry_params.len());
+                    let layer_params: Vec<ast::Param> = curry_params[start..cursor].to_vec();
                     let ret_type = *return_type;
                     current_type = ret_type.clone();
                     // 类型参数层（如 `(T: Type)`）是编译期参数：不占运行时参数位，
@@ -644,7 +644,7 @@ impl AstToIrGenerator {
 
                     // RFC-004 括号语义：返回位置的 `Paren` ⇔ 链条在此终止。
                     // 该括号内的参数**不属于本函数**——它们是被返回函数的参数。
-                    // parser 把签名拍平成 `signature_params`（内层名供 body 对齐类型），
+                    // parser 把签名拍平成 `curry_params`（内层名供 body 对齐类型），
                     // 故此处必须把游标退回，否则 `f: () -> ((a:Int)->Int)` 的 `a`
                     // 会被当成本层参数，`f` 变成接受 `a` 而非返回闭包。
                     // RFC-027 §3：具名括号（`(r: P(r))`）与 `Paren` 同款——
@@ -1912,17 +1912,20 @@ impl AstToIrGenerator {
         match &stmt.kind {
             ast::StmtKind::TypeDefinition {
                 name,
-                signature_params,
+                type_annotation,
                 definition,
             } => {
                 self.declared_type_names.insert(name.clone());
                 use crate::frontend::core::parser::ast::extract_generic_param_names;
                 use crate::frontend::core::types::mono::UniverseLevel;
 
+                // 泛型形参的唯一来源：声明注解的 Type::Fn 链（6.5.2）
+                let signature = ast::signature_fn_params(type_annotation.as_ref());
+
                 // 提取泛型参数名。探针传 L3 语义实现：约束名 / 内置名定种必须以
                 // 类型环境的权威表为准，否则 `(T: Add)` 不登记为泛型参数、
                 // 单态化请求的类型实参与 IR 的 generic_params 对不上（E3018）。
-                let generic_params = extract_generic_param_names(signature_params, &SemanticProbe);
+                let generic_params = extract_generic_param_names(&signature, &SemanticProbe);
                 let generic_param_names = if generic_params.is_empty() {
                     None
                 } else {
@@ -1930,7 +1933,7 @@ impl AstToIrGenerator {
                 };
 
                 // 签名：(T: Type) -> Type → params = [MetaType], return_type = MetaType
-                let params: Vec<MonoType> = signature_params
+                let params: Vec<MonoType> = signature
                     .iter()
                     .map(|p| {
                         p.ty.as_ref()
@@ -2026,11 +2029,12 @@ impl AstToIrGenerator {
             ast::StmtKind::Assign {
                 target,
                 type_annotation,
-                signature_params,
                 value,
                 ..
             } => {
                 use crate::frontend::core::parser::ast::Expr;
+                // 签名形参的唯一来源：注解的 Type::Fn 链（6.5.2）
+                let signature = ast::signature_fn_params(type_annotation.as_ref());
                 let (name, type_name) = match target.as_ref() {
                     Expr::Var(n, _) => (n.clone(), None),
                     Expr::FieldAccess { expr, field, .. } => {
@@ -2058,12 +2062,12 @@ impl AstToIrGenerator {
                 };
                 let generic_params =
                     crate::frontend::core::parser::ast::extract_generic_param_names(
-                        signature_params,
+                        &signature,
                         &SemanticProbe,
                     );
                 // 登记形参名，供命名参数调用（`add(b = 5, a = 3)`）重排实参。
-                // 名字取自 Lambda 形参（`params`）——签名里的 `Type::Fn` 只存类型、
-                // 不存名字，是值参数名唯一的来源。
+                // 名字取自 Lambda 形参（`params`）——那是**过滤后的值参数**表；
+                // 签名侧形参（`signature`）含类型位/约束位，名字口径不同。
                 if is_fn_binding && !params.is_empty() {
                     let names: Vec<String> = params.iter().map(|p| p.name.clone()).collect();
                     self.fn_param_names.insert(name.clone(), names);
@@ -2128,13 +2132,13 @@ impl AstToIrGenerator {
                         Some(generic_params.iter().map(|p| p.name.clone()).collect())
                     };
                     // curry 分流：如果 return_type 是 Type::Fn，走 curry 生成路径
-                    // 注意：必须传 signature_params（所有层参数），而非 params（仅 Lambda 参数）
+                    // 注意：必须传签名全层形参（signature），而非 params（仅 Lambda 参数）
                     if let Some(ast::Type::Fn { return_type, .. }) = type_annotation.as_ref() {
                         if matches!(return_type.as_ref(), ast::Type::Fn { .. }) {
                             self.generate_curry_function_ir(
                                 &name,
                                 type_annotation.as_ref().unwrap(),
-                                signature_params,
+                                &signature,
                                 &body,
                                 constants,
                                 generic_param_names,
@@ -3589,12 +3593,13 @@ impl AstToIrGenerator {
             ast::StmtKind::Assign {
                 target,
                 type_annotation,
-                signature_params,
                 value,
                 span,
                 ..
             } => {
                 use crate::frontend::core::parser::ast::Expr;
+                // 签名形参的唯一来源：注解的 Type::Fn 链（6.5.2）
+                let signature = ast::signature_fn_params(type_annotation.as_ref());
                 // 字段赋值：q.x = v / m.x = v（m 是 &mut 令牌）。
                 // Struct 运行时值是堆句柄，StoreField 原地写共享对象——
                 // 令牌与自动借用天然写回，无需 copy-back（#266）。
@@ -3691,7 +3696,7 @@ impl AstToIrGenerator {
                 if !params.is_empty() || !body.is_empty() {
                     let generic_params =
                         crate::frontend::core::parser::ast::extract_generic_param_names(
-                            signature_params,
+                            &signature,
                             &SemanticProbe,
                         );
                     let generic_param_names = if generic_params.is_empty() {
@@ -3700,14 +3705,14 @@ impl AstToIrGenerator {
                         Some(generic_params.iter().map(|p| p.name.clone()).collect())
                     };
                     // curry 分流：如果 return_type 是 Type::Fn，走 curry 生成路径
-                    // 注意：必须传 signature_params（所有层参数），而非 params（仅 Lambda 参数）
+                    // 注意：必须传签名全层形参（signature），而非 params（仅 Lambda 参数）
                     let func_result =
                         if let Some(ast::Type::Fn { return_type, .. }) = type_annotation.as_ref() {
                             if matches!(return_type.as_ref(), ast::Type::Fn { .. }) {
                                 self.generate_curry_function_ir(
                                     &name,
                                     type_annotation.as_ref().unwrap(),
-                                    signature_params,
+                                    &signature,
                                     &body,
                                     constants,
                                     generic_param_names,

@@ -473,7 +473,6 @@ fn make_var_stmt(
         kind: StmtKind::Assign {
             target: Box::new(Expr::Var(name.into(), Span::default())),
             type_annotation: None,
-            signature_params: vec![],
             value: Some(Box::new(init)),
             is_mut: false,
             span: Span::default(),
@@ -491,7 +490,6 @@ fn make_mut_var_stmt(
         kind: StmtKind::Assign {
             target: Box::new(Expr::Var(name.into(), Span::default())),
             type_annotation: None,
-            signature_params: vec![],
             value: Some(Box::new(init)),
             is_mut: true,
             span: Span::default(),
@@ -517,7 +515,6 @@ fn make_binding(
         kind: StmtKind::Assign {
             target: Box::new(Expr::Var(name.into(), Span::default())),
             type_annotation: None,
-            signature_params: vec![],
             value: Some(Box::new(Expr::Lambda {
                 params: params
                     .into_iter()

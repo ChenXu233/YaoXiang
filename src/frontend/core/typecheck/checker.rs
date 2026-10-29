@@ -5,7 +5,7 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::frontend::core::parser::ast::{
-    classify_generic_params, Expr, GenericParamKind, Module, Param, TypeBodyItem,
+    classify_generic_params, Expr, GenericParamKind, Module, TypeBodyItem,
 };
 use crate::frontend::core::types::{MonoType, PolyType, TraitTable};
 use crate::frontend::core::types::const_data::{ConstExpr, ConstValue, BinOp, ConstKind, ConstVarDef};
@@ -98,7 +98,6 @@ impl TypeChecker {
         let StmtKind::Assign {
             target,
             type_annotation,
-            signature_params,
             value,
             ..
         } = &stmt.kind
@@ -117,15 +116,17 @@ impl TypeChecker {
         }
         // 签名 = 参数类型（含返回位）。
         //
-        // 优先取 `signature_params`（RFC-010 新语法把参数类型放在这里），
+        // 形参从注解的 `Type::Fn` 链拍平（6.5.2：语句不再另存形参表），
         // 它区分 `Array(Int)` 与 `Array(Float)`；无参数时退到类型注解自身。
         // 注意：不能用 `{:?}` 格式化 `Type`——它含 `Span`，同一签名在不同
         // 位置会得到不同字符串。用 `MonoType::type_name()` 取纯类型名。
         let type_name_of = |t: &crate::frontend::core::parser::ast::Type| {
             crate::frontend::core::types::MonoType::from(t.clone()).type_name()
         };
-        let sig = if !signature_params.is_empty() {
-            signature_params
+        let signature =
+            crate::frontend::core::parser::ast::signature_fn_params(type_annotation.as_ref());
+        let sig = if !signature.is_empty() {
+            signature
                 .iter()
                 .map(|p| {
                     p.ty.as_ref()
@@ -426,18 +427,18 @@ impl TypeChecker {
             let _module_span_guard = crate::util::diagnostic::push_current_span(stmt.span);
             if let crate::frontend::core::parser::ast::StmtKind::TypeDefinition {
                 name,
-                signature_params,
+                type_annotation,
                 definition,
                 ..
             } = &stmt.kind
             {
-                self.add_type_definition(name, definition, signature_params, stmt.span);
+                self.add_type_definition(name, definition, type_annotation.as_ref(), stmt.span);
             }
             // RFC-010：`unsafe {}` 内的类型定义提升到本作用域（块外可用）
             let mut hoisted = Vec::new();
             self.collect_unsafe_type_defs(stmt, &mut hoisted);
-            for (name, definition, sig, span) in hoisted {
-                self.add_type_definition(&name, &definition, &sig, span);
+            for (name, definition, annotation, span) in hoisted {
+                self.add_type_definition(&name, &definition, annotation.as_ref(), span);
             }
         }
         // pass2: 函数/绑定签名（使其可被前向引用）
@@ -456,7 +457,7 @@ impl TypeChecker {
             for stmt in &module.items {
                 if let StmtKind::Assign {
                     target,
-                    signature_params,
+                    type_annotation,
                     ..
                 } = &stmt.kind
                 {
@@ -464,7 +465,10 @@ impl TypeChecker {
                     {
                         // 参数位是 `(A: Type)` 形态即类型参数（同
                         // `StatementChecker` 的 classify_generic_params 判据）。
-                        let names: Vec<String> = signature_params
+                        let params = crate::frontend::core::parser::ast::signature_fn_params(
+                            type_annotation.as_ref(),
+                        );
+                        let names: Vec<String> = params
                             .iter()
                             // 类型参数的语法形态是 `A: Type`，解析为 `Type::MetaType`
                             // （与 `StatementChecker::classify_generic_params` 判据一致）。
@@ -721,18 +725,18 @@ impl TypeChecker {
             let _module_span_guard = crate::util::diagnostic::push_current_span(stmt.span);
             if let crate::frontend::core::parser::ast::StmtKind::TypeDefinition {
                 name,
-                signature_params,
+                type_annotation,
                 definition,
                 ..
             } = &stmt.kind
             {
-                self.add_type_definition(name, definition, signature_params, stmt.span);
+                self.add_type_definition(name, definition, type_annotation.as_ref(), stmt.span);
             }
             // RFC-010：`unsafe {}` 内的类型定义提升到本作用域（块外可用）
             let mut hoisted = Vec::new();
             self.collect_unsafe_type_defs(stmt, &mut hoisted);
-            for (name, definition, sig, span) in hoisted {
-                self.add_type_definition(&name, &definition, &sig, span);
+            for (name, definition, annotation, span) in hoisted {
+                self.add_type_definition(&name, &definition, annotation.as_ref(), span);
             }
         }
 
@@ -1211,7 +1215,7 @@ impl TypeChecker {
     /// 交给上一作用域，使其在块外可用）。
     ///
     /// 递归处理嵌套的 unsafe 块；只取块体**直接**包含的 TypeDefinition
-    /// （更深层的块由各自的父块负责）。返回 (name, definition, signature_params, span)
+    /// （更深层的块由各自的父块负责）。返回 (name, definition, 签名注解, span)
     /// 以便调用方在 pass1 中统一注册。
     fn collect_unsafe_type_defs(
         &self,
@@ -1219,7 +1223,7 @@ impl TypeChecker {
         out: &mut Vec<(
             String,
             crate::frontend::core::parser::ast::Type,
-            Vec<Param>,
+            Option<crate::frontend::core::parser::ast::Type>,
             crate::util::span::Span,
         )>,
     ) {
@@ -1228,7 +1232,7 @@ impl TypeChecker {
             out: &mut Vec<(
                 String,
                 crate::frontend::core::parser::ast::Type,
-                Vec<Param>,
+                Option<crate::frontend::core::parser::ast::Type>,
                 crate::util::span::Span,
             )>,
         ) {
@@ -1238,7 +1242,7 @@ impl TypeChecker {
                     for s in &body.stmts {
                         if let StmtKind::TypeDefinition {
                             name,
-                            signature_params,
+                            type_annotation,
                             definition,
                             ..
                         } = &s.kind
@@ -1246,7 +1250,7 @@ impl TypeChecker {
                             out.push((
                                 name.clone(),
                                 definition.clone(),
-                                signature_params.clone(),
+                                type_annotation.clone(),
                                 s.span,
                             ));
                         }
@@ -1286,7 +1290,7 @@ impl TypeChecker {
             out: &mut Vec<(
                 String,
                 crate::frontend::core::parser::ast::Type,
-                Vec<Param>,
+                Option<crate::frontend::core::parser::ast::Type>,
                 crate::util::span::Span,
             )>,
         ) {
@@ -1411,7 +1415,6 @@ impl TypeChecker {
             crate::frontend::core::parser::ast::StmtKind::Assign {
                 target,
                 type_annotation,
-                signature_params,
                 value,
                 ..
             } if value.as_ref().is_some_and(|v| {
@@ -1424,6 +1427,10 @@ impl TypeChecker {
                 )
             }) || (value.is_none() && type_annotation.is_some()) =>
             {
+                // 签名形参的唯一来源：注解里的 Type::Fn 链（6.5.2）
+                let signature = crate::frontend::core::parser::ast::signature_fn_params(
+                    type_annotation.as_ref(),
+                );
                 // 从 target 提取 name 和 type_name
                 let (name, type_name) = match target.as_ref() {
                     crate::frontend::core::parser::ast::Expr::Var(n, _) => (n.clone(), None),
@@ -1473,7 +1480,7 @@ impl TypeChecker {
                 };
                 let method_type = type_annotation.as_ref();
                 let generic_params = classify_generic_params(
-                    signature_params,
+                    &signature,
                     // RFC-011b: 运算符接口名也是合法约束名（T: Add）——
                     // 约束求解在实例化点查接口实现登记表
                     &|name| {
@@ -1640,7 +1647,7 @@ impl TypeChecker {
                 let resolved_const =
                     crate::frontend::core::typecheck::const_param::resolve_const_candidates(
                         &generic_params,
-                        signature_params,
+                        &signature,
                         &used_as_const,
                         type_generic_params.len(),
                     );
@@ -1743,7 +1750,7 @@ impl TypeChecker {
                     if let Some(tn) = type_name.as_deref() {
                         let okey = format!("{}.{}", tn, name);
                         let param_names: Vec<String> =
-                            signature_params.iter().map(|p| p.name.clone()).collect();
+                            signature.iter().map(|p| p.name.clone()).collect();
                         self.env
                             .add_method_overload_with_params(&okey, fn_ty.clone(), param_names);
                     }
@@ -2820,11 +2827,13 @@ impl TypeChecker {
         &mut self,
         name: &str,
         definition: &crate::frontend::core::parser::ast::Type,
-        signature_params: &[Param],
+        type_annotation: Option<&crate::frontend::core::parser::ast::Type>,
         span: crate::util::span::Span,
     ) {
+        // 泛型形参从声明注解的 Type::Fn 链拍平（6.5.2：类型定义不再另存形参表）
+        let signature = crate::frontend::core::parser::ast::signature_fn_params(type_annotation);
         let generic_params = classify_generic_params(
-            signature_params,
+            &signature,
             // RFC-011b: 运算符接口名也是合法约束名（T: Add）——
             // 约束求解在实例化点查接口实现登记表
             &|name| self.env.has_trait(name) || super::operator_interfaces::spec(name).is_some(),
@@ -2938,8 +2947,8 @@ impl TypeChecker {
                     )
                 )
             });
-            if has_constraint && !signature_params.is_empty() {
-                let param_types: Vec<MonoType> = signature_params
+            if has_constraint && !signature.is_empty() {
+                let param_types: Vec<MonoType> = signature
                     .iter()
                     .filter_map(|p| p.ty.as_ref().map(|t| MonoType::from(t.clone())))
                     .collect();
@@ -3040,7 +3049,7 @@ impl TypeChecker {
             let resolved_const =
                 crate::frontend::core::typecheck::const_param::resolve_const_candidates(
                     &generic_params,
-                    signature_params,
+                    &signature,
                     &used_as_const,
                     type_param_names.len(),
                 );
@@ -3895,10 +3904,11 @@ impl TypeChecker {
     ) {
         use crate::frontend::core::parser::ast::{Expr, StmtKind, Type, TypeBodyItem};
         for stmt in &module.items {
-            let (name, signature_params, constraint) = match &stmt.kind {
+            // 形参从声明注解的 Type::Fn 链拍平（6.5.2：不再有并行形参表）
+            let (name, type_annotation, constraint) = match &stmt.kind {
                 StmtKind::TypeDefinition {
                     name,
-                    signature_params,
+                    type_annotation,
                     definition,
                     ..
                 } => {
@@ -3914,15 +3924,17 @@ impl TypeChecker {
                     let Some(c) = convert_expr_to_const_expr(expr) else {
                         continue;
                     };
-                    (name, signature_params, c)
+                    (name, type_annotation.as_ref(), c)
                 }
                 StmtKind::Assign {
                     target,
-                    type_annotation: Some(Type::Fn { return_type, .. }),
-                    signature_params,
+                    type_annotation: fn_annotation,
                     value: Some(v),
                     ..
                 } => {
+                    let Some(Type::Fn { return_type, .. }) = fn_annotation else {
+                        continue;
+                    };
                     let Expr::Var(name, _) = target.as_ref() else {
                         continue;
                     };
@@ -3945,12 +3957,15 @@ impl TypeChecker {
                     let Some(c) = convert_expr_to_const_expr(expr) else {
                         continue;
                     };
-                    (name, signature_params, c)
+                    (name, fn_annotation.as_ref(), c)
                 }
                 _ => continue,
             };
-            // 参数名在 signature_params（`Type::Fn::params` 只有类型没有名）
-            let [param] = signature_params.as_slice() else {
+            // 形参名与类型同栖在 `Type::Fn.params`（6.5.2）
+            let params = type_annotation
+                .map(Type::fn_params_flat)
+                .unwrap_or_default();
+            let [param] = params.as_slice() else {
                 continue;
             };
             let param_type = param

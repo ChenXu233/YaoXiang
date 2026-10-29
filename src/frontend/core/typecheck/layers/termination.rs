@@ -613,7 +613,6 @@ impl<'a> TerminationChecker<'a> {
             StmtKind::Expr(expr) => self.check_expr(expr, is_never),
             StmtKind::Assign {
                 target,
-                signature_params,
                 value: Some(v),
                 type_annotation,
                 ..
@@ -621,9 +620,11 @@ impl<'a> TerminationChecker<'a> {
                 use crate::frontend::core::parser::ast::Expr;
                 let child_never = is_never || is_never_return_type(type_annotation.as_ref());
                 // RFC-027a：带显式测度的函数体进上下文，使自递归调用可被识别。
-                // 用 `signature_params` 而非 `Type::Fn.params` 取形参名——后者只有
-                // 类型（`[Int, Int]`），名字在签名参数里。
-                let saved_ctx = self.enter_measured_fn(target, signature_params);
+                // 形参名从注解的 `Type::Fn` 链拍平（6.5.2：不再有并行形参表）。
+                let signature = crate::frontend::core::parser::ast::signature_fn_params(
+                    type_annotation.as_ref(),
+                );
+                let saved_ctx = self.enter_measured_fn(target, &signature);
                 if let Expr::Lambda { body, .. } = v.as_ref() {
                     self.check_stmts(&body.stmts, child_never);
                 } else if let Expr::Block(block) = v.as_ref() {
@@ -2039,7 +2040,7 @@ impl<'a> TerminationChecker<'a> {
     fn enter_measured_fn(
         &mut self,
         target: &Expr,
-        signature_params: &[ast::Param],
+        decl_params: &[ast::Param],
     ) -> Option<FnMeasureContext> {
         let Expr::Var(name, _) = target else {
             return None;
@@ -2047,7 +2048,7 @@ impl<'a> TerminationChecker<'a> {
         let measure = self.measures.get(name).cloned()?;
         let ctx = FnMeasureContext {
             name: name.clone(),
-            params: signature_params.iter().map(|p| p.name.clone()).collect(),
+            params: decl_params.iter().map(|p| p.name.clone()).collect(),
             measure,
         };
         self.current_fn.replace(ctx)

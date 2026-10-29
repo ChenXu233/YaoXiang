@@ -148,8 +148,17 @@ fn test_semantic_probe_and_default_probe_agree_on_same_source_const_param() {
         .iter()
         .find_map(|s| match &s.kind {
             crate::frontend::core::parser::ast::StmtKind::Assign {
-                signature_params, ..
-            } if !signature_params.is_empty() => Some(signature_params.clone()),
+                type_annotation, ..
+            } => {
+                let params = crate::frontend::core::parser::ast::signature_fn_params(
+                    type_annotation.as_ref(),
+                );
+                if params.is_empty() {
+                    None
+                } else {
+                    Some(params)
+                }
+            }
             _ => None,
         })
         .expect("应有一条带签名形参的赋值语句");

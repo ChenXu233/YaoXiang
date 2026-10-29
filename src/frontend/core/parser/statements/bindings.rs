@@ -65,7 +65,6 @@ pub fn parse_method_bind(
                 span,
             }),
             type_annotation: Some(method_type),
-            signature_params: Vec::new(),
             value: Some(Box::new(Expr::Lambda {
                 params,
                 body: Box::new(Block { stmts: body, span }),

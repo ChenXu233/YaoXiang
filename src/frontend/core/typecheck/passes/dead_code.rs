@@ -650,7 +650,6 @@ impl DeadCodeAnalyzer {
                     value,
                     target,
                     type_annotation,
-                    signature_params,
                     ..
                 } => {
                     if let Some(expr) = value {
@@ -677,7 +676,11 @@ impl DeadCodeAnalyzer {
                     if let Some(ty) = type_annotation {
                         ty.collect_name_refs(&mut referenced.refs);
                     }
-                    for param in signature_params {
+                    // 形参类型名同样算引用：从注解的 Type::Fn 链拍平（6.5.2）
+                    let signature = crate::frontend::core::parser::ast::signature_fn_params(
+                        type_annotation.as_ref(),
+                    );
+                    for param in &signature {
                         if let Some(ty) = &param.ty {
                             ty.collect_name_refs(&mut referenced.refs);
                         }
@@ -699,12 +702,15 @@ impl DeadCodeAnalyzer {
                 }
                 StmtKind::TypeDefinition {
                     name,
-                    signature_params,
+                    type_annotation,
                     definition,
                     ..
                 } => {
                     referenced.bind(name.clone());
-                    for param in signature_params {
+                    let signature = crate::frontend::core::parser::ast::signature_fn_params(
+                        type_annotation.as_ref(),
+                    );
+                    for param in &signature {
                         if let Some(ty) = &param.ty {
                             ty.collect_name_refs(&mut referenced.refs);
                         }

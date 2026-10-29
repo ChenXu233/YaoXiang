@@ -17,7 +17,7 @@ fn point_type_definition_stmt() -> Stmt {
     Stmt {
         kind: StmtKind::TypeDefinition {
             name: "Point".into(),
-            signature_params: vec![],
+            type_annotation: None,
             definition: Type::Struct {
                 body: vec![
                     ast::TypeBodyItem::Field(StructField {
@@ -342,7 +342,6 @@ fn test_stmtkind_var() {
         kind: StmtKind::Assign {
             target: Box::new(Expr::Var("x".into(), Span::dummy())),
             type_annotation: None,
-            signature_params: Vec::new(),
             value: Some(Box::new(Expr::Lit(Literal::Int(42), Span::dummy()))),
             is_mut: false,
             span: Span::dummy(),
@@ -366,7 +365,6 @@ fn test_stmtkind_binding() {
         kind: StmtKind::Assign {
             target: Box::new(Expr::Var("add".into(), Span::dummy())),
             type_annotation: None,
-            signature_params: vec![],
             value: Some(Box::new(Expr::Lambda {
                 params: vec![],
                 body: Box::new(Block {

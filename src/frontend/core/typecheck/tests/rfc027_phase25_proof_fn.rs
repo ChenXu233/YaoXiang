@@ -199,7 +199,6 @@ fn make_proof_fn_module(
         kind: StmtKind::Assign {
             target: Box::new(Expr::Var(fn_name.into(), Span::dummy())),
             type_annotation: Some(return_type),
-            signature_params: vec![],
             value: Some(Box::new(Expr::Lambda {
                 params: vec![param],
                 body: Box::new(Block {
@@ -405,7 +404,14 @@ fn make_proof_fn_typedef_module(
     let type_def_stmt = Stmt {
         kind: StmtKind::TypeDefinition {
             name: fn_name.into(),
-            signature_params: vec![param],
+            // 签名载体：与 parser 对 `name: (x: Int64) -> Type = { ... }` 的产出同形
+            type_annotation: Some(AstType::Fn {
+                params: vec![param],
+                return_type: Box::new(AstType::MetaType {
+                    name_span: Span::dummy(),
+                    args: vec![],
+                }),
+            }),
             definition: AstType::Struct {
                 body: vec![TypeBodyItem::Expr(AstType::ConstExpr(Box::new(body_expr)))],
             },

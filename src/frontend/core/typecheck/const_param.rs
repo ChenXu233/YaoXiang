@@ -33,7 +33,7 @@ pub fn ast_type_to_const_kind(ty: &Type) -> ConstKind {
 /// 其余作为落空者返回（携带原始 Param 以便并入参数链或报错）。
 pub fn resolve_const_candidates(
     generic_params: &[GenericParam],
-    signature_params: &[Param],
+    decl_params: &[Param],
     used_as_const: &HashSet<String>,
     n_type_params: usize,
 ) -> ResolvedConstParams {
@@ -54,7 +54,7 @@ pub fn resolve_const_candidates(
                     idx,
                 ));
             }
-        } else if let Some(p) = signature_params.iter().find(|p| p.name == gp.name) {
+        } else if let Some(p) = decl_params.iter().find(|p| p.name == gp.name) {
             result.fallen.push(p.clone());
         }
     }

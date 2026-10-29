@@ -93,7 +93,7 @@ fn test_resolve_const_candidates_hit_builds_contiguous_index() {
 ///
 /// 预期行为：
 /// - 未被类型位置引用的候选出现在 fallen 中
-/// - fallen 元素即 signature_params 中的原始 Param（含类型标注）
+/// - fallen 元素即声明签名中的原始 Param（含类型标注）
 #[test]
 fn test_resolve_const_candidates_fallen_carries_original_param() {
     // Arrange

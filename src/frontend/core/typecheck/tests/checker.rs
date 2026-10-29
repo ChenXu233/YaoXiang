@@ -54,7 +54,6 @@ fn assign_stmt(
         kind: crate::frontend::core::parser::ast::StmtKind::Assign {
             target: Box::new(var(target, span)),
             type_annotation: ty,
-            signature_params: vec![],
             value: Some(Box::new(value)),
             is_mut: false,
             span,
@@ -160,15 +159,22 @@ fn generic_wrapper_module() -> Module {
         Stmt {
             kind: crate::frontend::core::parser::ast::StmtKind::TypeDefinition {
                 name: "Wrapper".to_string(),
-                signature_params: vec![crate::frontend::core::parser::ast::Param {
-                    name: "T".to_string(),
-                    ty: Some(AstType::MetaType {
+                // 签名载体：与 parser 对 `Wrapper: (T: Type) -> Type = {...}` 的产出同形
+                type_annotation: Some(AstType::Fn {
+                    params: vec![crate::frontend::core::parser::ast::Param {
+                        name: "T".to_string(),
+                        ty: Some(AstType::MetaType {
+                            name_span: Span::dummy(),
+                            args: vec![],
+                        }),
+                        is_mut: false,
+                        span: Span::dummy(),
+                    }],
+                    return_type: Box::new(AstType::MetaType {
                         name_span: Span::dummy(),
                         args: vec![],
                     }),
-                    is_mut: false,
-                    span: Span::dummy(),
-                }],
+                }),
                 definition: AstType::Struct {
                     body: vec![crate::frontend::core::parser::ast::TypeBodyItem::Field(
                         crate::frontend::core::parser::ast::StructField {

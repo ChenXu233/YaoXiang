@@ -1392,7 +1392,6 @@ impl StatementChecker {
             crate::frontend::core::parser::ast::StmtKind::Assign {
                 target,
                 type_annotation,
-                signature_params,
                 value,
                 is_mut,
                 span: stmt_span,
@@ -1464,6 +1463,10 @@ impl StatementChecker {
                 // 绑定名的声明 span（#433/D55）：定义事件与引用 resolves_to 的落点。
                 // Var 左值用名字自身 span；字段/方法绑定用语句 span（声明行）。
                 let def_span = name_span.unwrap_or(*stmt_span);
+                // 签名形参的唯一来源：注解里的 Type::Fn 链（6.5.2：不再有并行形参表）
+                let signature = crate::frontend::core::parser::ast::signature_fn_params(
+                    type_annotation.as_ref(),
+                );
                 // 从 value 提取 Lambda params/body。
                 // RFC-010a 附录D：`name = { ... }` 无注解时按内容推断（块值是尾表达式）；
                 // 非 Fn 注解→块值（交给 check_var_stmt 按普通变量审）。
@@ -1480,7 +1483,7 @@ impl StatementChecker {
                     .is_some_and(|v| !matches!(v, Expr::Lambda { .. }))
                 {
                     let value_params: Vec<Param> =
-                        signature_params
+                        signature
                             .iter()
                             .filter(|p| {
                                 match &p.ty {
@@ -1513,7 +1516,6 @@ impl StatementChecker {
                     return self.check_fn_stmt(
                         &name,
                         type_annotation.as_ref(),
-                        signature_params,
                         &value_params,
                         &[],
                         synthetic_body,
@@ -1577,7 +1579,6 @@ impl StatementChecker {
                 let result = self.check_fn_stmt(
                     &name,
                     type_annotation.as_ref(),
-                    signature_params,
                     &params,
                     &body_stmts,
                     body_block,
@@ -1816,20 +1817,21 @@ impl StatementChecker {
         &mut self,
         name: &str,
         type_annotation: Option<&crate::frontend::core::parser::ast::Type>,
-        signature_params: &[Param],
         params: &[Param],
         _stmts: &[Stmt],
         body: Block,
         _span: crate::util::span::Span,
         name_span: crate::util::span::Span,
     ) -> Result<(), Box<Diagnostic>> {
+        // 签名形参的唯一来源：注解里的 Type::Fn 链（6.5.2：不再有并行形参表）
+        let signature = crate::frontend::core::parser::ast::signature_fn_params(type_annotation);
         // #353：记录绑定语句的位置，供尾表达式不符时指向它（而非体的末行）。
         // 真正该改的是注解所在的声明，不是体里那个（可能完全正确的）值。
         self.tail_annotation_span = Some(_span);
         // RFC-011 §5.2：收集约束形参（`T: Add` 的标注名为接口名）——
         // 调用点复检与定义体内运算符延迟派发的依据
         {
-            let constraints: Vec<(String, String)> = signature_params
+            let constraints: Vec<(String, String)> = signature
                 .iter()
                 .filter_map(|p| match &p.ty {
                     Some(crate::frontend::core::parser::ast::Type::Name { name: n, .. })
@@ -1852,7 +1854,7 @@ impl StatementChecker {
                 Some(constraints.into_iter().collect())
             };
         }
-        let generic_params = classify_generic_params(signature_params, &|name| {
+        let generic_params = classify_generic_params(&signature, &|name| {
             self.trait_table.has_trait(name)
                 || crate::frontend::core::typecheck::operator_interfaces::spec(name).is_some()
         });
@@ -1948,7 +1950,7 @@ impl StatementChecker {
 
         let resolved = crate::frontend::core::typecheck::const_param::resolve_const_candidates(
             &generic_params,
-            signature_params,
+            &signature,
             &used_as_const,
             type_generic_params.len(),
         );
@@ -2163,7 +2165,7 @@ impl StatementChecker {
         let const_binder_names: std::collections::HashSet<&str> =
             const_binders.iter().map(|cb| cb.name.as_str()).collect();
         let mut params: Vec<Param> = params.to_vec();
-        for p in signature_params {
+        for p in &signature {
             if !type_param_names.contains(p.name.as_str())
                 && !const_binder_names.contains(p.name.as_str())
                 && !params.iter().any(|ep| ep.name == p.name)

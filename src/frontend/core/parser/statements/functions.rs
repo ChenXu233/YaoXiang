@@ -36,7 +36,6 @@ pub fn parse_fn_stmt_with_name(
         kind: StmtKind::Assign {
             target: Box::new(Expr::Var(name, span)),
             type_annotation: None,
-            signature_params: Vec::new(),
             value: Some(Box::new(Expr::Lambda {
                 params,
                 body: Box::new(Block { stmts: body, span }),
@@ -74,7 +73,6 @@ pub fn parse_fn_stmt_with_name_simple(
         kind: StmtKind::Assign {
             target: Box::new(Expr::Var(name, span)),
             type_annotation: None,
-            signature_params: Vec::new(),
             value: Some(Box::new(Expr::Lambda {
                 params: vec![Param {
                     name: param_name,

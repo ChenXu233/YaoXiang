@@ -125,7 +125,6 @@ fn mixed_children_spawn_body() -> Block {
                 kind: StmtKind::Assign {
                     target: Box::new(Expr::Var("local_var".to_string(), dummy_span())),
                     type_annotation: None,
-                    signature_params: vec![],
                     value: Some(Box::new(Expr::Lit(
                         crate::frontend::core::lexer::tokens::Literal::Int(0),
                         dummy_span(),
@@ -168,7 +167,6 @@ fn test_is_direct_child_with_var_decl_is_false() {
         kind: StmtKind::Assign {
             target: Box::new(Expr::Var("x".to_string(), dummy_span())),
             type_annotation: None,
-            signature_params: vec![],
             value: Some(Box::new(Expr::Lit(
                 crate::frontend::core::lexer::tokens::Literal::Int(42),
                 dummy_span(),
@@ -700,7 +698,6 @@ fn test_spawn_body_no_direct_children() {
             kind: StmtKind::Assign {
                 target: Box::new(Expr::Var("x".to_string(), dummy_span())),
                 type_annotation: None,
-                signature_params: vec![],
                 value: None,
                 is_mut: false,
                 span: dummy_span(),

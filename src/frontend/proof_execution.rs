@@ -117,7 +117,7 @@ pub(super) fn execute_single_proof_fn(
             ast.items.iter().find_map(|stmt| match &stmt.kind {
                 StmtKind::TypeDefinition {
                     name,
-                    signature_params,
+                    type_annotation,
                     definition,
                     ..
                 } => {
@@ -135,7 +135,9 @@ pub(super) fn execute_single_proof_fn(
                                     plan_id: crate::util::plan_id::PlanId::UNPLANNED,
                                 };
                                 return Some((
-                                    signature_params.clone(),
+                                    crate::frontend::core::parser::ast::signature_fn_params(
+                                        type_annotation.as_ref(),
+                                    ),
                                     vec![constraint_stmt],
                                     None,
                                 ));

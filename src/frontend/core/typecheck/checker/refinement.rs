@@ -111,7 +111,6 @@ impl TypeChecker {
             StmtKind::Assign {
                 target,
                 type_annotation: Some(type_ann),
-                signature_params,
                 value,
                 ..
             } => {
@@ -154,8 +153,7 @@ impl TypeChecker {
                         // RFC-027 §3：返回位精化的 binder 名与谓词实参只在 **AST** 里
                         // 无损（`MonoType` 已把符号实参降级成占位），故在此按声明解析，
                         // 走查只消费结果。
-                        let ret_refinement =
-                            self.resolve_return_refinement(type_ann, signature_params, ctx.diags);
+                        let ret_refinement = self.resolve_return_refinement(type_ann, ctx.diags);
                         self.refined_walk_fn_body(body, fn_name, ret_refinement, ctx);
                     }
                 }
@@ -402,17 +400,19 @@ impl TypeChecker {
     /// 那几条诊断归注册路径（`resolve_type_annotation`），此处不重复报。
     /// 唯独「有未声明的自由变量」是本函数新增的义务，必须报、不得静默放行。
     ///
-    /// 作用域名单 = 本函数签名形参（`signature_params`，含 curry 各组与类型/
-    /// const 参数）+ 模块级绑定（`env.vars`）。嵌套函数体引用**外层**函数的
+    /// 作用域名单 = 本函数签名形参（注解 `Type::Fn` 链拍平，含 curry 各组与
+    /// 类型/const 参数）+ 模块级绑定（`env.vars`）。嵌套函数体引用**外层**函数的
     /// 形参时不在名单内——那类约束没有静态证据可判，报未定义标识符比静默
     /// 代入返回值安全。
     fn resolve_return_refinement(
         &self,
         type_ann: &crate::frontend::core::parser::ast::Type,
-        params: &[Param],
         diags: &mut Vec<Diagnostic>,
     ) -> Option<ReturnRefinement> {
         use crate::frontend::core::parser::ast::Type as AstType;
+
+        // 签名形参从本注解的 Type::Fn 链拍平（6.5.2：不再有并行形参表）
+        let params = type_ann.fn_params_flat();
 
         let AstType::Fn { return_type, .. } = type_ann else {
             return None;

@@ -382,7 +382,7 @@ pub fn format_params(
 ///
 /// 与 format_params 的区别：签名位置的 Type::Tuple 是多约束容器
 /// （parser 将 `T: A + B` 存为 Tuple），须渲染为 `A + B` 而非元组。
-pub fn format_signature_params(
+pub fn format_decl_params(
     params: &[Param],
     ctx: &FormatContext,
     source_map: &SourceMap,
@@ -426,12 +426,12 @@ fn format_signature_param_ty(
 /// 首组切分规则：返回类型会消费签名参数时（裸 Fn 的 curried 嵌套组，或
 /// Paren/NamedParen 包 Fn——RFC-004 括号内是完整类型值，参数名不外拍但
 /// 括号内按名渲染要从剩余参数取），按 `params.len()` 切出首组；否则
-/// （非 curried）首组即全部 `signature_params`——HM 推断标注（如
+/// （非 curried）首组即全部 `decl_params`——HM 推断标注（如
 /// `(Int, Int) -> Int`）在 `Type::Fn.params` 里不带类型（parser 只收集
 /// `p.ty` 非空者，declarations.rs），按 `params.len()` 切分会把整组名字
 /// 丢进返回侧静默消失，渲染成 `() -> Int`（#423）。
 pub fn format_fn_signature(
-    signature_params: &[Param],
+    decl_params: &[Param],
     fn_type: &Type,
     ctx: &FormatContext,
     source_map: &SourceMap,
@@ -449,15 +449,15 @@ pub fn format_fn_signature(
             _ => false,
         };
         let (first, rest) = if return_consumes {
-            split_params_at(signature_params, params.len())
+            split_params_at(decl_params, params.len())
         } else {
-            (signature_params, &[][..])
+            (decl_params, &[][..])
         };
-        let params_str = format_signature_params(first, ctx, source_map);
+        let params_str = format_decl_params(first, ctx, source_map);
         let ret = format_return_with_names(return_type, rest, ctx, source_map);
         format!("{} -> {}", params_str, ret)
     } else {
-        format_signature_params(signature_params, ctx, source_map)
+        format_decl_params(decl_params, ctx, source_map)
     }
 }
 

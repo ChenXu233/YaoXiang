@@ -4,7 +4,7 @@ use crate::frontend::core::parser::ast::*;
 
 use super::super::context::FormatContext;
 use super::super::source_map::SourceMap;
-use super::expr::{format_block, format_expr, format_params, format_signature_params};
+use super::expr::{format_block, format_expr, format_params, format_decl_params};
 use super::types::format_type;
 
 /// 格式化语句
@@ -77,19 +77,10 @@ pub fn format_stmt(
         StmtKind::Assign {
             target,
             type_annotation,
-            signature_params,
             value,
             is_mut,
             ..
-        } => format_assign(
-            target,
-            type_annotation,
-            signature_params,
-            value,
-            *is_mut,
-            ctx,
-            source_map,
-        ),
+        } => format_assign(target, type_annotation, value, *is_mut, ctx, source_map),
         StmtKind::Error(_span) => "/* error */".to_string(),
         StmtKind::DestructureAssign { names, rhs, .. } => {
             format!(
@@ -111,10 +102,12 @@ pub fn format_stmt(
         }
         StmtKind::TypeDefinition {
             name,
-            signature_params,
+            type_annotation,
             definition,
         } => {
-            if signature_params.is_empty() {
+            // 泛型形参从注解的 `Type::Fn` 链拍平（6.5.2：不再有并行形参表）。
+            let params = signature_fn_params(type_annotation.as_ref());
+            if params.is_empty() {
                 format!(
                     "{}: Type = {}",
                     name,
@@ -124,7 +117,7 @@ pub fn format_stmt(
                 format!(
                     "{}: {} -> Type = {}",
                     name,
-                    format_signature_params(signature_params, ctx, source_map),
+                    format_decl_params(&params, ctx, source_map),
                     format_type(definition, ctx, source_map)
                 )
             }
@@ -136,7 +129,6 @@ pub fn format_stmt(
 fn format_assign(
     target: &Expr,
     type_annotation: &Option<Type>,
-    signature_params: &[Param],
     value: &Option<Box<Expr>>,
     is_mut: bool,
     ctx: &FormatContext,
@@ -145,7 +137,9 @@ fn format_assign(
     let mut_str = if is_mut { "mut " } else { "" };
     let target_str = format_expr(target, ctx, source_map);
 
-    let type_str = format_type_annotation(type_annotation, signature_params, ctx, source_map);
+    // 签名形参的唯一来源：注解的 `Type::Fn` 链（6.5.2 删并行形参表）。
+    let params = signature_fn_params(type_annotation.as_ref());
+    let type_str = format_type_annotation(type_annotation, &params, ctx, source_map);
 
     if let Some(val) = value {
         let val_str = match val.as_ref() {
@@ -233,14 +227,14 @@ fn single_return_expr(body: &Block) -> Option<&Expr> {
 /// Fn 类型走 format_fn_signature；其他类型直接 format_type。无标注返回空串。
 fn format_type_annotation(
     type_annotation: &Option<Type>,
-    signature_params: &[Param],
+    decl_params: &[Param],
     ctx: &FormatContext,
     source_map: &SourceMap,
 ) -> String {
     match type_annotation {
         Some(ty) if matches!(ty, Type::Fn { .. }) => format!(
             ": {}",
-            super::expr::format_fn_signature(signature_params, ty, ctx, source_map)
+            super::expr::format_fn_signature(decl_params, ty, ctx, source_map)
         ),
         Some(ty) => format!(": {}", format_type(ty, ctx, source_map)),
         None => String::new(),

@@ -916,7 +916,6 @@ fn test_strategy1_flag_loop_rejected_when_counter_has_unknown_rebinding() {
         kind: StmtKind::Assign {
             target: Box::new(Expr::Var("i".to_string(), dummy_span())),
             type_annotation: None,
-            signature_params: Vec::new(),
             value: Some(Box::new(Expr::Var("step".to_string(), dummy_span()))),
             is_mut: false,
             span: dummy_span(),

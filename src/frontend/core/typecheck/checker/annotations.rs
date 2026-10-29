@@ -44,18 +44,26 @@ impl TypeChecker {
     ) {
         use crate::frontend::core::parser::ast::{StmtKind, Type as T};
 
-        let (type_annotation, signature_params, definition) = match &stmt.kind {
+        // 形参从声明注解的 `Type::Fn` 链拍平（6.5.2：不再有并行形参表）。
+        // `definition` 只对类型定义存在；其签名不做“顶层注解扫描”（保持 6.5.2
+        // 之前的诊断面：类型定义只扫定义体）。
+        let (annotation_for_params, definition) = match &stmt.kind {
             StmtKind::Assign {
-                type_annotation,
-                signature_params,
-                ..
-            } => (type_annotation.as_ref(), signature_params.as_slice(), None),
+                type_annotation, ..
+            } => (type_annotation.as_ref(), None),
             StmtKind::TypeDefinition {
-                signature_params,
+                type_annotation,
                 definition,
                 ..
-            } => (None, signature_params.as_slice(), Some(definition)),
+            } => (type_annotation.as_ref(), Some(definition)),
             _ => return,
+        };
+        let params = crate::frontend::core::parser::ast::signature_fn_params(annotation_for_params);
+        let type_annotation: Option<&T> = match &stmt.kind {
+            StmtKind::Assign {
+                type_annotation, ..
+            } => type_annotation.as_ref(),
+            _ => None,
         };
 
         // 签名参数名：**类型参数**（`A: Type`）与**编译期值参数**（`N: Int`，靠
@@ -72,7 +80,7 @@ impl TypeChecker {
             use crate::frontend::core::parser::ast::name_used_as_type;
             let not_predicate = &|_: &str| false;
             let mut names: Vec<String> = inherited.to_vec();
-            for p in signature_params {
+            for p in &params {
                 let Some(ty) = p.ty.as_ref() else { continue };
                 // 类型参数（`A: Type` 形态）直接计入
                 if matches!(ty, T::MetaType { .. }) {
@@ -82,11 +90,10 @@ impl TypeChecker {
                 // 值参数：其名在**签名注解或类型定义体的类型位**被引用时才算类型名
                 // （`(N: Int) -> (n: N) -> Int` 的内层 `N`；
                 //   `SafeArray: (T: Type, N: Int) -> Type = { data: Array(T, N) }` 的 `N`）
-                let referenced = signature_params.iter().any(|q| {
+                let referenced = params.iter().any(|q| {
                     q.ty.as_ref()
                         .is_some_and(|t| name_used_as_type(&p.name, t, not_predicate))
                 }) || type_annotation
-                    .as_ref()
                     .is_some_and(|t| name_used_as_type(&p.name, t, not_predicate))
                     || definition
                         .as_ref()
@@ -99,7 +106,7 @@ impl TypeChecker {
         };
 
         // 各层形参注解（`A: Type` 形态的类型参数位自身不引用类型，跳过）
-        for p in signature_params {
+        for p in &params {
             if let Some(ty) = p.ty.as_ref() {
                 if !matches!(ty, T::MetaType { .. }) {
                     self.check_type_names_in(ty, &generic_names);

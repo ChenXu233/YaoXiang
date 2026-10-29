@@ -501,7 +501,8 @@ pub fn parse_fn_type_with_names(
     }
     // return_type 位置可能是另一组 curry（如 (n: N) -> Int）。
     // parse_type_annotation 会丢参数名，故自行检测 curry 组并递归收集带名参数。
-    // all_params = 第一组 + 后续各组（拍平带名），供 signature_params 存全部 curry 组参数名。
+    // all_params = 第一组 + 后续各组（拍平带名），供调用方取全部 curry 组参数名
+    // （6.5.2 起由 `Type::fn_params_flat` 统一从 `Type::Fn` 链拍平，本返回值随之收敛）。
     // return_type 保持嵌套 Type::Fn（纯类型），供 type_annotation 构建正确嵌套结构。
     // 注意：必须前瞻到 `)` 之后确认是 `->` 才算 curry 组——
     // 返回类型本身可能是元组类型 (T, U)（#253），否则会把元组误判为 curry 参数组。

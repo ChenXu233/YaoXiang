@@ -88,7 +88,6 @@ fn test_check_var_stmt_with_type_annotation() {
     let stmt = make_stmt(StmtKind::Assign {
         target: Box::new(Expr::Var("x".to_string(), Span::dummy())),
         type_annotation: Some(builtin_ty("Int64")),
-        signature_params: vec![],
         value: Some(Box::new(Expr::Lit(Literal::Int(42), Span::dummy()))),
         is_mut: false,
         span: Span::dummy(),
@@ -117,7 +116,6 @@ fn test_check_var_stmt_type_inference() {
     let stmt = make_stmt(StmtKind::Assign {
         target: Box::new(Expr::Var("x".to_string(), Span::dummy())),
         type_annotation: None,
-        signature_params: vec![],
         value: Some(Box::new(Expr::Lit(Literal::Int(42), Span::dummy()))),
         is_mut: false,
         span: Span::dummy(),
@@ -371,7 +369,6 @@ fn test_check_var_stmt_type_mismatch() {
     let stmt = make_stmt(StmtKind::Assign {
         target: Box::new(Expr::Var("x".to_string(), Span::dummy())),
         type_annotation: Some(builtin_ty("Bool")),
-        signature_params: vec![],
         value: Some(Box::new(Expr::Lit(Literal::Int(42), Span::dummy()))),
         is_mut: false,
         span: Span::dummy(),
@@ -529,7 +526,6 @@ fn test_check_statement_checker_with_many_statements() {
         stmts.push(make_stmt(StmtKind::Assign {
             target: Box::new(Expr::Var(format!("var_{}", i), Span::dummy())),
             type_annotation: Some(builtin_ty("Int64")),
-            signature_params: vec![],
             value: Some(Box::new(Expr::Lit(Literal::Int(i as i128), Span::dummy()))),
             is_mut: false,
             span: Span::dummy(),
@@ -625,7 +621,6 @@ fn test_check_var_stmt_only_annotation() {
     let stmt = make_stmt(StmtKind::Assign {
         target: Box::new(Expr::Var("y".to_string(), Span::dummy())),
         type_annotation: Some(builtin_ty("Float64")),
-        signature_params: vec![],
         value: None,
         is_mut: false,
         span: Span::dummy(),

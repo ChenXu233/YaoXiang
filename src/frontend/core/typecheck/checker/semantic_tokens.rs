@@ -404,7 +404,6 @@ impl TypeChecker {
                 StmtKind::Assign {
                     target,
                     type_annotation,
-                    signature_params,
                     value,
                     ..
                 } => {
@@ -425,9 +424,13 @@ impl TypeChecker {
                     } else {
                         (Vec::new(), Vec::new())
                     };
+                    // 形参从注解的 Type::Fn 链拍平（6.5.2：不再有并行形参表）
+                    let signature = crate::frontend::core::parser::ast::signature_fn_params(
+                        type_annotation.as_ref(),
+                    );
                     let generic_params =
                         crate::frontend::core::parser::ast::extract_generic_param_names(
-                            signature_params,
+                            &signature,
                             &crate::frontend::core::typecheck::SemanticProbe,
                         );
                     let is_method = type_name.is_some();
@@ -656,13 +659,17 @@ impl TypeChecker {
                 StmtKind::If { .. } | StmtKind::Error(_) => {}
                 StmtKind::TypeDefinition {
                     name,
-                    signature_params,
+                    type_annotation,
                     definition,
                     ..
                 } => {
+                    // 形参从注解的 Type::Fn 链拍平（6.5.2：不再有并行形参表）
+                    let signature = crate::frontend::core::parser::ast::signature_fn_params(
+                        type_annotation.as_ref(),
+                    );
                     let generic_params =
                         crate::frontend::core::parser::ast::extract_generic_param_names(
-                            signature_params,
+                            &signature,
                             &crate::frontend::core::typecheck::SemanticProbe,
                         );
                     // 类型定义 → Type (定义)

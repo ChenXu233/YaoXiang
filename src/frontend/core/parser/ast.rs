@@ -253,10 +253,9 @@ pub enum StmtKind {
     /// value 是可选的初始化表达式（extern 绑定 / 方法绑定有，纯声明无）
     Assign {
         target: Box<Expr>,
+        /// 类型标注；函数定义时它承载 `Type::Fn`——形参名与类型同栖在
+        /// `Type::Fn.params`（`signature_fn_params` 是取用入口）。
         type_annotation: Option<Type>,
-        /// 签名第一组参数原样（含参数名），供 L3 的类型检查做泛型参数分类
-        /// （判据单一实现：本文件的 `classify_generic_params`）
-        signature_params: Vec<Param>,
         value: Option<Box<Expr>>,
         is_mut: bool,
         span: Span,
@@ -275,8 +274,10 @@ pub enum StmtKind {
     TypeDefinition {
         /// 类型名
         name: String,
-        /// 泛型参数原样（简单类型定义为空 Vec）
-        signature_params: Vec<Param>,
+        /// 声明签名：`(T: Type) -> Type`（`Point: Type` 记 `MetaType`）。
+        /// 泛型形参从 `Type::Fn` 载体取（`signature_fn_params`），与 `Assign`
+        /// 的 `type_annotation` 同一表示——不再另存并行形参表。
+        type_annotation: Option<Type>,
         /// 解析后的类型体（必有）
         definition: Type,
     },
@@ -953,6 +954,44 @@ impl Type {
             Type::Name { .. } | Type::ConstExpr(_) => self.clone(),
         }
     }
+
+    /// 从 `Type::Fn` 链拍平出全部形参（curry 各组依次展开；`Paren`/
+    /// `NamedParen` 视为透明继续内层）。
+    ///
+    /// 这是「语句声明里的原始签名形参」的**唯一实现**（RFC-039 6.5.2）：
+    /// `Assign`/`TypeDefinition` 不再另存形参表，消费点一律经本方法取；
+    /// 非函数类型返回空。`NamedParen` 的 binder 名不在此列——它由该节点
+    /// 自身承载、由类型检查器显式解释（返回位精化）。
+    pub fn fn_params_flat(&self) -> Vec<Param> {
+        fn walk(
+            ty: &Type,
+            out: &mut Vec<Param>,
+        ) {
+            match ty {
+                Type::Fn {
+                    params,
+                    return_type,
+                } => {
+                    out.extend(params.iter().cloned());
+                    walk(return_type, out);
+                }
+                Type::Paren(inner) | Type::NamedParen { inner, .. } => walk(inner, out),
+                _ => {}
+            }
+        }
+        let mut out = Vec::new();
+        walk(self, &mut out);
+        out
+    }
+}
+
+/// 语句的类型标注 → 拍平的签名形参（`Option` 形态的唯一入口）。
+///
+/// 非 `Type::Fn` 标注（普通值绑定、`Point: Type` 的元类型标注）返回空。
+pub fn signature_fn_params(type_annotation: Option<&Type>) -> Vec<Param> {
+    type_annotation
+        .map(Type::fn_params_flat)
+        .unwrap_or_default()
 }
 
 /// Match arm

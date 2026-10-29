@@ -17,7 +17,7 @@ fn outer_with_inner_field() -> Stmt {
     Stmt {
         kind: StmtKind::TypeDefinition {
             name: "Outer".to_string(),
-            signature_params: vec![],
+            type_annotation: None,
             definition: Type::Struct {
                 body: vec![TypeBodyItem::Field(StructField::new(
                     "inner".to_string(),
@@ -41,7 +41,6 @@ fn module_with_point_param_annotation() -> Module {
             kind: StmtKind::Assign {
                 target: Box::new(Expr::Var("main".to_string(), Span::dummy())),
                 type_annotation: None,
-                signature_params: vec![],
                 value: Some(Box::new(Expr::Lambda {
                     params: vec![crate::frontend::core::parser::ast::Param {
                         name: "p".to_string(),
@@ -97,7 +96,6 @@ fn make_binding(
         kind: StmtKind::Assign {
             target,
             type_annotation: None,
-            signature_params: vec![],
             value: Some(Box::new(Expr::Lambda {
                 params: vec![],
                 body: Box::new(Block {
@@ -120,7 +118,7 @@ fn make_type_def(name: &str) -> Stmt {
     Stmt {
         kind: StmtKind::TypeDefinition {
             name: name.to_string(),
-            signature_params: vec![],
+            type_annotation: None,
             definition: Type::Name {
                 name: "Int64".to_string(),
                 span: Span::dummy(),
@@ -137,7 +135,6 @@ fn make_var(name: &str) -> Stmt {
         kind: StmtKind::Assign {
             target: Box::new(Expr::Var(name.to_string(), Span::dummy())),
             type_annotation: None,
-            signature_params: vec![],
             value: None,
             is_mut: false,
             span: Span::dummy(),
@@ -156,7 +153,6 @@ fn make_annotated_var(name: &str) -> Stmt {
                 name: "Int".to_string(),
                 span: Span::dummy(),
             }),
-            signature_params: vec![],
             value: None,
             is_mut: false,
             span: Span::dummy(),
@@ -665,7 +661,6 @@ fn make_index_assign_stmt(
                 span: Span::dummy(),
             }),
             type_annotation: None,
-            signature_params: vec![],
             value: Some(Box::new(Expr::Var(value_var.to_string(), Span::dummy()))),
             is_mut: false,
             span: Span::dummy(),
