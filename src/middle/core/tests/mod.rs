@@ -7,6 +7,7 @@ pub mod batch_method_bind;
 pub mod bytecode;
 pub mod corpus;
 pub mod def_assign;
+pub mod fn_param_slots;
 pub mod ir_build;
 pub mod local_slots;
 pub mod native_fn_value;

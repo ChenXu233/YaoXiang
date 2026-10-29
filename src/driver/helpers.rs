@@ -1202,8 +1202,9 @@ pub(in crate::driver) fn generic_instantiation_map<'a>(
 /// （`trait_table.has_trait` + 约束名窄入口 `typecheck::is_constraint_name`——
 /// 与 L2 探针、L3 类型检查同源，不再各自摸运算符接口表）。
 ///
-/// 只扫顶层 `Assign`（`sum: (T: Add) -> … = …` 是顶层泛型绑定的承载形态，
-/// 形参从注解的 `Type::Fn` 链拍平，即第一组括号段）；普通值绑定没有 Fn 注解、
+/// 只扫顶层 `Assign`（`sum: (T: Add) -> … = …` 是顶层泛型绑定的承载形态）；
+/// 形参从注解的 `Type::Fn` 链拍平（**全部柯里化组依次展开**，见
+/// `Type::fn_params_flat`——不是只取第一组括号段）。普通值绑定没有 Fn 注解、
 /// 拍平为空，值参数类型名（`Vec3` 等）不满足 Type/ trait 判据 ⇒ 分类不出
 /// Type 参数，天然无条目。
 pub(in crate::driver) fn declared_type_param_names<'a>(

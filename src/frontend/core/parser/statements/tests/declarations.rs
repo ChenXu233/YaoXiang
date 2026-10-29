@@ -283,16 +283,14 @@ fn test_type_fn_params_carry_signature_verbatim() {
     else {
         panic!("Expected StmtKind::Binding, got {:?}", kind);
     };
+    // 口径：`Type::fn_params_flat` 拍平**全部柯里化组**（本用例只有一组，
+    // 故“拍平结果 == 第一组”是巧合；多组签名见 curried 测试）。
     let params = type_annotation
         .as_ref()
         .map(crate::frontend::core::parser::ast::Type::fn_params_flat)
         .unwrap_or_default();
 
-    assert_eq!(
-        params.len(),
-        2,
-        "签名第一组两个参数应原样保留（泛型 T 与值参数 x）"
-    );
+    assert_eq!(params.len(), 2, "签名形参应原样保留（泛型 T 与值参数 x）");
     assert_eq!(params[0].name, "T", "第一个参数应为 T");
     assert!(
         matches!(params[0].ty, Some(Type::MetaType { .. })),
@@ -305,6 +303,44 @@ fn test_type_fn_params_carry_signature_verbatim() {
     );
 }
 
+/// 不变量（6.5 F3）：**无名形参（name 空串）不得产出泛型名**——空串不是可
+/// 检索的名字，任何按名查找都永不命中；两个泛型分类入口都必须显式跳过。
+#[test]
+fn test_anonymous_param_never_yields_generic_name() {
+    // Arrange：三个可分类形态（MetaType / const 名 / 约束名）全部以匿名形参给出
+    let params = vec![
+        crate::frontend::core::parser::ast::Param::anonymous(
+            Some(Type::MetaType {
+                name_span: crate::util::span::Span::dummy(),
+                args: vec![],
+            }),
+            crate::util::span::Span::dummy(),
+        ),
+        crate::frontend::core::parser::ast::Param::from_type(Type::Name {
+            name: "Int".into(),
+            span: crate::util::span::Span::dummy(),
+        }),
+        crate::frontend::core::parser::ast::Param::from_type(Type::Name {
+            name: "Add".into(),
+            span: crate::util::span::Span::dummy(),
+        }),
+    ];
+
+    // Act
+    let classified =
+        crate::frontend::core::parser::ast::classify_generic_params(&params, &|name| name == "Add");
+    let extracted = extract_generic_param_names(&params, &NullProbe);
+
+    // Assert
+    assert!(
+        classified.is_empty(),
+        "无名形参不得产出泛型名（classify_generic_params），got: {classified:?}"
+    );
+    assert!(
+        extracted.is_empty(),
+        "无名形参不得产出泛型名（extract_generic_param_names），got: {extracted:?}"
+    );
+}
 #[test]
 fn test_value_params_no_merged_misalignment() {
     // 覆盖: RFC-007 参数匹配 — params 存值参数，标注来自签名对应值参数而非错位 zip

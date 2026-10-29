@@ -628,7 +628,15 @@ impl AstToIrGenerator {
                     return_type,
                 } => {
                     let start = cursor;
-                    cursor = (cursor + type_params.len()).min(curry_params.len());
+                    // 运行期形参位只数**带类型**的形参（基线口径）：参数位的
+                    // 裸标识符（`(Int64)`→name="Int64"、ty=None）不占运行期槽位。
+                    // 它是否算参数由 WBS 8.9.1（参数位形态归一）裁决，6.5 只做
+                    // 零行为差分的表示重塑（锁定测试：middle/core/tests/fn_param_slots.rs）。
+                    let runtime_param_count = type_params
+                        .iter()
+                        .filter(|p| p.occupies_runtime_param_slot())
+                        .count();
+                    cursor = (cursor + runtime_param_count).min(curry_params.len());
                     let layer_params: Vec<ast::Param> = curry_params[start..cursor].to_vec();
                     let ret_type = *return_type;
                     current_type = ret_type.clone();

@@ -768,9 +768,22 @@ pub struct Block {
 /// 表示——不得新增 Parameter/Arg 第二结构，也不得用
 /// `param_names: Vec<Option<String>>` 一类平行数组过渡。
 ///
-/// 名字约定：有名字的位置（签名/lambda）`name` 是真实标识符；纯类型位置
-/// （无名实参、类型反解合成）用 [`Param::anonymous`]，`name` 为空串，
-/// 由 [`Param::is_named`] 判定。空串名字不参与任何按名查找。
+/// # 名字槽的三种形态（事实描述，不是承诺）
+///
+/// 1. **有名形参**：签名/lambda 头里写出了名字（`a: Int`）——`name` 是真实
+///    形参标识符；
+/// 2. **无名形参（anonymous）**：纯类型位 / 类型反解合成——`name` 为空串，
+///    由 [`Param::anonymous`] / [`Param::from_type`] 构造；
+/// 3. **参数位裸标识符**：`(Int64)` / `(a)` 这类没有 `:` 的写法——`name` 是
+///    那个标识符、`ty = None`。它**可能是类型名而不是形参**（`(Int64)`），
+///    parser 不区分（类型名/参数名的歧义正是 6.4 探针注入要解决的问题）。
+///    该形态**不占运行期形参位**（基线口径，见
+///    [`Param::occupies_runtime_param_slot`]）；它究竟算不算参数由
+///    WBS 8.9.1（参数位形态归一，D53）裁决，6.5 只做零行为差分的表示重塑。
+///
+/// 空串名字不参与任何按名查找（泛型分类入口显式跳过无名形参，见
+/// `classify_generic_params` / `extract_generic_param_names`）。形态 0（无名）
+/// 与形态 3 在 AST 上都可判定；但形态 3 与「无标注的值形参」**同形**，不可区分。
 #[derive(Clone)]
 pub struct Param {
     pub name: String,
@@ -798,9 +811,31 @@ impl Param {
         Self::anonymous(Some(ty), Span::dummy())
     }
 
-    /// 是否携带真实名字（合成/类型位形参为 `false`）。
+    /// `name` 槽是否**非空**——只回答这一个事实，**不**表示「携带真实形参名」：
+    /// 参数位裸标识符（形态 3）也非空，但它是标识符、未必是形参。
     pub fn is_named(&self) -> bool {
         !self.name.is_empty()
+    }
+
+    /// 是否为**匿名形参**（形态 2：`name` 空串、仅由类型合成的纯类型位 /
+    /// 类型反解）。这是本节点能**判定**的非形参位形态；形态 3（参数位裸
+    /// 标识符）语法二义，不归本方法判定。
+    pub fn is_type_position(&self) -> bool {
+        !self.is_named()
+    }
+
+    /// 是否**缺少类型标注**（`ty = None`）：参数位裸标识符（形态 3）的唯一
+    /// 可判特征；不构成「它是类型名」的证明（也可能是无标注值形参）。
+    pub fn is_untyped(&self) -> bool {
+        self.ty.is_none()
+    }
+
+    /// 是否占**运行期形参位**（IR 参数槽）：按基线口径 = **带类型标注**。
+    /// 参数位裸标识符（形态 3，`ty = None`）不占位——此口径由 WBS 8.9.1
+    /// 重新裁定；改它必须同时改 `middle/core/tests/fn_param_slots.rs` 的
+    /// 锁定测试。
+    pub fn occupies_runtime_param_slot(&self) -> bool {
+        self.ty.is_some()
     }
 }
 
@@ -1170,6 +1205,11 @@ pub fn extract_generic_param_names(
     params
         .iter()
         .filter_map(|p| {
+            // 无名形参（形态 2：name 空串）不得产出泛型名——空串不是可检索的
+            // 名字，任何按名查找都永不命中（守卫单点，见 Param 的三形态说明）。
+            if !p.is_named() {
+                return None;
+            }
             let ty = p.ty.as_ref()?;
             match ty {
                 // (T: Type) — MetaType
@@ -1262,6 +1302,11 @@ pub fn classify_generic_params(
     params
         .iter()
         .filter_map(|p| {
+            // 无名形参（形态 2：name 空串）不得产出泛型名——空串不是可检索的
+            // 名字，任何按名查找都永不命中（守卫单点，见 Param 的三形态说明）。
+            if !p.is_named() {
+                return None;
+            }
             let ty = p.ty.as_ref()?;
             match ty {
                 // (T: Type) — MetaType
