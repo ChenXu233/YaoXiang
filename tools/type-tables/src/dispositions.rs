@@ -4,14 +4,14 @@
 //! 相应条目应从本表删除并让 T2/T3 转全绿——本文件是**待办清单**，不是豁免白名单：
 //! 新增差异必须在此登记理由，否则 `--report` 计入「未登记漂移」。
 //!
-//! **WBS 6.1.2（2026-10-27 定稿）之后的剩余项**：
+//! **WBS 6.1.2（2026-10-27 定稿）与 6.4（2026-10-29）之后的剩余项**：
 //! - `from_builtin_name` 已收敛为 15 个内置名 + `DateTime` 临时兼容别名，22 个实现内
 //!   拼写已删除（T2.5 的逐名哨兵守着，任一回退即报红）。6.0 勘察阶段登记在本表的
 //!   「补 Never 进 LSP 清单」「删 LSP 的 Int128 / Uint」三条**已按 action 兑现并删除**。
-//! - T2 剩余差异只有两类，都落在本轮改动面之外或属刻意选择：
-//!   ① `CONST_PARAM_TYPES`（`src/frontend/core/parser/ast.rs`）用大写位宽缩写
-//!   （`I8` / `U8` / `F32` …）而非规范名，留给 6.2 名称统一；
-//!   ② LSP 清单刻意不收录 `DateTime`（它是待迁出的 std 层别名，不属内置名）。
+//! - WBS 6.4 按 action 兑现了 10 条 T2.C1：`CONST_PARAM_TYPES` 删掉 10 个旧拼写
+//!   （I8/I16/I32/I64/U8/U16/U32/U64/F32/F64）后只剩规范名，C1（本表 ⊆ 内置名表）清零。
+//! - T2 剩余差异只有一类且属刻意选择：LSP 清单不收录 `DateTime`（待迁出的 std 层别名，
+//!   不属内置名）。
 //! - T3 的差异全部是「RFC-011 不承载内置类型名清单」这一事实的登记，不是待修缺陷。
 
 /// 一条已登记差异
@@ -25,69 +25,10 @@ pub struct Disposition {
 }
 
 /// T2：三表逐名差异
+///
+/// WBS 6.4：`CONST_PARAM_TYPES` 删掉 10 个旧拼写后，C1（本表 ⊆ 内置名表）已清零，
+/// 原先 10 条 T2.C1 登记随之兑现并删除。剩余只有 C2 一条（DateTime 刻意不收录）。
 pub const T2: &[Disposition] = &[
-    Disposition {
-        check: "T2.C1",
-        name: "I8",
-        reason: "CONST_PARAM_TYPES（src/frontend/core/parser/ast.rs）用大写位宽缩写 I8；\
-                 自 WBS 6.1.2 起 from_builtin_name 只认规范名 Int8（小写 i8 已删除）",
-        action: "6.2 名称统一：CONST_PARAM_TYPES 改用 Int8——本轮不动 parser（ast.rs 不在 6.1.2 改动面）",
-    },
-    Disposition {
-        check: "T2.C1",
-        name: "I16",
-        reason: "同上；from_builtin_name 只认 Int16",
-        action: "6.2：CONST_PARAM_TYPES 改用 Int16",
-    },
-    Disposition {
-        check: "T2.C1",
-        name: "I32",
-        reason: "同上；from_builtin_name 只认 Int32",
-        action: "6.2：CONST_PARAM_TYPES 改用 Int32",
-    },
-    Disposition {
-        check: "T2.C1",
-        name: "I64",
-        reason: "同上；from_builtin_name 只认 Int64",
-        action: "6.2：CONST_PARAM_TYPES 改用 Int64",
-    },
-    Disposition {
-        check: "T2.C1",
-        name: "F32",
-        reason: "同上；from_builtin_name 只认 Float32",
-        action: "6.2：CONST_PARAM_TYPES 改用 Float32",
-    },
-    Disposition {
-        check: "T2.C1",
-        name: "F64",
-        reason: "同上；from_builtin_name 只认 Float64",
-        action: "6.2：CONST_PARAM_TYPES 改用 Float64",
-    },
-    Disposition {
-        check: "T2.C1",
-        name: "U8",
-        reason: "CONST_PARAM_TYPES 含 U8；MonoType 没有无符号变体，15 个内置名里没有 Uint 族\
-                 （sizeof 表的 Uint 臂与 LSP 清单的 Uint 项已随 WBS 6.1.2 删除）",
-        action: "6.2：从 CONST_PARAM_TYPES 删除（保留会产生无法 lower 的 const 参数名）",
-    },
-    Disposition {
-        check: "T2.C1",
-        name: "U16",
-        reason: "同上",
-        action: "6.2：从 CONST_PARAM_TYPES 删除",
-    },
-    Disposition {
-        check: "T2.C1",
-        name: "U32",
-        reason: "同上",
-        action: "6.2：从 CONST_PARAM_TYPES 删除",
-    },
-    Disposition {
-        check: "T2.C1",
-        name: "U64",
-        reason: "同上",
-        action: "6.2：从 CONST_PARAM_TYPES 删除",
-    },
     Disposition {
         check: "T2.C2",
         name: "DateTime",

@@ -10,7 +10,7 @@ impl TypeChecker {
         &self,
         name: &str,
     ) -> bool {
-        if name == "Terminates" {
+        if crate::frontend::core::typecheck::is_builtin_predicate_name(name) {
             return true;
         }
         self.env.vars.get(name).is_some_and(|poly| {
@@ -66,7 +66,11 @@ impl TypeChecker {
         // 于是 `f: (bogus: Int) -> bogus = ...` 的返回位 `bogus` 被当合法类型
         // 放行，该函数的返回类型检查形同虚设（B5）。
         let generic_names: Vec<String> = {
-            use crate::frontend::core::parser::ast::name_used_as_type_in;
+            // 6.4 合并后的单一实现。本站点与 6.4 之前**同判定**：不做谓词短路
+            // （传空谓词集）——谓词应用的实参位由本文件的 `is_predicate_head`
+            // 在别处单独排除，此处改动会改诊断发射面。
+            use crate::frontend::core::parser::ast::name_used_as_type;
+            let not_predicate = &|_: &str| false;
             let mut names: Vec<String> = inherited.to_vec();
             for p in signature_params {
                 let Some(ty) = p.ty.as_ref() else { continue };
@@ -80,13 +84,13 @@ impl TypeChecker {
                 //   `SafeArray: (T: Type, N: Int) -> Type = { data: Array(T, N) }` 的 `N`）
                 let referenced = signature_params.iter().any(|q| {
                     q.ty.as_ref()
-                        .is_some_and(|t| name_used_as_type_in(&p.name, t))
+                        .is_some_and(|t| name_used_as_type(&p.name, t, not_predicate))
                 }) || type_annotation
                     .as_ref()
-                    .is_some_and(|t| name_used_as_type_in(&p.name, t))
+                    .is_some_and(|t| name_used_as_type(&p.name, t, not_predicate))
                     || definition
                         .as_ref()
-                        .is_some_and(|t| name_used_as_type_in(&p.name, t));
+                        .is_some_and(|t| name_used_as_type(&p.name, t, not_predicate));
                 if referenced {
                     names.push(p.name.clone());
                 }
@@ -436,7 +440,7 @@ fn is_predicate_head(
     name: &str,
     env: &crate::frontend::core::typecheck::environment::TypeEnvironment,
 ) -> bool {
-    if name == "Terminates" {
+    if crate::frontend::core::typecheck::is_builtin_predicate_name(name) {
         return true;
     }
     env.get_var(name).is_some_and(|poly| {

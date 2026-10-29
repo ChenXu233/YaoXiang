@@ -77,7 +77,7 @@ description: '词法分析器（Lexer）与语法分析器（Parser）阶段产�
 - **模板**：`期望 {expected}，找到 {found}`
 - **消息**：解析器期望特定的令牌
 - **帮助**：检查语法并添加期望的令牌
-- **发射点**：`src/driver/arms.rs:93`、`src/frontend/compiler.rs:177`、`src/frontend/core/parser/mod.rs:45` 等 22 处
+- **发射点**：`src/driver/arms.rs:93`、`src/frontend/compiler.rs:177`、`src/frontend/core/parser/mod.rs:59` 等 22 处
 
 ### E0011：意外的令牌
 
@@ -87,7 +87,7 @@ description: '词法分析器（Lexer）与语法分析器（Parser）阶段产�
 - **模板**：`意外的令牌：'{token}'`
 - **消息**：遇到了意外的令牌
 - **帮助**：删除或替换意外的令牌
-- **发射点**：`src/driver/arms.rs:93`、`src/frontend/compiler.rs:177`、`src/frontend/core/parser/mod.rs:45` 等 18 处
+- **发射点**：`src/driver/arms.rs:93`、`src/frontend/compiler.rs:177`、`src/frontend/core/parser/mod.rs:59` 等 18 处
 
 ### E0012：无效语法
 
@@ -137,5 +137,5 @@ description: '词法分析器（Lexer）与语法分析器（Parser）阶段产�
 - **模板**：`'{keyword}' 是关键字，不能用作名称`
 - **消息**：关键字不能用作变量或表达式名称
 - **帮助**：换一个不同的标识符代替关键字
-- **发射点**：`src/frontend/core/parser/parser_state.rs:243`
+- **发射点**：`src/frontend/core/parser/parser_state.rs:265`
 - **源码注释名**：关键字作变量名

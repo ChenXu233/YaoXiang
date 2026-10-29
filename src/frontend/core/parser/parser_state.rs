@@ -20,6 +20,11 @@ pub struct ParserState<'a> {
     tokens: &'a [Token],
     pos: usize,
     errors: Vec<Diagnostic>,
+    /// 注入的**类型环境探针**（RFC-039 6.4 / 03 §5.4）：约束名、编译期谓词名、
+    /// 内置名定种的唯一判定口。parser 属 L2，不得反向依赖 L3 的类型环境，
+    /// 故以 trait 注入；无环境入口传 [`NullProbe`](super::probe::NullProbe)，
+    /// 生产入口传编译器内置封闭集探针或 L3 语义探针。
+    probe: &'a dyn super::probe::TypeEnvProbe,
     /// match 臂守卫模式（RFC-010b）：为真时 `=>` 不作为 lambda 中缀被
     /// 表达式循环消费——守卫表达式 `n if n > 3 => ...` 要完整解析 `n > 3`
     /// 并停在 `=>`。save/restore 语义，嵌套（守卫里再写 match）安全。
@@ -36,14 +41,38 @@ pub struct ParserState<'a> {
 }
 
 impl<'a> ParserState<'a> {
-    pub fn new(tokens: &'a [Token]) -> Self {
+    pub fn new(
+        tokens: &'a [Token],
+        probe: &'a dyn super::probe::TypeEnvProbe,
+    ) -> Self {
         Self {
             tokens,
             pos: 0,
             errors: Vec::new(),
+            probe,
             no_fat_arrow: false,
             predicate_names: HashSet::new(),
             next_plan_id: 0,
+        }
+    }
+
+    /// 类型环境探针：约束名 / 谓词名 / 内置名定种一律经此判定。
+    pub fn probe(&self) -> &'a dyn super::probe::TypeEnvProbe {
+        self.probe
+    }
+
+    /// 名字定种：本遍已声明的谓词优先，其余交注入探针。
+    ///
+    /// parser 只能看到**本遍已解析**的声明（[`Self::declare_predicate`]），
+    /// 环境侧的谓词名由探针提供——两者都不是「类型层」本身的定义。
+    pub fn kind_of(
+        &self,
+        name: &str,
+    ) -> super::probe::NameKind {
+        if self.predicate_names.contains(name) {
+            super::probe::NameKind::Predicate
+        } else {
+            self.probe.kind_of(name)
         }
     }
 
@@ -67,13 +96,6 @@ impl<'a> ParserState<'a> {
         self.predicate_names.insert(name.to_string());
     }
 
-    /// RFC-027：本条声明是否引用已登记的谓词名。
-    pub(crate) fn is_predicate_name(
-        &self,
-        name: &str,
-    ) -> bool {
-        self.predicate_names.contains(name)
-    }
     pub fn at_end(&self) -> bool {
         self.pos >= self.tokens.len()
             || matches!(self.current().map(|t| &t.kind), Some(TokenKind::Eof))

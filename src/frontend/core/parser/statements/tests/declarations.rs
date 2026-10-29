@@ -3,6 +3,7 @@
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parse;
 use crate::frontend::core::parser::ast::{extract_generic_param_names, Expr, StmtKind, Type};
+use crate::frontend::core::parser::NullProbe;
 
 fn parse_stmt(source: &str) -> StmtKind {
     let tokens = tokenize(source).unwrap();
@@ -203,7 +204,7 @@ fn test_type_def_generic() {
             kind
         );
     };
-    let generic_params = extract_generic_param_names(signature_params);
+    let generic_params = extract_generic_param_names(signature_params, &NullProbe);
 
     // Assert
     assert_eq!(name, "Option", "类型名应为 Option");
@@ -599,7 +600,7 @@ fn test_type_def_generic_sum_type_recognized_as_struct() {
             kind
         );
     };
-    let generic_params = extract_generic_param_names(signature_params);
+    let generic_params = extract_generic_param_names(signature_params, &NullProbe);
 
     // Assert
     assert_eq!(name, "Option", "类型名应为 Option");

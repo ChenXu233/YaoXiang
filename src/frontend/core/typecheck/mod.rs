@@ -28,6 +28,9 @@ pub mod environment;
 // RFC-011b: 运算符接口与实现登记表
 pub mod operator_interfaces;
 
+// 类型环境探针的 L3 实现（RFC-039 6.4：parser 的数据流去类型依赖）
+pub mod probe;
+
 // 类型检查器
 pub mod checker;
 
@@ -58,6 +61,7 @@ pub use crate::frontend::core::types::{
 };
 
 // 重新导出子模块
+pub use probe::{is_builtin_predicate_name, is_constraint_name, SemanticProbe};
 pub use environment::*;
 pub use inference::*;
 pub use crate::frontend::core::types::eval::evaluator::*;

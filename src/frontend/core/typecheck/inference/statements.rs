@@ -1739,7 +1739,11 @@ impl StatementChecker {
         ty: MonoType,
     ) -> MonoType {
         match ty {
-            MonoType::Generic { ref name, .. } if name == "Terminates" => self.solver.new_var(),
+            MonoType::Generic { ref name, .. }
+                if crate::frontend::core::typecheck::is_builtin_predicate_name(name) =>
+            {
+                self.solver.new_var()
+            }
             MonoType::Generic { ref name, .. } if self.proof_fn_bases.contains_key(name) => {
                 self.proof_fn_bases.get(name).cloned().unwrap_or(ty)
             }
@@ -2227,7 +2231,9 @@ impl StatementChecker {
                         // `constraint_args` 可能为空。T1 的验收是「不报错」，已达成；
                         // 测度的实际提取与保真由 T2 处理（需同时收 `Name` 与
                         // `ConstExpr` 两种形态）。与证明函数路径同型限制。
-                        if name == "Terminates" && args.len() == 1 {
+                        if crate::frontend::core::typecheck::is_builtin_predicate_name(name)
+                            && args.len() == 1
+                        {
                             let constraint_args: Vec<crate::frontend::core::types::const_data::ConstExpr> = args
                                 .iter()
                                 .filter_map(|a| {

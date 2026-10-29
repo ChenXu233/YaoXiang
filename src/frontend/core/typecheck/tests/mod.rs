@@ -27,6 +27,7 @@ mod native_param_names;
 mod nested_fn_capture;
 mod overload_resolutions;
 mod predicate_resolver;
+mod probe;
 mod rfc010;
 mod rfc010a;
 mod rfc011;

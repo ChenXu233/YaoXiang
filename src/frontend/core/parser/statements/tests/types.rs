@@ -10,7 +10,7 @@
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::statements::types::parse_type_annotation;
 use crate::frontend::core::parser::ast::{BinOp, Expr, StmtKind, StructField, Type, TypeBodyItem};
-use crate::frontend::core::parser::{parse, ParserState};
+use crate::frontend::core::parser::{parse, NullProbe, ParserState};
 
 fn with_type<F>(
     source: &str,
@@ -19,7 +19,7 @@ fn with_type<F>(
     F: FnMut(Type),
 {
     let tokens = tokenize(source).unwrap();
-    let mut state = ParserState::new(&tokens);
+    let mut state = ParserState::new(&tokens, &NullProbe);
     let t = parse_type_annotation(&mut state).expect("parse_type_annotation failed");
     f(t);
 }
@@ -307,7 +307,7 @@ fn test_ptr_type() {
 fn test_reject_old_curried_fn_syntax() {
     // RFC-010: `Int -> Int` should be rejected
     let tokens = tokenize("Int -> Int").unwrap();
-    let mut state = ParserState::new(&tokens);
+    let mut state = ParserState::new(&tokens, &NullProbe);
     let result = parse_type_annotation(&mut state);
     assert!(result.is_none(), "Old curried fn syntax should be rejected");
 }
@@ -512,7 +512,7 @@ fn test_deprecated_pipe_syntax_not_parsed_as_variant() {
     // Arrange
     let source = "{ red | green | blue }";
     let tokens = tokenize(source).unwrap();
-    let mut state = ParserState::new(&tokens);
+    let mut state = ParserState::new(&tokens, &NullProbe);
 
     // Act
     let _ = parse_type_annotation(&mut state);

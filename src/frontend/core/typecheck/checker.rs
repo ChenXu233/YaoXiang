@@ -11,6 +11,7 @@ use crate::frontend::core::types::{MonoType, PolyType, TraitTable};
 use crate::frontend::core::types::const_data::{ConstExpr, ConstValue, BinOp, ConstKind, ConstVarDef};
 use crate::frontend::core::types::eval::const_eval::{ConstFunction, convert_expr_to_const_expr};
 use crate::frontend::core::typecheck::predicate_resolver::PredicateResolver;
+use crate::frontend::core::typecheck::is_builtin_predicate_name;
 use crate::frontend::core::typecheck::proof::verdict::ProofResult;
 use crate::frontend::core::typecheck::proof::dep_graph::{
     constraint_is_terminates, refined_free_vars, RefinedScopeUnit,
@@ -3499,7 +3500,7 @@ impl TypeChecker {
         &self,
         name: &str,
     ) -> bool {
-        if name == "Terminates" {
+        if is_builtin_predicate_name(name) {
             return true;
         }
         if self.env.predicate_defs.contains_key(name) {
@@ -3526,7 +3527,7 @@ impl TypeChecker {
             MonoType::Refined { base, constraint } => {
                 let is_terminates = matches!(
                     &constraint,
-                    ConstExpr::Call { func, .. } if func == "Terminates"
+                    ConstExpr::Call { func, .. } if is_builtin_predicate_name(func)
                 );
                 if is_terminates && matches!(base.as_ref(), MonoType::Void) {
                     return MonoType::Refined {
@@ -3576,7 +3577,7 @@ impl TypeChecker {
                 // 归档到 `Refined` 的收益：`resolves_type_name` 不必再特判，
                 // 且下游已有「`Refined` 取 `base` 做 unify」的成熟路径
                 // （inference/statements.rs），无需新机制。
-                if name == "Terminates" {
+                if is_builtin_predicate_name(name) {
                     if args.len() != 1 {
                         // 元数不对：二元形态（`Terminates(fn_ty, m)`）尚未实现
                         // （见 RFC-027a D1 park），多余实参不得静默忽略。

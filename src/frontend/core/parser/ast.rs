@@ -6,6 +6,8 @@ pub use crate::frontend::core::lexer::tokens::Literal;
 pub use crate::util::plan_id::PlanId;
 use crate::util::span::Span;
 
+use super::probe::{NameKind, TypeEnvProbe};
+
 #[derive(Debug, Clone)]
 pub struct SpannedIdent {
     pub name: String,
@@ -253,13 +255,14 @@ pub enum StmtKind {
     Expr(Box<Expr>),
     /// 赋值语句：target = 值 或 target: 类型 = 值
     /// target 是表达式（Var("x")、FieldAccess(Var("File"), "open")、...）
-    /// parser 不区分 target 能否当左值——typechecker 检查时判断
+    /// parser 不区分 target 能否当左值——由 L3 的类型检查判断
     /// type_annotation 是可选的类型标注
     /// value 是可选的初始化表达式（extern 绑定 / 方法绑定有，纯声明无）
     Assign {
         target: Box<Expr>,
         type_annotation: Option<Type>,
-        /// 签名第一组参数原样（含参数名），供 typechecker classify_generic_params 使用
+        /// 签名第一组参数原样（含参数名），供 L3 的类型检查做泛型参数分类
+        /// （判据单一实现：本文件的 `classify_generic_params`）
         signature_params: Vec<Param>,
         value: Option<Box<Expr>>,
         is_mut: bool,
@@ -694,7 +697,7 @@ fn collect_binding_kind_refs(
 /// 收集表达式中出现的标识符（仅 Var 叶子，不深入求值语义）。
 ///
 /// 用于 ConstExpr 等表达式位置的名字保守收集；
-/// 完整的引用分析在 typecheck/dead_code 各自的遍历中完成。
+/// 完整的引用分析在 L3 的类型检查与死代码分析各自的遍历中完成。
 fn collect_expr_ident_refs(
     expr: &Expr,
     out: &mut HashSet<String>,
@@ -806,19 +809,46 @@ pub fn is_meta_type(ty: &Type) -> bool {
     matches!(ty, Type::MetaType { .. })
 }
 
-/// Const parameter primitive types
-pub const CONST_PARAM_TYPES: &[&str] = &[
-    "Int", "Bool", "Float", "I8", "I16", "I32", "I64", "U8", "U16", "U32", "U64", "F32", "F64",
-    "Char", "String",
-];
-
-/// 参数名是否在给定类型中被当作类型引用（`(N: Int) -> (n: N)` 的 `N`）。
+/// 可作 **const 泛型参数**的内置类型名（`(N: Int)` 的 `Int`）。
 ///
-/// 与 `declarations.rs` 的 `name_used_as_type` 同义，此处独立实现以避免
-/// parser 内部跨模块依赖。
-pub fn name_used_as_type_in(
+/// 语义 = 「能被内置名表解析」（`NameKind::Builtin`）∩「const 参数可接受的
+/// 子集」。本表是**子集**的来源，全集在 L3 的内置名解析表
+/// （`MonoType::from_builtin_name`）——两份知识在 `extract_generic_param_names`
+/// 里显式接线（WBS 6.4.5），并由 `tools/type-tables` 的 T2 门禁逐名对账
+/// （C1：本表 ⊆ 内置名表）。
+///
+/// 6.4 删掉了 10 个旧拼写（`I8` / `I16` / `I32` / `I64` / `U8` /
+/// `U16` / `U32` / `U64` / `F32` / `F64`）：它们是 6.1 已删除的
+/// 实现内拼写，留在表里会产生**无法 lower** 的 const 参数名（Uint 族在
+/// `MonoType` 里没有变体，位宽缩写也不是内置名）。规范名（`Int8` …）不进本表
+/// ——它们自始不在 const 参数的可接受集合里，加入会拓宽泛型参数登记，属行为变更。
+pub const CONST_PARAM_TYPES: &[&str] = &["Int", "Bool", "Float", "Char", "String"];
+
+/// 参数名是否在给定类型中被当作**类型引用**（`(N: Int) -> (n: N)` 的 `N`）。
+///
+/// **单一实现**（RFC-039 P6 6.4 / 03 §5.3）：本函数是原先两份同义实现
+/// （本文件的 `name_used_as_type_in` 与 `statements/declarations.rs` 的
+/// `name_used_as_type`）合并后的**唯一**版本，后者已改为调用本函数。
+/// 合并口径 = 本文件版本（较新、修复更全）叠加上另一版的**谓词短路**：
+///
+/// - `Generic` 的**头部**同样是类型引用（`F(A)` 的 `F` 是构造器变量）——
+///   本文件版本有、另一版没有；
+/// - `Struct` / `NamedStruct` 的字段类型递归——本文件版本有、另一版落
+///   `_ => false`；
+/// - **谓词应用的实参位是值**（`Terminates(b)` 的 `b`），故头名被判定为谓词时
+///   整个应用短路 false——另一版有、本文件版本缺（RFC-027a）。
+///
+/// `is_predicate` 是调用方注入的环境问答：parser 侧传「探针 ∪ 本遍已声明谓词」，
+/// L3 侧传语义探针。两边都不是字符串常量表。
+///
+/// **已知共同缺口（本批刻意不动）**：`MetaType` / `ConstExpr` / `Paren` /
+/// `NamedParen` 四个变体两版原先都落 `_ => false`。补它们会改变
+/// 「const 参数是否被当类型用」的判定（进而改 IR 的 generic_params 与语料行为），
+/// 属语义修正，须按 07 的分流判据另立一轮，不在 6.4 的 C3 面内。
+pub fn name_used_as_type(
     name: &str,
     ty: &Type,
+    is_predicate: &dyn Fn(&str) -> bool,
 ) -> bool {
     match ty {
         Type::Name { name: n, .. } => n == name,
@@ -827,34 +857,45 @@ pub fn name_used_as_type_in(
         // （高阶类型参数，RFC-010 元类型层级的 Type1/Type2+ 值）——与 `F` 单独
         // 出现在类型位同义。此前只下钻实参位，头部被漏掉，于是类型体内的
         // `field: F(A)` 判不出 F 被当类型用，注解校验误报 E1003。
+        //
+        // 谓词应用反过来：头名是编译期谓词时**实参位是值**（`Terminates(b)`），
+        // 整个应用不构成类型引用。
         Type::Generic {
             name: head, args, ..
-        } => head == name || args.iter().any(|a| name_used_as_type_in(name, a)),
+        } => {
+            if is_predicate(head) {
+                return false;
+            }
+            head == name
+                || args
+                    .iter()
+                    .any(|a| name_used_as_type(name, a, is_predicate))
+        }
         Type::Fn {
             params,
             return_type,
         } => {
-            params.iter().any(|p| name_used_as_type_in(name, p))
-                || name_used_as_type_in(name, return_type)
+            params
+                .iter()
+                .any(|p| name_used_as_type(name, p, is_predicate))
+                || name_used_as_type(name, return_type, is_predicate)
         }
-        Type::Ptr(inner) => name_used_as_type_in(name, inner),
-        Type::Ref { inner, .. } => name_used_as_type_in(name, inner),
-        Type::Tuple(types) => types.iter().any(|t| name_used_as_type_in(name, t)),
+        Type::Ptr(inner) => name_used_as_type(name, inner, is_predicate),
+        Type::Ref { inner, .. } => name_used_as_type(name, inner, is_predicate),
+        Type::Tuple(types) => types
+            .iter()
+            .any(|t| name_used_as_type(name, t, is_predicate)),
         // 类型定义体：字段类型里的引用也算（`SafeArray = { data: Array(T, N) }`
         // 的 `N`）。此前缺这两个分支，const 泛型参数在定义体内被引用时
         // 判不出「被当类型用」，注解校验会把合法 const 参数误报未知名。
         Type::Struct { body } => body.iter().any(|item| match item {
-            crate::frontend::core::parser::ast::TypeBodyItem::Field(f) => {
-                name_used_as_type_in(name, &f.ty)
-            }
-            crate::frontend::core::parser::ast::TypeBodyItem::Expr(e) => {
-                name_used_as_type_in(name, e)
-            }
+            TypeBodyItem::Field(f) => name_used_as_type(name, &f.ty, is_predicate),
+            TypeBodyItem::Expr(e) => name_used_as_type(name, e, is_predicate),
             _ => false,
         }),
-        Type::NamedStruct { fields, .. } => {
-            fields.iter().any(|f| name_used_as_type_in(name, &f.ty))
-        }
+        Type::NamedStruct { fields, .. } => fields
+            .iter()
+            .any(|f| name_used_as_type(name, &f.ty, is_predicate)),
         _ => false,
     }
 }
@@ -877,11 +918,16 @@ pub fn is_type_level_fn(
     !params.is_empty() && is_type(return_type) && params.iter().all(is_type)
 }
 
-/// Extract just the names and constraints of generic parameters from signature params.
-/// Only returns structurally determined generic params (Type/MetaType + CONST_PARAM_TYPES).
-/// Trait-constrained params (T: Clone) are not recognized — typechecker's classify_generic_params
-/// handles those with access to the trait table.
-pub fn extract_generic_param_names(params: &[Param]) -> Vec<GenericParamName> {
+/// 从签名形参里抽出**结构可判定**的泛型参数（名字 + 约束）。
+///
+/// 三类来源：`Type`/`MetaType` 标注、`CONST_PARAM_TYPES` 里的内置类型名、
+/// 约束名（探针判定的运算符接口）、类型级函数标注（构造器变量）。其余
+/// `Name` 标注（用户类型的值参数）保守跳过——trait 表不在 L2，带 trait 约束的
+/// 分类由 L3 的 `classify_generic_params` 另做。
+pub fn extract_generic_param_names(
+    params: &[Param],
+    probe: &dyn TypeEnvProbe,
+) -> Vec<GenericParamName> {
     params
         .iter()
         .filter_map(|p| {
@@ -902,10 +948,20 @@ pub fn extract_generic_param_names(params: &[Param]) -> Vec<GenericParamName> {
                 //（如 `f: (N: Int) -> (n: N) -> Int` 的 `N`）。
                 // 不做此判别会把 `plain: (a: Int) -> Int` 误标为泛型函数，
                 // 单态化据此将其删除且永不重建（实测 E6006，#351）。
-                Type::Name { name, .. } if CONST_PARAM_TYPES.contains(&name.as_str()) => {
+                // 双知识接线（WBS 6.4.5）：名字必须是**内置名**（探针定种，权威表在
+                // L3 的 `from_builtin_name`）**且**在 const 参数可接受集合内。
+                // 只查本表的字符串比较会绕开探针的定种；只查探针则会把 `Int8` 等
+                // 规范名也当 const 参数候选（拓宽登记 = 行为变更）。
+                Type::Name { name, .. }
+                    if CONST_PARAM_TYPES.contains(&name.as_str())
+                        && probe.kind_of(name) == NameKind::Builtin =>
+                {
                     let used_as_type = params.iter().any(|q| {
-                        q.ty.as_ref()
-                            .is_some_and(|qt| name_used_as_type_in(&p.name, qt))
+                        q.ty.as_ref().is_some_and(|qt| {
+                            name_used_as_type(&p.name, qt, &|n| {
+                                probe.kind_of(n) == NameKind::Predicate
+                            })
+                        })
                     });
                     if used_as_type {
                         Some(GenericParamName {
@@ -916,18 +972,13 @@ pub fn extract_generic_param_names(params: &[Param]) -> Vec<GenericParamName> {
                         None
                     }
                 }
-                // RFC-011 §5.2：约束形参（`T: Add`——标注为运算符接口名）。
-                // 接口规格是编译器侧封闭集合，此处可静态判定；其余 Name
-                // （用户类型标注的值参数）仍保守跳过
-                Type::Name { name, .. }
-                    if crate::frontend::core::typecheck::operator_interfaces::spec(name)
-                        .is_some() =>
-                {
-                    Some(GenericParamName {
-                        name: p.name.clone(),
-                        constraints: vec![ty.clone()],
-                    })
-                }
+                // RFC-011 §5.2：约束形参（`T: Add`——标注为约束名）。
+                // 是不是约束名由注入探针判定（权威表在 L3 的运算符接口表）；
+                // 其余 Name（用户类型标注的值参数）仍保守跳过。
+                Type::Name { name, .. } if probe.is_constraint(name) => Some(GenericParamName {
+                    name: p.name.clone(),
+                    constraints: vec![ty.clone()],
+                }),
                 // 高阶类型参数（构造器变量）：标注是类型级函数 `(T: Type) -> Type`。
                 // 与 `classify_generic_params` 同一判据（is_type_level_fn），否则
                 // 声明侧把它当类型参数、IR 侧却少登记一个泛型参数——单态化请求的
@@ -943,7 +994,7 @@ pub fn extract_generic_param_names(params: &[Param]) -> Vec<GenericParamName> {
                     // 无法确认是否为 trait → 保守不下泛型参数
                     None
                 }
-                // (T: Clone + Add) — 无法确认所有元素都是 trait → 保守忽略（typechecker 负责）
+                // (T: Clone + Add) — 无法确认所有元素都是约束 → 保守忽略（L3 类型检查负责）
                 Type::Tuple(_types) => None,
                 _ => None,
             }

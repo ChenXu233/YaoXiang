@@ -890,7 +890,7 @@ impl TypeEnvironment {
         // （内建名，不是关键字）——它把一个测度绑定到一段计算上声明该计算终止。
         // 与 `Never` 同样不需也不可能存在源码声明；语义（测度与义务）由
         // `resolve_type_annotation` 与终止检查层消费（RFC-027a）。
-        if name == "Terminates" {
+        if crate::frontend::core::typecheck::is_builtin_predicate_name(name) {
             return true;
         }
         // 编译器级容器/引用类型：这些名字在类型位置由编译器直接识别

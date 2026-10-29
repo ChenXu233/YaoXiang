@@ -4,7 +4,7 @@
 use crate::frontend::core::lexer::tokens::*;
 use crate::util::diagnostic::ErrorCodeDefinition;
 use crate::frontend::core::parser::ast::*;
-use crate::frontend::core::parser::ParserState;
+use crate::frontend::core::parser::{NullProbe, ParserState};
 use crate::frontend::core::parser::statements::types::parse_type_annotation_required;
 use crate::frontend::core::parser::statements::functions::{parse_fn_params, parse_fn_body};
 use crate::util::span::Span;
@@ -101,7 +101,10 @@ impl BindingParser {
     ) -> Result<Stmt, crate::util::diagnostic::Diagnostic> {
         // RFC-004 Binding syntax parser:
         // Format: Type.method = value
-        let mut state = ParserState::new(tokens);
+        //
+        // 本入口不接收环境（`BindingParser` 只被测试与旧语法桥使用），故传
+        // `NullProbe`——判定退化为「无类型环境」，与 6.4 之前的可判定面一致。
+        let mut state = ParserState::new(tokens, &NullProbe);
 
         // Parse type name
         let _type_name = match state.current().map(|t| &t.kind) {

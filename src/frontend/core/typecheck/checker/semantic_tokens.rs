@@ -426,6 +426,7 @@ impl TypeChecker {
                     let generic_params =
                         crate::frontend::core::parser::ast::extract_generic_param_names(
                             signature_params,
+                            &crate::frontend::core::typecheck::SemanticProbe,
                         );
                     let is_method = type_name.is_some();
                     if is_method {
@@ -660,6 +661,7 @@ impl TypeChecker {
                     let generic_params =
                         crate::frontend::core::parser::ast::extract_generic_param_names(
                             signature_params,
+                            &crate::frontend::core::typecheck::SemanticProbe,
                         );
                     // 类型定义 → Type (定义)
                     let mut modifiers = vec![SemanticTokenModifier::Declaration];

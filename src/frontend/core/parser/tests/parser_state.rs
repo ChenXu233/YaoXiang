@@ -1,7 +1,7 @@
 //! Tests for ParserState: helpers, error tracking, save/restore.
 
 use crate::frontend::core::lexer::tokenize;
-use crate::frontend::core::parser::ParserState;
+use crate::frontend::core::parser::{NullProbe, ParserState};
 use crate::util::plan_id::PlanId;
 use crate::frontend::core::lexer::tokens::TokenKind;
 use crate::frontend::core::parser::parse_msg;
@@ -13,7 +13,7 @@ fn with_state<F>(
     F: FnMut(&mut ParserState<'_>),
 {
     let tokens = tokenize(source).unwrap();
-    let mut state = ParserState::new(&tokens);
+    let mut state = ParserState::new(&tokens, &NullProbe);
     f(&mut state);
 }
 

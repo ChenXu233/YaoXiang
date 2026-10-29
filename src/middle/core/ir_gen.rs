@@ -18,7 +18,9 @@ use crate::frontend::module::symbol::{DefKind, SymbolTable};
 use crate::frontend::module::ExportKind;
 use crate::frontend::core::typecheck::layers::ownership::ReleasePlan;
 use crate::frontend::core::typecheck::types::OverloadResolutions;
-use crate::frontend::core::typecheck::{MonoType, PolyType, TypeCheckResult};
+use crate::frontend::core::typecheck::{
+    is_constraint_name, MonoType, PolyType, SemanticProbe, TypeCheckResult,
+};
 use crate::middle::core::ir::{
     BasicBlock, ConstValue, FunctionBody, FunctionIR, Instruction, LocalSlot, ModuleIR, Operand,
 };
@@ -692,9 +694,7 @@ impl AstToIrGenerator {
     /// 形参落成运行时参数（sum 外层 Parameters: (Add)），调用 arity 全错。
     fn is_constraint_param_ann(ty: &ast::Type) -> bool {
         match ty {
-            ast::Type::Name { name, .. } => {
-                crate::frontend::core::typecheck::operator_interfaces::spec(name).is_some()
-            }
+            ast::Type::Name { name, .. } => is_constraint_name(name),
             _ => false,
         }
     }
@@ -1915,8 +1915,10 @@ impl AstToIrGenerator {
                 use crate::frontend::core::parser::ast::extract_generic_param_names;
                 use crate::frontend::core::types::mono::UniverseLevel;
 
-                // 提取泛型参数名
-                let generic_params = extract_generic_param_names(signature_params);
+                // 提取泛型参数名。探针传 L3 语义实现：约束名 / 内置名定种必须以
+                // 类型环境的权威表为准，否则 `(T: Add)` 不登记为泛型参数、
+                // 单态化请求的类型实参与 IR 的 generic_params 对不上（E3018）。
+                let generic_params = extract_generic_param_names(signature_params, &SemanticProbe);
                 let generic_param_names = if generic_params.is_empty() {
                     None
                 } else {
@@ -2051,6 +2053,7 @@ impl AstToIrGenerator {
                 let generic_params =
                     crate::frontend::core::parser::ast::extract_generic_param_names(
                         signature_params,
+                        &SemanticProbe,
                     );
                 // 登记形参名，供命名参数调用（`add(b = 5, a = 3)`）重排实参。
                 // 名字取自 Lambda 形参（`params`）——签名里的 `Type::Fn` 只存类型、
@@ -3683,6 +3686,7 @@ impl AstToIrGenerator {
                     let generic_params =
                         crate::frontend::core::parser::ast::extract_generic_param_names(
                             signature_params,
+                            &SemanticProbe,
                         );
                     let generic_param_names = if generic_params.is_empty() {
                         None

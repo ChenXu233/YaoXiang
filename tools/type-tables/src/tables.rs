@@ -236,8 +236,8 @@ impl NameTableReport {
             out.push_str("全绿（三表逐名一致）\n\n");
         } else if self.unlisted() == 0 {
             out.push_str(&format!(
-                "非全绿：{} 条差异，全部已登记处置（WBS 6.1.2 后剩余两类：\
-                 CONST_PARAM_TYPES 的大写位宽缩写留给 6.2 名称统一；DateTime 待 P10 S11 迁出）\n\n",
+                "非全绿：{} 条差异，全部已登记处置（WBS 6.4 后只剩 DateTime 待 P10 S11 迁出；\
+                 CONST_PARAM_TYPES 的 10 个旧拼写已随 6.4 删除，C1 清零）\n\n",
                 self.differences.len()
             ));
         } else {

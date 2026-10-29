@@ -425,7 +425,7 @@ impl TypeChecker {
             return None;
         };
         // `Terminates(m)` 是终止测度而非值约束（RFC-027 §6.9）
-        if name == "Terminates" {
+        if crate::frontend::core::typecheck::is_builtin_predicate_name(name) {
             return None;
         }
         let refined = self.refine_predicate_from_ast_args(name, args)?;

@@ -4,11 +4,13 @@
 pub mod ast;
 pub mod parser_state;
 pub mod pratt;
+pub mod probe;
 pub mod statements;
 #[cfg(test)]
 pub mod tests;
 
 pub use parser_state::{ParserState, parse_msg};
+pub use probe::{BuiltinProbe, NameKind, NullProbe, TypeEnvProbe};
 pub use pratt::*;
 pub use ast::*;
 pub use crate::frontend::core::lexer::tokens::*;
@@ -26,8 +28,20 @@ fn find_first(state: &ParserState<'_>) -> Option<Diagnostic> {
     state.errors().first().cloned()
 }
 
+/// 解析一个编译单元（无注入环境的默认入口）。
+///
+/// 判定经 [`BuiltinProbe`]（编译器内置封闭集）；需要更精确的类型环境时用
+/// [`parse_with_probe`] 注入 L3 的语义探针。
 pub fn parse(tokens: &[Token]) -> ParseResult {
-    let mut state = ParserState::new(tokens);
+    parse_with_probe(tokens, &BuiltinProbe)
+}
+
+/// 解析一个编译单元，名字定种判定交给调用方注入的探针。
+pub fn parse_with_probe(
+    tokens: &[Token],
+    probe: &dyn TypeEnvProbe,
+) -> ParseResult {
+    let mut state = ParserState::new(tokens, probe);
     let mut items = Vec::new();
 
     while !state.at_end() {
@@ -76,8 +90,17 @@ pub fn parse(tokens: &[Token]) -> ParseResult {
     }
 }
 
+/// 解析单个表达式（无注入环境的默认入口）。
 pub fn parse_expression(tokens: &[Token]) -> Result<Expr, Diagnostic> {
-    let mut state = ParserState::new(tokens);
+    parse_expression_with_probe(tokens, &BuiltinProbe)
+}
+
+/// 解析单个表达式，名字定种判定交给调用方注入的探针。
+pub fn parse_expression_with_probe(
+    tokens: &[Token],
+    probe: &dyn TypeEnvProbe,
+) -> Result<Expr, Diagnostic> {
+    let mut state = ParserState::new(tokens, probe);
     match state.parse_expression(BP_LOWEST) {
         Some(e) if !state.has_errors() => Ok(e),
         Some(_) | None => Err(find_first(&state).unwrap_or_else(|| {

@@ -15,7 +15,7 @@
 
 use crate::frontend::core::lexer::tokens::*;
 use crate::frontend::core::parser::ast::*;
-use crate::frontend::core::parser::{ParserState, BP_LOWEST, BP_ASSIGN};
+use crate::frontend::core::parser::{NameKind, ParserState, BP_LOWEST, BP_ASSIGN};
 use crate::util::diagnostic::ErrorCodeDefinition;
 use crate::frontend::core::parser::parse_msg;
 use crate::util::span::Span;
@@ -28,50 +28,6 @@ fn is_type_param_annotation(ty: Option<&Type>) -> bool {
     match ty {
         Some(Type::MetaType { .. }) => true,
         Some(Type::Name { name, .. }) => name == "Type",
-        _ => false,
-    }
-}
-
-/// 结构判定：参数名是否在给定类型中作为类型引用（`Type::Name`）出现。
-/// 用于识别 const 泛型参数——如 `(n: N)` 里的 N 被当类型用。不看大小写。
-///
-/// RFC-027a：`is_predicate` 判定「类型应用名是否编译期谓词」——谓词应用的
-/// 实参位是**值**（`Terminates(b)` 的 `b`），不是类型引用。不排除则形参 `b`
-/// 被误认为 const 泛型参数，从而被从 lambda params 中剔除、并当作类型替换
-/// （实测：`(a: Int, b: Int) -> Terminates(b)` 的 lambda params 退化为 `[a]`）。
-fn name_used_as_type(
-    name: &str,
-    ty: &Type,
-    is_predicate: &dyn Fn(&str) -> bool,
-) -> bool {
-    match ty {
-        Type::Name { name: n, .. } => n == name,
-        Type::Generic {
-            name: app_name,
-            args,
-            ..
-        } => {
-            if is_predicate(app_name) {
-                return false;
-            }
-            args.iter()
-                .any(|a| name_used_as_type(name, a, is_predicate))
-        }
-        Type::Fn {
-            params,
-            return_type,
-        } => {
-            params
-                .iter()
-                .any(|p| name_used_as_type(name, p, is_predicate))
-                || name_used_as_type(name, return_type, is_predicate)
-        }
-        Type::Ptr(inner) => name_used_as_type(name, inner, is_predicate),
-        Type::Ref { inner, .. } => name_used_as_type(name, inner, is_predicate),
-        Type::Tuple(types) => types
-            .iter()
-            .any(|t| name_used_as_type(name, t, is_predicate)),
-        Type::Literal { name: n, .. } => n == name,
         _ => false,
     }
 }
@@ -488,14 +444,10 @@ fn parse_assign_after_target(
                     // 从 lambda params 中剔除（实测退化为 `[a]`，函数体引用 `b` 报
                     // E3006）。此处排除谓词应用。
                     //
-                    // parser 不持有类型环境，无法查「是否已注册谓词」，故只能
-                    // 逐个内置谓词硬编码。目前只有 `Terminates`（RFC-027 §6.9）；
-                    // 随后续内置谓词增加而扩展（未来的开集方案：把谓词名下传给
-                    // parser，或改成语法层可判定的形态）。
-                    // parser 不持有类型环境，故看两处：内置谓词硬编码，
-                    // 外加本遍已解析的声明累积（`declare_predicate`）。
-                    let is_predicate_app =
-                        |n: &str| n == "Terminates" || state.is_predicate_name(n);
+                    // 判据的两个来源都不是 parser 自己的名字表：
+                    // ① 注入探针（`state.probe()`）——内置谓词与环境已知谓词；
+                    // ② 本遍已解析的声明累积（`declare_predicate`）。
+                    // `ParserState::is_predicate_app` 把两者合成一个问答。
                     let value_params: Vec<Param> = extracted_params
                         .iter()
                         .filter(|p| {
@@ -503,16 +455,17 @@ fn parse_assign_after_target(
                                 return false;
                             }
                             // RFC-011 §5.2：约束形参（`T: Add`——标注名为运算符
-                            // 接口/约束名，非具体类型）是类型位，不占运行时参数
+                            // 接口/约束名，非具体类型）是类型位，不占运行时参数。
+                            // 是不是约束名由注入探针判定（L2 不再持有该名字表）。
                             if let Some(Type::Name { name: n, .. }) = &p.ty {
-                                if crate::frontend::core::typecheck::operator_interfaces::spec(n)
-                                    .is_some()
-                                {
+                                if state.probe().is_constraint(n) {
                                     return false;
                                 }
                             }
                             let used_as_const = type_annotation.as_ref().is_some_and(|ann| {
-                                name_used_as_type(&p.name, ann, &is_predicate_app)
+                                name_used_as_type(&p.name, ann, &|n| {
+                                    state.kind_of(n) == NameKind::Predicate
+                                })
                             });
                             !used_as_const
                         })
@@ -613,7 +566,7 @@ fn parse_assign_after_target(
 
         state.skip(&TokenKind::Semicolon);
 
-        // x = { ... } → Block 作为 value，typechecker 识别为函数定义
+        // x = { ... } → Block 作为 value，L3 的类型检查识别为函数定义
         return Some(Stmt {
             kind: StmtKind::Assign {
                 target: Box::new(target),

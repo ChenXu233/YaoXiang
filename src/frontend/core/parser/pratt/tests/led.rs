@@ -14,11 +14,11 @@
 
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::ast::{BinOp, Expr};
-use crate::frontend::core::parser::ParserState;
+use crate::frontend::core::parser::{NullProbe, ParserState};
 
 fn parse_expr(source: &str) -> Expr {
     let tokens = tokenize(source).unwrap();
-    let mut state = ParserState::new(&tokens);
+    let mut state = ParserState::new(&tokens, &NullProbe);
     state
         .parse_expression(crate::frontend::core::parser::BP_LOWEST)
         .expect("parse failed")
@@ -31,7 +31,7 @@ fn test_infix_info_binary_ops() {
     // spec §4.2 优先级 3-4: 算术运算符
     for op in &["+", "-", "*", "/", "%"] {
         let tokens = tokenize(op).unwrap();
-        let state = ParserState::new(&tokens);
+        let state = ParserState::new(&tokens, &NullProbe);
         assert!(
             state.infix_info().is_some(),
             "infix_info should handle '{op}'"
@@ -43,7 +43,7 @@ fn test_infix_info_binary_ops() {
 fn test_infix_info_equality() {
     for op in &["==", "!="] {
         let tokens = tokenize(op).unwrap();
-        let state = ParserState::new(&tokens);
+        let state = ParserState::new(&tokens, &NullProbe);
         assert!(state.infix_info().is_some());
     }
 }
@@ -52,7 +52,7 @@ fn test_infix_info_equality() {
 fn test_infix_info_comparison() {
     for op in &["<", ">", "<=", ">="] {
         let tokens = tokenize(op).unwrap();
-        let state = ParserState::new(&tokens);
+        let state = ParserState::new(&tokens, &NullProbe);
         assert!(state.infix_info().is_some());
     }
 }
@@ -60,14 +60,14 @@ fn test_infix_info_comparison() {
 #[test]
 fn test_infix_info_assign() {
     let tokens = tokenize("=").unwrap();
-    let state = ParserState::new(&tokens);
+    let state = ParserState::new(&tokens, &NullProbe);
     assert!(state.infix_info().is_some());
 }
 
 #[test]
 fn test_infix_info_range() {
     let tokens = tokenize("..").unwrap();
-    let state = ParserState::new(&tokens);
+    let state = ParserState::new(&tokens, &NullProbe);
     assert!(state.infix_info().is_some());
 }
 
@@ -76,7 +76,7 @@ fn test_infix_info_call_field_index() {
     // spec §4.2 优先级 1: () . []
     for tok in &["(", ".", "["] {
         let tokens = tokenize(tok).unwrap();
-        let state = ParserState::new(&tokens);
+        let state = ParserState::new(&tokens, &NullProbe);
         assert!(state.infix_info().is_some());
     }
 }
@@ -85,7 +85,7 @@ fn test_infix_info_call_field_index() {
 fn test_infix_info_cast_try_lambda() {
     for tok in &["as", "?", "=>"] {
         let tokens = tokenize(tok).unwrap();
-        let state = ParserState::new(&tokens);
+        let state = ParserState::new(&tokens, &NullProbe);
         assert!(
             state.infix_info().is_some(),
             "infix_info should handle '{tok}'"
@@ -96,7 +96,7 @@ fn test_infix_info_cast_try_lambda() {
 #[test]
 fn test_infix_info_eof() {
     let tokens = tokenize("").unwrap();
-    let state = ParserState::new(&tokens);
+    let state = ParserState::new(&tokens, &NullProbe);
     assert!(state.infix_info().is_none());
 }
 

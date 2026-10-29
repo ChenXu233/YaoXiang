@@ -5,11 +5,11 @@
 
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::ast::{Expr, UnOp};
-use crate::frontend::core::parser::ParserState;
+use crate::frontend::core::parser::{NullProbe, ParserState};
 
 fn parse_expr(source: &str) -> Expr {
     let tokens = tokenize(source).unwrap();
-    let mut state = ParserState::new(&tokens);
+    let mut state = ParserState::new(&tokens, &NullProbe);
     state
         .parse_expression(crate::frontend::core::parser::BP_LOWEST)
         .expect("parse failed")
@@ -20,7 +20,7 @@ fn parse_expr(source: &str) -> Expr {
 #[test]
 fn test_prefix_info_identifier() {
     let tokens = tokenize("x").unwrap();
-    let state = ParserState::new(&tokens);
+    let state = ParserState::new(&tokens, &NullProbe);
     let info = state.prefix_info();
     assert!(
         info.is_some(),
@@ -33,7 +33,7 @@ fn test_prefix_info_identifier() {
 #[test]
 fn test_prefix_info_int_literal() {
     let tokens = tokenize("42").unwrap();
-    let state = ParserState::new(&tokens);
+    let state = ParserState::new(&tokens, &NullProbe);
     let info = state.prefix_info();
     assert!(info.is_some());
 }
@@ -41,7 +41,7 @@ fn test_prefix_info_int_literal() {
 #[test]
 fn test_prefix_info_float_literal() {
     let tokens = tokenize("3.14").unwrap();
-    let state = ParserState::new(&tokens);
+    let state = ParserState::new(&tokens, &NullProbe);
     let info = state.prefix_info();
     assert!(info.is_some());
 }
@@ -49,7 +49,7 @@ fn test_prefix_info_float_literal() {
 #[test]
 fn test_prefix_info_string_literal() {
     let tokens = tokenize(r#""hello""#).unwrap();
-    let state = ParserState::new(&tokens);
+    let state = ParserState::new(&tokens, &NullProbe);
     let info = state.prefix_info();
     assert!(info.is_some());
 }
@@ -57,7 +57,7 @@ fn test_prefix_info_string_literal() {
 #[test]
 fn test_prefix_info_bool_literal() {
     let tokens = tokenize("true").unwrap();
-    let state = ParserState::new(&tokens);
+    let state = ParserState::new(&tokens, &NullProbe);
     let info = state.prefix_info();
     assert!(info.is_some());
 }
@@ -65,7 +65,7 @@ fn test_prefix_info_bool_literal() {
 #[test]
 fn test_prefix_info_unary_minus() {
     let tokens = tokenize("-").unwrap();
-    let state = ParserState::new(&tokens);
+    let state = ParserState::new(&tokens, &NullProbe);
     let info = state.prefix_info();
     assert!(info.is_some());
     let (bp, _) = info.unwrap();
@@ -75,7 +75,7 @@ fn test_prefix_info_unary_minus() {
 #[test]
 fn test_prefix_info_unary_star() {
     let tokens = tokenize("*").unwrap();
-    let state = ParserState::new(&tokens);
+    let state = ParserState::new(&tokens, &NullProbe);
     let info = state.prefix_info();
     assert!(info.is_some());
     let (bp, _) = info.unwrap();
@@ -85,63 +85,63 @@ fn test_prefix_info_unary_star() {
 #[test]
 fn test_prefix_info_lparen() {
     let tokens = tokenize("(").unwrap();
-    let state = ParserState::new(&tokens);
+    let state = ParserState::new(&tokens, &NullProbe);
     assert!(state.prefix_info().is_some());
 }
 
 #[test]
 fn test_prefix_info_lbracket() {
     let tokens = tokenize("[").unwrap();
-    let state = ParserState::new(&tokens);
+    let state = ParserState::new(&tokens, &NullProbe);
     assert!(state.prefix_info().is_some());
 }
 
 #[test]
 fn test_prefix_info_lbrace() {
     let tokens = tokenize("{").unwrap();
-    let state = ParserState::new(&tokens);
+    let state = ParserState::new(&tokens, &NullProbe);
     assert!(state.prefix_info().is_some());
 }
 
 #[test]
 fn test_prefix_info_if() {
     let tokens = tokenize("if").unwrap();
-    let state = ParserState::new(&tokens);
+    let state = ParserState::new(&tokens, &NullProbe);
     assert!(state.prefix_info().is_some());
 }
 
 #[test]
 fn test_prefix_info_while() {
     let tokens = tokenize("while").unwrap();
-    let state = ParserState::new(&tokens);
+    let state = ParserState::new(&tokens, &NullProbe);
     assert!(state.prefix_info().is_some());
 }
 
 #[test]
 fn test_prefix_info_match() {
     let tokens = tokenize("match").unwrap();
-    let state = ParserState::new(&tokens);
+    let state = ParserState::new(&tokens, &NullProbe);
     assert!(state.prefix_info().is_some());
 }
 
 #[test]
 fn test_prefix_info_for() {
     let tokens = tokenize("for").unwrap();
-    let state = ParserState::new(&tokens);
+    let state = ParserState::new(&tokens, &NullProbe);
     assert!(state.prefix_info().is_some());
 }
 
 #[test]
 fn test_prefix_info_ref() {
     let tokens = tokenize("ref").unwrap();
-    let state = ParserState::new(&tokens);
+    let state = ParserState::new(&tokens, &NullProbe);
     assert!(state.prefix_info().is_some());
 }
 
 #[test]
 fn test_prefix_info_unsafe() {
     let tokens = tokenize("unsafe").unwrap();
-    let state = ParserState::new(&tokens);
+    let state = ParserState::new(&tokens, &NullProbe);
     assert!(state.prefix_info().is_some());
 }
 
@@ -149,21 +149,21 @@ fn test_prefix_info_unsafe() {
 fn test_prefix_info_at() {
     // Phase 1: @ 不再是前缀表达式（eval block 已移除）
     let tokens = tokenize("@").unwrap();
-    let state = ParserState::new(&tokens);
+    let state = ParserState::new(&tokens, &NullProbe);
     assert!(state.prefix_info().is_none(), "@ 不再是有效的前缀表达式");
 }
 
 #[test]
 fn test_prefix_info_spawn() {
     let tokens = tokenize("spawn").unwrap();
-    let state = ParserState::new(&tokens);
+    let state = ParserState::new(&tokens, &NullProbe);
     assert!(state.prefix_info().is_some());
 }
 
 #[test]
 fn test_prefix_info_return() {
     let tokens = tokenize("return").unwrap();
-    let state = ParserState::new(&tokens);
+    let state = ParserState::new(&tokens, &NullProbe);
     assert!(state.prefix_info().is_some());
 }
 
@@ -172,7 +172,7 @@ fn test_prefix_info_return() {
 #[test]
 fn test_prefix_info_break_removed() {
     let tokens = tokenize("break").unwrap();
-    let state = ParserState::new(&tokens);
+    let state = ParserState::new(&tokens, &NullProbe);
     assert!(
         state.prefix_info().is_none(),
         "break 不应注册为 pratt 前缀表达式（#314 仅语句位置）"
@@ -182,7 +182,7 @@ fn test_prefix_info_break_removed() {
 #[test]
 fn test_prefix_info_continue_removed() {
     let tokens = tokenize("continue").unwrap();
-    let state = ParserState::new(&tokens);
+    let state = ParserState::new(&tokens, &NullProbe);
     assert!(
         state.prefix_info().is_none(),
         "continue 不应注册为 pratt 前缀表达式（#314 仅语句位置）"
@@ -192,7 +192,7 @@ fn test_prefix_info_continue_removed() {
 #[test]
 fn test_prefix_info_eof() {
     let tokens = tokenize("").unwrap();
-    let state = ParserState::new(&tokens);
+    let state = ParserState::new(&tokens, &NullProbe);
     assert!(state.prefix_info().is_none());
 }
 

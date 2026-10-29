@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 use crate::frontend::core::lexer;
 use crate::frontend::core::parser::ast::{classify_generic_params, Expr, GenericParamKind, StmtKind};
 use crate::frontend::core::parser::{self, Module};
-use crate::frontend::core::typecheck::operator_interfaces;
+use crate::frontend::core::typecheck::SemanticProbe;
 use crate::frontend::core::typecheck::passes::dead_code::DeadCodeAnalyzer;
 use crate::frontend::core::typecheck::TypeCheckResult;
 use crate::frontend::core::types::mono::MonoType;
@@ -1134,9 +1134,9 @@ pub(in crate::driver) fn generic_instantiation_map<'a>(
 /// （`Type::Name` 约束名）不入表 ⇒ 导出面不带 ⇒ 跨单元请求的
 /// `generic_id.type_params` 为空（探针实测），单一 zip 通路展不开。这里回到
 /// 声明现场补读：判据用**现成单点** `ast::classify_generic_params`（与
-/// typecheck 侧同一函数，语义不复制），is_trait 闭包按其调用点同源判据组装
-/// （`trait_table.has_trait` + 内建算子接口 `operator_interfaces::spec`——
-/// checker.rs 处理 `(T: Add)` 的同一对来源）。
+/// 类型检查侧同一函数，语义不复制），is_trait 闭包按其调用点同源判据组装
+/// （`trait_table.has_trait` + 约束名窄入口 `typecheck::is_constraint_name`——
+/// 与 L2 探针、L3 类型检查同源，不再各自摸运算符接口表）。
 ///
 /// 只扫顶层 `Assign`（`sum: (T: Add) -> … = …` 是顶层泛型绑定的承载形态，
 /// `signature_params` 即第一组括号段）；普通值绑定的该段为空、值参数类型名
@@ -1147,7 +1147,8 @@ pub(in crate::driver) fn declared_type_param_names<'a>(
     let mut out: HashMap<String, Vec<String>> = HashMap::new();
     for (ast, result) in units {
         let is_trait = |name: &str| {
-            result.trait_table.has_trait(name) || operator_interfaces::spec(name).is_some()
+            result.trait_table.has_trait(name)
+                || crate::frontend::core::typecheck::is_constraint_name(name)
         };
         for stmt in &ast.items {
             if let StmtKind::Assign {
@@ -1240,7 +1241,9 @@ pub(in crate::driver) fn collect_package_refs(
             let Ok(tokens) = lexer::tokenize(&file.source) else {
                 continue;
             };
-            let parsed = parser::parse(&tokens);
+            // L1 注入 L3 语义探针（RFC-039 6.4 / 03 §5.4 的注入点）：名字定种
+            // 以类型环境为权威来源，parser 不再自带类型/谓词名知识。
+            let parsed = parser::parse_with_probe(&tokens, &SemanticProbe);
             if parsed.has_errors {
                 continue;
             }
