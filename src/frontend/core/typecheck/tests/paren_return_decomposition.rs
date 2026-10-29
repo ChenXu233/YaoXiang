@@ -229,3 +229,41 @@ main()
         result.diagnostics
     );
 }
+
+/// 规范 RFC-010a 规则①②：lambda 尾表达式形态（箭头糖 → 体末位是
+/// `Return(Lambda)` 语句）的 return 值必须与值级返回位统一——手写嵌套
+/// lambda 尾值 `fn() -> fn(int64) -> int64` ≠ 声明的 `fn(int64) -> int64`，
+/// 必须编译期 E1012 拒绝，不得静默错配（issue #501 形态 gb2：
+/// `g()(1)` 运行期返回 0 参函数对象而非 `inc(1) = 2`）
+#[test]
+fn test_paren_return_nested_lambda_tail_expr_keeps_e1012() {
+    // Arrange：体尾值是 0 参 lambda（返回函数值 inc），参数组与声明内层
+    // Fn 值参数组不对齐——作者 lambda 是外层本体，尾值类型是嵌套函数
+    let source = r#"
+inc: (x: Int) -> Int = (x) => x + 1
+g: () -> ((x: Int) -> Int) = () => () => inc
+main: () -> Void = {}
+main()
+"#;
+
+    // Act：类型检查
+    let result = check_source(source);
+
+    // Assert：E1012 必须存在，且期望/实际口径 = 内层 Fn 整体 vs 嵌套函数
+    let e1012 = result
+        .diagnostics
+        .iter()
+        .find(|d| d.code == "E1012")
+        .unwrap_or_else(|| {
+            panic!(
+                "嵌套 lambda 尾值与值级返回位不匹配必须报 E1012（静默错配比编译期拒绝更危险），实际诊断: {:?}",
+                result.diagnostics
+            )
+        });
+    assert!(
+        e1012.message.contains("expected 'fn(int64) -> int64'")
+            && e1012.message.contains("found 'fn() -> fn(int64) -> int64'"),
+        "E1012 的期望/实际口径必须保持内层 Fn 整体 vs 嵌套函数原文，实际消息: {}",
+        e1012.message
+    );
+}

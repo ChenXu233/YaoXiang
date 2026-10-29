@@ -1325,6 +1325,53 @@ impl StatementChecker {
         self.last_expr_stmt_ty = None;
     }
 
+    /// 检查 **return 值**与最近函数边界的值级返回位是否一致（RFC-010a 规则②）。
+    ///
+    /// [`Self::check_body_tail_type`] 只看块尾**语句形态**：末位是 `return` 时
+    /// 块值是 `Never`（爆炸原理放行），载荷类型从不参与统一。而 lambda 尾
+    /// 表达式糖（`=> expr` 解析成 `return expr`，parser/pratt/led.rs）使括号
+    /// 返回声明的体末位恰是 `Return(Lambda)`——载荷类型不在此处统一就会
+    /// 静默顶替声明的返回位（issue #501 形态 gb2：
+    /// `g: () -> ((x: Int) -> Int) = () => () => inc` 的 `g()(1)` 运行期返回
+    /// 0 参函数对象而非 `inc(1)`）。
+    ///
+    /// 豁免口径与 [`Self::check_body_tail_type`] 一致：
+    /// - 无期望（未标注 / lambda 无调用点期望）→ 无约束；
+    /// - `Void` 返回位（过程性 return）；
+    /// - 元类型返回位（证明函数，体是谓词不是 Type 值）；
+    /// - `Never` 载荷（solver 爆炸原理 `unify(Never, _)` 恒放行，solver.rs）。
+    ///
+    /// 位置：与 [`Self::check_body_tail_type`] 同款 #353 口径——优先指向声明
+    /// 语句的注解（真正该改的是注解，不是体里那个值），无注解 span 时退到
+    /// return 语句（lambda 体路径，`tail_annotation_span` 属最近声明）。
+    fn check_return_value_type(
+        &mut self,
+        found: &MonoType,
+        stmt_span: crate::util::span::Span,
+    ) -> Result<(), Box<Diagnostic>> {
+        let Some(expected) = self.expected_return_type.clone() else {
+            return Ok(());
+        };
+        if expected == MonoType::Void || matches!(expected, MonoType::MetaType { .. }) {
+            return Ok(());
+        }
+        // 先推进推断再比较：载荷若是组合表达式，类型可能还是未解的约束变量
+        let found = self.solver.resolve_type(found);
+        let expected = self.solver.resolve_type(&expected);
+        if self.solver.unify(&found, &expected).is_err() {
+            let at = self.tail_annotation_span.unwrap_or(stmt_span);
+            return Err(Box::new(
+                ErrorCodeDefinition::return_type_mismatch(
+                    &format!("{expected}"),
+                    &format!("{found}"),
+                )
+                .at(at)
+                .build(),
+            ));
+        }
+        Ok(())
+    }
+
     /// 检查语句
     pub fn check_stmt(
         &mut self,
@@ -1658,7 +1705,12 @@ impl StatementChecker {
                             .build(),
                     ));
                 }
-                self.check_expr(expr).map(|_| ())
+                let found = self.check_expr(expr)?;
+                // RFC-010a 规则②：return 值与最近函数边界的值级返回位统一
+                //（issue #501 形态 gb2——lambda 尾表达式糖使体末位是
+                // `Return(Lambda)`，尾校验按 Never 放行，载荷类型若不在此处
+                // 统一就会静默顶替声明的返回位）。
+                self.check_return_value_type(&found, stmt.span)
             }
             crate::frontend::core::parser::ast::StmtKind::Return(None) => {
                 if self.is_top_level {
@@ -1948,14 +2000,34 @@ impl StatementChecker {
                 //（`Type::is_paren_complete`）。
                 let paren_return_ann = return_type.is_paren_complete();
 
-                // 闭包包装形态：体的末位是单个 lambda 表达式语句
-                //（parser paren_return 包装的标记，declarations.rs）
+                // 闭包包装形态（体是外层函数本体）的两种 parser 标记：
+                //
+                // - `Expr(Lambda)`：parser paren_return 包装合成「外层 lambda 体
+                //   = [作者 lambda]」（parser/statements/declarations.rs，#501
+                //   形态 C / 语料 03-semantics/paren_return_fn.yx 的 mk）；
+                // - `Return(Some(Lambda))`：裸 Fn 链柯里的 RHS 外层 lambda 体是
+                //   单表达式（嵌套 lambda），parser 箭头糖把单表达式体糖成
+                //   `return` 语句（parser/pratt/led.rs；#501 形态 add——
+                //   integration test_curried_fn_assign_and_call，形态 gb2 的
+                //   判据测试 paren_return_decomposition）。
+                //
+                // 两者同轴：体是外层函数本体（吃外层参数、产出内层函数值），
+                // 不是最内层值函数——RFC-004 括号语义 + RFC-010 §3 的统一推论，
+                // value_sig 必须取外层整体，不得被下方 while 剥层吸收（剥层把
+                // expected_return_type 剥到最内层标量，与体的 return 载荷
+                //（内层 Fn）错配成 E1012，#501 形态 A 同一轴）。
                 let wrapped_closure = body.stmts.len() == 1
-                    && matches!(
-                        &body.stmts[0].kind,
-                        crate::frontend::core::parser::ast::StmtKind::Expr(e)
-                            if matches!(e.as_ref(), crate::frontend::core::parser::ast::Expr::Lambda { .. })
-                    );
+                    && match &body.stmts[0].kind {
+                        crate::frontend::core::parser::ast::StmtKind::Expr(e) => matches!(
+                            e.as_ref(),
+                            crate::frontend::core::parser::ast::Expr::Lambda { .. }
+                        ),
+                        crate::frontend::core::parser::ast::StmtKind::Return(Some(e)) => matches!(
+                            e.as_ref(),
+                            crate::frontend::core::parser::ast::Expr::Lambda { .. }
+                        ),
+                        _ => false,
+                    };
 
                 let mut subst = std::collections::HashMap::new();
                 for gp in &type_generic_params {
@@ -2008,11 +2080,12 @@ impl StatementChecker {
                     (substituted_params, substituted_ret)
                 };
 
-                // 值级形态：闭包包装 = 外层函数本体；返回位括号声明的完整类型
-                //（RFC-004，链条终止）同样 = 外层函数本体——`value_ret` 保持
-                // 内层 Fn 整体（issue #501 形态 A/B）；否则（裸 Fn 链柯里：
-                // 平铺柯里、const 柯里、类型泛型柯里）体是最内层值函数，
-                // while 剥层照旧（generic_slot_alignment 回归实证背书）。
+                // 值级形态：闭包包装（体是外层本体，两种标记见上）与返回位
+                // 括号声明的完整类型（RFC-004，链条终止）都取外层整体——
+                // `value_ret` 保持内层 Fn 整体（issue #501 形态 A/B）；否则
+                //（裸 Fn 链柯里且体不是外层 lambda 本体：平铺柯里、const 柯里、
+                // 类型泛型柯里）体是最内层值函数，while 剥层照旧
+                //（generic_slot_alignment 回归实证背书）。
                 let (value_params, value_ret) = if wrapped_closure || paren_return_ann {
                     (registered_params.clone(), registered_ret.clone())
                 } else {

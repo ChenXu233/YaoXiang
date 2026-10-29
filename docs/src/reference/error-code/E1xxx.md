@@ -16,11 +16,11 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 | 码号 | 中文名 | 类别 | span 豁免 | 模板 | 发射点 |
 | --- | --- | --- | --- | --- | --- |
 | `E1001` | 未知变量 | `TypeCheck` | 否 | `未知变量：'{name}'` | ✅ 5 处 |
-| `E1002` | 类型不匹配 | `TypeCheck` | 否 | `期望类型 '{expected}'，实际类型 '{found}'` | ✅ 84 处 |
+| `E1002` | 类型不匹配 | `TypeCheck` | 否 | `期望类型 '{expected}'，实际类型 '{found}'` | ✅ 85 处 |
 | `E1003` | 未知类型 | `TypeCheck` | 否 | `未知类型：'{type}'` | ✅ 3 处 |
 | `E1010` | 参数数量不匹配 | `TypeCheck` | 否 | `函数 '{func}' 期望 {expected} 个参数，找到 {found} 个` | ✅ 19 处 |
 | `E1011` | 参数类型不匹配 | `TypeCheck` | 否 | `参数类型不匹配：期望 '{expected}'，实际 '{found}'` | ⚠ 暂未发射 |
-| `E1012` | 返回类型不匹配 | `TypeCheck` | 否 | `返回类型不匹配：期望 '{expected}'，实际 '{found}'` | ✅ 1 处 |
+| `E1012` | 返回类型不匹配 | `TypeCheck` | 否 | `返回类型不匹配：期望 '{expected}'，实际 '{found}'` | ✅ 2 处 |
 | `E1013` | 函数未找到 | `TypeCheck` | 否 | `函数未找到：'{func}'` | ✅ 4 处 |
 | `E1014` | 命名参数名未知 | `TypeCheck` | 否 | `函数 '{func}' 没有名为 '{name}' 的参数（可用：{params}）` | ✅ 2 处 |
 | `E1015` | 参数重复指定 | `TypeCheck` | 否 | `函数 '{func}' 的参数 '{name}' 被重复指定` | ✅ 1 处 |
@@ -83,7 +83,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **模板**：`未知变量：'{name}'`
 - **消息**：引用的变量未定义
 - **帮助**：检查变量名是否拼写正确，或先定义它
-- **发射点**：`src/frontend/core/typecheck/checker/refinement.rs:449`、`src/frontend/core/typecheck/inference/expressions.rs:3269`、`src/frontend/core/typecheck/inference/statements.rs:2814` 等 5 处
+- **发射点**：`src/frontend/core/typecheck/checker/refinement.rs:449`、`src/frontend/core/typecheck/inference/expressions.rs:3269`、`src/frontend/core/typecheck/inference/statements.rs:2866` 等 5 处
 
 ### E1002：类型不匹配
 
@@ -93,7 +93,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **模板**：`期望类型 '{expected}'，实际类型 '{found}'`
 - **消息**：期望类型与实际类型不匹配
 - **帮助**：使用正确的类型或添加类型转换
-- **发射点**：`src/frontend/core/typecheck/inference/assignment.rs:103`、`src/frontend/core/typecheck/inference/assignment.rs:116`、`src/frontend/core/typecheck/inference/bounds.rs:311` 等 84 处
+- **发射点**：`src/frontend/core/typecheck/inference/assignment.rs:103`、`src/frontend/core/typecheck/inference/assignment.rs:116`、`src/frontend/core/typecheck/inference/bounds.rs:311` 等 85 处
 
 ### E1003：未知类型
 
@@ -133,7 +133,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **模板**：`返回类型不匹配：期望 '{expected}'，实际 '{found}'`
 - **消息**：函数返回类型不正确
 - **帮助**：函数体的值与声明的返回类型不符。要么修改函数体，要么修正注解——注意 `h: () -> Int = f` 的含义是「h 返回 Int」，而不是「h 就是 f」；若想给函数起别名请写 `h = f`。
-- **发射点**：`src/frontend/core/typecheck/inference/statements.rs:1312`
+- **发射点**：`src/frontend/core/typecheck/inference/statements.rs:1312`、`src/frontend/core/typecheck/inference/statements.rs:1364`
 
 ### E1013：函数未找到
 
@@ -407,7 +407,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **模板**：`类型定义 '{name}' 只能在模块级（模块顶层）`
 - **消息**：类型定义只能出现在模块顶层
 - **帮助**：将类型定义移到模块顶层
-- **发射点**：`src/frontend/core/typecheck/inference/expressions.rs:6333`、`src/frontend/core/typecheck/inference/statements.rs:1715`
+- **发射点**：`src/frontend/core/typecheck/inference/expressions.rs:6333`、`src/frontend/core/typecheck/inference/statements.rs:1767`
 
 ### E1081：`?` 仅允许在返回可传播类型的函数内使用
 
@@ -658,7 +658,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **模板**：`'return' 出现在函数外`
 - **消息**：return 只能在函数体内使用；Script 顶层是模块初始化层，没有函数边界可退
 - **帮助**：把 'return' 移入函数体；Script 模式下顶层语句即程序主体，要提前结束一段顶层逻辑请收进函数、在调用点控制
-- **发射点**：`src/frontend/core/typecheck/inference/expressions.rs:3782`、`src/frontend/core/typecheck/inference/statements.rs:1656`、`src/frontend/core/typecheck/inference/statements.rs:1666`
+- **发射点**：`src/frontend/core/typecheck/inference/expressions.rs:3782`、`src/frontend/core/typecheck/inference/statements.rs:1703`、`src/frontend/core/typecheck/inference/statements.rs:1718`
 - **源码注释名**：return 出现在函数外（RFC-010a 规则②边界条件：`return` 退出最近的
 
 ### E1110：方法绑定缺少签名标注

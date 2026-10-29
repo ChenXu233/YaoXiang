@@ -69,11 +69,11 @@ YaoXiang 的每个诊断都带一个稳定码号（如 `E1001`），便于检索
 | `E0016` | 期望表达式 | `Parser` | 否 | `期望表达式：{context}` | ✅ 4 处 |
 | `E0018` | 关键字作名称 | `Parser` | 否 | `'{keyword}' 是关键字，不能用作名称` | ✅ 1 处 |
 | `E1001` | 未知变量 | `TypeCheck` | 否 | `未知变量：'{name}'` | ✅ 5 处 |
-| `E1002` | 类型不匹配 | `TypeCheck` | 否 | `期望类型 '{expected}'，实际类型 '{found}'` | ✅ 84 处 |
+| `E1002` | 类型不匹配 | `TypeCheck` | 否 | `期望类型 '{expected}'，实际类型 '{found}'` | ✅ 85 处 |
 | `E1003` | 未知类型 | `TypeCheck` | 否 | `未知类型：'{type}'` | ✅ 3 处 |
 | `E1010` | 参数数量不匹配 | `TypeCheck` | 否 | `函数 '{func}' 期望 {expected} 个参数，找到 {found} 个` | ✅ 19 处 |
 | `E1011` | 参数类型不匹配 | `TypeCheck` | 否 | `参数类型不匹配：期望 '{expected}'，实际 '{found}'` | ⚠ 暂未发射 |
-| `E1012` | 返回类型不匹配 | `TypeCheck` | 否 | `返回类型不匹配：期望 '{expected}'，实际 '{found}'` | ✅ 1 处 |
+| `E1012` | 返回类型不匹配 | `TypeCheck` | 否 | `返回类型不匹配：期望 '{expected}'，实际 '{found}'` | ✅ 2 处 |
 | `E1013` | 函数未找到 | `TypeCheck` | 否 | `函数未找到：'{func}'` | ✅ 4 处 |
 | `E1014` | 命名参数名未知 | `TypeCheck` | 否 | `函数 '{func}' 没有名为 '{name}' 的参数（可用：{params}）` | ✅ 2 处 |
 | `E1015` | 参数重复指定 | `TypeCheck` | 否 | `函数 '{func}' 的参数 '{name}' 被重复指定` | ✅ 1 处 |
