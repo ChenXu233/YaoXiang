@@ -1863,3 +1863,17 @@ WBS 的 6.4.3 行把 `src/middle/core/ir_gen.rs` 的 `is_constraint_param_ann` �
 ### 计数
 
 本批不新增二级/三级任务 ⇒ 09 顶部计数表不变（二级 **72** / 三级 **193**）。6.4 的 5 个三级任务为既有登记，勾选不改变计数。
+
+## P3 3.22 收口（3.22.1 注解分解统一，2026-10-30）
+
+> **触发**：issue [#501](https://github.com/ChenXu233/YaoXiang/issues/501)（WBS 3.22.1）：返回位括号化函数类型分解层级错位——「声明返回函数类型的函数」没有任何能过的注解写法。
+
+> **队长调查对登记的两处修正（开工前探针实证）**：① 红态边界比登记窄——语料 `03-semantics/paren_return_fn.yx` 的 `mk`（lambda 尾表达式）本就绿（RFC-004 夹具）；真红态 = 函数名 RHS（expected 被剥到最内层标量）与 lambda 块体带 return（expected 已对、found 是 lambda 整体）两形态，**红因异源**。② 登记守卫判据「`h: (x: Int) -> Int = f` 逐字节不变」实测为**合法报错**（体尾表达式把函数值返回给 Int 返回位）——修后保持红即守卫，禁止修绿。
+
+> **改法**（`7880ee17` + 修复轮 `f032582b`，三段）：① `Type::is_paren_complete()`（ast.rs 新增单点）——返回位注解是 `Paren/NamedParen` ⇔ RFC-004 柯里链条终止 ⇔ 值级分解取外层整体；划分依据实证修正任务预设（curry_tail_expr 平铺柯里是「非泛型不剥」的反例）。② B 断链在 parser paren_return 包装（`declarations.rs` 加作者 lambda 与内层 Fn 参数组对齐判据——修法越界 typecheck 预设文件，依据：双层 AST 的 IR 形状本就错，typecheck 侧无法正确修）。③ 修复轮：`check_return_value_type`（Return 载荷与值级返回位统一）+ `wrapped_closure` 双臂扩展（`Return(Some(Lambda))` 载荷 = 体是外层本体，八种体形态判定表实证）。
+
+> **判据链**：t1 门禁 9 项绿（**生成器幂等门禁首战生效**——第 1 轮抓到 statements.rs 加行的发射点行号平移欠账）→ t2 **PASS**（六项验收含值断言阴性对照、A/B 双点变异可逆、零漂四项）→ t3 **REQUEST_CHANGES**（high = gb2 形态被 t1 从 E1012 变静默错配——把响亮失败变静默错误，队长独立复现）→ t1r 门禁绿但 **pre-commit integration 挡下**（既有柯里测试红——testsuite fast 只跑 `cargo test --lib`，integration 靠 pre-commit 兜底是 #486 已知状态）→ t1r2 门禁 10 项绿（integration 314 全绿）→ 队长合并冻结。
+
+> **流程教训（两条已固化）**：① 门禁清单固定含 `cargo test --test integration` 定向——testsuite fast 只盖 lib 面，前端语义改动必须直接跑 integration；② world.run 输出 256KB cap——cargo test 类大输出命令一律 python -c 包装截尾（t1r2 门禁脚本两次踩同一坑：#470 testsuite 262KB、#501 t1r2 lib 263KB）。均记入编排模板。
+
+> **登记**：issue [#501](https://github.com/ChenXu233/YaoXiang/issues/501) 已关闭（`7880ee17` + `f032582b`）；新遗留 [#514](https://github.com/ChenXu233/YaoXiang/issues/514)（shared solver 测试并发窗口，HEAD 既有）与 [#515](https://github.com/ChenXu233/YaoXiang/issues/515)（生成器 FN_CALL_RE_TMPL 无词边界，E1002 计数 84=83+1 修前既有）备案不占号；跨 WBS 备案：RFC-004 括号终止判定第三处 `ir_gen.rs:649` 未收敛到单点（t3 low，收敛属跨 WBS 待裁）。本批 flash 子代理通道经 provider 配额切换（individual-coding-plan 周配额耗尽 code 1310 → 按 用户指示切回免费 start-plan，AmendWorkflow 换轨零缓存损失）。
