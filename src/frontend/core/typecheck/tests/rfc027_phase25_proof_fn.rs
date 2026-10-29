@@ -188,7 +188,7 @@ fn make_proof_fn_module(
     };
 
     let return_type = AstType::Fn {
-        params: vec![builtin_ty("Int64")],
+        params: vec![Param::from_type(builtin_ty("Int64"))],
         return_type: Box::new(AstType::MetaType {
             name_span: Span::dummy(),
             args: vec![],

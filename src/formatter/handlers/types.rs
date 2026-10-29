@@ -37,8 +37,11 @@ pub fn format_type(
             params,
             return_type,
         } => {
+            // 类型位只打印类型：无类型（HM 推断）的形参不进入渲染，
+            // 与 reshape 前 Vec<Type> 的口径逐字一致。
             let params_str: Vec<String> = params
                 .iter()
+                .filter_map(|p| p.ty.as_ref())
                 .map(|t| format_type(t, ctx, source_map))
                 .collect();
             format!(

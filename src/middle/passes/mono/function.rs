@@ -383,7 +383,11 @@ impl FunctionMonomorphizer for super::Monomorphizer {
             } => AstType::Fn {
                 params: params
                     .iter()
-                    .map(|t| self.substitute_type_ast(t, type_map))
+                    .map(|p| {
+                        let mut p = p.clone();
+                        p.ty = p.ty.as_ref().map(|t| self.substitute_type_ast(t, type_map));
+                        p
+                    })
                     .collect(),
                 return_type: Box::new(self.substitute_type_ast(return_type, type_map)),
             },
@@ -488,7 +492,14 @@ impl FunctionMonomorphizer for super::Monomorphizer {
                     params,
                     return_type,
                 } => AstType::Fn {
-                    params: params.iter().map(|p| mono_to_ast_type(p, span)).collect(),
+                    params: params
+                        .iter()
+                        .map(|p| {
+                            crate::frontend::core::parser::ast::Param::from_type(mono_to_ast_type(
+                                p, span,
+                            ))
+                        })
+                        .collect(),
                     return_type: Box::new(mono_to_ast_type(return_type, span)),
                 },
                 // 其余（Struct/Enum/TypeVar/Literal/Union/...）保持既有有损兜底：
@@ -552,7 +563,13 @@ impl FunctionMonomorphizer for super::Monomorphizer {
             } => AstType::Fn {
                 params: params
                     .iter()
-                    .map(|t| self.substitute_type_in_ast(t, name_map))
+                    .map(|p| {
+                        let mut p = p.clone();
+                        p.ty =
+                            p.ty.as_ref()
+                                .map(|t| self.substitute_type_in_ast(t, name_map));
+                        p
+                    })
                     .collect(),
                 return_type: Box::new(self.substitute_type_in_ast(return_type, name_map)),
             },

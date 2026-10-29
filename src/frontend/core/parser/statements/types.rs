@@ -241,8 +241,23 @@ pub fn parse_type_annotation(state: &mut ParserState<'_>) -> Option<Type> {
             if state.at(&TokenKind::Arrow) {
                 state.bump(); // consume '->'
                 let return_type = Box::new(parse_type_annotation(state)?);
+                // 名字与类型同栖（RFC-039 6.8.1）：具名参数位带真实名字，
+                // 无名位置（纯类型列表）合成匿名形参——名字不再另存。
+                let params: Vec<Param> = param_types
+                    .into_iter()
+                    .enumerate()
+                    .map(|(i, ty)| match named_params.get(i) {
+                        Some((name, span)) => Param {
+                            name: name.clone(),
+                            ty: Some(ty),
+                            is_mut: false,
+                            span: *span,
+                        },
+                        None => Param::from_type(ty),
+                    })
+                    .collect();
                 return Some(Type::Fn {
-                    params: param_types,
+                    params,
                     return_type,
                 });
             }
@@ -523,7 +538,7 @@ pub fn parse_fn_type_with_names(
             let mut all_params = params.clone();
             all_params.extend(inner_all);
             let nested_fn = Type::Fn {
-                params: inner_first.iter().filter_map(|p| p.ty.clone()).collect(),
+                params: inner_first,
                 return_type: inner_ret,
             };
             return Some((params, all_params, Box::new(nested_fn)));
@@ -543,7 +558,7 @@ pub fn parse_fn_type_with_names(
                 let mut all_params = params.clone();
                 all_params.extend(inner_all);
                 let inner_fn = Type::Fn {
-                    params: inner_first.iter().filter_map(|p| p.ty.clone()).collect(),
+                    params: inner_first,
                     return_type: inner_ret,
                 };
                 return Some((
@@ -839,7 +854,7 @@ fn extract_fn_type_info(ty: &Type) -> (Vec<Param>, Type) {
         .enumerate()
         .map(|(i, p)| Param {
             name: format!("arg{}", i),
-            ty: Some(p.clone()),
+            ty: p.ty.clone(),
             is_mut: false,
             span: Span::dummy(),
         })

@@ -210,8 +210,10 @@ impl TypeChecker {
                 params,
                 return_type,
             } => {
-                for t in params {
-                    self.collect_type_tokens(file_path, t);
+                for p in params {
+                    if let Some(t) = &p.ty {
+                        self.collect_type_tokens(file_path, t);
+                    }
                 }
                 self.collect_type_tokens(file_path, return_type);
             }

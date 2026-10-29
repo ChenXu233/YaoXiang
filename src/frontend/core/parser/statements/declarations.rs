@@ -161,12 +161,10 @@ fn parse_assign_after_target(
                 let (fn_params_parsed, all_curry_params, return_type) =
                     parse_fn_type_with_names(state)?;
 
-                let param_types: Vec<Type> = fn_params_parsed
-                    .iter()
-                    .filter_map(|p| p.ty.clone())
-                    .collect();
+                // 名字与类型同栖（RFC-039 6.8.1）：第一组形参原样进
+                // Type::Fn.params，名字不再另存旁路（signature_params 在 commit 2 删除）。
                 let type_annotation = Type::Fn {
-                    params: param_types,
+                    params: fn_params_parsed,
                     return_type: return_type.clone(),
                 };
                 (Some(type_annotation), Some(all_curry_params))
@@ -351,7 +349,9 @@ fn parse_assign_after_target(
                         let own_param_count = match type_annotation.as_ref() {
                             Some(Type::Fn { params, .. }) => params
                                 .iter()
-                                .filter(|t| !is_type_param_annotation(Some(t)))
+                                // 与 reshape 前口径一致：只有带类型的形参参与计数
+                                .filter(|p| p.ty.is_some())
+                                .filter(|p| !is_type_param_annotation(p.ty.as_ref()))
                                 .count(),
                             _ => 0,
                         };
@@ -367,9 +367,9 @@ fn parse_assign_after_target(
                         // 运行时闭包形态（`make_adder: (a: Int) -> ((b: Int) -> Int)`）
                         // 首组含值参数，仍走下面的包装。
                         let first_group_has_type_params = match type_annotation.as_ref() {
-                            Some(Type::Fn { params, .. }) => {
-                                params.iter().any(|t| is_type_param_annotation(Some(t)))
-                            }
+                            Some(Type::Fn { params, .. }) => params
+                                .iter()
+                                .any(|p| is_type_param_annotation(p.ty.as_ref())),
                             _ => false,
                         };
                         // 被返回值的参数组 = 声明返回位内层 Fn 的值参数个数

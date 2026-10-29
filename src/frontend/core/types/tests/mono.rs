@@ -129,7 +129,7 @@ fn test_from_ast_type_tuple() {
 #[test]
 fn test_from_ast_type_fn() {
     let ast_ty = ast::Type::Fn {
-        params: vec![name_ty("Int32")],
+        params: vec![ast::Param::from_type(name_ty("Int32"))],
         return_type: Box::new(name_ty("Bool")),
     };
     let mono: MonoType = ast_ty.into();

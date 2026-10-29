@@ -9,7 +9,9 @@
 
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::statements::types::parse_type_annotation;
-use crate::frontend::core::parser::ast::{BinOp, Expr, StmtKind, StructField, Type, TypeBodyItem};
+use crate::frontend::core::parser::ast::{
+    BinOp, Expr, Param, StmtKind, StructField, Type, TypeBodyItem,
+};
 use crate::frontend::core::parser::{parse, NullProbe, ParserState};
 
 fn with_type<F>(
@@ -58,7 +60,7 @@ fn struct_interfaces(ty: &Type) -> Vec<String> {
 ///
 /// 签名带解析错误、或首个语句不是带函数类型注解的绑定时，带上原始 AST 上下文 panic——
 /// 定位失败本身就是用例要报的失败，调用方不必重复判空。
-fn parse_fn_type_annotation(source: &str) -> (Vec<Type>, Type) {
+fn parse_fn_type_annotation(source: &str) -> (Vec<Param>, Type) {
     let tokens = tokenize(source).expect("tokenize 签名源码失败");
     let result = parse(&tokens);
     assert!(
@@ -584,19 +586,21 @@ fn test_multi_named_paren_stays_tuple() {
     });
 }
 
-/// 普通函数类型 `(a: Int, b: Int) -> Int` 不受影响：参数位的形参名仍由
-/// `parse_fn_type_with_names` 承载，类型位只有类型。
+/// 普通函数类型 `(a: Int, b: Int) -> Int`：形参名与类型同栖（RFC-039 6.8.1）——
+/// 参数位不再丢弃名字，`Type::Fn.params` 携带 `Param`（名字 + 类型）。
 #[test]
-fn test_named_function_type_params_stay_anonymous_types() {
+fn test_named_function_type_params_carry_names_and_types() {
     // Arrange & Act：解析带函数类型注解的绑定，取出注解里的函数类型
     let (params, return_type) = parse_fn_type_annotation("f: (a: Int, b: Int) -> Int = { 1 }");
 
-    // Assert：参数位只有类型（名字丢弃），返回类型是 Int
-    assert_eq!(params.len(), 2, "参数位只有类型，不含名字");
+    // Assert：参数位名字与类型同栖，返回类型是 Int
+    assert_eq!(params.len(), 2, "参数位应有 2 个形参，got: {params:?}");
+    assert_eq!(params[0].name, "a", "第 1 个形参名应为 a，got: {params:?}");
+    assert_eq!(params[1].name, "b", "第 2 个形参名应为 b，got: {params:?}");
     assert!(
         params
             .iter()
-            .all(|p| matches!(p, Type::Name { name, .. } if name == "Int")),
+            .all(|p| matches!(p.ty.as_ref(), Some(Type::Name { name, .. }) if name == "Int")),
         "参数类型应为 Int，got: {params:?}"
     );
     assert!(

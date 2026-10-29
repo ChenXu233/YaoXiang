@@ -374,7 +374,9 @@ impl TypeChecker {
                 return_type,
             } => {
                 for p in params {
-                    Self::collect_unknown_type_names(p, generic_names, env, out);
+                    if let Some(ty) = &p.ty {
+                        Self::collect_unknown_type_names(ty, generic_names, env, out);
+                    }
                 }
                 Self::collect_unknown_type_names(return_type, generic_names, env, out);
             }

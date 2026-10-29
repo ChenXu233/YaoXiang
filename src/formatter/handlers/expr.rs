@@ -484,22 +484,26 @@ fn format_return_with_names(
     }
 
     if let Type::Fn {
-        params: inner_tys,
+        params: inner_params,
         return_type,
     } = ty
     {
-        let count = inner_tys.len();
+        // 名字取拍平的签名形参（params）；类型取本层 Type::Fn.params
+        // 中带类型的形参——输出口径与 reshape 前逐字一致。
+        let typed: Vec<&Param> = inner_params.iter().filter(|p| p.ty.is_some()).collect();
+        let count = typed.len();
         let (group, rest) = split_params_at(params, count);
         if !group.is_empty() && group.len() == count {
-            let named: Vec<String> = inner_tys
+            let named: Vec<String> = typed
                 .iter()
                 .zip(group.iter())
-                .map(|(t, p)| {
-                    format!(
+                .filter_map(|(t, p)| {
+                    let ty = t.ty.as_ref()?;
+                    Some(format!(
                         "{}: {}",
                         p.name,
-                        super::types::format_type(t, ctx, source_map)
-                    )
+                        super::types::format_type(ty, ctx, source_map)
+                    ))
                 })
                 .collect();
             let ret = format_return_with_names(return_type, rest, ctx, source_map);
@@ -519,21 +523,25 @@ fn format_paren_inner_with_names(
 ) -> String {
     match inner {
         Type::Fn {
-            params: inner_tys,
+            params: inner_params,
             return_type,
         } => {
-            let count = inner_tys.len();
+            // 口径同 format_return_with_names：名字取拍平签名形参，
+            // 类型取本层 Type::Fn.params 的带类型项（无类型形参不进类型位）。
+            let typed: Vec<&Param> = inner_params.iter().filter(|p| p.ty.is_some()).collect();
+            let count = typed.len();
             let (group, rest) = split_params_at(params, count);
             if !group.is_empty() && group.len() == count {
-                let named: Vec<String> = inner_tys
+                let named: Vec<String> = typed
                     .iter()
                     .zip(group.iter())
-                    .map(|(t, p)| {
-                        format!(
+                    .filter_map(|(t, p)| {
+                        let ty = t.ty.as_ref()?;
+                        Some(format!(
                             "{}: {}",
                             p.name,
-                            super::types::format_type(t, ctx, source_map)
-                        )
+                            super::types::format_type(ty, ctx, source_map)
+                        ))
                     })
                     .collect();
                 let ret = format_return_with_names(return_type, rest, ctx, source_map);

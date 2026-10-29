@@ -1491,7 +1491,8 @@ impl TypeChecker {
                     {
                         let pts: Vec<MonoType> = param_tys
                             .iter()
-                            .map(|t| MonoType::from(t.clone()))
+                            .filter_map(|p| p.ty.clone())
+                            .map(MonoType::from)
                             .collect();
                         (pts, MonoType::from(*return_type.clone()))
                     } else {
@@ -1504,7 +1505,8 @@ impl TypeChecker {
                             {
                                 let pts: Vec<MonoType> = param_tys
                                     .iter()
-                                    .map(|t| MonoType::from(t.clone()))
+                                    .filter_map(|p| p.ty.clone())
+                                    .map(MonoType::from)
                                     .collect();
                                 (pts, MonoType::from(*return_type.clone()))
                             } else {
@@ -1538,7 +1540,8 @@ impl TypeChecker {
                     {
                         let pts: Vec<MonoType> = param_tys
                             .iter()
-                            .map(|t| MonoType::from(t.clone()))
+                            .filter_map(|p| p.ty.clone())
+                            .map(MonoType::from)
                             .collect();
                         (pts, MonoType::from(*return_type.clone()))
                     } else {
@@ -1614,12 +1617,14 @@ impl TypeChecker {
                         } = return_type.as_ref()
                         {
                             for p in inner_params {
-                                collect_used_in_type(
-                                    p,
-                                    &candidate_names,
-                                    &mut used_as_const,
-                                    &is_predicate,
-                                );
+                                if let Some(ty) = &p.ty {
+                                    collect_used_in_type(
+                                        ty,
+                                        &candidate_names,
+                                        &mut used_as_const,
+                                        &is_predicate,
+                                    );
+                                }
                             }
                         }
                         // 也扫描 return_type 自身（深度嵌套场景）
@@ -3169,7 +3174,11 @@ fn detect_sum_type(
         }
         variants.push(super::environment::SumVariantDef {
             name: f.name.clone(),
-            params: params.iter().map(|t| MonoType::from(t.clone())).collect(),
+            params: params
+                .iter()
+                .filter_map(|p| p.ty.clone())
+                .map(MonoType::from)
+                .collect(),
         });
     }
     Some(variants)
@@ -3279,7 +3288,9 @@ pub(crate) fn collect_used_in_type(
             return_type,
         } => {
             for p in params {
-                collect_used_in_type(p, candidates, found, is_predicate);
+                if let Some(ty) = &p.ty {
+                    collect_used_in_type(ty, candidates, found, is_predicate);
+                }
             }
             collect_used_in_type(return_type, candidates, found, is_predicate);
         }

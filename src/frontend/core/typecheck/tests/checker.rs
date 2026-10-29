@@ -83,7 +83,9 @@ fn builtin_ty(name: &str) -> AstType {
 /// 单参函数类型 `(Int32) -> Int32`。
 fn int_fn_type() -> AstType {
     AstType::Fn {
-        params: vec![builtin_ty("Int32")],
+        params: vec![crate::frontend::core::parser::ast::Param::from_type(
+            builtin_ty("Int32"),
+        )],
         return_type: Box::new(builtin_ty("Int32")),
     }
 }

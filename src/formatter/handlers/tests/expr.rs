@@ -49,15 +49,15 @@ fn curried_signature_params() -> Vec<Param> {
 /// Fixture: curried 函数类型 `(Type) -> ((Int) -> Int)`。
 fn curried_fn_type() -> Type {
     Type::Fn {
-        params: vec![Type::MetaType {
+        params: vec![Param::from_type(Type::MetaType {
             name_span: Span::dummy(),
             args: vec![],
-        }],
+        })],
         return_type: Box::new(Type::Fn {
-            params: vec![Type::Name {
+            params: vec![Param::from_type(Type::Name {
                 name: "Int".to_string(),
                 span: Span::dummy(),
-            }],
+            })],
             return_type: Box::new(Type::Name {
                 name: "Int".to_string(),
                 span: Span::dummy(),

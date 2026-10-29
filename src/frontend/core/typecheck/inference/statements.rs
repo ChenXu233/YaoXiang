@@ -1927,12 +1927,14 @@ impl StatementChecker {
                 } = return_type.as_ref()
                 {
                     for p in inner_params {
-                        collect_used_in_type(
-                            p,
-                            &candidate_names,
-                            &mut used_as_const,
-                            &is_predicate,
-                        );
+                        if let Some(ty) = &p.ty {
+                            collect_used_in_type(
+                                ty,
+                                &candidate_names,
+                                &mut used_as_const,
+                                &is_predicate,
+                            );
+                        }
                     }
                 }
                 collect_used_in_type(
@@ -1978,7 +1980,8 @@ impl StatementChecker {
             {
                 let fn_param_types: Vec<MonoType> = param_types
                     .iter()
-                    .map(|t| MonoType::from(t.clone()))
+                    .filter_map(|p| p.ty.clone())
+                    .map(MonoType::from)
                     // RFC-027 §6.1：形参上的精化标注同样是**透明**的——`b` 的值就是
                     // 它的基类型。此前这里用裸 `MonoType::from`，精化形参停在名义形态
                     // `NonNegative(b)`，于是 1) 体内 `b` 当值用报 E1012/E1002，

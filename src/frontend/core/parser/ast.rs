@@ -452,8 +452,15 @@ pub enum Type {
         fields: Vec<StructField>,
     },
     Tuple(Vec<Type>),
+    /// 函数类型：`(a: Int, b: Int) -> Ret`。
+    ///
+    /// `params` 复用 [`Param`]——名字与类型同栖（RFC-039 6.8.1）：
+    /// 签名位置（`parse_fn_type_with_names`）与 lambda 头一样带真实名字；
+    /// 纯类型位置/类型反解没有名字可写时用 [`Param::anonymous`] 合成
+    /// （`name` 空串，`is_named()` 为 false）。**不得**再引入并行的
+    /// 名字数组（如 `param_names: Vec<Option<String>>`）。
     Fn {
-        params: Vec<Type>,
+        params: Vec<Param>,
         return_type: Box<Type>,
     },
     Generic {
@@ -628,8 +635,10 @@ impl Type {
                 params,
                 return_type,
             } => {
-                for ty in params {
-                    ty.collect_name_refs(out);
+                for p in params {
+                    if let Some(ty) = &p.ty {
+                        ty.collect_name_refs(out);
+                    }
                 }
                 return_type.collect_name_refs(out);
             }
@@ -750,13 +759,200 @@ pub struct Block {
     pub span: Span,
 }
 
-/// Function parameter
-#[derive(Debug, Clone)]
+/// Function parameter（形参：名字与类型同栖）
+///
+/// 三类使用点共用同一个结构（RFC-039 6.8.1）：lambda 头、函数签名的
+/// `Type::Fn.params`、以及需要形参名/类型对的语义消费点。**唯一**的形参
+/// 表示——不得新增 Parameter/Arg 第二结构，也不得用
+/// `param_names: Vec<Option<String>>` 一类平行数组过渡。
+///
+/// 名字约定：有名字的位置（签名/lambda）`name` 是真实标识符；纯类型位置
+/// （无名实参、类型反解合成）用 [`Param::anonymous`]，`name` 为空串，
+/// 由 [`Param::is_named`] 判定。空串名字不参与任何按名查找。
+#[derive(Clone)]
 pub struct Param {
     pub name: String,
     pub ty: Option<Type>,
     pub is_mut: bool,
     pub span: Span,
+}
+
+impl Param {
+    /// 合成**无名形参**：只有类型可写的位置（类型位置、类型反解）使用。
+    pub fn anonymous(
+        ty: Option<Type>,
+        span: Span,
+    ) -> Self {
+        Self {
+            name: String::new(),
+            ty,
+            is_mut: false,
+            span,
+        }
+    }
+
+    /// 由类型合成无名形参（span 取 dummy：合成形的源码位置不存在）。
+    pub fn from_type(ty: Type) -> Self {
+        Self::anonymous(Some(ty), Span::dummy())
+    }
+
+    /// 是否携带真实名字（合成/类型位形参为 `false`）。
+    pub fn is_named(&self) -> bool {
+        !self.name.is_empty()
+    }
+}
+
+/// `Debug` 手写（不 derive）：**无名形参**按其所承载的 `Type` 打印——与
+/// RFC-039 6.8.1 重塑前 `Type::Fn.params: Vec<Type>` 的 Debug 文本逐字一致。
+/// 规范化 IR 快照的 `type_decl` 行打印 AST 类型的 Debug 文本（
+/// `middle/core/normalize.rs`），纯表示重塑不得让快照文本漂移；有名形参
+/// 按完整结构打印（名字是语义，必须可见）。
+impl std::fmt::Debug for Param {
+    fn fmt(
+        &self,
+        f: &mut std::fmt::Formatter<'_>,
+    ) -> std::fmt::Result {
+        match (&self.ty, self.is_named(), self.is_mut) {
+            (Some(ty), false, false) => std::fmt::Debug::fmt(ty, f),
+            _ => f
+                .debug_struct("Param")
+                .field("name", &self.name)
+                .field("ty", &self.ty)
+                .field("is_mut", &self.is_mut)
+                .field("span", &self.span)
+                .finish(),
+        }
+    }
+}
+
+impl Type {
+    /// 剥掉**类型位形参名**（纯语法装饰）后的副本：`Type::Fn.params` 的名字
+    /// 归零并递归全树；`NamedParen.param`（返回位 binder）与匿名函数绑定的
+    /// 值级形参名是语义，原样保留。
+    ///
+    /// 用途：IR 的 `FunctionBody::TypeDecl` 仍以 `ast::Type` 为载体（载体迁移
+    /// 属 IR 形状议题，见 09 的 6.5.1 输入项 ②），而规范化 IR 快照按 `Debug`
+    /// 文本比对——把名字带进 IR 会让纯表示重塑（6.8.1）引发已入库快照漂移。
+    /// IR 不消费形参名，故入 IR 前归一为匿名形参。
+    pub fn without_fn_param_names(&self) -> Type {
+        fn strip_params(params: &[Param]) -> Vec<Param> {
+            params
+                .iter()
+                .map(|p| Param {
+                    name: String::new(),
+                    ty: p.ty.as_ref().map(|t| t.without_fn_param_names()),
+                    is_mut: p.is_mut,
+                    span: p.span,
+                })
+                .collect()
+        }
+        fn strip_field(f: &StructField) -> StructField {
+            StructField {
+                name: f.name.clone(),
+                is_mut: f.is_mut,
+                ty: f.ty.without_fn_param_names(),
+                default: f.default.clone(),
+            }
+        }
+        fn strip_fields(fields: &[StructField]) -> Vec<StructField> {
+            fields.iter().map(strip_field).collect()
+        }
+        fn strip_body(body: &[TypeBodyItem]) -> Vec<TypeBodyItem> {
+            body.iter()
+                .map(|item| match item {
+                    TypeBodyItem::Field(f) => TypeBodyItem::Field(strip_field(f)),
+                    TypeBodyItem::Binding(b) => TypeBodyItem::Binding(TypeBodyBinding {
+                        name: b.name.clone(),
+                        kind: match &b.kind {
+                            // 值级形参名是语义（不是类型位装饰）：保留
+                            BindingKind::Anonymous {
+                                params,
+                                return_type,
+                                positions,
+                                body,
+                            } => BindingKind::Anonymous {
+                                params: params.clone(),
+                                return_type: Box::new(return_type.without_fn_param_names()),
+                                positions: positions.clone(),
+                                body: body.clone(),
+                            },
+                            other => other.clone(),
+                        },
+                    }),
+                    TypeBodyItem::Interface(name) => TypeBodyItem::Interface(name.clone()),
+                    TypeBodyItem::Expr(t) => TypeBodyItem::Expr(t.without_fn_param_names()),
+                })
+                .collect()
+        }
+        match self {
+            Type::Struct { body } => Type::Struct {
+                body: strip_body(body),
+            },
+            Type::NamedStruct {
+                name,
+                name_span,
+                fields,
+            } => Type::NamedStruct {
+                name: name.clone(),
+                name_span: *name_span,
+                fields: strip_fields(fields),
+            },
+            Type::Tuple(types) => {
+                Type::Tuple(types.iter().map(|t| t.without_fn_param_names()).collect())
+            }
+            Type::Fn {
+                params,
+                return_type,
+            } => Type::Fn {
+                params: strip_params(params),
+                return_type: Box::new(return_type.without_fn_param_names()),
+            },
+            Type::Generic {
+                name,
+                name_span,
+                args,
+            } => Type::Generic {
+                name: name.clone(),
+                name_span: *name_span,
+                args: args.iter().map(|t| t.without_fn_param_names()).collect(),
+            },
+            Type::Literal {
+                name,
+                name_span,
+                base_type,
+            } => Type::Literal {
+                name: name.clone(),
+                name_span: *name_span,
+                base_type: Box::new(base_type.without_fn_param_names()),
+            },
+            Type::Ptr(inner) => Type::Ptr(Box::new(inner.without_fn_param_names())),
+            Type::Ref {
+                mutable,
+                inner,
+                span,
+            } => Type::Ref {
+                mutable: *mutable,
+                inner: Box::new(inner.without_fn_param_names()),
+                span: *span,
+            },
+            Type::MetaType { name_span, args } => Type::MetaType {
+                name_span: *name_span,
+                args: args.iter().map(|t| t.without_fn_param_names()).collect(),
+            },
+            Type::Paren(inner) => Type::Paren(Box::new(inner.without_fn_param_names())),
+            // NamedParen.param 是返回位 binder（语义），不剥
+            Type::NamedParen {
+                param,
+                param_span,
+                inner,
+            } => Type::NamedParen {
+                param: param.clone(),
+                param_span: *param_span,
+                inner: Box::new(inner.without_fn_param_names()),
+            },
+            Type::Name { .. } | Type::ConstExpr(_) => self.clone(),
+        }
+    }
 }
 
 /// Match arm
@@ -878,10 +1074,10 @@ pub fn name_used_as_type(
             params,
             return_type,
         } => {
-            params
-                .iter()
-                .any(|p| name_used_as_type(name, p, is_predicate))
-                || name_used_as_type(name, return_type, is_predicate)
+            params.iter().any(|p| {
+                p.ty.as_ref()
+                    .is_some_and(|t| name_used_as_type(name, t, is_predicate))
+            }) || name_used_as_type(name, return_type, is_predicate)
         }
         Type::Ptr(inner) => name_used_as_type(name, inner, is_predicate),
         Type::Ref { inner, .. } => name_used_as_type(name, inner, is_predicate),
@@ -908,7 +1104,7 @@ pub fn name_used_as_type(
 /// 这是高阶类型参数（构造器变量）的声明形态：F 的取值范围是类型构造器，
 /// 而非某个具体类型（RFC-010 元类型层级 Type1/Type2+）。
 pub fn is_type_level_fn(
-    params: &[Type],
+    params: &[Param],
     return_type: &Type,
 ) -> bool {
     fn is_type(t: &Type) -> bool {
@@ -918,7 +1114,9 @@ pub fn is_type_level_fn(
             _ => false,
         }
     }
-    !params.is_empty() && is_type(return_type) && params.iter().all(is_type)
+    !params.is_empty()
+        && is_type(return_type)
+        && params.iter().all(|p| p.ty.as_ref().is_some_and(is_type))
 }
 
 /// 从签名形参里抽出**结构可判定**的泛型参数（名字 + 约束）。

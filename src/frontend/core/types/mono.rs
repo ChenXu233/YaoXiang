@@ -1019,7 +1019,11 @@ impl From<ast::Type> for MonoType {
                 params,
                 return_type,
             } => MonoType::Fn {
-                params: params.into_iter().map(MonoType::from).collect(),
+                params: params
+                    .into_iter()
+                    .filter_map(|p| p.ty)
+                    .map(MonoType::from)
+                    .collect(),
                 return_type: Box::new(MonoType::from(*return_type)),
             },
             ast::Type::Generic { name, args, .. } => {

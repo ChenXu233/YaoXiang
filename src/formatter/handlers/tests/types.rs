@@ -166,7 +166,10 @@ fn test_format_type_option() {
 #[test]
 fn test_format_type_fn() {
     let ty = Type::Fn {
-        params: vec![name_type("Int32"), name_type("Bool")],
+        params: vec![
+            Param::from_type(name_type("Int32")),
+            Param::from_type(name_type("Bool")),
+        ],
         return_type: Box::new(name_type("String")),
     };
     assert_eq!(

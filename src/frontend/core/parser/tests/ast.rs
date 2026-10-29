@@ -460,10 +460,10 @@ fn test_type_primitives() {
 #[test]
 fn test_type_fn() {
     let t = Type::Fn {
-        params: vec![Type::Name {
+        params: vec![Param::from_type(Type::Name {
             name: "Int".into(),
             span: Span::dummy(),
-        }],
+        })],
         return_type: Box::new(Type::Name {
             name: "String".into(),
             span: Span::dummy(),

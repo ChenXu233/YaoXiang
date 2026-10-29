@@ -636,8 +636,10 @@ impl AstToIrGenerator {
                     // 该层擦除（不生成运行时函数层）。调用点 T 由类型推断填充（RFC-011）。
                     // ponytail: 仅处理纯类型参数层；类型/值参数混合同层视为值层（罕见，暂不拆）
                     let is_type_layer = !type_params.is_empty()
-                        && type_params.iter().all(|t| {
-                            Self::is_type_param_ann(t) || Self::is_constraint_param_ann(t)
+                        && type_params.iter().all(|p| {
+                            p.ty.as_ref().is_some_and(|t| {
+                                Self::is_type_param_ann(t) || Self::is_constraint_param_ann(t)
+                            })
                         });
 
                     // RFC-004 括号语义：返回位置的 `Paren` ⇔ 链条在此终止。
@@ -2015,7 +2017,9 @@ impl AstToIrGenerator {
                     return_type,
                     generic_params: generic_param_names,
                     body: FunctionBody::TypeDecl {
-                        definition: definition.clone(),
+                        // 形参名是纯语法装饰：IR 快照按 Debug 文本比对，
+                        // 带名字会让表示重塑（6.8.1）漂移已入库快照。
+                        definition: definition.without_fn_param_names(),
                     },
                 }))
             }

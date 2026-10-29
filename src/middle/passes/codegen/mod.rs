@@ -311,7 +311,11 @@ impl CodegenContext {
                 return_type,
                 ..
             } => MonoType::Fn {
-                params: params.iter().map(|t| self.type_from_ast(t)).collect(),
+                params: params
+                    .iter()
+                    .filter_map(|p| p.ty.as_ref())
+                    .map(|t| self.type_from_ast(t))
+                    .collect(),
                 return_type: Box::new(self.type_from_ast(return_type)),
             },
             Type::Generic { name, args, .. } => MonoType::TypeRef(format!(
