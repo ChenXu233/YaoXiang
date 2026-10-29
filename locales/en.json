@@ -1210,5 +1210,10 @@
     "example": "// zlib.yx: use zother.{o_val}\n// zother.yx: use zlib.{z_val}\n// => zlib → zother → zlib: the two modules import each other; the order within the cycle follows a deterministic convention based only on lexicographic path order",
     "error_output": "warning[W1007]: Module import cycle zlib → zother → zlib: initialization order within the cycle cannot be determined; the order within the cycle follows a deterministic convention based only on lexicographic path order (not a semantic guarantee)\n --> zother.yx:2:1\n  |\n2 | use zlib.{z_val}\n  | ^^^^^^^^^^^^^^^^^\n  |\nhelp: The value dependency within the cycle is opposite to the use order: when zlib reads zother.o_val, zother has not yet been initialized (the violated edge: zother imports zlib, so the topological order places zlib first). Initialization order follows use dependencies; value dependencies cannot all be satisfied within the cycle—break the cycle, or change that top-level value to a function for deferred evaluation"
   },
-  "W1007.value_edge.help": "The value dependency runs against the use order: {reader} reads {slot} while {owner} is not yet initialized (violated edge: {owner} imports {reader}; the topological order therefore places {reader} first). Initialization follows use dependencies; inside a cycle both cannot hold — break the cycle, or defer the top-level value behind a function."
+  "W1007.value_edge.help": "The value dependency runs against the use order: {reader} reads {slot} while {owner} is not yet initialized (violated edge: {owner} imports {reader}; the topological order therefore places {reader} first). Initialization follows use dependencies; inside a cycle both cannot hold — break the cycle, or defer the top-level value behind a function.",
+  "E3024": {
+    "title": "Project manifest is unreadable",
+    "template": "Project manifest {path} is unreadable: {detail}",
+    "help": "Fix yaoxiang.toml so it is valid TOML with the required [package] fields. When the manifest exists but cannot be parsed, the declared surfaces and the cross-file reference pool cannot be trusted, so compilation aborts instead of silently degrading to single-file semantics. A project without a manifest keeps single-file semantics."
+  }
 }

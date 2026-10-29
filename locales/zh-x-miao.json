@@ -1209,5 +1209,10 @@
     "example": "// zlib.yx: use zother.{o_val}\n// zother.yx: use zlib.{z_val}\n// => zlib → zother → zlib：两模块互相导入，环内先后只按路径字典序约定，喵~ nya~",
     "error_output": "warning[W1007]: 模块导入环 zlib → zother → zlib：环内初始化顺序不可判定，环内先后只按路径字典序作确定性约定（非语义保证）喵~\n --> zother.yx:2:1\n  |\n2 | use zlib.{z_val}\n  | ^^^^^^^^^^^^^^^^^\n  |\nhelp: 环内值依赖与 use 顺序相反：zlib 读取 zother.o_val 时 zother 尚未初始化（被违反的边：zother 导入 zlib，拓扑序据此把 zlib 排在前面）。初始化顺序按 use 依赖排，环内无法同时满足值依赖——打破环，或把该顶层值改为函数延迟求值，喵~ nya~"
   },
-  "W1007.value_edge.help": "The value dependency runs against the use order: {reader} reads {slot} while {owner} is not yet initialized (violated edge: {owner} imports {reader}; the topological order therefore places {reader} first). Initialization follows use dependencies; inside a cycle both cannot hold — break the cycle, or defer the top-level value behind a function."
+  "W1007.value_edge.help": "The value dependency runs against the use order: {reader} reads {slot} while {owner} is not yet initialized (violated edge: {owner} imports {reader}; the topological order therefore places {reader} first). Initialization follows use dependencies; inside a cycle both cannot hold — break the cycle, or defer the top-level value behind a function.",
+  "E3024": {
+    "title": "项目清单不可读喵",
+    "template": "项目清单 {path} 不可读喵：{detail} nya~",
+    "help": "要修好 yaoxiang.toml 喵（合法 TOML 和 [package] 必填字段）。清单存在但解析不了的话，声明面和跨文件引用池都不可信 nya～所以编译会中止，不会静默退化成单文件语义喵。没有清单的项目照样是单文件语义喵。"
+  }
 }

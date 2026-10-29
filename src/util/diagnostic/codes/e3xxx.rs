@@ -47,4 +47,14 @@ define_codes!(E3XXX, {
     // 此前这类**用户写法错误**落入 E3005「IR 内部错误，请报告此问题」，
     // 并把 `Discriminant(0)` 泄给用户。同族：#360（索引赋值）/#311（break）。
     ("E3023", Codegen, true, bin_top_level_statement() => ),
+    // E3024 清单存在但不可读（#503，WBS 3.23.1）：yaoxiang.toml 存在却解析
+    // 失败（非法 TOML / 缺 [package] 必填字段）此前被 `.ok()` 静默吞掉——
+    // 声明面/角色分类/引用池全部建立在错误前提上，跨文件引用池失效并误报
+    // W1002，check 仍 exit 0。裁决（2026-10-30，用户全权委托记录在案）：与
+    // 非法 .yx 源码同待遇，报错中止（方案甲）；无清单文件（合法单文件模式）
+    // 不受影响。
+    // span_exempt=true：错误位置在 yaoxiang.toml（非 .yx 源码），诊断条目
+    // 挂入口文件名下只是逐文件通道的载体——无源码位置可指，#324 契约禁止
+    // 塞 dummy span。
+    ("E3024", Codegen, true, manifest_unreadable(path: &str, detail: &str) => .param("path", path).param("detail", detail)),
 });

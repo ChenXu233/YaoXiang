@@ -88,7 +88,7 @@ dead-code = "warn"
 - **span 豁免**：否
 - **模板**：`本地模块 '{module}' 遮蔽了依赖包 '{dependency}'`
 - **帮助**：本地模块解析优先级最高（RFC-014）：'./src/{module}' 覆盖 .yaoxiang/vendor/ 中的依赖包 '{dependency}'。若遮蔽非本意请重命名本地模块；可用 --deny-shadowing 将其升级为错误
-- **发射点**：`src/driver/arms.rs:660`、`src/util/diagnostic/command.rs:78`
+- **发射点**：`src/driver/arms.rs:667`、`src/util/diagnostic/command.rs:78`
 
 ### W1007：模块导入环
 
@@ -96,7 +96,7 @@ dead-code = "warn"
 - **span 豁免**：否
 - **模板**：`模块导入环 {cycle}：环内初始化顺序不可判定，环内先后只按路径字典序作确定性约定（非语义保证）`
 - **帮助**：初始化顺序按 use 依赖的拓扑序决定；环内先后只有「环内路径字典序」这一确定性约定，不是语义保证。打破环（把环上某条 use 移出环，或改为函数体里的延迟求值）即可让初始化顺序可判定。与 E3019 的分工：E3019 判单元内顶层绑定之间的初始化成环，本码判模块之间的导入成环。
-- **发射点**：`src/driver/arms.rs:1759`
+- **发射点**：`src/driver/arms.rs:1799`
 
 ### W1063：const 泛型约束无法求值
 

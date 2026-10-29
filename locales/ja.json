@@ -1212,5 +1212,10 @@
     "example": "// zlib.yx: use zother.{o_val}\n// zother.yx: use zlib.{z_val}\n// => zlib → zother → zlib：両モジュールが相互にインポートしています。サイクル内の順序はパスの辞書順による規約にすぎません",
     "error_output": "warning[W1007]: モジュールインポートサイクル zlib → zother → zlib：サイクル内の初期化順序は判定不能。サイクル内の順序はパスの辞書順による決定的な規約にすぎない（意味的保証なし）\n --> zother.yx:2:1\n  |\n2 | use zlib.{z_val}\n  | ^^^^^^^^^^^^^^^^^\n  |\nhelp: サイクル内の値依存関係が use の順序と逆になっています：zlib が zother.o_val を読み込む時点では zother がまだ初期化されていません（違反された辺：zother が zlib をインポートするため、トポロジカル順序では zlib が先に置かれます）。初期化順序は use の依存関係に従いますが、サイクル内では値依存関係を同時に満たすことはできません——サイクルを壊すか、このトップレベル値を遅延評価する関数に変更してください"
   },
-  "W1007.value_edge.help": "The value dependency runs against the use order: {reader} reads {slot} while {owner} is not yet initialized (violated edge: {owner} imports {reader}; the topological order therefore places {reader} first). Initialization follows use dependencies; inside a cycle both cannot hold — break the cycle, or defer the top-level value behind a function."
+  "W1007.value_edge.help": "The value dependency runs against the use order: {reader} reads {slot} while {owner} is not yet initialized (violated edge: {owner} imports {reader}; the topological order therefore places {reader} first). Initialization follows use dependencies; inside a cycle both cannot hold — break the cycle, or defer the top-level value behind a function.",
+  "E3024": {
+    "title": "プロジェクトマニフェストを読み取れません",
+    "template": "プロジェクトマニフェスト {path} を読み取れません：{detail}",
+    "help": "yaoxiang.toml を修正してください（正当な TOML と [package] の必須フィールド）。マニフェストが存在するのに解析できない場合、宣言面と cross-file 参照プールは信頼できないため、単一ファイル意味論へ黙って退化するのではなくコンパイルを中止します。マニフェストのないプロジェクトは引き続き単一ファイル意味論です。"
+  }
 }

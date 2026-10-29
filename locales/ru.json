@@ -1212,5 +1212,10 @@
     "example": "// zlib.yx: use zother.{o_val}\n// zother.yx: use zlib.{z_val}\n// => zlib → zother → zlib: модули импортируют друг друга; внутри цикла действует только соглашение о лексикографическом порядке путей",
     "error_output": "warning[W1007]: циклический импорт модулей zlib → zother → zlib: порядок инициализации внутри цикла нельзя определить; внутри цикла действует лишь детерминированное соглашение о лексикографическом порядке путей (без семантических гарантий)\n --> zother.yx:2:1\n  |\n2 | use zlib.{z_val}\n  | ^^^^^^^^^^^^^^^^^\n  |\nhelp: зависимость по значению внутри цикла противоречит порядку use: когда zlib читает zother.o_val, модуль zother ещё не инициализирован (нарушенное ребро: zother импортирует zlib, поэтому при топологической сортировке zlib окажется перед zother). Порядок инициализации определяется зависимостями use, но в цикле невозможно одновременно удовлетворить все зависимости по значениям — разорвите цикл или превратите это значение верхнего уровня в функцию с ленивым вычислением"
   },
-  "W1007.value_edge.help": "The value dependency runs against the use order: {reader} reads {slot} while {owner} is not yet initialized (violated edge: {owner} imports {reader}; the topological order therefore places {reader} first). Initialization follows use dependencies; inside a cycle both cannot hold — break the cycle, or defer the top-level value behind a function."
+  "W1007.value_edge.help": "The value dependency runs against the use order: {reader} reads {slot} while {owner} is not yet initialized (violated edge: {owner} imports {reader}; the topological order therefore places {reader} first). Initialization follows use dependencies; inside a cycle both cannot hold — break the cycle, or defer the top-level value behind a function.",
+  "E3024": {
+    "title": "Манифест проекта нечитаем",
+    "template": "Манифест проекта {path} нечитаем: {detail}",
+    "help": "Исправьте yaoxiang.toml: корректный TOML и обязательные поля [package]. Если манифест существует, но не разбирается, поверхности объявлений и межфайловый пул ссылок недостоверны — компиляция прерывается вместо тихой деградации до семантики одного файла. Проект без манифеста сохраняет семантику одного файла."
+  }
 }

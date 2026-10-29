@@ -317,11 +317,15 @@ fn test_driver_run_script_rebinding_keeps_last_definition() {
 // ===================== 4.2.1 多文件形态（A1/B1/C3 裁决，2026-10-09）=====================
 
 /// 在临时目录落一个多文件项目（yaoxiang.toml + 给定 .yx），返回 (dir 守卫, 入口路径)。
+///
+/// 清单必须是**合法**的（含 `[package] version`）：WBS 3.23.1 / #503 起，
+/// 存在但不可读的清单报 E3024 并中止 RoleClassification 之后的死代码分析——
+/// 缺 version 的清单会把本组判据（W1001/per-file 收集）的触发前提整个换掉。
 fn make_project(files: &[(&str, &str)]) -> (tempfile::TempDir, PathBuf) {
     let dir = tempfile::tempdir().expect("tempdir creation failed");
     std::fs::write(
         dir.path().join("yaoxiang.toml"),
-        "[package]\nname = \"t\"\n",
+        "[package]\nname = \"t\"\nversion = \"0.1.0\"\n",
     )
     .expect("write manifest failed");
     for (name, content) in files {

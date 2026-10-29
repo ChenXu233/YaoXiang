@@ -23,12 +23,7 @@ use crate::frontend::module::roles::FileRole;
 use crate::frontend::config::CompileConfig;
 
 /// 合法 manifest（[package] 可解析 ⇒ 角色上下文可用 ⇒ Bin/Lib/Internal 分类生效）
-const MANIFEST: &str = "[package]\nname = \"ref-pool\"\nversion = \"0.1.0\"\n";
-
-/// 只有 [tool.test] 的 manifest：`PackageManifest` 解析失败 ⇒ 角色上下文退化为
-/// Script 态（helpers.rs 的 role_context → surfaces = None），但
-/// `find_project_root` 仍命中 ⇒ 旧实现在这条路径上仍装配引用池（RFC-029f 缺陷 3）
-const MANIFEST_UNPARSED: &str = "[tool.test]\npatterns = [\"tests/**/*.yx\"]\n";
+pub(super) const MANIFEST: &str = "[package]\nname = \"ref-pool\"\nversion = \"0.1.0\"\n";
 
 /// 声明了包目标的 manifest（RFC-029f 判定三层第一层）：池的根 = `[run].main`，
 /// 不是被检文件自身的发现集（WBS 4.9.1 / #334「包内 use 图」）
@@ -37,7 +32,7 @@ const MANIFEST_DECLARED: &str =
 
 /// 落一个临时项目夹具；manifest 为 None = 无 manifest（standalone / Script 态）。
 /// 入口是 main.yx（多文件夹具的入口约定）。
-fn write_project(
+pub(super) fn write_project(
     files: &[(&str, &str)],
     manifest: Option<&str>,
 ) -> (tempfile::TempDir, PathBuf) {
@@ -61,7 +56,7 @@ fn write_project(
 }
 
 /// 以 Check 形态跑 Driver（与 `yaoxiang check` 同一入口形态）
-fn run_check(entry: &Path) -> Result<DriverOutcome, DriverError> {
+pub(super) fn run_check(entry: &Path) -> Result<DriverOutcome, DriverError> {
     let program = Program::new(
         ProgramKind::Check,
         vec![Unit::new("main", entry, "")],
@@ -179,18 +174,17 @@ fn test_ref_pool_counts_same_named_definitions_per_module() {
 
 /// 4.9.3：Script 路径不接池——项目内其他文件的引用不影响 script.yx 的 W1001。
 ///
-/// 触发条件是「manifest 存在但 PackageManifest 解析失败」：角色上下文退化为
-/// Script（RFC-029f 附录C：无 manifest 上下文 = Script 态），而 find_project_root
-/// 仍命中 ⇒ 池在旧实现里非空（缺陷 3 的唯一可达路径）。
+/// 触发形态 = **无 manifest**（standalone，4.2.5 裁决 A：相对 use 沿导入者
+/// 目录解析，邻旁文件进发现集）：角色上下文为 Script 态（RFC-029f 附录C：
+/// 无 manifest 上下文 = Script 态），入口文件按定义-使用图判定、无池兜底。
+/// 旧夹具「manifest 存在但解析失败」自 WBS 3.23.1 / #503 起是 E3024 中止态
+/// （不再产生 Script 态），该路径的判据由 tests/manifest_error.rs 钉。
 #[test]
 fn test_ref_pool_is_not_assembled_for_script_role() {
     // Arrange：lib.yx 的局部变量 helper 与 main.yx 的顶级定义同名
     let main = "use std.assert\nuse lib.{touch}\n\nhelper: () -> Int = () => { return 42 }\n\nmain: () -> Void = {\n    touch()\n}\n";
     let lib = "// lib.yx —— 项目内另一文件\ntouch: () -> Void = () => {\n    helper = 1\n    n = helper\n    return\n}\n";
-    let (_dir, entry) = write_project(
-        &[("main.yx", main), ("lib.yx", lib)],
-        Some(MANIFEST_UNPARSED),
-    );
+    let (_dir, entry) = write_project(&[("main.yx", main), ("lib.yx", lib)], None);
 
     // Act
     let outcome = run_check(&entry).expect("check 必须返回产物");
