@@ -66,12 +66,26 @@ pub trait TypeEnvProbe {
 
     /// 名字定种（[`NameKind`]）。默认不定种（[`NameKind::UserType`]）。
     ///
-    /// 内置名的权威表（`from_builtin_name`）在 L3，故 L2 的默认实现不覆写本方法。
+    /// 内置名的权威表（`from_builtin_name`）在 L3，故 L2 的实现不覆写本方法。
     fn kind_of(
         &self,
         _name: &str,
     ) -> NameKind {
         NameKind::UserType
+    }
+
+    /// 本探针是否**持有内置类型名表**（L3 的 `MonoType::from_builtin_name`）。
+    ///
+    /// `kind_of` 的 [`NameKind::Builtin`] 只能由持有该表的探针给出；不持有的
+    /// 探针（[`NullProbe`] / [`BuiltinProbe`]——L2 拿不到类型表）必须返回
+    /// `false`。`extract_generic_param_names` 的 const 参数判定据此**回退**到
+    /// `CONST_PARAM_TYPES` 单表（= 6.4 之前的判据），避免「内置名定种永不成立」
+    /// 使 `(N: Int)` 静默漏登记（6.4 修复轮回归）。
+    ///
+    /// 默认 `false` 是保守选择：未知探针得到 6.4 前的行为，而不是静默关闭
+    /// const 参数收编。
+    fn knows_builtin_types(&self) -> bool {
+        false
     }
 }
 
@@ -85,9 +99,13 @@ impl TypeEnvProbe for NullProbe {}
 /// **为什么 L2 还留一份**：`parse()` 有 9 个生产入口（driver 的三个解析臂、
 /// 前端编排的两处逐文件解析、前端门面、`validate`、库入口、LSP 补全、
 /// `src/std/` 的源码解析），其中 `src/std/` 属本批硬验收的**零差异**面，
-/// 本批无法把它们全部改成注入形态。故默认探针保留这张封闭集表，判定结果与
-/// 6.4 之前**逐字一致**；一旦 L1 在各入口注入 L3 语义探针，本类型即可退化为
-/// 测试基线并删除。
+/// 本批无法把它们全部改成注入形态。故默认探针保留这张封闭集表：
+/// `is_constraint` / `is_predicate` 的判定与 6.4 之前逐字一致。
+///
+/// **它不持有内置类型名表**（`from_builtin_name` 在 L3），因此 `kind_of` 不返回
+/// [`NameKind::Builtin`]、`knows_builtin_types()` 为 `false`——const 泛型参数
+/// 判定据此回退到 `CONST_PARAM_TYPES` 单表，同样与 6.4 之前一致（不会漏判）。
+/// 一旦 L1 在各入口注入 L3 语义探针，本类型即可退化为测试基线并删除。
 ///
 /// **不是第二份权威表**：`CONSTRAINT_NAMES` 与 L3 运算符接口表的 7 名逐名
 /// 对账、`PREDICATE_NAMES` 与 L3 的内置谓词判定双向对账，由 L3 侧的对账

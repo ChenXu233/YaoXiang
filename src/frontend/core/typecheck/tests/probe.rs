@@ -135,3 +135,56 @@ fn test_semantic_probe_kind_of_matches_builtin_name_table() {
         "NullProbe 不携带任何类型知识，定种恒为 UserType"
     );
 }
+
+#[test]
+fn test_semantic_probe_and_default_probe_agree_on_same_source_const_param() {
+    // Arrange：同一份源码的拍平签名形参（`(N: Int)` 是 const 泛型参数，
+    // `n: N` 把 N 当类型引用——正是 const 参数判定的触发形态）
+    let tokens = crate::frontend::core::lexer::tokenize("f: (N: Int, n: N) -> Int = 1")
+        .expect("源码应可词法分析");
+    let module = crate::frontend::core::parser::parse(&tokens).module;
+    let params = module
+        .items
+        .iter()
+        .find_map(|s| match &s.kind {
+            crate::frontend::core::parser::ast::StmtKind::Assign {
+                signature_params, ..
+            } if !signature_params.is_empty() => Some(signature_params.clone()),
+            _ => None,
+        })
+        .expect("应有一条带签名形参的赋值语句");
+
+    // Act
+    let with_semantic: Vec<String> =
+        crate::frontend::core::parser::ast::extract_generic_param_names(&params, &SemanticProbe)
+            .into_iter()
+            .map(|p| p.name)
+            .collect();
+    let with_default: Vec<String> =
+        crate::frontend::core::parser::ast::extract_generic_param_names(
+            &params,
+            &crate::frontend::core::parser::BuiltinProbe,
+        )
+        .into_iter()
+        .map(|p| p.name)
+        .collect();
+
+    // Assert：持表探针（双知识全强度）与不持表探针（单表回退）对同一源码判定一致
+    assert_eq!(
+        with_semantic, with_default,
+        "同一源码下 SemanticProbe 与默认探针的 const 参数判定必须一致"
+    );
+    assert_eq!(
+        with_default,
+        vec!["N".to_string()],
+        "const 参数 N 必须被登记（6.4 前行为），实际 {with_default:?}"
+    );
+    assert!(
+        SemanticProbe.knows_builtin_types(),
+        "L3 语义探针持有内置类型名表"
+    );
+    assert!(
+        !crate::frontend::core::parser::BuiltinProbe.knows_builtin_types(),
+        "L2 默认探针不持有内置类型名表"
+    );
+}

@@ -69,4 +69,11 @@ impl TypeEnvProbe for SemanticProbe {
             NameKind::UserType
         }
     }
+
+    /// 本实现以 `MonoType::from_builtin_name` 为内置名权威表，故能给出
+    /// [`NameKind::Builtin`]——const 参数判定的双知识（内置名 ∩ const 可接受集合）
+    /// 在全强度生效。
+    fn knows_builtin_types(&self) -> bool {
+        true
+    }
 }

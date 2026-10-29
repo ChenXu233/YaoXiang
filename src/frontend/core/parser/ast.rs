@@ -948,13 +948,20 @@ pub fn extract_generic_param_names(
                 //（如 `f: (N: Int) -> (n: N) -> Int` 的 `N`）。
                 // 不做此判别会把 `plain: (a: Int) -> Int` 误标为泛型函数，
                 // 单态化据此将其删除且永不重建（实测 E6006，#351）。
-                // 双知识接线（WBS 6.4.5）：名字必须是**内置名**（探针定种，权威表在
-                // L3 的 `from_builtin_name`）**且**在 const 参数可接受集合内。
+                // 双知识接线（WBS 6.4.5）：名字必须在 const 参数可接受集合内，**且**
+                // 由探针确认为内置名（权威表在 L3 的 `from_builtin_name`）。
                 // 只查本表的字符串比较会绕开探针的定种；只查探针则会把 `Int8` 等
                 // 规范名也当 const 参数候选（拓宽登记 = 行为变更）。
+                //
+                // **不持有内置名表的探针回退单表判据**（6.4 修复轮）：L2 的默认探针
+                // （BuiltinProbe / NullProbe）拿不到类型表，`kind_of` 永不返回
+                // `Builtin`——若不放行，默认入口对 `(N: Int)` 会静默漏登记，与 6.4
+                // 之前不一致。`knows_builtin_types() == false` 时按 `CONST_PARAM_TYPES`
+                // 单表判定（= 6.4 前行为）；L3 语义探针持有名表，双知识仍全强度生效。
                 Type::Name { name, .. }
                     if CONST_PARAM_TYPES.contains(&name.as_str())
-                        && probe.kind_of(name) == NameKind::Builtin =>
+                        && (probe.kind_of(name) == NameKind::Builtin
+                            || !probe.knows_builtin_types()) =>
                 {
                     let used_as_type = params.iter().any(|q| {
                         q.ty.as_ref().is_some_and(|qt| {
