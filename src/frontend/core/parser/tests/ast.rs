@@ -869,22 +869,57 @@ fn test_expr_cast() {
     assert!(matches!(expr, Expr::Cast { .. }));
 }
 
+/// 函数值解构（`callable_parts`）：`Lambda` 是唯一带参数表的函数值形态。
+/// RFC-039 6.5：函数定义统一走 `Assign` + `Lambda`，下游消费点
+/// （semantic_tokens / dead_code / ir_gen）都经本 helper 取参数表与体。
 #[test]
-fn test_expr_fndef() {
-    let expr = Expr::FnDef {
-        name: "add".into(),
-        params: vec![],
-        return_type: Some(Type::Name {
-            name: "Int64".into(),
+fn test_expr_callable_parts_lambda_returns_params_and_body() {
+    // Arrange
+    let lambda = Expr::Lambda {
+        params: vec![Param {
+            name: "x".into(),
+            ty: None,
+            is_mut: false,
             span: Span::dummy(),
-        }),
+        }],
         body: Box::new(Block {
-            stmts: vec![],
+            stmts: vec![Stmt {
+                kind: StmtKind::Expr(Box::new(Expr::Var("x".into(), Span::dummy()))),
+                span: Span::dummy(),
+                plan_id: PlanId::UNPLANNED,
+            }],
             span: Span::dummy(),
         }),
         span: Span::dummy(),
     };
-    if let Expr::FnDef { name, .. } = &expr {
-        assert_eq!(name, "add");
-    }
+
+    // Act
+    let (params, body) = lambda.callable_parts();
+
+    // Assert
+    assert_eq!(params.len(), 1, "Lambda 应解构出 1 个参数");
+    assert_eq!(params[0].name, "x", "参数名应原样保留");
+    assert_eq!(body.len(), 1, "Lambda 应解构出块体语句");
+}
+
+/// 函数值解构（`callable_parts`）：块值形态（`f: () -> Int = { ... }`）没有参数表，
+/// 只交出块体语句——旧函数语法迁移到 `Block` 值后的下游落点。
+#[test]
+fn test_expr_callable_parts_block_returns_body_without_params() {
+    // Arrange
+    let block = Expr::Block(Block {
+        stmts: vec![Stmt {
+            kind: StmtKind::Expr(Box::new(Expr::Lit(Literal::Int(1), Span::dummy()))),
+            span: Span::dummy(),
+            plan_id: PlanId::UNPLANNED,
+        }],
+        span: Span::dummy(),
+    });
+
+    // Act
+    let (params, body) = block.callable_parts();
+
+    // Assert
+    assert!(params.is_empty(), "块值形态没有参数表");
+    assert_eq!(body.len(), 1, "块值应解构出块体语句");
 }
