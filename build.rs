@@ -22,7 +22,6 @@ fn main() {
         type_tables::AST_REL,
         type_tables::MONO_REL,
         type_tables::LSP_REL,
-        type_tables::RFC011_REL,
         type_tables::BYTECODE_REL,
         type_tables::FUNCTION_REL,
         type_tables::SCAN_ROOT_REL,

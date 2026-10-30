@@ -1,7 +1,7 @@
-//! type-tables 命令行：T1/T2/T3 的报告（本轮**只报告**，不接构建失败路径）
+//! type-tables 命令行：T1/T2 的报告（本轮**只报告**，不接构建失败路径）
 //!
 //! 用法（仓库根目录）：
-//!   cargo run --manifest-path tools/type-tables/Cargo.toml -- --report   # T1/T2/T3 文本报告
+//!   cargo run --manifest-path tools/type-tables/Cargo.toml -- --report   # T1/T2 文本报告
 //!   cargo run --manifest-path tools/type-tables/Cargo.toml -- --json     # T1 结构化结果
 //!   cargo run --manifest-path tools/type-tables/Cargo.toml -- --root <仓库根>
 

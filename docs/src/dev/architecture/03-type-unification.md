@@ -13,7 +13,7 @@
 - **parser 对 typecheck 层的真实反向依赖**（2 处，见 2.4）
 - **一个生产零构造的表达式变体** `Expr::FnDef`（**已删除：WBS 6.5.1，2026-10-30**——变体定义与全部消费臂删净，见 2.6）
 
-具体交付物是四样：26 变体逐个处置表（5.2）、`Type::Name` 的语义定种 `NameKind` 与同义词表消除（5.3）、`TypeEnvProbe` 注入式数据流（5.4）、类型表生成期门禁 T1-T3（5.7）。
+具体交付物是四样：26 变体逐个处置表（5.2）、`Type::Name` 的语义定种 `NameKind` 与同义词表消除（5.3）、`TypeEnvProbe` 注入式数据流（5.4）、类型表生成期门禁 T1/T2（5.7；原 T3 已按 2026-10-30 用户裁决删除）。
 
 ### 目录改名与本文路径
 
@@ -554,16 +554,29 @@ declarations.rs:498-511 与 ast.rs:930 改为
 
 类型表目前**没有**任何类似门禁。本文要补的机制形态可直接沿用。
 
-**新增 crate**：`tools/type-tables`（`Cargo.toml` 依赖仅 `serde_json`，与 `code-tables` 对称）。四个检查：
+**新增 crate**：`tools/type-tables`（`Cargo.toml` 依赖仅 `serde_json`，与 `code-tables` 对称）。检查项如下（T3 一栏已于 2026-10-30 删除，保留删除记录）：
 
 | # | 检查 | 输入 | 失败条件 | 治法 |
 | --- | --- | --- | --- | --- |
 | **T1 构造点分列** | 扫描 `src/frontend/core/parser/ast.rs` 的 `pub enum Type` 变体清单；在 `src/` 下按**三类分列**统计每个变体的构造点（① parser 前向 ② AST→AST 重建 ③ 反向桥重建；排除 `tests/` 与 `*/tests/*`） | 变体清单 + 三类命中表 | ① 某变体**前向零构造**且未登记；② 已登记变体出现前向构造点；③ 登记的通配臂兜底豁免点**未命中**；④ 存在**未登记的通配臂兜底点**（兜底豁免逐条登记，不得泛化到所有通配臂） | 删变体；或登记理由 / 删除失效登记（见 5.2 与 `REGISTERED_ZERO_FORWARD`） |
 | **T2 同义词表与全仓名字清单一致** | `types/mono.rs` 的 `from_builtin_name` match 表 + `ast.rs:855` `CONST_PARAM_TYPES` + `src/lsp/world.rs:182` 的 LSP 内置类型名清单 | 三张表 | 某个类型名在一张表中存在而另一张不认（按各自语义的映射规则比对）；**WBS 6.1.2 起另有 T2.5「已删除拼写哨兵」：22 个已删拼写任一被加回即报红** | `type-tables --fix` 双向补齐 |
-| **T3 内置类型名与 RFC-011 文档一致** | `from_builtin_name` 的规范名集合 + `docs/src/rfc/accepted/011-generic-type-system.md` 的类型表 | 两张表 | 码表区间/名字与注册表不一致 | `cargo run --manifest-path tools/type-tables/Cargo.toml -- --fix` |
+| ~~**T3 内置类型名与 RFC-011 文档一致**~~ | 原定：`from_builtin_name` 的规范名集合 + `docs/src/rfc/accepted/011-generic-type-system.md` 的类型表 | — | **已按 2026-10-30 用户裁决删除（比对对象不存在）**：RFC-011 是泛型系统设计，正文没有以「内置类型名」为列的表格 | —（不适用；删除理由与覆盖面见下表后的说明） |
 | **T4 `Type → MonoType` 穷尽性** | `Type` 变体清单 vs `types/lower.rs` 的 match 臂 | 两张表 | 有变体无对应臂，或有臂无对应变体 | 补臂 / 删臂 |
 
-**T4 的实现说明**：Rust 的穷尽 match 已在编译期保证"变体 → 臂"的方向。T4 的价值在**反向**——检测 `lower.rs` 里存在**指向已删除变体**的陈旧臂（这类代码在删除变体时就编译失败了，故 T4 实为冗余）。**T4 因此降级为一条 CI 断言（`cargo build` 成功即通过），不进 `build.rs` 的 `panic!` 路径。** T1-T3 才是真正需要文本解析的三项。
+> **T3 的删除与 T2 的覆盖范围（2026-10-30 用户裁决）**：T3 的**比对对象不存在**——RFC-011 是泛型
+> 系统设计，正文没有一张以「内置类型名」为列的表格；首版实现只好把「全部 markdown 表格行里 inline code
+> 包裹、且整体为首字母大写标识符的 token」当作文档侧口径，其产出必然是「无需处置」的空壳差异
+> （16 条登记：3 条文档独有 + 13 条代码独有，均无法判定真伪）。故该检查、其 16 条登记与
+> `--report` / `--json` 的对应输出节**同批删除**，代码侧不留占位。
+>
+> **内置类型名的载体只有代码侧三份清单，已全部由 T2 逐名对账**：① `from_builtin_name`
+> （`src/frontend/core/types/mono.rs`；15 个规范名 + `DateTime` 临时兼容别名，每臂首写法为规范名，
+> 6.1.2 删掉的 22 个实现内拼写由 T2.5 哨兵守着）；② `CONST_PARAM_TYPES`
+> （`src/frontend/core/parser/ast.rs`；**① 的子集**语义，检查号 C1）；③ LSP 内置类型名清单
+> （`src/lsp/world.rs`；**① 规范名的超集**语义，检查号 C2 / C3）。文档侧不设同类清单：
+> 新增内置名的权威落点是 ①，T2 会把 ②③ 的缺口报成**未登记漂移**。
+
+**T4 的实现说明**：Rust 的穷尽 match 已在编译期保证"变体 → 臂"的方向。T4 的价值在**反向**——检测 `lower.rs` 里存在**指向已删除变体**的陈旧臂（这类代码在删除变体时就编译失败了，故 T4 实为冗余）。**T4 因此降级为一条 CI 断言（`cargo build` 成功即通过），不进 `build.rs` 的 `panic!` 路径。** T1/T2 才是真正需要文本解析的两项（T3 已删除，见上）。
 
 **T1 的两个实现难点与缓解**：
 
@@ -644,7 +657,7 @@ declarations.rs:498-511 与 ast.rs:930 改为
 | 28 | `src/middle/core/bytecode.rs` | 原 `2352-2390`（**已删除**） | **删除** `From<MonoType> for IrType` 整个 impl（**已完成：WBS 6.2.2，2026-10-28**） | 纯删除 |
 | 29 | `src/backends/interpreter/image.rs` | `44` | `type_table` 改 `Vec<MonoType>`（**已完成：WBS 6.2.3，2026-10-28**） | 收敛 |
 | 30 | `src/middle/passes/mono/function.rs` | `358`-`623`（8 处） | `AstType::AssocType` 臂随门禁结论处理——**结论已定并实施：WBS 6.3.2 把 03 §2.2.2 登记的 5 变体 / 10 点（`Union`/`Option`/`Result`/`Sum`/`AssocType` 各 2）全部删除**，两座桥（`substitute_type_ast` / `substitute_type_in_ast`）同批改写 | 已完成（WBS 6.3.2，2026-10-29） |
-| 31 | `src/frontend/core/lexer/state.rs` / `tools/type-tables/` / `build.rs` | 新增 / `build.rs:19-37` 后 | 类型表门禁 T1-T3 | 门禁 |
+| 31 | `src/frontend/core/lexer/state.rs` / `tools/type-tables/` / `build.rs` | 新增 / `build.rs:19-37` 后 | 类型表门禁 T1/T2（原 T3 已按 2026-10-30 用户裁决删除） | 门禁 |
 | 32 | `spawn/placement.rs` | `122` | 删 `Expr::FnDef` 臂 | 随 #3 |
 | 33 | `spawn/analysis.rs` | `912` | 同上 | 随 #3 |
 | 34 | `formatter/handlers/expr.rs` | `43` | 同上 | 随 #3 |
@@ -691,7 +704,7 @@ declarations.rs:498-511 与 ast.rs:930 改为
 
 | 阶段 | 内容 | 验收判据 | 回滚点 |
 | --- | --- | --- | --- |
-| **0. 门禁先行** | 新建 `tools/type-tables`，实现 T1/T2/T3，T1 首版**只报告不失败**。在**未改动**的代码上取全量基线 | T1 报告准确列出 13 个 **parser 前向零构造**变体（含 `AssocType` 的定性：前向 0 / AST→AST 2，D8 不变），并**分列 2.2 的反向桥重建点与 2.2.2 的 AST→AST 重建点**；前向零构造 13 与全局零构造 1（仅 `Enum`）分开报；T2/T3 全绿或给出可修清单 | 无代码改动，无需回滚 |
+| **0. 门禁先行** | 新建 `tools/type-tables`，实现 T1/T2（T3 阶段 0 落地、后按 2026-10-30 用户裁决删除），T1 首版**只报告不失败**。在**未改动**的代码上取全量基线 | T1 报告准确列出 13 个 **parser 前向零构造**变体（含 `AssocType` 的定性：前向 0 / AST→AST 2，D8 不变），并**分列 2.2 的反向桥重建点与 2.2.2 的 AST→AST 重建点**；前向零构造 13 与全局零构造 1（仅 `Enum`）分开报；T2 全绿或给出可修清单 | 无代码改动，无需回滚 |
 | **1. 名称规范化** | **已完成（WBS 6.1.2，2026-10-27）**：`from_builtin_name`（`mono.rs:839-886`）收敛为 15 名 + `DateTime` 临时别名，删除 22 个实现内拼写；`add_builtin_types` 的 7 个小写副本、LSP 清单的 `Uint` / `Int128`、`sizeof` 的 `Uint` 臂同批清理；**不设 lexer 别名表**（语料实测 0 处非规范名）。**同步核实 `classify_generic_params` 用的是 `signature_params` 还是 `Lambda.params`**（**已核实：用未过滤的原始签名列表；6.5.2 后由 `Type::fn_params_flat` 提供，见 5.6**） | C3：全语料诊断集与阶段 0 基线**逐条相同** | 单独 commit，可 revert |
 | **2. 字节码类型统一** | **已完成（WBS 6.2，2026-10-28）**：四处载体改载 `MonoType`——`BytecodeFunction.params`（`bytecode.rs:814`）与 `return_type`（`:816`）、`BytecodeModule.type_table`（`:856`）、`Image.type_table`（`image.rs:44`）；删有损桥 `From<MonoType> for IrType`（原 `bytecode.rs:2352-2390`）与 `ir::Type` 再导出别名（`ir.rs:3` 的 `pub use` 降为私有 `use`）；解码改原样搬运（`bytecode.rs:2315`、`:2316`、`:2346`），此前 8 类 `MonoType` 变体塌缩为 `Void` 的静默信息损失不再发生 | C3 + 定向 `dump_bytecode` 对拍（6.2 表格逐项）——**实测全绿**（实录见 [09a](./09a-wbs-history.md) §P6 6.2） | 单独 commit，可 revert |
 | **3. 死变体删除** | **已完成（WBS 6.3，2026-10-29）**：按 5.2 表删 13 个变体（`ast::Type` 26 → 13）；清 `mono.rs:699-708` 等 match 臂、`types.rs:836` 兜底（改 let-else 显式返回 `Type::Name{"()"}`）；**同批处理 `function.rs:507-529`（#47）与 AST→AST 10 点（6.3.2）**；同步 `types/tests/mono.rs`。**#47 的口径已更正**：原写的「统一走 `AstType::Name` + `mono.type_name()`」在 6.1 之后**失效**——`type_name()` 是诊断展示用的小写内部名（`int64` / `void` / `string`），6.1.2 删掉小写拼写后它会落成 `TypeRef`、**静默丢掉类型身份**；实际改用新增的 `MonoType::canonical_name()`（`from_builtin_name` 的严格逆向，宽度显式）+ 结构回写 | C3 + `cargo build` 全绿（穷尽 match 强制补全所有臂）+ 泛型替换定向对拍（6.4 末行）——**实测全绿**（实录见 [09a](./09a-wbs-history.md) §P6 6.3） | 单独 commit，可 revert |
@@ -766,7 +779,7 @@ declarations.rs:498-511 与 ast.rs:930 改为
 ### 其他 RFC
 
 - [RFC-010 统一类型语法](../../rfc/accepted/010-unified-type-syntax.md) — `Type::Generic` 统一路径的依据
-- [RFC-011 泛型类型系统](../../rfc/accepted/011-generic-type-system.md) — 内置类型表（门禁 T3 的比对对象）
+- [RFC-011 泛型类型系统](../../rfc/accepted/011-generic-type-system.md) — 泛型机制与类型级构造器（`If` / `Match`）；**不承载内置类型名清单**，故不作门禁比对对象（原 T3 已按 2026-10-30 用户裁决删除，见 5.7）
 - [RFC-013 错误码规范](../../rfc/accepted/013-error-code-specification.md) — `build.rs` 生成期门禁的范例
 - [RFC-027 编译期求值与类型](../../rfc/accepted/027-compile-time-evaluation-types.md) — `Type::NamedParen` 与 `Type::ConstExpr` 的来源
 

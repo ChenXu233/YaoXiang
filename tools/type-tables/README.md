@@ -9,10 +9,10 @@ P6（类型表示单一化）的**类型表生成期门禁**，形态与 [`tools
 | 消费者 | 跑什么 | 失败形态 |
 | --- | --- | --- |
 | 根 `build.rs`（`[build-dependencies]`） | **只跑 T1** | 首版**只发 `cargo:warning`**，不 panic、不使构建失败（6.6「门禁转硬」才改 panic） |
-| `type-tables` bin | T1 + T2 + T3 | `--report` 只报告；仅内部错误（读不到文件 / syn 解析失败）时 exit 1 |
+| `type-tables` bin | T1 + T2 | `--report` 只报告；仅内部错误（读不到文件 / syn 解析失败）时 exit 1 |
 
 ```bash
-cargo run --manifest-path tools/type-tables/Cargo.toml -- --report   # T1/T2/T3 文本报告
+cargo run --manifest-path tools/type-tables/Cargo.toml -- --report   # T1/T2 文本报告
 cargo run --manifest-path tools/type-tables/Cargo.toml -- --json     # T1 结构化结果
 cargo run --manifest-path tools/type-tables/Cargo.toml -- --report --root <仓库根>
 ```
@@ -57,12 +57,15 @@ T1.7 用同一口径核对四项：未登记的零构造变体、登记但已不
 三条检查：C1 B ⊆ A；C2 A 规范名 ⊆ C；C3 C ⊆ A。差异逐条给处置——处置表在
 `src/dispositions.rs`（**待办清单，不是豁免白名单**：未登记的差异计入「未登记漂移」）。
 
-## T3 与 RFC-011 一致
+## T3（与 RFC-011 的比对）——已按 2026-10-30 用户裁决删除
 
-RFC-011 **没有**以「内置类型名」为列的表格（03 §5.7 假定它对标 RFC-013 的码表，但 RFC-013 是
-码表规范、RFC-011 是泛型系统设计）。故文档侧口径 = **RFC-011 全部 markdown 表格行里、inline code
-包裹且整体是首字母大写标识符的 token**；另附「全文是否提及」信息列，并用 `src/dispositions.rs`
-逐条登记差异与处置。T3 的结论里如实写明这条前提。
+比对对象不存在：RFC-011 是泛型系统设计，正文没有以「内置类型名」为列的表格。原先的文档侧口径
+（「全部 markdown 表格行里 inline code 包裹的首字母大写标识符」）只能把「文档不承载内置名清单」
+这一事实登记成 16 条「无需处置」的空壳差异，无法判定真伪。
+
+内置类型名的代码侧载体只有三张表（`from_builtin_name` / `CONST_PARAM_TYPES` / LSP 清单），
+已由 T2 逐名对账（含 C1/C2/C3 与 T2.5 哨兵）。故检查实现（原 `src/rfc011.rs`）与那 16 条登记
+同批删除，`--report` / `--json` 不再输出该节；判据与理由见 03 §5.7。
 
 ## 与 6.0 勘察的关系
 

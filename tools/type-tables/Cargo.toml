@@ -2,7 +2,7 @@
 name = "type-tables"
 version = "0.1.0"
 edition = "2021"
-description = "类型表生成期门禁 T1/T2/T3（P6 / RFC-039 §5.7）"
+description = "类型表生成期门禁 T1/T2（P6 / RFC-039 §5.7）"
 
 [lib]
 name = "type_tables"
