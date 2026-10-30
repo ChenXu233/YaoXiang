@@ -647,8 +647,10 @@ impl AstToIrGenerator {
                     // 会被当成本层参数，`f` 变成接受 `a` 而非返回闭包。
                     // RFC-027 §3：具名括号（`(r: P(r))`）与 `Paren` 同款——
                     // 括号声明“这是一个完整类型”，链条到此终止。
-                    let next_is_paren =
-                        matches!(ret_type, ast::Type::Paren(_) | ast::Type::NamedParen { .. });
+                    // 判定收敛到 `Type::is_paren_complete` 单点（#510 收口备案
+                    // 的第三处：parser paren_return / typecheck 值级分解 /
+                    // 此处 split_curry 三点共用，防判据漂移）。
+                    let next_is_paren = ret_type.is_paren_complete();
                     if next_is_paren {
                         cursor = start;
                     }

@@ -253,23 +253,32 @@ def cmd_trial(args):
     if not cmd:
         die("要给命令：scratch.py trial <batch> --patch <p> -- <命令...>")
     print(f"[trial] 执行：{' '.join(cmd)}")
-    rc = subprocess.run(cmd, cwd=str(path), text=True, encoding="utf-8", errors="replace")
-    print(f"[trial] 命令退出码 = {rc.returncode}")
-    r2 = run(["git", "apply", "-R", str(patch)], cwd=path)
-    fallback = r2.returncode != 0
-    if fallback:
-        run(["git", "checkout", "--", *changed], cwd=path)
-    after_status = run(["git", "status", "--porcelain"], cwd=path).stdout.strip()
-    restored_blob = {f: run(["git", "hash-object", f], cwd=path).stdout.strip() for f in changed}
-    back_to_head = all(restored_blob[f] == head_blob[f] for f in changed)
-    print(f"[trial] 还原：{'apply -R 成功' if not fallback else 'apply -R 失败（已 git checkout 兜底）'}")
-    for f in changed:
-        ok = '是' if restored_blob[f] == head_blob[f] else '否'
-        print(f"[trial]   {f}: 还原后={restored_blob[f][:12]}…  与 HEAD 一致={ok}")
-    print(f"[trial] 还原后 git status：{after_status if after_status else 'CLEAN'}")
-    if after_status or not back_to_head:
-        print("[trial] 警告：树没回到 HEAD 状态，请人工核对后再继续", file=sys.stderr)
-        sys.exit(3)
+    # 还原必达（#516）：命令启动失败（如路径错 FileNotFoundError）等异常
+    # 不得跳过 restore——否则批次树残留变异态，违反「trial 全自动
+    # apply→跑→restore」声明面。异常仍如实上抛。
+    rc = None
+    try:
+        rc = subprocess.run(cmd, cwd=str(path), text=True, encoding="utf-8", errors="replace")
+        print(f"[trial] 命令退出码 = {rc.returncode}")
+    finally:
+        r2 = run(["git", "apply", "-R", str(patch)], cwd=path)
+        fallback = r2.returncode != 0
+        if fallback:
+            run(["git", "checkout", "--", *changed], cwd=path)
+        after_status = run(["git", "status", "--porcelain"], cwd=path).stdout.strip()
+        restored_blob = {f: run(["git", "hash-object", f], cwd=path).stdout.strip() for f in changed}
+        back_to_head = all(restored_blob[f] == head_blob[f] for f in changed)
+        print(f"[trial] 还原：{'apply -R 成功' if not fallback else 'apply -R 失败（已 git checkout 兜底）'}")
+        for f in changed:
+            ok = '是' if restored_blob[f] == head_blob[f] else '否'
+            print(f"[trial]   {f}: 还原后={restored_blob[f][:12]}…  与 HEAD 一致={ok}")
+        print(f"[trial] 还原后 git status：{after_status if after_status else 'CLEAN'}")
+        if after_status or not back_to_head:
+            print("[trial] 警告：树没回到 HEAD 状态，请人工核对后再继续", file=sys.stderr)
+            sys.exit(3)
+    if rc is None:
+        print("[trial] 命令未能启动（树已机械还原）；请核对命令本身", file=sys.stderr)
+        sys.exit(2)
     print("[trial] 结论：" + ("变异使命令失败（判据抓到了）——把上面的输出留档" if rc.returncode != 0 else "变异后命令仍成功——判读这是不是「判据抓不到」"))
 
 
