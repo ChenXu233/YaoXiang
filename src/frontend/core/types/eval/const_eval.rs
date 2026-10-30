@@ -420,7 +420,14 @@ impl ConstGenericEval {
     ) -> Result<ConstValue, Diagnostic> {
         use crate::frontend::core::types::const_data::UnOp;
         match (op, &value) {
-            (UnOp::Neg, ConstValue::Int(n)) => Ok(ConstValue::Int(-*n)),
+            // #507：i128 裸取负在 `n = i128::MIN` 时 panic（saturating 链可
+            // 精确构造 MIN：`0 - i128::MAX - 1`，实测探针 p10 exit 101）——
+            // 走 checked_neg 报 const_overflow（与上方 Shl/Shr 的求值溢出
+            // 同通道），编译器不再崩。
+            (UnOp::Neg, ConstValue::Int(n)) => n
+                .checked_neg()
+                .map(ConstValue::Int)
+                .ok_or_else(|| ErrorCodeDefinition::const_overflow().build()),
             (UnOp::Not, ConstValue::Bool(b)) => Ok(ConstValue::Bool(!*b)),
             (UnOp::BitNot, ConstValue::Int(n)) => Ok(ConstValue::Int(!*n)),
             (UnOp::Pos, ConstValue::Int(n)) => Ok(ConstValue::Int(*n)),

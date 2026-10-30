@@ -7,7 +7,7 @@
 //! §4.3: GenericSize 类型尺寸计算
 //! §4.3: SizeExpr 表达式
 
-use crate::frontend::core::types::const_data::{BinOp, ConstExpr};
+use crate::frontend::core::types::const_data::{BinOp, ConstExpr, UnOp};
 use crate::frontend::core::types::{ConstValue, MonoType};
 use crate::frontend::core::types::eval::const_eval::{
     ConstFunction, ConstGenericEval, ConstGenericResult, GenericSize, SizeExpr, SizeResult,
@@ -1285,5 +1285,34 @@ fn test_convert_expr_to_const_expr_unsupported_returns_none() {
     assert_eq!(
         result, None,
         "List expression (not a constant expression) should return None"
+    );
+}
+
+#[test]
+fn test_eval_negate_i128_min_returns_overflow_error_not_panic() {
+    // #507：i128 域裸取负在 n = i128::MIN 时 overflow panic（debug 构建）——
+    // saturating 链可精确构造 MIN（`0 - i128::MAX - 1`，实测探针 exit 101）。
+    // 修后走 checked_neg 报 const_overflow（与 Div/0 的 Err 通道同构，
+    // 上层按「约束不可静态判定」跳过——宁漏报方向）。
+    // #324：单测直调需模拟 walk 上下文
+    let _walk_guard = crate::util::diagnostic::push_current_span(crate::util::span::Span::dummy());
+    let e = ConstGenericEval::new();
+    // Act + Assert — Neg(i128::MIN) 须返回 Err（const_overflow），不得 panic
+    let result = e.eval(&ConstExpr::UnOp {
+        op: UnOp::Neg,
+        expr: Box::new(ConstExpr::Lit(ConstValue::Int(i128::MIN))),
+    });
+    assert!(
+        result.is_err(),
+        "Neg(i128::MIN) 应报 const_overflow 而非 panic（#507）"
+    );
+    // 对照：普通值的取负行为不变
+    assert!(
+        e.eval(&ConstExpr::UnOp {
+            op: UnOp::Neg,
+            expr: Box::new(ConstExpr::Lit(ConstValue::Int(-5))),
+        })
+        .is_ok(),
+        "Neg(普通值) 行为不变（#507 只堵 MIN 溢出点）"
     );
 }
