@@ -387,7 +387,7 @@ fn parse_assign_after_target(
                                     Type::Fn { params, .. } => Some(
                                         params
                                             .iter()
-                                            .filter(|t| !is_type_param_annotation(Some(t)))
+                                            .filter(|p| !is_type_param_annotation(p.ty.as_ref()))
                                             .count(),
                                     ),
                                     _ => None,

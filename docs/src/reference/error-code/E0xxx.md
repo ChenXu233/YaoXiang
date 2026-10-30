@@ -77,7 +77,7 @@ description: '词法分析器（Lexer）与语法分析器（Parser）阶段产�
 - **模板**：`期望 {expected}，找到 {found}`
 - **消息**：解析器期望特定的令牌
 - **帮助**：检查语法并添加期望的令牌
-- **发射点**：`src/frontend/core/parser/parser_state.rs:153`、`src/frontend/core/parser/statements/bindings.rs:132`、`src/frontend/core/parser/statements/bindings.rs:163` 等 4 处
+- **发射点**：`src/frontend/core/parser/parser_state.rs:153`、`src/frontend/core/parser/statements/bindings.rs:131`、`src/frontend/core/parser/statements/bindings.rs:162` 等 4 处
 
 ### E0011：意外的令牌
 
