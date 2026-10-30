@@ -1897,3 +1897,13 @@ WBS 的 6.4.3 行把 `src/middle/core/ir_gen.rs` 的 `is_constraint_param_ann` �
 > **判据链**：t1 门禁 10 项一轮绿（红态 stash 机械还原双红 Ref/&mut、负验证断言咬合）→ t2 **PASS**（五步全过；探针首跑 exit 1 系 script 模式不自动执行 main 的 CLI 语义，补 `main()` 后同语料夹具同构）→ t3 **APPROVE**（反向补丁机械双红独立复现、integration 316（+2 纯追加）、快照零漂移、语料归因闭合：全语料仅 2 处约束泛型声明且无 Ref 实参调用——缺陷潜伏原因）。两条 low 补正随本记录：① **E1106 复检系全路径结构性死码**（t3 补强：`collect_instantiation_request` 先 `mem::take` 抽空 `last_type_args` + 显式实参路径提前 return ⇒ 复检对**所有**调用路径不可达，非仅 Ref 形态——比提交信息「对该形态被短路」更强，留此防止后人按窄口径设计复活方案）；② 负验证未独立复跑（红态走 E6006 panic 路径无法替代「断言咬住静默错值」的证明，采信 t1 陈述）。
 
 > **登记**：issue [#512](https://github.com/ChenXu233/YaoXiang/issues/512) 关闭评论带判据链与上述补正；**E1106 复检死码的修复**（扩 check 语义使复检触达 + args_compatible 的 Ref 兼容规则）属 D/E 类另行裁决；W1005 'Vec3.add' 残留属 #510 登记边界（Ref 实参不入实例化映射）另案。
+
+## #514 / #515 / #516 收口（测试基建与工具三连，2026-10-30）
+
+> **#514**（`16e153fd`，2 文件 +111/−32）：shared solver 判据读数改线程切片镜像——机理实证修正登记假设（SHARED_SOLVER 永不替换；真实机理 = 实例计数与进程账落账两步无原子性，并发快照窗口劈开错位落账，32 核 3/3 红）。修法 = 方向甲（THREAD_CONSUMER_STATS 线程局部镜像 + 读数移进编译线程），求解行为面零改动（删除行全为注释），判据阈值/方向/消息逐字保留；修后定向并发 3 轮 + 全量 2 轮 + 队长抽验 2 轮全绿。issue 已关。
+
+> **#515**（`2797ffd0`，7 文件）：FN_CALL_RE_TMPL 加 `\b` 词边界——家族性子串误计一次纠正八码（E8001 25→6 / E0010 22→4 / E1002 85→76 等；E0011 的 19 处完整保留验证无杀），生成物再生同提交、幂等复核过。issue 已关。
+
+> **#516**（`aa46328a`）：scratch.py trial 的 restore 包 finally——命令启动异常不再跳过还原（真实补丁 + 不存在命令实测：异常穿透可见、树被机械还原 CLEAN、exit 1 上抛）。issue 已关。同笔顺带：**RFC-004 括号终止语义第三处判定点**（ir_gen.rs split_curry 的 next_is_paren）收敛到 `Type::is_paren_complete` 单点（#510 收口备案的跨 WBS 项，纯判定收敛——lib 2887 全绿、语料 356 条零漂移）。
+
+> **提交规范备注**：本日多笔提交被 check-commit-msg 打回后按合法表改 scope/emoji（`mono`→`monomorphize`、`tools`→`docs`、`scratch`→`meta`、`:test_tube:`→`:white_check_mark:`）——scope 表与 emoji 白名单以 commit-convention.md 为准。
