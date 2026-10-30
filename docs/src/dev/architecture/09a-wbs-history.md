@@ -1907,3 +1907,11 @@ WBS 的 6.4.3 行把 `src/middle/core/ir_gen.rs` 的 `is_constraint_param_ann` �
 > **#516**（`aa46328a`）：scratch.py trial 的 restore 包 finally——命令启动异常不再跳过还原（真实补丁 + 不存在命令实测：异常穿透可见、树被机械还原 CLEAN、exit 1 上抛）。issue 已关。同笔顺带：**RFC-004 括号终止语义第三处判定点**（ir_gen.rs split_curry 的 next_is_paren）收敛到 `Type::is_paren_complete` 单点（#510 收口备案的跨 WBS 项，纯判定收敛——lib 2887 全绿、语料 356 条零漂移）。
 
 > **提交规范备注**：本日多笔提交被 check-commit-msg 打回后按合法表改 scope/emoji（`mono`→`monomorphize`、`tools`→`docs`、`scratch`→`meta`、`:test_tube:`→`:white_check_mark:`）——scope 表与 emoji 白名单以 commit-convention.md 为准。
+
+## #507 收口（const_eval 取负可达性实证 + 修 panic，2026-10-30）
+
+> **触发**：issue [#507](https://github.com/ChenXu233/YaoXiang/issues/507)（#468 复审 low 备案）：const_eval.rs 的 `(UnOp::Neg, Int(n)) => -n` 为 i128 裸取负，登记时为**静态推演未实测**；验收 = 先实证可达性。
+
+> **可达性实证（REACHABLE，panic 复现）**：探针形态 = 类型位常量约束 `Assert(N > -(0 - 170141183460469231731687303715884105727 - 1))`（i128::MAX 字面量）——parser 放行 `>` 右侧的 UnOp::Neg 包 saturating 链；saturating_sub 精确构造 i128::MIN（非饱和边界）⇒ 裸取负 panic（debug exit 101，编译器崩、零诊断）。**实证路径的关键排错**：首轮探针用 i64::MAX 字面量（9223372036854775807）只构造到 i64::MIN——在 i128 域取负安全不触发（与 #468 收口「i128 域字面量取负不溢出」论证一致）；字面量 parse 域为 [0, i128::MAX]（literals.rs）⇒ 用满域字面量才触达。语法面实测：条款开头 `-(...)` 被拒（E0010）、const 实参位算术链被拒（E1002）——唯一入口是 `>` 右侧的链+取负组合。
+
+> **修法**（`54221a5d`）：取负臂 `checked_neg`，溢出报既有 `const_overflow`（E4011，与 Shl/Shr 求值溢出同通道）；Err 上层按「约束不可静态判定」跳过——与 Div/0 既有 Err 语义完全一致（探针 p11 对照），非新语义。测试 +1（`eval_unop(Neg, i128::MIN)` → Err 先红后绿，stash 机械还原红于同位置 panic；对照普通值取负不变）；lib 2888（+1）全绿。issue 关闭（验收两条全兑现）。
