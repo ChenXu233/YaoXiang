@@ -11,7 +11,7 @@
 - **13 个 parser 前向零构造的 `ast::Type` 变体**（`ast.rs:427-541` 的 26 变体中，见 2.2；"前向"口径 = 不扣反向桥与 AST→AST 重建点）
 - **一张手写的类型名同义词表**（`mono.rs:839-886`，见 2.3；WBS 6.1.2 已收敛为 15 名解析表）
 - **parser 对 typecheck 层的真实反向依赖**（2 处，见 2.4）
-- **一个生产零构造的表达式变体** `Expr::FnDef`（`ast.rs:37-43`，见 2.6）
+- **一个生产零构造的表达式变体** `Expr::FnDef`（**已删除：WBS 6.5.1，2026-10-30**——变体定义与全部消费臂删净，见 2.6）
 
 具体交付物是四样：26 变体逐个处置表（5.2）、`Type::Name` 的语义定种 `NameKind` 与同义词表消除（5.3）、`TypeEnvProbe` 注入式数据流（5.4）、类型表生成期门禁 T1-T3（5.7）。
 
@@ -41,8 +41,8 @@ RFC-039 是上位总纲：四层模型、判据分级、跨文档的阶段顺序
 
 当前 `ir::Type` 的能力边界由两个变体划死：
 
-- `ast::Type::ConstExpr(Box<Expr>)`（`ast.rs:506`）把一个完整表达式树嵌进类型里。IR 指令的类型标注里出现 `Expr` 是不可能的。
-- `ast::Type::Literal { name, base_type }`（`ast.rs:476-482`）携带源码名与 `Span`，是编译期字面量类型的语法形态，不是运行期类型。
+- `ast::Type::ConstExpr(Box<Expr>)`（`ast.rs:505`）把一个完整表达式树嵌进类型里。IR 指令的类型标注里出现 `Expr` 是不可能的。
+- `ast::Type::Literal { name, base_type }`（`ast.rs:475-481`）携带源码名与 `Span`，是编译期字面量类型的语法形态，不是运行期类型。
 
 在 26 变体之上做 SSA 类型标注，等于把这 13 个死变体和两个语法专属变体永久固化进 IR 契约。
 
@@ -291,42 +291,27 @@ pub fn name_used_as_type_in(   // ast.rs:847
 
 本阶段不合并这两套枚举（其归属见 [05-frontend-paradigm.md](05-frontend-paradigm.md) 的"改运算符改动面"），但 T1 门禁的扫描对象应包含 `ast::BinOp` / `ast::UnOp`，使"新增零构造运算符"同样可见。
 
-### 2.6 `Expr::FnDef`：生产零构造的表达式变体
+### 2.6 `Expr::FnDef`：生产零构造的表达式变体（已删除：WBS 6.5.1，2026-10-30）
 
-`Expr::FnDef`（`ast.rs:37-43`）**生产零构造**属实——全仓仅两处构造：`src/frontend/core/parser/tests/ast.rs:837` 与 `src/frontend/core/typecheck/tests/checker.rs:111`，均为测试。
+**本节记录的是已落地的事实**：`Expr::FnDef` 曾是 `ast::Expr` 的一个变体。**生产零构造**属实——全仓仅两处构造（`src/frontend/core/parser/tests/ast.rs` 与 `src/frontend/core/typecheck/tests/checker.rs`），均为测试。
 
-但**消费点远多于 4 处**。实测生产消费点 12 处：
+但**消费点远多于 4 处**：基线实测生产消费点 **15 处**（分类见 5.5），另有 6 处注释提及该变体；6.4 收口态上实测 `git grep -n "FnDef" -- src/` = **25 行 / 16 文件** = 定义 1 + 生产消费 15 + 测试构造 3 + 注释 6。
 
-| 文件 | 行 |
-| --- | --- |
-| `src/frontend/core/spawn/placement.rs` | `122` |
-| `src/frontend/core/spawn/analysis.rs` | `912` |
-| `src/formatter/handlers/expr.rs` | `43` |
-| `src/frontend/module/orchestrator.rs` | `1492` |
-| `src/middle/core/ir_gen.rs` | `4325`、`5097` |
-| `src/frontend/core/typecheck/checker.rs` | `1642` |
-| `src/frontend/core/typecheck/checker/semantic_tokens.rs` | `1416` |
-| `src/frontend/core/typecheck/inference/expressions.rs` | `3374` |
-| `src/frontend/core/typecheck/inference/existential.rs` | `55` |
-| `src/frontend/core/typecheck/passes/dead_code.rs` | `305` |
-| `src/frontend/core/typecheck/layers/ownership.rs` | `1207` |
-| `src/frontend/core/typecheck/layers/termination.rs` | `752` |
+**函数定义实际走的路**是：`pratt/nud.rs` 构造 `Expr::Lambda` + `parser/statements/declarations.rs` 构造 `StmtKind::Assign`（把 `Lambda` 放进 `value`）。也就是说 `FnDef` 分支曾是**一条永不执行、但被 19 个代码位置维护着的并行路径**（15 消费 + 3 测试构造 + 1 定义）。
 
-另有 2 处穷举 match 臂被迫为它存在：`ast.rs:1026`（`Expr::span()`）与 `pratt/mod.rs:47`（`expr_end_line`）。
-
-**函数定义实际走的路**是：`nud.rs:425-429` 构造 `Expr::Lambda` + `declarations.rs:462-479` 构造 `StmtKind::Assign`（把 `Lambda` 放进 `value`）。也就是说 `FnDef` 分支是**一条永不执行、但被 14 个位置维护着的并行路径**。
+**落地态**：变体定义与全部消费臂**删净**，`src/` 内 `git grep -n "Expr::FnDef" -- src/` = 0 命中（裸词 `FnDef` 只剩 2 处说明性注释）。逐处处置表、测试迁移与实测数字见 [09a](./09a-wbs-history.md) §P6 6.5；设计上如何合并见 5.5。
 
 ### 2.7 语法节点替类型层保存语义
 
 **其一，`StmtKind::Assign` 曾携带 typechecker 专用字段（已修复：WBS 6.5.2 + 6.8.1，2026-10-30）。** 6.5.2 之前 `Assign` 变体含 `signature_params: Vec<Param>`（原 `ast.rs:244-245`），注释直言「签名第一组参数原样（含参数名），供 typechecker classify_generic_params 使用」——语句 AST 为类型检查器保留了一个专用槽位。
 
-现行表示：形参名与类型**同栖**在类型标注的 `Type::Fn.params`（`Vec<Param>`），唯一取用入口是 `Type::fn_params_flat`（`ast.rs`）。`Assign` 不再另存形参表；`TypeDefinition` 改为携带声明签名 `type_annotation: Option<Type>`（与 `Assign` 同一载体）。
+现行表示：形参名与类型**同栖**在类型标注的 `Type::Fn.params`（`Vec<Param>`），唯一取用入口是 `Type::fn_params_flat`（`ast.rs:985`）。`Assign` 不再另存形参表；`TypeDefinition` 改为携带声明签名 `type_annotation: Option<Type>`（与 `Assign` 同一载体）。
 
 **其二，表达式位置被当成参数列表。** `(a: Int, b: Int)` 在 `src/frontend/core/parser/pratt/nud.rs:505-514` 被解析为 **`Expr::Lambda { params, body: Box::new(Block { stmts: Vec::new(), .. }) }`**——一个**空 body 的 Lambda**。随后由 `src/frontend/core/parser/pratt/led.rs:466` 的 `Expr::Lambda { params, .. } => Some(params.clone())` 臂把它"捞回来"当作参数列表。
 
 即：AST 的一个正常变体被用作**临时的参数列表携带者**，再由另一个模块的 match 臂还原语义。
 
-**其三，`Type::NamedParen` 承载返回位 binder 名。** `ast.rs:519-540` 的注释明写：
+**其三，`Type::NamedParen` 承载返回位 binder 名。** `ast.rs:518-532` 的注释明写：
 
 > RFC-027 §3 的返回位精化靠它声明**返回形式参数名**（这里叫 binder）……**丢掉它，类型检查器只能猜**「约束里不在作用域的自由变量即返回值形参」，于是 `(r: P(m))` 会把未声明的 `m` 也当成 binder 静默代入（实测缺陷）。
 
@@ -372,6 +357,8 @@ ir::Type 别名删除, BytecodeFunction.params / type_table 改用 MonoType
 
 > 处置分类：**删除**（parser 前向零构造）、**保留**（前向有构造点）、**迁移**（语义归位到别的节点）。
 
+> **行号口径**：本表的「定义行」是**变体删除前的原位**（26 变体时代；6.3 已删其中 13 个）；「理由」列里的匹配点行号同为 **6.3 之前的基线口径**，不随代码平移更新——本批只把**仍存在的变体**（第 14 / 26 行）的定义行按落地态重取，并订正第 14 行已失效的消费点。
+
 | # | 变体 | 定义行 | 处置 | 理由 |
 | --- | --- | --- | --- | --- |
 | 1 | `Name { name, span }` | `ast.rs:428-431` | **保留**（加强） | parser 的**唯一**原始类型出口（`types.rs:162-165`）。删除 12 个原始类型变体后，所有原始类型都走它。需新增"名字的语义种类"标注（见 5.3） |
@@ -387,7 +374,7 @@ ir::Type 别名删除, BytecodeFunction.params / type_table 改用 MonoType
 | 11 | `Union(Vec<(String, Option<Type>)>)` | `ast.rs:448` | **删除** | parser 前向零构造（`mono.rs:743-746` 为 match 臂）；AST→AST 重建 2 点（`function.rs:377`/`606`）随 6.3.2 同批改写 |
 | 12 | `Enum(Vec<String>)` | `ast.rs:449` | **删除** | parser 前向零构造（`mono.rs:747` 为 match 臂）；三类合计为 0（唯一全局零构造变体）。枚举走 `Struct` + `TypeBodyItem`，与 `mono.rs:2378` 的 `MonoType::Enum(_) => IrType::Void` 无关 |
 | 13 | `Tuple(Vec<Type>)` | `ast.rs:450` | **保留** | `bytecode.rs:2374` 消费 |
-| 14 | `Fn { params, return_type }` | `ast.rs:451-454` | **保留** | `bytecode.rs:2366` 消费；**字段重塑 `params: Vec<Type>` → `Vec<Param>`（名字与类型同栖）随 6.8.1（D54）**——`Assign.signature_params` 的名字由此承接（见 6.5.2）。**已完成（WBS 6.8.1，2026-10-30）**：`Param` 增加 `anonymous`/`from_type`/`is_named`；无名形参（纯类型位）以空名字合成，本表「净效果」不变 |
+| 14 | `Fn { params, return_type }` | `ast.rs:463-466` | **保留** | `src/frontend/core/types/mono.rs:960`（`From<ast::Type> for MonoType`）与 `src/formatter/handlers/types.rs:36`（类型位渲染）消费（原写的 `bytecode.rs:2366` 指的是 `IrType::Fn`，已随 6.2 的 `ir::Type` 别名与有损桥删除而消失）；**字段重塑 `params: Vec<Type>` → `Vec<Param>`（名字与类型同栖）随 6.8.1（D54）**——`Assign.signature_params` 的名字由此承接（见 6.5.2）。**已完成（WBS 6.8.1，2026-10-30）**：`Param` 增加 `anonymous`/`from_type`/`is_named`；无名形参（纯类型位）以空名字合成，本表「净效果」不变；`Param` 的 `Debug` 手写（无名形参按所载类型打印 ⇒ IR 快照零漂移，见 5.6） |
 | 15 | `Option(Box<Type>)` | `ast.rs:455` | **删除** | parser 前向零构造（`mono.rs:770` 为 match 臂）；AST→AST 重建 2 点（`function.rs:427`/`600`）随 6.3.2 同批改写。`types.rs:392-396` 已说明走 `Generic` 路径 |
 | 16 | `Result(Box<Type>, Box<Type>)` | `ast.rs:456` | **删除** | parser 前向零构造（`mono.rs:771` 为 match 臂）；AST→AST 重建 2 点（`function.rs:431`/`602`）随 6.3.2 同批改写 |
 | 17 | `Generic { name, name_span, args }` | `ast.rs:457-461` | **保留** | `Result` / `Option` / `String` / `Bytes` 的实际表示都走它（`types.rs:397-399`） |
@@ -513,37 +500,25 @@ declarations.rs:498-511 与 ast.rs:930 改为
 
 **这消除了 RFC-039 路由表 C 的全部 3 条**——其中 2 条按 2.4 的口径本来就只涉及 parser 内部函数，真正的跨层引用是 `declarations.rs:509` 与 `ast.rs:930` 两处，均由本节覆盖。
 
-### 5.5 `Expr::FnDef` 合并
+### 5.5 `Expr::FnDef` 合并（已完成：WBS 6.5.1，2026-10-30）
 
-**主张：删除 `Expr::FnDef`（`ast.rs:37-43`），函数定义统一走 `Expr::Lambda` + `StmtKind::Assign`。**
+**主张：删除 `Expr::FnDef`，函数定义统一走 `Expr::Lambda` + `StmtKind::Assign`。** 这条路径本就是**已在运行的路径**（`pratt/nud.rs` 构造 `Expr::Lambda` + `parser/statements/declarations.rs` 构造 `StmtKind::Assign`，见 2.6），`FnDef` 分支是永不执行的并行实现。
 
-**这是已在运行的路径**：`nud.rs:425-429` + `declarations.rs:462-479`（见 2.6）。`FnDef` 分支是永不执行的并行实现。
+**落地态**：变体定义与全部 **15 处**生产消费臂**同批删净**（Rust 的穷举 `match` 使「定义 + 补臂」成为原子单元，见 [09a](./09a-wbs-history.md) §P6 6.5 的「登记①」）。基线消费点按形态分类：
 
-**改动清单**（12 处消费 + 2 处穷举臂，逐个列出）：
-
-| 位置 | 现有臂 | 目标 |
+| 类别 | 处数 | 处置 |
 | --- | --- | --- |
-| `spawn/placement.rs:122` | `Expr::FnDef { body, .. } => self.check_block(body)` | 并入既有 `Expr::Lambda` 臂（`body` 同为 `Box<Block>`，**直接删此臂**） |
-| `spawn/analysis.rs:912` | `Expr::FnDef { body, .. } => { ... }` | 同上，并入 Lambda 臂 |
-| `formatter/handlers/expr.rs:43` | `Expr::FnDef { ... }` | 改为格式化 `Assign` 中的 Lambda；该 arm 删除 |
-| `orchestrator.rs:1492` | `if let Expr::FnDef { name, .. }` | 改为从 `StmtKind::Assign { target, .. }` 取名字 |
-| `ir_gen.rs:4325` | `ast::Expr::FnDef { span, .. } => *span` | 并入 Lambda 臂（`Lambda` 也带 `span`） |
-| `ir_gen.rs:5097` | `\| ast::Expr::FnDef { span, .. }` | 删此 or-pattern |
-| `checker.rs:1642` | `if let ...::Expr::FnDef {` | 改判 `Expr::Lambda` |
-| `checker/semantic_tokens.rs:1416` | `Expr::FnDef {` | 删此臂 |
-| `inference/expressions.rs:3374` | `...::Expr::FnDef {` | 改判 `Expr::Lambda` |
-| `inference/existential.rs:55` | `\| Expr::FnDef { span, .. }` | 删此 or-pattern |
-| `passes/dead_code.rs:305` | `Expr::FnDef {` | 改判 `Expr::Lambda` |
-| `layers/ownership.rs:1207` | `\| Expr::FnDef { span, .. }` | 删此 or-pattern |
-| `layers/termination.rs:752` | `Expr::FnDef {` | 改判 `Expr::Lambda`；`termination.rs:2303` 的注释「`fn(): Never` — FnDef.return_type 是裸返回类型」同步更新 |
-| `ast.rs:1026` | `\| Expr::FnDef { span, .. }` | 删此 or-pattern |
-| `pratt/mod.rs:47` | `Expr::FnDef { span, .. } => *span` | 删此臂 |
-| `typecheck/tests/checker.rs:109-111` | 测试构造 `Expr::FnDef` | 改写为 `Expr::Lambda` + `Assign` |
-| `parser/tests/ast.rs:837-847` | 测试构造 `Expr::FnDef` | 删此测试 |
+| 变体定义 | 1 | 删 |
+| 穷举 match 臂（`Expr::span()` / `expr_end_line()` / `get_expr_span()`） | 3 | 删（不删则编译失败） |
+| 非穷举 match 臂 + 带 `_ => Span::dummy()` 的 or-pattern | 10 | 删（删后落兜底；留着即静默面） |
+| 非穷举 `if let` | 2 | 删（删后永不匹配，不报错不告警） |
+| 测试构造点 | 3 | 改写为 `Expr::Lambda` + `Assign`（用例不删） |
 
 **不改变行为**：`Expr::Lambda` 有 `params: Vec<Param>`、`body: Box<Block>`、`span`，与 `FnDef` 前三者同构；`FnDef` 独有的 `name` 字段在 `Expr` 层无处可用（名字在 `StmtKind::Assign.target` 上）。
 
-**风险与缓解**：`checker.rs:1642`、`inference/expressions.rs:3374` 这类**非穷举**的 `if let` 匹配在改造后变成永不匹配——不报错、不告警。缓解：类型表门禁（5.7）增加"零构造变体"检查，`Expr::FnDef` 删除后若有人重新写 `if let Expr::FnDef` 会直接编译失败（变体不存在），**这是编译期保证，无需门禁**。
+**风险与缓解（原计划，已落地）**：那 2 处非穷举 `if let` 在改造后变成永不匹配——不报错、不告警。缓解是**编译期保证**：变体删除后，谁再写 `if let Expr::FnDef` 会直接编译失败（变体不存在），**无需门禁**。
+
+**逐处处置表、测试迁移与实测数字**：见 [09a](./09a-wbs-history.md) §P6 6.5。
 
 ### 5.6 `signature_params` 与 `NamedParen` 的处置（已实施：WBS 6.5.2 + 6.8.1，2026-10-30）
 
@@ -561,13 +536,15 @@ declarations.rs:498-511 与 ast.rs:930 改为
 
 **`Type::NamedParen`（`ast.rs:533-540`）→ 保留节点，移出 binder 语义（已完成：6.5.2，2026-10-30）。**
 
-`ast.rs:519-532` 的注释记录了它存在的**充分理由**（见 2.7）：`(r: P(m))` 中若丢掉 `r`，类型检查器只能猜"约束里不在作用域的自由变量即返回值形参"，会**把未声明的 `m` 也当成 binder 静默代入**（注释标注为"实测缺陷"）。
+`ast.rs:518-532` 的注释记录了它存在的**充分理由**（见 2.7）：`(r: P(m))` 中若丢掉 `r`，类型检查器只能猜"约束里不在作用域的自由变量即返回值形参"，会**把未声明的 `m` 也当成 binder 静默代入**（注释标注为"实测缺陷"）。
 
 因此**不能简单删除**——那会重新引入一个已被修复的正确性缺陷。正确处置是：
 
 1. `NamedParen { param, param_span, inner }` 保留为**纯语法节点**，`param`/`param_span` 只作为源码事实携带，不承担类型层 binder 语义。
-2. binder 的解释权移交给 `sema/`：类型检查器在消费 `NamedParen` 时**显式**提取 `param` 为 binder。这是"读语法节点的字段"，与 `ConstExpr` 内嵌 `Expr` 同性质——语法节点提供事实，语义层做解释。
-3. 注释从"类型检查器只能猜"改写为"本节点提供 binder 名，语义解释在 `sema/` 内"。
+2. binder 的解释权移交**类型检查层**：类型检查器在消费 `NamedParen` 时**显式**提取 `param` 为 binder（落点 `src/frontend/core/typecheck/checker/refinement.rs:421`）。这是"读语法节点的字段"，与 `ConstExpr` 内嵌 `Expr` 同性质——语法节点提供事实，语义层做解释。
+3. 注释从"类型检查器只能猜"改写为"参数位的形参名归 `Type::Fn.params`，本节点只承载**返回位** binder"。
+
+> **路径订正**：本节初稿写的 `sema/` 是 RFC-039 D1 目录改名的**目标**目录名；本仓现状的语义层目录是 `src/frontend/core/typecheck/`（改名属 6.7 批次，尚未执行）。本文正文的代码路径一律按改名前的现状书写（见「目录改名与本文路径」）。
 
 **为什么这是"迁移"而不是"删除"**：语法树必须能无损表示源码。`r` 在源码里确实存在，AST 不能假装它不存在。问题不在节点存在，而在**语义解释的责任没被明确定义**。
 
@@ -639,21 +616,21 @@ declarations.rs:498-511 与 ast.rs:930 改为
 | --- | --- | --- | --- | --- |
 | 1 | `src/frontend/core/parser/ast.rs` | `435-438`、`448-449`、`455-456`、`472` | 删除 `String`/`Bytes`/`Bool`/`Void`/`Union`/`Enum`/`Option`/`Result`/`Sum`/`Int`/`Float` 变体（**已完成：WBS 6.3.1，2026-10-29**——13 个变体全删，`ast::Type` 收敛为 13 变体） | 纯删除 |
 | 2 | `src/frontend/core/parser/ast.rs` | `428-431` | `Name` 增加 `kind: NameKind` 字段 | 数据流 |
-| 3 | `src/frontend/core/parser/ast.rs` | `37-43` | 删除 `Expr::FnDef` | 纯删除 |
+| 3 | `src/frontend/core/parser/ast.rs` | `37-43`（变体原位，**已删**） | 删除 `Expr::FnDef`（**已完成：WBS 6.5.1，2026-10-30**——变体定义与全部 15 处生产消费臂同批删净，`src/` 内零引用） | 纯删除 |
 | 4 | `src/frontend/core/parser/ast.rs` | `244-245` | 删除 `Assign.signature_params`（**已完成：WBS 6.5.2，2026-10-30**——同批删 `TypeDefinition` 同名字段，改携 `type_annotation`） | 纯删除 |
-| 5 | `src/frontend/core/parser/ast.rs` | `1026` | 删 `Expr::FnDef` or-pattern | 随 #3 |
-| 6 | `src/frontend/core/parser/ast.rs` | `519-532` | `NamedParen` 注释改为"语法提供 binder 名，语义解释在 `sema/`"（**已完成：WBS 6.5.2，2026-10-30**——注释改为「参数名归 `Type::Fn.params`，本节点只承载返回位 binder」） | 文档 |
+| 5 | `src/frontend/core/parser/ast.rs` | `1026`（臂原位，**已删**） | 删 `Expr::FnDef` or-pattern | 随 #3（已完成） |
+| 6 | `src/frontend/core/parser/ast.rs` | `519-532` | `NamedParen` 注释改为"语法提供 binder 名，语义解释在**类型检查层**"（**已完成：WBS 6.5.2，2026-10-30**——注释改为「参数名归 `Type::Fn.params`，本节点只承载返回位 binder」；初稿写的 `sema/` 是 D1 改名的目标目录名，本仓现状为 `src/frontend/core/typecheck/`） | 文档 |
 | 7 | `src/frontend/core/parser/ast.rs` | `795-814` 后 | 新增 `pub enum NameKind` | 新增 |
 | 8 | `src/frontend/core/parser/probe.rs` | 新增 | `trait TypeEnvProbe` + `NullProbe`（**已完成：WBS 6.4.1，2026-10-29**——落地态另有 `BuiltinProbe` 与 `NameKind`，trait 方法为 `is_constraint` / `is_predicate` / `kind_of` / `knows_builtin_types`） | 新增 |
 | 9 | `src/frontend/core/parser/parser_state.rs` | `46-58` | 增加 `probe` 字段与访问器（**已完成：WBS 6.4.2，2026-10-29**——字段为 `&'a dyn TypeEnvProbe`，访问器为 `probe()` 与 `kind_of()`；`ParserState::new` 是唯一构造器，**40 个构造点全部接线**：生产 4 + 测试 36） | 数据流 |
 | 10 | `src/frontend/core/parser/statements/types.rs` | `162-165` | 用 `state.probe()` 定 `NameKind`（**未做**：6.4 只引入**定种枚举 + 探针查询**，**不动 `Type::Name` 的结构**——字段化会牵动全部生产/测试构造点，且要求反向桥 `mono_to_ast_type` 保真回写 `kind`，IR 快照与语料基线随之再生，与本批 C3 面（零漂移）冲突；`NameKind` 字段化留待出现第二个消费者时再评估） | 数据流 |
 | 11 | `src/frontend/core/parser/statements/types.rs` | `392-396` | 注释更新（`Result`/`Option` 走 `Generic`，已与事实一致，仅补变体删除说明）——**未做**：6.4 未改 `types.rs`（该文件的改动面在 6.3 的兜底改造），本行随 #10 一并留待后续批次 | 文档 |
-| 12 | `src/frontend/core/parser/statements/types.rs` | `836` | 删 `_ => (Vec::new(), Type::Void)` 兜底，改为显式错误返回——**WBS 6.3.1 已把兜底改为 let-else 显式返回 `Type::Name{"()"}`**（`Void` 变体已删；语义与 formatter 输出逐字不变），**「改为显式错误返回」这一半未做**——原计划留 6.4 的错误路径改造，但 **6.4 未接手该路径**（6.4 只做类型名依赖的注入化，`types.rs` 未改）⇒ **转入 6.5**（已登记进 09 的 6.5 行「下一轮契约输入」）。该路径语法可达（`semantic_tokens` 的 `Name` 臂会多记一枚 dummy-span token；语料 0 命中，零漂移） | 行为 |
+| 12 | `src/frontend/core/parser/statements/types.rs` | `836` | 删 `_ => (Vec::new(), Type::Void)` 兜底，改为显式错误返回——**WBS 6.3.1 已把兜底改为 let-else 显式返回 `Type::Name{"()"}`**（`Void` 变体已删；语义与 formatter 输出逐字不变），**「改为显式错误返回」这一半未做**——原计划留 6.4 的错误路径改造，但 **6.4 未接手该路径**（6.4 只做类型名依赖的注入化，`types.rs` 未改）⇒ **6.5 未接手**（该批只做表示重塑，兜底路径原样保留）⇒ **转入 6.6**，已登记进 09 的 6.6.1 行。该路径语法可达（`semantic_tokens` 的 `Name` 臂会多记一枚 dummy-span token；语料 0 命中，零漂移） | 行为 |
 | 13 | `src/frontend/core/parser/statements/declarations.rs` | `498-499` | 删 `n == "Terminates"`，改 `state.probe().is_predicate(n)`（**已完成：WBS 6.4.3，2026-10-29**——落地态经 `ParserState::kind_of` 读 `NameKind::Predicate`：本遍已声明的谓词优先，其余交注入探针） | 反向依赖 |
 | 14 | `src/frontend/core/parser/statements/declarations.rs` | `508-511` | 删 `typecheck::operator_interfaces::spec()` 调用（**已完成：WBS 6.4.3，2026-10-29**——改走 `state.probe().is_constraint(n)`） | 反向依赖 |
 | 15 | `src/frontend/core/parser/statements/declarations.rs` | `472` | 删 `signature_params` 实参——**已完成（WBS 6.5.2，2026-10-30）**：全部构造点删除该字段；同批把名字合并段的 HashMap 名字表改为位置对齐（判据：前置校验已保证逐位同名） | 随 #4 |
-| 16 | `src/frontend/core/parser/pratt/mod.rs` | `47` | 删 `Expr::FnDef` 臂 | 随 #3 |
-| 17 | `src/frontend/core/parser/pratt/led.rs` | `466` | 保留（是参数列表捞回点，随 5.5 改为直接读 Lambda） | 随 #3 |
+| 16 | `src/frontend/core/parser/pratt/mod.rs` | `47` | 删 `Expr::FnDef` 臂 | 随 #3（已完成） |
+| 17 | `src/frontend/core/parser/pratt/led.rs` | `466` | 保留（是参数列表捞回点）——**「随 5.5 改为直接读 Lambda」未做**：6.5.1 的改动清单里本就没有这一项，处置随 6.8.2 的声明驱动检查模式一并决定 | 保留 |
 | 18 | `src/frontend/core/types/mono.rs` | `699-708`、`743-747`、`770-771`、`814` | 删 13 个 match 臂（13 个删除变体各 1 个）（**已完成：WBS 6.3.1，2026-10-29**） | 随 #1 |
 | 19 | `src/frontend/core/types/mono.rs` | `620-642` | 砍同义词（大小写别名、`i64` 类缩写、`"()"`） | 收敛 |
 | 20 | `src/frontend/core/types/mono.rs` | `627` | `DateTime` 别名保留 | 保留 |
@@ -680,8 +657,8 @@ declarations.rs:498-511 与 ast.rs:930 改为
 | 41 | `typecheck/passes/dead_code.rs` | `305` | 同上 | 随 #3 |
 | 42 | `typecheck/layers/ownership.rs` | `1207` | 同上 | 随 #3 |
 | 43 | `typecheck/layers/termination.rs` | `752`、`2303` | 同上 + 注释更新 | 随 #3 |
-| 44 | `parser/tests/ast.rs` | `837-847` | 删 `Expr::FnDef` 测试 | 测试 |
-| 45 | `typecheck/tests/checker.rs` | `109-111` | 改写为 Lambda + Assign | 测试 |
+| 44 | `parser/tests/ast.rs` | `837-847` | 删 `Expr::FnDef` 测试（**已完成：WBS 6.5.1，2026-10-30**——用例未删，改为两个 Lambda 解构用例 + 一条端到端断言） | 测试 |
+| 45 | `typecheck/tests/checker.rs` | `109-111` | 改写为 Lambda + Assign（**已完成：WBS 6.5.1，2026-10-30**） | 测试 |
 | 46 | `types/tests/mono.rs` | `27-40`、`97`、`119-145`、`221` | 删除 11 个死变体的 lower 断言 | 测试 |
 | 47 | `src/middle/passes/mono/function.rs` | `507-529` | `mono_to_ast_type` 删 `AstType::Int`/`Float`/`Bool`/`Char`/`Void`/`String`/`Bytes` 分支，统一走 `AstType::Name` + `mono.type_name()`。**必须与 #1 同批处理**——**口径已更正（已完成：WBS 6.3.2，2026-10-29）**：`mono.type_name()` 是诊断展示用的小写内部名（`int64` / `void` / `string`），6.1.2 删掉小写拼写后它会落成 `TypeRef`、**静默丢掉类型身份**，故实际改用新增的 `MonoType::canonical_name()`（`from_builtin_name` 的严格逆向，宽度显式）+ 结构回写（`Generic` / `Ref` / `Fn`） | 收敛 |
 | 48 | `src/frontend/core/parser/ast.rs` | `891`、`930` | `extract_generic_param_names` 签名增 `probe: &dyn TypeEnvProbe`；删 `typecheck::operator_interfaces::spec()` 调用改 `probe.is_constraint(name)`。调用方（含 `parser/tests/ast.rs`）传 `&NullProbe`（**已完成：WBS 6.4.3，2026-10-29**——落地态签名见 `ast.rs:927`；生产调用方 `ir_gen.rs` 的 3 处传 `SemanticProbe`，其余传 `&NullProbe` / `&BuiltinProbe`） | 反向依赖 |
@@ -719,7 +696,7 @@ declarations.rs:498-511 与 ast.rs:930 改为
 | **2. 字节码类型统一** | **已完成（WBS 6.2，2026-10-28）**：四处载体改载 `MonoType`——`BytecodeFunction.params`（`bytecode.rs:814`）与 `return_type`（`:816`）、`BytecodeModule.type_table`（`:856`）、`Image.type_table`（`image.rs:44`）；删有损桥 `From<MonoType> for IrType`（原 `bytecode.rs:2352-2390`）与 `ir::Type` 再导出别名（`ir.rs:3` 的 `pub use` 降为私有 `use`）；解码改原样搬运（`bytecode.rs:2315`、`:2316`、`:2346`），此前 8 类 `MonoType` 变体塌缩为 `Void` 的静默信息损失不再发生 | C3 + 定向 `dump_bytecode` 对拍（6.2 表格逐项）——**实测全绿**（实录见 [09a](./09a-wbs-history.md) §P6 6.2） | 单独 commit，可 revert |
 | **3. 死变体删除** | **已完成（WBS 6.3，2026-10-29）**：按 5.2 表删 13 个变体（`ast::Type` 26 → 13）；清 `mono.rs:699-708` 等 match 臂、`types.rs:836` 兜底（改 let-else 显式返回 `Type::Name{"()"}`）；**同批处理 `function.rs:507-529`（#47）与 AST→AST 10 点（6.3.2）**；同步 `types/tests/mono.rs`。**#47 的口径已更正**：原写的「统一走 `AstType::Name` + `mono.type_name()`」在 6.1 之后**失效**——`type_name()` 是诊断展示用的小写内部名（`int64` / `void` / `string`），6.1.2 删掉小写拼写后它会落成 `TypeRef`、**静默丢掉类型身份**；实际改用新增的 `MonoType::canonical_name()`（`from_builtin_name` 的严格逆向，宽度显式）+ 结构回写 | C3 + `cargo build` 全绿（穷尽 match 强制补全所有臂）+ 泛型替换定向对拍（6.4 末行）——**实测全绿**（实录见 [09a](./09a-wbs-history.md) §P6 6.3） | 单独 commit，可 revert |
 | **4. parser 数据流** | **已完成（WBS 6.4，2026-10-29）**：新增 `probe.rs`（`TypeEnvProbe` + `NullProbe` + `BuiltinProbe` + `NameKind`）；改 `parser_state.rs`（增 `probe` 字段与 `probe()` / `kind_of()` 访问器，**40 个构造点全部接线**＝生产 4 + 测试 36）；删 parser 侧 2 处 `operator_interfaces::spec()` 调用、middle 侧 1 处与 driver 侧 1 处改走窄入口 `is_constraint_name`（#48）；合并两份 `name_used_as_type*` 为 `ast.rs:848` 的单一实现（#49）；`CONST_PARAM_TYPES` 经 `NameKind::Builtin` 双知识接线（#50）。**未做**：`types.rs:162-165` 给 `Type::Name` 加 `kind` 字段（#10，字段化与本批 C3 面冲突）、`types.rs:836` 的兜底改显式错误返回（#12，转 6.5） | C3 + **新增断言**：`grep 'typecheck' src/frontend/core/parser/` 应为 0 ——**实测两条 grep（`typecheck` / `operator_interfaces`）均 0 命中**；语料 356/356、IR 快照 216 零漂移、`cargo test --all` exit 0（lib 2868 → 2875 passed，+7） | 单独 commit，可 revert |
-| **5. AST 死变体与专用字段** | 删 `Expr::FnDef`（16 处）+ `Assign.signature_params`；`NamedParen` 语义迁移。**6.5.2 + 6.8.1 部分已完成（2026-10-30）**：`Type::Fn.params` 重塑为 `Vec<Param>` → 删两处并行形参表 → 单一拍平入口 `Type::fn_params_flat`；`NamedParen` 保留为语法节点、binder 由类型检查器显式解释 | C3 + `tests/integration/` **22 模块**全绿（实测 22 个 .rs；原文写 18 为旧数）；formatter 参数位输出逐字不变 | 表示重塑 / 删旧表示 / 可维护性收敛 **三笔**各自可 revert（实录见 [09a](./09a-wbs-history.md) §P6 6.5） |
+| **5. AST 死变体与专用字段** | **已完成（WBS 6.5.1 / 6.5.2 + 并入的 6.8.1，2026-10-30）**：删 `Expr::FnDef`（基线实测 **25 处 / 16 文件** = 定义 1 + 生产消费 15 + 测试构造 3 + 注释 6，其中代码引用 19 处）+ 删 `Assign` / `TypeDefinition` 两处并行形参表；`Type::Fn.params` 重塑为 `Vec<Param>`（名字与类型同栖）→ 单一拍平入口 `Type::fn_params_flat`；`NamedParen` 保留为语法节点、binder 由类型检查器显式解释 | C3 + `tests/integration/` **22 模块**全绿（实测 22 个 .rs；原文写 18 为旧数）；formatter 参数位输出逐字不变（全语料 355 个 `.yx` 对拍逐字节一致）；语料 356/356、IR 快照 216 条零漂移；`src/` 内 `#[test]` 2878 → 2883（未删测试） | 分 7 笔提交（2 笔删变体 + 3 笔表示重塑与旧表示删除 + 2 笔修复轮）；**可 revert 口径**：删变体那笔可独立 revert，测试迁移那笔须与之成对（见 [09a](./09a-wbs-history.md) §P6 6.5 的「登记①」）；实测数字与门禁见 [09a](./09a-wbs-history.md) §P6 6.5 |
 | **6. 门禁转硬** | T1 从 warning 改为 `panic!`；T4 降级为 CI 断言 | `cargo build` 在故意引入一个零构造变体时**必须失败**（红测试先行） | 单独 commit |
 
 **依赖顺序**：0 → 1 → 2 → 3 → 4 → 5 → 6。**阶段 3 与 5 必须在阶段 2 之后**——阶段 2 落地前，字节码侧的反向桥 A（`bytecode.rs` 的 `From<MonoType> for IrType`）消费 `IrType::String` / `IrType::Bytes`，先删变体会破坏编译；该桥已于 6.2.2 删除，**阶段 3 删变体时的剩余改写面是反向桥 B**（`middle/passes/mono/function.rs` 的 `mono_to_ast_type`，仍按名字反解 `String` / `Bytes`）与 `middle/core/ir.rs` 的三处 `ast::Type` 载体。阶段 3 的 #47 必须与 #1 同批，否则 `mono_to_ast_type` 静默改行为。**阶段 3 已于 2026-10-29 完成（WBS 6.3）**：反向桥 B 已改用 `canonical_name` + 结构回写；`middle/core/ir.rs` 的三处 `ast::Type` 载体**未改**——6.3 只删变体、不改 IR 形状（IR 快照 216 条与语料基线 356 行零漂移），载体处置留阶段 4。
@@ -745,7 +722,7 @@ declarations.rs:498-511 与 ast.rs:930 改为
 | --- | --- | --- |
 | 目标表示形态 | `Type` 作唯一类型结构 + `MonoType` 作工作表示；`ir::Type` 别名删除 | `ir.rs:3` 的别名是 `BytecodeFunction.params` 与 `FunctionCode.params` 字段类型不一致的直接原因（2.1）。别名删除后两套字段类型统一，`From` 桥失去存在理由 |
 | 否决"统一为 `MonoType`" | 不采纳 | 会导致 L2→L3 反向依赖（违反 RFC-039 分层），且需给 `MonoType` 加回 `Span` / `ConstExpr`。完整论证见 5.1 |
-| `NamedParen` 不删 | 保留为纯语法节点，binder 语义迁到 `sema/` | `ast.rs:519-532` 记录了删除会重新引入一个已修复的正确性缺陷：`(r: P(m))` 会把未声明的 `m` 当 binder 静默代入 |
+| `NamedParen` 不删 | 保留为纯语法节点，binder 语义迁到**类型检查层**（`src/frontend/core/typecheck/checker/refinement.rs:421`；`sema/` 是 D1 改名的目标目录名，本仓现状目录为 `typecheck/`） | `ast.rs:518-532` 记录了删除会重新引入一个已修复的正确性缺陷：`(r: P(m))` 会把未声明的 `m` 当 binder 静默代入 |
 | 目录改名 | **做**（D1），随 P5/P6 收尾以纯搬移批次执行；本文正文路径按改名前现状书写 | 2026-10-03 决议（ChenXu233）；2026-10-04 补充施工方式 |
 
 ### 被否决的替代方案
@@ -754,7 +731,7 @@ declarations.rs:498-511 与 ast.rs:930 改为
 
 ### 收益
 
-- **消除 14 个位置的维护负担**。`Expr::FnDef` 的 12 处消费 + 2 处穷举臂是一条永不执行的并行路径，删掉后 `ir_gen.rs` / `ownership.rs` / `termination.rs` 三处都少一个分支。
+- **消除 19 个位置的维护负担**。`Expr::FnDef` 的 15 处生产消费（含 3 处穷举臂）+ 3 处测试构造 + 1 处变体定义是一条永不执行的并行路径，删掉后 `ir_gen.rs` / `ownership.rs` / `termination.rs` 三处都少一个分支。
 - **消除一份已分叉的重复实现**。`name_used_as_type` 的两份副本（2.4）在定义体字段递归上已有分歧，合并后只剩一处。
 - **有损桥接消失后，`IrType::Void` 不再是"合法类型值"**。这是 07 第一层校验器"类型一致"不变量能真正跑绿的前提。
 - **门禁让退化不可能**。T1 使"新增零构造变体"从当前的静默通过变成构建失败——本仓库已有的 `build.rs` 机制证明这条路走得通。
@@ -795,33 +772,36 @@ declarations.rs:498-511 与 ast.rs:930 改为
 
 ### 代码位置
 
-- `src/frontend/core/parser/ast.rs:427-541` — `ast::Type` 26 变体定义
-- `src/frontend/core/parser/ast.rs:519-540` — `Type::NamedParen` 的 binder 语义说明（删除会重引入缺陷的证据）
-- `src/frontend/core/parser/ast.rs` — `Param`（名字与类型同栖）与 `Type::fn_params_flat`（拍平入口）：6.5.2/6.8.1 之后的形参唯一表示
-- `src/frontend/core/parser/ast.rs:838-841` — `CONST_PARAM_TYPES`：const 泛型参数名的第三份副本
-- `src/frontend/core/parser/ast.rs:843-885` — `name_used_as_type_in`：`declarations.rs:42` 的重复实现（已分叉）
-- `src/frontend/core/parser/ast.rs:891`、`930` — `extract_generic_param_names` 与其中的越界调用
-- `src/frontend/core/parser/ast.rs:191-213`、`217-223` — `ast::BinOp` / `ast::UnOp`
+> **行号锚按 6.5 落地态重取**（2026-10-30）；已随前序批次删除的条目保留并标注删除批次。
+
+- `src/frontend/core/parser/ast.rs:441-541` — `ast::Type` 定义（6.3 收口后 **13 变体**；26 变体时代的区间为 427-541）
+- `src/frontend/core/parser/ast.rs:518-532` — `Type::NamedParen` 的 binder 语义说明（删除会重引入缺陷的证据）
+- `src/frontend/core/parser/ast.rs:778`、`:985` — `Param`（名字与类型同栖）与 `Type::fn_params_flat`（拍平入口）：6.5.2/6.8.1 之后的形参唯一表示
+- `src/frontend/core/parser/ast.rs:858` — `Type::without_fn_param_names`：IR 载体入 IR 前剥掉类型位形参名（打印边界的一致性收口，见 5.6）
+- `src/frontend/core/parser/ast.rs:1074` — `CONST_PARAM_TYPES`：const 泛型参数名的第三份副本
+- `src/frontend/core/parser/ast.rs:1097` — `name_used_as_type`：6.4 合并后的单一实现（原 `name_used_as_type_in` 与 `declarations.rs` 那份已合并）
+- `src/frontend/core/parser/ast.rs:1178`、`:1275` — `extract_generic_param_names` 与 `classify_generic_params`（6.4 起经注入探针定种）
+- `src/frontend/core/parser/ast.rs:196-218`、`:222-228` — `ast::BinOp` / `ast::UnOp`
 - `src/frontend/core/parser/statements/types.rs:162-165` — parser 把所有原始类型表示为 `Type::Name`
-- `src/frontend/core/parser/statements/types.rs:392-396` — `Result`/`Option` 不 lower 成专用 AST 节点
-- `src/frontend/core/parser/statements/types.rs:836` — `Type::Void` 的唯一前向构造点（错误兜底）
-- `src/frontend/core/parser/statements/declarations.rs:42-80` — `name_used_as_type` 原件
-- `src/frontend/core/parser/statements/declarations.rs:494-511` — 硬编码 `"Terminates"` 与 `typecheck::operator_interfaces::spec()` 调用
-- `src/frontend/core/parser/pratt/nud.rs:505-514` — 表达式位置被表示为空 body `Expr::Lambda`
-- `src/frontend/core/parser/pratt/led.rs:466` — `expr_to_params` 臂把参数列表捞回
-- `src/frontend/core/types/mono.rs:839-886` — `from_builtin_name` 内置名解析表（15 名 + `DateTime` 临时别名；WBS 6.1.2）
-- `src/frontend/core/types/mono.rs:692-830` — `From<Type> for MonoType` 实现（13 个 match 臂中的 12 个在此）
-- `src/frontend/core/types/mono.rs` — `MonoType` 定义（约 22 变体，`mono.rs:167` 起；1077 行文件）
-- `src/frontend/core/types/const_data.rs:234-258`、`321-330` — `const_data::BinOp` / `const_data::UnOp`
+- `src/frontend/core/parser/statements/types.rs:407-416` — `Result`/`Option` 不 lower 成专用 AST 节点
+- `src/frontend/core/parser/statements/types.rs:823` — `extract_fn_type_info`：非 `Fn` 形态的兜底（6.3 起返回 `Type::Name{"()"}`；`Type::Void` 变体已删）
+- （**已删，6.4**）`src/frontend/core/parser/statements/declarations.rs:42-80` — `name_used_as_type` 原件，已合并进 `ast.rs` 的单一实现
+- `src/frontend/core/parser/statements/declarations.rs:441` — 硬编码 `"Terminates"` 与 `typecheck::operator_interfaces::spec()` 调用（6.4 已改走 `ParserState::kind_of` / 注入探针；两处字面引用均已消失，只余此处注释）
+- `src/frontend/core/parser/pratt/nud.rs:512` — 表达式位置被表示为空 body `Expr::Lambda`
+- `src/frontend/core/parser/pratt/led.rs:431` — `expr_to_params` 臂把参数列表捞回
+- `src/frontend/core/types/mono.rs:863` — `from_builtin_name` 内置名解析表（15 名 + `DateTime` 临时别名；WBS 6.1.2）
+- `src/frontend/core/types/mono.rs:960` — `From<ast::Type> for MonoType` 实现（13 个 match 臂中的 12 个在此）
+- `src/frontend/core/types/mono.rs:169` — `MonoType` 定义（约 22 变体）
+- `src/frontend/core/types/const_data.rs:240`、`:327` — `const_data::BinOp` / `const_data::UnOp`
 - `src/frontend/core/types/solver.rs:411` — `pub fn unify`
-- `src/frontend/core/types/eval/const_eval.rs` — 编译期常量求值（1128 行）
+- `src/frontend/core/types/eval/const_eval.rs` — 编译期常量求值
 - `src/frontend/core/types/eval/dependent_types.rs:478` — `check_structural_termination`
-- `src/middle/core/ir.rs:3` — `ir::Type` 作为 `ast::Type` 别名的证据
-- `src/middle/core/bytecode.rs:808-814` — `BytecodeFunction` 的 `Vec<ir::Type>` 字段
-- `src/middle/core/bytecode.rs:2352-2390` — 有损 `From<MonoType> for IrType` 桥
-- `src/middle/passes/codegen/bytecode.rs:32`、`275-278` — `FunctionCode` 的 `Vec<MonoType>` 字段
-- `src/middle/passes/mono/function.rs:507-529` — `mono_to_ast_type`：重建 7 个"死变体"的反向桥
+- （**已删，6.2.2**）`src/middle/core/ir.rs:3` — `ir::Type` 作为 `ast::Type` 别名的证据
+- `src/middle/core/bytecode.rs:809`（`BytecodeFunction`）、`:814` / `:816`（`params` / `return_type`，6.2 起载 `MonoType`）
+- （**已删，6.2.2**）`src/middle/core/bytecode.rs:2352-2390` — 有损 `From<MonoType> for IrType` 桥
+- `src/middle/passes/codegen/bytecode.rs:32`、`:275-278` — `BytecodeFile::type_table` 与 `FunctionCode` 的 `Vec<MonoType>` 字段
+- `src/middle/passes/mono/function.rs:458` — `mono_to_ast_type`：6.3 改写后的反向桥（按 `canonical_name` + 结构回写）
 - `src/backends/interpreter/image.rs:44` — 解释器模块的 `type_table`
-- `build.rs:19-37` — 错误码注册表构建期门禁（类型表门禁的形态参照）
-- `build.rs:39-54` — RFC-013 码表一致性比对
+- `build.rs:33-51` — 错误码注册表构建期门禁（类型表门禁的形态参照）
+- `build.rs:53-69` — RFC-013 码表一致性比对
 - `tools/code-tables/Cargo.toml:15-16` — 门禁 crate 仅依赖 `serde_json`（根 crate 无 `syn`；`tools/type-tables` 引入 `syn` 是首个例外）

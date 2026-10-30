@@ -1864,54 +1864,245 @@ WBS 的 6.4.3 行把 `src/middle/core/ir_gen.rs` 的 `is_constraint_param_ann` �
 
 本批不新增二级/三级任务 ⇒ 09 顶部计数表不变（二级 **72** / 三级 **193**）。6.4 的 5 个三级任务为既有登记，勾选不改变计数。
 
-## P3 3.22 收口（3.22.1 注解分解统一，2026-10-30）
+## P6 6.5 AST 死变体与专用字段收口（6.5.1 / 6.5.2 + 并入的 6.8.1，2026-10-30）
 
-> **触发**：issue [#501](https://github.com/ChenXu233/YaoXiang/issues/501)（WBS 3.22.1）：返回位括号化函数类型分解层级错位——「声明返回函数类型的函数」没有任何能过的注解写法。
+> **触发**：P6 6.4 收口后，6.5 的两个三级任务待收口——6.5.1 删 `Expr::FnDef`（生产零构造的表达式变体）；6.5.2 删 `StmtKind::Assign` / `StmtKind::TypeDefinition` 的并行形参表 `signature_params`，并把 `Type::NamedParen` 的 binder 语义归位。**6.8.1（`Type::Fn.params: Vec<Type>` → `Vec<Param>`）按用户 2026-10-29 裁决 B 跨二级任务加框并入本批**：6.5.2 只删旧表示、替代表示由 6.8.1 给出，二者必须同批收口——只删不替代必然改行为（初稿设想的「改用 `Lambda.params`」已被核实不可行，见「拍平 vs 过滤」）。
+>
+> **轮次**：勘察（改写面清单 + 语义风险清单）→ 实现（6.5.1 两笔 + 6.5.2/6.8.1 三笔）→ 独立验证 → 对抗性复审（needs_revision，6 条 finding）→ 修复轮 → 二次复审（needs_revision，2 条 finding）→ 二次修复轮 → 三次复审（pass）→ 本收口。
+>
+> **判据**：C3（诊断码 / 消息 / 顺序不变）+ 03 §6.4 的硬验收（`git diff --stat tests/yaoxiang tests/baselines src/std/` 必须为空）。另加本批自身的四条载体判据：① **变体零残留**——`Expr::FnDef` 与 `signature_params` 在 `src/` 内零引用；② **单一形参表示**——`Type::fn_params_flat` 是「语句声明里的原始签名形参」的唯一实现，无并行形参表；③ **NamedParen 等价**——节点保留、binder 解释点、五处透明下钻与渲染形态逐字不变；④ **零行为差分**——语料 356/356 与 IR 快照 216 条零漂移。
+>
+> **本节含五类内容**：① **实测数字**；② **探针结论**；③ **登记①：6.5.1 的 A/B 契约偏差**；④ **登记②：修复轮的 `inScope` 契约缺陷追认**；⑤ **登记③：F2 的处置结论**（裸标识符形参的运行期槽位口径）。后三类各占一节。
 
-> **队长调查对登记的两处修正（开工前探针实证）**：① 红态边界比登记窄——语料 `03-semantics/paren_return_fn.yx` 的 `mk`（lambda 尾表达式）本就绿（RFC-004 夹具）；真红态 = 函数名 RHS（expected 被剥到最内层标量）与 lambda 块体带 return（expected 已对、found 是 lambda 整体）两形态，**红因异源**。② 登记守卫判据「`h: (x: Int) -> Int = f` 逐字节不变」实测为**合法报错**（体尾表达式把函数值返回给 Int 返回位）——修后保持红即守卫，禁止修绿。
+### 结论：三条主线各归其位
 
-> **改法**（`7880ee17` + 修复轮 `f032582b`，三段）：① `Type::is_paren_complete()`（ast.rs 新增单点）——返回位注解是 `Paren/NamedParen` ⇔ RFC-004 柯里链条终止 ⇔ 值级分解取外层整体；划分依据实证修正任务预设（curry_tail_expr 平铺柯里是「非泛型不剥」的反例）。② B 断链在 parser paren_return 包装（`declarations.rs` 加作者 lambda 与内层 Fn 参数组对齐判据——修法越界 typecheck 预设文件，依据：双层 AST 的 IR 形状本就错，typecheck 侧无法正确修）。③ 修复轮：`check_return_value_type`（Return 载荷与值级返回位统一）+ `wrapped_closure` 双臂扩展（`Return(Some(Lambda))` 载荷 = 体是外层本体，八种体形态判定表实证）。
+| 主线 | 终态 | 载体 |
+| --- | --- | --- |
+| `Expr::FnDef` | **变体已删**，`src/` 内零引用；函数定义统一走 `Expr::Lambda` + `StmtKind::Assign` | `src/frontend/core/parser/ast.rs` |
+| 形参表示 | **单一表示** = `Type::Fn.params: Vec<Param>`（名字与类型同栖）；`Assign` / `TypeDefinition` 的 `signature_params` 已删，载体改为 `type_annotation: Option<Type>` | 同文件 `:463-466` / `:258` / `:280`；唯一取用入口 `Type::fn_params_flat`（同文件 `:985`） |
+| `Type::NamedParen` | **节点保留**（纯语法节点）；返回位 binder 由类型检查器**显式**解释 | 变体同文件 `:533-540`；解释点 `src/frontend/core/typecheck/checker/refinement.rs:421` |
 
-> **判据链**：t1 门禁 9 项绿（**生成器幂等门禁首战生效**——第 1 轮抓到 statements.rs 加行的发射点行号平移欠账）→ t2 **PASS**（六项验收含值断言阴性对照、A/B 双点变异可逆、零漂四项）→ t3 **REQUEST_CHANGES**（high = gb2 形态被 t1 从 E1012 变静默错配——把响亮失败变静默错误，队长独立复现）→ t1r 门禁绿但 **pre-commit integration 挡下**（既有柯里测试红——testsuite fast 只跑 `cargo test --lib`，integration 靠 pre-commit 兜底是 #486 已知状态）→ t1r2 门禁 10 项绿（integration 314 全绿）→ 队长合并冻结。
+`Expr` 枚举由 **31 变体收敛为 30**（删 `FnDef` 一个）；`ast::Type` 保持 6.3 收口后的 **13 变体**不变——本批只改 `Type::Fn` 的**字段类型**，不动变体集合。
 
-> **流程教训（两条已固化）**：① 门禁清单固定含 `cargo test --test integration` 定向——testsuite fast 只盖 lib 面，前端语义改动必须直接跑 integration；② world.run 输出 256KB cap——cargo test 类大输出命令一律 python -c 包装截尾（t1r2 门禁脚本两次踩同一坑：#470 testsuite 262KB、#501 t1r2 lib 263KB）。均记入编排模板。
+### 交付清单（7 笔提交，本地 dev，未推送）
 
-> **登记**：issue [#501](https://github.com/ChenXu233/YaoXiang/issues/501) 已关闭（`7880ee17` + `f032582b`）；新遗留 [#514](https://github.com/ChenXu233/YaoXiang/issues/514)（shared solver 测试并发窗口，HEAD 既有）与 [#515](https://github.com/ChenXu233/YaoXiang/issues/515)（生成器 FN_CALL_RE_TMPL 无词边界，E1002 计数 84=83+1 修前既有）备案不占号；跨 WBS 备案：RFC-004 括号终止判定第三处 `ir_gen.rs:649` 未收敛到单点（t3 low，收敛属跨 WBS 待裁）。本批 flash 子代理通道经 provider 配额切换（individual-coding-plan 周配额耗尽 code 1310 → 按 用户指示切回免费 start-plan，AmendWorkflow 换轨零缓存损失）。
+| # | 主题 | 日期 | 规模 |
+| --- | --- | --- | --- |
+| 1 | `:white_check_mark: test(parser): 函数定义测试迁移到 Lambda 解构` | 2026-10-29 | 2 files / +72 / −11 |
+| 2 | `:fire: refactor(parser): 删除零构造的 Expr::FnDef 变体及全部消费臂` | 2026-10-29 | 20 files / +46 / −346 |
+| 3 | `:recycle: refactor(parser): Type::Fn.params 改为 Vec<Param>（表示重塑）` | 2026-10-29 | 24 files / +383 / −103 |
+| 4 | `:fire: refactor(parser): 删除 Assign/TypeDefinition 的并行形参表` | 2026-10-30 | 35 files / +314 / −234 |
+| 5 | `:recycle: refactor(parser): 形参表示可维护性收敛` | 2026-10-30 | 22 files / +228 / −168 |
+| 6 | `:bug: fix(middle): 恢复裸标识符形参的运行期槽位口径 + 注释/守卫订正` | 2026-10-30 | 8 files / +175 / −14 |
+| 7 | `:fire: refactor(parser): 删除两个与既有谓词精确互补的死谓词` | 2026-10-30 | 1 file / +0 / −13 |
 
-## P3 3.23 收口（3.23.1 清单 E3024 非静默退化，2026-10-30）
+前 2 笔 = 6.5.1；第 3–5 笔 = 6.8.1 与 6.5.2 同批（顺序：先替代表示 → 再删旧表示 → 再可维护性收敛）；第 6 笔 = 二次复审的修复轮；第 7 笔 = 三次复审的修复轮。本收口文档另起一笔 `:memo: docs(plan): 6.5 AST 死变体与专用字段收口`（2026-10-30，3 files）。
 
-> **触发**：issue [#503](https://github.com/ChenXu233/YaoXiang/issues/503)（WBS 3.23.1）：清单存在但不可读时 `.ok()` 吞错 ⇒ 声明面静默置空 ⇒ 误报 W1002×2 且 check exit 0。登记时留「甲 报错退出 / 乙 继续但发 W 码」待裁——**用户 2026-10-30 全权委托（「由你做最佳决定」），队长裁决甲**：坏清单下声明面/角色分类/引用池全部建立在错误前提上，继续跑产出的一切结果不可信；与非法 .yx 源码同待遇。
+按仓库约定提交号在 push 之后取（`pull --rebase` 会重写本地哈希），故此处只记提交主题与日期。
 
-> **改法**（`81d86810`，19 文件 +415/−77）：role_context 三态化——NotFound = 合法单文件模式（行为不变）；可读 = 既有装配；存在但不可读 = E3024（新码，error 级，span_exempt 按 #324 契约）经 RoleClassification 臂注入并标记阶段失败，DeadCodeAnalysis 拓扑跳过（中止发生在退化之前）；Typecheck 等不依赖臂照跑。RoleContext 返回结构保持 helpers 纯函数（不生造第二诊断入口）。新码四步流程照 E1043 先例。四处既有测试坏清单夹具顺带修复（判据未动）。
+**基线**：本批 7 笔落在 6.4 收口提交之后的自动翻译机器人提交之上；机器人提交只改 `docs/src/en/**` 与翻译缓存，`src/` 逐字相同 ⇒ 本批的 `src/` 基线 = 6.4 收口态。
 
-> **判据链**：t1 门禁 10 项 3 轮绿（生成器幂等两次抓再生欠账后复绿；红态 stash 机械回退复验 + 守卫钉未修分支——#505 批次教训⑥的应用）→ t2 **PASS**（五段判据链、变异可逆 blob 三态、修前红态与 t1 实录交叉吻合）→ t3 **REQUEST_CHANGES**（medium = t1 注释判据「可过 PackageManifest 必可过 ProjectConfig」被反例证伪：`[tool.test] patterns = "字符串"` 穿透 PackageManifest 而 ProjectConfig 解析失败仍静默吞——**声明与事实不符必须修**；修法取 (a) 注释改如实陈述并 amend 并入（`81d86810` 终值），判定迁移依据 = amend 仅注释；**ProjectConfig 静默面属既有降级，收窄属行为变更另行裁决**——登记为本组遗留待裁）→ 队长复核（四探针复验：E3024 + 0 W1002 + exit 1 / 守卫两形态逐字节不变；诊断通道设计）。
+### `Expr::FnDef` 处置表（基线 25 处 / 16 文件）
 
-> **登记**：issue [#503](https://github.com/ChenXu233/YaoXiang/issues/503) 已关闭（`81d86810`）；新遗留 [#516](https://github.com/ChenXu233/YaoXiang/issues/516)（scratch.py trial 无 finally 兜底——工具缺陷，t3 实测撞上）；**ProjectConfig 静默回退面**（`[tool.test]` 类型错误 ⇒ patterns 静默回退内建约定）留待用户裁决是否收窄；main.rs run 配置 unwrap_or_default（#471 登记关联面）维持不修待裁。提交信息表述更正：ref_pool.rs 是坏清单夹具修复的**第五处**且性质为 4.9.3 触发形态迁移（MANIFEST_UNPARSED → None），非「四处之一」。
+6.4 收口态上实测 `git grep -n "FnDef" -- src/` = **25 行 / 16 文件**（其中字面 `Expr::FnDef` 18 处）。拆解：
 
-## #512 收口（Ref 实参派发名归底类型，2026-10-30；3.20.4 遗留伴生缺陷，不占 WBS 号）
+| 类别 | 处数 | 说明 |
+| --- | --- | --- |
+| 变体定义 | 1 | `src/frontend/core/parser/ast.rs:49`（`Expr` 枚举体） |
+| 生产消费点 | 15 | 见下表 |
+| 测试构造点 | 3 | `src/frontend/core/parser/tests/ast.rs:874` / `:887`、`src/frontend/core/typecheck/tests/checker.rs:121` |
+| 注释 | 6 | `src/frontend/core/typecheck/inference/expressions.rs:69`、`src/frontend/core/typecheck/layers/ownership.rs:2318`、`src/frontend/core/typecheck/layers/termination.rs:2311`、`src/frontend/core/typecheck/tests/checker.rs:119` / `:478`、`src/frontend/module/orchestrator.rs:1155` |
 
-> **触发**：issue [#512](https://github.com/ChenXu233/YaoXiang/issues/512)（#510 收口轮 t3 探针发现的既有深层缺陷）：约束泛型以 Ref 形态实参实例化（`sum(&a, &b)`）check 过、run 崩 E6006——mono 派发名改写成 `&Vec3.add` vs 算子登记名 `Vec3.add`。
+**15 处生产消费点**（基线位置）：
 
-> **改法**（`d82d4e85`，2 文件 +85/−1）：`operator_type_display` 递归剥 Ref 链（`&mut` 同口径）归底类型；「登记名不含 &」实证链闭合（ir_gen.rs 方法名 = `Type.method` / std 原生背书 / 用户条目 args 均底类型）⇒ 剥 Ref 只会把「找不到」变「找到」，无反向形态。登记侧零改动。
+| # | 位置 | 形态 | 处置 |
+| --- | --- | --- | --- |
+| 1 | `src/formatter/handlers/expr.rs:43` | match 臂 | 删；连带删唯一调用它的 `format_fn_def`（否则 `clippy -D warnings` 报 dead code） |
+| 2 | `src/frontend/core/parser/ast.rs:1121` | `Expr::span()` or-pattern（**穷举**） | 删 |
+| 3 | `src/frontend/core/parser/pratt/mod.rs:47` | `expr_end_line()` 臂（**穷举**） | 删 |
+| 4 | `src/frontend/core/spawn/analysis.rs:912` | match 臂（闭包捕获） | 删 |
+| 5 | `src/frontend/core/spawn/placement.rs:122` | match 臂 | 删 |
+| 6 | `src/frontend/core/typecheck/checker.rs:1359` | `if let`（非穷举） | 删（else-if 链头改 `if`） |
+| 7 | `src/frontend/core/typecheck/checker/semantic_tokens.rs:1372` | match 臂（token 收集） | 删 |
+| 8 | `src/frontend/core/typecheck/inference/existential.rs:55` | `expr_span()` or-pattern | 删 |
+| 9 | `src/frontend/core/typecheck/inference/expressions.rs:3874` | match 臂（推断） | 删（含 1 处 E1002 死发射点） |
+| 10 | `src/frontend/core/typecheck/layers/ownership.rs:1263` | `expr_span()` or-pattern | 删 |
+| 11 | `src/frontend/core/typecheck/layers/termination.rs:763` | match 臂 | 删（连带删仅此臂调用的 `check_fn_body`） |
+| 12 | `src/frontend/core/typecheck/passes/dead_code.rs:505` | match 臂（引用收集） | 删 |
+| 13 | `src/frontend/module/orchestrator.rs:1153` | `if let`（非穷举，整臂仅此内容） | 删整臂 |
+| 14 | `src/middle/core/ir_gen.rs:5005` | `get_expr_span()` 臂（**穷举**） | 删 |
+| 15 | `src/middle/core/ir_gen.rs:5812` | `expr_span` or-pattern | 删 |
 
-> **判据链**：t1 门禁 10 项一轮绿（红态 stash 机械还原双红 Ref/&mut、负验证断言咬合）→ t2 **PASS**（五步全过；探针首跑 exit 1 系 script 模式不自动执行 main 的 CLI 语义，补 `main()` 后同语料夹具同构）→ t3 **APPROVE**（反向补丁机械双红独立复现、integration 316（+2 纯追加）、快照零漂移、语料归因闭合：全语料仅 2 处约束泛型声明且无 Ref 实参调用——缺陷潜伏原因）。两条 low 补正随本记录：① **E1106 复检系全路径结构性死码**（t3 补强：`collect_instantiation_request` 先 `mem::take` 抽空 `last_type_args` + 显式实参路径提前 return ⇒ 复检对**所有**调用路径不可达，非仅 Ref 形态——比提交信息「对该形态被短路」更强，留此防止后人按窄口径设计复活方案）；② 负验证未独立复跑（红态走 E6006 panic 路径无法替代「断言咬住静默错值」的证明，采信 t1 陈述）。
+**「生产零构造」的一手证据**：基线的 `src/frontend/module/orchestrator.rs:1155-1156` 注释明写「当前 parser 也不产此变体——仅测试手工构造」；函数定义实际走 `Expr::Lambda` + `StmtKind::Assign`。⇒ 删净不改变任何 parser 产出。
 
-> **登记**：issue [#512](https://github.com/ChenXu233/YaoXiang/issues/512) 关闭评论带判据链与上述补正；**E1106 复检死码的修复**（扩 check 语义使复检触达 + args_compatible 的 Ref 兼容规则）属 D/E 类另行裁决；W1005 'Vec3.add' 残留属 #510 登记边界（Ref 实参不入实例化映射）另案。
+**测试迁移（未删测试）**：三处测试构造改写断言方向，不删用例——
 
-## #514 / #515 / #516 收口（测试基建与工具三连，2026-10-30）
+| 原用例 | 终态 |
+| --- | --- |
+| `test_expr_fndef`（`src/frontend/core/parser/tests/ast.rs`） | 拆为 `test_expr_callable_parts_lambda_returns_params_and_body`（同文件 `:874`）与 `test_expr_callable_parts_block_returns_body_without_params`（`:906`） |
+| 嵌套函数定义夹具（`src/frontend/core/typecheck/tests/checker.rs`） | `Expr::FnDef` → `Expr::Lambda`，用例保留 |
+| ——（新增） | `test_fn_block_body_with_fn_annotation_parses_to_lambda`（`src/frontend/core/parser/statements/tests/functions.rs:125`）：`f: () -> Int = { 5 }` → Assign + Lambda 的端到端断言 |
 
-> **#514**（`16e153fd`，2 文件 +111/−32）：shared solver 判据读数改线程切片镜像——机理实证修正登记假设（SHARED_SOLVER 永不替换；真实机理 = 实例计数与进程账落账两步无原子性，并发快照窗口劈开错位落账，32 核 3/3 红）。修法 = 方向甲（THREAD_CONSUMER_STATS 线程局部镜像 + 读数移进编译线程），求解行为面零改动（删除行全为注释），判据阈值/方向/消息逐字保留；修后定向并发 3 轮 + 全量 2 轮 + 队长抽验 2 轮全绿。issue 已关。
+### `signature_params` 处置（基线 168 行 / 31 文件 → 0）
 
-> **#515**（`2797ffd0`，7 文件）：FN_CALL_RE_TMPL 加 `\b` 词边界——家族性子串误计一次纠正八码（E8001 25→6 / E0010 22→4 / E1002 85→76 等；E0011 的 19 处完整保留验证无杀），生成物再生同提交、幂等复核过。issue 已关。
+6.4 收口态上实测 `git grep -n "signature_params" -- src/` = **168 行 / 31 文件**；落地态 **0 命中**（字段、构造、读取、注释一并清零；旧包装函数 `signature_fn_params` 亦删除）。
 
-> **#516**（`aa46328a`）：scratch.py trial 的 restore 包 finally——命令启动异常不再跳过还原（真实补丁 + 不存在命令实测：异常穿透可见、树被机械还原 CLEAN、exit 1 上抛）。issue 已关。同笔顺带：**RFC-004 括号终止语义第三处判定点**（ir_gen.rs split_curry 的 next_is_paren）收敛到 `Type::is_paren_complete` 单点（#510 收口备案的跨 WBS 项，纯判定收敛——lib 2887 全绿、语料 356 条零漂移）。
+真·字段面只有 **2 处属主字段**：`StmtKind::Assign` 与 `StmtKind::TypeDefinition` 各一个 `signature_params: Vec<Param>`；其余命中是同名遮蔽（函数形参名写死 `&[Param]`）、函数名与注释。落地态两处字段均已删，载体改为 `type_annotation: Option<Type>`（`src/frontend/core/parser/ast.rs:258` / `:280`）——`TypeDefinition` 与 `Assign` 同一载体。
 
-> **提交规范备注**：本日多笔提交被 check-commit-msg 打回后按合法表改 scope/emoji（`mono`→`monomorphize`、`tools`→`docs`、`scratch`→`meta`、`:test_tube:`→`:white_check_mark:`）——scope 表与 emoji 白名单以 commit-convention.md 为准。
+**拍平 vs 过滤（为什么不能改用 `Lambda.params`）**：初稿设想「就地重算 `Lambda.params`」，但 `Lambda.params` 是**已过滤**的值参数表（去掉类型位与约束位），而 `classify_generic_params` / `extract_generic_param_names` 需要**未过滤**的原始签名列表。实际做法是先把名字搬进唯一载体再删旧字段：拍平结果与旧 `signature_params` **逐位同源**（同一批 `Param` 节点），故泛型分类结果不变；改用 `Lambda.params` 的方案**会改行为，未采用**。
 
-## #507 收口（const_eval 取负可达性实证 + 修 panic，2026-10-30）
+**单一拍平入口**：`Type::fn_params_flat`（`src/frontend/core/parser/ast.rs:985`）是「语句声明里的原始签名形参」的**唯一实现**（全仓 1 处定义 + 31 处调用，16 文件）；curry 各组依次展开，`Paren` / `NamedParen` 视为透明继续内层。六条语义消费点全部改调它：`classify_generic_params`（`src/driver/helpers.rs`）、`extract_generic_param_names`（`src/frontend/core/typecheck/checker/semantic_tokens.rs`、`src/middle/core/ir_gen.rs`）、`resolve_const_candidates`、`add_method_overload_with_params`、`resolve_return_refinement`（`src/frontend/core/typecheck/checker/refinement.rs`）、`enter_measured_fn`（`src/frontend/core/typecheck/layers/termination.rs`）。
 
-> **触发**：issue [#507](https://github.com/ChenXu233/YaoXiang/issues/507)（#468 复审 low 备案）：const_eval.rs 的 `(UnOp::Neg, Int(n)) => -n` 为 i128 裸取负，登记时为**静态推演未实测**；验收 = 先实证可达性。
+**`Type::Fn.params` 重塑**（6.8.1，`Vec<Type>` → `Vec<Param>`）：复用既有 `Param` 结构——**不新增第二结构、不引入平行名字数组**（`param_names: Vec<Option<String>>` 一类被明令禁止）。无名形参（纯类型位 / 类型反解）以空名字合成，由 `Param::is_named()` 判定，空名不参与任何按名查找。基线 `Type::Fn` 共 **331 行 / 63 文件**，逐处处置：**改 23 文件**（含 `params` 元素的读取点改取 `.ty`）、**无需改 40 文件**（命中全部是 `MonoType::Fn`，不是 `ast::Type::Fn`）。
 
-> **可达性实证（REACHABLE，panic 复现）**：探针形态 = 类型位常量约束 `Assert(N > -(0 - 170141183460469231731687303715884105727 - 1))`（i128::MAX 字面量）——parser 放行 `>` 右侧的 UnOp::Neg 包 saturating 链；saturating_sub 精确构造 i128::MIN（非饱和边界）⇒ 裸取负 panic（debug exit 101，编译器崩、零诊断）。**实证路径的关键排错**：首轮探针用 i64::MAX 字面量（9223372036854775807）只构造到 i64::MIN——在 i128 域取负安全不触发（与 #468 收口「i128 域字面量取负不溢出」论证一致）；字面量 parse 域为 [0, i128::MAX]（literals.rs）⇒ 用满域字面量才触达。语法面实测：条款开头 `-(...)` 被拒（E0010）、const 实参位算术链被拒（E1002）——唯一入口是 `>` 右侧的链+取负组合。
+**为什么手写 `Param` 的 `Debug`**：规范化 IR 快照的 `type_decl` 行打印 AST 类型的 `Debug` 文本，且 216 条快照已入库。若靠 `UPDATE_SNAPSHOTS=1` 再生基线，就会把「形参携带名字」伪装成一次 IR 行为面变化（违反 07 §128「漂移必须能说清来源」）。故把一致性收在**打印边界**：无名形参按其所载 `Type` 打印（与重塑前 `Vec<Type>` 的文本逐字一致）＋ IR 载体入 IR 前由 `Type::without_fn_param_names`（`src/frontend/core/parser/ast.rs:858`）剥掉类型位形参名——**基线因此零漂移**。
 
-> **修法**（`54221a5d`）：取负臂 `checked_neg`，溢出报既有 `const_overflow`（E4011，与 Shl/Shr 求值溢出同通道）；Err 上层按「约束不可静态判定」跳过——与 Div/0 既有 Err 语义完全一致（探针 p11 对照），非新语义。测试 +1（`eval_unop(Neg, i128::MIN)` → Err 先红后绿，stash 机械还原红于同位置 panic；对照普通值取负不变）；lib 2888（+1）全绿。issue 关闭（验收两条全兑现）。
+### `NamedParen` 迁移等价性
+
+**节点保留、语义归位**：`Type::NamedParen { param, param_span, inner }`（`src/frontend/core/parser/ast.rs:533-540`）保留为**纯语法节点**；`param` 仍是返回位 binder 名，但**解释权显式归语义层**——`src/frontend/core/typecheck/checker/refinement.rs:421` 直接取 `param` 作 binder。
+
+等价性逐条可对：
+
+| 判据 | 落点 | 状态 |
+| --- | --- | --- |
+| binder 名的唯一来源 | `src/frontend/core/typecheck/checker/refinement.rs:421` | 不变 |
+| binder **不进入函数体作用域** | 同文件的作用域名单判定 | 不变 |
+| 五处透明下钻（只递归 `inner`） | `src/frontend/core/typecheck/checker/refinement.rs:519` / `:987`、`src/frontend/core/typecheck/checker/semantic_tokens.rs:124`、`src/frontend/core/types/mono.rs:968`、`src/middle/core/ir_gen.rs:1198` | 不变 |
+| 柯里化链终止（括号声明「完整类型」） | `src/frontend/core/parser/statements/declarations.rs:347`、`src/middle/core/ir_gen.rs:661` | 不变 |
+| 渲染形态 `({param}: {inner})` | `src/formatter/handlers/types.rs:18`、`src/formatter/handlers/expr.rs:477` | 不变 |
+| AST→AST 重建仍携 binder | `src/middle/passes/mono/function.rs:401-405` | 不变 |
+
+`ast.rs` 的注释改写为「参数位的形参名归 `Type::Fn.params`；本节点只承载**返回位**单具名括号的 binder」——**参数位与返回位是两回事**，混同即语义错误。
+
+**为什么不能简单删节点**：`(r: P(m))` 中若丢掉 `r`，类型检查器只能猜「约束里不在作用域的自由变量即返回值形参」，会把未声明的 `m` 也当 binder 静默代入（`ast.rs` 注释标注的实测缺陷）。⇒ 迁移 = 责任声明 + 注释改写，**不是删除**。
+
+### 实测数字
+
+① **硬验收**——6.4 收口态与本批落地态之间，`git diff --stat -- tests/yaoxiang tests/baselines src/std src/middle/core/tests/snapshots` **为空**（语料层 / 基线层 / 标准库 / IR 快照四段零差异）；`git diff --stat -- tests/` 同样**为空**（`tests/` 侧零直驱例外）。
+
+② **语料差分 356/356、差异为空**——基线 `tests/baselines/corpus-parity.jsonl` 共 356 行；`cargo run --example corpus_probe` 的产物与基线逐字节相同（`check-corpus-parity.py` exit 0）。
+
+③ **IR 快照 216 条零漂移**——`src/middle/core/tests/snapshots/` 下 216 个 `.snap` 全部在库未改（`check-snapshot-drift.sh` PASS）。
+
+④ **变体零残留**——落地态 `git grep -n "Expr::FnDef" -- src/` = 0 命中；`git grep -n "signature_params" -- src/` = 0 命中；`git grep -n "signature_fn_params" -- src/` = 0 命中；`git grep -n "is_untyped" -- src/` 与 `git grep -n "is_type_position" -- src/` = 0 命中（末轮修复删掉的两个死谓词）。裸词 `FnDef` 在 `src/` 内只剩 2 处**说明性注释**（`src/frontend/core/parser/statements/tests/functions.rs:123` 与 `src/frontend/core/typecheck/tests/checker.rs:121`，均写明「不构造已删除的 FnDef 变体」）。
+
+⑤ **`cargo test --all` exit 0**——lib **2878 passed** / 0 failed / 2 ignored；integration **314** passed；`tests/integration/` 下 22 个 `.rs` 模块全绿。`src/` 内 `#[test]` 计数 **2878 → 2883（+5，removed 0）**：3 个用例改名（`test_expr_fndef` → 两个 callable_parts 用例；`test_signature_params_stored_verbatim` → `test_type_fn_params_carry_signature_verbatim`；`test_named_function_type_params_stay_anonymous_types` → `test_named_function_type_params_carry_names_and_types`，断言方向由「类型位形参名丢弃」反转为「名字与类型同节点」，属加强）、5 个新增（`test_fn_block_body_with_fn_annotation_parses_to_lambda`、`test_type_fn_params_carry_name_and_type_on_same_node`、`test_anonymous_param_never_yields_generic_name`、`test_bare_identifier_param_takes_no_runtime_slot` 等）。**未删测试、未放宽断言**。
+
+⑥ **单一拍平入口**——`git grep -n "fn fn_params_flat" -- src/` = 1 处定义（`src/frontend/core/parser/ast.rs:985`）；`git grep -n "fn_params_flat" -- src/` = 32 行 / 16 文件（1 定义 + 31 调用点）。
+
+⑦ **错误码生成物（随行号平移再生）**——本批改动了诊断码发射点所在文件的行数（`ast.rs` 少 13 行等），错误码文档由生成器**位置敏感**地产出，必须重跑生成器并随提交再生：`docs/src/reference/error-code/E1xxx.md` / `E2xxx.md` / `E8xxx.md` / `index.md` 与 `docs/src/reference/warning-code/warning-codes.md` 共 5 个生成物，逐项 diff 仅为发射点行号平移，**诊断码数量与文字未变**；生成器复跑幂等（`git diff --quiet` exit 0）。
+
+### 探针结论
+
+**定向探针（13 组 × 2 类产物 = 26 份）**：在基线与本批的 4 个中间 revision（删变体 / 表示重塑 / 删旧表示 / 可维护性收敛）上分别产出 `check --json` 与 `format --stdout` 两类产物，**26/26 逐字节一致**。覆盖的同类路径含：lambda 头顺序与签名不一致（既有 E0012「signature has (a), lambda has (b)」）、类型参数与值参数混排（curry 分组）、纯类型位无名形参、TypeDefinition 泛型、const 泛型 + curry、命名实参重载、返回位 binder。
+
+**返回位 binder 的正反对照**：正例 `f: (b: Int) -> (r: IsPositive(r + 1))` 代入后约束成立 ⇒ 零诊断；反例触发 E4018 且诊断文本含**代入后**的约束（证明 binder 真被代入而非丢弃）；AST 级探针显示返回位 binder **不入** `Type::Fn.params`（拍平结果为空）。
+
+**formatter 只打类型**：类型位 `Type::Fn` 臂只渲染形参的 `ty`（无名形参不渲染）；声明签名位仍渲染 `name: type`。实测 `S: Type = { f: (a: Int) -> Int }` → `{ f: (Int) -> Int }`（名字确实被丢，与既有断言一致）；**全语料 formatter 对拍 355 个 `.yx` 逐字节一致**（基线二进制 vs 落地态二进制）。既有断言未改（`tests/formatter_integration.rs`）。
+
+**变异试验（判据可失败性）**：① 把 `Type::fn_params_flat` 的拍平改成跳过首参（`.skip(1)`），不变量测试 `test_type_fn_params_carry_signature_verbatim` 转红（exit 101），语料差分门禁同步转红（321 处差异）；② 把形参构造改成「非首参类型强制错配」，不变量测试 `test_type_fn_params_carry_name_and_type_on_same_node` 转红，断言消息点名第 2 个形参的类型应为 `Int`。两次变异均以 `git apply -R` **机械还原**，还原后被改文件的 blob 与 HEAD 逐字一致、`git status` CLEAN。
+
+**IR dump 对拍（F2 的判据）**：探针 `f: (Int64) -> (a: Int64) -> Int64 = 1` 的 `dump` 输出——表示重塑后（未修复）外层 `Params: (i64)`、修复后外层 `Params: ()`，与**基线**逐字相同（见「登记③」）。
+
+### 登记①：6.5.1 的 A/B 契约偏差（变体定义与补臂必须原子）
+
+6.5.1 的契约要求「**分 2 commit**」，落地为两笔：
+
+1. `:white_check_mark: test(parser): 函数定义测试迁移到 Lambda 解构`——把两处测试构造迁到 Lambda（**准备**）；
+2. `:fire: refactor(parser): 删除零构造的 Expr::FnDef 变体及全部消费臂`——删变体定义 + 全部消费臂（**删除**）。
+
+**偏差**：契约把「定义删除」放在第 1 笔，实测**不可行**——Rust 的穷举 `match` 下，变体定义与补臂删除必须**原子**：任一侧先删即编译不过（定义先删而臂未删 ⇒ 臂指向不存在的变体；臂先删而定义还在 ⇒ 变体仍零构造、删净判据不成立）。故「定义删除」随第 2 笔落地，第 1 笔只承载测试迁移。
+
+**可 revert 口径（实测）**：
+
+- 第 2 笔（删变体）**可独立 revert**，revert 后可 build（源码全 auto-merge 干净，仅 3 个生成物文档冲突；重生成后构建通过、`cargo check --tests` 通过，`Expr::FnDef` 变体回到定义处）；
+- 第 1 笔（测试迁移）**不可单独 revert**——须与第 2 笔**成对**回退（顺序：先第 2 笔后第 1 笔）。单独回退第 1 笔会把「构造已删变体」的旧测试带回来，编译报 `no variant named FnDef`。
+
+**判定**：准备—删除型拆分**天然不可单独回退**，是该类拆分的固有性质，不是执行缺陷；「分 2 commit」是契约明写要求，可回退单元是**两笔合起来**。此事由本节登记，不作为 finding。
+
+### 登记②：修复轮的 `inScope` 契约缺陷追认
+
+二次复审的修复轮（`:bug: fix(middle): 恢复裸标识符形参的运行期槽位口径 + 注释/守卫订正`）实际改动 8 个文件，其中 **4 个是机械必需面却不在契约声明内**：
+
+| 文件 | 为什么是机械必需面 |
+| --- | --- |
+| `docs/src/reference/error-code/E1xxx.md` | 诊断发射点行号随 `ast.rs` 平移，生成器产物（AGENTS.md 第 10 条⑤ 要求随提交入库） |
+| `docs/src/reference/error-code/E8xxx.md` | 同上 |
+| `src/middle/core/tests/fn_param_slots.rs` | F2 的行为面锁定测试；按仓库测试规范必须放 `src/middle/core/tests/` |
+| `src/middle/core/tests/mod.rs` | 上一条测试的模块登记（否则测试树成孤儿，既不编译也不运行） |
+
+**追认**：这 4 个文件属机械必需面，**按机械必需面接受**。成因是契约的 `inScope` 写窄——**不是实现者越界**，也不是「顺手多改」。
+
+**由此固化的规则建议（待用户裁决后写入 `coding-rules.md`）**：**repair 类任务的契约必须预置生成物与测试家目录**——凡修复会移动诊断发射点行号，`inScope` 必须含 `docs/src/reference/error-code/` 与 `docs/src/reference/warning-code/` 的生成物**路径前缀**；凡修复会新增测试文件，`inScope` 必须含该测试的**家目录**（如 `src/middle/core/tests/`）。理由：这两类是「不写进契约就必然被契约校验拒收」的机械必需面，而本仓已连续多个批次（6.2 / 6.3 / 6.4 / 本批）反复踩同一个坑；09a §P6 6.4 的「过程注记①」已就生成物一侧登记过同一条建议，本条把它补齐到「测试家目录」一侧。
+
+### 登记③：F2 的处置结论（裸标识符形参的运行期槽位口径）
+
+**问题**：`Type::Fn.params` 装的是**全部**形参位条目，其中含「参数位裸标识符」这一形态——`name` 是标识符、`ty` 为空（可能是类型名、不是形参）。表示重塑后，`split_curry`（`src/middle/core/ir_gen.rs:615`）的游标按**参数条目个数**推进，于是裸标识符也占了一个运行期形参位 ⇒ 柯里化外层 IR 形状变化。
+
+**实测**（探针 `f: (Int64) -> (a: Int64) -> Int64 = 1` 的 `dump`）：
+
+| 形态 | 外层 `Params` | 内层 `Params` |
+| --- | --- | --- |
+| 基线 | `()` | `(i64)` |
+| 表示重塑后（未修复） | `(i64)` | `(i64)` |
+| 修复后 | `()` | `(i64)` |
+
+⇒ 修复后与基线**逐字相同**。同形状的既有错误行为亦恢复一致：`= a` / `= (a) => a` / `= { a }` / `f: (a) -> (b: Int64) -> Int64 = (b) => b` 在落地态与基线同为 E3006（运行期变量解析失败），不再被意外编译通过。
+
+**口径**：裸标识符形参**不占运行期形参位**——此口径由 **WBS 8.9.1**（参数位形态归一，D53）重新裁定；本批不越权改口径，只**恢复基线口径**并把口径写进 API：`Param::occupies_runtime_param_slot()`（`src/frontend/core/parser/ast.rs:814`）= `ty.is_some()`，`split_curry` 按它计位（`src/middle/core/ir_gen.rs:637`）。AST 表示**未动**（`Type::Fn.params` 继续承载带名 / 裸标识符的全部形参），也没有用「退回旧表示」绕过。
+
+**锁定测试**：`src/middle/core/tests/fn_param_slots.rs` 的 `test_bare_identifier_param_takes_no_runtime_slot`（`:42`）断言外层 `Params` 为空、内层带类型形参仍占 1 位；测试注释写明「此口径由 8.9.1 重新裁定，改它必须同时改这条测试」。**改口径必须改这条测试**，防止静默漂移。
+
+**同批另两条 finding 的处置**：
+
+- **F1（注释与事实不符）**——`Param` 的名字约定改写为**三分形态**的事实描述：① 有名形参；② 无名（空串）；③ 参数位裸标识符（`name` 是标识符、`ty` 为空、可能是类型名、不是形参）。`is_named()` 的语义定死为「`name` 槽是否非空」，**不代表**「携带真实形参名」。parser 认不出用户类型名（更彻底的方案）不在本批范围，留 6.6 / 6.8。
+- **F3（空串不参与按名查找无守卫）**——`classify_generic_params` / `extract_generic_param_names` 两个入口显式跳过无名形参，并加 `test_anonymous_param_never_yields_generic_name`（`src/frontend/core/parser/statements/tests/declarations.rs:309`）以三种可分类形态（类型名 / const 名 / 约束名）断言两入口均返回空表。
+- **末轮修复**——删除两个与既有谓词**精确互补**的死谓词 `Param::is_untyped()` 与 `Param::is_type_position()`（各 0 引用、无桩、无替代方法，13 行删除）；保留 `is_named()`、`occupies_runtime_param_slot()`、`anonymous()` / `from_type()` 与手写 `Debug`。
+
+### 门禁（实测，全部 exit 0）
+
+| # | 门禁 | 实测 |
+| --- | --- | --- |
+| ① | `cargo fmt --check --all` | exit 0 |
+| ② | `cargo clippy --all --all-features --all-targets -- -D warnings` | exit 0 |
+| ③ | `cargo test --all` | exit 0（lib 2878 passed / 0 failed / 2 ignored；integration 314 passed） |
+| ④ | 语料差分 | 356 / 356，差异为空（`check-corpus-parity.py` exit 0） |
+| ⑤ | IR 快照 | 216 条零漂移（`check-snapshot-drift.sh` PASS） |
+| ⑥ | 义务账本 | PASS + `--selftest` 全 PASS |
+| ⑦ | 边界 + 扇出 + 概念 | 违规 0（`pub(crate)` 计数 165）；`check-boundary` / `check-fanout` / `check-concepts` 全 exit 0 |
+| ⑧ | 文档门禁 | `check-docs-truth` 诊断码 157 / 157；`check-docs-orphan` / `check-docs-refs` / `check-docs-examples` 全 exit 0 |
+| ⑨ | 错误码生成器幂等 | 重跑 `python scripts/docs/gen-error-code-docs.py` 后 `git diff --quiet` exit 0 |
+
+各量测轮次：① ② ④ ⑤ ⑦ ⑧ ⑨ 在本批每一轮提交后复跑；③ ⑥ 在实现批的落地树上完整跑通；两轮修复轮各复跑其自身判据子集，均 exit 0。
+
+另：`check-ir-verifier.sh` PASS（全语料 `verify_loose` 绿，校验面非空）；`npm run docs:build` exit 0（VitePress 真构建，AGENTS.md 第 10 条⑨——文档提交前的强制项）。
+
+### 直驱例外
+
+**无**。`tests/yaoxiang` / `tests/baselines` / `src/std` 三段零差异，`tests/` 侧同样零差异（6.4 收口态与本批落地态之间 `git diff --stat -- tests/` 为空）；`src/` 内 `#[test]` 由 2878 增至 2883，变化全部是「改名 + 新增」，**removed 0**，无放宽断言。表单驱测试 `tests/formatter_integration.rs` 未改。
+
+### 残留风险（转入 6.6 契约输入）
+
+① **parser 的非 Fn 签名兜底仍在**——`src/frontend/core/parser/statements/types.rs:823` 的 `extract_fn_type_info` 仍以 let-else 返回 `Type::Name{"()"}`（6.3 改自 `Type::Void` 兜底；语义与 formatter 输出逐字不变，但该路径**语法可达**：`semantic_tokens` 的 `Name` 臂比旧 `Void` 臂多记一枚 dummy-span token；6.3 收口时实测语料中该形态 0 命中，formatter / 诊断 / dump 零漂移）——**6.5 未接手**，须在 6.6 消除（不再由 parser 兜底产出伪类型）。已登记进 09 的 6.6.1 行。
+
+② **`ir.rs` 三处 `ast::Type` 载体未动**——`Instruction::Cast { target_type }`（`src/middle/core/ir.rs:322`）、`Instruction::TypeTest { ty }`（同文件 `:328`）、`FunctionBody::TypeDecl { definition }`（同文件 `:651`）仍持 `ast::Type`；6.3 只删变体、6.4 只做注入化、6.5 只做表示重塑，三批都**未改 IR 形状**（IR 快照 216 条与语料基线 356 行零漂移）。载体处置须在 6.6 决定（改动会动 IR 快照 / 语料基线）。已登记进 09 的 6.6.1 行。
+
+③ **表达式位置当参数列表仍在**——`src/frontend/core/parser/pratt/led.rs` 的 `expr_to_params` 臂仍把「空 body 的 `Expr::Lambda`」捞回来当参数列表（03 §6.3 #17 计划的「随 5.5 改为直接读 Lambda」**未做**，5.5 的改动清单里本就没有这一项）。处置随 6.8.2 的声明驱动检查模式一并决定。
+
+④ **参数位裸标识符是否算参数，仍待 8.9.1 裁决**——本批只恢复基线口径并写进 API 与锁定测试；「裸标识符按类型命名空间解析、解析不到报新 E 码」属 8.9.1。
+
+⑤ **parser 内两处内置封闭集仍在**——`CONST_PARAM_TYPES` 与 `PREDICATE_NAMES`（`scripts/ci/check-boundary.py` 的 B6 库存 2 处），9 个默认 `parse()` 入口尚未注入 `SemanticProbe`；转硬 T1 前须评估（承接 09 的 6.6.1 行第 ⑥ 项）。
+
+### 过程注记（四条）
+
+① **「删变体」不可能只删定义**——Rust 穷举 `match` 使「定义 + 补臂」成为原子单元；契约若把两者拆到不同 commit，就必须接受其中一笔不可单独 revert（见「登记①」）。
+
+② **表示重塑的顺序不能反**——先删 `signature_params` 再给替代表示，中间态必然改行为；本批按「先 `Vec<Param>` → 再删两处旧字段 → 再可维护性收敛」三笔推进，每笔单独可 build。
+
+③ **零行为差分靠「把一致性收在打印边界」而不是靠再生基线**——手写 `Param` 的 `Debug` 正是为此（见「为什么手写 `Debug`」）；若改走基线再生，216 条快照会被「形参携带名字」污染成一次假的 IR 行为变化。
+
+④ **本批有 4 个机械必需面文件曾落在契约外**（见「登记②」）——本仓连续多个批次重复踩同一个坑，规则建议待用户裁决后固化。
+
+### 计数
+
+本批不新增二级/三级任务 ⇒ 09 顶部计数表不变（二级 **72** / 三级 **193**）。6.5 的 2 个三级任务为既有登记，勾选不改变计数；跨二级并入的 6.8.1 亦为既有登记。
