@@ -817,19 +817,6 @@ impl Param {
         !self.name.is_empty()
     }
 
-    /// 是否为**匿名形参**（形态 2：`name` 空串、仅由类型合成的纯类型位 /
-    /// 类型反解）。这是本节点能**判定**的非形参位形态；形态 3（参数位裸
-    /// 标识符）语法二义，不归本方法判定。
-    pub fn is_type_position(&self) -> bool {
-        !self.is_named()
-    }
-
-    /// 是否**缺少类型标注**（`ty = None`）：参数位裸标识符（形态 3）的唯一
-    /// 可判特征；不构成「它是类型名」的证明（也可能是无标注值形参）。
-    pub fn is_untyped(&self) -> bool {
-        self.ty.is_none()
-    }
-
     /// 是否占**运行期形参位**（IR 参数槽）：按基线口径 = **带类型标注**。
     /// 参数位裸标识符（形态 3，`ty = None`）不占位——此口径由 WBS 8.9.1
     /// 重新裁定；改它必须同时改 `middle/core/tests/fn_param_slots.rs` 的
