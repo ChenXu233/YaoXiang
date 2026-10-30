@@ -49,6 +49,58 @@ impl SiteClass {
     }
 }
 
+/// 一项「重建位置」登记：**文件 + 函数名 → 类别**。
+///
+/// 这张表是第二类 / 反向桥分类的**唯一来源**，并且**必须与源码逐条对账**：
+/// 登记的函数在对应文件里找不到同名 `fn` 时，[`scan`] 直接返回 `Err`——
+/// 不得静默落回 [`SiteClass::Forward`]。理由：函数改名或删除后，它内部的重建点
+/// 会被误算成 parser 前向构造点（前向计数虚高、第二类虚低），而门禁仍报「名单一致」。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RebuildEntry {
+    /// 函数所在文件（仓库相对路径）
+    pub file: &'static str,
+    /// 函数名（必须是该文件里真实存在的 `fn` 名）
+    pub function: &'static str,
+    /// 该函数里构造点的归类
+    pub class: SiteClass,
+    /// 为什么它算这一类（报告与报错都要能自解释）
+    pub why: &'static str,
+}
+
+/// 生产登记表：全部「把已有 AST 类型重造一份 / 反向重建」的函数。
+///
+/// - 第二类 **AST→AST 重建**：把已有 `ast::Type` 重造一份（不是 `MonoType → AST`）。
+///   `without_fn_param_names` 是 6.5 批引入的保真重建（剥掉类型位形参名），语义与
+///   `substitute_type_ast` / `substitute_type_in_ast` 同族——**6.6.2 裁决 1A** 把它归入
+///   本类；此前它被误算作 parser 前向（11 个变体各虚高 1 点，见 T1.6 基线对账）。
+/// - 反向桥 B：`mono_to_ast_type`（`MonoType → ast::Type`）。
+pub const REBUILD_FUNCTIONS: &[RebuildEntry] = &[
+    RebuildEntry {
+        file: FUNCTION_REL,
+        function: "substitute_type_ast",
+        class: SiteClass::AstToAst,
+        why: "类型变量替换：把已有 AST 类型重造一份",
+    },
+    RebuildEntry {
+        file: FUNCTION_REL,
+        function: "substitute_type_in_ast",
+        class: SiteClass::AstToAst,
+        why: "类型变量替换（AST 内遍历）：把已有 AST 类型重造一份",
+    },
+    RebuildEntry {
+        file: AST_REL,
+        function: "without_fn_param_names",
+        class: SiteClass::AstToAst,
+        why: "剥掉类型位形参名的保真重建（6.6.2 裁决 1A；唯一消费点 ir_gen 入 IR 前归一）",
+    },
+    RebuildEntry {
+        file: FUNCTION_REL,
+        function: "mono_to_ast_type",
+        class: SiteClass::ReverseMonoToAst,
+        why: "反向桥 B：MonoType → ast::Type",
+    },
+];
+
 /// 一处构造点
 #[derive(Debug, Clone)]
 pub struct Site {
@@ -92,10 +144,21 @@ pub struct ScannedFile {
     pub sites: Vec<Site>,
     /// 该文件里把 `ast::Type`（或它的再导出 `ir::Type`）绑定到别的名字的别名
     pub aliases: BTreeSet<String>,
+    /// 该文件里出现的全部 `fn` 名（含 impl/trait 项与嵌套 fn；测试模块整棵排除）——
+    /// 供 [`REBUILD_FUNCTIONS`] 与源码对账
+    pub fn_names: BTreeSet<String>,
 }
 
 /// 扫 `src/`（排除 tests）与变体清单
 pub fn scan(root: &Path) -> Result<ScanResult, String> {
+    scan_with(root, REBUILD_FUNCTIONS)
+}
+
+/// 同上，重建位置登记表可注入（单测用；生产走 [`REBUILD_FUNCTIONS`]）
+pub fn scan_with(
+    root: &Path,
+    registry: &'static [RebuildEntry],
+) -> Result<ScanResult, String> {
     let ast_path = root.join(AST_REL);
     let variants = parse_variants(&ast_path)?;
     let variant_set: BTreeSet<String> = variants.iter().map(|v| v.name.clone()).collect();
@@ -106,12 +169,13 @@ pub fn scan(root: &Path) -> Result<ScanResult, String> {
         ..ScanResult::default()
     };
     let mut parse_failures = Vec::new();
+    let mut fn_names: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
 
     for path in &files {
         let rel = rel_path(root, path);
         let content = std::fs::read_to_string(path)
             .map_err(|e| format!("读取 {} 失败: {e}", path.display()))?;
-        let scanned = match scan_source(&rel, &content, &variant_set) {
+        let scanned = match scan_source_with(&rel, &content, &variant_set, registry) {
             Ok(scanned) => scanned,
             Err(e) => {
                 parse_failures.push(format!("{rel}: {e}"));
@@ -119,6 +183,7 @@ pub fn scan(root: &Path) -> Result<ScanResult, String> {
             }
         };
         result.scanned_files += 1;
+        fn_names.insert(rel.clone(), scanned.fn_names.clone());
         for alias in &scanned.aliases {
             result
                 .aliases
@@ -136,6 +201,26 @@ pub fn scan(root: &Path) -> Result<ScanResult, String> {
             parse_failures.join("\n  ")
         ));
     }
+    // 防静默降级：登记的重建函数必须在源码里真实存在。找不到就报错——若放任它落回
+    // Forward，改名/删除后的重建点会伪装成 parser 前向构造点（门禁随之失真）。
+    let missing = missing_rebuild_functions(registry, &fn_names);
+    if !missing.is_empty() {
+        return Err(format!(
+            "重建位置登记表与源码不一致（{} 项）——函数改名/删除后必须同步 scan.rs 的 \
+             REBUILD_FUNCTIONS，不得静默落回「parser 前向」：\n  {}",
+            missing.len(),
+            missing
+                .iter()
+                .map(|entry| format!(
+                    "{}::{}（{}）",
+                    entry.file,
+                    entry.function,
+                    entry.class.label()
+                ))
+                .collect::<Vec<_>>()
+                .join("\n  ")
+        ));
+    }
     for files in result.aliases.values_mut() {
         files.sort();
         files.dedup();
@@ -150,11 +235,22 @@ pub fn scan_source(
     content: &str,
     variants: &BTreeSet<String>,
 ) -> Result<ScannedFile, String> {
+    scan_source_with(file, content, variants, REBUILD_FUNCTIONS)
+}
+
+/// 同上，重建位置登记表可注入（单测用）
+pub fn scan_source_with(
+    file: &str,
+    content: &str,
+    variants: &BTreeSet<String>,
+    registry: &'static [RebuildEntry],
+) -> Result<ScannedFile, String> {
     let parsed = syn::parse_file(content).map_err(|e| e.to_string())?;
     let aliases = collect_type_aliases(&parsed);
     let mut collector = Collector {
         file,
         variants,
+        registry,
         sites: Vec::new(),
         fn_stack: Vec::new(),
         impl_stack: Vec::new(),
@@ -163,12 +259,32 @@ pub fn scan_source(
         alias_scopes: vec![BTreeSet::new()],
         generic_scopes: Vec::new(),
         all_aliases: BTreeSet::new(),
+        fn_names: BTreeSet::new(),
     };
     collector.visit_file(&parsed);
     Ok(ScannedFile {
         sites: collector.sites,
         aliases,
+        fn_names: collector.fn_names,
     })
+}
+
+/// 登记表 ↔ 源码对账：返回**在登记文件里找不到同名 `fn`** 的条目（应为空）。
+///
+/// `found` = 源文件名 → 该文件里出现过的全部 `fn` 名。
+pub fn missing_rebuild_functions(
+    registry: &[RebuildEntry],
+    found: &BTreeMap<String, BTreeSet<String>>,
+) -> Vec<RebuildEntry> {
+    registry
+        .iter()
+        .filter(|entry| {
+            !found
+                .get(entry.file)
+                .is_some_and(|names| names.contains(entry.function))
+        })
+        .copied()
+        .collect()
 }
 
 /// 按 `use` 声明解析「别名 → `ast::Type`」绑定（F4：不再用文件级文本包含判定）。
@@ -286,6 +402,8 @@ enum ImplKind {
 struct Collector<'a> {
     file: &'a str,
     variants: &'a BTreeSet<String>,
+    /// 重建位置登记表（分类的唯一来源；生产 = [`REBUILD_FUNCTIONS`]）
+    registry: &'static [RebuildEntry],
     sites: Vec<Site>,
     fn_stack: Vec<String>,
     impl_stack: Vec<ImplKind>,
@@ -298,6 +416,8 @@ struct Collector<'a> {
     generic_scopes: Vec<BTreeSet<String>>,
     /// 本文件出现过的全部别名（用于报告）
     all_aliases: BTreeSet<String>,
+    /// 本文件出现过的全部 `fn` 名（供登记表对账）
+    fn_names: BTreeSet<String>,
 }
 
 impl Collector<'_> {
@@ -341,20 +461,22 @@ impl Collector<'_> {
         });
     }
 
+    /// 归类：反向桥 A 按 `impl` 形态判定，其余按「文件 + 当前最内层 fn 名」查登记表。
+    ///
+    /// 登记表里没有的重建函数不会在这里被「猜」出来——它由 [`missing_rebuild_functions`]
+    /// 在 [`scan`] 层报错兜底（防静默降级），此处只负责纯映射。
     fn classify(&self) -> SiteClass {
         if self.file == BYTECODE_REL && self.impl_stack.last() == Some(&ImplKind::FromIrType) {
             return SiteClass::ReverseFromIrType;
         }
-        if self.file == FUNCTION_REL {
-            match self.fn_stack.last().map(String::as_str) {
-                Some("mono_to_ast_type") => return SiteClass::ReverseMonoToAst,
-                Some("substitute_type_ast") | Some("substitute_type_in_ast") => {
-                    return SiteClass::AstToAst
-                }
-                _ => {}
-            }
-        }
-        SiteClass::Forward
+        let Some(function) = self.fn_stack.last() else {
+            return SiteClass::Forward;
+        };
+        self.registry
+            .iter()
+            .find(|entry| entry.file == self.file && entry.function == function.as_str())
+            .map(|entry| entry.class)
+            .unwrap_or(SiteClass::Forward)
     }
 }
 
@@ -387,6 +509,7 @@ impl<'ast> Visit<'ast> for Collector<'_> {
         &mut self,
         node: &'ast ItemFn,
     ) {
+        self.fn_names.insert(node.sig.ident.to_string());
         self.fn_stack.push(node.sig.ident.to_string());
         self.alias_scopes.push(BTreeSet::new());
         self.generic_scopes
@@ -401,6 +524,7 @@ impl<'ast> Visit<'ast> for Collector<'_> {
         &mut self,
         node: &'ast ImplItemFn,
     ) {
+        self.fn_names.insert(node.sig.ident.to_string());
         self.fn_stack.push(node.sig.ident.to_string());
         self.alias_scopes.push(BTreeSet::new());
         self.generic_scopes
@@ -415,6 +539,7 @@ impl<'ast> Visit<'ast> for Collector<'_> {
         &mut self,
         node: &'ast TraitItemFn,
     ) {
+        self.fn_names.insert(node.sig.ident.to_string());
         self.fn_stack.push(node.sig.ident.to_string());
         self.alias_scopes.push(BTreeSet::new());
         self.generic_scopes
@@ -686,6 +811,99 @@ mod tests {
             "只有 Type::Int 是构造点，AstType::Int 无 import 不算"
         );
         assert!(scanned.aliases.is_empty(), "无 import 时别名集合应为空");
+    }
+
+    // 生产登记表对账的自测登记项（只用于单测；生产走 REBUILD_FUNCTIONS）
+    const TEST_REBUILD: &[RebuildEntry] = &[RebuildEntry {
+        file: AST_REL,
+        function: "without_fn_param_names",
+        class: SiteClass::AstToAst,
+        why: "test-only：验证「登记 → 归类」与「名字消失 → 报错」",
+    }];
+
+    // 裁决 1A 的归类本体：登记过的重建函数里的构造点必须落「AST→AST 重建」，
+    // 不得算 parser 前向（否则前向计数虚高、第二类虚低）。
+    #[test]
+    fn test_registered_rebuild_function_is_classified_as_ast_to_ast() {
+        // Arrange：ast.rs 风格——impl Type 里的方法，方法名在登记表里
+        let src = "impl Type {\n    pub fn without_fn_param_names(&self) -> Type {\n        Type::Ptr(Box::new(self.clone()))\n    }\n}\n";
+
+        // Act
+        let scanned = scan_source_with(AST_REL, src, &variants(&["Ptr"]), TEST_REBUILD)
+            .expect("fixture 应能解析");
+
+        // Assert
+        assert_eq!(scanned.sites.len(), 1, "impl 方法体里应有 1 个构造点");
+        assert_eq!(
+            scanned.sites[0].class,
+            SiteClass::AstToAst,
+            "登记过的 without_fn_param_names 里的构造点必须归第二类，不得算 parser 前向"
+        );
+        assert!(
+            scanned.fn_names.contains("without_fn_param_names"),
+            "扫描产物应记录该文件的 fn 名，供登记表对账"
+        );
+    }
+
+    // 反例的一半：不在登记表里的同名函数**会**落回前向——所以「名字消失」必须由
+    // 登记表对账报错兜底，不能靠 classify 自己猜。
+    #[test]
+    fn test_unregistered_function_is_not_classified_as_rebuild() {
+        // Arrange：同样的源码，但登记表为空
+        let src =
+            "fn without_fn_param_names(&self) -> Type { Type::Ptr(Box::new(self.clone())) }\n";
+
+        // Act
+        let scanned =
+            scan_source_with(AST_REL, src, &variants(&["Ptr"]), &[]).expect("fixture 应能解析");
+
+        // Assert
+        assert_eq!(
+            scanned.sites[0].class,
+            SiteClass::Forward,
+            "未登记的 fn 不对应任何重建类别——这正是必须报错而非静默通过的原因"
+        );
+    }
+
+    // 防静默降级（裁决 1A 的对账面）：登记表要求的函数在源码里不存在（改名/删除）时
+    // 必须报出该登记项；否则它的重建点会静默落回「parser 前向」，门禁失真。
+    #[test]
+    fn test_rebuild_registry_reports_missing_function() {
+        // Arrange：源码里只有改名后的拼写（without_fn_param_names_v2）
+        let mut found: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+        found.insert(
+            AST_REL.to_string(),
+            ["without_fn_param_names_v2".to_string()]
+                .into_iter()
+                .collect(),
+        );
+
+        // Act
+        let missing = missing_rebuild_functions(TEST_REBUILD, &found);
+
+        // Assert
+        assert_eq!(missing.len(), 1, "名字不匹配必须报出该登记项，不得静默通过");
+        assert_eq!(
+            missing[0].function, "without_fn_param_names",
+            "报出的应是登记名"
+        );
+    }
+
+    // 判据能绿：登记项都在源码里时不报错
+    #[test]
+    fn test_rebuild_registry_accepts_present_function() {
+        // Arrange
+        let mut found: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+        found.insert(
+            AST_REL.to_string(),
+            ["without_fn_param_names".to_string()].into_iter().collect(),
+        );
+
+        // Act
+        let missing = missing_rebuild_functions(TEST_REBUILD, &found);
+
+        // Assert
+        assert!(missing.is_empty(), "登记项都在时不得报错，实际 {missing:?}");
     }
 
     // F4 回归：同文件里泛型形参 T 遮蔽别名，不得把 T::X 当成 ast::Type

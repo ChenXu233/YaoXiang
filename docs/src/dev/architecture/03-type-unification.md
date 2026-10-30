@@ -558,7 +558,7 @@ declarations.rs:498-511 与 ast.rs:930 改为
 
 | # | 检查 | 输入 | 失败条件 | 治法 |
 | --- | --- | --- | --- | --- |
-| **T1 构造点分列** | 扫描 `src/frontend/core/parser/ast.rs` 的 `pub enum Type` 变体清单；在 `src/` 下按**三类分列**统计每个变体的构造点（① parser 前向 ② AST→AST 重建 ③ 反向桥重建；排除 `tests/` 与 `*/tests/*`） | 变体清单 + 三类命中表 | ① 某变体**前向零构造**且未登记；② 已登记变体出现前向构造点；③ 登记的通配臂兜底豁免点**未命中**；④ 存在**未登记的通配臂兜底点**（兜底豁免逐条登记，不得泛化到所有通配臂） | 删变体；或登记理由 / 删除失效登记（见 5.2 与 `REGISTERED_ZERO_FORWARD`） |
+| **T1 构造点分列** | 扫描 `src/frontend/core/parser/ast.rs` 的 `pub enum Type` 变体清单；在 `src/` 下按**三类分列**统计每个变体的构造点（① parser 前向 ② AST→AST 重建 ③ 反向桥重建；排除 `tests/` 与 `*/tests/*`）。重建位置（②③）由 `scan.rs` 的 `REBUILD_FUNCTIONS` 表驱动并与源码逐条对账 | 变体清单 + 三类命中表 + 勘察基线 | ① 某变体**前向零构造**且未登记；② 已登记变体出现前向构造点；③ 登记的通配臂兜底豁免点**未命中**；④ 存在**未登记的通配臂兜底点**（兜底豁免逐条登记，不得泛化到所有通配臂）；⑤ **勘察基线（T1.6）漂移**：某变体的 合计/前向/AST→AST/反向桥 与 `SCOUT_BASELINE` 不等（裁决 2A）；⑥ **重建位置登记表与源码不一致**：登记的重建函数在源码里找不到同名 `fn`（改名/删除未同步） | 删变体；或登记理由 / 删除失效登记（见 5.2 与 `REGISTERED_ZERO_FORWARD`）；基线漂移以可复现证据刷新 `SCOUT_BASELINE`（或修口径）；登记表随源码同步 |
 | **T2 同义词表与全仓名字清单一致** | `types/mono.rs` 的 `from_builtin_name` match 表 + `ast.rs:855` `CONST_PARAM_TYPES` + `src/lsp/world.rs:182` 的 LSP 内置类型名清单 | 三张表 | 某个类型名在一张表中存在而另一张不认（按各自语义的映射规则比对）；**WBS 6.1.2 起另有 T2.5「已删除拼写哨兵」：22 个已删拼写任一被加回即报红** | `type-tables --fix` 双向补齐 |
 | ~~**T3 内置类型名与 RFC-011 文档一致**~~ | 原定：`from_builtin_name` 的规范名集合 + `docs/src/rfc/accepted/011-generic-type-system.md` 的类型表 | — | **已按 2026-10-30 用户裁决删除（比对对象不存在）**：RFC-011 是泛型系统设计，正文没有以「内置类型名」为列的表格 | —（不适用；删除理由与覆盖面见下表后的说明） |
 | **T4 `Type → MonoType` 穷尽性** | `Type` 变体清单 vs `types/lower.rs` 的 match 臂 | 两张表 | 有变体无对应臂，或有臂无对应变体 | 补臂 / 删臂 |
@@ -578,15 +578,19 @@ declarations.rs:498-511 与 ast.rs:930 改为
 
 **T4 的实现说明**：Rust 的穷尽 match 已在编译期保证"变体 → 臂"的方向。T4 的价值在**反向**——检测 `lower.rs` 里存在**指向已删除变体**的陈旧臂（这类代码在删除变体时就编译失败了，故 T4 实为冗余）。**T4 因此降级为一条 CI 断言（`cargo build` 成功即通过），不进 `build.rs` 的 `panic!` 路径。** T1/T2 才是真正需要文本解析的两项（T3 已删除，见上）。
 
+**T1 的失败形态（6.6.2，2026-10-30 用户裁决 2A）**：T1 已从「只报告」转为**构建硬失败**——`build.rs` 调 `type_tables::build_gate(root)`：`Ok(摘要)` 打印一行 `cargo:warning`（信息行，不是违规），`Err(明细)` 直接 `panic!` 拒绝编译。**五类违规走同一条失败路径**（见上表 ①–⑤），报错逐条带**变体名**与构造点 / 兜底点 / 变体定义行的 `file:line`。扫描本身完不成（有文件解析失败、口径不完整）同样算失败——**不得降级为「通过」**。**登记机制保留且为空表**：`REGISTERED_ZERO_FORWARD` 与 `DEAD_VARIANTS_03` 现在都是空表（6.3 删掉 13 个死变体后已无零构造变体），T1.7 的「登记但已不成立 / 豁免未命中」报警与注入式核对（`*_with(registry)`）照常工作——新增零构造变体必须删除或在表里登记理由，否则构建失败。
+
+**重建位置的单一源（6.6.2，用户裁决 1A）**：第二类 / 反向桥的归类由 `scan.rs` 的 `REBUILD_FUNCTIONS` 表驱动（**文件 + 函数名 → 类别**）。`Type::without_fn_param_names`（6.5 批引入的保真重建：把已有 AST 类型重造一份以剥掉类型位形参名，唯一消费点 `ir_gen.rs` 入 IR 前归一）归入**第二类 AST→AST 重建**；此前它被算作 parser 前向，使 11 个变体的前向各虚高 1 点（`Name` / `ConstExpr` 走 `self.clone()`，本就不产点）。登记表与源码**逐条对账**：登记的函数在源码里找不到同名 `fn` 时扫描直接报错，**不得静默落回前向**（否则改名/删除后重建点会伪装成构造点）。
+
 **T1 的两个实现难点与缓解**：
 
 1. **构造点 vs match 臂的区分**需要语法分析。仓库根 `Cargo.toml` **无 `syn` 依赖**，`tools/code-tables` 亦只有 `serde_json`。缓解方案：
    - **首选**：给 `tools/type-tables` 引入 `syn`（仅该 crate，根 crate 不动）。`syn` 是标准做法，且门禁 crate 独立于编译器。
    - **退路**：复用已有的 `tools/extract_arm.py`（仓库内既有 Python 工具）的行级启发式——构造点位于 `= ` 右侧或函数实参位，match 臂位于 `=>` 左侧。用 `=>` 出现次数近似判断。
-   - **保守起点**：T1 首次上线时**只报告不失败**（`cargo:warning`），取一次全量基线确认启发式无误后再改为 `panic!`。这与"CI 门禁初期会红、需要先建立基线"的处理一致。
+   - **保守起点（已按此顺序走完）**：T1 首次上线时**只报告不失败**（`cargo:warning`），取一次全量基线确认启发式无误后再改为 `panic!`——6.0.1 起只报告，**6.6.2（2026-10-30）转 `panic!`**，转硬时基线已在同一口径下刷新到 13/13 行一致。这与"CI 门禁初期会红、需要先建立基线"的处理一致。
 2. **反向桥与 AST→AST 重建点必须单独归类**。2.2 记录了 `bytecode.rs:2353-2390` 与 `function.rs:507-529` 两处 `MonoType → ast::Type` 重建；2.2.2 记录了 `function.rs` 两个替换函数的 AST→AST 重建（15 变体 / 28 点，13 名单内 5 变体 / 10 点）。若 T1 把它们与前向构造混为一谈，`Int` / `Float` / `Bool` / `Char` / `Void` / `String` / `Bytes` 以及 `Union` / `Option` / `Result` / `Sum` / `AssocType` 会被判为"有构造点"而免于删除，与 5.2 的处置表直接矛盾。T1 的报告须把三类构造点分列，且**兜底豁免只作用于逐条登记的条目**（当前仅 `Void` 的 parser 错误兜底 `types.rs:836`），不得泛化到所有通配臂。
 
-**门禁覆盖面**：`build.rs` 中新增 `type_tables::validate(root, &entries)` 调用，位置紧邻 `build.rs:19-37` 现有块之后，沿用 `panic!("类型表校验失败（{} 项 error ...）", ...)` 形态。
+**门禁覆盖面（已落地，6.6.2，2026-10-30 用户裁决 2A）**：`build.rs` 调 `type_tables::build_gate(root)`，位置紧邻 `code-tables` 的校验块之后，沿用 `panic!` 拒绝编译的形态——`Ok(摘要)` 打一行 `cargo:warning`，`Err(明细)` 即 `panic!("类型表门禁 T1 失败（构建已拒绝）：…")`。**五类违规走同一条失败路径**：零构造变体未登记 / 登记但已出现前向构造点 / 登记豁免点未命中 / 未登记的通配臂兜底点 / **勘察基线（T1.6）漂移**；报错逐条带变体名与构造点、兜底点或变体定义行的 `file:line`。扫描本身完不成（有文件解析失败）同样算失败，**不得降级为「通过」**。
 
 ## 详细设计
 
@@ -710,7 +714,7 @@ declarations.rs:498-511 与 ast.rs:930 改为
 | **3. 死变体删除** | **已完成（WBS 6.3，2026-10-29）**：按 5.2 表删 13 个变体（`ast::Type` 26 → 13）；清 `mono.rs:699-708` 等 match 臂、`types.rs:836` 兜底（改 let-else 显式返回 `Type::Name{"()"}`）；**同批处理 `function.rs:507-529`（#47）与 AST→AST 10 点（6.3.2）**；同步 `types/tests/mono.rs`。**#47 的口径已更正**：原写的「统一走 `AstType::Name` + `mono.type_name()`」在 6.1 之后**失效**——`type_name()` 是诊断展示用的小写内部名（`int64` / `void` / `string`），6.1.2 删掉小写拼写后它会落成 `TypeRef`、**静默丢掉类型身份**；实际改用新增的 `MonoType::canonical_name()`（`from_builtin_name` 的严格逆向，宽度显式）+ 结构回写 | C3 + `cargo build` 全绿（穷尽 match 强制补全所有臂）+ 泛型替换定向对拍（6.4 末行）——**实测全绿**（实录见 [09a](./09a-wbs-history.md) §P6 6.3） | 单独 commit，可 revert |
 | **4. parser 数据流** | **已完成（WBS 6.4，2026-10-29）**：新增 `probe.rs`（`TypeEnvProbe` + `NullProbe` + `BuiltinProbe` + `NameKind`）；改 `parser_state.rs`（增 `probe` 字段与 `probe()` / `kind_of()` 访问器，**40 个构造点全部接线**＝生产 4 + 测试 36）；删 parser 侧 2 处 `operator_interfaces::spec()` 调用、middle 侧 1 处与 driver 侧 1 处改走窄入口 `is_constraint_name`（#48）；合并两份 `name_used_as_type*` 为 `ast.rs:848` 的单一实现（#49）；`CONST_PARAM_TYPES` 经 `NameKind::Builtin` 双知识接线（#50）。**未做**：`types.rs:162-165` 给 `Type::Name` 加 `kind` 字段（#10，字段化与本批 C3 面冲突）、`types.rs:836` 的兜底改显式错误返回（#12，转 6.5） | C3 + **新增断言**：`grep 'typecheck' src/frontend/core/parser/` 应为 0 ——**实测两条 grep（`typecheck` / `operator_interfaces`）均 0 命中**；语料 356/356、IR 快照 216 零漂移、`cargo test --all` exit 0（lib 2868 → 2875 passed，+7） | 单独 commit，可 revert |
 | **5. AST 死变体与专用字段** | **已完成（WBS 6.5.1 / 6.5.2 + 并入的 6.8.1，2026-10-30）**：删 `Expr::FnDef`（基线实测 **25 处 / 16 文件** = 定义 1 + 生产消费 15 + 测试构造 3 + 注释 6，其中代码引用 19 处）+ 删 `Assign` / `TypeDefinition` 两处并行形参表；`Type::Fn.params` 重塑为 `Vec<Param>`（名字与类型同栖）→ 单一拍平入口 `Type::fn_params_flat`；`NamedParen` 保留为语法节点、binder 由类型检查器显式解释 | C3 + `tests/integration/` **22 模块**全绿（实测 22 个 .rs；原文写 18 为旧数）；formatter 参数位输出逐字不变（全语料 355 个 `.yx` 对拍逐字节一致）；语料 356/356、IR 快照 216 条零漂移；`src/` 内 `#[test]` 2878 → 2883（未删测试） | 分 7 笔提交（2 笔删变体 + 3 笔表示重塑与旧表示删除 + 2 笔修复轮）；**可 revert 口径**：删变体那笔可独立 revert，测试迁移那笔须与之成对（见 [09a](./09a-wbs-history.md) §P6 6.5 的「登记①」）；实测数字与门禁见 [09a](./09a-wbs-history.md) §P6 6.5 |
-| **6. 门禁转硬** | T1 从 warning 改为 `panic!`；T4 降级为 CI 断言 | `cargo build` 在故意引入一个零构造变体时**必须失败**（红测试先行） | 单独 commit |
+| **6. 门禁转硬** | **已完成（6.6.2，2026-10-30 用户裁决 2A）**：T1 从 warning 改为 `panic!`，并把 **T1.6 勘察基线对账接入同一条失败路径**（构造点计数与 `SCOUT_BASELINE` 不一致即失败）；同时按裁决 1A 把 `without_fn_param_names` 归入第二类（前向回到冻结值）；T4 降级为 CI 断言 | `cargo build` 在故意引入一个零构造变体时**必须失败**；把 `SCOUT_BASELINE` 任一变体计数改 1 **也必须失败**——两处变异均以机械可逆补丁（`scripts/dev/scratch.py trial`）实测 | 单独 commit |
 
 **依赖顺序**：0 → 1 → 2 → 3 → 4 → 5 → 6。**阶段 3 与 5 必须在阶段 2 之后**——阶段 2 落地前，字节码侧的反向桥 A（`bytecode.rs` 的 `From<MonoType> for IrType`）消费 `IrType::String` / `IrType::Bytes`，先删变体会破坏编译；该桥已于 6.2.2 删除，**阶段 3 删变体时的剩余改写面是反向桥 B**（`middle/passes/mono/function.rs` 的 `mono_to_ast_type`，仍按名字反解 `String` / `Bytes`）与 `middle/core/ir.rs` 的三处 `ast::Type` 载体。阶段 3 的 #47 必须与 #1 同批，否则 `mono_to_ast_type` 静默改行为。**阶段 3 已于 2026-10-29 完成（WBS 6.3）**：反向桥 B 已改用 `canonical_name` + 结构回写；`middle/core/ir.rs` 的三处 `ast::Type` 载体**未改**——6.3 只删变体、不改 IR 形状（IR 快照 216 条与语料基线 356 行零漂移），载体处置留阶段 4。
 
@@ -760,7 +764,7 @@ declarations.rs:498-511 与 ast.rs:930 改为
 | **2. `signature_params` 删除有语义风险**（**已核实并解决：6.5.2，2026-10-30**）。它携带**未过滤**的参数列表，而 `Lambda.params` 是**已过滤**的。若 `classify_generic_params` 依赖前者，改造会改变泛型分类结果。**实测结论**：`classify_generic_params` / `extract_generic_param_names` 需要未过滤列表；拍平 `Type::Fn.params` 与旧 `signature_params` 同源（同一批 `Param` 节点），分类结果不变。改用 `Lambda.params` 的方案会改行为，**未采用**（语料 356/356、快照 216、`cargo test --all` 全绿）。
 | **3. 阶段 3 触及 `middle/passes/mono/function.rs`**。除 `AssocType` 的 8 处 match 外，`507-529` 的 `mono_to_ast_type` 是单态化类型替换的出口，改写后替换结果的 `type_name()` 可能变化（6.4 末行）。
 - **`.yx` 语料的非规范类型名可能非零**。若语料大量使用 `i64` / `int`，阶段 1 的"直接删同义词"不可行，退化为"移入 lexer 别名表"，`from_builtin_name` 的收敛幅度减小。（**实测为 0**：6.0 勘察见 5.3 末，故 WBS 6.1.2 直接删除别名、未走别名表路线。）
-- **门禁初期会红**。T1 首次上线若直接 `panic!` 会立刻阻塞编译。必须先只报告取基线。
+- **门禁初期会红**（**已按该风险分两步走**）。T1 首次上线若直接 `panic!` 会立刻阻塞编译，故 6.0.1 起先只报告取基线，6.6.2 才转 `panic!`；转硬时基线已在同一口径下刷新到 13/13 行一致，当前树 0 零构造。
 
 ### 未决问题
 

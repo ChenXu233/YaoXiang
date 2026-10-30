@@ -1,8 +1,10 @@
 //! 类型表生成期门禁（P6 / RFC-039 §5.7 的 T1–T2）
 //!
 //! 两个消费者（形态与 `tools/code-tables` 对称）：
-//! - `build.rs`（build-dependencies 引本 lib）：每次 `cargo build` 只跑 **T1**，且首版
-//!   **只报告不失败**——结果以 `cargo:warning` 输出，不 panic、不使构建失败（6.6 才转硬）。
+//! - `build.rs`（build-dependencies 引本 lib）：每次 `cargo build` 只跑 **T1**，**已是构建硬失败**
+//!   （6.6.2，2026-10-30）——违规即 `panic!` 拒绝编译：零构造变体 / 白名单与实现不一致 /
+//!   登记豁免点未命中 / 未登记的兜底点 / **勘察基线漂移（T1.6）**，五类走同一条失败路径；
+//!   通过时只打一行摘要（`cargo:warning` 信息行，不是违规）。
 //! - `type-tables` bin：`--report` 输出 T1/T2 两节全量报告，`--json` 输出 T1 结构化结果。
 //!
 //! 两项检查（失败条件见 [03-type-unification.md] §5.7 的表）：
@@ -36,16 +38,18 @@ pub const FUNCTION_REL: &str = "src/middle/passes/mono/function.rs";
 /// T1 的扫描根（递归，排除 `tests` 目录）
 pub const SCAN_ROOT_REL: &str = "src";
 
-/// `build.rs` 入口：只跑 T1，返回要逐行打印为 `cargo:warning=` 的文本。
+/// `build.rs` 入口：T1 **门禁**判定（6.6.2 起是构建硬失败）。
 ///
-/// **永不 panic、永不返回失败**：扫描本身出错时把错误折成一条 warning（6.0.1 口径）。
-/// 6.6「门禁转硬」时改成 panic 只需要改 `build.rs` 的调用点。
-pub fn build_warnings(root: &Path) -> Vec<String> {
+/// - `Ok(摘要)`：通过——`build.rs` 打印为一行 `cargo:warning` 信息（不是违规）；
+/// - `Err(明细)`：违规——`build.rs` 必须 `panic!` 使构建失败，明细含变体名与 `file:line`。
+///
+/// 扫描本身出错也算 `Err`：口径不完整时判定不成立，**不得**降级成「通过」（防静默降级）。
+pub fn build_gate(root: &Path) -> Result<String, String> {
     match scan::scan(root) {
-        Ok(result) => t1::ForwardReport::new(result).warnings(),
-        Err(msg) => vec![format!(
-            "type-tables T1 未完成（本版只报告，不使构建失败）：{msg}"
-        )],
+        Ok(result) => t1::ForwardReport::new(result).gate(),
+        Err(msg) => Err(format!(
+            "type-tables T1 扫描未完成（口径不完整 ⇒ 判定不成立）：{msg}"
+        )),
     }
 }
 
@@ -58,8 +62,11 @@ pub fn report(root: &Path) -> Result<String, String> {
     let mut out = String::new();
     out.push_str("=== P6 类型表门禁报告（tools/type-tables --report）===\n");
     out.push('\n');
-    out.push_str("本报告为**只报告**形态（6.0.1）：T1 在 build.rs 里也只发 cargo:warning，\n");
-    out.push_str("不 panic、不使构建失败；T2 本轮完全不接构建路径。6.6 才把 T1 转硬。\n");
+    out.push_str("**T1 已是构建门禁**（6.6.2，2026-10-30）：违规即 build.rs panic 拒绝编译——\n");
+    out.push_str("零构造变体 / 白名单与实现不一致 / 登记豁免未命中 / 未登记兜底点 /\n");
+    out.push_str(
+        "勘察基线漂移（T1.6）走同一条失败路径；通过时只打一行摘要。T2 仍只报告、不接构建路径。\n",
+    );
     out.push_str(&format!(
         "扫描根：{SCAN_ROOT_REL}/（排除 tests/ 与 */tests/*）\n"
     ));

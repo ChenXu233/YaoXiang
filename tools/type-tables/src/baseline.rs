@@ -1,11 +1,25 @@
-//! 勘察基线——用于 `--report` 的自校验，**不参与** build.rs 的判定。
+//! 勘察基线——**T1 门禁的一部分**（6.6.2 起：基线漂移与零构造走同一条失败路径）。
 //!
 //! 数字出自 syn AST 扫描（口径与 `scan.rs` 相同：构造点=表达式位置，排除 tests），
 //! 逐项为「变体 / 定义行 / 合计 / 前向 / AST→AST / 反向桥」。
-//! 与实测不一致时报告里逐项标 ✗——说明扫描口径漂了，而不是「基线过期」就当没事。
+//! 与实测不一致时 [`mismatches`] 逐变体给出「实测 vs 基线」，`build.rs` 据此**拒绝编译**：
+//! 不一致只有两种成立解释——源码新增/删除了构造点（须同步本表），或扫描口径漂了（须修工具）。
 //!
-//! **6.3 刷新**：WBS 6.3 删除 03 §5.2 的 13 个死变体后，基线只保留现存的 13 个变体行
-//! （旧基线见文末注释）。本次数字在删除后的树上实测，与 T1.2 逐项相等。
+//! **6.6.2 刷新（2026-10-30）**：裁决 1A 把 `Type::without_fn_param_names`（6.5 批引入的
+//! 保真重建）归入第二类 AST→AST 重建后，逐列变化如下（每处变化的来源逐一写明）：
+//! - **前向**：11 个变体各 −1，回到 6.3 冻结值——那 1 点本就不是 parser 前向构造点，
+//!   而是该函数 `match self` 各臂里重造 AST 的点（`ast.rs` 的 `without_fn_param_names`）。
+//!   退出的 11 个变体 = Struct / NamedStruct / Tuple / Fn / Generic / Literal / Ptr / Ref /
+//!   MetaType / Paren / NamedParen（`Name` 与 `ConstExpr` 走 `self.clone()`，本就不产点）。
+//! - **AST→AST**：同一批 11 个变体各 +1——点没变，只是改归第二类（裁决 1A）。
+//! - **合计**：同一批 11 个变体各 +1（相对 6.3 冻结值）——这是**真实新增**的重建点：
+//!   `without_fn_param_names` 由 6.5 批（`59803b4af`）引入，6.3 的基线不可能覆盖它；
+//!   旧口径把它算进前向，才表现为「前向虚高、第二类不动」。
+//! - **反向桥**：不变。
+//! - **定义行**：按刷新后的树重取（6.3 之后 `ast.rs` 的变体行已随 6.4/6.5 平移）。
+//!
+//! 上一次冻结（6.3，删除 03 §5.2 的 13 个死变体后）见 git 历史；6.0 原始勘察冻结于
+//! `bfe2f6ba366ff0c45f517a4bec8d7e87b0a59696`（见 09a §P6 6.0）。
 
 use crate::t1::VariantStats;
 
@@ -19,17 +33,17 @@ pub struct BaselineRow {
     pub reverse: usize,
 }
 
-/// 基线冻结 revision（本表描述 6.3 落地后的树）。
+/// 基线冻结 revision：本表的源码树。
 ///
-/// 删除前的 6.0 勘察冻结于 `bfe2f6ba366ff0c45f517a4bec8d7e87b0a59696`（见 09a §P6 6.0）；
-/// 6.3 的父提交是 `c5a77d569e98745f81e2b5a4463d15b9dee0dfa7`——本表即在该树上删除
-/// 13 个变体后由 T1.2 实测重取（删除前后行数与列含义不变，只有变体集变化）。
-pub const SCOUT_BASELINE_REV: &str = "c5a77d569e98745f81e2b5a4463d15b9dee0dfa7";
+/// 6.6.2 的改动只落在 `tools/type-tables/` 与 `build.rs`（不改 `src/`），故基线数字的
+/// 源码侧就是该 revision；任何人 checkout 它并用本批之后的口径跑 `type-tables --json`
+/// 都应得到逐列相同的数字（差异只可能来自口径漂移 = 门禁要抓的对象）。
+pub const SCOUT_BASELINE_REV: &str = "b37bd8b5e63a83592a0c33611964d1461acd2fb7";
 
 pub const SCOUT_BASELINE: &[BaselineRow] = &[
     BaselineRow {
         variant: "Name",
-        decl_line: 445,
+        decl_line: 442,
         total: 6,
         forward: 3,
         ast_to_ast: 0,
@@ -37,79 +51,79 @@ pub const SCOUT_BASELINE: &[BaselineRow] = &[
     },
     BaselineRow {
         variant: "Struct",
-        decl_line: 449,
-        total: 3,
+        decl_line: 446,
+        total: 4,
         forward: 1,
-        ast_to_ast: 2,
+        ast_to_ast: 3,
         reverse: 0,
     },
     BaselineRow {
         variant: "NamedStruct",
-        decl_line: 453,
-        total: 3,
+        decl_line: 450,
+        total: 4,
         forward: 1,
-        ast_to_ast: 2,
+        ast_to_ast: 3,
         reverse: 0,
     },
     BaselineRow {
         variant: "Tuple",
-        decl_line: 458,
-        total: 5,
+        decl_line: 455,
+        total: 6,
         forward: 3,
-        ast_to_ast: 2,
+        ast_to_ast: 3,
         reverse: 0,
     },
     BaselineRow {
         variant: "Fn",
-        decl_line: 459,
-        total: 7,
+        decl_line: 463,
+        total: 8,
         forward: 4,
-        ast_to_ast: 2,
+        ast_to_ast: 3,
         reverse: 1,
     },
     BaselineRow {
         variant: "Generic",
-        decl_line: 463,
-        total: 4,
+        decl_line: 467,
+        total: 5,
         forward: 1,
-        ast_to_ast: 2,
+        ast_to_ast: 3,
         reverse: 1,
     },
     BaselineRow {
         variant: "Literal",
-        decl_line: 471,
-        total: 3,
+        decl_line: 475,
+        total: 4,
         forward: 1,
-        ast_to_ast: 2,
+        ast_to_ast: 3,
         reverse: 0,
     },
     BaselineRow {
         variant: "Ptr",
-        decl_line: 480,
-        total: 3,
+        decl_line: 484,
+        total: 4,
         forward: 1,
-        ast_to_ast: 2,
+        ast_to_ast: 3,
         reverse: 0,
     },
     BaselineRow {
         variant: "Ref",
-        decl_line: 483,
-        total: 5,
+        decl_line: 487,
+        total: 6,
         forward: 2,
-        ast_to_ast: 2,
+        ast_to_ast: 3,
         reverse: 1,
     },
     BaselineRow {
         variant: "MetaType",
-        decl_line: 492,
-        total: 2,
+        decl_line: 496,
+        total: 3,
         forward: 2,
-        ast_to_ast: 0,
+        ast_to_ast: 1,
         reverse: 0,
     },
     BaselineRow {
         variant: "ConstExpr",
-        decl_line: 501,
+        decl_line: 505,
         total: 3,
         forward: 3,
         ast_to_ast: 0,
@@ -117,29 +131,111 @@ pub const SCOUT_BASELINE: &[BaselineRow] = &[
     },
     BaselineRow {
         variant: "Paren",
-        decl_line: 513,
-        total: 3,
+        decl_line: 517,
+        total: 4,
         forward: 2,
-        ast_to_ast: 1,
+        ast_to_ast: 2,
         reverse: 0,
     },
     BaselineRow {
         variant: "NamedParen",
-        decl_line: 528,
-        total: 2,
+        decl_line: 533,
+        total: 3,
         forward: 1,
-        ast_to_ast: 1,
+        ast_to_ast: 2,
         reverse: 0,
     },
 ];
 
-/// 删除前的 6.0 基线逐行数字（仅供追溯，不参与比对）：
-///
-/// `Int` / `Float` / `Char` / `String` / `Bytes` / `Bool` / `Void` / `Union` / `Enum` /
-/// `Option` / `Result` / `AssocType` / `Sum` 共 13 行，已随变体删除。
+// 删除前的 6.0 基线逐行数字（仅供追溯，不参与比对）：
+//
+// `Int` / `Float` / `Char` / `String` / `Bytes` / `Bool` / `Void` / `Union` / `Enum` /
+// `Option` / `Result` / `AssocType` / `Sum` 共 13 行，已随变体删除。
+
+/// 一处基线漂移
+#[derive(Debug, Clone)]
+pub struct BaselineMismatch {
+    pub variant: String,
+    /// 实测四列（合计 / 前向 / AST→AST / 反向桥）；`None` = 实测里没有该变体
+    pub measured: Option<[usize; 4]>,
+    /// 基线四列，列序同上；`None` = 基线里没有该变体（基线外新增）
+    pub baseline: Option<[usize; 4]>,
+}
+
+impl BaselineMismatch {
+    /// 一行可读的「实测 vs 基线」——报错与报告共用（合约要求列出三类列）
+    pub fn render(&self) -> String {
+        match (self.measured, self.baseline) {
+            (Some(m), Some(b)) => {
+                let mut line = format!(
+                    "{}：前向 实测{}(基线{}) / AST→AST 实测{}(基线{}) / 反向桥 实测{}(基线{})",
+                    self.variant, m[1], b[1], m[2], b[2], m[3], b[3]
+                );
+                if m[0] != b[0] {
+                    line.push_str(&format!("；合计 实测{}(基线{})", m[0], b[0]));
+                }
+                line
+            }
+            (Some(m), None) => format!(
+                "{}：基线外新增变体（实测 合计{} / 前向{} / AST→AST{} / 反向桥{}）",
+                self.variant, m[0], m[1], m[2], m[3]
+            ),
+            (None, Some(b)) => format!(
+                "{}：实测缺失（基线 合计{} / 前向{} / AST→AST{} / 反向桥{}）",
+                self.variant, b[0], b[1], b[2], b[3]
+            ),
+            (None, None) => format!("{}：实测与基线同时缺失（不应发生）", self.variant),
+        }
+    }
+}
+
+/// 与基线逐列对账；空 = 一致（`build.rs` 的判定与报告的 T1.6 节共用本函数）
+pub fn mismatches(stats: &[VariantStats]) -> Vec<BaselineMismatch> {
+    let mut out = Vec::new();
+    for row in SCOUT_BASELINE {
+        let measured = stats.iter().find(|s| s.name == row.variant).map(|s| {
+            [
+                s.total(),
+                s.forward_raw(),
+                s.ast_to_ast.len(),
+                s.reverse_total(),
+            ]
+        });
+        let baseline = [row.total, row.forward, row.ast_to_ast, row.reverse];
+        match measured {
+            Some(m) if m != baseline => out.push(BaselineMismatch {
+                variant: row.variant.to_string(),
+                measured: Some(m),
+                baseline: Some(baseline),
+            }),
+            Some(_) => {}
+            None => out.push(BaselineMismatch {
+                variant: row.variant.to_string(),
+                measured: None,
+                baseline: Some(baseline),
+            }),
+        }
+    }
+    for s in stats {
+        if !SCOUT_BASELINE.iter().any(|r| r.variant == s.name) {
+            out.push(BaselineMismatch {
+                variant: s.name.clone(),
+                measured: Some([
+                    s.total(),
+                    s.forward_raw(),
+                    s.ast_to_ast.len(),
+                    s.reverse_total(),
+                ]),
+                baseline: None,
+            });
+        }
+    }
+    out
+}
 
 /// 渲染「与勘察基线对账」一节
 pub fn render_comparison(stats: &[VariantStats]) -> String {
+    let drift = mismatches(stats);
     let mut out = String::new();
     out.push_str("── T1.6 与勘察基线对账 ────────────────────────────────────────────────\n");
     out.push_str(&format!(
@@ -151,11 +247,9 @@ pub fn render_comparison(stats: &[VariantStats]) -> String {
         "{:<12} {:>16} {:>16} {:>16} {:>16}\n",
         "变体", "合计", "前向", "AST→AST", "反向桥"
     ));
-    let mut mismatches = 0usize;
     for row in SCOUT_BASELINE {
         let Some(s) = stats.iter().find(|s| s.name == row.variant) else {
             out.push_str(&format!("{:<12} 实测缺失\n", row.variant));
-            mismatches += 1;
             continue;
         };
         let cells = [
@@ -169,32 +263,30 @@ pub fn render_comparison(stats: &[VariantStats]) -> String {
             let mark = if got == want { "=" } else { "✗" };
             line.push_str(&format!(" {:>7}({}{})", got, mark, want));
         }
-        if cells.iter().any(|(got, want)| got != want) {
-            mismatches += 1;
+        if drift.iter().any(|m| m.variant == row.variant) {
             line.push_str("  ← 不一致");
         }
         out.push_str(&line);
         out.push('\n');
     }
-    // 基线里没有的变体（新增变体）
-    for s in stats {
-        if !SCOUT_BASELINE.iter().any(|r| r.variant == s.name) {
-            out.push_str(&format!(
-                "{:<12} 基线外新增变体（合计 {}）\n",
-                s.name,
-                s.total()
-            ));
-            mismatches += 1;
+    if !drift.is_empty() {
+        out.push_str("逐项差异（实测 vs 基线）：\n");
+        for m in &drift {
+            out.push_str(&format!("  {}\n", m.render()));
         }
     }
+    let consistent = SCOUT_BASELINE
+        .iter()
+        .filter(|row| !drift.iter().any(|m| m.variant == row.variant))
+        .count();
     out.push_str(&format!(
         "结论：{} / {} 行一致{}\n\n",
-        SCOUT_BASELINE.len().saturating_sub(mismatches),
+        consistent,
         SCOUT_BASELINE.len(),
-        if mismatches == 0 {
+        if drift.is_empty() {
             "（扫描口径与冻结基线完全一致）"
         } else {
-            "——不一致项须以可复现证据裁决（见任务契约）"
+            "——基线对账失败：T1 门禁拒绝编译（逐项差异见上，须以可复现证据更新基线或修口径）"
         }
     ));
     out

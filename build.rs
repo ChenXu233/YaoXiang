@@ -67,10 +67,11 @@ fn main() {
         );
     }
 
-    // P6 6.0.1 类型表门禁 T1（`ast::Type` 构造点三类分列 + 零构造清单）——
-    // 首版**只报告**：逐条 cargo:warning，不 panic、不使构建失败；6.6「门禁转硬」才改 panic。
-    for warning in type_tables::build_warnings(root) {
-        println!("cargo:warning={warning}");
+    // P6 6.6.2 类型表门禁 T1（`ast::Type` 构造点三类分列 + 零构造清单 + 勘察基线对账）——
+    // **构建硬失败**（用户裁决 2A，2026-10-30）：任一违规即 panic 拒绝编译，通过时只打一行摘要。
+    match type_tables::build_gate(root) {
+        Ok(summary) => println!("cargo:warning={summary}"),
+        Err(detail) => panic!("类型表门禁 T1 失败（构建已拒绝）：\n{detail}"),
     }
 
     let _target_os = env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();

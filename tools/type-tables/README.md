@@ -8,7 +8,7 @@ P6（类型表示单一化）的**类型表生成期门禁**，形态与 [`tools
 
 | 消费者 | 跑什么 | 失败形态 |
 | --- | --- | --- |
-| 根 `build.rs`（`[build-dependencies]`） | **只跑 T1** | 首版**只发 `cargo:warning`**，不 panic、不使构建失败（6.6「门禁转硬」才改 panic） |
+| 根 `build.rs`（`[build-dependencies]`） | **只跑 T1** | **构建硬失败**（6.6.2，2026-10-30）：违规即 `panic!` 拒绝编译；通过时只打一行摘要（`cargo:warning` 信息行） |
 | `type-tables` bin | T1 + T2 | `--report` 只报告；仅内部错误（读不到文件 / syn 解析失败）时 exit 1 |
 
 ```bash
@@ -37,6 +37,11 @@ cargo run --manifest-path tools/type-tables/Cargo.toml -- --report --root <仓�
 
 两个数字分开报：**前向零构造**（有效前向计数为 0）与**全局零构造**（三类合计为 0）。
 
+**重建位置的单一源（6.6.2，裁决 1A）**：第二类 / 反向桥的归类由 `src/scan.rs` 的 `REBUILD_FUNCTIONS`
+表驱动（文件 + 函数名 → 类别）：`substitute_type_ast`、`substitute_type_in_ast`、
+`without_fn_param_names` 归第二类，`mono_to_ast_type` 归反向桥 B。登记表与源码**逐条对账**——
+登记的函数在源码里找不到同名 `fn`（改名/删除未同步）时扫描直接报错，不得静默落回 parser 前向。
+
 **兜底豁免逐条登记（F1）**：前向有效计数 = 原始前向点数 − **已登记**的通配臂兜底豁免点数。
 豁免只在 `REGISTERED_ZERO_FORWARD` 里显式登记。**WBS 6.3 之后该表为空**：03 §5.2 的 13 个
 死变体已从 `ast::Type` 删除，`Void` 的 `parser/statements/types.rs` 错误兜底随变体删除改为
@@ -44,7 +49,7 @@ cargo run --manifest-path tools/type-tables/Cargo.toml -- --report --root <仓�
 **未登记的通配臂构造点照常计入前向**——否则真实构造点会隐身，门禁仍报「名单一致」。
 T1.7 用同一口径核对四项：未登记的零构造变体、登记但已不成立、登记豁免点未命中（兜底点消失后
 须同步删登记）、未登记的兜底点。机制本身保留且可注入登记表（`*_with(registry)`）供单测。
-6.6 转硬后，**新增零构造变体必须删除或在此登记理由**（03 §5.7）。
+**已转硬（6.6.2）**：新增零构造变体必须删除或在此登记理由，否则 `cargo build` 直接失败。
 
 ## T2 三表一致
 
@@ -69,5 +74,7 @@ T1.7 用同一口径核对四项：未登记的零构造变体、登记但已不
 
 ## 与 6.0 勘察的关系
 
-`src/baseline.rs` 内嵌 6.0 勘察（冻结 `bfe2f6ba`）的逐变体数字，`--report` 的 T1.6 节会逐项对账
-（`实测(=基线)`）；不一致即扫描口径漂移，需以可复现证据裁决。基线不参与 build.rs 的判定。
+`src/baseline.rs` 内嵌勘察基线的逐变体数字（当前冻结于 `SCOUT_BASELINE_REV`），`--report` 的 T1.6 节
+逐项对账（`实测(=基线)`）。**6.6.2 起基线对账也进判定**（用户裁决 2A）：计数与基线不一致时
+`cargo build` 同样失败——不一致只有两种成立解释：源码新增/删除了构造点（须以可复现证据刷新
+`SCOUT_BASELINE`），或扫描口径漂了（须修工具）。

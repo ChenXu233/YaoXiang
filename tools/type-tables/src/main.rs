@@ -1,4 +1,7 @@
-//! type-tables 命令行：T1/T2 的报告（本轮**只报告**，不接构建失败路径）
+//! type-tables 命令行：T1/T2 的报告。
+//!
+//! **T1 已是构建门禁**（6.6.2，2026-10-30）：`cargo build` 经根 `build.rs` 调 [`type_tables::build_gate`]，
+//! 违规即 panic；本 bin 的 `--report` 输出同一份判定的完整报告（T2 仍只报告）。
 //!
 //! 用法（仓库根目录）：
 //!   cargo run --manifest-path tools/type-tables/Cargo.toml -- --report   # T1/T2 文本报告

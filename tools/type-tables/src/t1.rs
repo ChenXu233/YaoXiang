@@ -13,7 +13,7 @@
 use std::collections::BTreeSet;
 
 use crate::baseline;
-use crate::scan::{ScanResult, Site, SiteClass, VariantDecl};
+use crate::scan::{ScanResult, Site, SiteClass, VariantDecl, REBUILD_FUNCTIONS};
 
 /// 03 §5.2 的删除名单（前向口径的零构造变体）。
 ///
@@ -364,20 +364,35 @@ impl ForwardReport {
             "  1) parser 前向        ：不在下面任何重建位置的构造点（当前全部落在 parser）\n",
         );
         out.push_str(
-            "  2) AST→AST 重建       ：middle/passes/mono/function.rs 的 substitute_type_ast\n",
+            "  2) AST→AST 重建       ：把已有 AST 类型重造一份（不是 MonoType → AST）；\n",
         );
         out.push_str(
-            "                          与 substitute_type_in_ast——把已有 AST 类型重造一份\n",
+            "                          登记表 = scan.rs 的 REBUILD_FUNCTIONS，逐条与源码对账\n",
         );
-        out.push_str(
-            "                          （区间由 AST 派生，不在散文里写死行号，见 WBS 6.6）\n",
-        );
+        for entry in REBUILD_FUNCTIONS
+            .iter()
+            .filter(|entry| entry.class == SiteClass::AstToAst)
+        {
+            out.push_str(&format!(
+                "                          {}::{} —— {}\n",
+                entry.file, entry.function, entry.why
+            ));
+        }
         out.push_str(
             "  3) 反向桥 A           ：middle/core/bytecode.rs 的 impl From<MonoType> for IrType\n",
         );
         out.push_str(
-            "     反向桥 B           ：function.rs 的嵌套 fn mono_to_ast_type（MonoType → AST）\n",
+            "     反向桥 B           ：mono_to_ast_type（MonoType → AST，同样按登记表判定）\n",
         );
+        for entry in REBUILD_FUNCTIONS
+            .iter()
+            .filter(|entry| entry.class == SiteClass::ReverseMonoToAst)
+        {
+            out.push_str(&format!(
+                "                          {}::{} —— {}\n",
+                entry.file, entry.function, entry.why
+            ));
+        }
         out.push_str(
             "「前向零构造」= 前向有效计数为 0 = 原始前向点数 − **已登记**的通配臂兜底豁免点数；\n",
         );
@@ -575,7 +590,7 @@ impl ForwardReport {
 
         out.push_str(&baseline::render_comparison(&self.stats));
 
-        out.push_str("── T1.7 白名单核对（6.6 转硬的前提）────────────────────────────────────\n");
+        out.push_str("── T1.7 白名单核对 + 门禁判定 ────────────────────────────────────────\n");
         let check = self.whitelist_check();
         out.push_str(&format!(
             "已登记 {} 个；实测前向零构造 {} 个；未登记 {} 个；登记但已不成立 {} 个；\n\
@@ -594,40 +609,28 @@ impl ForwardReport {
                 .count(),
             check.unregistered_fallbacks.len(),
         ));
-        if check.is_consistent() {
-            out.push_str("  结论：名单一致（未登记 0 / 失效 0 / 豁免未命中 0 / 未登记兜底 0）\n");
+        let failures = self.gate_failures();
+        if failures.is_empty() {
+            out.push_str(
+                "  结论：名单一致（未登记 0 / 失效 0 / 豁免未命中 0 / 未登记兜底 0）；\
+                 勘察基线一致 ⇒ **门禁通过**（build.rs 只打一行摘要）\n",
+            );
         } else {
-            if !check.unregistered.is_empty() {
-                out.push_str(&format!("  未登记的零构造变体：{:?}\n", check.unregistered));
+            out.push_str(&format!(
+                "  结论：**门禁失败**（{} 项违规）——build.rs 会 panic 拒绝编译：\n",
+                failures.len()
+            ));
+            for failure in &failures {
+                out.push_str(&format!("    {failure}\n"));
             }
-            if !check.broken.is_empty() {
-                out.push_str(&format!(
-                    "  **登记但已不成立**（前向有效计数 > 0）：{:?}\n",
-                    check.broken
-                ));
-            }
-            if !check.stale_exemptions.is_empty() {
-                out.push_str(&format!(
-                    "  **登记豁免点未命中**（兜底点已消失，登记须同步删除）：{:?}\n",
-                    check.stale_exemptions
-                ));
-            }
-            if !check.unregistered_fallbacks.is_empty() {
-                out.push_str(&format!(
-                    "  **未登记的通配臂兜底点**（不予豁免，已计入前向）：{:?}\n",
-                    check.unregistered_fallbacks
-                ));
-            }
-            out.push_str("  结论：名单不一致（详见上方清单）\n");
         }
         out.push('\n');
         out
     }
 
-    /// `build.rs` 用的 warning 行（只报告，不失败）
-    pub fn warnings(&self) -> Vec<String> {
+    /// 通过时的一行摘要（`build.rs` 作为 `cargo:warning` 信息行打印，**不是违规**）
+    pub fn summary(&self) -> String {
         let check = self.whitelist_check();
-        let mut out = Vec::new();
         let global: Vec<&str> = self
             .global_zero()
             .iter()
@@ -649,8 +652,8 @@ impl ForwardReport {
             .filter(|stats| !stats.ast_to_ast.is_empty())
             .count();
         let dead_points: usize = self.dead_list_points().iter().map(|(_, n)| *n).sum();
-        out.push(format!(
-            "type-tables T1（只报告，6.6 才转硬）：扫描 {} 个非测试 .rs；ast::Type {} 变体；前向零构造 {}；全局零构造 {}〔{}〕；反向桥 A {} 变体；反向桥 B {} 变体；AST→AST 重建 {} 变体（6.3 删除名单内 {} 点）",
+        format!(
+            "type-tables T1 门禁通过：扫描 {} 个非测试 .rs；ast::Type {} 变体；前向零构造 {}；全局零构造 {}〔{}〕；反向桥 A {} 变体；反向桥 B {} 变体；AST→AST 重建 {} 变体（6.3 删除名单内 {} 点）；勘察基线一致",
             self.scanned_files,
             self.stats.len(),
             check.measured_zero.len(),
@@ -660,35 +663,87 @@ impl ForwardReport {
             reverse_b,
             ast_to_ast_variants,
             dead_points,
-        ));
+        )
+    }
 
-        if !check.unregistered.is_empty() {
+    /// T1 门禁的违规明细（空 = 通过）。
+    ///
+    /// **五类违规共用这一份输出**——`build.rs` 的失败路径与 `--report` 的 T1.7 节读的是
+    /// 同一个函数：零构造变体未登记 / 登记但已不成立 / 登记豁免点未命中 /
+    /// 未登记的通配臂兜底点 / **勘察基线漂移（裁决 2A）**。
+    /// 每条都带变体名与可定位的 `file:line`（构造点、兜底点或变体定义行）。
+    pub fn gate_failures(&self) -> Vec<String> {
+        let check = self.whitelist_check();
+        let mut out = Vec::new();
+        for name in &check.unregistered {
+            let decl = self
+                .stats
+                .iter()
+                .find(|stats| &stats.name == name)
+                .map(|stats| format!("{}:{}", crate::AST_REL, stats.decl_line))
+                .unwrap_or_else(|| "定义行未知".to_string());
             out.push(format!(
-                "type-tables T1：未登记的前向零构造变体 {:?} —— 新增零构造变体必须删除或登记理由（03 §5.7）",
-                check.unregistered
+                "零构造变体未登记：{name}（定义 {decl}）——新增前向零构造变体必须删除，或在 REGISTERED_ZERO_FORWARD 登记理由（03 §5.7）"
             ));
         }
-        if !check.broken.is_empty() {
+        for name in &check.broken {
+            let sites = self
+                .stats
+                .iter()
+                .find(|stats| &stats.name == name)
+                .map(|stats| {
+                    stats
+                        .forward
+                        .iter()
+                        .map(Site::location)
+                        .collect::<Vec<_>>()
+                        .join("、")
+                })
+                .unwrap_or_default();
+            let where_ = if sites.is_empty() {
+                "（变体已不存在于源码）".to_string()
+            } else {
+                format!("前向构造点：{sites}")
+            };
             out.push(format!(
-                "type-tables T1：登记的零构造变体已出现前向构造点 {:?} —— 名单与实现不一致，需更新（03 §5.7）",
-                check.broken
+                "登记但已不成立：{name}——已登记的零构造变体出现了前向构造点（{where_}），须更新登记或删掉构造点（03 §5.7）"
             ));
         }
-        if !check.stale_exemptions.is_empty() {
+        for stale in &check.stale_exemptions {
             out.push(format!(
-                "type-tables T1：登记的通配臂兜底豁免点未命中 {:?} —— 兜底点消失后登记须同步删除（03 §5.7）",
-                check.stale_exemptions
+                "登记豁免点未命中：{stale}——该文件里已找不到这个变体的通配臂前向构造点，登记须同步删除（03 §5.7）"
             ));
         }
-        if !check.unregistered_fallbacks.is_empty() {
+        for site in self.unregistered_fallbacks() {
             out.push(format!(
-                "type-tables T1：存在未登记的通配臂兜底点 {:?} —— 不予豁免（已计入前向）；如确需豁免须逐条登记（03 §5.7）",
-                check.unregistered_fallbacks
+                "未登记的通配臂兜底点：{}@{}——不予豁免（已计入前向）；确需豁免须逐条登记（03 §5.7）",
+                site.variant,
+                site.location()
+            ));
+        }
+        for drift in baseline::mismatches(&self.stats) {
+            out.push(format!(
+                "勘察基线漂移：{}（基线 revision {}）——源码新增/删除构造点须同步刷新 SCOUT_BASELINE；口径漂移须修扫描（03 §5.7）",
+                drift.render(),
+                baseline::SCOUT_BASELINE_REV
             ));
         }
         out
     }
 
+    /// `build.rs` 的 T1 判定：`Ok(摘要)` = 通过；`Err(明细)` = **构建必须失败**。
+    pub fn gate(&self) -> Result<String, String> {
+        let failures = self.gate_failures();
+        if failures.is_empty() {
+            Ok(self.summary())
+        } else {
+            Err(format!(
+                "{} 项违规：\n  {}",
+                failures.len(),
+                failures.join("\n  ")
+            ))
+        }
+    }
     /// `--json` 的结构化结果
     pub fn to_json(&self) -> serde_json::Value {
         let check = self.whitelist_check();
@@ -916,5 +971,111 @@ mod tests {
             "登记了但未命中的豁免点必须单列（兜底点消失后要同步删登记）"
         );
         assert!(!check.is_consistent(), "豁免未命中时白名单核对必须判不一致");
+    }
+
+    // 判据能绿：与基线逐列一致的报告 ⇒ gate 通过（build.rs 只打摘要）
+    #[test]
+    fn test_gate_passes_when_report_matches_baseline() {
+        // Arrange：按 SCOUT_BASELINE 逐行造出等价报告（列数一一对应）
+        let report = report_matching_baseline();
+
+        // Act
+        let gate = report.gate();
+
+        // Assert
+        let Ok(summary) = gate else {
+            panic!("与基线一致的报告必须通过门禁，实际 {gate:?}");
+        };
+        assert!(
+            summary.contains("门禁通过"),
+            "通过时摘要应写明门禁通过，实际：{summary}"
+        );
+    }
+
+    // 裁决 2A：基线漂移必须让门禁失败（不是只报告），且报错列出变体名与三类列实测 vs 基线
+    #[test]
+    fn test_gate_fails_on_baseline_drift() {
+        // Arrange：与基线一致，但多给 Struct 一个前向构造点（基线 1 → 实测 2）
+        let mut variants = baseline_variants();
+        let mut sites = baseline_sites();
+        sites.push(site("Struct", SiteClass::Forward, false));
+        let report = report(variants.drain(..).collect(), sites);
+
+        // Act
+        let gate = report.gate();
+
+        // Assert
+        let Err(message) = gate else {
+            panic!("基线漂移必须使门禁失败，实际 {gate:?}");
+        };
+        assert!(
+            message.contains("勘察基线漂移"),
+            "报错应点名「勘察基线漂移」，实际：{message}"
+        );
+        assert!(
+            message.contains("Struct"),
+            "报错应列出不一致的变体名，实际：{message}"
+        );
+        assert!(
+            message.contains("前向 实测2(基线1)"),
+            "报错应给出前向列的实测 vs 基线，实际：{message}"
+        );
+        assert!(
+            message.contains("AST→AST 实测3(基线3)") && message.contains("反向桥 实测0(基线0)"),
+            "报错应同时列出 AST→AST 与反向桥两列，实际：{message}"
+        );
+    }
+
+    // 零构造变体必须让门禁失败，且报错带变体名与定义位置（file:line）
+    #[test]
+    fn test_gate_fails_on_unregistered_zero_forward() {
+        // Arrange：与基线一致，另加一个没有任何构造点的新变体
+        let mut variants = baseline_variants();
+        variants.push(variant("Phantom", 600));
+        let report = report(variants, baseline_sites());
+
+        // Act
+        let gate = report.gate();
+
+        // Assert
+        let Err(message) = gate else {
+            panic!("新增零构造变体必须使门禁失败，实际 {gate:?}");
+        };
+        assert!(
+            message.contains("零构造变体未登记：Phantom"),
+            "报错应点名未登记的零构造变体，实际：{message}"
+        );
+        assert!(
+            message.contains(&format!("{}:600", crate::AST_REL)),
+            "报错应给出该变体的定义 file:line，实际：{message}"
+        );
+    }
+
+    // 按 SCOUT_BASELINE 造等价报告（列数一一对应；decl_line 用基线值）
+    fn report_matching_baseline() -> ForwardReport {
+        report(baseline_variants(), baseline_sites())
+    }
+
+    fn baseline_variants() -> Vec<VariantDecl> {
+        baseline::SCOUT_BASELINE
+            .iter()
+            .map(|row| variant(row.variant, row.decl_line))
+            .collect()
+    }
+
+    fn baseline_sites() -> Vec<Site> {
+        let mut sites = Vec::new();
+        for row in baseline::SCOUT_BASELINE {
+            for _ in 0..row.forward {
+                sites.push(site(row.variant, SiteClass::Forward, false));
+            }
+            for _ in 0..row.ast_to_ast {
+                sites.push(site(row.variant, SiteClass::AstToAst, false));
+            }
+            for _ in 0..row.reverse {
+                sites.push(site(row.variant, SiteClass::ReverseFromIrType, false));
+            }
+        }
+        sites
     }
 }
