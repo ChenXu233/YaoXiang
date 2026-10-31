@@ -61,7 +61,8 @@ pub const SCOUT_BASELINE_REV: &str = "b37bd8b5e63a83592a0c33611964d1461acd2fb7";
 /// 本常量 + [`SCOUT_BASELINE_CALIBER`] + 受影响的 [`SCOUT_BASELINE`] 数字 + [`SCOUT_BASELINE_REV`]。
 pub const SCOUT_BASELINE_CALIBER_REV: &str = "63ef9ca7cfb1287eed4019d324cbb736b8e2447e";
 
-/// 口径快照的一行：**文件 + 函数 → 类别键**（[`SiteClass::key`]，不是展示文案）。
+/// 口径快照的一行：**文件 + 函数 → 类别键**（[`SiteClass::key`](crate::scan::SiteClass::key)，不是展示文案；
+/// 类别的**稳定键**由该函数给出，展示文案见 `SiteClass::label`）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CaliberEntry {
     /// 函数所在文件（仓库相对路径）
