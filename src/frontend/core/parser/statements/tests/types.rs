@@ -6,11 +6,12 @@
 //! - §3.3 记录/接口类型（含和类型新语法）
 //! - §3.8 泛型类型
 //! - RFC-010 废弃语法的错误路径回归
+//! - 记录类型体里的匿名函数绑定 `name: FnType[pos] = lambda`（WBS 6.6.7：非 Fn 注解报诊断）
 
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::statements::types::parse_type_annotation;
 use crate::frontend::core::parser::ast::{
-    BinOp, Expr, Param, StmtKind, StructField, Type, TypeBodyItem,
+    BinOp, BindingKind, Expr, Param, Stmt, StmtKind, StructField, Type, TypeBodyItem,
 };
 use crate::frontend::core::parser::{parse, NullProbe, ParserState};
 
@@ -637,4 +638,124 @@ fn test_type_fn_params_carry_name_and_type_on_same_node() {
         matches!(&return_type, Type::Name { name, .. } if name == "Int"),
         "返回类型应为 Int，got: {return_type:?}"
     );
+}
+
+// 记录类型体里的匿名函数绑定 `name: FnType[pos] = lambda`（WBS 6.6.7）
+//
+// 形参与返回类型由注解提供。注解（剥掉透明的 `Paren` / `NamedParen` 后）是函数类型时
+// 取真实签名；不是函数类型时必须报诊断——旧行为伪造 `Type::Name{"()"}` 当返回类型
+// （6.3 把 `Type::Void` 兜底改成它），既不是真实类型，也让 `semantic_tokens` 的
+// `Name` 臂为 dummy 节点多记一枚 token。
+
+#[test]
+fn test_anon_binding_with_non_fn_annotation_reports_error() {
+    // Arrange: `(Int)` 不是函数类型，却带位置绑定 `[0] = 1`
+    let tokens = tokenize("Point: Type = { cb: (Int)[0] = 1 }").expect("tokenize 源码失败");
+
+    // Act
+    let result = parse(&tokens);
+
+    // Assert: 必须报 E0012 解析错误（旧行为静默伪造 `()` 返回类型——失败消息里打印 AST）
+    assert!(
+        result.has_errors,
+        "非 Fn 注解的位置绑定必须报解析错误，实际 AST: {:?}",
+        result.module.items
+    );
+    assert!(
+        result
+            .errors
+            .iter()
+            .any(|e| e.code == "E0012" && e.message.contains("function type")),
+        "错误应是 E0012 且指出需要函数类型注解，实际: {:?}",
+        result.errors
+    );
+    assert!(
+        !has_anonymous_binding_with_unit_return(&result.module.items),
+        "不得产出 `return_type = Name(\"()\")` 的匿名绑定（伪造载体已删），实际: {:?}",
+        result.module.items
+    );
+}
+
+#[test]
+fn test_anon_binding_with_fn_annotation_keeps_extracted_signature() {
+    // Arrange: `((a: Int) -> Bool)[0]` —— 合法的匿名函数绑定形态（未修的正常分支）
+    let tokens = tokenize("Point: Type = { cb: ((a: Int) -> Bool)[0] = a => true }")
+        .expect("tokenize 源码失败");
+
+    // Act
+    let result = parse(&tokens);
+
+    // Assert: 无解析错误，且形参与返回类型仍从函数的注解提取
+    assert!(
+        !result.has_errors,
+        "合法的匿名函数绑定不应报错，实际: {:?}",
+        result.errors
+    );
+    let Some(StmtKind::TypeDefinition {
+        definition: Type::Struct { body },
+        ..
+    }) = result.module.items.first().map(|s| &s.kind)
+    else {
+        panic!("应解析为记录类型定义，实际: {:?}", result.module.items);
+    };
+    let Some(TypeBodyItem::Binding(binding)) = body.first() else {
+        panic!("记录类型体首个条目应是绑定，实际: {body:?}");
+    };
+    assert_eq!(binding.name, "cb", "绑定名应原样保留");
+    let BindingKind::Anonymous {
+        params,
+        return_type,
+        positions,
+        ..
+    } = &binding.kind
+    else {
+        panic!("绑定种类应是 Anonymous，实际: {:?}", binding.kind);
+    };
+    assert_eq!(
+        positions.len(),
+        1,
+        "位置绑定应保留一个位置，实际: {positions:?}"
+    );
+    assert_eq!(positions[0], 0, "位置应是 0，实际: {positions:?}");
+    assert_eq!(
+        params.len(),
+        1,
+        "形参应从函数注解提取（arg0），实际: {params:?}"
+    );
+    assert_eq!(params[0].name, "arg0", "合成的形参名应是 arg0");
+    assert!(
+        matches!(params[0].ty.as_ref(), Some(Type::Name { name, .. }) if name == "Int"),
+        "形参类型应从注解提取 Int，实际: {:?}",
+        params[0].ty
+    );
+    assert!(
+        matches!(return_type.as_ref(), Type::Name { name, .. } if name == "Bool"),
+        "返回类型应从注解提取 Bool，实际: {return_type:?}"
+    );
+}
+
+/// AST 里是否还有「`return_type = Name("()")`」的匿名函数绑定。
+///
+/// 旧代码在非 Fn 注解时伪造这个返回类型（6.3 的 `Type::Void` 兜底改写而来）：
+/// 既不是真实类型，也让 `semantic_tokens` 的 `Name` 臂为 dummy 节点多记一枚 token。
+fn has_anonymous_binding_with_unit_return(items: &[Stmt]) -> bool {
+    items.iter().any(|item| {
+        let StmtKind::TypeDefinition {
+            definition: Type::Struct { body },
+            ..
+        } = &item.kind
+        else {
+            return false;
+        };
+        body.iter().any(|it| {
+            let TypeBodyItem::Binding(b) = it else {
+                return false;
+            };
+            matches!(
+                &b.kind,
+                BindingKind::Anonymous { return_type, .. }
+                    if matches!(return_type.as_ref(), Type::Name { name, .. } if name == "()")
+            )
+        })
+    })
 }

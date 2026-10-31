@@ -18,6 +18,12 @@
 //! - **反向桥**：不变。
 //! - **定义行**：按刷新后的树重取（6.3 之后 `ast.rs` 的变体行已随 6.4/6.5 平移）。
 //!
+//! **6.6.7 刷新（2026-10-31）**：只动 **`Name` 一行**——`src/frontend/core/parser/statements/types.rs`
+//! 的 `extract_fn_type_info` 不再伪造 `Type::Name{"()"}` 当非 Fn 注解的返回类型（改报
+//! 解析诊断），删掉 1 个**前向**构造点：前向 3 → 2、合计 6 → 5；AST→AST 与反向桥两列不变。
+//! 剩余 2 个前向点仍是真实类型构造——`parse_type_annotation` 的标识符类型与
+//! `wrap_literal_type_if_needed` 的 const 参数引用（门禁报错里自带当时的 `file:line`）。
+//!
 //! 上一次冻结（6.3，删除 03 §5.2 的 13 个死变体后）见 git 历史；6.0 原始勘察冻结于
 //! `bfe2f6ba366ff0c45f517a4bec8d7e87b0a59696`（见 09a §P6 6.0）。
 //!
@@ -49,6 +55,12 @@ pub struct BaselineRow {
 /// 6.6.2 的改动只落在 `tools/type-tables/` 与 `build.rs`（不改 `src/`），故基线数字的
 /// 源码侧就是该 revision；任何人 checkout 它并用本批之后的口径跑 `type-tables --json`
 /// 都应得到逐列相同的数字（差异只可能来自口径漂移 = 门禁要抓的对象）。
+///
+/// **6.6.7 的一行偏离**：该轮删掉了 `types.rs::extract_fn_type_info` 的 1 个**前向**
+/// 构造点（伪造的 `Type::Name{"()"}` 改报解析诊断），故 `Name` 行的 前向 / 合计 只对
+/// **含该改动的树**成立。该改动的提交号在推送后才可取（AGENTS.md「团队编排约定」第 6 条），
+/// 故此处仍记其父提交：在该树上跑 `--json` 会看到 `Name` 前向 3 / 合计 6——多出的正是
+/// 被删的那一点，其余 12 行与另两列逐列相同。
 pub const SCOUT_BASELINE_REV: &str = "b37bd8b5e63a83592a0c33611964d1461acd2fb7";
 
 /// 口径 revision：上表的数字**按哪一代 `scan.rs` 分类登记表**量出来的。
@@ -169,8 +181,8 @@ pub const SCOUT_BASELINE: &[BaselineRow] = &[
     BaselineRow {
         variant: "Name",
         decl_line: 442,
-        total: 6,
-        forward: 3,
+        total: 5,
+        forward: 2,
         ast_to_ast: 0,
         reverse: 3,
     },

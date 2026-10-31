@@ -635,6 +635,9 @@ fn parse_struct_type(state: &mut ParserState<'_>) -> Option<Type> {
             if state.at(&TokenKind::Colon) {
                 // 有冒号: 字段声明或匿名函数绑定
                 state.bump(); // consume ':'
+
+                // 注解的起点——匿名函数绑定取不到函数类型时，诊断落在这里
+                let annotation_span = state.span();
                 let field_type = parse_type_annotation(state)?;
 
                 // 检查是否有位置绑定: [positions]
@@ -643,8 +646,21 @@ fn parse_struct_type(state: &mut ParserState<'_>) -> Option<Type> {
                 if state.skip(&TokenKind::Eq) {
                     if let Some(pos) = positions {
                         // 匿名函数绑定: name: FnType[pos] = lambda
+                        //
+                        // 形参与返回类型由**注解**提供：注解不是函数类型时没有可用的真实
+                        // 类型，只能报诊断并放弃该绑定——不得伪造返回值（WBS 6.6.7；
+                        // 6.3 的 `Type::Name{"()"}` 兜底正是被删掉的伪造载体）。
+                        let Some((params, return_type)) = extract_fn_type_info(&field_type) else {
+                            state.error(
+                                ErrorCodeDefinition::invalid_syntax(&format!(
+                                    "Anonymous function binding '{name}' needs a function type annotation before [positions] (the lambda's parameter and return types come from it)"
+                                ))
+                                .at(annotation_span)
+                                .build(),
+                            );
+                            return None;
+                        };
                         let body_expr = state.parse_expression(BP_LOWEST)?;
-                        let (params, return_type) = extract_fn_type_info(&field_type);
                         body.push(TypeBodyItem::Binding(TypeBodyBinding {
                             name,
                             kind: BindingKind::Anonymous {
@@ -819,25 +835,40 @@ pub(crate) fn parse_binding_positions(state: &mut ParserState<'_>) -> Result<Vec
     Ok(positions)
 }
 
-/// 从函数类型中提取参数和返回类型
-fn extract_fn_type_info(ty: &Type) -> (Vec<Param>, Type) {
-    // 非 Fn 形态：签名位的返回类型仍是 Void。Void 专用变体已随 WBS 6.3 删除，
-    // 这里用它的**类型写法** "()"（from_builtin_name 与 Void 同臂，见
-    // types/mono.rs）：既保留原语义，也让 formatter 输出与删除前逐字相同。
-    // 用 if-let 而非 match 通配臂：T1 门禁把「通配臂内的构造点」单列为
-    // 未登记兜底（03 §5.7），此处不是错误兜底语义，不应触发该告警。
+/// 剥掉类型位置的**透明包装**：RFC-004 的 `Paren` 与 RFC-027 §3 的 `NamedParen`。
+///
+/// 两层在类型检查与 lower 里都透明（`From<ast::Type> for MonoType` 直接递归内层），
+/// 所以「注解究竟是什么类型」必须剥到底再判。匿名函数绑定尤其依赖这一点：裸函数类型
+/// 后面跟 `[pos]` 会被当成索引 / const 泛型实参，文档记载的写法一定是
+/// `((a: Int) -> Bool)[0]`——注解是 `Paren(Fn)`，不是 `Fn`。
+fn unwrap_transparent_type(mut ty: &Type) -> &Type {
+    loop {
+        match ty {
+            Type::Paren(inner) => ty = inner,
+            Type::NamedParen { inner, .. } => ty = inner,
+            other => return other,
+        }
+    }
+}
+
+/// 从函数类型中提取形参与返回类型。
+///
+/// 返回 `None` = 注解（剥掉透明括号后）**不是**函数类型：匿名函数绑定的形参与返回
+/// 类型由注解提供，没有函数类型就没有可用的真实类型，调用方必须报诊断并放弃该绑定
+/// （WBS 6.6.7）。
+///
+/// **不得**改成任何「占位返回类型」兜底——6.3 曾把 `Type::Void` 兜底换成
+/// `Type::Name{"()"}`：那既不是真实类型（下游会当成用户类型或 `Void` 的类型写法），
+/// 也让 `semantic_tokens` 的 `Name` 臂为这个 dummy 节点多记一枚 token。该路径
+/// **语法可达**（`{ cb: (Int)[0] = 1 }`：位置绑定要求函数类型注解，语法本身不拦），
+/// 故按诊断处理，而不是 `unreachable!`。
+fn extract_fn_type_info(ty: &Type) -> Option<(Vec<Param>, Type)> {
     let Type::Fn {
         params,
         return_type,
-    } = ty
+    } = unwrap_transparent_type(ty)
     else {
-        return (
-            Vec::new(),
-            Type::Name {
-                name: "()".to_string(),
-                span: Span::dummy(),
-            },
-        );
+        return None;
     };
     let param_list = params
         .iter()
@@ -849,5 +880,5 @@ fn extract_fn_type_info(ty: &Type) -> (Vec<Param>, Type) {
             span: Span::dummy(),
         })
         .collect();
-    (param_list, *return_type.clone())
+    Some((param_list, *return_type.clone()))
 }
