@@ -2255,3 +2255,36 @@ t1 门禁 10 项绿（fmt / clippy --lib / 定向 / lib 全量 2908 / integratio
 ### 计数
 
 三级 +1 = 3.23.2（194→195）；二级不变。issue [#520](https://github.com/ChenXu233/YaoXiang/issues/520) 关闭。
+
+## P3 3.20.6 收口（#519 E1106 调用点复检死码删除，2026-10-31）
+
+### 登记与裁决
+
+该死码由 #512 批次 t3 复审实证：E1106 调用点约束复检（`expressions.rs` 的「RFC-011 §5.2 调用点复检」块）是结构性死码——到达时 `last_type_args` 恒空 ⇒ `get(idx)` 恒 None ⇒ `continue` 短路。登记为 [#519](https://github.com/ChenXu233/YaoXiang/issues/519)。规范查证（裁决包）：①代码注释的「RFC-011 §5.2」系**误引**（RFC-011 实际 §5.2 是「类型族」，全文无调用点复检声明）；②RFC-013 仅库存性登记 E1106「约束未满足」；③RFC-011b「约束同判据」原则下，死码复检的判据（接口 registry `query_*_template`）与活执行面（mono 函数表 `all_function_names`）本就发散。**2026-10-31 用户裁决甲案：删除死码，E1106 转暂未发射**；约束未满足的检查层位与判据设计归 #519 开放（探针实证现状：约束未实现 check 0 error / run exit 1 运行期错误，`sum(NoAdd)` 特化炸）。
+
+### 删除边界（队长预先查证，t1 契约划死红线）
+
+- **删**：复检块本体 + `generic_fn_constraints` 死链（字段 `statements.rs:109`、setter `expressions.rs:512`、传播 `statements.rs:3113/:3222`）——其唯一读者是死码复检臂。
+- **留**：`current_fn_param_constraints` 全链（statements.rs 8 处 / expressions.rs 8 处，含 `:3033` 的 OperatorDispatch 发射与 `:1625` 消费）——定义体内 `a + b` 发射 `Call "T.add"` 靠它，mono 改写的承重路径。
+
+### 快照再生（escalation A 案，裁决全文备案）
+
+夹具 `constrained_generic_ops.yx` docstring 误引更正会机械平移 IR 快照 span（快照含 line/column/offset，offset 由总字节数决定；t1 两轮实测：4→6 行漂移、等行数不等字节也漂移），与契约「快照零漂」及禁跑 `--ignored` 字面冲突，t1 升级询问。**队长裁决**：判据修正为「IR 形态零漂」——AGENTS 常用命令区明文 `UPDATE_SNAPSHOTS=1 cargo test --lib snapshot -- --ignored` 为「改动影响 IR 或语料行为时」的基线再生命令，红线要求的是「同提交再生 + 人工 review」而非禁止再生；审查判据五条（逐行审查、每处变化必须只是 Span/Position/offset 数字平移、任何指令/形状/类型实质变化即停、语料差分仍须零漂、再生与删除同提交）。t1 机械逐行审查结果：**span 计数 14=14、非 span 骨架完全一致、line 差值集合 {2}、column 差值集合 {0}、offset 差值集合 {231}**——与 docstring +2 行/+231 字节精确对应，零指令变化；审查中抓到并修正一次编辑瑕疵（验证行重复致 line+3）后重再生复核。
+
+### 等价性与判据链
+
+t1 门禁全绿（lib 2908 与父版**同数**——既有测试零删改、integration 323+1、语料 356 零漂、快照绿、生成器幂等、现状探针 check 0 / run 1 与删除前一致）→ 队长复核（边界 grep：`generic_fn_constraints` 全仓 0 处、活链 8+8 处全在；mono/std 改动纯注释）+ 一处队长修补并入（`inference/tests/expressions.rs:431` 历史叙事注释「另有『结构性死码』登记待裁」→「已裁已删」，随冻结 amend）→ 冻结 → t2 **PASS**（**两向变异证明**：变异甲复活被删死码后 lib 全量与修后基线逐项同数 = 删除等价性直接证明；变异乙致残保留的活链后 constrained_generic 派发测试恰红 2 failed、snapshot 组仍绿 = 承重路径真实且删除未误伤其守卫；trial 全程机械可逆）→ t3 **APPROVE**（8 项全过：边界零泄漏、快照差值独立重算吻合、附录B 五要素齐备且「§5.2 是类型族」经原文核实、E1106 面（153 注册 / 35 暂未发射 / 生成器幂等）、判据零放宽、零漂三项本机跑绿）。
+
+### 误引更正与决议登记
+
+「RFC-011 §5.2 调用点复检」更正为 RFC-011b（约束同判据 / 约束语法糖）：契约点名 6 处 + t1 同族伴随 4 处（statements.rs:1834、expressions.rs:118/:497/:1567、std/mod.rs:412）+ 语料夹具 docstring；RFC-011b 附录B 落设计决策条目（五要素：裁决日期 2026-10-31 / 甲案 / 死码判据 / mono 面承接 / #519 指针）。**§5.2 误引余量 5 处**（后续清理登记）：src/ 3 处（ast.rs:1248、parser/statements/declarations.rs:490、ir_gen.rs:704——语境为约束形参语法判定，正确出处应引 RFC-011 §类型约束系统）+ tests/ 2 处（execution.rs:294/:332，t3 low 补充）。
+
+### 遗留备案（t3 三条 low，均不阻塞）
+
+1. **附录B 死码判据的 FieldAccess 理论窗口**：`fn_name_for_mono` 的 FieldAccess 分支不校验 receiver 是否模块别名，而 `collect_instantiation_request` 的 `callee_generic_name` 校验——该形态下 `last_type_args` 理论上可能非空；探针 B（同名带约束裸函数 + 值接收者方法调用）实测未复现发射，行为面即现状锚不受影响。闭合窗口或收紧附录B 措辞归 #519 后续设计。
+2. 现状锚的「先改判据再改锚」护栏是注释级约定，无机械强制——若要机制化（判据-锚联动 CI 校验）在 #519 设计时一并考虑。
+3. §5.2 误引余量 5 处（见上）。
+
+### 计数
+
+三级 +1 = 3.20.6（195→196）；二级不变。issue [#519](https://github.com/ChenXu233/YaoXiang/issues/519) **保持开放**（本行只收甲案删除；约束检查的层位与判据设计待后续）。
