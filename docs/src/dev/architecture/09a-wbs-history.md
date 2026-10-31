@@ -2106,3 +2106,53 @@ WBS 的 6.4.3 行把 `src/middle/core/ir_gen.rs` 的 `is_constraint_param_ann` �
 ### 计数
 
 本批不新增二级/三级任务 ⇒ 09 顶部计数表不变（二级 **72** / 三级 **193**）。6.5 的 2 个三级任务为既有登记，勾选不改变计数；跨二级并入的 6.8.1 亦为既有登记。
+
+## P3 3.20.5 收口（#511 跨单元导出登记口扩容，2026-10-31）
+
+### 登记与裁决
+
+3.20.4 收口时实证的上游登记口缺陷（`collect_signatures` Assign 臂手写判据只认 `Type::MetaType`，即 `(T: Type)` 形态）登记为 [#511](https://github.com/ChenXu233/YaoXiang/issues/511)，属 D/E 类须用户裁决。2026-10-31 用户在四件套（情况 / A–C 三案优缺点 / 推荐 A 带刹车 / 不可逆面单列）与规范分析（`type-system.md:151` 明文 `(T: Add)` 语法、`:47` 值依赖 const 形态——修复 = 实现对齐规范而非语义变更；RFC-011 语义零漂为前置；RFC-029/029g 可见性正交；Layer 0 SPECS 只读）后批准 **A 案（登记口扩容）**。契约内嵌刹车：四重零漂（lib 全量 / integration 全量 / 语料差分 / IR 快照）任一漂移即停工回报，不修漂移。
+
+### 根因与机制事实（动手前实证）
+
+导出登记口只收 `(T: Type)` ⇒ `declared_fn_type_params`（`checker.rs:41`）缺名 ⇒ `Export::type_params`（`orchestrator.rs`）为 None ⇒ 跨单元限定调用 `lookup_type_params`（`expressions.rs:2820` 附近）取不到声明名，`InstantiationRequest.generic_id.type_params` 空表，mono 走签名反推兜底（#510 探针实证 `params=[]`）。
+
+两条任务文本未覆盖的机制事实（t1 实证）：
+
+1. **const 泛型调用不发实例化请求**——单模块对照（与 `fn_const_generic.yx` 同构源码）与跨单元实测一致：`diagnostics=[]`、`requests=[]`，其单态化走 `const_binders` → mono 编译期求值面。`(N: Int)` 的兑现面因此是**导出携带**（`Export::type_params == Some(["N"])`），不是请求发射；t1 未为满足字面断言新增请求发射（越界且破坏守恒），以守恒锚测试 `test_instantiation_request_qualified_const_call_stays_request_free` 钉住。
+2. **值参数段的标注同样是 CONST_PARAM_TYPES 候选**——parser 旧形状把全部 curry 组拍平进 `signature_params`，`plain: (n: Int) -> Int` 的 `n` 也命中候选；若按「classify 收 Type+Const」直收，一切带 Int/Bool/Float/Char/String 标注的普通函数全带名，打破「普通函数不填表」不变式。修法 = Const 候选过 RFC-011 §4.1 两步判定的第二步（用途精筛）：复用 `collect_used_in_type`（checker.rs）扫注解返回段类型位，谓词应用实参位照 RFC-027a 排除。
+
+### 实现
+
+先 `c2231297`（8 文件 +307/−47，含生成物并账），随并行批次适配 rebase 并订正 helpers.rs 注释后终态为 `a9b5f578`（9 文件 +311/−51）。四处改动：
+
+- **登记口**（`checker.rs` collect_signatures Assign 臂）：`classify_generic_params` 单点收名（is_trait 闭包与 checker.rs 既有先例同源：`env.has_trait || operator_interfaces::spec`）+ Const 候选用途精筛；
+- **body_checker 填表同规**（`inference/statements.rs`）：填表块挪到 `const_binders`（`resolve_const_candidates` 结果）之后，names = Type 全收 + 用途命中 Const——修混合签名 `(T: Type, N: Int)` 被 body_checker 单侧 `[T]` 覆盖的缺口（快照合并「后者优先」，`checker.rs:328-336`）；
+- **helpers.rs 注释订正**：`declared_type_param_names` 的文档注释原文声称「登记口只认 `(T: Type)`」，修后与事实不符（t3 复审 low 项），按 #503 先例随本批订正（4 行等行数替换，下游 W1007 发射点零平移）；
+- **测试 +8**：登记口四单测（含 (T: Type) 回归锚 / plain 不变式锚）、跨单元请求两测试（含守恒锚）、导出面探针（add_of→`["T"]`、f→`["N"]`、plain→None）。
+
+### 红绿
+
+先红：四条登记口测试实现前实跑——接口约束 / 值依赖两条 FAILED（left None / right Some(["T"])/(["N"]))，回归锚与不变式锚绿。机械还原二次验证：stash 两处源码改动（保留测试）后登记口 2 红 + 导出面 1 红 + 跨单元 1 红（0 绿），stash pop 恢复。
+
+### 判据链
+
+t1 门禁 9 项绿 → **队长补修生成物欠账**（t1 门禁清单漏「重跑生成器」——checker.rs/statements.rs 插行必致发射点平移，3.20.4 同款；重跑后 E1xxx/E2xxx/E4xxx/警告页行号平移属本笔，**E4011 计数 4→5 属 #507（`8404ce04`）`const_eval.rs:430` checked_neg 发射点的顺延欠账，就此并账**；amend 并入 + 幂等复核）→ t2 **PASS**（还原补丁红绿谱 4 红 3 绿逐条吻合、trial 机械可逆 blob 校验 CLEAN、修后 lib 2895 / integration 316 全绿、语料 356 条差分空、快照绿、四门禁脚本 + markers 绿）→ t3 **APPROVE**（8 项清单核毕：双精筛一致性、is_predicate 空表支路、classify 六支过滤完备性、is_trait 同源、消费面走查、生成物并账、红绿真实性、判据零放宽；测试计数 2891→2898 只增、三测试文件纯追加）。
+
+### 并行批次适配（2026-10-31）
+
+6.4/6.5 批次（parser 表示重塑：`Type::Fn.params → Vec<Param>`、删 Assign 并行形参表、`fn_params_flat` 成为形参唯一取用入口）与 #511 同区，rebase 时 checker.rs 语义冲突 + 三份生成物冲突。解法 = **对端形状 + 本修逻辑**：登记口参数改从 `type_annotation` 经 `Type::fn_params_flat()` 取（递归拍平语义与旧 all_params 等价），usage 精筛逐 `Param.ty` 下钻；statements.rs 自动合并自洽（旧窄填表块消失、填表仍在 `const_binders` 之后，对端把 usage 扫描并入 `resolve_const_candidates` 入参使两套精筛判据反而归一）。适配后门禁电池在适配 revision 上复绿：clippy 0 / lib **2900** / integration **316** / 语料 356 条零漂 / 快照 7 绿 / markers+四脚本+生成器幂等全过。**t2/t3 判定迁移依据** = 适配仅表示形状、名字表语义面不变，四重零漂在适配 revision（`a9b5f578`）上逐项重立。
+
+### 第三方 merge 事件（第 10 条⑧备案）
+
+t2/t3 运行期间（16:38）主仓工作树出现一次**会话外第三方发起的裸 `git pull`**（`.git/MERGE_HEAD` = origin/dev 夜间基准笔 `1a92aea6`，MERGE_MSG 为裸 pull 生成式），与团队「同步一律 `git pull --rebase origin dev`」约定不符；四个未合并文件（checker.rs + 三份生成物）全部是原始冲突标记、无人 resolve，`git merge --abort` 机械还原至冻结 revision、零损失。归因：HEAD reflog 在冻结 amend 后无移动（在途 merge 不进 reflog）、本会话自动化清单两个均已完成禁用——**无法归因到具体发起者，不推断**。此后本批以 `git pull --rebase` 完成同步。
+
+### 遗留与边界备案（t3 三条 low，均不阻塞收口）
+
+1. **谓词排除判据现存三份不同构**（checker.rs `is_predicate_application` 三判据 / statements.rs / ir_gen SemanticProbe 仅内置谓词）：被调模块自身 use 的谓词 P + 签名 `(n: Int) -> (x: P(n)) -> Int` 形态（语法实证 `tests/yaoxiang/02-type-system/refinement/refined_param_arg_form.yx`）在登记口可把 `n` 误计入用途命中 ⇒ 非泛型函数误收名，暴露面 = 导出元数据（完整 check 的模块被快照合并修正 + const 调用不发请求兜底；语料内无此形态）。建议后续把谓词排除判据收单点（D3 同义映射气味）。
+2. **混合签名 `(T: Type, N: Int)` 的跨单元请求位对齐无测试覆盖**：约束复检按 `param_names.position` 取 `last_type_args[idx]`，名字表扩进 const 名后对齐性静态推演两可。建议补一条混合签名跨单元测试。
+3. helpers.rs 注释失真——已随本批订正（见实现节）。
+
+### 计数
+
+三级 +1 = 3.20.5（193→194）；二级不变。issue [#511](https://github.com/ChenXu233/YaoXiang/issues/511) 关闭。
