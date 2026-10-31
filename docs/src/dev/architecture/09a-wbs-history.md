@@ -2288,3 +2288,45 @@ t1 门禁全绿（lib 2908 与父版**同数**——既有测试零删改、inte
 ### 计数
 
 三级 +1 = 3.20.6（195→196）；二级不变。issue [#519](https://github.com/ChenXu233/YaoXiang/issues/519) **保持开放**（本行只收甲案删除；约束检查的层位与判据设计待后续）。
+
+## P3 3.20.7 收口（#519 甲案续篇——mono 派发改写未命中改报编译期 E1106，2026-11-01）
+
+### 登记与裁决
+
+用户 2026-11-01 批「按你推荐来」（甲案裁决包四件套见 WBS 3.20.7 行登记段）。层位定为 mono 特化改写循环（`qualify_deferred_method` 双查未命中处）——判据与运行时执行面同表同键，规避被删死码的判据发散死因；CHECK 已含 Monomorphization 阶段（`driver/program.rs` 3.4.8 ③ 注记），故翻面发生在 check 面。
+
+### t1 实现（flash 子代理，冻结 `1dbe456c`）
+
+`specialize_function` 改 `Result<Option<_, Diagnostic>>`（未命中 fail-fast 上抛，`process_queue` 以 `?` 承接）；成因区分 = 全表 `.{bare}` 后缀扫描、sort 取前 3 保确定性；`constraint_dispatch_failed(dispatch, detail)` 构造器重定义；013 行标题泛化「约束未满足」→「约束方法派发失败」（`tools/code-tables --fix` 再生——该表区间是工具再生产物，手改会被 build.rs 门禁拒建）；翻面锚 + 成因 B 多文件锚先红后绿。**契约偏差 4 条实证**：
+
+1. **判据修正（最重要）**：登记裁决包的事实②「all_function_names 与运行时名字空间同源」被实证**部分推翻**——该表只收 IR 函数，不含 `src/std/mod.rs` register_all 的 FFI 原生背书（`Int.add` 等）。首版实现把 `sum(1,2)` 这类成功程序杀成 E1106，被两条既有 D59 守卫测试（`method_unused.rs` 的 `test_constrained_generic_dispatch_{single_file,cross_unit}_run_values_unchanged`）当场抓红。修正 = 原生类型显示名（`operator_type_display` 四映射臂产出 + char 默认臂透传）未命中保持运行期回退，放行方向刻意**过包含**（多含=保旧行为，漏含=误杀成功程序）。WBS 行事实②已同步修正。
+2. check_file 翻面形态 = error_count 0→1 + 诊断文本，**非 pipeline Err**——check 的 CollectAll 聚合下 mono 失败走逐文件收集通道（`driver/arms.rs` Check 臂不设 failure），契约原断言按 driver 实证修正。
+3. mono 直驱测试 7 处签名连带（机械必需面，断言逐字保留，追认进 WBS 行清单）。
+4. span 实测：`.at` 接受 `Span`；单行表达式体形态下 ir_gen 记录的指令 span 是函数头——为该字段真实值非错位。
+
+### v2 修复轮（t3 首轮 REJECT 两 medium → 队长修复，amend `8ec5ca38`）
+
+1. **发射点行号平移再生（medium，队长失误）**：冻结审查修注释空行使行号 +1 后**漏跑错误码生成器**——生成物写 761、实际 762，与提交信息「生成器幂等」不符；3.20.4 模式（发射点附近行号平移不重跑生成器）在队长手上复发，t3 抓出。修正后发射点 767，生成器两轮哈希一致。
+2. **成因文案观测化（medium）**：后缀判据不区分同名异型、看不见函数表外来源（extern 体不产 FunctionIR），原「类型定义模块身份在单态化期丢失」断言句可能失真。改为观测陈述 + 条件归因：「全程序函数表中不存在该方法的实现登记——约束未满足」/「……若该实现确属本类型，则为类型定义模块身份在单态化期丢失、无法还原限定名（WBS 3.18）；同名异型时该条目与本派发无关」。doc 注释与 e1xxx 注释同调为「提示性区分」。
+3. `"Char"` → `"char"`（`MonoType::Char` 的 type_name 经 `operator_type_display` 默认臂透传小写，原大写 "Char" 为不可达死成员）；doc 注释如实描述产出面。
+4. 四语言 E1106 英文同文 → 真译（ja/ru/zh-classical/zh-x-miao——契约误称 #520 先例是英文同文，实际 cd5a30fa 四语皆真译；本轮对照语域补齐）。
+
+### t2 独立验证（批次树 519b @ `8ec5ca38`）——PASS
+
+- **R1**（未命中臂打回裸名回退）：基线两新测试绿 → 变异后皆 FAILED（exit 101）→ trial 机械还原（blob 与 HEAD 一致、status CLEAN）→ 重建后恢复绿。
+- **R2**（置空 `PRIMITIVE_DISPLAY_NAMES`）：两条 D59 守卫基线绿 → 变异后皆 FAILED（`Int.add` 被误杀）→ 还原恢复绿——原生类型放行是承重件，残化即红。
+- **冻结基线**：语料差分与基线逐字节一致（零漂）；IR 快照只读 6 passed / 1 ignored（更新模式按设计 ignored）；CI 四脚本 exit 0（check-boundary / check-fanout 现为 report-only 属 P9 前既定口径，输出内违规计数 0）；锁释放，树终态干净。
+- 变异命令形态注记：`cargo test --test integration -- <名1> <名2>`（libtest 多过滤器；契约原文的双测试直写形态本机 cargo 不接受，等价合法形态）。
+
+### t3 修复面确认——APPROVE（5/5）
+
+发射点 767/767 一致且修复面仅此一处行号修正；成因文案观测化与注释同调；char 修正与 type_name 事实吻合；四语真译；测试 diff 无断言放宽（v1→v2 未触碰测试文件）。
+
+### 环境事件备案
+
+- **批次树 Z3 种子**：`git worktree` 不携带 gitignored 的 `.z3/`，批次树首次构建触发 build.rs 联网下载 Z3，本机代理故障（Invoke-WebRequest 连接关闭）致构建失败。处置 = 主树 `.z3/z3-4.16.0-x64-win/` 复制进批次树后增量构建正常。**后续批次建树时若构建报 Z3 下载失败，先做此种子再排查其他原因**；另外上轮失败使锁悬挂（holder=t2 残留），`scratch.py release` 后再入。
+- **pre-commit 钩子跳过异常（待排查）**：pre-commit 失败轮之后的 `git commit` 中，clippy/test/doc/markdownlint 等钩子持续报「(no files to check) Skipped」——staged 面明确含 .rs 与 docs 文件（两次复现：`1dbe456c` 重试轮与 `8ec5ca38` amend 轮），而同会话此前失败前的钩子正常执行。门禁覆盖由批次工作流电池与队长手动电池兜底（两边均全绿）。机制未查明，**单独排查后另案登记**；在此之前，提交后须人工核对钩子输出，不可默认「Skipped=无文件可查」。
+
+### 计数
+
+三级 +1 = 3.20.7（196→197）；二级不变。issue [#519](https://github.com/ChenXu233/YaoXiang/issues/519) **关闭**（甲案删除 + 约束检查落地全链闭环；余量 = 同名异型消歧归 P6 类型身份收敛、动态调用路径覆盖边界、两成因 help 形态——均已在本行与 WBS 行登记去向）。
