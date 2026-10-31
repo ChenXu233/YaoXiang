@@ -47,6 +47,19 @@ impl SiteClass {
             SiteClass::ReverseMonoToAst => "反向桥 B（mono_to_ast_type）",
         }
     }
+
+    /// 稳定键（机读用：口径快照比对、JSON 之外的判据）。
+    ///
+    /// 与展示用的 [`SiteClass::label`] 分开——label 是给人看的中文文案，随时可能改措辞；
+    /// 拿文案当判据会让「改文案」被误判成「改口径」。快照只认本函数返回的键。
+    pub fn key(self) -> &'static str {
+        match self {
+            SiteClass::Forward => "forward",
+            SiteClass::AstToAst => "ast_to_ast",
+            SiteClass::ReverseFromIrType => "reverse_from_ir_type",
+            SiteClass::ReverseMonoToAst => "reverse_mono_to_ast",
+        }
+    }
 }
 
 /// 一项「重建位置」登记：**文件 + 函数名 → 类别**。

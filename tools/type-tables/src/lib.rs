@@ -43,6 +43,10 @@ pub const SCAN_ROOT_REL: &str = "src";
 /// - `Ok(摘要)`：通过——`build.rs` 打印为一行 `cargo:warning` 信息（不是违规）；
 /// - `Err(明细)`：违规——`build.rs` 必须 `panic!` 使构建失败，明细含变体名与 `file:line`。
 ///
+/// 违规分六类且共用一条失败路径：零构造变体未登记 / 登记但已不成立 / 登记豁免点未命中 /
+/// 未登记的通配臂兜底点 / **口径与基线不同代**（基线数字只在同一口径下可比，见
+/// [`baseline::caliber_error`]）/ 勘察基线漂移。
+///
 /// 扫描本身出错也算 `Err`：口径不完整时判定不成立，**不得**降级成「通过」（防静默降级）。
 pub fn build_gate(root: &Path) -> Result<String, String> {
     match scan::scan(root) {
@@ -64,9 +68,8 @@ pub fn report(root: &Path) -> Result<String, String> {
     out.push('\n');
     out.push_str("**T1 已是构建门禁**（6.6.2，2026-10-30）：违规即 build.rs panic 拒绝编译——\n");
     out.push_str("零构造变体 / 白名单与实现不一致 / 登记豁免未命中 / 未登记兜底点 /\n");
-    out.push_str(
-        "勘察基线漂移（T1.6）走同一条失败路径；通过时只打一行摘要。T2 仍只报告、不接构建路径。\n",
-    );
+    out.push_str("口径与基线不同代（6.6.3）/ 勘察基线漂移（T1.6）走同一条失败路径；\n");
+    out.push_str("通过时只打一行摘要。T2 仍只报告、不接构建路径。\n");
     out.push_str(&format!(
         "扫描根：{SCAN_ROOT_REL}/（排除 tests/ 与 */tests/*）\n"
     ));

@@ -653,7 +653,7 @@ impl ForwardReport {
             .count();
         let dead_points: usize = self.dead_list_points().iter().map(|(_, n)| *n).sum();
         format!(
-            "type-tables T1 门禁通过：扫描 {} 个非测试 .rs；ast::Type {} 变体；前向零构造 {}；全局零构造 {}〔{}〕；反向桥 A {} 变体；反向桥 B {} 变体；AST→AST 重建 {} 变体（6.3 删除名单内 {} 点）；勘察基线一致",
+            "type-tables T1 门禁通过：扫描 {} 个非测试 .rs；ast::Type {} 变体；前向零构造 {}；全局零构造 {}〔{}〕；反向桥 A {} 变体；反向桥 B {} 变体；AST→AST 重建 {} 变体（6.3 删除名单内 {} 点）；勘察基线一致、口径同代（{}）",
             self.scanned_files,
             self.stats.len(),
             check.measured_zero.len(),
@@ -663,15 +663,16 @@ impl ForwardReport {
             reverse_b,
             ast_to_ast_variants,
             dead_points,
+            baseline::SCOUT_BASELINE_CALIBER_REV
         )
     }
 
     /// T1 门禁的违规明细（空 = 通过）。
     ///
-    /// **五类违规共用这一份输出**——`build.rs` 的失败路径与 `--report` 的 T1.7 节读的是
+    /// **六类违规共用这一份输出**——`build.rs` 的失败路径与 `--report` 的 T1.7 节读的是
     /// 同一个函数：零构造变体未登记 / 登记但已不成立 / 登记豁免点未命中 /
-    /// 未登记的通配臂兜底点 / **勘察基线漂移（裁决 2A）**。
-    /// 每条都带变体名与可定位的 `file:line`（构造点、兜底点或变体定义行）。
+    /// 未登记的通配臂兜底点 / **口径与基线不同代（6.6.3 复审 F2）** / **勘察基线漂移（裁决 2A）**。
+    /// 每条都带变体名与可定位的 `file:line`（构造点、兜底点、变体定义行或口径函数名）。
     pub fn gate_failures(&self) -> Vec<String> {
         let check = self.whitelist_check();
         let mut out = Vec::new();
@@ -721,12 +722,20 @@ impl ForwardReport {
                 site.location()
             ));
         }
-        for drift in baseline::mismatches(&self.stats) {
-            out.push(format!(
-                "勘察基线漂移：{}（基线 revision {}）——源码新增/删除构造点须同步刷新 SCOUT_BASELINE；口径漂移须修扫描（03 §5.7）",
-                drift.render(),
-                baseline::SCOUT_BASELINE_REV
-            ));
+        // 口径优先（6.6.3 复审 F2）：口径不同代时基线数字**跨代不可比**，此时报「不同代」
+        // 并跳过漂移比对——否则归类被改只会退化成一条看不出原因的「数字漂了」。
+        match baseline::caliber_error() {
+            Some(error) => out.push(error),
+            None => {
+                for drift in baseline::mismatches(&self.stats) {
+                    out.push(format!(
+                        "勘察基线漂移：{}（基线 revision {}，口径 revision {}）——源码新增/删除构造点须同步刷新 SCOUT_BASELINE；改口径须同批刷新口径快照（03 §5.7）",
+                        drift.render(),
+                        baseline::SCOUT_BASELINE_REV,
+                        baseline::SCOUT_BASELINE_CALIBER_REV
+                    ));
+                }
+            }
         }
         out
     }
@@ -1023,6 +1032,15 @@ mod tests {
         assert!(
             message.contains("AST→AST 实测3(基线3)") && message.contains("反向桥 实测0(基线0)"),
             "报错应同时列出 AST→AST 与反向桥两列，实际：{message}"
+        );
+        // 6.6.3 复审 F1：漂移报错必须能定位——带构造点 file:line（合成点固定在 fixture 里）
+        assert!(
+            message.contains("src/fixture.rs:1"),
+            "漂移报错必须带构造点 file:line，实际：{message}"
+        );
+        assert!(
+            message.contains(&format!("{}:", crate::AST_REL)),
+            "漂移报错还应带变体定义行，实际：{message}"
         );
     }
 
