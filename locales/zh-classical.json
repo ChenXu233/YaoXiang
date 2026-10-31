@@ -1096,9 +1096,9 @@
     "help": "结构体模式必列诸字段；``..`` 省略未获支持"
   },
   "E1106": {
-    "title": "約束方法派發不成",
-    "message": "約束方法派發不成：`{dispatch}`——{detail}",
-    "template": "約束方法派發不成：`{dispatch}`——{detail}",
+    "title": "约束方法派发弗成",
+    "message": "约束方法派发弗成：`{dispatch}`——{detail}",
+    "template": "约束方法派发弗成：`{dispatch}`——{detail}",
     "help": "为该类型实现对应接口（于型体之中作接口实例化并定义方法），或改用已实现该接口之实参"
   },
   "E1107": {

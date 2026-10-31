@@ -1087,9 +1087,9 @@
     "help": "结构体模式必须列出全部字段喵~；`..` 略名暂时还不支持呢~"
   },
   "E1106": {
-    "title": "约束方法派发失败喵",
-    "message": "约束方法派发失败喵：`{dispatch}`——{detail} nya~",
-    "template": "约束方法派发失败喵：`{dispatch}`——{detail} nya~",
+    "title": "约束方法派发失败喵～",
+    "message": "约束方法派发失败喵～：`{dispatch}`——{detail}",
+    "template": "约束方法派发失败喵～：`{dispatch}`——{detail}",
     "help": "为该类型实现对应的接口喵~（在类型体里写接口实例化并定义方法），或者改用已经实现该接口的实参nya~"
   },
   "E1107": {
