@@ -440,8 +440,11 @@ fn test_specialize_identity_with_int() {
         Span::default(),
     );
 
-    // Act
-    let result = mono.specialize_function(&req);
+    // Act - 新签名 Result<Option<_>, Diagnostic>（#519 E1106）：命中路径
+    // 不会 Err，expect 只是把签名变化从断言面剥掉，下方判据保持原样
+    let result = mono
+        .specialize_function(&req)
+        .expect("特化不应遇到约束派发改写错误（E1106）");
 
     // Assert
     assert!(result.is_some(), "特化应该成功");
@@ -473,8 +476,11 @@ fn test_specialize_identity_with_string() {
         Span::default(),
     );
 
-    // Act
-    let result = mono.specialize_function(&req);
+    // Act - 新签名 Result<Option<_>, Diagnostic>（#519 E1106）：命中路径
+    // 不会 Err，expect 只是把签名变化从断言面剥掉，下方判据保持原样
+    let result = mono
+        .specialize_function(&req)
+        .expect("特化不应遇到约束派发改写错误（E1106）");
 
     // Assert
     assert!(result.is_some(), "特化应该成功");
@@ -498,8 +504,11 @@ fn test_specialize_swap_with_float() {
         Span::default(),
     );
 
-    // Act
-    let result = mono.specialize_function(&req);
+    // Act - 新签名 Result<Option<_>, Diagnostic>（#519 E1106）：命中路径
+    // 不会 Err，expect 只是把签名变化从断言面剥掉，下方判据保持原样
+    let result = mono
+        .specialize_function(&req)
+        .expect("特化不应遇到约束派发改写错误（E1106）");
 
     // Assert
     assert!(result.is_some(), "特化应该成功");
@@ -528,8 +537,11 @@ fn test_specialize_missing_generic_function_returns_none() {
     // Act
     let result = mono.specialize_function(&req);
 
-    // Assert
-    assert!(result.is_none(), "不存在的泛型函数应返回 None");
+    // Assert - Ok(None) = 既有「无特化义务」信号；Err 只留给约束派发改写未命中
+    assert!(
+        matches!(result, Ok(None)),
+        "不存在的泛型函数应返回 Ok(None)，得到: {result:?}"
+    );
 }
 
 #[test]
@@ -548,8 +560,11 @@ fn test_specialize_type_args_mismatch_returns_none() {
     // Act
     let result = mono.specialize_function(&req);
 
-    // Assert
-    assert!(result.is_none(), "类型参数数量不匹配应返回 None");
+    // Assert - Ok(None) = 既有「无特化义务」信号；Err 只留给约束派发改写未命中
+    assert!(
+        matches!(result, Ok(None)),
+        "类型参数数量不匹配应返回 Ok(None)，得到: {result:?}"
+    );
 }
 
 #[test]
@@ -583,10 +598,10 @@ fn test_specialize_non_generic_function_returns_none() {
     // Act
     let result = mono.specialize_function(&req);
 
-    // Assert
+    // Assert - Ok(None) = 既有「无特化义务」信号；Err 只留给约束派发改写未命中
     assert!(
-        result.is_none(),
-        "非泛型函数特化应返回 None（generic_params 为 None）"
+        matches!(result, Ok(None)),
+        "非泛型函数特化应返回 Ok(None)（generic_params 为 None），得到: {result:?}"
     );
 }
 
@@ -608,8 +623,11 @@ fn test_specialize_with_generic_type_args_replaces_inner_types() {
     mono.generic_functions.insert("first".to_string(), generic);
     let req = request("first", &["T"], MonoType::make_string(), Span::default());
 
-    // Act
-    let result = mono.specialize_function(&req);
+    // Act - 新签名 Result<Option<_>, Diagnostic>（#519 E1106）：命中路径
+    // 不会 Err，expect 只是把签名变化从断言面剥掉，下方判据保持原样
+    let result = mono
+        .specialize_function(&req)
+        .expect("特化不应遇到约束派发改写错误（E1106）");
 
     // Assert
     assert!(result.is_some(), "特化应该成功");

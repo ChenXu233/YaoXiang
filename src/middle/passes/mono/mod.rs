@@ -19,6 +19,19 @@ use crate::middle::core::ir::{
     BasicBlock, ConstValue, FunctionBody, FunctionIR, Instruction, LocalSlot, ModuleIR, Operand,
 };
 
+/// 原生类型显示名（约束派发改写面的类型头取值）。int64/float64/string/bool
+/// 经 [`crate::frontend::core::typecheck::operator_interfaces::
+/// operator_type_display`] 的四条映射臂产出 `Int`/`Float`/`String`/`Bool`；
+/// 其余原语（`MonoType::Char`）走默认臂透传小写名 `char`。它们没有用户方法，
+/// 约束派发改写产生的 `{原语}.{method}` 只能落在运行期 FFI 背书（`src/std/
+/// mod.rs` `register_all` 的 `Int.add` / `Float.add` / `String.add`）或原生
+/// 指令路径——这些名字不在 IR 函数表（[`Monomorphizer::all_function_names`]
+/// 只收 `ModuleIR.functions`），「查表未命中」对它们不构成「约束未满足」的
+/// 证据。未命中时按类型头放行（D59 C 类：不改成功程序——放行方向刻意取
+/// **过包含**：名单成员多于实际背书只会保持旧的运行期行为，漏成员才会把
+/// 成功程序误杀成 E1106）。运行期背书缺失时仍由 E6006 报告，与改造前一致。
+const PRIMITIVE_DISPLAY_NAMES: [&str; 5] = ["Int", "Float", "String", "Bool", "char"];
+
 /// 是否含**待求值的符号化类型实参**：`TypeRef(name)` 恰是所在泛型函数的类型参数名
 /// （#335 路径 A 的 deferred 分流依据）。
 ///
@@ -338,10 +351,12 @@ impl Monomorphizer {
             req.generic_id = GenericFunctionId::new(generic_name.clone(), resolved_type_params);
             let resolved_req = &req;
             // 先尝试类型特化，再尝试函数特化
+            // （#519：函数特化的派发改写未命中以 Err 传播 E1106，`?` 上抛；
+            // 类型特化仍只产 Ok(None) 形态的「无义务」信号）
             let specialized = if self.generic_types.contains_key(&generic_name) {
                 self.specialize_type(resolved_req)
             } else {
-                self.specialize_function(resolved_req)
+                self.specialize_function(resolved_req)?
             };
 
             match specialized {
@@ -496,17 +511,26 @@ impl Monomorphizer {
     }
 
     /// 特化单个函数：将泛型函数按类型参数替换为具体函数
+    ///
+    /// `Err` 仅在约束方法派发改写未命中时返回（E1106，#519 / 2026-11-01
+    /// 用户裁决甲案续篇，首个未命中即报）；`Ok(None)` 仍是「无 IR 特化
+    /// 义务」的既有信号（定义缺失、形参数不匹配等，由调用点归入
+    /// ir_instantiation_failed / 跳过）。
     fn specialize_function(
         &self,
         req: &InstantiationRequest,
-    ) -> Option<FunctionIR> {
-        let generic = self.generic_functions.get(req.generic_id().name())?;
-        let type_params = generic.generic_params.as_ref()?;
+    ) -> Result<Option<FunctionIR>, Diagnostic> {
+        let Some(generic) = self.generic_functions.get(req.generic_id().name()) else {
+            return Ok(None);
+        };
+        let Some(type_params) = generic.generic_params.as_ref() else {
+            return Ok(None);
+        };
         let type_args = req.type_args();
 
         // 验证类型参数数量匹配
         if type_args.len() != type_params.len() {
-            return None;
+            return Ok(None);
         }
 
         // 创建类型替换表：TypeVar(index) -> 具体类型
@@ -602,12 +626,14 @@ impl Monomorphizer {
         // RFC-011b（约束同判据）：约束形参的运算符派发改写——泛型定义体的
         // `a + b`（T 带约束）发射 `Call "T.add"`，此处按类型实参改写为
         // `Call "Vec3.add"`（用户方法）或 `Call "Int.add"`（FFI 原生背书）
-        // （约束的执行面即此改写；约束未实现的可观察行为见 issue #519）
+        // （约束的执行面即此改写；改写未命中的可观察行为 = 编译期 E1106，
+        // issue #519 / 2026-11-01 用户裁决甲案续篇）
         let mut blocks = new_blocks;
         for block in &mut blocks {
             for instr in &mut block.instructions {
                 if let Instruction::Call {
                     func: Operand::Const(ConstValue::String(name)),
+                    span: call_span,
                     ..
                 } = instr
                 {
@@ -617,11 +643,36 @@ impl Monomorphizer {
                             if let Some(concrete) = type_args.get(i) {
                                 let display = crate::frontend::core::typecheck::operator_interfaces::operator_type_display(concrete);
                                 let bare = format!("{}.{}", display, &name[prefix.len()..]);
-                                *name = Self::qualify_deferred_method(
+                                match Self::qualify_deferred_method(
                                     &bare,
                                     &generic.name,
                                     &self.all_function_names,
-                                );
+                                ) {
+                                    Some(qualified) => *name = qualified,
+                                    // #519（2026-11-01 甲案续篇）：用户类型的
+                                    // 方法派发未命中不再回退裸名——裸名进 IR
+                                    // 的下场是运行期 E6006 FunctionNotFound，
+                                    // 根因不可见；首个未命中即报 E1106
+                                    //（fail-fast，与 mono 既有
+                                    // ir_instantiation_failed 同形）。
+                                    // 例外（原语背书放行）：类型头是原语规范名
+                                    // 时（[`PRIMITIVE_DISPLAY_NAMES`]），派发
+                                    // 目标只能落在运行期 FFI 背书或原生指令
+                                    // 路径——IR 函数表看不到它们，「不在表内」
+                                    // 不构成「约束未满足」的证据；保持既有
+                                    // 回退（运行期缺失时仍是 E6006，与改造前
+                                    // 一致，D59 C 类不改成功程序）。
+                                    None => {
+                                        let type_head = bare.split('.').next().unwrap_or("");
+                                        if PRIMITIVE_DISPLAY_NAMES.contains(&type_head) {
+                                            *name = bare;
+                                        } else {
+                                            return Err(
+                                                self.dispatch_miss_diagnostic(&bare, *call_span)
+                                            );
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -630,7 +681,7 @@ impl Monomorphizer {
         }
 
         // 构建特化函数
-        Some(FunctionIR {
+        Ok(Some(FunctionIR {
             name: specialized_name,
             // 特化实例不复用原 DefId——mono 路径保持按名分发
             def: None,
@@ -642,7 +693,7 @@ impl Monomorphizer {
                 entry: new_entry,
                 locals: new_locals,
             },
-        })
+        }))
     }
 
     /// 约束泛型运算符派发名的多文件限定（4.10.3）：`operator_type_display`
@@ -651,26 +702,71 @@ impl Monomorphizer {
     /// 已丢失，无法从类型实参还原。确定性解析（与 `resolve_generic_name`
     /// 同一形态，不做后缀猜测）：表内精确命中（原生背书 `Int.add`、单文件
     /// 裸名表）直接用；否则试「泛型所属单元键」限定名并**查表验证**，命中
-    /// 才采用；都不中回退裸名（既有失败态，不差于现状）。已知缺口：类型
-    /// 与泛型定义**不同模块**时限定名仍无法还原（需 MonoType 携带定义模块，
-    /// 属 P6 类型身份收敛），维持既有 E6006 并登记 WBS。
+    /// 才采用；都不中返回 `None`——调用点按 #519（2026-11-01 用户裁决甲案
+    /// 续篇）报 E1106，不再回退裸名（裸名进 IR ⇒ 运行期 E6006，根因不可见）。
+    /// 已知缺口：类型与泛型定义**不同模块**时限定名仍无法还原（需 MonoType
+    /// 携带定义模块，属 P6 类型身份收敛）；该缺口现在以 E1106 成因 B 显性化
+    /// （WBS 3.18），不再静默。
     fn qualify_deferred_method(
         bare: &str,
         generic_name: &str,
         table: &std::collections::HashSet<String>,
-    ) -> String {
+    ) -> Option<String> {
         if table.contains(bare) {
-            return bare.to_string();
+            return Some(bare.to_string());
         }
         // 泛型所属单元键（首段切分，与 `resolve_generic_name` 的容器模块
         // 规则同源：`lib.sum` → `lib`，方法派生 `lib.Point.get_x` → `lib`）
         if let Some((module, _)) = generic_name.split_once('.') {
             let qualified = format!("{module}.{bare}");
             if table.contains(&qualified) {
-                return qualified;
+                return Some(qualified);
             }
         }
-        bare.to_string()
+        None
+    }
+
+    /// 约束方法派发改写未命中的 E1106 诊断（#519 / 2026-11-01 用户裁决甲案
+    /// 续篇 / WBS 3.20.7）。仅用户类型派发未命中进入本函数（原语类型头由
+    /// 改写点放行，见 [`PRIMITIVE_DISPLAY_NAMES`]）。成因按全程序函数表的
+    /// 后缀命中**提示性**区分——后缀判据不区分同名异型类型，也不能看见
+    /// 函数表之外的实现来源（如 extern 体），故 detail 只做观测陈述，
+    /// 归因句写成可能性而非断言（#519 批次复审修正）：
+    /// - 无任何以 `.{bare}` 结尾的键 ⇒ 成因 A：全表无同名方法登记，通常
+    ///   即约束未满足（类型未实现约束要求的运算符接口）；
+    /// - 存在其他单元键下的同名方法条目 ⇒ 成因 B：方法在表里，但其定义
+    ///   单元键无法从类型实参还原（跨模块类型身份缺口，WBS 3.18）；同名
+    ///   异型时该条目与本派发无关，随诊断如实说明。
+    ///
+    /// 候选取字典序前 3 个（`HashSet` 迭代无序，诊断必须确定性）。
+    fn dispatch_miss_diagnostic(
+        &self,
+        bare: &str,
+        span: crate::util::span::Span,
+    ) -> Diagnostic {
+        let suffix = format!(".{bare}");
+        let mut candidates: Vec<&String> = self
+            .all_function_names
+            .iter()
+            .filter(|name| name.ends_with(&suffix))
+            .collect();
+        candidates.sort();
+        let detail = if candidates.is_empty() {
+            "全程序函数表中不存在该方法的实现登记——约束未满足".to_string()
+        } else {
+            let listed = candidates
+                .iter()
+                .take(3)
+                .map(|candidate| candidate.to_string())
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!(
+                "函数表中存在其他单元键下的同名方法条目：{listed}——若该实现确属本类型，则为类型定义模块身份在单态化期丢失、无法还原限定名（WBS 3.18）；同名异型时该条目与本派发无关"
+            )
+        };
+        ErrorCodeDefinition::constraint_dispatch_failed(bare, &detail)
+            .at(span)
+            .build()
     }
 
     /// 特化类型定义：将泛型类型按类型参数替换为具体类型定义

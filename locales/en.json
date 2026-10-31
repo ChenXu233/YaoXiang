@@ -1096,9 +1096,9 @@
     "help": "Struct patterns must list all fields; the `..` shorthand is not yet supported"
   },
   "E1106": {
-    "title": "Constraint not satisfied",
-    "message": "Type '{type}' does not implement interface '{interface}' (constraint '{param}: {interface}')",
-    "template": "Type '{type}' does not implement `{interface}` — constraint `{param}: {interface}` for generic parameter `{param}` does not hold at this call site",
+    "title": "Constraint method dispatch failed",
+    "message": "Constraint method dispatch failed: `{dispatch}` — {detail}",
+    "template": "Constraint method dispatch failed: `{dispatch}` — {detail}",
     "help": "Implement the corresponding interface for this type (write an interface instantiation and define methods inside the type body), or use arguments that already implement this interface"
   },
   "E1107": {

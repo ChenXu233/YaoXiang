@@ -66,7 +66,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 | `E1103` | 类型位置不能使用方括号 | `TypeCheck` | 是 | `'{name}[...]' 不是类型语法——类型实参要用圆括号` | ✅ 1 处 |
 | `E1104` | 接口实现不在类型的定义模块 | `TypeCheck` | 否 | `类型 '{type}' 不由本模块定义，不能在本模块为其实现接口 '{interface}'` | ✅ 1 处 |
 | `E1105` | 变体构造器不可作为字段访问 | `TypeCheck` | 否 | `'{variant}' 是和类型 '{type}' 的变体构造器，不是数据字段` | ✅ 1 处 |
-| `E1106` | 约束未满足 | `TypeCheck` | 否 | `类型 '{type}' 未实现 \`{interface}\`——泛型参数 \`{param}\` 的约束 \`{param}: {interface}\` 在此调用点不成立` | ⚠ 暂未发射 |
+| `E1106` | 约束方法派发失败 | `TypeCheck` | 否 | `约束方法派发失败：\`{dispatch}\`——{detail}` | ✅ 1 处 |
 | `E1107` | 方法重载歧义 | `TypeCheck` | 否 | `方法重载歧义：'{key}' 有 {count} 个候选匹配且无法区分` | ✅ 1 处 |
 | `E1108` | 空块落入容器期望位 | `TypeCheck` | 是 | `此处期望容器类型，但 \`{}\` 是空块（值 Void）` | ✅ 2 处 |
 | `E1109` | return 出现在函数外 | `TypeCheck` | 否 | `'return' 出现在函数外` | ✅ 3 处 |
@@ -617,16 +617,15 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **发射点**：`src/frontend/core/typecheck/inference/expressions.rs:3529`
 - **源码注释名**：变体构造器被当作字段访问（RFC-010 记录式和类型：变体名升格，
 
-### E1106：约束未满足
+### E1106：约束方法派发失败
 
 - **类别**：`TypeCheck`
 - **span 豁免**：否
-- **构造函数**：`ErrorCodeDefinition::constraint_unsatisfied(type_, param, interface)`
-- **模板**：`类型 '{type}' 未实现 \`{interface}\`——泛型参数 \`{param}\` 的约束 \`{param}: {interface}\` 在此调用点不成立`
-- **消息**：类型 '{type}' 未实现接口 '{interface}'（约束 '{param}: {interface}'）
+- **构造函数**：`ErrorCodeDefinition::constraint_dispatch_failed(dispatch, detail)`
+- **模板**：`约束方法派发失败：\`{dispatch}\`——{detail}`
 - **帮助**：为该类型实现对应接口（类型体内写接口实例化并定义方法），或改用已实现该接口的实参
-- **发射点**：⚠ 暂未发射（注册表中保留该码，但非测试代码里没有调用处，用户无法触发）
-- **源码注释名**：约束未满足（暂未发射——调用点复检系结构性死码，已按 2026-10-31 用户裁决甲案删除，
+- **发射点**：`src/middle/passes/mono/mod.rs:767`
+- **源码注释名**：约束方法派发失败（发射面：mono 特化改写——src/middle/passes/mono/mod.rs
 
 ### E1107：方法重载歧义
 

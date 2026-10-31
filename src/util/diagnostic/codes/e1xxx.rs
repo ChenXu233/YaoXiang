@@ -113,10 +113,16 @@ define_codes!(E1XXX, {
     // E1105 变体构造器被当作字段访问（RFC-010 记录式和类型：变体名升格，
     // 构造只以 `类型.变体(...)` 调用形态存在，值上无变体数据字段）
     ("E1105", TypeCheck, false, variant_used_as_field(type_: &str, variant: &str) => .param("type", type_) .param("variant", variant)),
-    // E1106 约束未满足（暂未发射——调用点复检系结构性死码，已按 2026-10-31 用户裁决甲案删除，
-    // 见 RFC-011b 附录B 设计决策记录；约束未实现当前可观察行为 = check 静默过 / run 期运行时错误，
-    // issue #519 登记待设计。注册码保留，码号语义不变）
-    ("E1106", TypeCheck, false, constraint_unsatisfied(type_: &str, param: &str, interface: &str) => .param("type", type_) .param("param", param) .param("interface", interface)),
+    // E1106 约束方法派发失败（发射面：mono 特化改写——src/middle/passes/mono/mod.rs
+    // specialize_function 的派发改写循环。2026-11-01 用户裁决甲案续篇，
+    // issue #519 / WBS 3.20.7）：约束泛型定义体的 `T.add` 按类型实参改写为
+    // `实现.add` 时，改写名不在全程序函数表——mono 不再把裸名放进 IR 等
+    // 运行期 E6006，而是当场报本码（首个未命中即报，fail-fast）。detail 按
+    // 全表后缀命中做**提示性**区分（判据不区分同名异型、看不见函数表外
+    // 来源，归因句为可能性非断言）：全表无同名登记 = 通常即约束未满足
+    // （成因 A）；存在其他单元键下的同名条目 = 可能为跨模块类型身份缺口
+    // （成因 B，WBS 3.18，候选键随诊断列出），同名异型时条目无关。
+    ("E1106", TypeCheck, false, constraint_dispatch_failed(dispatch: &str, detail: &str) => .param("dispatch", dispatch) .param("detail", detail)),
     // E1107 方法重载歧义（RFC-011a §3：多候选且无期望类型可区分）
     ("E1107", TypeCheck, false, ambiguous_method_overload(key: &str, count: usize) => .param("key", key) .param("count", count.to_string())),
     // E1108 空块 `{}` 落入容器期望位（#394：B 方案定案的 `{}` = 空块 Void，

@@ -618,16 +618,26 @@ fn test_check_two_entries_sharing_module_reports_it_once() {
     );
 }
 
-// 约束泛型调用点复检的现状锚（#519 / 2026-10-31 用户裁决甲案）
+// 约束方法派发的编译期诊断锚（#519 甲案续篇 / 2026-11-01 用户裁决 / WBS 3.20.7）
 
-/// #519 现状锚（2026-10-31 用户裁决甲案）：约束泛型以未实现约束接口的类型
-/// 实例化时，check 不报错——调用点复检系结构性死码已删除（RFC-011b 附录B
-/// 设计决策记录 2026-10-31 条目），E1106 注册码保留但暂未发射；失败推迟到
-/// 运行期（mono 特化改写 `Call "T.add"` 的目标不在函数表）。约束未实现时
-/// 的检查层位与判据归 issue #519 后续设计：实现约束检查时先改判据，再改
-/// 本锚（先红后绿），不得绕过。
+/// #519 翻面锚（2026-11-01 甲案续篇落地，先红后绿）：mono 特化改写未命中
+/// 约束方法派发名时，check 编译期报 E1106。前史：2026-10-31 甲案删除调用点
+/// 复检（RFC-011b 附录B 设计决策记录）后失败推迟到运行期 E6006，本锚当时
+/// 断言 check 静默（`test_check_unsatisfied_constraint_generic_stays_silent`）；
+/// 2026-11-01 用户裁决把未命中前移到编译期（WBS 3.20.7），本锚按原守卫注释
+/// 的约定翻面。
+///
+/// 判据（RFC-011b 约束泛型运算符派发 + issue #519）：NoAdd 未实现 Add，
+/// `sum(NoAdd, NoAdd)` 的 `a + b` 改写目标 `NoAdd.add` 在函数表中无任何
+/// 同名条目（成因 A）——mono 不再把裸名放进 IR 等运行期 E6006，当场报
+/// E1106 且 detail 指明「函数表中不存在任何实现」。
+///
+/// 聚合形态说明：check 的聚合模式是 CollectAll（RFC-039 02-stage-contract，
+/// `driver/program.rs` CHECK_STAGES 注记），mono 失败走逐文件收集通道
+/// （`driver/arms.rs` `monomorphization_multi_file` 的 Check 臂），故
+/// check_file 的翻面形态是 error_count 0→1 而非 Err。
 #[test]
-fn test_check_unsatisfied_constraint_generic_stays_silent() {
+fn test_check_unsatisfied_constraint_generic_reports_e1106() {
     // Arrange - 未声明 Add 的记录类型 NoAdd，sum 以 NoAdd 实例化（与
     // 裁决实证形态同构：约束形参 + 运算符 + 未实现接口）
     let dir = temp_dir();
@@ -651,17 +661,112 @@ main()
 "#,
     );
 
-    // Act
+    // Act - check 命令行为面 + 诊断集合面各取一次
     let result = check_file(&file);
+    let checked = check_result(&file);
 
-    // Assert - 现状判据：check 静默过（0 error，E1106 暂未发射）
+    // Assert - 翻面：check 从静默 0 错改为报 1 错，诊断码 E1106、
+    // 文本携带改写失败的派发目标名 `NoAdd.add`
     assert!(
         result.is_ok(),
-        "check on unsatisfied-constraint project should not fail: {result:?}"
+        "check should surface the miss as an error count, not a pipeline failure: {result:?}"
     );
     assert_eq!(
         result.unwrap(),
-        0,
-        "call-site constraint recheck is removed (structural dead code, RFC-011b 2026-10-31): check must stay silent until #519 designs the new layer"
+        1,
+        "mono dispatch rewrite miss must be reported by check (E1106), not deferred to runtime E6006 (issue #519)"
+    );
+    let e1106: Vec<_> = checked
+        .diagnostics
+        .iter()
+        .filter(|d| d.diagnostic.code == "E1106")
+        .map(|d| &d.diagnostic)
+        .collect();
+    assert!(
+        !e1106.is_empty(),
+        "unsatisfied constraint must report E1106, got: {}",
+        checked
+            .diagnostics
+            .iter()
+            .map(|d| d.diagnostic.code.as_str())
+            .collect::<Vec<_>>()
+            .join(", ")
+    );
+    assert!(
+        e1106.iter().any(|d| d.message.contains("NoAdd.add")),
+        "E1106 message must name the failed dispatch target `NoAdd.add`, got: {:?}",
+        e1106.iter().map(|d| &d.message).collect::<Vec<_>>()
+    );
+}
+
+/// #519 成因 B 锚（WBS 3.20.7 / 2026-11-01 用户裁决甲案续篇）：跨模块类型
+/// 身份缺口的编译期显性化。类型与泛型定义在不同单元时，mono 无法从类型
+/// 实参还原方法的定义单元键（`Vec3.add` 在合并函数表登记为 `lib.Vec3.add`，
+/// WBS 3.18），此前回退裸名把失败推迟到运行期 E6006 `Vec3.add not found`。
+///
+/// 判据：函数表中存在其他单元键下的同名方法条目时，E1106 的 detail 必须列出
+/// 候选键（确定性：sort 后取前 3）——「类型定义模块身份在单态化期丢失」
+/// 从静默数据缺陷变成可诊断的编译期错误。
+#[test]
+fn test_check_constraint_dispatch_cross_module_miss_reports_candidates() {
+    // Arrange - lib.yx 定义 Vec3 与 Vec3.add（合并函数表键 lib.Vec3.add）；
+    // main.yx 定义 sum 并以 Vec3 实例化——方法所属单元键与泛型所属单元键不同
+    let dir = create_project(&[
+        (
+            "lib.yx",
+            r#"
+Vec3: Type = {
+    x: Float,
+    y: Float,
+    z: Float,
+    Add(Vec3, Vec3, Vec3),
+}
+
+Vec3.add: (self: &Vec3, other: &Vec3) -> Vec3 = (self, other) => {
+    return Vec3(self.x + other.x, self.y + other.y, self.z + other.z)
+}
+"#,
+        ),
+        (
+            "main.yx",
+            r#"
+use lib.{Vec3}
+
+sum: (T: Add) -> (a: T, b: T) -> T = a + b
+
+main = () => {
+    a = Vec3(1.0, 2.0, 3.0)
+    b = Vec3(4.0, 5.0, 6.0)
+    v = sum(a, b)
+}
+"#,
+        ),
+    ]);
+    let main = dir.path().join("main.yx");
+
+    // Act
+    let checked = check_result(&main);
+
+    // Assert - check 报 E1106，detail 列出其他单元键下的候选 lib.Vec3.add
+    let e1106: Vec<_> = checked
+        .diagnostics
+        .iter()
+        .filter(|d| d.diagnostic.code == "E1106")
+        .map(|d| &d.diagnostic)
+        .collect();
+    assert!(
+        !e1106.is_empty(),
+        "cross-module dispatch miss must report E1106, got: {}",
+        checked
+            .diagnostics
+            .iter()
+            .map(|d| d.diagnostic.code.as_str())
+            .collect::<Vec<_>>()
+            .join(", ")
+    );
+    assert!(
+        e1106.iter().any(|d| d.message.contains("lib.Vec3.add")),
+        "E1106 detail must list the candidate key lib.Vec3.add, got: {:?}",
+        e1106.iter().map(|d| &d.message).collect::<Vec<_>>()
     );
 }
