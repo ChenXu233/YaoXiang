@@ -1214,8 +1214,8 @@
   },
   "W1007.value_edge.help": "The value dependency runs against the use order: {reader} reads {slot} while {owner} is not yet initialized (violated edge: {owner} imports {reader}; the topological order therefore places {reader} first). Initialization follows use dependencies; inside a cycle both cannot hold — break the cycle, or defer the top-level value behind a function.",
   "E3024": {
-    "title": "プロジェクトマニフェストを読み取れません",
-    "template": "プロジェクトマニフェスト {path} を読み取れません：{detail}",
-    "help": "yaoxiang.toml を修正してください（正当な TOML と [package] の必須フィールド）。マニフェストが存在するのに解析できない場合、宣言面と cross-file 参照プールは信頼できないため、単一ファイル意味論へ黙って退化するのではなくコンパイルを中止します。マニフェストのないプロジェクトは引き続き単一ファイル意味論です。"
+    "title": "プロジェクト設定を読み取れません",
+    "template": "プロジェクト設定 {path} を読み取れません：{detail}",
+    "help": "yaoxiang.toml を修正してください（正当な TOML、[package] の必須フィールド、各節のフィールド型が規約に一致すること）。設定ファイルが存在するのに解析できない場合（宣言面または [tool.*] 拡張節のいずれか）、宣言面と cross-file 参照プール、明示的な設定は信頼できないため、黙って既定設定へ退化するのではなくコンパイルを中止します。設定ファイルのないプロジェクトは引き続き単一ファイル意味論です。"
   }
 }

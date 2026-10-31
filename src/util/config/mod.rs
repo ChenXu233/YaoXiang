@@ -237,6 +237,20 @@ impl Default for RuntimeConfig {
     }
 }
 
+/// 项目级配置加载（yaoxiang.toml）。
+///
+/// RFC-015 §向后兼容性（#520）：文件**不存在** = 合法（所有组件用内置默认值，
+/// 单文件模式语义不动）；**存在但读不了/解析不了** = 显式报错，不再静默回退
+/// 默认——`ConfigError::ParseError` 的 Display 携带 toml 的行号列号与错误原因
+/// （满足 RFC-015「提示具体行号和错误原因」），调用方在错误消息里补文件路径。
+pub fn load_project_config_from(path: &std::path::Path) -> Result<ProjectConfig, ConfigError> {
+    if !path.exists() {
+        return Ok(ProjectConfig::default());
+    }
+    let content = fs::read_to_string(path).map_err(ConfigError::IoError)?;
+    toml::from_str(&content).map_err(ConfigError::ParseError)
+}
+
 /// Load user-level configuration
 /// Returns default config if file doesn't exist
 pub fn load_user_config() -> Result<UserConfig, ConfigError> {

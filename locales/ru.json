@@ -1214,8 +1214,8 @@
   },
   "W1007.value_edge.help": "The value dependency runs against the use order: {reader} reads {slot} while {owner} is not yet initialized (violated edge: {owner} imports {reader}; the topological order therefore places {reader} first). Initialization follows use dependencies; inside a cycle both cannot hold — break the cycle, or defer the top-level value behind a function.",
   "E3024": {
-    "title": "Манифест проекта нечитаем",
-    "template": "Манифест проекта {path} нечитаем: {detail}",
-    "help": "Исправьте yaoxiang.toml: корректный TOML и обязательные поля [package]. Если манифест существует, но не разбирается, поверхности объявлений и межфайловый пул ссылок недостоверны — компиляция прерывается вместо тихой деградации до семантики одного файла. Проект без манифеста сохраняет семантику одного файла."
+    "title": "Конфигурация проекта нечитаема",
+    "template": "Конфигурация проекта {path} нечитаема: {detail}",
+    "help": "Исправьте yaoxiang.toml: корректный TOML, обязательные поля [package] и типы полей, соответствующие соглашениям. Если файл конфигурации существует, но не разбирается (поверхность объявлений или любое расширение [tool.*]), поверхности объявлений, межфайловый пул ссылок и явная конфигурация недостоверны — компиляция прерывается вместо тихого отката к конфигурации по умолчанию. Проект без файла конфигурации сохраняет семантику одного файла."
   }
 }

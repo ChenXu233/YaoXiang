@@ -9,7 +9,8 @@
 //!   RHS 为非 lambda 表达式时，表达式即外层函数体的尾值。
 //! - RFC-010a 规则①：函数体尾值 / return 值与声明返回位做统一（E1012）。
 //!
-//! 四形态（探针 target/yx-scratch/3.22/probe/，行为以语料 03-semantics/paren_return_fn.yx 为锚）：
+//! 四形态（行为以语料 03-semantics/paren_return_fn.yx 为锚；红绿实录见
+//! 09a 收口实录 3.22.1 节）：
 //! A 函数名 RHS、B lambda 块体 return、C lambda 尾表达式（基线已绿）、
 //! D 单层标量返回 + 函数名 RHS（合法报错，必须保持红）。
 

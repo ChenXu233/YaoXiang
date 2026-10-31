@@ -1212,8 +1212,8 @@
   },
   "W1007.value_edge.help": "The value dependency runs against the use order: {reader} reads {slot} while {owner} is not yet initialized (violated edge: {owner} imports {reader}; the topological order therefore places {reader} first). Initialization follows use dependencies; inside a cycle both cannot hold — break the cycle, or defer the top-level value behind a function.",
   "E3024": {
-    "title": "Project manifest is unreadable",
-    "template": "Project manifest {path} is unreadable: {detail}",
-    "help": "Fix yaoxiang.toml so it is valid TOML with the required [package] fields. When the manifest exists but cannot be parsed, the declared surfaces and the cross-file reference pool cannot be trusted, so compilation aborts instead of silently degrading to single-file semantics. A project without a manifest keeps single-file semantics."
+    "title": "Project config is unreadable",
+    "template": "Project config {path} is unreadable: {detail}",
+    "help": "Fix yaoxiang.toml so it is valid TOML with the required [package] fields and field types matching the conventions. When the config file exists but cannot be parsed (the declaration face or any [tool.*] extension section), the declared surfaces, the cross-file reference pool and the explicit config cannot be trusted, so compilation aborts instead of silently degrading to default configuration. A project without a config file keeps single-file semantics."
   }
 }

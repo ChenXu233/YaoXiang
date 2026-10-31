@@ -1211,8 +1211,8 @@
   },
   "W1007.value_edge.help": "The value dependency runs against the use order: {reader} reads {slot} while {owner} is not yet initialized (violated edge: {owner} imports {reader}; the topological order therefore places {reader} first). Initialization follows use dependencies; inside a cycle both cannot hold — break the cycle, or defer the top-level value behind a function.",
   "E3024": {
-    "title": "项目清单不可读喵",
-    "template": "项目清单 {path} 不可读喵：{detail} nya~",
-    "help": "要修好 yaoxiang.toml 喵（合法 TOML 和 [package] 必填字段）。清单存在但解析不了的话，声明面和跨文件引用池都不可信 nya～所以编译会中止，不会静默退化成单文件语义喵。没有清单的项目照样是单文件语义喵。"
+    "title": "项目配置不可读喵",
+    "template": "项目配置 {path} 不可读喵：{detail} nya~",
+    "help": "要修好 yaoxiang.toml 喵（合法 TOML、[package] 必填字段、各节字段类型合乎约定）。配置存在但解析不了的话（声明面或 [tool.*] 扩展节任一），声明面、跨文件引用池和显式配置都不可信 nya～所以编译会中止，不会静默退化成默认配置喵。没有配置的项目照样是单文件语义喵。"
   }
 }

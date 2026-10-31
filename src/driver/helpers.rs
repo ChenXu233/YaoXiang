@@ -717,14 +717,16 @@ pub(in crate::driver) fn ast_has_main(ast: &Module) -> bool {
 /// 项目角色上下文（RFC-029f）：显式声明面 + 测试发现规则 + 清单诊断——自
 /// orchestrator 移入（4.2.2；消费端是 RoleClassification / DeadCodeAnalysis 臂）。
 ///
-/// 三态（WBS 3.23.1 / #503）：
+/// 三态（WBS 3.23.1 / #503；#520 扩面）：
 /// - **无清单文件**（`read_to_string` NotFound）⇒ `surfaces` / `test_rules`
 ///   均 None、无诊断——合法单文件模式，行为与引入角色模型前一致；
 /// - **清单可读** ⇒ 按声明面装配（既有行为）；
 /// - **清单存在但不可读**（其它 io 错误 / 非法 TOML / 缺 `[package]` 必填
-///   字段）⇒ [RoleContext::manifest_diagnostics] 带一条 E3024（error 级）。
-///   此前 `.ok()` 把本态与「无清单」混为同一 None：声明面/角色分类/引用池
-///   全部建立在错误前提上 ⇒ 跨文件引用池失效、W1002 误报且 check exit 0。
+///   字段 / `[tool.*]` 投影解析失败）⇒ [RoleContext::manifest_diagnostics]
+///   带一条 E3024（error 级）。此前 `.ok()` 把本态与「无清单」混为同一
+///   None：声明面/角色分类/引用池全部建立在错误前提上 ⇒ 跨文件引用池失效、
+///   W1002 误报且 check exit 0（#503）；`[tool.*]` 面则被 `.ok()` 吞掉、
+///   显式 patterns 静默回退内建约定（#520 收窄，2026-10-31 甲案）。
 ///   消费端注入诊断并标记 RoleClassification 失败（中止发生在退化之前）。
 pub(in crate::driver) struct RoleContext {
     /// manifest 声明面（坏清单态为 None——前提已不成立）
@@ -781,13 +783,14 @@ pub(in crate::driver) fn role_context(project_root: Option<&Path>) -> RoleContex
         Err(e) => return RoleContext::unreadable(&manifest_path, &e.to_string()),
     };
     // 清单判据 = `PackageManifest` 解析（声明面之家）：失败（非法 TOML /
-    // 缺 [package] version 等必填字段）即报 E3024 并中止。注意覆盖边界
-    // （t3 复审 80904f7b 反例实证）：下方 `ProjectConfig`（test_rules 源）
-    // 的解析失败**不在** E3024 面内——`[tool.test]` 的类型错误可穿透
-    // PackageManifest（无 tool 字段、serde 忽略未知字段）却被这里的
-    // `.ok()` 静默吞掉，用户显式 patterns 静默回退内建约定。这是**既有**
-    // 静默降级（旧代码同款），收窄它属行为变更待另行裁决（#503 收口登记）；
-    // E3024 只覆盖声明面判据。
+    // 缺 [package] version 等必填字段）即报 E3024 并中止。
+    // 覆盖边界（#520 甲案，2026-10-31 用户裁决）：下方 `ProjectConfig`
+    // （test_rules 源）的解析失败**同在** E3024 面内——`[tool.test]` 的类型
+    // 错误可穿透 PackageManifest（无 tool 字段、serde 忽略未知字段），若被
+    // `.ok()` 静默吞掉，用户显式 patterns 会静默回退内建约定（RFC-036:146
+    // 挂在 RFC-015:282「配置解析失败时显示友好错误」之下）。该静默降级
+    // 2026-10-30 #503 收口时判定另行裁决，本裁决收窄为与声明面同待遇：
+    // 同一文件存在但不可读（任一投影解析失败）⇒ E3024 报错中止。
     let surfaces = match toml::from_str::<PackageManifest>(&src) {
         Ok(manifest) => {
             let views = roles::TargetViews {
@@ -808,9 +811,12 @@ pub(in crate::driver) fn role_context(project_root: Option<&Path>) -> RoleContex
         }
         Err(e) => return RoleContext::unreadable(&manifest_path, &e.to_string()),
     };
-    let test_rules = toml::from_str::<crate::util::config::ProjectConfig>(&src)
-        .ok()
-        .map(|config| roles::TestRules::from_config(&config.tool.test));
+    let test_rules = match toml::from_str::<crate::util::config::ProjectConfig>(&src) {
+        Ok(config) => Some(roles::TestRules::from_config(&config.tool.test)),
+        // [tool.*] 面的类型错误与声明面同待遇（#520）：E3024 报错中止，
+        // 不静默回退内建测试发现约定
+        Err(e) => return RoleContext::unreadable(&manifest_path, &e.to_string()),
+    };
     RoleContext {
         surfaces,
         test_rules,

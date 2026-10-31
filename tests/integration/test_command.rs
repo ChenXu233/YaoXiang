@@ -950,6 +950,45 @@ main = () => {
     );
 }
 
+/// #520 落点4（甲案，与 run/format 两臂同原则收窄）：yaoxiang.toml 存在但
+/// `[tool.test]` 解析失败（patterns 写成字符串而非列表）⇒ 显式报错 + 非零
+/// 退出（消息含配置路径与 toml 行号列号，RFC-015 §向后兼容性
+/// 015-configuration-system.md:282），不再静默回退默认发现面——红态实测
+/// （2026-10-31；红绿实录见 issue #520 与 09a 收口实录 3.23.2 节）：同夹具
+/// 输出 `No tests found.` 且退出 0，my_tests/ 下的测试静默失踪。
+#[test]
+fn test_test_command_broken_tool_test_config_fails_with_config_error() {
+    // Arrange：patterns 字段类型错（字符串 ≠ Vec<String>）+ my_tests/ 下的真测试文件
+    let dir = TempDir::new().expect("tempdir");
+    write_file(
+        dir.path(),
+        "yaoxiang.toml",
+        "[tool.test]\npatterns = \"my_tests/**/*.yx\"\n",
+    );
+    write_file(dir.path(), "my_tests/probe.yx", PASS_TEST);
+
+    // Act
+    let (code, stdout, stderr) = run_test_cmd(&[], dir.path());
+
+    // Assert：非零退出 + 消息含配置路径与 toml 行号原因；不得静默回退默认发现面
+    assert_ne!(
+        code, 0,
+        "坏 [tool.test] 配置必须非零退出，实际 exit = {code}"
+    );
+    assert!(
+        stderr.contains("yaoxiang.toml"),
+        "错误消息必须含配置文件路径，实际 stderr：{stderr:?}"
+    );
+    assert!(
+        stderr.contains("TOML parse error") && stderr.contains("line 2"),
+        "错误消息必须含 toml 行号与原因（RFC-015:282），实际 stderr：{stderr:?}"
+    );
+    assert!(
+        !stdout.contains("No tests found"),
+        "不得静默回退默认发现面（红态即 No tests found. + exit 0），实际 stdout：{stdout:?}"
+    );
+}
+
 #[test]
 fn test_test_command_suite_failure_collects_per_test_detail() {
     // Arrange - RFC-036 §7：一失败一通过——失败收集后其余测试照常运行

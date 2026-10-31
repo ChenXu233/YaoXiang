@@ -29,7 +29,7 @@ const MAIN_YX: &str = "use std.assert\nuse a.{Temp}\nuse b.{Temp as TempB}\n\nma
 /// 断言入口条目恰好报出 E3024（error 级、消息含清单路径）并返回该诊断。
 /// E3024 挂在入口文件名下（逐文件收集通道的载体；错误位置在 yaoxiang.toml，
 /// span 豁免故 line 记 0）。
-fn assert_entry_carries_e3024(outcome: &DriverOutcome) {
+fn assert_entry_carries_e3024(outcome: &DriverOutcome) -> &crate::util::diagnostic::Diagnostic {
     let files = outcome
         .check_diagnostics
         .iter()
@@ -62,6 +62,7 @@ fn assert_entry_carries_e3024(outcome: &DriverOutcome) {
         "E3024 消息必须含清单路径: {}",
         e3024.message
     );
+    e3024
 }
 
 /// 断言退化路径的 W1002 误报不再出现（a/b 条目存在但无 W1002——发现集成员
@@ -186,5 +187,96 @@ fn test_dead_code_analysis_skipped_when_manifest_unreadable() {
         ),
         "DeadCodeAnalysis 必须因 RoleClassification 失败被拓扑跳过: {:?}",
         outcome.skipped
+    );
+}
+
+/// #520 甲案（2026-10-31 用户裁决）：`[tool.test]` 面的类型错误（patterns 写
+/// 成字符串而非列表）可穿透 PackageManifest（无 tool 字段、serde 忽略未知
+/// 字段），旧代码 `.ok()` 静默吞掉 ⇒ 显式 patterns 静默回退内建约定。红态
+/// （修前实测 2026-10-31，CLI 探针）：0 条清单诊断 + 退出 0 + `custom_tests`
+/// 下文件误判 Internal 报 W1001。修后与声明面同待遇：同一文件存在但不可读
+/// ⇒ E3024（error 级，消息含路径与 patterns 解析原因）并中止（RFC-015:282
+/// 「配置解析失败时显示友好错误」/ RFC-036:146 [tool.*] 约定）。
+#[test]
+fn test_check_with_tool_test_type_error_reports_e3024() {
+    // Arrange：声明面合法（[package] 齐全），[tool.test] patterns 是字符串
+    let (_dir, entry) = write_project(
+        &[("main.yx", "main = () => { }\n")],
+        Some(concat!(
+            "[package]\nname = \"t\"\nversion = \"0.1.0\"\n\n",
+            "[run]\nmain = \"main.yx\"\n\n",
+            "[tool.test]\npatterns = \"custom_tests/**/*.yx\"\n"
+        )),
+    );
+
+    // Act
+    let outcome = run_check(&entry).expect("check 必须返回产物");
+
+    // Assert：E3024（error 级、消息含路径）+ detail 携带 patterns 的类型错
+    let e3024 = assert_entry_carries_e3024(&outcome);
+    assert!(
+        e3024.message.contains("patterns"),
+        "E3024 消息必须携带 [tool.test].patterns 的解析原因: {}",
+        e3024.message
+    );
+}
+
+/// 守卫（未修分支，#520）：合法 `[tool.test]` patterns（列表形态）零漂移——
+/// 无 E3024，且规则真实生效：custom_tests 下的文件按显式 pattern 判 Test、
+/// 跳过死代码判定（其未使用函数不报 W1001）。防修复把 test_rules 整体关掉。
+/// 入口 = t.yx 本身（与 CLI `check custom_tests/t.yx` 的逐入口 check_project
+/// 同构；若 test_rules 被静默丢弃，t.yx 退化为 Internal ⇒ W1001 现形）。
+#[test]
+fn test_check_with_valid_tool_test_rules_free_of_manifest_diagnostics() {
+    // Arrange：合法清单 + patterns 列表；t.yx 在 custom_tests 下、带未使用函数
+    let t_yx = "t1: () -> Int = () => { return 1 }\n";
+    let manifest = concat!(
+        "[package]\nname = \"t\"\nversion = \"0.1.0\"\n\n",
+        "[run]\nmain = \"main.yx\"\n\n",
+        "[tool.test]\npatterns = [\"custom_tests/**/*.yx\"]\n"
+    );
+    let (_dir, entry) = write_project(
+        &[
+            ("main.yx", "main = () => { }\n"),
+            ("custom_tests/t.yx", t_yx),
+        ],
+        Some(manifest),
+    );
+    let t_entry = entry.parent().unwrap().join("custom_tests").join("t.yx");
+
+    // Act：入口 = t.yx 的单文件 Check（与 ref_pool::run_check 同构，键取 t）
+    let program = crate::driver::Program::new(
+        crate::driver::ProgramKind::Check,
+        vec![crate::driver::Unit::new("t", t_entry, "")],
+        crate::frontend::config::CompileConfig::default(),
+    );
+    let outcome = crate::driver::Driver::new()
+        .run(program)
+        .expect("check 必须返回产物");
+
+    // Assert：无 E3024；t.yx 判 Test ⇒ 其未使用函数不报 W1001
+    assert!(
+        !outcome
+            .check_diagnostics
+            .iter()
+            .any(|(_, ds)| ds.iter().any(|d| d.code == "E3024")),
+        "合法 [tool.test] 不得报 E3024: {:?}",
+        outcome.check_diagnostics
+    );
+    let t_diags = outcome
+        .check_diagnostics
+        .iter()
+        .find(|(p, _)| p.ends_with("t.yx"))
+        .map(|(_, ds)| ds)
+        .unwrap_or_else(|| {
+            panic!(
+                "check 收集通道必须含 t.yx 条目: {:?}",
+                outcome.check_diagnostics
+            )
+        });
+    assert!(
+        !t_diags.iter().any(|d| d.code == "W1001"),
+        "显式 pattern 命中的测试文件判 Test、不参与死代码判定: {:?}",
+        t_diags
     );
 }

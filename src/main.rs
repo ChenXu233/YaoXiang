@@ -468,16 +468,14 @@ fn main() -> Result<()> {
             workers,
         } => {
             // Load project config for runtime settings
-            let project_config = {
-                let config_path = std::path::PathBuf::from("yaoxiang.toml");
-                if config_path.exists() {
-                    let content = std::fs::read_to_string(&config_path).unwrap_or_default();
-                    toml::from_str::<yaoxiang::util::config::ProjectConfig>(&content)
-                        .unwrap_or_default()
-                } else {
-                    yaoxiang::util::config::ProjectConfig::default()
-                }
-            };
+            // #520（RFC-015 §向后兼容性「配置解析失败时显示友好错误，提示具体
+            // 行号和错误原因」）：yaoxiang.toml **存在但不可读**（非法 TOML /
+            // 字段类型错）= 显式报错退出（anyhow 链带文件路径 + toml 行号），
+            // 不再静默回退 ProjectConfig::default()；不存在 = 合法默认不动
+            let project_config = yaoxiang::util::config::load_project_config_from(
+                std::path::Path::new("yaoxiang.toml"),
+            )
+            .with_context(|| "读取项目配置 yaoxiang.toml 失败")?;
 
             // CLI args override project config
             let runtime_mode = if runtime != "embedded" {
@@ -607,20 +605,23 @@ fn main() -> Result<()> {
             single_quote,
         } => {
             // 1. Load user config
-            let user_config = yaoxiang::util::config::load_user_config().unwrap_or_default();
+            // #520：用户配置存在但不可读 = 显式报错退出（消息带配置文件路径 +
+            // toml 行号），不再 unwrap_or_default() 静默回退；无配置文件路径
+            // （XDG_CONFIG_HOME / HOME / APPDATA 均不可定位）= 合法默认，
+            // 与 load_user_config 同口径
+            let user_config = match yaoxiang::util::config::user_config_path() {
+                Some(path) => yaoxiang::util::config::load_user_config_from(&path)
+                    .with_context(|| format!("读取用户配置 {} 失败", path.display()))?,
+                None => yaoxiang::util::config::UserConfig::default(),
+            };
 
             // 2. Load project config (current directory)
-            let project_config = {
-                let config_path = std::path::PathBuf::from("yaoxiang.toml");
-                if config_path.exists() {
-                    let content = std::fs::read_to_string(&config_path).unwrap_or_default();
-                    toml::from_str::<yaoxiang::util::config::ProjectConfig>(&content)
-                        .map(|c| c.fmt)
-                        .unwrap_or_default()
-                } else {
-                    yaoxiang::util::config::FmtConfig::default()
-                }
-            };
+            // #520：与 Run 臂同款——存在但不可读 = 显式报错，不存在 = 默认
+            let project_config = yaoxiang::util::config::load_project_config_from(
+                std::path::Path::new("yaoxiang.toml"),
+            )
+            .with_context(|| "读取项目配置 yaoxiang.toml 失败")?
+            .fmt;
 
             // 3. Start with user config as base
             let mut options = yaoxiang::formatter::FormatOptions::from(&user_config.fmt);

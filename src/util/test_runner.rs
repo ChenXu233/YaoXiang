@@ -120,7 +120,7 @@ struct JsonFile {
 pub fn run_test_command(options: &TestOptions) -> anyhow::Result<usize> {
     let cwd = std::env::current_dir().unwrap_or_default();
     let (mut files, exclude_patterns, config_parallel) = if options.paths.is_empty() {
-        let config = load_config();
+        let config = load_config()?;
         (
             discover_from(&config.patterns),
             config.exclude,
@@ -601,16 +601,20 @@ fn display_path(
     path.strip_prefix(cwd).unwrap_or(path).display().to_string()
 }
 
-/// 读取 `./yaoxiang.toml` 的 `[tool.test]`，缺失或解析失败回退默认值。
-fn load_config() -> TestConfig {
-    let config_path = PathBuf::from("yaoxiang.toml");
-    if config_path.exists() {
-        let content = std::fs::read_to_string(&config_path).unwrap_or_default();
-        if let Ok(config) = toml::from_str::<crate::util::config::ProjectConfig>(&content) {
-            return config.tool.test;
-        }
-    }
-    TestConfig::default()
+/// 读取 `./yaoxiang.toml` 的 `[tool.test]`。
+///
+/// #520 落点4（甲案，与 run/format 两臂同原则收窄）：文件**不存在** = 合法
+/// 默认 `TestConfig`（单文件散测试语义不动）；**存在但读不了/解析不了** =
+/// 显式报错——经单点 `crate::util::config::load_project_config_from`
+/// （`ConfigError::ParseError` 的 Display 携带 toml 行号列号），不再静默回退
+/// 默认（那会让 patterns 发现面静默错配——红态实测：坏 patterns 时
+/// `my_tests/` 下的测试静默失踪，输出 `No tests found.` 且退出 0）。
+/// 错误消息补文件路径（与 Run/Format 臂同款措辞），沿 `run_test_command`
+/// 的既有 anyhow 通道传出——main 的 Test 臂 `Err` 分支打印 stderr 并非零退出。
+fn load_config() -> anyhow::Result<TestConfig> {
+    crate::util::config::load_project_config_from(Path::new("yaoxiang.toml"))
+        .map(|config| config.tool.test)
+        .map_err(|e| anyhow::anyhow!("读取项目配置 yaoxiang.toml 失败: {e}"))
 }
 
 /// 按 pattern 集发现测试文件，排序去重。

@@ -1220,8 +1220,8 @@
   },
   "W1007.value_edge.help": "The value dependency runs against the use order: {reader} reads {slot} while {owner} is not yet initialized (violated edge: {owner} imports {reader}; the topological order therefore places {reader} first). Initialization follows use dependencies; inside a cycle both cannot hold — break the cycle, or defer the top-level value behind a function.",
   "E3024": {
-    "title": "項目清冊不可讀",
-    "template": "項目清冊 {path} 不可讀：{detail}",
-    "help": "正 yaoxiang.toml，使為合法 TOML 且備 [package] 必填之欄。清冊雖存而不可解者，聲明面與跨檔引用池皆不可信，編譯遂止，不默然退化為單檔之義。無清冊之項目，仍行單檔之義。"
+    "title": "項目配置不可讀",
+    "template": "項目配置 {path} 不可讀：{detail}",
+    "help": "正 yaoxiang.toml，使為合法 TOML、備 [package] 必填之欄，且諸節欄位之型皆合約定。配置雖存而不可解者（聲明面或 [tool.*] 擴節任一），聲明面與跨檔引用池、明示配置皆不可信，編譯遂止，不默然退化為預設之配置。無配置檔之項目，仍行單檔之義。"
   }
 }
