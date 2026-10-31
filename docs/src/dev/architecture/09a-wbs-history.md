@@ -2219,3 +2219,39 @@ t2/t3 运行期间（16:38）主仓工作树出现一次**会话外第三方发�
 ### 计数
 
 本批不新增二级/三级任务 ⇒ 09 顶部计数表不变（二级 **72** / 三级 **193**）。
+
+## P3 3.23.2 收口（#520 配置解析失败静默回退收窄，2026-10-31）
+
+### 登记与裁决
+
+3.23.1（#503）收口时 t3 复审实证的「另行裁决」遗留：`[tool.test]` 类型错误穿透 PackageManifest（serde 忽略未知字段、无 tool 字段）后被 `helpers.rs` 的 `.ok()` 静默吞掉，用户显式 patterns 静默回退内建约定。登记为 [#520](https://github.com/ChenXu233/YaoXiang/issues/520)，同族还有 run（`main.rs:474-477`）/ format（`:610`、`:616-620`）两落点。**2026-10-31 用户裁决甲案**：三落点收窄为显式报错非零退出。规范依据 = **RFC-015（已接受）向后兼容性节明文「配置解析失败时显示友好错误，提示具体行号和错误原因」（`015-configuration-system.md:282`）**——现状静默回退违反已接受 RFC，本案 = 实现对齐规范（与 #511 同性质）；`[tool.test]` 经 RFC-036:146 挂在 RFC-015 的 `[tool.*]` 扩展约定下。不可逆面（裁决时单列）：三面「原先成功程序」从静默成功变报错中止——正是修复目的。
+
+### 实现（t1 + t1r 两轮，冻结 `cd5a30fa`，20 文件 +583/−75）
+
+- **单点**：`util::config::load_project_config_from(path)`——缺失 = 合法默认（`ProjectConfig::default()`，单文件模式语义不动）；存在但读不了/解析不了 = `Err(ConfigError::IoError|ParseError)`（ParseError 的 Display 携带 toml 行号列号，兑现 RFC-015 的「行号与原因」）。
+- **落点1**（helpers.rs role_context）：ProjectConfig 投影解析失败并入 E3024 面（`unreadable` 中止，已建好的 surfaces 一并丢弃——与 #503 既有 unreadable 形态逐分支一致，中止发生在任何退化之前）；E3024 文案泛化「项目清单不可读」→「项目配置不可读」（locales 六语言 title/template/help 同 key 同改 + e3xxx 码表注释登记扩面出处 + RFC-013 表行 `code-tables --fix` 治愈 + 生成器再生）；span_exempt 保持（#324 契约）。
+- **落点2/3**（main.rs Run/Format 臂）：走单点 + `with_context(|| "读取项目配置 yaoxiang.toml 失败")?`；用户配置 `user_config_path()` 三级定位（XDG_CONFIG_HOME → HOME → APPDATA）——Some 则 `load_user_config_from` 报错传播，None（三级均不可定位）= 合法默认（与旧 unwrap_or_default 的差异：旧代码连「定位到但文件坏」也吞，新代码只对「定位不到」放默认——收窄本义）。
+- **落点4**（t1 案外发现，队长按已批原则并入并披露）：`util/test_runner.rs:605` 的 `load_config()` 注释原文「缺失或解析失败回退默认值」——`yaoxiang test` 的 patterns 发现面静默错配（红态实测：坏 patterns 时 `my_tests/` 下测试静默失踪，输出 `No tests found.` 且退出 0）。t1r 修复轮复用同一单点（防第四份复制），沿 `run_test_command` 既有 anyhow 通道传出，Test 臂非零退出。
+
+### 红绿
+
+四落点 CLI 探针实测（对照组齐全）：patterns 字符串态 `check main.yx custom_tests/t.yx` 对 custom_tests 文件**误报 W1001**（patterns 回退 + 声明面失效的直接后果）vs 合法列表对照 0 警告；`[mono` 非法 TOML 时 run 按**默认闸 100** 报错 vs 合法 150 报 150；`[fmt` 时 format 长表达式不换行（默认 120）vs 合法 40 换行；用户级坏 config.toml 同款。修后各落点报错（消息带路径 + toml 行号列号）+ 非零退出。测试级红↔绿机械闭环（stash 单文件 → 测试 FAILED → pop → 绿）。
+
+### 判据链
+
+t1 门禁 10 项绿（fmt / clippy --lib / 定向 / lib 全量 2908 / integration 322 / 语料 356 零漂 / 快照 / 生成器幂等）→ t1r 同清单复绿（integration 323）→ 冻结 → t2 **PASS**（还原补丁只回四行为源文件、单点与测试保留——5 条红判据全部变红且断言位置与修复面逐一对应，10 条单点与守卫测试保持绿；blob 校验确认变异态恰为父版内容、apply -R 还原 CLEAN；重建后 lib 2908 / integration 323 与预期精确一致；零漂与门禁十项全绿）→ t3 **REQUEST_CHANGES**（八项技术判据全过：unreadable 三态语义、单点完备性、E3024 注入面未扩大、RFC-015 行号实证、locales 六语言一致、14 条新测试合规、既有测试零删改、判据零放宽；**medium = 两条测试注释把 `.gitignore` 排除的批次探针目录写成红态出处——违反元规则①**，check-docs-refs 未抓因门禁只抽反引号 token（覆盖缺口，非豁免）；3 low：提交信息计数不实、WBS 行未落=时序正常、main.rs:610 注释漏列 XDG）→ 队长补修 **amend 并入**（4 行注释出处改写为 issue/09a 可解析指针 + **3.22 批次同形遗留 `paren_return_decomposition.rs:12` 顺带清理** + XDG 补列 + 提交消息计数更正）；**t2/t3 判定迁移依据 = amend 仅注释与提交消息、代码行为逐字节一致**（fmt 复验干净、生成器复跑零变化、四处均无诊断发射点）。
+
+### 守卫四条（全部有测试咬合）
+
+① 合法配置逐字节不变（mono_config 三测试 + format 40 列对照 + check 合法 patterns 无诊断且规则真实生效）；② 无配置 = 合法默认（missing-file 单测 + run/format/test 三命令对照）；③ 未知 section/字段容忍不动（未加 deny_unknown_fields，serde 语义原样，有单测钉住）；④ #503 判据不放宽（manifest_error 既有 5 条全绿，manifest 面红态判据原样）。
+
+### 边界备案
+
+- E3024 多入口 check 时逐入口各注入一条（2 入口 = 2 条）——#503 既有形态，本批未扩大。
+- ConfigError 的 Display（"IO error: {}" / "Config parse error: {}"）为英文既有文案，CLI 错误消息主体中文硬编码——跟随 main.rs/config 模块既有中英混排先例（`config/mod.rs:290` 同款），i18n 归属如需收口另案。
+- `docs/src/en/reference/error-code/index.md:176` 旧英文文案由 auto-translate bot 推送后跟进（en/ 归 bot 所有，不手改）。
+- check-docs-refs 门禁对裸写文本（非反引号 token）的探针目录引用不设防——t3 指出的覆盖缺口，工具侧收口待登记（本批以注释改写消除现存实例）。
+
+### 计数
+
+三级 +1 = 3.23.2（194→195）；二级不变。issue [#520](https://github.com/ChenXu233/YaoXiang/issues/520) 关闭。
