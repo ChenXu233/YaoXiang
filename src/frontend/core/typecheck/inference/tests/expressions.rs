@@ -424,6 +424,42 @@ fn test_instantiation_request_qualified_const_call_stays_request_free() {
     );
 }
 
+/// #511 / 3.20.5 t3-low② 收口：混合签名（约束段 `(T: Add)` + 值依赖 const 段
+/// `(N: Int)`）的跨单元**全柯里调用**与纯 const 形态同构——**零请求**。实测
+/// （探针先行）其单态化不经 `instantiation_requests` 通道；t3 提出的
+/// 「param_names.position 取 last_type_args[idx] 对齐性」疑虑因此在请求通道
+/// 上不成立（该疑虑所在的 E1106 约束复检路径另有「结构性死码」登记待裁）。
+/// 未覆盖边界：混合签名的部分应用（调用停在 const 段之前）无测试。
+#[test]
+fn test_instantiation_request_qualified_mixed_signature_call_stays_request_free() {
+    // Arrange：lib 导出混合签名 f（约束段 T + const 段 N，返回类型引用 N）；
+    // 约束段不吃调用位（T 从值实参类型反推），调用位 = N 的 const 实参 + x + n
+    let lib = module_info_from_source(
+        "lib",
+        "f: (T: Add) -> (N: Int) -> (x: T) -> (n: N) -> N = (x, n) => n\n",
+    );
+    let source = "use lib\nv = lib.f(7)(1)(2)\n";
+
+    // Act：真实 tokenize → parse → check 管线
+    let result = check_entry_with_modules(source, vec![lib]);
+
+    // Assert：零诊断 + 零请求（与纯 const 形态守恒一致）
+    assert!(
+        result.diagnostics.is_empty(),
+        "混合签名限定调用不应产生诊断，实际：{:?}",
+        result
+            .diagnostics
+            .iter()
+            .map(|d| d.to_string())
+            .collect::<Vec<_>>()
+    );
+    assert!(
+        result.instantiation_requests.is_empty(),
+        "混合签名全柯里调用不得发实例化请求（与纯 const 形态守恒一致），实际：{:?}",
+        request_triples(&result.instantiation_requests)
+    );
+}
+
 /// 边界：被调方是 FieldAccess 但接收者是**值**（方法调用），不是导入模块别名——
 /// 不产生任何实例化请求（请求只属于模块限定调用 `lib.f(x)`）。
 #[test]

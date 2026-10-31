@@ -1266,10 +1266,12 @@ mod export_type_params_tests {
     /// `(T: Type)`（MetaType），这两个形态的 `Export::type_params` 为 None。
     #[test]
     fn test_user_module_function_exports_carry_interface_and_const_param_names() {
-        // Arrange：同一模块给出接口约束泛型与 const 泛型（语料
-        // fn_const_generic.yx 同构），外加普通值参数函数作不变式对照
+        // Arrange：同一模块给出接口约束泛型、const 泛型（语料
+        // fn_const_generic.yx 同构）、混合签名（约束段 + const 段，
+        // t3-low② 名字表按声明序合排的导出面锚）与普通值参数函数作不变式对照
         let source = "add_of: (T: Add) -> (x: T) -> T = (x) => x\n\
                       \nf: (N: Int) -> (n: N) -> Int = (n) => n\n\
+                      \nmixed: (T: Type) -> (N: Int) -> (x: T) -> (n: N) -> T = (x, n) => x\n\
                       \nplain: (n: Int) -> Int = (n) => n\n";
         let tokens = crate::frontend::core::tokenize(source).expect("模块源码必须可词法分析");
         let parsed = crate::frontend::core::parser::parse(&tokens);
@@ -1292,6 +1294,11 @@ mod export_type_params_tests {
             export_named(&info, "f").type_params,
             Some(vec!["N".to_string()]),
             "值依赖 const (N: Int) 的形参名必须随导出携带（用途精筛命中）"
+        );
+        assert_eq!(
+            export_named(&info, "mixed").type_params,
+            Some(vec!["T".to_string(), "N".to_string()]),
+            "混合签名（约束段 T + const 段 N）的名字表必须按声明序合排携带"
         );
         assert_eq!(
             export_named(&info, "plain").type_params,
