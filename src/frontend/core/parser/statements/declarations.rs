@@ -487,7 +487,7 @@ fn parse_assign_after_target(
                             if is_type_param_annotation(p.ty.as_ref()) {
                                 return false;
                             }
-                            // RFC-011 §5.2：约束形参（`T: Add`——标注名为运算符
+                            // RFC-011 §2.1：约束形参（`T: Add`——标注名为运算符
                             // 接口/约束名，非具体类型）是类型位，不占运行时参数。
                             // 是不是约束名由注入探针判定（L2 不再持有该名字表）。
                             if let Some(Type::Name { name: n, .. }) = &p.ty {

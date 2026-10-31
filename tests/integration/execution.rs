@@ -291,7 +291,7 @@ fn test_binary_int_overflow_still_reports_integer_overflow() {
 /// `sum(&a, &b)`（a/b: Vec3）把 T 解成 `Ref{inner: Vec3}`；方法/背书登记名
 /// 一律按底类型（`Vec3.add` 的 `self: &Vec3` 是参数形态不是登记名），mono
 /// 改写必须剥 Ref 才能在合并函数表命中 `Vec3.add`——否则 run 报 E6006
-/// `&Vec3.add` not found（RFC-011 §5.2 约束泛型运算符派发，issue #512）。
+/// `&Vec3.add` not found（RFC-011b 约束泛型运算符派发，issue #512）。
 /// 值传形态（T=Vec3 / T=Int）是既有绿态的回归对照。
 #[test]
 fn test_constrained_generic_ref_args_dispatch_to_base_type_method() {
@@ -329,7 +329,7 @@ main = () => {
 ///
 /// `type_name` 对可变借用渲染 `&mut Vec3`，剥链不分可变性（函数表键空间
 /// 同样不存在 `&mut Type.add`），两侧同 `&mut` 的实例化派发归底类型
-/// （RFC-011 §5.2，issue #512）。
+/// （RFC-011b，issue #512）。
 #[test]
 fn test_constrained_generic_mut_ref_args_dispatch_to_base_type_method() {
     run_ok(

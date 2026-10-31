@@ -1245,7 +1245,7 @@ pub fn extract_generic_param_names(
                         None
                     }
                 }
-                // RFC-011 §5.2：约束形参（`T: Add`——标注为约束名）。
+                // RFC-011 §2.1：约束形参（`T: Add`——标注为约束名）。
                 // 是不是约束名由注入探针判定（权威表在 L3 的运算符接口表）；
                 // 其余 Name（用户类型标注的值参数）仍保守跳过。
                 Type::Name { name, .. } if probe.is_constraint(name) => Some(GenericParamName {

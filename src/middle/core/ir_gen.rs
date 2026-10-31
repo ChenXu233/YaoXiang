@@ -701,7 +701,7 @@ impl AstToIrGenerator {
         }
     }
 
-    /// 约束形参判定（RFC-011 §5.2）：标注是运算符接口/约束名（`T: Add` 的
+    /// 约束形参判定（RFC-011 §2.1）：标注是运算符接口/约束名（`T: Add` 的
     /// `Add`）→ 类型位。split_curry 的层擦除判据与它同源——漏判会让约束
     /// 形参落成运行时参数（sum 外层 Parameters: (Add)），调用 arity 全错。
     fn is_constraint_param_ann(ty: &ast::Type) -> bool {
