@@ -105,8 +105,6 @@ pub struct StatementChecker {
     /// RFC-011b: 接口实现登记表（运算符查询唯一判据，不经名字解析）
     interface_impl_registry:
         HashMap<String, Vec<crate::frontend::core::typecheck::environment::InterfaceImplEntry>>,
-    /// RFC-011 §5.2：泛型函数约束表（fn 名 → [(形参, 接口名)]）——调用点复检
-    generic_fn_constraints: std::collections::HashMap<String, Vec<(String, String)>>,
     /// 当前函数的约束形参（形参 → 接口名）：定义体内运算符延迟派发的依据
     current_fn_param_constraints: Option<std::collections::HashMap<String, String>>,
     /// RFC-011a §3：重载候选签名（key → [候选 Fn]，与 ir_names 候选序对应）
@@ -220,7 +218,6 @@ impl StatementChecker {
             collect_all_errors: false,
             function_local_vars: HashMap::new(),
             result_err_stack: Vec::new(),
-            generic_fn_constraints: std::collections::HashMap::new(),
             current_fn_param_constraints: None,
             method_overloads: std::collections::HashMap::new(),
             method_overload_ir_names: std::collections::HashMap::new(),
@@ -1831,8 +1828,8 @@ impl StatementChecker {
         // #353：记录绑定语句的位置，供尾表达式不符时指向它（而非体的末行）。
         // 真正该改的是注解所在的声明，不是体里那个（可能完全正确的）值。
         self.tail_annotation_span = Some(_span);
-        // RFC-011 §5.2：收集约束形参（`T: Add` 的标注名为接口名）——
-        // 调用点复检与定义体内运算符延迟派发的依据
+        // RFC-011b：收集约束形参（`T: Add` 的标注名为接口名）——定义体内
+        // 运算符延迟派发的依据
         {
             let constraints: Vec<(String, String)> = signature
                 .iter()
@@ -1847,10 +1844,6 @@ impl StatementChecker {
                     _ => None,
                 })
                 .collect();
-            if !constraints.is_empty() {
-                self.generic_fn_constraints
-                    .insert(name.to_string(), constraints.clone());
-            }
             self.current_fn_param_constraints = if constraints.is_empty() {
                 None
             } else {
@@ -3025,7 +3018,7 @@ impl StatementChecker {
                                     }
                                 }
                             }
-                            // RFC-011 §5.2：约束形参延迟派发（定义体内 T 上的
+                            // RFC-011b：约束形参延迟派发（定义体内 T 上的
                             // 运算符）——与 ExpressionInferrer 同款判定
                             if let Some(iface) =
                                 crate::frontend::core::typecheck::operator_interfaces::arithmetic_interface(op)
@@ -3110,7 +3103,6 @@ impl StatementChecker {
                         inferrer.set_current_fn_param_constraints(
                             self.current_fn_param_constraints.as_ref(),
                         );
-                        inferrer.set_generic_fn_constraints(&self.generic_fn_constraints);
                         inferrer.set_method_overloads(
                             &self.method_overloads,
                             &self.method_overload_ir_names,
@@ -3219,7 +3211,6 @@ impl StatementChecker {
                 inferrer.set_generic_fn_type_params(&self.generic_fn_type_params);
                 inferrer
                     .set_current_fn_param_constraints(self.current_fn_param_constraints.as_ref());
-                inferrer.set_generic_fn_constraints(&self.generic_fn_constraints);
                 inferrer
                     .set_method_overloads(&self.method_overloads, &self.method_overload_ir_names);
                 inferrer.set_method_overload_param_names(&self.method_overload_param_names);

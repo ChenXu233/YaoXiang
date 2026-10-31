@@ -428,7 +428,8 @@ fn test_instantiation_request_qualified_const_call_stays_request_free() {
 /// `(N: Int)`）的跨单元**全柯里调用**与纯 const 形态同构——**零请求**。实测
 /// （探针先行）其单态化不经 `instantiation_requests` 通道；t3 提出的
 /// 「param_names.position 取 last_type_args[idx] 对齐性」疑虑因此在请求通道
-/// 上不成立（该疑虑所在的 E1106 约束复检路径另有「结构性死码」登记待裁）。
+/// 上不成立（该疑虑所在的 E1106 约束复检路径系结构性死码，已经 2026-10-31
+/// 用户裁决甲案删除，见 RFC-011b 附录B 与 issue #519）。
 /// 未覆盖边界：混合签名的部分应用（调用停在 const 段之前）无测试。
 #[test]
 fn test_instantiation_request_qualified_mixed_signature_call_stays_request_free() {

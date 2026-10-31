@@ -617,3 +617,51 @@ fn test_check_two_entries_sharing_module_reports_it_once() {
         result.error_count
     );
 }
+
+// 约束泛型调用点复检的现状锚（#519 / 2026-10-31 用户裁决甲案）
+
+/// #519 现状锚（2026-10-31 用户裁决甲案）：约束泛型以未实现约束接口的类型
+/// 实例化时，check 不报错——调用点复检系结构性死码已删除（RFC-011b 附录B
+/// 设计决策记录 2026-10-31 条目），E1106 注册码保留但暂未发射；失败推迟到
+/// 运行期（mono 特化改写 `Call "T.add"` 的目标不在函数表）。约束未实现时
+/// 的检查层位与判据归 issue #519 后续设计：实现约束检查时先改判据，再改
+/// 本锚（先红后绿），不得绕过。
+#[test]
+fn test_check_unsatisfied_constraint_generic_stays_silent() {
+    // Arrange - 未声明 Add 的记录类型 NoAdd，sum 以 NoAdd 实例化（与
+    // 裁决实证形态同构：约束形参 + 运算符 + 未实现接口）
+    let dir = temp_dir();
+    let file = create_yx_file(
+        &dir,
+        "unsatisfied_constraint.yx",
+        r#"
+NoAdd: Type = {
+    x: Int,
+}
+
+sum: (T: Add) -> (a: T, b: T) -> T = a + b
+
+main: () -> Void = {
+    a = NoAdd(1)
+    b = NoAdd(2)
+    v = sum(a, b)
+}
+
+main()
+"#,
+    );
+
+    // Act
+    let result = check_file(&file);
+
+    // Assert - 现状判据：check 静默过（0 error，E1106 暂未发射）
+    assert!(
+        result.is_ok(),
+        "check on unsatisfied-constraint project should not fail: {result:?}"
+    );
+    assert_eq!(
+        result.unwrap(),
+        0,
+        "call-site constraint recheck is removed (structural dead code, RFC-011b 2026-10-31): check must stay silent until #519 designs the new layer"
+    );
+}

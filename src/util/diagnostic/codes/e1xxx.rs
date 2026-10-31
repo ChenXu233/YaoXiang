@@ -113,7 +113,9 @@ define_codes!(E1XXX, {
     // E1105 变体构造器被当作字段访问（RFC-010 记录式和类型：变体名升格，
     // 构造只以 `类型.变体(...)` 调用形态存在，值上无变体数据字段）
     ("E1105", TypeCheck, false, variant_used_as_field(type_: &str, variant: &str) => .param("type", type_) .param("variant", variant)),
-    // E1106 约束未满足（RFC-011 §5.2 调用点复检）
+    // E1106 约束未满足（暂未发射——调用点复检系结构性死码，已按 2026-10-31 用户裁决甲案删除，
+    // 见 RFC-011b 附录B 设计决策记录；约束未实现当前可观察行为 = check 静默过 / run 期运行时错误，
+    // issue #519 登记待设计。注册码保留，码号语义不变）
     ("E1106", TypeCheck, false, constraint_unsatisfied(type_: &str, param: &str, interface: &str) => .param("type", type_) .param("param", param) .param("interface", interface)),
     // E1107 方法重载歧义（RFC-011a §3：多候选且无期望类型可区分）
     ("E1107", TypeCheck, false, ambiguous_method_overload(key: &str, count: usize) => .param("key", key) .param("count", count.to_string())),

@@ -599,9 +599,10 @@ impl Monomorphizer {
             .join(", ");
         let specialized_name = format!("{}({})", generic.name, type_args_str);
 
-        // RFC-011 §5.2：约束形参的运算符派发改写——泛型定义体的
+        // RFC-011b（约束同判据）：约束形参的运算符派发改写——泛型定义体的
         // `a + b`（T 带约束）发射 `Call "T.add"`，此处按类型实参改写为
         // `Call "Vec3.add"`（用户方法）或 `Call "Int.add"`（FFI 原生背书）
+        // （约束的执行面即此改写；约束未实现的可观察行为见 issue #519）
         let mut blocks = new_blocks;
         for block in &mut blocks {
             for instr in &mut block.instructions {
