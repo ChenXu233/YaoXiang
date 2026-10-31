@@ -97,7 +97,10 @@ pub fn run(source: &str) -> Result<()> {
 pub fn eval_code(source: &str) -> Result<()> {
     let tokens = crate::frontend::core::tokenize(source)
         .map_err(|e| anyhow::anyhow!("Lexer error: {:?}", e))?;
-    let parse_result = crate::frontend::core::parser::parse(&tokens);
+    let parse_result = crate::frontend::core::parser::parse_with_probe(
+        &tokens,
+        &crate::frontend::core::typecheck::SemanticProbe,
+    );
     let has_main = parse_result.module.items.iter().any(|stmt| {
         matches!(
             &stmt.kind,

@@ -42,13 +42,14 @@ pub fn embedded_std_module_info(use_path: &str) -> Option<crate::frontend::modul
     use crate::frontend::core::parser;
     use crate::frontend::core::tokenize;
     use crate::frontend::core::typecheck::checker::TypeChecker;
+    use crate::frontend::core::typecheck::SemanticProbe;
     use crate::frontend::core::types::mono::MonoType;
     use crate::frontend::module::symbol::SymbolTable;
     use crate::frontend::module::{Export, ExportKind, ModuleInfo, ModuleSource};
 
     let source = embedded_std_source(use_path)?;
     let tokens = tokenize(source).ok()?;
-    let parsed = parser::parse(&tokens);
+    let parsed = parser::parse_with_probe(&tokens, &SemanticProbe);
     if parsed.has_errors {
         return None;
     }

@@ -11,7 +11,7 @@
 //! 两项检查（失败条件见 [03-type-unification.md] §5.7 的表）：
 //! - **T1 构造点分列**：`ast::Type` 的每个变体，统计三类构造点（parser 前向 / AST→AST 重建 /
 //!   反向桥重建），三类不得混算；前向零构造与全局零构造分别报。
-//! - **T2 三表一致**：`from_builtin_name`、`CONST_PARAM_TYPES`、LSP 内置类型名清单逐名比对。
+//! - **T2 三表一致**：`from_builtin_name`、`CONST_PARAM_TYPES`（L3 探针模块）、LSP 内置类型名清单逐名比对。
 //!   三张表是内置类型名的**全部代码侧载体**；文档侧没有载体（RFC-011 是泛型系统设计，
 //!   不枚举内置类型名），故门禁不把任何文档当比对对象（2026-10-30 用户裁决：比对对象不存在，
 //!   原「内置类型名 vs RFC-011 文档」一项已删除）。
@@ -26,8 +26,11 @@ pub mod tables;
 
 use std::path::Path;
 
-/// `ast::Type` 的定义家（T1 的变体清单来源；T2 的 `CONST_PARAM_TYPES` 亦在此）
+/// `ast::Type` 的定义家（T1 的变体清单来源）
 pub const AST_REL: &str = "src/frontend/core/parser/ast.rs";
+/// const 参数名表 `CONST_PARAM_TYPES` 的所在文件（T2 表 B；WBS 6.6.9 从 `parser/ast.rs`
+/// 移回 L3 的探针模块——parser 不再持有名字表，`check-boundary.py` B6 因此清零）
+pub const TYPECHECK_PROBE_REL: &str = "src/frontend/core/typecheck/probe.rs";
 /// `MonoType::from_builtin_name` 的所在文件（T2 的规范名来源）
 pub const MONO_REL: &str = "src/frontend/core/types/mono.rs";
 /// LSP 内置类型名清单的所在文件（T2 第三张表）

@@ -7,9 +7,15 @@
 //! 属 L2，不得反向依赖 L3（`scripts/ci/check-boundary.py` 的 B2）。故本模块
 //! 只定义**判定的接口**，实现由调用方注入（依赖倒置）：
 //!
-//! - [`NullProbe`]：全 false，单元测试与「无类型环境」入口的基线；
-//! - [`BuiltinProbe`]：编译器内置封闭集的镜像（见其文档与「残留」说明）；
-//! - L3 的语义探针 `SemanticProbe`：以运算符接口表 / 谓词判定 / 内置名表为准。
+//! - [`NullProbe`]：全 false，**无类型环境**入口与 parser 单元测试的基线；
+//! - L3 的语义探针 `SemanticProbe`（`typecheck::probe`）：以运算符接口表 / 内置谓词
+//!   判定 / 内置名表 / const 参数名表为准——9 个生产入口一律注入它（WBS 6.6.9）。
+//!
+//! **L2 不再持有任何名字表**（WBS 6.6.9）：6.4 曾在 parser 里留过两张封闭集
+//! （`CONSTRAINT_NAMES` / `PREDICATE_NAMES`）与一张 const 参数名表
+//! （`ast::CONST_PARAM_TYPES`），当作「默认入口拿不到 L3 环境」的兜底。三者都是
+//! L3 知识的**第二份副本**（`check-boundary.py` B6 的两个命中点），已全部删除：
+//! 默认入口只带 [`NullProbe`]（= parser 不出类型知识），生产入口显式注入语义探针。
 //!
 //! 注入点是 [`ParserState`](super::ParserState) 的 `probe` 字段：parser 内所有
 //! 「名字定种」判定一律经 `state.probe()`，parser 自身不再持有类型/谓词名字面量。
@@ -74,17 +80,21 @@ pub trait TypeEnvProbe {
         NameKind::UserType
     }
 
-    /// 本探针是否**持有内置类型名表**（L3 的 `MonoType::from_builtin_name`）。
+    /// 该名字是否为**可作 const 泛型参数**的类型名（`(N: Int)` 的 `Int`）。
     ///
-    /// `kind_of` 的 [`NameKind::Builtin`] 只能由持有该表的探针给出；不持有的
-    /// 探针（[`NullProbe`] / [`BuiltinProbe`]——L2 拿不到类型表）必须返回
-    /// `false`。`extract_generic_param_names` 的 const 参数判定据此**回退**到
-    /// `CONST_PARAM_TYPES` 单表（= 6.4 之前的判据），避免「内置名定种永不成立」
-    /// 使 `(N: Int)` 静默漏登记（6.4 修复轮回归）。
+    /// 权威集合在 L3（`typecheck::probe::CONST_PARAM_TYPES`，语义 =「内置名表里
+    /// 可被 const 参数接受的子集」）：parser 只提问、不建表。默认 `false` =
+    /// 「本探针不提供这条知识」，调用方不能据此反推「该名字一定不是」——它只意味着
+    /// parser 不会把它登记成 const 泛型参数。
     ///
-    /// 默认 `false` 是保守选择：未知探针得到 6.4 前的行为，而不是静默关闭
-    /// const 参数收编。
-    fn knows_builtin_types(&self) -> bool {
+    /// **历史口径（已删除）**：6.4 修复轮曾在 L2 留一张 `CONST_PARAM_TYPES` 单表，
+    /// 供不持有内置名表的探针回退（避免默认入口漏判）。那张表是 L3 知识的**第二份
+    /// 副本**（`check-boundary.py` B6 的命中点之一），WBS 6.6.9 已把它移回 L3、
+    /// 回退分支一并删除——parser 的内置封闭集清零。
+    fn is_const_param_type(
+        &self,
+        _name: &str,
+    ) -> bool {
         false
     }
 }
@@ -93,59 +103,3 @@ pub trait TypeEnvProbe {
 pub struct NullProbe;
 
 impl TypeEnvProbe for NullProbe {}
-
-/// 编译器**内置封闭集**探针：运算符接口名与内置谓词名的语言级常量表。
-///
-/// **为什么 L2 还留一份**：`parse()` 有 9 个生产入口（driver 的三个解析臂、
-/// 前端编排的两处逐文件解析、前端门面、`validate`、库入口、LSP 补全、
-/// `src/std/` 的源码解析），其中 `src/std/` 属本批硬验收的**零差异**面，
-/// 本批无法把它们全部改成注入形态。故默认探针保留这张封闭集表：
-/// `is_constraint` / `is_predicate` 的判定与 6.4 之前逐字一致。
-///
-/// **它不持有内置类型名表**（`from_builtin_name` 在 L3），因此 `kind_of` 不返回
-/// [`NameKind::Builtin`]、`knows_builtin_types()` 为 `false`——const 泛型参数
-/// 判定据此回退到 `CONST_PARAM_TYPES` 单表，同样与 6.4 之前一致（不会漏判）。
-/// 一旦 L1 在各入口注入 L3 语义探针，本类型即可退化为测试基线并删除。
-///
-/// **不是第二份权威表**：`CONSTRAINT_NAMES` 与 L3 运算符接口表的 7 名逐名
-/// 对账、`PREDICATE_NAMES` 与 L3 的内置谓词判定双向对账，由 L3 侧的对账
-/// 用例守着（漂移即测试红）。
-pub struct BuiltinProbe;
-
-/// 运算符接口名（约束名）封闭集，与 L3 运算符接口表逐名对账。
-pub const CONSTRAINT_NAMES: &[&str] = &[
-    "Add", "Subtract", "Multiply", "Divide", "Modulo", "Equal", "Index",
-];
-
-/// 内置谓词名封闭集，与 L3 的内置谓词判定双向对账。
-pub const PREDICATE_NAMES: &[&str] = &["Terminates"];
-
-impl TypeEnvProbe for BuiltinProbe {
-    fn is_constraint(
-        &self,
-        name: &str,
-    ) -> bool {
-        CONSTRAINT_NAMES.contains(&name)
-    }
-
-    fn is_predicate(
-        &self,
-        name: &str,
-    ) -> bool {
-        PREDICATE_NAMES.contains(&name)
-    }
-
-    /// 默认探针只能按自己的封闭集定种（内置类型名表在 L3，不在此处）。
-    fn kind_of(
-        &self,
-        name: &str,
-    ) -> NameKind {
-        if self.is_predicate(name) {
-            NameKind::Predicate
-        } else if self.is_constraint(name) {
-            NameKind::Constraint
-        } else {
-            NameKind::UserType
-        }
-    }
-}

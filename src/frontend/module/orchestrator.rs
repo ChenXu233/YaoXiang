@@ -29,6 +29,7 @@ use crate::util::diagnostic::Diagnostic;
 use crate::frontend::core::parser::{self, Module};
 use crate::frontend::core::tokenize;
 use crate::frontend::core::typecheck::checker::TypeChecker;
+use crate::frontend::core::typecheck::SemanticProbe;
 use crate::frontend::core::types::mono::MonoType;
 use crate::frontend::core::types::PolyType;
 use crate::frontend::module::registry::ModuleRegistry;
@@ -1038,7 +1039,7 @@ pub(crate) fn parse_file(
         path: path.display().to_string(),
         message: format!("{:?}", e),
     })?;
-    let result = parser::parse(&tokens);
+    let result = parser::parse_with_probe(&tokens, &SemanticProbe);
     if result.has_errors {
         let msg = result
             .errors
@@ -1228,7 +1229,10 @@ mod export_type_params_tests {
                       \nBox: Type = { inner: Int }\n\
                       \nvalue: Int = 7\n";
         let tokens = crate::frontend::core::tokenize(source).expect("模块源码必须可词法分析");
-        let parsed = crate::frontend::core::parser::parse(&tokens);
+        let parsed = crate::frontend::core::parser::parse_with_probe(
+            &tokens,
+            &crate::frontend::core::typecheck::SemanticProbe,
+        );
         assert!(
             !parsed.has_errors,
             "模块源码必须可解析：{:?}",
@@ -1274,7 +1278,10 @@ mod export_type_params_tests {
                       \nmixed: (T: Type) -> (N: Int) -> (x: T) -> (n: N) -> T = (x, n) => x\n\
                       \nplain: (n: Int) -> Int = (n) => n\n";
         let tokens = crate::frontend::core::tokenize(source).expect("模块源码必须可词法分析");
-        let parsed = crate::frontend::core::parser::parse(&tokens);
+        let parsed = crate::frontend::core::parser::parse_with_probe(
+            &tokens,
+            &crate::frontend::core::typecheck::SemanticProbe,
+        );
         assert!(
             !parsed.has_errors,
             "模块源码必须可解析：{:?}",

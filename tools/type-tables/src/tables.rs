@@ -3,7 +3,8 @@
 //! 三表（各自语义不同，故按「映射规则」而不是简单集合相等比对）：
 //! - **A** `from_builtin_name`（`MONO_REL`）：名字 → MonoType 的解析表；每个 match 臂的**首个写法**
 //!   视为规范名，其余为别名（依据：源码每臂都把规范大写写法放首位）。
-//! - **B** `CONST_PARAM_TYPES`（`AST_REL`）：可作 const 泛型参数的类型名（**A 的子集**语义）。
+//! - **B** `CONST_PARAM_TYPES`（`TYPECHECK_PROBE_REL`）：可作 const 泛型参数的类型名
+//!   （**A 的子集**语义；WBS 6.6.9 之前住在 `parser/ast.rs`，随 parser 封闭集清零移回 L3）。
 //! - **C** LSP 内置类型名清单（`LSP_REL`）：hover/definition 展示名（**A 规范名的超集**语义）。
 //!
 //! 三条检查：
@@ -19,7 +20,7 @@ use syn::visit::{self, Visit};
 use syn::{Expr, ExprLit, ImplItem, Item, Lit, Pat};
 
 use crate::dispositions::{self, Disposition};
-use crate::{AST_REL, LSP_REL, MONO_REL};
+use crate::{LSP_REL, MONO_REL, TYPECHECK_PROBE_REL};
 
 /// WBS 6.1.2（2026-10-27 定稿）删除的 22 个内置名「实现内拼写」。
 ///
@@ -102,7 +103,7 @@ impl NameTableReport {
         out.push_str("── T2 三表一致 ────────────────────────────────────────────────────────\n");
         out.push_str(&format!(
             "T2.1 三表原文（A: {}，B: {}，C: {}）\n",
-            MONO_REL, AST_REL, LSP_REL
+            MONO_REL, TYPECHECK_PROBE_REL, LSP_REL
         ));
         let alias_total: usize = self.builtin.iter().map(|a| a.aliases().len()).sum();
         out.push_str(&format!(
@@ -394,7 +395,7 @@ fn names_of_pat(
 }
 
 fn parse_const_param_types(root: &Path) -> Result<(Vec<String>, usize), String> {
-    let file = parse_file(&root.join(AST_REL))?;
+    let file = parse_file(&root.join(TYPECHECK_PROBE_REL))?;
     for item in &file.items {
         let Item::Const(c) = item else { continue };
         if c.ident != "CONST_PARAM_TYPES" {
@@ -405,7 +406,9 @@ fn parse_const_param_types(root: &Path) -> Result<(Vec<String>, usize), String> 
         let line = c.ident.span().start().line;
         return Ok((names, line));
     }
-    Err(format!("{AST_REL} 中未找到 const CONST_PARAM_TYPES"))
+    Err(format!(
+        "{TYPECHECK_PROBE_REL} 中未找到 const CONST_PARAM_TYPES"
+    ))
 }
 
 fn collect_string_array(

@@ -559,7 +559,7 @@ declarations.rs:498-511 与 ast.rs:930 改为
 | # | 检查 | 输入 | 失败条件 | 治法 |
 | --- | --- | --- | --- | --- |
 | **T1 构造点分列** | 扫描 `src/frontend/core/parser/ast.rs` 的 `pub enum Type` 变体清单；在 `src/` 下按**三类分列**统计每个变体的构造点（① parser 前向 ② AST→AST 重建 ③ 反向桥重建；排除 `tests/` 与 `*/tests/*`）。重建位置（②③）由 `scan.rs` 的 `REBUILD_FUNCTIONS` 表驱动并与源码逐条对账 | 变体清单 + 三类命中表 + 勘察基线 | ① 某变体**前向零构造**且未登记；② 已登记变体出现前向构造点；③ 登记的通配臂兜底豁免点**未命中**；④ 存在**未登记的通配臂兜底点**（兜底豁免逐条登记，不得泛化到所有通配臂）；⑤ **勘察基线（T1.6）漂移**：某变体的 合计/前向/AST→AST/反向桥 与 `SCOUT_BASELINE` 不等（裁决 2A）；⑥ **重建位置登记表与源码不一致**：登记的重建函数在源码里找不到同名 `fn`（改名/删除未同步）；⑦ **口径与基线不同代**：现行 `REBUILD_FUNCTIONS` 与冻结口径快照 `SCOUT_BASELINE_CALIBER`（口径 revision）不等（6.6.3） | 删变体；或登记理由 / 删除失效登记（见 5.2 与 `REGISTERED_ZERO_FORWARD`）；基线漂移以可复现证据刷新 `SCOUT_BASELINE`（含构造点 file:line）；改口径须同批刷新口径快照与基线数字；登记表随源码同步 |
-| **T2 同义词表与全仓名字清单一致** | `types/mono.rs` 的 `from_builtin_name` match 表 + `ast.rs:855` `CONST_PARAM_TYPES` + `src/lsp/world.rs:182` 的 LSP 内置类型名清单 | 三张表 | 某个类型名在一张表中存在而另一张不认（按各自语义的映射规则比对）；**WBS 6.1.2 起另有 T2.5「已删除拼写哨兵」：22 个已删拼写任一被加回即报红** | `type-tables --fix` 双向补齐 |
+| **T2 同义词表与全仓名字清单一致** | `types/mono.rs` 的 `from_builtin_name` match 表 + `typecheck/probe.rs` 的 `CONST_PARAM_TYPES`（WBS 6.6.9 从 `parser/ast.rs` 移回 L3）+ `src/lsp/world.rs:182` 的 LSP 内置类型名清单 | 三张表 | 某个类型名在一张表中存在而另一张不认（按各自语义的映射规则比对）；**WBS 6.1.2 起另有 T2.5「已删除拼写哨兵」：22 个已删拼写任一被加回即报红** | `type-tables --fix` 双向补齐 |
 | ~~**T3 内置类型名与 RFC-011 文档一致**~~ | 原定：`from_builtin_name` 的规范名集合 + `docs/src/rfc/accepted/011-generic-type-system.md` 的类型表 | — | **已按 2026-10-30 用户裁决删除（比对对象不存在）**：RFC-011 是泛型系统设计，正文没有以「内置类型名」为列的表格 | —（不适用；删除理由与覆盖面见下表后的说明） |
 | **T4 `Type → MonoType` 穷尽性** | `Type` 变体清单 vs `types/lower.rs` 的 match 臂 | 两张表 | 有变体无对应臂，或有臂无对应变体 | 补臂 / 删臂 |
 
@@ -802,7 +802,7 @@ declarations.rs:498-511 与 ast.rs:930 改为
 - `src/frontend/core/parser/ast.rs:518-532` — `Type::NamedParen` 的 binder 语义说明（删除会重引入缺陷的证据）
 - `src/frontend/core/parser/ast.rs:778`、`:985` — `Param`（名字与类型同栖）与 `Type::fn_params_flat`（拍平入口）：6.5.2/6.8.1 之后的形参唯一表示
 - `src/frontend/core/parser/ast.rs:858` — `Type::without_fn_param_names`：IR 载体入 IR 前剥掉类型位形参名（打印边界的一致性收口，见 5.6）
-- `src/frontend/core/parser/ast.rs:1074` — `CONST_PARAM_TYPES`：const 泛型参数名的第三份副本
+- `src/frontend/core/typecheck/probe.rs`（WBS 6.6.9 起）— `CONST_PARAM_TYPES`：const 泛型参数**可接受类型名**表的唯一权威（原在 `parser/ast.rs`，是 L3 知识的第三份副本；随 parser 封闭集清零移回 L3，parser 只经 `TypeEnvProbe::is_const_param_type` 提问，见 5.4）
 - `src/frontend/core/parser/ast.rs:1097` — `name_used_as_type`：6.4 合并后的单一实现（原 `name_used_as_type_in` 与 `declarations.rs` 那份已合并）
 - `src/frontend/core/parser/ast.rs:1178`、`:1275` — `extract_generic_param_names` 与 `classify_generic_params`（6.4 起经注入探针定种）
 - `src/frontend/core/parser/ast.rs:196-218`、`:222-228` — `ast::BinOp` / `ast::UnOp`

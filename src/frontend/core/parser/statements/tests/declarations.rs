@@ -327,8 +327,12 @@ fn test_anonymous_param_never_yields_generic_name() {
     ];
 
     // Act
-    let classified =
-        crate::frontend::core::parser::ast::classify_generic_params(&params, &|name| name == "Add");
+    // 探针传 NullProbe：本用例只断言「无名形参不产泛型名」，const 参数判定不参与
+    let classified = crate::frontend::core::parser::ast::classify_generic_params(
+        &params,
+        &|name| name == "Add",
+        &NullProbe,
+    );
     let extracted = extract_generic_param_names(&params, &NullProbe);
 
     // Assert
@@ -403,7 +407,7 @@ fn test_const_generic_no_merged_misalignment() {
     // 覆盖: RFC-011 Const 泛型 — (N: Int) 被 extract_generic_params 判为 Const 泛型而非值参数
     // 泛型参数名改用法判定（不再大小写猜测）。
     // 验证: f: (N: Int, s: String) -> String = (s) => s 的 params == [s: String]
-    //       (N: Int) 是 Const 泛型（Int 在 CONST_PARAM_TYPES 中），
+    //       (N: Int) 是 Const 泛型（Int 由注入探针判为 const 参数类型），
     //       不参与 lambda name 匹配 → 仅 s 匹配上
     let kind = parse_stmt("f: (N: Int, s: String) -> String = (s) => s");
     let StmtKind::Assign { value, .. } = &kind else {

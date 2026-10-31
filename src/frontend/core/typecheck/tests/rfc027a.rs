@@ -9,7 +9,8 @@
 use crate::frontend::core::typecheck::checker::TypeChecker;
 use crate::frontend::core::typecheck::types::TypeCheckResult;
 use crate::frontend::core::lexer::tokenize;
-use crate::frontend::core::parser::parse;
+use crate::frontend::core::parser::parse_with_probe;
+use crate::frontend::core::typecheck::SemanticProbe;
 use crate::frontend::core::types::const_data::{BinOp, ConstExpr};
 use crate::util::diagnostic::Diagnostic;
 
@@ -29,7 +30,7 @@ fn check_source(source: &str) -> TypeCheckResult {
             };
         }
     };
-    let module = match parse(&tokens) {
+    let module = match parse_with_probe(&tokens, &SemanticProbe) {
         result if result.has_errors => {
             return TypeCheckResult {
                 diagnostics: vec![Diagnostic::error(
@@ -201,7 +202,7 @@ f: (a: Int) -> Terminates(1, 2) = {
 /// 提取源码中所有 `Terminates(m)` 标注的测度（键 = 被标注的绑定/函数名）。
 fn measures_of(source: &str) -> std::collections::HashMap<String, ConstExpr> {
     let tokens = tokenize(source).expect("词法分析应成功");
-    let parsed = parse(&tokens);
+    let parsed = parse_with_probe(&tokens, &SemanticProbe);
     assert!(
         !parsed.has_errors,
         "解析应无错误，实际: {:?}",

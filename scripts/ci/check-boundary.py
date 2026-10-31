@@ -18,9 +18,10 @@ check-boundary.py —— 禁令二判据 C（边界侵蚀）门禁
                                  P6/P10 随词表迁移消除）
   B5 opcode 词表唯一归属          backends/ 内不得新增 opcode 常量定义文件
                                 （现状唯一：backends/common/opcode.rs，83 个）
-  B6 parser 内不得硬编码类型/谓词名  现状 2 文件（CONST_PARAM_TYPES；BuiltinProbe 的
-                                 内置谓词封闭集——WBS 6.4 把 "Terminates" 从判定点移进
-                                 默认探针的数据表）；字面量匹配前先剥掉行注释
+  B6 parser 内不得硬编码类型/谓词名  现状 0 文件（WBS 6.4 记 2：CONST_PARAM_TYPES 与
+                                 BuiltinProbe 的内置谓词封闭集；WBS 6.6.9 删掉两张封闭集
+                                 并把 CONST_PARAM_TYPES 移回 L3 后清零）；字面量匹配前
+                                 先剥掉行注释
   C  pub(crate) 泄漏计数         只记基线（总数 + 分目录），只许减不许增（P9 转硬）
 
 库存登记口径：{文件: 命中数}。文件内新增命中 → 计数增长 → 违规；
@@ -57,13 +58,12 @@ KNOWN_MIDDLE_TO_BACKENDS = {
     'middle/passes/codegen/emitter.rs': 1,            # :5 同上
 }
 KNOWN_OPCODE_DEF_FILES = {'backends/common/opcode.rs': 83}
-# WBS 6.4：`"Terminates"` 从 declarations.rs 移到默认探针的封闭集表
-# （parser/probe.rs 的 PREDICATE_NAMES），判定改经注入探针；CONST_PARAM_TYPES
-# 按 T2 门禁保留为解析源（删掉 10 个旧拼写后只剩 1 行字面量）。
-KNOWN_PARSER_HARDCODE = {
-    'frontend/core/parser/ast.rs': 1,                 # CONST_PARAM_TYPES 常量
-    'frontend/core/parser/probe.rs': 1,               # BuiltinProbe 的内置谓词封闭集
-}
+# WBS 6.4 的 2 处：`"Terminates"`（parser/probe.rs 的 PREDICATE_NAMES）与
+# CONST_PARAM_TYPES（parser/ast.rs）。
+# WBS 6.6.9 清零：两张封闭集随 `BuiltinProbe` 删除（约束名/谓词名的判定归 L3 的
+# operator_interfaces::SPECS 与 BUILTIN_PREDICATES），CONST_PARAM_TYPES 移回 L3
+# （typecheck/probe.rs）并只经注入探针回答。库存为空 ⇒ parser 内再出现内置名字面量即违规。
+KNOWN_PARSER_HARDCODE = {}
 
 BUILTIN_NAMES = {
     'Terminates', 'Int', 'Int64', 'Int32', 'Int16', 'Int8',

@@ -1873,10 +1873,15 @@ impl StatementChecker {
                 Some(constraints.into_iter().collect())
             };
         }
-        let generic_params = classify_generic_params(&signature, &|name| {
-            self.trait_table.has_trait(name)
-                || crate::frontend::core::typecheck::operator_interfaces::spec(name).is_some()
-        });
+        let generic_params = classify_generic_params(
+            &signature,
+            &|name| {
+                self.trait_table.has_trait(name)
+                    || crate::frontend::core::typecheck::operator_interfaces::spec(name).is_some()
+            },
+            // const 参数可接受的类型名：唯一权威在 L3 的探针（WBS 6.6.9）
+            &crate::frontend::core::typecheck::probe::SemanticProbe,
+        );
 
         // 检查是否与结构体重名
         if let Some(existing) = self.scope.get_var(name) {

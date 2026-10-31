@@ -12,6 +12,7 @@ use crate::frontend::core::lexer;
 use crate::frontend::core::parser::{self, Module};
 use crate::frontend::core::typecheck::checker::TypeChecker;
 use crate::frontend::core::typecheck::environment::MethodOverloadCandidates;
+use crate::frontend::core::typecheck::SemanticProbe;
 use crate::frontend::core::typecheck::TypeCheckResult;
 use crate::frontend::core::typecheck::passes::dead_code::DeadCodeAnalyzer;
 use crate::frontend::module::orchestrator::{self, OrchestratorError};
@@ -79,7 +80,7 @@ impl Driver {
                     continue;
                 }
             };
-            let result = parser::parse(&tokens);
+            let result = parser::parse_with_probe(&tokens, &SemanticProbe);
             if result.has_errors {
                 if matches!(program.aggregation, Aggregation::CollectAll) {
                     // CollectAll：全量 parse 错误 + 残缺 AST 继续下游——
@@ -163,7 +164,7 @@ impl Driver {
                     continue;
                 }
             };
-            let result = parser::parse(&tokens);
+            let result = parser::parse_with_probe(&tokens, &SemanticProbe);
             if result.has_errors {
                 units[i].check_diagnostics.extend(result.errors);
                 continue;
@@ -202,7 +203,7 @@ impl Driver {
                     continue;
                 }
             };
-            let result = parser::parse(&tokens);
+            let result = parser::parse_with_probe(&tokens, &SemanticProbe);
             if result.has_errors {
                 units[i].check_diagnostics.extend(result.errors);
                 // 缓冲区保留残缺 AST（编辑器哲学）；磁盘文件退出编译单元

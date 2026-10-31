@@ -10,7 +10,7 @@ pub mod statements;
 pub mod tests;
 
 pub use parser_state::{ParserState, parse_msg};
-pub use probe::{BuiltinProbe, NameKind, NullProbe, TypeEnvProbe};
+pub use probe::{NameKind, NullProbe, TypeEnvProbe};
 pub use pratt::*;
 pub use ast::*;
 pub use crate::frontend::core::lexer::tokens::*;
@@ -28,12 +28,17 @@ fn find_first(state: &ParserState<'_>) -> Option<Diagnostic> {
     state.errors().first().cloned()
 }
 
-/// 解析一个编译单元（无注入环境的默认入口）。
+/// 解析一个编译单元（**无类型环境**的语法入口）。
 ///
-/// 判定经 [`BuiltinProbe`]（编译器内置封闭集）；需要更精确的类型环境时用
-/// [`parse_with_probe`] 注入 L3 的语义探针。
+/// 只做语法：[`NullProbe`] 对一切「这个名字是什么」回答「不知道」，故 parser 不
+/// 产出任何类型名 / 谓词名 / 约束名知识（WBS 6.6.9：L2 不再持有名字表）。
+///
+/// **生产入口必须用 [`parse_with_probe`] 注入 L3 的语义探针**（`SemanticProbe`）：
+/// 否则 `(N: Int)` 这类 const 参数、`Add` 这类约束名的定种全部落空——而失败形态是
+/// **静默的**（parser 把类型名当形参名照常解析）。本函数只用于语法测试与确实不需要
+/// 语义的调用点。
 pub fn parse(tokens: &[Token]) -> ParseResult {
-    parse_with_probe(tokens, &BuiltinProbe)
+    parse_with_probe(tokens, &NullProbe)
 }
 
 /// 解析一个编译单元，名字定种判定交给调用方注入的探针。
@@ -91,8 +96,12 @@ pub fn parse_with_probe(
 }
 
 /// 解析单个表达式（无注入环境的默认入口）。
+/// 解析单个表达式（**无类型环境**的语法入口）。
+///
+/// 与 [`parse`] 同口径：只做语法，名字定种一律「不知道」；生产入口用
+/// [`parse_expression_with_probe`] 注入语义探针。
 pub fn parse_expression(tokens: &[Token]) -> Result<Expr, Diagnostic> {
-    parse_expression_with_probe(tokens, &BuiltinProbe)
+    parse_expression_with_probe(tokens, &NullProbe)
 }
 
 /// 解析单个表达式，名字定种判定交给调用方注入的探针。

@@ -1068,21 +1068,6 @@ pub fn is_meta_type(ty: &Type) -> bool {
     matches!(ty, Type::MetaType { .. })
 }
 
-/// 可作 **const 泛型参数**的内置类型名（`(N: Int)` 的 `Int`）。
-///
-/// 语义 = 「能被内置名表解析」（`NameKind::Builtin`）∩「const 参数可接受的
-/// 子集」。本表是**子集**的来源，全集在 L3 的内置名解析表
-/// （`MonoType::from_builtin_name`）——两份知识在 `extract_generic_param_names`
-/// 里显式接线（WBS 6.4.5），并由 `tools/type-tables` 的 T2 门禁逐名对账
-/// （C1：本表 ⊆ 内置名表）。
-///
-/// 6.4 删掉了 10 个旧拼写（`I8` / `I16` / `I32` / `I64` / `U8` /
-/// `U16` / `U32` / `U64` / `F32` / `F64`）：它们是 6.1 已删除的
-/// 实现内拼写，留在表里会产生**无法 lower** 的 const 参数名（Uint 族在
-/// `MonoType` 里没有变体，位宽缩写也不是内置名）。规范名（`Int8` …）不进本表
-/// ——它们自始不在 const 参数的可接受集合里，加入会拓宽泛型参数登记，属行为变更。
-pub const CONST_PARAM_TYPES: &[&str] = &["Int", "Bool", "Float", "Char", "String"];
-
 /// 参数名是否在给定类型中被当作**类型引用**（`(N: Int) -> (n: N)` 的 `N`）。
 ///
 /// **单一实现**（RFC-039 P6 6.4 / 03 §5.3）：本函数是原先两份同义实现
@@ -1181,7 +1166,7 @@ pub fn is_type_level_fn(
 
 /// 从签名形参里抽出**结构可判定**的泛型参数（名字 + 约束）。
 ///
-/// 三类来源：`Type`/`MetaType` 标注、`CONST_PARAM_TYPES` 里的内置类型名、
+/// 三类来源：`Type`/`MetaType` 标注、探针判为 const 参数类型的注解、
 /// 约束名（探针判定的运算符接口）、类型级函数标注（构造器变量）。其余
 /// `Name` 标注（用户类型的值参数）保守跳过——trait 表不在 L2，带 trait 约束的
 /// 分类由 L3 的 `classify_generic_params` 另做。
@@ -1214,21 +1199,11 @@ pub fn extract_generic_param_names(
                 //（如 `f: (N: Int) -> (n: N) -> Int` 的 `N`）。
                 // 不做此判别会把 `plain: (a: Int) -> Int` 误标为泛型函数，
                 // 单态化据此将其删除且永不重建（实测 E6006，#351）。
-                // 双知识接线（WBS 6.4.5）：名字必须在 const 参数可接受集合内，**且**
-                // 由探针确认为内置名（权威表在 L3 的 `from_builtin_name`）。
-                // 只查本表的字符串比较会绕开探针的定种；只查探针则会把 `Int8` 等
-                // 规范名也当 const 参数候选（拓宽登记 = 行为变更）。
                 //
-                // **不持有内置名表的探针回退单表判据**（6.4 修复轮）：L2 的默认探针
-                // （BuiltinProbe / NullProbe）拿不到类型表，`kind_of` 永不返回
-                // `Builtin`——若不放行，默认入口对 `(N: Int)` 会静默漏登记，与 6.4
-                // 之前不一致。`knows_builtin_types() == false` 时按 `CONST_PARAM_TYPES`
-                // 单表判定（= 6.4 前行为）；L3 语义探针持有名表，双知识仍全强度生效。
-                Type::Name { name, .. }
-                    if CONST_PARAM_TYPES.contains(&name.as_str())
-                        && (probe.kind_of(name) == NameKind::Builtin
-                            || !probe.knows_builtin_types()) =>
-                {
+                // 「哪些类型名可作 const 参数」由**注入探针**回答（WBS 6.6.9 把该表
+                // 移到 L3 的 `typecheck::probe::CONST_PARAM_TYPES`）：parser 不再
+                // 持有自己的表、也不再用内置名表二次复核——探针说不就是不。
+                Type::Name { name, .. } if probe.is_const_param_type(name) => {
                     let used_as_type = params.iter().any(|q| {
                         q.ty.as_ref().is_some_and(|qt| {
                             name_used_as_type(&p.name, qt, &|n| {
@@ -1278,13 +1253,14 @@ pub fn extract_generic_param_names(
 /// 用 trait_table 判定泛型参数分类（替代 extract_generic_params 的旧大小写猜测）。
 ///
 /// MetaType 或 Name("Type") → Type 参数（无约束）；
-/// CONST_PARAM_TYPES 原始类型名 → Const 参数；
+/// 探针判为 const 参数类型的注解（L3 的 `CONST_PARAM_TYPES`）→ Const 参数；
 /// Name 且 `is_trait(name)` → Type 参数（约束=该 annotation）；
 /// Tuple 且所有元素都是 trait → Type 参数（多约束）；
 /// 其余 → 跳过（值参数）。
 pub fn classify_generic_params(
     params: &[Param],
     is_trait: &dyn Fn(&str) -> bool,
+    probe: &dyn TypeEnvProbe,
 ) -> Vec<GenericParam> {
     params
         .iter()
@@ -1307,15 +1283,13 @@ pub fn classify_generic_params(
                     kind: GenericParamKind::Type,
                     constraints: Vec::new(),
                 }),
-                Type::Name { name, .. } if CONST_PARAM_TYPES.contains(&name.as_str()) => {
-                    Some(GenericParam {
-                        name: p.name.clone(),
-                        kind: GenericParamKind::Const {
-                            const_type: Box::new(ty.clone()),
-                        },
-                        constraints: Vec::new(),
-                    })
-                }
+                Type::Name { name, .. } if probe.is_const_param_type(name) => Some(GenericParam {
+                    name: p.name.clone(),
+                    kind: GenericParamKind::Const {
+                        const_type: Box::new(ty.clone()),
+                    },
+                    constraints: Vec::new(),
+                }),
                 Type::Name { name, .. } if is_trait(name) => Some(GenericParam {
                     name: p.name.clone(),
                     kind: GenericParamKind::Type,
@@ -1332,7 +1306,7 @@ pub fn classify_generic_params(
                     kind: GenericParamKind::Type,
                     constraints: Vec::new(),
                 }),
-                // annotation 为具体类型（非 trait、非 CONST_PARAM_TYPES）→ 非泛型参数
+                // annotation 为具体类型（非 trait、非探针认的 const 参数类型）→ 非泛型参数
                 Type::Name { .. } => None,
                 Type::Tuple(types) => {
                     let all_traits = types.iter().all(|t| match t {

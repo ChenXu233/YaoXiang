@@ -1235,11 +1235,16 @@ pub(in crate::driver) fn declared_type_param_names<'a>(
                         .as_ref()
                         .map(crate::frontend::core::parser::ast::Type::fn_params_flat)
                         .unwrap_or_default();
-                    let names: Vec<String> = classify_generic_params(&params, &is_trait)
-                        .into_iter()
-                        .filter(|p| matches!(p.kind, GenericParamKind::Type))
-                        .map(|p| p.name)
-                        .collect();
+                    let names: Vec<String> = classify_generic_params(
+                        &params,
+                        &is_trait,
+                        // const 参数可接受的类型名：唯一权威在 L3 的语义探针（WBS 6.6.9）
+                        &crate::frontend::core::typecheck::SemanticProbe,
+                    )
+                    .into_iter()
+                    .filter(|p| matches!(p.kind, GenericParamKind::Type))
+                    .map(|p| p.name)
+                    .collect();
                     if !names.is_empty() {
                         out.entry(name.clone()).or_insert(names);
                     }

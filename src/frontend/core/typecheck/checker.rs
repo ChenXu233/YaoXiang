@@ -482,6 +482,7 @@ impl TypeChecker {
                                     self.env.has_trait(n)
                                         || super::operator_interfaces::spec(n).is_some()
                                 },
+                                &super::probe::SemanticProbe,
                             );
                         // Const 候选过 RFC-011 §4.1 两步判定的第二步（用途精筛）：
                         // fn_params_flat 把全部 curry 组拍平，值参数段的
@@ -1561,6 +1562,8 @@ impl TypeChecker {
                     &|name| {
                         self.env.has_trait(name) || super::operator_interfaces::spec(name).is_some()
                     },
+                    // const 参数可接受的类型名：唯一权威在 L3 的探针（WBS 6.6.9）
+                    &super::probe::SemanticProbe,
                 );
                 // 处理统一函数语法
                 // 方法绑定使用 method_type，普通函数使用 type_annotation
@@ -2914,6 +2917,8 @@ impl TypeChecker {
             // RFC-011b: 运算符接口名也是合法约束名（T: Add）——
             // 约束求解在实例化点查接口实现登记表
             &|name| self.env.has_trait(name) || super::operator_interfaces::spec(name).is_some(),
+            // const 参数可接受的类型名：唯一权威在 L3 的探针（WBS 6.6.9）
+            &super::probe::SemanticProbe,
         );
         let param_names: Vec<String> = generic_params.iter().map(|p| p.name.clone()).collect();
         // RFC-010 Easter Egg: Type: Type = Type

@@ -56,7 +56,7 @@ T1.7 用同一口径核对四项：未登记的零构造变体、登记但已不
 | 表 | 位置 | 语义 |
 | --- | --- | --- |
 | A `from_builtin_name` | `src/frontend/core/types/mono.rs` | 名字 → `MonoType` 的解析表（每臂首写法=规范名） |
-| B `CONST_PARAM_TYPES` | `src/frontend/core/parser/ast.rs` | 可作 const 泛型参数的名字（**A 的子集**） |
+| B `CONST_PARAM_TYPES` | `src/frontend/core/typecheck/probe.rs` | 可作 const 泛型参数的名字（**A 的子集**；WBS 6.6.9 从 `parser/ast.rs` 移回 L3） |
 | C LSP 内置类型名清单 | `src/lsp/world.rs` | hover/definition 展示名（**A 规范名的超集**） |
 
 三条检查：C1 B ⊆ A；C2 A 规范名 ⊆ C；C3 C ⊆ A。差异逐条给处置——处置表在
