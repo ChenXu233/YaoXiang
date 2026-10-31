@@ -455,7 +455,7 @@ impl TypeChecker {
         // 却需要把名字随导出一并暴露——跨模块调用（`list.len(v)`）的单态化
         // 依赖它们绑定签名里的 `TypeRef("A")`。
         {
-            use crate::frontend::core::parser::ast::StmtKind;
+            use crate::frontend::core::parser::ast::{GenericParamKind, StmtKind, Type};
             for stmt in &module.items {
                 if let StmtKind::Assign {
                     target,
@@ -465,21 +465,69 @@ impl TypeChecker {
                 {
                     if let crate::frontend::core::parser::ast::Expr::Var(name, _) = target.as_ref()
                     {
-                        // 参数位是 `(A: Type)` 形态即类型参数（同
-                        // `StatementChecker` 的 classify_generic_params 判据）。
+                        // 参数位来自 `Type::Fn.params`（`fn_params_flat` 是唯一
+                        // 取用入口，递归拍平全部 curry 组）。判据单点：
+                        // `classify_generic_params` 收全量泛型形态——
+                        // MetaType `(T: Type)`、接口约束 `(T: Add)`（RFC-011b）、
+                        // const 候选 `(N: Int)`、类型级函数、Tuple 全 trait——
+                        // 与 `StatementChecker` 同源，不再各写一份 matches!。
                         let params = type_annotation
                             .as_ref()
                             .map(crate::frontend::core::parser::ast::Type::fn_params_flat)
                             .unwrap_or_default();
-                        let names: Vec<String> = params
+                        let generic_params =
+                            crate::frontend::core::parser::ast::classify_generic_params(
+                                &params,
+                                &|n| {
+                                    self.env.has_trait(n)
+                                        || super::operator_interfaces::spec(n).is_some()
+                                },
+                            );
+                        // Const 候选过 RFC-011 §4.1 两步判定的第二步（用途精筛）：
+                        // fn_params_flat 把全部 curry 组拍平，值参数段的
+                        // `(n: Int)` 同样是 CONST_PARAM_TYPES 候选——只有被后续
+                        // 段类型位引用的候选才是真 const 泛型，落空者不得进名字表
+                        // （普通函数不填表 ⇒ 跨单元走既有路径）。谓词应用的实参位
+                        // 是编译期表达式不是类型引用，照 RFC-027a 排除。
+                        let const_candidates: std::collections::HashSet<String> = generic_params
                             .iter()
-                            // 类型参数的语法形态是 `A: Type`，解析为 `Type::MetaType`
-                            // （与 `StatementChecker::classify_generic_params` 判据一致）。
+                            .filter(|p| matches!(p.kind, GenericParamKind::Const { .. }))
+                            .map(|p| p.name.clone())
+                            .collect();
+                        let mut used_as_const = std::collections::HashSet::new();
+                        if !const_candidates.is_empty() {
+                            let is_predicate = |n: &str| self.is_predicate_application(n);
+                            if let Some(Type::Fn { return_type, .. }) = type_annotation {
+                                if let Type::Fn {
+                                    params: inner_params,
+                                    ..
+                                } = return_type.as_ref()
+                                {
+                                    for p in inner_params {
+                                        if let Some(p_ty) = &p.ty {
+                                            collect_used_in_type(
+                                                p_ty,
+                                                &const_candidates,
+                                                &mut used_as_const,
+                                                &is_predicate,
+                                            );
+                                        }
+                                    }
+                                }
+                                collect_used_in_type(
+                                    return_type,
+                                    &const_candidates,
+                                    &mut used_as_const,
+                                    &is_predicate,
+                                );
+                            }
+                        }
+                        let names: Vec<String> = generic_params
+                            .iter()
                             .filter(|p| {
-                                matches!(
-                                    p.ty.as_ref(),
-                                    Some(crate::frontend::core::parser::ast::Type::MetaType { .. })
-                                )
+                                matches!(p.kind, GenericParamKind::Type)
+                                    || (matches!(p.kind, GenericParamKind::Const { .. })
+                                        && used_as_const.contains(&p.name))
                             })
                             .map(|p| p.name.clone())
                             .collect();

@@ -1260,4 +1260,43 @@ mod export_type_params_tests {
             "常量导出的 type_params 必须保持 None（声明期类型参数只属于函数）"
         );
     }
+
+    /// #511：接口约束 `(T: Add)`（type-system.md:151）与值依赖 const `(N: Int)`
+    /// （type-system.md:47）的形参名必须随导出携带——修前登记口只认
+    /// `(T: Type)`（MetaType），这两个形态的 `Export::type_params` 为 None。
+    #[test]
+    fn test_user_module_function_exports_carry_interface_and_const_param_names() {
+        // Arrange：同一模块给出接口约束泛型与 const 泛型（语料
+        // fn_const_generic.yx 同构），外加普通值参数函数作不变式对照
+        let source = "add_of: (T: Add) -> (x: T) -> T = (x) => x\n\
+                      \nf: (N: Int) -> (n: N) -> Int = (n) => n\n\
+                      \nplain: (n: Int) -> Int = (n) => n\n";
+        let tokens = crate::frontend::core::tokenize(source).expect("模块源码必须可词法分析");
+        let parsed = crate::frontend::core::parser::parse(&tokens);
+        assert!(
+            !parsed.has_errors,
+            "模块源码必须可解析：{:?}",
+            parsed.errors
+        );
+
+        // Act
+        let info = extract_module_info("lib", &parsed.module);
+
+        // Assert
+        assert_eq!(
+            export_named(&info, "add_of").type_params,
+            Some(vec!["T".to_string()]),
+            "接口约束 (T: Add) 的形参名必须随导出携带"
+        );
+        assert_eq!(
+            export_named(&info, "f").type_params,
+            Some(vec!["N".to_string()]),
+            "值依赖 const (N: Int) 的形参名必须随导出携带（用途精筛命中）"
+        );
+        assert_eq!(
+            export_named(&info, "plain").type_params,
+            None,
+            "普通值参数函数（无泛型参数）必须保持 None（登记口扩容不得污染）"
+        );
+    }
 }

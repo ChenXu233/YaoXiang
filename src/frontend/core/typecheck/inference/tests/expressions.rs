@@ -358,6 +358,72 @@ fn test_instantiation_request_bare_call_keeps_unqualified_name() {
     );
 }
 
+/// #511：接口约束形态 `(T: Add)`（type-system.md:151）的跨单元请求必须携带
+/// 声明名——修前登记口只认 `(T: Type)`（MetaType），`Export::type_params`
+/// 为 None ⇒ 请求 `type_params` 为空表，走签名反推兜底（#510 探针实证）。
+#[test]
+fn test_instantiation_request_qualified_call_carries_interface_constraint_param_name() {
+    // Arrange：lib 导出接口约束泛型 f，入口整体导入后限定调用
+    let lib = module_info_from_source("lib", "f: (T: Add) -> (x: T) -> T = (x) => x\n");
+    let source = "use lib\nv = lib.f(42)\n";
+
+    // Act：真实 tokenize → parse → check 管线
+    let result = check_entry_with_modules(source, vec![lib]);
+
+    // Assert：请求携带限定名 lib.f 且带声明名 ["T"]
+    assert!(
+        result.diagnostics.is_empty(),
+        "限定调用不应产生诊断，实际：{:?}",
+        result
+            .diagnostics
+            .iter()
+            .map(|d| d.to_string())
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        request_triples(&result.instantiation_requests),
+        vec![(
+            "lib.f".to_string(),
+            vec!["T".to_string()],
+            vec![MonoType::Int(64)],
+        )],
+        "(T: Add) 接口约束的跨单元请求必须携带导出快照的声明名 [\"T\"]（不得退回空表反推）"
+    );
+}
+
+/// #511 行为守恒锚：const 泛型限定调用 `lib.f(42)(5)` **不发实例化请求**——
+/// const 形态的单态化走 const_binders → mono 编译期求值面，不经
+/// `instantiation_requests`（单模块对照实测同样零请求）。#511 的登记口扩容
+/// 只改名字表，不得让 const 调用意外开始发请求；`(N: Int)` 的声明名兑现面
+/// 是导出携带（`Export::type_params`，见 orchestrator 的
+/// `export_type_params_tests`）。
+#[test]
+fn test_instantiation_request_qualified_const_call_stays_request_free() {
+    // Arrange：lib 导出 const 泛型 f，入口整体导入后两段 curry 调用
+    //（首段 42 是编译期 const 实参，末段 5 是运行时值实参）
+    let lib = module_info_from_source("lib", "f: (N: Int) -> (n: N) -> Int = (n) => n\n");
+    let source = "use lib\nv = lib.f(42)(5)\n";
+
+    // Act：真实 tokenize → parse → check 管线
+    let result = check_entry_with_modules(source, vec![lib]);
+
+    // Assert：零诊断 + 零请求（守恒，与单模块形态一致）
+    assert!(
+        result.diagnostics.is_empty(),
+        "const 泛型限定调用不应产生诊断，实际：{:?}",
+        result
+            .diagnostics
+            .iter()
+            .map(|d| d.to_string())
+            .collect::<Vec<_>>()
+    );
+    assert!(
+        result.instantiation_requests.is_empty(),
+        "const 泛型调用不得发实例化请求（其单态化不经该通道），实际：{:?}",
+        request_triples(&result.instantiation_requests)
+    );
+}
+
 /// 边界：被调方是 FieldAccess 但接收者是**值**（方法调用），不是导入模块别名——
 /// 不产生任何实例化请求（请求只属于模块限定调用 `lib.f(x)`）。
 #[test]

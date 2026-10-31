@@ -881,3 +881,100 @@ main()
             .collect::<Vec<_>>()
     );
 }
+
+// #511: 导出登记口（`collect_signatures` 的 Assign 臂）对泛型形参形态的收名判据
+//
+// 规范来源: type-system.md §泛型（(T: Type) 类型参数 / (T: Add) 接口约束 /
+// (N: Int) 值依赖 const 参数）。登记口只认 `Type::MetaType` 时，接口约束与
+// 值依赖形态的形参名不随导出携带 ⇒ 跨单元实例化请求走签名反推兜底（params=[]）。
+// 判据单点 = `ast::classify_generic_params`；Const 候选须过 RFC-011 §4.1
+// 两步判定的第二步（用途精筛），`(n: Int)` 这类值参数段的候选不得混入。
+
+/// 辅助：只跑签名收集阶段（登记口）后取声明名快照。
+///
+/// `collect_signatures` 不建 body_checker ⇒ `generic_fn_type_params_snapshot`
+/// 返回的就是登记口那份 `declared_fn_type_params`——与完整三遍的合并结果可区分。
+fn collect_signatures_declared_names(
+    source: &str
+) -> std::collections::HashMap<String, Vec<String>> {
+    // Arrange（公共部分）：词法 + 语法解析
+    let tokens = tokenize(source).expect("测试源码词法不应失败");
+    let parse_result = parse(&tokens);
+    assert!(
+        !parse_result.has_errors,
+        "测试源码语法必须正确（否则无法区分 bug 与测试写错）: {:?}",
+        parse_result.errors
+    );
+
+    // Act：仅收集顶层签名（登记口所在阶段）
+    let mut checker = TypeChecker::new("test");
+    checker.collect_signatures(&parse_result.module);
+    checker.generic_fn_type_params_snapshot()
+}
+
+#[test]
+fn test_collect_signatures_declares_meta_type_annotation_param_name() {
+    // Arrange：`(T: Type)` —— MetaType 形态，既有行为回归锚
+    let source = "f: (T: Type) -> (x: T) -> T = (x) => x\n";
+
+    // Act
+    let names = collect_signatures_declared_names(source);
+
+    // Assert
+    assert_eq!(
+        names.get("f"),
+        Some(&vec!["T".to_string()]),
+        "(T: Type) 的形参名必须进登记口声明名表（按声明序）"
+    );
+}
+
+#[test]
+fn test_collect_signatures_declares_interface_constraint_param_name() {
+    // Arrange：`(T: Add)` —— 接口约束形态（type-system.md:151），修前不进表
+    let source = "f: (T: Add) -> (x: T) -> T = (x) => x\n";
+
+    // Act
+    let names = collect_signatures_declared_names(source);
+
+    // Assert
+    assert_eq!(
+        names.get("f"),
+        Some(&vec!["T".to_string()]),
+        "(T: Add) 接口约束的形参名必须进登记口声明名表（与 (T: Type) 同收）"
+    );
+}
+
+#[test]
+fn test_collect_signatures_declares_value_dependent_const_param_name() {
+    // Arrange：`(N: Int) -> (n: N) -> Int` —— 值依赖 const 形态
+    // （type-system.md:47；语料 fn_const_generic.yx 同构），修前不进表
+    let source = "f: (N: Int) -> (n: N) -> Int = (n) => n\n";
+
+    // Act
+    let names = collect_signatures_declared_names(source);
+
+    // Assert
+    assert_eq!(
+        names.get("f"),
+        Some(&vec!["N".to_string()]),
+        "(N: Int) 值依赖 const 形参名必须进登记口声明名表（用途精筛命中：N 被后续段类型位引用）"
+    );
+}
+
+#[test]
+fn test_collect_signatures_keeps_plain_value_param_out_of_declared_names() {
+    // Arrange：`plain: (n: Int) -> Int` —— 值参数段的 Int 标注是
+    // CONST_PARAM_TYPES 候选，但用途精筛落空（n 未被后续段类型位引用），
+    // 不得混入声明名表（普通函数不填表 ⇒ 跨单元走既有路径）
+    let source = "plain: (n: Int) -> Int = (n) => n\n";
+
+    // Act
+    let names = collect_signatures_declared_names(source);
+
+    // Assert
+    assert!(
+        !names.contains_key("plain"),
+        "普通值参数函数不得进登记口声明名表（登记口填表后跨单元请求面会整体变化）。实际: {:?}",
+        names
+    );
+}

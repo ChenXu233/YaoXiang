@@ -1875,23 +1875,10 @@ impl StatementChecker {
 
         // 记录本函数的声明序类型参数名（调用点做类型参数替换时要用）。
         // 只登记非空的情况，避免污染普通函数。
-        {
-            let names: Vec<String> = generic_params
-                .iter()
-                .filter(|p| {
-                    matches!(
-                        p.kind,
-                        crate::frontend::core::parser::ast::GenericParamKind::Type
-                    )
-                })
-                .map(|p| p.name.clone())
-                .collect();
-            if !names.is_empty() {
-                self.generic_fn_type_params.insert(name.to_string(), names);
-            }
-        }
-
-        // 提取 Type 级别的泛型参数
+        // #511：收名与登记口同规——Type 参数全收；Const 候选按用途精筛
+        // （`const_binders` 即 `resolve_const_candidates` 的命中者）收，
+        // 落空候选（值参数段的 `(n: Int)`）不得混入。块体在下方
+        // `resolved`/`const_binders` 就绪后执行。
         let type_generic_params: Vec<_> = generic_params
             .iter()
             .filter(|p| {
@@ -1959,6 +1946,29 @@ impl StatementChecker {
         );
         let const_binders: Vec<crate::frontend::core::types::const_data::ConstVarDef> =
             resolved.const_binders;
+
+        // #511：声明序类型参数名填表（Type 全收 + 用途命中的 const 参数）。
+        // 按声明序合排：`generic_params` 就是签名声明序，filter 保序即可。
+        {
+            let const_names: std::collections::HashSet<&str> =
+                const_binders.iter().map(|c| c.name.as_str()).collect();
+            let names: Vec<String> = generic_params
+                .iter()
+                .filter(|p| {
+                    matches!(
+                        p.kind,
+                        crate::frontend::core::parser::ast::GenericParamKind::Type
+                    ) || (matches!(
+                        p.kind,
+                        crate::frontend::core::parser::ast::GenericParamKind::Const { .. }
+                    ) && const_names.contains(p.name.as_str()))
+                })
+                .map(|p| p.name.clone())
+                .collect();
+            if !names.is_empty() {
+                self.generic_fn_type_params.insert(name.to_string(), names);
+            }
+        }
 
         // 将函数自身注册到变量环境中。
         //

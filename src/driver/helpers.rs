@@ -1193,10 +1193,10 @@ pub(in crate::driver) fn generic_instantiation_map<'a>(
 /// 泛型函数名（绑定裸名）→ 声明序类型形参名表，从**定义单元的 AST** 提取
 /// （WBS 3.20.4 / issue #510）。
 ///
-/// 为什么需要第二来源：形参名随导出携带的登记口（`checker.rs::collect_signatures`
-/// 的 Assign 臂）只认 `(T: Type)`（MetaType）形态，约束泛型 `(T: Add)`
-/// （`Type::Name` 约束名）不入表 ⇒ 导出面不带 ⇒ 跨单元请求的
-/// `generic_id.type_params` 为空（探针实测），单一 zip 通路展不开。这里回到
+/// 为什么需要第二来源：#511 修后登记口已收全量泛型形态（`(T: Add)` 接口约束、
+/// 值依赖 `(N: Int)` 均入表），跨单元请求通常自带名字表、不走此兜底；仍会走
+/// 到这里的是登记口不覆盖的形态（如块内 FnDef 绑定），其请求的名字表为空，
+/// 单一 zip 通路展不开。这里回到
 /// 声明现场补读：判据用**现成单点** `ast::classify_generic_params`（与
 /// 类型检查侧同一函数，语义不复制），is_trait 闭包按其调用点同源判据组装
 /// （`trait_table.has_trait` + 约束名窄入口 `typecheck::is_constraint_name`——
