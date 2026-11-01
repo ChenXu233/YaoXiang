@@ -237,7 +237,7 @@ pub(super) fn execute_single_proof_fn(
         .generate()
         .map_err(|e| format!("证明函数 '{}' 字节码编译失败: {}", call.func_name, e))?;
 
-    let mut bytecode_module = crate::middle::core::bytecode::BytecodeModule::from(bytecode_file);
+    let mut bytecode_module = crate::middle::bytecode::BytecodeModule::from(bytecode_file);
     bytecode_module.entry_point = None;
 
     let args: Vec<RuntimeValue> = call.args.iter().map(from_const_value).collect();

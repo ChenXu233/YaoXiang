@@ -7,11 +7,11 @@
 //! - Borrow/Release round-trip encode-decode via `build_and_decode`
 //! - 解码保真：Ref / Struct 型不被塌缩（type_table 原样搬运，6.2.2）
 
-use crate::middle::core::bytecode::{BinaryOp, BytecodeInstr, BytecodeModule, CompareOp, Label, Reg};
+use crate::middle::bytecode::{BinaryOp, BytecodeInstr, BytecodeModule, CompareOp, Label, Reg};
 use std::collections::HashMap;
-use crate::backends::common::opcode;
+use crate::middle::bytecode::opcode;
 use crate::frontend::core::typecheck::MonoType;
-use crate::middle::passes::codegen::bytecode::BytecodeInstruction;
+use crate::middle::bytecode::file::BytecodeInstruction;
 
 // -- 辅助函数与测试数据表（规则 5.3：辅助函数集中在文件顶部）--
 
@@ -31,7 +31,7 @@ fn build_and_decode_typed(
     return_type: MonoType,
     type_table: Vec<MonoType>,
 ) -> BytecodeModule {
-    use crate::middle::passes::codegen::bytecode as bcfile;
+    use crate::middle::bytecode::file as bcfile;
     let func = bcfile::FunctionCode {
         name: "test_fn".to_string(),
         params,
@@ -1157,8 +1157,8 @@ fn test_decode_places_fields_in_correct_positions() {
 #[test]
 fn test_all_opcodes_have_decode_branch() {
     // Arrange: 从源码读取 opcode 定义与 bytecode.rs 的解码分支
-    let opcode_src = include_str!("../../../backends/common/opcode.rs");
-    let decoder_src = include_str!("../bytecode.rs");
+    let opcode_src = include_str!("../../bytecode/opcode.rs");
+    let decoder_src = include_str!("../../bytecode/mod.rs");
     let defined = defined_opcode_names(opcode_src);
     let decoded = decoder_match_arm_opcodes(decoder_src);
 
@@ -1229,7 +1229,7 @@ fn test_remaining_untested_layouts_roundtrip() {
 /// 注意 `dst` 是 **1 字节**（与容器类的 2 字节不同）——这正是 D4 记录的陷阱。
 #[test]
 fn test_call_static_layout_roundtrip() {
-    use crate::backends::common::opcode;
+    use crate::middle::bytecode::opcode;
     use crate::middle::bytecode::BytecodeInstr;
 
     // Arrange: dst=2, func_id=7, base=0, 2 个参数（reg 3、reg 4）
@@ -1263,7 +1263,7 @@ fn test_call_static_layout_roundtrip() {
 /// 故此处测长格式。
 #[test]
 fn test_call_native_ffi_layout_roundtrip() {
-    use crate::backends::common::opcode;
+    use crate::middle::bytecode::opcode;
     use crate::middle::bytecode::BytecodeInstr;
 
     // Arrange: dst=1, name_idx=3, mech=4, lib=5, sym=6, base=0, count=1, arg=reg 8
@@ -1305,7 +1305,7 @@ fn test_call_native_ffi_layout_roundtrip() {
 #[test]
 fn test_opcodes_without_encoder_are_documented() {
     // Arrange: 读取 opcode 定义与编码器源码
-    let opcode_src = include_str!("../../../backends/common/opcode.rs");
+    let opcode_src = include_str!("../../bytecode/opcode.rs");
     let translator_src = include_str!("../../passes/codegen/translator.rs");
     let defined = defined_opcode_names(opcode_src);
 

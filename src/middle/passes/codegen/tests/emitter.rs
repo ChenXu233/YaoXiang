@@ -2,9 +2,9 @@
 //!
 //! 测试 Emitter 的指令发射、映射记录和待回填跳转功能。
 
-use crate::backends::common::opcode;
+use crate::middle::bytecode::opcode;
 use crate::middle::passes::codegen::emitter::Emitter;
-use crate::middle::passes::codegen::BytecodeInstruction;
+use crate::middle::bytecode::file::BytecodeInstruction;
 
 #[test]
 fn test_emit_with_mapping() {

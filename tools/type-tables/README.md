@@ -34,7 +34,7 @@ cargo run --manifest-path tools/type-tables/Cargo.toml -- --report --root <仓�
    由登记表 `REBUILD_FUNCTIONS` 判定。历史在册函数（`substitute_type_ast` /
    `substitute_type_in_ast` / `mono_to_ast_type` / `without_fn_param_names`）已在
    WBS 6.6.11 / 6.6.12 随 IR 载体收窄全部删除，**该表现为空**；
-3. **反向桥**——A：`middle/core/bytecode.rs` 的 `impl From<MonoType> for IrType`
+3. **反向桥**——A：`middle/bytecode/mod.rs` 的 `impl From<MonoType> for IrType`（6.7.1b 前在 middle/core/bytecode.rs）
    （按 `impl` 形态判定，不看登记表）；B：`MonoType → ast::Type` 的反向重建，
    同样由登记表判定（`mono_to_ast_type` 已删，故当前 0 点）。
 

@@ -38,8 +38,11 @@ pub const TYPECHECK_PROBE_REL: &str = "src/frontend/core/typecheck/probe.rs";
 pub const MONO_REL: &str = "src/frontend/core/types/mono.rs";
 /// LSP 内置类型名清单的所在文件（T2 第三张表）
 pub const LSP_REL: &str = "src/lsp/world.rs";
-/// 反向桥 A（`impl From<MonoType> for IrType`）的所在文件（T1 分列）
-pub const BYTECODE_REL: &str = "src/middle/core/bytecode.rs";
+/// 反向桥 A（`impl From<MonoType> for IrType`）的所在文件（T1 分列）。
+///
+/// D1（6.7.1b）：字节码域合并——从 `middle/core/bytecode.rs` 迁到 `middle/bytecode/mod.rs`；
+/// 该 impl 已在 6.6.12 删除，本常量只作分类锚与报告文案，不参与扫描。
+pub const BYTECODE_REL: &str = "src/middle/bytecode/mod.rs";
 /// AST→AST 重建与反向桥 B（`mono_to_ast_type`）的所在文件（T1 分列）
 pub const FUNCTION_REL: &str = "src/middle/passes/mono/function.rs";
 /// T1 的扫描根（递归，排除 `tests` 目录）

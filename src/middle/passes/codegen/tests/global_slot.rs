@@ -131,7 +131,7 @@ fn test_global_slot_survives_serialization_roundtrip() {
     let mut buf = Vec::new();
     file.write_to(&mut buf).expect("write_to should succeed");
     let mut cursor = std::io::Cursor::new(&buf);
-    let restored = crate::middle::passes::codegen::BytecodeFile::read_from(&mut cursor)
+    let restored = crate::middle::bytecode::file::BytecodeFile::read_from(&mut cursor)
         .expect("read_from should succeed");
 
     let bytecode_module = crate::middle::bytecode::BytecodeModule::from(restored);

@@ -115,7 +115,7 @@ fn init_call_targets(module: ModuleIR) -> (Vec<u32>, Vec<String>) {
         .filter(|f| f.name == "__yx_module_init")
         .flat_map(|f| f.instructions.iter())
         .filter_map(|i| match i {
-            crate::middle::core::bytecode::BytecodeInstr::CallStatic { func, .. } => Some(*func),
+            crate::middle::bytecode::BytecodeInstr::CallStatic { func, .. } => Some(*func),
             _ => None,
         })
         .collect();
@@ -133,7 +133,7 @@ fn init_native_calls(module: ModuleIR) -> Vec<String> {
         .filter(|f| f.name == "__yx_module_init")
         .flat_map(|f| f.instructions.iter())
         .filter_map(|i| match i {
-            crate::middle::core::bytecode::BytecodeInstr::CallNative { func_name, .. } => {
+            crate::middle::bytecode::BytecodeInstr::CallNative { func_name, .. } => {
                 Some(func_name.clone())
             }
             _ => None,

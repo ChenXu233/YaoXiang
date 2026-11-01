@@ -39,24 +39,24 @@ fn make_interp_with_const(val: ConstValue) -> Interpreter {
 /// Borrow copies value from src register to dst register (immutable)
 /// Helper: test_new_array_bytecode_roundtrip_decode 的完整夹具与断言（逐条断言见函数体）。
 /// Fixture: NEW_ARRAY(5) + RETURN_VALUE 的编码文件（编码：opcode + dst + count 小端）。
-fn new_array_roundtrip_file() -> crate::middle::passes::codegen::BytecodeFile {
-    use crate::middle::passes::codegen::{
-        BytecodeFile, BytecodeInstruction, BytecodeHeader, CodeSection, FunctionCode,
+fn new_array_roundtrip_file() -> crate::middle::bytecode::file::BytecodeFile {
+    use crate::middle::bytecode::file::{
+        BytecodeFile, BytecodeInstruction, CodeSection, FileHeader, FunctionCode,
     };
 
     // Arrange — 构造原始编码：opcode(1) + dst(1) + count(4, 小端)
     let mut operands = vec![0u8]; // dst = r0
     operands.extend_from_slice(&5u32.to_le_bytes()); // count = 5
     let raw_new_array =
-        BytecodeInstruction::new(crate::backends::common::opcode::NEW_ARRAY, operands);
+        BytecodeInstruction::new(crate::middle::bytecode::opcode::NEW_ARRAY, operands);
     // ReturnValue r0
     let raw_return =
-        BytecodeInstruction::new(crate::backends::common::opcode::RETURN_VALUE, vec![0u8]);
+        BytecodeInstruction::new(crate::middle::bytecode::opcode::RETURN_VALUE, vec![0u8]);
 
     BytecodeFile {
-        header: BytecodeHeader {
+        header: FileHeader {
             entry_point: 0,
-            ..BytecodeHeader::default()
+            ..FileHeader::default()
         },
         type_table: vec![],
         const_pool: vec![],

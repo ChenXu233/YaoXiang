@@ -383,8 +383,8 @@ pub fn run_file_with_diagnostics(
     // 通过文件头魔数判定字节码 vs 源码
     // 内容即身份：不依赖文件名，cat dist.42 > out.bin 也能执行
     // probe I/O 错误退化为源码路径（read_to_string 产生更好的错误信息）
-    if crate::middle::passes::codegen::BytecodeFile::probe(file).unwrap_or(false) {
-        let bytecode_file = crate::middle::passes::codegen::BytecodeFile::load(file)
+    if crate::middle::bytecode::file::BytecodeFile::probe(file).unwrap_or(false) {
+        let bytecode_file = crate::middle::bytecode::file::BytecodeFile::load(file)
             .map_err(|e| anyhow::anyhow!("Failed to load bytecode file: {}", e))?;
         let bytecode_module = crate::middle::bytecode::BytecodeModule::from(bytecode_file);
 

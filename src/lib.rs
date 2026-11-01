@@ -249,7 +249,7 @@ pub fn build_bytecode_with_options(
         let mut sources = crate::util::span::SourceMap::new();
         sources.add_file(source_path_str.clone(), source.clone());
         bytecode_file.debug_section = Some(
-            crate::middle::passes::codegen::bytecode::DebugSection::with_global_names(
+            crate::middle::bytecode::file::DebugSection::with_global_names(
                 sources,
                 &bytecode_file.code_section.functions,
                 global_names,
@@ -280,7 +280,7 @@ pub fn build_bytecode_with_options(
 /// Dump bytecode for debugging
 #[cfg(not(target_arch = "wasm32"))]
 pub fn dump_bytecode(path: &Path) -> Result<()> {
-    use crate::middle::passes::codegen::bytecode::BytecodeFile;
+    use crate::middle::bytecode::file::BytecodeFile;
     use crate::middle::passes::codegen::CodegenContext;
 
     let path_str = path.display().to_string();
@@ -327,7 +327,7 @@ pub fn dump_bytecode(path: &Path) -> Result<()> {
 }
 
 /// 打印 BytecodeFile 的完整结构（header / type table / constants / functions）
-fn dump_bytecode_file(bytecode_file: &crate::middle::passes::codegen::bytecode::BytecodeFile) {
+fn dump_bytecode_file(bytecode_file: &crate::middle::bytecode::file::BytecodeFile) {
     tracing::info!(
         "{}",
         t_cur(
@@ -662,14 +662,14 @@ fn format_operands(operands: &[u8]) -> String {
 
 /// Dump instructions in a readable format with opcode names
 fn dump_instructions(
-    instructions: &[crate::middle::passes::codegen::bytecode::BytecodeInstruction],
+    instructions: &[crate::middle::bytecode::file::BytecodeInstruction],
     debug_map: Option<&::std::collections::HashMap<usize, crate::util::span::DebugSpan>>,
-    debug_section: Option<&crate::middle::passes::codegen::bytecode::DebugSection>,
+    debug_section: Option<&crate::middle::bytecode::file::DebugSection>,
 ) {
     for (instr_idx, instr) in instructions.iter().enumerate() {
         // Try to decode the opcode
         let ops_str = format_operands(&instr.operands);
-        let name = crate::backends::common::opcode_name(instr.opcode);
+        let name = crate::middle::bytecode::opcode::opcode_name(instr.opcode);
         let loc = dump_instr_location(instr_idx, debug_map, debug_section);
         if name != "Unknown" {
             tracing::info!(
@@ -706,7 +706,7 @@ fn dump_instructions(
 fn dump_instr_location(
     instr_idx: usize,
     debug_map: Option<&::std::collections::HashMap<usize, crate::util::span::DebugSpan>>,
-    debug_section: Option<&crate::middle::passes::codegen::bytecode::DebugSection>,
+    debug_section: Option<&crate::middle::bytecode::file::DebugSection>,
 ) -> String {
     let Some(ds) = debug_map.and_then(|m| m.get(&instr_idx)) else {
         return String::new();

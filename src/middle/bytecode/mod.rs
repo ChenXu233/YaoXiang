@@ -8,9 +8,16 @@
 //! - Is closer to the actual execution model
 //! - Is suitable for serialization
 //! - Can be interpreted or compiled further
+//!
+//! # 字节码域（D1 6.7.1b）
+//!
+//! 本目录是字节码域的唯一归属：`mod.rs` 是字节码 IR，`file.rs` 是 `.42` 容器与
+//! 序列化，`opcode.rs` 是唯一 opcode 词表（编码 / 解码 / 词表对拍共用同一组常量）。
+
+pub mod file;
+pub mod opcode;
 
 use std::collections::HashMap;
-use crate::backends::common::opcode;
 
 // Re-export the IR constant-pool type (shared by bytecode, codegen and backends).
 // ast::Type 的再导出已随 6.2.2 载体统一删除——字节码不再引用 ast::Type。
@@ -942,8 +949,8 @@ fn op_u32(
     Some(u32::from_le_bytes([b[0], b[1], b[2], b[3]]))
 }
 
-impl From<crate::middle::passes::codegen::bytecode::BytecodeFile> for BytecodeModule {
-    fn from(file: crate::middle::passes::codegen::bytecode::BytecodeFile) -> Self {
+impl From<crate::middle::bytecode::file::BytecodeFile> for BytecodeModule {
+    fn from(file: crate::middle::bytecode::file::BytecodeFile) -> Self {
         let name = "main".to_string(); // Default module name
 
         // #327：.42 加载后 FunctionCode.debug_map 恒为空（序列化不落代码段），
