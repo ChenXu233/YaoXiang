@@ -68,6 +68,10 @@ impl SiteClass {
 /// 登记的函数在对应文件里找不到同名 `fn` 时，[`scan`] 直接返回 `Err`——
 /// 不得静默落回 [`SiteClass::Forward`]。理由：函数改名或删除后，它内部的重建点
 /// 会被误算成 parser 前向构造点（前向计数虚高、第二类虚低），而门禁仍报「名单一致」。
+///
+/// **但请注意：这张表是「已知清单」，不是「重建函数全集」**——核对是**单向**的
+/// （登记表 → 源码）。反向那一半（源码里新出现、却没登记的的类重建函数）不靠这张表抓，
+/// 详见 [`REBUILD_FUNCTIONS`] 的说明。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RebuildEntry {
     /// 函数所在文件（仓库相对路径）
@@ -80,17 +84,32 @@ pub struct RebuildEntry {
     pub why: &'static str,
 }
 
-/// 生产登记表：全部「把已有 AST 类型重造一份 / 反向重建」的函数。
+/// 生产登记表：「**已知的**重建函数」清单（文件 + 函数名 → 类别）。
+///
+/// **它不是「重建函数全集」**（WBS 6.6.20 订正）：它是**人工维护**的已知清单，
+/// 用来把「已有 `ast::Type` 重造一份 / 反向重建」的构造点归到第二/三类，
+/// 使 parser 前向的计数与冻结基线可比。判据的原子是**构造点**，不是函数——
+/// 所以「哪些函数算重建位置」始终是一份**登记**，而不是一份完备的判定。
+///
+/// **核对是单向的**（登记表 → 源码）：[`missing_rebuild_functions`] 只抓「登记了但源码
+/// 里已无同名 `fn`」（改名/删除未同步）。反方向——源码里**新出现**、却没登记的类重建
+/// 函数——不靠这张表抓，而由两条路径兜住：
+///
+/// 1. **若它产生构造点**：`Collector::classify` 查不到登记即 `.unwrap_or(SiteClass::Forward)`，
+///    这些点会被算作 **parser 前向** ⇒ 前向计数相对冻结基线**上浮** ⇒ T1.6 的逐变体
+///    「勘察基线漂移」拒绝编译（6.6.2 起进判定路径）。**代价明确**：漏登记不会静默，
+///    但报错文案会指向「基线漂移」而不是「你忘了登记」——看到前向上浮先想这条。
+/// 2. **若它不产生构造点**（只是搬运 / 只读 / 只在测试里）：它不在扫描口径内，
+///    **不构成漏洞**——判据量的是构造点，不是「有没有重建函数」这个布尔事实。
 ///
 /// - 第二类 **AST→AST 重建**：把已有 `ast::Type` 重造一份（不是 `MonoType → AST`）。
 ///   曾经的在册函数：`substitute_type_ast`（6.6.11 删）、`substitute_type_in_ast`、
 ///   `mono_to_ast_type`（反向桥 B）与 6.5 的 `without_fn_param_names`——**6.6.12 全部删除**
 ///   （IR 不再持 `ast::Type`，这些函数失去唯一生产调用点）。
 /// **6.6.12 起为空表**：IR 层不再持 `ast::Type`（`FunctionBody::TypeDecl` 换 IR 原生
-/// 收窄载体）后，两座 AST→AST 替换（`substitute_type_ast` / `substitute_type_in_ast`）
-/// 与反向桥 B（`mono_to_ast_type`）连同 6.5 的 `without_fn_param_names` 全部删除，
-/// 仓内已无「重建 ast::Type」的生产函数。登记机制保留且可注入（单测覆盖），
-/// 新出现这类函数必须重新登记——空表即判据：任何 AST 重建点都会被算成 parser 前向。
+/// 收窄载体）后，仓内已无「重建 `ast::Type`」的生产函数。登记机制保留且可注入
+/// （`*_with(registry)` 供单测）。**空表不等于「以后不会再有」**：新出现这类函数时，
+/// 按上面第 1 条它会被基线漂移拦下，再回这里补登记即可（两个动作不能省其一）。
 pub const REBUILD_FUNCTIONS: &[RebuildEntry] = &[];
 
 /// 一处构造点
@@ -264,6 +283,12 @@ pub fn scan_source_with(
 /// 登记表 ↔ 源码对账：返回**在登记文件里找不到同名 `fn`** 的条目（应为空）。
 ///
 /// `found` = 源文件名 → 该文件里出现过的全部 `fn` 名。
+///
+/// **单向**（WBS 6.6.20 订正）：本函数只回答「登记表里有没有过期的项」
+/// （登记 → 源码）。它**不**回答「源码里有没有漏登记的重建函数」——那个方向没有
+/// 名字/形态启发式可判（「长得像重建」不是可机械判定的谓词），故由构造点计数兜：
+/// 未登记的重建函数若产生构造点，会被 [`Collector::classify`] 落成
+/// [`SiteClass::Forward`]，再被逐变体基线漂移（T1.6）拒绝编译。
 pub fn missing_rebuild_functions(
     registry: &[RebuildEntry],
     found: &BTreeMap<String, BTreeSet<String>>,
@@ -455,8 +480,11 @@ impl Collector<'_> {
 
     /// 归类：反向桥 A 按 `impl` 形态判定，其余按「文件 + 当前最内层 fn 名」查登记表。
     ///
-    /// 登记表里没有的重建函数不会在这里被「猜」出来——它由 [`missing_rebuild_functions`]
-    /// 在 [`scan`] 层报错兜底（防静默降级），此处只负责纯映射。
+    /// 登记表里没有的函数**一律落成 [`SiteClass::Forward`]**（`.unwrap_or(...)`），
+    /// 这里不做任何「长得像重建」的猜测。于是「新出现、却没登记的重建函数」若产生
+    /// 构造点，这些点会进 parser 前向 ⇒ 与冻结基线不符 ⇒ T1.6 的「勘察基线漂移」
+    /// 拒绝编译（这是该方向的**唯一**兜底；[`missing_rebuild_functions`] 只管反方向
+    /// 的过期项，两者不是同一件事——WBS 6.6.20 订正）。
     fn classify(&self) -> SiteClass {
         if self.file == BYTECODE_REL && self.impl_stack.last() == Some(&ImplKind::FromIrType) {
             return SiteClass::ReverseFromIrType;

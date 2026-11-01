@@ -30,17 +30,29 @@ cargo run --manifest-path tools/type-tables/Cargo.toml -- --report --root <仓�
 三类**不得混算**：
 
 1. **parser 前向**——不在任何重建位置的构造点（当前全部落在 parser）；
-2. **AST→AST 重建**——`middle/passes/mono/function.rs` 的 `substitute_type_ast` 与
-   `substitute_type_in_ast`（把已有 AST 类型重造一份；6.3 已删除其中 5 变体 / 10 点）；
-3. **反向桥**——A：`middle/core/bytecode.rs` 的 `impl From<MonoType> for IrType`；
-   B：`function.rs` 的嵌套 fn `mono_to_ast_type`。
+2. **AST→AST 重建**——把已有 `ast::Type` 重造一份（不是 `MonoType → AST`），
+   由登记表 `REBUILD_FUNCTIONS` 判定。历史在册函数（`substitute_type_ast` /
+   `substitute_type_in_ast` / `mono_to_ast_type` / `without_fn_param_names`）已在
+   WBS 6.6.11 / 6.6.12 随 IR 载体收窄全部删除，**该表现为空**；
+3. **反向桥**——A：`middle/core/bytecode.rs` 的 `impl From<MonoType> for IrType`
+   （按 `impl` 形态判定，不看登记表）；B：`MonoType → ast::Type` 的反向重建，
+   同样由登记表判定（`mono_to_ast_type` 已删，故当前 0 点）。
 
 两个数字分开报：**前向零构造**（有效前向计数为 0）与**全局零构造**（三类合计为 0）。
 
-**重建位置的单一源（6.6.2，裁决 1A）**：第二类 / 反向桥的归类由 `src/scan.rs` 的 `REBUILD_FUNCTIONS`
-表驱动（文件 + 函数名 → 类别）：`substitute_type_ast`、`substitute_type_in_ast`、
-`without_fn_param_names` 归第二类，`mono_to_ast_type` 归反向桥 B。登记表与源码**逐条对账**——
-登记的函数在源码里找不到同名 `fn`（改名/删除未同步）时扫描直接报错，不得静默落回 parser 前向。
+**重建位置的单一源（6.6.2，裁决 1A）**：第二类 / 反向桥 B 的归类由 `src/scan.rs` 的
+`REBUILD_FUNCTIONS` 表驱动（文件 + 函数名 → 类别），不靠名字启发式猜。
+
+**这张表是「已知清单」，不是「重建函数全集」，且核对是单向的**（WBS 6.6.20 订正）：
+
+| 方向 | 谁兜 | 失败形态 |
+| --- | --- | --- |
+| 登记了，但源码里已无同名 `fn`（改名/删除未同步） | `missing_rebuild_functions`（`scan` 层） | 扫描直接 `Err`，不得静默落回 parser 前向 |
+| 源码里新出现、却没登记，**且产生构造点** | `Collector::classify` 的 `.unwrap_or(SiteClass::Forward)` → 计入 parser 前向 | 逐变体**勘察基线漂移**（T1.6）拒绝编译——漏登记不会静默，但报错文案指向「基线漂移」，看到前向上浮先想这条 |
+| 源码里新出现、却没登记，**且不产生构造点**（只搬运 / 只读 / 只在测试里） | 无需兜 | **不是漏洞**：判据的原子是构造点，不是「有没有重建函数」这个布尔事实 |
+
+因此「重建函数只许出现在登记表里」这种读法是错的；正确的读法是**「构造点只许出现在三类里，
+凡属第二/三类的必须登记」**。
 
 **兜底豁免逐条登记（F1）**：前向有效计数 = 原始前向点数 − **已登记**的通配臂兜底豁免点数。
 豁免只在 `REGISTERED_ZERO_FORWARD` 里显式登记。**WBS 6.3 之后该表为空**：03 §5.2 的 13 个
