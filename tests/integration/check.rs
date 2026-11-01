@@ -979,3 +979,32 @@ fn test_check_curry_refined_params_in_two_groups_unify_with_base() {
         "#523: refined params in every curry group must unify by base type; got {errors} error(s)"
     );
 }
+
+/// #523 反向锚（t3 复审建议）：剥 base 只对统一**透明**，不遮蔽真不匹配——
+/// 内层精化位的实参类型真错时必须仍报错。没有这条，「剥除退化成跳过统一」
+/// 的遮蔽型回归会让上面三个零诊断锚全绿。
+#[test]
+fn test_check_curry_refined_param_genuine_mismatch_still_reports() {
+    // Arrange: 与主锚同构，但第二实参是 String——对剥后基类型 Int(64)
+    // 是真不匹配，必须恰好报一条错（E1002 Expected type 'int64'）。
+    // 诊断文本不得含 IsPositive 字样（#522 红线，由既有
+    // test_check_multifile_predicate_arg_not_misreplaced 的文本面锚钉住）。
+    let dir = temp_dir();
+    let file = create_yx_file(
+        &dir,
+        "curry_refined_genuine_mismatch.yx",
+        "IsPositive: (x: Int) -> Type = { x > 0 }\n\
+         sum: (N: Int) -> (x: IsPositive(N)) -> Int = { 0 }\n\
+         main = () => { print(sum(5)(\"str\")) }",
+    );
+
+    // Act
+    let result = check_file(&file);
+
+    // Assert: 真不匹配仍被拒绝 ⇒ 恰一条诊断；零诊断 = 统一被遮蔽（回归）。
+    let errors = result.expect("check should complete for genuinely mismatched refined param");
+    assert_eq!(
+        errors, 1,
+        "#523: stripping refinement must stay transparent to unification — a genuinely mismatched argument (String vs Int(64)) must still be rejected with exactly one error; got {errors} error(s)"
+    );
+}
