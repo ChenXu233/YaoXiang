@@ -24,7 +24,7 @@
 // reason: 接口契约属数据面（同 lexer::tokens 的豁免口径），非 parser 行为
 use crate::frontend::core::parser::probe::{NameKind, TypeEnvProbe};
 // 数据面引用（parser::ast 豁免口径，同上）——`TypeLevelNamespace::scan` 的参数类型
-use crate::frontend::core::parser::ast::Module;
+use crate::ast::Module;
 use crate::frontend::core::types::MonoType;
 use std::collections::HashSet;
 
@@ -81,7 +81,7 @@ pub(crate) struct PredicateDeclShape<'a> {
     /// 被绑定的谓词名（`TypeDefinition` 的类型名 / `Assign` 的左值名）。
     pub name: &'a str,
     /// 声明注解（形参从 `Type::Fn` 链拍平；第零遍登记用，scan 不消费）。
-    pub type_annotation: Option<&'a crate::frontend::core::parser::ast::Type>,
+    pub type_annotation: Option<&'a crate::ast::Type>,
     /// 约束体（常量表达式形态；第零遍登记用，scan 不消费）。
     pub constraint: crate::frontend::core::types::const_data::ConstExpr,
 }
@@ -91,10 +91,8 @@ pub(crate) struct PredicateDeclShape<'a> {
 /// 只做形态匹配、无环境副作用；第零遍在此之上叠加「仅单参数形态登记」
 /// 的收窄（`PredicateResolver::try_resolve` 的阶段 1 模型），scan 则对
 /// 全部命中形态收名——收窄差异是刻意的，见 `collect_predicate_defs`。
-pub(crate) fn predicate_decl_shape(
-    stmt: &crate::frontend::core::parser::ast::Stmt
-) -> Option<PredicateDeclShape<'_>> {
-    use crate::frontend::core::parser::ast::{Expr, StmtKind, Type, TypeBodyItem};
+pub(crate) fn predicate_decl_shape(stmt: &crate::ast::Stmt) -> Option<PredicateDeclShape<'_>> {
+    use crate::ast::{Expr, StmtKind, Type, TypeBodyItem};
     use crate::frontend::core::types::eval::const_eval::convert_expr_to_const_expr;
 
     match &stmt.kind {

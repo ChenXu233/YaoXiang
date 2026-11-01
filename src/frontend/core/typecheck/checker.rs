@@ -78,6 +78,13 @@ pub struct TypeChecker {
     early_value_bindings: HashMap<String, PolyType>,
     /// #358：已声明的顶层函数名 → 签名（用于区分重复定义与合法重载）。
     declared_top_fns: HashMap<String, String>,
+    /// 类型级命名空间（WBS 3.20.9 / #522）：「名是不是谓词」的声明级事实。
+    ///
+    /// 由 `check_module` / `check_module_collect_all` / `collect_signatures`
+    /// 的显式 `namespace` 参数注入——调用方 scan 自己可见的全部单元
+    /// （单文件传自身；多文件传全集，过包含方向安全）。三个入口**不带
+    /// 默认值**：漏接即编译错误，不存在默认空集的静默路径。
+    type_level_namespace: super::probe::TypeLevelNamespace,
 }
 
 /// 取顶层语句的函数**名与签名**（值/HOF 绑定也算函数）。
@@ -198,6 +205,7 @@ impl TypeChecker {
             import_used: HashSet::new(),
             early_value_bindings: HashMap::new(),
             declared_top_fns: HashMap::new(),
+            type_level_namespace: super::probe::TypeLevelNamespace::default(),
         }
     }
 
@@ -390,10 +398,17 @@ impl TypeChecker {
     /// 检查整个模块
     ///
     /// 在收集模式下，将收集所有错误后统一返回。
+    ///
+    /// `namespace`：本单元可见的类型级命名空间（`probe::TypeLevelNamespace`
+    /// ——「名是不是谓词」的声明级事实，WBS 3.20.9 / #522）。单文件入口传
+    /// `scan_one(module)`；多文件入口传全部单元的 scan 并集。无默认值——
+    /// 漏接即编译错误，不存在默认空集的静默路径。
     pub fn check_module(
         &mut self,
         module: &Module,
+        namespace: &super::probe::TypeLevelNamespace,
     ) -> TypeCheckResult {
+        self.type_level_namespace = namespace.clone();
         self.check_module_impl(module, false)
     }
 
@@ -404,7 +419,9 @@ impl TypeChecker {
     pub fn check_module_collect_all(
         &mut self,
         module: &Module,
+        namespace: &super::probe::TypeLevelNamespace,
     ) -> TypeCheckResult {
+        self.type_level_namespace = namespace.clone();
         self.check_module_impl(module, true)
     }
 
@@ -413,10 +430,17 @@ impl TypeChecker {
     /// 跑 pass1（类型定义）+ pass2（函数/绑定签名），**不检查函数体**。
     /// 用于在构建 Registry 时提取每个文件顶层绑定的真实 `MonoType`。
     /// 函数体里的跨文件引用留到完整三遍（pass3）才检查，彼时 Registry 已就绪。
+    ///
+    /// `namespace`：Registry 阶段的谓词名可见面（WBS 3.20.9 / #522）。
+    /// 本方法**不执行第零遍**（`env.predicate_defs` 在此阶段为空）、导入
+    /// 也未并——谓词判定只能走声明级 namespace，调用方（driver 的
+    /// Registry 臂 / 嵌入 std）须传全部可见单元的 scan 并集。
     pub fn collect_signatures(
         &mut self,
         module: &Module,
+        namespace: &super::probe::TypeLevelNamespace,
     ) {
+        self.type_level_namespace = namespace.clone();
         // pass1: 类型定义
         for stmt in &module.items {
             // #324：模块级阶段挂当前语句 span，诊断自动获得位置
@@ -588,21 +612,23 @@ impl TypeChecker {
             .map(|(name, poly)| (name.clone(), poly.body.clone()))
             .collect();
         body_checker.set_type_defs(type_defs);
-        // 双表分工（3.20.8 / #511 t3 low 收敛——谓词排除判据单一事实源）：
+        // 双表分工（3.20.8 收单点，3.20.9 起来源换声明级——#522）：
         //
         // 1. `proof_fn_bases`——证明函数基类型表（RFC-027 Phase 2.5）：
         //    「返回 Type 的函数名 → 其基类型」。消费者是**剥精化取基类型**
         //    （inference/statements.rs 的 `strip_refined_value_type` 与证明函数
         //    `Refined { base, .. }` 正格化），需要 MonoType 值，不是排除判据。
         // 2. `predicate_names`——谓词名字集，**谓词排除判据的单一事实源**：
-        //    三源（内置谓词 / `predicate_defs` 模块声明 / `env.vars`）的并集
-        //    逐名跑 `is_predicate_application`——与 A 面（`collect_signatures`
+        //    即注入的类型级命名空间（`probe::TypeLevelNamespace`，内置谓词
+        //    名 ∪ 全部可见单元的谓词声明名）。与 A 面（`collect_signatures`
         //    与 `collect_function_signature` 的两个 `collect_used_in_type`
-        //    调用点）同一判定函数，by construction 同源。消费者：
-        //    inference/statements.rs const 用途精筛的 `is_predicate`——谓词
-        //    应用的实参位是编译期表达式（值）不是类型引用，不得计入 const
-        //    泛型用途（RFC-027a；3.20.8 前该处是「`Terminates` 字面量 ∪
-        //    `proof_fn_bases` 判名」的窄化同义判据，与 A 面不同构）。
+        //    调用点）同一判定（`is_predicate_application` 现即 namespace
+        //    查询），by construction 同源。消费者：inference/statements.rs
+        //    const 用途精筛的 `is_predicate`——谓词应用的实参位是编译期
+        //    表达式（值）不是类型引用，不得计入 const 泛型用途（RFC-027a）。
+        //    3.20.9 前这里是「内置谓词 / `predicate_defs` / `env.vars` 三源
+        //    并集逐名过滤」的检查期计算——Registry 阶段三臂不完整导致 #522
+        //    假拒绝，已整体退役。
         let proof_fn_bases: HashMap<String, MonoType> = self
             .env
             .vars
@@ -621,14 +647,7 @@ impl TypeChecker {
             })
             .collect();
         body_checker.set_proof_fn_bases(proof_fn_bases);
-        let predicate_name_sources = crate::frontend::core::typecheck::probe::BUILTIN_PREDICATES
-            .iter()
-            .map(|s| s.to_string())
-            .chain(self.env.predicate_defs.keys().cloned())
-            .chain(self.env.vars.keys().cloned());
-        let predicate_names: HashSet<String> = predicate_name_sources
-            .filter(|name| self.is_predicate_application(name))
-            .collect();
+        let predicate_names: HashSet<String> = self.type_level_namespace.predicates.clone();
         body_checker.set_predicate_names(predicate_names);
         // 如果启用收集模式，设置收集所有错误
         if collect_all {
@@ -3510,25 +3529,18 @@ impl TypeChecker {
     /// 谓词应用的实参位是编译期表达式（值），不是类型引用——`Terminates(b)` 的
     /// `b`、`IsPositive(n)` 的 `n` 都是值。这些位置不得参与 const 泛型用途分析。
     ///
-    /// 判据取两条同源路径（与 `resolve_type_annotation` 一致）：
-    /// 1. 已在 `predicate_defs` 注册的谓词
-    /// 2. 返回 `Type` 的证明函数（如 `IsPositive: (x: Int) -> Type = { x > 0 }`）
-    /// 3. `Terminates`——内置谓词，无源码声明（RFC-027 §6.9）
+    /// 判据（WBS 3.20.9 / #522 起）：**声明级事实**——注入的类型级命名空间
+    /// （[`super::probe::TypeLevelNamespace`]，内置谓词名 ∪ 全部可见单元的
+    /// 谓词声明名）。此前的检查期三臂判定（内置名 / `env.predicate_defs` /
+    /// `env.get_var` 的 MetaType 返回）整体退役：Registry 阶段（`collect_signatures`）
+    /// 不跑第零遍且导入未并，三臂对谓词判假 ⇒ 谓词应用实参位被误计 const
+    /// 用途 ⇒ E1012 假拒绝（#522）。`env.predicate_defs` 表本身保留——
+    /// 它是约束求解 / 常量求值的消费面，退役的只是本判定对它的读取。
     fn is_predicate_application(
         &self,
         name: &str,
     ) -> bool {
-        if is_builtin_predicate_name(name) {
-            return true;
-        }
-        if self.env.predicate_defs.contains_key(name) {
-            return true;
-        }
-        matches!(
-            self.env.get_var(name).map(|p| &p.body),
-            Some(MonoType::Fn { return_type, .. })
-                if matches!(return_type.as_ref(), MonoType::MetaType { .. })
-        )
+        self.type_level_namespace.predicates.contains(name)
     }
 
     /// 把 `Terminates` 精化的占位 base 换成**新类型变量**（RFC-027a）。
@@ -3933,10 +3945,9 @@ impl TypeChecker {
     /// 不透明应用 `IsPositive(-5)`。这是精化约束第一次**可符号推理**的前提
     /// （SMT 与假设合证；终止检查良基性 `b >= 0` 就依赖它）。
     ///
-    /// 两种声明形态都收（与 pipeline 执行证明函数的取法同源）：
-    /// - `TypeDefinition`：`= { x > 0 }` 被解析成类型体，约束在
-    ///   `Type::Struct` 的 `TypeBodyItem::Expr(Type::ConstExpr)` 里（主形态）
-    /// - `Assign`：函数体形态
+    /// 两种声明形态的**识别**已提取为 probe.rs 的 `predicate_decl_shape`
+    /// （WBS 3.20.9 / #522：与 `TypeLevelNamespace::scan` 共用，shape
+    /// matching 全仓单点）；本遍在此之上叠加登记侧收窄：
     ///
     /// 只登记单参数形态：`PredicateResolver::try_resolve` 的阶段 1 模型即单参数，
     /// 登记多参数谓词会使其调用一律撞 ArityMismatch（E1093）——保持其走证明
@@ -3946,68 +3957,14 @@ impl TypeChecker {
         &mut self,
         module: &Module,
     ) {
-        use crate::ast::{Expr, StmtKind, Type, TypeBodyItem};
         for stmt in &module.items {
-            // 形参从声明注解的 Type::Fn 链拍平（6.5.2：不再有并行形参表）
-            let (name, type_annotation, constraint) = match &stmt.kind {
-                StmtKind::TypeDefinition {
-                    name,
-                    type_annotation,
-                    definition,
-                    ..
-                } => {
-                    let Type::Struct { body } = definition else {
-                        continue;
-                    };
-                    let Some(expr) = body.iter().find_map(|item| match item {
-                        TypeBodyItem::Expr(Type::ConstExpr(e)) => Some(e.as_ref()),
-                        _ => None,
-                    }) else {
-                        continue;
-                    };
-                    let Some(c) = convert_expr_to_const_expr(expr) else {
-                        continue;
-                    };
-                    (name, type_annotation.as_ref(), c)
-                }
-                StmtKind::Assign {
-                    target,
-                    type_annotation: fn_annotation,
-                    value: Some(v),
-                    ..
-                } => {
-                    let Some(Type::Fn { return_type, .. }) = fn_annotation else {
-                        continue;
-                    };
-                    let Expr::Var(name, _) = target.as_ref() else {
-                        continue;
-                    };
-                    // 返回 Type 才是谓词（`MetaType` 与 `Name{Type}` 两形态同义）
-                    let returns_type = matches!(return_type.as_ref(), Type::MetaType { .. })
-                        || matches!(return_type.as_ref(), Type::Name { name: n, .. } if n == "Type");
-                    if !returns_type {
-                        continue;
-                    }
-                    let Some(body) = extract_fn_body(Some(v.as_ref())) else {
-                        continue;
-                    };
-                    let Some(expr) = body.stmts.iter().find_map(|s| match &s.kind {
-                        StmtKind::Expr(e) => Some(e.as_ref()),
-                        StmtKind::Return(Some(e)) => Some(e.as_ref()),
-                        _ => None,
-                    }) else {
-                        continue;
-                    };
-                    let Some(c) = convert_expr_to_const_expr(expr) else {
-                        continue;
-                    };
-                    (name, fn_annotation.as_ref(), c)
-                }
-                _ => continue,
+            let Some(decl) = super::probe::predicate_decl_shape(stmt) else {
+                continue;
             };
             // 形参名与类型同栖在 `Type::Fn.params`（6.5.2）
-            let params = type_annotation
-                .map(Type::fn_params_flat)
+            let params = decl
+                .type_annotation
+                .map(crate::ast::Type::fn_params_flat)
                 .unwrap_or_default();
             let [param] = params.as_slice() else {
                 continue;
@@ -4018,11 +3975,11 @@ impl TypeChecker {
                 .map(|t| MonoType::from(t.clone()))
                 .unwrap_or(MonoType::Int(64));
             self.env.predicate_defs.insert(
-                name.clone(),
+                decl.name.to_string(),
                 crate::frontend::core::typecheck::predicate_resolver::PredicateDef {
                     param_name: param.name.clone(),
                     param_type,
-                    constraint,
+                    constraint: decl.constraint,
                 },
             );
         }
@@ -4161,8 +4118,10 @@ impl TypeChecker {
 }
 
 /// 提取绑定值的函数体（判定已由调用方完成，这里只取形态）：
-/// `Lambda` 恒为函数体；`Block` 在是函数定义时才是（值块返回 None）
-fn extract_fn_body(value: Option<&crate::ast::Expr>) -> Option<&crate::ast::Block> {
+/// `Lambda` 恒为函数体；`Block` 在是函数定义时才是（值块返回 None）。
+/// `pub(crate)`：probe.rs 的谓词声明形态识别（`predicate_decl_shape`，
+/// 第零遍与 namespace scan 的共享单点）同样消费。
+pub(crate) fn extract_fn_body(value: Option<&crate::ast::Expr>) -> Option<&crate::ast::Block> {
     match value? {
         crate::ast::Expr::Lambda { body, .. } => Some(body.as_ref()),
         crate::ast::Expr::Block(block) => Some(block),
