@@ -83,7 +83,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **模板**：`未知变量：'{name}'`
 - **消息**：引用的变量未定义
 - **帮助**：检查变量名是否拼写正确，或先定义它
-- **发射点**：`src/frontend/core/typecheck/checker/refinement.rs:443`、`src/frontend/core/typecheck/inference/expressions.rs:3249`、`src/frontend/core/typecheck/inference/statements.rs:2900` 等 4 处
+- **发射点**：`src/frontend/core/typecheck/checker/refinement.rs:443`、`src/frontend/core/typecheck/inference/expressions.rs:3249`、`src/frontend/core/typecheck/inference/statements.rs:2904` 等 4 处
 
 ### E1002：类型不匹配
 
@@ -133,7 +133,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **模板**：`返回类型不匹配：期望 '{expected}'，实际 '{found}'`
 - **消息**：函数返回类型不正确
 - **帮助**：函数体的值与声明的返回类型不符。要么修改函数体，要么修正注解——注意 `h: () -> Int = f` 的含义是「h 返回 Int」，而不是「h 就是 f」；若想给函数起别名请写 `h = f`。
-- **发射点**：`src/frontend/core/typecheck/inference/statements.rs:1332`、`src/frontend/core/typecheck/inference/statements.rs:1384`
+- **发射点**：`src/frontend/core/typecheck/inference/statements.rs:1335`、`src/frontend/core/typecheck/inference/statements.rs:1387`
 
 ### E1013：函数未找到
 
@@ -407,7 +407,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **模板**：`类型定义 '{name}' 只能在模块级（模块顶层）`
 - **消息**：类型定义只能出现在模块顶层
 - **帮助**：将类型定义移到模块顶层
-- **发射点**：`src/frontend/core/typecheck/inference/expressions.rs:6114`、`src/frontend/core/typecheck/inference/statements.rs:1779`
+- **发射点**：`src/frontend/core/typecheck/inference/expressions.rs:6114`、`src/frontend/core/typecheck/inference/statements.rs:1782`
 
 ### E1081：`?` 仅允许在返回可传播类型的函数内使用
 
@@ -657,7 +657,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **模板**：`'return' 出现在函数外`
 - **消息**：return 只能在函数体内使用；Script 顶层是模块初始化层，没有函数边界可退
 - **帮助**：把 'return' 移入函数体；Script 模式下顶层语句即程序主体，要提前结束一段顶层逻辑请收进函数、在调用点控制
-- **发射点**：`src/frontend/core/typecheck/inference/expressions.rs:3760`、`src/frontend/core/typecheck/inference/statements.rs:1721`、`src/frontend/core/typecheck/inference/statements.rs:1736`
+- **发射点**：`src/frontend/core/typecheck/inference/expressions.rs:3760`、`src/frontend/core/typecheck/inference/statements.rs:1724`、`src/frontend/core/typecheck/inference/statements.rs:1739`
 - **源码注释名**：return 出现在函数外（RFC-010a 规则②边界条件：`return` 退出最近的
 
 ### E1110：方法绑定缺少签名标注
