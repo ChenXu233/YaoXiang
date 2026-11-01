@@ -34,8 +34,8 @@ pub fn test_compiler() -> String {
 /// 任何降级形态（solver 缺失 / stub / 假链接）都会得到不同结果。
 #[wasm_bindgen]
 pub fn test_smt() -> String {
-    use yaoxiang::frontend::core::typecheck::proof::smt::ast::{SMTCommand, SMTExpr, SMTSort};
-    use yaoxiang::frontend::core::typecheck::proof::smt::backend::default_solver;
+    use yaoxiang::frontend::core::sema::proof::smt::ast::{SMTCommand, SMTExpr, SMTSort};
+    use yaoxiang::frontend::core::sema::proof::smt::backend::default_solver;
 
     let Some(solver) = default_solver() else {
         return "solver unavailable".to_string();
@@ -59,7 +59,7 @@ pub fn test_smt() -> String {
         SMTCommand::CheckSat,
     ];
     match solver.solve(&commands, 5000) {
-        yaoxiang::frontend::core::typecheck::proof::smt::ast::SMTResult::Unsat => {
+        yaoxiang::frontend::core::sema::proof::smt::ast::SMTResult::Unsat => {
             "unsat (z3 alive)".to_string()
         }
         other => format!("unexpected: {:?}", other),

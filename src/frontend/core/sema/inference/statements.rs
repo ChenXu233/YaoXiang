@@ -3279,7 +3279,7 @@ pub(super) fn strip_refined_with_proof_fns(
 ) -> MonoType {
     match ty {
         MonoType::Generic { ref name, .. }
-            if crate::frontend::core::typecheck::is_builtin_predicate_name(name) =>
+            if crate::frontend::core::sema::is_builtin_predicate_name(name) =>
         {
             solver.new_var()
         }
