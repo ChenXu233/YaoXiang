@@ -1,10 +1,10 @@
-//! 核心中间表示测试模块
+//! IR 测试模块
 //!
-//! 包含 bytecode、ir 等核心模块的单元测试。
+//! 包含 IR 构建 / 槽位 / 快照 / verify 等单元测试。
+//! （字节码 IR 与 .42 序列化的单测自 D1 6.7.1b' 起随实现住在 `middle/bytecode/tests/`。）
 
 pub mod alias_fn_value;
 pub mod batch_method_bind;
-pub mod bytecode;
 pub mod corpus;
 pub mod def_assign;
 pub mod fn_param_slots;

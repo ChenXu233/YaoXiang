@@ -1157,8 +1157,8 @@ fn test_decode_places_fields_in_correct_positions() {
 #[test]
 fn test_all_opcodes_have_decode_branch() {
     // Arrange: 从源码读取 opcode 定义与 bytecode.rs 的解码分支
-    let opcode_src = include_str!("../../bytecode/opcode.rs");
-    let decoder_src = include_str!("../../bytecode/mod.rs");
+    let opcode_src = include_str!("../opcode.rs");
+    let decoder_src = include_str!("../mod.rs");
     let defined = defined_opcode_names(opcode_src);
     let decoded = decoder_match_arm_opcodes(decoder_src);
 
@@ -1305,7 +1305,7 @@ fn test_call_native_ffi_layout_roundtrip() {
 #[test]
 fn test_opcodes_without_encoder_are_documented() {
     // Arrange: 读取 opcode 定义与编码器源码
-    let opcode_src = include_str!("../../bytecode/opcode.rs");
+    let opcode_src = include_str!("../opcode.rs");
     let translator_src = include_str!("../../passes/codegen/translator.rs");
     let defined = defined_opcode_names(opcode_src);
 

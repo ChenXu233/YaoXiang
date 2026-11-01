@@ -17,6 +17,10 @@
 pub mod file;
 pub mod opcode;
 
+// 测试与被测实现同域（D1 6.7.1b'）：字节码 IR 与 .42 序列化的单测住在 `tests/`。
+#[cfg(test)]
+mod tests;
+
 use std::collections::HashMap;
 
 // Re-export the IR constant-pool type (shared by bytecode, codegen and backends).
