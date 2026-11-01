@@ -326,7 +326,7 @@ TypeCast    ::= Expr 'as' TypeExpr
 > **静默重标注**——`let _ = self.infer_expr(expr)?;` 丢弃内层结果，随后直接返回
 > `target_type` 的 `MonoType`；
 > ③ 全仓**没有**可转换性校验，也没有对应的诊断码（`util/diagnostic/codes/` 无 cast 条目）；
-> ④ `ir_gen` 不生成任何指令（`middle/core/ir_gen.rs` 只在 `:5042` / `:5849` / `:9312` 取 `Expr::Cast` 的 span 与自由变量）；
+> ④ `ir_gen` 不生成任何指令（`middle/core/ir_gen.rs` 只在 `:5111` / `:5918` / `:9381` 取 `Expr::Cast` 的 span 与自由变量——前两处是 `get_expr_span` / `expr_span` 的 span 臂，第三处是 `collect_free_vars_expr`，三处都不产生指令）；
 > ⑤ 因此 `x as Int` 当前既不报错，也不产生任何运行期转换。
 
 ### 2.7 条件表达式
