@@ -1214,7 +1214,7 @@ fn test_const_un_op_debug() {
 
 #[test]
 fn test_convert_expr_to_const_expr_int_literal() {
-    use crate::frontend::core::parser::ast::Expr;
+    use crate::ast::Expr;
     use crate::frontend::core::lexer::tokens::Literal;
     use crate::util::span::Span;
     use crate::frontend::core::types::eval::const_eval::convert_expr_to_const_expr;
@@ -1231,7 +1231,7 @@ fn test_convert_expr_to_const_expr_int_literal() {
 
 #[test]
 fn test_convert_expr_to_const_expr_var() {
-    use crate::frontend::core::parser::ast::Expr;
+    use crate::ast::Expr;
     use crate::util::span::Span;
     use crate::frontend::core::types::eval::const_eval::convert_expr_to_const_expr;
 
@@ -1247,7 +1247,7 @@ fn test_convert_expr_to_const_expr_var() {
 
 #[test]
 fn test_convert_expr_to_const_expr_binop_gt() {
-    use crate::frontend::core::parser::ast::{Expr, BinOp};
+    use crate::ast::{Expr, BinOp};
     use crate::frontend::core::lexer::tokens::Literal;
     use crate::util::span::Span;
     use crate::frontend::core::types::eval::const_eval::convert_expr_to_const_expr;
@@ -1275,7 +1275,7 @@ fn test_convert_expr_to_const_expr_binop_gt() {
 
 #[test]
 fn test_convert_expr_to_const_expr_unsupported_returns_none() {
-    use crate::frontend::core::parser::ast::Expr;
+    use crate::ast::Expr;
     use crate::util::span::Span;
     use crate::frontend::core::types::eval::const_eval::convert_expr_to_const_expr;
 

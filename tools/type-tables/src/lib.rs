@@ -26,10 +26,13 @@ pub mod tables;
 
 use std::path::Path;
 
-/// `ast::Type` 的定义家（T1 的变体清单来源）
-pub const AST_REL: &str = "src/frontend/core/parser/ast.rs";
-/// const 参数名表 `CONST_PARAM_TYPES` 的所在文件（T2 表 B；WBS 6.6.9 从 `parser/ast.rs`
-/// 移回 L3 的探针模块——parser 不再持有名字表，`check-boundary.py` B6 因此清零）
+/// `ast::Type` 的定义家（T1 的变体清单来源）。
+///
+/// D1（6.7.1a）：AST 顶层化——从 `frontend/core/parser/ast.rs` 迁到顶层 `ast/`，
+/// 与 parser 平级；变体定义行与构造点行号随纯搬移保持不变（见 baseline 的刷新记录）。
+pub const AST_REL: &str = "src/ast/mod.rs";
+/// const 参数名表 `CONST_PARAM_TYPES` 的所在文件（T2 表 B；WBS 6.6.9 从当时的
+/// `parser/ast.rs`（6.7.1a 起为顶层 `ast/`）移回 L3 的探针模块——parser 不再持有名字表，`check-boundary.py` B6 因此清零）
 pub const TYPECHECK_PROBE_REL: &str = "src/frontend/core/typecheck/probe.rs";
 /// `MonoType::from_builtin_name` 的所在文件（T2 的规范名来源）
 pub const MONO_REL: &str = "src/frontend/core/types/mono.rs";

@@ -7,7 +7,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use crate::frontend::core::lexer;
-use crate::frontend::core::parser::ast::{classify_generic_params, Expr, GenericParamKind, StmtKind};
+use crate::ast::{classify_generic_params, Expr, GenericParamKind, StmtKind};
 use crate::frontend::core::parser::{self, Module};
 use crate::frontend::core::typecheck::SemanticProbe;
 use crate::frontend::core::typecheck::passes::dead_code::DeadCodeAnalyzer;
@@ -1233,7 +1233,7 @@ pub(in crate::driver) fn declared_type_param_names<'a>(
                     // 签名形参的唯一来源是 `Type::Fn` 链（6.5.2 删除并行形参表）。
                     let params = type_annotation
                         .as_ref()
-                        .map(crate::frontend::core::parser::ast::Type::fn_params_flat)
+                        .map(crate::ast::Type::fn_params_flat)
                         .unwrap_or_default();
                     let names: Vec<String> = classify_generic_params(
                         &params,

@@ -2,7 +2,7 @@
 
 // 6.6.12：**IR 层不再持有语法层类型**。此前的最后一处载体 `FunctionBody::TypeDecl`
 // 改携 IR 原生的收窄形状 [`TypeDeclBody`]（字段表 + 字节码类型表项），语法层 `ast::Type`
-// 在 IR 里彻底消失——本文件不再 `use frontend::core::parser::ast`（6.2 的四处载体、
+// 在 IR 里彻底消失——本文件不再 `use crate::ast`（6.2 的四处载体、
 // 6.6.11 的两个零生产者指令变体之后的历史见 09a §P6 6.2 / 6.6.11 / 6.6.12）。
 use std::collections::HashMap;
 

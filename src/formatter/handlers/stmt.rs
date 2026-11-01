@@ -1,6 +1,6 @@
 //! 语句格式化处理器
 
-use crate::frontend::core::parser::ast::*;
+use crate::ast::*;
 
 use super::super::context::FormatContext;
 use super::super::source_map::SourceMap;
@@ -108,7 +108,7 @@ pub fn format_stmt(
             // 泛型形参从注解的 `Type::Fn` 链拍平（6.5.2：不再有并行形参表）。
             let params = type_annotation
                 .as_ref()
-                .map(crate::frontend::core::parser::ast::Type::fn_params_flat)
+                .map(crate::ast::Type::fn_params_flat)
                 .unwrap_or_default();
             if params.is_empty() {
                 format!(
@@ -143,7 +143,7 @@ fn format_assign(
     // 签名形参的唯一来源：注解的 `Type::Fn` 链（6.5.2 删并行形参表）。
     let params = type_annotation
         .as_ref()
-        .map(crate::frontend::core::parser::ast::Type::fn_params_flat)
+        .map(crate::ast::Type::fn_params_flat)
         .unwrap_or_default();
     let type_str = format_type_annotation(type_annotation, &params, ctx, source_map);
 

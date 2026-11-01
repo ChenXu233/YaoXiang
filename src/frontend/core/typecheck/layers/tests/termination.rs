@@ -11,7 +11,7 @@ use crate::frontend::core::typecheck::layers::termination::{
     MeasureObligation, MeasureVerdict, TerminationChecker,
 };
 use crate::frontend::core::typecheck::proof::verdict::ProofResult;
-use crate::frontend::core::parser::ast::{BinOp, Block, Expr, Literal, PlanId, Stmt, StmtKind};
+use crate::ast::{BinOp, Block, Expr, Literal, PlanId, Stmt, StmtKind};
 use crate::frontend::core::types::const_data::{BinOp as ConstBinOp, ConstExpr};
 use crate::util::span::Span;
 
@@ -138,7 +138,7 @@ fn run_check_with_refined(
         span: dummy_span(),
         plan_id: PlanId::UNPLANNED,
     };
-    let module = crate::frontend::core::parser::ast::Module {
+    let module = crate::ast::Module {
         items: vec![stmt],
         span: dummy_span(),
     };
@@ -156,7 +156,7 @@ fn run_check(expr: &Expr) -> Vec<ProofResult> {
         span: dummy_span(),
         plan_id: PlanId::UNPLANNED,
     };
-    let module = crate::frontend::core::parser::ast::Module {
+    let module = crate::ast::Module {
         items: vec![stmt],
         span: dummy_span(),
     };
@@ -183,7 +183,7 @@ fn run_check_with_stub_solver_refined(
         span: dummy_span(),
         plan_id: PlanId::UNPLANNED,
     };
-    let module = crate::frontend::core::parser::ast::Module {
+    let module = crate::ast::Module {
         items: vec![stmt],
         span: dummy_span(),
     };
@@ -255,7 +255,7 @@ fn checker_with_measures<'a>(
 }
 
 /// 解析源码 → 断言解析无错 → 返回模块；词法与语法失败都带上下文 panic。
-fn checked_module(source: &str) -> crate::frontend::core::parser::ast::Module {
+fn checked_module(source: &str) -> crate::ast::Module {
     use crate::frontend::core::lexer::tokenize;
     use crate::frontend::core::parser::parse;
 

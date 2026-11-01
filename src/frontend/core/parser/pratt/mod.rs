@@ -10,7 +10,7 @@ mod tests;
 
 pub use precedence::*;
 
-use crate::frontend::core::parser::ast::*;
+use crate::ast::*;
 use crate::frontend::core::lexer::tokens::*;
 use crate::frontend::core::parser::ParserState;
 

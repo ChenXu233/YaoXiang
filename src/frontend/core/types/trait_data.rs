@@ -208,9 +208,9 @@ impl TraitTable {
     pub fn satisfies_ast_type(
         &self,
         trait_name: &str,
-        ty: &crate::frontend::core::parser::ast::Type,
+        ty: &crate::ast::Type,
     ) -> bool {
-        use crate::frontend::core::parser::ast::Type;
+        use crate::ast::Type;
         match ty {
             Type::Name { name, .. } => self.has_impl(trait_name, name),
             Type::Generic { name, args, .. } => {
@@ -238,7 +238,7 @@ impl TraitTable {
     pub fn can_auto_derive(
         &self,
         trait_name: &str,
-        fields: &[crate::frontend::core::parser::ast::StructField],
+        fields: &[crate::ast::StructField],
     ) -> bool {
         fields
             .iter()

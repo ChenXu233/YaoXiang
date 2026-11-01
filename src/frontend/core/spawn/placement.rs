@@ -2,7 +2,7 @@
 //!
 //! Recursively walks the AST to find `spawn` expressions and report diagnostics.
 
-use crate::frontend::core::parser::ast::{Block, Expr, FStringSegment, Module, Stmt, StmtKind};
+use crate::ast::{Block, Expr, FStringSegment, Module, Stmt, StmtKind};
 use crate::util::diagnostic::Diagnostic;
 
 pub fn check_spawn_placement(module: &Module) -> Vec<Diagnostic> {

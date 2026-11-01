@@ -133,7 +133,7 @@ impl LinearMeasure {
 // 1. 识别直接递归调用
 // 2. 检查调用参数是否严格递减（`f(n-1)` where `n-1 < n`）
 
-use crate::frontend::core::parser::ast::{self, Expr, Stmt, StmtKind, BinOp, Type};
+use crate::ast::{self, Expr, Stmt, StmtKind, BinOp, Type};
 use crate::frontend::core::typecheck::environment::TypeEnvironment;
 use crate::frontend::core::typecheck::proof::verdict::{
     BudgetReport, DisproofKind, DisproofModel, ProofResult, UnprovenReason,
@@ -617,13 +617,13 @@ impl<'a> TerminationChecker<'a> {
                 type_annotation,
                 ..
             } => {
-                use crate::frontend::core::parser::ast::Expr;
+                use crate::ast::Expr;
                 let child_never = is_never || is_never_return_type(type_annotation.as_ref());
                 // RFC-027a：带显式测度的函数体进上下文，使自递归调用可被识别。
                 // 形参名从注解的 `Type::Fn` 链拍平（6.5.2：不再有并行形参表）。
                 let signature = type_annotation
                     .as_ref()
-                    .map(crate::frontend::core::parser::ast::Type::fn_params_flat)
+                    .map(crate::ast::Type::fn_params_flat)
                     .unwrap_or_default();
                 let saved_ctx = self.enter_measured_fn(target, &signature);
                 if let Expr::Lambda { body, .. } = v.as_ref() {
@@ -1096,10 +1096,10 @@ impl<'a> TerminationChecker<'a> {
     }
 
     fn collect_assigned_names_from_stmt(
-        stmt: &crate::frontend::core::parser::ast::Stmt,
+        stmt: &crate::ast::Stmt,
         out: &mut Vec<String>,
     ) {
-        use crate::frontend::core::parser::ast::StmtKind;
+        use crate::ast::StmtKind;
         match &stmt.kind {
             StmtKind::Assign { target, .. } => {
                 if let Some(path) = Self::render_field_path(target) {
@@ -1199,7 +1199,7 @@ impl<'a> TerminationChecker<'a> {
                 value: Some(v),
                 ..
             } => {
-                use crate::frontend::core::parser::ast::Expr;
+                use crate::ast::Expr;
                 if let Expr::Var(name, _) = target.as_ref() {
                     let delta_info = self.analyze_delta(v, name);
                     // 位移**未知**的赋值同样要收进来：整条丢弃会让下游以为该变量
@@ -2362,7 +2362,7 @@ pub(crate) fn substitute_const_expr(
 /// 不在比较上做 De Morgan 规约——SMT 侧 `not (= b 0)` 与 `b != 0` 等价，
 /// 少一层变换就少一处可能出错的地方。
 pub(crate) fn negate_guard(
-    condition: &crate::frontend::core::parser::ast::Expr
+    condition: &crate::ast::Expr
 ) -> Option<crate::frontend::core::types::const_data::ConstExpr> {
     use crate::frontend::core::types::const_data::{ConstExpr, UnOp};
     use crate::frontend::core::types::eval::const_eval::convert_expr_to_const_expr;
@@ -2392,7 +2392,7 @@ pub(crate) fn negate_guard(
 ///
 /// 判错的方向是安全的：漏认 → 少压一条守卫 → 证明更难、不会造出假假设。
 fn block_diverges(stmts: &[Stmt]) -> bool {
-    use crate::frontend::core::parser::ast::{Expr, StmtKind};
+    use crate::ast::{Expr, StmtKind};
 
     let Some(last) = stmts.last() else {
         return false;

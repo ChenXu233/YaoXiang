@@ -228,7 +228,7 @@ impl<'a> ParserState<'a> {
     /// 释放计划身份（`Stmt::plan_id`）在此**统一发放**——语句构造在
     /// `parse_*_stmt` 里完成、语法入不了编号，故身份的单一来源是这里：
     /// 「每条经解析器产出的语句都有一个编译单元内唯一的身份」（RFC-039 D20）。
-    pub fn parse_statement(&mut self) -> Option<crate::frontend::core::parser::ast::Stmt> {
+    pub fn parse_statement(&mut self) -> Option<crate::ast::Stmt> {
         use crate::frontend::core::parser::statements::*;
         let ss = self.span();
         let stmt = match self.current().map(|t| &t.kind) {
@@ -276,7 +276,7 @@ impl<'a> ParserState<'a> {
     pub fn parse_expression(
         &mut self,
         min_bp: u8,
-    ) -> Option<crate::frontend::core::parser::ast::Expr> {
+    ) -> Option<crate::ast::Expr> {
         crate::frontend::core::parser::pratt::parse_expression_impl(self, min_bp)
     }
 }

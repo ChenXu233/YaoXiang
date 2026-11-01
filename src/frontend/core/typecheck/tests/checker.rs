@@ -10,7 +10,7 @@ use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parse;
 use crate::frontend::core::typecheck::checker::TypeChecker;
 use crate::frontend::core::types::{MonoType, PolyType};
-use crate::frontend::core::parser::ast::{Block, Module, PlanId, Stmt, Expr, Type as AstType};
+use crate::ast::{Block, Module, PlanId, Stmt, Expr, Type as AstType};
 use crate::util::diagnostic::Severity;
 use crate::util::span::Span;
 
@@ -38,7 +38,7 @@ fn expr_stmt(
     span: Span,
 ) -> Stmt {
     Stmt {
-        kind: crate::frontend::core::parser::ast::StmtKind::Expr(Box::new(expr)),
+        kind: crate::ast::StmtKind::Expr(Box::new(expr)),
         span,
         plan_id: PlanId::UNPLANNED,
     }
@@ -52,7 +52,7 @@ fn assign_stmt(
     span: Span,
 ) -> Stmt {
     Stmt {
-        kind: crate::frontend::core::parser::ast::StmtKind::Assign {
+        kind: crate::ast::StmtKind::Assign {
             target: Box::new(var(target, span)),
             type_annotation: ty,
             value: Some(Box::new(value)),
@@ -83,16 +83,14 @@ fn builtin_ty(name: &str) -> AstType {
 /// 单参函数类型 `(Int32) -> Int32`。
 fn int_fn_type() -> AstType {
     AstType::Fn {
-        params: vec![crate::frontend::core::parser::ast::Param::from_type(
-            builtin_ty("Int32"),
-        )],
+        params: vec![crate::ast::Param::from_type(builtin_ty("Int32"))],
         return_type: Box::new(builtin_ty("Int32")),
     }
 }
 
 /// `name: Int32` 形参。
-fn param(name: &str) -> crate::frontend::core::parser::ast::Param {
-    crate::frontend::core::parser::ast::Param {
+fn param(name: &str) -> crate::ast::Param {
+    crate::ast::Param {
         name: name.to_string(),
         ty: Some(builtin_ty("Int32")),
         is_mut: false,
@@ -123,7 +121,7 @@ fn int_identity_fn(name: &str) -> Stmt {
 /// `Assign` + `Lambda` 一种表达式形态。
 fn nested_fn_module() -> Module {
     let inner_fn = Expr::Lambda {
-        params: vec![crate::frontend::core::parser::ast::Param {
+        params: vec![crate::ast::Param {
             name: "y".to_string(),
             ty: Some(builtin_ty("Int32")),
             is_mut: false,
@@ -158,11 +156,11 @@ fn generic_wrapper_module() -> Module {
     module(vec![
         // Wrapper: Type = { value: T }  (泛型类型定义)
         Stmt {
-            kind: crate::frontend::core::parser::ast::StmtKind::TypeDefinition {
+            kind: crate::ast::StmtKind::TypeDefinition {
                 name: "Wrapper".to_string(),
                 // 签名载体：与 parser 对 `Wrapper: (T: Type) -> Type = {...}` 的产出同形
                 type_annotation: Some(AstType::Fn {
-                    params: vec![crate::frontend::core::parser::ast::Param {
+                    params: vec![crate::ast::Param {
                         name: "T".to_string(),
                         ty: Some(AstType::MetaType {
                             name_span: Span::dummy(),
@@ -177,17 +175,15 @@ fn generic_wrapper_module() -> Module {
                     }),
                 }),
                 definition: AstType::Struct {
-                    body: vec![crate::frontend::core::parser::ast::TypeBodyItem::Field(
-                        crate::frontend::core::parser::ast::StructField {
-                            name: "value".to_string(),
-                            is_mut: false,
-                            ty: AstType::Name {
-                                name: "T".to_string(),
-                                span: Span::dummy(),
-                            },
-                            default: None,
+                    body: vec![crate::ast::TypeBodyItem::Field(crate::ast::StructField {
+                        name: "value".to_string(),
+                        is_mut: false,
+                        ty: AstType::Name {
+                            name: "T".to_string(),
+                            span: Span::dummy(),
                         },
-                    )],
+                        default: None,
+                    })],
                 },
             },
             span: Span::dummy(),

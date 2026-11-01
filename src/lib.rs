@@ -21,6 +21,8 @@
 #![allow(clippy::mutable_key_type)]
 
 // Public modules
+// D1（6.7.1a）：AST 是与 parser 平级的顶层数据域，被前端/语义/IR/格式化各层共享。
+pub mod ast;
 pub mod backends;
 pub mod driver;
 pub mod formatter;
@@ -104,8 +106,8 @@ pub fn eval_code(source: &str) -> Result<()> {
     let has_main = parse_result.module.items.iter().any(|stmt| {
         matches!(
             &stmt.kind,
-            crate::frontend::core::parser::ast::StmtKind::Assign { target, .. }
-            if matches!(target.as_ref(), crate::frontend::core::parser::ast::Expr::Var(name, _) if name == "main")
+            crate::ast::StmtKind::Assign { target, .. }
+            if matches!(target.as_ref(), crate::ast::Expr::Var(name, _) if name == "main")
         )
     });
     let compile_source: String = if has_main {

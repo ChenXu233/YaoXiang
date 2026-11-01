@@ -9,7 +9,7 @@ use crate::formatter::handlers::expr::{
 use crate::formatter::context::FormatContext;
 use crate::formatter::source_map::SourceMap;
 use crate::formatter::FormatOptions;
-use crate::frontend::core::parser::ast::*;
+use crate::ast::*;
 use crate::util::span::Span;
 
 fn default_ctx() -> FormatContext {

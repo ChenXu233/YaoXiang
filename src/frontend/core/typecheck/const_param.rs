@@ -8,7 +8,7 @@
 
 use std::collections::HashSet;
 
-use crate::frontend::core::parser::ast::{GenericParam, GenericParamKind, Param, Type};
+use crate::ast::{GenericParam, GenericParamKind, Param, Type};
 use crate::frontend::core::types::const_data::{ConstKind, ConstVarDef};
 
 /// 精筛结果：命中者与落空者。

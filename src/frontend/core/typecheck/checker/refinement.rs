@@ -82,7 +82,7 @@ impl TypeChecker {
     /// 函数体/模块层作为最外层块，单元随走查结束整体丢弃，移除只是兜底。
     fn refined_walk_stmts(
         &self,
-        stmts: &[crate::frontend::core::parser::ast::Stmt],
+        stmts: &[crate::ast::Stmt],
         unit: &mut RefinedScopeUnit,
         ctx: &mut RefinedWalkCtx<'_, '_>,
     ) {
@@ -100,11 +100,11 @@ impl TypeChecker {
     /// 精化走查：单条语句。返回本语句注册的精化 dependant 名（供块退出清理）。
     fn refined_walk_stmt(
         &self,
-        stmt: &crate::frontend::core::parser::ast::Stmt,
+        stmt: &crate::ast::Stmt,
         unit: &mut RefinedScopeUnit,
         ctx: &mut RefinedWalkCtx<'_, '_>,
     ) -> Vec<String> {
-        use crate::frontend::core::parser::ast::{Expr, StmtKind};
+        use crate::ast::{Expr, StmtKind};
 
         match &stmt.kind {
             // 注解绑定 `x: T = v`：解析精化 → 注册依赖 + 初始校验 → 记录字面量值
@@ -141,10 +141,7 @@ impl TypeChecker {
                 }
                 // 绑定值是函数体 → 嵌套函数体独立单元走查（判定与
                 // `block_binding_is_function` 同源，#363：注解是推荐的函数写法）
-                if crate::frontend::core::parser::ast::Expr::block_binding_is_function(
-                    Some(type_ann),
-                    value.as_deref(),
-                ) {
+                if crate::ast::Expr::block_binding_is_function(Some(type_ann), value.as_deref()) {
                     if let Some(body) = extract_fn_body(value.as_deref()) {
                         let fn_name = match target.as_ref() {
                             Expr::Var(n, _) => Some(n.as_str()),
@@ -273,7 +270,7 @@ impl TypeChecker {
     fn refined_walk_branch_with_guard(
         &self,
         guard: Option<crate::frontend::core::types::const_data::ConstExpr>,
-        stmts: &[crate::frontend::core::parser::ast::Stmt],
+        stmts: &[crate::ast::Stmt],
         unit: &mut RefinedScopeUnit,
         ctx: &mut RefinedWalkCtx<'_, '_>,
     ) {
@@ -292,13 +289,10 @@ impl TypeChecker {
     /// 不产生验证义务（块局部，出块即清理）。不可判定时保守展开为多路径。
     fn refined_walk_if_paths(
         &self,
-        condition: &crate::frontend::core::parser::ast::Expr,
-        then_stmts: &[crate::frontend::core::parser::ast::Stmt],
-        else_ifs: &[(
-            Box<crate::frontend::core::parser::ast::Expr>,
-            Box<crate::frontend::core::parser::ast::Block>,
-        )],
-        else_branch: Option<&crate::frontend::core::parser::ast::Block>,
+        condition: &crate::ast::Expr,
+        then_stmts: &[crate::ast::Stmt],
+        else_ifs: &[(Box<crate::ast::Expr>, Box<crate::ast::Block>)],
+        else_branch: Option<&crate::ast::Block>,
         unit: &mut RefinedScopeUnit,
         ctx: &mut RefinedWalkCtx<'_, '_>,
     ) -> Vec<HashMap<String, crate::frontend::core::types::ConstValue>> {
@@ -365,7 +359,7 @@ impl TypeChecker {
     fn refined_walk_loop_body(
         &self,
         loop_var: Option<&str>,
-        body: &crate::frontend::core::parser::ast::Block,
+        body: &crate::ast::Block,
         unit: &mut RefinedScopeUnit,
         ctx: &mut RefinedWalkCtx<'_, '_>,
     ) {
@@ -406,10 +400,10 @@ impl TypeChecker {
     /// 代入返回值安全。
     fn resolve_return_refinement(
         &self,
-        type_ann: &crate::frontend::core::parser::ast::Type,
+        type_ann: &crate::ast::Type,
         diags: &mut Vec<Diagnostic>,
     ) -> Option<ReturnRefinement> {
-        use crate::frontend::core::parser::ast::Type as AstType;
+        use crate::ast::Type as AstType;
 
         // 签名形参从本注解的 Type::Fn 链拍平（6.5.2：不再有并行形参表）
         let params = type_ann.fn_params_flat();
@@ -465,7 +459,7 @@ impl TypeChecker {
     fn refine_predicate_from_ast_args(
         &self,
         name: &str,
-        args: &[crate::frontend::core::parser::ast::Type],
+        args: &[crate::ast::Type],
     ) -> Option<MonoType> {
         // 1. 编译期谓词定义（单参数）：实参代入谓词体模板
         if let Some(def) = self.env.predicate_defs.get(name) {
@@ -511,9 +505,9 @@ impl TypeChecker {
     /// 使实参覆盖面与既有路径一致。
     fn ast_type_to_const_expr(
         &self,
-        ty: &crate::frontend::core::parser::ast::Type,
+        ty: &crate::ast::Type,
     ) -> Option<ConstExpr> {
-        use crate::frontend::core::parser::ast::Type as AstType;
+        use crate::ast::Type as AstType;
         match ty {
             AstType::ConstExpr(expr) => convert_expr_to_const_expr(expr),
             AstType::Paren(inner) | AstType::NamedParen { inner, .. } => {
@@ -527,7 +521,7 @@ impl TypeChecker {
     /// 不与外层或兄弟函数互通（跨函数同名不互相触发重验证）
     fn refined_walk_fn_body(
         &self,
-        body: &crate::frontend::core::parser::ast::Block,
+        body: &crate::ast::Block,
         fn_name: Option<&str>,
         ret_refinement: Option<ReturnRefinement>,
         ctx: &mut RefinedWalkCtx<'_, '_>,
@@ -565,11 +559,8 @@ impl TypeChecker {
         //（`bad: (b: IsPositive(b)) -> (r: IsPositive(r)) = { b - 1 }` 无 `return` 关键字）。
         // 显式 `return` 已在 `refined_walk_stmt` 里查过，不重复。
         if let Some(last) = body.stmts.last() {
-            if let crate::frontend::core::parser::ast::StmtKind::Expr(e) = &last.kind {
-                if !matches!(
-                    e.as_ref(),
-                    crate::frontend::core::parser::ast::Expr::Return(..)
-                ) {
+            if let crate::ast::StmtKind::Expr(e) = &last.kind {
+                if !matches!(e.as_ref(), crate::ast::Expr::Return(..)) {
                     self.check_return_refinement(e, last.span, &fn_unit, ctx);
                 }
             }
@@ -978,10 +969,8 @@ struct ReturnRefinement {
 
 /// 剥离类型外侧的括号：精化解析里 `Paren`（RFC-004）与 `NamedParen`
 ///（RFC-027 §3 具名形态）同为透明，只递归内层。
-fn strip_type_parens(
-    ty: &crate::frontend::core::parser::ast::Type
-) -> &crate::frontend::core::parser::ast::Type {
-    use crate::frontend::core::parser::ast::Type as AstType;
+fn strip_type_parens(ty: &crate::ast::Type) -> &crate::ast::Type {
+    use crate::ast::Type as AstType;
     match ty {
         AstType::Paren(inner) => strip_type_parens(inner),
         AstType::NamedParen { inner, .. } => strip_type_parens(inner),
@@ -1035,10 +1024,8 @@ fn meet_value_paths(
 /// 收集语句列表中被**改写**的变量名（无注解赋值 `x = v` 的目标），
 /// 供循环体作废字面量值。注解绑定（`mut x: T = ...`）每次迭代重新
 /// 初始化且字面量值恒定，不在收集之列。递归覆盖嵌套控制流与值块。
-fn collect_assigned_var_names(
-    stmts: &[crate::frontend::core::parser::ast::Stmt]
-) -> std::collections::HashSet<String> {
-    use crate::frontend::core::parser::ast::{Expr, StmtKind};
+fn collect_assigned_var_names(stmts: &[crate::ast::Stmt]) -> std::collections::HashSet<String> {
+    use crate::ast::{Expr, StmtKind};
     let mut assigned = std::collections::HashSet::new();
     for stmt in stmts {
         match &stmt.kind {
@@ -1087,10 +1074,10 @@ fn collect_assigned_var_names(
 
 /// 表达式形态的控制流体内改写收集（值块 / While / For 表达式）
 fn collect_assigned_in_expr(
-    expr: &crate::frontend::core::parser::ast::Expr,
+    expr: &crate::ast::Expr,
     assigned: &mut std::collections::HashSet<String>,
 ) {
-    use crate::frontend::core::parser::ast::Expr;
+    use crate::ast::Expr;
     match expr {
         Expr::Block(block) => {
             assigned.extend(collect_assigned_var_names(&block.stmts));

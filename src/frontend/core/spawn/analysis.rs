@@ -12,7 +12,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use crate::frontend::core::parser::ast::{BinOp, Block, Expr, FStringSegment, Stmt, StmtKind};
+use crate::ast::{BinOp, Block, Expr, FStringSegment, Stmt, StmtKind};
 use crate::frontend::core::types::{MonoType, TraitTable};
 use crate::middle::core::ir::{ExecutionPlan, TaskGroup};
 

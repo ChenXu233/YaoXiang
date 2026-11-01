@@ -4,7 +4,7 @@
 //! unary ops, control flow, ref, unsafe, eval block, spawn.
 
 use crate::frontend::core::lexer::tokenize;
-use crate::frontend::core::parser::ast::{Expr, UnOp};
+use crate::ast::{Expr, UnOp};
 use crate::frontend::core::parser::{NullProbe, ParserState};
 
 fn parse_expr(source: &str) -> Expr {

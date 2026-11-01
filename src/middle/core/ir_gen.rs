@@ -10,7 +10,7 @@
 //! 3. 可测试性：独立的模块便于单元测试
 
 use crate::frontend::core::lexer::tokens::Literal;
-use crate::frontend::core::parser::ast::{self, Expr};
+use crate::ast::{self, Expr};
 use crate::frontend::module::registry::ModuleRegistry;
 use crate::frontend::module::ModuleSource;
 use crate::frontend::module::resolver::Resolver;
@@ -143,7 +143,7 @@ pub struct AstToIrGenerator {
     next_lib_id: usize,
     /// 结构体定义映射（类型名 -> 字段列表）
     /// 用于构造器调用时填充默认值
-    struct_definitions: HashMap<String, Vec<crate::frontend::core::parser::ast::StructField>>,
+    struct_definitions: HashMap<String, Vec<crate::ast::StructField>>,
     /// RFC-010 和类型的类型参数名（载荷类型替换用，见 sum_type_variants）
     sum_type_param_names: HashMap<String, Vec<String>>,
     /// 本模块声明的**全部**类型名（含泛型类型定义）。
@@ -697,7 +697,7 @@ impl AstToIrGenerator {
             ast::Type::Fn {
                 params,
                 return_type,
-            } => crate::frontend::core::parser::ast::is_type_level_fn(params, return_type),
+            } => crate::ast::is_type_level_fn(params, return_type),
             _ => false,
         }
     }
@@ -1979,13 +1979,13 @@ impl AstToIrGenerator {
                 definition,
             } => {
                 self.declared_type_names.insert(name.clone());
-                use crate::frontend::core::parser::ast::extract_generic_param_names;
+                use crate::ast::extract_generic_param_names;
                 use crate::frontend::core::types::mono::UniverseLevel;
 
                 // 泛型形参的唯一来源：声明注解的 Type::Fn 链（6.5.2）
                 let signature = type_annotation
                     .as_ref()
-                    .map(crate::frontend::core::parser::ast::Type::fn_params_flat)
+                    .map(crate::ast::Type::fn_params_flat)
                     .unwrap_or_default();
 
                 // 提取泛型参数名。探针传 L3 语义实现：约束名 / 内置名定种必须以
@@ -2112,11 +2112,11 @@ impl AstToIrGenerator {
                 value,
                 ..
             } => {
-                use crate::frontend::core::parser::ast::Expr;
+                use crate::ast::Expr;
                 // 签名形参的唯一来源：注解的 Type::Fn 链（6.5.2）
                 let signature = type_annotation
                     .as_ref()
-                    .map(crate::frontend::core::parser::ast::Type::fn_params_flat)
+                    .map(crate::ast::Type::fn_params_flat)
                     .unwrap_or_default();
                 let (name, type_name) = match target.as_ref() {
                     Expr::Var(n, _) => (n.clone(), None),
@@ -2144,10 +2144,7 @@ impl AstToIrGenerator {
                     (Vec::new(), Vec::new())
                 };
                 let generic_params =
-                    crate::frontend::core::parser::ast::extract_generic_param_names(
-                        &signature,
-                        &SemanticProbe,
-                    );
+                    crate::ast::extract_generic_param_names(&signature, &SemanticProbe);
                 // 登记形参名，供命名参数调用（`add(b = 5, a = 3)`）重排实参。
                 // 名字取自 Lambda 形参（`params`）——那是**过滤后的值参数**表；
                 // 签名侧形参（`signature`）含类型位/约束位，名字口径不同。
@@ -3680,11 +3677,11 @@ impl AstToIrGenerator {
                 span,
                 ..
             } => {
-                use crate::frontend::core::parser::ast::Expr;
+                use crate::ast::Expr;
                 // 签名形参的唯一来源：注解的 Type::Fn 链（6.5.2）
                 let signature = type_annotation
                     .as_ref()
-                    .map(crate::frontend::core::parser::ast::Type::fn_params_flat)
+                    .map(crate::ast::Type::fn_params_flat)
                     .unwrap_or_default();
                 // 字段赋值：q.x = v / m.x = v（m 是 &mut 令牌）。
                 // Struct 运行时值是堆句柄，StoreField 原地写共享对象——
@@ -3781,10 +3778,7 @@ impl AstToIrGenerator {
                 // 如果有 params/body，是嵌套函数
                 if !params.is_empty() || !body.is_empty() {
                     let generic_params =
-                        crate::frontend::core::parser::ast::extract_generic_param_names(
-                            &signature,
-                            &SemanticProbe,
-                        );
+                        crate::ast::extract_generic_param_names(&signature, &SemanticProbe);
                     let generic_param_names = if generic_params.is_empty() {
                         None
                     } else {
@@ -8112,7 +8106,7 @@ impl AstToIrGenerator {
         &self,
         func: &Expr,
     ) -> Option<(String, usize, usize)> {
-        use crate::frontend::core::parser::ast::Expr;
+        use crate::ast::Expr;
         if let Expr::FieldAccess {
             expr: base_expr,
             field: variant_name,
@@ -9259,7 +9253,7 @@ impl AstToIrGenerator {
 /// 这是编译器流程中的关键入口点：
 /// 类型检查 → IR 生成 → 代码生成
 pub fn generate_ir(
-    ast: &crate::frontend::core::parser::ast::Module,
+    ast: &crate::ast::Module,
     result: &crate::frontend::core::typecheck::TypeCheckResult,
 ) -> Result<crate::middle::ModuleIR, Vec<Diagnostic>> {
     // 单文件模式：仅 std 注册表，module_key 为 None → 不启用模块限定。
@@ -9275,9 +9269,9 @@ pub fn generate_ir(
 /// 这一个文件生成 IR。各文件产出的 `ModuleIR` 由编排器在 IR 层链接。
 #[allow(clippy::too_many_arguments)]
 pub fn generate_ir_with_context(
-    ast: &crate::frontend::core::parser::ast::Module,
+    ast: &crate::ast::Module,
     result: &crate::frontend::core::typecheck::TypeCheckResult,
-    cross_file_types: &[&crate::frontend::core::parser::ast::Module],
+    cross_file_types: &[&crate::ast::Module],
     global_layout: &[(String, usize)],
     // 本文件顶层绑定的槽位起始号（编排器分配，保证各文件区间不相交）
     global_slot_base: usize,
@@ -9308,15 +9302,15 @@ pub fn generate_ir_with_context(
 /// 仅做保守的语法级遍历：多收集一个变量只会多一条 env 槽位（不影响正确性），
 /// 漏收集才会导致闭包体内 `LoadUpvalue` 越界，故宁多勿少。
 fn collect_free_vars_stmt(
-    stmt: &crate::frontend::core::parser::ast::Stmt,
+    stmt: &crate::ast::Stmt,
     bound: &std::collections::HashSet<&str>,
     seen: &mut std::collections::HashSet<String>,
     out: &mut Vec<String>,
 ) {
-    use crate::frontend::core::parser::ast::StmtKind;
+    use crate::ast::StmtKind;
     // 小工具：走一个块（避免闭包借用冲突）
     fn walk_block(
-        b: &crate::frontend::core::parser::ast::Block,
+        b: &crate::ast::Block,
         bound: &std::collections::HashSet<&str>,
         seen: &mut std::collections::HashSet<String>,
         out: &mut Vec<String>,
@@ -9362,12 +9356,12 @@ fn collect_free_vars_stmt(
 
 /// 表达式层的自由变量收集（递归）。
 fn collect_free_vars_expr(
-    expr: &crate::frontend::core::parser::ast::Expr,
+    expr: &crate::ast::Expr,
     bound: &std::collections::HashSet<&str>,
     seen: &mut std::collections::HashSet<String>,
     out: &mut Vec<String>,
 ) {
-    use crate::frontend::core::parser::ast::Expr;
+    use crate::ast::Expr;
     match expr {
         Expr::Var(name, _) => {
             if !bound.contains(name.as_str()) && seen.insert(name.clone()) {

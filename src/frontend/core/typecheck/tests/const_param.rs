@@ -10,7 +10,7 @@
 
 use std::collections::HashSet;
 
-use crate::frontend::core::parser::ast::{GenericParam, GenericParamKind, Param, Type};
+use crate::ast::{GenericParam, GenericParamKind, Param, Type};
 use crate::frontend::core::typecheck::const_param::{ast_type_to_const_kind, resolve_const_candidates};
 use crate::frontend::core::types::const_data::ConstKind;
 use crate::util::span::Span;

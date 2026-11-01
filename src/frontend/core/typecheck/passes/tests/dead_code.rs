@@ -8,12 +8,12 @@
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parse;
 use crate::frontend::core::typecheck::passes::dead_code::{DeadCodeAnalyzer, DeadCodeWarning};
-use crate::frontend::core::parser::ast::{Block, Module, PlanId, Stmt, StmtKind, Expr, Type};
+use crate::ast::{Block, Module, PlanId, Stmt, StmtKind, Expr, Type};
 use crate::util::span::Span;
 
 /// 私有类型 `Outer { inner: Inner }`——字段类型引用私有类型 Inner。
 fn outer_with_inner_field() -> Stmt {
-    use crate::frontend::core::parser::ast::{StructField, TypeBodyItem};
+    use crate::ast::{StructField, TypeBodyItem};
     Stmt {
         kind: StmtKind::TypeDefinition {
             name: "Outer".to_string(),
@@ -42,7 +42,7 @@ fn module_with_point_param_annotation() -> Module {
                 target: Box::new(Expr::Var("main".to_string(), Span::dummy())),
                 type_annotation: None,
                 value: Some(Box::new(Expr::Lambda {
-                    params: vec![crate::frontend::core::parser::ast::Param {
+                    params: vec![crate::ast::Param {
                         name: "p".to_string(),
                         ty: Some(Type::Name {
                             name: "Point".to_string(),
@@ -608,7 +608,7 @@ fn make_match_stmt(
     pattern_type: &str,
     body_stmts: Vec<Stmt>,
 ) -> Stmt {
-    use crate::frontend::core::parser::ast::{MatchArm, Pattern};
+    use crate::ast::{MatchArm, Pattern};
     Stmt {
         kind: StmtKind::Expr(Box::new(Expr::Match {
             expr: Box::new(Expr::Var(scrutinee.to_string(), Span::dummy())),

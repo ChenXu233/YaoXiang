@@ -1,7 +1,6 @@
 //! Parser module
 //! Implements a Pratt Parser for the YaoXiang language with RFC-004/010/011 support.
 
-pub mod ast;
 pub mod parser_state;
 pub mod pratt;
 pub mod probe;
@@ -12,7 +11,9 @@ pub mod tests;
 pub use parser_state::{ParserState, parse_msg};
 pub use probe::{NameKind, NullProbe, TypeEnvProbe};
 pub use pratt::*;
-pub use ast::*;
+// D1（6.7.1a）：AST 顶层化后 parser 不再拥有 ast 子模块，只把顶层 `crate::ast` 的项
+// 再导出，使 `parser::Stmt` / `parser::Module` 这类既有路径继续成立。
+pub use crate::ast::*;
 pub use crate::frontend::core::lexer::tokens::*;
 pub use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};
 pub use crate::util::span::Span;

@@ -21,7 +21,7 @@
 //! （`typecheck::signature::export_signature_param_info` 的必需下限）：两侧各算一份
 //! 就会分歧——实测 ir_gen 曾硬编全必需位，把合法的「省略可选位」命名调用误报 E1010。
 
-use crate::frontend::core::parser::ast::Expr;
+use crate::ast::Expr;
 use crate::util::diagnostic::{ErrorCodeDefinition, Result};
 use crate::util::span::Span;
 

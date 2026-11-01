@@ -28,7 +28,7 @@ impl TypeChecker {
     /// 泛型参数名（`(A: Type)` 形态）先剔出来置顶跳过。
     pub(super) fn check_annotation_type_names(
         &mut self,
-        stmt: &crate::frontend::core::parser::ast::Stmt,
+        stmt: &crate::ast::Stmt,
     ) {
         self.check_annotation_type_names_with(stmt, &[]);
     }
@@ -39,10 +39,10 @@ impl TypeChecker {
     /// 函数体内的绑定/lambda 形参注解可以引用它们，不能当未知名报错。
     fn check_annotation_type_names_with(
         &mut self,
-        stmt: &crate::frontend::core::parser::ast::Stmt,
+        stmt: &crate::ast::Stmt,
         inherited: &[String],
     ) {
-        use crate::frontend::core::parser::ast::{StmtKind, Type as T};
+        use crate::ast::{StmtKind, Type as T};
 
         // 形参从声明注解的 `Type::Fn` 链拍平（6.5.2：不再有并行形参表）。
         // `definition` 只对类型定义存在；其签名不做“顶层注解扫描”（保持 6.5.2
@@ -59,7 +59,7 @@ impl TypeChecker {
             _ => return,
         };
         let params = annotation_for_params
-            .map(crate::frontend::core::parser::ast::Type::fn_params_flat)
+            .map(crate::ast::Type::fn_params_flat)
             .unwrap_or_default();
         let type_annotation: Option<&T> = match &stmt.kind {
             StmtKind::Assign {
@@ -79,7 +79,7 @@ impl TypeChecker {
             // 6.4 合并后的单一实现。本站点与 6.4 之前**同判定**：不做谓词短路
             // （传空谓词集）——谓词应用的实参位由本文件的 `is_predicate_head`
             // 在别处单独排除，此处改动会改诊断发射面。
-            use crate::frontend::core::parser::ast::name_used_as_type;
+            use crate::ast::name_used_as_type;
             let not_predicate = &|_: &str| false;
             let mut names: Vec<String> = inherited.to_vec();
             for p in &params {
@@ -144,10 +144,10 @@ impl TypeChecker {
     /// 下钻语句的嵌套作用域校验注解（B6）。只下钻承载函数体/块的位置。
     fn check_nested_annotations(
         &mut self,
-        stmt: &crate::frontend::core::parser::ast::Stmt,
+        stmt: &crate::ast::Stmt,
         inherited: &[String],
     ) {
-        use crate::frontend::core::parser::ast::StmtKind;
+        use crate::ast::StmtKind;
         match &stmt.kind {
             StmtKind::Assign { value, .. } => {
                 if let Some(e) = value.as_deref() {
@@ -183,10 +183,10 @@ impl TypeChecker {
     /// 表达式内的嵌套作用域下钻（块 / lambda / 循环 / 分支）。
     fn check_nested_annotations_in_expr(
         &mut self,
-        expr: &crate::frontend::core::parser::ast::Expr,
+        expr: &crate::ast::Expr,
         inherited: &[String],
     ) {
-        use crate::frontend::core::parser::ast::Expr;
+        use crate::ast::Expr;
         match expr {
             Expr::Block(b) => {
                 for s in &b.stmts {
@@ -255,10 +255,10 @@ impl TypeChecker {
     /// 要根治需给关联类型一个**区别于数据字段的语法形态**（如 `type Name: T`），
     /// 属语言设计变更，不在本修复范围。
     fn collect_member_names(
-        ty: &crate::frontend::core::parser::ast::Type,
+        ty: &crate::ast::Type,
         out: &mut Vec<String>,
     ) {
-        use crate::frontend::core::parser::ast::{Type as T, TypeBodyItem};
+        use crate::ast::{Type as T, TypeBodyItem};
         match ty {
             T::Struct { body } => {
                 for item in body {
@@ -282,10 +282,8 @@ impl TypeChecker {
     /// 它在类型位置无合法解释（编译期值参数不用下标），而默认路径会把它
     /// 静默变成一个名叫 `<const-expr>` 的占位类型，直到使用处才报出
     /// 完全无关的错误。
-    fn index_expr_head(
-        expr: &crate::frontend::core::parser::ast::Expr
-    ) -> Option<(String, crate::util::span::Span)> {
-        use crate::frontend::core::parser::ast::Expr as E;
+    fn index_expr_head(expr: &crate::ast::Expr) -> Option<(String, crate::util::span::Span)> {
+        use crate::ast::Expr as E;
         match expr {
             E::Index { expr, .. } => match expr.as_ref() {
                 E::Var(name, span) => Some((name.clone(), *span)),
@@ -310,7 +308,7 @@ impl TypeChecker {
     /// 它们是声明处绑定的局部名字，不是可解析类型。
     fn check_type_names_in(
         &mut self,
-        ty: &crate::frontend::core::parser::ast::Type,
+        ty: &crate::ast::Type,
         generic_names: &[String],
     ) {
         let mut unknown: Vec<(String, crate::util::span::Span, bool)> = Vec::new();
@@ -348,12 +346,12 @@ impl TypeChecker {
 
     /// 递归收集注解中无法解析的类型名（#372）。
     fn collect_unknown_type_names(
-        ty: &crate::frontend::core::parser::ast::Type,
+        ty: &crate::ast::Type,
         generic_names: &[String],
         env: &crate::frontend::core::typecheck::environment::TypeEnvironment,
         out: &mut Vec<(String, crate::util::span::Span, bool)>,
     ) {
-        use crate::frontend::core::parser::ast::Type as T;
+        use crate::ast::Type as T;
         match ty {
             T::Name { name, span } => {
                 if !generic_names.iter().any(|g| g == name) && !env.resolves_type_name(name) {
@@ -410,7 +408,7 @@ impl TypeChecker {
             }
             T::Struct { body } => {
                 for item in body {
-                    if let crate::frontend::core::parser::ast::TypeBodyItem::Field(f) = item {
+                    if let crate::ast::TypeBodyItem::Field(f) = item {
                         Self::collect_unknown_type_names(&f.ty, generic_names, env, out);
                     }
                 }

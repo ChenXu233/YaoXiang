@@ -4,7 +4,7 @@
 //! + 补充 expand_type 各类容器变体的测试
 
 use crate::frontend::core::types::{MonoType, PolyType, StructType, TypeVar};
-use crate::frontend::core::parser::ast;
+use crate::ast;
 use crate::frontend::core::lexer::tokens::Literal;
 use crate::frontend::core::types::EnumType;
 use crate::util::span::Span;

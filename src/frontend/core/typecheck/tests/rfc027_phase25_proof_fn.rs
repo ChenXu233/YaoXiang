@@ -151,7 +151,7 @@ fn test_call_with_named_var_args() {
 // 规范来源: RFC-027 §4.2 Phase 2.5 — 证明函数执行管线
 
 use crate::frontend::proof_execution::execute_single_proof_fn;
-use crate::frontend::core::parser::ast::{
+use crate::ast::{
     BinOp as AstBinOp, Block, Expr, Literal, Module, Param, PlanId, Stmt, StmtKind,
     Type as AstType, TypeBodyItem,
 };

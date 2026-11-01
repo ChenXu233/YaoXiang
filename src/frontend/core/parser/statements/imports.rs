@@ -6,7 +6,7 @@
 //! - `use path as alias;`
 
 use crate::frontend::core::lexer::tokens::*;
-use crate::frontend::core::parser::ast::*;
+use crate::ast::*;
 use crate::frontend::core::parser::{ParserState};
 use crate::util::diagnostic::ErrorCodeDefinition;
 use crate::util::span::Span;

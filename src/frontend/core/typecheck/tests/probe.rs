@@ -11,7 +11,7 @@
 //!   且**不得**宽化成 `kind_of == Builtin`（那是 12 个规范名 + 别名）
 //! - 定种：`SemanticProbe::kind_of` ↔ 上述三张表 + `from_builtin_name`
 
-use crate::frontend::core::parser::ast::extract_generic_param_names;
+use crate::ast::extract_generic_param_names;
 use crate::frontend::core::parser::{NameKind, NullProbe, TypeEnvProbe};
 use crate::frontend::core::typecheck::operator_interfaces::SPECS;
 use crate::frontend::core::typecheck::probe::{
@@ -179,12 +179,12 @@ fn test_semantic_probe_and_null_probe_differ_on_const_param() {
         .items
         .iter()
         .find_map(|s| match &s.kind {
-            crate::frontend::core::parser::ast::StmtKind::Assign {
+            crate::ast::StmtKind::Assign {
                 type_annotation, ..
             } => {
                 let params = type_annotation
                     .as_ref()
-                    .map(crate::frontend::core::parser::ast::Type::fn_params_flat)
+                    .map(crate::ast::Type::fn_params_flat)
                     .unwrap_or_default();
                 if params.is_empty() {
                     None

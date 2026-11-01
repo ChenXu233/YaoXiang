@@ -4,7 +4,7 @@
 //! - **A** `from_builtin_name`（`MONO_REL`）：名字 → MonoType 的解析表；每个 match 臂的**首个写法**
 //!   视为规范名，其余为别名（依据：源码每臂都把规范大写写法放首位）。
 //! - **B** `CONST_PARAM_TYPES`（`TYPECHECK_PROBE_REL`）：可作 const 泛型参数的类型名
-//!   （**A 的子集**语义；WBS 6.6.9 之前住在 `parser/ast.rs`，随 parser 封闭集清零移回 L3）。
+//!   （**A 的子集**语义；WBS 6.6.9 之前住在当时的 `parser/ast.rs`（6.7.1a 起为顶层 `ast/`），随 parser 封闭集清零移回 L3）。
 //! - **C** LSP 内置类型名清单（`LSP_REL`）：hover/definition 展示名（**A 规范名的超集**语义）。
 //!
 //! 三条检查：

@@ -10,7 +10,7 @@
 //! 现在一律经 [`is_builtin_predicate_name`]。
 //!
 //! 同理，**可作 const 泛型参数的类型名**表（[`CONST_PARAM_TYPES`]）的唯一权威也在
-//! 本模块（WBS 6.6.9 从 `parser::ast` 移回）：parser 只经
+//! 本模块（WBS 6.6.9 从 AST 模块移回，6.7.1a 起该模块是顶层 `ast/`）：parser 只经
 //! [`TypeEnvProbe::is_const_param_type`](crate::frontend::core::parser::probe::TypeEnvProbe)
 //! 提问，不再持有副本（`check-boundary.py` B6 归零）。
 //!
@@ -21,7 +21,7 @@
 
 // 依赖倒置：L3 实现 L2 定义的判定接口（TypeEnvProbe），读的是接口契约而不是
 // parser 的行为；方向仍是「L3 实现者 → L2 接口」，不构成 L2→L3 反向依赖。
-// reason: 接口契约属数据面（同 parser::ast / lexer::tokens 的豁免口径），非 parser 行为
+// reason: 接口契约属数据面（同 lexer::tokens 的豁免口径），非 parser 行为
 use crate::frontend::core::parser::probe::{NameKind, TypeEnvProbe};
 // 数据面引用（parser::ast 豁免口径，同上）——`TypeLevelNamespace::scan` 的参数类型
 use crate::frontend::core::parser::ast::Module;
@@ -42,7 +42,7 @@ pub fn is_builtin_predicate_name(name: &str) -> bool {
 /// 可作 **const 泛型参数**的类型名（`(N: Int)` 的 `Int`）。
 ///
 /// 语义 = 「内置名表（`MonoType::from_builtin_name`）里可被 const 参数接受的**子集**」。
-/// 本表是 L3 的**唯一权威**（WBS 6.6.9 从 `parser::ast` 移回此处）：parser（L2）只经
+/// 本表是 L3 的**唯一权威**（WBS 6.6.9 从 AST 模块移回此处，现为顶层 `ast/`）：parser（L2）只经
 /// `TypeEnvProbe::is_const_param_type` 提问，不再持有副本。
 ///
 /// 6.4 删掉了 10 个旧拼写（`I8` / `I16` / `I32` / `I64` / `U8` / `U16` / `U32` /

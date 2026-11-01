@@ -6,9 +6,7 @@
 //! RFC-024 §2.4: spawn for 数据并行
 //! RFC-018 §5: spawn 块代码生成
 
-use crate::frontend::core::parser::ast::{
-    BinOp, Block, Expr, FStringSegment, MatchArm, Pattern, PlanId, Stmt, StmtKind,
-};
+use crate::ast::{BinOp, Block, Expr, FStringSegment, MatchArm, Pattern, PlanId, Stmt, StmtKind};
 use crate::frontend::core::spawn::analysis::{
     analyze_reads_writes, analyze_spawn_body, analyze_spawn_for, build_execution_plan,
     is_direct_child, is_spawn_tail_expr,
@@ -300,7 +298,7 @@ fn test_reads_writes_cast_expr() {
     // Arrange
     let expr = Expr::Cast {
         expr: Box::new(var_expr("x")),
-        target_type: crate::frontend::core::parser::ast::Type::Name {
+        target_type: crate::ast::Type::Name {
             name: "Int".to_string(),
             span: dummy_span(),
         },

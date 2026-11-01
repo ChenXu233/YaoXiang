@@ -481,7 +481,7 @@ impl SourceMap {
         &mut self,
         old_order: &[usize],
         new_order: &[usize],
-        import_stmts: &[&crate::frontend::core::parser::ast::Stmt],
+        import_stmts: &[&crate::ast::Stmt],
     ) {
         // 1. 为每个旧导入索引关联其注释
         let mut comments_per_import: Vec<Vec<Comment>> = Vec::new();

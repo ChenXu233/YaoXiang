@@ -6,7 +6,7 @@ pub use crate::frontend::core::lexer::tokens::Literal;
 pub use crate::util::plan_id::PlanId;
 use crate::util::span::Span;
 
-use super::probe::{NameKind, TypeEnvProbe};
+use crate::frontend::core::parser::probe::{NameKind, TypeEnvProbe};
 
 #[derive(Debug, Clone)]
 pub struct SpannedIdent {
@@ -1299,9 +1299,7 @@ impl Expr {
         // 块内**直接**包含类型定义，且尾表达式引用该类型名
         let mut def_names: Vec<&str> = Vec::new();
         for st in &body.stmts {
-            if let crate::frontend::core::parser::ast::StmtKind::TypeDefinition { name, .. } =
-                &st.kind
-            {
+            if let crate::ast::StmtKind::TypeDefinition { name, .. } = &st.kind {
                 def_names.push(name.as_str());
             }
         }
@@ -1310,7 +1308,7 @@ impl Expr {
         }
         matches!(
             body.stmts.last().map(|s| &s.kind),
-            Some(crate::frontend::core::parser::ast::StmtKind::Expr(e))
+            Some(crate::ast::StmtKind::Expr(e))
                 if matches!(e.as_ref(), Expr::Var(n, _) if def_names.contains(&n.as_str()))
         )
     }

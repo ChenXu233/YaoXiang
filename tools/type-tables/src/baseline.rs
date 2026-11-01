@@ -38,6 +38,13 @@
 //! 口径同批删掉 `REBUILD_FUNCTIONS` / [`SCOUT_BASELINE_CALIBER`] 里的同一条登记——
 //! 这两处**必须成对**改，只改一处会先报「口径与基线不同代」并跳过数字比对。
 //!
+//! **6.7.1a 刷新（2026-11-01）**：AST 顶层化（`frontend/core/parser/ast.rs` → `src/ast/mod.rs`）
+//! 是**纯搬移**——变体定义行与三类构造点所在行逐行不变，故 [`SCOUT_BASELINE`] 的四个数字
+//! 全部不动；本批只把 [`crate::AST_REL`] 改指新家目录，让门禁按新路径找到 `pub enum Type`、
+//! 并让漂移报错里的 `file:line` 指得对。**不新增/删除任何构造点** ⇒ 基线数字对搬迁前后的
+//! 两棵树同样成立（本批实测逐列一致）；故 [`SCOUT_BASELINE_REV`] 保持 6.6.12 的树不倒填
+//! （提交号在推送后才可取，见 AGENTS.md「团队编排约定」第 6 条）。
+//!
 //! 上一次冻结（6.3，删除 03 §5.2 的 13 个死变体后）见 git 历史；6.0 原始勘察冻结于
 //! `bfe2f6ba366ff0c45f517a4bec8d7e87b0a59696`（见 09a §P6 6.0）。
 //!
@@ -675,7 +682,7 @@ mod tests {
             "该列的全部构造点都要列出，实际：{rendered}"
         );
         assert!(
-            rendered.contains("src/frontend/core/parser/ast.rs:446"),
+            rendered.contains("src/ast/mod.rs:446"),
             "漂移报错还应带变体定义行，实际：{rendered}"
         );
     }
@@ -695,7 +702,7 @@ mod tests {
 
         // Assert
         assert!(
-            rendered.contains("src/frontend/core/parser/ast.rs:600"),
+            rendered.contains("src/ast/mod.rs:600"),
             "基线外新增变体必须带定义行，实际：{rendered}"
         );
         assert!(

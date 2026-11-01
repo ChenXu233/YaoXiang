@@ -2,7 +2,7 @@
 
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parse;
-use crate::frontend::core::parser::ast::{extract_generic_param_names, Expr, StmtKind, Type};
+use crate::ast::{extract_generic_param_names, Expr, StmtKind, Type};
 use crate::frontend::core::parser::NullProbe;
 
 fn parse_stmt(source: &str) -> StmtKind {
@@ -19,7 +19,7 @@ fn parse_stmt(source: &str) -> StmtKind {
 fn test_var_simple() {
     let kind = parse_stmt("x = 42");
     assert!(
-        matches!(&kind, StmtKind::Assign { target, .. } if matches!(target.as_ref(), crate::frontend::core::parser::ast::Expr::Var(name, _) if name == "x"))
+        matches!(&kind, StmtKind::Assign { target, .. } if matches!(target.as_ref(), crate::ast::Expr::Var(name, _) if name == "x"))
     );
 }
 
@@ -91,7 +91,7 @@ fn test_var_block_initializer_is_binding() {
     let kind = parse_stmt("main = { x = 42 }");
     // main = { ... } 应该解析为 Binding（函数体）
     assert!(
-        matches!(&kind, StmtKind::Assign { target, .. } if matches!(target.as_ref(), crate::frontend::core::parser::ast::Expr::Var(name, _) if name == "main"))
+        matches!(&kind, StmtKind::Assign { target, .. } if matches!(target.as_ref(), crate::ast::Expr::Var(name, _) if name == "main"))
     );
 }
 
@@ -206,7 +206,7 @@ fn test_type_def_generic() {
     };
     let params = type_annotation
         .as_ref()
-        .map(crate::frontend::core::parser::ast::Type::fn_params_flat)
+        .map(crate::ast::Type::fn_params_flat)
         .unwrap_or_default();
     let generic_params = extract_generic_param_names(&params, &NullProbe);
 
@@ -287,7 +287,7 @@ fn test_type_fn_params_carry_signature_verbatim() {
     // 故“拍平结果 == 第一组”是巧合；多组签名见 curried 测试）。
     let params = type_annotation
         .as_ref()
-        .map(crate::frontend::core::parser::ast::Type::fn_params_flat)
+        .map(crate::ast::Type::fn_params_flat)
         .unwrap_or_default();
 
     assert_eq!(params.len(), 2, "签名形参应原样保留（泛型 T 与值参数 x）");
@@ -309,18 +309,18 @@ fn test_type_fn_params_carry_signature_verbatim() {
 fn test_anonymous_param_never_yields_generic_name() {
     // Arrange：三个可分类形态（MetaType / const 名 / 约束名）全部以匿名形参给出
     let params = vec![
-        crate::frontend::core::parser::ast::Param::anonymous(
+        crate::ast::Param::anonymous(
             Some(Type::MetaType {
                 name_span: crate::util::span::Span::dummy(),
                 args: vec![],
             }),
             crate::util::span::Span::dummy(),
         ),
-        crate::frontend::core::parser::ast::Param::from_type(Type::Name {
+        crate::ast::Param::from_type(Type::Name {
             name: "Int".into(),
             span: crate::util::span::Span::dummy(),
         }),
-        crate::frontend::core::parser::ast::Param::from_type(Type::Name {
+        crate::ast::Param::from_type(Type::Name {
             name: "Add".into(),
             span: crate::util::span::Span::dummy(),
         }),
@@ -328,11 +328,8 @@ fn test_anonymous_param_never_yields_generic_name() {
 
     // Act
     // 探针传 NullProbe：本用例只断言「无名形参不产泛型名」，const 参数判定不参与
-    let classified = crate::frontend::core::parser::ast::classify_generic_params(
-        &params,
-        &|name| name == "Add",
-        &NullProbe,
-    );
+    let classified =
+        crate::ast::classify_generic_params(&params, &|name| name == "Add", &NullProbe);
     let extracted = extract_generic_param_names(&params, &NullProbe);
 
     // Assert
@@ -494,10 +491,7 @@ fn test_type_def_constraint_expr_single() {
     };
     assert_eq!(body.len(), 1, "结构体应有 1 个体项");
     assert!(
-        matches!(
-            &body[0],
-            crate::frontend::core::parser::ast::TypeBodyItem::Expr(Type::ConstExpr(_))
-        ),
+        matches!(&body[0], crate::ast::TypeBodyItem::Expr(Type::ConstExpr(_))),
         "体项应为 Expr(ConstExpr), got {:?}",
         body[0]
     );
@@ -521,18 +515,12 @@ fn test_type_def_constraint_expr_multi() {
     };
     assert_eq!(body.len(), 2, "结构体应有 2 个体项");
     assert!(
-        matches!(
-            &body[0],
-            crate::frontend::core::parser::ast::TypeBodyItem::Expr(Type::ConstExpr(_))
-        ),
+        matches!(&body[0], crate::ast::TypeBodyItem::Expr(Type::ConstExpr(_))),
         "第 1 项应为 Expr(ConstExpr), got {:?}",
         body[0]
     );
     assert!(
-        matches!(
-            &body[1],
-            crate::frontend::core::parser::ast::TypeBodyItem::Expr(Type::ConstExpr(_))
-        ),
+        matches!(&body[1], crate::ast::TypeBodyItem::Expr(Type::ConstExpr(_))),
         "第 2 项应为 Expr(ConstExpr), got {:?}",
         body[1]
     );
@@ -556,18 +544,12 @@ fn test_type_def_constraint_expr_mixed() {
     };
     assert_eq!(body.len(), 2, "结构体应有 2 个体项");
     assert!(
-        matches!(
-            &body[0],
-            crate::frontend::core::parser::ast::TypeBodyItem::Field(_)
-        ),
+        matches!(&body[0], crate::ast::TypeBodyItem::Field(_)),
         "第 1 项应为 Field, got {:?}",
         body[0]
     );
     assert!(
-        matches!(
-            &body[1],
-            crate::frontend::core::parser::ast::TypeBodyItem::Expr(Type::ConstExpr(_))
-        ),
+        matches!(&body[1], crate::ast::TypeBodyItem::Expr(Type::ConstExpr(_))),
         "第 2 项应为 Expr(ConstExpr), got {:?}",
         body[1]
     );
@@ -607,10 +589,7 @@ fn test_type_def_constraint_expr_block_form() {
     };
     assert_eq!(body.len(), 1, "结构体应有 1 个体项");
     assert!(
-        matches!(
-            &body[0],
-            crate::frontend::core::parser::ast::TypeBodyItem::Expr(Type::ConstExpr(_))
-        ),
+        matches!(&body[0], crate::ast::TypeBodyItem::Expr(Type::ConstExpr(_))),
         "体项应为 Expr(ConstExpr), got {:?}",
         body[0]
     );
@@ -650,7 +629,7 @@ fn test_type_def_generic_sum_type_recognized_as_struct() {
     };
     let params = type_annotation
         .as_ref()
-        .map(crate::frontend::core::parser::ast::Type::fn_params_flat)
+        .map(crate::ast::Type::fn_params_flat)
         .unwrap_or_default();
     let generic_params = extract_generic_param_names(&params, &NullProbe);
 
@@ -682,12 +661,7 @@ fn test_type_def_generic_sum_type_field_count() {
     };
     let field_count = body
         .iter()
-        .filter(|it| {
-            matches!(
-                it,
-                crate::frontend::core::parser::ast::TypeBodyItem::Field(_)
-            )
-        })
+        .filter(|it| matches!(it, crate::ast::TypeBodyItem::Field(_)))
         .count();
 
     // Assert

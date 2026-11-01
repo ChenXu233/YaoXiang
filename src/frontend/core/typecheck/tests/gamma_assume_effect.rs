@@ -13,7 +13,7 @@ use crate::frontend::core::typecheck::test_util::{binop};
 use crate::util::plan_id::PlanId;
 use std::collections::HashMap;
 
-use crate::frontend::core::parser::ast::{BinOp as AstBinOp, Expr};
+use crate::ast::{BinOp as AstBinOp, Expr};
 use crate::frontend::core::lexer::tokens::Literal;
 use crate::frontend::core::typecheck::inference::ExpressionInferrer;
 use crate::frontend::core::typecheck::passes::overload;

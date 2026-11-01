@@ -10,9 +10,7 @@
 
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::statements::types::parse_type_annotation;
-use crate::frontend::core::parser::ast::{
-    BinOp, BindingKind, Expr, Param, Stmt, StmtKind, StructField, Type, TypeBodyItem,
-};
+use crate::ast::{BinOp, BindingKind, Expr, Param, Stmt, StmtKind, StructField, Type, TypeBodyItem};
 use crate::frontend::core::parser::{parse, NullProbe, ParserState};
 
 fn with_type<F>(

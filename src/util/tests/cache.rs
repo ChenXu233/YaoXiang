@@ -3,7 +3,7 @@
 //! 覆盖 `DocumentCache` 和 `DocumentStore` 的创建、更新、缓存失效、容量清理等功能。
 
 use crate::util::cache::{DocumentCache, DocumentStore};
-use crate::frontend::core::parser::ast::Module;
+use crate::ast::Module;
 
 #[test]
 fn test_document_cache_new() {

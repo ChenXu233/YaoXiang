@@ -7,7 +7,7 @@
 
 设计要点（吸取 span 迁移的教训）:
 - 逐行扫描 + 括号配平，不用正则整段匹配
-- 参数名与类型从 AST 定义（src/frontend/core/parser/ast.rs）解析，不猜测；
+- 参数名与类型从 AST 定义（src/ast/mod.rs；6.7.1a 顶层化前为 parser/ast.rs）解析，不猜测；
   解析失败即报错退出
 - 默认 dry-run，--apply 才写盘
 """
@@ -15,7 +15,7 @@ import re
 import sys
 
 SRC = 'src/middle/core/ir_gen.rs'
-AST = 'src/frontend/core/parser/ast.rs'
+AST = 'src/ast/mod.rs'
 
 # 顶层臂：恰好 12 空格缩进以 Expr:: 开头。模式本身可能跨多行
 # （如 "Expr::BinOp {\\n op,\\n ...\\n } =>"），因此只锚定起始行，

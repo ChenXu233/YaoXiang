@@ -24,7 +24,7 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::{Path, PathBuf};
 
-use crate::frontend::core::parser::ast::{Expr, StmtKind};
+use crate::ast::{Expr, StmtKind};
 use crate::util::diagnostic::Diagnostic;
 use crate::frontend::core::parser::{self, Module};
 use crate::frontend::core::tokenize;

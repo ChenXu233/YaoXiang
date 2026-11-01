@@ -6,7 +6,7 @@
 //! - 完整的错误收集
 //! - RFC-004/010/011 支撑
 
-use crate::frontend::core::parser::ast::Module;
+use crate::ast::Module;
 
 // ============ 子模块声明 ============
 

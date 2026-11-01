@@ -4,7 +4,7 @@
 //! - 类型推断
 //! - 常量计算
 
-use crate::frontend::core::parser::ast::{BinOp, Expr, Literal};
+use crate::ast::{BinOp, Expr, Literal};
 use crate::lsp::handlers::inlay_hint::{simple_infer_type, evaluate_constant};
 use crate::util::plan_id::PlanId;
 

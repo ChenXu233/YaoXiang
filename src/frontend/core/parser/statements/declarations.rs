@@ -14,7 +14,7 @@
 //! - `imports` - Use/import statement parsing
 
 use crate::frontend::core::lexer::tokens::*;
-use crate::frontend::core::parser::ast::*;
+use crate::ast::*;
 use crate::frontend::core::parser::{NameKind, ParserState, BP_LOWEST, BP_ASSIGN};
 use crate::util::diagnostic::ErrorCodeDefinition;
 use crate::frontend::core::parser::parse_msg;
@@ -269,7 +269,7 @@ fn parse_assign_after_target(
             // 拍平的签名形参从注解的 Type::Fn 链取得（6.5.2：唯一来源）
             let extracted_params = type_annotation
                 .as_ref()
-                .map(crate::frontend::core::parser::ast::Type::fn_params_flat)
+                .map(crate::ast::Type::fn_params_flat)
                 .unwrap_or_default();
             let saved = state.save_position();
             let init = state.parse_expression(BP_LOWEST);

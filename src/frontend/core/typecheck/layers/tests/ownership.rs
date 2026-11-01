@@ -451,9 +451,7 @@ fn test_mut_allowed() {
 
 // ── E2E 集成测试（RFC-009a §用例分析） ──────────────────
 
-use crate::frontend::core::parser::ast::{
-    BinOp, Block, Expr, Literal, Module, Param, PlanId, Stmt, StmtKind,
-};
+use crate::ast::{BinOp, Block, Expr, Literal, Module, Param, PlanId, Stmt, StmtKind};
 use crate::frontend::core::typecheck::environment::TypeEnvironment;
 use crate::frontend::core::typecheck::layers::ownership::OwnershipChecker;
 
@@ -1582,7 +1580,7 @@ fn test_e2e_ref_holds_ref_through_field_assignment() {
 // ── 辅助函数：解析模块 ──────────────────────────────────
 
 /// 辅助函数：解析源码为 AST Module
-fn parse_module(source: &str) -> crate::frontend::core::parser::ast::Module {
+fn parse_module(source: &str) -> crate::ast::Module {
     use crate::frontend::core::lexer::tokenize;
     use crate::frontend::core::parser::parse;
 

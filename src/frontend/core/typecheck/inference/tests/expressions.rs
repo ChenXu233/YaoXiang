@@ -12,7 +12,7 @@ use crate::frontend::core::typecheck::probe::TypeLevelNamespace;
 use crate::frontend::core::typecheck::inference::expressions::ExpressionInferrer;
 use crate::frontend::core::typecheck::inference::scope::ScopeManager;
 use crate::frontend::core::types::{MonoType, TypeConstraintSolver};
-use crate::frontend::core::parser::ast::Expr;
+use crate::ast::Expr;
 use crate::util::span::Span;
 
 use std::collections::HashMap;
@@ -31,7 +31,7 @@ fn int_expr(n: i128) -> Expr {
 
 /// `left <op> right` 二元表达式（dummy span）。
 fn binop_expr(
-    op: crate::frontend::core::parser::ast::BinOp,
+    op: crate::ast::BinOp,
     left: Expr,
     right: Expr,
 ) -> Expr {
@@ -238,12 +238,8 @@ fn test_infer_nested_expressions() {
     let mut inferrer = ctx.inferrer();
     // 嵌套表达式：(1 + 2) * 3
     let expr = binop_expr(
-        crate::frontend::core::parser::ast::BinOp::Mul,
-        binop_expr(
-            crate::frontend::core::parser::ast::BinOp::Add,
-            int_expr(1),
-            int_expr(2),
-        ),
+        crate::ast::BinOp::Mul,
+        binop_expr(crate::ast::BinOp::Add, int_expr(1), int_expr(2)),
         int_expr(3),
     );
 

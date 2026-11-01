@@ -307,7 +307,7 @@ pub fn missing_rebuild_functions(
 /// 按 `use` 声明解析「别名 → `ast::Type`」绑定（F4：不再用文件级文本包含判定）。
 ///
 /// 识别形态：`use …::Type as X;`（含分组 `use …::{self, Type as X}` 与再导出
-/// `pub use …::{Type as IrType}`）。全仓只有一个 `Type` 枚举（`parser/ast.rs`），
+/// `pub use …::{Type as IrType}`）。全仓只有一个 `Type` 枚举（`ast/`），
 /// `ir::Type` 是它的再导出，故任何 `Type as X` 都指向同一个类型。
 fn collect_type_aliases(file: &syn::File) -> BTreeSet<String> {
     let mut visitor = AliasCollector::default();
@@ -797,7 +797,7 @@ mod tests {
     #[test]
     fn test_alias_from_import_is_recognized() {
         // Arrange：非 T 的别名拼写（MyTy）
-        let src = "use crate::frontend::core::parser::ast::Type as MyTy;\n\
+        let src = "use crate::ast::Type as MyTy;\n\
                    fn f() -> MyTy { MyTy::Int(64) }\n";
 
         // Act
@@ -845,7 +845,7 @@ mod tests {
     // 不得算 parser 前向（否则前向计数虚高、第二类虚低）。
     #[test]
     fn test_registered_rebuild_function_is_classified_as_ast_to_ast() {
-        // Arrange：ast.rs 风格——impl Type 里的方法，方法名在登记表里
+        // Arrange：`ast/mod.rs` 风格——impl Type 里的方法，方法名在登记表里
         let src = "impl Type {\n    pub fn without_fn_param_names(&self) -> Type {\n        Type::Ptr(Box::new(self.clone()))\n    }\n}\n";
 
         // Act
@@ -930,7 +930,7 @@ mod tests {
     #[test]
     fn test_generic_param_shadows_type_alias() {
         // Arrange：模块级 import 了 Type as T，同时有个泛型函数形参也叫 T
-        let src = "use crate::frontend::core::parser::ast::Type as T;\n\
+        let src = "use crate::ast::Type as T;\n\
                    fn ok() -> Type { T::Int(64) }\n\
                    fn generic<T>(v: T) -> Type { let _ = T::Void(v); Type::Int(1) }\n";
 

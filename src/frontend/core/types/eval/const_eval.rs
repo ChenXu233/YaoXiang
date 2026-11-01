@@ -16,7 +16,7 @@
 
 // 重新导出主要类型
 use crate::frontend::core::types::ConstValue;
-use crate::frontend::core::parser::ast::{Expr, BinOp as AstBinOp, UnOp as AstUnOp};
+use crate::ast::{Expr, BinOp as AstBinOp, UnOp as AstUnOp};
 use crate::frontend::core::lexer::tokens::Literal;
 use crate::util::diagnostic::Diagnostic;
 use crate::util::diagnostic::codes::ErrorCodeDefinition;
@@ -884,7 +884,7 @@ pub mod predefined_sizes {
 /// - 字面量类型到 ConstValue 的转换
 /// - Const 参数的类型验证
 /// - 字面量类型约束检查
-use crate::frontend::core::parser::ast::{Type, GenericParam, GenericParamKind};
+use crate::ast::{Type, GenericParam, GenericParamKind};
 use crate::frontend::core::types::ConstKind;
 
 /// Integer types for const parameters
@@ -1061,7 +1061,7 @@ pub fn ast_type_to_mono_type(ty: &Type) -> Option<MonoType> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::frontend::core::parser::ast::{BinOp as AB, Expr};
+    use crate::ast::{BinOp as AB, Expr};
     use crate::util::span::Span;
 
     fn test_span() -> Span {

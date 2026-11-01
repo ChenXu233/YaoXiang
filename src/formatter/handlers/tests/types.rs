@@ -7,7 +7,7 @@ use crate::formatter::handlers::types::format_type;
 use crate::formatter::options::FormatOptions;
 use crate::formatter::source_map::SourceMap;
 use crate::frontend::core::lexer::tokens::Literal;
-use crate::frontend::core::parser::ast::*;
+use crate::ast::*;
 use crate::util::span::Span;
 
 fn default_ctx() -> FormatContext {

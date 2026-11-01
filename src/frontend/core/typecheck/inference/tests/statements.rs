@@ -5,7 +5,7 @@
 
 use crate::frontend::core::typecheck::inference::statements::StatementChecker;
 use crate::frontend::core::types::{MonoType, PolyType, TraitTable, TypeConstraintSolver};
-use crate::frontend::core::parser::ast::{self, Stmt, StmtKind, Expr, BinOp, Block, Param, PlanId};
+use crate::ast::{self, Stmt, StmtKind, Expr, BinOp, Block, Param, PlanId};
 use crate::frontend::core::lexer::tokens::Literal;
 use crate::util::span::Span;
 

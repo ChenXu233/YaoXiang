@@ -13,7 +13,7 @@
 
 use std::collections::HashMap;
 
-use crate::frontend::core::parser::ast::Expr;
+use crate::ast::Expr;
 use crate::frontend::core::types::{MonoType, PolyType, TypeConstraintSolver};
 use crate::frontend::core::typecheck::environment::GenericTypeDef;
 use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};

@@ -71,7 +71,7 @@ pub fn embedded_std_module_info(use_path: &str) -> Option<crate::frontend::modul
 
     for stmt in &parsed.module.items {
         match &stmt.kind {
-            parser::ast::StmtKind::TypeDefinition {
+            crate::ast::StmtKind::TypeDefinition {
                 name, definition, ..
             } => {
                 if let Some(ty) = types.get(name).map(|p| p.body.clone()) {
@@ -92,8 +92,8 @@ pub fn embedded_std_module_info(use_path: &str) -> Option<crate::frontend::modul
                     });
                 }
             }
-            parser::ast::StmtKind::Assign { target, value, .. } => {
-                if let parser::ast::Expr::Var(name, _) = target.as_ref() {
+            crate::ast::StmtKind::Assign { target, value, .. } => {
+                if let crate::ast::Expr::Var(name, _) = target.as_ref() {
                     if let Some(ty) = vars.get(name).map(|p| p.body.clone()) {
                         // 声明期形参名：命名参数调用（`list.push(item = 9, list = v)`）
                         // 需按名字重排实参。名字只存在于 AST 的 Lambda 形参里

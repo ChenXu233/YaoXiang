@@ -5,7 +5,7 @@
 use std::collections::HashMap;
 
 use crate::frontend::core::typecheck::inference::patterns::PatternInferrer;
-use crate::frontend::core::parser::ast::Pattern;
+use crate::ast::Pattern;
 use crate::frontend::core::lexer::tokens::Literal;
 use crate::frontend::core::types::{MonoType, StructType};
 

@@ -6,7 +6,7 @@
 //! - EnumType: 枚举类型
 //! - UniverseLevel: RFC-010 类型宇宙层级
 
-use crate::frontend::core::parser::ast;
+use crate::ast;
 use crate::frontend::core::types::var::TypeVar;
 use crate::frontend::core::types::const_data::{ConstExpr, ConstVarDef, ConstValue};
 use std::collections::HashMap;
@@ -1144,9 +1144,7 @@ impl From<ast::Type> for MonoType {
 ///
 /// 复用 `From<ast::Type> for MonoType` 实现，包装为 PolyType。
 /// 用于跨文件检查时注册模块导出的类型信息。
-pub fn ast_type_to_poly_type(
-    ast_type: &crate::frontend::core::parser::ast::Type
-) -> super::PolyType {
+pub fn ast_type_to_poly_type(ast_type: &crate::ast::Type) -> super::PolyType {
     super::PolyType::mono(MonoType::from(ast_type.clone()))
 }
 

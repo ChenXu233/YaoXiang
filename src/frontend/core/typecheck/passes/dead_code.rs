@@ -19,7 +19,7 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use crate::util::span::Span;
 use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};
 
-use crate::frontend::core::parser::ast::{Module, Stmt, StmtKind, Expr, Block};
+use crate::ast::{Module, Stmt, StmtKind, Expr, Block};
 
 /// 死代码分析器
 pub struct DeadCodeAnalyzer {
@@ -308,11 +308,10 @@ impl DeadCodeAnalyzer {
                         continue;
                     };
                     // RFC-010a 附录D：非 Fn 注解的块绑定是**块值**而非函数
-                    let is_fn_binding =
-                        crate::frontend::core::parser::ast::Expr::block_binding_is_function(
-                            type_annotation.as_ref(),
-                            value.as_deref(),
-                        );
+                    let is_fn_binding = crate::ast::Expr::block_binding_is_function(
+                        type_annotation.as_ref(),
+                        value.as_deref(),
+                    );
                     let (params, body): (Vec<_>, Vec<_>) = if is_fn_binding {
                         match value {
                             Some(v) => v.callable_parts(),
@@ -524,11 +523,8 @@ impl DeadCodeAnalyzer {
                 Expr::FString { segments, .. } => {
                     for seg in segments {
                         match seg {
-                            crate::frontend::core::parser::ast::FStringSegment::Text(_) => {}
-                            crate::frontend::core::parser::ast::FStringSegment::Interpolation {
-                                expr,
-                                ..
-                            } => {
+                            crate::ast::FStringSegment::Text(_) => {}
+                            crate::ast::FStringSegment::Interpolation { expr, .. } => {
                                 collect_from_expr(expr, referenced);
                             }
                         }
@@ -578,7 +574,7 @@ impl DeadCodeAnalyzer {
         }
 
         fn collect_params_names_and_types(
-            params: &[crate::frontend::core::parser::ast::Param],
+            params: &[crate::ast::Param],
             referenced: &mut IdentSink,
         ) {
             for param in params {
@@ -602,10 +598,10 @@ impl DeadCodeAnalyzer {
         /// match 模式中的名字引用：Identifier 兼作常量模式（无法与绑定区分，
         /// 一律收集），Struct/Union 头部是类型名引用，Guard 条件是真实表达式
         fn collect_pattern_refs(
-            pattern: &crate::frontend::core::parser::ast::Pattern,
+            pattern: &crate::ast::Pattern,
             referenced: &mut IdentSink,
         ) {
-            use crate::frontend::core::parser::ast::Pattern;
+            use crate::ast::Pattern;
             match pattern {
                 Pattern::Identifier(name) => {
                     referenced.insert(name.clone());
@@ -679,7 +675,7 @@ impl DeadCodeAnalyzer {
                     // 形参类型名同样算引用：从注解的 Type::Fn 链拍平（6.5.2）
                     let signature = type_annotation
                         .as_ref()
-                        .map(crate::frontend::core::parser::ast::Type::fn_params_flat)
+                        .map(crate::ast::Type::fn_params_flat)
                         .unwrap_or_default();
                     for param in &signature {
                         if let Some(ty) = &param.ty {
@@ -710,7 +706,7 @@ impl DeadCodeAnalyzer {
                     referenced.bind(name.clone());
                     let signature = type_annotation
                         .as_ref()
-                        .map(crate::frontend::core::parser::ast::Type::fn_params_flat)
+                        .map(crate::ast::Type::fn_params_flat)
                         .unwrap_or_default();
                     for param in &signature {
                         if let Some(ty) = &param.ty {

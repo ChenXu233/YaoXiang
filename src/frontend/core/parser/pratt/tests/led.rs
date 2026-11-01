@@ -13,7 +13,7 @@
 //!   =>:                    （Lambda，右结合）
 
 use crate::frontend::core::lexer::tokenize;
-use crate::frontend::core::parser::ast::{BinOp, Expr};
+use crate::ast::{BinOp, Expr};
 use crate::frontend::core::parser::{NullProbe, ParserState};
 
 fn parse_expr(source: &str) -> Expr {

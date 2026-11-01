@@ -9,7 +9,7 @@
 //! 本文件**不得**引用 L3（`check-boundary.py` B2 不豁免 tests）：需要「持有内置名
 //! 知识」的探针一律用本文件的本地 stub 表达。
 
-use crate::frontend::core::parser::ast::{extract_generic_param_names, Param, Type};
+use crate::ast::{extract_generic_param_names, Param, Type};
 use crate::frontend::core::parser::{NameKind, NullProbe, TypeEnvProbe};
 use crate::util::span::Span;
 

@@ -16,7 +16,7 @@
 
 use std::collections::HashMap;
 
-use crate::frontend::core::parser::ast::BinOp;
+use crate::ast::BinOp;
 use crate::frontend::core::types::mono::StructType;
 use crate::frontend::core::types::{MonoType, PolyType, TypeVar};
 

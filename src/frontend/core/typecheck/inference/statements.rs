@@ -11,7 +11,7 @@ use std::collections::{HashMap, HashSet};
 use crate::frontend::module::{Export, ExportKind, ModuleInfo};
 use crate::frontend::module::registry::ModuleRegistry;
 use crate::frontend::core::types::{MonoType, PolyType, TraitTable, TypeConstraintSolver};
-use crate::frontend::core::parser::ast::{classify_generic_params, Block, Expr, Param, PlanId, Stmt};
+use crate::ast::{classify_generic_params, Block, Expr, Param, PlanId, Stmt};
 use crate::frontend::core::typecheck::scope::VarInfo;
 use crate::frontend::core::typecheck::checker::collect_used_in_type;
 use crate::middle::passes::mono::instance::InstantiationRequest;
@@ -469,11 +469,11 @@ impl StatementChecker {
     /// 此时返回 None 让调用方回退到 `Generic` 形态，两侧表示一致。
     fn try_instantiate_generic_type(
         &mut self,
-        type_ann: &crate::frontend::core::parser::ast::Type,
+        type_ann: &crate::ast::Type,
     ) -> Option<MonoType> {
         use crate::frontend::core::typecheck::TypeEnvironment;
         match type_ann {
-            crate::frontend::core::parser::ast::Type::Generic {
+            crate::ast::Type::Generic {
                 name,
                 args,
                 name_span,
@@ -709,10 +709,10 @@ impl StatementChecker {
         &mut self,
         path: &str,
         path_span: crate::util::span::Span,
-        path_parts: &[crate::frontend::core::parser::ast::SpannedIdent],
-        items: &Option<Vec<crate::frontend::core::parser::ast::SpannedIdent>>,
-        alias: &Option<Vec<crate::frontend::core::parser::ast::SpannedIdent>>,
-        item_aliases: &Option<Vec<Option<crate::frontend::core::parser::ast::SpannedIdent>>>,
+        path_parts: &[crate::ast::SpannedIdent],
+        items: &Option<Vec<crate::ast::SpannedIdent>>,
+        alias: &Option<Vec<crate::ast::SpannedIdent>>,
+        item_aliases: &Option<Vec<Option<crate::ast::SpannedIdent>>>,
     ) -> Result<(), Box<Diagnostic>> {
         let Some(module) = self.module_registry.get(path).cloned() else {
             // E5001：模块未找到（此前静默 return，错误延后成"unknown variable"）。
@@ -1273,7 +1273,7 @@ impl StatementChecker {
         &self,
         body: &Block,
     ) -> Option<MonoType> {
-        use crate::frontend::core::parser::ast::StmtKind;
+        use crate::ast::StmtKind;
         let Some(last) = body.stmts.last() else {
             return Some(MonoType::Void);
         };
@@ -1405,14 +1405,14 @@ impl StatementChecker {
         // 账本键：当前语句的 span（嵌套语句递归时逐层覆盖，#256）
         self.scope.set_current_stmt(stmt.span);
         match &stmt.kind {
-            crate::frontend::core::parser::ast::StmtKind::Expr(expr) => {
+            crate::ast::StmtKind::Expr(expr) => {
                 // 记录本条表达式语句的类型——尾表达式校验要用（#354）。
                 // 每次进体前由调用方清空，故末位语句写下的就是尾表达式的类型。
                 let ty = self.check_expr(expr)?;
                 self.last_expr_stmt_ty = Some(ty);
                 Ok(())
             }
-            crate::frontend::core::parser::ast::StmtKind::Assign {
+            crate::ast::StmtKind::Assign {
                 target,
                 type_annotation,
                 value,
@@ -1420,7 +1420,7 @@ impl StatementChecker {
                 span: stmt_span,
                 ..
             } => {
-                use crate::frontend::core::parser::ast::Expr;
+                use crate::ast::Expr;
                 // 字段赋值（`s.n = v` / `s.data[i] = v`）不是变量声明/赋值：
                 // 它不引入也不重赋值任何变量，spec §4.3「赋值优先」不适用。
                 //
@@ -1489,7 +1489,7 @@ impl StatementChecker {
                 // 签名形参的唯一来源：注解里的 Type::Fn 链（6.5.2：不再有并行形参表）
                 let signature = type_annotation
                     .as_ref()
-                    .map(crate::frontend::core::parser::ast::Type::fn_params_flat)
+                    .map(crate::ast::Type::fn_params_flat)
                     .unwrap_or_default();
                 // 从 value 提取 Lambda params/body。
                 // RFC-010a 附录D：`name = { ... }` 无注解时按内容推断（块值是尾表达式）；
@@ -1500,33 +1500,33 @@ impl StatementChecker {
                 // 否则注册形态停留在完整柯里注解（arity 含类型位），调用点
                 // arity 全错，且定义体的约束延迟派发无从发生。
                 // 仅表达式体走此路：lambda 体已被上方臂提取
-                if type_annotation.as_ref().is_some_and(|t| {
-                    matches!(t, crate::frontend::core::parser::ast::Type::Fn { .. })
-                }) && value
-                    .as_deref()
-                    .is_some_and(|v| !matches!(v, Expr::Lambda { .. }))
+                if type_annotation
+                    .as_ref()
+                    .is_some_and(|t| matches!(t, crate::ast::Type::Fn { .. }))
+                    && value
+                        .as_deref()
+                        .is_some_and(|v| !matches!(v, Expr::Lambda { .. }))
                 {
-                    let value_params: Vec<Param> =
-                        signature
-                            .iter()
-                            .filter(|p| {
-                                match &p.ty {
-                        Some(crate::frontend::core::parser::ast::Type::MetaType { .. }) => false,
-                        Some(crate::frontend::core::parser::ast::Type::Name { name: n, .. }) => {
-                            !(self.trait_table.has_trait(n)
-                                || crate::frontend::core::typecheck::operator_interfaces::spec(n)
+                    let value_params: Vec<Param> = signature
+                        .iter()
+                        .filter(|p| match &p.ty {
+                            Some(crate::ast::Type::MetaType { .. }) => false,
+                            Some(crate::ast::Type::Name { name: n, .. }) => {
+                                !(self.trait_table.has_trait(n)
+                                    || crate::frontend::core::typecheck::operator_interfaces::spec(
+                                        n,
+                                    )
                                     .is_some())
-                        }
-                        _ => true,
-                    }
-                            })
-                            .cloned()
-                            .collect();
+                            }
+                            _ => true,
+                        })
+                        .cloned()
+                        .collect();
                     let synthetic_body = Block {
                         stmts: vec![Stmt {
-                            kind: crate::frontend::core::parser::ast::StmtKind::Expr(Box::new(
+                            kind: crate::ast::StmtKind::Expr(Box::new(
                                 value.as_deref().cloned().unwrap_or({
-                                    crate::frontend::core::parser::ast::Expr::Lit(
+                                    crate::ast::Expr::Lit(
                                         crate::frontend::core::lexer::tokens::Literal::Void,
                                         stmt.span,
                                     )
@@ -1553,7 +1553,7 @@ impl StatementChecker {
                         if let Expr::Lambda { params, body, .. } = v.as_ref() {
                             (params.clone(), body.stmts.clone())
                         } else if let Expr::Block(block) = v.as_ref() {
-                            if crate::frontend::core::parser::ast::Expr::block_binding_is_function(
+                            if crate::ast::Expr::block_binding_is_function(
                                 type_annotation.as_ref(),
                                 Some(v.as_ref()),
                             ) {
@@ -1611,14 +1611,14 @@ impl StatementChecker {
                 );
                 result
             }
-            crate::frontend::core::parser::ast::StmtKind::For {
+            crate::ast::StmtKind::For {
                 var,
                 var_mut,
                 iterable,
                 body,
                 ..
             } => self.check_for_stmt(var, *var_mut, iterable, body, stmt.span),
-            crate::frontend::core::parser::ast::StmtKind::If {
+            crate::ast::StmtKind::If {
                 condition,
                 then_branch,
                 else_if_branches,
@@ -1638,7 +1638,7 @@ impl StatementChecker {
                 )
                 // check_if_stmt 已把 `if` 表达式的类型写入 last_expr_stmt_ty
             }
-            crate::frontend::core::parser::ast::StmtKind::Use {
+            crate::ast::StmtKind::Use {
                 path,
                 path_span,
                 path_parts,
@@ -1666,11 +1666,7 @@ impl StatementChecker {
                 }
             },
             // 元组解构赋值
-            crate::frontend::core::parser::ast::StmtKind::DestructureAssign {
-                names,
-                rhs,
-                span,
-            } => {
+            crate::ast::StmtKind::DestructureAssign { names, rhs, span } => {
                 let rhs_ty = self.check_expr(rhs)?;
                 let resolved_ty = self.solver.resolve_type(&rhs_ty);
                 match &resolved_ty {
@@ -1712,7 +1708,7 @@ impl StatementChecker {
                 }
             }
             // 错误恢复占位符：报告错误但不 panic
-            crate::frontend::core::parser::ast::StmtKind::Error(span) => Err(Box::new(
+            crate::ast::StmtKind::Error(span) => Err(Box::new(
                 ErrorCodeDefinition::invalid_syntax("缺失语句")
                     .at(*span)
                     .build(),
@@ -1722,7 +1718,7 @@ impl StatementChecker {
             // RFC-010a 规则② 边界条件：`return` 退出最近的函数边界，顶层是
             // 模块初始化层、没有函数边界——编译期拒绝（E1109），不再运行期
             // 静默终止初始化、跳过后续顶层语句。
-            crate::frontend::core::parser::ast::StmtKind::Return(Some(expr)) => {
+            crate::ast::StmtKind::Return(Some(expr)) => {
                 if self.is_top_level {
                     return Err(Box::new(
                         ErrorCodeDefinition::return_outside_function()
@@ -1737,7 +1733,7 @@ impl StatementChecker {
                 // 统一就会静默顶替声明的返回位）。
                 self.check_return_value_type(&found, stmt.span)
             }
-            crate::frontend::core::parser::ast::StmtKind::Return(None) => {
+            crate::ast::StmtKind::Return(None) => {
                 if self.is_top_level {
                     return Err(Box::new(
                         ErrorCodeDefinition::return_outside_function()
@@ -1750,10 +1746,8 @@ impl StatementChecker {
             // 类型定义是模块级概念（checker.rs pass1 只扫 module.items 注册）——
             // 模块级出现合法（pass1 已注册，此处无事可做）；函数体内出现此前
             // 落 `_ => Ok(())` 静默跳过（#295），留下误导性「Unknown variable」错误。
-            crate::frontend::core::parser::ast::StmtKind::TypeDefinition {
-                name,
-                definition,
-                ..
+            crate::ast::StmtKind::TypeDefinition {
+                name, definition, ..
             } => {
                 // RFC-010：`unsafe {}` 内允许类型定义（不透明类型封装）。
                 // 故除模块级外，unsafe 块内也放行。
@@ -1764,20 +1758,16 @@ impl StatementChecker {
                     // parser 解析为带默认值的字段，默认值在构造点求值，self 不在作用域。
                     // 方法应在顶层定义（`T.name: ... = ...`）或用 [positions] 绑定语法。
                     match definition {
-                        crate::frontend::core::parser::ast::Type::Struct { body } => {
+                        crate::ast::Type::Struct { body } => {
                             for item in body {
-                                if let crate::frontend::core::parser::ast::TypeBodyItem::Field(f) =
-                                    item
-                                {
+                                if let crate::ast::TypeBodyItem::Field(f) = item {
                                     if let Some(default) = &f.default {
                                         self.check_expr(default)?;
                                     }
                                 }
                             }
                         }
-                        crate::frontend::core::parser::ast::Type::NamedStruct {
-                            fields, ..
-                        } => {
+                        crate::ast::Type::NamedStruct { fields, .. } => {
                             for f in fields {
                                 if let Some(default) = &f.default {
                                     self.check_expr(default)?;
@@ -1840,7 +1830,7 @@ impl StatementChecker {
     fn check_fn_stmt(
         &mut self,
         name: &str,
-        type_annotation: Option<&crate::frontend::core::parser::ast::Type>,
+        type_annotation: Option<&crate::ast::Type>,
         params: &[Param],
         _stmts: &[Stmt],
         body: Block,
@@ -1849,7 +1839,7 @@ impl StatementChecker {
     ) -> Result<(), Box<Diagnostic>> {
         // 签名形参的唯一来源：注解里的 Type::Fn 链（6.5.2：不再有并行形参表）
         let signature = type_annotation
-            .map(crate::frontend::core::parser::ast::Type::fn_params_flat)
+            .map(crate::ast::Type::fn_params_flat)
             .unwrap_or_default();
         // #353：记录绑定语句的位置，供尾表达式不符时指向它（而非体的末行）。
         // 真正该改的是注解所在的声明，不是体里那个（可能完全正确的）值。
@@ -1860,7 +1850,7 @@ impl StatementChecker {
             let constraints: Vec<(String, String)> = signature
                 .iter()
                 .filter_map(|p| match &p.ty {
-                    Some(crate::frontend::core::parser::ast::Type::Name { name: n, .. })
+                    Some(crate::ast::Type::Name { name: n, .. })
                         if self.trait_table.has_trait(n)
                             || crate::frontend::core::typecheck::operator_interfaces::spec(n)
                                 .is_some() =>
@@ -1905,24 +1895,14 @@ impl StatementChecker {
         // `resolved`/`const_binders` 就绪后执行。
         let type_generic_params: Vec<_> = generic_params
             .iter()
-            .filter(|p| {
-                matches!(
-                    p.kind,
-                    crate::frontend::core::parser::ast::GenericParamKind::Type
-                )
-            })
+            .filter(|p| matches!(p.kind, crate::ast::GenericParamKind::Type))
             .collect();
 
         // === 函数 const 泛型判定（用途分析） ===
         // 精筛唯一实现在 const_param::resolve_const_candidates（RFC-011 §4.1）
         let candidate_names: std::collections::HashSet<String> = generic_params
             .iter()
-            .filter(|p| {
-                matches!(
-                    p.kind,
-                    crate::frontend::core::parser::ast::GenericParamKind::Const { .. }
-                )
-            })
+            .filter(|p| matches!(p.kind, crate::ast::GenericParamKind::Const { .. }))
             .map(|p| p.name.clone())
             .collect();
 
@@ -1941,10 +1921,8 @@ impl StatementChecker {
             // 字面量 ∪ `proof_fn_bases` 判名」的窄化同义判据（不查
             // `predicate_defs`、漏无参证明函数），与 A 面不同构。
             let is_predicate = |n: &str| self.predicate_names.contains(n);
-            if let Some(crate::frontend::core::parser::ast::Type::Fn { return_type, .. }) =
-                type_annotation
-            {
-                if let crate::frontend::core::parser::ast::Type::Fn {
+            if let Some(crate::ast::Type::Fn { return_type, .. }) = type_annotation {
+                if let crate::ast::Type::Fn {
                     params: inner_params,
                     ..
                 } = return_type.as_ref()
@@ -1986,13 +1964,9 @@ impl StatementChecker {
             let names: Vec<String> = generic_params
                 .iter()
                 .filter(|p| {
-                    matches!(
-                        p.kind,
-                        crate::frontend::core::parser::ast::GenericParamKind::Type
-                    ) || (matches!(
-                        p.kind,
-                        crate::frontend::core::parser::ast::GenericParamKind::Const { .. }
-                    ) && const_names.contains(p.name.as_str()))
+                    matches!(p.kind, crate::ast::GenericParamKind::Type)
+                        || (matches!(p.kind, crate::ast::GenericParamKind::Const { .. })
+                            && const_names.contains(p.name.as_str()))
                 })
                 .map(|p| p.name.clone())
                 .collect();
@@ -2019,7 +1993,7 @@ impl StatementChecker {
         let mut type_param_vars: std::collections::HashMap<String, MonoType> =
             std::collections::HashMap::new();
         if let Some(type_ann) = type_annotation {
-            if let crate::frontend::core::parser::ast::Type::Fn {
+            if let crate::ast::Type::Fn {
                 params: param_types,
                 return_type,
             } = type_ann
@@ -2067,14 +2041,12 @@ impl StatementChecker {
                 //（内层 Fn）错配成 E1012，#501 形态 A 同一轴）。
                 let wrapped_closure = body.stmts.len() == 1
                     && match &body.stmts[0].kind {
-                        crate::frontend::core::parser::ast::StmtKind::Expr(e) => matches!(
-                            e.as_ref(),
-                            crate::frontend::core::parser::ast::Expr::Lambda { .. }
-                        ),
-                        crate::frontend::core::parser::ast::StmtKind::Return(Some(e)) => matches!(
-                            e.as_ref(),
-                            crate::frontend::core::parser::ast::Expr::Lambda { .. }
-                        ),
+                        crate::ast::StmtKind::Expr(e) => {
+                            matches!(e.as_ref(), crate::ast::Expr::Lambda { .. })
+                        }
+                        crate::ast::StmtKind::Return(Some(e)) => {
+                            matches!(e.as_ref(), crate::ast::Expr::Lambda { .. })
+                        }
                         _ => false,
                     };
 
@@ -2269,7 +2241,7 @@ impl StatementChecker {
     fn check_var_stmt(
         &mut self,
         name: &str,
-        type_annotation: Option<&crate::frontend::core::parser::ast::Type>,
+        type_annotation: Option<&crate::ast::Type>,
         prelude_stmts: &[Stmt],
         initializer: Option<&Expr>,
         is_mut: bool,
@@ -2312,7 +2284,7 @@ impl StatementChecker {
     fn check_var_stmt_inner(
         &mut self,
         name: &str,
-        type_annotation: Option<&crate::frontend::core::parser::ast::Type>,
+        type_annotation: Option<&crate::ast::Type>,
         prelude_stmts: &[Stmt],
         initializer: Option<&Expr>,
         is_mut: bool,
@@ -2349,12 +2321,7 @@ impl StatementChecker {
                     .unwrap_or_else(|| MonoType::from(type_ann.clone()));
                 // RFC-027 Phase 2.5: 证明函数类型解析（从 AST Type 直接提取）
                 // IsPositive(5) → Refined { base: Int(64), constraint: Call("IsPositive", [5]) }
-                let ann_ty = if let crate::frontend::core::parser::ast::Type::Generic {
-                    name,
-                    args,
-                    ..
-                } = type_ann
-                {
+                let ann_ty = if let crate::ast::Type::Generic { name, args, .. } = type_ann {
                     if !args.is_empty() {
                         // RFC-027a：`Terminates(m)` 是内置谓词（无源码声明），
                         // 故不在 `proof_fn_bases` 里——单独分支正格化为 `Refined`。
@@ -2371,7 +2338,7 @@ impl StatementChecker {
                             let constraint_args: Vec<crate::frontend::core::types::const_data::ConstExpr> = args
                                 .iter()
                                 .filter_map(|a| {
-                                    if let crate::frontend::core::parser::ast::Type::ConstExpr(expr) = a {
+                                    if let crate::ast::Type::ConstExpr(expr) = a {
                                         crate::frontend::core::types::eval::const_eval::convert_expr_to_const_expr(expr)
                                     } else {
                                         None
@@ -2390,7 +2357,7 @@ impl StatementChecker {
                             let constraint_args: Vec<crate::frontend::core::types::const_data::ConstExpr> = args
                                 .iter()
                                 .filter_map(|a| {
-                                    if let crate::frontend::core::parser::ast::Type::ConstExpr(expr) = a {
+                                    if let crate::ast::Type::ConstExpr(expr) = a {
                                         crate::frontend::core::types::eval::const_eval::convert_expr_to_const_expr(expr)
                                     } else {
                                         None
@@ -2461,9 +2428,7 @@ impl StatementChecker {
                     // 两者都逐元素 unify(T)，并豁免随后的 List↔容器 unify。
                     let seed_container = if resolved_ann.is_vec() || resolved_ann.is_array() {
                         match initializer {
-                            Some(crate::frontend::core::parser::ast::Expr::List(elems, _)) => {
-                                Some(elems)
-                            }
+                            Some(crate::ast::Expr::List(elems, _)) => Some(elems),
                             _ => None,
                         }
                     } else {
@@ -2600,10 +2565,7 @@ impl StatementChecker {
                     // 依赖型精化（`s: SumUpTo(n, 6)`，n 变更后重验证）是另一条独立
                     // 缺口：VC 生成器查 env 得 None 而静默跳过，见 #379。
                     (**base).clone()
-                } else if let crate::frontend::core::parser::ast::Type::Generic {
-                    name, args, ..
-                } = type_ann
-                {
+                } else if let crate::ast::Type::Generic { name, args, .. } = type_ann {
                     // 泛型注解（`L(Int)`）：存回 **Generic 形态**而非展开后的 Struct。
                     //
                     // 展开后的 Struct 只能携带字段布局，**丢掉类型实参**（`L(Int)` → 只余
@@ -2969,7 +2931,7 @@ impl StatementChecker {
                 right,
                 span,
             } => {
-                use crate::frontend::core::parser::ast::BinOp;
+                use crate::ast::BinOp;
                 let right_ty = self.check_expr(right)?;
 
                 if matches!(op, BinOp::Assign) {
@@ -3187,7 +3149,7 @@ impl StatementChecker {
             // ExpressionInferrer，其 infer_stmt 兜底臂静默跳过 If/For/TypeDefinition
             // 等语句种类，循环体内的类型错误编译通过（仅 IR 层内部错误兜底）。
             // 语义镜像 check_for_stmt：条件 Bool 校验 + 循环上下文（E1102）+ 逐语句递归。
-            crate::frontend::core::parser::ast::Expr::While {
+            crate::ast::Expr::While {
                 condition,
                 body,
                 span,

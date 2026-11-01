@@ -2,7 +2,7 @@
 
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parse;
-use crate::frontend::core::parser::ast::{Expr, StmtKind};
+use crate::ast::{Expr, StmtKind};
 
 fn parse_fn(source: &str) -> StmtKind {
     let tokens = tokenize(source).unwrap();

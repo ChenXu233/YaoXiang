@@ -4,9 +4,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use crate::frontend::core::parser::ast::{
-    classify_generic_params, Expr, GenericParamKind, Module, TypeBodyItem,
-};
+use crate::ast::{classify_generic_params, Expr, GenericParamKind, Module, TypeBodyItem};
 use crate::frontend::core::types::{MonoType, PolyType, TraitTable};
 use crate::frontend::core::types::const_data::{ConstExpr, ConstValue, BinOp, ConstKind, ConstVarDef};
 use crate::frontend::core::types::eval::const_eval::{ConstFunction, convert_expr_to_const_expr};
@@ -54,14 +52,10 @@ pub struct TypeChecker {
     /// RFC-004: 类型体绑定的待登记队列（类型名, 绑定, span）。
     /// pass1 收集类型定义，此时被绑函数可能尚未注册（pass2 收集签名），
     /// 故 External/DefaultExternal 延迟到 pass2 之后统一登记。
-    pending_body_bindings: Vec<(
-        String,
-        crate::frontend::core::parser::ast::TypeBodyBinding,
-        crate::util::span::Span,
-    )>,
+    pending_body_bindings: Vec<(String, crate::ast::TypeBodyBinding, crate::util::span::Span)>,
     /// RFC-011a: 已注册类型定义的 AST 体项（接口展开需要原始应用项；
     /// MonoType 转换会丢弃 Expr/Binding 项，故单独留存）。
-    type_definition_bodies: HashMap<String, Vec<crate::frontend::core::parser::ast::TypeBodyItem>>,
+    type_definition_bodies: HashMap<String, Vec<crate::ast::TypeBodyItem>>,
     /// RFC-011a: 类型体中的接口实例化待决记录（阶段 2 延迟完整性检查）。
     pending_interface_instantiations: Vec<PendingInterfaceInstantiation>,
     /// RFC-011a §3: 已声明方法签名 (类型名, 方法名) -> 签名。
@@ -84,13 +78,6 @@ pub struct TypeChecker {
     early_value_bindings: HashMap<String, PolyType>,
     /// #358：已声明的顶层函数名 → 签名（用于区分重复定义与合法重载）。
     declared_top_fns: HashMap<String, String>,
-    /// 类型级命名空间（WBS 3.20.9 / #522）：「名是不是谓词」的声明级事实。
-    ///
-    /// 由 `check_module` / `check_module_collect_all` / `collect_signatures`
-    /// 的显式 `namespace` 参数注入——调用方 scan 自己可见的全部单元
-    /// （单文件传自身；多文件传全集，过包含方向安全）。三个入口**不带
-    /// 默认值**：漏接即编译错误，不存在默认空集的静默路径。
-    type_level_namespace: super::probe::TypeLevelNamespace,
 }
 
 /// 取顶层语句的函数**名与签名**（值/HOF 绑定也算函数）。
@@ -99,9 +86,9 @@ pub struct TypeChecker {
 impl TypeChecker {
     fn top_level_fn_signature(
         &self,
-        stmt: &crate::frontend::core::parser::ast::Stmt,
+        stmt: &crate::ast::Stmt,
     ) -> Option<(String, String)> {
-        use crate::frontend::core::parser::ast::{Expr, StmtKind};
+        use crate::ast::{Expr, StmtKind};
         let StmtKind::Assign {
             target,
             type_annotation,
@@ -127,12 +114,12 @@ impl TypeChecker {
         // 它区分 `Array(Int)` 与 `Array(Float)`；无参数时退到类型注解自身。
         // 注意：不能用 `{:?}` 格式化 `Type`——它含 `Span`，同一签名在不同
         // 位置会得到不同字符串。用 `MonoType::type_name()` 取纯类型名。
-        let type_name_of = |t: &crate::frontend::core::parser::ast::Type| {
+        let type_name_of = |t: &crate::ast::Type| {
             crate::frontend::core::types::MonoType::from(t.clone()).type_name()
         };
         let signature = type_annotation
             .as_ref()
-            .map(crate::frontend::core::parser::ast::Type::fn_params_flat)
+            .map(crate::ast::Type::fn_params_flat)
             .unwrap_or_default();
         let sig = if !signature.is_empty() {
             signature
@@ -158,7 +145,7 @@ impl TypeChecker {
 struct PendingInterfaceInstantiation {
     impl_type: String,
     interface_name: String,
-    args: Vec<crate::frontend::core::parser::ast::Type>,
+    args: Vec<crate::ast::Type>,
     span: crate::util::span::Span,
 }
 
@@ -211,7 +198,6 @@ impl TypeChecker {
             import_used: HashSet::new(),
             early_value_bindings: HashMap::new(),
             declared_top_fns: HashMap::new(),
-            type_level_namespace: super::probe::TypeLevelNamespace::default(),
         }
     }
 
@@ -396,7 +382,7 @@ impl TypeChecker {
     /// 检查单个语句（委托给 StatementChecker）
     pub fn check_stmt(
         &mut self,
-        stmt: &crate::frontend::core::parser::ast::Stmt,
+        stmt: &crate::ast::Stmt,
     ) -> Result<(), Box<Diagnostic>> {
         self.body_checker_mut().check_stmt(stmt)
     }
@@ -404,17 +390,10 @@ impl TypeChecker {
     /// 检查整个模块
     ///
     /// 在收集模式下，将收集所有错误后统一返回。
-    ///
-    /// `namespace`：本单元可见的类型级命名空间（`probe::TypeLevelNamespace`
-    /// ——「名是不是谓词」的声明级事实，WBS 3.20.9 / #522）。单文件入口传
-    /// `scan_one(module)`；多文件入口传全部单元的 scan 并集。无默认值——
-    /// 漏接即编译错误，不存在默认空集的静默路径。
     pub fn check_module(
         &mut self,
         module: &Module,
-        namespace: &super::probe::TypeLevelNamespace,
     ) -> TypeCheckResult {
-        self.type_level_namespace = namespace.clone();
         self.check_module_impl(module, false)
     }
 
@@ -425,9 +404,7 @@ impl TypeChecker {
     pub fn check_module_collect_all(
         &mut self,
         module: &Module,
-        namespace: &super::probe::TypeLevelNamespace,
     ) -> TypeCheckResult {
-        self.type_level_namespace = namespace.clone();
         self.check_module_impl(module, true)
     }
 
@@ -436,22 +413,15 @@ impl TypeChecker {
     /// 跑 pass1（类型定义）+ pass2（函数/绑定签名），**不检查函数体**。
     /// 用于在构建 Registry 时提取每个文件顶层绑定的真实 `MonoType`。
     /// 函数体里的跨文件引用留到完整三遍（pass3）才检查，彼时 Registry 已就绪。
-    ///
-    /// `namespace`：Registry 阶段的谓词名可见面（WBS 3.20.9 / #522）。
-    /// 本方法**不执行第零遍**（`env.predicate_defs` 在此阶段为空）、导入
-    /// 也未并——谓词判定只能走声明级 namespace，调用方（driver 的
-    /// Registry 臂 / 嵌入 std）须传全部可见单元的 scan 并集。
     pub fn collect_signatures(
         &mut self,
         module: &Module,
-        namespace: &super::probe::TypeLevelNamespace,
     ) {
-        self.type_level_namespace = namespace.clone();
         // pass1: 类型定义
         for stmt in &module.items {
             // #324：模块级阶段挂当前语句 span，诊断自动获得位置
             let _module_span_guard = crate::util::diagnostic::push_current_span(stmt.span);
-            if let crate::frontend::core::parser::ast::StmtKind::TypeDefinition {
+            if let crate::ast::StmtKind::TypeDefinition {
                 name,
                 type_annotation,
                 definition,
@@ -479,7 +449,7 @@ impl TypeChecker {
         // 却需要把名字随导出一并暴露——跨模块调用（`list.len(v)`）的单态化
         // 依赖它们绑定签名里的 `TypeRef("A")`。
         {
-            use crate::frontend::core::parser::ast::{GenericParamKind, StmtKind, Type};
+            use crate::ast::{GenericParamKind, StmtKind, Type};
             for stmt in &module.items {
                 if let StmtKind::Assign {
                     target,
@@ -487,8 +457,7 @@ impl TypeChecker {
                     ..
                 } = &stmt.kind
                 {
-                    if let crate::frontend::core::parser::ast::Expr::Var(name, _) = target.as_ref()
-                    {
+                    if let crate::ast::Expr::Var(name, _) = target.as_ref() {
                         // 参数位来自 `Type::Fn.params`（`fn_params_flat` 是唯一
                         // 取用入口，递归拍平全部 curry 组）。判据单点：
                         // `classify_generic_params` 收全量泛型形态——
@@ -497,17 +466,16 @@ impl TypeChecker {
                         // 与 `StatementChecker` 同源，不再各写一份 matches!。
                         let params = type_annotation
                             .as_ref()
-                            .map(crate::frontend::core::parser::ast::Type::fn_params_flat)
+                            .map(crate::ast::Type::fn_params_flat)
                             .unwrap_or_default();
-                        let generic_params =
-                            crate::frontend::core::parser::ast::classify_generic_params(
-                                &params,
-                                &|n| {
-                                    self.env.has_trait(n)
-                                        || super::operator_interfaces::spec(n).is_some()
-                                },
-                                &super::probe::SemanticProbe,
-                            );
+                        let generic_params = crate::ast::classify_generic_params(
+                            &params,
+                            &|n| {
+                                self.env.has_trait(n)
+                                    || super::operator_interfaces::spec(n).is_some()
+                            },
+                            &super::probe::SemanticProbe,
+                        );
                         // Const 候选过 RFC-011 §4.1 两步判定的第二步（用途精筛）：
                         // fn_params_flat 把全部 curry 组拍平，值参数段的
                         // `(n: Int)` 同样是 CONST_PARAM_TYPES 候选——只有被后续
@@ -620,23 +588,21 @@ impl TypeChecker {
             .map(|(name, poly)| (name.clone(), poly.body.clone()))
             .collect();
         body_checker.set_type_defs(type_defs);
-        // 双表分工（3.20.8 收单点，3.20.9 起来源换声明级——#522）：
+        // 双表分工（3.20.8 / #511 t3 low 收敛——谓词排除判据单一事实源）：
         //
         // 1. `proof_fn_bases`——证明函数基类型表（RFC-027 Phase 2.5）：
         //    「返回 Type 的函数名 → 其基类型」。消费者是**剥精化取基类型**
         //    （inference/statements.rs 的 `strip_refined_value_type` 与证明函数
         //    `Refined { base, .. }` 正格化），需要 MonoType 值，不是排除判据。
         // 2. `predicate_names`——谓词名字集，**谓词排除判据的单一事实源**：
-        //    即注入的类型级命名空间（`probe::TypeLevelNamespace`，内置谓词
-        //    名 ∪ 全部可见单元的谓词声明名）。与 A 面（`collect_signatures`
+        //    三源（内置谓词 / `predicate_defs` 模块声明 / `env.vars`）的并集
+        //    逐名跑 `is_predicate_application`——与 A 面（`collect_signatures`
         //    与 `collect_function_signature` 的两个 `collect_used_in_type`
-        //    调用点）同一判定（`is_predicate_application` 现即 namespace
-        //    查询），by construction 同源。消费者：inference/statements.rs
-        //    const 用途精筛的 `is_predicate`——谓词应用的实参位是编译期
-        //    表达式（值）不是类型引用，不得计入 const 泛型用途（RFC-027a）。
-        //    3.20.9 前这里是「内置谓词 / `predicate_defs` / `env.vars` 三源
-        //    并集逐名过滤」的检查期计算——Registry 阶段三臂不完整导致 #522
-        //    假拒绝，已整体退役。
+        //    调用点）同一判定函数，by construction 同源。消费者：
+        //    inference/statements.rs const 用途精筛的 `is_predicate`——谓词
+        //    应用的实参位是编译期表达式（值）不是类型引用，不得计入 const
+        //    泛型用途（RFC-027a；3.20.8 前该处是「`Terminates` 字面量 ∪
+        //    `proof_fn_bases` 判名」的窄化同义判据，与 A 面不同构）。
         let proof_fn_bases: HashMap<String, MonoType> = self
             .env
             .vars
@@ -655,7 +621,14 @@ impl TypeChecker {
             })
             .collect();
         body_checker.set_proof_fn_bases(proof_fn_bases);
-        let predicate_names: HashSet<String> = self.type_level_namespace.predicates.clone();
+        let predicate_name_sources = crate::frontend::core::typecheck::probe::BUILTIN_PREDICATES
+            .iter()
+            .map(|s| s.to_string())
+            .chain(self.env.predicate_defs.keys().cloned())
+            .chain(self.env.vars.keys().cloned());
+        let predicate_names: HashSet<String> = predicate_name_sources
+            .filter(|name| self.is_predicate_application(name))
+            .collect();
         body_checker.set_predicate_names(predicate_names);
         // 如果启用收集模式，设置收集所有错误
         if collect_all {
@@ -712,9 +685,9 @@ impl TypeChecker {
     /// 自身的完整检查。
     pub fn harvest_untyped_value_bindings(
         &mut self,
-        module: &crate::frontend::core::parser::ast::Module,
+        module: &crate::ast::Module,
     ) {
-        use crate::frontend::core::parser::ast::{Expr, StmtKind};
+        use crate::ast::{Expr, StmtKind};
         // T3 占位先行：前向引用（`b = a + 1` 中 a 在后）名字可见，
         // 且 init_body_checker 的占位同步依赖这一步
         for stmt in &module.items {
@@ -746,7 +719,7 @@ impl TypeChecker {
         }
 
         // 收割目标：裸名、无标注、非函数、签名表里没有的顶层绑定
-        let targets: Vec<&crate::frontend::core::parser::ast::Stmt> = module
+        let targets: Vec<&crate::ast::Stmt> = module
             .items
             .iter()
             .filter(|stmt| match &stmt.kind {
@@ -817,7 +790,7 @@ impl TypeChecker {
         for stmt in &module.items {
             // #324：模块级阶段挂当前语句 span，诊断自动获得位置
             let _module_span_guard = crate::util::diagnostic::push_current_span(stmt.span);
-            if let crate::frontend::core::parser::ast::StmtKind::TypeDefinition {
+            if let crate::ast::StmtKind::TypeDefinition {
                 name,
                 type_annotation,
                 definition,
@@ -1313,24 +1286,24 @@ impl TypeChecker {
     /// 以便调用方在 pass1 中统一注册。
     fn collect_unsafe_type_defs(
         &self,
-        stmt: &crate::frontend::core::parser::ast::Stmt,
+        stmt: &crate::ast::Stmt,
         out: &mut Vec<(
             String,
-            crate::frontend::core::parser::ast::Type,
-            Option<crate::frontend::core::parser::ast::Type>,
+            crate::ast::Type,
+            Option<crate::ast::Type>,
             crate::util::span::Span,
         )>,
     ) {
         fn walk_expr(
-            e: &crate::frontend::core::parser::ast::Expr,
+            e: &crate::ast::Expr,
             out: &mut Vec<(
                 String,
-                crate::frontend::core::parser::ast::Type,
-                Option<crate::frontend::core::parser::ast::Type>,
+                crate::ast::Type,
+                Option<crate::ast::Type>,
                 crate::util::span::Span,
             )>,
         ) {
-            use crate::frontend::core::parser::ast::{Expr, StmtKind};
+            use crate::ast::{Expr, StmtKind};
             match e {
                 Expr::Unsafe { body, .. } => {
                     for s in &body.stmts {
@@ -1380,15 +1353,15 @@ impl TypeChecker {
             }
         }
         fn collect_unsafe_type_defs_pub(
-            stmt: &crate::frontend::core::parser::ast::Stmt,
+            stmt: &crate::ast::Stmt,
             out: &mut Vec<(
                 String,
-                crate::frontend::core::parser::ast::Type,
-                Option<crate::frontend::core::parser::ast::Type>,
+                crate::ast::Type,
+                Option<crate::ast::Type>,
                 crate::util::span::Span,
             )>,
         ) {
-            use crate::frontend::core::parser::ast::StmtKind;
+            use crate::ast::StmtKind;
             match &stmt.kind {
                 StmtKind::Expr(e) => walk_expr(e, out),
                 StmtKind::Assign { value: Some(v), .. } => walk_expr(v, out),
@@ -1426,7 +1399,7 @@ impl TypeChecker {
 
     fn collect_function_signature(
         &mut self,
-        stmt: &crate::frontend::core::parser::ast::Stmt,
+        stmt: &crate::ast::Stmt,
     ) {
         // #358：顶层函数**重复定义**检测（同名**同签名**才是重复）。
         //
@@ -1452,20 +1425,18 @@ impl TypeChecker {
             }
         }
         match &stmt.kind {
-            crate::frontend::core::parser::ast::StmtKind::Expr(expr) => {
+            crate::ast::StmtKind::Expr(expr) => {
                 // 处理叠加在表达式语句上的赋值 (name = value)；
                 // 函数定义即 value 上的 Lambda（RFC-039 6.5）
-                if let crate::frontend::core::parser::ast::Expr::BinOp {
-                    op: crate::frontend::core::parser::ast::BinOp::Assign,
+                if let crate::ast::Expr::BinOp {
+                    op: crate::ast::BinOp::Assign,
                     left,
                     right,
                     ..
                 } = expr.as_ref()
                 {
-                    if let crate::frontend::core::parser::ast::Expr::Var(name, _) = left.as_ref() {
-                        if let crate::frontend::core::parser::ast::Expr::Lambda { params, .. } =
-                            right.as_ref()
-                        {
+                    if let crate::ast::Expr::Var(name, _) = left.as_ref() {
+                        if let crate::ast::Expr::Lambda { params, .. } = right.as_ref() {
                             let fn_ty = MonoType::Fn {
                                 params: params
                                     .iter()
@@ -1506,34 +1477,29 @@ impl TypeChecker {
                     }
                 }
             }
-            crate::frontend::core::parser::ast::StmtKind::Assign {
+            crate::ast::StmtKind::Assign {
                 target,
                 type_annotation,
                 value,
                 ..
             } if value.as_ref().is_some_and(|v| {
-                matches!(
-                    v.as_ref(),
-                    crate::frontend::core::parser::ast::Expr::Lambda { .. }
-                ) || crate::frontend::core::parser::ast::Expr::block_binding_is_function(
-                    type_annotation.as_ref(),
-                    Some(v.as_ref()),
-                )
+                matches!(v.as_ref(), crate::ast::Expr::Lambda { .. })
+                    || crate::ast::Expr::block_binding_is_function(
+                        type_annotation.as_ref(),
+                        Some(v.as_ref()),
+                    )
             }) || (value.is_none() && type_annotation.is_some()) =>
             {
                 // 签名形参的唯一来源：注解里的 Type::Fn 链（6.5.2）
                 let signature = type_annotation
                     .as_ref()
-                    .map(crate::frontend::core::parser::ast::Type::fn_params_flat)
+                    .map(crate::ast::Type::fn_params_flat)
                     .unwrap_or_default();
                 // 从 target 提取 name 和 type_name
                 let (name, type_name) = match target.as_ref() {
-                    crate::frontend::core::parser::ast::Expr::Var(n, _) => (n.clone(), None),
-                    crate::frontend::core::parser::ast::Expr::FieldAccess {
-                        expr, field, ..
-                    } => {
-                        if let crate::frontend::core::parser::ast::Expr::Var(tn, _) = expr.as_ref()
-                        {
+                    crate::ast::Expr::Var(n, _) => (n.clone(), None),
+                    crate::ast::Expr::FieldAccess { expr, field, .. } => {
+                        if let crate::ast::Expr::Var(tn, _) = expr.as_ref() {
                             {
                                 // 语义分流（issue #180 F 组）：base 是类型才是方法定义；
                                 // base 是值（实例）→ 字段赋值，pass3 处理，不当方法定义收集。
@@ -1556,16 +1522,12 @@ impl TypeChecker {
                 // 从 value 提取 params 和 body（Lambda 形式）
                 let (params, _): (Vec<_>, Vec<_>) = match value {
                     Some(expr) => {
-                        if let crate::frontend::core::parser::ast::Expr::Lambda {
-                            params: p,
-                            body: b,
-                            ..
+                        if let crate::ast::Expr::Lambda {
+                            params: p, body: b, ..
                         } = expr.as_ref()
                         {
                             (p.clone(), b.stmts.clone())
-                        } else if let crate::frontend::core::parser::ast::Expr::Block(b) =
-                            expr.as_ref()
-                        {
+                        } else if let crate::ast::Expr::Block(b) = expr.as_ref() {
                             (Vec::new(), b.stmts.clone())
                         } else {
                             (Vec::new(), Vec::new())
@@ -1588,7 +1550,7 @@ impl TypeChecker {
                 // 方法绑定使用 method_type，普通函数使用 type_annotation
                 let (param_types, return_type) = if let Some(meth_ty) = method_type {
                     // 方法绑定：优先使用 method_type 中的签名
-                    if let crate::frontend::core::parser::ast::Type::Fn {
+                    if let crate::ast::Type::Fn {
                         params: param_tys,
                         return_type,
                     } = meth_ty
@@ -1602,7 +1564,7 @@ impl TypeChecker {
                     } else {
                         // method_type 不是 Fn 类型，回退到 type_annotation 或 params
                         if let Some(type_ann) = type_annotation {
-                            if let crate::frontend::core::parser::ast::Type::Fn {
+                            if let crate::ast::Type::Fn {
                                 params: param_tys,
                                 return_type,
                             } = type_ann
@@ -1637,7 +1599,7 @@ impl TypeChecker {
                         }
                     }
                 } else if let Some(type_ann) = type_annotation {
-                    if let crate::frontend::core::parser::ast::Type::Fn {
+                    if let crate::ast::Type::Fn {
                         params: param_tys,
                         return_type,
                     } = type_ann
@@ -1677,12 +1639,7 @@ impl TypeChecker {
                 // 需要剥离类型级参数，并将 TypeRef("T") 替换为新的类型变量。
                 let type_generic_params: Vec<_> = generic_params
                     .iter()
-                    .filter(|p| {
-                        matches!(
-                            p.kind,
-                            crate::frontend::core::parser::ast::GenericParamKind::Type
-                        )
-                    })
+                    .filter(|p| matches!(p.kind, crate::ast::GenericParamKind::Type))
                     .collect();
 
                 // === 函数 const 泛型判定（用途分析） ===
@@ -1691,12 +1648,7 @@ impl TypeChecker {
                 // 被引用的候选 → const。精筛唯一实现在 const_param.rs（RFC-011 §4.1）。
                 let candidate_names: HashSet<String> = generic_params
                     .iter()
-                    .filter(|p| {
-                        matches!(
-                            p.kind,
-                            crate::frontend::core::parser::ast::GenericParamKind::Const { .. }
-                        )
-                    })
+                    .filter(|p| matches!(p.kind, crate::ast::GenericParamKind::Const { .. }))
                     .map(|p| p.name.clone())
                     .collect();
 
@@ -1711,11 +1663,8 @@ impl TypeChecker {
                     // 引用。不排除则形参名被误判为 const 泛型参数并替换成底层类型，
                     // 精化约束/测度在到达消费端之前就丢了（E1092）。
                     let is_predicate = |n: &str| self.is_predicate_application(n);
-                    if let Some(crate::frontend::core::parser::ast::Type::Fn {
-                        return_type, ..
-                    }) = type_annotation
-                    {
-                        if let crate::frontend::core::parser::ast::Type::Fn {
+                    if let Some(crate::ast::Type::Fn { return_type, .. }) = type_annotation {
+                        if let crate::ast::Type::Fn {
                             params: inner_params,
                             ..
                         } = return_type.as_ref()
@@ -1863,7 +1812,7 @@ impl TypeChecker {
                     self.env.add_var(name.clone(), poly);
                 }
             }
-            crate::frontend::core::parser::ast::StmtKind::Use {
+            crate::ast::StmtKind::Use {
                 path,
                 items,
                 alias,
@@ -1987,7 +1936,7 @@ impl TypeChecker {
                 }
             }
             // 外部绑定: Type.method = function 或 Type.method = function[pos]
-            crate::frontend::core::parser::ast::StmtKind::Assign {
+            crate::ast::StmtKind::Assign {
                 target,
                 value: Some(val),
                 span,
@@ -2060,9 +2009,9 @@ impl TypeChecker {
     /// 类型来源优先级：显式标注 > 初始化表达式的字面量类型 > 类型变量（待 pass3 统一）。
     fn collect_value_binding_signature(
         &mut self,
-        stmt: &crate::frontend::core::parser::ast::Stmt,
+        stmt: &crate::ast::Stmt,
     ) {
-        use crate::frontend::core::parser::ast::{Expr, StmtKind};
+        use crate::ast::{Expr, StmtKind};
         let StmtKind::Assign {
             target,
             type_annotation,
@@ -2172,7 +2121,7 @@ impl TypeChecker {
         let pending = std::mem::take(&mut self.pending_body_bindings);
         for (type_name, binding, span) in pending {
             match &binding.kind {
-                crate::frontend::core::parser::ast::BindingKind::External {
+                crate::ast::BindingKind::External {
                     function,
                     positions,
                 } => {
@@ -2184,7 +2133,7 @@ impl TypeChecker {
                         span,
                     );
                 }
-                crate::frontend::core::parser::ast::BindingKind::DefaultExternal { function } => {
+                crate::ast::BindingKind::DefaultExternal { function } => {
                     self.register_external_method_binding(
                         &type_name,
                         &binding.name,
@@ -2193,7 +2142,7 @@ impl TypeChecker {
                         span,
                     );
                 }
-                crate::frontend::core::parser::ast::BindingKind::Anonymous { .. } => {}
+                crate::ast::BindingKind::Anonymous { .. } => {}
             }
         }
     }
@@ -2202,9 +2151,9 @@ impl TypeChecker {
     /// head 命中已注册类型构造器（generic_type_defs）且实参全为类型形态。
     fn is_interface_application(
         &self,
-        ty: &crate::frontend::core::parser::ast::Type,
+        ty: &crate::ast::Type,
     ) -> bool {
-        use crate::frontend::core::parser::ast::Type;
+        use crate::ast::Type;
         if let Type::Generic {
             name: head, args, ..
         } = ty
@@ -2225,10 +2174,10 @@ impl TypeChecker {
 
     /// RFC-011a: 类型实参是否引用给定参数名（抽象引用 → 继承链接，不记待决实例化）
     fn type_arg_references(
-        ty: &crate::frontend::core::parser::ast::Type,
+        ty: &crate::ast::Type,
         params: &[String],
     ) -> bool {
-        use crate::frontend::core::parser::ast::Type;
+        use crate::ast::Type;
         match ty {
             Type::Name { name, .. } => params.contains(name),
             Type::Generic { args, .. } => args.iter().any(|a| Self::type_arg_references(a, params)),
@@ -2269,10 +2218,10 @@ impl TypeChecker {
     /// 类型表达式是否引用指定类型名（模板 Self 位判定：
     /// `Index(Box(T), Int, T)` 的 `Box(T)` 引用 Box 自身）
     fn type_mentions_type(
-        ty: &crate::frontend::core::parser::ast::Type,
+        ty: &crate::ast::Type,
         name: &str,
     ) -> bool {
-        use crate::frontend::core::parser::ast::Type;
+        use crate::ast::Type;
         match ty {
             Type::Name { name: n, .. } => n == name,
             Type::Generic { name: n, args, .. } => {
@@ -2309,9 +2258,9 @@ impl TypeChecker {
     pub fn type_def_export_payload(
         &self,
         name: &str,
-        definition: &crate::frontend::core::parser::ast::Type,
+        definition: &crate::ast::Type,
     ) -> Option<crate::frontend::module::TypeDefPayload> {
-        use crate::frontend::core::parser::ast::{Type, TypeBodyItem};
+        use crate::ast::{Type, TypeBodyItem};
         let type_def = self.env.generic_type_defs.get(name).cloned();
         let sum_variants = self.env.sum_types.get(name).cloned().unwrap_or_default();
         let mut interface_impls: Vec<(String, super::environment::InterfaceImplEntry)> = Vec::new();
@@ -2379,7 +2328,7 @@ impl TypeChecker {
         visiting: &mut Vec<String>,
         span: crate::util::span::Span,
     ) -> Result<Vec<(String, MonoType)>, ()> {
-        use crate::frontend::core::parser::ast::Type;
+        use crate::ast::Type;
         if visiting.iter().any(|v| v == interface_name) {
             // 循环继承：终止该分支展开
             return Ok(Vec::new());
@@ -2695,8 +2644,8 @@ impl TypeChecker {
     }
 
     /// 从 Index 表达式的 index 部分提取位置列表
-    fn extract_positions(index: &crate::frontend::core::parser::ast::Expr) -> Vec<i64> {
-        crate::frontend::core::parser::ast::Expr::extract_binding_positions(index)
+    fn extract_positions(index: &crate::ast::Expr) -> Vec<i64> {
+        crate::ast::Expr::extract_binding_positions(index)
     }
 
     /// 将模块注册为 Struct 类型（包含所有导出作为字段）
@@ -2897,7 +2846,7 @@ impl TypeChecker {
     /// 计数，破坏非阻断契约。
     fn collect_unused_import_warnings(
         &mut self,
-        module: &crate::frontend::core::parser::ast::Module,
+        module: &crate::ast::Module,
     ) -> Vec<Diagnostic> {
         let (body_imports, used_refs) = match self.body_checker.as_mut() {
             Some(bc) => bc.drain_import_tracking(),
@@ -2923,13 +2872,13 @@ impl TypeChecker {
     fn add_type_definition(
         &mut self,
         name: &str,
-        definition: &crate::frontend::core::parser::ast::Type,
-        type_annotation: Option<&crate::frontend::core::parser::ast::Type>,
+        definition: &crate::ast::Type,
+        type_annotation: Option<&crate::ast::Type>,
         span: crate::util::span::Span,
     ) {
         // 泛型形参从声明注解的 Type::Fn 链拍平（6.5.2：类型定义不再另存形参表）
         let signature = type_annotation
-            .map(crate::frontend::core::parser::ast::Type::fn_params_flat)
+            .map(crate::ast::Type::fn_params_flat)
             .unwrap_or_default();
         let generic_params = classify_generic_params(
             &signature,
@@ -2946,15 +2895,15 @@ impl TypeChecker {
             // 检查 definition 是否引用了 Type
             let is_type_self_ref = match definition {
                 // 情况1: definition 是 MetaType（Type: Type = ...）
-                crate::frontend::core::parser::ast::Type::MetaType { .. } => true,
+                crate::ast::Type::MetaType { .. } => true,
                 // 情况2: definition 是 Name("Type")（Type: Type = Type）
-                crate::frontend::core::parser::ast::Type::Name { name, .. } => name == "Type",
+                crate::ast::Type::Name { name, .. } => name == "Type",
                 // 情况3: definition 是 Generic { name: "Type", ... }（Type: Type = Type[T]）
-                crate::frontend::core::parser::ast::Type::Generic {
+                crate::ast::Type::Generic {
                     name: type_name, ..
                 } => type_name == "Type",
                 // 情况4: definition 是 NamedStruct { name: "Type", ... }
-                crate::frontend::core::parser::ast::Type::NamedStruct {
+                crate::ast::Type::NamedStruct {
                     name: type_name, ..
                 } => type_name == "Type",
                 _ => false,
@@ -2997,19 +2946,17 @@ impl TypeChecker {
 
         // RFC-004: 类型体内的方法绑定登记到 method_bindings（与语句级 Type.method = fn[pos]
         // 同一语义）。此前类型体 Binding 项只有 IR 侧登记，方法调用在类型检查层报 E1042。
-        if let crate::frontend::core::parser::ast::Type::Struct { body } = definition {
+        if let crate::ast::Type::Struct { body } = definition {
             for item in body {
-                if let crate::frontend::core::parser::ast::TypeBodyItem::Binding(b) = item {
+                if let crate::ast::TypeBodyItem::Binding(b) = item {
                     match &b.kind {
-                        crate::frontend::core::parser::ast::BindingKind::External { .. }
-                        | crate::frontend::core::parser::ast::BindingKind::DefaultExternal {
-                            ..
-                        } => {
+                        crate::ast::BindingKind::External { .. }
+                        | crate::ast::BindingKind::DefaultExternal { .. } => {
                             // 被绑函数可能在其后定义，延迟到 pass2 之后登记
                             self.pending_body_bindings
                                 .push((name.to_string(), b.clone(), span));
                         }
-                        crate::frontend::core::parser::ast::BindingKind::Anonymous {
+                        crate::ast::BindingKind::Anonymous {
                             params,
                             return_type,
                             positions,
@@ -3039,13 +2986,11 @@ impl TypeChecker {
         // RFC-027 Phase 2.5: 带约束表达式的类型定义同时注册为 proof 函数
         // IsPositive: (x: Int) -> Type = { x > 0 }
         // → 注册 `IsPositive` 为 `Fn { params: [Int], return_type: MetaType }`
-        if let crate::frontend::core::parser::ast::Type::Struct { body } = definition {
+        if let crate::ast::Type::Struct { body } = definition {
             let has_constraint = body.iter().any(|item| {
                 matches!(
                     item,
-                    crate::frontend::core::parser::ast::TypeBodyItem::Expr(
-                        crate::frontend::core::parser::ast::Type::ConstExpr(_)
-                    )
+                    crate::ast::TypeBodyItem::Expr(crate::ast::Type::ConstExpr(_))
                 )
             });
             if has_constraint && !signature.is_empty() {
@@ -3065,7 +3010,7 @@ impl TypeChecker {
         }
 
         // RFC-011a 阶段1: 类型体 AST 项留存（接口展开需要原始应用项，MonoType 转换会丢弃）
-        if let crate::frontend::core::parser::ast::Type::Struct { body } = definition {
+        if let crate::ast::Type::Struct { body } = definition {
             self.type_definition_bodies
                 .insert(name.to_string(), body.clone());
         }
@@ -3075,16 +3020,14 @@ impl TypeChecker {
         // 记入待决队列，阶段 2 统一做 Self 替换 + 完整性检查；实参引用本声明的类型参数
         // （如接口继承体内的 Animal(Self)）为抽象链接，不记待检查（展开时延迟替换）。
         // 其余应用项维持 const 约束路径（Assert(N > 0) 等），行为不变。
-        if let crate::frontend::core::parser::ast::Type::Struct { body } = definition {
+        if let crate::ast::Type::Struct { body } = definition {
             let enclosing_params: Vec<String> =
                 generic_params.iter().map(|p| p.name.clone()).collect();
             for item in body {
-                if let crate::frontend::core::parser::ast::TypeBodyItem::Expr(ty) = item {
+                if let crate::ast::TypeBodyItem::Expr(ty) = item {
                     if self.is_interface_application(ty) {
-                        if let crate::frontend::core::parser::ast::Type::Generic {
-                            name: head,
-                            args,
-                            ..
+                        if let crate::ast::Type::Generic {
+                            name: head, args, ..
                         } = ty
                         {
                             let abstract_ref = args
@@ -3170,7 +3113,7 @@ impl TypeChecker {
 
             // 从类型体收集待定证明义务到 const 参数
             // （接口实例化应用项已被分流，不走 const 约束路径）
-            if let crate::frontend::core::parser::ast::Type::Struct { body } = definition {
+            if let crate::ast::Type::Struct { body } = definition {
                 for item in body {
                     match item {
                         TypeBodyItem::Expr(ty) if !self.is_interface_application(ty) => {
@@ -3228,9 +3171,9 @@ impl TypeChecker {
 fn detect_sum_type(
     name: &str,
     param_names: &[String],
-    definition: &crate::frontend::core::parser::ast::Type,
+    definition: &crate::ast::Type,
 ) -> Option<Vec<super::environment::SumVariantDef>> {
-    use crate::frontend::core::parser::ast::{Type, TypeBodyItem};
+    use crate::ast::{Type, TypeBodyItem};
     let body = match definition {
         Type::Struct { body } => body,
         _ => return None,
@@ -3298,10 +3241,10 @@ fn detect_sum_type(
 /// 遍历类型表达式中的 Generic 类型（如 Assert(N < 100)），
 /// 将含自由 const 变量的 ConstExpr 参数关联到对应 const binder 的 constraints。
 fn process_body_expr_item(
-    ty: &crate::frontend::core::parser::ast::Type,
+    ty: &crate::ast::Type,
     const_binders: &mut [ConstVarDef],
 ) {
-    use crate::frontend::core::parser::ast::Type;
+    use crate::ast::Type;
     if let Type::Generic { args, .. } = ty {
         for arg in args {
             if let Type::ConstExpr(expr) = arg {
@@ -3341,9 +3284,9 @@ fn find_const_var_in_expr(
 /// - `length: N` 里作为字段类型标注的裸 `Name`
 fn collect_used_const_names(
     candidates: &HashSet<String>,
-    definition: &crate::frontend::core::parser::ast::Type,
+    definition: &crate::ast::Type,
 ) -> HashSet<String> {
-    use crate::frontend::core::parser::ast::Type;
+    use crate::ast::Type;
     let mut found = HashSet::new();
     if let Type::Struct { body } = definition {
         for item in body {
@@ -3367,12 +3310,12 @@ fn collect_used_const_names(
 /// 实参位是**编译期表达式操作数**（`Terminates(b)` 的 `b`），不是类型引用，
 /// 必须跳过（RFC-027a T1）。
 pub(crate) fn collect_used_in_type(
-    ty: &crate::frontend::core::parser::ast::Type,
+    ty: &crate::ast::Type,
     candidates: &HashSet<String>,
     found: &mut HashSet<String>,
     is_predicate: &dyn Fn(&str) -> bool,
 ) {
-    use crate::frontend::core::parser::ast::Type;
+    use crate::ast::Type;
     match ty {
         Type::Name { name, .. } if candidates.contains(name) => {
             found.insert(name.clone());
@@ -3444,15 +3387,15 @@ impl TypeChecker {
     fn auto_derive_traits(
         &mut self,
         type_name: &str,
-        definition: &crate::frontend::core::parser::ast::Type,
+        definition: &crate::ast::Type,
     ) {
         // 提取字段列表
-        let fields: Vec<crate::frontend::core::parser::ast::StructField> = match definition {
-            crate::frontend::core::parser::ast::Type::NamedStruct { fields, .. } => fields.clone(),
-            crate::frontend::core::parser::ast::Type::Struct { body } => body
+        let fields: Vec<crate::ast::StructField> = match definition {
+            crate::ast::Type::NamedStruct { fields, .. } => fields.clone(),
+            crate::ast::Type::Struct { body } => body
                 .iter()
                 .filter_map(|it| {
-                    if let crate::frontend::core::parser::ast::TypeBodyItem::Field(f) = it {
+                    if let crate::ast::TypeBodyItem::Field(f) = it {
                         Some(f.clone())
                     } else {
                         None
@@ -3516,8 +3459,8 @@ impl TypeChecker {
         &self,
         imported_module_roots: &mut HashSet<String>,
         path: &str,
-        items: &Option<Vec<crate::frontend::core::parser::ast::SpannedIdent>>,
-        alias: &Option<Vec<crate::frontend::core::parser::ast::SpannedIdent>>,
+        items: &Option<Vec<crate::ast::SpannedIdent>>,
+        alias: &Option<Vec<crate::ast::SpannedIdent>>,
     ) {
         if items.is_some() {
             return;
@@ -3567,18 +3510,25 @@ impl TypeChecker {
     /// 谓词应用的实参位是编译期表达式（值），不是类型引用——`Terminates(b)` 的
     /// `b`、`IsPositive(n)` 的 `n` 都是值。这些位置不得参与 const 泛型用途分析。
     ///
-    /// 判据（WBS 3.20.9 / #522 起）：**声明级事实**——注入的类型级命名空间
-    /// （[`super::probe::TypeLevelNamespace`]，内置谓词名 ∪ 全部可见单元的
-    /// 谓词声明名）。此前的检查期三臂判定（内置名 / `env.predicate_defs` /
-    /// `env.get_var` 的 MetaType 返回）整体退役：Registry 阶段（`collect_signatures`）
-    /// 不跑第零遍且导入未并，三臂对谓词判假 ⇒ 谓词应用实参位被误计 const
-    /// 用途 ⇒ E1012 假拒绝（#522）。`env.predicate_defs` 表本身保留——
-    /// 它是约束求解 / 常量求值的消费面，退役的只是本判定对它的读取。
+    /// 判据取两条同源路径（与 `resolve_type_annotation` 一致）：
+    /// 1. 已在 `predicate_defs` 注册的谓词
+    /// 2. 返回 `Type` 的证明函数（如 `IsPositive: (x: Int) -> Type = { x > 0 }`）
+    /// 3. `Terminates`——内置谓词，无源码声明（RFC-027 §6.9）
     fn is_predicate_application(
         &self,
         name: &str,
     ) -> bool {
-        self.type_level_namespace.predicates.contains(name)
+        if is_builtin_predicate_name(name) {
+            return true;
+        }
+        if self.env.predicate_defs.contains_key(name) {
+            return true;
+        }
+        matches!(
+            self.env.get_var(name).map(|p| &p.body),
+            Some(MonoType::Fn { return_type, .. })
+                if matches!(return_type.as_ref(), MonoType::MetaType { .. })
+        )
     }
 
     /// 把 `Terminates` 精化的占位 base 换成**新类型变量**（RFC-027a）。
@@ -3848,10 +3798,10 @@ impl TypeChecker {
     /// 递归收集单条语句中的精化变量名（含函数体内的嵌套绑定）
     fn collect_refined_var_names_in_stmt(
         &self,
-        stmt: &crate::frontend::core::parser::ast::Stmt,
+        stmt: &crate::ast::Stmt,
         names: &mut std::collections::HashSet<String>,
     ) {
-        use crate::frontend::core::parser::ast::{Expr, StmtKind};
+        use crate::ast::{Expr, StmtKind};
 
         // 轻量解析：只关心「注解是否解析为 Refined」，诊断丢弃（另一遍会报）
         let mut sink = Vec::new();
@@ -3903,10 +3853,10 @@ impl TypeChecker {
     /// 递归收集表达式内的精化绑定（块/循环体/函数体）
     fn collect_refined_var_names_in_expr(
         &self,
-        expr: &crate::frontend::core::parser::ast::Expr,
+        expr: &crate::ast::Expr,
         names: &mut std::collections::HashSet<String>,
     ) {
-        use crate::frontend::core::parser::ast::Expr;
+        use crate::ast::Expr;
 
         match expr {
             Expr::Block(block) => {
@@ -3983,9 +3933,10 @@ impl TypeChecker {
     /// 不透明应用 `IsPositive(-5)`。这是精化约束第一次**可符号推理**的前提
     /// （SMT 与假设合证；终止检查良基性 `b >= 0` 就依赖它）。
     ///
-    /// 两种声明形态的**识别**已提取为 probe.rs 的 `predicate_decl_shape`
-    /// （WBS 3.20.9 / #522：与 `TypeLevelNamespace::scan` 共用，shape
-    /// matching 全仓单点）；本遍在此之上叠加登记侧收窄：
+    /// 两种声明形态都收（与 pipeline 执行证明函数的取法同源）：
+    /// - `TypeDefinition`：`= { x > 0 }` 被解析成类型体，约束在
+    ///   `Type::Struct` 的 `TypeBodyItem::Expr(Type::ConstExpr)` 里（主形态）
+    /// - `Assign`：函数体形态
     ///
     /// 只登记单参数形态：`PredicateResolver::try_resolve` 的阶段 1 模型即单参数，
     /// 登记多参数谓词会使其调用一律撞 ArityMismatch（E1093）——保持其走证明
@@ -3995,14 +3946,68 @@ impl TypeChecker {
         &mut self,
         module: &Module,
     ) {
+        use crate::ast::{Expr, StmtKind, Type, TypeBodyItem};
         for stmt in &module.items {
-            let Some(decl) = super::probe::predicate_decl_shape(stmt) else {
-                continue;
+            // 形参从声明注解的 Type::Fn 链拍平（6.5.2：不再有并行形参表）
+            let (name, type_annotation, constraint) = match &stmt.kind {
+                StmtKind::TypeDefinition {
+                    name,
+                    type_annotation,
+                    definition,
+                    ..
+                } => {
+                    let Type::Struct { body } = definition else {
+                        continue;
+                    };
+                    let Some(expr) = body.iter().find_map(|item| match item {
+                        TypeBodyItem::Expr(Type::ConstExpr(e)) => Some(e.as_ref()),
+                        _ => None,
+                    }) else {
+                        continue;
+                    };
+                    let Some(c) = convert_expr_to_const_expr(expr) else {
+                        continue;
+                    };
+                    (name, type_annotation.as_ref(), c)
+                }
+                StmtKind::Assign {
+                    target,
+                    type_annotation: fn_annotation,
+                    value: Some(v),
+                    ..
+                } => {
+                    let Some(Type::Fn { return_type, .. }) = fn_annotation else {
+                        continue;
+                    };
+                    let Expr::Var(name, _) = target.as_ref() else {
+                        continue;
+                    };
+                    // 返回 Type 才是谓词（`MetaType` 与 `Name{Type}` 两形态同义）
+                    let returns_type = matches!(return_type.as_ref(), Type::MetaType { .. })
+                        || matches!(return_type.as_ref(), Type::Name { name: n, .. } if n == "Type");
+                    if !returns_type {
+                        continue;
+                    }
+                    let Some(body) = extract_fn_body(Some(v.as_ref())) else {
+                        continue;
+                    };
+                    let Some(expr) = body.stmts.iter().find_map(|s| match &s.kind {
+                        StmtKind::Expr(e) => Some(e.as_ref()),
+                        StmtKind::Return(Some(e)) => Some(e.as_ref()),
+                        _ => None,
+                    }) else {
+                        continue;
+                    };
+                    let Some(c) = convert_expr_to_const_expr(expr) else {
+                        continue;
+                    };
+                    (name, fn_annotation.as_ref(), c)
+                }
+                _ => continue,
             };
             // 形参名与类型同栖在 `Type::Fn.params`（6.5.2）
-            let params = decl
-                .type_annotation
-                .map(crate::frontend::core::parser::ast::Type::fn_params_flat)
+            let params = type_annotation
+                .map(Type::fn_params_flat)
                 .unwrap_or_default();
             let [param] = params.as_slice() else {
                 continue;
@@ -4013,11 +4018,11 @@ impl TypeChecker {
                 .map(|t| MonoType::from(t.clone()))
                 .unwrap_or(MonoType::Int(64));
             self.env.predicate_defs.insert(
-                decl.name.to_string(),
+                name.clone(),
                 crate::frontend::core::typecheck::predicate_resolver::PredicateDef {
                     param_name: param.name.clone(),
                     param_type,
-                    constraint: decl.constraint,
+                    constraint,
                 },
             );
         }
@@ -4037,13 +4042,13 @@ impl TypeChecker {
     /// 递归收集单条语句中的显式测度（含函数体内的嵌套绑定）
     fn collect_termination_measures_in_stmt(
         &self,
-        stmt: &crate::frontend::core::parser::ast::Stmt,
+        stmt: &crate::ast::Stmt,
         measures: &mut std::collections::HashMap<
             String,
             crate::frontend::core::types::const_data::ConstExpr,
         >,
     ) {
-        use crate::frontend::core::parser::ast::{Expr, StmtKind, Type};
+        use crate::ast::{Expr, StmtKind, Type};
 
         match &stmt.kind {
             StmtKind::Assign {
@@ -4095,13 +4100,13 @@ impl TypeChecker {
     /// 递归收集表达式内的显式测度（块/循环体/函数体）
     fn collect_termination_measures_in_expr(
         &self,
-        expr: &crate::frontend::core::parser::ast::Expr,
+        expr: &crate::ast::Expr,
         measures: &mut std::collections::HashMap<
             String,
             crate::frontend::core::types::const_data::ConstExpr,
         >,
     ) {
-        use crate::frontend::core::parser::ast::Expr;
+        use crate::ast::Expr;
 
         match expr {
             Expr::Block(block) => {
@@ -4135,9 +4140,9 @@ impl TypeChecker {
     /// `Type::Generic` 形态（`Terminates(f(n))`，解析器读作类型应用）不是测度
     /// 表达式，需要 const fn 求值才能定值，暂不支持——返回 `None` 而非猜一个值。
     fn terminates_measure(
-        ty: &crate::frontend::core::parser::ast::Type
+        ty: &crate::ast::Type
     ) -> Option<crate::frontend::core::types::const_data::ConstExpr> {
-        use crate::frontend::core::parser::ast::Type;
+        use crate::ast::Type;
         use crate::frontend::core::types::const_data::ConstExpr;
         use crate::frontend::core::types::eval::const_eval::convert_expr_to_const_expr;
 
@@ -4156,15 +4161,11 @@ impl TypeChecker {
 }
 
 /// 提取绑定值的函数体（判定已由调用方完成，这里只取形态）：
-/// `Lambda` 恒为函数体；`Block` 在是函数定义时才是（值块返回 None）。
-/// `pub(crate)`：probe.rs 的谓词声明形态识别（`predicate_decl_shape`，
-/// 第零遍与 namespace scan 的共享单点）同样消费。
-pub(crate) fn extract_fn_body(
-    value: Option<&crate::frontend::core::parser::ast::Expr>
-) -> Option<&crate::frontend::core::parser::ast::Block> {
+/// `Lambda` 恒为函数体；`Block` 在是函数定义时才是（值块返回 None）
+fn extract_fn_body(value: Option<&crate::ast::Expr>) -> Option<&crate::ast::Block> {
     match value? {
-        crate::frontend::core::parser::ast::Expr::Lambda { body, .. } => Some(body.as_ref()),
-        crate::frontend::core::parser::ast::Expr::Block(block) => Some(block),
+        crate::ast::Expr::Lambda { body, .. } => Some(body.as_ref()),
+        crate::ast::Expr::Block(block) => Some(block),
         _ => None,
     }
 }

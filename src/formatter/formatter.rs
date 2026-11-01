@@ -2,7 +2,7 @@
 //!
 //! 顶层格式化入口，协调 SourceMap、FormatContext 和各 Handler。
 
-use crate::frontend::core::parser::ast::Module;
+use crate::ast::Module;
 
 use super::context::FormatContext;
 use super::options::FormatOptions;
@@ -48,7 +48,7 @@ impl Formatter {
     /// 格式化单个表达式（用于测试）
     pub fn format_expr(
         &self,
-        expr: &crate::frontend::core::parser::ast::Expr,
+        expr: &crate::ast::Expr,
     ) -> String {
         super::handlers::expr::format_expr(expr, &self.ctx, &self.source_map)
     }
@@ -56,7 +56,7 @@ impl Formatter {
     /// 格式化单个语句（用于测试）
     pub fn format_stmt(
         &self,
-        stmt: &crate::frontend::core::parser::ast::StmtKind,
+        stmt: &crate::ast::StmtKind,
     ) -> String {
         super::handlers::stmt::format_stmt(stmt, &self.ctx, &self.source_map)
     }

@@ -2,7 +2,7 @@
 //! 基于语言规范 §3（AST 结构）
 
 use crate::frontend::core::lexer::tokens::Literal;
-use crate::frontend::core::parser::ast::{
+use crate::ast::{
     self, BindingKind, BinOp, Block, Expr, FStringSegment, GenericParam, GenericParamKind,
     MatchArm, Param, Pattern, PlanId, SpannedIdent, Stmt, StmtKind, StructField, Type,
     TypeBodyBinding, UnOp, is_meta_type,

@@ -3,7 +3,7 @@
 
 use crate::frontend::core::lexer::tokens::*;
 use crate::util::diagnostic::ErrorCodeDefinition;
-use crate::frontend::core::parser::ast::*;
+use crate::ast::*;
 use crate::frontend::core::parser::{NullProbe, ParserState};
 use crate::frontend::core::parser::statements::types::parse_type_annotation_required;
 use crate::frontend::core::parser::statements::functions::{parse_fn_params, parse_fn_body};

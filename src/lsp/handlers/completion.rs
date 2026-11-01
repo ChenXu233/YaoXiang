@@ -12,7 +12,7 @@ use tracing::debug;
 
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parse_with_probe;
-use crate::frontend::core::parser::ast::{Module, StmtKind};
+use crate::ast::{Module, StmtKind};
 use crate::frontend::core::typecheck::semantic_db::DefinitionKind;
 use crate::frontend::core::typecheck::SemanticProbe;
 use crate::lsp::session::Session;
@@ -163,9 +163,7 @@ fn extract_symbols_from_module(module: &Module) -> Vec<CompletionItem> {
                     });
                 } else if let Some(v) = value {
                     // Lambda → 函数项（含零参）；其余值绑定 → 变量项
-                    if let crate::frontend::core::parser::ast::Expr::Lambda { params, .. } =
-                        v.as_ref()
-                    {
+                    if let crate::ast::Expr::Lambda { params, .. } = v.as_ref() {
                         items.push(CompletionItem {
                             label: name.clone(),
                             kind: Some(CompletionItemKind::FUNCTION),
