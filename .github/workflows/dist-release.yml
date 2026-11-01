@@ -212,7 +212,11 @@ jobs:
       fail-fast: false
       # runner / dist-args / install_dist / packages_install 由 dist 计算
       matrix: ${{ fromJson(needs.plan.outputs.val).ci.github.artifacts_matrix }}
-    runs-on: ${{ matrix.runner }}
+    # macOS 14 镜像 2026-11-02 退役，GitHub 在退役前安排了 brownout 演练：演练窗口内
+    # macos-14 作业会被直接拒绝启动（见 actions/runner-images#13518）。cargo-dist 0.32/0.33
+    # 都把 aarch64-apple-darwin 映射到 macos-14，故在消费点统一改投 macos-15——同为 Apple
+    # Silicon 托管镜像，产物 target 仍是 aarch64-apple-darwin。上游改默认值后此行可删除。
+    runs-on: ${{ matrix.runner == 'macos-14' && 'macos-15' || matrix.runner }}
     container: ${{ matrix.container && matrix.container.image || null }}
     timeout-minutes: 60
     env:
