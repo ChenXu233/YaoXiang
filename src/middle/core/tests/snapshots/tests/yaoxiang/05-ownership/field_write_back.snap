@@ -1,6 +1,6 @@
 module
   fn Point() -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
-    type_decl Struct { body: [Field(StructField { name: "x", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 8, column: 20, offset: 280 }, end: Position { line: 8, column: 23, offset: 283 } } }, default: None }), Field(StructField { name: "y", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 8, column: 28, offset: 288 }, end: Position { line: 8, column: 31, offset: 291 } } }, default: None })] }
+    type_decl [x: Int(64) ; y: Int(64)]
   fn Point.sum(Ref { mutable: false, inner: TypeRef("Point") }) -> Int(64)
     locals_total=6
     Load %0 <- %1

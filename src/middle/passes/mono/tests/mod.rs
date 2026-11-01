@@ -4,6 +4,5 @@
 //! RFC-011 §4: 泛型函数特化
 //! RFC-031: 优化级别与 Pass 管理器
 
-mod function;
 mod instance;
 mod monomorphizer;

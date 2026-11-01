@@ -1,6 +1,6 @@
 module
   fn Point() -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
-    type_decl Struct { body: [Field(StructField { name: "x", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 7, column: 20, offset: 142 }, end: Position { line: 7, column: 23, offset: 145 } } }, default: None }), Field(StructField { name: "y", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 7, column: 28, offset: 150 }, end: Position { line: 7, column: 31, offset: 153 } } }, default: None })] }
+    type_decl [x: Int(64) ; y: Int(64)]
   fn main() -> Void
     slot[0] p : Int(64) @depth1
     slot[1] p2 : Int(64) @depth1

@@ -1,6 +1,6 @@
 module
   fn Counter() -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
-    type_decl Struct { body: [Field(StructField { name: "n", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 10, column: 22, offset: 467 }, end: Position { line: 10, column: 25, offset: 470 } } }, default: None }), Field(StructField { name: "label", is_mut: false, ty: Name { name: "String", span: Span { start: Position { line: 10, column: 34, offset: 479 }, end: Position { line: 10, column: 40, offset: 485 } } }, default: None })] }
+    type_decl [n: Int(64) ; label: Generic { name: "String", args: [] }]
   fn Counter.bump(Ref { mutable: true, inner: TypeRef("Counter") }, Int(64)) -> Void
     locals_total=8
     Load %0 <- %1

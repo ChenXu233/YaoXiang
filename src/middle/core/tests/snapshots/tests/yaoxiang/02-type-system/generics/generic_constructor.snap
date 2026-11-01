@@ -1,7 +1,7 @@
 module
   fn Pair(MetaType { universe_level: UniverseLevel { level: "0" }, type_params: [] }) -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
     generic_params: ["T"]
-    type_decl Struct { body: [Field(StructField { name: "first", is_mut: false, ty: Name { name: "T", span: Span { start: Position { line: 15, column: 12, offset: 801 }, end: Position { line: 15, column: 13, offset: 802 } } }, default: None }), Field(StructField { name: "second", is_mut: false, ty: Name { name: "T", span: Span { start: Position { line: 16, column: 13, offset: 816 }, end: Position { line: 16, column: 14, offset: 817 } } }, default: None })] }
+    type_decl [first: TypeRef("T") ; second: TypeRef("T")]
   fn main() -> Void
     slot[0] p : Int(64) @depth1
     slot[1] s : Int(64) @depth1

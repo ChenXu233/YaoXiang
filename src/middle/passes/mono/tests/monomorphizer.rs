@@ -14,12 +14,12 @@
 //! - 嵌套泛型 BFS 引用扫描（如 List(List(Int))）
 //! - 小写参数名类型参数判定（靠名单不靠大小写启发式）
 
-use crate::frontend::core::parser::ast::{StructField, Type as AstType, TypeBodyItem};
 use crate::frontend::core::typecheck::MonoType;
 use crate::frontend::core::types::mono::UniverseLevel;
 use crate::frontend::core::types::var::TypeVar;
 use crate::middle::core::ir::{
     BasicBlock, ConstValue, FunctionBody, FunctionIR, Instruction, LocalSlot, ModuleIR, Operand,
+    TypeDeclBody, TypeDeclField,
 };
 use crate::middle::passes::mono::instance::{GenericFunctionId, InstantiationRequest};
 use crate::middle::passes::mono::Monomorphizer;
@@ -99,18 +99,14 @@ fn make_swap_ir() -> FunctionIR {
 /// 创建泛型 Pair 类型定义 IR: `Pair: (T: Type) -> Type = { first: T, second: T }`
 /// 字段名按传入顺序排列，便于断言。
 fn make_pair_type_ir(fields: &[&str]) -> FunctionIR {
-    let body_items: Vec<TypeBodyItem> = fields
+    let decl_fields: Vec<TypeDeclField> = fields
         .iter()
-        .map(|name| {
-            TypeBodyItem::Field(StructField {
-                name: (*name).to_string(),
-                ty: AstType::Name {
-                    name: "T".to_string(),
-                    span: Span::dummy(),
-                },
-                default: None,
-                is_mut: false,
-            })
+        .map(|name| TypeDeclField {
+            name: (*name).to_string(),
+            ty: MonoType::TypeRef("T".to_string()),
+            is_mut: false,
+            has_default: false,
+            is_method: false,
         })
         .collect();
 
@@ -127,7 +123,11 @@ fn make_pair_type_ir(fields: &[&str]) -> FunctionIR {
         },
         generic_params: Some(vec!["T".to_string()]),
         body: FunctionBody::TypeDecl {
-            definition: AstType::Struct { body: body_items },
+            body: TypeDeclBody {
+                fields: decl_fields,
+                // 旧路径 `type_from_ast(Struct) = Void`：构造器/类型表项在语料里恒为 Void
+                self_type: MonoType::Void,
+            },
         },
     }
 }
@@ -375,18 +375,14 @@ fn make_generic_type_decl_ir(
     param: &str,
     fields: &[&str],
 ) -> FunctionIR {
-    let body_items: Vec<TypeBodyItem> = fields
+    let decl_fields: Vec<TypeDeclField> = fields
         .iter()
-        .map(|name| {
-            TypeBodyItem::Field(StructField {
-                name: (*name).to_string(),
-                ty: AstType::Name {
-                    name: param.to_string(),
-                    span: Span::dummy(),
-                },
-                default: None,
-                is_mut: false,
-            })
+        .map(|name| TypeDeclField {
+            name: (*name).to_string(),
+            ty: MonoType::TypeRef(param.to_string()),
+            is_mut: false,
+            has_default: false,
+            is_method: false,
         })
         .collect();
 
@@ -403,26 +399,24 @@ fn make_generic_type_decl_ir(
         },
         generic_params: Some(vec![param.to_string()]),
         body: FunctionBody::TypeDecl {
-            definition: AstType::Struct { body: body_items },
+            body: TypeDeclBody {
+                fields: decl_fields,
+                // 旧路径 `type_from_ast(Struct) = Void`：构造器/类型表项在语料里恒为 Void
+                self_type: MonoType::Void,
+            },
         },
     }
 }
 
-/// 取出 `FunctionBody::TypeDecl` 中 `Struct` 的字段列表。
-fn type_decl_fields(body: &FunctionBody) -> Vec<&StructField> {
-    let FunctionBody::TypeDecl { definition } = body else {
+/// 取出 `FunctionBody::TypeDecl` 的字段表（IR 原生收窄载体，6.6.12 起）。
+///
+/// 判据不变：仍是「类型体里有哪些字段、顺序如何」；取值面从语法层 `StructField`
+/// 换成 IR 原生 `TypeDeclField`（字段类型已是 `MonoType`，不再有 AST 往返）。
+fn type_decl_fields(body: &FunctionBody) -> &[TypeDeclField] {
+    let FunctionBody::TypeDecl { body } = body else {
         panic!("body 应是 TypeDecl");
     };
-    let AstType::Struct { body } = definition else {
-        panic!("definition 应是 Struct");
-    };
-    body.iter()
-        .enumerate()
-        .map(|(idx, item)| match item {
-            TypeBodyItem::Field(f) => f,
-            _ => panic!("body[{idx}] 应是 Field"),
-        })
-        .collect()
+    &body.fields
 }
 
 // ==================== specialize_function 测试 ====================
@@ -1109,30 +1103,24 @@ fn test_specialize_generic_struct_substitutes_type_params() {
         "特化结果 body 应为 TypeDecl"
     );
 
-    // Assert: 类型体中两个字段的 T 都已被替换为 Int(64)
+    // Assert: 类型体中两个字段的 T 都已被替换为 Int(64)。
+    //
+    // 断言口径（6.6.12）：旧形态分两段断「AST 写回是规范名 Name(Int64)」+「再 lower 回
+    // Int(64)」；载体换成 IR 原生 `MonoType` 后没有 AST 中间态，故直接断言 IR 类型——
+    // 事实相同（字段类型被替换成 Int(64)），且不经有损往返，比旧两段更强。
     let fields = type_decl_fields(&result.body);
     assert_eq!(fields.len(), 2, "Pair 应有两个字段");
     assert_eq!(fields[0].name, "first", "第一个字段名应为 first");
-    assert!(
-        matches!(&fields[0].ty, AstType::Name { name, .. } if name == "Int64"),
-        "first 字段类型应为规范名 Name(Int64)，实际为 {:?}",
-        fields[0].ty
-    );
     assert_eq!(
-        MonoType::from(fields[0].ty.clone()),
+        fields[0].ty,
         MonoType::Int(64),
-        "first 字段类型必须能还原回 Int(64)"
+        "first 字段类型必须被替换成 Int(64)"
     );
     assert_eq!(fields[1].name, "second", "第二个字段名应为 second");
-    assert!(
-        matches!(&fields[1].ty, AstType::Name { name, .. } if name == "Int64"),
-        "second 字段类型应为规范名 Name(Int64)，实际为 {:?}",
-        fields[1].ty
-    );
     assert_eq!(
-        MonoType::from(fields[1].ty.clone()),
+        fields[1].ty,
         MonoType::Int(64),
-        "second 字段类型必须能还原回 Int(64)"
+        "second 字段类型必须被替换成 Int(64)"
     );
 }
 
@@ -1219,6 +1207,85 @@ fn test_collect_generic_type_refs_nested_specialization() {
     );
 }
 
+// ==================== 类型声明载体：is_method 标记（6.6.12） ====================
+
+/// 特化只替换字段**类型**，不得丢字段的分类标记（`is_method` / `is_mut` / `has_default`）。
+///
+/// 为什么这条重要：载体用 `..f.clone()` 保留其余字段，而 `is_method` 是 SPEC
+/// `type-system.md:443`「函数类型字段不生成构造参数」将来接线的唯一依据——一旦特化
+/// 把它抹成 false，后续轮次就无法区分方法字段与数据字段。
+#[test]
+fn test_specialize_type_keeps_field_classification_flags() {
+    // Arrange: Pair<T>，一个数据字段 + 一个函数类型字段（方法）
+    let mut mono = Monomorphizer::new();
+    let decl = FunctionIR {
+        def: None,
+        name: "Pair".to_string(),
+        params: vec![MonoType::MetaType {
+            universe_level: UniverseLevel::type1(),
+            type_params: Vec::new(),
+        }],
+        return_type: MonoType::MetaType {
+            universe_level: UniverseLevel::type1(),
+            type_params: Vec::new(),
+        },
+        generic_params: Some(vec!["T".to_string()]),
+        body: FunctionBody::TypeDecl {
+            body: TypeDeclBody {
+                fields: vec![
+                    TypeDeclField {
+                        name: "value".to_string(),
+                        ty: MonoType::TypeRef("T".to_string()),
+                        is_mut: true,
+                        has_default: true,
+                        is_method: false,
+                    },
+                    TypeDeclField {
+                        name: "get".to_string(),
+                        ty: MonoType::Fn {
+                            params: vec![MonoType::TypeRef("T".to_string())],
+                            return_type: Box::new(MonoType::TypeRef("T".to_string())),
+                        },
+                        is_mut: false,
+                        has_default: false,
+                        is_method: true,
+                    },
+                ],
+                self_type: MonoType::Void,
+            },
+        },
+    };
+    mono.generic_types.insert("Pair".to_string(), decl);
+    let req = request("Pair", &["T"], MonoType::Int(64), Span::default());
+
+    // Act
+    let result = mono.specialize_type(&req).expect("特化 Pair(Int) 应成功");
+
+    // Assert: 类型被替换，分类标记原样保留
+    let fields = type_decl_fields(&result.body);
+    assert_eq!(fields.len(), 2, "Pair 应有两个字段");
+    assert_eq!(
+        fields[0].ty,
+        MonoType::Int(64),
+        "数据字段的 T 应被替换成 Int(64)"
+    );
+    assert!(fields[0].is_mut, "数据字段的 is_mut 标记不得丢");
+    assert!(fields[0].has_default, "数据字段的 has_default 标记不得丢");
+    assert!(!fields[0].is_method, "数据字段的 is_method 必须是 false");
+    assert_eq!(
+        fields[1].ty,
+        MonoType::Fn {
+            params: vec![MonoType::Int(64)],
+            return_type: Box::new(MonoType::Int(64)),
+        },
+        "函数类型字段的 T 也应被替换成 Int(64)"
+    );
+    assert!(
+        fields[1].is_method,
+        "函数类型字段的 is_method 标记不得丢（SPEC 443 的未来依据）"
+    );
+}
+
 // ==================== 小写参数名测试 (Issue #197) ====================
 
 #[test]
@@ -1236,24 +1303,17 @@ fn test_specialize_type_lowercase_param_name() {
 
     // Assert
     assert_eq!(result.name, "Small(string)", "特化类型名应为 Small(string)");
-    let FunctionBody::TypeDecl { definition } = &result.body else {
+    let FunctionBody::TypeDecl { body } = &result.body else {
         panic!("body 应是 TypeDecl");
     };
-    let AstType::Struct { body } = definition else {
-        panic!("definition 应是 Struct");
-    };
-    let TypeBodyItem::Field(f) = &body[0] else {
-        panic!("body 应是 Field");
-    };
-    assert!(
-        matches!(&f.ty, AstType::Name { name, .. } if name == "String"),
-        "小写参数名 t 应被替换为规范名 Name(String)，实际为 {:?}",
-        f.ty
-    );
+    assert_eq!(body.fields.len(), 1, "Small 应有一个字段");
+    // 实质判据不变：小写参数名 t 也必须被替换成 String（而不是留成 TypeRef("t")）。
+    // 旧形态另断一段「AST 写回是规范名 Name(String)」——载体换成 IR 原生 `MonoType` 后
+    // 没有 AST 中间态可断言，该中间态性质由 mono/tests/function.rs 的 leg B 用例覆盖。
     assert_eq!(
-        MonoType::from(f.ty.clone()),
+        body.fields[0].ty,
         MonoType::make_string(),
-        "String 字段类型必须能还原回 Generic(String)"
+        "小写参数名 t 的字段类型必须被替换成 String"
     );
 }
 

@@ -1,8 +1,8 @@
 module
   fn Point() -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
-    type_decl Struct { body: [Field(StructField { name: "x", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 7, column: 20, offset: 169 }, end: Position { line: 7, column: 23, offset: 172 } } }, default: None }), Field(StructField { name: "y", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 7, column: 28, offset: 177 }, end: Position { line: 7, column: 31, offset: 180 } } }, default: None })] }
+    type_decl [x: Int(64) ; y: Int(64)]
   fn Window() -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
-    type_decl Struct { body: [Field(StructField { name: "target", is_mut: false, ty: Name { name: "Point", span: Span { start: Position { line: 10, column: 13, offset: 213 }, end: Position { line: 10, column: 18, offset: 218 } } }, default: None }), Field(StructField { name: "view", is_mut: false, ty: Ref { mutable: false, inner: Name { name: "Point", span: Span { start: Position { line: 11, column: 12, offset: 231 }, end: Position { line: 11, column: 17, offset: 236 } } }, span: Span { start: Position { line: 11, column: 17, offset: 236 }, end: Position { line: 11, column: 18, offset: 237 } } }, default: None })] }
+    type_decl [target: TypeRef("Point") ; view: Ref { mutable: false, inner: TypeRef("Point") }]
   fn main() -> Void
     slot[0] p : Int(64) @depth1
     slot[1] ref_p : Int(64) @depth1

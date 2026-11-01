@@ -2,7 +2,6 @@
 //!
 //! 提供函数单态化相关的辅助函数和trait
 
-use crate::frontend::core::parser::ast::Type as AstType;
 use crate::frontend::core::typecheck::MonoType;
 use crate::middle::core::ir::{BasicBlock, FunctionBody, FunctionIR, LocalSlot, ModuleIR};
 use crate::middle::passes::mono::instance::{FunctionId, InstantiationRequest};
@@ -55,12 +54,6 @@ pub trait FunctionMonomorphizer {
         type_map: &HashMap<usize, MonoType>,
     ) -> MonoType;
 
-    /// 替换 ast::Type 中的类型参数（按名称匹配）
-    fn substitute_type_in_ast(
-        &self,
-        ty: &AstType,
-        name_map: &HashMap<String, MonoType>,
-    ) -> AstType;
     /// 构建输出模块
     fn build_output_module(
         &self,
@@ -245,166 +238,6 @@ impl FunctionMonomorphizer for super::Monomorphizer {
             _ => ty.clone(),
         }
     }
-
-    fn substitute_type_in_ast(
-        &self,
-        ty: &AstType,
-        name_map: &HashMap<String, MonoType>,
-    ) -> AstType {
-        use crate::frontend::core::parser::ast::{self, Type as AstType};
-
-        /// 将 MonoType 转换为 AST 类型表示，用于类型替换
-        fn mono_to_ast_type(
-            mono: &MonoType,
-            span: crate::util::span::Span,
-        ) -> AstType {
-            // 内建标量：回写**规范名**（from_builtin_name 认得的拼写）。
-            // 不能用 type_name()——那是诊断展示用的小写内部名（int64 / void /
-            // string），6.1 删掉小写拼写后会落成 TypeRef，静默丢掉类型身份
-            // （WBS 6.3；03 §6.3 #47 的口径更正）。
-            if let Some(name) = mono.canonical_name() {
-                return AstType::Name {
-                    name: name.to_string(),
-                    span,
-                };
-            }
-            match mono {
-                MonoType::TypeRef(name) => AstType::Name {
-                    name: name.clone(),
-                    span,
-                },
-                // 容器/元组/任意泛型实例：AST 侧唯一表示就是 Generic。
-                // Option/Result 自 parser 起即走 Generic（见
-                // statements/types.rs:392-396）；Tuple 走 Generic 与
-                // From<Tuple> 的 make_tuple 结果逐字相同（含空元组边界）。
-                MonoType::Generic { name, args } => AstType::Generic {
-                    name: name.clone(),
-                    name_span: span,
-                    args: args.iter().map(|a| mono_to_ast_type(a, span)).collect(),
-                },
-                MonoType::Ref { mutable, inner } => AstType::Ref {
-                    mutable: *mutable,
-                    inner: Box::new(mono_to_ast_type(inner, span)),
-                    span,
-                },
-                MonoType::Fn {
-                    params,
-                    return_type,
-                } => AstType::Fn {
-                    params: params
-                        .iter()
-                        .map(|p| {
-                            crate::frontend::core::parser::ast::Param::from_type(mono_to_ast_type(
-                                p, span,
-                            ))
-                        })
-                        .collect(),
-                    return_type: Box::new(mono_to_ast_type(return_type, span)),
-                },
-                // 其余（Struct/Enum/TypeVar/Literal/Union/...）保持既有有损兜底：
-                // 6.3 只删死变体，不扩面改这些类型的回写形态。
-                other => AstType::Name {
-                    name: other.type_name(),
-                    span,
-                },
-            }
-        }
-
-        match ty {
-            AstType::Name { name, span } => {
-                if let Some(replacement) = name_map.get(name) {
-                    mono_to_ast_type(replacement, *span)
-                } else {
-                    ty.clone()
-                }
-            }
-            AstType::Struct { body } => {
-                let new_body = body
-                    .iter()
-                    .map(|item| match item {
-                        ast::TypeBodyItem::Field(f) => ast::TypeBodyItem::Field(ast::StructField {
-                            name: f.name.clone(),
-                            is_mut: f.is_mut,
-                            ty: self.substitute_type_in_ast(&f.ty, name_map),
-                            default: f.default.clone(),
-                        }),
-                        _ => item.clone(),
-                    })
-                    .collect();
-                AstType::Struct { body: new_body }
-            }
-            AstType::NamedStruct {
-                name,
-                name_span,
-                fields,
-            } => AstType::NamedStruct {
-                name: name.clone(),
-                name_span: *name_span,
-                fields: fields
-                    .iter()
-                    .map(|f| ast::StructField {
-                        name: f.name.clone(),
-                        is_mut: f.is_mut,
-                        ty: self.substitute_type_in_ast(&f.ty, name_map),
-                        default: f.default.clone(),
-                    })
-                    .collect(),
-            },
-            AstType::Tuple(types) => AstType::Tuple(
-                types
-                    .iter()
-                    .map(|t| self.substitute_type_in_ast(t, name_map))
-                    .collect(),
-            ),
-            AstType::Fn {
-                params,
-                return_type,
-            } => AstType::Fn {
-                params: params
-                    .iter()
-                    .map(|p| {
-                        let mut p = p.clone();
-                        p.ty =
-                            p.ty.as_ref()
-                                .map(|t| self.substitute_type_in_ast(t, name_map));
-                        p
-                    })
-                    .collect(),
-                return_type: Box::new(self.substitute_type_in_ast(return_type, name_map)),
-            },
-            AstType::Generic {
-                name,
-                name_span,
-                args,
-            } => AstType::Generic {
-                name: name.clone(),
-                name_span: *name_span,
-                args: args
-                    .iter()
-                    .map(|t| self.substitute_type_in_ast(t, name_map))
-                    .collect(),
-            },
-            AstType::Literal {
-                name,
-                name_span,
-                base_type,
-            } => AstType::Literal {
-                name: name.clone(),
-                name_span: *name_span,
-                base_type: Box::new(self.substitute_type_in_ast(base_type, name_map)),
-            },
-            AstType::Ptr(inner) => {
-                AstType::Ptr(Box::new(self.substitute_type_in_ast(inner, name_map)))
-            }
-            AstType::Ref { mutable, inner, .. } => AstType::Ref {
-                mutable: *mutable,
-                inner: Box::new(self.substitute_type_in_ast(inner, name_map)),
-                span: crate::util::span::Span::default(),
-            },
-            _ => ty.clone(),
-        }
-    }
-
     fn build_output_module(
         &self,
         original_module: &ModuleIR,

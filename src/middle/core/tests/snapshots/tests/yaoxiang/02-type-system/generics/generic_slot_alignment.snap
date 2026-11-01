@@ -1,7 +1,7 @@
 module
   fn Box(MetaType { universe_level: UniverseLevel { level: "0" }, type_params: [] }) -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
     generic_params: ["T"]
-    type_decl Struct { body: [Field(StructField { name: "v", is_mut: false, ty: Generic { name: "Vec", name_span: Span { start: Position { line: 12, column: 31, offset: 594 }, end: Position { line: 12, column: 34, offset: 597 } }, args: [Name { name: "T", span: Span { start: Position { line: 12, column: 35, offset: 598 }, end: Position { line: 12, column: 36, offset: 599 } } }] }, default: None }), Field(StructField { name: "n", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 12, column: 42, offset: 605 }, end: Position { line: 12, column: 45, offset: 608 } } }, default: None })] }
+    type_decl [v: Generic { name: "Vec", args: [TypeRef("T")] } ; n: Int(64)]
   fn mk(TypeRef("A")) -> Generic { name: "Box", args: [TypeRef("A")] }
     generic_params: ["A"]
     slot[0] item : Int(64) @depth1

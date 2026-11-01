@@ -1,7 +1,7 @@
 module
   global[0] n : Int(64)
   fn SumUpTo(Int(64), Int(64)) -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
-    type_decl Struct { body: [Expr(ConstExpr(BinOp { op: Eq, left: Var("s", Span { start: Position { line: 12, column: 39, offset: 690 }, end: Position { line: 12, column: 40, offset: 691 } }), right: BinOp { op: Mul, left: Var("n", Span { start: Position { line: 12, column: 44, offset: 695 }, end: Position { line: 12, column: 45, offset: 696 } }), right: Lit(Int(2), Span { start: Position { line: 12, column: 48, offset: 699 }, end: Position { line: 12, column: 49, offset: 700 } }), span: Span { start: Position { line: 12, column: 46, offset: 697 }, end: Position { line: 12, column: 47, offset: 698 } } }, span: Span { start: Position { line: 12, column: 41, offset: 692 }, end: Position { line: 12, column: 43, offset: 694 } } }))] }
+    type_decl []
   fn keep_valid() -> Int(64)
     slot[0] s : Int(64) @depth1
     locals_total=2

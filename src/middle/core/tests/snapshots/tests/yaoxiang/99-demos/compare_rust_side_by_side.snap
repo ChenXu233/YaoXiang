@@ -1,8 +1,8 @@
 module
   fn Point() -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
-    type_decl Struct { body: [Field(StructField { name: "x", is_mut: false, ty: Name { name: "Float", span: Span { start: Position { line: 7, column: 20, offset: 176 }, end: Position { line: 7, column: 25, offset: 181 } } }, default: None }), Field(StructField { name: "y", is_mut: false, ty: Name { name: "Float", span: Span { start: Position { line: 7, column: 30, offset: 186 }, end: Position { line: 7, column: 35, offset: 191 } } }, default: None })] }
+    type_decl [x: Float(64) ; y: Float(64)]
   fn PointView() -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
-    type_decl Struct { body: [Field(StructField { name: "inner", is_mut: false, ty: Ref { mutable: false, inner: Name { name: "Point", span: Span { start: Position { line: 13, column: 13, offset: 376 }, end: Position { line: 13, column: 18, offset: 381 } } }, span: Span { start: Position { line: 14, column: 1, offset: 382 }, end: Position { line: 14, column: 2, offset: 383 } } }, default: None })] }
+    type_decl [inner: Ref { mutable: false, inner: TypeRef("Point") }]
   fn get_x(Ref { mutable: false, inner: TypeRef("PointView") }) -> Float(64)
     slot[0] view : Int(64) @depth1
     locals_total=4

@@ -4,7 +4,7 @@ module
   global[2] b : Int(64)
   global[3] c : Int(64)
   fn IsPositive(Int(64)) -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
-    type_decl Struct { body: [Expr(ConstExpr(BinOp { op: Gt, left: Var("x", Span { start: Position { line: 14, column: 34, offset: 816 }, end: Position { line: 14, column: 35, offset: 817 } }), right: Lit(Int(0), Span { start: Position { line: 14, column: 38, offset: 820 }, end: Position { line: 14, column: 39, offset: 821 } }), span: Span { start: Position { line: 14, column: 36, offset: 818 }, end: Position { line: 14, column: 37, offset: 819 } } }))] }
+    type_decl []
   fn divide(Int(64), Generic { name: "IsPositive", args: [TypeRef("b")] }) -> Int(64)
     slot[0] a : Int(64) @depth1
     slot[1] b : Int(64) @depth1

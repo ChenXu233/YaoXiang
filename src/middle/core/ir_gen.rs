@@ -23,6 +23,7 @@ use crate::frontend::core::typecheck::{
 };
 use crate::middle::core::ir::{
     BasicBlock, ConstValue, FunctionBody, FunctionIR, Instruction, LocalSlot, ModuleIR, Operand,
+    TypeDeclBody, TypeDeclField,
 };
 use crate::tlog;
 use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};
@@ -147,8 +148,8 @@ pub struct AstToIrGenerator {
     sum_type_param_names: HashMap<String, Vec<String>>,
     /// 本模块声明的**全部**类型名（含泛型类型定义）。
     ///
-    /// `struct_definitions` 只收非泛型结构体；泛型类型（`E: (T: Type) -> Type = ..`）
-    /// 走 TypeDecl 函数路径不落在这里。但名字解析需要知道「这是用户自己的类型」，
+    /// 类型声明（含泛型，`E: (T: Type) -> Type = ..`）一律走 TypeDecl 函数路径；
+    /// 名字解析需要知道「这是用户自己的类型」，
     /// 否则 `use std.math` 后用户写 `PI: Type = ..; PI(7)` 会被解析成
     /// `std.math.PI`（常量）——调用常量得到 void，静默错值（D10）。
     declared_type_names: std::collections::HashSet<String>,
@@ -1911,6 +1912,60 @@ impl AstToIrGenerator {
         }
     }
 
+    /// 类型声明在**字节码类型表**里的项。
+    ///
+    /// 等价于原 `codegen::type_from_ast`（WBS 6.6.12 前移）：载体只带 `MonoType`，
+    /// codegen 不再接触 AST。逐臂与原实现一致——`Name`→`TypeRef`、`Tuple`→`make_tuple`、
+    /// `Fn`→`Fn`（丢无名形参，与原实现相同）、`Generic`→`TypeRef("Name(arg, …)")`，
+    /// 其余（含 `Struct`/`NamedStruct`/`MetaType` 等）→ `Void`。
+    fn type_decl_self_type(ast_type: &ast::Type) -> MonoType {
+        match ast_type {
+            ast::Type::Name { name, .. } => MonoType::TypeRef(name.clone()),
+            ast::Type::Tuple(types) => {
+                MonoType::make_tuple(types.iter().map(Self::type_decl_self_type).collect())
+            }
+            ast::Type::Fn {
+                params,
+                return_type,
+                ..
+            } => MonoType::Fn {
+                params: params
+                    .iter()
+                    .filter_map(|p| p.ty.as_ref())
+                    .map(Self::type_decl_self_type)
+                    .collect(),
+                return_type: Box::new(Self::type_decl_self_type(return_type)),
+            },
+            ast::Type::Generic { name, args, .. } => MonoType::TypeRef(format!(
+                "{}({})",
+                name,
+                args.iter()
+                    .map(|t| Self::type_decl_self_type(t).type_name())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )),
+            _ => MonoType::Void,
+        }
+    }
+
+    /// 字段注解是否为**函数类型**（= 方法字段）。
+    ///
+    /// 剥掉透明包装（`Paren` / `NamedParen`）后再判——与 `From<ast::Type> for MonoType`
+    /// 的透明口径一致（RFC-004 / RFC-027 §3）。SPEC `type-system.md:443`：函数类型字段
+    /// 不生成构造参数；当前 `translator::synthesize_constructor` 仍把两类都算进构造参数
+    /// （已知不一致，登记见 09a §P6 6.6.12，本轮不改行为）。
+    fn field_is_method(ty: &ast::Type) -> bool {
+        let mut t = ty;
+        loop {
+            match t {
+                ast::Type::Paren(inner) => t = inner,
+                ast::Type::NamedParen { inner, .. } => t = inner,
+                ast::Type::Fn { .. } => return true,
+                _ => return false,
+            }
+        }
+    }
+
     /// 生成语句的 IR
     fn generate_stmt_ir(
         &mut self,
@@ -2030,10 +2085,24 @@ impl AstToIrGenerator {
                     params,
                     return_type,
                     generic_params: generic_param_names,
+                    // 类型声明的 IR 原生收窄载体（WBS 6.6.12）：只带字段表与类型表项。
+                    // 形参名 / 默认值表达式 / const 界 / 匿名绑定 / span 都不进 IR，
+                    // 故 6.5 时代「入 IR 前剥形参名」的 `without_fn_param_names` 随之删除。
                     body: FunctionBody::TypeDecl {
-                        // 形参名是纯语法装饰：IR 快照按 Debug 文本比对，
-                        // 带名字会让表示重塑（6.8.1）漂移已入库快照。
-                        definition: definition.without_fn_param_names(),
+                        body: TypeDeclBody {
+                            fields: definition
+                                .struct_fields()
+                                .into_iter()
+                                .map(|f| TypeDeclField {
+                                    name: f.name.clone(),
+                                    ty: f.ty.clone().into(),
+                                    is_mut: f.is_mut,
+                                    has_default: f.default.is_some(),
+                                    is_method: Self::field_is_method(&f.ty),
+                                })
+                                .collect(),
+                            self_type: Self::type_decl_self_type(definition),
+                        },
                     },
                 }))
             }

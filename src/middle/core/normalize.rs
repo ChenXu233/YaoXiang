@@ -564,8 +564,28 @@ pub fn normalize_module(ir: &ModuleIR) -> String {
             writeln!(out, "    generic_params: {gp:?}").unwrap();
         }
         match &func.body {
-            FunctionBody::TypeDecl { definition } => {
-                writeln!(out, "    type_decl {definition:?}").unwrap();
+            FunctionBody::TypeDecl { body } => {
+                // 紧凑形态（裁决 Q3）：字段名: 类型 + is_mut / has_default 标记，
+                // **不含 span**——语法层载体已消失，span 不再有载体可泄漏。
+                let fields: Vec<String> = body
+                    .fields
+                    .iter()
+                    .map(|f| {
+                        let mut flags: Vec<&str> = Vec::new();
+                        if f.is_mut {
+                            flags.push("mut");
+                        }
+                        if f.has_default {
+                            flags.push("default");
+                        }
+                        if flags.is_empty() {
+                            format!("{}: {:?}", f.name, f.ty)
+                        } else {
+                            format!("{}: {:?} [{}]", f.name, f.ty, flags.join(","))
+                        }
+                    })
+                    .collect();
+                writeln!(out, "    type_decl [{}]", fields.join(" ; ")).unwrap();
             }
             FunctionBody::Code { blocks, locals, .. } => {
                 // 具名槽表（源码变量身份；temp 占位槽无信息不打印）

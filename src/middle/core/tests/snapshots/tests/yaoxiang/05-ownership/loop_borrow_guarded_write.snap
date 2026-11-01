@@ -1,6 +1,6 @@
 module
   fn Point() -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
-    type_decl Struct { body: [Field(StructField { name: "x", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 9, column: 20, offset: 561 }, end: Position { line: 9, column: 23, offset: 564 } } }, default: None }), Field(StructField { name: "y", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 9, column: 28, offset: 569 }, end: Position { line: 9, column: 31, offset: 572 } } }, default: None })] }
+    type_decl [x: Int(64) ; y: Int(64)]
   fn bump(Ref { mutable: true, inner: TypeRef("Point") }) -> Void
     slot[0] pt : Int(64) @depth1
     locals_total=7

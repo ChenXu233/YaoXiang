@@ -1,10 +1,10 @@
 module
   fn Entry(MetaType { universe_level: UniverseLevel { level: "0" }, type_params: [] }, MetaType { universe_level: UniverseLevel { level: "0" }, type_params: [] }) -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
     generic_params: ["K", "V"]
-    type_decl Struct { body: [Field(StructField { name: "key", is_mut: false, ty: Name { name: "K", span: Span { start: Position { line: 16, column: 10, offset: 581 }, end: Position { line: 16, column: 11, offset: 582 } } }, default: None }), Field(StructField { name: "value", is_mut: false, ty: Name { name: "V", span: Span { start: Position { line: 17, column: 12, offset: 595 }, end: Position { line: 17, column: 13, offset: 596 } } }, default: None })] }
+    type_decl [key: TypeRef("K") ; value: TypeRef("V")]
   fn Box(MetaType { universe_level: UniverseLevel { level: "0" }, type_params: [] }) -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
     generic_params: ["T"]
-    type_decl Struct { body: [Field(StructField { name: "inner", is_mut: false, ty: Name { name: "T", span: Span { start: Position { line: 22, column: 12, offset: 679 }, end: Position { line: 22, column: 13, offset: 680 } } }, default: None })] }
+    type_decl [inner: TypeRef("T")]
   fn twice(Fn { params: [TypeRef("T")], return_type: TypeRef("T") }, TypeRef("T")) -> TypeRef("T")
     generic_params: ["T"]
     slot[0] f : Int(64) @depth1

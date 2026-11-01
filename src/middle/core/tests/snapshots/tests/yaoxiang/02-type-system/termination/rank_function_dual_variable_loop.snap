@@ -1,8 +1,8 @@
 module
   fn NonNegative(Int(64)) -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
-    type_decl Struct { body: [Expr(ConstExpr(BinOp { op: Ge, left: Var("x", Span { start: Position { line: 12, column: 35, offset: 665 }, end: Position { line: 12, column: 36, offset: 666 } }), right: Lit(Int(0), Span { start: Position { line: 12, column: 40, offset: 670 }, end: Position { line: 12, column: 41, offset: 671 } }), span: Span { start: Position { line: 12, column: 37, offset: 667 }, end: Position { line: 12, column: 39, offset: 669 } } }))] }
+    type_decl []
   fn AtMost(Int(64), Int(64)) -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
-    type_decl Struct { body: [Expr(ConstExpr(BinOp { op: Le, left: Var("x", Span { start: Position { line: 14, column: 38, offset: 712 }, end: Position { line: 14, column: 39, offset: 713 } }), right: Var("n", Span { start: Position { line: 14, column: 43, offset: 717 }, end: Position { line: 14, column: 44, offset: 718 } }), span: Span { start: Position { line: 14, column: 40, offset: 714 }, end: Position { line: 14, column: 42, offset: 716 } } }))] }
+    type_decl []
   fn main() -> Void
     slot[0] a : Int(64) @depth1
     slot[1] b : Int(64) @depth1

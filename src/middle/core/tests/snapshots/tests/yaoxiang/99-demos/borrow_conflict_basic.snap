@@ -1,6 +1,6 @@
 module
   fn Point() -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
-    type_decl Struct { body: [Field(StructField { name: "x", is_mut: false, ty: Name { name: "Float", span: Span { start: Position { line: 7, column: 20, offset: 204 }, end: Position { line: 7, column: 25, offset: 209 } } }, default: None }), Field(StructField { name: "y", is_mut: false, ty: Name { name: "Float", span: Span { start: Position { line: 7, column: 30, offset: 214 }, end: Position { line: 7, column: 35, offset: 219 } } }, default: None })] }
+    type_decl [x: Float(64) ; y: Float(64)]
   fn Point.read(Ref { mutable: false, inner: TypeRef("Point") }) -> Void
     locals_total=4
     Load %0 <- %1

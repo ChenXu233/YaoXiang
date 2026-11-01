@@ -1,10 +1,10 @@
 module
   fn Container(MetaType { universe_level: UniverseLevel { level: "0" }, type_params: [] }) -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
     generic_params: ["T"]
-    type_decl Struct { body: [Field(StructField { name: "value", is_mut: false, ty: Name { name: "T", span: Span { start: Position { line: 12, column: 12, offset: 406 }, end: Position { line: 12, column: 13, offset: 407 } } }, default: None })] }
+    type_decl [value: TypeRef("T")]
   fn Pair(MetaType { universe_level: UniverseLevel { level: "0" }, type_params: [] }) -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
     generic_params: ["T"]
-    type_decl Struct { body: [Field(StructField { name: "first", is_mut: false, ty: Name { name: "T", span: Span { start: Position { line: 17, column: 12, offset: 489 }, end: Position { line: 17, column: 13, offset: 490 } } }, default: None }), Field(StructField { name: "second", is_mut: false, ty: Name { name: "T", span: Span { start: Position { line: 18, column: 13, offset: 504 }, end: Position { line: 18, column: 14, offset: 505 } } }, default: None })] }
+    type_decl [first: TypeRef("T") ; second: TypeRef("T")]
   fn main() -> Void
     slot[0] c : Int(64) @depth1
     slot[1] int_c : Int(64) @depth1

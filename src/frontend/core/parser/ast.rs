@@ -835,9 +835,10 @@ impl Param {
 /// 纯表示重塑（6.8.1）不改变 IR 语义，若靠 `UPDATE_SNAPSHOTS=1` 再生基线，
 /// 就会把「形参携带名字」这件事伪装成一次 IR 行为面变化，违反 07 §128
 /// 「漂移必须能说清来源」——复审时也无法区分「表示搬运」与「真实 IR 变化」。
-/// 故把文本一致性收在**打印边界**（此处 + `Type::without_fn_param_names`
-/// 在入 IR 前剥掉类型位形参名），而不是改写基线。无名形参的裸 `Type` 文本
-/// 正是旧 `Vec<Type>` 的文本，故快照零漂移。
+/// 故把文本一致性收在**打印边界**（此处），而不是改写基线。无名形参的裸 `Type`
+/// 文本正是旧 `Vec<Type>` 的文本，故快照零漂移。（6.5 时代另有
+/// `Type::without_fn_param_names` 在入 IR 前剥类型位形参名；WBS 6.6.12 把 IR 的
+/// 类型声明载体换成 IR 原生收窄形状后，AST 不再入 IR，该函数成为死代码并已删除。）
 impl std::fmt::Debug for Param {
     fn fmt(
         &self,
@@ -857,134 +858,6 @@ impl std::fmt::Debug for Param {
 }
 
 impl Type {
-    /// 剥掉**类型位形参名**（纯语法装饰）后的副本：`Type::Fn.params` 的名字
-    /// 归零并递归全树；`NamedParen.param`（返回位 binder）与匿名函数绑定的
-    /// 值级形参名是语义，原样保留。
-    ///
-    /// 用途：IR 的 `FunctionBody::TypeDecl` 仍以 `ast::Type` 为载体（载体迁移
-    /// 属 IR 形状议题，见 09 的 6.5.1 输入项 ②），而规范化 IR 快照按 `Debug`
-    /// 文本比对——把名字带进 IR 会让纯表示重塑（6.8.1）引发已入库快照漂移。
-    /// IR 不消费形参名，故入 IR 前归一为匿名形参。
-    pub fn without_fn_param_names(&self) -> Type {
-        fn strip_params(params: &[Param]) -> Vec<Param> {
-            params
-                .iter()
-                .map(|p| Param {
-                    name: String::new(),
-                    ty: p.ty.as_ref().map(|t| t.without_fn_param_names()),
-                    is_mut: p.is_mut,
-                    span: p.span,
-                })
-                .collect()
-        }
-        fn strip_field(f: &StructField) -> StructField {
-            StructField {
-                name: f.name.clone(),
-                is_mut: f.is_mut,
-                ty: f.ty.without_fn_param_names(),
-                default: f.default.clone(),
-            }
-        }
-        fn strip_fields(fields: &[StructField]) -> Vec<StructField> {
-            fields.iter().map(strip_field).collect()
-        }
-        fn strip_body(body: &[TypeBodyItem]) -> Vec<TypeBodyItem> {
-            body.iter()
-                .map(|item| match item {
-                    TypeBodyItem::Field(f) => TypeBodyItem::Field(strip_field(f)),
-                    TypeBodyItem::Binding(b) => TypeBodyItem::Binding(TypeBodyBinding {
-                        name: b.name.clone(),
-                        kind: match &b.kind {
-                            // 值级形参名是语义（不是类型位装饰）：保留
-                            BindingKind::Anonymous {
-                                params,
-                                return_type,
-                                positions,
-                                body,
-                            } => BindingKind::Anonymous {
-                                params: params.clone(),
-                                return_type: Box::new(return_type.without_fn_param_names()),
-                                positions: positions.clone(),
-                                body: body.clone(),
-                            },
-                            other => other.clone(),
-                        },
-                    }),
-                    TypeBodyItem::Interface(name) => TypeBodyItem::Interface(name.clone()),
-                    TypeBodyItem::Expr(t) => TypeBodyItem::Expr(t.without_fn_param_names()),
-                })
-                .collect()
-        }
-        match self {
-            Type::Struct { body } => Type::Struct {
-                body: strip_body(body),
-            },
-            Type::NamedStruct {
-                name,
-                name_span,
-                fields,
-            } => Type::NamedStruct {
-                name: name.clone(),
-                name_span: *name_span,
-                fields: strip_fields(fields),
-            },
-            Type::Tuple(types) => {
-                Type::Tuple(types.iter().map(|t| t.without_fn_param_names()).collect())
-            }
-            Type::Fn {
-                params,
-                return_type,
-            } => Type::Fn {
-                params: strip_params(params),
-                return_type: Box::new(return_type.without_fn_param_names()),
-            },
-            Type::Generic {
-                name,
-                name_span,
-                args,
-            } => Type::Generic {
-                name: name.clone(),
-                name_span: *name_span,
-                args: args.iter().map(|t| t.without_fn_param_names()).collect(),
-            },
-            Type::Literal {
-                name,
-                name_span,
-                base_type,
-            } => Type::Literal {
-                name: name.clone(),
-                name_span: *name_span,
-                base_type: Box::new(base_type.without_fn_param_names()),
-            },
-            Type::Ptr(inner) => Type::Ptr(Box::new(inner.without_fn_param_names())),
-            Type::Ref {
-                mutable,
-                inner,
-                span,
-            } => Type::Ref {
-                mutable: *mutable,
-                inner: Box::new(inner.without_fn_param_names()),
-                span: *span,
-            },
-            Type::MetaType { name_span, args } => Type::MetaType {
-                name_span: *name_span,
-                args: args.iter().map(|t| t.without_fn_param_names()).collect(),
-            },
-            Type::Paren(inner) => Type::Paren(Box::new(inner.without_fn_param_names())),
-            // NamedParen.param 是返回位 binder（语义），不剥
-            Type::NamedParen {
-                param,
-                param_span,
-                inner,
-            } => Type::NamedParen {
-                param: param.clone(),
-                param_span: *param_span,
-                inner: Box::new(inner.without_fn_param_names()),
-            },
-            Type::Name { .. } | Type::ConstExpr(_) => self.clone(),
-        }
-    }
-
     /// 从 `Type::Fn` 链拍平出全部形参（curry 各组依次展开；`Paren`/
     /// `NamedParen` 视为透明继续内层）。
     ///

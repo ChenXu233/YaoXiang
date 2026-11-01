@@ -22,7 +22,6 @@ pub mod translator;
 #[cfg(test)]
 mod tests;
 
-use crate::frontend::core::parser::ast::Type;
 use crate::frontend::core::typecheck::MonoType;
 use crate::middle::core::ir::{ConstValue, ModuleIR, Operand};
 use crate::middle::passes::codegen::translator::Translator;
@@ -165,16 +164,18 @@ impl CodegenContext {
         debug!("{}", t(MSG::CodegenConstPool, lang, Some(&[&const_count])));
 
         // 3. 生成类型表（从 TypeDecl 函数中收集）
+        //
+        // 6.6.12 起类型声明的 TypeDecl 载体自带类型表项（`TypeDeclBody::self_type`，
+        // 由 ir_gen 在 AST 降级期算好），codegen 不再摸语法层 AST。
         let type_table: Vec<MonoType> = self
             .module
             .functions
             .iter()
-            .filter_map(|f| {
-                if let crate::middle::core::ir::FunctionBody::TypeDecl { definition } = &f.body {
-                    Some(self.type_from_ast(definition))
-                } else {
-                    None
+            .filter_map(|f| match &f.body {
+                crate::middle::core::ir::FunctionBody::TypeDecl { body } => {
+                    Some(body.self_type.clone())
                 }
+                _ => None,
             })
             .collect();
         let type_count = type_table.len();
@@ -293,41 +294,6 @@ impl CodegenContext {
             .functions
             .iter()
             .position(|func| &func.name == entry_name)
-    }
-
-    /// 从 AST 类型转换
-    #[allow(clippy::only_used_in_recursion)]
-    fn type_from_ast(
-        &self,
-        ast_type: &Type,
-    ) -> MonoType {
-        match ast_type {
-            Type::Name { name, .. } => MonoType::TypeRef(name.clone()),
-            Type::Tuple(types) => {
-                MonoType::make_tuple(types.iter().map(|t| self.type_from_ast(t)).collect())
-            }
-            Type::Fn {
-                params,
-                return_type,
-                ..
-            } => MonoType::Fn {
-                params: params
-                    .iter()
-                    .filter_map(|p| p.ty.as_ref())
-                    .map(|t| self.type_from_ast(t))
-                    .collect(),
-                return_type: Box::new(self.type_from_ast(return_type)),
-            },
-            Type::Generic { name, args, .. } => MonoType::TypeRef(format!(
-                "{}({})",
-                name,
-                args.iter()
-                    .map(|t| self.type_from_ast(t).type_name())
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            )),
-            _ => MonoType::Void,
-        }
     }
 }
 

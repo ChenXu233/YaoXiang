@@ -801,10 +801,23 @@ impl Monomorphizer {
         let new_return_type = self.substitute_single_type(&generic.return_type, &type_map);
 
         // 替换类型体里的类型参数
-        let new_definition = match &generic.body {
-            FunctionBody::TypeDecl { definition } => {
-                self.substitute_type_in_ast(definition, &name_map)
-            }
+        //
+        // 载体是 IR 原生收窄形状（6.6.12）：字段类型与类型表项都是 `MonoType`，
+        // 直接用**已有的** `MonoType::substitute`——不引入任何新的替换实现。
+        // 已知窄缺口：字段类型是「内联匿名结构体/枚举」时 `substitute` 不深入
+        // （`other => clone`），登记见 09a §P6 6.6.12（语料 0 例）。
+        let new_body = match &generic.body {
+            FunctionBody::TypeDecl { body } => crate::middle::core::ir::TypeDeclBody {
+                fields: body
+                    .fields
+                    .iter()
+                    .map(|f| crate::middle::core::ir::TypeDeclField {
+                        ty: f.ty.substitute(&name_map),
+                        ..f.clone()
+                    })
+                    .collect(),
+                self_type: body.self_type.substitute(&name_map),
+            },
             _ => return None,
         };
 
@@ -823,9 +836,7 @@ impl Monomorphizer {
             params: new_params,
             return_type: new_return_type,
             generic_params: None,
-            body: FunctionBody::TypeDecl {
-                definition: new_definition,
-            },
+            body: FunctionBody::TypeDecl { body: new_body },
         })
     }
 

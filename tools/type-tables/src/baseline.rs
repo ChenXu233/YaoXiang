@@ -24,6 +24,12 @@
 //! 剩余 2 个前向点仍是真实类型构造——`parse_type_annotation` 的标识符类型与
 //! `wrap_literal_type_if_needed` 的 const 参数引用（门禁报错里自带当时的 `file:line`）。
 //!
+//! **6.6.12 刷新（2026-11-01）**：IR 不再持 `ast::Type`（`FunctionBody::TypeDecl` 换成
+//! IR 原生收窄载体 `TypeDeclBody`）后，`REBUILD_FUNCTIONS` 里的最后两条
+//! （`substitute_type_in_ast` 与反向桥 `mono_to_ast_type`）连同 6.5 的
+//! `without_fn_param_names` 全部删除——**登记表与口径快照现均为空**（`&[]`），
+//! 基线里所有 AST→AST 与反向桥列归零（逐变体数字见 09a §P6 6.6.12 的门禁红态与刷新表）。
+//!
 //! **6.6.11 刷新（2026-11-01）**：删掉 `Instruction::Cast` / `Instruction::TypeTest` 两个
 //! **零生产者**死变体后，`mono/function.rs::substitute_type_ast` 失去唯一调用者并随之删除——
 //! 它名下的 **10 个 AST→AST 构造点**一起消失，故 10 个变体（Struct / NamedStruct / Tuple /
@@ -70,8 +76,12 @@ pub struct BaselineRow {
 /// - 6.6.7：删 `types.rs::extract_fn_type_info` 的 1 个**前向**点（伪造 `Type::Name{"()"}`
 ///   改报诊断）⇒ 该树上 `Name` 前向 3 / 合计 6（多出被删的那一点）；
 /// - 6.6.11：删 `mono/function.rs::substitute_type_ast` 的 **10 个 AST→AST** 点 ⇒ 在该树上
-///   10 个变体的 AST→AST 与合计**各多 1**（实测漂移清单见 6.6.11 的提交信息与 09a）。
-pub const SCOUT_BASELINE_REV: &str = "28ded1fd850cea9fc8ddf388f660d23ce69e2551";
+///   10 个变体的 AST→AST 与合计**各多 1**（实测漂移清单见 6.6.11 的提交信息与 09a）；
+/// - 6.6.12：删 `ast.rs::without_fn_param_names`（11 变体各 −1）+ `substitute_type_in_ast`
+///   （8 变体各 −1）+ 反向桥 `mono_to_ast_type`（`Name` 反向桥 3→0、`Fn`/`Generic`/`Ref`
+///   各 1→0）⇒ 在该树上上述各行按清单**各多 1**（`Name` 合计 5 / 反向桥 3，`Fn`/`Generic`/
+///   `Ref` 合计各多 2），逐行数字见 09a §P6 6.6.12。
+pub const SCOUT_BASELINE_REV: &str = "343ed13b0777c5c21420a6dbcda9e80cf1c017fb";
 
 /// 口径 revision：上表的数字**按哪一代 `scan.rs` 分类登记表**量出来的。
 ///
@@ -82,10 +92,11 @@ pub const SCOUT_BASELINE_REV: &str = "28ded1fd850cea9fc8ddf388f660d23ce69e2551";
 /// 改口径（新增/删除重建函数、改某函数的类别）时，**同批**更新：
 /// 本常量 + [`SCOUT_BASELINE_CALIBER`] + 受影响的 [`SCOUT_BASELINE`] 数字 + [`SCOUT_BASELINE_REV`]。
 ///
-/// **6.6.11 前进**：口径删掉 `substitute_type_ast` 一条（该函数随 Cast/TypeTest 死变体
-/// 一并删除）；随后代码里已无可引用的提交号，故此处记其父提交——快照与现行
-/// [`crate::scan::REBUILD_FUNCTIONS`] 逐条一致（3 条），门禁的「同代」判定成立。
-pub const SCOUT_BASELINE_CALIBER_REV: &str = "28ded1fd850cea9fc8ddf388f660d23ce69e2551";
+/// **6.6.11 / 6.6.12 前进**：口径先删 `substitute_type_ast`（随 Cast/TypeTest 死变体一并删除），
+/// 6.6.12 再删 `without_fn_param_names`、`substitute_type_in_ast` 与反向桥 `mono_to_ast_type`
+/// ⇒ **快照与现行 [`crate::scan::REBUILD_FUNCTIONS`] 都为空表**，门禁的「同代」判定成立。
+/// 提交号在推送后才可取，故此处记本次改动的父提交。
+pub const SCOUT_BASELINE_CALIBER_REV: &str = "343ed13b0777c5c21420a6dbcda9e80cf1c017fb";
 
 /// 口径快照的一行：**文件 + 函数 → 类别键**（[`SiteClass::key`](crate::scan::SiteClass::key)，不是展示文案；
 /// 类别的**稳定键**由该函数给出，展示文案见 `SiteClass::label`）。
@@ -103,23 +114,7 @@ pub struct CaliberEntry {
 ///
 /// 它不与 `REBUILD_FUNCTIONS` 共表，正是为了让「口径被改」成为**可检测事件**：
 /// 共表则改一处两处一起变，门禁永远看不见口径变更。
-pub const SCOUT_BASELINE_CALIBER: &[CaliberEntry] = &[
-    CaliberEntry {
-        file: crate::FUNCTION_REL,
-        function: "substitute_type_in_ast",
-        class: "ast_to_ast",
-    },
-    CaliberEntry {
-        file: crate::AST_REL,
-        function: "without_fn_param_names",
-        class: "ast_to_ast",
-    },
-    CaliberEntry {
-        file: crate::FUNCTION_REL,
-        function: "mono_to_ast_type",
-        class: "reverse_mono_to_ast",
-    },
-];
+pub const SCOUT_BASELINE_CALIBER: &[CaliberEntry] = &[];
 
 /// 口径快照 ↔ 现行登记表的差异（空 = 同代）。
 ///
@@ -190,81 +185,81 @@ pub const SCOUT_BASELINE: &[BaselineRow] = &[
     BaselineRow {
         variant: "Name",
         decl_line: 442,
-        total: 5,
+        total: 2,
         forward: 2,
         ast_to_ast: 0,
-        reverse: 3,
+        reverse: 0,
     },
     BaselineRow {
         variant: "Struct",
         decl_line: 446,
-        total: 3,
+        total: 1,
         forward: 1,
-        ast_to_ast: 2,
+        ast_to_ast: 0,
         reverse: 0,
     },
     BaselineRow {
         variant: "NamedStruct",
         decl_line: 450,
-        total: 3,
+        total: 1,
         forward: 1,
-        ast_to_ast: 2,
+        ast_to_ast: 0,
         reverse: 0,
     },
     BaselineRow {
         variant: "Tuple",
         decl_line: 455,
-        total: 5,
+        total: 3,
         forward: 3,
-        ast_to_ast: 2,
+        ast_to_ast: 0,
         reverse: 0,
     },
     BaselineRow {
         variant: "Fn",
         decl_line: 463,
-        total: 7,
+        total: 4,
         forward: 4,
-        ast_to_ast: 2,
-        reverse: 1,
+        ast_to_ast: 0,
+        reverse: 0,
     },
     BaselineRow {
         variant: "Generic",
         decl_line: 467,
-        total: 4,
+        total: 1,
         forward: 1,
-        ast_to_ast: 2,
-        reverse: 1,
+        ast_to_ast: 0,
+        reverse: 0,
     },
     BaselineRow {
         variant: "Literal",
         decl_line: 475,
-        total: 3,
+        total: 1,
         forward: 1,
-        ast_to_ast: 2,
+        ast_to_ast: 0,
         reverse: 0,
     },
     BaselineRow {
         variant: "Ptr",
         decl_line: 484,
-        total: 3,
+        total: 1,
         forward: 1,
-        ast_to_ast: 2,
+        ast_to_ast: 0,
         reverse: 0,
     },
     BaselineRow {
         variant: "Ref",
         decl_line: 487,
-        total: 5,
+        total: 2,
         forward: 2,
-        ast_to_ast: 2,
-        reverse: 1,
+        ast_to_ast: 0,
+        reverse: 0,
     },
     BaselineRow {
         variant: "MetaType",
         decl_line: 496,
-        total: 3,
+        total: 2,
         forward: 2,
-        ast_to_ast: 1,
+        ast_to_ast: 0,
         reverse: 0,
     },
     BaselineRow {
@@ -278,17 +273,17 @@ pub const SCOUT_BASELINE: &[BaselineRow] = &[
     BaselineRow {
         variant: "Paren",
         decl_line: 517,
-        total: 3,
+        total: 2,
         forward: 2,
-        ast_to_ast: 1,
+        ast_to_ast: 0,
         reverse: 0,
     },
     BaselineRow {
         variant: "NamedParen",
         decl_line: 533,
-        total: 2,
+        total: 1,
         forward: 1,
-        ast_to_ast: 1,
+        ast_to_ast: 0,
         reverse: 0,
     },
 ];

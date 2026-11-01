@@ -1,6 +1,6 @@
 module
   fn Grid() -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
-    type_decl Struct { body: [Field(StructField { name: "cells", is_mut: false, ty: Generic { name: "List", name_span: Span { start: Position { line: 10, column: 12, offset: 332 }, end: Position { line: 10, column: 16, offset: 336 } }, args: [Name { name: "Float", span: Span { start: Position { line: 10, column: 17, offset: 337 }, end: Position { line: 10, column: 22, offset: 342 } } }] }, default: None }), Expr(Generic { name: "Index", name_span: Span { start: Position { line: 11, column: 5, offset: 349 }, end: Position { line: 11, column: 10, offset: 354 } }, args: [Name { name: "Grid", span: Span { start: Position { line: 11, column: 11, offset: 355 }, end: Position { line: 11, column: 15, offset: 359 } } }, Name { name: "Int", span: Span { start: Position { line: 11, column: 17, offset: 361 }, end: Position { line: 11, column: 20, offset: 364 } } }, Name { name: "Float", span: Span { start: Position { line: 11, column: 22, offset: 366 }, end: Position { line: 11, column: 27, offset: 371 } } }] })] }
+    type_decl [cells: Generic { name: "List", args: [Float(64)] }]
   fn Grid.index(Ref { mutable: false, inner: TypeRef("Grid") }, Ref { mutable: false, inner: Int(64) }) -> Float(64)
     locals_total=6
     Load %0 <- %1

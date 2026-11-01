@@ -22,7 +22,7 @@ use syn::{
     Token, TraitItemFn, UseTree,
 };
 
-use crate::{AST_REL, BYTECODE_REL, FUNCTION_REL, SCAN_ROOT_REL};
+use crate::{AST_REL, BYTECODE_REL, SCAN_ROOT_REL};
 
 /// 构造点的类别。**三类（加反向桥两类）不得混算**——混算会把 03 §5.2 的删除名单抹平。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -83,30 +83,15 @@ pub struct RebuildEntry {
 /// 生产登记表：全部「把已有 AST 类型重造一份 / 反向重建」的函数。
 ///
 /// - 第二类 **AST→AST 重建**：把已有 `ast::Type` 重造一份（不是 `MonoType → AST`）。
-///   `without_fn_param_names` 是 6.5 批引入的保真重建（剥掉类型位形参名），语义与
-///   `substitute_type_ast` / `substitute_type_in_ast` 同族——**6.6.2 裁决 1A** 把它归入
-///   本类；此前它被误算作 parser 前向（11 个变体各虚高 1 点，见 T1.6 基线对账）。
-/// - 反向桥 B：`mono_to_ast_type`（`MonoType → ast::Type`）。
-pub const REBUILD_FUNCTIONS: &[RebuildEntry] = &[
-    RebuildEntry {
-        file: FUNCTION_REL,
-        function: "substitute_type_in_ast",
-        class: SiteClass::AstToAst,
-        why: "类型变量替换（AST 内遍历）：把已有 AST 类型重造一份",
-    },
-    RebuildEntry {
-        file: AST_REL,
-        function: "without_fn_param_names",
-        class: SiteClass::AstToAst,
-        why: "剥掉类型位形参名的保真重建（6.6.2 裁决 1A；唯一消费点 ir_gen 入 IR 前归一）",
-    },
-    RebuildEntry {
-        file: FUNCTION_REL,
-        function: "mono_to_ast_type",
-        class: SiteClass::ReverseMonoToAst,
-        why: "反向桥 B：MonoType → ast::Type",
-    },
-];
+///   曾经的在册函数：`substitute_type_ast`（6.6.11 删）、`substitute_type_in_ast`、
+///   `mono_to_ast_type`（反向桥 B）与 6.5 的 `without_fn_param_names`——**6.6.12 全部删除**
+///   （IR 不再持 `ast::Type`，这些函数失去唯一生产调用点）。
+/// **6.6.12 起为空表**：IR 层不再持 `ast::Type`（`FunctionBody::TypeDecl` 换 IR 原生
+/// 收窄载体）后，两座 AST→AST 替换（`substitute_type_ast` / `substitute_type_in_ast`）
+/// 与反向桥 B（`mono_to_ast_type`）连同 6.5 的 `without_fn_param_names` 全部删除，
+/// 仓内已无「重建 ast::Type」的生产函数。登记机制保留且可注入（单测覆盖），
+/// 新出现这类函数必须重新登记——空表即判据：任何 AST 重建点都会被算成 parser 前向。
+pub const REBUILD_FUNCTIONS: &[RebuildEntry] = &[];
 
 /// 一处构造点
 #[derive(Debug, Clone)]

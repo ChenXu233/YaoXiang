@@ -1,6 +1,6 @@
 module
   fn Point() -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
-    type_decl Struct { body: [Field(StructField { name: "x", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 7, column: 20, offset: 387 }, end: Position { line: 7, column: 23, offset: 390 } } }, default: None }), Field(StructField { name: "y", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 7, column: 28, offset: 395 }, end: Position { line: 7, column: 31, offset: 398 } } }, default: None })] }
+    type_decl [x: Int(64) ; y: Int(64)]
   fn good_seq(Ref { mutable: true, inner: TypeRef("Point") }) -> Void
     slot[0] p : Int(64) @depth1
     locals_total=4

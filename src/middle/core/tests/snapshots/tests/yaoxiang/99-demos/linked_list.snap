@@ -1,6 +1,6 @@
 module
   fn Node() -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
-    type_decl Struct { body: [Field(StructField { name: "value", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 7, column: 23, offset: 206 }, end: Position { line: 7, column: 26, offset: 209 } } }, default: None }), Field(StructField { name: "next", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 7, column: 34, offset: 217 }, end: Position { line: 7, column: 37, offset: 220 } } }, default: None })] }
+    type_decl [value: Int(64) ; next: Int(64)]
   fn sum_values(Ref { mutable: false, inner: TypeRef("Node") }, Ref { mutable: false, inner: TypeRef("Node") }) -> Int(64)
     slot[0] a : Int(64) @depth1
     slot[1] b : Int(64) @depth1
