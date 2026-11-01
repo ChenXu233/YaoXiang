@@ -2337,7 +2337,7 @@ t1 门禁全绿（lib 2908 与父版**同数**——既有测试零删改、inte
 
 用户批「同意」（设计稿四件套见 WBS 3.20.8 行登记段：三现场查证 A/B/C、甲乙丙方案、红绿预设）。三现场：A = `checker.rs` collect_signatures（:499/:1668）`is_predicate_application` 全判据；B = `inference/statements.rs` const 用途精筛的窄化内联 lambda（`"Terminates"` 字面量 ∪ `proof_fn_bases` 判名，不查 `predicate_defs`、漏无参证明函数）；C = `helpers.rs` 补名（只收 Type kind，谓词实参位不产候选——显式不适用，未动）。
 
-### 实现（flash t1，冻结 `4f8441b9`）
+### 实现（flash t1，冻结 `dd7cd37e`）
 
 `predicate_names` 名字集：checker.rs 注入点对 `BUILTIN_PREDICATES` ∪ `env.predicate_defs` 键 ∪ `env.vars` 键逐名跑 `is_predicate_application` 预计算，`set_predicate_names` 注入；B 面 lambda 改 `predicate_names.contains(n)`——与 A 面同一判定函数，by construction 同源。**设计假设修正（t1 按契约停下报告）**：`proof_fn_bases` 非唯一消费者——`strip_refined_value_type`（statements.rs :1798/:1821 一带）与证明函数 `Refined { base, .. }` 正格化仍消费它（需 MonoType 值，与排除判据用途正交）⇒ **双表分工**而非整体替换：proof_fn_bases 保留（文档注明不参与判据）、predicate_names 为判据单一事实源、旧窄化分支删除（无新旧并存）。
 
