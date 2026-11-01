@@ -2839,3 +2839,33 @@ issue #522 的裁决包（甲/乙/丙）呈报后，用户追问「既要又要�
 ### 计数与环境
 
 三级 +1 = 3.20.9（199→200）；二级不变。issue [#522](https://github.com/ChenXu233/YaoXiang/issues/522) **关闭**（误替换面验收达成；数据传播残留归 #524）。批次树 522 release+gc（约 7.7 GB）。流程注记：`orchestrator` 不是 commit-msg 合法 scope（orchestrator.rs 属 `frontend`）。
+
+## P3 3.20.10 收口（curry 内层参数位精化按基类型统一——#523，2026-11-01）
+
+**任务与归属**：D59 **C 类**假拒绝直修（旧行为 = 该编译的程序被编译期 E1002 拒绝），来源 = 3.20.8 批次探针的既有下游缺口（issue [#523](https://github.com/ChenXu233/YaoXiang/issues/523)）。
+
+**缺陷定性（含 issue 夹具更正，如实登记）**：issue 正文夹具 `print(sum(5))` 是部分应用形态，修前即 0 error——真实红态是完整应用 `print(sum(5)(3))`：curry 内层参数组的精化标注 `IsPositive(N)` 原样进入调用点统一，基类型实参被假拒绝（E1002 `Expected type 'IsPositive(N)', found type 'int64'`）。注册期只剥外层形参位；形参位形态此前已绿。更正已回注 issue 关闭评论。
+
+**修法（判据单源）**：剥除逻辑提为 statements 的共享自由函数 `strip_refined_with_proof_fns`（三臂：内置谓词→新鲜变量 / 证明函数应用→基类型 / 无参 TypeRef→基类型）；注册期方法 `strip_refined_value_type` 委托到它（行为不变），调用点 ExpressionInferrer 逐参统一前经同一实现剥除；`proof_fn_bases` 由 StatementChecker 随委托注入（与注册期同一张表，默认空表）。顶层 Refined 的剥除仍归 solver 的 `strip_refined_for_unify`（既有职责，未动）。
+
+### t1——实现（flash 子代理），门禁 14 项全绿
+
+门禁电池（脚本按退出码裁决）：fmt / markers / CI 四脚本 / 错误码生成器幂等 / clippy 全量 / IR 快照比对 / integration 全量 / testsuite fast / 语料差分。红绿 = stash 修复后三锚 FAILED（逐锚同款 E1002）→ 恢复 3 passed；导入形态探针逐字节不变（full 应用 E1002 属 #524 未动）；真不匹配探针 `sum(5)("str")` 报 E1002 `Expected type 'int64'` 且无 IsPositive 字样（#522 红线）。
+
+**工作流门禁口径两修正（已记入工作流模板记忆）**：① IR 快照漂移检查不得写 `cargo test --lib snapshot -- --ignored`——会把 mode=manual 的再生测试一起拉起，其环境守卫无 UPDATE_SNAPSHOTS 必按设计爆红（判据不可能通过的门禁）；正确形态 = `check-snapshot-drift.sh` 的等价命令（`--exact` 只跑比对测试 + 输出含 `1 passed` 守卫）。② `world.run` 的 bash 通道在本机落到 WSL 默认发行版 docker-desktop（工具发行版，无 /bin/bash），`.sh` 门禁内联成 python 等价命令执行。
+
+### 提交与 rebase 定稿（含第三方事故备案，AGENTS 第 10 条⑧）
+
+并行队伍 56654352（AST 顶层化搬移，自称纯搬移）在路径改写外把 checker.rs 整体回退到 3.20.8 态（`type_level_namespace` 字段与三入口 namespace 参数被剥除），8 处调用方与全部测试仍是 3.20.9 设计 ⇒ 其推送后的 dev HEAD 编译不过（13 错，本会话 t1 实测并定性）。本会话曾独立完成恢复笔 `efe43dea`（以 22def888 为底本 + 路径改写 + fmt，归一化 diff 仅剩格式与注释行）；并行队伍随后自修推送 `1c3feba0`，与本会话恢复**逐字节等价**（两文件 diff 0 行），其提交信息含根因（rebase 解冲突整文件取一方静默丢增量）与规则固化提议（「冲突文件禁止整取一方」——留用户裁决）。据此 rebase 丢弃我方重复恢复笔、只重放修复笔；重放后文档漂移 19 行（对方未再生生成物），重新生成并 amend。**定稿：修复笔 `9b8dccfb`，树与初版 `168af1d0` 逐字节等价（git diff 空），t1 门禁证据对定稿高保真。**
+
+### t2——PASS（批次树 t3.20.10-verify @ 9b8dccfb）
+
+变异可逆证明：最小补丁摘除调用点剥除 → `cargo test --test integration test_check_curry` 三锚全红（exit 101，0 passed; 3 failed，逐锚 E1002 `Expected type 'IsPositive(N)', found type 'int64'`，位于各夹具内层精化参数位）→ trial 机械还原（blob 与 HEAD 一致、git status CLEAN）→ rebuild 后同 filter 3 passed。等价性：IR 快照比对 1 passed（218 份零漂移）；语料差分 358 行逐字节零漂移（358=358 对账一致）。
+
+### t3——APPROVE（七镜头全过，1 low 已采纳）
+
+①判据单源 PASS：`strip_refined_with_proof_fns` 是唯一新增剥除点，全部调用点两处均委托；`is_builtin_predicate_name` 其余命中均为修复笔未触碰的既有职责；solver 顶层剥除未动；委托 diff 与原实现逐臂一致。②职责累积 PASS：单字段 + 单 setter + 单消费点，借用注入与注册期同一张表。③补丁式 PASS：修消费端统一缺口本体（resolve 之后、E1002 发射之前），无吞诊断、无谓词名特判；实测真不匹配仍报且 expected 为剥后 base。④#522 红线 PASS：诊断文本 = 剥后 base + 实参自身类型，谓词实参无路径进诊断。⑤授权边界 PASS：6 文件全录，生成物 hunk 全为行号平移、处数不变；无 #442 / #524 / baselines / 快照 / locales 触碰。⑥测试规范 PASS。⑦诚实性 PASS：提交信息声称与 diff 自洽，四项历史声称静态自洽并如实标注未复跑。**1 low → 采纳**：三个新锚均为零诊断回归面，缺「真不匹配仍报错」反向锚 ⇒ 收口补 `test_check_curry_refined_param_genuine_mismatch_still_reports`（与主锚同构、第二实参 String、断言恰一条诊断——剥 base 对统一透明、不遮蔽真不匹配；四锚同 filter 实跑 4 passed，纯测试笔 `db2e7b26`）。
+
+### 计数与环境
+
+三级 +1 = 3.20.10（200→201）；二级不变。issue [#523](https://github.com/ChenXu233/YaoXiang/issues/523) **关闭**（夹具更正已回注评论）；谓词体跨单元传播残留归 [#524](https://github.com/ChenXu233/YaoXiang/issues/524)（S-needs-decision——#523 落地后其剩余面收敛为纯数据管道：Registry 导出 vs 导入面登记）。批次树 523-repro（t1 复现用）与 t3.20.10-verify（t2 量测用）release + gc。
