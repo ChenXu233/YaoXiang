@@ -1326,4 +1326,45 @@ mod export_type_params_tests {
             "普通值参数函数（无泛型参数）必须保持 None（登记口扩容不得污染）"
         );
     }
+
+    /// #522 / 3.20.9 批次 t2-M2 阴性发现的补锚：`extract_module_info` 的
+    /// namespace 实参必须**跨单元消费**——lib 声明的谓词名经项目并集进入
+    /// namespace 后，main 侧 `sum: (N: Int) -> (x: IsPositive(N)) -> Int`
+    /// 的 `N` 不得进导出面 `type_params`。CLI 面观察不到此差异（诊断形态
+    /// 被 #523 缺口遮蔽），这里直测 ModuleInfo——namespace 实参被弃用
+    /// （如换成空集）时本锚红。
+    #[test]
+    fn test_extract_module_info_consumes_namespace_across_units() {
+        // Arrange：lib 声明谓词；main `use` 后声明 const 形参签名——
+        // 谓词应用实参位 `N` 是编译期表达式（值），不是类型引用
+        let parse = |src: &str| {
+            let tokens = crate::frontend::core::tokenize(src).expect("模块源码必须可词法分析");
+            let parsed = crate::frontend::core::parser::parse(&tokens);
+            assert!(
+                !parsed.has_errors,
+                "模块源码必须可解析：{:?}",
+                parsed.errors
+            );
+            parsed.module
+        };
+        let lib = parse("IsPositive: (x: Int) -> Type = { x > 0 }\n");
+        let main = parse(
+            "use lib.{IsPositive}\n\
+             sum: (N: Int) -> (x: IsPositive(N)) -> Int = (x) => x\n",
+        );
+
+        // Act：namespace = 全项目声明并集（driver registry 臂的形态），
+        // 覆盖 lib 的谓词声明
+        let namespace =
+            crate::frontend::core::typecheck::probe::TypeLevelNamespace::scan([&lib, &main]);
+        let info = extract_module_info("main", &main, &namespace);
+
+        // Assert：IsPositive ∈ namespace ⇒ 谓词实参位排除 ⇒ N 不进导出面
+        assert_eq!(
+            export_named(&info, "sum").type_params,
+            None,
+            "跨单元谓词声明的实参位 N 不得进导出面 type_params（namespace 跨单元消费锚；\
+             实参被弃用为空集时此断言翻红）"
+        );
+    }
 }
