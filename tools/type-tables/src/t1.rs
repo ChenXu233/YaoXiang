@@ -726,18 +726,32 @@ impl ForwardReport {
         // 并跳过漂移比对——否则归类被改只会退化成一条看不出原因的「数字漂了」。
         match baseline::caliber_error() {
             Some(error) => out.push(error),
-            None => {
-                for drift in baseline::mismatches(&self.stats) {
-                    out.push(format!(
-                        "勘察基线漂移：{}（基线 revision {}，口径 revision {}）——源码新增/删除构造点须同步刷新 SCOUT_BASELINE；改口径须同批刷新口径快照（03 §5.7）",
-                        drift.render(),
-                        baseline::SCOUT_BASELINE_REV,
-                        baseline::SCOUT_BASELINE_CALIBER_REV
-                    ));
-                }
-            }
+            None => out.extend(Self::drift_failures(&self.stats, baseline::SCOUT_BASELINE)),
         }
         out
+    }
+
+    /// 基线漂移失败项（基线行**可注入**；生产走 [`ForwardReport::gate_failures`]，基线 =
+    /// `baseline::SCOUT_BASELINE`）。
+    ///
+    /// 单独抽出来是给判据自测用（WBS 6.6.21）：夹具构造**自造基线表**再断言文案形状，
+    /// 而不是读生产常量——生产表一变更/清空，读常量的夹具就会悄悄退化成「在验证空表」，
+    /// 判据本身有没有坏就看不出来了。
+    pub(crate) fn drift_failures(
+        stats: &[VariantStats],
+        rows: &[baseline::BaselineRow],
+    ) -> Vec<String> {
+        baseline::mismatches_with(stats, rows)
+            .iter()
+            .map(|drift| {
+                format!(
+                    "勘察基线漂移：{}（基线 revision {}，口径 revision {}）——源码新增/删除构造点须同步刷新 SCOUT_BASELINE；改口径须同批刷新口径快照（03 §5.7）",
+                    drift.render(),
+                    baseline::SCOUT_BASELINE_REV,
+                    baseline::SCOUT_BASELINE_CALIBER_REV
+                )
+            })
+            .collect()
     }
 
     /// `build.rs` 的 T1 判定：`Ok(摘要)` = 通过；`Err(明细)` = **构建必须失败**。
@@ -1001,22 +1015,47 @@ mod tests {
         );
     }
 
-    // 裁决 2A：基线漂移必须让门禁失败（不是只报告），且报错列出变体名与三类列实测 vs 基线
+    // 裁决 2A：基线漂移必须让门禁失败（不是只报告），且报错列出变体名与三类列实测 vs 基线。
+    //
+    // 夹具（WBS 6.6.21）：**自造**基线行 + 由同一批行派生的构造点，**不读** `SCOUT_BASELINE`
+    // ——读生产常量的写法在生产表变更/清空后会悄悄退化（原来那三条红就是这么来的）。
     #[test]
     fn test_gate_fails_on_baseline_drift() {
-        // Arrange：与基线一致，但多给 Struct 一个前向构造点（基线 1 → 实测 2）
-        let mut variants = baseline_variants();
-        let mut sites = baseline_sites();
+        // Arrange：自造一条基线行（合计 5 = 前向 1 + AST→AST 3 + 反向桥 1）；
+        // 先造出与之一致的报告，再多给一个前向点（1 → 2）制造漂移
+        let rows = [baseline::BaselineRow {
+            variant: "Struct",
+            decl_line: 446,
+            total: 5,
+            forward: 1,
+            ast_to_ast: 3,
+            reverse: 1,
+        }];
+        let variants = vec![variant("Struct", 446)];
+        let mut sites = Vec::new();
+        for _ in 0..1 {
+            sites.push(site("Struct", SiteClass::Forward, false));
+        }
+        for _ in 0..3 {
+            sites.push(site("Struct", SiteClass::AstToAst, false));
+        }
+        for _ in 0..1 {
+            sites.push(site("Struct", SiteClass::ReverseFromIrType, false));
+        }
+        // 漂移点：前向 1 → 2
         sites.push(site("Struct", SiteClass::Forward, false));
-        let report = report(variants.drain(..).collect(), sites);
+        let report = report(variants, sites);
 
-        // Act
-        let gate = report.gate();
+        // Act：走可注入基线的那条路径（生产 `gate()` 用的是同一个函数 + SCOUT_BASELINE）
+        let failures = ForwardReport::drift_failures(&report.stats, &rows);
 
-        // Assert
-        let Err(message) = gate else {
-            panic!("基线漂移必须使门禁失败，实际 {gate:?}");
-        };
+        // Assert：失败集合非空 ⇒ 门禁必然失败；文案含变体名与三类列实测 vs 基线
+        assert_eq!(
+            failures.len(),
+            1,
+            "基线漂移应恰好报 1 条，实际 {failures:?}"
+        );
+        let message = &failures[0];
         assert!(
             message.contains("勘察基线漂移"),
             "报错应点名「勘察基线漂移」，实际：{message}"
@@ -1030,7 +1069,7 @@ mod tests {
             "报错应给出前向列的实测 vs 基线，实际：{message}"
         );
         assert!(
-            message.contains("AST→AST 实测3(基线3)") && message.contains("反向桥 实测0(基线0)"),
+            message.contains("AST→AST 实测3(基线3)") && message.contains("反向桥 实测1(基线1)"),
             "报错应同时列出 AST→AST 与反向桥两列，实际：{message}"
         );
         // 6.6.3 复审 F1：漂移报错必须能定位——带构造点 file:line（合成点固定在 fixture 里）
@@ -1041,6 +1080,11 @@ mod tests {
         assert!(
             message.contains(&format!("{}:", crate::AST_REL)),
             "漂移报错还应带变体定义行，实际：{message}"
+        );
+        // 三列数字来自**自造基线行**（前向 1 / AST→AST 3 / 反向桥 1），不来自生产常量
+        assert!(
+            message.contains("合计 实测6(基线5)"),
+            "报错应给出合计列的实测 vs 基线（派生列），实际：{message}"
         );
     }
 

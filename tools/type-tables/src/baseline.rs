@@ -399,10 +399,22 @@ impl BaselineMismatch {
     }
 }
 
-/// 与基线逐列对账；空 = 一致（`build.rs` 的判定与报告的 T1.6 节共用本函数）
+/// 与基线逐列对账；空 = 一致（`build.rs` 的判定与报告的 T1.6 节共用本函数）。
+///
+/// 生产路径走本函数（基线 = [`SCOUT_BASELINE`]）；判据自测走 [`mismatches_with`]
+/// **注入自造基线表**——夹具读生产常量会在生产表变更/清空时悄悄退化成「在验证空表」
+/// （WBS 6.6.21 的教训）。
 pub fn mismatches(stats: &[VariantStats]) -> Vec<BaselineMismatch> {
+    mismatches_with(stats, SCOUT_BASELINE)
+}
+
+/// 同 [`mismatches`]，基线行由调用方注入（判据自测用；生产走 [`SCOUT_BASELINE`]）。
+pub fn mismatches_with(
+    stats: &[VariantStats],
+    rows: &[BaselineRow],
+) -> Vec<BaselineMismatch> {
     let mut out = Vec::new();
-    for row in SCOUT_BASELINE {
+    for row in rows {
         let found = stats.iter().find(|s| s.name == row.variant);
         let baseline = [row.total, row.forward, row.ast_to_ast, row.reverse];
         match found {
@@ -442,7 +454,7 @@ pub fn mismatches(stats: &[VariantStats]) -> Vec<BaselineMismatch> {
         }
     }
     for s in stats {
-        if !SCOUT_BASELINE.iter().any(|r| r.variant == s.name) {
+        if !rows.iter().any(|r| r.variant == s.name) {
             let measured = [
                 s.total(),
                 s.forward_raw(),
@@ -549,6 +561,42 @@ mod tests {
     use super::*;
     use crate::scan::{ScanResult, SiteClass, VariantDecl};
     use crate::t1::ForwardReport;
+
+    // 守则（WBS 6.6.21）：**夹具不得依赖生产常量的当前内容**。
+    //
+    // 反例（本批修掉的三条）：夹具读 `REBUILD_FUNCTIONS` / `SCOUT_BASELINE_CALIBER` /
+    // `SCOUT_BASELINE` 来造期望值。生产表在 WBS 6.6.12 被清空后，这些夹具没有报错，
+    // 而是**悄悄退化成「在验证空表」**（map 空集 → 断言恒假 / 期望点名一个已不存在的条目），
+    // 恰好把「判据是否还能失败」这件事遮掉。凡验「判据本身」的用例，一律自造输入；
+    // **验生产不变量**的用例（如 `test_caliber_drift_clean_on_frozen_snapshot`）可以读
+    // 生产常量，但必须在注释里标明它验的是不变量、不是判据自测。
+
+    /// 自造一条登记项（夹具用；`why` 固定标 test-only，便于报告里一眼认出）。
+    fn rebuild(
+        file: &'static str,
+        function: &'static str,
+        class: SiteClass,
+    ) -> RebuildEntry {
+        RebuildEntry {
+            file,
+            function,
+            class,
+            why: "test-only",
+        }
+    }
+
+    /// 自造一条冻结口径项（夹具用）。
+    fn caliber(
+        file: &'static str,
+        function: &'static str,
+        class: &'static str,
+    ) -> CaliberEntry {
+        CaliberEntry {
+            file,
+            function,
+            class,
+        }
+    }
 
     fn stats_with(
         variants: Vec<VariantDecl>,
@@ -660,22 +708,30 @@ mod tests {
     // 且点明是哪一条、从什么改到什么——不能退化成一条数字漂移。
     #[test]
     fn test_caliber_drift_flags_class_change() {
-        // Arrange：现行登记表把 without_fn_param_names 归回 Forward（其余条目与冻结口径一致，
-        // 以便断言「只有这一处口径变化」）
-        let registry: Vec<RebuildEntry> = REBUILD_FUNCTIONS
-            .iter()
-            .map(|entry| RebuildEntry {
-                class: if entry.function == "without_fn_param_names" {
-                    SiteClass::Forward
-                } else {
-                    entry.class
-                },
-                ..*entry
-            })
-            .collect();
+        // Arrange：**自造**登记表与冻结快照（不读生产常量）——三条同代 + 一处类别被改，
+        // 以便断言「只有这一处口径变化」。生产表在 6.6.12 已清空，读它会让本用例退化。
+        let snapshot = [
+            caliber(crate::FUNCTION_REL, "substitute_type_in_ast", "ast_to_ast"),
+            caliber(crate::FUNCTION_REL, "without_fn_param_names", "ast_to_ast"),
+            caliber(crate::AST_REL, "some_forward_fn", "forward"),
+        ];
+        let registry = [
+            rebuild(
+                crate::FUNCTION_REL,
+                "substitute_type_in_ast",
+                SiteClass::AstToAst,
+            ),
+            // 唯一一处口径变化：把 without_fn_param_names 从 ast_to_ast 归回 Forward
+            rebuild(
+                crate::FUNCTION_REL,
+                "without_fn_param_names",
+                SiteClass::Forward,
+            ),
+            rebuild(crate::AST_REL, "some_forward_fn", SiteClass::Forward),
+        ];
 
         // Act
-        let drift = caliber_drift(&registry, SCOUT_BASELINE_CALIBER);
+        let drift = caliber_drift(&registry, &snapshot);
 
         // Assert
         assert_eq!(drift.len(), 1, "类别变化应恰好报 1 条，实际 {drift:?}");
@@ -691,7 +747,10 @@ mod tests {
         );
     }
 
-    // 判据能绿：现行登记表与冻结快照同代时不报
+    // 判据能绿：现行登记表与冻结快照同代时不报。
+    //
+    // **注意**：本用例是**生产不变量**检查（现行表 == 冻结快照），所以**刻意**读生产常量——
+    // 它验的不是「判据能否失败」，不适用上面的自造夹具守则。
     #[test]
     fn test_caliber_drift_clean_on_frozen_snapshot() {
         // Act
@@ -708,10 +767,38 @@ mod tests {
         );
     }
 
+    // 判据能绿（自造数据版）：登记表与快照逐条同代时不报——不依赖生产常量。
+    #[test]
+    fn test_caliber_drift_clean_on_identical_local_tables() {
+        // Arrange：自造一对同代表（登记表 == 快照）
+        let snapshot = [
+            caliber(crate::FUNCTION_REL, "substitute_type_in_ast", "ast_to_ast"),
+            caliber(crate::AST_REL, "some_forward_fn", "forward"),
+        ];
+        let registry = [
+            rebuild(
+                crate::FUNCTION_REL,
+                "substitute_type_in_ast",
+                SiteClass::AstToAst,
+            ),
+            rebuild(crate::AST_REL, "some_forward_fn", SiteClass::Forward),
+        ];
+
+        // Act
+        let drift = caliber_drift(&registry, &snapshot);
+
+        // Assert
+        assert!(
+            drift.is_empty(),
+            "同代（自造数据）不得报口径漂移，实际 {drift:?}"
+        );
+    }
+
     // 快照里多/少条目同样算口径变更（新增或删除重建函数）
     #[test]
     fn test_caliber_drift_flags_added_and_removed_entries() {
-        // Arrange：登记表删掉 mono_to_ast_type，另加一个快照里没有的函数
+        // Arrange：**自造**冻结快照（不读生产常量）：登记表删掉 mono_to_ast_type，
+        // 另加一个快照里没有的函数
         let registry = [
             RebuildEntry {
                 file: crate::FUNCTION_REL,
@@ -726,9 +813,17 @@ mod tests {
                 why: "test-only：模拟新增重建函数",
             },
         ];
+        let snapshot = [
+            caliber(crate::FUNCTION_REL, "substitute_type_ast", "ast_to_ast"),
+            caliber(
+                crate::FUNCTION_REL,
+                "mono_to_ast_type",
+                "reverse_mono_to_ast",
+            ),
+        ];
 
         // Act
-        let drift = caliber_drift(&registry, SCOUT_BASELINE_CALIBER);
+        let drift = caliber_drift(&registry, &snapshot);
 
         // Assert
         assert!(
