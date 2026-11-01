@@ -2887,6 +2887,19 @@ issue #522 的裁决包（甲/乙/丙）呈报后，用户追问「既要又要�
 | 6.7.1d | `typecheck/` → `sema/` | 116 文件 / 5.6 万行 / 130 rename / 549 行引用 | 116 个被搬文件 token 级比对 123/123 相同 |
 | 收尾 | 字节码测试归位、`src/` 内 README 旧路径、wasm 旧路径 | 3 + 7 + 1 文件 | 见「三、四」 |
 
+**最终提交序列**（rebase 到 V0.8.7 之后的真实哈希；rebase 前的号已失效，不再引用）：
+
+| 顺序 | 提交 | 内容 |
+| --- | --- | --- |
+| 1 | `49d90c30` | 字节码域合并（B4 3 → 0） |
+| 2 | `1009eefb` | `middle/core/` → `middle/ir/` |
+| 3 | `08ecaadf` | 字节码测试归位 |
+| 4 | `28ef775f` | `typecheck/` → `sema/` |
+| 5 | `1def39f6` | `src/` 内 7 份 README 旧路径 |
+| 6 | `04f5c69a` | 本批收口文档 |
+| 7 | `5795303e` | rename 残留（上游新代码旧模块名 + wasm 子 crate） |
+
+
 ### 二、门禁自身的路径口径（本批最贵的教训）
 
 搬移时**门禁会静默变瞎**——不是报错，是「不再匹配任何东西」而输出绿。本批累计发现 **6 类**：
@@ -2913,7 +2926,7 @@ issue #522 的裁决包（甲/乙/丙）呈报后，用户追问「既要又要�
 
 ### 五、过程事故与缺陷（如实记录）
 
-1. **rebase 丢上游增量（队长操作缺陷）**：t2 的 rebase 用 `git checkout --theirs` 整文件取一方，把上游 `22def888`（类型级命名空间 #522）在 `checker.rs` / `probe.rs` 的增量整段覆盖，dev 一度 `cargo check` 24 个错误。修法 = 对「上游改过 ∩ t2 改过」的 9 个文件做三方合并（base=`b11923ca`、ours=上游、theirs=t2），实际只有 2 个真受害。**教训**：冲突文件禁止整取一方；提交前先看 `git diff --cached --name-only`（我曾把别人的暂存 rename 卷进自己的提交）。
+1. **rebase 丢上游增量（队长操作缺陷）**：t2 的 rebase 用 `git checkout --theirs` 整文件取一方，把上游 `22def888`（类型级命名空间 #522）在 `checker.rs` / `probe.rs` 的增量整段覆盖，dev 一度 `cargo check` 24 个错误。修法 = 对「上游改过 ∩ t2 改过」的 9 个文件做三方合并（以本批起点为 base、ours=上游、theirs=本批），实际只有 2 个真受害。**教训**：冲突文件禁止整取一方；提交前先看 `git diff --cached --name-only`（我曾把别人的暂存 rename 卷进自己的提交）。
 2. **契约缺陷两处**：`t9` 的 `inScope` 写的是改名前的 `src/middle/core/tests/`（前序已改成 `ir/tests/`）；`t10` 的 `inScope` 只写单文件而验收要求全仓扫描。**规则**：inScope 按**当前**目录名取；验收项含「全仓扫描」时 inScope 写路径前缀。
 3. **验证/复审由队长执行**：MiniMax 额度耗尽，`t6`（验证）与 `t7`（复审）由队长补做，**与实现者同族，独立性减弱**；补偿 = 不信自测数字、自做 blob 级比对、每条判据反向证红。
 
@@ -2921,3 +2934,11 @@ issue #522 的裁决包（甲/乙/丙）呈报后，用户追问「既要又要�
 
 - `01` / `03` / `06` 与 `09` / `09a` 仍含改名前的路径引用，按既定口径（过渡文档不清理）留待重写；`src/` 内真实残留为 **0**（仅 `middle/ir/mod.rs` 首行的历史说明）。
 - `ir.rs` / `ir_gen.rs` 的内部拆分（operand/instr/block/fn_、lower/）属 04 任务；`middle::ir::ir::` 的重复段届时消失；`clippy::module_inception` 的局部豁免带删除条件。
+
+### 七、rebase 到 V0.8.7 后的二次验证
+
+推送时上游已进 V0.8.7（前端架构重构 + 类型检查修复），本批 6 笔重放其上，三处冲突逐处处置：生成物 `E2xxx.md` 取我方后由生成器定稿；`sema/inference/statements.rs` **取上游**（V0.8.7 把该段重构成 `strip_refined_with_proof_fns` 调用，本批只改名、无语义改动）；`09`/`09a` 取上游版再重放本批编辑（禁止整文件取一方）。
+
+重放后重算判据（**基线已变，原测量作废**）：快照相对新基点 **218 个全部 rename、内容差异 0 行**；语料基线内容差异 0 行；门禁 boundary/snapshot/corpus/obligations/docs-refs/docs-truth 全绿；`cargo test --lib -- --list` = 2923 tests。另发现并修掉一处重放残留：`sema/inference/statements.rs` 取了上游新代码但未跟着改名（`frontend::core::typecheck::`），`cargo check --lib` 曾报 2 错。
+
+**教训（第三次同工作树并发事故）**：队长在成员 pre-commit 钩子运行期间触发 `pull --rebase`，导致该成员提交失败；另一成员随后凭盘上副本恢复。规则：**队长跑 rebase/pull 前先确认无成员在提交**；成员提交前应探测 rebase 状态。
