@@ -2628,17 +2628,21 @@ Ptr 3→2 / 2→1、Ref 5→4 / 2→1、MetaType 3→2 / 1→0、Paren 3→2 / 1
    并列即触禁令三 A）。
 ② **函数类型字段不进构造参数（SPEC 443）未接线**：载体已能表达（`is_method`），`translator` 仍按历史
    行为把两类都算进构造参数；改它属可观察变更，需另立裁决。
-③ **`measure_decreasing.snap` 陈旧 ⇒ 判据分歧 + 快照覆盖洞**（预存，非本轮引入）：
-   · **判据分歧**：`tests/baselines/corpus-parity.jsonl:133` 记该语料 `diagnostics: [] / exit: 0`（CLI
-     路径通过）；而**快照判据路径**（`normalize_corpus_file` 的 lex→parse→typecheck→ir_gen 精简序列）
-     在 ir_gen 期报 `E3006`（variable b could not be resolved）⇒ 两条判据对同一文件结论不一致；
-   · **覆盖洞**：`normalize_corpus_file` 对前置阶段失败**静默跳过**，快照门禁没有「语料有、快照无」的
-     对账项，故该文件不在快照覆盖内而门禁仍绿（与 6.5「testsuite 扫到 0 个文件仍 exit 0」同族）；
-   · **时间证据**：该快照最后写于 **2026-10-12**（`8605a081b`），邻接快照（如 `structs.snap`）与语料
-     文件本身最后写于 2026-10-13 ⇒ 它已约三周未进判据；junk 探针（给该 snap 追加一行再跑比对测试，
-     仍绿）证实它确在覆盖之外；
-   · **处置**：本轮**不删样本、不改判据**（删了等于用消掉样本换「全域无 span」），已登记进 09 的 6.6
-     残留面 ⑨ 待裁定（补对账门禁 or 修 ir_gen 的 E3006 路径）。这是快照面**唯一**残留 span 的来源。
+③ **`measure_decreasing.snap` 陈旧 ⇒ 快照判据覆盖洞**（**本节初版把成因记错了，已按 6.6.16 实测订正**）：
+   · **回归引入点 = t4（`28ded1fd8`）**，不是「预存 / 自 2026-10-12 起」。t4 把 parser 的三张内置名字表
+     移出 L2 时，9 个生产入口都注入了 `SemanticProbe`，**唯独快照判据这一条没有**：
+     `normalize_corpus_file` 仍用裸 `parse()`（`NullProbe`）⇒ `Terminates` 不再被认作谓词 ⇒ 返回位测度
+     形参被当 const 泛型参数剔除 ⇒ `ir_gen` 报 `E3006` ⇒ 规范化文本 `None` ⇒ 判据静默 `continue`；
+   · **实测口径**：t4 之前 216/216 全覆盖、跳过 0；t4 之后 **214/218**，跳过 4 个
+     （`deep_recursion_within_limit` / `explicit_termination_measure` / `measure_decreasing` /
+     `stack_overflow_e6004`）；junk 探针与「还原裸 `parse()` 后断言点名 4 个」两次实测均证实；
+   · **不是两条判据对同一文件结论相反**：语料基线由 CLI/driver 产出，driver 早已注入探针；是快照判据
+     这条路径自己喂错了 AST ⇒ 「修 ir_gen 的 E3006 路径」这个待裁选项**撤回**（ir_gen 报错正确）；
+   · **处置（6.6.16 已完成）**：入口改 `parse_with_probe(&tokens, &SemanticProbe)`（判据实现，产品代码
+     零改动）；`assert!(compared > 200)` 这条会让 218→214 仍绿的松下限换成**对账断言**——凡到达 IR 却
+     拿不到规范化文本的失败并逐条点名、且 `compared == reachable`；更新流程同样「跳过即红」。修后
+     **218/218**，`measure_decreasing.snap` 收敛为收窄载体形态（`type_decl []`：该类型体只有 const 界
+     表达式、无数据字段），**快照面残留 span 归零**（本节初版据此写的「唯一残留 span」已不再成立）。
 ④ **`field_is_method` 的判定值有单测**（`middle/core/tests/type_decl.rs`）：函数类型字段
    `is_method == true`、数据字段 `== false`（判定写反时该断言先红）。
 

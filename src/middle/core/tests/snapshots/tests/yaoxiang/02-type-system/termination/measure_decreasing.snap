@@ -1,6 +1,6 @@
 module
   fn NonNegative(Int(64)) -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
-    type_decl Struct { body: [Expr(ConstExpr(BinOp { op: Ge, left: Var("x", Span { start: Position { line: 13, column: 35, offset: 690 }, end: Position { line: 13, column: 36, offset: 691 } }), right: Lit(Int(0), Span { start: Position { line: 13, column: 40, offset: 695 }, end: Position { line: 13, column: 41, offset: 696 } }), span: Span { start: Position { line: 13, column: 37, offset: 692 }, end: Position { line: 13, column: 39, offset: 694 } } }))] }
+    type_decl []
   fn countdown(Int(64), Generic { name: "NonNegative", args: [TypeRef("b")] }) -> Generic { name: "Terminates", args: [TypeRef("b")] }
     slot[0] n : Int(64) @depth1
     slot[1] b : Int(64) @depth1
