@@ -25,6 +25,7 @@
 //! `tests/yaoxiang/06-compile-errors/refinement/return_refinement_multi_arg_predicate_err.yx`、
 //! `tests/yaoxiang/06-compile-errors/refinement/return_refinement_multi_arg_literal_err.yx`。
 
+use crate::frontend::core::typecheck::probe::TypeLevelNamespace;
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parse;
 use crate::frontend::core::typecheck::checker::TypeChecker;
@@ -72,7 +73,7 @@ fn check_source(source: &str) -> TypeCheckResult {
         result => result.module,
     };
     let mut checker = TypeChecker::new("test");
-    checker.check_module(&module)
+    checker.check_module(&module, &TypeLevelNamespace::scan_one(&module))
 }
 
 /// 断言零诊断。

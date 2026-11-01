@@ -14,6 +14,7 @@
 //! 更新模式带 #[ignore] 常驻：更新是显式人工动作，不参与 CI；比对模式
 //! test_ir_snapshots_stable 是常态判据（门禁 9.5 check-snapshot-drift.sh 驱动）。
 
+use crate::frontend::core::typecheck::probe::TypeLevelNamespace;
 use std::path::{Path, PathBuf};
 
 use crate::frontend::core::lexer::tokenize;
@@ -57,7 +58,10 @@ fn normalize_corpus_file(path: &Path) -> Option<String> {
         return None;
     }
     let mut checker = TypeChecker::new(&path.display().to_string());
-    let type_result = checker.check_module(&parsed.module);
+    let type_result = checker.check_module(
+        &parsed.module,
+        &TypeLevelNamespace::scan_one(&parsed.module),
+    );
     if !type_result.diagnostics.is_empty() {
         return None;
     }

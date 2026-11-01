@@ -19,6 +19,7 @@
 //! 差分，恰为本次编译的精确增量——进程累计口径的差分窗口会被并发落账
 //! 劈开（全量并发跑间歇红），线程口径天然免于该污染。
 
+use crate::frontend::core::typecheck::probe::TypeLevelNamespace;
 use std::sync::mpsc;
 use std::time::Duration;
 
@@ -67,7 +68,13 @@ fn check_source_once(source: &str) -> usize {
     let parsed = parse(&tokens);
     assert!(!parsed.has_errors, "探针源码应可解析: {:?}", parsed.errors);
     let mut checker = TypeChecker::new("yx44-shared-probe");
-    checker.check_module(&parsed.module).diagnostics.len()
+    checker
+        .check_module(
+            &parsed.module,
+            &TypeLevelNamespace::scan_one(&parsed.module),
+        )
+        .diagnostics
+        .len()
 }
 /// D58 禁令的执行机制：闭包内再次获取共享求解器 → panic（而不是死锁）
 ///

@@ -123,11 +123,15 @@ fn check_module_inner(
         checker.env().module_registry = ext_env.module_registry.clone();
     }
 
+    // 谓词名可见面（WBS 3.20.9 / #522）：本自由函数是单文件入口，
+    // scan 被检模块自身
+    let namespace = probe::TypeLevelNamespace::scan_one(ast);
+
     // 执行模块检查
     let result = if collect_all {
-        checker.check_module_collect_all(ast)
+        checker.check_module_collect_all(ast, &namespace)
     } else {
-        checker.check_module(ast)
+        checker.check_module(ast, &namespace)
     };
 
     // 将 method_bindings 导回传入的环境

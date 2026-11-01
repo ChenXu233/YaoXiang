@@ -13,6 +13,7 @@
 //!
 //! 本文件钉住第 1 条（可观测），第 2 条是终止检查良基性的前置。
 
+use crate::frontend::core::typecheck::probe::TypeLevelNamespace;
 use crate::frontend::core::typecheck::checker::TypeChecker;
 use crate::frontend::core::typecheck::types::TypeCheckResult;
 use crate::frontend::core::lexer::tokenize;
@@ -50,7 +51,7 @@ fn check_source(source: &str) -> TypeCheckResult {
         result => result.module,
     };
     let mut checker = TypeChecker::new("test");
-    checker.check_module(&module)
+    checker.check_module(&module, &TypeLevelNamespace::scan_one(&module))
 }
 
 /// 注册后约束是谓词体（可折叠），常量违反在 `check_module` 内即判出。
@@ -109,7 +110,10 @@ fn test_collect_param_refinements_yields_predicate_body() {
     let parsed = parse(&tokens);
     assert!(!parsed.has_errors, "解析应无错误: {:?}", parsed.errors);
     let mut checker = TypeChecker::new("test");
-    checker.check_module(&parsed.module);
+    checker.check_module(
+        &parsed.module,
+        &TypeLevelNamespace::scan_one(&parsed.module),
+    );
 
     // Act
     let collected = checker.collect_param_refinements();

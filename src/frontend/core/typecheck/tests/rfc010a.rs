@@ -8,6 +8,7 @@
 //! - 块值不是函数边界：顶层绑定值块内的 `return` 同样拒绝
 //! - 合法位置回归：命名函数体 / lambda 体 / spawn 体内的 `return` 不受影响
 
+use crate::frontend::core::typecheck::probe::TypeLevelNamespace;
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parse;
 use crate::frontend::core::typecheck::checker::TypeChecker;
@@ -44,7 +45,7 @@ fn check_source(source: &str) -> crate::frontend::core::typecheck::types::TypeCh
         result => result.module,
     };
     let mut checker = TypeChecker::new("test");
-    checker.check_module(&module)
+    checker.check_module(&module, &TypeLevelNamespace::scan_one(&module))
 }
 
 /// 规范：Script 顶层 `return`（模块初始化层，无函数边界）应报 E1109

@@ -8,6 +8,7 @@
 //! RFC-039 §3.4.8 ①: 跨模块限定调用 `lib.f(x)` 发泛型实例化请求（generic_id
 //!   用限定名，与 merged-IR 的函数表键对齐）
 
+use crate::frontend::core::typecheck::probe::TypeLevelNamespace;
 use crate::frontend::core::typecheck::inference::expressions::ExpressionInferrer;
 use crate::frontend::core::typecheck::inference::scope::ScopeManager;
 use crate::frontend::core::types::{MonoType, TypeConstraintSolver};
@@ -55,7 +56,11 @@ fn module_info_from_source(
         "模块源码必须可解析：{:?}",
         parsed.errors
     );
-    crate::frontend::module::orchestrator::extract_module_info(module_key, &parsed.module)
+    crate::frontend::module::orchestrator::extract_module_info(
+        module_key,
+        &parsed.module,
+        &TypeLevelNamespace::scan_one(&parsed.module),
+    )
 }
 
 /// 以真实 tokenize → parse → check 管线检查入口源码；`modules` 预先注册进
@@ -75,7 +80,10 @@ fn check_entry_with_modules(
     for module in modules {
         checker.env().module_registry.register(module);
     }
-    checker.check_module_collect_all(&parsed.module)
+    checker.check_module_collect_all(
+        &parsed.module,
+        &TypeLevelNamespace::scan_one(&parsed.module),
+    )
 }
 
 /// 实例化请求快照：`(generic_id 名, 声明序类型参数名, 类型实参)`。

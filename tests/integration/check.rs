@@ -11,6 +11,7 @@
 #![cfg(feature = "cli")]
 
 use std::path::PathBuf;
+use std::process::Command;
 use tempfile::TempDir;
 use yaoxiang::util::diagnostic::run_check_command_once;
 
@@ -832,5 +833,59 @@ fn test_check_terminates_measure_arg_not_collected_as_const() {
     assert_eq!(
         errors, 0,
         "Terminates measure arg must not enter const binder names (3.20.8 single-source criterion); got {errors} error(s)"
+    );
+}
+
+// ============ 3.20.9 / #522：跨单元谓词可见性（Registry 面）============
+//
+// 判据改为声明级 namespace（`probe::TypeLevelNamespace`，全部可见单元 scan
+// 并集）后，lib.yx 声明谓词、main.yx 声明精化签名的多文件形态里，谓词应用
+// 实参位 `N` 在全部诊断中必须保持**未替换**。修前 Registry 阶段判据三臂不
+// 完整 ⇒ `N` 被误收 const 用途并替换成底层类型，诊断文本出现
+// `IsPositive(int64)`（E1012 `found 'IsPositive(int64)'`）。
+//
+// 注：夹具经 check 仍会报既有的 `IsPositive(N)` 形态诊断（导入谓词的精化
+// 正格化在导入面不可见，属另一缺陷面，非本锚判定对象）；本锚只钉
+// 「误替换形态不得回归」。
+
+/// #522 回归锚：多文件谓词应用实参位不得被替换成底层类型。
+#[test]
+fn test_check_multifile_predicate_arg_not_misreplaced() {
+    // Arrange: lib.yx 声明谓词、main.yx `use lib.{IsPositive}` 后声明
+    // const 形参签名——谓词应用实参位 `N` 是编译期表达式（值），不是类型引用
+    let dir = temp_dir();
+    create_yx_file(&dir, "lib.yx", "IsPositive: (x: Int) -> Type = { x > 0 }\n");
+    let main_file = create_yx_file(
+        &dir,
+        "main.yx",
+        "use lib.{IsPositive}\n\
+         \n\
+         sum: (N: Int) -> (x: IsPositive(N)) -> Int = (x) => x\n\
+         \n\
+         main: () -> Void = {\n\
+         \x20   print(sum(42)(5))\n\
+         }\n\
+         \n\
+         main()\n",
+    );
+
+    // Act: 子进程跑 CLI check（诊断文本是判据面，run_check_command_once 只回计数）
+    let output = Command::new(env!("CARGO_BIN_EXE_yaoxiang-rs"))
+        .arg("check")
+        .arg(&main_file)
+        .current_dir(&dir)
+        .output()
+        .expect("failed to run yaoxiang-rs check");
+    let text = format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    // Assert: 谓词应用实参位 `N` 不得被替换——诊断中不得出现 `IsPositive(int64)`
+    // （`N` 误收 const 用途并被替换成底层类型的 #522 形态）
+    assert!(
+        !text.contains("IsPositive(int64)"),
+        "#522: cross-unit predicate application arg N must stay unreplaced in all diagnostics; got: {text}"
     );
 }

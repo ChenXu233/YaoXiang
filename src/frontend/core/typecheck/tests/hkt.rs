@@ -8,6 +8,7 @@
 //! - 3.5.1 推断传类型实参：`Holder(Box(1))` / `Holder([1, 2])` 从实参类型头部解出
 //! - 3.5.2 显式类型实参：`Holder(Box, Int)(Box(1))` 与 `probe(Box, Int)(7)`
 
+use crate::frontend::core::typecheck::probe::TypeLevelNamespace;
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parse;
 use crate::frontend::core::typecheck::checker::TypeChecker;
@@ -19,7 +20,10 @@ fn check_source(source: &str) -> Vec<String> {
     assert!(result.errors.is_empty(), "解析失败: {:?}", result.errors);
     let mut checker = TypeChecker::new("test");
     checker
-        .check_module(&result.module)
+        .check_module(
+            &result.module,
+            &TypeLevelNamespace::scan_one(&result.module),
+        )
         .diagnostics
         .iter()
         .map(|d| format!("{d}"))

@@ -11,6 +11,7 @@
 //! 本文件是四形态（纯命名 / 混合 / 命名与位置冲突 / 命名重复绑定）的判据所在，
 //! 并为验收矩阵（值级 oracle）提供逐条钉板。
 
+use crate::frontend::core::typecheck::probe::TypeLevelNamespace;
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parse;
 use crate::frontend::core::typecheck::checker::TypeChecker;
@@ -50,7 +51,10 @@ fn probe(source: &str) -> Probe {
         parsed.errors
     );
     let mut checker = TypeChecker::new("<named-args-probe>");
-    let type_result = checker.check_module(&parsed.module);
+    let type_result = checker.check_module(
+        &parsed.module,
+        &TypeLevelNamespace::scan_one(&parsed.module),
+    );
     let diagnostics: Vec<String> = type_result
         .diagnostics
         .iter()

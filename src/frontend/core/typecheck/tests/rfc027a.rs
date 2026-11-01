@@ -6,6 +6,7 @@
 //! 本文件覆盖 **T1**（`Terminates` 进类型解析器）、**T2**（测度提取）。
 //! 义务生成（T3）、SMT 判定（T4）见后续任务。
 
+use crate::frontend::core::typecheck::probe::TypeLevelNamespace;
 use crate::frontend::core::typecheck::checker::TypeChecker;
 use crate::frontend::core::typecheck::types::TypeCheckResult;
 use crate::frontend::core::lexer::tokenize;
@@ -45,7 +46,7 @@ fn check_source(source: &str) -> TypeCheckResult {
         result => result.module,
     };
     let mut checker = TypeChecker::new("test");
-    checker.check_module(&module)
+    checker.check_module(&module, &TypeLevelNamespace::scan_one(&module))
 }
 
 /// 断言整份源码**零诊断**。

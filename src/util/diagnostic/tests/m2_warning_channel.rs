@@ -4,6 +4,7 @@
 //! 未使用导入（W1003）经 typecheck use elaboration 检出后走 warnings 通道
 //! （Warning severity、不混入错误 diagnostics）。
 
+use crate::frontend::core::typecheck::probe::TypeLevelNamespace;
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parse;
 use crate::frontend::core::typecheck::checker::TypeChecker;
@@ -95,7 +96,10 @@ fn check_source(source: &str) -> crate::frontend::core::typecheck::types::TypeCh
     );
 
     let mut checker = TypeChecker::new("test");
-    checker.check_module(&parse_result.module)
+    checker.check_module(
+        &parse_result.module,
+        &TypeLevelNamespace::scan_one(&parse_result.module),
+    )
 }
 
 #[test]

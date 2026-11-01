@@ -54,7 +54,11 @@ pub fn embedded_std_module_info(use_path: &str) -> Option<crate::frontend::modul
         return None;
     }
     let mut checker = TypeChecker::new(use_path);
-    checker.collect_signatures(&parsed.module);
+    // 谓词名可见面（WBS 3.20.9 / #522）：嵌入 std 只见自身单元，scan 自身
+    // 模块传入（std.yx 源里现无谓词声明，内置谓词名仍由 scan 收进）
+    let namespace =
+        crate::frontend::core::typecheck::probe::TypeLevelNamespace::scan_one(&parsed.module);
+    checker.collect_signatures(&parsed.module, &namespace);
     let vars = checker.env().vars.clone();
     let types = checker.env().types.clone();
     // 声明期类型参数名（按声明序）：跨模块调用的单态化需要它们绑定签名里的

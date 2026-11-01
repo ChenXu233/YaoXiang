@@ -5,6 +5,7 @@
 //! RFC-010: 统一类型语法
 //! RFC-011: 泛型系统设计
 
+use crate::frontend::core::typecheck::probe::TypeLevelNamespace;
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parse;
 use crate::frontend::core::typecheck::checker::TypeChecker;
@@ -309,7 +310,7 @@ fn test_type_checker_check_empty_module() {
     let module = module(vec![]);
 
     // Act
-    let result = checker.check_module(&module);
+    let result = checker.check_module(&module, &TypeLevelNamespace::scan_one(&module));
 
     // Assert
     assert!(
@@ -334,7 +335,7 @@ fn test_type_checker_reports_type_mismatch() {
     )]);
 
     // Act
-    let result = checker.check_module(&module);
+    let result = checker.check_module(&module, &TypeLevelNamespace::scan_one(&module));
 
     // Assert - 应该报告类型错误
     assert!(
@@ -366,7 +367,7 @@ fn test_type_mismatch_diagnostic_carries_source_span() {
     )]);
 
     // Act
-    let _ = checker.check_module(&module);
+    let _ = checker.check_module(&module, &TypeLevelNamespace::scan_one(&module));
 
     // Assert: 诊断应携带非 dummy 的源码定位（E1002 不再丢 span）
     let with_span = e1002_with_span(&checker);
@@ -393,7 +394,7 @@ fn test_type_checker_reports_undefined_variable() {
     )]);
 
     // Act
-    let result = checker.check_module(&module);
+    let result = checker.check_module(&module, &TypeLevelNamespace::scan_one(&module));
 
     // Assert - 使用未定义变量应该报错
     assert!(
@@ -426,7 +427,7 @@ fn test_type_checker_reports_fn_param_type_mismatch() {
     ]);
 
     // Act
-    let result = checker.check_module(&module);
+    let result = checker.check_module(&module, &TypeLevelNamespace::scan_one(&module));
 
     // Assert - 规范 §6.3: 函数参数类型必须匹配，传入 String 但参数期望 Int 应报错
     assert!(
@@ -452,7 +453,7 @@ fn test_type_checker_with_large_module() {
     let module = module(items);
 
     // Act
-    let result = checker.check_module(&module);
+    let result = checker.check_module(&module, &TypeLevelNamespace::scan_one(&module));
 
     // Assert - 100 个未定义变量的语句应报错（规范 §6.3: 使用未定义变量是编译错误）
     assert!(
@@ -472,7 +473,7 @@ fn test_type_checker_with_multiple_function_definitions() {
     ]);
 
     // Act
-    let result = checker.check_module(&module);
+    let result = checker.check_module(&module, &TypeLevelNamespace::scan_one(&module));
 
     // Assert - 多个函数定义应该正常处理
     assert!(
@@ -488,7 +489,7 @@ fn test_type_checker_with_nested_function_definition() {
     let module = nested_fn_module();
 
     // Act
-    let result = checker.check_module(&module);
+    let result = checker.check_module(&module, &TypeLevelNamespace::scan_one(&module));
 
     // Assert - 规范 §6.3: 嵌套函数定义应通过类型检查（所有变量已定义，类型一致）
     assert!(
@@ -504,7 +505,7 @@ fn test_type_checker_with_generic_type_binding() {
     let module = generic_wrapper_module();
 
     // Act
-    let result = checker.check_module(&module);
+    let result = checker.check_module(&module, &TypeLevelNamespace::scan_one(&module));
 
     // Assert - 规范 §3.8: 泛型类型定义和使用应通过类型检查（所有类型参数已提供）
     assert!(
@@ -533,7 +534,10 @@ fn check_source_for_refined(
 
     // Act
     let mut checker = TypeChecker::new("test");
-    checker.check_module(&parse_result.module)
+    checker.check_module(
+        &parse_result.module,
+        &TypeLevelNamespace::scan_one(&parse_result.module),
+    )
 }
 
 #[test]
@@ -766,7 +770,10 @@ main = {
         parsed.errors
     );
     let mut checker = TypeChecker::new("healthy-probe");
-    let result = checker.check_module(&parsed.module);
+    let result = checker.check_module(
+        &parsed.module,
+        &TypeLevelNamespace::scan_one(&parsed.module),
+    );
 
     // Act
     let (ledger, _call_ownership, degradation) = checker.ownership_inputs(Span::dummy());
@@ -908,7 +915,10 @@ fn collect_signatures_declared_names(
 
     // Act：仅收集顶层签名（登记口所在阶段）
     let mut checker = TypeChecker::new("test");
-    checker.collect_signatures(&parse_result.module);
+    checker.collect_signatures(
+        &parse_result.module,
+        &TypeLevelNamespace::scan_one(&parse_result.module),
+    );
     checker.generic_fn_type_params_snapshot()
 }
 
@@ -975,6 +985,44 @@ fn test_collect_signatures_keeps_plain_value_param_out_of_declared_names() {
     assert!(
         !names.contains_key("plain"),
         "普通值参数函数不得进登记口声明名表（登记口填表后跨单元请求面会整体变化）。实际: {:?}",
+        names
+    );
+}
+
+/// #522（WBS 3.20.9）：跨单元谓词可见性——lib 单元声明谓词、main 单元声明
+/// 精化签名时，Registry 面（`collect_signatures`）的 const 用途精筛必须把
+/// 谓词应用实参位 `N` 排除在声明名表外。修前 Registry 阶段谓词判据三臂不
+/// 完整（不跑第零遍 `collect_predicate_defs`、导入未并）⇒ `IsPositive` 判假
+/// ⇒ `N` 被误收进导出面 `type_params` 并被替换（E1012 `IsPositive(int64)`）。
+#[test]
+fn test_collect_signatures_keeps_cross_unit_predicate_arg_out_of_const_names() {
+    // Arrange：谓词在 lib 单元、消费签名在 main 单元——namespace 取双单元
+    // scan 并集（多文件 Registry 臂 driver 的同构形态，arms.rs registry 臂）
+    let lib_source = "IsPositive: (x: Int) -> Type = { x > 0 }\n";
+    let main_source = "sum: (N: Int) -> (x: IsPositive(N)) -> Int = (x) => x\n";
+    let parse_module = |src: &str| {
+        let tokens = tokenize(src).expect("测试源码词法不应失败");
+        let parsed = parse(&tokens);
+        assert!(
+            !parsed.has_errors,
+            "测试源码语法必须正确（否则无法区分 bug 与测试写错）: {:?}",
+            parsed.errors
+        );
+        parsed.module
+    };
+    let lib_module = parse_module(lib_source);
+    let main_module = parse_module(main_source);
+    let namespace = TypeLevelNamespace::scan([&lib_module, &main_module]);
+
+    // Act：仅收集 main 的顶层签名（Registry 阶段入口，不跑第零遍）
+    let mut checker = TypeChecker::new("test");
+    checker.collect_signatures(&main_module, &namespace);
+
+    // Assert：`N` 是谓词应用实参位（编译期表达式，RFC-027a），不得进声明名表
+    let names = checker.generic_fn_type_params_snapshot();
+    assert!(
+        !names.contains_key("sum"),
+        "#522: 跨单元谓词应用实参位 N 不得被误收进 Registry 声明名表（导出面 type_params）。实际: {:?}",
         names
     );
 }

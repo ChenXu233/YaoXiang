@@ -35,6 +35,7 @@
 //! 4.5.2 把消费门落成响亮（W1090）；#452 把决议与消费两端一起补齐，
 //! 冲突/缺参/未知名/重复命名一律编译期报错（不得静默择一）。
 
+use crate::frontend::core::typecheck::probe::TypeLevelNamespace;
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parse;
 use crate::frontend::core::typecheck::checker::TypeChecker;
@@ -62,7 +63,10 @@ fn probe_overload(source: &str) -> OverloadProbe {
         parsed.errors
     );
     let mut checker = TypeChecker::new("<overload-probe>");
-    let type_result = checker.check_module(&parsed.module);
+    let type_result = checker.check_module(
+        &parsed.module,
+        &TypeLevelNamespace::scan_one(&parsed.module),
+    );
     let diagnostics: Vec<String> = type_result
         .diagnostics
         .iter()

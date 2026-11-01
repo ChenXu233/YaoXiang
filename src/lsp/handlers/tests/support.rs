@@ -8,6 +8,7 @@
 //! definitions/references**——消费端测试手工喂登记数据即静默通道
 //! （coding-rules 第六部分）。
 
+use crate::frontend::core::typecheck::probe::TypeLevelNamespace;
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parse;
 use crate::frontend::core::typecheck::TypeChecker;
@@ -26,7 +27,10 @@ pub(crate) fn check_semantic_into_world(
     let tokens = tokenize(content).expect("测试源码必须可词法分析");
     let parsed = parse(&tokens);
     let mut checker = TypeChecker::new(uri);
-    let result = checker.check_module_collect_all(&parsed.module);
+    let result = checker.check_module_collect_all(
+        &parsed.module,
+        &TypeLevelNamespace::scan_one(&parsed.module),
+    );
     world.update_semantic_db(result.semantic_db);
 }
 

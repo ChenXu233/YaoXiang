@@ -41,6 +41,7 @@
 //! 但生成器不跨编排边界暴露，本判据先覆盖单文件 pipeline 语料面；多文件面随
 //! P4 统一 Driver 自然并入（D20 迁移时同一观测点复用）。
 
+use crate::frontend::core::typecheck::probe::TypeLevelNamespace;
 use std::path::Path;
 
 use super::corpus::{corpus_files, reaches_ir_generation};
@@ -68,7 +69,10 @@ fn produced_vs_unconsumed(path: &Path) -> Option<(usize, Vec<PlanId>)> {
         return None;
     }
     let mut checker = TypeChecker::new(&path.display().to_string());
-    let type_result = checker.check_module(&parsed.module);
+    let type_result = checker.check_module(
+        &parsed.module,
+        &TypeLevelNamespace::scan_one(&parsed.module),
+    );
     if !type_result.diagnostics.is_empty() {
         return None;
     }
@@ -103,7 +107,10 @@ fn compile_plan_probe(source: &str) -> PlanProbe {
         parsed.errors
     );
     let mut checker = TypeChecker::new("<plan-probe>");
-    let type_result = checker.check_module(&parsed.module);
+    let type_result = checker.check_module(
+        &parsed.module,
+        &TypeLevelNamespace::scan_one(&parsed.module),
+    );
     assert!(
         type_result.diagnostics.is_empty(),
         "夹具必须通过类型检查: {:?}",

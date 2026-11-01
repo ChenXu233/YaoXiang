@@ -9,6 +9,7 @@
 //! - §4: 编译期泛型（N: Int、编译期计算）
 //! - §6: 函数重载特化
 
+use crate::frontend::core::typecheck::probe::TypeLevelNamespace;
 use crate::frontend::core::typecheck::checker::TypeChecker;
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parse;
@@ -20,7 +21,7 @@ fn check_source(source: &str) -> crate::frontend::core::typecheck::types::TypeCh
     assert!(!result.has_errors, "parse failed: {:?}", result.errors);
     let module = result.module;
     let mut checker = TypeChecker::new("test");
-    checker.check_module(&module)
+    checker.check_module(&module, &TypeLevelNamespace::scan_one(&module))
 }
 
 // RFC-011 §1: 基础泛型

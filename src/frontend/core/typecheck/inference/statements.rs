@@ -136,12 +136,14 @@ pub struct StatementChecker {
     /// `Refined { base, .. }` 正格化）——不参与谓词排除判据：判据走
     /// `predicate_names`（3.20.8 起单一事实源，见其文档）。
     proof_fn_bases: HashMap<String, MonoType>,
-    /// 谓词名字集（内置谓词 ∪ `predicate_defs` 模块声明 ∪ `env.vars`，逐名经
-    /// `is_predicate_application` 判真收进）。**谓词排除判据的单一事实源**
-    /// （3.20.8 / #511 t3 low 收敛）：由 checker.rs 注入点与 A 面两个
-    /// `collect_used_in_type` 调用点用同一判定函数同源预计算，by construction
-    /// 同构。消费者：const 用途精筛的 `is_predicate` 闭包——谓词应用的实参位
-    /// 是编译期表达式（值）不是类型引用，不得计入 const 泛型用途（RFC-027a）。
+    /// 谓词名字集（即注入的类型级命名空间 `probe::TypeLevelNamespace`：
+    /// 内置谓词名 ∪ 全部可见单元的谓词声明名）。**谓词排除判据的单一
+    /// 事实源**（3.20.8 收单点；3.20.9 / #522 起来源换声明级 namespace
+    /// ——由 checker.rs 注入点 clone 传入，与 A 面 `collect_used_in_type`
+    /// 调用点的 `is_predicate_application`（现即 namespace 查询）by
+    /// construction 同源）。消费者：const 用途精筛的 `is_predicate`
+    /// 闭包——谓词应用的实参位是编译期表达式（值）不是类型引用，不得
+    /// 计入 const 泛型用途（RFC-027a）。
     predicate_names: HashSet<String>,
     /// 循环嵌套深度（#311）：语句级 for 由本 walker 递归走体，循环上下文在此追踪。
     /// 委托表达式检查给 ExpressionInferrer 时经 set_loop_depth 传入，保证
@@ -443,10 +445,11 @@ impl StatementChecker {
         self.proof_fn_bases = bases;
     }
 
-    /// 设置谓词名字集——谓词排除判据的单一事实源（3.20.8）。
+    /// 设置谓词名字集——谓词排除判据的单一事实源（3.20.8；3.20.9 / #522
+    /// 起来源换声明级）。
     ///
-    /// 由 checker.rs 注入点用 `is_predicate_application` 同源预计算
-    /// （内置谓词 / `predicate_defs` / `env.vars` 三源并集），与 A 面两个
+    /// 由 checker.rs 注入点从类型级命名空间（`probe::TypeLevelNamespace`
+    /// clone）传入——内置谓词名 ∪ 全部可见单元的谓词声明名，与 A 面两个
     /// `collect_used_in_type` 调用点 by construction 同判据。
     pub fn set_predicate_names(
         &mut self,
@@ -1930,12 +1933,13 @@ impl StatementChecker {
             // RFC-027a：谓词应用的实参位是编译期表达式（值）而非类型引用
             //（`Terminates(b)` 的 `b`），不得计入 const 用途——见
             // `collect_used_in_type` 的 `is_predicate` 参数。
-            // 判据单源（3.20.8 / #511 t3 low）：读 `predicate_names`——由
-            // checker.rs 注入点用 `is_predicate_application` 同源预计算，
-            // 与 A 面（`collect_used_in_type` 的两个调用点）同一判据源
-            // by construction。3.20.8 前这里是「`Terminates` 字面量 ∪
-            // `proof_fn_bases` 判名」的窄化同义判据（不查 `predicate_defs`、
-            // 漏无参证明函数），与 A 面不同构。
+            // 判据单源（3.20.8 / #511 t3 low 收单点；3.20.9 / #522 起来源
+            // 换声明级）：读 `predicate_names`——checker.rs 注入点从类型级
+            // 命名空间（`probe::TypeLevelNamespace`）clone 传入，与 A 面
+            // （`collect_used_in_type` 的两个调用点，判据即 namespace 查询）
+            // 同一判据源 by construction。3.20.8 前这里是「`Terminates`
+            // 字面量 ∪ `proof_fn_bases` 判名」的窄化同义判据（不查
+            // `predicate_defs`、漏无参证明函数），与 A 面不同构。
             let is_predicate = |n: &str| self.predicate_names.contains(n);
             if let Some(crate::frontend::core::parser::ast::Type::Fn { return_type, .. }) =
                 type_annotation

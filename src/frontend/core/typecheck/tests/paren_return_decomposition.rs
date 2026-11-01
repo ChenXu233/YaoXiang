@@ -14,6 +14,7 @@
 //! A 函数名 RHS、B lambda 块体 return、C lambda 尾表达式（基线已绿）、
 //! D 单层标量返回 + 函数名 RHS（合法报错，必须保持红）。
 
+use crate::frontend::core::typecheck::probe::TypeLevelNamespace;
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parse;
 use crate::frontend::core::typecheck::checker::TypeChecker;
@@ -51,7 +52,7 @@ fn check_source(source: &str) -> TypeCheckResult {
         result => result.module,
     };
     let mut checker = TypeChecker::new("test");
-    checker.check_module(&module)
+    checker.check_module(&module, &TypeLevelNamespace::scan_one(&module))
 }
 
 /// 规范 RFC-004：返回位括号声明「返回值是一个函数」——函数名作 RHS 时

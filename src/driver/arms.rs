@@ -13,6 +13,7 @@ use crate::frontend::core::parser::{self, Module};
 use crate::frontend::core::typecheck::checker::TypeChecker;
 use crate::frontend::core::typecheck::environment::MethodOverloadCandidates;
 use crate::frontend::core::typecheck::SemanticProbe;
+use crate::frontend::core::typecheck::probe::TypeLevelNamespace;
 use crate::frontend::core::typecheck::TypeCheckResult;
 use crate::frontend::core::typecheck::passes::dead_code::DeadCodeAnalyzer;
 use crate::frontend::module::orchestrator::{self, OrchestratorError};
@@ -252,6 +253,9 @@ impl Driver {
             semantic_db,
             ..
         } = state;
+        // 谓词名可见面（WBS 3.20.9 / #522）：scan 全部已 parse 单元——
+        // 单文件形态通常只有入口一个，全集 scan 过包含方向安全
+        let namespace = TypeLevelNamespace::scan(asts.iter().flatten());
         for (i, us) in units.iter_mut().enumerate() {
             let Some(ast) = &asts[i] else {
                 continue; // CollectAll 下 parse 失败的单元（4.1.3 不可达）
@@ -260,8 +264,8 @@ impl Driver {
             // 首错即返；CollectAll（LSP 兜底）收集模式
             let mut checker = TypeChecker::new(&program.units[i].path.display().to_string());
             let mut type_result = match program.aggregation {
-                Aggregation::FailFast => checker.check_module(ast),
-                Aggregation::CollectAll => checker.check_module_collect_all(ast),
+                Aggregation::FailFast => checker.check_module(ast, &namespace),
+                Aggregation::CollectAll => checker.check_module_collect_all(ast, &namespace),
             };
             // 语义数据面（4.6.1）：仅 CollectAll 形态产出（LSP 消费）；
             // 在诊断判定**之前**取走，错误文件同样保留染色/跳转数据
@@ -326,6 +330,10 @@ impl Driver {
         let is_lsp = matches!(program.kind, ProgramKind::Lsp);
         let is_embedded = matches!(program.kind, ProgramKind::Embedded);
         let vendor_root = vendor_root.clone();
+        // 谓词名可见面（WBS 3.20.9 / #522）：scan 全部单元的 AST 全集——
+        // 跨文件 use 的谓词（lib.yx 声明、main.yx 使用）在检查/签名两侧
+        // 同源可见；全集 scan 过包含方向安全
+        let namespace = TypeLevelNamespace::scan(asts.iter().flatten());
         for (i, us) in units.iter_mut().enumerate() {
             let Some(ast) = &asts[i] else {
                 continue;
@@ -368,8 +376,8 @@ impl Driver {
                 checker.set_vendor_root(root.clone());
             }
             let mut result = match program.aggregation {
-                Aggregation::FailFast => checker.check_module(ast),
-                Aggregation::CollectAll => checker.check_module_collect_all(ast),
+                Aggregation::FailFast => checker.check_module(ast, &namespace),
+                Aggregation::CollectAll => checker.check_module_collect_all(ast, &namespace),
             };
             // 语义数据面（4.6.1）：Lsp 形态的目标文件无论诊断成败都汇入
             // ——染色/跳转在打字中间态不消失；Check 无消费者不汇入
@@ -1315,6 +1323,10 @@ impl Driver {
         state: &mut State,
     ) {
         let mut registry = ModuleRegistry::with_std();
+        // 谓词名可见面（WBS 3.20.9 / #522）：Registry 阶段不跑第零遍、导入
+        // 未并——谓词判定只能走声明级 namespace。对全部单元 AST 取 scan 并集
+        // 传入（过包含方向安全）
+        let namespace = TypeLevelNamespace::scan(state.asts.iter().flatten());
         for (unit, ast) in state.program.units.iter().zip(state.asts.iter()) {
             let Some(ast) = ast else {
                 continue; // 上游失败（FailFast 下 run 循环已中止，防御）
@@ -1327,7 +1339,7 @@ impl Driver {
             if unit.path.to_str().is_some_and(|p| p.starts_with('<')) {
                 continue;
             }
-            let mut info = orchestrator::extract_module_info(&unit.key, ast);
+            let mut info = orchestrator::extract_module_info(&unit.key, ast, &namespace);
             // 来源标记：vendor 依赖目录下的文件是 Vendor（与本地 User 区分）
             if orchestrator::is_vendor_path(&unit.path) {
                 info.source = ModuleSource::Vendor;

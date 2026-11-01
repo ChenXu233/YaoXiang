@@ -7,6 +7,7 @@
 //!
 //! **此口径由 8.9.1 重新裁定；改它必须改这条测试。**
 
+use crate::frontend::core::typecheck::probe::TypeLevelNamespace;
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parse;
 use crate::frontend::core::typecheck::checker::TypeChecker;
@@ -25,7 +26,10 @@ fn generate_ir(source: &str) -> ModuleIR {
         parsed.errors
     );
     let mut checker = TypeChecker::new("bare_param_slots");
-    let type_result = checker.check_module(&parsed.module);
+    let type_result = checker.check_module(
+        &parsed.module,
+        &TypeLevelNamespace::scan_one(&parsed.module),
+    );
     assert!(
         type_result.diagnostics.is_empty(),
         "测试源码类型检查应通过: {:?}",

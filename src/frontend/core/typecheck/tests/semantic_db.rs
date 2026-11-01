@@ -10,6 +10,7 @@
 //! 静默通道判定（coding-rules 第六部分）：本文件即「生产端直驱」测试——
 //! 语义数据全部来自真实 tokenize → parse → check 管线，不手工构造登记数据。
 
+use crate::frontend::core::typecheck::probe::TypeLevelNamespace;
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parse;
 use crate::frontend::core::typecheck::TypeChecker;
@@ -25,7 +26,10 @@ fn check_to_semantic_db(
     let tokens = tokenize(source).expect("测试源码必须可词法分析");
     let parsed = parse(&tokens);
     let mut checker = TypeChecker::new(uri);
-    let result = checker.check_module_collect_all(&parsed.module);
+    let result = checker.check_module_collect_all(
+        &parsed.module,
+        &TypeLevelNamespace::scan_one(&parsed.module),
+    );
     result.semantic_db
 }
 

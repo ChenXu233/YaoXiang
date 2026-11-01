@@ -22,6 +22,7 @@
 //! 范围说明：多文件路径（orchestrator 逐文件 AstToIrGenerator）共用同一台账，
 //! 但生成器不跨编排边界暴露，本判据先覆盖单文件 pipeline 语料面。
 
+use crate::frontend::core::typecheck::probe::TypeLevelNamespace;
 use std::path::Path;
 
 use super::corpus::{corpus_files, reaches_ir_generation};
@@ -55,7 +56,10 @@ fn produced_vs_unconsumed(path: &Path) -> Option<(usize, Vec<PlanId>)> {
         return None;
     }
     let mut checker = TypeChecker::new(&path.display().to_string());
-    let type_result = checker.check_module(&parsed.module);
+    let type_result = checker.check_module(
+        &parsed.module,
+        &TypeLevelNamespace::scan_one(&parsed.module),
+    );
     if !type_result.diagnostics.is_empty() {
         return None;
     }

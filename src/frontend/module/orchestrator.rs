@@ -1056,12 +1056,17 @@ pub(crate) fn parse_file(
 }
 
 /// 提取一个文件的模块信息：跑签名收集，导出所有顶层绑定的真实类型。
+///
+/// `namespace`：谓词名可见面（WBS 3.20.9 / #522）——签名收集阶段不跑
+/// 第零遍、导入未并，谓词判定只能走声明级 namespace；调用方（driver 的
+/// Registry 臂）须传全部可见单元的 scan 并集。
 pub(crate) fn extract_module_info(
     module_key: &str,
     ast: &Module,
+    namespace: &crate::frontend::core::typecheck::probe::TypeLevelNamespace,
 ) -> ModuleInfo {
     let mut checker = TypeChecker::new(module_key);
-    checker.collect_signatures(ast);
+    checker.collect_signatures(ast, namespace);
     // #397：无标注顶层绑定也要进导出面——收割推断出的具体类型。
     // 此前这类绑定既不在签名表也无标注可读，导出面直接丢弃，
     // 导入方访问时报误导性的「成员未找到」。
@@ -1240,7 +1245,11 @@ mod export_type_params_tests {
         );
 
         // Act
-        let info = extract_module_info("lib", &parsed.module);
+        let info = extract_module_info(
+            "lib",
+            &parsed.module,
+            &crate::frontend::core::typecheck::probe::TypeLevelNamespace::scan_one(&parsed.module),
+        );
 
         // Assert：按 kind 区分——仅函数类导出携带，其余一律 None
         assert_eq!(
@@ -1289,7 +1298,11 @@ mod export_type_params_tests {
         );
 
         // Act
-        let info = extract_module_info("lib", &parsed.module);
+        let info = extract_module_info(
+            "lib",
+            &parsed.module,
+            &crate::frontend::core::typecheck::probe::TypeLevelNamespace::scan_one(&parsed.module),
+        );
 
         // Assert
         assert_eq!(

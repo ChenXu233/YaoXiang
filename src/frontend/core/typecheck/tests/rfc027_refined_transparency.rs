@@ -14,6 +14,7 @@
 //! 在 `check_module` **之后**执行，故精化**违反**的用例在 `.yx` 层，见
 //! `tests/yaoxiang/06-compile-errors/refinement/refined_annotation_literal_violates_err.yx`。
 
+use crate::frontend::core::typecheck::probe::TypeLevelNamespace;
 use crate::frontend::core::typecheck::checker::TypeChecker;
 use crate::frontend::core::typecheck::types::TypeCheckResult;
 use crate::frontend::core::lexer::tokenize;
@@ -54,7 +55,7 @@ fn check_source(source: &str) -> TypeCheckResult {
         result => result.module,
     };
     let mut checker = TypeChecker::new("test");
-    checker.check_module(&module)
+    checker.check_module(&module, &TypeLevelNamespace::scan_one(&module))
 }
 
 /// 断言零诊断。

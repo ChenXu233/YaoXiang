@@ -14,6 +14,7 @@
 //! 回归防线：模块级函数 / 模块级绑定 / 类型参数照常可用；lambda **表达式**体
 //! （#254 创建点固化）行为不变；同块兄弟嵌套函数引用维持既有 E1001（先于本任务）。
 
+use crate::frontend::core::typecheck::probe::TypeLevelNamespace;
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parse;
 use crate::frontend::core::typecheck::checker::TypeChecker;
@@ -25,7 +26,12 @@ fn check_source(source: &str) -> Vec<Diagnostic> {
     let result = parse(&tokens);
     assert!(result.errors.is_empty(), "解析失败: {:?}", result.errors);
     let mut checker = TypeChecker::new("test");
-    checker.check_module(&result.module).diagnostics
+    checker
+        .check_module(
+            &result.module,
+            &TypeLevelNamespace::scan_one(&result.module),
+        )
+        .diagnostics
 }
 
 /// 诊断 span 覆盖的源码文本——断言「定位指向引用处」。
