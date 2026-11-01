@@ -1,9 +1,20 @@
 name: CI
 
 on:
+  # 触发面按「谁验一次」划分，同一份提交只跑一遍：
+  #  - push 只覆盖主干：dev（开发主干，日常推送都落这里）与 main（发布主干）。
+  #  - pull_request 只覆盖「合入 dev」的 PR（dependabot / 特性分支 / fork PR）。
+  #    dev→main 的发布 PR 不再触发 PR 运行——它的 head 就是 dev，同一提交已由 push
+  #    事件验过，push 的检查同样会显示在 PR 页面。此前的双份列表（(push) 与
+  #    (pull_request) 同名）就是这样来的：发布 PR 存活期间每次推 dev 都跑两遍。
+  #  - 已知取舍：base=main 且 head 不是 dev 的 PR（hotfix→main、升 docs 依赖的
+  #    dependabot PR）不再自动跑 PR CI；按仓库惯例这类提交会同时开一条 →dev 的 PR
+  #    由那条验，确需单独验时用下面的 workflow_dispatch 手动对目标分支触发。
   push:
-    branches: ['*']
+    branches: [dev, main]
   pull_request:
+    branches: [dev]
+  workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.ref }}
