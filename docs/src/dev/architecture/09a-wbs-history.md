@@ -2330,3 +2330,27 @@ t1 门禁全绿（lib 2908 与父版**同数**——既有测试零删改、inte
 ### 计数
 
 三级 +1 = 3.20.7（196→197）；二级不变。issue [#519](https://github.com/ChenXu233/YaoXiang/issues/519) **关闭**（甲案删除 + 约束检查落地全链闭环；余量 = 同名异型消歧归 P6 类型身份收敛、动态调用路径覆盖边界、两成因 help 形态——均已在本行与 WBS 行登记去向）。
+
+## P3 3.20.8 收口（谓词排除判据收单点，2026-11-01）
+
+### 登记与裁决
+
+用户批「同意」（设计稿四件套见 WBS 3.20.8 行登记段：三现场查证 A/B/C、甲乙丙方案、红绿预设）。三现场：A = `checker.rs` collect_signatures（:499/:1668）`is_predicate_application` 全判据；B = `inference/statements.rs` const 用途精筛的窄化内联 lambda（`"Terminates"` 字面量 ∪ `proof_fn_bases` 判名，不查 `predicate_defs`、漏无参证明函数）；C = `helpers.rs` 补名（只收 Type kind，谓词实参位不产候选——显式不适用，未动）。
+
+### 实现（flash t1，冻结 `4f8441b9`）
+
+`predicate_names` 名字集：checker.rs 注入点对 `BUILTIN_PREDICATES` ∪ `env.predicate_defs` 键 ∪ `env.vars` 键逐名跑 `is_predicate_application` 预计算，`set_predicate_names` 注入；B 面 lambda 改 `predicate_names.contains(n)`——与 A 面同一判定函数，by construction 同源。**设计假设修正（t1 按契约停下报告）**：`proof_fn_bases` 非唯一消费者——`strip_refined_value_type`（statements.rs :1798/:1821 一带）与证明函数 `Refined { base, .. }` 正格化仍消费它（需 MonoType 值，与排除判据用途正交）⇒ **双表分工**而非整体替换：proof_fn_bases 保留（文档注明不参与判据）、predicate_names 为判据单一事实源、旧窄化分支删除（无新旧并存）。
+
+### 探针实证（七组夹具，改造前后逐夹具一致）
+
+1. 单文件谓词形态（IsPositive + `(N: Int) -> (x: IsPositive(N))`）**未复现误收**——设计预设的行为红不存在，照实记录；既有下游缺口 E1002（curry 内层精化未按 base 统一的假拒绝）与判据无关，登记 [#523](https://github.com/ChenXu233/YaoXiang/issues/523)。
+2. 跨文件 use 导入谓词误收【证实】：E1012 显示 `IsPositive(int64)`——且**本文件谓词在 collect_signatures（Registry 阶段）同样不可见**（该阶段不执行第零遍 + 导入未并）。病灶 = 阶段边界，判据单源治不了环境可见性，登记 [#522](https://github.com/ChenXu233/YaoXiang/issues/522)（修法方向 = Registry 阶段谓词名可见性，与 use 导入解析时序相关，属设计裁决点）。
+3. 既有锚：lib rfc027 118 passed。
+
+### 锚敏感性边界（如实声明）
+
+新增双锚（`test_check_predicate_application_arg_not_collected_as_const` / `test_check_terminates_measure_arg_not_collected_as_const`）对「谓词排除机制**整体**回归」敏感（红），对 B 面**单独**回归不敏感（A 面兜底）——B 面统一的正确性保障是 by construction 同源预计算，不是行为观察面。t2 变异试验若只残化 B 面不会红，故本批免批次树 t2/t3（规模裁量与 0.2.4 同机制：可观察行为面零变化 + 探针即红绿证据 + 结构性收敛由代码审查与门禁电池覆盖）。
+
+### 计数
+
+三级 +1 = 3.20.8（198→199，头数同笔补齐）；二级不变。新增 issue [#522](https://github.com/ChenXu233/YaoXiang/issues/522)（Registry 阶段谓词不可见 → 导出元数据误收）、[#523](https://github.com/ChenXu233/YaoXiang/issues/523)（curry 内层精化统一缺口）。
