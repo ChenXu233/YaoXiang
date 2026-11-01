@@ -41,8 +41,8 @@ use crate::frontend::core::parser::parse;
 use crate::frontend::core::typecheck::checker::TypeChecker;
 use crate::frontend::core::typecheck::types::OverloadResolutions;
 use crate::frontend::module::registry::ModuleRegistry;
-use crate::middle::core::ir::Instruction;
-use crate::middle::core::ir_gen::AstToIrGenerator;
+use crate::middle::ir::ir::Instruction;
+use crate::middle::ir::ir_gen::AstToIrGenerator;
 use crate::util::plan_id::PlanId;
 
 /// 真实链路探针结果：诊断码 / 决议条目数 / 未消费条目 / IR 里的被调名（排序后）。
@@ -86,8 +86,8 @@ fn probe_overload(source: &str) -> OverloadProbe {
                     .filter_map(|inst| match inst {
                         Instruction::Call {
                             func:
-                                crate::middle::core::ir::Operand::Const(
-                                    crate::middle::core::ir::ConstValue::String(name),
+                                crate::middle::ir::ir::Operand::Const(
+                                    crate::middle::ir::ir::ConstValue::String(name),
                                 ),
                             ..
                         } => Some(name.clone()),

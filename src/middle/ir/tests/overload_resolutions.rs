@@ -30,7 +30,7 @@ use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parse;
 use crate::frontend::core::typecheck::checker::TypeChecker;
 use crate::frontend::module::registry::ModuleRegistry;
-use crate::middle::core::ir_gen::AstToIrGenerator;
+use crate::middle::ir::ir_gen::AstToIrGenerator;
 use crate::util::plan_id::PlanId;
 
 /// 证据面地板之二：语料中**被真实消费**的决议条目数下限（实测 2——`method_overload.yx`

@@ -21,7 +21,7 @@ use crate::frontend::core::typecheck::checker::TypeChecker;
 use crate::frontend::core::typecheck::environment::ExportParamInfo;
 use crate::frontend::core::typecheck::{MonoType, PolyType};
 use crate::frontend::module::registry::ModuleRegistry;
-use crate::middle::core::ir_gen::AstToIrGenerator;
+use crate::middle::ir::ir_gen::AstToIrGenerator;
 
 /// 宿主嵌入形态同 `Native`：命名空间根是 **Struct 变量**（FieldAccess 可解析），
 /// 成员是两个经 `add_native_signature`（**签名串**入参）注册的 native 函数。

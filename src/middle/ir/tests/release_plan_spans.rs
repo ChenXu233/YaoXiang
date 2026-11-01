@@ -49,7 +49,7 @@ use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parse;
 use crate::frontend::core::typecheck::checker::TypeChecker;
 use crate::frontend::module::registry::ModuleRegistry;
-use crate::middle::core::ir_gen::AstToIrGenerator;
+use crate::middle::ir::ir_gen::AstToIrGenerator;
 use crate::util::plan_id::PlanId;
 
 /// 修前实测的证据面（有释放义务且走通全链的语料文件数，见模块头「红态证据」：
@@ -142,8 +142,8 @@ fn compile_plan_probe(source: &str) -> PlanProbe {
 }
 
 /// IR 里 `Instruction::Drop` 指向的局部变量名（槽位表反查；无名槽位标 `<temp N>`）。
-fn dropped_local_names(ir: &crate::middle::core::ir::ModuleIR) -> Vec<String> {
-    use crate::middle::core::ir::{FunctionBody, Instruction, Operand};
+fn dropped_local_names(ir: &crate::middle::ir::ir::ModuleIR) -> Vec<String> {
+    use crate::middle::ir::ir::{FunctionBody, Instruction, Operand};
     let mut names = Vec::new();
     for func in &ir.functions {
         let FunctionBody::Code { blocks, locals, .. } = &func.body else {

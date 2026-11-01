@@ -302,7 +302,7 @@ pub enum RuntimeValue {
     /// 与 [`RuntimeValue::Function`] 并列而不是复用它——原生函数没有 IR 函数体，
     /// `FunctionId`（函数表索引）对它无意义；**名字**（FFI 注册表里的限定名）就是
     /// 它的运行时身份，`CallDyn` 据此按名分发。IR/字节码侧由
-    /// [`crate::middle::core::ir::ConstValue::NativeFn`] 承载同一个名字，
+    /// [`crate::middle::ir::ir::ConstValue::NativeFn`] 承载同一个名字，
     /// 「某个导出是不是原生函数」只由
     /// `ModuleRegistry::is_native_fn_export` 判一次。
     NativeFunction(Arc<str>),

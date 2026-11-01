@@ -819,7 +819,7 @@ impl Param {
 
     /// 是否占**运行期形参位**（IR 参数槽）：按基线口径 = **带类型标注**。
     /// 参数位裸标识符（形态 3，`ty = None`）不占位——此口径由 WBS 8.9.1
-    /// 重新裁定；改它必须同时改 `middle/core/tests/fn_param_slots.rs` 的
+    /// 重新裁定；改它必须同时改 `middle/ir/tests/fn_param_slots.rs` 的
     /// 锁定测试。
     pub fn occupies_runtime_param_slot(&self) -> bool {
         self.ty.is_some()
@@ -831,7 +831,7 @@ impl Param {
 /// 有名形参按完整结构打印（名字是语义，必须可见）。
 ///
 /// **为什么必须手写而不是再生基线**：规范化 IR 快照的 `type_decl` 行打印
-/// AST 类型的 `Debug` 文本（`middle/core/normalize.rs`），并已入库 216 条。
+/// AST 类型的 `Debug` 文本（`middle/ir/normalize.rs`），并已入库 216 条。
 /// 纯表示重塑（6.8.1）不改变 IR 语义，若靠 `UPDATE_SNAPSHOTS=1` 再生基线，
 /// 就会把「形参携带名字」这件事伪装成一次 IR 行为面变化，违反 07 §128
 /// 「漂移必须能说清来源」——复审时也无法区分「表示搬运」与「真实 IR 变化」。

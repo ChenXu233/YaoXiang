@@ -17,7 +17,7 @@
 use crate::frontend::core::typecheck::MonoType;
 use crate::frontend::core::types::mono::UniverseLevel;
 use crate::frontend::core::types::var::TypeVar;
-use crate::middle::core::ir::{
+use crate::middle::ir::ir::{
     BasicBlock, ConstValue, FunctionBody, FunctionIR, Instruction, LocalSlot, ModuleIR, Operand,
     TypeDeclBody, TypeDeclField,
 };

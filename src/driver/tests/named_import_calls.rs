@@ -55,7 +55,7 @@ fn single_file_values(source: &str) -> Vec<String> {
         "单文件对照程序必须类型检查通过：{:?}",
         tr.diagnostics
     );
-    let mut generator = crate::middle::core::ir_gen::AstToIrGenerator::new_with_type_result(
+    let mut generator = crate::middle::ir::ir_gen::AstToIrGenerator::new_with_type_result(
         &tr,
         crate::frontend::module::registry::ModuleRegistry::with_std(),
         None,

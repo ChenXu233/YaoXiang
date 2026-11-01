@@ -11,7 +11,7 @@ use crate::driver::helpers::aggregate_instantiation_requests;
 use crate::driver::unit::Unit;
 use crate::frontend::core::typecheck::TypeCheckResult;
 use crate::frontend::core::types::MonoType;
-use crate::middle::core::ir::{FunctionBody, FunctionIR, ModuleIR};
+use crate::middle::ir::ir::{FunctionBody, FunctionIR, ModuleIR};
 use crate::middle::passes::mono::instance::{GenericFunctionId, InstantiationRequest};
 use crate::util::span::Span;
 

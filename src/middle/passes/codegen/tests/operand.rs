@@ -2,7 +2,7 @@
 //!
 //! 测试 OperandResolver 的寄存器转换和溢出检查功能。
 
-use crate::middle::core::ir::Operand;
+use crate::middle::ir::ir::Operand;
 use crate::middle::passes::codegen::operand::OperandResolver;
 
 #[test]

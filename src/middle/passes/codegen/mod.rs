@@ -22,7 +22,7 @@ mod tests;
 
 use crate::frontend::core::typecheck::MonoType;
 use crate::middle::bytecode::file::{BytecodeFile, FileHeader};
-use crate::middle::core::ir::{ConstValue, ModuleIR, Operand};
+use crate::middle::ir::ir::{ConstValue, ModuleIR, Operand};
 use crate::middle::passes::codegen::translator::Translator;
 use crate::middle::passes::codegen::flow::{FlowManager, SymbolScopeManager};
 use crate::middle::passes::codegen::operand::OperandResolver;
@@ -171,7 +171,7 @@ impl CodegenContext {
             .functions
             .iter()
             .filter_map(|f| match &f.body {
-                crate::middle::core::ir::FunctionBody::TypeDecl { body } => {
+                crate::middle::ir::ir::FunctionBody::TypeDecl { body } => {
                     Some(body.self_type.clone())
                 }
                 _ => None,

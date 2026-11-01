@@ -16,8 +16,8 @@ use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parse;
 use crate::frontend::core::typecheck::checker::TypeChecker;
 use crate::frontend::module::registry::ModuleRegistry;
-use crate::middle::core::ir::Instruction;
-use crate::middle::core::ir_gen::AstToIrGenerator;
+use crate::middle::ir::ir::Instruction;
+use crate::middle::ir::ir_gen::AstToIrGenerator;
 
 /// 夹具的收尾：一个可观察的顶层值绑定（解释器全局槽位可见）。
 const TAIL: &str = "\nr: Int = main()\n";
@@ -78,8 +78,8 @@ fn probe(source: &str) -> Probe {
                 .filter_map(|inst| match inst {
                     Instruction::Call {
                         func:
-                            crate::middle::core::ir::Operand::Const(
-                                crate::middle::core::ir::ConstValue::String(name),
+                            crate::middle::ir::ir::Operand::Const(
+                                crate::middle::ir::ir::ConstValue::String(name),
                             ),
                         ..
                     } => Some(name.clone()),

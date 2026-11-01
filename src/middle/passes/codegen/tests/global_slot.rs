@@ -8,7 +8,7 @@
 use crate::backends::common::RuntimeValue;
 use crate::backends::Executor;
 use crate::frontend::core::typecheck::MonoType;
-use crate::middle::core::ir::{
+use crate::middle::ir::ir::{
     BasicBlock, ConstValue, FunctionBody, FunctionIR, GlobalSlot, Instruction, ModuleIR, Operand,
     LocalSlot,
 };

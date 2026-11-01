@@ -10,7 +10,7 @@ set -u
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
-SRC=src/middle/core/ir_gen.rs
+SRC=src/middle/ir/ir_gen.rs
 SNAP=/tmp/ir_gen_arm_snapshot.rs
 PASS=()
 FAIL=()

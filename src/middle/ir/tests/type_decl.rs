@@ -16,8 +16,8 @@ use crate::frontend::core::parser::parse;
 use crate::frontend::core::typecheck::checker::TypeChecker;
 use crate::frontend::core::typecheck::MonoType;
 use crate::frontend::module::registry::ModuleRegistry;
-use crate::middle::core::ir::{FunctionBody, ModuleIR, TypeDeclBody};
-use crate::middle::core::ir_gen::AstToIrGenerator;
+use crate::middle::ir::ir::{FunctionBody, ModuleIR, TypeDeclBody};
+use crate::middle::ir::ir_gen::AstToIrGenerator;
 
 /// 源码 → module IR：与语料快照判据（`tests/snapshot.rs`）同一条
 /// lex → parse → typecheck → ir_gen 生成序列。

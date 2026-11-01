@@ -4,7 +4,7 @@
 //! - 常量池的添加和获取
 //! - 字节码缓冲区的发射和获取
 
-use crate::middle::core::ir::ConstValue;
+use crate::middle::ir::ir::ConstValue;
 use crate::middle::passes::codegen::buffer::{BytecodeBuffer, ConstantPool};
 
 #[test]

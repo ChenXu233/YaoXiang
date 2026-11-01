@@ -21,7 +21,7 @@ use crate::frontend::core::typecheck::types::OverloadResolutions;
 use crate::frontend::core::typecheck::{
     is_constraint_name, MonoType, PolyType, SemanticProbe, TypeCheckResult,
 };
-use crate::middle::core::ir::{
+use crate::middle::ir::ir::{
     BasicBlock, ConstValue, FunctionBody, FunctionIR, Instruction, LocalSlot, ModuleIR, Operand,
     TypeDeclBody, TypeDeclField,
 };
@@ -136,9 +136,9 @@ pub struct AstToIrGenerator {
     /// 键 = 本文件的绑定名（不含模块限定）。
     global_written_types: HashMap<String, String>,
     /// FFI 库绑定
-    ffi_libs: Vec<crate::middle::core::ir::FfiLibBinding>,
+    ffi_libs: Vec<crate::middle::ir::ir::FfiLibBinding>,
     /// FFI 绑定 — 不透明类型或外部函数
-    ffi_bindings: Vec<crate::middle::core::ir::FfiBinding>,
+    ffi_bindings: Vec<crate::middle::ir::ir::FfiBinding>,
     /// 下一个库 ID
     next_lib_id: usize,
     /// 结构体定义映射（类型名 -> 字段列表）
@@ -632,7 +632,7 @@ impl AstToIrGenerator {
                     // 运行期形参位只数**带类型**的形参（基线口径）：参数位的
                     // 裸标识符（`(Int64)`→name="Int64"、ty=None）不占运行期槽位。
                     // 它是否算参数由 WBS 8.9.1（参数位形态归一）裁决，6.5 只做
-                    // 零行为差分的表示重塑（锁定测试：middle/core/tests/fn_param_slots.rs）。
+                    // 零行为差分的表示重塑（锁定测试：middle/ir/tests/fn_param_slots.rs）。
                     let runtime_param_count = type_params
                         .iter()
                         .filter(|p| p.occupies_runtime_param_slot())
@@ -1471,7 +1471,7 @@ impl AstToIrGenerator {
                 .global_vars
                 .iter()
                 .enumerate()
-                .map(|(i, (name, ty, _))| crate::middle::core::ir::GlobalSlot {
+                .map(|(i, (name, ty, _))| crate::middle::ir::ir::GlobalSlot {
                     name: name.clone(),
                     ty: ty.clone(),
                     index: self.global_slot_base + i,
@@ -2575,7 +2575,7 @@ impl AstToIrGenerator {
         {
             let lib_id = self.get_or_create_lib_id(&mechanism, &lib);
             self.ffi_bindings
-                .push(crate::middle::core::ir::FfiBinding::FuncBinding {
+                .push(crate::middle::ir::ir::FfiBinding::FuncBinding {
                     func_name: name.to_string(),
                     lib_id,
                     symbol: symbol.clone(),
@@ -3204,7 +3204,7 @@ impl AstToIrGenerator {
         }
         let id = self.next_lib_id;
         self.next_lib_id += 1;
-        self.ffi_libs.push(crate::middle::core::ir::FfiLibBinding {
+        self.ffi_libs.push(crate::middle::ir::ir::FfiLibBinding {
             id,
             mechanism: mechanism.to_string(),
             lib_name: lib_name.to_string(),

@@ -9,7 +9,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 
-output=$(cargo test --all-features --lib middle::core::tests::verify -- --exact     middle::core::tests::verify::test_verify_loose_corpus_green 2>&1) || {
+output=$(cargo test --all-features --lib middle::ir::tests::verify -- --exact     middle::ir::tests::verify::test_verify_loose_corpus_green 2>&1) || {
     echo "$output" | tail -30
     echo "check-ir-verifier: FAIL（verify_loose 语料判据红）"
     exit 1

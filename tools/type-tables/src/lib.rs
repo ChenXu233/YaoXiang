@@ -40,7 +40,7 @@ pub const MONO_REL: &str = "src/frontend/core/types/mono.rs";
 pub const LSP_REL: &str = "src/lsp/world.rs";
 /// 反向桥 A（`impl From<MonoType> for IrType`）的所在文件（T1 分列）。
 ///
-/// D1（6.7.1b）：字节码域合并——从 `middle/core/bytecode.rs` 迁到 `middle/bytecode/mod.rs`；
+/// D1（6.7.1b）：字节码域合并——从 `middle/ir/bytecode.rs` 迁到 `middle/bytecode/mod.rs`；
 /// 该 impl 已在 6.6.12 删除，本常量只作分类锚与报告文案，不参与扫描。
 pub const BYTECODE_REL: &str = "src/middle/bytecode/mod.rs";
 /// AST→AST 重建与反向桥 B（`mono_to_ast_type`）的所在文件（T1 分列）

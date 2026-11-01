@@ -3,7 +3,7 @@
 //! 将中间表示（IR）翻译为字节码指令。
 
 use crate::middle::bytecode::opcode;
-use crate::middle::core::ir::{
+use crate::middle::ir::ir::{
     BasicBlock, ConstValue, FunctionBody, FunctionIR, Instruction, LocalSlot, ModuleIR, Operand,
 };
 use crate::frontend::core::typecheck::MonoType;
@@ -104,7 +104,7 @@ impl Translator {
     ) -> Result<TranslatorOutput, Diagnostic> {
         // 消费 FFI 函数绑定 — 存储 mechanism/lib/symbol 元数据
         for binding in &module.ffi_bindings {
-            if let crate::middle::core::ir::FfiBinding::FuncBinding {
+            if let crate::middle::ir::ir::FfiBinding::FuncBinding {
                 func_name,
                 lib_id,
                 symbol,
@@ -354,7 +354,7 @@ impl Translator {
     fn synthesize_constructor(
         &mut self,
         type_func: &FunctionIR,
-        body: &crate::middle::core::ir::TypeDeclBody,
+        body: &crate::middle::ir::ir::TypeDeclBody,
     ) -> Result<crate::middle::bytecode::file::FunctionCode, Diagnostic> {
         let fields = &body.fields;
         let struct_name = &type_func.name;
@@ -943,7 +943,7 @@ impl Translator {
     fn translate_spawn_multi(
         &mut self,
         closures: &[Operand],
-        plan: &crate::middle::core::ir::ExecutionPlan,
+        plan: &crate::middle::ir::ir::ExecutionPlan,
         result: &Operand,
     ) -> Result<BytecodeInstruction, Diagnostic> {
         let dst_reg = self.operand_resolver.to_reg(result)?;
@@ -997,7 +997,7 @@ impl Translator {
     fn translate_spawn_from_list(
         &mut self,
         closures_list: &Operand,
-        plan: &crate::middle::core::ir::ExecutionPlan,
+        plan: &crate::middle::ir::ir::ExecutionPlan,
         result: &Operand,
     ) -> Result<BytecodeInstruction, Diagnostic> {
         let dst_reg = self.operand_resolver.to_reg(result)?;

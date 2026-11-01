@@ -30,7 +30,7 @@ use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parse;
 use crate::frontend::core::typecheck::checker::TypeChecker;
 use crate::frontend::module::registry::ModuleRegistry;
-use crate::middle::core::ir_gen::AstToIrGenerator;
+use crate::middle::ir::ir_gen::AstToIrGenerator;
 
 /// 真实链路探针：类型检查诊断码 / IR 生成结果（诊断码集合）。
 struct MethodBindProbe {

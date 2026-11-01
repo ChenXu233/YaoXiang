@@ -14,7 +14,7 @@
 import re
 import sys
 
-SRC = 'src/middle/core/ir_gen.rs'
+SRC = 'src/middle/ir/ir_gen.rs'
 AST = 'src/ast/mod.rs'
 
 # 顶层臂：恰好 12 空格缩进以 Expr:: 开头。模式本身可能跨多行

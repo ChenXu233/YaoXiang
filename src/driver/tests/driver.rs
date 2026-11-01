@@ -453,20 +453,21 @@ fn test_driver_run_multi_file_init_calls_use_qualified_names() {
 
     // Assert：init 里出现的调用名都在函数表里（自洽），且裸名 helper 不存在
     let function_names: Vec<String> = merged.functions.iter().map(|f| f.name.clone()).collect();
-    let init_calls: Vec<String> = merged
-        .init
-        .iter()
-        .filter_map(|i| match i {
-            crate::middle::core::ir::Instruction::Call {
-                func:
-                    crate::middle::core::ir::Operand::Const(
-                        crate::middle::core::ir::ConstValue::String(n),
-                    ),
-                ..
-            } => Some(n.clone()),
-            _ => None,
-        })
-        .collect();
+    let init_calls: Vec<String> =
+        merged
+            .init
+            .iter()
+            .filter_map(|i| match i {
+                crate::middle::ir::ir::Instruction::Call {
+                    func:
+                        crate::middle::ir::ir::Operand::Const(
+                            crate::middle::ir::ir::ConstValue::String(n),
+                        ),
+                    ..
+                } => Some(n.clone()),
+                _ => None,
+            })
+            .collect();
     assert!(
         !init_calls.is_empty(),
         "夹具应至少有一条 init 调用（否则判据空转）：{init_calls:?}"

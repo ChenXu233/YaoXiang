@@ -641,13 +641,13 @@ pub(in crate::driver) fn aggregate_instantiation_requests(
             .get(i)
             .and_then(|a| a.as_ref())
             .map(|ast| {
-                crate::middle::core::ir_gen::AstToIrGenerator::import_aliases_from(ast, registry)
+                crate::middle::ir::ir_gen::AstToIrGenerator::import_aliases_from(ast, registry)
             })
             // 无 AST（上游失败）时无可解析：空表等价于纯单元键限定化
             .unwrap_or_default();
         let resolver = |name: &str| -> Option<String> {
             // 解析走 ir_gen 的**单点实现**（与生成期改写指令同一函数）
-            let raw = crate::middle::core::ir_gen::AstToIrGenerator::resolve_call_target(
+            let raw = crate::middle::ir::ir_gen::AstToIrGenerator::resolve_call_target(
                 name, &rename, &aliases,
             );
             let raw = raw.filter(|r| program_functions.contains(r.as_str()));

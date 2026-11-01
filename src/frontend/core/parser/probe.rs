@@ -31,7 +31,7 @@
 /// 因而 `kind` 必须被保真回写），并连带 IR 快照与语料基线再生、与本批零漂移
 /// 判据冲突。那些重建函数已在 6.6.12 随 IR 载体收窄全部删除：IR 层如今**一处
 /// `ast::Type` 都不持**（`FunctionBody::TypeDecl` 改携 IR 原生的 `TypeDeclBody`，
-/// `middle/core/ir.rs` 也不再 import 语法层 `ast`）。故「`kind` 会经 AST 往返
+/// `middle/ir/ir.rs` 也不再 import 语法层 `ast`）。故「`kind` 会经 AST 往返
 /// 进 IR」这一障碍**今天已不存在**。
 ///
 /// **今天不字段化的理由只剩两条（须重新论证，不是 6.4 那套）**：① 字段化仍要

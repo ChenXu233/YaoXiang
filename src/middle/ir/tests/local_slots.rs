@@ -5,7 +5,7 @@
 //! 名字会静默退回全 None——本测试即是防静默回退的哨兵。
 
 use crate::frontend::compiler::Compiler;
-use crate::middle::core::ir::{FunctionBody, LocalSlot, ModuleIR};
+use crate::middle::ir::ir::{FunctionBody, LocalSlot, ModuleIR};
 
 /// 编译 `src` 并取回模块 IR；失败时带上错误原因。
 fn compile(src: &str) -> ModuleIR {

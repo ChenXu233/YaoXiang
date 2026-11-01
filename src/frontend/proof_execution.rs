@@ -203,12 +203,12 @@ pub(super) fn execute_single_proof_fn(
     use crate::backends::Executor;
     use crate::middle;
 
-    let mut ir_gen = middle::core::ir_gen::AstToIrGenerator::new_with_type_result(
+    let mut ir_gen = middle::ir::ir_gen::AstToIrGenerator::new_with_type_result(
         type_result,
         crate::frontend::module::registry::ModuleRegistry::with_std(),
         None,
     );
-    let mut constants: Vec<middle::core::ir::ConstValue> = Vec::new();
+    let mut constants: Vec<middle::ir::ir::ConstValue> = Vec::new();
     let func_ir = ir_gen
         .generate_function_ir(
             &call.func_name,

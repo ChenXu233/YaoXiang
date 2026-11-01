@@ -181,11 +181,11 @@ pub const NON_OBLIGATION_FIELDS: &[NonObligationField] = &[
     },
     NonObligationField {
         field: "bindings",
-        reason: "类型绑定表：确有跨阶段读取（src/middle/core/ir_gen.rs:735/:5034），但文档注释未声明跨阶段契约 ⇒ 未收编进 02 义务字段表；登记在此闭合字段普查",
+        reason: "类型绑定表：确有跨阶段读取（src/middle/ir/ir_gen.rs:735/:5034），但文档注释未声明跨阶段契约 ⇒ 未收编进 02 义务字段表；登记在此闭合字段普查",
     },
     NonObligationField {
         field: "local_var_types",
-        reason: "诊断渲染用局部类型表：跨阶段读取在 src/middle/core/ir_gen.rs:852/:4543/:4794（错误消息），与 bindings 同——未声明契约",
+        reason: "诊断渲染用局部类型表：跨阶段读取在 src/middle/ir/ir_gen.rs:852/:4543/:4794（错误消息），与 bindings 同——未声明契约",
     },
     NonObligationField {
         field: "semantic_db",
@@ -193,7 +193,7 @@ pub const NON_OBLIGATION_FIELDS: &[NonObligationField] = &[
     },
     NonObligationField {
         field: "trait_table",
-        reason: "trait 表：跨阶段读取在 src/middle/core/ir_gen.rs:4336/:6867（与 local_var_types 配对传参），文档注释未声明契约",
+        reason: "trait 表：跨阶段读取在 src/middle/ir/ir_gen.rs:4336/:6867（与 local_var_types 配对传参），文档注释未声明契约",
     },
     NonObligationField {
         field: "warnings",

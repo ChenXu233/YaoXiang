@@ -21,7 +21,7 @@
 
 use super::driver::{make_script_project, run_multi};
 use crate::frontend::module::symbol::DefId;
-use crate::middle::core::ir::{ConstValue, Instruction, ModuleIR, Operand};
+use crate::middle::ir::ir::{ConstValue, Instruction, ModuleIR, Operand};
 
 /// 跑合并 IR 的 codegen + 解释器，返回 (全部全局槽位值, 执行错误)。
 fn run_codegen(module: ModuleIR) -> (Vec<String>, Option<String>) {

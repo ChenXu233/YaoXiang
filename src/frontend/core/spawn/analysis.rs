@@ -14,7 +14,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::ast::{BinOp, Block, Expr, FStringSegment, Stmt, StmtKind};
 use crate::frontend::core::types::{MonoType, TraitTable};
-use crate::middle::core::ir::{ExecutionPlan, TaskGroup};
+use crate::middle::ir::ir::{ExecutionPlan, TaskGroup};
 
 // 公共 API
 

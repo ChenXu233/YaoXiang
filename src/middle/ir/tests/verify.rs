@@ -14,9 +14,9 @@ use crate::frontend::core::parser::parse;
 use crate::frontend::core::typecheck::MonoType;
 use crate::frontend::core::typecheck::checker::TypeChecker;
 use crate::frontend::module::registry::ModuleRegistry;
-use crate::middle::core::ir::{ConstValue, Instruction, Operand};
-use crate::middle::core::ir_gen::AstToIrGenerator;
-use crate::middle::core::verify::{verify_loose, verify_ssa, InvariantKind, VerifyError};
+use crate::middle::ir::ir::{ConstValue, Instruction, Operand};
+use crate::middle::ir::ir_gen::AstToIrGenerator;
+use crate::middle::ir::verify::{verify_loose, verify_ssa, InvariantKind, VerifyError};
 use crate::util::span::Span;
 
 use super::corpus::{corpus_files, reaches_ir_generation};

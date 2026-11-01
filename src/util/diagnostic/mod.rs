@@ -528,7 +528,7 @@ fn script_main_never_called(
     module: &crate::middle::ModuleIR,
     qualified_main: &str,
 ) -> bool {
-    use crate::middle::core::ir::{ConstValue, Instruction, Operand};
+    use crate::middle::ir::ir::{ConstValue, Instruction, Operand};
     use std::collections::HashSet;
 
     let defines_main = module

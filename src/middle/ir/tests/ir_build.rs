@@ -2,7 +2,7 @@
 //! FunctionIR / ModuleIR 构造器。单块函数：块内指令序即展平序。
 
 use crate::frontend::core::typecheck::MonoType;
-use crate::middle::core::ir::{
+use crate::middle::ir::ir::{
     BasicBlock, ConstValue, FunctionBody, FunctionIR, Instruction, LocalSlot, ModuleIR, Operand,
 };
 use crate::util::span::Span;

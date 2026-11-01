@@ -50,6 +50,9 @@ L2_DIRS = ('frontend/core/lexer/', 'frontend/core/parser/')
 # 「AST 为顶层域，无需豁免条款」）；但它是 parser 侧的构造面：B2/B6 继续按原口径扫它，
 # 扫描面与 6.7 之前一致（当时 ast.rs 落在 L2_DIRS 内），不得因搬迁而缩水。
 AST_DIRS = ('ast/',)
+# D1（6.7.1c）：`middle/core/` 改名 `middle/ir/`。层表**不需要新增条目**——`middle/` 前缀
+# 同时覆盖 `middle/ir/` 与 `middle/bytecode/`（6.7.1b 合并出的字节码域）；此处只记一笔，
+# 免得后来者以为改名漏登记。子目录改名时同理：只要父目录前缀在表内，规则面就不缩水。
 L3_DIRS = ('frontend/core/typecheck/', 'frontend/core/types/', 'middle/')
 L4_DIRS = ('backends/', 'std/')
 
@@ -63,7 +66,7 @@ L2_DATA_PREFIXES = ('lexer::tokens', 'lexer::TokenKind', 'lexer::Token', 'lexer:
 KNOWN_INCLUDE = {}
 # WBS 6.4：parser 的两处 typecheck 调用改为注入式探针（parser/probe.rs），库存清零。
 KNOWN_L2_CROSS = {}
-# D1 6.7.1b：opcode 词表迁入 middle/bytecode/ 后，原 3 条（middle/core/bytecode.rs、
+# D1 6.7.1b：opcode 词表迁入 middle/bytecode/ 后，原 3 条（middle/ir/bytecode.rs、
 # middle/passes/codegen/{translator,emitter}.rs 各自 use crate::backends::common::opcode）
 # 全部清零并删除——不删会一直打印「可清零」占位，且新命中会与死条目混在一起看不出。
 KNOWN_MIDDLE_TO_BACKENDS = {}

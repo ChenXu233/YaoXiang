@@ -21,7 +21,7 @@ use std::collections::HashMap;
 
 // Re-export the IR constant-pool type (shared by bytecode, codegen and backends).
 // ast::Type 的再导出已随 6.2.2 载体统一删除——字节码不再引用 ast::Type。
-pub use crate::middle::core::ir::ConstValue;
+pub use crate::middle::ir::ir::ConstValue;
 
 /// Register index in the virtual machine
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

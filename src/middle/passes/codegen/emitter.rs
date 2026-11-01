@@ -132,14 +132,14 @@ impl Emitter {
     }
 
     /// 获取常量池
-    pub fn take_constant_pool(&mut self) -> Vec<crate::middle::core::ir::ConstValue> {
+    pub fn take_constant_pool(&mut self) -> Vec<crate::middle::ir::ir::ConstValue> {
         self.buffer.take_constant_pool()
     }
 
     /// 添加常量
     pub fn add_constant(
         &mut self,
-        value: crate::middle::core::ir::ConstValue,
+        value: crate::middle::ir::ir::ConstValue,
     ) -> usize {
         self.buffer.add_constant(value)
     }

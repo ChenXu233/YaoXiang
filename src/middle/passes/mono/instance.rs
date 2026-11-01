@@ -463,7 +463,7 @@ pub struct FunctionInstance {
     pub type_args: Vec<MonoType>,
 
     /// 特化后的函数IR（延迟生成）
-    pub ir: Option<Arc<crate::middle::core::ir::FunctionIR>>,
+    pub ir: Option<Arc<crate::middle::ir::ir::FunctionIR>>,
 }
 
 impl FunctionInstance {
@@ -484,13 +484,13 @@ impl FunctionInstance {
     /// 设置函数IR
     pub fn set_ir(
         &mut self,
-        ir: crate::middle::core::ir::FunctionIR,
+        ir: crate::middle::ir::ir::FunctionIR,
     ) {
         self.ir = Some(Arc::new(ir));
     }
 
     /// 获取函数IR（如果已生成）
-    pub fn get_ir(&self) -> Option<&crate::middle::core::ir::FunctionIR> {
+    pub fn get_ir(&self) -> Option<&crate::middle::ir::ir::FunctionIR> {
         self.ir.as_deref()
     }
 }
@@ -564,7 +564,7 @@ impl fmt::Display for FunctionId {
 
 // ==================== 闭包单态化相关 ====================
 
-use crate::middle::core::ir::{FunctionIR, Operand};
+use crate::middle::ir::ir::{FunctionIR, Operand};
 
 /// 捕获变量
 ///

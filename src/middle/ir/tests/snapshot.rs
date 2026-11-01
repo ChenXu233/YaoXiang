@@ -23,9 +23,9 @@ use crate::frontend::core::typecheck::checker::TypeChecker;
 use crate::frontend::core::typecheck::MonoType;
 use crate::frontend::core::typecheck::SemanticProbe;
 use crate::frontend::module::registry::ModuleRegistry;
-use crate::middle::core::ir::{FunctionBody, GlobalSlot, Instruction, Operand};
-use crate::middle::core::ir_gen::AstToIrGenerator;
-use crate::middle::core::normalize::normalize_module;
+use crate::middle::ir::ir::{FunctionBody, GlobalSlot, Instruction, Operand};
+use crate::middle::ir::ir_gen::AstToIrGenerator;
+use crate::middle::ir::normalize::normalize_module;
 use crate::util::span::Span;
 
 use super::corpus::{corpus_files, reaches_ir_generation};
@@ -37,7 +37,7 @@ fn snapshot_path_for(yx: &Path) -> PathBuf {
     let mut p = manifest
         .join("src")
         .join("middle")
-        .join("core")
+        .join("ir")
         .join("tests")
         .join("snapshots");
     for comp in relative.components() {

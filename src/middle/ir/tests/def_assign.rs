@@ -5,7 +5,7 @@
 
 use crate::frontend::compiler::Compiler;
 use crate::frontend::module::symbol::DefId;
-use crate::middle::core::ir::{
+use crate::middle::ir::ir::{
     BasicBlock, ConstValue, FunctionBody, FunctionIR, Instruction, ModuleIR, Operand,
 };
 

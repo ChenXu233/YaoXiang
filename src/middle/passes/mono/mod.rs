@@ -15,7 +15,7 @@ pub mod instance;
 use function::FunctionMonomorphizer;
 use instance::{GenericFunctionId, InstantiationRequest, SpecializationKey};
 use crate::frontend::core::typecheck::MonoType;
-use crate::middle::core::ir::{
+use crate::middle::ir::ir::{
     BasicBlock, ConstValue, FunctionBody, FunctionIR, Instruction, LocalSlot, ModuleIR, Operand,
 };
 
@@ -807,11 +807,11 @@ impl Monomorphizer {
         // 已知窄缺口：字段类型是「内联匿名结构体/枚举」时 `substitute` 不深入
         // （`other => clone`），登记见 09a §P6 6.6.12（语料 0 例）。
         let new_body = match &generic.body {
-            FunctionBody::TypeDecl { body } => crate::middle::core::ir::TypeDeclBody {
+            FunctionBody::TypeDecl { body } => crate::middle::ir::ir::TypeDeclBody {
                 fields: body
                     .fields
                     .iter()
-                    .map(|f| crate::middle::core::ir::TypeDeclField {
+                    .map(|f| crate::middle::ir::ir::TypeDeclField {
                         ty: f.ty.substitute(&name_map),
                         ..f.clone()
                     })

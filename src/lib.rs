@@ -622,18 +622,18 @@ fn dump_type_detail(ty: &crate::frontend::core::typecheck::MonoType) -> String {
     }
 }
 
-fn dump_const_detail(constant: &crate::middle::core::ir::ConstValue) -> &'static str {
+fn dump_const_detail(constant: &crate::middle::ir::ir::ConstValue) -> &'static str {
     match constant {
-        crate::middle::core::ir::ConstValue::Void => "void",
-        crate::middle::core::ir::ConstValue::Bool(_) => "bool",
-        crate::middle::core::ir::ConstValue::Int(_) => "int",
-        crate::middle::core::ir::ConstValue::Float(_) => "float",
-        crate::middle::core::ir::ConstValue::Char(_) => "char",
-        crate::middle::core::ir::ConstValue::String(_) => "String",
-        crate::middle::core::ir::ConstValue::Bytes(_) => "bytes",
-        crate::middle::core::ir::ConstValue::NativeFn(_) => "nativefn",
-        crate::middle::core::ir::ConstValue::LibraryRef { .. }
-        | crate::middle::core::ir::ConstValue::ExternRef { .. } => todo!(),
+        crate::middle::ir::ir::ConstValue::Void => "void",
+        crate::middle::ir::ir::ConstValue::Bool(_) => "bool",
+        crate::middle::ir::ir::ConstValue::Int(_) => "int",
+        crate::middle::ir::ir::ConstValue::Float(_) => "float",
+        crate::middle::ir::ir::ConstValue::Char(_) => "char",
+        crate::middle::ir::ir::ConstValue::String(_) => "String",
+        crate::middle::ir::ir::ConstValue::Bytes(_) => "bytes",
+        crate::middle::ir::ir::ConstValue::NativeFn(_) => "nativefn",
+        crate::middle::ir::ir::ConstValue::LibraryRef { .. }
+        | crate::middle::ir::ir::ConstValue::ExternRef { .. } => todo!(),
     }
 }
 
