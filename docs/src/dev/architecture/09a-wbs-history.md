@@ -1622,7 +1622,7 @@ grep -rEn --include=*.yx '(:|->|<)[[:space:]]*(int|int64|i64|datetime|int32|i32|
 
 ③ **值位 `.yx` 探针的 `E1002`**——值位探针在 6.3 的父提交与落地态**同报 `E1002`**，诊断逐字节一致 ⇒ 属**预存语言限制**（非本批引入）；该形态的往返覆盖因此改用 IR 层探针完成（15 个规范名 + 结构类型）。
 
-④ **`ir.rs` 三处 `ast::Type` 载体未动**——6.3 只删变体、**未改 IR 形状**（IR 快照 216 条与语料基线 356 行零漂移）；`Instruction::Cast { target_type }`（`src/middle/core/ir.rs:325`）、`Instruction::TypeTest { ty }`（同文件 `:330`）、`FunctionBody::TypeDecl { definition }`（同文件 `:651`）仍持 `ast::Type`。载体处置留 6.4（改动会动 IR 快照与语料基线），已登记进 09 的 6.4 行「下一轮契约输入」。
+④ **`ir.rs` 三处 `ast::Type` 载体未动**——6.3 只删变体、**未改 IR 形状**（IR 快照 216 条与语料基线 356 行零漂移）；`Instruction::Cast { target_type }`（`src/middle/core/ir.rs:325`）、`Instruction::TypeTest { ty }`（同文件 `:330`）、`FunctionBody::TypeDecl { definition }`（同文件 `:651`）仍持 `ast::Type`——**行号取自 6.3 收口提交 `717db877a`**（`git show 717db877a:src/middle/core/ir.rs` 逐行可复核；三处载体此后分别于 6.6.11 / 6.6.12 删除或换形，故在当前 HEAD 上不可解析）。载体处置留 6.4（改动会动 IR 快照与语料基线），已登记进 09 的 6.4 行「下一轮契约输入」。
 
 ### 过程注记（三条）
 
@@ -1848,7 +1848,7 @@ WBS 的 6.4.3 行把 `src/middle/core/ir_gen.rs` 的 `is_constraint_param_ann` �
 
 ⑥ **parser 的非 Fn 签名兜底仍在**——`src/frontend/core/parser/statements/types.rs` 的 `_ => (Vec::new(), Type::Void)` 兜底在 6.3 已改为 let-else 显式返回 `Type::Name{"()"}`（语义与 formatter 输出逐字不变），但该路径**语法可达**：`semantic_tokens` 的 `Name` 臂会比旧的 `Void` 臂（空操作）多记一枚 dummy-span token（语料 393 个 `.yx` 中该形态 0 命中，formatter / 诊断 / dump 零漂移）。**6.4 未接手该路径**（本批只做类型名依赖的注入化），须在 6.5 一并消除（不再由 parser 兜底产出伪类型）。
 
-⑦ **`ir.rs` 三处 `ast::Type` 载体未动**——`Instruction::Cast { target_type }`（`src/middle/core/ir.rs:325`）、`Instruction::TypeTest { ty }`（同文件 `:330`）、`FunctionBody::TypeDecl { definition }`（同文件 `:651`）仍持 `ast::Type`；6.3 只删变体、6.4 只做注入化，两批都**未改 IR 形状**（IR 快照 216 条与语料基线 356 行零漂移）。载体处置须另立一轮（改动会动 IR 快照 / 语料基线）。
+⑦ **`ir.rs` 三处 `ast::Type` 载体未动**——`Instruction::Cast { target_type }`（`1615d65ca` 上的 `src/middle/core/ir.rs:325`）、`Instruction::TypeTest { ty }`（同 rev 同文件 `:330`）、`FunctionBody::TypeDecl { definition }`（同 rev 同文件 `:651`）仍持 `ast::Type`——**行号取自 6.5 收口提交 `1615d65ca`**（`git show 1615d65ca:src/middle/core/ir.rs` 逐行可复核；三处载体此后分别于 6.6.11 / 6.6.12 删除或换形，故在当前 HEAD 上不可解析）；6.3 只删变体、6.4 只做注入化，两批都**未改 IR 形状**（IR 快照 216 条与语料基线 356 行零漂移）。载体处置须另立一轮（改动会动 IR 快照 / 语料基线）。
 
 ### 过程注记（四条）
 
