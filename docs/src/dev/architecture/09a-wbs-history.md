@@ -2705,3 +2705,62 @@ Ptr 3→2 / 2→1、Ref 5→4 / 2→1、MetaType 3→2 / 1→0、Paren 3→2 / 1
 ### 六、计数
 
 本续轮不新增二级/三级任务 ⇒ 09 顶部计数表不变（二级 **72** / 三级 **193**）。
+
+三级 +1 = 3.20.7（196→197）；二级不变。issue [#519](https://github.com/ChenXu233/YaoXiang/issues/519) **关闭**（甲案删除 + 约束检查落地全链闭环；余量 = 同名异型消歧归 P6 类型身份收敛、动态调用路径覆盖边界、两成因 help 形态——均已在本行与 WBS 行登记去向）。
+
+## P3 3.20.8 收口（谓词排除判据收单点，2026-11-01）
+
+### 登记与裁决
+
+用户批「同意」（设计稿四件套见 WBS 3.20.8 行登记段：三现场查证 A/B/C、甲乙丙方案、红绿预设）。三现场：A = `checker.rs` collect_signatures（:499/:1668）`is_predicate_application` 全判据；B = `inference/statements.rs` const 用途精筛的窄化内联 lambda（`"Terminates"` 字面量 ∪ `proof_fn_bases` 判名，不查 `predicate_defs`、漏无参证明函数）；C = `helpers.rs` 补名（只收 Type kind，谓词实参位不产候选——显式不适用，未动）。
+
+### 实现（flash t1，冻结 `dd7cd37e`）
+
+`predicate_names` 名字集：checker.rs 注入点对 `BUILTIN_PREDICATES` ∪ `env.predicate_defs` 键 ∪ `env.vars` 键逐名跑 `is_predicate_application` 预计算，`set_predicate_names` 注入；B 面 lambda 改 `predicate_names.contains(n)`——与 A 面同一判定函数，by construction 同源。**设计假设修正（t1 按契约停下报告）**：`proof_fn_bases` 非唯一消费者——`strip_refined_value_type`（statements.rs :1798/:1821 一带）与证明函数 `Refined { base, .. }` 正格化仍消费它（需 MonoType 值，与排除判据用途正交）⇒ **双表分工**而非整体替换：proof_fn_bases 保留（文档注明不参与判据）、predicate_names 为判据单一事实源、旧窄化分支删除（无新旧并存）。
+
+### 探针实证（七组夹具，改造前后逐夹具一致）
+
+1. 单文件谓词形态（IsPositive + `(N: Int) -> (x: IsPositive(N))`）**未复现误收**——设计预设的行为红不存在，照实记录；既有下游缺口 E1002（curry 内层精化未按 base 统一的假拒绝）与判据无关，登记 [#523](https://github.com/ChenXu233/YaoXiang/issues/523)。
+2. 跨文件 use 导入谓词误收【证实】：E1012 显示 `IsPositive(int64)`——且**本文件谓词在 collect_signatures（Registry 阶段）同样不可见**（该阶段不执行第零遍 + 导入未并）。病灶 = 阶段边界，判据单源治不了环境可见性，登记 [#522](https://github.com/ChenXu233/YaoXiang/issues/522)（修法方向 = Registry 阶段谓词名可见性，与 use 导入解析时序相关，属设计裁决点）。
+3. 既有锚：lib rfc027 118 passed。
+
+### 锚敏感性边界（如实声明）
+
+新增双锚（`test_check_predicate_application_arg_not_collected_as_const` / `test_check_terminates_measure_arg_not_collected_as_const`）对「谓词排除机制**整体**回归」敏感（红），对 B 面**单独**回归不敏感（A 面兜底）——B 面统一的正确性保障是 by construction 同源预计算，不是行为观察面。t2 变异试验若只残化 B 面不会红，故本批免批次树 t2/t3（规模裁量与 0.2.4 同机制：可观察行为面零变化 + 探针即红绿证据 + 结构性收敛由代码审查与门禁电池覆盖）。
+
+### 计数
+
+三级 +1 = 3.20.8（198→199，头数同笔补齐）；二级不变。新增 issue [#522](https://github.com/ChenXu233/YaoXiang/issues/522)（Registry 阶段谓词不可见 → 导出元数据误收）、[#523](https://github.com/ChenXu233/YaoXiang/issues/523)（curry 内层精化统一缺口）。
+
+## P3 3.20.9 收口（类型级命名空间——#522 丁案，2026-11-01）
+
+### 登记与裁决
+
+issue #522 的裁决包（甲/乙/丙）呈报后，用户追问「既要又要」的方案 ⇒ **丁案**（类型级命名空间）：把「名是不是谓词」从检查期状态提升为声明级事实——用会过期的检查期状态回答不过期的声明级问题，是可见性缺口的架构根源。用户批丁（内嵌裁决点 = env 三臂退役）。
+
+### 实现（flash t1，冻结 `82bd1c38`）
+
+- `probe.rs`：`TypeLevelNamespace { predicates }` + 纯函数 `scan`/`scan_one`（`BUILTIN_PREDICATES` ∪ 各单元谓词声明名）+ `predicate_decl_shape`（声明形态识别全仓单点，第零遍与 scan 共用；第零遍 env 登记行为逐字保留）。
+- `is_predicate_application` 的 env 三臂整体退役为 namespace 查询；`predicate_defs` 表本身（证明/常量求值消费面）不动。
+- 接线 9 处生产 + 49 处测试全部**编译器强制**显式传参：collect_signatures 加 namespace 参数（driver `registry()` 臂传全部单元 scan 并集 / embedded std 传 `scan_one`）；check_module(_collect_all) 加参（单文件 scan 自身、多文件传 `state.asts` 全集——过包含方向安全）；B 面注入来源从 env 计算换 `namespace.predicates`（env 计算删净，无并存）。
+- 双回归锚：单元锚（Registry 面 scan，断言跨单元谓词实参 N 不进 declared_fn_type_params）+ 集成锚（CLI 诊断不含 `IsPositive(int64)` 误替换形态）。
+
+### 探针与红绿（如实）
+
+- **#522 验收面达成**：误替换修掉——`IsPositive(N)` 全诊断与导出面保持未替换。
+- **预设「check 转绿」未达（如实）**：剩余 E1012 expected 侧（`'int64'` vs `'IsPositive(N)'`）与 E1002 是既有缺陷——t1 对照实验定性：**本地谓词声明无 E1012，导入形态特有** ⇒ 谓词**约束体数据**不跨单元传播（第零遍只登记本单元、导入面查不到体），比名判据深一层的数据传播设计点 → 登记 [#524](https://github.com/ChenXu233/YaoXiang/issues/524)（S-needs-decision）；E1002 归 #523。
+- **等价性双探针**：t1 三次构造「env-vars 臂独占命中形态」均被语言拒绝（Type 非一阶值）；t3 构造出反例 `g: (x: Int) -> Type = { helper(x) }`（call 体非 const 可转换——旧 env 臂判真、新 namespace 判假）但**父子双版三探针输出逐字节一致** ⇒ 等价结论成立（t1 的「不可构造」措辞修正为「可构造但无行为差异」）。
+
+### t2（批次树 522 @ `82bd1c38`）——M1 PASS / M2 阴性 / 基线 PASS
+
+- **M1 PASS**：scan 退化为只收内置谓词后，双锚**各自独立红**（单元锚实报 `{"sum": ["N"]}` 误收、集成锚实报 `IsPositive(int64)` 形态），trial 机械可逆、重建恢复绿——声明级判据承重。
+- **M2 阴性（照实）**：把 extract_module_info 的 namespace 实参换成空集后 121 个定向测试全绿——CLI 观察面被 #523 缺口遮蔽，该实参是**无锚死区**。处置 = 队长补双模块直测锚（`test_extract_module_info_consumes_namespace_across_units`：项目并集下 sum 的 `Export::type_params` 必须保持 None，实参弃用即红，`a0e24aae`）；arms 侧 scan 构造义务由集成锚间接覆盖（#524/#523 落地后 CLI 观察面自动增强）。
+- **基线 PASS**：语料差分逐字节一致（md5 双方 60f36554…，356 行）；IR 快照 7 passed / 1 ignored；CI 四脚本 exit 0（boundary/fanout report-only 以输出内违规 0 为准）；锁释放。
+
+### t3——APPROVE（7/7，3 low）
+
+形态单点（predicate_decl_shape 双消费者共用、第二份无）；退役无残根（三臂删净、predicate_defs 非判定消费面零改动、builtin 判定口 8 处消费者保留）；接线无漏网（5 个生产构造点全注入、旁路方法无生产裸调）；过包含方向成立；B 面切换无并存；锚判据强度合规；39 文件全机械。**3 low**：①登记措辞修正（见上等价性）；②inScope 窄于机械必需面——typecheck/mod.rs + 25 个签名连带测试文件追认；③`TypeChecker::new` 空集默认 + 旁路方法（check_stmt 等）若被绕过三入口直调将静默拿空集——今日无生产路径，脚枪备案。
+
+### 计数与环境
+
+三级 +1 = 3.20.9（199→200）；二级不变。issue [#522](https://github.com/ChenXu233/YaoXiang/issues/522) **关闭**（误替换面验收达成；数据传播残留归 #524）。批次树 522 release+gc（约 7.7 GB）。流程注记：`orchestrator` 不是 commit-msg 合法 scope（orchestrator.rs 属 `frontend`）。
