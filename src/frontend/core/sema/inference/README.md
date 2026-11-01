@@ -16,6 +16,6 @@
 - 不做死代码检测（那是 `passes/dead_code`）
 - 不做类型关系判断（那是 `layers/equivalence`）
 
-**依赖**：`types/`、`typecheck/environment`
+**依赖**：`types/`、`sema/environment`
 
 **被依赖**：`checker.rs`、`layers/`（部分）

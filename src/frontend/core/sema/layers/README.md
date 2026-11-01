@@ -1,4 +1,4 @@
-# typecheck/layers/ — 证明层
+# sema/layers/ — 证明层
 
 **职责**：RFC-027 证明检查的各层模块。每个被调用的层提供一个「证明入口」
 （返回 `ProofResult` 或 `Vec<ProofResult>`），由 `checker.rs::check_module_impl`
@@ -9,7 +9,7 @@
 所谓「层序」＝ 调用点在 `check_module_impl` 里的先后。
 
 **定位以符号为锚**：下文用「函数名 / 驱动点」指路；括号里的行号按现树取、随改动平移，
-仅供快速跳读。下称 `checker.rs` = `src/frontend/core/typecheck/checker.rs`；
+仅供快速跳读。下称 `checker.rs` = `src/frontend/core/sema/checker.rs`；
 其余路径均为仓库根相对路径。
 
 **实际调用顺序**：
@@ -31,9 +31,9 @@
 
 **`equivalence.rs` 的现状**：`check_module_impl` 对它**零调用**。
 `check_type_equivalence`（`equivalence.rs:216`）全仓库只被测试引用
-（`src/frontend/core/typecheck/tests/rfc027_phase1_integration.rs:13`、
-`src/frontend/core/typecheck/tests/rfc027_phase4_e2e.rs:15`）；同文件的 `is_subtype`
-是生产路径上的共享助手（`src/frontend/core/typecheck/inference/assignment.rs:17`），
+（`src/frontend/core/sema/tests/rfc027_phase1_integration.rs:13`、
+`src/frontend/core/sema/tests/rfc027_phase4_e2e.rs:15`）；同文件的 `is_subtype`
+是生产路径上的共享助手（`src/frontend/core/sema/inference/assignment.rs:17`），
 `structurally_equal` 现仅测试引用（`layers/tests/equivalence.rs:5`）。
 它当下的身份是**共享类型比较工具 + 一个仅测试使用的证明入口**，不是被顺序调用的层。
 
@@ -47,7 +47,7 @@
   主要是 `proof/`（`ProofResult` / `ProofContext` / SMT 后端）、`types/`（`MonoType` /
   `ConstExpr` / `Evaluator`）与 `crate::util::*`（`Span` / `PlanId` /
   `ConsumptionLedger`）；`ownership.rs` 另依赖
-  `typecheck::inference::call_ownership::CallOwnershipTable`（完整清单见各文件 `use` 块）
+  `sema::inference::call_ownership::CallOwnershipTable`（完整清单见各文件 `use` 块）
 - 新增层要两步落地：`mod.rs` 里 `pub mod` 声明 + 在 `check_module_impl`
   （或驱动它的走查）里补调用点；缺第二步的层永不执行，`check_type_equivalence` 即此类
 

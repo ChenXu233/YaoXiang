@@ -14,7 +14,7 @@
 
 **依赖**：types/（mono, var, const_data, substitute）
 
-**被依赖**：typecheck/layers/equivalence（通过 evaluator 做确定性归约）
+**被依赖**：sema/layers/equivalence（通过 evaluator 做确定性归约）
 
 **规则**：
 - 所有函数是纯函数，不持有可变状态
