@@ -131,8 +131,18 @@ pub struct StatementChecker {
     dep_env: crate::frontend::core::types::eval::dependent_types::DependentTypeEnv,
     /// Trait 表（用于 classify_generic_params 判定 annotation 是否为 trait）
     trait_table: TraitTable,
-    /// 证明函数基类型表: "IsPositive" -> Int(64)（RFC-027 Phase 2.5）
+    /// 证明函数基类型表: "IsPositive" -> Int(64)（RFC-027 Phase 2.5）。
+    /// 专用于**剥精化取基类型**（`strip_refined_value_type` 与证明函数
+    /// `Refined { base, .. }` 正格化）——不参与谓词排除判据：判据走
+    /// `predicate_names`（3.20.8 起单一事实源，见其文档）。
     proof_fn_bases: HashMap<String, MonoType>,
+    /// 谓词名字集（内置谓词 ∪ `predicate_defs` 模块声明 ∪ `env.vars`，逐名经
+    /// `is_predicate_application` 判真收进）。**谓词排除判据的单一事实源**
+    /// （3.20.8 / #511 t3 low 收敛）：由 checker.rs 注入点与 A 面两个
+    /// `collect_used_in_type` 调用点用同一判定函数同源预计算，by construction
+    /// 同构。消费者：const 用途精筛的 `is_predicate` 闭包——谓词应用的实参位
+    /// 是编译期表达式（值）不是类型引用，不得计入 const 泛型用途（RFC-027a）。
+    predicate_names: HashSet<String>,
     /// 循环嵌套深度（#311）：语句级 for 由本 walker 递归走体，循环上下文在此追踪。
     /// 委托表达式检查给 ExpressionInferrer 时经 set_loop_depth 传入，保证
     /// E1102（break/continue 循环外）判定跨两个 walker 一致。
@@ -242,6 +252,7 @@ impl StatementChecker {
             dep_env,
             trait_table,
             proof_fn_bases: HashMap::new(),
+            predicate_names: HashSet::new(),
             loop_depth: 0,
             import_watch: HashMap::new(),
             imported_used: HashSet::new(),
@@ -430,6 +441,18 @@ impl StatementChecker {
         bases: HashMap<String, MonoType>,
     ) {
         self.proof_fn_bases = bases;
+    }
+
+    /// 设置谓词名字集——谓词排除判据的单一事实源（3.20.8）。
+    ///
+    /// 由 checker.rs 注入点用 `is_predicate_application` 同源预计算
+    /// （内置谓词 / `predicate_defs` / `env.vars` 三源并集），与 A 面两个
+    /// `collect_used_in_type` 调用点 by construction 同判据。
+    pub fn set_predicate_names(
+        &mut self,
+        names: HashSet<String>,
+    ) {
+        self.predicate_names = names;
     }
 
     /// 尝试实例化泛型类型
@@ -1902,7 +1925,13 @@ impl StatementChecker {
             // RFC-027a：谓词应用的实参位是编译期表达式（值）而非类型引用
             //（`Terminates(b)` 的 `b`），不得计入 const 用途——见
             // `collect_used_in_type` 的 `is_predicate` 参数。
-            let is_predicate = |n: &str| n == "Terminates" || self.proof_fn_bases.contains_key(n);
+            // 判据单源（3.20.8 / #511 t3 low）：读 `predicate_names`——由
+            // checker.rs 注入点用 `is_predicate_application` 同源预计算，
+            // 与 A 面（`collect_used_in_type` 的两个调用点）同一判据源
+            // by construction。3.20.8 前这里是「`Terminates` 字面量 ∪
+            // `proof_fn_bases` 判名」的窄化同义判据（不查 `predicate_defs`、
+            // 漏无参证明函数），与 A 面不同构。
+            let is_predicate = |n: &str| self.predicate_names.contains(n);
             if let Some(crate::frontend::core::parser::ast::Type::Fn { return_type, .. }) =
                 type_annotation
             {

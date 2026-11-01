@@ -770,3 +770,67 @@ main = () => {
         e1106.iter().map(|d| &d.message).collect::<Vec<_>>()
     );
 }
+
+// ============ 3.20.8 / #511 t3 low：谓词排除判据不得回归窄化形态 ============
+//
+// 判据单源后（inference/statements.rs 的 const 用途精筛读 `predicate_names`，
+// 由 checker.rs 注入点用 `is_predicate_application` 同源预计算——内置谓词 /
+// `predicate_defs` / `env.vars` 三源），若该判据回归为 3.20.8 前的窄化形态
+// （只认 `Terminates` 字面量 ∪ 证明函数基类型表判名），证明函数谓词
+// `IsPositive` 应用 `IsPositive(b)` 的实参位 `b` 会被 `collect_used_in_type`
+// 误计入 const 泛型用途——形参名被当作 const 绑定并替换成底层具体类型，
+// 精化约束在到达消费端之前就丢失（E1092 类症状，见 checker.rs
+// `collect_used_in_type` 的谓词排除注释）。
+
+/// 谓词应用实参位不得计入 const 泛型用途（判据窄化回归锚）。
+#[test]
+fn test_check_predicate_application_arg_not_collected_as_const() {
+    // Arrange: 证明函数谓词 + 形参位精化——谓词应用的实参 `b` 是编译期
+    // 表达式（值），不是类型引用；`f` 的签名不含 const 候选，check 应零诊断。
+    let dir = temp_dir();
+    let file = create_yx_file(
+        &dir,
+        "predicate_const_anchor.yx",
+        "IsPositive: (x: Int) -> Type = { x > 0 }\n\
+         f: (b: IsPositive(b)) -> Int = { 0 }\n\
+         main = () => { print(f(5)) }",
+    );
+
+    // Act
+    let result = check_file(&file);
+
+    // Assert: 判据正确 ⇒ 谓词实参位被排除 ⇒ 无误收类诊断。
+    // 判据回归窄化时 `b` 会进 const_binders 并被替换，此处将出现 E10xx。
+    let errors = result.expect("well-formed predicate refinement should check cleanly");
+    assert_eq!(
+        errors, 0,
+        "predicate application arg must not enter const binder names (3.20.8 single-source criterion); got {errors} error(s)"
+    );
+}
+
+/// 内置谓词 `Terminates` 的测度位同样不得计入 const 泛型用途（内置源锚）。
+#[test]
+fn test_check_terminates_measure_arg_not_collected_as_const() {
+    // Arrange: 内置谓词无源码声明（RFC-027 §6.9），判据必须经内置源命中；
+    // 返回位 `Terminates(b)` 的 `b` 是测度表达式，`a`/`b` 均为运行时值参数。
+    let dir = temp_dir();
+    let file = create_yx_file(
+        &dir,
+        "terminates_const_anchor.yx",
+        "gcd: (a: Int, b: Int) -> Terminates(b) = {\n\
+         \x20 if b == 0 { return a }\n\
+         \x20 return gcd(b, a % b)\n\
+         }\n\
+         main = () => { print(gcd(48, 18)) }",
+    );
+
+    // Act
+    let result = check_file(&file);
+
+    // Assert: 内置谓词源命中 ⇒ 测度位排除 ⇒ 零诊断（rfc027a T1 验收面）。
+    let errors = result.expect("well-formed Terminates annotation should check cleanly");
+    assert_eq!(
+        errors, 0,
+        "Terminates measure arg must not enter const binder names (3.20.8 single-source criterion); got {errors} error(s)"
+    );
+}

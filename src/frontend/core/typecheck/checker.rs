@@ -595,7 +595,21 @@ impl TypeChecker {
             .map(|(name, poly)| (name.clone(), poly.body.clone()))
             .collect();
         body_checker.set_type_defs(type_defs);
-        // RFC-027 Phase 2.5: 构建证明函数基类型表
+        // 双表分工（3.20.8 / #511 t3 low 收敛——谓词排除判据单一事实源）：
+        //
+        // 1. `proof_fn_bases`——证明函数基类型表（RFC-027 Phase 2.5）：
+        //    「返回 Type 的函数名 → 其基类型」。消费者是**剥精化取基类型**
+        //    （inference/statements.rs 的 `strip_refined_value_type` 与证明函数
+        //    `Refined { base, .. }` 正格化），需要 MonoType 值，不是排除判据。
+        // 2. `predicate_names`——谓词名字集，**谓词排除判据的单一事实源**：
+        //    三源（内置谓词 / `predicate_defs` 模块声明 / `env.vars`）的并集
+        //    逐名跑 `is_predicate_application`——与 A 面（`collect_signatures`
+        //    与 `collect_function_signature` 的两个 `collect_used_in_type`
+        //    调用点）同一判定函数，by construction 同源。消费者：
+        //    inference/statements.rs const 用途精筛的 `is_predicate`——谓词
+        //    应用的实参位是编译期表达式（值）不是类型引用，不得计入 const
+        //    泛型用途（RFC-027a；3.20.8 前该处是「`Terminates` 字面量 ∪
+        //    `proof_fn_bases` 判名」的窄化同义判据，与 A 面不同构）。
         let proof_fn_bases: HashMap<String, MonoType> = self
             .env
             .vars
@@ -614,6 +628,15 @@ impl TypeChecker {
             })
             .collect();
         body_checker.set_proof_fn_bases(proof_fn_bases);
+        let predicate_name_sources = crate::frontend::core::typecheck::probe::BUILTIN_PREDICATES
+            .iter()
+            .map(|s| s.to_string())
+            .chain(self.env.predicate_defs.keys().cloned())
+            .chain(self.env.vars.keys().cloned());
+        let predicate_names: HashSet<String> = predicate_name_sources
+            .filter(|name| self.is_predicate_application(name))
+            .collect();
+        body_checker.set_predicate_names(predicate_names);
         // 如果启用收集模式，设置收集所有错误
         if collect_all {
             body_checker.set_collect_all_errors(true);
