@@ -70,6 +70,8 @@
 {"expectation":"behavior","file":"tests/yaoxiang/02-type-system/aggregates/structs.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
 {"expectation":"behavior","file":"tests/yaoxiang/02-type-system/aggregates/tuple_index_field.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
 {"expectation":"behavior","file":"tests/yaoxiang/02-type-system/aggregates/tuples.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/aggregates/type_decl_anon_binding.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/aggregates/type_decl_default_field.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
 {"expectation":"behavior","file":"tests/yaoxiang/02-type-system/functions/closure_arg_inference.yx","run":{"diagnostics":[["W1001","tests/yaoxiang/02-type-system/functions/closure_arg_inference.yx",12],["W1001","tests/yaoxiang/02-type-system/functions/closure_arg_inference.yx",16],["W1001","tests/yaoxiang/02-type-system/functions/closure_arg_inference.yx",20],["W1004","tests/yaoxiang/02-type-system/functions/closure_arg_inference.yx",23],["W1004","tests/yaoxiang/02-type-system/functions/closure_arg_inference.yx",27],["W1004","tests/yaoxiang/02-type-system/functions/closure_arg_inference.yx",31]],"exit":0,"stderr":[],"stdout":[]}}
 {"expectation":"behavior","file":"tests/yaoxiang/02-type-system/functions/closures.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
 {"expectation":"behavior","file":"tests/yaoxiang/02-type-system/functions/curry_tail_expr.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}

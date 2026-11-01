@@ -105,7 +105,7 @@ MonoType::Struct(_) | MonoType::Enum(_) | MonoType::Ref { .. }
 
 同时 `IrType::String` / `IrType::Bytes` 指向的 `ast::Type::String`（`ast.rs:435`）与 `ast::Type::Bytes`（`ast.rs:436`）正是 2.2 要删的死变体——**有损桥接的两端都指向死代码**。
 
-**现状（6.2.2 起）**：该 impl 已**整个删除**，解码期不再把 `MonoType` 降级重建为 `ast::Type`——四处载体统一改载 `MonoType`：`BytecodeFunction.params`（`src/middle/core/bytecode.rs:814`）与 `return_type`（同文件 `:816`）、`BytecodeModule.type_table`（同文件 `:856`）、`Image.type_table`（`src/backends/interpreter/image.rs:44`）；解码改原样搬运（`bytecode.rs:2315`、`:2316`、`:2346`）。上面这段塌缩**不再发生**：那 8 个 `MonoType` 变体在签名与类型表里保留真实类型，`IrType::Void` 不再兼作「信息丢失」的替身。`ir::Type` 再导出别名（`src/middle/core/ir.rs:3` 的 `pub use ... ast::Type`）亦已降为私有导入（`:7`）——IR 层不再对外再导出语法层类型；IR 层此前有三处载体直接持 `ast::Type`（`Instruction::Cast.target_type` / `Instruction::TypeTest.ty` / `FunctionBody::TypeDecl.definition`）；其中前两处已于 **WBS 6.6.11** 随两个**零生产者**死变体一并删除（载荷本就被下游丢弃），现只余**一处**：`FunctionBody::TypeDecl.definition`。**同名的字节码侧 `BytecodeInstr::Cast` 是另一套**（载荷是类型表下标 `u16`，不是语法类型），保留不动。
+**现状（6.2.2 起）**：该 impl 已**整个删除**，解码期不再把 `MonoType` 降级重建为 `ast::Type`——四处载体统一改载 `MonoType`：`BytecodeFunction.params`（`src/middle/core/bytecode.rs:814`）与 `return_type`（同文件 `:816`）、`BytecodeModule.type_table`（同文件 `:856`）、`Image.type_table`（`src/backends/interpreter/image.rs:44`）；解码改原样搬运（`bytecode.rs:2315`、`:2316`、`:2346`）。上面这段塌缩**不再发生**：那 8 个 `MonoType` 变体在签名与类型表里保留真实类型，`IrType::Void` 不再兼作「信息丢失」的替身。`ir::Type` 再导出别名（`src/middle/core/ir.rs:3` 的 `pub use ... ast::Type`）亦已降为私有导入（`:7`）——IR 层不再对外再导出语法层类型；IR 层此前有三处载体直接持 `ast::Type`（`Instruction::Cast.target_type` / `Instruction::TypeTest.ty` / `FunctionBody::TypeDecl.definition`）：前两处已于 **WBS 6.6.11** 随两个**零生产者**死变体一并删除（载荷本就被下游丢弃）；最后一处已于 **WBS 6.6.12** 换成 IR 原生收窄载体 [`TypeDeclBody`]（字段表 `Vec<TypeDeclField>` + 字节码类型表项 `self_type: MonoType`）——**IR 层不再持任何 `ast::Type`，`src/middle/core/ir.rs` 也不再 import 语法层 `ast`**。**同名的字节码侧 `BytecodeInstr::Cast` 是另一套**（载荷是类型表下标 `u16`，不是语法类型），保留不动。
 
 ### 2.2 parser 前向零构造变体
 
@@ -580,7 +580,7 @@ declarations.rs:498-511 与 ast.rs:930 改为
 
 **T1 的失败形态（6.6.2，2026-10-30 用户裁决 2A）**：T1 已从「只报告」转为**构建硬失败**——`build.rs` 调 `type_tables::build_gate(root)`：`Ok(摘要)` 打印一行 `cargo:warning`（信息行，不是违规），`Err(明细)` 直接 `panic!` 拒绝编译。**六类违规走同一条失败路径**（见上表 ①–⑤ 与 ⑦；⑥ 属扫描层失败路径「重建位置登记表与源码不一致」，与 6.6.3 新增的口径不同代一样直接判失败，但不算门禁违规类），报错逐条带**变体名**与构造点 / 兜底点 / 变体定义行的 `file:line`——基线漂移同样带（6.6.3 复审 F1：此前只有数字，读者拿不到「去哪儿看」）。扫描本身完不成（有文件解析失败、口径不完整）同样算失败——**不得降级为「通过」**。**登记机制保留且为空表**：`REGISTERED_ZERO_FORWARD` 与 `DEAD_VARIANTS_03` 现在都是空表（6.3 删掉 13 个死变体后已无零构造变体），T1.7 的「登记但已不成立 / 豁免未命中」报警与注入式核对（`*_with(registry)`）照常工作——新增零构造变体必须删除或在表里登记理由，否则构建失败。
 
-**重建位置的单一源（6.6.2，用户裁决 1A）**：第二类 / 反向桥的归类由 `scan.rs` 的 `REBUILD_FUNCTIONS` 表驱动（**文件 + 函数名 → 类别**）。`Type::without_fn_param_names`（6.5 批引入的保真重建：把已有 AST 类型重造一份以剥掉类型位形参名，唯一消费点 `ir_gen.rs` 入 IR 前归一）归入**第二类 AST→AST 重建**；此前它被算作 parser 前向，使 11 个变体的前向各虚高 1 点（`Name` / `ConstExpr` 走 `self.clone()`，本就不产点）。登记表与源码**逐条对账**：登记的函数在源码里找不到同名 `fn` 时扫描直接报错，**不得静默落回前向**（否则改名/删除后重建点会伪装成构造点）。
+**重建位置的单一源（6.6.2，用户裁决 1A）**：第二类 / 反向桥的归类由 `scan.rs` 的 `REBUILD_FUNCTIONS` 表驱动（**文件 + 函数名 → 类别**）。`Type::without_fn_param_names`（6.5 批引入的保真重建：把已有 AST 类型重造一份以剥掉类型位形参名，唯一消费点 `ir_gen.rs` 入 IR 前归一；**6.6.12 起已随 IR 载体收窄删除**，其登记与口径快照同批移出）归入**第二类 AST→AST 重建**；此前它被算作 parser 前向，使 11 个变体的前向各虚高 1 点（`Name` / `ConstExpr` 走 `self.clone()`，本就不产点）。登记表与源码**逐条对账**：登记的函数在源码里找不到同名 `fn` 时扫描直接报错，**不得静默落回前向**（否则改名/删除后重建点会伪装成构造点）。
 
 **基线数字钉住两样东西（6.6.3 复审 F1/F2）**：
 
@@ -801,7 +801,7 @@ declarations.rs:498-511 与 ast.rs:930 改为
 - `src/frontend/core/parser/ast.rs:441-541` — `ast::Type` 定义（6.3 收口后 **13 变体**；26 变体时代的区间为 427-541）
 - `src/frontend/core/parser/ast.rs:518-532` — `Type::NamedParen` 的 binder 语义说明（删除会重引入缺陷的证据）
 - `src/frontend/core/parser/ast.rs:778`、`:985` — `Param`（名字与类型同栖）与 `Type::fn_params_flat`（拍平入口）：6.5.2/6.8.1 之后的形参唯一表示
-- `src/frontend/core/parser/ast.rs:858` — `Type::without_fn_param_names`：IR 载体入 IR 前剥掉类型位形参名（打印边界的一致性收口，见 5.6）
+- （**已删除，WBS 6.6.12**）`src/frontend/core/parser/ast.rs` 的 `Type::without_fn_param_names`：6.5 批为「IR 以 `ast::Type` 为载体」而设的打印边界收口；6.6.12 把 `FunctionBody::TypeDecl` 换成 IR 原生收窄载体后 AST 不再入 IR，该函数失去唯一生产调用点并删除（T1 的 `REBUILD_FUNCTIONS` / `SCOUT_BASELINE_CALIBER` 同批少一条）
 - `src/frontend/core/typecheck/probe.rs`（WBS 6.6.9 起）— `CONST_PARAM_TYPES`：const 泛型参数**可接受类型名**表的唯一权威（原在 `parser/ast.rs`，是 L3 知识的第三份副本；随 parser 封闭集清零移回 L3，parser 只经 `TypeEnvProbe::is_const_param_type` 提问，见 5.4）
 - `src/frontend/core/parser/ast.rs:1097` — `name_used_as_type`：6.4 合并后的单一实现（原 `name_used_as_type_in` 与 `declarations.rs` 那份已合并）
 - `src/frontend/core/parser/ast.rs:1178`、`:1275` — `extract_generic_param_names` 与 `classify_generic_params`（6.4 起经注入探针定种）

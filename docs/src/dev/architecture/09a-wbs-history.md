@@ -2279,3 +2279,374 @@ type-tables T1 扫描未完成（口径不完整 ⇒ 判定不成立）：重建
 ### 计数
 
 本批不新增二级/三级任务 ⇒ 09 顶部计数表不变（二级 **72** / 三级 **193**）。
+
+### 附：改前 `type_decl` 行原文（对照用）
+
+口径：`343ed13b0` 的 `src/middle/core/tests/snapshots/`，`grep -rn "type_decl"` 命中 **96 行 / 69 文件**。
+下文逐文件原样抄录（仅去掉快照路径前缀，行内文本一字未改）——**B 收窄后这些行会被整行替换**，
+保留原文是为了事后能回答「到底丢了哪些信息」：每行都带完整 `Span { start: Position { line, column, offset }, end: … }`
+（即 07 §快照规范化表里「剥离 Span」一项此前**并未真正成立**的来源）。
+
+```text
+# src/middle/core/tests/snapshots/tests/yaoxiang/01-syntax/basics/statement-termination.snap
+    type_decl Struct { body: [Field(StructField { name: "x", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 11, column: 20, offset: 405 }, end: Position { line: 11, column: 23, offset: 408 } } }, default: None }), Field(StructField { name: "y", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 11, column: 28, offset: 413 }, end: Position { line: 11, column: 31, offset: 416 } } }, default: None })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/02-type-system/aggregates/pattern_destructure.snap
+    type_decl Struct { body: [Field(StructField { name: "make", is_mut: false, ty: Fn { params: [Name { name: "Int", span: Span { start: Position { line: 15, column: 12, offset: 562 }, end: Position { line: 15, column: 15, offset: 565 } } }, Name { name: "Int", span: Span { start: Position { line: 15, column: 17, offset: 567 }, end: Position { line: 15, column: 20, offset: 570 } } }], return_type: Name { name: "Pair", span: Span { start: Position { line: 15, column: 25, offset: 575 }, end: Position { line: 15, column: 29, offset: 579 } } } }, default: None }), Field(StructField { name: "empty", is_mut: false, ty: Fn { params: [], return_type: Name { name: "Pair", span: Span { start: Position { line: 16, column: 18, offset: 598 }, end: Position { line: 16, column: 22, offset: 602 } } } }, default: None })] }
+    type_decl Struct { body: [Field(StructField { name: "x", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 19, column: 20, offset: 626 }, end: Position { line: 19, column: 23, offset: 629 } } }, default: None }), Field(StructField { name: "y", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 19, column: 28, offset: 634 }, end: Position { line: 19, column: 31, offset: 637 } } }, default: None })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/02-type-system/aggregates/structs.snap
+    type_decl Struct { body: [Field(StructField { name: "x", is_mut: false, ty: Name { name: "Float", span: Span { start: Position { line: 8, column: 20, offset: 230 }, end: Position { line: 8, column: 25, offset: 235 } } }, default: None }), Field(StructField { name: "y", is_mut: false, ty: Name { name: "Float", span: Span { start: Position { line: 8, column: 30, offset: 240 }, end: Position { line: 8, column: 35, offset: 245 } } }, default: None })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/02-type-system/aggregates/struct_equality.snap
+    type_decl Struct { body: [Field(StructField { name: "x", is_mut: false, ty: Name { name: "Float", span: Span { start: Position { line: 10, column: 8, offset: 281 }, end: Position { line: 10, column: 13, offset: 286 } } }, default: None }), Field(StructField { name: "y", is_mut: false, ty: Name { name: "Float", span: Span { start: Position { line: 11, column: 8, offset: 295 }, end: Position { line: 11, column: 13, offset: 300 } } }, default: None })] }
+    type_decl Struct { body: [Field(StructField { name: "x", is_mut: false, ty: Name { name: "Float", span: Span { start: Position { line: 15, column: 8, offset: 327 }, end: Position { line: 15, column: 13, offset: 332 } } }, default: None }), Field(StructField { name: "y", is_mut: false, ty: Name { name: "Float", span: Span { start: Position { line: 16, column: 8, offset: 341 }, end: Position { line: 16, column: 13, offset: 346 } } }, default: None }), Field(StructField { name: "z", is_mut: false, ty: Name { name: "Float", span: Span { start: Position { line: 17, column: 8, offset: 355 }, end: Position { line: 17, column: 13, offset: 360 } } }, default: None }), Expr(Generic { name: "Equal", name_span: Span { start: Position { line: 18, column: 5, offset: 366 }, end: Position { line: 18, column: 10, offset: 371 } }, args: [Name { name: "Vec3", span: Span { start: Position { line: 18, column: 11, offset: 372 }, end: Position { line: 18, column: 15, offset: 376 } } }, Name { name: "Vec3", span: Span { start: Position { line: 18, column: 17, offset: 378 }, end: Position { line: 18, column: 21, offset: 382 } } }] })] }
+    type_decl Struct { body: [Field(StructField { name: "start", is_mut: false, ty: Name { name: "Point", span: Span { start: Position { line: 27, column: 12, offset: 559 }, end: Position { line: 27, column: 17, offset: 564 } } }, default: None }), Field(StructField { name: "end", is_mut: false, ty: Name { name: "Point", span: Span { start: Position { line: 28, column: 10, offset: 575 }, end: Position { line: 28, column: 15, offset: 580 } } }, default: None })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/02-type-system/functions/method_block_tail_expr.snap
+    type_decl Struct { body: [Field(StructField { name: "x", is_mut: false, ty: Name { name: "Float", span: Span { start: Position { line: 8, column: 20, offset: 289 }, end: Position { line: 8, column: 25, offset: 294 } } }, default: None }), Field(StructField { name: "y", is_mut: false, ty: Name { name: "Float", span: Span { start: Position { line: 8, column: 30, offset: 299 }, end: Position { line: 8, column: 35, offset: 304 } } }, default: None })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/02-type-system/functions/method_call_args.snap
+    type_decl Struct { body: [Field(StructField { name: "n", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 10, column: 22, offset: 467 }, end: Position { line: 10, column: 25, offset: 470 } } }, default: None }), Field(StructField { name: "label", is_mut: false, ty: Name { name: "String", span: Span { start: Position { line: 10, column: 34, offset: 479 }, end: Position { line: 10, column: 40, offset: 485 } } }, default: None })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/02-type-system/functions/method_overload.snap
+    type_decl Struct { body: [Field(StructField { name: "value", is_mut: false, ty: Name { name: "Float", span: Span { start: Position { line: 15, column: 23, offset: 815 }, end: Position { line: 15, column: 28, offset: 820 } } }, default: None })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/02-type-system/generics/constrained_generic_ops.snap
+    type_decl Struct { body: [Field(StructField { name: "x", is_mut: false, ty: Name { name: "Float", span: Span { start: Position { line: 13, column: 8, offset: 498 }, end: Position { line: 13, column: 13, offset: 503 } } }, default: None }), Field(StructField { name: "y", is_mut: false, ty: Name { name: "Float", span: Span { start: Position { line: 14, column: 8, offset: 512 }, end: Position { line: 14, column: 13, offset: 517 } } }, default: None }), Field(StructField { name: "z", is_mut: false, ty: Name { name: "Float", span: Span { start: Position { line: 15, column: 8, offset: 526 }, end: Position { line: 15, column: 13, offset: 531 } } }, default: None }), Expr(Generic { name: "Add", name_span: Span { start: Position { line: 16, column: 5, offset: 537 }, end: Position { line: 16, column: 8, offset: 540 } }, args: [Name { name: "Vec3", span: Span { start: Position { line: 16, column: 9, offset: 541 }, end: Position { line: 16, column: 13, offset: 545 } } }, Name { name: "Vec3", span: Span { start: Position { line: 16, column: 15, offset: 547 }, end: Position { line: 16, column: 19, offset: 551 } } }, Name { name: "Vec3", span: Span { start: Position { line: 16, column: 21, offset: 553 }, end: Position { line: 16, column: 25, offset: 557 } } }] })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/02-type-system/generics/const_generic_assert.snap
+    type_decl Struct { body: [Field(StructField { name: "_assert_rows", is_mut: false, ty: Generic { name: "Assert", name_span: Span { start: Position { line: 9, column: 19, offset: 344 }, end: Position { line: 9, column: 25, offset: 350 } }, args: [ConstExpr(BinOp { op: Gt, left: Var("Rows", Span { start: Position { line: 9, column: 26, offset: 351 }, end: Position { line: 9, column: 30, offset: 355 } }), right: Lit(Int(0), Span { start: Position { line: 9, column: 33, offset: 358 }, end: Position { line: 9, column: 34, offset: 359 } }), span: Span { start: Position { line: 9, column: 31, offset: 356 }, end: Position { line: 9, column: 32, offset: 357 } } })] }, default: None }), Field(StructField { name: "_assert_cols", is_mut: false, ty: Generic { name: "Assert", name_span: Span { start: Position { line: 10, column: 19, offset: 380 }, end: Position { line: 10, column: 25, offset: 386 } }, args: [ConstExpr(BinOp { op: Gt, left: Var("Cols", Span { start: Position { line: 10, column: 26, offset: 387 }, end: Position { line: 10, column: 30, offset: 391 } }), right: Lit(Int(0), Span { start: Position { line: 10, column: 33, offset: 394 }, end: Position { line: 10, column: 34, offset: 395 } }), span: Span { start: Position { line: 10, column: 31, offset: 392 }, end: Position { line: 10, column: 32, offset: 393 } } })] }, default: None }), Field(StructField { name: "data", is_mut: false, ty: Generic { name: "Array", name_span: Span { start: Position { line: 11, column: 11, offset: 408 }, end: Position { line: 11, column: 16, offset: 413 } }, args: [Generic { name: "Array", name_span: Span { start: Position { line: 11, column: 17, offset: 414 }, end: Position { line: 11, column: 22, offset: 419 } }, args: [Name { name: "T", span: Span { start: Position { line: 11, column: 23, offset: 420 }, end: Position { line: 11, column: 24, offset: 421 } } }, Name { name: "Cols", span: Span { start: Position { line: 11, column: 26, offset: 423 }, end: Position { line: 11, column: 30, offset: 427 } } }] }, Name { name: "Rows", span: Span { start: Position { line: 11, column: 33, offset: 430 }, end: Position { line: 11, column: 37, offset: 434 } } }] }, default: None })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/02-type-system/generics/const_generic_instantiate.snap
+    type_decl Struct { body: [Field(StructField { name: "_assert_n", is_mut: false, ty: Generic { name: "Assert", name_span: Span { start: Position { line: 9, column: 16, offset: 319 }, end: Position { line: 9, column: 22, offset: 325 } }, args: [ConstExpr(BinOp { op: Gt, left: Var("N", Span { start: Position { line: 9, column: 23, offset: 326 }, end: Position { line: 9, column: 24, offset: 327 } }), right: Lit(Int(0), Span { start: Position { line: 9, column: 27, offset: 330 }, end: Position { line: 9, column: 28, offset: 331 } }), span: Span { start: Position { line: 9, column: 25, offset: 328 }, end: Position { line: 9, column: 26, offset: 329 } } })] }, default: None }), Field(StructField { name: "data", is_mut: false, ty: Generic { name: "Array", name_span: Span { start: Position { line: 10, column: 11, offset: 344 }, end: Position { line: 10, column: 16, offset: 349 } }, args: [Name { name: "T", span: Span { start: Position { line: 10, column: 17, offset: 350 }, end: Position { line: 10, column: 18, offset: 351 } } }, Name { name: "N", span: Span { start: Position { line: 10, column: 20, offset: 353 }, end: Position { line: 10, column: 21, offset: 354 } } }] }, default: None })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/02-type-system/generics/const_generic_lt_le_bound.snap
+    type_decl Struct { body: [Field(StructField { name: "_assert_lt", is_mut: false, ty: Generic { name: "Assert", name_span: Span { start: Position { line: 9, column: 17, offset: 347 }, end: Position { line: 9, column: 23, offset: 353 } }, args: [ConstExpr(BinOp { op: Lt, left: Var("N", Span { start: Position { line: 9, column: 24, offset: 354 }, end: Position { line: 9, column: 25, offset: 355 } }), right: Lit(Int(100), Span { start: Position { line: 9, column: 28, offset: 358 }, end: Position { line: 9, column: 31, offset: 361 } }), span: Span { start: Position { line: 9, column: 26, offset: 356 }, end: Position { line: 9, column: 27, offset: 357 } } })] }, default: None }), Field(StructField { name: "_assert_le", is_mut: false, ty: Generic { name: "Assert", name_span: Span { start: Position { line: 10, column: 17, offset: 380 }, end: Position { line: 10, column: 23, offset: 386 } }, args: [ConstExpr(BinOp { op: Le, left: Var("N", Span { start: Position { line: 10, column: 24, offset: 387 }, end: Position { line: 10, column: 25, offset: 388 } }), right: Lit(Int(100), Span { start: Position { line: 10, column: 29, offset: 392 }, end: Position { line: 10, column: 32, offset: 395 } }), span: Span { start: Position { line: 10, column: 26, offset: 389 }, end: Position { line: 10, column: 28, offset: 391 } } })] }, default: None }), Field(StructField { name: "data", is_mut: false, ty: Generic { name: "Array", name_span: Span { start: Position { line: 11, column: 11, offset: 408 }, end: Position { line: 11, column: 16, offset: 413 } }, args: [Name { name: "T", span: Span { start: Position { line: 11, column: 17, offset: 414 }, end: Position { line: 11, column: 18, offset: 415 } } }, Name { name: "N", span: Span { start: Position { line: 11, column: 20, offset: 417 }, end: Position { line: 11, column: 21, offset: 418 } } }] }, default: None })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/02-type-system/generics/generics_matrix.snap
+    type_decl Struct { body: [Field(StructField { name: "key", is_mut: false, ty: Name { name: "K", span: Span { start: Position { line: 16, column: 10, offset: 581 }, end: Position { line: 16, column: 11, offset: 582 } } }, default: None }), Field(StructField { name: "value", is_mut: false, ty: Name { name: "V", span: Span { start: Position { line: 17, column: 12, offset: 595 }, end: Position { line: 17, column: 13, offset: 596 } } }, default: None })] }
+    type_decl Struct { body: [Field(StructField { name: "inner", is_mut: false, ty: Name { name: "T", span: Span { start: Position { line: 22, column: 12, offset: 679 }, end: Position { line: 22, column: 13, offset: 680 } } }, default: None })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/02-type-system/generics/generic_constructor.snap
+    type_decl Struct { body: [Field(StructField { name: "first", is_mut: false, ty: Name { name: "T", span: Span { start: Position { line: 15, column: 12, offset: 801 }, end: Position { line: 15, column: 13, offset: 802 } } }, default: None }), Field(StructField { name: "second", is_mut: false, ty: Name { name: "T", span: Span { start: Position { line: 16, column: 13, offset: 816 }, end: Position { line: 16, column: 14, offset: 817 } } }, default: None })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/02-type-system/generics/generic_container_index.snap
+    type_decl Struct { body: [Field(StructField { name: "v", is_mut: false, ty: Name { name: "T", span: Span { start: Position { line: 15, column: 8, offset: 706 }, end: Position { line: 15, column: 9, offset: 707 } } }, default: None }), Field(StructField { name: "n", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 16, column: 8, offset: 716 }, end: Position { line: 16, column: 11, offset: 719 } } }, default: None }), Expr(Generic { name: "Index", name_span: Span { start: Position { line: 17, column: 5, offset: 725 }, end: Position { line: 17, column: 10, offset: 730 } }, args: [Generic { name: "Box", name_span: Span { start: Position { line: 17, column: 11, offset: 731 }, end: Position { line: 17, column: 14, offset: 734 } }, args: [Name { name: "T", span: Span { start: Position { line: 17, column: 15, offset: 735 }, end: Position { line: 17, column: 16, offset: 736 } } }] }, Name { name: "Int", span: Span { start: Position { line: 17, column: 19, offset: 739 }, end: Position { line: 17, column: 22, offset: 742 } } }, Name { name: "T", span: Span { start: Position { line: 17, column: 24, offset: 744 }, end: Position { line: 17, column: 25, offset: 745 } } }] })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/02-type-system/generics/generic_method_binding.snap
+    type_decl Struct { body: [Field(StructField { name: "v", is_mut: false, ty: Name { name: "T", span: Span { start: Position { line: 12, column: 31, offset: 505 }, end: Position { line: 12, column: 32, offset: 506 } } }, default: None })] }
+    type_decl Struct { body: [Field(StructField { name: "data", is_mut: false, ty: Generic { name: "Vec", name_span: Span { start: Position { line: 20, column: 11, offset: 709 }, end: Position { line: 20, column: 14, offset: 712 } }, args: [Name { name: "T", span: Span { start: Position { line: 20, column: 15, offset: 713 }, end: Position { line: 20, column: 16, offset: 714 } } }] }, default: None }), Field(StructField { name: "length", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 21, column: 13, offset: 729 }, end: Position { line: 21, column: 16, offset: 732 } } }, default: None })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/02-type-system/generics/generic_slot_alignment.snap
+    type_decl Struct { body: [Field(StructField { name: "v", is_mut: false, ty: Generic { name: "Vec", name_span: Span { start: Position { line: 12, column: 31, offset: 594 }, end: Position { line: 12, column: 34, offset: 597 } }, args: [Name { name: "T", span: Span { start: Position { line: 12, column: 35, offset: 598 }, end: Position { line: 12, column: 36, offset: 599 } } }] }, default: None }), Field(StructField { name: "n", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 12, column: 42, offset: 605 }, end: Position { line: 12, column: 45, offset: 608 } } }, default: None })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/02-type-system/generics/generic_types.snap
+    type_decl Struct { body: [Field(StructField { name: "value", is_mut: false, ty: Name { name: "T", span: Span { start: Position { line: 12, column: 12, offset: 406 }, end: Position { line: 12, column: 13, offset: 407 } } }, default: None })] }
+    type_decl Struct { body: [Field(StructField { name: "first", is_mut: false, ty: Name { name: "T", span: Span { start: Position { line: 17, column: 12, offset: 489 }, end: Position { line: 17, column: 13, offset: 490 } } }, default: None }), Field(StructField { name: "second", is_mut: false, ty: Name { name: "T", span: Span { start: Position { line: 18, column: 13, offset: 504 }, end: Position { line: 18, column: 14, offset: 505 } } }, default: None })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/02-type-system/interfaces/associated_type_in_body.snap
+    type_decl Struct { body: [Field(StructField { name: "some", is_mut: false, ty: Fn { params: [Name { name: "T", span: Span { start: Position { line: 15, column: 38, offset: 742 }, end: Position { line: 15, column: 39, offset: 743 } } }], return_type: Name { name: "Self", span: Span { start: Position { line: 15, column: 44, offset: 748 }, end: Position { line: 15, column: 48, offset: 752 } } } }, default: None }), Field(StructField { name: "none", is_mut: false, ty: Fn { params: [], return_type: Name { name: "Self", span: Span { start: Position { line: 15, column: 62, offset: 766 }, end: Position { line: 15, column: 66, offset: 770 } } } }, default: None })] }
+    type_decl Struct { body: [Field(StructField { name: "next", is_mut: false, ty: Fn { params: [Name { name: "Self", span: Span { start: Position { line: 17, column: 12, offset: 819 }, end: Position { line: 17, column: 16, offset: 823 } } }], return_type: Generic { name: "Option", name_span: Span { start: Position { line: 17, column: 21, offset: 828 }, end: Position { line: 17, column: 27, offset: 834 } }, args: [Name { name: "Item", span: Span { start: Position { line: 17, column: 28, offset: 835 }, end: Position { line: 17, column: 32, offset: 839 } } }] } }, default: None }), Field(StructField { name: "has_next", is_mut: false, ty: Fn { params: [Name { name: "Self", span: Span { start: Position { line: 18, column: 16, offset: 857 }, end: Position { line: 18, column: 20, offset: 861 } } }], return_type: Name { name: "Bool", span: Span { start: Position { line: 18, column: 25, offset: 866 }, end: Position { line: 18, column: 29, offset: 870 } } } }, default: None })] }
+    type_decl Struct { body: [Field(StructField { name: "IteratorType", is_mut: false, ty: Generic { name: "Iterator", name_span: Span { start: Position { line: 21, column: 19, offset: 927 }, end: Position { line: 21, column: 27, offset: 935 } }, args: [Name { name: "Item", span: Span { start: Position { line: 21, column: 28, offset: 936 }, end: Position { line: 21, column: 32, offset: 940 } } }] }, default: None }), Field(StructField { name: "iter", is_mut: false, ty: Fn { params: [Name { name: "Self", span: Span { start: Position { line: 22, column: 12, offset: 954 }, end: Position { line: 22, column: 16, offset: 958 } } }], return_type: Name { name: "IteratorType", span: Span { start: Position { line: 22, column: 21, offset: 963 }, end: Position { line: 22, column: 33, offset: 975 } } } }, default: None })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/02-type-system/interfaces/interfaces.snap
+    type_decl Struct { body: [Field(StructField { name: "x", is_mut: false, ty: Name { name: "Float", span: Span { start: Position { line: 6, column: 20, offset: 143 }, end: Position { line: 6, column: 25, offset: 148 } } }, default: None }), Field(StructField { name: "y", is_mut: false, ty: Name { name: "Float", span: Span { start: Position { line: 6, column: 30, offset: 153 }, end: Position { line: 6, column: 35, offset: 158 } } }, default: None })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/02-type-system/interfaces/interface_dynamic_dispatch.snap
+    type_decl Struct { body: [Field(StructField { name: "speak", is_mut: false, ty: Fn { params: [Ref { mutable: false, inner: Name { name: "Self", span: Span { start: Position { line: 11, column: 20, offset: 438 }, end: Position { line: 11, column: 24, offset: 442 } } }, span: Span { start: Position { line: 11, column: 24, offset: 442 }, end: Position { line: 11, column: 25, offset: 443 } } }], return_type: Name { name: "String", span: Span { start: Position { line: 11, column: 29, offset: 447 }, end: Position { line: 11, column: 35, offset: 453 } } } }, default: None }), Field(StructField { name: "age", is_mut: false, ty: Fn { params: [Ref { mutable: false, inner: Name { name: "Self", span: Span { start: Position { line: 12, column: 18, offset: 472 }, end: Position { line: 12, column: 22, offset: 476 } } }, span: Span { start: Position { line: 12, column: 22, offset: 476 }, end: Position { line: 12, column: 23, offset: 477 } } }], return_type: Name { name: "Int", span: Span { start: Position { line: 12, column: 27, offset: 481 }, end: Position { line: 12, column: 30, offset: 484 } } } }, default: None }), Field(StructField { name: "age_up", is_mut: false, ty: Fn { params: [Ref { mutable: false, inner: Name { name: "Self", span: Span { start: Position { line: 13, column: 21, offset: 506 }, end: Position { line: 13, column: 25, offset: 510 } } }, span: Span { start: Position { line: 13, column: 25, offset: 510 }, end: Position { line: 13, column: 26, offset: 511 } } }, Name { name: "Int", span: Span { start: Position { line: 13, column: 34, offset: 519 }, end: Position { line: 13, column: 37, offset: 522 } } }], return_type: Name { name: "Int", span: Span { start: Position { line: 13, column: 42, offset: 527 }, end: Position { line: 13, column: 45, offset: 530 } } } }, default: None })] }
+    type_decl Struct { body: [Field(StructField { name: "name", is_mut: false, ty: Name { name: "String", span: Span { start: Position { line: 17, column: 11, offset: 559 }, end: Position { line: 17, column: 17, offset: 565 } } }, default: None }), Field(StructField { name: "age_years", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 18, column: 16, offset: 582 }, end: Position { line: 18, column: 19, offset: 585 } } }, default: None }), Expr(Generic { name: "Animal", name_span: Span { start: Position { line: 19, column: 5, offset: 591 }, end: Position { line: 19, column: 11, offset: 597 } }, args: [Name { name: "Dog", span: Span { start: Position { line: 19, column: 12, offset: 598 }, end: Position { line: 19, column: 15, offset: 601 } } }] })] }
+    type_decl Struct { body: [Field(StructField { name: "lives", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 26, column: 12, offset: 823 }, end: Position { line: 26, column: 15, offset: 826 } } }, default: None }), Expr(Generic { name: "Animal", name_span: Span { start: Position { line: 27, column: 5, offset: 832 }, end: Position { line: 27, column: 11, offset: 838 } }, args: [Name { name: "Cat", span: Span { start: Position { line: 27, column: 12, offset: 839 }, end: Position { line: 27, column: 15, offset: 842 } } }] })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/02-type-system/interfaces/interface_inheritance.snap
+    type_decl Struct { body: [Field(StructField { name: "speak", is_mut: false, ty: Fn { params: [Ref { mutable: false, inner: Name { name: "Self", span: Span { start: Position { line: 12, column: 20, offset: 441 }, end: Position { line: 12, column: 24, offset: 445 } } }, span: Span { start: Position { line: 12, column: 24, offset: 445 }, end: Position { line: 12, column: 25, offset: 446 } } }], return_type: Name { name: "String", span: Span { start: Position { line: 12, column: 29, offset: 450 }, end: Position { line: 12, column: 35, offset: 456 } } } }, default: None })] }
+    type_decl Struct { body: [Expr(Generic { name: "Animal", name_span: Span { start: Position { line: 17, column: 5, offset: 592 }, end: Position { line: 17, column: 11, offset: 598 } }, args: [Name { name: "Self", span: Span { start: Position { line: 17, column: 12, offset: 599 }, end: Position { line: 17, column: 16, offset: 603 } } }] }), Field(StructField { name: "fetch", is_mut: false, ty: Fn { params: [Ref { mutable: false, inner: Name { name: "Self", span: Span { start: Position { line: 18, column: 20, offset: 625 }, end: Position { line: 18, column: 24, offset: 629 } } }, span: Span { start: Position { line: 18, column: 24, offset: 629 }, end: Position { line: 18, column: 25, offset: 630 } } }], return_type: Name { name: "String", span: Span { start: Position { line: 18, column: 29, offset: 634 }, end: Position { line: 18, column: 35, offset: 640 } } } }, default: None })] }
+    type_decl Struct { body: [Field(StructField { name: "name", is_mut: false, ty: Name { name: "String", span: Span { start: Position { line: 22, column: 11, offset: 669 }, end: Position { line: 22, column: 17, offset: 675 } } }, default: None }), Expr(Generic { name: "Pet", name_span: Span { start: Position { line: 23, column: 5, offset: 681 }, end: Position { line: 23, column: 8, offset: 684 } }, args: [Name { name: "Dog", span: Span { start: Position { line: 23, column: 9, offset: 685 }, end: Position { line: 23, column: 12, offset: 688 } } }] })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/02-type-system/interfaces/interface_instantiate.snap
+    type_decl Struct { body: [Field(StructField { name: "speak", is_mut: false, ty: Fn { params: [Ref { mutable: false, inner: Name { name: "Self", span: Span { start: Position { line: 14, column: 20, offset: 663 }, end: Position { line: 14, column: 24, offset: 667 } } }, span: Span { start: Position { line: 14, column: 24, offset: 667 }, end: Position { line: 14, column: 25, offset: 668 } } }], return_type: Name { name: "String", span: Span { start: Position { line: 14, column: 29, offset: 672 }, end: Position { line: 14, column: 35, offset: 678 } } } }, default: None }), Field(StructField { name: "age", is_mut: false, ty: Fn { params: [Ref { mutable: false, inner: Name { name: "Self", span: Span { start: Position { line: 15, column: 18, offset: 697 }, end: Position { line: 15, column: 22, offset: 701 } } }, span: Span { start: Position { line: 15, column: 22, offset: 701 }, end: Position { line: 15, column: 23, offset: 702 } } }], return_type: Name { name: "Int", span: Span { start: Position { line: 15, column: 27, offset: 706 }, end: Position { line: 15, column: 30, offset: 709 } } } }, default: None })] }
+    type_decl Struct { body: [Field(StructField { name: "name", is_mut: false, ty: Name { name: "String", span: Span { start: Position { line: 20, column: 11, offset: 778 }, end: Position { line: 20, column: 17, offset: 784 } } }, default: None }), Expr(Generic { name: "Animal", name_span: Span { start: Position { line: 21, column: 5, offset: 790 }, end: Position { line: 21, column: 11, offset: 796 } }, args: [Name { name: "Dog", span: Span { start: Position { line: 21, column: 12, offset: 797 }, end: Position { line: 21, column: 15, offset: 800 } } }] })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/02-type-system/interfaces/interface_rebind_dispatch.snap
+    type_decl Struct { body: [Field(StructField { name: "speak", is_mut: false, ty: Fn { params: [Ref { mutable: false, inner: Name { name: "Self", span: Span { start: Position { line: 11, column: 20, offset: 432 }, end: Position { line: 11, column: 24, offset: 436 } } }, span: Span { start: Position { line: 11, column: 24, offset: 436 }, end: Position { line: 11, column: 25, offset: 437 } } }], return_type: Name { name: "String", span: Span { start: Position { line: 11, column: 29, offset: 441 }, end: Position { line: 11, column: 35, offset: 447 } } } }, default: None })] }
+    type_decl Struct { body: [Field(StructField { name: "name", is_mut: false, ty: Name { name: "String", span: Span { start: Position { line: 15, column: 11, offset: 477 }, end: Position { line: 15, column: 17, offset: 483 } } }, default: None }), Expr(Generic { name: "Animal", name_span: Span { start: Position { line: 16, column: 5, offset: 489 }, end: Position { line: 16, column: 11, offset: 495 } }, args: [Name { name: "Bird", span: Span { start: Position { line: 16, column: 12, offset: 496 }, end: Position { line: 16, column: 16, offset: 500 } } }] }), Binding(TypeBodyBinding { name: "speak", kind: External { function: "animal_speak", positions: [0] } })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/02-type-system/interfaces/operator_index.snap
+    type_decl Struct { body: [Field(StructField { name: "cells", is_mut: false, ty: Generic { name: "List", name_span: Span { start: Position { line: 10, column: 12, offset: 332 }, end: Position { line: 10, column: 16, offset: 336 } }, args: [Name { name: "Float", span: Span { start: Position { line: 10, column: 17, offset: 337 }, end: Position { line: 10, column: 22, offset: 342 } } }] }, default: None }), Expr(Generic { name: "Index", name_span: Span { start: Position { line: 11, column: 5, offset: 349 }, end: Position { line: 11, column: 10, offset: 354 } }, args: [Name { name: "Grid", span: Span { start: Position { line: 11, column: 11, offset: 355 }, end: Position { line: 11, column: 15, offset: 359 } } }, Name { name: "Int", span: Span { start: Position { line: 11, column: 17, offset: 361 }, end: Position { line: 11, column: 20, offset: 364 } } }, Name { name: "Float", span: Span { start: Position { line: 11, column: 22, offset: 366 }, end: Position { line: 11, column: 27, offset: 371 } } }] })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/02-type-system/interfaces/operator_interfaces.snap
+    type_decl Struct { body: [Field(StructField { name: "x", is_mut: false, ty: Name { name: "Float", span: Span { start: Position { line: 9, column: 8, offset: 264 }, end: Position { line: 9, column: 13, offset: 269 } } }, default: None }), Field(StructField { name: "y", is_mut: false, ty: Name { name: "Float", span: Span { start: Position { line: 10, column: 8, offset: 278 }, end: Position { line: 10, column: 13, offset: 283 } } }, default: None }), Expr(Generic { name: "Add", name_span: Span { start: Position { line: 11, column: 5, offset: 289 }, end: Position { line: 11, column: 8, offset: 292 } }, args: [Name { name: "Point", span: Span { start: Position { line: 11, column: 9, offset: 293 }, end: Position { line: 11, column: 14, offset: 298 } } }, Name { name: "Point", span: Span { start: Position { line: 11, column: 16, offset: 300 }, end: Position { line: 11, column: 21, offset: 305 } } }, Name { name: "Point", span: Span { start: Position { line: 11, column: 23, offset: 307 }, end: Position { line: 11, column: 28, offset: 312 } } }] }), Expr(Generic { name: "Multiply", name_span: Span { start: Position { line: 12, column: 5, offset: 319 }, end: Position { line: 12, column: 13, offset: 327 } }, args: [Name { name: "Point", span: Span { start: Position { line: 12, column: 14, offset: 328 }, end: Position { line: 12, column: 19, offset: 333 } } }, Name { name: "Float", span: Span { start: Position { line: 12, column: 21, offset: 335 }, end: Position { line: 12, column: 26, offset: 340 } } }, Name { name: "Point", span: Span { start: Position { line: 12, column: 28, offset: 342 }, end: Position { line: 12, column: 33, offset: 347 } } }] })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/02-type-system/name-resolution/std_name_shadowing.snap
+    type_decl Struct { body: [Field(StructField { name: "n", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 13, column: 17, offset: 550 }, end: Position { line: 13, column: 20, offset: 553 } } }, default: None })] }
+    type_decl Struct { body: [Field(StructField { name: "data", is_mut: false, ty: Generic { name: "Vec", name_span: Span { start: Position { line: 16, column: 32, offset: 657 }, end: Position { line: 16, column: 35, offset: 660 } }, args: [Name { name: "T", span: Span { start: Position { line: 16, column: 36, offset: 661 }, end: Position { line: 16, column: 37, offset: 662 } } }] }, default: None }), Field(StructField { name: "n", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 16, column: 43, offset: 668 }, end: Position { line: 16, column: 46, offset: 671 } } }, default: None })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/02-type-system/patterns/match_call_scrutinee.snap
+    type_decl Struct { body: [Field(StructField { name: "opt", is_mut: false, ty: Generic { name: "Option", name_span: Span { start: Position { line: 28, column: 10, offset: 890 }, end: Position { line: 28, column: 16, offset: 896 } }, args: [Name { name: "Int", span: Span { start: Position { line: 28, column: 17, offset: 897 }, end: Position { line: 28, column: 20, offset: 900 } } }] }, default: None })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/02-type-system/refinement/call_arg_evidence.snap
+    type_decl Struct { body: [Expr(ConstExpr(BinOp { op: Gt, left: Var("x", Span { start: Position { line: 14, column: 34, offset: 816 }, end: Position { line: 14, column: 35, offset: 817 } }), right: Lit(Int(0), Span { start: Position { line: 14, column: 38, offset: 820 }, end: Position { line: 14, column: 39, offset: 821 } }), span: Span { start: Position { line: 14, column: 36, offset: 818 }, end: Position { line: 14, column: 37, offset: 819 } } }))] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/02-type-system/refinement/refined_dependent_module_scope.snap
+    type_decl Struct { body: [Expr(ConstExpr(BinOp { op: Eq, left: Var("s", Span { start: Position { line: 11, column: 39, offset: 583 }, end: Position { line: 11, column: 40, offset: 584 } }), right: BinOp { op: Mul, left: Var("n", Span { start: Position { line: 11, column: 44, offset: 588 }, end: Position { line: 11, column: 45, offset: 589 } }), right: Lit(Int(2), Span { start: Position { line: 11, column: 48, offset: 592 }, end: Position { line: 11, column: 49, offset: 593 } }), span: Span { start: Position { line: 11, column: 46, offset: 590 }, end: Position { line: 11, column: 47, offset: 591 } } }, span: Span { start: Position { line: 11, column: 41, offset: 585 }, end: Position { line: 11, column: 43, offset: 587 } } }))] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/02-type-system/refinement/refined_dependent_revalidate.snap
+    type_decl Struct { body: [Expr(ConstExpr(BinOp { op: Eq, left: Var("s", Span { start: Position { line: 12, column: 39, offset: 690 }, end: Position { line: 12, column: 40, offset: 691 } }), right: BinOp { op: Mul, left: Var("n", Span { start: Position { line: 12, column: 44, offset: 695 }, end: Position { line: 12, column: 45, offset: 696 } }), right: Lit(Int(2), Span { start: Position { line: 12, column: 48, offset: 699 }, end: Position { line: 12, column: 49, offset: 700 } }), span: Span { start: Position { line: 12, column: 46, offset: 697 }, end: Position { line: 12, column: 47, offset: 698 } } }, span: Span { start: Position { line: 12, column: 41, offset: 692 }, end: Position { line: 12, column: 43, offset: 694 } } }))] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/02-type-system/refinement/refined_param_arg_form.snap
+    type_decl Struct { body: [Expr(ConstExpr(BinOp { op: Gt, left: Var("x", Span { start: Position { line: 17, column: 34, offset: 951 }, end: Position { line: 17, column: 35, offset: 952 } }), right: Lit(Int(0), Span { start: Position { line: 17, column: 38, offset: 955 }, end: Position { line: 17, column: 39, offset: 956 } }), span: Span { start: Position { line: 17, column: 36, offset: 953 }, end: Position { line: 17, column: 37, offset: 954 } } }))] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/02-type-system/refinement/refined_param_uses_base_type.snap
+    type_decl Struct { body: [Expr(ConstExpr(BinOp { op: Gt, left: Var("x", Span { start: Position { line: 18, column: 34, offset: 1058 }, end: Position { line: 18, column: 35, offset: 1059 } }), right: Lit(Int(0), Span { start: Position { line: 18, column: 38, offset: 1062 }, end: Position { line: 18, column: 39, offset: 1063 } }), span: Span { start: Position { line: 18, column: 36, offset: 1060 }, end: Position { line: 18, column: 37, offset: 1061 } } }))] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/02-type-system/refinement/refined_variable_uses_base_type.snap
+    type_decl Struct { body: [Expr(ConstExpr(BinOp { op: Gt, left: Var("x", Span { start: Position { line: 10, column: 34, offset: 530 }, end: Position { line: 10, column: 35, offset: 531 } }), right: Lit(Int(0), Span { start: Position { line: 10, column: 38, offset: 534 }, end: Position { line: 10, column: 39, offset: 535 } }), span: Span { start: Position { line: 10, column: 36, offset: 532 }, end: Position { line: 10, column: 37, offset: 533 } } }))] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/02-type-system/refinement/return_refinement.snap
+    type_decl Struct { body: [Expr(ConstExpr(BinOp { op: Gt, left: Var("x", Span { start: Position { line: 19, column: 34, offset: 1189 }, end: Position { line: 19, column: 35, offset: 1190 } }), right: Lit(Int(0), Span { start: Position { line: 19, column: 38, offset: 1193 }, end: Position { line: 19, column: 39, offset: 1194 } }), span: Span { start: Position { line: 19, column: 36, offset: 1191 }, end: Position { line: 19, column: 37, offset: 1192 } } }))] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/02-type-system/refinement/return_refinement_arg_expr.snap
+    type_decl Struct { body: [Expr(ConstExpr(BinOp { op: Gt, left: Var("x", Span { start: Position { line: 13, column: 34, offset: 701 }, end: Position { line: 13, column: 35, offset: 702 } }), right: Lit(Int(0), Span { start: Position { line: 13, column: 38, offset: 705 }, end: Position { line: 13, column: 39, offset: 706 } }), span: Span { start: Position { line: 13, column: 36, offset: 703 }, end: Position { line: 13, column: 37, offset: 704 } } }))] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/02-type-system/sum-types/sum_type.snap
+    type_decl Struct { body: [Field(StructField { name: "red", is_mut: false, ty: Fn { params: [], return_type: Name { name: "Color", span: Span { start: Position { line: 9, column: 16, offset: 290 }, end: Position { line: 9, column: 21, offset: 295 } } } }, default: None }), Field(StructField { name: "green", is_mut: false, ty: Fn { params: [], return_type: Name { name: "Color", span: Span { start: Position { line: 10, column: 18, offset: 314 }, end: Position { line: 10, column: 23, offset: 319 } } } }, default: None }), Field(StructField { name: "blue", is_mut: false, ty: Fn { params: [], return_type: Name { name: "Color", span: Span { start: Position { line: 11, column: 17, offset: 337 }, end: Position { line: 11, column: 22, offset: 342 } } } }, default: None })] }
+    type_decl Struct { body: [Field(StructField { name: "ok", is_mut: false, ty: Fn { params: [Name { name: "T", span: Span { start: Position { line: 15, column: 10, offset: 395 }, end: Position { line: 15, column: 11, offset: 396 } } }], return_type: Generic { name: "Result", name_span: Span { start: Position { line: 15, column: 16, offset: 401 }, end: Position { line: 15, column: 22, offset: 407 } }, args: [Name { name: "T", span: Span { start: Position { line: 15, column: 23, offset: 408 }, end: Position { line: 15, column: 24, offset: 409 } } }, Name { name: "E", span: Span { start: Position { line: 15, column: 26, offset: 411 }, end: Position { line: 15, column: 27, offset: 412 } } }] } }, default: None }), Field(StructField { name: "err", is_mut: false, ty: Fn { params: [Name { name: "E", span: Span { start: Position { line: 16, column: 11, offset: 425 }, end: Position { line: 16, column: 12, offset: 426 } } }], return_type: Generic { name: "Result", name_span: Span { start: Position { line: 16, column: 17, offset: 431 }, end: Position { line: 16, column: 23, offset: 437 } }, args: [Name { name: "T", span: Span { start: Position { line: 16, column: 24, offset: 438 }, end: Position { line: 16, column: 25, offset: 439 } } }, Name { name: "E", span: Span { start: Position { line: 16, column: 27, offset: 441 }, end: Position { line: 16, column: 28, offset: 442 } } }] } }, default: None })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/02-type-system/sum-types/sum_type_equality_forms.snap
+    type_decl Struct { body: [Field(StructField { name: "red", is_mut: false, ty: Fn { params: [], return_type: Name { name: "Color", span: Span { start: Position { line: 13, column: 16, offset: 648 }, end: Position { line: 13, column: 21, offset: 653 } } } }, default: None }), Field(StructField { name: "green", is_mut: false, ty: Fn { params: [], return_type: Name { name: "Color", span: Span { start: Position { line: 14, column: 18, offset: 672 }, end: Position { line: 14, column: 23, offset: 677 } } } }, default: None }), Field(StructField { name: "blue", is_mut: false, ty: Fn { params: [], return_type: Name { name: "Color", span: Span { start: Position { line: 15, column: 17, offset: 695 }, end: Position { line: 15, column: 22, offset: 700 } } } }, default: None })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/02-type-system/sum-types/sum_type_match.snap
+    type_decl Struct { body: [Field(StructField { name: "ok", is_mut: false, ty: Fn { params: [Name { name: "T", span: Span { start: Position { line: 9, column: 10, offset: 299 }, end: Position { line: 9, column: 11, offset: 300 } } }], return_type: Generic { name: "Result", name_span: Span { start: Position { line: 9, column: 16, offset: 305 }, end: Position { line: 9, column: 22, offset: 311 } }, args: [Name { name: "T", span: Span { start: Position { line: 9, column: 23, offset: 312 }, end: Position { line: 9, column: 24, offset: 313 } } }, Name { name: "E", span: Span { start: Position { line: 9, column: 26, offset: 315 }, end: Position { line: 9, column: 27, offset: 316 } } }] } }, default: None }), Field(StructField { name: "err", is_mut: false, ty: Fn { params: [Name { name: "E", span: Span { start: Position { line: 10, column: 11, offset: 329 }, end: Position { line: 10, column: 12, offset: 330 } } }], return_type: Generic { name: "Result", name_span: Span { start: Position { line: 10, column: 17, offset: 335 }, end: Position { line: 10, column: 23, offset: 341 } }, args: [Name { name: "T", span: Span { start: Position { line: 10, column: 24, offset: 342 }, end: Position { line: 10, column: 25, offset: 343 } } }, Name { name: "E", span: Span { start: Position { line: 10, column: 27, offset: 345 }, end: Position { line: 10, column: 28, offset: 346 } } }] } }, default: None })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/02-type-system/sum-types/user_try_type.snap
+    type_decl Struct { body: [Field(StructField { name: "just", is_mut: false, ty: Fn { params: [Name { name: "Int", span: Span { start: Position { line: 12, column: 12, offset: 439 }, end: Position { line: 12, column: 15, offset: 442 } } }], return_type: Name { name: "Maybe", span: Span { start: Position { line: 12, column: 20, offset: 447 }, end: Position { line: 12, column: 25, offset: 452 } } } }, default: None }), Field(StructField { name: "nothing", is_mut: false, ty: Fn { params: [], return_type: Name { name: "Maybe", span: Span { start: Position { line: 13, column: 20, offset: 473 }, end: Position { line: 13, column: 25, offset: 478 } } } }, default: None }), Expr(Generic { name: "Try", name_span: Span { start: Position { line: 14, column: 5, offset: 484 }, end: Position { line: 14, column: 8, offset: 487 } }, args: [Name { name: "Maybe", span: Span { start: Position { line: 14, column: 9, offset: 488 }, end: Position { line: 14, column: 14, offset: 493 } } }, Name { name: "Int", span: Span { start: Position { line: 14, column: 16, offset: 495 }, end: Position { line: 14, column: 19, offset: 498 } } }, Name { name: "String", span: Span { start: Position { line: 14, column: 21, offset: 500 }, end: Position { line: 14, column: 27, offset: 506 } } }] })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/02-type-system/termination/flag_loop_guarded_exit.snap
+    type_decl Struct { body: [Expr(ConstExpr(BinOp { op: Le, left: Var("x", Span { start: Position { line: 12, column: 38, offset: 659 }, end: Position { line: 12, column: 39, offset: 660 } }), right: Var("n", Span { start: Position { line: 12, column: 43, offset: 664 }, end: Position { line: 12, column: 44, offset: 665 } }), span: Span { start: Position { line: 12, column: 40, offset: 661 }, end: Position { line: 12, column: 42, offset: 663 } } }))] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/02-type-system/termination/measure_decreasing.snap
+    type_decl Struct { body: [Expr(ConstExpr(BinOp { op: Ge, left: Var("x", Span { start: Position { line: 13, column: 35, offset: 690 }, end: Position { line: 13, column: 36, offset: 691 } }), right: Lit(Int(0), Span { start: Position { line: 13, column: 40, offset: 695 }, end: Position { line: 13, column: 41, offset: 696 } }), span: Span { start: Position { line: 13, column: 37, offset: 692 }, end: Position { line: 13, column: 39, offset: 694 } } }))] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/02-type-system/termination/rank_function_dual_variable_loop.snap
+    type_decl Struct { body: [Expr(ConstExpr(BinOp { op: Ge, left: Var("x", Span { start: Position { line: 12, column: 35, offset: 665 }, end: Position { line: 12, column: 36, offset: 666 } }), right: Lit(Int(0), Span { start: Position { line: 12, column: 40, offset: 670 }, end: Position { line: 12, column: 41, offset: 671 } }), span: Span { start: Position { line: 12, column: 37, offset: 667 }, end: Position { line: 12, column: 39, offset: 669 } } }))] }
+    type_decl Struct { body: [Expr(ConstExpr(BinOp { op: Le, left: Var("x", Span { start: Position { line: 14, column: 38, offset: 712 }, end: Position { line: 14, column: 39, offset: 713 } }), right: Var("n", Span { start: Position { line: 14, column: 43, offset: 717 }, end: Position { line: 14, column: 44, offset: 718 } }), span: Span { start: Position { line: 14, column: 40, offset: 714 }, end: Position { line: 14, column: 42, offset: 716 } } }))] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/04-concurrency/spawn_capture.snap
+    type_decl Struct { body: [Field(StructField { name: "x", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 8, column: 20, offset: 306 }, end: Position { line: 8, column: 23, offset: 309 } } }, default: None }), Field(StructField { name: "y", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 8, column: 28, offset: 314 }, end: Position { line: 8, column: 31, offset: 317 } } }, default: None })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/04-concurrency/spawn_capture_standard.snap
+    type_decl Struct { body: [Field(StructField { name: "x", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 9, column: 20, offset: 370 }, end: Position { line: 9, column: 23, offset: 373 } } }, default: None }), Field(StructField { name: "y", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 9, column: 28, offset: 378 }, end: Position { line: 9, column: 31, offset: 381 } } }, default: None })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/05-ownership/auto_borrow_free_fn.snap
+    type_decl Struct { body: [Field(StructField { name: "x", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 10, column: 20, offset: 413 }, end: Position { line: 10, column: 23, offset: 416 } } }, default: None }), Field(StructField { name: "y", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 10, column: 28, offset: 421 }, end: Position { line: 10, column: 31, offset: 424 } } }, default: None })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/05-ownership/borrow_immutable.snap
+    type_decl Struct { body: [Field(StructField { name: "x", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 7, column: 20, offset: 156 }, end: Position { line: 7, column: 23, offset: 159 } } }, default: None }), Field(StructField { name: "y", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 7, column: 28, offset: 164 }, end: Position { line: 7, column: 31, offset: 167 } } }, default: None })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/05-ownership/borrow_mutable.snap
+    type_decl Struct { body: [Field(StructField { name: "x", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 7, column: 20, offset: 162 }, end: Position { line: 7, column: 23, offset: 165 } } }, default: None }), Field(StructField { name: "y", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 7, column: 28, offset: 170 }, end: Position { line: 7, column: 31, offset: 173 } } }, default: None })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/05-ownership/borrow_return.snap
+    type_decl Struct { body: [Field(StructField { name: "x", is_mut: false, ty: Name { name: "Float", span: Span { start: Position { line: 11, column: 20, offset: 491 }, end: Position { line: 11, column: 25, offset: 496 } } }, default: None }), Field(StructField { name: "y", is_mut: false, ty: Name { name: "Float", span: Span { start: Position { line: 11, column: 30, offset: 501 }, end: Position { line: 11, column: 35, offset: 506 } } }, default: None })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/05-ownership/chained_receiver_reuse.snap
+    type_decl Struct { body: [Field(StructField { name: "x", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 8, column: 20, offset: 278 }, end: Position { line: 8, column: 23, offset: 281 } } }, default: None }), Field(StructField { name: "y", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 8, column: 28, offset: 286 }, end: Position { line: 8, column: 31, offset: 289 } } }, default: None })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/05-ownership/field_write_back.snap
+    type_decl Struct { body: [Field(StructField { name: "x", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 8, column: 20, offset: 280 }, end: Position { line: 8, column: 23, offset: 283 } } }, default: None }), Field(StructField { name: "y", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 8, column: 28, offset: 288 }, end: Position { line: 8, column: 31, offset: 291 } } }, default: None })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/05-ownership/loop_borrow_guarded_write.snap
+    type_decl Struct { body: [Field(StructField { name: "x", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 9, column: 20, offset: 561 }, end: Position { line: 9, column: 23, offset: 564 } } }, default: None }), Field(StructField { name: "y", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 9, column: 28, offset: 569 }, end: Position { line: 9, column: 31, offset: 572 } } }, default: None })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/05-ownership/loop_borrow_reuse.snap
+    type_decl Struct { body: [Field(StructField { name: "x", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 7, column: 20, offset: 387 }, end: Position { line: 7, column: 23, offset: 390 } } }, default: None }), Field(StructField { name: "y", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 7, column: 28, offset: 395 }, end: Position { line: 7, column: 31, offset: 398 } } }, default: None })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/05-ownership/method_receiver_autoborrow.snap
+    type_decl Struct { body: [Field(StructField { name: "x", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 14, column: 20, offset: 757 }, end: Position { line: 14, column: 23, offset: 760 } } }, default: None }), Field(StructField { name: "y", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 14, column: 28, offset: 765 }, end: Position { line: 14, column: 31, offset: 768 } } }, default: None })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/05-ownership/move_basic.snap
+    type_decl Struct { body: [Field(StructField { name: "x", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 7, column: 20, offset: 142 }, end: Position { line: 7, column: 23, offset: 145 } } }, default: None }), Field(StructField { name: "y", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 7, column: 28, offset: 150 }, end: Position { line: 7, column: 31, offset: 153 } } }, default: None })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/05-ownership/nested_token_scope.snap
+    type_decl Struct { body: [Field(StructField { name: "x", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 11, column: 20, offset: 443 }, end: Position { line: 11, column: 23, offset: 446 } } }, default: None }), Field(StructField { name: "y", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 11, column: 28, offset: 451 }, end: Position { line: 11, column: 31, offset: 454 } } }, default: None })] }
+    type_decl Struct { body: [Field(StructField { name: "view", is_mut: false, ty: Ref { mutable: false, inner: Name { name: "Point", span: Span { start: Position { line: 13, column: 24, offset: 481 }, end: Position { line: 13, column: 29, offset: 486 } } }, span: Span { start: Position { line: 13, column: 30, offset: 487 }, end: Position { line: 13, column: 31, offset: 488 } } }, default: None })] }
+    type_decl Struct { body: [Field(StructField { name: "inner", is_mut: false, ty: Name { name: "Inner", span: Span { start: Position { line: 14, column: 24, offset: 512 }, end: Position { line: 14, column: 29, offset: 517 } } }, default: None })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/05-ownership/ownership_deep.snap
+    type_decl Struct { body: [Field(StructField { name: "x", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 13, column: 20, offset: 592 }, end: Position { line: 13, column: 23, offset: 595 } } }, default: None }), Field(StructField { name: "y", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 13, column: 28, offset: 600 }, end: Position { line: 13, column: 31, offset: 603 } } }, default: None })] }
+    type_decl Struct { body: [Field(StructField { name: "view", is_mut: false, ty: Ref { mutable: false, inner: Name { name: "Point", span: Span { start: Position { line: 25, column: 12, offset: 817 }, end: Position { line: 25, column: 17, offset: 822 } } }, span: Span { start: Position { line: 25, column: 17, offset: 822 }, end: Position { line: 25, column: 18, offset: 823 } } }, default: None })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/05-ownership/struct_dup.snap
+    type_decl Struct { body: [Field(StructField { name: "x", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 9, column: 20, offset: 412 }, end: Position { line: 9, column: 23, offset: 415 } } }, default: None }), Field(StructField { name: "y", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 9, column: 28, offset: 420 }, end: Position { line: 9, column: 31, offset: 423 } } }, default: None })] }
+    type_decl Struct { body: [Field(StructField { name: "from", is_mut: false, ty: Name { name: "Point", span: Span { start: Position { line: 12, column: 25, offset: 551 }, end: Position { line: 12, column: 30, offset: 556 } } }, default: None }), Field(StructField { name: "to", is_mut: false, ty: Name { name: "Point", span: Span { start: Position { line: 12, column: 36, offset: 562 }, end: Position { line: 12, column: 41, offset: 567 } } }, default: None })] }
+    type_decl Struct { body: [Field(StructField { name: "name", is_mut: false, ty: Name { name: "String", span: Span { start: Position { line: 15, column: 23, offset: 707 }, end: Position { line: 15, column: 29, offset: 713 } } }, default: None }), Field(StructField { name: "id", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 15, column: 35, offset: 719 }, end: Position { line: 15, column: 38, offset: 722 } } }, default: None })] }
+    type_decl Struct { body: [Field(StructField { name: "view", is_mut: false, ty: Ref { mutable: false, inner: Name { name: "Point", span: Span { start: Position { line: 18, column: 25, offset: 820 }, end: Position { line: 18, column: 30, offset: 825 } } }, span: Span { start: Position { line: 18, column: 31, offset: 826 }, end: Position { line: 18, column: 32, offset: 827 } } }, default: None })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/05-ownership/token_dup_copy.snap
+    type_decl Struct { body: [Field(StructField { name: "x", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 8, column: 20, offset: 339 }, end: Position { line: 8, column: 23, offset: 342 } } }, default: None }), Field(StructField { name: "y", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 8, column: 28, offset: 347 }, end: Position { line: 8, column: 31, offset: 350 } } }, default: None })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/05-ownership/token_in_struct.snap
+    type_decl Struct { body: [Field(StructField { name: "x", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 7, column: 20, offset: 169 }, end: Position { line: 7, column: 23, offset: 172 } } }, default: None }), Field(StructField { name: "y", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 7, column: 28, offset: 177 }, end: Position { line: 7, column: 31, offset: 180 } } }, default: None })] }
+    type_decl Struct { body: [Field(StructField { name: "target", is_mut: false, ty: Name { name: "Point", span: Span { start: Position { line: 10, column: 13, offset: 213 }, end: Position { line: 10, column: 18, offset: 218 } } }, default: None }), Field(StructField { name: "view", is_mut: false, ty: Ref { mutable: false, inner: Name { name: "Point", span: Span { start: Position { line: 11, column: 12, offset: 231 }, end: Position { line: 11, column: 17, offset: 236 } } }, span: Span { start: Position { line: 11, column: 17, offset: 236 }, end: Position { line: 11, column: 18, offset: 237 } } }, default: None })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/99-demos/auto_borrow.snap
+    type_decl Struct { body: [Field(StructField { name: "x", is_mut: false, ty: Name { name: "Float", span: Span { start: Position { line: 7, column: 20, offset: 206 }, end: Position { line: 7, column: 25, offset: 211 } } }, default: None }), Field(StructField { name: "y", is_mut: false, ty: Name { name: "Float", span: Span { start: Position { line: 7, column: 30, offset: 216 }, end: Position { line: 7, column: 35, offset: 221 } } }, default: None })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/99-demos/borrow_conflict_basic.snap
+    type_decl Struct { body: [Field(StructField { name: "x", is_mut: false, ty: Name { name: "Float", span: Span { start: Position { line: 7, column: 20, offset: 204 }, end: Position { line: 7, column: 25, offset: 209 } } }, default: None }), Field(StructField { name: "y", is_mut: false, ty: Name { name: "Float", span: Span { start: Position { line: 7, column: 30, offset: 214 }, end: Position { line: 7, column: 35, offset: 219 } } }, default: None })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/99-demos/compare_autoborrow.snap
+    type_decl Struct { body: [Field(StructField { name: "x", is_mut: false, ty: Name { name: "Float", span: Span { start: Position { line: 8, column: 20, offset: 238 }, end: Position { line: 8, column: 25, offset: 243 } } }, default: None }), Field(StructField { name: "y", is_mut: false, ty: Name { name: "Float", span: Span { start: Position { line: 8, column: 30, offset: 248 }, end: Position { line: 8, column: 35, offset: 253 } } }, default: None })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/99-demos/compare_lifetime.snap
+    type_decl Struct { body: [Field(StructField { name: "x", is_mut: false, ty: Name { name: "Float", span: Span { start: Position { line: 8, column: 20, offset: 255 }, end: Position { line: 8, column: 25, offset: 260 } } }, default: None }), Field(StructField { name: "y", is_mut: false, ty: Name { name: "Float", span: Span { start: Position { line: 8, column: 30, offset: 265 }, end: Position { line: 8, column: 35, offset: 270 } } }, default: None })] }
+    type_decl Struct { body: [Field(StructField { name: "target", is_mut: false, ty: Name { name: "Point", span: Span { start: Position { line: 11, column: 13, offset: 303 }, end: Position { line: 11, column: 18, offset: 308 } } }, default: None }), Field(StructField { name: "view", is_mut: false, ty: Ref { mutable: false, inner: Name { name: "Point", span: Span { start: Position { line: 12, column: 12, offset: 321 }, end: Position { line: 12, column: 17, offset: 326 } } }, span: Span { start: Position { line: 13, column: 1, offset: 380 }, end: Position { line: 13, column: 2, offset: 381 } } }, default: None })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/99-demos/compare_rust_side_by_side.snap
+    type_decl Struct { body: [Field(StructField { name: "x", is_mut: false, ty: Name { name: "Float", span: Span { start: Position { line: 7, column: 20, offset: 176 }, end: Position { line: 7, column: 25, offset: 181 } } }, default: None }), Field(StructField { name: "y", is_mut: false, ty: Name { name: "Float", span: Span { start: Position { line: 7, column: 30, offset: 186 }, end: Position { line: 7, column: 35, offset: 191 } } }, default: None })] }
+    type_decl Struct { body: [Field(StructField { name: "inner", is_mut: false, ty: Ref { mutable: false, inner: Name { name: "Point", span: Span { start: Position { line: 13, column: 13, offset: 376 }, end: Position { line: 13, column: 18, offset: 381 } } }, span: Span { start: Position { line: 14, column: 1, offset: 382 }, end: Position { line: 14, column: 2, offset: 383 } } }, default: None })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/99-demos/complex_data_structure.snap
+    type_decl Struct { body: [Field(StructField { name: "value", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 7, column: 23, offset: 214 }, end: Position { line: 7, column: 26, offset: 217 } } }, default: None }), Field(StructField { name: "next", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 7, column: 34, offset: 225 }, end: Position { line: 7, column: 37, offset: 228 } } }, default: None })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/99-demos/linked_list.snap
+    type_decl Struct { body: [Field(StructField { name: "value", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 7, column: 23, offset: 206 }, end: Position { line: 7, column: 26, offset: 209 } } }, default: None }), Field(StructField { name: "next", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 7, column: 34, offset: 217 }, end: Position { line: 7, column: 37, offset: 220 } } }, default: None })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/99-demos/resource_raii.snap
+    type_decl Struct { body: [Field(StructField { name: "name", is_mut: false, ty: Name { name: "String", span: Span { start: Position { line: 8, column: 11, offset: 167 }, end: Position { line: 8, column: 17, offset: 173 } } }, default: None }), Field(StructField { name: "closed", is_mut: false, ty: Name { name: "Bool", span: Span { start: Position { line: 9, column: 13, offset: 187 }, end: Position { line: 9, column: 17, offset: 191 } } }, default: None })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/99-demos/token_view_pattern.snap
+    type_decl Struct { body: [Field(StructField { name: "value", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 7, column: 25, offset: 195 }, end: Position { line: 7, column: 28, offset: 198 } } }, default: None })] }
+    type_decl Struct { body: [Field(StructField { name: "owner", is_mut: false, ty: Name { name: "Buffer", span: Span { start: Position { line: 11, column: 12, offset: 279 }, end: Position { line: 11, column: 18, offset: 285 } } }, default: None }), Field(StructField { name: "view", is_mut: false, ty: Ref { mutable: false, inner: Name { name: "Buffer", span: Span { start: Position { line: 12, column: 12, offset: 298 }, end: Position { line: 12, column: 18, offset: 304 } } }, span: Span { start: Position { line: 13, column: 1, offset: 305 }, end: Position { line: 13, column: 2, offset: 306 } } }, default: None })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/99-demos/tree_structure.snap
+    type_decl Struct { body: [Field(StructField { name: "value", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 7, column: 23, offset: 194 }, end: Position { line: 7, column: 26, offset: 197 } } }, default: None }), Field(StructField { name: "left", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 7, column: 34, offset: 205 }, end: Position { line: 7, column: 37, offset: 208 } } }, default: None }), Field(StructField { name: "right", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 7, column: 46, offset: 217 }, end: Position { line: 7, column: 49, offset: 220 } } }, default: None })] }
+
+```
+
+## P6 6.6.12 B-收窄：`FunctionBody::TypeDecl` 换成 IR 原生收窄载体（2026-11-01）
+
+**触发与裁决**：6.6.8 的勘察把 `ir.rs` 三处 `ast::Type` 载体摊开；6.6.11（A-1）删掉其中
+两处零生产者指令变体后，用户 2026-11-01 裁决 **Q2 = 收窄版**（只承载 IR 真正消费的信息）、
+**Q3 = 快照不保留 span**，并把「反向桥 B 变生产死代码」裁为 **②：一并删除**（含 t1 入库的
+10 条 leg B 用例）。
+
+### 载体形状（两层 `pub struct`，无 `pub use` 再导出）
+
+- `TypeDeclBody { fields: Vec<TypeDeclField>, self_type: MonoType }`
+  · 字段表顺序 = 构造参数序；`self_type` = 字节码类型表项（原 `codegen::type_from_ast` 的结果
+    前移到 `ir_gen`，逐臂等价：`Name`→`TypeRef`、`Tuple`→`make_tuple`、`Fn`→`Fn`、
+    `Generic`→`TypeRef("Name(args)")`、其余→`Void`，实测见 `middle/core/tests/type_decl.rs`）。
+- `TypeDeclField { name: String, ty: MonoType, is_mut: bool, has_default: bool, is_method: bool }`
+  · **默认值表达式 / const 界表达式 / 匿名方法绑定 / span 一律不进**：默认值在 `ir_gen` 已降级成
+    指令、const 界在类型检查层消费、匿名绑定经 `register_type_bindings` 另有归宿、span 只在源码
+    诊断里有意义。
+  · 字段名与两个标记只服务快照与诊断可读性（IR 不按名查找）；AST 侧字段恒有名字，故 `name: String`
+    而非 `Option<String>`（`Option` 会引入永不出现的分支）。
+  · `is_method`：注解剥掉透明 `Paren`/`NamedParen` 后是 `Type::Fn` 的字段（SPEC
+    `type-system.md:443`：函数类型字段不生成构造参数）。**本轮只表达区分、不改行为**：
+    `translator::synthesize_constructor` 仍按历史行为把两类字段都算进构造参数（`Option`/`Result`
+    的 `some`/`none`、`ok`/`err` 命中），该不一致在此登记，接线留后续轮次。
+
+### 全链改写（一条提交，含机械连带）
+
+- `ir_gen`：类型声明处造载体（`definition.struct_fields()` 逐项降级 + `type_decl_self_type`），
+  并把 `type_from_ast` 的逐臂逻辑前移过来；删除 `definition.without_fn_param_names()` 调用。
+- `codegen`：类型表直接取 `body.self_type`（`type_from_ast` 随之删除，`ast::Type` 的 import 一并去掉）。
+- `translator::synthesize_constructor`：改收 `&TypeDeclBody`，构造参数仍取**全部**字段（行为不变）。
+- `normalize`：`type_decl` 行改紧凑形态 `[name: <MonoType> [mut,default] ; …]`，**不含 span**。
+- `mono::specialize_type`：字段类型与 `self_type` 走**已有的** `MonoType::substitute`——不引入任何
+  新的替换实现（t8 结论）。
+- 删除面：`ast::without_fn_param_names`、`FunctionMonomorphizer::substitute_type_in_ast` 及其内嵌
+  `mono_to_ast_type`（三者失去唯一生产调用点）、`mono/tests/function.rs`（t1 的 10 条 leg B 用例，
+  判据随桥一并消失——**不是被 leg B 接手，leg B 本身也删了**）。
+- T1：`REBUILD_FUNCTIONS` 与 `SCOUT_BASELINE_CALIBER` **双双清空为 `&[]`**；门禁摘要现为
+  「反向桥 A 0 变体；反向桥 B 0 变体；AST→AST 重建 0 变体」。
+
+### 门禁红态（三份原文，证明漏刷会被拒编译）
+
+① 删 `without_fn_param_names` 但未动登记表：
+
+```text
+类型表门禁 T1 失败（构建已拒绝）：
+type-tables T1 扫描未完成（口径不完整 ⇒ 判定不成立）：重建位置登记表与源码不一致（1 项）——函数改名/删除后必须同步 scan.rs 的 REBUILD_FUNCTIONS，不得静默落回「parser 前向」：
+  src/frontend/core/parser/ast.rs::without_fn_param_names（AST→AST 重建）
+```
+
+② 删登记表与口径快照、未刷基线数字（11 项违规，逐行「合计 / AST→AST」）：Struct 3→2 / 2→1、
+NamedStruct 3→2 / 2→1、Tuple 5→4 / 2→1、Fn 7→6 / 2→1、Generic 4→3 / 2→1、Literal 3→2 / 2→1、
+Ptr 3→2 / 2→1、Ref 5→4 / 2→1、MetaType 3→2 / 1→0、Paren 3→2 / 1→0、NamedParen 2→1 / 1→0。
+
+③ 再删反向桥两条（`substitute_type_in_ast` + `mono_to_ast_type`）后（9 项违规，逐行
+「合计 / AST→AST / 反向桥」）：`Name` 5→2 / 0→0 / 3→0、`Struct` 2→1 / 1→0 / 0→0、
+`NamedStruct`、`Tuple`、`Literal`、`Ptr` 同「2→1 / 1→0 / 0→0」、`Fn` 6→4 / 1→0 / 1→0、
+`Generic` 3→1 / 1→0 / 1→0、`Ref` 4→2 / 1→0 / 1→0。
+
+口径条数口径：`REBUILD_FUNCTIONS` 与 `SCOUT_BASELINE_CALIBER` **各少 3 条**（`without_fn_param_names`、
+`substitute_type_in_ast`、`mono_to_ast_type`），基线面则是「11 行 + 9 行」两批逐行数字——两者不是同一种计数。
+
+### 快照（96 行 / 69 文件 → 再生逐行 review）
+
+改前 96 行原文已在本节末尾「附：改前 `type_decl` 行原文（对照用）」逐文件留档。再生结果：
+
+| 项 | 实测 |
+| --- | --- |
+| 被改写的 `type_decl` 行 | **95 行 / 68 文件** |
+| **未**被改写的陈旧行 | **1 行**（`tests/yaoxiang/02-type-system/termination/measure_decreasing.snap`）——该语料在**快照判据路径**的 IR 生成期报 `E3006`（「variable b could not be resolved」）被 `normalize_corpus_file` 跳过，快照自更早版本起就没再参与比对（**预存缺口**，非本轮引入；探针实测见本节结论）|
+| 新增语料带出的快照 | 2 行 / 2 文件（本轮新增的两条语料）|
+| 全域 span 残留 | **1 处**，即上面那行陈旧快照（其余 95 行再生后无 span）|
+
+逐行 review 口径（自动化辅助 + 人工抽检）：对 68 个改写文件逐文件比对「旧 AST Debug 行」与「新紧凑行」的
+**字段数 / 字段名顺序 / `is_mut` / `has_default`**——**0 处不一致**（脚本逐文件核对）；类型渲染由 AST 形状
+（`Name("Float")` / `Generic("Option", [Name("T")])`）换成 `MonoType`（`Float(64)` / `TypeRef("Option(T)")`），
+这是 `MonoType::from` 的既有降级，不是新语义。
+
+### 语料新增（零覆盖 → 有覆盖）
+
+- `tests/yaoxiang/02-type-system/aggregates/type_decl_default_field.yx`：带默认值字段的类型，
+  `Config()`（默认值生效）与 `Config(7, "custom")`（覆盖）两路都断言；
+- `tests/yaoxiang/02-type-system/aggregates/type_decl_anon_binding.yx`：含内联匿名函数绑定的类型
+  （`cb: ((a: Int) -> Bool)[0] = a => a > 0`），构造 + 读回数据字段 + 调用绑定（返回值不断言）。
+
+`tests/baselines/corpus-parity.jsonl` 由 356 行增至 **358 行**，diff 仅新增两行（均为 `diagnostics: []`、
+`exit: 0`）；原 356 行逐字节未变（零行为漂移）。
+
+### mono 单测改写（逐条等价，改写前已报批）
+
+| 原断言 | 新断言 | 为什么等价 |
+| --- | --- | --- |
+| 夹具 `make_pair_type_ir` / `make_generic_type_decl_ir` 造 `TypeDecl { definition: AstType::Struct{…} }` | 造 `TypeDeclBody { fields: [TypeDeclField{ ty: TypeRef(参数名) }], self_type: Void }` | 夹具语义是「泛型类型定义、字段类型是类型参数」；`MonoType::from(Name("T")) == TypeRef("T")`，`self_type: Void` 正是旧路径 `type_from_ast(Struct)` 的结果 |
+| helper `type_decl_fields` 取 `&[StructField]` | 取 `&[TypeDeclField]` | 判据「有哪些字段、顺序如何」不变，取值面换成 IR 载体 |
+| `test_specialize_generic_struct_substitutes_type_params`：断言 `fields[i].ty` 是 `AstType::Name{"Int64"}` **且** `MonoType::from(...) == Int(64)` | 断言 `fields[i].ty == MonoType::Int(64)` | 两段合起来的事实是「字段类型被替换成 Int(64)」；旧路径要经规范名写回再 lower 的有损往返，新断言无往返、更强。**AST 中间态断言随桥一并消失，不是被 leg B 接手——leg B 也删了** |
+| `test_specialize_type_lowercase_param_name`：断言 `f.ty` 是 `Name{"String"}` **且** lower 后 `== make_string()` | 断言 `fields[0].ty == MonoType::make_string()` | 实质判据「小写参数名 `t` 也被替换成 String（不是 `TypeRef("t")`）」原样保留 |
+| （无） | 新增 `test_specialize_type_keeps_field_classification_flags`：`is_mut` / `has_default` / `is_method` 标记在特化后保留 | 只增不减；守住 `..f.clone()` 不丢分类标记 |
+
+### 已知缺口（登记）
+
+① **字段类型是「内联匿名结构体/枚举」**：`MonoType::substitute` 对 `Struct`/`Enum` 走 `other => clone()`，
+   这类字段类型不会被替换。语料 0 例；**不另造第三份替换实现**（与 `types/substitute.rs::Substituter`
+   并列即触禁令三 A）。
+② **函数类型字段不进构造参数（SPEC 443）未接线**：载体已能表达（`is_method`），`translator` 仍按历史
+   行为把两类都算进构造参数；改它属可观察变更，需另立裁决。
+③ **`measure_decreasing.snap` 陈旧 ⇒ 判据分歧 + 快照覆盖洞**（预存，非本轮引入）：
+   · **判据分歧**：`tests/baselines/corpus-parity.jsonl:133` 记该语料 `diagnostics: [] / exit: 0`（CLI
+     路径通过）；而**快照判据路径**（`normalize_corpus_file` 的 lex→parse→typecheck→ir_gen 精简序列）
+     在 ir_gen 期报 `E3006`（variable b could not be resolved）⇒ 两条判据对同一文件结论不一致；
+   · **覆盖洞**：`normalize_corpus_file` 对前置阶段失败**静默跳过**，快照门禁没有「语料有、快照无」的
+     对账项，故该文件不在快照覆盖内而门禁仍绿（与 6.5「testsuite 扫到 0 个文件仍 exit 0」同族）；
+   · **时间证据**：该快照最后写于 **2026-10-12**（`8605a081b`），邻接快照（如 `structs.snap`）与语料
+     文件本身最后写于 2026-10-13 ⇒ 它已约三周未进判据；junk 探针（给该 snap 追加一行再跑比对测试，
+     仍绿）证实它确在覆盖之外；
+   · **处置**：本轮**不删样本、不改判据**（删了等于用消掉样本换「全域无 span」），已登记进 09 的 6.6
+     残留面 ⑨ 待裁定（补对账门禁 or 修 ir_gen 的 E3006 路径）。这是快照面**唯一**残留 span 的来源。
+④ **`field_is_method` 的判定值有单测**（`middle/core/tests/type_decl.rs`）：函数类型字段
+   `is_method == true`、数据字段 `== false`（判定写反时该断言先红）。
+
+### 门禁（实测）
+
+`cargo build --bin yaoxiang-rs` / `cargo fmt --check --all` / `cargo clippy -D warnings` /
+`testsuite.py run fast` / `check-corpus-parity` / `check-snapshot-drift` / `check-docs-truth` 全绿。
+
+### 计数
+
+本批不新增二级/三级任务 ⇒ 09 顶部计数表不变（二级 **72** / 三级 **193**）。
