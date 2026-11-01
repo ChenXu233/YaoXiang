@@ -1,9 +1,11 @@
 //! Intermediate Representation
 
-// 6.2.2：不再把 ast::Type 以 pub use 再导出为 IR 层的类型名——IR 层仍有三处载体持有
-// ast::Type（Instruction::Cast.target_type / Instruction::TypeTest.ty /
-// FunctionBody::TypeDecl.definition），改用私有导入 + 全名写清，
-// 既不对外再导出 ast::Type，也不掩盖这几处尚未收敛的跨层引用。
+// 6.2.2：不再把 ast::Type 以 pub use 再导出为 IR 层的类型名——IR 层仅剩一处载体持有
+// ast::Type（FunctionBody::TypeDecl.definition），改用私有导入 + 全名写清，
+// 既不对外再导出 ast::Type，也不掩盖这处尚未收敛的跨层引用。
+// 6.6.11：`Instruction::Cast` / `Instruction::TypeTest` 两个**零生产者**死变体已删除
+// （载荷还被下游丢弃：`translate_cast` 拿不到 target_type、TypeTest 臂发空操作数占位）。
+// 字节码侧 `BytecodeInstr::Cast` 是另一套（载荷为类型表下标），保留。
 use crate::frontend::core::parser::ast;
 use std::collections::HashMap;
 
@@ -319,17 +321,6 @@ pub enum Instruction {
         span: Span,
     },
     // 注意：迭代器协议已通过 Call 指令实现，无需独立的 IR 指令
-    Cast {
-        dst: Operand,
-        src: Operand,
-        target_type: ast::Type,
-        span: Span,
-    },
-    TypeTest {
-        src: Operand,
-        ty: ast::Type,
-        span: Span,
-    },
     /// Spawn a new task (for cycle detection: track args and result)
     Spawn {
         /// 每个直接子表达式对应一个闭包
@@ -589,8 +580,6 @@ impl Instruction {
             Instruction::LoadIndex { span, .. } => *span,
             Instruction::StoreIndex { span, .. } => *span,
             Instruction::Contains { span, .. } => *span,
-            Instruction::Cast { span, .. } => *span,
-            Instruction::TypeTest { span, .. } => *span,
             Instruction::Spawn { span, .. } => *span,
             Instruction::SpawnFromList { span, .. } => *span,
             Instruction::Yield { span, .. } => *span,

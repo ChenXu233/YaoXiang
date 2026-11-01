@@ -462,6 +462,18 @@ const EXPECTED_UNENCODED: &[&str] = &[
     "SWITCH",
     // 占位 opcode：仅在显示名表出现，非真实指令
     "LABEL",
+    // 6.6.11 的**连带后果**（不是「预留路径」，不要照「将来占位」读）：IR 侧的
+    // `Instruction::Cast` / `TypeTest` 两个**零生产者**死变体删除后，CAST / TYPE_CHECK
+    // 失去它们**唯一**的 translator 编码器（原 `Cast { .. } => translate_cast(..)` 与
+    // `TypeTest { .. } => … vec![0, 0, 0]` 两臂）。此刻三件事**同时**成立：
+    //   ① 无 IR 生产者（IR 侧已无对应变体，`ir_gen` 从不构造）；
+    //   ② 解释器无 handler（`src/backends/interpreter/` 内 grep CAST / TYPE_CHECK 零命中）；
+    //   ③ 解码器与往返测试仍在（`BytecodeInstr::Cast`，见本文件 :208 / :626）。
+    // ⇒ 将来若要重新接通，必须**三处同补**（translator 编码器 + IR 生产者 + 解释器 handler）；
+    //   只补编码器而不删本表，会让 `test_opcodes_without_encoder_are_documented` 的
+    //   `newly_encoded` 分支变红（见该测试的第三条断言）。
+    "CAST",
+    "TYPE_CHECK",
 ];
 
 /// Helper: 解码器现支持的全部指令种类及其期望 opcode（编码方向）。

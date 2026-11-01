@@ -2220,137 +2220,62 @@ t2/t3 运行期间（16:38）主仓工作树出现一次**会话外第三方发�
 
 本批不新增二级/三级任务 ⇒ 09 顶部计数表不变（二级 **72** / 三级 **193**）。
 
-## P3 3.23.2 收口（#520 配置解析失败静默回退收窄，2026-10-31）
+## P6 6.6.11 A-1：删除 `Instruction::Cast` / `TypeTest` 两个零生产者死变体（2026-11-01）
 
-### 登记与裁决
+**触发**：6.6.8 的勘察把 `ir.rs` 三处 `ast::Type` 载体摊开（`Cast.target_type` / `TypeTest.ty` / `TypeDecl.definition`）；用户 2026-11-01 裁决 **Q1 = 做 A-1**（删两个零生产者变体 + 刷 T1 基线与口径）。载体 C（`FunctionBody::TypeDecl.definition`）另议。
 
-3.23.1（#503）收口时 t3 复审实证的「另行裁决」遗留：`[tool.test]` 类型错误穿透 PackageManifest（serde 忽略未知字段、无 tool 字段）后被 `helpers.rs` 的 `.ok()` 静默吞掉，用户显式 patterns 静默回退内建约定。登记为 [#520](https://github.com/ChenXu233/YaoXiang/issues/520)，同族还有 run（`main.rs:474-477`）/ format（`:610`、`:616-620`）两落点。**2026-10-31 用户裁决甲案**：三落点收窄为显式报错非零退出。规范依据 = **RFC-015（已接受）向后兼容性节明文「配置解析失败时显示友好错误，提示具体行号和错误原因」（`015-configuration-system.md:282`）**——现状静默回退违反已接受 RFC，本案 = 实现对齐规范（与 #511 同性质）；`[tool.test]` 经 RFC-036:146 挂在 RFC-015 的 `[tool.*]` 扩展约定下。不可逆面（裁决时单列）：三面「原先成功程序」从静默成功变报错中止——正是修复目的。
+**为什么删不改变行为（结构性依据）**：构造 Rust 枚举变体必须写出变体名；全仓对这两个名字的 10 处命中**全是消费臂**——`ir.rs` 的 `span()` 2 处、`normalize.rs` 的文本渲染 2 处、`verify.rs` 的三张分类表 4 处、`mono/function.rs` 的指令替换 2 处、`translator.rs` 的降级 2 处，无一是构造点。⇒ 任何程序的 IR 里都不可能出现这两个变体，删除只移除不可达代码（且它们的载荷本就丢：`translate_cast` 拿不到 `target_type`，`TypeTest` 臂发 `vec![0, 0, 0]` 空操作数占位）。
 
-### 实现（t1 + t1r 两轮，冻结 `cd5a30fa`，20 文件 +583/−75）
+**改法（一条提交）**：
 
-- **单点**：`util::config::load_project_config_from(path)`——缺失 = 合法默认（`ProjectConfig::default()`，单文件模式语义不动）；存在但读不了/解析不了 = `Err(ConfigError::IoError|ParseError)`（ParseError 的 Display 携带 toml 行号列号，兑现 RFC-015 的「行号与原因」）。
-- **落点1**（helpers.rs role_context）：ProjectConfig 投影解析失败并入 E3024 面（`unreadable` 中止，已建好的 surfaces 一并丢弃——与 #503 既有 unreadable 形态逐分支一致，中止发生在任何退化之前）；E3024 文案泛化「项目清单不可读」→「项目配置不可读」（locales 六语言 title/template/help 同 key 同改 + e3xxx 码表注释登记扩面出处 + RFC-013 表行 `code-tables --fix` 治愈 + 生成器再生）；span_exempt 保持（#324 契约）。
-- **落点2/3**（main.rs Run/Format 臂）：走单点 + `with_context(|| "读取项目配置 yaoxiang.toml 失败")?`；用户配置 `user_config_path()` 三级定位（XDG_CONFIG_HOME → HOME → APPDATA）——Some 则 `load_user_config_from` 报错传播，None（三级均不可定位）= 合法默认（与旧 unwrap_or_default 的差异：旧代码连「定位到但文件坏」也吞，新代码只对「定位不到」放默认——收窄本义）。
-- **落点4**（t1 案外发现，队长按已批原则并入并披露）：`util/test_runner.rs:605` 的 `load_config()` 注释原文「缺失或解析失败回退默认值」——`yaoxiang test` 的 patterns 发现面静默错配（红态实测：坏 patterns 时 `my_tests/` 下测试静默失踪，输出 `No tests found.` 且退出 0）。t1r 修复轮复用同一单点（防第四份复制），沿 `run_test_command` 既有 anyhow 通道传出，Test 臂非零退出。
+- 删变体 `Instruction::Cast { dst, src, target_type: ast::Type, span }` / `Instruction::TypeTest { src, ty: ast::Type, span }`；
+- 删消费臂：`ir.rs` 2 条 `span()`、`normalize.rs` 2 条、`verify.rs` 4 条（定义 dst / 无操作数 / `use_operands` 各 1）、`translator.rs` 2 条；
+- 删失去唯一调用者的函数：`translate_cast`（唯一调用点就是 Cast 臂）、`substitute_instruction`（退化为恒等）、`substitute_type_ast`（唯一调用者是 `substitute_instruction`）、`substitute_block`（唯一职责是逐指令调用前者，退化为 `clone`）——trait 声明同步清理，两处块级映射改 `blocks.clone()`；
+- 字节码侧 `BytecodeInstr::Cast`（`bytecode.rs:542`，`opcode()` 映射 `:644`、`size()` `:801`、解码 `:2088-2090`）与 `opcode::CAST`/`TYPE_CHECK`（`backends/common/opcode.rs:108-109`）**保留**（见下方不对称说明）。
 
-### 红绿
+**门禁红态（原文留存，证明漏刷会被拒编译）**：
 
-四落点 CLI 探针实测（对照组齐全）：patterns 字符串态 `check main.yx custom_tests/t.yx` 对 custom_tests 文件**误报 W1001**（patterns 回退 + 声明面失效的直接后果）vs 合法列表对照 0 警告；`[mono` 非法 TOML 时 run 按**默认闸 100** 报错 vs 合法 150 报 150；`[fmt` 时 format 长表达式不换行（默认 120）vs 合法 40 换行；用户级坏 config.toml 同款。修后各落点报错（消息带路径 + toml 行号列号）+ 非零退出。测试级红↔绿机械闭环（stash 单文件 → 测试 FAILED → pop → 绿）。
+① 只删代码、未动 `REBUILD_FUNCTIONS`（`build.rs` 拒绝编译）：
 
-### 判据链
+```text
+类型表门禁 T1 失败（构建已拒绝）：
+type-tables T1 扫描未完成（口径不完整 ⇒ 判定不成立）：重建位置登记表与源码不一致（1 项）——函数改名/删除后必须同步 scan.rs 的 REBUILD_FUNCTIONS，不得静默落回「parser 前向」：
+  src/middle/passes/mono/function.rs::substitute_type_ast（AST→AST 重建）
+```
 
-t1 门禁 10 项绿（fmt / clippy --lib / 定向 / lib 全量 2908 / integration 322 / 语料 356 零漂 / 快照 / 生成器幂等）→ t1r 同清单复绿（integration 323）→ 冻结 → t2 **PASS**（还原补丁只回四行为源文件、单点与测试保留——5 条红判据全部变红且断言位置与修复面逐一对应，10 条单点与守卫测试保持绿；blob 校验确认变异态恰为父版内容、apply -R 还原 CLEAN；重建后 lib 2908 / integration 323 与预期精确一致；零漂与门禁十项全绿）→ t3 **REQUEST_CHANGES**（八项技术判据全过：unreadable 三态语义、单点完备性、E3024 注入面未扩大、RFC-015 行号实证、locales 六语言一致、14 条新测试合规、既有测试零删改、判据零放宽；**medium = 两条测试注释把 `.gitignore` 排除的批次探针目录写成红态出处——违反元规则①**，check-docs-refs 未抓因门禁只抽反引号 token（覆盖缺口，非豁免）；3 low：提交信息计数不实、WBS 行未落=时序正常、main.rs:610 注释漏列 XDG）→ 队长补修 **amend 并入**（4 行注释出处改写为 issue/09a 可解析指针 + **3.22 批次同形遗留 `paren_return_decomposition.rs:12` 顺带清理** + XDG 补列 + 提交消息计数更正）；**t2/t3 判定迁移依据 = amend 仅注释与提交消息、代码行为逐字节一致**（fmt 复验干净、生成器复跑零变化、四处均无诊断发射点）。
+② 删了登记表与口径快照、但未刷基线数字（10 项违规，逐行数字 = 下表「前」值）：
 
-### 守卫四条（全部有测试咬合）
+| 变体 | 合计 基线→实测 | AST→AST 基线→实测 | 实测残余构造点（删除后） |
+| --- | --- | --- | --- |
+| `Struct` | 4→3 | 3→2 | `ast.rs:919`（`without_fn_param_names`） |
+| `NamedStruct` | 4→3 | 3→2 | `ast.rs:926` |
+| `Tuple` | 6→5 | 3→2 | `ast.rs:932` |
+| `Fn` | 8→7 | 3→2 | `ast.rs:937` |
+| `Generic` | 5→4 | 3→2 | `ast.rs:945` |
+| `Literal` | 4→3 | 3→2 | `ast.rs:954` |
+| `Ptr` | 4→3 | 3→2 | `ast.rs:959` |
+| `Ref` | 6→5 | 3→2 | `ast.rs:964` |
+| `Paren` | 4→3 | 2→1 | `ast.rs:973` |
+| `NamedParen` | 3→2 | 2→1 | `ast.rs:979` |
 
-① 合法配置逐字节不变（mono_config 三测试 + format 40 列对照 + check 合法 patterns 无诊断且规则真实生效）；② 无配置 = 合法默认（missing-file 单测 + run/format/test 三命令对照）；③ 未知 section/字段容忍不动（未加 deny_unknown_fields，serde 语义原样，有单测钉住）；④ #503 判据不放宽（manifest_error 既有 5 条全绿，manifest 面红态判据原样）。
+> `MetaType` 不在此列：`substitute_type_ast` 对它的那一臂是 `ty.clone()`，本就不产构造点。前向与反向桥两列不受影响。
 
-### 边界备案
+**口径同批**：`REBUILD_FUNCTIONS` 与 `SCOUT_BASELINE_CALIBER` 各删 `substitute_type_ast` 一条（两处必须成对改：只改一处会先报「口径与基线不同代」并**跳过**数字比对，看起来像另一类故障）；`SCOUT_BASELINE_REV` 与 `SCOUT_BASELINE_CALIBER_REV` 同批前进（提交号在推送后才可取，故记本次改动的父提交并写明偏离）。刷新后门禁摘要：`勘察基线一致、口径同代`。
 
-- E3024 多入口 check 时逐入口各注入一条（2 入口 = 2 条）——#503 既有形态，本批未扩大。
-- ConfigError 的 Display（"IO error: {}" / "Config parse error: {}"）为英文既有文案，CLI 错误消息主体中文硬编码——跟随 main.rs/config 模块既有中英混排先例（`config/mod.rs:290` 同款），i18n 归属如需收口另案。
-- `docs/src/en/reference/error-code/index.md:176` 旧英文文案由 auto-translate bot 推送后跟进（en/ 归 bot 所有，不手改）。
-- check-docs-refs 门禁对裸写文本（非反引号 token）的探针目录引用不设防——t3 指出的覆盖缺口，工具侧收口待登记（本批以注释改写消除现存实例）。
+**`as` 的既有缺口（登记；不是本次删出来的）**：删两个死变体不触及 `as` 的语法与关键字，但会让「`as` 语义未落地」从「IR 里有空变体」变成「IR 里什么都没有」，故必须登记：
 
-### 计数
+- 文法与优先级已定义（`docs/src/reference/language-spec/syntax.md` §2.6 / §2.4 第 2 级、关键字表含 `as`）；
+- 解析产出 `ast::Expr::Cast`（`parser/pratt/led.rs:81` 的 `KwAs` 中缀臂）；
+- 类型检查只做**静默重标注**：`typecheck/inference/expressions.rs:3847-3853` 用 `let _ = self.infer_expr(expr)?;` 丢弃内层结果，随后直接返回目标类型的 `MonoType`；
+- 全仓**没有**可转换性校验，也没有对应诊断码（`util/diagnostic/codes/` 无 cast 条目）；
+- `ir_gen` 从不生成指令（`middle/core/ir_gen.rs` 只在 `:5042` / `:5849` / `:9312` 取 `Expr::Cast` 的 span 与自由变量）；
+- 语料 397 个 `.yx` 中 `as` 转换 0 例（`git grep -E '[^a-zA-Z_]as[ ]+[A-Z]' -- '*.yx'` 零命中）。
+⇒ 现状是「语法受支持 + 类型检查静默重标注 + 无合法性校验 + 无运行期转换」，对语料零影响但零覆盖。SPEC 侧注记已同批落在 §2.6。
 
-三级 +1 = 3.23.2（194→195）；二级不变。issue [#520](https://github.com/ChenXu233/YaoXiang/issues/520) 关闭。
+**「IR 无 Cast、字节码有 Cast」的不对称及原因**：字节码侧的 `BytecodeInstr::Cast { dst, src, target_type_id }` 与 `opcode::CAST` / `TYPE_CHECK` 保留，因为它们是**另一套载荷**——字节码侧持的是类型表下标（`u16`），属于字节码的类型表契约（有往返测试 `middle/core/tests/bytecode.rs:208` / `:626`），而不是语法层类型；且删它们会牵动 `.42` 格式与解码器。本轮只删「IR 侧从无生产者、载荷还被丢弃」的语法类型载体。另注：解释器侧目前没有 `CAST`/`TYPE_CHECK` 的 handler（`grep -rn "CAST\|TYPE_CHECK" src/backends/interpreter/` 零命中），故字节码 CAST 同样不可执行——但那是字节码/执行器面的既有状态，不在本轮范围。
 
-## P3 3.20.6 收口（#519 E1106 调用点复检死码删除，2026-10-31）
-
-### 登记与裁决
-
-该死码由 #512 批次 t3 复审实证：E1106 调用点约束复检（`expressions.rs` 的「RFC-011 §5.2 调用点复检」块）是结构性死码——到达时 `last_type_args` 恒空 ⇒ `get(idx)` 恒 None ⇒ `continue` 短路。登记为 [#519](https://github.com/ChenXu233/YaoXiang/issues/519)。规范查证（裁决包）：①代码注释的「RFC-011 §5.2」系**误引**（RFC-011 实际 §5.2 是「类型族」，全文无调用点复检声明）；②RFC-013 仅库存性登记 E1106「约束未满足」；③RFC-011b「约束同判据」原则下，死码复检的判据（接口 registry `query_*_template`）与活执行面（mono 函数表 `all_function_names`）本就发散。**2026-10-31 用户裁决甲案：删除死码，E1106 转暂未发射**；约束未满足的检查层位与判据设计归 #519 开放（探针实证现状：约束未实现 check 0 error / run exit 1 运行期错误，`sum(NoAdd)` 特化炸）。
-
-### 删除边界（队长预先查证，t1 契约划死红线）
-
-- **删**：复检块本体 + `generic_fn_constraints` 死链（字段 `statements.rs:109`、setter `expressions.rs:512`、传播 `statements.rs:3113/:3222`）——其唯一读者是死码复检臂。
-- **留**：`current_fn_param_constraints` 全链（statements.rs 8 处 / expressions.rs 8 处，含 `:3033` 的 OperatorDispatch 发射与 `:1625` 消费）——定义体内 `a + b` 发射 `Call "T.add"` 靠它，mono 改写的承重路径。
-
-### 快照再生（escalation A 案，裁决全文备案）
-
-夹具 `constrained_generic_ops.yx` docstring 误引更正会机械平移 IR 快照 span（快照含 line/column/offset，offset 由总字节数决定；t1 两轮实测：4→6 行漂移、等行数不等字节也漂移），与契约「快照零漂」及禁跑 `--ignored` 字面冲突，t1 升级询问。**队长裁决**：判据修正为「IR 形态零漂」——AGENTS 常用命令区明文 `UPDATE_SNAPSHOTS=1 cargo test --lib snapshot -- --ignored` 为「改动影响 IR 或语料行为时」的基线再生命令，红线要求的是「同提交再生 + 人工 review」而非禁止再生；审查判据五条（逐行审查、每处变化必须只是 Span/Position/offset 数字平移、任何指令/形状/类型实质变化即停、语料差分仍须零漂、再生与删除同提交）。t1 机械逐行审查结果：**span 计数 14=14、非 span 骨架完全一致、line 差值集合 {2}、column 差值集合 {0}、offset 差值集合 {231}**——与 docstring +2 行/+231 字节精确对应，零指令变化；审查中抓到并修正一次编辑瑕疵（验证行重复致 line+3）后重再生复核。
-
-### 等价性与判据链
-
-t1 门禁全绿（lib 2908 与父版**同数**——既有测试零删改、integration 323+1、语料 356 零漂、快照绿、生成器幂等、现状探针 check 0 / run 1 与删除前一致）→ 队长复核（边界 grep：`generic_fn_constraints` 全仓 0 处、活链 8+8 处全在；mono/std 改动纯注释）+ 一处队长修补并入（`inference/tests/expressions.rs:431` 历史叙事注释「另有『结构性死码』登记待裁」→「已裁已删」，随冻结 amend）→ 冻结 → t2 **PASS**（**两向变异证明**：变异甲复活被删死码后 lib 全量与修后基线逐项同数 = 删除等价性直接证明；变异乙致残保留的活链后 constrained_generic 派发测试恰红 2 failed、snapshot 组仍绿 = 承重路径真实且删除未误伤其守卫；trial 全程机械可逆）→ t3 **APPROVE**（8 项全过：边界零泄漏、快照差值独立重算吻合、附录B 五要素齐备且「§5.2 是类型族」经原文核实、E1106 面（153 注册 / 35 暂未发射 / 生成器幂等）、判据零放宽、零漂三项本机跑绿）。
-
-### 误引更正与决议登记
-
-「RFC-011 §5.2 调用点复检」更正为 RFC-011b（约束同判据 / 约束语法糖）：契约点名 6 处 + t1 同族伴随 4 处（statements.rs:1834、expressions.rs:118/:497/:1567、std/mod.rs:412）+ 语料夹具 docstring；RFC-011b 附录B 落设计决策条目（五要素：裁决日期 2026-10-31 / 甲案 / 死码判据 / mono 面承接 / #519 指针）。**§5.2 误引余量 5 处**（后续清理登记）：src/ 3 处（ast.rs:1248、parser/statements/declarations.rs:490、ir_gen.rs:704——语境为约束形参语法判定，正确出处应引 RFC-011 §类型约束系统）+ tests/ 2 处（execution.rs:294/:332，t3 low 补充）。
-
-### 遗留备案（t3 三条 low，均不阻塞）
-
-1. **附录B 死码判据的 FieldAccess 理论窗口**：`fn_name_for_mono` 的 FieldAccess 分支不校验 receiver 是否模块别名，而 `collect_instantiation_request` 的 `callee_generic_name` 校验——该形态下 `last_type_args` 理论上可能非空；探针 B（同名带约束裸函数 + 值接收者方法调用）实测未复现发射，行为面即现状锚不受影响。闭合窗口或收紧附录B 措辞归 #519 后续设计。
-2. 现状锚的「先改判据再改锚」护栏是注释级约定，无机械强制——若要机制化（判据-锚联动 CI 校验）在 #519 设计时一并考虑。
-3. §5.2 误引余量 5 处（见上）。
+**零漂移与门禁**：`src/middle/core/tests/snapshots/` 216 个快照对 `TypeTest`/`Instruction::Cast` grep **0 命中**（删前删后一致）；语料 356/356（`check-corpus-parity` 差异空）；`git diff --stat 3e4be8c27 HEAD -- tests/yaoxiang tests/baselines src/middle/core/tests/snapshots` 为空；`cargo fmt --check --all` / `cargo clippy -D warnings` / `testsuite.py run fast` / `check-docs-truth.py` 全绿；`verify.rs` 三张分类表除被删两臂外其余变体逐条位置未变（diff 仅删行）。
 
 ### 计数
 
-三级 +1 = 3.20.6（195→196）；二级不变。issue [#519](https://github.com/ChenXu233/YaoXiang/issues/519) **保持开放**（本行只收甲案删除；约束检查的层位与判据设计待后续）。
-
-## P3 3.20.7 收口（#519 甲案续篇——mono 派发改写未命中改报编译期 E1106，2026-11-01）
-
-### 登记与裁决
-
-用户 2026-11-01 批「按你推荐来」（甲案裁决包四件套见 WBS 3.20.7 行登记段）。层位定为 mono 特化改写循环（`qualify_deferred_method` 双查未命中处）——判据与运行时执行面同表同键，规避被删死码的判据发散死因；CHECK 已含 Monomorphization 阶段（`driver/program.rs` 3.4.8 ③ 注记），故翻面发生在 check 面。
-
-### t1 实现（flash 子代理，冻结 `1dbe456c`）
-
-`specialize_function` 改 `Result<Option<_, Diagnostic>>`（未命中 fail-fast 上抛，`process_queue` 以 `?` 承接）；成因区分 = 全表 `.{bare}` 后缀扫描、sort 取前 3 保确定性；`constraint_dispatch_failed(dispatch, detail)` 构造器重定义；013 行标题泛化「约束未满足」→「约束方法派发失败」（`tools/code-tables --fix` 再生——该表区间是工具再生产物，手改会被 build.rs 门禁拒建）；翻面锚 + 成因 B 多文件锚先红后绿。**契约偏差 4 条实证**：
-
-1. **判据修正（最重要）**：登记裁决包的事实②「all_function_names 与运行时名字空间同源」被实证**部分推翻**——该表只收 IR 函数，不含 `src/std/mod.rs` register_all 的 FFI 原生背书（`Int.add` 等）。首版实现把 `sum(1,2)` 这类成功程序杀成 E1106，被两条既有 D59 守卫测试（`method_unused.rs` 的 `test_constrained_generic_dispatch_{single_file,cross_unit}_run_values_unchanged`）当场抓红。修正 = 原生类型显示名（`operator_type_display` 四映射臂产出 + char 默认臂透传）未命中保持运行期回退，放行方向刻意**过包含**（多含=保旧行为，漏含=误杀成功程序）。WBS 行事实②已同步修正。
-2. check_file 翻面形态 = error_count 0→1 + 诊断文本，**非 pipeline Err**——check 的 CollectAll 聚合下 mono 失败走逐文件收集通道（`driver/arms.rs` Check 臂不设 failure），契约原断言按 driver 实证修正。
-3. mono 直驱测试 7 处签名连带（机械必需面，断言逐字保留，追认进 WBS 行清单）。
-4. span 实测：`.at` 接受 `Span`；单行表达式体形态下 ir_gen 记录的指令 span 是函数头——为该字段真实值非错位。
-
-### v2 修复轮（t3 首轮 REJECT 两 medium → 队长修复，amend `8ec5ca38`）
-
-1. **发射点行号平移再生（medium，队长失误）**：冻结审查修注释空行使行号 +1 后**漏跑错误码生成器**——生成物写 761、实际 762，与提交信息「生成器幂等」不符；3.20.4 模式（发射点附近行号平移不重跑生成器）在队长手上复发，t3 抓出。修正后发射点 767，生成器两轮哈希一致。
-2. **成因文案观测化（medium）**：后缀判据不区分同名异型、看不见函数表外来源（extern 体不产 FunctionIR），原「类型定义模块身份在单态化期丢失」断言句可能失真。改为观测陈述 + 条件归因：「全程序函数表中不存在该方法的实现登记——约束未满足」/「……若该实现确属本类型，则为类型定义模块身份在单态化期丢失、无法还原限定名（WBS 3.18）；同名异型时该条目与本派发无关」。doc 注释与 e1xxx 注释同调为「提示性区分」。
-3. `"Char"` → `"char"`（`MonoType::Char` 的 type_name 经 `operator_type_display` 默认臂透传小写，原大写 "Char" 为不可达死成员）；doc 注释如实描述产出面。
-4. 四语言 E1106 英文同文 → 真译（ja/ru/zh-classical/zh-x-miao——契约误称 #520 先例是英文同文，实际 cd5a30fa 四语皆真译；本轮对照语域补齐）。
-
-### t2 独立验证（批次树 519b @ `8ec5ca38`）——PASS
-
-- **R1**（未命中臂打回裸名回退）：基线两新测试绿 → 变异后皆 FAILED（exit 101）→ trial 机械还原（blob 与 HEAD 一致、status CLEAN）→ 重建后恢复绿。
-- **R2**（置空 `PRIMITIVE_DISPLAY_NAMES`）：两条 D59 守卫基线绿 → 变异后皆 FAILED（`Int.add` 被误杀）→ 还原恢复绿——原生类型放行是承重件，残化即红。
-- **冻结基线**：语料差分与基线逐字节一致（零漂）；IR 快照只读 6 passed / 1 ignored（更新模式按设计 ignored）；CI 四脚本 exit 0（check-boundary / check-fanout 现为 report-only 属 P9 前既定口径，输出内违规计数 0）；锁释放，树终态干净。
-- 变异命令形态注记：`cargo test --test integration -- <名1> <名2>`（libtest 多过滤器；契约原文的双测试直写形态本机 cargo 不接受，等价合法形态）。
-
-### t3 修复面确认——APPROVE（5/5）
-
-发射点 767/767 一致且修复面仅此一处行号修正；成因文案观测化与注释同调；char 修正与 type_name 事实吻合；四语真译；测试 diff 无断言放宽（v1→v2 未触碰测试文件）。
-
-### 环境事件备案
-
-- **批次树 Z3 种子**：`git worktree` 不携带 gitignored 的 `.z3/`（本地构建依赖缓存目录），批次树首次构建触发 build.rs 联网下载 Z3，本机代理故障（Invoke-WebRequest 连接关闭）致构建失败。处置 = 把主树 `.z3/` 下对应平台的缓存目录（z3-4.16.0-x64-win）复制进批次树同名目录后增量构建正常。**后续批次建树时若构建报 Z3 下载失败，先做此种子再排查其他原因**；另外上轮失败使锁悬挂（holder=t2 残留），`scratch.py release` 后再入。
-- **「pre-commit 钩子楔死」系误读，已撤回（2026-11-01 判别实验澄清）**：本批次三条提交（`1dbe456c` 重试轮、`8ec5ca38`、`bab3a8ad`）的钩子输出被误读为「文件过滤钩子持续 (no files to check) Skipped、staged 明明有文件」——真相是**每笔提交的钩子输出有两段序列**：pre-commit 阶段（全量门禁真实执行，cargo test --all 都跑）+ commit-msg 阶段（该阶段的文件集合只有提交消息本身，文件过滤钩子在此阶段跳过是 pre-commit 对无 `stages:` 限定钩子的**正常**行为）。本仓 `.git/hooks/` 同时装有 pre-commit 与 commit-msg 两个 shim，而 `.pre-commit-config.yaml` 的钩子多数未写 `stages:` 限定 ⇒ 每笔提交两段输出；此前三次「楔死」证据全部来自只截 tail 窗口、恰好只看到第二段（第一段全量序列在窗口之上被切掉）。受控探针证实：`-F` 消息提交同样全量跑钩子（探针提交已 `reset --hard` 回滚，blob 无痕）。**教训**：判钩子覆盖必须看完整输出，不得凭 tail 段推断；「commit-msg 阶段全 Skipped」是正常形态。收口提交 `bab3a8ad` 的提交信息里「pre-commit 失败轮后持续跳过异常」的说法据此**撤回**（提交信息不可改，以本条为准）。可选改进（未做，留裁决）：给配置里的文件钩子显式加 `stages: [pre-commit]`，输出减半且根除这类误读面。
-
-### 计数
-
-三级 +1 = 3.20.7（196→197）；二级不变。issue [#519](https://github.com/ChenXu233/YaoXiang/issues/519) **关闭**（甲案删除 + 约束检查落地全链闭环；余量 = 同名异型消歧归 P6 类型身份收敛、动态调用路径覆盖边界、两成因 help 形态——均已在本行与 WBS 行登记去向）。
-
-## P3 3.20.8 收口（谓词排除判据收单点，2026-11-01）
-
-### 登记与裁决
-
-用户批「同意」（设计稿四件套见 WBS 3.20.8 行登记段：三现场查证 A/B/C、甲乙丙方案、红绿预设）。三现场：A = `checker.rs` collect_signatures（:499/:1668）`is_predicate_application` 全判据；B = `inference/statements.rs` const 用途精筛的窄化内联 lambda（`"Terminates"` 字面量 ∪ `proof_fn_bases` 判名，不查 `predicate_defs`、漏无参证明函数）；C = `helpers.rs` 补名（只收 Type kind，谓词实参位不产候选——显式不适用，未动）。
-
-### 实现（flash t1，冻结 `dd7cd37e`）
-
-`predicate_names` 名字集：checker.rs 注入点对 `BUILTIN_PREDICATES` ∪ `env.predicate_defs` 键 ∪ `env.vars` 键逐名跑 `is_predicate_application` 预计算，`set_predicate_names` 注入；B 面 lambda 改 `predicate_names.contains(n)`——与 A 面同一判定函数，by construction 同源。**设计假设修正（t1 按契约停下报告）**：`proof_fn_bases` 非唯一消费者——`strip_refined_value_type`（statements.rs :1798/:1821 一带）与证明函数 `Refined { base, .. }` 正格化仍消费它（需 MonoType 值，与排除判据用途正交）⇒ **双表分工**而非整体替换：proof_fn_bases 保留（文档注明不参与判据）、predicate_names 为判据单一事实源、旧窄化分支删除（无新旧并存）。
-
-### 探针实证（七组夹具，改造前后逐夹具一致）
-
-1. 单文件谓词形态（IsPositive + `(N: Int) -> (x: IsPositive(N))`）**未复现误收**——设计预设的行为红不存在，照实记录；既有下游缺口 E1002（curry 内层精化未按 base 统一的假拒绝）与判据无关，登记 [#523](https://github.com/ChenXu233/YaoXiang/issues/523)。
-2. 跨文件 use 导入谓词误收【证实】：E1012 显示 `IsPositive(int64)`——且**本文件谓词在 collect_signatures（Registry 阶段）同样不可见**（该阶段不执行第零遍 + 导入未并）。病灶 = 阶段边界，判据单源治不了环境可见性，登记 [#522](https://github.com/ChenXu233/YaoXiang/issues/522)（修法方向 = Registry 阶段谓词名可见性，与 use 导入解析时序相关，属设计裁决点）。
-3. 既有锚：lib rfc027 118 passed。
-
-### 锚敏感性边界（如实声明）
-
-新增双锚（`test_check_predicate_application_arg_not_collected_as_const` / `test_check_terminates_measure_arg_not_collected_as_const`）对「谓词排除机制**整体**回归」敏感（红），对 B 面**单独**回归不敏感（A 面兜底）——B 面统一的正确性保障是 by construction 同源预计算，不是行为观察面。t2 变异试验若只残化 B 面不会红，故本批免批次树 t2/t3（规模裁量与 0.2.4 同机制：可观察行为面零变化 + 探针即红绿证据 + 结构性收敛由代码审查与门禁电池覆盖）。
-
-### 计数
-
-三级 +1 = 3.20.8（198→199，头数同笔补齐）；二级不变。新增 issue [#522](https://github.com/ChenXu233/YaoXiang/issues/522)（Registry 阶段谓词不可见 → 导出元数据误收）、[#523](https://github.com/ChenXu233/YaoXiang/issues/523)（curry 内层精化统一缺口）。
+本批不新增二级/三级任务 ⇒ 09 顶部计数表不变（二级 **72** / 三级 **193**）。

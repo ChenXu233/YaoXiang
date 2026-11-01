@@ -105,7 +105,7 @@ MonoType::Struct(_) | MonoType::Enum(_) | MonoType::Ref { .. }
 
 同时 `IrType::String` / `IrType::Bytes` 指向的 `ast::Type::String`（`ast.rs:435`）与 `ast::Type::Bytes`（`ast.rs:436`）正是 2.2 要删的死变体——**有损桥接的两端都指向死代码**。
 
-**现状（6.2.2 起）**：该 impl 已**整个删除**，解码期不再把 `MonoType` 降级重建为 `ast::Type`——四处载体统一改载 `MonoType`：`BytecodeFunction.params`（`src/middle/core/bytecode.rs:814`）与 `return_type`（同文件 `:816`）、`BytecodeModule.type_table`（同文件 `:856`）、`Image.type_table`（`src/backends/interpreter/image.rs:44`）；解码改原样搬运（`bytecode.rs:2315`、`:2316`、`:2346`）。上面这段塌缩**不再发生**：那 8 个 `MonoType` 变体在签名与类型表里保留真实类型，`IrType::Void` 不再兼作「信息丢失」的替身。`ir::Type` 再导出别名（`src/middle/core/ir.rs:3` 的 `pub use ... ast::Type`）亦已降为私有导入（`:7`）——IR 层不再对外再导出语法层类型；但 IR 层仍有三处载体直接持 `ast::Type`（`Instruction::Cast.target_type` / `Instruction::TypeTest.ty` / `FunctionBody::TypeDecl.definition`），留待 6.3 处置。
+**现状（6.2.2 起）**：该 impl 已**整个删除**，解码期不再把 `MonoType` 降级重建为 `ast::Type`——四处载体统一改载 `MonoType`：`BytecodeFunction.params`（`src/middle/core/bytecode.rs:814`）与 `return_type`（同文件 `:816`）、`BytecodeModule.type_table`（同文件 `:856`）、`Image.type_table`（`src/backends/interpreter/image.rs:44`）；解码改原样搬运（`bytecode.rs:2315`、`:2316`、`:2346`）。上面这段塌缩**不再发生**：那 8 个 `MonoType` 变体在签名与类型表里保留真实类型，`IrType::Void` 不再兼作「信息丢失」的替身。`ir::Type` 再导出别名（`src/middle/core/ir.rs:3` 的 `pub use ... ast::Type`）亦已降为私有导入（`:7`）——IR 层不再对外再导出语法层类型；IR 层此前有三处载体直接持 `ast::Type`（`Instruction::Cast.target_type` / `Instruction::TypeTest.ty` / `FunctionBody::TypeDecl.definition`）；其中前两处已于 **WBS 6.6.11** 随两个**零生产者**死变体一并删除（载荷本就被下游丢弃），现只余**一处**：`FunctionBody::TypeDecl.definition`。**同名的字节码侧 `BytecodeInstr::Cast` 是另一套**（载荷是类型表下标 `u16`，不是语法类型），保留不动。
 
 ### 2.2 parser 前向零构造变体
 

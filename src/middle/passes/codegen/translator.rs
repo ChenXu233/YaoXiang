@@ -575,9 +575,6 @@ impl Translator {
                 ))
             }
 
-            Cast { dst, src, .. } => self.translate_cast(dst, src),
-            TypeTest { .. } => Ok(BytecodeInstruction::new(opcode::TYPE_CHECK, vec![0, 0, 0])),
-
             Spawn {
                 span: _,
                 closures,
@@ -1195,19 +1192,6 @@ impl Translator {
         Ok(BytecodeInstruction::new(
             opcode::STORE_ELEMENT,
             vec![dst_reg, index_reg, src_reg],
-        ))
-    }
-
-    fn translate_cast(
-        &mut self,
-        dst: &Operand,
-        src: &Operand,
-    ) -> Result<BytecodeInstruction, Diagnostic> {
-        let dst_reg = self.operand_resolver.to_reg(dst)?;
-        let src_reg = self.operand_resolver.to_reg(src)?;
-        Ok(BytecodeInstruction::new(
-            opcode::CAST,
-            vec![dst_reg, src_reg, 0, 0],
         ))
     }
 

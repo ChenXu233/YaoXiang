@@ -131,17 +131,6 @@ fn fmt_instruction(
         }
         Instruction::Neg { dst, src, .. } => format!("Neg {} <- {}", o(dst, f, m), o(src, f, m)),
         Instruction::Not { dst, src, .. } => format!("Not {} <- {}", o(dst, f, m), o(src, f, m)),
-        Instruction::Cast {
-            dst,
-            src,
-            target_type,
-            ..
-        } => format!(
-            "Cast {} <- {} as {:?}",
-            o(dst, f, m),
-            o(src, f, m),
-            target_type
-        ),
         Instruction::LoadField {
             dst, src, field, ..
         } => format!("LoadField {} <- {}.{field}", o(dst, f, m), o(src, f, m)),
@@ -253,7 +242,6 @@ fn fmt_instruction(
         Instruction::StoreUpvalue {
             src, upvalue_idx, ..
         } => format!("StoreUpvalue upvalue({upvalue_idx}) <- {}", o(src, f, m)),
-        Instruction::TypeTest { src, ty, .. } => format!("TypeTest {} is {:?}", o(src, f, m), ty),
         // ---- 无操作数 / 纯跳转 ----
         Instruction::Dup { .. } => "Dup".to_string(),
         Instruction::Swap { .. } => "Swap".to_string(),

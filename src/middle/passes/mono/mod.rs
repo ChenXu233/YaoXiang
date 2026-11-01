@@ -601,12 +601,10 @@ impl Monomorphizer {
             })
             .collect();
 
-        // 替换指令中的类型
+        // 指令层面已没有需要改写的 ast::Type 载荷（6.6.11 删了 Cast/TypeTest 两个零
+        // 生产者死变体），块原样克隆即可。
         let new_blocks: Vec<BasicBlock> = match &generic.body {
-            FunctionBody::Code { blocks, .. } => blocks
-                .iter()
-                .map(|block| self.substitute_block(block, &type_map))
-                .collect(),
+            FunctionBody::Code { blocks, .. } => blocks.clone(),
             _ => Vec::new(),
         };
 

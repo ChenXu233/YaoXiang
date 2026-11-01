@@ -4,7 +4,7 @@
 
 use crate::frontend::core::parser::ast::Type as AstType;
 use crate::frontend::core::typecheck::MonoType;
-use crate::middle::core::ir::{BasicBlock, FunctionBody, FunctionIR, Instruction, LocalSlot, ModuleIR};
+use crate::middle::core::ir::{BasicBlock, FunctionBody, FunctionIR, LocalSlot, ModuleIR};
 use crate::middle::passes::mono::instance::{FunctionId, InstantiationRequest};
 use std::collections::HashMap;
 
@@ -54,26 +54,6 @@ pub trait FunctionMonomorphizer {
         ty: &MonoType,
         type_map: &HashMap<usize, MonoType>,
     ) -> MonoType;
-
-    /// 替换基本块中的指令
-    fn substitute_block(
-        &self,
-        block: &BasicBlock,
-        type_map: &HashMap<usize, MonoType>,
-    ) -> BasicBlock;
-
-    /// 替换指令中的类型
-    fn substitute_instruction(
-        &self,
-        instr: &Instruction,
-        type_map: &HashMap<usize, MonoType>,
-    ) -> Instruction;
-
-    fn substitute_type_ast(
-        &self,
-        ty: &AstType,
-        type_map: &HashMap<usize, MonoType>,
-    ) -> AstType;
 
     /// 替换 ast::Type 中的类型参数（按名称匹配）
     fn substitute_type_in_ast(
@@ -208,11 +188,10 @@ impl FunctionMonomorphizer for super::Monomorphizer {
                 .collect(),
             _ => Vec::new(),
         };
+        // 指令里已没有需要改写的 ast::Type 载荷（6.6.11 删了 Cast/TypeTest 两个
+        // 死变体），块级改写退化为原样克隆——不再有逐指令映射这一步。
         let new_blocks: Vec<BasicBlock> = match &generic_func.body {
-            FunctionBody::Code { blocks, .. } => blocks
-                .iter()
-                .map(|block| self.substitute_block(block, &type_param_map))
-                .collect(),
+            FunctionBody::Code { blocks, .. } => blocks.clone(),
             _ => Vec::new(),
         };
         let new_entry = match &generic_func.body {
@@ -264,186 +243,6 @@ impl FunctionMonomorphizer for super::Monomorphizer {
                     .collect(),
             },
             _ => ty.clone(),
-        }
-    }
-
-    fn substitute_block(
-        &self,
-        block: &BasicBlock,
-        type_map: &HashMap<usize, MonoType>,
-    ) -> BasicBlock {
-        let new_instructions: Vec<Instruction> = block
-            .instructions
-            .iter()
-            .map(|instr| self.substitute_instruction(instr, type_map))
-            .collect();
-        BasicBlock {
-            label: block.label,
-            instructions: new_instructions,
-            successors: block.successors.clone(),
-        }
-    }
-
-    fn substitute_instruction(
-        &self,
-        instr: &Instruction,
-        type_map: &HashMap<usize, MonoType>,
-    ) -> Instruction {
-        match instr {
-            Instruction::Cast {
-                dst,
-                src,
-                target_type,
-                span,
-            } => {
-                let new_target = self.substitute_type_ast(target_type, type_map);
-                Instruction::Cast {
-                    dst: dst.clone(),
-                    src: src.clone(),
-                    target_type: new_target,
-                    span: *span,
-                }
-            }
-            Instruction::TypeTest {
-                src: operand,
-                ty: test_type,
-                span,
-            } => Instruction::TypeTest {
-                src: operand.clone(),
-                ty: self.substitute_type_ast(test_type, type_map),
-                span: *span,
-            },
-            _ => instr.clone(),
-        }
-    }
-
-    fn substitute_type_ast(
-        &self,
-        ty: &AstType,
-        type_map: &HashMap<usize, MonoType>,
-    ) -> AstType {
-        match ty {
-            // 无类型参数可替换的叶子：直接返回。
-            //
-            // 6.3 删掉的 Int/Float/Char/String/Bytes/Bool/Void/Enum 不再需要臂——
-            // parser 前向零构造，且回写桥（mono_to_ast_type）已改产 `Name`。
-            AstType::Name { .. } => ty.clone(),
-
-            // 结构体：递归替换字段类型
-            AstType::Struct { body } => AstType::Struct {
-                body: body
-                    .iter()
-                    .map(|it| match it {
-                        crate::frontend::core::parser::ast::TypeBodyItem::Field(f) => {
-                            crate::frontend::core::parser::ast::TypeBodyItem::Field(
-                                crate::frontend::core::parser::ast::StructField {
-                                    name: f.name.clone(),
-                                    is_mut: f.is_mut,
-                                    ty: self.substitute_type_ast(&f.ty, type_map),
-                                    default: f.default.clone(),
-                                },
-                            )
-                        }
-                        other => other.clone(),
-                    })
-                    .collect(),
-            },
-
-            // 命名结构体
-            AstType::NamedStruct {
-                name,
-                name_span,
-                fields,
-            } => AstType::NamedStruct {
-                name: name.clone(),
-                name_span: *name_span,
-                fields: fields
-                    .iter()
-                    .map(|f| crate::frontend::core::parser::ast::StructField {
-                        name: f.name.clone(),
-                        is_mut: f.is_mut,
-                        ty: self.substitute_type_ast(&f.ty, type_map),
-                        default: f.default.clone(),
-                    })
-                    .collect(),
-            },
-
-            // 元组：递归替换元素类型
-            AstType::Tuple(types) => AstType::Tuple(
-                types
-                    .iter()
-                    .map(|t| self.substitute_type_ast(t, type_map))
-                    .collect(),
-            ),
-
-            // 函数类型：替换参数和返回类型
-            AstType::Fn {
-                params,
-                return_type,
-            } => AstType::Fn {
-                params: params
-                    .iter()
-                    .map(|p| {
-                        let mut p = p.clone();
-                        p.ty = p.ty.as_ref().map(|t| self.substitute_type_ast(t, type_map));
-                        p
-                    })
-                    .collect(),
-                return_type: Box::new(self.substitute_type_ast(return_type, type_map)),
-            },
-
-            // RFC-004：括号有语义，替换内层后保留括号（供 split_curry 判定链条终点）
-            AstType::Paren(inner) => {
-                AstType::Paren(Box::new(self.substitute_type_ast(inner, type_map)))
-            }
-
-            // RFC-027 §3：具名括号同款保留（binder 名不是类型参数，不参与替换）
-            AstType::NamedParen {
-                param,
-                param_span,
-                inner,
-            } => AstType::NamedParen {
-                param: param.clone(),
-                param_span: *param_span,
-                inner: Box::new(self.substitute_type_ast(inner, type_map)),
-            },
-
-            // 泛型类型：替换类型参数
-            AstType::Generic {
-                name,
-                name_span,
-                args,
-            } => AstType::Generic {
-                name: name.clone(),
-                name_span: *name_span,
-                args: args
-                    .iter()
-                    .map(|t| self.substitute_type_ast(t, type_map))
-                    .collect(),
-            },
-
-            // 字面量类型：替换基础类型
-            AstType::Literal {
-                name,
-                name_span,
-                base_type,
-            } => AstType::Literal {
-                name: name.clone(),
-                name_span: *name_span,
-                base_type: Box::new(self.substitute_type_ast(base_type, type_map)),
-            },
-            AstType::Ptr(inner) => {
-                AstType::Ptr(Box::new(self.substitute_type_ast(inner, type_map)))
-            }
-
-            // 元类型：直接返回
-            AstType::MetaType { .. } => ty.clone(),
-            AstType::Ref { mutable, inner, .. } => AstType::Ref {
-                mutable: *mutable,
-                inner: Box::new(self.substitute_type_ast(inner, type_map)),
-                span: crate::util::span::Span::default(),
-            },
-            AstType::ConstExpr(_) => ty.clone(),
         }
     }
 

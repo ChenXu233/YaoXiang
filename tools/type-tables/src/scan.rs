@@ -90,12 +90,6 @@ pub struct RebuildEntry {
 pub const REBUILD_FUNCTIONS: &[RebuildEntry] = &[
     RebuildEntry {
         file: FUNCTION_REL,
-        function: "substitute_type_ast",
-        class: SiteClass::AstToAst,
-        why: "类型变量替换：把已有 AST 类型重造一份",
-    },
-    RebuildEntry {
-        file: FUNCTION_REL,
         function: "substitute_type_in_ast",
         class: SiteClass::AstToAst,
         why: "类型变量替换（AST 内遍历）：把已有 AST 类型重造一份",

@@ -24,6 +24,14 @@
 //! 剩余 2 个前向点仍是真实类型构造——`parse_type_annotation` 的标识符类型与
 //! `wrap_literal_type_if_needed` 的 const 参数引用（门禁报错里自带当时的 `file:line`）。
 //!
+//! **6.6.11 刷新（2026-11-01）**：删掉 `Instruction::Cast` / `Instruction::TypeTest` 两个
+//! **零生产者**死变体后，`mono/function.rs::substitute_type_ast` 失去唯一调用者并随之删除——
+//! 它名下的 **10 个 AST→AST 构造点**一起消失，故 10 个变体（Struct / NamedStruct / Tuple /
+//! Fn / Generic / Literal / Ptr / Ref / Paren / NamedParen）的 **AST→AST 与合计各 −1**；
+//! 前向与反向桥两列不动（`MetaType` 那一臂只 `clone`、本就不产点，故名不在 10 之列）。
+//! 口径同批删掉 `REBUILD_FUNCTIONS` / [`SCOUT_BASELINE_CALIBER`] 里的同一条登记——
+//! 这两处**必须成对**改，只改一处会先报「口径与基线不同代」并跳过数字比对。
+//!
 //! 上一次冻结（6.3，删除 03 §5.2 的 13 个死变体后）见 git 历史；6.0 原始勘察冻结于
 //! `bfe2f6ba366ff0c45f517a4bec8d7e87b0a59696`（见 09a §P6 6.0）。
 //!
@@ -56,12 +64,14 @@ pub struct BaselineRow {
 /// 源码侧就是该 revision；任何人 checkout 它并用本批之后的口径跑 `type-tables --json`
 /// 都应得到逐列相同的数字（差异只可能来自口径漂移 = 门禁要抓的对象）。
 ///
-/// **6.6.7 的一行偏离**：该轮删掉了 `types.rs::extract_fn_type_info` 的 1 个**前向**
-/// 构造点（伪造的 `Type::Name{"()"}` 改报解析诊断），故 `Name` 行的 前向 / 合计 只对
-/// **含该改动的树**成立。该改动的提交号在推送后才可取（AGENTS.md「团队编排约定」第 6 条），
-/// 故此处仍记其父提交：在该树上跑 `--json` 会看到 `Name` 前向 3 / 合计 6——多出的正是
-/// 被删的那一点，其余 12 行与另两列逐列相同。
-pub const SCOUT_BASELINE_REV: &str = "b37bd8b5e63a83592a0c33611964d1461acd2fb7";
+/// **6.6.7 / 6.6.11 的偏离（两处，逐处写明）**：这两轮各删了构造点，故相应行只对
+/// **含该改动的树**成立。提交号在推送后才可取（AGENTS.md「团队编排约定」第 6 条），
+/// 故 revision 记的是它们**之前**的树：
+/// - 6.6.7：删 `types.rs::extract_fn_type_info` 的 1 个**前向**点（伪造 `Type::Name{"()"}`
+///   改报诊断）⇒ 该树上 `Name` 前向 3 / 合计 6（多出被删的那一点）；
+/// - 6.6.11：删 `mono/function.rs::substitute_type_ast` 的 **10 个 AST→AST** 点 ⇒ 在该树上
+///   10 个变体的 AST→AST 与合计**各多 1**（实测漂移清单见 6.6.11 的提交信息与 09a）。
+pub const SCOUT_BASELINE_REV: &str = "28ded1fd850cea9fc8ddf388f660d23ce69e2551";
 
 /// 口径 revision：上表的数字**按哪一代 `scan.rs` 分类登记表**量出来的。
 ///
@@ -71,7 +81,11 @@ pub const SCOUT_BASELINE_REV: &str = "b37bd8b5e63a83592a0c33611964d1461acd2fb7";
 ///
 /// 改口径（新增/删除重建函数、改某函数的类别）时，**同批**更新：
 /// 本常量 + [`SCOUT_BASELINE_CALIBER`] + 受影响的 [`SCOUT_BASELINE`] 数字 + [`SCOUT_BASELINE_REV`]。
-pub const SCOUT_BASELINE_CALIBER_REV: &str = "63ef9ca7cfb1287eed4019d324cbb736b8e2447e";
+///
+/// **6.6.11 前进**：口径删掉 `substitute_type_ast` 一条（该函数随 Cast/TypeTest 死变体
+/// 一并删除）；随后代码里已无可引用的提交号，故此处记其父提交——快照与现行
+/// [`crate::scan::REBUILD_FUNCTIONS`] 逐条一致（3 条），门禁的「同代」判定成立。
+pub const SCOUT_BASELINE_CALIBER_REV: &str = "28ded1fd850cea9fc8ddf388f660d23ce69e2551";
 
 /// 口径快照的一行：**文件 + 函数 → 类别键**（[`SiteClass::key`](crate::scan::SiteClass::key)，不是展示文案；
 /// 类别的**稳定键**由该函数给出，展示文案见 `SiteClass::label`）。
@@ -90,11 +104,6 @@ pub struct CaliberEntry {
 /// 它不与 `REBUILD_FUNCTIONS` 共表，正是为了让「口径被改」成为**可检测事件**：
 /// 共表则改一处两处一起变，门禁永远看不见口径变更。
 pub const SCOUT_BASELINE_CALIBER: &[CaliberEntry] = &[
-    CaliberEntry {
-        file: crate::FUNCTION_REL,
-        function: "substitute_type_ast",
-        class: "ast_to_ast",
-    },
     CaliberEntry {
         file: crate::FUNCTION_REL,
         function: "substitute_type_in_ast",
@@ -189,65 +198,65 @@ pub const SCOUT_BASELINE: &[BaselineRow] = &[
     BaselineRow {
         variant: "Struct",
         decl_line: 446,
-        total: 4,
+        total: 3,
         forward: 1,
-        ast_to_ast: 3,
+        ast_to_ast: 2,
         reverse: 0,
     },
     BaselineRow {
         variant: "NamedStruct",
         decl_line: 450,
-        total: 4,
+        total: 3,
         forward: 1,
-        ast_to_ast: 3,
+        ast_to_ast: 2,
         reverse: 0,
     },
     BaselineRow {
         variant: "Tuple",
         decl_line: 455,
-        total: 6,
+        total: 5,
         forward: 3,
-        ast_to_ast: 3,
+        ast_to_ast: 2,
         reverse: 0,
     },
     BaselineRow {
         variant: "Fn",
         decl_line: 463,
-        total: 8,
+        total: 7,
         forward: 4,
-        ast_to_ast: 3,
+        ast_to_ast: 2,
         reverse: 1,
     },
     BaselineRow {
         variant: "Generic",
         decl_line: 467,
-        total: 5,
+        total: 4,
         forward: 1,
-        ast_to_ast: 3,
+        ast_to_ast: 2,
         reverse: 1,
     },
     BaselineRow {
         variant: "Literal",
         decl_line: 475,
-        total: 4,
+        total: 3,
         forward: 1,
-        ast_to_ast: 3,
+        ast_to_ast: 2,
         reverse: 0,
     },
     BaselineRow {
         variant: "Ptr",
         decl_line: 484,
-        total: 4,
+        total: 3,
         forward: 1,
-        ast_to_ast: 3,
+        ast_to_ast: 2,
         reverse: 0,
     },
     BaselineRow {
         variant: "Ref",
         decl_line: 487,
-        total: 6,
+        total: 5,
         forward: 2,
-        ast_to_ast: 3,
+        ast_to_ast: 2,
         reverse: 1,
     },
     BaselineRow {
@@ -269,17 +278,17 @@ pub const SCOUT_BASELINE: &[BaselineRow] = &[
     BaselineRow {
         variant: "Paren",
         decl_line: 517,
-        total: 4,
+        total: 3,
         forward: 2,
-        ast_to_ast: 2,
+        ast_to_ast: 1,
         reverse: 0,
     },
     BaselineRow {
         variant: "NamedParen",
         decl_line: 533,
-        total: 3,
+        total: 2,
         forward: 1,
-        ast_to_ast: 2,
+        ast_to_ast: 1,
         reverse: 0,
     },
 ];
