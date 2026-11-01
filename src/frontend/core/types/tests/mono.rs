@@ -137,6 +137,49 @@ fn test_from_ast_type_fn() {
 }
 
 #[test]
+fn test_from_ast_type_fn_drops_untyped_param_as_loss() {
+    // Arrange: 一个带类型形参 + 一个**裸标识符形参**（`ty = None`——6.5 / 8.9.1 的
+    // `(Int64)` 形参位：标识符占位、无类型标注）。后者在 AST 里是合法且常见的形态。
+    let ast_ty = ast::Type::Fn {
+        params: vec![
+            ast::Param::from_type(name_ty("Int32")),
+            ast::Param::anonymous(None, Span::dummy()),
+        ],
+        return_type: Box::new(name_ty("Bool")),
+    };
+    let ast_param_count = match &ast_ty {
+        ast::Type::Fn { params, .. } => params.len(),
+        _ => unreachable!("夹具就是 Type::Fn"),
+    };
+
+    // Act
+    let mono: MonoType = ast_ty.into();
+
+    // Assert: **有损**——`From<ast::Type> for MonoType` 的 Fn 臂用
+    // `.filter_map(|p| p.ty)`，`ty = None` 的形参被直接丢掉，故 2 个只剩 1 个。
+    //
+    // 为什么不在本轮改行为（WBS 6.6.15）：给无名形参合成占位类型会改变
+    // `MonoType::Fn` 的形参数，进而改变函数类型相等性（E1002 的误报面）、重载解析
+    // 与 IR 快照 / 语料基线——属 D 类可观察变更，须先经裁决。本测试只把这条损失
+    // **钉成可失败的断言**：实现若改成「保留全部形参」，下面的差值为 0、断言红。
+    match mono {
+        MonoType::Fn { params, .. } => {
+            assert_eq!(
+                ast_param_count - params.len(),
+                1,
+                "Fn 降级必须丢掉 ty=None 的形参（有损事实：{ast_param_count} → 1）；保留全部形参时本断言红——那时须同时裁决形参数与相等性口径"
+            );
+            assert_eq!(
+                params,
+                vec![MonoType::Int(32)],
+                "留下来的必须是带类型标注的那个形参，且相对顺序不变"
+            );
+        }
+        other => panic!("Fn 注解必须降级成 MonoType::Fn，实际 {other:?}"),
+    }
+}
+
+#[test]
 fn test_from_ast_type_empty_tuple_is_unit() {
     // 零元元组 = 单位类型 = Void；parser 对空括号的产出就是 Type::Tuple(vec![])。
     assert_eq!(MonoType::from(ast::Type::Tuple(vec![])), MonoType::Void);
