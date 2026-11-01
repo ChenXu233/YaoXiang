@@ -13,8 +13,8 @@
 
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parse;
-use crate::frontend::core::typecheck::checker::TypeChecker;
-use crate::frontend::core::typecheck::MonoType;
+use crate::frontend::core::sema::checker::TypeChecker;
+use crate::frontend::core::sema::MonoType;
 use crate::frontend::module::registry::ModuleRegistry;
 use crate::middle::ir::ir::{FunctionBody, ModuleIR, TypeDeclBody};
 use crate::middle::ir::ir_gen::AstToIrGenerator;
@@ -32,7 +32,7 @@ fn generate_ir(source: &str) -> ModuleIR {
     let mut checker = TypeChecker::new("type_decl_carrier");
     let type_result = checker.check_module(
         &parsed.module,
-        &crate::frontend::core::typecheck::probe::TypeLevelNamespace::scan_one(&parsed.module),
+        &crate::frontend::core::sema::probe::TypeLevelNamespace::scan_one(&parsed.module),
     );
     assert!(
         type_result.diagnostics.is_empty(),

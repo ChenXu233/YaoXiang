@@ -29,7 +29,7 @@ mod tests;
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
-use crate::frontend::core::typecheck::environment::MethodOverloadCandidates;
+use crate::frontend::core::sema::environment::MethodOverloadCandidates;
 use crate::frontend::core::types::mono::MonoType;
 use crate::util::span::Span;
 
@@ -111,15 +111,15 @@ pub struct Export {
 #[derive(Debug, Clone)]
 pub struct TypeDefPayload {
     /// 泛型模板（声明序类型参数名 + poly），非泛型类型为 None
-    pub type_def: Option<crate::frontend::core::typecheck::environment::GenericTypeDef>,
+    pub type_def: Option<crate::frontend::core::sema::environment::GenericTypeDef>,
     /// 和类型变体（声明序即 variant_id）；非和类型为空
-    pub sum_variants: Vec<crate::frontend::core::typecheck::environment::SumVariantDef>,
+    pub sum_variants: Vec<crate::frontend::core::sema::environment::SumVariantDef>,
     /// 类型体内接口应用（`Try(Result(T, E), T, E)` / `Equal` 等）：
     /// （接口名，实现登记）列表。实参引用声明类型参数的抽象条目原样携带
     /// （与定义方待决队列同源），具体条目与 finalize 产物同构。
     pub interface_impls: Vec<(
         String,
-        crate::frontend::core::typecheck::environment::InterfaceImplEntry,
+        crate::frontend::core::sema::environment::InterfaceImplEntry,
     )>,
 }
 

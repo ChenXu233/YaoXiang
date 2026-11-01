@@ -14,14 +14,14 @@
 //! 更新模式带 #[ignore] 常驻：更新是显式人工动作，不参与 CI；比对模式
 //! test_ir_snapshots_stable 是常态判据（门禁 9.5 check-snapshot-drift.sh 驱动）。
 
-use crate::frontend::core::typecheck::probe::TypeLevelNamespace;
+use crate::frontend::core::sema::probe::TypeLevelNamespace;
 use std::path::{Path, PathBuf};
 
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parse_with_probe;
-use crate::frontend::core::typecheck::checker::TypeChecker;
-use crate::frontend::core::typecheck::MonoType;
-use crate::frontend::core::typecheck::SemanticProbe;
+use crate::frontend::core::sema::checker::TypeChecker;
+use crate::frontend::core::sema::MonoType;
+use crate::frontend::core::sema::SemanticProbe;
 use crate::frontend::module::registry::ModuleRegistry;
 use crate::middle::ir::ir::{FunctionBody, GlobalSlot, Instruction, Operand};
 use crate::middle::ir::ir_gen::AstToIrGenerator;

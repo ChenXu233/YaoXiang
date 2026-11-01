@@ -4,10 +4,10 @@
 //! 未使用导入（W1003）经 typecheck use elaboration 检出后走 warnings 通道
 //! （Warning severity、不混入错误 diagnostics）。
 
-use crate::frontend::core::typecheck::probe::TypeLevelNamespace;
+use crate::frontend::core::sema::probe::TypeLevelNamespace;
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parse;
-use crate::frontend::core::typecheck::checker::TypeChecker;
+use crate::frontend::core::sema::checker::TypeChecker;
 use crate::util::diagnostic::{ErrorCollector, ErrorCodeDefinition, Severity};
 
 /// RFC-011：#具名导入 use std.io.{print} 但 print 未引用 → W1003。
@@ -86,7 +86,7 @@ fn test_error_collector_splits_errors_and_warnings() {
 }
 
 /// 辅助：源码 → 类型检查结果（语法必须正确，否则测试本身有错）
-fn check_source(source: &str) -> crate::frontend::core::typecheck::types::TypeCheckResult {
+fn check_source(source: &str) -> crate::frontend::core::sema::types::TypeCheckResult {
     let tokens = tokenize(source).expect("测试源码词法不应失败");
     let parse_result = parse(&tokens);
     assert!(

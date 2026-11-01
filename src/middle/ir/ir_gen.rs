@@ -16,9 +16,9 @@ use crate::frontend::module::ModuleSource;
 use crate::frontend::module::resolver::Resolver;
 use crate::frontend::module::symbol::{DefKind, SymbolTable};
 use crate::frontend::module::ExportKind;
-use crate::frontend::core::typecheck::layers::ownership::ReleasePlan;
-use crate::frontend::core::typecheck::types::OverloadResolutions;
-use crate::frontend::core::typecheck::{
+use crate::frontend::core::sema::layers::ownership::ReleasePlan;
+use crate::frontend::core::sema::types::OverloadResolutions;
+use crate::frontend::core::sema::{
     is_constraint_name, MonoType, PolyType, SemanticProbe, TypeCheckResult,
 };
 use crate::middle::ir::ir::{
@@ -524,7 +524,7 @@ impl AstToIrGenerator {
 
     /// 共享判据给出的「逐实参形参位」→ **按形参槽位序**重排的实参下标。
     ///
-    /// #452 / #456：实参绑定的**判定**只有一处——`typecheck::inference::arg_binding::
+    /// #452 / #456：实参绑定的**判定**只有一处——`sema::inference::arg_binding::
     /// `bind_args_to_params`（位置占前导槽、命名按名入槽、未知名/争槽/命名后接位置/
     /// 重复命名/缺参六条规则全在那边）。本函数**只搬运**：把「逐实参的形参位」
     /// 转成 IR 侧要的「按槽位序的实参序」，不判位、不判名、不判可选位。
@@ -556,53 +556,43 @@ impl AstToIrGenerator {
         &self,
         full_path: &str,
         leaf: &str,
-    ) -> Option<crate::frontend::core::typecheck::environment::ExportParamInfo> {
+    ) -> Option<crate::frontend::core::sema::environment::ExportParamInfo> {
         // #466：先查**全名/混编名**键——重载候选的形参名按混编名精确登记，
         // 叶子名键在同名重载下末次覆盖，会让决议命中的候选拿错名字表。
         // 非重载路径全名不在本表（fn_param_names 只登记本模块定义），落回叶名。
         if let Some(names) = self.fn_param_names.get(full_path) {
             let names = names.clone();
             let required_min = names.len();
-            return Some(
-                crate::frontend::core::typecheck::environment::ExportParamInfo {
-                    names,
-                    required_min,
-                },
-            );
+            return Some(crate::frontend::core::sema::environment::ExportParamInfo {
+                names,
+                required_min,
+            });
         }
         if let Some(names) = self.fn_param_names.get(leaf) {
             let names = names.clone();
             let required_min = names.len();
-            return Some(
-                crate::frontend::core::typecheck::environment::ExportParamInfo {
-                    names,
-                    required_min,
-                },
-            );
+            return Some(crate::frontend::core::sema::environment::ExportParamInfo {
+                names,
+                required_min,
+            });
         }
         let export = self.registry.resolve_export(full_path).ok()?;
         if let Some(names) = export.param_names.clone() {
             let required_min = names.len();
-            return Some(
-                crate::frontend::core::typecheck::environment::ExportParamInfo {
-                    names,
-                    required_min,
-                },
-            );
+            return Some(crate::frontend::core::sema::environment::ExportParamInfo {
+                names,
+                required_min,
+            });
         }
         // #454 / t14：原生导出的注册点（src/std/mod.rs）只带签名串、不带形参名表，
         // 故第三个来源 = 从**签名串**提取形参名与必需下限——与 typecheck 原生臂
         // 同一出口，避免两侧各算一份而分歧。
         let (names, required_min) =
-            crate::frontend::core::typecheck::signature::export_signature_param_info(
-                &export.signature,
-            )?;
-        Some(
-            crate::frontend::core::typecheck::environment::ExportParamInfo {
-                names,
-                required_min,
-            },
-        )
+            crate::frontend::core::sema::signature::export_signature_param_info(&export.signature)?;
+        Some(crate::frontend::core::sema::environment::ExportParamInfo {
+            names,
+            required_min,
+        })
     }
 
     ///
@@ -6952,7 +6942,7 @@ impl AstToIrGenerator {
             })
         });
         let method_names = base_name.map(|base| {
-            use crate::frontend::core::typecheck::operator_interfaces::TRY_METHODS;
+            use crate::frontend::core::sema::operator_interfaces::TRY_METHODS;
             let qualified = self.registry.std_method_binding_qualified_map();
             // 名字集合的唯一真相源是 `TRY_METHODS`（typecheck 侧注册同表）；
             // 此处不再手抄一遍，否则改名时两边静默漂移。
@@ -8269,7 +8259,7 @@ impl AstToIrGenerator {
                         // 内联副本，槽冲突报旧码 E1015、缺规则④）；可选位与形参名同出一源。
                         let optional: Vec<bool> =
                             (0..names.len()).map(|i| i >= info.required_min).collect();
-                        let positions = crate::frontend::core::typecheck::inference::arg_binding::bind_args_to_params(
+                        let positions = crate::frontend::core::sema::inference::arg_binding::bind_args_to_params(
                             &method_function_name,
                             names,
                             args,
@@ -8367,7 +8357,7 @@ impl AstToIrGenerator {
                             // 调用的一部分，IR 按形参名表重建调用序时区分不了「缺席的接收者」
                             // 与「缺席的必需位」；旧实现同样以空槽跳过，注释即「诊断归
                             // typecheck」。
-                            let positions = crate::frontend::core::typecheck::inference::arg_binding::bind_args_to_params(
+                            let positions = crate::frontend::core::sema::inference::arg_binding::bind_args_to_params(
                                 diag_key,
                                 &names,
                                 args,
@@ -8464,7 +8454,7 @@ impl AstToIrGenerator {
                         // 而调用按 typecheck 决议出的候选（元数可能更小）发实参；
                         // 按声明表重判缺参会把合法决议误报 E1010（`t.pick2(a = 2)`
                         // 命中一元候选、声明表是二元那条的实测）。
-                        let positions = crate::frontend::core::typecheck::inference::arg_binding::bind_args_to_params(
+                        let positions = crate::frontend::core::sema::inference::arg_binding::bind_args_to_params(
                             &leaf,
                             &names,
                             args,
@@ -8799,15 +8789,12 @@ impl AstToIrGenerator {
                     let diag_key = callee.as_deref().unwrap_or("<fn>");
                     let optional: Vec<bool> =
                         (0..names.len()).map(|i| i >= info.required_min).collect();
-                    let positions = crate::frontend::core::typecheck::inference::arg_binding::bind_args_to_params(
-                        diag_key,
-                        names,
-                        args,
-                        named_args,
-                        0, // 命名空间调用无接收者位
-                        &optional,
-                        *span,
-                    )?;
+                    let positions =
+                        crate::frontend::core::sema::inference::arg_binding::bind_args_to_params(
+                            diag_key, names, args, named_args,
+                            0, // 命名空间调用无接收者位
+                            &optional, *span,
+                        )?;
                     let mut slots: Vec<Option<Operand>> = vec![None; names.len()];
                     for (arg_pos, pos) in positions.iter().enumerate() {
                         if *pos >= slots.len() {
@@ -9254,7 +9241,7 @@ impl AstToIrGenerator {
 /// 类型检查 → IR 生成 → 代码生成
 pub fn generate_ir(
     ast: &crate::ast::Module,
-    result: &crate::frontend::core::typecheck::TypeCheckResult,
+    result: &crate::frontend::core::sema::TypeCheckResult,
 ) -> Result<crate::middle::ModuleIR, Vec<Diagnostic>> {
     // 单文件模式：仅 std 注册表，module_key 为 None → 不启用模块限定。
     let mut generator =
@@ -9270,7 +9257,7 @@ pub fn generate_ir(
 #[allow(clippy::too_many_arguments)]
 pub fn generate_ir_with_context(
     ast: &crate::ast::Module,
-    result: &crate::frontend::core::typecheck::TypeCheckResult,
+    result: &crate::frontend::core::sema::TypeCheckResult,
     cross_file_types: &[&crate::ast::Module],
     global_layout: &[(String, usize)],
     // 本文件顶层绑定的槽位起始号（编排器分配，保证各文件区间不相交）

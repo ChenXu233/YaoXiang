@@ -6,7 +6,7 @@
 // 6.6.11 的两个零生产者指令变体之后的历史见 09a §P6 6.2 / 6.6.11 / 6.6.12）。
 use std::collections::HashMap;
 
-use crate::frontend::core::typecheck::MonoType;
+use crate::frontend::core::sema::MonoType;
 use crate::frontend::module::symbol::DefId;
 use crate::util::span::Span;
 

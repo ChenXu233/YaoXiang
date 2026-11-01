@@ -41,13 +41,13 @@
 //! 但生成器不跨编排边界暴露，本判据先覆盖单文件 pipeline 语料面；多文件面随
 //! P4 统一 Driver 自然并入（D20 迁移时同一观测点复用）。
 
-use crate::frontend::core::typecheck::probe::TypeLevelNamespace;
+use crate::frontend::core::sema::probe::TypeLevelNamespace;
 use std::path::Path;
 
 use super::corpus::{corpus_files, reaches_ir_generation};
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parse;
-use crate::frontend::core::typecheck::checker::TypeChecker;
+use crate::frontend::core::sema::checker::TypeChecker;
 use crate::frontend::module::registry::ModuleRegistry;
 use crate::middle::ir::ir_gen::AstToIrGenerator;
 use crate::util::plan_id::PlanId;
@@ -60,7 +60,7 @@ const PRE_FIX_EXAMINED: usize = 173;
 /// 逐文件走真实生成序列，返回 (产出键数, 未被消费的产出键)。
 ///
 /// 返回 None 的三类情形（合同不适用，非判据失败）：生成前置阶段（lex/parse/
-/// typecheck/ir_gen）失败；文件无释放义务（产出键集为空——不构成本判据证据）。
+/// sema/ir_gen）失败；文件无释放义务（产出键集为空——不构成本判据证据）。
 fn produced_vs_unconsumed(path: &Path) -> Option<(usize, Vec<PlanId>)> {
     let source = std::fs::read_to_string(path).ok()?;
     let tokens = tokenize(&source).ok()?;

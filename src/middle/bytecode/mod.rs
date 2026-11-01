@@ -822,9 +822,9 @@ pub struct BytecodeFunction {
     pub name: String,
     /// Parameter types（6.2 载体统一：签名与类型检查产物同载体 MonoType，
     /// 解码原样搬运，不再经有损桥重建）
-    pub params: Vec<crate::frontend::core::typecheck::MonoType>,
+    pub params: Vec<crate::frontend::core::sema::MonoType>,
     /// Return type（同上）
-    pub return_type: crate::frontend::core::typecheck::MonoType,
+    pub return_type: crate::frontend::core::sema::MonoType,
     /// Number of local variables
     pub local_count: usize,
     /// 局部变量名（槽位下标 → 源码名）；仅具名变量，临时寄存器不入表
@@ -864,7 +864,7 @@ pub struct BytecodeModule {
     /// Functions defined in this module
     pub functions: Vec<BytecodeFunction>,
     /// Type table（6.2 载体统一：与函数签名同载体 MonoType，解码原样搬运）
-    pub type_table: Vec<crate::frontend::core::typecheck::MonoType>,
+    pub type_table: Vec<crate::frontend::core::sema::MonoType>,
     /// 编译期类型方法表（type_name → [(裸方法名, 函数表索引)]）。
     /// 解释器加载期直建 vtable 缓存，分发全程按函数表索引。
     pub vtables: Vec<(String, Vec<(String, u32)>)>,

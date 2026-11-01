@@ -23,7 +23,7 @@ use crate::driver::obligations::{
 use crate::driver::state::{SkipReason, State};
 use crate::driver::{Driver, DriverOutcome, Program, ProgramKind, Stage, Unit};
 use crate::frontend::config::CompileConfig;
-use crate::frontend::core::typecheck::TypeCheckResult;
+use crate::frontend::core::sema::TypeCheckResult;
 use crate::frontend::core::types::MonoType;
 use crate::middle::passes::mono::instance::{GenericFunctionId, InstantiationRequest};
 use crate::util::diagnostic::{ErrorCodeDefinition, Severity};

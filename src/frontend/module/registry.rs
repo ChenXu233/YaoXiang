@@ -9,7 +9,7 @@ use std::rc::Rc;
 
 use super::symbol::{DefKind, SymbolTable};
 use super::{Export, ExportKind, ModuleError, ModuleInfo, ModuleSource};
-use crate::frontend::core::typecheck::environment::MethodOverloadCandidates;
+use crate::frontend::core::sema::environment::MethodOverloadCandidates;
 use crate::frontend::core::types::mono::MonoType;
 
 /// 模块注册表
@@ -472,7 +472,7 @@ mod tests {
             .get("std.result")
             .expect("std.result should be registered");
         assert!(m.exports.contains_key("Result"), "yx type export missing");
-        for method in crate::frontend::core::typecheck::operator_interfaces::TRY_METHODS {
+        for method in crate::frontend::core::sema::operator_interfaces::TRY_METHODS {
             let key = format!("Result.{method}");
             assert!(
                 m.method_bindings.contains_key(&key),

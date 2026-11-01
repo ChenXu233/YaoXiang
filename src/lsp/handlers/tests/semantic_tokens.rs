@@ -16,13 +16,13 @@ use lsp_types::{
     SemanticToken, SemanticTokensFullDeltaResult, SemanticTokensParams, SemanticTokensResult,
 };
 
-use crate::frontend::core::typecheck::semantic_db::SemanticDB;
+use crate::frontend::core::sema::semantic_db::SemanticDB;
 use crate::lsp::handlers::semantic_tokens::{
     handle_semantic_tokens_full, handle_semantic_tokens_full_delta, SemanticTokensCache,
     diff_semantic_tokens,
 };
 
-use crate::frontend::core::typecheck::semantic_db::{
+use crate::frontend::core::sema::semantic_db::{
     SemanticToken as DbToken, SemanticTokenModifier, SemanticTokenType,
 };
 use crate::util::span::{Position, Span};

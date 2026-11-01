@@ -10,7 +10,7 @@
 use crate::middle::bytecode::{BinaryOp, BytecodeInstr, BytecodeModule, CompareOp, Label, Reg};
 use std::collections::HashMap;
 use crate::middle::bytecode::opcode;
-use crate::frontend::core::typecheck::MonoType;
+use crate::frontend::core::sema::MonoType;
 use crate::middle::bytecode::file::BytecodeInstruction;
 
 // -- 辅助函数与测试数据表（规则 5.3：辅助函数集中在文件顶部）--
@@ -56,7 +56,7 @@ fn build_and_decode_typed(
 
 /// Helper: Point 结构体类型（字段 x/y: i64）——解码保真测试夹具。
 fn point_struct_type() -> MonoType {
-    MonoType::Struct(crate::frontend::core::typecheck::StructType {
+    MonoType::Struct(crate::frontend::core::sema::StructType {
         name: "Point".to_string(),
         fields: vec![
             ("x".to_string(), MonoType::Int(64)),

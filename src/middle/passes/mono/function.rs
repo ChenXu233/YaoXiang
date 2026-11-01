@@ -2,7 +2,7 @@
 //!
 //! 提供函数单态化相关的辅助函数和trait
 
-use crate::frontend::core::typecheck::MonoType;
+use crate::frontend::core::sema::MonoType;
 use crate::middle::ir::ir::{BasicBlock, FunctionBody, FunctionIR, LocalSlot, ModuleIR};
 use crate::middle::passes::mono::instance::{FunctionId, InstantiationRequest};
 use std::collections::HashMap;

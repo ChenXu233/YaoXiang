@@ -8,11 +8,11 @@
 //!    序列产出的 ModuleIR 上 verify_loose 必须跑绿，且校验面非空（9.6 门禁的
 //!    防假门禁断言：函数数与指令数必须 > 0）。
 
-use crate::frontend::core::typecheck::probe::TypeLevelNamespace;
+use crate::frontend::core::sema::probe::TypeLevelNamespace;
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parse;
-use crate::frontend::core::typecheck::MonoType;
-use crate::frontend::core::typecheck::checker::TypeChecker;
+use crate::frontend::core::sema::MonoType;
+use crate::frontend::core::sema::checker::TypeChecker;
 use crate::frontend::module::registry::ModuleRegistry;
 use crate::middle::ir::ir::{ConstValue, Instruction, Operand};
 use crate::middle::ir::ir_gen::AstToIrGenerator;

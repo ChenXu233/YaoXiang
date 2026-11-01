@@ -2,7 +2,7 @@
 //!
 //! 测试 LabelGenerator、RegisterAllocator、FlowManager 和 SymbolScopeManager 的功能。
 
-use crate::frontend::core::typecheck::MonoType;
+use crate::frontend::core::sema::MonoType;
 use crate::middle::passes::codegen::flow::{
     FlowManager, LabelGenerator, RegisterAllocator, Storage, Symbol, SymbolScopeManager,
 };

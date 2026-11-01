@@ -546,7 +546,7 @@ impl Type {
     /// 括号 = 柯里链条终止 = 该类型是函数的**值**，不是下一层参数组。
     /// 两处共用同一判定，防止判据漂移：
     /// - parser 的 paren_return 包装（`parser/statements/declarations.rs`）；
-    /// - typecheck 的值级分解（`typecheck/inference/statements.rs`，issue #501）。
+    /// - typecheck 的值级分解（`sema/inference/statements.rs`，issue #501）。
     pub fn is_paren_complete(&self) -> bool {
         matches!(self, Type::Paren(_) | Type::NamedParen { .. })
     }
@@ -1074,7 +1074,7 @@ pub fn extract_generic_param_names(
                 // 单态化据此将其删除且永不重建（实测 E6006，#351）。
                 //
                 // 「哪些类型名可作 const 参数」由**注入探针**回答（WBS 6.6.9 把该表
-                // 移到 L3 的 `typecheck::probe::CONST_PARAM_TYPES`）：parser 不再
+                // 移到 L3 的 `sema::probe::CONST_PARAM_TYPES`）：parser 不再
                 // 持有自己的表、也不再用内置名表二次复核——探针说不就是不。
                 Type::Name { name, .. } if probe.is_const_param_type(name) => {
                     let used_as_type = params.iter().any(|q| {

@@ -14,10 +14,10 @@
 //! 三个用例分别钉住：非泛型纯 yx 导出 / 泛型纯 yx 导出 / native 导出（#492 面
 //! 本批不动，形态必须逐字节保持零参 Call）。
 
-use crate::frontend::core::typecheck::probe::TypeLevelNamespace;
+use crate::frontend::core::sema::probe::TypeLevelNamespace;
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parse;
-use crate::frontend::core::typecheck::checker::TypeChecker;
+use crate::frontend::core::sema::checker::TypeChecker;
 use crate::frontend::module::registry::ModuleRegistry;
 use crate::middle::ir::ir::{ConstValue, FunctionBody, Instruction, ModuleIR, Operand};
 use crate::middle::ir::ir_gen::AstToIrGenerator;

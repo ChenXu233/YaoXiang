@@ -7,10 +7,10 @@
 //!
 //! **此口径由 8.9.1 重新裁定；改它必须改这条测试。**
 
-use crate::frontend::core::typecheck::probe::TypeLevelNamespace;
+use crate::frontend::core::sema::probe::TypeLevelNamespace;
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parse;
-use crate::frontend::core::typecheck::checker::TypeChecker;
+use crate::frontend::core::sema::checker::TypeChecker;
 use crate::frontend::module::registry::ModuleRegistry;
 use crate::middle::ir::ir::ModuleIR;
 use crate::middle::ir::ir_gen::AstToIrGenerator;

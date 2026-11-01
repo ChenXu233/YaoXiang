@@ -13,8 +13,8 @@ use tracing::debug;
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parse_with_probe;
 use crate::ast::{Module, StmtKind};
-use crate::frontend::core::typecheck::semantic_db::DefinitionKind;
-use crate::frontend::core::typecheck::SemanticProbe;
+use crate::frontend::core::sema::semantic_db::DefinitionKind;
+use crate::frontend::core::sema::SemanticProbe;
 use crate::lsp::session::Session;
 use crate::lsp::world::World;
 

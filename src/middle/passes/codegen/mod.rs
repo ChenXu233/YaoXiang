@@ -20,7 +20,7 @@ pub mod translator;
 #[cfg(test)]
 mod tests;
 
-use crate::frontend::core::typecheck::MonoType;
+use crate::frontend::core::sema::MonoType;
 use crate::middle::bytecode::file::{BytecodeFile, FileHeader};
 use crate::middle::ir::ir::{ConstValue, ModuleIR, Operand};
 use crate::middle::passes::codegen::translator::Translator;

@@ -3,7 +3,7 @@
 //! RFC-011 §3: 零成本抽象与单态化
 //! RFC-011 §4: 实例化请求与缓存键定义
 
-use crate::frontend::core::typecheck::MonoType;
+use crate::frontend::core::sema::MonoType;
 use crate::middle::passes::mono::instance::{
     GenericFunctionId, InstantiationRequest, SpecializationKey,
 };

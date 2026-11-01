@@ -26,8 +26,8 @@ use std::collections::HashMap;
 fn countdown_function() -> BytecodeFunction {
     BytecodeFunction {
         name: "count_down".to_string(),
-        params: vec![crate::frontend::core::typecheck::MonoType::Void],
-        return_type: crate::frontend::core::typecheck::MonoType::Void,
+        params: vec![crate::frontend::core::sema::MonoType::Void],
+        return_type: crate::frontend::core::sema::MonoType::Void,
         local_count: 8,
         local_names: HashMap::new(),
         upvalue_count: 0,

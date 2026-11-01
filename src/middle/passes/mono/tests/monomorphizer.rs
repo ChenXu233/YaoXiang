@@ -14,7 +14,7 @@
 //! - 嵌套泛型 BFS 引用扫描（如 List(List(Int))）
 //! - 小写参数名类型参数判定（靠名单不靠大小写启发式）
 
-use crate::frontend::core::typecheck::MonoType;
+use crate::frontend::core::sema::MonoType;
 use crate::frontend::core::types::mono::UniverseLevel;
 use crate::frontend::core::types::var::TypeVar;
 use crate::middle::ir::ir::{

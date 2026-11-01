@@ -60,7 +60,7 @@ description: '语义分析阶段产生的错误，涵盖作用域、变量生命
 - **模板**：`重复定义：'{name}' 已在当前作用域中定义`
 - **消息**：变量在同一作用域中定义了多次
 - **帮助**：重命名或删除重复的定义
-- **发射点**：`src/frontend/core/typecheck/checker.rs:1435`、`src/frontend/core/typecheck/inference/expressions.rs:6022`、`src/frontend/core/typecheck/inference/statements.rs:1883` 等 4 处
+- **发射点**：`src/frontend/core/sema/checker.rs:1435`、`src/frontend/core/sema/inference/expressions.rs:6023`、`src/frontend/core/sema/inference/statements.rs:1875` 等 4 处
 
 ### E2003：所有权错误
 
@@ -70,7 +70,7 @@ description: '语义分析阶段产生的错误，涵盖作用域、变量生命
 - **模板**：`所有权约束违反：{reason}`
 - **消息**：所有权约束未满足
 - **帮助**：检查值的所有权语义
-- **发射点**：`src/frontend/core/typecheck/proof/verdict.rs:220`
+- **发射点**：`src/frontend/core/sema/proof/verdict.rs:220`
 - **源码注释名**：所有权约束违反
 
 ### E2010：不可变赋值
@@ -81,7 +81,7 @@ description: '语义分析阶段产生的错误，涵盖作用域、变量生命
 - **模板**：`无法给不可变变量 '{name}' 赋值`
 - **消息**：试图修改不可变变量
 - **帮助**：使用 'mut' 声明可变变量
-- **发射点**：`src/frontend/core/typecheck/inference/expressions.rs:6017`、`src/frontend/core/typecheck/inference/statements.rs:2622`
+- **发射点**：`src/frontend/core/sema/inference/expressions.rs:6018`、`src/frontend/core/sema/inference/statements.rs:2614`
 
 ### E2011：使用未初始化变量
 
@@ -111,7 +111,7 @@ description: '语义分析阶段产生的错误，涵盖作用域、变量生命
 - **模板**：`Cannot shadow existing variable '{name}'`
 - **消息**：不能遮蔽已有变量
 - **帮助**：使用不同的变量名，或在不同的作用域中声明变量
-- **发射点**：`src/frontend/core/typecheck/inference/expressions.rs:6027`、`src/frontend/core/typecheck/inference/statements.rs:2636`、`src/frontend/core/typecheck/inference/statements.rs:2709`
+- **发射点**：`src/frontend/core/sema/inference/expressions.rs:6028`、`src/frontend/core/sema/inference/statements.rs:2628`、`src/frontend/core/sema/inference/statements.rs:2701`
 
 ### E2014：使用已移动的值
 
@@ -120,7 +120,7 @@ description: '语义分析阶段产生的错误，涵盖作用域、变量生命
 - **构造函数**：`ErrorCodeDefinition::use_after_move(name)`
 - **模板**：`'{name}' 已被移动，无法再次使用`
 - **帮助**：该值已被移动到新的所有者。如需再次使用，请使用引用或克隆。
-- **发射点**：`src/frontend/core/typecheck/proof/verdict.rs:168`
+- **发射点**：`src/frontend/core/sema/proof/verdict.rs:168`
 - **源码注释名**：使用已移动的变量
 
 ### E2016：不可变赋值
@@ -130,7 +130,7 @@ description: '语义分析阶段产生的错误，涵盖作用域、变量生命
 - **构造函数**：`ErrorCodeDefinition::immutable_assign(name)`
 - **模板**：`无法给不可变变量 '{name}' 赋值`
 - **帮助**：使用 `mut` 声明变量以允许赋值。
-- **发射点**：`src/frontend/core/typecheck/proof/verdict.rs:198`
+- **发射点**：`src/frontend/core/sema/proof/verdict.rs:198`
 - **源码注释名**：不可变赋值（所有权检查器用）
 
 ### E2018：可变/不可变借用冲突
@@ -140,7 +140,7 @@ description: '语义分析阶段产生的错误，涵盖作用域、变量生命
 - **构造函数**：`ErrorCodeDefinition::mutable_immutable_borrow_conflict(name)`
 - **模板**：`无法可变借用 '{name}'（已被不可变借用）`
 - **帮助**：确保在创建可变引用前没有不可变引用存在。
-- **发射点**：`src/frontend/core/typecheck/proof/verdict.rs:158`
+- **发射点**：`src/frontend/core/sema/proof/verdict.rs:158`
 
 ### E2019：双重释放
 
@@ -149,7 +149,7 @@ description: '语义分析阶段产生的错误，涵盖作用域、变量生命
 - **构造函数**：`ErrorCodeDefinition::double_drop(name)`
 - **模板**：`值 '{name}' 被释放了两次`
 - **帮助**：确保值只被释放一次。
-- **发射点**：`src/frontend/core/typecheck/proof/verdict.rs:188`
+- **发射点**：`src/frontend/core/sema/proof/verdict.rs:188`
 
 ### E2020：释放后使用
 
@@ -158,7 +158,7 @@ description: '语义分析阶段产生的错误，涵盖作用域、变量生命
 - **构造函数**：`ErrorCodeDefinition::use_after_drop(name)`
 - **模板**：`'{name}' 在释放后被使用`
 - **帮助**：在值被释放前使用它，或重构代码。
-- **发射点**：`src/frontend/core/typecheck/proof/verdict.rs:178`
+- **发射点**：`src/frontend/core/sema/proof/verdict.rs:178`
 
 ### E2027：unsafe 解引用
 
@@ -167,7 +167,7 @@ description: '语义分析阶段产生的错误，涵盖作用域、变量生命
 - **构造函数**：`ErrorCodeDefinition::unsafe_deref()`
 - **模板**：`无法在 unsafe 块外解引用裸指针`
 - **帮助**：将解引用操作包裹在 `unsafe` 块中。
-- **发射点**：`src/frontend/core/typecheck/proof/verdict.rs:205`
+- **发射点**：`src/frontend/core/sema/proof/verdict.rs:205`
 
 ### E2029：spawn 内引用循环
 
@@ -177,7 +177,7 @@ description: '语义分析阶段产生的错误，涵盖作用域、变量生命
 - **模板**：`spawn 内引用循环: {cycle}`
 - **消息**：spawn 块内检测到引用形成循环
 - **帮助**：spawn 捕获的引用不能形成循环依赖，请检查捕获列表
-- **发射点**：`src/frontend/core/typecheck/proof/verdict.rs:213`
+- **发射点**：`src/frontend/core/sema/proof/verdict.rs:213`
 - **源码注释名**：spawn 内 ref 循环
 
 ### E2030：精化类型约束违反
@@ -187,7 +187,7 @@ description: '语义分析阶段产生的错误，涵盖作用域、变量生命
 - **构造函数**：`ErrorCodeDefinition::refined_constraint_violated(assigned, var, constraint, counterexample)`
 - **模板**：`对 '{assigned}' 赋值后，'{var}' 不再满足精化类型约束：{constraint}（反例：{counterexample}）`
 - **帮助**：精化类型标注要求依赖变量在相关赋值之后仍然满足谓词约束。请调整赋值使约束成立，或放宽类型标注。
-- **发射点**：`src/frontend/core/typecheck/checker/refinement.rs:634`
+- **发射点**：`src/frontend/core/sema/checker/refinement.rs:634`
 - **源码注释名**：精化类型约束违反（赋值后依赖变量 VC 被 SMT 证伪——
 
 ### E2031：精化约束无法证明
@@ -197,7 +197,7 @@ description: '语义分析阶段产生的错误，涵盖作用域、变量生命
 - **构造函数**：`ErrorCodeDefinition::refined_unproven(assigned, var, constraint)`
 - **模板**：`对 '{assigned}' 赋值后，'{var}' 的精化类型约束：{constraint} 在证明内核内无法静态证明`
 - **帮助**：RFC-027 要求所有精化约束在编译期得到证明——证不出即编译错误。请改写约束使其实参可静态取值（字面量或字面量可折叠的表达式），或提供返回 Type 的证明函数参与编译期执行。
-- **发射点**：`src/frontend/core/typecheck/checker/refinement.rs:655`、`src/frontend/core/typecheck/checker/refinement.rs:798`、`src/frontend/core/typecheck/checker/refinement.rs:937`
+- **发射点**：`src/frontend/core/sema/checker/refinement.rs:655`、`src/frontend/core/sema/checker/refinement.rs:797`、`src/frontend/core/sema/checker/refinement.rs:936`
 - **源码注释名**：精化约束无法证明（RFC-027 §4/§9：Unproven → 编译错误 + 未解命题，
 
 ### E2090：无效签名
@@ -208,7 +208,7 @@ description: '语义分析阶段产生的错误，涵盖作用域、变量生命
 - **模板**：`无效签名：{reason}`
 - **消息**：函数签名解析失败
 - **帮助**：检查函数签名格式是否正确
-- **发射点**：`src/frontend/core/typecheck/signature.rs:58`、`src/frontend/core/typecheck/signature.rs:63`、`src/frontend/core/typecheck/signature.rs:526`
+- **发射点**：`src/frontend/core/sema/signature.rs:58`、`src/frontend/core/sema/signature.rs:63`、`src/frontend/core/sema/signature.rs:526`
 - **源码注释名**：签名解析失败（通用）
 
 ### E2091：签名未知类型
@@ -230,7 +230,7 @@ description: '语义分析阶段产生的错误，涵盖作用域、变量生命
 - **模板**：`无效签名：缺少 '->'`
 - **消息**：签名中缺少 '->'
 - **帮助**：确保签名格式为 '(参数列表) -> 返回类型'
-- **发射点**：`src/frontend/core/typecheck/signature.rs:71`
+- **发射点**：`src/frontend/core/sema/signature.rs:71`
 - **源码注释名**：缺少箭头
 
 ### E2093：重复参数名
@@ -241,7 +241,7 @@ description: '语义分析阶段产生的错误，涵盖作用域、变量生命
 - **模板**：`无效签名：重复参数名 '{name}'`
 - **消息**：签名中存在重复的参数名
 - **帮助**：确保每个参数名是唯一的
-- **发射点**：`src/frontend/core/typecheck/signature.rs:51`、`src/frontend/core/typecheck/signature.rs:84`
+- **发射点**：`src/frontend/core/sema/signature.rs:51`、`src/frontend/core/sema/signature.rs:84`
 
 ### E2094：泛型参数遮蔽
 
@@ -261,7 +261,7 @@ description: '语义分析阶段产生的错误，涵盖作用域、变量生命
 - **模板**：`无效签名：参数名 '{name}' 遮蔽了泛型参数`
 - **消息**：参数名与泛型参数同名
 - **帮助**：参数名不能与泛型参数同名
-- **发射点**：`src/frontend/core/typecheck/signature.rs:92`
+- **发射点**：`src/frontend/core/sema/signature.rs:92`
 
 ### E2096：签名裸容器类型
 
@@ -271,5 +271,5 @@ description: '语义分析阶段产生的错误，涵盖作用域、变量生命
 - **模板**：`无效签名：容器类型 '{name}' 缺少类型实参`
 - **消息**：签名中的容器类型缺少类型实参
 - **帮助**：容器类型是泛型类型构造器（SPEC type-system §4.1.1），裸名不是合法类型表达式。写成参数化形态：List(T)、Dict(K, V)、Vec(T)、Array(T, N)、Set(T)、Tuple(T, ...)
-- **发射点**：`src/frontend/core/typecheck/signature.rs:519`
+- **发射点**：`src/frontend/core/sema/signature.rs:519`
 - **源码注释名**：签名裸容器类型（#391：容器是泛型构造器，SPEC §4.1.1，构造期拒绝）

@@ -25,10 +25,10 @@
 //! 该形态在**编译期**被拒绝（E1110），进程不崩；IR 生成返回诊断而非 panic。
 //! typecheck 层对该形态不报错（本夹具即其证据）——诊断的落点就是唯一的崩溃点。
 
-use crate::frontend::core::typecheck::probe::TypeLevelNamespace;
+use crate::frontend::core::sema::probe::TypeLevelNamespace;
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parse;
-use crate::frontend::core::typecheck::checker::TypeChecker;
+use crate::frontend::core::sema::checker::TypeChecker;
 use crate::frontend::module::registry::ModuleRegistry;
 use crate::middle::ir::ir_gen::AstToIrGenerator;
 

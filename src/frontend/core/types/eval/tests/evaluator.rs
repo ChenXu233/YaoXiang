@@ -11,8 +11,8 @@
 
 use crate::frontend::core::types::eval::evaluator::{EvalConfig, Evaluator};
 use crate::frontend::core::types::MonoType;
-use crate::frontend::core::typecheck::TypeEnvironment;
-use crate::frontend::core::typecheck::proof::budget::BudgetTracker;
+use crate::frontend::core::sema::TypeEnvironment;
+use crate::frontend::core::sema::proof::budget::BudgetTracker;
 use crate::frontend::core::types::eval::dependent_types::DependentTypeEnv;
 use crate::std::StdModule;
 

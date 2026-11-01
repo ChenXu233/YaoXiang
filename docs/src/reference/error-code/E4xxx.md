@@ -40,7 +40,7 @@ description: '泛型约束、特质系统与常量求值相关的错误。'
 - **模板**：`类型 '{type}' 不满足特质约束 '{trait}'`
 - **消息**：类型不满足泛型约束
 - **帮助**：确保类型满足所有必需的特质边界
-- **发射点**：`src/frontend/core/typecheck/inference/bounds.rs:77`
+- **发射点**：`src/frontend/core/sema/inference/bounds.rs:77`
 - **源码注释名**：类型不满足特质约束
 
 ### E4002：特质未找到
@@ -127,7 +127,7 @@ description: '泛型约束、特质系统与常量求值相关的错误。'
 - **模板**：`精化谓词违反：{constraint}{counterexample}`
 - **消息**：精化类型约束被证伪
 - **帮助**：谓词被证伪——存在使约束为假的赋值。请检查变量值或放宽约束。
-- **发射点**：`src/frontend/proof_execution.rs:49`、`src/frontend/proof_execution.rs:59`、`src/frontend/core/typecheck/checker/refinement.rs:621` 等 6 处
+- **发射点**：`src/frontend/proof_execution.rs:49`、`src/frontend/proof_execution.rs:59`、`src/frontend/core/sema/checker/refinement.rs:621` 等 6 处
 
 ### E4019：类型等式不成立
 
@@ -137,7 +137,7 @@ description: '泛型约束、特质系统与常量求值相关的错误。'
 - **模板**：`类型等式不成立：期望 {expected}，实际 {found}`
 - **消息**：类型等式在证明管道内证伪
 - **帮助**：检查组件的类型计算或提供证明函数。
-- **发射点**：`src/frontend/core/typecheck/proof/verdict.rs:146`
+- **发射点**：`src/frontend/core/sema/proof/verdict.rs:146`
 - **源码注释名**：类型等式不成立（证明管道内）
 
 ### E4020：需要证明函数
@@ -148,7 +148,7 @@ description: '泛型约束、特质系统与常量求值相关的错误。'
 - **模板**：`需要证明函数来验证约束`
 - **消息**：约束无法在编译期证明，需要提供证明函数
 - **帮助**：添加证明函数或提供运行时检查
-- **发射点**：`src/frontend/core/typecheck/proof/verdict.rs:293`
+- **发射点**：`src/frontend/core/sema/proof/verdict.rs:293`
 - **源码注释名**：需要证明函数来验证约束
 
 ### E4021：循环终止性无法自动证明
@@ -159,7 +159,7 @@ description: '泛型约束、特质系统与常量求值相关的错误。'
 - **模板**：`无法自动证明循环终止：未找到有效的递减度量`
 - **消息**：编译器无法为该循环合成递减度量，无法自动证明其终止
 - **帮助**：这是编译器自动推理的覆盖边界，并非程序错误。请改用带明确递减变量的循环形式（如每轮减小一个有下界的计数变量），或参考 RFC-027 §7 的度量策略与覆盖范围。
-- **发射点**：`src/frontend/core/typecheck/proof/verdict.rs:289`
+- **发射点**：`src/frontend/core/sema/proof/verdict.rs:289`
 
 ### E4022：测度不成立
 
@@ -169,5 +169,5 @@ description: '泛型约束、特质系统与常量求值相关的错误。'
 - **模板**：`测度不成立：此调用点无法证明测度严格递减  反例： {counterexample}`
 - **消息**：该递归调用点的测度未能严格递减，无法证明递归终止（已附反例）
 - **帮助**：这是精化类型主张的终止性义务：带 `Terminates` 测度的递归函数，每个递归调用点都必须证明测度严格递减。反例给出了一组使递减不成立的取值。请检查测度选择是否恰当，或补充分支守卫使递归路径上的下降成立。参考 RFC-027a。
-- **发射点**：`src/frontend/core/typecheck/proof/verdict.rs:131`
+- **发射点**：`src/frontend/core/sema/proof/verdict.rs:131`
 - **源码注释名**：测度不成立（RFC-027a §义务生成）

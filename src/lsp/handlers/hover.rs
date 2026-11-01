@@ -10,7 +10,7 @@
 use lsp_types::{Hover, HoverContents, HoverParams, MarkupContent, MarkupKind};
 use tracing::debug;
 
-use crate::frontend::core::typecheck::semantic_db::DefinitionKind;
+use crate::frontend::core::sema::semantic_db::DefinitionKind;
 use crate::lsp::locate::{find_identifier_at_position, span_to_range};
 use crate::lsp::session::Session;
 use crate::lsp::world::World;

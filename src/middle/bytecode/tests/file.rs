@@ -6,7 +6,7 @@
 //! - RFC-034 §「IR 调试元数据」（调试段格式）：v1 仅 ip→span；v2 增每函数
 //!   局部变量名表；v3 增全局槽位名表。读取端接受 v1/v2/v3，旧产物补空表不 panic。
 
-use crate::frontend::core::typecheck::MonoType;
+use crate::frontend::core::sema::MonoType;
 use crate::middle::bytecode::file::{
     BytecodeFile, BytecodeInstruction, CodeSection, DebugSection, FileHeader, FunctionCode,
 };

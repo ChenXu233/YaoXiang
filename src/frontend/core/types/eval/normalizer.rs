@@ -10,8 +10,8 @@
 //! 复用 core/type_system/substitute.rs 中的公共替换实现
 
 use crate::frontend::core::types::{MonoType, Substitution, Substituter};
-use crate::frontend::core::typecheck::TypeEnvironment;
-use crate::frontend::core::typecheck::proof::budget::BudgetTracker;
+use crate::frontend::core::sema::TypeEnvironment;
+use crate::frontend::core::sema::proof::budget::BudgetTracker;
 use super::dependent_types::DependentTypeEnv;
 use super::evaluator::Evaluator;
 use std::collections::HashMap;

@@ -2,7 +2,7 @@
 //!
 //! 管理编译器状态和语义数据库，为 LSP 提供语义分析支持。
 
-use crate::frontend::core::typecheck::semantic_db::{DefId, DefinitionInfo, DefinitionKind, SemanticDB};
+use crate::frontend::core::sema::semantic_db::{DefId, DefinitionInfo, DefinitionKind, SemanticDB};
 use crate::lsp::handlers::semantic_tokens::SemanticTokensCache;
 use crate::util::span::Span;
 

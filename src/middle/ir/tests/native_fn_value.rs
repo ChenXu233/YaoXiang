@@ -14,10 +14,10 @@
 //! 零漂移反向判据：native **常量**（`std.math.PI`）作值必须仍走零参 `Call`，
 //! 那是既有成功程序的表现，本修复不得改变它。
 
-use crate::frontend::core::typecheck::probe::TypeLevelNamespace;
+use crate::frontend::core::sema::probe::TypeLevelNamespace;
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parse;
-use crate::frontend::core::typecheck::checker::TypeChecker;
+use crate::frontend::core::sema::checker::TypeChecker;
 use crate::frontend::module::registry::ModuleRegistry;
 use crate::middle::ir::ir::{ConstValue, FunctionBody, Instruction, ModuleIR, Operand};
 use crate::middle::ir::ir_gen::AstToIrGenerator;

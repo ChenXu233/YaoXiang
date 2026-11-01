@@ -28,8 +28,8 @@ use crate::ast::{Expr, StmtKind};
 use crate::util::diagnostic::Diagnostic;
 use crate::frontend::core::parser::{self, Module};
 use crate::frontend::core::tokenize;
-use crate::frontend::core::typecheck::checker::TypeChecker;
-use crate::frontend::core::typecheck::SemanticProbe;
+use crate::frontend::core::sema::checker::TypeChecker;
+use crate::frontend::core::sema::SemanticProbe;
 use crate::frontend::core::types::mono::MonoType;
 use crate::frontend::core::types::PolyType;
 use crate::frontend::module::registry::ModuleRegistry;
@@ -222,7 +222,7 @@ pub struct LspAnalysis {
     /// 非目标文件的顶层导出定义面（`external_definitions`，跨文件跳转
     /// 在定义文件未打开时也能命中）。文件身份为 OS 路径（URI 换算在
     /// LSP 摄入边界完成）。
-    pub semantic_db: crate::frontend::core::typecheck::semantic_db::SemanticDB,
+    pub semantic_db: crate::frontend::core::sema::semantic_db::SemanticDB,
 }
 
 /// 用项目上下文分析一份**内存源码**（LSP 脏缓冲区 / 未落盘编辑）——
@@ -1063,7 +1063,7 @@ pub(crate) fn parse_file(
 pub(crate) fn extract_module_info(
     module_key: &str,
     ast: &Module,
-    namespace: &crate::frontend::core::typecheck::probe::TypeLevelNamespace,
+    namespace: &crate::frontend::core::sema::probe::TypeLevelNamespace,
 ) -> ModuleInfo {
     let mut checker = TypeChecker::new(module_key);
     checker.collect_signatures(ast, namespace);
@@ -1236,7 +1236,7 @@ mod export_type_params_tests {
         let tokens = crate::frontend::core::tokenize(source).expect("模块源码必须可词法分析");
         let parsed = crate::frontend::core::parser::parse_with_probe(
             &tokens,
-            &crate::frontend::core::typecheck::SemanticProbe,
+            &crate::frontend::core::sema::SemanticProbe,
         );
         assert!(
             !parsed.has_errors,
@@ -1248,7 +1248,7 @@ mod export_type_params_tests {
         let info = extract_module_info(
             "lib",
             &parsed.module,
-            &crate::frontend::core::typecheck::probe::TypeLevelNamespace::scan_one(&parsed.module),
+            &crate::frontend::core::sema::probe::TypeLevelNamespace::scan_one(&parsed.module),
         );
 
         // Assert：按 kind 区分——仅函数类导出携带，其余一律 None
@@ -1289,7 +1289,7 @@ mod export_type_params_tests {
         let tokens = crate::frontend::core::tokenize(source).expect("模块源码必须可词法分析");
         let parsed = crate::frontend::core::parser::parse_with_probe(
             &tokens,
-            &crate::frontend::core::typecheck::SemanticProbe,
+            &crate::frontend::core::sema::SemanticProbe,
         );
         assert!(
             !parsed.has_errors,
@@ -1301,7 +1301,7 @@ mod export_type_params_tests {
         let info = extract_module_info(
             "lib",
             &parsed.module,
-            &crate::frontend::core::typecheck::probe::TypeLevelNamespace::scan_one(&parsed.module),
+            &crate::frontend::core::sema::probe::TypeLevelNamespace::scan_one(&parsed.module),
         );
 
         // Assert
@@ -1355,8 +1355,7 @@ mod export_type_params_tests {
 
         // Act：namespace = 全项目声明并集（driver registry 臂的形态），
         // 覆盖 lib 的谓词声明
-        let namespace =
-            crate::frontend::core::typecheck::probe::TypeLevelNamespace::scan([&lib, &main]);
+        let namespace = crate::frontend::core::sema::probe::TypeLevelNamespace::scan([&lib, &main]);
         let info = extract_module_info("main", &main, &namespace);
 
         // Assert：IsPositive ∈ namespace ⇒ 谓词实参位排除 ⇒ N 不进导出面

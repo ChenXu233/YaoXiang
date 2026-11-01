@@ -9,9 +9,9 @@ use std::path::{Path, PathBuf};
 use crate::frontend::core::lexer;
 use crate::ast::{classify_generic_params, Expr, GenericParamKind, StmtKind};
 use crate::frontend::core::parser::{self, Module};
-use crate::frontend::core::typecheck::SemanticProbe;
-use crate::frontend::core::typecheck::passes::dead_code::DeadCodeAnalyzer;
-use crate::frontend::core::typecheck::TypeCheckResult;
+use crate::frontend::core::sema::SemanticProbe;
+use crate::frontend::core::sema::passes::dead_code::DeadCodeAnalyzer;
+use crate::frontend::core::sema::TypeCheckResult;
 use crate::frontend::core::types::mono::MonoType;
 use crate::frontend::module::orchestrator;
 use crate::frontend::module::orchestrator::OrchestratorError;
@@ -993,7 +993,7 @@ pub(in crate::driver) fn collect_compilation_refs(
 ///   （`DeadCodeAnalyzer::set_resolved_groups`）；
 /// - 定义单元归属：`OverloadResolutions` 每单元一份（条目记在**记录方**单元），
 ///   名字形如 `{Type}.{method}#k`——`{Type}` 是**定义侧**的裸类型名且**不带单元**
-///   （见 `typecheck/environment.rs` 的 `add_method_overload_with_params`）⇒ 一条
+///   （见 `sema/environment.rs` 的 `add_method_overload_with_params`）⇒ 一条
 ///   条目可能指向**多个单元**的同名类型（同名类型跨单元，见 `typed_owners`）；
 ///   故归因按「记录方能拼出该类型名的模块集合」给出，而不是单值反查；
 /// - 只读：经 `OverloadResolutions::iter`（不触达 `get`、不计入消费台账）。
@@ -1205,7 +1205,7 @@ pub(in crate::driver) fn generic_instantiation_map<'a>(
 /// 单一 zip 通路展不开。这里回到
 /// 声明现场补读：判据用**现成单点** `ast::classify_generic_params`（与
 /// 类型检查侧同一函数，语义不复制），is_trait 闭包按其调用点同源判据组装
-/// （`trait_table.has_trait` + 约束名窄入口 `typecheck::is_constraint_name`——
+/// （`trait_table.has_trait` + 约束名窄入口 `sema::is_constraint_name`——
 /// 与 L2 探针、L3 类型检查同源，不再各自摸运算符接口表）。
 ///
 /// 只扫顶层 `Assign`（`sum: (T: Add) -> … = …` 是顶层泛型绑定的承载形态）；
@@ -1220,7 +1220,7 @@ pub(in crate::driver) fn declared_type_param_names<'a>(
     for (ast, result) in units {
         let is_trait = |name: &str| {
             result.trait_table.has_trait(name)
-                || crate::frontend::core::typecheck::is_constraint_name(name)
+                || crate::frontend::core::sema::is_constraint_name(name)
         };
         for stmt in &ast.items {
             if let StmtKind::Assign {
@@ -1239,7 +1239,7 @@ pub(in crate::driver) fn declared_type_param_names<'a>(
                         &params,
                         &is_trait,
                         // const 参数可接受的类型名：唯一权威在 L3 的语义探针（WBS 6.6.9）
-                        &crate::frontend::core::typecheck::SemanticProbe,
+                        &crate::frontend::core::sema::SemanticProbe,
                     )
                     .into_iter()
                     .filter(|p| matches!(p.kind, GenericParamKind::Type))

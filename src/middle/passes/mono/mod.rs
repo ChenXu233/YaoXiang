@@ -14,13 +14,13 @@ pub mod instance;
 
 use function::FunctionMonomorphizer;
 use instance::{GenericFunctionId, InstantiationRequest, SpecializationKey};
-use crate::frontend::core::typecheck::MonoType;
+use crate::frontend::core::sema::MonoType;
 use crate::middle::ir::ir::{
     BasicBlock, ConstValue, FunctionBody, FunctionIR, Instruction, LocalSlot, ModuleIR, Operand,
 };
 
 /// 原生类型显示名（约束派发改写面的类型头取值）。int64/float64/string/bool
-/// 经 [`crate::frontend::core::typecheck::operator_interfaces::
+/// 经 [`crate::frontend::core::sema::operator_interfaces::
 /// operator_type_display`] 的四条映射臂产出 `Int`/`Float`/`String`/`Bool`；
 /// 其余原语（`MonoType::Char`）走默认臂透传小写名 `char`。它们没有用户方法，
 /// 约束派发改写产生的 `{原语}.{method}` 只能落在运行期 FFI 背书（`src/std/
@@ -639,7 +639,7 @@ impl Monomorphizer {
                         let prefix = format!("{pn}.");
                         if name.starts_with(&prefix) {
                             if let Some(concrete) = type_args.get(i) {
-                                let display = crate::frontend::core::typecheck::operator_interfaces::operator_type_display(concrete);
+                                let display = crate::frontend::core::sema::operator_interfaces::operator_type_display(concrete);
                                 let bare = format!("{}.{}", display, &name[prefix.len()..]);
                                 match Self::qualify_deferred_method(
                                     &bare,

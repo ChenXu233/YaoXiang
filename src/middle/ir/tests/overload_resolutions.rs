@@ -22,13 +22,13 @@
 //! 范围说明：多文件路径（orchestrator 逐文件 AstToIrGenerator）共用同一台账，
 //! 但生成器不跨编排边界暴露，本判据先覆盖单文件 pipeline 语料面。
 
-use crate::frontend::core::typecheck::probe::TypeLevelNamespace;
+use crate::frontend::core::sema::probe::TypeLevelNamespace;
 use std::path::Path;
 
 use super::corpus::{corpus_files, reaches_ir_generation};
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parse;
-use crate::frontend::core::typecheck::checker::TypeChecker;
+use crate::frontend::core::sema::checker::TypeChecker;
 use crate::frontend::module::registry::ModuleRegistry;
 use crate::middle::ir::ir_gen::AstToIrGenerator;
 use crate::util::plan_id::PlanId;
@@ -47,7 +47,7 @@ const MIN_EXAMINED: usize = 1;
 /// 逐文件走真实生成序列，返回 (产出条目数, 未被消费的产出键)。
 ///
 /// 返回 None 的诸情形（合同不适用，非判据失败）：生成前置阶段（lex/parse/
-/// typecheck/ir_gen）失败；文件没有重载决议（产出为空——不构成本判据证据）。
+/// sema/ir_gen）失败；文件没有重载决议（产出为空——不构成本判据证据）。
 fn produced_vs_unconsumed(path: &Path) -> Option<(usize, Vec<PlanId>)> {
     let source = std::fs::read_to_string(path).ok()?;
     let tokens = tokenize(&source).ok()?;

@@ -9,7 +9,7 @@
 //! 值正确性（分发结果 == Woof/Meow）由 E2E interface_dynamic_dispatch.yx 覆盖。
 
 use crate::middle::bytecode::{BytecodeFunction, BytecodeInstr, BytecodeModule, ConstValue, Reg};
-use crate::frontend::core::typecheck::MonoType;
+use crate::frontend::core::sema::MonoType;
 use std::collections::HashMap;
 
 /// Vec(Animal) 异构容器 + 变体分发，经字节码落盘/加载往返后执行正确。

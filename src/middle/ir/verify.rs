@@ -45,7 +45,7 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::fmt;
 
-use crate::frontend::core::typecheck::MonoType;
+use crate::frontend::core::sema::MonoType;
 
 use super::ir::{ConstValue, FunctionBody, FunctionIR, Instruction, LocalSlot, ModuleIR, Operand};
 

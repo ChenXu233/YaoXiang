@@ -20,7 +20,7 @@
 //!    - tests/: 统一测试套件
 //!
 //!    （生命周期检查不在 middle 层：RFC-009/009a 令牌生命期分析
-//!    住 frontend/core/typecheck/layers/ownership.rs）
+//!    住 frontend/core/sema/layers/ownership.rs）
 //!
 //! 4. **对外接口**: 统一的API导出
 

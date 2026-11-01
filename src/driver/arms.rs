@@ -10,12 +10,12 @@ use std::path::{Path, PathBuf};
 
 use crate::frontend::core::lexer;
 use crate::frontend::core::parser::{self, Module};
-use crate::frontend::core::typecheck::checker::TypeChecker;
-use crate::frontend::core::typecheck::environment::MethodOverloadCandidates;
-use crate::frontend::core::typecheck::SemanticProbe;
-use crate::frontend::core::typecheck::probe::TypeLevelNamespace;
-use crate::frontend::core::typecheck::TypeCheckResult;
-use crate::frontend::core::typecheck::passes::dead_code::DeadCodeAnalyzer;
+use crate::frontend::core::sema::checker::TypeChecker;
+use crate::frontend::core::sema::environment::MethodOverloadCandidates;
+use crate::frontend::core::sema::SemanticProbe;
+use crate::frontend::core::sema::probe::TypeLevelNamespace;
+use crate::frontend::core::sema::TypeCheckResult;
+use crate::frontend::core::sema::passes::dead_code::DeadCodeAnalyzer;
 use crate::frontend::module::orchestrator::{self, OrchestratorError};
 use crate::frontend::module::registry::ModuleRegistry;
 use crate::frontend::module::roles::{self, FileRole};
@@ -437,7 +437,7 @@ impl Driver {
         // typecheck（「Lsp 只检目标文件」的性能契约不动）。std/嵌入模块
         // 无定义文件（definition_file 为 None），天然排除。
         if is_lsp {
-            use crate::frontend::core::typecheck::semantic_db::{DefId, DefinitionInfo, DefinitionKind};
+            use crate::frontend::core::sema::semantic_db::{DefId, DefinitionInfo, DefinitionKind};
             use crate::frontend::module::ExportKind;
             let mut externals = Vec::new();
             for unit in &program.units {
@@ -1501,12 +1501,11 @@ impl Driver {
         {
             let unit_irs: Vec<Option<ModuleIR>> =
                 state.units.iter().map(|us| us.ir.clone()).collect();
-            let type_results: Vec<Option<&crate::frontend::core::typecheck::TypeCheckResult>> =
-                state
-                    .units
-                    .iter()
-                    .map(|us| us.type_result.as_ref())
-                    .collect();
+            let type_results: Vec<Option<&crate::frontend::core::sema::TypeCheckResult>> = state
+                .units
+                .iter()
+                .map(|us| us.type_result.as_ref())
+                .collect();
             let registry = state.registry.clone();
             state.aggregated_requests = aggregate_instantiation_requests(
                 &state.program.units,

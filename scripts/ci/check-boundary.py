@@ -53,7 +53,7 @@ AST_DIRS = ('ast/',)
 # D1（6.7.1c）：`middle/core/` 改名 `middle/ir/`。层表**不需要新增条目**——`middle/` 前缀
 # 同时覆盖 `middle/ir/` 与 `middle/bytecode/`（6.7.1b 合并出的字节码域）；此处只记一笔，
 # 免得后来者以为改名漏登记。子目录改名时同理：只要父目录前缀在表内，规则面就不缩水。
-L3_DIRS = ('frontend/core/typecheck/', 'frontend/core/types/', 'middle/')
+L3_DIRS = ('frontend/core/sema/', 'frontend/core/types/', 'middle/')
 L4_DIRS = ('backends/', 'std/')
 
 # L3/L4 可消费的 L2 数据路径（字面量/Token 是词法数据域）。
@@ -78,7 +78,7 @@ KNOWN_OPCODE_DEF_FILES = {'middle/bytecode/opcode.rs': 83}
 # CONST_PARAM_TYPES（当时的 parser/ast.rs，现 ast/mod.rs）。
 # WBS 6.6.9 清零：两张封闭集随 `BuiltinProbe` 删除（约束名/谓词名的判定归 L3 的
 # operator_interfaces::SPECS 与 BUILTIN_PREDICATES），CONST_PARAM_TYPES 移回 L3
-# （typecheck/probe.rs）并只经注入探针回答。库存为空 ⇒ parser 内再出现内置名字面量即违规。
+# （sema/probe.rs）并只经注入探针回答。库存为空 ⇒ parser 内再出现内置名字面量即违规。
 KNOWN_PARSER_HARDCODE = {}
 
 BUILTIN_NAMES = {
@@ -88,7 +88,7 @@ BUILTIN_NAMES = {
 }
 
 RE_INCLUDE = re.compile(r'\binclude!\s*\(')
-RE_L2_CROSS = re.compile(r'crate::(?:frontend::core::(?:typecheck|types)|middle|backends)::')
+RE_L2_CROSS = re.compile(r'crate::(?:frontend::core::(?:sema|types)|middle|backends)::')
 RE_TO_L2 = re.compile(r'crate::frontend::core::(lexer|parser)::([A-Za-z_][\w:]*)')
 RE_MID_BACK = re.compile(r'crate::backends::')
 RE_OPCODE_DEF = re.compile(r'pub const [A-Za-z_]\w*: u8 = 0x')

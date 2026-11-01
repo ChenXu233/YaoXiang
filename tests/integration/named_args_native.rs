@@ -60,7 +60,7 @@ main()
 
 /// 断言侧同类：assert.assert 的形参名与签名一致（cond / msg）⇒ 通过。
 /// 名字不符（message）⇒ 编译期 E1014，由
-/// `typecheck::tests::named_args_loud::test_native_assert_named_args_checked_by_signature` 钉住。
+/// `sema::tests::named_args_loud::test_native_assert_named_args_checked_by_signature` 钉住。
 #[test]
 fn test_native_assert_named_args_match_signature() {
     // Arrange / Act / Assert

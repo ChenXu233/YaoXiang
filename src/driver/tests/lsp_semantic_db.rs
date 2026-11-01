@@ -14,7 +14,7 @@ use std::path::{Path, PathBuf};
 
 use crate::driver::{Driver, DriverError, DriverOutcome, Program, ProgramKind, Unit};
 use crate::frontend::config::CompileConfig;
-use crate::frontend::core::typecheck::semantic_db::DefinitionKind;
+use crate::frontend::core::sema::semantic_db::DefinitionKind;
 
 /// 落一个带 manifest 的双文件项目（lib.yx 定义 `add_one`，main.yx 导入并调用），
 /// 返回 (dir 守卫, 入口路径, lib 路径)。

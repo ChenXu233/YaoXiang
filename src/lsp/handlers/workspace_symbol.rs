@@ -10,7 +10,7 @@
 use lsp_types::{SymbolInformation, SymbolKind as LspSymbolKind, WorkspaceSymbolParams};
 use tracing::debug;
 
-use crate::frontend::core::typecheck::semantic_db::{DefinitionInfo, DefinitionKind};
+use crate::frontend::core::sema::semantic_db::{DefinitionInfo, DefinitionKind};
 use crate::lsp::locate::span_to_range;
 use crate::lsp::world::World;
 

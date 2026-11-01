@@ -21,7 +21,7 @@ use tracing::{debug, warn};
 
 use crate::driver::{Aggregation, Driver, Program, ProgramKind, Unit};
 use crate::frontend::config::CompileConfig;
-use crate::frontend::core::typecheck::semantic_db::SemanticDB;
+use crate::frontend::core::sema::semantic_db::SemanticDB;
 use crate::util::diagnostic::Diagnostic;
 
 use super::uri::{path_to_uri, uri_to_path};

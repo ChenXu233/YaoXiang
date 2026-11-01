@@ -63,13 +63,13 @@ fn register_x_definition(world: &mut World) {
     use crate::util::span::Span;
     world.semantic_db_mut().add_definition(
         "file:///test/main.yx",
-        crate::frontend::core::typecheck::semantic_db::DefinitionInfo {
-            def_id: crate::frontend::core::typecheck::semantic_db::DefId {
+        crate::frontend::core::sema::semantic_db::DefinitionInfo {
+            def_id: crate::frontend::core::sema::semantic_db::DefId {
                 file_path: "file:///test/main.yx".to_string(),
                 span: Span::dummy(),
             },
             name: "x".to_string(),
-            kind: crate::frontend::core::typecheck::semantic_db::DefinitionKind::Variable,
+            kind: crate::frontend::core::sema::semantic_db::DefinitionKind::Variable,
             span: Span::dummy(),
             file_path: "file:///test/main.yx".to_string(),
             type_info: Some("Int".to_string()),

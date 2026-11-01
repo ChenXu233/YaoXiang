@@ -33,7 +33,7 @@ use std::path::Path;
 pub const AST_REL: &str = "src/ast/mod.rs";
 /// const 参数名表 `CONST_PARAM_TYPES` 的所在文件（T2 表 B；WBS 6.6.9 从当时的
 /// `parser/ast.rs`（6.7.1a 起为顶层 `ast/`）移回 L3 的探针模块——parser 不再持有名字表，`check-boundary.py` B6 因此清零）
-pub const TYPECHECK_PROBE_REL: &str = "src/frontend/core/typecheck/probe.rs";
+pub const TYPECHECK_PROBE_REL: &str = "src/frontend/core/sema/probe.rs";
 /// `MonoType::from_builtin_name` 的所在文件（T2 的规范名来源）
 pub const MONO_REL: &str = "src/frontend/core/types/mono.rs";
 /// LSP 内置类型名清单的所在文件（T2 第三张表）

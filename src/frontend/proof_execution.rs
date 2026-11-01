@@ -12,7 +12,7 @@
 //! 多文件路径被静默丢弃（02-stage-contract §正确性漏洞证据链，WBS 3.1.2）。
 //! 禁令三要求同一行为只有一处实现，故抽为中立模块供各入口共享。
 //!
-//! # 为什么不放 typecheck/proof/
+//! # 为什么不放 sema/proof/
 //!
 //! 执行要经 middle（IR/codegen）与 backends（解释器）——那是 L3 语义层
 //! 依赖 L4 执行层的反向依赖（check-boundary 判据 B3 拦截）。编排层
@@ -20,8 +20,8 @@
 //! 移入 driver 作为 `Stage::ProofExecution` 的实现。
 
 use crate::ast::Module;
-use crate::frontend::core::typecheck::proof::verdict::ProofFunctionCall;
-use crate::frontend::core::typecheck::TypeCheckResult;
+use crate::frontend::core::sema::proof::verdict::ProofFunctionCall;
+use crate::frontend::core::sema::TypeCheckResult;
 use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};
 
 /// 执行全部证明义务，返回错误诊断（空 = 全部证明通过）。

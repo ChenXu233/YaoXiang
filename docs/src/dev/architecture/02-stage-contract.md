@@ -132,7 +132,7 @@ RFC-039 给出**为什么**重构与**按什么顺序**做；本文给出 L1 的
 **这是本文的核心。以下八步全部可复核。**
 
 **第 1 步 —— 义务的产生点唯一。**
-`src/frontend/core/typecheck/layers/predicate.rs:232-239` 是全仓库**唯一**构造非空 `proof_calls` 的位置：
+`src/frontend/core/sema/layers/predicate.rs:232-239` 是全仓库**唯一**构造非空 `proof_calls` 的位置：
 
 ```rust
 // predicate.rs:232-239
@@ -149,7 +149,7 @@ return ProofResult::Unproven {
 语义即「此精化约束的谓词实参是编译期字面量，必须实际执行该证明函数才能判定」。
 
 **第 2 步 —— 消费点在 checker 内部，但只发不消费。**
-`src/frontend/core/typecheck/checker.rs` 有**三处同构分支**处理 `ProofResult::Unproven`：
+`src/frontend/core/sema/checker.rs` 有**三处同构分支**处理 `ProofResult::Unproven`：
 
 | 分支 | 位置 | 行为 |
 | --- | --- | --- |
@@ -203,7 +203,7 @@ ProofResult::Unproven { .. } => {}
 
 **`tests/integration/multifile.rs`（726 行 / 27 个 `#[test]`）对 `Sorted` / `proof` / `refin` 三个关键词的命中数为 0。** 多文件路径的证明义务零覆盖。
 
-RFC-027 的三个单测（`src/frontend/core/typecheck/tests/rfc027_phase25_proof_fn.rs`、`rfc027_refined_transparency.rs`、`rfc027_return_refinement.rs`）确实断言了 `proof_calls` 非空——例如 `rfc027_return_refinement.rs:350-359` 断言 `result.proof_calls` 中存在 `SumUpTo` 调用。但它们**全部经由 `check_source` → `checker.check_module(&module)`**（`rfc027_return_refinement.rs:45/75`、`rfc027_refined_transparency.rs:27/57`），**恰好停在 `pipeline.rs` 之前**。
+RFC-027 的三个单测（`src/frontend/core/sema/tests/rfc027_phase25_proof_fn.rs`、`rfc027_refined_transparency.rs`、`rfc027_return_refinement.rs`）确实断言了 `proof_calls` 非空——例如 `rfc027_return_refinement.rs:350-359` 断言 `result.proof_calls` 中存在 `SumUpTo` 调用。但它们**全部经由 `check_source` → `checker.check_module(&module)`**（`rfc027_return_refinement.rs:45/75`、`rfc027_refined_transparency.rs:27/57`），**恰好停在 `pipeline.rs` 之前**。
 
 测试文件自己的文档注释已经写明了这一点。`rfc027_refined_transparency.rs:13-15`：
 
@@ -225,12 +225,12 @@ RFC-027 的三个单测（`src/frontend/core/typecheck/tests/rfc027_phase25_proo
 
 ### 义务字段：13 个「产出即契约」的字段，零机制保证
 
-`src/frontend/core/typecheck/types.rs:16-76` 的 `TypeCheckResult` 中，有 **13 个字段**的文档注释明确写着「由 X 阶段产出 → Y 阶段消费」，即它们本质上是**跨阶段义务**：
+`src/frontend/core/sema/types.rs:16-76` 的 `TypeCheckResult` 中，有 **13 个字段**的文档注释明确写着「由 X 阶段产出 → Y 阶段消费」，即它们本质上是**跨阶段义务**：
 
 | 字段 | 定义行 | 产出方 → 消费方 |
 | --- | --- | --- |
 
-> **取行约定**：定义行 = `types.rs` 里该字段的**声明行**（`pub` / `pub(super)` 那一行），不是 doc 注释首行——同一字段的注释块可能多行，声明行才是唯一可锚定的位置。本表上方那句里的**结构体范围**（`src/frontend/core/typecheck/types.rs:16-76`）随结构体行号浮动，由门禁 **F5** 机械对账（写错即红）；定义行列由 **F4** 对账。
+> **取行约定**：定义行 = `types.rs` 里该字段的**声明行**（`pub` / `pub(super)` 那一行），不是 doc 注释首行——同一字段的注释块可能多行，声明行才是唯一可锚定的位置。本表上方那句里的**结构体范围**（`src/frontend/core/sema/types.rs:16-76`）随结构体行号浮动，由门禁 **F5** 机械对账（写错即红）；定义行列由 **F4** 对账。
 | `proof_calls` | `36` | typecheck → **proof_execution** |
 | `release_plan` | `38` | ownership → IR 生成（**`PlanId` 键控**：`ir_gen.rs:360` 读（`type_result.release_plan.clone()`）、`:3103` 用（`ReleasePlan::consume`）；结算完成标记 `:1095`） |
 | `escaped_refs` | `40` | ownership → IR 生成 |
@@ -283,7 +283,7 @@ RFC-027 的三个单测（`src/frontend/core/typecheck/tests/rfc027_phase25_proo
 
 **（a）层序只在文档里声明，没有机制强制；`equivalence` 层不在管线里。**
 
-`src/frontend/core/typecheck/layers/README.md` 描述的是 `checker.rs::check_module_impl` 的实际调用序（定位以函数名/驱动点为锚，行号按现树取）：
+`src/frontend/core/sema/layers/README.md` 描述的是 `checker.rs::check_module_impl` 的实际调用序（定位以函数名/驱动点为锚，行号按现树取）：
 
 | 实际顺序 | 调用点 | 对应层 |
 | --- | --- | --- |
@@ -315,7 +315,7 @@ RFC-027 的三个单测（`src/frontend/core/typecheck/tests/rfc027_phase25_proo
 `predicate.rs:31-32` 的注释明确选择了硬失败：「初始化失败保持**硬失败**：软化会把『Z3 未安装』误诊为『约束超出内核能力』」。而 `backend.rs:60` 的契约文档说的是「`None`：后端不可用……**调用方应保守降级**」。**同一份代码里两种哲学并存，且硬失败的那条会 panic 而非返回错误。**
 
 **（c）每次回边判定新建 Z3 context，缓存形同虚设。**
-`ownership.rs:627` 在回边切断判定的热路径上调用 `default_solver()`。而 `src/frontend/core/typecheck/proof/smt/backend.rs:67-72`：
+`ownership.rs:627` 在回边切断判定的热路径上调用 `default_solver()`。而 `src/frontend/core/sema/proof/smt/backend.rs:67-72`：
 
 ```rust
 pub fn default_solver() -> Option<Box<dyn Solver>> {
@@ -657,7 +657,7 @@ impl Obligations {
 > | 4.3.1 账本上线 | `State::assert_drained()` 唯一结算点；13 条义务清单 + 交付标记 + 三档结算；审计面 `DriverOutcome.obligations` | 调用点 `src/driver/mod.rs:110`；结算 `src/driver/obligations.rs:577`；外发 `:654`；七处交付标记 `src/driver/arms.rs:554/:672/:726/:781/:842/:936/:1221` |
 > | 3.4.4 清账 | `variant_ctor_calls` 删字段——声明职责由 IR 侧就地形态检测等价兑现 | `src/middle/core/ir_gen.rs:7448`（`detect_variant_ctor_call`）、`:7496`（调用点） |
 > | 3.4.5 清账 | `method_overload_ir_names` 删跨阶段镜像（在相位候选名表 + `overload_resolutions` 保留） | 决议消费点 `ir_gen.rs:380/:7632/:7705`；定义侧 `method_def_ordinals` `:1828` |
-> | 3.4.9 清账 | `interface_impl_registry` 改判**树内事实**：删「镜像供 middle/LSP 消费」声明、保留在相位消费；义务 14 → 13、红名单 1 → 0 | 声明载体 `src/frontend/core/typecheck/types.rs:52`（字段声明行；其 doc 注释见同文件 `:47-51`，裁决甲改写）；在相位消费 `src/frontend/core/typecheck/operator_interfaces.rs:623`、`src/frontend/core/typecheck/inference/expressions.rs` 七处（`:1514/:1646/:3151/:3876/:3899/:4400/:4408`）、`src/frontend/core/typecheck/checker.rs:214`（只读访问器 :214-217）；登记 `src/driver/obligations.rs:150` |
+> | 3.4.9 清账 | `interface_impl_registry` 改判**树内事实**：删「镜像供 middle/LSP 消费」声明、保留在相位消费；义务 14 → 13、红名单 1 → 0 | 声明载体 `src/frontend/core/sema/types.rs:52`（字段声明行；其 doc 注释见同文件 `:47-51`，裁决甲改写）；在相位消费 `src/frontend/core/sema/operator_interfaces.rs:623`、`src/frontend/core/sema/inference/expressions.rs` 七处（`:1514/:1646/:3151/:3876/:3899/:4400/:4408`）、`src/frontend/core/sema/checker.rs:214`（只读访问器 :214-217）；登记 `src/driver/obligations.rs:150` |
 > | 4.3.2 定级 | **同码升 E**：显式 `.severity(Severity::Error)`，码号仍 `W1090`；外发按级别分流错误通道（首个失败优先） | `src/driver/obligations.rs:450`（severity）、`:676-699`（E 级分支）；码族与级别解耦的登记见 `src/util/diagnostic/codes/w1xxx.rs:26-36` |
 >
 > **8.2 收口结论**
@@ -730,7 +730,7 @@ impl Obligations {
 > **四、判据与证据**：D41 同型判据 `test_release_plan_spans_consumed`（按 `PlanId` 结算）与新增
 > `test_overload_resolutions_consumed`（语料逐文件 lex→parse→typecheck→ir_gen，**差集必须为空 + 证据面地板**：
 > 产出过决议的文件数 `≥ 1`、被真实消费条目 `≥ 2`，无白名单）；决议形态覆盖 9 项钉板见
-> `src/frontend/core/typecheck/tests/overload_resolutions.rs`（期望返回 / 位置实参 / 类型体内绑定 / `?` 操作数 /
+> `src/frontend/core/sema/tests/overload_resolutions.rs`（期望返回 / 位置实参 / 类型体内绑定 / `?` 操作数 /
 > 纯命名 / 位置+命名 / 歧义 / 变体构造 / 未分配身份）。变异驱动：消费键偏移一位 ⇒ 判据红 + 真实程序
 > `error [W1090]` + 语料门禁差异；还原后复绿。门禁数值：`check-obligations.py` PASS、语料 342 条差分为空、
 > `cargo test --lib` 2712 passed / 0 failed（IR 快照零漂移）。
@@ -1142,12 +1142,12 @@ pub enum Aggregation {
 | `src/util/diagnostic/mod.rs` | `565-619` | `check_files_with_diagnostics` 统一走 `Program { kind: Check }` |
 | `src/util/diagnostic/mod.rs` | `621-661` | `check_single_file` **删除** |
 | `wasm/src/lib.rs` | `30-36`、`42-51` | `test_compile` / `run_code` 改为构造 `Program { kind: WasmPlayground }`（当前经 `Compiler::compile_with_source` 隐式落到路径 1） |
-| `src/frontend/core/typecheck/layers/predicate.rs` | `34-36` | `.expect()` 改为返回 `SMTResult::Unknown` + 诊断（**行为变更**） |
-| `src/frontend/core/typecheck/checker.rs` | `1303-1314` | `ProofResult::Unproven { .. } => {}` 空臂改为产诊断（**修复第二个静默丢弃点**） |
-| `src/frontend/core/typecheck/checker.rs` | `TypeChecker::ownership_inputs` 判据点 | `unwrap_or_default()` 降级路径加 warning 诊断 |
-| `src/frontend/core/typecheck/checker.rs` | `1244` | 修正与 `1320` 不符的注释 |
-| `src/frontend/core/typecheck/layers/README.md` | 全文 | 层序表改为**实际**执行顺序；删除「下层失败上层不跑」（不存在 short-circuit） |
-| `src/frontend/core/typecheck/proof/smt/backend.rs` | `67-72` | **按 D58**：新增进程级共享单例（`LazyLock<Mutex<Option<Box<dyn Solver>>>>`）+ `with_shared_solver` 闭包访问口；`predicate.rs`/`checker.rs`/`ownership.rs` 三消费点改走共享口。`&'static` 裸引用形态不可行（`dyn Solver` 不 `Sync`），原文表述以 D58 为准 |
+| `src/frontend/core/sema/layers/predicate.rs` | `34-36` | `.expect()` 改为返回 `SMTResult::Unknown` + 诊断（**行为变更**） |
+| `src/frontend/core/sema/checker.rs` | `1303-1314` | `ProofResult::Unproven { .. } => {}` 空臂改为产诊断（**修复第二个静默丢弃点**） |
+| `src/frontend/core/sema/checker.rs` | `TypeChecker::ownership_inputs` 判据点 | `unwrap_or_default()` 降级路径加 warning 诊断 |
+| `src/frontend/core/sema/checker.rs` | `1244` | 修正与 `1320` 不符的注释 |
+| `src/frontend/core/sema/layers/README.md` | 全文 | 层序表改为**实际**执行顺序；删除「下层失败上层不跑」（不存在 short-circuit） |
+| `src/frontend/core/sema/proof/smt/backend.rs` | `67-72` | **按 D58**：新增进程级共享单例（`LazyLock<Mutex<Option<Box<dyn Solver>>>>`）+ `with_shared_solver` 闭包访问口；`predicate.rs`/`checker.rs`/`ownership.rs` 三消费点改走共享口。`&'static` 裸引用形态不可行（`dyn Solver` 不 `Sync`），原文表述以 D58 为准 |
 
 **删除**：`src/util/diagnostic/mod.rs:621-661` 的 `check_single_file`；`src/lsp/handlers/diagnostics.rs:161-227` 的手工 lex/parse 序列。
 
@@ -1270,12 +1270,12 @@ pub enum Aggregation {
 - [07-equivalence-oracle.md](07-equivalence-oracle.md) — C1-C6 分级、三层判据、`test_multifile_proof_obligation_not_dropped` 漏洞判据
 - [RFC-027 编译期求值与类型](../../rfc/accepted/027-compile-time-evaluation-types.md) — Phase 2.5 证明函数执行的设计来源
 - [RFC-013 错误码规范](../../rfc/accepted/013-error-code-specification.md) — `build.rs:19-55` 门禁的对照码表
-- `src/frontend/core/typecheck/checker/refinement.rs` — 「不得让 silent pass 复活」的明文声明（原 `checker.rs:5165-5169`）
-- `src/frontend/core/typecheck/layers/README.md` — 层序调用表与 `equivalence` 的真实身份（无 short-circuit）
-- `src/frontend/core/typecheck/layers/predicate.rs:31-32` — SMT 初始化硬失败的明文理由
-- `src/frontend/core/typecheck/proof/smt/backend.rs:60` — 「调用方应保守降级」的契约声明（与 `predicate.rs` 矛盾）
-- `src/frontend/core/typecheck/types.rs:16-76` — 13 个下游必须消费的义务字段（3.4.4/3.4.5/3.4.9 清账后）
-- `src/frontend/core/typecheck/tests/rfc027_refined_transparency.rs:13-15` — 单测自认「停在 pipeline 之前」
+- `src/frontend/core/sema/checker/refinement.rs` — 「不得让 silent pass 复活」的明文声明（原 `checker.rs:5165-5169`）
+- `src/frontend/core/sema/layers/README.md` — 层序调用表与 `equivalence` 的真实身份（无 short-circuit）
+- `src/frontend/core/sema/layers/predicate.rs:31-32` — SMT 初始化硬失败的明文理由
+- `src/frontend/core/sema/proof/smt/backend.rs:60` — 「调用方应保守降级」的契约声明（与 `predicate.rs` 矛盾）
+- `src/frontend/core/sema/types.rs:16-76` — 13 个下游必须消费的义务字段（3.4.4/3.4.5/3.4.9 清账后）
+- `src/frontend/core/sema/tests/rfc027_refined_transparency.rs:13-15` — 单测自认「停在 pipeline 之前」
 - `tests/yaoxiang/06-compile-errors/refinement/refined_annotation_literal_violates_err.yx:12-13` — 语料自认「由 pipeline.rs 在 check_module 之后执行」
 - `wasm/src/lib.rs` 的 `compile_playground`（`run_code` 经它编译）— playground 的第四个编译调用方（单文件路径，故执行 proof_execution）
 - `wasm/Cargo.toml:10-18` — cdylib + wasm-bindgen 在 shim crate 而非主 crate

@@ -2,7 +2,7 @@
 //!
 //! 单态化过程中的工作单元定义
 
-use crate::frontend::core::typecheck::MonoType;
+use crate::frontend::core::sema::MonoType;
 use crate::util::span::Span;
 use std::fmt;
 use std::hash::{Hash, Hasher};
