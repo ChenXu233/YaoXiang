@@ -2869,3 +2869,55 @@ issue #522 的裁决包（甲/乙/丙）呈报后，用户追问「既要又要�
 ### 计数与环境
 
 三级 +1 = 3.20.10（200→201）；二级不变。issue [#523](https://github.com/ChenXu233/YaoXiang/issues/523) **关闭**（夹具更正已回注评论）；谓词体跨单元传播残留归 [#524](https://github.com/ChenXu233/YaoXiang/issues/524)（S-needs-decision——#523 落地后其剩余面收敛为纯数据管道：Registry 导出 vs 导入面登记）。批次树 523-repro（t1 复现用）与 t3.20.10-verify（t2 量测用）release + gc。
+
+
+---
+
+## P6 6.7 目录改名（D1 纯搬移批次，2026-11-01）
+
+**一句话**：把 IR 层、语义层、AST、字节码四处的目录名与归属一次搬正，判据是「搬完行为零变化」——最终 218 个 IR 快照 **identical 218 / differing 0 / missing 0**，语料基线 **内容 0 行变化**（14 个改动全是 rename）。
+
+### 一、五步搬移（每步独占 commit）
+
+| 步 | 内容 | 规模 | 关键判据 |
+| --- | --- | --- | --- |
+| 6.7.1a | `parser/ast.rs` → 顶层 `src/ast/` | 1378 行 / 86 处引用 | 快照与语料 zero-diff；B3 数据面豁免改指 `ast::` |
+| 6.7.1b | 两个 `bytecode.rs` + `opcode.rs` → `middle/bytecode/` | 2389 + 774 + 207 行 | **B4 反向依赖 3 → 0**（门禁里写着「P6/P10 随词表迁移消除」，本步兑现） |
+| 6.7.1c | `middle/core/` → `middle/ir/` | 238 文件（237 个 rename） | 快照 blob 级 identical=218 / differing=0 |
+| 6.7.1d | `typecheck/` → `sema/` | 116 文件 / 5.6 万行 / 130 rename / 549 行引用 | 116 个被搬文件 token 级比对 123/123 相同 |
+| 收尾 | 字节码测试归位、`src/` 内 README 旧路径、wasm 旧路径 | 3 + 7 + 1 文件 | 见「三、四」 |
+
+### 二、门禁自身的路径口径（本批最贵的教训）
+
+搬移时**门禁会静默变瞎**——不是报错，是「不再匹配任何东西」而输出绿。本批累计发现 **6 类**：
+
+1. **测试过滤名**：`check-snapshot-drift.sh` / `check-ir-verifier.sh` 里写着 `middle::core::tests::{snapshot,verify}`；目录一改，测试匹配 0 个，门禁 FAIL「判据测试未执行」。
+2. **层表**：`check-boundary.py` 的 `L2_DIRS` / `L3_DIRS` / `L2_DATA_PREFIXES`（`parser::ast` → `ast::`）。
+3. **正则**：`check-boundary` 的 `RE_L2_CROSS`（B2 全靠它）、`check-obligations` 的 F5 正则（`core/typecheck/types.rs`）——不改则校验对象永久消失。
+4. **夹具树**：`check-obligations --selftest` 的夹具里存着第二份路径拷贝（`typecheck/types.rs.txt`、`middle/core/ir_gen.rs.txt`），改常量时不同改则 selftest 红。
+5. **生成物**：错误码文档的发射点路径；且**必须在 pre-commit 的 `cargo fix`/`clippy --fix` 跑完之后**再生，否则行号被平移、提交后又脏。
+6. **扫描面**：`check-docs-refs.py` 只扫 `docs/**`——`src/` 内的 `.md` 是盲区（7 份 README 的旧路径只能靠人翻到）。
+
+### 三、三个「判据看起来覆盖了，其实没有」
+
+1. **`include_str!` 同深度搬迁不会报错**：`t1` 探针曾断言「路径漂了断在编译期」，只在**跨深度**成立。`ir/tests/` → `bytecode/tests/` 深度相同，旧路径 `../../bytecode/opcode.rs` 仍解析得到——编译器一声不响。唯一正确做法是逐个 `[ -f ]` 核对。
+2. **`check-docs-refs` 不校验存在性**：它只查「是否落在 `.gitignore` 覆盖范围」，从不检查路径是否存在。实测往文档塞 `src/definitely_not_existing_dir/probe.rs` → 仍报 `OK`。这正是本批各步文档残留全部静默通过的原因。**待裁决**：加存在性检查会让过渡文档（09/09a/03/07/en 镜像）的历史引用立刻全红，需先定口径（豁免清单 / 只查新增行）。
+3. **被 `workspace.exclude` 排出的子 crate 没有本地判据**：`wasm` 与 `tools/type-tables` 都不被 `cargo test --all` 编译。`wasm/src/lib.rs` 的 3 处旧路径因此把 wasm 构建打坏而本地全绿（与 6.6 的 type-tables 同一缺口）。`tools/type-tables` 已于 6.6 接进 CI；`wasm` 目前只有 `_build-wasm.yml` 覆盖。
+
+### 四、实证：门禁可失败
+
+- boundary B2：往 parser 加 `use ...::sema::` → exit 1；还原 → exit 0。
+- 快照门禁：移走一个 `.snap` → exit 1；还原 → exit 0。
+- B5 唯一归属：造一个假 opcode 定义文件 → exit 1（报「1 处，库存 0」）；删除 → exit 0。
+- check-obligations F5：把 02 的结构体范围写错 → exit 1（三处 F5）；改回 → exit 0。
+
+### 五、过程事故与缺陷（如实记录）
+
+1. **rebase 丢上游增量（队长操作缺陷）**：t2 的 rebase 用 `git checkout --theirs` 整文件取一方，把上游 `22def888`（类型级命名空间 #522）在 `checker.rs` / `probe.rs` 的增量整段覆盖，dev 一度 `cargo check` 24 个错误。修法 = 对「上游改过 ∩ t2 改过」的 9 个文件做三方合并（base=`b11923ca`、ours=上游、theirs=t2），实际只有 2 个真受害。**教训**：冲突文件禁止整取一方；提交前先看 `git diff --cached --name-only`（我曾把别人的暂存 rename 卷进自己的提交）。
+2. **契约缺陷两处**：`t9` 的 `inScope` 写的是改名前的 `src/middle/core/tests/`（前序已改成 `ir/tests/`）；`t10` 的 `inScope` 只写单文件而验收要求全仓扫描。**规则**：inScope 按**当前**目录名取；验收项含「全仓扫描」时 inScope 写路径前缀。
+3. **验证/复审由队长执行**：MiniMax 额度耗尽，`t6`（验证）与 `t7`（复审）由队长补做，**与实现者同族，独立性减弱**；补偿 = 不信自测数字、自做 blob 级比对、每条判据反向证红。
+
+### 六、残留
+
+- `01` / `03` / `06` 与 `09` / `09a` 仍含改名前的路径引用，按既定口径（过渡文档不清理）留待重写；`src/` 内真实残留为 **0**（仅 `middle/ir/mod.rs` 首行的历史说明）。
+- `ir.rs` / `ir_gen.rs` 的内部拆分（operand/instr/block/fn_、lower/）属 04 任务；`middle::ir::ir::` 的重复段届时消失；`clippy::module_inception` 的局部豁免带删除条件。
