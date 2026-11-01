@@ -168,7 +168,7 @@ precisely the essence of the defect.
 >   failed at runtime with E6006 (confirmed by a probe). This has been fixed and WBS 4.10.2 closed.
 >   The related “multi-file lacks the single-file parse hard-abort quirk” was registered as WBS
 >   4.10.1—**it has also been fixed** (immediately after 4.2.2; the Check path was degraded to
->   per-file collection; this audit examines the “stage coverage/field consumption” dimension, and
+>   per-file collection; this audit examines the “stage coverage and field consumption” dimension, and
 >   this case is a compilation-unit membership difference, so it fell outside that scope).
 >
 > - **Embedded std registration-surface coverage (found during 4.2.5 implementation, fixed)**: the

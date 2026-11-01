@@ -2324,7 +2324,7 @@ t1 门禁全绿（lib 2908 与父版**同数**——既有测试零删改、inte
 
 ### 环境事件备案
 
-- **批次树 Z3 种子**：`git worktree` 不携带 gitignored 的 `.z3/`，批次树首次构建触发 build.rs 联网下载 Z3，本机代理故障（Invoke-WebRequest 连接关闭）致构建失败。处置 = 主树 `.z3/z3-4.16.0-x64-win/` 复制进批次树后增量构建正常。**后续批次建树时若构建报 Z3 下载失败，先做此种子再排查其他原因**；另外上轮失败使锁悬挂（holder=t2 残留），`scratch.py release` 后再入。
+- **批次树 Z3 种子**：`git worktree` 不携带 gitignored 的 `.z3/`（本地构建依赖缓存目录），批次树首次构建触发 build.rs 联网下载 Z3，本机代理故障（Invoke-WebRequest 连接关闭）致构建失败。处置 = 把主树 `.z3/` 下对应平台的缓存目录（z3-4.16.0-x64-win）复制进批次树同名目录后增量构建正常。**后续批次建树时若构建报 Z3 下载失败，先做此种子再排查其他原因**；另外上轮失败使锁悬挂（holder=t2 残留），`scratch.py release` 后再入。
 - **「pre-commit 钩子楔死」系误读，已撤回（2026-11-01 判别实验澄清）**：本批次三条提交（`1dbe456c` 重试轮、`8ec5ca38`、`bab3a8ad`）的钩子输出被误读为「文件过滤钩子持续 (no files to check) Skipped、staged 明明有文件」——真相是**每笔提交的钩子输出有两段序列**：pre-commit 阶段（全量门禁真实执行，cargo test --all 都跑）+ commit-msg 阶段（该阶段的文件集合只有提交消息本身，文件过滤钩子在此阶段跳过是 pre-commit 对无 `stages:` 限定钩子的**正常**行为）。本仓 `.git/hooks/` 同时装有 pre-commit 与 commit-msg 两个 shim，而 `.pre-commit-config.yaml` 的钩子多数未写 `stages:` 限定 ⇒ 每笔提交两段输出；此前三次「楔死」证据全部来自只截 tail 窗口、恰好只看到第二段（第一段全量序列在窗口之上被切掉）。受控探针证实：`-F` 消息提交同样全量跑钩子（探针提交已 `reset --hard` 回滚，blob 无痕）。**教训**：判钩子覆盖必须看完整输出，不得凭 tail 段推断；「commit-msg 阶段全 Skipped」是正常形态。收口提交 `bab3a8ad` 的提交信息里「pre-commit 失败轮后持续跳过异常」的说法据此**撤回**（提交信息不可改，以本条为准）。可选改进（未做，留裁决）：给配置里的文件钩子显式加 `stages: [pre-commit]`，输出减半且根除这类误读面。
 
 ### 计数
