@@ -1805,24 +1805,7 @@ impl StatementChecker {
         &mut self,
         ty: MonoType,
     ) -> MonoType {
-        match ty {
-            MonoType::Generic { ref name, .. }
-                if crate::frontend::core::typecheck::is_builtin_predicate_name(name) =>
-            {
-                self.solver.new_var()
-            }
-            MonoType::Generic { ref name, .. } if self.proof_fn_bases.contains_key(name) => {
-                self.proof_fn_bases.get(name).cloned().unwrap_or(ty)
-            }
-            // 无参形态 `b: NonNegative`：`MonoType::from` 给出 `TypeRef("NonNegative")`。
-            // 不剥则它作为名义类型参与统一，拒绝一切基类型实参。
-            // 只剥「返回 Type 的证明函数」名——普通类型名（`Int`/自定义类型）
-            // 不在 `proof_fn_bases` 里，不受影响。
-            MonoType::TypeRef(ref name) if self.proof_fn_bases.contains_key(name) => {
-                self.proof_fn_bases.get(name).cloned().unwrap_or(ty)
-            }
-            other => other,
-        }
+        strip_refined_with_proof_fns(ty, &self.proof_fn_bases, &mut self.solver)
     }
 
     /// 检查函数语句
@@ -3098,6 +3081,9 @@ impl StatementChecker {
                         inferrer.set_interface_impl_registry(&self.interface_impl_registry);
                         inferrer.set_sum_types(&self.sum_types);
                         inferrer.set_type_defs(&self.type_defs);
+                        // #523：证明函数基类型表随委托传入——调用点剥精化与
+                        // 注册期同一判据（strip_refined_with_proof_fns 单源）
+                        inferrer.set_proof_fn_bases(&self.proof_fn_bases);
                         inferrer.set_generic_fn_type_params(&self.generic_fn_type_params);
                         inferrer.set_generic_type_defs(&self.generic_type_defs);
                         inferrer.set_current_fn_param_constraints(
@@ -3208,6 +3194,9 @@ impl StatementChecker {
                 inferrer.set_interface_impl_registry(&self.interface_impl_registry);
                 inferrer.set_sum_types(&self.sum_types);
                 inferrer.set_generic_type_defs(&self.generic_type_defs);
+                // #523：证明函数基类型表随委托传入——调用点剥精化与
+                // 注册期同一判据（strip_refined_with_proof_fns 单源）
+                inferrer.set_proof_fn_bases(&self.proof_fn_bases);
                 inferrer.set_generic_fn_type_params(&self.generic_fn_type_params);
                 inferrer
                     .set_current_fn_param_constraints(self.current_fn_param_constraints.as_ref());
@@ -3268,5 +3257,46 @@ pub(super) fn contains_unresolved_param(t: &MonoType) -> bool {
         } => params.iter().any(contains_unresolved_param) || contains_unresolved_param(return_type),
         MonoType::Union(v) | MonoType::Intersection(v) => v.iter().any(contains_unresolved_param),
         _ => false,
+    }
+}
+
+/// 精化应用剥除取基类型（RFC-027 §6）——**判据单源**的共享实现。
+///
+/// 两个消费面：
+/// - 注册期（形参位 / 返回位）：`strip_refined_value_type`（本文件方法，
+///   委托到此处）；
+/// - 调用点（curry 内层参数位，#523）：`ExpressionInferrer` 逐参统一前
+///   剥除——注册期只剥外层参数组，内层组的精化标注原样进入统一，不剥
+///   则基类型实参被假拒绝（E1002 `Expected type 'IsPositive(N)', found
+///   type 'int64'`）。
+///
+/// 判据（与 22def888 起的两条同源路径一致）：
+/// 1. 内置谓词（`is_builtin_predicate_name`，如 `Terminates`）→ **新鲜
+///    类型变量**——测度/约束不参与值统一，验证归证明管道（RFC-027a）；
+/// 2. 证明函数应用 `Generic{P, ..}`（如 `IsPositive(N)`）→ 其基类型
+///    （`proof_fn_bases[P]`）；
+/// 3. 无参形态 `TypeRef("P")`（`b: NonNegative` 经 `MonoType::from` 的
+///    产物）→ 同上；普通类型名不在 `proof_fn_bases`，不受影响。
+///
+/// 顶层 `Refined`（已正格化形态）不在本函数职责内——solver 的
+/// `strip_refined_for_unify`（RFC-027 §6.1）在统一时已透明剥除。
+pub(super) fn strip_refined_with_proof_fns(
+    ty: MonoType,
+    proof_fn_bases: &HashMap<String, MonoType>,
+    solver: &mut TypeConstraintSolver,
+) -> MonoType {
+    match ty {
+        MonoType::Generic { ref name, .. }
+            if crate::frontend::core::typecheck::is_builtin_predicate_name(name) =>
+        {
+            solver.new_var()
+        }
+        MonoType::Generic { ref name, .. } if proof_fn_bases.contains_key(name) => {
+            proof_fn_bases.get(name).cloned().unwrap_or(ty)
+        }
+        MonoType::TypeRef(ref name) if proof_fn_bases.contains_key(name) => {
+            proof_fn_bases.get(name).cloned().unwrap_or(ty)
+        }
+        other => other,
     }
 }

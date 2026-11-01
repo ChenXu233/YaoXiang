@@ -165,6 +165,13 @@ pub struct ExpressionInferrer<'a> {
     /// 事实收集，经 StatementChecker 回收、checker 发射 W1063（先例同构：
     /// instantiation_requests 等字段的同一条汇聚链）。
     pub unevaluable_const_constraints: Vec<(crate::util::span::Span, String)>,
+    /// 证明函数基类型表（RFC-027 Phase 2.5）：「返回 Type 的函数名 → 其基类型」。
+    /// #523：调用点逐参统一消费——curry 内层参数位的精化应用注册期不剥
+    /// （`check_fn_stmt` 只剥外层形参位），原始形态 `IsPositive(N)` 若不按
+    /// base 统一，基类型实参被假拒绝（E1002）。剥除判据**单源**：与注册期
+    /// 的 `statements::strip_refined_value_type` 共用同一实现
+    /// （`strip_refined_with_proof_fns`），本表由 StatementChecker 随委托注入。
+    proof_fn_bases: &'a HashMap<String, MonoType>,
 }
 
 impl<'a> ExpressionInferrer<'a> {
@@ -208,6 +215,7 @@ impl<'a> ExpressionInferrer<'a> {
             native_param_names: &EMPTY_NATIVE_PARAM_NAMES,
             match_scrutinee_types: HashMap::new(),
             unevaluable_const_constraints: Vec::new(),
+            proof_fn_bases: &EMPTY_SIGNATURES,
             dep_env: None,
             gamma: None,
             import_watch: HashMap::new(),
@@ -256,6 +264,7 @@ impl<'a> ExpressionInferrer<'a> {
             native_param_names: &EMPTY_NATIVE_PARAM_NAMES,
             match_scrutinee_types: HashMap::new(),
             unevaluable_const_constraints: Vec::new(),
+            proof_fn_bases: &EMPTY_SIGNATURES,
             dep_env: None,
             gamma: None,
             import_watch: HashMap::new(),
@@ -305,6 +314,7 @@ impl<'a> ExpressionInferrer<'a> {
             native_param_names: &EMPTY_NATIVE_PARAM_NAMES,
             match_scrutinee_types: HashMap::new(),
             unevaluable_const_constraints: Vec::new(),
+            proof_fn_bases: &EMPTY_SIGNATURES,
             dep_env: None,
             gamma: None,
             import_watch: HashMap::new(),
@@ -356,6 +366,7 @@ impl<'a> ExpressionInferrer<'a> {
             native_param_names: &EMPTY_NATIVE_PARAM_NAMES,
             match_scrutinee_types: HashMap::new(),
             unevaluable_const_constraints: Vec::new(),
+            proof_fn_bases: &EMPTY_SIGNATURES,
             dep_env: None,
             gamma: None,
             import_watch: HashMap::new(),
@@ -476,6 +487,16 @@ impl<'a> ExpressionInferrer<'a> {
         defs: &'a HashMap<String, crate::frontend::core::typecheck::environment::GenericTypeDef>,
     ) {
         self.generic_type_defs = defs;
+    }
+
+    /// 设置证明函数基类型表（RFC-027 Phase 2.5 / #523）。
+    /// StatementChecker 随委托注入——与注册期 `proof_fn_bases` 同一张表，
+    /// 剥精化判据因此单源（见 `strip_refined_with_proof_fns`）。
+    pub fn set_proof_fn_bases(
+        &mut self,
+        bases: &'a HashMap<String, MonoType>,
+    ) {
+        self.proof_fn_bases = bases;
     }
 
     /// 设置 native 导出形参名表（#454）
@@ -5704,6 +5725,22 @@ impl<'a> ExpressionInferrer<'a> {
                         };
                         // resolve 参数类型：TypeRef("Int") → Int(64) 等
                         let mut resolved_param = self.solver.resolve_type(param_ty);
+                        // #523（RFC-027 §6）：精化应用对统一**透明**——剥到基类型。
+                        //
+                        // 注册期只剥了形参位（`check_fn_stmt` 的外层参数组）；
+                        // curry 内层参数组的精化标注（`(N: Int) -> (x: IsPositive(N))`
+                        // 的内层 `IsPositive(N)`）原样进入调用点统一，基类型实参
+                        // 对不上原始形态被假拒绝（E1002 Expected type
+                        // 'IsPositive(N)', found type 'int64'）。此处与注册期共用
+                        // 同一剥除实现（判据单源，见
+                        // `statements::strip_refined_with_proof_fns`）：已剥形态
+                        //（外层组参数）在此是恒等变换；内置谓词位换新鲜变量，
+                        // 约束仍由证明管道验证，此处只管「按 base 统一」。
+                        resolved_param = super::statements::strip_refined_with_proof_fns(
+                            resolved_param,
+                            self.proof_fn_bases,
+                            self.solver,
+                        );
                         // Int -> Float 扩展转换是允许的
                         if matches!(
                             (&actual_arg, &resolved_param),

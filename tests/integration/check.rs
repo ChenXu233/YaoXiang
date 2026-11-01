@@ -889,3 +889,93 @@ fn test_check_multifile_predicate_arg_not_misreplaced() {
         "#522: cross-unit predicate application arg N must stay unreplaced in all diagnostics; got: {text}"
     );
 }
+
+// ============ 3.20.10 / #523：curry 内层参数位精化按 base 统一 ============
+//
+// RFC-027 §6：精化是编译期约束，对统一**透明**——消费端按证明函数基类型
+// （`proof_fn_bases`）剥到 base 再统一。形参位（外层参数组）在注册期已剥
+// （3.20.8 既有锚覆盖）；curry 内层参数组的精化标注此前原样进入调用点
+// 统一，基类型实参被假拒绝——E1002 `Expected type 'IsPositive(N)', found
+// type 'int64'`（N 保持未替换，判据面正确，是消费端统一缺口，#522 教训
+// 的同轴：诊断不得出现替换后的谓词实参）。
+//
+// 修法：调用点逐参统一前与注册期共用同一剥除实现
+// （`strip_refined_with_proof_fns`，判据单源）。
+
+/// #523 主锚：curry 内层参数位的精化在完整应用时按 base 统一，不假拒绝。
+#[test]
+fn test_check_curry_inner_refined_param_unifies_with_base() {
+    // Arrange: 本地谓词声明 + const 柯里签名，精化在内层参数组——
+    // 部分应用 `sum(5)` 合法（约束不在此评估）；完整应用 `sum(5)(3)` 的
+    // 第二个实参对内层 `IsPositive(N)` 统一，必须按基类型 Int(64) 接受。
+    let dir = temp_dir();
+    let file = create_yx_file(
+        &dir,
+        "curry_inner_refinement.yx",
+        "IsPositive: (x: Int) -> Type = { x > 0 }\n\
+         sum: (N: Int) -> (x: IsPositive(N)) -> Int = { 0 }\n\
+         main = () => { print(sum(5)(3)) }",
+    );
+
+    // Act
+    let result = check_file(&file);
+
+    // Assert: 内层精化按 base 统一 ⇒ 零诊断（issue #523 验收面）。
+    // 消费端缺口回归时此处报 E1002 `Expected type 'IsPositive(N)', found
+    // type 'int64'`（假拒绝形态）。
+    let errors = result.expect("curry call with inner refined param should check cleanly");
+    assert_eq!(
+        errors, 0,
+        "#523: curry inner-layer refined param must unify by proof-fn base type (IsPositive(N) -> Int(64)), not be falsely rejected; got {errors} error(s)"
+    );
+}
+
+/// #523 补锚：精化位在**后续** curry 组（第三层）同样按 base 统一。
+#[test]
+fn test_check_curry_refinement_in_later_group_unifies_with_base() {
+    // Arrange: 三层柯里，精化只在第三组（中间组是普通值参数）——剥除
+    // 必须逐层生效，不依赖「精化在第一个内层组」的位置假设。
+    let dir = temp_dir();
+    let file = create_yx_file(
+        &dir,
+        "curry_later_group_refinement.yx",
+        "IsPositive: (x: Int) -> Type = { x > 0 }\n\
+         f: (N: Int) -> (a: Int) -> (x: IsPositive(N)) -> Int = { 0 }\n\
+         main = () => { print(f(5)(1)(3)) }",
+    );
+
+    // Act
+    let result = check_file(&file);
+
+    // Assert: 第三次应用的实参对 `IsPositive(N)` 统一按 base 放行。
+    let errors = result.expect("curry call with refinement in a later group should check cleanly");
+    assert_eq!(
+        errors, 0,
+        "#523: refined param in a later curry group must unify by base type; got {errors} error(s)"
+    );
+}
+
+/// #523 补锚：**多个**内层组同时带精化，逐实参各自剥 base。
+#[test]
+fn test_check_curry_refined_params_in_two_groups_unify_with_base() {
+    // Arrange: 两层内层组的参数位都带精化——剥除必须按实参逐位生效
+    //（第二、第三次应用各自对精化形态统一），不能只剥第一处。
+    let dir = temp_dir();
+    let file = create_yx_file(
+        &dir,
+        "curry_two_refined_groups.yx",
+        "IsPositive: (x: Int) -> Type = { x > 0 }\n\
+         g: (N: Int) -> (x: IsPositive(N)) -> (y: IsPositive(N)) -> Int = { 0 }\n\
+         main = () => { print(g(5)(3)(4)) }",
+    );
+
+    // Act
+    let result = check_file(&file);
+
+    // Assert: 两处内层精化都按 base 统一 ⇒ 零诊断。
+    let errors = result.expect("curry call with refined params in two groups should check cleanly");
+    assert_eq!(
+        errors, 0,
+        "#523: refined params in every curry group must unify by base type; got {errors} error(s)"
+    );
+}
