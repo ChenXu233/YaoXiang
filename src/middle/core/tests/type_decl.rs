@@ -30,7 +30,10 @@ fn generate_ir(source: &str) -> ModuleIR {
         parsed.errors
     );
     let mut checker = TypeChecker::new("type_decl_carrier");
-    let type_result = checker.check_module(&parsed.module);
+    let type_result = checker.check_module(
+        &parsed.module,
+        &crate::frontend::core::typecheck::probe::TypeLevelNamespace::scan_one(&parsed.module),
+    );
     assert!(
         type_result.diagnostics.is_empty(),
         "测试源码类型检查应通过: {:?}",
