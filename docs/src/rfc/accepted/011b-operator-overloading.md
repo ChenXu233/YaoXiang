@@ -724,6 +724,7 @@ Instruction::VariantTag { group: "Result".to_string(), .. }
 | `Try` 形状           | 定案：四方法（is_failure/success/residual/from_error）+ assert-Never 死路语义；已落地 | `?` 需三件事，单方法 `residual` 不够；构造子 parser 特判随 Result 归 std 一并退役                          | 2026-09-22 |
 | `%` 语义定性         | 缺陷修正（文档已承诺取模），不留兼容期               | `reference/index.md`「乘除取模」为先证                                                                  | 2026-09-22 |
 | `Result` 归 std 依据 | 引 RFC-013 既有定位，不再引用不存在的编号            | RFC-013 已写「std 库 `Result(T, Error)`」                                                               | 2026-09-22 |
+| 调用点约束复检删除   | 甲案：删除调用点复检死码与 `generic_fn_constraints` 传播链；E1106 注册码保留、转暂未发射 | 结构性死码：复检到达时 `last_type_args` 恒空 ⇒ `get(idx)` 恒 `None` ⇒ `continue` 短路 ⇒ E1106 全路径不可达；且复检判据（接口实现登记表查询）与活执行面（mono 按函数表改写 `Call "T.add"`）在「约束同判据」原则下本就发散。实证：约束未实现时 check 0 error、失败推迟至运行期（改写目标不在函数表），可用「约束类型 + 未实现接口 + 调用」语料复现。约束未实现时的检查层位与判据归 issue #519 登记待设计 | 2026-10-31 |
 
 ## 附录C：术语表
 

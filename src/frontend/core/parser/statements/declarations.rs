@@ -14,8 +14,8 @@
 //! - `imports` - Use/import statement parsing
 
 use crate::frontend::core::lexer::tokens::*;
-use crate::frontend::core::parser::ast::*;
-use crate::frontend::core::parser::{ParserState, BP_LOWEST, BP_ASSIGN};
+use crate::ast::*;
+use crate::frontend::core::parser::{NameKind, ParserState, BP_LOWEST, BP_ASSIGN};
 use crate::util::diagnostic::ErrorCodeDefinition;
 use crate::frontend::core::parser::parse_msg;
 use crate::util::span::Span;
@@ -28,53 +28,6 @@ fn is_type_param_annotation(ty: Option<&Type>) -> bool {
     match ty {
         Some(Type::MetaType { .. }) => true,
         Some(Type::Name { name, .. }) => name == "Type",
-        _ => false,
-    }
-}
-
-/// 结构判定：参数名是否在给定类型中作为类型引用（`Type::Name`）出现。
-/// 用于识别 const 泛型参数——如 `(n: N)` 里的 N 被当类型用。不看大小写。
-///
-/// RFC-027a：`is_predicate` 判定「类型应用名是否编译期谓词」——谓词应用的
-/// 实参位是**值**（`Terminates(b)` 的 `b`），不是类型引用。不排除则形参 `b`
-/// 被误认为 const 泛型参数，从而被从 lambda params 中剔除、并当作类型替换
-/// （实测：`(a: Int, b: Int) -> Terminates(b)` 的 lambda params 退化为 `[a]`）。
-fn name_used_as_type(
-    name: &str,
-    ty: &Type,
-    is_predicate: &dyn Fn(&str) -> bool,
-) -> bool {
-    match ty {
-        Type::Name { name: n, .. } => n == name,
-        Type::Generic {
-            name: app_name,
-            args,
-            ..
-        } => {
-            if is_predicate(app_name) {
-                return false;
-            }
-            args.iter()
-                .any(|a| name_used_as_type(name, a, is_predicate))
-        }
-        Type::Fn {
-            params,
-            return_type,
-        } => {
-            params
-                .iter()
-                .any(|p| name_used_as_type(name, p, is_predicate))
-                || name_used_as_type(name, return_type, is_predicate)
-        }
-        Type::Option(inner) | Type::Ptr(inner) => name_used_as_type(name, inner, is_predicate),
-        Type::Ref { inner, .. } => name_used_as_type(name, inner, is_predicate),
-        Type::Result(a, b) => {
-            name_used_as_type(name, a, is_predicate) || name_used_as_type(name, b, is_predicate)
-        }
-        Type::Tuple(types) | Type::Sum(types) => types
-            .iter()
-            .any(|t| name_used_as_type(name, t, is_predicate)),
-        Type::Literal { name: n, .. } => n == name,
         _ => false,
     }
 }
@@ -168,7 +121,7 @@ fn parse_assign_after_target(
     // ── 解析类型标注 ──
     // RFC-010: name: (a: Int, b: Int) -> Ret = body (参数名在签名中)
     // 特征: 冒号后面跟着函数类型 (param: Type, ...) -> Ret
-    let (type_annotation, fn_params) = if state.at(&TokenKind::Colon) {
+    let (type_annotation, is_fn_signature) = if state.at(&TokenKind::Colon) {
         state.bump(); // consume ':'
 
         if state.at(&TokenKind::LParen) {
@@ -205,18 +158,15 @@ fn parse_assign_after_target(
             state.restore_position(saved);
 
             if is_rfc010 {
-                let (fn_params_parsed, all_curry_params, return_type) =
-                    parse_fn_type_with_names(state)?;
+                let (fn_params_parsed, return_type) = parse_fn_type_with_names(state)?;
 
-                let param_types: Vec<Type> = fn_params_parsed
-                    .iter()
-                    .filter_map(|p| p.ty.clone())
-                    .collect();
+                // 名字与类型同栖（RFC-039 6.8.1）：形参原样进 Type::Fn.params，
+                // 不再有第二份 curry 旁路（6.5.2 commit ③ 收敛返回值）。
                 let type_annotation = Type::Fn {
-                    params: param_types,
-                    return_type: return_type.clone(),
+                    params: fn_params_parsed,
+                    return_type,
                 };
-                (Some(type_annotation), Some(all_curry_params))
+                (Some(type_annotation), true)
             } else {
                 // Check old function syntax: (Type, Type) -> Ret
                 let saved_check = state.save_position();
@@ -241,14 +191,14 @@ fn parse_assign_after_target(
                 }
 
                 let type_ann = parse_type_annotation_required(state)?;
-                (Some(type_ann), None)
+                (Some(type_ann), false)
             }
         } else {
             let type_ann = parse_type_annotation_required(state)?;
-            (Some(type_ann), None)
+            (Some(type_ann), false)
         }
     } else {
-        (None, None)
+        (None, false)
     };
 
     // 纯声明: `name: Type` 后无 `=`，直接跟换行/分号/新语句
@@ -300,7 +250,7 @@ fn parse_assign_after_target(
                             return Some(Stmt {
                                 kind: StmtKind::TypeDefinition {
                                     name: name.clone(),
-                                    signature_params: fn_params.clone().unwrap_or_default(),
+                                    type_annotation: type_annotation.clone(),
                                     definition,
                                 },
                                 span,
@@ -314,8 +264,13 @@ fn parse_assign_after_target(
             }
         }
 
-        // Case 1: 有 fn_params (RFC-010 新语法)
-        if let Some(ref extracted_params) = fn_params {
+        // Case 1: RFC-010 函数签名（注解是 Type::Fn）
+        if is_fn_signature {
+            // 拍平的签名形参从注解的 Type::Fn 链取得（6.5.2：唯一来源）
+            let extracted_params = type_annotation
+                .as_ref()
+                .map(crate::ast::Type::fn_params_flat)
+                .unwrap_or_default();
             let saved = state.save_position();
             let init = state.parse_expression(BP_LOWEST);
 
@@ -358,25 +313,21 @@ fn parse_assign_after_target(
                         }
                     }
 
-                    // 值参数对齐
+                    // 值参数对齐（按位置）：上面已校验签名与 lambda 的值参数
+                    // **逐位同名**且个数一致，故按位置取类型等价于按名查表。
+                    // 6.5.2 commit ③ 删掉「按名重建 HashMap」这层派生——名字
+                    // 曾同时存在于签名与 lambda 头两处，只需这一份位置对齐。
                     let merged: Vec<Param> = if value_params.is_empty() {
                         lambda_params.to_vec()
                     } else {
-                        let sig_by_name: std::collections::HashMap<&str, &Param> = extracted_params
-                            .iter()
-                            .map(|p| (p.name.as_str(), p))
-                            .collect();
                         lambda_params
                             .iter()
-                            .map(|lam| {
-                                let sig =
-                                    sig_by_name.get(lam.name.as_str()).copied().unwrap_or(lam);
-                                Param {
-                                    name: lam.name.clone(),
-                                    ty: sig.ty.clone(),
-                                    is_mut: lam.is_mut,
-                                    span: lam.span,
-                                }
+                            .zip(value_params.iter())
+                            .map(|(lam, sig)| Param {
+                                name: lam.name.clone(),
+                                ty: sig.ty.clone(),
+                                is_mut: lam.is_mut,
+                                span: lam.span,
                             })
                             .collect()
                     };
@@ -390,11 +341,7 @@ fn parse_assign_after_target(
                     // 括号同样声明「这是完整类型（值）」，链条到此终止。
                     let paren_return = matches!(
                         type_annotation.as_ref(),
-                        Some(Type::Fn { return_type, .. })
-                            if matches!(
-                                return_type.as_ref(),
-                                Type::Paren(_) | Type::NamedParen { .. }
-                            )
+                        Some(Type::Fn { return_type, .. }) if return_type.is_paren_complete()
                     );
                     if paren_return {
                         // 本函数自己的**值**参数个数 = 第一组签名参数中非类型参数的个数
@@ -402,7 +349,9 @@ fn parse_assign_after_target(
                         let own_param_count = match type_annotation.as_ref() {
                             Some(Type::Fn { params, .. }) => params
                                 .iter()
-                                .filter(|t| !is_type_param_annotation(Some(t)))
+                                // 与 reshape 前口径一致：只有带类型的形参参与计数
+                                .filter(|p| p.ty.is_some())
+                                .filter(|p| !is_type_param_annotation(p.ty.as_ref()))
                                 .count(),
                             _ => 0,
                         };
@@ -418,12 +367,51 @@ fn parse_assign_after_target(
                         // 运行时闭包形态（`make_adder: (a: Int) -> ((b: Int) -> Int)`）
                         // 首组含值参数，仍走下面的包装。
                         let first_group_has_type_params = match type_annotation.as_ref() {
-                            Some(Type::Fn { params, .. }) => {
-                                params.iter().any(|t| is_type_param_annotation(Some(t)))
-                            }
+                            Some(Type::Fn { params, .. }) => params
+                                .iter()
+                                .any(|p| is_type_param_annotation(p.ty.as_ref())),
                             _ => false,
                         };
-                        if !own_params.is_empty() || !first_group_has_type_params {
+                        // 被返回值的参数组 = 声明返回位内层 Fn 的值参数个数
+                        //（`(x: Int) -> Int` 的 `(x: Int)` 组；类型参数位擦除不计）。
+                        // 内层不是 Fn（如 `-> (Int)`、`-> (&Float, &Point)`）时为
+                        // None——个数判据不适用，保持既有行为。
+                        let inner_fn_value_param_count = match type_annotation.as_ref() {
+                            Some(Type::Fn { return_type, .. }) => {
+                                let inner = match return_type.as_ref() {
+                                    Type::Paren(t) => Some(t.as_ref()),
+                                    Type::NamedParen { inner, .. } => Some(inner.as_ref()),
+                                    _ => None,
+                                };
+                                inner.and_then(|t| match t {
+                                    Type::Fn { params, .. } => Some(
+                                        params
+                                            .iter()
+                                            .filter(|p| !is_type_param_annotation(p.ty.as_ref()))
+                                            .count(),
+                                    ),
+                                    _ => None,
+                                })
+                            }
+                            _ => None,
+                        };
+                        // 作者 lambda 的参数组与内层 Fn 参数组**不对齐**时，作者写
+                        // 的 lambda 就是外层函数本体——体里的 return / 尾表达式
+                        // 供给被返回的函数值，不再包装。包装会把它变成「被返回的
+                        // 值」，凭空多出一层与声明不符的函数形态（issue #501 形态
+                        // B：`() => { return inc }` 被包成 `() => () => { return inc }`，
+                        // g()(1) 的运行时形态与 E1012 的 found 口径同时错位）。
+                        // 对齐时（含内层非 Fn）保持既有包装：作者 lambda 即被返回
+                        // 的函数值（`mk: () -> ((a: Int) -> Int) = (a) => a + 1`、
+                        // `mk_block: () -> (() -> Int) = { () => 7 }`、运行时闭包
+                        // `make_adder: (a: Int) -> ((b: Int) -> Int) = (b) => a + b`）。
+                        let author_lambda_is_outer = matches!(
+                            inner_fn_value_param_count,
+                            Some(n) if n != lambda_params.len()
+                        );
+                        if !author_lambda_is_outer
+                            && (!own_params.is_empty() || !first_group_has_type_params)
+                        {
                             let inner = Expr::Lambda {
                                 params: merged,
                                 body: body.clone(),
@@ -448,7 +436,6 @@ fn parse_assign_after_target(
                                 kind: StmtKind::Assign {
                                     target: Box::new(target),
                                     type_annotation,
-                                    signature_params: extracted_params.clone(),
                                     value: Some(Box::new(value)),
                                     is_mut,
                                     span,
@@ -471,7 +458,6 @@ fn parse_assign_after_target(
                         kind: StmtKind::Assign {
                             target: Box::new(target),
                             type_annotation,
-                            signature_params: extracted_params.clone(),
                             value: Some(Box::new(value)),
                             is_mut,
                             span,
@@ -491,31 +477,28 @@ fn parse_assign_after_target(
                     // 从 lambda params 中剔除（实测退化为 `[a]`，函数体引用 `b` 报
                     // E3006）。此处排除谓词应用。
                     //
-                    // parser 不持有类型环境，无法查「是否已注册谓词」，故只能
-                    // 逐个内置谓词硬编码。目前只有 `Terminates`（RFC-027 §6.9）；
-                    // 随后续内置谓词增加而扩展（未来的开集方案：把谓词名下传给
-                    // parser，或改成语法层可判定的形态）。
-                    // parser 不持有类型环境，故看两处：内置谓词硬编码，
-                    // 外加本遍已解析的声明累积（`declare_predicate`）。
-                    let is_predicate_app =
-                        |n: &str| n == "Terminates" || state.is_predicate_name(n);
+                    // 判据的两个来源都不是 parser 自己的名字表：
+                    // ① 注入探针（`state.probe()`）——内置谓词与环境已知谓词；
+                    // ② 本遍已解析的声明累积（`declare_predicate`）。
+                    // `ParserState::is_predicate_app` 把两者合成一个问答。
                     let value_params: Vec<Param> = extracted_params
                         .iter()
                         .filter(|p| {
                             if is_type_param_annotation(p.ty.as_ref()) {
                                 return false;
                             }
-                            // RFC-011 §5.2：约束形参（`T: Add`——标注名为运算符
-                            // 接口/约束名，非具体类型）是类型位，不占运行时参数
+                            // RFC-011 §2.1：约束形参（`T: Add`——标注名为运算符
+                            // 接口/约束名，非具体类型）是类型位，不占运行时参数。
+                            // 是不是约束名由注入探针判定（L2 不再持有该名字表）。
                             if let Some(Type::Name { name: n, .. }) = &p.ty {
-                                if crate::frontend::core::typecheck::operator_interfaces::spec(n)
-                                    .is_some()
-                                {
+                                if state.probe().is_constraint(n) {
                                     return false;
                                 }
                             }
                             let used_as_const = type_annotation.as_ref().is_some_and(|ann| {
-                                name_used_as_type(&p.name, ann, &is_predicate_app)
+                                name_used_as_type(&p.name, ann, &|n| {
+                                    state.kind_of(n) == NameKind::Predicate
+                                })
                             });
                             !used_as_const
                         })
@@ -546,7 +529,6 @@ fn parse_assign_after_target(
                         kind: StmtKind::Assign {
                             target: Box::new(target),
                             type_annotation,
-                            signature_params: extracted_params.clone(),
                             value: Some(Box::new(value)),
                             is_mut,
                             span,
@@ -574,7 +556,7 @@ fn parse_assign_after_target(
                             return Some(Stmt {
                                 kind: StmtKind::TypeDefinition {
                                     name: "Type".to_string(),
-                                    signature_params: Vec::new(),
+                                    type_annotation: type_annotation.clone(),
                                     definition: Type::MetaType {
                                         name_span: Span::dummy(),
                                         args: Vec::new(),
@@ -593,7 +575,7 @@ fn parse_assign_after_target(
                 return Some(Stmt {
                     kind: StmtKind::TypeDefinition {
                         name: name.clone(),
-                        signature_params: Vec::new(),
+                        type_annotation: type_annotation.clone(),
                         definition,
                     },
                     span,
@@ -616,12 +598,11 @@ fn parse_assign_after_target(
 
         state.skip(&TokenKind::Semicolon);
 
-        // x = { ... } → Block 作为 value，typechecker 识别为函数定义
+        // x = { ... } → Block 作为 value，L3 的类型检查识别为函数定义
         return Some(Stmt {
             kind: StmtKind::Assign {
                 target: Box::new(target),
                 type_annotation,
-                signature_params: Vec::new(),
                 value: Some(Box::new(initializer)),
                 is_mut,
                 span,
@@ -856,7 +837,6 @@ pub fn parse_identifier_stmt(
             kind: StmtKind::Assign {
                 target: Box::new(target),
                 type_annotation: None,
-                signature_params: Vec::new(),
                 value: Some(Box::new(value)),
                 is_mut,
                 span,

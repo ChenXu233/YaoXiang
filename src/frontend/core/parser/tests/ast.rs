@@ -2,7 +2,7 @@
 //! 基于语言规范 §3（AST 结构）
 
 use crate::frontend::core::lexer::tokens::Literal;
-use crate::frontend::core::parser::ast::{
+use crate::ast::{
     self, BindingKind, BinOp, Block, Expr, FStringSegment, GenericParam, GenericParamKind,
     MatchArm, Param, Pattern, PlanId, SpannedIdent, Stmt, StmtKind, StructField, Type,
     TypeBodyBinding, UnOp, is_meta_type,
@@ -17,18 +17,24 @@ fn point_type_definition_stmt() -> Stmt {
     Stmt {
         kind: StmtKind::TypeDefinition {
             name: "Point".into(),
-            signature_params: vec![],
+            type_annotation: None,
             definition: Type::Struct {
                 body: vec![
                     ast::TypeBodyItem::Field(StructField {
                         name: "x".into(),
-                        ty: Type::Float(64),
+                        ty: Type::Name {
+                            name: "Float64".into(),
+                            span: Span::dummy(),
+                        },
                         is_mut: false,
                         default: None,
                     }),
                     ast::TypeBodyItem::Field(StructField {
                         name: "y".into(),
-                        ty: Type::Float(64),
+                        ty: Type::Name {
+                            name: "Float64".into(),
+                            span: Span::dummy(),
+                        },
                         is_mut: false,
                         default: None,
                     }),
@@ -336,7 +342,6 @@ fn test_stmtkind_var() {
         kind: StmtKind::Assign {
             target: Box::new(Expr::Var("x".into(), Span::dummy())),
             type_annotation: None,
-            signature_params: Vec::new(),
             value: Some(Box::new(Expr::Lit(Literal::Int(42), Span::dummy()))),
             is_mut: false,
             span: Span::dummy(),
@@ -360,7 +365,6 @@ fn test_stmtkind_binding() {
         kind: StmtKind::Assign {
             target: Box::new(Expr::Var("add".into(), Span::dummy())),
             type_annotation: None,
-            signature_params: vec![],
             value: Some(Box::new(Expr::Lambda {
                 params: vec![],
                 body: Box::new(Block {
@@ -436,21 +440,28 @@ fn test_type_name() {
 
 #[test]
 fn test_type_primitives() {
-    assert!(matches!(Type::Int(64), Type::Int(64)));
-    assert!(matches!(Type::Float(64), Type::Float(64)));
-    assert!(matches!(Type::Char, Type::Char));
-    assert!(matches!(Type::String, Type::String));
-    assert!(matches!(Type::Bool, Type::Bool));
-    assert!(matches!(Type::Void, Type::Void));
+    // WBS 6.3：内建标量不再有专用变体，parser 统一产出 Name。
+    for name in [
+        "Int", "Int64", "Float", "Float64", "Char", "String", "Bytes", "Bool", "Void",
+    ] {
+        let t = Type::Name {
+            name: name.into(),
+            span: Span::dummy(),
+        };
+        assert!(
+            matches!(&t, Type::Name { name: n, .. } if n == name),
+            "{name} 必须以 Name 表示"
+        );
+    }
 }
 
 #[test]
 fn test_type_fn() {
     let t = Type::Fn {
-        params: vec![Type::Name {
+        params: vec![Param::from_type(Type::Name {
             name: "Int".into(),
             span: Span::dummy(),
-        }],
+        })],
         return_type: Box::new(Type::Name {
             name: "String".into(),
             span: Span::dummy(),
@@ -465,7 +476,16 @@ fn test_type_fn() {
 
 #[test]
 fn test_type_tuple() {
-    let t = Type::Tuple(vec![Type::Int(64), Type::Bool]);
+    let t = Type::Tuple(vec![
+        Type::Name {
+            name: "Int64".into(),
+            span: Span::dummy(),
+        },
+        Type::Name {
+            name: "Bool".into(),
+            span: Span::dummy(),
+        },
+    ]);
     if let Type::Tuple(ts) = &t {
         assert_eq!(ts.len(), 2);
     } else {
@@ -625,7 +645,10 @@ fn test_struct_field_with_default() {
     let field = StructField::with_default(
         "x".into(),
         false,
-        Type::Float(64),
+        Type::Name {
+            name: "Float64".into(),
+            span: Span::dummy(),
+        },
         Expr::Lit(Literal::Float(0.0), Span::dummy()),
     );
     assert_eq!(field.name, "x");
@@ -650,7 +673,10 @@ fn test_generic_param_const_kind() {
     let gp = GenericParam {
         name: "N".into(),
         kind: GenericParamKind::Const {
-            const_type: Box::new(Type::Int(64)),
+            const_type: Box::new(Type::Name {
+                name: "Int64".into(),
+                span: Span::dummy(),
+            }),
         },
         constraints: vec![],
     };
@@ -695,7 +721,10 @@ fn test_binding_kind_external() {
 fn test_binding_kind_anonymous() {
     let bk = BindingKind::Anonymous {
         params: vec![],
-        return_type: Box::new(Type::Void),
+        return_type: Box::new(Type::Name {
+            name: "Void".into(),
+            span: Span::dummy(),
+        }),
         positions: vec![0],
         body: Box::new(Expr::Lit(Literal::Int(0), Span::dummy())),
     };
@@ -838,19 +867,57 @@ fn test_expr_cast() {
     assert!(matches!(expr, Expr::Cast { .. }));
 }
 
+/// 函数值解构（`callable_parts`）：`Lambda` 是唯一带参数表的函数值形态。
+/// RFC-039 6.5：函数定义统一走 `Assign` + `Lambda`，下游消费点
+/// （semantic_tokens / dead_code / ir_gen）都经本 helper 取参数表与体。
 #[test]
-fn test_expr_fndef() {
-    let expr = Expr::FnDef {
-        name: "add".into(),
-        params: vec![],
-        return_type: Some(Type::Int(64)),
+fn test_expr_callable_parts_lambda_returns_params_and_body() {
+    // Arrange
+    let lambda = Expr::Lambda {
+        params: vec![Param {
+            name: "x".into(),
+            ty: None,
+            is_mut: false,
+            span: Span::dummy(),
+        }],
         body: Box::new(Block {
-            stmts: vec![],
+            stmts: vec![Stmt {
+                kind: StmtKind::Expr(Box::new(Expr::Var("x".into(), Span::dummy()))),
+                span: Span::dummy(),
+                plan_id: PlanId::UNPLANNED,
+            }],
             span: Span::dummy(),
         }),
         span: Span::dummy(),
     };
-    if let Expr::FnDef { name, .. } = &expr {
-        assert_eq!(name, "add");
-    }
+
+    // Act
+    let (params, body) = lambda.callable_parts();
+
+    // Assert
+    assert_eq!(params.len(), 1, "Lambda 应解构出 1 个参数");
+    assert_eq!(params[0].name, "x", "参数名应原样保留");
+    assert_eq!(body.len(), 1, "Lambda 应解构出块体语句");
+}
+
+/// 函数值解构（`callable_parts`）：块值形态（`f: () -> Int = { ... }`）没有参数表，
+/// 只交出块体语句——旧函数语法迁移到 `Block` 值后的下游落点。
+#[test]
+fn test_expr_callable_parts_block_returns_body_without_params() {
+    // Arrange
+    let block = Expr::Block(Block {
+        stmts: vec![Stmt {
+            kind: StmtKind::Expr(Box::new(Expr::Lit(Literal::Int(1), Span::dummy()))),
+            span: Span::dummy(),
+            plan_id: PlanId::UNPLANNED,
+        }],
+        span: Span::dummy(),
+    });
+
+    // Act
+    let (params, body) = block.callable_parts();
+
+    // Assert
+    assert!(params.is_empty(), "块值形态没有参数表");
+    assert_eq!(body.len(), 1, "块值应解构出块体语句");
 }

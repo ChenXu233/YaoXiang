@@ -402,8 +402,9 @@ impl ConstKind {
 
     /// 从 AST 类型名创建 ConstKind
     ///
-    /// 解析器遇到 `N: Int` 时，const_type 为 `Type::Name("Int")` 或 `Type::Int(64)`。
-    /// 不管是哪种形式，都能通过类型名字符串转化为 ConstKind。
+    /// 解析器遇到 `N: Int` 时，const_type 为 `Type::Name("Int")`（WBS 6.3 删除了
+    /// `Int(64)` 这类专用变体，所有内置标量一律走 Name），此处按类型名字符串
+    /// 转成 ConstKind。
     pub fn from_ast_type_name(name: &str) -> Option<Self> {
         match name {
             "Int" | "Int64" | "Int32" | "Int16" | "Int8" => Some(ConstKind::Int(None)),

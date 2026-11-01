@@ -35,6 +35,7 @@ jobs:
             ~/.cargo/git/db
             target
             .z3
+            tools/type-tables/target
           key: check-${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             check-${{ runner.os }}-cargo-
@@ -47,6 +48,13 @@ jobs:
 
       - name: Build check
         run: cargo check --all-features
+
+      # tools/type-tables 在根 Cargo.toml 的 workspace.exclude 里，`cargo test --all`
+      # 覆盖不到它；而它正是 T1/T2 类型表门禁的实现本体。这里显式跑它的 27 条
+      # 单元测试——否则「门禁程序自己算得对不对」没有任何自动判据（2026-11-01 实例：
+      # 一次清空登记表让 3 条夹具变红，撑了 11 笔提交、6 个成员回合无人发现）。
+      - name: Type-table gate self-tests (excluded from workspace)
+        run: cargo test --manifest-path tools/type-tables/Cargo.toml
 
   scripts:
     name: Scripts (typecheck + tests)

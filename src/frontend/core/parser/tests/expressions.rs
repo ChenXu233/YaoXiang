@@ -2,7 +2,7 @@
 
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parse_expression;
-use crate::frontend::core::parser::ast::{BinOp, Expr, FStringSegment, UnOp};
+use crate::ast::{BinOp, Expr, FStringSegment, UnOp};
 use crate::frontend::core::lexer::tokens::Literal;
 
 fn parse_expr(source: &str) -> Expr {

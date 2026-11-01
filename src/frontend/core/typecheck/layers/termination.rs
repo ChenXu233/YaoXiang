@@ -133,7 +133,7 @@ impl LinearMeasure {
 // 1. 识别直接递归调用
 // 2. 检查调用参数是否严格递减（`f(n-1)` where `n-1 < n`）
 
-use crate::frontend::core::parser::ast::{self, Expr, Stmt, StmtKind, BinOp, Type};
+use crate::ast::{self, Expr, Stmt, StmtKind, BinOp, Type};
 use crate::frontend::core::typecheck::environment::TypeEnvironment;
 use crate::frontend::core::typecheck::proof::verdict::{
     BudgetReport, DisproofKind, DisproofModel, ProofResult, UnprovenReason,
@@ -613,17 +613,19 @@ impl<'a> TerminationChecker<'a> {
             StmtKind::Expr(expr) => self.check_expr(expr, is_never),
             StmtKind::Assign {
                 target,
-                signature_params,
                 value: Some(v),
                 type_annotation,
                 ..
             } => {
-                use crate::frontend::core::parser::ast::Expr;
+                use crate::ast::Expr;
                 let child_never = is_never || is_never_return_type(type_annotation.as_ref());
                 // RFC-027a：带显式测度的函数体进上下文，使自递归调用可被识别。
-                // 用 `signature_params` 而非 `Type::Fn.params` 取形参名——后者只有
-                // 类型（`[Int, Int]`），名字在签名参数里。
-                let saved_ctx = self.enter_measured_fn(target, signature_params);
+                // 形参名从注解的 `Type::Fn` 链拍平（6.5.2：不再有并行形参表）。
+                let signature = type_annotation
+                    .as_ref()
+                    .map(crate::ast::Type::fn_params_flat)
+                    .unwrap_or_default();
+                let saved_ctx = self.enter_measured_fn(target, &signature);
                 if let Expr::Lambda { body, .. } = v.as_ref() {
                     self.check_stmts(&body.stmts, child_never);
                 } else if let Expr::Block(block) = v.as_ref() {
@@ -759,17 +761,6 @@ impl<'a> TerminationChecker<'a> {
                     self.check_stmt(s, is_never);
                 }
                 self.check_expr(iterable, is_never);
-            }
-            Expr::FnDef {
-                name: _,
-                params,
-                body,
-                return_type,
-                ..
-            } => {
-                let param_names: Vec<String> = params.iter().map(|p| p.name.clone()).collect();
-                let fn_never = is_never || is_never_return_type(return_type.as_ref());
-                self.check_fn_body(&param_names, body, fn_never);
             }
             Expr::Call { func, args, .. } => {
                 for a in args {
@@ -1105,10 +1096,10 @@ impl<'a> TerminationChecker<'a> {
     }
 
     fn collect_assigned_names_from_stmt(
-        stmt: &crate::frontend::core::parser::ast::Stmt,
+        stmt: &crate::ast::Stmt,
         out: &mut Vec<String>,
     ) {
-        use crate::frontend::core::parser::ast::StmtKind;
+        use crate::ast::StmtKind;
         match &stmt.kind {
             StmtKind::Assign { target, .. } => {
                 if let Some(path) = Self::render_field_path(target) {
@@ -1208,7 +1199,7 @@ impl<'a> TerminationChecker<'a> {
                 value: Some(v),
                 ..
             } => {
-                use crate::frontend::core::parser::ast::Expr;
+                use crate::ast::Expr;
                 if let Expr::Var(name, _) = target.as_ref() {
                     let delta_info = self.analyze_delta(v, name);
                     // 位移**未知**的赋值同样要收进来：整条丢弃会让下游以为该变量
@@ -2040,18 +2031,6 @@ impl<'a> TerminationChecker<'a> {
 
     // ==================== 递归终止检查 ====================
 
-    /// 检查函数体
-    fn check_fn_body(
-        &mut self,
-        _param_names: &[String],
-        body: &ast::Block,
-        is_never: bool,
-    ) {
-        for s in &body.stmts {
-            self.check_stmt(s, is_never);
-        }
-    }
-
     /// 若该绑定带显式测度，进入其函数体上下文（RFC-027a §义务生成）。
     ///
     /// 返回**进入前**的上下文，供遍历结束后恢复——函数体可嵌套（lambda 套
@@ -2062,7 +2041,7 @@ impl<'a> TerminationChecker<'a> {
     fn enter_measured_fn(
         &mut self,
         target: &Expr,
-        signature_params: &[ast::Param],
+        decl_params: &[ast::Param],
     ) -> Option<FnMeasureContext> {
         let Expr::Var(name, _) = target else {
             return None;
@@ -2070,7 +2049,7 @@ impl<'a> TerminationChecker<'a> {
         let measure = self.measures.get(name).cloned()?;
         let ctx = FnMeasureContext {
             name: name.clone(),
-            params: signature_params.iter().map(|p| p.name.clone()).collect(),
+            params: decl_params.iter().map(|p| p.name.clone()).collect(),
             measure,
         };
         self.current_fn.replace(ctx)
@@ -2308,7 +2287,7 @@ fn is_never_return_type(ty: Option<&Type>) -> bool {
     match ty {
         // `name: () -> Never` — type_annotation 是 Fn 类型，取 return_type
         Some(Type::Fn { return_type, .. }) => is_type_never(return_type.as_ref()),
-        // `fn(): Never` — FnDef.return_type 是裸返回类型
+        // 裸类型注解（如 `name: Never`）——注解本身就是返回类型
         Some(t) => is_type_never(t),
         None => false,
     }
@@ -2383,7 +2362,7 @@ pub(crate) fn substitute_const_expr(
 /// 不在比较上做 De Morgan 规约——SMT 侧 `not (= b 0)` 与 `b != 0` 等价，
 /// 少一层变换就少一处可能出错的地方。
 pub(crate) fn negate_guard(
-    condition: &crate::frontend::core::parser::ast::Expr
+    condition: &crate::ast::Expr
 ) -> Option<crate::frontend::core::types::const_data::ConstExpr> {
     use crate::frontend::core::types::const_data::{ConstExpr, UnOp};
     use crate::frontend::core::types::eval::const_eval::convert_expr_to_const_expr;
@@ -2413,7 +2392,7 @@ pub(crate) fn negate_guard(
 ///
 /// 判错的方向是安全的：漏认 → 少压一条守卫 → 证明更难、不会造出假假设。
 fn block_diverges(stmts: &[Stmt]) -> bool {
-    use crate::frontend::core::parser::ast::{Expr, StmtKind};
+    use crate::ast::{Expr, StmtKind};
 
     let Some(last) = stmts.last() else {
         return false;

@@ -12,7 +12,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use crate::frontend::core::parser::ast::{BinOp, Block, Expr, FStringSegment, Stmt, StmtKind};
+use crate::ast::{BinOp, Block, Expr, FStringSegment, Stmt, StmtKind};
 use crate::frontend::core::types::{MonoType, TraitTable};
 use crate::middle::core::ir::{ExecutionPlan, TaskGroup};
 
@@ -898,18 +898,6 @@ fn collect_reads_writes(
 
         // spawn 块（嵌套 spawn）
         Expr::Spawn { body, .. } => {
-            collect_from_block(
-                body,
-                reads,
-                writes,
-                resource_vars,
-                trait_table,
-                local_var_types,
-            );
-        }
-
-        // 函数定义（闭包捕获的外层变量）
-        Expr::FnDef { body, .. } => {
             collect_from_block(
                 body,
                 reads,

@@ -15,7 +15,7 @@
 //! # 契约
 //!
 //! - **分配**：`ParserState::alloc_plan_id` 是唯一分配点，解析期按序递增；
-//! - **载体**：`crate::frontend::core::parser::ast::Stmt::plan_id`；
+//! - **载体**：`crate::ast::Stmt::plan_id`；
 //! - **结算**：`ReleasePlan` 产出 ⊆ 消费（IR 生成逐语句查表）——差集非空即
 //!   响亮报出（义务账本 `W1090`），不得静默（D41）。
 //!

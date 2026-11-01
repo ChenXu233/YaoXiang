@@ -1,0 +1,21 @@
+// 02-type-system/aggregates/type_decl_anon_binding.yx
+// 覆盖: 类型体内**内联匿名函数绑定**（RFC-039 6.6.12：绑定不进 IR 载体）
+// 验证: 类型体含 Binding 项时仍可构造、数据字段可读回；绑定本身可调用（返回值不断言）
+// 状态: ✅ 可运行
+
+use std.assert
+
+Point: Type = {
+    x: Int,
+    // 内联匿名方法绑定：`[0]` 是绑定的参数位置，lambda 头提供签名
+    cb: ((a: Int) -> Bool)[0] = a => a > 0,
+}
+
+main: () -> Void = {
+    p = Point(1)
+    assert.assert(p.x == 1, "含匿名绑定的类型仍可构造并读回数据字段")
+    // 调用绑定（当前绑定调用返回 Void，故只作调用覆盖，不断言返回值）
+    p.cb(5)
+}
+
+main()

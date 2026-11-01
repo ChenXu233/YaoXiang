@@ -21,6 +21,8 @@
 #![allow(clippy::mutable_key_type)]
 
 // Public modules
+// D1（6.7.1a）：AST 是与 parser 平级的顶层数据域，被前端/语义/IR/格式化各层共享。
+pub mod ast;
 pub mod backends;
 pub mod driver;
 pub mod formatter;
@@ -97,12 +99,15 @@ pub fn run(source: &str) -> Result<()> {
 pub fn eval_code(source: &str) -> Result<()> {
     let tokens = crate::frontend::core::tokenize(source)
         .map_err(|e| anyhow::anyhow!("Lexer error: {:?}", e))?;
-    let parse_result = crate::frontend::core::parser::parse(&tokens);
+    let parse_result = crate::frontend::core::parser::parse_with_probe(
+        &tokens,
+        &crate::frontend::core::typecheck::SemanticProbe,
+    );
     let has_main = parse_result.module.items.iter().any(|stmt| {
         matches!(
             &stmt.kind,
-            crate::frontend::core::parser::ast::StmtKind::Assign { target, .. }
-            if matches!(target.as_ref(), crate::frontend::core::parser::ast::Expr::Var(name, _) if name == "main")
+            crate::ast::StmtKind::Assign { target, .. }
+            if matches!(target.as_ref(), crate::ast::Expr::Var(name, _) if name == "main")
         )
     });
     let compile_source: String = if has_main {
@@ -721,3 +726,4 @@ fn dump_instr_location(
 
 #[cfg(test)]
 mod tests;
+// stages 显式化探针

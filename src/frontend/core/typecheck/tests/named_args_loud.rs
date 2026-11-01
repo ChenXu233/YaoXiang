@@ -11,6 +11,7 @@
 //!
 //! 本文件把这些形态收成**仓内夹具**（外部探针包不入库），逐条断言编译期错误码。
 
+use crate::frontend::core::typecheck::probe::TypeLevelNamespace;
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parse;
 use crate::frontend::core::typecheck::checker::TypeChecker;
@@ -25,7 +26,10 @@ fn compile_codes(source: &str) -> Vec<String> {
         parsed.errors
     );
     let mut checker = TypeChecker::new("<named-args-loud>");
-    let tr = checker.check_module(&parsed.module);
+    let tr = checker.check_module(
+        &parsed.module,
+        &TypeLevelNamespace::scan_one(&parsed.module),
+    );
     for d in tr.diagnostics.iter() {
         eprintln!("LOUD_DIAG {} :: {}", d.code, d.message);
     }

@@ -1,12 +1,12 @@
 module
   fn Animal(MetaType { universe_level: UniverseLevel { level: "0" }, type_params: [] }) -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
     generic_params: ["Self"]
-    type_decl Struct { body: [Field(StructField { name: "speak", is_mut: false, ty: Fn { params: [Ref { mutable: false, inner: Name { name: "Self", span: Span { start: Position { line: 12, column: 20, offset: 441 }, end: Position { line: 12, column: 24, offset: 445 } } }, span: Span { start: Position { line: 12, column: 24, offset: 445 }, end: Position { line: 12, column: 25, offset: 446 } } }], return_type: Name { name: "String", span: Span { start: Position { line: 12, column: 29, offset: 450 }, end: Position { line: 12, column: 35, offset: 456 } } } }, default: None })] }
+    type_decl [speak: Fn { params: [Ref { mutable: false, inner: TypeRef("Self") }], return_type: Generic { name: "String", args: [] } }]
   fn Pet(MetaType { universe_level: UniverseLevel { level: "0" }, type_params: [] }) -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
     generic_params: ["Self"]
-    type_decl Struct { body: [Expr(Generic { name: "Animal", name_span: Span { start: Position { line: 17, column: 5, offset: 592 }, end: Position { line: 17, column: 11, offset: 598 } }, args: [Name { name: "Self", span: Span { start: Position { line: 17, column: 12, offset: 599 }, end: Position { line: 17, column: 16, offset: 603 } } }] }), Field(StructField { name: "fetch", is_mut: false, ty: Fn { params: [Ref { mutable: false, inner: Name { name: "Self", span: Span { start: Position { line: 18, column: 20, offset: 625 }, end: Position { line: 18, column: 24, offset: 629 } } }, span: Span { start: Position { line: 18, column: 24, offset: 629 }, end: Position { line: 18, column: 25, offset: 630 } } }], return_type: Name { name: "String", span: Span { start: Position { line: 18, column: 29, offset: 634 }, end: Position { line: 18, column: 35, offset: 640 } } } }, default: None })] }
+    type_decl [fetch: Fn { params: [Ref { mutable: false, inner: TypeRef("Self") }], return_type: Generic { name: "String", args: [] } }]
   fn Dog() -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
-    type_decl Struct { body: [Field(StructField { name: "name", is_mut: false, ty: Name { name: "String", span: Span { start: Position { line: 22, column: 11, offset: 669 }, end: Position { line: 22, column: 17, offset: 675 } } }, default: None }), Expr(Generic { name: "Pet", name_span: Span { start: Position { line: 23, column: 5, offset: 681 }, end: Position { line: 23, column: 8, offset: 684 } }, args: [Name { name: "Dog", span: Span { start: Position { line: 23, column: 9, offset: 685 }, end: Position { line: 23, column: 12, offset: 688 } } }] })] }
+    type_decl [name: Generic { name: "String", args: [] }]
   fn Dog.speak(Ref { mutable: false, inner: TypeRef("Dog") }) -> Generic { name: "String", args: [] }
     locals_total=2
     Load %0 <- string("Woof")

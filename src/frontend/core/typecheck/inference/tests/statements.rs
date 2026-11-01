@@ -5,11 +5,19 @@
 
 use crate::frontend::core::typecheck::inference::statements::StatementChecker;
 use crate::frontend::core::types::{MonoType, PolyType, TraitTable, TypeConstraintSolver};
-use crate::frontend::core::parser::ast::{self, Stmt, StmtKind, Expr, BinOp, Block, Param, PlanId};
+use crate::ast::{self, Stmt, StmtKind, Expr, BinOp, Block, Param, PlanId};
 use crate::frontend::core::lexer::tokens::Literal;
 use crate::util::span::Span;
 
 // 辅助函数
+
+/// 内建类型在 AST 里的唯一写法：Name（WBS 6.3 删除了 Int/Float/… 专用变体）。
+fn builtin_ty(name: &str) -> ast::Type {
+    ast::Type::Name {
+        name: name.to_string(),
+        span: Span::dummy(),
+    }
+}
 
 /// 从 StmtKind 构造 Stmt，使用 dummy span
 fn make_stmt(kind: StmtKind) -> Stmt {
@@ -79,8 +87,7 @@ fn test_check_var_stmt_with_type_annotation() {
     let mut checker = make_checker();
     let stmt = make_stmt(StmtKind::Assign {
         target: Box::new(Expr::Var("x".to_string(), Span::dummy())),
-        type_annotation: Some(ast::Type::Int(64)),
-        signature_params: vec![],
+        type_annotation: Some(builtin_ty("Int64")),
         value: Some(Box::new(Expr::Lit(Literal::Int(42), Span::dummy()))),
         is_mut: false,
         span: Span::dummy(),
@@ -109,7 +116,6 @@ fn test_check_var_stmt_type_inference() {
     let stmt = make_stmt(StmtKind::Assign {
         target: Box::new(Expr::Var("x".to_string(), Span::dummy())),
         type_annotation: None,
-        signature_params: vec![],
         value: Some(Box::new(Expr::Lit(Literal::Int(42), Span::dummy()))),
         is_mut: false,
         span: Span::dummy(),
@@ -362,8 +368,7 @@ fn test_check_var_stmt_type_mismatch() {
     // x: Bool = 42 — Int 字面量与 Bool 注解不匹配
     let stmt = make_stmt(StmtKind::Assign {
         target: Box::new(Expr::Var("x".to_string(), Span::dummy())),
-        type_annotation: Some(ast::Type::Bool),
-        signature_params: vec![],
+        type_annotation: Some(builtin_ty("Bool")),
         value: Some(Box::new(Expr::Lit(Literal::Int(42), Span::dummy()))),
         is_mut: false,
         span: Span::dummy(),
@@ -520,8 +525,7 @@ fn test_check_statement_checker_with_many_statements() {
     for i in 0..100 {
         stmts.push(make_stmt(StmtKind::Assign {
             target: Box::new(Expr::Var(format!("var_{}", i), Span::dummy())),
-            type_annotation: Some(ast::Type::Int(64)),
-            signature_params: vec![],
+            type_annotation: Some(builtin_ty("Int64")),
             value: Some(Box::new(Expr::Lit(Literal::Int(i as i128), Span::dummy()))),
             is_mut: false,
             span: Span::dummy(),
@@ -555,13 +559,13 @@ fn test_check_fn_def_with_params() {
     let params = vec![
         Param {
             name: "a".to_string(),
-            ty: Some(ast::Type::Int(32)),
+            ty: Some(builtin_ty("Int32")),
             is_mut: false,
             span: Span::dummy(),
         },
         Param {
             name: "b".to_string(),
-            ty: Some(ast::Type::Bool),
+            ty: Some(builtin_ty("Bool")),
             is_mut: false,
             span: Span::dummy(),
         },
@@ -586,7 +590,7 @@ fn test_check_fn_def_params_visible_in_body() {
     let mut checker = make_checker();
     let params = vec![Param {
         name: "x".to_string(),
-        ty: Some(ast::Type::Int(32)),
+        ty: Some(builtin_ty("Int32")),
         is_mut: false,
         span: Span::dummy(),
     }];
@@ -616,8 +620,7 @@ fn test_check_var_stmt_only_annotation() {
     let mut checker = make_checker();
     let stmt = make_stmt(StmtKind::Assign {
         target: Box::new(Expr::Var("y".to_string(), Span::dummy())),
-        type_annotation: Some(ast::Type::Float(64)),
-        signature_params: vec![],
+        type_annotation: Some(builtin_ty("Float64")),
         value: None,
         is_mut: false,
         span: Span::dummy(),

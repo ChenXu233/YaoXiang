@@ -10,8 +10,8 @@
 //! - Meta types: `Type`
 
 use crate::frontend::core::lexer::tokens::*;
-use crate::frontend::core::parser::ast::*;
-use crate::frontend::core::parser::ast::StructField;
+use crate::ast::*;
+use crate::ast::StructField;
 use crate::frontend::core::parser::{ParserState, BP_LOWEST};
 use crate::frontend::core::parser::parse_msg;
 use crate::util::diagnostic::ErrorCodeDefinition;
@@ -241,8 +241,23 @@ pub fn parse_type_annotation(state: &mut ParserState<'_>) -> Option<Type> {
             if state.at(&TokenKind::Arrow) {
                 state.bump(); // consume '->'
                 let return_type = Box::new(parse_type_annotation(state)?);
+                // 名字与类型同栖（RFC-039 6.8.1）：具名参数位带真实名字，
+                // 无名位置（纯类型列表）合成匿名形参——名字不再另存。
+                let params: Vec<Param> = param_types
+                    .into_iter()
+                    .enumerate()
+                    .map(|(i, ty)| match named_params.get(i) {
+                        Some((name, span)) => Param {
+                            name: name.clone(),
+                            ty: Some(ty),
+                            is_mut: false,
+                            span: *span,
+                        },
+                        None => Param::from_type(ty),
+                    })
+                    .collect();
                 return Some(Type::Fn {
-                    params: param_types,
+                    params,
                     return_type,
                 });
             }
@@ -311,7 +326,7 @@ pub fn parse_type_annotation(state: &mut ParserState<'_>) -> Option<Type> {
                 let n = *n;
                 state.bump();
                 Some(Type::ConstExpr(Box::new(Expr::UnOp {
-                    op: crate::frontend::core::parser::ast::UnOp::Neg,
+                    op: crate::ast::UnOp::Neg,
                     expr: Box::new(Expr::Lit(
                         crate::frontend::core::lexer::tokens::Literal::Int(n),
                         span,
@@ -405,9 +420,7 @@ fn parse_constructor_type(
 /// Returns (Vec<Param>, return_type)
 /// This is for RFC-010 unified syntax: `name: (a: Int, b: Int) -> Ret = body`
 /// Also supports const generic literal types: `factorial: [n: Int](n: n) -> Int`
-pub fn parse_fn_type_with_names(
-    state: &mut ParserState<'_>
-) -> Option<(Vec<Param>, Vec<Param>, Box<Type>)> {
+pub fn parse_fn_type_with_names(state: &mut ParserState<'_>) -> Option<(Vec<Param>, Box<Type>)> {
     if !state.expect(&TokenKind::LParen) {
         return None;
     }
@@ -486,8 +499,9 @@ pub fn parse_fn_type_with_names(
     }
     // return_type 位置可能是另一组 curry（如 (n: N) -> Int）。
     // parse_type_annotation 会丢参数名，故自行检测 curry 组并递归收集带名参数。
-    // all_params = 第一组 + 后续各组（拍平带名），供 signature_params 存全部 curry 组参数名。
-    // return_type 保持嵌套 Type::Fn（纯类型），供 type_annotation 构建正确嵌套结构。
+    // 返回值收敛为**两元组**（6.5.2 commit ③）：第一组形参 + 返回类型；后续各组的
+    // 形参名与类型同栖在嵌套 `Type::Fn.params` 里，调用方经
+    // `Type::fn_params_flat` 拍平取得全部 curry 形参——不再旁路返回同一份数据。
     // 注意：必须前瞻到 `)` 之后确认是 `->` 才算 curry 组——
     // 返回类型本身可能是元组类型 (T, U)（#253），否则会把元组误判为 curry 参数组。
     let saved = state.save_position();
@@ -519,38 +533,30 @@ pub fn parse_fn_type_with_names(
     };
 
     if is_named_curry {
-        if let Some((inner_first, inner_all, inner_ret)) = parse_fn_type_with_names(state) {
-            let mut all_params = params.clone();
-            all_params.extend(inner_all);
+        if let Some((inner_params, inner_ret)) = parse_fn_type_with_names(state) {
             let nested_fn = Type::Fn {
-                params: inner_first.iter().filter_map(|p| p.ty.clone()).collect(),
+                params: inner_params,
                 return_type: inner_ret,
             };
-            return Some((params, all_params, Box::new(nested_fn)));
+            return Some((params, Box::new(nested_fn)));
         }
         state.restore_position(saved);
     }
     // RFC-004 括号语义：`-> ((a: Int) -> Int)` —— 外层括号声明“返回值是函数”，
-    // 链条到此终止（`split_curry` 遇 `Paren` 停下）。但 body lambda 仍需要
-    // 内层参数**名**对齐类型，而 `Type::Fn` 只存类型不存名（见上方说明），
-    // 故此处回扫一次收集带名参数，返回类型保持 `Paren`。
+    // 链条到此终止（`split_curry` 遇 `Paren` 停下）。内层参数名与类型同栖在
+    // 嵌套 `Type::Fn.params`（6.8.1），这里只需把带名的内层函数类型放进
+    // `Paren`，调用方拍平即可拿到它——返回类型保持 `Paren`。
     let saved_paren = state.save_position();
     if state.skip(&TokenKind::LParen) && state.at(&TokenKind::LParen) {
-        if let Some((inner_first, inner_all, inner_ret)) = parse_fn_type_with_names(state) {
+        if let Some((inner_params, inner_ret)) = parse_fn_type_with_names(state) {
             // 仅在全部内层参数都带类型时采用——否则 `((Int) -> Int)` 的 `Int`
             // 会被 parse_fn_type_with_names 误当作参数名（无名参数 ty=None）。
-            if inner_first.iter().all(|p| p.ty.is_some()) && state.skip(&TokenKind::RParen) {
-                let mut all_params = params.clone();
-                all_params.extend(inner_all);
+            if inner_params.iter().all(|p| p.ty.is_some()) && state.skip(&TokenKind::RParen) {
                 let inner_fn = Type::Fn {
-                    params: inner_first.iter().filter_map(|p| p.ty.clone()).collect(),
+                    params: inner_params,
                     return_type: inner_ret,
                 };
-                return Some((
-                    params,
-                    all_params,
-                    Box::new(Type::Paren(Box::new(inner_fn))),
-                ));
+                return Some((params, Box::new(Type::Paren(Box::new(inner_fn)))));
             }
         }
     }
@@ -558,8 +564,7 @@ pub fn parse_fn_type_with_names(
 
     // `->` 后返回类型必需：严格版，非法 token 报错而非静默吞掉整个签名（审计发现）
     let return_type = Box::new(parse_type_annotation_required(state)?);
-    let all_params = params.clone();
-    Some((params, all_params, return_type))
+    Some((params, return_type))
 }
 
 /// Wrap a type annotation as a literal type if it's a const parameter reference
@@ -630,6 +635,9 @@ fn parse_struct_type(state: &mut ParserState<'_>) -> Option<Type> {
             if state.at(&TokenKind::Colon) {
                 // 有冒号: 字段声明或匿名函数绑定
                 state.bump(); // consume ':'
+
+                // 注解的起点——匿名函数绑定取不到函数类型时，诊断落在这里
+                let annotation_span = state.span();
                 let field_type = parse_type_annotation(state)?;
 
                 // 检查是否有位置绑定: [positions]
@@ -638,8 +646,21 @@ fn parse_struct_type(state: &mut ParserState<'_>) -> Option<Type> {
                 if state.skip(&TokenKind::Eq) {
                     if let Some(pos) = positions {
                         // 匿名函数绑定: name: FnType[pos] = lambda
+                        //
+                        // 形参与返回类型由**注解**提供：注解不是函数类型时没有可用的真实
+                        // 类型，只能报诊断并放弃该绑定——不得伪造返回值（WBS 6.6.7；
+                        // 6.3 的 `Type::Name{"()"}` 兜底正是被删掉的伪造载体）。
+                        let Some((params, return_type)) = extract_fn_type_info(&field_type) else {
+                            state.error(
+                                ErrorCodeDefinition::invalid_syntax(&format!(
+                                    "Anonymous function binding '{name}' needs a function type annotation before [positions] (the lambda's parameter and return types come from it)"
+                                ))
+                                .at(annotation_span)
+                                .build(),
+                            );
+                            return None;
+                        };
                         let body_expr = state.parse_expression(BP_LOWEST)?;
-                        let (params, return_type) = extract_fn_type_info(&field_type);
                         body.push(TypeBodyItem::Binding(TypeBodyBinding {
                             name,
                             kind: BindingKind::Anonymous {
@@ -814,25 +835,50 @@ pub(crate) fn parse_binding_positions(state: &mut ParserState<'_>) -> Result<Vec
     Ok(positions)
 }
 
-/// 从函数类型中提取参数和返回类型
-fn extract_fn_type_info(ty: &Type) -> (Vec<Param>, Type) {
-    match ty {
-        Type::Fn {
-            params,
-            return_type,
-        } => {
-            let param_list = params
-                .iter()
-                .enumerate()
-                .map(|(i, p)| Param {
-                    name: format!("arg{}", i),
-                    ty: Some(p.clone()),
-                    is_mut: false,
-                    span: Span::dummy(),
-                })
-                .collect();
-            (param_list, *return_type.clone())
+/// 剥掉类型位置的**透明包装**：RFC-004 的 `Paren` 与 RFC-027 §3 的 `NamedParen`。
+///
+/// 两层在类型检查与 lower 里都透明（`From<ast::Type> for MonoType` 直接递归内层），
+/// 所以「注解究竟是什么类型」必须剥到底再判。匿名函数绑定尤其依赖这一点：裸函数类型
+/// 后面跟 `[pos]` 会被当成索引 / const 泛型实参，文档记载的写法一定是
+/// `((a: Int) -> Bool)[0]`——注解是 `Paren(Fn)`，不是 `Fn`。
+fn unwrap_transparent_type(mut ty: &Type) -> &Type {
+    loop {
+        match ty {
+            Type::Paren(inner) => ty = inner,
+            Type::NamedParen { inner, .. } => ty = inner,
+            other => return other,
         }
-        _ => (Vec::new(), Type::Void),
     }
+}
+
+/// 从函数类型中提取形参与返回类型。
+///
+/// 返回 `None` = 注解（剥掉透明括号后）**不是**函数类型：匿名函数绑定的形参与返回
+/// 类型由注解提供，没有函数类型就没有可用的真实类型，调用方必须报诊断并放弃该绑定
+/// （WBS 6.6.7）。
+///
+/// **不得**改成任何「占位返回类型」兜底——6.3 曾把 `Type::Void` 兜底换成
+/// `Type::Name{"()"}`：那既不是真实类型（下游会当成用户类型或 `Void` 的类型写法），
+/// 也让 `semantic_tokens` 的 `Name` 臂为这个 dummy 节点多记一枚 token。该路径
+/// **语法可达**（`{ cb: (Int)[0] = 1 }`：位置绑定要求函数类型注解，语法本身不拦），
+/// 故按诊断处理，而不是 `unreachable!`。
+fn extract_fn_type_info(ty: &Type) -> Option<(Vec<Param>, Type)> {
+    let Type::Fn {
+        params,
+        return_type,
+    } = unwrap_transparent_type(ty)
+    else {
+        return None;
+    };
+    let param_list = params
+        .iter()
+        .enumerate()
+        .map(|(i, p)| Param {
+            name: format!("arg{}", i),
+            ty: p.ty.clone(),
+            is_mut: false,
+            span: Span::dummy(),
+        })
+        .collect();
+    Some((param_list, *return_type.clone()))
 }

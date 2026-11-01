@@ -33,7 +33,7 @@ module
     Ret %1
     Ret %1
   fn Holder() -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
-    type_decl Struct { body: [Field(StructField { name: "opt", is_mut: false, ty: Generic { name: "Option", name_span: Span { start: Position { line: 28, column: 10, offset: 890 }, end: Position { line: 28, column: 16, offset: 896 } }, args: [Name { name: "Int", span: Span { start: Position { line: 28, column: 17, offset: 897 }, end: Position { line: 28, column: 20, offset: 900 } } }] }, default: None })] }
+    type_decl [opt: Generic { name: "Option", args: [Int(64)] }]
   init (locals=105)
     islot[6] x : Int(64) @depth1
     islot[24] x : Int(64) @depth1

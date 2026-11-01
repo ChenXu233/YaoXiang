@@ -9,7 +9,7 @@
 use lsp_types::{InlayHint, InlayHintKind, InlayHintLabel, InlayHintParams};
 use tracing::debug;
 
-use crate::frontend::core::parser::ast::{BinOp, Expr, Literal, StmtKind};
+use crate::ast::{BinOp, Expr, Literal, StmtKind};
 use crate::lsp::locate::span_to_range;
 use crate::lsp::session::Session;
 
@@ -36,7 +36,7 @@ pub fn handle_inlay_hint(
             ..
         } = &stmt.kind
         {
-            use crate::frontend::core::parser::ast::Expr;
+            use crate::ast::Expr;
             let name_span = match target.as_ref() {
                 Expr::Var(_, s) => *s,
                 _ => *stmt_span,

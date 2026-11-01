@@ -1,8 +1,8 @@
 module
   fn Buffer() -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
-    type_decl Struct { body: [Field(StructField { name: "value", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 7, column: 25, offset: 195 }, end: Position { line: 7, column: 28, offset: 198 } } }, default: None })] }
+    type_decl [value: Int(64)]
   fn BufferView() -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
-    type_decl Struct { body: [Field(StructField { name: "owner", is_mut: false, ty: Name { name: "Buffer", span: Span { start: Position { line: 11, column: 12, offset: 279 }, end: Position { line: 11, column: 18, offset: 285 } } }, default: None }), Field(StructField { name: "view", is_mut: false, ty: Ref { mutable: false, inner: Name { name: "Buffer", span: Span { start: Position { line: 12, column: 12, offset: 298 }, end: Position { line: 12, column: 18, offset: 304 } } }, span: Span { start: Position { line: 13, column: 1, offset: 305 }, end: Position { line: 13, column: 2, offset: 306 } } }, default: None })] }
+    type_decl [owner: TypeRef("Buffer") ; view: Ref { mutable: false, inner: TypeRef("Buffer") }]
   fn main() -> Void
     slot[0] buf : Int(64) @depth1
     slot[1] ref_buf : Int(64) @depth1

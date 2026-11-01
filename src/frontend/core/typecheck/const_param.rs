@@ -8,7 +8,7 @@
 
 use std::collections::HashSet;
 
-use crate::frontend::core::parser::ast::{GenericParam, GenericParamKind, Param, Type};
+use crate::ast::{GenericParam, GenericParamKind, Param, Type};
 use crate::frontend::core::types::const_data::{ConstKind, ConstVarDef};
 
 /// 精筛结果：命中者与落空者。
@@ -23,9 +23,6 @@ pub struct ResolvedConstParams {
 pub fn ast_type_to_const_kind(ty: &Type) -> ConstKind {
     let name = match ty {
         Type::Name { name, .. } => Some(name.as_str()),
-        Type::Int(_) => Some("Int"),
-        Type::Float(_) => Some("Float"),
-        Type::Bool => Some("Bool"),
         _ => None,
     };
     name.and_then(ConstKind::from_ast_type_name)
@@ -36,7 +33,7 @@ pub fn ast_type_to_const_kind(ty: &Type) -> ConstKind {
 /// 其余作为落空者返回（携带原始 Param 以便并入参数链或报错）。
 pub fn resolve_const_candidates(
     generic_params: &[GenericParam],
-    signature_params: &[Param],
+    decl_params: &[Param],
     used_as_const: &HashSet<String>,
     n_type_params: usize,
 ) -> ResolvedConstParams {
@@ -57,7 +54,7 @@ pub fn resolve_const_candidates(
                     idx,
                 ));
             }
-        } else if let Some(p) = signature_params.iter().find(|p| p.name == gp.name) {
+        } else if let Some(p) = decl_params.iter().find(|p| p.name == gp.name) {
             result.fallen.push(p.clone());
         }
     }

@@ -74,7 +74,7 @@ fn error_module_with_debug_span() -> (SourceMap, BytecodeModule) {
     module.add_function(BytecodeFunction {
         name: "main".to_string(),
         params: vec![],
-        return_type: crate::middle::core::ir::Type::Void,
+        return_type: crate::frontend::core::typecheck::MonoType::Void,
         local_count: 0,
         local_names: HashMap::new(),
         upvalue_count: 0,

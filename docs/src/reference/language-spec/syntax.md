@@ -319,6 +319,16 @@ IndexAccess ::= Expr '[' Expr ']'
 TypeCast    ::= Expr 'as' TypeExpr
 ```
 
+> **实现现状（既有缺口，非本版引入）**：上文只定义文法与优先级（§2.4 第 2 级），
+> 语义尚未落地。可独立复核的事实：
+> ① 解析：`parser/pratt/led.rs:81` 的 `KwAs` 中缀臂产出 `ast::Expr::Cast`；
+> ② 类型检查：`typecheck/inference/expressions.rs:3847-3853` 对 `Expr::Cast` 只做
+> **静默重标注**——`let _ = self.infer_expr(expr)?;` 丢弃内层结果，随后直接返回
+> `target_type` 的 `MonoType`；
+> ③ 全仓**没有**可转换性校验，也没有对应的诊断码（`util/diagnostic/codes/` 无 cast 条目）；
+> ④ `ir_gen` 不生成任何指令（`middle/core/ir_gen.rs` 只在 `:5111` / `:5918` / `:9381` 取 `Expr::Cast` 的 span 与自由变量——前两处是 `get_expr_span` / `expr_span` 的 span 臂，第三处是 `collect_free_vars_expr`，三处都不产生指令）；
+> ⑤ 因此 `x as Int` 当前既不报错，也不产生任何运行期转换。
+
 ### 2.7 条件表达式
 
 ```

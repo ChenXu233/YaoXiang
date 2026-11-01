@@ -3,7 +3,7 @@
 use std::collections::HashSet;
 
 use crate::formatter::source_map::SourceMap;
-use crate::frontend::core::parser::ast::*;
+use crate::ast::*;
 
 /// 导入类型
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]

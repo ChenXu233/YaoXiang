@@ -11,6 +11,7 @@
 #![cfg(feature = "cli")]
 
 use std::path::PathBuf;
+use std::process::Command;
 use tempfile::TempDir;
 use yaoxiang::util::diagnostic::run_check_command_once;
 
@@ -615,5 +616,395 @@ fn test_check_two_entries_sharing_module_reports_it_once() {
         result.error_count, 1,
         "error_count must not double-count the shared module, got {}",
         result.error_count
+    );
+}
+
+// 约束方法派发的编译期诊断锚（#519 甲案续篇 / 2026-11-01 用户裁决 / WBS 3.20.7）
+
+/// #519 翻面锚（2026-11-01 甲案续篇落地，先红后绿）：mono 特化改写未命中
+/// 约束方法派发名时，check 编译期报 E1106。前史：2026-10-31 甲案删除调用点
+/// 复检（RFC-011b 附录B 设计决策记录）后失败推迟到运行期 E6006，本锚当时
+/// 断言 check 静默（`test_check_unsatisfied_constraint_generic_stays_silent`）；
+/// 2026-11-01 用户裁决把未命中前移到编译期（WBS 3.20.7），本锚按原守卫注释
+/// 的约定翻面。
+///
+/// 判据（RFC-011b 约束泛型运算符派发 + issue #519）：NoAdd 未实现 Add，
+/// `sum(NoAdd, NoAdd)` 的 `a + b` 改写目标 `NoAdd.add` 在函数表中无任何
+/// 同名条目（成因 A）——mono 不再把裸名放进 IR 等运行期 E6006，当场报
+/// E1106 且 detail 指明「函数表中不存在任何实现」。
+///
+/// 聚合形态说明：check 的聚合模式是 CollectAll（RFC-039 02-stage-contract，
+/// `driver/program.rs` CHECK_STAGES 注记），mono 失败走逐文件收集通道
+/// （`driver/arms.rs` `monomorphization_multi_file` 的 Check 臂），故
+/// check_file 的翻面形态是 error_count 0→1 而非 Err。
+#[test]
+fn test_check_unsatisfied_constraint_generic_reports_e1106() {
+    // Arrange - 未声明 Add 的记录类型 NoAdd，sum 以 NoAdd 实例化（与
+    // 裁决实证形态同构：约束形参 + 运算符 + 未实现接口）
+    let dir = temp_dir();
+    let file = create_yx_file(
+        &dir,
+        "unsatisfied_constraint.yx",
+        r#"
+NoAdd: Type = {
+    x: Int,
+}
+
+sum: (T: Add) -> (a: T, b: T) -> T = a + b
+
+main: () -> Void = {
+    a = NoAdd(1)
+    b = NoAdd(2)
+    v = sum(a, b)
+}
+
+main()
+"#,
+    );
+
+    // Act - check 命令行为面 + 诊断集合面各取一次
+    let result = check_file(&file);
+    let checked = check_result(&file);
+
+    // Assert - 翻面：check 从静默 0 错改为报 1 错，诊断码 E1106、
+    // 文本携带改写失败的派发目标名 `NoAdd.add`
+    assert!(
+        result.is_ok(),
+        "check should surface the miss as an error count, not a pipeline failure: {result:?}"
+    );
+    assert_eq!(
+        result.unwrap(),
+        1,
+        "mono dispatch rewrite miss must be reported by check (E1106), not deferred to runtime E6006 (issue #519)"
+    );
+    let e1106: Vec<_> = checked
+        .diagnostics
+        .iter()
+        .filter(|d| d.diagnostic.code == "E1106")
+        .map(|d| &d.diagnostic)
+        .collect();
+    assert!(
+        !e1106.is_empty(),
+        "unsatisfied constraint must report E1106, got: {}",
+        checked
+            .diagnostics
+            .iter()
+            .map(|d| d.diagnostic.code.as_str())
+            .collect::<Vec<_>>()
+            .join(", ")
+    );
+    assert!(
+        e1106.iter().any(|d| d.message.contains("NoAdd.add")),
+        "E1106 message must name the failed dispatch target `NoAdd.add`, got: {:?}",
+        e1106.iter().map(|d| &d.message).collect::<Vec<_>>()
+    );
+}
+
+/// #519 成因 B 锚（WBS 3.20.7 / 2026-11-01 用户裁决甲案续篇）：跨模块类型
+/// 身份缺口的编译期显性化。类型与泛型定义在不同单元时，mono 无法从类型
+/// 实参还原方法的定义单元键（`Vec3.add` 在合并函数表登记为 `lib.Vec3.add`，
+/// WBS 3.18），此前回退裸名把失败推迟到运行期 E6006 `Vec3.add not found`。
+///
+/// 判据：函数表中存在其他单元键下的同名方法条目时，E1106 的 detail 必须列出
+/// 候选键（确定性：sort 后取前 3）——「类型定义模块身份在单态化期丢失」
+/// 从静默数据缺陷变成可诊断的编译期错误。
+#[test]
+fn test_check_constraint_dispatch_cross_module_miss_reports_candidates() {
+    // Arrange - lib.yx 定义 Vec3 与 Vec3.add（合并函数表键 lib.Vec3.add）；
+    // main.yx 定义 sum 并以 Vec3 实例化——方法所属单元键与泛型所属单元键不同
+    let dir = create_project(&[
+        (
+            "lib.yx",
+            r#"
+Vec3: Type = {
+    x: Float,
+    y: Float,
+    z: Float,
+    Add(Vec3, Vec3, Vec3),
+}
+
+Vec3.add: (self: &Vec3, other: &Vec3) -> Vec3 = (self, other) => {
+    return Vec3(self.x + other.x, self.y + other.y, self.z + other.z)
+}
+"#,
+        ),
+        (
+            "main.yx",
+            r#"
+use lib.{Vec3}
+
+sum: (T: Add) -> (a: T, b: T) -> T = a + b
+
+main = () => {
+    a = Vec3(1.0, 2.0, 3.0)
+    b = Vec3(4.0, 5.0, 6.0)
+    v = sum(a, b)
+}
+"#,
+        ),
+    ]);
+    let main = dir.path().join("main.yx");
+
+    // Act
+    let checked = check_result(&main);
+
+    // Assert - check 报 E1106，detail 列出其他单元键下的候选 lib.Vec3.add
+    let e1106: Vec<_> = checked
+        .diagnostics
+        .iter()
+        .filter(|d| d.diagnostic.code == "E1106")
+        .map(|d| &d.diagnostic)
+        .collect();
+    assert!(
+        !e1106.is_empty(),
+        "cross-module dispatch miss must report E1106, got: {}",
+        checked
+            .diagnostics
+            .iter()
+            .map(|d| d.diagnostic.code.as_str())
+            .collect::<Vec<_>>()
+            .join(", ")
+    );
+    assert!(
+        e1106.iter().any(|d| d.message.contains("lib.Vec3.add")),
+        "E1106 detail must list the candidate key lib.Vec3.add, got: {:?}",
+        e1106.iter().map(|d| &d.message).collect::<Vec<_>>()
+    );
+}
+
+// ============ 3.20.8 / #511 t3 low：谓词排除判据不得回归窄化形态 ============
+//
+// 判据单源后（inference/statements.rs 的 const 用途精筛读 `predicate_names`，
+// 由 checker.rs 注入点用 `is_predicate_application` 同源预计算——内置谓词 /
+// `predicate_defs` / `env.vars` 三源），若该判据回归为 3.20.8 前的窄化形态
+// （只认 `Terminates` 字面量 ∪ 证明函数基类型表判名），证明函数谓词
+// `IsPositive` 应用 `IsPositive(b)` 的实参位 `b` 会被 `collect_used_in_type`
+// 误计入 const 泛型用途——形参名被当作 const 绑定并替换成底层具体类型，
+// 精化约束在到达消费端之前就丢失（E1092 类症状，见 checker.rs
+// `collect_used_in_type` 的谓词排除注释）。
+
+/// 谓词应用实参位不得计入 const 泛型用途（判据窄化回归锚）。
+#[test]
+fn test_check_predicate_application_arg_not_collected_as_const() {
+    // Arrange: 证明函数谓词 + 形参位精化——谓词应用的实参 `b` 是编译期
+    // 表达式（值），不是类型引用；`f` 的签名不含 const 候选，check 应零诊断。
+    let dir = temp_dir();
+    let file = create_yx_file(
+        &dir,
+        "predicate_const_anchor.yx",
+        "IsPositive: (x: Int) -> Type = { x > 0 }\n\
+         f: (b: IsPositive(b)) -> Int = { 0 }\n\
+         main = () => { print(f(5)) }",
+    );
+
+    // Act
+    let result = check_file(&file);
+
+    // Assert: 判据正确 ⇒ 谓词实参位被排除 ⇒ 无误收类诊断。
+    // 判据回归窄化时 `b` 会进 const_binders 并被替换，此处将出现 E10xx。
+    let errors = result.expect("well-formed predicate refinement should check cleanly");
+    assert_eq!(
+        errors, 0,
+        "predicate application arg must not enter const binder names (3.20.8 single-source criterion); got {errors} error(s)"
+    );
+}
+
+/// 内置谓词 `Terminates` 的测度位同样不得计入 const 泛型用途（内置源锚）。
+#[test]
+fn test_check_terminates_measure_arg_not_collected_as_const() {
+    // Arrange: 内置谓词无源码声明（RFC-027 §6.9），判据必须经内置源命中；
+    // 返回位 `Terminates(b)` 的 `b` 是测度表达式，`a`/`b` 均为运行时值参数。
+    let dir = temp_dir();
+    let file = create_yx_file(
+        &dir,
+        "terminates_const_anchor.yx",
+        "gcd: (a: Int, b: Int) -> Terminates(b) = {\n\
+         \x20 if b == 0 { return a }\n\
+         \x20 return gcd(b, a % b)\n\
+         }\n\
+         main = () => { print(gcd(48, 18)) }",
+    );
+
+    // Act
+    let result = check_file(&file);
+
+    // Assert: 内置谓词源命中 ⇒ 测度位排除 ⇒ 零诊断（rfc027a T1 验收面）。
+    let errors = result.expect("well-formed Terminates annotation should check cleanly");
+    assert_eq!(
+        errors, 0,
+        "Terminates measure arg must not enter const binder names (3.20.8 single-source criterion); got {errors} error(s)"
+    );
+}
+
+// ============ 3.20.9 / #522：跨单元谓词可见性（Registry 面）============
+//
+// 判据改为声明级 namespace（`probe::TypeLevelNamespace`，全部可见单元 scan
+// 并集）后，lib.yx 声明谓词、main.yx 声明精化签名的多文件形态里，谓词应用
+// 实参位 `N` 在全部诊断中必须保持**未替换**。修前 Registry 阶段判据三臂不
+// 完整 ⇒ `N` 被误收 const 用途并替换成底层类型，诊断文本出现
+// `IsPositive(int64)`（E1012 `found 'IsPositive(int64)'`）。
+//
+// 注：夹具经 check 仍会报既有的 `IsPositive(N)` 形态诊断（导入谓词的精化
+// 正格化在导入面不可见，属另一缺陷面，非本锚判定对象）；本锚只钉
+// 「误替换形态不得回归」。
+
+/// #522 回归锚：多文件谓词应用实参位不得被替换成底层类型。
+#[test]
+fn test_check_multifile_predicate_arg_not_misreplaced() {
+    // Arrange: lib.yx 声明谓词、main.yx `use lib.{IsPositive}` 后声明
+    // const 形参签名——谓词应用实参位 `N` 是编译期表达式（值），不是类型引用
+    let dir = temp_dir();
+    create_yx_file(&dir, "lib.yx", "IsPositive: (x: Int) -> Type = { x > 0 }\n");
+    let main_file = create_yx_file(
+        &dir,
+        "main.yx",
+        "use lib.{IsPositive}\n\
+         \n\
+         sum: (N: Int) -> (x: IsPositive(N)) -> Int = (x) => x\n\
+         \n\
+         main: () -> Void = {\n\
+         \x20   print(sum(42)(5))\n\
+         }\n\
+         \n\
+         main()\n",
+    );
+
+    // Act: 子进程跑 CLI check（诊断文本是判据面，run_check_command_once 只回计数）
+    let output = Command::new(env!("CARGO_BIN_EXE_yaoxiang-rs"))
+        .arg("check")
+        .arg(&main_file)
+        .current_dir(&dir)
+        .output()
+        .expect("failed to run yaoxiang-rs check");
+    let text = format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    // Assert: 谓词应用实参位 `N` 不得被替换——诊断中不得出现 `IsPositive(int64)`
+    // （`N` 误收 const 用途并被替换成底层类型的 #522 形态）
+    assert!(
+        !text.contains("IsPositive(int64)"),
+        "#522: cross-unit predicate application arg N must stay unreplaced in all diagnostics; got: {text}"
+    );
+}
+
+// ============ 3.20.10 / #523：curry 内层参数位精化按 base 统一 ============
+//
+// RFC-027 §6：精化是编译期约束，对统一**透明**——消费端按证明函数基类型
+// （`proof_fn_bases`）剥到 base 再统一。形参位（外层参数组）在注册期已剥
+// （3.20.8 既有锚覆盖）；curry 内层参数组的精化标注此前原样进入调用点
+// 统一，基类型实参被假拒绝——E1002 `Expected type 'IsPositive(N)', found
+// type 'int64'`（N 保持未替换，判据面正确，是消费端统一缺口，#522 教训
+// 的同轴：诊断不得出现替换后的谓词实参）。
+//
+// 修法：调用点逐参统一前与注册期共用同一剥除实现
+// （`strip_refined_with_proof_fns`，判据单源）。
+
+/// #523 主锚：curry 内层参数位的精化在完整应用时按 base 统一，不假拒绝。
+#[test]
+fn test_check_curry_inner_refined_param_unifies_with_base() {
+    // Arrange: 本地谓词声明 + const 柯里签名，精化在内层参数组——
+    // 部分应用 `sum(5)` 合法（约束不在此评估）；完整应用 `sum(5)(3)` 的
+    // 第二个实参对内层 `IsPositive(N)` 统一，必须按基类型 Int(64) 接受。
+    let dir = temp_dir();
+    let file = create_yx_file(
+        &dir,
+        "curry_inner_refinement.yx",
+        "IsPositive: (x: Int) -> Type = { x > 0 }\n\
+         sum: (N: Int) -> (x: IsPositive(N)) -> Int = { 0 }\n\
+         main = () => { print(sum(5)(3)) }",
+    );
+
+    // Act
+    let result = check_file(&file);
+
+    // Assert: 内层精化按 base 统一 ⇒ 零诊断（issue #523 验收面）。
+    // 消费端缺口回归时此处报 E1002 `Expected type 'IsPositive(N)', found
+    // type 'int64'`（假拒绝形态）。
+    let errors = result.expect("curry call with inner refined param should check cleanly");
+    assert_eq!(
+        errors, 0,
+        "#523: curry inner-layer refined param must unify by proof-fn base type (IsPositive(N) -> Int(64)), not be falsely rejected; got {errors} error(s)"
+    );
+}
+
+/// #523 补锚：精化位在**后续** curry 组（第三层）同样按 base 统一。
+#[test]
+fn test_check_curry_refinement_in_later_group_unifies_with_base() {
+    // Arrange: 三层柯里，精化只在第三组（中间组是普通值参数）——剥除
+    // 必须逐层生效，不依赖「精化在第一个内层组」的位置假设。
+    let dir = temp_dir();
+    let file = create_yx_file(
+        &dir,
+        "curry_later_group_refinement.yx",
+        "IsPositive: (x: Int) -> Type = { x > 0 }\n\
+         f: (N: Int) -> (a: Int) -> (x: IsPositive(N)) -> Int = { 0 }\n\
+         main = () => { print(f(5)(1)(3)) }",
+    );
+
+    // Act
+    let result = check_file(&file);
+
+    // Assert: 第三次应用的实参对 `IsPositive(N)` 统一按 base 放行。
+    let errors = result.expect("curry call with refinement in a later group should check cleanly");
+    assert_eq!(
+        errors, 0,
+        "#523: refined param in a later curry group must unify by base type; got {errors} error(s)"
+    );
+}
+
+/// #523 补锚：**多个**内层组同时带精化，逐实参各自剥 base。
+#[test]
+fn test_check_curry_refined_params_in_two_groups_unify_with_base() {
+    // Arrange: 两层内层组的参数位都带精化——剥除必须按实参逐位生效
+    //（第二、第三次应用各自对精化形态统一），不能只剥第一处。
+    let dir = temp_dir();
+    let file = create_yx_file(
+        &dir,
+        "curry_two_refined_groups.yx",
+        "IsPositive: (x: Int) -> Type = { x > 0 }\n\
+         g: (N: Int) -> (x: IsPositive(N)) -> (y: IsPositive(N)) -> Int = { 0 }\n\
+         main = () => { print(g(5)(3)(4)) }",
+    );
+
+    // Act
+    let result = check_file(&file);
+
+    // Assert: 两处内层精化都按 base 统一 ⇒ 零诊断。
+    let errors = result.expect("curry call with refined params in two groups should check cleanly");
+    assert_eq!(
+        errors, 0,
+        "#523: refined params in every curry group must unify by base type; got {errors} error(s)"
+    );
+}
+
+/// #523 反向锚（t3 复审建议）：剥 base 只对统一**透明**，不遮蔽真不匹配——
+/// 内层精化位的实参类型真错时必须仍报错。没有这条，「剥除退化成跳过统一」
+/// 的遮蔽型回归会让上面三个零诊断锚全绿。
+#[test]
+fn test_check_curry_refined_param_genuine_mismatch_still_reports() {
+    // Arrange: 与主锚同构，但第二实参是 String——对剥后基类型 Int(64)
+    // 是真不匹配，必须恰好报一条错（E1002 Expected type 'int64'）。
+    // 诊断文本不得含 IsPositive 字样（#522 红线，由既有
+    // test_check_multifile_predicate_arg_not_misreplaced 的文本面锚钉住）。
+    let dir = temp_dir();
+    let file = create_yx_file(
+        &dir,
+        "curry_refined_genuine_mismatch.yx",
+        "IsPositive: (x: Int) -> Type = { x > 0 }\n\
+         sum: (N: Int) -> (x: IsPositive(N)) -> Int = { 0 }\n\
+         main = () => { print(sum(5)(\"str\")) }",
+    );
+
+    // Act
+    let result = check_file(&file);
+
+    // Assert: 真不匹配仍被拒绝 ⇒ 恰一条诊断；零诊断 = 统一被遮蔽（回归）。
+    let errors = result.expect("check should complete for genuinely mismatched refined param");
+    assert_eq!(
+        errors, 1,
+        "#523: stripping refinement must stay transparent to unification — a genuinely mismatched argument (String vs Int(64)) must still be rejected with exactly one error; got {errors} error(s)"
     );
 }

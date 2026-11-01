@@ -168,9 +168,6 @@ use std.test
 t_add: () -> Result(Void, String) = () => test.assert_eq(1 + 1, 2)
 
 main: () -> Void = {
-    // 值化判定：直接调用即执行断言（Ok = 通过）
-    t_add()
-
     test.suite([
         ("add", () => t_add()),
         ("truth", () => test.assert_true(true)),

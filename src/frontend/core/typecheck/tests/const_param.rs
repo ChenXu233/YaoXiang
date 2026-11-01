@@ -10,7 +10,7 @@
 
 use std::collections::HashSet;
 
-use crate::frontend::core::parser::ast::{GenericParam, GenericParamKind, Param, Type};
+use crate::ast::{GenericParam, GenericParamKind, Param, Type};
 use crate::frontend::core::typecheck::const_param::{ast_type_to_const_kind, resolve_const_candidates};
 use crate::frontend::core::types::const_data::ConstKind;
 use crate::util::span::Span;
@@ -58,7 +58,13 @@ fn test_resolve_const_candidates_hit_builds_contiguous_index() {
                 span: Span::default(),
             },
         ),
-        const_param("M", Type::Bool),
+        const_param(
+            "M",
+            Type::Name {
+                name: "Bool".to_string(),
+                span: Span::default(),
+            },
+        ),
     ];
     let sig = vec![sig_param("N", None), sig_param("M", None)];
     let used: HashSet<String> = ["N".to_string(), "M".to_string()].into();
@@ -87,7 +93,7 @@ fn test_resolve_const_candidates_hit_builds_contiguous_index() {
 ///
 /// 预期行为：
 /// - 未被类型位置引用的候选出现在 fallen 中
-/// - fallen 元素即 signature_params 中的原始 Param（含类型标注）
+/// - fallen 元素即声明签名中的原始 Param（含类型标注）
 #[test]
 fn test_resolve_const_candidates_fallen_carries_original_param() {
     // Arrange
@@ -156,7 +162,13 @@ fn test_ast_type_to_const_kind_maps_annotation_forms() {
         "Name(Float) 应映射为 ConstKind::Float"
     );
     assert!(
-        matches!(ast_type_to_const_kind(&Type::Bool), ConstKind::Bool),
+        matches!(
+            ast_type_to_const_kind(&Type::Name {
+                name: "Bool".to_string(),
+                span: Span::default(),
+            }),
+            ConstKind::Bool
+        ),
         "Bool 应映射为 ConstKind::Bool"
     );
     let unknown_ty = Type::Name {

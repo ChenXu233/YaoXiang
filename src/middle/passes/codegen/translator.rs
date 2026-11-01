@@ -152,9 +152,9 @@ impl Translator {
             self.source_file_id =
                 module.function_files.get(&func.name).copied().unwrap_or(0) as FileId;
             match &func.body {
-                FunctionBody::TypeDecl { definition, .. } => {
-                    // 类型定义：从定义机械合成构造函数
-                    let ctor = self.synthesize_constructor(func, definition)?;
+                FunctionBody::TypeDecl { body, .. } => {
+                    // 类型定义：从 IR 原生收窄载体机械合成构造函数（6.6.12）
+                    let ctor = self.synthesize_constructor(func, body)?;
                     code_section.functions.push(ctor);
                 }
                 FunctionBody::Code { .. } => {
@@ -343,13 +343,17 @@ impl Translator {
     /// 从类型定义机械合成构造函数
     ///
     /// 等价于旧 ir_gen 的 `generate_struct_constructor_ir`，但在 codegen 阶段执行。
-    /// 数据源从 `struct_definitions` HashMap 变为 `FunctionBody::TypeDecl { definition }`。
+    /// 数据源自 6.6.12 起是 IR 原生的 [`TypeDeclBody`]（收窄载体），不再读语法层 AST。
+    ///
+    /// **本轮不改行为**：仍按历史行为把**全部**字段（含函数类型字段/方法）算进构造
+    /// 参数。SPEC `type-system.md:443` 要求方法不进构造参数，该不一致登记在 09a
+    /// §P6 6.6.12（载体上的 `is_method` 已能表达区分，留给后续轮次接线）。
     fn synthesize_constructor(
         &mut self,
         type_func: &FunctionIR,
-        definition: &crate::frontend::core::parser::ast::Type,
+        body: &crate::middle::core::ir::TypeDeclBody,
     ) -> Result<super::FunctionCode, Diagnostic> {
-        let fields = definition.struct_fields();
+        let fields = &body.fields;
         let struct_name = &type_func.name;
 
         if fields.is_empty() {
@@ -393,7 +397,7 @@ impl Translator {
         });
 
         // 创建临时 FunctionIR 用于 translate_instruction
-        let param_types: Vec<MonoType> = fields.iter().map(|f| f.ty.clone().into()).collect();
+        let param_types: Vec<MonoType> = fields.iter().map(|f| f.ty.clone()).collect();
         let mut locals: Vec<LocalSlot> = param_types.iter().cloned().map(LocalSlot::temp).collect();
         locals.push(LocalSlot::temp(MonoType::TypeRef(struct_name.clone())));
 
@@ -574,9 +578,6 @@ impl Translator {
                     vec![dst_reg, elem_reg, container_reg],
                 ))
             }
-
-            Cast { dst, src, .. } => self.translate_cast(dst, src),
-            TypeTest { .. } => Ok(BytecodeInstruction::new(opcode::TYPE_CHECK, vec![0, 0, 0])),
 
             Spawn {
                 span: _,
@@ -1195,19 +1196,6 @@ impl Translator {
         Ok(BytecodeInstruction::new(
             opcode::STORE_ELEMENT,
             vec![dst_reg, index_reg, src_reg],
-        ))
-    }
-
-    fn translate_cast(
-        &mut self,
-        dst: &Operand,
-        src: &Operand,
-    ) -> Result<BytecodeInstruction, Diagnostic> {
-        let dst_reg = self.operand_resolver.to_reg(dst)?;
-        let src_reg = self.operand_resolver.to_reg(src)?;
-        Ok(BytecodeInstruction::new(
-            opcode::CAST,
-            vec![dst_reg, src_reg, 0, 0],
         ))
     }
 

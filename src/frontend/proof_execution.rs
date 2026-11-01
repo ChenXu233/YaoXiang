@@ -19,7 +19,7 @@
 //! （frontend 根部）是它唯一合法的家；P4 统一 Driver 时按 02 §改动清单
 //! 移入 driver 作为 `Stage::ProofExecution` 的实现。
 
-use crate::frontend::core::parser::ast::Module;
+use crate::ast::Module;
 use crate::frontend::core::typecheck::proof::verdict::ProofFunctionCall;
 use crate::frontend::core::typecheck::TypeCheckResult;
 use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};
@@ -77,7 +77,7 @@ pub(super) fn execute_single_proof_fn(
     ast: &Module,
     type_result: &TypeCheckResult,
 ) -> Result<bool, String> {
-    use crate::frontend::core::parser::ast::StmtKind;
+    use crate::ast::StmtKind;
 
     // 1. 在 AST 中查找函数定义
     let (params, body_stmts, type_ann) = ast
@@ -90,7 +90,7 @@ pub(super) fn execute_single_proof_fn(
                 value,
                 ..
             } => {
-                use crate::frontend::core::parser::ast::Expr;
+                use crate::ast::Expr;
                 let name = match target.as_ref() {
                     Expr::Var(n, _) => n.clone(),
                     _ => return None,
@@ -117,25 +117,28 @@ pub(super) fn execute_single_proof_fn(
             ast.items.iter().find_map(|stmt| match &stmt.kind {
                 StmtKind::TypeDefinition {
                     name,
-                    signature_params,
+                    type_annotation,
                     definition,
                     ..
                 } => {
                     if *name != call.func_name {
                         return None;
                     }
-                    use crate::frontend::core::parser::ast::{Type, TypeBodyItem};
+                    use crate::ast::{Type, TypeBodyItem};
                     if let Type::Struct { body } = definition {
                         for item in body {
                             if let TypeBodyItem::Expr(Type::ConstExpr(expr)) = item {
                                 // 合成语句（非解析产物）：无释放计划身份
-                                let constraint_stmt = crate::frontend::core::parser::ast::Stmt {
+                                let constraint_stmt = crate::ast::Stmt {
                                     kind: StmtKind::Expr(expr.clone()),
                                     span: crate::util::span::Span::dummy(),
                                     plan_id: crate::util::plan_id::PlanId::UNPLANNED,
                                 };
                                 return Some((
-                                    signature_params.clone(),
+                                    type_annotation
+                                        .as_ref()
+                                        .map(crate::ast::Type::fn_params_flat)
+                                        .unwrap_or_default(),
                                     vec![constraint_stmt],
                                     None,
                                 ));

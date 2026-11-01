@@ -1,9 +1,9 @@
 module
   fn PI() -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
-    type_decl Struct { body: [Field(StructField { name: "n", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 13, column: 17, offset: 550 }, end: Position { line: 13, column: 20, offset: 553 } } }, default: None })] }
+    type_decl [n: Int(64)]
   fn E(MetaType { universe_level: UniverseLevel { level: "0" }, type_params: [] }) -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
     generic_params: ["T"]
-    type_decl Struct { body: [Field(StructField { name: "data", is_mut: false, ty: Generic { name: "Vec", name_span: Span { start: Position { line: 16, column: 32, offset: 657 }, end: Position { line: 16, column: 35, offset: 660 } }, args: [Name { name: "T", span: Span { start: Position { line: 16, column: 36, offset: 661 }, end: Position { line: 16, column: 37, offset: 662 } } }] }, default: None }), Field(StructField { name: "n", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 16, column: 43, offset: 668 }, end: Position { line: 16, column: 46, offset: 671 } } }, default: None })] }
+    type_decl [data: Generic { name: "Vec", args: [TypeRef("T")] } ; n: Int(64)]
   fn mk_e(TypeRef("A")) -> Generic { name: "E", args: [TypeRef("A")] }
     generic_params: ["A"]
     slot[0] x : Int(64) @depth1

@@ -4,6 +4,7 @@
 //! 未使用导入（W1003）经 typecheck use elaboration 检出后走 warnings 通道
 //! （Warning severity、不混入错误 diagnostics）。
 
+use crate::frontend::core::typecheck::probe::TypeLevelNamespace;
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parse;
 use crate::frontend::core::typecheck::checker::TypeChecker;
@@ -95,7 +96,10 @@ fn check_source(source: &str) -> crate::frontend::core::typecheck::types::TypeCh
     );
 
     let mut checker = TypeChecker::new("test");
-    checker.check_module(&parse_result.module)
+    checker.check_module(
+        &parse_result.module,
+        &TypeLevelNamespace::scan_one(&parse_result.module),
+    )
 }
 
 #[test]
@@ -262,6 +266,67 @@ main = () => {
     assert!(
         !result.warnings.iter().any(|d| d.code == "W1003"),
         "函数体内已使用的导入不应报 W1003，实际: {:?}",
+        result.warnings
+    );
+}
+
+/// WBS 3.20.2：变体解构（match some(v)/none()）所需的导入不得判未使用——
+/// 变体集在场是该形态的前置（删 `use std.option` 即 E1002），照
+/// docs/src/reference/stdlib/weak.md 的自然写法取最小同构。
+#[test]
+fn test_variant_destructure_import_not_reported_w1003() {
+    // Arrange: 导入 Option 的变体集后仅经 match 模式消费（不写类型名）
+    let source = r#"
+use std.weak
+use std.option
+
+main = () => {
+    p = ref 42
+    w = weak.new(p)
+    u = weak.upgrade(w)
+    match u {
+        some(v) => println("alive"),
+        none() => println("dropped"),
+    }
+}
+"#;
+
+    // Act
+    let result = check_source(source);
+
+    // Assert: 不报 W1003；且无类型错误（删该导入今日报 E1002——改判后仍能编译）
+    assert!(
+        !result.warnings.iter().any(|d| d.code == "W1003"),
+        "变体解构所需的导入不应报 W1003，实际: {:?}",
+        result.warnings
+    );
+    assert!(
+        result.diagnostics.is_empty(),
+        "该源码不应有任何类型错误（E1002 缺导入形态的否证面），实际: {:?}",
+        result.diagnostics
+    );
+}
+
+/// 守卫：导入变体集但全程未消费（无解构、无构造）仍报 W1003——
+/// 3.20.2 修法不得把「导入即视为已使用」。
+#[test]
+fn test_unused_variant_set_import_still_reports_w1003() {
+    // Arrange: use std.option 在场但程序不接触变体
+    let source = r#"
+use std.option
+
+main = () => {
+    println("x")
+}
+"#;
+
+    // Act
+    let result = check_source(source);
+
+    // Assert
+    assert!(
+        result.warnings.iter().any(|d| d.code == "W1003"),
+        "未消费变体集的导入仍应报 W1003，实际: {:?}",
         result.warnings
     );
 }

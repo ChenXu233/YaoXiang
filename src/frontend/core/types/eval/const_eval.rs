@@ -16,7 +16,7 @@
 
 // 重新导出主要类型
 use crate::frontend::core::types::ConstValue;
-use crate::frontend::core::parser::ast::{Expr, BinOp as AstBinOp, UnOp as AstUnOp};
+use crate::ast::{Expr, BinOp as AstBinOp, UnOp as AstUnOp};
 use crate::frontend::core::lexer::tokens::Literal;
 use crate::util::diagnostic::Diagnostic;
 use crate::util::diagnostic::codes::ErrorCodeDefinition;
@@ -420,7 +420,14 @@ impl ConstGenericEval {
     ) -> Result<ConstValue, Diagnostic> {
         use crate::frontend::core::types::const_data::UnOp;
         match (op, &value) {
-            (UnOp::Neg, ConstValue::Int(n)) => Ok(ConstValue::Int(-*n)),
+            // #507：i128 裸取负在 `n = i128::MIN` 时 panic（saturating 链可
+            // 精确构造 MIN：`0 - i128::MAX - 1`，实测探针 p10 exit 101）——
+            // 走 checked_neg 报 const_overflow（与上方 Shl/Shr 的求值溢出
+            // 同通道），编译器不再崩。
+            (UnOp::Neg, ConstValue::Int(n)) => n
+                .checked_neg()
+                .map(ConstValue::Int)
+                .ok_or_else(|| ErrorCodeDefinition::const_overflow().build()),
             (UnOp::Not, ConstValue::Bool(b)) => Ok(ConstValue::Bool(!*b)),
             (UnOp::BitNot, ConstValue::Int(n)) => Ok(ConstValue::Int(!*n)),
             (UnOp::Pos, ConstValue::Int(n)) => Ok(ConstValue::Int(*n)),
@@ -494,13 +501,19 @@ impl ConstGenericEval {
                     }
                 };
 
-                // 基础类型大小表
+                // 基础类型大小表（WBS 6.1.2：只收内置名，且**不是**内置名的清单——
+                // 清单在 `MonoType::from_builtin_name`；本表不覆盖的名字一律报
+                // Unknown type，不猜大小）。
+                //
+                // 此前有 `"Uint"` 臂：它不是内置类型名（`MonoType` 无无符号变体），
+                // 留着等于让 `sizeof(Uint)` 对一个任何类型标注都写不出的名字返回
+                // 8 字节——静默给错答案。无符号语义按 SPEC §2.1 用 `Int` 加下界约定。
                 let size = match type_name {
-                    "Void" => 0,
+                    "Void" | "()" => 0,
                     "Never" => 0,
                     "Bool" => 1,
                     "Char" => 4,
-                    "Int" | "Uint" | "Float" | "String" => 8,
+                    "Int" | "Float" | "String" => 8,
                     _ => {
                         return Some(Err(ErrorCodeDefinition::const_eval_failed(&format!(
                             "Unknown type: {}",
@@ -871,7 +884,7 @@ pub mod predefined_sizes {
 /// - 字面量类型到 ConstValue 的转换
 /// - Const 参数的类型验证
 /// - 字面量类型约束检查
-use crate::frontend::core::parser::ast::{Type, GenericParam, GenericParamKind};
+use crate::ast::{Type, GenericParam, GenericParamKind};
 use crate::frontend::core::types::ConstKind;
 
 /// Integer types for const parameters
@@ -1041,16 +1054,6 @@ pub fn extract_const_param_info(param: &GenericParam) -> Option<(String, ConstKi
 pub fn ast_type_to_mono_type(ty: &Type) -> Option<MonoType> {
     match ty {
         Type::Name { name, .. } => Some(MonoType::TypeRef(name.clone())),
-        Type::Int(n) => Some(MonoType::Int(*n)),
-        Type::Float(n) => Some(MonoType::Float(*n)),
-        Type::Char => Some(MonoType::Char),
-        Type::String => Some(MonoType::make_string()),
-        Type::Bytes => Some(MonoType::Generic {
-            name: "Bytes".into(),
-            args: vec![],
-        }),
-        Type::Bool => Some(MonoType::Bool),
-        Type::Void => Some(MonoType::Void),
         _ => None,
     }
 }
@@ -1058,7 +1061,7 @@ pub fn ast_type_to_mono_type(ty: &Type) -> Option<MonoType> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::frontend::core::parser::ast::{BinOp as AB, Expr};
+    use crate::ast::{BinOp as AB, Expr};
     use crate::util::span::Span;
 
     fn test_span() -> Span {

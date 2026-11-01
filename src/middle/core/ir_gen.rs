@@ -10,7 +10,7 @@
 //! 3. 可测试性：独立的模块便于单元测试
 
 use crate::frontend::core::lexer::tokens::Literal;
-use crate::frontend::core::parser::ast::{self, Expr};
+use crate::ast::{self, Expr};
 use crate::frontend::module::registry::ModuleRegistry;
 use crate::frontend::module::ModuleSource;
 use crate::frontend::module::resolver::Resolver;
@@ -18,9 +18,12 @@ use crate::frontend::module::symbol::{DefKind, SymbolTable};
 use crate::frontend::module::ExportKind;
 use crate::frontend::core::typecheck::layers::ownership::ReleasePlan;
 use crate::frontend::core::typecheck::types::OverloadResolutions;
-use crate::frontend::core::typecheck::{MonoType, PolyType, TypeCheckResult};
+use crate::frontend::core::typecheck::{
+    is_constraint_name, MonoType, PolyType, SemanticProbe, TypeCheckResult,
+};
 use crate::middle::core::ir::{
     BasicBlock, ConstValue, FunctionBody, FunctionIR, Instruction, LocalSlot, ModuleIR, Operand,
+    TypeDeclBody, TypeDeclField,
 };
 use crate::tlog;
 use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};
@@ -140,13 +143,13 @@ pub struct AstToIrGenerator {
     next_lib_id: usize,
     /// 结构体定义映射（类型名 -> 字段列表）
     /// 用于构造器调用时填充默认值
-    struct_definitions: HashMap<String, Vec<crate::frontend::core::parser::ast::StructField>>,
+    struct_definitions: HashMap<String, Vec<crate::ast::StructField>>,
     /// RFC-010 和类型的类型参数名（载荷类型替换用，见 sum_type_variants）
     sum_type_param_names: HashMap<String, Vec<String>>,
     /// 本模块声明的**全部**类型名（含泛型类型定义）。
     ///
-    /// `struct_definitions` 只收非泛型结构体；泛型类型（`E: (T: Type) -> Type = ..`）
-    /// 走 TypeDecl 函数路径不落在这里。但名字解析需要知道「这是用户自己的类型」，
+    /// 类型声明（含泛型，`E: (T: Type) -> Type = ..`）一律走 TypeDecl 函数路径；
+    /// 名字解析需要知道「这是用户自己的类型」，
     /// 否则 `use std.math` 后用户写 `PI: Type = ..; PI(7)` 会被解析成
     /// `std.math.PI`（常量）——调用常量得到 void，静默错值（D10）。
     declared_type_names: std::collections::HashSet<String>,
@@ -325,7 +328,7 @@ struct LoopTargets {
 /// 一层 curry 签名
 ///
 /// 由 `split_curry` 从嵌套的 `Type::Fn` 拆出。
-/// `params` 是这层的参数（带名字），从拍平的 `signature_params` 切出。
+/// `params` 是这层的参数（带名字），从拍平的 curry 形参切出。
 /// `return_type` 是这层的返回类型：还有下一层时是 `Type::Fn`，最后一层是值类型。
 /// 一层 curry 签名
 struct CurryLayer {
@@ -604,7 +607,7 @@ impl AstToIrGenerator {
 
     ///
     /// 输入：`type_annotation` 是 `Type::Fn` 的嵌套结构（如 `(N: Int) -> (n: N) -> Int`）
-    /// 输入：`signature_params` 是拍平的所有 curry 参数（如 `[N: Int, n: N]`）
+    /// 输入：`curry_params` 是拍平的所有 curry 参数（如 `[N: Int, n: N]`）
     /// 输出：按层切分的 `CurryLayer` 列表
     ///
     /// 非 curry 函数（如 `(a: Int, b: Int) -> Int`）返回 1 个 layer，
@@ -612,7 +615,7 @@ impl AstToIrGenerator {
     #[allow(clippy::while_let_loop)]
     fn split_curry(
         type_ann: &ast::Type,
-        signature_params: &[ast::Param],
+        curry_params: &[ast::Param],
     ) -> Vec<CurryLayer> {
         let mut layers = Vec::new();
         // 用索引游标而非迭代器：Paren 分支需要把已取走的层参数“退回”。
@@ -626,27 +629,39 @@ impl AstToIrGenerator {
                     return_type,
                 } => {
                     let start = cursor;
-                    cursor = (cursor + type_params.len()).min(signature_params.len());
-                    let layer_params: Vec<ast::Param> = signature_params[start..cursor].to_vec();
+                    // 运行期形参位只数**带类型**的形参（基线口径）：参数位的
+                    // 裸标识符（`(Int64)`→name="Int64"、ty=None）不占运行期槽位。
+                    // 它是否算参数由 WBS 8.9.1（参数位形态归一）裁决，6.5 只做
+                    // 零行为差分的表示重塑（锁定测试：middle/core/tests/fn_param_slots.rs）。
+                    let runtime_param_count = type_params
+                        .iter()
+                        .filter(|p| p.occupies_runtime_param_slot())
+                        .count();
+                    cursor = (cursor + runtime_param_count).min(curry_params.len());
+                    let layer_params: Vec<ast::Param> = curry_params[start..cursor].to_vec();
                     let ret_type = *return_type;
                     current_type = ret_type.clone();
                     // 类型参数层（如 `(T: Type)`）是编译期参数：不占运行时参数位，
                     // 该层擦除（不生成运行时函数层）。调用点 T 由类型推断填充（RFC-011）。
                     // ponytail: 仅处理纯类型参数层；类型/值参数混合同层视为值层（罕见，暂不拆）
                     let is_type_layer = !type_params.is_empty()
-                        && type_params.iter().all(|t| {
-                            Self::is_type_param_ann(t) || Self::is_constraint_param_ann(t)
+                        && type_params.iter().all(|p| {
+                            p.ty.as_ref().is_some_and(|t| {
+                                Self::is_type_param_ann(t) || Self::is_constraint_param_ann(t)
+                            })
                         });
 
                     // RFC-004 括号语义：返回位置的 `Paren` ⇔ 链条在此终止。
                     // 该括号内的参数**不属于本函数**——它们是被返回函数的参数。
-                    // parser 把签名拍平成 `signature_params`（内层名供 body 对齐类型），
+                    // parser 把签名拍平成 `curry_params`（内层名供 body 对齐类型），
                     // 故此处必须把游标退回，否则 `f: () -> ((a:Int)->Int)` 的 `a`
                     // 会被当成本层参数，`f` 变成接受 `a` 而非返回闭包。
                     // RFC-027 §3：具名括号（`(r: P(r))`）与 `Paren` 同款——
                     // 括号声明“这是一个完整类型”，链条到此终止。
-                    let next_is_paren =
-                        matches!(ret_type, ast::Type::Paren(_) | ast::Type::NamedParen { .. });
+                    // 判定收敛到 `Type::is_paren_complete` 单点（#510 收口备案
+                    // 的第三处：parser paren_return / typecheck 值级分解 /
+                    // 此处 split_curry 三点共用，防判据漂移）。
+                    let next_is_paren = ret_type.is_paren_complete();
                     if next_is_paren {
                         cursor = start;
                     }
@@ -682,19 +697,17 @@ impl AstToIrGenerator {
             ast::Type::Fn {
                 params,
                 return_type,
-            } => crate::frontend::core::parser::ast::is_type_level_fn(params, return_type),
+            } => crate::ast::is_type_level_fn(params, return_type),
             _ => false,
         }
     }
 
-    /// 约束形参判定（RFC-011 §5.2）：标注是运算符接口/约束名（`T: Add` 的
+    /// 约束形参判定（RFC-011 §2.1）：标注是运算符接口/约束名（`T: Add` 的
     /// `Add`）→ 类型位。split_curry 的层擦除判据与它同源——漏判会让约束
     /// 形参落成运行时参数（sum 外层 Parameters: (Add)），调用 arity 全错。
     fn is_constraint_param_ann(ty: &ast::Type) -> bool {
         match ty {
-            ast::Type::Name { name, .. } => {
-                crate::frontend::core::typecheck::operator_interfaces::spec(name).is_some()
-            }
+            ast::Type::Name { name, .. } => is_constraint_name(name),
             _ => false,
         }
     }
@@ -1899,6 +1912,60 @@ impl AstToIrGenerator {
         }
     }
 
+    /// 类型声明在**字节码类型表**里的项。
+    ///
+    /// 等价于原 `codegen::type_from_ast`（WBS 6.6.12 前移）：载体只带 `MonoType`，
+    /// codegen 不再接触 AST。逐臂与原实现一致——`Name`→`TypeRef`、`Tuple`→`make_tuple`、
+    /// `Fn`→`Fn`（丢无名形参，与原实现相同）、`Generic`→`TypeRef("Name(arg, …)")`，
+    /// 其余（含 `Struct`/`NamedStruct`/`MetaType` 等）→ `Void`。
+    fn type_decl_self_type(ast_type: &ast::Type) -> MonoType {
+        match ast_type {
+            ast::Type::Name { name, .. } => MonoType::TypeRef(name.clone()),
+            ast::Type::Tuple(types) => {
+                MonoType::make_tuple(types.iter().map(Self::type_decl_self_type).collect())
+            }
+            ast::Type::Fn {
+                params,
+                return_type,
+                ..
+            } => MonoType::Fn {
+                params: params
+                    .iter()
+                    .filter_map(|p| p.ty.as_ref())
+                    .map(Self::type_decl_self_type)
+                    .collect(),
+                return_type: Box::new(Self::type_decl_self_type(return_type)),
+            },
+            ast::Type::Generic { name, args, .. } => MonoType::TypeRef(format!(
+                "{}({})",
+                name,
+                args.iter()
+                    .map(|t| Self::type_decl_self_type(t).type_name())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )),
+            _ => MonoType::Void,
+        }
+    }
+
+    /// 字段注解是否为**函数类型**（= 方法字段）。
+    ///
+    /// 剥掉透明包装（`Paren` / `NamedParen`）后再判——与 `From<ast::Type> for MonoType`
+    /// 的透明口径一致（RFC-004 / RFC-027 §3）。SPEC `type-system.md:443`：函数类型字段
+    /// 不生成构造参数；当前 `translator::synthesize_constructor` 仍把两类都算进构造参数
+    /// （已知不一致，登记见 09a §P6 6.6.12，本轮不改行为）。
+    fn field_is_method(ty: &ast::Type) -> bool {
+        let mut t = ty;
+        loop {
+            match t {
+                ast::Type::Paren(inner) => t = inner,
+                ast::Type::NamedParen { inner, .. } => t = inner,
+                ast::Type::Fn { .. } => return true,
+                _ => return false,
+            }
+        }
+    }
+
     /// 生成语句的 IR
     fn generate_stmt_ir(
         &mut self,
@@ -1908,15 +1975,23 @@ impl AstToIrGenerator {
         match &stmt.kind {
             ast::StmtKind::TypeDefinition {
                 name,
-                signature_params,
+                type_annotation,
                 definition,
             } => {
                 self.declared_type_names.insert(name.clone());
-                use crate::frontend::core::parser::ast::extract_generic_param_names;
+                use crate::ast::extract_generic_param_names;
                 use crate::frontend::core::types::mono::UniverseLevel;
 
-                // 提取泛型参数名
-                let generic_params = extract_generic_param_names(signature_params);
+                // 泛型形参的唯一来源：声明注解的 Type::Fn 链（6.5.2）
+                let signature = type_annotation
+                    .as_ref()
+                    .map(crate::ast::Type::fn_params_flat)
+                    .unwrap_or_default();
+
+                // 提取泛型参数名。探针传 L3 语义实现：约束名 / 内置名定种必须以
+                // 类型环境的权威表为准，否则 `(T: Add)` 不登记为泛型参数、
+                // 单态化请求的类型实参与 IR 的 generic_params 对不上（E3018）。
+                let generic_params = extract_generic_param_names(&signature, &SemanticProbe);
                 let generic_param_names = if generic_params.is_empty() {
                     None
                 } else {
@@ -1924,7 +1999,7 @@ impl AstToIrGenerator {
                 };
 
                 // 签名：(T: Type) -> Type → params = [MetaType], return_type = MetaType
-                let params: Vec<MonoType> = signature_params
+                let params: Vec<MonoType> = signature
                     .iter()
                     .map(|p| {
                         p.ty.as_ref()
@@ -2010,19 +2085,39 @@ impl AstToIrGenerator {
                     params,
                     return_type,
                     generic_params: generic_param_names,
+                    // 类型声明的 IR 原生收窄载体（WBS 6.6.12）：只带字段表与类型表项。
+                    // 形参名 / 默认值表达式 / const 界 / 匿名绑定 / span 都不进 IR，
+                    // 故 6.5 时代「入 IR 前剥形参名」的 `without_fn_param_names` 随之删除。
                     body: FunctionBody::TypeDecl {
-                        definition: definition.clone(),
+                        body: TypeDeclBody {
+                            fields: definition
+                                .struct_fields()
+                                .into_iter()
+                                .map(|f| TypeDeclField {
+                                    name: f.name.clone(),
+                                    ty: f.ty.clone().into(),
+                                    is_mut: f.is_mut,
+                                    has_default: f.default.is_some(),
+                                    is_method: Self::field_is_method(&f.ty),
+                                })
+                                .collect(),
+                            self_type: Self::type_decl_self_type(definition),
+                        },
                     },
                 }))
             }
             ast::StmtKind::Assign {
                 target,
                 type_annotation,
-                signature_params,
                 value,
                 ..
             } => {
-                use crate::frontend::core::parser::ast::Expr;
+                use crate::ast::Expr;
+                // 签名形参的唯一来源：注解的 Type::Fn 链（6.5.2）
+                let signature = type_annotation
+                    .as_ref()
+                    .map(crate::ast::Type::fn_params_flat)
+                    .unwrap_or_default();
                 let (name, type_name) = match target.as_ref() {
                     Expr::Var(n, _) => (n.clone(), None),
                     Expr::FieldAccess { expr, field, .. } => {
@@ -2049,12 +2144,10 @@ impl AstToIrGenerator {
                     (Vec::new(), Vec::new())
                 };
                 let generic_params =
-                    crate::frontend::core::parser::ast::extract_generic_param_names(
-                        signature_params,
-                    );
+                    crate::ast::extract_generic_param_names(&signature, &SemanticProbe);
                 // 登记形参名，供命名参数调用（`add(b = 5, a = 3)`）重排实参。
-                // 名字取自 Lambda 形参（`params`）——签名里的 `Type::Fn` 只存类型、
-                // 不存名字，是值参数名唯一的来源。
+                // 名字取自 Lambda 形参（`params`）——那是**过滤后的值参数**表；
+                // 签名侧形参（`signature`）含类型位/约束位，名字口径不同。
                 if is_fn_binding && !params.is_empty() {
                     let names: Vec<String> = params.iter().map(|p| p.name.clone()).collect();
                     self.fn_param_names.insert(name.clone(), names);
@@ -2119,13 +2212,13 @@ impl AstToIrGenerator {
                         Some(generic_params.iter().map(|p| p.name.clone()).collect())
                     };
                     // curry 分流：如果 return_type 是 Type::Fn，走 curry 生成路径
-                    // 注意：必须传 signature_params（所有层参数），而非 params（仅 Lambda 参数）
+                    // 注意：必须传签名全层形参（signature），而非 params（仅 Lambda 参数）
                     if let Some(ast::Type::Fn { return_type, .. }) = type_annotation.as_ref() {
                         if matches!(return_type.as_ref(), ast::Type::Fn { .. }) {
                             self.generate_curry_function_ir(
                                 &name,
                                 type_annotation.as_ref().unwrap(),
-                                signature_params,
+                                &signature,
                                 &body,
                                 constants,
                                 generic_param_names,
@@ -3580,12 +3673,16 @@ impl AstToIrGenerator {
             ast::StmtKind::Assign {
                 target,
                 type_annotation,
-                signature_params,
                 value,
                 span,
                 ..
             } => {
-                use crate::frontend::core::parser::ast::Expr;
+                use crate::ast::Expr;
+                // 签名形参的唯一来源：注解的 Type::Fn 链（6.5.2）
+                let signature = type_annotation
+                    .as_ref()
+                    .map(crate::ast::Type::fn_params_flat)
+                    .unwrap_or_default();
                 // 字段赋值：q.x = v / m.x = v（m 是 &mut 令牌）。
                 // Struct 运行时值是堆句柄，StoreField 原地写共享对象——
                 // 令牌与自动借用天然写回，无需 copy-back（#266）。
@@ -3681,23 +3778,21 @@ impl AstToIrGenerator {
                 // 如果有 params/body，是嵌套函数
                 if !params.is_empty() || !body.is_empty() {
                     let generic_params =
-                        crate::frontend::core::parser::ast::extract_generic_param_names(
-                            signature_params,
-                        );
+                        crate::ast::extract_generic_param_names(&signature, &SemanticProbe);
                     let generic_param_names = if generic_params.is_empty() {
                         None
                     } else {
                         Some(generic_params.iter().map(|p| p.name.clone()).collect())
                     };
                     // curry 分流：如果 return_type 是 Type::Fn，走 curry 生成路径
-                    // 注意：必须传 signature_params（所有层参数），而非 params（仅 Lambda 参数）
+                    // 注意：必须传签名全层形参（signature），而非 params（仅 Lambda 参数）
                     let func_result =
                         if let Some(ast::Type::Fn { return_type, .. }) = type_annotation.as_ref() {
                             if matches!(return_type.as_ref(), ast::Type::Fn { .. }) {
                                 self.generate_curry_function_ir(
                                     &name,
                                     type_annotation.as_ref().unwrap(),
-                                    signature_params,
+                                    &signature,
                                     &body,
                                     constants,
                                     generic_param_names,
@@ -4998,7 +5093,6 @@ impl AstToIrGenerator {
             ast::Expr::BinOp { span, .. } => *span,
             ast::Expr::UnOp { span, .. } => *span,
             ast::Expr::Call { span, .. } => *span,
-            ast::Expr::FnDef { span, .. } => *span,
             ast::Expr::If { span, .. } => *span,
             ast::Expr::Match { span, .. } => *span,
             ast::Expr::While { span, .. } => *span,
@@ -5805,7 +5899,6 @@ impl AstToIrGenerator {
             ast::Expr::BinOp { span, .. }
             | ast::Expr::UnOp { span, .. }
             | ast::Expr::Call { span, .. }
-            | ast::Expr::FnDef { span, .. }
             | ast::Expr::If { span, .. }
             | ast::Expr::Match { span, .. }
             | ast::Expr::While { span, .. }
@@ -8013,7 +8106,7 @@ impl AstToIrGenerator {
         &self,
         func: &Expr,
     ) -> Option<(String, usize, usize)> {
-        use crate::frontend::core::parser::ast::Expr;
+        use crate::ast::Expr;
         if let Expr::FieldAccess {
             expr: base_expr,
             field: variant_name,
@@ -9160,7 +9253,7 @@ impl AstToIrGenerator {
 /// 这是编译器流程中的关键入口点：
 /// 类型检查 → IR 生成 → 代码生成
 pub fn generate_ir(
-    ast: &crate::frontend::core::parser::ast::Module,
+    ast: &crate::ast::Module,
     result: &crate::frontend::core::typecheck::TypeCheckResult,
 ) -> Result<crate::middle::ModuleIR, Vec<Diagnostic>> {
     // 单文件模式：仅 std 注册表，module_key 为 None → 不启用模块限定。
@@ -9176,9 +9269,9 @@ pub fn generate_ir(
 /// 这一个文件生成 IR。各文件产出的 `ModuleIR` 由编排器在 IR 层链接。
 #[allow(clippy::too_many_arguments)]
 pub fn generate_ir_with_context(
-    ast: &crate::frontend::core::parser::ast::Module,
+    ast: &crate::ast::Module,
     result: &crate::frontend::core::typecheck::TypeCheckResult,
-    cross_file_types: &[&crate::frontend::core::parser::ast::Module],
+    cross_file_types: &[&crate::ast::Module],
     global_layout: &[(String, usize)],
     // 本文件顶层绑定的槽位起始号（编排器分配，保证各文件区间不相交）
     global_slot_base: usize,
@@ -9209,15 +9302,15 @@ pub fn generate_ir_with_context(
 /// 仅做保守的语法级遍历：多收集一个变量只会多一条 env 槽位（不影响正确性），
 /// 漏收集才会导致闭包体内 `LoadUpvalue` 越界，故宁多勿少。
 fn collect_free_vars_stmt(
-    stmt: &crate::frontend::core::parser::ast::Stmt,
+    stmt: &crate::ast::Stmt,
     bound: &std::collections::HashSet<&str>,
     seen: &mut std::collections::HashSet<String>,
     out: &mut Vec<String>,
 ) {
-    use crate::frontend::core::parser::ast::StmtKind;
+    use crate::ast::StmtKind;
     // 小工具：走一个块（避免闭包借用冲突）
     fn walk_block(
-        b: &crate::frontend::core::parser::ast::Block,
+        b: &crate::ast::Block,
         bound: &std::collections::HashSet<&str>,
         seen: &mut std::collections::HashSet<String>,
         out: &mut Vec<String>,
@@ -9263,12 +9356,12 @@ fn collect_free_vars_stmt(
 
 /// 表达式层的自由变量收集（递归）。
 fn collect_free_vars_expr(
-    expr: &crate::frontend::core::parser::ast::Expr,
+    expr: &crate::ast::Expr,
     bound: &std::collections::HashSet<&str>,
     seen: &mut std::collections::HashSet<String>,
     out: &mut Vec<String>,
 ) {
-    use crate::frontend::core::parser::ast::Expr;
+    use crate::ast::Expr;
     match expr {
         Expr::Var(name, _) => {
             if !bound.contains(name.as_str()) && seen.insert(name.clone()) {

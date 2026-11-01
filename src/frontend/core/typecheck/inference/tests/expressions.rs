@@ -8,10 +8,11 @@
 //! RFC-039 §3.4.8 ①: 跨模块限定调用 `lib.f(x)` 发泛型实例化请求（generic_id
 //!   用限定名，与 merged-IR 的函数表键对齐）
 
+use crate::frontend::core::typecheck::probe::TypeLevelNamespace;
 use crate::frontend::core::typecheck::inference::expressions::ExpressionInferrer;
 use crate::frontend::core::typecheck::inference::scope::ScopeManager;
 use crate::frontend::core::types::{MonoType, TypeConstraintSolver};
-use crate::frontend::core::parser::ast::Expr;
+use crate::ast::Expr;
 use crate::util::span::Span;
 
 use std::collections::HashMap;
@@ -30,7 +31,7 @@ fn int_expr(n: i128) -> Expr {
 
 /// `left <op> right` 二元表达式（dummy span）。
 fn binop_expr(
-    op: crate::frontend::core::parser::ast::BinOp,
+    op: crate::ast::BinOp,
     left: Expr,
     right: Expr,
 ) -> Expr {
@@ -55,7 +56,11 @@ fn module_info_from_source(
         "模块源码必须可解析：{:?}",
         parsed.errors
     );
-    crate::frontend::module::orchestrator::extract_module_info(module_key, &parsed.module)
+    crate::frontend::module::orchestrator::extract_module_info(
+        module_key,
+        &parsed.module,
+        &TypeLevelNamespace::scan_one(&parsed.module),
+    )
 }
 
 /// 以真实 tokenize → parse → check 管线检查入口源码；`modules` 预先注册进
@@ -75,7 +80,10 @@ fn check_entry_with_modules(
     for module in modules {
         checker.env().module_registry.register(module);
     }
-    checker.check_module_collect_all(&parsed.module)
+    checker.check_module_collect_all(
+        &parsed.module,
+        &TypeLevelNamespace::scan_one(&parsed.module),
+    )
 }
 
 /// 实例化请求快照：`(generic_id 名, 声明序类型参数名, 类型实参)`。
@@ -230,12 +238,8 @@ fn test_infer_nested_expressions() {
     let mut inferrer = ctx.inferrer();
     // 嵌套表达式：(1 + 2) * 3
     let expr = binop_expr(
-        crate::frontend::core::parser::ast::BinOp::Mul,
-        binop_expr(
-            crate::frontend::core::parser::ast::BinOp::Add,
-            int_expr(1),
-            int_expr(2),
-        ),
+        crate::ast::BinOp::Mul,
+        binop_expr(crate::ast::BinOp::Add, int_expr(1), int_expr(2)),
         int_expr(3),
     );
 
@@ -355,6 +359,109 @@ fn test_instantiation_request_bare_call_keeps_unqualified_name() {
             vec![MonoType::Int(64)]
         )],
         "裸 Var 调用的请求名保持裸名 identity（不得被限定化）"
+    );
+}
+
+/// #511：接口约束形态 `(T: Add)`（type-system.md:151）的跨单元请求必须携带
+/// 声明名——修前登记口只认 `(T: Type)`（MetaType），`Export::type_params`
+/// 为 None ⇒ 请求 `type_params` 为空表，走签名反推兜底（#510 探针实证）。
+#[test]
+fn test_instantiation_request_qualified_call_carries_interface_constraint_param_name() {
+    // Arrange：lib 导出接口约束泛型 f，入口整体导入后限定调用
+    let lib = module_info_from_source("lib", "f: (T: Add) -> (x: T) -> T = (x) => x\n");
+    let source = "use lib\nv = lib.f(42)\n";
+
+    // Act：真实 tokenize → parse → check 管线
+    let result = check_entry_with_modules(source, vec![lib]);
+
+    // Assert：请求携带限定名 lib.f 且带声明名 ["T"]
+    assert!(
+        result.diagnostics.is_empty(),
+        "限定调用不应产生诊断，实际：{:?}",
+        result
+            .diagnostics
+            .iter()
+            .map(|d| d.to_string())
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        request_triples(&result.instantiation_requests),
+        vec![(
+            "lib.f".to_string(),
+            vec!["T".to_string()],
+            vec![MonoType::Int(64)],
+        )],
+        "(T: Add) 接口约束的跨单元请求必须携带导出快照的声明名 [\"T\"]（不得退回空表反推）"
+    );
+}
+
+/// #511 行为守恒锚：const 泛型限定调用 `lib.f(42)(5)` **不发实例化请求**——
+/// const 形态的单态化走 const_binders → mono 编译期求值面，不经
+/// `instantiation_requests`（单模块对照实测同样零请求）。#511 的登记口扩容
+/// 只改名字表，不得让 const 调用意外开始发请求；`(N: Int)` 的声明名兑现面
+/// 是导出携带（`Export::type_params`，见 orchestrator 的
+/// `export_type_params_tests`）。
+#[test]
+fn test_instantiation_request_qualified_const_call_stays_request_free() {
+    // Arrange：lib 导出 const 泛型 f，入口整体导入后两段 curry 调用
+    //（首段 42 是编译期 const 实参，末段 5 是运行时值实参）
+    let lib = module_info_from_source("lib", "f: (N: Int) -> (n: N) -> Int = (n) => n\n");
+    let source = "use lib\nv = lib.f(42)(5)\n";
+
+    // Act：真实 tokenize → parse → check 管线
+    let result = check_entry_with_modules(source, vec![lib]);
+
+    // Assert：零诊断 + 零请求（守恒，与单模块形态一致）
+    assert!(
+        result.diagnostics.is_empty(),
+        "const 泛型限定调用不应产生诊断，实际：{:?}",
+        result
+            .diagnostics
+            .iter()
+            .map(|d| d.to_string())
+            .collect::<Vec<_>>()
+    );
+    assert!(
+        result.instantiation_requests.is_empty(),
+        "const 泛型调用不得发实例化请求（其单态化不经该通道），实际：{:?}",
+        request_triples(&result.instantiation_requests)
+    );
+}
+
+/// #511 / 3.20.5 t3-low② 收口：混合签名（约束段 `(T: Add)` + 值依赖 const 段
+/// `(N: Int)`）的跨单元**全柯里调用**与纯 const 形态同构——**零请求**。实测
+/// （探针先行）其单态化不经 `instantiation_requests` 通道；t3 提出的
+/// 「param_names.position 取 last_type_args[idx] 对齐性」疑虑因此在请求通道
+/// 上不成立（该疑虑所在的 E1106 约束复检路径系结构性死码，已经 2026-10-31
+/// 用户裁决甲案删除，见 RFC-011b 附录B 与 issue #519）。
+/// 未覆盖边界：混合签名的部分应用（调用停在 const 段之前）无测试。
+#[test]
+fn test_instantiation_request_qualified_mixed_signature_call_stays_request_free() {
+    // Arrange：lib 导出混合签名 f（约束段 T + const 段 N，返回类型引用 N）；
+    // 约束段不吃调用位（T 从值实参类型反推），调用位 = N 的 const 实参 + x + n
+    let lib = module_info_from_source(
+        "lib",
+        "f: (T: Add) -> (N: Int) -> (x: T) -> (n: N) -> N = (x, n) => n\n",
+    );
+    let source = "use lib\nv = lib.f(7)(1)(2)\n";
+
+    // Act：真实 tokenize → parse → check 管线
+    let result = check_entry_with_modules(source, vec![lib]);
+
+    // Assert：零诊断 + 零请求（与纯 const 形态守恒一致）
+    assert!(
+        result.diagnostics.is_empty(),
+        "混合签名限定调用不应产生诊断，实际：{:?}",
+        result
+            .diagnostics
+            .iter()
+            .map(|d| d.to_string())
+            .collect::<Vec<_>>()
+    );
+    assert!(
+        result.instantiation_requests.is_empty(),
+        "混合签名全柯里调用不得发实例化请求（与纯 const 形态守恒一致），实际：{:?}",
+        request_triples(&result.instantiation_requests)
     );
 }
 

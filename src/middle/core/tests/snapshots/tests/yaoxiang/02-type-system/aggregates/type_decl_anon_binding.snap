@@ -1,0 +1,34 @@
+module
+  fn Point() -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
+    type_decl [x: Int(64)]
+  fn main() -> Void
+    slot[0] p : Int(64) @depth1
+    locals_total=7
+    Load %0 <- int(1)
+    Call %1 <- string("Point") [%0] (def=d0)
+    Load %2 <- %1
+    LoadField %3 <- %2.0
+    Load %4 <- int(1)
+    Eq %5 <- %3, %4
+    Load %6 <- string("含匿名绑定的类型仍可构造并读回数据字段")
+    Call %0 <- string("std.assert.assert") [%5, %6] (def=d1)
+    Load %5 <- %1
+    Load %3 <- int(5)
+    Call %0 <- string("Point.__anon_cb") [%5, %3] (def=d2)
+    Drop %1
+    Ret %0
+  fn closure_0(Int(64)) -> Void
+    slot[0] a : Int(64) @depth2
+    locals_total=5
+    Load %0 <- %1
+    Load %2 <- int(0)
+    Gt %3 <- %0, %2
+    Ret %3
+  fn Point.__anon_cb(Int(64)) -> Bool
+    slot[0] arg0 : Int(64) @depth1
+    locals_total=2
+    Load %0 <- arg%0
+    MakeClosure %1 <- closure_0 env=[] (def=d3)
+    Ret %1
+  init (locals=0)
+    Call %0 <- string("main") [] (def=d4)

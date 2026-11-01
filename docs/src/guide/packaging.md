@@ -107,7 +107,7 @@ Workspace my-project (2 members)
 
 ```yaoxiang
 // mylib/src/lib.yx
-greet: () -> string = "hello from mylib"
+greet: () -> String = "hello from mylib"
 ```
 
 所有顶层绑定默认对外可见，无需 `pub`——见[模块系统](modules#导出不需要-pub)。

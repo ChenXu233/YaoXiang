@@ -6,7 +6,7 @@
 //! - 完整的错误收集
 //! - RFC-004/010/011 支撑
 
-use crate::frontend::core::parser::ast::Module;
+use crate::ast::Module;
 
 // ============ 子模块声明 ============
 
@@ -27,6 +27,9 @@ pub mod environment;
 
 // RFC-011b: 运算符接口与实现登记表
 pub mod operator_interfaces;
+
+// 类型环境探针的 L3 实现（RFC-039 6.4：parser 的数据流去类型依赖）
+pub mod probe;
 
 // 类型检查器
 pub mod checker;
@@ -58,6 +61,7 @@ pub use crate::frontend::core::types::{
 };
 
 // 重新导出子模块
+pub use probe::{is_builtin_predicate_name, is_constraint_name, SemanticProbe};
 pub use environment::*;
 pub use inference::*;
 pub use crate::frontend::core::types::eval::evaluator::*;
@@ -119,11 +123,15 @@ fn check_module_inner(
         checker.env().module_registry = ext_env.module_registry.clone();
     }
 
+    // 谓词名可见面（WBS 3.20.9 / #522）：本自由函数是单文件入口，
+    // scan 被检模块自身
+    let namespace = probe::TypeLevelNamespace::scan_one(ast);
+
     // 执行模块检查
     let result = if collect_all {
-        checker.check_module_collect_all(ast)
+        checker.check_module_collect_all(ast, &namespace)
     } else {
-        checker.check_module(ast)
+        checker.check_module(ast, &namespace)
     };
 
     // 将 method_bindings 导回传入的环境
@@ -135,24 +143,15 @@ fn check_module_inner(
 }
 
 /// 添加内置类型到环境
+///
+/// **不含标量内置名**（WBS 6.1.2）：`Int` / `Bool` / `String` … 由
+/// `MonoType::from_builtin_name` 单源解析（`TypeEnvironment::resolves_type_name`
+/// 第一条就是查它）。此处曾登记 `int` / `float` / `bool` / `string` / `void` /
+/// `never` / `char` 七个小写拼写，等于在类型表里留了第二份别名表——名字虽能
+/// 解析，却与解析表给的 `MonoType` 不一致（`int` 登记的是 `Int(32)`，
+/// `from_builtin_name("Int")` 给 `Int(64)`）。删除后小写拼写在类型位置一律
+/// 落成未知类型，与 SPEC §2.1 的 15 名清单一致。
 pub fn add_builtin_types(env: &mut environment::TypeEnvironment) {
-    env.types
-        .insert("int".to_string(), PolyType::mono(MonoType::Int(32)));
-    env.types
-        .insert("float".to_string(), PolyType::mono(MonoType::Float(64)));
-    env.types
-        .insert("bool".to_string(), PolyType::mono(MonoType::Bool));
-    env.types.insert(
-        "string".to_string(),
-        PolyType::mono(MonoType::make_string()),
-    );
-    env.types
-        .insert("void".to_string(), PolyType::mono(MonoType::Void));
-    env.types
-        .insert("never".to_string(), PolyType::mono(MonoType::Never));
-    env.types
-        .insert("char".to_string(), PolyType::mono(MonoType::Char));
-
     // RFC-024: 内置资源类型
     for resource_type in &["FilePath", "HttpUrl", "DBUrl", "Console"] {
         env.types.insert(

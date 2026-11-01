@@ -102,9 +102,6 @@ main: () -> Void = {
         some(v) => println("alive"),
         none() => println("dropped"),
     }
-
-    // 变体集在场：同一套 some/none 也可直接构造
-    probe = Option(Int).some(7)
 }
 ```
 

@@ -1,10 +1,10 @@
 module
   fn Point() -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
-    type_decl Struct { body: [Field(StructField { name: "x", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 11, column: 20, offset: 443 }, end: Position { line: 11, column: 23, offset: 446 } } }, default: None }), Field(StructField { name: "y", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 11, column: 28, offset: 451 }, end: Position { line: 11, column: 31, offset: 454 } } }, default: None })] }
+    type_decl [x: Int(64) ; y: Int(64)]
   fn Inner() -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
-    type_decl Struct { body: [Field(StructField { name: "view", is_mut: false, ty: Ref { mutable: false, inner: Name { name: "Point", span: Span { start: Position { line: 13, column: 24, offset: 481 }, end: Position { line: 13, column: 29, offset: 486 } } }, span: Span { start: Position { line: 13, column: 30, offset: 487 }, end: Position { line: 13, column: 31, offset: 488 } } }, default: None })] }
+    type_decl [view: Ref { mutable: false, inner: TypeRef("Point") }]
   fn Outer() -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
-    type_decl Struct { body: [Field(StructField { name: "inner", is_mut: false, ty: Name { name: "Inner", span: Span { start: Position { line: 14, column: 24, offset: 512 }, end: Position { line: 14, column: 29, offset: 517 } } }, default: None })] }
+    type_decl [inner: TypeRef("Inner")]
   fn main() -> Void
     slot[0] p : Int(64) @depth1
     slot[1] t : Int(64) @depth1

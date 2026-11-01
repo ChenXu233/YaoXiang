@@ -19,7 +19,7 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use crate::util::span::Span;
 use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};
 
-use crate::frontend::core::parser::ast::{Module, Stmt, StmtKind, Expr, Block};
+use crate::ast::{Module, Stmt, StmtKind, Expr, Block};
 
 /// 死代码分析器
 pub struct DeadCodeAnalyzer {
@@ -42,6 +42,13 @@ pub struct DeadCodeAnalyzer {
     /// （`RefPool::field_names` 全局平铺）对它们不成立，判定不因同名兄弟的
     /// 跨文件同名引用而放宽（宁漏报方向仍保留给无决议记录的组）
     resolved_groups: HashSet<String>,
+    /// 被**算子派发**命中的方法名组（`Type.method` 基名，全局；WBS 3.20.3 /
+    /// issue #505）：`u[0]` / `u == t` 在 typecheck 侧的具名决议是
+    /// `OperatorDispatch { type_name, method }`（独立于 D20 重载决议的义务
+    /// 通道，driver 从 `TypeCheckResult::operator_dispatches` 解析后传入）。
+    /// 派发名不分重载候选 ⇒ 组内**全部声明**按活判定；组未命中时其余判定
+    /// 原样——接口声明了但算子从未作用于该类型 ⇒ 照报 W1005（守卫不放宽）
+    operator_dispatched: HashSet<String>,
 }
 
 /// 符号定义
@@ -215,6 +222,7 @@ impl DeadCodeAnalyzer {
             cross_file_refs: HashSet::new(),
             resolved_methods: HashSet::new(),
             resolved_groups: HashSet::new(),
+            operator_dispatched: HashSet::new(),
         }
     }
 
@@ -256,6 +264,17 @@ impl DeadCodeAnalyzer {
         self.resolved_groups = groups;
     }
 
+    /// 设置「被算子派发命中的方法名组」（`Type.method` 基名，全局集合；
+    /// WBS 3.20.3 / issue #505）：driver 从 `TypeCheckResult::operator_dispatches`
+    /// （RFC-011b span 键控派发点）解析后传入。命中 ⇒ 组内全部声明按活判定；
+    /// 未命中 ⇒ 其余判定原样（未被调用的算子方法照报 W1005）。
+    pub fn set_operator_dispatched_groups(
+        &mut self,
+        groups: HashSet<String>,
+    ) {
+        self.operator_dispatched = groups;
+    }
+
     /// 该名字组是否有决议记录（决定逐候选还是回落短名共判）——
     /// 用驱动侧汇总的**全局**名字组：跨单元同名方法的决议记在别的单元上，
     /// 本单元也要据「该组受决议控制」停用池的名字级豁免
@@ -289,11 +308,10 @@ impl DeadCodeAnalyzer {
                         continue;
                     };
                     // RFC-010a 附录D：非 Fn 注解的块绑定是**块值**而非函数
-                    let is_fn_binding =
-                        crate::frontend::core::parser::ast::Expr::block_binding_is_function(
-                            type_annotation.as_ref(),
-                            value.as_deref(),
-                        );
+                    let is_fn_binding = crate::ast::Expr::block_binding_is_function(
+                        type_annotation.as_ref(),
+                        value.as_deref(),
+                    );
                     let (params, body): (Vec<_>, Vec<_>) = if is_fn_binding {
                         match value {
                             Some(v) => v.callable_parts(),
@@ -483,14 +501,6 @@ impl DeadCodeAnalyzer {
                     collect_from_expr(expr, referenced);
                     collect_from_expr(index, referenced);
                 }
-                Expr::FnDef {
-                    name, params, body, ..
-                } => {
-                    referenced.bind(name.clone());
-                    referenced.insert(name.clone());
-                    collect_params_names_and_types(params, referenced);
-                    collect_from_block(body, referenced);
-                }
                 Expr::Lambda { params, body, .. } => {
                     collect_params_names_and_types(params, referenced);
                     collect_from_block(body, referenced);
@@ -513,11 +523,8 @@ impl DeadCodeAnalyzer {
                 Expr::FString { segments, .. } => {
                     for seg in segments {
                         match seg {
-                            crate::frontend::core::parser::ast::FStringSegment::Text(_) => {}
-                            crate::frontend::core::parser::ast::FStringSegment::Interpolation {
-                                expr,
-                                ..
-                            } => {
+                            crate::ast::FStringSegment::Text(_) => {}
+                            crate::ast::FStringSegment::Interpolation { expr, .. } => {
                                 collect_from_expr(expr, referenced);
                             }
                         }
@@ -567,7 +574,7 @@ impl DeadCodeAnalyzer {
         }
 
         fn collect_params_names_and_types(
-            params: &[crate::frontend::core::parser::ast::Param],
+            params: &[crate::ast::Param],
             referenced: &mut IdentSink,
         ) {
             for param in params {
@@ -591,10 +598,10 @@ impl DeadCodeAnalyzer {
         /// match 模式中的名字引用：Identifier 兼作常量模式（无法与绑定区分，
         /// 一律收集），Struct/Union 头部是类型名引用，Guard 条件是真实表达式
         fn collect_pattern_refs(
-            pattern: &crate::frontend::core::parser::ast::Pattern,
+            pattern: &crate::ast::Pattern,
             referenced: &mut IdentSink,
         ) {
-            use crate::frontend::core::parser::ast::Pattern;
+            use crate::ast::Pattern;
             match pattern {
                 Pattern::Identifier(name) => {
                     referenced.insert(name.clone());
@@ -639,7 +646,6 @@ impl DeadCodeAnalyzer {
                     value,
                     target,
                     type_annotation,
-                    signature_params,
                     ..
                 } => {
                     if let Some(expr) = value {
@@ -666,7 +672,12 @@ impl DeadCodeAnalyzer {
                     if let Some(ty) = type_annotation {
                         ty.collect_name_refs(&mut referenced.refs);
                     }
-                    for param in signature_params {
+                    // 形参类型名同样算引用：从注解的 Type::Fn 链拍平（6.5.2）
+                    let signature = type_annotation
+                        .as_ref()
+                        .map(crate::ast::Type::fn_params_flat)
+                        .unwrap_or_default();
+                    for param in &signature {
                         if let Some(ty) = &param.ty {
                             ty.collect_name_refs(&mut referenced.refs);
                         }
@@ -688,12 +699,16 @@ impl DeadCodeAnalyzer {
                 }
                 StmtKind::TypeDefinition {
                     name,
-                    signature_params,
+                    type_annotation,
                     definition,
                     ..
                 } => {
                     referenced.bind(name.clone());
-                    for param in signature_params {
+                    let signature = type_annotation
+                        .as_ref()
+                        .map(crate::ast::Type::fn_params_flat)
+                        .unwrap_or_default();
+                    for param in &signature {
                         if let Some(ty) = &param.ty {
                             ty.collect_name_refs(&mut referenced.refs);
                         }
@@ -726,6 +741,14 @@ impl DeadCodeAnalyzer {
                     if let Some(branch) = else_branch {
                         collect_from_block(branch, referenced);
                     }
+                }
+                // 单表达式体 lambda 的合成体语句：parser 对 `() => expr`
+                // 就地合成 `Return(Some(expr))` 糖（pratt/led.rs「Single
+                // expression body」臂），不经 StmtKind::Expr——漏收会让
+                // 闭包体内的引用整体丢失，仅被闭包引用的定义误报 W1001
+                //（WBS 3.20.1：docs/src/reference/stdlib/test.md 的 t_add）
+                StmtKind::Return(Some(expr)) => {
+                    collect_from_expr(expr, referenced);
                 }
                 _ => {}
             }
@@ -784,7 +807,13 @@ impl DeadCodeAnalyzer {
                         let k = ordinal.entry(def.name.clone()).or_insert(0);
                         let this = *k;
                         *k += 1;
-                        if self.method_group_has_marks(&def.name) {
+                        // WBS 3.20.3 / issue #505：算子派发命中**整组**——算子
+                        // 调用点不产生 D20 重载决议条目（`operator_dispatches`
+                        // 是独立义务通道），派发名 `Type.method` 不分重载候选，
+                        // 故组内全部声明按活判定
+                        if self.operator_dispatched.contains(&def.name) {
+                            true
+                        } else if self.method_group_has_marks(&def.name) {
                             self.resolved_methods.contains(&(def.name.clone(), this))
                         } else {
                             let short = def.name.rsplit('.').next().unwrap_or(&def.name);
@@ -822,8 +851,8 @@ impl DeadCodeAnalyzer {
 
         for def in &self.all_defs {
             let name = &def.name;
-            let marked_group =
-                matches!(def.kind, SymbolKind::Method) && self.method_group_has_marks(name);
+            // 声明序推进先于任何判定分支：同组后续声明的序号不得因本条提前
+            // 判活而错位
             let this_decl = match def.kind {
                 SymbolKind::Method => {
                     let k = ordinal.entry(def.name.clone()).or_insert(0);
@@ -833,6 +862,13 @@ impl DeadCodeAnalyzer {
                 }
                 _ => 0,
             };
+            // 算子派发命中的组整组按活（WBS 3.20.3 / issue #505）；
+            // 未命中时照走原判定（未被调用的算子方法不得被豁免）
+            if matches!(def.kind, SymbolKind::Method) && self.operator_dispatched.contains(name) {
+                continue;
+            }
+            let marked_group =
+                matches!(def.kind, SymbolKind::Method) && self.method_group_has_marks(name);
             if marked_group {
                 // 逐候选：决议命中**本单元这条定义** ⇒ 活；未命中 ⇒ 判死
                 // （WBS 4.9.7 / #464：跨单元同名同序不被兄弟的调用豁免）

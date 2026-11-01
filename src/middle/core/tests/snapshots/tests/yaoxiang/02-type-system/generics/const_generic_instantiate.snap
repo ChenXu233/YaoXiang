@@ -1,7 +1,7 @@
 module
   fn SafeArray(MetaType { universe_level: UniverseLevel { level: "0" }, type_params: [] }, Int(64)) -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
     generic_params: ["T"]
-    type_decl Struct { body: [Field(StructField { name: "_assert_n", is_mut: false, ty: Generic { name: "Assert", name_span: Span { start: Position { line: 9, column: 16, offset: 319 }, end: Position { line: 9, column: 22, offset: 325 } }, args: [ConstExpr(BinOp { op: Gt, left: Var("N", Span { start: Position { line: 9, column: 23, offset: 326 }, end: Position { line: 9, column: 24, offset: 327 } }), right: Lit(Int(0), Span { start: Position { line: 9, column: 27, offset: 330 }, end: Position { line: 9, column: 28, offset: 331 } }), span: Span { start: Position { line: 9, column: 25, offset: 328 }, end: Position { line: 9, column: 26, offset: 329 } } })] }, default: None }), Field(StructField { name: "data", is_mut: false, ty: Generic { name: "Array", name_span: Span { start: Position { line: 10, column: 11, offset: 344 }, end: Position { line: 10, column: 16, offset: 349 } }, args: [Name { name: "T", span: Span { start: Position { line: 10, column: 17, offset: 350 }, end: Position { line: 10, column: 18, offset: 351 } } }, Name { name: "N", span: Span { start: Position { line: 10, column: 20, offset: 353 }, end: Position { line: 10, column: 21, offset: 354 } } }] }, default: None })] }
+    type_decl [_assert_n: Generic { name: "Assert", args: [TypeRef("<const-expr>")] } ; data: Generic { name: "Array", args: [TypeRef("T"), TypeRef("N")] }]
   fn main() -> Void
     slot[0] arr : Int(64) @depth1
     locals_total=4

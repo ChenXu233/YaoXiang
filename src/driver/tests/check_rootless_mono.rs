@@ -34,11 +34,12 @@ pub(super) fn make_rootless_project(files: &[(&str, &str)]) -> (tempfile::TempDi
 
 /// 同夹具但**带 manifest**（Bin 语义：`module_key=Some`，E3023 开关打开）——
 /// 用来证明「Script 语义未被打开 E3023」的断言不是空转。
+/// 清单合法（含 version）：WBS 3.23.1 / #503 起坏清单报 E3024 中止。
 pub(super) fn make_bin_project(files: &[(&str, &str)]) -> (tempfile::TempDir, PathBuf) {
     let dir = tempfile::tempdir().expect("create tempdir");
     std::fs::write(
         dir.path().join("yaoxiang.toml"),
-        "[package]\nname = \"t\"\n",
+        "[package]\nname = \"t\"\nversion = \"0.1.0\"\n",
     )
     .expect("write manifest failed");
     let mut entry = PathBuf::new();

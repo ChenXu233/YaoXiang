@@ -170,7 +170,8 @@ impl Compiler {
         &mut self,
         tokens: &[super::core::lexer::Token],
     ) -> Result<super::core::parser::Module, CompileError> {
-        let result = super::core::parser::parse(tokens);
+        let result =
+            super::core::parser::parse_with_probe(tokens, &super::core::typecheck::SemanticProbe);
         if result.has_errors {
             Err(CompileError::Parse(
                 result.errors.into_iter().next().unwrap_or_else(|| {

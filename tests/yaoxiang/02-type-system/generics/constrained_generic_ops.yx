@@ -1,7 +1,9 @@
 // 02-type-system/generics/constrained_generic_ops.yx
-// 覆盖: RFC-011 §5.2 约束泛型的运算符——`T: Add` 定义体内的 `a + b`
-// 延迟派发（Call "T.add"），mono 按类型实参改写（Int.add FFI / Vec3.add
-// 用户方法），调用点复检（未实现者 E1106）
+// 覆盖: RFC-011b 约束泛型的运算符——`T: Add` 定义体内的 `a + b` 延迟派发
+// （Call "T.add"），mono 按类型实参改写（Int.add FFI / Vec3.add 用户方法）。
+// 2026-10-31 用户裁决甲案：调用点复检系结构性死码已删除（RFC-011b 附录B
+// 设计决策记录）；约束执行面 = mono 特化改写，未实现约束当前可观察行为 =
+// check 静默过 / run 期运行时错误（issue #519 登记待设计）
 // 验证:
 //   - 约束泛型在 Int 上实例化（原生背书）
 //   - 约束泛型在用户类型上实例化（Vec3.add 方法派发）

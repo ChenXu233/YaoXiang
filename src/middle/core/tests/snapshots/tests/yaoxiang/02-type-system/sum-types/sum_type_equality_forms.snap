@@ -1,6 +1,6 @@
 module
   fn Color() -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
-    type_decl Struct { body: [Field(StructField { name: "red", is_mut: false, ty: Fn { params: [], return_type: Name { name: "Color", span: Span { start: Position { line: 13, column: 16, offset: 648 }, end: Position { line: 13, column: 21, offset: 653 } } } }, default: None }), Field(StructField { name: "green", is_mut: false, ty: Fn { params: [], return_type: Name { name: "Color", span: Span { start: Position { line: 14, column: 18, offset: 672 }, end: Position { line: 14, column: 23, offset: 677 } } } }, default: None }), Field(StructField { name: "blue", is_mut: false, ty: Fn { params: [], return_type: Name { name: "Color", span: Span { start: Position { line: 15, column: 17, offset: 695 }, end: Position { line: 15, column: 22, offset: 700 } } } }, default: None })] }
+    type_decl [red: Fn { params: [], return_type: TypeRef("Color") } ; green: Fn { params: [], return_type: TypeRef("Color") } ; blue: Fn { params: [], return_type: TypeRef("Color") }]
   fn mk() -> TypeRef("Color")
     locals_total=2
     Load %0 <- void

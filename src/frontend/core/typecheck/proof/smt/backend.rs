@@ -28,8 +28,9 @@
 //!
 //! 单例化的意义在**缓存可观测**：缓存是实例内的（`z3_backend.rs`），每消费点
 //! 新建实例会让命中率计数与 `CACHE_CAP` 空转（WBS 4.4.2）。共享实例下
-//! [`shared_solver_cache_stats`] 与 [`shared_solver_consumer_stats`] 给出跨三点
-//! 累计的命中/未命中数字。
+//! [`shared_solver_cache_stats`] 给出实例累计的命中/未命中数字，
+//! [`shared_solver_consumer_stats`] / [`shared_solver_thread_consumer_stats`]
+//! 给出按消费点切片的观测账（进程累计 / 当前线程两个口径）。
 //!
 //! [`default_solver`]（新建实例）只保留给测试与独立场景。
 //!
@@ -46,7 +47,9 @@
 //!    （`with_shared_solver` → `record_consumer_use`：`acquisitions` +1，
 //!    `hits`/`misses` 按后端缓存计数增量累加）。
 //! 2. **读取面只有** `proof/smt/tests/shared.rs`——生产代码**零调用**
-//!    （`shared_solver_consumer_stats` 的调用点全仓仅此一处）。
+//!    （进程累计口 `shared_solver_consumer_stats` 与线程镜像口
+//!    `shared_solver_thread_consumer_stats` 的调用点全仓均只在该测试文件；
+//!    自 #514 起判据读数走镜像口，进程累计口保留为该口径的读取口）。
 //! 3. [`SolverConsumer::ALL`] 是**测试专用常量**，生产代码不得依赖。
 //!
 //! 为什么保留：4.4.2（D58 共享单例）的验收判据以这份读数为载体——「三点共享
@@ -216,8 +219,10 @@ static SHARED_SOLVER: LazyLock<Mutex<Option<Box<dyn Solver>>>> =
 /// 与 [`SHARED_SOLVER`] 分开上锁：观测计数是纯增量，不参与求解串行化。
 /// 锁序单向（先求解器锁、后观测锁），读取口只取观测锁，无环。
 ///
-/// 生产侧**零读取**：唯一读取口 `shared_solver_consumer_stats` 的调用点全仓
-/// 只在 `proof/smt/tests/shared.rs`——契约见模块头「观测账的读写面契约」。
+/// 生产侧**零读取**：读取口（进程累计口 `shared_solver_consumer_stats` 与
+/// 线程镜像口 `shared_solver_thread_consumer_stats`）的调用点全仓只在
+/// `proof/smt/tests/shared.rs`——契约见模块头「观测账的读写面契约」。
+/// 线程切片镜像 [`THREAD_CONSUMER_STATS`] 与本表同点同值累加。
 static CONSUMER_STATS: Mutex<[ConsumerStats; 3]> = Mutex::new(
     [ConsumerStats {
         acquisitions: 0,
@@ -232,6 +237,31 @@ thread_local! {
     /// D58 禁令的执行机制：`Mutex` 不可重入，闭包内再次获取即死锁——
     /// 死锁没有诊断信息且挂死整个编译/测试进程；本标志把违反变成显式 panic。
     static IN_SHARED_SOLVER: Cell<bool> = const { Cell::new(false) };
+
+    /// 当前线程的观测镜像——进程账 [`CONSUMER_STATS`] 的**线程切片**（issue #514）。
+    ///
+    /// 写入点与进程账**同点同值**：[`record_consumer_use`] 把同一份增量同时
+    /// 累加进进程账与本线程镜像。镜像只被当前线程写、只被当前线程读，因此
+    /// 线程内「编译前 / 编译后」两次读数的差分恰好等于**本线程该时段**经
+    /// 共享口发生的贡献——并发下其他线程的落账不可见。
+    ///
+    /// 为什么需要它（issue #514）：4.4.2 判据②「实例增量 ≥ 三点之和」原本以
+    /// 进程账差分为读数源；进程账的落账发生在实例计数累加**之后**
+    /// （[`with_shared_solver`] 里 `drop(guard)` 之后，两步之间无原子性），
+    /// 并发下其他测试的一笔获取可以被读取方的快照窗口劈开——实例计数落在
+    /// 窗口前缘之前、落账落在前缘之后——三点增量被推高而实例增量不含它，
+    /// 判据间歇失败（单跑绿、全量并发红）。线程切片使差分天然免于跨线程
+    /// 落账污染，判据本体（阈值与比对方向）不变。
+    ///
+    /// **测试专用读数通道**：读取面只有 `proof/smt/tests/shared.rs`，生产
+    /// 代码不得依赖——与模块头「观测账的读写面契约」同规。
+    static THREAD_CONSUMER_STATS: Cell<[ConsumerStats; 3]> = const {
+        Cell::new([ConsumerStats {
+            acquisitions: 0,
+            hits: 0,
+            misses: 0,
+        }; 3])
+    };
 }
 /// 在**进程级共享求解器**上执行 `f`——生产路径唯一的求解器获取口（D58）。
 ///
@@ -307,6 +337,18 @@ fn record_consumer_use(
     entry.acquisitions += 1;
     entry.hits += hits;
     entry.misses += misses;
+    drop(stats);
+
+    // 同一份增量记进当前线程的镜像（写入点与进程账同点同值，见
+    // THREAD_CONSUMER_STATS 的注释）——Cell 无锁，与进程账锁无交互。
+    THREAD_CONSUMER_STATS.with(|mirror| {
+        let mut slots = mirror.get();
+        let entry = &mut slots[consumer.index()];
+        entry.acquisitions += 1;
+        entry.hits += hits;
+        entry.misses += misses;
+        mirror.set(slots);
+    });
 }
 
 /// 共享实例自身的进程累计缓存计数（命中, 未命中）。
@@ -323,18 +365,37 @@ pub fn shared_solver_cache_stats() -> Option<(u64, u64)> {
     guard.as_deref().and_then(Solver::cache_stats)
 }
 
-/// 单个消费点的进程累计观测值（WBS 4.4.2：命中率按消费点可观测）。
+/// 单个消费点的**进程累计**观测值（WBS 4.4.2：命中率按消费点可观测）。
 ///
 /// 与 [`shared_solver_cache_stats`] 的差别：这里只统计**经共享口**发生的
-/// 求解，且按消费点分开；两者共同构成「三点共享同一实例」的读数
-/// （三点增量之和 = 共享实例计数器的增量，前提是没有绕过获取口的直接调用）。
+/// 求解，且按消费点分开；与共享实例计数共同构成「三点共享同一实例」的
+/// 读数（三点增量之和 = 共享实例计数器的增量，前提是没有绕过获取口的
+/// 直接调用）。
 ///
-/// 本函数是观测账的**唯一读取口**：按契约，调用方**只有**
-/// `proof/smt/tests/shared.rs`，生产代码不得调用——见模块头
-/// 「观测账的读写面契约」。
+/// 与 [`shared_solver_thread_consumer_stats`] 的差别：本函数是**进程累计**
+/// 口径（含其他线程的贡献），后者是**当前线程**口径。#514 起 4.4.2 判据的
+/// 读数走线程口径（进程口径的差分窗口会被并发落账劈开，见
+/// [`THREAD_CONSUMER_STATS`] 注释）；本函数保留为进程累计口径的读取口，
+/// 当前全仓零调用。
+///
+/// 读取面契约：调用方**只有** `proof/smt/tests/shared.rs`，生产代码不得
+/// 调用——见模块头「观测账的读写面契约」。
 pub fn shared_solver_consumer_stats(consumer: SolverConsumer) -> ConsumerStats {
     let stats = CONSUMER_STATS
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
     stats[consumer.index()]
+}
+
+/// 当前线程的观测镜像累计值（WBS 4.4.2；issue #514 的并发安全读数通道）。
+///
+/// 与 [`shared_solver_consumer_stats`] 的差别：这里只累计**当前线程**经
+/// 共享口发生的获取（镜像见 [`THREAD_CONSUMER_STATS`]）。在执行编译的
+/// 线程内对「编译前 / 编译后」各取一次、做差，即得**本次编译**的精确
+/// 增量；进程累计口径下并发其他线程的落账会进入差分窗口，线程口径不会。
+///
+/// 读取面只有 `proof/smt/tests/shared.rs`，生产代码不得调用——与
+/// 「观测账的读写面契约」同规。
+pub fn shared_solver_thread_consumer_stats(consumer: SolverConsumer) -> ConsumerStats {
+    THREAD_CONSUMER_STATS.with(|mirror| mirror.get()[consumer.index()])
 }

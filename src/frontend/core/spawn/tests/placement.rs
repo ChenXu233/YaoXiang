@@ -2,7 +2,7 @@
 //!
 //! RFC-024 §2.1: spawn 块可以出现在任何表达式位置
 
-use crate::frontend::core::parser::ast::{Block, Expr, Module, PlanId, Stmt, StmtKind};
+use crate::ast::{Block, Expr, Module, PlanId, Stmt, StmtKind};
 use crate::frontend::core::spawn::placement::check_spawn_placement;
 use crate::util::span::Span;
 
@@ -38,7 +38,6 @@ fn var_stmt(name: &str) -> Stmt {
         kind: StmtKind::Assign {
             target: Box::new(Expr::Var(name.to_string(), Span::dummy())),
             type_annotation: None,
-            signature_params: vec![],
             value: None,
             is_mut: false,
             span: Span::dummy(),

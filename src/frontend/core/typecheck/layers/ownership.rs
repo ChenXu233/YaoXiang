@@ -911,7 +911,7 @@ pub fn check_ownership(
 
 // ── OwnershipChecker：AST 遍历 ───────────────────────────
 
-use crate::frontend::core::parser::ast::{Expr, Module, Stmt, StmtKind};
+use crate::ast::{Expr, Module, Stmt, StmtKind};
 use crate::frontend::core::typecheck::inference::call_ownership::CallOwnershipTable;
 
 /// 赋值/传参/返回的复制语义（SPEC §11.2，#256）
@@ -1104,7 +1104,7 @@ impl OwnershipChecker {
             // 底层变量，保守但 sound（宁可误报冲突，不可漏检别名）
             Expr::Index { expr: inner, .. } => Self::extract_var_name(inner),
             Expr::UnOp {
-                op: crate::frontend::core::parser::ast::UnOp::Deref,
+                op: crate::ast::UnOp::Deref,
                 expr: inner,
                 ..
             } => Self::extract_var_name(inner),
@@ -1260,7 +1260,6 @@ impl OwnershipChecker {
             Expr::BinOp { span, .. }
             | Expr::UnOp { span, .. }
             | Expr::Call { span, .. }
-            | Expr::FnDef { span, .. }
             | Expr::If { span, .. }
             | Expr::Match { span, .. }
             | Expr::While { span, .. }
@@ -1548,7 +1547,7 @@ impl OwnershipChecker {
         arg_count: usize,
         env: &crate::frontend::core::typecheck::environment::TypeEnvironment,
     ) -> Option<(String, Vec<String>, ParamOwnership, Vec<ParamOwnership>)> {
-        let crate::frontend::core::parser::ast::Expr::FieldAccess {
+        let crate::ast::Expr::FieldAccess {
             expr: obj, field, ..
         } = func
         else {
@@ -1634,7 +1633,7 @@ impl OwnershipChecker {
                     cur = inner;
                 }
                 Expr::UnOp {
-                    op: crate::frontend::core::parser::ast::UnOp::Deref,
+                    op: crate::ast::UnOp::Deref,
                     expr: inner,
                     ..
                 } => {
@@ -1760,7 +1759,7 @@ impl OwnershipChecker {
     /// 不做 const_eval——路径条件 soundness 未解决前的保守裁剪）
     fn literal_bool(expr: &Expr) -> Option<bool> {
         match expr {
-            Expr::Lit(crate::frontend::core::parser::ast::Literal::Bool(b), _) => Some(*b),
+            Expr::Lit(crate::ast::Literal::Bool(b), _) => Some(*b),
             _ => None,
         }
     }
@@ -1983,7 +1982,7 @@ impl OwnershipChecker {
             Expr::BinOp {
                 op, left, right, ..
             } => {
-                if *op == crate::frontend::core::parser::ast::BinOp::Assign {
+                if *op == crate::ast::BinOp::Assign {
                     // #257：表达式层赋值同样拒绝 Linear（&mut）令牌复制
                     if let Expr::Var(src_name, _) = right.as_ref() {
                         if self.classify_var(src_name) == CopySemantics::Linear {
@@ -2056,7 +2055,7 @@ impl OwnershipChecker {
                 }
             }
             Expr::UnOp {
-                op: crate::frontend::core::parser::ast::UnOp::Deref,
+                op: crate::ast::UnOp::Deref,
                 expr,
                 span,
             } => {
@@ -2315,7 +2314,7 @@ impl OwnershipChecker {
                 self.walk_expr(expr)
             }
 
-            // FnDef / Lambda / Lit / FString 等跳过
+            // Lambda / Lit / FString 等跳过
             _ => vec![],
         };
         // RFC-039 D20：本节点归属**当前语句**——释放边界落在哪条语句上，
@@ -2345,7 +2344,7 @@ impl OwnershipChecker {
                 is_mut,
                 ..
             } => {
-                use crate::frontend::core::parser::ast::Expr;
+                use crate::ast::Expr;
                 let name = match target.as_ref() {
                     Expr::Var(n, _) => n.clone(),
                     // 非变量目标（字段写入 `m.x = v`、解构等）：仍须遍历 target 与
@@ -2406,7 +2405,7 @@ impl OwnershipChecker {
                     }
                 }
                 if let Some(Expr::BinOp {
-                    op: crate::frontend::core::parser::ast::BinOp::Assign,
+                    op: crate::ast::BinOp::Assign,
                     left,
                     right,
                     ..
@@ -2434,7 +2433,7 @@ impl OwnershipChecker {
                 }
                 if let Some(init) = initializer {
                     if let Expr::BinOp {
-                        op: crate::frontend::core::parser::ast::BinOp::Assign,
+                        op: crate::ast::BinOp::Assign,
                         left,
                         right,
                         ..
@@ -2685,7 +2684,7 @@ impl OwnershipChecker {
     /// 快照 / 语料 C1 zero-diff 判据据不住。故此处改为确定性排序。
     fn build_release_plan(
         &self,
-        params: &[crate::frontend::core::parser::ast::Param],
+        params: &[crate::ast::Param],
     ) -> ReleasePlan {
         let param_names: HashSet<&str> = params.iter().map(|p| p.name.as_str()).collect();
         let mut plan_groups: HashMap<PlanId, Vec<&str>> = HashMap::new();
@@ -2844,7 +2843,7 @@ impl OwnershipChecker {
     fn check_function(
         &mut self,
         _name: &str,
-        params: &[crate::frontend::core::parser::ast::Param],
+        params: &[crate::ast::Param],
         body: &[Stmt],
         env: &crate::frontend::core::typecheck::environment::TypeEnvironment,
         stmt_key: usize,
@@ -2904,7 +2903,7 @@ impl OwnershipChecker {
         let mut merged_escaped: HashSet<String> = HashSet::new();
         for stmt in &module.items {
             if let StmtKind::Assign { target, value, .. } = &stmt.kind {
-                use crate::frontend::core::parser::ast::Expr;
+                use crate::ast::Expr;
                 let name = match target.as_ref() {
                     Expr::Var(n, _) => n.clone(),
                     _ => continue,

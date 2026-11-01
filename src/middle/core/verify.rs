@@ -544,7 +544,6 @@ fn def_operands(instr: &Instruction) -> Vec<&Operand> {
         | Instruction::LoadField { dst, .. }
         | Instruction::LoadIndex { dst, .. }
         | Instruction::Contains { dst, .. }
-        | Instruction::Cast { dst, .. }
         | Instruction::HeapAlloc { dst, .. }
         | Instruction::CreateStruct { dst, .. }
         | Instruction::NewDict { dst, .. }
@@ -600,7 +599,6 @@ fn def_operands(instr: &Instruction) -> Vec<&Operand> {
         | Instruction::Free { .. }
         | Instruction::StoreField { .. }
         | Instruction::StoreIndex { .. }
-        | Instruction::TypeTest { .. }
         | Instruction::Yield { .. }
         | Instruction::Drop { .. }
         | Instruction::ArcDrop { .. }
@@ -621,8 +619,6 @@ fn use_operands(instr: &Instruction) -> Vec<&Operand> {
         | Instruction::Neg { src, .. }
         | Instruction::Not { src, .. }
         | Instruction::Free { src, .. }
-        | Instruction::Cast { src, .. }
-        | Instruction::TypeTest { src, .. }
         | Instruction::Drop { src, .. }
         | Instruction::ArcDrop { src, .. }
         | Instruction::PtrLoad { src, .. }

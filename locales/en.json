@@ -1096,9 +1096,9 @@
     "help": "Struct patterns must list all fields; the `..` shorthand is not yet supported"
   },
   "E1106": {
-    "title": "Constraint not satisfied",
-    "message": "Type '{type}' does not implement interface '{interface}' (constraint '{param}: {interface}')",
-    "template": "Type '{type}' does not implement `{interface}` — constraint `{param}: {interface}` for generic parameter `{param}` does not hold at this call site",
+    "title": "Constrained method dispatch failed",
+    "message": "Constrained method dispatch failed: `{dispatch}`—{detail}",
+    "template": "Constrained method dispatch failed: `{dispatch}`—{detail}",
     "help": "Implement the corresponding interface for this type (write an interface instantiation and define methods inside the type body), or use arguments that already implement this interface"
   },
   "E1107": {
@@ -1210,5 +1210,10 @@
     "example": "// zlib.yx: use zother.{o_val}\n// zother.yx: use zlib.{z_val}\n// => zlib → zother → zlib: the two modules import each other; the order within the cycle follows a deterministic convention based only on lexicographic path order",
     "error_output": "warning[W1007]: Module import cycle zlib → zother → zlib: initialization order within the cycle cannot be determined; the order within the cycle follows a deterministic convention based only on lexicographic path order (not a semantic guarantee)\n --> zother.yx:2:1\n  |\n2 | use zlib.{z_val}\n  | ^^^^^^^^^^^^^^^^^\n  |\nhelp: The value dependency within the cycle is opposite to the use order: when zlib reads zother.o_val, zother has not yet been initialized (the violated edge: zother imports zlib, so the topological order places zlib first). Initialization order follows use dependencies; value dependencies cannot all be satisfied within the cycle—break the cycle, or change that top-level value to a function for deferred evaluation"
   },
-  "W1007.value_edge.help": "The value dependency runs against the use order: {reader} reads {slot} while {owner} is not yet initialized (violated edge: {owner} imports {reader}; the topological order therefore places {reader} first). Initialization follows use dependencies; inside a cycle both cannot hold — break the cycle, or defer the top-level value behind a function."
+  "W1007.value_edge.help": "The value dependency runs against the use order: {reader} reads {slot} while {owner} is not yet initialized (violated edge: {owner} imports {reader}; the topological order therefore places {reader} first). Initialization follows use dependencies; inside a cycle both cannot hold — break the cycle, or defer the top-level value behind a function.",
+  "E3024": {
+    "title": "Project config is unreadable",
+    "template": "Project config {path} is unreadable: {detail}",
+    "help": "Fix yaoxiang.toml so it is valid TOML with the required [package] fields and field types matching the conventions. When the config file exists but cannot be parsed (the declaration face or any [tool.*] extension section), the declared surfaces, the cross-file reference pool and the explicit config cannot be trusted, so compilation aborts instead of silently degrading to default configuration. A project without a config file keeps single-file semantics."
+  }
 }

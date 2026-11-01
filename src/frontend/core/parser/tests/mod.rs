@@ -7,3 +7,4 @@ mod error_recovery;
 mod expressions;
 mod integration;
 mod parser_state;
+mod probe;

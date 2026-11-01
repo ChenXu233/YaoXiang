@@ -10,7 +10,7 @@
 
 > **代码自己声明的不变量，被架构而非逻辑破坏了。**
 
-`src/frontend/core/typecheck/checker.rs:5165` 的注释原文写着「Unproven → 编译错误，无降级、无 silent pass……不得让 silent pass 复活」。但这条不变量只在**单文件路径**上成立：形如 `x: Sorted(3)` 的证明函数约束，在多文件 `yaoxiang run`、`yaoxiang check`、LSP 三条路径下**静默通过**，证明函数从不执行，且不产生任何诊断。
+`checker/refinement.rs` 的 `revalidate_refined` 内注释原文写着（原 `checker.rs:5165`，P5 5.2.1 已搬迁）「Unproven → 编译错误，无降级、无 silent pass……不得让 silent pass 复活」。但这条不变量只在**单文件路径**上成立：形如 `x: Sorted(3)` 的证明函数约束，在多文件 `yaoxiang run`、`yaoxiang check`、LSP 三条路径下**静默通过**，证明函数从不执行，且不产生任何诊断。
 
 ### 覆盖
 
@@ -113,7 +113,7 @@ RFC-039 给出**为什么**重构与**按什么顺序**做；本文给出 L1 的
 > - **第 6 行**（单态化单文件独占）→ 归 WBS 3.4.8（前置 4.1.3，潜在风险未证缺陷）。
 > - **第 7 行** check_module / check_module_collect_all 双入口 → 归 4.2.7（Aggregation 参数驱动）。
 > - 代码侧引用的「#434 裁决」此前 docs 零登记——已补登为 RFC-039 **D57**。
-> - **嵌入 std 纳入不对称（表外新事实，2026-10-09 补登）**：单文件路径由 `merge_embedded_std_ir` 无条件注入 std.list（for 循环脱糖必需，#117 硬切换），多文件 `discover` 此前只认显式 `use`——项目内 for 循环编译通过、运行期 E6006（探针实证）。已修复并勾销 WBS 4.10.2；同族「多文件缺单文件一步」的 parse 硬中止怪癖挂号 WBS 4.10.1——**亦已修复**（4.2.2 后随即落地，Check 路径降级为逐文件收集；本审计方法看「阶段覆盖/字段消费」维度，这条是编译单元成员差异，属漏网维度）。
+> - **嵌入 std 纳入不对称（表外新事实，2026-10-09 补登）**：单文件路径由 `merge_embedded_std_ir` 无条件注入 std.list（for 循环脱糖必需，#117 硬切换），多文件 `discover` 此前只认显式 `use`——项目内 for 循环编译通过、运行期 E6006（探针实证）。已修复并勾销 WBS 4.10.2；同族「多文件缺单文件一步」的 parse 硬中止怪癖挂号 WBS 4.10.1——**亦已修复**（4.2.2 后随即落地，Check 路径降级为逐文件收集；本审计方法看「阶段覆盖与字段消费」维度，这条是编译单元成员差异，属漏网维度）。
 >
 > - **嵌入 std 注册表面覆盖（4.2.5 施工发现，已修）**：Registry 臂对嵌入
 >   std 单元用 `extract_module_info` 重复收获注册，会顶掉 `with_std()`
@@ -153,18 +153,18 @@ return ProofResult::Unproven {
 
 | 分支 | 位置 | 行为 |
 | --- | --- | --- |
-| 形参精化校验 | `5164` `if calls.is_empty()` → 推硬错误（`5170-5177`）；`5179` `ctx.proof_calls.extend(calls.clone())` | **不发任何诊断** |
-| 调用点实参校验 | `5306` → 推硬错误（`5308-5316`）；`5318` `ctx.proof_calls.extend(calls)` | **不发任何诊断** |
-| 返回位义务 | `5420` → 推硬错误（`5442-5446`）；`5448` `ctx.proof_calls.extend(calls)` | **不发任何诊断** |
+| 形参精化校验（`revalidate_refined`，原 `checker.rs:5164`） | `if calls.is_empty()` → 推硬错误（原 `5170-5177`）；`ctx.proof_calls.extend(calls.clone())`（原 `5179`） | **不发任何诊断** |
+| 调用点实参校验（`check_call_arg_refinements`，原 `checker.rs:5306`） | 推硬错误（原 `5308-5316`）；`ctx.proof_calls.extend(calls)`（原 `5318`） | **不发任何诊断** |
+| 返回位义务（`check_return_refinement`，原 `checker.rs:5420`） | 推硬错误（原 `5442-5446`）；`ctx.proof_calls.extend(calls)`（原 `5448`） | **不发任何诊断** |
 
-`checker.rs:5165-5169` 的注释原文：
+`checker/refinement.rs` 的 `revalidate_refined` 内注释原文（原 `checker.rs:5165-5169`）：
 
 > `RFC-027 §4/§9：Unproven → 编译错误，无降级、无 silent pass。` …… `本分支因此成为真防线而非前瞻兑底：不得让 silent pass 复活。`
 
 即：作者明知「不产诊断」是缺陷，把它明确归类为**已知的、无处可去的中间态**，设计上假定「一定有人会来读 `proof_calls`」。
 
 **第 3 步 —— 该字段确实被填进了结果。**
-`checker.rs:1234-1235` 声明局部 `proof_calls` 并收集，`checker.rs:1439` 以 `proof_calls, // Phase 2.5 预登记证明函数义务` 写入 `TypeCheckResult`。字段定义在 `types.rs:29`。
+`check_module_impl` 内声明局部 `proof_calls` 并收集（原 `checker.rs:1234-1235`），再以 `proof_calls, // Phase 2.5 预登记证明函数义务` 写入 `TypeCheckResult`（原 `:1439`）。字段定义在 `types.rs:29`。
 
 **第 4 步 —— 全仓库只有一个读取点。**
 `TypeCheckResult.proof_calls`（`types.rs:29`）在生产代码中**只有 `src/frontend/pipeline.rs:187` 一处被读取**（`189` 传参）：
@@ -178,7 +178,7 @@ if !typecheck_result.type_result.proof_calls.is_empty() {
 }
 ```
 
-（全仓 `proof_calls` 标识符的其他命中分三类，都不是本字段的消费者：`checker.rs:1234/4564/5494` 是生产侧收集；`verdict.rs:61` 是 `ProofResult` 的同名字段；`tests/rfc027_*.rs` 读的是 `ProofResult`。）
+（全仓 `proof_calls` 标识符的其他命中分三类，都不是本字段的消费者：`checker.rs` 与 `checker/refinement.rs` 的三处生产侧收集（原 `:1234/4564/5494`）；`verdict.rs:61` 是 `ProofResult` 的同名字段；`tests/rfc027_*.rs` 读的是 `ProofResult`。）
 
 **第 5 步 —— orchestrator 的四个入口全部不经过那一层。**
 `src/frontend/module/orchestrator.rs` 的 `compile_project`（`99`）、`check_project`（`273`）、`check_source_in_project`（`450`）、`compile_embedded_module`（`1374`）**均不调用 `pipeline.rs`**，直接调 `TypeChecker::check_module`（`124` / `493` / `1386`）。因此它们连 `pipeline.rs:187` 那个唯一读取点都碰不到。
@@ -190,10 +190,10 @@ if !typecheck_result.type_result.proof_calls.is_empty() {
 `y: Sorted(3) = 5`（`Sorted: (x: Int) -> Type = { ... }`）在多文件 / check / LSP 三条路径下**编译通过、运行通过、无任何诊断**。证明函数从未被调用。
 
 **第 8 步（补充核实）—— 层内还有第二个静默丢弃点。**
-`checker.rs:1303-1314` 处理 ownership 层结果时：
+`check_module_impl` 处理 ownership 层结果时（原 `checker.rs:1303-1314`）：
 
 ```rust
-// checker.rs:1313
+// 原 checker.rs:1313（现 check_module_impl 内）
 ProofResult::Unproven { .. } => {}
 ```
 
@@ -309,7 +309,7 @@ RFC-027 的三个单测（`src/frontend/core/typecheck/tests/rfc027_phase25_proo
 | 消费点 | 获取策略 | 求解器不可用时 |
 | --- | --- | --- |
 | `predicate.rs:34-36` | 全局 `static SOLVER: LazyLock<Mutex<Box<dyn Solver>>>` | **`.expect("Z3 solver initialization failed…")` → panic** |
-| `termination.rs`（经 `checker.rs:1265-1268` 注入） | 构造期注入 `with_solver_owned` | `None` → **静默跳过**（不注入） |
+| `termination.rs`（经 `check_module_impl` 注入，原 `checker.rs:1265-1268`） | 构造期注入 `with_solver_owned` | `None` → **静默跳过**（不注入） |
 | `ownership.rs:627`（回边切断判定） | **每次调用** `default_solver()` | `None => return false`（`629`）→ 保守不切断 |
 
 `predicate.rs:31-32` 的注释明确选择了硬失败：「初始化失败保持**硬失败**：软化会把『Z3 未安装』误诊为『约束超出内核能力』」。而 `backend.rs:60` 的契约文档说的是「`None`：后端不可用……**调用方应保守降级**」。**同一份代码里两种哲学并存，且硬失败的那条会 panic 而非返回错误。**
@@ -331,7 +331,7 @@ pub fn default_solver() -> Option<Box<dyn Solver>> {
 （对照：`predicate.rs:34-36` 的 `LazyLock` 确实是单例。同一后端，两种生命周期策略。）
 
 **（d）checker 静默降级 + 注释与实际不符。**
-`checker.rs:1283-1287` 与 `1289-1293`：
+`check_module_impl` 的两处 `body_checker` 兜底（原 `checker.rs:1283-1287` 与 `1289-1293`）：
 
 ```rust
 let ledger = self.body_checker.as_ref()
@@ -344,7 +344,7 @@ let call_ownership = self.body_checker.as_ref()
 
 `body_checker` 为 `None` 时，ownership 检查拿到**空类型账本和空调用表**并照常运行——所有权分析退化为「什么都不冲突」，**无任何警告**。（处理建议：应记为一条 warning 级诊断，或至少在义务账本中留痕。）
 
-`checker.rs:1244` 的注释称终止检查「在类型检查之后、约束求解之前运行」。实际 `self.env.solver().solve()` 在 `checker.rs:1320`——**termination 在 `1256`、ownership 在 `1296` 之后，即注释所说的「之前」实际是「两层之后」**。
+`check_module_impl` 的注释称终止检查「在类型检查之后、约束求解之前运行」。实际 `self.env.solver().solve()` 在它之后（原 `checker.rs:1320`；termination 原 `:1256`、ownership 原 `:1296`）——**注释所说的「之前」实际是「两层之后」**。
 
 ### wasm 现状：shim crate 承载，29 个文件的分支是活的
 
@@ -435,7 +435,8 @@ pub enum StageScope { PerModule, Project }
 >    AST 产物——初稿次序会逼 Registry 臂「隐藏 parse」，让阶段表对数据流
 >    撒谎；且多文件 parse 因此从 2 次降为 1 次。附带的现状如实登记：多文件
 >    路径 parse 错误曾是硬中止（`build_registry_from` 的 `?` 传播，与
->    CollectAll 语义的张力登记为 WBS 4.10.1）——**4.10.1 已修复**
+>    CollectAll 语义的张力登记为 WBS 4.10.1；`build_registry_from` 已于
+>    2026-10-26 随零调用者清账删除，此处保留历史叙述）——**4.10.1 已修复**
 >    （2026-10-09 用户裁决 rust 式收集语义 + 方案 B）：Check 路径 parse
 >    失败降级为逐文件诊断收集、带病文件退出编译单元（不进 registry，
 >    导入方报 E5001）；MultiFile 路径保留硬中止（FailFast 下坏文件产不出
@@ -566,6 +567,8 @@ impl Obligations {
 > **四、红名单现状（清账收口）与 3.4.4/3.4.5/3.4.9 的落地记录**
 >
 > 红名单 3 → **0**——三条清账任务已于 2026-10-13 全部落地：
+>
+> 注：以下行锚记录 **2026-10-22 当时**的文件状态；P5（2026-10-26）把 checker 拆成 `checker.rs` + `checker/{semantic_tokens,refinement,annotations}.rs` 后，`checker.rs` 行号整体前移，下列锚点不再对应现文件，仅作历史引证。
 >
 > - **3.4.4 `variant_ctor_calls` → 删字段**。其声明职责（「ir_gen 生成 CreateVariant」）由 IR 侧
 >   就地形态检测等价兑现：`src/middle/core/ir_gen.rs:7448 fn detect_variant_ctor_call`（同一 AST 形态
@@ -1022,7 +1025,7 @@ impl Driver {
 | `lsp::run_diagnostics`（`lsp/handlers/diagnostics.rs:146`） | 项目内改走 `Program { kind: Lsp, aggregation: CollectAll }`；单文件分支的**手工 lex→parse→… 序列删除**，改调 `Program { kind: SingleFile, aggregation: CollectAll }` |
 | `check_files_with_diagnostics`（`diagnostic/mod.rs:565`） | `standalone` 分支（`614-616` → `check_single_file` `623-661`）删除，统一走 `Program { kind: Check }` |
 
-**`check_project` 与 `compile_project` 的重复度（约 40% 共享 / 60% 分叉）**。共享的是：vendor 一致性核对、文件发现、`build_registry_from`、`all_method_bindings`、解析循环、逐文件 checker 装配、结果处理。分叉的是上表 11 项中的第 2/3/4/5/7/8/9/10/11 项。**这 40% 的共享骨架正是 `Driver` 的价值区间**——分叉的 60% 全部是「阶段集合不同」或「聚合模式不同」，而这恰好是 `Program` 的两个字段能完整表达的。
+**`check_project` 与 `compile_project` 的重复度（约 40% 共享 / 60% 分叉）**。共享的是：vendor 一致性核对、文件发现、`build_registry_from`（已于 2026-10-26 随零调用者清账删除，此处保留历史叙述）、`all_method_bindings`、解析循环、逐文件 checker 装配、结果处理。分叉的是上表 11 项中的第 2/3/4/5/7/8/9/10/11 项。**这 40% 的共享骨架正是 `Driver` 的价值区间**——分叉的 60% 全部是「阶段集合不同」或「聚合模式不同」，而这恰好是 `Program` 的两个字段能完整表达的。
 
 ### 4. 失败语义：`Continue` / `Abort` / `Warn`
 
@@ -1148,7 +1151,7 @@ pub enum Aggregation {
 
 **删除**：`src/util/diagnostic/mod.rs:621-661` 的 `check_single_file`；`src/lsp/handlers/diagnostics.rs:161-227` 的手工 lex/parse 序列。
 
-**不动**：`checker.rs:5164/5179/5306/5318/5420/5448`（六处 `Unproven` 分支逻辑本身正确——**问题在消费端不在生产端**，改生产端会掩盖架构缺陷）；`Cargo.toml`；任何 `#[cfg(target_arch = "wasm32")]` 分支（wasm 分支的可达性判定归 `06-cleanup-inventory.md`）。
+**不动**：`Unproven` 分支的生产端逻辑（现分居 `checker/refinement.rs` 的 `revalidate_refined` / `check_call_arg_refinements` / `check_return_refinement` 与 `checker.rs` 的 ownership 结果处理臂；原 `checker.rs:5164/5179/5306/5318/5420/5448`，P5 5.2.1 搬迁）——逻辑本身正确，**问题在消费端不在生产端**，改生产端会掩盖架构缺陷；`Cargo.toml`；任何 `#[cfg(target_arch = "wasm32")]` 分支（wasm 分支的可达性判定归 `06-cleanup-inventory.md`）。
 
 ### 向后兼容性
 
@@ -1199,7 +1202,7 @@ pub enum Aggregation {
 | `check_single_file`（`diagnostic/mod.rs:621-661`）删除 | `yaoxiang check` 在项目内外行为一致 |
 | LSP 手工阶段序列删除 | LSP 与 CLI 对同一文件给出相同诊断集 |
 | **`test_multifile_proof_obligation_not_dropped` 转绿** | 漏洞已修 |
-| `checker.rs:1313` 空 match 臂修复 | `test_no_silent_pass_on_unproven`：`Unproven` 在任一模式下必产诊断 |
+| ownership 层 `Unproven` 空 match 臂修复（原 `checker.rs:1313`） | `test_no_silent_pass_on_unproven`：`Unproven` 在任一模式下必产诊断 |
 | `predicate.rs:34-36` `.expect()` 改为诊断 | 移除 Z3 环境下不再 panic |
 
 **回滚点**：漏洞修复与结构合并**分两个 commit**。若结构合并出问题，可只回滚结构 commit、保留漏洞修复 commit——此时 `test_multifile_proof_obligation_not_dropped` 保持绿；反向（保留结构、回滚修复）会转红，是不可接受的中间态，禁止合入。
@@ -1231,11 +1234,11 @@ pub enum Aggregation {
 | --- | --- | --- |
 | **阶段模型** | `Stage` 为 12 变体的编译期可穷举枚举，**拒绝运行期注册** | 穷尽 `match` 是零成本的编译期强制：新增变体时 `dispatch` 编译不过。这与 opcode 表在 RFC-039 路由表 B 中已被验证的机制同构。`StageScope` 进一步把「逐模块还是项目级」变成类型事实，消除需要人推理的调用次数问题 |
 | **义务机制** | `Obligations` + `assert_drained()` 做**运行期**结算，与 `scripts/ci/check-obligations.py` 的**静态**门禁并用；**严重级终态 E 级**（2026-10-13 用户裁决甲：同码升 E、码号不变；**实施形态见 §2 修订注记**：账本不复制字段结构；红名单——清账后 0 条——机制保留、不进用户可见诊断流） | 修的是一整类 bug，不是一个 bug：当前已核实同类隐患至少 2 处（`proof_calls`、`checker.rs:1313`），13 个义务字段全在射程内。W→E 分两步是为了让每一步的 C2 判据都可用——如今义务清单已清账到 13 条、红名单归零，健康态零发射，故终态直接取 E（见 §2 修订注记第七、八段） |
-| **修复范围** | 修**消费端**（编排层），**不动** `checker.rs:5164/5179/5306/5318/5420/5448` 六处 `Unproven` 分支的生产端逻辑 | 问题在消费端不在生产端。改生产端会把架构缺陷掩盖成"逻辑修好了"，而这三处分支的逻辑本身是正确的 |
+| **修复范围** | 修**消费端**（编排层），**不动** `Unproven` 分支的生产端逻辑（现分居 `checker/refinement.rs` 三处与 `checker.rs` 一处；原 `checker.rs:5164/5179/5306/5318/5420/5448`） | 问题在消费端不在生产端。改生产端会把架构缺陷掩盖成"逻辑修好了"，而这三处分支的逻辑本身是正确的 |
 
 这样设计额外消除两类裂缝：
 
-- **「注释承诺」与「代码行为」的裂缝**。`checker.rs:5165` 的「不得让 silent pass 复活」是**注释级契约**，靠 `assert_drained()` 兑现。
+- **「注释承诺」与「代码行为」的裂缝**。`checker/refinement.rs`（原 `checker.rs:5165`）的「不得让 silent pass 复活」是**注释级契约**，靠 `assert_drained()` 兑现。
 - **「一个数组忘记 append」**。当前是五个函数各自手写调用序列；统一后是唯一一张阶段表，且新增阶段漏接会在编译期报错。
 
 ### 未采纳的方向
@@ -1267,7 +1270,7 @@ pub enum Aggregation {
 - [07-equivalence-oracle.md](07-equivalence-oracle.md) — C1-C6 分级、三层判据、`test_multifile_proof_obligation_not_dropped` 漏洞判据
 - [RFC-027 编译期求值与类型](../../rfc/accepted/027-compile-time-evaluation-types.md) — Phase 2.5 证明函数执行的设计来源
 - [RFC-013 错误码规范](../../rfc/accepted/013-error-code-specification.md) — `build.rs:19-55` 门禁的对照码表
-- `src/frontend/core/typecheck/checker.rs:5165-5169` — 「不得让 silent pass 复活」的明文声明
+- `src/frontend/core/typecheck/checker/refinement.rs` — 「不得让 silent pass 复活」的明文声明（原 `checker.rs:5165-5169`）
 - `src/frontend/core/typecheck/layers/README.md` — 层序调用表与 `equivalence` 的真实身份（无 short-circuit）
 - `src/frontend/core/typecheck/layers/predicate.rs:31-32` — SMT 初始化硬失败的明文理由
 - `src/frontend/core/typecheck/proof/smt/backend.rs:60` — 「调用方应保守降级」的契约声明（与 `predicate.rs` 矛盾）

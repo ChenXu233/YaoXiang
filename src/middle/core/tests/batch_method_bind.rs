@@ -25,6 +25,7 @@
 //! 该形态在**编译期**被拒绝（E1110），进程不崩；IR 生成返回诊断而非 panic。
 //! typecheck 层对该形态不报错（本夹具即其证据）——诊断的落点就是唯一的崩溃点。
 
+use crate::frontend::core::typecheck::probe::TypeLevelNamespace;
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parse;
 use crate::frontend::core::typecheck::checker::TypeChecker;
@@ -47,7 +48,10 @@ fn probe_method_bind(source: &str) -> MethodBindProbe {
         parsed.errors
     );
     let mut checker = TypeChecker::new("<method-bind-probe>");
-    let type_result = checker.check_module(&parsed.module);
+    let type_result = checker.check_module(
+        &parsed.module,
+        &TypeLevelNamespace::scan_one(&parsed.module),
+    );
     let typecheck_codes: Vec<String> = type_result
         .diagnostics
         .iter()

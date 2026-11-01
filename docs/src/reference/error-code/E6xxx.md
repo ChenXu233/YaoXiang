@@ -15,12 +15,12 @@ description: '程序运行期（VM / std 原生函数）产生的错误。'
 
 | 码号 | 中文名 | 类别 | span 豁免 | 模板 | 发射点 |
 | --- | --- | --- | --- | --- | --- |
-| `E6001` | 除零错误 | `Runtime` | 是 | `表达式 {expr} 除以零` | ✅ 8 处 |
+| `E6001` | 除零错误 | `Runtime` | 是 | `表达式 {expr} 除以零` | ✅ 5 处 |
 | `E6003` | 数组索引越界 | `Runtime` | 是 | `数组索引越界：有效范围是 0..{max}，找到 {index}` | ✅ 3 处 |
 | `E6004` | 栈溢出 | `Runtime` | 是 | `栈溢出：递归深度超出限制 {limit}` | ✅ 3 处 |
 | `E6005` | 断言失败 | `Runtime` | 是 | `断言失败：{condition}` | ✅ 3 处 |
 | `E6006` | 函数未找到（运行时） | `Runtime` | 是 | `函数未找到：'{func}'` | ✅ 1 处 |
-| `E6007` | 运行时错误 | `Runtime` | 是 | `运行时错误：{message}` | ✅ 5 处 |
+| `E6007` | 运行时错误 | `Runtime` | 是 | `运行时错误：{message}` | ✅ 3 处 |
 | `E6008` | 键不存在 | `Runtime` | 是 | `键不存在：{key}` | ✅ 2 处 |
 
 ## 逐码说明
@@ -33,7 +33,7 @@ description: '程序运行期（VM / std 原生函数）产生的错误。'
 - **模板**：`表达式 {expr} 除以零`
 - **消息**：试图除以零
 - **帮助**：添加检查以防止除以零
-- **发射点**：`src/backends/interpreter/executor/executor.rs:948`、`src/backends/interpreter/executor/executor.rs:957`、`src/backends/mod.rs:180` 等 8 处
+- **发射点**：`src/backends/interpreter/executor/executor.rs:948`、`src/backends/interpreter/executor/executor.rs:957`、`src/backends/mod.rs:180` 等 5 处
 
 ### E6003：数组索引越界
 
@@ -82,7 +82,7 @@ description: '程序运行期（VM / std 原生函数）产生的错误。'
 - **构造函数**：`ErrorCodeDefinition::runtime_error(message)`
 - **模板**：`运行时错误：{message}`
 - **帮助**：查看错误消息了解详情
-- **发射点**：`src/util/diagnostic/mod.rs:91`、`src/util/diagnostic/mod.rs:202`、`src/util/diagnostic/mod.rs:203` 等 5 处
+- **发射点**：`src/util/diagnostic/mod.rs:202`、`src/util/diagnostic/mod.rs:203`、`src/util/diagnostic/mod.rs:234`
 - **源码注释名**：运行时错误（通用）
 
 ### E6008：键不存在

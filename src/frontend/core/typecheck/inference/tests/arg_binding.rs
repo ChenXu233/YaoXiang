@@ -4,7 +4,7 @@
 //! 语言必须一致。E1010「命名实参缺必需形参」形态的 help 不得在发射点
 //! 硬编某语言成品串；缺失形参名的信息不得丢失（不得为换语言丢内容）。
 
-use crate::frontend::core::parser::ast::Expr;
+use crate::ast::Expr;
 use crate::frontend::core::typecheck::inference::arg_binding::bind_args_to_params;
 use crate::util::span::{Position, Span};
 

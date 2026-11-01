@@ -2,7 +2,8 @@
 
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parse;
-use crate::frontend::core::parser::ast::{extract_generic_param_names, Expr, StmtKind, Type};
+use crate::ast::{extract_generic_param_names, Expr, StmtKind, Type};
+use crate::frontend::core::parser::NullProbe;
 
 fn parse_stmt(source: &str) -> StmtKind {
     let tokens = tokenize(source).unwrap();
@@ -18,7 +19,7 @@ fn parse_stmt(source: &str) -> StmtKind {
 fn test_var_simple() {
     let kind = parse_stmt("x = 42");
     assert!(
-        matches!(&kind, StmtKind::Assign { target, .. } if matches!(target.as_ref(), crate::frontend::core::parser::ast::Expr::Var(name, _) if name == "x"))
+        matches!(&kind, StmtKind::Assign { target, .. } if matches!(target.as_ref(), crate::ast::Expr::Var(name, _) if name == "x"))
     );
 }
 
@@ -90,7 +91,7 @@ fn test_var_block_initializer_is_binding() {
     let kind = parse_stmt("main = { x = 42 }");
     // main = { ... } 应该解析为 Binding（函数体）
     assert!(
-        matches!(&kind, StmtKind::Assign { target, .. } if matches!(target.as_ref(), crate::frontend::core::parser::ast::Expr::Var(name, _) if name == "main"))
+        matches!(&kind, StmtKind::Assign { target, .. } if matches!(target.as_ref(), crate::ast::Expr::Var(name, _) if name == "main"))
     );
 }
 
@@ -194,7 +195,7 @@ fn test_type_def_generic() {
     // Act
     let StmtKind::TypeDefinition {
         name,
-        signature_params,
+        type_annotation,
         ..
     } = &kind
     else {
@@ -203,7 +204,11 @@ fn test_type_def_generic() {
             kind
         );
     };
-    let generic_params = extract_generic_param_names(signature_params);
+    let params = type_annotation
+        .as_ref()
+        .map(crate::ast::Type::fn_params_flat)
+        .unwrap_or_default();
+    let generic_params = extract_generic_param_names(&params, &NullProbe);
 
     // Assert
     assert_eq!(name, "Option", "类型名应为 Option");
@@ -268,34 +273,75 @@ fn test_expr_stmt_call() {
 }
 
 #[test]
-fn test_signature_params_stored_verbatim() {
-    // 覆盖: RFC-010 统一声明语法 — signature_params 原样存储签名第一组参数
+fn test_type_fn_params_carry_signature_verbatim() {
+    // 覆盖: RFC-010 统一声明语法 — 签名形参原样存于 Type::Fn.params（RFC-039 6.5.2）
     // 验证: 泛型与值参数混合签名 (T: Type, x: Int) 两项按序保留，名字与标注完整
     let kind = parse_stmt("foo: (T: Type, x: Int) -> Int = x");
     let StmtKind::Assign {
-        signature_params, ..
+        type_annotation, ..
     } = &kind
     else {
         panic!("Expected StmtKind::Binding, got {:?}", kind);
     };
+    // 口径：`Type::fn_params_flat` 拍平**全部柯里化组**（本用例只有一组，
+    // 故“拍平结果 == 第一组”是巧合；多组签名见 curried 测试）。
+    let params = type_annotation
+        .as_ref()
+        .map(crate::ast::Type::fn_params_flat)
+        .unwrap_or_default();
 
-    assert_eq!(
-        signature_params.len(),
-        2,
-        "签名第一组两个参数应原样保留（泛型 T 与值参数 x）"
-    );
-    assert_eq!(signature_params[0].name, "T", "第一个参数应为 T");
+    assert_eq!(params.len(), 2, "签名形参应原样保留（泛型 T 与值参数 x）");
+    assert_eq!(params[0].name, "T", "第一个参数应为 T");
     assert!(
-        matches!(signature_params[0].ty, Some(Type::MetaType { .. })),
+        matches!(params[0].ty, Some(Type::MetaType { .. })),
         "T 的标注应为 MetaType（Type 关键字）"
     );
-    assert_eq!(signature_params[1].name, "x", "第二个参数应为 x");
+    assert_eq!(params[1].name, "x", "第二个参数应为 x");
     assert!(
-        matches!(&signature_params[1].ty, Some(Type::Name { name, .. }) if name == "Int"),
+        matches!(&params[1].ty, Some(Type::Name { name, .. }) if name == "Int"),
         "x 的标注应为 Int"
     );
 }
 
+/// 不变量（6.5 F3）：**无名形参（name 空串）不得产出泛型名**——空串不是可
+/// 检索的名字，任何按名查找都永不命中；两个泛型分类入口都必须显式跳过。
+#[test]
+fn test_anonymous_param_never_yields_generic_name() {
+    // Arrange：三个可分类形态（MetaType / const 名 / 约束名）全部以匿名形参给出
+    let params = vec![
+        crate::ast::Param::anonymous(
+            Some(Type::MetaType {
+                name_span: crate::util::span::Span::dummy(),
+                args: vec![],
+            }),
+            crate::util::span::Span::dummy(),
+        ),
+        crate::ast::Param::from_type(Type::Name {
+            name: "Int".into(),
+            span: crate::util::span::Span::dummy(),
+        }),
+        crate::ast::Param::from_type(Type::Name {
+            name: "Add".into(),
+            span: crate::util::span::Span::dummy(),
+        }),
+    ];
+
+    // Act
+    // 探针传 NullProbe：本用例只断言「无名形参不产泛型名」，const 参数判定不参与
+    let classified =
+        crate::ast::classify_generic_params(&params, &|name| name == "Add", &NullProbe);
+    let extracted = extract_generic_param_names(&params, &NullProbe);
+
+    // Assert
+    assert!(
+        classified.is_empty(),
+        "无名形参不得产出泛型名（classify_generic_params），got: {classified:?}"
+    );
+    assert!(
+        extracted.is_empty(),
+        "无名形参不得产出泛型名（extract_generic_param_names），got: {extracted:?}"
+    );
+}
 #[test]
 fn test_value_params_no_merged_misalignment() {
     // 覆盖: RFC-007 参数匹配 — params 存值参数，标注来自签名对应值参数而非错位 zip
@@ -358,7 +404,7 @@ fn test_const_generic_no_merged_misalignment() {
     // 覆盖: RFC-011 Const 泛型 — (N: Int) 被 extract_generic_params 判为 Const 泛型而非值参数
     // 泛型参数名改用法判定（不再大小写猜测）。
     // 验证: f: (N: Int, s: String) -> String = (s) => s 的 params == [s: String]
-    //       (N: Int) 是 Const 泛型（Int 在 CONST_PARAM_TYPES 中），
+    //       (N: Int) 是 Const 泛型（Int 由注入探针判为 const 参数类型），
     //       不参与 lambda name 匹配 → 仅 s 匹配上
     let kind = parse_stmt("f: (N: Int, s: String) -> String = (s) => s");
     let StmtKind::Assign { value, .. } = &kind else {
@@ -445,10 +491,7 @@ fn test_type_def_constraint_expr_single() {
     };
     assert_eq!(body.len(), 1, "结构体应有 1 个体项");
     assert!(
-        matches!(
-            &body[0],
-            crate::frontend::core::parser::ast::TypeBodyItem::Expr(Type::ConstExpr(_))
-        ),
+        matches!(&body[0], crate::ast::TypeBodyItem::Expr(Type::ConstExpr(_))),
         "体项应为 Expr(ConstExpr), got {:?}",
         body[0]
     );
@@ -472,18 +515,12 @@ fn test_type_def_constraint_expr_multi() {
     };
     assert_eq!(body.len(), 2, "结构体应有 2 个体项");
     assert!(
-        matches!(
-            &body[0],
-            crate::frontend::core::parser::ast::TypeBodyItem::Expr(Type::ConstExpr(_))
-        ),
+        matches!(&body[0], crate::ast::TypeBodyItem::Expr(Type::ConstExpr(_))),
         "第 1 项应为 Expr(ConstExpr), got {:?}",
         body[0]
     );
     assert!(
-        matches!(
-            &body[1],
-            crate::frontend::core::parser::ast::TypeBodyItem::Expr(Type::ConstExpr(_))
-        ),
+        matches!(&body[1], crate::ast::TypeBodyItem::Expr(Type::ConstExpr(_))),
         "第 2 项应为 Expr(ConstExpr), got {:?}",
         body[1]
     );
@@ -507,18 +544,12 @@ fn test_type_def_constraint_expr_mixed() {
     };
     assert_eq!(body.len(), 2, "结构体应有 2 个体项");
     assert!(
-        matches!(
-            &body[0],
-            crate::frontend::core::parser::ast::TypeBodyItem::Field(_)
-        ),
+        matches!(&body[0], crate::ast::TypeBodyItem::Field(_)),
         "第 1 项应为 Field, got {:?}",
         body[0]
     );
     assert!(
-        matches!(
-            &body[1],
-            crate::frontend::core::parser::ast::TypeBodyItem::Expr(Type::ConstExpr(_))
-        ),
+        matches!(&body[1], crate::ast::TypeBodyItem::Expr(Type::ConstExpr(_))),
         "第 2 项应为 Expr(ConstExpr), got {:?}",
         body[1]
     );
@@ -558,10 +589,7 @@ fn test_type_def_constraint_expr_block_form() {
     };
     assert_eq!(body.len(), 1, "结构体应有 1 个体项");
     assert!(
-        matches!(
-            &body[0],
-            crate::frontend::core::parser::ast::TypeBodyItem::Expr(Type::ConstExpr(_))
-        ),
+        matches!(&body[0], crate::ast::TypeBodyItem::Expr(Type::ConstExpr(_))),
         "体项应为 Expr(ConstExpr), got {:?}",
         body[0]
     );
@@ -589,7 +617,7 @@ fn test_type_def_generic_sum_type_recognized_as_struct() {
     // Act
     let StmtKind::TypeDefinition {
         name,
-        signature_params,
+        type_annotation,
         definition,
         ..
     } = &kind
@@ -599,7 +627,11 @@ fn test_type_def_generic_sum_type_recognized_as_struct() {
             kind
         );
     };
-    let generic_params = extract_generic_param_names(signature_params);
+    let params = type_annotation
+        .as_ref()
+        .map(crate::ast::Type::fn_params_flat)
+        .unwrap_or_default();
+    let generic_params = extract_generic_param_names(&params, &NullProbe);
 
     // Assert
     assert_eq!(name, "Option", "类型名应为 Option");
@@ -629,12 +661,7 @@ fn test_type_def_generic_sum_type_field_count() {
     };
     let field_count = body
         .iter()
-        .filter(|it| {
-            matches!(
-                it,
-                crate::frontend::core::parser::ast::TypeBodyItem::Field(_)
-            )
-        })
+        .filter(|it| matches!(it, crate::ast::TypeBodyItem::Field(_)))
         .count();
 
     // Assert

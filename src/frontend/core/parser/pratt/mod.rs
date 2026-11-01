@@ -10,7 +10,7 @@ mod tests;
 
 pub use precedence::*;
 
-use crate::frontend::core::parser::ast::*;
+use crate::ast::*;
 use crate::frontend::core::lexer::tokens::*;
 use crate::frontend::core::parser::ParserState;
 
@@ -44,7 +44,6 @@ fn expr_end_line(expr: &Expr) -> usize {
         Expr::BinOp { span, .. } => *span,
         Expr::UnOp { span, .. } => *span,
         Expr::Call { span, .. } => *span,
-        Expr::FnDef { span, .. } => *span,
         Expr::If { span, .. } => *span,
         Expr::Match { span, .. } => *span,
         Expr::While { span, .. } => *span,

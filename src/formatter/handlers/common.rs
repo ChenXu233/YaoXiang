@@ -1,6 +1,6 @@
 //! 公共格式化函数
 
-use crate::frontend::core::parser::ast::*;
+use crate::ast::*;
 use super::super::context::FormatContext;
 use super::super::source_map::SourceMap;
 use super::expr::{format_expr, format_block};

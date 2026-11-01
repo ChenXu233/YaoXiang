@@ -119,7 +119,7 @@ IR 快照必须**规范化**，否则任何寄存器编号变化都会导致全�
 
 | 规范化项 | 规则 |
 | --- | --- |
-| 剥离 `Span` | 所有 span 字段置为哨兵值 |
+| 剥离 `Span` | 所有 span 字段置为哨兵值。**WBS 6.6.12 起这一项才真正成立**：此前 `type_decl` 行打印的是类型声明载体的 `ast::Type` Debug 文本，实测 IR 快照里 **100% 的 span 泄漏都来自该行**（96 行 / 69 文件，改前原文留档见 09a §P6 6.6.12）；载体换成 IR 原生收窄形状后，快照全域不再出现 span |
 | 临时值重命名 | 按首次出现顺序重命名为 `%0 %1 %2 ...`，**保留定义-使用拓扑顺序** |
 | 全局槽位相对化 | 按模块内首次出现顺序重编号 |
 | 前驱排序 | `successors` 与 `Phi` 输入按 label 排序 |
@@ -165,7 +165,7 @@ fn test_multifile_proof_obligation_not_dropped() {
 | 测试 | 断言 | 拦住的缺陷 |
 | --- | --- | --- |
 | `test_program_stage_coverage` | 每个 `Program::stages()` ⊆ `Stage::ALL` 且等于期望数组 | 未来漏接阶段 |
-| `test_no_silent_pass_on_unproven` | `ProofResult::Unproven` 在任一模式下必产诊断 | `checker.rs:5179/5318/5448` 的 extend 分支 |
+| `test_no_silent_pass_on_unproven` | `ProofResult::Unproven` 在任一模式下必产诊断 | `checker/refinement.rs` 三处 `extend` 分支（原 `checker.rs:5179/5318/5448`） |
 | `test_release_plan_spans_consumed` | ownership 产出的 `PlanId` 集合 ⊆ IR 构造消费的集合（**按结构身份结算，无白名单**） | `ReleasePlan` span 键静默丢 Drop（历史形态；键迁移后由消费台账 + `W1090` 兜底） |
 | `test_overload_resolutions_consumed` | 语料逐文件：重载决议产出 ⊆ 消费，且**证据面地板** `examined ≥ 1` / 被真实消费 `≥ 2` | 决议条目被静默丢弃（回落到默认绑定的静默错答） |
 | `test_obligations_drained` | 任何 `Obligations` 字段在全仓无消费点时 CI 失败 | 本类缺陷的整个类别 |

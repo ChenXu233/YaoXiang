@@ -14,9 +14,7 @@
 
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parse;
-use crate::frontend::core::parser::ast::{
-    Expr, StmtKind, BindingKind, Type, TypeBodyBinding, TypeBodyItem,
-};
+use crate::ast::{Expr, StmtKind, BindingKind, Type, TypeBodyBinding, TypeBodyItem};
 use crate::frontend::core::parser::statements::bindings::{BindingParser, BindingPositionValidator};
 
 fn parse_stmt(source: &str) -> StmtKind {

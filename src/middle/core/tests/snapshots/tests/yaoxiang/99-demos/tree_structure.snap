@@ -1,6 +1,6 @@
 module
   fn Tree() -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
-    type_decl Struct { body: [Field(StructField { name: "value", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 7, column: 23, offset: 194 }, end: Position { line: 7, column: 26, offset: 197 } } }, default: None }), Field(StructField { name: "left", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 7, column: 34, offset: 205 }, end: Position { line: 7, column: 37, offset: 208 } } }, default: None }), Field(StructField { name: "right", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 7, column: 46, offset: 217 }, end: Position { line: 7, column: 49, offset: 220 } } }, default: None })] }
+    type_decl [value: Int(64) ; left: Int(64) ; right: Int(64)]
   fn sum_tree(Ref { mutable: false, inner: TypeRef("Tree") }) -> Int(64)
     slot[0] t : Int(64) @depth1
     locals_total=9

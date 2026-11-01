@@ -14,6 +14,7 @@
 //! 2. 四形态各一判据，且**与普通用户函数同码**（同一判据、同一码）；
 //! 3. 可选位（`?name`）与必需下限同出一源：省略可选位的命名调用放行、缺必需位报 E1010。
 
+use crate::frontend::core::typecheck::probe::TypeLevelNamespace;
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parse;
 use crate::frontend::core::typecheck::checker::TypeChecker;
@@ -67,9 +68,9 @@ fn host_checker() -> TypeChecker {
 /// 跨调用面比较必须按**流水线**口径。类型检查有诊断时短路（后续阶段前提不成立）。
 fn diagnostics_via_pipeline(
     mut checker: TypeChecker,
-    module: &crate::frontend::core::parser::ast::Module,
+    module: &crate::ast::Module,
 ) -> Vec<String> {
-    let result = checker.check_module(module);
+    let result = checker.check_module(module, &TypeLevelNamespace::scan_one(module));
     let mut codes: Vec<String> = result.diagnostics.iter().map(|d| d.code.clone()).collect();
     if !codes.is_empty() {
         return codes;
@@ -83,7 +84,7 @@ fn diagnostics_via_pipeline(
 }
 
 /// 解析源码 → 模块（失败即 panic，夹具自身错误必须显式）。
-fn parse_module(source: &str) -> crate::frontend::core::parser::ast::Module {
+fn parse_module(source: &str) -> crate::ast::Module {
     let tokens = tokenize(source).unwrap_or_else(|e| panic!("词法失败: {e:?}\n源码:\n{source}"));
     let parsed = parse(&tokens);
     assert!(!parsed.has_errors, "解析失败: {:?}", parsed.errors);
@@ -100,7 +101,7 @@ fn check_host_native(source: &str) -> Vec<String> {
     let module = parse_module(source);
     let mut checker = host_checker();
     checker
-        .check_module(&module)
+        .check_module(&module, &TypeLevelNamespace::scan_one(&module))
         .diagnostics
         .iter()
         .map(|d| d.code.clone())

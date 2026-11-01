@@ -1,7 +1,7 @@
 module
   fn Box(MetaType { universe_level: UniverseLevel { level: "0" }, type_params: [] }) -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
     generic_params: ["T"]
-    type_decl Struct { body: [Field(StructField { name: "v", is_mut: false, ty: Name { name: "T", span: Span { start: Position { line: 15, column: 8, offset: 706 }, end: Position { line: 15, column: 9, offset: 707 } } }, default: None }), Field(StructField { name: "n", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 16, column: 8, offset: 716 }, end: Position { line: 16, column: 11, offset: 719 } } }, default: None }), Expr(Generic { name: "Index", name_span: Span { start: Position { line: 17, column: 5, offset: 725 }, end: Position { line: 17, column: 10, offset: 730 } }, args: [Generic { name: "Box", name_span: Span { start: Position { line: 17, column: 11, offset: 731 }, end: Position { line: 17, column: 14, offset: 734 } }, args: [Name { name: "T", span: Span { start: Position { line: 17, column: 15, offset: 735 }, end: Position { line: 17, column: 16, offset: 736 } } }] }, Name { name: "Int", span: Span { start: Position { line: 17, column: 19, offset: 739 }, end: Position { line: 17, column: 22, offset: 742 } } }, Name { name: "T", span: Span { start: Position { line: 17, column: 24, offset: 744 }, end: Position { line: 17, column: 25, offset: 745 } } }] })] }
+    type_decl [v: TypeRef("T") ; n: Int(64)]
   fn Box.index(Ref { mutable: false, inner: Generic { name: "Box", args: [TypeRef("T")] } }, Int(64)) -> Fn { params: [Ref { mutable: false, inner: Generic { name: "Box", args: [TypeRef("T")] } }, Int(64)], return_type: TypeRef("T") }
     locals_total=4
     Load %0 <- %1

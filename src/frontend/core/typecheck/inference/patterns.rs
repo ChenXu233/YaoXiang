@@ -5,7 +5,7 @@
 //! 实现模式匹配的类型推断
 
 use crate::util::diagnostic::Result;
-use crate::frontend::core::parser::ast;
+use crate::ast;
 use crate::frontend::core::types::MonoType;
 
 /// 模式匹配推断器

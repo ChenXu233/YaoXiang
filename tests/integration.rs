@@ -54,6 +54,10 @@ mod cli_e2e;
 #[path = "integration/mono_config.rs"]
 mod mono_config;
 
+/// #520（甲案）：配置存在但不可读 ⇒ 显式报错（run/format 两命令端到端）
+#[path = "integration/config_error.rs"]
+mod config_error;
+
 /// RFC-039 WBS 3.6.1：局部函数类型值按名调用走间接调用（先红后绿）
 #[path = "integration/fn_value_call.rs"]
 mod fn_value_call;

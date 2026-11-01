@@ -64,8 +64,9 @@ DEFINE_RE = re.compile(r"define_codes!\s*\(\s*(?P<statics>[A-Z0-9_]+)\s*,\s*\{(?
 COMMENT_RE = re.compile(r"^\s*//[/!]?\s*(?P<text>.*?)\s*$")
 CODE_PREFIX_RE = re.compile(r"^(?P<code>[EW]\d{4})\s*(?P<name>.*)$")
 
-# 发射点扫描
-FN_CALL_RE_TMPL = r"(?:ErrorCodeDefinition\s*::\s*)?{fn}\s*\("
+# 词边界（#515）：`\b` 使 `type_mismatch` 不再子串命中 `return_type_mismatch(`——
+# `_` 与字母交界无词边界；独立调用与 `::` 限定的边界不受影响
+FN_CALL_RE_TMPL = r"(?:ErrorCodeDefinition\s*::\s*)?\b{fn}\s*\("
 ERROR_NEW_RE = re.compile(r'error_new\s*\(\s*"(?P<code>[EW]\d{{4}})"')
 FIND_CODE_RE = re.compile(r'ErrorCodeDefinition\s*::\s*find\s*\(\s*"(?P<code>[EW]\d{{4}})"')
 CODE_LITERAL_RE = re.compile(r'"(?P<code>[EW]\d{4})"')

@@ -1,6 +1,6 @@
 module
   fn Point() -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
-    type_decl Struct { body: [Field(StructField { name: "x", is_mut: false, ty: Name { name: "Float", span: Span { start: Position { line: 6, column: 20, offset: 143 }, end: Position { line: 6, column: 25, offset: 148 } } }, default: None }), Field(StructField { name: "y", is_mut: false, ty: Name { name: "Float", span: Span { start: Position { line: 6, column: 30, offset: 153 }, end: Position { line: 6, column: 35, offset: 158 } } }, default: None })] }
+    type_decl [x: Float(64) ; y: Float(64)]
   fn Point.draw(Ref { mutable: false, inner: TypeRef("Point") }, Generic { name: "String", args: [] }) -> Void
     locals_total=2
     Ret

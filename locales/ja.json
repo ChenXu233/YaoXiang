@@ -1090,9 +1090,9 @@
     "help": "構造体パターンには全フィールドを列挙する必要があります。`..` による省略記法は未対応です"
   },
   "E1106": {
-    "title": "制約が満たされていません",
-    "message": "型 '{type}' はインタフェース '{interface}' を実装していません（制約 '{param}: {interface}'）",
-    "template": "型 '{type}' は `{interface}` を実装していません——ジェネリック引数 `{param}` の制約 `{param}: {interface}` がこの呼び出し点で成立しません",
+    "title": "制約付きメソッドディスパッチの失敗",
+    "message": "制約付きメソッドディスパッチに失敗しました：`{dispatch}`——{detail}",
+    "template": "制約付きメソッドディスパッチに失敗しました：`{dispatch}`——{detail}",
     "help": "その型に対応するインタフェースを実装するか（型本体内にインタフェースの実装とメソッド定義を記述）、またはそのインタフェースを実装済みの実引数を使用してください"
   },
   "E1107": {
@@ -1212,5 +1212,10 @@
     "example": "// zlib.yx: use zother.{o_val}\n// zother.yx: use zlib.{z_val}\n// => zlib → zother → zlib：両モジュールが相互にインポートしています。サイクル内の順序はパスの辞書順による規約にすぎません",
     "error_output": "warning[W1007]: モジュールインポートサイクル zlib → zother → zlib：サイクル内の初期化順序は判定不能。サイクル内の順序はパスの辞書順による決定的な規約にすぎない（意味的保証なし）\n --> zother.yx:2:1\n  |\n2 | use zlib.{z_val}\n  | ^^^^^^^^^^^^^^^^^\n  |\nhelp: サイクル内の値依存関係が use の順序と逆になっています：zlib が zother.o_val を読み込む時点では zother がまだ初期化されていません（違反された辺：zother が zlib をインポートするため、トポロジカル順序では zlib が先に置かれます）。初期化順序は use の依存関係に従いますが、サイクル内では値依存関係を同時に満たすことはできません——サイクルを壊すか、このトップレベル値を遅延評価する関数に変更してください"
   },
-  "W1007.value_edge.help": "The value dependency runs against the use order: {reader} reads {slot} while {owner} is not yet initialized (violated edge: {owner} imports {reader}; the topological order therefore places {reader} first). Initialization follows use dependencies; inside a cycle both cannot hold — break the cycle, or defer the top-level value behind a function."
+  "W1007.value_edge.help": "The value dependency runs against the use order: {reader} reads {slot} while {owner} is not yet initialized (violated edge: {owner} imports {reader}; the topological order therefore places {reader} first). Initialization follows use dependencies; inside a cycle both cannot hold — break the cycle, or defer the top-level value behind a function.",
+  "E3024": {
+    "title": "プロジェクト設定を読み取れません",
+    "template": "プロジェクト設定 {path} を読み取れません：{detail}",
+    "help": "yaoxiang.toml を修正してください（正当な TOML、[package] の必須フィールド、各節のフィールド型が規約に一致すること）。設定ファイルが存在するのに解析できない場合（宣言面または [tool.*] 拡張節のいずれか）、宣言面と cross-file 参照プール、明示的な設定は信頼できないため、黙って既定設定へ退化するのではなくコンパイルを中止します。設定ファイルのないプロジェクトは引き続き単一ファイル意味論です。"
+  }
 }

@@ -344,7 +344,7 @@ P10 其余清理与状态修正          06 §S2-S6
 
 | # | 议题 | **决定** | 理由 |
 | --- | --- | --- | --- |
-| D8 | `AssocType`（`ast.rs:463-471`）是否删除 | **删。** 生产零构造（全仓唯一构造在测试 `types/tests/mono.rs:178`，不改变结论），随 T1 门禁独立复核 | 与其余 11 个零构造变体同一处置；未来若启用关联类型语法，由新提案重定义 |
+| D8 | `AssocType`（`ast.rs:463-471`）是否删除 | **删。** **parser 前向**零构造（全仓唯一前向构造在测试 `types/tests/mono.rs:178`，不改变结论）；`substitute_type_ast` / `substitute_type_in_ast` 各有一处 **AST→AST 重建点**，随 6.3 同批删除，随 T1 门禁独立复核 | 与其余 12 个前向零构造变体同一处置；未来若启用关联类型语法，由新提案重定义 |
 | D9 | T1 门禁用 `syn` 还是 Python | **用 `syn`。** `tools/code-tables` 已是 Rust crate，复用它 | 另建 Python 解析器是重复实现，违反禁令一 |
 | D10 | `Type::Void` 兜底（`parser/statements/types.rs:836`）改为什么 | **改为 `Err(Diagnostic)` 返回** | 静默兜底是"生造"的一种——用假值掩盖缺失 |
 | D11 | `NameKind` 判定 + LSP 路径 probe | **LSP 复用 `TypeEnvProbe`**，不另开 probe 通道 | `lsp/world.rs` 已持有 `SemanticDB`，复用成本低 |

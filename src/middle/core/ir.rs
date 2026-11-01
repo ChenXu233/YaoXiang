@@ -1,6 +1,9 @@
 //! Intermediate Representation
 
-pub use crate::frontend::core::parser::ast::Type;
+// 6.6.12：**IR 层不再持有语法层类型**。此前的最后一处载体 `FunctionBody::TypeDecl`
+// 改携 IR 原生的收窄形状 [`TypeDeclBody`]（字段表 + 字节码类型表项），语法层 `ast::Type`
+// 在 IR 里彻底消失——本文件不再 `use crate::ast`（6.2 的四处载体、
+// 6.6.11 的两个零生产者指令变体之后的历史见 09a §P6 6.2 / 6.6.11 / 6.6.12）。
 use std::collections::HashMap;
 
 use crate::frontend::core::typecheck::MonoType;
@@ -315,17 +318,6 @@ pub enum Instruction {
         span: Span,
     },
     // 注意：迭代器协议已通过 Call 指令实现，无需独立的 IR 指令
-    Cast {
-        dst: Operand,
-        src: Operand,
-        target_type: Type,
-        span: Span,
-    },
-    TypeTest {
-        src: Operand,
-        ty: Type,
-        span: Span,
-    },
     /// Spawn a new task (for cycle detection: track args and result)
     Spawn {
         /// 每个直接子表达式对应一个闭包
@@ -585,8 +577,6 @@ impl Instruction {
             Instruction::LoadIndex { span, .. } => *span,
             Instruction::StoreIndex { span, .. } => *span,
             Instruction::Contains { span, .. } => *span,
-            Instruction::Cast { span, .. } => *span,
-            Instruction::TypeTest { span, .. } => *span,
             Instruction::Spawn { span, .. } => *span,
             Instruction::SpawnFromList { span, .. } => *span,
             Instruction::Yield { span, .. } => *span,
@@ -644,7 +634,48 @@ pub enum FunctionBody {
         locals: Vec<LocalSlot>,
     },
     /// 返回值是类型 → {} 是类型字面量
-    TypeDecl { definition: Type },
+    ///
+    /// 载荷是 IR 原生的收窄形状（[`TypeDeclBody`]）：只保留 IR 真正消费的信息，
+    /// 不再携带语法层 `ast::Type`（WBS 6.6.12）。
+    TypeDecl { body: TypeDeclBody },
+}
+
+/// 类型声明的 IR 原生载体（收窄）。
+///
+/// **收窄口径**（WBS 6.6.12）：IR 只消费三样东西——① 字段的个数与顺序；② 每个字段的
+/// 类型（`MonoType`）；③ 该类型在字节码类型表里的项（[`TypeDeclBody::self_type`]）。
+/// **默认值表达式 / const 界表达式 / 匿名方法绑定 / span 一律不进**：默认值在
+/// `ir_gen` 已降级成指令、const 界在类型检查层消费、匿名绑定在 `register_type_bindings`
+/// 另有归宿；span 只在源码诊断里有意义，而 IR 快照按文本比对（保留 span 会让快照
+/// 携带源码偏移，见 07 §快照规范化表「剥离 Span」一项此前并未真正成立）。
+#[derive(Debug, Clone)]
+pub struct TypeDeclBody {
+    /// 字段表：顺序 = 构造参数序
+    pub fields: Vec<TypeDeclField>,
+    /// 该类型在字节码类型表（`BytecodeModule::type_table`）里的项
+    pub self_type: MonoType,
+}
+
+/// 类型声明的一个字段（IR 原生）。
+///
+/// 字段名与 `is_mut` / `has_default` 只服务**快照与诊断可读性**，不参与任何 IR 决策；
+/// 默认值**表达式**不进本结构（见 [`TypeDeclBody`] 的收窄口径）。
+#[derive(Debug, Clone)]
+pub struct TypeDeclField {
+    /// 字段名。IR 不按名查找；AST 侧字段恒有名字，故这里不是 `Option`。
+    pub name: String,
+    /// 字段类型（构造参数类型；AST→`MonoType` 的降级在 `ir_gen` 完成）
+    pub ty: MonoType,
+    /// 字段可变性标记（快照显示用）
+    pub is_mut: bool,
+    /// 是否有默认值**标记**（默认值表达式不进载体，它在 `ir_gen` 已降级成指令）
+    pub has_default: bool,
+    /// 是否为**函数类型字段**（方法）。
+    ///
+    /// SPEC `type-system.md:443`：函数类型字段不生成构造参数。载体必须能表达这个
+    /// 区分；但 `translator::synthesize_constructor` 目前仍按历史行为把两类字段都算
+    /// 进构造参数（已知不一致，登记见 09a §P6 6.6.12——本轮不改行为）。
+    pub is_method: bool,
 }
 
 /// 局部变量槽位：类型 + 源码名 + 作用域深度。

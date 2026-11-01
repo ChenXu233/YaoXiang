@@ -1,7 +1,7 @@
 //! Tests for ParserState: helpers, error tracking, save/restore.
 
 use crate::frontend::core::lexer::tokenize;
-use crate::frontend::core::parser::ParserState;
+use crate::frontend::core::parser::{NullProbe, ParserState};
 use crate::util::plan_id::PlanId;
 use crate::frontend::core::lexer::tokens::TokenKind;
 use crate::frontend::core::parser::parse_msg;
@@ -13,7 +13,7 @@ fn with_state<F>(
     F: FnMut(&mut ParserState<'_>),
 {
     let tokens = tokenize(source).unwrap();
-    let mut state = ParserState::new(&tokens);
+    let mut state = ParserState::new(&tokens, &NullProbe);
     f(&mut state);
 }
 
@@ -177,7 +177,7 @@ fn test_can_start_stmt_identifier() {
 /// 收集模块里全部语句的释放计划身份（语句自身 → 其嵌套块）。
 ///
 /// 夹具级 AST 走查：只覆盖本用例用到的语句/表达式形态。
-fn collect_stmt_plan_ids(module: &crate::frontend::core::parser::ast::Module) -> Vec<PlanId> {
+fn collect_stmt_plan_ids(module: &crate::ast::Module) -> Vec<PlanId> {
     let mut ids = Vec::new();
     for stmt in &module.items {
         collect_one_stmt(stmt, &mut ids);
@@ -186,10 +186,10 @@ fn collect_stmt_plan_ids(module: &crate::frontend::core::parser::ast::Module) ->
 }
 
 fn collect_one_stmt(
-    stmt: &crate::frontend::core::parser::ast::Stmt,
+    stmt: &crate::ast::Stmt,
     ids: &mut Vec<PlanId>,
 ) {
-    use crate::frontend::core::parser::ast::{Block, StmtKind};
+    use crate::ast::{Block, StmtKind};
     ids.push(stmt.plan_id);
     let mut block = |b: &Block, ids: &mut Vec<PlanId>| {
         for inner in &b.stmts {
@@ -221,11 +221,11 @@ fn collect_one_stmt(
 }
 
 fn collect_expr_plan_ids(
-    expr: &crate::frontend::core::parser::ast::Expr,
+    expr: &crate::ast::Expr,
     ids: &mut Vec<PlanId>,
-    block: &mut impl FnMut(&crate::frontend::core::parser::ast::Block, &mut Vec<PlanId>),
+    block: &mut impl FnMut(&crate::ast::Block, &mut Vec<PlanId>),
 ) {
-    use crate::frontend::core::parser::ast::Expr;
+    use crate::ast::Expr;
     match expr {
         Expr::Block(b) => block(b, ids),
         Expr::Lambda { body, .. } => block(body, ids),
@@ -314,7 +314,7 @@ fn test_parse_statement_plan_ids_are_unique_and_deterministic() {
 #[test]
 fn test_unplanned_statement_has_no_plan_id() {
     // Arrange：手工构造的合成语句（ir_gen 内建 / 直驱夹具同款）
-    use crate::frontend::core::parser::ast::{Expr, Stmt, StmtKind};
+    use crate::ast::{Expr, Stmt, StmtKind};
     let stmt = Stmt {
         kind: StmtKind::Expr(Box::new(Expr::Lit(
             crate::frontend::core::lexer::tokens::Literal::Int(1),

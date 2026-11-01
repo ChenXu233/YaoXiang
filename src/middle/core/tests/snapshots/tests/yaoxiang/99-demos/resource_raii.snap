@@ -1,6 +1,6 @@
 module
   fn File() -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
-    type_decl Struct { body: [Field(StructField { name: "name", is_mut: false, ty: Name { name: "String", span: Span { start: Position { line: 8, column: 11, offset: 167 }, end: Position { line: 8, column: 17, offset: 173 } } }, default: None }), Field(StructField { name: "closed", is_mut: false, ty: Name { name: "Bool", span: Span { start: Position { line: 9, column: 13, offset: 187 }, end: Position { line: 9, column: 17, offset: 191 } } }, default: None })] }
+    type_decl [name: Generic { name: "String", args: [] } ; closed: Bool]
   fn File.open(Ref { mutable: true, inner: TypeRef("File") }) -> Void
     locals_total=5
     Load %0 <- %1

@@ -1,8 +1,8 @@
 module
   fn Pair() -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
-    type_decl Struct { body: [Field(StructField { name: "make", is_mut: false, ty: Fn { params: [Name { name: "Int", span: Span { start: Position { line: 15, column: 12, offset: 562 }, end: Position { line: 15, column: 15, offset: 565 } } }, Name { name: "Int", span: Span { start: Position { line: 15, column: 17, offset: 567 }, end: Position { line: 15, column: 20, offset: 570 } } }], return_type: Name { name: "Pair", span: Span { start: Position { line: 15, column: 25, offset: 575 }, end: Position { line: 15, column: 29, offset: 579 } } } }, default: None }), Field(StructField { name: "empty", is_mut: false, ty: Fn { params: [], return_type: Name { name: "Pair", span: Span { start: Position { line: 16, column: 18, offset: 598 }, end: Position { line: 16, column: 22, offset: 602 } } } }, default: None })] }
+    type_decl [make: Fn { params: [Int(64), Int(64)], return_type: TypeRef("Pair") } ; empty: Fn { params: [], return_type: TypeRef("Pair") }]
   fn Point() -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
-    type_decl Struct { body: [Field(StructField { name: "x", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 19, column: 20, offset: 626 }, end: Position { line: 19, column: 23, offset: 629 } } }, default: None }), Field(StructField { name: "y", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 19, column: 28, offset: 634 }, end: Position { line: 19, column: 31, offset: 637 } } }, default: None })] }
+    type_decl [x: Int(64) ; y: Int(64)]
   fn main() -> Void
     slot[0] p : Int(64) @depth1
     slot[1] v : Int(64) @depth1

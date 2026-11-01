@@ -75,26 +75,48 @@ TypeExpr    ::= PrimitiveType
 
 ### 2.1 原类型
 
+**内置类型名共 15 个，本节即权威表**：`Never` / `Void` / `()` / `Bool` / `Int` /
+`Int8` / `Int16` / `Int32` / `Int64` / `Float` / `Float32` / `Float64` / `Char` /
+`String` / `Bytes`。实现面的单一真相源是 `MonoType::from_builtin_name`
+（`src/frontend/core/types/mono.rs`），本表与它**逐名一致**——`tools/type-tables --report`
+的 T2 门禁就是拿这张表、`CONST_PARAM_TYPES` 与 LSP 类型名清单三方比对。
+
 | 类型     | 逻辑对应       | 描述                                                                  | 默认大小 |
 | -------- | -------------- | --------------------------------------------------------------------- | -------- |
-| `Type`   | —              | 元类型                                                                | 0 字节   |
+| `Type`   | —              | 元类型（不是值类型名，见下）                                          | 0 字节   |
 | `Never`  | ⊥（假/空类型） | 零构造子，无任何值。发散/panic 返回类型。`Never <: T` 对任意 T 成立。 | 0 字节   |
 | `Void`   | ⊤（真/Unit）   | 有默认 void 值，零字段积类型。`x: Void = <默认>` 合法。               | 0 字节   |
 | `Bool`   | —              | 布尔值：`true` / `false`                                              | 1 字节   |
-| `Int`    | —              | 有符号整数                                                            | 8 字节   |
-| `Float`  | —              | 浮点数                                                                | 8 字节   |
+| `Int`    | —              | 有符号整数（= `Int64`）                                               | 8 字节   |
+| `Int8`   | —              | 8 位有符号整数                                                        | 1 字节   |
+| `Int16`  | —              | 16 位有符号整数                                                       | 2 字节   |
+| `Int32`  | —              | 32 位有符号整数                                                       | 4 字节   |
+| `Int64`  | —              | 64 位有符号整数                                                       | 8 字节   |
+| `Float`  | —              | 浮点数（= `Float64`）                                                 | 8 字节   |
+| `Float32`| —              | 32 位浮点数                                                           | 4 字节   |
+| `Float64`| —              | 64 位浮点数                                                           | 8 字节   |
 | `String` | —              | UTF-8 字符串                                                          | 可变     |
 | `Char`   | —              | Unicode 字符                                                          | 4 字节   |
 | `Bytes`  | —              | 原始字节                                                              | 可变     |
 
-带位宽的整数：`Int8`, `Int16`, `Int32`, `Int64`；带位宽的浮点：`Float32`, `Float64`。
-完整的内建类型名表见 `src/frontend/core/types/mono.rs:618-640` 的
-`MonoType::from_builtin_name`。
+`()` 是 `Void` 的**类型写法**（零元素元组 = 单位类型），与 `Void` 同义：标准库签名串里
+写作 `() -> Void`，解析表把 `()` 与 `Void` 放在同一臂。
 
-> **没有无符号整数类型**。`Uint`（以及 `Int128`）不是可用类型名——`Uint` 只出现在
-> `src/lsp/world.rs:176` 的 LSP 补全候选表与
-> `src/frontend/core/types/eval/const_eval.rs:503` 的 `sizeof` 兜底分支里，两者都不是
-> 类型注册。需要无符号语义时自己用 `Int` 加上下界约定。
+**拼写只有一种**。`Int` 不是 `int`、`Int64` 不是 `int64`/`i64`、`String` 不是
+`string`/`str`、`Bool` 不是 `bool`、`Void` 不是 `void`、`Never` 不是 `never`、
+`Float` 不是 `float`/`f64`、`Char` 不是 `char`、`Bytes` 不是 `bytes`。实现内
+曾并存 22 个这样的小写/缩写拼写，已于 **WBS 6.1.2（2026-10-27 定稿）** 全部删除：
+写非规范拼写在类型位置一律报未知类型，不会被静默收成用户类型。
+
+> **`DateTime` 不是内置名**。它是 **std 层的语义别名**：`src/std/time.rs` 与
+> `src/std/interfaces/time.yx` 的 `now` / `parse_time` 签名串仍写 `DateTime`，
+> 运行时它就是 `Int`（#338 连带修复）。解析表里它只作为**临时兼容别名**保留，
+> 且本表不收录；把它迁出内置名表、改由 std 侧承载属 **P10 S11**
+> （issue [#513](https://github.com/ChenXu233/YaoXiang/issues/513)）。
+
+> **没有无符号整数类型**。`Uint`（以及 `Int128`）不是可用类型名——`MonoType` 没有
+> 无符号变体，LSP 类型名清单与 `sizeof` 的名字表里曾各有一处残留，均已随
+> WBS 6.1.2 删除。需要无符号语义时自己用 `Int` 加上下界约定。
 
 ### 2.2 Never 与 Void：⊥ 与 ⊤
 

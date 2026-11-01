@@ -9,7 +9,7 @@ use crate::formatter::handlers::expr::{
 use crate::formatter::context::FormatContext;
 use crate::formatter::source_map::SourceMap;
 use crate::formatter::FormatOptions;
-use crate::frontend::core::parser::ast::*;
+use crate::ast::*;
 use crate::util::span::Span;
 
 fn default_ctx() -> FormatContext {
@@ -21,9 +21,9 @@ fn default_source_map() -> SourceMap {
 }
 
 /// Helper: test_format_fn_signature_curried_grouping 的完整夹具与断言（逐条断言见函数体）。
-/// Fixture: curried 签名的 `signature_params = [T: Type, x: Int]`。
-fn curried_signature_params() -> Vec<Param> {
-    let signature_params = vec![
+/// Fixture: curried 签名的 `decl_params = [T: Type, x: Int]`。
+fn curried_decl_params() -> Vec<Param> {
+    let decl_params = vec![
         Param {
             name: "T".to_string(),
             ty: Some(Type::MetaType {
@@ -43,21 +43,21 @@ fn curried_signature_params() -> Vec<Param> {
             span: Span::dummy(),
         },
     ];
-    signature_params
+    decl_params
 }
 
 /// Fixture: curried 函数类型 `(Type) -> ((Int) -> Int)`。
 fn curried_fn_type() -> Type {
     Type::Fn {
-        params: vec![Type::MetaType {
+        params: vec![Param::from_type(Type::MetaType {
             name_span: Span::dummy(),
             args: vec![],
-        }],
+        })],
         return_type: Box::new(Type::Fn {
-            params: vec![Type::Name {
+            params: vec![Param::from_type(Type::Name {
                 name: "Int".to_string(),
                 span: Span::dummy(),
-            }],
+            })],
             return_type: Box::new(Type::Name {
                 name: "Int".to_string(),
                 span: Span::dummy(),
@@ -230,11 +230,14 @@ fn test_format_cast() {
     let inner = Expr::Var("x".to_string(), Span::dummy());
     let expr = Expr::Cast {
         expr: Box::new(inner),
-        target_type: Type::Int(64),
+        target_type: Type::Name {
+            name: "Int64".to_string(),
+            span: Span::dummy(),
+        },
         span: Span::dummy(),
     };
     let result = format_expr(&expr, &ctx, &default_source_map());
-    assert_eq!(result, "x as i64");
+    assert_eq!(result, "x as Int64", "cast 目标类型应输出规范名");
 }
 
 #[test]
@@ -353,19 +356,25 @@ fn test_format_params_short() {
     let params = vec![
         Param {
             name: "x".to_string(),
-            ty: Some(Type::Int(64)),
+            ty: Some(Type::Name {
+                name: "Int64".to_string(),
+                span: Span::dummy(),
+            }),
             is_mut: false,
             span: Span::dummy(),
         },
         Param {
             name: "y".to_string(),
-            ty: Some(Type::Int(64)),
+            ty: Some(Type::Name {
+                name: "Int64".to_string(),
+                span: Span::dummy(),
+            }),
             is_mut: false,
             span: Span::dummy(),
         },
     ];
     let result = format_params(&params, &ctx, &default_source_map());
-    assert_eq!(result, "(x: i64, y: i64)");
+    assert_eq!(result, "(x: Int64, y: Int64)", "参数类型应原样输出规范名");
 }
 
 #[test]
@@ -377,13 +386,19 @@ fn test_format_params_long_wraps() {
     let params = vec![
         Param {
             name: "very_long_param_name".to_string(),
-            ty: Some(Type::Int(64)),
+            ty: Some(Type::Name {
+                name: "Int64".to_string(),
+                span: Span::dummy(),
+            }),
             is_mut: false,
             span: Span::dummy(),
         },
         Param {
             name: "another_long_param".to_string(),
-            ty: Some(Type::Int(64)),
+            ty: Some(Type::Name {
+                name: "Int64".to_string(),
+                span: Span::dummy(),
+            }),
             is_mut: false,
             span: Span::dummy(),
         },
@@ -708,18 +723,18 @@ fn test_format_error_placeholder() {
 
 #[test]
 fn test_format_fn_signature_curried_grouping() {
-    // Arrange — curried 泛型函数签名（signature_params 按嵌套 Fn 切分）
+    // Arrange — curried 泛型函数签名（decl_params 按嵌套 Fn 切分）
     let ctx = default_ctx();
-    let signature_params = curried_signature_params();
+    let decl_params = curried_decl_params();
     let fn_type = curried_fn_type();
 
-    // Act — 按嵌套 Fn 结构切分 signature_params
-    let result = format_fn_signature(&signature_params, &fn_type, &ctx, &default_source_map());
+    // Act — 按嵌套 Fn 结构切分 decl_params
+    let result = format_fn_signature(&decl_params, &fn_type, &ctx, &default_source_map());
 
     // Assert — 第一组给外层，第二组给内层，单层括号保证幂等
     assert_eq!(
         result, "(T: Type) -> (x: Int) -> Int",
-        "curried 签名应按嵌套 Fn 切分 signature_params：got {:?}",
+        "curried 签名应按嵌套 Fn 切分 decl_params：got {:?}",
         result
     );
 }

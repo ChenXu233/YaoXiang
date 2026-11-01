@@ -6,7 +6,7 @@
 //! 使用统一的 ScopeManager 管理变量作用域。
 
 use crate::util::diagnostic::{ErrorCodeDefinition, Result};
-use crate::frontend::core::parser::ast::{BinOp, UnOp};
+use crate::ast::{BinOp, UnOp};
 use crate::frontend::core::types::{MonoType, PolyType, TypeConstraintSolver};
 use crate::frontend::core::typecheck::passes::overload;
 use crate::frontend::module::symbol::SymbolTable;
@@ -66,7 +66,7 @@ pub struct ExpressionInferrer<'a> {
     /// 约束求解器
     solver: &'a mut TypeConstraintSolver,
     /// 循环嵌套深度（#311）：while/for 体内才允许 break/continue。
-    /// 函数体（FnDef/Lambda）边界重置——闭包体不继承外层循环上下文；
+    /// 函数体（Lambda）边界重置——闭包体不继承外层循环上下文；
     /// spawn for 体是逐元素闭包执行，不计入可 break 的循环上下文。
     loop_depth: usize,
     /// 函数边界嵌套深度（RFC-010a 规则②）：0 = 模块初始化层（Script 顶层），
@@ -115,7 +115,7 @@ pub struct ExpressionInferrer<'a> {
     /// 用于 List(1, 2, 3) 等泛型类型构造调用的实例化
     generic_type_defs:
         &'a HashMap<String, crate::frontend::core::typecheck::environment::GenericTypeDef>,
-    /// RFC-011 §5.2：当前函数的约束形参（形参 → 接口名）——定义体内
+    /// RFC-011b：当前函数的约束形参（形参 → 接口名）——定义体内
     /// 约束类型上的运算符延迟派发依据
     current_fn_param_constraints: Option<&'a HashMap<String, String>>,
     /// RFC-011a §3：重载候选签名与 IR 混编名（方法级重载决议）
@@ -128,8 +128,6 @@ pub struct ExpressionInferrer<'a> {
     current_expected: Option<MonoType>,
     /// RFC-011a §3：重载决议点（**调用点 PlanId** → 混编 IR 名；RFC-039 D20）
     pub overload_resolutions: Vec<(crate::util::plan_id::PlanId, String)>,
-    /// RFC-011 §5.2：泛型函数约束表——调用点复检
-    generic_fn_constraints: Option<&'a HashMap<String, Vec<(String, String)>>>,
     /// 实例化请求（收集遇到的所有泛型函数实例化需求）
     pub instantiation_requests: Vec<InstantiationRequest>,
     /// 泛型函数的声明序类型参数名：函数名 -> ["T", "Acc", ...]（由 StatementChecker 注入）。
@@ -167,6 +165,13 @@ pub struct ExpressionInferrer<'a> {
     /// 事实收集，经 StatementChecker 回收、checker 发射 W1063（先例同构：
     /// instantiation_requests 等字段的同一条汇聚链）。
     pub unevaluable_const_constraints: Vec<(crate::util::span::Span, String)>,
+    /// 证明函数基类型表（RFC-027 Phase 2.5）：「返回 Type 的函数名 → 其基类型」。
+    /// #523：调用点逐参统一消费——curry 内层参数位的精化应用注册期不剥
+    /// （`check_fn_stmt` 只剥外层形参位），原始形态 `IsPositive(N)` 若不按
+    /// base 统一，基类型实参被假拒绝（E1002）。剥除判据**单源**：与注册期
+    /// 的 `statements::strip_refined_value_type` 共用同一实现
+    /// （`strip_refined_with_proof_fns`），本表由 StatementChecker 随委托注入。
+    proof_fn_bases: &'a HashMap<String, MonoType>,
 }
 
 impl<'a> ExpressionInferrer<'a> {
@@ -197,7 +202,6 @@ impl<'a> ExpressionInferrer<'a> {
             method_overload_param_names: None,
             current_expected: None,
             overload_resolutions: Vec::new(),
-            generic_fn_constraints: None,
             instantiation_requests: Vec::new(),
             generic_fn_type_params: &EMPTY_FN_TYPE_PARAMS,
             last_type_args: Vec::new(),
@@ -211,6 +215,7 @@ impl<'a> ExpressionInferrer<'a> {
             native_param_names: &EMPTY_NATIVE_PARAM_NAMES,
             match_scrutinee_types: HashMap::new(),
             unevaluable_const_constraints: Vec::new(),
+            proof_fn_bases: &EMPTY_SIGNATURES,
             dep_env: None,
             gamma: None,
             import_watch: HashMap::new(),
@@ -246,7 +251,6 @@ impl<'a> ExpressionInferrer<'a> {
             method_overload_param_names: None,
             current_expected: None,
             overload_resolutions: Vec::new(),
-            generic_fn_constraints: None,
             instantiation_requests: Vec::new(),
             generic_fn_type_params: &EMPTY_FN_TYPE_PARAMS,
             last_type_args: Vec::new(),
@@ -260,6 +264,7 @@ impl<'a> ExpressionInferrer<'a> {
             native_param_names: &EMPTY_NATIVE_PARAM_NAMES,
             match_scrutinee_types: HashMap::new(),
             unevaluable_const_constraints: Vec::new(),
+            proof_fn_bases: &EMPTY_SIGNATURES,
             dep_env: None,
             gamma: None,
             import_watch: HashMap::new(),
@@ -296,7 +301,6 @@ impl<'a> ExpressionInferrer<'a> {
             method_overload_param_names: None,
             current_expected: None,
             overload_resolutions: Vec::new(),
-            generic_fn_constraints: None,
             instantiation_requests: Vec::new(),
             generic_fn_type_params: &EMPTY_FN_TYPE_PARAMS,
             last_type_args: Vec::new(),
@@ -310,6 +314,7 @@ impl<'a> ExpressionInferrer<'a> {
             native_param_names: &EMPTY_NATIVE_PARAM_NAMES,
             match_scrutinee_types: HashMap::new(),
             unevaluable_const_constraints: Vec::new(),
+            proof_fn_bases: &EMPTY_SIGNATURES,
             dep_env: None,
             gamma: None,
             import_watch: HashMap::new(),
@@ -348,7 +353,6 @@ impl<'a> ExpressionInferrer<'a> {
             method_overload_param_names: None,
             current_expected: None,
             overload_resolutions: Vec::new(),
-            generic_fn_constraints: None,
             instantiation_requests: Vec::new(),
             generic_fn_type_params: &EMPTY_FN_TYPE_PARAMS,
             last_type_args: Vec::new(),
@@ -362,6 +366,7 @@ impl<'a> ExpressionInferrer<'a> {
             native_param_names: &EMPTY_NATIVE_PARAM_NAMES,
             match_scrutinee_types: HashMap::new(),
             unevaluable_const_constraints: Vec::new(),
+            proof_fn_bases: &EMPTY_SIGNATURES,
             dep_env: None,
             gamma: None,
             import_watch: HashMap::new(),
@@ -420,7 +425,7 @@ impl<'a> ExpressionInferrer<'a> {
     /// 成员违规（具体类型未实现接口）以 E1101 返回。
     pub(crate) fn collect_existential_coercions(
         &mut self,
-        expr: &crate::frontend::core::parser::ast::Expr,
+        expr: &crate::ast::Expr,
         expected: &MonoType,
     ) -> Result<()> {
         let (mut coercions, errors) = super::existential::collect_existential_coercions(
@@ -484,6 +489,16 @@ impl<'a> ExpressionInferrer<'a> {
         self.generic_type_defs = defs;
     }
 
+    /// 设置证明函数基类型表（RFC-027 Phase 2.5 / #523）。
+    /// StatementChecker 随委托注入——与注册期 `proof_fn_bases` 同一张表，
+    /// 剥精化判据因此单源（见 `strip_refined_with_proof_fns`）。
+    pub fn set_proof_fn_bases(
+        &mut self,
+        bases: &'a HashMap<String, MonoType>,
+    ) {
+        self.proof_fn_bases = bases;
+    }
+
     /// 设置 native 导出形参名表（#454）
     pub fn set_native_param_names(
         &mut self,
@@ -500,20 +515,12 @@ impl<'a> ExpressionInferrer<'a> {
         self.native_arity = arities;
     }
 
-    /// RFC-011 §5.2：当前函数的约束形参（定义体延迟派发）
+    /// RFC-011b：当前函数的约束形参（定义体延迟派发）
     pub fn set_current_fn_param_constraints(
         &mut self,
         constraints: Option<&'a HashMap<String, String>>,
     ) {
         self.current_fn_param_constraints = constraints;
-    }
-
-    /// RFC-011 §5.2：泛型函数约束表（调用点复检）
-    pub fn set_generic_fn_constraints(
-        &mut self,
-        constraints: &'a HashMap<String, Vec<(String, String)>>,
-    ) {
-        self.generic_fn_constraints = Some(constraints);
     }
 
     /// RFC-011a §3：重载候选签名与 IR 混编名
@@ -749,12 +756,12 @@ impl<'a> ExpressionInferrer<'a> {
     /// - 左操作数已是 Range 而右侧再嵌套 Range（`a..b..c..d`）：拒绝，区间是三分量构造
     fn infer_range_expr(
         &mut self,
-        left: &crate::frontend::core::parser::ast::Expr,
-        right: &crate::frontend::core::parser::ast::Expr,
+        left: &crate::ast::Expr,
+        right: &crate::ast::Expr,
         span: crate::util::span::Span,
     ) -> Result<MonoType> {
         use crate::frontend::core::lexer::tokens::Literal;
-        use crate::frontend::core::parser::ast::Expr;
+        use crate::ast::Expr;
 
         let left_ty = self.infer_expr(left)?;
         let right_ty = self.infer_expr(right)?;
@@ -983,11 +990,11 @@ impl<'a> ExpressionInferrer<'a> {
     /// - 各臂 body 类型 unify 为 match 表达式的结果类型。
     fn check_match_expr(
         &mut self,
-        scrutinee: &crate::frontend::core::parser::ast::Expr,
-        arms: &[crate::frontend::core::parser::ast::MatchArm],
+        scrutinee: &crate::ast::Expr,
+        arms: &[crate::ast::MatchArm],
         match_span: crate::util::span::Span,
     ) -> Result<MonoType> {
-        use crate::frontend::core::parser::ast::Pattern;
+        use crate::ast::Pattern;
         let scrutinee_ty = self.infer_expr(scrutinee)?;
         let scrutinee_ty = self.solver.resolve_type(&scrutinee_ty);
         let mut resolved = scrutinee_ty.clone();
@@ -1051,11 +1058,10 @@ impl<'a> ExpressionInferrer<'a> {
 
         for arm in arms {
             // RFC-010b：守卫解包——`pat if cond => body`，绑定对守卫可见
-            let (pat, guard): (&Pattern, Option<&crate::frontend::core::parser::ast::Expr>) =
-                match &arm.pattern {
-                    Pattern::Guard { pattern, condition } => (pattern, Some(condition)),
-                    p => (p, None),
-                };
+            let (pat, guard): (&Pattern, Option<&crate::ast::Expr>) = match &arm.pattern {
+                Pattern::Guard { pattern, condition } => (pattern, Some(condition)),
+                p => (p, None),
+            };
 
             // 兜底臂之后的任何臂都不可达（E1031）。兜底 = 无条件命中的
             // 不可驳斥模式（Identifier/Wildcard/Tuple/Struct，未带守卫）
@@ -1208,12 +1214,12 @@ impl<'a> ExpressionInferrer<'a> {
     /// 首个备选的绑定进入 `binds`（同名绑定的类型必然一致：同一被匹配类型）。
     fn check_pattern_alts(
         &mut self,
-        pattern: &crate::frontend::core::parser::ast::Pattern,
+        pattern: &crate::ast::Pattern,
         ty: &MonoType,
         binds: &mut Vec<(String, MonoType)>,
         span: crate::util::span::Span,
     ) -> Result<()> {
-        use crate::frontend::core::parser::ast::Pattern;
+        use crate::ast::Pattern;
         let alts: Vec<&Pattern> = match pattern {
             Pattern::Or(ps) => ps.iter().collect(),
             p => vec![p],
@@ -1243,12 +1249,12 @@ impl<'a> ExpressionInferrer<'a> {
     /// 从 `ty` 自足解析（载荷位可能是另一和类型，如 `ok(some(v))`）。
     fn check_pattern(
         &mut self,
-        pattern: &crate::frontend::core::parser::ast::Pattern,
+        pattern: &crate::ast::Pattern,
         ty: &MonoType,
         binds: &mut Vec<(String, MonoType)>,
         span: crate::util::span::Span,
     ) -> Result<()> {
-        use crate::frontend::core::parser::ast::Pattern;
+        use crate::ast::Pattern;
         let resolved = self.solver.resolve_type(ty);
         match pattern {
             Pattern::Wildcard => Ok(()),
@@ -1381,6 +1387,13 @@ impl<'a> ExpressionInferrer<'a> {
                         .build());
                     }
                 };
+                // WBS 3.20.2：变体解构消费的是该类型的**变体集**——变体集
+                // 随 use 导入成文（register_type_payload 写入 sum_types），
+                // 和类型名经成员监视集回指到导入（note_import_use），于是
+                // `match some(v) / none()` 算作消费了 `use std.option`，
+                // 不再误报 W1003（docs/src/reference/stdlib/weak.md 自然
+                // 写法；变体名不走 Var 解析臂，此臂是它唯一的语义消费点）
+                self.note_import_use(&sum_name);
                 let Some(vdef) = variants.iter().find(|v| &v.name == variant) else {
                     return Err(ErrorCodeDefinition::field_not_found(variant, &sum_name)
                         .at(span)
@@ -1436,7 +1449,7 @@ impl<'a> ExpressionInferrer<'a> {
     /// 守卫条件检查：必须产出 Bool（绑定已在臂作用域内，check_expr 期间可见）
     fn check_guard_condition(
         &mut self,
-        cond: &crate::frontend::core::parser::ast::Expr,
+        cond: &crate::ast::Expr,
     ) -> Result<()> {
         let cond_ty = self.infer_expr(cond)?;
         let cond_ty = self.solver.resolve_type(&cond_ty);
@@ -1472,8 +1485,8 @@ impl<'a> ExpressionInferrer<'a> {
         type_name: &str,
         variant_name: &str,
         concrete: Vec<MonoType>,
-        value_args: &[crate::frontend::core::parser::ast::Expr],
-        named_args: &[(String, crate::frontend::core::parser::ast::Expr)],
+        value_args: &[crate::ast::Expr],
+        named_args: &[(String, crate::ast::Expr)],
         span: crate::util::span::Span,
     ) -> Result<MonoType> {
         let Some(variants) = self.sum_types.get(type_name) else {
@@ -1571,7 +1584,7 @@ impl<'a> ExpressionInferrer<'a> {
         let (entry, remaining) = match hit {
             Some(hit) => hit,
             None => {
-                // RFC-011 §5.2：约束形参延迟派发——操作数是带匹配约束的
+                // RFC-011b：约束形参延迟派发——操作数是带匹配约束的
                 // 当前函数类型形参（TypeRef("T")）→ 记形参名派发，ir_gen
                 // 发 `Call "T.add"`，mono 特化时按类型实参改写
                 if let Some(pn) = self.constrained_operand_param(op, l, r) {
@@ -1979,8 +1992,8 @@ impl<'a> ExpressionInferrer<'a> {
     /// 类型名在实参位置推断得到的只是笼统的 `MetaType`（类型宇宙的值），
     /// 而显式类型实参要的是它**指的类型**——`mk(Int)` 必须把 `A` 绑到 `Int`，
     /// 而不是绑到「某个类型值」。这里从 AST 形态直接取类型。
-    fn type_arg_of_expr(expr: &crate::frontend::core::parser::ast::Expr) -> MonoType {
-        use crate::frontend::core::parser::ast::Expr;
+    fn type_arg_of_expr(expr: &crate::ast::Expr) -> MonoType {
+        use crate::ast::Expr;
         match expr {
             Expr::Var(name, _) => {
                 MonoType::from_builtin_name(name).unwrap_or_else(|| MonoType::TypeRef(name.clone()))
@@ -2587,9 +2600,9 @@ impl<'a> ExpressionInferrer<'a> {
     /// 两者都保持注入前的行为。
     fn callee_generic_name(
         &self,
-        func_expr: &crate::frontend::core::parser::ast::Expr,
+        func_expr: &crate::ast::Expr,
     ) -> Option<String> {
-        use crate::frontend::core::parser::ast::Expr;
+        use crate::ast::Expr;
         match func_expr {
             Expr::Var(name, _) => Some(name.clone()),
             Expr::FieldAccess {
@@ -2612,7 +2625,7 @@ impl<'a> ExpressionInferrer<'a> {
     fn collect_instantiation_request(
         &mut self,
         func_ty: &MonoType,
-        func_expr: &crate::frontend::core::parser::ast::Expr,
+        func_expr: &crate::ast::Expr,
         _arg_types: &[MonoType],
         mono_func_ty: &MonoType,
         call_span: crate::util::span::Span,
@@ -2634,10 +2647,7 @@ impl<'a> ExpressionInferrer<'a> {
         };
         // 限定调用（被调方是 FieldAccess）标记：下方第一条路径的 arity
         // 判据随之收紧（见该处注释）。
-        let is_qualified = matches!(
-            func_expr,
-            crate::frontend::core::parser::ast::Expr::FieldAccess { .. }
-        );
+        let is_qualified = matches!(func_expr, crate::ast::Expr::FieldAccess { .. });
 
         // ── 层级：声明名为权威，签名形态反推只兜底 ────────────────────
         //
@@ -2844,7 +2854,7 @@ impl<'a> ExpressionInferrer<'a> {
     /// 回退侧只认首候选名表导致的误拒）。
     fn names_support_named_args(
         names: &[String],
-        named_args: &[(String, crate::frontend::core::parser::ast::Expr)],
+        named_args: &[(String, crate::ast::Expr)],
     ) -> bool {
         names.is_empty() || named_args.iter().all(|(n, _)| names.iter().any(|p| p == n))
     }
@@ -2891,7 +2901,7 @@ impl<'a> ExpressionInferrer<'a> {
         lists: &[Vec<String>],
         cands: Option<&Vec<MonoType>>,
         total_args: usize,
-        named_args: &[(String, crate::frontend::core::parser::ast::Expr)],
+        named_args: &[(String, crate::ast::Expr)],
     ) -> (Option<Vec<String>>, Option<MonoType>) {
         if lists.len() == 1 {
             return (lists.first().cloned(), None);
@@ -2935,8 +2945,8 @@ impl<'a> ExpressionInferrer<'a> {
     fn bind_named_args(
         key: &str,
         param_names: &[String],
-        args: &[crate::frontend::core::parser::ast::Expr],
-        named_args: &[(String, crate::frontend::core::parser::ast::Expr)],
+        args: &[crate::ast::Expr],
+        named_args: &[(String, crate::ast::Expr)],
         call_span: crate::util::span::Span,
     ) -> Result<Vec<usize>> {
         super::arg_binding::bind_args_to_params(
@@ -2957,15 +2967,15 @@ impl<'a> ExpressionInferrer<'a> {
     /// 动态分发/链式访问（obj 非局部变量）不在本检查范围，返回 None。
     fn method_binding_call_key(
         &self,
-        func: &crate::frontend::core::parser::ast::Expr,
+        func: &crate::ast::Expr,
     ) -> Option<String> {
-        let crate::frontend::core::parser::ast::Expr::FieldAccess {
+        let crate::ast::Expr::FieldAccess {
             expr: obj, field, ..
         } = func
         else {
             return None;
         };
-        let crate::frontend::core::parser::ast::Expr::Var(obj_name, _) = &**obj else {
+        let crate::ast::Expr::Var(obj_name, _) = &**obj else {
             return None;
         };
 
@@ -3042,11 +3052,11 @@ impl<'a> ExpressionInferrer<'a> {
     /// 形态与 [`Self::infer_expr`] 完全一致。
     pub fn infer_expr_with_expected(
         &mut self,
-        expr: &crate::frontend::core::parser::ast::Expr,
+        expr: &crate::ast::Expr,
         expected: Option<&MonoType>,
     ) -> Result<MonoType> {
         match expr {
-            crate::frontend::core::parser::ast::Expr::Lambda { params, body, .. } => {
+            crate::ast::Expr::Lambda { params, body, .. } => {
                 self.infer_lambda(params, body, expected)
             }
             _ => self.infer_expr(expr),
@@ -3103,8 +3113,8 @@ impl<'a> ExpressionInferrer<'a> {
     /// return 检查以期望返回位为准。
     fn infer_lambda(
         &mut self,
-        params: &[crate::frontend::core::parser::ast::Param],
-        body: &crate::frontend::core::parser::ast::Block,
+        params: &[crate::ast::Param],
+        body: &crate::ast::Block,
         expected: Option<&MonoType>,
     ) -> Result<MonoType> {
         let value_sig: Option<(Vec<MonoType>, MonoType)> = expected
@@ -3166,9 +3176,7 @@ impl<'a> ExpressionInferrer<'a> {
         // 取出载荷类型——退出后形参已不在 scope，重推会失败。
         let arrow_payload_ty = match &body_ty {
             Ok(MonoType::Never) if body.stmts.len() == 1 => match &body.stmts[0].kind {
-                crate::frontend::core::parser::ast::StmtKind::Return(Some(e)) => {
-                    self.infer_expr(e).ok()
-                }
+                crate::ast::StmtKind::Return(Some(e)) => self.infer_expr(e).ok(),
                 _ => None,
             },
             _ => None,
@@ -3213,16 +3221,16 @@ impl<'a> ExpressionInferrer<'a> {
     /// 推断表达式的类型
     pub fn infer_expr(
         &mut self,
-        expr: &crate::frontend::core::parser::ast::Expr,
+        expr: &crate::ast::Expr,
     ) -> Result<MonoType> {
         // #324：挂当前节点 span，walk 内诊断构造自动获得位置
         let _current_span = crate::util::diagnostic::push_current_span(expr.span());
         match expr {
             // 字面量
-            crate::frontend::core::parser::ast::Expr::Lit(lit, _) => self.infer_literal(lit),
+            crate::ast::Expr::Lit(lit, _) => self.infer_literal(lit),
 
             // 变量
-            crate::frontend::core::parser::ast::Expr::Var(name, span) => {
+            crate::ast::Expr::Var(name, span) => {
                 // 语义引用登记（#433/D55）：get_var_info 一次拿全类型与定义位置，
                 // resolves_to 与定义侧 BindingEvent 同源（同走 VarInfo.definition_span）
                 let resolved = self
@@ -3266,7 +3274,7 @@ impl<'a> ExpressionInferrer<'a> {
             }
 
             // 二元运算
-            crate::frontend::core::parser::ast::Expr::BinOp {
+            crate::ast::Expr::BinOp {
                 op,
                 left,
                 right,
@@ -3279,9 +3287,7 @@ impl<'a> ExpressionInferrer<'a> {
                 let right_ty = self.infer_expr(right)?;
 
                 if matches!(op, BinOp::Assign) {
-                    if let crate::frontend::core::parser::ast::Expr::Var(var_name, _) =
-                        left.as_ref()
-                    {
+                    if let crate::ast::Expr::Var(var_name, _) = left.as_ref() {
                         // 局部程序变量重赋值强制统一（E1002）；仅全局（std/模块导出）
                         // 撞名时保持旧覆写行为，见 assign_var 文档
                         let enforce = self.scope.var_in_local_scopes(var_name);
@@ -3300,19 +3306,19 @@ impl<'a> ExpressionInferrer<'a> {
             }
 
             // 一元运算
-            crate::frontend::core::parser::ast::Expr::UnOp { op, expr, .. } => {
+            crate::ast::Expr::UnOp { op, expr, .. } => {
                 let expr_ty = self.infer_expr(expr)?;
                 self.infer_unary(op, &expr_ty)
             }
 
             // 元组
-            crate::frontend::core::parser::ast::Expr::Tuple(elems, _) => {
+            crate::ast::Expr::Tuple(elems, _) => {
                 let types: Result<Vec<_>> = elems.iter().map(|e| self.infer_expr(e)).collect();
                 Ok(MonoType::make_tuple(types?))
             }
 
             // 列表
-            crate::frontend::core::parser::ast::Expr::List(elems, _) => {
+            crate::ast::Expr::List(elems, _) => {
                 if elems.is_empty() {
                     let elem_ty = self.solver.new_var();
                     Ok(MonoType::make_list(elem_ty))
@@ -3330,7 +3336,7 @@ impl<'a> ExpressionInferrer<'a> {
             }
 
             // 字典
-            crate::frontend::core::parser::ast::Expr::Dict(pairs, _) => {
+            crate::ast::Expr::Dict(pairs, _) => {
                 if pairs.is_empty() {
                     let key_ty = self.solver.new_var();
                     let value_ty = self.solver.new_var();
@@ -3358,7 +3364,7 @@ impl<'a> ExpressionInferrer<'a> {
             // 下标访问
             // #299 §3: membership 谓词 `elem in container` → Bool
             // 右操作数：List/Array/Dict(键)/Tuple/String 子串/Range 区间
-            crate::frontend::core::parser::ast::Expr::In {
+            crate::ast::Expr::In {
                 elem,
                 container,
                 span,
@@ -3405,7 +3411,7 @@ impl<'a> ExpressionInferrer<'a> {
                     .build()),
                 }
             }
-            crate::frontend::core::parser::ast::Expr::Index {
+            crate::ast::Expr::Index {
                 expr: container,
                 index,
                 span: idx_span,
@@ -3425,7 +3431,7 @@ impl<'a> ExpressionInferrer<'a> {
                     MonoType::Generic { name, args } if name == "Array" => Ok(args[0].clone()),
                     MonoType::Generic { name, args } if name == "Dict" => Ok(args[1].clone()),
                     MonoType::Generic { name, args } if name == "Tuple" => {
-                        if let crate::frontend::core::parser::ast::Expr::Lit(
+                        if let crate::ast::Expr::Lit(
                             crate::frontend::core::lexer::tokens::Literal::Int(i),
                             _,
                         ) = index.as_ref()
@@ -3506,7 +3512,7 @@ impl<'a> ExpressionInferrer<'a> {
             }
 
             // 字段访问
-            crate::frontend::core::parser::ast::Expr::FieldAccess {
+            crate::ast::Expr::FieldAccess {
                 expr: obj,
                 field,
                 span,
@@ -3709,7 +3715,7 @@ impl<'a> ExpressionInferrer<'a> {
             }
 
             // 函数调用
-            crate::frontend::core::parser::ast::Expr::Call {
+            crate::ast::Expr::Call {
                 func,
                 args,
                 named_args,
@@ -3718,7 +3724,7 @@ impl<'a> ExpressionInferrer<'a> {
             } => self.infer_call_expr(func, args, named_args, *span, *plan_id),
 
             // If 表达式
-            crate::frontend::core::parser::ast::Expr::If {
+            crate::ast::Expr::If {
                 condition,
                 then_branch,
                 else_if_branches,
@@ -3732,7 +3738,7 @@ impl<'a> ExpressionInferrer<'a> {
             ),
 
             // While 表达式
-            crate::frontend::core::parser::ast::Expr::While {
+            crate::ast::Expr::While {
                 condition, body, ..
             } => {
                 let cond_ty = self.infer_expr(condition)?;
@@ -3758,7 +3764,7 @@ impl<'a> ExpressionInferrer<'a> {
             }
 
             // For 循环
-            crate::frontend::core::parser::ast::Expr::For {
+            crate::ast::Expr::For {
                 var,
                 var_mut,
                 iterable,
@@ -3767,7 +3773,7 @@ impl<'a> ExpressionInferrer<'a> {
             } => self.infer_for_loop(var, *var_mut, iterable, body, *span),
 
             // Return 表达式
-            crate::frontend::core::parser::ast::Expr::Return(expr, span) => {
+            crate::ast::Expr::Return(expr, span) => {
                 // RFC-010a 规则② 边界条件：模块初始化层（Script 顶层）没有函数
                 // 边界可退——编译期拒绝（E1109），不再运行期静默终止初始化、
                 // 跳过后续顶层语句
@@ -3816,7 +3822,7 @@ impl<'a> ExpressionInferrer<'a> {
             }
 
             // Break 表达式
-            crate::frontend::core::parser::ast::Expr::Break(span) => {
+            crate::ast::Expr::Break(span) => {
                 // #311：循环控制流仅允许在 while/for 体内（spawn for 体在函数边界已重置深度）
                 if self.loop_depth == 0 {
                     return Err(ErrorCodeDefinition::break_outside_loop("break")
@@ -3827,7 +3833,7 @@ impl<'a> ExpressionInferrer<'a> {
             }
 
             // Continue 表达式
-            crate::frontend::core::parser::ast::Expr::Continue(span) => {
+            crate::ast::Expr::Continue(span) => {
                 if self.loop_depth == 0 {
                     return Err(ErrorCodeDefinition::break_outside_loop("continue")
                         .at(*span)
@@ -3837,7 +3843,7 @@ impl<'a> ExpressionInferrer<'a> {
             }
 
             // Cast 表达式
-            crate::frontend::core::parser::ast::Expr::Cast {
+            crate::ast::Expr::Cast {
                 expr, target_type, ..
             } => {
                 let _ = self.infer_expr(expr)?;
@@ -3846,7 +3852,7 @@ impl<'a> ExpressionInferrer<'a> {
             }
 
             // Block 表达式
-            crate::frontend::core::parser::ast::Expr::Block(block) => {
+            crate::ast::Expr::Block(block) => {
                 // #394：空块 `{}` 落入容器期望位——B 方案定案 `{}` = 空块（值
                 // Void），空字典钦定写法是 `dict.new()`（SPEC syntax §1.6.4）。
                 // 期望类型可得不匹配时直接给出引导，不让用户在
@@ -3863,113 +3869,8 @@ impl<'a> ExpressionInferrer<'a> {
                 self.infer_block(block, true, None)
             }
 
-            // 函数定义
-            crate::frontend::core::parser::ast::Expr::FnDef {
-                name,
-                params,
-                return_type,
-                body,
-                span: fn_span,
-                ..
-            } => {
-                self.scope.enter_fn();
-                let result: Result<()> = (|| {
-                    for param in params {
-                        let param_ty = self.solver.new_var();
-                        self.add_param(
-                            param.name.clone(),
-                            PolyType::mono(param_ty),
-                            param.is_mut,
-                            param.span,
-                        );
-                    }
-
-                    let ret_mono: MonoType =
-                        return_type.clone().map_or(MonoType::Void, |t| t.into());
-                    // RFC-001: Result-returning functions implicitly wrap the final value in Ok(...),
-                    // so the body type is the Ok type (not Result[T, E]).
-                    let expected_body_ty = match &ret_mono {
-                        m if m.is_result() => {
-                            let args = m.generic_args().unwrap();
-                            args[0].clone()
-                        }
-                        _ => ret_mono.clone(),
-                    };
-
-                    // Enter a new `Result` context for this function body.
-                    let saved_result_err = self.result_err.take();
-                    self.result_err = match &ret_mono {
-                        m if m.is_result() => {
-                            let args = m.generic_args().unwrap();
-                            Some(args[1].clone())
-                        }
-                        _ => None,
-                    };
-
-                    // Save and set expected return type for return statement checking
-                    let saved_expected_ret = self.expected_return_type.take();
-                    self.expected_return_type = Some(expected_body_ty.clone());
-
-                    // #311：函数体是循环上下文边界——外层循环的 break/continue 不可跨入
-                    let saved_loop_depth = self.loop_depth;
-                    self.loop_depth = 0;
-                    // 函数边界（RFC-010a 规则②）：体内 return 退出本函数（E1109 判定）
-                    let saved_fn_depth = self.fn_depth;
-                    self.fn_depth += 1;
-
-                    let body_ty_res = self.infer_block(body, true, Some(&expected_body_ty));
-
-                    // Restore outer contexts
-                    self.expected_return_type = saved_expected_ret;
-                    self.result_err = saved_result_err;
-                    self.loop_depth = saved_loop_depth;
-                    self.fn_depth = saved_fn_depth;
-
-                    let body_ty = body_ty_res?;
-
-                    // RFC-010a 规则①：块值必须与声明的返回类型一致。
-                    // 此前 unify 结果被 `let _` 吞掉，类型不符静默通过、推迟到运行时
-                    // （如 `f: () -> Int = { "s" }` 编得过）。此处上报。
-                    // `Never` 是特例：`return` 在尾位置时块类型为 `Never`，
-                    // `Never <: T` 属实（爆炸原理），不算错。
-                    if return_type.is_some()
-                        && body_ty != MonoType::Never
-                        && self.solver.unify(&body_ty, &expected_body_ty).is_err()
-                    {
-                        return Err(ErrorCodeDefinition::type_mismatch(
-                            &format!("{}", expected_body_ty),
-                            &format!("{}", body_ty),
-                        )
-                        .at(body.span)
-                        .build());
-                    }
-
-                    Ok(())
-                })();
-                self.scope.exit_fn();
-                result?;
-
-                let param_types: Vec<MonoType> =
-                    params.iter().map(|_| self.solver.new_var()).collect();
-                let return_type_box =
-                    Box::new(return_type.clone().map_or(MonoType::Void, |t| t.into()));
-
-                let fn_type = MonoType::Fn {
-                    params: param_types,
-                    return_type: return_type_box,
-                };
-                self.scope.add_var(
-                    name.clone(),
-                    PolyType::mono(fn_type.clone()),
-                    false,
-                    *fn_span,
-                );
-
-                Ok(fn_type)
-            }
-
             // Lambda 表达式
-            crate::frontend::core::parser::ast::Expr::Lambda {
+            crate::ast::Expr::Lambda {
                 params,
                 body,
                 span: _span,
@@ -3977,17 +3878,15 @@ impl<'a> ExpressionInferrer<'a> {
             } => self.infer_lambda(params, body, None),
 
             // Match 表达式
-            crate::frontend::core::parser::ast::Expr::Match { expr, arms, span } => {
+            crate::ast::Expr::Match { expr, arms, span } => {
                 self.check_match_expr(expr, arms, *span)
             }
 
             // Try 表达式: expr?（RFC-011b 阶段 2 定案：接口驱动，不硬绑 Result）
-            crate::frontend::core::parser::ast::Expr::Try { expr, span } => {
-                self.infer_try_expr(expr, *span)
-            }
+            crate::ast::Expr::Try { expr, span } => self.infer_try_expr(expr, *span),
 
             // Ref 表达式
-            crate::frontend::core::parser::ast::Expr::Ref { expr, .. } => {
+            crate::ast::Expr::Ref { expr, .. } => {
                 let expr_ty = self.infer_expr(expr)?;
                 Ok(MonoType::Generic {
                     name: "Arc".into(),
@@ -3996,15 +3895,11 @@ impl<'a> ExpressionInferrer<'a> {
             }
 
             // Unsafe 块
-            crate::frontend::core::parser::ast::Expr::Unsafe { body, .. } => {
+            crate::ast::Expr::Unsafe { body, .. } => {
                 // RFC-010：块内定义的类型名提升到当前作用域（供尾表达式引用），
                 // 须在检查块体**之前**注册，否则 `T` 报 E1001。
                 for st in &body.stmts {
-                    if let crate::frontend::core::parser::ast::StmtKind::TypeDefinition {
-                        name,
-                        ..
-                    } = &st.kind
-                    {
+                    if let crate::ast::StmtKind::TypeDefinition { name, .. } = &st.kind {
                         if self.scope.get_var(name).is_none() {
                             // 类型值的运行时表示是 Void（编译期构造）
                             self.scope.add_var(
@@ -4023,7 +3918,7 @@ impl<'a> ExpressionInferrer<'a> {
             }
 
             // spawn 块：spawn { ... }
-            crate::frontend::core::parser::ast::Expr::Spawn { body, .. } => {
+            crate::ast::Expr::Spawn { body, .. } => {
                 // `spawn {}` 引入**新的函数边界**：块内 `return` 退出的是 spawn 体
                 // 而非外层函数（运行时已验证：`r = spawn { return 3 + 4 }` 得 r == 7）。
                 //
@@ -4043,7 +3938,7 @@ impl<'a> ExpressionInferrer<'a> {
             // ListComp 表达式
             // #401：按生成器子句顺序绑定——第 i 个子句的 iterable/condition
             // 可引用先前子句的迭代变量；过滤条件强制 Bool（同 if 推断）
-            crate::frontend::core::parser::ast::Expr::ListComp {
+            crate::ast::Expr::ListComp {
                 element,
                 generators,
                 ..
@@ -4094,14 +3989,10 @@ impl<'a> ExpressionInferrer<'a> {
 
             // RFC-012: F-string 类型推断
             // f-string 总是返回 String 类型
-            crate::frontend::core::parser::ast::Expr::FString { segments, .. } => {
+            crate::ast::Expr::FString { segments, .. } => {
                 // 验证每个插值表达式的类型
                 for segment in segments {
-                    if let crate::frontend::core::parser::ast::FStringSegment::Interpolation {
-                        expr,
-                        ..
-                    } = segment
-                    {
+                    if let crate::ast::FStringSegment::Interpolation { expr, .. } = segment {
                         let _expr_ty = self.infer_expr(expr)?;
                         // 所有类型都支持转换为 String（通过 format()）
                     }
@@ -4110,15 +4001,13 @@ impl<'a> ExpressionInferrer<'a> {
             }
 
             // 错误恢复占位符：返回新类型变量，不会导致 panic
-            crate::frontend::core::parser::ast::Expr::Error(span) => {
-                Err(ErrorCodeDefinition::invalid_syntax("缺失表达式")
-                    .at(*span)
-                    .build())
-            }
+            crate::ast::Expr::Error(span) => Err(ErrorCodeDefinition::invalid_syntax("缺失表达式")
+                .at(*span)
+                .build()),
 
             // 借用表达式：&expr 或 &mut expr
             // TODO: 详细类型检查将在后续任务中实现
-            crate::frontend::core::parser::ast::Expr::Borrow {
+            crate::ast::Expr::Borrow {
                 mutable,
                 expr: inner,
                 ..
@@ -4131,7 +4020,7 @@ impl<'a> ExpressionInferrer<'a> {
             }
 
             // spawn for 数据并行循环（RFC-024 §2.4）
-            crate::frontend::core::parser::ast::Expr::SpawnFor {
+            crate::ast::Expr::SpawnFor {
                 var,
                 var_mut,
                 iterable,
@@ -4185,7 +4074,7 @@ impl<'a> ExpressionInferrer<'a> {
     /// 外层函数返回类型也须实现，且 E 位接得住残余类型。
     fn infer_try_expr(
         &mut self,
-        expr: &crate::frontend::core::parser::ast::Expr,
+        expr: &crate::ast::Expr,
         span: crate::util::span::Span,
     ) -> Result<MonoType> {
         let inner_ty = self.infer_expr(expr)?;
@@ -4252,10 +4141,10 @@ impl<'a> ExpressionInferrer<'a> {
     /// 覆盖面：变体构造拦截、内置容器构造、显式类型实参、闭包形参期望传播、
     /// 重载解析、方法调用糖、`Any` 多态槽位等。
     /// #394：空块表达式判定——`{}`（B 方案定案：空块值 Void，非空字典）
-    fn is_empty_block_expr(expr: &crate::frontend::core::parser::ast::Expr) -> bool {
+    fn is_empty_block_expr(expr: &crate::ast::Expr) -> bool {
         matches!(
             expr,
-            crate::frontend::core::parser::ast::Expr::Block(b) if b.stmts.is_empty()
+            crate::ast::Expr::Block(b) if b.stmts.is_empty()
         )
     }
 
@@ -4276,35 +4165,34 @@ impl<'a> ExpressionInferrer<'a> {
 
     fn infer_call_expr(
         &mut self,
-        func: &crate::frontend::core::parser::ast::Expr,
-        args: &[crate::frontend::core::parser::ast::Expr],
-        named_args: &[(String, crate::frontend::core::parser::ast::Expr)],
+        func: &crate::ast::Expr,
+        args: &[crate::ast::Expr],
+        named_args: &[(String, crate::ast::Expr)],
         span: crate::util::span::Span,
         call_plan_id: crate::util::plan_id::PlanId,
     ) -> Result<MonoType> {
         // RFC-010: 变体构造——Result(Int, String).ok(5) / Color.red()。
         // 构造器只以调用形态存在（无一等构造器值），在 infer(func) 之前
         // 拦截，避免 FieldAccess 臂的变体字段拒绝。
-        if let crate::frontend::core::parser::ast::Expr::FieldAccess {
+        if let crate::ast::Expr::FieldAccess {
             expr: base_expr,
             field: variant_name,
             ..
         } = func
         {
             // 两种 base 形态：泛型 `Call(Var(名), 类型实参)` / 非泛型 `Var(名)`
-            let inner = if let crate::frontend::core::parser::ast::Expr::Call {
-                func: inner_func,
-                ..
+            let inner = if let crate::ast::Expr::Call {
+                func: inner_func, ..
             } = base_expr.as_ref()
             {
                 inner_func
             } else {
                 base_expr.as_ref()
             };
-            if let crate::frontend::core::parser::ast::Expr::Var(type_name, _) = inner {
+            if let crate::ast::Expr::Var(type_name, _) = inner {
                 if self.sum_types.contains_key(type_name) {
                     let concrete = match base_expr.as_ref() {
-                        crate::frontend::core::parser::ast::Expr::Var(_, _) => Vec::new(),
+                        crate::ast::Expr::Var(_, _) => Vec::new(),
                         _ => {
                             let base_ty = self.infer_expr(base_expr)?;
                             match self.solver.resolve_type(&base_ty) {
@@ -4466,7 +4354,7 @@ impl<'a> ExpressionInferrer<'a> {
         }
 
         // 重载解析
-        if let crate::frontend::core::parser::ast::Expr::Var(ref name, _) = *func {
+        if let crate::ast::Expr::Var(ref name, _) = *func {
             if overload::has_overloads(self.overload_candidates, name) {
                 match overload::resolve_overload_from_env(
                     self.overload_candidates,
@@ -4497,7 +4385,7 @@ impl<'a> ExpressionInferrer<'a> {
         // 时收成 `Generic{名, [实参…]}`（声明序变体集保留在 sum_types，
         // 变体构造在 FieldAccess+Call 形态处理）。类型表示与 `Result(T,E)`
         // 在类型位置的既有形态一致。
-        if let crate::frontend::core::parser::ast::Expr::Var(type_name, _) = func {
+        if let crate::ast::Expr::Var(type_name, _) = func {
             // func_ty 在此处可能是 MetaType（Var 臂开口）或 Struct（类型声明的
             // scope 镜像先命中 Var 臂）——两者都收成 Generic 形态
             if self.sum_types.contains_key(type_name) {
@@ -4531,7 +4419,7 @@ impl<'a> ExpressionInferrer<'a> {
                             // 而非 MetaType。零类型参数的和类型收成与变体构造
                             // 输出一致的 `Generic{名, []}`（TypeRef 与之不 unify）；
                             // 其余按名收名义引用
-                            if let crate::frontend::core::parser::ast::Expr::Var(n, _) = a {
+                            if let crate::ast::Expr::Var(n, _) = a {
                                 if self.sum_types.contains_key(n) {
                                     let has_params = self
                                         .generic_type_defs
@@ -4554,40 +4442,35 @@ impl<'a> ExpressionInferrer<'a> {
                             }
                             // 元组类型实参（`Result((Json, Int), Error)`）：语法
                             // 位置的元组即类型元组，元素按类型名收集
-                            if let crate::frontend::core::parser::ast::Expr::Tuple(items, _) = a {
-                                let parts: Option<Vec<MonoType>> =
-                                    items
-                                        .iter()
-                                        .map(|e| match e {
-                                            crate::frontend::core::parser::ast::Expr::Var(n, _) => {
-                                                concrete_type_from_expr_arg(
-                                                    e,
-                                                    self.type_defs,
-                                                    self.generic_type_defs,
-                                                )
-                                                .or_else(|| {
-                                                    if self.sum_types.contains_key(n) {
-                                                        let has_params = self
-                                                            .generic_type_defs
-                                                            .get(n)
-                                                            .map(|d| !d.type_param_names.is_empty())
-                                                            .unwrap_or(false);
-                                                        if has_params {
-                                                            return Some(MonoType::TypeRef(
-                                                                n.clone(),
-                                                            ));
-                                                        }
-                                                        return Some(MonoType::Generic {
-                                                            name: n.clone(),
-                                                            args: vec![],
-                                                        });
-                                                    }
-                                                    None
-                                                })
+                            if let crate::ast::Expr::Tuple(items, _) = a {
+                                let parts: Option<Vec<MonoType>> = items
+                                    .iter()
+                                    .map(|e| match e {
+                                        crate::ast::Expr::Var(n, _) => concrete_type_from_expr_arg(
+                                            e,
+                                            self.type_defs,
+                                            self.generic_type_defs,
+                                        )
+                                        .or_else(|| {
+                                            if self.sum_types.contains_key(n) {
+                                                let has_params = self
+                                                    .generic_type_defs
+                                                    .get(n)
+                                                    .map(|d| !d.type_param_names.is_empty())
+                                                    .unwrap_or(false);
+                                                if has_params {
+                                                    return Some(MonoType::TypeRef(n.clone()));
+                                                }
+                                                return Some(MonoType::Generic {
+                                                    name: n.clone(),
+                                                    args: vec![],
+                                                });
                                             }
-                                            _ => None,
-                                        })
-                                        .collect();
+                                            None
+                                        }),
+                                        _ => None,
+                                    })
+                                    .collect();
                                 if let Some(ps) = parts {
                                     return Some(MonoType::Generic {
                                         name: "Tuple".to_string(),
@@ -4601,9 +4484,7 @@ impl<'a> ExpressionInferrer<'a> {
                         // 名义引用 TypeRef(名)——错拼名由类型名校验拦截
                         concrete_type_from_expr_arg(a, self.type_defs, self.generic_type_defs)
                             .or_else(|| match a {
-                                crate::frontend::core::parser::ast::Expr::Var(n, _) => {
-                                    Some(MonoType::TypeRef(n.clone()))
-                                }
+                                crate::ast::Expr::Var(n, _) => Some(MonoType::TypeRef(n.clone())),
                                 _ => None,
                             })
                     })
@@ -4625,13 +4506,11 @@ impl<'a> ExpressionInferrer<'a> {
 
         // 单态化：处理编译期泛型参数
         let fn_name_for_mono = match func {
-            crate::frontend::core::parser::ast::Expr::Var(n, _) => Some(n.as_str()),
+            crate::ast::Expr::Var(n, _) => Some(n.as_str()),
             // 限定名调用（`list.len(v)`）：取函数名才能查声明期类型参数名表
             // 并按声明序绑定签名里的 `TypeRef("A")`；否则实参无法与
             // `&Vec(A)` unify 报 E1002。
-            crate::frontend::core::parser::ast::Expr::FieldAccess { field, .. } => {
-                Some(field.as_str())
-            }
+            crate::ast::Expr::FieldAccess { field, .. } => Some(field.as_str()),
             _ => None,
         };
         let mono_func_ty = self.monomorphize(func_ty.clone(), &value_arg_types, fn_name_for_mono);
@@ -4760,55 +4639,6 @@ impl<'a> ExpressionInferrer<'a> {
         // 收集实例化请求：检测泛型函数调用并记录
         self.collect_instantiation_request(&func_ty, func, &arg_types, &mono_func_ty, span);
 
-        // RFC-011 §5.2 调用点复检：约束形参的具体类型必须实现约束
-        // 接口（定义体内运算符已延迟派发为 `Call "T.add"`，mono 按
-        // 实参改写——此处保证改写目标存在，未实现者调用点即报错）
-        if let Some(fname) = fn_name_for_mono {
-            use crate::frontend::core::typecheck::operator_interfaces as ops;
-            if let Some(constraints) = self.generic_fn_constraints.and_then(|m| m.get(fname)) {
-                if let Some(param_names) = self.generic_fn_type_params.get(fname) {
-                    for (pn, iface) in constraints {
-                        let Some(idx) = param_names.iter().position(|n| n == pn) else {
-                            continue;
-                        };
-                        let Some(concrete) = self.last_type_args.get(idx) else {
-                            continue;
-                        };
-                        if super::statements::contains_unresolved_param(concrete) {
-                            continue;
-                        }
-                        let satisfied = match iface.as_str() {
-                            "Equal" => ops::query_exact_template(
-                                self.interface_impl_registry,
-                                self.generic_type_defs,
-                                self.solver,
-                                iface,
-                                &[concrete.clone(), concrete.clone()],
-                            )
-                            .is_some(),
-                            _ => ops::query_operator_template(
-                                self.interface_impl_registry,
-                                self.generic_type_defs,
-                                self.solver,
-                                iface,
-                                &[concrete.clone(), concrete.clone()],
-                            )
-                            .is_some(),
-                        };
-                        if !satisfied {
-                            return Err(ErrorCodeDefinition::constraint_unsatisfied(
-                                &ops::operator_type_display(concrete),
-                                pn,
-                                iface,
-                            )
-                            .at(span)
-                            .build());
-                        }
-                    }
-                }
-            }
-        }
-
         // #335 G3 类型信息流接口：按单态化结果记录调用点所有权
         //（Ref{mutable}→Write/Read 借用，其余 Move；impl 方法 params[0]
         //  为接收者位；std 可变方法首实参为容器写借用）
@@ -4835,13 +4665,11 @@ impl<'a> ExpressionInferrer<'a> {
                     .collect();
                 // std 可变容器方法：首实参（容器）按写借用处理——
                 // 此前缺省 Move 被复制豁免，借用期间的原地修改不检
-                if let crate::frontend::core::parser::ast::Expr::FieldAccess {
-                    expr: obj,
-                    field,
-                    ..
+                if let crate::ast::Expr::FieldAccess {
+                    expr: obj, field, ..
                 } = func
                 {
-                    if matches!(**obj, crate::frontend::core::parser::ast::Expr::Var(..))
+                    if matches!(**obj, crate::ast::Expr::Var(..))
                         && !co.args.is_empty()
                         && matches!(
                             super::call_ownership::std_native_receiver_ownership(field),
@@ -5176,11 +5004,11 @@ impl<'a> ExpressionInferrer<'a> {
 
         // 两层调用：Container(Int)(42, 43) —— func 是泛型类型构造调用，
         // 内层已完成实例化（func_ty 是具体 Struct），外层实参是构造参数。
-        if let crate::frontend::core::parser::ast::Expr::Call {
+        if let crate::ast::Expr::Call {
             func: inner_func, ..
         } = func
         {
-            if let crate::frontend::core::parser::ast::Expr::Var(inner_name, _) = &**inner_func {
+            if let crate::ast::Expr::Var(inner_name, _) = &**inner_func {
                 if self.generic_type_defs.contains_key(inner_name) {
                     if let MonoType::Struct(st) = &func_ty {
                         // 构造参数 arity（同普通 struct #271#1：有默认值字段可省略）
@@ -5237,10 +5065,7 @@ impl<'a> ExpressionInferrer<'a> {
                             // Vec 是运行时长度的可增长缓冲，语义与字面量一致；
                             // 逐元素 unify(T) 仍然执行，不做整段豁免。
                             let vec_seed_ok = matches!(field_ty, MonoType::Generic { name, .. } if name == "Vec")
-                                && matches!(
-                                    args.get(i),
-                                    Some(crate::frontend::core::parser::ast::Expr::List(_, _))
-                                );
+                                && matches!(args.get(i), Some(crate::ast::Expr::List(_, _)));
                             if vec_seed_ok {
                                 if let (
                                     Some(MonoType::Generic { args: fa, .. }),
@@ -5281,7 +5106,7 @@ impl<'a> ExpressionInferrer<'a> {
         //   - 部分匹配（至少一位匹配上）→ 按类型构造报错：逐位检查，先报第一个错误位
         //   - 完全匹配不上 → 构造参数（自动生成的构造函数）：位置式按字段顺序填，
         //     类型参数从元素类型自动解包；const 位无法自动解包时报错。
-        if let crate::frontend::core::parser::ast::Expr::Var(ref fn_name, _) = *func {
+        if let crate::ast::Expr::Var(ref fn_name, _) = *func {
             if let Some(generic_def) = self.generic_type_defs.get(fn_name).cloned() {
                 // 构造/实例化用的记录体取自**声明模板**而不是 func_ty：泛型类型
                 // 构造器名在值位置的类型已是类型级函数 (T: Type) -> Type（见 Var 臂
@@ -5556,7 +5381,7 @@ impl<'a> ExpressionInferrer<'a> {
 
         // 效应消费：成功调用后向流敏感 Γ 注入谓词
         // （如 std.assert(x > 0) 成功后把 x > 0 加入 Γ）
-        if let crate::frontend::core::parser::ast::Expr::Var(ref fn_name, _) = *func {
+        if let crate::ast::Expr::Var(ref fn_name, _) = *func {
             if let Some(dep_env) = self.dep_env {
                 if let Some(spec) = dep_env.get_effect_spec(fn_name) {
                     // `Effect` 目前只有一个变体 GammaAssume——直接解构，
@@ -5577,7 +5402,7 @@ impl<'a> ExpressionInferrer<'a> {
         // #271#1：统一参数个数检查（构造器缺参/超参、函数缺参/超参）。
         // 泛型类型构造器（List(1,2,3) 值构造）豁免——其参数语义是类型参数+值参数，
         // 不适用字段计数（RFC-011），在 match 前拦下。
-        if let crate::frontend::core::parser::ast::Expr::Var(ref fn_name, _) = *func {
+        if let crate::ast::Expr::Var(ref fn_name, _) = *func {
             // 豁免：泛型类型构造器（List(1,2,3) 值构造是 RFC-011 语义，非字段计数）。
             if !self.generic_type_defs.contains_key(fn_name) {
                 let provided = arg_types.len();
@@ -5729,7 +5554,7 @@ impl<'a> ExpressionInferrer<'a> {
         //   params[0]，接口派发/impl 方法/Try 方法同族，#317 同款约定）只属于
         //   值接收者形态。params 为空（计数不可靠）维持跳过。
         if method_key.is_none() {
-            if let crate::frontend::core::parser::ast::Expr::FieldAccess {
+            if let crate::ast::Expr::FieldAccess {
                 expr: obj, field, ..
             } = func
             {
@@ -5853,37 +5678,28 @@ impl<'a> ExpressionInferrer<'a> {
                 let total_args = arg_types.len() + named_args.len();
                 let mut arg_types_all: Vec<&MonoType> = arg_types.iter().collect();
                 arg_types_all.extend(named_types.iter().copied());
-                let aligned: Option<
-                    Vec<(
-                        &MonoType,
-                        &MonoType,
-                        &crate::frontend::core::parser::ast::Expr,
-                    )>,
-                > = param_positions.as_ref().and_then(|positions| {
-                    if positions.len() != total_args {
-                        return None;
-                    }
-                    let mut out = Vec::with_capacity(positions.len());
-                    for (i, position) in positions.iter().enumerate() {
-                        // 槽位下标含接收者位（全形参表坐标）；args 侧余下的是值形参
-                        let value_slot = position.checked_sub(recv_offset)?;
-                        let param_ty = param_slice.get(value_slot)?;
-                        let arg_ty = *arg_types_all.get(i)?;
-                        // 实参序 = 位置实参（前导，与 args 同序）+ 命名实参（书写序）
-                        let arg_expr = if i < args.len() {
-                            args.get(i)?
-                        } else {
-                            &named_args.get(i - args.len())?.1
-                        };
-                        out.push((arg_ty, param_ty, arg_expr));
-                    }
-                    Some(out)
-                });
-                let checked_args: Vec<(
-                    &MonoType,
-                    &MonoType,
-                    &crate::frontend::core::parser::ast::Expr,
-                )> = match aligned {
+                let aligned: Option<Vec<(&MonoType, &MonoType, &crate::ast::Expr)>> =
+                    param_positions.as_ref().and_then(|positions| {
+                        if positions.len() != total_args {
+                            return None;
+                        }
+                        let mut out = Vec::with_capacity(positions.len());
+                        for (i, position) in positions.iter().enumerate() {
+                            // 槽位下标含接收者位（全形参表坐标）；args 侧余下的是值形参
+                            let value_slot = position.checked_sub(recv_offset)?;
+                            let param_ty = param_slice.get(value_slot)?;
+                            let arg_ty = *arg_types_all.get(i)?;
+                            // 实参序 = 位置实参（前导，与 args 同序）+ 命名实参（书写序）
+                            let arg_expr = if i < args.len() {
+                                args.get(i)?
+                            } else {
+                                &named_args.get(i - args.len())?.1
+                            };
+                            out.push((arg_ty, param_ty, arg_expr));
+                        }
+                        Some(out)
+                    });
+                let checked_args: Vec<(&MonoType, &MonoType, &crate::ast::Expr)> = match aligned {
                     Some(list) => list,
                     None if total_args == param_slice.len() => args
                         .iter()
@@ -5909,6 +5725,22 @@ impl<'a> ExpressionInferrer<'a> {
                         };
                         // resolve 参数类型：TypeRef("Int") → Int(64) 等
                         let mut resolved_param = self.solver.resolve_type(param_ty);
+                        // #523（RFC-027 §6）：精化应用对统一**透明**——剥到基类型。
+                        //
+                        // 注册期只剥了形参位（`check_fn_stmt` 的外层参数组）；
+                        // curry 内层参数组的精化标注（`(N: Int) -> (x: IsPositive(N))`
+                        // 的内层 `IsPositive(N)`）原样进入调用点统一，基类型实参
+                        // 对不上原始形态被假拒绝（E1002 Expected type
+                        // 'IsPositive(N)', found type 'int64'）。此处与注册期共用
+                        // 同一剥除实现（判据单源，见
+                        // `statements::strip_refined_with_proof_fns`）：已剥形态
+                        //（外层组参数）在此是恒等变换；内置谓词位换新鲜变量，
+                        // 约束仍由证明管道验证，此处只管「按 base 统一」。
+                        resolved_param = super::statements::strip_refined_with_proof_fns(
+                            resolved_param,
+                            self.proof_fn_bases,
+                            self.solver,
+                        );
                         // Int -> Float 扩展转换是允许的
                         if matches!(
                             (&actual_arg, &resolved_param),
@@ -5991,7 +5823,7 @@ impl<'a> ExpressionInferrer<'a> {
     /// - 尾随表达式不影响块的返回类型
     pub fn infer_block(
         &mut self,
-        block: &crate::frontend::core::parser::ast::Block,
+        block: &crate::ast::Block,
         _allow_unit: bool,
         _expected_type: Option<&MonoType>,
     ) -> Result<MonoType> {
@@ -6031,8 +5863,8 @@ impl<'a> ExpressionInferrer<'a> {
         &mut self,
         var: &str,
         var_mut: bool,
-        iterable: &crate::frontend::core::parser::ast::Expr,
-        body: &crate::frontend::core::parser::ast::Block,
+        iterable: &crate::ast::Expr,
+        body: &crate::ast::Block,
         span: crate::util::span::Span,
     ) -> Result<MonoType> {
         let iter_ty = self.infer_expr(iterable)?;
@@ -6068,13 +5900,10 @@ impl<'a> ExpressionInferrer<'a> {
     /// （infer_stmt，spawn 体/循环体内）共用。
     fn infer_if_expr(
         &mut self,
-        condition: &crate::frontend::core::parser::ast::Expr,
-        then_branch: &crate::frontend::core::parser::ast::Block,
-        else_if_branches: &[(
-            Box<crate::frontend::core::parser::ast::Expr>,
-            Box<crate::frontend::core::parser::ast::Block>,
-        )],
-        else_branch: Option<&crate::frontend::core::parser::ast::Block>,
+        condition: &crate::ast::Expr,
+        then_branch: &crate::ast::Block,
+        else_if_branches: &[(Box<crate::ast::Expr>, Box<crate::ast::Block>)],
+        else_branch: Option<&crate::ast::Block>,
     ) -> Result<MonoType> {
         let cond_ty = self.infer_expr(condition)?;
         if cond_ty != MonoType::Bool {
@@ -6120,15 +5949,15 @@ impl<'a> ExpressionInferrer<'a> {
     /// 控制流语句取其块值。
     pub fn infer_stmt(
         &mut self,
-        stmt: &crate::frontend::core::parser::ast::Stmt,
+        stmt: &crate::ast::Stmt,
     ) -> Result<MonoType> {
         // #324：挂当前节点 span，walk 内诊断构造自动获得位置
         let _current_span = crate::util::diagnostic::push_current_span(stmt.span);
         match &stmt.kind {
             // RFC-010a 规则①：语句的值——表达式语句取其表达式类型；赋值语句为
             // Void；`return` 为 Never（规则②）；控制流语句取其块值/运算值。
-            crate::frontend::core::parser::ast::StmtKind::Expr(expr) => self.infer_expr(expr),
-            crate::frontend::core::parser::ast::StmtKind::Assign {
+            crate::ast::StmtKind::Expr(expr) => self.infer_expr(expr),
+            crate::ast::StmtKind::Assign {
                 target,
                 type_annotation,
                 value,
@@ -6136,7 +5965,7 @@ impl<'a> ExpressionInferrer<'a> {
                 span: stmt_span,
                 ..
             } => {
-                use crate::frontend::core::parser::ast::Expr;
+                use crate::ast::Expr;
                 let name = match target.as_ref() {
                     Expr::Var(n, _) => n.clone(),
                     _ => return Ok(MonoType::Void),
@@ -6169,7 +5998,7 @@ impl<'a> ExpressionInferrer<'a> {
                     // 非 Fn 注解→块值（立即求值，变量绑定块值类型）。
                     // 此前不论注解一律注册为 0 参函数，与 ir_gen 分流脱节（#343）。
                     if let Expr::Block(..) = v.as_ref() {
-                        if crate::frontend::core::parser::ast::Expr::block_binding_is_function(
+                        if crate::ast::Expr::block_binding_is_function(
                             type_annotation.as_ref(),
                             Some(v.as_ref()),
                         ) {
@@ -6249,7 +6078,7 @@ impl<'a> ExpressionInferrer<'a> {
             // infer_block 走到这里，If/For 中的语句从未被类型检查（类型错误编译通过，
             // 仅 IR 层内部错误兜底）。语义与 StatementChecker::check_stmt 对齐；
             // 无兜底臂：新增 StmtKind 变体将编译期报非穷尽 match。
-            crate::frontend::core::parser::ast::StmtKind::For {
+            crate::ast::StmtKind::For {
                 var,
                 var_mut,
                 iterable,
@@ -6259,7 +6088,7 @@ impl<'a> ExpressionInferrer<'a> {
                 self.infer_for_loop(var, *var_mut, iterable, body, stmt.span)?;
                 Ok(MonoType::Void)
             }
-            crate::frontend::core::parser::ast::StmtKind::If {
+            crate::ast::StmtKind::If {
                 condition,
                 then_branch,
                 else_if_branches,
@@ -6272,11 +6101,7 @@ impl<'a> ExpressionInferrer<'a> {
                 else_branch.as_deref(),
             ),
             // 元组解构赋值（镜像 StatementChecker::check_stmt 的 DestructureAssign 臂）
-            crate::frontend::core::parser::ast::StmtKind::DestructureAssign {
-                names,
-                rhs,
-                span,
-            } => {
+            crate::ast::StmtKind::DestructureAssign { names, rhs, span } => {
                 let rhs_ty = self.infer_expr(rhs)?;
                 let resolved_ty = self.solver.resolve_type(&rhs_ty);
                 match &resolved_ty {
@@ -6311,15 +6136,15 @@ impl<'a> ExpressionInferrer<'a> {
             // RFC-010a 规则②：return : (T) -> Never（非局部退出，退出最近的函数边界）。
             // 值本身仍被推断（与 expected_return_type 统一），但语句类型是 Never，
             // 使其在 join 中被忽略。
-            crate::frontend::core::parser::ast::StmtKind::Return(Some(expr)) => {
+            crate::ast::StmtKind::Return(Some(expr)) => {
                 self.infer_expr(expr)?;
                 Ok(MonoType::Never)
             }
-            crate::frontend::core::parser::ast::StmtKind::Return(None) => Ok(MonoType::Never),
+            crate::ast::StmtKind::Return(None) => Ok(MonoType::Never),
             // 类型定义仅模块级合法（E1071，#295）；infer_stmt 只会在 spawn 体/
             // 循环体内遇到它——必为函数上下文，一律报错。
             // 例外（RFC-010）：`unsafe {}` 内允许类型定义（不透明类型封装）。
-            crate::frontend::core::parser::ast::StmtKind::TypeDefinition { name, .. } => {
+            crate::ast::StmtKind::TypeDefinition { name, .. } => {
                 if self.unsafe_depth > 0 {
                     Ok(MonoType::Void)
                 } else {
@@ -6331,9 +6156,9 @@ impl<'a> ExpressionInferrer<'a> {
             // use 语句的模块注册依赖 StatementChecker 的环境（process_use_stmt），
             // inferrer 无模块上下文。真实代码中 use 已由 checker 处理；表达式位置的
             // 循环体内出现时显式接受，import 未注册时下游报 E1001（响亮失败）。
-            crate::frontend::core::parser::ast::StmtKind::Use { .. } => Ok(MonoType::Void),
+            crate::ast::StmtKind::Use { .. } => Ok(MonoType::Void),
             // 错误恢复占位符：报告错误但不 panic（镜像 StatementChecker::check_stmt）
-            crate::frontend::core::parser::ast::StmtKind::Error(span) => {
+            crate::ast::StmtKind::Error(span) => {
                 Err(ErrorCodeDefinition::invalid_syntax("缺失语句")
                     .at(*span)
                     .build())
@@ -6347,10 +6172,10 @@ pub type ExprInferrer<'a> = ExpressionInferrer<'a>;
 
 /// 提取命名空间路径前缀：Var("io") → "io"，FieldAccess(FieldAccess(a,b),c) → "a.b.c"
 /// （FieldAccess 推断臂与 #317 方法调用探测共用）
-fn extract_namespace_path(expr: &crate::frontend::core::parser::ast::Expr) -> Option<String> {
+fn extract_namespace_path(expr: &crate::ast::Expr) -> Option<String> {
     match expr {
-        crate::frontend::core::parser::ast::Expr::Var(name, _) => Some(name.clone()),
-        crate::frontend::core::parser::ast::Expr::FieldAccess { expr, field, .. } => {
+        crate::ast::Expr::Var(name, _) => Some(name.clone()),
+        crate::ast::Expr::FieldAccess { expr, field, .. } => {
             extract_namespace_path(expr).map(|p| format!("{}.{}", p, field))
         }
         _ => None,
@@ -6358,35 +6183,29 @@ fn extract_namespace_path(expr: &crate::frontend::core::parser::ast::Expr) -> Op
 }
 
 /// Extract a string literal from an AST expression (compile-time evaluation helper)
-fn extract_string_literal_from_expr(
-    expr: &crate::frontend::core::parser::ast::Expr
-) -> Option<String> {
+fn extract_string_literal_from_expr(expr: &crate::ast::Expr) -> Option<String> {
     match expr {
-        crate::frontend::core::parser::ast::Expr::Lit(
-            crate::frontend::core::lexer::tokens::Literal::String(s),
-            _,
-        ) => Some(s.clone()),
+        crate::ast::Expr::Lit(crate::frontend::core::lexer::tokens::Literal::String(s), _) => {
+            Some(s.clone())
+        }
         _ => None,
     }
 }
 /// 从表达式提取编译期常量值（用于 const 泛型参数）
 fn extract_const_value_from_expr(
-    expr: &crate::frontend::core::parser::ast::Expr
+    expr: &crate::ast::Expr
 ) -> Option<crate::frontend::core::types::const_data::ConstValue> {
     use crate::frontend::core::types::const_data::ConstValue;
     match expr {
-        crate::frontend::core::parser::ast::Expr::Lit(
-            crate::frontend::core::lexer::tokens::Literal::Int(n),
-            _,
-        ) => Some(ConstValue::Int(*n)),
-        crate::frontend::core::parser::ast::Expr::Lit(
-            crate::frontend::core::lexer::tokens::Literal::Bool(b),
-            _,
-        ) => Some(ConstValue::Bool(*b)),
-        crate::frontend::core::parser::ast::Expr::Lit(
-            crate::frontend::core::lexer::tokens::Literal::Float(f),
-            _,
-        ) => Some(ConstValue::Float(*f as f32)),
+        crate::ast::Expr::Lit(crate::frontend::core::lexer::tokens::Literal::Int(n), _) => {
+            Some(ConstValue::Int(*n))
+        }
+        crate::ast::Expr::Lit(crate::frontend::core::lexer::tokens::Literal::Bool(b), _) => {
+            Some(ConstValue::Bool(*b))
+        }
+        crate::ast::Expr::Lit(crate::frontend::core::lexer::tokens::Literal::Float(f), _) => {
+            Some(ConstValue::Float(*f as f32))
+        }
         _ => None,
     }
 }
@@ -6638,7 +6457,7 @@ fn substitute_type_params_with_vars_walk(
 /// 从类型构造实参表达式提取具体类型：类型名在表达式位置 infer 成 MetaType 空壳
 /// （不存具体类型名），实例化泛型类型前需从 AST 名称解包成具体 MonoType。
 fn concrete_type_from_expr_arg(
-    expr: &crate::frontend::core::parser::ast::Expr,
+    expr: &crate::ast::Expr,
     type_defs: &HashMap<String, MonoType>,
     generic_type_defs: &HashMap<
         String,
@@ -6646,7 +6465,7 @@ fn concrete_type_from_expr_arg(
     >,
 ) -> Option<MonoType> {
     match expr {
-        crate::frontend::core::parser::ast::Expr::Var(name, _) => {
+        crate::ast::Expr::Var(name, _) => {
             if is_builtin_type_name(name) {
                 // 内置**泛型**容器名（Vec / Array）是类型构造器：值位置是 Type
                 // 宇宙的值，类型实参位要的是构造器名（TypeRef）而非具体标量类型。
@@ -6668,8 +6487,8 @@ fn concrete_type_from_expr_arg(
 }
 
 /// RFC-010b: 模式标签（诊断显示用，typecheck 侧本地版本）
-fn local_pattern_label(p: &crate::frontend::core::parser::ast::Pattern) -> String {
-    use crate::frontend::core::parser::ast::Pattern;
+fn local_pattern_label(p: &crate::ast::Pattern) -> String {
+    use crate::ast::Pattern;
     match p {
         Pattern::Wildcard => "_".to_string(),
         Pattern::Identifier(n) => n.clone(),

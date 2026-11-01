@@ -7,8 +7,9 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use crate::frontend::core::lexer;
-use crate::frontend::core::parser::ast::{Expr, StmtKind};
+use crate::ast::{classify_generic_params, Expr, GenericParamKind, StmtKind};
 use crate::frontend::core::parser::{self, Module};
+use crate::frontend::core::typecheck::SemanticProbe;
 use crate::frontend::core::typecheck::passes::dead_code::DeadCodeAnalyzer;
 use crate::frontend::core::typecheck::TypeCheckResult;
 use crate::frontend::core::types::mono::MonoType;
@@ -713,49 +714,119 @@ pub(in crate::driver) fn ast_has_main(ast: &Module) -> bool {
     })
 }
 
-/// 项目角色上下文（RFC-029f）：显式声明面 + 测试发现规则——自
-/// orchestrator 移入（4.2.2；唯一消费端是 RoleClassification 臂）。
+/// 项目角色上下文（RFC-029f）：显式声明面 + 测试发现规则 + 清单诊断——自
+/// orchestrator 移入（4.2.2；消费端是 RoleClassification / DeadCodeAnalysis 臂）。
+///
+/// 三态（WBS 3.23.1 / #503；#520 扩面）：
+/// - **无清单文件**（`read_to_string` NotFound）⇒ `surfaces` / `test_rules`
+///   均 None、无诊断——合法单文件模式，行为与引入角色模型前一致；
+/// - **清单可读** ⇒ 按声明面装配（既有行为）；
+/// - **清单存在但不可读**（其它 io 错误 / 非法 TOML / 缺 `[package]` 必填
+///   字段 / `[tool.*]` 投影解析失败）⇒ [RoleContext::manifest_diagnostics]
+///   带一条 E3024（error 级）。此前 `.ok()` 把本态与「无清单」混为同一
+///   None：声明面/角色分类/引用池全部建立在错误前提上 ⇒ 跨文件引用池失效、
+///   W1002 误报且 check exit 0（#503）；`[tool.*]` 面则被 `.ok()` 吞掉、
+///   显式 patterns 静默回退内建约定（#520 收窄，2026-10-31 甲案）。
+///   消费端注入诊断并标记 RoleClassification 失败（中止发生在退化之前）。
+pub(in crate::driver) struct RoleContext {
+    /// manifest 声明面（坏清单态为 None——前提已不成立）
+    pub surfaces: Option<roles::ExplicitSurfaces>,
+    /// 测试发现规则（坏清单态为 None）
+    pub test_rules: Option<roles::TestRules>,
+    /// 清单存在但不可读时的 E3024（error 级）；其余两态恒空
+    pub manifest_diagnostics: Vec<Diagnostic>,
+}
+
+impl RoleContext {
+    /// 无清单文件：合法单文件模式（无诊断、无声明面）
+    fn no_manifest() -> Self {
+        RoleContext {
+            surfaces: None,
+            test_rules: None,
+            manifest_diagnostics: Vec::new(),
+        }
+    }
+
+    /// 清单存在但不可读：E3024（消息带清单路径与错误详情；span 豁免——
+    /// 位置在 yaoxiang.toml 而非 .yx 源码，#324 契约禁止塞 dummy span）
+    fn unreadable(
+        manifest_path: &Path,
+        detail: &str,
+    ) -> Self {
+        RoleContext {
+            surfaces: None,
+            test_rules: None,
+            manifest_diagnostics: vec![ErrorCodeDefinition::manifest_unreadable(
+                &manifest_path.display().to_string(),
+                detail,
+            )
+            .build()],
+        }
+    }
+}
+
 /// manifest 读取解析依赖 `crate::package`——wasm32 下不编译，降级为
-/// `(None, None)`（全体 Script 态、无 patterns 规则，行为与引入模型前一致）。
+/// 无清单态（全体 Script 态、无 patterns 规则，行为与引入模型前一致）。
 #[cfg(not(target_arch = "wasm32"))]
-pub(in crate::driver) fn role_context(
-    project_root: Option<&Path>
-) -> (Option<roles::ExplicitSurfaces>, Option<roles::TestRules>) {
+pub(in crate::driver) fn role_context(project_root: Option<&Path>) -> RoleContext {
     let Some(root) = project_root else {
-        return (None, None);
+        return RoleContext::no_manifest();
     };
-    let Ok(src) = std::fs::read_to_string(root.join(crate::package::manifest::MANIFEST_FILE))
-    else {
-        return (None, None);
+    let manifest_path = root.join(crate::package::manifest::MANIFEST_FILE);
+    // 先 read_to_string 判存在性再解析（既定结构，#503）：NotFound = 无清单
+    // （合法单文件模式）；其余 io 错误 = 存在但读不了，与解析失败同待遇
+    let src = match std::fs::read_to_string(&manifest_path) {
+        Ok(src) => src,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            return RoleContext::no_manifest();
+        }
+        Err(e) => return RoleContext::unreadable(&manifest_path, &e.to_string()),
     };
-    let surfaces = toml::from_str::<PackageManifest>(&src)
-        .ok()
-        .map(|manifest| roles::TargetViews {
-            bins: manifest
-                .bin
-                .iter()
-                .map(|b| b.path.clone())
-                .chain(manifest.run.as_ref().and_then(|r| r.main.clone()))
-                .collect(),
-            libs: manifest
-                .exports
-                .values()
-                .cloned()
-                .chain(manifest.lib.as_ref().map(|l| l.path.clone()))
-                .collect(),
-        })
-        .map(|views| roles::explicit_surfaces(&views, root));
-    let test_rules = toml::from_str::<crate::util::config::ProjectConfig>(&src)
-        .ok()
-        .map(|config| roles::TestRules::from_config(&config.tool.test));
-    (surfaces, test_rules)
+    // 清单判据 = `PackageManifest` 解析（声明面之家）：失败（非法 TOML /
+    // 缺 [package] version 等必填字段）即报 E3024 并中止。
+    // 覆盖边界（#520 甲案，2026-10-31 用户裁决）：下方 `ProjectConfig`
+    // （test_rules 源）的解析失败**同在** E3024 面内——`[tool.test]` 的类型
+    // 错误可穿透 PackageManifest（无 tool 字段、serde 忽略未知字段），若被
+    // `.ok()` 静默吞掉，用户显式 patterns 会静默回退内建约定（RFC-036:146
+    // 挂在 RFC-015:282「配置解析失败时显示友好错误」之下）。该静默降级
+    // 2026-10-30 #503 收口时判定另行裁决，本裁决收窄为与声明面同待遇：
+    // 同一文件存在但不可读（任一投影解析失败）⇒ E3024 报错中止。
+    let surfaces = match toml::from_str::<PackageManifest>(&src) {
+        Ok(manifest) => {
+            let views = roles::TargetViews {
+                bins: manifest
+                    .bin
+                    .iter()
+                    .map(|b| b.path.clone())
+                    .chain(manifest.run.as_ref().and_then(|r| r.main.clone()))
+                    .collect(),
+                libs: manifest
+                    .exports
+                    .values()
+                    .cloned()
+                    .chain(manifest.lib.as_ref().map(|l| l.path.clone()))
+                    .collect(),
+            };
+            Some(roles::explicit_surfaces(&views, root))
+        }
+        Err(e) => return RoleContext::unreadable(&manifest_path, &e.to_string()),
+    };
+    let test_rules = match toml::from_str::<crate::util::config::ProjectConfig>(&src) {
+        Ok(config) => Some(roles::TestRules::from_config(&config.tool.test)),
+        // [tool.*] 面的类型错误与声明面同待遇（#520）：E3024 报错中止，
+        // 不静默回退内建测试发现约定
+        Err(e) => return RoleContext::unreadable(&manifest_path, &e.to_string()),
+    };
+    RoleContext {
+        surfaces,
+        test_rules,
+        manifest_diagnostics: Vec::new(),
+    }
 }
 
 #[cfg(target_arch = "wasm32")]
-pub(in crate::driver) fn role_context(
-    _project_root: Option<&Path>
-) -> (Option<roles::ExplicitSurfaces>, Option<roles::TestRules>) {
-    (None, None)
+pub(in crate::driver) fn role_context(_project_root: Option<&Path>) -> RoleContext {
+    RoleContext::no_manifest()
 }
 
 /// 引用池的装配输入：源路径 + 角色 + 已解析 AST（借用视图）
@@ -930,6 +1001,11 @@ pub(in crate::driver) fn collect_compilation_refs(
 pub(in crate::driver) struct MethodMarks {
     pub by_unit: HashMap<String, HashSet<(String, usize)>>,
     pub groups: HashSet<String>,
+    /// 定义单元键 → 该单元内被**算子派发**命中的 `Type.method` 组
+    /// （WBS 3.20.3 / issue #505；整组——派发名不分重载候选）。
+    /// 来源是 `TypeCheckResult::operator_dispatches`（RFC-011b span 键控
+    /// 派发点，与 D20 重载决议表平行互不重叠的义务通道）。
+    pub operator_by_unit: HashMap<String, HashSet<String>>,
 }
 
 /// 记录方单元的**类型名面**：定义侧裸类型名 → 该单元能拼出这个名字的模块键集合
@@ -984,6 +1060,20 @@ pub(in crate::driver) fn resolved_method_marks(
     type_results: &[Option<&TypeCheckResult>],
 ) -> MethodMarks {
     let module_keys: HashSet<String> = units.iter().map(|u| u.key.clone()).collect();
+    // WBS 3.20.4 / issue #510：先**第一遍扫全部 type_results** 建全局实例化
+    // 映射（形参名 → 具体类型名）——实例化请求记在**调用方**单元的
+    // TypeCheckResult 里，派发记录（约束形参名）在**定义方**单元：映射必须
+    // 跨单元聚合，派发循环里才能把 "T.add" 展开成 "Vec3.add" 再归因。
+    // 形参名表从**全部单元的 AST** 提取一并传入：跨单元兜底路径的请求不带
+    // type_params（探针实测 params=[]），名字只能回定义单元的声明里取。
+    let fn_type_params = declared_type_param_names(
+        type_results
+            .iter()
+            .enumerate()
+            .filter_map(|(i, r)| Some((asts.get(i).and_then(|a| a.as_ref())?, (*r)?))),
+    );
+    let inst_map =
+        generic_instantiation_map(type_results.iter().filter_map(|r| *r), &fn_type_params);
     let mut marks = MethodMarks::default();
     for (i, result) in type_results.iter().enumerate() {
         let Some(result) = result else { continue };
@@ -1009,8 +1099,181 @@ pub(in crate::driver) fn resolved_method_marks(
             }
             marks.groups.insert(base);
         }
+        // 算子派发（WBS 3.20.3 / issue #505）：`u[0]` / `u == t` 的具名决议
+        // `{type_name, method}` 同样按**定义单元**归因——归因面与 overload
+        // 条目同一套（`typed_owners` 的可能归属并入 + 记录方自身）；派发名
+        // `Type.method` 不分重载候选 ⇒ 记**整组**，分析器按组命中判活。
+        //
+        // WBS 3.20.4 / issue #510：派发名可能是**约束形参名**（泛型体内
+        // `a + b` ⇒ 组 "T.add"）——先按实例化映射（上方跨单元聚合的
+        // `inst_map`）展开成具体类型组（原组保留），再逐组走同一套归因：
+        // 展开出的 "Vec3.add" 以其自身类型名查 `owners` 归到定义单元，
+        // 原 "T.add" 照旧归记录方。
+        let dispatch_bases = result
+            .operator_dispatches
+            .iter()
+            .map(|d| format!("{}.{}", d.type_name, d.method));
+        for base in expand_dispatch_groups(dispatch_bases, &inst_map) {
+            let type_name = base.split('.').next().unwrap_or(&base);
+            let mut defining: HashSet<String> = owners.get(type_name).cloned().unwrap_or_default();
+            defining.insert(recorder_unit.clone());
+            for key in defining {
+                marks
+                    .operator_by_unit
+                    .entry(key)
+                    .or_default()
+                    .insert(base.clone());
+            }
+        }
     }
     marks
+}
+
+/// 形参名 → 已见具体类型名集合的**实例化映射**（WBS 3.20.4 / issue #510，
+/// 映射构建的**单点**，两臂共用）。
+///
+/// typecheck 记录的算子派发名是**约束形参名**（`OperatorDispatch{type_name:"T"}`
+/// ⇒ 组 "T.add"），而 `T → Vec3` 的具名化发生在 mono 特化（middle 层）——死代码
+/// 分析在 typecheck 后运行，看不到实例化。但 typecheck 自己已记录全部实例化：
+/// `TypeCheckResult::instantiation_requests` 的每条请求带 `generic_id.type_params`
+/// （形参名表）与 `type_args`（实参表），按位 zip 即 形参名 → 实参类型名。
+/// 同一形参多次实例化（sum@Int、sum@Vec3）取并集；跨泛型同名形参也取并集
+/// （都表示「这个名字被绑定过的具体类型面」）。
+///
+/// `fn_type_params`（函数名 → 形参名表，见 [`declared_type_param_names`]）服务
+/// **跨单元兜底路径**的请求：限定/花括号导入的调用走签名形态反推
+/// （expressions.rs 的 `collect_instantiation_request` 第二条路径），发出的请求
+/// `type_params` 为**空**（探针实测 params=[]）——此时按函数名查表补名再 zip。
+/// 函数名做**尾段**匹配（`lib.sum` → `sum`）：AST 表按绑定裸名建，两种调用
+/// 形态都命中；同名跨模块的短名误配方向 = 展开出多余组 ⇒ 至多漏报 W1005
+/// （宁漏报方向，登记为边界）。
+///
+/// 聚合口径由调用方决定：**调用点在别的单元时请求记在那里的 type_result 里**
+/// ——编排臂必须传全部单元的 TypeCheckResult（跨单元聚合），单文件臂传本单元
+/// 一条（单文件形态无跨单元）。
+///
+/// 只收**具体类型实参**（Struct/Enum/Int/Float/Bool/Char 值形态）；
+/// `MonoType::Generic`/`TypeRef` 等符号化实参不入映射——嵌套泛型深链不求值
+/// （issue #510 登记边界）。`MonoType::type_name()` 的行为（`types/mono.rs`）：
+/// Struct → 裸名（"Vec3"）、`Int(64)` → "int64"——展开出的 "int64.add" 无用户
+/// 方法定义，组不命中任何定义，天然无害。
+pub(in crate::driver) fn generic_instantiation_map<'a>(
+    type_results: impl IntoIterator<Item = &'a TypeCheckResult>,
+    fn_type_params: &HashMap<String, Vec<String>>,
+) -> HashMap<String, HashSet<String>> {
+    let mut map: HashMap<String, HashSet<String>> = HashMap::new();
+    for result in type_results {
+        for request in &result.instantiation_requests {
+            let from_request = request.generic_id.type_params();
+            let params: &[String] = if from_request.is_empty() {
+                let bare = request
+                    .generic_id
+                    .name()
+                    .rsplit('.')
+                    .next()
+                    .unwrap_or(request.generic_id.name());
+                match fn_type_params.get(bare) {
+                    Some(names) => names.as_slice(),
+                    None => continue,
+                }
+            } else {
+                from_request
+            };
+            for (param, arg) in params.iter().zip(request.type_args()) {
+                let concrete = match arg {
+                    MonoType::Struct(_)
+                    | MonoType::Enum(_)
+                    | MonoType::Bool
+                    | MonoType::Char
+                    | MonoType::Int(_)
+                    | MonoType::Float(_) => arg.type_name(),
+                    _ => continue,
+                };
+                map.entry(param.clone()).or_default().insert(concrete);
+            }
+        }
+    }
+    map
+}
+
+/// 泛型函数名（绑定裸名）→ 声明序类型形参名表，从**定义单元的 AST** 提取
+/// （WBS 3.20.4 / issue #510）。
+///
+/// 为什么需要第二来源：#511 修后登记口已收全量泛型形态（`(T: Add)` 接口约束、
+/// 值依赖 `(N: Int)` 均入表），跨单元请求通常自带名字表、不走此兜底；仍会走
+/// 到这里的是登记口不覆盖的形态（如块内 FnDef 绑定），其请求的名字表为空，
+/// 单一 zip 通路展不开。这里回到
+/// 声明现场补读：判据用**现成单点** `ast::classify_generic_params`（与
+/// 类型检查侧同一函数，语义不复制），is_trait 闭包按其调用点同源判据组装
+/// （`trait_table.has_trait` + 约束名窄入口 `typecheck::is_constraint_name`——
+/// 与 L2 探针、L3 类型检查同源，不再各自摸运算符接口表）。
+///
+/// 只扫顶层 `Assign`（`sum: (T: Add) -> … = …` 是顶层泛型绑定的承载形态）；
+/// 形参从注解的 `Type::Fn` 链拍平（**全部柯里化组依次展开**，见
+/// `Type::fn_params_flat`——不是只取第一组括号段）。普通值绑定没有 Fn 注解、
+/// 拍平为空，值参数类型名（`Vec3` 等）不满足 Type/ trait 判据 ⇒ 分类不出
+/// Type 参数，天然无条目。
+pub(in crate::driver) fn declared_type_param_names<'a>(
+    units: impl IntoIterator<Item = (&'a Module, &'a TypeCheckResult)>
+) -> HashMap<String, Vec<String>> {
+    let mut out: HashMap<String, Vec<String>> = HashMap::new();
+    for (ast, result) in units {
+        let is_trait = |name: &str| {
+            result.trait_table.has_trait(name)
+                || crate::frontend::core::typecheck::is_constraint_name(name)
+        };
+        for stmt in &ast.items {
+            if let StmtKind::Assign {
+                target,
+                type_annotation,
+                ..
+            } = &stmt.kind
+            {
+                if let Expr::Var(name, _) = target.as_ref() {
+                    // 签名形参的唯一来源是 `Type::Fn` 链（6.5.2 删除并行形参表）。
+                    let params = type_annotation
+                        .as_ref()
+                        .map(crate::ast::Type::fn_params_flat)
+                        .unwrap_or_default();
+                    let names: Vec<String> = classify_generic_params(
+                        &params,
+                        &is_trait,
+                        // const 参数可接受的类型名：唯一权威在 L3 的语义探针（WBS 6.6.9）
+                        &crate::frontend::core::typecheck::SemanticProbe,
+                    )
+                    .into_iter()
+                    .filter(|p| matches!(p.kind, GenericParamKind::Type))
+                    .map(|p| p.name)
+                    .collect();
+                    if !names.is_empty() {
+                        out.entry(name.clone()).or_insert(names);
+                    }
+                }
+            }
+        }
+    }
+    out
+}
+
+/// 派发组按实例化映射展开（WBS 3.20.4 / issue #510，展开逻辑的**单点**，
+/// 两臂共用）：组 "{P}.{m}" 若 P 在映射中 ⇒ 追加全部 "{X}.{m}"（X ∈ map[P]）；
+/// **原组保留**——用户类型可能真叫 "T"，且展开是追加不是替换。
+pub(in crate::driver) fn expand_dispatch_groups(
+    groups: impl IntoIterator<Item = String>,
+    map: &HashMap<String, HashSet<String>>,
+) -> HashSet<String> {
+    let mut expanded = HashSet::new();
+    for group in groups {
+        expanded.insert(group.clone());
+        if let Some((param, method)) = group.split_once('.') {
+            if let Some(type_names) = map.get(param) {
+                for type_name in type_names {
+                    expanded.insert(format!("{type_name}.{method}"));
+                }
+            }
+        }
+    }
+    expanded
 }
 
 /// `Type.method#k` → `(Type.method, k)`；无 `#` 后缀 ⇒ 声明序 0
@@ -1060,7 +1323,9 @@ pub(in crate::driver) fn collect_package_refs(
             let Ok(tokens) = lexer::tokenize(&file.source) else {
                 continue;
             };
-            let parsed = parser::parse(&tokens);
+            // L1 注入 L3 语义探针（RFC-039 6.4 / 03 §5.4 的注入点）：名字定种
+            // 以类型环境为权威来源，parser 不再自带类型/谓词名知识。
+            let parsed = parser::parse_with_probe(&tokens, &SemanticProbe);
             if parsed.has_errors {
                 continue;
             }

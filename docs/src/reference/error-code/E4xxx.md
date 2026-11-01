@@ -21,7 +21,7 @@ description: '泛型约束、特质系统与常量求值相关的错误。'
 | `E4004` | 特质实现冲突 | `Generic` | 否 | `特质 '{trait}' 的实现冲突` | ⚠ 暂未发射 |
 | `E4005` | 关联类型未找到 | `Generic` | 否 | `在 '{container}' 中找不到关联类型 '{assoc_type}'` | ⚠ 暂未发射 |
 | `E4010` | 常量除零 | `Generic` | 否 | `常量表达式除以零` | ✅ 3 处 |
-| `E4011` | 常量溢出 | `Generic` | 否 | `常量表达式溢出` | ✅ 4 处 |
+| `E4011` | 常量溢出 | `Generic` | 否 | `常量表达式溢出` | ✅ 5 处 |
 | `E4012` | 常量递归过深 | `Generic` | 否 | `常量求值超出最大递归深度 {limit}` | ✅ 1 处 |
 | `E4014` | 常量求值失败 | `Generic` | 是 | `无法求值常量表达式：{reason}` | ✅ 10 处 |
 | `E4018` | 精化谓词违反 | `Generic` | 是 | `精化谓词违反：{constraint}{counterexample}` | ✅ 6 处 |
@@ -99,7 +99,7 @@ description: '泛型约束、特质系统与常量求值相关的错误。'
 - **构造函数**：`ErrorCodeDefinition::const_overflow()`
 - **模板**：`常量表达式溢出`
 - **帮助**：常量表达式的结果超出了类型的范围。
-- **发射点**：`src/frontend/core/types/eval/const_eval.rs:376`、`src/frontend/core/types/eval/const_eval.rs:381`、`src/frontend/core/types/eval/const_eval.rs:386` 等 4 处
+- **发射点**：`src/frontend/core/types/eval/const_eval.rs:376`、`src/frontend/core/types/eval/const_eval.rs:381`、`src/frontend/core/types/eval/const_eval.rs:386` 等 5 处
 
 ### E4012：常量递归过深
 
@@ -108,7 +108,7 @@ description: '泛型约束、特质系统与常量求值相关的错误。'
 - **构造函数**：`ErrorCodeDefinition::const_recursion_too_deep(limit)`
 - **模板**：`常量求值超出最大递归深度 {limit}`
 - **帮助**：简化常量表达式以减少递归。
-- **发射点**：`src/frontend/core/types/eval/const_eval.rs:540`
+- **发射点**：`src/frontend/core/types/eval/const_eval.rs:553`
 
 ### E4014：常量求值失败
 
@@ -127,7 +127,7 @@ description: '泛型约束、特质系统与常量求值相关的错误。'
 - **模板**：`精化谓词违反：{constraint}{counterexample}`
 - **消息**：精化类型约束被证伪
 - **帮助**：谓词被证伪——存在使约束为假的赋值。请检查变量值或放宽约束。
-- **发射点**：`src/frontend/proof_execution.rs:49`、`src/frontend/proof_execution.rs:59`、`src/frontend/core/typecheck/checker.rs:5245` 等 6 处
+- **发射点**：`src/frontend/proof_execution.rs:49`、`src/frontend/proof_execution.rs:59`、`src/frontend/core/typecheck/checker/refinement.rs:621` 等 6 处
 
 ### E4019：类型等式不成立
 

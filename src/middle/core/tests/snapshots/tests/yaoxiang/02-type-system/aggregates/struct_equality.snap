@@ -1,8 +1,8 @@
 module
   fn Point() -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
-    type_decl Struct { body: [Field(StructField { name: "x", is_mut: false, ty: Name { name: "Float", span: Span { start: Position { line: 10, column: 8, offset: 281 }, end: Position { line: 10, column: 13, offset: 286 } } }, default: None }), Field(StructField { name: "y", is_mut: false, ty: Name { name: "Float", span: Span { start: Position { line: 11, column: 8, offset: 295 }, end: Position { line: 11, column: 13, offset: 300 } } }, default: None })] }
+    type_decl [x: Float(64) ; y: Float(64)]
   fn Vec3() -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
-    type_decl Struct { body: [Field(StructField { name: "x", is_mut: false, ty: Name { name: "Float", span: Span { start: Position { line: 15, column: 8, offset: 327 }, end: Position { line: 15, column: 13, offset: 332 } } }, default: None }), Field(StructField { name: "y", is_mut: false, ty: Name { name: "Float", span: Span { start: Position { line: 16, column: 8, offset: 341 }, end: Position { line: 16, column: 13, offset: 346 } } }, default: None }), Field(StructField { name: "z", is_mut: false, ty: Name { name: "Float", span: Span { start: Position { line: 17, column: 8, offset: 355 }, end: Position { line: 17, column: 13, offset: 360 } } }, default: None }), Expr(Generic { name: "Equal", name_span: Span { start: Position { line: 18, column: 5, offset: 366 }, end: Position { line: 18, column: 10, offset: 371 } }, args: [Name { name: "Vec3", span: Span { start: Position { line: 18, column: 11, offset: 372 }, end: Position { line: 18, column: 15, offset: 376 } } }, Name { name: "Vec3", span: Span { start: Position { line: 18, column: 17, offset: 378 }, end: Position { line: 18, column: 21, offset: 382 } } }] })] }
+    type_decl [x: Float(64) ; y: Float(64) ; z: Float(64)]
   fn Vec3.equal(Ref { mutable: false, inner: TypeRef("Vec3") }, Ref { mutable: false, inner: TypeRef("Vec3") }) -> Bool
     locals_total=7
     Load %0 <- %1
@@ -13,7 +13,7 @@ module
     Ret %6
     Ret %6
   fn Line() -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
-    type_decl Struct { body: [Field(StructField { name: "start", is_mut: false, ty: Name { name: "Point", span: Span { start: Position { line: 27, column: 12, offset: 559 }, end: Position { line: 27, column: 17, offset: 564 } } }, default: None }), Field(StructField { name: "end", is_mut: false, ty: Name { name: "Point", span: Span { start: Position { line: 28, column: 10, offset: 575 }, end: Position { line: 28, column: 15, offset: 580 } } }, default: None })] }
+    type_decl [start: TypeRef("Point") ; end: TypeRef("Point")]
   fn main() -> Void
     slot[0] a : Int(64) @depth1
     slot[1] b : Int(64) @depth1

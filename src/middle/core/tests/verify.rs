@@ -8,6 +8,7 @@
 //!    序列产出的 ModuleIR 上 verify_loose 必须跑绿，且校验面非空（9.6 门禁的
 //!    防假门禁断言：函数数与指令数必须 > 0）。
 
+use crate::frontend::core::typecheck::probe::TypeLevelNamespace;
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parse;
 use crate::frontend::core::typecheck::MonoType;
@@ -682,7 +683,10 @@ fn test_verify_loose_corpus_green() {
             continue;
         }
         let mut checker = TypeChecker::new(&file.display().to_string());
-        let type_result = checker.check_module(&parsed.module);
+        let type_result = checker.check_module(
+            &parsed.module,
+            &TypeLevelNamespace::scan_one(&parsed.module),
+        );
         if !type_result.diagnostics.is_empty() {
             continue;
         }

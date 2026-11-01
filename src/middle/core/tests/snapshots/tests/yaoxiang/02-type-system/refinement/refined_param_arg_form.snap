@@ -1,6 +1,6 @@
 module
   fn IsPositive(Int(64)) -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
-    type_decl Struct { body: [Expr(ConstExpr(BinOp { op: Gt, left: Var("x", Span { start: Position { line: 17, column: 34, offset: 951 }, end: Position { line: 17, column: 35, offset: 952 } }), right: Lit(Int(0), Span { start: Position { line: 17, column: 38, offset: 955 }, end: Position { line: 17, column: 39, offset: 956 } }), span: Span { start: Position { line: 17, column: 36, offset: 953 }, end: Position { line: 17, column: 37, offset: 954 } } }))] }
+    type_decl []
   fn identity(Generic { name: "IsPositive", args: [TypeRef("b")] }) -> Int(64)
     slot[0] b : Int(64) @depth1
     locals_total=2

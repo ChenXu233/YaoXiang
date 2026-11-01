@@ -1,6 +1,6 @@
 module
   fn Point() -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
-    type_decl Struct { body: [Field(StructField { name: "x", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 8, column: 20, offset: 278 }, end: Position { line: 8, column: 23, offset: 281 } } }, default: None }), Field(StructField { name: "y", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 8, column: 28, offset: 286 }, end: Position { line: 8, column: 31, offset: 289 } } }, default: None })] }
+    type_decl [x: Int(64) ; y: Int(64)]
   fn Point.shift(Ref { mutable: true, inner: TypeRef("Point") }) -> Void
     locals_total=7
     Load %0 <- %1

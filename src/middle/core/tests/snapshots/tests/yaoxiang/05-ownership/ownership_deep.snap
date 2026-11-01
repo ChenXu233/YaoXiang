@@ -1,6 +1,6 @@
 module
   fn Point() -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
-    type_decl Struct { body: [Field(StructField { name: "x", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 13, column: 20, offset: 592 }, end: Position { line: 13, column: 23, offset: 595 } } }, default: None }), Field(StructField { name: "y", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 13, column: 28, offset: 600 }, end: Position { line: 13, column: 31, offset: 603 } } }, default: None })] }
+    type_decl [x: Int(64) ; y: Int(64)]
   fn Point.sum(Ref { mutable: false, inner: TypeRef("Point") }) -> Int(64)
     locals_total=6
     Load %0 <- %1
@@ -26,7 +26,7 @@ module
     StoreField %7.1 <- %12 (type=None, name=Some("y"))
     Ret
   fn Window() -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
-    type_decl Struct { body: [Field(StructField { name: "view", is_mut: false, ty: Ref { mutable: false, inner: Name { name: "Point", span: Span { start: Position { line: 25, column: 12, offset: 817 }, end: Position { line: 25, column: 17, offset: 822 } } }, span: Span { start: Position { line: 25, column: 17, offset: 822 }, end: Position { line: 25, column: 18, offset: 823 } } }, default: None })] }
+    type_decl [view: Ref { mutable: false, inner: TypeRef("Point") }]
   fn main() -> Void
     slot[0] p : Int(64) @depth1
     slot[1] view : Int(64) @depth1

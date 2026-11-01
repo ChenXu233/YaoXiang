@@ -4,7 +4,7 @@
 //!
 //! 1. **发现**：从入口文件所在目录递归收集所有 `.yx` 文件
 //! 2. **签名提取**：对每个文件跑 pass1（类型）+ pass2（签名），提取顶层绑定的真实 `MonoType`
-//! 3. **构建 Registry**：用户模块（`ModuleSource::User`）+ std，合并为预构建注册表
+//! 3. **Registry**：用户模块（`ModuleSource::User`）+ std 合并为预构建注册表——构建由 Driver 的 `registry` 臂承担（`src/driver/arms.rs:1298`）；本模块只提供 `extract_module_info` 等构件（旧 `build_registry` 链于 2026-10-26 随零调用者清账删除）
 //! 4. **逐文件类型检查**：每个文件带着完整 Registry 独立 typecheck——强制模块边界
 //!    （必须 `use` 才能访问其他文件的绑定，`use` 保持 record 解构语义）
 //! 5. **逐文件 IR 生成 + IR 层链接**：每个文件独立生成 `ModuleIR`（预注册跨文件的
@@ -24,11 +24,12 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::{Path, PathBuf};
 
-use crate::frontend::core::parser::ast::{Expr, StmtKind};
+use crate::ast::{Expr, StmtKind};
 use crate::util::diagnostic::Diagnostic;
 use crate::frontend::core::parser::{self, Module};
 use crate::frontend::core::tokenize;
 use crate::frontend::core::typecheck::checker::TypeChecker;
+use crate::frontend::core::typecheck::SemanticProbe;
 use crate::frontend::core::types::mono::MonoType;
 use crate::frontend::core::types::PolyType;
 use crate::frontend::module::registry::ModuleRegistry;
@@ -376,25 +377,6 @@ pub(crate) fn entry_module_key(entry: &Path) -> String {
     }
 }
 
-pub fn build_registry(entry: &Path) -> Result<ModuleRegistry, OrchestratorError> {
-    let files = discover(entry)?;
-    build_registry_from(&files)
-}
-
-fn build_registry_from(files: &[DiscoveredFile]) -> Result<ModuleRegistry, OrchestratorError> {
-    let mut registry = ModuleRegistry::with_std();
-    for file in files {
-        let ast = parse_file(&file.path, &file.source)?;
-        let mut info = extract_module_info(&file.module_key, &ast);
-        // 来源标记：vendor 依赖目录下的文件是 Vendor（与本地 User 区分）
-        if is_vendor_path(&file.path) {
-            info.source = ModuleSource::Vendor;
-        }
-        registry.register(info);
-    }
-    Ok(registry)
-}
-
 /// 路径是否位于某个项目的 `.yaoxiang/vendor/` 下。
 pub(crate) fn is_vendor_path(path: &Path) -> bool {
     let mut prev = None;
@@ -408,15 +390,6 @@ pub(crate) fn is_vendor_path(path: &Path) -> bool {
     false
 }
 
-/// 从入口沿 `use` 追踪发现可达模块（#247/RFC-036：替代目录递归——
-/// 不相关文件的编译错误不再阻塞运行，测试文件的进程隔离才成立）。
-///
-/// 解析双根：`use a.b` 先按**导入者所在目录**解析，未命中再按**项目根**
-/// （最近的 yaoxiang.toml 祖先）解析。模块键 = use 路径，与解析自哪个根无关。
-pub(crate) fn discover(entry: &Path) -> Result<Vec<DiscoveredFile>, OrchestratorError> {
-    discover_with_used(entry).map(|(files, _, _)| files)
-}
-
 /// 遮蔽事件：文件路径、use 路径、use 的 span、被遮蔽的包名
 ///
 /// pub(crate)：P4 4.2.2 起 driver（L1）的 Discovery 臂消费本类型；
@@ -428,7 +401,8 @@ pub(crate) type ShadowEvent = (PathBuf, String, crate::util::span::Span, String)
 /// pub(crate)：同 `ShadowEvent` 的过渡性放宽（4.2.2）
 pub(crate) type Discovery = (Vec<DiscoveredFile>, HashSet<PathBuf>, Vec<ShadowEvent>);
 
-/// 同 [`discover`]，附带 use 边信息：被 ≥1 个文件 `use` 的文件路径集合
+/// 同 `discover_with_used` 的前身 `discover`（2026-10-26 随零调用者清账删除），
+/// 附带 use 边信息：被 ≥1 个文件 `use` 的文件路径集合
 /// （canonical 化，与发现文件路径同口径比对）——角色推断的 Lib 信号（RFC-029f）；
 /// 以及本地模块遮蔽依赖包事件（RFC-014 §项目模式，W1006）。
 ///
@@ -1065,7 +1039,7 @@ pub(crate) fn parse_file(
         path: path.display().to_string(),
         message: format!("{:?}", e),
     })?;
-    let result = parser::parse(&tokens);
+    let result = parser::parse_with_probe(&tokens, &SemanticProbe);
     if result.has_errors {
         let msg = result
             .errors
@@ -1082,12 +1056,17 @@ pub(crate) fn parse_file(
 }
 
 /// 提取一个文件的模块信息：跑签名收集，导出所有顶层绑定的真实类型。
+///
+/// `namespace`：谓词名可见面（WBS 3.20.9 / #522）——签名收集阶段不跑
+/// 第零遍、导入未并，谓词判定只能走声明级 namespace；调用方（driver 的
+/// Registry 臂）须传全部可见单元的 scan 并集。
 pub(crate) fn extract_module_info(
     module_key: &str,
     ast: &Module,
+    namespace: &crate::frontend::core::typecheck::probe::TypeLevelNamespace,
 ) -> ModuleInfo {
     let mut checker = TypeChecker::new(module_key);
-    checker.collect_signatures(ast);
+    checker.collect_signatures(ast, namespace);
     // #397：无标注顶层绑定也要进导出面——收割推断出的具体类型。
     // 此前这类绑定既不在签名表也无标注可读，导出面直接丢弃，
     // 导入方访问时报误导性的「成员未找到」。
@@ -1176,22 +1155,6 @@ pub(crate) fn extract_module_info(
                     }
                 }
             }
-            StmtKind::Expr(expr) => {
-                if let Expr::FnDef { name, .. } = expr.as_ref() {
-                    if let Some(ty) = lookup(&vars, name) {
-                        // FnDef 节点不携带名字标识符 span（当前 parser 也不产
-                        // 此变体——仅测试手工构造），定义位置空缺
-                        info.add_export(make_export(
-                            module_key,
-                            name,
-                            ExportKind::Function,
-                            ty,
-                            &fn_type_params,
-                            None,
-                        ));
-                    }
-                }
-            }
             _ => {}
         }
     }
@@ -1271,7 +1234,10 @@ mod export_type_params_tests {
                       \nBox: Type = { inner: Int }\n\
                       \nvalue: Int = 7\n";
         let tokens = crate::frontend::core::tokenize(source).expect("模块源码必须可词法分析");
-        let parsed = crate::frontend::core::parser::parse(&tokens);
+        let parsed = crate::frontend::core::parser::parse_with_probe(
+            &tokens,
+            &crate::frontend::core::typecheck::SemanticProbe,
+        );
         assert!(
             !parsed.has_errors,
             "模块源码必须可解析：{:?}",
@@ -1279,7 +1245,11 @@ mod export_type_params_tests {
         );
 
         // Act
-        let info = extract_module_info("lib", &parsed.module);
+        let info = extract_module_info(
+            "lib",
+            &parsed.module,
+            &crate::frontend::core::typecheck::probe::TypeLevelNamespace::scan_one(&parsed.module),
+        );
 
         // Assert：按 kind 区分——仅函数类导出携带，其余一律 None
         assert_eq!(
@@ -1301,6 +1271,100 @@ mod export_type_params_tests {
             export_named(&info, "value").type_params,
             None,
             "常量导出的 type_params 必须保持 None（声明期类型参数只属于函数）"
+        );
+    }
+
+    /// #511：接口约束 `(T: Add)`（type-system.md:151）与值依赖 const `(N: Int)`
+    /// （type-system.md:47）的形参名必须随导出携带——修前登记口只认
+    /// `(T: Type)`（MetaType），这两个形态的 `Export::type_params` 为 None。
+    #[test]
+    fn test_user_module_function_exports_carry_interface_and_const_param_names() {
+        // Arrange：同一模块给出接口约束泛型、const 泛型（语料
+        // fn_const_generic.yx 同构）、混合签名（约束段 + const 段，
+        // t3-low② 名字表按声明序合排的导出面锚）与普通值参数函数作不变式对照
+        let source = "add_of: (T: Add) -> (x: T) -> T = (x) => x\n\
+                      \nf: (N: Int) -> (n: N) -> Int = (n) => n\n\
+                      \nmixed: (T: Type) -> (N: Int) -> (x: T) -> (n: N) -> T = (x, n) => x\n\
+                      \nplain: (n: Int) -> Int = (n) => n\n";
+        let tokens = crate::frontend::core::tokenize(source).expect("模块源码必须可词法分析");
+        let parsed = crate::frontend::core::parser::parse_with_probe(
+            &tokens,
+            &crate::frontend::core::typecheck::SemanticProbe,
+        );
+        assert!(
+            !parsed.has_errors,
+            "模块源码必须可解析：{:?}",
+            parsed.errors
+        );
+
+        // Act
+        let info = extract_module_info(
+            "lib",
+            &parsed.module,
+            &crate::frontend::core::typecheck::probe::TypeLevelNamespace::scan_one(&parsed.module),
+        );
+
+        // Assert
+        assert_eq!(
+            export_named(&info, "add_of").type_params,
+            Some(vec!["T".to_string()]),
+            "接口约束 (T: Add) 的形参名必须随导出携带"
+        );
+        assert_eq!(
+            export_named(&info, "f").type_params,
+            Some(vec!["N".to_string()]),
+            "值依赖 const (N: Int) 的形参名必须随导出携带（用途精筛命中）"
+        );
+        assert_eq!(
+            export_named(&info, "mixed").type_params,
+            Some(vec!["T".to_string(), "N".to_string()]),
+            "混合签名（约束段 T + const 段 N）的名字表必须按声明序合排携带"
+        );
+        assert_eq!(
+            export_named(&info, "plain").type_params,
+            None,
+            "普通值参数函数（无泛型参数）必须保持 None（登记口扩容不得污染）"
+        );
+    }
+
+    /// #522 / 3.20.9 批次 t2-M2 阴性发现的补锚：`extract_module_info` 的
+    /// namespace 实参必须**跨单元消费**——lib 声明的谓词名经项目并集进入
+    /// namespace 后，main 侧 `sum: (N: Int) -> (x: IsPositive(N)) -> Int`
+    /// 的 `N` 不得进导出面 `type_params`。CLI 面观察不到此差异（诊断形态
+    /// 被 #523 缺口遮蔽），这里直测 ModuleInfo——namespace 实参被弃用
+    /// （如换成空集）时本锚红。
+    #[test]
+    fn test_extract_module_info_consumes_namespace_across_units() {
+        // Arrange：lib 声明谓词；main `use` 后声明 const 形参签名——
+        // 谓词应用实参位 `N` 是编译期表达式（值），不是类型引用
+        let parse = |src: &str| {
+            let tokens = crate::frontend::core::tokenize(src).expect("模块源码必须可词法分析");
+            let parsed = crate::frontend::core::parser::parse(&tokens);
+            assert!(
+                !parsed.has_errors,
+                "模块源码必须可解析：{:?}",
+                parsed.errors
+            );
+            parsed.module
+        };
+        let lib = parse("IsPositive: (x: Int) -> Type = { x > 0 }\n");
+        let main = parse(
+            "use lib.{IsPositive}\n\
+             sum: (N: Int) -> (x: IsPositive(N)) -> Int = (x) => x\n",
+        );
+
+        // Act：namespace = 全项目声明并集（driver registry 臂的形态），
+        // 覆盖 lib 的谓词声明
+        let namespace =
+            crate::frontend::core::typecheck::probe::TypeLevelNamespace::scan([&lib, &main]);
+        let info = extract_module_info("main", &main, &namespace);
+
+        // Assert：IsPositive ∈ namespace ⇒ 谓词实参位排除 ⇒ N 不进导出面
+        assert_eq!(
+            export_named(&info, "sum").type_params,
+            None,
+            "跨单元谓词声明的实参位 N 不得进导出面 type_params（namespace 跨单元消费锚；\
+             实参被弃用为空集时此断言翻红）"
         );
     }
 }

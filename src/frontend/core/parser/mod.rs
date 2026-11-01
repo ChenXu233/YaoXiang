@@ -1,16 +1,19 @@
 //! Parser module
 //! Implements a Pratt Parser for the YaoXiang language with RFC-004/010/011 support.
 
-pub mod ast;
 pub mod parser_state;
 pub mod pratt;
+pub mod probe;
 pub mod statements;
 #[cfg(test)]
 pub mod tests;
 
 pub use parser_state::{ParserState, parse_msg};
+pub use probe::{NameKind, NullProbe, TypeEnvProbe};
 pub use pratt::*;
-pub use ast::*;
+// D1（6.7.1a）：AST 顶层化后 parser 不再拥有 ast 子模块，只把顶层 `crate::ast` 的项
+// 再导出，使 `parser::Stmt` / `parser::Module` 这类既有路径继续成立。
+pub use crate::ast::*;
 pub use crate::frontend::core::lexer::tokens::*;
 pub use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};
 pub use crate::util::span::Span;
@@ -26,8 +29,25 @@ fn find_first(state: &ParserState<'_>) -> Option<Diagnostic> {
     state.errors().first().cloned()
 }
 
+/// 解析一个编译单元（**无类型环境**的语法入口）。
+///
+/// 只做语法：[`NullProbe`] 对一切「这个名字是什么」回答「不知道」，故 parser 不
+/// 产出任何类型名 / 谓词名 / 约束名知识（WBS 6.6.9：L2 不再持有名字表）。
+///
+/// **生产入口必须用 [`parse_with_probe`] 注入 L3 的语义探针**（`SemanticProbe`）：
+/// 否则 `(N: Int)` 这类 const 参数、`Add` 这类约束名的定种全部落空——而失败形态是
+/// **静默的**（parser 把类型名当形参名照常解析）。本函数只用于语法测试与确实不需要
+/// 语义的调用点。
 pub fn parse(tokens: &[Token]) -> ParseResult {
-    let mut state = ParserState::new(tokens);
+    parse_with_probe(tokens, &NullProbe)
+}
+
+/// 解析一个编译单元，名字定种判定交给调用方注入的探针。
+pub fn parse_with_probe(
+    tokens: &[Token],
+    probe: &dyn TypeEnvProbe,
+) -> ParseResult {
+    let mut state = ParserState::new(tokens, probe);
     let mut items = Vec::new();
 
     while !state.at_end() {
@@ -76,8 +96,20 @@ pub fn parse(tokens: &[Token]) -> ParseResult {
     }
 }
 
+/// 解析单个表达式（**无类型环境**的语法入口）。
+///
+/// 与 [`parse`] 同口径：只做语法，名字定种一律「不知道」；生产入口用
+/// [`parse_expression_with_probe`] 注入语义探针。
 pub fn parse_expression(tokens: &[Token]) -> Result<Expr, Diagnostic> {
-    let mut state = ParserState::new(tokens);
+    parse_expression_with_probe(tokens, &NullProbe)
+}
+
+/// 解析单个表达式，名字定种判定交给调用方注入的探针。
+pub fn parse_expression_with_probe(
+    tokens: &[Token],
+    probe: &dyn TypeEnvProbe,
+) -> Result<Expr, Diagnostic> {
+    let mut state = ParserState::new(tokens, probe);
     match state.parse_expression(BP_LOWEST) {
         Some(e) if !state.has_errors() => Ok(e),
         Some(_) | None => Err(find_first(&state).unwrap_or_else(|| {

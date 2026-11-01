@@ -409,7 +409,7 @@ pub fn register_all(
     registry: &mut FfiRegistry,
     dep_env: &mut crate::frontend::core::types::eval::dependent_types::DependentTypeEnv,
 ) {
-    // RFC-011 §5.2：约束泛型的原生背书——泛型定义体的运算符派发发射
+    // RFC-011b（约束同判据）：约束泛型的原生背书——泛型定义体的运算符派发发射
     // `Call "T.add"`，mono 按类型实参改写为 `Call "Int.add"` 等（原语类型
     // 没有用户方法，FFI 条目即运算符接口 Add 的原生实现）
     registry.register("Int.add", native_builtin_int_add);

@@ -1,0 +1,25 @@
+// 02-type-system/aggregates/type_decl_default_field.yx
+// 覆盖: 类型体内**带默认值的字段**（RFC-039 6.6.12：默认值表达式不进 IR 载体）
+// 验证: 省略实参时默认值生效；显式实参覆盖默认值；数据字段可读回
+// 状态: ✅ 可运行
+
+use std.assert
+
+Config: Type = {
+    retries: Int = 3,
+    name: String = "default",
+}
+
+main: () -> Void = {
+    // 省略实参：走默认值（默认值表达式在 ir_gen 已降级成指令，不进 IR 的 TypeDecl 载体）
+    d = Config()
+    assert.assert(d.retries == 3, "默认值字段应初始化为 3")
+    assert.assert(d.name == "default", "默认值字段应初始化为 default")
+
+    // 显式实参：覆盖默认值
+    c = Config(7, "custom")
+    assert.assert(c.retries == 7, "显式实参应覆盖默认值")
+    assert.assert(c.name == "custom", "显式实参应覆盖默认值")
+}
+
+main()

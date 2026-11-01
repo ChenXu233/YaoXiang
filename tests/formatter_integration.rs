@@ -46,8 +46,8 @@ fn test_format_mut_var_declaration() {
 
 #[test]
 fn test_format_typed_var_declaration() {
-    // RFC-010: x: i64 = 1 语法
-    assert_format_eq("x: i64 = 1", "x: i64 = 1\n");
+    // RFC-010: x: Int64 = 1 语法（WBS 6.1.2：内置类型名只认规范拼写，i64 已删除）
+    assert_format_eq("x: Int64 = 1", "x: Int64 = 1\n");
 }
 
 #[test]
@@ -126,7 +126,7 @@ fn test_format_dict_literal() {
 #[test]
 fn test_format_long_line_wraps() {
     let source =
-        "x: i64 = 1 + 2 + 3 + 4 + 5 + 6 + 7 + 8 + 9 + 10 + 11 + 12 + 13 + 14 + 15 + 16 + 17 + 18 + 19 + 20 + 21 + 22 + 23 + 24 + 25 + 26 + 27 + 28 + 29 + 30";
+        "x: Int64 = 1 + 2 + 3 + 4 + 5 + 6 + 7 + 8 + 9 + 10 + 11 + 12 + 13 + 14 + 15 + 16 + 17 + 18 + 19 + 20 + 21 + 22 + 23 + 24 + 25 + 26 + 27 + 28 + 29 + 30";
     let result = format_source(source, &default_options()).unwrap();
     assert!(result.contains('\n'), "Long line should be wrapped");
 }

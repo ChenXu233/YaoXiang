@@ -5,17 +5,19 @@
 //! RFC-029g: `pub` 关键字已删除；未引用的顶层绑定一律参与判定，
 //! 唯一豁免口是包内引用池（RFC-029f，跨文件消费者不可见）
 
+use crate::frontend::core::lexer::tokenize;
+use crate::frontend::core::parser::parse;
 use crate::frontend::core::typecheck::passes::dead_code::{DeadCodeAnalyzer, DeadCodeWarning};
-use crate::frontend::core::parser::ast::{Block, Module, PlanId, Stmt, StmtKind, Expr, Type};
+use crate::ast::{Block, Module, PlanId, Stmt, StmtKind, Expr, Type};
 use crate::util::span::Span;
 
 /// 私有类型 `Outer { inner: Inner }`——字段类型引用私有类型 Inner。
 fn outer_with_inner_field() -> Stmt {
-    use crate::frontend::core::parser::ast::{StructField, TypeBodyItem};
+    use crate::ast::{StructField, TypeBodyItem};
     Stmt {
         kind: StmtKind::TypeDefinition {
             name: "Outer".to_string(),
-            signature_params: vec![],
+            type_annotation: None,
             definition: Type::Struct {
                 body: vec![TypeBodyItem::Field(StructField::new(
                     "inner".to_string(),
@@ -39,9 +41,8 @@ fn module_with_point_param_annotation() -> Module {
             kind: StmtKind::Assign {
                 target: Box::new(Expr::Var("main".to_string(), Span::dummy())),
                 type_annotation: None,
-                signature_params: vec![],
                 value: Some(Box::new(Expr::Lambda {
-                    params: vec![crate::frontend::core::parser::ast::Param {
+                    params: vec![crate::ast::Param {
                         name: "p".to_string(),
                         ty: Some(Type::Name {
                             name: "Point".to_string(),
@@ -95,7 +96,6 @@ fn make_binding(
         kind: StmtKind::Assign {
             target,
             type_annotation: None,
-            signature_params: vec![],
             value: Some(Box::new(Expr::Lambda {
                 params: vec![],
                 body: Box::new(Block {
@@ -113,13 +113,16 @@ fn make_binding(
 }
 
 /// 构造一个类型定义语句（`Name: Type = ...` 的真实语法形态，#321）
-/// definition 用原生类型——不引用自身（自引用会被收集成使用，污染判定）
+/// definition 用内建类型名（Name）——不引用自身（自引用会被收集成使用，污染判定）
 fn make_type_def(name: &str) -> Stmt {
     Stmt {
         kind: StmtKind::TypeDefinition {
             name: name.to_string(),
-            signature_params: vec![],
-            definition: Type::Int(64),
+            type_annotation: None,
+            definition: Type::Name {
+                name: "Int64".to_string(),
+                span: Span::dummy(),
+            },
         },
         span: Span::dummy(),
         plan_id: PlanId::UNPLANNED,
@@ -132,7 +135,6 @@ fn make_var(name: &str) -> Stmt {
         kind: StmtKind::Assign {
             target: Box::new(Expr::Var(name.to_string(), Span::dummy())),
             type_annotation: None,
-            signature_params: vec![],
             value: None,
             is_mut: false,
             span: Span::dummy(),
@@ -151,7 +153,6 @@ fn make_annotated_var(name: &str) -> Stmt {
                 name: "Int".to_string(),
                 span: Span::dummy(),
             }),
-            signature_params: vec![],
             value: None,
             is_mut: false,
             span: Span::dummy(),
@@ -607,7 +608,7 @@ fn make_match_stmt(
     pattern_type: &str,
     body_stmts: Vec<Stmt>,
 ) -> Stmt {
-    use crate::frontend::core::parser::ast::{MatchArm, Pattern};
+    use crate::ast::{MatchArm, Pattern};
     Stmt {
         kind: StmtKind::Expr(Box::new(Expr::Match {
             expr: Box::new(Expr::Var(scrutinee.to_string(), Span::dummy())),
@@ -660,7 +661,6 @@ fn make_index_assign_stmt(
                 span: Span::dummy(),
             }),
             type_annotation: None,
-            signature_params: vec![],
             value: Some(Box::new(Expr::Var(value_var.to_string(), Span::dummy()))),
             is_mut: false,
             span: Span::dummy(),
@@ -1023,5 +1023,193 @@ fn test_no_project_refs_keeps_file_local_judgement() {
             .any(|w| w.code == "W1001" && w.message.contains("orphan_fn")),
         "无引用池时未引用的顶层绑定应报 W1001，实际: {:?}",
         warnings
+    );
+}
+
+/// 解析源码为模块（语法必须正确，否则测试本身有错）
+fn parse_module(source: &str) -> Module {
+    let tokens = tokenize(source).expect("测试源码词法不应失败");
+    let parse_result = parse(&tokens);
+    assert!(
+        !parse_result.has_errors,
+        "测试源码语法必须正确（否则无法区分 bug 与测试写错）: {:?}",
+        parse_result.errors
+    );
+    parse_result.module
+}
+
+/// WBS 3.20.1：单表达式体 lambda 的合成体语句是
+/// `StmtKind::Return(Some(expr))`（parser/pratt/led.rs 就地合成的糖）——
+/// 可达集走查必须收集其中的引用，否则「顶层函数仅被闭包引用」的
+/// 自然写法（docs/src/reference/stdlib/test.md 的 t_add）误报 W1001。
+#[test]
+fn test_fn_referenced_only_in_lambda_expr_body_not_reported_w1001() {
+    // Arrange: 照 test.md 自然形态的最小同构——helper 仅在
+    // 闭包 `() => helper()` 内被引用；dead_fn 全程无引用作守卫
+    let ast = parse_module(
+        r#"
+main = () => {
+    sink([("add", () => helper())])
+}
+helper = () => 42
+sink = (v) => println("x")
+dead_fn = () => 43
+"#,
+    );
+
+    // Act
+    let mut analyzer = DeadCodeAnalyzer::new();
+    let warnings = analyzer.analyze(&ast);
+
+    // Assert
+    assert!(
+        warnings
+            .iter()
+            .all(|w| !(w.code == "W1001" && w.message.contains("helper"))),
+        "仅被闭包表达式体引用的 helper 不应报 W1001，实际: {:?}",
+        warnings
+    );
+    assert!(
+        warnings
+            .iter()
+            .any(|w| w.code == "W1001" && w.message.contains("dead_fn")),
+        "守卫：真正无引用的 dead_fn 仍应报 W1001，实际: {:?}",
+        warnings
+    );
+}
+
+/// 块体 lambda（`() => { helper() }`）与表达式体走同一判据：闭包体内
+/// 引用使被引定义可达，不得因体形态不同而分歧。
+#[test]
+fn test_fn_referenced_in_lambda_block_body_not_reported_w1001() {
+    // Arrange: 闭包用块体形态引用 helper
+    let ast = parse_module(
+        r#"
+main = () => {
+    sink([("add", () => { helper() })])
+}
+helper = () => 42
+sink = (v) => println("x")
+"#,
+    );
+
+    // Act
+    let mut analyzer = DeadCodeAnalyzer::new();
+    let warnings = analyzer.analyze(&ast);
+
+    // Assert
+    assert!(
+        warnings
+            .iter()
+            .all(|w| !(w.code == "W1001" && w.message.contains("helper"))),
+        "块体闭包内引用的 helper 不应报 W1001，实际: {:?}",
+        warnings
+    );
+}
+
+/// WBS 3.20.3 / issue #505：算子派发命中的方法组**整组按活**——
+/// `u[0]` / `u == t` 的具名决议（`OperatorDispatch`）不产生 D20 重载决议
+/// 条目，AST 引用收集里也没有 `index`/`equal` 短名 ⇒ 修复前两方法误报
+/// W1005（红态实测）。driver 把派发组喂进来后不得再报。
+#[test]
+fn test_operator_dispatched_group_keeps_methods_alive_w1005() {
+    // Arrange: 类型体内接口声明 + 两方法定义 + main 只写算子表达式
+    //（AST 引用里没有 index/equal 短名——派发决议在 typecheck 侧）
+    let ast = parse_module(
+        r#"
+Temp: Type = {
+    v: Float,
+    Index(Temp, Int, Float),
+    Equal(Temp, Temp),
+}
+Temp.index: (self: &Temp, key: &Int) -> Float = (self, key) => {
+    self.v + 1.0
+}
+Temp.equal: (self: &Temp, other: &Temp) -> Bool = (self, other) => {
+    true
+}
+main = () => {
+    u = Temp(19.0)
+    println(u[0])
+    println(u == u)
+}
+"#,
+    );
+
+    // Act: 不喂派发组（修复前形态）→ 对照；喂派发组 → 修复后形态
+    let mut analyzer = DeadCodeAnalyzer::new();
+    let before = analyzer.analyze(&ast);
+    let mut analyzer = DeadCodeAnalyzer::new();
+    analyzer.set_operator_dispatched_groups(StdHashSet::from([
+        "Temp.index".to_string(),
+        "Temp.equal".to_string(),
+    ]));
+    let after = analyzer.analyze(&ast);
+
+    // Assert: 修复前两方法各报一条 W1005（红态本身也在断言里钉住）；
+    // 喂入派发组后两条全部消失
+    let before_hits: Vec<&str> = before
+        .iter()
+        .filter(|w| w.code == "W1005")
+        .map(|w| {
+            if w.message.contains("Temp.index") {
+                "Temp.index"
+            } else {
+                "Temp.equal"
+            }
+        })
+        .collect();
+    assert!(
+        before_hits.contains(&"Temp.index") && before_hits.contains(&"Temp.equal"),
+        "无派发组时 index/equal 应各报一条 W1005（红态基线），实际: {before:?}"
+    );
+    assert!(
+        after.iter().all(|w| w.code != "W1005"),
+        "算子派发命中的方法组不得报 W1005，实际: {after:?}"
+    );
+}
+
+/// WBS 3.20.3 / issue #505 守卫（不得放宽判据）：接口声明了、方法定义了，
+/// 但**没有**算子派发作用于该类型 ⇒ 两方法仍须如实报 W1005——派发组为空时
+/// 判定与修复前完全一致。
+#[test]
+fn test_operator_interface_declared_without_dispatch_still_reports_w1005() {
+    // Arrange: 同构类型与方法，main 只读字段（无 u[0] / u == t）
+    let ast = parse_module(
+        r#"
+Temp: Type = {
+    v: Float,
+    Index(Temp, Int, Float),
+    Equal(Temp, Temp),
+}
+Temp.index: (self: &Temp, key: &Int) -> Float = (self, key) => {
+    self.v + 1.0
+}
+Temp.equal: (self: &Temp, other: &Temp) -> Bool = (self, other) => {
+    true
+}
+main = () => {
+    u = Temp(1.0)
+    println(u.v)
+}
+"#,
+    );
+
+    // Act: 派发组为空（接口从未被算子使用）
+    let mut analyzer = DeadCodeAnalyzer::new();
+    let warnings = analyzer.analyze(&ast);
+
+    // Assert: 两方法照报 W1005
+    assert!(
+        warnings
+            .iter()
+            .any(|w| w.code == "W1005" && w.message.contains("Temp.index")),
+        "无算子派发时 Temp.index 仍应报 W1005，实际: {warnings:?}"
+    );
+    assert!(
+        warnings
+            .iter()
+            .any(|w| w.code == "W1005" && w.message.contains("Temp.equal")),
+        "无算子派发时 Temp.equal 仍应报 W1005，实际: {warnings:?}"
     );
 }

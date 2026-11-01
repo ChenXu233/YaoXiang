@@ -1,9 +1,9 @@
 module
   fn Animal(MetaType { universe_level: UniverseLevel { level: "0" }, type_params: [] }) -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
     generic_params: ["Self"]
-    type_decl Struct { body: [Field(StructField { name: "speak", is_mut: false, ty: Fn { params: [Ref { mutable: false, inner: Name { name: "Self", span: Span { start: Position { line: 11, column: 20, offset: 432 }, end: Position { line: 11, column: 24, offset: 436 } } }, span: Span { start: Position { line: 11, column: 24, offset: 436 }, end: Position { line: 11, column: 25, offset: 437 } } }], return_type: Name { name: "String", span: Span { start: Position { line: 11, column: 29, offset: 441 }, end: Position { line: 11, column: 35, offset: 447 } } } }, default: None })] }
+    type_decl [speak: Fn { params: [Ref { mutable: false, inner: TypeRef("Self") }], return_type: Generic { name: "String", args: [] } }]
   fn Bird() -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
-    type_decl Struct { body: [Field(StructField { name: "name", is_mut: false, ty: Name { name: "String", span: Span { start: Position { line: 15, column: 11, offset: 477 }, end: Position { line: 15, column: 17, offset: 483 } } }, default: None }), Expr(Generic { name: "Animal", name_span: Span { start: Position { line: 16, column: 5, offset: 489 }, end: Position { line: 16, column: 11, offset: 495 } }, args: [Name { name: "Bird", span: Span { start: Position { line: 16, column: 12, offset: 496 }, end: Position { line: 16, column: 16, offset: 500 } } }] }), Binding(TypeBodyBinding { name: "speak", kind: External { function: "animal_speak", positions: [0] } })] }
+    type_decl [name: Generic { name: "String", args: [] }]
   fn animal_speak(Ref { mutable: false, inner: TypeRef("Bird") }) -> Generic { name: "String", args: [] }
     slot[0] self : Int(64) @depth1
     locals_total=2

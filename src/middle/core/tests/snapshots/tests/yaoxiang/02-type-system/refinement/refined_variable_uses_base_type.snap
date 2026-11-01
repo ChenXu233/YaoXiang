@@ -4,7 +4,7 @@ module
   global[2] total : Int(64)
   global[3] w : Generic { name: "IsPositive", args: [Literal { name: "5", base_type: Int(64), value: Int(5) }] }
   fn IsPositive(Int(64)) -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
-    type_decl Struct { body: [Expr(ConstExpr(BinOp { op: Gt, left: Var("x", Span { start: Position { line: 10, column: 34, offset: 530 }, end: Position { line: 10, column: 35, offset: 531 } }), right: Lit(Int(0), Span { start: Position { line: 10, column: 38, offset: 534 }, end: Position { line: 10, column: 39, offset: 535 } }), span: Span { start: Position { line: 10, column: 36, offset: 532 }, end: Position { line: 10, column: 37, offset: 533 } } }))] }
+    type_decl []
   init (locals=0)
     Load %0 <- int(5)
     Store @0 <- %0

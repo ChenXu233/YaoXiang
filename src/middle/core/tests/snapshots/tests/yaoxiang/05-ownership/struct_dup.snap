@@ -1,12 +1,12 @@
 module
   fn Point() -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
-    type_decl Struct { body: [Field(StructField { name: "x", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 9, column: 20, offset: 412 }, end: Position { line: 9, column: 23, offset: 415 } } }, default: None }), Field(StructField { name: "y", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 9, column: 28, offset: 420 }, end: Position { line: 9, column: 31, offset: 423 } } }, default: None })] }
+    type_decl [x: Int(64) ; y: Int(64)]
   fn Segment() -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
-    type_decl Struct { body: [Field(StructField { name: "from", is_mut: false, ty: Name { name: "Point", span: Span { start: Position { line: 12, column: 25, offset: 551 }, end: Position { line: 12, column: 30, offset: 556 } } }, default: None }), Field(StructField { name: "to", is_mut: false, ty: Name { name: "Point", span: Span { start: Position { line: 12, column: 36, offset: 562 }, end: Position { line: 12, column: 41, offset: 567 } } }, default: None })] }
+    type_decl [from: TypeRef("Point") ; to: TypeRef("Point")]
   fn Named() -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
-    type_decl Struct { body: [Field(StructField { name: "name", is_mut: false, ty: Name { name: "String", span: Span { start: Position { line: 15, column: 23, offset: 707 }, end: Position { line: 15, column: 29, offset: 713 } } }, default: None }), Field(StructField { name: "id", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 15, column: 35, offset: 719 }, end: Position { line: 15, column: 38, offset: 722 } } }, default: None })] }
+    type_decl [name: Generic { name: "String", args: [] } ; id: Int(64)]
   fn Window() -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
-    type_decl Struct { body: [Field(StructField { name: "view", is_mut: false, ty: Ref { mutable: false, inner: Name { name: "Point", span: Span { start: Position { line: 18, column: 25, offset: 820 }, end: Position { line: 18, column: 30, offset: 825 } } }, span: Span { start: Position { line: 18, column: 31, offset: 826 }, end: Position { line: 18, column: 32, offset: 827 } } }, default: None })] }
+    type_decl [view: Ref { mutable: false, inner: TypeRef("Point") }]
   fn sum_of(TypeRef("Point")) -> Int(64)
     slot[0] p : Int(64) @depth1
     locals_total=6

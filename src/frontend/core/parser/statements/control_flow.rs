@@ -2,7 +2,7 @@
 //! Handles if/else, loops, match, and return statements
 
 use crate::frontend::core::lexer::tokens::*;
-use crate::frontend::core::parser::ast::*;
+use crate::ast::*;
 use crate::util::span::Span;
 use crate::util::diagnostic::ErrorCodeDefinition;
 

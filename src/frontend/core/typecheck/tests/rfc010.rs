@@ -10,6 +10,7 @@
 //! - §3.5: 泛型类型 `List: (T: Type) -> Type = { ... }`
 //! - §3.6: 方法定义 `Point.draw: (self: Point, ...) -> ...`
 
+use crate::frontend::core::typecheck::probe::TypeLevelNamespace;
 use crate::frontend::core::typecheck::checker::TypeChecker;
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parse;
@@ -101,7 +102,7 @@ fn check_source(source: &str) -> crate::frontend::core::typecheck::types::TypeCh
         result => result.module,
     };
     let mut checker = TypeChecker::new("test");
-    checker.check_module(&module)
+    checker.check_module(&module, &TypeLevelNamespace::scan_one(&module))
 }
 
 // RFC-010 §3.1: 变量声明
@@ -713,7 +714,7 @@ fn test_semantic_dispatch_type_vs_value_base() {
     let r = parse(&tokens);
     assert!(!r.has_errors, "parse failed: {:?}", r.errors);
     let mut checker = TypeChecker::new("test");
-    checker.check_module(&r.module);
+    checker.check_module(&r.module, &TypeLevelNamespace::scan_one(&r.module));
     assert!(
         checker.env().method_bindings.contains_key("Point.get_x"),
         "类型 base 应登记类型空间方法"
@@ -724,7 +725,7 @@ fn test_semantic_dispatch_type_vs_value_base() {
     let r = parse(&tokens);
     assert!(!r.has_errors, "parse failed: {:?}", r.errors);
     let mut checker = TypeChecker::new("test");
-    checker.check_module(&r.module);
+    checker.check_module(&r.module, &TypeLevelNamespace::scan_one(&r.module));
     assert!(
         !checker.env().method_bindings.contains_key("p.get_x"),
         "值 base 不应在 pass2 登记为方法（应走 pass3 schema 校验）"
@@ -747,7 +748,7 @@ fn test_method_def_arm_value_base_not_method() {
     let r = parse(&tokens);
     assert!(!r.has_errors, "parse failed: {:?}", r.errors);
     let mut checker = TypeChecker::new("test");
-    checker.check_module(&r.module);
+    checker.check_module(&r.module, &TypeLevelNamespace::scan_one(&r.module));
 
     // Assert
     assert!(

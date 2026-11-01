@@ -6,11 +6,12 @@
 //! - §3.3 记录/接口类型（含和类型新语法）
 //! - §3.8 泛型类型
 //! - RFC-010 废弃语法的错误路径回归
+//! - 记录类型体里的匿名函数绑定 `name: FnType[pos] = lambda`（WBS 6.6.7：非 Fn 注解报诊断）
 
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::statements::types::parse_type_annotation;
-use crate::frontend::core::parser::ast::{BinOp, Expr, StmtKind, StructField, Type, TypeBodyItem};
-use crate::frontend::core::parser::{parse, ParserState};
+use crate::ast::{BinOp, BindingKind, Expr, Param, Stmt, StmtKind, StructField, Type, TypeBodyItem};
+use crate::frontend::core::parser::{parse, NullProbe, ParserState};
 
 fn with_type<F>(
     source: &str,
@@ -19,7 +20,7 @@ fn with_type<F>(
     F: FnMut(Type),
 {
     let tokens = tokenize(source).unwrap();
-    let mut state = ParserState::new(&tokens);
+    let mut state = ParserState::new(&tokens, &NullProbe);
     let t = parse_type_annotation(&mut state).expect("parse_type_annotation failed");
     f(t);
 }
@@ -58,7 +59,7 @@ fn struct_interfaces(ty: &Type) -> Vec<String> {
 ///
 /// 签名带解析错误、或首个语句不是带函数类型注解的绑定时，带上原始 AST 上下文 panic——
 /// 定位失败本身就是用例要报的失败，调用方不必重复判空。
-fn parse_fn_type_annotation(source: &str) -> (Vec<Type>, Type) {
+fn parse_fn_type_annotation(source: &str) -> (Vec<Param>, Type) {
     let tokens = tokenize(source).expect("tokenize 签名源码失败");
     let result = parse(&tokens);
     assert!(
@@ -307,7 +308,7 @@ fn test_ptr_type() {
 fn test_reject_old_curried_fn_syntax() {
     // RFC-010: `Int -> Int` should be rejected
     let tokens = tokenize("Int -> Int").unwrap();
-    let mut state = ParserState::new(&tokens);
+    let mut state = ParserState::new(&tokens, &NullProbe);
     let result = parse_type_annotation(&mut state);
     assert!(result.is_none(), "Old curried fn syntax should be rejected");
 }
@@ -512,7 +513,7 @@ fn test_deprecated_pipe_syntax_not_parsed_as_variant() {
     // Arrange
     let source = "{ red | green | blue }";
     let tokens = tokenize(source).unwrap();
-    let mut state = ParserState::new(&tokens);
+    let mut state = ParserState::new(&tokens, &NullProbe);
 
     // Act
     let _ = parse_type_annotation(&mut state);
@@ -584,23 +585,175 @@ fn test_multi_named_paren_stays_tuple() {
     });
 }
 
-/// 普通函数类型 `(a: Int, b: Int) -> Int` 不受影响：参数位的形参名仍由
-/// `parse_fn_type_with_names` 承载，类型位只有类型。
+/// 普通函数类型 `(a: Int, b: Int) -> Int`：形参名与类型同栖（RFC-039 6.8.1）——
+/// 参数位不再丢弃名字，`Type::Fn.params` 携带 `Param`（名字 + 类型）。
 #[test]
-fn test_named_function_type_params_stay_anonymous_types() {
+fn test_named_function_type_params_carry_names_and_types() {
     // Arrange & Act：解析带函数类型注解的绑定，取出注解里的函数类型
     let (params, return_type) = parse_fn_type_annotation("f: (a: Int, b: Int) -> Int = { 1 }");
 
-    // Assert：参数位只有类型（名字丢弃），返回类型是 Int
-    assert_eq!(params.len(), 2, "参数位只有类型，不含名字");
+    // Assert：参数位名字与类型同栖，返回类型是 Int
+    assert_eq!(params.len(), 2, "参数位应有 2 个形参，got: {params:?}");
+    assert_eq!(params[0].name, "a", "第 1 个形参名应为 a，got: {params:?}");
+    assert_eq!(params[1].name, "b", "第 2 个形参名应为 b，got: {params:?}");
     assert!(
         params
             .iter()
-            .all(|p| matches!(p, Type::Name { name, .. } if name == "Int")),
+            .all(|p| matches!(p.ty.as_ref(), Some(Type::Name { name, .. }) if name == "Int")),
         "参数类型应为 Int，got: {params:?}"
     );
     assert!(
         matches!(&return_type, Type::Name { name, .. } if name == "Int"),
         "返回类型应为 Int，got: {return_type:?}"
     );
+}
+/// 不变量（RFC-039 6.8.1 / 6.5.2）：`Type::Fn.params` 是形参的**唯一**表示——
+/// 名字与类型必须来自**同一个** `Param` 节点。用途：防「平行参数表示」
+/// （另开名字数组 / 第二结构）复活后名字与类型各来自不同节点、静默错配。
+#[test]
+fn test_type_fn_params_carry_name_and_type_on_same_node() {
+    // Arrange & Act：解析带类型的函数定义签名（RFC-010 统一语法）
+    let (params, return_type) = parse_fn_type_annotation("f: (a: Int, b: Int) -> Int = a + b");
+
+    // Assert：逐位断言「同一个 Param 同时给出名字与类型」
+    assert_eq!(params.len(), 2, "形参应为 2 个，got: {params:?}");
+    let expected = [("a", "Int"), ("b", "Int")];
+    for (i, (param, (want_name, want_ty))) in params.iter().zip(expected.iter()).enumerate() {
+        assert_eq!(
+            param.name.as_str(),
+            *want_name,
+            "第 {} 个形参名应为 {want_name}（名字必须与类型同节点），got: {param:?}",
+            i + 1
+        );
+        assert!(
+            matches!(param.ty.as_ref(), Some(Type::Name { name, .. }) if name == want_ty),
+            "第 {} 个形参的类型应为 {want_ty}（名字必须与类型同节点），got: {:?}",
+            i + 1,
+            param.ty
+        );
+    }
+    assert!(
+        matches!(&return_type, Type::Name { name, .. } if name == "Int"),
+        "返回类型应为 Int，got: {return_type:?}"
+    );
+}
+
+// 记录类型体里的匿名函数绑定 `name: FnType[pos] = lambda`（WBS 6.6.7）
+//
+// 形参与返回类型由注解提供。注解（剥掉透明的 `Paren` / `NamedParen` 后）是函数类型时
+// 取真实签名；不是函数类型时必须报诊断——旧行为伪造 `Type::Name{"()"}` 当返回类型
+// （6.3 把 `Type::Void` 兜底改成它），既不是真实类型，也让 `semantic_tokens` 的
+// `Name` 臂为 dummy 节点多记一枚 token。
+
+#[test]
+fn test_anon_binding_with_non_fn_annotation_reports_error() {
+    // Arrange: `(Int)` 不是函数类型，却带位置绑定 `[0] = 1`
+    let tokens = tokenize("Point: Type = { cb: (Int)[0] = 1 }").expect("tokenize 源码失败");
+
+    // Act
+    let result = parse(&tokens);
+
+    // Assert: 必须报 E0012 解析错误（旧行为静默伪造 `()` 返回类型——失败消息里打印 AST）
+    assert!(
+        result.has_errors,
+        "非 Fn 注解的位置绑定必须报解析错误，实际 AST: {:?}",
+        result.module.items
+    );
+    assert!(
+        result
+            .errors
+            .iter()
+            .any(|e| e.code == "E0012" && e.message.contains("function type")),
+        "错误应是 E0012 且指出需要函数类型注解，实际: {:?}",
+        result.errors
+    );
+    assert!(
+        !has_anonymous_binding_with_unit_return(&result.module.items),
+        "不得产出 `return_type = Name(\"()\")` 的匿名绑定（伪造载体已删），实际: {:?}",
+        result.module.items
+    );
+}
+
+#[test]
+fn test_anon_binding_with_fn_annotation_keeps_extracted_signature() {
+    // Arrange: `((a: Int) -> Bool)[0]` —— 合法的匿名函数绑定形态（未修的正常分支）
+    let tokens = tokenize("Point: Type = { cb: ((a: Int) -> Bool)[0] = a => true }")
+        .expect("tokenize 源码失败");
+
+    // Act
+    let result = parse(&tokens);
+
+    // Assert: 无解析错误，且形参与返回类型仍从函数的注解提取
+    assert!(
+        !result.has_errors,
+        "合法的匿名函数绑定不应报错，实际: {:?}",
+        result.errors
+    );
+    let Some(StmtKind::TypeDefinition {
+        definition: Type::Struct { body },
+        ..
+    }) = result.module.items.first().map(|s| &s.kind)
+    else {
+        panic!("应解析为记录类型定义，实际: {:?}", result.module.items);
+    };
+    let Some(TypeBodyItem::Binding(binding)) = body.first() else {
+        panic!("记录类型体首个条目应是绑定，实际: {body:?}");
+    };
+    assert_eq!(binding.name, "cb", "绑定名应原样保留");
+    let BindingKind::Anonymous {
+        params,
+        return_type,
+        positions,
+        ..
+    } = &binding.kind
+    else {
+        panic!("绑定种类应是 Anonymous，实际: {:?}", binding.kind);
+    };
+    assert_eq!(
+        positions.len(),
+        1,
+        "位置绑定应保留一个位置，实际: {positions:?}"
+    );
+    assert_eq!(positions[0], 0, "位置应是 0，实际: {positions:?}");
+    assert_eq!(
+        params.len(),
+        1,
+        "形参应从函数注解提取（arg0），实际: {params:?}"
+    );
+    assert_eq!(params[0].name, "arg0", "合成的形参名应是 arg0");
+    assert!(
+        matches!(params[0].ty.as_ref(), Some(Type::Name { name, .. }) if name == "Int"),
+        "形参类型应从注解提取 Int，实际: {:?}",
+        params[0].ty
+    );
+    assert!(
+        matches!(return_type.as_ref(), Type::Name { name, .. } if name == "Bool"),
+        "返回类型应从注解提取 Bool，实际: {return_type:?}"
+    );
+}
+
+/// AST 里是否还有「`return_type = Name("()")`」的匿名函数绑定。
+///
+/// 旧代码在非 Fn 注解时伪造这个返回类型（6.3 的 `Type::Void` 兜底改写而来）：
+/// 既不是真实类型，也让 `semantic_tokens` 的 `Name` 臂为 dummy 节点多记一枚 token。
+fn has_anonymous_binding_with_unit_return(items: &[Stmt]) -> bool {
+    items.iter().any(|item| {
+        let StmtKind::TypeDefinition {
+            definition: Type::Struct { body },
+            ..
+        } = &item.kind
+        else {
+            return false;
+        };
+        body.iter().any(|it| {
+            let TypeBodyItem::Binding(b) = it else {
+                return false;
+            };
+            matches!(
+                &b.kind,
+                BindingKind::Anonymous { return_type, .. }
+                    if matches!(return_type.as_ref(), Type::Name { name, .. } if name == "()")
+            )
+        })
+    })
 }

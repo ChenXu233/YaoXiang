@@ -11,9 +11,10 @@ use lsp_types::{CompletionItem, CompletionItemKind, CompletionParams, Completion
 use tracing::debug;
 
 use crate::frontend::core::lexer::tokenize;
-use crate::frontend::core::parser::parse;
-use crate::frontend::core::parser::ast::{Module, StmtKind};
+use crate::frontend::core::parser::parse_with_probe;
+use crate::ast::{Module, StmtKind};
 use crate::frontend::core::typecheck::semantic_db::DefinitionKind;
+use crate::frontend::core::typecheck::SemanticProbe;
 use crate::lsp::session::Session;
 use crate::lsp::world::World;
 
@@ -133,7 +134,7 @@ pub(crate) fn document_symbol_items(content: &str) -> Vec<CompletionItem> {
         Err(_) => return Vec::new(),
     };
 
-    let parse_result = parse(&tokens);
+    let parse_result = parse_with_probe(&tokens, &SemanticProbe);
     extract_symbols_from_module(&parse_result.module)
 }
 
@@ -162,9 +163,7 @@ fn extract_symbols_from_module(module: &Module) -> Vec<CompletionItem> {
                     });
                 } else if let Some(v) = value {
                     // Lambda → 函数项（含零参）；其余值绑定 → 变量项
-                    if let crate::frontend::core::parser::ast::Expr::Lambda { params, .. } =
-                        v.as_ref()
-                    {
+                    if let crate::ast::Expr::Lambda { params, .. } = v.as_ref() {
                         items.push(CompletionItem {
                             label: name.clone(),
                             kind: Some(CompletionItemKind::FUNCTION),

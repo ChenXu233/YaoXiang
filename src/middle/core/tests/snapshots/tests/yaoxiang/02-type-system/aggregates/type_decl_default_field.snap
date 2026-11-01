@@ -1,0 +1,42 @@
+module
+  fn Config() -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
+    type_decl [retries: Int(64) [default] ; name: Generic { name: "String", args: [] } [default]]
+  fn main() -> Void
+    slot[0] d : Int(64) @depth1
+    slot[1] c : Int(64) @depth1
+    locals_total=8
+    Load %0 <- int(3)
+    Load %1 <- string("default")
+    Call %2 <- string("Config") [%0, %1] (def=d0)
+    Load %3 <- %2
+    LoadField %4 <- %3.0
+    Load %5 <- int(3)
+    Eq %1 <- %4, %5
+    Load %6 <- string("默认值字段应初始化为 3")
+    Call %0 <- string("std.assert.assert") [%1, %6] (def=d1)
+    Load %3 <- %2
+    LoadField %4 <- %3.1
+    Load %5 <- string("default")
+    Eq %1 <- %4, %5
+    Load %6 <- string("默认值字段应初始化为 default")
+    Call %0 <- string("std.assert.assert") [%1, %6] (def=d1)
+    Load %1 <- int(7)
+    Load %4 <- string("custom")
+    Call %0 <- string("Config") [%1, %4] (def=d0)
+    Load %6 <- %0
+    LoadField %5 <- %6.0
+    Load %3 <- int(7)
+    Eq %4 <- %5, %3
+    Load %7 <- string("显式实参应覆盖默认值")
+    Call %1 <- string("std.assert.assert") [%4, %7] (def=d1)
+    Load %6 <- %0
+    LoadField %5 <- %6.1
+    Load %3 <- string("custom")
+    Eq %4 <- %5, %3
+    Load %7 <- string("显式实参应覆盖默认值")
+    Call %1 <- string("std.assert.assert") [%4, %7] (def=d1)
+    Drop %0
+    Drop %2
+    Ret %1
+  init (locals=0)
+    Call %0 <- string("main") [] (def=d2)

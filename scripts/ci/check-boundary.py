@@ -9,17 +9,20 @@ check-boundary.py —— 禁令二判据 C（边界侵蚀）门禁
 引入阶段：P0（report-only，默认退出码恒 0）；P9 统一转硬（CI 改为 --strict）。
 
 检查项（对应 01 §依赖方向规范的七行规则）：
-  B1 禁止 include!               现状 1 处（checker.rs:5618，P5 消除）
-  B2 L2 不得依赖 L3/L4           现状 2 处（03 §2.4，P6 消除）
-  B3 L3/L4 不得 use L2 行为      数据路径豁免：parser::ast（D1 顶层域）、
-                                 lexer::tokens（字面量/Token 数据）；测试目录豁免。
-                                 现状生产命中 0，基线取 0
+  B1 禁止 include!               现状 0 处（WBS 5.1 已消除：checker.rs 改真 `mod`）
+  B2 L2 不得依赖 L3/L4           现状 0 处（03 §2.4；WBS 6.4 已消除）
+  B3 L3/L4 不得 use L2 行为      数据路径豁免：lexer::tokens（字面量/Token 数据）；
+                                 AST 自 6.7.1a 顶层化起不在 L2 路径下（`crate::ast::`），
+                                 规则本身即不命中——无需豁免条款（01 §依赖方向规范）；
+                                 测试目录豁免。现状生产命中 0，基线取 0
   B4 L3 不得反向依赖 L4          现状 3 处（middle → backends::common::opcode，
                                  P6/P10 随词表迁移消除）
   B5 opcode 词表唯一归属          backends/ 内不得新增 opcode 常量定义文件
                                 （现状唯一：backends/common/opcode.rs，83 个）
-  B6 parser 内不得硬编码类型/谓词名  现状 2 文件（CONST_PARAM_TYPES、"Terminates"，
-                                 P6 消除）；字面量匹配前先剥掉行注释
+  B6 parser 内不得硬编码类型/谓词名  现状 0 文件（WBS 6.4 记 2：CONST_PARAM_TYPES 与
+                                 BuiltinProbe 的内置谓词封闭集；WBS 6.6.9 删掉两张封闭集
+                                 并把 CONST_PARAM_TYPES 移回 L3 后清零）；字面量匹配前
+                                 先剥掉行注释
   C  pub(crate) 泄漏计数         只记基线（总数 + 分目录），只许减不许增（P9 转硬）
 
 库存登记口径：{文件: 命中数}。文件内新增命中 → 计数增长 → 违规；
@@ -39,28 +42,36 @@ SRC = os.path.join(ROOT, 'src')
 
 # ---- 层归属（按现状路径；目录改名 D1 后随 6.7 批次同步本表）----
 L2_DIRS = ('frontend/core/lexer/', 'frontend/core/parser/')
+# D1（6.7.1a）：AST 从 `frontend/core/parser/ast.rs` 迁到顶层 `ast/`，与 parser 平级。
+# 它不是 L2——`crate::ast::` 不是 L2 路径，B3 本就不命中（01 §依赖方向规范：
+# 「AST 为顶层域，无需豁免条款」）；但它是 parser 侧的构造面：B2/B6 继续按原口径扫它，
+# 扫描面与 6.7 之前一致（当时 ast.rs 落在 L2_DIRS 内），不得因搬迁而缩水。
+AST_DIRS = ('ast/',)
 L3_DIRS = ('frontend/core/typecheck/', 'frontend/core/types/', 'middle/')
 L4_DIRS = ('backends/', 'std/')
 
-# L3/L4 可消费的 L2 数据路径（AST 顶层域 D1；字面量/Token 是词法数据域）
-L2_DATA_PREFIXES = ('parser::ast', 'lexer::tokens', 'lexer::TokenKind', 'lexer::Token', 'lexer::Literal')
+# L3/L4 可消费的 L2 数据路径（字面量/Token 是词法数据域）。
+# AST 顶层化后移除 `parser::ast`：`crate::ast::` 不被 RE_TO_L2 命中（顶层域不是 L2），
+# 从 L3/L4 引用 AST 已不属「use L2」，故不再需要数据路径豁免。
+L2_DATA_PREFIXES = ('lexer::tokens', 'lexer::TokenKind', 'lexer::Token', 'lexer::Literal')
 
 # ---- 现状库存（2026-10-06 实测登记；消除后从表中移除，新增即违规）----
-KNOWN_INCLUDE = {'frontend/core/typecheck/checker.rs': 1}
-KNOWN_L2_CROSS = {
-    'frontend/core/parser/ast.rs': 1,                 # :930 operator_interfaces::spec 调用点
-    'frontend/core/parser/statements/declarations.rs': 1,  # :509 同上
-}
+# WBS 5.1：checker.rs 的 include!("checker/semantic_tokens.rs") 已改真 `mod`，库存清零。
+KNOWN_INCLUDE = {}
+# WBS 6.4：parser 的两处 typecheck 调用改为注入式探针（parser/probe.rs），库存清零。
+KNOWN_L2_CROSS = {}
 KNOWN_MIDDLE_TO_BACKENDS = {
     'middle/core/bytecode.rs': 1,                     # :13 use ...::common::opcode
     'middle/passes/codegen/translator.rs': 1,         # :5 同上
     'middle/passes/codegen/emitter.rs': 1,            # :5 同上
 }
 KNOWN_OPCODE_DEF_FILES = {'backends/common/opcode.rs': 83}
-KNOWN_PARSER_HARDCODE = {
-    'frontend/core/parser/ast.rs': 2,                 # :839-840 CONST_PARAM_TYPES 常量
-    'frontend/core/parser/statements/declarations.rs': 1,  # :499 "Terminates"
-}
+# WBS 6.4 的 2 处：`"Terminates"`（parser/probe.rs 的 PREDICATE_NAMES）与
+# CONST_PARAM_TYPES（当时的 parser/ast.rs，现 ast/mod.rs）。
+# WBS 6.6.9 清零：两张封闭集随 `BuiltinProbe` 删除（约束名/谓词名的判定归 L3 的
+# operator_interfaces::SPECS 与 BUILTIN_PREDICATES），CONST_PARAM_TYPES 移回 L3
+# （typecheck/probe.rs）并只经注入探针回答。库存为空 ⇒ parser 内再出现内置名字面量即违规。
+KNOWN_PARSER_HARDCODE = {}
 
 BUILTIN_NAMES = {
     'Terminates', 'Int', 'Int64', 'Int32', 'Int16', 'Int8',
@@ -159,7 +170,7 @@ def main():
     print('扫描范围: src/（%d 个 .rs）\n' % len(files))
 
     # ---- B1 include! ----
-    print('== B1 include!（库存 %d 处，P5 消除）==' % sum(KNOWN_INCLUDE.values()))
+    print('== B1 include!（库存 %d 处，WBS 5.1 已消除）==' % sum(KNOWN_INCLUDE.values()))
     for f in files:
         rp = rel(f)
         hits, ex = count_hits(f, RE_INCLUDE)
@@ -171,7 +182,7 @@ def main():
     print('== B2 L2→L3/L4 反向依赖（库存 %d 处，03 §2.4，P6 消除）==' % sum(KNOWN_L2_CROSS.values()))
     for f in files:
         rp = rel(f)
-        if not any(rp.startswith(d) for d in L2_DIRS):
+        if not any(rp.startswith(d) for d in L2_DIRS + AST_DIRS):
             continue
         hits, ex = count_hits(f, RE_L2_CROSS)
         exempt_total += ex
@@ -179,7 +190,7 @@ def main():
     print()
 
     # ---- B3 L3/L4 → L2 行为（数据路径与测试豁免，基线 0）----
-    print('== B3 L3/L4→L2 行为引用（数据路径 parser::ast / lexer::tokens 豁免；基线 0）==')
+    print('== B3 L3/L4→L2 行为引用（数据路径 lexer::tokens 豁免；AST 顶层化后不命中；基线 0）==')
     for f in files:
         rp = rel(f)
         if not any(rp.startswith(d) for d in L3_DIRS + L4_DIRS):
@@ -218,7 +229,7 @@ def main():
     print('== B6 parser 内硬编码类型/谓词名（库存 %d 处，P6 消除）==' % sum(KNOWN_PARSER_HARDCODE.values()))
     for f in files:
         rp = rel(f)
-        if not any(rp.startswith(d) for d in L2_DIRS) or is_test_path(rp):
+        if not any(rp.startswith(d) for d in L2_DIRS + AST_DIRS) or is_test_path(rp):
             continue
         hits, ex = count_hits(f, RE_BUILTIN_LIT)
         exempt_total += ex

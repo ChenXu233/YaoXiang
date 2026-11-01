@@ -543,14 +543,28 @@ def iter_source_files(root: Path):
         if not base.is_dir():
             continue
         for path in sorted(base.rglob("*.rs")):
-            if any(part in (".git", "target", "node_modules") for part in path.parts):
+            # 判据必须按**相对 root** 的路径组件算：AGENTS 第 9 条把批次树
+            # 定在 <repo>/target/yx-scratch/<batch>/tree，若按绝对路径判，
+            # 树内每个文件都含 "target" 组件而被全部跳过——扫描恒为 0 项，
+            # fast/full 通道会「绿但空」（2026-10-30 实测：树内 0 项 /
+            # 主工作树 3252 项，同树 cargo test --lib -- --list 列得出 2882 个）。
+            rel_parts = path.relative_to(root).parts
+            if any(part in (".git", "target", "node_modules") for part in rel_parts):
                 continue
             yield path
 
 
 def scan_sources(root: Path) -> ScanResult:
+    """扫描 root 下的源码，产出计划条目。
+
+    空扫描一律报错：本仓库的 src/tests 不可能一个 .rs 都没有，扫到 0 项
+    只可能意味着路径判据把整棵树都排除了——那样后续计划为空、通道
+    「绿但空」，比直接失败危险得多（2026-10-30 实例：批次树内 0 项）。
+    """
     aggregate = ScanResult()
+    scanned = 0
     for path in iter_source_files(root):
+        scanned += 1
         try:
             text = path.read_text(encoding="utf-8", errors="replace")
         except OSError as exc:
@@ -558,6 +572,11 @@ def scan_sources(root: Path) -> ScanResult:
         result = scan_text(str(path), text, module_path_for(path, root))
         aggregate.items.extend(result.items)
         aggregate.stray_markers.extend(result.stray_markers)
+    if scanned == 0:
+        raise ToolError(
+            f"源码扫描为 0 项（root={root}）：路径判据把整棵树排除了，"
+            "计划会为空、通道将「绿但空」。请检查 iter_source_files 的排除判据。"
+        )
     return aggregate
 
 
@@ -586,7 +605,12 @@ def cargo_test_list(root: Path, targets: str, env: dict) -> set[str]:
     args = ["cargo", "test"]
     args += ["--lib"] if targets == "lib" else ["--all-targets"]
     args += ["--", "--list"]
-    proc = subprocess.run(args, cwd=root, env=env, capture_output=True, text=True)
+    # encoding 必须显式指定：Windows 默认 GBK，构建脚本的中文警告会让
+    # 解码线程抛 UnicodeDecodeError，把真正的失败原因掩盖掉。
+    proc = subprocess.run(
+        args, cwd=root, env=env, capture_output=True, text=True,
+        encoding="utf-8", errors="replace",
+    )
     if proc.returncode != 0:
         tail = "\n".join(proc.stderr.strip().splitlines()[-15:])
         raise ToolError(f"cargo test --list 失败（exit {proc.returncode}）：\n{tail}")

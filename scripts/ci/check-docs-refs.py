@@ -16,6 +16,9 @@ check-docs-refs.py —— 「文档引用的路径必须任何人都能解析」
   1. 取 git 跟踪的全部文本文件（md / rs / py / sh / toml / yml / json / ps1）。
   2. 抽取反引号内联代码片段与 markdown 链接目标中的「路径状」token：含 "/"
      且不是 URL、不是命令行参数。
+  2b. #521（2026-11-01）：.md 文件另做**裸文本**抽取——反引号/链接目标掩码后
+     的自由文本里同样路径状的 token（证据出处的主体面是文档；源码/脚本内的
+     裸文本引用面另行登记）。抽取面放宽，判定与豁免完全复用第 3–5 步。
   3. 用 `git check-ignore -v` 判定该 token 是否落在 .gitignore 覆盖范围内。
   4. 命中、且该 token 在被忽略目录下**有具体子路径** → 违规（这条引用在
      别的机器上打不开）。
@@ -49,15 +52,32 @@ ALLOWED_PREFIXES = {
     'target/yxpkg/': '打包产物目录（构建输出）——规格，不是证据引用',
     'target/distrib/': '分发产物目录（构建输出）——规格，不是证据引用',
     'target/debug/': 'cargo 构建产物目录（本地可执行文件位置）——不是证据引用',
+    'target/release/': 'cargo release 构建产物目录（本地可执行文件位置）——不是证据引用',
+    'target/clippy/': 'pre-commit clippy 钩子的独立缓存目录（.pre-commit-config.yaml 规定的工具写入位置）——规格，不是证据引用',
+    'target/bench-': 'bench 历史脚本的本地输出文件（运行时产物）——不是证据引用',
+    'target/shootout': 'bench 基准结果输出文件（脚本运行时产物）——不是证据引用',
+    'target/hist-local': 'bench 历史本地库目录（运行时产物）——不是证据引用',
     'target/test-budget/': '测试预算通道的本地输出目录（运行时产物）——不是证据引用',
     'target/…': '省略号形态的构建产物目录说明——不是证据引用',
     '.claude/': '本地 agent 工作台目录（不入库；文档讲的是本地用法与历史记录）——不是证据引用',
     'docs/public/wasm/': 'VitePress playground 的发布产物目录（构建输出 / 发布目标）——规格，不是证据引用',
+    'yaoxiang/cache/': 'RFC-014/029a 包管理器缓存布局示例（规格陈述）——不是证据引用',
+    'cargo/registry/cache/': 'RFC-005（已否决）中的 cargo 缓存布局示例（规格陈述）——不是证据引用',
+    'dist/': 'RFC-015/037 分发产物目录布局示例（规格陈述）——不是证据引用',
+    'node_modules/': 'RFC-015 配置示例中的 Node 依赖目录（规格陈述）——不是证据引用',
+    'pkg/msi': 'RFC-037 打包布局示例（规格陈述）——不是证据引用',
+    'mylib/target/yxpkg/': '打包指南示例的产物路径（规格陈述）——不是证据引用',
 }
 
 # 内联代码片段 + markdown 链接目标
 INLINE_CODE = re.compile(r'`([^`\n]+)`')
 MD_LINK = re.compile(r'\]\(([^)\s]+)\)')
+
+# 裸文本路径状 token（#521：仅对 .md 启用——证据出处的主体面是文档；
+# 源码/脚本里的裸文本引用面另行登记）。只认正斜杠（文档与 .gitignore
+# 规则的通行写法）；判定仍由 classify() 的 check-ignore + 豁免表兜底，
+# 抽取面放宽不改变红绿判据。
+BARE_TEXT = re.compile(r'[A-Za-z0-9_][A-Za-z0-9_./-]*[/][A-Za-z0-9_./-]*')
 
 # 明显不是「路径」的 token
 SKIP_PREFIX = ('http://', 'https://', 'mailto:', 'ftp://', '//')
@@ -97,40 +117,70 @@ def read_text(rel):
         return None
 
 
+def _common_token_filters(span):
+    """裸文本与内联代码共用的 token 过滤（与 path_like_tokens 的既有判据同源）。"""
+    if not span or ' ' in span or '\t' in span:
+        return None
+    if span.startswith(SKIP_PREFIX) or span in SKIP_EXACT:
+        return None
+    if '/' not in span:
+        return None
+    if span.startswith('-'):
+        return None
+    # 越界 / 绝对路径不是「仓库内引用」，且会让 git check-ignore 整批报
+    # "fatal: '../' is outside repository"（2026-10-21 实测）——直接剔除。
+    if span.startswith('/') or re.match(r'^[A-Za-z]:[\\/]', span):
+        return None
+    # 以 ~ 开头的是**用户主目录**路径（~/.yaoxiang/、~/.cargo/ …）——那是「讲本机
+    # 环境配置」的内容，不是仓库内引用（AGENTS 元规则 ① 的例外），一律不判。
+    if span.startswith('~'):
+        return None
+    if '..' in span.split('/'):
+        return None
+    if '://' in span:
+        return None
+    # 只取形如 a/b 的前缀（去掉 :行号 / :列 之类后缀）
+    token = span.split(':')[0] if re.match(r'^[A-Za-z0-9_./-]+:[0-9]', span) else span
+    token = token.rstrip('.,;:)\'"')
+    if '/' not in token:
+        return None
+    return token
+
+
 def path_like_tokens(text):
-    """抽出路径状 token -> [(行号, 列号, token)]"""
+    """抽出路径状 token -> [(行号, 列号, token)]（反引号内联代码 + 链接目标）"""
     hits = []
     for regex in (INLINE_CODE, MD_LINK):
         for m in regex.finditer(text):
-            span = m.group(1).strip()
-            if not span or ' ' in span or '\t' in span:
-                continue
-            if span.startswith(SKIP_PREFIX) or span in SKIP_EXACT:
-                continue
-            if '/' not in span:
-                continue
-            if span.startswith('-'):
-                continue
-            # 越界 / 绝对路径不是「仓库内引用」，且会让 git check-ignore 整批报
-            # "fatal: '../' is outside repository"（2026-10-21 实测）——直接剔除。
-            if span.startswith('/') or re.match(r'^[A-Za-z]:[\\/]', span):
-                continue
-            # 以 ~ 开头的是**用户主目录**路径（~/.yaoxiang/、~/.cargo/ …）——那是「讲本机
-            # 环境配置」的内容，不是仓库内引用（AGENTS 元规则 ① 的例外），一律不判。
-            if span.startswith('~'):
-                continue
-            if '..' in span.split('/'):
-                continue
-            if '://' in span:
-                continue
-            # 只取形如 a/b 的前缀（去掉 :行号 / :列 之类后缀）
-            token = span.split(':')[0] if re.match(r'^[A-Za-z0-9_./-]+:[0-9]', span) else span
-            token = token.rstrip('.,;:)\'"')
-            if '/' not in token:
+            token = _common_token_filters(m.group(1).strip())
+            if token is None:
                 continue
             line = text.count('\n', 0, m.start()) + 1
             col = m.start(1) - (text.rfind('\n', 0, m.start()) + 1) + 1
             hits.append((line, col, token))
+    return hits
+
+
+def bare_text_tokens(text):
+    """裸文本路径状 token -> [(行号, 列号, token)]（#521，仅 .md 调用）。
+
+    先把反引号片段、链接目标、带 scheme 的 URL 与 ~ 主目录路径掩掉（前两处
+    由 path_like_tokens 负责；后两处的 token 会被 BARE_TEXT 从中段咬出
+    「github.com/…」「yaoxiang/…」这类尾巴，须整体排除），再在剩余文本上找
+    路径状连续段。判定与豁免全部复用 classify()——抽取面放宽不改变红绿判据。
+    """
+    masked = INLINE_CODE.sub(lambda m: '`' * len(m.group(0)), text)
+    masked = MD_LINK.sub(lambda m: '(' + ' ' * max(0, len(m.group(0)) - 2) + ')', masked)
+    masked = re.sub(r'\b(?:https?|ftp)://\S+', lambda m: ' ' * len(m.group(0)), masked)
+    masked = re.sub(r'(?<![A-Za-z0-9_])~[/\\][^\s]*', lambda m: ' ' * len(m.group(0)), masked)
+    hits = []
+    for m in BARE_TEXT.finditer(masked):
+        token = _common_token_filters(m.group(0))
+        if token is None:
+            continue
+        line = text.count('\n', 0, m.start()) + 1
+        col = m.start() - (text.rfind('\n', 0, m.start()) + 1) + 1
+        hits.append((line, col, token))
     return hits
 
 
@@ -239,6 +289,11 @@ def scan():
             continue
         for (line, col, tok) in path_like_tokens(text):
             candidates.append((rel, line, col, tok))
+        # #521：裸文本抽取仅对 .md 启用（证据出处的主体面；源码/脚本里的
+        # 裸文本引用面另行登记，见 issue #521 的 scope 决定）。
+        if rel.lower().endswith('.md'):
+            for (line, col, tok) in bare_text_tokens(text):
+                candidates.append((rel, line, col, tok))
     return candidates, files
 
 
@@ -265,6 +320,32 @@ def selftest():
         print('[%s] %-34s %s -> %s（期望 %s）' % (
             status, name, token, '红' if got else '绿', '红' if should_fail else '绿'))
     print('selftest:', 'PASS' if ok else 'FAIL')
+    if not ok:
+        return 1
+
+    # #521：裸文本抽取面（仅 .md 调用；红绿判定复用 classify）。
+    bare_cases = [
+        ('裸文本：路径状 token 抽出', '详见 target/yx-scratch/x/evidence.md 的记录',
+         ['target/yx-scratch/x/evidence.md']),
+        ('裸文本：反引号内不重复计（掩码后只剩裸写那处）', '见 `docs/src/a/b.md` 与 docs/src/c/d.md',
+         ['docs/src/c/d.md']),
+        ('裸文本：URL 不抽', '参见 https://github.com/ChenXu233/YaoXiang/wiki/a/b 页面', []),
+        ('裸文本：主目录不抽', '配置在 ~/.yaoxiang/settings.toml 生效', []),
+        ('裸文本：冒号行号剥除', '见 docs/src/dev/HOWTO.md:12 的表', ['docs/src/dev/HOWTO.md']),
+    ]
+    for name, text, expected in bare_cases:
+        got = [t for (_l, _c, t) in bare_text_tokens(text)]
+        status = 'OK' if got == expected else 'FAIL'
+        if got != expected:
+            ok = False
+        print('[%s] %-40s %s（期望 %s）' % (status, name, got, expected))
+    # 裸文本端到端：抽出的 token 进 classify 必须判红（豁免/占位符规则不变）
+    toks = [t for (_l, _c, t) in bare_text_tokens('详见 target/yx-scratch/x/evidence.md 的记录')]
+    red = bool(classify([('fixture.md', 1, 1, t) for t in toks])[0])
+    print('[%s] %-40s classify 判红 = %s' % ('OK' if red else 'FAIL', '裸文本端到端判红', red))
+    if not red:
+        ok = False
+    print('selftest(裸文本):', 'PASS' if ok else 'FAIL')
     return 0 if ok else 1
 
 

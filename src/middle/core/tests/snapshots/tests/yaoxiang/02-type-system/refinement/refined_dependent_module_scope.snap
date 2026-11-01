@@ -2,7 +2,7 @@ module
   global[0] n : Int(64)
   global[1] s : Generic { name: "SumUpTo", args: [TypeRef("n"), Literal { name: "6", base_type: Int(64), value: Int(6) }] }
   fn SumUpTo(Int(64), Int(64)) -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
-    type_decl Struct { body: [Expr(ConstExpr(BinOp { op: Eq, left: Var("s", Span { start: Position { line: 11, column: 39, offset: 583 }, end: Position { line: 11, column: 40, offset: 584 } }), right: BinOp { op: Mul, left: Var("n", Span { start: Position { line: 11, column: 44, offset: 588 }, end: Position { line: 11, column: 45, offset: 589 } }), right: Lit(Int(2), Span { start: Position { line: 11, column: 48, offset: 592 }, end: Position { line: 11, column: 49, offset: 593 } }), span: Span { start: Position { line: 11, column: 46, offset: 590 }, end: Position { line: 11, column: 47, offset: 591 } } }, span: Span { start: Position { line: 11, column: 41, offset: 585 }, end: Position { line: 11, column: 43, offset: 587 } } }))] }
+    type_decl []
   init (locals=0)
     Load %0 <- int(3)
     Store @0 <- %0

@@ -18,11 +18,12 @@ use crate::lsp::world::World;
 
 /// 落一个带 manifest 的双文件项目：lib.yx 定义 `add_one`，main.yx 导入并调用。
 /// 返回 (dir 守卫, main.yx 路径, lib.yx 路径)。
+/// 清单合法（含 version）：WBS 3.23.1 / #503 起坏清单报 E3024 中止。
 fn make_cross_file_project() -> (tempfile::TempDir, PathBuf, PathBuf) {
     let dir = tempfile::tempdir().expect("create tempdir");
     std::fs::write(
         dir.path().join("yaoxiang.toml"),
-        "[package]\nname = \"t\"\n",
+        "[package]\nname = \"t\"\nversion = \"0.1.0\"\n",
     )
     .expect("write manifest failed");
     let lib = dir.path().join("lib.yx");

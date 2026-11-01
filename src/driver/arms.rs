@@ -12,6 +12,8 @@ use crate::frontend::core::lexer;
 use crate::frontend::core::parser::{self, Module};
 use crate::frontend::core::typecheck::checker::TypeChecker;
 use crate::frontend::core::typecheck::environment::MethodOverloadCandidates;
+use crate::frontend::core::typecheck::SemanticProbe;
+use crate::frontend::core::typecheck::probe::TypeLevelNamespace;
 use crate::frontend::core::typecheck::TypeCheckResult;
 use crate::frontend::core::typecheck::passes::dead_code::DeadCodeAnalyzer;
 use crate::frontend::module::orchestrator::{self, OrchestratorError};
@@ -29,9 +31,10 @@ use crate::util::span::Span;
 use super::obligations::{Obligation, IR_GENERATION_DELIVERED};
 use super::helpers::{
     aggregate_instantiation_requests, allocate_global_slots, ast_has_main,
-    collect_compilation_refs, collect_package_refs, init_topological_order, is_bin_role,
+    collect_compilation_refs, collect_package_refs, declared_type_param_names,
+    expand_dispatch_groups, generic_instantiation_map, init_topological_order, is_bin_role,
     link_module_irs, merge_embedded_std_ir, resolved_method_marks, role_context, ImportCycle,
-    InitOrder,
+    InitOrder, RoleContext,
 };
 use super::state::{DriverError, SkipReason, SkippedStage, State, UnitState};
 use super::{Aggregation, Driver, ProgramKind, Stage, Unit};
@@ -78,7 +81,7 @@ impl Driver {
                     continue;
                 }
             };
-            let result = parser::parse(&tokens);
+            let result = parser::parse_with_probe(&tokens, &SemanticProbe);
             if result.has_errors {
                 if matches!(program.aggregation, Aggregation::CollectAll) {
                     // CollectAll：全量 parse 错误 + 残缺 AST 继续下游——
@@ -162,7 +165,7 @@ impl Driver {
                     continue;
                 }
             };
-            let result = parser::parse(&tokens);
+            let result = parser::parse_with_probe(&tokens, &SemanticProbe);
             if result.has_errors {
                 units[i].check_diagnostics.extend(result.errors);
                 continue;
@@ -201,7 +204,7 @@ impl Driver {
                     continue;
                 }
             };
-            let result = parser::parse(&tokens);
+            let result = parser::parse_with_probe(&tokens, &SemanticProbe);
             if result.has_errors {
                 units[i].check_diagnostics.extend(result.errors);
                 // 缓冲区保留残缺 AST（编辑器哲学）；磁盘文件退出编译单元
@@ -250,6 +253,9 @@ impl Driver {
             semantic_db,
             ..
         } = state;
+        // 谓词名可见面（WBS 3.20.9 / #522）：scan 全部已 parse 单元——
+        // 单文件形态通常只有入口一个，全集 scan 过包含方向安全
+        let namespace = TypeLevelNamespace::scan(asts.iter().flatten());
         for (i, us) in units.iter_mut().enumerate() {
             let Some(ast) = &asts[i] else {
                 continue; // CollectAll 下 parse 失败的单元（4.1.3 不可达）
@@ -258,8 +264,8 @@ impl Driver {
             // 首错即返；CollectAll（LSP 兜底）收集模式
             let mut checker = TypeChecker::new(&program.units[i].path.display().to_string());
             let mut type_result = match program.aggregation {
-                Aggregation::FailFast => checker.check_module(ast),
-                Aggregation::CollectAll => checker.check_module_collect_all(ast),
+                Aggregation::FailFast => checker.check_module(ast, &namespace),
+                Aggregation::CollectAll => checker.check_module_collect_all(ast, &namespace),
             };
             // 语义数据面（4.6.1）：仅 CollectAll 形态产出（LSP 消费）；
             // 在诊断判定**之前**取走，错误文件同样保留染色/跳转数据
@@ -324,6 +330,10 @@ impl Driver {
         let is_lsp = matches!(program.kind, ProgramKind::Lsp);
         let is_embedded = matches!(program.kind, ProgramKind::Embedded);
         let vendor_root = vendor_root.clone();
+        // 谓词名可见面（WBS 3.20.9 / #522）：scan 全部单元的 AST 全集——
+        // 跨文件 use 的谓词（lib.yx 声明、main.yx 使用）在检查/签名两侧
+        // 同源可见；全集 scan 过包含方向安全
+        let namespace = TypeLevelNamespace::scan(asts.iter().flatten());
         for (i, us) in units.iter_mut().enumerate() {
             let Some(ast) = &asts[i] else {
                 continue;
@@ -366,8 +376,8 @@ impl Driver {
                 checker.set_vendor_root(root.clone());
             }
             let mut result = match program.aggregation {
-                Aggregation::FailFast => checker.check_module(ast),
-                Aggregation::CollectAll => checker.check_module_collect_all(ast),
+                Aggregation::FailFast => checker.check_module(ast, &namespace),
+                Aggregation::CollectAll => checker.check_module_collect_all(ast, &namespace),
             };
             // 语义数据面（4.6.1）：Lsp 形态的目标文件无论诊断成败都汇入
             // ——染色/跳转在打字中间态不消失；Check 无消费者不汇入
@@ -515,6 +525,23 @@ impl Driver {
                 continue;
             }
             let mut analyzer = DeadCodeAnalyzer::new();
+            // 算子派发组（WBS 3.20.3 / issue #505）：单文件形态无跨单元归因
+            // ——派发点与定义同处本单元，直接从本单元 typecheck 产物读取；
+            // 命中的 `Type.method` 组整组按活，未命中照报 W1005。
+            // WBS 3.20.4 / issue #510：派发名可能是**约束形参名**（泛型体内
+            // `a + b` ⇒ 组 "T.add"）——单文件形态的实例化请求就在同一份
+            // type_result 里，按映射（形参名 → 具体类型名）展开成具体类型组
+            // 再喂分析器（映射/展开逻辑单点在 helpers.rs，两臂共用）。
+            if let Some(tr) = us.type_result.as_ref() {
+                let fn_type_params = declared_type_param_names(std::iter::once((ast, tr)));
+                let inst_map = generic_instantiation_map(std::iter::once(tr), &fn_type_params);
+                analyzer.set_operator_dispatched_groups(expand_dispatch_groups(
+                    tr.operator_dispatches
+                        .iter()
+                        .map(|d| format!("{}.{}", d.type_name, d.method)),
+                    &inst_map,
+                ));
+            }
             let found = analyzer.analyze(ast);
             // 结构化警告诊断（severity 由 builder 按 W 前缀推导，#321 M2）
             warnings.extend(analyzer.to_diagnostics(&found));
@@ -589,7 +616,14 @@ impl Driver {
         // 轮 2（WBS 4.9.4/4.9.5）在本块之上把**消费判据**收紧：名字只记到
         // import 解析出的那个模块（改进 4：被 import 后真实使用才算消费），
         // 且 Test 模块的引用不贡献（改进 5）——见 helpers.rs 的 `RefPool`。
-        let (surfaces, test_rules) = role_context(project_root_canon.as_deref());
+        // 3.23.1（#503）：坏清单的中止归 RoleClassification 臂（E3024 +
+        // 阶段失败）——本臂依赖该阶段，拓扑跳过后走不到这里；走得到 =
+        // 清单可读或无清单，诊断面必空，故只解构声明面两元
+        let RoleContext {
+            surfaces,
+            test_rules,
+            ..
+        } = role_context(project_root_canon.as_deref());
         let mut package_roots: Vec<PathBuf> = surfaces
             .as_ref()
             .map(|s| s.bins.iter().chain(s.libs.iter()).cloned().collect())
@@ -679,6 +713,16 @@ impl Driver {
                     .unwrap_or_default(),
             );
             analyzer.set_resolved_groups(resolved_marks.groups.clone());
+            // 算子派发组（WBS 3.20.3 / issue #505）：`u[0]` / `u == t` 的
+            // 具名决议按定义单元归因后喂给分析器——命中的 `Type.method`
+            // 组整组按活；未命中 ⇒ 未被调用的算子方法照报 W1005
+            analyzer.set_operator_dispatched_groups(
+                resolved_marks
+                    .operator_by_unit
+                    .get(&unit_key)
+                    .cloned()
+                    .unwrap_or_default(),
+            );
             match us.role {
                 Some(FileRole::Bin | FileRole::Internal) => {
                     analyzer.set_exempt_pub(consumed_names());
@@ -1279,6 +1323,10 @@ impl Driver {
         state: &mut State,
     ) {
         let mut registry = ModuleRegistry::with_std();
+        // 谓词名可见面（WBS 3.20.9 / #522）：Registry 阶段不跑第零遍、导入
+        // 未并——谓词判定只能走声明级 namespace。对全部单元 AST 取 scan 并集
+        // 传入（过包含方向安全）
+        let namespace = TypeLevelNamespace::scan(state.asts.iter().flatten());
         for (unit, ast) in state.program.units.iter().zip(state.asts.iter()) {
             let Some(ast) = ast else {
                 continue; // 上游失败（FailFast 下 run 循环已中止，防御）
@@ -1291,7 +1339,7 @@ impl Driver {
             if unit.path.to_str().is_some_and(|p| p.starts_with('<')) {
                 continue;
             }
-            let mut info = orchestrator::extract_module_info(&unit.key, ast);
+            let mut info = orchestrator::extract_module_info(&unit.key, ast, &namespace);
             // 来源标记：vendor 依赖目录下的文件是 Vendor（与本地 User 区分）
             if orchestrator::is_vendor_path(&unit.path) {
                 info.source = ModuleSource::Vendor;
@@ -1322,28 +1370,61 @@ impl Driver {
         &self,
         state: &mut State,
     ) {
-        let State {
-            program,
-            asts,
-            units,
-            used_by,
-            entry_path,
-            ..
-        } = state;
-        // 项目角色上下文：manifest 缺失或损坏 → surfaces 为 None → 全体
-        // Script 态（行为与引入角色模型前一致）；wasm32 下 package 模块
-        // 不编译，同样降级。
+        // 项目角色上下文（WBS 3.23.1 / #503 三态化）：无清单文件 ⇒ 合法单
+        // 文件模式（无声明面，行为不变）；清单可读 ⇒ 按声明面装配；清单
+        // **存在但不可读**（非法 TOML / 缺 [package] 必填字段）⇒ E3024
+        // （error 级）进逐文件收集通道并标记本阶段失败。
+        //
+        // 为何中止（2026-10-30 裁决甲，与非法 .yx 源码同待遇）：坏清单下
+        // surfaces 为 None ⇒ 全体 Script 态，声明面/角色分类/引用池全部建立
+        // 在错误前提上——`RoleClassification` 标记失败后，唯一依赖本阶段的
+        // `DeadCodeAnalysis` 随之拓扑跳过，退化单文件语义产的 W1002/W1001
+        // 不再出现（中止发生在退化之前）；Typecheck 等不依赖本阶段的臂照跑
+        // （源码合法照过）。wasm32 下 package 模块不编译，同样降级为无清单态。
         //
         // canonical 口径必须与下面 `file_canon` 一致：`roles::classify` 的
         // TestRules / 声明面都是 canonical 比较（roles.rs 的 `canonical()`），
         // 根用原始路径时 `file_canon.starts_with(root.join("tests"))` 在
         // Windows 的 `\\?\` 前缀下静默为 false——tests/ 下的文件被误判成
         // Internal（CLI 恰好因入口先 canonicalize 而掩盖了这条）
-        let project_root = orchestrator::find_project_root(entry_path);
+        let project_root = orchestrator::find_project_root(&state.entry_path);
         let project_root_canon = project_root
             .as_ref()
             .map(|root| root.canonicalize().unwrap_or_else(|_| root.clone()));
-        let (surfaces, test_rules) = role_context(project_root_canon.as_deref());
+        let mut role_ctx = role_context(project_root_canon.as_deref());
+        let State {
+            program,
+            asts,
+            units,
+            used_by,
+            entry_path,
+            failed_stages,
+            ..
+        } = state;
+        if !role_ctx.manifest_diagnostics.is_empty() {
+            // 诊断挂入口文件条目（逐文件收集通道的载体；清单错误无 .yx 位置，
+            // span 豁免——见 codes/e3xxx.rs 的 E3024 条目）。**注入按形态门控
+            // 到 Check/Lsp**：MultiFile compile 的收集通道契约只装 W 码
+            // （state.rs DriverOutcome 注记），E 码不得混入 compile 的警告面。
+            // 阶段失败标记**不分形态**：compile 的 DeadCodeAnalysis 同样消费
+            // 声明面，坏清单下其 W 码同样是错误前提上的产物——跳过（少报）
+            // 不改变 run 的执行面（IR/Linking 不依赖本阶段）。
+            let check_channel = matches!(program.kind, ProgramKind::Check | ProgramKind::Lsp);
+            let carrier = program
+                .units
+                .iter()
+                .position(|u| u.path == *entry_path)
+                .unwrap_or(0);
+            if check_channel {
+                units[carrier]
+                    .check_diagnostics
+                    .extend(std::mem::take(&mut role_ctx.manifest_diagnostics));
+            }
+            // 标记失败 = DeadCodeAnalysis 拓扑跳过（不经 fail_with 故障通道：
+            // OrchestratorError 无清单错误变体，且故障通道不带诊断明细）
+            failed_stages.push(Stage::RoleClassification);
+        }
+        let (surfaces, test_rules) = (role_ctx.surfaces, role_ctx.test_rules);
         for (i, us) in units.iter_mut().enumerate() {
             let Some(ast) = &asts[i] else {
                 continue; // 上游失败（FailFast 下 run 循环已中止，防御）

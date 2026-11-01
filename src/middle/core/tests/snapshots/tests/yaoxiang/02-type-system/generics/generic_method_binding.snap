@@ -1,7 +1,7 @@
 module
   fn Box(MetaType { universe_level: UniverseLevel { level: "0" }, type_params: [] }) -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
     generic_params: ["T"]
-    type_decl Struct { body: [Field(StructField { name: "v", is_mut: false, ty: Name { name: "T", span: Span { start: Position { line: 12, column: 31, offset: 505 }, end: Position { line: 12, column: 32, offset: 506 } } }, default: None })] }
+    type_decl [v: TypeRef("T")]
   fn Box.get(Ref { mutable: false, inner: Generic { name: "Box", args: [TypeRef("T")] } }) -> Fn { params: [Ref { mutable: false, inner: Generic { name: "Box", args: [TypeRef("T")] } }], return_type: TypeRef("T") }
     locals_total=3
     Load %0 <- %1
@@ -10,7 +10,7 @@ module
     Ret %2
   fn MyList(MetaType { universe_level: UniverseLevel { level: "0" }, type_params: [] }) -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
     generic_params: ["T"]
-    type_decl Struct { body: [Field(StructField { name: "data", is_mut: false, ty: Generic { name: "Vec", name_span: Span { start: Position { line: 20, column: 11, offset: 709 }, end: Position { line: 20, column: 14, offset: 712 } }, args: [Name { name: "T", span: Span { start: Position { line: 20, column: 15, offset: 713 }, end: Position { line: 20, column: 16, offset: 714 } } }] }, default: None }), Field(StructField { name: "length", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 21, column: 13, offset: 729 }, end: Position { line: 21, column: 16, offset: 732 } } }, default: None })] }
+    type_decl [data: Generic { name: "Vec", args: [TypeRef("T")] } ; length: Int(64)]
   fn MyList.push(Ref { mutable: true, inner: Generic { name: "MyList", args: [TypeRef("T")] } }, TypeRef("T")) -> Fn { params: [Ref { mutable: true, inner: Generic { name: "MyList", args: [TypeRef("T")] } }, TypeRef("T")], return_type: Void }
     locals_total=13
     Load %0 <- %1

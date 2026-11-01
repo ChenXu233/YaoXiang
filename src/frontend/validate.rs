@@ -9,9 +9,10 @@ use std::sync::Arc;
 use std::sync::Mutex;
 
 use crate::frontend::core::lexer::tokenize;
-use crate::frontend::core::parser::parse;
-use crate::frontend::core::parser::ast::Module;
+use crate::frontend::core::parser::parse_with_probe;
+use crate::ast::Module;
 use crate::frontend::core::typecheck::check_module;
+use crate::frontend::core::typecheck::SemanticProbe;
 /// FNV-1a 哈希算法（内联自 compilation_cache::content_hash）
 ///
 /// 非加密用途的快速哈希，用于内容变更检测。
@@ -75,7 +76,7 @@ pub fn validate_source(source: &str) -> ValidateResult {
         };
 
         // ---- 语法分析 ----
-        let parse_result = parse(&tokens);
+        let parse_result = parse_with_probe(&tokens, &SemanticProbe);
         if parse_result.has_errors {
             let result = ValidateResult {
                 diagnostics: parse_result.errors,

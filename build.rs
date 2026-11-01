@@ -16,6 +16,18 @@ fn main() {
     println!("cargo:rerun-if-changed={}", code_tables::RFC013_REL);
     println!("cargo:rerun-if-changed=src/util/diagnostic/codes");
     println!("cargo:rerun-if-changed=src/std/result.rs");
+    // P6 6.0.1：类型表门禁 T1 的扫描面——变体定义、三类构造点与反向桥点变化都要重跑。
+    // 路径常量单一源在 type_tables（与 code_tables::RFC013_REL 同一形态，避免双份漂移）。
+    for path in [
+        type_tables::AST_REL,
+        type_tables::MONO_REL,
+        type_tables::LSP_REL,
+        type_tables::BYTECODE_REL,
+        type_tables::FUNCTION_REL,
+        type_tables::SCAN_ROOT_REL,
+    ] {
+        println!("cargo:rerun-if-changed={path}");
+    }
 
     // #325/#326：构建期权威校验（解析/校验/比对逻辑单一实现于 tools/code-tables lib）——
     // 注册码唯一性、段位、zh 完备性、locales 孤立、RFC-013 码表区间一致性；
@@ -53,6 +65,13 @@ fn main() {
   "
             )
         );
+    }
+
+    // P6 6.6.2 类型表门禁 T1（`ast::Type` 构造点三类分列 + 零构造清单 + 勘察基线对账）——
+    // **构建硬失败**（用户裁决 2A，2026-10-30）：任一违规即 panic 拒绝编译，通过时只打一行摘要。
+    match type_tables::build_gate(root) {
+        Ok(summary) => println!("cargo:warning={summary}"),
+        Err(detail) => panic!("类型表门禁 T1 失败（构建已拒绝）：\n{detail}"),
     }
 
     let _target_os = env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();

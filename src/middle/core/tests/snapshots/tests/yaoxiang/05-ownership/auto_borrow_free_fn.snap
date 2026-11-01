@@ -1,6 +1,6 @@
 module
   fn Point() -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
-    type_decl Struct { body: [Field(StructField { name: "x", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 10, column: 20, offset: 413 }, end: Position { line: 10, column: 23, offset: 416 } } }, default: None }), Field(StructField { name: "y", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 10, column: 28, offset: 421 }, end: Position { line: 10, column: 31, offset: 424 } } }, default: None })] }
+    type_decl [x: Int(64) ; y: Int(64)]
   fn manhattan(Ref { mutable: false, inner: TypeRef("Point") }) -> Int(64)
     slot[0] p : Int(64) @depth1
     locals_total=6

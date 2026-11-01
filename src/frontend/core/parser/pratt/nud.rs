@@ -3,7 +3,7 @@
 //! This module implements prefix parsing for the Pratt parser with RFC-010/011 support.
 
 use crate::frontend::core::lexer::tokens::*;
-use crate::frontend::core::parser::ast::*;
+use crate::ast::*;
 use crate::frontend::core::parser::ParserState;
 use crate::frontend::core::parser::pratt::precedence::*;
 use crate::util::diagnostic::ErrorCodeDefinition;
@@ -365,7 +365,7 @@ impl<'a> ParserState<'a> {
         let token = self.current().cloned()?;
         if let TokenKind::FStringLiteral(raw) = token.kind {
             self.bump();
-            let segments = Self::parse_fstring_segments(&raw, span)?;
+            let segments = Self::parse_fstring_segments(&raw, span, self.probe())?;
             Some(Expr::FString { segments, span })
         } else {
             None
@@ -384,6 +384,7 @@ impl<'a> ParserState<'a> {
     fn parse_fstring_segments(
         raw: &str,
         span: Span,
+        probe: &dyn crate::frontend::core::parser::probe::TypeEnvProbe,
     ) -> Option<Vec<FStringSegment>> {
         let mut segments = Vec::new();
         let mut chars = raw.chars().peekable();
@@ -445,7 +446,8 @@ impl<'a> ParserState<'a> {
                 let tokens_result = crate::frontend::core::lexer::tokenize(expr_str_trimmed);
                 match tokens_result {
                     Ok(tokens) => {
-                        let mut parser = crate::frontend::core::parser::ParserState::new(&tokens);
+                        let mut parser =
+                            crate::frontend::core::parser::ParserState::new(&tokens, probe);
                         if let Some(expr) =
                             parser.parse_expression(crate::frontend::core::parser::pratt::BP_LOWEST)
                         {
@@ -798,7 +800,7 @@ impl<'a> ParserState<'a> {
 
         // RFC-010a 规则①：块的值 = 尾表达式（唯一出口）。
         // 此处不过早剥离末尾表达式——块整体交给下游求值，
-        // 由 typecheck / ir_gen 按尾表达式规则取值。
+        // 由 L3 的类型检查 / IR 生成按尾表达式规则取值。
         Some(Expr::Block(Block { stmts, span }))
     }
 
@@ -1103,7 +1105,7 @@ impl<'a> ParserState<'a> {
             // 把 `|` 收成 BinOp(BitOr)，这里还原为 Or 模式（顶层或模式由
             // parse_match 的显式收链处理，走不到此臂）
             Expr::BinOp {
-                op: crate::frontend::core::parser::ast::BinOp::BitOr,
+                op: crate::ast::BinOp::BitOr,
                 left,
                 right,
                 ..
@@ -1120,7 +1122,7 @@ impl<'a> ParserState<'a> {
                 if let Expr::Var(name, _) = func.as_ref() {
                     // 零载荷变体模式：`none()` 空括号 = 无载荷绑定（Union 内
                     // 模式为 None）。此前空参落进下方多参分支被编码成空元组
-                    // 内模式，typecheck/IR 按「尚未实现的元组模式」拒绝——
+                    // 内模式，L3 的类型检查 / IR 按「尚未实现的元组模式」拒绝——
                     // 零载荷变体从此无法 match。
                     if args.is_empty() {
                         return Pattern::Union {

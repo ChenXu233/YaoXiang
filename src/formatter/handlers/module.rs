@@ -1,6 +1,6 @@
 //! 模块格式化处理器
 
-use crate::frontend::core::parser::ast::*;
+use crate::ast::*;
 
 use super::super::context::FormatContext;
 use super::super::source_map::SourceMap;

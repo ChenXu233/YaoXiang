@@ -1,7 +1,7 @@
 # WBS 历史注记（落地实录 · 审计 · 裁决留痕）
 
 > 本文是 [09-execution-wbs.md](./09-execution-wbs.md)（施工任务表）的**历史注记**：各阶段的落地实录、审计发现、裁决留痕与勘误。
-> **分工**：09 只描述**计划**（看板、三级任务表、依赖、风险、验收）；本文只记录**历史**（做过什么、发现了什么、如何裁决），按时间追加，不改写历史。
+> **分工**：09 只描述**计划**（看板、三级任务表、依赖、风险、验收）；本文只记录**历史**（做过什么、发现了什么、如何裁决），按时间追加，不改写历史。**09 行的收口登记只写「已完成 + 本文指针」**：实测数字、探针结果、判据细节一律落在这里，不回填 09（AGENTS.md「团队编排约定」第 8 条）。
 
 ## P2 建立等价性判据基线
 
@@ -1205,3 +1205,1667 @@
 > **过程注记**：①t2 在主工作树量测而非批次树——替代路径依据：HEAD 恰为冻结 revision 且树干净（量测前后各核一次）、所跑为纯脚本与 npm 构建不依赖 cargo 产物、生成器重跑 diff 空证明未改文件；如实报告非隐瞒，注记认可但**后续批次仍默认走批次树**（零 cargo 依赖的纯文档任务可援引本例）。②第四处同族矛盾（`docs/src/dev/architecture/01-routing.md:264` 手写「不计入错误数」对 W1090 为假）超出「只改生成器三处」范围未修，遗留登记 [#509](https://github.com/ChenXu233/YaoXiang/issues/509)；`013-error-code-specification.md` 经查已自洽（例外同段登记，无需动）。③`cargo audit` 钩子全程网络故障 SKIP（本组四轮一致，零依赖变更）。
 
 > **3.21 整组归档（2026-10-25）**：四个三级任务同日全部完成——3.21.1（`cfb3442d`，#468 取负溢出）、3.21.2（`df89d6ee`，#469 诊断外显三处，D 类经用户批准）、3.21.3（`a8ad0530`，#471 mono 配置贯通）、3.21.4（`3b6df553`，#470 生成器散文）；每轮均「实现门禁全绿 → 独立验证 PASS（含变异可逆）→ 独立复审 APPROVE」三段判据链，遗留集中 [#507](https://github.com/ChenXu233/YaoXiang/issues/507) / [#509](https://github.com/ChenXu233/YaoXiang/issues/509) / [#503](https://github.com/ChenXu233/YaoXiang/issues/503)（关联证据）；本地门禁全绿，各批 CI 结论按覆盖关系核对登记（执行面在跑的并入发版前统一核对，见各 issue 收口评论）。批次树已 gc 清零。
+
+## P3 3.20 收口（轮 1：3.20.1 W1001 闭包引用 + 3.20.2 W1003 变体解构导入，2026-10-25）
+
+> **触发**：WBS 3.20.1 / 3.20.2（2026-10-21 登记，来源 = 3.4.6 施工期暴露的两个既有 W 码误报；修复方向经用户 2026-10-19 裁决丙预先批准，回滚义务绑定两任务——修好后恢复 test.md / weak.md 被改写绕行的示例并再生基线）。
+
+> **改法**（提交 `4c3c8260`，10 文件 +190/−37，两误报双修一笔提交）：①**W1001**——根因比登记描述深一层：`Expr::Lambda` 臂本就递归闭包体，漏点在 parser 对单表达式体闭包 `() => expr` 合成的 `StmtKind::Return` 糖语句（`pratt/led.rs:410-419`）在 `collect_from_stmt` 的六臂 match 中无对应臂、落入 `_ => {}` 致表达式体闭包内引用整体丢失（实测佐证：最小形态 `() => helper()` 报、块体 `() => { helper() }` 不报）；修法 = `dead_code.rs:735` 补 `Return(Some(expr))` 收集臂（+8 行）。②**W1003**——根因：match 变体名走 `check_pattern` 的 Union 臂逐变体比对 sum_types、从不经 `Expr::Var` 解析，语义层唯一导入使用打点 `note_import_use` 接不上，语法兜底收到的 some/none/v 与导入本地名 option 集合成员连不上；修法 = Union 臂解析出和类型后 `note_import_use(&sum_name)`（`expressions.rs:1390`，+7 行），沿既有成员监视集回流链（`watch_import_members` → `imported_used` → `drain_import_tracking` → 三层并集）算作消费。
+
+> **回滚义务（已执行）**：`weak.md` 删 `probe = Option(Int).some(7)` 绕行，与 3.4.6 前形态（`git show 1725d021^`）**逐字节一致**；`test.md` 删主函数直调绕行恢复闭包引用自然形态。**一处有据偏离**：`test.md` 的 `use std.assert` 不恢复——实测 3.4.6 前原文跑 check 报 `W1003 unused import: 'assert'`（该示例只经 `use std.test` 用 `test.assert_eq`，std.assert 真未被消费），3.4.6 删它是**真修**而非误报绕行；恢复会重引入真 W1003 并打破文档示例门禁（`stdlib_docs.rs:116` stderr 非空即红）。复审两半论证均实测复核同意。
+
+> **证据（三段判据链，2026-10-25）**：
+>
+> | 环节 | 判据 | 结果 |
+> | --- | --- | --- |
+> | 实现轮 | 两处各红转绿 + 守卫 + 负控 | W1001 红测试修前 FAILED（输出含实际 W1001 诊断）修后绿，真未使用守卫保留；W1003 红测试修前 FAILED 修后绿且 diagnostics 空（改判后仍可编译），真未使用守卫保留，删导入仍 E1002（前置未削弱） |
+> | 实现轮门禁 | fmt / 全量 clippy / testsuite fast / markers / CI 四脚本 | 8 项全 exit 0（一轮过；首轮工作流因 testsuite stdout 262KB 超 world.run 256KB 上限 errored——改 `python -c` 包装只回传尾部 3000 字符后修正，实现者工作零成本缓存复用） |
+> | 独立验证 | 批次树两处三支复测（误报消失 / 守卫真阳性 / 负控）+ 文档示例端到端（7 块 0/0） | PASS |
+> | 独立验证 | 变异可逆（两修复合一补丁 revert） | 恰好两个红转绿测试 FAILED、apply -R 还原 blob 与 HEAD 逐一一致、trial 后重建 |
+> | 独立验证 | 零漂四项（语料 356 零差异 / 快照绿 / 生成器干净树 diff=0 / stdlib_docs 门禁绿） | 全过 |
+> | 复审 | 修复语义 / 回滚核实 / 基线对账 / 红线 / 漏报风险 | APPROVE（3 条 low，见下） |
+
+> **基线与过程注记**：①语料再生 4 条记录 8 行全部为误报 W 码消失（`test_suite.yx` W1001×3、`test_suite_fail.yx` W1001×2、`weak_ops.yx` W1003、`sum_type_native_match.yx` W1003），**`test_suite_fail` 的真阳性 W1003（`use std.result` 确实无人用）保留在基线**——修复不误伤真阳性的活证据；文档示例不在语料范围（语料 = `tests/yaoxiang/**`、`src/std/tests/**`、multifile main，示例走 stdlib_docs 门禁——口径澄清实现轮已核）。②复审 3 条 low：Union 臂失败路径（field_not_found 等）在打点之后才 return Err——失败时已标使用，但伴随 E 码、非阻断通道、且「写了变体名即尝试消费」语义可辩护；新增 4 测试的判据引用（WBS 号/文档路径）可解析但未直引 warning-codes.md 章节（轻微规范缺口）；提交信息「闭包表达式体」未完整陈述 Return 臂顺路覆盖显式 `return expr;` 语句的同源历史漏收（漏报方向无夹带）——本注记即补述。③`spawn/analysis.rs` 的同名收集器经核实为独立读写分析且已处理 Return，无同类缺陷。
+
+> **登记**：WBS 3.20.1 / 3.20.2 已完成（无独立 issue 锚，判据落本表与 WBS）；3.20 组仅余 3.20.3（issue [#505](https://github.com/ChenXu233/YaoXiang/issues/505)，算子方法 W1005）。
+
+## P3 3.20 收口（轮 2：3.20.3 算子派发可达性 + 登记 3.20.4，2026-10-26）
+
+> **触发**：issue [#505](https://github.com/ChenXu233/YaoXiang/issues/505)（2026-10-25 登记，WBS 3.20.3）：算子接口方法被算子表达式**实际派发调用**（run 值正确 20.0/false）仍报 W1005——可达性不计算子派发。
+
+> **改法**（提交 `ef4cbbd8`，7 文件 +308/−13）：根因实证——算子表达式的具名决议走 `OperatorDispatch` 义务通道（`TypeCheckResult::operator_dispatches`，RFC-011b span 键控，产点 `expressions.rs` 四处 + `statements.rs` 两处），与死代码分析消费的 D20 重载决议表（`overload_resolutions`）是 `obligations.rs` 里的**两条独立义务**、互不相通；方法组无决议记录回落短名共判，而 AST 只有 `u[0]`/`u==t`、无 `index`/`equal` 标识符 ⇒ 误报。修法 = driver 解析 `operator_dispatches` 按既有 `typed_owners` 归因到定义单元，analyzer 新增「派发组整组命中」（派发名不分重载候选 ⇒ 组内全部声明按活）；方法名映射复用 Layer 0 SPECS（`OperatorDispatch.method` 的产物），不生造第二份；Script 与 Check/MultiFile 双臂接线。
+
+> **证据（三段判据链，2026-10-26）**：
+>
+> | 环节 | 判据 | 结果 |
+> | --- | --- | --- |
+> | 实现轮 | 单文件（2 条 W1005）与跨单元（4 条）双形态红转绿 + run 值不变（20.0/false）+ 守卫（接口声明但算子未作用仍报） | 红态机械还原实测（t1 自查修正过一次 forbidden 行号错位导致的假绿并在红态复验翻红） |
+> | 实现轮门禁 | fmt / 全量 clippy / testsuite fast / markers / CI 四脚本 | 8 项全 exit 0（一轮过） |
+> | 独立验证 | 双形态值级+诊断集双断言、守卫、泛型残留行为与登记一致、变异可逆（还原派发接线后恰好主验收测试红）、零漂四项 | PASS（一次 trial 后测试二进制复用变异期产物假红，强制重编后全绿、树内容 blob 核实始终为冻结 rev） |
+> | 复审 | 断链三环逐点核实、两臂接线完整、整组按活有据、4.9.6/4.9.7 逐候选零改动、基线无夹带、变异实验独立复核红绿真实性 | APPROVE（3 条 low 收口提醒，见下） |
+> | 基线 | 语料 4 处 W1005 消失逐夹具归因（Vec3.equal / Box.index / Grid.index / Point.add+multiply——按条目计 5 条、按夹具计 4 处），同提交再生；IR 快照零漂移 | 全部真实派发夹具 |
+
+> **遗留与过程注记**：①**3.20.4 新登记**（issue [#510](https://github.com/ChenXu233/YaoXiang/issues/510)）：泛型约束形参的算子派发（`T: Add` 形参经 mono 具名化，typecheck 后的死代码分析不可见）仍误报——修它需消费 mono 改写产物（第三条通路），注入点设计需先裁决；t1 未用放宽手法（把 `T.add` 也算命中）掩盖，夹具 `constrained_generic_ops.yx` 的现存 W1005 被基线钉住。②**整组豁免 × D20 逐候选叠加边界**：同一 `(Type, method)` 组既有普通重载调用又有算子派发时，死候选被整组豁免掩盖——与运行时按名 Call 的 RFC-011a 历史债同源（派发通道与运行时都无法分辨「候选是否被调用」），宁漏报方向合规、非判据放宽；何时收敛取决于 RFC-011a 签名分发债的清偿。③**测试基建观察（待用户裁决是否登记改进）**：`src/driver/tests/ref_pool.rs` 的 `assert_warnings` helper（4.9 系列既有，非本批引入）——`forbidden` 参数是 `(code, line)` 精确对的存在性断言，**行号写错 ⇒ contains 永假 ⇒ 断言永真 ⇒ 静默空转**（t1 首跑假绿即踩此坑）；改进方向 = forbidden 语义升级为「该文件不得含该 code 的任何条目」或 forbidden 行号与诊断集反向对账。④跨单元「不同名」类型（`a.Temp`/`b.Box`）的守卫形态未写（t1 仅单文件守卫 + analyzer 级验证）——同名近似（`typed_owners` 可能归属都豁免）与 4.9.7 既有口径一致故不阻断，随 3.20.4 一并考虑。
+
+> **登记**：issue [#505](https://github.com/ChenXu233/YaoXiang/issues/505) 已关闭；新三级 **3.20.4**（#510）登记待排期（三级计数 189 → 190）；3.20 组至此 3.20.1–3.20.3 完成、3.20.4 在册。
+
+## P5 checker 文件内拆分收口（5.1 / 5.2 / 5.3，2026-10-26）
+
+> **触发**：WBS P5 三个二级任务（原缺口 G1「P5 无任何施工步骤」的补齐）：`include!` → 真 `mod`、拆出 `refinement`、拆出 `annotations`。判据 C1 zero-diff。**本批按 AGENTS 第 3 条「加框」把三个二级任务并进一支队**——同一文件、同一条依赖链（5.1.1 → 5.2.1 → 5.2.2 → 5.3.1）、同一判据；用户 2026-10-26 批准。若按「一队一二级」拆三队，5.1 那两行改动要单独养一支队，而真正的工作是「把约 3,700 行搬进三个子模块」这一个连续动作。
+
+> **轮次构成（14 个任务）**：t1 勘察（只读）→ 5.1 / 5.2.1 / 5.2.2 / 5.3 各「实现 + 独立验证 + 异家族复审」→ 收口。实现 `deepseek-v4.1-flash-oc`；验证 `glm-5.3-flash`；复审先后为 `MiniMax-M3.1-Flash` → `glm-5.3` → `kimi-k3.1-pro`（前两者分别遇 TRANSPORT 与 429，见「执行环境事故」）。
+
+> **终态形状**：`checker.rs` 5736 → **4167** 行（余 3 个 `mod` 声明与编排方法）；新增 `checker/refinement.rs` 1107、`checker/annotations.rs` 470；`checker/semantic_tokens.rs` 1553（原 1535 + 作用域头 + rustfmt 重排）。四文件合计 7297 行。
+
+> **四轮判据（每轮独立在冻结 revision 上量测）**：
+>
+> | 轮次 | 形状 | 生成物 | 反向对照 |
+> | --- | --- | --- | --- |
+> | 5.1 | `include!` → `mod semantic_tokens;` + `use super::*` + 入口 `pub(super)`；B1 库存清零 | 零漂移 | 删 `use super::*;` → build exit 101（136 errors） |
+> | 5.2.1 | 迁 22 项（方法 15 + 类型/常量 3 + 自由函数 4）；保留面 13 项与共享 6 项原地 | 3 文件 4 行 / 6 个发射点 token | `self.env` → `self.envv` → build exit 101（E0609） |
+> | 5.2.2 | `&mut self` → `&self` + 返回诊断；7 插入 / 7 删除 | 42 行，`:N` 归一残留 0 | 漏传 `module` 实参 → build exit 101（E0061） |
+> | 5.3 | 迁注解族 10 项；`collect_used_in_type` 不迁、零再导出 | 19 行（17 纯平移 + 2 路径行号） | t12 报告文本丢失，未留存（见「执行环境事故」） |
+>
+> 每轮共同：语料 356 行 / 76950 字节 sha256 `48c2b40a…` 逐字节等值；IR 快照 204 张零漂移且脚本输出含「1 passed」；`cargo test --lib` 2845 passed / 0 failed / 2 ignored（四轮同数）；`check-boundary` 的 `pub(crate)` 全程 **167 未增**、B1 库存 0；fmt / clippy / docs-truth / docs-refs / fanout（默认模式）/ 生成器零漂移 全 exit 0。子模块入口一律 `pub(super)`（`collect_semantic_tokens` / `collect_refined_binding_checks` / `check_annotation_type_names` 三处），不放大到 `pub(crate)`。
+
+> **5.2.2 为什么不是 WBS 原文的形态**：原文写「`&mut self` → `(module, &mut TypeEnvironment, &mut Vec<ProofFunctionCall>)`，调用点仅 1235」。实测：该 impl 块 78 处 `self.`、入口生产调用点 3 处 + 测试 1 处；「脱 impl」要求整片走查方法一并转自由函数，连带 `resolve_type_annotation`（生产 8 处）与 `collect_param_refinements`（生产 2 处 + 测试 1 处）外移，并制造「保留面（签名收集）→ refinement」反向依赖——与该步要消除的耦合方向相反。故改取 **B′**：入口改 `&self` + `-> Vec<Diagnostic>`，诊断写入点搬到唯一调用方 `check_module_impl`，7 插入 / 7 删除即消除「以 `&mut self` 隐式写错误通道」。`#263` 的缓冲注释即该隐式通道的旁证。
+
+> **t1 勘察对 WBS 前提的三处推翻**（判据一律改用符号）：① WBS 行锚全失准（`:5618` 已是 `RefinedWalkCtx` 字段、`3441–3661` 已属类型定义面、5.2.2 的「1235」实为 `:1240`）；② 混装块 `3843–5571` 里「应归 annotations 的项 = 0」——`resolve_type_annotation` 的调用方是 6 处注解路径 : 1 处走查 : 1 处走查，属跨界共享；③ 5.2.1 不能整块搬——该块 1729 行含 **437 行保留代码**（`auto_derive_traits`、`collect_refined_var_names` 族、`collect_termination_measures` 族、`terminates_measure` 等）。最终边界：annotations 10 项 / refinement 22 项 / 共享 6 项 / 保留 79 项。
+
+> **三条契约缺陷（队长写错，记录在案）**：① t11 的 acceptance 要求更正 09 的 5.3.2 行，`inScope` 却没圈 `09-execution-wbs.md` ⇒ 改文档与 `changedPaths` 校验互斥（实现者停在原地提问，没有硬凑）；② t11 任务书正文照 WBS 旧行锚列了 7 个自由函数，与 objective/acceptance 的「10 项、`collect_used_in_type` 不迁」冲突（实现者按契约执行，判断正确）；③ 5.2.2 原文的调用点计数失真。共同教训：**行锚与调用点计数不能凭旧文档写契约，必须先量**。
+
+> **两条文档事实缺陷（同样是我方）**：① `01-routing.md` 一度写入 `semantic_tokens.rs` 1537 行——它是「格式化前 1535+2」的中间态，**任何 revision 都未持有该数字**，由复审用 `wc -l` 抓出后改为 1553；② 5.2.2 那笔提交（`:recycle: refactor(typecheck): 精化入口收口为 &self + 返回诊断`）的信息写「check-fanout 0（13 处均既有登记项）」，实测该 revision 为 report-only、库存 9 / 违规 9、全输出无「13」——不改写历史，改由收口提交的信息加一行更正并在此登记正确数字。
+
+> **文档行锚清算（32 处 / 7 文件）**：P5 把代码搬出 `checker.rs` 后，`checker.rs:<行>` 形式的引用**失去对象**（例：`02` 的六处 `Unproven` 分支锚、`01` 的 layers 调用点、`layers/README` 的三个 `check_predicate` 站点与 `substitute_const_expr` 站点）。一律改成**符号**（函数名 / 模块名），不再写新数字——P5 本身就是三次连续搬运，数字锚必然再漂。`check-docs-truth` 与 `check-docs-refs` 都不校验源码行锚，这一批全靠复审发现。
+
+> **执行环境事故（不粉饰）**：本批三次进程级失败（两次收尾阶段上下文/步数耗尽、一次三例 `TRANSPORT: Stream ended without finish_reason`），以及 GLM 路由 5 小时额度耗尽（`429 [1308]`，当日 15:37:53 重置）。后果：t12（5.3 独立验证）任务侧 completed 但**报告文本丢失**，改由队长在收口时重跑同一套门禁复现数字（与 t6/t9 同值），而不是假装报告还在。所有失败均未污染工作树：`HEAD` 与提交始终干净；成员不推送、不清理，清理与收口归队长。另：`pull --rebase` 时与上游 `3.20.3/3.20.4` 的提交在**生成物**上冲突，逐笔以「重跑生成器」解冲突（而非手改行号），故每笔提交的生成物与当时代码自洽。
+
+> **遗留**：① `check-fanout.py --strict` 9 处（全在 `driver/`，父提交同判据同 9 处 ⇒ 既有欠账，非本批引入），是否登记 WBS 行待用户裁决；② `check-snapshot-drift.sh` 文案写「204 快照」而实际 216 个 `.snap`（早于本批）；③ `02-stage-contract.md` 中「仅行号平移、指向仍留在 `checker.rs` 的逻辑」的历史引文未逐一重取（本批只修**已指错对象**的那些）；④ 批次树 `gc` 后清零。
+
+> **计数**：本批不新增二级/三级任务 ⇒ 09 顶部计数表不变。
+
+## P9 判据 C 接线点重定基收口（9.12.1 / 9.12.2，2026-10-26）
+
+> **登记误标（我方）**：P5 收口实录把 `check-fanout.py --strict` 的 9 处违规列为「遗留」，同日登记为 9.12，标题写成「清存量同名多定义」——**写错了**。`--strict` 的违规只来自判据 C（入口接线）；A 判据（同名函数多定义，181 条）是 report-only，永远不会让 `--strict` 红。收口时更正标题与正文。
+
+> **根因**：`STAGE_MARKERS` 是 2026-10-06 按 P4 之前「六条路径各自手工接线」的现状标定的，注释明写「P4 统一 Driver 后本表随库存一起删除」。P4 落地后词表与 19 条 `KNOWN_WIRING_SITES` 都没退休 —— 于是判据把 Driver **自己的阶段表**判成违规（`Stage::DeadCodeAnalysis` 变体名、`slug` 字符串表、`state.rs` 依赖表），与禁令三判据 C 的规则文本（「新增第 N 个入口**而非登记进声明式阶段表** → 违规」）正好相反。这是「门禁长期红、被人为绕过」的典型形态，故处置是**重定基判据**，不是补白名单。
+
+> **9 处的实际构成（逐行查了命中行）**：4 处是真接线（`driver/arms.rs` 的 `parsing_single_file` / `parsing_check` / `parsing_lsp` 与 `driver/helpers.rs` 的 `collect_package_refs`，各一次 `tokenize` + `parse`）；4 处命中的是**阶段词汇表本身**（`driver/mod.rs` 的 `dispatch` 臂、`driver/stage.rs` 的 `scope` 谓词与 `slug` 表、`driver/state.rs` 的依赖表）；1 处是 `frontend/module/orchestrator.rs` 的 `#[cfg(test)] mod` 单元测试（原 `is_test_path` 只豁免 `/tests/` 目录，不覆盖 `src/` 内嵌测试模块）。
+
+> **四项判据修正（口径变化，逐项有依据）**：① **LEX 并入 `Parsing`** —— `src/driver/stage.rs` 与 02 §目标设计 1 都写明 `Parsing` =「词法 + 语法分析（lex → parse）」，词法不是独立阶段，同一函数内 tokenize + parse 只算一个阶段；② **DEADCODE / MONO 只认调用形态** —— 原正则 `dead_code|DeadCode` 会把 `Stage::DeadCodeAnalysis` 这类词汇表当成阶段调用；③ **`#[cfg(test)] mod` 豁免** 以**花括号配对**求模块行范围（不用关键字回看）；④ **12 个变体的臂形态改为派生** —— 从 `Stage::ALL` 取变体、从 `dispatch` 的穷尽 match 取 `self.<臂>(`，单一源 + 三条 fail-loud 守护（变体源失效 / 变体在 match 里找不到臂 / 派生臂名在 `src/driver/*.rs` 里没有 `fn` 定义），`dispatch` 另单列 `DECLARED_DISPATCH_POINTS`（输出标记 `[调度点]`，不计违规）。
+
+> **附带修掉的虚报**：`fn_ranges` 把函数签名行算进被测体，于是 `fn check_project(` 的函数名自匹配 TC 正则、凭空多出一个阶段（`check_project` / `check_source_in_project` 两条退役理由因此不实）。新增 `fn_body` 切掉签名段；实测「≥2 阶段 → <2 阶段」的函数减少量为 **0**，即这次修根因没有顺手放掉任何真接线（由复审用四种口径独立重算确认，非复述实现者）。
+
+> **13 条退役库存的分类（实测，非推断）**：函数已删除 5 条（`frontend/pipeline.rs` 的 `run_typecheck` / `run_ir_generation`、`orchestrator` 的 `collect_project_refs`、`lsp` 的 `update_semantic_db` / `run_diagnostics`）；函数仍存但已不再直接调用阶段原语 5 条（`pipeline.rs run`、`orchestrator compile_project` / `compile_embedded_module` / `check_project` / `check_source_in_project`）；仅因 LEX 并入 `Parsing` 而降为单阶段 3 条（`lib.rs eval_code`、`orchestrator parse_file`、`lsp/handlers/completion.rs document_symbol_items`）。最终库存 = 6 条，接线点实测 = 7 处（6 库存 + 1 调度点）。
+
+> **复审链四轮，每轮都抓到真问题**：轮 1 `needs_revision`（medium）——词表不认 driver 阶段臂的调用形态，`self.parsing(` + `self.typecheck(` 的手工两阶段接线**实测为绿**（真逃逸，不是措辞问题）；轮 2 `needs_revision`（medium）——「其余 6 个变体除臂形态外没有第二个可调形态」不实：VendorConsistency / Discovery / Registry / RoleClassification 的阶段实现是 Driver **之外**的共享原语；轮 3 `needs_revision`（low）——盲区段把「活接线」与「死代码候选」并列成同一处置菜单；轮 4 **pass**，无 finding。轮 2 另独立验证了「派生失效必须 fail-loud」（四种破坏各造一次全部 exit 1，不存在「退化空表却仍全绿」）。
+
+> **变异证据**：独立验证侧 5 条负控（driver 外新接线 / driver 内非 dispatch / 删调度点登记 / 删库存条目 / 登记失效），复审侧逐条用自己的补丁复跑全部 exit 1 并机械还原（`git status` 干净 + blob 与 HEAD 一致）；复审另自造 3 个实现者与验证者都没用过的形态。判据没有变成「改绿就算」——每轮都要求「你能不能再造一个应红的」。
+
+> **队长自己的四处缺陷（不粉饰）**：① 派工写「13 条里 10 条函数已不存在」是从脚本 `[进展] … 已消失` 标签反推的，而该标签只表示「不再被判为接线点」，实测分类是 5 / 5 / 3；发现后 amend 了验证任务的 acceptance，没有让验证者背假 finding。② 自动生成的 repair 任务 `inScope` 里混进了 findings 文本被切出的**伪路径**（`PROOF/DEADCODE/MONO`、`PARSE/TC`、`Codegen/Exec`）与禁改文件，直接下发会让 `changedPaths` 校验当场失败——由队长重写为单一脚本路径。③ 派工文本里写了「用户裁决 A′」这种**会话私有代号**，成员如实抄进脚本 docstring，违反元规则①（仓库内不可解析）——复审抓出后改为四处可解析依据（禁令三判据 C / 02 §目标设计 1 / `stage.rs` 的 `Parsing` 注释 / 09 的 9.12 行）。④ **9.12 登记提交只追加了「+1 = 9.12 / +1 = 9.12.1」的日期注记，没有同步行首总数**（仍留 70 / 190），收口时一并补正（含本批新增的 9.12.2 ⇒ 71 / 192）。前三条都是「凭标签与旧文档写契约」的同一个病，与本批要修的判据错误同源。
+
+> **流程偏差（记录，不掩饰）**：一次变异试验没走 `scratch.py trial` 批次树，而是在主仓工作树用 difflib 生成补丁 → `git apply` → 跑门禁 → `git apply -R` → blob 对账。复审判定「机械可逆的实质等效」并接受，同时记两条注记：绕开「探针/独立检出一律走批次树」的约定、且无「变异前树必须干净」的前置检查与 `apply -R` 失败兜底。其余各轮均在批次树的冻结 revision 上量测。
+
+> **环境事故**：复审成员的路由两次 `TRANSPORT: Stream ended without finish_reason`（收尾轮与后续消息），用户手动复活成员后继续；两次均未产生未收口的 attempt、未污染工作树。另有一次评审循环撞运行时上限（三轮 `needs_revision` 后由系统升级），队长按「先向用户报、不自行再开一轮」处置，用户复活成员后才继续。
+
+> **门禁（最终字节上）**：`check-fanout.py --strict` exit 0（违规 0、库存 6、接线点 7）、report-only exit 0；`check-boundary.py` exit 0（`pub(crate)` 167、违规 0）；`check-docs-truth.py` / `check-docs-refs.py` exit 0；重跑 `gen-error-code-docs.py` 后 `git diff --quiet` exit 0；A 段 181 条同名定义、B 段六族文件数（BinOp 58 / UnOp 31 / MonoType 120 / ConstValue 78 / Literal 54 / bytecode 运算符 10）与改动前一致。Rust 侧门禁（fmt / clippy / test / 语料 / 快照）本批不适用——四笔改动只碰 `scripts/ci/check-fanout.py`，`git show --name-only` 可证。
+
+> **遗留（登记为 9.12.2，未决）**：① 4 个变体的共享原语未收录进词表（是否收录属**未决裁决**，实测收录会新暴露且仅暴露 2 处）；② `build_registry` 是零调用者的死代码重复（`driver/arms.rs` 的 Registry 臂自建表、不调它），但它是 lib 目标公开项，删除属**对外 API 面变更**，须单独裁决；③ `collect_package_refs` 是活代码的真接线，收录后需登记库存或重构。
+
+> **计数**：本批新增三级任务 9.12.2 ⇒ 三级 190 → 192（含补正的 9.12.1 漏计 1 条）；二级 70 → 71（同上，9.12 登记时漏计）。
+
+## P9 判据 C 覆盖面扩张与 `build_registry` 清账（9.12.2，2026-10-26）
+
+> **裁决**：用户 2026-10-26 就两个互不耦合的决策给出 **D1-A（收录 4 个变体的 Driver 外阶段共享原语）+ D2-A（删除零调用者的 `build_registry` 链）**。裁决书写明 D1 只改门禁的看法、不动代码与 API，D2 才是对外 API 面变更（`build_registry` 因 `pub mod frontend` → `pub mod orchestrator` 属 lib 目标公开项），因此两者独立评估、执行顺序为**先删后收**（这样新暴露只剩一处，库存落在 7 而不是 8）。
+
+> **删除面（D2-A）**：删 `orchestrator::build_registry`（原 `:379-382`）与私有 `build_registry_from`（原 `:384-396`）。**连带删 `discover`**（原 `:416-418`）——它唯一的调用点就在 `build_registry` 体内，删后即零调用者，`-D warnings` 会因 dead_code 直接报错；这一点在契约里事先写明，不是实现时临时扩大范围。保留：`DiscoveredFile` / `Discovery` 类型 / `extract_module_info` / `parse_file` / `is_vendor_path`（各有其它使用者）。Driver 的 `registry` 臂（`src/driver/arms.rs`）自建表、不调被删函数 ⇒ 行为中性。
+
+> **收录面（D1-A）**：删除后仍存在的 Driver 外阶段原语——VendorConsistency ← `ensure_vendor_consistency`、Discovery ← `discover_with_used`、RoleClassification ← `roles::classify`、Registry ← `extract_module_info`。两条口径要点：① `roles::classify` 必须用**限定形态**，裸名 `classify` 会误伤其它模块的同名助手（复审用「无关 `classify` + `tokenize`」探针实测复现过误判）；② 不用裸 `.register(`（仓内多处同名），`ModuleRegistry::with_std` 这类精确形态可用。收录后新暴露**恰一处**：`collect_package_refs`（`driver/helpers.rs:1057`，活代码、`driver/arms.rs:626` 调用），登记为库存 **6 → 7**，接线点 **7 → 8**。
+
+> **判据自身的诚实性修正**：轮 1 复审抓到「Registry 变体零覆盖 + docstring 三处断言不实」——`build_registry` 删掉后，脚本却断言「Registry 已没有 Driver 外原语」，而 `extract_module_info` 与 `ModuleRegistry::with_std` 仍在。处置取**补标记**而不是改断言（改断言只是把洞写进文字）：只补键不加探针时 `--strict` 逐项不变（无副作用），补键后「Driver 外重建 registry」的探针由 exit 0 转 exit 1。同一轮还把「收录口径」改写成可判定的 R1–R3，并**删掉那条被表内 5 项证伪的规则**（「凡构造该阶段数据的函数就不收」——PARSE 收 `parse_file`、TC 收 `TypeChecker::new`、DEADCODE 收 `DeadCodeAnalyzer`、MONO 收 `Monomorphizer`、IRGEN 收 `AstToIrGenerator` 都是构造器形态）；反例换成 `is_vendor_path` / `scan_use_refs`。
+
+> **覆盖面数字**：判据头部改为派生计算后的 **14 键 = 共享原语 12 + 2 个变体专有臂键（GlobalSlotAlloc / Linking）**，另 10 个变体的臂形态并入共享原语键；开头段与「覆盖范围」段统一为 **10 + 2**（原先「6 个变体另有共享原语 / 其余 6 个变体分三类」的旧划分已删除）。
+
+> **失实注释与陈旧数字（同一批清掉）**：`orchestrator.rs:7` 模块头不再声称本模块构建 Registry（改为「构建由 Driver 的 `registry` 臂承担」+ 保留删除日期）；`statements.rs:737` 改指 `discover_with_used`；`orchestrator.rs:403` 的 `[discover]` 悬空 intra-doc 链接改为文字引用；脚本里 `orchestrator.rs:1312 → :925` 的陈旧行号（经核：父提交时该注释在 `:952`，`1312` 早已越界，**非本批引入**）与 `ModuleRegistry::with_std` 的「30+ 处」未实测数字一并改为实测值（**26 处 / 21 文件；`/tests/` 16 处 13 文件；其余 10 处 8 文件里 3 处落在生产文件的 `#[cfg(test)] mod` 内 ⇒ 生产 7 处 6 文件**）。`docs/src/en/**` 的翻译副本不手改，由 auto-translate bot 在推送后再生。
+
+> **复审链**：轮 1 `needs_revision`（1 medium：Registry 零覆盖 + 三处断言不实；2 low：裸名 `classify` 过宽、悬空 doc 链接）→ 修复轮 → 轮 2 **pass**（复审用**自造探针**独立复现，未复用实现者的探针；F1 补键后违规行 `[Discovery/PARSE/Registry]` 由它自己构造）。随后把两处失实注释与脚本里三处失真表述（F4/F5/F6/F8）并成一轮清理 → 窄复审 **pass**：该轮用**剥掉 docstring 后比对 AST** 的强口径证明判据逻辑零夹带（非注释语句 254/254 逐条相同、词表 pattern 值级全同、运行期 `stage_markers` / `wiring_sites` / `dispatch_points` 结果全等），并独立复算了 F6 的四个数字。
+
+> **行为中性证据**：语料差分 356 行**逐字节一致**（sha256 与父提交相同）、IR 快照 216 张**零漂移**、`cargo test --lib` **2855 passed / 0 failed / 2 ignored**（测试数不减）、`cargo fmt --check` 与 `clippy --all --all-features --all-targets -D warnings` exit 0、`check-boundary` exit 0（`pub(crate)` **167 → 166**，即删掉 `discover` 的必然结果）、`check-docs-truth` / `check-docs-refs` / `gen-error-code-docs` 零漂移全 exit 0。A 段同名定义 **181 → 180**：删掉 `build_registry` 后「`build_registry`: 2 个文件」这条同名条目退出名单，是删除的直接结果（父提交实测 181、当前 180，差值恰为该条）。
+
+> **队长自己的两处契约缺陷（不粉饰）**：① 我在实现契约里写「A 段 181 条不变」，但删除必然让「`build_registry`: 2 个文件」退出同名名单 ⇒ 正确预期是 180；验证者按实测报 180 并给出对账，没有迁就我的错误预期。② F4（两处失实注释）的归属在**看板 acceptance 与派工消息之间自相矛盾**（一边算给本修复轮、一边说归另外两个任务），实现者按「修复面超出 inScope 就停下报告」处理——判断正确，是我的契约缺陷；随后单独开窄任务补做，并要求**原地替换不增删行**，以免把上一轮刚校正的行号再次推漂。
+
+> **偏差登记（不改写历史）**：修复轮那笔提交的信息里写 `extract_module_info（:1057…）`，而该 commit **自身 revision** 上是 `:1058`（同一笔里在 `orchestrator.rs` 插入一行所致）——违反「行号必须在被引用的 revision 上重取」。处置：**不改写该提交**（改写会换掉复审已绑定的 sha、使其 `pass` 失效），改为在此登记；脚本 docstring 内的行号已同步为 `:1058`。
+
+> **未修的两条非阻塞观察（如实留着）**：① `orchestrator.rs:7` 新写的「本模块只提供 `extract_module_info` 等构件」作用域是第 3 条（Registry），字面可能被读成模块级断言，复审建议改成「在 Registry 一节…」；② 同一模块头第 1 条「**发现**：从入口文件所在目录递归收集所有 `.yx` 文件」是**本批之前**就与实现（沿 `use` BFS）不符的旧描述。两条均非阻塞、未在本批处理。
+
+> **过程偏差**：本轮无成员进程级失败（复审成员此前两次 `TRANSPORT` 是上一批的事）；实现者首次 amend 被 `commit-msg` 钩子拒（scope 不接受 `docs(frontend,ci)` 多值），改为 `docs(ci)` 通过，**未跳钩子**。
+
+> **计数**：本批不新增二级/三级任务（9.12.2 已于前批登记）⇒ 09 顶部计数表不变（二级 71 / 三级 192）。另记一处自查：上一批把 9.12 勾成完成时，其三级 9.12.2 尚未做，存在过一段「二级已勾、三级未收口」的不一致，本批收口后该不一致自动消解。
+
+## P3 3.20 收口（轮 3：3.20.4 泛型派发具名化 + 整组归档，2026-10-26）
+
+> **触发**：issue [#510](https://github.com/ChenXu233/YaoXiang/issues/510)（2026-10-26 登记，WBS 3.20.4）：`sum: (T: Add) -> (a: T, b: T) -> T` 以 `Int`/`Vec3` 实例化（run 值正确）时 `Vec3.add` 仍报 W1005——typecheck 记录的派发名是约束形参名（组 `"T.add"`），具名化在 mono 特化，死代码分析不可见。
+
+> **通路裁决（用户 2026-10-26 批准甲案）**：裁决前调查推翻了登记文案「修它需消费 mono 改写产物」的前提——typecheck 期已持有全部实例化：`InstantiationRequest.type_args: Vec<MonoType>`（instance.rs:20）+ `GenericFunctionId.type_params: Vec<String>`（instance.rs:345）。三案比选（甲 = driver 死代码臂内映射展开；乙 = 消费 mono 产物/管线后移——违 3.4.8 ③「CHECK 形态 mono 成功产物不消费不外发」+ 跨层红线；丙 = typecheck 内即时具名化——时序不可能，实例化请求来自调用点、晚于泛型体检查），甲案胜出：零管线改动、零跨层、复用 3.20.3 注入缝。
+
+> **改法**（提交 `c94bb869`，7 文件 +329/−17）：driver 死代码臂建「形参名 → 具体类型名」映射，把派发组 `"T.add"` 展开成具体组（`Vec3.add`/`int64.add`…，原组保留）再喂 `set_operator_dispatched_groups`；只收值形态实参（Struct/Enum/Int/Float/Bool/Char），符号化实参（Generic/TypeRef）不入映射。三个单点函数（`generic_instantiation_map` / `declared_type_param_names` / `expand_dispatch_groups`，helpers.rs）两臂共用：编排臂 `resolved_method_marks` 两遍扫（先跨单元聚合建映射，派发循环展开后逐组走既有 owners 归因），单文件臂同构接线。**机制缺口修补**：跨单元兜底路径的请求 `params=[]`（t1 探针实测）⇒ 消费侧扫定义单元 AST 补名（复用 `ast::classify_generic_params` 单点，is_trait 与 checker.rs:1520-1526 同源：`has_trait || operator_interfaces::spec`）；上游登记口缺陷（checker.rs:466-477 Assign 臂只认 `(T: Type)` 不认 `(T: Add)` ⇒ `Export::type_params` 为 None）属 D/E 类**未修**——修它会让跨单元请求切到声明名路径、mono 特化匹配随之改变。
+
+> **证据（判据链，2026-10-26）**：
+>
+> | 环节 | 判据 | 结果 |
+> | --- | --- | --- |
+> | 实现轮 | 先红后绿三组：单文件（夹具形态，红态 W1005@19 留档）、跨单元（临时项目）、守卫（sum 未调用 ⇒ 无请求 ⇒ 仍报）+ 值级×2（Int(3)/Float(5.0)）；3.20.3 既有 18 测试逐字节不变（纯追加 147 行） | 修前 2 FAILED（输出留档）→ 修后 18/18 绿；真二进制双夹具 check 0 warning、run exit 0 |
+> | 实现轮门禁 | fmt / 全量 clippy / testsuite fast / markers / CI 四脚本 | 8 项全 exit 0（一轮过） |
+> | 基线 | 语料再生恰 1 行（constrained_generic_ops 的 W1005@19 → 空，exit/stdout/stderr 不变）；IR 快照零漂移 | 逐条核对无夹带 |
+> | 独立验证（t2） | 批次树三组复测（值级+诊断集双断言）、守卫、深链边界与登记一致、变异可逆（还原展开接线恰红 + blob 机械还原 + trial 后重建）、零漂四项 | **FAIL——唯一失败项 = 错误码生成物欠账**（见下）；其余全过 |
+> | 复审（t3） | 数据链只用前端产物、两臂闭合、单点无复制、同源判据核实、守卫边界、过滤谓词对照 MonoType 全变体、归因口径与 3.20.3 一致、红绿独立复现、基线对账、测试合规 | **REQUEST_CHANGES（high = 同款欠账）**；主体判定成立：`c1adca7b^`+新测试补丁 2 条未修先红、trial blob 机械还原、`pub(crate)` 167 未增 |
+> | 队长补修 | 重跑生成器 → 5 处行号平移（E0010/E0011 `arms.rs:92→93`、E8001 `helpers.rs:68→69`、W1006 `653→660`、W1007 `1752→1759`，计数无更正）→ amend 并入 → 幂等复核 | `git diff --quiet` exit 0；rebase 后复验仍幂等；t2/t3 判定迁移依据 = amend 仅追加生成物、代码与被验 revision 逐字节一致 |
+
+> **六条边界登记（不改码，全部宁漏报方向）**：① 嵌套泛型深链——符号化实参不求值，`g(x) = sum(x, x)` 形态仍可能误报；② 短名尾段误配——补名按函数名尾段查表且 first-wins（`or_insert` 不合并），跨模块同名泛型错配方向 = 展开多余组 ⇒ 至多漏报；③ 兜底路径实参序——反推 type_args 按位去重，声明序与位序不一致的签名可错挂（同前，漏报方向；arity 不齐 zip 截断）；④ 块内 FnDef 形态——补名只扫顶层 Assign（当前无块内泛型派发场景证据）；⑤ Ref 形态实参不入映射——t3 探针（`sum(&a, &b)`）实测 check 过、run **E6006**（mono 按形参名改写与登记名 `Vec3.add` 不符）＝既有深层缺陷，伴生 W1005 残留 → [#512](https://github.com/ChenXu233/YaoXiang/issues/512)；⑥ 同名形参跨函数并集漏报——t3 探针（union_leak：`f` 体内派发但从不调用 + `g` 无派发但以 Vec3 实例化）实证从未派发的方法可被并集豁免——与 3.20.3「整组按活」同构（派发通道无法分辨个体），非判据放宽。
+
+> **契约缺陷（队长写错，记录在案）**：t1 契约写「不改诊断发射点 ⇒ 不用重跑错误码生成器」——误。AGENTS 验证⑤原文即含「行号平移」：import/注释引起的发射点行号平移同样必须再生生成物。本批 t1 门禁清单漏「重跑生成器 + `git diff --quiet`」一项，导致 t2 抓到时已提交（本地 `c1adca7b`，amend 为 `17201560`，rebase 后终值 `c94bb869`——三值代码逐字节一致，差异仅生成物与提交位）。**后续批次 t1/t2 门禁固定含此项**。与 #470 批次的教训合并：生成器幂等必须作为独立门禁项存在，不能依附于「是否改了发射点」的主观判断。
+
+> **登记**：issue [#510](https://github.com/ChenXu233/YaoXiang/issues/510) 已关闭（实现 `c94bb869`）；新遗留 [#511](https://github.com/ChenXu233/YaoXiang/issues/511)（上游登记口 D/E 类，修前须用户裁决）与 [#512](https://github.com/ChenXu233/YaoXiang/issues/512)（Ref 形态 E6006 既有深层缺陷）备案不占号；**3.20 组四任务（3.20.1–3.20.4）全部收口，2026-10-26 归档**（回滚义务已于轮 1 执行）——归档条件满足：全部三级收口、提交已推送、CI 按第 13 条交由后代 run 覆盖并入发版前统一核对。
+
+## P6 6.0 门禁先行收口（6.0.1 / 6.0.2，2026-10-27）
+
+> **触发**：P6 的设计文档写于 2026-10-05，此后 P4 统一 Driver、P5 拆分 checker，行锚已漂；09 的 P6 表与 03 文档的数字互相矛盾（13 / 12 / 11）。用户 2026-10-26 裁决「一队做 6.0–6.8」后，首轮先做 **6.0 门禁先行 + 全量锚点重测**，不先动业务代码。
+
+> **裁决登记（用户 2026-10-26，三项）**：① **团队范围 = 一队做 6.0–6.8**（P5 先例；收口时登记偏差）；② **硬验收限 6.1–6.7**——`git diff --stat tests/ src/std/` 必须在 6.1–6.7 的**每轮**为空；**6.8.2（D54 行为修复，新诊断码 + 基线更新）单列一轮并单独裁决**，不适用本硬验收；③ **3.18 / 3.18.2 留 P3**，P6 之后另立设计/批次，并更正 09 中「正确修法属 P6」的措辞（该措辞已改为「归属阶段：P3（前置待 P6）」）。
+
+> **本轮两条裁决**：① **计数 = 删 13**：03 §5.2 的处置表逐行数出 删 13 / 迁 1 / 留 12（26 → 13），**§5.2 表头「删 12、迁 1、留 13 / 26 → 14」与 09 的 6.3.1「删 11 个变体」都写错**，已按表体更正为 13。② **`AssocType` 的处置**：03 §5.2 第 18 行与 §5.7 的原触发条件（「若报告显示 `AssocType` 存在生产构造点，说明本节核实有误，正确动作是回到 RFC 决议表改 D8」）**确实命中**——实测在 `src/middle/passes/mono/function.rs` 的两个 AST→AST 替换函数里各有一个生产重建点。但**命中的是口径问题、不是核实有误**：那些点是把**已有 AST 类型**重造一份以替换类型变量，不是 parser 的产出。因此处置是 **D8 不变、口径改为「parser 前向零构造」、两个函数的重建点登记进 6.3.2**，**不塞白名单**。**用户裁决 A：就地更正 D8**（不附日期注记）——把「生产零构造」改为「**parser 前向**零构造」、补两处 AST→AST 重建点、把「其余 11 个」改为「其余 12 个」；删除结论不变。
+
+> **轮次**：本批 = 6.0 的两个三级任务（6.0.1 新建 `tools/type-tables` 实现 T1/T2/T3 且 T1 先只报告不失败；6.0.2 在业务代码零改动上取全量基线并人工核对），共 6 个工作单元：全量锚点勘察 / 门禁实现 / 基线取样 / 独立验证 / 复审与修复轮 / 本收口。
+
+> **判据**：C3（诊断码 / 消息 / 顺序不变）。本批是**纯新增门禁**（首版只发 `cargo:warning`、不 `panic!`），故实际判据是三条：**门禁在未改动代码上零漂移**、**故意引入零构造变体必须被门禁抓到**、**修复后基线与修复前逐点相同**。
+
+> **门禁数字（实测）**：T1 扫 `src/` 全量 **287 个非测试 `.rs`**，**构造点 74 = 前向 25 + AST→AST 28 + 反向桥 21**（反向桥 A `From<MonoType> for IrType` 9 变体/12 点、反向桥 B `mono_to_ast_type` 8 变体/9 点；AST→AST 15 变体/28 点）。**前向零构造 13**（`Int`/`Float`/`Char`/`String`/`Bytes`/`Bool`/`Void`/`Union`/`Enum`/`Option`/`Result`/`Sum`/`AssocType`）、**全局零构造 1**（仅 `Enum`）。03 §2.2 名单内的 AST→AST 重建 = **5 变体 / 10 点**（`Union`/`Option`/`Result`/`Sum`/`AssocType` 各 2）——**这就是 6.3 的实际改写面**。T2 三表 13 臂（38 写法 / 25 别名）/ 15 项 / 15 项，差异 14 条（C1 10、C2 2、C3 2）全部登记处置、未登记 0；T3 差异 14 条（文档独有 3 + 代码独有 11）全部登记处置、未登记 0。
+
+> **过程注记（两条）**：① **勘察任务的 `output` 落成占位串**：该字段写入时因工具读取失败写成占位串 `REPORT_READ_FAILED`，真实报告在其补交正文中；实现者据此对齐 26/26 行，结论一致。② **批次树里的 workspace 认领伪影**：验证轮在 `scripts/dev/scratch.py` 管理的批次树（worktree）内跑 `cargo run --manifest-path tools/type-tables` 时，外层 workspace 的 `exclude` 不匹配嵌套路径，cargo 报 workspace 认领冲突。量测改用**主仓同内容二进制 + `--root <批次树>`**（工具按 root 参数扫描目标树）完成，**未在批次树内构建**；工具文件逐字副本的 sha256 全一致。
+
+> **复审链**：复审轮 1 `needs_revision`（F1 通配臂豁免泛化 / F2 03-09 口径载体 / F3 `cfg` token 子串判定 / F4 文件级文本包含判别名）→ 修复轮（豁免改逐条登记、`cfg` 改谓词语义、别名改从 `use` 声明 AST 解析并带作用域与泛型形参遮蔽、03 与 09 的口径载体同步）→ 复审轮 2 **pass**。修复前后基线**零漂移**：74 个构造点逐点相同、26 变体五项计数无差异、前向零构造 13 与全局零构造 1 不变。
+
+> **遗留（转入下一轮契约输入，不在本批处理）**：① **T1 的 `Void` 兜底豁免登记须随 6.3 同步删除**——`Type::Void` 变体删除后该登记转为 stale，门禁随即红；② **T3 的比对对象待 6.6 裁决**——RFC-011 **没有**内置类型名表，当前口径是取表格 inline-code token（5 个），6.6 转硬前须在「改文档源 / 降级 report-only / 删除并并入 T2」之间三选一，**不得直接转硬**；③ `substitute_type_ast` / `substitute_type_in_ast` 的行号区间**由 AST 派生**，文档与散文不得写死行号；④ 09 的 P6 行锚已按本轮实测改为**符号优先**（类型 / 函数名 + 入库路径），数值行号只保留仍有效的若干处。
+
+> **计数**：本批不新增二级/三级任务 ⇒ 09 顶部计数表不变（二级 71 / 三级 192）。6.0 的两个三级任务已在 09 勾选完成，证据取**实测数字**而非提交号（`pull --rebase` 会重写本地哈希）。
+
+## P10 S11 登记（DateTime 迁出内置类型名，2026-10-27）
+
+> **触发**：P6 6.1 的内置类型名定稿（15 名：`Never` / `Void` / `()` / `Bool` / `Int` / `Int8` / `Int16` / `Int32` / `Int64` / `Float` / `Float32` / `Float64` / `Char` / `String` / `Bytes`）把 `DateTime` 排除在外。`DateTime` 是 `std.time` 的语义别名（`Int`），最终由标准库提供，不能留在 `MonoType::from_builtin_name` 里。
+
+> **为何 6.1.2 不删**：6.1–6.7 的硬验收要求 `git diff --stat tests/ src/std/` 为空，而 `src/std/interfaces/time.yx` 与 `src/std/time.rs` 仍使用 `DateTime`；同批删除会改 std + 文档 + 基线。故 6.1.2 只保留**临时兼容别名**（仅大写 `DateTime`；小写 `datetime` 随 22 个别名同批删除），SPEC 内置表不写它并注明「待迁出」。
+
+> **登记**：P10 S11（二级 +1、三级 +1 = S11.1），出处 issue [#513](https://github.com/ChenXu233/YaoXiang/issues/513)。**删除保证**：issue #513 是唯一出处；S11.1 未完成前不得关闭。验收 = `grep -rn DateTime src/std` 归零 + 旧写法明确未知类型诊断 + std 编译/测试通过 + 语料/快照按新签名再生并人工 review。
+
+> **计数**：09 顶部二级 71 → 72、三级 192 → 193（本条登记即两处 +1）。
+
+## P6 6.1 名称规范化收口（6.1.1 / 6.1.2 / 6.1.3，2026-10-28）
+
+> **触发**：P6 6.0（门禁先行）收口后，6.1 的三个三级任务待收口——6.1.1 统计语料里的非规范类型名（决定能否**直接删同义词**、是否需要再生基线）、6.1.2 收敛 `MonoType::from_builtin_name` 的同义词表、6.1.3 核实 `classify_generic_params` 消费的是哪个参数列表（**必须逐行核实，不能假定等价**）。6.1.2 的名字清单属「登记/不登记 + 破坏性变更」决策点，须用户拍板，故本批先取定稿再动实现。
+
+> **定稿（用户 2026-10-27）**：内置类型名 **15 个**——`Never` / `Void` / `()` / `Bool` / `Int` / `Int8` / `Int16` / `Int32` / `Int64` / `Float` / `Float32` / `Float64` / `Char` / `String` / `Bytes`；删除 **22 个**实现内拼写——`int` / `int64` / `i64` / `datetime` / `int32` / `i32` / `int16` / `i16` / `int8` / `i8` / `float` / `float64` / `f64` / `float32` / `f32` / `bool` / `char` / `string` / `str` / `bytes` / `void` / `never`；**不设 lexer 别名表**（语料实测真实类型位 0 处，见 6.1.1）。`DateTime` **不属内置名**：它是 `std.time` 的语义别名（运行时就是 `RuntimeValue::Int`，#338 连带修复），最终由标准库提供；但 6.1–6.7 的 `src/std` 零差异硬验收不允许同批迁出（`src/std/interfaces/time.yx` 与 `src/std/time.rs` 的签名串仍写 `DateTime`），故 6.1.2 只留**大写 `DateTime` 的临时兼容别名**（小写 `datetime` 随 22 拼写同批删除），SPEC 内置表不写它并注「待迁出」。**迁出由 P10 S11 负责**（issue [#513](https://github.com/ChenXu233/YaoXiang/issues/513)）。
+
+> **轮次**：本批 = 6.1 的三个三级任务（6.1.1 语料统计 / 6.1.2 同义词表收敛 / 6.1.3 参数列表核实），共 5 个工作单元：6.1.1 统计与口径复核 → 6.1.2 实现（定稿 15 名 + 删 22 拼写 + 删第二份别名表 + SPEC §2.1 自包含）→ 独立验证 → 对抗性复审 → 本收口登记。
+
+> **判据**：C3（诊断码 / 消息 / 顺序不变）。实际落到三条可机械复核的判据：① **接受面**——15 个内置名在类型位置一律接受，22 个实现内拼写一律报未知类型（不得 panic、不得静默放行）；② **零漂移**——语料差分与 IR 快照相对基线**零差异**；③ **文档自包含**——SPEC §2.1（`docs/src/reference/language-spec/type-system.md`）本节即权威表，不再把名字清单委托给实现文件。
+
+> **门禁数字（实测）**：① **接受面**——15 名全接受（`Never` / `Void` / `Bool` / `Int` / `Int64` / `Float` / `Float64` / `Char` / `String` 走变量注解形态 rc=0；`Int8` / `Int16` / `Int32` / `Float32` / `Float64` / `Bytes` 走参数注解形态 rc=0，绕开字面量宽度收敛；`()` 走 `mut u: () = {}` rc=0；`DateTime` 临时别名 rc=0）；22 个拼写全拒：21 个报 `E1003 Unknown type: '<名>'`，`void` 在**词法层**被拒（`E0010 expected a type, found VoidLiteral`——`void` 是 `Void` 的字面量关键字，不是类型名）；负控 `Uint` / `Int128` / `Point` 均 `E1003`（与 SPEC §2.1 的无符号注记一致）。② **语料差分 356/356、差异为空**（基线 `tests/baselines/corpus-parity.jsonl` 356 行）；IR 快照 `test_ir_snapshots_stable` 1 passed / 0 failed；`cargo test --lib` 2863 passed / 0 failed。③ **T2 报告** `tools/type-tables --report` RC 0——T2.1 权威清单 = **15 臂 / 16 写法**（`DateTime` 别名臂在 `src/frontend/core/types/mono.rs:883`）、T2.3 差异 11 条**全部已登记**（C1 大写缩写留 6.2、C2 `DateTime` 留 P10 S11）、**T2.5「已删除拼写哨兵」= 检查 22 条 / 被重新接受 0 条**；`tools/type-tables` 单测 16 passed / 0 failed（含「22 名口径自校验」与「哨兵能红」两个用例）。④ **6.1.1 语料重测**（命令见下）= 393 个 `.yx`（`tests/yaoxiang` 316 + `tests/yaoxiang-multifile` 39 + `src/std` 38）里 22 个拼写命中 **308 行**，**真实类型位 0 处**。⑤ **硬验收**——`git diff --stat tests/yaoxiang tests/baselines src/std/` 为空；`tests/` 侧仅 `tests/formatter_integration.rs` 改了 **3 行**（2 处 `assert_format_eq` 的 `i64`→`Int64` + 1 行注释），属**机械要求**（被改的拼写要求期望类型名同步），未删测试、未放宽断言。
+
+> **6.1.1 重测命令（可复跑）**：
+
+```bash
+# ① 22 个定稿拼写在语料中的全部命中行（308 行）
+grep -rEn --include=*.yx -w 'int|int64|i64|datetime|int32|i32|int16|i16|int8|i8|float|float64|f64|float32|f32|bool|char|string|str|bytes|void|never' tests/yaoxiang tests/yaoxiang-multifile src/std | wc -l
+
+# ② 类型位候选（只有 2 行，且逐行看全在 // 注释内 ⇒ 代码里的真实类型位 0 处）
+grep -rEn --include=*.yx '(:|->|<)[[:space:]]*(int|int64|i64|datetime|int32|i32|int16|i16|int8|i8|float|float64|f64|float32|f32|bool|char|string|str|bytes|void|never)([^A-Za-z0-9_]|$)' tests/yaoxiang tests/yaoxiang-multifile src/std
+```
+
+> **6.1.1 逐条裁决（308 行）**：字符串字面量 + 注释 + `std.string` 模块名 / 命名空间访问（`use std.string`、`string.chars(...)`）+ `src/std/interfaces/convert.yx` 里 `int.to_string` / `float.to_string` / `bool.to_string` / `char.to_string` 的**命名空间限定方法名前缀** + `Json` 的变体名与变体构造（`bool` / `str`）+ `void` **字面量**（`Result(Void, String).ok(void)`）——**无一处是类型标注**。另：仓库里余下的 4 个 `benches/shootout/src/**/*.yx` 同扫，命中只有注释与模块名，类型位同为 0 处。**2026-10-27 旧记的「原始词命中 16 处 = 字符串 12 + 注释 4」是窄口径**（只数整数/浮点族 14 个拼写、不计 `src/std` 的命名空间用法），本次按定稿的 22 个拼写全量重测，**结论一致**（真实类型位 0 处 ⇒ 无需再生基线）。
+
+> **6.1.3 逐行核实结论**：`classify_generic_params`（`src/frontend/core/parser/ast.rs:1009`）消费的是 **`signature_params`**——`StmtKind::Assign::signature_params`（同文件 `:263`）与 `StmtKind::TypeDefinition::signature_params`（同文件 `:283`）两个字段；消费点 `src/frontend/core/typecheck/inference/statements.rs:1799`、`src/frontend/core/typecheck/checker.rs:1520` 与 `:2866`、`src/driver/helpers.rs:1160`。**不是** `extract_generic_param_names`（同文件 `:932`）的产物（后者消费点 `src/middle/core/ir_gen.rs:1919` / `:2052` / `:3684`、`src/frontend/core/typecheck/checker/semantic_tokens.rs:472` / `:706`）。**二者不等价**，四条可证差异：① trait 约束来源不同——`extract` 只认 `operator_interfaces::spec(name)`（`ast.rs:971`，静态封闭集合），`classify` 走 `is_trait` 回调（`ast.rs:1038`；调用点传入「trait 表有该名」**或**「内建算子接口有该名」，`inference/statements.rs:1800-1801`）⇒ `classify` 覆盖面更大；② `CONST_PARAM_TYPES` 判定不同——`extract` 另需「同一签名内被当类型引用」的启发式（`ast.rs:953-965`）才认，`classify` 直接判为 `Const`（`ast.rs:1029-1037`）；③ 元组多约束不同——`extract` 对 `Type::Tuple` 恒不认（`ast.rs:995`），`classify` 在「全部元素是 trait」时认作多约束 Type 参数（`ast.rs:1056-1069`）；④ 返回类型不同（`Vec<GenericParamName>` 无 kind vs `Vec<GenericParam>` 带 `GenericParamKind::Type` / `Const`）。
+
+> **硬验收口径修订（用户 2026-10-27，承 2026-10-26 裁决②）**：P6 的零差异硬验收口径由 `git diff --stat tests/ src/std/` 修订为 **`git diff --stat tests/yaoxiang tests/baselines src/std/` 必须为空**，并**新准**：`tests/` 下的**直驱测试文件**（驱动被改代码的测试，如 `tests/formatter_integration.rs`）在**改动机械要求**时可修改，须逐项登记 **file / 行数 / 理由**，且**不得删测试、不得放宽断言**。**修订关系**：2026-10-26 裁决② 定的原口径把整个 `tests/` 一刀切为零差异，与「直驱测试文件须随被改拼写同步更新」的现实冲突；本修订**只放宽直驱测试文件一档**，**语料层（`tests/yaoxiang`）、基线层（`tests/baselines`）与标准库（`src/std/`）的零差异要求不变**，6.8.2 行为修复批单列一轮并单独裁决的例外也**维持不变**。三处同步登记：09 的 P6 硬验收条、03 §6.4 硬性验收条件、本实录。首次适用 = 6.1.2（`tests/formatter_integration.rs` 3 行，见门禁数字⑤）。
+
+> **过程注记（三条，验证与复审轮实测）**：① **`scratch.py trial` 内的 bash 探针落到了 WSL**——trial 走 `git apply` 加命令执行，命令里的 bash 探针被 WSL 接管并以 **exit 127** 结束，判据**根本没触发**，首轮据此得出的「绿」是假绿；改用 **python 探针**后两门禁才真实转红。② **trial 之后必须先 `scratch.py build` 再量测**——`trial` 的机械还原只覆盖源码文件，变异版测试跑测已把批次树二进制重编，不重建则后续量测全部出自变异产物（AGENTS.md 第 9 条的固化条款）。③ **首轮 trial 未在补丁后重建**得出假绿（PASS），识别为方法错误后补「先 build 再探针」的脚本重做，两条负控才**真实转红**：负控 1 = 把 `int` 臂加回 → 该拼写重新被接受（rc=0）；负控 2 = 删掉 `Int` 臂 → `Int` 报 `E1003 Unknown type: 'Int'`。两次均 `git apply -R` 还原、还原后 blob 与 HEAD 逐字一致、`git status` CLEAN。
+
+> **遗留（转入下一轮契约输入，不在本批处理）**：① **`DateTime` 迁出**（P10 S11，issue [#513](https://github.com/ChenXu233/YaoXiang/issues/513)）——6.1.2 的临时兼容别名臂（`src/frontend/core/types/mono.rs:883`）在 S11.1 完成前不得删除；S11.1 的验收 = `grep -rn DateTime src/std` 归零 + 旧写法明确未知类型诊断 + std 编译/测试通过 + 语料/快照按新签名再生并人工 review。② **诊断文案的内部显示名**（复审轮的非阻断观察）——`E1002` / `E1012` 的文案里仍出现 `int8` / `int64` 这类**内部显示名**（`MonoType` 显示名呈现层的既有事实，`operator_type_display` 只覆盖部分路径），不在 6.1.2 的判据与改动面内，留 **6.2 及之后的名称统一轮**考虑。③ **「类型名解析须单源」的约束仍在**——`NameKind`（03 §5.3）与两份 `name_used_as_type*` 的合并属 6.4 / 6.5，本批不动；6.1.2 只删掉了 `add_builtin_types` 里那份**小写别名副本**。④ **门禁登记随 6.3 / 6.6 同步**——6.0 收口实录的遗留①（T1 的 `Void` 兜底豁免登记须随 6.3 删变体清账，否则门禁报 stale）与遗留②（T3 的比对对象待 6.6 裁决）**仍在**，本批不动；6.1.2 新增的 T2.5「已删除拼写哨兵」在 6.1–6.7 各轮持续生效。
+
+> **计数**：本批不新增二级/三级任务 ⇒ 09 顶部计数表不变（二级 **72** / 三级 **193**）。6.1 的 3 个三级任务为既有登记，勾选不改变计数；P10 S11 已在前一笔（2026-10-27）登记。
+
+## P6 6.2 字节码类型统一收口（6.2.1 / 6.2.2 / 6.2.3，2026-10-28）
+
+> **触发**：P6 6.1 收口后，6.2 的三个三级任务待收口——6.2.1 改字节码签名与模块类型表的载体、6.2.2 删有损桥 `From<MonoType> for IrType` 与 `ir::Type` 再导出别名、6.2.3 改解释器镜像的 `type_table` 载体。6.2 是 6.3 删变体的前置（03 §实施要点 阶段 0→6 严格串行）：载体不先统一，阶段 3 删 `ast::Type` 变体时就没有唯一的改写面。
+
+> **轮次**：本批 = 6.2 的三个三级任务（6.2.1 字节码签名与模块类型表改载 MonoType / 6.2.2 删有损桥与 `ir::Type` 再导出 / 6.2.3 解释器镜像类型表改载 MonoType），工作单元依次为：实现（6.2.1 + 6.2.3 一笔）→ 实现（6.2.2 一笔）→ 独立验证 → 复审 → 欠账清偿（6.1.2 遗留，一笔独立提交）→ 验证（第二轮）→ 本收口。
+
+> **判据**：C3（诊断码 / 消息 / 顺序不变）+ 03 §6.4 的硬验收（`git diff --stat tests/yaoxiang tests/baselines src/std/` 必须为空）。另加本批自身的两条载体判据：① 四处载体（`BytecodeFunction.params` / `return_type`、`BytecodeModule.type_table`、`Image.type_table`）统一载 `MonoType`，解码期**原样搬运**、不得再经任何降级桥；② 删桥后签名与类型表**不得丢结构**——此前塌缩为 `Void` 的 8 类 `MonoType` 必须保留真实形态。
+
+> **结论（改动落点）**：① **四处载体改载 `MonoType`**——`BytecodeFunction.params`（`src/middle/core/bytecode.rs:814`）与 `return_type`（同文件 `:816`）、`BytecodeModule.type_table`（同文件 `:856`）、`Image.type_table`（`src/backends/interpreter/image.rs:44`）。② **解码三处原样搬运**——`params: func.params`（`bytecode.rs:2315`）、`return_type: func.return_type`（`:2316`）、`type_table: file.type_table`（`:2346`）；此前的 `.into_iter().map(|t| t.into()).collect()` 与 `.into()` 两处有损转换随 6.2.2 一并消失。③ **有损桥 `impl From<MonoType> for IrType`（改前位于 `bytecode.rs:2353-2390`）整个 impl 删除**。④ **`ir::Type` 再导出别名删除**——`src/middle/core/ir.rs:3` 的 `pub use crate::frontend::core::parser::ast::Type;` 降为私有 `use crate::frontend::core::parser::ast;`（同文件 `:7`）；`ir::Type` 这个名字在 IR 层不再对外存在。
+
+> **提交（本地 dev，未推送）**：`:recycle: refactor(middle): 字节码签名与类型表改载 MonoType`（2026-10-28，14 files / +109 / −38）、`:recycle: refactor(middle): 删除有损桥与 ir::Type 再导出`（2026-10-28，4 files / +116 / −88）、`:wrench: chore(meta): 清偿 6.1.2 遗留的三笔预存欠账`（2026-10-28，4 files / +12 / −6）；全批 **20 files / +220 / −115**。按仓库约定提交号在 push 之后取（`pull --rebase` 会重写本地哈希），故此处只记提交主题与日期。
+
+> **实测数字（冻结 revision 上）**：① **硬验收**——6.2 的父提交（`:memo: docs(meta): 固化 WBS 与实录的记录边界`，2026-10-28）到本批 tip 之间，`git diff --stat -- tests/yaoxiang tests/baselines src/std/` **为空**（语料层 / 基线层 / 标准库零差异）。② **语料差分 356/356、差异为空**（基线 `tests/baselines/corpus-parity.jsonl` 共 356 行），两文件逐字节相同。③ **IR 快照 216 条零漂移**（`src/middle/core/tests/snapshots/` 下 216 个 `.snap`，非 `manual` 再生）。④ **`dump_bytecode` 定向对拍 12/12 逐字节一致**（3 个程序 × 4 类产物；md5：p1 `2c93d78f` / `a7bca9a6` / `94f667d4` / `d013ebe6`，p2 `3af1d390` / `b21f40e0` / `4e0b2c99` / `d013ebe6`，p3 `a0617e15` / `006604ad` / `1e0636d3` / `03220d59`）。⑤ **`cargo test --all` exit 0**——lib **2863 → 2865 passed**（+2 = 两条新的解码保真测试）、0 failed / 2 ignored；integration **314** passed。⑥ **变异验证**——把「解码期把 `MonoType` 降级重建为 `ast::Type`」的旧桥以补丁形式装回，**4 条保真测试转红**（exit 101）；`git apply -R` 还原后该文件 blob `004bd15e422b…` 与 HEAD 一致、`git status` CLEAN（证明判据能失败，不是恒绿）。
+
+> **门禁（实测，冻结 revision 上 9/9 绿）**：① `cargo fmt --check --all` 0；② `cargo clippy --all --all-features --all-targets -- -D warnings` 0；③ `cargo test --all` 0；④ 语料差分 0（356/356）；⑤ IR 快照 0 漂移（216 条）；⑥ 义务账本 0（13 必填 / 13 全填 / 交接字段 0 未归零 / 登记字段 8）；⑦ 边界 + 扇出 0（`pub(crate)` 计数 166、fanout 0）；⑧ 文档三门禁 0（docs-truth 157=157、docs-refs 1145 文件 / 5978 token〔本收口小节落地后该计数为 6012，因本节新增了引用 token〕、docs-examples 258 块 0 失败）；⑨ 错误码生成器幂等 0（重跑 `python scripts/docs/gen-error-code-docs.py` 后 `git diff --quiet` 0）。另 `check-ir-verifier.sh` PASS。
+
+> **直驱例外（`tests/` 下两处机械改动，逐项登记 file / 行数 / 理由）**：① **`tests/integration/backends.rs`，+4 / −3 行，3 处**——导入行 `use yaoxiang::middle::{ConstValue, Type};` 拆为 `use yaoxiang::frontend::core::MonoType;` + `use yaoxiang::middle::ConstValue;`（`ir::Type` 别名删除后 `Type` 不再从 `middle` 再导出）；`params` 的两个字面量 `Type::Int(0)` → `MonoType::Int(0)`；`return_type` 的 `Type::Int(0)` → `MonoType::Int(0)`。**理由** = 载体类型由 `ir::Type` 改为 `MonoType`，构造点必须同步；该文件**无类型断言，断言一行未动**。② **`tests/integration/codegen_extended.rs`，+25 / −11 行，1 处**（`test_ir_types`）——导入 `use yaoxiang::middle::Type as IrType;` 改为 `use yaoxiang::frontend::core::MonoType;`；五个类型字面量改 `MonoType`（`Int(64)` / `Float(64)` / `Bool` / `Void` / `make_string()`）；**断言只增不减**——原函数只构造不判等，现补 5 条 `assert_eq!` + 2 条 `assert_ne!`（均带自定义消息）。两处均**未删测试、未放宽断言**。
+
+> **塌缩口径（8 类 `MonoType` 不再塌缩为 `Void`）**：改前 `From<MonoType> for IrType` 把 **8 类 `MonoType` 变体**（`Struct` / `Enum` / `Ref` / `TypeVar` / `TypeRef` / `Union` / `Intersection` / `AssocType`）**全部塌缩为 `IrType::Void`**，外加一条 `_ => IrType::Void` 兜底（任何非 `String` / `Bytes` / `Tuple` 的 `Generic` 亦塌成 `Void`）——`IrType::Void` 当时是**合法的类型值而非错误信号**，下游无法区分「确实返回 `Void`」与「返回类型在桥接时丢失了」。改后解码原样搬运，**这 8 类保留真实类型**。**为何无行为变化**：运行时不消费函数签名的类型信息（`src/backends/` 对 `.params` / `.return_type` 的引用数为 **0**，类型表只被克隆与按下标寻址），故「恢复真实类型」不改变任何可观察行为——语料差分 356/356 逐字节相同即为证据。**唯一的可观察差异是 REPL 的 `{:?}` 展示文本**（`src/repl/eval.rs:360` 打印 `func.return_type`、`:370` 打印 `module.type_table[…]`，此前显示塌缩后的类型、现在显示真实类型），该处**无断言**，方向与 03 §6.4「`dump_bytecode` 输出变化属 C3 允许范围」一致。
+
+> **T1 门禁的预期告警（反向桥 A 9→0，须在 6.6 转硬前刷新基线）**：`tools/type-tables` 的 T1 报告按三类分列统计构造点，其中「反向桥 A」= `From<MonoType> for IrType`。6.2.2 删掉该 impl 后，**反向桥 A 由 9 变体 / 12 点变为 0 变体 / 0 点**——T1.4 分列实测：反向桥 A「变体 0 个 / 点 0 个」，反向桥 B（`mono_to_ast_type`）仍是「变体 8 个 / 点 9 个」。T1 报告自带的**冻结基线**（`tools/type-tables/src/baseline.rs` 的 `SCOUT_BASELINE_REV` = `bfe2f6ba366ff0c45f517a4bec8d7e87b0a59696`，6.0 勘察基线，已推送）在 T1.6 对账时**必然对反向桥 A 列打 ✗**——实测「**17 / 26 行一致**」，不一致的 9 行恰是反向桥 A 重建过的那 9 个变体（`Int` / `Float` / `Char` / `String` / `Bytes` / `Bool` / `Void` / `Tuple` / `Fn`），而**前向列与 AST→AST 列全部仍 `=`**。**这是预期差异而非回归**：基线冻结于 6.0（那时反向桥 A 尚在），代码在 6.2 后确实没有这些构造点了。T1 当前是 report-only（报告仍 exit 0、不拦构建），但**一旦 6.6 把它转硬成 `panic!`，这个 ✗ 就会把「已删除的构造点」当成退化报出来**——故**转硬前须先刷新基线口径**。已登记进 09 的 6.6 行「下一轮契约输入」。另：T1.3 前向零构造 = **13**、T1.3b 全局零构造 = **1**（仅 `Enum`），与 6.0 基线一致——**6.2 未改变 6.3 的删除名单**。
+
+> **IR 侧残留的三处 `ast::Type` 载体（留 6.3 决定）**：`src/middle/core/ir.rs` 的 `Instruction::Cast { target_type: ast::Type }`（`:325`）、`Instruction::TypeTest { ty: ast::Type }`（`:330`）、`FunctionBody::TypeDecl { definition: ast::Type }`（`:651`）**仍持 `ast::Type`**。6.2 只删了 `ir::Type` 这个**再导出别名**、把三处改写成全名 `ast::Type`，**未改 IR 的形状**（这三处仍是语法层类型，IR 层仍留一处指向 parser 的类型引用）。三处如何处置（随 6.3 删变体一并改载体，还是另立一轮）**留给 6.3 的契约决定**；它们落在 IR 指令 / 函数体的类型标注上，改动会动 **IR 快照（216 条）与语料基线（356 行）**。已登记进 09 的 6.3 行「下一轮契约输入」。
+
+> **6.1.2 遗留的 E4xxx 生成物欠账（已清偿）**：6.1.2 删掉 `src/frontend/core/types/eval/const_eval.rs` 里 `eval_builtin` 的 `"Uint"` 死臂时**改动了该文件的行数**，使 `E4012`（常量递归过深）的发射点由 `const_eval.rs:540` 平移到 `:546`；而错误码文档由生成器**位置敏感**地产出（`python scripts/docs/gen-error-code-docs.py`），生成物 `docs/src/reference/error-code/E4xxx.md` 里的发射点行号因此变成**陈旧值**——这正是 AGENTS.md 第 10 条⑤「改动诊断码或其发射点后必须重跑生成器」要防的情况。**现状**：该欠账与另两笔预存欠账一并按**用户裁决 A**在**一笔独立提交**（`:wrench: chore(meta): 清偿 6.1.2 遗留的三笔预存欠账`，2026-10-28）里清偿：① 重跑生成器（`E4xxx.md` 的发射点行号 540 → 546）；② 对 `tools/type-tables` 补 `cargo fmt`（`tables.rs` 三处超长 `push_str` 换行，9 / 3 行，**纯格式化无语义变化**——6.1.2 实现时本地 `cargo fmt` 未带 `--all` 才漏）；③ 打包指南中英两侧示例的返回类型由已删除的小写别名 `string` 改为规范名 `String`（`docs/src/guide/packaging.md` 与 `docs/src/en/guide/packaging.md`）。**处置后**：生成器幂等（重跑后 `git diff --quiet` 0）、`cargo fmt --check --all` 0、docs-examples 258 块 0 失败。
+
+> **注记（须更正的一处措辞）**：该笔提交的说明把这处发射点写成「E4013」，**实为 `E4012`（常量递归过深）**——`E4013` 在错误码注册表（`src/util/diagnostic/codes/e4xxx.rs`）与生成物 `docs/src/reference/error-code/E4xxx.md` 中**均不存在**。复核命令：`grep -rn 'E4013' src/ docs/src/reference/ scripts/`（零命中）、`grep -n 'E4012' src/util/diagnostic/codes/e4xxx.rs docs/src/reference/error-code/E4xxx.md`。
+
+> **过程注记（三条）**：① **t1 首轮被 `changedPaths` 拒收**——契约的 inScope 漏了 `tests/integration/backends.rs`（载体改型后该直驱测试文件必然要改，属 AGENTS.md 第 6 条契约规则②「机械必需面」），经**契约追认**后按同一提交重报并复测。② **t6 的 outOfScope 前缀遮蔽了 inScope 的精确路径**——该轮契约把 `tools/type-tables/src/tables.rs` 写进 inScope，却又在 outOfScope 列了前缀 `tools/`，校验器按 out-of-scope 优先判定该文件不可声明；**下一批的 outOfScope 须收窄**（写成 `tools/code-tables/` 之类，或删掉 `tools/`）。③ **本批未改 IR 形状**——`ir.rs` 三处 `ast::Type` 载体只改全名、不改形状（见上）。
+
+> **遗留（转入下一轮契约输入，不在本批处理）**：① **T1 冻结基线须在 6.6 转硬前刷新**（反向桥 A 9→0 的对账差异，见上；已登记进 09 的 6.6 行）。② **`ir.rs` 三处 `ast::Type` 载体的处置留给 6.3**（删变体时须一并决定载体，改动会动 IR 快照与语料基线；已登记进 09 的 6.3 行）。③ **T1 的 `Void` 兜底豁免登记随 6.3 同步删除**（6.0 收口实录遗留①，仍在）。④ **T3 的比对对象待 6.6 裁决**（6.0 收口实录遗留②，仍在）。⑤ **`DateTime` 迁出**（P10 S11，issue [#513](https://github.com/ChenXu233/YaoXiang/issues/513)，6.1 收口实录遗留①，仍在）。
+
+> **计数**：本批不新增二级/三级任务 ⇒ 09 顶部计数表不变（二级 **72** / 三级 **193**）。6.2 的 3 个三级任务为既有登记，勾选不改变计数。
+
+## P6 6.3 死变体删除收口（6.3.1 / 6.3.2，2026-10-29）
+
+> **触发**：P6 6.2 收口后，6.3 的两个三级任务待收口——6.3.1 删 `ast::Type` 的 13 个死变体并清掉全部匹配臂与构造点（含 `src/frontend/core/parser/statements/types.rs` 的 `Type::Void` 错误兜底）；6.3.2 **必须与 6.3.1 同批**重写反向桥 B（`mono_to_ast_type`）与两份 AST→AST 替换（10 点）。**两者必须同批**：变体一删，两座桥上的重建臂就不可编译；只改桥不改变体，回写形态会静默改变。
+
+> **轮次**：本批 = 6.3 的两个三级任务（6.3.1 删变体 / 6.3.2 重写两座桥），工作单元依次为：勘察（改写面清单 + 规范名往返策略）→ 实现（6.3.1 + 6.3.2 一笔提交）→ 独立验证 → 对抗性复审 → 契约追认（错误码生成物随删随清）→ 本收口。
+
+> **判据**：C3（诊断码 / 消息 / 顺序不变）+ 03 §6.4 的硬验收（`git diff --stat tests/yaoxiang tests/baselines src/std/` 必须为空）。另加本批自身的两条载体判据：① **变体零残留**——13 个旧变体名在 `src/` 内零引用（含 `AstType` / `T` 两个 `use` 别名）；② **回写形态唯一**——反向桥 B 的产物必须是 `from_builtin_name` 认得的**规范名**（宽度显式），不得再落回诊断展示用的小写内部名。
+
+### 结论：`ast::Type` 26 → 13
+
+**删掉的 13 个变体**：`Int` / `Float` / `Char` / `String` / `Bytes` / `Bool` / `Void` / `Union` / `Enum` / `Option` / `Result` / `Sum` / `AssocType`。
+
+**现存的 13 个变体**：`Name` / `Struct` / `NamedStruct` / `Tuple` / `Fn` / `Generic` / `Literal` / `Ptr` / `Ref` / `MetaType` / `ConstExpr` / `Paren` / `NamedParen`。
+
+**零残留**：13 个旧变体名在 `src/` 内**零引用**，含两个 `use` 别名（`AstType` ← 2 文件、`T` ← 1 文件，即 `src/frontend/core/typecheck/checker/annotations.rs`）。复核命令：`git grep -n -E '\b(Type|AstType|T)::(Int|Float|Char|String|Bytes|Bool|Void|Union|Enum|Option|Result|Sum|AssocType)\b' -- src/`（零命中，`git grep` exit 1）。全仓其余命中只在 `docs/`（历史叙述）与 `tools/type-tables/`（门禁自测夹具里的模式字符串），**不是 `ast::Type` 引用**。
+
+**改写面（17 个 match 块，全部同批处置）**：删变体后，**穷尽 match**（无 `_` 兜底）由编译器强制补臂（不补即编译失败）；**带 `_` 兜底的 match** 则不报编译错、通配臂会把新形态静默吃掉——故两类都必须显式处置。
+
+| 兜底 | 站点 | 删前命中 | 处置 |
+| --- | --- | --- | --- |
+| 穷尽（编译期强制） | `format_type`（`src/formatter/handlers/types.rs`） | 13 臂 | 删 13 臂，内建标量一律走 `Type::Name` |
+| 穷尽（编译期强制） | `From<ast::Type> for MonoType`（`src/frontend/core/types/mono.rs`） | 13 臂 | 删 13 臂 |
+| 穷尽（编译期强制） | `collect_type_tokens`（`src/frontend/core/typecheck/checker/semantic_tokens.rs`） | 13 臂 | 删 13 臂 |
+| 穷尽（编译期强制） | `substitute_type_ast`（`src/middle/passes/mono/function.rs`） | 10 点 | 删 10 点（见下表） |
+| `_` 兜底（静默面） | `collect_name_refs`（`src/frontend/core/parser/ast.rs`） | `Union` / `Sum` / `Option` / `Result` / `AssocType` | 删臂（`Tuple` / `Ptr` 臂去掉 or-pattern 里的旧名） |
+| `_` 兜底（静默面） | `name_used_as_type_in`（`src/frontend/core/parser/ast.rs`） | `Option` / `Result` / `Sum` | 删臂 |
+| `_` 兜底（静默面） | `name_used_as_type`（`src/frontend/core/parser/statements/declarations.rs`） | `Option` / `Result` / `Sum` | 删臂 |
+| `_` 兜底（静默面） | `extract_fn_type_info`（`src/frontend/core/parser/statements/types.rs`） | `Void` 兜底 | `_ => (Vec::new(), Type::Void)` 改 let-else 显式返回 `Type::Name{"()"}` |
+| `_` 兜底（静默面） | `detect_sum_type` 的 `match ret`（`src/frontend/core/typecheck/checker.rs`） | `Result` / `Option` | 删臂 |
+| `_` 兜底（静默面） | `collect_used_in_type`（`src/frontend/core/typecheck/checker.rs`） | `Option` / `Result` / `Sum` | 删臂 |
+| `_` 兜底（静默面） | `collect_unknown_type_names`（`src/frontend/core/typecheck/checker/annotations.rs`，别名 `T`） | `Sum` / `Option` / `Result` / `AssocType` / `Union` | 删臂 |
+| `_` 兜底（静默面） | `const_param_kind`（`src/frontend/core/typecheck/const_param.rs`） | `Int` / `Float` / `Bool` | 删臂 |
+| `_` 兜底（静默面） | `extract_const_param_info`（`src/frontend/core/types/eval/const_eval.rs`） | `Int` / `Float` / `Char` / `String` / `Bytes` / `Bool` / `Void` | 删臂 |
+| `_` 兜底（静默面） | `satisfies_ast_type`（`src/frontend/core/types/trait_data.rs`） | `Int`…`Void` / `Option` / `Result` | 删臂 |
+| `_` 兜底（静默面） | `type_from_ast`（`src/middle/passes/codegen/mod.rs`） | `Int`…`Void` / `Option` / `Result` | 删臂 |
+| `_` 兜底（静默面） | `mono_to_ast_type`（反向桥 B，`src/middle/passes/mono/function.rs`） | 7 个内建标量臂 | 改写为 `canonical_name` + 结构回写（见下节） |
+| `_` 兜底（静默面） | `substitute_type_in_ast`（`src/middle/passes/mono/function.rs`） | 10 点 | 删 10 点，**保留原 `_ => ty.clone()`**（不新增兜底） |
+
+**未新增任何通配臂**：逐文件 `_` 臂计数改前与改后逐字一致，唯 `src/frontend/core/types/mono.rs` +1 = 新增 `canonical_name` 的 `_ => None`（`MonoType` 查表语义，**不是** `ast::Type` 构造兜底）。
+
+### 规范名往返口径（为何不能用 `type_name()`）
+
+反向桥 B 的职责是把 `MonoType` 回写成 `ast::Type`。6.3 之前它对 7 个内建标量各有一条专用臂（`Int` / `Float` / `Bool` / `Char` / `Void` / `String` / `Bytes`）；变体删除后这些臂没有了，**回写必须落到 `ast::Type` 的某个变体上**——只剩 `Name` 可用。
+
+**为何不能用 `type_name()`**：`MonoType::type_name()` 是**诊断展示用**的内部名（`int64` / `void` / `string` / `float64` …）。6.1.2 已把 22 个实现内拼写从 `from_builtin_name` 删除（含全部小写名），因此按 `type_name()` 回写出的 `Name{"int64"}` 在下游会被解析成**用户类型引用**（`TypeRef`）而不是内置标量——**类型身份静默丢失**（`Int64` 变成某个未声明的用户类型）。这不是格式差异，是语义降级。
+
+**采用的口径**：新增 `MonoType::canonical_name()`（`src/frontend/core/types/mono.rs`），作为 `from_builtin_name` 的**严格逆向**——
+
+- **覆盖范围 = `from_builtin_name` 的像**：15 个规范名对应的 `MonoType`；实现为 12 条臂（`Never` / `Void` / `Bool` / `Int8` / `Int16` / `Int32` / `Int64` / `Float32` / `Float64` / `Char` / `String` / `Bytes`）。
+- **宽度显式**：`Int` / `Float` 是**入参别名**（`from_builtin_name("Int")` → `Int(64)`、`"Float"` → `Float(64)`），回写恒取宽度显式形式 `Int64` / `Float64`，保证产物唯一；`()` 恒回写为 `Void`。
+- **`DateTime` 只入不出**：它是 std 层语义别名（`from_builtin_name("DateTime")` → `Int(64)`），`canonical_name` 永不产出（用例以 `assert_ne!` 钉死）。
+- **返回 `None` = 该类型没有规范名**（容器泛型 / `Tuple` / `Ref` / `Fn` / `Struct` / `TypeVar` …），调用方须按**结构**回写。
+
+**回写结构**：`mono_to_ast_type` 改为「先 `canonical_name`，再按结构回写」——`Generic { name, args }`（覆盖 `Option` / `Result` / `Tuple` / `List` / 任意泛型实例，逐字往返）、`Ref`、`Fn`；其余（`Struct` / `Enum` / `TypeVar` / `Literal` / `Union` / …）保持既有有损兜底 `Name { type_name() }`，**不扩面**（6.3 只删死变体，不改这些类型的回写形态）。**未改 `type_name()` 本身**。
+
+**往返覆盖**：① **leg A（15 名逐名往返）**——`from_builtin_name` → `canonical_name` → `from_builtin_name` 还原同一 `MonoType`，由仓内用例 `src/frontend/core/types/tests/mono.rs` 的 `test_canonical_name_round_trips_all_builtin_names` 覆盖（15 名全列）；另有 `test_canonical_name_uses_width_explicit_spellings`（宽度显式）与 `test_canonical_name_rejects_structural_types`（结构类型返回 `None`）两条。② **leg B（`mono_to_ast_type` 产物再 lower）**——回写出的 `ast::Type` 再经 `From<ast::Type> for MonoType` 还原，与原 `MonoType` 全等，见「残留风险」②。
+
+### 10 点处置表（AST→AST 重建）
+
+03 §2.2.2 登记的 AST→AST 重建在 6.3 名单内有 **5 变体 / 10 点**（`Union` / `Option` / `Result` / `Sum` / `AssocType` 各 2）。**全部删除**——变体已不存在，臂不可达。
+
+下表行号为**删前**位置，取自 6.3 的父提交（`:pencil: docs: auto-translate documentation`，2026-10-28；该 revision 亦记在 `tools/type-tables/src/baseline.rs` 的 `SCOUT_BASELINE_REV`）。变体删除后行号平移，故按 09 §6.3.2 的口径**以函数名定位、不在散文里写死行号**。
+
+| 变体 | `substitute_type_ast` | `substitute_type_in_ast` | 处置 |
+| --- | --- | --- | --- |
+| `Union` | 377 | 606 | 删臂 |
+| `Option` | 427 | 600 | 删臂 |
+| `Result` | 431 | 602 | 删臂 |
+| `AssocType` | 456 | 623 | 删臂 |
+| `Sum` | 467 | 632 | 删臂 |
+
+**两处替换函数的兜底口径不同**：`substitute_type_ast` 对 13 个现存变体**穷尽匹配、无 `_` 兜底**（删变体由编译器强制补臂，不存在「静默吃掉」的可能）；`substitute_type_in_ast` 保留其原有的 `_ => ty.clone()`——**本批未新增任何兜底**，删臂后「不再递归」也无行为差异（该节点已不可能出现）。
+
+**下游可达性（删臂不改可观测行为的依据）**：① `substitute_type_ast` 仅由 `substitute_instruction` 的 `Cast` / `TypeTest` 调用，而 `ir_gen` 从不构造 `Instruction::Cast` / `Instruction::TypeTest`（全仓只有 IR 定义、mono 改写与 normalize / verify 消费）；② `substitute_type_in_ast` 仅由 `specialize_type`（`src/middle/passes/mono/mod.rs`）调用，语料 393 个 `.yx` 中 `类型名(...)` 特化 `TypeDecl` **0 例**。故 10 点当前**无生产可达路径**。
+
+### T1 门禁清账
+
+6.0 收口时登记在 T1 门禁上的死变体名单与兜底豁免，随 6.3 的删除**同批清账**（否则门禁立即报 stale）：
+
+| 清账项 | 处置 |
+| --- | --- |
+| `VOID_FALLBACK`（`tools/type-tables/src/t1.rs` 的 `FallbackExemption` 常量） | **删除**——`Void` 变体已不存在，兜底点改为 `Type::Name{"()"}`（不再是通配臂构造点） |
+| `REGISTERED_ZERO_FORWARD`（13 条 `RegisteredZeroVariant`） | **清空为 `&[]`**——13 个死变体已删，实测前向零构造为 0 |
+| `DEAD_VARIANTS_03`（03 §5.2 的 13 个死变体名单） | **清空为 `&[]`** |
+| `SCOUT_BASELINE` / `SCOUT_BASELINE_REV`（`tools/type-tables/src/baseline.rs`） | **刷新**——基线由 26 行收敛为现存 13 变体行，冻结 revision 换到 6.3 的父提交 |
+| `tools/type-tables/README.md` 与 `t1.rs` 的口径文案 | 同步改为「6.3 之后登记表为空；机制保留且可注入（`*_with(registry)`）供单测覆盖」 |
+
+**清账后的 `--report` 实测**（`cargo run --manifest-path tools/type-tables/Cargo.toml -- --report`，exit 0）：
+
+| 项 | 实测值 |
+| --- | --- |
+| T1.1 扫描面 | 非测试 `.rs` **287** 个；`ast::Type` 变体 **13**（定义行 445–528）；别名解析 2 个（`AstType` ← 2 文件、`T` ← 1 文件） |
+| T1.3 前向零构造 | **0** |
+| T1.3b 全局零构造 | **0** |
+| T1.4 反向桥 A | 变体 **0** 个 / 点 **0** 个 |
+| T1.4 反向桥 B | 变体 **4** 个 / 点 **6** 个（`Name` 3 点 / `Generic` / `Ref` / `Fn` 各 1 点） |
+| T1.5 AST→AST | 变体 **10** 个 / 点 **18** 个（**剩余**重建点）；其中「WBS 6.3 删除名单」= 0 个变体 / 0 点 |
+| T1.6 基线对账 | **13 / 13 行一致**（扫描口径与冻结基线完全一致） |
+| T1.7 白名单核对 | 已登记 0 / 实测前向零构造 0 / 未登记 0 / 登记但已不成立 0 / 登记豁免点 0 条（命中 0）/ 未登记的通配臂兜底点 0 → **名单一致** |
+
+### 实测数字
+
+① **硬验收**——`git diff --stat -- tests/yaoxiang tests/baselines src/std/` 在 6.3 的父提交与落地态之间**为空**（语料层 / 基线层 / 标准库零差异）；`tests/` 侧同样零差异（见「直驱例外」）。
+
+② **语料差分 356/356、差异为空**——基线 `tests/baselines/corpus-parity.jsonl` 共 356 行；`cargo run --example corpus_probe` 的产物与基线逐字节相同，`check-corpus-parity.py` exit 0。
+
+③ **IR 快照 216 条零漂移**——`src/middle/core/tests/snapshots/` 下 216 个 `.snap`，全部在库未改。
+
+④ **dump 对拍 8/8 md5 逐字一致**——4 个泛型替换程序的 dump（`77dd7cf4` / `9131dd36` / `82f43780` + 对照 `c2a2de8d`）+ 4 件 `.42` 产物（`8ce5007f` / `99f2dce8` / `67cb94f4` / `41b22441`），与改动前逐字相同。
+
+⑤ **`cargo test --all` exit 0**——lib **2865 → 2868 passed**（+3 = 三条 `canonical_name` 用例）/ 0 failed / 2 ignored；integration **314** passed；其余测试二进制全绿；全仓 `#[test]` **3394 → 3397**（+3，**未删测试**）。
+
+⑥ **变异验证（判据可失败性）**——把 `canonical_name` 的 12 条臂小写化（生产变异），往返用例转红（exit 101）且全量 lib 4 failed；`git apply -R` 机械还原后该文件 blob 与 HEAD 逐字一致、`git status` CLEAN。
+
+> **提交（本地 dev，未推送）**：`:recycle: refactor(parser): ast::Type 26→13 变体并重写两座类型桥`（2026-10-28，28 files / +677 / −818）；本收口文档另起一笔 `:memo: docs(plan): 6.3 死变体删除收口`（2026-10-29，3 files）。按仓库约定提交号在 push 之后取（`pull --rebase` 会重写本地哈希），故此处只记提交主题与日期。
+
+### 门禁（实测，全部 exit 0）
+
+| # | 门禁 | 实测 |
+| --- | --- | --- |
+| ① | `cargo fmt --check --all` | exit 0 |
+| ② | `cargo clippy --all --all-features --all-targets -- -D warnings` | exit 0 |
+| ③ | `cargo test --all` | exit 0（lib 2868 passed / 0 failed / 2 ignored；integration 314 passed） |
+| ④ | 语料差分 | 356 / 356，差异为空（`check-corpus-parity.py` exit 0） |
+| ⑤ | IR 快照 | 216 条零漂移（`check-snapshot-drift.sh` PASS） |
+| ⑥ | 义务账本 | PASS（13 必填 / 13 全填 / 红名单 0 / 非义务登记 8）+ 自测 5 项全 PASS |
+| ⑦ | 边界 + 扇出 + 概念 | 违规 0（`pub(crate)` 计数 **166**）；`check-boundary` / `check-fanout` / `check-concepts` 全 exit 0 |
+| ⑧ | 文档门禁 | `check-docs-truth` 诊断码 **157 / 157**；`check-docs-orphan` 文档站 md 176 篇 / 索引覆盖 173 篇；`check-docs-refs` 1145 个跟踪文本文件、6076 个路径状 token、无不可解析引用；`check-docs-examples` 抽取 258 个代码块、失败 0 |
+| ⑨ | 错误码生成器幂等 | 重跑 `python scripts/docs/gen-error-code-docs.py` 后 `git diff --quiet` exit 0 |
+
+另：`check-ir-verifier.sh` PASS（全语料 `verify_loose` 绿，校验面非空）；`cd docs && npm run docs:build` exit 0（VitePress 真构建，AGENTS.md 第 10 条⑨）。
+
+### 错误码生成物（随删随清）
+
+`src/frontend/core/typecheck/checker.rs` 删臂使该文件行数平移，两个精化类诊断码的发射点随之漂移；错误码文档由生成器**位置敏感**地产出，故必须重跑生成器并随提交再生（AGENTS.md 第 10 条⑤ 的机械必需面）：
+
+| 诊断码 | 删前发射点 | 删后发射点 |
+| --- | --- | --- |
+| `E1092`（精化类型实参形态非法） | `checker.rs:3618` / `:3666` / `:3694` | `checker.rs:3603` / `:3651` / `:3679` |
+| `E1093`（精化实参个数不匹配） | `checker.rs:3601` / `:3691` | `checker.rs:3586` / `:3676` |
+
+再生范围 = `docs/src/reference/error-code/E1xxx.md` **2 行**（两个发射点行）；生成器复跑幂等。
+
+### 直驱例外
+
+**无**。`tests/yaoxiang` / `tests/baselines` / `src/std` 三段零差异，`tests/` 侧同样零差异；全仓 `#[test]` 由 3394 增至 3397，变化全部落在 `src/` 内的 10 个测试模块（`src/frontend/core/types/tests/mono.rs` 等）——**未删测试、未放宽断言**。
+
+### 残留风险（转入下一轮契约输入）
+
+① **`Name{"()"}` 兜底语法可达 + `semantic_tokens` 的 dummy token**——`src/frontend/core/parser/statements/types.rs` 的非 Fn 签名兜底现为 let-else 显式返回 `Type::Name{"()"}`（formatter 输出逐字不变）；该路径**语法可达**（非 Fn 类型出现在绑定位置），`semantic_tokens` 的 `Name` 臂会比旧的 `Void` 臂（空操作）多记一枚 dummy-span token（`add_token` 无 span 过滤）。语料 393 个 `.yx` 中该形态 **0 命中**，formatter / 诊断 / dump **零漂移**。**随 6.4 的错误路径改造一并消除**（已登记进 09 的 6.4 行「下一轮契约输入」）。
+
+② **leg B 往返覆盖未入库**——反向桥 B（`mono_to_ast_type`）的产物再 `From` 回 `MonoType` 的**全链往返**，目前只有**验证树内**的探针测试覆盖（随验证树清理一并删除、未入库）；仓内只覆盖 `Int64` 单点。**转硬前须另立实现侧小任务把该往返测试正式入库**（已登记进 09 的 6.6 行「下一轮契约输入」）。
+
+③ **值位 `.yx` 探针的 `E1002`**——值位探针在 6.3 的父提交与落地态**同报 `E1002`**，诊断逐字节一致 ⇒ 属**预存语言限制**（非本批引入）；该形态的往返覆盖因此改用 IR 层探针完成（15 个规范名 + 结构类型）。
+
+④ **`ir.rs` 三处 `ast::Type` 载体未动**——6.3 只删变体、**未改 IR 形状**（IR 快照 216 条与语料基线 356 行零漂移）；`Instruction::Cast { target_type }`（`src/middle/core/ir.rs:325`）、`Instruction::TypeTest { ty }`（同文件 `:330`）、`FunctionBody::TypeDecl { definition }`（同文件 `:651`）仍持 `ast::Type`——**行号取自 6.3 收口提交 `717db877a`**（`git show 717db877a:src/middle/core/ir.rs` 逐行可复核；三处载体此后分别于 6.6.11 / 6.6.12 删除或换形，故在当前 HEAD 上不可解析）。载体处置留 6.4（改动会动 IR 快照与语料基线），已登记进 09 的 6.4 行「下一轮契约输入」。
+
+### 过程注记（三条）
+
+① **实现轮的契约把 `docs/` 划进 outOfScope，漏了生成物**——错误码生成物 `docs/src/reference/error-code/E1xxx.md` 随 `checker.rs` 删臂的行号平移而必须再生，属 AGENTS.md 第 6 条契约规则①「机械必需面」；经**契约追认**后并入同一提交（生成器复跑幂等）。
+
+② **勘察清单漏了别名 `T`**——`src/frontend/core/typecheck/checker/annotations.rs` 用 `use …::ast::Type as T`，其 5 处 `T::` 命中不在勘察阶段的「201 行」清单内；实现轮已一并处置。**后续契约的「死变体清单」口径须含别名扫描**（T1 门禁的别名解析早已登记「`T` ← 1 文件」）。
+
+③ **提交 amend 时改写了正文**——实现轮在 amend 时删掉了正文中「未纳入本提交」这类与事实不符的表述。
+
+### 计数
+
+本批不新增二级/三级任务 ⇒ 09 顶部计数表不变（二级 **72** / 三级 **193**）。6.3 的 2 个三级任务为既有登记，勾选不改变计数。
+
+## P6 6.4 parser 数据流收口（6.4.1–6.4.5，2026-10-29）
+
+> **触发**：P6 6.3 收口后，6.4 的五个三级任务待收口——6.4.1 新增 `probe.rs`（类型环境探针的**接口**定义在 L2）、6.4.2 改 `ParserState`（增 `probe` 字段与访问器）、6.4.3 删 `operator_interfaces::spec()` 调用（parser 侧 2 处 + middle 侧 1 处）、6.4.4 合并两份 `name_used_as_type*`、6.4.5 让 `CONST_PARAM_TYPES` 经 `NameKind::Builtin` 接线。
+
+> **轮次**：勘察（改写面清单）→ 实现（6.4.1–6.4.5 一笔提交）→ 独立验证 → 对抗性复审 → **静态审计抓到真回归** → 修复轮 → 二次验证 → 二次复审 → 契约追认 → 本收口。
+
+> **判据**：C3（诊断码 / 消息 / 顺序不变）+ 03 §6.4 的硬验收（`git diff --stat tests/yaoxiang tests/baselines src/std/` 必须为空）。另加本批自身的两条载体判据：① **parser 内零类型层引用**——`grep -rn 'typecheck' src/frontend/core/parser/` 与 `grep -rn 'operator_interfaces' src/frontend/core/parser/` 均须 0 命中；② **判据可失败性**——三条变异试验各自使判据转红并机械还原。
+
+### 结论：parser 的类型名依赖改为注入式探针
+
+parser（L2）此前**直接调用**类型检查侧（L3）的运算符接口表来判定「约束名 / 谓词名」，构成 L2→L3 反向依赖（`scripts/ci/check-boundary.py` 的 B2 库存 2 处）。本轮按 03 §5.4 改为**注入式探针**：接口定义在 L2，实现由 L3 提供——依赖倒置。
+
+| 产物 | 位置 | 内容 |
+| --- | --- | --- |
+| 探针接口 | `src/frontend/core/parser/probe.rs` | `trait TypeEnvProbe`（`is_constraint` / `is_predicate` / `kind_of` / `knows_builtin_types` 四个纯查询方法，全部带默认实现）、`enum NameKind`（`Builtin` / `Constraint` / `Predicate` / `UserType`）、`NullProbe`（全 false）、`BuiltinProbe`（编译器内置封闭集） |
+| L3 实现 | `src/frontend/core/typecheck/probe.rs` | `SemanticProbe`（以运算符接口表 / 内置谓词判定 / `MonoType::from_builtin_name` 为权威来源）+ 两个窄入口 `is_constraint_name`（`:33`）/ `is_builtin_predicate_name`（`:25`） |
+| 注入点 | `src/frontend/core/parser/parser_state.rs` | `ParserState` 增 `probe` 字段（`:27`）+ `probe()`（`:60`）+ `kind_of()`（`:68`）两个访问器；构造器 `ParserState::new(tokens, probe)`（`:44`）显式收探针 |
+| 入口 | `src/frontend/core/parser/mod.rs` | `parse`（`:35`）= `parse_with_probe(tokens, &BuiltinProbe)`；`parse_expression`（`:94`）= `parse_expression_with_probe(tokens, &BuiltinProbe)`；注入缝 `parse_with_probe`（`:40`）/ `parse_expression_with_probe`（`:99`） |
+
+**其余五项改动**：
+
+1. parser 内两处 `operator_interfaces::spec()` 调用**删除**，改走探针（`probe.is_constraint(name)`）。
+2. parser 内 8 处提及 typecheck 的注释按事实改写（跨层描述改为「L3 的类型检查」等表述）。
+3. 两份 `name_used_as_type*` 合并为 `src/frontend/core/parser/ast.rs:848` 的**单一实现**（详见下节差异表）。
+4. `CONST_PARAM_TYPES` **15 → 5 名**（删 10 个 6.1 已废的实现内拼写），并经 `NameKind::Builtin` 接线（详见下节）。
+5. `Terminates` 的逐点字符串比较收敛为单一判定口：`typecheck/` 内 9 个判定点改调 `is_builtin_predicate_name`（`checker.rs` ×3、`checker/annotations.rs` ×2、`checker/refinement.rs` ×1、`environment.rs` ×1、`inference/statements.rs` ×2）；该目录内 `"Terminates"` 字面量命中由 **16 行降为 8 行**（新增的 1 行是判定表 `BUILTIN_PREDICATES`，其余 7 行是诊断文案、既有常量 `TERMINATES_PREDICATE` 与 2 个未归一的判定点 `checker.rs:4128` / `inference/statements.rs:1868`）。
+
+### probe 设计（trait / 三个实现 / 接入点）
+
+**trait 的四个方法**（`src/frontend/core/parser/probe.rs:45`）：
+
+| 方法 | 语义 | 默认实现 | L3 语义探针（`SemanticProbe`） |
+| --- | --- | --- | --- |
+| `is_constraint` | 该名字是否为**约束名**（运算符接口，`(T: Add)` 的 `Add`） | `false` | `typecheck::is_constraint_name` → 运算符接口表 |
+| `is_predicate` | 该名字是否为**编译期谓词**（`Terminates`） | `false` | `typecheck::is_builtin_predicate_name` → 内置谓词表 |
+| `kind_of` | 名字定种（`NameKind`） | `NameKind::UserType` | `MonoType::from_builtin_name` 命中 → `Builtin`；否则 `is_constraint_name` → `Constraint`；否则 `is_builtin_predicate_name` → `Predicate`；其余 `UserType` |
+| `knows_builtin_types` | 本探针是否**持有内置类型名表** | `false`（保守） | `true` |
+
+**三个实现**：
+
+- `NullProbe`（`parser/probe.rs:93`）——全 false；单元测试与「无类型环境」入口的基线。
+- `BuiltinProbe`（`parser/probe.rs:113`）——编译器**内置封闭集**的镜像：约束名 7 个（`CONSTRAINT_NAMES`，`:116`）+ 内置谓词名 1 个（`PREDICATE_NAMES`，`:121`）。**不是第二份权威表**：7 个约束名与 L3 运算符接口表逐名对账、内置谓词名与 L3 的内置谓词判定双向对账，由 L3 侧的对账用例守着（`typecheck/tests/probe.rs` 两条用例）。
+- `SemanticProbe`（`typecheck/probe.rs:41`）——L3 实现，权威来源 = 运算符接口表 / 内置谓词判定 / `MonoType::from_builtin_name`。
+
+**接入点**：
+
+- **字段**：`ParserState.probe: &'a dyn TypeEnvProbe`（`parser_state.rs:27`）——借用而非 `Box`，不引入所有权与生命周期外的额外约束。
+- **访问器**：`probe()`（`:60`）返回探针本身；`kind_of(name)`（`:68`）= **本遍已声明的谓词优先**（`predicate_names`）→ `NameKind::Predicate`，其余交探针——**定种的唯一入口**（`probe.kind_of` 不再被 parser 直接调用）。
+- **构造点 40 处** = 生产 **4** + 测试 **36**：
+
+| 类别 | 处数 | 位置 |
+| --- | --- | --- |
+| 生产 | 4 | `parser/mod.rs:44`（`parse_with_probe` 透传注入的探针）、`parser/mod.rs:103`（`parse_expression_with_probe` 同）、`parser/pratt/nud.rs:450`（f-string 插值重解析，透传外层探针）、`parser/statements/bindings.rs:107`（`parse_binding` 传 `&NullProbe`——该入口不接收环境） |
+| 测试 | 36 | `pratt/tests/led.rs` ×9、`pratt/tests/nud.rs` ×23、`statements/tests/types.rs` ×3、`tests/parser_state.rs` ×1 |
+
+> `parse_binding`（`parser/statements/bindings.rs:97`）虽在生产模块内，但**全仓唯一调用方是测试**（`parser/statements/tests/bindings.rs:310`）⇒ 其 `NullProbe` 构造点无生产影响。
+
+### spec() 处置表
+
+改前全仓 `operator_interfaces::spec()`（含别名形式 `ops::spec(`）的**调用点共 14 处**（不含 `operator_interfaces.rs:253` 的模块内自用与 `driver/helpers.rs:1138` 的文档注释提及）。本批逐处去向：
+
+| # | 改前位置 | 层 | 本批处置 | 替代判据 |
+| --- | --- | --- | --- | --- |
+| 1 | `src/frontend/core/parser/ast.rs:923`（`extract_generic_param_names`） | L2→L3 | **删除调用**，改走探针 | `probe.is_constraint(name)`（`parser/probe.rs:49`） |
+| 2 | `src/frontend/core/parser/statements/declarations.rs:508` | L2→L3 | **删除调用**，改走探针 | `state.probe().is_constraint(n)`（现 `declarations.rs:461`） |
+| 3 | `src/middle/core/ir_gen.rs:696`（`is_constraint_param_ann`） | L3→L3 | 改调窄入口 | `typecheck::is_constraint_name(name)`（现 `ir_gen.rs:697`） |
+| 4 | `src/driver/helpers.rs:1150`（`generic_instantiation_map` 的 is_trait 闭包） | L1→L3 | 改调窄入口 | `typecheck::is_constraint_name(name)`（现 `helpers.rs:1151`） |
+| 5–9 | `src/frontend/core/typecheck/checker.rs` ×5（改前 `:1525` / `:2228` / `:2341` / `:2451` / `:2870`） | L3→L3 | **本批未动** | 仍是 L3 内部直接查表（合法） |
+| 10 | `src/frontend/core/typecheck/inference/expressions.rs:1585`（`ops::spec(iface)` 别名形式） | L3→L3 | **本批未动** | 同上 |
+| 11–14 | `src/frontend/core/typecheck/inference/statements.rs` ×4（改前 `:1443` / `:1781` / `:1801` / `:2932`） | L3→L3 | **本批未动** | 同上 |
+
+**窄入口的等价性**：`is_constraint_name`（`typecheck/probe.rs:33`）的实现**逐字**是 `super::operator_interfaces::spec(name).is_some()` ⇒ 改调窄入口不改变任何判定结果，只把「摸表」收敛为「问一个名字是不是约束名」。
+
+**新增的窄入口只增不减**：L3 侧的 `is_constraint_name` 是本批**新增**的（第 3、4 处改调它）；`is_builtin_predicate_name`（`:25`）把 9 处 `"Terminates"` 逐点比较收敛为内置谓词名的**单一判定口**。
+
+### 「全仓 13 处」与实测数的对账
+
+WBS 的 6.4.3 行写「**全仓 13 处**」——**该口径少算 1 处**：
+
+| 分项 | WBS 计划口径 | 实测 | 差额 |
+| --- | --- | --- | --- |
+| parser 侧 | 2 | 2 | — |
+| typecheck 侧 | 10 | 10 | — |
+| middle 侧 | 1 | 1 | — |
+| **driver 侧** | **0（未计）** | **1**（`src/driver/helpers.rs:1150`） | **+1** |
+| 合计 | 13 | **14** | +1 |
+
+**差额来源**：`src/driver/helpers.rs:1150` 的 `operator_interfaces::spec(name).is_some()`（L1 编排层 → L3 类型层）——原计划的 grep 口径只搜了 `operator_interfaces::spec(` 的全限定写法，漏了经 `use` 引入后的短名调用。**该处本批已一并处置**（改调窄入口），故落地态 parser 内 0 处、driver 1 处改窄入口、middle 1 处改窄入口、typecheck 10 处保持。
+
+### name_used_as_type* 合并差异表
+
+改前有两份**同名同义、行为已分叉**的实现（03 §2.4 登记）：
+
+- `src/frontend/core/parser/ast.rs` 的 `name_used_as_type_in`（`pub`，无回调参数）
+- `src/frontend/core/parser/statements/declarations.rs` 的 `name_used_as_type`（模块私有，带 `is_predicate` 回调）
+
+**分叉三处 + 共同缺口**（下表即合并依据）：
+
+| 分叉点 | ast.rs 版 | declarations.rs 版 | 合并后的**正本**（`ast.rs:848` 的 `name_used_as_type`） |
+| --- | --- | --- | --- |
+| `Generic` 的**头部**（`F(A)` 的 `F`） | 判头部是否被当类型用 | 不判 | **采 ast.rs 版**（头部判定） |
+| **谓词短路**（`Terminates(b)` 的实参位是值） | 无 | 对整个 `Generic` 节点短路 `false` | **采 declarations.rs 版**（短路读 `NameKind::Predicate`） |
+| `Struct` / `NamedStruct` 的字段类型递归 | 有 | 落 `_ => false` | **采 ast.rs 版**（递归） |
+| `MetaType` / `ConstExpr` / `Paren` / `NamedParen` | 不处理 | 不处理 | **两版共同缺口，本批刻意不动** |
+
+**合并方式**：以 ast.rs 版为正本（其头部判定与 Struct 递归较完整），叠加上 declarations.rs 版的**谓词短路**；短路判据由「字符串回调」改为**读 `NameKind::Predicate`**（探针问答，非名字表）。declarations.rs 侧那份实现**删除**，改为调用 ast.rs 的合并版（`declarations.rs:466`）；L3 侧 `checker/annotations.rs` 也改调同一实现（`:87` / `:90` / `:93`），并按 L3 原口径传恒 `false` 的谓词闭包（`annotations.rs:69-93`）。
+
+**合并后的判定面扩大一处**（A 项）：类型位 lambda 形参的判定由 `[F, g]` 变为 `[g]`——合并版把 `Generic` 头部也算类型引用（这正是 ast.rs 版原有的更完整语义）。**对外零差异**：5 个 `.yx` 程序的 CLI 诊断在两个 revision 上逐字相同（判定面扩大不产生新的对外诊断）。
+
+**为何不补共同缺口**：补 `MetaType` / `ConstExpr` / `Paren` / `NamedParen` 会改变「const 参数是否被当类型用」的判定（进而改 IR 的 `generic_params` 与语料行为），属**语义修正**，须按 07 的分流判据另立一轮，不在 6.4 的 C3 面内。缺口已登记在 03 §5.3 与本节「残留风险」。
+
+### CONST_PARAM_TYPES 接线
+
+| 项 | 改前 | 改后 |
+| --- | --- | --- |
+| 常量名 | `CONST_PARAM_TYPES`（`ast.rs`） | 同名保留（**不新增概念**） |
+| 表内容 | 15 名：`Int` / `Bool` / `Float` / `Char` / `String` + `I8` / `I16` / `I32` / `I64` / `U8` / `U16` / `U32` / `U64` / `F32` / `F64` | **5 名**：`Int` / `Bool` / `Float` / `Char` / `String`（`ast.rs:825`） |
+| 删掉的 10 名 | 6.1.2 已删除的实现内拼写 | 留在表里会产生**无法 lower** 的 const 参数名（`Uint` 族在 `MonoType` 里没有变体，位宽缩写也不是内置名） |
+| 判定方式 | 直接查本表字符串 | **双知识接线**：`CONST_PARAM_TYPES.contains(name) && (probe.kind_of(name) == NameKind::Builtin \|\| !probe.knows_builtin_types())`（`ast.rs:961-964`） |
+
+**双知识的含义**：名字必须既在「const 参数可接受集合」内，又由探针确认为**内置名**（权威表在 L3 的 `MonoType::from_builtin_name`）。只查本表会绕开探针的定种；只查探针则会把 `Int8` 等规范名也当 const 参数候选（**拓宽登记 = 行为变更**）。规范名（`Int8` …）自始不在 const 参数的可接受集合里，**不进本表**。
+
+**`knows_builtin_types` 的存在理由**：L2 的默认探针（`BuiltinProbe` / `NullProbe`）拿不到内置名表，`kind_of` 永不返回 `Builtin`——若不放行，默认 `parse()` 入口对 `(N: Int)` 会**静默漏登记**。`knows_builtin_types() == false` 时按本表单表判定（= 6.4 前行为），L3 语义探针持有名表（覆写为 `true`），双知识仍全强度生效。
+
+**连带清账**：`tools/type-tables` 的 T2 门禁 dispositions 表删 **10 条 `T2.C1`** 登记（这 10 个拼写已在 6.1.2 清账，本批把 const 参数表的同 10 名一并删除 ⇒ 登记随之兑现）；清账后该表只剩 `DateTime` 的一条 `T2.C2`。
+
+### ir_gen 那处「跨层」的处置（层号更正）
+
+WBS 的 6.4.3 行把 `src/middle/core/ir_gen.rs` 的 `is_constraint_param_ann` 标为「**L3→L2 跨层反向依赖**」——**该层号标注有误**。
+
+- `scripts/ci/check-boundary.py` 的 `L3_DIRS` **同时含 `typecheck` 与 `middle`** ⇒ middle → typecheck 是 **L3→L3 同层**，RFC-039 四层模型下不构成反向依赖；实跑该门禁**违规 0 处**，CI 不旗标。
+- 该处本批的处置是**改调窄入口** `typecheck::is_constraint_name`（`ir_gen.rs:697`），并让 3 处 `extract_generic_param_names` 调用传 `SemanticProbe`（否则 `(T: Add)` 不登记 → E3018）。
+
+**门禁基线同步**：`scripts/ci/check-boundary.py` 的两张基线表随本批同步——B2（`L2→L3/L4` 反向依赖）库存清零；B6（parser 内硬编码类型/谓词名）由 `declarations.rs` 移到 `probe.rs`，库存仍 **2 处**（`ast.rs` 的 `CONST_PARAM_TYPES` 与 `probe.rs` 的 `PREDICATE_NAMES`）。豁免 **1 处**（L3 实现 L2 的判定接口，reason 已注明于 `typecheck/probe.rs:12-15`），违规 **0 处**，`pub(crate)` 计数 **165**。
+
+### grep = 0 证据
+
+改后（落地态）实测，**两条命令均 0 命中**（`grep` 无输出 = exit 1）：
+
+| 命令 | 结果 |
+| --- | --- |
+| `grep -rn 'typecheck' src/frontend/core/parser/` | 无输出（exit 1） |
+| `grep -rn 'operator_interfaces' src/frontend/core/parser/` | 无输出（exit 1） |
+
+**对照改前**：同一口径在 6.4 的父提交上命中 **10 处**（`ast.rs` 6、`pratt/nud.rs` 2、`statements/declarations.rs` 2——其中 **2 处代码调用 + 8 处注释**）。改前 parser 内的全部 `use crate::` 路径中亦含 typecheck 引用；改后枚举 parser 内全部 `use crate::` 路径，**无 typecheck / middle 引用**。
+
+### 回归与修复轮（首版真回归 → 方案 B）
+
+**首版（6.4.1–6.4.5 一笔提交）的真回归**：const 参数的 guard 要求 `probe.kind_of(name) == NameKind::Builtin`，而 L2 的默认探针（`BuiltinProbe` / `NullProbe`）**不持有内置类型名表**（`MonoType::from_builtin_name` 在 L3），`kind_of` 永不返回 `Builtin` ⇒ 默认 `parse()` 入口对 `(N: Int)` 这类 const 参数**静默漏登记**，与 6.4 之前不一致。
+
+**修法（方案 B）**：`trait TypeEnvProbe` 增 `knows_builtin_types()`（默认 `false` = 保守）；const 参数的 guard 改为 `CONST_PARAM_TYPES.contains(name) && (kind_of == Builtin || !knows_builtin_types())`——**不持表的探针回退单表判据**（= 6.4 前行为），L3 的 `SemanticProbe` 覆写为 `true`，双知识在全强度生效。
+
+**未选方案 A**（让 `BuiltinProbe.kind_of` 对内置名返回 `Builtin`）：L2 没有内置名表，A 只能拿 `CONST_PARAM_TYPES` 反推 `Builtin`——等于把 const 可接受集合冒充内置名全集（`Int8` / `Bool` 仍会是 `UserType`），在 L2 造第二份半个内置名源，且 `kind_of` 的语义继续失真。
+
+**先红后绿证据**：新增回归用例在修复前**实测红**（期望 `["N"]` 实得 `[]`），修复后绿；新增双探针同源对账用例绿。新增用例 7 条（`parser/tests/probe.rs` 3 条 + `typecheck/tests/probe.rs` 4 条）。
+
+### 实测数字
+
+① **硬验收**——`git diff --stat -- tests/yaoxiang tests/baselines src/std/` 在 6.4 的父提交与落地态之间**为空**（语料层 / 基线层 / 标准库零差异）；`tests/` 侧同样零差异（见「直驱例外」）。
+
+② **语料差分 356/356、差异为空**——基线 `tests/baselines/corpus-parity.jsonl` 共 356 行；`cargo run --example corpus_probe` 的产物与基线逐字节相同。
+
+③ **IR 快照 216 条零漂移**——`src/middle/core/tests/snapshots/` 下 216 个 `.snap` 全部在库未改。
+
+④ **`cargo test --all` exit 0**——lib **2868 → 2875 passed**（+7 = 本批新增的 7 条探针用例）/ 0 failed / 2 ignored；integration **314** passed；其余测试二进制全绿。测试集合对账：`git grep -c '#\[test\]' <rev> -- 'src/**'` 求和 **2871 → 2878**（+7，**removed 0**），全仓口径 **3399 → 3406**（+7）——**未删测试、未放宽断言**。
+
+⑤ **grep 判据**——见上节，两条命令均 0 命中。
+
+⑥ **变异验证（判据可失败性）**——三条变异各自使判据转红并**机械还原**（`git apply -R` 后逐文件 blob 与 HEAD 逐字一致、`git status` CLEAN）：
+
+| 变异 | 转红的判据 |
+| --- | --- |
+| M1 撤销 `knows_builtin_types` 回退（回到修复前的 guard） | 探针用例 2 FAILED（`parser::tests::probe` 期望 `["N"]` 实得 `[]`；`typecheck::tests::probe` 双探针对账 left `["N"]` / right `[]`） |
+| M2 在 parser 内插入 typecheck 引用 | grep 判据红（`grep -rn 'typecheck' src/frontend/core/parser/` 命中） |
+| M3 把 `SemanticProbe` 的 `knows_builtin_types` 改回 `false` | 1 FAILED（双探针对账用例） |
+
+> **提交（本地 dev，未推送）**：`:recycle: refactor(parser): 注入类型环境探针，parser 去除类型名依赖（P6 6.4）`（2026-10-29，32 files / +660 / −295）与 `:bug: fix(parser): 默认探针恢复 const 参数收编（6.4 修复轮）`（2026-10-29，6 files / +185 / −7）；本收口文档另起一笔 `:memo: docs(plan): 6.4 parser 数据流收口`。按仓库约定提交号在 push 之后取（`pull --rebase` 会重写本地哈希），故此处只记提交主题与日期。
+
+### 门禁（实测，全部 exit 0）
+
+| # | 门禁 | 实测 |
+| --- | --- | --- |
+| ① | `cargo fmt --check --all` | exit 0 |
+| ② | `cargo clippy --all --all-features --all-targets -- -D warnings` | exit 0 |
+| ③ | `cargo test --all` | exit 0（lib 2875 passed / 0 failed / 2 ignored；integration 314 passed） |
+| ④ | 语料差分 | 356 / 356，差异为空 |
+| ⑤ | IR 快照 | 216 条零漂移（`check-snapshot-drift.sh` PASS） |
+| ⑥ | 义务账本 | PASS |
+| ⑦ | 边界 + 扇出 + 概念 | 违规 0（`pub(crate)` 计数 **165**；B6 库存 2 处；豁免 1 处）；`check-fanout` 违规 0、库存 7 处（接线点实测 8 处）；`check-concepts` exit 0 |
+| ⑧ | 文档门禁 | `check-docs-truth` / `check-docs-orphan` / `check-docs-refs` / `check-docs-examples` 全 exit 0 |
+| ⑨ | 错误码生成器幂等 | 重跑 `python scripts/docs/gen-error-code-docs.py` 后 `git diff --quiet` exit 0 |
+
+**错误码生成物（随行号平移再生）**：本批改动了诊断码发射点所在文件的行数，故错误码文档由生成器**位置敏感**地产出，必须重跑生成器并随提交再生（AGENTS.md 第 10 条⑤ 的机械必需面）——`docs/src/reference/error-code/E0xxx.md`、`E1xxx.md`、`E2xxx.md`、`E8xxx.md` 与 `docs/src/reference/warning-code/warning-codes.md` 共 **5 个生成物**，逐项 diff 仅为发射点行号平移，**诊断码数量与文字未变**；生成器复跑幂等。
+
+### 直驱例外
+
+**无**。`tests/yaoxiang` / `tests/baselines` / `src/std` 三段零差异，`tests/` 侧同样零差异；全仓 `#[test]` 由 3399 增至 3406，变化全部落在 `src/` 内的两个新增测试模块（`src/frontend/core/parser/tests/probe.rs`、`src/frontend/core/typecheck/tests/probe.rs`）——**未删测试、未放宽断言**。
+
+### 残留风险（转入下一轮契约输入）
+
+① **`NullProbe` + 谓词应用路径无测试覆盖**（低危）——`NullProbe` 下 `ParserState::kind_of` 只看本遍已声明谓词，环境侧谓词不可见 ⇒ 谓词应用短路在纯 `NullProbe` 下不生效。生产入口不受影响（`parse` / `parse_expression` 默认 `BuiltinProbe`，`parse_binding` 的 `NullProbe` 构造点全仓仅测试调用）。**若未来把 `NullProbe` 用于生产或等价基线，先补谓词应用用例。**
+
+② **`NameKind` 未字段化**——03 §5.3 的目标形态是给 `Type::Name` 增 `kind` 字段、在构造点一次定死；本批只引入**定种枚举 + 探针查询**，不动 `Type::Name` 的结构（字段化会牵动全部构造点，且要求反向桥 `mono_to_ast_type` 保真回写 `kind`，IR 快照与语料基线随之再生——与本批 C3 面冲突）。当前定种信息只有一个消费者（`extract_generic_param_names` 的 const 参数判定），**字段化留待出现第二个消费者时再评估**。
+
+③ **`name_used_as_type` 的四个变体缺口**——`MetaType` / `ConstExpr` / `Paren` / `NamedParen` 两版原先都落 `_ => false`，合并版保持该缺口。补它们会改变「const 参数是否被当类型用」的判定（进而改 IR 的 `generic_params` 与语料行为），属**语义修正**，须另立一轮（07 的分流判据），不在 6.4 的 C3 面内。
+
+④ **两处陈旧注释**——`src/frontend/core/parser/probe.rs:44` 写「三个方法都带默认实现」，实为**四个**（增 `knows_builtin_types`）；`src/frontend/core/parser/statements/declarations.rs:450` 的注释仍称 `ParserState::is_predicate_app`，实际方法名是 `kind_of`。二者在 `src/` 内（不在本批收口文档的改动面内），留待下一轮实现侧一并修正。
+
+⑤ **9 个默认 `parse()` 入口尚未注入 `SemanticProbe`**——`parse()` 的 9 个生产调用点为：driver 的三个解析臂（`src/driver/arms.rs:82` / `:166` / `:205`）、前端编排的两处逐文件解析（`src/frontend/module/orchestrator.rs:1041` / `:1247`）、前端门面（`src/frontend/compiler.rs:173`）、库入口（`src/lib.rs:100`）、LSP 补全（`src/lsp/handlers/completion.rs:136`）、`src/std/` 的源码解析（`src/std/yx_sources.rs:51`）。它们目前走默认 `BuiltinProbe`（编译器内置封闭集的镜像），故 B6 仍有 2 处库存。注入缝已就位（`src/driver/helpers.rs:1246` 的 `parse_with_probe` 是生产用例），**后续批次可把这 9 个入口全部改为注入 `SemanticProbe` 后删除 `BuiltinProbe` 的内置封闭集**——但 `src/std/` 的源码解析属本批硬验收的**零差异**面，改签名须同批再生语料基线。
+
+⑥ **parser 的非 Fn 签名兜底仍在**——`src/frontend/core/parser/statements/types.rs` 的 `_ => (Vec::new(), Type::Void)` 兜底在 6.3 已改为 let-else 显式返回 `Type::Name{"()"}`（语义与 formatter 输出逐字不变），但该路径**语法可达**：`semantic_tokens` 的 `Name` 臂会比旧的 `Void` 臂（空操作）多记一枚 dummy-span token（语料 393 个 `.yx` 中该形态 0 命中，formatter / 诊断 / dump 零漂移）。**6.4 未接手该路径**（本批只做类型名依赖的注入化），须在 6.5 一并消除（不再由 parser 兜底产出伪类型）。
+
+⑦ **`ir.rs` 三处 `ast::Type` 载体未动**——`Instruction::Cast { target_type }`（`1615d65ca` 上的 `src/middle/core/ir.rs:325`）、`Instruction::TypeTest { ty }`（同 rev 同文件 `:330`）、`FunctionBody::TypeDecl { definition }`（同 rev 同文件 `:651`）仍持 `ast::Type`——**行号取自 6.5 收口提交 `1615d65ca`**（`git show 1615d65ca:src/middle/core/ir.rs` 逐行可复核；三处载体此后分别于 6.6.11 / 6.6.12 删除或换形，故在当前 HEAD 上不可解析）；6.3 只删变体、6.4 只做注入化，两批都**未改 IR 形状**（IR 快照 216 条与语料基线 356 行零漂移）。载体处置须另立一轮（改动会动 IR 快照 / 语料基线）。
+
+### 过程注记（四条）
+
+① **生成物再一次落在 outOfScope**——本批实现轮的契约把 `docs/` 划进 outOfScope，却含 5 个错误码生成物（随诊断码发射点行号平移必须再生，属 AGENTS.md 第 6 条契约规则①「机械必需面」）。**6.2 / 6.3 / 6.4 三批连续踩同一个坑**——后续契约须把「`docs/src/reference/error-code/` 与 `docs/src/reference/warning-code/` 的生成物」显式圈进 `inScope`（按路径前缀写，不得用散文限定）。
+
+② **首版提交里有假陈述**——首版 `parser/probe.rs` 的注释写「`is_constraint` / `is_predicate` 的判定与 6.4 之前逐字一致」，但该表述被当时的审计轮判为**假陈述**（`kind_of` 不含内置名，const 参数判定靠回退才一致），修复轮已改为按事实分述。
+
+③ **一次审计轮因 revision 变更而中止**——审计轮的结论（真回归）已被修复轮与二次验证吸收；其中止原因是冻结的 SHA 变更，**不是判据失败**。真回归本身由静态审计（读代码 + 读判据）发现，不依赖运行期探针。
+
+④ **本次收口对 09 的 6.4 行做了三处口径更正**——6.4.2 的字段清单（6 → 7 字段）、6.4.3 的调用点口径（「全仓 13 处」→ 计划口径 + 实测 14 处）与**层号**（middle → typecheck 是 L3→L3 同层，原写「L3→L2 跨层反向依赖」）、6.4.5 的行号锚点。这些是**事实性更正**，不是实测数字回填；数字与判据细节仍在本文。
+
+### 计数
+
+本批不新增二级/三级任务 ⇒ 09 顶部计数表不变（二级 **72** / 三级 **193**）。6.4 的 5 个三级任务为既有登记，勾选不改变计数。
+
+## P6 6.5 AST 死变体与专用字段收口（6.5.1 / 6.5.2 + 并入的 6.8.1，2026-10-30）
+
+> **触发**：P6 6.4 收口后，6.5 的两个三级任务待收口——6.5.1 删 `Expr::FnDef`（生产零构造的表达式变体）；6.5.2 删 `StmtKind::Assign` / `StmtKind::TypeDefinition` 的并行形参表 `signature_params`，并把 `Type::NamedParen` 的 binder 语义归位。**6.8.1（`Type::Fn.params: Vec<Type>` → `Vec<Param>`）按用户 2026-10-29 裁决 B 跨二级任务加框并入本批**：6.5.2 只删旧表示、替代表示由 6.8.1 给出，二者必须同批收口——只删不替代必然改行为（初稿设想的「改用 `Lambda.params`」已被核实不可行，见「拍平 vs 过滤」）。
+>
+> **轮次**：勘察（改写面清单 + 语义风险清单）→ 实现（6.5.1 两笔 + 6.5.2/6.8.1 三笔）→ 独立验证 → 对抗性复审（needs_revision，6 条 finding）→ 修复轮 → 二次复审（needs_revision，2 条 finding）→ 二次修复轮 → 三次复审（pass）→ 本收口。
+>
+> **判据**：C3（诊断码 / 消息 / 顺序不变）+ 03 §6.4 的硬验收（`git diff --stat tests/yaoxiang tests/baselines src/std/` 必须为空）。另加本批自身的四条载体判据：① **变体零残留**——`Expr::FnDef` 与 `signature_params` 在 `src/` 内零引用；② **单一形参表示**——`Type::fn_params_flat` 是「语句声明里的原始签名形参」的唯一实现，无并行形参表；③ **NamedParen 等价**——节点保留、binder 解释点、五处透明下钻与渲染形态逐字不变；④ **零行为差分**——语料 356/356 与 IR 快照 216 条零漂移。
+>
+> **本节含五类内容**：① **实测数字**；② **探针结论**；③ **登记①：6.5.1 的 A/B 契约偏差**；④ **登记②：修复轮的 `inScope` 契约缺陷追认**；⑤ **登记③：F2 的处置结论**（裸标识符形参的运行期槽位口径）。后三类各占一节。
+
+### 结论：三条主线各归其位
+
+| 主线 | 终态 | 载体 |
+| --- | --- | --- |
+| `Expr::FnDef` | **变体已删**，`src/` 内零引用；函数定义统一走 `Expr::Lambda` + `StmtKind::Assign` | `src/frontend/core/parser/ast.rs` |
+| 形参表示 | **单一表示** = `Type::Fn.params: Vec<Param>`（名字与类型同栖）；`Assign` / `TypeDefinition` 的 `signature_params` 已删，载体改为 `type_annotation: Option<Type>` | 同文件 `:463-466` / `:258` / `:280`；唯一取用入口 `Type::fn_params_flat`（同文件 `:985`） |
+| `Type::NamedParen` | **节点保留**（纯语法节点）；返回位 binder 由类型检查器**显式**解释 | 变体同文件 `:533-540`；解释点 `src/frontend/core/typecheck/checker/refinement.rs:421` |
+
+`Expr` 枚举由 **31 变体收敛为 30**（删 `FnDef` 一个）；`ast::Type` 保持 6.3 收口后的 **13 变体**不变——本批只改 `Type::Fn` 的**字段类型**，不动变体集合。
+
+### 交付清单（7 笔提交，本地 dev，未推送）
+
+| # | 主题 | 日期 | 规模 |
+| --- | --- | --- | --- |
+| 1 | `:white_check_mark: test(parser): 函数定义测试迁移到 Lambda 解构` | 2026-10-29 | 2 files / +72 / −11 |
+| 2 | `:fire: refactor(parser): 删除零构造的 Expr::FnDef 变体及全部消费臂` | 2026-10-29 | 20 files / +46 / −346 |
+| 3 | `:recycle: refactor(parser): Type::Fn.params 改为 Vec<Param>（表示重塑）` | 2026-10-29 | 24 files / +383 / −103 |
+| 4 | `:fire: refactor(parser): 删除 Assign/TypeDefinition 的并行形参表` | 2026-10-30 | 35 files / +314 / −234 |
+| 5 | `:recycle: refactor(parser): 形参表示可维护性收敛` | 2026-10-30 | 22 files / +228 / −168 |
+| 6 | `:bug: fix(middle): 恢复裸标识符形参的运行期槽位口径 + 注释/守卫订正` | 2026-10-30 | 8 files / +175 / −14 |
+| 7 | `:fire: refactor(parser): 删除两个与既有谓词精确互补的死谓词` | 2026-10-30 | 1 file / +0 / −13 |
+
+前 2 笔 = 6.5.1；第 3–5 笔 = 6.8.1 与 6.5.2 同批（顺序：先替代表示 → 再删旧表示 → 再可维护性收敛）；第 6 笔 = 二次复审的修复轮；第 7 笔 = 三次复审的修复轮。本收口文档另起一笔 `:memo: docs(plan): 6.5 AST 死变体与专用字段收口`（2026-10-30，3 files）。
+
+按仓库约定提交号在 push 之后取（`pull --rebase` 会重写本地哈希），故此处只记提交主题与日期。
+
+**基线**：本批 7 笔落在 6.4 收口提交之后的自动翻译机器人提交之上；机器人提交只改 `docs/src/en/**` 与翻译缓存，`src/` 逐字相同 ⇒ 本批的 `src/` 基线 = 6.4 收口态。
+
+### `Expr::FnDef` 处置表（基线 25 处 / 16 文件）
+
+6.4 收口态上实测 `git grep -n "FnDef" -- src/` = **25 行 / 16 文件**（其中字面 `Expr::FnDef` 18 处）。拆解：
+
+| 类别 | 处数 | 说明 |
+| --- | --- | --- |
+| 变体定义 | 1 | `src/frontend/core/parser/ast.rs:49`（`Expr` 枚举体） |
+| 生产消费点 | 15 | 见下表 |
+| 测试构造点 | 3 | `src/frontend/core/parser/tests/ast.rs:874` / `:887`、`src/frontend/core/typecheck/tests/checker.rs:121` |
+| 注释 | 6 | `src/frontend/core/typecheck/inference/expressions.rs:69`、`src/frontend/core/typecheck/layers/ownership.rs:2318`、`src/frontend/core/typecheck/layers/termination.rs:2311`、`src/frontend/core/typecheck/tests/checker.rs:119` / `:478`、`src/frontend/module/orchestrator.rs:1155` |
+
+**15 处生产消费点**（基线位置）：
+
+| # | 位置 | 形态 | 处置 |
+| --- | --- | --- | --- |
+| 1 | `src/formatter/handlers/expr.rs:43` | match 臂 | 删；连带删唯一调用它的 `format_fn_def`（否则 `clippy -D warnings` 报 dead code） |
+| 2 | `src/frontend/core/parser/ast.rs:1121` | `Expr::span()` or-pattern（**穷举**） | 删 |
+| 3 | `src/frontend/core/parser/pratt/mod.rs:47` | `expr_end_line()` 臂（**穷举**） | 删 |
+| 4 | `src/frontend/core/spawn/analysis.rs:912` | match 臂（闭包捕获） | 删 |
+| 5 | `src/frontend/core/spawn/placement.rs:122` | match 臂 | 删 |
+| 6 | `src/frontend/core/typecheck/checker.rs:1359` | `if let`（非穷举） | 删（else-if 链头改 `if`） |
+| 7 | `src/frontend/core/typecheck/checker/semantic_tokens.rs:1372` | match 臂（token 收集） | 删 |
+| 8 | `src/frontend/core/typecheck/inference/existential.rs:55` | `expr_span()` or-pattern | 删 |
+| 9 | `src/frontend/core/typecheck/inference/expressions.rs:3874` | match 臂（推断） | 删（含 1 处 E1002 死发射点） |
+| 10 | `src/frontend/core/typecheck/layers/ownership.rs:1263` | `expr_span()` or-pattern | 删 |
+| 11 | `src/frontend/core/typecheck/layers/termination.rs:763` | match 臂 | 删（连带删仅此臂调用的 `check_fn_body`） |
+| 12 | `src/frontend/core/typecheck/passes/dead_code.rs:505` | match 臂（引用收集） | 删 |
+| 13 | `src/frontend/module/orchestrator.rs:1153` | `if let`（非穷举，整臂仅此内容） | 删整臂 |
+| 14 | `src/middle/core/ir_gen.rs:5005` | `get_expr_span()` 臂（**穷举**） | 删 |
+| 15 | `src/middle/core/ir_gen.rs:5812` | `expr_span` or-pattern | 删 |
+
+**「生产零构造」的一手证据**：基线的 `src/frontend/module/orchestrator.rs:1155-1156` 注释明写「当前 parser 也不产此变体——仅测试手工构造」；函数定义实际走 `Expr::Lambda` + `StmtKind::Assign`。⇒ 删净不改变任何 parser 产出。
+
+**测试迁移（未删测试）**：三处测试构造改写断言方向，不删用例——
+
+| 原用例 | 终态 |
+| --- | --- |
+| `test_expr_fndef`（`src/frontend/core/parser/tests/ast.rs`） | 拆为 `test_expr_callable_parts_lambda_returns_params_and_body`（同文件 `:874`）与 `test_expr_callable_parts_block_returns_body_without_params`（`:906`） |
+| 嵌套函数定义夹具（`src/frontend/core/typecheck/tests/checker.rs`） | `Expr::FnDef` → `Expr::Lambda`，用例保留 |
+| ——（新增） | `test_fn_block_body_with_fn_annotation_parses_to_lambda`（`src/frontend/core/parser/statements/tests/functions.rs:125`）：`f: () -> Int = { 5 }` → Assign + Lambda 的端到端断言 |
+
+### `signature_params` 处置（基线 168 行 / 31 文件 → 0）
+
+6.4 收口态上实测 `git grep -n "signature_params" -- src/` = **168 行 / 31 文件**；落地态 **0 命中**（字段、构造、读取、注释一并清零；旧包装函数 `signature_fn_params` 亦删除）。
+
+真·字段面只有 **2 处属主字段**：`StmtKind::Assign` 与 `StmtKind::TypeDefinition` 各一个 `signature_params: Vec<Param>`；其余命中是同名遮蔽（函数形参名写死 `&[Param]`）、函数名与注释。落地态两处字段均已删，载体改为 `type_annotation: Option<Type>`（`src/frontend/core/parser/ast.rs:258` / `:280`）——`TypeDefinition` 与 `Assign` 同一载体。
+
+**拍平 vs 过滤（为什么不能改用 `Lambda.params`）**：初稿设想「就地重算 `Lambda.params`」，但 `Lambda.params` 是**已过滤**的值参数表（去掉类型位与约束位），而 `classify_generic_params` / `extract_generic_param_names` 需要**未过滤**的原始签名列表。实际做法是先把名字搬进唯一载体再删旧字段：拍平结果与旧 `signature_params` **逐位同源**（同一批 `Param` 节点），故泛型分类结果不变；改用 `Lambda.params` 的方案**会改行为，未采用**。
+
+**单一拍平入口**：`Type::fn_params_flat`（`src/frontend/core/parser/ast.rs:985`）是「语句声明里的原始签名形参」的**唯一实现**（全仓 1 处定义 + 31 处调用，16 文件）；curry 各组依次展开，`Paren` / `NamedParen` 视为透明继续内层。六条语义消费点全部改调它：`classify_generic_params`（`src/driver/helpers.rs`）、`extract_generic_param_names`（`src/frontend/core/typecheck/checker/semantic_tokens.rs`、`src/middle/core/ir_gen.rs`）、`resolve_const_candidates`、`add_method_overload_with_params`、`resolve_return_refinement`（`src/frontend/core/typecheck/checker/refinement.rs`）、`enter_measured_fn`（`src/frontend/core/typecheck/layers/termination.rs`）。
+
+**`Type::Fn.params` 重塑**（6.8.1，`Vec<Type>` → `Vec<Param>`）：复用既有 `Param` 结构——**不新增第二结构、不引入平行名字数组**（`param_names: Vec<Option<String>>` 一类被明令禁止）。无名形参（纯类型位 / 类型反解）以空名字合成，由 `Param::is_named()` 判定，空名不参与任何按名查找。基线 `Type::Fn` 共 **331 行 / 63 文件**，逐处处置：**改 23 文件**（含 `params` 元素的读取点改取 `.ty`）、**无需改 40 文件**（命中全部是 `MonoType::Fn`，不是 `ast::Type::Fn`）。
+
+**为什么手写 `Param` 的 `Debug`**：规范化 IR 快照的 `type_decl` 行打印 AST 类型的 `Debug` 文本，且 216 条快照已入库。若靠 `UPDATE_SNAPSHOTS=1` 再生基线，就会把「形参携带名字」伪装成一次 IR 行为面变化（违反 07 §128「漂移必须能说清来源」）。故把一致性收在**打印边界**：无名形参按其所载 `Type` 打印（与重塑前 `Vec<Type>` 的文本逐字一致）＋ IR 载体入 IR 前由 `Type::without_fn_param_names`（`src/frontend/core/parser/ast.rs:858`）剥掉类型位形参名——**基线因此零漂移**。
+
+### `NamedParen` 迁移等价性
+
+**节点保留、语义归位**：`Type::NamedParen { param, param_span, inner }`（`src/frontend/core/parser/ast.rs:533-540`）保留为**纯语法节点**；`param` 仍是返回位 binder 名，但**解释权显式归语义层**——`src/frontend/core/typecheck/checker/refinement.rs:421` 直接取 `param` 作 binder。
+
+等价性逐条可对：
+
+| 判据 | 落点 | 状态 |
+| --- | --- | --- |
+| binder 名的唯一来源 | `src/frontend/core/typecheck/checker/refinement.rs:421` | 不变 |
+| binder **不进入函数体作用域** | 同文件的作用域名单判定 | 不变 |
+| 五处透明下钻（只递归 `inner`） | `src/frontend/core/typecheck/checker/refinement.rs:519` / `:987`、`src/frontend/core/typecheck/checker/semantic_tokens.rs:124`、`src/frontend/core/types/mono.rs:968`、`src/middle/core/ir_gen.rs:1198` | 不变 |
+| 柯里化链终止（括号声明「完整类型」） | `src/frontend/core/parser/statements/declarations.rs:347`、`src/middle/core/ir_gen.rs:661` | 不变 |
+| 渲染形态 `({param}: {inner})` | `src/formatter/handlers/types.rs:18`、`src/formatter/handlers/expr.rs:477` | 不变 |
+| AST→AST 重建仍携 binder | `src/middle/passes/mono/function.rs:401-405` | 不变 |
+
+`ast.rs` 的注释改写为「参数位的形参名归 `Type::Fn.params`；本节点只承载**返回位**单具名括号的 binder」——**参数位与返回位是两回事**，混同即语义错误。
+
+**为什么不能简单删节点**：`(r: P(m))` 中若丢掉 `r`，类型检查器只能猜「约束里不在作用域的自由变量即返回值形参」，会把未声明的 `m` 也当 binder 静默代入（`ast.rs` 注释标注的实测缺陷）。⇒ 迁移 = 责任声明 + 注释改写，**不是删除**。
+
+### 实测数字
+
+① **硬验收**——6.4 收口态与本批落地态之间，`git diff --stat -- tests/yaoxiang tests/baselines src/std src/middle/core/tests/snapshots` **为空**（语料层 / 基线层 / 标准库 / IR 快照四段零差异）；`git diff --stat -- tests/` 同样**为空**（`tests/` 侧零直驱例外）。
+
+② **语料差分 356/356、差异为空**——基线 `tests/baselines/corpus-parity.jsonl` 共 356 行；`cargo run --example corpus_probe` 的产物与基线逐字节相同（`check-corpus-parity.py` exit 0）。
+
+③ **IR 快照 216 条零漂移**——`src/middle/core/tests/snapshots/` 下 216 个 `.snap` 全部在库未改（`check-snapshot-drift.sh` PASS）。
+
+④ **变体零残留**——落地态 `git grep -n "Expr::FnDef" -- src/` = 0 命中；`git grep -n "signature_params" -- src/` = 0 命中；`git grep -n "signature_fn_params" -- src/` = 0 命中；`git grep -n "is_untyped" -- src/` 与 `git grep -n "is_type_position" -- src/` = 0 命中（末轮修复删掉的两个死谓词）。裸词 `FnDef` 在 `src/` 内只剩 2 处**说明性注释**（`src/frontend/core/parser/statements/tests/functions.rs:123` 与 `src/frontend/core/typecheck/tests/checker.rs:121`，均写明「不构造已删除的 FnDef 变体」）。
+
+⑤ **`cargo test --all` exit 0**——lib **2878 passed** / 0 failed / 2 ignored；integration **314** passed；`tests/integration/` 下 22 个 `.rs` 模块全绿。`src/` 内 `#[test]` 计数 **2878 → 2883（+5，removed 0）**：3 个用例改名（`test_expr_fndef` → 两个 callable_parts 用例；`test_signature_params_stored_verbatim` → `test_type_fn_params_carry_signature_verbatim`；`test_named_function_type_params_stay_anonymous_types` → `test_named_function_type_params_carry_names_and_types`，断言方向由「类型位形参名丢弃」反转为「名字与类型同节点」，属加强）、5 个新增（`test_fn_block_body_with_fn_annotation_parses_to_lambda`、`test_type_fn_params_carry_name_and_type_on_same_node`、`test_anonymous_param_never_yields_generic_name`、`test_bare_identifier_param_takes_no_runtime_slot` 等）。**未删测试、未放宽断言**。
+
+⑥ **单一拍平入口**——`git grep -n "fn fn_params_flat" -- src/` = 1 处定义（`src/frontend/core/parser/ast.rs:985`）；`git grep -n "fn_params_flat" -- src/` = 32 行 / 16 文件（1 定义 + 31 调用点）。
+
+⑦ **错误码生成物（随行号平移再生）**——本批改动了诊断码发射点所在文件的行数（`ast.rs` 少 13 行等），错误码文档由生成器**位置敏感**地产出，必须重跑生成器并随提交再生：`docs/src/reference/error-code/E1xxx.md` / `E2xxx.md` / `E8xxx.md` / `index.md` 与 `docs/src/reference/warning-code/warning-codes.md` 共 5 个生成物，逐项 diff 仅为发射点行号平移，**诊断码数量与文字未变**；生成器复跑幂等（`git diff --quiet` exit 0）。
+
+### 探针结论
+
+**定向探针（13 组 × 2 类产物 = 26 份）**：在基线与本批的 4 个中间 revision（删变体 / 表示重塑 / 删旧表示 / 可维护性收敛）上分别产出 `check --json` 与 `format --stdout` 两类产物，**26/26 逐字节一致**。覆盖的同类路径含：lambda 头顺序与签名不一致（既有 E0012「signature has (a), lambda has (b)」）、类型参数与值参数混排（curry 分组）、纯类型位无名形参、TypeDefinition 泛型、const 泛型 + curry、命名实参重载、返回位 binder。
+
+**返回位 binder 的正反对照**：正例 `f: (b: Int) -> (r: IsPositive(r + 1))` 代入后约束成立 ⇒ 零诊断；反例触发 E4018 且诊断文本含**代入后**的约束（证明 binder 真被代入而非丢弃）；AST 级探针显示返回位 binder **不入** `Type::Fn.params`（拍平结果为空）。
+
+**formatter 只打类型**：类型位 `Type::Fn` 臂只渲染形参的 `ty`（无名形参不渲染）；声明签名位仍渲染 `name: type`。实测 `S: Type = { f: (a: Int) -> Int }` → `{ f: (Int) -> Int }`（名字确实被丢，与既有断言一致）；**全语料 formatter 对拍 355 个 `.yx` 逐字节一致**（基线二进制 vs 落地态二进制）。既有断言未改（`tests/formatter_integration.rs`）。
+
+**变异试验（判据可失败性）**：① 把 `Type::fn_params_flat` 的拍平改成跳过首参（`.skip(1)`），不变量测试 `test_type_fn_params_carry_signature_verbatim` 转红（exit 101），语料差分门禁同步转红（321 处差异）；② 把形参构造改成「非首参类型强制错配」，不变量测试 `test_type_fn_params_carry_name_and_type_on_same_node` 转红，断言消息点名第 2 个形参的类型应为 `Int`。两次变异均以 `git apply -R` **机械还原**，还原后被改文件的 blob 与 HEAD 逐字一致、`git status` CLEAN。
+
+**IR dump 对拍（F2 的判据）**：探针 `f: (Int64) -> (a: Int64) -> Int64 = 1` 的 `dump` 输出——表示重塑后（未修复）外层 `Params: (i64)`、修复后外层 `Params: ()`，与**基线**逐字相同（见「登记③」）。
+
+### 登记①：6.5.1 的 A/B 契约偏差（变体定义与补臂必须原子）
+
+6.5.1 的契约要求「**分 2 commit**」，落地为两笔：
+
+1. `:white_check_mark: test(parser): 函数定义测试迁移到 Lambda 解构`——把两处测试构造迁到 Lambda（**准备**）；
+2. `:fire: refactor(parser): 删除零构造的 Expr::FnDef 变体及全部消费臂`——删变体定义 + 全部消费臂（**删除**）。
+
+**偏差**：契约把「定义删除」放在第 1 笔，实测**不可行**——Rust 的穷举 `match` 下，变体定义与补臂删除必须**原子**：任一侧先删即编译不过（定义先删而臂未删 ⇒ 臂指向不存在的变体；臂先删而定义还在 ⇒ 变体仍零构造、删净判据不成立）。故「定义删除」随第 2 笔落地，第 1 笔只承载测试迁移。
+
+**可 revert 口径（实测）**：
+
+- 第 2 笔（删变体）**可独立 revert**，revert 后可 build（源码全 auto-merge 干净，仅 3 个生成物文档冲突；重生成后构建通过、`cargo check --tests` 通过，`Expr::FnDef` 变体回到定义处）；
+- 第 1 笔（测试迁移）**不可单独 revert**——须与第 2 笔**成对**回退（顺序：先第 2 笔后第 1 笔）。单独回退第 1 笔会把「构造已删变体」的旧测试带回来，编译报 `no variant named FnDef`。
+
+**判定**：准备—删除型拆分**天然不可单独回退**，是该类拆分的固有性质，不是执行缺陷；「分 2 commit」是契约明写要求，可回退单元是**两笔合起来**。此事由本节登记，不作为 finding。
+
+### 登记②：修复轮的 `inScope` 契约缺陷追认
+
+二次复审的修复轮（`:bug: fix(middle): 恢复裸标识符形参的运行期槽位口径 + 注释/守卫订正`）实际改动 8 个文件，其中 **4 个是机械必需面却不在契约声明内**：
+
+| 文件 | 为什么是机械必需面 |
+| --- | --- |
+| `docs/src/reference/error-code/E1xxx.md` | 诊断发射点行号随 `ast.rs` 平移，生成器产物（AGENTS.md 第 10 条⑤ 要求随提交入库） |
+| `docs/src/reference/error-code/E8xxx.md` | 同上 |
+| `src/middle/core/tests/fn_param_slots.rs` | F2 的行为面锁定测试；按仓库测试规范必须放 `src/middle/core/tests/` |
+| `src/middle/core/tests/mod.rs` | 上一条测试的模块登记（否则测试树成孤儿，既不编译也不运行） |
+
+**追认**：这 4 个文件属机械必需面，**按机械必需面接受**。成因是契约的 `inScope` 写窄——**不是实现者越界**，也不是「顺手多改」。
+
+**由此固化的规则建议（待用户裁决后写入 `coding-rules.md`）**：**repair 类任务的契约必须预置生成物与测试家目录**——凡修复会移动诊断发射点行号，`inScope` 必须含 `docs/src/reference/error-code/` 与 `docs/src/reference/warning-code/` 的生成物**路径前缀**；凡修复会新增测试文件，`inScope` 必须含该测试的**家目录**（如 `src/middle/core/tests/`）。理由：这两类是「不写进契约就必然被契约校验拒收」的机械必需面，而本仓已连续多个批次（6.2 / 6.3 / 6.4 / 本批）反复踩同一个坑；09a §P6 6.4 的「过程注记①」已就生成物一侧登记过同一条建议，本条把它补齐到「测试家目录」一侧。
+
+### 登记③：F2 的处置结论（裸标识符形参的运行期槽位口径）
+
+**问题**：`Type::Fn.params` 装的是**全部**形参位条目，其中含「参数位裸标识符」这一形态——`name` 是标识符、`ty` 为空（可能是类型名、不是形参）。表示重塑后，`split_curry`（`src/middle/core/ir_gen.rs:615`）的游标按**参数条目个数**推进，于是裸标识符也占了一个运行期形参位 ⇒ 柯里化外层 IR 形状变化。
+
+**实测**（探针 `f: (Int64) -> (a: Int64) -> Int64 = 1` 的 `dump`）：
+
+| 形态 | 外层 `Params` | 内层 `Params` |
+| --- | --- | --- |
+| 基线 | `()` | `(i64)` |
+| 表示重塑后（未修复） | `(i64)` | `(i64)` |
+| 修复后 | `()` | `(i64)` |
+
+⇒ 修复后与基线**逐字相同**。同形状的既有错误行为亦恢复一致：`= a` / `= (a) => a` / `= { a }` / `f: (a) -> (b: Int64) -> Int64 = (b) => b` 在落地态与基线同为 E3006（运行期变量解析失败），不再被意外编译通过。
+
+**口径**：裸标识符形参**不占运行期形参位**——此口径由 **WBS 8.9.1**（参数位形态归一，D53）重新裁定；本批不越权改口径，只**恢复基线口径**并把口径写进 API：`Param::occupies_runtime_param_slot()`（`src/frontend/core/parser/ast.rs:814`）= `ty.is_some()`，`split_curry` 按它计位（`src/middle/core/ir_gen.rs:637`）。AST 表示**未动**（`Type::Fn.params` 继续承载带名 / 裸标识符的全部形参），也没有用「退回旧表示」绕过。
+
+**锁定测试**：`src/middle/core/tests/fn_param_slots.rs` 的 `test_bare_identifier_param_takes_no_runtime_slot`（`:42`）断言外层 `Params` 为空、内层带类型形参仍占 1 位；测试注释写明「此口径由 8.9.1 重新裁定，改它必须同时改这条测试」。**改口径必须改这条测试**，防止静默漂移。
+
+**同批另两条 finding 的处置**：
+
+- **F1（注释与事实不符）**——`Param` 的名字约定改写为**三分形态**的事实描述：① 有名形参；② 无名（空串）；③ 参数位裸标识符（`name` 是标识符、`ty` 为空、可能是类型名、不是形参）。`is_named()` 的语义定死为「`name` 槽是否非空」，**不代表**「携带真实形参名」。parser 认不出用户类型名（更彻底的方案）不在本批范围，留 6.6 / 6.8。
+- **F3（空串不参与按名查找无守卫）**——`classify_generic_params` / `extract_generic_param_names` 两个入口显式跳过无名形参，并加 `test_anonymous_param_never_yields_generic_name`（`src/frontend/core/parser/statements/tests/declarations.rs:309`）以三种可分类形态（类型名 / const 名 / 约束名）断言两入口均返回空表。
+- **末轮修复**——删除两个与既有谓词**精确互补**的死谓词 `Param::is_untyped()` 与 `Param::is_type_position()`（各 0 引用、无桩、无替代方法，13 行删除）；保留 `is_named()`、`occupies_runtime_param_slot()`、`anonymous()` / `from_type()` 与手写 `Debug`。
+
+### 门禁（实测，全部 exit 0）
+
+| # | 门禁 | 实测 |
+| --- | --- | --- |
+| ① | `cargo fmt --check --all` | exit 0 |
+| ② | `cargo clippy --all --all-features --all-targets -- -D warnings` | exit 0 |
+| ③ | `cargo test --all` | exit 0（lib 2878 passed / 0 failed / 2 ignored；integration 314 passed） |
+| ④ | 语料差分 | 356 / 356，差异为空（`check-corpus-parity.py` exit 0） |
+| ⑤ | IR 快照 | 216 条零漂移（`check-snapshot-drift.sh` PASS） |
+| ⑥ | 义务账本 | PASS + `--selftest` 全 PASS |
+| ⑦ | 边界 + 扇出 + 概念 | 违规 0（`pub(crate)` 计数 165）；`check-boundary` / `check-fanout` / `check-concepts` 全 exit 0 |
+| ⑧ | 文档门禁 | `check-docs-truth` 诊断码 157 / 157；`check-docs-orphan` / `check-docs-refs` / `check-docs-examples` 全 exit 0 |
+| ⑨ | 错误码生成器幂等 | 重跑 `python scripts/docs/gen-error-code-docs.py` 后 `git diff --quiet` exit 0 |
+
+各量测轮次：① ② ④ ⑤ ⑦ ⑧ ⑨ 在本批每一轮提交后复跑；③ ⑥ 在实现批的落地树上完整跑通；两轮修复轮各复跑其自身判据子集，均 exit 0。
+
+另：`check-ir-verifier.sh` PASS（全语料 `verify_loose` 绿，校验面非空）；`npm run docs:build` exit 0（VitePress 真构建，AGENTS.md 第 10 条⑨——文档提交前的强制项）。
+
+### 直驱例外
+
+**无**。`tests/yaoxiang` / `tests/baselines` / `src/std` 三段零差异，`tests/` 侧同样零差异（6.4 收口态与本批落地态之间 `git diff --stat -- tests/` 为空）；`src/` 内 `#[test]` 由 2878 增至 2883，变化全部是「改名 + 新增」，**removed 0**，无放宽断言。表单驱测试 `tests/formatter_integration.rs` 未改。
+
+### 残留风险（转入 6.6 契约输入）
+
+① **parser 的非 Fn 签名兜底仍在**——`src/frontend/core/parser/statements/types.rs:823` 的 `extract_fn_type_info` 仍以 let-else 返回 `Type::Name{"()"}`（6.3 改自 `Type::Void` 兜底；语义与 formatter 输出逐字不变，但该路径**语法可达**：`semantic_tokens` 的 `Name` 臂比旧 `Void` 臂多记一枚 dummy-span token；6.3 收口时实测语料中该形态 0 命中，formatter / 诊断 / dump 零漂移）——**6.5 未接手**，须在 6.6 消除（不再由 parser 兜底产出伪类型）。已登记进 09 的 6.6.1 行。
+
+② **`ir.rs` 三处 `ast::Type` 载体未动**——`Instruction::Cast { target_type }`（`src/middle/core/ir.rs:322`）、`Instruction::TypeTest { ty }`（同文件 `:328`）、`FunctionBody::TypeDecl { definition }`（同文件 `:651`）仍持 `ast::Type`；6.3 只删变体、6.4 只做注入化、6.5 只做表示重塑，三批都**未改 IR 形状**（IR 快照 216 条与语料基线 356 行零漂移）。载体处置须在 6.6 决定（改动会动 IR 快照 / 语料基线）。已登记进 09 的 6.6.1 行。
+
+③ **表达式位置当参数列表仍在**——`src/frontend/core/parser/pratt/led.rs` 的 `expr_to_params` 臂仍把「空 body 的 `Expr::Lambda`」捞回来当参数列表（03 §6.3 #17 计划的「随 5.5 改为直接读 Lambda」**未做**，5.5 的改动清单里本就没有这一项）。处置随 6.8.2 的声明驱动检查模式一并决定。
+
+④ **参数位裸标识符是否算参数，仍待 8.9.1 裁决**——本批只恢复基线口径并写进 API 与锁定测试；「裸标识符按类型命名空间解析、解析不到报新 E 码」属 8.9.1。
+
+⑤ **parser 内两处内置封闭集仍在**——`CONST_PARAM_TYPES` 与 `PREDICATE_NAMES`（`scripts/ci/check-boundary.py` 的 B6 库存 2 处），9 个默认 `parse()` 入口尚未注入 `SemanticProbe`；转硬 T1 前须评估（承接 09 的 6.6.1 行第 ⑥ 项）。
+
+### 过程注记（四条）
+
+① **「删变体」不可能只删定义**——Rust 穷举 `match` 使「定义 + 补臂」成为原子单元；契约若把两者拆到不同 commit，就必须接受其中一笔不可单独 revert（见「登记①」）。
+
+② **表示重塑的顺序不能反**——先删 `signature_params` 再给替代表示，中间态必然改行为；本批按「先 `Vec<Param>` → 再删两处旧字段 → 再可维护性收敛」三笔推进，每笔单独可 build。
+
+③ **零行为差分靠「把一致性收在打印边界」而不是靠再生基线**——手写 `Param` 的 `Debug` 正是为此（见「为什么手写 `Debug`」）；若改走基线再生，216 条快照会被「形参携带名字」污染成一次假的 IR 行为变化。
+
+④ **本批有 4 个机械必需面文件曾落在契约外**（见「登记②」）——本仓连续多个批次重复踩同一个坑，规则建议待用户裁决后固化。
+
+### 计数
+
+本批不新增二级/三级任务 ⇒ 09 顶部计数表不变（二级 **72** / 三级 **193**）。6.5 的 2 个三级任务为既有登记，勾选不改变计数；跨二级并入的 6.8.1 亦为既有登记。
+
+## P3 3.20.5 收口（#511 跨单元导出登记口扩容，2026-10-31）
+
+### 登记与裁决
+
+3.20.4 收口时实证的上游登记口缺陷（`collect_signatures` Assign 臂手写判据只认 `Type::MetaType`，即 `(T: Type)` 形态）登记为 [#511](https://github.com/ChenXu233/YaoXiang/issues/511)，属 D/E 类须用户裁决。2026-10-31 用户在四件套（情况 / A–C 三案优缺点 / 推荐 A 带刹车 / 不可逆面单列）与规范分析（`type-system.md` 的接口约束一节明文 `(T: Add)` 语法、值依赖 const 一节的形态——修复 = 实现对齐规范而非语义变更；RFC-011 语义零漂为前置；RFC-029/029g 可见性正交；Layer 0 SPECS 只读）后批准 **A 案（登记口扩容）**。契约内嵌刹车：四重零漂（lib 全量 / integration 全量 / 语料差分 / IR 快照）任一漂移即停工回报，不修漂移。
+
+### 根因与机制事实（动手前实证）
+
+导出登记口只收 `(T: Type)` ⇒ `declared_fn_type_params`（checker 的登记名字表字段）缺名 ⇒ `Export::type_params`（`orchestrator.rs`）为 None ⇒ 跨单元限定调用 `lookup_type_params`（expressions 里跨单元限定调用取声明名的那个查找点）取不到声明名，`InstantiationRequest.generic_id.type_params` 空表，mono 走签名反推兜底（#510 探针实证 `params=[]`）。
+
+两条任务文本未覆盖的机制事实（t1 实证）：
+
+1. **const 泛型调用不发实例化请求**——单模块对照（与 `fn_const_generic.yx` 同构源码）与跨单元实测一致：`diagnostics=[]`、`requests=[]`，其单态化走 `const_binders` → mono 编译期求值面。`(N: Int)` 的兑现面因此是**导出携带**（`Export::type_params == Some(["N"])`），不是请求发射；t1 未为满足字面断言新增请求发射（越界且破坏守恒），以守恒锚测试 `test_instantiation_request_qualified_const_call_stays_request_free` 钉住。
+2. **值参数段的标注同样是 CONST_PARAM_TYPES 候选**——parser 旧形状把全部 curry 组拍平进 `signature_params`，`plain: (n: Int) -> Int` 的 `n` 也命中候选；若按「classify 收 Type+Const」直收，一切带 Int/Bool/Float/Char/String 标注的普通函数全带名，打破「普通函数不填表」不变式。修法 = Const 候选过 RFC-011 §4.1 两步判定的第二步（用途精筛）：复用 `collect_used_in_type`（checker.rs）扫注解返回段类型位，谓词应用实参位照 RFC-027a 排除。
+
+### 实现
+
+先 `c2231297`（8 文件 +307/−47，含生成物并账），随并行批次适配 rebase 并订正 helpers.rs 注释后终态为 `a9b5f578`（9 文件 +311/−51）。四处改动：
+
+- **登记口**（`checker.rs` collect_signatures Assign 臂）：`classify_generic_params` 单点收名（is_trait 闭包与 checker.rs 既有先例同源：`env.has_trait || operator_interfaces::spec`）+ Const 候选用途精筛；
+- **body_checker 填表同规**（`inference/statements.rs`）：填表块挪到 `const_binders`（`resolve_const_candidates` 结果）之后，names = Type 全收 + 用途命中 Const——修混合签名 `(T: Type, N: Int)` 被 body_checker 单侧 `[T]` 覆盖的缺口（快照合并「后者优先」，checker 的快照合并段）；
+- **helpers.rs 注释订正**：`declared_type_param_names` 的文档注释原文声称「登记口只认 `(T: Type)`」，修后与事实不符（t3 复审 low 项），按 #503 先例随本批订正（4 行等行数替换，下游 W1007 发射点零平移）；
+- **测试 +8**：登记口四单测（含 (T: Type) 回归锚 / plain 不变式锚）、跨单元请求两测试（含守恒锚）、导出面探针（add_of→`["T"]`、f→`["N"]`、plain→None）。
+
+### 红绿
+
+先红：四条登记口测试实现前实跑——接口约束 / 值依赖两条 FAILED（left None / right Some(["T"])/(["N"]))，回归锚与不变式锚绿。机械还原二次验证：stash 两处源码改动（保留测试）后登记口 2 红 + 导出面 1 红 + 跨单元 1 红（0 绿），stash pop 恢复。
+
+### 判据链
+
+t1 门禁 9 项绿 → **队长补修生成物欠账**（t1 门禁清单漏「重跑生成器」——checker.rs/statements.rs 插行必致发射点平移，3.20.4 同款；重跑后 E1xxx/E2xxx/E4xxx/警告页行号平移属本笔，**E4011 计数 4→5 属 #507（`8404ce04`）const_eval 里 checked_neg 的那个发射点的顺延欠账，就此并账**；amend 并入 + 幂等复核）→ t2 **PASS**（还原补丁红绿谱 4 红 3 绿逐条吻合、trial 机械可逆 blob 校验 CLEAN、修后 lib 2895 / integration 316 全绿、语料 356 条差分空、快照绿、四门禁脚本 + markers 绿）→ t3 **APPROVE**（8 项清单核毕：双精筛一致性、is_predicate 空表支路、classify 六支过滤完备性、is_trait 同源、消费面走查、生成物并账、红绿真实性、判据零放宽；测试计数 2891→2898 只增、三测试文件纯追加）。
+
+### 并行批次适配（2026-10-31）
+
+6.4/6.5 批次（parser 表示重塑：`Type::Fn.params → Vec<Param>`、删 Assign 并行形参表、`fn_params_flat` 成为形参唯一取用入口）与 #511 同区，rebase 时 checker.rs 语义冲突 + 三份生成物冲突。解法 = **对端形状 + 本修逻辑**：登记口参数改从 `type_annotation` 经 `Type::fn_params_flat()` 取（递归拍平语义与旧 all_params 等价），usage 精筛逐 `Param.ty` 下钻；statements.rs 自动合并自洽（旧窄填表块消失、填表仍在 `const_binders` 之后，对端把 usage 扫描并入 `resolve_const_candidates` 入参使两套精筛判据反而归一）。适配后门禁电池在适配 revision 上复绿：clippy 0 / lib **2900** / integration **316** / 语料 356 条零漂 / 快照 7 绿 / markers+四脚本+生成器幂等全过。**t2/t3 判定迁移依据** = 适配仅表示形状、名字表语义面不变，四重零漂在适配 revision（`a9b5f578`）上逐项重立。
+
+### 第三方 merge 事件（第 10 条⑧备案）
+
+t2/t3 运行期间（16:38）主仓工作树出现一次**会话外第三方发起的裸 `git pull`**（`.git/MERGE_HEAD` = origin/dev 夜间基准笔 `1a92aea6`，MERGE_MSG 为裸 pull 生成式），与团队「同步一律 `git pull --rebase origin dev`」约定不符；四个未合并文件（checker.rs + 三份生成物）全部是原始冲突标记、无人 resolve，`git merge --abort` 机械还原至冻结 revision、零损失。归因：HEAD reflog 在冻结 amend 后无移动（在途 merge 不进 reflog）、本会话自动化清单两个均已完成禁用——**无法归因到具体发起者，不推断**。此后本批以 `git pull --rebase` 完成同步。
+
+### 遗留与边界备案（t3 三条 low，均不阻塞收口）
+
+1. **谓词排除判据现存三份不同构**（checker.rs `is_predicate_application` 三判据 / statements.rs / ir_gen SemanticProbe 仅内置谓词）：被调模块自身 use 的谓词 P + 签名 `(n: Int) -> (x: P(n)) -> Int` 形态（语法实证 `tests/yaoxiang/02-type-system/refinement/refined_param_arg_form.yx`）在登记口可把 `n` 误计入用途命中 ⇒ 非泛型函数误收名，暴露面 = 导出元数据（完整 check 的模块被快照合并修正 + const 调用不发请求兜底；语料内无此形态）。建议后续把谓词排除判据收单点（D3 同义映射气味）。
+2. **混合签名 `(T: Type, N: Int)` 的跨单元请求位对齐无测试覆盖**：约束复检按 `param_names.position` 取 `last_type_args[idx]`，名字表扩进 const 名后对齐性静态推演两可。建议补一条混合签名跨单元测试。
+3. helpers.rs 注释失真——已随本批订正（见实现节）。
+
+### 计数
+
+三级 +1 = 3.20.5（193→194）；二级不变。issue [#511](https://github.com/ChenXu233/YaoXiang/issues/511) 关闭。
+
+---
+
+## P3 3.20.6 收口（#519 E1106 调用点复检死码删除，2026-10-31）
+
+### 登记与裁决
+
+该死码由 #512 批次 t3 复审实证：E1106 调用点约束复检（`expressions.rs` 的「RFC-011 §5.2 调用点复检」块）是结构性死码——到达时 `last_type_args` 恒空 ⇒ `get(idx)` 恒 None ⇒ `continue` 短路。登记为 [#519](https://github.com/ChenXu233/YaoXiang/issues/519)。规范查证（裁决包）：①代码注释的「RFC-011 §5.2」系**误引**（RFC-011 实际 §5.2 是「类型族」，全文无调用点复检声明）；②RFC-013 仅库存性登记 E1106「约束未满足」；③RFC-011b「约束同判据」原则下，死码复检的判据（接口 registry `query_*_template`）与活执行面（mono 函数表 `all_function_names`）本就发散。**2026-10-31 用户裁决甲案：删除死码，E1106 转暂未发射**；约束未满足的检查层位与判据设计归 #519 开放（探针实证现状：约束未实现 check 0 error / run exit 1 运行期错误，`sum(NoAdd)` 特化炸）。
+
+### 删除边界（队长预先查证，t1 契约划死红线）
+
+- **删**：复检块本体 + `generic_fn_constraints` 死链（statements 的字段、expressions 的 setter、statements 的两处传播）——其唯一读者是死码复检臂。
+- **留**：`current_fn_param_constraints` 全链（statements.rs 8 处 / expressions.rs 8 处，含 statements 的 OperatorDispatch 发射与消费两点）——定义体内 `a + b` 发射 `Call "T.add"` 靠它，mono 改写的承重路径。
+
+### 快照再生（escalation A 案，裁决全文备案）
+
+夹具 `constrained_generic_ops.yx` docstring 误引更正会机械平移 IR 快照 span（快照含 line/column/offset，offset 由总字节数决定；t1 两轮实测：4→6 行漂移、等行数不等字节也漂移），与契约「快照零漂」及禁跑 `--ignored` 字面冲突，t1 升级询问。**队长裁决**：判据修正为「IR 形态零漂」——AGENTS 常用命令区明文 `UPDATE_SNAPSHOTS=1 cargo test --lib snapshot -- --ignored` 为「改动影响 IR 或语料行为时」的基线再生命令，红线要求的是「同提交再生 + 人工 review」而非禁止再生；审查判据五条（逐行审查、每处变化必须只是 Span/Position/offset 数字平移、任何指令/形状/类型实质变化即停、语料差分仍须零漂、再生与删除同提交）。t1 机械逐行审查结果：**span 计数 14=14、非 span 骨架完全一致、line 差值集合 {2}、column 差值集合 {0}、offset 差值集合 {231}**——与 docstring +2 行/+231 字节精确对应，零指令变化；审查中抓到并修正一次编辑瑕疵（验证行重复致 line+3）后重再生复核。
+
+### 等价性与判据链
+
+t1 门禁全绿（lib 2908 与父版**同数**——既有测试零删改、integration 323+1、语料 356 零漂、快照绿、生成器幂等、现状探针 check 0 / run 1 与删除前一致）→ 队长复核（边界 grep：`generic_fn_constraints` 全仓 0 处、活链 8+8 处全在；mono/std 改动纯注释）+ 一处队长修补并入（inference 测试里那条历史叙事注释「另有『结构性死码』登记待裁」→「已裁已删」，随冻结 amend）→ 冻结 → t2 **PASS**（**两向变异证明**：变异甲复活被删死码后 lib 全量与修后基线逐项同数 = 删除等价性直接证明；变异乙致残保留的活链后 constrained_generic 派发测试恰红 2 failed、snapshot 组仍绿 = 承重路径真实且删除未误伤其守卫；trial 全程机械可逆）→ t3 **APPROVE**（8 项全过：边界零泄漏、快照差值独立重算吻合、附录B 五要素齐备且「§5.2 是类型族」经原文核实、E1106 面（153 注册 / 35 暂未发射 / 生成器幂等）、判据零放宽、零漂三项本机跑绿）。
+
+### 误引更正与决议登记
+
+「RFC-011 §5.2 调用点复检」更正为 RFC-011b（约束同判据 / 约束语法糖）：契约点名 6 处 + t1 同族伴随 4 处（inference 两文件的四处注释与 std 注册表一处）+ 语料夹具 docstring；RFC-011b 附录B 落设计决策条目（五要素：裁决日期 2026-10-31 / 甲案 / 死码判据 / mono 面承接 / #519 指针）。**§5.2 误引余量 5 处**（后续清理登记）：src/ 3 处（parser 的 ast 两处与 ir_gen 各一处——语境均为约束形参语法判定，正确出处应引 RFC-011 §类型约束系统）+ tests/ 2 处（integration 执行测试的两条注释，t3 low 补充）。
+
+### 遗留备案（t3 三条 low，均不阻塞）
+
+1. **附录B 死码判据的 FieldAccess 理论窗口**：`fn_name_for_mono` 的 FieldAccess 分支不校验 receiver 是否模块别名，而 `collect_instantiation_request` 的 `callee_generic_name` 校验——该形态下 `last_type_args` 理论上可能非空；探针 B（同名带约束裸函数 + 值接收者方法调用）实测未复现发射，行为面即现状锚不受影响。闭合窗口或收紧附录B 措辞归 #519 后续设计。
+2. 现状锚的「先改判据再改锚」护栏是注释级约定，无机械强制——若要机制化（判据-锚联动 CI 校验）在 #519 设计时一并考虑。
+3. §5.2 误引余量 5 处（见上）。
+
+### 计数
+
+三级 +1 = 3.20.6（195→196）；二级不变。issue [#519](https://github.com/ChenXu233/YaoXiang/issues/519) **保持开放**（本行只收甲案删除；约束检查的层位与判据设计待后续）。
+
+## P3 3.20.7 收口（#519 甲案续篇——mono 派发改写未命中改报编译期 E1106，2026-11-01）
+
+### 登记与裁决
+
+用户 2026-11-01 批「按你推荐来」（甲案裁决包四件套见 WBS 3.20.7 行登记段）。层位定为 mono 特化改写循环（`qualify_deferred_method` 双查未命中处）——判据与运行时执行面同表同键，规避被删死码的判据发散死因；CHECK 已含 Monomorphization 阶段（`driver/program.rs` 3.4.8 ③ 注记），故翻面发生在 check 面。
+
+### t1 实现（flash 子代理，冻结 `1dbe456c`）
+
+`specialize_function` 改 `Result<Option<_, Diagnostic>>`（未命中 fail-fast 上抛，`process_queue` 以 `?` 承接）；成因区分 = 全表 `.{bare}` 后缀扫描、sort 取前 3 保确定性；`constraint_dispatch_failed(dispatch, detail)` 构造器重定义；013 行标题泛化「约束未满足」→「约束方法派发失败」（`tools/code-tables --fix` 再生——该表区间是工具再生产物，手改会被 build.rs 门禁拒建）；翻面锚 + 成因 B 多文件锚先红后绿。**契约偏差 4 条实证**：
+
+1. **判据修正（最重要）**：登记裁决包的事实②「all_function_names 与运行时名字空间同源」被实证**部分推翻**——该表只收 IR 函数，不含 `src/std/mod.rs` register_all 的 FFI 原生背书（`Int.add` 等）。首版实现把 `sum(1,2)` 这类成功程序杀成 E1106，被两条既有 D59 守卫测试（`method_unused.rs` 的 `test_constrained_generic_dispatch_{single_file,cross_unit}_run_values_unchanged`）当场抓红。修正 = 原生类型显示名（`operator_type_display` 四映射臂产出 + char 默认臂透传）未命中保持运行期回退，放行方向刻意**过包含**（多含=保旧行为，漏含=误杀成功程序）。WBS 行事实②已同步修正。
+2. check_file 翻面形态 = error_count 0→1 + 诊断文本，**非 pipeline Err**——check 的 CollectAll 聚合下 mono 失败走逐文件收集通道（`driver/arms.rs` Check 臂不设 failure），契约原断言按 driver 实证修正。
+3. mono 直驱测试 7 处签名连带（机械必需面，断言逐字保留，追认进 WBS 行清单）。
+4. span 实测：`.at` 接受 `Span`；单行表达式体形态下 ir_gen 记录的指令 span 是函数头——为该字段真实值非错位。
+
+### v2 修复轮（t3 首轮 REJECT 两 medium → 队长修复，amend `8ec5ca38`）
+
+1. **发射点行号平移再生（medium，队长失误）**：冻结审查修注释空行使行号 +1 后**漏跑错误码生成器**——生成物写 761、实际 762，与提交信息「生成器幂等」不符；3.20.4 模式（发射点附近行号平移不重跑生成器）在队长手上复发，t3 抓出。修正后发射点 767，生成器两轮哈希一致。
+2. **成因文案观测化（medium）**：后缀判据不区分同名异型、看不见函数表外来源（extern 体不产 FunctionIR），原「类型定义模块身份在单态化期丢失」断言句可能失真。改为观测陈述 + 条件归因：「全程序函数表中不存在该方法的实现登记——约束未满足」/「……若该实现确属本类型，则为类型定义模块身份在单态化期丢失、无法还原限定名（WBS 3.18）；同名异型时该条目与本派发无关」。doc 注释与 e1xxx 注释同调为「提示性区分」。
+3. `"Char"` → `"char"`（`MonoType::Char` 的 type_name 经 `operator_type_display` 默认臂透传小写，原大写 "Char" 为不可达死成员）；doc 注释如实描述产出面。
+4. 四语言 E1106 英文同文 → 真译（ja/ru/zh-classical/zh-x-miao——契约误称 #520 先例是英文同文，实际 cd5a30fa 四语皆真译；本轮对照语域补齐）。
+
+### t2 独立验证（批次树 519b @ `8ec5ca38`）——PASS
+
+- **R1**（未命中臂打回裸名回退）：基线两新测试绿 → 变异后皆 FAILED（exit 101）→ trial 机械还原（blob 与 HEAD 一致、status CLEAN）→ 重建后恢复绿。
+- **R2**（置空 `PRIMITIVE_DISPLAY_NAMES`）：两条 D59 守卫基线绿 → 变异后皆 FAILED（`Int.add` 被误杀）→ 还原恢复绿——原生类型放行是承重件，残化即红。
+- **冻结基线**：语料差分与基线逐字节一致（零漂）；IR 快照只读 6 passed / 1 ignored（更新模式按设计 ignored）；CI 四脚本 exit 0（check-boundary / check-fanout 现为 report-only 属 P9 前既定口径，输出内违规计数 0）；锁释放，树终态干净。
+- 变异命令形态注记：`cargo test --test integration -- <名1> <名2>`（libtest 多过滤器；契约原文的双测试直写形态本机 cargo 不接受，等价合法形态）。
+
+### t3 修复面确认——APPROVE（5/5）
+
+发射点 767/767 一致且修复面仅此一处行号修正；成因文案观测化与注释同调；char 修正与 type_name 事实吻合；四语真译；测试 diff 无断言放宽（v1→v2 未触碰测试文件）。
+
+### 环境事件备案
+
+- **批次树 Z3 种子**：`git worktree` 不携带 gitignored 的 `.z3/`（本地构建依赖缓存目录），批次树首次构建触发 build.rs 联网下载 Z3，本机代理故障（Invoke-WebRequest 连接关闭）致构建失败。处置 = 把主树 `.z3/` 下对应平台的缓存目录（z3-4.16.0-x64-win）复制进批次树同名目录后增量构建正常。**后续批次建树时若构建报 Z3 下载失败，先做此种子再排查其他原因**；另外上轮失败使锁悬挂（holder=t2 残留），`scratch.py release` 后再入。
+- **「pre-commit 钩子楔死」系误读，已撤回（2026-11-01 判别实验澄清）**：本批次三条提交（`1dbe456c` 重试轮、`8ec5ca38`、`bab3a8ad`）的钩子输出被误读为「文件过滤钩子持续 (no files to check) Skipped、staged 明明有文件」——真相是**每笔提交的钩子输出有两段序列**：pre-commit 阶段（全量门禁真实执行，cargo test --all 都跑）+ commit-msg 阶段（该阶段的文件集合只有提交消息本身，文件过滤钩子在此阶段跳过是 pre-commit 对无 `stages:` 限定钩子的**正常**行为）。本仓 `.git/hooks/` 同时装有 pre-commit 与 commit-msg 两个 shim，而 `.pre-commit-config.yaml` 的钩子多数未写 `stages:` 限定 ⇒ 每笔提交两段输出；此前三次「楔死」证据全部来自只截 tail 窗口、恰好只看到第二段（第一段全量序列在窗口之上被切掉）。受控探针证实：`-F` 消息提交同样全量跑钩子（探针提交已 `reset --hard` 回滚，blob 无痕）。**教训**：判钩子覆盖必须看完整输出，不得凭 tail 段推断；「commit-msg 阶段全 Skipped」是正常形态。收口提交 `bab3a8ad` 的提交信息里「pre-commit 失败轮后持续跳过异常」的说法据此**撤回**（提交信息不可改，以本条为准）。可选改进（未做，留裁决）：给配置里的文件钩子显式加 `stages: [pre-commit]`，输出减半且根除这类误读面。
+
+### 计数
+
+三级 +1 = 3.20.7（196→197）；二级不变。issue [#519](https://github.com/ChenXu233/YaoXiang/issues/519) **关闭**（甲案删除 + 约束检查落地全链闭环；余量 = 同名异型消歧归 P6 类型身份收敛、动态调用路径覆盖边界、两成因 help 形态——均已在本行与 WBS 行登记去向）。
+
+## P6 6.6 门禁转硬（首轮，2026-10-31）
+
+第三次重跑该二级任务：6.0 建了 T1/T2/T3 但 T1 只发 `cargo:warning`，6.6 把它变成**构建硬失败**。首轮只做「T3 删除 + T1 转硬 + 复审修复」，其余遗留面（parser 非 Fn 兜底 / `ir.rs` 三处载体 / leg B 往返 / 两处封闭集）留给后续轮次，故 09 的 6.6 行**不整行勾完成**。
+
+### 三个前置裁决（用户 2026-10-31）
+
+① **T3 怎么办 → 1C「删除并入 T2」**。勘察事实：RFC-011 是泛型系统设计文档，**没有以内置类型名为列的表格**；T3 的「文档侧口径」实测只抓到 5 个 token（`If` / `Int` / `Match` / `String` / `Type`），产出的 16 条差异全部只能登记为「无需处置」——该检查绿不绿都不代表事实，属门禁空转。T2 比对的是代码侧三份**真实存在**的清单（`from_builtin_name` / `CONST_PARAM_TYPES` / LSP 清单），覆盖面更实。
+
+② **T1 白名单机制 → 2A「保留机制 + 空表转硬」**。`REGISTERED_ZERO_FORWARD` 与 `DEAD_VARIANTS_03` 空表转硬；保留登记与 T1.7 失效报警，供以后出现合法兜底点时逐条登记（豁免必须显式且可审计）。
+
+③ **T1.6 系统性 +1 → 3A「先查来源再定」**。勘察结论：不是基线过期、也不是口径变化，而是 6.5 批新增的一处转换函数 `Type::without_fn_param_names`（`src/frontend/core/parser/ast.rs`，唯一生产消费点 `ir_gen.rs` 入 IR 前归一）**被误算成 parser 前向**。它的 `match` 恰好重造 11 个变体各 1 点，`Name` / `ConstExpr` 走 `self.clone()` 不产点——与实测 delta（11 变体各 +1、两变体 0）逐项吻合。性质是**合法的 AST→AST 保真重建**，故按用户追加裁决 **1A** 把它归入第二类，而不是刷新基线把 +1 固化成「前向构造」。
+
+### 四笔提交（内容口径；提交号见 `git log`）
+
+① **删 T3 并入 T2**：`rfc011.rs` 整文件（323 行）、`lib.rs` 的 `pub mod` / `RFC011_REL` / 报告段与报告头、`dispositions` 的 **16 条** T3 登记（3 条 `T3.D2C` + 13 条 `T3.C2D`）、`build.rs` 的 `RFC011_REL` 引用、README 与 03 §5.7 的对应说明（8 文件 +92/−463）。
+
+② **T1 转硬 + 基线对账进判据 + 归类修正**：`build.rs` 改调 `build_gate`，`Err` 即 `panic!`；`gate_failures` 并入 `baseline::mismatches`（裁决 2A——此前 `render_comparison` 只被 render 调用，`warnings()` 不含它，**基线漂移永远不会红**）；`scan.rs` 改 `REBUILD_FUNCTIONS` 表驱动分类并加 `missing_rebuild_functions` 与源码对账（改名即报错，不静默落回前向）；基线 13 行与 `SCOUT_BASELINE_REV` 同批刷新，逐列 diff 写进提交信息（8 文件 +643/−150）。
+
+③ **修复审 F1/F2**：`BaselineMismatch` 增 `decl_line` 与 `sites`，四类站点全部可追 `file:line`（此前只给数字——与 `t1.rs` 自述不符）；新增 `SCOUT_BASELINE_CALIBER_REV` + 冻结口径快照 + `caliber_drift`，口径失配**优先报且不退化**为数字漂移（6 文件 +541/−50）。
+
+④ **文档与实现对齐**：`lib.rs` 模块头「五类」→「六类」（与同文件 `build_gate` 逐条同名）；修 `baseline.rs` 的断裂 intra-doc link（2 文件 +5/−3）。
+
+### 实测数字
+
+- 扫描面：**289** 个非测试 `.rs`、**13** 个 `ast::Type` 变体；**前向零构造 0 / 全局零构造 0**；T1.6 由 2/13 回到 **13/13**；T1.7 名单一致（未登记 0 / 失效 0 / 豁免未命中 0 / 未登记兜底 0）。
+- T2：`from_builtin_name` 15 名 + `()`、`CONST_PARAM_TYPES` 5 名、LSP 清单 14 名；**1 条已登记差异**（`DateTime`，待 P10 S11 迁出）。
+- 删 T3 的净效果：`--report` 前后 diff = 报告头 2 行 + 整段 T3（81 行），`T1.1–T2.5` **逐字节相同**。
+- 工具 crate 单测：**16 → 26 passed**（删 3 条只覆盖被删口径的用例，其余为新增：报错含 `file:line`、口径新增/删除/类别变化/同代）。
+- **6.6 全批未动 `src/` 与 `tests/`**（跨四笔的 `git diff --stat` 均为空）⇒ 语料差分与 IR 快照无变更面。
+
+### 变异证据（判据可失败）
+
+- 实现轮：注入 `PhantomVariant` → `exit 101` 且报「零构造变体未登记：…（定义 ast.rs:542）」；`Struct` 计数 4→5 → 报三列实测 vs 基线；**改重建函数名** → 报「登记表与源码不一致」（防静默降级）。
+- 验证轮：自写 **6 个**变异覆盖五类违规 **+ 两条「扫描不完整」分支**——源码不可解析时报「扫描未完成（口径不完整 ⇒ 判定不成立）」，**不降级为通过**；批次树内未变异构建通过且同样扫到 289 个文件（排除「静默扫 0 文件」的假绿）。
+- 修复轮：口径类别 `AstToAst→Forward` → 报「口径与基线不同代」且**只列这一条**；基线数字改 1 → 报带 `file:line` 的漂移。
+- 复审轮逐条验证「只动一处就能过」：只改现行登记表 / 只改冻结快照 / 只改基线数字 / 改口径+快照但不改数字——**四条路径全被拦**。
+
+### 复审结论与三条流程事实
+
+复审最终 `pass`（F1/F2 真闭，F3/F4 两条 low 已随第四笔与 09/03 处置）。需要如实记下的流程事实：
+
+① **t5 的 verdict 未落进任务记录**：该任务在中断后处于终态 `failed`，`claim/update` 均被拒（terminal immutable），结论只能以 `evidence_note` 与致队长报告为准。这是工具形态的产物，不是判定缺失。
+
+② **复审与验证同属 MiniMax 家族**（glm 额度耗尽所致）：跨家族独立性的收益消失，改为「各自重取证据、引用他人数字必须标『未自测』」。实测该安排仍有价值——复审独立发现的问题（F1/F2）验证轮未发现。
+
+③ **本批有两笔 `--no-verify` 提交**：起因是同一棵树上有人正在写别的文件，pre-commit 的 stash 窗口与在写内容冲突（实测一次被钩子回滚：`Stashed changes conflicted with hook auto-fixes … Rolling back fixes`）。两笔的门禁由验证轮与本轮手动补齐。将来遇「两成员同树并行」应**串行化提交**，而不是默认跳过钩子。
+
+④ **队长流程失误**：复审轮（`t8`）曾因建任务时**漏写依赖**被调度器提前派发，已接管取消并按依赖重建。记录在案，以免后人误判为调度器缺陷。
+
+### 残留面（转入后续轮次，09 的 6.6 行已如实标注）
+
+① **parser 的非 Fn 签名兜底**——`types.rs` 的 `extract_fn_type_info` 仍以 let-else 返回 `Type::Name{"()"}`，该路径语法可达（`semantic_tokens` 会多记一枚 dummy-span token，语料 0 命中）。
+② **`ir.rs` 三处 `ast::Type` 载体**（`Cast.target_type` / `TypeTest.ty` / `TypeDecl.definition`）——四批都未改 IR 形状，处置会动 IR 快照与语料基线，须另立裁决。
+③ **leg B 全链往返测试**未入库（目前只有验证树探针覆盖）。
+④ **parser 两处内置封闭集**（`CONST_PARAM_TYPES` / `PREDICATE_NAMES`）与 9 个默认 `parse()` 入口尚未注入 `SemanticProbe`。
+⑤ **工具 crate 的文档门禁缺口**——`tools/type-tables` 不在 workspace，仓内钩子只 `cargo doc` 根 crate，故一条断裂 intra-doc link 长期未被发现（本轮靠手工 `cargo doc --manifest-path` 才暴露）。该缺口不从属于 6.6，登记供 P10 或工具接线时处理。
+
+### 计数
+
+本批不新增二级/三级任务 ⇒ 09 顶部计数表不变（二级 **72** / 三级 **193**）。
+
+## P6 6.6.11 A-1：删除 `Instruction::Cast` / `TypeTest` 两个零生产者死变体（2026-11-01）
+
+**触发**：6.6.8 的勘察把 `ir.rs` 三处 `ast::Type` 载体摊开（`Cast.target_type` / `TypeTest.ty` / `TypeDecl.definition`）；用户 2026-11-01 裁决 **Q1 = 做 A-1**（删两个零生产者变体 + 刷 T1 基线与口径）。载体 C（`FunctionBody::TypeDecl.definition`）另议。
+
+**为什么删不改变行为（结构性依据）**：构造 Rust 枚举变体必须写出变体名；全仓对这两个名字的 10 处命中**全是消费臂**——`ir.rs` 的 `span()` 2 处、`normalize.rs` 的文本渲染 2 处、`verify.rs` 的三张分类表 4 处、`mono/function.rs` 的指令替换 2 处、`translator.rs` 的降级 2 处，无一是构造点。⇒ 任何程序的 IR 里都不可能出现这两个变体，删除只移除不可达代码（且它们的载荷本就丢：`translate_cast` 拿不到 `target_type`，`TypeTest` 臂发 `vec![0, 0, 0]` 空操作数占位）。
+
+**改法（一条提交）**：
+
+- 删变体 `Instruction::Cast { dst, src, target_type: ast::Type, span }` / `Instruction::TypeTest { src, ty: ast::Type, span }`；
+- 删消费臂：`ir.rs` 2 条 `span()`、`normalize.rs` 2 条、`verify.rs` 4 条（定义 dst / 无操作数 / `use_operands` 各 1）、`translator.rs` 2 条；
+- 删失去唯一调用者的函数：`translate_cast`（唯一调用点就是 Cast 臂）、`substitute_instruction`（退化为恒等）、`substitute_type_ast`（唯一调用者是 `substitute_instruction`）、`substitute_block`（唯一职责是逐指令调用前者，退化为 `clone`）——trait 声明同步清理，两处块级映射改 `blocks.clone()`；
+- 字节码侧 `BytecodeInstr::Cast`（`bytecode.rs:542`，`opcode()` 映射 `:644`、`size()` `:801`、解码 `:2088-2090`）与 `opcode::CAST`/`TYPE_CHECK`（`backends/common/opcode.rs:108-109`）**保留**（见下方不对称说明）。
+
+**门禁红态（原文留存，证明漏刷会被拒编译）**：
+
+① 只删代码、未动 `REBUILD_FUNCTIONS`（`build.rs` 拒绝编译）：
+
+```text
+类型表门禁 T1 失败（构建已拒绝）：
+type-tables T1 扫描未完成（口径不完整 ⇒ 判定不成立）：重建位置登记表与源码不一致（1 项）——函数改名/删除后必须同步 scan.rs 的 REBUILD_FUNCTIONS，不得静默落回「parser 前向」：
+  src/middle/passes/mono/function.rs::substitute_type_ast（AST→AST 重建）
+```
+
+② 删了登记表与口径快照、但未刷基线数字（10 项违规，逐行数字 = 下表「前」值）：
+
+| 变体 | 合计 基线→实测 | AST→AST 基线→实测 | 实测残余构造点（删除后） |
+| --- | --- | --- | --- |
+| `Struct` | 4→3 | 3→2 | `ast.rs:919`（`without_fn_param_names`） |
+| `NamedStruct` | 4→3 | 3→2 | `ast.rs:926` |
+| `Tuple` | 6→5 | 3→2 | `ast.rs:932` |
+| `Fn` | 8→7 | 3→2 | `ast.rs:937` |
+| `Generic` | 5→4 | 3→2 | `ast.rs:945` |
+| `Literal` | 4→3 | 3→2 | `ast.rs:954` |
+| `Ptr` | 4→3 | 3→2 | `ast.rs:959` |
+| `Ref` | 6→5 | 3→2 | `ast.rs:964` |
+| `Paren` | 4→3 | 2→1 | `ast.rs:973` |
+| `NamedParen` | 3→2 | 2→1 | `ast.rs:979` |
+
+> `MetaType` 不在此列：`substitute_type_ast` 对它的那一臂是 `ty.clone()`，本就不产构造点。前向与反向桥两列不受影响。
+
+**口径同批**：`REBUILD_FUNCTIONS` 与 `SCOUT_BASELINE_CALIBER` 各删 `substitute_type_ast` 一条（两处必须成对改：只改一处会先报「口径与基线不同代」并**跳过**数字比对，看起来像另一类故障）；`SCOUT_BASELINE_REV` 与 `SCOUT_BASELINE_CALIBER_REV` 同批前进（提交号在推送后才可取，故记本次改动的父提交并写明偏离）。刷新后门禁摘要：`勘察基线一致、口径同代`。
+
+**`as` 的既有缺口（登记；不是本次删出来的）**：删两个死变体不触及 `as` 的语法与关键字，但会让「`as` 语义未落地」从「IR 里有空变体」变成「IR 里什么都没有」，故必须登记：
+
+- 文法与优先级已定义（`docs/src/reference/language-spec/syntax.md` §2.6 / §2.4 第 2 级、关键字表含 `as`）；
+- 解析产出 `ast::Expr::Cast`（`parser/pratt/led.rs:81` 的 `KwAs` 中缀臂）；
+- 类型检查只做**静默重标注**：`typecheck/inference/expressions.rs:3847-3853` 用 `let _ = self.infer_expr(expr)?;` 丢弃内层结果，随后直接返回目标类型的 `MonoType`；
+- 全仓**没有**可转换性校验，也没有对应诊断码（`util/diagnostic/codes/` 无 cast 条目）；
+- `ir_gen` 从不生成指令（`middle/core/ir_gen.rs` 只在 `:5042` / `:5849` / `:9312` 取 `Expr::Cast` 的 span 与自由变量）；
+- 语料 397 个 `.yx` 中 `as` 转换 0 例（`git grep -E '[^a-zA-Z_]as[ ]+[A-Z]' -- '*.yx'` 零命中）。
+⇒ 现状是「语法受支持 + 类型检查静默重标注 + 无合法性校验 + 无运行期转换」，对语料零影响但零覆盖。SPEC 侧注记已同批落在 §2.6。
+
+**「IR 无 Cast、字节码有 Cast」的不对称及原因**：字节码侧的 `BytecodeInstr::Cast { dst, src, target_type_id }` 与 `opcode::CAST` / `TYPE_CHECK` 保留，因为它们是**另一套载荷**——字节码侧持的是类型表下标（`u16`），属于字节码的类型表契约（有往返测试 `middle/core/tests/bytecode.rs:208` / `:626`），而不是语法层类型；且删它们会牵动 `.42` 格式与解码器。本轮只删「IR 侧从无生产者、载荷还被丢弃」的语法类型载体。另注：解释器侧目前没有 `CAST`/`TYPE_CHECK` 的 handler（`grep -rn "CAST\|TYPE_CHECK" src/backends/interpreter/` 零命中），故字节码 CAST 同样不可执行——但那是字节码/执行器面的既有状态，不在本轮范围。
+
+**零漂移与门禁**：`src/middle/core/tests/snapshots/` 216 个快照对 `TypeTest`/`Instruction::Cast` grep **0 命中**（删前删后一致）；语料 356/356（`check-corpus-parity` 差异空）；`git diff --stat 3e4be8c27 HEAD -- tests/yaoxiang tests/baselines src/middle/core/tests/snapshots` 为空；`cargo fmt --check --all` / `cargo clippy -D warnings` / `testsuite.py run fast` / `check-docs-truth.py` 全绿；`verify.rs` 三张分类表除被删两臂外其余变体逐条位置未变（diff 仅删行）。
+
+### 计数
+
+本批不新增二级/三级任务 ⇒ 09 顶部计数表不变（二级 **72** / 三级 **193**）。
+
+### 附：改前 `type_decl` 行原文（对照用）
+
+口径：`343ed13b0` 的 `src/middle/core/tests/snapshots/`，`grep -rn "type_decl"` 命中 **96 行 / 69 文件**。
+下文逐文件原样抄录（仅去掉快照路径前缀，行内文本一字未改）——**B 收窄后这些行会被整行替换**，
+保留原文是为了事后能回答「到底丢了哪些信息」：每行都带完整 `Span { start: Position { line, column, offset }, end: … }`
+（即 07 §快照规范化表里「剥离 Span」一项此前**并未真正成立**的来源）。
+
+```text
+# src/middle/core/tests/snapshots/tests/yaoxiang/01-syntax/basics/statement-termination.snap
+    type_decl Struct { body: [Field(StructField { name: "x", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 11, column: 20, offset: 405 }, end: Position { line: 11, column: 23, offset: 408 } } }, default: None }), Field(StructField { name: "y", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 11, column: 28, offset: 413 }, end: Position { line: 11, column: 31, offset: 416 } } }, default: None })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/02-type-system/aggregates/pattern_destructure.snap
+    type_decl Struct { body: [Field(StructField { name: "make", is_mut: false, ty: Fn { params: [Name { name: "Int", span: Span { start: Position { line: 15, column: 12, offset: 562 }, end: Position { line: 15, column: 15, offset: 565 } } }, Name { name: "Int", span: Span { start: Position { line: 15, column: 17, offset: 567 }, end: Position { line: 15, column: 20, offset: 570 } } }], return_type: Name { name: "Pair", span: Span { start: Position { line: 15, column: 25, offset: 575 }, end: Position { line: 15, column: 29, offset: 579 } } } }, default: None }), Field(StructField { name: "empty", is_mut: false, ty: Fn { params: [], return_type: Name { name: "Pair", span: Span { start: Position { line: 16, column: 18, offset: 598 }, end: Position { line: 16, column: 22, offset: 602 } } } }, default: None })] }
+    type_decl Struct { body: [Field(StructField { name: "x", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 19, column: 20, offset: 626 }, end: Position { line: 19, column: 23, offset: 629 } } }, default: None }), Field(StructField { name: "y", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 19, column: 28, offset: 634 }, end: Position { line: 19, column: 31, offset: 637 } } }, default: None })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/02-type-system/aggregates/structs.snap
+    type_decl Struct { body: [Field(StructField { name: "x", is_mut: false, ty: Name { name: "Float", span: Span { start: Position { line: 8, column: 20, offset: 230 }, end: Position { line: 8, column: 25, offset: 235 } } }, default: None }), Field(StructField { name: "y", is_mut: false, ty: Name { name: "Float", span: Span { start: Position { line: 8, column: 30, offset: 240 }, end: Position { line: 8, column: 35, offset: 245 } } }, default: None })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/02-type-system/aggregates/struct_equality.snap
+    type_decl Struct { body: [Field(StructField { name: "x", is_mut: false, ty: Name { name: "Float", span: Span { start: Position { line: 10, column: 8, offset: 281 }, end: Position { line: 10, column: 13, offset: 286 } } }, default: None }), Field(StructField { name: "y", is_mut: false, ty: Name { name: "Float", span: Span { start: Position { line: 11, column: 8, offset: 295 }, end: Position { line: 11, column: 13, offset: 300 } } }, default: None })] }
+    type_decl Struct { body: [Field(StructField { name: "x", is_mut: false, ty: Name { name: "Float", span: Span { start: Position { line: 15, column: 8, offset: 327 }, end: Position { line: 15, column: 13, offset: 332 } } }, default: None }), Field(StructField { name: "y", is_mut: false, ty: Name { name: "Float", span: Span { start: Position { line: 16, column: 8, offset: 341 }, end: Position { line: 16, column: 13, offset: 346 } } }, default: None }), Field(StructField { name: "z", is_mut: false, ty: Name { name: "Float", span: Span { start: Position { line: 17, column: 8, offset: 355 }, end: Position { line: 17, column: 13, offset: 360 } } }, default: None }), Expr(Generic { name: "Equal", name_span: Span { start: Position { line: 18, column: 5, offset: 366 }, end: Position { line: 18, column: 10, offset: 371 } }, args: [Name { name: "Vec3", span: Span { start: Position { line: 18, column: 11, offset: 372 }, end: Position { line: 18, column: 15, offset: 376 } } }, Name { name: "Vec3", span: Span { start: Position { line: 18, column: 17, offset: 378 }, end: Position { line: 18, column: 21, offset: 382 } } }] })] }
+    type_decl Struct { body: [Field(StructField { name: "start", is_mut: false, ty: Name { name: "Point", span: Span { start: Position { line: 27, column: 12, offset: 559 }, end: Position { line: 27, column: 17, offset: 564 } } }, default: None }), Field(StructField { name: "end", is_mut: false, ty: Name { name: "Point", span: Span { start: Position { line: 28, column: 10, offset: 575 }, end: Position { line: 28, column: 15, offset: 580 } } }, default: None })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/02-type-system/functions/method_block_tail_expr.snap
+    type_decl Struct { body: [Field(StructField { name: "x", is_mut: false, ty: Name { name: "Float", span: Span { start: Position { line: 8, column: 20, offset: 289 }, end: Position { line: 8, column: 25, offset: 294 } } }, default: None }), Field(StructField { name: "y", is_mut: false, ty: Name { name: "Float", span: Span { start: Position { line: 8, column: 30, offset: 299 }, end: Position { line: 8, column: 35, offset: 304 } } }, default: None })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/02-type-system/functions/method_call_args.snap
+    type_decl Struct { body: [Field(StructField { name: "n", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 10, column: 22, offset: 467 }, end: Position { line: 10, column: 25, offset: 470 } } }, default: None }), Field(StructField { name: "label", is_mut: false, ty: Name { name: "String", span: Span { start: Position { line: 10, column: 34, offset: 479 }, end: Position { line: 10, column: 40, offset: 485 } } }, default: None })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/02-type-system/functions/method_overload.snap
+    type_decl Struct { body: [Field(StructField { name: "value", is_mut: false, ty: Name { name: "Float", span: Span { start: Position { line: 15, column: 23, offset: 815 }, end: Position { line: 15, column: 28, offset: 820 } } }, default: None })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/02-type-system/generics/constrained_generic_ops.snap
+    type_decl Struct { body: [Field(StructField { name: "x", is_mut: false, ty: Name { name: "Float", span: Span { start: Position { line: 13, column: 8, offset: 498 }, end: Position { line: 13, column: 13, offset: 503 } } }, default: None }), Field(StructField { name: "y", is_mut: false, ty: Name { name: "Float", span: Span { start: Position { line: 14, column: 8, offset: 512 }, end: Position { line: 14, column: 13, offset: 517 } } }, default: None }), Field(StructField { name: "z", is_mut: false, ty: Name { name: "Float", span: Span { start: Position { line: 15, column: 8, offset: 526 }, end: Position { line: 15, column: 13, offset: 531 } } }, default: None }), Expr(Generic { name: "Add", name_span: Span { start: Position { line: 16, column: 5, offset: 537 }, end: Position { line: 16, column: 8, offset: 540 } }, args: [Name { name: "Vec3", span: Span { start: Position { line: 16, column: 9, offset: 541 }, end: Position { line: 16, column: 13, offset: 545 } } }, Name { name: "Vec3", span: Span { start: Position { line: 16, column: 15, offset: 547 }, end: Position { line: 16, column: 19, offset: 551 } } }, Name { name: "Vec3", span: Span { start: Position { line: 16, column: 21, offset: 553 }, end: Position { line: 16, column: 25, offset: 557 } } }] })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/02-type-system/generics/const_generic_assert.snap
+    type_decl Struct { body: [Field(StructField { name: "_assert_rows", is_mut: false, ty: Generic { name: "Assert", name_span: Span { start: Position { line: 9, column: 19, offset: 344 }, end: Position { line: 9, column: 25, offset: 350 } }, args: [ConstExpr(BinOp { op: Gt, left: Var("Rows", Span { start: Position { line: 9, column: 26, offset: 351 }, end: Position { line: 9, column: 30, offset: 355 } }), right: Lit(Int(0), Span { start: Position { line: 9, column: 33, offset: 358 }, end: Position { line: 9, column: 34, offset: 359 } }), span: Span { start: Position { line: 9, column: 31, offset: 356 }, end: Position { line: 9, column: 32, offset: 357 } } })] }, default: None }), Field(StructField { name: "_assert_cols", is_mut: false, ty: Generic { name: "Assert", name_span: Span { start: Position { line: 10, column: 19, offset: 380 }, end: Position { line: 10, column: 25, offset: 386 } }, args: [ConstExpr(BinOp { op: Gt, left: Var("Cols", Span { start: Position { line: 10, column: 26, offset: 387 }, end: Position { line: 10, column: 30, offset: 391 } }), right: Lit(Int(0), Span { start: Position { line: 10, column: 33, offset: 394 }, end: Position { line: 10, column: 34, offset: 395 } }), span: Span { start: Position { line: 10, column: 31, offset: 392 }, end: Position { line: 10, column: 32, offset: 393 } } })] }, default: None }), Field(StructField { name: "data", is_mut: false, ty: Generic { name: "Array", name_span: Span { start: Position { line: 11, column: 11, offset: 408 }, end: Position { line: 11, column: 16, offset: 413 } }, args: [Generic { name: "Array", name_span: Span { start: Position { line: 11, column: 17, offset: 414 }, end: Position { line: 11, column: 22, offset: 419 } }, args: [Name { name: "T", span: Span { start: Position { line: 11, column: 23, offset: 420 }, end: Position { line: 11, column: 24, offset: 421 } } }, Name { name: "Cols", span: Span { start: Position { line: 11, column: 26, offset: 423 }, end: Position { line: 11, column: 30, offset: 427 } } }] }, Name { name: "Rows", span: Span { start: Position { line: 11, column: 33, offset: 430 }, end: Position { line: 11, column: 37, offset: 434 } } }] }, default: None })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/02-type-system/generics/const_generic_instantiate.snap
+    type_decl Struct { body: [Field(StructField { name: "_assert_n", is_mut: false, ty: Generic { name: "Assert", name_span: Span { start: Position { line: 9, column: 16, offset: 319 }, end: Position { line: 9, column: 22, offset: 325 } }, args: [ConstExpr(BinOp { op: Gt, left: Var("N", Span { start: Position { line: 9, column: 23, offset: 326 }, end: Position { line: 9, column: 24, offset: 327 } }), right: Lit(Int(0), Span { start: Position { line: 9, column: 27, offset: 330 }, end: Position { line: 9, column: 28, offset: 331 } }), span: Span { start: Position { line: 9, column: 25, offset: 328 }, end: Position { line: 9, column: 26, offset: 329 } } })] }, default: None }), Field(StructField { name: "data", is_mut: false, ty: Generic { name: "Array", name_span: Span { start: Position { line: 10, column: 11, offset: 344 }, end: Position { line: 10, column: 16, offset: 349 } }, args: [Name { name: "T", span: Span { start: Position { line: 10, column: 17, offset: 350 }, end: Position { line: 10, column: 18, offset: 351 } } }, Name { name: "N", span: Span { start: Position { line: 10, column: 20, offset: 353 }, end: Position { line: 10, column: 21, offset: 354 } } }] }, default: None })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/02-type-system/generics/const_generic_lt_le_bound.snap
+    type_decl Struct { body: [Field(StructField { name: "_assert_lt", is_mut: false, ty: Generic { name: "Assert", name_span: Span { start: Position { line: 9, column: 17, offset: 347 }, end: Position { line: 9, column: 23, offset: 353 } }, args: [ConstExpr(BinOp { op: Lt, left: Var("N", Span { start: Position { line: 9, column: 24, offset: 354 }, end: Position { line: 9, column: 25, offset: 355 } }), right: Lit(Int(100), Span { start: Position { line: 9, column: 28, offset: 358 }, end: Position { line: 9, column: 31, offset: 361 } }), span: Span { start: Position { line: 9, column: 26, offset: 356 }, end: Position { line: 9, column: 27, offset: 357 } } })] }, default: None }), Field(StructField { name: "_assert_le", is_mut: false, ty: Generic { name: "Assert", name_span: Span { start: Position { line: 10, column: 17, offset: 380 }, end: Position { line: 10, column: 23, offset: 386 } }, args: [ConstExpr(BinOp { op: Le, left: Var("N", Span { start: Position { line: 10, column: 24, offset: 387 }, end: Position { line: 10, column: 25, offset: 388 } }), right: Lit(Int(100), Span { start: Position { line: 10, column: 29, offset: 392 }, end: Position { line: 10, column: 32, offset: 395 } }), span: Span { start: Position { line: 10, column: 26, offset: 389 }, end: Position { line: 10, column: 28, offset: 391 } } })] }, default: None }), Field(StructField { name: "data", is_mut: false, ty: Generic { name: "Array", name_span: Span { start: Position { line: 11, column: 11, offset: 408 }, end: Position { line: 11, column: 16, offset: 413 } }, args: [Name { name: "T", span: Span { start: Position { line: 11, column: 17, offset: 414 }, end: Position { line: 11, column: 18, offset: 415 } } }, Name { name: "N", span: Span { start: Position { line: 11, column: 20, offset: 417 }, end: Position { line: 11, column: 21, offset: 418 } } }] }, default: None })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/02-type-system/generics/generics_matrix.snap
+    type_decl Struct { body: [Field(StructField { name: "key", is_mut: false, ty: Name { name: "K", span: Span { start: Position { line: 16, column: 10, offset: 581 }, end: Position { line: 16, column: 11, offset: 582 } } }, default: None }), Field(StructField { name: "value", is_mut: false, ty: Name { name: "V", span: Span { start: Position { line: 17, column: 12, offset: 595 }, end: Position { line: 17, column: 13, offset: 596 } } }, default: None })] }
+    type_decl Struct { body: [Field(StructField { name: "inner", is_mut: false, ty: Name { name: "T", span: Span { start: Position { line: 22, column: 12, offset: 679 }, end: Position { line: 22, column: 13, offset: 680 } } }, default: None })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/02-type-system/generics/generic_constructor.snap
+    type_decl Struct { body: [Field(StructField { name: "first", is_mut: false, ty: Name { name: "T", span: Span { start: Position { line: 15, column: 12, offset: 801 }, end: Position { line: 15, column: 13, offset: 802 } } }, default: None }), Field(StructField { name: "second", is_mut: false, ty: Name { name: "T", span: Span { start: Position { line: 16, column: 13, offset: 816 }, end: Position { line: 16, column: 14, offset: 817 } } }, default: None })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/02-type-system/generics/generic_container_index.snap
+    type_decl Struct { body: [Field(StructField { name: "v", is_mut: false, ty: Name { name: "T", span: Span { start: Position { line: 15, column: 8, offset: 706 }, end: Position { line: 15, column: 9, offset: 707 } } }, default: None }), Field(StructField { name: "n", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 16, column: 8, offset: 716 }, end: Position { line: 16, column: 11, offset: 719 } } }, default: None }), Expr(Generic { name: "Index", name_span: Span { start: Position { line: 17, column: 5, offset: 725 }, end: Position { line: 17, column: 10, offset: 730 } }, args: [Generic { name: "Box", name_span: Span { start: Position { line: 17, column: 11, offset: 731 }, end: Position { line: 17, column: 14, offset: 734 } }, args: [Name { name: "T", span: Span { start: Position { line: 17, column: 15, offset: 735 }, end: Position { line: 17, column: 16, offset: 736 } } }] }, Name { name: "Int", span: Span { start: Position { line: 17, column: 19, offset: 739 }, end: Position { line: 17, column: 22, offset: 742 } } }, Name { name: "T", span: Span { start: Position { line: 17, column: 24, offset: 744 }, end: Position { line: 17, column: 25, offset: 745 } } }] })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/02-type-system/generics/generic_method_binding.snap
+    type_decl Struct { body: [Field(StructField { name: "v", is_mut: false, ty: Name { name: "T", span: Span { start: Position { line: 12, column: 31, offset: 505 }, end: Position { line: 12, column: 32, offset: 506 } } }, default: None })] }
+    type_decl Struct { body: [Field(StructField { name: "data", is_mut: false, ty: Generic { name: "Vec", name_span: Span { start: Position { line: 20, column: 11, offset: 709 }, end: Position { line: 20, column: 14, offset: 712 } }, args: [Name { name: "T", span: Span { start: Position { line: 20, column: 15, offset: 713 }, end: Position { line: 20, column: 16, offset: 714 } } }] }, default: None }), Field(StructField { name: "length", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 21, column: 13, offset: 729 }, end: Position { line: 21, column: 16, offset: 732 } } }, default: None })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/02-type-system/generics/generic_slot_alignment.snap
+    type_decl Struct { body: [Field(StructField { name: "v", is_mut: false, ty: Generic { name: "Vec", name_span: Span { start: Position { line: 12, column: 31, offset: 594 }, end: Position { line: 12, column: 34, offset: 597 } }, args: [Name { name: "T", span: Span { start: Position { line: 12, column: 35, offset: 598 }, end: Position { line: 12, column: 36, offset: 599 } } }] }, default: None }), Field(StructField { name: "n", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 12, column: 42, offset: 605 }, end: Position { line: 12, column: 45, offset: 608 } } }, default: None })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/02-type-system/generics/generic_types.snap
+    type_decl Struct { body: [Field(StructField { name: "value", is_mut: false, ty: Name { name: "T", span: Span { start: Position { line: 12, column: 12, offset: 406 }, end: Position { line: 12, column: 13, offset: 407 } } }, default: None })] }
+    type_decl Struct { body: [Field(StructField { name: "first", is_mut: false, ty: Name { name: "T", span: Span { start: Position { line: 17, column: 12, offset: 489 }, end: Position { line: 17, column: 13, offset: 490 } } }, default: None }), Field(StructField { name: "second", is_mut: false, ty: Name { name: "T", span: Span { start: Position { line: 18, column: 13, offset: 504 }, end: Position { line: 18, column: 14, offset: 505 } } }, default: None })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/02-type-system/interfaces/associated_type_in_body.snap
+    type_decl Struct { body: [Field(StructField { name: "some", is_mut: false, ty: Fn { params: [Name { name: "T", span: Span { start: Position { line: 15, column: 38, offset: 742 }, end: Position { line: 15, column: 39, offset: 743 } } }], return_type: Name { name: "Self", span: Span { start: Position { line: 15, column: 44, offset: 748 }, end: Position { line: 15, column: 48, offset: 752 } } } }, default: None }), Field(StructField { name: "none", is_mut: false, ty: Fn { params: [], return_type: Name { name: "Self", span: Span { start: Position { line: 15, column: 62, offset: 766 }, end: Position { line: 15, column: 66, offset: 770 } } } }, default: None })] }
+    type_decl Struct { body: [Field(StructField { name: "next", is_mut: false, ty: Fn { params: [Name { name: "Self", span: Span { start: Position { line: 17, column: 12, offset: 819 }, end: Position { line: 17, column: 16, offset: 823 } } }], return_type: Generic { name: "Option", name_span: Span { start: Position { line: 17, column: 21, offset: 828 }, end: Position { line: 17, column: 27, offset: 834 } }, args: [Name { name: "Item", span: Span { start: Position { line: 17, column: 28, offset: 835 }, end: Position { line: 17, column: 32, offset: 839 } } }] } }, default: None }), Field(StructField { name: "has_next", is_mut: false, ty: Fn { params: [Name { name: "Self", span: Span { start: Position { line: 18, column: 16, offset: 857 }, end: Position { line: 18, column: 20, offset: 861 } } }], return_type: Name { name: "Bool", span: Span { start: Position { line: 18, column: 25, offset: 866 }, end: Position { line: 18, column: 29, offset: 870 } } } }, default: None })] }
+    type_decl Struct { body: [Field(StructField { name: "IteratorType", is_mut: false, ty: Generic { name: "Iterator", name_span: Span { start: Position { line: 21, column: 19, offset: 927 }, end: Position { line: 21, column: 27, offset: 935 } }, args: [Name { name: "Item", span: Span { start: Position { line: 21, column: 28, offset: 936 }, end: Position { line: 21, column: 32, offset: 940 } } }] }, default: None }), Field(StructField { name: "iter", is_mut: false, ty: Fn { params: [Name { name: "Self", span: Span { start: Position { line: 22, column: 12, offset: 954 }, end: Position { line: 22, column: 16, offset: 958 } } }], return_type: Name { name: "IteratorType", span: Span { start: Position { line: 22, column: 21, offset: 963 }, end: Position { line: 22, column: 33, offset: 975 } } } }, default: None })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/02-type-system/interfaces/interfaces.snap
+    type_decl Struct { body: [Field(StructField { name: "x", is_mut: false, ty: Name { name: "Float", span: Span { start: Position { line: 6, column: 20, offset: 143 }, end: Position { line: 6, column: 25, offset: 148 } } }, default: None }), Field(StructField { name: "y", is_mut: false, ty: Name { name: "Float", span: Span { start: Position { line: 6, column: 30, offset: 153 }, end: Position { line: 6, column: 35, offset: 158 } } }, default: None })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/02-type-system/interfaces/interface_dynamic_dispatch.snap
+    type_decl Struct { body: [Field(StructField { name: "speak", is_mut: false, ty: Fn { params: [Ref { mutable: false, inner: Name { name: "Self", span: Span { start: Position { line: 11, column: 20, offset: 438 }, end: Position { line: 11, column: 24, offset: 442 } } }, span: Span { start: Position { line: 11, column: 24, offset: 442 }, end: Position { line: 11, column: 25, offset: 443 } } }], return_type: Name { name: "String", span: Span { start: Position { line: 11, column: 29, offset: 447 }, end: Position { line: 11, column: 35, offset: 453 } } } }, default: None }), Field(StructField { name: "age", is_mut: false, ty: Fn { params: [Ref { mutable: false, inner: Name { name: "Self", span: Span { start: Position { line: 12, column: 18, offset: 472 }, end: Position { line: 12, column: 22, offset: 476 } } }, span: Span { start: Position { line: 12, column: 22, offset: 476 }, end: Position { line: 12, column: 23, offset: 477 } } }], return_type: Name { name: "Int", span: Span { start: Position { line: 12, column: 27, offset: 481 }, end: Position { line: 12, column: 30, offset: 484 } } } }, default: None }), Field(StructField { name: "age_up", is_mut: false, ty: Fn { params: [Ref { mutable: false, inner: Name { name: "Self", span: Span { start: Position { line: 13, column: 21, offset: 506 }, end: Position { line: 13, column: 25, offset: 510 } } }, span: Span { start: Position { line: 13, column: 25, offset: 510 }, end: Position { line: 13, column: 26, offset: 511 } } }, Name { name: "Int", span: Span { start: Position { line: 13, column: 34, offset: 519 }, end: Position { line: 13, column: 37, offset: 522 } } }], return_type: Name { name: "Int", span: Span { start: Position { line: 13, column: 42, offset: 527 }, end: Position { line: 13, column: 45, offset: 530 } } } }, default: None })] }
+    type_decl Struct { body: [Field(StructField { name: "name", is_mut: false, ty: Name { name: "String", span: Span { start: Position { line: 17, column: 11, offset: 559 }, end: Position { line: 17, column: 17, offset: 565 } } }, default: None }), Field(StructField { name: "age_years", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 18, column: 16, offset: 582 }, end: Position { line: 18, column: 19, offset: 585 } } }, default: None }), Expr(Generic { name: "Animal", name_span: Span { start: Position { line: 19, column: 5, offset: 591 }, end: Position { line: 19, column: 11, offset: 597 } }, args: [Name { name: "Dog", span: Span { start: Position { line: 19, column: 12, offset: 598 }, end: Position { line: 19, column: 15, offset: 601 } } }] })] }
+    type_decl Struct { body: [Field(StructField { name: "lives", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 26, column: 12, offset: 823 }, end: Position { line: 26, column: 15, offset: 826 } } }, default: None }), Expr(Generic { name: "Animal", name_span: Span { start: Position { line: 27, column: 5, offset: 832 }, end: Position { line: 27, column: 11, offset: 838 } }, args: [Name { name: "Cat", span: Span { start: Position { line: 27, column: 12, offset: 839 }, end: Position { line: 27, column: 15, offset: 842 } } }] })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/02-type-system/interfaces/interface_inheritance.snap
+    type_decl Struct { body: [Field(StructField { name: "speak", is_mut: false, ty: Fn { params: [Ref { mutable: false, inner: Name { name: "Self", span: Span { start: Position { line: 12, column: 20, offset: 441 }, end: Position { line: 12, column: 24, offset: 445 } } }, span: Span { start: Position { line: 12, column: 24, offset: 445 }, end: Position { line: 12, column: 25, offset: 446 } } }], return_type: Name { name: "String", span: Span { start: Position { line: 12, column: 29, offset: 450 }, end: Position { line: 12, column: 35, offset: 456 } } } }, default: None })] }
+    type_decl Struct { body: [Expr(Generic { name: "Animal", name_span: Span { start: Position { line: 17, column: 5, offset: 592 }, end: Position { line: 17, column: 11, offset: 598 } }, args: [Name { name: "Self", span: Span { start: Position { line: 17, column: 12, offset: 599 }, end: Position { line: 17, column: 16, offset: 603 } } }] }), Field(StructField { name: "fetch", is_mut: false, ty: Fn { params: [Ref { mutable: false, inner: Name { name: "Self", span: Span { start: Position { line: 18, column: 20, offset: 625 }, end: Position { line: 18, column: 24, offset: 629 } } }, span: Span { start: Position { line: 18, column: 24, offset: 629 }, end: Position { line: 18, column: 25, offset: 630 } } }], return_type: Name { name: "String", span: Span { start: Position { line: 18, column: 29, offset: 634 }, end: Position { line: 18, column: 35, offset: 640 } } } }, default: None })] }
+    type_decl Struct { body: [Field(StructField { name: "name", is_mut: false, ty: Name { name: "String", span: Span { start: Position { line: 22, column: 11, offset: 669 }, end: Position { line: 22, column: 17, offset: 675 } } }, default: None }), Expr(Generic { name: "Pet", name_span: Span { start: Position { line: 23, column: 5, offset: 681 }, end: Position { line: 23, column: 8, offset: 684 } }, args: [Name { name: "Dog", span: Span { start: Position { line: 23, column: 9, offset: 685 }, end: Position { line: 23, column: 12, offset: 688 } } }] })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/02-type-system/interfaces/interface_instantiate.snap
+    type_decl Struct { body: [Field(StructField { name: "speak", is_mut: false, ty: Fn { params: [Ref { mutable: false, inner: Name { name: "Self", span: Span { start: Position { line: 14, column: 20, offset: 663 }, end: Position { line: 14, column: 24, offset: 667 } } }, span: Span { start: Position { line: 14, column: 24, offset: 667 }, end: Position { line: 14, column: 25, offset: 668 } } }], return_type: Name { name: "String", span: Span { start: Position { line: 14, column: 29, offset: 672 }, end: Position { line: 14, column: 35, offset: 678 } } } }, default: None }), Field(StructField { name: "age", is_mut: false, ty: Fn { params: [Ref { mutable: false, inner: Name { name: "Self", span: Span { start: Position { line: 15, column: 18, offset: 697 }, end: Position { line: 15, column: 22, offset: 701 } } }, span: Span { start: Position { line: 15, column: 22, offset: 701 }, end: Position { line: 15, column: 23, offset: 702 } } }], return_type: Name { name: "Int", span: Span { start: Position { line: 15, column: 27, offset: 706 }, end: Position { line: 15, column: 30, offset: 709 } } } }, default: None })] }
+    type_decl Struct { body: [Field(StructField { name: "name", is_mut: false, ty: Name { name: "String", span: Span { start: Position { line: 20, column: 11, offset: 778 }, end: Position { line: 20, column: 17, offset: 784 } } }, default: None }), Expr(Generic { name: "Animal", name_span: Span { start: Position { line: 21, column: 5, offset: 790 }, end: Position { line: 21, column: 11, offset: 796 } }, args: [Name { name: "Dog", span: Span { start: Position { line: 21, column: 12, offset: 797 }, end: Position { line: 21, column: 15, offset: 800 } } }] })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/02-type-system/interfaces/interface_rebind_dispatch.snap
+    type_decl Struct { body: [Field(StructField { name: "speak", is_mut: false, ty: Fn { params: [Ref { mutable: false, inner: Name { name: "Self", span: Span { start: Position { line: 11, column: 20, offset: 432 }, end: Position { line: 11, column: 24, offset: 436 } } }, span: Span { start: Position { line: 11, column: 24, offset: 436 }, end: Position { line: 11, column: 25, offset: 437 } } }], return_type: Name { name: "String", span: Span { start: Position { line: 11, column: 29, offset: 441 }, end: Position { line: 11, column: 35, offset: 447 } } } }, default: None })] }
+    type_decl Struct { body: [Field(StructField { name: "name", is_mut: false, ty: Name { name: "String", span: Span { start: Position { line: 15, column: 11, offset: 477 }, end: Position { line: 15, column: 17, offset: 483 } } }, default: None }), Expr(Generic { name: "Animal", name_span: Span { start: Position { line: 16, column: 5, offset: 489 }, end: Position { line: 16, column: 11, offset: 495 } }, args: [Name { name: "Bird", span: Span { start: Position { line: 16, column: 12, offset: 496 }, end: Position { line: 16, column: 16, offset: 500 } } }] }), Binding(TypeBodyBinding { name: "speak", kind: External { function: "animal_speak", positions: [0] } })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/02-type-system/interfaces/operator_index.snap
+    type_decl Struct { body: [Field(StructField { name: "cells", is_mut: false, ty: Generic { name: "List", name_span: Span { start: Position { line: 10, column: 12, offset: 332 }, end: Position { line: 10, column: 16, offset: 336 } }, args: [Name { name: "Float", span: Span { start: Position { line: 10, column: 17, offset: 337 }, end: Position { line: 10, column: 22, offset: 342 } } }] }, default: None }), Expr(Generic { name: "Index", name_span: Span { start: Position { line: 11, column: 5, offset: 349 }, end: Position { line: 11, column: 10, offset: 354 } }, args: [Name { name: "Grid", span: Span { start: Position { line: 11, column: 11, offset: 355 }, end: Position { line: 11, column: 15, offset: 359 } } }, Name { name: "Int", span: Span { start: Position { line: 11, column: 17, offset: 361 }, end: Position { line: 11, column: 20, offset: 364 } } }, Name { name: "Float", span: Span { start: Position { line: 11, column: 22, offset: 366 }, end: Position { line: 11, column: 27, offset: 371 } } }] })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/02-type-system/interfaces/operator_interfaces.snap
+    type_decl Struct { body: [Field(StructField { name: "x", is_mut: false, ty: Name { name: "Float", span: Span { start: Position { line: 9, column: 8, offset: 264 }, end: Position { line: 9, column: 13, offset: 269 } } }, default: None }), Field(StructField { name: "y", is_mut: false, ty: Name { name: "Float", span: Span { start: Position { line: 10, column: 8, offset: 278 }, end: Position { line: 10, column: 13, offset: 283 } } }, default: None }), Expr(Generic { name: "Add", name_span: Span { start: Position { line: 11, column: 5, offset: 289 }, end: Position { line: 11, column: 8, offset: 292 } }, args: [Name { name: "Point", span: Span { start: Position { line: 11, column: 9, offset: 293 }, end: Position { line: 11, column: 14, offset: 298 } } }, Name { name: "Point", span: Span { start: Position { line: 11, column: 16, offset: 300 }, end: Position { line: 11, column: 21, offset: 305 } } }, Name { name: "Point", span: Span { start: Position { line: 11, column: 23, offset: 307 }, end: Position { line: 11, column: 28, offset: 312 } } }] }), Expr(Generic { name: "Multiply", name_span: Span { start: Position { line: 12, column: 5, offset: 319 }, end: Position { line: 12, column: 13, offset: 327 } }, args: [Name { name: "Point", span: Span { start: Position { line: 12, column: 14, offset: 328 }, end: Position { line: 12, column: 19, offset: 333 } } }, Name { name: "Float", span: Span { start: Position { line: 12, column: 21, offset: 335 }, end: Position { line: 12, column: 26, offset: 340 } } }, Name { name: "Point", span: Span { start: Position { line: 12, column: 28, offset: 342 }, end: Position { line: 12, column: 33, offset: 347 } } }] })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/02-type-system/name-resolution/std_name_shadowing.snap
+    type_decl Struct { body: [Field(StructField { name: "n", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 13, column: 17, offset: 550 }, end: Position { line: 13, column: 20, offset: 553 } } }, default: None })] }
+    type_decl Struct { body: [Field(StructField { name: "data", is_mut: false, ty: Generic { name: "Vec", name_span: Span { start: Position { line: 16, column: 32, offset: 657 }, end: Position { line: 16, column: 35, offset: 660 } }, args: [Name { name: "T", span: Span { start: Position { line: 16, column: 36, offset: 661 }, end: Position { line: 16, column: 37, offset: 662 } } }] }, default: None }), Field(StructField { name: "n", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 16, column: 43, offset: 668 }, end: Position { line: 16, column: 46, offset: 671 } } }, default: None })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/02-type-system/patterns/match_call_scrutinee.snap
+    type_decl Struct { body: [Field(StructField { name: "opt", is_mut: false, ty: Generic { name: "Option", name_span: Span { start: Position { line: 28, column: 10, offset: 890 }, end: Position { line: 28, column: 16, offset: 896 } }, args: [Name { name: "Int", span: Span { start: Position { line: 28, column: 17, offset: 897 }, end: Position { line: 28, column: 20, offset: 900 } } }] }, default: None })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/02-type-system/refinement/call_arg_evidence.snap
+    type_decl Struct { body: [Expr(ConstExpr(BinOp { op: Gt, left: Var("x", Span { start: Position { line: 14, column: 34, offset: 816 }, end: Position { line: 14, column: 35, offset: 817 } }), right: Lit(Int(0), Span { start: Position { line: 14, column: 38, offset: 820 }, end: Position { line: 14, column: 39, offset: 821 } }), span: Span { start: Position { line: 14, column: 36, offset: 818 }, end: Position { line: 14, column: 37, offset: 819 } } }))] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/02-type-system/refinement/refined_dependent_module_scope.snap
+    type_decl Struct { body: [Expr(ConstExpr(BinOp { op: Eq, left: Var("s", Span { start: Position { line: 11, column: 39, offset: 583 }, end: Position { line: 11, column: 40, offset: 584 } }), right: BinOp { op: Mul, left: Var("n", Span { start: Position { line: 11, column: 44, offset: 588 }, end: Position { line: 11, column: 45, offset: 589 } }), right: Lit(Int(2), Span { start: Position { line: 11, column: 48, offset: 592 }, end: Position { line: 11, column: 49, offset: 593 } }), span: Span { start: Position { line: 11, column: 46, offset: 590 }, end: Position { line: 11, column: 47, offset: 591 } } }, span: Span { start: Position { line: 11, column: 41, offset: 585 }, end: Position { line: 11, column: 43, offset: 587 } } }))] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/02-type-system/refinement/refined_dependent_revalidate.snap
+    type_decl Struct { body: [Expr(ConstExpr(BinOp { op: Eq, left: Var("s", Span { start: Position { line: 12, column: 39, offset: 690 }, end: Position { line: 12, column: 40, offset: 691 } }), right: BinOp { op: Mul, left: Var("n", Span { start: Position { line: 12, column: 44, offset: 695 }, end: Position { line: 12, column: 45, offset: 696 } }), right: Lit(Int(2), Span { start: Position { line: 12, column: 48, offset: 699 }, end: Position { line: 12, column: 49, offset: 700 } }), span: Span { start: Position { line: 12, column: 46, offset: 697 }, end: Position { line: 12, column: 47, offset: 698 } } }, span: Span { start: Position { line: 12, column: 41, offset: 692 }, end: Position { line: 12, column: 43, offset: 694 } } }))] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/02-type-system/refinement/refined_param_arg_form.snap
+    type_decl Struct { body: [Expr(ConstExpr(BinOp { op: Gt, left: Var("x", Span { start: Position { line: 17, column: 34, offset: 951 }, end: Position { line: 17, column: 35, offset: 952 } }), right: Lit(Int(0), Span { start: Position { line: 17, column: 38, offset: 955 }, end: Position { line: 17, column: 39, offset: 956 } }), span: Span { start: Position { line: 17, column: 36, offset: 953 }, end: Position { line: 17, column: 37, offset: 954 } } }))] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/02-type-system/refinement/refined_param_uses_base_type.snap
+    type_decl Struct { body: [Expr(ConstExpr(BinOp { op: Gt, left: Var("x", Span { start: Position { line: 18, column: 34, offset: 1058 }, end: Position { line: 18, column: 35, offset: 1059 } }), right: Lit(Int(0), Span { start: Position { line: 18, column: 38, offset: 1062 }, end: Position { line: 18, column: 39, offset: 1063 } }), span: Span { start: Position { line: 18, column: 36, offset: 1060 }, end: Position { line: 18, column: 37, offset: 1061 } } }))] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/02-type-system/refinement/refined_variable_uses_base_type.snap
+    type_decl Struct { body: [Expr(ConstExpr(BinOp { op: Gt, left: Var("x", Span { start: Position { line: 10, column: 34, offset: 530 }, end: Position { line: 10, column: 35, offset: 531 } }), right: Lit(Int(0), Span { start: Position { line: 10, column: 38, offset: 534 }, end: Position { line: 10, column: 39, offset: 535 } }), span: Span { start: Position { line: 10, column: 36, offset: 532 }, end: Position { line: 10, column: 37, offset: 533 } } }))] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/02-type-system/refinement/return_refinement.snap
+    type_decl Struct { body: [Expr(ConstExpr(BinOp { op: Gt, left: Var("x", Span { start: Position { line: 19, column: 34, offset: 1189 }, end: Position { line: 19, column: 35, offset: 1190 } }), right: Lit(Int(0), Span { start: Position { line: 19, column: 38, offset: 1193 }, end: Position { line: 19, column: 39, offset: 1194 } }), span: Span { start: Position { line: 19, column: 36, offset: 1191 }, end: Position { line: 19, column: 37, offset: 1192 } } }))] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/02-type-system/refinement/return_refinement_arg_expr.snap
+    type_decl Struct { body: [Expr(ConstExpr(BinOp { op: Gt, left: Var("x", Span { start: Position { line: 13, column: 34, offset: 701 }, end: Position { line: 13, column: 35, offset: 702 } }), right: Lit(Int(0), Span { start: Position { line: 13, column: 38, offset: 705 }, end: Position { line: 13, column: 39, offset: 706 } }), span: Span { start: Position { line: 13, column: 36, offset: 703 }, end: Position { line: 13, column: 37, offset: 704 } } }))] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/02-type-system/sum-types/sum_type.snap
+    type_decl Struct { body: [Field(StructField { name: "red", is_mut: false, ty: Fn { params: [], return_type: Name { name: "Color", span: Span { start: Position { line: 9, column: 16, offset: 290 }, end: Position { line: 9, column: 21, offset: 295 } } } }, default: None }), Field(StructField { name: "green", is_mut: false, ty: Fn { params: [], return_type: Name { name: "Color", span: Span { start: Position { line: 10, column: 18, offset: 314 }, end: Position { line: 10, column: 23, offset: 319 } } } }, default: None }), Field(StructField { name: "blue", is_mut: false, ty: Fn { params: [], return_type: Name { name: "Color", span: Span { start: Position { line: 11, column: 17, offset: 337 }, end: Position { line: 11, column: 22, offset: 342 } } } }, default: None })] }
+    type_decl Struct { body: [Field(StructField { name: "ok", is_mut: false, ty: Fn { params: [Name { name: "T", span: Span { start: Position { line: 15, column: 10, offset: 395 }, end: Position { line: 15, column: 11, offset: 396 } } }], return_type: Generic { name: "Result", name_span: Span { start: Position { line: 15, column: 16, offset: 401 }, end: Position { line: 15, column: 22, offset: 407 } }, args: [Name { name: "T", span: Span { start: Position { line: 15, column: 23, offset: 408 }, end: Position { line: 15, column: 24, offset: 409 } } }, Name { name: "E", span: Span { start: Position { line: 15, column: 26, offset: 411 }, end: Position { line: 15, column: 27, offset: 412 } } }] } }, default: None }), Field(StructField { name: "err", is_mut: false, ty: Fn { params: [Name { name: "E", span: Span { start: Position { line: 16, column: 11, offset: 425 }, end: Position { line: 16, column: 12, offset: 426 } } }], return_type: Generic { name: "Result", name_span: Span { start: Position { line: 16, column: 17, offset: 431 }, end: Position { line: 16, column: 23, offset: 437 } }, args: [Name { name: "T", span: Span { start: Position { line: 16, column: 24, offset: 438 }, end: Position { line: 16, column: 25, offset: 439 } } }, Name { name: "E", span: Span { start: Position { line: 16, column: 27, offset: 441 }, end: Position { line: 16, column: 28, offset: 442 } } }] } }, default: None })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/02-type-system/sum-types/sum_type_equality_forms.snap
+    type_decl Struct { body: [Field(StructField { name: "red", is_mut: false, ty: Fn { params: [], return_type: Name { name: "Color", span: Span { start: Position { line: 13, column: 16, offset: 648 }, end: Position { line: 13, column: 21, offset: 653 } } } }, default: None }), Field(StructField { name: "green", is_mut: false, ty: Fn { params: [], return_type: Name { name: "Color", span: Span { start: Position { line: 14, column: 18, offset: 672 }, end: Position { line: 14, column: 23, offset: 677 } } } }, default: None }), Field(StructField { name: "blue", is_mut: false, ty: Fn { params: [], return_type: Name { name: "Color", span: Span { start: Position { line: 15, column: 17, offset: 695 }, end: Position { line: 15, column: 22, offset: 700 } } } }, default: None })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/02-type-system/sum-types/sum_type_match.snap
+    type_decl Struct { body: [Field(StructField { name: "ok", is_mut: false, ty: Fn { params: [Name { name: "T", span: Span { start: Position { line: 9, column: 10, offset: 299 }, end: Position { line: 9, column: 11, offset: 300 } } }], return_type: Generic { name: "Result", name_span: Span { start: Position { line: 9, column: 16, offset: 305 }, end: Position { line: 9, column: 22, offset: 311 } }, args: [Name { name: "T", span: Span { start: Position { line: 9, column: 23, offset: 312 }, end: Position { line: 9, column: 24, offset: 313 } } }, Name { name: "E", span: Span { start: Position { line: 9, column: 26, offset: 315 }, end: Position { line: 9, column: 27, offset: 316 } } }] } }, default: None }), Field(StructField { name: "err", is_mut: false, ty: Fn { params: [Name { name: "E", span: Span { start: Position { line: 10, column: 11, offset: 329 }, end: Position { line: 10, column: 12, offset: 330 } } }], return_type: Generic { name: "Result", name_span: Span { start: Position { line: 10, column: 17, offset: 335 }, end: Position { line: 10, column: 23, offset: 341 } }, args: [Name { name: "T", span: Span { start: Position { line: 10, column: 24, offset: 342 }, end: Position { line: 10, column: 25, offset: 343 } } }, Name { name: "E", span: Span { start: Position { line: 10, column: 27, offset: 345 }, end: Position { line: 10, column: 28, offset: 346 } } }] } }, default: None })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/02-type-system/sum-types/user_try_type.snap
+    type_decl Struct { body: [Field(StructField { name: "just", is_mut: false, ty: Fn { params: [Name { name: "Int", span: Span { start: Position { line: 12, column: 12, offset: 439 }, end: Position { line: 12, column: 15, offset: 442 } } }], return_type: Name { name: "Maybe", span: Span { start: Position { line: 12, column: 20, offset: 447 }, end: Position { line: 12, column: 25, offset: 452 } } } }, default: None }), Field(StructField { name: "nothing", is_mut: false, ty: Fn { params: [], return_type: Name { name: "Maybe", span: Span { start: Position { line: 13, column: 20, offset: 473 }, end: Position { line: 13, column: 25, offset: 478 } } } }, default: None }), Expr(Generic { name: "Try", name_span: Span { start: Position { line: 14, column: 5, offset: 484 }, end: Position { line: 14, column: 8, offset: 487 } }, args: [Name { name: "Maybe", span: Span { start: Position { line: 14, column: 9, offset: 488 }, end: Position { line: 14, column: 14, offset: 493 } } }, Name { name: "Int", span: Span { start: Position { line: 14, column: 16, offset: 495 }, end: Position { line: 14, column: 19, offset: 498 } } }, Name { name: "String", span: Span { start: Position { line: 14, column: 21, offset: 500 }, end: Position { line: 14, column: 27, offset: 506 } } }] })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/02-type-system/termination/flag_loop_guarded_exit.snap
+    type_decl Struct { body: [Expr(ConstExpr(BinOp { op: Le, left: Var("x", Span { start: Position { line: 12, column: 38, offset: 659 }, end: Position { line: 12, column: 39, offset: 660 } }), right: Var("n", Span { start: Position { line: 12, column: 43, offset: 664 }, end: Position { line: 12, column: 44, offset: 665 } }), span: Span { start: Position { line: 12, column: 40, offset: 661 }, end: Position { line: 12, column: 42, offset: 663 } } }))] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/02-type-system/termination/measure_decreasing.snap
+    type_decl Struct { body: [Expr(ConstExpr(BinOp { op: Ge, left: Var("x", Span { start: Position { line: 13, column: 35, offset: 690 }, end: Position { line: 13, column: 36, offset: 691 } }), right: Lit(Int(0), Span { start: Position { line: 13, column: 40, offset: 695 }, end: Position { line: 13, column: 41, offset: 696 } }), span: Span { start: Position { line: 13, column: 37, offset: 692 }, end: Position { line: 13, column: 39, offset: 694 } } }))] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/02-type-system/termination/rank_function_dual_variable_loop.snap
+    type_decl Struct { body: [Expr(ConstExpr(BinOp { op: Ge, left: Var("x", Span { start: Position { line: 12, column: 35, offset: 665 }, end: Position { line: 12, column: 36, offset: 666 } }), right: Lit(Int(0), Span { start: Position { line: 12, column: 40, offset: 670 }, end: Position { line: 12, column: 41, offset: 671 } }), span: Span { start: Position { line: 12, column: 37, offset: 667 }, end: Position { line: 12, column: 39, offset: 669 } } }))] }
+    type_decl Struct { body: [Expr(ConstExpr(BinOp { op: Le, left: Var("x", Span { start: Position { line: 14, column: 38, offset: 712 }, end: Position { line: 14, column: 39, offset: 713 } }), right: Var("n", Span { start: Position { line: 14, column: 43, offset: 717 }, end: Position { line: 14, column: 44, offset: 718 } }), span: Span { start: Position { line: 14, column: 40, offset: 714 }, end: Position { line: 14, column: 42, offset: 716 } } }))] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/04-concurrency/spawn_capture.snap
+    type_decl Struct { body: [Field(StructField { name: "x", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 8, column: 20, offset: 306 }, end: Position { line: 8, column: 23, offset: 309 } } }, default: None }), Field(StructField { name: "y", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 8, column: 28, offset: 314 }, end: Position { line: 8, column: 31, offset: 317 } } }, default: None })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/04-concurrency/spawn_capture_standard.snap
+    type_decl Struct { body: [Field(StructField { name: "x", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 9, column: 20, offset: 370 }, end: Position { line: 9, column: 23, offset: 373 } } }, default: None }), Field(StructField { name: "y", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 9, column: 28, offset: 378 }, end: Position { line: 9, column: 31, offset: 381 } } }, default: None })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/05-ownership/auto_borrow_free_fn.snap
+    type_decl Struct { body: [Field(StructField { name: "x", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 10, column: 20, offset: 413 }, end: Position { line: 10, column: 23, offset: 416 } } }, default: None }), Field(StructField { name: "y", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 10, column: 28, offset: 421 }, end: Position { line: 10, column: 31, offset: 424 } } }, default: None })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/05-ownership/borrow_immutable.snap
+    type_decl Struct { body: [Field(StructField { name: "x", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 7, column: 20, offset: 156 }, end: Position { line: 7, column: 23, offset: 159 } } }, default: None }), Field(StructField { name: "y", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 7, column: 28, offset: 164 }, end: Position { line: 7, column: 31, offset: 167 } } }, default: None })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/05-ownership/borrow_mutable.snap
+    type_decl Struct { body: [Field(StructField { name: "x", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 7, column: 20, offset: 162 }, end: Position { line: 7, column: 23, offset: 165 } } }, default: None }), Field(StructField { name: "y", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 7, column: 28, offset: 170 }, end: Position { line: 7, column: 31, offset: 173 } } }, default: None })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/05-ownership/borrow_return.snap
+    type_decl Struct { body: [Field(StructField { name: "x", is_mut: false, ty: Name { name: "Float", span: Span { start: Position { line: 11, column: 20, offset: 491 }, end: Position { line: 11, column: 25, offset: 496 } } }, default: None }), Field(StructField { name: "y", is_mut: false, ty: Name { name: "Float", span: Span { start: Position { line: 11, column: 30, offset: 501 }, end: Position { line: 11, column: 35, offset: 506 } } }, default: None })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/05-ownership/chained_receiver_reuse.snap
+    type_decl Struct { body: [Field(StructField { name: "x", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 8, column: 20, offset: 278 }, end: Position { line: 8, column: 23, offset: 281 } } }, default: None }), Field(StructField { name: "y", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 8, column: 28, offset: 286 }, end: Position { line: 8, column: 31, offset: 289 } } }, default: None })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/05-ownership/field_write_back.snap
+    type_decl Struct { body: [Field(StructField { name: "x", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 8, column: 20, offset: 280 }, end: Position { line: 8, column: 23, offset: 283 } } }, default: None }), Field(StructField { name: "y", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 8, column: 28, offset: 288 }, end: Position { line: 8, column: 31, offset: 291 } } }, default: None })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/05-ownership/loop_borrow_guarded_write.snap
+    type_decl Struct { body: [Field(StructField { name: "x", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 9, column: 20, offset: 561 }, end: Position { line: 9, column: 23, offset: 564 } } }, default: None }), Field(StructField { name: "y", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 9, column: 28, offset: 569 }, end: Position { line: 9, column: 31, offset: 572 } } }, default: None })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/05-ownership/loop_borrow_reuse.snap
+    type_decl Struct { body: [Field(StructField { name: "x", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 7, column: 20, offset: 387 }, end: Position { line: 7, column: 23, offset: 390 } } }, default: None }), Field(StructField { name: "y", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 7, column: 28, offset: 395 }, end: Position { line: 7, column: 31, offset: 398 } } }, default: None })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/05-ownership/method_receiver_autoborrow.snap
+    type_decl Struct { body: [Field(StructField { name: "x", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 14, column: 20, offset: 757 }, end: Position { line: 14, column: 23, offset: 760 } } }, default: None }), Field(StructField { name: "y", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 14, column: 28, offset: 765 }, end: Position { line: 14, column: 31, offset: 768 } } }, default: None })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/05-ownership/move_basic.snap
+    type_decl Struct { body: [Field(StructField { name: "x", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 7, column: 20, offset: 142 }, end: Position { line: 7, column: 23, offset: 145 } } }, default: None }), Field(StructField { name: "y", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 7, column: 28, offset: 150 }, end: Position { line: 7, column: 31, offset: 153 } } }, default: None })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/05-ownership/nested_token_scope.snap
+    type_decl Struct { body: [Field(StructField { name: "x", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 11, column: 20, offset: 443 }, end: Position { line: 11, column: 23, offset: 446 } } }, default: None }), Field(StructField { name: "y", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 11, column: 28, offset: 451 }, end: Position { line: 11, column: 31, offset: 454 } } }, default: None })] }
+    type_decl Struct { body: [Field(StructField { name: "view", is_mut: false, ty: Ref { mutable: false, inner: Name { name: "Point", span: Span { start: Position { line: 13, column: 24, offset: 481 }, end: Position { line: 13, column: 29, offset: 486 } } }, span: Span { start: Position { line: 13, column: 30, offset: 487 }, end: Position { line: 13, column: 31, offset: 488 } } }, default: None })] }
+    type_decl Struct { body: [Field(StructField { name: "inner", is_mut: false, ty: Name { name: "Inner", span: Span { start: Position { line: 14, column: 24, offset: 512 }, end: Position { line: 14, column: 29, offset: 517 } } }, default: None })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/05-ownership/ownership_deep.snap
+    type_decl Struct { body: [Field(StructField { name: "x", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 13, column: 20, offset: 592 }, end: Position { line: 13, column: 23, offset: 595 } } }, default: None }), Field(StructField { name: "y", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 13, column: 28, offset: 600 }, end: Position { line: 13, column: 31, offset: 603 } } }, default: None })] }
+    type_decl Struct { body: [Field(StructField { name: "view", is_mut: false, ty: Ref { mutable: false, inner: Name { name: "Point", span: Span { start: Position { line: 25, column: 12, offset: 817 }, end: Position { line: 25, column: 17, offset: 822 } } }, span: Span { start: Position { line: 25, column: 17, offset: 822 }, end: Position { line: 25, column: 18, offset: 823 } } }, default: None })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/05-ownership/struct_dup.snap
+    type_decl Struct { body: [Field(StructField { name: "x", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 9, column: 20, offset: 412 }, end: Position { line: 9, column: 23, offset: 415 } } }, default: None }), Field(StructField { name: "y", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 9, column: 28, offset: 420 }, end: Position { line: 9, column: 31, offset: 423 } } }, default: None })] }
+    type_decl Struct { body: [Field(StructField { name: "from", is_mut: false, ty: Name { name: "Point", span: Span { start: Position { line: 12, column: 25, offset: 551 }, end: Position { line: 12, column: 30, offset: 556 } } }, default: None }), Field(StructField { name: "to", is_mut: false, ty: Name { name: "Point", span: Span { start: Position { line: 12, column: 36, offset: 562 }, end: Position { line: 12, column: 41, offset: 567 } } }, default: None })] }
+    type_decl Struct { body: [Field(StructField { name: "name", is_mut: false, ty: Name { name: "String", span: Span { start: Position { line: 15, column: 23, offset: 707 }, end: Position { line: 15, column: 29, offset: 713 } } }, default: None }), Field(StructField { name: "id", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 15, column: 35, offset: 719 }, end: Position { line: 15, column: 38, offset: 722 } } }, default: None })] }
+    type_decl Struct { body: [Field(StructField { name: "view", is_mut: false, ty: Ref { mutable: false, inner: Name { name: "Point", span: Span { start: Position { line: 18, column: 25, offset: 820 }, end: Position { line: 18, column: 30, offset: 825 } } }, span: Span { start: Position { line: 18, column: 31, offset: 826 }, end: Position { line: 18, column: 32, offset: 827 } } }, default: None })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/05-ownership/token_dup_copy.snap
+    type_decl Struct { body: [Field(StructField { name: "x", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 8, column: 20, offset: 339 }, end: Position { line: 8, column: 23, offset: 342 } } }, default: None }), Field(StructField { name: "y", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 8, column: 28, offset: 347 }, end: Position { line: 8, column: 31, offset: 350 } } }, default: None })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/05-ownership/token_in_struct.snap
+    type_decl Struct { body: [Field(StructField { name: "x", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 7, column: 20, offset: 169 }, end: Position { line: 7, column: 23, offset: 172 } } }, default: None }), Field(StructField { name: "y", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 7, column: 28, offset: 177 }, end: Position { line: 7, column: 31, offset: 180 } } }, default: None })] }
+    type_decl Struct { body: [Field(StructField { name: "target", is_mut: false, ty: Name { name: "Point", span: Span { start: Position { line: 10, column: 13, offset: 213 }, end: Position { line: 10, column: 18, offset: 218 } } }, default: None }), Field(StructField { name: "view", is_mut: false, ty: Ref { mutable: false, inner: Name { name: "Point", span: Span { start: Position { line: 11, column: 12, offset: 231 }, end: Position { line: 11, column: 17, offset: 236 } } }, span: Span { start: Position { line: 11, column: 17, offset: 236 }, end: Position { line: 11, column: 18, offset: 237 } } }, default: None })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/99-demos/auto_borrow.snap
+    type_decl Struct { body: [Field(StructField { name: "x", is_mut: false, ty: Name { name: "Float", span: Span { start: Position { line: 7, column: 20, offset: 206 }, end: Position { line: 7, column: 25, offset: 211 } } }, default: None }), Field(StructField { name: "y", is_mut: false, ty: Name { name: "Float", span: Span { start: Position { line: 7, column: 30, offset: 216 }, end: Position { line: 7, column: 35, offset: 221 } } }, default: None })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/99-demos/borrow_conflict_basic.snap
+    type_decl Struct { body: [Field(StructField { name: "x", is_mut: false, ty: Name { name: "Float", span: Span { start: Position { line: 7, column: 20, offset: 204 }, end: Position { line: 7, column: 25, offset: 209 } } }, default: None }), Field(StructField { name: "y", is_mut: false, ty: Name { name: "Float", span: Span { start: Position { line: 7, column: 30, offset: 214 }, end: Position { line: 7, column: 35, offset: 219 } } }, default: None })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/99-demos/compare_autoborrow.snap
+    type_decl Struct { body: [Field(StructField { name: "x", is_mut: false, ty: Name { name: "Float", span: Span { start: Position { line: 8, column: 20, offset: 238 }, end: Position { line: 8, column: 25, offset: 243 } } }, default: None }), Field(StructField { name: "y", is_mut: false, ty: Name { name: "Float", span: Span { start: Position { line: 8, column: 30, offset: 248 }, end: Position { line: 8, column: 35, offset: 253 } } }, default: None })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/99-demos/compare_lifetime.snap
+    type_decl Struct { body: [Field(StructField { name: "x", is_mut: false, ty: Name { name: "Float", span: Span { start: Position { line: 8, column: 20, offset: 255 }, end: Position { line: 8, column: 25, offset: 260 } } }, default: None }), Field(StructField { name: "y", is_mut: false, ty: Name { name: "Float", span: Span { start: Position { line: 8, column: 30, offset: 265 }, end: Position { line: 8, column: 35, offset: 270 } } }, default: None })] }
+    type_decl Struct { body: [Field(StructField { name: "target", is_mut: false, ty: Name { name: "Point", span: Span { start: Position { line: 11, column: 13, offset: 303 }, end: Position { line: 11, column: 18, offset: 308 } } }, default: None }), Field(StructField { name: "view", is_mut: false, ty: Ref { mutable: false, inner: Name { name: "Point", span: Span { start: Position { line: 12, column: 12, offset: 321 }, end: Position { line: 12, column: 17, offset: 326 } } }, span: Span { start: Position { line: 13, column: 1, offset: 380 }, end: Position { line: 13, column: 2, offset: 381 } } }, default: None })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/99-demos/compare_rust_side_by_side.snap
+    type_decl Struct { body: [Field(StructField { name: "x", is_mut: false, ty: Name { name: "Float", span: Span { start: Position { line: 7, column: 20, offset: 176 }, end: Position { line: 7, column: 25, offset: 181 } } }, default: None }), Field(StructField { name: "y", is_mut: false, ty: Name { name: "Float", span: Span { start: Position { line: 7, column: 30, offset: 186 }, end: Position { line: 7, column: 35, offset: 191 } } }, default: None })] }
+    type_decl Struct { body: [Field(StructField { name: "inner", is_mut: false, ty: Ref { mutable: false, inner: Name { name: "Point", span: Span { start: Position { line: 13, column: 13, offset: 376 }, end: Position { line: 13, column: 18, offset: 381 } } }, span: Span { start: Position { line: 14, column: 1, offset: 382 }, end: Position { line: 14, column: 2, offset: 383 } } }, default: None })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/99-demos/complex_data_structure.snap
+    type_decl Struct { body: [Field(StructField { name: "value", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 7, column: 23, offset: 214 }, end: Position { line: 7, column: 26, offset: 217 } } }, default: None }), Field(StructField { name: "next", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 7, column: 34, offset: 225 }, end: Position { line: 7, column: 37, offset: 228 } } }, default: None })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/99-demos/linked_list.snap
+    type_decl Struct { body: [Field(StructField { name: "value", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 7, column: 23, offset: 206 }, end: Position { line: 7, column: 26, offset: 209 } } }, default: None }), Field(StructField { name: "next", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 7, column: 34, offset: 217 }, end: Position { line: 7, column: 37, offset: 220 } } }, default: None })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/99-demos/resource_raii.snap
+    type_decl Struct { body: [Field(StructField { name: "name", is_mut: false, ty: Name { name: "String", span: Span { start: Position { line: 8, column: 11, offset: 167 }, end: Position { line: 8, column: 17, offset: 173 } } }, default: None }), Field(StructField { name: "closed", is_mut: false, ty: Name { name: "Bool", span: Span { start: Position { line: 9, column: 13, offset: 187 }, end: Position { line: 9, column: 17, offset: 191 } } }, default: None })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/99-demos/token_view_pattern.snap
+    type_decl Struct { body: [Field(StructField { name: "value", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 7, column: 25, offset: 195 }, end: Position { line: 7, column: 28, offset: 198 } } }, default: None })] }
+    type_decl Struct { body: [Field(StructField { name: "owner", is_mut: false, ty: Name { name: "Buffer", span: Span { start: Position { line: 11, column: 12, offset: 279 }, end: Position { line: 11, column: 18, offset: 285 } } }, default: None }), Field(StructField { name: "view", is_mut: false, ty: Ref { mutable: false, inner: Name { name: "Buffer", span: Span { start: Position { line: 12, column: 12, offset: 298 }, end: Position { line: 12, column: 18, offset: 304 } } }, span: Span { start: Position { line: 13, column: 1, offset: 305 }, end: Position { line: 13, column: 2, offset: 306 } } }, default: None })] }
+
+# src/middle/core/tests/snapshots/tests/yaoxiang/99-demos/tree_structure.snap
+    type_decl Struct { body: [Field(StructField { name: "value", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 7, column: 23, offset: 194 }, end: Position { line: 7, column: 26, offset: 197 } } }, default: None }), Field(StructField { name: "left", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 7, column: 34, offset: 205 }, end: Position { line: 7, column: 37, offset: 208 } } }, default: None }), Field(StructField { name: "right", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 7, column: 46, offset: 217 }, end: Position { line: 7, column: 49, offset: 220 } } }, default: None })] }
+
+```
+
+## P6 6.6.12 B-收窄：`FunctionBody::TypeDecl` 换成 IR 原生收窄载体（2026-11-01）
+
+**触发与裁决**：6.6.8 的勘察把 `ir.rs` 三处 `ast::Type` 载体摊开；6.6.11（A-1）删掉其中
+两处零生产者指令变体后，用户 2026-11-01 裁决 **Q2 = 收窄版**（只承载 IR 真正消费的信息）、
+**Q3 = 快照不保留 span**，并把「反向桥 B 变生产死代码」裁为 **②：一并删除**（含 t1 入库的
+10 条 leg B 用例）。
+
+### 载体形状（两层 `pub struct`，无 `pub use` 再导出）
+
+- `TypeDeclBody { fields: Vec<TypeDeclField>, self_type: MonoType }`
+  · 字段表顺序 = 构造参数序；`self_type` = 字节码类型表项（原 `codegen::type_from_ast` 的结果
+    前移到 `ir_gen`，逐臂等价：`Name`→`TypeRef`、`Tuple`→`make_tuple`、`Fn`→`Fn`、
+    `Generic`→`TypeRef("Name(args)")`、其余→`Void`，实测见 `middle/core/tests/type_decl.rs`）。
+- `TypeDeclField { name: String, ty: MonoType, is_mut: bool, has_default: bool, is_method: bool }`
+  · **默认值表达式 / const 界表达式 / 匿名方法绑定 / span 一律不进**：默认值在 `ir_gen` 已降级成
+    指令、const 界在类型检查层消费、匿名绑定经 `register_type_bindings` 另有归宿、span 只在源码
+    诊断里有意义。
+  · 字段名与两个标记只服务快照与诊断可读性（IR 不按名查找）；AST 侧字段恒有名字，故 `name: String`
+    而非 `Option<String>`（`Option` 会引入永不出现的分支）。
+  · `is_method`：注解剥掉透明 `Paren`/`NamedParen` 后是 `Type::Fn` 的字段（SPEC
+    `type-system.md:443`：函数类型字段不生成构造参数）。**本轮只表达区分、不改行为**：
+    `translator::synthesize_constructor` 仍按历史行为把两类字段都算进构造参数（`Option`/`Result`
+    的 `some`/`none`、`ok`/`err` 命中），该不一致在此登记，接线留后续轮次。
+
+### 全链改写（一条提交，含机械连带）
+
+- `ir_gen`：类型声明处造载体（`definition.struct_fields()` 逐项降级 + `type_decl_self_type`），
+  并把 `type_from_ast` 的逐臂逻辑前移过来；删除 `definition.without_fn_param_names()` 调用。
+- `codegen`：类型表直接取 `body.self_type`（`type_from_ast` 随之删除，`ast::Type` 的 import 一并去掉）。
+- `translator::synthesize_constructor`：改收 `&TypeDeclBody`，构造参数仍取**全部**字段（行为不变）。
+- `normalize`：`type_decl` 行改紧凑形态 `[name: <MonoType> [mut,default] ; …]`，**不含 span**。
+- `mono::specialize_type`：字段类型与 `self_type` 走**已有的** `MonoType::substitute`——不引入任何
+  新的替换实现（t8 结论）。
+- 删除面：`ast::without_fn_param_names`、`FunctionMonomorphizer::substitute_type_in_ast` 及其内嵌
+  `mono_to_ast_type`（三者失去唯一生产调用点）、`mono/tests/function.rs`（t1 的 10 条 leg B 用例，
+  判据随桥一并消失——**不是被 leg B 接手，leg B 本身也删了**）。
+- T1：`REBUILD_FUNCTIONS` 与 `SCOUT_BASELINE_CALIBER` **双双清空为 `&[]`**；门禁摘要现为
+  「反向桥 A 0 变体；反向桥 B 0 变体；AST→AST 重建 0 变体」。
+
+### 门禁红态（三份原文，证明漏刷会被拒编译）
+
+① 删 `without_fn_param_names` 但未动登记表：
+
+```text
+类型表门禁 T1 失败（构建已拒绝）：
+type-tables T1 扫描未完成（口径不完整 ⇒ 判定不成立）：重建位置登记表与源码不一致（1 项）——函数改名/删除后必须同步 scan.rs 的 REBUILD_FUNCTIONS，不得静默落回「parser 前向」：
+  src/frontend/core/parser/ast.rs::without_fn_param_names（AST→AST 重建）
+```
+
+② 删登记表与口径快照、未刷基线数字（11 项违规，逐行「合计 / AST→AST」）：Struct 3→2 / 2→1、
+NamedStruct 3→2 / 2→1、Tuple 5→4 / 2→1、Fn 7→6 / 2→1、Generic 4→3 / 2→1、Literal 3→2 / 2→1、
+Ptr 3→2 / 2→1、Ref 5→4 / 2→1、MetaType 3→2 / 1→0、Paren 3→2 / 1→0、NamedParen 2→1 / 1→0。
+
+③ 再删反向桥两条（`substitute_type_in_ast` + `mono_to_ast_type`）后（9 项违规，逐行
+「合计 / AST→AST / 反向桥」）：`Name` 5→2 / 0→0 / 3→0、`Struct` 2→1 / 1→0 / 0→0、
+`NamedStruct`、`Tuple`、`Literal`、`Ptr` 同「2→1 / 1→0 / 0→0」、`Fn` 6→4 / 1→0 / 1→0、
+`Generic` 3→1 / 1→0 / 1→0、`Ref` 4→2 / 1→0 / 1→0。
+
+口径条数口径：`REBUILD_FUNCTIONS` 与 `SCOUT_BASELINE_CALIBER` **各少 3 条**（`without_fn_param_names`、
+`substitute_type_in_ast`、`mono_to_ast_type`），基线面则是「11 行 + 9 行」两批逐行数字——两者不是同一种计数。
+
+### 快照（96 行 / 69 文件 → 再生逐行 review）
+
+改前 96 行原文已在本节末尾「附：改前 `type_decl` 行原文（对照用）」逐文件留档。再生结果：
+
+| 项 | 实测 |
+| --- | --- |
+| 被改写的 `type_decl` 行 | **95 行 / 68 文件** |
+| **未**被改写的陈旧行 | **1 行**（`tests/yaoxiang/02-type-system/termination/measure_decreasing.snap`）——该语料在**快照判据路径**的 IR 生成期报 `E3006`（「variable b could not be resolved」）被 `normalize_corpus_file` 跳过，快照自更早版本起就没再参与比对（**预存缺口**，非本轮引入；探针实测见本节结论）|
+| 新增语料带出的快照 | 2 行 / 2 文件（本轮新增的两条语料）|
+| 全域 span 残留 | **1 处**，即上面那行陈旧快照（其余 95 行再生后无 span）|
+
+逐行 review 口径（自动化辅助 + 人工抽检）：对 68 个改写文件逐文件比对「旧 AST Debug 行」与「新紧凑行」的
+**字段数 / 字段名顺序 / `is_mut` / `has_default`**——**0 处不一致**（脚本逐文件核对）；类型渲染由 AST 形状
+（`Name("Float")` / `Generic("Option", [Name("T")])`）换成 `MonoType`（`Float(64)` / `TypeRef("Option(T)")`），
+这是 `MonoType::from` 的既有降级，不是新语义。
+
+### 语料新增（零覆盖 → 有覆盖）
+
+- `tests/yaoxiang/02-type-system/aggregates/type_decl_default_field.yx`：带默认值字段的类型，
+  `Config()`（默认值生效）与 `Config(7, "custom")`（覆盖）两路都断言；
+- `tests/yaoxiang/02-type-system/aggregates/type_decl_anon_binding.yx`：含内联匿名函数绑定的类型
+  （`cb: ((a: Int) -> Bool)[0] = a => a > 0`），构造 + 读回数据字段 + 调用绑定（返回值不断言）。
+
+`tests/baselines/corpus-parity.jsonl` 由 356 行增至 **358 行**，diff 仅新增两行（均为 `diagnostics: []`、
+`exit: 0`）；原 356 行逐字节未变（零行为漂移）。
+
+### mono 单测改写（逐条等价，改写前已报批）
+
+| 原断言 | 新断言 | 为什么等价 |
+| --- | --- | --- |
+| 夹具 `make_pair_type_ir` / `make_generic_type_decl_ir` 造 `TypeDecl { definition: AstType::Struct{…} }` | 造 `TypeDeclBody { fields: [TypeDeclField{ ty: TypeRef(参数名) }], self_type: Void }` | 夹具语义是「泛型类型定义、字段类型是类型参数」；`MonoType::from(Name("T")) == TypeRef("T")`，`self_type: Void` 正是旧路径 `type_from_ast(Struct)` 的结果 |
+| helper `type_decl_fields` 取 `&[StructField]` | 取 `&[TypeDeclField]` | 判据「有哪些字段、顺序如何」不变，取值面换成 IR 载体 |
+| `test_specialize_generic_struct_substitutes_type_params`：断言 `fields[i].ty` 是 `AstType::Name{"Int64"}` **且** `MonoType::from(...) == Int(64)` | 断言 `fields[i].ty == MonoType::Int(64)` | 两段合起来的事实是「字段类型被替换成 Int(64)」；旧路径要经规范名写回再 lower 的有损往返，新断言无往返、更强。**AST 中间态断言随桥一并消失，不是被 leg B 接手——leg B 也删了** |
+| `test_specialize_type_lowercase_param_name`：断言 `f.ty` 是 `Name{"String"}` **且** lower 后 `== make_string()` | 断言 `fields[0].ty == MonoType::make_string()` | 实质判据「小写参数名 `t` 也被替换成 String（不是 `TypeRef("t")`）」原样保留 |
+| （无） | 新增 `test_specialize_type_keeps_field_classification_flags`：`is_mut` / `has_default` / `is_method` 标记在特化后保留 | 只增不减；守住 `..f.clone()` 不丢分类标记 |
+
+### 已知缺口（登记）
+
+① **字段类型是「内联匿名结构体/枚举」**：`MonoType::substitute` 对 `Struct`/`Enum` 走 `other => clone()`，
+   这类字段类型不会被替换。语料 0 例；**不另造第三份替换实现**（与 `types/substitute.rs::Substituter`
+   并列即触禁令三 A）。
+② **函数类型字段不进构造参数（SPEC 443）未接线**：载体已能表达（`is_method`），`translator` 仍按历史
+   行为把两类都算进构造参数；改它属可观察变更，需另立裁决。
+③ **`measure_decreasing.snap` 陈旧 ⇒ 快照判据覆盖洞**（**本节初版把成因记错了，已按 6.6.16 实测订正**）：
+   · **回归引入点 = t4（`28ded1fd8`）**，不是「预存 / 自 2026-10-12 起」。t4 把 parser 的三张内置名字表
+     移出 L2 时，9 个生产入口都注入了 `SemanticProbe`，**唯独快照判据这一条没有**：
+     `normalize_corpus_file` 仍用裸 `parse()`（`NullProbe`）⇒ `Terminates` 不再被认作谓词 ⇒ 返回位测度
+     形参被当 const 泛型参数剔除 ⇒ `ir_gen` 报 `E3006` ⇒ 规范化文本 `None` ⇒ 判据静默 `continue`；
+   · **实测口径**：t4 之前 216/216 全覆盖、跳过 0；t4 之后 **214/218**，跳过 4 个
+     （`deep_recursion_within_limit` / `explicit_termination_measure` / `measure_decreasing` /
+     `stack_overflow_e6004`）；junk 探针与「还原裸 `parse()` 后断言点名 4 个」两次实测均证实；
+   · **不是两条判据对同一文件结论相反**：语料基线由 CLI/driver 产出，driver 早已注入探针；是快照判据
+     这条路径自己喂错了 AST ⇒ 「修 ir_gen 的 E3006 路径」这个待裁选项**撤回**（ir_gen 报错正确）；
+   · **处置（6.6.16 已完成）**：入口改 `parse_with_probe(&tokens, &SemanticProbe)`（判据实现，产品代码
+     零改动）；`assert!(compared > 200)` 这条会让 218→214 仍绿的松下限换成**对账断言**——凡到达 IR 却
+     拿不到规范化文本的失败并逐条点名、且 `compared == reachable`；更新流程同样「跳过即红」。修后
+     **218/218**，`measure_decreasing.snap` 收敛为收窄载体形态（`type_decl []`：该类型体只有 const 界
+     表达式、无数据字段），**快照面残留 span 归零**（本节初版据此写的「唯一残留 span」已不再成立）。
+④ **`field_is_method` 的判定值有单测**（`middle/core/tests/type_decl.rs`）：函数类型字段
+   `is_method == true`、数据字段 `== false`（判定写反时该断言先红）。
+
+### 门禁（实测）
+
+`cargo build --bin yaoxiang-rs` / `cargo fmt --check --all` / `cargo clippy -D warnings` /
+`testsuite.py run fast` / `check-corpus-parity` / `check-snapshot-drift` / `check-docs-truth` 全绿。
+
+### 计数
+
+本批不新增二级/三级任务 ⇒ 09 顶部计数表不变（二级 **72** / 三级 **193**）。
+
+---
+
+## P6 6.6 续轮：门禁转硬的剩余面 + 三处自伤回归（2026-11-01）
+
+首轮（见上一节）只做 T3 删除与 T1 转硬，把 6.6.1 行点名的四个剩余面留给后续轮次。用户追问「为什么要剩」后，本续轮一次做完，并在过程中查出**三处由本批自己造成的门禁失效**。
+
+### 一、四个剩余面
+
+| 面 | 做法 | 判据 |
+| --- | --- | --- |
+| **leg B 全链往返测试入库** | 10 条用例覆盖规范名/结构类型/有损边界/容器形态；桥仍是私有嵌套 fn（不为测试放 public） | 可失败：把桥的 `canonical_name` 分支改回 `type_name()` → 6/10 转红 |
+| **parser 非 Fn 签名兜底** | `extract_fn_type_info` 改 `Option<(Vec<Param>, Type)>`，非 Fn 由调用方报 **E0012** 并放弃该绑定；不再产 `Name("()")` 伪类型 | 红判据先行：旧代码上 `Point: Type = { cb: (Int)[0] = 1 }` 的 `has_errors == false` 并打印伪造 AST，改后转绿 |
+| **`ir.rs` 三处 `ast::Type` 载体** | A-1 删 `Instruction::Cast`/`TypeTest`（**零生产者**，且载荷本就被下游丢弃）；B 把 `TypeDecl.definition` 换成 `TypeDeclBody{fields, self_type}` + `TypeDeclField{name, ty, is_mut, has_default, is_method}` | IR 层零 `ast::Type` 载体（`ir.rs` 连 `use ...::parser::ast` 都删了）；218 个快照零 span |
+| **parser 两处内置封闭集** | 9 个生产入口全部注入 `SemanticProbe`；`CONSTRAINT_NAMES`/`PREDICATE_NAMES` 删除，`CONST_PARAM_TYPES` 移入 L3 走窄入口 `is_const_param_type_name` | `check-boundary` 的 B6 库存 **2 → 0**；反宽化断言（探针认 Int、不认 Int64/Int8/Void/Bytes）经变异证红 |
+
+### 二、三个不可逆动作（均先取证再执行）
+
+1. **IR 快照再生**：改前先把 96 行 `type_decl` 原文（69 文件）抄进本节留档，再 `UPDATE_SNAPSHOTS=1`；实际改写 95 行/68 文件，续轮新增语料 +2 行。逐行比对按「字段数 / 字段名序 / is_mut / has_default」对齐，95/95 行 0 处不一致；复审判为「表示变化，非信息丢失」。
+2. **T1 基线三次刷新**（删 `without_fn_param_names`、删 A-1 牵连的 `substitute_type_ast`、删反向桥），每次都由门禁在改动落地那一刻**拒绝编译**并打印逐行列数字——这是「门禁 fail-loud」的实证，不是事后补账。
+3. **口径快照与登记表双双清空**（`REBUILD_FUNCTIONS` / `SCOUT_BASELINE_CALIBER` 现均 `&[]`）：IR 层已无 AST→AST 重建或反向桥，第二类与桥类计数归零。
+
+### 三、三处由本批自己造成的门禁失效（本轮最重要的产出）
+
+| # | 失效形态 | 引入点 | 怎么发现的 | 修法 |
+| --- | --- | --- | --- | --- |
+| 1 | 快照判据**静默跳过** 4 个语料文件（218 里只比 214） | **6.6.9**：9 个生产入口都注入 `SemanticProbe`，唯独判据那条用裸 `parse()` | 语料基线说「编译通过 / exit 0」、快照路径报 E3006 —— 两条判据对同一文件结论相反 | 判据入口注入探针 + 「到达 IR 却被跳过 ⇒ 红并点名」+ 双射断言；旧的 `compared > 200` 松下限被替换 |
+| 2 | T1 的「勘察基线漂移」**不进判据** | 6.6 首轮之前即存在（`render_comparison` 只被 render 调用） | 扫描 T1 输出时发现报告有漂移行、构建却绿 | 并入 `gate_failures` 同一条失败路径 |
+| 3 | `tools/type-tables` 的 27 条测试**从不在自动路径上**（`workspace.exclude`，CI 零引用） | 仓库既有形态 | t20 恰好把该 crate 的 `cargo test` 写进 verify 才踩到 3 条红 | 夹具改为自造输入（不读生产常量）→ 27/0；**接线到 CI/pre-commit 已请示用户，结论待决** |
+
+三者的共性：**判据的输入少了一块，输出照样是绿**。下一轮（6.7 目录改名）开工前应先自查「这条判据的输入集合是否完整」。
+
+### 四、分期登记与订正
+
+- **`as` 是 SPEC 声称支持、实现从未落地的既有缺口**：`syntax.md` §2.6 只有文法与优先级、无语义规则；类型检查只做静默重标注（丢弃内层结果、返回目标类型），**无可转换性检查、无诊断码**；`ir_gen` 不生成指令；字节码侧无生产者；397 个 `.yx` 0 例。删除两个空变体后该缺口更显眼，已在 `syntax.md` §2.6、`06-cleanup-inventory.md` §B（新增 B13，同型于 B8 `Instruction::TailCall`）、`03` 三处登记，**既不写「已实现」也不写「本版移除」**。
+- **`is_method` 已进载体且有断言，但 IR 层当前无消费者**：它是为 SPEC `type-system.md:443`（函数类型字段不生成构造参数）预留的区分；当前 `synthesize_constructor` 仍按全体字段合成，**行为不变**。接线留待实现 443 时进行。
+- **`t20` 是「交付已落地、状态 failed」**：文档改动在 `b05f5abe6`（登记表语义订正），置 failed 只因 verify 撞上既有红。
+- **行号腐化是系统性问题**：本轮复扫 6 份文档 68 处 + `syntax.md` 3 处行号引用，`09` 30 处、`09a` 余 28 处、`07` 6 处属「按测量时刻写的历史锚点」，在 HEAD 上多数已不指向原内容。已按「规范/设计文档去行号、实录钉 rev」处理本批涉及部分；**全量治理待单独立轮**。
+- **可复用经验**：行号会漂移，语义描述不会。`syntax.md` §2.6 那条注记除改数字外，还写清「哪两处是 span 臂、哪一处是自由变量收集」——下次 `ir_gen` 再挪行，读者仍能按语义对上。
+
+### 五、残留面（不在本批处理）
+
+1. **快照门禁缺「孤儿快照」方向**：现有两条是「语料有、快照无 ⇒ 红」与「到达 IR 却被跳过 ⇒ 红」；「快照有、语料没有」无人拦（当前无实例）。
+2. **T1 登记表的读法**：它是「已知的重建函数清单」而非全集，核对单向（登记表→源码）；「新增未登记且产生构造点」由 `classify` 的 `Forward` 兜底 + 基线漂移拦，「新增但无构造点」不在扫描口径内。
+3. **`is_method` 接线**（见上）。
+4. **`tools/type-tables` 的测试接线**（见上，待用户裁决）。
+5. **`measure_decreasing` 的 `type_decl` 恰为 `[]`**：该类型体只有 const 界表达式、无数据字段，属收窄载体的预期形态，不是丢信息。
+
+### 六、计数
+
+本续轮不新增二级/三级任务 ⇒ 09 顶部计数表不变（二级 **72** / 三级 **193**）。
+
+三级 +1 = 3.20.7（196→197）；二级不变。issue [#519](https://github.com/ChenXu233/YaoXiang/issues/519) **关闭**（甲案删除 + 约束检查落地全链闭环；余量 = 同名异型消歧归 P6 类型身份收敛、动态调用路径覆盖边界、两成因 help 形态——均已在本行与 WBS 行登记去向）。
+
+## P3 3.20.8 收口（谓词排除判据收单点，2026-11-01）
+
+### 登记与裁决
+
+用户批「同意」（设计稿四件套见 WBS 3.20.8 行登记段：三现场查证 A/B/C、甲乙丙方案、红绿预设）。三现场：A = `checker.rs` collect_signatures 等两个 `collect_used_in_type` 调用点的 `is_predicate_application` 全判据；B = `inference/statements.rs` const 用途精筛的窄化内联 lambda（`"Terminates"` 字面量 ∪ `proof_fn_bases` 判名，不查 `predicate_defs`、漏无参证明函数）；C = `helpers.rs` 补名（只收 Type kind，谓词实参位不产候选——显式不适用，未动）。
+
+### 实现（flash t1，冻结 `dd7cd37e`）
+
+`predicate_names` 名字集：checker.rs 注入点对 `BUILTIN_PREDICATES` ∪ `env.predicate_defs` 键 ∪ `env.vars` 键逐名跑 `is_predicate_application` 预计算，`set_predicate_names` 注入；B 面 lambda 改 `predicate_names.contains(n)`——与 A 面同一判定函数，by construction 同源。**设计假设修正（t1 按契约停下报告）**：`proof_fn_bases` 非唯一消费者——`strip_refined_value_type`（statements.rs :1798/:1821 一带）与证明函数 `Refined { base, .. }` 正格化仍消费它（需 MonoType 值，与排除判据用途正交）⇒ **双表分工**而非整体替换：proof_fn_bases 保留（文档注明不参与判据）、predicate_names 为判据单一事实源、旧窄化分支删除（无新旧并存）。
+
+### 探针实证（七组夹具，改造前后逐夹具一致）
+
+1. 单文件谓词形态（IsPositive + `(N: Int) -> (x: IsPositive(N))`）**未复现误收**——设计预设的行为红不存在，照实记录；既有下游缺口 E1002（curry 内层精化未按 base 统一的假拒绝）与判据无关，登记 [#523](https://github.com/ChenXu233/YaoXiang/issues/523)。
+2. 跨文件 use 导入谓词误收【证实】：E1012 显示 `IsPositive(int64)`——且**本文件谓词在 collect_signatures（Registry 阶段）同样不可见**（该阶段不执行第零遍 + 导入未并）。病灶 = 阶段边界，判据单源治不了环境可见性，登记 [#522](https://github.com/ChenXu233/YaoXiang/issues/522)（修法方向 = Registry 阶段谓词名可见性，与 use 导入解析时序相关，属设计裁决点）。
+3. 既有锚：lib rfc027 118 passed。
+
+### 锚敏感性边界（如实声明）
+
+新增双锚（`test_check_predicate_application_arg_not_collected_as_const` / `test_check_terminates_measure_arg_not_collected_as_const`）对「谓词排除机制**整体**回归」敏感（红），对 B 面**单独**回归不敏感（A 面兜底）——B 面统一的正确性保障是 by construction 同源预计算，不是行为观察面。t2 变异试验若只残化 B 面不会红，故本批免批次树 t2/t3（规模裁量与 0.2.4 同机制：可观察行为面零变化 + 探针即红绿证据 + 结构性收敛由代码审查与门禁电池覆盖）。
+
+### 计数
+
+三级 +1 = 3.20.8（198→199，头数同笔补齐）；二级不变。新增 issue [#522](https://github.com/ChenXu233/YaoXiang/issues/522)（Registry 阶段谓词不可见 → 导出元数据误收）、[#523](https://github.com/ChenXu233/YaoXiang/issues/523)（curry 内层精化统一缺口）。
+
+## P3 3.20.9 收口（类型级命名空间——#522 丁案，2026-11-01）
+
+### 登记与裁决
+
+issue #522 的裁决包（甲/乙/丙）呈报后，用户追问「既要又要」的方案 ⇒ **丁案**（类型级命名空间）：把「名是不是谓词」从检查期状态提升为声明级事实——用会过期的检查期状态回答不过期的声明级问题，是可见性缺口的架构根源。用户批丁（内嵌裁决点 = env 三臂退役）。
+
+### 实现（flash t1，冻结 `82bd1c38`）
+
+- `probe.rs`：`TypeLevelNamespace { predicates }` + 纯函数 `scan`/`scan_one`（`BUILTIN_PREDICATES` ∪ 各单元谓词声明名）+ `predicate_decl_shape`（声明形态识别全仓单点，第零遍与 scan 共用；第零遍 env 登记行为逐字保留）。
+- `is_predicate_application` 的 env 三臂整体退役为 namespace 查询；`predicate_defs` 表本身（证明/常量求值消费面）不动。
+- 接线 9 处生产 + 49 处测试全部**编译器强制**显式传参：collect_signatures 加 namespace 参数（driver `registry()` 臂传全部单元 scan 并集 / embedded std 传 `scan_one`）；check_module(_collect_all) 加参（单文件 scan 自身、多文件传 `state.asts` 全集——过包含方向安全）；B 面注入来源从 env 计算换 `namespace.predicates`（env 计算删净，无并存）。
+- 双回归锚：单元锚（Registry 面 scan，断言跨单元谓词实参 N 不进 declared_fn_type_params）+ 集成锚（CLI 诊断不含 `IsPositive(int64)` 误替换形态）。
+
+### 探针与红绿（如实）
+
+- **#522 验收面达成**：误替换修掉——`IsPositive(N)` 全诊断与导出面保持未替换。
+- **预设「check 转绿」未达（如实）**：剩余 E1012 expected 侧（`'int64'` vs `'IsPositive(N)'`）与 E1002 是既有缺陷——t1 对照实验定性：**本地谓词声明无 E1012，导入形态特有** ⇒ 谓词**约束体数据**不跨单元传播（第零遍只登记本单元、导入面查不到体），比名判据深一层的数据传播设计点 → 登记 [#524](https://github.com/ChenXu233/YaoXiang/issues/524)（S-needs-decision）；E1002 归 #523。
+- **等价性双探针**：t1 三次构造「env-vars 臂独占命中形态」均被语言拒绝（Type 非一阶值）；t3 构造出反例 `g: (x: Int) -> Type = { helper(x) }`（call 体非 const 可转换——旧 env 臂判真、新 namespace 判假）但**父子双版三探针输出逐字节一致** ⇒ 等价结论成立（t1 的「不可构造」措辞修正为「可构造但无行为差异」）。
+
+### t2（批次树 522 @ `82bd1c38`）——M1 PASS / M2 阴性 / 基线 PASS
+
+- **M1 PASS**：scan 退化为只收内置谓词后，双锚**各自独立红**（单元锚实报 `{"sum": ["N"]}` 误收、集成锚实报 `IsPositive(int64)` 形态），trial 机械可逆、重建恢复绿——声明级判据承重。
+- **M2 阴性（照实）**：把 extract_module_info 的 namespace 实参换成空集后 121 个定向测试全绿——CLI 观察面被 #523 缺口遮蔽，该实参是**无锚死区**。处置 = 队长补双模块直测锚（`test_extract_module_info_consumes_namespace_across_units`：项目并集下 sum 的 `Export::type_params` 必须保持 None，实参弃用即红，`a0e24aae`）；arms 侧 scan 构造义务由集成锚间接覆盖（#524/#523 落地后 CLI 观察面自动增强）。
+- **基线 PASS**：语料差分逐字节一致（md5 双方 60f36554…，356 行）；IR 快照 7 passed / 1 ignored；CI 四脚本 exit 0（boundary/fanout report-only 以输出内违规 0 为准）；锁释放。
+
+### t3——APPROVE（7/7，3 low）
+
+形态单点（predicate_decl_shape 双消费者共用、第二份无）；退役无残根（三臂删净、predicate_defs 非判定消费面零改动、builtin 判定口 8 处消费者保留）；接线无漏网（5 个生产构造点全注入、旁路方法无生产裸调）；过包含方向成立；B 面切换无并存；锚判据强度合规；39 文件全机械。**3 low**：①登记措辞修正（见上等价性）；②inScope 窄于机械必需面——typecheck/mod.rs + 25 个签名连带测试文件追认；③`TypeChecker::new` 空集默认 + 旁路方法（check_stmt 等）若被绕过三入口直调将静默拿空集——今日无生产路径，脚枪备案。
+
+### 计数与环境
+
+三级 +1 = 3.20.9（199→200）；二级不变。issue [#522](https://github.com/ChenXu233/YaoXiang/issues/522) **关闭**（误替换面验收达成；数据传播残留归 #524）。批次树 522 release+gc（约 7.7 GB）。流程注记：`orchestrator` 不是 commit-msg 合法 scope（orchestrator.rs 属 `frontend`）。
+
+## P3 3.20.10 收口（curry 内层参数位精化按基类型统一——#523，2026-11-01）
+
+**任务与归属**：D59 **C 类**假拒绝直修（旧行为 = 该编译的程序被编译期 E1002 拒绝），来源 = 3.20.8 批次探针的既有下游缺口（issue [#523](https://github.com/ChenXu233/YaoXiang/issues/523)）。
+
+**缺陷定性（含 issue 夹具更正，如实登记）**：issue 正文夹具 `print(sum(5))` 是部分应用形态，修前即 0 error——真实红态是完整应用 `print(sum(5)(3))`：curry 内层参数组的精化标注 `IsPositive(N)` 原样进入调用点统一，基类型实参被假拒绝（E1002 `Expected type 'IsPositive(N)', found type 'int64'`）。注册期只剥外层形参位；形参位形态此前已绿。更正已回注 issue 关闭评论。
+
+**修法（判据单源）**：剥除逻辑提为 statements 的共享自由函数 `strip_refined_with_proof_fns`（三臂：内置谓词→新鲜变量 / 证明函数应用→基类型 / 无参 TypeRef→基类型）；注册期方法 `strip_refined_value_type` 委托到它（行为不变），调用点 ExpressionInferrer 逐参统一前经同一实现剥除；`proof_fn_bases` 由 StatementChecker 随委托注入（与注册期同一张表，默认空表）。顶层 Refined 的剥除仍归 solver 的 `strip_refined_for_unify`（既有职责，未动）。
+
+### t1——实现（flash 子代理），门禁 14 项全绿
+
+门禁电池（脚本按退出码裁决）：fmt / markers / CI 四脚本 / 错误码生成器幂等 / clippy 全量 / IR 快照比对 / integration 全量 / testsuite fast / 语料差分。红绿 = stash 修复后三锚 FAILED（逐锚同款 E1002）→ 恢复 3 passed；导入形态探针逐字节不变（full 应用 E1002 属 #524 未动）；真不匹配探针 `sum(5)("str")` 报 E1002 `Expected type 'int64'` 且无 IsPositive 字样（#522 红线）。
+
+**工作流门禁口径两修正（已记入工作流模板记忆）**：① IR 快照漂移检查不得写 `cargo test --lib snapshot -- --ignored`——会把 mode=manual 的再生测试一起拉起，其环境守卫无 UPDATE_SNAPSHOTS 必按设计爆红（判据不可能通过的门禁）；正确形态 = `check-snapshot-drift.sh` 的等价命令（`--exact` 只跑比对测试 + 输出含 `1 passed` 守卫）。② `world.run` 的 bash 通道在本机落到 WSL 默认发行版 docker-desktop（工具发行版，无 /bin/bash），`.sh` 门禁内联成 python 等价命令执行。
+
+### 提交与 rebase 定稿（含第三方事故备案，AGENTS 第 10 条⑧）
+
+并行队伍 56654352（AST 顶层化搬移，自称纯搬移）在路径改写外把 checker.rs 整体回退到 3.20.8 态（`type_level_namespace` 字段与三入口 namespace 参数被剥除），8 处调用方与全部测试仍是 3.20.9 设计 ⇒ 其推送后的 dev HEAD 编译不过（13 错，本会话 t1 实测并定性）。本会话曾独立完成恢复笔 `efe43dea`（以 22def888 为底本 + 路径改写 + fmt，归一化 diff 仅剩格式与注释行）；并行队伍随后自修推送 `1c3feba0`，与本会话恢复**逐字节等价**（两文件 diff 0 行），其提交信息含根因（rebase 解冲突整文件取一方静默丢增量）与规则固化提议（「冲突文件禁止整取一方」——留用户裁决）。据此 rebase 丢弃我方重复恢复笔、只重放修复笔；重放后文档漂移 19 行（对方未再生生成物），重新生成并 amend。**定稿：修复笔 `9b8dccfb`，树与初版 `168af1d0` 逐字节等价（git diff 空），t1 门禁证据对定稿高保真。**
+
+### t2——PASS（批次树 t3.20.10-verify @ 9b8dccfb）
+
+变异可逆证明：最小补丁摘除调用点剥除 → `cargo test --test integration test_check_curry` 三锚全红（exit 101，0 passed; 3 failed，逐锚 E1002 `Expected type 'IsPositive(N)', found type 'int64'`，位于各夹具内层精化参数位）→ trial 机械还原（blob 与 HEAD 一致、git status CLEAN）→ rebuild 后同 filter 3 passed。等价性：IR 快照比对 1 passed（218 份零漂移）；语料差分 358 行逐字节零漂移（358=358 对账一致）。
+
+### t3——APPROVE（七镜头全过，1 low 已采纳）
+
+①判据单源 PASS：`strip_refined_with_proof_fns` 是唯一新增剥除点，全部调用点两处均委托；`is_builtin_predicate_name` 其余命中均为修复笔未触碰的既有职责；solver 顶层剥除未动；委托 diff 与原实现逐臂一致。②职责累积 PASS：单字段 + 单 setter + 单消费点，借用注入与注册期同一张表。③补丁式 PASS：修消费端统一缺口本体（resolve 之后、E1002 发射之前），无吞诊断、无谓词名特判；实测真不匹配仍报且 expected 为剥后 base。④#522 红线 PASS：诊断文本 = 剥后 base + 实参自身类型，谓词实参无路径进诊断。⑤授权边界 PASS：6 文件全录，生成物 hunk 全为行号平移、处数不变；无 #442 / #524 / baselines / 快照 / locales 触碰。⑥测试规范 PASS。⑦诚实性 PASS：提交信息声称与 diff 自洽，四项历史声称静态自洽并如实标注未复跑。**1 low → 采纳**：三个新锚均为零诊断回归面，缺「真不匹配仍报错」反向锚 ⇒ 收口补 `test_check_curry_refined_param_genuine_mismatch_still_reports`（与主锚同构、第二实参 String、断言恰一条诊断——剥 base 对统一透明、不遮蔽真不匹配；四锚同 filter 实跑 4 passed，纯测试笔 `db2e7b26`）。
+
+### 计数与环境
+
+三级 +1 = 3.20.10（200→201）；二级不变。issue [#523](https://github.com/ChenXu233/YaoXiang/issues/523) **关闭**（夹具更正已回注评论）；谓词体跨单元传播残留归 [#524](https://github.com/ChenXu233/YaoXiang/issues/524)（S-needs-decision——#523 落地后其剩余面收敛为纯数据管道：Registry 导出 vs 导入面登记）。批次树 523-repro（t1 复现用）与 t3.20.10-verify（t2 量测用）release + gc。

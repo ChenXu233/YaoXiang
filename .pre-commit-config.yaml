@@ -9,12 +9,14 @@ repos:
         language: system
         types: [rust]
         pass_filenames: false
+        stages: [pre-commit]
 
       - id: cargo-fix
         name: cargo fix
         entry: cargo fix --all --allow-dirty
         language: system
         pass_filenames: false
+        stages: [pre-commit]
 
       - id: cargo-clippy-fix
         name: cargo clippy --fix
@@ -24,6 +26,7 @@ repos:
         language: system
         types: [rust]
         pass_filenames: false
+        stages: [pre-commit]
 
       - id: cargo-clippy
         name: cargo clippy (门禁)
@@ -35,6 +38,7 @@ repos:
         language: system
         types: [rust]
         pass_filenames: false
+        stages: [pre-commit]
 
       - id: cargo-test
         name: cargo test
@@ -43,6 +47,7 @@ repos:
         types: [rust]
         pass_filenames: false
         always_run: false
+        stages: [pre-commit]
 
       - id: cargo-doc
         name: cargo doc
@@ -50,6 +55,7 @@ repos:
         language: system
         types: [rust]
         pass_filenames: false
+        stages: [pre-commit]
 
       - id: sync-version-badge
         name: sync version badge to README
@@ -57,6 +63,7 @@ repos:
         language: system
         files: '^(Cargo\.toml|README\.md|docs/gh/README\.en\.md)$'
         pass_filenames: false
+        stages: [pre-commit]
 
       - id: markdownlint
         name: markdownlint docs
@@ -70,6 +77,7 @@ repos:
         files: '^docs/.*\.md$'
         types: [markdown]
         exclude: '^docs/(node_modules|public|dist|superpowers)/|^docs/src/\.vitepress/|^docs/src/(en|ja|ru|archive)/|^docs/src/design/rfc/(deprecated|rejected)/'
+        stages: [pre-commit]
 
       - id: check-commit-msg
         name: check commit message format
@@ -83,3 +91,4 @@ repos:
         entry: cargo audit
         language: system
         pass_filenames: false
+        stages: [pre-commit]

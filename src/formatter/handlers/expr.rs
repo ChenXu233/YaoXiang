@@ -1,6 +1,6 @@
 //! 表达式格式化处理器
 
-use crate::frontend::core::parser::ast::*;
+use crate::ast::*;
 
 use super::super::context::FormatContext;
 use super::super::source_map::SourceMap;
@@ -40,13 +40,6 @@ pub fn format_expr(
             named_args,
             ..
         } => format_call(func, args, named_args, ctx, source_map),
-        Expr::FnDef {
-            name,
-            params,
-            return_type,
-            body,
-            span: _,
-        } => format_fn_def(name, params, return_type, body, ctx, source_map),
         Expr::If {
             condition,
             then_branch,
@@ -361,30 +354,6 @@ pub(crate) fn format_call(
     super::delimited::format_delimited_list("(", ")", &all_args, Some(&func_str), ctx)
 }
 
-/// 格式化函数定义（表达式形式）
-fn format_fn_def(
-    name: &str,
-    params: &[Param],
-    return_type: &Option<Type>,
-    body: &Block,
-    ctx: &FormatContext,
-    source_map: &SourceMap,
-) -> String {
-    let params_str = format_params(params, ctx, source_map);
-    let ret_str = if let Some(ty) = return_type {
-        format!(" -> {}", super::types::format_type(ty, ctx, source_map))
-    } else {
-        String::new()
-    };
-    format!(
-        "fn {}{}{} {}",
-        name,
-        params_str,
-        ret_str,
-        format_block(body, ctx, source_map)
-    )
-}
-
 /// 格式化参数列表
 pub fn format_params(
     params: &[Param],
@@ -413,7 +382,7 @@ pub fn format_params(
 ///
 /// 与 format_params 的区别：签名位置的 Type::Tuple 是多约束容器
 /// （parser 将 `T: A + B` 存为 Tuple），须渲染为 `A + B` 而非元组。
-pub fn format_signature_params(
+pub fn format_decl_params(
     params: &[Param],
     ctx: &FormatContext,
     source_map: &SourceMap,
@@ -457,12 +426,12 @@ fn format_signature_param_ty(
 /// 首组切分规则：返回类型会消费签名参数时（裸 Fn 的 curried 嵌套组，或
 /// Paren/NamedParen 包 Fn——RFC-004 括号内是完整类型值，参数名不外拍但
 /// 括号内按名渲染要从剩余参数取），按 `params.len()` 切出首组；否则
-/// （非 curried）首组即全部 `signature_params`——HM 推断标注（如
+/// （非 curried）首组即全部 `decl_params`——HM 推断标注（如
 /// `(Int, Int) -> Int`）在 `Type::Fn.params` 里不带类型（parser 只收集
 /// `p.ty` 非空者，declarations.rs），按 `params.len()` 切分会把整组名字
 /// 丢进返回侧静默消失，渲染成 `() -> Int`（#423）。
 pub fn format_fn_signature(
-    signature_params: &[Param],
+    decl_params: &[Param],
     fn_type: &Type,
     ctx: &FormatContext,
     source_map: &SourceMap,
@@ -480,15 +449,15 @@ pub fn format_fn_signature(
             _ => false,
         };
         let (first, rest) = if return_consumes {
-            split_params_at(signature_params, params.len())
+            split_params_at(decl_params, params.len())
         } else {
-            (signature_params, &[][..])
+            (decl_params, &[][..])
         };
-        let params_str = format_signature_params(first, ctx, source_map);
+        let params_str = format_decl_params(first, ctx, source_map);
         let ret = format_return_with_names(return_type, rest, ctx, source_map);
         format!("{} -> {}", params_str, ret)
     } else {
-        format_signature_params(signature_params, ctx, source_map)
+        format_decl_params(decl_params, ctx, source_map)
     }
 }
 
@@ -515,22 +484,26 @@ fn format_return_with_names(
     }
 
     if let Type::Fn {
-        params: inner_tys,
+        params: inner_params,
         return_type,
     } = ty
     {
-        let count = inner_tys.len();
+        // 名字取拍平的签名形参（params）；类型取本层 Type::Fn.params
+        // 中带类型的形参——输出口径与 reshape 前逐字一致。
+        let typed: Vec<&Param> = inner_params.iter().filter(|p| p.ty.is_some()).collect();
+        let count = typed.len();
         let (group, rest) = split_params_at(params, count);
         if !group.is_empty() && group.len() == count {
-            let named: Vec<String> = inner_tys
+            let named: Vec<String> = typed
                 .iter()
                 .zip(group.iter())
-                .map(|(t, p)| {
-                    format!(
+                .filter_map(|(t, p)| {
+                    let ty = t.ty.as_ref()?;
+                    Some(format!(
                         "{}: {}",
                         p.name,
-                        super::types::format_type(t, ctx, source_map)
-                    )
+                        super::types::format_type(ty, ctx, source_map)
+                    ))
                 })
                 .collect();
             let ret = format_return_with_names(return_type, rest, ctx, source_map);
@@ -550,21 +523,25 @@ fn format_paren_inner_with_names(
 ) -> String {
     match inner {
         Type::Fn {
-            params: inner_tys,
+            params: inner_params,
             return_type,
         } => {
-            let count = inner_tys.len();
+            // 口径同 format_return_with_names：名字取拍平签名形参，
+            // 类型取本层 Type::Fn.params 的带类型项（无类型形参不进类型位）。
+            let typed: Vec<&Param> = inner_params.iter().filter(|p| p.ty.is_some()).collect();
+            let count = typed.len();
             let (group, rest) = split_params_at(params, count);
             if !group.is_empty() && group.len() == count {
-                let named: Vec<String> = inner_tys
+                let named: Vec<String> = typed
                     .iter()
                     .zip(group.iter())
-                    .map(|(t, p)| {
-                        format!(
+                    .filter_map(|(t, p)| {
+                        let ty = t.ty.as_ref()?;
+                        Some(format!(
                             "{}: {}",
                             p.name,
-                            super::types::format_type(t, ctx, source_map)
-                        )
+                            super::types::format_type(ty, ctx, source_map)
+                        ))
                     })
                     .collect();
                 let ret = format_return_with_names(return_type, rest, ctx, source_map);

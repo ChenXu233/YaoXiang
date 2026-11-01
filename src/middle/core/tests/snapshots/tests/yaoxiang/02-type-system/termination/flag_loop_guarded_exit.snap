@@ -1,6 +1,6 @@
 module
   fn AtMost(Int(64), Int(64)) -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
-    type_decl Struct { body: [Expr(ConstExpr(BinOp { op: Le, left: Var("x", Span { start: Position { line: 12, column: 38, offset: 659 }, end: Position { line: 12, column: 39, offset: 660 } }), right: Var("n", Span { start: Position { line: 12, column: 43, offset: 664 }, end: Position { line: 12, column: 44, offset: 665 } }), span: Span { start: Position { line: 12, column: 40, offset: 661 }, end: Position { line: 12, column: 42, offset: 663 } } }))] }
+    type_decl []
   fn main() -> Void
     slot[0] flag : Int(64) @depth1
     slot[1] i : Int(64) @depth1

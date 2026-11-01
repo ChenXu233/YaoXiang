@@ -12,8 +12,9 @@
 use std::collections::HashMap;
 use crate::backends::common::opcode;
 
-// Re-export types for conversion
-pub use crate::middle::core::ir::{Type as IrType, ConstValue};
+// Re-export the IR constant-pool type (shared by bytecode, codegen and backends).
+// ast::Type 的再导出已随 6.2.2 载体统一删除——字节码不再引用 ast::Type。
+pub use crate::middle::core::ir::ConstValue;
 
 /// Register index in the virtual machine
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -808,10 +809,11 @@ impl BytecodeInstr {
 pub struct BytecodeFunction {
     /// Function name
     pub name: String,
-    /// Parameter types
-    pub params: Vec<crate::middle::core::ir::Type>,
-    /// Return type
-    pub return_type: crate::middle::core::ir::Type,
+    /// Parameter types（6.2 载体统一：签名与类型检查产物同载体 MonoType，
+    /// 解码原样搬运，不再经有损桥重建）
+    pub params: Vec<crate::frontend::core::typecheck::MonoType>,
+    /// Return type（同上）
+    pub return_type: crate::frontend::core::typecheck::MonoType,
     /// Number of local variables
     pub local_count: usize,
     /// 局部变量名（槽位下标 → 源码名）；仅具名变量，临时寄存器不入表
@@ -850,8 +852,8 @@ pub struct BytecodeModule {
     pub constants: Vec<ConstValue>,
     /// Functions defined in this module
     pub functions: Vec<BytecodeFunction>,
-    /// Type table
-    pub type_table: Vec<crate::middle::core::ir::Type>,
+    /// Type table（6.2 载体统一：与函数签名同载体 MonoType，解码原样搬运）
+    pub type_table: Vec<crate::frontend::core::typecheck::MonoType>,
     /// 编译期类型方法表（type_name → [(裸方法名, 函数表索引)]）。
     /// 解释器加载期直建 vtable 缓存，分发全程按函数表索引。
     pub vtables: Vec<(String, Vec<(String, u32)>)>,
@@ -2303,10 +2305,15 @@ impl From<crate::middle::passes::codegen::bytecode::BytecodeFile> for BytecodeMo
                 ip += 1;
             }
 
+            // 6.2 载体统一：签名与类型表在 BytecodeFile / BytecodeModule 两侧同为 MonoType，
+            // 解码原样搬运。此前解码期把 MonoType 有损降级为 ast::Type（Struct/Enum/Ref/
+            // TypeVar/TypeRef/Union/Intersection/AssocType 与非 String|Bytes|Tuple 的 Generic
+            // 全塌成 Void，见 docs/src/dev/architecture/03-type-unification.md §2.1），该降级桥
+            // 已于 6.2.2 删除——类型表与签名因此不再丢结构。
             let byte_func = BytecodeFunction {
                 name: func.name,
-                params: func.params.into_iter().map(|t| t.into()).collect(),
-                return_type: func.return_type.into(),
+                params: func.params,
+                return_type: func.return_type,
                 local_count: func.local_count,
                 local_names,
                 upvalue_count: 0, // Not stored in BytecodeFile
@@ -2336,7 +2343,7 @@ impl From<crate::middle::passes::codegen::bytecode::BytecodeFile> for BytecodeMo
             name,
             constants: file.const_pool,
             functions,
-            type_table: file.type_table.into_iter().map(|t| t.into()).collect(),
+            type_table: file.type_table,
             vtables: file.vtables,
             globals: Vec::new(), // Not stored in BytecodeFile yet
             entry_point,
@@ -2345,46 +2352,6 @@ impl From<crate::middle::passes::codegen::bytecode::BytecodeFile> for BytecodeMo
             debug_sources,
             // #368：全局槽位名表随调试段进模块
             global_names,
-        }
-    }
-}
-
-/// Convert MonoType to IrType (ast::Type)
-impl From<crate::frontend::core::typecheck::MonoType> for IrType {
-    fn from(ty: crate::frontend::core::typecheck::MonoType) -> Self {
-        use crate::frontend::core::typecheck::MonoType;
-        match ty {
-            MonoType::Int(w) => IrType::Int(w),
-            MonoType::Float(w) => IrType::Float(w),
-            MonoType::Bool => IrType::Bool,
-            MonoType::Char => IrType::Char,
-            MonoType::Void => IrType::Void,
-            MonoType::Fn {
-                params,
-                return_type,
-                ..
-            } => IrType::Fn {
-                params: params.into_iter().map(|t| t.into()).collect(),
-                return_type: Box::new((*return_type).into()),
-            },
-            // #299：String/Bytes/Tuple/List/Dict/Option/Result/Range/Arc/Weak 现为 Generic 表示
-            MonoType::Generic { name, args } => match name.as_str() {
-                "String" => IrType::String,
-                "Bytes" => IrType::Bytes,
-                "Tuple" => IrType::Tuple(args.clone().into_iter().map(|t| t.into()).collect()),
-                _ => IrType::Void,
-            },
-            // Struct, Enum, Ref, TypeVar, TypeRef, Union, Intersection, AssocType — unresolved or no IR form
-            MonoType::Struct(_)
-            | MonoType::Enum(_)
-            | MonoType::Ref { .. }
-            | MonoType::TypeVar(_)
-            | MonoType::TypeRef(_)
-            | MonoType::Union(_)
-            | MonoType::Intersection(_)
-            | MonoType::AssocType { .. } => IrType::Void,
-            // 残留旧变体（Task 1.7 删除枚举变体前的过渡分支）
-            _ => IrType::Void,
         }
     }
 }

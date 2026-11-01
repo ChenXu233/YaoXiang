@@ -1,3 +1,5 @@
+use super::*;
+
 impl TypeChecker {
     fn semantic_token_type_for_export(
         export: &crate::frontend::module::Export
@@ -20,9 +22,9 @@ impl TypeChecker {
         &mut self,
         file_path: &str,
         path: &str,
-        path_parts: &[crate::frontend::core::parser::ast::SpannedIdent],
-        items: &Option<Vec<crate::frontend::core::parser::ast::SpannedIdent>>,
-        alias: &Option<Vec<crate::frontend::core::parser::ast::SpannedIdent>>,
+        path_parts: &[crate::ast::SpannedIdent],
+        items: &Option<Vec<crate::ast::SpannedIdent>>,
+        alias: &Option<Vec<crate::ast::SpannedIdent>>,
     ) {
         // use path.{...} 的 path 部分始终是模块命名空间
         if items.is_some() {
@@ -108,9 +110,9 @@ impl TypeChecker {
     fn collect_type_tokens(
         &mut self,
         file_path: &str,
-        ty: &crate::frontend::core::parser::ast::Type,
+        ty: &crate::ast::Type,
     ) {
-        use crate::frontend::core::parser::ast::Type;
+        use crate::ast::Type;
 
         match ty {
             // RFC-004：括号在语义上透明，仅 formatter/split_curry 可见
@@ -172,37 +174,26 @@ impl TypeChecker {
             Type::Struct { body } => {
                 for item in body {
                     match item {
-                        crate::frontend::core::parser::ast::TypeBodyItem::Field(f) => {
+                        crate::ast::TypeBodyItem::Field(f) => {
                             self.collect_type_tokens(file_path, &f.ty);
                         }
-                        crate::frontend::core::parser::ast::TypeBodyItem::Binding(b) => {
-                            match &b.kind {
-                                crate::frontend::core::parser::ast::BindingKind::Anonymous {
-                                    params,
-                                    return_type,
-                                    ..
-                                } => {
-                                    for p in params {
-                                        if let Some(t) = &p.ty {
-                                            self.collect_type_tokens(file_path, t);
-                                        }
+                        crate::ast::TypeBodyItem::Binding(b) => match &b.kind {
+                            crate::ast::BindingKind::Anonymous {
+                                params,
+                                return_type,
+                                ..
+                            } => {
+                                for p in params {
+                                    if let Some(t) = &p.ty {
+                                        self.collect_type_tokens(file_path, t);
                                     }
-                                    self.collect_type_tokens(file_path, return_type);
                                 }
-                                crate::frontend::core::parser::ast::BindingKind::External { .. }
-                                | crate::frontend::core::parser::ast::BindingKind::DefaultExternal {
-                                    ..
-                                } => {}
+                                self.collect_type_tokens(file_path, return_type);
                             }
-                        }
+                            crate::ast::BindingKind::External { .. }
+                            | crate::ast::BindingKind::DefaultExternal { .. } => {}
+                        },
                         _ => {}
-                    }
-                }
-            }
-            Type::Union(variants) => {
-                for (_name, maybe_ty) in variants {
-                    if let Some(t) = maybe_ty {
-                        self.collect_type_tokens(file_path, t);
                     }
                 }
             }
@@ -215,40 +206,12 @@ impl TypeChecker {
                 params,
                 return_type,
             } => {
-                for t in params {
-                    self.collect_type_tokens(file_path, t);
+                for p in params {
+                    if let Some(t) = &p.ty {
+                        self.collect_type_tokens(file_path, t);
+                    }
                 }
                 self.collect_type_tokens(file_path, return_type);
-            }
-            Type::Option(inner) => self.collect_type_tokens(file_path, inner),
-            Type::Result(ok, err) => {
-                self.collect_type_tokens(file_path, ok);
-                self.collect_type_tokens(file_path, err);
-            }
-            Type::AssocType {
-                host_type,
-                assoc_name,
-                assoc_name_span,
-                assoc_args,
-            } => {
-                self.collect_type_tokens(file_path, host_type);
-                self.semantic_db.add_token(
-                    file_path,
-                    semantic_db::SemanticToken {
-                        name: assoc_name.clone(),
-                        token_type: semantic_db::SemanticTokenType::Type,
-                        modifiers: vec![],
-                        span: *assoc_name_span,
-                    },
-                );
-                for t in assoc_args {
-                    self.collect_type_tokens(file_path, t);
-                }
-            }
-            Type::Sum(types) => {
-                for t in types {
-                    self.collect_type_tokens(file_path, t);
-                }
             }
             Type::Literal {
                 name,
@@ -281,15 +244,7 @@ impl TypeChecker {
                     self.collect_type_tokens(file_path, t);
                 }
             }
-            Type::Int(_)
-            | Type::Float(_)
-            | Type::Char
-            | Type::String
-            | Type::Bytes
-            | Type::Bool
-            | Type::Void
-            | Type::Enum(_)
-            | Type::ConstExpr(_) => {}
+            Type::ConstExpr(_) => {}
             Type::Ref { inner, .. } => self.collect_type_tokens(file_path, inner),
         }
     }
@@ -410,11 +365,11 @@ impl TypeChecker {
         }
     }
 
-    fn collect_semantic_tokens(
+    pub(super) fn collect_semantic_tokens(
         &mut self,
         module: &Module,
     ) {
-        use crate::frontend::core::parser::ast::StmtKind;
+        use crate::ast::StmtKind;
         use semantic_db::{
             SemanticToken, SemanticTokenType, SemanticTokenModifier, ScopeInfo, ScopeKind,
         };
@@ -445,19 +400,17 @@ impl TypeChecker {
                 StmtKind::Assign {
                     target,
                     type_annotation,
-                    signature_params,
                     value,
                     ..
                 } => {
                     let Some((name, type_name)) = target.receiver_parts() else {
-                    continue
+                        continue;
                     };
                     // RFC-010a 附录D：非 Fn 注解的块绑定是**块值**而非函数
-                    let is_fn_binding =
-                        crate::frontend::core::parser::ast::Expr::block_binding_is_function(
-                            type_annotation.as_ref(),
-                            value.as_deref(),
-                        );
+                    let is_fn_binding = crate::ast::Expr::block_binding_is_function(
+                        type_annotation.as_ref(),
+                        value.as_deref(),
+                    );
                     let (params, body): (Vec<_>, Vec<_>) = if is_fn_binding {
                         match value {
                             Some(v) => v.callable_parts(),
@@ -466,7 +419,15 @@ impl TypeChecker {
                     } else {
                         (Vec::new(), Vec::new())
                     };
-                    let generic_params = crate::frontend::core::parser::ast::extract_generic_param_names(signature_params);
+                    // 形参从注解的 Type::Fn 链拍平（6.5.2：不再有并行形参表）
+                    let signature = type_annotation
+                        .as_ref()
+                        .map(crate::ast::Type::fn_params_flat)
+                        .unwrap_or_default();
+                    let generic_params = crate::ast::extract_generic_param_names(
+                        &signature,
+                        &crate::frontend::core::typecheck::SemanticProbe,
+                    );
                     let is_method = type_name.is_some();
                     if is_method {
                         self.semantic_db.add_token(
@@ -661,7 +622,8 @@ impl TypeChecker {
                 }
                 StmtKind::DestructureAssign { names, rhs, .. } => {
                     for name in names {
-                        let is_declaration = declared.entry(0).or_default().insert(name.name.clone());
+                        let is_declaration =
+                            declared.entry(0).or_default().insert(name.name.clone());
                         let modifiers = if is_declaration {
                             vec![SemanticTokenModifier::Declaration]
                         } else {
@@ -689,16 +651,22 @@ impl TypeChecker {
                         &mut imported_module_roots,
                     );
                 }
-                StmtKind::If { .. } | StmtKind::Error(_) => {
-                }
+                StmtKind::If { .. } | StmtKind::Error(_) => {}
                 StmtKind::TypeDefinition {
                     name,
-                    signature_params,
+                    type_annotation,
                     definition,
                     ..
                 } => {
-                    let generic_params =
-                        crate::frontend::core::parser::ast::extract_generic_param_names(signature_params);
+                    // 形参从注解的 Type::Fn 链拍平（6.5.2：不再有并行形参表）
+                    let signature = type_annotation
+                        .as_ref()
+                        .map(crate::ast::Type::fn_params_flat)
+                        .unwrap_or_default();
+                    let generic_params = crate::ast::extract_generic_param_names(
+                        &signature,
+                        &crate::frontend::core::typecheck::SemanticProbe,
+                    );
                     // 类型定义 → Type (定义)
                     let mut modifiers = vec![SemanticTokenModifier::Declaration];
                     if !generic_params.is_empty() {
@@ -717,7 +685,6 @@ impl TypeChecker {
 
                     // 类型定义体中的类型引用
                     self.collect_type_tokens(&fp, definition);
-
                 }
                 StmtKind::Return(expr_opt) => {
                     if let Some(expr) = expr_opt {
@@ -739,13 +706,13 @@ impl TypeChecker {
     fn collect_stmt_tokens(
         &mut self,
         file_path: &str,
-        stmt: &crate::frontend::core::parser::ast::Stmt,
+        stmt: &crate::ast::Stmt,
         scope_idx: usize,
         declared: &mut HashMap<usize, HashSet<String>>,
         constructor_names: &HashSet<String>,
         imported_module_roots: &mut HashSet<String>,
     ) {
-        use crate::frontend::core::parser::ast::StmtKind;
+        use crate::ast::StmtKind;
         use semantic_db::SemanticTokenModifier;
 
         match &stmt.kind {
@@ -764,9 +731,12 @@ impl TypeChecker {
                     _ => stmt.span,
                 };
                 // 非 Lambda value → 变量
-                let is_lambda = value.as_ref().is_some_and(|v| matches!(v.as_ref(), Expr::Lambda { .. } | Expr::Block(..)));
+                let is_lambda = value
+                    .as_ref()
+                    .is_some_and(|v| matches!(v.as_ref(), Expr::Lambda { .. } | Expr::Block(..)));
                 if !is_lambda {
-                    let is_declaration = declared.entry(scope_idx).or_default().insert(name.clone());
+                    let is_declaration =
+                        declared.entry(scope_idx).or_default().insert(name.clone());
                     let modifiers = if is_declaration {
                         vec![SemanticTokenModifier::Declaration]
                     } else {
@@ -966,7 +936,10 @@ impl TypeChecker {
             }
             StmtKind::DestructureAssign { names, rhs, .. } => {
                 for name in names {
-                    let is_declaration = declared.entry(scope_idx).or_default().insert(name.name.clone());
+                    let is_declaration = declared
+                        .entry(scope_idx)
+                        .or_default()
+                        .insert(name.name.clone());
                     let modifiers = if is_declaration {
                         vec![SemanticTokenModifier::Declaration]
                     } else {
@@ -1005,7 +978,6 @@ impl TypeChecker {
         constructor_names: &HashSet<String>,
         imported_module_roots: &mut HashSet<String>,
     ) {
-
         match expr {
             Expr::Var(name, span) => {
                 // 判断是函数引用还是变量引用
@@ -1401,54 +1373,16 @@ impl TypeChecker {
                     imported_module_roots,
                 );
             }
-            Expr::FnDef {
-                name,
-                params,
-                return_type,
-                body,
-                span,
+            Expr::ListComp {
+                element,
+                generators,
                 ..
             } => {
-                self.semantic_db.add_token(
-                    file_path,
-                    semantic_db::SemanticToken {
-                        name: name.clone(),
-                        token_type: semantic_db::SemanticTokenType::Function,
-                        modifiers: vec![semantic_db::SemanticTokenModifier::Declaration],
-                        span: *span,
-                    },
-                );
-                for param in params {
-                    self.semantic_db.add_token(
-                        file_path,
-                        semantic_db::SemanticToken {
-                            name: param.name.clone(),
-                            token_type: semantic_db::SemanticTokenType::Parameter,
-                            modifiers: vec![semantic_db::SemanticTokenModifier::Declaration],
-                            span: param.span,
-                        },
-                    );
-                    if let Some(t) = &param.ty {
-                        self.collect_type_tokens(file_path, t);
-                    }
-                }
-                if let Some(t) = return_type {
-                    self.collect_type_tokens(file_path, t);
-                }
-                for s in &body.stmts {
-                    self.collect_stmt_tokens(
-                        file_path,
-                        s,
-                        scope_idx,
-                        declared,
-                        constructor_names,
-                        imported_module_roots,
-                    );
-                }
-            }
-            Expr::ListComp { element, generators, .. } => {
                 for gen in generators {
-                    declared.entry(scope_idx).or_default().insert(gen.var.clone());
+                    declared
+                        .entry(scope_idx)
+                        .or_default()
+                        .insert(gen.var.clone());
                     self.semantic_db.add_token(
                         file_path,
                         semantic_db::SemanticToken {
@@ -1488,11 +1422,7 @@ impl TypeChecker {
             }
             Expr::FString { segments, .. } => {
                 for seg in segments {
-                    if let crate::frontend::core::parser::ast::FStringSegment::Interpolation {
-                        expr,
-                        ..
-                    } = seg
-                    {
+                    if let crate::ast::FStringSegment::Interpolation { expr, .. } = seg {
                         self.collect_expr_tokens(
                             file_path,
                             expr,

@@ -208,27 +208,16 @@ impl TraitTable {
     pub fn satisfies_ast_type(
         &self,
         trait_name: &str,
-        ty: &crate::frontend::core::parser::ast::Type,
+        ty: &crate::ast::Type,
     ) -> bool {
-        use crate::frontend::core::parser::ast::Type;
+        use crate::ast::Type;
         match ty {
             Type::Name { name, .. } => self.has_impl(trait_name, name),
-            Type::Int(_) => self.has_impl(trait_name, "Int"),
-            Type::Float(_) => self.has_impl(trait_name, "Float"),
-            Type::Char => self.has_impl(trait_name, "Char"),
-            Type::String => self.has_impl(trait_name, "String"),
-            Type::Bytes => self.has_impl(trait_name, "Bytes"),
-            Type::Bool => self.has_impl(trait_name, "Bool"),
-            Type::Void => self.has_impl(trait_name, "Void"),
             Type::Generic { name, args, .. } => {
                 self.has_impl(trait_name, name)
                     && args
                         .iter()
                         .all(|arg| self.satisfies_ast_type(trait_name, arg))
-            }
-            Type::Option(inner) => self.satisfies_ast_type(trait_name, inner),
-            Type::Result(ok, err) => {
-                self.satisfies_ast_type(trait_name, ok) && self.satisfies_ast_type(trait_name, err)
             }
             Type::Tuple(elems) => elems.iter().all(|e| self.satisfies_ast_type(trait_name, e)),
             Type::Fn { .. } => false,
@@ -249,7 +238,7 @@ impl TraitTable {
     pub fn can_auto_derive(
         &self,
         trait_name: &str,
-        fields: &[crate::frontend::core::parser::ast::StructField],
+        fields: &[crate::ast::StructField],
     ) -> bool {
         fields
             .iter()

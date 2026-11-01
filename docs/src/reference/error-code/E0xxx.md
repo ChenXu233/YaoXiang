@@ -19,9 +19,9 @@ description: '词法分析器（Lexer）与语法分析器（Parser）阶段产�
 | `E0002` | 无效数字字面量 | `Lexer` | 否 | `无效数字字面量：'{literal}'` | ✅ 1 处 |
 | `E0003` | 未终止的字符串 | `Lexer` | 否 | `字符串从第 {line} 行开始未终止` | ⚠ 暂未发射 |
 | `E0004` | 无效字符字面量 | `Lexer` | 否 | `无效字符字面量：'{literal}'` | ⚠ 暂未发射 |
-| `E0010` | 期望的令牌 | `Parser` | 否 | `期望 {expected}，找到 {found}` | ✅ 22 处 |
+| `E0010` | 期望的令牌 | `Parser` | 否 | `期望 {expected}，找到 {found}` | ✅ 4 处 |
 | `E0011` | 意外的令牌 | `Parser` | 否 | `意外的令牌：'{token}'` | ✅ 18 处 |
-| `E0012` | 无效语法 | `Parser` | 否 | `无效语法：{reason}` | ✅ 13 处 |
+| `E0012` | 无效语法 | `Parser` | 否 | `无效语法：{reason}` | ✅ 14 处 |
 | `E0013` | 不匹配的括号 | `Parser` | 否 | `不匹配的 {bracket_type}：在第 {open_line} 行、第 {open_col} 列打开，未闭合` | ⚠ 暂未发射 |
 | `E0014` | 缺少分号 | `Parser` | 否 | `{statement} 后缺少分号` | ⚠ 暂未发射 |
 | `E0016` | 期望表达式 | `Parser` | 否 | `期望表达式：{context}` | ✅ 4 处 |
@@ -77,7 +77,7 @@ description: '词法分析器（Lexer）与语法分析器（Parser）阶段产�
 - **模板**：`期望 {expected}，找到 {found}`
 - **消息**：解析器期望特定的令牌
 - **帮助**：检查语法并添加期望的令牌
-- **发射点**：`src/driver/arms.rs:92`、`src/frontend/compiler.rs:177`、`src/frontend/core/parser/mod.rs:45` 等 22 处
+- **发射点**：`src/frontend/core/parser/parser_state.rs:153`、`src/frontend/core/parser/statements/bindings.rs:131`、`src/frontend/core/parser/statements/bindings.rs:162` 等 4 处
 
 ### E0011：意外的令牌
 
@@ -87,7 +87,7 @@ description: '词法分析器（Lexer）与语法分析器（Parser）阶段产�
 - **模板**：`意外的令牌：'{token}'`
 - **消息**：遇到了意外的令牌
 - **帮助**：删除或替换意外的令牌
-- **发射点**：`src/driver/arms.rs:92`、`src/frontend/compiler.rs:177`、`src/frontend/core/parser/mod.rs:45` 等 18 处
+- **发射点**：`src/driver/arms.rs:95`、`src/frontend/compiler.rs:178`、`src/frontend/core/parser/mod.rs:65` 等 18 处
 
 ### E0012：无效语法
 
@@ -97,7 +97,7 @@ description: '词法分析器（Lexer）与语法分析器（Parser）阶段产�
 - **模板**：`无效语法：{reason}`
 - **消息**：表达式或语句存在语法错误
 - **帮助**：检查表达式或语句的语法
-- **发射点**：`src/frontend/core/lexer/tokens.rs:44`、`src/frontend/core/lexer/tokens.rs:48`、`src/frontend/core/lexer/tokens.rs:53` 等 13 处
+- **发射点**：`src/frontend/core/lexer/tokens.rs:44`、`src/frontend/core/lexer/tokens.rs:48`、`src/frontend/core/lexer/tokens.rs:53` 等 14 处
 
 ### E0013：不匹配的括号
 
@@ -137,5 +137,5 @@ description: '词法分析器（Lexer）与语法分析器（Parser）阶段产�
 - **模板**：`'{keyword}' 是关键字，不能用作名称`
 - **消息**：关键字不能用作变量或表达式名称
 - **帮助**：换一个不同的标识符代替关键字
-- **发射点**：`src/frontend/core/parser/parser_state.rs:243`
+- **发射点**：`src/frontend/core/parser/parser_state.rs:265`
 - **源码注释名**：关键字作变量名
