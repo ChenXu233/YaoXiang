@@ -121,6 +121,10 @@ pub struct AstToIrGenerator {
     symbols: Vec<HashMap<String, SymbolEntry>>,
     /// 类型检查结果（包含变量绑定信息）
     type_result: Option<Box<TypeCheckResult>>,
+    /// 当前正在生成的函数绑定，其声明**返回位**若是 Fn（括号返回 / 闭包包装形态），
+    /// 这里放该内层 Fn 的形参（名字, 类型）。供闭包 IR 定型用：parser 已不再往
+    /// 实现头填声明类型，闭包自己拿不到外层声明（D54 修复轮 F1）。
+    closure_decl_params: Vec<(String, MonoType)>,
     /// 下一个临时寄存器编号
     next_temp: usize,
     /// 本函数临时寄存器高水位（#393：语句级回收会回滚 next_temp，
@@ -349,6 +353,7 @@ impl AstToIrGenerator {
         Self {
             symbols: vec![HashMap::new()],
             type_result: Some(Box::new(type_result.clone())),
+            closure_decl_params: Vec::new(),
             next_temp: 0,
             temp_high_water: 0,
             temp_floor: 0,
@@ -593,6 +598,66 @@ impl AstToIrGenerator {
             names,
             required_min,
         })
+    }
+
+    /// 声明**返回位**若是完整 Fn（括号返回 / 闭包包装形态），取该内层 Fn 的
+    /// 运行期形参（名字, 类型）；否则空表。
+    ///
+    /// 用途：闭包 IR 的形参定型。parser 不再往实现头填声明类型（D54 修复轮 F1），
+    /// 闭包自己拿不到外层声明，只能由正在生成的函数把「返回位声明的形参」递下来。
+    /// 编译期槽的剔除口径与别处同源（`extract_generic_param_names`）。
+    fn paren_return_value_params(type_annotation: Option<&ast::Type>) -> Vec<(String, MonoType)> {
+        let Some(ast::Type::Fn { return_type, .. }) = type_annotation else {
+            return Vec::new();
+        };
+        // 返回位可能是裸括号（`() -> ((a: Int) -> Int)`）——`Paren` 在语义层透明，
+        // 递归内层即可（见 `ast::Type::is_paren_complete` 的口径）。
+        let mut inner_ty: &ast::Type = return_type.as_ref();
+        while let ast::Type::Paren(inner) = inner_ty {
+            inner_ty = inner.as_ref();
+        }
+        let ast::Type::Fn { params: inner, .. } = inner_ty else {
+            return Vec::new();
+        };
+        let flat: Vec<ast::Param> = inner.to_vec();
+        let generic = crate::ast::extract_generic_param_names(&flat, &SemanticProbe);
+        flat.iter()
+            .filter(|p| !generic.iter().any(|g| g.name == p.name))
+            .map(|p| {
+                let ty =
+                    p.ty.clone()
+                        .map(MonoType::from)
+                        .unwrap_or_else(|| MonoType::Int(64));
+                (p.name.clone(), ty)
+            })
+            .collect()
+    }
+
+    /// 声明签名里**运行期形参**的（名字, 类型）：剥掉编译期槽后取前 N 位。
+    ///
+    /// 与 typecheck 的绑定位对齐**同一条规则**（值级签名前 N 位，N = 实现头形参数）：
+    /// IR 只**渲染**声明写下的类型，不参与判定（WBS 6.8.2 / D54 修复轮 F1）。
+    /// 编译期槽的剔除口径与解析/检查层同源——`extract_generic_param_names` 判类型位
+    /// 与类型级函数位（`(T: Type)` / `(F: (T: Type) -> T)`）：它们在值级签名里是
+    /// `MetaType` 值的槽，不占运行期形参位。
+    ///
+    /// 拿不到声明（无注解 / 注解不是 Fn）时返回空表，调用点按既有惯例填 `Int(64)`。
+    fn declaration_runtime_params(type_annotation: Option<&ast::Type>) -> Vec<(String, MonoType)> {
+        let Some(ann) = type_annotation else {
+            return Vec::new();
+        };
+        let flat = ann.fn_params_flat();
+        let generic = crate::ast::extract_generic_param_names(&flat, &SemanticProbe);
+        flat.iter()
+            .filter(|p| !generic.iter().any(|g| g.name == p.name))
+            .map(|p| {
+                let ty =
+                    p.ty.clone()
+                        .map(MonoType::from)
+                        .unwrap_or_else(|| MonoType::Int(64));
+                (p.name.clone(), ty)
+            })
+            .collect()
     }
 
     /// 声明侧**运行期形参名**：签名里不占编译期位的形参（类型位 / const 位 /
@@ -2427,16 +2492,17 @@ impl AstToIrGenerator {
         // 进入新作用域
         self.enter_scope();
 
-        // 注册参数
+        // 注册参数；类型按**方法自己的声明签名**前 N 位渲染（D54 修复轮 F1：IR 只渲染
+        // 不判定，声明是唯一来源——parser 已不再往实现头填声明类型）。
+        let declared_params = Self::declaration_runtime_params(Some(method_type));
         let mut param_types = Vec::new();
         for (i, param) in params.iter().enumerate() {
-            if let Some(param_type_ast) = &param.ty {
-                let param_type = param_type_ast.clone().into();
-                param_types.push(param_type);
-            } else {
-                // 参数没有类型，默认为 Int64
-                param_types.push(MonoType::Int(64));
-            }
+            param_types.push(
+                declared_params
+                    .get(i)
+                    .map(|(_, ty)| ty.clone())
+                    .unwrap_or(MonoType::Int(64)),
+            );
 
             // 注册参数到符号表
             self.register_local(&param.name, i);
@@ -2553,6 +2619,13 @@ impl AstToIrGenerator {
         constants: &mut Vec<ConstValue>,
         generic_params: Option<Vec<String>>,
     ) -> Result<Option<FunctionIR>, Diagnostic> {
+        // 括号返回 / 闭包包装形态：把声明**返回位**内层 Fn 的形参递给闭包 IR 定型
+        //（parser 不再填 AST 标注；入口 save、出口还原，互不串味）。
+        let saved_closure_decl = std::mem::replace(
+            &mut self.closure_decl_params,
+            Self::paren_return_value_params(type_annotation),
+        );
+
         // 检测 native("symbol") 模式：函数体为空语句 + Native("...") 表达式
         // 检测 native("symbol") 模式：函数体为空语句 + Native("...") 表达式
         // 形如: my_add: (a: Int, b: Int) -> Int = Native("my_add")
@@ -2715,15 +2788,21 @@ impl AstToIrGenerator {
         }
         let locals_types: Vec<LocalSlot> = self.take_cur_locals(total_locals);
 
+        // 还原闭包定型上下文（避免串到下一个函数）
+        self.closure_decl_params = saved_closure_decl;
+
         // 构建函数 IR
         let func_ir = FunctionIR {
             def: None, // 由 generate_module_ir 尾部 assign_defs 填充
             name: name.to_string(),
-            // WBS 2.1.2：无注解参数填 Int(64) 占位，对齐 method 1749 惯例——
-            // filter_map 丢弃会让 params 长度与帧布局错位（verify 实测）
-            params: params
-                .iter()
-                .map(|p| p.ty.clone().map(|t| t.into()).unwrap_or(MonoType::Int(64)))
+            // 形参类型：按**函数自己的声明签名**前 N 位渲染（D54 修复轮 F1：IR 只渲染
+            // 不判定，声明是唯一来源）。拿不到声明类型时按 WBS 2.1.2 的惯例填 Int(64)
+            // 占位——filter_map 丢弃会让 params 长度与帧布局错位（verify 实测）。
+            params: Self::declaration_runtime_params(type_annotation)
+                .into_iter()
+                .map(|(_, ty)| ty)
+                .chain(std::iter::repeat(MonoType::Int(64)))
+                .take(params.len())
                 .collect(),
             return_type,
             generic_params,
@@ -2948,6 +3027,12 @@ impl AstToIrGenerator {
         constants: &mut Vec<ConstValue>,
         generic_params: Option<Vec<String>>,
     ) -> Result<Option<FunctionIR>, Diagnostic> {
+        // 括号返回 / 闭包包装：把声明**返回位**内层 Fn 的形参递给闭包 IR 定型
+        //（parser 不再填 AST 标注；入口 save、出口还原，见 generate_function_ir 同款）。
+        let saved_closure_decl = std::mem::replace(
+            &mut self.closure_decl_params,
+            Self::paren_return_value_params(Some(type_annotation)),
+        );
         let layers = Self::split_curry(type_annotation, all_params);
 
         let mut layer_funcs: Vec<FunctionIR> = Vec::new();
@@ -3024,6 +3109,9 @@ impl AstToIrGenerator {
         // 第 0 个是最外层，其余是内层
         let outer = layer_funcs.remove(0);
         self.nested_functions.extend(layer_funcs);
+        // 还原闭包定型上下文（避免串到下一个函数）
+        self.closure_decl_params = saved_closure_decl;
+
         Ok(Some(outer))
     }
     /// 尝试将表达式求值为编译时常量
@@ -7485,9 +7573,19 @@ impl AstToIrGenerator {
         // WBS 2.1.2 实测缺陷修复：无注解参数此前被 filter_map 丢弃，
         // params 长度与帧布局错位（参数槽仍在 env_count+i 占位，元数据却空）。
         // 对齐 generate_method_ir:1749 惯例：无注解参数填 Int(64) 占位。
+        // 形参类型：外层声明若在返回位给了完整 Fn（括号返回 / 闭包包装形态），
+        // 按它渲染（与 typecheck 的声明驱动同一来源）；否则按作者标注；再否则 Int64
+        // 占位（WBS 2.1.2：长度必须与帧布局一致）。
+        let declared = &self.closure_decl_params;
         let param_types: Vec<MonoType> = params
             .iter()
-            .map(|p| p.ty.clone().map(|t| t.into()).unwrap_or(MonoType::Int(64)))
+            .enumerate()
+            .map(|(i, p)| {
+                if declared.len() == params.len() {
+                    return declared[i].1.clone();
+                }
+                p.ty.clone().map(|t| t.into()).unwrap_or(MonoType::Int(64))
+            })
             .collect();
 
         let closure_func = FunctionIR {

@@ -295,9 +295,8 @@ fn parse_assign_after_target(
                     // Lambda 形式: name: (a: Int, b: Int) -> Int = (a, b) => a + b
                     //
                     // 实现头的形参是**位置**绑定器：第 i 位就是声明里第 i 个运行期
-                    // 形参位（WBS 6.8.2a / D54 ①③）。故此处只做一件事——把声明的
-                    // 类型按位补进实现头，名字**只取实现头自己的**（体内按作者名引用
-                    // 第 i 位；调用侧的可用名取声明，`f(a = 7)` 用声明名 a）。
+                    // 形参位（WBS 6.8.2a / D54 ①③）。对齐与类型下传都归 typecheck
+                    //（`check_fn_stmt` 一处），parser 只产出作者写的东西。
                     //
                     // 两条旧判据在此退役（判据归口到后续各层，单一来源）：
                     // - 「名字交集为空 ⇒ 整段跳过」：交集为空时签名类型从未到达实现头
@@ -311,12 +310,37 @@ fn parse_assign_after_target(
                     // 作者自带标注**保留原样**：冲突归 typecheck 的 E1011（D54 ④：
                     // 声明是权威源，作者的标注不得被静默覆盖）。旧行为是按位**覆盖**，
                     // 实测 `f: (a: Int) -> Int = (a: String) => a` check 绿、打印 1。
-                    let lambda_names: std::collections::HashSet<&str> =
-                        lambda_params.iter().map(|p| p.name.as_str()).collect();
-                    let value_params: Vec<&Param> = extracted_params
-                        .iter()
-                        .filter(|p| lambda_names.contains(p.name.as_str()))
-                        .collect();
+                    // 实现头的形参是**位置**绑定器：第 i 位就是声明里第 i 个运行期形参位
+                    //（WBS 6.8.2a / D54 ①③）。填充口径与 typecheck 的对齐**同一条规则**：
+                    // 值级签名剥掉编译期位后取**前 N 位**（N = 实现头形参数）——两条判据
+                    // 按构造一致，不再有「parser 按名字交集挑、typecheck 按位置挑」的第二
+                    // 判据（D54 修复轮 F1 的病根：部分交集时两者矛盾，矛盾还被 E1011 当成
+                    // 「作者写了冲突标注」报出，诊断里的 found 类型是 parser 自己造的）。
+                    //
+                    // 只补空洞：作者自带标注**保留原样**（冲突归 typecheck 的 E1011）。
+                    // 编译期位的判定与检查层同源（两条件并集）：
+                    // ① 标注本身就是类型位（``T: Type` / 类型级函数）；
+                    // ② 形参名出现在签名的**任何类型位置**里（``T: Add + Multiply` 这类
+                    //    约束写法、以及 const 参数 ``(N: Int) -> (x: Array(N))`` 的用法判定）——
+                    //    值形参的名字不会出现在类型里，故这条不会误伤。
+                    let type_position_names: std::collections::HashSet<String> = {
+                        let mut out = std::collections::HashSet::new();
+                        for p in &extracted_params {
+                            if let Some(ty) = p.ty.as_ref() {
+                                ty.collect_name_refs(&mut out);
+                            }
+                        }
+                        out
+                    };
+                    let value_level_sig: Vec<&Param> = {
+                        let mut out: Vec<&Param> = extracted_params
+                            .iter()
+                            .filter(|p| !is_type_param_annotation(p.ty.as_ref()))
+                            .filter(|p| !type_position_names.contains(p.name.as_str()))
+                            .collect();
+                        out.truncate(lambda_params.len());
+                        out
+                    };
                     let merged: Vec<Param> = lambda_params
                         .iter()
                         .enumerate()
@@ -325,7 +349,7 @@ fn parse_assign_after_target(
                             ty: lam
                                 .ty
                                 .clone()
-                                .or_else(|| value_params.get(i).and_then(|sig| sig.ty.clone())),
+                                .or_else(|| value_level_sig.get(i).and_then(|sig| sig.ty.clone())),
                             is_mut: lam.is_mut,
                             span: lam.span,
                         })

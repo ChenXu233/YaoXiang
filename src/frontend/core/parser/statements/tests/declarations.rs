@@ -400,12 +400,12 @@ fn test_generic_curried_fn_params_from_lambda() {
 }
 
 #[test]
-fn test_const_generic_no_merged_misalignment() {
-    // 覆盖: RFC-011 Const 泛型 — (N: Int) 被 extract_generic_params 判为 Const 泛型而非值参数
-    // 泛型参数名改用法判定（不再大小写猜测）。
-    // 验证: f: (N: Int, s: String) -> String = (s) => s 的 params == [s: String]
-    //       (N: Int) 是 Const 泛型（Int 由注入探针判为 const 参数类型），
-    //       不参与 lambda name 匹配 → 仅 s 匹配上
+fn test_positional_fill_takes_first_value_slot() {
+    // 覆盖: D54 修复轮 F4/F1 — 实现头按**值级签名前 N 位**取声明类型（与 typecheck 同一
+    // 规则）。旧口径按**名字交集**挑（此例里 N 的名字不命中，于是 s 跳到声明第 2 位拿到
+    // String）——那是 parser 的第二条判据，已随位置口径统一删除。
+    // 验证: f: (N: Int, s: String) -> String = (s) => s 的实现头只有 1 位 ⇒ 取声明第 1 位
+    //（N: Int）的类型 ⇒ params == [s: Int]；名字仍是作者写的 s（名字只作体内引用）。
     let kind = parse_stmt("f: (N: Int, s: String) -> String = (s) => s");
     let StmtKind::Assign { value, .. } = &kind else {
         panic!("Expected StmtKind::Binding, got {:?}", kind);
@@ -420,15 +420,11 @@ fn test_const_generic_no_merged_misalignment() {
         Vec::new()
     };
 
-    assert_eq!(
-        params.len(),
-        1,
-        "params 应只含值参数 s（Const 泛型 N 不参与值参数对齐）"
-    );
-    assert_eq!(params[0].name, "s", "值参数名应为 s");
+    assert_eq!(params.len(), 1, "params 应只含实现头写的形参 s");
+    assert_eq!(params[0].name, "s", "值参数名应为作者写的 s");
     assert!(
-        matches!(&params[0].ty, Some(Type::Name { name, .. }) if name == "String"),
-        "s 的标注应为 String（来自签名值参数），而非 N 的 Int 错位"
+        matches!(&params[0].ty, Some(Type::Name { name, .. }) if name == "Int"),
+        "按位置口径取声明第 1 位（N: Int）的类型——不是按名字跳到 s 自己的 String"
     );
 }
 

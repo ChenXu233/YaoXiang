@@ -1065,6 +1065,82 @@ impl StatementChecker {
     // 与值级形参签名（#泛型柯里化下传），两者来源不同不宜合并。与仓库既有
     // ir_gen.rs / formatter/handlers/stmt.rs 的同类签名一致。
     #[allow(clippy::too_many_arguments)]
+    /// 实现头标注与声明同位的值级类型是否**指同一个类型**（D54 修复轮 F2）。
+    ///
+    /// 判据是结构相等，不是「可统一」：
+    /// - 同 id 的未绑定变量 ↔ 同一变量；
+    /// - 声明侧未绑定变量 ↔ 作者写回的同名类型参数 `TypeRef(name)`——`type_param_vars[name]`
+    ///   就是声明里那个新鲜变量，属同一个类型，是「等价」而非「收窄」（std 里
+    ///   `(xs: &Vec(T))` 这类写法全部走这条）；
+    /// - 其余按构造逐层相等（`Ref` / `Fn` / `Generic` 递归，叶子走 `PartialEq`）。
+    ///
+    /// 具体标注 vs 未绑定类型变量 ⇒ **不相等**（收窄与放宽都不是对照一致），这正是旧
+    /// 沙箱判据吞掉的那一类。
+    fn annotation_matches(
+        &self,
+        declared: &MonoType,
+        own: &MonoType,
+        type_param_vars: &std::collections::HashMap<String, MonoType>,
+    ) -> bool {
+        match (declared, own) {
+            (MonoType::TypeVar(a), MonoType::TypeVar(b)) => a == b,
+            (MonoType::TypeVar(v), MonoType::TypeRef(n))
+            | (MonoType::TypeRef(n), MonoType::TypeVar(v)) => {
+                matches!(
+                    self.solver
+                        .resolve_type(type_param_vars.get(n).unwrap_or(&MonoType::Void)),
+                    MonoType::TypeVar(w) if w == *v
+                )
+            }
+            (MonoType::TypeVar(_), _) | (_, MonoType::TypeVar(_)) => false,
+            (
+                MonoType::Ref {
+                    mutable: m1,
+                    inner: i1,
+                },
+                MonoType::Ref {
+                    mutable: m2,
+                    inner: i2,
+                },
+            ) => m1 == m2 && self.annotation_matches(i1, i2, type_param_vars),
+            (
+                MonoType::Fn {
+                    params: p1,
+                    return_type: r1,
+                    ..
+                },
+                MonoType::Fn {
+                    params: p2,
+                    return_type: r2,
+                    ..
+                },
+            ) => {
+                p1.len() == p2.len()
+                    && p1
+                        .iter()
+                        .zip(p2.iter())
+                        .all(|(a, b)| self.annotation_matches(a, b, type_param_vars))
+                    && self.annotation_matches(r1, r2, type_param_vars)
+            }
+            (
+                MonoType::Generic { name: n1, args: a1 },
+                MonoType::Generic { name: n2, args: a2 },
+            ) => {
+                n1 == n2
+                    && a1.len() == a2.len()
+                    && a1
+                        .iter()
+                        .zip(a2.iter())
+                        .all(|(a, b)| self.annotation_matches(a, b, type_param_vars))
+            }
+            _ => declared == own,
+        }
+    }
+
+    // 形参已含 self 共 8 个：函数体检查需同时拿到声明返回类型（RFC-010a 规则①）
+    // 与值级形参签名（#泛型柯里化下传），两者来源不同不宜合并。与仓库既有
+    // ir_gen.rs / formatter/handlers/stmt.rs 的同类签名一致。
+    #[allow(clippy::too_many_arguments)]
     fn check_fn_body(
         &mut self,
         name: &str,
@@ -1123,15 +1199,18 @@ impl StatementChecker {
                 // 替换——否则 `(n: N)` 这类合法写法会被误判成冲突。
                 let own_ty = MonoType::from(own.clone()).substitute(const_subst);
                 let own_ty = self.strip_refined_value_type(own_ty);
+                // 声明侧同样先剥**精化**：`IsPositive(N)` 与其基类型在值级是同一个
+                // 类型（与标注路径同源，`strip_refined_value_type` 单点）。#523 回归：
+                // parser 停止填参后，精化位才第一次走到「按声明取值」+ 结构比较这条路。
                 let expected = self.solver.resolve_type(&vp[i]);
+                let expected = self.strip_refined_value_type(expected);
                 let found = self.solver.resolve_type(&own_ty);
-                // 统一在**求解器克隆沙箱**里做（判据同调用点候选匹配，见
-                // expressions.rs 的重载沙箱）：不得在真实求解器上统一——那会把声明
-                // 的类型变量先行绑到实现头的 TypeRef 上，体内 return 的对照随后拿到
-                // 错口径（实测 `pick: (T: Type) -> (x: &T) -> T = (x) => x` 误报 E1012）。
-                // 沙箱失败 = 两侧不可能相容（一阶统一：此处失败则任何后续绑定也救不回）。
-                let mut sandbox = self.solver.clone();
-                if sandbox.unify(&found, &expected).is_err() {
+                // 判据 = **结构相等**，不是「求解器能统一」（D54 修复轮 F2 订正）：旧口径在
+                // 克隆沙箱里 unify，把「具体标注 vs 未绑定类型变量」判为相容（变量绑成具体
+                // 类型后随即丢弃），于是实现比声明更窄的约束被吞、编译期拒绝退化成运行期
+                // 错误（实测 `pick: (T: Type) -> (x: T) -> T = (x: Int) => x + 1`：check 绿、
+                // `pick(String)("hi")` 运行期 E6007）。结构比较不做任何绑定。
+                if !self.annotation_matches(&expected, &found, type_param_vars) {
                     return Err(Box::new(
                         ErrorCodeDefinition::parameter_type_mismatch(
                             &format!("{expected}"),
@@ -1159,7 +1238,10 @@ impl StatementChecker {
         // 回归实证）；缺标注时才用值级签名的对应位填充。
         for (i, param) in params.iter().enumerate() {
             let param_ty = if let (None, Some(vp)) = (param.ty.as_ref(), value_params) {
-                vp.get(i).cloned().unwrap_or_else(|| self.solver.new_var())
+                // 与「形参自带标注」同款预处理：声明在位的类型若是精化（证明函数）形态，
+                // 必须先剥成基类型（#523 回归实证：parser 停填后精化位才第一次走这条路径）。
+                let declared_ty = vp.get(i).cloned().unwrap_or_else(|| self.solver.new_var());
+                self.strip_refined_value_type(declared_ty)
             } else {
                 // RFC-027 §6.1：形参**自带标注**时走的是注解（保留 TypeRef 声明名，
                 // 单态化依赖它），但精化标注必须剥成基类型——否则 `b: NonNegative(b)`
@@ -2246,10 +2328,20 @@ impl StatementChecker {
         // 于实现头的形参追加到参数表尾部 ⇒ 个数恒不等，按位取值整段失效、形参退回
         // fresh var：实测 `f: (a: Int) -> Int = (b) => b + "s"` 的 b 成了 fresh var，
         // `b + "s"` 顺利 unify 成 String，check 绿、运行期 E6007。改名不该改变判据。
-        let aligned_value_params: Option<&[MonoType]> = value_sig
-            .as_ref()
-            .map(|(ps, _)| ps.as_slice())
-            .and_then(|ps| ps.len().checked_sub(params.len()).map(|start| &ps[start..]));
+        let aligned_value_params: Option<&[MonoType]> = value_sig.as_ref().map(|(ps, _)| {
+            // 先剥**编译期槽**：类型位在值级签名里是 `MetaType` 值的槽
+            //（`f: (T: Type, x: T) -> T` 的值级签名是 `[MetaType, TypeRef(T)]`），
+            // 它不占运行期形参位；const 位与值位同组时是普通值类型，仍占位。
+            let mut start = 0;
+            while start < ps.len() && matches!(ps[start], MonoType::MetaType { .. }) {
+                start += 1;
+            }
+            let value_level = &ps[start..];
+            // 对齐 = **值级签名的前 N 位**（N = 实现形参数）：调用点实参也是按声明序
+            // 从左到右填运行期形参位，两侧同一口径（D54 修复轮 F4 订正；旧口径取
+            // 末尾 N 位，实现头只写部分形参时会把 a 对到 b 上）。
+            &value_level[..params.len().min(value_level.len())]
+        });
 
         let mut params: Vec<Param> = params.to_vec();
         for p in &signature {
