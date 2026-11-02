@@ -1,0 +1,20 @@
+module
+  fn f(Int(64)) -> Int(64)
+    slot[0] a : Int(64) @depth1
+    locals_total=4
+    Load %0 <- arg%0
+    Load %1 <- %0
+    Load %2 <- int(2)
+    Mul %3 <- %1, %2
+    Ret %3
+  fn main() -> Void
+    locals_total=6
+    Load %0 <- int(21)
+    Call %1 <- string("f") [%0] (def=d0)
+    Load %2 <- int(42)
+    Eq %3 <- %1, %2
+    Load %4 <- string("块体形参由声明驱动（按位）")
+    Call %5 <- string("std.assert.assert") [%3, %4] (def=d1)
+    Ret %5
+  init (locals=0)
+    Call %0 <- string("main") [] (def=d2)

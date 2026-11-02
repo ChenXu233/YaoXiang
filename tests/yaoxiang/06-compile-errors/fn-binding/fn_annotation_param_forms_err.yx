@@ -1,0 +1,12 @@
+// 06-compile-errors/fn-binding/fn_annotation_param_forms_err.yx
+// D54 / WBS 6.8.2c ①：**同一语义、三种语法**的形参维度必须给出同一条诊断——
+//   实现头的形参名与声明不同只是改名（按位绑定），类型一律来自声明。
+//   旧行为：同名的两格报 E1002，改名那一格 check 绿、运行期 E6007。
+// expect: compile-error E1002
+// 覆盖: 形参按位驱动（同名箭头 / 异名箭头 / 块体 三形态同码）
+// 验证: 三格逐格同码——改名不再改变判据
+// 状态: ❌ 应编译失败
+
+same_name: (a: Int) -> Int = (a) => a + "s"
+renamed: (a: Int) -> Int = (b) => b + "s"
+block_body: (a: Int) -> Int = { a + "s" }

@@ -2870,7 +2870,6 @@ issue #522 的裁决包（甲/乙/丙）呈报后，用户追问「既要又要�
 
 三级 +1 = 3.20.10（200→201）；二级不变。issue [#523](https://github.com/ChenXu233/YaoXiang/issues/523) **关闭**（夹具更正已回注评论）；谓词体跨单元传播残留归 [#524](https://github.com/ChenXu233/YaoXiang/issues/524)（S-needs-decision——#523 落地后其剩余面收敛为纯数据管道：Registry 导出 vs 导入面登记）。批次树 523-repro（t1 复现用）与 t3.20.10-verify（t2 量测用）release + gc。
 
-
 ---
 
 ## P6 6.7 目录改名（D1 纯搬移批次，2026-11-01）
@@ -2898,7 +2897,6 @@ issue #522 的裁决包（甲/乙/丙）呈报后，用户追问「既要又要�
 | 5 | `1def39f6` | `src/` 内 7 份 README 旧路径 |
 | 6 | `04f5c69a` | 本批收口文档 |
 | 7 | `5795303e` | rename 残留（上游新代码旧模块名 + wasm 子 crate） |
-
 
 ### 二、门禁自身的路径口径（本批最贵的教训）
 
@@ -3012,3 +3010,64 @@ typecheck → ir_gen 同一条生成序列，断言 `FunctionIR.params`）：
 运行期值位排在末尾（类型泛型位在首、柯里值层是最内层组），取**末尾 N 位**（N = 本函数运行期
 形参数）；并覆盖方法绑定（`generate_method_ir`）。此前「条数恰好相等才取声明名、否则退回实现头名」
 的**条件分叉已删除**——全仓函数形参名只有一个来源。
+
+## P6 6.8.2c 语料与夹具覆盖 + 改判登记（2026-11-02）
+
+语料与基线：新增 **6** 个夹具（3 个 `expect: compile-error` 于 `06-compile-errors/fn-binding/`、3 个可运行
+于 `02-type-system/functions/`），语料基线 363 → **369** 行（**6 行新增、0 行删改**），IR 快照 219 → **222**
+（3 个可运行夹具各 1 个）；既有夹具与既有断言 **0 处改动**。
+
+### 一、t1 行为矩阵 → 夹具逐格对照
+
+出口维度（六格 = 三写法 × 两出口形态，全部 `E1012` 且位置指注解行）——夹具
+`fn_annotation_return_forms_err.yx`：
+
+| t1 矩阵格 | 夹具内函数名 |
+| --- | --- |
+| 箭头 lambda 尾表达式 | `tail_expr` |
+| 箭头 lambda 显式 return | `arrow_explicit_return` |
+| block 体尾表达式 | `block_tail` |
+| block 体显式 return | `block_explicit_return` |
+| 具名引用尾表达式 | `named_ref` |
+| 具名引用显式 return | `named_ref_explicit` |
+
+形参维度（同一语义三语法，全部 `E1002`）——夹具 `fn_annotation_param_forms_err.yx`：
+`same_name`（同名箭头）/ `renamed`（异名箭头）/ `block_body`（块体）。
+
+其余改判格：
+
+| 格 | 改后判定 | 夹具 |
+| --- | --- | --- |
+| 实现头标注与声明冲突 | `E1011` | `fn_annotation_param_type_conflict_err.yx` |
+| 实现形参多于声明（异名形态） | `E1112` | `fn_annotation_impl_arity_err.yx` |
+| 实现形参多于声明（旧 parser `E0012` 形态） | `E1112` | `fn_annotation_param_count_mismatch_err.yx` |
+| 命名实参用声明名（旧 `E1014` 形态） | 通过 | `fn_annotation_decl_param_names.yx` |
+
+「通过」格防回归夹具（旧行为与新行为都通过，用来钉住「不得改判」）：
+
+| 格 | 夹具 |
+| --- | --- |
+| 实现少写形参（缺席位按声明名补齐） | `fn_annotation_impl_fewer_params_ok.yx` |
+| 块体形参由声明驱动（按位） | `fn_annotation_block_param_ok.yx` |
+| 实现头按位置绑定（旧 `E0012` 名字不匹配形态） | `fn_annotation_impl_head_positional_ok.yx` |
+
+如实留白：匿名 lambda 作实参（`f((x) => ...)`）本批不改其判定（仍走调用点整体 `Fn` 统一 → `E1002`），
+故无夹具（见退役面核对一节的「残留」）。
+
+### 二、改判登记（file / 变化 / 理由）
+
+**既有夹具改判数 = 0**：语料基线 diff 为 6 行新增、0 行删改；`tests/` 下无既有夹具被修改；`src/**/tests/`
+下只有新增文件与 `mod.rs` 一行注册。原因不是「行为没变」，而是**这些格此前没有夹具**——t1 的矩阵全部由
+外部探针量出。故本轮改判都写在新夹具的首注里，并在此登记：
+
+| 夹具 | 变化（旧 → 新） | 理由 |
+| --- | --- | --- |
+| `fn_annotation_param_forms_err.yx` | 异名箭头：check 绿 / 运行期 `E6007` → `E1002` | 形参类型按位取自声明（旧按名字交集合并，交集为空整段跳过） |
+| `fn_annotation_param_type_conflict_err.yx` | check 绿 / 打印 1 → `E1011` | 作者标注不再被静默覆盖，声明是权威源 |
+| `fn_annotation_impl_arity_err.yx` | check 绿 / 运行期 void 或 `E6007` → `E1112` | 多出的实现形参没有声明位可绑 |
+| `fn_annotation_param_count_mismatch_err.yx` | `E0012`（parser 族）→ `E1112`（typecheck 族） | 元数对照归 typecheck——只有那层分得清类型位 / const 位 |
+| `fn_annotation_impl_head_positional_ok.yx` | `E0012`（名字不匹配）→ 通过 | 实现头是位置绑定器，名字不参与重排 |
+| `fn_annotation_return_forms_err.yx` | 显式 return 两格：`E1002`（指载荷）→ `E1012`（指注解） | 出口两叉收一叉（两种 AST 形状同一判据） |
+| `fn_annotation_decl_param_names.yx` | `E1014`（available 列实现头名）→ 通过 | 命名实参可用名取声明 |
+| `fn_annotation_impl_fewer_params_ok.yx` | 通过 → 通过（防回归） | 反向不报是判据的一部分（缺席位补名） |
+| `fn_annotation_block_param_ok.yx` | 通过 → 通过（防回归） | 块体形参一直由声明驱动，钉住不被连带改判 |

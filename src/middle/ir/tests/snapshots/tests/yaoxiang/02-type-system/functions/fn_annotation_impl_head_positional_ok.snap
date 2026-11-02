@@ -1,0 +1,22 @@
+module
+  fn f(Int(64), Int(64)) -> Int(64)
+    slot[0] b : Int(64) @depth1
+    slot[1] a : Int(64) @depth1
+    locals_total=4
+    Load %0 <- arg%0
+    Load %1 <- arg%1
+    Load %2 <- %0
+    Ret %2
+    Ret
+  fn main() -> Void
+    locals_total=7
+    Load %0 <- int(1)
+    Load %1 <- int(2)
+    Call %2 <- string("f") [%0, %1] (def=d0)
+    Load %3 <- int(1)
+    Eq %4 <- %2, %3
+    Load %5 <- string("实现头按位置绑定：名字不重排实参")
+    Call %6 <- string("std.assert.assert") [%4, %5] (def=d1)
+    Ret %6
+  init (locals=0)
+    Call %0 <- string("main") [] (def=d2)
