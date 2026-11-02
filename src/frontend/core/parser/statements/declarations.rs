@@ -318,29 +318,18 @@ fn parse_assign_after_target(
                     // 「作者写了冲突标注」报出，诊断里的 found 类型是 parser 自己造的）。
                     //
                     // 只补空洞：作者自带标注**保留原样**（冲突归 typecheck 的 E1011）。
-                    // 编译期位的判定与检查层同源（两条件并集）：
-                    // ① 标注本身就是类型位（``T: Type` / 类型级函数）；
-                    // ② 形参名出现在签名的**任何类型位置**里（``T: Add + Multiply` 这类
-                    //    约束写法、以及 const 参数 ``(N: Int) -> (x: Array(N))`` 的用法判定）——
-                    //    值形参的名字不会出现在类型里，故这条不会误伤。
-                    let type_position_names: std::collections::HashSet<String> = {
-                        let mut out = std::collections::HashSet::new();
-                        for p in &extracted_params {
-                            if let Some(ty) = p.ty.as_ref() {
-                                ty.collect_name_refs(&mut out);
-                            }
-                        }
-                        out
-                    };
-                    let value_level_sig: Vec<&Param> = {
-                        let mut out: Vec<&Param> = extracted_params
-                            .iter()
-                            .filter(|p| !is_type_param_annotation(p.ty.as_ref()))
-                            .filter(|p| !type_position_names.contains(p.name.as_str()))
-                            .collect();
-                        out.truncate(lambda_params.len());
-                        out
-                    };
+                    // 运行期值位的切法**只有一处**（`crate::ast::Type::runtime_value_params`）：
+                    // 沿柯里链走到最内层值组、再剔除编译期位。parser 与 typecheck / ir_gen
+                    // 用同一个输入、同一个顺序——旧的「拍平签名取前 N」在多层柯里声明上会
+                    // 把外层值形参填进内层实现头（实测
+                    // `f: (A: Int) -> (B: String) -> Int = (x) => x` 因而误报 E1011）。
+                    let value_level_sig: Vec<Param> = type_annotation
+                        .as_ref()
+                        .map(crate::ast::Type::runtime_value_params_innermost)
+                        .unwrap_or_default()
+                        .into_iter()
+                        .take(lambda_params.len())
+                        .collect();
                     let merged: Vec<Param> = lambda_params
                         .iter()
                         .enumerate()

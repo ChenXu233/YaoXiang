@@ -1,0 +1,13 @@
+// 06-compile-errors/fn-binding/fn_curry_arrow_outer_value_param_err.yx
+// D54 修复轮 F1 收口：**多层柯里 + 外层是普通值形参**的箭头体。
+//   f: (A: Int) -> (B: String) -> Int = (x) => x
+//   箭头体**只绑最内层值组**（B: String）⇒ x 是 String，出口声明是 Int ⇒ E1012。
+//   旧链路里 parser 用「拍平签名前 N 位」填实现头，x 被填成外层 A 的 Int，
+//   构造出一个作者没写过的冲突，误报 E1011（语义完全不同的码）。
+// expect: compile-error E1012
+// 覆盖: E1011 / E1012 的判据边界——两者都由**声明为准**触发，但「作者标注与声明不符」
+//       报 E1011，「体的出口与声明返回位不符」报 E1012，不得互相冒充
+// 验证: 必须报 E1012；若又变回 E1011，说明形参切法又分叉了
+// 状态: ❌ 应编译失败
+
+f: (A: Int) -> (B: String) -> Int = (x) => x

@@ -17,6 +17,8 @@
 > 原 2.4.2（`test_program_stage_coverage`）与 2.4.5（`test_obligations_drained` 骨架）**移出 P2**：两者引用的 `Program` / `Obligations` 类型在 P4 才存在，P2 无法编译。前者即 P4 的 4.1.4（勿双重登记），后者的 `#[ignore]` 红骨架并入 4.3.1。
 >
 > **2.3.3 落地（2026-10-07）**：C4 必覆盖清单逐项核对（07 §143），10 类语义语料层全覆盖且均在 corpus-parity.jsonl 差分基线内（26 个代表文件 26/26 命中，grep 实证）——ref/borrow/move 05-ownership 全目录（ref_shared、borrow_immutable/mutable/return、move_basic、ownership_deep 等）、闭包捕获 closures + closure_arg_inference + spawn_capture、柯里化 curry_value_fix + curry_tail_expr、spawn 04-concurrency ×13、迭代器 for spawn_for 等 16 文件、和类型 sum_type_*+ pattern_or_guard + match_call_scrutinee、existential 强制点 interface_dynamic_dispatch（Vec(Animal) 存在类型异构包装触发 existential_coercions）+ interface_rebind_dispatch、`?`/Try 传播 question_propagation + option_try + try_methods + user_try_type、方法重载 method_overload（+ method_overload_ambiguous_err 在诊断差分面）、精化约束 Drop 序列 refined_* ×5 + 05-ownership 驱动 ReleasePlan（span 键契约另有 2.4.4 红判据常驻）。性能基线 `benches/pipeline.rs` 入库（07 §145 三冒烟之二）：`corpus_compile_frontend` 全语料编译首测 17.6s、`cli_cold_start_hello` 进程冷启动 169.7ms；解释吞吐由 benches/lib.rs hotpath 组（interp_fib_recursive_27 / interp_loop_steady_10m）已有覆盖，不重复建设。回归门禁 check-perf-regression.sh 归 P9 统一清单（2.5）。
+>
+> **2026-11-02 基准口径修正**：`benches/pipeline.rs` 的 `corpus_compile_frontend` 改名 `corpus_cold_compile`——实测它量的是「每文件冷编译」，不是语料前端吞吐：每个语料文件都从 `Compiler::new()` 起，单次约 87ms（run 157 @ `91a05c4` 的 19.4s ÷ 223 个语料文件），而同一路径编译空源也要约 80ms（`Compiler::new()` + `compile_with_source("")` 可复现），耗时与文件大小无关；时间主要花在每文件重建 std 前端环境（13 个 native 模块 + 5 个嵌入 std `.yx` 的签名收集）与 `std.list` 的整段编译上。同批新增 `one_file_compile`（一次 `Compiler::new()` + `hello.yx` 编译，不 spawn 进程）作为固定引导成本基线与比值分母：`corpus_cold_compile / one_file_compile` = 相当于多少次单文件编译，消掉机器速度差异后仍对语料侧工作量敏感（按 `benches/history/criterion.jsonl` 的读数，raw 值跨夜变异系数约 14%，与 `cli_cold_start_hello` 的相关系数约 0.99）。`scripts/ci/bench-history.py` 只在渲染期按 `SERIES_RENAMES` 归并旧名、现算比值序列，原始 JSONL 不改写，趋势线不断。
 
 ## P3 修正确性漏洞（最小方案）
 
@@ -3175,3 +3177,39 @@ E1010）。已改成实情并把「运行期也按声明元数接收」**登记�
 | 部分名字交集（F1） | `fn_annotation_partial_intersection_ok.yx` | `add3: (a: Int, b: String, c: Bool) -> Int = (a, c) => a` 通过且断言值；`pick2` 是同一位置形状的改名版，必须同码 |
 | 泛型声明 + 具体标注（F2） | `fn_annotation_generic_param_concrete_err.yx` | `pick: (T: Type) -> (x: T) -> T = (x: Int) => x + 1` 报 E1011（收窄，编译期拒） |
 | 实现少写形参（F4） | `fn_annotation_impl_fewer_params_ok.yx`（已有，本轮改首注为实情） | `f(1)` 通过、`f(1,2)` 报 E1010 |
+
+### 七、F1 收口：一个层感知 helper 统一三处形参切法（D54 修复轮 4）
+
+复审第二轮判 F1 still-open：parser 用**拍平签名**算前 N、typecheck 用**剥层后的值级签名**算前 N，
+输入不同 ⇒ 多层柯里声明上分叉（`f: (A: Int) -> (B: String) -> Int = (x) => x` 由正确 E1012
+退化成误报 E1011，found 的 int64 是 parser 从外层 A 填的）；ir_gen 内部还各切一次——形参**类型**
+取前 N、调用侧可用**名**取**末尾 N**（`f(a = 1, b = "s")` 报 E1014 available: b，而第 0 槽是 a 的槽）。
+
+**修法**：把「声明里哪些形参是运行期值位、按什么顺序」收敛到 `ast` 侧的**一处**
+（与 `fn_params_flat` 同家、编译期位过滤单点）：
+
+- `Type::runtime_value_params()`——**拍平**版（声明序、跨所有柯里层）：回答「调用时要按序给几个值」，
+  供 E1112 形参数判定、块体实现头的参数合成、IR 的调用侧可用名；
+- `Type::runtime_value_params_innermost()`——**最内层值组**版（`Paren`/`NamedParen` 视为「返回的是函数值」，
+  与 `split_curry` 停层口径一致）：回答「箭头体的形参表绑定哪一组声明形参」。
+
+两者的编译期位过滤是同一个 `value_slots` 实现（类型位 `T: Type`/类型级函数、多约束并集
+`T: Add + Multiply`）；**依赖类型的值形参不被剔除**（`f: (a: Int, b: Vec(a)) -> Int = (x, y) => x`
+的 `a` 名字虽出现在 `Vec(a)` 里，它仍是运行期值位——旧过滤把它当编译期位，`x` 拿到 `Vec(a)` 而误报 E1012）。
+
+parser / typecheck / ir_gen 三处都改调这两个 helper（不再各自写过滤）；IR 的形参类型改为直接取
+**AST 形参自带的标注**（parser 已按体内形态填好：箭头→最内层组、块体→各层拍平），因此快照**零漂移**。
+
+**实测（判据）**：① `f: (A: Int) -> (B: String) -> Int = (x) => x` → **E1012**（不再是 E1011）；
+② 同形态返回 `String` 的合法程序不再被 E1011 遮住，回到既有的 **E3006** 形态（箭头体引用的形参
+在 IR 里没有运行期槽位，见上一条残留）；③ `f: (a: Int, b: Vec(a)) -> Int = (x, y) => x` → **绿**；
+④ `f: (a: Int, b: String) -> Int = (x) => x + 1` 调 `f(a = 1, b = "s")` → **E1014 available: a**
+（第 0 槽是 a，名与槽同源）。F1 原四探针与 F2 三向保持。
+
+**F5b（残留改写）**：「柯里形态实现头改名」不再被 E1011 遮住——它现在落在既有的 **E3006** 形态上
+（与上一条「箭头体引用只存在于类型检查作用域的声明形参」同源：类型检查侧有该名字、IR 侧没有槽位）。
+
+**夹具**：`06-compile-errors/fn-binding/fn_curry_arrow_outer_value_param_err.yx`（判据①，E1012）、
+`06-compile-errors/fn-binding/fn_named_args_slot_alignment_err.yx`（判据④，E1014 available: a）。
+判据③ 的依赖类型形态没有入语料：它的 IR 规范化拿不到文本、快照判据会判「跳过即红」，故以探针
+实测（`f(1, [1, 2]) == 1` 通过）与本节记录为准，待该语料形态的规范化支持补齐后再补夹具。

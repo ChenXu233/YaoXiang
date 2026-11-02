@@ -1,0 +1,16 @@
+// 06-compile-errors/fn-binding/fn_named_args_slot_alignment_err.yx
+// D54 修复轮 F1 收口（判据 B）：**实现头改名 + 命名实参**。
+//   f: (a: Int, b: String) -> Int = (x) => x + 1
+//   实现头只有 1 位 ⇒ 运行期只有 1 个槽（声明第 0 位 a），可用名集合 = {a}。
+//   旧口径里形参**类型**取前 N、调用侧可用**名**取末尾 N ⇒ 集合 = {b}：
+//   于是 f(a = 1) 反而被拒、f(b = "s") 通过——同一个签名被内外两套切法切了两次。
+// expect: compile-error E1014
+// 覆盖: 调用侧可用名与形参槽位一一对应（第 0 槽是 a）；b 不在可用名里
+// 验证: 必须报 E1014 且 available 只有 a（若 available 变成 b，说明名字又按末尾取了）
+// 状态: ❌ 应编译失败
+
+f: (a: Int, b: String) -> Int = (x) => x + 1
+
+main: () -> Void = {
+    y: Int = f(a = 1, b = "s")
+}

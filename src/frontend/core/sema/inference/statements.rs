@@ -2104,11 +2104,11 @@ impl StatementChecker {
         // 位置取**最早可判定点**（注册/环境变更之前）：此处报错不得留下
         // expected_return_type / result_err_stack 的半更新状态。
         if matches!(type_annotation, Some(crate::ast::Type::Fn { .. })) {
-            let declared_value_slots = signature
-                .iter()
-                .filter(|p| !type_generic_params.iter().any(|g| g.name == p.name))
-                .filter(|p| !const_binders.iter().any(|cb| cb.name == p.name))
-                .count();
+            // 运行期值位个数取**权威切法**（与 parser / ir_gen 同一 helper），
+            // 不再各自用「签名剔除类型名 / const 名」另算一份。
+            let declared_value_slots = type_annotation
+                .map(|t| t.runtime_value_params().len())
+                .unwrap_or(0);
             if params.len() > declared_value_slots {
                 return Err(Box::new(
                     ErrorCodeDefinition::implementation_param_count_mismatch(
