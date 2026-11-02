@@ -252,3 +252,67 @@ make_adder: (n: Int) -> ((x: Int) -> Int) = (x) => x + n
         "括号返回/闭包包装形态不应产生诊断：{codes:?}"
     );
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// E1011 判据的**求解器沙箱**边界（WBS 6.8.2b 退役面核对 + 复审关注点）
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// 形参标注冲突用「求解器克隆沙箱」判定：沙箱里的统一结论**不回写**主求解器。
+// 两个方向都必须钉住：
+// - 不泄漏：沙箱若把声明的类型变量先绑到实现头的 TypeRef 上，体内 return 的
+//   对照会拿到错口径（`pick: (T: Type) -> (x: &T) -> T = (x) => x` 会被误报 E1012）；
+// - 不吞错：沙箱只是「兼容性探测」，真实的类型错误仍必须照常报出。
+
+#[test]
+fn test_fn_annotation_conflict_sandbox_does_not_leak_into_solver() {
+    // Arrange：声明返回 T、形参 &T，体内直接返回形参（T 是类型参数的新鲜变量）
+    const SRC: &str = r#"
+pick: (T: Type) -> (x: &T) -> T = (x) => x
+"#;
+    // Act
+    let codes = compile_codes(SRC);
+    // Assert：沙箱探测后主求解器仍保持「T 未绑定」——不得冒出错口径的 E1012
+    //（若泄漏，T 会被绑成 &T，随后 return 的对照必然报 E1012）
+    assert!(
+        !codes.iter().any(|c| c == "E1012"),
+        "冲突判定的沙箱统一不得泄漏进主求解器（否则误报 E1012）：{codes:?}"
+    );
+}
+
+#[test]
+fn test_fn_annotation_conflict_sandbox_still_reports_real_error() {
+    // Arrange：同一泛型形态，但返回位写死 Int、体内返回 &T——真实错误
+    const SRC: &str = r#"
+pick: (T: Type) -> (x: &T) -> Int = (x) => x
+"#;
+    // Act
+    let codes = compile_codes(SRC);
+    // Assert：沙箱不吞错——返回值与声明返回位的真实不符仍报 E1012
+    assert!(
+        codes.iter().any(|c| c == "E1012"),
+        "沙箱只做兼容性探测，真实返回位错误必须照常报 E1012：{codes:?}"
+    );
+}
+
+#[test]
+fn test_fn_annotation_param_conflict_keeps_declared_type_for_callers() {
+    // Arrange：定义处形参标注冲突（E1011），调用处按**声明**类型传错实参
+    const SRC: &str = r#"
+f: (a: Int) -> Int = (a: String) => a
+main: () -> Void = {
+    x: Int = f("hello")
+}
+"#;
+    // Act
+    let codes = compile_codes(SRC);
+    // Assert：两处真实错误都在（定义 E1011 + 调用 E1002），且注册形态仍是声明类型
+    //（若冲突判定污染了注册类型，调用点这里就不会再报 E1002）
+    assert!(
+        codes.iter().any(|c| c == "E1011"),
+        "定义处的形参标注冲突必须报 E1011：{codes:?}"
+    );
+    assert!(
+        codes.iter().any(|c| c == "E1002"),
+        "调用点仍按声明类型判实参（E1002）——注册形态不得被冲突判定污染：{codes:?}"
+    );
+}

@@ -595,6 +595,32 @@ impl AstToIrGenerator {
         })
     }
 
+    /// 声明侧**运行期形参名**：签名里不占编译期位的形参（类型位 / const 位 /
+    /// 约束位由 [`crate::ast::extract_generic_param_names`] 剔除，与解析/检查层
+    /// 同源），再取**末尾 N 位**（N = 本函数的运行期形参个数）。
+    ///
+    /// 末尾对齐是 **typecheck 与 IR 共用的那一条口径**（WBS 6.8.2a / D54 ③）——
+    /// 声明序里「实现体自己的运行期值位」总排在后：类型泛型位在首，柯里形态的值层
+    /// 是最内层组。`check_fn_stmt` 的 `aligned_value_params` 用同一条规则切值级
+    /// 签名；两处必须同源，否则「调用侧可用名」与「体内形参类型」会按两套规则切
+    /// 同一个签名（那正是 D54 要消灭的按形态分叉）。
+    ///
+    /// 取值为空/不足 N 时返回已有的那些名字（`saturating_sub`）：不足只可能出现在
+    /// typecheck 已拒绝（E1112）的形态上，此处不再另立判据。
+    fn declared_runtime_param_names(
+        signature: &[ast::Param],
+        generic_params: &[ast::GenericParamName],
+        runtime_param_count: usize,
+    ) -> Vec<String> {
+        let declared: Vec<String> = signature
+            .iter()
+            .filter(|p| !generic_params.iter().any(|g| g.name == p.name))
+            .map(|p| p.name.clone())
+            .collect();
+        let start = declared.len().saturating_sub(runtime_param_count);
+        declared[start..].to_vec()
+    }
+
     ///
     /// 输入：`type_annotation` 是 `Type::Fn` 的嵌套结构（如 `(N: Int) -> (n: N) -> Int`）
     /// 输入：`curry_params` 是拍平的所有 curry 参数（如 `[N: Int, n: N]`）
@@ -2145,20 +2171,17 @@ impl AstToIrGenerator {
                 // 形参——剔除口径与解析/检查层同源（extract_generic_param_names 判类型位、
                 // const 位、约束位）。
                 //
-                // 只有声明名表与运行期形参数**对齐**时才采用：柯里化/闭包包装形态下
-                // 实现头对应的是某一层而非全部声明位（本表按函数名登记一层，逐层登记
-                // 不在此表语义内），此时沿用旧口径（实现头名字），不改既有行为。
+                // 与 typecheck 的按位对齐**同一条口径**：运行期值位排在声明序末尾
+                //（类型泛型位在首、柯里值层是最内层组），故取末尾 N 位（N = 本函数的
+                // 运行期形参数）——与 `check_fn_stmt` 的 `aligned_value_params` 同源。
+                // 两处必须用同一条切分规则，否则「调用侧可用名」与「体内形参类型」
+                // 会按两套规则切同一个签名（D54 要消灭的正是这种按形态分叉）。
                 if is_fn_binding && !params.is_empty() {
-                    let declaration_names: Vec<String> = signature
-                        .iter()
-                        .filter(|p| !generic_params.iter().any(|g| g.name == p.name))
-                        .map(|p| p.name.clone())
-                        .collect();
-                    let names: Vec<String> = if declaration_names.len() == params.len() {
-                        declaration_names
-                    } else {
-                        params.iter().map(|p| p.name.clone()).collect()
-                    };
+                    let names = Self::declared_runtime_param_names(
+                        &signature,
+                        &generic_params,
+                        params.len(),
+                    );
                     self.fn_param_names.insert(name.clone(), names);
                 }
                 if let Some(type_name) = type_name {
@@ -2366,8 +2389,17 @@ impl AstToIrGenerator {
         // 的登记）在同名重载下末次覆盖，决议命中 `Temp.pick` 的调用会按末候选
         // `Temp.pick#1` 的形参名绑定（E1014 available: 错候选）。混编名与候选
         // 一一对应，调用点按决议出的名字查（`lookup_param_info` 先全名后叶名）。
+        // 名字口径与普通函数绑定**同一规则**（D54 ③：调用侧可用名取声明，实现头的
+        // 名字只是体内局部名）。方法声明的首位是接收者位，suffix-N 仍按位置对齐。
         if !params.is_empty() {
-            let names: Vec<String> = params.iter().map(|p| p.name.clone()).collect();
+            let declaration = method_type.fn_params_flat();
+            let declaration_generic =
+                crate::ast::extract_generic_param_names(&declaration, &SemanticProbe);
+            let names = Self::declared_runtime_param_names(
+                &declaration,
+                &declaration_generic,
+                params.len(),
+            );
             self.fn_param_names.insert(func_name.clone(), names);
         }
 

@@ -2942,3 +2942,73 @@ issue #522 的裁决包（甲/乙/丙）呈报后，用户追问「既要又要�
 重放后重算判据（**基线已变，原测量作废**）：快照相对新基点 **218 个全部 rename、内容差异 0 行**；语料基线内容差异 0 行；门禁 boundary/snapshot/corpus/obligations/docs-refs/docs-truth 全绿；`cargo test --lib -- --list` = 2923 tests。另发现并修掉一处重放残留：`sema/inference/statements.rs` 取了上游新代码但未跟着改名（`frontend::core::typecheck::`），`cargo check --lib` 曾报 2 错。
 
 **教训（第三次同工作树并发事故）**：队长在成员 pre-commit 钩子运行期间触发 `pull --rebase`，导致该成员提交失败；另一成员随后凭盘上副本恢复。规则：**队长跑 rebase/pull 前先确认无成员在提交**；成员提交前应探测 rebase 状态。
+
+## P6 6.8.2 标注检查模式（D54）——退役面核对（2026-11-02，6.8.2b 轮）
+
+实现轮（6.8.2a）落了四件：形参按位驱动、出口统一 `E1012`、注册形态取声明、实现头标注对照
+`E1011`（新码）；另新增对外码 `E1112`（实现形参个数超出声明）。本节记的是**退役面核对**——
+哪些旧机制真的被删、哪些必须留下（撤掉即改基线），以及按形状分叉的残留。
+
+### 一、`#295` 补参段：编译期形参位不进值形参（口径实证）
+
+`check_fn_stmt` 的补参段会遍历整条拍平签名；按位对齐改造后必须确认：类型位（`(T: Type)`）、
+类型级函数位（`(F: (T: Type) -> Type)`）、const 位（被类型体引用的 `(N: Int)`）**不占**本层
+运行期形参。三个新夹具钉住（`src/middle/ir/tests/fn_param_slots.rs`，走 lex → parse →
+typecheck → ir_gen 同一条生成序列，断言 `FunctionIR.params`）：
+
+| 夹具 | 断言 |
+| --- | --- |
+| `f: (T: Type, x: T) -> T = (y) => y` | 运行期形参 1 个，且类型不是 `Type` 元类型 |
+| `f: (N: Int) -> (n: N) -> Int = (n) => n` | 外层 1 位（const 固化在本层）、内层 1 位（值层不重复吃 const 位） |
+| `f: (a: Int) -> Int = (b) => b` + `f(a = 7)` | 命名实参按声明名在 IR 侧重排，IR 生成不报 `E1014` |
+
+前后对照（父提交 `5c0ceeaf` 的二进制 vs 工作树，同一份源码逐文件跑 `check` 与 `run`）：
+12 个「旧名字合并段会补类型」且到达 IR 的语料，**退出码与 stdout 逐文件一致**——含任务点名的
+`generics_matrix.yx`、`curry_value_fix.yx`、`fn_const_generic.yx`、`fn_const_generic_lowercase.yx`
+（另有 `closure_arg_inference.yx` / `generics.yx` / `monomorphization.yx` / `definitions.yx` /
+`fn_value_first_class.yx` / `option_try.yx` / `user_try_type.yx` / `token_dup_copy.yx`）。
+
+### 二、按语法形态分叉：四种书写形态的实测
+
+| 书写形态 | 形参维度 | 出口维度 |
+| --- | --- | --- |
+| 箭头 lambda（实现头改名） | `E1002` | `E1012` @ 注解 |
+| 块体 | `E1002` | `E1012` @ 注解 |
+| 表达式体（`= a + "s"`） | `E1002` | `E1012` @ 注解 |
+| 具名函数引用（`= g`） | —（无实现头） | `E1012` @ 注解（另有绑定位既有的 `E1002`，改造前后一致） |
+
+三种带实现头的形态给出**同一条诊断**；出口四种形态同一码同一位置。判据单点在 `check_fn_stmt`
+（注册 + 按位对齐 + `E1112`），parser 的两个赋值臂只差「形参表由谁给」（实现头 / 按声明合成），
+下游不再按形状分流。
+
+**残留（本批不动，如实登记）**：① 匿名 lambda 作实参（`f((x) => ...)`）仍走调用点整体 `Fn`
+统一 → `E1002`，与具名绑定不是同一处判据；② 柯里形态下实现头**改名**
+（`f: (N: Int) -> (n: N) -> Int = (m) => m`）sema 放行、`ir_gen` 的 curry 路径按声明名注册
+局部名 ⇒ `E3006`「IR 内部错误」——父提交 `5c0ceeaf` 实测同样复现（既有缺口，本批不引入也不修复）。
+
+### 三、IR 快照受影响面的实际处置（订正勘察轮的「约 20 个文件」估计）
+
+机械可逆变异（补丁：撤掉 parser「声明类型按位补进实现头」，即「只退役不接管」形态）→
+`UPDATE_SNAPSHOTS=1` 再生快照 → **9 个快照变化**，`git apply -R` + `git checkout` 还原后
+`git status` 干净：
+
+- `02-type-system/functions/closure_arg_inference.snap`
+- `02-type-system/functions/method_overload.snap`
+- `02-type-system/generics/constrained_generic_ops.snap`
+- `02-type-system/generics/generic_container_index.snap`
+- `02-type-system/interfaces/operator_interfaces.snap`
+- `02-type-system/sum-types/option_try.snap`
+- `02-type-system/sum-types/sum_type_match.snap`
+- `02-type-system/sum-types/user_try_type.snap`
+- `05-ownership/token_dup_copy.snap`
+
+实际处置 = **接管而非纯退役**：声明类型仍按位补进实现头（唯一改动是「实现头自带的标注优先保留」，
+供 `E1011` 对照）。故存量 **218 个快照零漂移**（`check-snapshot-drift.sh` 实测 219 = 218 +
+本轮新增的 1 个夹具快照）；语料基线同理（新增 5 个夹具，原 358 行逐行不变）。
+
+### 四、判据收单点
+
+`ir_gen` 的形参名表（`fn_param_names`）改为与 typecheck 的按位对齐**同一条规则**：声明序里
+运行期值位排在末尾（类型泛型位在首、柯里值层是最内层组），取**末尾 N 位**（N = 本函数运行期
+形参数）；并覆盖方法绑定（`generate_method_ir`）。此前「条数恰好相等才取声明名、否则退回实现头名」
+的**条件分叉已删除**——全仓函数形参名只有一个来源。
