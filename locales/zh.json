@@ -196,12 +196,12 @@
   },
   "E1010.missing_named.help": "缺少必需形参：{missing}（命名实参只按形参名入槽，不占前导位置）",
   "E1011": {
-    "title": "参数类型不匹配",
-    "message": "参数类型检查失败",
-    "template": "参数类型不匹配：期望 '{expected}'，实际 '{found}'",
-    "help": "确保参数类型与函数签名匹配",
-    "example": "add(\"hello\", 2);",
-    "error_output": "error[E1011]: 参数类型不匹配\n --> example.yx:1:5\n  |\n1 | add(\"hello\", 2);\n  |     ^ 期望 'Int'，找到 'String'"
+    "title": "实现形参标注与声明不符",
+    "message": "实现头形参的标注与声明不一致",
+    "template": "实现形参标注与声明不符：期望 '{expected}'，实际 '{found}'",
+    "help": "声明是权威源：删掉实现头的标注（它的形参只是位置绑定器），或把它改成与声明一致",
+    "example": "f: (a: Int) -> Int = (a: String) => a",
+    "error_output": "error[E1011]: 实现形参标注与声明不符\n --> example.yx:1:23\n  |\n1 | f: (a: Int) -> Int = (a: String) => a\n  |                      ^ 期望 'Int'，实际 'String'"
   },
   "E1012": {
     "title": "返回类型不匹配",

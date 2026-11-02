@@ -1211,9 +1211,21 @@ impl StatementChecker {
                 // 错误（实测 `pick: (T: Type) -> (x: T) -> T = (x: Int) => x + 1`：check 绿、
                 // `pick(String)("hi")` 运行期 E6007）。结构比较不做任何绑定。
                 if !self.annotation_matches(&expected, &found, type_param_vars) {
+                    // 诊断里的「期望」要能读懂：声明侧是类型参数的未绑定变量时打印**参数名**
+                    //（否则用户看到的是内部变量号 t38，看不出它指声明的 T）。
+                    let expected_display = match &expected {
+                        MonoType::TypeVar(v) => type_param_vars
+                            .iter()
+                            .find(|(_, ty)| {
+                                matches!(self.solver.resolve_type(ty), MonoType::TypeVar(w) if w == *v)
+                            })
+                            .map(|(n, _)| n.clone())
+                            .unwrap_or_else(|| format!("{expected}")),
+                        _ => format!("{expected}"),
+                    };
                     return Err(Box::new(
                         ErrorCodeDefinition::parameter_type_mismatch(
-                            &format!("{expected}"),
+                            &expected_display,
                             &format!("{found}"),
                         )
                         .at(param.span)

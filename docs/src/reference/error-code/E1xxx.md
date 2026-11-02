@@ -19,7 +19,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 | `E1002` | 类型不匹配 | `TypeCheck` | 否 | `期望类型 '{expected}'，实际类型 '{found}'` | ✅ 73 处 |
 | `E1003` | 未知类型 | `TypeCheck` | 否 | `未知类型：'{type}'` | ✅ 3 处 |
 | `E1010` | 参数数量不匹配 | `TypeCheck` | 否 | `函数 '{func}' 期望 {expected} 个参数，找到 {found} 个` | ✅ 19 处 |
-| `E1011` | 参数类型不匹配 | `TypeCheck` | 否 | `参数类型不匹配：期望 '{expected}'，实际 '{found}'` | ✅ 1 处 |
+| `E1011` | 实现形参标注与声明不符 | `TypeCheck` | 否 | `实现形参标注与声明不符：期望 '{expected}'，实际 '{found}'` | ✅ 1 处 |
 | `E1012` | 返回类型不匹配 | `TypeCheck` | 否 | `返回类型不匹配：期望 '{expected}'，实际 '{found}'` | ✅ 4 处 |
 | `E1013` | 函数未找到 | `TypeCheck` | 否 | `函数未找到：'{func}'` | ✅ 3 处 |
 | `E1014` | 命名参数名未知 | `TypeCheck` | 否 | `函数 '{func}' 没有名为 '{name}' 的参数（可用：{params}）` | ✅ 2 处 |
@@ -84,7 +84,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **模板**：`未知变量：'{name}'`
 - **消息**：引用的变量未定义
 - **帮助**：检查变量名是否拼写正确，或先定义它
-- **发射点**：`src/frontend/core/sema/checker/refinement.rs:443`、`src/frontend/core/sema/inference/expressions.rs:3294`、`src/frontend/core/sema/inference/statements.rs:3067` 等 4 处
+- **发射点**：`src/frontend/core/sema/checker/refinement.rs:443`、`src/frontend/core/sema/inference/expressions.rs:3294`、`src/frontend/core/sema/inference/statements.rs:3079` 等 4 处
 
 ### E1002：类型不匹配
 
@@ -116,15 +116,16 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **帮助**：检查函数调用参数数量
 - **发射点**：`src/frontend/core/sema/environment.rs:576`、`src/frontend/core/sema/inference/arg_binding.rs:125`、`src/frontend/core/sema/inference/expressions.rs:1312` 等 19 处
 
-### E1011：参数类型不匹配
+### E1011：实现形参标注与声明不符
 
 - **类别**：`TypeCheck`
 - **span 豁免**：否
 - **构造函数**：`ErrorCodeDefinition::parameter_type_mismatch(expected, found)`
-- **模板**：`参数类型不匹配：期望 '{expected}'，实际 '{found}'`
-- **消息**：参数类型检查失败
-- **帮助**：确保参数类型与函数签名匹配
-- **发射点**：`src/frontend/core/sema/inference/statements.rs:1215`
+- **模板**：`实现形参标注与声明不符：期望 '{expected}'，实际 '{found}'`
+- **消息**：实现头形参的标注与声明不一致
+- **帮助**：声明是权威源：删掉实现头的标注（它的形参只是位置绑定器），或把它改成与声明一致
+- **发射点**：`src/frontend/core/sema/inference/statements.rs:1227`
+- **源码注释名**：参数类型不匹配
 
 ### E1012：返回类型不匹配
 
@@ -134,7 +135,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **模板**：`返回类型不匹配：期望 '{expected}'，实际 '{found}'`
 - **消息**：函数返回类型不正确
 - **帮助**：函数体的值与声明的返回类型不符。要么修改函数体，要么修正注解——注意 `h: () -> Int = f` 的含义是「h 返回 Int」，而不是「h 就是 f」；若想给函数起别名请写 `h = f`。
-- **发射点**：`src/frontend/core/sema/inference/expressions.rs:3832`、`src/frontend/core/sema/inference/expressions.rs:3841`、`src/frontend/core/sema/inference/statements.rs:1457` 等 4 处
+- **发射点**：`src/frontend/core/sema/inference/expressions.rs:3832`、`src/frontend/core/sema/inference/expressions.rs:3841`、`src/frontend/core/sema/inference/statements.rs:1469` 等 4 处
 
 ### E1013：函数未找到
 
@@ -408,7 +409,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **模板**：`类型定义 '{name}' 只能在模块级（模块顶层）`
 - **消息**：类型定义只能出现在模块顶层
 - **帮助**：将类型定义移到模块顶层
-- **发射点**：`src/frontend/core/sema/inference/expressions.rs:6188`、`src/frontend/core/sema/inference/statements.rs:1902`
+- **发射点**：`src/frontend/core/sema/inference/expressions.rs:6188`、`src/frontend/core/sema/inference/statements.rs:1914`
 
 ### E1081：`?` 仅允许在返回可传播类型的函数内使用
 
@@ -658,7 +659,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **模板**：`'return' 出现在函数外`
 - **消息**：return 只能在函数体内使用；Script 顶层是模块初始化层，没有函数边界可退
 - **帮助**：把 'return' 移入函数体；Script 模式下顶层语句即程序主体，要提前结束一段顶层逻辑请收进函数、在调用点控制
-- **发射点**：`src/frontend/core/sema/inference/expressions.rs:3805`、`src/frontend/core/sema/inference/statements.rs:1844`、`src/frontend/core/sema/inference/statements.rs:1859`
+- **发射点**：`src/frontend/core/sema/inference/expressions.rs:3805`、`src/frontend/core/sema/inference/statements.rs:1856`、`src/frontend/core/sema/inference/statements.rs:1871`
 - **源码注释名**：return 出现在函数外（RFC-010a 规则②边界条件：`return` 退出最近的
 
 ### E1110：方法绑定缺少签名标注
@@ -691,5 +692,5 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **模板**：`函数 '{name}' 声明了 {expected} 个形参，实现写了 {found} 个`
 - **消息**：函数体写的形参多于声明里占运行期位的形参，多出的形参没有值可以接收
 - **帮助**：函数能收几个运行期值由标注决定：删掉实现头多出的形参，或把它们的位补进标注（`f: (a: Int, b: Int) -> Int = (a, b) => ...`）
-- **发射点**：`src/frontend/core/sema/inference/statements.rs:2102`
+- **发射点**：`src/frontend/core/sema/inference/statements.rs:2114`
 - **源码注释名**：实现形参个数超出声明（WBS 6.8.2a / D54：声明驱动的 Fn 标注 ↔ 函数体

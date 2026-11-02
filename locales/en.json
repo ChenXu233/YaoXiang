@@ -196,12 +196,12 @@
   },
   "E1010.missing_named.help": "Missing required parameters: {missing} (named arguments fill slots by parameter name and do not occupy leading positions)",
   "E1011": {
-    "title": "argument type mismatch",
-    "message": "argument type check failed",
-    "template": "argument type mismatch: expected '{expected}', found '{found}'",
-    "help": "ensure the argument types match the function signature",
-    "example": "add(\"hello\", 2);",
-    "error_output": "error[E1011]: argument type mismatch\n --> example.yx:1:5\n  |\n1 | add(\"hello\", 2);\n  |     ^ expected 'Int', found 'String'"
+    "title": "implementation parameter annotation mismatch",
+    "message": "an implementation parameter's annotation does not match the declaration",
+    "template": "implementation parameter annotation mismatch: expected '{expected}', found '{found}'",
+    "help": "the declaration is authoritative: drop the annotation from the implementation head (its parameters are positional binders), or make it match the declaration",
+    "example": "f: (a: Int) -> Int = (a: String) => a",
+    "error_output": "error[E1011]: implementation parameter annotation mismatch\n --> example.yx:1:23\n  |\n1 | f: (a: Int) -> Int = (a: String) => a\n  |                      ^ expected 'Int', found 'String'"
   },
   "E1012": {
     "title": "return type mismatch",
