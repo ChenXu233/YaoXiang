@@ -97,6 +97,12 @@ pub struct ExpressionInferrer<'a> {
     result_err: Option<MonoType>,
     /// 当前函数的预期返回类型（用于 return 语句的类型检查）
     expected_return_type: Option<MonoType>,
+    /// 当前函数**声明注解**的位置（#353 口径 / WBS 6.8.2a D54 ②）：return 值
+    /// 与声明返回位不符时指向注解，而不是体内那个（可能完全正确的）值——与语句
+    /// 形态的 check_return_value_type 同一落点（两种 return AST 形状同一诊断、
+    /// 同一位置）。None = 当前期望返回位不是本地声明给的（匿名 lambda / spawn 体），
+    /// 此时退回 return 语句自身的位置。
+    return_annotation_span: Option<crate::util::span::Span>,
     /// 当前嵌套的 `unsafe {}` 深度（RFC-010：unsafe 块内允许类型定义）
     unsafe_depth: usize,
     /// 方法绑定表: "Type.method" -> MonoType(Fn)
@@ -191,6 +197,7 @@ impl<'a> ExpressionInferrer<'a> {
             module_namespaces: None,
             result_err: None,
             expected_return_type: None,
+            return_annotation_span: None,
             unsafe_depth: 0,
             method_bindings: &EMPTY_SIGNATURES,
             type_defs: &EMPTY_SIGNATURES,
@@ -240,6 +247,7 @@ impl<'a> ExpressionInferrer<'a> {
             module_namespaces: None,
             result_err: None,
             expected_return_type: None,
+            return_annotation_span: None,
             unsafe_depth: 0,
             method_bindings: &EMPTY_SIGNATURES,
             type_defs: &EMPTY_SIGNATURES,
@@ -290,6 +298,7 @@ impl<'a> ExpressionInferrer<'a> {
             module_namespaces: None,
             result_err,
             expected_return_type: None,
+            return_annotation_span: None,
             unsafe_depth: 0,
             method_bindings: &EMPTY_SIGNATURES,
             type_defs: &EMPTY_SIGNATURES,
@@ -342,6 +351,7 @@ impl<'a> ExpressionInferrer<'a> {
             module_namespaces: None,
             result_err,
             expected_return_type,
+            return_annotation_span: None,
             unsafe_depth: 0,
             method_bindings,
             type_defs: &EMPTY_SIGNATURES,
@@ -538,6 +548,15 @@ impl<'a> ExpressionInferrer<'a> {
         names: &'a HashMap<String, Vec<Vec<String>>>,
     ) {
         self.method_overload_param_names = Some(names);
+    }
+
+    /// 注入当前函数**声明注解**的位置（#353 口径）：return 值类型不符的诊断
+    /// 指向注解，与语句形态 check_return_value_type 同一落点（WBS 6.8.2a D54 ②）。
+    pub fn set_return_annotation_span(
+        &mut self,
+        span: Option<crate::util::span::Span>,
+    ) {
+        self.return_annotation_span = span;
     }
 
     /// 期望类型（方法重载按期望返回决议）
@@ -3165,6 +3184,9 @@ impl<'a> ExpressionInferrer<'a> {
         let saved_expected_ret = self.expected_return_type.take();
         // 期望返回位：体的 return 检查以被调签名的返回类型为准
         self.expected_return_type = value_sig.as_ref().map(|(_, r)| r.clone());
+        // 期望位来自**调用点**（被调签名）而非本地声明：注解位置同样隔离，
+        // 否则 lambda 体内的 return 不符会指向外层那个无关的绑定注解。
+        let saved_ann_span = self.return_annotation_span.take();
         // #311：函数体同样是循环上下文边界
         let saved_loop_depth = self.loop_depth;
         self.loop_depth = 0;
@@ -3185,6 +3207,7 @@ impl<'a> ExpressionInferrer<'a> {
         self.loop_depth = saved_loop_depth;
         self.fn_depth = saved_fn_depth;
         self.expected_return_type = saved_expected_ret;
+        self.return_annotation_span = saved_ann_span;
         self.result_err = saved_result_err;
 
         self.scope.exit_fn();
@@ -3789,27 +3812,37 @@ impl<'a> ExpressionInferrer<'a> {
                     // expression type matches it via unification.
                     let expected = self.expected_return_type.clone();
                     if let Some(ref expected) = expected {
+                        // 诊断口径与语句形态的 return 收一叉（WBS 6.8.2a / D54 ②）：
+                        // `return X` 有两个 AST 形状——箭头糖 `=> X` 成 StmtKind::Return
+                        //（parser/pratt/led.rs），显式 `return X` 成 StmtKind::Expr(Expr::Return)
+                        //（parser/statements/control_flow.rs）。两者是**同一语义**，却各走
+                        // 一个检查函数：语句形态报 E1012（指向注解，check_return_value_type），
+                        // 表达式形态此前报 E1002（指向载荷）。实测同一 `f: () -> Int = ...`
+                        // 的 `{ "hello" }` / `{ return "hello" }` 两格：一个 E1012、一个
+                        // E1002。此处改用 E1012 并把位置指向**注解**（#353 口径：真正该改的是
+                        // 声明，不是体里那个可能完全正确的值）。
+                        let at = self.return_annotation_span.unwrap_or(*span);
                         // 返回位若含**未绑定的类型参数**（`List(TypeRef "A")`，A 是所在
                         // 泛型的参数），先按名把该参数绑定到实际返回类型，再做常规 unify。
                         // 否则 `unify(List(Int), List(TypeRef "A"))` 因「TypeRef 与具体类型
-                        // 无统一规则」而报 E1002——而这里 A := Int 是合法的。
+                        // 无统一规则」而报错——而这里 A := Int 是合法的。
                         let bound_expected = Self::bind_type_params_from(expected, &ret_ty);
                         if bound_expected != *expected {
                             self.solver.unify(&ret_ty, &bound_expected).map_err(|_| {
-                                ErrorCodeDefinition::type_mismatch(
+                                ErrorCodeDefinition::return_type_mismatch(
                                     &format!("{}", bound_expected),
                                     &format!("{}", ret_ty),
                                 )
-                                .at(*span)
+                                .at(at)
                                 .build()
                             })?;
                         } else {
                             self.solver.unify(&ret_ty, expected).map_err(|_| {
-                                ErrorCodeDefinition::type_mismatch(
+                                ErrorCodeDefinition::return_type_mismatch(
                                     &format!("{}", expected),
                                     &format!("{}", ret_ty),
                                 )
-                                .at(*span)
+                                .at(at)
                                 .build()
                             })?;
                         }
@@ -3927,12 +3960,15 @@ impl<'a> ExpressionInferrer<'a> {
                 // 导致 `f: () -> Void = { r = spawn { return 1 + 2 } }` 误报
                 // E1002（把 spawn 体的 return 当外层 void 函数的 return）。
                 let saved = self.expected_return_type.take();
+                // spawn 体的 return 也不属外层声明：注解位置随之隔离（同 expected）
+                let saved_ann_span = self.return_annotation_span.take();
                 // spawn 体是函数边界（RFC-010a 规则②）：体内 return 退出 spawn（E1109 判定）
                 let saved_fn_depth = self.fn_depth;
                 self.fn_depth += 1;
                 let result = self.infer_block(body, true, None);
                 self.fn_depth = saved_fn_depth;
                 self.expected_return_type = saved;
+                self.return_annotation_span = saved_ann_span;
                 result
             }
 

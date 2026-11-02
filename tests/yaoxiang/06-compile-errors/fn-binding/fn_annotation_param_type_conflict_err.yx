@@ -1,0 +1,13 @@
+// 06-compile-errors/fn-binding/fn_annotation_param_type_conflict_err.yx
+// D54 / WBS 6.8.2a ④：实现头自带标注与声明冲突必须响亮（E1011）——
+//   旧行为是 parser 按位**覆盖**作者的标注（`String` 被静默丢弃，打印 1）。
+// expect: compile-error E1011
+// 覆盖: 形参标注冲突（声明是权威源，作者标注不得被静默覆盖）
+// 验证: 冲突报在声明语句上，不再静默择一
+// 状态: ❌ 应编译失败
+
+f: (a: Int) -> Int = (a: String) => a
+
+main: () -> Void = {
+    x: Int = f(1)
+}

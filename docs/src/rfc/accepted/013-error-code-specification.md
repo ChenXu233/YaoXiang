@@ -348,6 +348,7 @@ E1001::unknown_variable(&var_name)
 | E1109 | return 出现在函数外         |
 | E1110 | 方法绑定缺少签名标注            |
 | E1111 | 实参重复占用或顺序非法           |
+| E1112 | 实现形参个数超出声明            |
 <!-- code-table:E1xxx end -->
 
 > **RFC-011b 关联（2026-09-22 注）**：[RFC-011b: 运算符重载](011b-operator-overloading.md)

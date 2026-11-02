@@ -23,11 +23,23 @@ use crate::util::span::Span;
 // Import from sibling modules
 use super::types::{parse_type_annotation_required, parse_fn_type_with_names};
 
-/// 判断 annotation 是否为类型参数标注（`Type` / `MetaType`）。纯结构，不看名字。
+/// 该形参标注是否为**类型位**（编译期擦除，不占运行期形参位）：具体元类型
+/// `Type`（`(T: Type)`）与**类型级函数**（`(F: (T: Type) -> Type)`——构造器变量，
+/// RFC-010 元类型层级 Type1/Type2+）。
+///
+/// 判据与 `ast::classify_generic_params` / `ir_gen::split_curry` 的
+/// `is_type_param_ann` **必须同源**：此前此处缺类型级函数分支，同一份声明在
+/// parser 眼里 F 是值参数、在类型检查/IR 眼里是类型参数，于是「声明占几个运行期
+/// 形参位」两处答案不同（WBS 6.8.2a 的 E1112 元数对照当场把这种声明误判成
+/// 「实现形参超出声明」）。判据复用 `ast::is_type_level_fn` 单点。
 fn is_type_param_annotation(ty: Option<&Type>) -> bool {
     match ty {
         Some(Type::MetaType { .. }) => true,
         Some(Type::Name { name, .. }) => name == "Type",
+        Some(Type::Fn {
+            params,
+            return_type,
+        }) => crate::ast::is_type_level_fn(params, return_type),
         _ => false,
     }
 }
@@ -281,56 +293,43 @@ fn parse_assign_after_target(
                     ..
                 }) => {
                     // Lambda 形式: name: (a: Int, b: Int) -> Int = (a, b) => a + b
+                    //
+                    // 实现头的形参是**位置**绑定器：第 i 位就是声明里第 i 个运行期
+                    // 形参位（WBS 6.8.2a / D54 ①③）。故此处只做一件事——把声明的
+                    // 类型按位补进实现头，名字**只取实现头自己的**（体内按作者名引用
+                    // 第 i 位；调用侧的可用名取声明，`f(a = 7)` 用声明名 a）。
+                    //
+                    // 两条旧判据在此退役（判据归口到后续各层，单一来源）：
+                    // - 「名字交集为空 ⇒ 整段跳过」：交集为空时签名类型从未到达实现头
+                    //   （`f: (a: Int) -> Int = (b) => b + "s"` 的 b 成了 fresh var，
+                    //   check 绿、运行期 E6007）——现在按位置补齐；
+                    // - 「个数/名字逐位相等，否则 E0012」：个数冲突归 typecheck 的
+                    //   E1112（声明是权威源，且只有那一层分得清类型位/const 位）；
+                    //   名字不再要求相等——「必须同名才能合并」正是「同一语义不同
+                    //   语法」的静默来源（`(b, a)` 与 `(a, b)` 得到两种命运）。
+                    //
+                    // 作者自带标注**保留原样**：冲突归 typecheck 的 E1011（D54 ④：
+                    // 声明是权威源，作者的标注不得被静默覆盖）。旧行为是按位**覆盖**，
+                    // 实测 `f: (a: Int) -> Int = (a: String) => a` check 绿、打印 1。
                     let lambda_names: std::collections::HashSet<&str> =
                         lambda_params.iter().map(|p| p.name.as_str()).collect();
                     let value_params: Vec<&Param> = extracted_params
                         .iter()
                         .filter(|p| lambda_names.contains(p.name.as_str()))
                         .collect();
-
-                    if !value_params.is_empty() {
-                        if lambda_params.len() != value_params.len() {
-                            state.error(parse_msg(state, format!(
-                            "Parameter count mismatch: signature has {} value parameters, lambda has {}",
-                            value_params.len(),
-                            lambda_params.len()
-                        )));
-                            return None;
-                        }
-
-                        for (i, (sig_param, lambda_param)) in
-                            value_params.iter().zip(lambda_params.iter()).enumerate()
-                        {
-                            if sig_param.name != lambda_param.name {
-                                state.error(parse_msg(state, format!(
-                                "Parameter name mismatch at position {}: signature has '{}', lambda has '{}'.",
-                                i + 1,
-                                sig_param.name,
-                                lambda_param.name
-                            )));
-                                return None;
-                            }
-                        }
-                    }
-
-                    // 值参数对齐（按位置）：上面已校验签名与 lambda 的值参数
-                    // **逐位同名**且个数一致，故按位置取类型等价于按名查表。
-                    // 6.5.2 commit ③ 删掉「按名重建 HashMap」这层派生——名字
-                    // 曾同时存在于签名与 lambda 头两处，只需这一份位置对齐。
-                    let merged: Vec<Param> = if value_params.is_empty() {
-                        lambda_params.to_vec()
-                    } else {
-                        lambda_params
-                            .iter()
-                            .zip(value_params.iter())
-                            .map(|(lam, sig)| Param {
-                                name: lam.name.clone(),
-                                ty: sig.ty.clone(),
-                                is_mut: lam.is_mut,
-                                span: lam.span,
-                            })
-                            .collect()
-                    };
+                    let merged: Vec<Param> = lambda_params
+                        .iter()
+                        .enumerate()
+                        .map(|(i, lam)| Param {
+                            name: lam.name.clone(),
+                            ty: lam
+                                .ty
+                                .clone()
+                                .or_else(|| value_params.get(i).and_then(|sig| sig.ty.clone())),
+                            is_mut: lam.is_mut,
+                            span: lam.span,
+                        })
+                        .collect();
 
                     // RFC-004 括号语义：返回位置是 `Paren` ⇔ 链条在此终止。
                     // 作者写的 lambda（`(a) => a + 1`）就是**被返回的函数值**，

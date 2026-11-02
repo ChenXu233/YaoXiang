@@ -1,0 +1,18 @@
+// 02-type-system/functions/fn_annotation_decl_param_names.yx
+// D54 / WBS 6.8.2a ③：命名实参的**可用名取声明**——实现头改名不影响调用侧
+//   （旧行为：调用 `f(a = 7)` 报 E1014，available 列的是实现头的 b）。
+// 验证:
+//   - 声明名 a/b 可作命名实参，且与位置实参同值
+//   - 实现头按位绑定（x 取第 1 位、y 取第 2 位）
+// 状态: ✅ 可运行
+
+use std.assert
+
+f: (a: Int, b: Int) -> Int = (x, y) => x * 10 + y
+
+main: () -> Void = {
+    assert.assert(f(a = 2, b = 1) == 21, "named args bind by declared name")
+    assert.assert(f(2, 1) == 21, "positional form is equivalent")
+}
+
+main()

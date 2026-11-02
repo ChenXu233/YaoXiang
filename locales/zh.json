@@ -1020,6 +1020,14 @@
     "example": "add(1, a = 2);",
     "error_output": "error[E1111]: 实参重复占用或顺序非法\n --> example.yx:1:1\n  |\n1 | add(1, a = 2);\n  |          ^ 函数 'add' 的形参 'a' 收到多个实参（或实参顺序非法）"
   },
+  "E1112": {
+    "title": "实现形参个数超出声明",
+    "message": "函数体写的形参多于声明里占运行期位的形参，多出的形参没有值可以接收",
+    "template": "函数 '{name}' 声明了 {expected} 个形参，实现写了 {found} 个",
+    "help": "函数能收几个运行期值由标注决定：删掉实现头多出的形参，或把它们的位补进标注（`f: (a: Int, b: Int) -> Int = (a, b) => ...`）",
+    "example": "f: () -> Int = (a: Int) => a",
+    "error_output": "error[E1112]: 实现形参个数超出声明\n --> example.yx:1:19\n  |\n1 | f: () -> Int = (a: Int) => a\n  |                   ^ 函数 'f' 声明了 0 个形参，实现写了 1 个"
+  },
   "E1064": {
     "title": "绑定位置索引无效",
     "template": "绑定位置索引无效：{positions}（函数共 {total} 个参数）",

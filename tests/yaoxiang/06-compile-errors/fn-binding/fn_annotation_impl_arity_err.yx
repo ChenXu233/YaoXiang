@@ -1,0 +1,14 @@
+// 06-compile-errors/fn-binding/fn_annotation_impl_arity_err.yx
+// D54 / WBS 6.8.2a ①：实现写的形参多于声明的运行期形参位 → E1112——
+//   旧行为 check 绿：多出的形参没有值可绑，运行期 f() 拿到 void
+//   （`f() + 1` 拖到运行期才报 E6007）。
+// expect: compile-error E1112
+// 覆盖: 声明驱动的形参元数对照（类型位 / const 位不占运行期槽）
+// 验证: 同一形态在「赋值 / 二元运算 / 直接调用」三处调用点都是同一条编译期诊断
+// 状态: ❌ 应编译失败
+
+f: () -> Int = (a: Int) => a
+
+main: () -> Void = {
+    x: Int = f()
+}

@@ -2136,10 +2136,29 @@ impl AstToIrGenerator {
                 let generic_params =
                     crate::ast::extract_generic_param_names(&signature, &SemanticProbe);
                 // 登记形参名，供命名参数调用（`add(b = 5, a = 3)`）重排实参。
-                // 名字取自 Lambda 形参（`params`）——那是**过滤后的值参数**表；
-                // 签名侧形参（`signature`）含类型位/约束位，名字口径不同。
+                //
+                // 名字取**声明形态**（WBS 6.8.2a / D54 ③）：函数收几个值、每一位叫什么
+                // 由标注决定，实现头的名字只是体内的局部名。旧口径取 Lambda 头
+                //（`params`）的名字表，于是实现头一改名，**调用侧跟着改名**：实测
+                // `f: (a: Int) -> Int = (b) => b` 的 `f(a = 7)` 报 E1014
+                //（available: b），而声明里明明写着 a。声明名 = 签名里不占编译期位的
+                // 形参——剔除口径与解析/检查层同源（extract_generic_param_names 判类型位、
+                // const 位、约束位）。
+                //
+                // 只有声明名表与运行期形参数**对齐**时才采用：柯里化/闭包包装形态下
+                // 实现头对应的是某一层而非全部声明位（本表按函数名登记一层，逐层登记
+                // 不在此表语义内），此时沿用旧口径（实现头名字），不改既有行为。
                 if is_fn_binding && !params.is_empty() {
-                    let names: Vec<String> = params.iter().map(|p| p.name.clone()).collect();
+                    let declaration_names: Vec<String> = signature
+                        .iter()
+                        .filter(|p| !generic_params.iter().any(|g| g.name == p.name))
+                        .map(|p| p.name.clone())
+                        .collect();
+                    let names: Vec<String> = if declaration_names.len() == params.len() {
+                        declaration_names
+                    } else {
+                        params.iter().map(|p| p.name.clone()).collect()
+                    };
                     self.fn_param_names.insert(name.clone(), names);
                 }
                 if let Some(type_name) = type_name {

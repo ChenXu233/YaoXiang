@@ -1202,6 +1202,14 @@
     "example": "add(1, a = 2);",
     "error_output": "error[E1111]: Argument duplicate or invalid order\n --> example.yx:1:1\n  |\n1 | add(1, a = 2);\n  |          ^ function 'add' parameter 'a' received multiple arguments (or argument order is invalid)"
   },
+  "E1112": {
+    "title": "Implementation declares more parameters than the signature",
+    "message": "The function body declares more parameters than the signature has runtime parameter positions, so the extra ones have no value to receive",
+    "template": "function '{name}' declares {expected} parameters but the implementation declares {found}",
+    "help": "The annotation decides how many runtime values the function takes: remove the extra parameters from the implementation head, or add their positions to the annotation (`f: (a: Int, b: Int) -> Int = (a, b) => ...`)",
+    "example": "f: () -> Int = (a: Int) => a",
+    "error_output": "error[E1112]: implementation declares more parameters than the signature\n --> example.yx:1:19\n  |\n1 | f: () -> Int = (a: Int) => a\n  |                   ^ function 'f' declares 0 parameters but the implementation declares 1"
+  },
   "W1007": {
     "title": "Module import cycle",
     "message": "Modules in the compilation set form an import cycle; initialization order inside the cycle is undecidable",

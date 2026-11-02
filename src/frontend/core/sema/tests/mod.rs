@@ -19,6 +19,7 @@
 mod checker;
 mod const_param;
 mod environment;
+mod fn_annotation_binding;
 mod gamma_assume_effect;
 mod hkt;
 mod named_args;

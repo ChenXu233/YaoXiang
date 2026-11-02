@@ -1,0 +1,14 @@
+// 06-compile-errors/fn-binding/fn_annotation_return_explicit_err.yx
+// D54 / WBS 6.8.2a ②：显式 `return X` 与箭头糖（`=> X`）是同一语义、
+//   两个 AST 形状，必须同一诊断（E1012）且都指向**注解**——
+//   旧行为：显式 return 报 E1002、位置指向载荷。
+// expect: compile-error E1012
+// 覆盖: 出口两叉收一叉（StmtKind::Return ↔ Expr::Return 同一检查口径）
+// 验证: 同一 `f: () -> Int` 的尾表达式与显式 return 两格同码同位置
+// 状态: ❌ 应编译失败
+
+f: () -> Int = { return "hello" }
+
+main: () -> Void = {
+    x: Int = f()
+}

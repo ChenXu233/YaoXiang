@@ -1202,6 +1202,14 @@
     "example": "add(1, a = 2);",
     "error_output": "error[E1111]: 实参叠占，序次乖违\n --> example.yx:1:1\n  |\n1 | add(1, a = 2);\n  |          ^ 函数 'add' 之形参 'a' 数受实参（或实参序次乖违）"
   },
+  "E1112": {
+    "title": "实现形参多于声明",
+    "message": "函数体所书形参多于声明之运行期形参位，多者无值可受",
+    "template": "函数 '{name}' 声明 {expected} 形参，而实现书 {found} 个",
+    "help": "函数受几值，由标注定之：删实现头多出之形参，或以具位补入标注（`f: (a: Int, b: Int) -> Int = (a, b) => ...`）",
+    "example": "f: () -> Int = (a: Int) => a",
+    "error_output": "error[E1112]: 实现形参多于声明\n --> example.yx:1:19\n  |\n1 | f: () -> Int = (a: Int) => a\n  |                   ^ 函数 'f' 声明 0 形参，而实现书 1 个"
+  },
   "W1082": {
     "title": "所有权析降级",
     "message": "无函数体检查器，所有权之析已循空账本降级运行",
