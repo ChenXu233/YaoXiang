@@ -3264,3 +3264,23 @@ parser / typecheck / ir_gen 三处都改调这两个 helper（不再各自写过
 2. 柯里形态实现头改名 → **E3006**；箭头体引用「只存在于类型检查作用域」的声明形参 → **E3006**（块体同语义正常）。两者同属 #295 补参段「有类型检查侧、无 IR 侧」的分叉。
 3. 四语 locale（ja / ru / zh-classical / zh-x-miao）仍是旧文案；`test_i18n_consistency` 只断言 en + zh。
 4. 实现少写形参时，落在缺席位上的实参在 IR 侧被丢弃（`f(1)` 合法但实参不参与）；运行期按声明元数接收属 D 类，未改行为。
+
+## P3 3.20.11 收口（谓词约束体随 Registry 导出按 use 门控传播——#524 甲案，2026-11-04）
+
+**裁决与语义面**：用户 2026-11-03 裁决甲案——谓词 def（三元组 参数名/基类型/约束体模板）走 Registry 导出面携带、导入物化按 use 门控并入、全 def 传播；**可见性语义随裁决固化**：未导入谓词解析失败是正确行为（use 是唯一跨单元名引入机制）；仅基类型的 opaque 降级方案（丙）已否。裁决包查证底座：谓词数据只在 L3 消费（middle 零消费）；编译期谓词（模板面，SMT 直接求解）与证明函数（不透明 Call，证明管道第 4 级按名送 Pipeline 经 merged IR 执行）双形态。
+
+**实现（判据单源四件，提交 `e287812b`，11 文件 +271/−51）**：① def 构建提纯为自由函数 `predicate_resolver::collect_predicate_defs`（`predicate_decl_shape` 单点 + 既有登记侧收窄原样保留），第零遍方法与导出提取两处委托；② `Export` 增 `predicate_def` 载荷（type_params 先例同族）；③ `extract_module_info` 对 TypeDefinition / Function / Constant 三种导出形态都附 def（模板面不因声明拼写降级）；④ `register_use_export` 双臂按 use 门控并入——TypeDefinition 臂登记 proof-fn 形态变量 + 并入 def（与本地面 `add_type_definition` 产物同权），Function/Constant 臂补 def；⑤ `PredicateDef::proof_fn_type` 形态构造单源（本地面与导入面共用）。**门控即调用面**：register_use_export 只被 use 语句选中的导出调用（t3 实测七调用点全在 Use 处理链内）。
+
+**锚（先红后绿）**：导入形态完整应用 / 部分应用 ⇒ 0 诊断（修前 E1012 + E1002 逐字复现）；use 门控锚 `test_check_unimported_predicate_use_still_rejected`（lib 内未导入谓词仍被拒绝——裁决语义常驻钉，断言 errors ≥ 1 不钉具体码，注释给理由）。回归面：#523 四锚、#522、3.20.8 双锚、rfc027 全族绿。
+
+**验证链**：
+
+- t1 门禁 14 项全绿。**IR 快照门禁口径核正（如实登记）**：harness 内联等价命令的过滤名未跟 middle 层改名 core→ir（`middle::core::tests::snapshot` → `middle::ir::tests::snapshot`），过滤器零命中触发「1 passed」守卫假红两轮——实现者取证（同 exe 双环境复跑脚本本体 PASS、223 份零漂移、失败形态与漂移不符）成立，队长以脚本本体复跑采信。教训：内联等价命令会随仓库改名腐烂，必须从脚本现读过滤名（已入工作流模板记忆）。错误码生成物门禁在未提交树上的口径（工作树 vs index）由实现者按 3.20.10 流程处理（生成器 rc=0 与 CWD 无关、两次输出逐字节一致、diff 恰 6 处行号平移 → staging）。
+- t2 **M1 PASS**：变异摘除导出附值 → 导入双锚红（E1012 `expected 'int64', found 'IsPositive(N)'` + E1002 逐字复现），trial 机械还原 blob CLEAN；等价性 = IR 快照 1 passed（现读过滤名）+ 语料差分 81638 字节逐字节零漂移。
+- t2 **M2 证伪（如实登记）**：任务书指定变异（try_resolve 查不到时伪造 def）实测不可检——未导入谓词的拒绝发生在**更早的类型名注册面**（`check_type_names_in` 发 E1003 Unknown type，执行到不了 resolve_type_annotation 的 Generic 臂），try_resolve 的 `?` 不是门控执法点。**发现：门控系双层独立执法**（类型名注册面 + predicate_defs 查找面），锚的红绿铰链在注册面。
+- 队长补 **M2'**（按 3.20.9 补锚先例）：use 选择臂前插「全部导出无视选择注册」= 被否决的乙案行为 → 门控锚翻红（exit 101）、trial 机械可逆、还原 rebuild 绿——锚对真实违反路径的敏感性成立。批次树 t3.20.11-m2p，release + gc。
+- t3 **APPROVE** 七镜头：①判据单源（PredicateDef 生产构造全仓一处、Fn/MetaType 形态拼装仅 proof_fn_type 本体、predicate_decl_shape 无绕过）；②可见性（七调用点全在 Use 链内、env.predicate_defs 生产写入仅三处、拒绝方向正确、常驻锚存在）；③无降级（两声明拼写都附完整三元组，无 opaque 化路径）；④#522 红线（diff 无诊断文本构造）；⑤边界（11 文件与授权逐一吻合，无 baselines/快照/locales/#442/#523 触碰）；⑥测试规范；⑦诚实性（静态自洽，运行时断言标注依赖验证轮闭环）。**1 low → 登记 [#527](https://github.com/ChenXu233/YaoXiang/issues/527)**：多参数带约束 TypeDefinition 谓词导入/本地面不同构（本地面 proof-fn 形态可解析、导入面单参数收窄拒绝）——非本笔回归、方向拒绝、暴露面窄。
+
+### 计数与环境
+
+三级 +1 = 3.20.11（201→202）；二级不变。issue [#524](https://github.com/ChenXu233/YaoXiang/issues/524) **关闭**；多参数边界归 [#527](https://github.com/ChenXu233/YaoXiang/issues/527)。批次树 t3.20.11-verify 与 t3.20.11-m2p release + gc（约 11.2 GB）。
