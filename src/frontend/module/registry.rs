@@ -375,6 +375,7 @@ impl ModuleRegistry {
                 param_names: None,
                 type_payload: None,
                 definition_span: None, // std 虚拟模块无源码定义位置（4.6.1）
+                predicate_def: None,   // std 虚拟子模块无谓词 def（#524 载荷面）
             });
 
             // 注册模块信息
@@ -445,6 +446,7 @@ impl ModuleRegistry {
                         param_names: None,
                         type_payload: None,
                         definition_span: None, // std 虚拟模块无源码定义位置（4.6.1）
+                        predicate_def: None,   // std 虚拟子模块无谓词 def（#524 载荷面）
                     });
                     self.register(info);
                 }
@@ -512,6 +514,7 @@ mod tests {
             param_names: None,
             type_payload: None,
             definition_span: None,
+            predicate_def: None,
         }
     }
 

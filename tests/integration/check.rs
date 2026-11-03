@@ -1008,3 +1008,115 @@ fn test_check_curry_refined_param_genuine_mismatch_still_reports() {
         "#523: stripping refinement must stay transparent to unification — a genuinely mismatched argument (String vs Int(64)) must still be rejected with exactly one error; got {errors} error(s)"
     );
 }
+
+// ============ 3.20.11 / #524：导入谓词 def 跨单元传播（甲案）============
+//
+// 谓词 def（`PredicateDef { param_name, param_type, constraint }` 三元组）
+// 随 Registry 导出面携带：Export 增设 `predicate_def` 载荷，定义方
+// `extract_module_info` 用与第零遍同源的构建判据提取，导入方
+// `register_use_export` 按 use 门控并入 `env.predicate_defs`，并同构登记
+// proof-fn 形态变量（本地面的 `add_type_definition` RFC-027 Phase 2.5 分支
+// 同款）——模板面与剥基类型面在导入方同权可用。
+//
+// 可见性语义（2026-11-03 用户裁决，甲案的一部分）：use 是唯一跨单元名引入
+// 机制，**未导入的谓词解析失败是正确行为**——解析跟函数/类型走同一扇门。
+
+/// #524 主锚：导入谓词的精化签名在完整应用时零诊断。
+#[test]
+fn test_check_imported_predicate_def_propagates_full_application() {
+    // Arrange: lib.yx 声明谓词、main.yx `use lib.{IsPositive}` 后声明精化
+    // 签名并完整应用——修前 env.predicate_defs 与 proof_fn_bases 双缺，
+    // E1012 + E1002（CLI 复现：target/yx-scratch 同构夹具，2026-11-03）
+    let dir = temp_dir();
+    create_yx_file(&dir, "lib.yx", "IsPositive: (x: Int) -> Type = { x > 0 }\n");
+    let main_file = create_yx_file(
+        &dir,
+        "main.yx",
+        "use lib.{IsPositive}\n\
+         \n\
+         sum: (N: Int) -> (x: IsPositive(N)) -> Int = (x) => x\n\
+         \n\
+         main: () -> Void = {\n\
+         \x20   print(sum(5)(3))\n\
+         }\n",
+    );
+
+    // Act
+    let result = check_file(&main_file);
+
+    // Assert: def 随导出传播、按 use 门控并入 ⇒ 模板正格化与剥基类型在
+    // 导入方都可用 ⇒ 零诊断（义务验证含在内）
+    let errors = result.expect("imported predicate refinement should check cleanly");
+    assert_eq!(
+        errors, 0,
+        "#524: imported predicate def must propagate via Registry export surface — full application sum(5)(3) must check with 0 diagnostics; got {errors} error(s)"
+    );
+}
+
+/// #524 补锚：部分应用形态同样零诊断（#523 教训同轴——curry 内层精化位
+/// 在「先部分应用、再完整应用」路径上同样要按 base 统一）。
+#[test]
+fn test_check_imported_predicate_def_propagates_partial_application() {
+    // Arrange: 与主锚同构，部分应用先落一个绑定、再经绑定完整应用
+    let dir = temp_dir();
+    create_yx_file(&dir, "lib.yx", "IsPositive: (x: Int) -> Type = { x > 0 }\n");
+    let main_file = create_yx_file(
+        &dir,
+        "main.yx",
+        "use lib.{IsPositive}\n\
+         \n\
+         sum: (N: Int) -> (x: IsPositive(N)) -> Int = (x) => x\n\
+         \n\
+         main: () -> Void = {\n\
+         \x20   partial = sum(5)\n\
+         \x20   print(partial(3))\n\
+         }\n",
+    );
+
+    // Act
+    let result = check_file(&main_file);
+
+    // Assert: 部分应用产出的函数值与后续完整应用都按剥后基类型统一 ⇒ 零诊断
+    let errors = result.expect("imported predicate partial application should check cleanly");
+    assert_eq!(
+        errors, 0,
+        "#524: imported predicate def must propagate — partial application sum(5) then full application must check with 0 diagnostics; got {errors} error(s)"
+    );
+}
+
+/// #524 use 门控锚：**未导入**的谓词解析失败是正确行为（可见性语义，
+/// 2026-11-03 用户裁决）——use 是唯一跨单元名引入机制，解析跟函数/类型
+/// 走同一扇门。此锚常驻：若日后把全部 def 无视 use 门控整体并入，此处翻红。
+#[test]
+fn test_check_unimported_predicate_use_still_rejected() {
+    // Arrange: lib 声明两个谓词，main 只导入其一，另一谓词用于精化签名
+    let dir = temp_dir();
+    create_yx_file(
+        &dir,
+        "lib.yx",
+        "IsPositive: (x: Int) -> Type = { x > 0 }\n\
+         NonNegative: (x: Int) -> Type = { x >= 0 }\n",
+    );
+    let main_file = create_yx_file(
+        &dir,
+        "main.yx",
+        "use lib.{IsPositive}\n\
+         \n\
+         sum: (N: Int) -> (x: NonNegative(N)) -> Int = (x) => x\n\
+         \n\
+         main: () -> Void = {\n\
+         \x20   print(sum(5)(3))\n\
+         }\n",
+    );
+
+    // Act
+    let result = check_file(&main_file);
+
+    // Assert: 未导入谓词的使用必须被拒绝（不钉具体诊断码——那是解析失败
+    // 形态的实现细节；钉住的是「必须失败」这一语义决策面）
+    let errors = result.expect("check should complete for unimported predicate use");
+    assert!(
+        errors >= 1,
+        "#524 visibility: an imported-gated predicate NOT brought in by use must fail resolution (use is the only cross-unit name introduction); got {errors} error(s)"
+    );
+}

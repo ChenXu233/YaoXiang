@@ -89,6 +89,7 @@ pub fn embedded_std_module_info(use_path: &str) -> Option<crate::frontend::modul
                         // embedded yx std 模块的定义文件是虚拟路径（`<std/…>`），
                         // 跨文件 resolves_to 对 std 一律回退 use 行（4.6.1 口径）
                         definition_span: None,
+                        predicate_def: None, // 嵌入 std 面当前无谓词声明（#524 载荷面）
                     });
                 }
             }
@@ -117,6 +118,7 @@ pub fn embedded_std_module_info(use_path: &str) -> Option<crate::frontend::modul
                             param_names,
                             type_payload: None,
                             definition_span: None, // 同上：std 无真实定义文件
+                            predicate_def: None,   // 嵌入 std 面当前无谓词声明（#524 载荷面）
                         });
                     }
                 }

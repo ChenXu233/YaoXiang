@@ -2779,7 +2779,27 @@ impl TypeChecker {
                 let ty = self.export_register_type(export);
                 let poly = PolyType::mono(ty);
                 self.env.add_type(register_name.clone(), poly.clone());
-                self.env.add_var(register_name.clone(), poly);
+                // #524 甲案：谓词 def 随导出携带、按 use 门控在此并入导入方
+                // `env.predicate_defs`（模板面：正格化 `IsPositive(N)` → `N > 0`），
+                // 并同构登记 proof-fn 形态变量（剥基类型面：`proof_fn_bases` 的
+                // 判据源）——两样与本地面 `add_type_definition` 的登记产物完全
+                // 同权（vars 最终值同为 Fn 形态，Struct poly 只留类型空间）。
+                // 门控即调用面：本函数只被 use 语句选中的导出调用，未导入的
+                // 谓词不进表 ⇒ 解析失败（正确行为，2026-11-03 用户裁决）。
+                if let Some(def) = &export.predicate_def {
+                    self.env
+                        .add_var(
+                            register_name.clone(),
+                            PolyType::mono(crate::frontend::core::sema::predicate_resolver::PredicateDef::proof_fn_type(
+                                std::slice::from_ref(&def.param_type),
+                            )),
+                        );
+                    self.env
+                        .predicate_defs
+                        .insert(register_name.clone(), def.clone());
+                } else {
+                    self.env.add_var(register_name.clone(), poly);
+                }
                 // 跨模块类型传播：恢复定义方三张表（泛型模板 / 和类型变体 /
                 // 接口实现登记）——变体构造、match 变体解构、`?` 与运算符
                 // 分发的唯一判据都在这三张表里
@@ -2791,7 +2811,13 @@ impl TypeChecker {
                     return;
                 }
                 let ty = self.export_register_type(export);
-                self.env.add_var(register_name, PolyType::mono(ty));
+                self.env.add_var(register_name.clone(), PolyType::mono(ty));
+                // #524 甲案：Assign 形态谓词（Function 导出，mono_type 已是
+                // proof-fn 形态）只差约束体模板——def 同样按 use 门控并入，
+                // 模板面与 TypeDefinition 形态同权，不降级为不透明 Call。
+                if let Some(def) = &export.predicate_def {
+                    self.env.predicate_defs.insert(register_name, def.clone());
+                }
             }
         }
     }
@@ -3017,13 +3043,11 @@ impl TypeChecker {
                     .iter()
                     .filter_map(|p| p.ty.as_ref().map(|t| MonoType::from(t.clone())))
                     .collect();
-                let fn_ty = MonoType::Fn {
-                    params: param_types,
-                    return_type: Box::new(MonoType::MetaType {
-                        universe_level: crate::frontend::core::types::mono::UniverseLevel::type0(),
-                        type_params: vec![],
-                    }),
-                };
+                // 形态构造单源（#524）：与导入面 register_use_export 共用
+                let fn_ty =
+                    crate::frontend::core::sema::predicate_resolver::PredicateDef::proof_fn_type(
+                        &param_types,
+                    );
                 self.env.add_var(name.to_string(), PolyType::mono(fn_ty));
             }
         }
@@ -3941,43 +3965,18 @@ impl TypeChecker {
     /// 不透明应用 `IsPositive(-5)`。这是精化约束第一次**可符号推理**的前提
     /// （SMT 与假设合证；终止检查良基性 `b >= 0` 就依赖它）。
     ///
-    /// 两种声明形态的**识别**已提取为 probe.rs 的 `predicate_decl_shape`
-    /// （WBS 3.20.9 / #522：与 `TypeLevelNamespace::scan` 共用，shape
-    /// matching 全仓单点）；本遍在此之上叠加登记侧收窄：
-    ///
-    /// 只登记单参数形态：`PredicateResolver::try_resolve` 的阶段 1 模型即单参数，
-    /// 登记多参数谓词会使其调用一律撞 ArityMismatch（E1093）——保持其走证明
-    /// 函数路径（现行为）。约束体不可转为常量表达式的声明不登记也不报错
-    /// （它只是普通函数）。
+    /// def 构建（形态识别、单参数收窄、参数默认口径）已提纯为自由函数
+    /// `predicate_resolver::collect_predicate_defs`（#524：Registry 导出
+    /// 提取是第二个委托方，判据不得出现第二份）；本遍只负责并入本单元的
+    /// `env.predicate_defs`。
     fn collect_predicate_defs(
         &mut self,
         module: &Module,
     ) {
-        for stmt in &module.items {
-            let Some(decl) = super::probe::predicate_decl_shape(stmt) else {
-                continue;
-            };
-            // 形参名与类型同栖在 `Type::Fn.params`（6.5.2）
-            let params = decl
-                .type_annotation
-                .map(crate::ast::Type::fn_params_flat)
-                .unwrap_or_default();
-            let [param] = params.as_slice() else {
-                continue;
-            };
-            let param_type = param
-                .ty
-                .as_ref()
-                .map(|t| MonoType::from(t.clone()))
-                .unwrap_or(MonoType::Int(64));
-            self.env.predicate_defs.insert(
-                decl.name.to_string(),
-                crate::frontend::core::sema::predicate_resolver::PredicateDef {
-                    param_name: param.name.clone(),
-                    param_type,
-                    constraint: decl.constraint,
-                },
-            );
+        for (name, def) in
+            crate::frontend::core::sema::predicate_resolver::collect_predicate_defs(module)
+        {
+            self.env.predicate_defs.insert(name, def);
         }
     }
     pub(crate) fn collect_termination_measures(

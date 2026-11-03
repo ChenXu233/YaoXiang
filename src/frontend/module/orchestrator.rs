@@ -1077,6 +1077,14 @@ pub(crate) fn extract_module_info(
     // （反推区分不了类型参数与普通类型名，会误伤 `Dict(K,V)` / `File` 等）。
     let fn_type_params = checker.generic_fn_type_params_snapshot();
 
+    // 编译期谓词 def（#524 甲案）：构建判据与第零遍同源（单源自由函数，
+    // `predicate_resolver::collect_predicate_defs`）。按名附到对应导出上随
+    // Registry 面携带——导入方 `register_use_export` 按 use 门控并入
+    // `env.predicate_defs`；未导入的谓词解析失败是正确行为（2026-11-03
+    // 用户裁决：use 是唯一跨单元名引入机制）。
+    let predicate_defs =
+        crate::frontend::core::sema::predicate_resolver::collect_predicate_defs(ast);
+
     // TypeEnvironment 不实现 Clone，只克隆需要的几张表。
     let vars = checker.env().vars.clone();
     let types = checker.env().types.clone();
@@ -1112,6 +1120,11 @@ pub(crate) fn extract_module_info(
                     );
                     // 跨模块类型传播：泛型模板 + 和类型变体 + 接口实现随导出携带
                     export.type_payload = checker.type_def_export_payload(name, definition);
+                    // 谓词 def 随导出携带（#524 甲案）——谓词按 TypeDefinition
+                    // 形态导出（kind=Type），def 是导入方谓词正格化的唯一模板源
+                    if let Some(def) = predicate_defs.get(name.as_str()) {
+                        export.predicate_def = Some(def.clone());
+                    }
                     info.add_export(export);
                 }
             }
@@ -1125,6 +1138,10 @@ pub(crate) fn extract_module_info(
                     // `def_span = name_span`（statements.rs 的 Assign 臂）同源同值，
                     // 跨文件 `resolves_to` 的 DefId 因此能命中本文件直接检查
                     // 产出的定义条目（WBS 4.6.1）。
+                    // 谓词 def（#524 甲案）：Assign 形态谓词（体是 lambda/表达
+                    // 式，不走类型体）按 Function/Constant 导出，def 同样随
+                    // 导出携带——模板面不因声明拼写降级。
+                    let predicate_def = predicate_defs.get(name.as_str()).cloned();
                     if let Some(ty) = lookup(&vars, name) {
                         // 函数/lambda 绑定由 collect_signatures 收集 → 在 vars 中。
                         let kind = if matches!(ty, MonoType::Fn { .. }) {
@@ -1132,26 +1149,30 @@ pub(crate) fn extract_module_info(
                         } else {
                             ExportKind::Constant
                         };
-                        info.add_export(make_export(
+                        let mut export = make_export(
                             module_key,
                             name,
                             kind,
                             ty,
                             &fn_type_params,
                             Some(*name_span),
-                        ));
+                        );
+                        export.predicate_def = predicate_def;
+                        info.add_export(export);
                     } else if let Some(type_ann) = type_annotation {
                         // 普通常量（如 `value: Int = 7`）不会被当作签名收集，
                         // 从类型标注导出其类型。
                         let ty = MonoType::from(type_ann.clone());
-                        info.add_export(make_export(
+                        let mut export = make_export(
                             module_key,
                             name,
                             ExportKind::Constant,
                             ty,
                             &fn_type_params,
                             Some(*name_span),
-                        ));
+                        );
+                        export.predicate_def = predicate_def;
+                        info.add_export(export);
                     }
                 }
             }
@@ -1194,6 +1215,7 @@ fn make_export(
         param_names: None,
         type_payload: None,
         definition_span,
+        predicate_def: None,
     }
 }
 
