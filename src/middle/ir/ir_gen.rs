@@ -648,6 +648,42 @@ impl AstToIrGenerator {
     /// （`self.fn_param_names` 的登记）——同一 helper、同一顺序，不得各自再切一次。
     /// SPEC §7.1 分类器的**真注入**：候选类型取 L3 权威表；类型命名空间与谓词集
     /// 由 `generate_module_ir` 入口从 AST 扫出，不使用保守假值。
+    /// 实现头绑定序列第 i 位在**调用点实参序列**里的下标（SPEC §7.1「两条序列」）。
+    ///
+    /// 绑定序列 = 形参 − 类型参数 − 编译期值参数；调用点序列 = 形参 − 类型参数（编译期值
+    /// 参数**仍占**实参位）。故绑定第 i 位常常**不等于**运行期第 i 位：
+    /// `f: (N: Int, M: N) -> Int = (m) => m` 的 `m` 是绑定第 0 位、运行期第 1 位（第 0 位
+    /// 是 N）。名字在声明里唯一，故按名取下标；取不到时退回 i。
+    ///
+    /// 与 typecheck 侧同源：两侧都用 `runtime_value_params`（调用点序列）与
+    /// `declaration_runtime_param_slots`（绑定序列）这两个既有 helper，不另切一刀。
+    fn impl_head_runtime_indices(
+        &self,
+        type_annotation: Option<&ast::Type>,
+    ) -> Vec<usize> {
+        let Some(ann) = type_annotation else {
+            return Vec::new();
+        };
+        let call_seq: Vec<String> = ann
+            .runtime_value_params()
+            .into_iter()
+            .map(|p| p.name)
+            .collect();
+        let bindable = self.declaration_runtime_param_slots(Some(ann), call_seq.len());
+        // 两条序列等长 ⇒ 恒等映射（没有编译期值参数，或它们不与值参数同层）。只有确实
+        // 存在「不占绑定序列的编译期值参数」时才按下标重映射——否则柯里层/裸标识符形参
+        // 的既有槽位顺序会被打乱（语料 `01-syntax/basics/statement-termination.yx` 实测
+        // 因此 E6005）。
+        if bindable.len() == call_seq.len() {
+            return (0..bindable.len()).collect();
+        }
+        bindable
+            .into_iter()
+            .enumerate()
+            .map(|(i, p)| call_seq.iter().position(|n| *n == p.name).unwrap_or(i))
+            .collect()
+    }
+
     fn declaration_runtime_param_slots(
         &self,
         type_annotation: Option<&ast::Type>,
@@ -2525,14 +2561,24 @@ impl AstToIrGenerator {
         // 往实现头填声明类型）。
         let declared = self.declaration_runtime_param_slots(Some(method_type), params.len());
         let param_types = self.impl_param_types(params, Some(method_type));
+        // 槽位取**调用点实参序列**里的下标：绑定第 i 位 ≠ 运行期第 i 位
+        //（见 `impl_head_runtime_indices`）。
+        let runtime_indices = self.impl_head_runtime_indices(Some(method_type));
         for (i, param) in params.iter().enumerate() {
             // 注册参数到符号表
-            self.register_local(&param.name, i);
+            self.register_local(&param.name, runtime_indices.get(i).copied().unwrap_or(i));
         }
         self.note_param_written_types(params, &declared);
 
         // 记录局部变量起始位置（在参数之后）
-        let local_var_start = params.len();
+        // 帧宽只看**实际用到的**槽位：`take(params.len())` 保证「声明比实现头多」的形态
+        // 不会凭空加宽（`locals_total` 因此与改动前一致）。
+        let used_max = runtime_indices
+            .iter()
+            .take(params.len())
+            .max()
+            .map_or(0, |m| m + 1);
+        let local_var_start = params.len().max(used_max);
         self.next_temp = local_var_start;
         // #393：本函数是独立寄存器空间——高水位与循环态地板随之清零
         self.temp_high_water = local_var_start;
@@ -2683,22 +2729,33 @@ impl AstToIrGenerator {
         // 进入函数体作用域
         self.enter_scope();
 
-        // 为每个参数生成 LoadArg 指令并注册
+        // 为每个参数生成 LoadArg 指令并注册。槽位取**调用点实参序列**里的下标：
+        // 绑定第 i 位 ≠ 运行期第 i 位（见 `impl_head_runtime_indices`）——
+        // `f: (N: Int, M: N) -> Int = (m) => m` 的 `m` 是绑定第 0 位、运行期第 1 位。
+        let runtime_indices = self.impl_head_runtime_indices(type_annotation);
         for (i, param) in params.iter().enumerate() {
+            let slot = runtime_indices.get(i).copied().unwrap_or(i);
             instructions.push(Instruction::Load {
-                dst: Operand::Local(i),
-                src: Operand::Arg(i),
+                dst: Operand::Local(slot),
+                src: Operand::Arg(slot),
                 span: self.cur_span,
             });
 
-            self.register_local(&param.name, i);
+            self.register_local(&param.name, slot);
         }
         // 写出类型名与形参类型同一来源（作者标注 → 声明同类位）。
         let declared = self.declaration_runtime_param_slots(type_annotation, params.len());
         self.note_param_written_types(params, &declared);
 
         // 记录局部变量起始位置（在参数之后）
-        let local_var_start = params.len();
+        // 帧宽只看**实际用到的**槽位：`take(params.len())` 保证「声明比实现头多」的形态
+        // 不会凭空加宽（`locals_total` 因此与改动前一致）。
+        let used_max = runtime_indices
+            .iter()
+            .take(params.len())
+            .max()
+            .map_or(0, |m| m + 1);
+        let local_var_start = params.len().max(used_max);
         self.next_temp = local_var_start;
         // #393：本函数是独立寄存器空间——高水位与循环态地板随之清零
         self.temp_high_water = local_var_start;

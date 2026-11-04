@@ -2106,29 +2106,14 @@ impl StatementChecker {
             // 字面量 ∪ `proof_fn_bases` 判名」的窄化同义判据（不查
             // `predicate_defs`、漏无参证明函数），与 A 面不同构。
             let is_predicate = |n: &str| self.predicate_names.contains(n);
-            if let Some(crate::ast::Type::Fn { return_type, .. }) = type_annotation {
-                if let crate::ast::Type::Fn {
-                    params: inner_params,
-                    ..
-                } = return_type.as_ref()
-                {
-                    for p in inner_params {
-                        if let Some(ty) = &p.ty {
-                            collect_used_in_type(
-                                ty,
-                                &candidate_names,
-                                &mut used_as_const,
-                                &is_predicate,
-                            );
-                        }
-                    }
-                }
-                collect_used_in_type(
-                    return_type,
-                    &candidate_names,
-                    &mut used_as_const,
-                    &is_predicate,
-                );
+            // 「类型位置」= 声明的**全部 `Type` 子树**（SPEC type-system §7.1）：形参标注、
+            // 返回类型、内层 `Fn` 的形参类型都是同一棵树的子树。此前只扫「返回位 + 返回位
+            // 内层 Fn 的形参标注」，**漏了本层形参自己的标注** ⇒ `f: (N: Int, M: N) -> Int`
+            // 里 `M: N` 的 `N` 从未计入用途 ⇒ `const_binders` 为空 ⇒ `M` 的标注停在裸名
+            // `N`（实测 E1012「expected int64, found N」）。`collect_used_in_type` 的 `Fn`
+            // 臂本就递归形参与返回位，故整棵树一次收口，不按位置分情况。
+            if let Some(ann) = type_annotation {
+                collect_used_in_type(ann, &candidate_names, &mut used_as_const, &is_predicate);
             }
         }
 
