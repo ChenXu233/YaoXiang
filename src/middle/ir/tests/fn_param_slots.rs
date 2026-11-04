@@ -74,6 +74,67 @@ fn test_bare_identifier_param_takes_no_runtime_slot() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// WBS 6.8.3：实现头只承载作者写的形参 ⇒ IR 的形参类型从**声明**渲染
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[test]
+fn test_impl_head_param_type_rendered_from_declaration() {
+    // Arrange & Act：实现头不带标注，声明的形参类型是非 Int 的 Bool
+    //（parser 停止填声明类型后，IR 不能再退回 Int(64) 占位——占位会让帧布局里的
+    //  形参类型与声明不符，而声明是 IR 唯一的类型来源）
+    let module = generate_ir("f: (a: Bool) -> Int = (x) => 1");
+
+    // Assert：形参类型取声明第 0 位（Bool）
+    let f = module
+        .functions
+        .iter()
+        .find(|f| f.name == "f")
+        .expect("应生成函数 f");
+    assert_eq!(
+        f.params.len(),
+        1,
+        "实现头 1 位形参对应声明第 0 位，got: {:?}",
+        f.params
+    );
+    assert!(
+        matches!(
+            f.params[0],
+            crate::frontend::core::types::mono::MonoType::Bool
+        ),
+        "形参类型必须渲染声明的 Bool（Int(64) 占位说明声明来源没接上），got: {:?}",
+        f.params[0]
+    );
+}
+
+#[test]
+fn test_impl_head_param_types_align_positionally_with_declaration() {
+    // Arrange & Act：两位形参、实现头改名且不带标注，声明类型各不相同
+    let module = generate_ir("f: (a: Int, b: Bool) -> Int = (x, y) => x");
+
+    // Assert：按**位置**渲染（第 1 位取声明的 Bool，不是第 0 位的 Int、
+    // 也不是 Int(64) 占位）——两位同型时这个错位是看不出
+    let f = module
+        .functions
+        .iter()
+        .find(|f| f.name == "f")
+        .expect("应生成函数 f");
+    assert_eq!(
+        f.params.len(),
+        2,
+        "两位实现形参应对应声明前两位，got: {:?}",
+        f.params
+    );
+    assert!(
+        matches!(
+            f.params[1],
+            crate::frontend::core::types::mono::MonoType::Bool
+        ),
+        "第 1 位形参必须渲染声明第 1 位的 Bool（按位对齐），got: {:?}",
+        f.params[1]
+    );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // WBS 6.8.2b（D54 退役面）：声明侧**编译期形参位**不得被灌进运行期值形参
 // ─────────────────────────────────────────────────────────────────────────────
 //
@@ -162,6 +223,97 @@ fn test_named_argument_uses_declared_name_at_ir_level() {
     assert!(
         module.functions.iter().any(|f| f.name == "f"),
         "命名实参按声明名绑定后 IR 仍应生成函数 f"
+    );
+}
+
+/// 源码 → 前端（typecheck）阶段的诊断消息。
+fn typecheck_errors(source: &str) -> Vec<String> {
+    let tokens = tokenize(source).expect("测试源码词法不应失败");
+    let parsed = parse(&tokens);
+    assert!(
+        !parsed.has_errors,
+        "测试源码语法必须正确: {:?}",
+        parsed.errors
+    );
+    let mut checker = TypeChecker::new("named_arg_names");
+    checker
+        .check_module(
+            &parsed.module,
+            &TypeLevelNamespace::scan_one(&parsed.module),
+        )
+        .diagnostics
+        .into_iter()
+        .map(|d| d.message)
+        .collect()
+}
+
+/// 源码 → IR 级诊断（typecheck 必须干净，只回 IR 阶段报告的错误）。
+fn generate_ir_errors(source: &str) -> Vec<String> {
+    let tokens = tokenize(source).expect("测试源码词法不应失败");
+    let parsed = parse(&tokens);
+    assert!(
+        !parsed.has_errors,
+        "测试源码语法必须正确: {:?}",
+        parsed.errors
+    );
+    let mut checker = TypeChecker::new("named_arg_names");
+    let type_result = checker.check_module(
+        &parsed.module,
+        &TypeLevelNamespace::scan_one(&parsed.module),
+    );
+    assert!(
+        type_result.diagnostics.is_empty(),
+        "测试源码类型检查应通过（E1014 的 available 列表在 IR 阶段结算）: {:?}",
+        type_result.diagnostics
+    );
+    let mut generator =
+        AstToIrGenerator::new_with_type_result(&type_result, ModuleRegistry::with_std(), None);
+    match generator.generate_module_ir(&parsed.module) {
+        Ok(_) => Vec::new(),
+        Err(diags) => diags.into_iter().map(|d| d.message).collect(),
+    }
+}
+
+#[test]
+fn test_named_argument_available_names_are_declaration_names() {
+    // Arrange — 实现头改名（x, y）而声明名是 a, b；调用侧写两个不存在的名字。
+    // 元数对得上 ⇒ 走到 IR 的命名实参检查（typecheck 只结算元数）。
+    const SRC: &str = "f: (a: Int, b: String) -> Int = (x, y) => x\n\
+         r: Int = f(c = 1, d = \"s\")";
+
+    // Act
+    let messages = generate_ir_errors(SRC);
+
+    // Assert — available 列表 = 声明名集合（a, b）：实现头名 x/y 不得冒充可用名
+    //（旧口径列 `x, y`，正是 6.8.2 记的「available: b 而第 0 槽是 a 的槽」那类误报）。
+    assert!(
+        messages.iter().any(|m| m.contains("(available: a, b)")),
+        "available 必须列出声明名集合 (a, b)，实际消息：{messages:?}"
+    );
+    assert!(
+        !messages.iter().any(|m| m.contains("available: x")),
+        "实现头名不得进入可用名集合，实际消息：{messages:?}"
+    );
+}
+
+#[test]
+fn test_method_named_argument_available_names_are_declaration_names() {
+    // Arrange — 方法绑定实现头改名（m, q）而声明名是 n, a；调用侧写不存在的名字。
+    const SRC: &str = "Temp: Type = { v: Int }\n\
+         Temp.pick: (self: &Temp, n: Int, a: Int) -> Int = (self, m, q) => m\n\
+         main: () -> Int = {\n\
+             t = Temp(1)\n\
+             return t.pick(z = 1, w = 2)\n\
+         }\n\
+         r: Int = main()";
+
+    // Act — 方法形态的命名实参在 **typecheck** 阶段结算（普通函数在 IR 阶段）
+    let messages = typecheck_errors(SRC);
+
+    // Assert — 方法形态同样按声明名列出（接收者位不参与可用名集合）。
+    assert!(
+        messages.iter().any(|m| m.contains("(available: n, a)")),
+        "方法形态的 available 必须列出声明名集合 (n, a)，实际消息：{messages:?}"
     );
 }
 

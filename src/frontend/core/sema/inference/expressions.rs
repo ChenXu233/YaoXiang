@@ -2045,16 +2045,10 @@ impl<'a> ExpressionInferrer<'a> {
         Substituter::new().substitute(ty, &sub)
     }
 
-    /// 剥离顶层 `Ref`（递归），返回内层类型。用于类型参数推断时穿透借用包装：
-    /// `unify(&List(Int), &List(T))` 走 Ref 分支后递归到内层即可解出 T，
-    /// 但实参未带 Ref 时（或可变性不匹配）到不了内层，故显式剥一层再补 unify。
-    fn strip_ref(ty: &MonoType) -> MonoType {
-        match ty {
-            MonoType::Ref { inner, .. } => Self::strip_ref(inner),
-            other => other.clone(),
-        }
-    }
-
+    /// 类型参数推断时穿透借用包装：
+    /// 递归到内层即可解出 T，但实参未带 Ref 时（或可变性不匹配）到不了内层，
+    /// 故显式剥一层再补一次 unify。剥法本身单点在 MonoType::strip_ref
+    /// （与函数体出口对照共用同一份实现）。
     /// 值位置的**类型值**判定：`Int` 这样的具体类型 infer 成 `MetaType`；
     /// `Box` / `Vec` 这样的类型构造器 infer 成类型级函数 `(T: Type) -> Type`
     /// （RFC-010 元类型宇宙的 Type1 值）。两者都是类型实参的候选形态。
@@ -2449,7 +2443,7 @@ impl<'a> ExpressionInferrer<'a> {
             if arg_types.len() == new_params.len() {
                 for (arg_ty, param_ty) in arg_types.iter().zip(new_params.iter()) {
                     let _ = self.solver.unify(arg_ty, param_ty);
-                    let (a, p) = (Self::strip_ref(arg_ty), Self::strip_ref(param_ty));
+                    let (a, p) = (arg_ty.strip_ref(), param_ty.strip_ref());
                     let _ = self.solver.unify(&a, &p);
                 }
             }

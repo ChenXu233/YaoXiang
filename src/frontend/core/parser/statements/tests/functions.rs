@@ -83,11 +83,22 @@ fn test_fn_multi_param() {
 }
 
 #[test]
-fn test_fn_typed_params() {
+fn test_fn_signature_params_carry_types() {
+    // 覆盖: WBS 6.8.3 — 类型标注停在**声明**里；实现头只保留作者写的东西
     let kind = parse_fn("add: (a: Int, b: Int) -> Int = (a, b) => a + b");
-    let StmtKind::Assign { value, .. } = &kind else {
+    let StmtKind::Assign {
+        value,
+        type_annotation,
+        ..
+    } = &kind
+    else {
         panic!("Expected Assign");
     };
+    // Act：声明侧（Type::Fn 链）与实现头（lambda params）分别取值
+    let signature = type_annotation
+        .as_ref()
+        .map(crate::ast::Type::fn_params_flat)
+        .unwrap_or_default();
     let params = if let Some(v) = value {
         if let Expr::Lambda { params, .. } = v.as_ref() {
             params.clone()
@@ -97,8 +108,19 @@ fn test_fn_typed_params() {
     } else {
         Vec::new()
     };
-    assert_eq!(params.len(), 2);
-    assert!(params[0].ty.is_some(), "参数应有类型标注");
+    // Assert：声明的形参带类型；实现头的同名形参不再被补上类型
+    assert_eq!(signature.len(), 2, "声明侧应有 2 位形参");
+    assert!(
+        signature.iter().all(|p| p.ty.is_some()),
+        "声明侧形参必须带类型标注，got: {:?}",
+        signature.iter().map(|p| &p.ty).collect::<Vec<_>>()
+    );
+    assert_eq!(params.len(), 2, "实现头应保留作者写的 2 位形参");
+    assert!(
+        params.iter().all(|p| p.ty.is_none()),
+        "实现头不得被 parser 补上声明类型（6.8.3 起由消费点取声明），got: {:?}",
+        params.iter().map(|p| &p.ty).collect::<Vec<_>>()
+    );
 }
 
 #[test]

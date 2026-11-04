@@ -3200,6 +3200,30 @@ E1010）。已改成实情并把「运行期也按声明元数接收」**登记�
 parser / typecheck / ir_gen 三处都改调这两个 helper（不再各自写过滤）；IR 的形参类型改为直接取
 **AST 形参自带的标注**（parser 已按体内形态填好：箭头→最内层组、块体→各层拍平），因此快照**零漂移**。
 
+> **订正（WBS 6.8.3 实现轮实测）**：上面这句「三处都改调」与当时的实际调用点不符，逐处核对如下。
+>
+> - 6.8.2 那一轮**真正收敛成单点**的只有 ir_gen：形参类型、写出类型名、调用侧可用名三处共享
+>   `declaration_runtime_params`（后来改名 `declaration_runtime_param_slots`）；
+> - `runtime_value_params`（**拍平**版）当时只有 E1112 的元数判定在用；
+> - `runtime_value_params_innermost`（最内层组版）被 parser 的块体合成与 typecheck 的
+>   `aligned_value_params` 各用一次，且**两处各自仍带一份过滤**（parser 判类型位/约束名/被当 const 用；
+>   typecheck 先剥 `MetaType` 编译期槽再取前 N 位）——这正是「声明来源」在 6.8.3 要收的尾。
+>
+> **6.8.3 的实际调用点清单**（单一入口 `Type::impl_head_runtime_params(is_constraint, is_predicate)`，
+> 层选择与四类编译期位过滤都在它里面；`runtime_value_params_innermost` 随之删除）：
+>
+> 1. **parser**：块体 / 表达式体**合成**实现头的形参表（只注入「是不是约束名」的探针问答）；
+> 2. **typecheck**：`check_fn_stmt` 的 `declared_value_params`——体内形参绑定与 E1011 标注对照
+>    **共用同一份**列表（旧的两份：`aligned_value_params` 的 `MonoType` 前 N 位切片、
+>    `declared_param_forms` 的声明原文，已合并）；
+> 3. **ir_gen**：`declaration_runtime_param_slots`（拍平版 `runtime_value_params` 的前 N 位），
+>    供形参类型 `impl_param_types`、写出类型名 `note_param_written_types`、调用侧可用名
+>    `fn_param_names` 三处。
+>
+> 顺带实测（同一 HEAD 对照）：块体形态的**依赖类型值形参** `f: (a: Int, b: Vec(a)) -> Int = { a }`
+> 旧口径报 E1011（parser 的用法判据把 `a` 当编译期位剔掉、实现头少一位、位次前移），收敛后转绿；
+> 判据落在 typecheck 层（该形态的 IR 规范化拿不到文本，进不了语料快照）。
+
 **实测（判据）**：① `f: (A: Int) -> (B: String) -> Int = (x) => x` → **E1012**（不再是 E1011）；
 ② 同形态返回 `String` 的合法程序不再被 E1011 遮住，回到既有的 **E3006** 形态（箭头体引用的形参
 在 IR 里没有运行期槽位，见上一条残留）；③ `f: (a: Int, b: Vec(a)) -> Int = (x, y) => x` → **绿**；

@@ -733,6 +733,13 @@ impl TypeConstraintSolver {
             }
             // #299：容器/复合类型（List/Dict/Set/Tuple/Range/Arc/Weak/Option/Result/String/Bytes）统一走 Generic
             MonoType::Generic { args, .. } => args.iter().any(|t| self.contains_var(t, var)),
+            // 借用类型 `&T` / `&mut T`：内层是同一个值世界的类型，occurs check 必须
+            // **穿透**。缺本臂时 occurs check 对借用位失灵：`bind(t, &t)` 被判「不含 t」
+            // 而建立自指绑定，此后任何 `resolve_type(t)` → `expand_type` 展开
+            // `&t` → 再展开 `t`，无限自递归（实测 CLI 栈溢出 0xC00000FD，见 09a §P6 6.8.3）。
+            // 声明形参是借用、返回位是同一类型变量的合法写法
+            // （`pick: (T: Type) -> (x: &T) -> T = (x) => x`）正是这条路径的入口。
+            MonoType::Ref { inner, .. } => self.contains_var(inner, var),
             // 基本类型和类型引用不包含类型变量
             _ => false,
         }

@@ -103,11 +103,11 @@ fn test_format_fn_type_params_preserved() {
 
 #[test]
 fn test_format_fn_type_named_params() {
-    // §4.1 + RFC-007 完整形式: 带名 Fn 类型标注按名渲染；parser 会把签名类型合并进值 lambda 参数
-    // （declarations.rs 的 merged params），值侧渲染为 `(x: Int) => x`
+    // §4.1 + RFC-007 完整形式: 带名 Fn 类型标注按名渲染；实现头**按源码保真**，
+    // parser 不再把签名类型并进值 lambda 参数（WBS 6.8.3），故值侧仍是 `(x) => x`。
     assert_format_eq(
         "f: (x: Int) -> Int = (x) => x",
-        "f: (x: Int) -> Int = (x: Int) => x\n",
+        "f: (x: Int) -> Int = (x) => x\n",
     );
 }
 
@@ -694,11 +694,11 @@ fn test_format_generic_function_roundtrip() {
     let result = format_source(input, &default_options())
         .unwrap_or_else(|e| panic!("Failed to format: {}", e));
 
-    // Assert — 注解括号保留，值是单个 lambda（不再包外层块），参数标注来自签名
-    assert_eq!(
-        result,
-        "map: (T: Type) -> ((x: Int) -> Int) = (x: Int) => x\n"
-    );
+    // Assert — 注解括号保留，值是单个 lambda（不再包外层块）；实现头**只保留作者写的
+    // 形参**（`(x)`，不带标注）——6.8.3 起 parser 不再按声明往实现头填类型，
+    // 填进去会让 formatter 把 `= (x) => x` 改写成 `= (x: Int) => x`（源码被改写），
+    // 也会让 typecheck 分不出「作者写的标注」与「parser 填的标注」。
+    assert_eq!(result, "map: (T: Type) -> ((x: Int) -> Int) = (x) => x\n");
 }
 
 #[test]
@@ -710,11 +710,9 @@ fn test_format_named_params_function_roundtrip() {
     let result = format_source(input, &default_options())
         .unwrap_or_else(|e| panic!("Failed to format: {}", e));
 
-    // Assert — 带签名的函数绑定 params 携带标注、单表达式体为 Return 语句
-    assert_eq!(
-        result,
-        "add: (a: Int, b: Int) -> Int = (a: Int, b: Int) => a + b\n"
-    );
+    // Assert — 实现头按源码保真（6.8.3 起 parser 不再补声明类型），
+    // 单表达式体为 Return 语句
+    assert_eq!("add: (a: Int, b: Int) -> Int = (a, b) => a + b\n", result);
 }
 
 #[test]

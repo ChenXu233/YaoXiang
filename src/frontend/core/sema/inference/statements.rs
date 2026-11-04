@@ -1027,19 +1027,22 @@ impl StatementChecker {
 
     /// 带 const 替换的 check_fn_def（const 泛型参数名 → 底层类型的 MonoType）
     ///
-    /// `value_params`：值级参数类型（签名剥层+替换后的结果，位置与 `params`
-    /// 对应）。函数体就是这个值级函数，参数绑定以它为准——lambda 参数缺
-    /// 标注时不再从 AST 标注抄名字（那是悬空 TypeRef 的来源）。
+    /// `declared_value_params`：实现头第 i 位的**声明来源**（按位对齐到声明里
+    /// 实现头所绑那一层的运行期值位，`ast::Type::impl_head_runtime_params`）。
+    /// 体内绑定与 E1011 标注对照共用这一份——两者的声明侧口径必须相同。
     ///
     /// `type_param_vars`：类型参数名 → 新鲜类型变量，进参数链供体内值位置
     /// 引用（`Result(T, E).err(e)` 的 T/E）。
+    // 与 check_fn_body 同款：声明侧来源分三路（声明值位 / const 替换 / 类型参数变量），
+    // 来源不同不宜合并成结构体。仓库内 ir_gen / formatter 同类签名同样用本条。
+    #[allow(clippy::too_many_arguments)]
     fn check_fn_def_with_subst(
         &mut self,
         name: &str,
         params: &[Param],
         body: &Block,
         const_subst: &std::collections::HashMap<String, MonoType>,
-        value_params: Option<&[MonoType]>,
+        declared_value_params: Option<&[Param]>,
         type_param_vars: &std::collections::HashMap<String, MonoType>,
     ) -> Result<(), Box<Diagnostic>> {
         let expected_ret = self.expected_return_type.clone();
@@ -1049,7 +1052,7 @@ impl StatementChecker {
             body,
             const_subst,
             expected_ret,
-            value_params,
+            declared_value_params,
             type_param_vars,
         )
     }
@@ -1148,7 +1151,7 @@ impl StatementChecker {
         body: &Block,
         const_subst: &std::collections::HashMap<String, MonoType>,
         expected_ret: Option<MonoType>,
-        value_params: Option<&[MonoType]>,
+        declared_value_params: Option<&[Param]>,
         type_param_vars: &std::collections::HashMap<String, MonoType>,
     ) -> Result<(), Box<Diagnostic>> {
         // 检查是否已经检查过
@@ -1190,20 +1193,26 @@ impl StatementChecker {
         // `value_params` 由绑定位按「值级签名末尾 N 位」对齐后传入（N = 实现
         // 形参数，见 check_fn_stmt 的 aligned_value_params），故这里按**前缀**
         // 一一对应：第 i 个实现对第 i 个值级位。
-        if let Some(vp) = value_params {
-            for (i, param) in params.iter().enumerate().take(vp.len()) {
+        if let Some(declared) = declared_value_params {
+            for (i, param) in params.iter().enumerate().take(declared.len()) {
                 let Some(own) = param.ty.as_ref() else {
                     continue;
                 };
+                let Some(declared_ty) = declared.get(i).and_then(|d| d.ty.clone()) else {
+                    continue;
+                };
                 // 与下方绑定同款预处理：精化剥成基类型、const 参数按 const_subst
-                // 替换——否则 `(n: N)` 这类合法写法会被误判成冲突。
+                // 替换——否则 `(n: N)` 这类合法写法会被误判成冲突。声明侧与作者标注
+                // 走**同一份**替换/剥精化（两侧口径必须相同才能比较）。
                 let own_ty = MonoType::from(own.clone()).substitute(const_subst);
                 let own_ty = self.strip_refined_value_type(own_ty);
                 // 声明侧同样先剥**精化**：`IsPositive(N)` 与其基类型在值级是同一个
                 // 类型（与标注路径同源，`strip_refined_value_type` 单点）。#523 回归：
                 // parser 停止填参后，精化位才第一次走到「按声明取值」+ 结构比较这条路。
-                let expected = self.solver.resolve_type(&vp[i]);
+                let expected = MonoType::from(declared_ty).substitute(const_subst);
                 let expected = self.strip_refined_value_type(expected);
+                let expected = self.solver.resolve_type(&expected);
+
                 let found = self.solver.resolve_type(&own_ty);
                 // 判据 = **结构相等**，不是「求解器能统一」（D54 修复轮 F2 订正）：旧口径在
                 // 克隆沙箱里 unify，把「具体标注 vs 未绑定类型变量」判为相容（变量绑成具体
@@ -1235,9 +1244,8 @@ impl StatementChecker {
             }
         }
 
-        // 添加参数到函数作用域。value_params（已对齐到实现形参，见绑定位的
-        // aligned_value_params）按位置对应实现形参：声明是权威源，实现头的名字
-        // 只决定体内用哪个名字引用第 i 个值（WBS 6.8.2a / D54 ①）。
+        // 添加参数到函数作用域。`declared_value_params` 按位置对应实现形参：声明是
+        // 权威源，实现头的名字只决定体内用哪个名字引用第 i 个值（WBS 6.8.2a / D54 ①）。
         //
         // 旧口径要求「个数恰好相等」才按位取值，而 #295 会把签名里未出现于实现头的
         // 形参追加到参数表尾部 ⇒ 个数恒不等，按位取值整段失效、形参退回 fresh var：
@@ -1247,13 +1255,18 @@ impl StatementChecker {
         //
         // 只补空洞：参数自带标注时保留标注形态（TypeRef 名字是 IR 单态化按声明名
         // 改写的链路，替换成匿名 TypeVar 会断链——monomorphization.yx 嵌套泛型调用
-        // 回归实证）；缺标注时才用值级签名的对应位填充。
+        // 回归实证）；缺标注时取**声明标注原文**（parser 不再往实现头填声明类型之后，
+        // 这是「实现头缺标注」的唯一来源；形态与旧口径逐字一致）。
         for (i, param) in params.iter().enumerate() {
-            let param_ty = if let (None, Some(vp)) = (param.ty.as_ref(), value_params) {
+            let param_ty = if let (None, Some(declared)) =
+                (param.ty.as_ref(), declared_value_params)
+            {
                 // 与「形参自带标注」同款预处理：声明在位的类型若是精化（证明函数）形态，
                 // 必须先剥成基类型（#523 回归实证：parser 停填后精化位才第一次走这条路径）。
-                let declared_ty = vp.get(i).cloned().unwrap_or_else(|| self.solver.new_var());
-                self.strip_refined_value_type(declared_ty)
+                match declared.get(i).and_then(|d| d.ty.clone()) {
+                    Some(declared_ty) => self.strip_refined_value_type(MonoType::from(declared_ty)),
+                    None => self.solver.new_var(),
+                }
             } else {
                 // RFC-027 §6.1：形参**自带标注**时走的是注解（保留 TypeRef 声明名，
                 // 单态化依赖它），但精化标注必须剥成基类型——否则 `b: NonNegative(b)`
@@ -1454,7 +1467,9 @@ impl StatementChecker {
         // 先推进推断再比较：`if` 等组合表达式的类型可能还是未解的约束变量
         let tail_ty = self.solver.resolve_type(&tail_ty);
         let expected = self.solver.resolve_type(expected);
-        if self.solver.unify(&tail_ty, &expected).is_err() {
+        // 出口对照统一走 `exit_type_matches`（借用形 ↔ 值形对齐后判；与显式
+        // `return` 的载荷对照同一份判据，见该方法的文档）。
+        if !self.exit_type_matches(&tail_ty, &expected) {
             // #353：用 E1012（尾表达式与声明返回类型不符）而非 E1002，
             // 并把位置**指向注解**——真正该改的是注解，不是体的最后一行。
             //
@@ -1477,6 +1492,38 @@ impl StatementChecker {
         Ok(())
     }
 
+    /// 出口对照：先做**借用形 ↔ 值形**对齐，再判是否真的不符（RFC-010a 规则①②）。
+    ///
+    /// 借用是编译期零大小类型（`MonoType::Ref`），`&T` 与 `T` 在值位是同一个值。
+    /// 调用点早已按这条口径处理实参（`expressions.rs`：先 `unify(arg, param)`，
+    /// 再把两侧剥掉借用补一次 unify），函数体侧的出口对照此前没有对应实现——
+    /// 是对称缺口。
+    ///
+    /// 触发形态（合法程序）：`pick: (T: Type) -> (x: &T) -> T = (x) => x`。
+    /// 体的返回值类型是 `&t`、声明的返回位是 `t`：直接 `unify(&t, t)` 会把 `t`
+    /// 绑成 `&t`（occurs check 补齐借用位后改为报错）——两者都不对，因为借用形
+    /// 与值形本就是同一个值。
+    ///
+    /// 判据顺序固定：先原样 unify（成功即相容）；失败时剥掉两侧的借用，**剥后结构
+    /// 相同**才算相容。不是「剥后还能统一」——那会把
+    /// `pick: (T: Type) -> (x: &T) -> Int = (x) => x` 这类真实不符也放行
+    ///（`t` 被绑成 `Int`）。剥法单点在 [`MonoType::strip_ref`]。
+    fn exit_type_matches(
+        &mut self,
+        found: &MonoType,
+        expected: &MonoType,
+    ) -> bool {
+        if self.solver.unify(found, expected).is_ok() {
+            return true;
+        }
+        // 借用形 ↔ 值形对齐：借用是编译期零大小类型，`&t` 与 `t` 是同一个值。
+        // 判据是**剥掉借用后结构相同**，不是「剥掉后还能统一」——后者会把
+        // `pick: (T: Type) -> (x: &T) -> Int = (x) => x` 这类真实不符也放行
+        //（`t` 被绑成 `Int`，与调用点把实参借用剥掉后补 unify 的**推断**用途不同：
+        // 那里是求类型参数，这里是判定）。
+        let (found, expected) = (found.strip_ref(), expected.strip_ref());
+        self.solver.resolve_type(&found) == self.solver.resolve_type(&expected)
+    }
     /// 清空尾表达式类型记录（进入新函数体前调用）。
     fn clear_tail_ty(&mut self) {
         self.last_expr_stmt_ty = None;
@@ -1515,7 +1562,9 @@ impl StatementChecker {
         // 先推进推断再比较：载荷若是组合表达式，类型可能还是未解的约束变量
         let found = self.solver.resolve_type(found);
         let expected = self.solver.resolve_type(&expected);
-        if self.solver.unify(&found, &expected).is_err() {
+        // 与块尾表达式对照同一份判据（`exit_type_matches`）：借用形与值形在
+        // 值位是同一个值，先对齐再判。
+        if !self.exit_type_matches(&found, &expected) {
             let at = self.tail_annotation_span.unwrap_or(stmt_span);
             return Err(Box::new(
                 ErrorCodeDefinition::return_type_mismatch(
@@ -2096,6 +2145,22 @@ impl StatementChecker {
         // `gt: (t: Int) -> (x: Int) -> Bool = (x) => x > t` 的 t 在体内是可引用的
         // 运行期值，见下方的 #295 补参）。
         //
+        // **口径订正（WBS 6.8.3 实测）**：曾按「实现头所绑那一层」的位数（最内层组）
+        // 对照，意图让柯里与平铺同码——但柯里声明的实现头**本就该列出全部柯里值位**：
+        // `add3: (a: Int) -> (b: Int) -> (c: Int) -> Int = (a, b, c) => a + b + c` 是
+        // 既有可运行写法（tests/integration/curry_codegen.rs 与 curry_execution.rs 各
+        // 有一条判据），按层对照会把它判成 E1112。故按**拍平**的运行期值位对照
+        //（`runtime_value_params`）：它回答的正是「调用要按序给几个值」，与 E1112 的
+        // 文案（declares N parameters）同义。
+        //
+        // 另记（本批不修、已在 09a 登记）：**柯里声明配多形参实现头的绑定本身是既有
+        // 缺口**——形参多于所绑那一层时，那几位的类型取不到声明来源。实测（同一 HEAD）：
+        // `(A: Int) -> (B: String) -> String = (x, y) => y` 报内部一致性错误（变量在 IR
+        // 阶段未解析）、`= (x, y) => y.len()` 报 E1053（对未解析类型变量取字段）、
+        // `= (x, y) => x` 报 E1012。故「`(x, y) => 1` 不报 E1112」不等于绑定成功：
+        // 该格函数体不引用形参，仅因不暴露才静默通过；`add3` 三层同型也只是 unify 成立。
+        // E1112 维持拍平口径的理由是「元数 = 调用要按序给几个值」，与绑定是否接通无关。
+        //
         // 多出的位没有值可绑：旧行为静默接受，实测 `f: () -> Int = (a: Int) => a`
         // check 绿、运行期 f() 拿到 void（`f() + 1` 到运行期才报 E6007）。
         // 反向（实现少于声明）不在此报：缺席的位由下方 #295 用声明名补齐，函数照常
@@ -2328,31 +2393,30 @@ impl StatementChecker {
         let const_binder_names: std::collections::HashSet<&str> =
             const_binders.iter().map(|cb| cb.name.as_str()).collect();
 
-        // 实现形参 → 值级形参的**按位对应**（WBS 6.8.2a / D54 ①）：取值级签名的
-        // **末尾 N 位**（N = 实现形参数）。为什么是末尾：声明序里「实现体自己的
-        // 运行期值位」总排在后——类型泛型位在首（平铺泛型形态的值级签名保留
-        // TypeRef 槽位供调用点按声明名绑类型实参，如
-        // `mk: (A: Type, item: A) -> Box(A)` 的值级签名是 [Type, A]、实现头只有
-        // item），柯里形态的值层是最内层组。个数不等时不给对应（例如柯里声明配
-        // 多形参实现头：那几位的类型由它们自己的标注决定）。
+        // 实现头第 i 位的**声明来源**：按位对齐到声明里「实现头所绑那一层」的运行期
+        // 值位（`ast::Type::impl_head_runtime_params`，与 parser 合成块体实现头同一个
+        // helper——WBS 6.8.2 / D54 F1 收口，6.8.3 F1d）。两件事共用这一份列表，
+        // 不再各切一刀：① E1011 的标注对照（声明侧类型）；② 体内形参绑定（声明标注原文）。
         //
-        // 旧口径要求「个数恰好相等」才按位取值，而下方 #295 补参会把签名里未出现
-        // 于实现头的形参追加到参数表尾部 ⇒ 个数恒不等，按位取值整段失效、形参退回
-        // fresh var：实测 `f: (a: Int) -> Int = (b) => b + "s"` 的 b 成了 fresh var，
-        // `b + "s"` 顺利 unify 成 String，check 绿、运行期 E6007。改名不该改变判据。
-        let aligned_value_params: Option<&[MonoType]> = value_sig.as_ref().map(|(ps, _)| {
-            // 先剥**编译期槽**：类型位在值级签名里是 `MetaType` 值的槽
-            //（`f: (T: Type, x: T) -> T` 的值级签名是 `[MetaType, TypeRef(T)]`），
-            // 它不占运行期形参位；const 位与值位同组时是普通值类型，仍占位。
-            let mut start = 0;
-            while start < ps.len() && matches!(ps[start], MonoType::MetaType { .. }) {
-                start += 1;
-            }
-            let value_level = &ps[start..];
-            // 对齐 = **值级签名的前 N 位**（N = 实现形参数）：调用点实参也是按声明序
-            // 从左到右填运行期形参位，两侧同一口径（D54 修复轮 F4 订正；旧口径取
-            // 末尾 N 位，实现头只写部分形参时会把 a 对到 b 上）。
-            &value_level[..params.len().min(value_level.len())]
+        // **必须是声明标注原文**（不是值级签名替换后的形态）：`TypeRef("T")` 是单态化
+        // 按声明名改写调用点实参的链路，替换成匿名 TypeVar 会断链（parser 停填后这是
+        // 「实现头缺标注」的唯一来源；实测跨单元泛型链停在 `b.g` 未特化）。
+        //
+        // 只取前 N 位（N = 实现头形参数）：下方 #295 补参追加的位不走这里。个数不等时
+        // 多出的实现形参没有声明位（例如柯里声明配多形参实现头——那是既有缺口，
+        // 见 09a §P6 6.8.3 的登记：绑定路径未接通，本批不扩面）。
+        let declared_value_params: Option<Vec<Param>> = type_annotation.map(|ann| {
+            ann.impl_head_runtime_params(
+                &|n| {
+                    self.trait_table.has_trait(n)
+                        || crate::frontend::core::sema::operator_interfaces::spec(n).is_some()
+                },
+                // 与 const 用途精筛同一事实源（`predicate_names`，3.20.8 起单点）。
+                &|n| self.predicate_names.contains(n),
+            )
+            .into_iter()
+            .take(params.len())
+            .collect()
         });
 
         let mut params: Vec<Param> = params.to_vec();
@@ -2390,7 +2454,7 @@ impl StatementChecker {
             &params,
             &body,
             &const_subst,
-            aligned_value_params,
+            declared_value_params.as_deref(),
             &type_param_vars,
         );
 

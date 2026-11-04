@@ -858,75 +858,237 @@ impl std::fmt::Debug for Param {
 }
 
 impl Type {
-    /// 从 `Type::Fn` 链拍平出全部形参（curry 各组依次展开；`Paren`/
-    /// `NamedParen` 视为透明继续内层）。
+    /// 声明里**运行期值位**（**拍平**口径：声明序、跨所有柯里层、按调用序）。
     ///
-    /// 这是「语句声明里的原始签名形参」的**唯一实现**（RFC-039 6.5.2）：
-    /// `Assign`/`TypeDefinition` 不再另存形参表，消费点一律经本方法取；
-    /// 非函数类型返回空。`NamedParen` 的 binder 名不在此列——它由该节点
-    /// 自身承载、由类型检查器显式解释（返回位精化）。
-    /// 声明里**运行期值位**（按调用序）——WBS 6.8.2 / D54 F1 的**唯一**切法。
+    /// 它回答的问题是「调用时要按序给几个值」——消费点：E1112 的元数对照、
+    /// IR 的形参类型与调用侧可用名（`fn_param_slots` 的 `declaration_runtime_param_slots`）。
     ///
-    /// parser（填充实现头）、typecheck（形参数判定）、ir_gen（形参类型与调用侧可用名）
-    /// 三处共用本方法，不得各自再写一份过滤：任何「拍平 vs 剥层」的第二种输入都会在
-    /// 多层柯里声明上分叉（实测 `f: (A: Int) -> (B: String) -> Int = (x) => x`：
-    /// 拍平取前 N 会把 x 填成外层 A 的 Int，误报 E1011）。
+    /// **不是**「实现体所绑的那一层」：那是 [`Type::impl_head_runtime_params`]（层内口径，
+    /// 供 parser 合成实现头、typecheck 按位取声明来源）。两者不可互换——多层柯里声明上
+    /// 拍平取前 N 会把内层实现头的 `x` 填成外层 `A` 的 Int（实测误报 E1011）。
     ///
-    /// 两步：
-    /// 1. **沿柯里链走到最内层值组**：`return_type` 是 `Type::Fn` 时继续下钻；
-    ///    `Paren` / `NamedParen` 表示「返回的是一个函数值」（链条到此终止，与
-    ///    `split_curry` 的停层口径一致）。
-    /// 2. 在该组里剔除**编译期位**：标注本身是类型位（`T: Type`、类型级函数、
-    ///    名字为 `Type`）；以及「标注是全裸名字的并集、且该名字出现在组内类型位置」
-    ///    的约束写法（`T: Add + Multiply`）。
-    ///
-    /// 值类型的形参即便名字出现在类型位置（依赖类型 `b: Vec(a)` 的 `a`）**不剔除**——
-    /// 它是运行期值位，只是它的值参与了类型。
+    /// 过滤：仅「名字层编译期位」（`T: Type`、类型级函数）
+    /// 与「全裸名字并集且名字出现在类型位置」的多约束写法（`T: Add + Multiply`）。
+    /// 按**用途**判定的编译期位（`N: Int` 被当常量用）需要层与使用域信息，不在此过滤：
+    /// 拍平口径把它们当值位（`f: (N: Int) -> (n: N) -> Int` 平铺后是 2 位），
+    /// 故元数对照只可能偏宽、不会误报。
     pub fn runtime_value_params(&self) -> Vec<Param> {
-        // 拍平版（声明序，跨所有柯里层）：形参数判定（E1112）、块体实现头的参数合成、
-        // IR 的调用侧可用名都按这一份取——它回答「调用时要按序给几个值」。
         Self::value_slots(&self.fn_params_flat())
     }
 
-    /// 声明里最内层值组的运行期值位（同一条编译期位过滤）。
-    ///
-    /// 回答另一个问题：箭头体的形参表绑定哪一组声明形参——它只绑最内层值组
-    ///（f: (A: Int) -> (B: String) -> Int = (x) => x 的 x 是内层的 String，
-    /// 故出口对照报 E1012 而不是 E1011）；块体由 #295 补参段补齐各层，走拍平版。
-    pub fn runtime_value_params_innermost(&self) -> Vec<Param> {
-        fn innermost(ty: &Type) -> &Type {
-            let mut cur = ty;
+    /// 最内层层（值组）的 Fn 节点（停层判据见 [`Type::impl_head_layer`]）。
+    fn innermost_fn(ty: &Type) -> Option<&Type> {
+        let mut cur = ty;
+        loop {
+            let Type::Fn { return_type, .. } = cur else {
+                return None;
+            };
+            // 返回位可以是括号包起来的函数类型（`(T) -> ((self: &R(T)) -> Bool)`）：
+            // 它表示「返回的是一个函数值」，而**实现头绑的是这个内层 Fn 的形参**
+            // （`= (self) => ...`）——与 `curry` 不同，不沿内层继续下钻。
+            let mut next: &Type = return_type;
             loop {
-                let Type::Fn { return_type, .. } = cur else {
-                    return cur;
-                };
-                // 返回位可以是括号包起来的函数类型（`(T) -> ((self: &R(T)) -> Bool)`）：
-                // 它表示「返回的是一个函数值」，而**实现头绑的是这个内层 Fn 的形参**
-                // （`= (self) => ...`）——与 `curry` 不同，不沿内层继续下钻。
-                let mut next: &Type = return_type;
-                loop {
-                    match next {
-                        Type::Paren(inner) => next = inner,
-                        Type::NamedParen { inner, .. } => next = inner,
-                        _ => break,
-                    }
-                }
-                if matches!(next, Type::Fn { .. }) {
-                    cur = next;
-                } else {
-                    return cur;
+                match next {
+                    Type::Paren(inner) => next = inner,
+                    Type::NamedParen { inner, .. } => next = inner,
+                    _ => break,
                 }
             }
+            if matches!(next, Type::Fn { .. }) {
+                cur = next;
+            } else {
+                return Some(cur);
+            }
         }
-        let Type::Fn { params, .. } = innermost(self) else {
-            return Vec::new();
-        };
-        Self::value_slots(params)
     }
 
-    /// 编译期位过滤的唯一实现：类型位（T: Type、类型级函数）与多约束并集
-    ///（T: Add + Multiply，全裸名字且名字出现在组内类型位置）。值类型的形参
-    /// 即便名字出现在类型位置（依赖类型 b: Vec(a) 的 a）不剔除。
+    /// 实现头（**合成**形参表：块体 / 表达式体没有作者写的头）绑定**哪一组**声明形参。
+    ///
+    /// 返回该组的原始形参（顺序即声明序、**不做编译期位过滤**——过滤要按用途判定，
+    /// 只有消费方判得出：parser 的探针问答 / sema 的 const 用途分析）。要「这一层
+    /// 有哪些运行期值位」请直接用 [`Type::impl_head_runtime_params`]（层选择 + 过滤
+    /// 的单一入口）；本方法只回答「哪一组」，供 parser 的括号包装分支按组取形参。
+    ///
+    /// 分组的唯一判据在**括号返回位**：`mk: (a: Int) -> ((b: Int) -> R)` 的链条在
+    /// 括号处终止（`Paren` 声明「返回的是一个函数值」），体是**外层**函数本体
+    ///（它产出被返回的函数值），故取**首组**；其余（裸 Fn 链柯里 / 普通函数）
+    /// 体是最内层值函数。与 typecheck 的值级分层（`check_fn_stmt`：闭包包装或
+    /// 括号返回 ⇒ 外层，否则剥层到最内层）是同一条分层规则（WBS 6.8.3 ③ 的口径），
+    /// 故 parser 合成出的形参与 typecheck 的逐位对齐按构造同源。
+    pub fn impl_head_layer(&self) -> Vec<Param> {
+        match self.impl_head_fn() {
+            Some(Type::Fn { params, .. }) => params.clone(),
+            _ => Vec::new(),
+        }
+    }
+
+    /// 实现头所绑那一层的 **Fn 节点**（层选择单点；`impl_head_layer` 与编译期位
+    /// 判据的使用域都从这里取）。
+    fn impl_head_fn(&self) -> Option<&Type> {
+        match self {
+            Type::Fn {
+                params,
+                return_type,
+            } if return_type.is_paren_complete() => {
+                // 首组全是**编译期位**（`(T: Type) -> ((self: &R(T)) -> Bool)`）时本层
+                // 不占运行期位，paren 层就是值层——作者写的 lambda 即值级函数本体
+                // （与 parser 的包装判定、typecheck 的类型泛型剥离同一条规则）。
+                if Self::value_slots(params).is_empty() {
+                    Self::paren_inner_fn(return_type)
+                } else {
+                    Some(self)
+                }
+            }
+            _ => Self::innermost_fn(self),
+        }
+    }
+
+    /// 括号返回位内层的 Fn 节点（`-> ((a: Int) -> R)`）；内层不是 Fn
+    ///（`-> (Int)` 一类）时为空。
+    fn paren_inner_fn(return_type: &Type) -> Option<&Type> {
+        let mut inner: &Type = return_type;
+        loop {
+            match inner {
+                Type::Paren(t) => inner = t,
+                Type::NamedParen { inner: t, .. } => inner = t,
+                Type::Fn { .. } => return Some(inner),
+                _ => return None,
+            }
+        }
+    }
+
+    /// 实现头所绑那一层的**运行期值位**——这一份切法的**单一实现**
+    ///（WBS 6.8.2 / D54 F1 收尾，6.8.3 F1d）。
+    ///
+    /// 消费点（各自不得再写过滤循环）：
+    /// - parser：块体 / 表达式体**合成**实现头的形参表（没有作者写的头时才合成）；
+    /// - typecheck：实现头第 i 位的**声明来源**——体内绑定与 E1011 标注对照按位对齐
+    ///   （`check_fn_stmt` 的 `declared_value_params`）。
+    ///
+    /// 四类编译期位在此一次剔除：
+    /// 1. **类型位**：`T: Type`、类型级函数 `(F: (T: Type) -> Type)`；
+    /// 2. **约束位**：标注是约束名（`T: Add`）——是不是约束由调用方注入
+    ///    （parser 传探针、sema 传 trait 表）；谓词应用（`Terminates(b)`）的实参位
+    ///    是**值**不是类型，故「被当类型用」的扫描另需调用方注入谓词问答；
+    /// 3. **多约束并集且名字出现在组内类型位置**（`T: Clone + Add`）；
+    /// 4. **被当编译期常量/类型用**：名字出现在**本层之外**的类型位置
+    ///    （`f: (N: Int, s: String) -> Array(Int, N)` 的 `N`，见
+    ///    `const_used_layer_names`）。
+    ///
+    /// **依赖类型的值形参不剔除**：`f: (a: Int, b: Vec(a)) -> Int` 的 `a` 名字虽出现在
+    /// `Vec(a)` 里，但那是**本组**形参标注——它的值参与类型，仍是运行期值位。剔掉它
+    /// 会让实现头少一位、位次整体前移（块体形态实测因此误报 E1011）。
+    pub fn impl_head_runtime_params(
+        &self,
+        is_constraint: &dyn Fn(&str) -> bool,
+        is_predicate: &dyn Fn(&str) -> bool,
+    ) -> Vec<Param> {
+        let Some(Type::Fn { .. }) = self.impl_head_fn() else {
+            return Vec::new();
+        };
+        let layer = self.impl_head_layer();
+        let const_used = self.const_used_layer_names(is_predicate);
+        // 组内类型位置出现的名字——多约束并集判据用（`T: Clone + Add`）。
+        let mut type_position_names: std::collections::HashSet<String> =
+            std::collections::HashSet::new();
+        for p in &layer {
+            if let Some(ty) = p.ty.as_ref() {
+                ty.collect_name_refs(&mut type_position_names);
+            }
+        }
+        layer
+            .into_iter()
+            .filter(|p| {
+                let Some(ty) = p.ty.as_ref() else {
+                    return true;
+                };
+                if Self::is_name_level_type_slot(ty) {
+                    return false;
+                }
+                if matches!(ty, Type::Name { name, .. } if is_constraint(name)) {
+                    return false;
+                }
+                if let Type::Tuple(items) = ty {
+                    let all_names =
+                        !items.is_empty() && items.iter().all(|t| matches!(t, Type::Name { .. }));
+                    if all_names && type_position_names.contains(p.name.as_str()) {
+                        return false;
+                    }
+                }
+                !const_used.contains(p.name.as_str())
+            })
+            .collect()
+    }
+
+    /// 层内形参名是否被**当编译期常量/类型**用：名字出现在**本层之外**的类型位置。
+    ///
+    /// 使用域（本层以外的部分）分三种形态：
+    /// - 普通函数 / 裸 Fn 链柯里：本层 Fn 的**返回位**——`f: (N: Int, s: String) ->
+    ///   Array(Int, N)` 的 `N`、`f: (N: Int) -> (n: N) -> Int` 的 `N`（后者本层是内层组，
+    ///   故 `N` 不在层内，本函数不涉及）；
+    /// - 括号返回位且值层是**首组**：paren 内层组的形参标注（`(a: Int) ->
+    ///   ((b: Vec(a)) -> R)`）——此时 `a` 是向外层闭包提供的运行期值；
+    /// - 其余：无使用域（返回位不是函数类型 / 不是 Fn 声明）。
+    ///
+    /// **不含本层形参自己的标注**——那正是「依赖类型的值形参」与「编译期常量」的分界：
+    /// `f: (a: Int, b: Vec(a)) -> Int` 的 `a` 只出现在本组里，是运行期值位。
+    fn const_used_layer_names(
+        &self,
+        is_predicate: &dyn Fn(&str) -> bool,
+    ) -> std::collections::HashSet<String> {
+        let mut out = std::collections::HashSet::new();
+        let Some(layer_fn) = self.impl_head_fn() else {
+            return out;
+        };
+        // 使用域：本层之外的类型位置
+        let mut scope: Vec<&Type> = Vec::new();
+        let paren_layer_is_first_group = matches!(
+            self,
+            Type::Fn { params, return_type }
+                if return_type.is_paren_complete() && !Self::value_slots(params).is_empty()
+        );
+        if paren_layer_is_first_group {
+            if let Some(Type::Fn { params, .. }) =
+                self.fn_return_type().and_then(Self::paren_inner_fn)
+            {
+                scope.extend(params.iter().filter_map(|p| p.ty.as_ref()));
+            }
+        }
+        if let Type::Fn { return_type, .. } = layer_fn {
+            scope.push(return_type.as_ref());
+        }
+        for p in &self.impl_head_layer() {
+            if p.name.is_empty() {
+                continue;
+            }
+            if scope
+                .iter()
+                .any(|t| crate::ast::name_used_as_type(&p.name, t, is_predicate))
+            {
+                out.insert(p.name.clone());
+            }
+        }
+        out
+    }
+
+    /// Fn 的返回位（非 Fn 声明返回自身）。
+    fn fn_return_type(&self) -> Option<&Type> {
+        match self {
+            Type::Fn { return_type, .. } => Some(return_type.as_ref()),
+            _ => None,
+        }
+    }
+    /// 标注本身是否**类型位**：`T: Type`、名字恰为 `Type`、类型级函数
+    ///（`(F: (T: Type) -> Type)` 的构造器变量）。判据单点——`value_slots` 与
+    /// `impl_head_runtime_params` 共用，不得各写一份 `matches!`。
+    fn is_name_level_type_slot(ty: &Type) -> bool {
+        matches!(ty, Type::MetaType { .. })
+            || matches!(ty, Type::Name { name, .. } if name == "Type")
+            || matches!(ty, Type::Fn { params, return_type } if crate::ast::is_type_level_fn(params, return_type))
+    }
+
+    /// **拍平**口径的编译期位过滤（`runtime_value_params` 用；不含按用途判定的
+    /// 编译期常量位——那些要层与使用域信息，见 `impl_head_runtime_params`）。
     fn value_slots(params: &[Param]) -> Vec<Param> {
         let mut type_position_names: std::collections::HashSet<String> =
             std::collections::HashSet::new();
@@ -941,15 +1103,12 @@ impl Type {
                 let Some(ty) = p.ty.as_ref() else {
                     return true;
                 };
-                if matches!(ty, Type::MetaType { .. })
-                    || matches!(ty, Type::Name { name, .. } if name == "Type")
-                    || matches!(ty, Type::Fn { params: ps, return_type } if crate::ast::is_type_level_fn(ps, return_type))
-                {
+                if Self::is_name_level_type_slot(ty) {
                     return false;
                 }
                 if let Type::Tuple(items) = ty {
-                    let all_names = !items.is_empty()
-                        && items.iter().all(|t| matches!(t, Type::Name { .. }));
+                    let all_names =
+                        !items.is_empty() && items.iter().all(|t| matches!(t, Type::Name { .. }));
                     if all_names && type_position_names.contains(p.name.as_str()) {
                         return false;
                     }
@@ -960,6 +1119,13 @@ impl Type {
             .collect()
     }
 
+    /// 从 `Type::Fn` 链**拍平**出全部形参（curry 各组依次展开；`Paren` /
+    /// `NamedParen` 视为透明继续内层）。
+    ///
+    /// 这是「语句声明里的原始签名形参」的**唯一实现**（RFC-039 6.5.2）：
+    /// `Assign`/`TypeDefinition` 不再另存形参表，消费点一律经本方法取；非函数
+    /// 类型返回空。`NamedParen` 的 binder 名不在此列——它由该节点自身承载、
+    /// 由类型检查器显式解释（返回位精化）。
     pub fn fn_params_flat(&self) -> Vec<Param> {
         fn walk(
             ty: &Type,

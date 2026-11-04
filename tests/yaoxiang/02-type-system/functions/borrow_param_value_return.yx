@@ -1,0 +1,31 @@
+// 02-type-system/functions/borrow_param_value_return.yx
+// 覆盖: 声明形参是借用、返回位是**同一个**类型变量（借用形 vs 值形）
+//       借用是编译期零大小类型，`&T` 与 `T` 在值位是同一个值——出口对照必须先把
+//       两种形态对齐，既不能把 T 绑成 &T（自指绑定，随后 expand_type 无限自递归），
+//       也不能反过来误报 E1012。
+// 验证: 箭头体（尾表达式）与块体（尾表达式 / 显式 return）三种出口形态都通过且取值正确
+// 状态: ✅ 可运行
+
+use std.assert
+
+// 箭头体：体是 `return x`（箭头糖）
+pick: (T: Type) -> (x: &T) -> T = (x) => x
+
+// 块体尾表达式：走 check_body_tail_type 那条出口对照
+pick_tail: (T: Type) -> (x: &T) -> T = { x }
+
+// 块体显式 return：走 check_return_value_type
+pick_ret: (T: Type) -> (x: &T) -> T = { return x }
+
+main: () -> Void = {
+    a = pick(7)
+    assert.assert(a == 7, "pick(7) should be 7")
+
+    b = pick_tail("hi")
+    assert.assert(b == "hi", "pick_tail should return the borrowed value")
+
+    c = pick_ret(3)
+    assert.assert(c == 3, "pick_ret(3) should be 3")
+}
+
+main()

@@ -1,0 +1,15 @@
+// 06-compile-errors/fn-binding/fn_curry_impl_arity_err.yx
+// D54 / WBS 6.8.3 ③：实现形参**多于声明的运行期值位** → E1112。
+//   柯里声明的值位按**拍平**计（调用要按序给几个值）：2 层柯里是 2 位，
+//   实现头写 3 位就多出一位没有声明位可绑；平铺声明只有 1 位，写 2 位即多。
+//   （2 层柯里写 2 位是合法的——实现头只是体内局部名，参数值由柯里各层按序接收；
+//   既有可运行写法 `add3: (a: Int) -> (b: Int) -> (c: Int) -> Int = (a, b, c) => ...`
+//   由 tests/integration/curry_codegen.rs 的判据守着。）
+// expect: compile-error E1112
+// 覆盖: 元数对照按拍平的运行期值位，柯里与平铺同一口径
+// 验证: 平铺（flat）与柯里（curry）两格都报 E1112，位置指向多出的那位形参
+// 状态: ❌ 应编译失败
+
+flat: (a: Int) -> Int = (x, y) => 1
+
+curry: (A: Int) -> (B: String) -> Int = (x, y, z) => 1

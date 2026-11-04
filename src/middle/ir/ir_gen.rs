@@ -633,33 +633,45 @@ impl AstToIrGenerator {
             .collect()
     }
 
-    /// 声明签名里**运行期形参**的（名字, 类型）：剥掉编译期槽后取前 N 位。
+    /// 实现头形参的**声明来源**：运行期值位的前 N 位（N = 实现头形参数）。
     ///
-    /// 与 typecheck 的绑定位对齐**同一条规则**（值级签名前 N 位，N = 实现头形参数）：
-    /// IR 只**渲染**声明写下的类型，不参与判定（WBS 6.8.2 / D54 修复轮 F1）。
-    /// 编译期槽的剔除口径与解析/检查层同源——`extract_generic_param_names` 判类型位
-    /// 与类型级函数位（`(T: Type)` / `(F: (T: Type) -> T)`）：它们在值级签名里是
-    /// `MetaType` 值的槽，不占运行期形参位。
+    /// 与 typecheck 的绑定位对齐**同一条规则**（值级签名前 N 位），切法单点在
+    /// `ast::Type::runtime_value_params`（沿柯里链走到最内层值组、再剔除编译期位）。
+    /// IR 只**渲染**声明写下的类型与名字，不参与判定（WBS 6.8.2 / D54 修复轮 F1）。
     ///
-    /// 拿不到声明（无注解 / 注解不是 Fn）时返回空表，调用点按既有惯例填 `Int(64)`。
-    fn declaration_runtime_params(type_annotation: Option<&ast::Type>) -> Vec<(String, MonoType)> {
-        // 运行期值位的切法**只有一处**（`crate::ast::Type::runtime_value_params`）：
-        // 沿柯里链走到最内层值组、再剔除编译期位。IR 只**渲染**声明写下的类型/名字，
-        // 不参与判定（WBS 6.8.2 / D54 F1）。
+    /// 一切「实现头第 i 位的声明信息」都从这里取：形参**类型**（`impl_param_types`）、
+    /// 形参**写出类型名**（`note_param_written_types`）、**调用侧可用名**
+    /// （`self.fn_param_names` 的登记）——同一 helper、同一顺序，不得各自再切一次。
+    fn declaration_runtime_param_slots(
+        type_annotation: Option<&ast::Type>,
+        count: usize,
+    ) -> Vec<ast::Param> {
         type_annotation
-            .map(|ann| {
-                ann.runtime_value_params()
-                    .into_iter()
-                    .map(|p| {
-                        let ty =
-                            p.ty.clone()
-                                .map(MonoType::from)
-                                .unwrap_or_else(|| MonoType::Int(64));
-                        (p.name, ty)
-                    })
-                    .collect()
-            })
+            .map(|ann| ann.runtime_value_params())
             .unwrap_or_default()
+            .into_iter()
+            .take(count)
+            .collect()
+    }
+
+    /// 实现头形参的 IR 类型表：作者标注优先，缺标注按声明同类位渲染，都没有时
+    /// 按 WBS 2.1.2 的惯例填 `Int(64)` 占位（`filter_map` 丢弃会让 params 长度与
+    /// 帧布局错位——verify 实测）。
+    fn impl_param_types(
+        params: &[ast::Param],
+        type_annotation: Option<&ast::Type>,
+    ) -> Vec<MonoType> {
+        let declared = Self::declaration_runtime_param_slots(type_annotation, params.len());
+        params
+            .iter()
+            .enumerate()
+            .map(|(i, p)| {
+                p.ty.clone()
+                    .or_else(|| declared.get(i).and_then(|d| d.ty.clone()))
+                    .map(MonoType::from)
+                    .unwrap_or(MonoType::Int(64))
+            })
+            .collect()
     }
 
     ///
@@ -1209,14 +1221,23 @@ impl AstToIrGenerator {
     }
 
     /// 形参写出的类型名（注解原文）——与局部变量走同一条派发归因链。
+    ///
+    /// `declared` 是同一形参位在**声明**里的形参（`declaration_runtime_param_slots`）：
+    /// parser 不再往实现头填声明类型（WBS 6.8.3），故第 i 位「写出的是什么类型名」
+    /// 按「作者标注 → 声明同类位」取——与形参类型、调用侧可用名同一来源。
     fn note_param_written_types(
         &mut self,
         params: &[ast::Param],
+        declared: &[ast::Param],
     ) {
         let written: Vec<(String, String)> = params
             .iter()
-            .filter_map(|p| {
-                let ty = p.ty.as_ref().and_then(Self::written_type_name_of)?;
+            .enumerate()
+            .filter_map(|(i, p)| {
+                let ty =
+                    p.ty.as_ref()
+                        .or_else(|| declared.get(i).and_then(|d| d.ty.as_ref()))
+                        .and_then(Self::written_type_name_of)?;
                 Some((p.name.clone(), ty.to_string()))
             })
             .collect();
@@ -2221,12 +2242,13 @@ impl AstToIrGenerator {
                     // 调用侧可用名与形参**类型**同一来源（同一个 helper、同一个顺序）：
                     // 旧口径类型取前 N、名字取末尾 N，在多层柯里声明上会错位
                     // （实测 `f(a = 1, b = "s")` 报 E1014 available: b，而第 0 槽是 a 的槽）。
-                    let names: Vec<String> =
-                        Self::declaration_runtime_params(type_annotation.as_ref())
-                            .into_iter()
-                            .take(params.len())
-                            .map(|(n, _)| n)
-                            .collect();
+                    let names: Vec<String> = Self::declaration_runtime_param_slots(
+                        type_annotation.as_ref(),
+                        params.len(),
+                    )
+                    .into_iter()
+                    .map(|p| p.name)
+                    .collect();
                     self.fn_param_names.insert(name.clone(), names);
                 }
                 if let Some(type_name) = type_name {
@@ -2439,11 +2461,11 @@ impl AstToIrGenerator {
         if !params.is_empty() {
             // 与普通函数绑定同一来源（同一个 helper）：方法声明的首位是接收者位，
             // 位置口径一致 ⇒ 调用侧可用名与槽位不会错位。
-            let names: Vec<String> = Self::declaration_runtime_params(Some(method_type))
-                .into_iter()
-                .take(params.len())
-                .map(|(n, _)| n)
-                .collect();
+            let names: Vec<String> =
+                Self::declaration_runtime_param_slots(Some(method_type), params.len())
+                    .into_iter()
+                    .map(|p| p.name)
+                    .collect();
             self.fn_param_names.insert(func_name.clone(), names);
         }
 
@@ -2471,24 +2493,16 @@ impl AstToIrGenerator {
         // 进入新作用域
         self.enter_scope();
 
-        // 注册参数；类型按**方法自己的声明签名**前 N 位渲染（D54 修复轮 F1：IR 只渲染
-        // 不判定，声明是唯一来源——parser 已不再往实现头填声明类型）。
-        let declared_params = Self::declaration_runtime_params(Some(method_type));
-        let mut param_types = Vec::new();
+        // 注册参数；类型按**方法自己的声明签名**渲染（与普通函数同一 helper：
+        // 作者标注优先、缺标注取声明同类位；IR 只渲染不判定——parser 已不再
+        // 往实现头填声明类型）。
+        let declared = Self::declaration_runtime_param_slots(Some(method_type), params.len());
+        let param_types = Self::impl_param_types(params, Some(method_type));
         for (i, param) in params.iter().enumerate() {
-            param_types.push(
-                param
-                    .ty
-                    .clone()
-                    .map(MonoType::from)
-                    .or_else(|| declared_params.get(i).map(|(_, ty)| ty.clone()))
-                    .unwrap_or(MonoType::Int(64)),
-            );
-
             // 注册参数到符号表
             self.register_local(&param.name, i);
         }
-        self.note_param_written_types(params);
+        self.note_param_written_types(params, &declared);
 
         // 记录局部变量起始位置（在参数之后）
         let local_var_start = params.len();
@@ -2652,7 +2666,9 @@ impl AstToIrGenerator {
 
             self.register_local(&param.name, i);
         }
-        self.note_param_written_types(params);
+        // 写出类型名与形参类型同一来源（作者标注 → 声明同类位）。
+        let declared = Self::declaration_runtime_param_slots(type_annotation, params.len());
+        self.note_param_written_types(params, &declared);
 
         // 记录局部变量起始位置（在参数之后）
         let local_var_start = params.len();
@@ -2776,17 +2792,11 @@ impl AstToIrGenerator {
         let func_ir = FunctionIR {
             def: None, // 由 generate_module_ir 尾部 assign_defs 填充
             name: name.to_string(),
-            // 形参类型：按**函数自己的声明签名**前 N 位渲染（D54 修复轮 F1：IR 只渲染
-            // 不判定，声明是唯一来源）。拿不到声明类型时按 WBS 2.1.2 的惯例填 Int(64)
-            // 占位——filter_map 丢弃会让 params 长度与帧布局错位（verify 实测）。
-            params: params
-                .iter()
-                .map(|p| {
-                    p.ty.clone()
-                        .map(MonoType::from)
-                        .unwrap_or(MonoType::Int(64))
-                })
-                .collect(),
+            // 形参类型：作者标注优先，缺标注按**函数自己的声明签名**同类位渲染
+            // （parser 不再往实现头填声明类型，声明是 IR 唯一的类型来源；D54 F1 /
+            // WBS 6.8.3）。拿不到声明类型时按 WBS 2.1.2 的惯例填 Int(64) 占位——
+            // filter_map 丢弃会让 params 长度与帧布局错位（verify 实测）。
+            params: Self::impl_param_types(params, type_annotation),
             return_type,
             generic_params,
             body: FunctionBody::Code {
@@ -2911,7 +2921,9 @@ impl AstToIrGenerator {
         for (i, param) in layer.params.iter().enumerate() {
             self.register_local(&param.name, env_count + i);
         }
-        self.note_param_written_types(&layer.params);
+        // curry 层形参全部来自声明注解本身（层参数由 `split_curry` 从注解切出），
+        // 无需声明补位。
+        self.note_param_written_types(&layer.params, &[]);
 
         // next_temp 起始 = 参数总数
         self.next_temp = env_count + layer.params.len();
@@ -3611,7 +3623,8 @@ impl AstToIrGenerator {
 
             self.register_local(&param.name, i);
         }
-        self.note_param_written_types(params);
+        // 匿名绑定 / 闭包的形参就是声明（绑定注解 / 返回位内层 Fn）本身，无需补位。
+        self.note_param_written_types(params, &[]);
 
         // 记录局部变量起始位置
         let local_var_start = params.len();
@@ -5615,7 +5628,8 @@ impl AstToIrGenerator {
         for (i, param) in params.iter().enumerate() {
             self.register_local(&param.name, env_count + i);
         }
-        self.note_param_written_types(params);
+        // 匿名绑定 / 闭包的形参就是声明（绑定注解 / 返回位内层 Fn）本身，无需补位。
+        self.note_param_written_types(params, &[]);
 
         // 记录局部变量起始位置
         let local_var_start = env_count + params.len();

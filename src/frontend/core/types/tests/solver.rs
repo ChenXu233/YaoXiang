@@ -656,6 +656,53 @@ fn test_bind_occurs_check_nested() {
 }
 
 #[test]
+fn test_bind_occurs_check_through_ref() {
+    // Arrange — 借用位是 occurs check 必须**穿透**的一层：`&T` 与 `T` 是同一个值世界
+    // 的类型（借用编译期零大小）。缺这一臂时 `bind(t, &t)` 被判「不含 t」而建立
+    // 自指绑定，此后任何 resolve_type(t) 都在 expand_type 里无限自递归（实测栈溢出）。
+    // #324：这些 API 生产上运行于类型检查 walk 内（guard 覆盖），单测直调需模拟 walk 上下文
+    let _walk_guard = crate::util::diagnostic::push_current_span(crate::util::span::Span::dummy());
+    let mut solver = s();
+    let v = solver.new_var().type_var().unwrap();
+    let self_ref = MonoType::Ref {
+        mutable: false,
+        inner: Box::new(MonoType::TypeVar(v)),
+    };
+
+    // Act & Assert — 自指借用必须被拒
+    assert!(
+        solver.bind(v, &self_ref).is_err(),
+        "occurs check 必须穿透借用位（`bind(t, &t)` 是无限类型）"
+    );
+    // 借用内层是**别的**变量时照常可绑——过滤不是「见 Ref 一律拒」
+    let w = solver.new_var().type_var().unwrap();
+    let borrowed_other = MonoType::Ref {
+        mutable: true,
+        inner: Box::new(MonoType::TypeVar(w)),
+    };
+    assert!(
+        solver.bind(v, &borrowed_other).is_ok(),
+        "借用内层是另一个类型变量时应正常绑定"
+    );
+}
+
+#[test]
+fn test_contains_var_sees_through_ref() {
+    // Arrange — 与 `contains_var` 同族判据：借用包装不遮挡内层变量
+    let mut solver = s();
+    let v = solver.new_var().type_var().unwrap();
+    let borrowed = MonoType::Ref {
+        mutable: false,
+        inner: Box::new(MonoType::make_list(MonoType::TypeVar(v))),
+    };
+
+    // Act & Assert
+    assert!(
+        solver.contains_var(&borrowed, v),
+        "借用（含内层容器）里的类型变量必须可见"
+    );
+}
+#[test]
 fn test_bind_conflicting_types() {
     // #324：这些 API 生产上运行于类型检查 walk 内（guard 覆盖），单测直调需模拟 walk 上下文
     let _walk_guard = crate::util::diagnostic::push_current_span(crate::util::span::Span::dummy());

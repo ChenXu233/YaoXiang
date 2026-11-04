@@ -343,10 +343,12 @@ fn test_anonymous_param_never_yields_generic_name() {
     );
 }
 #[test]
-fn test_value_params_no_merged_misalignment() {
-    // 覆盖: RFC-007 参数匹配 — params 存值参数，标注来自签名对应值参数而非错位 zip
-    // 验证: foo: (T: Type, x: Int) -> Int = (x) => x 的 params == [x: Int]
-    //       （修复前 merged 产出 x: MetaType 错位——x 配上了 T 的标注）
+fn test_impl_head_params_not_filled_from_declaration() {
+    // 覆盖: WBS 6.8.3 — parser 只产出**作者写的**形参：名字与标注都不动，不按声明补位
+    // 验证: foo: (T: Type, x: Int) -> Int = (x) => x 的实现头 == [x]（无标注）
+    //       旧口径在这里按位置把声明类型填进 x（曾修过一次错位），但「填过之后
+    //       typecheck 分不出作者标注与 parser 标注」使 E1011/E1112 两枚判据失效；
+    //       声明类型改由消费点按同一 helper 自取（typecheck 按位对齐 / IR 渲染）。
     let kind = parse_stmt("foo: (T: Type, x: Int) -> Int = (x) => x");
     let StmtKind::Assign { value, .. } = &kind else {
         panic!("Expected StmtKind::Binding, got {:?}", kind);
@@ -361,11 +363,17 @@ fn test_value_params_no_merged_misalignment() {
         Vec::new()
     };
 
-    assert_eq!(params.len(), 1, "params 应只含值参数（泛型 T 不在其中）");
-    assert_eq!(params[0].name, "x", "值参数名应为 x");
+    // Assert
+    assert_eq!(
+        params.len(),
+        1,
+        "params 应只含实现头写的形参（泛型 T 不在其中）"
+    );
+    assert_eq!(params[0].name, "x", "形参名应为作者写的 x");
     assert!(
-        matches!(&params[0].ty, Some(Type::Name { name, .. }) if name == "Int"),
-        "x 的标注应为 Int（来自签名值参数），而非 MetaType 错位"
+        params[0].ty.is_none(),
+        "parser 不得再按声明补位（作者没写标注就必须是 None），got: {:?}",
+        params[0].ty
     );
 }
 
@@ -400,12 +408,10 @@ fn test_generic_curried_fn_params_from_lambda() {
 }
 
 #[test]
-fn test_positional_fill_takes_first_value_slot() {
-    // 覆盖: D54 修复轮 F4/F1 — 实现头按**值级签名前 N 位**取声明类型（与 typecheck 同一
-    // 规则）。旧口径按**名字交集**挑（此例里 N 的名字不命中，于是 s 跳到声明第 2 位拿到
-    // String）——那是 parser 的第二条判据，已随位置口径统一删除。
-    // 验证: f: (N: Int, s: String) -> String = (s) => s 的实现头只有 1 位 ⇒ 取声明第 1 位
-    //（N: Int）的类型 ⇒ params == [s: Int]；名字仍是作者写的 s（名字只作体内引用）。
+fn test_impl_head_keeps_authored_names_without_fill() {
+    // 覆盖: WBS 6.8.3 — 实现头的名字只作体内引用，声明类型不再由 parser 补位
+    //       （按位对齐归 typecheck 的 aligned_value_params，IR 走 declaration_runtime_param_slots）
+    // 验证: f: (N: Int, s: String) -> String = (s) => s 的实现头 == [s]（作者写的名字、无标注）
     let kind = parse_stmt("f: (N: Int, s: String) -> String = (s) => s");
     let StmtKind::Assign { value, .. } = &kind else {
         panic!("Expected StmtKind::Binding, got {:?}", kind);
@@ -420,11 +426,13 @@ fn test_positional_fill_takes_first_value_slot() {
         Vec::new()
     };
 
+    // Assert
     assert_eq!(params.len(), 1, "params 应只含实现头写的形参 s");
-    assert_eq!(params[0].name, "s", "值参数名应为作者写的 s");
+    assert_eq!(params[0].name, "s", "形参名应为作者写的 s");
     assert!(
-        matches!(&params[0].ty, Some(Type::Name { name, .. }) if name == "Int"),
-        "按位置口径取声明第 1 位（N: Int）的类型——不是按名字跳到 s 自己的 String"
+        params[0].ty.is_none(),
+        "作者没写标注时 parser 不得补位（声明类型按位取自 typecheck/IR），got: {:?}",
+        params[0].ty
     );
 }
 

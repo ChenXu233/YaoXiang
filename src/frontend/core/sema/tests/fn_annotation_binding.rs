@@ -254,6 +254,115 @@ make_adder: (n: Int) -> ((x: Int) -> Int) = (x) => x + n
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// WBS 6.8.3：实现头只承载作者写的形参（parser 停止填声明类型）
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[test]
+fn test_fn_annotation_curry_impl_arity_counts_flattened_slots() {
+    // Arrange — 元数对照按**拍平的运行期值位**（声明「调用要按序给几个值」）：
+    // 2 层柯里的拍平值位是 2 位，实现头写 2 位合法、3 位才多；平铺声明只有 1 位。
+    // 6.8.3 曾试按「实现头所绑那一层」（最内层组）对照，会把既有可运行写法
+    // `add3: (a: Int) -> (b: Int) -> (c: Int) -> Int = (a, b, c) => ...` 判成 E1112
+    //（tests/integration/curry_codegen.rs / curry_execution.rs 各有一条判据）。
+    //
+    // 反过来也**不得**把 `curry_two` 当成「绑定成功」的证据：柯里声明配多形参实现头
+    // 的绑定本身是既有缺口（体内一引用那几位就报错——内部一致性错误 / E1053 / E1012，
+    // 见 09a §P6 6.8.3 的登记）。本用例只钉 E1112 的元数口径，不涉绑定。
+    const SRC: &str = r#"
+flat: (a: Int) -> Int = (x, y) => 1
+curry_two: (A: Int) -> (B: String) -> Int = (x, y) => 1
+curry_three: (A: Int) -> (B: String) -> Int = (x, y, z) => 1
+"#;
+    // Act
+    let codes = compile_codes(SRC);
+    // Assert — flat（1 位写 2）与 curry_three（2 位写 3）各一条，curry_two 合法
+    assert_eq!(
+        codes.iter().filter(|c| *c == "E1112").count(),
+        2,
+        "平铺 1 位写 2 位、柯里 2 位写 3 位各报一条；柯里 2 位写 2 位不报：{codes:?}"
+    );
+}
+
+#[test]
+fn test_fn_annotation_curry_impl_within_slots_still_passes() {
+    // Arrange — 同一柯里声明，实现头少写（1 位、0 位）
+    const SRC: &str = r#"
+one: (A: Int) -> (B: String) -> Int = (x) => 1
+none: (A: Int) -> (B: String) -> Int = () => 1
+"#;
+    // Act
+    let codes = compile_codes(SRC);
+    // Assert — 反向（实现少于声明）不报：缺席位由 #295 用声明名补齐
+    assert!(
+        codes.is_empty(),
+        "实现头不超过声明值位时不得报 E1112：{codes:?}"
+    );
+}
+
+#[test]
+fn test_fn_annotation_borrow_param_value_return_aligned() {
+    // Arrange — 声明形参是借用、返回位是**同一个**类型变量：`&T` 与 `T` 形不同而
+    // 语义同（借用是编译期零大小类型，值位是同一个值）。两种出口形态都要覆盖：
+    // 箭头体（尾表达式）与块体（显式 return）。
+    const SRC: &str = r#"
+pick: (T: Type) -> (x: &T) -> T = (x) => x
+pick_block: (T: Type) -> (x: &T) -> T = { x }
+pick_ret: (T: Type) -> (x: &T) -> T = { return x }
+"#;
+    // Act
+    let codes = compile_codes(SRC);
+    // Assert — 出口对照先做借用形 ↔ 值形对齐。旧行为：solver 把 T 绑成 &T 建出自指
+    // 绑定，随后 expand_type 对 T 无限自递归（实测 CLI 栈溢出 0xC00000FD）；
+    // occurs check 补齐后若不做对齐，则退化成误报 E1012（止崩但误判）。
+    assert!(
+        codes.is_empty(),
+        "借用形参的返回值必须与值形返回位相容（不得误报 E1012）：{codes:?}"
+    );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// F1f（WBS 6.8.3）：依赖类型值形参 / 编译期 const 位的按位对齐——typecheck 层判据
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// 这两条形态进不了语料：`Vec(a)` 的 IR 规范化拿不到文本，快照判据会判「跳过即红」
+//（09a §P6 6.8.2 判据③ 的登记）。故判据落在 **typecheck 层**：本组只跑
+// lex → parse → typecheck，不碰 IR。
+
+#[test]
+fn test_dependent_value_param_stays_runtime_slot() {
+    // Arrange — `a` 的**值**参与 `b` 的类型（依赖类型），它仍是运行期值位；
+    // 实现头的两条合成路径（箭头体 / 块体）都必须保住两位并按位对上声明。
+    const SRC: &str = r#"
+arrow: (a: Int, b: Vec(a)) -> Int = (x, y) => x
+block: (a: Int, b: Vec(a)) -> Int = { a }
+"#;
+    // Act
+    let codes = compile_codes(SRC);
+    // Assert — 零诊断。把 `a` 当编译期位剔掉会让实现头少一位、位次整体前移，
+    // 块体形态会因此误报 E1011（expected 'int64', found 'Vec(a)'）。
+    assert!(
+        codes.is_empty(),
+        "依赖类型的值形参不得被当成编译期位（否则实现头少一位）：{codes:?}"
+    );
+}
+
+#[test]
+fn test_const_generic_param_takes_no_impl_head_slot() {
+    // Arrange — `N` 出现在**返回位**的类型位置 ⇒ 编译期 const 位，不占实现头形参；
+    // 块体合成出来的头必须只保留值位（`N` 在体内仍可引用，由 const 参数链提供）。
+    const SRC: &str = r#"
+f: (N: Int, s: String) -> Int = { N }
+g: (N: Int) -> (n: N) -> Int = { n }
+"#;
+    // Act
+    let codes = compile_codes(SRC);
+    // Assert — 零诊断：N 若被算进实现头，位次前移会把 s/String 对到 N/Int 上报 E1011。
+    assert!(
+        codes.is_empty(),
+        "编译期 const 位不得占实现头形参位、值位必须按位对齐：{codes:?}"
+    );
+}
+// ─────────────────────────────────────────────────────────────────────────────
 // E1011 判据的**求解器沙箱**边界（WBS 6.8.2b 退役面核对 + 复审关注点）
 // ─────────────────────────────────────────────────────────────────────────────
 //
