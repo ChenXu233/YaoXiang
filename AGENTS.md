@@ -23,6 +23,18 @@ YaoXiang 是一门编程语言及其编译器（Rust 实现）。`src/` 约 16 �
 2. 施工任务查 [09-execution-wbs.md](docs/src/dev/architecture/09-execution-wbs.md) 的三级任务表（带 `- [ ]` 看板）。
 3. 三条禁令（概要，全文见 [coding-rules.md](docs/src/dev/coding-rules.md)）：**不得生造**（新概念先证明与既有概念不重复）、**不得职责累积**（一个模块一类职责）、**该重构不补丁**（同一行为 ≥2 处复制 / 新增第 N 个入口 / 一次改 ≥3 处同义映射 → 停工走设计流程）。
 
+### 改文档之前（强制）
+
+**文档规则的唯一本体是 [docs-rules.md](docs/src/dev/docs-rules.md)，不是 coding-rules.md**——coding-rules 管代码，docs-rules 管文档（docs-rules 开头即写明二者同级）。改文档前先读它，再读下面三样。
+
+同一条「先读再动手」也适用于文档。改任何规范 / 设计 / 计划文档前，必须读：
+
+1. **上游设计依据**：这次改动对应的 RFC 决议（[RFC-039](docs/src/rfc/accepted/039-compiler-architecture.md) 的决议登记 D1–D59，或该领域的专题 RFC）；
+2. **同层相邻文档**：同一张表 / 同一组术语是否在别处已有定义（两处各写一份 = 「不得生造」的翻版）；
+3. **[docs-rules.md](docs/src/dev/docs-rules.md)**（文档规则本体；§5 是权威链与修改前提）。
+
+**方向规则**：RFC 是 SPEC 的设定依据——SPEC 可以写「设计依据见 RFC」，**RFC 不得以 SPEC 为依据**，否则 RFC 再也不能改 SPEC。**更正就地写入**，不留「勘误 / 原为…现改为…」的对照，历史在 git 里。
+
 ## 请求用户裁决时（强制）
 
 凡需要用户拍板的决策（架构取舍、语义偏差、登记/不登记、破坏性变更、规则固化、排序插队等），**必须一次性给全以下四件**，缺一件视为未完成汇报：
@@ -102,7 +114,7 @@ YaoXiang 是一门编程语言及其编译器（Rust 实现）。`src/` 约 16 �
 
 ## 发现值得记录的规则时
 
-工作中若发现值得固化的规则（如被反复纠正的做法、新的红线、新的判定标准），**先向用户提出，经同意后**再更新 [coding-rules.md](docs/src/dev/coding-rules.md) 等文档（HOWTO、红线清单、对应 RFC 决议登记等按归属就近落位）。规则以文档为准，不要只留在对话记录里。**且规则文本（不只是意图）必须先贴给用户过目，获同意后才能提交**——用户批准了「要加这条规则」不等于批准了你的措辞。
+工作中若发现值得固化的规则（如被反复纠正的做法、新的红线、新的判定标准），**先向用户提出，经同意后**再按归属落位——代码规则进 [coding-rules.md](docs/src/dev/coding-rules.md)，文档规则进 [docs-rules.md](docs/src/dev/docs-rules.md)，动工入口进 [HOWTO.md](docs/src/dev/HOWTO.md)，RFC 级裁决进对应 RFC 的决议登记。规则以文档为准，不要只留在对话记录里。**且规则文本（不只是意图）必须先贴给用户过目，获同意后才能提交**——用户批准了「要加这条规则」不等于批准了你的措辞。
 
 ## 常用命令
 
@@ -172,4 +184,5 @@ git pull --rebase origin dev        # 与对端无冲突（merge-tree 干净）�
 | [01](docs/src/dev/architecture/01-routing.md) | 加一个特性该改哪里、目录职责表 |
 | [07](docs/src/dev/architecture/07-equivalence-oracle.md) | 等价性判据 C1–C6 |
 | [test-specification](docs/src/dev/test-specification.md) | 测试怎么写（命名/AAA/断言消息——写测试前必读） |
+| [docs-rules](docs/src/dev/docs-rules.md) | 文档怎么写（分类/风格/权威链——改文档前必读） |
 | [RFC-039](docs/src/rfc/accepted/039-compiler-architecture.md) | 总纲、决议登记 D1–D59 |
