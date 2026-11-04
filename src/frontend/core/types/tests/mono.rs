@@ -10,6 +10,54 @@ use crate::frontend::core::types::EnumType;
 use crate::util::span::Span;
 use std::collections::HashMap;
 
+// ─────────────────────────────────────────────────────────────────────────────
+// 借用形 ↔ 值形的同形态判据（WBS 6.8.3 病灶 B 的**承重判据**，单元级）
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// 端到端判据区分不了这条判据：6.8.3 把体内绑定改成取声明标注原文后，出口 unify 直接
+// 成功，剥借用那一步在两万级用例里都不再被走到（验证轮实测：删掉对齐后 2950 条全过）。
+// 故判据落在**判定函数本身**：删掉「剥借用」或退回「无条件剥借用」，本组必红。
+
+#[test]
+fn test_borrow_value_forms_match_aligns_only_generic_positions() {
+    // Arrange — 三格真值表的输入：泛型位借用/值形、具体类型借用/值形、跨类型。
+    let tv = MonoType::TypeVar(TypeVar::new(3));
+    let borrow_tv = MonoType::Ref {
+        mutable: false,
+        inner: Box::new(tv.clone()),
+    };
+    let borrow_int = MonoType::Ref {
+        mutable: false,
+        inner: Box::new(MonoType::Int(64)),
+    };
+
+    // Act & Assert ①：`&T` 与 `T`（同一类型变量）**同形态**——借用是编译期零大小
+    // 令牌，两个方向都必须相容（`= (x) => x` 的返回值形态 ± 声明返回位形态）。
+    assert!(
+        MonoType::borrow_value_forms_match(&borrow_tv, &tv),
+        "&T 与 T（同一类型变量）必须判相等（删掉剥借用这一步即红）"
+    );
+    assert!(
+        MonoType::borrow_value_forms_match(&tv, &borrow_tv),
+        "T 与 &T 必须判相等（对称方向；只认一个方向同样是漏判）"
+    );
+
+    // Assert ②：`&Int` 与 `String` **不同形态**——跨类型不得因借用位而放行
+    assert!(
+        !MonoType::borrow_value_forms_match(&borrow_int, &MonoType::make_string()),
+        "&Int 与 String 必须判不等：形态对齐只剥一层借用、不换类型"
+    );
+
+    // Assert ③：`&Int` 与 `Int` **不同形态**——具体类型上的借用不是令牌的另一种写法。
+    // 这一格是**防回归**、不是新语义：6.8.3 之前的树上 `f: (x: &Int) -> Int = (x) => x`
+    // 本就报 E1012（`expected 'int64', found '&int64'`）；无条件剥借用是「声明来源」
+    // 改造过程中的中间态，会把这条已拒绝的形态放行成静默错答。
+    assert!(
+        !MonoType::borrow_value_forms_match(&borrow_int, &MonoType::Int(64)),
+        "&Int 与 Int 必须判不等（退回无条件剥借用即红：那会放行上一版已报 E1012 的形态）"
+    );
+}
+
 // §3.2-§3.17: From<ast::Type> 转换
 
 /// 内建类型在 AST 里的唯一写法：Name（WBS 6.3 删除了 Int/Float/… 专用变体）。

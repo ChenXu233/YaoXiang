@@ -468,14 +468,62 @@ impl MonoType {
     /// 剥离**全部**顶层借用（递归）：`&&mut T` → `T`，非借用类型原样返回。
     ///
     /// 借用是编译期零大小类型（见 [`MonoType::Ref`]），`&T` 与 `T` 在值位是
-    /// 同一个值——凡「借用形 vs 值形」本该相容的比较点，都用本方法把两侧对齐。
-    /// **单点实现**：调用点的实参对照与函数体出口对照共用同一份剥法，避免两处
-    /// 各写一份而在借用位上分叉（09a §P6 6.8.3 记录的对称缺口即由此而来）。
+    /// 同一个值——调用点的实参对照（`sema::inference::expressions` 的先 unify、
+    /// 失败再剥一层补 unify）用本方法，因为那里是**推断**（要求出类型参数）。
+    ///
+    /// **不是**出口对照的判据：判定「形态是否相符」时无条件剥会把 `&Int` 与 `Int`
+    /// 判成同形（真实不符被放行）。出口对照用 [`MonoType::borrow_value_forms_match`]。
     pub fn strip_ref(&self) -> MonoType {
         match self {
             MonoType::Ref { inner, .. } => inner.strip_ref(),
             other => other.clone(),
         }
+    }
+
+    /// 借用形 ↔ 值形的**同形态判据**（出口对照的判定单点，纯函数、无求解器）。
+    ///
+    /// 相容**当且仅当**：一侧是借用、另一侧恰是它的内层，且被剥的内层是**泛型位**
+    /// （类型变量 `TypeVar` / 类型参数名 `TypeRef`）。即 `&T` 与 `T` 同形态。
+    ///
+    /// 为什么只对泛型位：借用是编译期零大小令牌，在泛型位上「声明写 `&T`、体拿到
+    /// `T`」与「声明写 `T`、体拿到 `&T`」是同一件事（同一个值、同一个类型变量）——
+    /// 6.8.3 之前 `pick: (T: Type) -> (x: &T) -> T = (x) => x` 因此在出口被误判 E1012。
+    /// 而 `&Int` 与 `Int` 是**两种形态**：具体类型上的借用不是令牌的另一种写法。
+    ///
+    /// **「内层是泛型位」这一条是防回归，不是新语义**：6.8.3 之前的树上
+    /// `f: (x: &Int) -> Int = (x) => x` 本就报 E1012（`expected 'int64', found '&int64'`）。
+    /// 无条件剥借用是「声明来源」改造过程中出现过的**中间态**（出口一律剥一层），
+    /// 它会把这条已拒绝的形态放行成静默错答——真值表第三格（`&Int` 与 `Int` 不等）
+    /// 钉的就是「别把上一版已拒绝的形态放行」。故不得退回无条件剥借用。
+    ///
+    /// 判据承重在单元级：`tests::mono` 直接钉这张真值表（`&T`/`T` 相等；
+    /// `&Int`/`String`、`&Int`/`Int` 不等），端到端形态区分不了这两条边界。
+    pub fn borrow_value_forms_match(
+        found: &MonoType,
+        expected: &MonoType,
+    ) -> bool {
+        /// 借用包装且内层是泛型位时，返回它的值形。
+        fn value_form_of(ty: &MonoType) -> Option<&MonoType> {
+            match ty {
+                MonoType::Ref { inner, .. }
+                    if matches!(inner.as_ref(), MonoType::TypeVar(_) | MonoType::TypeRef(_)) =>
+                {
+                    Some(inner.as_ref())
+                }
+                _ => None,
+            }
+        }
+        if let Some(inner) = value_form_of(found) {
+            if inner == expected {
+                return true;
+            }
+        }
+        if let Some(inner) = value_form_of(expected) {
+            if inner == found {
+                return true;
+            }
+        }
+        false
     }
 
     /// 构造内建缓冲类型 `Vec(T)`（见 `is_list` 的名字分层说明）。

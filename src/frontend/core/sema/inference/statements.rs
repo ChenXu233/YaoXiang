@@ -1492,22 +1492,31 @@ impl StatementChecker {
         Ok(())
     }
 
-    /// 出口对照：先做**借用形 ↔ 值形**对齐，再判是否真的不符（RFC-010a 规则①②）。
+    /// 出口对照：先原样 unify，失败再做**借用形 ↔ 值形**对齐（RFC-010a 规则①②）。
     ///
-    /// 借用是编译期零大小类型（`MonoType::Ref`），`&T` 与 `T` 在值位是同一个值。
-    /// 调用点早已按这条口径处理实参（`expressions.rs`：先 `unify(arg, param)`，
-    /// 再把两侧剥掉借用补一次 unify），函数体侧的出口对照此前没有对应实现——
-    /// 是对称缺口。
+    /// 判据顺序固定：
+    /// 1. 原样 `unify`（成功即相容）；
+    /// 2. 失败时按 [`MonoType::borrow_value_forms_match`] 判**形态**——只对**泛型位**
+    ///    剥借用（`&T` 与 `T` 同形态），具体类型上的借用（`&Int` 与 `Int`）不算同形。
     ///
     /// 触发形态（合法程序）：`pick: (T: Type) -> (x: &T) -> T = (x) => x`。
     /// 体的返回值类型是 `&t`、声明的返回位是 `t`：直接 `unify(&t, t)` 会把 `t`
-    /// 绑成 `&t`（occurs check 补齐借用位后改为报错）——两者都不对，因为借用形
-    /// 与值形本就是同一个值。
+    /// 绑成 `&t`（occurs check 穿透借用位后改为报错）。
     ///
-    /// 判据顺序固定：先原样 unify（成功即相容）；失败时剥掉两侧的借用，**剥后结构
-    /// 相同**才算相容。不是「剥后还能统一」——那会把
-    /// `pick: (T: Type) -> (x: &T) -> Int = (x) => x` 这类真实不符也放行
-    ///（`t` 被绑成 `Int`）。剥法单点在 [`MonoType::strip_ref`]。
+    /// **不是**「剥后还能统一」——那会把 `pick: (T: Type) -> (x: &T) -> Int = (x) => x`
+    /// 这类真实不符也放行（`t` 被绑成 `Int`）。也不是「无条件剥借用」（见该判据的文档）。
+    ///
+    /// 因果链订正（WBS 6.8.3 验证轮实测）：6.8.3 之前这条对齐是**止崩的必需品**——
+    /// 那时函数体形参的类型取自值级签名的替换结果，`&T` 与 `T` 都还是求解器变量，
+    /// `unify(&t, t)` 会建立自指绑定 `t ↦ &t`，随后 `expand_type` 无限自递归爆栈；
+    /// 只补 `contains_var` 的 `Ref` 臂（病灶 A）虽止崩但会把合法程序判成 E1012，
+    /// 故当时记的是「A+B 必须同批」。6.8.3 把体内绑定改成取**声明标注原文**
+    ///（`TypeRef("T")` 名义类型）之后，出口 unify 直接成功、走不到 bind ⇒ 自指绑定
+    /// 与 `expand_type` 自递归都不可达（验证轮实测：关掉本对齐后 2950 条用例全过、
+    /// 57 格借用矩阵零差异）。因此：**A 仍有承重**（`contains_var` / `contains_type_vars`
+    /// 各有一条单元判据），**B 是防御性对齐**——它保住「借用形与值形同形态」这条语义
+    ///（`&T` 与 `T` 在值位是同一个值），并拦住具体类型上的形态不符；承重判据在单元级
+    ///（`types::tests::mono` 的真值表），端到端区分不了这一层。
     fn exit_type_matches(
         &mut self,
         found: &MonoType,
@@ -1516,13 +1525,12 @@ impl StatementChecker {
         if self.solver.unify(found, expected).is_ok() {
             return true;
         }
-        // 借用形 ↔ 值形对齐：借用是编译期零大小类型，`&t` 与 `t` 是同一个值。
-        // 判据是**剥掉借用后结构相同**，不是「剥掉后还能统一」——后者会把
-        // `pick: (T: Type) -> (x: &T) -> Int = (x) => x` 这类真实不符也放行
-        //（`t` 被绑成 `Int`，与调用点把实参借用剥掉后补 unify 的**推断**用途不同：
-        // 那里是求类型参数，这里是判定）。
-        let (found, expected) = (found.strip_ref(), expected.strip_ref());
-        self.solver.resolve_type(&found) == self.solver.resolve_type(&expected)
+        // 判定前先解析到当前形态：`unify` 可能已部分绑定，形态判据看的是解析后的样子。
+        let (found, expected) = (
+            self.solver.resolve_type(found),
+            self.solver.resolve_type(expected),
+        );
+        MonoType::borrow_value_forms_match(&found, &expected)
     }
     /// 清空尾表达式类型记录（进入新函数体前调用）。
     fn clear_tail_ty(&mut self) {

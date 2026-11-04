@@ -735,10 +735,13 @@ impl TypeConstraintSolver {
             MonoType::Generic { args, .. } => args.iter().any(|t| self.contains_var(t, var)),
             // 借用类型 `&T` / `&mut T`：内层是同一个值世界的类型，occurs check 必须
             // **穿透**。缺本臂时 occurs check 对借用位失灵：`bind(t, &t)` 被判「不含 t」
-            // 而建立自指绑定，此后任何 `resolve_type(t)` → `expand_type` 展开
-            // `&t` → 再展开 `t`，无限自递归（实测 CLI 栈溢出 0xC00000FD，见 09a §P6 6.8.3）。
-            // 声明形参是借用、返回位是同一类型变量的合法写法
-            // （`pick: (T: Type) -> (x: &T) -> T = (x) => x`）正是这条路径的入口。
+            // 而建立**自指绑定**，此后任何 `resolve_type(t)` → `expand_type` 展开
+            // `&t` → 再展开 `t`，无限自递归。
+            //
+            // 承重在**单元级**：`types::tests::solver` 直接构造 `bind(t, &t)` 并断言被拒、
+            // 且 `contains_var(&t, t)` 为真。端到端已不可达——6.8.3 把函数体形参的类型改成
+            // 取声明标注原文（`TypeRef` 名义类型）后，出口 unify 直接成功、走不到这条 bind
+            //（验证轮实测：闸掉本臂与出口对齐，全量用例仍绿）。
             MonoType::Ref { inner, .. } => self.contains_var(inner, var),
             // 基本类型和类型引用不包含类型变量
             _ => false,

@@ -311,9 +311,14 @@ pick_ret: (T: Type) -> (x: &T) -> T = { return x }
 "#;
     // Act
     let codes = compile_codes(SRC);
-    // Assert — 出口对照先做借用形 ↔ 值形对齐。旧行为：solver 把 T 绑成 &T 建出自指
-    // 绑定，随后 expand_type 对 T 无限自递归（实测 CLI 栈溢出 0xC00000FD）；
-    // occurs check 补齐后若不做对齐，则退化成误报 E1012（止崩但误判）。
+    // Assert — 出口对照必须认「借用形 ↔ 值形同形态」，不得误报 E1012。
+    //
+    // 因果链订正（WBS 6.8.3 验证轮实测）：本条**不是**递归修复的承重判据。修复前
+    // （函数体形参取值级签名替换结果）`unify(&t, t)` 会建自指绑定、`expand_type`
+    // 无限自递归；6.8.3 把体内绑定改成取声明标注原文（`TypeRef` 名义类型）后，出口
+    // unify 直接成功、走不到那条 bind（闸掉入口对齐与 occurs check 的 Ref 臂，全量
+    // 用例仍绿）。故本条的职责只剩**语义**：借用形与值形在值位是同一个值，三种出口
+    // 形态都不得报错。判据承重在单元级（`types::tests::mono` 的同形态真值表）。
     assert!(
         codes.is_empty(),
         "借用形参的返回值必须与值形返回位相容（不得误报 E1012）：{codes:?}"
