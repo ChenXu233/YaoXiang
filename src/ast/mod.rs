@@ -1304,6 +1304,13 @@ pub fn classify_compile_time_value_params(
     }
 
     // ②③④ 用途精筛 + 命名空间解析 + 单调不动点
+    //
+    // **类型命名空间是可增长的**（SPEC §7.1 第 3 条）：已确认的编译期值参数在下一轮
+    // 轮进入类型命名空间——这正是「自引用按单调不动点处理」的落地形态。少了这一步，
+    // 第二轮必然不再增长、整个循环退化成单趟扫描，`f: (N: Int, M: N) -> Int = (m) => m`
+    // 里 `M: N` 的 `N` 就永远解析不到（实测漏成裸名 `N`，报 E1012）。
+    // 集合只增不减 ⇒ 单调；每轮至少新增一个候选才继续 ⇒ 最多 |候选| 轮，必然终止
+    //（没有「试 N 次」式上限）。
     let mut confirmed: std::collections::HashSet<String> = std::collections::HashSet::new();
     loop {
         let mut grew = false;
@@ -1311,7 +1318,8 @@ pub fn classify_compile_time_value_params(
             if confirmed.contains(name) {
                 continue;
             }
-            // 解析到类型命名空间 ⇒ 该名字在类型位置上是类型引用，与形参无关
+            // 解析到类型命名空间 ⇒ 该名字在类型位置上是类型引用，与形参无关。
+            // 命名空间 = 注入的声明面（`is_type_name`）∪ 已确认的编译期值参数。
             if is_type_name(name) {
                 continue;
             }
