@@ -475,9 +475,19 @@ fn parse_assign_after_target(
                     let value_params: Vec<Param> = type_annotation
                         .as_ref()
                         .map(|ann| {
+                            // 两个问答的可用性不同，别把「不知道」当「是」（WBS 6.8.4-1c F-2）：
+                            // - `is_const_param_type`：探针给出**真答案**（权威表在 L3 的
+                            //   `sema::probe::CONST_PARAM_TYPES`）；
+                            // - `is_type_name`：L2 拿不到「已声明类型名」表，`kind_of` 把
+                            //   「用户声明类型」与「无法定种」都答成 `UserType`，据此判「是类型」
+                            //   会把每个候选都 skip 掉 ⇒ 一个编译期值参数都剔不掉 ⇒ 合成头里
+                            //   仍带着它们 ⇒ E1112 误报。故此处取保守可靠值 `false`：
+                            //   分类只在**已声明类型与形参名同形**时可能过度，而那种形态的
+                            //   权威判定在 typecheck（它有真命名空间，E1011/E1112 都按它算）。
+                            //   不在 L2 复制 L3 名表（禁令一/二）：这里只表态「不提供该知识」。
                             let cls = crate::ast::ParamClassifier {
                                 is_const_param_type: &|n| state.probe().is_const_param_type(n),
-                                is_type_name: &|n| state.kind_of(n) == NameKind::UserType,
+                                is_type_name: &|_| false,
                                 is_predicate: &|n| state.kind_of(n) == NameKind::Predicate,
                             };
                             ann.impl_head_runtime_params(&|n| state.probe().is_constraint(n), &cls)
