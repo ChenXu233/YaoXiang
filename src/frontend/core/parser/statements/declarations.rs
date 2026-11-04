@@ -475,10 +475,12 @@ fn parse_assign_after_target(
                     let value_params: Vec<Param> = type_annotation
                         .as_ref()
                         .map(|ann| {
-                            ann.impl_head_runtime_params(
-                                &|n| state.probe().is_constraint(n),
-                                &|n| state.kind_of(n) == NameKind::Predicate,
-                            )
+                            let cls = crate::ast::ParamClassifier {
+                                is_const_param_type: &|n| state.probe().is_const_param_type(n),
+                                is_type_name: &|n| state.kind_of(n) == NameKind::UserType,
+                                is_predicate: &|n| state.kind_of(n) == NameKind::Predicate,
+                            };
+                            ann.impl_head_runtime_params(&|n| state.probe().is_constraint(n), &cls)
                         })
                         .unwrap_or_default();
 

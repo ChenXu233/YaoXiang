@@ -972,8 +972,8 @@ impl Type {
     ///    是**值**不是类型，故「被当类型用」的扫描另需调用方注入谓词问答；
     /// 3. **多约束并集且名字出现在组内类型位置**（`T: Clone + Add`）；
     /// 4. **被当编译期常量/类型用**：名字出现在**本层之外**的类型位置
-    ///    （`f: (N: Int, s: String) -> Array(Int, N)` 的 `N`，见
-    ///    `const_used_layer_names`）。
+    ///    （`f: (N: Int, s: String) -> Array(Int, N)` 的 `N`，由唯一分类器
+    ///    `classify_compile_time_value_params` 判定）。
     ///
     /// **依赖类型的值形参不剔除**：`f: (a: Int, b: Vec(a)) -> Int` 的 `a` 名字虽出现在
     /// `Vec(a)` 里，但那是**本组**形参标注——它的值参与类型，仍是运行期值位。剔掉它
@@ -981,13 +981,16 @@ impl Type {
     pub fn impl_head_runtime_params(
         &self,
         is_constraint: &dyn Fn(&str) -> bool,
-        is_predicate: &dyn Fn(&str) -> bool,
+        cls: &ParamClassifier<'_>,
     ) -> Vec<Param> {
         let Some(Type::Fn { .. }) = self.impl_head_fn() else {
             return Vec::new();
         };
         let layer = self.impl_head_layer();
-        let const_used = self.const_used_layer_names(is_predicate);
+        // 用途判定交给唯一分类器（SPEC §7.1）：名字在**任一** Type 子树被引用 ⇒ 编译期
+        // 值参数。使用域不再是「本层之外」——那是 F-1 的位置特判，§7.1 明写「遍历全部
+        // 子树、不按位置分情况」。
+        let const_used = classify_compile_time_value_params(&self.fn_params_flat(), &[self], cls);
         // 组内类型位置出现的名字——多约束并集判据用（`T: Clone + Add`）。
         let mut type_position_names: std::collections::HashSet<String> =
             std::collections::HashSet::new();
@@ -1020,65 +1023,6 @@ impl Type {
             .collect()
     }
 
-    /// 层内形参名是否被**当编译期常量/类型**用：名字出现在**本层之外**的类型位置。
-    ///
-    /// 使用域（**本层之外**的部分）只有一处：括号返回位且值层是**首组**时的 paren
-    /// 内层组形参标注——`f: (a: Int) -> ((b: Vec(a)) -> R)` 的 `a` 会流进被返回闭包的
-    /// 形参类型里，那一层在本层之后（是另一个层）。
-    ///
-    /// **本层自己的返回位不算使用域**（WBS 6.8.3 F-1 订正）：`f: (a: Int) -> Vec(a)` 的
-    /// `a` 出现在**本层返回位**的类型实参位置——这是「依赖类型的运行期值」，不是
-    /// 编译期常量。把它当编译期位剔掉会让实现头少一位、位次整体前移：实测
-    /// `f: (a: Int) -> Vec(a) = (a) => a` 由 E1012 退化成**静默通过**
-    ///（`Option(a)` / `Array(a, 2)` / `Vec(Vec(a))` 同形），
-    /// 而 `f: (a: Int, b: Vec(a)) -> Vec(a)` 的逐字一致标注反被判 E1011。
-    /// 本层返回位属于本层声明的一部分（与形参标注同源），故与它们一样**不进**使用域。
-    ///
-    /// **不含本层形参自己的标注**——那正是「依赖类型的值形参」与「编译期常量」的分界：
-    /// `f: (a: Int, b: Vec(a)) -> Int` 的 `a` 只出现在本组里，是运行期值位。
-    fn const_used_layer_names(
-        &self,
-        is_predicate: &dyn Fn(&str) -> bool,
-    ) -> std::collections::HashSet<String> {
-        let mut out = std::collections::HashSet::new();
-        if self.impl_head_fn().is_none() {
-            return out;
-        }
-        // 使用域：本层之外的类型位置（只有「括号返回位的 paren 内层组」这一处）。
-        let mut scope: Vec<&Type> = Vec::new();
-        let paren_layer_is_first_group = matches!(
-            self,
-            Type::Fn { params, return_type }
-                if return_type.is_paren_complete() && !Self::value_slots(params).is_empty()
-        );
-        if paren_layer_is_first_group {
-            if let Some(Type::Fn { params, .. }) =
-                self.fn_return_type().and_then(Self::paren_inner_fn)
-            {
-                scope.extend(params.iter().filter_map(|p| p.ty.as_ref()));
-            }
-        }
-        for p in &self.impl_head_layer() {
-            if p.name.is_empty() {
-                continue;
-            }
-            if scope
-                .iter()
-                .any(|t| crate::ast::name_used_as_type(&p.name, t, is_predicate))
-            {
-                out.insert(p.name.clone());
-            }
-        }
-        out
-    }
-
-    /// Fn 的返回位（非 Fn 声明返回自身）。
-    fn fn_return_type(&self) -> Option<&Type> {
-        match self {
-            Type::Fn { return_type, .. } => Some(return_type.as_ref()),
-            _ => None,
-        }
-    }
     /// 标注本身是否**类型位**：`T: Type`、名字恰为 `Type`、类型级函数
     ///（`(F: (T: Type) -> Type)` 的构造器变量）。判据单点——`value_slots` 与
     /// `impl_head_runtime_params` 共用，不得各写一份 `matches!`。
@@ -1088,6 +1032,22 @@ impl Type {
             || matches!(ty, Type::Fn { params, return_type } if crate::ast::is_type_level_fn(params, return_type))
     }
 
+    /// **实现头绑定序列**（拍平口径）：形参 − 类型参数 − 编译期值参数（SPEC §7.1）。
+    ///
+    /// 与**调用点实参序列**（形参 − 类型参数；编译期值参数仍占实参位）是两个序列，
+    /// 不得并成一个。本函数只回答「实现头第 i 位能绑到哪个声明位」，供 E1112 / E1011；
+    /// 调用点实参分配不走这里。
+    pub fn runtime_value_params_cls(
+        &self,
+        cls: &ParamClassifier<'_>,
+    ) -> Vec<Param> {
+        let flat = self.fn_params_flat();
+        let compile_time = classify_compile_time_value_params(&flat, &[self], cls);
+        Self::value_slots(&flat)
+            .into_iter()
+            .filter(|p| !compile_time.contains(p.name.as_str()))
+            .collect()
+    }
     /// **拍平**口径的编译期位过滤（`runtime_value_params` 用；不含按用途判定的
     /// 编译期常量位——那些要层与使用域信息，见 `impl_head_runtime_params`）。
     fn value_slots(params: &[Param]) -> Vec<Param> {
@@ -1299,6 +1259,76 @@ pub fn is_type_level_fn(
         && params.iter().all(|p| p.ty.as_ref().is_some_and(is_type))
 }
 
+/// 分类注入：SPEC §7.1 的三个问答都由调用方提供（L2 不持有任何名字表）。
+pub struct ParamClassifier<'a> {
+    /// 该类型名可作编译期值参数候选（非 `Type` 的具体类型；权威表在 L3）。
+    pub is_const_param_type: &'a dyn Fn(&str) -> bool,
+    /// 该名字在**类型命名空间**里可解析（已声明类型 + 类型参数）。
+    pub is_type_name: &'a dyn Fn(&str) -> bool,
+    /// 该名字是编译期谓词（谓词应用的实参位是**值**不是类型）。
+    pub is_predicate: &'a dyn Fn(&str) -> bool,
+}
+
+/// 编译期值参数分类——**唯一**分类器（SPEC type-system §7.1 / RFC-011 §4.1）。
+///
+/// 此前有三套独立判据（`extract_generic_param_names` 只扫其它形参、漏返回位；
+/// `Type::const_used_layer_names` 只看本层之外；`ir_gen::split_curry` 自带游标判据），
+/// 三者在「名字出现在类型位置」的形态上给出不同位次。本函数是它们的共同上游：
+/// 输出**编译期值参数的名单**，其余形参是运行期值参数（推论见 SPEC §7.1 末段：
+/// 编译期值参数不占**实现头绑定序列**的位；调用点实参序列另算）。
+///
+/// 判定按规范的顺序：形态粗筛（非 `Type` 的具体类型）→ 用途精筛（名字在**任一**
+/// `Type` 子树被引用）→ 命名空间解析（解析到类型即与形参无关）→ 单调不动点。
+/// 谓词应用的实参位是**值**不是类型（`Terminates(b)` 的 `b`），故扫描按 `is_predicate`
+/// 排除——否则值参数会被误判成编译期值参数。
+pub fn classify_compile_time_value_params(
+    params: &[Param],
+    type_positions: &[&Type],
+    cls: &ParamClassifier<'_>,
+) -> std::collections::HashSet<String> {
+    let is_const_param_type = cls.is_const_param_type;
+    let is_type_name = cls.is_type_name;
+    let is_predicate = cls.is_predicate;
+    // ① 形态粗筛：非 Type 的具体类型标注 + 有名形参
+    let candidates: Vec<String> = params
+        .iter()
+        .filter(|p| p.is_named())
+        .filter(|p| match p.ty.as_ref() {
+            Some(Type::Name { name, .. }) => name != "Type" && is_const_param_type(name),
+            _ => false,
+        })
+        .map(|p| p.name.clone())
+        .collect();
+    if candidates.is_empty() {
+        return std::collections::HashSet::new();
+    }
+
+    // ②③④ 用途精筛 + 命名空间解析 + 单调不动点
+    let mut confirmed: std::collections::HashSet<String> = std::collections::HashSet::new();
+    loop {
+        let mut grew = false;
+        for name in &candidates {
+            if confirmed.contains(name) {
+                continue;
+            }
+            // 解析到类型命名空间 ⇒ 该名字在类型位置上是类型引用，与形参无关
+            if is_type_name(name) {
+                continue;
+            }
+            if type_positions
+                .iter()
+                .any(|t| name_used_as_type(name, t, is_predicate))
+            {
+                confirmed.insert(name.clone());
+                grew = true;
+            }
+        }
+        if !grew {
+            break;
+        }
+    }
+    confirmed
+}
 /// 从签名形参里抽出**结构可判定**的泛型参数（名字 + 约束）。
 ///
 /// 三类来源：`Type`/`MetaType` 标注、探针判为 const 参数类型的注解、
@@ -1636,3 +1666,6 @@ impl Expr {
         }
     }
 }
+
+#[cfg(test)]
+mod tests;

@@ -142,6 +142,9 @@ pub struct StatementChecker {
     /// 闭包——谓词应用的实参位是编译期表达式（值）不是类型引用，不得
     /// 计入 const 泛型用途（RFC-027a）。
     predicate_names: HashSet<String>,
+    /// 类型命名空间（已声明类型名 + 类型参数名；checker.rs 从 `env.types` 注入）：
+    /// SPEC §7.1「被引用按命名空间解析」的单一事实源——名字解析到类型即与形参无关。
+    type_names: HashSet<String>,
     /// 循环嵌套深度（#311）：语句级 for 由本 walker 递归走体，循环上下文在此追踪。
     /// 委托表达式检查给 ExpressionInferrer 时经 set_loop_depth 传入，保证
     /// E1102（break/continue 循环外）判定跨两个 walker 一致。
@@ -252,6 +255,7 @@ impl StatementChecker {
             trait_table,
             proof_fn_bases: HashMap::new(),
             predicate_names: HashSet::new(),
+            type_names: HashSet::new(),
             loop_depth: 0,
             import_watch: HashMap::new(),
             imported_used: HashSet::new(),
@@ -450,6 +454,15 @@ impl StatementChecker {
         names: HashSet<String>,
     ) {
         self.predicate_names = names;
+    }
+
+    /// 注入类型命名空间（已声明类型名 + 类型参数名）——SPEC §7.1 的命名空间解析
+    /// 问答，与 `set_predicate_names` 同一点注入。
+    pub fn set_type_names(
+        &mut self,
+        names: HashSet<String>,
+    ) {
+        self.type_names = names;
     }
 
     /// 尝试实例化泛型类型
@@ -2181,8 +2194,17 @@ impl StatementChecker {
         if matches!(type_annotation, Some(crate::ast::Type::Fn { .. })) {
             // 运行期值位个数取**权威切法**（与 parser / ir_gen 同一 helper），
             // 不再各自用「签名剔除类型名 / const 名」另算一份。
+            // **实现头绑定序列**（形参 − 类型参数 − 编译期值参数，SPEC §7.1）：调用点
+            // 实参序列另算（编译期值参数仍占实参位，RFC-011 §4.1 的 factorial 例即如此）。
+            let cls = crate::ast::ParamClassifier {
+                is_const_param_type: &|n| {
+                    crate::frontend::core::sema::probe::is_const_param_type_name(n)
+                },
+                is_type_name: &|n| self.type_names.contains(n),
+                is_predicate: &|n| self.predicate_names.contains(n),
+            };
             let declared_value_slots = type_annotation
-                .map(|t| t.runtime_value_params().len())
+                .map(|t| t.runtime_value_params_cls(&cls).len())
                 .unwrap_or(0);
             if params.len() > declared_value_slots {
                 return Err(Box::new(
@@ -2416,13 +2438,20 @@ impl StatementChecker {
         // 多出的实现形参没有声明位（例如柯里声明配多形参实现头——那是既有缺口，
         // 见 09a §P6 6.8.3 的登记：绑定路径未接通，本批不扩面）。
         let declared_value_params: Option<Vec<Param>> = type_annotation.map(|ann| {
+            let cls = crate::ast::ParamClassifier {
+                is_const_param_type: &|n| {
+                    crate::frontend::core::sema::probe::is_const_param_type_name(n)
+                },
+                is_type_name: &|n| self.type_names.contains(n),
+                // 与 const 用途精筛同一事实源（`predicate_names`，3.20.8 起单点）。
+                is_predicate: &|n| self.predicate_names.contains(n),
+            };
             ann.impl_head_runtime_params(
                 &|n| {
                     self.trait_table.has_trait(n)
                         || crate::frontend::core::sema::operator_interfaces::spec(n).is_some()
                 },
-                // 与 const 用途精筛同一事实源（`predicate_names`，3.20.8 起单点）。
-                &|n| self.predicate_names.contains(n),
+                &cls,
             )
             .into_iter()
             .take(params.len())

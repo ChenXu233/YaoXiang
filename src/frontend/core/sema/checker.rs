@@ -649,6 +649,10 @@ impl TypeChecker {
         body_checker.set_proof_fn_bases(proof_fn_bases);
         let predicate_names: HashSet<String> = self.type_level_namespace.predicates.clone();
         body_checker.set_predicate_names(predicate_names);
+        // SPEC §7.1：「被引用按命名空间解析」—— 类型命名空间（`env.types`：内置类型 ∪
+        // 用户声明类型）与谓词集同一注入点，供唯一分类器回答「名字是类型还是编译期值参数」。
+        let type_names: HashSet<String> = self.env.types.keys().cloned().collect();
+        body_checker.set_type_names(type_names);
         // 如果启用收集模式，设置收集所有错误
         if collect_all {
             body_checker.set_collect_all_errors(true);

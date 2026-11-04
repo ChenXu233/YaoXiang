@@ -157,6 +157,9 @@ pub struct AstToIrGenerator {
     /// 否则 `use std.math` 后用户写 `PI: Type = ..; PI(7)` 会被解析成
     /// `std.math.PI`（常量）——调用常量得到 void，静默错值（D10）。
     declared_type_names: std::collections::HashSet<String>,
+    /// 编译期谓词名集（`generate_module_ir` 入口从 AST 扫出）：SPEC §7.1 的
+    /// 「谓词应用的实参位是值不是类型」判据要用它——保守假值会让同形不遮蔽失效。
+    predicate_names: std::collections::HashSet<String>,
     /// 类型绑定映射（类型名 -> (方法名 -> BindingInfo)）
     /// 用于方法调用时的参数重排和函数转发（RFC-004）
     type_bindings: HashMap<String, HashMap<String, BindingInfo>>,
@@ -365,6 +368,7 @@ impl AstToIrGenerator {
             struct_definitions: HashMap::new(),
 
             declared_type_names: std::collections::HashSet::new(),
+            predicate_names: std::collections::HashSet::new(),
             type_bindings: HashMap::new(),
             nested_functions: Vec::new(),
             closure_counter: 0,
@@ -642,12 +646,22 @@ impl AstToIrGenerator {
     /// 一切「实现头第 i 位的声明信息」都从这里取：形参**类型**（`impl_param_types`）、
     /// 形参**写出类型名**（`note_param_written_types`）、**调用侧可用名**
     /// （`self.fn_param_names` 的登记）——同一 helper、同一顺序，不得各自再切一次。
+    /// SPEC §7.1 分类器的**真注入**：候选类型取 L3 权威表；类型命名空间与谓词集
+    /// 由 `generate_module_ir` 入口从 AST 扫出，不使用保守假值。
     fn declaration_runtime_param_slots(
+        &self,
         type_annotation: Option<&ast::Type>,
         count: usize,
     ) -> Vec<ast::Param> {
+        let cls = ast::ParamClassifier {
+            is_const_param_type: &|n| {
+                crate::frontend::core::sema::probe::is_const_param_type_name(n)
+            },
+            is_type_name: &|n| self.declared_type_names.contains(n),
+            is_predicate: &|n| self.predicate_names.contains(n),
+        };
         type_annotation
-            .map(|ann| ann.runtime_value_params())
+            .map(|ann| ann.runtime_value_params_cls(&cls))
             .unwrap_or_default()
             .into_iter()
             .take(count)
@@ -658,10 +672,11 @@ impl AstToIrGenerator {
     /// 按 WBS 2.1.2 的惯例填 `Int(64)` 占位（`filter_map` 丢弃会让 params 长度与
     /// 帧布局错位——verify 实测）。
     fn impl_param_types(
+        &self,
         params: &[ast::Param],
         type_annotation: Option<&ast::Type>,
     ) -> Vec<MonoType> {
-        let declared = Self::declaration_runtime_param_slots(type_annotation, params.len());
+        let declared = self.declaration_runtime_param_slots(type_annotation, params.len());
         params
             .iter()
             .enumerate()
@@ -1471,6 +1486,20 @@ impl AstToIrGenerator {
         }
         // use 导入别名表（含 #245 条目别名）：生成期解析调用名用。
         self.use_aliases = self.build_import_aliases(module);
+        // SPEC §7.1 分类器的**真注入**：类型命名空间（本文件声明的类型名）与谓词名集
+        // 在入口处从 AST 扫出，供 `param_classifier` 回答命名空间解析——保守假值会
+        // 让「形参名与类型名同形不构成遮蔽」失效。
+        {
+            let namespace = crate::frontend::core::sema::probe::TypeLevelNamespace::scan(
+                std::iter::once(module),
+            );
+            self.predicate_names = namespace.predicates;
+            for stmt in &module.items {
+                if let ast::StmtKind::TypeDefinition { name, .. } = &stmt.kind {
+                    self.declared_type_names.insert(name.clone());
+                }
+            }
+        }
 
         // T3：先分配所有顶层值绑定的槽位，使前向引用在生成期可解析。
         self.register_global_slots(module);
@@ -2242,13 +2271,11 @@ impl AstToIrGenerator {
                     // 调用侧可用名与形参**类型**同一来源（同一个 helper、同一个顺序）：
                     // 旧口径类型取前 N、名字取末尾 N，在多层柯里声明上会错位
                     // （实测 `f(a = 1, b = "s")` 报 E1014 available: b，而第 0 槽是 a 的槽）。
-                    let names: Vec<String> = Self::declaration_runtime_param_slots(
-                        type_annotation.as_ref(),
-                        params.len(),
-                    )
-                    .into_iter()
-                    .map(|p| p.name)
-                    .collect();
+                    let names: Vec<String> = self
+                        .declaration_runtime_param_slots(type_annotation.as_ref(), params.len())
+                        .into_iter()
+                        .map(|p| p.name)
+                        .collect();
                     self.fn_param_names.insert(name.clone(), names);
                 }
                 if let Some(type_name) = type_name {
@@ -2461,11 +2488,11 @@ impl AstToIrGenerator {
         if !params.is_empty() {
             // 与普通函数绑定同一来源（同一个 helper）：方法声明的首位是接收者位，
             // 位置口径一致 ⇒ 调用侧可用名与槽位不会错位。
-            let names: Vec<String> =
-                Self::declaration_runtime_param_slots(Some(method_type), params.len())
-                    .into_iter()
-                    .map(|p| p.name)
-                    .collect();
+            let names: Vec<String> = self
+                .declaration_runtime_param_slots(Some(method_type), params.len())
+                .into_iter()
+                .map(|p| p.name)
+                .collect();
             self.fn_param_names.insert(func_name.clone(), names);
         }
 
@@ -2496,8 +2523,8 @@ impl AstToIrGenerator {
         // 注册参数；类型按**方法自己的声明签名**渲染（与普通函数同一 helper：
         // 作者标注优先、缺标注取声明同类位；IR 只渲染不判定——parser 已不再
         // 往实现头填声明类型）。
-        let declared = Self::declaration_runtime_param_slots(Some(method_type), params.len());
-        let param_types = Self::impl_param_types(params, Some(method_type));
+        let declared = self.declaration_runtime_param_slots(Some(method_type), params.len());
+        let param_types = self.impl_param_types(params, Some(method_type));
         for (i, param) in params.iter().enumerate() {
             // 注册参数到符号表
             self.register_local(&param.name, i);
@@ -2667,7 +2694,7 @@ impl AstToIrGenerator {
             self.register_local(&param.name, i);
         }
         // 写出类型名与形参类型同一来源（作者标注 → 声明同类位）。
-        let declared = Self::declaration_runtime_param_slots(type_annotation, params.len());
+        let declared = self.declaration_runtime_param_slots(type_annotation, params.len());
         self.note_param_written_types(params, &declared);
 
         // 记录局部变量起始位置（在参数之后）
@@ -2796,7 +2823,7 @@ impl AstToIrGenerator {
             // （parser 不再往实现头填声明类型，声明是 IR 唯一的类型来源；D54 F1 /
             // WBS 6.8.3）。拿不到声明类型时按 WBS 2.1.2 的惯例填 Int(64) 占位——
             // filter_map 丢弃会让 params 长度与帧布局错位（verify 实测）。
-            params: Self::impl_param_types(params, type_annotation),
+            params: self.impl_param_types(params, type_annotation),
             return_type,
             generic_params,
             body: FunctionBody::Code {
