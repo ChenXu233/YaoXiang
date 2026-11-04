@@ -326,6 +326,54 @@ pick_ret: (T: Type) -> (x: &T) -> T = { return x }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// F-1（WBS 6.8.3 复审阻塞项）：本层返回位**不是**编译期位的使用域
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// 形参名出现在**本层返回位**的类型实参位置（`Vec(a)`）时，它是依赖类型的运行期值，
+// 不是编译期常量。把它当编译期位剔掉会让实现头少一位、位次整体前移——实测旧口径
+// `f: (a: Int) -> Vec(a) = (a) => a` 由 E1012 退化成**静默通过**（运行期打印 1），
+// 而逐字一致的标注反被判 E1011。判据落在 typecheck 层（IR 规范化拿不到该形态的文本，
+// 进不了语料快照）；箭头体与块体两种合成路径必须**同码**。
+
+#[test]
+fn test_param_used_in_own_return_type_still_rejects_bad_body() {
+    // Arrange — 声明返回位用到了本层的值形参（依赖类型），体却直接返回那个值。
+    // `Vec` / `Option` / `Array` / 嵌套四种同形写法都要覆盖，箭头体与块体各一份。
+    const SRC: &str = r#"
+vec_arrow: (a: Int) -> Vec(a) = (a) => a
+vec_block: (a: Int) -> Vec(a) = { a }
+opt_arrow: (a: Int) -> Option(a) = (a) => a
+arr_arrow: (a: Int) -> Array(a, 2) = (a) => a
+nested_arrow: (a: Int) -> Vec(Vec(a)) = (a) => a
+"#;
+    // Act
+    let codes = compile_codes(SRC);
+    // Assert — 五格都必须报 E1012（与「声明返回类型不符」同码）：位次前移会让形参退回
+    // 新鲜类型变量、与返回位统一成同一个值 ⇒ 静默通过，那是静默错答。
+    assert_eq!(
+        codes.iter().filter(|c| *c == "E1012").count(),
+        5,
+        "返回位用到本层值形参时，体直接返回值必须报 E1012（不得静默通过）：{codes:?}"
+    );
+}
+
+#[test]
+fn test_param_used_in_own_return_type_keeps_annotation_alignment() {
+    // Arrange — 作者标注与声明**逐字一致**，且声明返回位用到了本层形参：
+    // `b` 的值参与 `Vec(a)`、返回位也是 `Vec(a)`。
+    const SRC: &str = r#"
+arrow: (a: Int, b: Vec(a)) -> Vec(a) = (a: Int, b: Vec(a)) => b
+block: (a: Int, b: Vec(a)) -> Vec(a) = { b }
+"#;
+    // Act
+    let codes = compile_codes(SRC);
+    // Assert — 零诊断：位次一旦前移，逐字一致的标注会被判成 E1011（假阳性）。
+    assert!(
+        codes.is_empty(),
+        "作者标注与声明逐字一致时不得报 E1011（位次不得前移）：{codes:?}"
+    );
+}
+// ─────────────────────────────────────────────────────────────────────────────
 // F1f（WBS 6.8.3）：依赖类型值形参 / 编译期 const 位的按位对齐——typecheck 层判据
 // ─────────────────────────────────────────────────────────────────────────────
 //

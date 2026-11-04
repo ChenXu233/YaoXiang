@@ -437,11 +437,17 @@ fn test_impl_head_keeps_authored_names_without_fill() {
 }
 
 #[test]
-fn test_const_generic_filtered_without_lambda_head() {
-    // 覆盖: RFC-011 §4.1 Const 泛型 — 无 lambda 头分支同样剔除 Const 泛型
-    // 泛型参数按"用途"判定（不再大小写/名单猜测）：
-    // N 被用在返回类型 Array(Int, N) 的类型位置 → 是 Const 泛型 → 从值参数剔除。
-    // 验证: f: (N: Int, s: String) -> Array(Int, N) = s 的 params == [s: String]
+fn test_impl_head_keeps_same_group_param_used_in_own_return() {
+    // 覆盖: RFC-011 §4.1 Const 泛型 + WBS 6.8.3 F-1（使用域订正）
+    //
+    // 泛型参数按"用途"判定（不再大小写/名单猜测），但**用途必须在本层之外**：
+    // 本层自己的返回位属于本层声明的一部分，`N` 出现在 `Array(Int, N)` 里说明它是
+    // 本组的编译期/依赖位，**不**说明它不在值参数表里——同组的形参按声明序都是
+    // 调用点要按序给的值位（`f(3, "x")`）。把本层返回位当使用域会剔掉它、让实现头
+    // 少一位、位次前移（实测 `f: (a: Int) -> Vec(a) = (a) => a` 因此由 E1012 退化成
+    // 静默通过，见 typecheck 侧的 F-1 判据）。
+    //
+    // 验证: f: (N: Int, s: String) -> Array(Int, N) = s 的 params == [N: Int, s: String]
 
     // Arrange
     let kind = parse_stmt("f: (N: Int, s: String) -> Array(Int, N) = s");
@@ -462,12 +468,21 @@ fn test_const_generic_filtered_without_lambda_head() {
 
     assert_eq!(
         params.len(),
-        1,
-        "params 应只含值参数 s（Const 泛型 N 被当类型用，不是值参数）"
+        2,
+        "同组的 N 与 s 都是值参数位（本层返回位不构成剔除依据），got: {:?}",
+        params.iter().map(|p| p.name.clone()).collect::<Vec<_>>()
     );
-    assert_eq!(params[0].name, "s", "值参数名应为 s");
+    assert_eq!(
+        params[0].name, "N",
+        "第 0 位应是声明序上的 N（位次不得前移）"
+    );
     assert!(
-        matches!(&params[0].ty, Some(Type::Name { name, .. }) if name == "String"),
+        matches!(&params[0].ty, Some(Type::Name { name, .. }) if name == "Int"),
+        "N 的标注应为 Int"
+    );
+    assert_eq!(params[1].name, "s", "值参数名应为 s");
+    assert!(
+        matches!(&params[1].ty, Some(Type::Name { name, .. }) if name == "String"),
         "s 的标注应为 String"
     );
 }

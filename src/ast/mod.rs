@@ -1022,13 +1022,17 @@ impl Type {
 
     /// 层内形参名是否被**当编译期常量/类型**用：名字出现在**本层之外**的类型位置。
     ///
-    /// 使用域（本层以外的部分）分三种形态：
-    /// - 普通函数 / 裸 Fn 链柯里：本层 Fn 的**返回位**——`f: (N: Int, s: String) ->
-    ///   Array(Int, N)` 的 `N`、`f: (N: Int) -> (n: N) -> Int` 的 `N`（后者本层是内层组，
-    ///   故 `N` 不在层内，本函数不涉及）；
-    /// - 括号返回位且值层是**首组**：paren 内层组的形参标注（`(a: Int) ->
-    ///   ((b: Vec(a)) -> R)`）——此时 `a` 是向外层闭包提供的运行期值；
-    /// - 其余：无使用域（返回位不是函数类型 / 不是 Fn 声明）。
+    /// 使用域（**本层之外**的部分）只有一处：括号返回位且值层是**首组**时的 paren
+    /// 内层组形参标注——`f: (a: Int) -> ((b: Vec(a)) -> R)` 的 `a` 会流进被返回闭包的
+    /// 形参类型里，那一层在本层之后（是另一个层）。
+    ///
+    /// **本层自己的返回位不算使用域**（WBS 6.8.3 F-1 订正）：`f: (a: Int) -> Vec(a)` 的
+    /// `a` 出现在**本层返回位**的类型实参位置——这是「依赖类型的运行期值」，不是
+    /// 编译期常量。把它当编译期位剔掉会让实现头少一位、位次整体前移：实测
+    /// `f: (a: Int) -> Vec(a) = (a) => a` 由 E1012 退化成**静默通过**
+    ///（`Option(a)` / `Array(a, 2)` / `Vec(Vec(a))` 同形），
+    /// 而 `f: (a: Int, b: Vec(a)) -> Vec(a)` 的逐字一致标注反被判 E1011。
+    /// 本层返回位属于本层声明的一部分（与形参标注同源），故与它们一样**不进**使用域。
     ///
     /// **不含本层形参自己的标注**——那正是「依赖类型的值形参」与「编译期常量」的分界：
     /// `f: (a: Int, b: Vec(a)) -> Int` 的 `a` 只出现在本组里，是运行期值位。
@@ -1037,10 +1041,10 @@ impl Type {
         is_predicate: &dyn Fn(&str) -> bool,
     ) -> std::collections::HashSet<String> {
         let mut out = std::collections::HashSet::new();
-        let Some(layer_fn) = self.impl_head_fn() else {
+        if self.impl_head_fn().is_none() {
             return out;
-        };
-        // 使用域：本层之外的类型位置
+        }
+        // 使用域：本层之外的类型位置（只有「括号返回位的 paren 内层组」这一处）。
         let mut scope: Vec<&Type> = Vec::new();
         let paren_layer_is_first_group = matches!(
             self,
@@ -1053,9 +1057,6 @@ impl Type {
             {
                 scope.extend(params.iter().filter_map(|p| p.ty.as_ref()));
             }
-        }
-        if let Type::Fn { return_type, .. } = layer_fn {
-            scope.push(return_type.as_ref());
         }
         for p in &self.impl_head_layer() {
             if p.name.is_empty() {
