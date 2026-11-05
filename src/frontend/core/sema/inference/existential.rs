@@ -118,9 +118,12 @@ fn walk(
         MonoType::Generic { name, args }
             if (name == "List" || name == "Vec" || name == "Array") && args.len() == 1 =>
         {
-            if let Expr::List(elems, _) = expr {
+            // 元素按**元素槽**下钻（`Vec(3)` 的实参是长度槽、元素是它的基类型），
+            // 与变量声明侧的容器种子判定同源（`MonoType::container_element_slot`）——
+            // 同一件事只有一份切法，不在两处各读一次 `args[0]`。
+            if let (Expr::List(elems, _), Some(elem)) = (expr, expected.container_element_slot()) {
                 for e in elems {
-                    walk(solver, scope, generic_type_defs, e, &args[0], out, errors);
+                    walk(solver, scope, generic_type_defs, e, elem, out, errors);
                 }
             }
         }

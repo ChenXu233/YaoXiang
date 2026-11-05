@@ -457,6 +457,55 @@ impl MonoType {
         self.is_generic_named("Range")
     }
 
+    /// 容器注解的**长度槽**：依赖类型里「元素个数」那一颗，不是元素类型。
+    ///
+    /// `Vec(3)` / `Array(Int, 3)` 里的字面量实参是**长度**（WBS 6.8.7-3）。它与值槽
+    /// （`n: N` 这类单值类型位，由 `sema::inference` 的期望传播消费）是两套判据：
+    /// 长度槽只回答「元素个数必须是 3」，不参与元素定型——`[1, 2, 3]` 与
+    /// `[1, 2, 4]` 都合法，`[1, 2]` 报长度不符。
+    ///
+    /// 「字面量实参即长度」的判据单点在这里：字面量类型 `int64::3` 在**元素位**
+    /// 不可构造（元素按 `int64` 定型），把它当元素期望会把每个元素都按 `int64::3`
+    /// 拒绝。
+    ///
+    /// 返回长度槽的类型（`Literal{...}`），由调用方取 `value` 与元素个数比对；
+    /// 以下情形返回 `None`（不做长度校验，保持既有行为）：非容器、长度位不是
+    /// 字面量（`Vec(Int)` 只有元素槽；`Array(Int, N)` 的 `N` 是符号常量，推迟）。
+    pub fn container_length_slot(&self) -> Option<&MonoType> {
+        let MonoType::Generic { name, args } = self else {
+            return None;
+        };
+        // 只回答**列表字面量种子**会落到的那两个内建容器：`Vec(T)`（运行时长度缓冲）
+        // 与 `Array(T, N)`（定长）。`List(T)` 是标准库类型，长度承载在它的
+        // `length: Int` 字段上，不由这条判据校验。
+        if !matches!(name.as_str(), "Vec" | "Array") {
+            return None;
+        }
+        let last = args.last()?;
+        matches!(last, MonoType::Literal { .. }).then_some(last)
+    }
+
+    /// 容器注解的**元素槽**：元素按什么定型。
+    ///
+    /// 与 [`MonoType::container_length_slot`] 是同一件事的两半：容器注解里的
+    /// 字面量实参是长度槽，故元素槽取它的**基类型**（`Vec(3)` 的元素是
+    /// `Int(64)`）；其余情形就是第一个实参（`Vec(Int)`、`Array(T, N)`、`List(T)`）。
+    ///
+    /// 非容器返回 `None`——`Dict(K, V)` 的第一位是键类型，不是元素类型，
+    /// 不得从这里误取。
+    pub fn container_element_slot(&self) -> Option<&MonoType> {
+        let MonoType::Generic { name, args } = self else {
+            return None;
+        };
+        if !matches!(name.as_str(), "Vec" | "Array" | "List") {
+            return None;
+        }
+        match args.first()? {
+            MonoType::Literal { base_type, .. } => Some(base_type.as_ref()),
+            first => Some(first),
+        }
+    }
+
     /// 取泛型参数（List→[T], Dict→[K,V]），非泛型类型返回 None
     pub fn generic_args(&self) -> Option<&[MonoType]> {
         match self {

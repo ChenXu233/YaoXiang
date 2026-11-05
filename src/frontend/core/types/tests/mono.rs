@@ -58,6 +58,99 @@ fn test_borrow_value_forms_match_aligns_only_generic_positions() {
     );
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// 容器注解的**长度槽 / 元素槽**分离（WBS 6.8.7-3 的承重判据，单元级）
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// 端到端只看得到「`v: Vec(3) = [1,2,3]` 是否通过」，区分不了「字面量实参按长度读」
+// 与「元素期望退回 Literal{3}」这两条判据；故判据落在两个切槽函数本身——把元素槽
+// 退回 `args[0]` 原样，第一组必红。
+
+/// 单值类型 `int64::n`（`Vec(3)` 的 `3`、`Array(T, 3)` 的 `3` 的载体）。
+fn int_literal_type(n: i128) -> MonoType {
+    MonoType::Literal {
+        name: n.to_string(),
+        base_type: Box::new(MonoType::Int(64)),
+        value: crate::frontend::core::types::const_data::ConstValue::Int(n),
+    }
+}
+
+#[test]
+fn test_container_element_slot_replaces_length_literal_with_base_type() {
+    // Arrange — `Vec(3)`（字面量实参 = 长度槽）与 `Vec(Int)`（既有元素槽形态）。
+    let vec_of_three = MonoType::Generic {
+        name: "Vec".to_string(),
+        args: vec![int_literal_type(3)],
+    };
+    let vec_of_int = MonoType::make_vec(MonoType::Int(64));
+
+    // Act
+    let elem_of_literal = vec_of_three.container_element_slot();
+    let elem_of_int = vec_of_int.container_element_slot();
+
+    // Assert — `Vec(3)` 的元素取字面量的**基类型**（长度只校验个数）；`Vec(Int)`
+    // 的元素仍是 Int（既有形态零回归）。
+    assert_eq!(
+        elem_of_literal,
+        Some(&MonoType::Int(64)),
+        "Vec(3) 的元素槽必须是字面量的基类型 Int(64)：退回 Literal{{3}} 会把每个元素按 int64::3 拒绝"
+    );
+    assert_eq!(
+        elem_of_int,
+        Some(&MonoType::Int(64)),
+        "Vec(Int) 的元素槽必须仍是 Int(64)（既有 Vec(Int) 形态零回归）"
+    );
+}
+
+#[test]
+fn test_container_length_slot_reads_only_literal_arguments() {
+    // Arrange — 三格：`Vec(3)` 的字面量是长度；`Array(Int, 3)` 的第二位是长度；
+    // `Array(Int, N)` 的 N 是符号常量（RFC-011 const 参数形态），长度推迟。
+    let vec_of_three = MonoType::Generic {
+        name: "Vec".to_string(),
+        args: vec![int_literal_type(3)],
+    };
+    let array_of_three = MonoType::Generic {
+        name: "Array".to_string(),
+        args: vec![MonoType::Int(64), int_literal_type(3)],
+    };
+    let array_of_symbolic_n = MonoType::Generic {
+        name: "Array".to_string(),
+        args: vec![MonoType::Int(64), MonoType::TypeRef("N".to_string())],
+    };
+    let vec_of_int = MonoType::make_vec(MonoType::Int(64));
+
+    // Act & Assert
+    assert!(
+        matches!(
+            vec_of_three.container_length_slot(),
+            Some(MonoType::Literal {
+                value: crate::frontend::core::types::const_data::ConstValue::Int(3),
+                ..
+            })
+        ),
+        "Vec(3) 的长度槽必须是字面量 3（元素个数只由它校验）"
+    );
+    assert!(
+        matches!(
+            array_of_three.container_length_slot(),
+            Some(MonoType::Literal {
+                value: crate::frontend::core::types::const_data::ConstValue::Int(3),
+                ..
+            })
+        ),
+        "Array(Int, 3) 的长度槽必须是第二位（既有定长数组长度校验零回归）"
+    );
+    assert!(
+        array_of_symbolic_n.container_length_slot().is_none(),
+        "Array(Int, N) 的 N 是符号常量：长度槽必须返回 None（校验推迟，不得按 0 处理）"
+    );
+    assert!(
+        vec_of_int.container_length_slot().is_none(),
+        "Vec(Int) 没有长度槽：必须返回 None（既有形态不做长度校验，零回归）"
+    );
+}
+
 // §3.2-§3.17: From<ast::Type> 转换
 
 /// 内建类型在 AST 里的唯一写法：Name（WBS 6.3 删除了 Int/Float/… 专用变体）。

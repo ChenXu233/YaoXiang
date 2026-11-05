@@ -2699,11 +2699,14 @@ impl StatementChecker {
                         None
                     };
                     let mut seed_matched = false;
-                    if let (Some(elems), MonoType::Generic { args, .. }) =
-                        (seed_container, &resolved_ann)
+                    // 元素按**元素槽**定型（WBS 6.8.7-3）：容器注解里的字面量实参是
+                    // 长度槽（`Vec(3)` 的 3 是元素个数，不是元素类型），元素取它的
+                    // 基类型——`[1, 2, 3]` 与 `[1, 2, 4]` 都按 `Int` 定型；
+                    // `Vec(Int)` 的元素槽仍是 `Int`（零回归）。长度槽的校验在同段末尾。
+                    if let (Some(elems), Some(elem_ann)) =
+                        (seed_container, resolved_ann.container_element_slot())
                     {
                         seed_matched = true;
-                        let elem_ann = &args[0];
                         for elem in elems.iter() {
                             let elem_ty = self.check_expr(elem)?;
                             if self.solver.unify(&elem_ty, elem_ann).is_err() {
@@ -2734,24 +2737,29 @@ impl StatementChecker {
                                 ));
                             }
                         }
-                        // Array 专属：N 为具体字面量时比对元素个数
-                        // （N 为符号常量（TypeRef，RFC-011 const 参数形态）时推迟）。
-                        if resolved_ann.is_array() {
-                            if let Some(MonoType::Literal {
-                                value: crate::frontend::core::types::const_data::ConstValue::Int(n),
-                                ..
-                            }) = args.get(1)
-                            {
-                                if *n != elems.len() as i128 {
-                                    return Err(Box::new(
-                                        ErrorCodeDefinition::type_mismatch(
-                                            &format!("{}", ann_ty),
-                                            &format!("Array({}, {})", elem_ann, elems.len()),
-                                        )
-                                        .at(stmt_span)
-                                        .build(),
-                                    ));
-                                }
+                        // 长度槽：`Vec(3)` / `Array(Int, 3)` 的字面量实参比对元素个数
+                        // （`Vec(Int)` 没有长度槽；`Array(Int, N)` 的 N 是符号常量时
+                        // 推迟，保持既有行为）。这是「长度槽只校验长度」的落点。
+                        if let Some(MonoType::Literal {
+                            value: crate::frontend::core::types::const_data::ConstValue::Int(n),
+                            ..
+                        }) = resolved_ann.container_length_slot()
+                        {
+                            if *n != elems.len() as i128 {
+                                // 报文体沿用 Array 长度的既有形态（容器名 + 元素槽 + 实际个数）。
+                                let container = if resolved_ann.is_array() {
+                                    "Array"
+                                } else {
+                                    "Vec"
+                                };
+                                return Err(Box::new(
+                                    ErrorCodeDefinition::type_mismatch(
+                                        &format!("{}", ann_ty),
+                                        &format!("{}({}, {})", container, elem_ann, elems.len()),
+                                    )
+                                    .at(stmt_span)
+                                    .build(),
+                                ));
                             }
                         }
                     }
