@@ -523,6 +523,11 @@ impl TypeConstraintSolver {
 
             // #300：字面量类型 unify——const 泛型实参（Array(T, N) 的 N）按值比较。
             // 缺失本臂时相同 Literal 落 catch-all，Array(Int,3) 无法跨函数边界。
+            // 6.8.7：单值类型 <: 基类型——`int64::3` 的值可以进 `int64` 槽位。
+            // 反向**不成立**（基类型不保证等于那个唯一值）：`f(42)(5)` 的 5 是
+            // int64，与形参 int64::42 因此仍报 E1002。
+            (MonoType::Literal { base_type, .. }, other) if base_type.as_ref() == other => Ok(()),
+
             (MonoType::Literal { value: v1, .. }, MonoType::Literal { value: v2, .. }) => {
                 if v1 == v2 {
                     Ok(())

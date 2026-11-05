@@ -145,6 +145,10 @@ pub fn is_subtype(
                 .zip(b.fields.iter())
                 .all(|(af, bf)| af.0 == bf.0 && is_subtype(&af.1, &bf.1, env))
         }
+        // 6.8.7：单值类型 <: 基类型（`int64::3 <: int64`）。递归到底层基类型再判，
+        // 因此只可能比基类型更宽、不会退化成「任意类型都是子类型」。
+        // **反向没有对应臂**：基类型不保证等于那个唯一值。
+        (MonoType::Literal { base_type, .. }, sup) => is_subtype(base_type, sup, env),
         // 非结构体对约束类型：尝试鸭子类型
         (_, MonoType::Struct(_)) if sup.is_constraint() => satisfies_constraint(sub, sup, env),
         _ => false,

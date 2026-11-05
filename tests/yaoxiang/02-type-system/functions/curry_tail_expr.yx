@@ -2,6 +2,9 @@
 // 覆盖: RFC-011 §4.1 函数级 const 泛型 / curry 函数尾表达式返回值（#297/E 同类）
 // 验证: curry 最内层函数体的尾表达式值作为返回值，不再返回 Void
 // 状态: ✅ 可运行
+//
+// 6.8.7 起 `n: N` 为单值类型（`int64::N`），实参必须等于 N：`g(7)(7)` 合法，
+// `g(7)(4)` 报 E1002（4 ≠ 7）。
 
 use std.assert
 
@@ -17,8 +20,8 @@ main: () -> Void = {
     r1 = f(10)(5)
     assert.assert(r1 == 15, "f(10)(5) should be 15")
 
-    r2 = g(7)(4)
-    assert.assert(r2 == 8, "g(7)(4) should be 8")
+    r2 = g(7)(7)
+    assert.assert(r2 == 14, "g(7)(7) should be 14")
 }
 
 main()

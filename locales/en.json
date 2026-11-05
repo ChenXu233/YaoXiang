@@ -789,7 +789,7 @@
   "E3006": {
     "title": "Unresolved variable",
     "template": "IR generation internal error: variable '{name}' could not be resolved",
-    "help": "The variable reference remains unresolved at the IR generation stage, indicating that the type checker let it through. This is a compiler internal consistency issue; please report this issue."
+    "help": "Two sources. (1) User-reachable: a curried declaration paired with an impl head that names more parameters than that layer's value slots, an arrow body referencing a declaration parameter that lives only in the type-checking scope, or a host native function missing from the runtime table. For the first two, list the impl-head parameters in declaration order so every name the body references is bound; for the third, use a registered native function or upgrade the runtime. (2) Otherwise the type checker let this reference through — a compiler internal consistency issue; please report it."
   },
   "E3007": {
     "title": "Top-level binding initialization must be a constant",
@@ -1204,11 +1204,11 @@
   },
   "E1112": {
     "title": "Implementation declares more parameters than the signature",
-    "message": "The function body declares more parameters than the signature has runtime parameter positions, so the extra ones have no value to receive",
-    "template": "function '{name}' declares {expected} parameters but the implementation declares {found}",
-    "help": "The annotation decides how many runtime values the function takes: remove the extra parameters from the implementation head, or add their positions to the annotation (`f: (a: Int, b: Int) -> Int = (a, b) => ...`)",
+    "message": "The implementation head lists more parameters than the annotation provides runtime positions for, so the extra ones have no value to bind",
+    "template": "function '{name}' provides {expected} runtime parameter position(s), but the implementation head lists {found} parameter(s); the extra one(s) have no value to bind",
+    "help": "The annotation decides how many runtime values the function takes: remove the extra parameters from the implementation head, or add their positions to the annotation (`f: (a: Int, b: Int) -> Int = (a, b) => ...`). A parameter used only in type positions is a compile-time value parameter and takes no runtime position.",
     "example": "f: () -> Int = (a: Int) => a",
-    "error_output": "error[E1112]: implementation declares more parameters than the signature\n --> example.yx:1:19\n  |\n1 | f: () -> Int = (a: Int) => a\n  |                   ^ function 'f' declares 0 parameters but the implementation declares 1"
+    "error_output": "error[E1112]: implementation declares more parameters than the signature\n --> example.yx:1:19\n  |\n1 | f: () -> Int = (a: Int) => a\n  |                   ^ function 'f' provides 0 runtime parameter position(s), but the implementation head lists 1 parameter(s); the extra one(s) have no value to bind"
   },
   "W1007": {
     "title": "Module import cycle",

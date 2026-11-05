@@ -965,6 +965,28 @@ fn test_collect_signatures_declares_value_dependent_const_param_name() {
     );
 }
 
+/// 规范：Registry 面（`collect_signatures`）的 const 用途精筛扫**整棵**声明标注
+/// （type-system.md §7.1：类型位置 = 声明中的全部 `Type` 子树）。
+///
+/// `f: (N: Int, m: N) -> Int` 的 `N` 只出现在**本组形参** `m: N` 的标注里
+/// （返回位是 `Int`）⇒ 必须进登记口声明名表。只扫返回位 + 返回位内层 Fn 形参的
+/// 旧口径扫不到这一处，落空者于是不进表。
+#[test]
+fn test_collect_signatures_declares_const_param_referenced_in_own_group_annotation() {
+    // Arrange：值位只有 m（N 是编译期值参数，不占实现头绑定序列）
+    let source = "f: (N: Int, m: N) -> Int = (m) => 0\n";
+
+    // Act
+    let names = collect_signatures_declared_names(source);
+
+    // Assert
+    assert_eq!(
+        names.get("f"),
+        Some(&vec!["N".to_string()]),
+        "本组形参标注 `m: N` 的引用必须让 N 进登记口声明名表（扫描面 = 整棵 type_annotation）"
+    );
+}
+
 #[test]
 fn test_collect_signatures_keeps_plain_value_param_out_of_declared_names() {
     // Arrange：`plain: (n: Int) -> Int` —— 值参数段的 Int 标注是

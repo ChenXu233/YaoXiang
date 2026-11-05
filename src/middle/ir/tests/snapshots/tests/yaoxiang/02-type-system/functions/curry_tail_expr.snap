@@ -21,14 +21,14 @@ module
     Eq %2 <- %1, %4
     Load %5 <- string("f(10)(5) should be 15")
     Call %0 <- string("std.assert.assert") [%2, %5] (def=d3)
-    Load %2 <- int(4)
+    Load %2 <- int(7)
     Load %4 <- int(7)
     Call %1 <- string("g") [%4] (def=d4)
     CallDyn %0 <- %1 [%2]
     Load %4 <- %0
-    Load %5 <- int(8)
+    Load %5 <- int(14)
     Eq %1 <- %4, %5
-    Load %6 <- string("g(7)(4) should be 8")
+    Load %6 <- string("g(7)(7) should be 14")
     Call %2 <- string("std.assert.assert") [%1, %6] (def=d3)
     Drop %3
     Drop %0

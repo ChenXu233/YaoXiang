@@ -13,7 +13,6 @@ use crate::frontend::module::registry::ModuleRegistry;
 use crate::frontend::core::types::{MonoType, PolyType, TraitTable, TypeConstraintSolver};
 use crate::ast::{classify_generic_params, Block, Expr, Param, PlanId, Stmt};
 use crate::frontend::core::sema::scope::VarInfo;
-use crate::frontend::core::sema::checker::collect_used_in_type;
 use crate::middle::passes::mono::instance::InstantiationRequest;
 
 use super::scope::ScopeManager;
@@ -2093,7 +2092,9 @@ impl StatementChecker {
 
         let mut used_as_const: std::collections::HashSet<String> = std::collections::HashSet::new();
         if !candidate_names.is_empty() {
-            // 扫描内层 Fn 的 params 判断 const 用途。
+            // 扫描整棵声明标注判断 const 用途（扫描面单点：
+            // `const_param::used_as_const_in_annotation`，与 Registry 面 / 签名面
+            // 同一实现）。
             //
             // RFC-027a：谓词应用的实参位是编译期表达式（值）而非类型引用
             //（`Terminates(b)` 的 `b`），不得计入 const 用途——见
@@ -2101,7 +2102,7 @@ impl StatementChecker {
             // 判据单源（3.20.8 / #511 t3 low 收单点；3.20.9 / #522 起来源
             // 换声明级）：读 `predicate_names`——checker.rs 注入点从类型级
             // 命名空间（`probe::TypeLevelNamespace`）clone 传入，与 A 面
-            // （`collect_used_in_type` 的两个调用点，判据即 namespace 查询）
+            // （`is_predicate_application`，判据即同一 namespace 查询）
             // 同一判据源 by construction。3.20.8 前这里是「`Terminates`
             // 字面量 ∪ `proof_fn_bases` 判名」的窄化同义判据（不查
             // `predicate_defs`、漏无参证明函数），与 A 面不同构。
@@ -2113,7 +2114,12 @@ impl StatementChecker {
             // `N`（实测 E1012「expected int64, found N」）。`collect_used_in_type` 的 `Fn`
             // 臂本就递归形参与返回位，故整棵树一次收口，不按位置分情况。
             if let Some(ann) = type_annotation {
-                collect_used_in_type(ann, &candidate_names, &mut used_as_const, &is_predicate);
+                used_as_const =
+                    crate::frontend::core::sema::const_param::used_as_const_in_annotation(
+                        ann,
+                        &candidate_names,
+                        &is_predicate,
+                    );
             }
         }
 
@@ -2285,18 +2291,13 @@ impl StatementChecker {
                     subst.insert(gp.name.clone(), fresh_var.clone());
                     type_param_vars.insert(gp.name.clone(), fresh_var);
                 }
-                for cb in &const_binders {
-                    let base_ty = match cb.kind {
-                        crate::frontend::core::types::const_data::ConstKind::Int(_) => {
-                            MonoType::Int(64)
-                        }
-                        crate::frontend::core::types::const_data::ConstKind::Bool => MonoType::Bool,
-                        crate::frontend::core::types::const_data::ConstKind::Float(_) => {
-                            MonoType::Float(64)
-                        }
-                    };
-                    subst.insert(cb.name.clone(), base_ty);
-                }
+                // 6.8.7（A 路径，用户裁决 2026-11-05）：const binder **不进**注册签名的
+                // 替换表——`(n: N)` 的 `TypeRef("N")` 保留为「可定点替换的记号」，
+                // 由调用点的 `collect_const_arg_instantiation_request` 按
+                // `Literal(42)` 定点替换（6.8.5 同一 helper）。此前在这里把 N 抹成
+                // Int(64)，`n: N` 的单值约束因此从未被强制（实测 `f(42)(5)` 通过）。
+                // 体内检查另有自己的 `const_subst`（见下方 check_fn_def_with_subst），
+                // 不受本条影响。
                 let substituted_ret = fn_return_type.clone().substitute(&subst);
                 let substituted_params: Vec<MonoType> = fn_param_types
                     .iter()

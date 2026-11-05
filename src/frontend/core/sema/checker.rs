@@ -473,7 +473,7 @@ impl TypeChecker {
         // 却需要把名字随导出一并暴露——跨模块调用（`list.len(v)`）的单态化
         // 依赖它们绑定签名里的 `TypeRef("A")`。
         {
-            use crate::ast::{GenericParamKind, StmtKind, Type};
+            use crate::ast::{GenericParamKind, StmtKind};
             for stmt in &module.items {
                 if let StmtKind::Assign {
                     target,
@@ -511,33 +511,20 @@ impl TypeChecker {
                             .filter(|p| matches!(p.kind, GenericParamKind::Const { .. }))
                             .map(|p| p.name.clone())
                             .collect();
+                        // 扫描面 = **整棵 `type_annotation`**（SPEC type-system §7.1：
+                        // 「类型位置」指声明中的全部 `Type` 子树）。此前只扫返回位 +
+                        // 返回位内层 Fn 的形参，漏掉本层形参自己的标注——`f: (N: Int, M: N)
+                        // -> Int` 的 `N` 因此判不出 const 用途。单点见
+                        // `const_param::used_as_const_in_annotation`。
                         let mut used_as_const = std::collections::HashSet::new();
-                        if !const_candidates.is_empty() {
+                        if let Some(ann) = type_annotation {
                             let is_predicate = |n: &str| self.is_predicate_application(n);
-                            if let Some(Type::Fn { return_type, .. }) = type_annotation {
-                                if let Type::Fn {
-                                    params: inner_params,
-                                    ..
-                                } = return_type.as_ref()
-                                {
-                                    for p in inner_params {
-                                        if let Some(p_ty) = &p.ty {
-                                            collect_used_in_type(
-                                                p_ty,
-                                                &const_candidates,
-                                                &mut used_as_const,
-                                                &is_predicate,
-                                            );
-                                        }
-                                    }
-                                }
-                                collect_used_in_type(
-                                    return_type,
+                            used_as_const =
+                                crate::frontend::core::sema::const_param::used_as_const_in_annotation(
+                                    ann,
                                     &const_candidates,
-                                    &mut used_as_const,
                                     &is_predicate,
                                 );
-                            }
                         }
                         let names: Vec<String> = generic_params
                             .iter()
@@ -1677,39 +1664,28 @@ impl TypeChecker {
 
                 let mut used_as_const = HashSet::new();
                 if !candidate_names.is_empty() {
-                    // 扫描内层 Fn 的 params：对于 (N: Int) -> (n: N) -> Int，
-                    // type_annotation.return_type 是 Fn { params: [Type::Name("N")], ... }。
-                    // N 出现在内层 params 中 → const。
+                    // 扫描面 = **整棵 `type_annotation`**（SPEC type-system §7.1：
+                    // 「类型位置」指声明中的全部 `Type` 子树——形参标注、返回类型、
+                    // 内层 `Fn` 的形参与返回位都是同一棵树的子树）。此前只扫返回位 +
+                    // 返回位内层 Fn 的形参，漏掉本层形参自己的标注：`f: (N: Int, M: N)
+                    // -> Int` 里 `M: N` 的 `N` 从未计入用途 ⇒ `const_binders` 为空
+                    // ⇒ `M` 的标注停在裸名 → E1012。
                     //
                     // RFC-027a：扫描需排除**谓词应用的实参位置**——`Terminates(b)`
                     // 的 `b`、`IsPositive(n)` 的 `n` 是编译期表达式（值），不是类型
                     // 引用。不排除则形参名被误判为 const 泛型参数并替换成底层类型，
                     // 精化约束/测度在到达消费端之前就丢了（E1092）。
+                    //
+                    // 扫描面单点在 `const_param::used_as_const_in_annotation`——
+                    // 与 Registry 面（`collect_signatures`）与函数体面同一实现。
                     let is_predicate = |n: &str| self.is_predicate_application(n);
-                    if let Some(crate::ast::Type::Fn { return_type, .. }) = type_annotation {
-                        if let crate::ast::Type::Fn {
-                            params: inner_params,
-                            ..
-                        } = return_type.as_ref()
-                        {
-                            for p in inner_params {
-                                if let Some(ty) = &p.ty {
-                                    collect_used_in_type(
-                                        ty,
-                                        &candidate_names,
-                                        &mut used_as_const,
-                                        &is_predicate,
-                                    );
-                                }
-                            }
-                        }
-                        // 也扫描 return_type 自身（深度嵌套场景）
-                        collect_used_in_type(
-                            return_type,
-                            &candidate_names,
-                            &mut used_as_const,
-                            &is_predicate,
-                        );
+                    if let Some(ann) = type_annotation {
+                        used_as_const =
+                            crate::frontend::core::sema::const_param::used_as_const_in_annotation(
+                                ann,
+                                &candidate_names,
+                                &is_predicate,
+                            );
                     }
                 }
 
@@ -1754,21 +1730,17 @@ impl TypeChecker {
                         // return_type 不是 Fn（可能是单值泛型），保持原样
                         _ => (param_types, return_type),
                     }
-                } else if !const_binders.is_empty() {
-                    // 没有 Type 泛型但有 const 泛型（如 factorial: (N: Int) -> ...）
-                    // 替换 return_type 中的 TypeRef("N") 为 Int
-                    let mut subst = HashMap::new();
-                    for cb in &const_binders {
-                        let base_ty = match cb.kind {
-                            ConstKind::Int(_) => MonoType::Int(64),
-                            ConstKind::Bool => MonoType::Bool,
-                            ConstKind::Float(_) => MonoType::Float(64),
-                        };
-                        subst.insert(cb.name.clone(), base_ty);
-                    }
-                    let substituted_ret = return_type.clone().substitute(&subst);
-                    (param_types, substituted_ret)
                 } else {
+                    // 6.8.7（A 路径，用户裁决 2026-11-05）：**不再**把 const binder
+                    // 抹成基类型。`factorial: (N: Int) -> (k: N) -> Int` 的返回位保留
+                    // `TypeRef("N")`——它就是「可定点替换的记号」：调用点从 const 实参
+                    // 得到 `int64::42` 后，由 6.8.5 的
+                    // `collect_const_arg_instantiation_request` 按名把它替换成
+                    // `Literal(42)`（单值类型）。旧行为（N→Int(64)）让内层形参变成
+                    // 裸基类型，`n: N` 因此从未被强制（实测 `f(42)(5)` 通过）。
+                    //
+                    // 只影响**类型检查面的注册签名**：IR 的形参渲染本就走 AST 标注
+                    // （`n: N` → `TypeRef("N")`，见语料快照），不经过这里。
                     (param_types, return_type)
                 };
 

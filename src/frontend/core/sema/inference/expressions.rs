@@ -755,6 +755,19 @@ impl<'a> ExpressionInferrer<'a> {
         &mut self,
         lit: &crate::frontend::core::lexer::tokens::Literal,
     ) -> Result<MonoType> {
+        // 6.8.7：期望类型驱动的字面量定型——单值类型（int64::3）要有居民。
+        //
+        // 判据只有一条：当前期望类型是 Literal{v} 且本字面量取值等于 v。
+        // 否则（无期望 / 期望不是单值类型 / 值不等）仍取基类型——值不等的情形
+        // 由后续形参/标注对照按单值类型报 E1002，不在这里改判。
+        if let Some(expected) = self.current_expected.clone() {
+            if let Some(ty) = Self::literal_matches_single_value_type(
+                lit,
+                Some(&self.solver.resolve_type(&expected)),
+            ) {
+                return Ok(ty);
+            }
+        }
         let ty = match lit {
             crate::frontend::core::lexer::tokens::Literal::Int(_) => MonoType::Int(64),
             crate::frontend::core::lexer::tokens::Literal::Float(_) => MonoType::Float(64),
@@ -2632,6 +2645,148 @@ impl<'a> ExpressionInferrer<'a> {
         }
     }
 
+    /// 6.8.5-1（A 路径）：const 实参的**编译期特化**请求。
+    ///
+    /// const 值编码成既有的 [`MonoType::Literal`]，走既有的
+    /// `InstantiationRequest.type_args`——mono 侧把它当普通类型实参：特化名形如
+    /// `f(int64::42)`（与 `build_call_site_map` 同一 `type_name()` 口径），体内
+    /// `TypeRef("N")` 由既有 `name_map` 换成该字面量。因此 `f(42)` 与 `f(7)`
+    /// 各得一份独立 IR，无需新增任何类型/表。
+    ///
+    /// 四条判据全中才登记：
+    /// 1. 被调方在本作用域有 `PolyType`，且 `const_binders` 非空（声明期登记口，
+    ///    与 `collect_function_signature` 的 `PolyType::new_with_const` 同一来源）；
+    /// 2. 声明期泛型名表（`generic_fn_type_params`）**恰好**就是这些 const 名——
+    ///    纯 const 泛型；类型泛型走下面既有两条路径；
+    /// 3. 首层形参数 == const 名数（该层全由编译期值参数组成）⇒ 位置实参前 n 位
+    ///    与 const 名按声明序一一对应；
+    /// 4. 前 n 位实参都是**编译期字面量**（`f(42)`），且调用不带命名实参。
+    ///
+    /// 非字面量 const 实参（`f(x)`）本轮**不登记**、保持现状的运行期传参：
+    /// 值环境（非 mut 绑定 / 字面量推导 / 初始化式非外部输入）属 WBS 6.8.5-2。
+    /// TODO(6.8.5-2)：值环境落地后按「不可变绑定 + 初始化式可证常量」判定，不再
+    /// 要求字面量；届时本函数的判据 4 换成值环境查询。
+    fn collect_const_arg_instantiation_request(
+        &mut self,
+        func: &crate::ast::Expr,
+        args: &[crate::ast::Expr],
+        named_args_len: usize,
+        span: crate::util::span::Span,
+    ) -> Option<MonoType> {
+        // 命名实参的位次由绑定规则决定，本轮不在这里推导（保持现状）
+        if named_args_len != 0 {
+            return None;
+        }
+        let fn_name = self.callee_generic_name(func)?;
+        // 1 + 3：声明期 const binder 表与首层形参数
+        let poly = self.scope.get_var(&fn_name)?;
+        let const_names: Vec<String> = poly.const_binders.iter().map(|b| b.name.clone()).collect();
+        if const_names.is_empty() {
+            return None;
+        }
+        let body = poly.body.clone();
+        let MonoType::Fn {
+            params,
+            return_type,
+        } = &body
+        else {
+            return None;
+        };
+        if params.len() != const_names.len() {
+            return None;
+        }
+        // 2：纯 const 泛型（声明名表 == const 名表，顺序按声明序）
+        let type_params = self.lookup_type_params(&fn_name);
+        if type_params.is_empty() || type_params != const_names {
+            return None;
+        }
+        // 4：前 n 位实参是可求值的字面量
+        let mut type_args: Vec<MonoType> = Vec::with_capacity(const_names.len());
+        for arg in args.iter().take(const_names.len()) {
+            let value = Self::const_literal_of_expr(arg)?;
+            let base_type = match &value {
+                crate::frontend::core::types::const_data::ConstValue::Int(_) => MonoType::Int(64),
+                crate::frontend::core::types::const_data::ConstValue::Bool(_) => MonoType::Bool,
+                crate::frontend::core::types::const_data::ConstValue::Float(_) => {
+                    MonoType::Float(64)
+                }
+                _ => return None,
+            };
+            type_args.push(MonoType::Literal {
+                name: format!("{value}"),
+                base_type: Box::new(base_type),
+                value,
+            });
+        }
+        let generic_id = GenericFunctionId::new(fn_name, type_params);
+        // 返回值：把 const binder 换成字面量后的**返回类型**——`f(42)` 之后
+        // `n: N` 的 N 立即定成 `int64::42`，外层调用点 `f(42)(5)` 因此按单值
+        // 类型检查（6.8.7）。IR 侧的特化仍由下面这条既有请求驱动（6.8.5-1）。
+        let subst: HashMap<String, MonoType> = const_names
+            .iter()
+            .cloned()
+            .zip(type_args.iter().cloned())
+            .collect();
+        let specialized_ret = return_type.as_ref().clone().substitute(&subst);
+        let mut request = InstantiationRequest::new(generic_id, type_args, span);
+        request.containing_fn = self.scope.fn_context().map(str::to_owned);
+        self.instantiation_requests.push(request);
+        Some(specialized_ret)
+    }
+
+    /// 实参表达式 → 编译期常量值（**只认字面量**）。
+    ///
+    /// 这是 6.8.5-1 对「可证明为常量」的最小判据；常量折叠/不可变绑定的值环境
+    /// 属 WBS 6.8.5-2（见 `collect_const_arg_instantiation_request` 的 TODO）。
+    fn const_literal_of_expr(
+        expr: &crate::ast::Expr
+    ) -> Option<crate::frontend::core::types::const_data::ConstValue> {
+        use crate::ast::Expr;
+        let Expr::Lit(lit, _) = expr else {
+            return None;
+        };
+        Self::literal_const_value(lit)
+    }
+
+    /// 字面量 → 编译期常量值（值这一路的最小判据：只认字面量）。
+    fn literal_const_value(
+        lit: &crate::frontend::core::lexer::tokens::Literal
+    ) -> Option<crate::frontend::core::types::const_data::ConstValue> {
+        use crate::frontend::core::lexer::tokens::Literal;
+        use crate::frontend::core::types::const_data::ConstValue;
+        match lit {
+            Literal::Int(n) => Some(ConstValue::Int(*n)),
+            Literal::Bool(b) => Some(ConstValue::Bool(*b)),
+            Literal::Float(f) => Some(ConstValue::Float(*f as f32)),
+            _ => None,
+        }
+    }
+
+    /// 6.8.7：期望类型是**单值类型** Literal{v} 且字面量取值等于 v 时，返回该
+    /// 单值类型（单值类型的居民）；否则 None（调用方按既有基类型定型）。
+    ///
+    /// 只在「期望明确是 Literal{v} 且值相等」时命中——不是「字面量恒为 Literal」
+    /// （后者会让全部整数字面量改型、224 份快照大面积漂移，本轮不选）。
+    fn literal_matches_single_value_type(
+        lit: &crate::frontend::core::lexer::tokens::Literal,
+        expected: Option<&MonoType>,
+    ) -> Option<MonoType> {
+        let MonoType::Literal {
+            value: want,
+            base_type,
+            name,
+        } = expected?
+        else {
+            return None;
+        };
+        let have = Self::literal_const_value(lit)?;
+        (have == *want).then(|| MonoType::Literal {
+            name: name.clone(),
+            base_type: base_type.clone(),
+            value: want.clone(),
+        })
+    }
+
     /// 收集泛型函数实例化请求
     ///
     /// 检测函数调用是否是泛型函数调用，如果是则构造 InstantiationRequest
@@ -3072,6 +3227,16 @@ impl<'a> ExpressionInferrer<'a> {
         match expr {
             crate::ast::Expr::Lambda { params, body, .. } => {
                 self.infer_lambda(params, body, expected)
+            }
+            // 6.8.7：字面量同样消费期望——期望是单值类型且取值相等时定型为该
+            // 单值类型。调用实参位因此能拿到 Literal{v} 型实参：
+            // f(42)(42) 的 42 定型为 int64::42，与形参 n: N 的单值类型对齐。
+            crate::ast::Expr::Lit(lit, _) => {
+                let expected_resolved = expected.map(|e| self.solver.resolve_type(e));
+                match Self::literal_matches_single_value_type(lit, expected_resolved.as_ref()) {
+                    Some(ty) => Ok(ty),
+                    None => self.infer_literal(lit),
+                }
             }
             _ => self.infer_expr(expr),
         }
@@ -4666,6 +4831,17 @@ impl<'a> ExpressionInferrer<'a> {
         explicit_type_args.clear();
         // 清除探针
         let _ = &explicit_type_args;
+
+        // 6.8.5-1（A 路径）+ 6.8.7：const 实参的编译期特化——`f(42)` / `f(7)` 各一份 IR；
+        // 同时返回把 const binder 换成字面量后的**返回类型**，使 `f(42)` 的
+        // `n: N` 立即定成 `int64::42`（单值类型强制）。命中即返回：
+        // 纯 const 泛型不会命中下面那条通用路径（它按 TypeVar / 声明类型名收实参），
+        // 与显式类型实参路径（D6.3）同形。
+        if let Some(const_specialized) =
+            self.collect_const_arg_instantiation_request(func, args, named_args.len(), span)
+        {
+            return Ok(const_specialized);
+        }
 
         // 收集实例化请求：检测泛型函数调用并记录
         self.collect_instantiation_request(&func_ty, func, &arg_types, &mono_func_ty, span);

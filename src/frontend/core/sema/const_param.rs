@@ -29,6 +29,39 @@ pub fn ast_type_to_const_kind(ty: &Type) -> ConstKind {
         .unwrap_or(ConstKind::Int(None))
 }
 
+/// 用途精筛的**扫描面**单点：声明标注（`type_annotation`）整棵树上的候选引用。
+///
+/// 「类型位置」= 声明中的全部 `Type` 子树（SPEC type-system §7.1 / RFC-011 §4.1）：
+/// 形参标注、返回类型、内层 `Fn` 的形参与返回位、`Assert` 谓词、类型构造实参位
+/// 都是同一棵树在不同语法位置上的实例，故一次递归遍历收口，**不按位置分情况**。
+/// 只扫返回位、或只扫「返回位 + 返回位内层 Fn 的形参」，会漏掉本层形参自己的标注：
+/// `f: (N: Int, M: N) -> Int` 里 `M: N` 的 `N` 从未计入用途 ⇒ `const_binders`
+/// 为空 ⇒ `M` 的标注停在裸名 → E1012。
+///
+/// 三个调用点共用本函数——Registry 面（`TypeChecker::collect_signatures`）、
+/// 签名面（`TypeChecker::collect_function_signature`）、函数体面
+/// （`StatementChecker`）——「类型位置」这条判据因此只有一份实现。
+///
+/// 本函数**不**委托 `ast::name_used_as_type`：后者对 `ConstExpr` / `MetaType` /
+/// `Paren` / `NamedParen` 落 `_ => false`（见该函数的「已知共同缺口」），直接换会
+/// 把 `Assert(N > 0)` 判成落空。合并到唯一分类器须先补齐那四个变体。
+pub fn used_as_const_in_annotation(
+    annotation: &Type,
+    candidates: &HashSet<String>,
+    is_predicate: &dyn Fn(&str) -> bool,
+) -> HashSet<String> {
+    let mut used = HashSet::new();
+    if !candidates.is_empty() {
+        crate::frontend::core::sema::checker::collect_used_in_type(
+            annotation,
+            candidates,
+            &mut used,
+            is_predicate,
+        );
+    }
+    used
+}
+
 /// 用途精筛：候选中被 `used_as_const` 引用者进 const_binders，
 /// 其余作为落空者返回（携带原始 Param 以便并入参数链或报错）。
 pub fn resolve_const_candidates(

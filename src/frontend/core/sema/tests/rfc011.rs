@@ -648,7 +648,8 @@ fn test_rfc011_fn_const_generic_curry() {
     // Arrange
     let source = r#"
         f: (N: Int) -> (n: N) -> Int = (n) => n
-        result = f(42)(5)
+        // 6.8.7：n: N 是单值类型，实参必须等于 N（5 ≠ 42 会报 E1002）
+        result = f(42)(42)
     "#;
 
     // Act
@@ -673,7 +674,8 @@ fn test_rfc011_fn_const_generic_lowercase_equiv() {
     // Arrange
     let source = r#"
         f: (m: Int) -> (n: m) -> Int = (n) => n
-        result = f(42)(5)
+        // 6.8.7：n: m 是单值类型，实参必须等于 m（5 ≠ 42 会报 E1002）
+        result = f(42)(42)
     "#;
 
     // Act
@@ -698,7 +700,8 @@ fn test_rfc011_fn_const_generic_block_body() {
     // Arrange
     let source = r#"
         double: (N: Int) -> (n: N) -> Int = { n + n }
-        result = double(10)(7)
+        // 6.8.7：n: N 是单值类型，实参必须等于 N（7 = 10 以外会报 E1002）
+        result = double(10)(10)
     "#;
 
     // Act
