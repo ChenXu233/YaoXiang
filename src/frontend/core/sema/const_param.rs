@@ -93,3 +93,32 @@ pub fn resolve_const_candidates(
     }
     result
 }
+
+/// 字面量 → 编译期常量值（**只认字面量**）。
+///
+/// 这是「可证明为常量」的最小判据，6.8.5-1 起被 const 实参特化与 6.8.7 的单值类型
+/// 定型共用；放在本模块（const 参数判据的家）而不是散在推断器里，是为了让写入端
+/// （值环境登记）与消费端（特化请求）用**同一份**判据，不出现两套口径。
+pub fn literal_const_value(
+    lit: &crate::frontend::core::lexer::tokens::Literal
+) -> Option<crate::frontend::core::types::const_data::ConstValue> {
+    use crate::frontend::core::lexer::tokens::Literal;
+    use crate::frontend::core::types::const_data::ConstValue;
+    match lit {
+        Literal::Int(n) => Some(ConstValue::Int(*n)),
+        Literal::Bool(b) => Some(ConstValue::Bool(*b)),
+        Literal::Float(f) => Some(ConstValue::Float(*f as f32)),
+        _ => None,
+    }
+}
+
+/// 实参/初始化式表达式 → 编译期常量值（只认字面量）。
+pub fn const_literal_of_expr(
+    expr: &crate::ast::Expr
+) -> Option<crate::frontend::core::types::const_data::ConstValue> {
+    use crate::ast::Expr;
+    let Expr::Lit(lit, _) = expr else {
+        return None;
+    };
+    literal_const_value(lit)
+}

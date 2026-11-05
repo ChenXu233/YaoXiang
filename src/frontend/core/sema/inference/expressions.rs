@@ -2703,7 +2703,14 @@ impl<'a> ExpressionInferrer<'a> {
         // 4：前 n 位实参是可求值的字面量
         let mut type_args: Vec<MonoType> = Vec::with_capacity(const_names.len());
         for arg in args.iter().take(const_names.len()) {
-            let value = Self::const_literal_of_expr(arg)?;
+            // 6.8.5-2a：实参判据由「字面量」放宽为「字面量 **或** 值环境命中」——
+            // 后者是非 mut、字面量初始化的绑定（`x: Int = 5` 的 x）。
+            // 其余三条判据（纯 const 泛型 / 首层形参数 / 无命名实参）不变。
+            let value = crate::frontend::core::sema::const_param::const_literal_of_expr(arg)
+                .or_else(|| match arg {
+                    crate::ast::Expr::Var(n, _) => self.scope.get_var_const_value(n).cloned(),
+                    _ => None,
+                })?;
             let base_type = match &value {
                 crate::frontend::core::types::const_data::ConstValue::Int(_) => MonoType::Int(64),
                 crate::frontend::core::types::const_data::ConstValue::Bool(_) => MonoType::Bool,
@@ -2734,34 +2741,6 @@ impl<'a> ExpressionInferrer<'a> {
         Some(specialized_ret)
     }
 
-    /// 实参表达式 → 编译期常量值（**只认字面量**）。
-    ///
-    /// 这是 6.8.5-1 对「可证明为常量」的最小判据；常量折叠/不可变绑定的值环境
-    /// 属 WBS 6.8.5-2（见 `collect_const_arg_instantiation_request` 的 TODO）。
-    fn const_literal_of_expr(
-        expr: &crate::ast::Expr
-    ) -> Option<crate::frontend::core::types::const_data::ConstValue> {
-        use crate::ast::Expr;
-        let Expr::Lit(lit, _) = expr else {
-            return None;
-        };
-        Self::literal_const_value(lit)
-    }
-
-    /// 字面量 → 编译期常量值（值这一路的最小判据：只认字面量）。
-    fn literal_const_value(
-        lit: &crate::frontend::core::lexer::tokens::Literal
-    ) -> Option<crate::frontend::core::types::const_data::ConstValue> {
-        use crate::frontend::core::lexer::tokens::Literal;
-        use crate::frontend::core::types::const_data::ConstValue;
-        match lit {
-            Literal::Int(n) => Some(ConstValue::Int(*n)),
-            Literal::Bool(b) => Some(ConstValue::Bool(*b)),
-            Literal::Float(f) => Some(ConstValue::Float(*f as f32)),
-            _ => None,
-        }
-    }
-
     /// 6.8.7：期望类型是**单值类型** Literal{v} 且字面量取值等于 v 时，返回该
     /// 单值类型（单值类型的居民）；否则 None（调用方按既有基类型定型）。
     ///
@@ -2779,7 +2758,7 @@ impl<'a> ExpressionInferrer<'a> {
         else {
             return None;
         };
-        let have = Self::literal_const_value(lit)?;
+        let have = crate::frontend::core::sema::const_param::literal_const_value(lit)?;
         (have == *want).then(|| MonoType::Literal {
             name: name.clone(),
             base_type: base_type.clone(),

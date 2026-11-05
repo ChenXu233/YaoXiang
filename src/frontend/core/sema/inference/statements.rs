@@ -2923,6 +2923,20 @@ impl StatementChecker {
 
         self.scope
             .add_var(name.to_string(), PolyType::mono(ty), is_mut, name_span);
+        // 6.8.5-2a 值环境：非 mut 绑定 + 初始化式是字面量 ⇒ 值编译期已知。
+        //
+        // 「不来自外部输入」这一条由「初始化式就是字面量」直接保证（字面量不可能
+        // 是 stdin / FFI / 宿主注入）。表达式常量折叠与跨函数传播不在本卡；
+        // 未命中的绑定只是**不登记**，后续按既有运行期传参，不是静默改判。
+        //
+        // 只对非 mut 登记：mut 绑定随时可被改写，其「初始化值」不再是它的值。
+        if !is_mut {
+            if let Some(value) = initializer
+                .and_then(crate::frontend::core::sema::const_param::const_literal_of_expr)
+            {
+                self.scope.set_const_value(name, value);
+            }
+        }
         Ok(())
     }
 

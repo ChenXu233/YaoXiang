@@ -157,6 +157,11 @@ pub struct VarInfo {
     /// 外层帧的**值**参数要拒（RFC-009 §2.3 隐式捕获），而类型参数不进运行时
     /// 帧、不构成捕获，故不受捕获屏障遮挡。
     pub compile_time_only: bool,
+    /// 6.8.5-2a 值环境：非 mut 绑定且初始化式是字面量时登记的**编译期已知值**。
+    ///
+    /// 挂在 VarInfo（per-binding）而不是按名字的旁表：按名的表在块内遮蔽下会取到
+    /// 外层同名绑定的值，把程序特化成另一个常量——静默错值比报错严重。
+    pub const_value: Option<crate::frontend::core::types::const_data::ConstValue>,
 }
 
 /// 语义定义事件：绑定期单点采集，由 TypeChecker 排空进 SemanticDB（#433/D55）。
@@ -399,6 +404,7 @@ impl ScopeManager {
             forward_declared: false,
             imported: false,
             compile_time_only: false,
+            const_value: None,
         };
         if self.local_scopes.is_empty() {
             self.globals.insert(name, info);
@@ -427,6 +433,7 @@ impl ScopeManager {
             forward_declared: true,
             imported: false,
             compile_time_only: false,
+            const_value: None,
         };
         if self.local_scopes.is_empty() {
             self.globals.insert(name, info);
@@ -451,6 +458,7 @@ impl ScopeManager {
             forward_declared: false,
             imported: true,
             compile_time_only: false,
+            const_value: None,
         };
         if self.local_scopes.is_empty() {
             self.globals.insert(name, info);
@@ -501,6 +509,7 @@ impl ScopeManager {
             forward_declared: false,
             imported: false,
             compile_time_only,
+            const_value: None,
         };
         if let Some(scope) = self.param_scopes.last_mut() {
             scope.insert(name, info);
@@ -510,6 +519,43 @@ impl ScopeManager {
     }
 
     /// 获取变量：局部链（内→外）→ 参数链（内→外）→ 全局
+    /// 6.8.5-2a：登记某个绑定的编译期已知值（值环境）。
+    ///
+    /// 只对**已存在的绑定**生效——调用方保证 name 已经 add_var 入链；找不到
+    /// 则什么也不做（前向占位等非常规形态不登记，宁可少特化不可错特化）。
+    pub fn set_const_value(
+        &mut self,
+        name: &str,
+        value: crate::frontend::core::types::const_data::ConstValue,
+    ) {
+        for scope in self.local_scopes.iter_mut().rev() {
+            if let Some(info) = scope.get_mut(name) {
+                info.const_value = Some(value);
+                return;
+            }
+        }
+        for scope in self.param_scopes.iter_mut().rev() {
+            if let Some(info) = scope.get_mut(name) {
+                info.const_value = Some(value);
+                return;
+            }
+        }
+        if let Some(info) = self.globals.get_mut(name) {
+            info.const_value = Some(value);
+        }
+    }
+
+    /// 6.8.5-2a：读某个绑定的编译期已知值（值环境查询，读值口径）。
+    ///
+    /// 用 get_var_info（含捕获屏障）：屏障外的绑定在当前函数体里读不到值，
+    /// 也就不该参与特化。
+    pub fn get_var_const_value(
+        &self,
+        name: &str,
+    ) -> Option<&crate::frontend::core::types::const_data::ConstValue> {
+        self.get_var_info(name).and_then(|i| i.const_value.as_ref())
+    }
+
     pub fn get_var(
         &self,
         name: &str,
