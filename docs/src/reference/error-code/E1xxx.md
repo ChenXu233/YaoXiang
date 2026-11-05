@@ -84,7 +84,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **模板**：`未知变量：'{name}'`
 - **消息**：引用的变量未定义
 - **帮助**：检查变量名是否拼写正确，或先定义它
-- **发射点**：`src/frontend/core/sema/checker/refinement.rs:443`、`src/frontend/core/sema/inference/expressions.rs:3288`、`src/frontend/core/sema/inference/statements.rs:3182` 等 4 处
+- **发射点**：`src/frontend/core/sema/checker/refinement.rs:443`、`src/frontend/core/sema/inference/expressions.rs:3288`、`src/frontend/core/sema/inference/statements.rs:3167` 等 4 处
 
 ### E1002：类型不匹配
 
@@ -670,7 +670,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **模板**：`'{type}.{method}' 缺少签名标注`
 - **消息**：方法绑定 '{type}.{method}' 没有签名标注，编译器无法确定它的接收者、形参名与返回类型
 - **帮助**：补上签名标注：'{type}.{method}: (self: &{type}, ...) -> 返回类型 = 函数体'；要复用现成函数则写 '{type}.{method}: (…) -> 返回类型 = 函数名[位置]'
-- **发射点**：`src/middle/ir/ir_gen.rs:2314`
+- **发射点**：`src/middle/ir/ir_gen.rs:2350`
 - **源码注释名**：方法绑定缺少签名标注（WBS 3.13.1 / issue #451，D59 A 类：旧行为是
 
 ### E1111：实参重复占用或顺序非法
@@ -692,5 +692,5 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **模板**：`函数 '{name}' 声明了 {expected} 个形参，实现写了 {found} 个`
 - **消息**：函数体写的形参多于声明里占运行期位的形参，多出的形参没有值可以接收
 - **帮助**：函数能收几个运行期值由标注决定：删掉实现头多出的形参，或把它们的位补进标注（`f: (a: Int, b: Int) -> Int = (a, b) => ...`）
-- **发射点**：`src/frontend/core/sema/inference/statements.rs:2211`
+- **发射点**：`src/frontend/core/sema/inference/statements.rs:2196`
 - **源码注释名**：实现形参个数超出声明（WBS 6.8.2a / D54：声明驱动的 Fn 标注 ↔ 函数体
