@@ -1,166 +1,248 @@
 # Coding Rules
 
-> **This document is the sole authoritative source for YaoXiang code change rules.** It describes
-> the rules precisely, without status diagnostics or historical justification. Historical incident
-> evidence and decision rationale:
-> [08-maintenance-mechanism.md](architecture/08-maintenance-mechanism.md) (2026-10 diagnostic
-> record, archived with RFC-039); external convention references (Go / rustc, etc.) are in the same
-> document. Execution entry: [HOWTO.md](HOWTO.md) (pre-work self-check) → this document (rules) → PR
-> template (mandatory at submission).
+> **This document is the sole authoritative source for YaoXiang code-change rules.** It describes
+> the rules precisely, without diagnosing the current state or providing historical rationale.
+> Historical incident evidence and decision rationale are documented in
+> [08-maintenance-mechanism.md](architecture/08-maintenance-mechanism.md) (October 2026 diagnostic
+> record, archived with RFC-039); references to external conventions (Go / rustc, etc.) are also
+> found there. Execution path: [HOWTO.md](HOWTO.md) (pre-work self-check) → this document (rules) →
+> PR template (mandatory at submission).
 
 ## Part One: Three Prohibitions
 
-### Prohibition 1: No Fabrication
+### Prohibition One: No Inventing Concepts
 
-Before adding any new `pub` type / enum / constant table / concept, **all** of the following four
-criteria must pass for compliance. Any single hit is a violation:
+Before adding any `pub` type / enum / constant table / concept, **all four** criteria below must
+pass for the addition to be compliant. Any violation is prohibited:
 
-| Criterion                        | Rule                                                                                                                                                             |
-| -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| A. Overlapping responsibility    | The new item shares ≥ half of its variant names with an existing item AND responsibilities overlap → violation                                                   |
-| B. Insufficient call sites       | New `pub` item has < 2 call sites (only the definition site + the single call site) → violation; cannot prove it is a concept rather than a local implementation |
-| C. Requires disambiguating alias | Needs a `use … as XxxBinOp` style alias to distinguish items of the same semantics → violation                                                                   |
-| D. Bridged by synonym table      | Bridges differences via hand-written string matching → violation; must switch to exhaustive matching or explicit conversion                                      |
+| Criterion                                   | Rule                                                                                                                                                                             |
+| ------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A. Overlapping responsibility               | The new item's variant names overlap by at least half with those of an existing item, and their responsibilities overlap → violation                                             |
+| B. Insufficient call sites                  | The new `pub` item has fewer than two call sites (only the definition and its sole call site) → violation; it cannot be shown to be a concept rather than a local implementation |
+| C. Disambiguating alias required            | An alias such as `use … as XxxBinOp` is needed to distinguish semantically equivalent items → violation                                                                          |
+| D. Differences bridged with a synonym table | Differences are bridged through handwritten string matching → violation; exhaustive matching or an explicit conversion is required                                               |
 
-### Prohibition 2: No Responsibility Accumulation
+### Prohibition Two: No Accumulation of Responsibilities
 
-A module takes on only one class of responsibility. No line count / volume / file size gate — scale
-issues are resolved by responsibility separation, not by numbers.
+A module has only one kind of responsibility. There is no line-count, size, or file-size gate:
+scaling problems are solved by separating responsibilities, not by imposing numerical limits.
 
-| Criterion                             | Rule                                                                                                                                                                                                                                                         |
-| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| A. Responsibility class               | The new code does not belong to an **existing responsibility class** of the target module (class 2 and above) → violation; create a new module or move the existing code for that responsibility along with it. **Manual judgment, not machine-automatable** |
-| B. Bypassing the authoritative source | Adds table entries without updating the sole authoritative source (bypassing the authoritative table with hand-written copies) → violation                                                                                                                   |
-| C. Boundary erosion                   | Adds any cross-layer dependency (L2→L3, L4→L1/L2), `include!`, or `pub(crate)` cross-layer leakage → violation. **Machine-automatable, checked by CI**                                                                                                       |
+| Criterion                             | Rule                                                                                                                                                                                                                                                                                                   |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| A. Responsibility category            | The new code does not belong to the target module's **existing responsibility category** (that is, it would introduce a second or subsequent category) → violation; create a new module or move the existing code for that responsibility as well. **Requires human judgment and cannot be automated** |
+| B. Bypassing the authoritative source | A table entry is added without updating the sole authoritative source (a handwritten copy bypasses the authoritative table) → violation                                                                                                                                                                |
+| C. Boundary erosion                   | Any new cross-layer dependency (L2→L3, L4→L1/L2), `include!`, or cross-layer `pub(crate)` exposure is introduced → violation. **Can be automated and is checked by CI**                                                                                                                                |
 
-### Prohibition 3: Refactor, Don't Patch
+### Prohibition Three: No Patching Instead of Refactoring
 
-| Criterion                  | Rule                                                                                                                                                                      |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| A. Synonymous duplication  | The same behavior appears in ≥ 2 places (aliasing / conversion / stage wiring / error mapping) → violation; must be lifted to a shared layer                              |
-| B. Excessive fan-out       | A single change requires synchronously modifying ≥ 3 existing synonymous mappings → **deemed an architectural change**, stop work, go through the design document process |
-| C. Adding new entry points | Adds "the Nth entry point / table entry" instead of registering it into the declarative stage table → violation                                                           |
+| Criterion                 | Rule                                                                                                                                                                                       |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| A. Synonymous duplication | The same behavior appears in at least two places (aliases / conversions / stage wiring / error mapping) → violation; it must be promoted to a shared layer                                 |
+| B. Excessive fan-out      | A single change requires synchronously modifying at least three existing synonymous mappings → **classified as an architectural change**; stop work and follow the design-document process |
+| C. New entry point        | A “Nth entry / table item” is added instead of being registered in the declarative stage table → violation                                                                                 |
 
 ## Part Two: Decision Procedure (D0–D4)
 
-Each code change goes through five gates in order. Each is a decidable boolean condition, **stop on
-first hit**:
+Every code change must pass five gates in sequence. Each gate is a decidable Boolean condition;
+**stop as soon as one is triggered**:
 
 ```
-D0  Gate         Does this change touch any existing table (error code / opcode / type / entry stage)?
-                 ├─ Yes → Can you point to the module that is the sole authoritative implementation of that table?
-                 │        ├─ Yes → Continue
-                 │        └─ No  → ⛔ Stop. Establish the authoritative source first
-                 └─ No  → Continue
-                          ↓
-D1  No Fabrication   After removing the new concept, can the same semantics be expressed with "existing concept + parameters"?
-                     ├─ Yes → ⛔ Forbid adding. Record the reason in the PR
-                     └─ No  → Continue
-                              ↓
-D2  No Parallelism   Is the new concept semantically equivalent to some existing concept (≥ half of variant names overlap)?
-                     ├─ Yes → Is there a From/TryFrom conversion that is machine-checked?
-                     │        ├─ Yes → Continue
-                     │        └─ No  → ⛔ Merge into one (forbidden to use import aliases to distinguish)
-                     └─ No  → Continue
-                              ↓
-D3  Patch?   Judge in order, stop on first hit:
-             1) The same behavior needs to be duplicated in ≥ 2 places?            → Yes → ⛔ Must be lifted to a shared layer
-             2) Need to add "the 6th entry point"?                                → Yes → ⛔ Forbid manual wiring, register in the stage table instead
-             3) A single change requires modifying ≥ 3 synonymous mappings?      → Yes → ⛔ Deemed an architectural change, stop work and go through design document
-             4) None of the above                                                  → Local patch is allowed, but must come with regression tests
-                              ↓
-D4  Responsibility?   Does the new code added this time belong to an existing responsibility class of the target module?
-                       ├─ No  (class 2 and above) → ⛔ Create a new module, or move the existing code for that responsibility along with it
-                       └─ Yes                       → Compliant
+D0  门禁    本次改动是否触碰任何一张已存在的表（错误码/opcode/类型/入口阶段）？
+             ├─ 是 → 能指出该表的唯一权威实现模块吗？
+             │        ├─ 能 → 继续
+             │        └─ 不能 → ⛔ 停止。先建立权威源
+             └─ 否 → 继续
+                    ↓
+D1  防生造   去掉新概念后，能否用「既有概念 + 参数」表达同样的语义？
+             ├─ 能 → ⛔ 禁止新增。理由记入 PR
+             └─ 不能 → 继续
+                    ↓
+D2  防并行   新概念是否与某既有概念同语义（变体名重合 ≥ 半数）？
+             ├─ 是 → 有 From/TryFrom 转换且机检吗？
+             │        ├─ 有 → 继续
+             │        └─ 无 → ⛔ 合并为一份（禁止用 import 别名区分）
+             └─ 否 → 继续
+                    ↓
+D3  补丁?    依次判定，命中即止：
+             1) 同一行为需在 ≥2 处复制？        → 是 → ⛔ 必须提到共享层
+             2) 需要新增"第 6 个入口"？         → 是 → ⛔ 禁止手工接线，改为登记进阶段表
+             3) 一次修改要改 ≥3 处同义映射？   → 是 → ⛔ 判定为架构变更，停工走设计文档
+             4) 以上皆否                       → 允许局部补丁，但必须附带回归测试
+                    ↓
+D4  职责?    本次新增代码属于目标模块已有的职责类别吗？
+             ├─ 否（第 2 类及以上）→ ⛔ 新建模块，或把该职责的现有代码一并搬过去
+             └─ 是 → 合规
 ```
 
-**Trade-off criteria (throughout D0–D4)**: The reasons for rejecting a proposal **may only** be
-based on **correctness** and **readability**; "size of change surface", "whether a new mechanism is
-introduced", and "implementation cost" **do not constitute reasons for rejection**. This runs in
-parallel with Prohibition 1 — Prohibition 1 constrains "whether a concept is duplicated", while this
-rule constrains "whether the reason for the trade-off stands": rejecting a proposal on the grounds
-of change surface or new mechanism will be sent back directly by review.
+**Trade-off criteria (applicable throughout D0–D4)**: A proposal may be rejected **only** on grounds
+of **correctness** and **readability**. The “size of the change,” “whether it introduces a new
+mechanism,” and “implementation cost” **do not constitute grounds for rejection**. This operates in
+parallel with Prohibition One: Prohibition One constrains whether concepts are duplicated, while
+this criterion constrains whether the reasons for a trade-off are valid. A proposal rejected because
+of its change footprint or because it introduces a new mechanism is sent straight back during
+review.
 
-Trade-offs requiring user adjudication (architectural choices, semantic deviations,
-register/do-not-register, breaking changes, queue jumping) shall, per the repo root `AGENTS.md`
-"When requesting user adjudication (mandatory)" section, provide all four items: situation +
-evidence, per-option pros and cons, clear recommendation + cost, and call-out of breaking impact.
+When a trade-off requires a user decision—architectural choice, semantic deviation, whether to
+register something, breaking change, or priority ordering—provide all four items required by “When
+requesting user adjudication (mandatory)” in the repository-root `AGENTS.md`: situation and
+evidence, item-by-item advantages and disadvantages, an explicit recommendation and its cost, and an
+explicit statement of any breaking changes.
 
-**Triage of semantic corrections (RFC-039 D59)**: D0–D4 are all retained; one additional step of
-"error type" tagging — **types A/B/C** (old behavior was **non-success**: crash/stack overflow,
-silent failure, silent mismatch, silent no-op, silent wrong answer) **may be fixed along the way
-during refactoring**, with the conditions of **red-then-green + not changing the externally visible
-behavior of programs that "previously succeeded" + registration in the same commit + baseline
-regeneration in the same commit and manual review**; **types D/E/F** (changes the observable
-behavior of previously successful programs, the external contract table, or RFC-level design
-changes) **must first go through user adjudication**. For the full criteria, see
-[07 §Triage Criteria for Semantic Corrections](architecture/07-equivalence-oracle.md) and RFC-039
-decision register D59; add one line to the PR required block: "Error type (A–F)".
+**Routing for semantic corrections (RFC-039 D59)**: All D0–D4 gates remain in force, with one
+additional “error type” label. **Types A/B/C**—cases where the old behavior was **unsuccessful**:
+crash or stack overflow, silent failure, silent mismatch, silent no-op, or silently incorrect
+answer—may be corrected alongside a refactor, provided that the result goes **from red to green**,
+the externally observable behavior of programs that **previously succeeded** does not change, the
+correction is registered in the same commit, the baseline is regenerated in the same commit, and a
+human review is performed. **Types D/E/F**—changes to the externally observable behavior of programs
+that previously succeeded, external contract tables, or RFC-level design changes—require a user
+decision first. See
+[07 §Semantic-correction routing criteria](architecture/07-equivalence-oracle.md) and D59 in the
+RFC-039 decision record for the detailed criteria; add a line for “Error type (A–F)” to the required
+PR block.
 
-## Part Three: Red Lines (Review Must Send Back)
+## Part Three: Red Lines (Changes Must Be Rejected During Review)
 
-1. **Don't change code you haven't looked at** — without having opened the changed files or grepped
-   for related references, you may not touch them
-2. **No unimplemented leftovers for core functionality** — no adding `todo!()`, `unimplemented!()`,
-   `Vec::new() // Not implemented yet` style silent drops, or indefinite "separate issues". Found
-   items must be fixed immediately, or registered as current-phase tasks
-3. **Don't delete tests, don't loosen criteria for a green light** — failure to comply is an
-   implementation defect; report honestly and reassess, which is not a reason to modify the
-   criteria; the number of tests may only increase, not decrease
-4. **Don't use import aliases to bridge semantically equivalent concepts**
-5. **Don't add new `include!`, don't add new reverse cross-layer dependencies, and `pub(crate)`
-   cross-layer leakage may only decrease, not increase**
-6. **The PR required block must be filled in truthfully** — unable to write the D0 authoritative
-   source module name = didn't check, send back directly; "Error type (A–F, per D59)" missing or
-   inconsistent with the actual change, send back as well
+1. **Do not change code you have not inspected**—you may not modify a file unless you have opened it
+   and grepped for relevant references
+2. **Do not leave core functionality as deferred implementation**—do not add silent-discard patterns
+   such as `todo!()`, `unimplemented!()`, or `Vec::new() // Not implemented yet`, nor defer work
+   indefinitely to a “standalone issue.” Fix it upon discovery, or register it as a task for the
+   current phase
+3. **Do not delete tests or relax criteria to obtain a green build**—being unable to satisfy them is
+   an implementation defect; report it accurately and reassess. **Test admission and retirement
+   follow Part Seven**: a test may be retired only if it fails all three gates (clause / incident
+   history / proof); “delete it because it is failing” is always rejected
+4. **Do not use import aliases to bridge semantically equivalent concepts**
+5. **Do not add `include!` or new reverse cross-layer dependencies; cross-layer `pub(crate)`
+   exposure may only decrease, never increase**
+6. **The required PR block must be completed accurately**—if the authoritative source module for D0
+   cannot be named, the source was not investigated and the change is rejected; a missing “Error
+   type (A–F, per D59)” label, or one that does not match the actual change, is likewise rejected
 
-## Part Four: Division of Labor Between Machine and Human
+## Part Four: Division of Labor Between Machines and Humans
 
-**Hand mechanical problems to tools; review only looks at non-mechanical problems.**
+**Assign mechanical issues to tools; review should focus only on non-mechanical issues.**
 
-| Category                                                                                                        | Executor                                                                  |
-| --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| Formatting, lint, table consistency, boundary erosion (Prohibition 2 C), test wiring, cross-layer dependencies  | Tools: `cargo fmt` / `clippy` / `build.rs` gate / `scripts/ci/check-*.py` |
-| Responsibility class judgment (Prohibition 2 A), D3 "patch or architectural change" judgment, exemption reasons | Human: PR required block + review                                         |
+| Category                                                                                                                 | Executor                                                                   |
+| ------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------- |
+| Formatting, linting, table consistency, boundary erosion (Prohibition Two C), test wiring, cross-layer dependencies      | Tools: `cargo fmt` / `clippy` / `build.rs` gates / `scripts/ci/check-*.py` |
+| Responsibility-category judgment (Prohibition Two A), D3’s “patch or architectural change” decision, exemption rationale | Human: required PR block + review                                          |
 
-**Corrections are written in place; no old-vs-new comparison is kept**: when you find a document or
-comment that does not match reality, change the body to match the reality directly, and delete the
-old wording; do not keep the old text with a "revision note" or "originally... now changed to..."
-style comparison — the reader should not have to read the wrong version before reading the right
-one. The **process evidence** of the correction (red→green, before/after diff, ruling number) is
-written into the commit message or the WBS history record (`09a`), not into the corrected body. The
-history record (`09a`) and work orders/change lists (e.g., `02` §Change List) are not bound by this
+**Write corrections directly into the text; do not retain old/new comparisons**: when documentation
+or comments do not match reality, directly change the text to state the facts and delete the old
+wording. Do not retain the old text and append “revision notes” or “originally…, now…” comparisons;
+readers should not have to encounter the incorrect version before the correct one. Evidence of the
+**correction process** (red→green, before/after diff, adjudication number) belongs in the commit
+message or the WBS historical record (`09a`), not in the body of the corrected text. The historical
+record (`09a`) and work orders/change lists (such as `02` §Change List) are exempt from this
 restriction.
 
 ## Part Five: Exemption Mechanism
 
-- All exemptions from machine-checked criteria shall use the inline comment `// reason: <reason>`
-- The number of exemptions itself is included in the gate report and reviewed item by item
-- An exemption is an **exception voucher**, not a **convention**; when the same kind of exemption
-  appears for the 2nd time, the correct action is to change the rule or the criterion, not to add a
-  3rd exemption
+- Exemptions from machine-enforced criteria must always use an inline `// reason: <reason>` comment
+- The exemption count itself is included in the gate report, and each exemption is reviewed
+  individually
+- An exemption is **evidence of an exception**, not **a convention**; when the same type of
+  exemption appears for the second time, the correct action is to change the rule or criterion, not
+  to add a third exemption
 
 ## Part Six: Code Review Checklist
 
-Each PR review goes through these items in order:
+Review each PR against the following items:
 
-- [ ] **D0** Does it touch any table? Which module is the sole authoritative implementation of that
-      table?
-- [ ] **D1** Can the new concept be expressed with existing concepts + parameters? If not, where is
-      the reason recorded?
-- [ ] **D2** Is it semantically equivalent to an existing concept? Where is the conversion? Is an
-      import alias needed?
-- [ ] **D3** Does the same behavior appear in ≥ 2 places? Was a new entry point added instead of
-      registering in the stage table? Will ≥ 3 synonymous mappings need to be changed?
-- [ ] **D4** Does the new code added this time belong to an existing responsibility class of the
-      target module?
-- [ ] **Silent channel** For "register-consume" type mechanisms (one side registers data, the other
-      side consumes, e.g., SemanticDB, proof_calls, obligation ledger), are the **direct-drive**
-      tests for the producer and consumer delivered in the same batch? If consumer-side tests
-      manually construct registered data while the producer side has no direct-drive evidence, the
-      mechanism is superficially present but the data flow has never happened — send back (three
-      existing cases: proof_calls, RFC-039 D54, RFC-039 D55)
-- [ ] **Boundary** Is it being eroded? Any new cross-layer dependency / `include!` / `pub(crate)`
-      cross-layer leakage?
-- [ ] **Division of labor** Have mechanical problems been caught by tools? Is review being spent
-      only on non-mechanical issues?
+- [ ] **D0**: Does the change touch any table? Which module is the sole authoritative implementation
+      of that table?
+- [ ] **D1**: Can the new concept be expressed using existing concepts and parameters? If not, where
+      is the rationale recorded?
+- [ ] **D2**: Is it semantically equivalent to an existing concept? Where is the conversion? Is an
+      import alias required?
+- [ ] **D3**: Does the same behavior appear in at least two places? Was an entry point added instead
+      of registering it in the stage table? Must at least three synonymous mappings be changed?
+- [ ] **D4**: Does the new code belong to the target module’s existing responsibility category?
+- [ ] **Silent channel**: For a registration-to-consumption mechanism—one side registers data and
+      the other consumes it, such as SemanticDB, proof_calls, or the obligation ledger—are the
+      direct-path tests for the producer and consumer delivered in the same batch? If the consumer
+      test manually constructs registered data while the producer has no direct-path evidence, the
+      mechanism exists only on the surface and the data flow has never occurred; reject the change
+      (three precedents: proof_calls, RFC-039 D54, and RFC-039 D55)
+- [ ] **Boundaries**: Have they been eroded? Have cross-layer dependencies, `include!`, or
+      cross-layer `pub(crate)` exposure been added?
+- [ ] **Check admission**: Which of the three gates in Part Seven does the new test/gate pass? Where
+      is the rationale documented? (For a check that passes the **proof** gate, also answer: if it
+      were replaced with a correct alternative implementation, would it fail?)
+- [ ] **Division of labor**: Are mechanical issues covered by tools? Is review spending time only on
+      non-mechanical issues?
+
+## Part Seven: Admission and Retirement of Checks and Tests
+
+**A green result proves nothing.** Checks have only negative epistemic value: what they prove is
+that “on this occasion, it did not get this point wrong.” Whether a check is worth keeping depends
+solely on whether it guards a **property that has been explicitly stated**. If that cannot be
+answered, the check is not safety; it is a tax on people who follow the rules.
+
+### 7.1 The Sole Validation: If It Were Replaced with a Correct Alternative Implementation, Would It Fail?
+
+| Result | Meaning                                                                                                                 | Disposition                                      |
+| ------ | ----------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
+| Fails  | It freezes an **implementation choice** (rendered text, message wording, exact line numbers, internal structural shape) | Characterize it; **do not admit it to the gate** |
+| Passes | It guards a **property**                                                                                                | Legitimate check                                 |
+
+Any check that freezes the current output wholesale (full snapshots, byte-for-byte comparisons) will
+necessarily fail when replaced with a correct implementation; by definition, it cannot pass this
+gate.
+
+Corollary: the atomic unit of a test is not “one test,” but **one falsifiable distinction**. Writing
+the same code path, input class, and assertion intent N times adds zero incremental information; the
+mere fact that “this repository has thousands of tests” constitutes no evidence.
+
+### 7.2 Admission: Three Gates
+
+Every new check must pass **at least one** of the following three gates, and the rationale must be
+recorded in a comment at the top of the test file or in the commit message:
+
+| Gate                 | Required evidence                                                                                                                                         |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Clause**           | Name the relevant clause of a SPEC / RFC                                                                                                                  |
+| **Incident history** | Name a real failure: which change introduced it, what the defect was, and how it was exposed at the time                                                  |
+| **Proof**            | ① What is the property? ② Why **must** it hold, independently of implementation choices? ③ Why is this test the least expensive observation point for it? |
+
+The three gates are **not equivalent**: a clause is an external constraint and may be ambiguous;
+incident history covers only the occurrence that actually happened; **proof covers the entire class
+of properties**, and is therefore the most durable over time—its value lies not in catching a past
+occurrence, but in blocking a class of violations.
+
+The third gate must have teeth. Everyone can say, “This is an invariant,” but most things described
+that way actually freeze the current implementation. All three gates share one validation (7.1): if
+replacing the check with a correct alternative implementation makes it fail, return it to
+characterization—it is not proof, but a freeze disguised as proof.
+
+### 7.3 Retirement: Reversal of the Burden of Proof
+
+Run existing checks through 7.2: **keep any that passes at least one gate; delete any that passes
+none.** There is no “observation period,” “downgrade to advisory,” or “retain after marking as
+characterization”—all three merely prolong something whose rationale cannot be explained.
+
+- **Deletion is not irreversible**: history remains in git, and anything can be recovered by commit
+  when needed. Precisely because it can be recovered, “delete first and retrieve it later if
+  necessary” is preferable to “keep everything unconditionally”;
+- Delete in batches, with one commit per batch and the ability to revert the batch as a whole;
+- For each batch, record in [09a](architecture/09a-wbs-history.md) what was deleted, which gate was
+  used to judge it, and whether alternative coverage exists.
+
+### 7.4 Cost Discipline
+
+Cost is unrelated to legitimacy. Cost must be measurable (using the repository’s existing `cost:`
+resource-profile marker) and included in the gate budget. **“CI runs in parallel, so it does not
+matter” must not be used as a justification**—parallelism saves wall-clock time, but it does not
+save the time each person spends on local self-checks, and that is the cost paid every day.
+
+### 7.5 Boundary with Red Line 3
+
+Red Line 3 concerns **motivation** (changing criteria to make CI green), whereas this part concerns
+**cost and benefit** (whether the check is worthwhile). The two do not conflict.
+
+**Mandatory order of adjudication in a conflict**: ① Is it red now because the **implementation is
+wrong**, or because the **criterion is wrong**? ② If this cannot be answered, do not delete it and
+do not change the criterion; ③ If the **criterion is wrong**, retire the check under 7.3; do not
+modify the assertion.
