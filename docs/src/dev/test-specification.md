@@ -688,6 +688,15 @@ fn test_fibonacci() {
 
 **规则 9.2**：集成测试不得依赖网络、系统环境变量或外部服务。
 
+**规则 9.3**：语料（`tests/yaoxiang/`、`src/std/tests/`、`tests/yaoxiang-multifile/`）的
+`check` 退出 0 之后，`run` 不得报出与编译期同族的错误：E0 词法/语法、E1 类型、E2 语义、
+E3 代码生成、E4 泛型、E5 模块。族→类别的权威源是 `src/util/diagnostic/codes/mod.rs` 的
+`ErrorCategory`；`run` 只报 E6–E8（运行时 / I/O / 内部）不构成违反。
+
+判据由 `python scripts/ci/check-soundness.py` 执行。它当前是 **report-only**（分叉只打印、
+不阻塞；`--strict` 是翻闸形态），`pre-commit` 在暂存区含语料 `.yx` 时以
+`--report-only` 跑它。翻闸条件（三类已知分叉归零 + 变异自证）与当前实测状态写在脚本头部注释里。
+
 ---
 
 ## 基准测试规范
