@@ -84,6 +84,12 @@ TEST_ATTR_RE = re.compile(r"^\s*#\[test\]\s*$")
 FN_RE = re.compile(r"^\s*(?:pub\s+)?(?:async\s+)?fn\s+([A-Za-z_][A-Za-z0-9_]*)")
 SHOULD_PANIC_RE = re.compile(r"#\[should_panic")
 
+# Rust 字面量与注释的词法形态（0.6-13：body_span 取函数体前要先跳过它们——
+# 字符串里的花括号会把配平提前拉平，函数体被截断，分箱随之出错）。
+RAW_STRING_RE = re.compile(r"(b|c)?r(#*)\"")   # r"..." / r#"..."# / br"..." / cr#"..."#
+PLAIN_STRING_RE = re.compile(r"(b|c)?\"")       # "..." / b"..." / c"..."
+CHAR_RE = re.compile(r"(b|c)?'")                 # 'x' / '\n' / b'x'（'a 是生命周期，不是字面量）
+
 
 class EnvError(RuntimeError):
     pass
@@ -132,12 +138,134 @@ def header_text(path: str, rel_path: str) -> str:
     return "\n".join(parts)
 
 
-def body_span(lines, start):
-    """从 fn name( 所在行起，按花括号配平找到函数体结束行（含）。"""
+def _is_ident_char(ch: str) -> bool:
+    return ch.isalnum() or ch == "_"
+
+
+def mask_noncode(text: str) -> str:
+    """把字符串字面量 / 字符字面量 / 行注释 / 块注释 / 原始字符串的内容换成空格。
+
+    Rust 源码里花括号可以出现在这些非代码区域（典型如 `tokenize("{")`）。
+    按字面量配平花括号会把函数体提前截断——实测 `test_prefix_info_lbrace`
+    的函数体被截成两行，断言摘要取到文件余下部分，分箱因此出错（0.6-13）。
+
+    返回值与入参等长：非代码区域的内容换成空格，换行原样保留，故行数与
+    行号不变，调用方仍按行号定位。注释与字面量**内容**判据不受影响——
+    掩码只用于找函数体边界，断言统计仍读原文。
+    """
+    out = list(text)
+    n = len(text)
+
+    def blank(start: int, end: int) -> None:
+        for k in range(start, min(end, n)):
+            if out[k] != "\n":
+                out[k] = " "
+
+    i = 0
+    while i < n:
+        ch = text[i]
+        # 行注释
+        if text.startswith("//", i):
+            j = text.find("\n", i)
+            j = n if j < 0 else j
+            blank(i, j)
+            i = j
+            continue
+        # 块注释（Rust 允许嵌套）
+        if text.startswith("/*", i):
+            depth = 0
+            j = i
+            while j < n:
+                if text.startswith("/*", j):
+                    depth += 1
+                    blank(j, j + 2)
+                    j += 2
+                    continue
+                if text.startswith("*/", j):
+                    depth -= 1
+                    blank(j, j + 2)
+                    j += 2
+                    if depth == 0:
+                        break
+                    continue
+                blank(j, j + 1)
+                j += 1
+            i = j
+            continue
+        # 原始字符串：r"..." / r#"..."# / br"..." / cr#"..."#
+        m = RAW_STRING_RE.match(text, i)
+        if m and (m.group(1) or i == 0 or not _is_ident_char(text[i - 1])):
+            close = '"' + m.group(2)
+            j = text.find(close, m.end())
+            end = n if j < 0 else j + len(close)
+            blank(i, end)
+            i = end
+            continue
+        # 普通字符串："..." / b"..." / c"..."
+        m = PLAIN_STRING_RE.match(text, i)
+        if m:
+            j = m.end()
+            while j < n:
+                if text[j] == "\\":
+                    j += 2
+                    continue
+                if text[j] == '"':
+                    j += 1
+                    break
+                j += 1
+            blank(i, j)
+            i = j
+            continue
+        # 字符字面量：'x' / '\n' / b'x'；'a / '_ 是生命周期，不是字面量
+        m = CHAR_RE.match(text, i)
+        if m:
+            j = m.end()
+            if j < n and text[j] == "\\":
+                k = j + 1
+                if text.startswith("u{", k):
+                    close = text.find("}", k)
+                    k = n if close < 0 else close + 1
+                else:
+                    k += 1
+                j = k
+                while j < n and text[j] != "'":
+                    j += 1
+                j = min(j + 1, n)
+                blank(i, j)
+                i = j
+                continue
+            nxt = text[j] if j < n else ""
+            nxt2 = text[j + 1] if j + 1 < n else ""
+            if nxt2 == "'":
+                # 'x' —— 单字符字面量
+                blank(i, j + 2)
+                i = j + 2
+                continue
+            if nxt.isalpha() or nxt == "_":
+                # 'a / '_ / 'static —— 生命周期，不是字符字面量
+                blank(i, i + 1)
+                i += 1
+                continue
+            # 其余按字符字面量扫到收尾引号（如 '{'、')'、' '）
+            k = text.find("'", j)
+            end = n if k < 0 else k + 1
+            blank(i, end)
+            i = end
+            continue
+        i += 1
+    return "".join(out)
+
+
+def body_span(masked_lines, start):
+    """从 fn name( 所在行起，按花括号配平找到函数体结束行（含）。
+
+    入参必须是 mask_noncode 处理过的行——否则字符串字面量里的花括号
+    （如 `tokenize("{")`）会把配平提前拉平，函数体被截断（0.6-13 修的就是这个）。
+    """
     depth = 0
     opened = False
-    for idx in range(start, len(lines)):
-        for ch in lines[idx]:
+    for idx in range(start, len(masked_lines)):
+        for ch in masked_lines[idx]:
             if ch == "{":
                 depth += 1
                 opened = True
@@ -145,7 +273,7 @@ def body_span(lines, start):
                 depth -= 1
                 if opened and depth == 0:
                     return start, idx
-    return start, len(lines) - 1
+    return start, len(masked_lines) - 1
 
 
 def doc_block(lines, fn_line):
@@ -247,7 +375,10 @@ def scan():
     audit_index = load_audit_index()
     for path in iter_rust_files():
         rel_path = rel(path)
-        lines = read_text(path).splitlines()
+        raw = read_text(path)
+        lines = raw.splitlines()
+        # 掩码行只用于找函数体边界；断言统计与病史门仍读原文（0.6-13）
+        masked_lines = mask_noncode(raw).splitlines()
         header = header_text(path, rel_path)
         for idx, line in enumerate(lines):
             if not TEST_ATTR_RE.match(line):
@@ -262,7 +393,7 @@ def scan():
                 fn_idx += 1
             if not name:
                 continue
-            start, end = body_span(lines, fn_idx)
+            start, end = body_span(masked_lines, fn_idx)
             body = "\n".join(lines[start : end + 1])
             attr_block = "\n".join(lines[idx : fn_idx + 1])
             gate, basis, action = classify(
@@ -314,14 +445,16 @@ def _selftest_case(tmp, filename, header, body, audit=None):
     path = os.path.join(tmp, filename)
     with io.open(path, "w", encoding="utf-8") as fh:
         fh.write(header + body)
-    lines = read_text(path).splitlines()
+    raw = read_text(path)
+    lines = raw.splitlines()
+    masked_lines = mask_noncode(raw).splitlines()
     for idx, line in enumerate(lines):
         if TEST_ATTR_RE.match(line):
             fn_idx = idx + 1
             while fn_idx < len(lines) and not FN_RE.match(lines[fn_idx]):
                 fn_idx += 1
             name = FN_RE.match(lines[fn_idx]).group(1)
-            start, end = body_span(lines, fn_idx)
+            start, end = body_span(masked_lines, fn_idx)
             body_text = "\n".join(lines[start : end + 1])
             gate, basis, action = classify(
                 rel(filename),
@@ -331,7 +464,14 @@ def _selftest_case(tmp, filename, header, body, audit=None):
                 bool(SHOULD_PANIC_RE.search("\n".join(lines[idx : fn_idx + 1]))),
                 audit,
             )
-            return {"name": name, "gate": gate, "action": action, "basis": basis}
+            return {
+                "name": name,
+                "gate": gate,
+                "action": action,
+                "basis": basis,
+                "body_lines": body_text.count("\n") + 1,
+                "body": body_text,
+            }
     raise EnvError(f"selftest 样例没有解析出 #[test]：{filename}")
 
 
@@ -364,6 +504,61 @@ def selftest():
             tmp, "empty.rs", "//! 没有条款引用\n",
             "#[test]\nfn test_no_assertion() {\n    let _x = 1;\n}\n",
         )
+        # 0.6-13：字符串 / 字符 / 原始字符串 / 注释里的花括号不得截断函数体。
+        # 每个样例后面都跟一条「哨兵」测试——旧实现会在花括号上失衡，
+        # 一路吞到文件尾，函数体因此被算长。
+        # 第一个样例把 "}" 放在 "{" 前面：旧实现一见到 "}" 就把配平拉平、
+        # 当场截断；两个花括号数量相等也照样截错（这才是「配平」这个做法的病根）。
+        braces = _selftest_case(
+            tmp, "braces.rs", "//! 没有条款引用\n",
+            "#[test]\n"
+            "fn test_brace_in_string_not_truncated() {\n"
+            '    let close = "}";\n'
+            '    let open = "{";\n'
+            "    assert_eq!(open.len() + close.len(), 2);\n"
+            "}\n\n"
+            "#[test]\n"
+            "fn test_canary_after_braces() {\n"
+            "    assert_eq!(2 + 2, 4);\n"
+            "}\n",
+        )
+        unbalanced = _selftest_case(
+            tmp, "unbalanced.rs", "//! 没有条款引用\n",
+            "#[test]\n"
+            "fn test_unbalanced_brace_in_string_not_truncated() {\n"
+            '    let tokens = tokenize("{").unwrap();\n'
+            "    assert_eq!(tokens.len(), 1);\n"
+            "}\n\n"
+            "#[test]\n"
+            "fn test_canary_after_unbalanced() {\n"
+            "    assert_eq!(2 + 2, 4);\n"
+            "}\n",
+        )
+        raw = _selftest_case(
+            tmp, "raw.rs", "//! 没有条款引用\n",
+            "#[test]\n"
+            "fn test_brace_in_raw_string_and_comment() {\n"
+            '    let raw = r#"{"#;\n'
+            "    /* } 注释里的花括号 */\n"
+            '    assert_eq!(raw, "{");\n'
+            "}\n\n"
+            "#[test]\n"
+            "fn test_canary_after_raw() {\n"
+            "    assert_eq!(2 + 2, 4);\n"
+            "}\n",
+        )
+        charlit = _selftest_case(
+            tmp, "charlit.rs", "//! 没有条款引用\n",
+            "#[test]\n"
+            "fn test_brace_in_char_literal() {\n"
+            "    let ch = '{';\n"
+            "    assert_eq!(ch, '{');\n"
+            "}\n\n"
+            "#[test]\n"
+            "fn test_canary_after_charlit() {\n"
+            "    assert_eq!(2 + 2, 4);\n"
+            "}\n",
+        )
     ok = True
     if pos["gate"] != "条款" or pos["action"] != "待核":
         print(f"[selftest] FAIL 未审计的条款引用应落 条款/待核，实际 {pos['gate']}/{pos['action']}")
@@ -383,10 +578,32 @@ def selftest():
     if sectioned["gate"] != "条款" or sectioned["action"] != "待核":
         print(f"[selftest] FAIL 有节号但未审计应落 条款/待核，实际 {sectioned['gate']}/{sectioned['action']}")
         ok = False
-    print(
-        "[selftest] OK：§节号正例→条款/待核、审计确认真实支撑→条款/留、弱断言反例→待判/退役候选、"
-        "无断言反例→均不通过/退役候选、裸 RFC 反例→不过条款门"
-    )
+    for label, case, want_lines in (
+        ("字符串里的花括号", braces, 5),
+        ("字符串里不成对的花括号", unbalanced, 4),
+        ("原始字符串与块注释里的花括号", raw, 5),
+        ("字符字面量里的花括号", charlit, 4),
+    ):
+        if case["body_lines"] != want_lines:
+            print(
+                f"[selftest] FAIL {label}不得截断函数体，实际取到 {case['body_lines']} 行"
+                f"（应为 {want_lines}）"
+            )
+            ok = False
+        if case["action"] != "待判":
+            print(
+                f"[selftest] FAIL 取到完整函数体后应见强断言（→待判），"
+                f"实际 {case['action']}（{label}）"
+            )
+            ok = False
+    if ok:
+        print(
+            "[selftest] OK：§节号正例→条款/待核、审计确认真实支撑→条款/留、弱断言反例→待判/退役候选、"
+            "无断言反例→均不通过/退役候选、裸 RFC 反例→不过条款门、"
+            "字面量与注释里的花括号不截断函数体（4 例）"
+        )
+    else:
+        print("[selftest] FAIL：见上方逐条失败项")
     return 0 if ok else 1
 
 

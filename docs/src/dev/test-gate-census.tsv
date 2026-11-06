@@ -214,7 +214,7 @@ test_lsp_semantic_db_kept_when_target_has_type_error	src/driver/tests/lsp_semant
 test_single_file_collect_all_semantic_db_keyed_by_path	src/driver/tests/lsp_semantic_db.rs	assertx1 expectx1	待判	两门皆不过；断言只有 is_ok/is_some/unwrap 一类弱断言	退役候选
 test_single_file_collect_all_semantic_db_kept_on_error	src/driver/tests/lsp_semantic_db.rs	assertx2 expectx1	待判	两门皆不过；断言只有 is_ok/is_some/unwrap 一类弱断言	退役候选
 test_check_with_versionless_manifest_reports_e3024_and_drops_w1002	src/driver/tests/manifest_error.rs	expectx1	病史	函数体/注释点名 issue/回归/缺陷/事故	留
-test_check_with_invalid_toml_manifest_reports_e3024_and_drops_w1002	src/driver/tests/manifest_error.rs	matchesx2 assertx6 unwrapx1 expectx6 helperx5	病史	函数体/注释点名 issue/回归/缺陷/事故	留
+test_check_with_invalid_toml_manifest_reports_e3024_and_drops_w1002	src/driver/tests/manifest_error.rs	expectx1	病史	函数体/注释点名 issue/回归/缺陷/事故	留
 test_check_without_manifest_keeps_single_file_semantics	src/driver/tests/manifest_error.rs	assertx1 expectx1 helperx2	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
 test_check_with_valid_manifest_free_of_manifest_diagnostics	src/driver/tests/manifest_error.rs	assertx1 expectx1 helperx3	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
 test_dead_code_analysis_skipped_when_manifest_unreadable	src/driver/tests/manifest_error.rs	matchesx2 assertx1 expectx1	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
@@ -349,11 +349,11 @@ test_format_single_stmt_block_inline	src/formatter/handlers/tests/expr.rs	assert
 test_format_single_stmt_block_multiline_when_long	src/formatter/handlers/tests/expr.rs	assertx1	条款	文件头有可核条目（§<数字>），但未经抽样审计确认	待核
 test_format_params_short	src/formatter/handlers/tests/expr.rs	assert_eqx1	条款	文件头有可核条目（§<数字>），但未经抽样审计确认	待核
 test_format_params_long_wraps	src/formatter/handlers/tests/expr.rs	assertx2	条款	文件头有可核条目（§<数字>），但未经抽样审计确认	待核
-test_format_match_basic	src/formatter/handlers/tests/expr.rs	assert_eqx21 assertx4	条款	文件头有可核条目（§<数字>），但未经抽样审计确认	待核
+test_format_match_basic	src/formatter/handlers/tests/expr.rs	assertx3	条款	文件头有可核条目（§<数字>），但未经抽样审计确认	待核
 test_format_fstring_simple	src/formatter/handlers/tests/expr.rs	assert_eqx1	条款	文件头有可核条目（§<数字>），但未经抽样审计确认	待核
 test_format_fstring_with_spec	src/formatter/handlers/tests/expr.rs	assert_eqx1	条款	文件头有可核条目（§<数字>），但未经抽样审计确认	待核
 test_format_try_operator	src/formatter/handlers/tests/expr.rs	assert_eqx1	条款	文件头有可核条目（§<数字>），但未经抽样审计确认	待核
-test_format_unsafe_block	src/formatter/handlers/tests/expr.rs	assert_eqx18 assertx1	条款	文件头有可核条目（§<数字>），但未经抽样审计确认	待核
+test_format_unsafe_block	src/formatter/handlers/tests/expr.rs	assertx1	条款	文件头有可核条目（§<数字>），但未经抽样审计确认	待核
 test_format_var_simple	src/formatter/handlers/tests/expr.rs	assert_eqx1	条款	文件头有可核条目（§<数字>），但未经抽样审计确认	待核
 test_format_var_camel_case	src/formatter/handlers/tests/expr.rs	assert_eqx1	条款	文件头有可核条目（§<数字>），但未经抽样审计确认	待核
 test_format_return_with_value	src/formatter/handlers/tests/expr.rs	assert_eqx1	条款	文件头有可核条目（§<数字>），但未经抽样审计确认	待核
@@ -411,10 +411,10 @@ test_source_map_offset_to_line	src/formatter/tests/source_map.rs	assert_eqx3	待
 test_source_map_comment_in_string_ignored	src/formatter/tests/source_map.rs	assert_eqx2	待判	两门皆不过；含强断言，证明门需人工复核	待判
 test_source_map_comment_in_block_body	src/formatter/tests/source_map.rs	assert_eqx3	待判	两门皆不过；含强断言，证明门需人工复核	待判
 test_source_map_char_literal_non_ascii	src/formatter/tests/source_map.rs	assert_eqx1 assertx1	待判	两门皆不过；含强断言，证明门需人工复核	待判
-test_fstring_brace_escape_preserved_raw	src/frontend/core/lexer/tests/fstring.rs	assertx1 is_errx1 helperx10	证明	现状锚（名字含 unchanged/anchor/guard/preserve/baseline）	留
+test_fstring_brace_escape_preserved_raw	src/frontend/core/lexer/tests/fstring.rs	helperx1	证明	现状锚（名字含 unchanged/anchor/guard/preserve/baseline）	留
 test_fstring_close_brace_escape_preserved_raw	src/frontend/core/lexer/tests/fstring.rs	helperx1	证明	现状锚（名字含 unchanged/anchor/guard/preserve/baseline）	留
 test_fstring_interpolation_markers_preserved	src/frontend/core/lexer/tests/fstring.rs	helperx1	证明	现状锚（名字含 unchanged/anchor/guard/preserve/baseline）	留
-test_fstring_mixed_escape_and_interpolation	src/frontend/core/lexer/tests/fstring.rs	assertx1 is_errx1 helperx7	条款	文件头有可核条目（§<数字>），但未经抽样审计确认	待核
+test_fstring_mixed_escape_and_interpolation	src/frontend/core/lexer/tests/fstring.rs	helperx1	条款	文件头有可核条目（§<数字>），但未经抽样审计确认	待核
 test_fstring_backslash_escape_decoded	src/frontend/core/lexer/tests/fstring.rs	helperx1	条款	文件头有可核条目（§<数字>），但未经抽样审计确认	待核
 test_fstring_multiline_raw	src/frontend/core/lexer/tests/fstring.rs	helperx1	条款	文件头有可核条目（§<数字>），但未经抽样审计确认	待核
 test_fstring_multiline_with_interpolation	src/frontend/core/lexer/tests/fstring.rs	helperx1	条款	文件头有可核条目（§<数字>），但未经抽样审计确认	待核
@@ -452,7 +452,7 @@ test_char_simple	src/frontend/core/lexer/tests/literals.rs	matchesx1 assertx1 un
 test_char_escape	src/frontend/core/lexer/tests/literals.rs	matchesx1 assertx1 unwrapx1	条款	文件头有可核条目（§<数字>），但未经抽样审计确认	待核
 test_fstring_simple	src/frontend/core/lexer/tests/literals.rs	matchesx1 assertx1 unwrapx1	条款	文件头有可核条目（§<数字>），但未经抽样审计确认	待核
 test_fstring_interpolation	src/frontend/core/lexer/tests/literals.rs	matchesx1 assertx1 unwrapx1	条款	文件头有可核条目（§<数字>），但未经抽样审计确认	待核
-test_fstring_escape_brace	src/frontend/core/lexer/tests/literals.rs	assert_eqx1 matchesx11 assertx29 is_okx2 is_errx16 unwrapx9	病史	函数体/注释点名 issue/回归/缺陷/事故	留
+test_fstring_escape_brace	src/frontend/core/lexer/tests/literals.rs	matchesx1 assertx1 unwrapx1	条款	文件头有可核条目（§<数字>），但未经抽样审计确认	待核
 test_bool_true	src/frontend/core/lexer/tests/literals.rs	matchesx1 assertx1 unwrapx1	条款	文件头有可核条目（§<数字>），但未经抽样审计确认	待核
 test_bool_false	src/frontend/core/lexer/tests/literals.rs	matchesx1 assertx1 unwrapx1	条款	文件头有可核条目（§<数字>），但未经抽样审计确认	待核
 test_negative_int	src/frontend/core/lexer/tests/literals.rs	assert_eqx1 matchesx2 assertx2 unwrapx1	条款	文件头有可核条目（§<数字>），但未经抽样审计确认	待核
@@ -538,7 +538,7 @@ test_infix_assign	src/frontend/core/parser/pratt/tests/led.rs	matchesx1 assertx1
 test_prefix_info_identifier	src/frontend/core/parser/pratt/tests/nud.rs	assert_eqx1 assertx1 is_somex1 unwrapx2	待判	两门皆不过；含强断言，证明门需人工复核	待判
 test_prefix_info_unary_minus	src/frontend/core/parser/pratt/tests/nud.rs	assert_eqx1 assertx1 is_somex1 unwrapx2	待判	两门皆不过；含强断言，证明门需人工复核	待判
 test_prefix_info_unary_star	src/frontend/core/parser/pratt/tests/nud.rs	assert_eqx1 assertx1 is_somex1 unwrapx2	待判	两门皆不过；含强断言，证明门需人工复核	待判
-test_prefix_info_lbrace	src/frontend/core/parser/pratt/tests/nud.rs	matchesx11 assertx19 is_somex4 is_nonex4 unwrapx8	待判	两门皆不过；含强断言，证明门需人工复核	待判
+test_prefix_info_lbrace	src/frontend/core/parser/pratt/tests/nud.rs	assertx1 is_somex1 unwrapx1	待判	两门皆不过；断言只有 is_ok/is_some/unwrap 一类弱断言	退役候选
 test_prefix_info_match	src/frontend/core/parser/pratt/tests/nud.rs	assertx1 is_somex1 unwrapx1	待判	两门皆不过；断言只有 is_ok/is_some/unwrap 一类弱断言	退役候选
 test_prefix_info_unsafe	src/frontend/core/parser/pratt/tests/nud.rs	assertx1 is_somex1 unwrapx1	待判	两门皆不过；断言只有 is_ok/is_some/unwrap 一类弱断言	退役候选
 test_prefix_info_at	src/frontend/core/parser/pratt/tests/nud.rs	assertx1 is_nonex1 unwrapx1	待判	两门皆不过；断言只有 is_ok/is_some/unwrap 一类弱断言	退役候选
@@ -634,7 +634,7 @@ test_use_with_alias	src/frontend/core/parser/statements/tests/imports.rs	assert_
 test_use_deep_path	src/frontend/core/parser/statements/tests/imports.rs	assert_eqx1	条款	文件头有可核条目（§<数字>），但未经抽样审计确认	待核
 test_use_item_inline_alias	src/frontend/core/parser/statements/tests/imports.rs	assert_eqx2 unwrapx2	条款	文件头有可核条目（§<数字>），但未经抽样审计确认	待核
 test_use_item_mixed_alias_and_plain	src/frontend/core/parser/statements/tests/imports.rs	assert_eqx1 matchesx1 assertx2 is_nonex1 unwrapx2	条款	文件头有可核条目（§<数字>），但未经抽样审计确认	待核
-test_use_items_carry_source_spans	src/frontend/core/parser/statements/tests/imports.rs	assert_eqx8 assertx2 is_nonex1 unwrapx3 expectx1	条款	文件头有可核条目（§<数字>），但未经抽样审计确认	待核
+test_use_items_carry_source_spans	src/frontend/core/parser/statements/tests/imports.rs	assert_eqx8 unwrapx2 expectx1	条款	文件头有可核条目（§<数字>），但未经抽样审计确认	待核
 test_use_items_no_alias_gives_none_item_aliases	src/frontend/core/parser/statements/tests/imports.rs	assertx1 is_nonex1	条款	文件头有可核条目（§<数字>），但未经抽样审计确认	待核
 test_use_positional_item_alias_rejected	src/frontend/core/parser/statements/tests/imports.rs	assertx1 unwrapx1	条款	文件头有可核条目（§<数字>），但未经抽样审计确认	待核
 test_type_name_simple	src/frontend/core/parser/statements/tests/types.rs	matchesx1 assertx1	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
@@ -668,7 +668,7 @@ test_struct_field_assert_arith_mod	src/frontend/core/parser/statements/tests/typ
 test_struct_field_assert_arith_mul	src/frontend/core/parser/statements/tests/types.rs	matchesx2 assertx1	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
 test_sum_type_record_syntax_no_variant_ast	src/frontend/core/parser/statements/tests/types.rs	matchesx1 assertx1	病史	函数体/注释点名 issue/回归/缺陷/事故	留
 test_sum_type_record_field_count	src/frontend/core/parser/statements/tests/types.rs	assert_eqx1 matchesx1	病史	函数体/注释点名 issue/回归/缺陷/事故	留
-test_deprecated_pipe_syntax_not_parsed_as_variant	src/frontend/core/parser/statements/tests/types.rs	unwrapx1	病史	函数体/注释点名 issue/回归/缺陷/事故	留
+test_deprecated_pipe_syntax_not_parsed_as_variant	src/frontend/core/parser/statements/tests/types.rs	assertx1 unwrapx1	病史	函数体/注释点名 issue/回归/缺陷/事故	留
 test_named_paren_return_refinement_keeps_declared_binder_name	src/frontend/core/parser/statements/tests/types.rs	assert_eqx3 matchesx2 assertx1	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
 test_unnamed_single_paren_stays_paren	src/frontend/core/parser/statements/tests/types.rs	matchesx2 assertx1	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
 test_multi_named_paren_stays_tuple	src/frontend/core/parser/statements/tests/types.rs	assert_eqx1 matchesx1 assertx1	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
@@ -788,7 +788,7 @@ test_fstring_segments_text_only	src/frontend/core/parser/tests/expressions.rs	as
 test_fstring_segments_interpolation	src/frontend/core/parser/tests/expressions.rs	assert_eqx1 helperx2	条款	文件头有可核条目（§<数字>），但未经抽样审计确认	待核
 test_fstring_segments_brace_escape	src/frontend/core/parser/tests/expressions.rs	assert_eqx1 helperx1	条款	文件头有可核条目（§<数字>），但未经抽样审计确认	待核
 test_fstring_segments_escape_adjacent_interpolation	src/frontend/core/parser/tests/expressions.rs	assert_eqx1 helperx3	条款	文件头有可核条目（§<数字>），但未经抽样审计确认	待核
-test_fstring_segments_close_brace_escape	src/frontend/core/parser/tests/expressions.rs	（无断言）	条款	文件头有可核条目（§<数字>），但未经抽样审计确认	待核
+test_fstring_segments_close_brace_escape	src/frontend/core/parser/tests/expressions.rs	assert_eqx1 helperx1	条款	文件头有可核条目（§<数字>），但未经抽样审计确认	待核
 test_fstring_segments_format_spec	src/frontend/core/parser/tests/expressions.rs	assert_eqx1 helperx1	条款	文件头有可核条目（§<数字>），但未经抽样审计确认	待核
 test_empty_module	src/frontend/core/parser/tests/integration.rs	assertx2 unwrapx1	待判	文件头只引整篇 RFC/规范而无节号（收紧后不算条款门）——需人工核	待核
 test_multiple_statements	src/frontend/core/parser/tests/integration.rs	assert_eqx1 assertx1 unwrapx1	待判	文件头只引整篇 RFC/规范而无节号（收紧后不算条款门）——需人工核	待核

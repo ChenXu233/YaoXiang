@@ -3723,3 +3723,60 @@ census 重算「退役候选」115 → 104（门「待判」935 → 924）；cli
    不在本卡声明的 inScope 内，按 AGENTS.md 第 6 条属「机械必需面」，已如实申报待追认。
 
 **回退**：本批一笔提交（本页与 `test-gate-census.md` / `test-gate-census.tsv` 同提交），`git revert <sha>` 即整体恢复。
+
+### 七、普查生成器修正（2026-11-06）
+
+修 `scripts/dev/test-gate-census.py` 的 `body_span`：旧实现按花括号配平取函数体，不跳过字符串 / 字符字面量
+与注释里的花括号，函数体因此被截断（0.6-12 退役第二批时发现并登记在 `test-gate-census.md` 的边界说明里）。
+
+**修法**：新增 `mask_noncode`——先把字符串字面量 / 字符字面量 / 行注释 / 块注释（可嵌套）/ 原始字符串
+（`r"…"` / `r#"…"#` / `br"…"` / `cr#"…"#`）的内容换成空格（换行原样保留，行号与行数不变），
+再配平花括号。**掩码只用于找函数体边界**；断言统计与病史门仍读原文——判据本身没有放宽。
+字符字面量与生命周期的区分：`'x'` / `'\n'` / `'{'` 是字面量，`'a` / `'_` / `'static` 是生命周期
+（后者只跳过引号本身）。
+
+**判据有牙（变异自证）**：把修好的生成器退回旧实现（`body_span` 不看掩码、两个调用点都改回原文行），
+新加的 4 条 `--selftest` 用例**全部报 FAIL、退出码 1**；新实现 4 例全过。每例后面跟一条「哨兵」测试——
+旧实现一旦失衡就会一路吞到文件尾，函数体因此被算长。
+
+**受影响的测试 11 条**（数法：逐文件逐测试比较**修复前后的函数体边界**，边界不同者即为受影响；
+全仓 3413 条测试中 11 条被旧实现取错）：lexer/tests/fstring.rs 3 · formatter/handlers/tests/expr.rs 2 ·
+driver/tests/manifest_error.rs 1 · lexer/tests/literals.rs 1 · parser/pratt/tests/nud.rs 1 ·
+parser/statements/tests/imports.rs 1 · parser/statements/tests/types.rs 1 · parser/tests/expressions.rs 1。
+
+**分箱差异 2 条**（其余 9 条里 8 条只改「断言摘要」那一列、1 条连摘要都没变）：
+
+1. `test_prefix_info_lbrace`（parser/pratt/tests/nud.rs）：待判/待判 → 待判/**退役候选**。真实函数体只有
+   `assert!(state.prefix_info().is_some())` 一条弱断言；条款门（文件头与函数体无 §节号）与病史门
+   （无 issue/回归/缺陷/事故）皆不过 ⇒ 退役候选（候选不是判决，证明门仍需人工复核）。
+2. `test_fstring_escape_brace`（lexer/tests/literals.rs）：病史/留 → 条款/**待核**。旧实现把函数体截到文件尾，
+   吞进来的文字里含「回归 / 缺陷 / 事故」而被误判成病史门；真实函数体内无此类字样 ⇒ 病史门不再成立；
+   该文件头有可核条目（§1.6.1 / §1.6.2 / §1.6.3 / §1.6.4 / RFC-012）⇒ 条款门命中但未经抽样审计确认 ⇒ 待核。
+
+**8 条「断言摘要」变化逐条**：
+
+| 测试名 | 文件 | 旧摘要 | 新摘要 |
+| --- | --- | --- | --- |
+| `test_check_with_invalid_toml_manifest_reports_e3024_and_drops_w1002` | src/driver/tests/manifest_error.rs | matchesx2 assertx6 unwrapx1 expectx6 helperx5 | expectx1 |
+| `test_format_match_basic` | src/formatter/handlers/tests/expr.rs | assert_eqx21 assertx4 | assertx3 |
+| `test_format_unsafe_block` | src/formatter/handlers/tests/expr.rs | assert_eqx18 assertx1 | assertx1 |
+| `test_fstring_brace_escape_preserved_raw` | src/frontend/core/lexer/tests/fstring.rs | assertx1 is_errx1 helperx10 | helperx1 |
+| `test_fstring_mixed_escape_and_interpolation` | src/frontend/core/lexer/tests/fstring.rs | assertx1 is_errx1 helperx7 | helperx1 |
+| `test_use_items_carry_source_spans` | src/frontend/core/parser/statements/tests/imports.rs | assert_eqx8 assertx2 is_nonex1 unwrapx3 expectx1 | assert_eqx8 unwrapx2 expectx1 |
+| `test_deprecated_pipe_syntax_not_parsed_as_variant` | src/frontend/core/parser/statements/tests/types.rs | unwrapx1 | assertx1 unwrapx1 |
+| `test_fstring_segments_close_brace_escape` | src/frontend/core/parser/tests/expressions.rs | （无断言） | assert_eqx1 helperx1 |
+
+**数字**：全仓 `#[test]` 3413（**不变**，本轮零删除、零修改）；census 门 条款 1713 → 1714 · 病史 314 → 313 ·
+证明 447 · 待判 924 · 均不通过 15；处置 留 776 → 775 · 待核 2121 → 2122 · 待判 412 → 411 ·
+退役候选 104 → 105。
+
+**门禁**：`census`（重算写入）0 · `--selftest` 0 · `--check` 0（3413 条）· 两次重跑逐字节相同
+（`--stdout` 两次输出 sha256 f318f1b9634276a7f44f1a54f7e7fa4c7f3c5c21046c9028f734d9ac1d459580，
+入库 TSV sha256 2eaa308dbeb01489adeb9f682bfaf2521e613428ee9d9fea593b1220557e5c75）·
+`audit --check` 0（数据文件仍覆盖全部 40 条样本，种子 20261106）· markdownlint 0 ·
+check-docs-orphan / refs / truth 0 · `docs:build` 绿。
+
+**顺带修掉的一处假绿**：`--selftest` 的收尾行此前**无条件**打印「OK」，即使有断言失败也照打——
+现在只在全过时打印 OK，失败时打印 FAIL 并以退出码 1 收场（与 `check-soundness.py` 同一类修法）。
+
+**回退**：本卡一笔提交（生成器 + 普查表 + 本页同提交），`git revert <sha>` 即整体恢复。
