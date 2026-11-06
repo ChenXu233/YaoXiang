@@ -3662,3 +3662,64 @@ k: (y: Int) -> Int = { f(y)(y) }        // 运行期算出的值填进 N 位
 **数字**：全仓 `#[test]` 3445 → 3424；`git diff` 计 `-#[test]` 行 = 21；census 重算「退役候选」136 → 115；语料 375/375 差分空、IR 快照与 `tests/baselines` 零漂移；clippy `-D warnings` 0（删后重编 test 目标，无独占 helper 被误删）；健全性探针 0 分叉；integration 335 passed；`run fast` 3338 条 exit 0。
 
 **回退**：本批一笔提交，`git revert <sha>` 即整体恢复。
+
+### 六、第二批测试退役（2026-11-06）
+
+按 `coding-rules` 第七部分：从普查表的「退役候选」里取**一个目录簇**——`src/frontend/core/parser/pratt/tests/nud.rs`
+（pratt 前缀解析模块）的 18 条弱断言测试，逐条判定，**删 11 / 留 7**。
+
+**判定与执行由同一成员做**（用户指定 MiniMax-M3.1-Flash 为实现者，不拆「判定者 + 执行者」两张卡）。硬要求不变：
+判删必须指认具体替代覆盖测试名，指认不出或读不懂一律判留。本批与第一批的差别：**这 18 条体内有断言**
+（不是空测试），退役理由是「三扇门皆不过 + 零判据增量」。
+
+#### 逐条判定表
+
+格式：`测试名 TAB 断言什么 TAB 替代覆盖测试名 TAB 删或留 TAB 依据`（制表符分隔）
+
+| 测试名 | 断言什么 | 替代覆盖测试名 | 处置 | 依据 |
+| --- | --- | --- | --- | --- |
+| `test_prefix_info_int_literal` | 只断言 `prefix_info()` 对 `42` 返回 `Some`（不锁绑定力、不锁解析结果） | `test_parse_int_literal`（同文件） | 删 | 条款门无（文件头与函数体无 §节号）、病史门无（无 issue/回归/缺陷）；证明门 ③ 不成立——替代覆盖走同一条 `parse_expression → parse_prefix → prefix_info` 路径并断言 `Expr::Lit`，覆盖面严格含本条，本条零判据增量 |
+| `test_prefix_info_float_literal` | 只断言 `prefix_info()` 对 `3.14` 返回 `Some` | `test_parse_float_literal`（同文件） | 删 | 同上 |
+| `test_prefix_info_string_literal` | 只断言 `prefix_info()` 对 `"hello"` 返回 `Some` | `test_parse_string_literal`（同文件） | 删 | 同上 |
+| `test_prefix_info_bool_literal` | 只断言 `prefix_info()` 对 `true` 返回 `Some` | `test_parse_bool_true`（同文件） | 删 | 同上 |
+| `test_prefix_info_lparen` | 只断言 `prefix_info()` 对 `(` 返回 `Some` | `test_grouped_expr` + `test_tuple`（`src/frontend/core/parser/tests/expressions.rs`） | 删 | 同上；两者都经 `parse_expr`（`parse_expression` 自由函数 → `ParserState::parse_expression` → `parse_prefix` → `prefix_info`）解析 `(` 开头的源码并断言 AST 形状 |
+| `test_prefix_info_lbracket` | 只断言 `prefix_info()` 对 `[` 返回 `Some` | `test_list_literal` + `test_list_empty`（`expressions.rs`） | 删 | 同上 |
+| `test_prefix_info_if` | 只断言 `prefix_info()` 对 `if` 返回 `Some` | `test_parse_if_expr`（同文件） | 删 | 同上 |
+| `test_prefix_info_while` | 只断言 `prefix_info()` 对 `while` 返回 `Some` | `test_parse_while_expr`（同文件） | 删 | 同上 |
+| `test_prefix_info_for` | 只断言 `prefix_info()` 对 `for` 返回 `Some` | `test_parse_for_expr`（同文件） | 删 | 同上 |
+| `test_prefix_info_ref` | 只断言 `prefix_info()` 对 `ref` 返回 `Some` | `test_ref_expr`（`expressions.rs`，解析 `"ref x"` 并断言 `Expr::Ref`） | 删 | 同上 |
+| `test_prefix_info_return` | 只断言 `prefix_info()` 对 `return` 返回 `Some` | `test_parse_return_expr`（同文件，解析 `"return 42"` 并断言 `Expr::Return`） | 删 | 同上 |
+| `test_prefix_info_match` | 只断言 `prefix_info()` 对 `match` 返回 `Some` | 无 | 留 | 条款门无、病史门无；**证明门成立**——它是 match 前缀路由在**单元层**的唯一走查点：全仓无任何单元测试解析 match 表达式（`src/frontend/core/parser/tests/ast.rs` 的 `test_expr_match` 是手工构造 AST 节点，不经解析器）。语料 `tests/yaoxiang/01-syntax/control-flow/match.yx` 虽走同一代码路径，但那是进程边界的整程序判据面，不是本模块的单元观察点。指认不出单元级替代覆盖 ⇒ 判留 |
+| `test_prefix_info_unsafe` | 只断言 `prefix_info()` 对 `unsafe` 返回 `Some` | 无 | 留 | 同上（`ast.rs` 的 `test_expr_unsafe` 为手工构造；语料 `tests/yaoxiang/03-semantics/unsafe_block_value.yx` 属整程序层） |
+| `test_prefix_info_spawn` | 只断言 `prefix_info()` 对 `spawn` 返回 `Some` | 无 | 留 | 同上（语料 `tests/yaoxiang/04-concurrency/spawn_basic.yx` 属整程序层） |
+| `test_prefix_info_at` | 断言 `prefix_info()` 对 `@` 返回 `None`（注释：@ 不再是前缀表达式，eval block 已移除） | 无 | 留 | 条款门无、病史门无（「eval block 已移除」只出现在本文件，全仓无可解析的 issue 号或变更记录）；**证明门成立**——这是「@ 不在路由表里」的唯一观察点。语句层的 `@` 报错（`src/frontend/core/parser/parser_state.rs` 的 `TokenKind::At` 分支）是另一条性质，由 `src/frontend/core/parser/tests/error_recovery.rs` 的 `test_parse_returns_error` 观察，不能替代本条。指认不出替代覆盖 ⇒ 判留 |
+| `test_prefix_info_break_removed` | 断言 `prefix_info()` 对 `break` 返回 `None` | 语料 `tests/yaoxiang/06-compile-errors/control-flow/break_expr_position_err.yx`（文件头「覆盖: #314 break 语句唯一性定案（pratt 前缀注册已移除）」） | 留 | **病史门成立**——函数体与文件注释点名 #314（break/continue 移出表达式位置，Python 风格定案）。#314 在全仓 19 处被引用（源码 + 语料 + 格式化测试），可解析。能过病史门 ⇒ 留 |
+| `test_prefix_info_continue_removed` | 断言 `prefix_info()` 对 `continue` 返回 `None` | 语料 `tests/yaoxiang/06-compile-errors/control-flow/continue_label_err.yx` | 留 | 同上（病史门：#314） |
+| `test_prefix_info_eof` | 断言 `prefix_info()` 在空 token 序列上返回 `None` | 无 | 留 | 条款门无、病史门无；**证明门成立**——这是「前缀路由在输入耗尽时不给出解析器」的唯一观察点。`error_recovery.rs` 的 `test_parse_empty_input` 观察的是「空程序解析无错、模块无条目」，走模块/语句层，不经前缀路由。指认不出替代覆盖 ⇒ 判留 |
+
+**判留的共同口径**（供后续批次复用）：单元级观察点只能被**另一条单元测试**替代；语料与整程序集成测试
+走的是进程边界的另一层判据面，不是本模块的单元观察点——若允许用语料替代单元测试，全仓每条单元测试
+都会被语料「替代」，该口径会自我取消。
+
+**数字**：全仓 `#[test]` 3424 → 3413；`git diff` 计 `-#[test]` 行 = 11（判删 11 = 实删 11，diff 只增 0 行）；
+census 重算「退役候选」115 → 104（门「待判」935 → 924）；clippy `-D warnings` 0；健全性探针 0 分叉；
+`run fast` 与 `cargo test --test integration` 全绿；census `--check` / `--selftest` 通过；
+语料 375 条与 IR 快照零漂移；`docs:build` 绿。
+
+**判定过程中查出的三件事**：
+
+1. **普查生成器的函数体截断不跳字符串字面量**：`body_span` 按花括号配平取函数体，遇到源码里的 `"{"`
+   会提前截断。实测 `test_prefix_info_lbrace`（体内有 `tokenize("{")`）的函数体被截成两行，
+   「断言摘要」取到文件余下部分（`matchesx11 assertx24 …`），因而分箱成「待判」而非「退役候选」——
+   **分箱错**。该条因此不在本批退役候选池内（未删）。生成器在 `scripts/` 下，不在本批 inScope，留待另卡修。
+2. **`prefix_info` 返回的绑定力在前缀路径上无人消费**：`parse_prefix` 把 `_bp` 丢弃，只用解析函数。
+   本批不据此改实现（那超出「测试退役」的 inScope），仅如实登记。
+3. **`docs:build` 的红是本卡之前就有的**：普查页与它的 en 镜像各有一处 `§<数字>` / `§<number>`
+   没加反引号。VitePress 的 markdown 以 `html: true` 解析，裸 `<数字>` 被 Vue 当成未闭合元素，
+   报 `Element is missing end tag`。把本卡的 3 个文档文件回退到 HEAD（cp 快照 + sha256 逐字节还原）后
+   `docs:build` 仍以同一报错红 ⇒ 与本卡无关；引入点是 t10 的提交 `bd257db9`（对账表那一行），
+   t13 报告的「docs:build 0」在当前树上复现不出来。本卡按本页既有约定（机器判据表里本来就是
+   `§<数字>` 加反引号）把 zh / en 两处补上反引号，构建转绿（86.47 s）。en 镜像（`docs/src/en/dev/`）
+   不在本卡声明的 inScope 内，按 AGENTS.md 第 6 条属「机械必需面」，已如实申报待追认。
+
+**回退**：本批一笔提交（本页与 `test-gate-census.md` / `test-gate-census.tsv` 同提交），`git revert <sha>` 即整体恢复。

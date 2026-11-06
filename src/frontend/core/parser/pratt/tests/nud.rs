@@ -31,38 +31,6 @@ fn test_prefix_info_identifier() {
 }
 
 #[test]
-fn test_prefix_info_int_literal() {
-    let tokens = tokenize("42").unwrap();
-    let state = ParserState::new(&tokens, &NullProbe);
-    let info = state.prefix_info();
-    assert!(info.is_some());
-}
-
-#[test]
-fn test_prefix_info_float_literal() {
-    let tokens = tokenize("3.14").unwrap();
-    let state = ParserState::new(&tokens, &NullProbe);
-    let info = state.prefix_info();
-    assert!(info.is_some());
-}
-
-#[test]
-fn test_prefix_info_string_literal() {
-    let tokens = tokenize(r#""hello""#).unwrap();
-    let state = ParserState::new(&tokens, &NullProbe);
-    let info = state.prefix_info();
-    assert!(info.is_some());
-}
-
-#[test]
-fn test_prefix_info_bool_literal() {
-    let tokens = tokenize("true").unwrap();
-    let state = ParserState::new(&tokens, &NullProbe);
-    let info = state.prefix_info();
-    assert!(info.is_some());
-}
-
-#[test]
 fn test_prefix_info_unary_minus() {
     let tokens = tokenize("-").unwrap();
     let state = ParserState::new(&tokens, &NullProbe);
@@ -83,20 +51,6 @@ fn test_prefix_info_unary_star() {
 }
 
 #[test]
-fn test_prefix_info_lparen() {
-    let tokens = tokenize("(").unwrap();
-    let state = ParserState::new(&tokens, &NullProbe);
-    assert!(state.prefix_info().is_some());
-}
-
-#[test]
-fn test_prefix_info_lbracket() {
-    let tokens = tokenize("[").unwrap();
-    let state = ParserState::new(&tokens, &NullProbe);
-    assert!(state.prefix_info().is_some());
-}
-
-#[test]
 fn test_prefix_info_lbrace() {
     let tokens = tokenize("{").unwrap();
     let state = ParserState::new(&tokens, &NullProbe);
@@ -104,36 +58,8 @@ fn test_prefix_info_lbrace() {
 }
 
 #[test]
-fn test_prefix_info_if() {
-    let tokens = tokenize("if").unwrap();
-    let state = ParserState::new(&tokens, &NullProbe);
-    assert!(state.prefix_info().is_some());
-}
-
-#[test]
-fn test_prefix_info_while() {
-    let tokens = tokenize("while").unwrap();
-    let state = ParserState::new(&tokens, &NullProbe);
-    assert!(state.prefix_info().is_some());
-}
-
-#[test]
 fn test_prefix_info_match() {
     let tokens = tokenize("match").unwrap();
-    let state = ParserState::new(&tokens, &NullProbe);
-    assert!(state.prefix_info().is_some());
-}
-
-#[test]
-fn test_prefix_info_for() {
-    let tokens = tokenize("for").unwrap();
-    let state = ParserState::new(&tokens, &NullProbe);
-    assert!(state.prefix_info().is_some());
-}
-
-#[test]
-fn test_prefix_info_ref() {
-    let tokens = tokenize("ref").unwrap();
     let state = ParserState::new(&tokens, &NullProbe);
     assert!(state.prefix_info().is_some());
 }
@@ -156,13 +82,6 @@ fn test_prefix_info_at() {
 #[test]
 fn test_prefix_info_spawn() {
     let tokens = tokenize("spawn").unwrap();
-    let state = ParserState::new(&tokens, &NullProbe);
-    assert!(state.prefix_info().is_some());
-}
-
-#[test]
-fn test_prefix_info_return() {
-    let tokens = tokenize("return").unwrap();
     let state = ParserState::new(&tokens, &NullProbe);
     assert!(state.prefix_info().is_some());
 }

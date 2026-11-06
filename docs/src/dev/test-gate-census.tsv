@@ -536,24 +536,13 @@ test_infix_lambda_block_body	src/frontend/core/parser/pratt/tests/led.rs	matches
 test_infix_lambda_typed_params	src/frontend/core/parser/pratt/tests/led.rs	matchesx1 assertx1	条款	文件头有可核条目（§<数字>），但未经抽样审计确认	待核
 test_infix_assign	src/frontend/core/parser/pratt/tests/led.rs	matchesx1 assertx1	条款	文件头有可核条目（§<数字>），但未经抽样审计确认	待核
 test_prefix_info_identifier	src/frontend/core/parser/pratt/tests/nud.rs	assert_eqx1 assertx1 is_somex1 unwrapx2	待判	两门皆不过；含强断言，证明门需人工复核	待判
-test_prefix_info_int_literal	src/frontend/core/parser/pratt/tests/nud.rs	assertx1 is_somex1 unwrapx1	待判	两门皆不过；断言只有 is_ok/is_some/unwrap 一类弱断言	退役候选
-test_prefix_info_float_literal	src/frontend/core/parser/pratt/tests/nud.rs	assertx1 is_somex1 unwrapx1	待判	两门皆不过；断言只有 is_ok/is_some/unwrap 一类弱断言	退役候选
-test_prefix_info_string_literal	src/frontend/core/parser/pratt/tests/nud.rs	assertx1 is_somex1 unwrapx1	待判	两门皆不过；断言只有 is_ok/is_some/unwrap 一类弱断言	退役候选
-test_prefix_info_bool_literal	src/frontend/core/parser/pratt/tests/nud.rs	assertx1 is_somex1 unwrapx1	待判	两门皆不过；断言只有 is_ok/is_some/unwrap 一类弱断言	退役候选
 test_prefix_info_unary_minus	src/frontend/core/parser/pratt/tests/nud.rs	assert_eqx1 assertx1 is_somex1 unwrapx2	待判	两门皆不过；含强断言，证明门需人工复核	待判
 test_prefix_info_unary_star	src/frontend/core/parser/pratt/tests/nud.rs	assert_eqx1 assertx1 is_somex1 unwrapx2	待判	两门皆不过；含强断言，证明门需人工复核	待判
-test_prefix_info_lparen	src/frontend/core/parser/pratt/tests/nud.rs	assertx1 is_somex1 unwrapx1	待判	两门皆不过；断言只有 is_ok/is_some/unwrap 一类弱断言	退役候选
-test_prefix_info_lbracket	src/frontend/core/parser/pratt/tests/nud.rs	assertx1 is_somex1 unwrapx1	待判	两门皆不过；断言只有 is_ok/is_some/unwrap 一类弱断言	退役候选
-test_prefix_info_lbrace	src/frontend/core/parser/pratt/tests/nud.rs	matchesx11 assertx24 is_somex9 is_nonex4 unwrapx13	待判	两门皆不过；含强断言，证明门需人工复核	待判
-test_prefix_info_if	src/frontend/core/parser/pratt/tests/nud.rs	assertx1 is_somex1 unwrapx1	待判	两门皆不过；断言只有 is_ok/is_some/unwrap 一类弱断言	退役候选
-test_prefix_info_while	src/frontend/core/parser/pratt/tests/nud.rs	assertx1 is_somex1 unwrapx1	待判	两门皆不过；断言只有 is_ok/is_some/unwrap 一类弱断言	退役候选
+test_prefix_info_lbrace	src/frontend/core/parser/pratt/tests/nud.rs	matchesx11 assertx19 is_somex4 is_nonex4 unwrapx8	待判	两门皆不过；含强断言，证明门需人工复核	待判
 test_prefix_info_match	src/frontend/core/parser/pratt/tests/nud.rs	assertx1 is_somex1 unwrapx1	待判	两门皆不过；断言只有 is_ok/is_some/unwrap 一类弱断言	退役候选
-test_prefix_info_for	src/frontend/core/parser/pratt/tests/nud.rs	assertx1 is_somex1 unwrapx1	待判	两门皆不过；断言只有 is_ok/is_some/unwrap 一类弱断言	退役候选
-test_prefix_info_ref	src/frontend/core/parser/pratt/tests/nud.rs	assertx1 is_somex1 unwrapx1	待判	两门皆不过；断言只有 is_ok/is_some/unwrap 一类弱断言	退役候选
 test_prefix_info_unsafe	src/frontend/core/parser/pratt/tests/nud.rs	assertx1 is_somex1 unwrapx1	待判	两门皆不过；断言只有 is_ok/is_some/unwrap 一类弱断言	退役候选
 test_prefix_info_at	src/frontend/core/parser/pratt/tests/nud.rs	assertx1 is_nonex1 unwrapx1	待判	两门皆不过；断言只有 is_ok/is_some/unwrap 一类弱断言	退役候选
 test_prefix_info_spawn	src/frontend/core/parser/pratt/tests/nud.rs	assertx1 is_somex1 unwrapx1	待判	两门皆不过；断言只有 is_ok/is_some/unwrap 一类弱断言	退役候选
-test_prefix_info_return	src/frontend/core/parser/pratt/tests/nud.rs	assertx1 is_somex1 unwrapx1	待判	两门皆不过；断言只有 is_ok/is_some/unwrap 一类弱断言	退役候选
 test_prefix_info_break_removed	src/frontend/core/parser/pratt/tests/nud.rs	assertx1 is_nonex1 unwrapx1	待判	两门皆不过；断言只有 is_ok/is_some/unwrap 一类弱断言	退役候选
 test_prefix_info_continue_removed	src/frontend/core/parser/pratt/tests/nud.rs	assertx1 is_nonex1 unwrapx1	待判	两门皆不过；断言只有 is_ok/is_some/unwrap 一类弱断言	退役候选
 test_prefix_info_eof	src/frontend/core/parser/pratt/tests/nud.rs	assertx1 is_nonex1 unwrapx1	待判	两门皆不过；断言只有 is_ok/is_some/unwrap 一类弱断言	退役候选
