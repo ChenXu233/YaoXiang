@@ -1449,10 +1449,20 @@ impl Driver {
             // 不门控即同一缺失双报（与 3.4.8 ③ 把入口校验留在 Linking 的
             // 「纯合并」决定同一条理由）。
             let check_channel = matches!(program.kind, ProgramKind::Check | ProgramKind::Lsp);
+            let declares_no_targets = surfaces
+                .as_ref()
+                .is_some_and(|s| s.bins.is_empty() && s.libs.is_empty());
+            let is_this_entry = path.as_path() == entry_path.as_path();
             if check_channel
-                && surfaces
+                && ((surfaces
                     .as_ref()
-                    .is_some_and(|s| s.bins.contains(&file_canon))
+                    .is_some_and(|s| s.bins.contains(&file_canon)))
+                    // 0.6（2026-11-06 用户裁决乙，E3020 与 run 同口径）：清单只说
+                    // [package]、不声明任何目标时，run 的 is_bin_role 仍要求入口有
+                    // main，而本臂此前只校验声明面 bins ⇒ check 放过、run 报 E3020。
+                    // 判据面保持 AST：入口自身编译失败时 IR 缺失，若改用 IR 会把
+                    // 「编译失败」误判成「缺 main」（Linking 臂注释的同一理由）。
+                    || (declares_no_targets && is_this_entry))
                 && !ast_has_main(ast)
             {
                 // 无源码位置的文件级诊断用占位 span（原 entry_span 语义）
@@ -1578,22 +1588,25 @@ impl Driver {
         // Script 无入口概念（顶层代码即程序）；Bin 要求存在名为 main 的绑定
         // （值/函数皆可）；带参 main 编译期拒绝（#357：入口恒零参调用）。
         //
-        // Check 形态整块跳过（纯合并）：E3020 的判据归 RoleClassification
-        // （双报防线，见臂注释）；E3022 属 run 路径的入口契约，check 现状不报
-        // 它——本臂在 check 只合并，不给 check 添新诊断。
+        // 形态分流（0.6，2026-11-06 用户裁决乙：check 与 run 同码同口径）：
         //
-        // 还有一层硬性理由：run 路径的入口校验以「merged IR 里有没有 main」
-        // 判定，而在 Check 的收集语义下，入口自身带错（parse/typecheck 失败）
-        // 就没有 IR——会被误判成「缺 main」而硬中止，把 rust 式收集退化成
-        // FailFast。并入纯合并即无此形状。
-        if !matches!(state.program.kind, ProgramKind::Check) && is_bin_role(&state.entry_path) {
+        // - **E3020（缺 main 绑定）**：run 在本臂 fail_with 硬中止；Check **不查**
+        //   ——判据归 RoleClassification（AST 面）。硬性理由：Check 的收集语义下，
+        //   入口自身带错（parse/typecheck 失败）就没有 IR，按 IR 判定会把「编译
+        //   失败」误判成「缺 main」并硬中止，把 CollectAll 退化成 FailFast。
+        // - **E3022（main 带参）**：判据本来就是 IR 面（merged IR 里 main 的参数表），
+        //   Check 形态同形可用——main 出现在 IR 里就说明它编译通过，不存在上述
+        //   误判。故 Check 也判，但进**逐文件收集通道**（与 run 的硬中止不同形：
+        //   CollectAll 语义下不得因一个入口中止整轮收集）。
+        if is_bin_role(&state.entry_path) {
+            let check_form = matches!(state.program.kind, ProgramKind::Check);
             let qualified_main = format!("{}.main", state.entry_key);
             let has_main_fn = merged.functions.iter().any(|f| f.name == qualified_main);
             let has_main_value = merged
                 .globals
                 .iter()
                 .any(|g| g.name == "main" || g.name == qualified_main);
-            if !has_main_fn && !has_main_value {
+            if !check_form && !has_main_fn && !has_main_value {
                 let diag =
                     ErrorCodeDefinition::bin_missing_main(&state.entry_path.display().to_string())
                         .at(Span::default())
@@ -1619,15 +1632,27 @@ impl Driver {
                     let diag = ErrorCodeDefinition::bin_main_signature("main", "()", &found)
                         .at(Span::default())
                         .build();
-                    state.fail_with(
-                        Stage::Linking,
-                        OrchestratorError::TypeCheck {
-                            path: state.entry_path.display().to_string(),
-                            message: diag.to_string(),
-                            diagnostics: vec![diag],
-                        },
-                    );
-                    return;
+                    if check_form {
+                        // 收集通道：诊断挂入口文件条目（与 RoleClassification 的
+                        // E3020 同一载体）；carrier 下标先算，避免同时借 program 与 units
+                        let carrier = state
+                            .program
+                            .units
+                            .iter()
+                            .position(|u| u.path == state.entry_path)
+                            .unwrap_or(0);
+                        state.units[carrier].check_diagnostics.push(diag);
+                    } else {
+                        state.fail_with(
+                            Stage::Linking,
+                            OrchestratorError::TypeCheck {
+                                path: state.entry_path.display().to_string(),
+                                message: diag.to_string(),
+                                diagnostics: vec![diag],
+                            },
+                        );
+                        return;
+                    }
                 }
             }
         }

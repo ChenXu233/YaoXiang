@@ -1,0 +1,16 @@
+// project-corpus/e3005-mono-max-depth —— 项目形态夹具（健全性探针判据面）
+// 覆盖: test-specification 规则 9.3 —— check 通过 ⇒ run 不得报 E0–E5 同族错误
+// 证的是: check 与 run 读同一份 yaoxiang.toml 的 [mono] 节——特化深度 2 的链在
+//         上限 1 下两条路径都必须报 E3005（修复前 check 不读 [mono]，按默认 100 放过）
+// 期望（判据）: check 与 run 对同一项目必须给出一致结论
+// 现状（2026-11-06 修复后）: check 退出 1、run 退出 1，同为 E3005（上限 1，当前 2）
+// 回归守卫: 若 check 又不读 [mono]，check 退回 0 而 run 仍报 E3005 ⇒ 探针把本夹具
+//           重新记为一处分叉；它留在判据面正是为了挡这条回退。
+// 错误码: E3005（Codegen 族 E3）IR 生成期特化链深度超限
+// 注意: 没有 expect 指令（理由同 e3022-entry-signature：不得把违规录成期望行为）。
+f1: (T1: Type) -> (x: T1) -> T1 = (x) => { f2(x) }
+f2: (T2: Type) -> (x: T2) -> T2 = (x) => { f3(x) }
+f3: (T3: Type) -> (x: T3) -> T3 = (x) => { f4(x) }
+f4: (T4: Type) -> (x: T4) -> T4 = (x) => { f5(x) }
+f5: (T5: Type) -> (x: T5) -> T5 = (x) => { x }
+main = () => { f1(1) }

@@ -112,10 +112,12 @@ repos:
         # 宽口径 E0–E5：check 通过 ⇒ run 不得出现词法/语法/类型/语义/代码生成/泛型/模块
         # 同族错误（WBS 0.6.3）。本轮只报告、不阻塞：--report-only 保证任何情况 exit 0；
         # 翻闸判据（三类已知分叉归零 + 变异自证）见 scripts/ci/check-soundness.py 头部。
-        # 只在暂存区含语料 .yx 时触发：375 条语料 × 2 次 CLI ≈ 25 s。
+        # 只在暂存区含语料 .yx 或项目形态夹具时触发：378 条 × 2 次 CLI ≈ 25 s。
+        # 项目形态层（tests/project-corpus/）必须一并匹配——它是本探针唯一的真实判据面，
+        # 漏匹配就等于「改夹具时门禁不跑」，同一类洞会在新层复现。
         entry: python scripts/ci/check-soundness.py --report-only
         language: system
-        files: '^(tests/yaoxiang/.*\.yx|src/std/tests/.*\.yx|tests/yaoxiang-multifile/.*\.yx)$'
+        files: '^(tests/yaoxiang/.*\.yx|src/std/tests/.*\.yx|tests/yaoxiang-multifile/.*\.yx|tests/project-corpus/.*)$'
         pass_filenames: false
         stages: [pre-commit]
         verbose: true

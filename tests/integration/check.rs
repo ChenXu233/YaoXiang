@@ -325,8 +325,12 @@ fn create_project(files: &[(&str, &str)]) -> TempDir {
 
 /// 检查单个文件并返回聚合结果（用于断言错误码）。
 fn check_result(path: &PathBuf) -> yaoxiang::util::diagnostic::CheckResult {
-    yaoxiang::util::diagnostic::check_files_with_diagnostics(std::slice::from_ref(path))
-        .expect("check should not fail at parse stage")
+    // 默认编译闸门：本文件的断言只看诊断码，不涉 [mono] 配置面
+    yaoxiang::util::diagnostic::check_files_with_diagnostics(
+        std::slice::from_ref(path),
+        yaoxiang::frontend::config::CompileConfig::default(),
+    )
+    .expect("check should not fail at parse stage")
 }
 
 fn error_codes(result: &yaoxiang::util::diagnostic::CheckResult) -> Vec<String> {
@@ -590,8 +594,11 @@ fn test_check_two_entries_sharing_module_reports_it_once() {
     let entries = vec![dir.path().join("a.yx"), dir.path().join("b.yx")];
 
     // Act
-    let result = yaoxiang::util::diagnostic::check_files_with_diagnostics(&entries)
-        .expect("check should not fail at parse stage");
+    let result = yaoxiang::util::diagnostic::check_files_with_diagnostics(
+        &entries,
+        yaoxiang::frontend::config::CompileConfig::default(),
+    )
+    .expect("check should not fail at parse stage");
     let lib_codes: Vec<String> = result
         .diagnostics
         .iter()

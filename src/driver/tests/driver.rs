@@ -1544,24 +1544,24 @@ fn test_driver_run_check_mono_failure_keeps_other_file_diagnostics() {
     );
 }
 
-/// 纯合并的另一面：**未声明**为 bin 的入口缺 main 时 check 既不报 E3020，也
-/// 不走故障通道——该判据属 RoleClassification 的声明面（`[[bin]].path` /
-/// `[run].main`），Linking 在 check 不做入口校验。判别力：Linking 照搬 compile
-/// 的 `is_bin_role`（只问项目根是否存在）时，有 manifest 的入口缺 main 会被判
-/// 缺 main 而硬中止（且「入口自身有错 → 无 IR」也会被误判成缺 main），
-/// 第一条断言红。
+/// 0.6（2026-11-06 用户裁决乙：check 与 run 同码同口径）：**未声明**目标也
+/// 不是豁免——清单存在即要求入口有 main（判据 `is_bin_role`，与 run 的
+/// Linking 臂同一入口契约），check 必须报 E3020 且走收集通道。
+/// 判别力：判据退回「只校验声明面 bins」时本条红（旧行为）；照搬 Linking 的
+/// IR 判据（入口自身编译失败 → 无 IR）则会把「编译失败」误判成缺 main 并硬中止
+/// ——故判据留在 RoleClassification 的 AST 面，两条风险都不存在。
 #[test]
-fn test_driver_run_check_undeclared_entry_without_main_reports_no_e3020() {
-    // Arrange：有 manifest（[package]）但无 [[bin]] 声明，入口无 main 绑定
+fn test_driver_run_check_undeclared_entry_without_main_reports_e3020() {
+    // Arrange：有 manifest（[package]）但无 [[bin]] / [run].main 声明，入口无 main 绑定
     let (_dir, entry) = make_project(&[("main.yx", "helper: () -> Void = {}\n")]);
 
     // Act
     let outcome = run_check(&entry).expect("driver run failed");
 
-    // Assert：故障通道与收集通道都不得出现 E3020（无 IR 也不许被误判为缺 main）
+    // Assert：收集通道报 E3020（不硬中止），与 run 的入口契约同码
     assert!(
         outcome.failure.is_none(),
-        "未声明 bin 的入口缺 main 不得触发 run 路径的入口校验: {:?}",
+        "入口缺 main 走收集诊断而非故障通道: {:?}",
         outcome.failure
     );
     let codes: Vec<&str> = outcome
@@ -1570,8 +1570,34 @@ fn test_driver_run_check_undeclared_entry_without_main_reports_no_e3020() {
         .flat_map(|(_, ds)| ds.iter().map(|d| d.code.as_str()))
         .collect();
     assert!(
-        !codes.contains(&"E3020"),
-        "未声明 bin 的入口缺 main 不属 check 的 E3020 判据（Linking 纯合并不查入口）: {codes:?}"
+        codes.contains(&"E3020"),
+        "check 必须与 run 同口径报 E3020（清单存在即要求入口有 main）: {codes:?}"
+    );
+}
+
+/// 0.6（2026-11-06 用户裁决乙）：bin 项目入口 `main` 带参时，check 必须与 run
+/// 同码同口径报 E3022——判据复用 run 侧 Linking 的 IR 面（merged IR 里 main 的
+/// 参数表），只是 Check 形态走逐文件收集通道而非硬中止。
+/// 判别力：删掉 Linking 的 Check 分支判断时本条红（项目形态夹具会重新分叉）。
+#[test]
+fn test_driver_run_check_entry_main_with_params_reports_e3022() {
+    // Arrange：有 manifest 的项目，入口 main 带一个参数（run 期恒零参调用）
+    let (_dir, entry) = make_project(&[("main.yx", "main = (a: Int) => { a }\n")]);
+
+    // Act
+    let outcome = run_check(&entry).expect("driver run failed");
+
+    // Assert：收集通道恰好一条 E3022（不硬中止），与 run 同码
+    assert!(
+        outcome.failure.is_none(),
+        "带参 main 在 check 是收集诊断而非硬中止: {:?}",
+        outcome.failure
+    );
+    let diags = check_diags_of(&outcome, "main.yx").expect("entry for main.yx");
+    assert_eq!(
+        diags.iter().filter(|d| d.code == "E3022").count(),
+        1,
+        "带参 main 必须恰好报一条 E3022: {diags:?}"
     );
 }
 

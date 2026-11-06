@@ -1,0 +1,5 @@
+[package]
+name = "e3020-missing-main-binding"
+version = "0.1.0"
+
+# 注意：这里故意不声明 [run] main —— 「有 manifest 但缺入口绑定」正是本夹具的被测面

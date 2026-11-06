@@ -1,0 +1,11 @@
+// project-corpus/e3020-missing-main-binding —— 项目形态夹具（健全性探针判据面）
+// 覆盖: test-specification 规则 9.3 —— check 通过 ⇒ run 不得报 E0–E5 同族错误
+// 证的是: 有 manifest（Bin 角色判定依据）却既未声明 [run] main、也没有 main 绑定时，
+//         check 与 run 都必须报「缺入口」——清单存在即要求入口有 main
+// 期望（判据）: check 与 run 对同一项目必须给出一致结论
+// 现状（2026-11-06 修复后）: check 退出 1、run 退出 1，同为 E3020
+// 回归守卫: 若 check 侧退回「只校验声明面 bins」，check 退回 0 而 run 仍报 E3020
+//           ⇒ 探针把它重新记为一处分叉。
+// 错误码: E3020（Codegen 族 E3）Executable is missing the main binding
+// 注意: 没有 expect 指令（理由同 e3022-entry-signature：不得把违规录成期望行为）。
+f = () => 1

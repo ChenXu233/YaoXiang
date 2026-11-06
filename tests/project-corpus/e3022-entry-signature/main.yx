@@ -1,0 +1,13 @@
+// project-corpus/e3022-entry-signature —— 项目形态夹具（健全性探针判据面）
+// 覆盖: test-specification 规则 9.3 —— check 通过 ⇒ run 不得报 E0–E5 同族错误
+// 证的是: 入口签名契约对 check 与 run 是同一份——两条路径都必须报带参 main
+// 期望（判据）: check 与 run 对同一程序必须给出一致结论
+// 现状（2026-11-06 修复后）: check 退出 1、run 退出 1，同为 E3022
+// 回归守卫: 若 check 侧不再判入口签名，check 退回 0 而 run 仍报 E3022 ⇒ 探针把它
+//           重新记为一处分叉；它留在判据面正是为了挡这条回退。
+// 错误码: E3022（Codegen 族 E3）Entry 'main' signature mismatch
+// 注意: 本文件没有 expect 指令——它不是行为断言，而是「两条路径不得矛盾」的判据面；
+//       写成 // expect: runtime-error E3022 等于把违规录成期望行为。
+main = (a: Int) => {
+    a
+}

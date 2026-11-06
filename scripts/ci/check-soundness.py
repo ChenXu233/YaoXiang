@@ -3,6 +3,10 @@
 
 判据（宽口径 E0–E5）
 --------------------
+判据面 = **先项目形态、后单文件语料**：
+  * 项目形态：`tests/project-corpus/<case>/`（含 `yaoxiang.toml`，入口 `main.yx`）——
+    三类已知分叉（E3022 / E3020 / E3005）的入库判据面；这些目录**不进**语料差分基线；
+  * 单文件/既有语料：`tests/yaoxiang`、`src/std/tests`、`tests/yaoxiang-multifile`。
 对每条语料在**其所在目录**为 cwd 跑 `check`：
   * `check` 退出码非 0 ⇒ 该语料不进判据面（负控面：编译期已经报错，run 的行为不在
     本探针判定范围），只计入「check 未通过」；
@@ -38,9 +42,13 @@ pre-commit 里挂的是 `--report-only`，只在暂存区含语料 `.yx` 时触�
    **E3020**（有 manifest 未声明 `[run] main` 且无 main 绑定，check=0 / run=E3020）、
    **E3005**（check 不读 `yaoxiang.toml` 的 `[mono]`：`max_depth = 1` 时 run 按上限 1
    报错，check 仍按默认 100 放过，同一程序 check=0 / run=E3005）。
-   注意：**今天的 375 条语料上这三类一个都没有**（实测 0，与勘察同口径）；它们只在
-   「项目形态」的场景里复现——用 `--corpus <场景根>` 把场景喂给探针即可复现，
-   不必（也不得）新增 `.yx` 语料；
+   **进度（2026-11-06）**：三类全修——E3005（`[mono]` 贯通到 check 链）、E3020 /
+   E3022（入口契约判定补进 check），语料上的分叉已归零（实测 0 处）；三套夹具转为
+   「check 与 run 同口径」的回归守卫（任一处判据被退回 ⇒ 探针重新报出分叉）。
+   这三类的入库判据面是 `tests/project-corpus/` 下的三套项目夹具，探针默认就纳入；
+   **单文件语料（今天的 375 条）上这三类一个都没有**（实测 0），故项目形态必须单独
+   成层——不得把它们塞进 `tests/yaoxiang`（会被 corpus_probe 收进差分基线，把违规
+   录成期望行为）；
 2. 变异自证：去掉 `src/driver/program.rs` 的 `CHECK_STAGES` 里的 `Stage::Typecheck`
    并重编 `cargo build --bin yaoxiang-rs`，本探针必须报出分叉；还原后归零、补丁前后
    blob 一致；
@@ -75,7 +83,15 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 
 BIN_NAME = "yaoxiang-rs"
 
-# 语料三处（合计 = 语料差分基线的记录数；只读既有语料，不新增夹具）
+# 项目形态判据面（先跑）：tests/project-corpus/<case>/ 下含 yaoxiang.toml 的项目，
+# 入口约定 main.yx（与 tests/yaoxiang-multifile 同一套约定）。这三套复现的是
+# 「check 放过、run 才报」的分叉（E3022 / E3020 / E3005），**不进语料差分基线**
+# （corpus_probe 不扫这个目录），也不被 yx_multifile_runner 收集。
+PROJECT_CORPUS_ROOTS: tuple[tuple[str, str], ...] = (
+    ("tests/project-corpus", "**/main.yx"),
+)
+
+# 单文件/既有语料（后跑）：三处，合计 = 语料差分基线的记录数
 CORPUS_ROOTS: tuple[tuple[str, str], ...] = (
     ("tests/yaoxiang", "**/*.yx"),
     ("src/std/tests", "**/*.yx"),
@@ -152,6 +168,19 @@ def discover_corpus(root: Path, extra_roots: list[str]) -> list[tuple[str, Path]
     「项目形态的场景」喂给探针做复现/自证，**不改官方语料**。
     """
     found: list[tuple[str, Path]] = []
+    for label, pattern in PROJECT_CORPUS_ROOTS:
+        base = root / label
+        if not base.is_dir():
+            raise ToolError(f"项目形态判据面不存在：{base}（缺了它三类已知分叉就没有入库判据面）")
+        paths = sorted(base.glob(pattern))
+        if not paths:
+            raise ToolError(f"{base} 下没有 {pattern}：判据面会「绿但空」")
+        for path in paths:
+            if not (path.parent / "yaoxiang.toml").is_file():
+                raise ToolError(
+                    f"{path} 缺同级 yaoxiang.toml：项目形态夹具必须是含 manifest 的一级子目录"
+                )
+        found.extend((label, path) for path in paths)
     for label, pattern in CORPUS_ROOTS:
         base = root / label
         if not base.is_dir():
@@ -236,11 +265,16 @@ def summarize(records: list[dict], categories: dict[str, tuple[str, ...]]) -> di
             by_family[code[:2]] = by_family.get(code[:2], 0) + 1
     runtime_only = [r for r in passed if r["codes"] and not r["divergences"]]
     silent_failure = [r for r in passed if r["run_exit"] not in (0, None) and not r["codes"]]
+    labels: list[str] = []
+    for label, _ in PROJECT_CORPUS_ROOTS + CORPUS_ROOTS:
+        if label not in labels:
+            labels.append(label)
+    for record in records:  # --corpus 传入的额外根
+        if record["corpus"] not in labels:
+            labels.append(record["corpus"])
     return {
         "corpus": len(records),
-        "corpus_by_root": {
-            label: sum(1 for r in records if r["corpus"] == label) for label, _ in CORPUS_ROOTS
-        },
+        "corpus_by_root": {label: sum(1 for r in records if r["corpus"] == label) for label in labels},
         "check_passed": len(passed),
         "check_failed": len(records) - len(passed),
         "check_timeouts": sum(1 for r in records if r["check_timeout"]),

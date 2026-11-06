@@ -7,6 +7,7 @@ use crate::util::diagnostic::{
     parse_compile_error, check_files_with_diagnostics, render_runtime_error, ErrorCodeDefinition,
     TextEmitter,
 };
+use crate::frontend::config::CompileConfig;
 use crate::util::span::{DebugSpan, SourceFile, SourceMap, Span, Position};
 use crate::backends::{ExecutorError, StackFrame};
 use crate::middle::bytecode::{BytecodeModule, BytecodeFunction, BytecodeInstr};
@@ -316,7 +317,8 @@ main: () -> Void = {
     )
     .expect("write yx file");
 
-    let result = check_files_with_diagnostics(&[file]).expect("run check");
+    let result =
+        check_files_with_diagnostics(&[file], CompileConfig::default()).expect("run check");
     assert_eq!(result.error_count, 0);
     assert_eq!(result.warning_count, 0);
     assert!(result.diagnostics.is_empty());
@@ -337,7 +339,8 @@ main: () -> Void = {
     )
     .expect("write yx file");
 
-    let result = check_files_with_diagnostics(&[file]).expect("run check");
+    let result =
+        check_files_with_diagnostics(&[file], CompileConfig::default()).expect("run check");
     assert!(result.error_count > 0);
     assert!(!result.diagnostics.is_empty());
 }
@@ -350,7 +353,8 @@ fn test_type_error_message_no_solver_typevar_leak() {
     let (_dir, file) = leak_case_file();
 
     // Act — 类型检查并拼接全部诊断消息
-    let result = check_files_with_diagnostics(&[file]).expect("run check");
+    let result =
+        check_files_with_diagnostics(&[file], CompileConfig::default()).expect("run check");
     assert!(result.error_count > 0, "应有类型错误");
     let joined = result
         .diagnostics
@@ -396,7 +400,8 @@ main: () -> Void = {
     )
     .expect("write b.yx");
 
-    let result = check_files_with_diagnostics(&[file_a, file_b]).expect("run check");
+    let result = check_files_with_diagnostics(&[file_a, file_b], CompileConfig::default())
+        .expect("run check");
     assert_eq!(
         result.error_count, 0,
         "Independent multi-file check should pass without errors"
@@ -418,6 +423,55 @@ main: () -> Void = {
     )
     .expect("write file");
 
-    let result = check_files_with_diagnostics(&[file]).expect("run check");
+    let result =
+        check_files_with_diagnostics(&[file], CompileConfig::default()).expect("run check");
     assert_eq!(result.error_count, 0);
+}
+/// #471：check 链必须读同一份 [mono] 闸门——同一段特化链，默认上限 100 放过、
+/// 上限 1 必须报 E3005（与 run 同一根因、同一拦截点）。
+#[test]
+fn test_check_honors_mono_max_depth_gate() {
+    // Arrange —— 深度 2 的特化链（f1 → … → f5），除深度外无其它错误
+    let dir = tempdir().expect("create temp dir");
+    let file = dir.path().join("main.yx");
+    fs::write(
+        &file,
+        r#"f1: (T1: Type) -> (x: T1) -> T1 = (x) => { f2(x) }
+f2: (T2: Type) -> (x: T2) -> T2 = (x) => { f3(x) }
+f3: (T3: Type) -> (x: T3) -> T3 = (x) => { f4(x) }
+f4: (T4: Type) -> (x: T4) -> T4 = (x) => { f5(x) }
+f5: (T5: Type) -> (x: T5) -> T5 = (x) => { x }
+main = () => { f1(1) }
+"#,
+    )
+    .expect("write yx file");
+    let tight = CompileConfig {
+        mono: crate::frontend::config::MonoConfig {
+            max_depth: 1,
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+
+    // Act —— 同一份源码，只换 [mono] 闸门
+    let loose_result =
+        check_files_with_diagnostics(std::slice::from_ref(&file), CompileConfig::default())
+            .expect("check with default gate");
+    let tight_result = check_files_with_diagnostics(std::slice::from_ref(&file), tight)
+        .expect("check with tight gate");
+
+    // Assert —— 默认闸门放过；上限 1 必须报 E3005（check 与 run 同口径）
+    assert_eq!(
+        loose_result.error_count, 0,
+        "默认上限 100 下深度 2 的链不应报错"
+    );
+    let codes: Vec<&str> = tight_result
+        .diagnostics
+        .iter()
+        .map(|d| d.diagnostic.code.as_str())
+        .collect();
+    assert!(
+        codes.contains(&"E3005"),
+        "max_depth=1 必须报 E3005，实际诊断码: {codes:?}"
+    );
 }
