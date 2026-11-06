@@ -131,7 +131,7 @@ python scripts/dev/testsuite.py markers --check  # 标记 ↔ cargo test --list 
 CARGO_BUILD_JOBS=2 RUST_TEST_THREADS=1 cargo test   # 手跑兜底：必须自带资源上限，否则重测会与其它测试并发
 # 禁止裸跑 cargo test -- --ignored 全量：会执行 mode=manual（快照再生改写基线）与红态常驻用例。
 # 当前 pre-commit 仍跑 cargo test --all；把门禁切到 fast/full 的接线属 #486 后续排期。
-# 测试数只许增不许减。
+# 测试的准入与退役见 coding-rules 第七部分（三扇门：条款 / 病史 / 证明）。
 
 # 基线再生——改动影响 IR 或语料行为时必跑，diff 人工 review 后同提交入库：
 UPDATE_SNAPSHOTS=1 cargo test --lib snapshot -- --ignored    # IR 快照（src/middle/ir/tests/snapshots/）
@@ -158,7 +158,7 @@ git pull --rebase origin dev        # 与对端无冲突（merge-tree 干净）�
 
 - 不看代码就改：没打开文件、没 grep 过引用点，不许动
 - 核心功能留 `todo!()` / “Not implemented yet” / 无限期“独立 issue”
-- 删测试或放宽判据换绿灯（不存在 C5′；做不到是实现缺陷，如实报告）
+- 删测试或放宽判据换绿灯（做不到是实现缺陷，如实报告）；测试的**准入与退役**按 [coding-rules 第七部分](docs/src/dev/coding-rules.md)——三扇门（条款 / 病史 / 证明）一扇都过不了才可退役，「因为红了就删」永远打回
 - 裸跑 `cargo test -- --ignored` 全量（会执行快照再生的 `manual` 档与红态常驻用例——等于悄悄改写基线）
 - 写/改测试不读 [test-specification.md](docs/src/dev/test-specification.md)——命名必须 `test_<what>_<scenario>` 前缀、超 5 行必须 AAA 三段注释、断言必须带自定义消息、枚举匹配用 `assert!(matches!(...))`；判据红态常驻属设计形态（如 2.4.4），不是「永久 ignore」违规
 - 改 IR/语料行为而不同步基线：改 `src/`（前端/ir_gen/std）或语料 `.yx` 会改变 IR 或运行行为时，IR 快照与语料差分基线必须**同提交**更新（命令见常用命令区），各自 git diff 人工 review；快照/差分门禁红了说明基线欠账，不许绕
@@ -169,7 +169,7 @@ git pull --rebase origin dev        # 与对端无冲突（merge-tree 干净）�
 
 1. **不看的代码不改**——没有打开过被改文件、没有 grep 过相关引用点，不许动它。
 2. **核心功能不留待实现遗留**——不许新增 `todo!()`、`unimplemented!`、`Vec::new() // Not implemented yet` 式静默丢弃、无限期「独立 issue」。发现即修，或登记进当前阶段任务。
-3. **不删测试、不放宽判据换绿灯**——做不到是实现缺陷，如实报告并重新评估，不是修改判据的理由；测试数只许增不许减。
+3. **不删测试、不放宽判据换绿灯**——做不到是实现缺陷，如实报告并重新评估，不是修改判据的理由。测试的准入与退役按第七部分的三扇门，见 [coding-rules](docs/src/dev/coding-rules.md)。
 4. **不用 import 别名弥合同语义概念**（`as AstBinOp` 这类）。
 5. **不新增 `include!`、不新增跨层反向依赖**（L2→L3 等）、`pub(crate)` 跨层泄漏只许减不许增。
 6. **PR 必填块必须如实填写**——D0 权威源模块名写不出 = 没查，直接打回；「错误类型（A–F，按 D59）」漏标或与改动实际不符，同样打回。
