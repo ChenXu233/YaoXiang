@@ -463,6 +463,10 @@
           {
             "text": "Test Specification",
             "link": "/dev/test-specification"
+          },
+          {
+            "text": "Test Gate Census",
+            "link": "/dev/test-gate-census"
           }
         ]
       }

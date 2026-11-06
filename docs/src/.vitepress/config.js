@@ -440,6 +440,7 @@ export default defineConfig({
                 { text: "分支指南", link: "/dev/branch-maintenance-guide" },
                 { text: "发布流程", link: "/dev/release" },
                 { text: "测试规范", link: "/dev/test-specification" },
+                { text: "测试三扇门普查", link: "/dev/test-gate-census" },
               ],
             },
           ],
