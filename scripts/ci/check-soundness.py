@@ -28,15 +28,17 @@ E2=Semantic、E3=Codegen、E4=Generic、E5=Module、E6=Runtime、E7=Io、E8=Inte
 3. **诊断可能挂在别的文件上**：`check` 在项目内按 project root 归组，错误位置不一定是
    被指定的那个文件。故整段 stdout+stderr 全扫，不按文件名过滤。
 
-当前状态：report-only（本轮不阻塞）
-----------------------------------
+当前状态：已翻闸（pre-commit 阻塞；2026-11-06）
+------------------------------------------------
 三种形态：
-  * 默认：分叉只打印、exit 0；环境问题（二进制缺失 / 权威源读不到）仍 exit 3；
-  * `--report-only`：连环境问题也不阻塞（exit 恒 0）——pre-commit 钩子用这一形态；
-  * `--strict`：翻闸后的形态，分叉 > 0 即 exit 1。
-pre-commit 里挂的是 `--report-only`，只在暂存区含语料 `.yx` 时触发。
+  * `--strict`：**门禁形态**（pre-commit entry 用它），分叉 > 0 即 exit 1，环境问题 exit 3；
+  * 默认（无参数）：手工排查形态，分叉只打印、exit 0；环境问题仍 exit 3；
+  * `--report-only`：应急排查形态，连环境问题也不阻塞（exit 恒 0）——**不进任何门禁**。
+pre-commit 里挂的是 `--strict`，只在暂存区含语料 `.yx` 或项目形态夹具时触发（≈30 s）。
+翻闸后**任何**让 check/run 分叉的改动都会阻塞提交；确有正当理由的临时放过走
+coding-rules 第五部分（`// reason:` + 豁免计数进门禁报告），**不得**把 entry 改回 report-only。
 
-翻转成阻塞的判据（翻闸时把 pre-commit entry 的 `--report-only` 换成 `--strict`）
+翻闸判据（三条都已满足，证据：2026-11-06 翻闸轮实测）
 -----------------------------------------------------
 1. 三类已知分叉在语料上归零：**E3022**（bin 项目 main 带参，check=0 / run=E3022）、
    **E3020**（有 manifest 未声明 `[run] main` 且无 main 绑定，check=0 / run=E3020）、
@@ -56,13 +58,13 @@ pre-commit 里挂的是 `--report-only`，只在暂存区含语料 `.yx` 时触�
 
 用法
 ----
-    python scripts/ci/check-soundness.py                 # report-only（默认），exit 0
-    python scripts/ci/check-soundness.py --strict        # 翻闸后的形态：有分叉即 exit 1
+    python scripts/ci/check-soundness.py                 # 手工排查（默认），分叉只打印 exit 0
+    python scripts/ci/check-soundness.py --strict        # 门禁形态（pre-commit 用它）：有分叉即 exit 1
     python scripts/ci/check-soundness.py --json          # 机器可读摘要
     python scripts/ci/check-soundness.py --bin <path>    # 指定 CLI 二进制（变异自证用）
     python scripts/ci/check-soundness.py --root <path>   # 指定仓库根
     python scripts/ci/check-soundness.py --jobs 8        # 并发数（默认 8，1 = 顺序）
-    python scripts/ci/check-soundness.py --report-only   # pre-commit 形态：任何情况都不阻塞
+    python scripts/ci/check-soundness.py --report-only   # 应急排查：任何情况都不阻塞（不进门禁）
     python scripts/ci/check-soundness.py --corpus <dir>  # 额外语料根：喂场景做复现/自证
 
 退出码：0 = 默认 / --report-only（不论分叉数）；1 = --strict 且分叉 > 0；
@@ -298,7 +300,12 @@ def summarize(records: list[dict], categories: dict[str, tuple[str, ...]]) -> di
 
 
 def print_report(
-    summary: dict, categories: dict[str, tuple[str, ...]], binary: str, elapsed: float, jobs: int
+    summary: dict,
+    categories: dict[str, tuple[str, ...]],
+    binary: str,
+    elapsed: float,
+    jobs: int,
+    mode: str = "default",
 ) -> None:
     roots = " / ".join(f"{label} {count}" for label, count in summary["corpus_by_root"].items())
     print(f"[soundness] 语料 {summary['corpus']} 条：{roots}")
@@ -341,10 +348,13 @@ def print_report(
         )
     print(f"[soundness] 耗时 {elapsed:.1f}s（{summary['corpus']} 条语料 × 2 次 CLI，jobs={jobs}）")
     if summary["divergence_count"]:
-        print(
-            "[soundness] report-only：本轮不阻塞（分叉非零也只 exit 0）；"
-            "翻闸判据见脚本头「翻转成阻塞的判据」"
-        )
+        # 结论行必须按形态如实报——audit 时把 strict 说成「不阻塞」等于假绿
+        verdict = {
+            "strict": "[soundness] strict：分叉 > 0 ⇒ exit 1（门禁形态，本条阻塞提交）",
+            "report-only": "[soundness] report-only：本轮不阻塞（分叉非零也只 exit 0）；"
+            "翻闸判据见脚本头「翻转成阻塞的判据」",
+        }.get(mode, "[soundness] 手工排查形态：分叉只打印、exit 0；门禁形态用 --strict")
+        print(verdict)
     else:
         print("[soundness] OK：check 通过的语料在 run 上未出现 E0–E5 同族错误")
 
@@ -352,15 +362,16 @@ def print_report(
 def main(argv=None) -> int:
     force_utf8_stdio()
     parser = argparse.ArgumentParser(
-        description="健全性探针：check 通过 ⇒ run 不得出现 E0–E5 同族错误（默认 report-only）"
+        description="健全性探针：check 通过 ⇒ run 不得出现 E0–E5 同族错误"
+        "（默认手工排查 exit 0；门禁用 --strict）"
     )
     parser.add_argument("--root", default=None, help="仓库根（默认脚本所在仓库）")
     parser.add_argument("--bin", default=None, help="CLI 二进制（默认 target/debug/yaoxiang-rs[.exe]）")
-    parser.add_argument("--strict", action="store_true", help="分叉 > 0 时 exit 1（翻闸后的形态）")
+    parser.add_argument("--strict", action="store_true", help="分叉 > 0 时 exit 1（门禁形态，pre-commit 用）")
     parser.add_argument(
         "--report-only",
         action="store_true",
-        help="任何情况都 exit 0（pre-commit 钩子形态）：连环境错误也不阻塞",
+        help="任何情况都 exit 0（应急排查形态，不进任何门禁）：连环境错误也不阻塞",
     )
     parser.add_argument("--json", action="store_true", help="输出机器可读摘要")
     parser.add_argument("--jobs", type=int, default=8, help="并发 CLI 调用数（默认 8；1 = 顺序）")
@@ -402,7 +413,8 @@ def main(argv=None) -> int:
     if args.json:
         print(json.dumps(summary, ensure_ascii=False, indent=2))
     else:
-        print_report(summary, categories, str(binary), elapsed, jobs)
+        mode = "strict" if args.strict else ("report-only" if args.report_only else "default")
+        print_report(summary, categories, str(binary), elapsed, jobs, mode)
 
     if args.strict and summary["divergence_count"]:
         return 1

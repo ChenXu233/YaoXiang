@@ -693,9 +693,12 @@ fn test_fibonacci() {
 E3 代码生成、E4 泛型、E5 模块。族→类别的权威源是 `src/util/diagnostic/codes/mod.rs` 的
 `ErrorCategory`；`run` 只报 E6–E8（运行时 / I/O / 内部）不构成违反。
 
-判据由 `python scripts/ci/check-soundness.py` 执行。它当前是 **report-only**（分叉只打印、
-不阻塞；`--strict` 是翻闸形态），`pre-commit` 在暂存区含语料 `.yx` 时以
-`--report-only` 跑它。翻闸条件（三类已知分叉归零 + 变异自证）与当前实测状态写在脚本头部注释里。
+判据由 `python scripts/ci/check-soundness.py` 执行。它已于 2026-11-06 **翻闸（阻塞）**：
+`pre-commit` 在暂存区含语料 `.yx` 或项目形态夹具时以 `--strict` 跑它，有分叉即 exit 1、
+阻塞提交。`--report-only` 保留为**手工排查**形态（任何情况 exit 0），不进任何门禁；翻闸后
+临时放过只能走 coding-rules 第五部分（`// reason:` + 豁免计数进门禁报告），**不得**把钩子
+改回 report-only。翻闸判据（三类已知分叉归零 + 变异自证 + 耗时预算）与实测数字写在脚本头部
+注释里。
 
 判据面分两层：**项目形态**在 `tests/project-corpus/`（含 `yaoxiang.toml` 的项目夹具，
 E3022 / E3020 / E3005 各一套），**单文件语料**是上列三处。项目形态层只由本探针消费，
