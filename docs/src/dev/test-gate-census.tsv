@@ -1881,7 +1881,6 @@ test_reduction_config_default	src/frontend/core/types/eval/tests/normalizer.rs	a
 test_reduction_config_custom	src/frontend/core/types/eval/tests/normalizer.rs	assert_eqx2 assertx2	待判	两门皆不过；含强断言，证明门需人工复核	待判
 test_normalizer_normalize_primitives	src/frontend/core/types/eval/tests/normalizer.rs	assert_eqx4	待判	两门皆不过；含强断言，证明门需人工复核	待判
 test_normalizer_normalize_composite	src/frontend/core/types/eval/tests/normalizer.rs	assert_eqx3	待判	两门皆不过；含强断言，证明门需人工复核	待判
-test_normalizer_with_config	src/frontend/core/types/eval/tests/normalizer.rs	（无断言）	均不通过	体内无任何断言（含委托断言助手）、也无 should_panic——证明门机器可判	退役候选
 test_normalizer_normalize_struct	src/frontend/core/types/eval/tests/normalizer.rs	assert_eqx1	待判	两门皆不过；含强断言，证明门需人工复核	待判
 test_normalizer_normalize_dict	src/frontend/core/types/eval/tests/normalizer.rs	assert_eqx1	待判	两门皆不过；含强断言，证明门需人工复核	待判
 test_normalizer_normalize_set	src/frontend/core/types/eval/tests/normalizer.rs	assert_eqx1	待判	两门皆不过；含强断言，证明门需人工复核	待判
@@ -1905,7 +1904,6 @@ test_normalizer_normalize_union_type	src/frontend/core/types/eval/tests/normaliz
 test_normalizer_normalize_intersection_type	src/frontend/core/types/eval/tests/normalizer.rs	assert_eqx1	待判	两门皆不过；含强断言，证明门需人工复核	待判
 test_normalizer_normalize_assoc_type	src/frontend/core/types/eval/tests/normalizer.rs	assert_eqx1	待判	两门皆不过；含强断言，证明门需人工复核	待判
 test_normalizer_normalize_meta_type	src/frontend/core/types/eval/tests/normalizer.rs	assert_eqx1	待判	两门皆不过；含强断言，证明门需人工复核	待判
-test_normalizer_evaluator	src/frontend/core/types/eval/tests/normalizer.rs	（无断言）	均不通过	体内无任何断言（含委托断言助手）、也无 should_panic——证明门机器可判	退役候选
 test_normalizer_context	src/frontend/core/types/eval/tests/normalizer.rs	（无断言）	均不通过	体内无任何断言（含委托断言助手）、也无 should_panic——证明门机器可判	退役候选
 test_normalization_context_apply_no_change	src/frontend/core/types/eval/tests/normalizer.rs	assert_eqx1	待判	两门皆不过；含强断言，证明门需人工复核	待判
 test_normalization_context_substitute_var	src/frontend/core/types/eval/tests/normalizer.rs	assert_eqx1	待判	两门皆不过；含强断言，证明门需人工复核	待判
@@ -1945,14 +1943,7 @@ test_logic_op_apply	src/frontend/core/types/eval/tests/operations.rs	assert_eqx3
 test_arithmetic_extra	src/frontend/core/types/eval/tests/operations.rs	assert_eqx1 assertx1 is_nonex1	待判	两门皆不过；含强断言，证明门需人工复核	待判
 test_arithmetic_float_binary_op	src/frontend/core/types/eval/tests/operations.rs	assert_eqx1	待判	两门皆不过；含强断言，证明门需人工复核	待判
 test_type_computer_new_and_with_config	src/frontend/core/types/eval/tests/reducer.rs	（无断言）	均不通过	体内无任何断言（含委托断言助手）、也无 should_panic——证明门机器可判	退役候选
-test_type_computer_register_alias	src/frontend/core/types/eval/tests/reducer.rs	（无断言）	均不通过	体内无任何断言（含委托断言助手）、也无 should_panic——证明门机器可判	退役候选
-test_type_computer_compute_primitive	src/frontend/core/types/eval/tests/reducer.rs	（无断言）	均不通过	体内无任何断言（含委托断言助手）、也无 should_panic——证明门机器可判	退役候选
 test_type_computer_compute_type_ref	src/frontend/core/types/eval/tests/reducer.rs	（无断言）	均不通过	体内无任何断言（含委托断言助手）、也无 should_panic——证明门机器可判	退役候选
-test_type_computer_set_context	src/frontend/core/types/eval/tests/reducer.rs	（无断言）	均不通过	体内无任何断言（含委托断言助手）、也无 should_panic——证明门机器可判	退役候选
-test_type_computer_compute_type_var	src/frontend/core/types/eval/tests/reducer.rs	（无断言）	均不通过	体内无任何断言（含委托断言助手）、也无 should_panic——证明门机器可判	退役候选
-test_type_computer_compute_list	src/frontend/core/types/eval/tests/reducer.rs	（无断言）	均不通过	体内无任何断言（含委托断言助手）、也无 should_panic——证明门机器可判	退役候选
-test_type_computer_compute_tuple	src/frontend/core/types/eval/tests/reducer.rs	（无断言）	均不通过	体内无任何断言（含委托断言助手）、也无 should_panic——证明门机器可判	退役候选
-test_type_computer_compute_fn	src/frontend/core/types/eval/tests/reducer.rs	（无断言）	均不通过	体内无任何断言（含委托断言助手）、也无 should_panic——证明门机器可判	退役候选
 test_reducer_stuck_on_primitives	src/frontend/core/types/eval/tests/reducer.rs	assert_eqx1 matchesx2 assertx2	待判	两门皆不过；含强断言，证明门需人工复核	待判
 test_reducer_delta_reduces_alias	src/frontend/core/types/eval/tests/reducer.rs	assert_eqx1	待判	两门皆不过；含强断言，证明门需人工复核	待判
 test_reducer_unknown_alias_stays_stuck	src/frontend/core/types/eval/tests/reducer.rs	matchesx1 assertx1	待判	两门皆不过；含强断言，证明门需人工复核	待判
@@ -1960,7 +1951,6 @@ test_reducer_with_config	src/frontend/core/types/eval/tests/reducer.rs	matchesx1
 test_reducer_register_alias	src/frontend/core/types/eval/tests/reducer.rs	matchesx2 assertx2	待判	两门皆不过；含强断言，证明门需人工复核	待判
 test_reducer_register_aliases	src/frontend/core/types/eval/tests/reducer.rs	matchesx2 assertx2	待判	两门皆不过；含强断言，证明门需人工复核	待判
 test_reducer_step_count	src/frontend/core/types/eval/tests/reducer.rs	assert_eqx1	待判	两门皆不过；含强断言，证明门需人工复核	待判
-test_reducer_reduce_with_limit	src/frontend/core/types/eval/tests/reducer.rs	（无断言）	均不通过	体内无任何断言（含委托断言助手）、也无 should_panic——证明门机器可判	退役候选
 test_reducer_reduce_function_type	src/frontend/core/types/eval/tests/reducer.rs	matchesx1 assertx1	待判	两门皆不过；含强断言，证明门需人工复核	待判
 test_reducer_reduce_empty_function	src/frontend/core/types/eval/tests/reducer.rs	matchesx1 assertx1	待判	两门皆不过；含强断言，证明门需人工复核	待判
 test_reducer_step_count_after_reduce	src/frontend/core/types/eval/tests/reducer.rs	assert_eqx1	待判	两门皆不过；含强断言，证明门需人工复核	待判
@@ -1982,9 +1972,7 @@ test_reducer_reduce_type_ref_with_alias_chain	src/frontend/core/types/eval/tests
 test_reducer_reduce_type_ref_self_referential	src/frontend/core/types/eval/tests/reducer.rs	（无断言）	均不通过	体内无任何断言（含委托断言助手）、也无 should_panic——证明门机器可判	退役候选
 test_unifier_new_and_reset	src/frontend/core/types/eval/tests/reducer.rs	assertx2	待判	两门皆不过；含强断言，证明门需人工复核	待判
 test_unifier_same_types	src/frontend/core/types/eval/tests/reducer.rs	matchesx2 assertx2	待判	两门皆不过；含强断言，证明门需人工复核	待判
-test_unifier_different_types	src/frontend/core/types/eval/tests/reducer.rs	（无断言）	均不通过	体内无任何断言（含委托断言助手）、也无 should_panic——证明门机器可判	退役候选
 test_unifier_with_config	src/frontend/core/types/eval/tests/reducer.rs	matchesx1 assertx1	待判	两门皆不过；含强断言，证明门需人工复核	待判
-test_unifier_substitution_after_unify	src/frontend/core/types/eval/tests/reducer.rs	（无断言）	均不通过	体内无任何断言（含委托断言助手）、也无 should_panic——证明门机器可判	退役候选
 test_unifier_unify_composite_types	src/frontend/core/types/eval/tests/reducer.rs	matchesx1 assertx1	待判	两门皆不过；含强断言，证明门需人工复核	待判
 test_unifier_unify_different_composite	src/frontend/core/types/eval/tests/reducer.rs	matchesx1 assertx1	待判	两门皆不过；含强断言，证明门需人工复核	待判
 test_unifier_unify_type_vars_same	src/frontend/core/types/eval/tests/reducer.rs	matchesx1 assertx1	待判	两门皆不过；含强断言，证明门需人工复核	待判
@@ -2009,15 +1997,6 @@ test_unifier_reset_clears_substitution	src/frontend/core/types/eval/tests/reduce
 test_unifier_unify_void_with_void	src/frontend/core/types/eval/tests/reducer.rs	matchesx1 assertx1	待判	两门皆不过；含强断言，证明门需人工复核	待判
 test_unifier_unify_char_with_char	src/frontend/core/types/eval/tests/reducer.rs	matchesx1 assertx1	待判	两门皆不过；含强断言，证明门需人工复核	待判
 test_unifier_unify_bytes_with_bytes	src/frontend/core/types/eval/tests/reducer.rs	matchesx1 assertx1	待判	两门皆不过；含强断言，证明门需人工复核	待判
-test_unifier_unify_option_same	src/frontend/core/types/eval/tests/reducer.rs	（无断言）	均不通过	体内无任何断言（含委托断言助手）、也无 should_panic——证明门机器可判	退役候选
-test_unifier_unify_result_same	src/frontend/core/types/eval/tests/reducer.rs	（无断言）	均不通过	体内无任何断言（含委托断言助手）、也无 should_panic——证明门机器可判	退役候选
-test_unifier_unify_dict_same	src/frontend/core/types/eval/tests/reducer.rs	（无断言）	均不通过	体内无任何断言（含委托断言助手）、也无 should_panic——证明门机器可判	退役候选
-test_unifier_unify_set_same	src/frontend/core/types/eval/tests/reducer.rs	（无断言）	均不通过	体内无任何断言（含委托断言助手）、也无 should_panic——证明门机器可判	退役候选
-test_unifier_unify_range_same	src/frontend/core/types/eval/tests/reducer.rs	（无断言）	均不通过	体内无任何断言（含委托断言助手）、也无 should_panic——证明门机器可判	退役候选
-test_unifier_unify_arc_same	src/frontend/core/types/eval/tests/reducer.rs	（无断言）	均不通过	体内无任何断言（含委托断言助手）、也无 should_panic——证明门机器可判	退役候选
-test_unifier_unify_weak_same	src/frontend/core/types/eval/tests/reducer.rs	（无断言）	均不通过	体内无任何断言（含委托断言助手）、也无 should_panic——证明门机器可判	退役候选
-test_unifier_unify_enum_same	src/frontend/core/types/eval/tests/reducer.rs	（无断言）	均不通过	体内无任何断言（含委托断言助手）、也无 should_panic——证明门机器可判	退役候选
-test_unifier_unify_struct_same	src/frontend/core/types/eval/tests/reducer.rs	（无断言）	均不通过	体内无任何断言（含委托断言助手）、也无 should_panic——证明门机器可判	退役候选
 test_compute_config	src/frontend/core/types/eval/tests/reducer.rs	assert_eqx1 assertx1	待判	两门皆不过；含强断言，证明门需人工复核	待判
 test_bool	src/frontend/core/types/eval/tests/type_families.rs	assert_eqx2 assertx2	待判	两门皆不过；含强断言，证明门需人工复核	待判
 test_nat	src/frontend/core/types/eval/tests/type_families.rs	assert_eqx7 assertx2	待判	两门皆不过；含强断言，证明门需人工复核	待判

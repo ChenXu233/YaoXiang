@@ -26,70 +26,10 @@ fn test_type_computer_new_and_with_config() {
 }
 
 #[test]
-fn test_type_computer_register_alias() {
-    let mut c = TypeComputer::new();
-    c.register_alias("MyInt".to_string(), MonoType::Int(32));
-    let result = c.compute(&MonoType::TypeRef("MyInt".to_string()));
-    // Should not panic, should return Done or Pending
-    let _ = result;
-}
-
-#[test]
-fn test_type_computer_compute_primitive() {
-    let mut c = TypeComputer::new();
-    let result = c.compute(&MonoType::Int(32));
-    // Primitives should compute without error
-    let _ = result;
-}
-
-#[test]
 fn test_type_computer_compute_type_ref() {
     let mut c = TypeComputer::new();
     c.register_alias("MyInt".to_string(), MonoType::Int(64));
     let result = c.compute(&MonoType::TypeRef("MyInt".to_string()));
-    let _ = result;
-}
-
-#[test]
-fn test_type_computer_set_context() {
-    let c = TypeComputer::new();
-    // set_context expects ComputeContext, not NormalizationContext
-    // Just verify the computer can be created and used
-    let _ = c.context();
-}
-
-#[test]
-fn test_type_computer_compute_type_var() {
-    let mut c = TypeComputer::new();
-    let tv = MonoType::TypeVar(crate::frontend::core::types::TypeVar::new(0));
-    let result = c.compute(&tv);
-    let _ = result;
-}
-
-#[test]
-fn test_type_computer_compute_list() {
-    let mut c = TypeComputer::new();
-    let list = MonoType::make_list(MonoType::Int(32));
-    let result = c.compute(&list);
-    let _ = result;
-}
-
-#[test]
-fn test_type_computer_compute_tuple() {
-    let mut c = TypeComputer::new();
-    let tuple = MonoType::make_tuple(vec![MonoType::Int(32), MonoType::make_string()]);
-    let result = c.compute(&tuple);
-    let _ = result;
-}
-
-#[test]
-fn test_type_computer_compute_fn() {
-    let mut c = TypeComputer::new();
-    let f = MonoType::Fn {
-        params: vec![MonoType::Int(32)],
-        return_type: Box::new(MonoType::make_string()),
-    };
-    let result = c.compute(&f);
     let _ = result;
 }
 
@@ -171,15 +111,6 @@ fn test_reducer_step_count() {
     let _ = r.reduce(&MonoType::TypeRef("MyInt".to_string()));
     // Step count may or may not increase depending on implementation
     let _ = r.step_count();
-}
-
-#[test]
-fn test_reducer_reduce_with_limit() {
-    let mut r = TypeReducer::new();
-    r.register_alias("A".to_string(), MonoType::Int(32));
-    let result = r.reduce_with_limit(&MonoType::TypeRef("A".to_string()), 10);
-    // Should not panic
-    let _ = result;
 }
 
 #[test]
@@ -398,16 +329,6 @@ fn test_unifier_same_types() {
 }
 
 #[test]
-fn test_unifier_different_types() {
-    let mut u = TypeUnifier::new();
-    match u.unify(&MonoType::Int(32), &MonoType::make_string()) {
-        UnificationResult::Success(_) => {}
-        UnificationResult::Failure(_) => {}
-        UnificationResult::NeedReduction(..) => {}
-    }
-}
-
-#[test]
 fn test_unifier_with_config() {
     let _config = ReductionConfig::default();
     let mut u = TypeUnifier::new();
@@ -416,15 +337,6 @@ fn test_unifier_with_config() {
         u.unify(&MonoType::Int(32), &MonoType::Int(32)),
         UnificationResult::Success(_)
     ));
-}
-
-#[test]
-fn test_unifier_substitution_after_unify() {
-    let mut u = TypeUnifier::new();
-    let _ = u.unify(&MonoType::Int(32), &MonoType::Int(32));
-    let sub = u.substitution();
-    // After unifying same types, substitution should exist
-    let _ = sub;
 }
 
 #[test]
@@ -663,131 +575,6 @@ fn test_unifier_unify_bytes_with_bytes() {
         args: vec![],
     };
     assert!(matches!(u.unify(&b, &b), UnificationResult::Success(_)));
-}
-
-#[test]
-fn test_unifier_unify_option_same() {
-    let mut u = TypeUnifier::new();
-    let o1 = MonoType::make_option(MonoType::Int(32));
-    let o2 = MonoType::make_option(MonoType::Int(32));
-    // Option unification may fail (not handled) or succeed
-    let _ = u.unify(&o1, &o2);
-}
-
-#[test]
-fn test_unifier_unify_result_same() {
-    let mut u = TypeUnifier::new();
-    let r1 = MonoType::make_result(MonoType::Int(32), MonoType::make_string());
-    let r2 = MonoType::make_result(MonoType::Int(32), MonoType::make_string());
-    // Result unification may fail (not handled) or succeed
-    let _ = u.unify(&r1, &r2);
-}
-
-#[test]
-fn test_unifier_unify_dict_same() {
-    let mut u = TypeUnifier::new();
-    let d1 = MonoType::make_dict(MonoType::make_string(), MonoType::Int(32));
-    let d2 = MonoType::make_dict(MonoType::make_string(), MonoType::Int(32));
-    // Dict unification may fail (not handled) or succeed
-    let _ = u.unify(&d1, &d2);
-}
-
-#[test]
-fn test_unifier_unify_set_same() {
-    let mut u = TypeUnifier::new();
-    let s1 = MonoType::Generic {
-        name: "Set".into(),
-        args: vec![MonoType::Bool],
-    };
-    let s2 = MonoType::Generic {
-        name: "Set".into(),
-        args: vec![MonoType::Bool],
-    };
-    // Set unification may fail (not handled) or succeed
-    let _ = u.unify(&s1, &s2);
-}
-
-#[test]
-fn test_unifier_unify_range_same() {
-    let mut u = TypeUnifier::new();
-    let r1 = MonoType::Generic {
-        name: "Range".into(),
-        args: vec![MonoType::Int(64)],
-    };
-    let r2 = MonoType::Generic {
-        name: "Range".into(),
-        args: vec![MonoType::Int(64)],
-    };
-    // Range unification may fail (not handled) or succeed
-    let _ = u.unify(&r1, &r2);
-}
-
-#[test]
-fn test_unifier_unify_arc_same() {
-    let mut u = TypeUnifier::new();
-    let a1 = MonoType::Generic {
-        name: "Arc".into(),
-        args: vec![MonoType::Int(32)],
-    };
-    let a2 = MonoType::Generic {
-        name: "Arc".into(),
-        args: vec![MonoType::Int(32)],
-    };
-    // Arc unification may fail (not handled) or succeed
-    let _ = u.unify(&a1, &a2);
-}
-
-#[test]
-fn test_unifier_unify_weak_same() {
-    let mut u = TypeUnifier::new();
-    let w1 = MonoType::Generic {
-        name: "Weak".into(),
-        args: vec![MonoType::make_string()],
-    };
-    let w2 = MonoType::Generic {
-        name: "Weak".into(),
-        args: vec![MonoType::make_string()],
-    };
-    // Weak unification may fail (not handled) or succeed
-    let _ = u.unify(&w1, &w2);
-}
-
-#[test]
-fn test_unifier_unify_enum_same() {
-    let mut u = TypeUnifier::new();
-    let e1 = MonoType::Enum(crate::frontend::core::types::EnumType {
-        name: "Color".to_string(),
-        variants: vec!["red".to_string()],
-    });
-    let e2 = MonoType::Enum(crate::frontend::core::types::EnumType {
-        name: "Color".to_string(),
-        variants: vec!["red".to_string()],
-    });
-    // Enum unification may fail (not handled) or succeed
-    let _ = u.unify(&e1, &e2);
-}
-
-#[test]
-fn test_unifier_unify_struct_same() {
-    let mut u = TypeUnifier::new();
-    let s1 = MonoType::Struct(crate::frontend::core::types::StructType {
-        name: "Point".to_string(),
-        fields: vec![("x".to_string(), MonoType::Float(64))],
-        methods: std::collections::HashMap::new(),
-        field_mutability: vec![false],
-        field_has_default: vec![false],
-        interfaces: vec![],
-    });
-    let s2 = MonoType::Struct(crate::frontend::core::types::StructType {
-        name: "Point".to_string(),
-        fields: vec![("x".to_string(), MonoType::Float(64))],
-        methods: std::collections::HashMap::new(),
-        field_mutability: vec![false],
-        field_has_default: vec![false],
-        interfaces: vec![],
-    });
-    // Struct unification may fail (not handled) or succeed
-    let _ = u.unify(&s1, &s2);
 }
 
 // ComputeConfig

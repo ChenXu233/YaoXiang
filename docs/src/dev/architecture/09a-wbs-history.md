@@ -3644,3 +3644,21 @@ k: (y: Int) -> Int = { f(y)(y) }        // 运行期算出的值填进 N 位
 | 删除文件留下死链 | 删 `checks-policy.md` 后 en 镜像仍有指向它的链接，`docs:build` 红；`check-docs-refs.py` 排除含 `..` 的相对链接，抓不到；当次也没跑 `docs:build` |
 | 前提被实测推翻 | 曾断言「宽口径今天立刻红三类」——在**语料**上不成立（0 分叉），三类只在项目形态复现 |
 | 大文件读改写截断 | 用「整文件读入 → 改 → 整体写回」编辑 09a（3597 行）时，读取侧有行数上限，写回只剩 409 行——提交统计里的 3219 deletions 暴露，靠 git show HEAD~1: 还原后改用追加。教训：大文件一律追加或定点替换，不做整文件读改写 |
+
+### 五、第一批测试退役（2026-11-06）
+
+按 `coding-rules` 第七部分：`src/frontend/core/types/eval/tests/` 下 26 条「体内无任何断言」的测试逐条判定，**删 21 / 留 5**。
+
+**判定与执行分离**：判定由独立成员（模型家族与实现者不同）做，产出 `<测试名>\t<实际断言什么>\t<同格覆盖测试名|无>\t<删|留>\t<依据>`；硬要求是「判删必须指认具体替代覆盖测试名，指认不出一律判留，读不懂也判留」。执行者只按表删，两个数对账（判删 21 / 实删 21）。
+
+**留下的 5 条**（都指认不出替代覆盖）：`with_config` 三个 public 构造器的唯一调用点、`compute` 链路的唯一走查点（全仓无任何 `ComputeResult` 断言）、别名两跳链唯一用例、循环别名唯一用例（且是唯一把 `step_count` 顶到 limit、验证「链式展开会终止」的守卫）。
+
+**判定过程中查出的三件事**（比「哪些该删」更重要）：
+
+1. 三条「无断言」测试其实是**空转**——`test_normalizer_with_config` 体内根本没调 `with_config`；`test_type_computer_set_context` 没调 `set_context`；`test_unifier_substitution_after_unify` 的注释说「substitution should exist」，实际 `unify(Int(32),Int(32))` 走 `_ if ty1 == ty2` 等价臂、根本不写替换表。它们指向了从不发生的动作。
+2. **`ReductionResult::Reduced` 全仓从未被构造**：`reduce_internal` 只返回 `Stuck`，故 Delta 归约「真的归约成功」这一语义当前无从观测，`test_reducer_delta_reduces_alias` 的 `Reduced` 分支是不可达代码。**这是实现缺陷，不是删测试的理由**（已另立卡）。
+3. 普查表里那 26 条的「为什么不丢判据」是机器按启发式写的，逐一核对后**三条站不住**（自引用被说成由「未注册别名」用例覆盖；上限语义被说成由一条对上限零断言的用例锁定），已按人判改判。
+
+**数字**：全仓 `#[test]` 3445 → 3424；`git diff` 计 `-#[test]` 行 = 21；census 重算「退役候选」136 → 115；语料 375/375 差分空、IR 快照与 `tests/baselines` 零漂移；clippy `-D warnings` 0（删后重编 test 目标，无独占 helper 被误删）；健全性探针 0 分叉；integration 335 passed；`run fast` 3338 条 exit 0。
+
+**回退**：本批一笔提交，`git revert <sha>` 即整体恢复。

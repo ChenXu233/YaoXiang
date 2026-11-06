@@ -14,7 +14,7 @@ WBS 0.6「大清理」的前置材料：把全仓 `#[test]` 按 [coding-rules �
 
 | 产物 | 作用 |
 | --- | --- |
-| `docs/src/dev/test-gate-census.tsv` | 逐条判定表（3445 行 + 表头），与本页同目录 |
+| `docs/src/dev/test-gate-census.tsv` | 逐条判定表（3424 行 + 表头），与本页同目录 |
 | `scripts/dev/test-gate-census.py` | 生成器（可重跑、可 `--check`、可 `--selftest`） |
 | `scripts/dev/test-gate-census-audit.py` | 抽样审计：按固定种子复现 40 条样本（`--sample` / `--check`） |
 | `scripts/dev/test-gate-census-audit.json` | 40 条逐条判定与依据（生成器读它把「审计确认真实支撑」判为留） |
@@ -27,13 +27,13 @@ WBS 0.6「大清理」的前置材料：把全仓 `#[test]` 按 [coding-rules �
 
 | 面 | 条数 |
 | --- | --- |
-| 根包 lib（`src/`，含各模块 `tests/` 子目录） | 2971 |
+| 根包 lib（`src/`，含各模块 `tests/` 子目录） | 2950 |
 | `tests/integration` | 335 |
 | `tests/formatter_integration.rs` | 52 |
 | `tests/yx_runner.rs` / `tests/yx_multifile_runner.rs` | 2 / 1 |
 | `tools/` | 75 |
 | `benches/` | 9 |
-| **合计** | **3445**（296 个文件） |
+| **合计** | **3424**（296 个文件） |
 
 ### 三扇门的机器判据
 
@@ -76,16 +76,16 @@ WBS 0.6「大清理」的前置材料：把全仓 `#[test]` 按 [coding-rules �
 | 病史 | 314 |
 | 证明（spec-shaped 判据面 / 现状锚） | 447 |
 | 待判（两门皆不过，证明门待人工） | 935 |
-| 均不通过（体内无任何断言） | 36 |
-| **合计** | **3445** |
+| 均不通过（体内无任何断言） | 15 |
+| **合计** | **3424** |
 
 | 处置 | 条数 | 对比 0.6-9 |
 | --- | --- | --- |
 | 留 | **776** | 2897（−2121） |
 | 待核 | 2121 | 0（新增档位） |
 | 待判 | 412 | 412（不变） |
-| 退役候选 | 136 | 136（不变） |
-| **合计** | **3445** | — |
+| 退役候选 | 115 | 136（第一批退役 21 条） |
+| **合计** | **3424** | — |
 
 两点口径变化要说明：
 
@@ -176,7 +176,7 @@ WBS 0.6「大清理」的前置材料：把全仓 `#[test]` 按 [coding-rules �
 
 - **「留」从 2897 掉到 776**（−2121）——正是那 2121 条「凭引用就留」的落为待核；收紧生效，
   不是分布调参。
-- **退役候选 136 不变**：首批 26 条本就与条款无关（体内一条断言都没有），审计不改它们的判定。
+- **退役候选与条款无关**：首批 26 条本就与条款无关（体内一条断言都没有），审计不改它们的判定；第一批 21 条已退役，候选 136 → 115。
   这也说明「退役面」与「条款错引面」是两个问题：错引的测试多数有断言，该做的是补条款或改引用，
   而不是删测试。
 - 待核 2121 条是后续「条款门补票」的工作量：给它们补上能对上断言的具体条目，或改判退役候选。
@@ -194,7 +194,7 @@ WBS 0.6「大清理」的前置材料：把全仓 `#[test]` 按 [coding-rules �
 
 | 项 | 0.6-2 勘察 | 本次 | 差异原因 |
 | --- | --- | --- | --- |
-| 全仓 `#[test]` | 3443 | 3445 | 0.6-2 之后新增 2 条（E3005 与 E3022 的 check 口径回归测试），根包 lib 2969 → 2971 |
+| 全仓 `#[test]` | 3443 | 3424 | 0.6-2 之后新增 2 条（E3005 与 E3022 的 check 口径回归测试），又按首批退役清单删除 21 条无断言测试；净 −19 |
 | 测试文件数 | 296 | 296 | 未变 |
 | 条款门 | 227 文件（77%） | 收紧后 113 文件；按条 1713 | 判据从「出现字样」收紧为「有节号 §<数字>」，故文件数近乎腰斩 |
 | 病史信号 | 442 条 / 148 文件 | 门内 314 条；三半径：测试自身 7 / 文件头 291（38 文件）/ 整文件 1218（79 文件） | 0.6-2 的 148 文件比本次整文件半径 79 文件还宽，其词表/范围更大；本次严格按卡面四信号 |
@@ -207,49 +207,27 @@ WBS 0.6「大清理」的前置材料：把全仓 `#[test]` 按 [coding-rules �
    35%–65%）——「引用」与「引用支撑断言」是两件事，旧口径把前者当成了后者。
 2. **收紧后真正有条款支撑的约 1202 条**（区间 846–1557），其余要么待核补票，要么本来就该按
    病史门/证明门判定。
-3. **退役面不受影响**：136 条候选与条款无关（无断言/弱断言），首批 26 条维持不变。
+3. **退役面与条款错引面无关**：候选 136 条与条款无关（无断言/弱断言）；首批已退役 21 条，候选降为 115。
 4. **病史门是最大的合法留来源**（314 条）：它证明「钉住一次真实事故」比「抄一句 RFC」更靠得住。
 
-## 首批退役清单（只列不删）
+## 首批退役（已执行，2026-11-06）
 
-**批次：`src/frontend/core/types/eval/tests/` 的 26 条「无断言」测试**（单一目录簇，理由同族：
-体内无任何断言）。选取理由：这一簇是全仓唯一的「整目录型无断言簇」，删除判据最硬——测试不
-断言任何东西时，删掉不丢判据；同目录另有 327 条测试（含断言的源行数：`conditional.rs` 127、
-`const_eval.rs` 158、`operations.rs` 72、`normalizer.rs` 60、`reducer.rs` 60）覆盖同一批 API
-的真实行为。
+**第一批：`src/frontend/core/types/eval/tests/` 的 26 条「无断言」测试里退役 21 条、保留 5 条**
+（单一目录簇；判据 = coding-rules 第七部分的**三扇门皆不过**：条款门无、病史门无、体内无任何断言）。
+逐条判定与「同格覆盖」由 0.6-11a 判定表给出（删 21 / 留 5），本页不复述理由，只登记执行结果。
 
-| # | 测试名 | 文件 | 它断言什么 | 为什么删了不丢判据 |
-| --- | --- | --- | --- | --- |
-| 1 | `test_normalizer_with_config` | normalizer.rs | 无断言：构造 `TypeNormalizer` 后 `normalize(Int(32))` 丢弃结果 | 无断言可丢；范式化结果由同文件 `test_normalizer_normalize_primitives` 用 `assert_eq!` 锁定 |
-| 2 | `test_normalizer_evaluator` | normalizer.rs | 无断言：只取 `evaluator()` 句柄，不调用 | 无断言可丢；句柄访问由同文件带断言的归约用例顺带覆盖 |
-| 3 | `test_normalizer_context` | normalizer.rs | 无断言：只取 `context()` 句柄 | 同上 |
-| 4 | `test_type_computer_new_and_with_config` | reducer.rs | 无断言：`new()` / `with_config()` 构造后丢弃 | 无断言可丢；构造是其余计算用例的必经步骤（它们带断言） |
-| 5 | `test_type_computer_register_alias` | reducer.rs | 无断言：注册别名后 `compute()` 丢弃结果 | 无断言可丢；别名归约结果由 `test_reducer_delta_reduces_alias` 用 `assert_eq!` 锁定 |
-| 6 | `test_type_computer_compute_primitive` | reducer.rs | 无断言：`compute(Int(32))` 丢弃 | 无断言可丢；基本类型计算由 `test_reducer_stuck_on_primitives` 等带断言用例覆盖 |
-| 7 | `test_type_computer_compute_type_ref` | reducer.rs | 无断言：注册别名后 `compute(TypeRef)` 丢弃 | 无断言可丢；同 #5 |
-| 8 | `test_type_computer_set_context` | reducer.rs | 无断言：只取 `context()`（注释自称「just verify can be created」） | 无断言可丢 |
-| 9 | `test_type_computer_compute_type_var` | reducer.rs | 无断言：`compute(TypeVar)` 丢弃 | 无断言可丢；类型变量归约由 `test_reducer_reduce_type_var` 覆盖 |
-| 10 | `test_type_computer_compute_list` | reducer.rs | 无断言：`compute(List<Int>)` 丢弃 | 无断言可丢；列表归约由 `test_reducer_reduce_list_type` 覆盖 |
-| 11 | `test_type_computer_compute_tuple` | reducer.rs | 无断言：`compute((Int, String))` 丢弃 | 无断言可丢；元组归约由 `test_reducer_reduce_tuple_type` 覆盖 |
-| 12 | `test_type_computer_compute_fn` | reducer.rs | 无断言：`compute(Fn)` 丢弃 | 无断言可丢；函数类型归约由 `test_reducer_reduce_function_type` 覆盖 |
-| 13 | `test_reducer_reduce_with_limit` | reducer.rs | 无断言：`reduce_with_limit()` 丢弃结果 | 无断言可丢；步数上限语义由 `test_reducer_step_count`（`assert_eq!`）锁定 |
-| 14 | `test_reducer_reduce_type_ref_with_alias_chain` | reducer.rs | 无断言：A→B→Int 链式别名归约丢弃结果 | 无断言可丢；单跳别名归约由 `test_reducer_delta_reduces_alias` 锁定 |
-| 15 | `test_reducer_reduce_type_ref_self_referential` | reducer.rs | 无断言：自引用别名归约丢弃结果 | 无断言可丢；自引用停在原地由 `test_reducer_unknown_alias_stays_stuck` 的 `assert_eq!` 覆盖 |
-| 16 | `test_unifier_different_types` | reducer.rs | 无断言：`unify(Int, String)` 后 `match` 三个分支全空 | 无断言可丢；不同类型不统一由 `test_unifier_unify_different_concrete` 覆盖 |
-| 17 | `test_unifier_substitution_after_unify` | reducer.rs | 无断言：统一后取替换表即丢弃 | 无断言可丢；替换表由 `test_unifier_same_types` 等带断言用例覆盖 |
-| 18 | `test_unifier_unify_option_same` | reducer.rs | 无断言：`unify(Option<Int>, Option<Int>)` 丢弃（注释写「may fail or succeed」） | 无断言可丢；该形态本就未定义结论，删掉不丢判据 |
-| 19 | `test_unifier_unify_result_same` | reducer.rs | 同上（Result） | 同上 |
-| 20 | `test_unifier_unify_dict_same` | reducer.rs | 同上（Dict） | 同上 |
-| 21 | `test_unifier_unify_set_same` | reducer.rs | 无断言：`unify(Set<Bool>, Set<Bool>)` 丢弃 | 无断言可丢；容器类型统一由 `test_unifier_unify_composite_types` 覆盖 |
-| 22 | `test_unifier_unify_range_same` | reducer.rs | 无断言（Range） | 同上 |
-| 23 | `test_unifier_unify_arc_same` | reducer.rs | 无断言（Arc） | 同上 |
-| 24 | `test_unifier_unify_weak_same` | reducer.rs | 无断言（Weak） | 同上 |
-| 25 | `test_unifier_unify_enum_same` | reducer.rs | 无断言（Enum） | 同上 |
-| 26 | `test_unifier_unify_struct_same` | reducer.rs | 无断言（Struct） | 同上 |
-
-**删除前置条件（留给执行批次的卡，本卡不做）**：① 同目录带断言的用例仍覆盖同一 API（否则先把
-断言补进那些用例）；② 删除与 `cargo test --lib` / `run fast` 同批验证；③ 同提交更新本页与
-`test-gate-census.tsv`（`--check` 会红）；④ 按 [coding-rules](./coding-rules.md) 第七部分登记。
+- **已退役 21 条**（`normalizer.rs` 2 条 + `reducer.rs` 19 条）：`test_normalizer_with_config`、
+  `test_normalizer_evaluator`、`test_type_computer_register_alias`、`test_type_computer_compute_primitive`、
+  `test_type_computer_set_context`、`test_type_computer_compute_type_var`、`test_type_computer_compute_list`、
+  `test_type_computer_compute_tuple`、`test_type_computer_compute_fn`、`test_reducer_reduce_with_limit`、
+  `test_unifier_different_types`、`test_unifier_substitution_after_unify`、`test_unifier_unify_option_same`、
+  `test_unifier_unify_result_same`、`test_unifier_unify_dict_same`、`test_unifier_unify_set_same`、
+  `test_unifier_unify_range_same`、`test_unifier_unify_arc_same`、`test_unifier_unify_weak_same`、
+  `test_unifier_unify_enum_same`、`test_unifier_unify_struct_same`。
+- **保留 5 条**（判定表指认不出替代覆盖，按硬要求留）：`test_normalizer_context`、
+  `test_type_computer_new_and_with_config`、`test_type_computer_compute_type_ref`、
+  `test_reducer_reduce_type_ref_with_alias_chain`、`test_reducer_reduce_type_ref_self_referential`。
+- **回退**：整批是一个提交（本页与 `test-gate-census.tsv` 同提交），`git revert <sha>` 即整体回退。
 
 ## 复跑与自检
 
@@ -264,7 +242,7 @@ python scripts/dev/test-gate-census-audit.py --check   # 审计数据文件是�
 生成器只做词法判定，边界如实说明：
 
 - **委托断言只按名字识别**（`assert*/check*` 助手函数）。若某测试的断言藏在名字不带这两类前缀的
-  助手里，它会被误判成「无断言」——首批 26 条已逐条人工复核过函数体，本页给出的理由以人工复核为准。
+  助手里，它会被误判成「无断言」——首批 26 条（退役 21 / 留 5）均已逐条人工复核过函数体。
 - **证明门不判**：任何「两门皆不过」的测试只落「待判」或「退役候选」，生成器不宣布「该删」。
 - **不跨文件去重**：完全重复的测试不在本表识别（0.6-2 已实测仅 1%，不构成退役面）。
 - **审计只覆盖 40 条**：审计结论只用于给这 40 条定性，并给出 2403 条池的**比例**；不得把某条的

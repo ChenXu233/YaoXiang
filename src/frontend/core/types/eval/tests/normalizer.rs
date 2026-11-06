@@ -64,13 +64,6 @@ fn test_normalizer_normalize_composite() {
 }
 
 #[test]
-fn test_normalizer_with_config() {
-    let mut n = TypeNormalizer::new();
-    // Normalizer should work with default config
-    let _ = n.normalize(&MonoType::Int(32));
-}
-
-#[test]
 fn test_normalizer_normalize_struct() {
     let mut n = TypeNormalizer::new();
     let s = MonoType::Struct(crate::frontend::core::types::StructType {
@@ -288,13 +281,7 @@ fn test_normalizer_normalize_meta_type() {
     assert_eq!(n.normalize(&meta), NormalForm::Normalized);
 }
 
-// Evaluator 相关
-
-#[test]
-fn test_normalizer_evaluator() {
-    let mut n = TypeNormalizer::new();
-    let _evaluator = n.evaluator();
-}
+// Context 相关
 
 #[test]
 fn test_normalizer_context() {
