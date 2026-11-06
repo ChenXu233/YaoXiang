@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
 """check-test-channel: 测试通道口径同源门禁（#486 第 2 项）
 
-四处在声明「提交前跑哪些测试」：`AGENTS.md` 常用命令区、
+五处在声明「提交前 / CI 跑哪些测试」：`AGENTS.md` 常用命令区、
 `docs/src/dev/test-specification.md` 规则 18.1、`docs/src/dev/HOWTO.md`
-提交前验证（改代码）、`.pre-commit-config.yaml` 的 cargo-test 钩子。它们曾各写一份
-且互不一致——文档写 `cargo test`、HOWTO 没有测试命令、pre-commit 跑
-`cargo test --all`，而 `testsuite.py run fast` 当时只跑 `cargo test --lib`。
-后果是本地自检全绿、提交时才红（`n: N` 强制后两条集成用例仍写 `f(42)(5)`）。
+提交前验证（改代码）、`.pre-commit-config.yaml` 的 cargo-test 钩子、
+`.github/workflows/ci.yml` 的测试步。它们曾各写一份且互不一致——文档写
+`cargo test`、HOWTO 没有测试命令、pre-commit 跑 `cargo test --all`、CI 漏
+`--test formatter_integration`（那 52 条只在 pre-commit 跑），而 `testsuite.py run fast`
+当时只跑 `cargo test --lib`。后果是本地自检全绿、提交时才红（`n: N` 强制后两条
+集成用例仍写 `f(42)(5)`）。
 
-本门禁把四处按同一目标集机械对齐（任一不满足即 exit 1）：
+本门禁把五处按同一目标集机械对齐（任一不满足即 exit 1）：
 
   1. `scripts/dev/testsuite.py` 的 `EXPLICIT_TARGETS` 与 `_base_command()` 拼出的
      cargo 选择器必须一致，且等于本脚本钉住的 `CANONICAL_TARGETS`
@@ -19,11 +21,15 @@
   3. `.pre-commit-config.yaml`：`cargo-test-fast` 的 entry 是规范命令、
      `cargo-test` 的 entry 是拦提交口径 `cargo test --all --quiet`，
      且 fast 段排在 cargo-test 段之前（配置开 `fail_fast: true`，顺序即优先级）。
+  4. `.github/workflows/ci.yml` 的测试步（唯一同时含 `cargo test` 与 `--test integration`
+     的 `run:` 行）必须覆盖 `CANONICAL_TARGETS` 的每一个选择器（`--lib` / `--test <name>`），
+     且不得出现 `--all-targets`；额外的 `--bins` / `--all-features` 只提示、不判红
+     （它们只扩大覆盖面）。CI 是第五处声明：漏目标即 exit 1。
 
 用法:
     python scripts/ci/check-test-channel.py [--root <仓库根>]
 
-退出码: 0 = 四处同源; 1 = 口径不一致; 3 = 环境错误（文件缺失 / testsuite 导入失败）。
+退出码: 0 = 五处同源; 1 = 口径不一致; 3 = 环境错误（文件缺失 / testsuite 导入失败）。
 """
 from __future__ import annotations
 
@@ -62,6 +68,12 @@ DOC_SITES: tuple[tuple[str, str, str, str], ...] = (
 
 CHANNEL_RE = re.compile(r"scripts/dev/testsuite\.py\s+run\s+([a-z]+)")
 KNOWN_CHANNELS = ("fast", "full")
+
+# CI 测试步的识别：`run:` 行同时含这两个片段（本仓唯一的全量测试步）。
+# 多行块写法（`run: |`）会被判「找不到测试步」——有意如此：门禁要能机械解析，
+# 改写成块时必须同步改本解析。
+CI_WORKFLOW = ".github/workflows/ci.yml"
+CI_TEST_HINTS = ("cargo test", "--test integration")
 
 
 class CheckError(Exception):
@@ -139,6 +151,45 @@ def parse_hooks(text: str) -> dict[str, dict]:
         if m:
             hooks[current]["entry"] = m.group(1).strip().strip("'\"")
     return hooks
+
+
+def parse_ci_test_step(text: str) -> tuple[int, str]:
+    """找 CI 里的测试步：同时含 `cargo test` 与 `--test integration` 的 `run:` 行。"""
+    for idx, line in enumerate(text.splitlines(), 1):
+        stripped = line.strip()
+        if not stripped.startswith("run:"):
+            continue
+        command = stripped[len("run:") :].strip()
+        if all(hint in command for hint in CI_TEST_HINTS):
+            return idx, command
+    raise SectionMissing(
+        "ci.yml 里找不到测试步：期望一行 `run: cargo test … --test integration …`"
+        "（多行块写法 run: | 不被解析，改写成块时必须同步改本解析）"
+    )
+
+
+def cargo_selectors(command: str) -> dict:
+    """从 `cargo test …` 命令里抽出目标选择器与特性开关。"""
+    tokens = command.split()
+    tests: list[str] = []
+    selectors = {"lib": False, "bins": False, "all_targets": False, "all_features": False}
+    idx = 0
+    while idx < len(tokens):
+        token = tokens[idx]
+        if token == "--lib":
+            selectors["lib"] = True
+        elif token == "--bins":
+            selectors["bins"] = True
+        elif token == "--all-targets":
+            selectors["all_targets"] = True
+        elif token == "--all-features":
+            selectors["all_features"] = True
+        elif token == "--test" and idx + 1 < len(tokens):
+            tests.append(tokens[idx + 1])
+            idx += 1
+        idx += 1
+    selectors["tests"] = tests
+    return selectors
 
 
 def channel_targets(testsuite, channel: str) -> tuple[str, ...] | None:
@@ -245,7 +296,42 @@ def main(argv=None) -> int:
             "配置开 fail_fast: true，顺序即优先级）"
         )
 
-    # ---- 4. 三处文档是否指向同一目标集
+    # ---- 4. CI（第五处）：测试步必须覆盖同一目标集
+    try:
+        ci_text = read_text(root / CI_WORKFLOW)
+    except CheckError as exc:
+        print(f"[error] {exc}", file=sys.stderr)
+        return 3
+    try:
+        ci_line, ci_command = parse_ci_test_step(ci_text)
+    except SectionMissing as exc:
+        problems.append(f"{CI_WORKFLOW}: {exc}")
+    else:
+        selectors = cargo_selectors(ci_command)
+        if selectors["all_targets"]:
+            problems.append(
+                f"{CI_WORKFLOW}:{ci_line} 测试步出现 --all-targets（会把 criterion bench 当测试执行）"
+            )
+        for target in CANONICAL_TARGETS:
+            if target == "lib":
+                if not selectors["lib"]:
+                    problems.append(f"{CI_WORKFLOW}:{ci_line} 测试步漏了目标 lib（--lib）")
+            elif target not in selectors["tests"]:
+                problems.append(f"{CI_WORKFLOW}:{ci_line} 测试步漏了目标 {target}（--test {target}）")
+        extras = sorted(name for name in selectors["tests"] if name not in CANONICAL_TARGETS)
+        if extras:
+            print(
+                f"[ci] 注意：测试步含额外测试目标 {extras}"
+                "（不属于 CANONICAL_TARGETS，只提示不判红）"
+            )
+        suffix = (" + --bins" if selectors["bins"] else "") + (
+            " + --all-features" if selectors["all_features"] else ""
+        )
+        print(
+            f"[ci] {CI_WORKFLOW}:{ci_line} → --lib + --test {' '.join(selectors['tests'])}{suffix}"
+        )
+
+    # ---- 5. 三处文档是否指向同一目标集
     distinct = {tuple(sorted(value)) for value in site_target_sets.values()}
     if len(distinct) > 1:
         problems.append(f"三处文档指向的目标集不一致：{site_target_sets}")
@@ -256,7 +342,7 @@ def main(argv=None) -> int:
         print(f"[check-test-channel] 不一致 {len(problems)} 条")
         return 1
     print(
-        f"[check-test-channel] OK：testsuite / 三处文档 / pre-commit 同源，"
+        f"[check-test-channel] OK：testsuite / 三处文档 / pre-commit / CI 同源，"
         f"提交前目标集 = {' + '.join(CANONICAL_TARGETS)}"
     )
     return 0
