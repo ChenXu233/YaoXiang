@@ -40,8 +40,22 @@ repos:
         pass_filenames: false
         stages: [pre-commit]
 
+      # 两段测试：第一段是快反馈（同一目标集的独立 testsuite 通道，带资源预算），
+      # 第二段是拦提交的全量口径。两段的命令串与 AGENTS.md 常用命令区、
+      # docs/src/dev/test-specification.md 规则 18.1、docs/src/dev/HOWTO.md
+      # 提交前验证（改代码）由 scripts/ci/check-test-channel.py 机械对账，
+      # 任一处口径不一致即红。
+      - id: cargo-test-fast
+        name: cargo test (fast 通道)
+        entry: python scripts/dev/testsuite.py run fast
+        language: system
+        types: [rust]
+        pass_filenames: false
+        always_run: false
+        stages: [pre-commit]
+
       - id: cargo-test
-        name: cargo test
+        name: cargo test (拦提交全量)
         entry: cargo test --all --quiet
         language: system
         types: [rust]

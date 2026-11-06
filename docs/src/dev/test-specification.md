@@ -857,8 +857,11 @@ proptest! {
 
 **规则 18.1**：提交 PR 前，作者必须自查以下项目：
 
-- [ ] `cargo test` 全部通过
-- [ ] `cargo test --doc` 全部通过
+- [ ] `python scripts/dev/testsuite.py run fast` 通过——提交前自检跑 `--lib`（src/ 单元测试）
+      与四个集成侧目标（`integration` / `formatter_integration` / `yx_runner` /
+      `yx_multifile_runner`）；`pre-commit` 第一段就是这条命令，第二段跑
+      `cargo test --all --quiet` 拦提交
+- [ ] `cargo test --doc` 通过——doctest 不在 `run fast` 的覆盖面内，由 CI 的测试作业兜底
 - [ ] `cargo bench` 无性能回归（如涉及热路径变更）
 - [ ] 新增代码符合覆盖率目标
 - [ ] 测试命名符合命名规范

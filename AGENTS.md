@@ -125,12 +125,14 @@ python scripts/rfc/check_tracking.py   # RFC 状态一致性
 
 # 测试怎么跑（#486：资源画像标记 + 预算通道）——
 python scripts/dev/testsuite.py plan             # 只打印计划：预算 / 波次 / 每波峰值 / 实际 jobs 与 threads
-python scripts/dev/testsuite.py run fast         # 本地提交前默认通道：非 ignore 全跑；mode=exclusive 各自独占一波
+python scripts/dev/testsuite.py run fast         # 提交前必跑：--lib + 集成侧四个 tests 目标；装不下的波逐条报「跳过 N 条」
 python scripts/dev/testsuite.py run full         # 推送前与 CI 口径：预算不足即 exit 2 并列出缺口，不静默跳过
 python scripts/dev/testsuite.py markers --check  # 标记 ↔ cargo test --list 双向对账（新增 #[ignore] 必须带 cost: 标记）
 CARGO_BUILD_JOBS=2 RUST_TEST_THREADS=1 cargo test   # 手跑兜底：必须自带资源上限，否则重测会与其它测试并发
 # 禁止裸跑 cargo test -- --ignored 全量：会执行 mode=manual（快照再生改写基线）与红态常驻用例。
-# 当前 pre-commit 仍跑 cargo test --all；把门禁切到 fast/full 的接线属 #486 后续排期。
+# pre-commit 两段：先跑上面的 run fast（快反馈），再跑 cargo test --all --quiet 拦提交。
+# doctest（cargo test --doc）与语料差分不在 run fast 覆盖面内，由 CI 兜底。
+python scripts/ci/check-test-channel.py         # 测试口径同源：本区 / test-specification 18.1 / pre-commit entry 三处一致
 # 测试的准入与退役见 coding-rules 第七部分（三扇门：条款 / 病史 / 证明）。
 
 # 基线再生——改动影响 IR 或语料行为时必跑，diff 人工 review 后同提交入库：

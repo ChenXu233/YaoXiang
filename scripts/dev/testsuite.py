@@ -6,8 +6,12 @@
     python scripts/dev/testsuite.py markers --check     # 双向守卫：标记 <-> #[test] <-> 独占助手
     python scripts/dev/testsuite.py markers --selftest  # 文法与扫描器的正反例自检
     python scripts/dev/testsuite.py plan [--json]       # 只打印计划（预算 / 每波成员与峰值 / 实际 jobs 与 threads）
-    python scripts/dev/testsuite.py run fast            # 默认集按预算装箱；独占测试各占一波；装不下的 defer
-    python scripts/dev/testsuite.py run full            # 默认集必须全部跑到；预算不足即报红并列出缺口
+    python scripts/dev/testsuite.py run fast            # 显式目标集按预算装箱；独占测试各占一波；装不下的逐条列出并计入跳过统计
+    python scripts/dev/testsuite.py run full            # 显式目标集必须全部跑到；预算不足即报红并列出缺口
+
+目标集是**显式**的（`EXPLICIT_TARGETS`：`--lib` + 四个 `tests/` 目标），不由标记 / `#[ignore]`
+的位置推导，也不用 `--all-targets`——`--all-targets` 会把 `[[bench]]`（criterion，
+`harness=false`）当测试执行，而那些目标不属于自检覆盖面。
 
 标记文法（就地声明，不建中央清单 —— RFC-036 2026-09-06 已批准：中央清单必腐烂）：
 
@@ -43,6 +47,20 @@ KIB = 1 << 10
 
 UNITS = {"B": 1, "KiB": KIB, "MiB": MIB, "GiB": GIB}
 MODES = ("shared", "exclusive", "manual")
+
+# 自检目标集——「提交前自检跑哪些测试」的唯一事实源：
+# lib 目标（src/ 单元测试）+ 四个 tests/ 测试目标（集成侧）。
+# 不用 --all-targets：它会把 [[bench]]（criterion，harness=false）当测试执行，
+# 而那些目标不属于自检覆盖面。新增 tests/<name>.rs 必须同时登记在这里
+# （markers --check 拦截漏登记的目标），文档口径由
+# scripts/ci/check-test-channel.py 与这里对齐（不一致即红）。
+EXPLICIT_TARGETS: tuple[str, ...] = (
+    "lib",
+    "integration",
+    "formatter_integration",
+    "yx_runner",
+    "yx_multifile_runner",
+)
 
 # 预算口径（全部可用环境变量覆盖）
 DEFAULT_RESERVE = 2 * GIB  # 机器可用内存里留给 OS / 编辑器的保留量
@@ -590,21 +608,52 @@ def cargo_env(limits: Limits) -> dict:
     return env
 
 
-def decide_targets(scan: ScanResult, root: Path) -> str:
-    """自动选目标：标记/ignore 只出现在 src/ 时用 lib（快），否则 all-targets（全）。"""
-    for item in scan.items:
-        if not (item.marker or item.has_ignore):
-            continue
-        rel = item.path.relative_to(root)
-        if rel.parts and rel.parts[0] != "src":
-            return "all"
-    return "lib"
+def target_args(targets: tuple[str, ...] = EXPLICIT_TARGETS) -> list[str]:
+    """目标名 → cargo 选择器：lib 用 --lib，其余用 --test <name>。"""
+    args: list[str] = []
+    for target in targets:
+        if target == "lib":
+            args.append("--lib")
+        else:
+            args += ["--test", target]
+    return args
 
 
-def cargo_test_list(root: Path, targets: str, env: dict) -> set[str]:
-    args = ["cargo", "test"]
-    args += ["--lib"] if targets == "lib" else ["--all-targets"]
-    args += ["--", "--list"]
+def target_of_path(path: Path, root: Path) -> str | None:
+    """测试项所属的显式目标；不属于任何目标（如 tests/common/ 的共享模块）返回 None。
+
+    src/ 下的 #[test] 编译进 --lib；tests/ 顶层每个 <name>.rs 是 cargo 自动发现的
+    测试目标；tests/integration/** 经 tests/integration.rs 的 #[path] 编进 integration。
+    """
+    try:
+        parts = path.resolve().relative_to(root.resolve()).parts
+    except ValueError:
+        return None
+    if not parts:
+        return None
+    if parts[0] == "src":
+        return "lib"
+    if parts[0] != "tests" or len(parts) < 2:
+        return None
+    if parts[1] in ("integration", "integration.rs"):
+        return "integration"
+    if len(parts) == 2 and parts[1].endswith(".rs"):
+        stem = parts[1][: -len(".rs")]
+        return stem if stem in EXPLICIT_TARGETS else None
+    return None
+
+
+def unlisted_test_targets(root: Path) -> list[Path]:
+    """tests/ 顶层 .rs 就是 cargo 会跑的测试目标；不在 EXPLICIT_TARGETS 里 = 自检漏覆盖。"""
+    tests_dir = root / "tests"
+    if not tests_dir.is_dir():
+        return []
+    listed = {t for t in EXPLICIT_TARGETS if t != "lib"}
+    return sorted(p for p in tests_dir.glob("*.rs") if p.stem not in listed)
+
+
+def cargo_test_list(root: Path, env: dict) -> set[str]:
+    args = ["cargo", "test"] + target_args() + ["--", "--list"]
     # encoding 必须显式指定：Windows 默认 GBK，构建脚本的中文警告会让
     # 解码线程抛 UnicodeDecodeError，把真正的失败原因掩盖掉。
     proc = subprocess.run(
@@ -679,10 +728,9 @@ def cmd_markers(args) -> int:
                 "（就地声明在 #[test] 上方紧邻的注释块内）"
             )
 
-    targets = decide_targets(scan, root)
     cargo_names: set[str] = set()
     if not args.no_cargo:
-        cargo_names = cargo_test_list(root, targets, cargo_env(limits))
+        cargo_names = cargo_test_list(root, cargo_env(limits))
         resolve_names(scan, cargo_names)
 
     for item in scan.items:
@@ -711,6 +759,13 @@ def cmd_markers(args) -> int:
             f"{rel(root, path)}:{line}: 游离的 cost: 标记（{text}）——必须落在某个 #[test] 上方紧邻块内"
         )
 
+    # 覆盖缺口：cargo 会跑、而自检通道不跑的测试目标
+    for path in unlisted_test_targets(root):
+        problems.append(
+            f"{rel(root, path)}: tests/ 顶层测试目标 {path.stem!r} 不在 EXPLICIT_TARGETS 里"
+            "——自检通道不会跑它的用例（覆盖缺口）。并入 EXPLICIT_TARGETS，或删除该目标"
+        )
+
     marker_items = [it for it in scan.items if it.marker is not None]
     by_mode = {mode: sum(1 for it in marker_items if it.marker.mode == mode) for mode in MODES}
     ignored = [it for it in scan.items if it.has_ignore]
@@ -722,7 +777,10 @@ def cmd_markers(args) -> int:
     if args.no_cargo:
         print("[markers] 注意：--no-cargo 跳过了 cargo test --list 交叉核对（不得用于门禁）", file=sys.stderr)
     else:
-        print(f"[markers] cargo 交叉核对：{targets} 目标 {len(cargo_names)} 条测试名")
+        print(
+            f"[markers] cargo 交叉核对：显式目标集 {' + '.join(EXPLICIT_TARGETS)}，"
+            f"共 {len(cargo_names)} 条测试名"
+        )
 
     if problems:
         for problem in problems:
@@ -861,6 +919,7 @@ class Wave:
     kind: str  # batch | exclusive | singleton
     items: list[TestItem]
     unmarked_count: int
+    member_count: int  # 本波会跑的测试条数（批量波 = 未标记 + 已标记）
     peak_bytes: int
     time_secs: float
     fits: bool
@@ -877,30 +936,25 @@ class Plan:
     batch_count: int
     ignored: list[TestItem]
     manual: list[TestItem]
-    targets: str
+    targets: tuple[str, ...]
 
 
 def _wave_env(limits: Limits, threads: int) -> dict:
     return {"CARGO_BUILD_JOBS": str(limits.cargo_build_jobs), "RUST_TEST_THREADS": str(threads)}
 
 
-def _base_command(targets: str) -> list[str]:
-    return ["cargo", "test"] + (["--lib"] if targets == "lib" else ["--all-targets"]) + ["--"]
+def _base_command() -> list[str]:
+    """显式目标集的 cargo 测试命令前缀（绝不拼 --all-targets：会把 criterion bench 当测试跑）。"""
+    return ["cargo", "test"] + target_args() + ["--"]
 
 
-def _in_targets(item: TestItem, targets: str, root: Path) -> bool:
-    """计划只统计实际会被这条 cargo 命令选中的目标（lib 目标 = src/ 下的单元测试）。"""
-    if targets == "all":
-        return True
-    try:
-        rel_path = item.path.relative_to(root)
-    except ValueError:
-        return False
-    return bool(rel_path.parts) and rel_path.parts[0] == "src"
+def _in_targets(item: TestItem, root: Path) -> bool:
+    """计划只统计显式目标集实际会编译的测试项（tests/common/ 的共享模块不在其内）。"""
+    return target_of_path(item.path, root) is not None
 
 
-def build_plan(scan: ScanResult, limits: Limits, targets: str, root: Path) -> Plan:
-    scoped = [it for it in scan.items if _in_targets(it, targets, root)]
+def build_plan(scan: ScanResult, limits: Limits, root: Path) -> Plan:
+    scoped = [it for it in scan.items if _in_targets(it, root)]
     default = [
         it for it in scoped if not it.has_ignore and (it.marker is None or it.marker.mode != "manual")
     ]
@@ -930,7 +984,7 @@ def build_plan(scan: ScanResult, limits: Limits, targets: str, root: Path) -> Pl
     if batch:
         # 批量波必须显式跳过：独占/独享波成员（各自单独一波）+ mode=manual（两条通道都不得执行）
         skip_names = [it.full_name for it in exclusive + singletons + manual if it.full_name]
-        command = _base_command(targets) + [f"--test-threads={limits.rust_test_threads}"]
+        command = _base_command() + [f"--test-threads={limits.rust_test_threads}"]
         for name in skip_names:
             command += ["--skip", name]
         waves.append(
@@ -938,6 +992,7 @@ def build_plan(scan: ScanResult, limits: Limits, targets: str, root: Path) -> Pl
                 kind="batch",
                 items=[it for it in batch if it.marker is not None],
                 unmarked_count=sum(1 for it in batch if it.marker is None),
+                member_count=len(batch),
                 peak_bytes=batch_peak(batch),
                 time_secs=sum(it.marker.time_secs for it in batch if it.marker is not None),
                 fits=batch_peak(batch) <= limits.budget_bytes,
@@ -946,7 +1001,7 @@ def build_plan(scan: ScanResult, limits: Limits, targets: str, root: Path) -> Pl
             )
         )
     for item in exclusive + singletons:
-        command = _base_command(targets) + [
+        command = _base_command() + [
             "--exact",
             item.full_name or item.fn_name,
             "--test-threads=1",
@@ -957,6 +1012,7 @@ def build_plan(scan: ScanResult, limits: Limits, targets: str, root: Path) -> Pl
                 kind="exclusive" if item in exclusive else "singleton",
                 items=[item],
                 unmarked_count=0,
+                member_count=1,
                 peak_bytes=item.marker.peak_bytes,
                 time_secs=item.marker.time_secs,
                 fits=item.marker.peak_bytes <= limits.budget_bytes,
@@ -973,7 +1029,7 @@ def build_plan(scan: ScanResult, limits: Limits, targets: str, root: Path) -> Pl
         batch_count=len(batch),
         ignored=ignored,
         manual=manual,
-        targets=targets,
+        targets=EXPLICIT_TARGETS,
     )
 
 
@@ -985,13 +1041,14 @@ def plan_to_json(plan: Plan, limits: Limits) -> dict:
     def wave_json(wave: Wave) -> dict:
         return {
             "kind": wave.kind,
+            "member_count": wave.member_count,
             "members": [it.full_name or it.fn_name for it in wave.items],
             "unmarked_count": wave.unmarked_count,
             "peak_bytes": wave.peak_bytes,
             "peak_human": human_bytes(wave.peak_bytes),
             "time_secs": round(wave.time_secs, 3),
             "fits_budget": wave.fits,
-            "action": "run" if wave.fits else "defer",
+            "action": "run" if wave.fits else "skip",
             "command": wave.command,
             "env": wave.env,
         }
@@ -1023,12 +1080,14 @@ def plan_to_json(plan: Plan, limits: Limits) -> dict:
             "ignored": len(plan.ignored),
             "manual": len(plan.manual),
         },
-        "targets": plan.targets,
+        "targets": list(plan.targets),
         "waves": [wave_json(w) for w in plan.waves],
-        "deferred": [
+        "skipped_tests": sum(w.member_count for w in plan.waves if not w.fits),
+        "skipped": [
             {
                 "kind": w.kind,
-                "name": w.items[0].full_name if w.items else w.kind,
+                "member_count": w.member_count,
+                "members": [it.full_name or it.fn_name for it in w.items],
                 "peak_bytes": w.peak_bytes,
                 "peak_human": human_bytes(w.peak_bytes),
                 "gap_bytes": w.peak_bytes - limits.budget_bytes,
@@ -1044,6 +1103,7 @@ def plan_to_json(plan: Plan, limits: Limits) -> dict:
 
 def print_plan(plan: Plan, limits: Limits) -> None:
     exclusive_waves = sum(1 for w in plan.waves if w.kind != "batch")
+    print(f"[plan] 目标集（显式）：{' + '.join(plan.targets)}")
     print(
         f"[plan] 默认集 {plan.default_count} 条：批量波 {plan.batch_count} 条；"
         f"独占/独享波 {exclusive_waves} 个；跳过 #[ignore] {len(plan.ignored)} 条、mode=manual {len(plan.manual)} 条"
@@ -1059,10 +1119,11 @@ def print_plan(plan: Plan, limits: Limits) -> None:
         verdict = (
             "执行"
             if wave.fits
-            else f"装不下（缺口 {human_bytes(wave.peak_bytes - limits.budget_bytes)}）"
+            else f"跳过（装不下：缺口 {human_bytes(wave.peak_bytes - limits.budget_bytes)}）"
         )
         print(
-            f"[plan] 波 {wave.index}/{wave.total} {wave.kind:<9} 成员：{members}\n"
+            f"[plan] 波 {wave.index}/{wave.total} {wave.kind:<9} 成员：{members}"
+            f"（共 {wave.member_count} 条）\n"
             f"        峰值合计 {human_bytes(wave.peak_bytes)} / 预算 {human_bytes(limits.budget_bytes)}"
             f"（预计 {wave.time_secs:.1f}s）→ {verdict}\n"
             f"        命令：CARGO_BUILD_JOBS={wave.env['CARGO_BUILD_JOBS']}"
@@ -1079,14 +1140,13 @@ def _load_plan(args):
     limits = resolve_limits()
     print_limits(limits)
     scan = scan_sources(root)
-    targets = decide_targets(scan, root)
-    cargo_names = cargo_test_list(root, targets, cargo_env(limits))
+    cargo_names = cargo_test_list(root, cargo_env(limits))
     resolve_names(scan, cargo_names)
     unresolved = [it for it in scan.items if (it.marker or it.has_ignore) and it.full_name is None]
     if unresolved:
         names = ", ".join(f"{rel(root, it.path)}:{it.line} {it.fn_name}" for it in unresolved)
         raise ToolError(f"这些测试无法映射到 cargo test --list 的名字，不能装箱：{names}")
-    return root, limits, scan, build_plan(scan, limits, targets, root)
+    return root, limits, scan, build_plan(scan, limits, root)
 
 
 def cmd_plan(args) -> int:
@@ -1114,6 +1174,37 @@ def _gap_table(title: str, waves: list[Wave], limits: Limits, tail: str) -> None
         print(tail)
 
 
+def _skip_table(skipped: list[Wave], limits: Limits) -> None:
+    """逐条列出被跳过的测试与条数：fast 通道不得静默 defer，且必须给可执行的降级路径。"""
+    total = sum(w.member_count for w in skipped)
+    print(
+        f"[fast] 跳过 {total} 条测试（{len(skipped)} 波装不进预算；本通道 exit 0，"
+        "不放宽判据、不静默执行）："
+    )
+    for wave in skipped:
+        gap = human_bytes(wave.peak_bytes - limits.budget_bytes)
+        where = (
+            f"峰值 {human_bytes(wave.peak_bytes)} > 预算 {human_bytes(limits.budget_bytes)}，缺口 {gap}"
+        )
+        if wave.kind == "batch":
+            print(f"  - 批量波：{wave.member_count} 条测试（{where}）")
+            continue
+        for name in (it.full_name or it.fn_name for it in wave.items):
+            print(f"  - {name}（{where}）")
+    print("[fast] 降级路径（装得下就会执行，任选其一）：")
+    print(
+        "  1) 抬高预算重跑：YX_TEST_MEM_BUDGET=<能装下最重一波的容量> "
+        "python scripts/dev/testsuite.py run fast"
+    )
+    print(
+        "  2) 让缺口直接报红：python scripts/dev/testsuite.py run full   "
+        "# 预算不足即 exit 2，列出全部缺口"
+    )
+    print("  3) 手工单跑（按下面列出的波次命令，独占/独享波已带 --test-threads=1）：")
+    for wave in skipped:
+        print(f"     {_shell_join(wave.command)}")
+
+
 def _execute_wave(root: Path, wave: Wave, limits: Limits) -> int:
     print(
         f"[run] 波 {wave.index}/{wave.total} {wave.kind}：CARGO_BUILD_JOBS={wave.env['CARGO_BUILD_JOBS']}"
@@ -1135,38 +1226,40 @@ def cmd_run(args) -> int:
         print("[run] 默认集为空：没有可执行的波")
         return 0
 
-    deferred = [w for w in plan.waves if not w.fits]
-    if args.channel == "full" and deferred:
+    skipped = [w for w in plan.waves if not w.fits]
+    skipped_tests = sum(w.member_count for w in skipped)
+    if args.channel == "full" and skipped:
         _gap_table(
             "[full] 预算不足：默认集装不下，禁止静默跳过（exit 2）",
-            deferred,
+            skipped,
             limits,
             "[full] 未执行任何波：先把预算抬到能装下最重的一波，再重跑。",
         )
         return 2
-    if args.channel == "fast" and len(deferred) == len(plan.waves):
-        _gap_table(
-            "[fast] defer 表（按预算装不下 → 跳过；本通道 exit 0，不放宽判据、不静默执行）：",
-            deferred,
-            limits,
-            "[fast] 提示：腾出内存、调大 YX_TEST_MEM_BUDGET，或改用 run full 让缺口直接报红。",
+    if args.channel == "fast" and len(skipped) == len(plan.waves):
+        _skip_table(skipped, limits)
+        print(
+            f"[run] fast 通道完成：执行 0 波（0 条），"
+            f"跳过 {len(skipped)} 波（{skipped_tests} 条测试）"
         )
         return 0
 
+    executed = 0
+    executed_tests = 0
     for wave in plan.waves:
         if not wave.fits:
             continue
         if _execute_wave(root, wave, limits) != 0:
             print(f"[run] 波 {wave.index}/{wave.total} 失败（{wave.kind}）", file=sys.stderr)
             return 1
-    if deferred:
-        _gap_table(
-            "[fast] defer 表（按预算装不下 → 跳过；本通道 exit 0，不放宽判据、不静默执行）：",
-            deferred,
-            limits,
-            "[fast] 提示：腾出内存、调大 YX_TEST_MEM_BUDGET，或改用 run full 让缺口直接报红。",
-        )
-    print(f"[run] {args.channel} 通道完成：执行 {len(plan.waves) - len(deferred)} 波，defer {len(deferred)} 波")
+        executed += 1
+        executed_tests += wave.member_count
+    if skipped:
+        _skip_table(skipped, limits)
+    print(
+        f"[run] {args.channel} 通道完成：执行 {executed} 波（{executed_tests} 条），"
+        f"跳过 {len(skipped)} 波（{skipped_tests} 条测试）"
+    )
     return 0
 
 

@@ -83,6 +83,21 @@
 | 任务比预想大       | 在 [09](architecture/09-execution-wbs.md) 里把三级任务再拆细                                | 一个超大 commit 混多个验收判据 |
 | 发现文档与代码矛盾 | 先信代码，再修文档（先例：`layers/README.md` 层序反了，D7）                                 | 照着错的文档写代码             |
 
+### 提交前验证（改代码）
+
+```bash
+cargo fmt                                              # 格式化（必跑）
+cargo clippy --all --all-features --all-targets -- -D warnings
+python scripts/dev/testsuite.py run fast               # 提交前必跑：lib + 集成侧，见下
+python scripts/ci/check-test-channel.py                # 四处口径同源（本页 / AGENTS.md / test-specification / pre-commit）
+```
+
+`run fast` 的目标集是显式的：`--lib`（src/ 单元测试）加四个集成侧目标
+`integration` / `formatter_integration` / `yx_runner` / `yx_multifile_runner`；
+`pre-commit` 第一段跑的就是这条命令，第二段跑 `cargo test --all --quiet` 拦提交。
+doctest（`cargo test --doc`）与语料差分不在 `run fast` 的覆盖面内，由 CI 兜底。
+预算装不下的独占波会在结束时逐条列出「跳过 N 条测试」并提供降级路径，不静默跳过。
+
 ## 二、改文档
 
 ### 分类：这篇文档属于哪个目录
