@@ -38,15 +38,15 @@
   "src/reference/language-spec/type-system.md:en": "443d2c26c8d80f455a7c1f3ae3c700b1",
   "src/reference/stdlib/index.md:en": "6e48b367d2ba90b014d677cc31f89c39",
   "src/reference/error-code/E0xxx.md:en": "9648c29e4a91648bf85609f2c71e5fe9",
-  "src/reference/error-code/E1xxx.md:en": "b39e055e428a2d94d2af88d7f559e8f5",
-  "src/reference/error-code/E2xxx.md:en": "2c536f2c53718b4e0dac0df3b8bf1701",
+  "src/reference/error-code/E1xxx.md:en": "aaee6d3d158c0ead391b9660348f3934",
+  "src/reference/error-code/E2xxx.md:en": "ad38dda956946c28fb33f7f662be4b30",
   "src/reference/error-code/E4xxx.md:en": "8283264a86311d0af73997a0108506da",
   "src/reference/error-code/E5xxx.md:en": "020f5af2837292468c1973c0fcdd67a3",
   "src/reference/error-code/E6xxx.md:en": "a13dd30fb9c19c92fc94b61f1f71a937",
   "src/reference/error-code/E7xxx.md:en": "391baba405abb7de3fac7d79b0ce4dde",
   "src/reference/error-code/E8xxx.md:en": "a302c3c19240add117d4587bca0cbbd0",
   "src/reference/error-code/index.md:en": "2d3f627ed5945d1dd357cc8b1e08e1aa",
-  "src/reference/warning-code/warning-codes.md:en": "c83a31495fbf760d5bf90925fbef3be4",
+  "src/reference/warning-code/warning-codes.md:en": "b3de794d9d7a1409222525fe55002848",
   "src/reference/package/commands.md:en": "4056810ea1976545a441151a8fd8dc0c",
   "src/reference/package/error-codes.md:en": "e66207fca3a3afc49426c39f06ae4ef6",
   "src/reference/package/index.md:en": "a9f9da2b4b9fee190f2503b2cf103684",
@@ -215,5 +215,5 @@
   "src/rfc/accepted/039-compiler-architecture.md:en": "262892d9605164cd627a02bd7e893baf",
   "src/rfc/accepted/027a-termination-explicit-measure.md:en": "fe67f308209f9a47a64c5fcf08be3425",
   "src/dev/architecture/09a-wbs-history.md:en": "ec967c9f777f037fe2be7024976e8196",
-  "src/dev/test-gate-census.md:en": "4ac5a8eafd21165d4fb40f5ec4cf0f3c"
+  "src/dev/test-gate-census.md:en": "c531bfd7e9e8b8b5b2ca3f4263064d8a"
 }
