@@ -12,7 +12,8 @@ WBS 0.6 的「大清理」前置：把全仓 #[test] 按三扇门（条款 / 病
 * 条款门（0.6-10 收紧）：测试文件的头部（前 25 行；src/**/tests*/ 下的文件连父
   mod.rs 一起看）出现**可核条目**——节号形态 §<数字>（含 RFC-<数字> §<数字>、
   SPEC §<数字>）。只写「见 RFC-011」而没有任何节号的不算：0.6-10 的 40 条分层抽样
-  实测「引用了但撑不住断言」占 50%（见 docs/src/dev/test-gate-census.md 的抽样审计节）。
+  实测「引用了但撑不住断言」占 50%——这条实测是**放弃「凭一句引用就留」的直接原因**。
+  （该抽样审计已于 0.6-19 废止并删除，结论保留、审计产物不再维护。）
 * 病史门：测试函数体、文档注释或**文件头**（//! 回归背景）点名真实故障
   （issue #N、回归、缺陷、事故）——该测试钉的是一次已发生的事故。文件头半径
   的理由：项目惯例是把「回归背景：issue #N」写在文件头，逐条测试注释里不重复。
@@ -26,10 +27,11 @@ WBS 0.6 的「大清理」前置：把全仓 #[test] 按三扇门（条款 / 病
   tests/formatter_integration.rs、tests/yx_runner*.rs（spec-shaped，走进程边界）、
   以及测试名含 unchanged/anchor/guard/preserv/baseline 的现状锚 —— 一律「留」。
 * 病史门过 → 「留」。
-* 条款门（有可核条目）且**抽样审计确认真实支撑** → 「留」（审计数据见
-  scripts/dev/test-gate-census-audit.json，由同目录的 audit 脚本按固定种子复现）。
-* 条款门命中但未经审计、或审计判为「不相关 / 泛泛」 → 「待核」——**有引用不等于
-  引用撑得住断言**，收紧后不再凭文件头一句话给「留」。
+* 条款门（有可核条目）→ 一律「待核」——**有引用不等于引用撑得住断言**，
+  收紧后不再凭文件头一句话给「留」。
+  （0.6-10 的 40 条抽样审计已于 0.6-19 废止并删除：审计池随测试退役缩小后，原样本
+  38 条已不存在，--check 恒报「缺 38 条、多 38 条」；审计脚本与数据文件一并删除，
+  条款引用不再有「审计确认」这一档。）
 * 两门皆不过 + 断言只有弱断言（is_ok/is_some/is_err/is_none + unwrap/expect）
   → 「退役候选」（候选，不是判决；证明门仍需人工复核）。
 * 两门皆不过 + 有 assert_eq!/assert_ne!/matches!/带消息的 assert → 「待判」。
@@ -345,15 +347,11 @@ def assertion_summary(body: str, masked_body: str = "") -> str:
     return " ".join(counts) if counts else "（无断言）"
 
 
-def classify(rel_path, name, header, body, has_should_panic, audit=None, masked_body=None):
+def classify(rel_path, name, header, body, has_should_panic, masked_body=None):
     """返回 (门, 依据, 处置)。
 
     header 同时承载两种用途：条款门（可核条目 §<数字>）与病史门的**文件头半径**
     （测试文件的 //! 头常写「回归背景：issue #226」，那是整份文件的病史声明）。
-
-    audit：本条测试若在 0.6-10 的 40 条分层抽样里，传 {verdict, evidence}——
-      审计确认「真实支撑」的才给「留」，判为「不相关/泛泛」的一律「待核」。
-      未经审计的条款引用也只到「待核」：有引用不等于引用撑得住断言。
 
     masked_body：同一函数体的**掩码行**（字符串与注释已抹掉）。match + panic! 形态
     只在掩码行上判定，避免注释里的 match/panic! 造成假阳性；缺省时退回 body。
@@ -370,14 +368,8 @@ def classify(rel_path, name, header, body, has_should_panic, audit=None, masked_
         if HISTORY_RE.search(body):
             return "病史", "函数体/注释点名 issue/回归/缺陷/事故", "留"
         return "病史", "文件头（//! 回归背景）点名 issue/回归/缺陷/事故", "留"
-    if audit:
-        verdict = audit.get("verdict", "")
-        if verdict == "真实支撑":
-            return "条款", f"抽样审计确认条款真实支撑：{audit.get('evidence', '')}", "留"
-        gate = "条款" if clause else "待判"
-        return gate, f"抽样审计判为{verdict}：{audit.get('evidence', '')}", "待核"
     if clause:
-        return "条款", "文件头有可核条目（§<数字>），但未经抽样审计确认", "待核"
+        return "条款", "文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）", "待核"
     if LOOSE_REF_RE.search(header):
         return "待判", "文件头只引整篇 RFC/规范而无节号（收紧后不算条款门）——需人工核", "待核"
     has_helper = bool(HELPER_RE.search(body))
@@ -399,29 +391,8 @@ def classify(rel_path, name, header, body, has_should_panic, audit=None, masked_
     return "待判", "两门皆不过；含强断言，证明门需人工复核", "待判"
 
 
-AUDIT_PATH = os.path.join(
-    os.path.dirname(os.path.abspath(__file__)), "test-gate-census-audit.json"
-)
-
-
-def load_audit_index():
-    """审计数据：{(file, name): {verdict, evidence}}；文件不存在时返回空表。
-
-    审计由同目录 test-gate-census-audit.py 按固定种子复现样本，人工逐条判定后
-    写进该 JSON；生成器只读它，不自己下「条款撑不撑得住」的结论。
-    """
-    if not os.path.isfile(AUDIT_PATH):
-        return {}
-    import json
-
-    with io.open(AUDIT_PATH, "r", encoding="utf-8") as fh:
-        data = json.load(fh)
-    return {(r["file"], r["name"]): r for r in data.get("records", [])}
-
-
 def scan():
     rows = []
-    audit_index = load_audit_index()
     for path in iter_rust_files():
         rel_path = rel(path)
         raw = read_text(path)
@@ -452,7 +423,6 @@ def scan():
                 header,
                 body + "\n" + doc_block(lines, fn_idx),
                 bool(SHOULD_PANIC_RE.search(attr_block)),
-                audit_index.get((rel_path, name)),
                 masked_body,
             )
             rows.append(
@@ -492,7 +462,7 @@ def summarize(rows):
 SELFTEST_CLAUSE = "//! 条款门正例：依据 language-spec §3.2 与 RFC-029\n"
 
 
-def _selftest_case(tmp, filename, header, body, audit=None):
+def _selftest_case(tmp, filename, header, body):
     path = os.path.join(tmp, filename)
     with io.open(path, "w", encoding="utf-8") as fh:
         fh.write(header + body)
@@ -514,7 +484,6 @@ def _selftest_case(tmp, filename, header, body, audit=None):
                 "\n".join(lines[:25]),
                 body_text + "\n" + doc_block(lines, fn_idx),
                 bool(SHOULD_PANIC_RE.search("\n".join(lines[idx : fn_idx + 1]))),
-                audit,
                 masked_body,
             )
             return {
@@ -547,11 +516,6 @@ def selftest():
         sectioned = _selftest_case(
             tmp, "sectioned.rs", "//! 依据 RFC-011 §4 编译期泛型\n",
             "#[test]\nfn test_sectioned_clause_is_pending() {\n    assert_eq!(1 + 1, 2);\n}\n",
-        )
-        audited = _selftest_case(
-            tmp, "audited.rs", "//! 依据 RFC-011 §4 编译期泛型\n",
-            "#[test]\nfn test_audited_clause_is_kept() {\n    assert_eq!(1 + 1, 2);\n}\n",
-            audit={"verdict": "真实支撑", "evidence": "selftest"},
         )
         empty = _selftest_case(
             tmp, "empty.rs", "//! 没有条款引用\n",
@@ -676,10 +640,7 @@ def selftest():
         )
     ok = True
     if pos["gate"] != "条款" or pos["action"] != "待核":
-        print(f"[selftest] FAIL 未审计的条款引用应落 条款/待核，实际 {pos['gate']}/{pos['action']}")
-        ok = False
-    if audited["gate"] != "条款" or audited["action"] != "留":
-        print(f"[selftest] FAIL 审计确认真实支撑应落 条款/留，实际 {audited['gate']}/{audited['action']}")
+        print(f"[selftest] FAIL 未经人工确认的条款引用应落 条款/待核，实际 {pos['gate']}/{pos['action']}")
         ok = False
     if neg["gate"] != "待判" or neg["action"] != "退役候选":
         print(f"[selftest] FAIL 弱断言反例应落 待判/退役候选，实际 {neg['gate']}/{neg['action']}")
@@ -691,7 +652,7 @@ def selftest():
         print(f"[selftest] FAIL 只有 RFC 编号没有节号不得过条款门，实际 {bare['gate']}/{bare['action']}")
         ok = False
     if sectioned["gate"] != "条款" or sectioned["action"] != "待核":
-        print(f"[selftest] FAIL 有节号但未审计应落 条款/待核，实际 {sectioned['gate']}/{sectioned['action']}")
+        print(f"[selftest] FAIL 有节号但未经人工确认应落 条款/待核，实际 {sectioned['gate']}/{sectioned['action']}")
         ok = False
     for label, case, want_lines in (
         ("字符串里的花括号", braces, 5),
@@ -745,7 +706,7 @@ def selftest():
             ok = False
     if ok:
         print(
-            "[selftest] OK：§节号正例→条款/待核、审计确认真实支撑→条款/留、弱断言反例→待判/退役候选、"
+            "[selftest] OK：§节号正例→条款/待核、弱断言反例→待判/退役候选、"
             "无断言反例→均不通过/退役候选、裸 RFC 反例→不过条款门、"
             "字面量与注释里的花括号不截断函数体（4 例）、"
             "含数字的助手名与 match+panic 形态被认作断言（2 例，含 2 例反向对照）"
