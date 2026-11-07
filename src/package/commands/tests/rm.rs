@@ -10,7 +10,6 @@ use crate::package::commands::add;
 use crate::package::commands::init;
 use crate::package::commands::rm::exec_in;
 use crate::package::error::PackageError;
-use crate::package::lock::LockFile;
 use crate::package::manifest::PackageManifest;
 use tempfile::TempDir;
 
@@ -30,24 +29,6 @@ fn test_rm_dependency() {
 
     let manifest = PackageManifest::load(&project_dir).unwrap();
     assert!(!manifest.dependencies.contains_key("foo"));
-}
-
-#[test]
-fn test_rm_dev_dependency() {
-    let (_tmp, project_dir) = setup_project_with_deps();
-    exec_in(&project_dir, "bar", true).unwrap();
-
-    let manifest = PackageManifest::load(&project_dir).unwrap();
-    assert!(!manifest.dev_dependencies.contains_key("bar"));
-}
-
-#[test]
-fn test_rm_updates_lock() {
-    let (_tmp, project_dir) = setup_project_with_deps();
-    exec_in(&project_dir, "foo", false).unwrap();
-
-    let lock = LockFile::load(&project_dir).unwrap();
-    assert!(!lock.package.contains_key("foo"));
 }
 
 #[test]

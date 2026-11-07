@@ -11,7 +11,6 @@
 //!   且**不得**宽化成 `kind_of == Builtin`（那是 12 个规范名 + 别名）
 //! - 定种：`SemanticProbe::kind_of` ↔ 上述三张表 + `from_builtin_name`
 
-use crate::ast::extract_generic_param_names;
 use crate::frontend::core::parser::{NameKind, NullProbe, TypeEnvProbe};
 use crate::frontend::core::sema::operator_interfaces::SPECS;
 use crate::frontend::core::sema::probe::{
@@ -166,55 +165,4 @@ fn test_semantic_probe_const_param_types_match_spec_without_widening() {
             );
         }
     }
-}
-
-#[test]
-fn test_semantic_probe_and_null_probe_differ_on_const_param() {
-    // Arrange：同一份源码的拍平签名形参（`(N: Int)` 是 const 泛型参数，
-    // `n: N` 把 N 当类型引用——正是 const 参数判定的触发形态）
-    let tokens = crate::frontend::core::lexer::tokenize("f: (N: Int, n: N) -> Int = 1")
-        .expect("源码应可词法分析");
-    let module = crate::frontend::core::parser::parse(&tokens).module;
-    let params = module
-        .items
-        .iter()
-        .find_map(|s| match &s.kind {
-            crate::ast::StmtKind::Assign {
-                type_annotation, ..
-            } => {
-                let params = type_annotation
-                    .as_ref()
-                    .map(crate::ast::Type::fn_params_flat)
-                    .unwrap_or_default();
-                if params.is_empty() {
-                    None
-                } else {
-                    Some(params)
-                }
-            }
-            _ => None,
-        })
-        .expect("应有一条带签名形参的赋值语句");
-
-    // Act：语义探针（生产入口的形态）vs NullProbe（默认语法入口）
-    let with_semantic: Vec<String> = extract_generic_param_names(&params, &SemanticProbe)
-        .into_iter()
-        .map(|p| p.name)
-        .collect();
-    let with_null: Vec<String> = extract_generic_param_names(&params, &NullProbe)
-        .into_iter()
-        .map(|p| p.name)
-        .collect();
-
-    // Assert：语义探针下 const 参数 N 必须登记；NullProbe 下不登记——
-    // 这正是「默认入口不得静默降级」的另一面：生产入口必须注入语义探针。
-    assert_eq!(
-        with_semantic,
-        vec!["N".to_string()],
-        "注入语义探针时 (N: Int) 必须登记为 const 参数"
-    );
-    assert!(
-        with_null.is_empty(),
-        "NullProbe 不携带类型知识，不得登记 const 参数，实际 {with_null:?}"
-    );
 }

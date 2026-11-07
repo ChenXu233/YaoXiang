@@ -34,49 +34,6 @@ fn test_parse_full_version() {
 }
 
 #[test]
-fn test_parse_two_part_version() {
-    let ver = v("1.2");
-    assert_eq!((ver.major, ver.minor, ver.patch), (1, 2, 0));
-}
-
-#[test]
-fn test_parse_single_part_version() {
-    let ver = v("1");
-    assert_eq!((ver.major, ver.minor, ver.patch), (1, 0, 0));
-}
-
-#[test]
-fn test_parse_prerelease_version() {
-    let ver = v("1.0.0-alpha");
-    assert_eq!((ver.major, ver.minor, ver.patch), (1, 0, 0));
-    assert_eq!(ver.pre.to_string(), "alpha");
-}
-
-#[test]
-fn test_parse_two_part_prerelease_version() {
-    // 两段 + 预发布段：补齐后仍可解析（旧解析器同语义）
-    let ver = v("1.2-beta");
-    assert_eq!((ver.major, ver.minor, ver.patch), (1, 2, 0));
-    assert_eq!(ver.pre.to_string(), "beta");
-}
-
-#[test]
-fn test_parse_version_display() {
-    assert_eq!(v("1.2.3").to_string(), "1.2.3");
-    assert_eq!(v("1.0.0-beta").to_string(), "1.0.0-beta");
-}
-
-#[test]
-fn test_parse_version_ordering() {
-    assert!(v("1.0.0") < v("2.0.0"));
-    assert!(v("1.0.0") < v("1.1.0"));
-    assert!(v("1.0.0") < v("1.0.1"));
-    // 预发布版本比正式版本低（semver crate 按 spec 逐标识比较）
-    assert!(v("1.0.0-alpha") < v("1.0.0"));
-    assert!(v("1.0.0-alpha") < v("1.0.0-beta"));
-}
-
-#[test]
 fn test_parse_invalid_version() {
     // Act / Assert：非法输入（非版本词 / 四段 / 空串）一律报错
     assert!(parse_version("invalid").is_err(), "非版本词应报错");
@@ -90,94 +47,6 @@ fn test_parse_invalid_version() {
 fn test_parse_caret_version() {
     // ^1.2.3 → >=1.2.3, <2.0.0
     let r = req("^1.2.3");
-    assert!(r.matches(&v("1.2.3")));
-    assert!(r.matches(&v("1.9.9")));
-    assert!(!r.matches(&v("2.0.0")));
-    assert!(!r.matches(&v("1.2.2")));
-}
-
-#[test]
-fn test_parse_caret_zero_major() {
-    // ^0.2.3 → >=0.2.3, <0.3.0
-    let r = req("^0.2.3");
-    assert!(r.matches(&v("0.2.3")));
-    assert!(r.matches(&v("0.2.9")));
-    assert!(!r.matches(&v("0.3.0")));
-}
-
-#[test]
-fn test_parse_tilde_version() {
-    // ~1.2.3 → >=1.2.3, <1.3.0
-    let r = req("~1.2.3");
-    assert!(r.matches(&v("1.2.3")));
-    assert!(r.matches(&v("1.2.9")));
-    assert!(!r.matches(&v("1.3.0")));
-    assert!(!r.matches(&v("1.2.2")));
-}
-
-#[test]
-fn test_parse_bare_version_is_exact() {
-    // Arrange：裸版本 = 精确匹配（`add` 的文档化语义，非 Cargo 的 caret 默认）
-    let r = req("1.0.0");
-
-    // Act / Assert
-    assert!(r.matches(&v("1.0.0")));
-    assert!(!r.matches(&v("1.0.1")));
-    assert!(!r.matches(&v("0.9.9")));
-
-    // 两段裸版本补齐后仍精确
-    let r = req("1.2");
-    assert!(r.matches(&v("1.2.0")));
-    assert!(!r.matches(&v("1.2.1")));
-}
-
-#[test]
-fn test_parse_wildcard() {
-    let r = req("*");
-    assert!(r.matches(&v("0.0.0")));
-    assert!(r.matches(&v("99.99.99")));
-
-    // 通配比较器（旧解析器不支持，现为超集）
-    let r = req("1.2.*");
-    assert!(r.matches(&v("1.2.0")));
-    assert!(r.matches(&v("1.2.9")));
-    assert!(!r.matches(&v("1.3.0")));
-}
-
-#[test]
-fn test_parse_gte() {
-    let r = req(">=1.0.0");
-    assert!(r.matches(&v("1.0.0")));
-    assert!(r.matches(&v("2.0.0")));
-    assert!(!r.matches(&v("0.9.9")));
-}
-
-#[test]
-fn test_parse_gt() {
-    let r = req(">1.0.0");
-    assert!(!r.matches(&v("1.0.0")));
-    assert!(r.matches(&v("1.0.1")));
-}
-
-#[test]
-fn test_parse_lte() {
-    let r = req("<=1.0.0");
-    assert!(r.matches(&v("1.0.0")));
-    assert!(r.matches(&v("0.9.9")));
-    assert!(!r.matches(&v("1.0.1")));
-}
-
-#[test]
-fn test_parse_lt() {
-    let r = req("<1.0.0");
-    assert!(!r.matches(&v("1.0.0")));
-    assert!(r.matches(&v("0.9.9")));
-}
-
-#[test]
-fn test_parse_compound() {
-    // >=1.2.3, <2.0.0
-    let r = req(">=1.2.3, <2.0.0");
     assert!(r.matches(&v("1.2.3")));
     assert!(r.matches(&v("1.9.9")));
     assert!(!r.matches(&v("2.0.0")));
@@ -220,43 +89,4 @@ fn test_compatible_versions() {
     assert!(is_compatible(&req("^1.0.0"), &req("^1.5.0")));
     // 相同区间兼容（旧枚举实现在 major<100 内枚举碰巧成立，区间法直接成立）
     assert!(is_compatible(&req("^1.0.0"), &req(">=1.2.0, <1.9.0")));
-}
-
-#[test]
-fn test_incompatible_versions() {
-    assert!(!is_compatible(&req("^1.0.0"), &req("^2.0.0")));
-    assert!(!is_compatible(&req(">=1.0.0, <1.2.0"), &req(">=1.3.0")));
-}
-
-#[test]
-fn test_wildcard_compatible_with_anything() {
-    assert!(is_compatible(&req("*"), &req("^1.0.0")));
-    assert!(is_compatible(&req("^1.0.0"), &req("*")));
-}
-
-#[test]
-fn test_compatible_high_major_range() {
-    // 旧枚举实现 major<100/minor<50/patch<20 的盲区：高版本区间被误判不兼容
-    assert!(is_compatible(&req("^200.0.0"), &req("^200.5.0")));
-    assert!(is_compatible(&req(">=500.0.0"), &req(">=600.0.0")));
-}
-
-#[test]
-fn test_incompatible_upper_bound() {
-    // 交集为空的上界约束（旧实现靠枚举命中，区间法直接判定）
-    assert!(!is_compatible(&req("<=1.0.0"), &req(">=1.0.1")));
-    assert!(!is_compatible(&req("=1.0.0"), &req("=1.0.1")));
-    assert!(is_compatible(&req("=1.0.0"), &req("=1.0.0")));
-}
-
-#[test]
-fn test_compatible_exact_and_range() {
-    assert!(is_compatible(&req("=1.5.0"), &req("^1.0.0")));
-    assert!(!is_compatible(&req("=2.5.0"), &req("^1.0.0")));
-}
-
-#[test]
-fn test_compatible_tilde() {
-    assert!(is_compatible(&req("~1.2.3"), &req("~1.2.9")));
-    assert!(!is_compatible(&req("~1.2.3"), &req("~1.3.0")));
 }

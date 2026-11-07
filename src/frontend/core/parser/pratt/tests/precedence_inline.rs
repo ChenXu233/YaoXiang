@@ -80,17 +80,3 @@ fn test_bp_ordering() {
     assert!(BP_FACTOR <= BP_CALL);
     assert!(BP_CALL < BP_HIGHEST);
 }
-
-#[test]
-fn test_from_bp_invalid() {
-    assert_eq!(Precedence::from_bp(11), None);
-    assert_eq!(Precedence::from_bp(100), None);
-}
-
-#[test]
-fn test_precedence_context_can_parse() {
-    let low = PrecedenceContext::new(BP_LOWEST);
-    assert!(low.can_parse());
-    let high = PrecedenceContext::new(BP_HIGHEST);
-    assert!(high.can_parse());
-}

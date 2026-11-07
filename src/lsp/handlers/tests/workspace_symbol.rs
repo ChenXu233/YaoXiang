@@ -100,54 +100,6 @@ fn test_workspace_symbol_empty_query() {
 }
 
 #[test]
-fn test_workspace_symbol_exact_match() {
-    let world = make_world_with_symbols();
-    let params = WorkspaceSymbolParams {
-        query: "fibonacci".to_string(),
-        work_done_progress_params: Default::default(),
-        partial_result_params: Default::default(),
-    };
-
-    let result = handle_workspace_symbol(&world, params);
-    assert!(result.is_some());
-    let symbols = result.unwrap();
-    assert_eq!(symbols.len(), 1, "精确匹配应返回 1 个结果");
-    assert_eq!(symbols[0].name, "fibonacci");
-}
-
-#[test]
-fn test_workspace_symbol_prefix_match() {
-    let world = make_world_with_symbols();
-    let params = WorkspaceSymbolParams {
-        query: "fibon".to_string(),
-        work_done_progress_params: Default::default(),
-        partial_result_params: Default::default(),
-    };
-
-    let result = handle_workspace_symbol(&world, params);
-    assert!(result.is_some());
-    let symbols = result.unwrap();
-    assert_eq!(symbols.len(), 1, "前缀匹配应返回 1 个结果");
-    assert_eq!(symbols[0].name, "fibonacci");
-}
-
-#[test]
-fn test_workspace_symbol_fuzzy_match() {
-    let world = make_world_with_symbols();
-    let params = WorkspaceSymbolParams {
-        query: "fid".to_string(),
-        work_done_progress_params: Default::default(),
-        partial_result_params: Default::default(),
-    };
-
-    let result = handle_workspace_symbol(&world, params);
-    assert!(result.is_some());
-    let symbols = result.unwrap();
-    assert_eq!(symbols.len(), 1, "模糊匹配应返回 1 个结果");
-    assert_eq!(symbols[0].name, "find_by_id");
-}
-
-#[test]
 fn test_workspace_symbol_no_match() {
     let world = make_world_with_symbols();
     let params = WorkspaceSymbolParams {

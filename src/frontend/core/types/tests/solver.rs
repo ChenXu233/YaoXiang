@@ -316,72 +316,6 @@ fn test_unify_int_width_mismatch() {
 }
 
 #[test]
-fn test_unify_cross_kind_mismatch() {
-    // #324：这些 API 生产上运行于类型检查 walk 内（guard 覆盖），单测直调需模拟 walk 上下文
-    let _walk_guard = crate::util::diagnostic::push_current_span(crate::util::span::Span::dummy());
-    let mut solver = s();
-    let bytes = MonoType::Generic {
-        name: "Bytes".into(),
-        args: vec![],
-    };
-    assert!(solver.unify(&MonoType::Int(32), &MonoType::Bool).is_err());
-    assert!(solver
-        .unify(&MonoType::make_string(), &MonoType::Int(64))
-        .is_err());
-    assert!(solver.unify(&MonoType::Void, &MonoType::Bool).is_err());
-    assert!(solver.unify(&MonoType::Char, &bytes).is_err());
-}
-
-// §3.3: 结构体统一
-
-#[test]
-fn test_unify_struct_same() {
-    let mut solver = s();
-    let a = struct_ty(
-        "Point",
-        vec![("x", MonoType::Float(64)), ("y", MonoType::Float(64))],
-    );
-    let b = struct_ty(
-        "Point",
-        vec![("x", MonoType::Float(64)), ("y", MonoType::Float(64))],
-    );
-    assert!(solver.unify(&a, &b).is_ok());
-}
-
-#[test]
-fn test_unify_struct_different_name() {
-    // #324：这些 API 生产上运行于类型检查 walk 内（guard 覆盖），单测直调需模拟 walk 上下文
-    let _walk_guard = crate::util::diagnostic::push_current_span(crate::util::span::Span::dummy());
-    let mut solver = s();
-    let a = struct_ty("Point", vec![("x", MonoType::Float(64))]);
-    let b = struct_ty("Vec2", vec![("x", MonoType::Float(64))]);
-    assert!(solver.unify(&a, &b).is_err());
-}
-
-#[test]
-fn test_unify_struct_different_field_count() {
-    // #324：这些 API 生产上运行于类型检查 walk 内（guard 覆盖），单测直调需模拟 walk 上下文
-    let _walk_guard = crate::util::diagnostic::push_current_span(crate::util::span::Span::dummy());
-    let mut solver = s();
-    let a = struct_ty("P", vec![("x", MonoType::Float(64))]);
-    let b = struct_ty(
-        "P",
-        vec![("x", MonoType::Float(64)), ("y", MonoType::Float(64))],
-    );
-    assert!(solver.unify(&a, &b).is_err());
-}
-
-#[test]
-fn test_unify_struct_different_field_name() {
-    // #324：这些 API 生产上运行于类型检查 walk 内（guard 覆盖），单测直调需模拟 walk 上下文
-    let _walk_guard = crate::util::diagnostic::push_current_span(crate::util::span::Span::dummy());
-    let mut solver = s();
-    let a = struct_ty("P", vec![("x", MonoType::Float(64))]);
-    let b = struct_ty("P", vec![("y", MonoType::Float(64))]);
-    assert!(solver.unify(&a, &b).is_err());
-}
-
-#[test]
 fn test_unify_struct_different_field_type() {
     // #324：这些 API 生产上运行于类型检查 walk 内（guard 覆盖），单测直调需模拟 walk 上下文
     let _walk_guard = crate::util::diagnostic::push_current_span(crate::util::span::Span::dummy());
@@ -400,54 +334,6 @@ fn test_unify_struct_with_var_field() {
     assert!(solver.unify(&a, &b).is_ok());
 }
 
-// §3.4: 枚举统一
-
-#[test]
-fn test_unify_enum_same() {
-    let mut solver = s();
-    let a = MonoType::Enum(crate::frontend::core::types::EnumType {
-        name: "Color".to_string(),
-        variants: vec!["red".to_string(), "green".to_string(), "blue".to_string()],
-    });
-    let b = MonoType::Enum(crate::frontend::core::types::EnumType {
-        name: "Color".to_string(),
-        variants: vec!["red".to_string(), "green".to_string(), "blue".to_string()],
-    });
-    assert!(solver.unify(&a, &b).is_ok());
-}
-
-#[test]
-fn test_unify_enum_different_name() {
-    // #324：这些 API 生产上运行于类型检查 walk 内（guard 覆盖），单测直调需模拟 walk 上下文
-    let _walk_guard = crate::util::diagnostic::push_current_span(crate::util::span::Span::dummy());
-    let mut solver = s();
-    let a = MonoType::Enum(crate::frontend::core::types::EnumType {
-        name: "Color".to_string(),
-        variants: vec!["red".to_string()],
-    });
-    let b = MonoType::Enum(crate::frontend::core::types::EnumType {
-        name: "Status".to_string(),
-        variants: vec!["red".to_string()],
-    });
-    assert!(solver.unify(&a, &b).is_err());
-}
-
-#[test]
-fn test_unify_enum_different_variants() {
-    // #324：这些 API 生产上运行于类型检查 walk 内（guard 覆盖），单测直调需模拟 walk 上下文
-    let _walk_guard = crate::util::diagnostic::push_current_span(crate::util::span::Span::dummy());
-    let mut solver = s();
-    let a = MonoType::Enum(crate::frontend::core::types::EnumType {
-        name: "Opt".to_string(),
-        variants: vec!["some".to_string(), "none".to_string()],
-    });
-    let b = MonoType::Enum(crate::frontend::core::types::EnumType {
-        name: "Opt".to_string(),
-        variants: vec!["some".to_string()],
-    });
-    assert!(solver.unify(&a, &b).is_err());
-}
-
 // §3.6: 元组统一
 
 #[test]
@@ -455,15 +341,6 @@ fn test_unify_tuple_structural() {
     let mut solver = s();
     let a = MonoType::make_tuple(vec![MonoType::Int(32), MonoType::make_string()]);
     let b = MonoType::make_tuple(vec![MonoType::Int(32), MonoType::make_string()]);
-    assert!(solver.unify(&a, &b).is_ok());
-}
-
-#[test]
-fn test_unify_tuple_with_var() {
-    let mut solver = s();
-    let v = solver.new_var();
-    let a = MonoType::make_tuple(vec![MonoType::Int(32)]);
-    let b = MonoType::make_tuple(vec![v]);
     assert!(solver.unify(&a, &b).is_ok());
 }
 
@@ -481,130 +358,6 @@ fn test_unify_fn_params() {
         return_type: Box::new(MonoType::make_string()),
     };
     assert!(solver.unify(&f1, &f2).is_ok());
-}
-
-#[test]
-fn test_unify_fn_return_mismatch() {
-    // #324：这些 API 生产上运行于类型检查 walk 内（guard 覆盖），单测直调需模拟 walk 上下文
-    let _walk_guard = crate::util::diagnostic::push_current_span(crate::util::span::Span::dummy());
-    let mut solver = s();
-    let f1 = MonoType::Fn {
-        params: vec![],
-        return_type: Box::new(MonoType::Int(32)),
-    };
-    let f2 = MonoType::Fn {
-        params: vec![],
-        return_type: Box::new(MonoType::Bool),
-    };
-    assert!(solver.unify(&f1, &f2).is_err());
-}
-
-#[test]
-fn test_unify_fn_with_vars() {
-    let mut solver = s();
-    let v = solver.new_var();
-    let f1 = MonoType::Fn {
-        params: vec![MonoType::Int(32)],
-        return_type: Box::new(v),
-    };
-    let f2 = MonoType::Fn {
-        params: vec![MonoType::Int(32)],
-        return_type: Box::new(MonoType::make_string()),
-    };
-    assert!(solver.unify(&f1, &f2).is_ok());
-}
-
-// §3.7: Option/Result 统一
-
-#[test]
-fn test_unify_result_nested() {
-    let mut solver = s();
-    let v = solver.new_var();
-    let r1 = MonoType::make_result(MonoType::Int(32), MonoType::make_string());
-    let r2 = MonoType::make_result(v.clone(), MonoType::make_string());
-    assert!(solver.unify(&r1, &r2).is_ok());
-}
-
-// §3.13: 联合类型统一
-
-#[test]
-fn test_unify_union_self() {
-    let mut solver = s();
-    let u = MonoType::Union(vec![MonoType::Int(32), MonoType::make_string()]);
-    assert!(solver.unify(&u, &u).is_ok());
-}
-
-#[test]
-fn test_unify_union_with_concrete() {
-    let mut solver = s();
-    let u = MonoType::Union(vec![MonoType::Int(32), MonoType::make_string()]);
-    assert!(solver.unify(&u, &MonoType::Int(32)).is_ok());
-}
-
-#[test]
-fn test_unify_union_with_unrelated() {
-    // #324：这些 API 生产上运行于类型检查 walk 内（guard 覆盖），单测直调需模拟 walk 上下文
-    let _walk_guard = crate::util::diagnostic::push_current_span(crate::util::span::Span::dummy());
-    let mut solver = s();
-    let u = MonoType::Union(vec![MonoType::Int(32), MonoType::make_string()]);
-    assert!(solver.unify(&u, &MonoType::Bool).is_err());
-}
-
-// §3.14: 交集类型统一
-
-#[test]
-fn test_unify_intersection_self() {
-    let mut solver = s();
-    let i = MonoType::Intersection(vec![
-        MonoType::TypeRef("Clone".to_string()),
-        MonoType::TypeRef("Display".to_string()),
-    ]);
-    assert!(solver.unify(&i, &i).is_ok());
-}
-
-#[test]
-fn test_unify_intersection_with_concrete() {
-    let mut solver = s();
-    // §3.14: intersection A&B means "satisfies both A and B"
-    // (Int(32) & Int(32)) == Int(32) succeeds since Int(32) satisfies both
-    let i = MonoType::Intersection(vec![MonoType::Int(32), MonoType::Int(32)]);
-    assert!(solver.unify(&i, &MonoType::Int(32)).is_ok());
-}
-
-#[test]
-fn test_unify_intersection_with_unrelated_fails() {
-    // #324：这些 API 生产上运行于类型检查 walk 内（guard 覆盖），单测直调需模拟 walk 上下文
-    let _walk_guard = crate::util::diagnostic::push_current_span(crate::util::span::Span::dummy());
-    let mut solver = s();
-    // (Clone & Int(32)) == Int(32) fails because Int(32) doesn't implement Clone
-    let i = MonoType::Intersection(vec![
-        MonoType::TypeRef("Clone".to_string()),
-        MonoType::Int(32),
-    ]);
-    assert!(solver.unify(&i, &MonoType::Int(32)).is_err());
-}
-
-// §3.2: TypeRef 统一
-
-#[test]
-fn test_unify_typeref_same_name() {
-    let mut solver = s();
-    let a = MonoType::TypeRef("MyType".to_string());
-    let b = MonoType::TypeRef("MyType".to_string());
-    assert!(solver.unify(&a, &b).is_ok());
-}
-
-#[test]
-fn test_unify_typeref_different() {
-    // #324：这些 API 生产上运行于类型检查 walk 内（guard 覆盖），单测直调需模拟 walk 上下文
-    let _walk_guard = crate::util::diagnostic::push_current_span(crate::util::span::Span::dummy());
-    let mut solver = s();
-    assert!(solver
-        .unify(
-            &MonoType::TypeRef("A".to_string()),
-            &MonoType::TypeRef("B".to_string())
-        )
-        .is_err());
 }
 
 // §3.8: 变量基础操作
@@ -627,15 +380,6 @@ fn test_new_generic_var_is_separate() {
     assert_eq!(gv.index(), 0);
     let v = solver.new_var();
     assert_eq!(v.type_var().unwrap().index(), 1);
-}
-
-#[test]
-fn test_bind_and_resolve() {
-    let mut solver = s();
-    let tv = solver.new_var().type_var().unwrap();
-    assert!(solver.bind(tv, &MonoType::Int(32)).is_ok());
-    let resolved = solver.resolve(&MonoType::TypeVar(tv));
-    assert_eq!(resolved, MonoType::Int(32));
 }
 
 #[test]
@@ -687,22 +431,6 @@ fn test_bind_occurs_check_through_ref() {
 }
 
 #[test]
-fn test_contains_var_sees_through_ref() {
-    // Arrange — 与 `contains_var` 同族判据：借用包装不遮挡内层变量
-    let mut solver = s();
-    let v = solver.new_var().type_var().unwrap();
-    let borrowed = MonoType::Ref {
-        mutable: false,
-        inner: Box::new(MonoType::make_list(MonoType::TypeVar(v))),
-    };
-
-    // Act & Assert
-    assert!(
-        solver.contains_var(&borrowed, v),
-        "借用（含内层容器）里的类型变量必须可见"
-    );
-}
-#[test]
 fn test_bind_conflicting_types() {
     // #324：这些 API 生产上运行于类型检查 walk 内（guard 覆盖），单测直调需模拟 walk 上下文
     let _walk_guard = crate::util::diagnostic::push_current_span(crate::util::span::Span::dummy());
@@ -711,17 +439,6 @@ fn test_bind_conflicting_types() {
     assert!(solver.bind(tv, &MonoType::Bool).is_ok());
     assert!(solver.bind(tv, &MonoType::Bool).is_ok()); // same type is OK
     assert!(solver.bind(tv, &MonoType::Int(32)).is_err()); // different type fails
-}
-
-#[test]
-fn test_reset_clears_everything() {
-    let mut solver = s();
-    solver.new_var();
-    solver.new_generic_var();
-    let v = solver.new_var();
-    solver.add_constraint(v, MonoType::Int(32), Span::dummy());
-    solver.reset();
-    assert_eq!(solver.new_var().type_var().unwrap().index(), 0);
 }
 
 // §3.8: 泛型实例化和泛化
@@ -739,51 +456,6 @@ fn test_unify_var_twice_consistent() {
     assert!(solver.unify(&v, &MonoType::Int(32)).is_ok());
     // Unify with conflicting type fails
     assert!(solver.unify(&v, &MonoType::make_string()).is_err());
-}
-
-#[test]
-fn test_unify_var_link_chain() {
-    let mut solver = s();
-    let v0 = solver.new_var().type_var().unwrap();
-    let v1 = solver.new_var().type_var().unwrap();
-    let v2 = solver.new_var().type_var().unwrap();
-
-    // Create chain: v0 → v1 → v2 → Int(32)
-    assert!(solver.bind(v0, &MonoType::TypeVar(v1)).is_ok());
-    assert!(solver.bind(v1, &MonoType::TypeVar(v2)).is_ok());
-    assert!(solver.bind(v2, &MonoType::Int(32)).is_ok());
-
-    // Resolving v0 should give Int(32)
-    assert_eq!(solver.resolve(&MonoType::TypeVar(v0)), MonoType::Int(32));
-}
-
-// §3.8: contains_var
-
-#[test]
-fn test_contains_var_nested() {
-    let mut solver = s();
-    let tv = solver.new_var().type_var().unwrap();
-    assert!(solver.contains_var(
-        &MonoType::Struct(StructType {
-            name: "W".to_string(),
-            fields: vec![("v".to_string(), MonoType::make_list(MonoType::TypeVar(tv)))],
-            methods: std::collections::HashMap::new(),
-            field_mutability: vec![false],
-            field_has_default: vec![false],
-            interfaces: vec![],
-        }),
-        tv,
-    ));
-}
-
-// §3.8: solve
-
-#[test]
-fn test_solve_simple_equality() {
-    let mut solver = s();
-    let v = solver.new_var();
-    solver.add_constraint(v, MonoType::Int(32), Span::dummy());
-    assert!(solver.solve().is_ok());
 }
 
 #[test]
@@ -838,43 +510,6 @@ fn test_expand_type_through_all_containers() {
     assert_composite_types_preserved(&solver, v);
 }
 
-// expand_type_mut — 通过 resolve (mut) 展开
-
-#[test]
-fn test_expand_mut_through_all_containers() {
-    let mut solver = s();
-    let v = solver.new_var().type_var().unwrap();
-    let _ = solver.bind(v, &MonoType::Bool);
-
-    // resolve (mut version) through various containers
-    let dict = MonoType::make_dict(MonoType::TypeVar(v), MonoType::Int(32));
-    assert_eq!(
-        solver.resolve(&dict),
-        MonoType::make_dict(MonoType::Bool, MonoType::Int(32))
-    );
-
-    let set = MonoType::Generic {
-        name: "Set".into(),
-        args: vec![MonoType::TypeVar(v)],
-    };
-    assert_eq!(
-        solver.resolve(&set),
-        MonoType::Generic {
-            name: "Set".into(),
-            args: vec![MonoType::Bool]
-        }
-    );
-
-    let range = MonoType::Generic {
-        name: "Range".into(),
-        args: vec![MonoType::TypeVar(v)],
-    };
-    assert!(matches!(solver.resolve(&range), MonoType::Generic { name, .. } if name == "Range"));
-
-    let union = MonoType::Union(vec![MonoType::TypeVar(v)]);
-    assert!(matches!(solver.resolve(&union), MonoType::Union(_)));
-}
-
 // contains_var — 各种容器
 
 #[test]
@@ -887,86 +522,6 @@ fn test_contains_var_in_containers() {
 
     // Act & Assert — 不含 v 的类型应返回 false
     assert_contains_var_negative(&solver, v);
-}
-
-// §3.7: Fn 参数数量不匹配
-
-#[test]
-fn test_unify_fn_param_count_mismatch() {
-    // #324：这些 API 生产上运行于类型检查 walk 内（guard 覆盖），单测直调需模拟 walk 上下文
-    let _walk_guard = crate::util::diagnostic::push_current_span(crate::util::span::Span::dummy());
-    let mut solver = s();
-    let f1 = MonoType::Fn {
-        params: vec![MonoType::Int(32), MonoType::Bool],
-        return_type: Box::new(MonoType::Void),
-    };
-    let f2 = MonoType::Fn {
-        params: vec![MonoType::Int(32)],
-        return_type: Box::new(MonoType::Void),
-    };
-    assert!(
-        solver.unify(&f1, &f2).is_err(),
-        "Fn with different param count should fail"
-    );
-}
-
-// §3.8: instantiate 包含 Result/Option 的 PolyType
-
-// §3.8: generalize 包含 Arc/Weak 的类型
-
-// §3.8: contains_var 在 Option/Result/Fn 参数中
-
-#[test]
-fn test_contains_var_in_option() {
-    let mut solver = s();
-    let v = solver.new_var().type_var().unwrap();
-    let opt = MonoType::make_option(MonoType::TypeVar(v));
-    // #299：Generic arm 递归查找，Option 能正确找到变量（不再 fall-through）
-    assert!(
-        solver.contains_var(&opt, v),
-        "Option 包含类型变量应返回 true（Generic 递归）"
-    );
-}
-
-#[test]
-fn test_contains_var_in_result() {
-    let mut solver = s();
-    let v = solver.new_var().type_var().unwrap();
-    let res = MonoType::make_result(MonoType::TypeVar(v), MonoType::make_string());
-    // #299：Generic arm 递归查找，Result 能正确找到变量（不再 fall-through）
-    assert!(
-        solver.contains_var(&res, v),
-        "Result 包含类型变量应返回 true（Generic 递归）"
-    );
-}
-
-#[test]
-fn test_contains_var_in_fn_params() {
-    let mut solver = s();
-    let v = solver.new_var().type_var().unwrap();
-    let f = MonoType::Fn {
-        params: vec![MonoType::TypeVar(v), MonoType::Int(32)],
-        return_type: Box::new(MonoType::Void),
-    };
-    assert!(
-        solver.contains_var(&f, v),
-        "Fn params containing var should be detected"
-    );
-}
-
-// §3.8: 同一变量多个约束求解
-
-#[test]
-fn test_solve_with_multiple_constraints_on_same_var() {
-    let mut solver = s();
-    let v = solver.new_var();
-    // Same type in multiple constraints should succeed
-    solver.add_constraint(v.clone(), MonoType::Int(32), Span::dummy());
-    solver.add_constraint(v, MonoType::Int(32), Span::dummy());
-    assert!(
-        solver.solve().is_ok(),
-        "consistent constraints should solve"
-    );
 }
 
 // §3.8: List 类型统一
@@ -995,18 +550,6 @@ fn test_unify_list_different_element_type() {
     );
 }
 
-#[test]
-fn test_unify_list_with_var() {
-    let mut solver = s();
-    let v = solver.new_var();
-    let a = MonoType::make_list(MonoType::Int(32));
-    let b = MonoType::make_list(v);
-    assert!(
-        solver.unify(&a, &b).is_ok(),
-        "List(Int) should unify with List(var)"
-    );
-}
-
 // generalize 收集自由变量
 
 // solve with constraints
@@ -1014,16 +557,6 @@ fn test_unify_list_with_var() {
 #[test]
 fn test_solve_empty_constraints() {
     let mut solver = s();
-    assert!(solver.solve().is_ok());
-}
-
-#[test]
-fn test_solve_multiple_independent() {
-    let mut solver = s();
-    let v1 = solver.new_var();
-    let v2 = solver.new_var();
-    solver.add_constraint(v1, MonoType::Int(32), Span::dummy());
-    solver.add_constraint(v2, MonoType::make_string(), Span::dummy());
     assert!(solver.solve().is_ok());
 }
 
@@ -1060,48 +593,6 @@ fn test_expand_mut_fn_with_bound_var() {
     };
     let resolved = solver.resolve(&f);
     assert!(matches!(resolved, MonoType::Fn { .. }));
-}
-
-// unify with Union — unordered backtracking
-
-#[test]
-fn test_unify_union_unordered_matching() {
-    // #324：这些 API 生产上运行于类型检查 walk 内（guard 覆盖），单测直调需模拟 walk 上下文
-    let _walk_guard = crate::util::diagnostic::push_current_span(crate::util::span::Span::dummy());
-    let mut solver = s();
-    // Two unions with same elements in different order
-    let u1 = MonoType::Union(vec![
-        MonoType::Int(32),
-        MonoType::make_string(),
-        MonoType::Bool,
-    ]);
-    let u2 = MonoType::Union(vec![
-        MonoType::make_string(),
-        MonoType::Bool,
-        MonoType::Int(32),
-    ]);
-    assert!(solver.unify(&u1, &u2).is_ok());
-}
-
-#[test]
-fn test_unify_union_unordered_mismatch() {
-    // #324：这些 API 生产上运行于类型检查 walk 内（guard 覆盖），单测直调需模拟 walk 上下文
-    let _walk_guard = crate::util::diagnostic::push_current_span(crate::util::span::Span::dummy());
-    let mut solver = s();
-    let u1 = MonoType::Union(vec![MonoType::Int(32), MonoType::make_string()]);
-    let u2 = MonoType::Union(vec![MonoType::Int(32), MonoType::Bool]);
-    assert!(solver.unify(&u1, &u2).is_err());
-}
-
-// generalize with nested containers — collect_generalizable_vars 路径
-
-#[test]
-fn test_resolve_never_builtin() {
-    let solver = s();
-    assert_eq!(
-        solver.resolve_type(&MonoType::TypeRef("Never".to_string())),
-        MonoType::Never
-    );
 }
 
 #[test]
@@ -1143,47 +634,5 @@ fn test_metatype_unify_different_level() {
     assert!(
         solver.unify(&a, &b).is_err(),
         "unify(Type₀, Type₁) should fail — different levels"
-    );
-}
-
-#[test]
-fn test_metatype_unify_with_params() {
-    // Arrange
-    let mut solver = s();
-    let a = MonoType::MetaType {
-        universe_level: UniverseLevel::type0(),
-        type_params: vec![MonoType::Int(32)],
-    };
-    let b = MonoType::MetaType {
-        universe_level: UniverseLevel::type0(),
-        type_params: vec![MonoType::Int(32)],
-    };
-
-    // Act & Assert
-    assert!(
-        solver.unify(&a, &b).is_ok(),
-        "unify(Type₀(Int32), Type₀(Int32)) should succeed — same params"
-    );
-}
-
-#[test]
-fn test_metatype_unify_with_params_mismatch() {
-    // #324：这些 API 生产上运行于类型检查 walk 内（guard 覆盖），单测直调需模拟 walk 上下文
-    let _walk_guard = crate::util::diagnostic::push_current_span(crate::util::span::Span::dummy());
-    // Arrange
-    let mut solver = s();
-    let a = MonoType::MetaType {
-        universe_level: UniverseLevel::type0(),
-        type_params: vec![MonoType::Int(32)],
-    };
-    let b = MonoType::MetaType {
-        universe_level: UniverseLevel::type0(),
-        type_params: vec![MonoType::Int(64)],
-    };
-
-    // Act & Assert
-    assert!(
-        solver.unify(&a, &b).is_err(),
-        "unify(Type₀(Int32), Type₀(Int64)) should fail — param mismatch"
     );
 }

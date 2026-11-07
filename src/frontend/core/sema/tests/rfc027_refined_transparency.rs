@@ -207,31 +207,6 @@ fn test_call_arg_unconvertible_still_generates_no_obligation() {
 
 // ==================== RFC-027 §3.4：强半场的两条证据来源 ====================
 
-/// §3.4 —— 实参**无任何静态证据**时必须拒绝（强半场）。
-///
-/// `divide_user_input: (x: Int, y: Int) -> Int = divide(x, y)`：`y` 无界、也
-/// 无精化标注，验证条件 `{} ⇒ { y > 0 }` 有反例（y = 0）⇒ E4018。
-/// 这是 §3.4「YaoXiang 不接受运行时值直接进入精化类型参数而不提供静态证据」
-/// 的直接落地（#395 第二行）。
-#[test]
-fn test_call_arg_without_evidence_is_rejected() {
-    // Arrange
-    let source = format!(
-        "{IS_POSITIVE}divide: (a: Int, b: IsPositive(b)) -> Int = {{ a }}\n\
-         u: (x: Int, y: Int) -> Int = divide(x, y)"
-    );
-
-    // Act
-    let result = check_source(&source);
-
-    // Assert
-    assert!(
-        result.diagnostics.iter().any(|d| d.code == "E4018"),
-        "实参无静态证据应报 E4018（§3.4 强半场）；实际: {:#?}",
-        result.diagnostics
-    );
-}
-
 /// §3.4 —— 实参**自身的精化标注**是证据（#395 第三行）。
 ///
 /// `via_param: (n: IsPositive(n)) -> Int = divide(0, n)`：证据来自形参前置条件。
@@ -292,28 +267,6 @@ fn test_call_arg_evidenced_by_if_guard() {
     );
 }
 
-/// §3.4 —— 无守卫时同一调用仍须拒绝（守卫要有、不能白送）。
-///
-/// 与上一条成对：同一调用、同一函数，只差 `if` 守卫。
-#[test]
-fn test_call_arg_without_guard_is_rejected() {
-    // Arrange —— 无守卫
-    let source = format!(
-        "{IS_POSITIVE}divide: (a: Int, b: IsPositive(b)) -> Int = {{ a }}\n\
-         unguarded: (x: Int, y: Int) -> Int = {{\n    z: Int = divide(x, y)\n    z\n}}"
-    );
-
-    // Act
-    let result = check_source(&source);
-
-    // Assert
-    assert!(
-        result.diagnostics.iter().any(|d| d.code == "E4018"),
-        "无守卫时 y 无界，应报 E4018；实际: {:#?}",
-        result.diagnostics
-    );
-}
-
 // ==================== RFC-027 §3：返回点精化义务（后置条件） ====================
 
 /// §3 的谓词定义：`IsPositive: (x: Int) -> Type = { x > 0 }`
@@ -365,52 +318,6 @@ fn test_return_postcondition_proved_from_param_refinement_is_clean() {
     assert_clean(
         &source,
         "Γ 含形参精化 `b > 0` 时，`b + 1 > 0` 成立，后置条件应零诊断",
-    );
-}
-
-/// RFC-027 §3 —— 裸精化返回位（约束只涉及形参）同样在返回点验证。
-///
-/// `f: (b: Int) -> IsPositive(b + 1) = { b + 1 }`：约束 `b + 1 > 0` 与返回值无关，
-/// 它是「返回类型在 b ≤ -1 时为空」的断言；b 无下界故有反例 ⇒ 拒绝。
-///
-/// 这正是 §3「统一性」的体现：两个形态同一条规则，只是绑定来源不同——
-/// 具名形态（`-> (r: P(...))`）的声明名绑 `return` 的值，裸形态没有声明名，
-/// 约束里的 `b` 是形参 ⇒ 用自己的符号（见 rfc027_return_refinement.rs）。
-#[test]
-fn test_bare_return_refinement_checked_over_params() {
-    // Arrange
-    let source = format!("{IS_POSITIVE}f: (b: Int) -> IsPositive(b + 1) = {{ b + 1 }}");
-
-    // Act
-    let result = check_source(&source);
-
-    // Assert
-    assert!(
-        result.diagnostics.iter().any(|d| d.code == "E4018"),
-        "`b + 1 > 0` 在 b 无下界时有反例（b = -1），应报 E4018；实际: {:#?}",
-        result.diagnostics
-    );
-}
-
-/// RFC-027 §3 —— 显式 `return`（非尾表达式）同样在返回点验证。
-///
-/// RFC-010a：块的值 = 尾表达式，故尾表达式是**隐式** `return`；显式 `return`
-/// 是另一条出口。两条出口都要查——只查其一即漏。
-#[test]
-fn test_explicit_return_postcondition_is_checked() {
-    // Arrange —— 走显式 return 这条出口
-    let source = format!(
-        "{IS_POSITIVE}f: (b: IsPositive(b)) -> (r: IsPositive(r)) = {{\n    return b - 1\n}}"
-    );
-
-    // Act
-    let result = check_source(&source);
-
-    // Assert
-    assert!(
-        result.diagnostics.iter().any(|d| d.code == "E4018"),
-        "显式 return 违反后置条件应同样报 E4018；实际: {:#?}",
-        result.diagnostics
     );
 }
 

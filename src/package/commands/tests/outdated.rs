@@ -116,20 +116,6 @@ fn git_repo_without_tags() -> (TempDir, std::path::PathBuf) {
 }
 
 #[test]
-fn test_outdated_skips_path_and_uninstalled() {
-    let specs = vec![
-        spec("local", "1.0.0", None), // 无 git 字段 → path/registry 类，跳过
-        spec("ghost", "1.0.0", Some("https://github.com/u/repo")),
-    ];
-    let mut lock = LockFile::new();
-    // ghost 未登记 lock → 跳过
-    lock.lock_dependency_full("local", "1.0.0", "path", None);
-
-    let entries = check_entries(&specs, &lock).unwrap();
-    assert!(entries.is_empty());
-}
-
-#[test]
 fn test_outdated_detects_newer_tag() {
     let tmp = TempDir::new().unwrap();
     let repo = make_git_repo(&tmp.path().join("repo"));
@@ -161,23 +147,6 @@ fn test_outdated_up_to_date() {
     assert!(matches!(
         entries[0].status,
         crate::package::commands::outdated::OutdatedStatus::UpToDate
-    ));
-}
-
-#[test]
-fn test_outdated_tag_pinned() {
-    let tmp = TempDir::new().unwrap();
-    let repo = make_git_repo(&tmp.path().join("repo"));
-
-    let url = format!("{}?tag=v1.0.0", repo.to_str().unwrap());
-    let specs = vec![spec("fixture", "1.0.0", Some(&url))];
-    let mut lock = LockFile::new();
-    lock.lock_dependency_full("fixture", "1.0.0", "git", None);
-
-    let entries = check_entries(&specs, &lock).unwrap();
-    assert!(matches!(
-        entries[0].status,
-        crate::package::commands::outdated::OutdatedStatus::Pinned
     ));
 }
 

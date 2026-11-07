@@ -27,14 +27,6 @@ fn test_document_cache_update_changed() {
 }
 
 #[test]
-fn test_document_cache_update_unchanged() {
-    let mut cache = DocumentCache::new("test.yx".to_string(), "x = 42".to_string(), 1);
-    let changed = cache.update("x = 42".to_string(), 2);
-    assert!(!changed);
-    assert_eq!(cache.version(), 2);
-}
-
-#[test]
 fn test_document_cache_hash_detection() {
     let cache = DocumentCache::new("test.yx".to_string(), "hello world".to_string(), 1);
     assert!(cache.content_matches("hello world"));
@@ -52,17 +44,6 @@ fn test_document_store_open_close() {
     store.close("a.yx");
     assert_eq!(store.document_count(), 1);
     assert!(!store.is_open("a.yx"));
-}
-
-#[test]
-fn test_document_store_update() {
-    let mut store = DocumentStore::new();
-    store.open("a.yx".to_string(), "x = 1".to_string(), 1);
-
-    let changed = store.update("a.yx", "x = 2".to_string(), 2);
-    assert!(changed);
-    assert_eq!(store.get("a.yx").unwrap().content(), "x = 2");
-    assert_eq!(store.get("a.yx").unwrap().version(), 2);
 }
 
 #[test]

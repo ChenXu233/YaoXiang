@@ -18,27 +18,6 @@ use crate::frontend::core::sema::checker::TypeChecker;
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parse;
 
-/// RFC-011a §1：接口继承 `Pet(Self)` 内嵌 `Animal(Self)`，`Dog` 需递归展开。
-const INHERITANCE_EXPANDS_FULL: &str = r#"
-        Animal: (Self: Type) -> Type = {
-            speak: (self: Self) -> String,
-        }
-        Pet: (Self: Type) -> Type = {
-            Animal(Self),
-            fetch: (self: Self) -> String,
-        }
-        Dog: Type = {
-            name: String,
-            Pet(Dog),
-        }
-        Dog.speak: (self: Dog) -> String = {
-            return "Woof"
-        }
-        Dog.fetch: (self: Dog) -> String = {
-            return self.name + " fetches"
-        }
-    "#;
-
 /// 辅助函数：解析源代码并类型检查，同时返回 checker 以检查实现证明
 pub(crate) fn check_source_with_checker(
     source: &str
@@ -218,29 +197,6 @@ fn test_rfc011a_overload_different_signature_allowed() {
     );
 }
 
-// 接口继承：Self 延迟替换
-
-/// 规范：接口继承 Pet: Animal(Self) → Pet(Dog) 递归展开为 Animal(Dog)
-///
-/// 预期行为：
-/// - Dog 须同时实现 speak（继承自 Animal）与 fetch（Pet 自有）
-/// - 实现证明登记为 {Dog, Pet}
-#[test]
-fn test_rfc011a_inheritance_expands_recursively() {
-    let (result, checker) = check_source_with_checker(INHERITANCE_EXPANDS_FULL);
-    assert!(
-        result.diagnostics.is_empty(),
-        "inherited contract should pass: {:?}",
-        result.diagnostics
-    );
-    let proof = checker
-        .implementation_proofs()
-        .iter()
-        .find(|p| p.type_name == "Dog" && p.interface_name == "Pet")
-        .expect("Dog should have a Pet proof via recursive expansion");
-    assert_eq!(proof.methods.len(), 2, "inherited + own members proven");
-}
-
 /// 规范：继承链成员缺失同样报完整性错误
 #[test]
 fn test_rfc011a_inherited_member_missing_reports_e1098() {
@@ -289,24 +245,5 @@ fn test_rfc011a_unknown_interface_in_chain_reports_e1095() {
         result.diagnostics.iter().any(|d| d.code == "E1095"),
         "unknown interface in inheritance chain should report E1095: {:?}",
         result.diagnostics
-    );
-}
-
-/// 规范：不完整实现不产生证明
-#[test]
-fn test_rfc011a_no_proof_on_failed_check() {
-    let source = r#"
-        Animal: (Self: Type) -> Type = {
-            speak: (self: Self) -> String,
-        }
-        Dog: Type = {
-            name: String,
-            Animal(Dog),
-        }
-    "#;
-    let (_result, checker) = check_source_with_checker(source);
-    assert!(
-        checker.implementation_proofs().is_empty(),
-        "failed completeness check must not generate proof"
     );
 }

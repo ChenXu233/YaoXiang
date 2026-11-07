@@ -3911,3 +3911,54 @@ census 门 均不通过 15 → 14 · 待判 924 → 923；处置 退役候选 10
 **产物**：删 1 条测试 + 同批更新 `test-gate-census.tsv` 与 `test-gate-census.md`（分布表数字 +
 「第四批退役」节）+ 本节。**未产出逐条 TSV 或一次性脚本**（用户已裁决：一次性分析产物不入库）——
 判定表只落在本实录里。
+
+### 十二、第五批批量瘦身（0.6-18，2026-11-07）
+
+用户裁决：**less is more，大胆删**——不再逐条论证、不再造分析工具，按一条机械规则批量删。
+本批一次性退役 **1353** 条单元测试，只动 `src/**/tests/**` 的单元测试；E2E 面
+（`tests/yaoxiang/**`、`tests/integration/**`、`tests/formatter_integration.rs`、
+`tests/yx_runner*.rs`、`tests/project-corpus/**`）**一条未动**。
+
+**规则（机械执行，不逐条论证）**：同一个被测符号 + 同一个断言结果类别，只留断言最强的一条，其余删除。
+
+- **被测符号**：测试体内调用的仓库内符号（含沿本文件助手函数传递一层）；一个测试若触达多个符号，
+  按**主符号**（第一个仓库内调用）归类。符号按仓库内路径限定（如
+  `src/frontend/core/lexer::tokenize`），不按裸名跨模块合并；裸名同名（`path`、`run`、`new` 之类）
+  不构成合并理由。
+- **结果类别**：具体值 / 某个错误码（E 码）/ 某个变体匹配 / 仅判 ok / 仅判 err / 仅 should_panic。
+- **强度**：`assert_eq!`/`assert_ne!` > `assert!`/`matches!`（或 match + `panic!`） >
+  `is_ok`/`is_some`/`is_err` > `should_panic` > 无。同组等强时保留文件中最先出现的一条。
+- **边界处理**：一个测试同时断言多个类别（无法判定主类别）时**保留**，不猜；体内无断言的测试
+  没有「断言结果类别」，不进入本规则。
+
+**三条例外（一条没少）**：① 名字或注释点名过 `issue #` / 回归 / 缺陷 / 事故的（病史门）；
+② 某个符号只有一条测试的（删了该符号就没有单元观察点）；③ `#[should_panic]` 且是该符号唯一
+should_panic 用例的。病史门 313 条与「体内无断言」11 条**退役 0 条**。
+
+**两个数**：保留 **2055** 条 / 删除 **1353** 条。全仓 `#[test]` 3408 → 2055；
+删除数 = `git diff` 计 `-#[test]` **1353** 行、`+#[test]` **0** 行；2055 + 1353 = 3408。
+
+**三条例外的核对结果**：病史门 313 条 → 313 条（**退役 0 条**）；「体内无断言」11 条 → 11 条
+（**退役 0 条**）；普查退役候选 98 → 61（−37）。退役量按门分布：条款 902 · 待判 428 · 证明 23。
+退役前有 480 个「符号只有一条测试」的符号，其唯一测试**退役 0 条**。
+
+**随删清理**：被删测试独占的助手函数、随之失效的 import 与结构体字段一并清掉——
+`cargo clippy --all --all-features --all-targets -- -D warnings` 0 告警、`cargo check --all-targets`
+0 告警 0 错误。
+
+**两处越界删除需留档**：普查原判「留」而本批规则仍删的有 **29** 条——现状锚 23 条（名字含
+unchanged/anchor/guard/preserve/baseline，其中多为「guard」「preserves」这类**领域词**误命中，
+如 `test_while_guard_scope_balanced`、`test_e2e_level2a_exact_match_from_if_guard`）与审计确认
+「条款真实支撑」6 条。本批按卡面三条例外的封闭清单执行，未额外保护这两类；要恢复只需回填。
+
+**抽查（保留集是否仍能覆盖被删的性质）**：按文件抽样复核过被删最多的几簇
+（`src/frontend/core/lexer/tests/literals.rs` 删 41 留 9 · `src/formatter/handlers/tests/expr.rs`
+删 39 留 10 · `src/frontend/core/types/eval/tests/const_eval.rs` 删 48 留 48）——
+每簇保留的都是该符号在该结果类别下**断言最强**的一条。
+
+**抽样审计样本池需重抽**：40 条抽样按固定种子从测试池抽取，本批退役后原样本里 38 条已不存在，
+`python scripts/dev/test-gate-census-audit.py --check` 因此报「缺 38 条、多 38 条」——
+需按新池重抽并重新逐条判定（本批未代为判定，避免把未读过的断言判成「真实支撑」）。
+
+**回退**：本批一笔提交（本页与 `test-gate-census.md` / `test-gate-census.tsv` 同提交），
+`git revert <sha>` 即整体恢复。

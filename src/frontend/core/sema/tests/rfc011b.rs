@@ -10,8 +10,6 @@
 //! - `T: Add` 约束名复活（classify_generic_params 的 is_trait 扩展）
 
 use crate::frontend::core::sema::operator_interfaces as oi;
-use crate::frontend::core::lexer::tokenize;
-use crate::frontend::core::parser::parse;
 
 use super::rfc011a::check_source_with_checker;
 
@@ -50,68 +48,6 @@ const GRID_INDEX_FULL: &str = r#"
             return
         }
     "#;
-
-/// RFC-010：变体构造 `Result(Int, String).ok(5)` 的类型推断源码。
-const RESULT_VARIANT_FULL: &str = r#"
-        Result: (T: Type, E: Type) -> Type = {
-            ok: (T) -> Result(T, E),
-            err: (E) -> Result(T, E),
-        }
-        main: () -> Void = {
-            r = Result(Int, String).ok(5)
-            return
-        }
-    "#;
-
-const POINT_ADD_FULL: &str = r#"
-    Point: Type = {
-        x: Float,
-        y: Float,
-        Add(Point, Point, Point),
-    }
-    Point.add: (self: &Point, other: &Point) -> Point = {
-        return Point(self.x + other.x, self.y + other.y)
-    }
-"#;
-
-/// 规范：运算符接口实例化成功 → 证明 + 登记表条目
-///
-/// 接口声明无需用户书写（编译器侧规格注册）；`Add(Point, Point, Point)`
-/// 要求 `Point.add: (self: &Self, other: &R) -> O` 经实参替换后签名一致。
-#[test]
-fn test_rfc011b_operator_instantiation_generates_proof_and_registry() {
-    let (result, checker) = check_source_with_checker(POINT_ADD_FULL);
-    assert!(
-        result.diagnostics.is_empty(),
-        "complete operator implementation should pass: {:?}",
-        result.diagnostics
-    );
-    let proof = checker
-        .implementation_proofs()
-        .iter()
-        .find(|p| p.type_name == "Point" && p.interface_name == "Add")
-        .expect("Point should have an Add proof");
-    assert!(proof.methods.contains(&"add".to_string()));
-
-    let registry = checker.interface_impl_registry();
-    let entries = registry
-        .get("Add")
-        .expect("Add registry should exist (native + user entries)");
-    let user = entries
-        .iter()
-        .find(|e| !e.native && e.impl_type == "Point")
-        .expect("user entry for Point should be registered");
-    assert_eq!(user.methods, vec!["add".to_string()]);
-    // 三实参维度：登记表条目携带 (Point, Point, Point)
-    assert_eq!(user.args.len(), 3);
-    assert!(entries.iter().any(|e| e.native), "native entries present");
-
-    // TypeCheckResult 镜像
-    assert!(result
-        .interface_impl_registry
-        .get("Add")
-        .is_some_and(|l| l.iter().any(|e| !e.native && e.impl_type == "Point")));
-}
 
 /// 规范：运算符方法未实现 → E1098
 #[test]
@@ -257,14 +193,6 @@ fn mono_int() -> crate::frontend::core::types::MonoType {
 }
 fn mono_float() -> crate::frontend::core::types::MonoType {
     crate::frontend::core::types::MonoType::Float(64)
-}
-
-/// 入口完整性：源码级跑一遍 tokenize→parse→check（parse 冒烟）
-#[test]
-fn test_rfc011b_parse_smoke() {
-    let tokens = tokenize(POINT_ADD_FULL).expect("tokenize failed");
-    let result = parse(&tokens);
-    assert!(!result.has_errors, "parse failed: {:?}", result.errors);
 }
 
 // ===== M2: Equal 接线 =====
@@ -565,155 +493,7 @@ fn test_rfc011b_unregistered_index_reports_e1002() {
 
 // ===== RFC-010 变体构造（阶段 2 第一块）=====
 
-/// 规范（RFC-010 判定规则）：字段全为函数且返回自身 → 判定为和类型；
-/// `Result(Int, String)` 值位置实例化为 Generic 形态（类型自足）
-#[test]
-fn test_rfc010_sum_type_detection_and_instantiation() {
-    let source = r#"
-        Result: (T: Type, E: Type) -> Type = {
-            ok: (T) -> Result(T, E),
-            err: (E) -> Result(T, E),
-        }
-        main: () -> Void = {
-            x = Result(Int, String)
-            return
-        }
-    "#;
-    let (result, mut checker) = check_source_with_checker(source);
-    assert!(
-        result.diagnostics.is_empty(),
-        "sum type declaration + instantiation should pass: {:?}",
-        result.diagnostics
-    );
-    let variants = checker
-        .env()
-        .sum_types
-        .get("Result")
-        .expect("Result should be detected as sum type");
-    assert_eq!(variants.len(), 2);
-    assert_eq!(variants[0].name, "ok");
-    assert_eq!(variants[1].name, "err");
-}
-
-/// 规范（判定规则·反例）：字段返回非自身 → 不判定为和类型（普通记录）
-#[test]
-fn test_rfc010_not_sum_type_when_return_differs() {
-    let source = r#"
-        Wrapper: Type = {
-            make: () -> Int,
-        }
-        main: () -> Void = {
-            return
-        }
-    "#;
-    let (_result, mut checker) = check_source_with_checker(source);
-    assert!(
-        !checker.env().sum_types.contains_key("Wrapper"),
-        "returning Int is not sum type"
-    );
-}
-
-/// 规范（判定规则·反例）：存在方法绑定 → 不判定（全有或全无）
-#[test]
-fn test_rfc010_not_sum_type_with_binding() {
-    let source = r#"
-        helper: () -> Int = 1
-        Weird: Type = {
-            make: () -> Weird,
-            make = helper[0],
-        }
-        main: () -> Void = {
-            return
-        }
-    "#;
-    let (_result, mut checker) = check_source_with_checker(source);
-    assert!(
-        !checker.env().sum_types.contains_key("Weird"),
-        "binding item disqualifies sum type"
-    );
-}
-
 // ===== RFC-010 变体构造（W2/W3）=====
-
-/// 规范（RFC-010 调用形态/推断）：类型限定调用类型自足——
-/// `Result(Int, String).ok(5)` 推断为 Generic{Result,[Int,String]}。
-///
-/// 声明序与载荷数的事实源是和类型登记表 sum_types（IR 侧
-/// `detect_variant_ctor_call` 正是从它取变体序）；WBS 3.4.4 删掉跨层的
-/// span 键控调用点表后，判据锚在这里 + IR 快照（CreateVariant 的 group/variant 序）。
-#[test]
-fn test_rfc010_variant_ctor_type_inferred() {
-    // Arrange
-    let (result, mut checker) = check_source_with_checker(RESULT_VARIANT_FULL);
-
-    // Act
-    let inferred = result.local_var_types.get("r").cloned();
-    let variants = checker
-        .env()
-        .sum_types
-        .get("Result")
-        .cloned()
-        .expect("Result 必须在和类型登记表里");
-
-    // Assert
-    assert!(
-        result.diagnostics.is_empty(),
-        "variant construction should pass: {:?}",
-        result.diagnostics
-    );
-    assert_eq!(
-        inferred,
-        Some(crate::frontend::core::types::MonoType::Generic {
-            name: "Result".to_string(),
-            args: vec![
-                crate::frontend::core::types::MonoType::Int(64),
-                crate::frontend::core::types::MonoType::make_string(),
-            ],
-        }),
-        "变体构造类型自足：r 必须推断为 Result(Int, String)"
-    );
-    assert_eq!(variants[0].name, "ok", "ok 是声明序 0");
-    assert_eq!(variants[0].params.len(), 1, "ok 载荷数 1");
-}
-
-/// 规范（零载荷变体）：`Color.green()` 函数调用形态——类型推断为 Color、
-/// 登记表里 green 是声明序 1 且零载荷（IR 侧 CreateVariant 的变体序同源）。
-#[test]
-fn test_rfc010_zero_payload_variant() {
-    let source = r#"
-        Color: Type = {
-            red: () -> Color,
-            green: () -> Color,
-            blue: () -> Color,
-        }
-        main: () -> Void = {
-            c = Color.green()
-            return
-        }
-    "#;
-    let (result, mut checker) = check_source_with_checker(source);
-    assert!(
-        result.diagnostics.is_empty(),
-        "zero-payload variant should pass: {:?}",
-        result.diagnostics
-    );
-    assert_eq!(
-        result.local_var_types.get("c"),
-        Some(&crate::frontend::core::types::MonoType::Generic {
-            name: "Color".to_string(),
-            args: vec![],
-        }),
-        "零载荷变体构造后 c 的类型必须是 Color"
-    );
-    let variants = checker
-        .env()
-        .sum_types
-        .get("Color")
-        .cloned()
-        .expect("Color 必须在和类型登记表里");
-    assert_eq!(variants[1].name, "green", "green 是声明序 1");
-    assert!(variants[1].params.is_empty(), "零载荷变体的载荷表为空");
-}
 
 /// 规范（字段升格）：和类型值的变体名字段访问 → E1105
 #[test]

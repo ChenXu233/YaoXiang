@@ -9,10 +9,9 @@
 use std::time::Duration;
 
 use crate::package::cache::GlobalCache;
-use crate::package::commands::publish::publish_github_flow;
 use crate::package::dependency::DependencySpec;
 use crate::package::runtime;
-use crate::package::source::github::{parse_owner_repo, GitHubClient, GitHubSource};
+use crate::package::source::github::{parse_owner_repo, GitHubSource};
 use crate::package::source::{select_source, Source, SourceKind};
 use crate::package::tests::mock_http::{MockApi, MockResp};
 use crate::package::yxpkg;
@@ -213,43 +212,6 @@ fn assert_release_asset_download(
     );
 }
 
-/// Fixture: publish --github 全流程的 4 个按序响应（查重 404 / tag 200 / 创建 201 / 上传 201）。
-fn publish_flow_responses() -> Vec<MockResp> {
-    vec![
-        json_resp(404, r#"{"message":"Not Found"}"#),
-        json_resp(
-            200,
-            r#"{"ref":"refs/tags/v1.0.0","object":{"sha":"abc","type":"commit"}}"#,
-        ),
-        json_resp(
-            201,
-            r#"{"id":42,"html_url":"https://github.com/owner/demo/releases/tag/v1.0.0"}"#,
-        ),
-        json_resp(201, "{}"),
-    ]
-}
-
-/// Act: 跑 publish 全流程并返回 Release URL（失败时打印版本与错误）。
-fn publish_ok(
-    client: &GitHubClient,
-    artifact: &std::path::Path,
-) -> String {
-    runtime::drive(publish_github_flow(
-        client, "owner", "demo", "demo", "1.0.0", "demo pkg", artifact,
-    ))
-    .unwrap_or_else(|e| panic!("publish 1.0.0 应成功: {e}"))
-}
-
-/// Assert: 4 次请求及其方法序列（查重/tag 校验 GET，创建/上传 POST）。
-fn assert_publish_request_methods(api: &MockApi) {
-    let reqs = api.recorded();
-    assert_eq!(reqs.len(), 4, "release 查重/tag 校验/创建/上传共 4 次请求");
-    assert_eq!(reqs[0].method, "GET");
-    assert_eq!(reqs[1].method, "GET");
-    assert_eq!(reqs[2].method, "POST");
-    assert_eq!(reqs[3].method, "POST");
-}
-
 #[test]
 fn test_resolve_selects_best_tag_from_releases() {
     // Arrange：releases 含 v1.2.0 / v1.3.0 / v2.0.0
@@ -265,27 +227,6 @@ fn test_resolve_selects_best_tag_from_releases() {
     // Assert：满足 ^1.2.0 的最高版本，且只打一次 releases 端点
     assert_eq!(resolved, "1.3.0");
     assert_eq!(api.recorded().len(), 1);
-    api.handle.join().unwrap();
-}
-
-#[test]
-fn test_resolve_falls_back_to_tags_endpoint_when_no_releases() {
-    // Arrange：releases 为空（纯源码仓库常态）→ tags 端点回退
-    let api = MockApi::spawn(vec![
-        json_resp(200, "[]"),
-        json_resp(
-            200,
-            r#"[{"name":"v0.9.0","commit":{"sha":"abc","url":"u"}}]"#,
-        ),
-    ]);
-    let (source, _cache_root) = gh_source(&api);
-
-    // Act
-    let resolved = runtime::drive(source.resolve(&spec("^0.9.0"))).unwrap();
-
-    // Assert：解析结果正确，且确实回退了端点
-    assert_eq!(resolved, "0.9.0");
-    assert_eq!(api.recorded().len(), 2, "releases 为空后应回退 tags 端点");
     api.handle.join().unwrap();
 }
 
@@ -307,50 +248,6 @@ fn test_etag_conditional_request_hits_cache_on_304() {
     assert_eq!(first, "1.0.0");
     assert_eq!(second, "1.0.0");
     assert_etag_revalidation(&api);
-    api.handle.join().unwrap();
-}
-
-#[test]
-fn test_server_errors_back_off_then_succeed() {
-    // Arrange：两次 5xx 后一次成功（退避基数测试注入 1ms）
-    let api = MockApi::spawn(vec![
-        json_resp(500, "boom"),
-        json_resp(500, "boom"),
-        json_resp(200, &releases_json(&["v1.0.0"])),
-    ]);
-    let (source, _cache_root) = gh_source(&api);
-
-    // Act
-    let resolved = runtime::drive(source.resolve(&spec("^1.0.0"))).unwrap();
-
-    // Assert：重试后成功，共 3 次请求
-    assert_eq!(resolved, "1.0.0");
-    assert_eq!(api.recorded().len(), 3, "两次 5xx 后第三次应成功");
-    api.handle.join().unwrap();
-}
-
-#[test]
-fn test_rate_limit_reported_without_retry() {
-    // Arrange：403 + x-ratelimit-remaining: 0（GitHub 主速率限制形态）
-    let api = MockApi::spawn(vec![MockResp {
-        status: 403,
-        headers: vec![
-            ("x-ratelimit-remaining".to_string(), "0".to_string()),
-            ("x-ratelimit-reset".to_string(), "1700000000".to_string()),
-        ],
-        body: b"rate limited".to_vec(),
-    }]);
-    let (source, _cache_root) = gh_source(&api);
-
-    // Act
-    let err = runtime::drive(source.resolve(&spec("^1.0.0"))).unwrap_err();
-
-    // Assert：如实报 RateLimited，不重试（重发无意义）
-    assert!(
-        matches!(err, crate::package::PackageError::RateLimited(_)),
-        "got: {err}"
-    );
-    assert_eq!(api.recorded().len(), 1, "速率限制不应重试");
     api.handle.join().unwrap();
 }
 
@@ -430,54 +327,4 @@ fn test_owner_repo_parsing_covers_url_forms() {
         "非 github.com 主机不路由到适配层"
     );
     assert_eq!(parse_owner_repo("https://github.com/owner"), None);
-}
-
-/// publish --github 全流程：版本查重（404）→ tag 校验（200）→ 创建 Release
-/// （201）→ 上传资产（201）
-#[test]
-fn test_publish_github_flow_creates_release_and_uploads() {
-    // Arrange
-    let tmp = tempfile::tempdir().unwrap();
-    let api = MockApi::spawn(publish_flow_responses());
-    let cache = GlobalCache::with_root(tmp.path().join("cache"));
-    let client = GitHubClient::for_tests(cache, api.url.clone(), Duration::from_millis(1));
-    let artifact = tmp.path().join("demo-1.0.0.yxpkg");
-    std::fs::write(&artifact, b"PKGBYTES").expect("write fixture artifact");
-
-    // Act
-    let url = publish_ok(&client, &artifact);
-
-    // Assert：4 次请求（查重/tag 校验是 GET，创建/上传是非幂等 POST）
-    assert_eq!(url, "https://github.com/owner/demo/releases/tag/v1.0.0");
-    assert_publish_request_methods(&api);
-    api.handle.join().unwrap();
-}
-
-/// 版本已存在时 publish 必须拒绝（014a 发布前校验 2：版本号不可复用）
-#[test]
-fn test_publish_github_flow_rejects_existing_release() {
-    // Arrange：查重端点直接命中已有 Release
-    let tmp = tempfile::tempdir().unwrap();
-    let api = MockApi::spawn(vec![json_resp(
-        200,
-        r#"{"tag_name":"v1.0.0","draft":false,"prerelease":false,"assets":[]}"#,
-    )]);
-    let cache = GlobalCache::with_root(tmp.path().join("cache"));
-    let client = GitHubClient::for_tests(cache, api.url.clone(), Duration::from_millis(1));
-    let artifact = tmp.path().join("demo-1.0.0.yxpkg");
-    std::fs::write(&artifact, b"PKGBYTES").expect("write fixture artifact");
-
-    // Act
-    let err = runtime::drive(publish_github_flow(
-        &client, "owner", "demo", "demo", "1.0.0", "d", &artifact,
-    ))
-    .unwrap_err();
-
-    // Assert：报 VersionAlreadyExists 且查重命中后不再继续
-    assert!(
-        matches!(err, crate::package::PackageError::VersionAlreadyExists(_)),
-        "got: {err}"
-    );
-    assert_eq!(api.recorded().len(), 1, "查重命中后不应继续");
-    api.handle.join().unwrap();
 }

@@ -36,27 +36,6 @@ fn make_params(uri: &str) -> CodeActionParams {
     }
 }
 
-fn make_params_with_range(
-    uri: &str,
-    start_line: u32,
-    start_char: u32,
-    end_line: u32,
-    end_char: u32,
-) -> CodeActionParams {
-    let mut params = make_params(uri);
-    params.range = Range {
-        start: Position {
-            line: start_line,
-            character: start_char,
-        },
-        end: Position {
-            line: end_line,
-            character: end_char,
-        },
-    };
-    params
-}
-
 #[test]
 fn test_code_action_no_selection() {
     let params = make_params("file:///test.yx");
@@ -65,16 +44,5 @@ fn test_code_action_no_selection() {
 
     let actions = result.unwrap();
     // At least inline variable
-    assert!(actions.iter().any(|a| a.title == "内联变量"));
-}
-
-#[test]
-fn test_code_action_with_selection() {
-    let params = make_params_with_range("file:///test.yx", 0, 0, 0, 5);
-    let result = handle_code_action(params, "x = 1 + 2");
-    assert!(result.is_some());
-
-    let actions = result.unwrap();
-    assert!(actions.iter().any(|a| a.title == "提取为变量"));
     assert!(actions.iter().any(|a| a.title == "内联变量"));
 }

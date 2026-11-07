@@ -10,56 +10,10 @@ fn parse_expr(source: &str) -> Expr {
     parse_expression(&tokens).unwrap()
 }
 
-// 字面量和标识符 (Spec §2.6, §2.5)
-
-#[test]
-fn test_int_literal() {
-    let expr = parse_expr("42");
-    assert!(matches!(expr, Expr::Lit(..)));
-}
-
-#[test]
-fn test_float_literal() {
-    let expr = parse_expr("3.14");
-    assert!(matches!(expr, Expr::Lit(..)));
-}
-
-#[test]
-fn test_string_literal() {
-    let expr = parse_expr(r#""hello""#);
-    assert!(matches!(expr, Expr::Lit(..)));
-}
-
-#[test]
-fn test_bool_literal() {
-    assert!(matches!(parse_expr("true"), Expr::Lit(..)));
-    assert!(matches!(parse_expr("false"), Expr::Lit(..)));
-}
-
-#[test]
-fn test_char_literal() {
-    let expr = parse_expr("'a'");
-    assert!(matches!(expr, Expr::Lit(..)));
-}
-
 #[test]
 fn test_void_literal() {
     let expr = parse_expr("void");
     assert!(matches!(expr, Expr::Lit(Literal::Void, _)));
-}
-
-#[test]
-fn test_identifier() {
-    let expr = parse_expr("x");
-    assert!(matches!(expr, Expr::Var(..)));
-}
-
-// 一元运算符 (Spec §4.2)
-
-#[test]
-fn test_unary_neg() {
-    let expr = parse_expr("-x");
-    assert!(matches!(expr, Expr::UnOp { op: UnOp::Neg, .. }));
 }
 
 #[test]
@@ -84,62 +38,6 @@ fn test_unary_not() {
     }
 }
 
-// 二元运算符优先级 (Spec §4.2)
-
-#[test]
-fn test_binop_add() {
-    let expr = parse_expr("1 + 2");
-    assert!(matches!(expr, Expr::BinOp { op: BinOp::Add, .. }));
-}
-
-#[test]
-fn test_binop_sub() {
-    let expr = parse_expr("1 - 2");
-    assert!(matches!(expr, Expr::BinOp { op: BinOp::Sub, .. }));
-}
-
-#[test]
-fn test_binop_mul() {
-    let expr = parse_expr("1 * 2");
-    assert!(matches!(expr, Expr::BinOp { op: BinOp::Mul, .. }));
-}
-
-#[test]
-fn test_binop_div() {
-    let expr = parse_expr("1 / 2");
-    assert!(matches!(expr, Expr::BinOp { op: BinOp::Div, .. }));
-}
-
-#[test]
-fn test_binop_eq() {
-    let expr = parse_expr("a == b");
-    assert!(matches!(expr, Expr::BinOp { op: BinOp::Eq, .. }));
-}
-
-#[test]
-fn test_binop_neq() {
-    let expr = parse_expr("a != b");
-    assert!(matches!(expr, Expr::BinOp { op: BinOp::Neq, .. }));
-}
-
-#[test]
-fn test_binop_lt() {
-    let expr = parse_expr("a < b");
-    assert!(matches!(expr, Expr::BinOp { op: BinOp::Lt, .. }));
-}
-
-#[test]
-fn test_binop_range() {
-    let expr = parse_expr("1..5");
-    assert!(matches!(
-        expr,
-        Expr::BinOp {
-            op: BinOp::Range,
-            ..
-        }
-    ));
-}
-
 #[test]
 fn test_precedence_mul_before_add() {
     // 2 + 3 * 4 应解析为 2 + (3 * 4)
@@ -159,55 +57,6 @@ fn test_precedence_compare_before_logical() {
     let _ = expr;
 }
 
-// 函数调用 (Spec §4.3)
-
-#[test]
-fn test_call_no_args() {
-    let expr = parse_expr("f()");
-    assert!(matches!(expr, Expr::Call { .. }));
-}
-
-#[test]
-fn test_call_args() {
-    let expr = parse_expr("f(a, b)");
-    if let Expr::Call {
-        args, named_args, ..
-    } = &expr
-    {
-        assert_eq!(args.len(), 2);
-        assert!(named_args.is_empty(), "无命名参数时 named_args 应为空");
-    } else {
-        panic!("Expected Call");
-    }
-}
-
-#[test]
-fn test_call_named_args() {
-    // Spec §4.3: 命名参数 Point(x=1, y=2)
-    let expr = parse_expr("Point(x=1, y=2)");
-    if let Expr::Call { named_args, .. } = &expr {
-        assert_eq!(named_args.len(), 2);
-        assert_eq!(named_args[0].0, "x");
-        assert_eq!(named_args[1].0, "y");
-    } else {
-        panic!("Expected Call with named args");
-    }
-}
-
-// 成员访问和索引 (Spec §4.4, §4.5)
-
-#[test]
-fn test_field_access() {
-    let expr = parse_expr("obj.field");
-    assert!(matches!(expr, Expr::FieldAccess { .. }));
-}
-
-#[test]
-fn test_index() {
-    let expr = parse_expr("arr[0]");
-    assert!(matches!(expr, Expr::Index { .. }));
-}
-
 // 字面量和集合 (Spec §2.6.4)
 
 #[test]
@@ -217,161 +66,9 @@ fn test_list_literal() {
 }
 
 #[test]
-fn test_list_empty() {
-    let expr = parse_expr("[]");
-    assert!(matches!(expr, Expr::List(..)));
-}
-
-#[test]
 fn test_tuple() {
     let expr = parse_expr("(1, 2)");
     assert!(matches!(expr, Expr::Tuple(..)));
-}
-
-// 列表推导式 (Spec §1.6.5，旧编号 §2.6.5，#401)
-
-#[test]
-fn test_list_comp() {
-    let expr = parse_expr("[x * x for x in items]");
-    assert!(matches!(expr, Expr::ListComp { .. }));
-}
-
-#[test]
-fn test_list_comp_with_filter_yields_condition() {
-    // Arrange
-    let source = "[x for x in items if x > 0]";
-
-    // Act
-    let expr = parse_expr(source);
-
-    // Assert
-    match expr {
-        Expr::ListComp { generators, .. } => {
-            assert_eq!(generators.len(), 1, "单 for 子句应解析为 1 个生成器");
-            assert_eq!(generators[0].var, "x", "迭代变量应为 x");
-            assert!(generators[0].condition.is_some(), "if 过滤应解析出过滤条件");
-        }
-        other => panic!("期望 ListComp，实际为 {:?}", other),
-    }
-}
-
-#[test]
-fn test_list_comp_multi_generator_expands_clauses() {
-    // Arrange
-    let source = "[x * y for x in xs for y in ys]";
-
-    // Act
-    let expr = parse_expr(source);
-
-    // Assert
-    match expr {
-        Expr::ListComp { generators, .. } => {
-            assert_eq!(generators.len(), 2, "两个 for 子句应解析为 2 个生成器");
-            assert_eq!(generators[0].var, "x", "第一个迭代变量应为 x");
-            assert_eq!(generators[1].var, "y", "第二个迭代变量应为 y");
-            assert!(
-                generators[0].condition.is_none() && generators[1].condition.is_none(),
-                "无 if 子句时过滤条件应为空"
-            );
-        }
-        other => panic!("期望 ListComp，实际为 {:?}", other),
-    }
-}
-
-#[test]
-fn test_list_comp_multi_generator_with_per_clause_filters() {
-    // Arrange
-    let source = "[x * y for x in xs if x > 0 for y in ys if y < 9]";
-
-    // Act
-    let expr = parse_expr(source);
-
-    // Assert
-    match expr {
-        Expr::ListComp { generators, .. } => {
-            assert_eq!(generators.len(), 2, "两个 for 子句应解析为 2 个生成器");
-            assert!(generators[0].condition.is_some(), "第一个子句应带 if 过滤");
-            assert!(generators[1].condition.is_some(), "第二个子句应带 if 过滤");
-        }
-        other => panic!("期望 ListComp，实际为 {:?}", other),
-    }
-}
-
-// Lambda (Spec §4.10)
-
-#[test]
-fn test_lambda_single() {
-    let expr = parse_expr("(x) => x + 1");
-    assert!(matches!(expr, Expr::Lambda { .. }));
-}
-
-#[test]
-fn test_lambda_multi() {
-    let expr = parse_expr("(a, b) => a + b");
-    assert!(matches!(expr, Expr::Lambda { .. }));
-}
-
-#[test]
-fn test_lambda_block_body() {
-    let expr = parse_expr("(x) => { return x }");
-    assert!(matches!(expr, Expr::Lambda { .. }));
-}
-
-// 控制流表达式 (Spec §4.7, §4.8)
-
-#[test]
-fn test_if_expr() {
-    let expr = parse_expr("if true { 1 } else { 2 }");
-    assert!(matches!(expr, Expr::If { .. }));
-}
-
-#[test]
-fn test_block_expr() {
-    let expr = parse_expr("{ 42 }");
-    assert!(matches!(expr, Expr::Block(..)));
-}
-
-// 类型转换 (Spec §4.6)
-
-#[test]
-fn test_cast() {
-    let expr = parse_expr("42 as Float");
-    assert!(matches!(expr, Expr::Cast { .. }));
-}
-
-// 错误传播 (Spec §6.9.4)
-
-#[test]
-fn test_try_operator() {
-    let expr = parse_expr("x?");
-    assert!(matches!(expr, Expr::Try { .. }));
-}
-
-// 分组表达式
-
-#[test]
-fn test_grouped_expr() {
-    let expr = parse_expr("(1 + 2) * 3");
-    // 外层应该是 Mul，左操作数应该是 BinOp::Add
-    if let Expr::BinOp {
-        op: BinOp::Mul,
-        left,
-        ..
-    } = &expr
-    {
-        assert!(matches!(left.as_ref(), Expr::BinOp { op: BinOp::Add, .. }));
-    } else {
-        panic!("Expected Mul at top level with grouped Add inside");
-    }
-}
-
-// 特殊表达式
-
-#[test]
-fn test_ref_expr() {
-    // Spec §8.3: ref 关键字创建 Arc
-    let expr = parse_expr("ref x");
-    assert!(matches!(expr, Expr::Ref { .. }));
 }
 
 // f-string 段切分（RFC-012, #402）

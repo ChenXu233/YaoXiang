@@ -12,7 +12,7 @@
 
 use std::collections::HashSet;
 
-use crate::ast::{BinOp, Expr, GenericParam, GenericParamKind, Param, Type};
+use crate::ast::{GenericParam, GenericParamKind, Param, Type};
 use crate::frontend::core::sema::const_param::{
     ast_type_to_const_kind, resolve_const_candidates, used_as_const_in_annotation,
 };
@@ -70,14 +70,6 @@ fn name_type(name: &str) -> Type {
     }
 }
 
-/// 构造 `(params) -> Int` 形态的声明标注
-fn fn_ann(params: Vec<Param>) -> Type {
-    Type::Fn {
-        params,
-        return_type: Box::new(int_type()),
-    }
-}
-
 /// 规范：**本组形参自己的标注**同样属于类型位置（§7.1「遍历全部子树」）
 ///
 /// 预期行为：
@@ -103,96 +95,6 @@ fn test_used_as_const_in_annotation_scans_own_group_param_annotation() {
     assert!(
         used.contains("N"),
         "本组形参标注 `M: N` 的 N 是类型引用，必须计入 const 用途；实际: {used:?}"
-    );
-}
-
-/// 规范：谓词应用的实参位是**值**，不是类型引用（RFC-027a / §7.1）
-///
-/// 预期行为：`(x: IsPositive(N)) -> Int` 的 `N` 不计入 const 用途——谓词实参位是
-/// 编译期表达式操作数，计入会让形参名被替换成底层类型、精化约束在消费端之前丢失（E1092）
-#[test]
-fn test_used_as_const_in_annotation_skips_predicate_application_arg() {
-    // Arrange：`(x: IsPositive(N)) -> Int`
-    let ann = fn_ann(vec![sig_param(
-        "x",
-        Some(Type::Generic {
-            name: "IsPositive".to_string(),
-            name_span: Span::default(),
-            args: vec![name_type("N")],
-        }),
-    )]);
-    let candidates: HashSet<String> = ["N".to_string()].into();
-
-    // Act
-    let used = used_as_const_in_annotation(&ann, &candidates, &|n| n == "IsPositive");
-
-    // Assert
-    assert!(
-        used.is_empty(),
-        "谓词应用实参位是值，不得计入 const 用途（RFC-027a）；实际: {used:?}"
-    );
-}
-
-/// 规范：类型构造的实参位是**类型引用**（§7.1 `Array(T, N)` 的 `N`）
-///
-/// 预期行为：`(x: Array(Int, N)) -> Int` 的 `N` 计入 const 用途（`Array` 不是谓词）
-#[test]
-fn test_used_as_const_in_annotation_counts_type_ctor_arg() {
-    // Arrange：`(x: Array(Int, N)) -> Int`
-    let ann = fn_ann(vec![sig_param(
-        "x",
-        Some(Type::Generic {
-            name: "Array".to_string(),
-            name_span: Span::default(),
-            args: vec![int_type(), name_type("N")],
-        }),
-    )]);
-    let candidates: HashSet<String> = ["N".to_string()].into();
-
-    // Act
-    let used = used_as_const_in_annotation(&ann, &candidates, &|_| false);
-
-    // Assert
-    assert!(
-        used.contains("N"),
-        "类型构造实参位的 N 必须计入 const 用途；实际: {used:?}"
-    );
-}
-
-/// 规范：`Assert(N > 0)` 的 `ConstExpr` 是编译期值引用
-///
-/// 预期行为：
-/// - `Type::ConstExpr` 里的 `N` 计入 const 用途
-///
-/// 这条同时是本函数**不委托 `ast::name_used_as_type`** 的正确性依据：后者对
-/// `ConstExpr` / `MetaType` / `Paren` / `NamedParen` 落 `_ => false`（见该函数的
-/// 「已知共同缺口」），缺口未补前把两处窄扫描并进唯一分类器，会把谓词里的
-/// 编译期值引用判成落空。
-#[test]
-fn test_used_as_const_in_annotation_counts_assert_const_expr() {
-    // Arrange：`(x: Assert(N > 0)) -> Int`
-    let ann = fn_ann(vec![sig_param(
-        "x",
-        Some(Type::Generic {
-            name: "Assert".to_string(),
-            name_span: Span::default(),
-            args: vec![Type::ConstExpr(Box::new(Expr::BinOp {
-                op: BinOp::Gt,
-                left: Box::new(Expr::Var("N".to_string(), Span::default())),
-                right: Box::new(Expr::Var("0".to_string(), Span::default())),
-                span: Span::default(),
-            }))],
-        }),
-    )]);
-    let candidates: HashSet<String> = ["N".to_string()].into();
-
-    // Act
-    let used = used_as_const_in_annotation(&ann, &candidates, &|_| false);
-
-    // Assert
-    assert!(
-        used.contains("N"),
-        "`Assert(N > 0)` 的 N 是编译期值引用，必须计入 const 用途；实际: {used:?}"
     );
 }
 
@@ -241,63 +143,6 @@ fn test_resolve_const_candidates_hit_builds_contiguous_index() {
         "binder index 应连续无空洞"
     );
     assert!(resolved.fallen.is_empty(), "无落空候选");
-}
-
-/// 规范：落空候选不进 binders，fallen 携带原始签名参数供并入参数链或报 E1094
-///
-/// 预期行为：
-/// - 未被类型位置引用的候选出现在 fallen 中
-/// - fallen 元素即声明签名中的原始 Param（含类型标注）
-#[test]
-fn test_resolve_const_candidates_fallen_carries_original_param() {
-    // Arrange
-    let int_ty = Type::Name {
-        name: "Int".to_string(),
-        span: Span::default(),
-    };
-    let params = vec![const_param("t", int_ty.clone())];
-    let sig = vec![sig_param("t", Some(int_ty.clone()))];
-    let used: HashSet<String> = HashSet::new();
-
-    // Act
-    let resolved = resolve_const_candidates(&params, &sig, &used, 0);
-
-    // Assert
-    assert!(resolved.const_binders.is_empty(), "落空候选不得进 binders");
-    assert_eq!(resolved.fallen.len(), 1, "落空候选应返回原始参数");
-    assert_eq!(resolved.fallen[0].name, "t", "fallen 应携带原参数名");
-    assert!(
-        resolved.fallen[0].ty.is_some(),
-        "fallen 应保留原始类型标注（E1094 文案与值参数链都需要）"
-    );
-}
-
-/// 规范：混合场景下命中与落空按用途分析精确分流，互不串扰
-///
-/// 预期行为：
-/// - N 在类型位置被引用 → binder；t 仅 body 值位置引用（#295/#297 场景）→ fallen
-#[test]
-fn test_resolve_const_candidates_mixed_hit_and_fallen_split() {
-    // Arrange
-    let int_ty = Type::Name {
-        name: "Int".to_string(),
-        span: Span::default(),
-    };
-    let params = vec![
-        const_param("N", int_ty.clone()),
-        const_param("t", int_ty.clone()),
-    ];
-    let sig = vec![sig_param("N", None), sig_param("t", None)];
-    let used: HashSet<String> = ["N".to_string()].into();
-
-    // Act
-    let resolved = resolve_const_candidates(&params, &sig, &used, 0);
-
-    // Assert
-    assert_eq!(resolved.const_binders.len(), 1, "仅 N 命中");
-    assert_eq!(resolved.const_binders[0].name, "N", "命中者应为 N");
-    assert_eq!(resolved.fallen.len(), 1, "仅 t 落空");
-    assert_eq!(resolved.fallen[0].name, "t", "落空者应为 t");
 }
 
 /// 规范：annotation 形态映射 ConstKind（Int/Float/Bool/未知回退 Int）

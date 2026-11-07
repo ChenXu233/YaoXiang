@@ -19,7 +19,7 @@ use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parse;
 use crate::frontend::core::sema::checker::TypeChecker;
 use crate::frontend::module::registry::ModuleRegistry;
-use crate::middle::ir::ir::{ConstValue, FunctionBody, Instruction, ModuleIR, Operand};
+use crate::middle::ir::ir::{ModuleIR};
 use crate::middle::ir::ir_gen::AstToIrGenerator;
 use crate::middle::ir::verify::verify_loose;
 use crate::util::diagnostic::Severity;
@@ -51,96 +51,6 @@ fn compile_ir(source: &str) -> ModuleIR {
         .expect("夹具必须生成 IR")
 }
 
-/// 某函数体里与「别名作值」相关的两种形态：
-/// - 原生函数值常量（`ConstValue::NativeFn`）承载的名字；
-/// - 零参 `Call` 的目标名（native 常量的既有形态）。
-fn alias_value_shapes(
-    ir: &ModuleIR,
-    func_name: &str,
-) -> (Vec<String>, Vec<String>) {
-    let func = ir
-        .functions
-        .iter()
-        .find(|f| f.name == func_name)
-        .unwrap_or_else(|| panic!("函数 {func_name} 必须在 IR 函数表里"));
-    let FunctionBody::Code { blocks, .. } = &func.body else {
-        panic!("函数 {func_name} 必须是代码体");
-    };
-    let mut native_fns = Vec::new();
-    let mut zero_arg_calls = Vec::new();
-    for block in blocks {
-        for instr in &block.instructions {
-            match instr {
-                Instruction::Load {
-                    src: Operand::Const(ConstValue::NativeFn(name)),
-                    ..
-                } => native_fns.push(name.clone()),
-                Instruction::Call {
-                    func: Operand::Const(ConstValue::String(name)),
-                    args,
-                    ..
-                } if args.is_empty() => zero_arg_calls.push(name.clone()),
-                _ => {}
-            }
-        }
-    }
-    (native_fns, zero_arg_calls)
-}
-
-/// 原生函数作值 ⇒ `ConstValue::NativeFn`（不是零参 Call）。
-#[test]
-fn test_native_fn_alias_value_is_native_fn_const() {
-    // Arrange：顶层重绑（值位置），不调用
-    let ir = compile_ir(
-        "use std.io.{println}
-main: () -> Void = {
-    f = println
-}
-main()
-",
-    );
-
-    // Act
-    let (native_fns, zero_arg_calls) = alias_value_shapes(&ir, "main");
-
-    // Assert：物化形态唯一是原生函数值常量，零参 Call 不得出现
-    assert!(
-        native_fns.iter().any(|name| name == "std.io.println"),
-        "原生函数作值必须物化为 ConstValue::NativeFn(std.io.println)，实际={native_fns:?}",
-    );
-    assert!(
-        !zero_arg_calls.iter().any(|name| name == "std.io.println"),
-        "原生函数作值不得落零参 Call（静默不动作路径），实际零参调用={zero_arg_calls:?}",
-    );
-}
-
-/// native **常量**作值 ⇒ 零参 `Call`（既有成功形态，逐字节不变）。
-#[test]
-fn test_native_constant_alias_value_keeps_zero_arg_call() {
-    // Arrange
-    let ir = compile_ir(
-        "use std.math.{PI}
-main: () -> Void = {
-    p = PI
-}
-main()
-",
-    );
-
-    // Act
-    let (native_fns, zero_arg_calls) = alias_value_shapes(&ir, "main");
-
-    // Assert
-    assert!(
-        zero_arg_calls.iter().any(|name| name == "std.math.PI"),
-        "native 常量作值必须保持零参 Call(std.math.PI)，实际零参调用={zero_arg_calls:?}",
-    );
-    assert!(
-        !native_fns.iter().any(|name| name == "std.math.PI"),
-        "native 常量不得被物化成原生函数值（它不是函数），实际={native_fns:?}",
-    );
-}
-
 /// 不变量（verify.rs:151 同批）：原生函数值常量**不引入 env 槽**——
 /// `verify` 的闭包 env 槽数只从 MakeClosure 恢复，本形态没有闭包体；
 /// 含本形态的模块必须在宽松口径下零违规。
@@ -165,85 +75,5 @@ main()
         verified.is_ok(),
         "含原生函数值的模块必须在宽松口径下零违规，实际: {:?}",
         verified.err()
-    );
-}
-
-/// 某函数体里 MakeClosure 的目标名（函数代码物化形态）。
-fn make_closure_targets(
-    ir: &ModuleIR,
-    func_name: &str,
-) -> Vec<String> {
-    let func = ir
-        .functions
-        .iter()
-        .find(|f| f.name == func_name)
-        .unwrap_or_else(|| panic!("函数 {func_name} 必须在 IR 函数表里"));
-    let FunctionBody::Code { blocks, .. } = &func.body else {
-        panic!("函数 {func_name} 必须是代码体");
-    };
-    let mut closures = Vec::new();
-    for block in blocks {
-        for instr in &block.instructions {
-            if let Instruction::MakeClosure { func, .. } = instr {
-                closures.push(func.clone());
-            }
-        }
-    }
-    closures
-}
-
-/// 模块**成员**作值（`p = io.println`）与别名作值同权 ⇒ 原生函数值常量。
-///
-/// 成员访问与 `use lib.{f}` 别名是同一判据的两条入口（emit_module_export_value）——
-/// 此前成员路径一律生成零参调用：`p("x")` 变成以零实参调用 println（静默不动作）。
-#[test]
-fn test_native_fn_member_value_is_native_fn_const() {
-    // Arrange
-    let ir = compile_ir(
-        "use std.io
-main: () -> Void = {
-    p = io.println
-}
-main()
-",
-    );
-
-    // Act
-    let (native_fns, zero_arg_calls) = alias_value_shapes(&ir, "main");
-
-    // Assert
-    assert!(
-        native_fns.iter().any(|name| name == "std.io.println"),
-        "模块成员作值必须物化为 ConstValue::NativeFn(std.io.println)，实际={native_fns:?}",
-    );
-    assert!(
-        !zero_arg_calls.iter().any(|name| name == "std.io.println"),
-        "模块成员作值不得落零参 Call，实际零参调用={zero_arg_calls:?}",
-    );
-}
-
-/// 模块成员里的**纯 yx 导出**作值 ⇒ MakeClosure（与别名路径同一判据）。
-///
-/// `q = json.parse` 的 parse 定义在嵌入源里（函数表有条目）；此前成员路径把它
-/// 也当 native 名零参调用——`q("true")` 静默拿到被调体零实参的返回值。
-#[test]
-fn test_yx_std_member_value_is_make_closure() {
-    // Arrange
-    let ir = compile_ir(
-        "use std.json
-main: () -> Void = {
-    q = json.parse
-}
-main()
-",
-    );
-
-    // Act
-    let closures = make_closure_targets(&ir, "main");
-
-    // Assert
-    assert!(
-        closures.iter().any(|name| name == "std.json.parse"),
-        "纯 yx std 成员作值必须物化为 MakeClosure(std.json.parse)，实际闭包={closures:?}",
     );
 }

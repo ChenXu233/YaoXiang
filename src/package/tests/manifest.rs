@@ -84,43 +84,6 @@ fn test_add_dev_dependency() {
 }
 
 #[test]
-fn test_remove_dependency() {
-    let mut manifest = PackageManifest::new("test");
-    manifest.add_dependency("foo", "1.0.0");
-    assert!(manifest.remove_dependency("foo"));
-    assert!(!manifest.dependencies.contains_key("foo"));
-}
-
-#[test]
-fn test_remove_nonexistent_dependency() {
-    let mut manifest = PackageManifest::new("test");
-    assert!(!manifest.remove_dependency("nonexistent"));
-}
-
-#[test]
-fn test_has_dependency() {
-    let mut manifest = PackageManifest::new("test");
-    manifest.add_dependency("foo", "1.0.0");
-    manifest.add_dev_dependency("bar", "2.0.0");
-    assert!(manifest.has_dependency("foo"));
-    assert!(manifest.has_dependency("bar"));
-    assert!(!manifest.has_dependency("baz"));
-}
-
-#[test]
-fn test_round_trip_with_dependencies() {
-    let dir = tempfile::TempDir::new().unwrap();
-    let mut manifest = PackageManifest::new("test-project");
-    manifest.add_dependency("foo", "1.0.0");
-    manifest.add_dev_dependency("bar", "2.0.0");
-    manifest.save(dir.path()).unwrap();
-
-    let loaded = PackageManifest::load(dir.path()).unwrap();
-    assert!(loaded.dependencies.contains_key("foo"));
-    assert!(loaded.dev_dependencies.contains_key("bar"));
-}
-
-#[test]
 fn test_parse_toml_with_table_dependency() {
     let toml_str = r#"
 [package]

@@ -13,7 +13,6 @@
 //! - 空列表查询
 //! - 完整性验证
 
-use crate::package::vendor::checksum::compute_directory_checksum;
 use crate::package::vendor::VendorManager;
 use tempfile::TempDir;
 
@@ -31,14 +30,6 @@ fn test_vendor_manager_new() {
 }
 
 #[test]
-fn test_ensure_vendor_dir() {
-    let tmp = TempDir::new().unwrap();
-    let manager = VendorManager::new(tmp.path());
-    manager.ensure_vendor_dir().unwrap();
-    assert!(manager.vendor_dir().exists());
-}
-
-#[test]
 fn test_dep_path() {
     let tmp = TempDir::new().unwrap();
     let manager = VendorManager::new(tmp.path());
@@ -50,21 +41,6 @@ fn test_dep_path() {
             .join("vendor")
             .join("foo-1.0.0")
     );
-}
-
-#[test]
-fn test_install_multi_version() {
-    let tmp = TempDir::new().unwrap();
-    let manager = VendorManager::new(tmp.path());
-    manager.ensure_vendor_dir().unwrap();
-
-    // 模拟安装两个版本
-    std::fs::create_dir_all(manager.dep_path("foo", "1.0.0")).unwrap();
-    std::fs::create_dir_all(manager.dep_path("foo", "1.1.0")).unwrap();
-
-    assert!(manager.is_installed("foo", "1.0.0"));
-    assert!(manager.is_installed("foo", "1.1.0"));
-    assert!(!manager.is_installed("foo", "2.0.0"));
 }
 
 #[test]
@@ -80,39 +56,6 @@ fn test_list_installed() {
     assert_eq!(installed.len(), 2);
     assert_eq!(installed[0], ("bar".to_string(), "2.0.0".to_string()));
     assert_eq!(installed[1], ("foo".to_string(), "1.0.0".to_string()));
-}
-
-#[test]
-fn test_uninstall_dependency() {
-    let tmp = TempDir::new().unwrap();
-    let manager = VendorManager::new(tmp.path());
-    manager.ensure_vendor_dir().unwrap();
-
-    std::fs::create_dir_all(manager.dep_path("foo", "1.0.0")).unwrap();
-    assert!(manager.is_installed("foo", "1.0.0"));
-
-    let removed = manager.uninstall_dependency("foo", "1.0.0").unwrap();
-    assert!(removed);
-    assert!(!manager.is_installed("foo", "1.0.0"));
-}
-
-#[test]
-fn test_clean() {
-    let tmp = TempDir::new().unwrap();
-    let manager = VendorManager::new(tmp.path());
-    manager.ensure_vendor_dir().unwrap();
-
-    std::fs::create_dir_all(manager.dep_path("foo", "1.0.0")).unwrap();
-    std::fs::create_dir_all(manager.dep_path("bar", "2.0.0")).unwrap();
-    std::fs::create_dir_all(manager.dep_path("baz", "3.0.0")).unwrap();
-
-    let keep = vec![("foo".to_string(), "1.0.0".to_string())];
-    let removed = manager.clean(&keep).unwrap();
-
-    assert_eq!(removed.len(), 2);
-    assert!(manager.is_installed("foo", "1.0.0"));
-    assert!(!manager.is_installed("bar", "2.0.0"));
-    assert!(!manager.is_installed("baz", "3.0.0"));
 }
 
 #[test]
@@ -136,30 +79,4 @@ fn test_list_installed_empty() {
     let manager = VendorManager::new(tmp.path());
     let installed = manager.list_installed().unwrap();
     assert!(installed.is_empty());
-}
-
-#[test]
-fn test_verify_integrity() {
-    let tmp = TempDir::new().unwrap();
-    let manager = VendorManager::new(tmp.path());
-    manager.ensure_vendor_dir().unwrap();
-
-    // 创建测试文件
-    let dep_path = manager.dep_path("foo", "1.0.0");
-    std::fs::create_dir_all(&dep_path).unwrap();
-    std::fs::write(dep_path.join("lib.yx"), "main = { 42 }").unwrap();
-
-    // 计算校验和
-    let checksum_value = compute_directory_checksum(&dep_path).unwrap();
-
-    // 校验应通过
-    assert!(manager
-        .verify_integrity("foo", "1.0.0", &checksum_value)
-        .unwrap());
-
-    // 修改文件后校验应失败
-    std::fs::write(dep_path.join("lib.yx"), "main = { 0 }").unwrap();
-    assert!(!manager
-        .verify_integrity("foo", "1.0.0", &checksum_value)
-        .unwrap());
 }

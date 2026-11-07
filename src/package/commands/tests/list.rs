@@ -42,15 +42,3 @@ fn test_format_extra_empty() {
     };
     assert_eq!(format_extra(&spec), "");
 }
-
-#[test]
-fn test_format_extra_with_git() {
-    let spec = DependencySpec {
-        name: "foo".to_string(),
-        version: "1.0.0".to_string(),
-        git: Some("https://github.com/example/foo".to_string()),
-        path: None,
-    };
-    let extra = format_extra(&spec);
-    assert!(extra.contains("git:"));
-}

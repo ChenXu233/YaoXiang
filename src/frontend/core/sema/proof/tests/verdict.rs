@@ -78,40 +78,6 @@ fn test_into_diagnostic_predicate_violation_basic() {
 }
 
 #[test]
-fn test_into_diagnostic_predicate_violation_multiple_assignments() {
-    // #324：这些 API 生产上运行于类型检查 walk 内（guard 覆盖），单测直调需模拟 walk 上下文
-    let _walk_guard = crate::util::diagnostic::push_current_span(crate::util::span::Span::dummy());
-    // Arrange
-    let model = DisproofModel {
-        kind: DisproofKind::PredicateViolation,
-        assignments: vec![("x".into(), "0".into()), ("y".into(), "5".into())],
-        constraint: "(x > 0) and (y < 0)".into(),
-        span: None,
-        predicate_span: None,
-    };
-
-    // Act
-    let diag = model.into_diagnostic();
-
-    // Assert
-    assert!(
-        diag.message.contains("x = 0"),
-        "Message must contain 'x = 0'. Got: '{}'",
-        diag.message
-    );
-    assert!(
-        diag.message.contains("y = 5"),
-        "Message must contain 'y = 5'. Got: '{}'",
-        diag.message
-    );
-    assert!(
-        diag.message.contains("(x > 0) and (y < 0)"),
-        "Message must contain the constraint text. Got: '{}'",
-        diag.message
-    );
-}
-
-#[test]
 fn test_into_diagnostic_predicate_violation_empty_assignments() {
     // #324：这些 API 生产上运行于类型检查 walk 内（guard 覆盖），单测直调需模拟 walk 上下文
     let _walk_guard = crate::util::diagnostic::push_current_span(crate::util::span::Span::dummy());
@@ -232,34 +198,6 @@ fn test_into_diagnostic_type_mismatch_single_assignment() {
     assert_eq!(
         diag.code, "E4019",
         "Single assignment must still produce E4019 error"
-    );
-}
-
-#[test]
-fn test_into_diagnostic_type_mismatch_empty_assignments() {
-    // #324：这些 API 生产上运行于类型检查 walk 内（guard 覆盖），单测直调需模拟 walk 上下文
-    let _walk_guard = crate::util::diagnostic::push_current_span(crate::util::span::Span::dummy());
-    // Arrange
-    let model = DisproofModel {
-        kind: DisproofKind::TypeMismatch,
-        assignments: vec![],
-        constraint: String::new(),
-        span: None,
-        predicate_span: None,
-    };
-
-    // Act
-    let diag = model.into_diagnostic();
-
-    // Assert
-    assert_eq!(
-        diag.code, "E4019",
-        "Empty assignments must still produce E4019 error"
-    );
-    assert!(
-        diag.message.contains("expected") || !diag.message.is_empty(),
-        "Diagnostic message must not panic with empty assignments. Got: '{}'",
-        diag.message
     );
 }
 

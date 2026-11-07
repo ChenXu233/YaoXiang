@@ -19,7 +19,6 @@ use crate::frontend::core::sema::proof::verdict::{DisproofKind, ProofResult};
 use crate::frontend::core::sema::TypeEnvironment;
 use crate::frontend::core::types::const_data::{BinOp, ConstExpr, ConstValue};
 use crate::frontend::core::types::mono::MonoType;
-use crate::util::span::{Position, Span};
 
 /// 单变量约束 `var <op> n` 的精化类型 + 反例绑定 `var = bound`。
 fn constrained(
@@ -36,55 +35,6 @@ fn constrained(
     let mut bindings = HashMap::new();
     bindings.insert(var.into(), ConstValue::Int(bound));
     (refined_int(constraint), bindings)
-}
-
-/// 多变量约束 `x + y > 0` 的精化类型（无假设 → SMT 可找反例）。
-fn multivariable_refined() -> MonoType {
-    refined_int(binop(
-        BinOp::Gt,
-        binop(
-            BinOp::Add,
-            ConstExpr::NamedVar("x".into()),
-            ConstExpr::NamedVar("y".into()),
-        ),
-        ConstExpr::Lit(ConstValue::Int(0)),
-    ))
-}
-
-// RFC-027 §4 & Phase 4.1: PredicateViolation E2E
-
-/// E2E: Level 1 Disproved → DisproofModel.kind = PredicateViolation
-///
-/// 模拟 `Positive(0)` — 直接求值 x>0=false，验证 kind 字段正确。
-#[test]
-fn test_e2e_phase4_level1_disproved_has_predicate_violation_kind() {
-    // Arrange
-    let constraint = binop(
-        BinOp::Gt,
-        ConstExpr::NamedVar("x".into()),
-        ConstExpr::Lit(ConstValue::Int(0)),
-    );
-    let refined = refined_int(constraint);
-    let mut bindings = HashMap::new();
-    bindings.insert("x".into(), ConstValue::Int(0));
-    let env = TypeEnvironment::new();
-    let ctx = ProofContext::new(&env);
-
-    // Act
-    let result = check_predicate(&ctx, &refined, &bindings);
-
-    // Assert
-    match result {
-        ProofResult::Disproved(model) => {
-            assert_eq!(
-                model.kind,
-                DisproofKind::PredicateViolation,
-                "E2E Level 1: Disproved 的 kind 必须是 PredicateViolation，实际: {:?}",
-                model.kind
-            );
-        }
-        other => panic!("E2E Level 1: x=0 时 x>0 必须 Disproved，实际: {other:?}"),
-    }
 }
 
 /// E2E: Level 1 Disproved → constraint 文本包含正确的谓词表达式
@@ -188,47 +138,6 @@ fn test_e2e_phase4_into_diagnostic_predicate_violation_e4018() {
     }
 }
 
-/// E2E: into_diagnostic() — PredicateViolation 带 Span
-///
-/// 验证设置了 span 时诊断携带正确位置。
-#[test]
-fn test_e2e_phase4_into_diagnostic_with_span() {
-    // Arrange
-    let constraint = binop(
-        BinOp::Gt,
-        ConstExpr::NamedVar("x".into()),
-        ConstExpr::Lit(ConstValue::Int(0)),
-    );
-    let refined = refined_int(constraint);
-    let mut bindings = HashMap::new();
-    bindings.insert("x".into(), ConstValue::Int(0));
-    let env = TypeEnvironment::new();
-    let ctx = ProofContext::new(&env);
-
-    // Act
-    let result = check_predicate(&ctx, &refined, &bindings);
-
-    // Assert
-    match result {
-        ProofResult::Disproved(mut model) => {
-            // 设置 span（模拟 checker.rs 在调用点填入）
-            let start = Position::new(42, 5);
-            let end = Position::new(42, 10);
-            model.span = Some(Span::new(start, end));
-
-            let diag = model.into_diagnostic();
-            assert!(diag.span.is_some(), "诊断必须有 span");
-            let diag_span = diag.span.unwrap();
-            assert_eq!(
-                diag_span.start.line, 42,
-                "Span 行号必须匹配，实际: {}",
-                diag_span.start.line
-            );
-        }
-        other => panic!("期望 Disproved，实际: {other:?}"),
-    }
-}
-
 /// E2E: into_result() — Disproved 转 Err(Diagnostic)
 ///
 /// 验证完整管道：check_predicate → into_result → Err(E4018)
@@ -308,61 +217,6 @@ fn test_e2e_phase4_type_equivalence_type_mismatch() {
     }
 }
 
-/// E2E: check_type_equivalence 相同类型 → Proved（正常路径）
-#[test]
-fn test_e2e_phase4_type_equivalence_same_type_proved() {
-    // Arrange
-    let lhs = MonoType::Int(64);
-    let rhs = MonoType::Int(64);
-    let env = TypeEnvironment::new();
-    let ctx = ProofContext::new(&env);
-
-    // Act
-    let result = check_type_equivalence(&ctx, &lhs, &rhs);
-
-    // Assert
-    assert!(
-        result.is_proved(),
-        "E2E: Int == Int 必须是 Proved，实际: {result:?}"
-    );
-}
-
-// RFC-027 §4: 多变量反例 + 假设蕴含 E2E
-
-/// E2E: 多变量约束 Disproved → 所有变量都出现在反例中
-#[test]
-fn test_e2e_phase4_multivariable_constraint_disproved() {
-    // #324：这些 API 生产上运行于类型检查 walk 内（guard 覆盖），单测直调需模拟 walk 上下文
-    let _walk_guard = crate::util::diagnostic::push_current_span(crate::util::span::Span::dummy());
-    // Arrange
-    // 约束: x + y > 0，无假设 → SMT 可找 x=-1, y=0
-    let refined = multivariable_refined();
-    let env = TypeEnvironment::new();
-    let ctx = ProofContext::new(&env);
-
-    // Act
-    let result = check_predicate(&ctx, &refined, &HashMap::new());
-
-    // Assert
-    match result {
-        ProofResult::Disproved(model) => {
-            assert_eq!(
-                model.kind,
-                DisproofKind::PredicateViolation,
-                "多变量反例的 kind 必须是 PredicateViolation"
-            );
-            // into_diagnostic 应包含约束文本
-            let diag = model.into_diagnostic();
-            assert!(
-                diag.message.contains("x") || diag.message.contains("y"),
-                "诊断消息应包括变量名，实际: '{}'",
-                diag.message
-            );
-        }
-        other => panic!("期望 Disproved，实际: {other:?}"),
-    }
-}
-
 /// E2E: 批量 DisproofModel — 多个证明结果各自独立转换
 #[test]
 fn test_e2e_phase4_multiple_disproved_models_independent() {
@@ -401,30 +255,4 @@ fn test_e2e_phase4_multiple_disproved_models_independent() {
         }
         (r1, r2) => panic!("两个都必须 Disproved，实际: {r1:?}, {r2:?}"),
     }
-}
-
-/// E2E: Proved → into_result → Ok
-///
-/// 正常路径不产生诊断。
-#[test]
-fn test_e2e_phase4_proved_into_result_ok() {
-    // Arrange
-    let constraint = binop(
-        BinOp::Gt,
-        ConstExpr::NamedVar("x".into()),
-        ConstExpr::Lit(ConstValue::Int(0)),
-    );
-    let refined = refined_int(constraint);
-    let mut bindings = HashMap::new();
-    bindings.insert("x".into(), ConstValue::Int(5));
-    let env = TypeEnvironment::new();
-    let ctx = ProofContext::new(&env);
-
-    // Act
-    let result = check_predicate(&ctx, &refined, &bindings);
-
-    // Assert
-    assert!(result.is_proved(), "x=5 时 x>0 必须 Proved");
-    let outcome = result.into_result();
-    assert!(outcome.is_ok(), "E2E: Proved into_result 必须返回 Ok(())");
 }

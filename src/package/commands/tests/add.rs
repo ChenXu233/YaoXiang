@@ -11,7 +11,6 @@ use crate::package::commands::add::exec_in;
 use crate::package::commands::init;
 use crate::package::error::PackageError;
 use crate::package::lock::LockFile;
-use crate::package::manifest::PackageManifest;
 use tempfile::TempDir;
 
 fn setup_project() -> (TempDir, std::path::PathBuf) {
@@ -19,24 +18,6 @@ fn setup_project() -> (TempDir, std::path::PathBuf) {
     init::exec_in(tmp.path(), &init::InitOptions { lib: false }, "test-proj").unwrap();
     let project_dir = tmp.path().join("test-proj");
     (tmp, project_dir)
-}
-
-#[test]
-fn test_add_dependency() {
-    let (_tmp, project_dir) = setup_project();
-    exec_in(&project_dir, "foo", Some("1.0.0"), None, None, false, false).unwrap();
-
-    let manifest = PackageManifest::load(&project_dir).unwrap();
-    assert!(manifest.dependencies.contains_key("foo"));
-}
-
-#[test]
-fn test_add_dev_dependency() {
-    let (_tmp, project_dir) = setup_project();
-    exec_in(&project_dir, "bar", Some("2.0.0"), None, None, true, false).unwrap();
-
-    let manifest = PackageManifest::load(&project_dir).unwrap();
-    assert!(manifest.dev_dependencies.contains_key("bar"));
 }
 
 #[test]
@@ -60,67 +41,6 @@ fn test_add_duplicate_fails() {
         result.unwrap_err(),
         PackageError::DependencyAlreadyExists(_)
     ));
-}
-
-#[test]
-fn test_add_default_version() {
-    let (_tmp, project_dir) = setup_project();
-    exec_in(&project_dir, "foo", None, None, None, false, false).unwrap();
-
-    let manifest = PackageManifest::load(&project_dir).unwrap();
-    assert_eq!(
-        manifest.dependencies["foo"],
-        toml::Value::String("*".to_string())
-    );
-}
-
-#[test]
-fn test_add_git_source() {
-    let (_tmp, project_dir) = setup_project();
-    exec_in(
-        &project_dir,
-        "demo",
-        Some("^0.3"),
-        Some("https://github.com/u/demo"),
-        None,
-        false,
-        false,
-    )
-    .unwrap();
-
-    let manifest = PackageManifest::load(&project_dir).unwrap();
-    let table = manifest.dependencies["demo"].as_table().unwrap();
-    assert_eq!(table["version"], toml::Value::String("^0.3".to_string()));
-    assert_eq!(
-        table["git"],
-        toml::Value::String("https://github.com/u/demo".to_string())
-    );
-
-    // lock 文件同步登记
-    let lock = LockFile::load(&project_dir).unwrap();
-    assert!(lock.package.contains_key("demo"));
-}
-
-#[test]
-fn test_add_path_source() {
-    let (_tmp, project_dir) = setup_project();
-    exec_in(
-        &project_dir,
-        "local",
-        Some("1.0.0"),
-        None,
-        Some("./local-src"),
-        false,
-        false,
-    )
-    .unwrap();
-
-    let manifest = PackageManifest::load(&project_dir).unwrap();
-    let table = manifest.dependencies["local"].as_table().unwrap();
-    assert_eq!(
-        table["path"],
-        toml::Value::String("./local-src".to_string())
-    );
 }
 
 #[test]

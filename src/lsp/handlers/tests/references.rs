@@ -65,22 +65,6 @@ fn test_references_excluding_declaration_finds_all_usages() {
 }
 
 #[test]
-fn test_references_including_declaration_adds_definition_site() {
-    // Arrange
-    let (session, world) = setup();
-    // Act：同上但包含声明
-    let params = make_params(SAMPLE_URI, 1, 4, true);
-    let result = handle_references(&session, &world, params);
-    // Assert：两个使用点 + 一个定义点
-    let locations = result.expect("x 引用点必须给出引用列表");
-    assert_eq!(locations.len(), 3, "两个使用点加一个定义点");
-    assert!(
-        locations.iter().any(|l| l.range.start.line == 0),
-        "定义点（第一行）应在列"
-    );
-}
-
-#[test]
 fn test_references_not_on_ident_returns_none() {
     // Arrange
     let (session, world) = setup();
@@ -100,19 +84,4 @@ fn test_references_doc_not_open_returns_none() {
     let result = handle_references(&session, &world, params);
     // Assert
     assert!(result.is_none(), "未打开的文档应返回 None");
-}
-
-#[test]
-fn test_references_mid_identifier_cursor_also_finds() {
-    // Arrange：三字符名 abc——光标落在标识符**中部**（b 上）
-    // （2026-10-16 用户裁决：查库键 = 标识符自身起点）
-    let (session, world) = open_and_check("abc = 1\ny = abc + abc\n");
-
-    // Act
-    let params = make_params(SAMPLE_URI, 1, 5, false);
-    let result = handle_references(&session, &world, params);
-
-    // Assert：与起点光标同效——两个使用点都在列
-    let locations = result.expect("标识符中部光标必须同效找到引用（起点查库键裁决）");
-    assert_eq!(locations.len(), 2, "两个使用点都应被找到");
 }

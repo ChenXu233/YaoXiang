@@ -39,9 +39,6 @@ const IS_POSITIVE: &str = "IsPositive: (x: Int) -> Type = { x > 0 }\n";
 /// §2 的二元谓词（RFC-027 招牌后置条件形态）：`s == n * 2`。
 const SUM_UP_TO: &str = "SumUpTo: (n: Int, s: Int) -> Type = { s == n * 2 }\n";
 
-/// §3 的二元证明函数：`a == b`（非单参数谓词定义，走证明函数路径）。
-const EQ2: &str = "Eq2: (a: Int, b: Int) -> Type = { a == b }\n";
-
 /// 解析并类型检查一段源码（词法/语法错误折算成 E0001 诊断）。
 fn check_source(source: &str) -> TypeCheckResult {
     let tokens = match tokenize(source) {
@@ -160,60 +157,6 @@ fn test_return_binder_argument_expression_substituted_proves_clean() {
     );
 }
 
-/// §3：谓词实参代入后为假 ⇒ E4018，且反例/约束文本里是**代入后的式子**。
-///
-/// `d2: () -> (r: IsPositive(r - 100)) = { return 5 }`：约束 `5 - 100 > 0`（-95 > 0）
-/// 为假。修复前实参丢失，约束退化成 `5 > 0` 而静默通过。
-#[test]
-fn test_return_binder_argument_expression_substituted_violation_reports_e4018() {
-    // Arrange
-    let source = format!("{IS_POSITIVE}d2: () -> (r: IsPositive(r - 100)) = {{ return 5 }}");
-
-    // Act
-    let result = check_source(&source);
-
-    // Assert
-    assert_has_code(
-        &result,
-        "E4018",
-        "约束 5 - 100 > 0 为假：代入实参后必须判伪",
-    );
-    assert!(
-        result
-            .diagnostics
-            .iter()
-            .any(|d| d.message.contains("5 - 100")),
-        "诊断应给出**代入后**的约束 `5 - 100 > 0`（实参真正代入的证据）；实际: {:#?}",
-        result.diagnostics
-    );
-}
-
-/// §3：返回形式参数只认**声明的名字**；未声明的自由变量报未定义标识符。
-///
-/// `g: () -> (r: Eq2(m, r)) = { return 7 }`：声明的返回形式参数是 `r`，
-/// `m` 既不在签名里、也不在作用域里 ⇒ E1001。
-/// 修复前 `m` 与 `r` 都被当成返回形式参数代入 `7`，约束退化成 `7 == 7` 恒真而静默通过。
-#[test]
-fn test_return_binder_undeclared_free_variable_reports_unknown_identifier() {
-    // Arrange
-    let source = format!("{EQ2}g: () -> (r: Eq2(m, r)) = {{ return 7 }}");
-
-    // Act
-    let result = check_source(&source);
-
-    // Assert
-    assert_has_code(
-        &result,
-        "E1001",
-        "未声明的自由变量 m 不得被当成返回形式参数，应报未定义标识符",
-    );
-    assert!(
-        result.diagnostics.iter().any(|d| d.message.contains("m")),
-        "未定义标识符诊断应点名 m；实际: {:#?}",
-        result.diagnostics
-    );
-}
-
 /// §3：声明的返回形式参数之外，**作用域内**的自由变量用自己的符号（不代返回值）。
 ///
 /// `f: (b: IsPositive(b)) -> (r: IsPositive(b + r)) = { b + 1 }`：约束 `b + r > 0`，
@@ -291,39 +234,6 @@ fn test_multi_arg_predicate_with_variable_arg_points_at_return_position() {
         diag.help,
         en_locale_help("E2031"),
         "help 应回落 E2031 的本地化文案（不再由 code 侧 with_help 覆盖）"
-    );
-}
-
-/// §2：裸精化返回位（未声明 binder）的 `{var}` 取**规范标识符** `result`。
-///
-/// RFC-027 §2 把返回值形参命名为 `result`（spec: `-> (result: IsMax(T, arr, result))`，
-/// 「`result` 是返回值形参，值由 `return` 提供」），裸形态 `-> P(...)` 即其简写——
-/// 故这里不是英文散文，而是合法的标识符。
-#[test]
-fn test_bare_multi_arg_predicate_points_at_return_position() {
-    // Arrange
-    crate::util::i18n::set_lang_from_string("en".to_string());
-    let source = format!("{SUM_UP_TO}f: (b: Int) -> SumUpTo(b, b) = {{ b }}");
-
-    // Act
-    let result = check_source(&source);
-
-    // Assert
-    assert_has_code(&result, "E2031", "裸形态的多元谓词实参含形参，判不出");
-    let diag = result
-        .diagnostics
-        .iter()
-        .find(|d| d.code == "E2031")
-        .expect("已断言存在 E2031");
-    assert!(
-        diag.message.contains("'result'") && !diag.message.contains("'b'"),
-        "裸形态 {{var}} 应是规范标识符 `result`（不是形参 b、也不是散文）；实际: {:#?}",
-        diag.message
-    );
-    assert!(
-        !contains_cjk(&diag.message),
-        "裸形态文案同样不得含 code 写死的自然语言；实际: {:#?}",
-        diag.message
     );
 }
 

@@ -238,21 +238,6 @@ fn lsp_token(
         token_modifiers_bitset,
     }
 }
-#[test]
-fn test_empty_file() {
-    let db = SemanticDB::new();
-    let mut cache = SemanticTokensCache::new();
-    let params = full_params("file:///empty.yx");
-
-    let result = handle_semantic_tokens_full(&db, &mut cache, None, params).unwrap();
-    // 文件不在 DB 中 → None
-    if let SemanticTokensResult::Tokens(tokens) = result {
-        assert!(tokens.data.is_empty());
-        assert!(tokens.result_id.is_some());
-    } else {
-        panic!("Expected SemanticTokensResult::Tokens");
-    }
-}
 
 #[test]
 fn test_file_with_tokens() {
@@ -444,13 +429,6 @@ fn test_delta_fallback_on_invalid_result_id() {
 // ============ Diff 算法测试 ============
 
 #[test]
-fn test_diff_identical() {
-    let tokens = vec![lsp_token(0, 0, 3, 0, 0)];
-    let edits = diff_semantic_tokens(&tokens, &tokens);
-    assert!(edits.is_empty());
-}
-
-#[test]
 fn test_diff_append() {
     let old = vec![lsp_token(0, 0, 3, 0, 0)];
     let new = vec![lsp_token(0, 0, 3, 0, 0), lsp_token(1, 0, 3, 2, 0)];
@@ -460,36 +438,6 @@ fn test_diff_append() {
     assert_eq!(edits[0].delete_count, 0);
     assert!(edits[0].data.is_some());
     assert_eq!(edits[0].data.as_ref().unwrap().len(), 1);
-}
-
-#[test]
-fn test_diff_prepend() {
-    let old = vec![lsp_token(1, 0, 3, 2, 0)];
-    let new = vec![lsp_token(0, 0, 3, 0, 0), lsp_token(1, 0, 3, 2, 0)];
-    let edits = diff_semantic_tokens(&old, &new);
-    assert_eq!(edits.len(), 1);
-    assert_eq!(edits[0].start, 0);
-}
-
-#[test]
-fn test_diff_empty_to_tokens() {
-    let old: Vec<SemanticToken> = vec![];
-    let new = vec![lsp_token(0, 0, 3, 0, 0)];
-    let edits = diff_semantic_tokens(&old, &new);
-    assert_eq!(edits.len(), 1);
-    assert_eq!(edits[0].start, 0);
-    assert_eq!(edits[0].delete_count, 0);
-    assert!(edits[0].data.is_some());
-}
-
-#[test]
-fn test_diff_tokens_to_empty() {
-    let old = vec![lsp_token(0, 0, 3, 0, 0)];
-    let new: Vec<SemanticToken> = vec![];
-    let edits = diff_semantic_tokens(&old, &new);
-    assert_eq!(edits.len(), 1);
-    assert_eq!(edits[0].start, 0);
-    assert_eq!(edits[0].delete_count, 5); // 1 token * 5
 }
 
 // ============ Cache 测试 ============

@@ -133,54 +133,6 @@ main: () -> Void = {
 }
 
 #[test]
-fn test_fn_annotation_return_explicit_and_arrow_share_code() {
-    // Arrange：同一「返回位不符」的两种 AST 形状（箭头糖 vs 显式 return）
-    const SRC: &str = r#"
-arrow_tail: () -> Int = () => "hello"
-arrow_explicit: () -> Int = () => { return "hello" }
-block_explicit: () -> Int = { return "hello" }
-"#;
-    // Act
-    let diags = compile_diags(SRC);
-    let e1012_lines: Vec<usize> = diags
-        .iter()
-        .filter(|(c, _)| c == "E1012")
-        .map(|(_, line)| *line)
-        .collect();
-    let e1002_count = diags.iter().filter(|(c, _)| c == "E1002").count();
-    // Assert：两叉收一叉——三条都是 E1012，位置都指向**注解**所在行
-    assert_eq!(
-        (e1012_lines.len(), e1002_count),
-        (3, 0),
-        "尾表达式与显式 return 必须同码（E1012），不得再出现 E1002：{diags:?}"
-    );
-    assert_eq!(
-        e1012_lines,
-        vec![2, 3, 4],
-        "E1012 必须指向声明注解所在行（不是载荷所在的体内位置）：{diags:?}"
-    );
-}
-
-#[test]
-fn test_fn_annotation_param_annotation_conflict_reports_e1011() {
-    // Arrange：实现头自带 String 标注，声明写 Int（旧行为：静默覆盖，打印 1）
-    const SRC: &str = r#"
-f: (a: Int) -> Int = (a: String) => a
-"#;
-    // Act
-    let diags = compile_diags(SRC);
-    // Assert：冲突必须响亮（④），且码是形参类型不符 E1011
-    assert!(
-        diags.iter().any(|(c, _)| c == "E1011"),
-        "实现头的形参标注与声明冲突必须报 E1011：{diags:?}"
-    );
-    assert_eq!(
-        diags[0].1, 2,
-        "E1011 必须指向声明语句（含形参的那一行）：{diags:?}"
-    );
-}
-
-#[test]
 fn test_fn_annotation_impl_param_count_exceeds_declaration() {
     // Arrange：声明 0 个运行期形参，实现写了 1 个（旧行为：check 绿、运行期 void）
     const SRC: &str = r#"

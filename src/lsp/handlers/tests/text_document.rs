@@ -70,29 +70,6 @@ fn test_did_change() {
 }
 
 #[test]
-fn test_did_change_returns_uri() {
-    let mut session = Session::new();
-    session
-        .document_store_mut()
-        .open("file:///test/main.yx".to_string(), "x = 42".to_string(), 1);
-
-    let params = DidChangeTextDocumentParams {
-        text_document: VersionedTextDocumentIdentifier {
-            uri: test_uri("main.yx"),
-            version: 2,
-        },
-        content_changes: vec![TextDocumentContentChangeEvent {
-            range: None,
-            range_length: None,
-            text: "x = 99".to_string(),
-        }],
-    };
-
-    let result = handle_did_change(&mut session, params);
-    assert_eq!(result, Some("file:///test/main.yx".to_string()));
-}
-
-#[test]
 fn test_did_close() {
     let mut session = Session::new();
     session

@@ -23,7 +23,7 @@ use crate::frontend::core::sema::checker::TypeChecker;
 use crate::frontend::core::sema::MonoType;
 use crate::frontend::core::sema::SemanticProbe;
 use crate::frontend::module::registry::ModuleRegistry;
-use crate::middle::ir::ir::{FunctionBody, GlobalSlot, Instruction, Operand};
+use crate::middle::ir::ir::{FunctionBody, Instruction};
 use crate::middle::ir::ir_gen::AstToIrGenerator;
 use crate::middle::ir::normalize::normalize_module;
 use crate::util::span::Span;
@@ -207,7 +207,7 @@ fn test_update_ir_snapshots_via_env_guard() {
 // 规范化规则单元测试（07 §第二层表格逐项）
 // =====================
 
-use super::ir_build::{func, int_const, module_with, move_instr, ret_void, temp_slot};
+use super::ir_build::{func, module_with, ret_void, temp_slot};
 
 /// 剥 Span 规则：仅 span 不同的两个模块，规范化文本必须全等。
 #[test]
@@ -239,125 +239,4 @@ fn test_span_stripped_makes_identical_output() {
 
     // Assert
     assert_eq!(a, b, "span 差异不得出现在规范化输出中：\nA={a}\nB={b}");
-}
-
-/// 临时值重命名规则：按首次出现顺序 %0 %1（与原始槽号无关，保留定义-使用拓扑）。
-#[test]
-fn test_locals_renamed_by_first_use_order() {
-    // Arrange：Local(7) 先于 Local(3) 出现
-    let f = func(
-        "f",
-        vec![],
-        MonoType::Void,
-        vec![temp_slot(MonoType::Int(64)); 10],
-        vec![
-            move_instr(7, int_const(1)),
-            move_instr(3, Operand::Local(7)),
-            ret_void(),
-        ],
-    );
-    let m = module_with(vec![f]);
-
-    // Act
-    let text = normalize_module(&m);
-
-    // Assert：槽 7 → %0，槽 3 → %1
-    assert!(
-        text.contains("Move %0 <- int(1)"),
-        "首次出现应得 %0：\n{text}"
-    );
-    assert!(
-        text.contains("Move %1 <- %0"),
-        "二次出现应得 %1 且引用一致：\n{text}"
-    );
-}
-
-/// 全局槽位相对化规则：Global(7) 首次出现即 @0（模块内使用序）。
-#[test]
-fn test_globals_relativized_by_first_use() {
-    // Arrange：globals 表一项（绝对槽号 7），指令引用之
-    let mut m = module_with(vec![func(
-        "f",
-        vec![],
-        MonoType::Void,
-        vec![temp_slot(MonoType::Int(64))],
-        vec![
-            Instruction::Load {
-                dst: Operand::Local(0),
-                src: Operand::Global(7),
-                span: Span::dummy(),
-            },
-            ret_void(),
-        ],
-    )]);
-    m.globals.push(GlobalSlot {
-        name: "g".to_string(),
-        ty: MonoType::Int(64),
-        index: 7,
-    });
-
-    // Act
-    let text = normalize_module(&m);
-
-    // Assert
-    assert!(
-        text.contains("Load %0 <- @0"),
-        "Global(7) 应相对化为 @0：\n{text}"
-    );
-}
-
-/// 确定性规则：HashMap 元数据（function_files）必须排序输出，两次规范化全等。
-#[test]
-fn test_deterministic_across_hashmap_iteration() {
-    // Arrange：function_files 两条目（HashMap 迭代序不定）
-    let mut m = module_with(vec![func(
-        "f",
-        vec![],
-        MonoType::Void,
-        vec![],
-        vec![ret_void()],
-    )]);
-    m.function_files.insert("b_fn".to_string(), 1);
-    m.function_files.insert("a_fn".to_string(), 0);
-
-    // Act
-    let first = normalize_module(&m);
-    let second = normalize_module(&m);
-
-    // Assert：全等且按名排序
-    assert_eq!(first, second, "同一模块两次规范化必须全等");
-    let a_pos = first.find("a_fn").unwrap();
-    let b_pos = first.find("b_fn").unwrap();
-    assert!(a_pos < b_pos, "function_files 必须按名排序：\n{first}");
-}
-
-/// 字段序保留规则：CreateStruct 的 fields 构造顺序是语义（07 原文），不得排序。
-#[test]
-fn test_struct_field_order_preserved() {
-    // Arrange：fields = [Local(1), Local(2)]（序即语义）
-    let f = func(
-        "f",
-        vec![],
-        MonoType::Void,
-        vec![temp_slot(MonoType::Int(64)); 3],
-        vec![
-            Instruction::CreateStruct {
-                dst: Operand::Local(0),
-                type_name: "P".to_string(),
-                fields: vec![Operand::Local(1), Operand::Local(2)],
-                span: Span::dummy(),
-            },
-            ret_void(),
-        ],
-    );
-    let m = module_with(vec![f]);
-
-    // Act
-    let text = normalize_module(&m);
-
-    // Assert：字段序 [%1, %2] 原样保留
-    assert!(
-        text.contains("CreateStruct %0 <- P[%1, %2]"),
-        "构造字段序必须保留（不得排序）：\n{text}"
-    );
 }

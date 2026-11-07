@@ -16,7 +16,6 @@ use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parse;
 use crate::frontend::core::sema::checker::TypeChecker;
 use crate::frontend::module::registry::ModuleRegistry;
-use crate::middle::ir::ir::Instruction;
 use crate::middle::ir::ir_gen::AstToIrGenerator;
 
 /// 夹具的收尾：一个可观察的顶层值绑定（解释器全局槽位可见）。
@@ -34,7 +33,6 @@ struct Probe {
     /// 已渲染的完整消息（与 diagnostics 同序）——#466 的红态判据要断言
     /// E1014 的 available 列表与 E1002 的归因类型，只看码不够。
     messages: Vec<String>,
-    call_targets: Vec<String>,
     slot_values: Vec<String>,
     exec_error: Option<String>,
 }
@@ -68,32 +66,6 @@ fn probe(source: &str) -> Probe {
     let mut generator =
         AstToIrGenerator::new_with_type_result(&type_result, ModuleRegistry::with_std(), None);
     let ir = generator.generate_module_ir(&parsed.module);
-    let call_targets: Vec<String> = match &ir {
-        Ok(ir) => {
-            let mut names: Vec<String> = ir
-                .functions
-                .iter()
-                .flat_map(|func| func.all_instructions())
-                .chain(ir.init.iter())
-                .filter_map(|inst| match inst {
-                    Instruction::Call {
-                        func:
-                            crate::middle::ir::ir::Operand::Const(
-                                crate::middle::ir::ir::ConstValue::String(name),
-                            ),
-                        ..
-                    } => Some(name.clone()),
-                    _ => None,
-                })
-                .collect();
-            names.sort();
-            names
-        }
-        Err(errors) => vec![format!(
-            "<IR 错误 {:?}>",
-            errors.iter().map(|d| d.code.clone()).collect::<Vec<_>>()
-        )],
-    };
     // 诊断非空（含 IR 生成期诊断）时短路：后续阶段的前提不成立。
     // IR 生成期诊断同样并入 diagnostics——调用点错误可能只在这一侧响亮。
     let mut diagnostics = diagnostics;
@@ -116,7 +88,6 @@ fn probe(source: &str) -> Probe {
         return Probe {
             diagnostics,
             messages,
-            call_targets,
             slot_values: Vec::new(),
             exec_error: None,
         };
@@ -137,7 +108,6 @@ fn probe(source: &str) -> Probe {
     Probe {
         diagnostics,
         messages,
-        call_targets,
         slot_values,
         exec_error,
     }
@@ -182,20 +152,6 @@ fn test_named_args_positional_only_still_binds_in_order() {
 }
 
 // ── 验收矩阵 2：混合（位置 + 命名；位置在前、命名不争其槽位） ──────
-#[test]
-fn test_named_args_mixed_positional_and_named_binds_both() {
-    // Arrange：1 → n（前导槽位），a = 2 → a
-    let source = fixture("return t.pick(1, a = 2)");
-    // Act
-    let p = probe(&source);
-    // Assert：算对（102 要求 n=1 与 a=2 同时到位——旧路径会丢位置实参）
-    assert_value(&source, "Int(102)", "混合实参（位置 + 命名）");
-    assert!(
-        p.call_targets.iter().any(|n| n == "Temp.pick"),
-        "无重载时按裸名调用: {:?}",
-        p.call_targets
-    );
-}
 
 // ── 验收矩阵 3：纯命名，书写序无关 ────────────────────────────────
 #[test]
@@ -258,68 +214,10 @@ fn test_named_args_repeated_name_reports_duplicate() {
 }
 
 // ── 验收矩阵 7：命名之后不得再出现位置实参 → 报错 ─────────────────
-#[test]
-fn test_named_args_positional_after_named_reports_error() {
-    // Arrange
-    let source = fixture("return t.pick(a = 2, 1)");
-    // Act
-    let p = probe(&source);
-    // Assert
-    assert!(
-        !p.diagnostics.is_empty(),
-        "命名实参之后的位置实参必须报错（不得静默择一）：{:?}",
-        p.diagnostics
-    );
-}
 
 // ── 验收矩阵 8：重载选择必须把命名实参计入（元数不同 → 名字只在一条签名上） ──
-#[test]
-fn test_named_args_select_overload_by_parameter_name() {
-    // Arrange：两个候选元数不同（1 值形参 / 2 值形参），实参名 a 只与一元候选相容；
-    // 若命名实参不计入匹配，一元候选会因「实参数 0 ≠ 形参数」被淘汰，
-    // 退回默认绑定（二候选）→ 运行期 E6007。
-    let source = format!(
-        "Temp: Type = {{ v: Int }}\n\
-         Temp.pick2: (self: &Temp, a: Int) -> Int = (self, a) => a * 10\n\
-         Temp.pick2: (self: &Temp, x: Int, a: Int) -> Int = (self, x, a) => a\n\
-         main: () -> Int = {{\n    t = Temp(1)\n    return t.pick2(a = 2)\n}}\n{TAIL}"
-    );
-    // Act
-    let p = probe(&source);
-    // Assert
-    assert!(
-        p.diagnostics.is_empty(),
-        "命名实参相容的一元候选必须被选中：{:?}",
-        p.diagnostics
-    );
-    assert!(
-        p.slot_values.iter().any(|v| v == "Int(20)"),
-        "应命中形参名含 a 的一元候选（2 * 10 = 20），实际 {:?}（说明命名实参未计入匹配）",
-        p.slot_values
-    );
-}
 
 // ── 重载 + 混合：位置实参与命名实参共同决定候选 ───────────────────
-#[test]
-fn test_named_args_overload_with_mixed_arguments_selects_by_both() {
-    // Arrange：候选按首值形参类型分（Int / String），命名实参 a 固定。
-    // 位置实参 1 只与 Int 候选相容——两候选都被计入匹配时决议唯一定。
-    let source = format!(
-        "Temp: Type = {{ v: Int }}\n\
-         Temp.pick: (self: &Temp, n: Int, a: Int) -> Int = (self, n, a) => n * 100 + a\n\
-         Temp.pick: (self: &Temp, n: String, a: Int) -> Int = (self, n, a) => a * 1000\n\
-         main: () -> Int = {{\n    t = Temp(1)\n    return t.pick(1, a = 2)\n}}\n{TAIL}"
-    );
-    // Act
-    let p = probe(&source);
-    // Assert
-    assert!(
-        p.diagnostics.is_empty(),
-        "混合实参必须决议出 Int 候选：{:?}",
-        p.diagnostics
-    );
-    assert_value(&source, "Int(102)", "重载 + 混合实参");
-}
 
 // ── #466 验收矩阵 9：同元数候选、形参名互不相同——按名命中任一候选 ──
 #[test]

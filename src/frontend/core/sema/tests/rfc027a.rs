@@ -12,7 +12,7 @@ use crate::frontend::core::sema::types::TypeCheckResult;
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parse_with_probe;
 use crate::frontend::core::sema::SemanticProbe;
-use crate::frontend::core::types::const_data::{BinOp, ConstExpr};
+use crate::frontend::core::types::const_data::{ConstExpr};
 use crate::util::diagnostic::Diagnostic;
 
 /// 解析源代码并类型检查
@@ -210,90 +210,6 @@ fn measures_of(source: &str) -> std::collections::HashMap<String, ConstExpr> {
         parsed.errors
     );
     TypeChecker::new("test").collect_termination_measures(&parsed.module)
-}
-
-/// RFC-027a §2.1 —— 测度写在**函数返回类型位**，须提取为参数表达式并挂在函数名下。
-#[test]
-fn test_measure_extracted_from_return_position() {
-    // Arrange
-    let source = "gcd: (a: Int, b: Int) -> Terminates(b) = { 1 }";
-
-    // Act
-    let measures = measures_of(source);
-
-    // Assert
-    assert_eq!(
-        measures.get("gcd"),
-        Some(&ConstExpr::NamedVar("b".to_string())),
-        "返回类型位的 Terminates(b) 应提取出测度 NamedVar(b) 并挂到函数名 gcd 上；\
-         实际提取结果: {measures:?}"
-    );
-    assert_eq!(
-        measures.len(),
-        1,
-        "只应提取到一个测度（gcd），实际: {measures:?}"
-    );
-}
-
-/// RFC-027a §2.1 —— 测度写在**变量绑定位**，须提取并挂在绑定名下。
-#[test]
-fn test_measure_extracted_from_binding_position() {
-    // Arrange
-    let source = "acc: Terminates(n) = 0";
-
-    // Act
-    let measures = measures_of(source);
-
-    // Assert
-    assert_eq!(
-        measures.get("acc"),
-        Some(&ConstExpr::NamedVar("n".to_string())),
-        "绑定位的 Terminates(n) 应提取出测度 NamedVar(n) 并挂到绑定名 acc 上；\
-         实际提取结果: {measures:?}"
-    );
-}
-
-/// RFC-027a §2.3 —— 测度可以是**复合表达式**（`n - i`），不得退化成单变量。
-///
-/// 这是本任务的关键断言：早先设想把测度存成字符串或变量名会在此处把
-/// `n - i` 压成 `n`，SMT 拿到的测度就错了。
-#[test]
-fn test_measure_extracted_compound_expression() {
-    // Arrange
-    let source = "acc: Terminates(n - i) = 0";
-
-    // Act
-    let measures = measures_of(source);
-
-    // Assert
-    let expected = ConstExpr::BinOp {
-        op: BinOp::Sub,
-        left: Box::new(ConstExpr::NamedVar("n".to_string())),
-        right: Box::new(ConstExpr::NamedVar("i".to_string())),
-    };
-    assert_eq!(
-        measures.get("acc"),
-        Some(&expected),
-        "复合测度 n - i 应被完整提取为 BinOp(Sub, n, i)，不得压成单变量；\
-         实际提取结果: {measures:?}"
-    );
-}
-
-/// RFC-027a §2.1 —— 测度写在**嵌套函数体内**的绑定位，同样须被提取。
-#[test]
-fn test_measure_found_in_nested_function_body() {
-    // Arrange
-    let source = "main: () -> Void = { acc: Terminates(n) = 0 }";
-
-    // Act
-    let measures = measures_of(source);
-
-    // Assert
-    assert_eq!(
-        measures.get("acc"),
-        Some(&ConstExpr::NamedVar("n".to_string())),
-        "函数体内的 Terminates 绑定位应被递归提取；实际提取结果: {measures:?}"
-    );
 }
 
 /// 回归 —— 普通类型标注不得产生测度（防止提取器误吞无关注解）。

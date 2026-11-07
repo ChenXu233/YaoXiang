@@ -30,36 +30,6 @@ fn test_environment_new_with_module() {
 }
 
 #[test]
-fn test_environment_add_var() {
-    // Arrange
-    let mut env = TypeEnvironment::new();
-
-    // Act
-    env.add_var("x".to_string(), PolyType::mono(MonoType::Int(32)));
-
-    // Assert
-    assert!(env.vars.contains_key("x"), "should contain variable x");
-}
-
-#[test]
-fn test_environment_add_type() {
-    // Arrange
-    let mut env = TypeEnvironment::new();
-
-    // Act - 使用简单的类型引用
-    env.add_type(
-        "MyType".to_string(),
-        PolyType::mono(MonoType::TypeRef("MyType".to_string())),
-    );
-
-    // Assert
-    assert!(
-        env.types.contains_key("MyType"),
-        "should contain type MyType"
-    );
-}
-
-#[test]
 fn test_environment_has_solver() {
     // Arrange & Act
     let _env = TypeEnvironment::new();
@@ -88,22 +58,6 @@ fn test_environment_duplicate_var_allowed() {
     );
 }
 
-// Boundary 测试
-
-#[test]
-fn test_environment_with_many_vars() {
-    // Arrange
-    let mut env = TypeEnvironment::new();
-
-    // Act - 添加大量变量
-    for i in 0..1000 {
-        env.add_var(format!("var_{}", i), PolyType::mono(MonoType::Int(32)));
-    }
-
-    // Assert
-    assert_eq!(env.vars.len(), 1000, "should have 1000 variables");
-}
-
 #[test]
 fn test_environment_with_many_types() {
     // Arrange
@@ -118,25 +72,6 @@ fn test_environment_with_many_types() {
     assert_eq!(env.types.len(), 1000, "should have 1000 types");
 }
 
-#[test]
-fn test_resolve_base_kind_type_vs_value() {
-    use crate::frontend::core::sema::environment::BaseKind;
-    let mut env = TypeEnvironment::new();
-    // Point 是类型
-    env.add_type(
-        "Point".to_string(),
-        PolyType::mono(MonoType::TypeRef("Point".to_string())),
-    );
-    // p 是变量
-    env.add_var(
-        "p".to_string(),
-        PolyType::mono(MonoType::TypeRef("Point".to_string())),
-    );
-
-    assert_eq!(env.resolve_base_kind("Point"), BaseKind::TypeSpace);
-    assert_eq!(env.resolve_base_kind("p"), BaseKind::ValueSpace);
-    assert_eq!(env.resolve_base_kind("nope"), BaseKind::Unknown);
-}
 // ===== WBS 3.4.1：const 约束 Unproven 不得静默 =====
 // 规范来源：RFC-011 §4.3 编译期验证 + RFC-027 §4/§9「Unproven 不得 silent pass」。
 // environment.rs 的 Unproven 空臂（审计：全仓零登记的活体静默丢弃点）——
@@ -213,50 +148,6 @@ fn test_instantiate_generic_type_unevaluable_constraint_is_surfaced() {
         inst.unevaluable_constraints[0].contains('N'),
         "事实应指明不可求值的 const 参数名，实际: {}",
         inst.unevaluable_constraints[0]
-    );
-}
-
-#[test]
-fn test_instantiate_generic_type_non_bool_constraint_is_surfaced() {
-    use crate::frontend::core::types::const_data::{BinOp, ConstExpr, ConstValue};
-
-    // Arrange: 字面量实参 N=5，约束 `N + 1` 求值产 Int（非 Bool）——
-    // Unproven 可达支二：求值结果非布尔
-    let def = constrained_type_def(ConstExpr::BinOp {
-        op: BinOp::Add,
-        left: Box::new(ConstExpr::NamedVar("N".to_string())),
-        right: Box::new(ConstExpr::Lit(ConstValue::Int(1))),
-    });
-    let args = vec![MonoType::Int(64), literal_arg_five()];
-
-    // Act
-    let inst = TypeEnvironment::instantiate_generic_type(&def, &args)
-        .unwrap_or_else(|e| panic!("实例化应放行，实际 Err: {e}"));
-
-    // Assert
-    assert_eq!(
-        inst.unevaluable_constraints.len(),
-        1,
-        "约束求值结果非 Bool 属不可判定，必须上达事实，实际 {:?}",
-        inst.unevaluable_constraints
-    );
-}
-
-#[test]
-fn test_instantiate_generic_type_literal_constraint_stays_silent() {
-    // Arrange: const 实参为字面量 5（N=5 > 0 可求值且满足）
-    let def = constrained_type_def(evaluable_constraint());
-    let args = vec![MonoType::Int(64), literal_arg_five()];
-
-    // Act
-    let inst = TypeEnvironment::instantiate_generic_type(&def, &args)
-        .unwrap_or_else(|e| panic!("字面量满足约束应放行，实际 Err: {e}"));
-
-    // Assert: 约束可判定且满足——零事实（正常路径不产生信号）
-    assert!(
-        inst.unevaluable_constraints.is_empty(),
-        "字面量约束可判定，不应上达事实，实际 {:?}",
-        inst.unevaluable_constraints
     );
 }
 

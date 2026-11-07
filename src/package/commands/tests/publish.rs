@@ -90,35 +90,6 @@ fn test_publish_dry_run_materializes_workspace_refs() {
 }
 
 #[test]
-fn test_publish_dry_run_packs_plain_project() {
-    // Arrange：无 workspace 引用的单包
-    let tmp = tempfile::tempdir().unwrap();
-    let project = tmp.path().join("proj");
-    sample_project(&project);
-
-    // Act
-    exec_in(
-        &project,
-        PublishArgs {
-            dry_run: true,
-            github: false,
-            no_test: true,
-        },
-    )
-    .unwrap();
-
-    // Assert：归档内 manifest 原样保留
-    let artifact = project.join("target/yxpkg/demo-1.0.0.yxpkg");
-    let out = tmp.path().join("out");
-    yxpkg::unpack(&artifact, &out).unwrap();
-    let published = std::fs::read_to_string(out.join("yaoxiang.toml")).unwrap();
-    assert!(
-        published.contains("name = \"demo\""),
-        "无引用时 manifest 原样打包: {published}"
-    );
-}
-
-#[test]
 fn test_publish_requires_description() {
     // Arrange：缺 description（014a 发布前校验 1）
     let tmp = tempfile::tempdir().unwrap();
@@ -170,31 +141,5 @@ fn test_bare_publish_reports_registry_deferred() {
     assert!(
         !project.join("target").exists(),
         "裸 publish 不应产生打包产物"
-    );
-}
-
-#[test]
-fn test_publish_no_test_skips_failing_tests() {
-    // Arrange：测试必然失败 + --no-test
-    let tmp = tempfile::tempdir().unwrap();
-    let project = tmp.path().join("proj");
-    sample_project(&project);
-    write(&project.join("tests/broken.yx"), "let ??? broken\n");
-
-    // Act
-    exec_in(
-        &project,
-        PublishArgs {
-            dry_run: true,
-            github: false,
-            no_test: true,
-        },
-    )
-    .unwrap();
-
-    // Assert：跳过测试照常打包
-    assert!(
-        project.join("target/yxpkg/demo-1.0.0.yxpkg").is_file(),
-        "--no-test 应跳过测试照常打包"
     );
 }

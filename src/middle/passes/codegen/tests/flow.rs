@@ -4,7 +4,7 @@
 
 use crate::frontend::core::sema::MonoType;
 use crate::middle::passes::codegen::flow::{
-    FlowManager, LabelGenerator, RegisterAllocator, Storage, Symbol, SymbolScopeManager,
+    LabelGenerator, RegisterAllocator, Storage, Symbol, SymbolScopeManager,
 };
 
 // ── 辅助函数（规则 5.3：集中在文件顶部）──────────────
@@ -42,18 +42,6 @@ fn test_register_allocator() {
     assert_eq!(reg.alloc_local(), 1);
     assert_eq!(reg.alloc_temp(), 0);
     assert_eq!(reg.alloc_temp(), 1);
-}
-
-#[test]
-fn test_flow_manager() {
-    let mut cfm = FlowManager::new();
-    assert_eq!(cfm.alloc_local(), 0);
-    assert_eq!(cfm.alloc_temp(), 0);
-    assert_eq!(cfm.next_label(), 0);
-    cfm.add_function_index("main".to_string(), 0);
-    assert_eq!(cfm.get_function_index("main"), Some(&0));
-    cfm.set_loop_label(10, 20);
-    assert_eq!(cfm.loop_label(), Some((10, 20)));
 }
 
 #[test]

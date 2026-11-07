@@ -247,26 +247,6 @@ fn test_step_over_advances_past_call() {
     );
 }
 
-#[test]
-fn test_step_over_on_non_call_behaves_like_step() {
-    // Arrange: 普通指令（非 Call）
-    let module = make_module(
-        vec![
-            BytecodeInstr::Nop,
-            BytecodeInstr::ReturnValue { value: Reg(0) },
-        ],
-        vec![],
-    );
-    let mut interp = load_module_for_stepping(&module);
-
-    // Act: step_over 普通指令
-    let result = interp.step_over();
-
-    // Assert: 与 step 行为相同
-    assert!(result.is_ok());
-    assert_eq!(interp.current_ip(), 1);
-}
-
 // ── step_out 测试 ──────────────────────────────────────────────
 
 #[test]
@@ -357,67 +337,7 @@ fn test_run_stops_at_breakpoint() {
     assert_eq!(interp.current_ip(), 2, "run 应停在断点 IP=2");
 }
 
-#[test]
-fn test_run_resumes_after_breakpoint() {
-    // Arrange: 断点在 IP=1
-    let module = make_module(
-        vec![
-            BytecodeInstr::Nop,
-            BytecodeInstr::Nop,
-            BytecodeInstr::ReturnValue { value: Reg(0) },
-        ],
-        vec![],
-    );
-    let mut interp = load_module_for_stepping(&module);
-    interp.set_breakpoint(1);
-
-    // Act: run 到断点，移除断点，再 run
-    interp.run().unwrap();
-    assert_eq!(interp.current_ip(), 1);
-    interp.remove_breakpoint(1);
-    let result = interp.run();
-
-    // Assert: 第二次 run 执行到结束
-    assert!(result.is_ok(), "移除断点后 run 应成功");
-}
-
 // ── 断点管理测试 ───────────────────────────────────────────────
-
-#[test]
-fn test_set_and_check_breakpoint() {
-    // Arrange
-    let mut interp = embedded_interpreter();
-
-    // Act
-    interp.set_breakpoint(5);
-
-    // Assert
-    assert!(interp.breakpoints().contains(&5), "断点应包含 IP=5");
-}
-
-#[test]
-fn test_remove_breakpoint() {
-    // Arrange
-    let mut interp = embedded_interpreter();
-    interp.set_breakpoint(5);
-
-    // Act
-    interp.remove_breakpoint(5);
-
-    // Assert
-    assert!(!interp.breakpoints().contains(&5), "断点应已移除 IP=5");
-}
-
-#[test]
-fn test_has_breakpoint_at_current_ip() {
-    // Arrange: 在当前 IP 设置断点
-    let module = make_module(vec![BytecodeInstr::ReturnValue { value: Reg(0) }], vec![]);
-    let mut interp = load_module_for_stepping(&module);
-    interp.set_breakpoint(0);
-
-    // Assert
-    assert!(interp.has_breakpoint(), "当前 IP=0 应有断点");
-}
 
 // ── current_function 测试 ──────────────────────────────────────
 
@@ -436,75 +356,3 @@ fn test_current_function_returns_name() {
 }
 
 // ── 栈追踪测试 ─────────────────────────────────────────────────
-
-#[test]
-fn test_capture_stack_during_execution() {
-    // Arrange: 执行中的解释器
-    let module = make_module(
-        vec![
-            BytecodeInstr::Nop,
-            BytecodeInstr::ReturnValue { value: Reg(0) },
-        ],
-        vec![],
-    );
-    let mut interp = load_module_for_stepping(&module);
-
-    // Act: step 一条指令后 capture_stack
-    interp.step().unwrap();
-    let stack = interp.capture_stack();
-
-    // Assert: 栈非空，包含 main
-    assert!(!stack.is_empty(), "执行中 capture_stack 应非空");
-    assert_eq!(stack[0].function_name, "main", "栈顶应为 main 函数");
-}
-
-/// 帧原地驻留后，执行中的帧就在 `call_stack` 末尾，`capture_stack` 天然包含它。
-/// （旧实现把帧从栈上弹出，靠 `current_frame_info` 补回；该字段已随重构删除。）
-// ── 步进 + 断点组合测试 ────────────────────────────────────────
-
-#[test]
-fn test_step_then_run_to_breakpoint() {
-    // Arrange: step 一条，然后 run 到断点
-    let module = make_module(
-        vec![
-            BytecodeInstr::Nop,
-            BytecodeInstr::Nop,
-            BytecodeInstr::Nop,
-            BytecodeInstr::ReturnValue { value: Reg(0) },
-        ],
-        vec![],
-    );
-    let mut interp = load_module_for_stepping(&module);
-    interp.set_breakpoint(3);
-
-    // Act: step 到 IP=1，然后 run
-    interp.step().unwrap();
-    assert_eq!(interp.current_ip(), 1);
-    interp.run().unwrap();
-
-    // Assert: 停在断点 IP=3
-    assert_eq!(interp.current_ip(), 3, "step + run 应停在断点");
-}
-
-#[test]
-fn test_multiple_breakpoints_run_stops_at_first() {
-    // Arrange: 两个断点
-    let module = make_module(
-        vec![
-            BytecodeInstr::Nop,
-            BytecodeInstr::Nop,
-            BytecodeInstr::Nop,
-            BytecodeInstr::ReturnValue { value: Reg(0) },
-        ],
-        vec![],
-    );
-    let mut interp = load_module_for_stepping(&module);
-    interp.set_breakpoint(1);
-    interp.set_breakpoint(2);
-
-    // Act: run
-    interp.run().unwrap();
-
-    // Assert: 停在第一个断点 IP=1
-    assert_eq!(interp.current_ip(), 1, "应停在第一个断点 IP=1");
-}

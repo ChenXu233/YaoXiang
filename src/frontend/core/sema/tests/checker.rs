@@ -9,8 +9,7 @@ use crate::frontend::core::sema::probe::TypeLevelNamespace;
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parse;
 use crate::frontend::core::sema::checker::TypeChecker;
-use crate::frontend::core::types::{MonoType, PolyType};
-use crate::ast::{Block, Module, PlanId, Stmt, Expr, Type as AstType};
+use crate::ast::{Module, PlanId, Stmt, Expr, Type as AstType};
 use crate::util::diagnostic::Severity;
 use crate::util::span::Span;
 
@@ -30,18 +29,6 @@ fn var(
     span: Span,
 ) -> Expr {
     Expr::Var(name.to_string(), span)
-}
-
-/// 表达式语句。
-fn expr_stmt(
-    expr: Expr,
-    span: Span,
-) -> Stmt {
-    Stmt {
-        kind: crate::ast::StmtKind::Expr(Box::new(expr)),
-        span,
-        plan_id: PlanId::UNPLANNED,
-    }
 }
 
 /// 声明语句 `target: ty = value`（`ty` 为 `None` 时不写类型标注）。
@@ -78,138 +65,6 @@ fn builtin_ty(name: &str) -> AstType {
         name: name.to_string(),
         span: Span::dummy(),
     }
-}
-
-/// 单参函数类型 `(Int32) -> Int32`。
-fn int_fn_type() -> AstType {
-    AstType::Fn {
-        params: vec![crate::ast::Param::from_type(builtin_ty("Int32"))],
-        return_type: Box::new(builtin_ty("Int32")),
-    }
-}
-
-/// `name: Int32` 形参。
-fn param(name: &str) -> crate::ast::Param {
-    crate::ast::Param {
-        name: name.to_string(),
-        ty: Some(builtin_ty("Int32")),
-        is_mut: false,
-        span: Span::dummy(),
-    }
-}
-
-/// `name: (Int32) -> Int32 = (x) => { x }`——同形函数绑定夹具。
-fn int_identity_fn(name: &str) -> Stmt {
-    assign_stmt(
-        name,
-        Some(int_fn_type()),
-        Expr::Lambda {
-            params: vec![param("x")],
-            body: Box::new(Block {
-                stmts: vec![expr_stmt(var("x", Span::dummy()), Span::dummy())],
-                span: Span::dummy(),
-            }),
-            span: Span::dummy(),
-        },
-        Span::dummy(),
-    )
-}
-
-/// 嵌套函数定义夹具：`outer: (Int32) -> Int32 = (x) => { inner(x); x }`，
-/// 其中 `inner` 是体内的 `Lambda`（`inner: (Int32) -> Int32 = (y) => { y }`
-/// 的函数值形态）。RFC-039 6.5 删除 FnDef 变体后，函数定义只有
-/// `Assign` + `Lambda` 一种表达式形态。
-fn nested_fn_module() -> Module {
-    let inner_fn = Expr::Lambda {
-        params: vec![crate::ast::Param {
-            name: "y".to_string(),
-            ty: Some(builtin_ty("Int32")),
-            is_mut: false,
-            span: Span::dummy(),
-        }],
-        body: Box::new(Block {
-            stmts: vec![expr_stmt(var("y", Span::dummy()), Span::dummy())],
-            span: Span::dummy(),
-        }),
-        span: Span::dummy(),
-    };
-    module(vec![assign_stmt(
-        "outer",
-        Some(int_fn_type()),
-        Expr::Lambda {
-            params: vec![param("x")],
-            body: Box::new(Block {
-                stmts: vec![
-                    expr_stmt(inner_fn, Span::dummy()),
-                    expr_stmt(var("x", Span::dummy()), Span::dummy()),
-                ],
-                span: Span::dummy(),
-            }),
-            span: Span::dummy(),
-        },
-        Span::dummy(),
-    )])
-}
-
-/// 泛型夹具：`Wrapper: (T: Type) -> Type = { value: T }` 与 `w: Wrapper<Int> = Wrapper(1)`。
-fn generic_wrapper_module() -> Module {
-    module(vec![
-        // Wrapper: Type = { value: T }  (泛型类型定义)
-        Stmt {
-            kind: crate::ast::StmtKind::TypeDefinition {
-                name: "Wrapper".to_string(),
-                // 签名载体：与 parser 对 `Wrapper: (T: Type) -> Type = {...}` 的产出同形
-                type_annotation: Some(AstType::Fn {
-                    params: vec![crate::ast::Param {
-                        name: "T".to_string(),
-                        ty: Some(AstType::MetaType {
-                            name_span: Span::dummy(),
-                            args: vec![],
-                        }),
-                        is_mut: false,
-                        span: Span::dummy(),
-                    }],
-                    return_type: Box::new(AstType::MetaType {
-                        name_span: Span::dummy(),
-                        args: vec![],
-                    }),
-                }),
-                definition: AstType::Struct {
-                    body: vec![crate::ast::TypeBodyItem::Field(crate::ast::StructField {
-                        name: "value".to_string(),
-                        is_mut: false,
-                        ty: AstType::Name {
-                            name: "T".to_string(),
-                            span: Span::dummy(),
-                        },
-                        default: None,
-                    })],
-                },
-            },
-            span: Span::dummy(),
-            plan_id: PlanId::UNPLANNED,
-        },
-        // w: Wrapper<Int> = Wrapper(1)  (使用泛型类型)
-        assign_stmt(
-            "w",
-            Some(AstType::Generic {
-                name: "Wrapper".to_string(),
-                name_span: Span::dummy(),
-                args: vec![AstType::Name {
-                    name: "Int".to_string(),
-                    span: Span::dummy(),
-                }],
-            }),
-            Expr::call(
-                var("Wrapper", Span::dummy()),
-                vec![int_lit(1, Span::dummy())],
-                vec![],
-                Span::dummy(),
-                PlanId::UNPLANNED,
-            ),
-            Span::dummy(),
-        ),
-    ])
 }
 
 /// 检查器诊断中携带非 dummy span 的 E1002 数量。
@@ -252,98 +107,12 @@ fn test_type_checker_new_creates_with_module_name() {
 }
 
 #[test]
-fn test_type_checker_has_builtin_types() {
-    // Arrange
-    let mut checker = TypeChecker::new("test");
-
-    // Act
-    let env = checker.env();
-
-    // Assert - 内置名由 `MonoType::from_builtin_name` 单源解析（WBS 6.1.2），
-    // 类型表里不再登记小写拼写副本；故断言「可解析」而不是「types 表里有键」
-    assert!(env.resolves_type_name("Int"), "内置名 Int 应可解析");
-    assert!(env.resolves_type_name("Bool"), "内置名 Bool 应可解析");
-    assert!(env.resolves_type_name("String"), "内置名 String 应可解析");
-    assert!(env.resolves_type_name("Void"), "内置名 Void 应可解析");
-    assert!(
-        !env.resolves_type_name("int"),
-        "小写拼写 int 不是类型名（WBS 6.1.2 已删除该别名）"
-    );
-    assert!(
-        !env.resolves_type_name("string"),
-        "小写拼写 string 不是类型名（WBS 6.1.2 已删除该别名）"
-    );
-}
-
-#[test]
-fn test_type_checker_can_add_var() {
-    // Arrange
-    let mut checker = TypeChecker::new("test");
-
-    // Act
-    checker
-        .env()
-        .add_var("x".to_string(), PolyType::mono(MonoType::Int(32)));
-
-    // Assert
-    let env = checker.env();
-    assert!(env.vars.contains_key("x"), "should have variable x");
-}
-
-#[test]
 fn test_type_checker_has_no_errors_initially() {
     // Arrange & Act
     let checker = TypeChecker::new("test");
 
     // Assert
     assert!(!checker.has_errors(), "should have no errors initially");
-}
-
-#[test]
-fn test_type_checker_check_empty_module() {
-    // Arrange
-    let mut checker = TypeChecker::new("test");
-    let module = module(vec![]);
-
-    // Act
-    let result = checker.check_module(&module, &TypeLevelNamespace::scan_one(&module));
-
-    // Assert
-    assert!(
-        result.diagnostics.is_empty(),
-        "empty module should pass type check"
-    );
-}
-
-// Error path 测试
-
-#[test]
-fn test_type_checker_reports_type_mismatch() {
-    // Arrange
-    let mut checker = TypeChecker::new("test");
-
-    // 构造一个类型不匹配的 AST：将 Int 赋值给 String 变量
-    let module = module(vec![assign_stmt(
-        "x",
-        Some(builtin_ty("String")),
-        int_lit(42, Span::dummy()),
-        Span::dummy(),
-    )]);
-
-    // Act
-    let result = checker.check_module(&module, &TypeLevelNamespace::scan_one(&module));
-
-    // Assert - 应该报告类型错误
-    assert!(
-        !result.diagnostics.is_empty() || checker.has_errors(),
-        "x: String = 42 should report type mismatch error"
-    );
-    let has_type_error = !result.diagnostics.is_empty()
-        || checker.errors().iter().any(|e| {
-            let msg = format!("{:?}", e);
-            msg.contains("mismatch") || msg.contains("type")
-        });
-    assert!(has_type_error, "error should be related to type mismatch");
 }
 
 #[test]
@@ -377,136 +146,6 @@ fn test_type_mismatch_diagnostic_carries_source_span() {
         span.expect("E1002 诊断存在且带 span").start.line,
         3,
         "E1002 span 应指向语句所在行 3"
-    );
-}
-
-#[test]
-fn test_type_checker_reports_undefined_variable() {
-    // Arrange
-    let mut checker = TypeChecker::new("test");
-    let module = module(vec![expr_stmt(
-        var("undefined_var", Span::dummy()),
-        Span::dummy(),
-    )]);
-
-    // Act
-    let result = checker.check_module(&module, &TypeLevelNamespace::scan_one(&module));
-
-    // Assert - 使用未定义变量应该报错
-    assert!(
-        !result.diagnostics.is_empty() || checker.has_errors(),
-        "using undefined variable should produce an error"
-    );
-}
-
-#[test]
-fn test_type_checker_reports_fn_param_type_mismatch() {
-    // Arrange: 定义 add: (x: Int) -> Int = x，然后调用 add("hello")
-    let mut checker = TypeChecker::new("test");
-    let module = module(vec![
-        // fn add(x: Int) -> Int { x }
-        int_identity_fn("add"),
-        // add("hello") — 传入 String 但参数期望 Int
-        expr_stmt(
-            Expr::call(
-                var("add", Span::dummy()),
-                vec![Expr::Lit(
-                    crate::frontend::core::lexer::tokens::Literal::String("hello".to_string()),
-                    Span::dummy(),
-                )],
-                vec![],
-                Span::dummy(),
-                PlanId::UNPLANNED,
-            ),
-            Span::dummy(),
-        ),
-    ]);
-
-    // Act
-    let result = checker.check_module(&module, &TypeLevelNamespace::scan_one(&module));
-
-    // Assert - 规范 §6.3: 函数参数类型必须匹配，传入 String 但参数期望 Int 应报错
-    assert!(
-        !result.diagnostics.is_empty() || checker.has_errors(),
-        "add(\"hello\") with param type Int should report type mismatch"
-    );
-}
-
-// Boundary 测试
-
-#[test]
-fn test_type_checker_with_large_module() {
-    // Arrange
-    let mut checker = TypeChecker::new("test");
-    let mut items = vec![];
-    for i in 0..100 {
-        // 添加大量语句
-        items.push(expr_stmt(
-            var(&format!("var_{}", i), Span::dummy()),
-            Span::dummy(),
-        ));
-    }
-    let module = module(items);
-
-    // Act
-    let result = checker.check_module(&module, &TypeLevelNamespace::scan_one(&module));
-
-    // Assert - 100 个未定义变量的语句应报错（规范 §6.3: 使用未定义变量是编译错误）
-    assert!(
-        !result.diagnostics.is_empty() || checker.has_errors(),
-        "100 undefined variables should produce errors"
-    );
-}
-
-#[test]
-fn test_type_checker_with_multiple_function_definitions() {
-    // Arrange: 定义三个函数
-    let mut checker = TypeChecker::new("test");
-    let module = module(vec![
-        int_identity_fn("add"),
-        int_identity_fn("sub"),
-        int_identity_fn("mul"),
-    ]);
-
-    // Act
-    let result = checker.check_module(&module, &TypeLevelNamespace::scan_one(&module));
-
-    // Assert - 多个函数定义应该正常处理
-    assert!(
-        result.diagnostics.is_empty(),
-        "multiple function definitions should be accepted"
-    );
-}
-
-#[test]
-fn test_type_checker_with_nested_function_definition() {
-    // Arrange: 外层函数内部定义一个 Lambda（函数值）表达式
-    let mut checker = TypeChecker::new("test");
-    let module = nested_fn_module();
-
-    // Act
-    let result = checker.check_module(&module, &TypeLevelNamespace::scan_one(&module));
-
-    // Assert - 规范 §6.3: 嵌套函数定义应通过类型检查（所有变量已定义，类型一致）
-    assert!(
-        result.diagnostics.is_empty(),
-        "nested function definition with correct types should pass type check"
-    );
-}
-
-#[test]
-fn test_type_checker_with_generic_type_binding() {
-    // Arrange: 定义泛型类型 Wrapper[T] = { value: T }，然后使用 Wrapper<Int>
-    let mut checker = TypeChecker::new("test");
-    let module = generic_wrapper_module();
-
-    // Act
-    let result = checker.check_module(&module, &TypeLevelNamespace::scan_one(&module));
-
-    // Assert - 规范 §3.8: 泛型类型定义和使用应通过类型检查（所有类型参数已提供）
-    assert!(
-        result.diagnostics.is_empty(),
-        "generic type definition and usage with all type params provided should pass"
     );
 }
 
@@ -590,32 +229,6 @@ main = {
     );
 }
 
-#[test]
-fn test_refined_proof_fn_valid_arg_no_e1092() {
-    // Arrange: 合法字面量实参（正常路径对照）
-    let source = r#"
-IsSmall: (x: Int) -> Type = { x < 100 }
-main = {
-    y: IsSmall(5) = 5
-    y
-}
-"#;
-
-    // Act
-    let result = check_source_for_refined(source);
-
-    // Assert: 合法实参不得产生 E1092
-    assert!(
-        !result.diagnostics.iter().any(|d| d.code == "E1093"),
-        "合法实参不应报 E1092，实际诊断: {:?}",
-        result
-            .diagnostics
-            .iter()
-            .map(|d| &d.code)
-            .collect::<Vec<_>>()
-    );
-}
-
 // RFC-027 §6 / #377（A）：精化变量向下游表现为 base 类型
 //
 // 精化是**编译期约束**，不是运行时类型：`y: IsPositive(5)` 的运行时类型就是
@@ -654,63 +267,6 @@ main: () -> Int = {
     );
 }
 
-#[test]
-fn test_refined_variable_returns_as_base_type() {
-    // Arrange: 精化变量直接作为函数返回值
-    let source = r#"
-IsPositive: (x: Int) -> Type = { x > 0 }
-main: () -> Int = {
-    y: IsPositive(5) = 5
-    y
-}
-"#;
-
-    // Act
-    let result = check_source_for_refined(source);
-
-    // Assert: y 作返回值即返回其 base（Int），与声明返回类型 Int 一致
-    assert!(
-        !result.diagnostics.iter().any(|d| d.code == "E1002"),
-        "精化变量作返回值时类型应为其 base（Int）。实际诊断: {:?}",
-        result
-            .diagnostics
-            .iter()
-            .map(|d| &d.code)
-            .collect::<Vec<_>>()
-    );
-}
-
-#[test]
-fn test_refined_variable_reassignment_to_base_value_is_accepted() {
-    // Arrange: 精化变量被重赋一个同为 base 类型的值
-    //
-    // 语义依据（实测）：`IsPositive(5)` 的约束是「5 > 0」这一静态命题，与
-    // 变量后续取值无关（`y: IsPositive(5) = -9999` 亦不报错）。故重赋 Int
-    // 值不应被拒——当前 E1002 把精化变量当运行时类型，对任何重赋值一刀切。
-    let source = r#"
-IsPositive: (x: Int) -> Type = { x > 0 }
-main: () -> Int = {
-    mut y: IsPositive(5) = 5
-    y = 6
-    y
-}
-"#;
-
-    // Act
-    let result = check_source_for_refined(source);
-
-    // Assert: y 的运行时类型是 Int，重赋 Int 值应被接受
-    assert!(
-        !result.diagnostics.iter().any(|d| d.code == "E1002"),
-        "精化变量的运行时类型是 Int，重赋 Int 值不应报 E1002。实际诊断: {:?}",
-        result
-            .diagnostics
-            .iter()
-            .map(|d| &d.code)
-            .collect::<Vec<_>>()
-    );
-}
-
 // ==================== WBS 4.4.3：所有权层降级留痕（02 §S5 (d)） ====================
 
 /// 无 `body_checker` 时所有权层输入降级 → **必须**有诊断（WBS 4.4.3）
@@ -741,49 +297,6 @@ fn test_ownership_inputs_without_body_checker_reports_degradation_warning() {
         matches!(warning.severity, Severity::Warning),
         "降级是警告级（不阻断编译），实际: {:?}",
         warning.severity
-    );
-}
-
-/// 健康路径零发射：`body_checker` 就位时不走降级分支、不产 W1082
-#[test]
-fn test_ownership_inputs_with_body_checker_reports_no_degradation() {
-    // Arrange — 真实编译（`init_body_checker` 已执行）
-    let tokens = tokenize(
-        r#"
-main = {
-    x = 1
-    x
-}
-"#,
-    )
-    .expect("测试源码词法不应失败");
-    let parsed = parse(&tokens);
-    assert!(
-        !parsed.has_errors,
-        "测试源码语法必须正确（否则无法区分 bug 与测试写错）: {:?}",
-        parsed.errors
-    );
-    let mut checker = TypeChecker::new("healthy-probe");
-    let result = checker.check_module(
-        &parsed.module,
-        &TypeLevelNamespace::scan_one(&parsed.module),
-    );
-
-    // Act
-    let (ledger, _call_ownership, degradation) = checker.ownership_inputs(Span::dummy());
-
-    // Assert
-    assert!(
-        degradation.is_none(),
-        "健康路径（body_checker 就位）不得走降级分支"
-    );
-    assert!(
-        !result.warnings.iter().any(|w| w.code == "W1082"),
-        "健康程序零发射：编译产物 warnings 不得含 W1082"
-    );
-    assert!(
-        !ledger.is_empty(),
-        "健康路径的类型账本来自 body_checker，不应为空"
     );
 }
 
@@ -929,116 +442,5 @@ fn test_collect_signatures_declares_meta_type_annotation_param_name() {
         names.get("f"),
         Some(&vec!["T".to_string()]),
         "(T: Type) 的形参名必须进登记口声明名表（按声明序）"
-    );
-}
-
-#[test]
-fn test_collect_signatures_declares_interface_constraint_param_name() {
-    // Arrange：`(T: Add)` —— 接口约束形态（type-system.md:151），修前不进表
-    let source = "f: (T: Add) -> (x: T) -> T = (x) => x\n";
-
-    // Act
-    let names = collect_signatures_declared_names(source);
-
-    // Assert
-    assert_eq!(
-        names.get("f"),
-        Some(&vec!["T".to_string()]),
-        "(T: Add) 接口约束的形参名必须进登记口声明名表（与 (T: Type) 同收）"
-    );
-}
-
-#[test]
-fn test_collect_signatures_declares_value_dependent_const_param_name() {
-    // Arrange：`(N: Int) -> (n: N) -> Int` —— 值依赖 const 形态
-    // （type-system.md:47；语料 fn_const_generic.yx 同构），修前不进表
-    let source = "f: (N: Int) -> (n: N) -> Int = (n) => n\n";
-
-    // Act
-    let names = collect_signatures_declared_names(source);
-
-    // Assert
-    assert_eq!(
-        names.get("f"),
-        Some(&vec!["N".to_string()]),
-        "(N: Int) 值依赖 const 形参名必须进登记口声明名表（用途精筛命中：N 被后续段类型位引用）"
-    );
-}
-
-/// 规范：Registry 面（`collect_signatures`）的 const 用途精筛扫**整棵**声明标注
-/// （type-system.md §7.1：类型位置 = 声明中的全部 `Type` 子树）。
-///
-/// `f: (N: Int, m: N) -> Int` 的 `N` 只出现在**本组形参** `m: N` 的标注里
-/// （返回位是 `Int`）⇒ 必须进登记口声明名表。只扫返回位 + 返回位内层 Fn 形参的
-/// 旧口径扫不到这一处，落空者于是不进表。
-#[test]
-fn test_collect_signatures_declares_const_param_referenced_in_own_group_annotation() {
-    // Arrange：值位只有 m（N 是编译期值参数，不占实现头绑定序列）
-    let source = "f: (N: Int, m: N) -> Int = (m) => 0\n";
-
-    // Act
-    let names = collect_signatures_declared_names(source);
-
-    // Assert
-    assert_eq!(
-        names.get("f"),
-        Some(&vec!["N".to_string()]),
-        "本组形参标注 `m: N` 的引用必须让 N 进登记口声明名表（扫描面 = 整棵 type_annotation）"
-    );
-}
-
-#[test]
-fn test_collect_signatures_keeps_plain_value_param_out_of_declared_names() {
-    // Arrange：`plain: (n: Int) -> Int` —— 值参数段的 Int 标注是
-    // CONST_PARAM_TYPES 候选，但用途精筛落空（n 未被后续段类型位引用），
-    // 不得混入声明名表（普通函数不填表 ⇒ 跨单元走既有路径）
-    let source = "plain: (n: Int) -> Int = (n) => n\n";
-
-    // Act
-    let names = collect_signatures_declared_names(source);
-
-    // Assert
-    assert!(
-        !names.contains_key("plain"),
-        "普通值参数函数不得进登记口声明名表（登记口填表后跨单元请求面会整体变化）。实际: {:?}",
-        names
-    );
-}
-
-/// #522（WBS 3.20.9）：跨单元谓词可见性——lib 单元声明谓词、main 单元声明
-/// 精化签名时，Registry 面（`collect_signatures`）的 const 用途精筛必须把
-/// 谓词应用实参位 `N` 排除在声明名表外。修前 Registry 阶段谓词判据三臂不
-/// 完整（不跑第零遍 `collect_predicate_defs`、导入未并）⇒ `IsPositive` 判假
-/// ⇒ `N` 被误收进导出面 `type_params` 并被替换（E1012 `IsPositive(int64)`）。
-#[test]
-fn test_collect_signatures_keeps_cross_unit_predicate_arg_out_of_const_names() {
-    // Arrange：谓词在 lib 单元、消费签名在 main 单元——namespace 取双单元
-    // scan 并集（多文件 Registry 臂 driver 的同构形态，arms.rs registry 臂）
-    let lib_source = "IsPositive: (x: Int) -> Type = { x > 0 }\n";
-    let main_source = "sum: (N: Int) -> (x: IsPositive(N)) -> Int = (x) => x\n";
-    let parse_module = |src: &str| {
-        let tokens = tokenize(src).expect("测试源码词法不应失败");
-        let parsed = parse(&tokens);
-        assert!(
-            !parsed.has_errors,
-            "测试源码语法必须正确（否则无法区分 bug 与测试写错）: {:?}",
-            parsed.errors
-        );
-        parsed.module
-    };
-    let lib_module = parse_module(lib_source);
-    let main_module = parse_module(main_source);
-    let namespace = TypeLevelNamespace::scan([&lib_module, &main_module]);
-
-    // Act：仅收集 main 的顶层签名（Registry 阶段入口，不跑第零遍）
-    let mut checker = TypeChecker::new("test");
-    checker.collect_signatures(&main_module, &namespace);
-
-    // Assert：`N` 是谓词应用实参位（编译期表达式，RFC-027a），不得进声明名表
-    let names = checker.generic_fn_type_params_snapshot();
-    assert!(
-        !names.contains_key("sum"),
-        "#522: 跨单元谓词应用实参位 N 不得被误收进 Registry 声明名表（导出面 type_params）。实际: {:?}",
-        names
     );
 }

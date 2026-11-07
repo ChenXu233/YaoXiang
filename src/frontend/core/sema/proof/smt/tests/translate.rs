@@ -5,7 +5,7 @@
 
 use std::collections::HashMap;
 
-use crate::frontend::core::types::const_data::{BinOp, ConstExpr, ConstValue, UnOp};
+use crate::frontend::core::types::const_data::{BinOp, ConstExpr, ConstValue};
 use crate::frontend::core::sema::proof::smt::ast::{SMTCommand, SMTSort};
 use crate::frontend::core::sema::proof::smt::translate::{
     infer_var_sorts, translate_constraint, translate_expr,
@@ -44,22 +44,6 @@ fn test_translate_simple_constraint() {
 }
 
 #[test]
-fn test_translate_with_assumptions_emits_background_assertions() {
-    let constraint = make_gt("y", 0);
-    let assumptions = vec![make_gt("y", 5)];
-    let mut var_sorts = HashMap::new();
-    var_sorts.insert("y".into(), SMTSort::Int);
-
-    let commands = translate_constraint(&constraint, &assumptions, &var_sorts);
-
-    assert_eq!(
-        commands.len(),
-        5,
-        "应有 5 条命令: declare-const + assert(假设) + assert(not 目标) + check-sat + get-model"
-    );
-}
-
-#[test]
 fn test_translate_expr_gt_to_smt_gt() {
     let expr = make_gt("x", 10);
     let result = translate_expr(&expr);
@@ -68,24 +52,6 @@ fn test_translate_expr_gt_to_smt_gt() {
         "(> x 10)",
         "Gt 比较应翻译为 SMT > 运算符"
     );
-}
-
-#[test]
-fn test_translate_expr_and_produces_nested_smt() {
-    let expr = ConstExpr::BinOp {
-        op: BinOp::And,
-        left: Box::new(make_gt("x", 0)),
-        right: Box::new(ConstExpr::BinOp {
-            op: BinOp::Lt,
-            left: Box::new(ConstExpr::NamedVar("x".into())),
-            right: Box::new(ConstExpr::Lit(ConstValue::Int(10))),
-        }),
-    };
-    let result = translate_expr(&expr);
-    let s = result.to_string();
-    assert!(s.contains("and"), "And 表达式应包含 and 操作符: {s}");
-    assert!(s.contains("(> x 0)"), "And 左子树应包含 (> x 0): {s}");
-    assert!(s.contains("(< x 10)"), "And 右子树应包含 (< x 10): {s}");
 }
 
 #[test]
@@ -105,19 +71,5 @@ fn test_infer_var_sorts_from_arithmetic_constraints() {
     assert!(
         sorts.contains_key("y"),
         "约束中的 y 变量应被推断: {sorts:?}"
-    );
-}
-
-#[test]
-fn test_translate_expr_not_yields_smt_not() {
-    let expr = ConstExpr::UnOp {
-        op: UnOp::Not,
-        expr: Box::new(make_gt("z", 0)),
-    };
-    let result = translate_expr(&expr);
-    assert_eq!(
-        result.to_string(),
-        "(not (> z 0))",
-        "Not 一元运算应翻译为 SMT not 表达式"
     );
 }

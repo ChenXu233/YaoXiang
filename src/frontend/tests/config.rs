@@ -27,9 +27,3 @@ fn test_compile_config_with_dead_code_disabled() {
     let config = CompileConfig::new().with_dead_code_enabled(false);
     assert!(!config.dead_code.enabled);
 }
-
-#[test]
-fn test_compile_config_with_dead_code_enabled() {
-    let config = CompileConfig::new().with_dead_code_enabled(true);
-    assert!(config.dead_code.enabled);
-}

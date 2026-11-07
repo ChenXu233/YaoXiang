@@ -113,26 +113,6 @@ fn countdown_of(interp: &Interpreter) -> BytecodeFunction {
 const LIMIT_SAMPLES: [usize; 4] = [5, 64, 1024, 4096];
 
 #[test]
-fn test_countdown_recursion_just_below_limit_returns_value() {
-    for limit in LIMIT_SAMPLES {
-        // Arrange — 上限 limit，入参 limit - 1 ⇒ 驻留帧数恰为 limit（被调帧 + 递归帧）
-        let mut interp = countdown_interpreter(limit);
-        let func = countdown_of(&interp);
-        let depth = (limit - 1) as i64;
-
-        // Act
-        let result = interp.execute_function(&func, &[RuntimeValue::Int(depth)]);
-
-        // Assert — 上限内的良构递归必须正常返回值（守卫不得误伤）
-        assert_eq!(
-            result.expect("上限内的良构递归应返回值"),
-            RuntimeValue::Int(depth),
-            "max_stack_depth={limit} 时深度上限内的递归应返回 {depth}"
-        );
-    }
-}
-
-#[test]
 fn test_countdown_recursion_at_limit_reports_e6004_with_real_limit() {
     for limit in LIMIT_SAMPLES {
         // Arrange — 入参 limit ⇒ 需要 limit + 1 帧，超出上限一帧
@@ -150,32 +130,4 @@ fn test_countdown_recursion_at_limit_reports_e6004_with_real_limit() {
             "max_stack_depth={limit} 时应为 StackOverflow {{ limit: {limit} }}，实际 {err:?}"
         );
     }
-}
-
-#[test]
-fn test_deep_recursion_consumes_heap_not_native_stack() {
-    // Arrange — 深递归跑在 512 KiB 原生栈的线程上：若每层解释型调用仍消耗原生栈
-    // （修复前约 1 KiB/层），2 万层必然爆栈；蹦床后原生栈用量与深度无关。
-    const DEPTH: usize = 20_000;
-    let handle = std::thread::Builder::new()
-        .name("stack-guard-probe".to_string())
-        .stack_size(512 * 1024)
-        .spawn(|| {
-            let mut interp = countdown_interpreter(DEPTH + 1);
-            let func = countdown_of(&interp);
-            interp.execute_function(&func, &[RuntimeValue::Int(DEPTH as i64)])
-        })
-        .expect("探测线程应能创建");
-
-    // Act
-    let result = handle
-        .join()
-        .expect("探测线程不应崩溃（崩即原生栈被解释型深度耗尽）");
-
-    // Assert
-    assert_eq!(
-        result.expect("深递归应返回值"),
-        RuntimeValue::Int(DEPTH as i64),
-        "解释型深度 {DEPTH} 应只消耗堆，不消耗原生栈"
-    );
 }

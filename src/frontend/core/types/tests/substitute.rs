@@ -4,7 +4,7 @@
 //! Substituter: substitute 经过所有容器类型 (Struct, Tuple, Dict, Set, Enum, Range, Arc, Weak, Union, Intersection, AssocType, Fn, Option, Result)
 
 use crate::frontend::core::types::substitute::contains_type_vars;
-use crate::frontend::core::types::{EnumType, MonoType, StructType, Substitution, Substituter, TypeVar};
+use crate::frontend::core::types::{MonoType, Substitution, Substituter, TypeVar};
 use std::collections::HashMap;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -60,17 +60,6 @@ fn test_substitution_contains_var() {
 }
 
 #[test]
-fn test_substitution_merge() {
-    let mut a = Substitution::new();
-    a.insert(0, MonoType::Int(32));
-    let mut b = Substitution::new();
-    b.insert(1, MonoType::make_string());
-    let merged = a.merge(&b);
-    assert_eq!(merged.get(&0), Some(&MonoType::Int(32)));
-    assert_eq!(merged.get(&1), Some(&MonoType::make_string()));
-}
-
-#[test]
 fn test_substitution_bound_vars_len_is_empty() {
     let mut sub = Substitution::new();
     assert!(sub.is_empty());
@@ -96,233 +85,6 @@ fn test_substituter_substitute_var() {
 }
 
 #[test]
-fn test_substituter_substitute_with_map() {
-    let subber = Substituter::new();
-    let mut map = HashMap::new();
-    map.insert(0, MonoType::make_string());
-    let tv = MonoType::TypeVar(TypeVar::new(0));
-    let result = subber.substitute_with_map(&tv, &map);
-    assert_eq!(result, MonoType::make_string());
-}
-
-// 以下测试覆盖 substitute_internal 对所有容器类型的递归替换
-
-fn tv(idx: usize) -> MonoType {
-    MonoType::TypeVar(TypeVar::new(idx))
-}
-
-#[test]
-fn test_substitute_through_struct() {
-    let subber = Substituter::new();
-    let mut sub = Substitution::new();
-    sub.bind(TypeVar::new(0), MonoType::Int(32));
-    let ty = MonoType::Struct(StructType {
-        name: "Wrapper".to_string(),
-        fields: vec![("value".to_string(), tv(0))],
-        methods: HashMap::new(),
-        field_mutability: vec![false],
-        field_has_default: vec![false],
-        interfaces: vec![],
-    });
-    let result = subber.substitute(&ty, &sub);
-    match result {
-        MonoType::Struct(ref s) => assert_eq!(s.fields[0].1, MonoType::Int(32)),
-        _ => panic!("Expected Struct"),
-    }
-}
-
-#[test]
-fn test_substitute_through_tuple() {
-    let subber = Substituter::new();
-    let mut sub = Substitution::new();
-    sub.bind(TypeVar::new(0), MonoType::make_string());
-    let ty = MonoType::make_tuple(vec![tv(0), MonoType::Bool]);
-    let result = subber.substitute(&ty, &sub);
-    assert_eq!(
-        result,
-        MonoType::make_tuple(vec![MonoType::make_string(), MonoType::Bool])
-    );
-}
-
-#[test]
-fn test_substitute_through_dict() {
-    let subber = Substituter::new();
-    let mut sub = Substitution::new();
-    sub.bind(TypeVar::new(0), MonoType::Int(32));
-    let ty = MonoType::make_dict(MonoType::make_string(), tv(0));
-    let result = subber.substitute(&ty, &sub);
-    assert_eq!(
-        result,
-        MonoType::make_dict(MonoType::make_string(), MonoType::Int(32))
-    );
-}
-
-#[test]
-fn test_substitute_through_set() {
-    let subber = Substituter::new();
-    let mut sub = Substitution::new();
-    sub.bind(TypeVar::new(0), MonoType::Bool);
-    let ty = MonoType::Generic {
-        name: "Set".into(),
-        args: vec![tv(0)],
-    };
-    let result = subber.substitute(&ty, &sub);
-    assert_eq!(
-        result,
-        MonoType::Generic {
-            name: "Set".into(),
-            args: vec![MonoType::Bool]
-        }
-    );
-}
-
-#[test]
-fn test_substitute_through_fn() {
-    let subber = Substituter::new();
-    let mut sub = Substitution::new();
-    sub.bind(TypeVar::new(0), MonoType::Int(64));
-    let ty = MonoType::Fn {
-        params: vec![tv(0)],
-        return_type: Box::new(tv(0)),
-    };
-    let result = subber.substitute(&ty, &sub);
-    match result {
-        MonoType::Fn {
-            params,
-            return_type,
-            ..
-        } => {
-            assert_eq!(params[0], MonoType::Int(64));
-            assert_eq!(*return_type, MonoType::Int(64));
-        }
-        _ => panic!("Expected Fn"),
-    }
-}
-
-#[test]
-fn test_substitute_through_option_result() {
-    // RFC-011 泛型语义：替换必须穿透 Option/Result 容器（#251：此前 fall-through
-    // 导致泛型 native 签名类型变量跨调用泄漏，已修复）
-    let subber = Substituter::new();
-    let mut sub = Substitution::new();
-    sub.bind(TypeVar::new(0), MonoType::make_string());
-    let opt = MonoType::make_option(tv(0));
-    assert_eq!(
-        subber.substitute(&opt, &sub),
-        MonoType::make_option(MonoType::make_string())
-    );
-    let res = MonoType::make_result(tv(0), MonoType::Int(32));
-    assert_eq!(
-        subber.substitute(&res, &sub),
-        MonoType::make_result(MonoType::make_string(), MonoType::Int(32))
-    );
-}
-
-#[test]
-fn test_substitute_through_range() {
-    let subber = Substituter::new();
-    let mut sub = Substitution::new();
-    sub.bind(TypeVar::new(0), MonoType::Int(32));
-    let ty = MonoType::Generic {
-        name: "Range".into(),
-        args: vec![tv(0)],
-    };
-    let result = subber.substitute(&ty, &sub);
-    assert_eq!(
-        result,
-        MonoType::Generic {
-            name: "Range".into(),
-            args: vec![MonoType::Int(32)]
-        }
-    );
-}
-
-#[test]
-fn test_substitute_through_arc_weak() {
-    let subber = Substituter::new();
-    let mut sub = Substitution::new();
-    sub.bind(TypeVar::new(0), MonoType::make_string());
-    let arc = MonoType::Generic {
-        name: "Arc".into(),
-        args: vec![tv(0)],
-    };
-    assert_eq!(
-        subber.substitute(&arc, &sub),
-        MonoType::Generic {
-            name: "Arc".into(),
-            args: vec![MonoType::make_string()]
-        }
-    );
-    let weak = MonoType::Generic {
-        name: "Weak".into(),
-        args: vec![tv(0)],
-    };
-    assert_eq!(
-        subber.substitute(&weak, &sub),
-        MonoType::Generic {
-            name: "Weak".into(),
-            args: vec![MonoType::make_string()]
-        }
-    );
-}
-
-#[test]
-fn test_substitute_through_union_intersection() {
-    let subber = Substituter::new();
-    let mut sub = Substitution::new();
-    sub.bind(TypeVar::new(0), MonoType::Bool);
-    let union = MonoType::Union(vec![tv(0), MonoType::Int(32)]);
-    let result = subber.substitute(&union, &sub);
-    assert_eq!(
-        result,
-        MonoType::Union(vec![MonoType::Bool, MonoType::Int(32)])
-    );
-    let inter = MonoType::Intersection(vec![tv(0), MonoType::make_string()]);
-    let result2 = subber.substitute(&inter, &sub);
-    assert_eq!(
-        result2,
-        MonoType::Intersection(vec![MonoType::Bool, MonoType::make_string()])
-    );
-}
-
-#[test]
-fn test_substitute_through_enum() {
-    let subber = Substituter::new();
-    let mut sub = Substitution::new();
-    sub.bind(TypeVar::new(0), MonoType::Int(32));
-    // Enum variants don't contain type variables, so substitution is a no-op
-    let ty = MonoType::Enum(EnumType {
-        name: "Color".to_string(),
-        variants: vec!["red".to_string()],
-    });
-    assert_eq!(subber.substitute(&ty, &sub), ty);
-}
-
-#[test]
-fn test_substitute_through_assoc_type() {
-    let subber = Substituter::new();
-    let mut sub = Substitution::new();
-    sub.bind(TypeVar::new(0), MonoType::Int(32));
-    let ty = MonoType::AssocType {
-        host_type: Box::new(tv(0)),
-        assoc_name: "Item".to_string(),
-        assoc_args: vec![MonoType::make_string()],
-    };
-    let result = subber.substitute(&ty, &sub);
-    match result {
-        MonoType::AssocType {
-            host_type,
-            assoc_name,
-            ..
-        } => {
-            assert_eq!(*host_type, MonoType::Int(32));
-            assert_eq!(assoc_name, "Item");
-        }
-        _ => panic!("Expected AssocType"),
-    }
-}
-
-#[test]
 fn test_substitute_no_match_returns_original() {
     let subber = Substituter::new();
     let sub = Substitution::new();
@@ -341,29 +103,6 @@ fn test_substitute_generic_params_too_few() {
     assert_eq!(result, MonoType::TypeVar(tv));
 }
 
-// §3: 补充替换测试
-
-#[test]
-fn test_substitute_through_list() {
-    let subber = Substituter::new();
-    let mut sub = Substitution::new();
-    sub.bind(TypeVar::new(0), MonoType::make_string());
-    let ty = MonoType::make_list(tv(0));
-    let result = subber.substitute(&ty, &sub);
-    assert_eq!(result, MonoType::make_list(MonoType::make_string()));
-}
-
-#[test]
-fn test_substitute_type_var_bound_to_type_var() {
-    let subber = Substituter::new();
-    let mut sub = Substitution::new();
-    // v0 → v1
-    sub.bind(TypeVar::new(0), MonoType::TypeVar(TypeVar::new(1)));
-    // Substitute v0 should give v1
-    let result = subber.substitute(&tv(0), &sub);
-    assert_eq!(result, MonoType::TypeVar(TypeVar::new(1)));
-}
-
 #[test]
 fn test_substitute_with_map_no_match() {
     let subber = Substituter::new();
@@ -378,44 +117,6 @@ fn test_substitute_with_map_no_match() {
 }
 
 #[test]
-fn test_substitute_with_map_multiple_vars() {
-    let subber = Substituter::new();
-    let mut map = HashMap::new();
-    map.insert(0, MonoType::make_string());
-    map.insert(1, MonoType::Bool);
-    let ty = MonoType::make_tuple(vec![tv(0), tv(1), MonoType::Int(32)]);
-    let result = subber.substitute_with_map(&ty, &map);
-    assert_eq!(
-        result,
-        MonoType::make_tuple(vec![
-            MonoType::make_string(),
-            MonoType::Bool,
-            MonoType::Int(32)
-        ])
-    );
-}
-
-#[test]
-fn test_substitution_bound_vars_empty() {
-    let sub = Substitution::new();
-    assert!(
-        sub.bound_vars().is_empty(),
-        "empty substitution should have no bound vars"
-    );
-}
-
-#[test]
-fn test_substitution_bound_vars_non_empty() {
-    let mut sub = Substitution::new();
-    sub.insert(0, MonoType::Int(32));
-    sub.insert(3, MonoType::make_string());
-    let vars = sub.bound_vars();
-    assert_eq!(vars.len(), 2, "should have 2 bound vars");
-    assert!(vars.contains(&0), "should contain index 0");
-    assert!(vars.contains(&3), "should contain index 3");
-}
-
-#[test]
 fn test_substitute_generic_params_matching() {
     let subber = Substituter::new();
     let ty = MonoType::make_tuple(vec![
@@ -427,44 +128,5 @@ fn test_substitute_generic_params_matching() {
     assert_eq!(
         result,
         MonoType::make_tuple(vec![MonoType::Int(32), MonoType::make_string()])
-    );
-}
-
-#[test]
-fn test_substitute_struct_with_nested_list() {
-    let subber = Substituter::new();
-    let mut sub = Substitution::new();
-    sub.bind(TypeVar::new(0), MonoType::Bool);
-    let ty = MonoType::Struct(StructType {
-        name: "Wrapper".to_string(),
-        fields: vec![("data".to_string(), MonoType::make_list(tv(0)))],
-        methods: HashMap::new(),
-        field_mutability: vec![false],
-        field_has_default: vec![false],
-        interfaces: vec![],
-    });
-    let result = subber.substitute(&ty, &sub);
-    match result {
-        MonoType::Struct(ref s) => {
-            assert_eq!(s.fields[0].1, MonoType::make_list(MonoType::Bool));
-        }
-        _ => panic!("Expected Struct"),
-    }
-}
-
-#[test]
-fn test_substitute_contains_type_vars() {
-    use crate::frontend::core::types::substitute::contains_type_vars;
-    assert!(
-        contains_type_vars(&tv(0)),
-        "TypeVar should contain type vars"
-    );
-    assert!(
-        !contains_type_vars(&MonoType::Int(32)),
-        "Int should not contain type vars"
-    );
-    assert!(
-        contains_type_vars(&MonoType::make_list(tv(0))),
-        "List containing TypeVar should be detected"
     );
 }

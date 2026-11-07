@@ -5,7 +5,7 @@
 
 use crate::frontend::core::sema::inference::statements::StatementChecker;
 use crate::frontend::core::types::{MonoType, PolyType, TraitTable, TypeConstraintSolver};
-use crate::ast::{self, Stmt, StmtKind, Expr, BinOp, Block, Param, PlanId};
+use crate::ast::{self, Stmt, StmtKind, Expr, BinOp, Block, PlanId};
 use crate::frontend::core::lexer::tokens::Literal;
 use crate::util::span::Span;
 
@@ -45,21 +45,6 @@ fn make_checker() -> StatementChecker {
         crate::frontend::core::types::eval::dependent_types::DependentTypeEnv::new(),
         TraitTable::default(),
     )
-}
-
-/// 创建带 scope 内已有变量的 StatementChecker
-fn make_checker_with_var(
-    name: &str,
-    ty: MonoType,
-) -> StatementChecker {
-    let mut checker = make_checker();
-    checker.add_var(
-        name.to_string(),
-        PolyType::mono(ty),
-        false,
-        crate::util::span::Span::default(),
-    );
-    checker
 }
 
 // Happy path 测试
@@ -156,33 +141,6 @@ fn test_check_if_stmt_bool_condition() {
     assert!(result.is_ok(), "if true {{}} 应成功");
 }
 
-/// §5.6: if 语句带 elif 和 else 分支 → Ok
-#[test]
-fn test_check_if_stmt_with_else_if_and_else() {
-    // Arrange
-    let mut checker = make_checker();
-    let stmt = make_stmt(StmtKind::If {
-        condition: Box::new(Expr::Lit(Literal::Bool(true), Span::dummy())),
-        then_branch: Box::new(make_block(vec![])),
-        else_if_branches: vec![(
-            Box::new(Expr::Lit(Literal::Bool(false), Span::dummy())),
-            Box::new(make_block(vec![])),
-        )],
-        else_branch: Some(Box::new(make_block(vec![]))),
-        span: Span::dummy(),
-    });
-
-    // Act
-    let result = checker.check_stmt(&stmt);
-
-    // Assert
-    assert!(
-        result.is_ok(),
-        "if/elif/else 语句中条件均为 Bool 时应成功: {:?}",
-        result.err()
-    );
-}
-
 /// §5.3: 表达式语句（赋值）→ Ok，赋值后变量存在
 #[test]
 fn test_check_expr_stmt_assignment_creates_var() {
@@ -272,35 +230,6 @@ fn test_check_expr_stmt_reassignment_type_change_rejected() {
     );
 }
 
-/// §5.9.2: for 循环遍历 Range → Ok
-#[test]
-fn test_check_for_stmt_range() {
-    // Arrange
-    let mut checker = make_checker();
-    let stmt = make_stmt(StmtKind::For {
-        var: "i".to_string(),
-        var_span: Span::dummy(),
-        var_mut: false,
-        iterable: Box::new(Expr::BinOp {
-            op: BinOp::Range,
-            left: Box::new(Expr::Lit(Literal::Int(0), Span::dummy())),
-            right: Box::new(Expr::Lit(Literal::Int(10), Span::dummy())),
-            span: Span::dummy(),
-        }),
-        body: Box::new(make_block(vec![])),
-    });
-
-    // Act
-    let result = checker.check_stmt(&stmt);
-
-    // Assert
-    assert!(
-        result.is_ok(),
-        "for 循环遍历 Range 应成功: {:?}",
-        result.err()
-    );
-}
-
 // Error path 测试
 
 /// §5.6: if 条件非 Bool 类型 → Err（§5.6 条件必须是 Bool）
@@ -323,29 +252,6 @@ fn test_check_if_stmt_non_bool_condition() {
     assert!(result.is_err(), "if 42 {{}} 应返回 Err（条件非 Bool）");
 }
 
-/// §5.6: elif 条件非 Bool 类型 → Err
-#[test]
-fn test_check_if_stmt_non_bool_else_if_condition() {
-    // Arrange
-    let mut checker = make_checker();
-    let stmt = make_stmt(StmtKind::If {
-        condition: Box::new(Expr::Lit(Literal::Bool(true), Span::dummy())),
-        then_branch: Box::new(make_block(vec![])),
-        else_if_branches: vec![(
-            Box::new(Expr::Lit(Literal::Int(1), Span::dummy())),
-            Box::new(make_block(vec![])),
-        )],
-        else_branch: None,
-        span: Span::dummy(),
-    });
-
-    // Act
-    let result = checker.check_stmt(&stmt);
-
-    // Assert
-    assert!(result.is_err(), "elif 条件为 Int 时应返回 Err");
-}
-
 /// §5.3: 使用未定义变量 → Err
 #[test]
 fn test_check_undefined_variable() {
@@ -358,55 +264,6 @@ fn test_check_undefined_variable() {
 
     // Assert
     assert!(result.is_err(), "使用未定义变量应返回 Err");
-}
-
-/// §5.3.1: 变量声明类型注解与初始化器不匹配 → Err
-#[test]
-fn test_check_var_stmt_type_mismatch() {
-    // Arrange
-    let mut checker = make_checker();
-    // x: Bool = 42 — Int 字面量与 Bool 注解不匹配
-    let stmt = make_stmt(StmtKind::Assign {
-        target: Box::new(Expr::Var("x".to_string(), Span::dummy())),
-        type_annotation: Some(builtin_ty("Bool")),
-        value: Some(Box::new(Expr::Lit(Literal::Int(42), Span::dummy()))),
-        is_mut: false,
-        span: Span::dummy(),
-    });
-
-    // Act
-    let result = checker.check_stmt(&stmt);
-
-    // Assert
-    assert!(result.is_err(), "x: Bool = 42 类型不匹配应返回 Err");
-}
-
-/// §5.9.3: for 循环变量遮蔽外层变量 → Err
-#[test]
-fn test_check_for_stmt_shadowing() {
-    // Arrange
-    let mut checker = make_checker_with_var("i", MonoType::Int(32));
-    let stmt = make_stmt(StmtKind::For {
-        var: "i".to_string(),
-        var_span: Span::dummy(),
-        var_mut: false,
-        iterable: Box::new(Expr::BinOp {
-            op: BinOp::Range,
-            left: Box::new(Expr::Lit(Literal::Int(0), Span::dummy())),
-            right: Box::new(Expr::Lit(Literal::Int(5), Span::dummy())),
-            span: Span::dummy(),
-        }),
-        body: Box::new(make_block(vec![])),
-    });
-
-    // Act
-    let result = checker.check_stmt(&stmt);
-
-    // Assert
-    assert!(
-        result.is_err(),
-        "for i in 1..5 {{}} 当外层已存在 i 时应返回 Err（变量遮蔽）"
-    );
 }
 
 // Boundary 测试
@@ -440,80 +297,6 @@ fn test_check_nested_scopes() {
         checker.get_var("inner_var").is_none(),
         "退出作用域后 get_var(\"inner_var\") 应返回 None"
     );
-}
-
-/// §5.2: 嵌套作用域：外层变量对内层可见
-#[test]
-fn test_check_nested_scopes_outer_visible_in_inner() {
-    // Arrange
-    let mut checker = make_checker();
-    checker.add_var(
-        "outer_var".to_string(),
-        PolyType::mono(MonoType::Bool),
-        false,
-        crate::util::span::Span::default(),
-    );
-
-    // Act — 进入内层作用域
-    checker.enter_scope();
-
-    // Assert — 内层可以访问外层变量
-    assert!(
-        checker.get_var("outer_var").is_some(),
-        "内层作用域应能访问外层变量 outer_var"
-    );
-
-    // Act — 退出内层
-    checker.exit_scope();
-
-    // Assert — 外层变量仍然存在
-    assert!(
-        checker.get_var("outer_var").is_some(),
-        "退出内层后外层变量 outer_var 应仍然存在"
-    );
-}
-
-/// §5.2: var_exists_in_any_scope 和 var_exists_in_current_scope 区分
-#[test]
-fn test_check_scope_level_queries() {
-    // Arrange
-    let mut checker = make_checker();
-    checker.add_var(
-        "global".to_string(),
-        PolyType::mono(MonoType::make_string()),
-        false,
-        crate::util::span::Span::default(),
-    );
-
-    // Act — 进入内层
-    checker.enter_scope();
-
-    // Assert — global 在任何作用域中存在，但不在当前作用域
-    assert!(
-        checker.var_exists_in_any_scope("global"),
-        "var_exists_in_any_scope(\"global\") 应为 true"
-    );
-    assert!(
-        !checker.var_exists_in_current_scope("global"),
-        "var_exists_in_current_scope(\"global\") 在内层应为 false"
-    );
-
-    // Act — 添加到当前作用域
-    checker.add_var(
-        "local".to_string(),
-        PolyType::mono(MonoType::Float(64)),
-        false,
-        crate::util::span::Span::default(),
-    );
-
-    // Assert
-    assert!(
-        checker.var_exists_in_current_scope("local"),
-        "var_exists_in_current_scope(\"local\") 应为 true"
-    );
-
-    // Cleanup
-    checker.exit_scope();
 }
 
 /// §5.1: 大量语句不 panic
@@ -551,68 +334,6 @@ fn test_check_statement_checker_with_many_statements() {
     );
 }
 
-/// §5.8: check_fn_def 处理带参数的函数
-#[test]
-fn test_check_fn_def_with_params() {
-    // Arrange
-    let mut checker = make_checker();
-    let params = vec![
-        Param {
-            name: "a".to_string(),
-            ty: Some(builtin_ty("Int32")),
-            is_mut: false,
-            span: Span::dummy(),
-        },
-        Param {
-            name: "b".to_string(),
-            ty: Some(builtin_ty("Bool")),
-            is_mut: false,
-            span: Span::dummy(),
-        },
-    ];
-    let body = make_block(vec![Stmt {
-        kind: StmtKind::Expr(Box::new(Expr::Var("a".to_string(), Span::dummy()))),
-        span: Span::dummy(),
-        plan_id: PlanId::UNPLANNED,
-    }]);
-
-    // Act
-    let result = checker.check_fn_def("my_fn", &params, &body);
-
-    // Assert
-    assert!(result.is_ok(), "带参数的函数定义应成功: {:?}", result.err());
-}
-
-/// §5.8: check_fn_def 参数在函数体内可见
-#[test]
-fn test_check_fn_def_params_visible_in_body() {
-    // Arrange
-    let mut checker = make_checker();
-    let params = vec![Param {
-        name: "x".to_string(),
-        ty: Some(builtin_ty("Int32")),
-        is_mut: false,
-        span: Span::dummy(),
-    }];
-    // 函数体中使用参数 x + 1
-    let body = make_block(vec![Stmt {
-        kind: StmtKind::Expr(Box::new(Expr::BinOp {
-            op: BinOp::Add,
-            left: Box::new(Expr::Var("x".to_string(), Span::dummy())),
-            right: Box::new(Expr::Lit(Literal::Int(1), Span::dummy())),
-            span: Span::dummy(),
-        })),
-        span: Span::dummy(),
-        plan_id: PlanId::UNPLANNED,
-    }]);
-
-    // Act
-    let result = checker.check_fn_def("inc", &params, &body);
-
-    // Assert
-    assert!(result.is_ok(), "函数体内使用参数应成功: {:?}", result.err());
-}
-
 /// §5.3: 变量声明：只有类型注解，无初始化器
 #[test]
 fn test_check_var_stmt_only_annotation() {
@@ -639,24 +360,4 @@ fn test_check_var_stmt_only_annotation() {
         checker.get_var("y").is_some(),
         "声明后 get_var(\"y\") 应返回 Some"
     );
-}
-
-/// §5.3: 表达式语句（非赋值）→ Ok
-#[test]
-fn test_check_expr_stmt_non_assignment() {
-    // Arrange
-    let mut checker = make_checker();
-    // 纯表达式语句：1 + 2
-    let stmt = make_stmt(StmtKind::Expr(Box::new(Expr::BinOp {
-        op: BinOp::Add,
-        left: Box::new(Expr::Lit(Literal::Int(1), Span::dummy())),
-        right: Box::new(Expr::Lit(Literal::Int(2), Span::dummy())),
-        span: Span::dummy(),
-    })));
-
-    // Act
-    let result = checker.check_stmt(&stmt);
-
-    // Assert
-    assert!(result.is_ok(), "纯表达式语句应成功: {:?}", result.err());
 }

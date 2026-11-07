@@ -40,10 +40,3 @@ fn test_t_key_level_fallback() {
     assert_ne!(result, "package_outdated_none");
     assert!(!result.is_empty());
 }
-
-#[test]
-fn test_t_missing_everywhere_returns_key() {
-    // 所有语言都缺此键时才回落键名（仅当新增 MSG 未配词条时发生）
-    let key = MSG::PackageOutdatedRow.key();
-    assert_eq!(key, "package_outdated_row");
-}

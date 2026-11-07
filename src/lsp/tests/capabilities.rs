@@ -30,33 +30,9 @@ fn test_server_capabilities() {
 }
 
 #[test]
-fn test_completion_capability() {
-    let caps = server_capabilities();
-    assert!(caps.completion_provider.is_some(), "补全能力应开启");
-
-    let comp = caps.completion_provider.unwrap();
-    assert_eq!(comp.resolve_provider, Some(false));
-    let triggers = comp.trigger_characters.unwrap();
-    assert!(triggers.contains(&".".to_string()));
-    assert!(triggers.contains(&"@".to_string()));
-}
-
-#[test]
 fn test_definition_capability() {
     let caps = server_capabilities();
     assert!(caps.definition_provider.is_some(), "跳转定义能力应开启");
-}
-
-#[test]
-fn test_references_capability() {
-    let caps = server_capabilities();
-    assert!(caps.references_provider.is_some(), "查找引用能力应开启");
-}
-
-#[test]
-fn test_hover_capability() {
-    let caps = server_capabilities();
-    assert!(caps.hover_provider.is_some(), "悬停提示能力应开启");
 }
 
 #[test]

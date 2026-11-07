@@ -43,73 +43,9 @@ fn test_direct_eval_proved_for_true_literal_comparison() {
     assert!(result.is_proved(), "纯字面量 5>0 应直接求值为 Proved");
 }
 
-#[test]
-fn test_direct_eval_disproved_for_false_literal_comparison() {
-    let refined = refined_int(binop(
-        BinOp::Gt,
-        ConstExpr::Lit(ConstValue::Int(0)),
-        ConstExpr::Lit(ConstValue::Int(0)),
-    ));
-
-    let env = TypeEnvironment::new();
-    let ctx = ProofContext::new(&env);
-    let result = check_predicate(&ctx, &refined, &HashMap::new());
-    assert!(!result.is_proved(), "纯字面量 0>0 应求值为 Disproved");
-}
-
 // =========== §3.2: 假设栈蕴含 ===========
 
-#[test]
-fn test_assumption_stack_match_proves_without_evaluator_or_smt() {
-    let cond = constraint_gt("y", 0);
-    let refined = refined_int(cond.clone());
-
-    let env = TypeEnvironment::new();
-    let mut ctx = ProofContext::new(&env);
-    ctx.assumptions.inject(cond);
-
-    // 约束在假设栈中 → 直接 Proved，不经过 Evaluator 和 Z3
-    let result = check_predicate(&ctx, &refined, &HashMap::new());
-    assert!(result.is_proved(), "约束 y>0 在假设栈中应直接 Proved");
-}
-
-#[test]
-fn test_assumption_stack_no_match_falls_through_to_evaluator() {
-    let in_stack = constraint_gt("y", 0);
-    let constraint = constraint_gt("y", 5);
-    let refined = refined_int(constraint);
-
-    let env = TypeEnvironment::new();
-    let mut ctx = ProofContext::new(&env);
-    ctx.assumptions.inject(in_stack);
-
-    let mut bindings = HashMap::new();
-    bindings.insert("y".into(), ConstValue::Int(5));
-
-    // y>5 ≠ y>0，不匹配假设栈 → 回退到 Evaluator
-    let result = check_predicate(&ctx, &refined, &bindings);
-    assert!(
-        !result.is_proved(),
-        "y>5 不在假设栈中，Evaluator 求值 5>5 → false → Disproved"
-    );
-}
-
 // =========== §8: Z3 SMT 求解 ===========
-
-#[test]
-fn test_smt_implication_from_assumptions_to_weaker_constraint() {
-    // 假设: y > 5
-    // 目标: y > 0
-    // Z3 应证明蕴含: y > 5 ⇒ y > 0
-    let refined = refined_int(constraint_gt("y", 0));
-
-    let env = TypeEnvironment::new();
-    let mut ctx = ProofContext::new(&env);
-    ctx.assumptions.inject(constraint_gt("y", 5));
-
-    let result = check_predicate(&ctx, &refined, &HashMap::new());
-    assert!(result.is_proved(), "Z3 应证明 y>5 ⇒ y>0");
-}
 
 #[test]
 fn test_smt_symbolic_variable_without_binding_detects_counterexample() {
@@ -131,28 +67,4 @@ fn test_smt_symbolic_variable_without_binding_detects_counterexample() {
         }
         other => panic!("期望 Disproved，实际: {other:?}"),
     }
-}
-
-#[test]
-fn test_smt_linear_arithmetic_with_concrete_binding() {
-    // 约束: x > 0 && x < 10
-    // bindings: x = 5
-    let constraint = ConstExpr::BinOp {
-        op: BinOp::And,
-        left: Box::new(constraint_gt("x", 0)),
-        right: Box::new(binop(
-            BinOp::Lt,
-            ConstExpr::NamedVar("x".into()),
-            ConstExpr::Lit(ConstValue::Int(10)),
-        )),
-    };
-    let refined = refined_int(constraint);
-
-    let env = TypeEnvironment::new();
-    let ctx = ProofContext::new(&env);
-    let mut bindings = HashMap::new();
-    bindings.insert("x".into(), ConstValue::Int(5));
-
-    let result = check_predicate(&ctx, &refined, &bindings);
-    assert!(result.is_proved(), "x=5 应满足 x>0 && x<10");
 }

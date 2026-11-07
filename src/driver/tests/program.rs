@@ -110,61 +110,6 @@ fn test_program_stage_coverage() {
 }
 
 #[test]
-fn test_program_stage_tables_are_subsets_of_stage_all() {
-    // Arrange / Act / Assert: 任意 kind 的阶段表 ⊆ Stage::ALL 且无重复
-    for kind in ALL_KINDS {
-        let stages = kind.stages();
-        for stage in stages {
-            assert!(
-                Stage::ALL.contains(stage),
-                "ProgramKind::{kind:?} lists {stage:?} which is absent from Stage::ALL"
-            );
-        }
-        for (i, a) in stages.iter().enumerate() {
-            for b in stages.iter().skip(i + 1) {
-                assert_ne!(a, b, "ProgramKind::{kind:?} lists Stage::{a:?} twice");
-            }
-        }
-    }
-}
-
-#[test]
-fn test_program_stage_tables_respect_topological_order() {
-    // Arrange / Act / Assert: 每 kind 的阶段表是 Stage::ALL 顺序的子序列
-    for kind in ALL_KINDS {
-        let positions: Vec<usize> = kind
-            .stages()
-            .iter()
-            .map(|s| {
-                Stage::ALL
-                    .iter()
-                    .position(|a| a == s)
-                    .unwrap_or_else(|| panic!("{s:?} must be in Stage::ALL"))
-            })
-            .collect();
-        for pair in positions.windows(2) {
-            assert!(
-                pair[0] < pair[1],
-                "ProgramKind::{kind:?} stage table violates Stage::ALL topological order"
-            );
-        }
-    }
-}
-
-#[test]
-fn test_program_stages_derive_from_kind() {
-    // Arrange
-    let program = make_program(ProgramKind::Check);
-
-    // Act
-    let stages = program.stages();
-
-    // Assert: Program 的阶段表即 kind 的预定义组合（无自定义入口，§3 防退化）
-    assert_eq!(stages, ProgramKind::Check.stages());
-    assert_eq!(stages, expected_stages(ProgramKind::Check));
-}
-
-#[test]
 fn test_program_kind_default_aggregation() {
     // Arrange: 02 §5 现状对应表
     let fail_fast = [

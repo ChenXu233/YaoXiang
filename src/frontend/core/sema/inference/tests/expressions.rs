@@ -21,28 +21,6 @@ use crate::frontend::core::sema::TypeCheckResult;
 use crate::frontend::module::ModuleInfo;
 use crate::middle::passes::mono::instance::InstantiationRequest;
 
-/// 整数字面量表达式 `n`。
-fn int_expr(n: i128) -> Expr {
-    Expr::Lit(
-        crate::frontend::core::lexer::tokens::Literal::Int(n),
-        Span::dummy(),
-    )
-}
-
-/// `left <op> right` 二元表达式（dummy span）。
-fn binop_expr(
-    op: crate::ast::BinOp,
-    left: Expr,
-    right: Expr,
-) -> Expr {
-    Expr::BinOp {
-        op,
-        left: Box::new(left),
-        right: Box::new(right),
-        span: Span::dummy(),
-    }
-}
-
 /// 按多文件编排的导出提取管线（tokenize → parse → extract_module_info）构造
 /// 模块导出面——full_path 为 `{module_key}.{bare}`，与 `build_registry_from` 同源。
 fn module_info_from_source(
@@ -165,52 +143,6 @@ fn test_infer_integer_literal() {
     );
 }
 
-/// §3.2: 字符串字面量推断为 String
-#[test]
-fn test_infer_string_literal() {
-    // Arrange
-    let mut ctx = TestContext::new();
-    let mut inferrer = ctx.inferrer();
-    let expr = Expr::Lit(
-        crate::frontend::core::lexer::tokens::Literal::String("hello".to_string()),
-        Span::dummy(),
-    );
-
-    // Act
-    let result = inferrer.infer_expr(&expr);
-
-    // Assert
-    assert!(result.is_ok(), "should infer string literal");
-    assert_eq!(
-        result.unwrap(),
-        MonoType::make_string(),
-        "string literal should be String"
-    );
-}
-
-/// §3.2: 布尔字面量推断为 Bool
-#[test]
-fn test_infer_bool_literal() {
-    // Arrange
-    let mut ctx = TestContext::new();
-    let mut inferrer = ctx.inferrer();
-    let expr = Expr::Lit(
-        crate::frontend::core::lexer::tokens::Literal::Bool(true),
-        Span::dummy(),
-    );
-
-    // Act
-    let result = inferrer.infer_expr(&expr);
-
-    // Assert
-    assert!(result.is_ok(), "should infer bool literal");
-    assert_eq!(
-        result.unwrap(),
-        MonoType::Bool,
-        "bool literal should be Bool"
-    );
-}
-
 // Error path 测试
 
 /// §4: 未定义变量应报错
@@ -226,33 +158,6 @@ fn test_infer_undefined_variable() {
 
     // Assert
     assert!(result.is_err(), "should fail for undefined variable");
-}
-
-// Boundary 测试
-
-/// §3.2 & §4: 嵌套表达式 (1 + 2) * 3 应推断为 Int(64)
-#[test]
-fn test_infer_nested_expressions() {
-    // Arrange
-    let mut ctx = TestContext::new();
-    let mut inferrer = ctx.inferrer();
-    // 嵌套表达式：(1 + 2) * 3
-    let expr = binop_expr(
-        crate::ast::BinOp::Mul,
-        binop_expr(crate::ast::BinOp::Add, int_expr(1), int_expr(2)),
-        int_expr(3),
-    );
-
-    // Act
-    let result = inferrer.infer_expr(&expr);
-
-    // Assert - 断言推断出的具体类型为 Int(64)，而非仅检查 is_ok()
-    assert!(result.is_ok(), "should handle nested expressions");
-    assert_eq!(
-        result.unwrap(),
-        MonoType::Int(64),
-        "nested int arithmetic expression should infer to Int(64)"
-    );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

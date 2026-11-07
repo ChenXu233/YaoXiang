@@ -494,15 +494,6 @@ fn test_type_tuple() {
 }
 
 #[test]
-fn test_type_meta_type() {
-    let t = Type::MetaType {
-        name_span: Span::dummy(),
-        args: vec![],
-    };
-    assert!(is_meta_type(&t), "Type 应是 MetaType");
-}
-
-#[test]
 fn test_type_generic() {
     let t = Type::Generic {
         name: "List".into(),
@@ -750,16 +741,6 @@ fn test_type_body_binding() {
         },
     };
     assert_eq!(tbb.name, "distance");
-}
-
-// Helper function tests
-
-#[test]
-fn test_is_meta_type_false() {
-    assert!(!is_meta_type(&Type::Name {
-        name: "Int".into(),
-        span: Span::dummy()
-    }));
 }
 
 // Module default

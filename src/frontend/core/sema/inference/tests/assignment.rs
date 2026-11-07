@@ -6,7 +6,6 @@
 use crate::frontend::core::sema::inference::assignment::{AssignmentChecker, ConstraintAssignmentInfo};
 use crate::frontend::core::types::mono::StructType;
 use crate::frontend::core::types::MonoType;
-use crate::frontend::core::sema::environment::TypeEnvironment;
 use crate::util::span::Span;
 use std::collections::HashMap;
 
@@ -15,31 +14,6 @@ use std::collections::HashMap;
 /// 创建测试用的 Span
 fn dummy_span() -> Span {
     Span::dummy()
-}
-
-/// 环境夹具：`SomeShape.draw` 绑定为 `(Surface) -> Void`。
-fn env_with_some_shape_draw() -> TypeEnvironment {
-    let mut env = TypeEnvironment::default();
-    env.method_bindings.insert(
-        "SomeShape.draw".to_string(),
-        MonoType::Fn {
-            params: vec![MonoType::TypeRef("Surface".to_string())],
-            return_type: Box::new(MonoType::Void),
-        },
-    );
-    env
-}
-
-/// 创建空的 StructType（无字段、无方法）
-fn empty_struct(name: &str) -> MonoType {
-    MonoType::Struct(StructType {
-        name: name.to_string(),
-        fields: vec![],
-        methods: HashMap::new(),
-        field_mutability: vec![],
-        field_has_default: vec![],
-        interfaces: vec![],
-    })
 }
 
 /// 创建接口类型（所有字段均为 Fn 类型）
@@ -155,132 +129,6 @@ fn test_assignment_constraint_concrete() {
         }
         other => panic!("期望 Concrete 变体，实际得到 {:?}", other),
     }
-}
-
-#[test]
-fn test_assignment_constraint_dynamic() {
-    // Arrange — 接口赋值，右值为 TypeRef（编译期无法确定具体类型）
-    // 通过 TypeEnvironment 提供方法绑定，使 TypeRef 满足接口约束
-    let mut checker = AssignmentChecker::new();
-    let constraint = make_drawable_interface();
-    let rhs = MonoType::TypeRef("SomeShape".to_string());
-    let span = dummy_span();
-
-    // 构造环境：SomeShape.draw 绑定为 (Surface) -> Void
-    let env = env_with_some_shape_draw();
-
-    // Act
-    let result = checker.check_assignment(&constraint, &rhs, span, Some(&env));
-
-    // Assert
-    assert!(
-        result.is_ok(),
-        "TypeRef（有方法绑定）赋值给 Drawable 接口应成功"
-    );
-    let info = checker
-        .last_constraint_info()
-        .expect("约束赋值应产生 ConstraintAssignmentInfo");
-    match info {
-        ConstraintAssignmentInfo::Dynamic { constraint_type } => {
-            assert_eq!(
-                *constraint_type, constraint,
-                "Dynamic.constraint_type 应为 Drawable"
-            );
-        }
-        other => panic!("期望 Dynamic 变体，实际得到 {:?}", other),
-    }
-}
-
-#[test]
-fn test_assignment_constraint_dynamic_via_empty_constraint() {
-    // Arrange — 空约束（无方法要求）赋值，右值为 TypeRef
-    // 空约束下任何类型都满足，且 TypeRef 非具体 Struct → Dynamic
-    let mut checker = AssignmentChecker::new();
-    let empty_constraint = empty_struct("Serializable");
-    let rhs = MonoType::TypeRef("AnyType".to_string());
-    let span = dummy_span();
-
-    // Act
-    let result = checker.check_assignment(&empty_constraint, &rhs, span, None);
-
-    // Assert
-    assert!(result.is_ok(), "TypeRef 赋值给空约束（Serializable）应成功");
-    let info = checker
-        .last_constraint_info()
-        .expect("约束赋值应产生 ConstraintAssignmentInfo");
-    match info {
-        ConstraintAssignmentInfo::Dynamic { constraint_type } => {
-            assert_eq!(
-                *constraint_type, empty_constraint,
-                "Dynamic.constraint_type 应为 Serializable"
-            );
-        }
-        other => panic!("期望 Dynamic 变体，实际得到 {:?}", other),
-    }
-}
-
-// Error path 测试
-
-#[test]
-fn test_assignment_incompatible_types() {
-    // Arrange — Int(32) 和 String 无子类型关系
-    let mut checker = AssignmentChecker::new();
-    let lhs = MonoType::Int(32);
-    let rhs = MonoType::make_string();
-    let span = dummy_span();
-
-    // Act
-    let result = checker.check_assignment(&lhs, &rhs, span, None);
-
-    // Assert
-    assert!(
-        result.is_err(),
-        "String 赋值给 Int(32) 应失败（类型不兼容）"
-    );
-}
-
-#[test]
-fn test_assignment_float_to_int_narrowing() {
-    // Arrange — 不允许收窄：Float 不是 Int 的子类型
-    let mut checker = AssignmentChecker::new();
-    let lhs = MonoType::Int(32);
-    let rhs = MonoType::Float(64);
-    let span = dummy_span();
-
-    // Act
-    let result = checker.check_assignment(&lhs, &rhs, span, None);
-
-    // Assert
-    assert!(
-        result.is_err(),
-        "Float(64) 赋值给 Int(32) 应失败（不允许收窄）"
-    );
-}
-
-#[test]
-fn test_assignment_constraint_missing_method() {
-    // Arrange — 右值缺少接口要求的方法
-    let mut checker = AssignmentChecker::new();
-    let constraint = make_drawable_interface();
-    // Square 没有 draw 方法
-    let square = MonoType::Struct(StructType {
-        name: "Square".to_string(),
-        fields: vec![("side".to_string(), MonoType::Float(64))],
-        methods: HashMap::new(),
-        field_mutability: vec![false],
-        field_has_default: vec![false],
-        interfaces: vec![],
-    });
-    let span = dummy_span();
-
-    // Act
-    let result = checker.check_assignment(&constraint, &square, span, None);
-
-    // Assert
-    assert!(
-        result.is_err(),
-        "Square（无 draw 方法）赋值给 Drawable 应失败"
-    );
 }
 
 // Boundary 测试

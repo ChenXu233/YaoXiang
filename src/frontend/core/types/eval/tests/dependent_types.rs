@@ -77,14 +77,6 @@ fn test_associated_type() {
 }
 
 #[test]
-fn test_has_unbound_params() {
-    let def = AssociatedTypeDef::TypeParam("T".to_string());
-    assert!(!def.has_unbound_params(&["T".to_string()]));
-    assert!(def.has_unbound_params(&[]));
-    assert!(!AssociatedTypeDef::Direct(MonoType::Int(32)).has_unbound_params(&[]));
-}
-
-#[test]
 fn test_substitute() {
     let def = AssociatedTypeDef::TypeParam("T".to_string());
     let mut subs = HashMap::new();
@@ -142,14 +134,6 @@ fn test_dependent_type_env() {
         .is_none());
 }
 
-// 补充测试: AssociatedTypeDef 扩展
-
-#[test]
-fn test_associated_def_direct_into_type() {
-    let def = AssociatedTypeDef::Direct(MonoType::Bool);
-    assert_eq!(def.into_type(), MonoType::Bool);
-}
-
 #[test]
 fn test_associated_def_type_param_into_type() {
     let def = AssociatedTypeDef::TypeParam("T".to_string());
@@ -166,16 +150,6 @@ fn test_associated_def_substitute_no_match() {
     // No match for "T" in subs - should return original
     let result = def.substitute(&subs);
     assert!(matches!(result, AssociatedTypeDef::TypeParam(ref name) if name == "T"));
-}
-
-#[test]
-fn test_associated_def_direct_substitute() {
-    let def = AssociatedTypeDef::Direct(MonoType::Int(32));
-    let mut subs = HashMap::new();
-    subs.insert("T".to_string(), MonoType::make_string());
-    // Direct type is not affected by substitution
-    let result = def.substitute(&subs);
-    assert_eq!(result.into_type(), MonoType::Int(32));
 }
 
 // 补充测试: TypeFamily 扩展
@@ -205,22 +179,6 @@ fn test_type_family_instantiate_wrong_arg_count() {
     // Wrong number of args
     let result = family.instantiate(&[]);
     assert!(result.is_none());
-}
-
-#[test]
-fn test_type_family_multiple_params() {
-    let family = TypeFamily::new(
-        "Pair".to_string(),
-        vec!["A".to_string(), "B".to_string()],
-        vec![],
-        AssociatedTypeDef::Direct(MonoType::make_tuple(vec![
-            MonoType::TypeRef("A".to_string()),
-            MonoType::TypeRef("B".to_string()),
-        ])),
-    );
-    assert_eq!(family.type_params().len(), 2);
-    let result = family.instantiate(&[MonoType::Int(32), MonoType::make_string()]);
-    assert!(result.is_some());
 }
 
 #[test]
@@ -297,16 +255,6 @@ fn test_dependent_type_env_overwrite() {
 }
 
 #[test]
-fn test_associated_type_new() {
-    let at = AssociatedType::new(
-        "Item".to_string(),
-        AssociatedTypeDef::Direct(MonoType::Bool),
-    );
-    assert_eq!(at.name, "Item");
-    assert_eq!(at.definition.into_type(), MonoType::Bool);
-}
-
-#[test]
 fn test_associated_type_def_match_variant() {
     // Arrange — 构造 Match 变体：true→Void, false→Never
     let match_def = AssociatedTypeDef::Match {
@@ -362,109 +310,6 @@ fn test_istrue_type_family_instantiate() {
     assert_istrue_string_arg_returns_none(&env);
 }
 
-#[test]
-fn test_assert_type_family_instantiate() {
-    // Arrange — 注册内建类型族
-    let mut env = DependentTypeEnv::new();
-    crate::std::assert::AssertModule.register_type_families(&mut env);
-    let assert_tf = env
-        .get_type_family("Assert")
-        .expect("Assert should be registered after AssertModule.register_type_families");
-
-    // Assert — 类型参数为 ["cond"]
-    assert_eq!(
-        assert_tf.type_params(),
-        &["cond"],
-        "Assert should have one type param 'cond'"
-    );
-
-    // Act — Assert(true) 展开为 IsTrue(true)
-    let result = assert_tf.instantiate(&[MonoType::TypeRef("true".into())]);
-    assert!(
-        result.is_some(),
-        "Assert(true) should instantiate successfully"
-    );
-
-    // Assert — Assert(true) 参数替换后得到 IsTrue(true)
-    let result_ty = result.unwrap().into_type();
-    assert_eq!(
-        result_ty,
-        MonoType::TypeRef("IsTrue(true)".to_string()),
-        "Assert(true) must expand to IsTrue(true) via parameter substitution"
-    );
-}
-
-// Recursive 类型族测试
-
-#[test]
-fn test_recursive_instantiate_zero() {
-    // Arrange — factorial(Zero) = 1; factorial(Succ(n)) = Succ(n) * factorial(n)
-    let factorial = TypeFamily::new(
-        "factorial".to_string(),
-        vec!["n".to_string()],
-        vec![],
-        AssociatedTypeDef::Recursive {
-            arg_index: 0,
-            arms: vec![
-                RecursiveArm {
-                    pattern: RecursivePattern::Zero,
-                    result: MonoType::Int(1),
-                },
-                RecursiveArm {
-                    pattern: RecursivePattern::Succ("ih_n".to_string()),
-                    result: MonoType::TypeRef("Nat(Mul, Succ(n), factorial(ih_n))".to_string()),
-                },
-            ],
-        },
-    );
-
-    // Act — factorial(Zero) → Int(1)
-    let result = factorial.instantiate(&[MonoType::TypeRef("Zero".to_string())]);
-
-    // Assert
-    assert!(result.is_some(), "factorial(Zero) should instantiate");
-    assert_eq!(
-        result.unwrap().into_type(),
-        MonoType::Int(1),
-        "factorial(Zero) = 1"
-    );
-}
-
-#[test]
-fn test_recursive_instantiate_succ() {
-    // Arrange — factorial(Succ(Zero)) = Succ(Zero) * factorial(Zero)
-    let factorial = TypeFamily::new(
-        "factorial".to_string(),
-        vec!["n".to_string()],
-        vec![],
-        AssociatedTypeDef::Recursive {
-            arg_index: 0,
-            arms: vec![
-                RecursiveArm {
-                    pattern: RecursivePattern::Zero,
-                    result: MonoType::Int(1),
-                },
-                RecursiveArm {
-                    pattern: RecursivePattern::Succ("ih_n".to_string()),
-                    result: MonoType::TypeRef("Nat(Mul, Succ(n), factorial(ih_n))".to_string()),
-                },
-            ],
-        },
-    );
-
-    // Act — factorial(Succ(Zero))
-    let result = factorial.instantiate(&[MonoType::TypeRef("Succ(Zero)".to_string())]);
-
-    // Assert — should produce Nat(Mul, Succ(Succ(Zero)), factorial(Zero))
-    assert!(result.is_some(), "factorial(Succ(Zero)) should instantiate");
-    let result_ty = result.unwrap().into_type();
-    let expected = MonoType::TypeRef("Nat(Mul, Succ(Succ(Zero)), factorial(Zero))".to_string());
-    assert_eq!(
-        result_ty, expected,
-        "factorial(Succ(Zero)) should expand to one step"
-    );
-}
-
 // Nat 解析/转换测试
 
 #[test]
@@ -473,37 +318,6 @@ fn test_parse_nat_from_type_zero() {
         parse_nat_from_type(&MonoType::TypeRef("Zero".to_string())),
         Some(Nat::Zero),
         "TypeRef('Zero') → Nat::Zero"
-    );
-}
-
-#[test]
-fn test_parse_nat_from_type_succ() {
-    // Succ(Zero) → Nat::Succ(Nat::Zero)
-    let parsed = parse_nat_from_type(&MonoType::TypeRef("Succ(Zero)".to_string()));
-    assert!(parsed.is_some());
-    assert_eq!(parsed.unwrap().to_usize(), 1, "Succ(Zero) = 1");
-
-    // Succ(Succ(Zero)) → 2
-    let parsed = parse_nat_from_type(&MonoType::TypeRef("Succ(Succ(Zero))".to_string()));
-    assert!(parsed.is_some());
-    assert_eq!(parsed.unwrap().to_usize(), 2, "Succ(Succ(Zero)) = 2");
-}
-
-#[test]
-fn test_parse_nat_from_type_int() {
-    assert_eq!(
-        parse_nat_from_type(&MonoType::Int(5)),
-        Some(Nat::from_usize(5)),
-        "Int(5) → Nat::from_usize(5)"
-    );
-}
-
-#[test]
-fn test_parse_nat_from_type_bool() {
-    assert_eq!(
-        parse_nat_from_type(&MonoType::Bool),
-        None,
-        "Bool should not parse as Nat"
     );
 }
 
@@ -562,50 +376,5 @@ fn test_structural_termination_zero_branch_recursive() {
     assert!(
         check_structural_termination("factorial", &arms).is_err(),
         "Zero branch with self-call should fail"
-    );
-}
-
-#[test]
-fn test_structural_termination_succ_wrong_arg() {
-    // Succ(n) with func(Succ(n)) → err
-    let arms = vec![
-        RecursiveArm {
-            pattern: RecursivePattern::Zero,
-            result: MonoType::Int(1),
-        },
-        RecursiveArm {
-            pattern: RecursivePattern::Succ("n".to_string()),
-            result: MonoType::TypeRef("factorial(Succ(n))".to_string()),
-        },
-    ];
-    assert!(
-        check_structural_termination("factorial", &arms).is_err(),
-        "Succ(n) with factorial(Succ(n)) should fail"
-    );
-}
-
-#[test]
-fn test_structural_termination_missing_zero() {
-    // Missing Zero branch → err
-    let arms = vec![RecursiveArm {
-        pattern: RecursivePattern::Succ("n".to_string()),
-        result: MonoType::TypeRef("factorial(n)".to_string()),
-    }];
-    assert!(
-        check_structural_termination("fib", &arms).is_err(),
-        "Missing Zero branch should fail"
-    );
-}
-
-#[test]
-fn test_structural_termination_missing_succ() {
-    // Missing Succ branch → err
-    let arms = vec![RecursiveArm {
-        pattern: RecursivePattern::Zero,
-        result: MonoType::Int(0),
-    }];
-    assert!(
-        check_structural_termination("constant", &arms).is_err(),
-        "Missing Succ branch should fail"
     );
 }

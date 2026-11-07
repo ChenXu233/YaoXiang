@@ -7,11 +7,10 @@
 use std::collections::HashMap;
 
 #[cfg(not(target_arch = "wasm32"))]
-use crate::frontend::core::sema::proof::smt::ast::{SMTCommand, SMTResult, SMTSort};
+use crate::frontend::core::sema::proof::smt::ast::{SMTResult};
 #[cfg(not(target_arch = "wasm32"))]
-use crate::frontend::core::sema::proof::smt::backend::Solver;
 #[cfg(not(target_arch = "wasm32"))]
-use crate::frontend::core::sema::proof::smt::z3_backend::{evict_if_full, Z3Backend, CACHE_CAP};
+use crate::frontend::core::sema::proof::smt::z3_backend::{evict_if_full, CACHE_CAP};
 
 /// 触顶清空边界：恰满 CAP 时下一次写入路径先清空，缓存永不越过上限
 #[cfg(not(target_arch = "wasm32"))]
@@ -32,42 +31,6 @@ fn test_cache_eviction_clears_at_cap() {
         cache.is_empty(),
         "达到 CACHE_CAP 必须整体清空，实际 {} 条",
         cache.len()
-    );
-}
-
-/// 命中/未命中计数经真实求解路径累计（Z3 缺失时跳过，同 default_solver 用例）
-#[cfg(not(target_arch = "wasm32"))]
-#[test]
-fn test_cache_counters_count_hit_and_miss() {
-    let Ok(backend) = Z3Backend::new() else {
-        // Z3 未安装时跳过：本用例验证计数，不是强制依赖 Z3
-        return;
-    };
-    let commands = vec![
-        SMTCommand::DeclareConst("x".into(), SMTSort::Int),
-        SMTCommand::CheckSat,
-    ];
-
-    // Act — 同一查询两次：第一次 miss（真求解），第二次 hit（缓存直返）
-    let first = backend.solve(&commands, 1000);
-    let second = backend.solve(&commands, 1000);
-
-    // Assert
-    let (hits, misses) = backend
-        .cache_stats()
-        .expect("Z3 后端有实例内缓存，缓存计数恒为 Some");
-    assert!(
-        misses >= 1,
-        "首次查询必须计为 miss，实际 (hits={hits}, misses={misses})"
-    );
-    assert!(
-        hits >= 1,
-        "重复查询必须计为 hit，实际 (hits={hits}, misses={misses})"
-    );
-    assert_eq!(
-        format!("{first:?}"),
-        format!("{second:?}"),
-        "缓存命中返回的结果必须与真求解一致"
     );
 }
 

@@ -40,7 +40,6 @@ impl MockResp {
 
 #[derive(Debug, Clone)]
 pub(crate) struct RecordedReq {
-    pub method: String,
     pub path: String,
     pub if_none_match: Option<String>,
 }
@@ -71,7 +70,7 @@ impl MockApi {
                 let mut lines = req_text.lines();
                 let request_line = lines.next().unwrap_or_default();
                 let mut parts = request_line.split_whitespace();
-                let method = parts.next().unwrap_or_default().to_string();
+                let _ = parts.next();
                 let path = parts.next().unwrap_or_default().to_string();
                 let if_none_match = req_text.lines().find_map(|l| {
                     let (k, v) = l.split_once(':')?;
@@ -82,7 +81,6 @@ impl MockApi {
                     .lock()
                     .expect("lock mock request log")
                     .push(RecordedReq {
-                        method,
                         path,
                         if_none_match,
                     });
