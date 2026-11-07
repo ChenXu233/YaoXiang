@@ -73,20 +73,20 @@ WBS 0.6「大清理」的前置材料：把全仓 `#[test]` 按 [coding-rules �
 
 | 门 | 条数 |
 | --- | --- |
-| 条款（有可核条目） | 1714 |
+| 条款（有可核条目） | 1713 |
 | 病史 | 313 |
 | 证明（spec-shaped 判据面 / 现状锚） | 447 |
-| 待判（两门皆不过，证明门待人工） | 926 |
+| 待判（两门皆不过，证明门待人工） | 924 |
 | 均不通过（体内无任何断言） | 11 |
-| **合计** | **3411** |
+| **合计** | **3408** |
 
 | 处置 | 条数 | 对比 0.6-9 |
 | --- | --- | --- |
 | 留 | **775** | 2897（−2122） |
-| 待核 | 2122 | 0（新增档位） |
+| 待核 | 2121 | 0（新增档位） |
 | 待判 | 414 | 412（第二批退役后 −1，0.6-15 判据修正 +3） |
-| 退役候选 | 100 | 136（第一批退役 21 条、第二批退役 11 条，生成器修正 +1，第三批 −2，0.6-15 判据修正 −3） |
-| **合计** | **3411** | — |
+| 退役候选 | 98 | 136（第一批退役 −21、第二批 −11、生成器修正 +1、第三批 −2、0.6-15 判据修正 −3、冗余扫描 −1、第四批 −1） |
+| **合计** | **3408** | — |
 
 两点口径变化要说明：
 
@@ -213,7 +213,7 @@ WBS 0.6「大清理」的前置材料：把全仓 `#[test]` 按 [coding-rules �
    35%–65%）——「引用」与「引用支撑断言」是两件事，旧口径把前者当成了后者。
 2. **收紧后真正有条款支撑的约 1202 条**（区间 846–1557），其余要么待核补票，要么本来就该按
    病史门/证明门判定。
-3. **退役面与条款错引面无关**：候选 136 条与条款无关（无断言/弱断言）；首批已退役 21 条、第二批已退役 11 条，生成器修正 +1，第三批 −2，候选降为 103。
+3. **退役面与条款错引面无关**：候选 136 条与条款无关（无断言/弱断言）；首批已退役 21 条、第二批已退役 11 条，生成器修正 +1，第三批 −2，0.6-15 判据修正 −3，冗余扫描 −1，第四批 −1，候选降为 98。
 4. **病史门是最大的合法留来源**（313 条）：它证明「钉住一次真实事故」比「抄一句 RFC」更靠得住。
 
 ## 首批退役（已执行，2026-11-06）
@@ -427,6 +427,32 @@ test-specification 规则 6.1 要求写成 `assert!(matches!(...))`，但它确�
 ### 回退
 
 生成器与普查表同提交，`git revert <sha>` 即整体恢复。
+
+## 第四批退役（已执行，2026-11-07）
+
+**第四批：目录簇 `src/backends/interpreter/`（解释器后端的测试目录）的 10 条「退役候选」里退役 1 条、保留 9 条**
+（单一目录簇，三个文件一次读完再判：`tests/bytecode_load.rs` 4 条 · `tests/weak.rs` 2 条 ·
+`executor/tests/debug.rs` 4 条）。判据 = coding-rules 第七部分的**三扇门**；判留口径 =
+「单元级观察点只能被另一条单元测试替代，语料/集成属进程边界层」；**判删必须指认具体替代覆盖测试名，
+指认不出或读不懂即判留**。
+
+- **已退役 1 条**：`test_capture_stack_includes_current_frame_during_step`
+  （`src/backends/interpreter/executor/tests/debug.rs`）——同文件的
+  `test_capture_stack_during_execution` 走同一条路径（`make_module` + `load_module_for_stepping`
+  加一次 step 再取 `capture_stack`），且断言**严格更强**：它断言栈非空且 `stack[0].function_name == "main"`
+  （钉住栈顶位置），被列者只断言 `stack.iter().any(|f| f.function_name == "main")`（任意位置即可）
+  ——前者为真必蕴含后者 ⇒ 零判据增量。
+- **保留 9 条**：`test_run_bytecode_file_roundtrip` · `test_run_bytecode_file_invalid_magic` ·
+  `test_run_bytecode_file_version_mismatch` · `test_run_file_with_yxbc_magic_uses_bytecode_load_path` ·
+  `test_weak_upgrade_some` · `test_weak_upgrade_none` · `test_step_on_empty_stack_returns_ok` ·
+  `test_step_out_returns_to_caller` · `test_run_to_completion`——逐条读原文后，它们各自都是
+  某条性质的**唯一单元观察点**（load 的魔数/版本两条分支互不相同、YXBC 路由层、Weak 的 Some/None
+  两侧、无帧 step、step_out 弹栈、run 到结束栈空），指认不出能替代它们的单元测试 ⇒ 按硬要求留。
+  逐条依据见 `docs/src/dev/architecture/09a-wbs-history.md` 的第十一节（判定表放实录，不进本页）。
+- **数字**：全仓 `#[test]` 3409 → 3408；判删 1 = `git diff` 计 `-#[test]` 1 行、`+#[test]` 0 行；
+  支配者 `test_capture_stack_during_execution` 单独跑通过。普查：退役候选 99 → 98 · 待判 925 → 924 ·
+  条款 1713 · 病史 313 · 证明 447 · 均不通过 11 · 待核 2121 · 留 775。
+- **回退**：整批是一个提交（本页与 `test-gate-census.tsv` 同提交），`git revert <sha>` 即整体回退。
 
 ## 复跑与自检
 

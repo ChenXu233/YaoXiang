@@ -460,30 +460,6 @@ fn test_capture_stack_during_execution() {
 
 /// 帧原地驻留后，执行中的帧就在 `call_stack` 末尾，`capture_stack` 天然包含它。
 /// （旧实现把帧从栈上弹出，靠 `current_frame_info` 补回；该字段已随重构删除。）
-#[test]
-fn test_capture_stack_includes_current_frame_during_step() {
-    // Arrange: 单步执行时当前帧应可被 capture_stack 观察到
-    let module = make_module(
-        vec![
-            BytecodeInstr::Nop,
-            BytecodeInstr::Nop,
-            BytecodeInstr::ReturnValue { value: Reg(0) },
-        ],
-        vec![],
-    );
-    let mut interp = load_module_for_stepping(&module);
-
-    // Act: step 执行第一条指令
-    interp.step().unwrap();
-
-    // Assert: capture_stack 应包含当前帧
-    let stack = interp.capture_stack();
-    assert!(
-        stack.iter().any(|f| f.function_name == "main"),
-        "capture_stack 应包含 main 帧"
-    );
-}
-
 // ── 步进 + 断点组合测试 ────────────────────────────────────────
 
 #[test]

@@ -38,7 +38,6 @@ test_remove_breakpoint	src/backends/interpreter/executor/tests/debug.rs	assertx1
 test_has_breakpoint_at_current_ip	src/backends/interpreter/executor/tests/debug.rs	assertx1	待判	两门皆不过；含强断言，证明门需人工复核	待判
 test_current_function_returns_name	src/backends/interpreter/executor/tests/debug.rs	assert_eqx1	待判	两门皆不过；含强断言，证明门需人工复核	待判
 test_capture_stack_during_execution	src/backends/interpreter/executor/tests/debug.rs	assert_eqx1 assertx1 unwrapx1	待判	两门皆不过；含强断言，证明门需人工复核	待判
-test_capture_stack_includes_current_frame_during_step	src/backends/interpreter/executor/tests/debug.rs	assertx1 unwrapx1	待判	两门皆不过；断言只有 is_ok/is_some/unwrap 一类弱断言	退役候选
 test_step_then_run_to_breakpoint	src/backends/interpreter/executor/tests/debug.rs	assert_eqx2 unwrapx2	待判	两门皆不过；含强断言，证明门需人工复核	待判
 test_multiple_breakpoints_run_stops_at_first	src/backends/interpreter/executor/tests/debug.rs	assert_eqx1 unwrapx1	待判	两门皆不过；含强断言，证明门需人工复核	待判
 test_borrow_copies_value_immutable	src/backends/interpreter/executor/tests/execute.rs	assert_eqx1 unwrapx1	条款	文件头有可核条目（§<数字>），但未经抽样审计确认	待核

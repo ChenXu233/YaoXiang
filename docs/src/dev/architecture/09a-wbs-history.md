@@ -3868,3 +3868,46 @@ census 门 均不通过 15 → 14 · 待判 924 → 923；处置 退役候选 10
 **1,426 → 12 是这条路的结论**：只按「真子集 + 更强」判，机器会把「验不同性质」的两条判成支配（实测 `test_infix_call_pos_args` 会「支配」`test_infix_add`）。逐条对照表（68,586 行 / 10.75 MB）、生成脚本、以及普查页上的详细分析节，均按用户裁决删除——只留这一条结论。
 
 删除 2 条：`test_from_ast_type_fn` ← `test_from_ast_type_fn_drops_untyped_param_as_loss`；`test_is_installed` ← `test_clean`。全仓 `#[test]` 3411 → 3409。与「零断言」线唯一冲突的一格（`test_reducer_reduce_type_ref_with_alias_chain`）以人判为准、不删。
+
+### 十一、第四批目录簇清洗（0.6-17，2026-11-07）
+
+用户裁决：冗余那条路走完了，继续按目录簇清理。判据不变（coding-rules 第七部分三扇门）；
+判留口径不变：**单元级观察点只能被另一条单元测试替代**，语料/集成属进程边界层，不能替代单元观察点；
+判删必须指认具体替代覆盖测试名，指认不出或读不懂 ⇒ 判留。
+
+**簇**：`src/backends/interpreter/`（解释器后端的测试目录）——普查表 99 条退役候选里、inScope 内、
+前几批未判过、候选最密的一簇。三个文件一次读完再判：`tests/bytecode_load.rs` 4 条 ·
+`tests/weak.rs` 2 条 · `executor/tests/debug.rs` 4 条 = **10 条**。
+
+**逐条判定表**（测试名 / 断言什么 / 替代覆盖 / 删或留 / 依据）：
+
+| # | 测试名 | 断言什么 | 替代覆盖 | 判 | 依据 |
+| --- | --- | --- | --- | --- | --- |
+| 1 | `test_capture_stack_includes_current_frame_during_step` | step 一条指令后 `capture_stack` 里含 main 帧（`stack.iter().any(\|f\| f.function_name == "main")`） | `test_capture_stack_during_execution`（同文件） | **删** | 条款门无（文件头只列覆盖清单，无 §节号/RFC 条目）、病史门无（体内无 issue/回归/缺陷/事故指认）；证明门 ③ 不成立——同文件替代覆盖走同一条路径（`make_module` + `load_module_for_stepping` + step 一次 + `capture_stack`），且断言**严格更强**：断言栈非空且 `stack[0].function_name == "main"`（钉住栈顶位置），被列者只要求任意位置存在 main 帧——前者为真必蕴含后者 ⇒ 零判据增量 |
+| 2 | `test_run_bytecode_file_roundtrip` | 编译 → 落 .42 → `load` → `execute_module` 不报错（体内零断言，5 处 `.expect`） | 无 | 留 | 条款门无、病史门无；证明门成立——「.42 字节码文件端到端往返可执行」这条链路的唯一观察点；同文件的 with_method_vtable 虽走同一条链，但它额外断言 vtables 段内容、程序形态也不同（块形态 vs 本条的箭头函数形态）⇒ 指认不出能完整替代它的单元测试 ⇒ 按「指认不出即判留」保留（零断言另由「均不通过」那条线处理） |
+| 3 | `test_run_bytecode_file_invalid_magic` | 坏魔数的 .42 必须被 `load` 拒绝，且错误信息含 "invalid magic" | 无 | 留 | 证明门成立——「魔数不符必须被拒」的唯一观察点（同文件 version_mismatch 走的是有效魔数 + 坏版本号，另一条分支）；断言里钉了错误措辞（属特征化成分），但「load 必须失败」这条性质无替代覆盖 ⇒ 判留 |
+| 4 | `test_run_bytecode_file_version_mismatch` | 有效魔数 + 版本号 99 必须被拒，且信息含 "unsupported" | 无 | 留 | 证明门成立——「版本号不受支持必须被拒」的唯一观察点（与第 3 条是两条不同分支） |
+| 5 | `test_run_file_with_yxbc_magic_uses_bytecode_load_path` | 带 YXBC 魔数的文件走 `run_file_with_diagnostics` 必须落到字节码加载分支并报 "Failed to load bytecode file" | 无 | 留 | 证明门成立——「run 入口按魔数路由到字节码加载分支」这条**路由层**性质的唯一观察点；第 3/4 条观察的是 `load` 内部的校验分支，不是路由层 |
+| 6 | `test_weak_upgrade_some` | Arc 存活时 `weak.upgrade()` 返回 Some，且内层是 `Int(42)`（match + panic 形态） | 无 | 留 | 证明门成立——「Arc 存活时 upgrade 可取回且值不变」的唯一观察点；同文件的 `test_weak_upgrade_none` 只覆盖 Arc 已释放那侧，`test_weak_from_arc` 只验 Weak 变体本身 |
+| 7 | `test_weak_upgrade_none` | Arc 已释放后 `upgrade()` 返回 None | 无 | 留 | 证明门成立——「Arc 释放后 upgrade 必须返回 None」这条分支的唯一观察点 |
+| 8 | `test_step_on_empty_stack_returns_ok` | 空解释器（无帧）上 `step` 返回 Ok | 无 | 留 | 证明门成立——「无帧时 step 的行为」是本文件唯一观察点（其余 step 用例都先 `load_module_for_stepping` 压了帧）；`is_ok()` 是弱断言但有区分力（改成 Err 或 panic 都会红）⇒ 指认不出替代覆盖 ⇒ 判留 |
+| 9 | `test_step_out_returns_to_caller` | `step_out` 返回 Ok 且执行后 `current_function` 为 None（栈已弹空） | 无 | 留 | 证明门成立——「step_out 会弹出当前帧」这条语义的唯一观察点（`test_run_to_completion` 走的是 `run()` 入口，capture_stack 两条观察的是栈快照）。**备注**：函数前半段有一段未生效的 setup（注释自陈「由于 execute_module 会完整执行，我们改用更简单的方式验证」），名字声称的「回到调用者」并未被体内观察——这是命名/意图与实现不符，不构成三扇门皆不过，故不删；若要收敛应另开一卡改写本条 |
+| 10 | `test_run_to_completion` | `run` 到程序结束返回 Ok 且 `current_function` 为 None（栈空） | 无 | 留 | 证明门成立——「run 跑到结束」这条路径的唯一观察点（两条断点用例观察的是中途停 ≠ 结束）；「结束后栈空」这一断言也只在此 |
+
+**结果**：判删 **1** 条 / 判留 9 条。判留的 9 条**逐个 grep 仍在**（同一文件内逐一确认），
+被删的 1 条逐个确认已不在。
+
+**两个数对账**：判删 1 = `git diff` 计 `-#[test]` **1** 行、`+#[test]` **0** 行、`+` 行合计 **0**
+（只删不增）；支配者 `test_capture_stack_during_execution` **单独跑通过**
+（`cargo test --lib test_capture_stack_during_execution` → 1 passed）。
+
+**独占 helper 清理**：本簇删除后 `make_module` / `load_module_for_stepping` /
+`module_with_callee` / `module_two_nops_then_return` / `embedded_interpreter` 仍分别有
+13 / 14 / 3 / 2 / 6 个调用点，**无一变成独占** ⇒ 无需删 helper；被保留测试用到的 helper 一律未动。
+
+**数字**：全仓 `#[test]` 3409 → 3408。普查：退役候选 99 → 98 · 待判 925 → 924 · 条款 1713 ·
+病史 313 · 证明 447 · 均不通过 11 · 待核 2121 · 留 775。
+
+**产物**：删 1 条测试 + 同批更新 `test-gate-census.tsv` 与 `test-gate-census.md`（分布表数字 +
+「第四批退役」节）+ 本节。**未产出逐条 TSV 或一次性脚本**（用户已裁决：一次性分析产物不入库）——
+判定表只落在本实录里。
