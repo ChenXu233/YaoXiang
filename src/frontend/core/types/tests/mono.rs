@@ -268,16 +268,6 @@ fn test_from_ast_type_tuple() {
 }
 
 #[test]
-fn test_from_ast_type_fn() {
-    let ast_ty = ast::Type::Fn {
-        params: vec![ast::Param::from_type(name_ty("Int32"))],
-        return_type: Box::new(name_ty("Bool")),
-    };
-    let mono: MonoType = ast_ty.into();
-    assert!(matches!(mono, MonoType::Fn { .. }));
-}
-
-#[test]
 fn test_from_ast_type_fn_drops_untyped_param_as_loss() {
     // Arrange: 一个带类型形参 + 一个**裸标识符形参**（`ty = None`——6.5 / 8.9.1 的
     // `(Int64)` 形参位：标识符占位、无类型标注）。后者在 AST 里是合法且常见的形态。

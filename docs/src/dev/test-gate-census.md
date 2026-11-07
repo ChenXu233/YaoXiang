@@ -428,6 +428,74 @@ test-specification 规则 6.1 要求写成 `assert!(matches!(...))`，但它确�
 
 生成器与普查表同提交，`git revert <sha>` 即整体恢复。
 
+## 全仓冗余扫描（0.6-16）
+
+用户裁决：**不要一批一批做**——一次算完整仓的冗余面，产出「保留者 → 被删者」的完整对照，然后一次性删；
+且**不许用「变异证明删了会红」当删除依据**（对一条已被更强用例覆盖的测试，变异只证明「它会失败」，
+不证明「它不可替代」）。判据只有**支配关系**。
+
+### 口径与方法
+
+- **逐条产物不入库**（用户裁决 2026-11-07：10.75 MB 的边界档对照表与生成脚本一并删除）。本节保留**口径、漏斗与结论**——它们是可复用的知识；逐条表是一次性分析产物，需要时按本节口径重算即可。
+- **调用集** = 测试触达的**产品符号**：测试体内直接调用的符号 + 沿**本文件的助手函数**传递（≥1 层），
+  减去本文件自带的脚手架助手名（只传递、不计元素）与标准库管道方法（len / clone / iter / …），
+  只计仓库内定义过的符号。
+- **断言强度**：4 = assert_eq! / assert_ne! > 3 = assert! / matches!（或 match + panic! 形态）>
+  2 = is_ok() / is_some() / is_none() / is_err() > 1 = #[should_panic] > 0 = 其余。
+- **支配**（同一模块＝同一文件内、调用集有交集）：A 支配 B ⇔ 调用集(B) 真子集于 调用集(A)
+  且 强度(A) > 强度(B) 且 输入字面量集(B) 被 输入字面量集(A) 覆盖。
+  ⇒ **严格档**（可退役）；其余（调用集相等 / 强度相等 / 互不包含 / 反向包含 / 输入不同 /
+  无字符串输入可比）⇒ **边界档，只列不删**。
+- **「跨模块不算支配」按字面取「同一文件」**：不同模块的测试各自有独立观察面。
+
+### 相对卡面的一处收窄：输入维度（只收窄、不放宽）
+
+只按「调用集真子集 + 强度严格更强」判，机器会把「验的是不同性质」的两条测试判成支配——实测
+`test_infix_call_pos_args`（验调用实参）会支配 `test_infix_add`（验 + 运算符）：前者多调了
+len / is_empty，与被测性质无关；删掉 `test_infix_add` 就丢了「+ 运算符」这条单元观察面。
+故加一条**输入维度**：被支配者喂进去的字符串字面量必须被支配者覆盖；没有字符串输入可比者，
+按「指认不出即判留」口径不判支配。
+
+### 分布
+
+- 全仓 3409 条测试（296 个模块）；强度分布 4=1397 · 3=1758 · 2=1 · 1=0 · 0=253。
+- **漏斗**（同模块、调用集有交集的 68574 对里逐层收敛）：
+  有交集 68574 → +调用集真子集 1426 → +强度严格更强 1426 → +输入被覆盖 **12** ⇒ 严格档 12 对 / 9 条被支配测试
+  （删掉那 2 条后重算即此数）。
+- **边界档 68574 对**，理由分布：调用集相等 27668 · 强度相等 21066 · 调用集反向包含 7882 ·
+  强度更弱 5775 · 调用集互不包含 4771 · 输入不同 1117 · 无字符串输入可比 295。
+  边界档逐条对照表未入库（同上一节理由）；需要时按本节目径重算。
+
+### 与「零断言」那条线的交叉
+
+- 严格档里被支配测试同时属普查「均不通过（体内无任何断言）」的：**1 条**
+  （`test_reducer_reduce_type_ref_with_alias_chain`）——它正是 0.6-11a 判定表里**指认不出替代覆盖**
+  而判留的那一条；两条线在它身上不一致，以 0.6-11a 的人工判定为准（**不删**）。
+- 边界档里被列测试属「均不通过」的：95 对。
+
+### 逐条判定（严格档 11 条，逐条读原文）
+
+| 被列测试 | 文件 | 支配者 | 判 | 依据 |
+| --- | --- | --- | --- | --- |
+| `test_from_ast_type_fn` | src/frontend/core/types/tests/mono.rs | `test_from_ast_type_fn_drops_untyped_param_as_loss` | **删** | 支配者同样把 `ast::Type::Fn` 转成 `MonoType::Fn`，且在命中 Fn 臂时额外锁定形参（`params == vec![MonoType::Int(32)]`），未命中则 panic。转换臂（`ast::Type::Fn` → `MonoType::Fn`）是结构性的、不随形参个数变——被列者若为假（转不出 Fn 变体），支配者必红 ⇒ 支配成立 |
+| `test_is_installed` | src/package/vendor/tests/mod.rs | `test_clean` | **删** | `is_installed` 的实现是 `self.dep_path(name, version).exists()`（存在性判定）。支配者断言了 is_installed 的**两种结果**：`foo`（保留）真、`bar`/`baz`（被 clean 掉）假——被列者的两条断言（建目录前假、建目录后真）分别被这两条蕴含：任一条为假 ⇒ 支配者必红 ⇒ 支配成立 |
+| `test_expr_ref` | src/frontend/core/parser/tests/ast.rs | `test_expr_callable_parts_lambda_returns_params_and_body` | 留 | 支配者只验 lambda 的 `callable_parts()` 解构，从不构造 `Expr::Ref`；被列者验的是「Ref 变体被手工构造出来」这条观察面，支配者红了它仍可绿 ⇒ 支配不成立 |
+| `test_expr_try` | src/frontend/core/parser/tests/ast.rs | `test_expr_callable_parts_lambda_returns_params_and_body` | 留 | 同上：支配者不碰 `Expr::Try` |
+| `test_skip_failure` | src/frontend/core/parser/pratt/tests/parser_state.rs | `test_skip_success` | 留 | 两条断言**相反**：支配者断言 skip 对 `;` 返回真，被列者断言 skip 对非 `;` 返回假。skip 若恒返回真，支配者仍绿而被列者红 ⇒ 支配不成立 |
+| `test_measure_disproof_silent_without_well_foundedness` | src/frontend/core/sema/layers/tests/termination.rs | `test_measure_disproof_emits_e4022_when_well_founded` | 留 | 两条验的是**相反分支**（well-founded 发 E4022 / 非 well-founded 静默），输入面不同（非 well-founded 那条走不到支配者的分支）⇒ 支配不成立 |
+| `test_associated_def_type_param_into_type` | src/frontend/core/types/eval/tests/dependent_types.rs | `test_associated_def_direct_substitute`、`test_substitute` | 留 | 被列者验 `TypeParam.into_type()` 返回 TypeRef；两条支配者都先 substitute 再 `into_type()`，拿到的是替换后的 Int(32)——若 `into_type()` 对 TypeParam 失准，支配者仍绿 ⇒ 支配不成立 |
+| `test_reducer_reduce_type_ref_with_alias_chain` | src/frontend/core/types/eval/tests/reducer.rs | `test_reducer_register_alias` | 留 | 支配者只验注册别名，被列者验「A→B→Int(32) 的链式 reduce」这条路径（0.6-11a 判定表已指认不出替代覆盖而判留）⇒ 支配不成立 |
+| `test_from_ast_type_meta_type` | src/frontend/core/types/tests/mono.rs | `test_from_ast_type_fn_drops_untyped_param_as_loss`、`test_from_ast_type_primitives` | 留 | 两条支配者都不转 `ast::Type::MetaType`（一个转 Fn、一个转基础类型名）⇒ 支配不成立 |
+| `test_from_ast_type_meta_type_nested` | src/frontend/core/types/tests/mono.rs | `test_calculate_meta_type_level_args`、`test_get_ast_type_universe_level_nested` | 留 | 两条支配者只算 meta type 的**层级**，从不转成 `MonoType::MetaType`（被列者验的就是那次转换）⇒ 支配不成立 |
+| `test_empty_code_is_none` | src/lsp/handlers/tests/diagnostics.rs | `test_no_span_uses_default_range` | 留 | 两条断言的对象不同：被列者验诊断**码**为空，支配者验**range** 取默认值 ⇒ 支配不成立 |
+
+### 结论
+
+严格档机器判 11 条，逐条读原文后 **删 2 / 留 9**；本轮**一次性退役 2 条**（判留的 9 条一条未动，
+普查判据未改）。**支配关系在本仓能成立的只有这 2 条**——其余 9 条的机械关系是「支配者多搭了几次
+便车」（多调了 setup / 断言形式更强），不是「覆盖了被列者的观察面」。若不引入输入维度，
+机械判据会给出 1426 对、其中大量是这种假支配（见下节漏斗）。
+
 ## 复跑与自检
 
 ```bash

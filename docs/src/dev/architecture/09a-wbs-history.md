@@ -3858,3 +3858,62 @@ census 门 均不通过 15 → 14 · 待判 924 → 923；处置 退役候选 10
 新加的 `--selftest` 用例**全红**、退出码 1；新实现全过。
 
 **回退**：生成器与普查表同提交，`git revert <sha>` 即整体恢复。
+
+### 十、全仓冗余扫描与一次性退役（2026-11-07）
+
+用户裁决：**不要一批一批做**——一次算完整仓的冗余面，产出「保留者 → 被删者」的完整对照，然后一次性删；
+且**不许用「变异证明删了会红」当删除依据**（变异只证明「它会失败」，不证明「它不可替代」）。
+判据只有**支配关系**。
+
+**产物**：`docs/src/dev/test-gate-census.md` 的「全仓冗余扫描（0.6-16）」节（口径 / 方法 / 分布 /
+漏斗 / 与「零断言」线的交叉 / 逐条判定）。
+
+**逐条对照表与生成脚本未入库**（用户裁决 2026-11-07）：边界档 68,586 行 / 10.75 MB 与本仓规模不相称，且它本就是「判不了」的集合，价值不在全量。分析与结论留在普查页，重算按那节口径即可。
+
+**口径**：调用集 = 测试触达的**产品符号**（直接调用 + 沿本文件助手传递 ≥1 层；排除本文件脚手架
+助手名与标准库管道方法；只计仓库内定义过的符号）；强度 4 = assert_eq!/assert_ne! >
+3 = assert!/matches!（或 match + panic! 形态）> 2 = is_ok()/is_some()/is_none()/is_err() >
+1 = #[should_panic] > 0 = 其余；支配 = 同模块（同一文件）内、调用集有交集，且
+**调用集(B) 真子集于 调用集(A) 且 强度(A) > 强度(B) 且 输入字面量集(B) 被 输入字面量集(A) 覆盖**。
+其余一律落**边界档，只列不删**。
+
+**相对卡面的一处收窄（只收窄、不放宽）**：单按「调用集真子集 + 强度严格更强」判，机器会把
+「验的是不同性质」的两条测试判成支配——实测 `test_infix_call_pos_args`（验调用实参）会支配
+`test_infix_add`（验 + 运算符），前者多调了 len/is_empty，与被测性质无关。故加**输入维度**：
+被支配者喂的字符串字面量必须被支配者覆盖；没有字符串输入可比者按「指认不出即判留」不判支配。
+
+**漏斗**（同模块、调用集有交集 68574 对）：+调用集真子集 1426 → +强度严格更强 1426 →
++输入被覆盖 **12** ⇒ 严格档 12 对 / 9 条被支配测试（删掉那 2 条后重算即此数）。
+**边界档 68574 对**：调用集相等 27668 · 强度相等 21066 · 反向包含 7882 · 强度更弱 5775 ·
+互不包含 4771 · 输入不同 1117 · 无字符串输入可比 295——逐条列在 TSV 里，未静默丢弃。
+
+**逐条判定（严格档 11 条，逐条读原文）= 删 2 / 留 9**
+
+| 被列测试 | 文件 | 支配者 | 判 | 依据 |
+| --- | --- | --- | --- | --- |
+| `test_from_ast_type_fn` | src/frontend/core/types/tests/mono.rs | `test_from_ast_type_fn_drops_untyped_param_as_loss` | **删** | 支配者同样把 `ast::Type::Fn` 转成 `MonoType::Fn`，且在命中 Fn 臂时额外锁定形参、未命中则 panic；转换臂是结构性的、不随形参个数变——被列者若为假（转不出 Fn 变体），支配者必红 |
+| `test_is_installed` | src/package/vendor/tests/mod.rs | `test_clean` | **删** | `is_installed` 的实现是 `dep_path(name, version).exists()`；支配者断言了 is_installed 的两种结果（`foo` 真、`bar`/`baz` 假），被列者的两条断言（建目录前假、建目录后真）分别被蕴含：任一条为假 ⇒ 支配者必红 |
+| `test_expr_ref` | src/frontend/core/parser/tests/ast.rs | `test_expr_callable_parts_lambda_returns_params_and_body` | 留 | 支配者只验 lambda 的 `callable_parts()`，从不构造 `Expr::Ref` ⇒ 支配不成立 |
+| `test_expr_try` | src/frontend/core/parser/tests/ast.rs | 同上 | 留 | 支配者不碰 `Expr::Try` ⇒ 支配不成立 |
+| `test_skip_failure` | src/frontend/core/parser/pratt/tests/parser_state.rs | `test_skip_success` | 留 | 两条断言相反（skip 对 `;` 真 / 对非 `;` 假）；skip 恒真时支配者仍绿 ⇒ 支配不成立 |
+| `test_measure_disproof_silent_without_well_foundedness` | src/frontend/core/sema/layers/tests/termination.rs | `test_measure_disproof_emits_e4022_when_well_founded` | 留 | 验的是相反分支、输入面不同 ⇒ 支配不成立 |
+| `test_associated_def_type_param_into_type` | src/frontend/core/types/eval/tests/dependent_types.rs | `test_associated_def_direct_substitute`、`test_substitute` | 留 | 两条支配者都先 substitute 再 `into_type()`，拿到的是 Int(32) 而非 TypeRef ⇒ 支配不成立 |
+| `test_reducer_reduce_type_ref_with_alias_chain` | src/frontend/core/types/eval/tests/reducer.rs | `test_reducer_register_alias` | 留 | 支配者只验注册别名；被列者验链式 reduce（0.6-11a 已判留）⇒ 支配不成立 |
+| `test_from_ast_type_meta_type` | src/frontend/core/types/tests/mono.rs | `test_from_ast_type_fn_drops_untyped_param_as_loss`、`test_from_ast_type_primitives` | 留 | 两条支配者都不转 `ast::Type::MetaType` ⇒ 支配不成立 |
+| `test_from_ast_type_meta_type_nested` | src/frontend/core/types/tests/mono.rs | `test_calculate_meta_type_level_args`、`test_get_ast_type_universe_level_nested` | 留 | 两条支配者只算层级、从不转成 `MonoType::MetaType` ⇒ 支配不成立 |
+| `test_empty_code_is_none` | src/lsp/handlers/tests/diagnostics.rs | `test_no_span_uses_default_range` | 留 | 断言对象不同（诊断**码**为空 / **range** 取默认）⇒ 支配不成立 |
+
+**与「零断言」线的交叉**：严格档里被支配测试同时属普查「均不通过」的只有 1 条
+（`test_reducer_reduce_type_ref_with_alias_chain`）——它正是 0.6-11a 判定表里指认不出替代覆盖
+而判留的那条；两条线在它身上不一致，以人工判定为准（**不删**）。边界档里被列测试属「均不通过」的有 95 对。
+
+**数字**：全仓 `#[test]` 3411 → 3409；判删 2 = `git diff` 计 `-#[test]` 2 行（+0 行）；
+被删 2 条的支配者**逐条单独跑通过**（`cargo test --lib test_from_ast_type_fn_drops_untyped_param_as_loss`
+→ 1 passed；`cargo test --lib test_clean` → 5 passed，含 `package::vendor::tests::test_clean` ok）。
+普查：条款 1714 → 1713 · 待核 2122 → 2121 · 退役候选 100 → 99。
+
+**结论**：支配关系在本仓能成立的只有这 2 条——其余 9 条的机械关系是「支配者多搭了几次便车」
+（多调了 setup / 断言形式更强），不是「覆盖了被列者的观察面」。不引入输入维度时机械判据给出
+1426 对，绝大多数是这种假支配。边界档全量留给人工看。
+
+**回退**：本批一笔提交（测试 + 扫描器 + 两张表 + 本页同提交），`git revert <sha>` 即整体恢复。

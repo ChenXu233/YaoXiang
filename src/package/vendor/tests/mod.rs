@@ -53,18 +53,6 @@ fn test_dep_path() {
 }
 
 #[test]
-fn test_is_installed() {
-    let tmp = TempDir::new().unwrap();
-    let manager = VendorManager::new(tmp.path());
-    assert!(!manager.is_installed("foo", "1.0.0"));
-
-    // 创建目录
-    manager.ensure_vendor_dir().unwrap();
-    std::fs::create_dir_all(manager.dep_path("foo", "1.0.0")).unwrap();
-    assert!(manager.is_installed("foo", "1.0.0"));
-}
-
-#[test]
 fn test_install_multi_version() {
     let tmp = TempDir::new().unwrap();
     let manager = VendorManager::new(tmp.path());

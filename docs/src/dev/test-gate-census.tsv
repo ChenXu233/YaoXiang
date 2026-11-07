@@ -2031,7 +2031,6 @@ test_from_ast_type_struct_with_defaults	src/frontend/core/types/tests/mono.rs	ma
 test_from_ast_type_named_struct	src/frontend/core/types/tests/mono.rs	matchesx1 assertx1	条款	文件头有可核条目（§<数字>），但未经抽样审计确认	待核
 test_from_ast_type_name_void_spellings	src/frontend/core/types/tests/mono.rs	assert_eqx2	条款	文件头有可核条目（§<数字>），但未经抽样审计确认	待核
 test_from_ast_type_tuple	src/frontend/core/types/tests/mono.rs	matchesx1 assertx1	条款	文件头有可核条目（§<数字>），但未经抽样审计确认	待核
-test_from_ast_type_fn	src/frontend/core/types/tests/mono.rs	matchesx1 assertx1	条款	文件头有可核条目（§<数字>），但未经抽样审计确认	待核
 test_from_ast_type_fn_drops_untyped_param_as_loss	src/frontend/core/types/tests/mono.rs	assert_eqx2 match_panicx1	条款	文件头有可核条目（§<数字>），但未经抽样审计确认	待核
 test_from_ast_type_empty_tuple_is_unit	src/frontend/core/types/tests/mono.rs	assert_eqx1	条款	文件头有可核条目（§<数字>），但未经抽样审计确认	待核
 test_from_ast_type_result	src/frontend/core/types/tests/mono.rs	matchesx1 assertx1	条款	文件头有可核条目（§<数字>），但未经抽样审计确认	待核
@@ -2783,7 +2782,6 @@ test_fetch_local_dep_manifestless_star_fails	src/package/vendor/tests/fetcher.rs
 test_vendor_manager_new	src/package/vendor/tests/mod.rs	assert_eqx1 unwrapx1	待判	两门皆不过；含强断言，证明门需人工复核	待判
 test_ensure_vendor_dir	src/package/vendor/tests/mod.rs	assertx1 unwrapx2	待判	两门皆不过；断言只有 is_ok/is_some/unwrap 一类弱断言	退役候选
 test_dep_path	src/package/vendor/tests/mod.rs	assert_eqx1 unwrapx1	待判	两门皆不过；含强断言，证明门需人工复核	待判
-test_is_installed	src/package/vendor/tests/mod.rs	assertx2 unwrapx3	待判	两门皆不过；断言只有 is_ok/is_some/unwrap 一类弱断言	退役候选
 test_install_multi_version	src/package/vendor/tests/mod.rs	assertx3 unwrapx4	待判	两门皆不过；断言只有 is_ok/is_some/unwrap 一类弱断言	退役候选
 test_list_installed	src/package/vendor/tests/mod.rs	assert_eqx3 unwrapx5	待判	两门皆不过；含强断言，证明门需人工复核	待判
 test_uninstall_dependency	src/package/vendor/tests/mod.rs	assertx3 unwrapx4	待判	两门皆不过；断言只有 is_ok/is_some/unwrap 一类弱断言	退役候选
