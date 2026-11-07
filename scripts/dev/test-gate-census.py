@@ -78,7 +78,9 @@ STRONG_RE = re.compile(r"\b(assert_eq|assert_ne|matches)\s*!")
 ASSERT_RE = re.compile(r"\b(assert|assert_eq|assert_ne|debug_assert|matches)\s*!")
 # 委托断言：调用名为 assert*/check* 的助手函数（如 assert_neq_truth_table(&c)）——
 # 断言在助手体内，词法上看不到 assert! 宏，但判据真实存在（实测假阳性来源）。
-HELPER_RE = re.compile(r"\b(assert|check)[A-Za-z_]*\s*\(")
+# 0.6-15：名字部分放开数字——[A-Za-z_]* 匹配不到 assert_slot_is_42 这类含数字的助手，
+# 会把「体内有断言」的测试误判成「体内无任何断言」（实测 15 条「均不通过」里 3 条是这种）。
+HELPER_RE = re.compile(r"\b(assert|check)[A-Za-z0-9_]*\s*\(")
 
 TEST_ATTR_RE = re.compile(r"^\s*#\[test\]\s*$")
 FN_RE = re.compile(r"^\s*(?:pub\s+)?(?:async\s+)?fn\s+([A-Za-z_][A-Za-z0-9_]*)")
@@ -290,7 +292,35 @@ def doc_block(lines, fn_line):
     return "\n".join(reversed(out))
 
 
-def assertion_summary(body: str) -> str:
+def match_panic_blocks(masked_body: str) -> int:
+    """数出「match <expr> { … panic!(…) … }」形态的块数。
+
+    形态定义：match 关键字后（到第一个 '{'，即扫描表达式）开出的块里出现 panic!(——
+    断言写在某个臂里，词法上看不到 assert! 宏（test-specification 规则 6.1 要求写成
+    assert!(matches!(...))，但存量代码有此形态，0.6-15 实测 1 条）。
+
+    块边界用花括号配平确定；**入参必须是掩码行**——字符串与注释里的花括号不参与配平，
+    注释里的 panic! 也不会被当成断言。
+    """
+    blocks = 0
+    for m in re.finditer(r"(?<![\w.])match\b[^{};]*\{", masked_body):
+        depth = 0
+        end = len(masked_body)
+        for i in range(m.end() - 1, len(masked_body)):
+            ch = masked_body[i]
+            if ch == "{":
+                depth += 1
+            elif ch == "}":
+                depth -= 1
+                if depth == 0:
+                    end = i
+                    break
+        if re.search(r"\bpanic!\s*\(", masked_body[m.end() : end]):
+            blocks += 1
+    return blocks
+
+
+def assertion_summary(body: str, masked_body: str = "") -> str:
     counts = []
     for label, pattern in (
         ("assert_eq", re.compile(r"\bassert_eq\s*!")),
@@ -303,15 +333,19 @@ def assertion_summary(body: str) -> str:
         ("is_err", re.compile(r"\.is_err\(\)")),
         ("unwrap", re.compile(r"\.unwrap\(\)")),
         ("expect", re.compile(r"\.expect\(")),
-        ("helper", re.compile(r"\b(assert|check)[A-Za-z_]*\s*\(")),
+        ("helper", HELPER_RE),
     ):
         n = len(pattern.findall(body))
         if n:
             counts.append(f"{label}x{n}")
+    if masked_body:
+        n = match_panic_blocks(masked_body)
+        if n:
+            counts.append(f"match_panicx{n}")
     return " ".join(counts) if counts else "（无断言）"
 
 
-def classify(rel_path, name, header, body, has_should_panic, audit=None):
+def classify(rel_path, name, header, body, has_should_panic, audit=None, masked_body=None):
     """返回 (门, 依据, 处置)。
 
     header 同时承载两种用途：条款门（可核条目 §<数字>）与病史门的**文件头半径**
@@ -320,7 +354,12 @@ def classify(rel_path, name, header, body, has_should_panic, audit=None):
     audit：本条测试若在 0.6-10 的 40 条分层抽样里，传 {verdict, evidence}——
       审计确认「真实支撑」的才给「留」，判为「不相关/泛泛」的一律「待核」。
       未经审计的条款引用也只到「待核」：有引用不等于引用撑得住断言。
+
+    masked_body：同一函数体的**掩码行**（字符串与注释已抹掉）。match + panic! 形态
+    只在掩码行上判定，避免注释里的 match/panic! 造成假阳性；缺省时退回 body。
     """
+    if masked_body is None:
+        masked_body = body
     clause = bool(CLAUSE_RE.search(header))
     history = bool(HISTORY_RE.search(body)) or bool(HISTORY_RE.search(header))
     if rel_path.startswith(NO_RETIRE_PATHS):
@@ -341,9 +380,19 @@ def classify(rel_path, name, header, body, has_should_panic, audit=None):
         return "条款", "文件头有可核条目（§<数字>），但未经抽样审计确认", "待核"
     if LOOSE_REF_RE.search(header):
         return "待判", "文件头只引整篇 RFC/规范而无节号（收紧后不算条款门）——需人工核", "待核"
-    if not ASSERT_RE.search(body) and not HELPER_RE.search(body) and not has_should_panic:
-        return "均不通过", "体内无任何断言（含委托断言助手）、也无 should_panic——证明门机器可判", "退役候选"
-    if HELPER_RE.search(body) and not ASSERT_RE.search(body):
+    has_helper = bool(HELPER_RE.search(body))
+    has_match_panic = match_panic_blocks(masked_body) > 0
+    no_macro = not ASSERT_RE.search(body)
+    # 「均不通过」是机器的**确信判决**（体内一条断言都没有），必须判准；
+    # 「退役候选」只是待人工复核的池子，池子大小不是判决。
+    # 故 0.6-15 的两处放宽只改「均不通过」这一档：体内唯一的断言形态是
+    # 委托助手（含数字的名字）或 match + panic! 时，改落「待判/待判」——
+    # 其余分箱（弱断言池等）一律按原判据走，不因放宽而变动。
+    if no_macro and not has_helper and not has_match_panic and not has_should_panic:
+        return "均不通过", "体内无任何断言（含委托断言助手、match+panic 形态）、也无 should_panic——证明门机器可判", "退役候选"
+    if no_macro and not has_helper and not has_should_panic and has_match_panic:
+        return "待判", "两门皆不过；断言为 match + panic! 形态，机器不判其覆盖力", "待判"
+    if has_helper and no_macro:
         return "待判", "两门皆不过；断言委托给 assert*/check* 助手，机器不判其覆盖力", "待判"
     if WEAK_RE.search(body) and not STRONG_RE.search(body):
         return "待判", "两门皆不过；断言只有 is_ok/is_some/unwrap 一类弱断言", "退役候选"
@@ -395,6 +444,7 @@ def scan():
                 continue
             start, end = body_span(masked_lines, fn_idx)
             body = "\n".join(lines[start : end + 1])
+            masked_body = "\n".join(masked_lines[start : end + 1])
             attr_block = "\n".join(lines[idx : fn_idx + 1])
             gate, basis, action = classify(
                 rel_path,
@@ -403,12 +453,13 @@ def scan():
                 body + "\n" + doc_block(lines, fn_idx),
                 bool(SHOULD_PANIC_RE.search(attr_block)),
                 audit_index.get((rel_path, name)),
+                masked_body,
             )
             rows.append(
                 {
                     "name": name,
                     "file": rel_path,
-                    "asserts": assertion_summary(body),
+                    "asserts": assertion_summary(body, masked_body),
                     "gate": gate,
                     "basis": basis,
                     "action": action,
@@ -456,6 +507,7 @@ def _selftest_case(tmp, filename, header, body, audit=None):
             name = FN_RE.match(lines[fn_idx]).group(1)
             start, end = body_span(masked_lines, fn_idx)
             body_text = "\n".join(lines[start : end + 1])
+            masked_body = "\n".join(masked_lines[start : end + 1])
             gate, basis, action = classify(
                 rel(filename),
                 name,
@@ -463,6 +515,7 @@ def _selftest_case(tmp, filename, header, body, audit=None):
                 body_text + "\n" + doc_block(lines, fn_idx),
                 bool(SHOULD_PANIC_RE.search("\n".join(lines[idx : fn_idx + 1]))),
                 audit,
+                masked_body,
             )
             return {
                 "name": name,
@@ -559,6 +612,68 @@ def selftest():
             "    assert_eq!(2 + 2, 4);\n"
             "}\n",
         )
+        # 0.6-15：助手名含数字（assert_slot_is_42）与 match + panic! 形态
+        # 都必须被认作断言——旧正则把它们当成「体内无任何断言」，会把有判据的测试
+        # 误分箱成退役候选。另加两条反向对照：match 里没有 panic!、panic! 只在注释里，
+        # 都**不得**被认作断言（证明放宽没有过头）。
+        digit_helper = _selftest_case(
+            tmp, "digit_helper.rs", "//! 没有条款引用\n",
+            "#[test]\n"
+            "fn test_digit_helper_is_an_assertion() {\n"
+            "    let value = 42;\n"
+            "    assert_slot_is_42(&value);\n"
+            "}\n\n"
+            "#[test]\n"
+            "fn test_canary_after_digit_helper() {\n"
+            "    assert_eq!(2 + 2, 4);\n"
+            "}\n",
+        )
+        match_panic = _selftest_case(
+            tmp, "match_panic.rs", "//! 没有条款引用\n",
+            "#[test]\n"
+            "fn test_match_panic_is_an_assertion() {\n"
+            "    let value = 42;\n"
+            "    match value {\n"
+            "        42 => {}\n"
+            '        _ => panic!("expected 42"),\n'
+            "    }\n"
+            "}\n\n"
+            "#[test]\n"
+            "fn test_canary_after_match_panic() {\n"
+            "    assert_eq!(2 + 2, 4);\n"
+            "}\n",
+        )
+        match_no_panic = _selftest_case(
+            tmp, "match_no_panic.rs", "//! 没有条款引用\n",
+            "#[test]\n"
+            "fn test_match_without_panic_is_not_an_assertion() {\n"
+            "    let value = 42;\n"
+            "    match value {\n"
+            "        42 => {}\n"
+            "        _ => {}\n"
+            "    }\n"
+            "}\n\n"
+            "#[test]\n"
+            "fn test_canary_after_match_no_panic() {\n"
+            "    assert_eq!(2 + 2, 4);\n"
+            "}\n",
+        )
+        panic_in_comment = _selftest_case(
+            tmp, "panic_in_comment.rs", "//! 没有条款引用\n",
+            "#[test]\n"
+            "fn test_panic_in_comment_is_not_an_assertion() {\n"
+            "    let value = 42;\n"
+            '    // 若这里 panic!("boom")，测试就会红\n'
+            "    match value {\n"
+            "        42 => {}\n"
+            "        _ => {}\n"
+            "    }\n"
+            "}\n\n"
+            "#[test]\n"
+            "fn test_canary_after_panic_in_comment() {\n"
+            "    assert_eq!(2 + 2, 4);\n"
+            "}\n",
+        )
     ok = True
     if pos["gate"] != "条款" or pos["action"] != "待核":
         print(f"[selftest] FAIL 未审计的条款引用应落 条款/待核，实际 {pos['gate']}/{pos['action']}")
@@ -596,11 +711,44 @@ def selftest():
                 f"实际 {case['action']}（{label}）"
             )
             ok = False
+    for label, case, want_lines in (
+        ("助手名含数字", digit_helper, 4),
+        ("match + panic! 形态", match_panic, 7),
+        ("match 里没有 panic!", match_no_panic, 7),
+        ("panic! 只出现在注释里", panic_in_comment, 8),
+    ):
+        if case["body_lines"] != want_lines:
+            print(
+                f"[selftest] FAIL {label}的函数体边界取错，实际 {case['body_lines']} 行"
+                f"（应为 {want_lines}）"
+            )
+            ok = False
+    for label, case in (
+        ("助手名含数字", digit_helper),
+        ("match + panic! 形态", match_panic),
+    ):
+        if case["gate"] != "待判" or case["action"] != "待判":
+            print(
+                f"[selftest] FAIL {label}必须被认作断言（→待判/待判），"
+                f"实际 {case['gate']}/{case['action']}"
+            )
+            ok = False
+    for label, case in (
+        ("match 里没有 panic!", match_no_panic),
+        ("panic! 只出现在注释里", panic_in_comment),
+    ):
+        if case["gate"] != "均不通过" or case["action"] != "退役候选":
+            print(
+                f"[selftest] FAIL {label}不得被认作断言，"
+                f"实际 {case['gate']}/{case['action']}"
+            )
+            ok = False
     if ok:
         print(
             "[selftest] OK：§节号正例→条款/待核、审计确认真实支撑→条款/留、弱断言反例→待判/退役候选、"
             "无断言反例→均不通过/退役候选、裸 RFC 反例→不过条款门、"
-            "字面量与注释里的花括号不截断函数体（4 例）"
+            "字面量与注释里的花括号不截断函数体（4 例）、"
+            "含数字的助手名与 match+panic 形态被认作断言（2 例，含 2 例反向对照）"
         )
     else:
         print("[selftest] FAIL：见上方逐条失败项")

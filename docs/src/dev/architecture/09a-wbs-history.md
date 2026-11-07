@@ -3780,3 +3780,81 @@ check-docs-orphan / refs / truth 0 · `docs:build` 绿。
 现在只在全过时打印 OK，失败时打印 FAIL 并以退出码 1 收场（与 `check-soundness.py` 同一类修法）。
 
 **回退**：本卡一笔提交（生成器 + 普查表 + 本页同提交），`git revert <sha>` 即整体恢复。
+
+### 八、第三批测试退役（2026-11-07）
+
+按 `coding-rules` 第七部分：从普查表的「退役候选」里取**一个目录簇**——
+`src/middle/passes/codegen/tests/`（`middle::passes::codegen` 一个被测模块）的 5 条退役候选，
+逐条判定，**删 2 / 留 3**。
+
+（卡面拟编「七」，但「七、普查生成器修正」已由 0.6-13 占用——两卡并行推进，编号按落定先后。）
+
+**判留口径沿用上一批**：单元级观察点只能被另一条**单元测试**替代；语料 / 集成属进程边界层，
+不能替代单元观察点。
+
+#### 逐条判定表
+
+| 测试名 | 断言什么 | 替代覆盖测试名 | 处置 | 依据 |
+| --- | --- | --- | --- | --- |
+| `test_execute_module_with_global_slot` | `run_fixture()` + `assert_slot_is_42(&interp)`——与同文件 `test_global_slot_store_then_load_roundtrip` 的函数体**逐字相同**（去注释后仅函数名不同） | `test_global_slot_store_then_load_roundtrip` | 删 | 条款门无（文件头与函数体无 §节号）、病史门无（无 issue/回归/缺陷/事故）；证明门 ③ 不成立——它的文档注释声称验「`execute_module` 入口路径返回非 Void」，但体内从未观察 `execute_module` 的返回值（`run_fixture` 用 `.expect(...)` 丢掉了），声称的意图没有实现，函数体是纯重复 ⇒ 零判据增量 |
+| `test_scope_manager_basic` | `lookup("x").is_some()` + `lookup("y").is_none()`（插入一个 Symbol 后查得到 / 从未插入的名字查不到） | `test_scope_nesting` | 删 | 条款门无、病史门无；证明门 ③ 不成立——`test_scope_nesting` 严格覆盖：正查（`lookup("a").is_some()`）、负查（`lookup("b").is_none()`）、`scope_level` 计数、插入的 `Symbol` 形状同形；「从未插入查不到」与「弹出后查不到」在 `SymbolScopeManager::lookup` 里是同一条路径（逐层 `scope.get(name)`，找不到即 `None`）⇒ 本条零增量 |
+| `test_global_slot_store_then_load_roundtrip` | `assert_slot_is_42(&interp)`——手工 IR 的全局槽位写入后读回是 `Int(42)` | 无 | 留 | 条款门无、病史门无；**证明门成立**——「不走序列化直连执行」这条路径的**唯一**观察点（序列化变体是另一条路径），且断言了具体值 |
+| `test_global_slot_survives_serialization_roundtrip` | 同上，但经 `write_to` → `read_from` 往返后再执行 | 无 | 留 | **证明门成立**——序列化往返的唯一观察点 |
+| `test_register_overflow` | `to_reg(&Operand::Local(256)).is_err()`——寄存器号越界必须被拒绝 | 无 | 留 | **证明门成立**——`OperandResolver::to_reg` 的 `id > 255` 拒绝分支的**唯一**单元观察点（字节码层有各自独立的溢出检查，不覆盖本函数；全仓无第二条用例让 `to_reg` 越界）；`is_err()` 是有区分力的断言（守卫被去掉就会红），不是「只证明没 panic」 |
+
+**数字**：全仓 `#[test]` 3413 → 3411；`git diff` 计 `-#[test]` 行 = 2（判删 2 = 实删 2，diff 只增 0 行）；
+census 门 均不通过 15 → 14 · 待判 924 → 923；处置 退役候选 105 → 103。
+
+**本批查出的一处普查盲点**：普查的「委托断言」识别 `\b(assert|check)[A-Za-z_]*\s*\(`
+**匹配不到名字里带数字的助手**——`[A-Za-z_]*` 不含数字，故 `assert_slot_is_42(&interp)` 不被识别为断言，
+本批 5 条候选里的 2 条因此被误分箱成「体内无任何断言」。全仓 15 条「均不通过」逐条复核后，
+**4 条其实有断言**（3 条数字助手 + 1 条 `src/backends/interpreter/tests/weak.rs::test_weak_from_arc` 的
+`match` + `panic!` 形态），其余 11 条确实一条断言都没有。
+**这 4 条若按机器的「均不通过」直接带走，会误删有判据的测试**——本批逐条人判后才没有删。
+生成器在 `scripts/` 下，不在本卡 inScope，留待另卡修。
+
+**回退**：本批一笔提交（本页与 `test-gate-census.md` / `test-gate-census.tsv` 同提交），
+`git revert <sha>` 即整体恢复。
+
+### 九、普查判据修正（2026-11-07）
+
+修 `scripts/dev/test-gate-census.py` 对「体内有没有断言」的识别——0.6-14 第三批查出的两处盲点。
+**本轮不删任何测试**（全仓 `#[test]` 3411 条不变）。
+
+**修了什么**
+
+1. **委托断言的名字部分放开数字**：`\b(assert|check)[A-Za-z_]*\s*\(` → `\b(assert|check)[A-Za-z0-9_]*\s*\(`。
+   旧式样匹配不到 `assert_slot_is_42(&interp)` 这类含数字的助手名，含它的测试被当成「体内一条断言都没有」。
+2. **新增 `match` + `panic!` 形态**：`match <expr> { … panic!(…) … }`。识别方式：`match` 关键字后到
+   第一个 `{`（扫描表达式）开出的块，块边界用**花括号配平**确定，块内出现 `panic!(` 才算；
+   **判定在掩码行上做**——字符串与注释里的花括号不参与配平，注释里的 `panic!` 不算断言。
+
+**分箱差异：3 条**（门与处置变了；另有 77 条只改「断言摘要」那一列）
+
+- `test_weak_from_arc`（src/backends/interpreter/tests/weak.rs）：均不通过 / 退役候选 → 待判 / 待判。
+  依据：体内是 `match weak { RuntimeValue::Weak(_) => {} _ => panic!("Expected Weak variant") }`——
+  断言变体，形态原先未被识别。
+- `test_global_slot_store_then_load_roundtrip`（src/middle/passes/codegen/tests/global_slot.rs）：
+  均不通过 / 退役候选 → 待判 / 待判。依据：断言委托给 `assert_slot_is_42(&interp)`，
+  助手名含数字，旧式样匹配不到。
+- `test_global_slot_survives_serialization_roundtrip`（同文件）：同上。
+
+**放宽只改「均不通过」一档**：该档是机器的**确信判决**（体内一条断言都没有），判准是硬要求；
+「退役候选」只是待人工复核的池子，池子大小不是判决。弱断言池等其余分箱一律按原判据走。
+结果：门 均不通过 14 → 11 · 待判 923 → 926；处置 退役候选 103 → 100 · 待判 411 → 414。
+
+**现存「均不通过」11 条逐条复核**：11 条确实一条断言都没有（逐条清单与复核结论见
+`test-gate-census.md` 的「生成器判据修正（0.6-15）」节）。其中 5 条是 0.6-11a 判定表里
+指认不出替代覆盖而判留的，本轮复核结论与之一致。
+
+**逆向抽查（放宽有没有过头）**：从 88 条新认作断言的条目里按固定种子（20261107）抽 5 条读原文——
+`test_substitute_through_assoc_type`、`test_unlisted_file_rejected`、`test_assignment_constraint_dynamic`、
+`test_delta_add_token`、`test_e2e_phase4_into_diagnostic_predicate_violation_e4018`；
+5 条全都在断言具体值或具体变体（命中臂里 `assert_eq!` / `assert!`，未命中 `panic!`），
+换成另一条正确实现会让它们红。反向对照也进了 `--selftest`：`match` 里没有 `panic!`、
+`panic!` 只出现在注释里，两种都**不得**被认作断言。
+
+**判据有牙（发育性证明）**：把生成器退回旧实现（`HELPER_RE` 不含数字 + 关掉 `match` + `panic!` 识别），
+新加的 `--selftest` 用例**全红**、退出码 1；新实现全过。
+
+**回退**：生成器与普查表同提交，`git revert <sha>` 即整体恢复。

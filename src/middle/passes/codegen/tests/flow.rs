@@ -57,23 +57,6 @@ fn test_flow_manager() {
 }
 
 #[test]
-fn test_scope_manager_basic() {
-    let mut manager = SymbolScopeManager::new();
-    manager.insert(
-        "x".to_string(),
-        Symbol {
-            name: "x".to_string(),
-            ty: MonoType::Int(64),
-            storage: Storage::Local(0),
-            is_mut: false,
-            scope_level: 0,
-        },
-    );
-    assert!(manager.lookup("x").is_some());
-    assert!(manager.lookup("y").is_none());
-}
-
-#[test]
 fn test_scope_nesting() {
     let mut manager = SymbolScopeManager::new();
     manager.insert(

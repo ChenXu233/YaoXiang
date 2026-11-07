@@ -9,13 +9,13 @@ WBS 0.6「大清理」的前置材料：把全仓 `#[test]` 按 [coding-rules �
 **三扇门（条款 / 病史 / 证明）** 机械分类，产出一份可重跑的逐条判定表；再对条款门做一次
 分层抽样审计（40 条），量出「引了条款但撑不住断言」的比例，并用**收紧后的判据**重算分布。
 **本页与生成器本身只读不改测试**；测试的退役按批次执行（每批一个提交、可整体 `git revert`），
-执行结果登记在下方「首批退役 / 第二批退役」两节与 `09a`。
+执行结果登记在下方「首批退役 / 第二批退役 / 第三批退役」三节与 `09a`。
 
 生成物：
 
 | 产物 | 作用 |
 | --- | --- |
-| `docs/src/dev/test-gate-census.tsv` | 逐条判定表（3413 行 + 表头），与本页同目录 |
+| `docs/src/dev/test-gate-census.tsv` | 逐条判定表（3411 行 + 表头），与本页同目录 |
 | `scripts/dev/test-gate-census.py` | 生成器（可重跑、可 `--check`、可 `--selftest`） |
 | `scripts/dev/test-gate-census-audit.py` | 抽样审计：按固定种子复现 40 条样本（`--sample` / `--check`） |
 | `scripts/dev/test-gate-census-audit.json` | 40 条逐条判定与依据（生成器读它把「审计确认真实支撑」判为留） |
@@ -34,7 +34,7 @@ WBS 0.6「大清理」的前置材料：把全仓 `#[test]` 按 [coding-rules �
 | `tests/yx_runner.rs` / `tests/yx_multifile_runner.rs` | 2 / 1 |
 | `tools/` | 75 |
 | `benches/` | 9 |
-| **合计** | **3413**（296 个文件） |
+| **合计** | **3411**（296 个文件） |
 
 ### 三扇门的机器判据
 
@@ -42,7 +42,7 @@ WBS 0.6「大清理」的前置材料：把全仓 `#[test]` 按 [coding-rules �
 | --- | --- | --- |
 | 条款门（0.6-10 收紧） | 文件头前 25 行出现**可核条目**：节号形态 `§<数字>`（含 `RFC-<数字> §<数字>`、`SPEC §<数字>`）；`src/**/tests/` 下的文件连父 `mod.rs` 一起看 | 该测试对得上一条可指名的条款 |
 | 病史门 | 测试函数体、函数文档注释，或**文件头**（`//! 回归背景：issue #226` 这类）点名真实故障：`issue #N` / 回归 / 缺陷 / 事故 | 该测试钉的是一次已发生的事故 |
-| 证明门 | **机器判不了**（「换一个正确的替代实现，它会不会红」需要人判）。故前两门都不过的一律落「待判」，不自动判成「均不通过」；唯一例外是体内**一条断言都没有**（含委托给 `assert*/check*` 助手的也没有、也没有 `#[should_panic]`） | 只能给出「待判」或「无断言」 |
+| 证明门 | **机器判不了**（「换一个正确的替代实现，它会不会红」需要人判）。故前两门都不过的一律落「待判」，不自动判成「均不通过」；唯一例外是体内**一条断言都没有**（含委托给 `assert*/check*` 助手的也没有、`match` + `panic!` 形态的也没有、也没有 `#[should_panic]`） | 只能给出「待判」或「无断言」 |
 
 收紧的理由：0.6-9 的条款门只要求文件头**出现 `§`/`RFC`/`SPEC` 字样**，于是 2403 条被判「留」。
 0.6-10 的 40 条分层抽样实测：**一半的引用撑不住断言**（见下节）。收紧后只认节号形态，且
@@ -76,17 +76,17 @@ WBS 0.6「大清理」的前置材料：把全仓 `#[test]` 按 [coding-rules �
 | 条款（有可核条目） | 1714 |
 | 病史 | 313 |
 | 证明（spec-shaped 判据面 / 现状锚） | 447 |
-| 待判（两门皆不过，证明门待人工） | 924 |
-| 均不通过（体内无任何断言） | 15 |
-| **合计** | **3413** |
+| 待判（两门皆不过，证明门待人工） | 926 |
+| 均不通过（体内无任何断言） | 11 |
+| **合计** | **3411** |
 
 | 处置 | 条数 | 对比 0.6-9 |
 | --- | --- | --- |
 | 留 | **775** | 2897（−2122） |
 | 待核 | 2122 | 0（新增档位） |
-| 待判 | 411 | 412（第二批退役后 −1，生成器修正后不变） |
-| 退役候选 | 105 | 136（第一批退役 21 条、第二批退役 11 条，生成器修正 +1） |
-| **合计** | **3413** | — |
+| 待判 | 414 | 412（第二批退役后 −1，0.6-15 判据修正 +3） |
+| 退役候选 | 100 | 136（第一批退役 21 条、第二批退役 11 条，生成器修正 +1，第三批 −2，0.6-15 判据修正 −3） |
+| **合计** | **3411** | — |
 
 两点口径变化要说明：
 
@@ -178,7 +178,9 @@ WBS 0.6「大清理」的前置材料：把全仓 `#[test]` 按 [coding-rules �
 - **「留」从 2897 掉到 775**（−2122）——正是那 2122 条「凭引用就留」的落为待核；收紧生效，
   不是分布调参。
 - **退役候选与条款无关**：首批 26 条本就与条款无关（体内一条断言都没有），审计不改它们的判定；第一批 21 条已退役，候选 136 → 115；第二批 11 条已退役，候选 115 → 104；
-  0.6-13 修生成器（函数体边界不再被字面量里的花括号截断）后 +1，候选 104 → 105。
+  0.6-13 修生成器（函数体边界不再被字面量里的花括号截断）后 +1，候选 104 → 105；
+  第三批 2 条已退役，候选 105 → 103；0.6-15 修判据（助手名含数字 / `match` + `panic!` 形态被认作断言）
+  后 3 条从「均不通过」移出，候选 103 → 100。
   第二批 11 条同理：体内**有**断言，但只有 `is_some()` / `is_none()` 一类弱断言，不锁定绑定力、
   也不锁定解析结果。
   这也说明「退役面」与「条款错引面」是两个问题：错引的测试多数有断言，该做的是补条款或改引用，
@@ -198,7 +200,7 @@ WBS 0.6「大清理」的前置材料：把全仓 `#[test]` 按 [coding-rules �
 
 | 项 | 0.6-2 勘察 | 本次 | 差异原因 |
 | --- | --- | --- | --- |
-| 全仓 `#[test]` | 3443 | 3413 | 0.6-2 之后新增 2 条（E3005 与 E3022 的 check 口径回归测试），又按首批退役清单删除 21 条无断言测试、按第二批清单删除 11 条弱断言测试；净 −30 |
+| 全仓 `#[test]` | 3443 | 3411 | 0.6-2 之后新增 2 条（E3005 与 E3022 的 check 口径回归测试），又按首批清单删除 21 条无断言测试、按第二批清单删除 11 条弱断言测试、按第三批清单删除 2 条；净 −32 |
 | 测试文件数 | 296 | 296 | 未变 |
 | 条款门 | 227 文件（77%） | 收紧后 113 文件；按条 1714 | 判据从「出现字样」收紧为「有节号 `§<数字>`」，故文件数近乎腰斩 |
 | 病史信号 | 442 条 / 148 文件 | 门内 313 条；三半径：测试自身 7 / 文件头 291（38 文件）/ 整文件 1218（79 文件） | 0.6-2 的 148 文件比本次整文件半径 79 文件还宽，其词表/范围更大；本次严格按卡面四信号 |
@@ -211,7 +213,7 @@ WBS 0.6「大清理」的前置材料：把全仓 `#[test]` 按 [coding-rules �
    35%–65%）——「引用」与「引用支撑断言」是两件事，旧口径把前者当成了后者。
 2. **收紧后真正有条款支撑的约 1202 条**（区间 846–1557），其余要么待核补票，要么本来就该按
    病史门/证明门判定。
-3. **退役面与条款错引面无关**：候选 136 条与条款无关（无断言/弱断言）；首批已退役 21 条、第二批已退役 11 条，生成器修正 +1，候选降为 105。
+3. **退役面与条款错引面无关**：候选 136 条与条款无关（无断言/弱断言）；首批已退役 21 条、第二批已退役 11 条，生成器修正 +1，第三批 −2，候选降为 103。
 4. **病史门是最大的合法留来源**（313 条）：它证明「钉住一次真实事故」比「抄一句 RFC」更靠得住。
 
 ## 首批退役（已执行，2026-11-06）
@@ -305,6 +307,127 @@ WBS 0.6「大清理」的前置材料：把全仓 `#[test]` 按 [coding-rules �
 待判 412 → 411 · 退役候选 104 → 105。**全仓 `#[test]` 数不变（3413）**——本轮只改判据的实现，
 不改任何测试。
 
+## 第三批退役（已执行，2026-11-07）
+
+**第三批：`src/middle/passes/codegen/tests/` 的 5 条退役候选逐条判定，退役 2 条、保留 3 条。**
+（单一目录簇 = `middle::passes::codegen` 一个被测模块；判据 = coding-rules 第七部分的**三扇门皆不过**。）
+
+本批沿用上一批立的**判留口径**：单元级观察点只能被另一条**单元测试**替代；语料 / 集成属进程边界层，
+不能替代单元观察点。
+
+- **已退役 2 条**：
+  - `test_execute_module_with_global_slot`（`global_slot.rs`）——函数体与同文件的
+    `test_global_slot_store_then_load_roundtrip` **逐字相同**（去注释后仅函数名不同）：都是
+    `run_fixture()` + `assert_slot_is_42(&interp)`。它的文档注释声称验「`execute_module` 入口路径返回
+    非 Void」，但体内从未观察 `execute_module` 的返回值（`run_fixture` 用 `.expect(...)` 把它丢掉了）——
+    声称的意图没有实现，函数体是纯重复 ⇒ 零判据增量。替代覆盖 = `test_global_slot_store_then_load_roundtrip`。
+  - `test_scope_manager_basic`（`flow.rs`）——同文件的 `test_scope_nesting` 严格覆盖：正查
+    （`lookup("a").is_some()`）、负查（`lookup("b").is_none()`）、`scope_level` 计数、插入的 `Symbol`
+    形状（`symbol("a", Int(64), Local(0), false, 0)` 与本条内联的 `Symbol` 同形）。
+    「从未插入的名字查不到」与「弹出后查不到」在 `SymbolScopeManager::lookup` 里是同一条路径
+    （逐层 `scope.get(name)`，找不到即 `None`）⇒ 本条零增量。替代覆盖 = `test_scope_nesting`。
+- **保留 3 条**：
+  - `test_global_slot_store_then_load_roundtrip`——「不走序列化直连执行」这条路径的唯一观察点
+    （序列化变体是另一条路径），且 `assert_slot_is_42` 断言了具体值。
+  - `test_global_slot_survives_serialization_roundtrip`——序列化往返（`write_to` → `read_from` → 执行）
+    的唯一观察点。
+  - `test_register_overflow`（`operand.rs`）——`OperandResolver::to_reg` 的 `id > 255` 拒绝分支的
+    **唯一**单元观察点（字节码层有各自独立的溢出检查，不覆盖本函数；全仓无第二条用例让 `to_reg` 越界）。
+    `is_err()` 是有区分力的断言（守卫被去掉就会红），不是「只证明没 panic」。
+- **回退**：整批是一个提交（本页与 `test-gate-census.tsv` 同提交），`git revert <sha>` 即整体回退。
+
+### 本批查出的一处普查盲点（**0.6-15 已修**，见下节「生成器判据修正」）
+
+普查的「委托断言」识别 `\b(assert|check)[A-Za-z_]*\s*\(` **匹配不到名字里带数字的助手**：
+`[A-Za-z_]*` 不含数字，于是 `assert_slot_is_42(&interp)` 这种调用**不被识别为断言**——
+本批 5 条候选里的 2 条因此被误分箱成「体内无任何断言」。
+
+全仓 15 条「均不通过」逐条复核（把助手名放宽到含数字、并额外识别 `match` + `panic!` 形态）后：
+**4 条其实有断言**——3 条是上述数字助手（`assert_slot_is_42`），1 条是
+`src/backends/interpreter/tests/weak.rs` 的 `test_weak_from_arc`（`match` + `panic!` 形态；
+test-specification 规则 6.1 要求写成 `assert!(matches!(...))`，但它确实在断言）。其余 11 条确实一条断言都没有。
+
+**这 4 条若按机器的「均不通过」直接带走，会误删有判据的测试**——本批逐条人判后才没有删；
+生成器侧的修法见下节「生成器判据修正（0.6-15）」。
+
+## 生成器判据修正（0.6-15）
+
+**两处判据盲点已修：助手名含数字、`match` + `panic!` 形态。**
+本轮**不删任何测试**（全仓 `#[test]` 3411 条不变），只改生成器对「体内有没有断言」的识别。
+
+### 修了什么
+
+1. **委托断言的名字部分放开数字**：`\b(assert|check)[A-Za-z_]*\s*\(` → `\b(assert|check)[A-Za-z0-9_]*\s*\(`。
+   旧式样匹配不到 `assert_slot_is_42(&interp)` 这类含数字的助手名，于是含它的测试被当成
+   「体内一条断言都没有」。
+2. **新增 `match` + `panic!` 形态**：`match <expr> { … panic!(…) … }`——断言写在某个臂里，
+   词法上看不到 `assert!` 宏（test-specification 规则 6.1 要求写成 `assert!(matches!(...))`，
+   但存量代码有此形态）。识别方式：`match` 关键字后到第一个 `{`（扫描表达式）开出的块，
+   块边界用**花括号配平**确定，块内出现 `panic!(` 才算。**判定在掩码行上做**——
+   字符串与注释里的花括号不参与配平，注释里的 `panic!` 也不会被当成断言。
+
+### 分箱差异：3 条（门与处置变了）
+
+| 测试名 | 文件 | 旧箱 | 新箱 | 依据 |
+| --- | --- | --- | --- | --- |
+| `test_weak_from_arc` | src/backends/interpreter/tests/weak.rs | 均不通过 / 退役候选 | 待判 / 待判 | 体内是 `match weak { RuntimeValue::Weak(_) => {} _ => panic!("Expected Weak variant") }`——断言变体，形态原先未被识别；现认作断言，机器不判其覆盖力 |
+| `test_global_slot_store_then_load_roundtrip` | src/middle/passes/codegen/tests/global_slot.rs | 均不通过 / 退役候选 | 待判 / 待判 | 断言委托给 `assert_slot_is_42(&interp)`——助手名含数字，旧式样匹配不到；现认作断言 |
+| `test_global_slot_survives_serialization_roundtrip` | src/middle/passes/codegen/tests/global_slot.rs | 均不通过 / 退役候选 | 待判 / 待判 | 同上（序列化往返那条） |
+
+另有 **77 条只改了「断言摘要」那一列**（门与处置不变）：多数是摘要里多出 `match_panicxN`
+（体内有 `match` + `panic!` 形态），4 条多出 `helperxN`（`src/driver/tests/manifest_error.rs` 3 条、
+`src/package/tests/cache.rs` 1 条——助手名含数字）。
+
+**放宽只改「均不通过」一档**：该档是机器的**确信判决**（体内一条断言都没有），判准是硬要求；
+「退役候选」只是待人工复核的池子，池子大小不是判决。故弱断言池等其余分箱一律按原判据走。
+结果：门 均不通过 14 → 11 · 待判 923 → 926；处置 退役候选 103 → 100 · 待判 411 → 414。
+
+### 现存「均不通过」11 条：逐条复核结论
+
+全仓 11 条「均不通过」逐条读原文复核后，**11 条确实一条断言都没有**（含 `assert*` / `check*` 助手、
+`match` + `panic!` 形态都没有，也没有 `#[should_panic]`）：
+
+| 测试名 | 文件 | 体内实际做什么 | 复核结论 |
+| --- | --- | --- | --- |
+| `test_run_bytecode_file_roundtrip` | src/backends/interpreter/tests/bytecode_load.rs | 5 处 `.expect(...)`，只保证不崩 | 真无断言（只证明没崩） |
+| `test_normalizer_context` | src/frontend/core/types/eval/tests/normalizer.rs | 取 `context()` 句柄即丢弃 | 真无断言 |
+| `test_type_computer_new_and_with_config` | src/frontend/core/types/eval/tests/reducer.rs | 构造两个 `TypeComputer` 取 context 即丢弃 | 真无断言 |
+| `test_type_computer_compute_type_ref` | src/frontend/core/types/eval/tests/reducer.rs | 算 `compute(TypeRef)` 后丢弃 | 真无断言 |
+| `test_reducer_reduce_type_ref_with_alias_chain` | src/frontend/core/types/eval/tests/reducer.rs | 链式别名 `reduce` 后丢弃 | 真无断言 |
+| `test_reducer_reduce_type_ref_self_referential` | src/frontend/core/types/eval/tests/reducer.rs | 自指别名 `reduce` 后丢弃 | 真无断言 |
+| `test_document_symbol_items_invalid_code` | src/lsp/handlers/tests/completion.rs | 对非法内容调 `document_symbol_items` 后丢弃 | 真无断言（只证明没 panic） |
+| `test_handle_formatting` | src/lsp/handlers/tests/formatting.rs | 调 `handle_formatting` 后丢弃 edits | 真无断言（只证明没 panic） |
+| `test_handle_range_formatting` | src/lsp/handlers/tests/formatting.rs | 调 `handle_range_formatting` 后丢弃 edits | 真无断言（只证明没 panic） |
+| `test_cli_modules_available_on_native` | src/tests/feature_gate.rs | 构造 lsp / repl 即丢弃（wasm32 cfg 门内） | 真无断言 |
+| `test_z3_modules_available_on_native` | src/tests/feature_gate.rs | 构造 `Z3Backend`；`let _: Z3_context = std::ptr::null_mut();` 只是类型标注 | 真无断言 |
+
+其中 5 条（`test_normalizer_context` 与 reducer.rs 的 4 条）是 0.6-11a 判定表里**指认不出替代覆盖**
+而判留的；本轮复核结论与之一致。
+
+### 逆向抽查：放宽有没有过头
+
+从 88 条「新认作断言」的条目里按固定种子（20261107）抽 5 条读原文，确认它们真的在断言：
+
+| 抽查条目 | 文件 | 原文里的断言 |
+| --- | --- | --- |
+| `test_substitute_through_assoc_type` | src/frontend/core/types/tests/substitute.rs | `match` 命中的臂里两条 `assert_eq!`，未命中则 `panic!("Expected AssocType")` |
+| `test_unlisted_file_rejected` | src/package/tests/yxpkg.rs | 命中臂里 `assert!(msg.contains("src/evil.yx"))`，未命中 `panic!("expected InvalidPackage, got …")` |
+| `test_assignment_constraint_dynamic` | src/frontend/core/sema/inference/tests/assignment.rs | 命中臂里 `assert_eq!` 比对约束类型，未命中 `panic!("不是 Dynamic 变体…")` |
+| `test_delta_add_token` | src/lsp/handlers/tests/semantic_tokens.rs | 命中臂里 `assert!(!delta.edits.is_empty())`，未命中 `panic!("Expected TokensDelta variant")` |
+| `test_e2e_phase4_into_diagnostic_predicate_violation_e4018` | src/frontend/core/sema/tests/rfc027_phase4_e2e.rs | 命中臂里三条 `assert_eq!` / `assert!` 校验错误码与消息，未命中 `panic!("不是 Disproved…")` |
+
+5 条全都在断言具体值或具体变体（把实现换成另一条正确路径会让它们红）——**放宽没有过头**。
+反向对照也进了 `--selftest`：`match` 里没有 `panic!`、`panic!` 只出现在注释里，两种都**不得**被认作断言。
+
+### 判据有牙（发育性证明）
+
+把生成器退回旧实现（`HELPER_RE` 不含数字 + 关掉 `match` + `panic!` 识别），新加的 `--selftest` 用例
+**全红**、退出码 1；新实现全过。
+
+### 回退
+
+生成器与普查表同提交，`git revert <sha>` 即整体恢复。
+
 ## 复跑与自检
 
 ```bash
@@ -324,6 +447,10 @@ python scripts/dev/test-gate-census-audit.py --check   # 审计数据文件是�
   会把配平拉歪，函数体因此被截断——`test_prefix_info_lbrace`（体内有 `tokenize("{")`）曾被截到文件尾，
   「断言摘要」取到文件余下部分，分箱成「待判」而非「退役候选」。现已改为先掩码非代码区域
   （字符串 / 字符字面量 / 行注释 / 块注释 / 原始字符串）再配平，见下节「生成器修正」。
+- **「委托断言」识别（0.6-15 已修）**：旧式样 `\b(assert|check)[A-Za-z_]*\s*\(` 的 `[A-Za-z_]*` 不含数字，
+  故 `assert_slot_is_42(&interp)` 这类调用不被识别为断言——含这种调用的测试会被误判成「体内无任何断言」。
+  实测当时全仓 15 条「均不通过」里有 4 条其实有断言（3 条数字助手 + 1 条 `match` + `panic!` 形态）。
+  现已把名字部分放宽为 `[A-Za-z0-9_]*` 并新增 `match` + `panic!` 形态识别，见下节「生成器判据修正」。
 - **证明门不判**：任何「两门皆不过」的测试只落「待判」或「退役候选」，生成器不宣布「该删」。
 - **不跨文件去重**：完全重复的测试不在本表识别（0.6-2 已实测仅 1%，不构成退役面）。
 - **审计只覆盖 40 条**：审计结论只用于给这 40 条定性，并给出 2403 条池的**比例**；不得把某条的
