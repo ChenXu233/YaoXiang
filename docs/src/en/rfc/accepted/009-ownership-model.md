@@ -48,6 +48,12 @@ Peek/in-place edit    Take away         Shared holding     Clone one copy      S
   type system)
 - ❌ Users do not need to know the difference between Rc and Arc (compiler selects automatically)
 
+> **Wiring with quantities**: Move/Dup/Clone are the syntactic surface of the binding quantities
+> `q ∈ {0, 1, ω}`—1 (linear) and ω (unrestricted)—with clone() explicitly crossing quantities.
+> q=0 (zero quantity: computed at compile time, erased at runtime) is driven by the strength
+> declarations of RFC-011 §4.1 and shares the same binding discipline as this model's 1/ω:
+> ownership and compile-time-ness are three readings of one rule.
+
 > **Programming burden**: `&T` is Duplicable, `&mut T` is not — two type attributes, zero special
 > rules, fully automatic compiler. **Performance guarantee**: Move is zero overhead, tokens are zero
 > overhead (zero-size types, disappear after compilation), `ref` is pay-as-you-go, no GC pauses.

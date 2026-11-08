@@ -694,21 +694,21 @@ LiteralType   ::= Identifier ':' Int          // Compile-time constant (candidat
 > annotation”: in `add: (a: Int, b: Int) -> Int = a + b`, `a`/`b` are runtime value parameters
 > because neither appears in any type position.
 
-**Terminology**: A generic parameter annotated with a concrete type other than `Type` (such as
-`Int`) is called a **compile-time value-parameter candidate**. Whether it becomes a compile-time
-value parameter depends on whether its value is referenced in a type position (value dependency).
-**No `const` keyword is required** (the implementation once used “const generic” for this concept,
-but the documentation consistently uses “compile-time value parameter”).
+**Terminology**: Whether a generic parameter annotated with a concrete type other than `Type`
+(such as `Int`) enters compile time depends on whether its value is referenced in a type position
+(value dependency). **No `const` keyword is required** (the implementation once used “const
+generic” for this concept, but the documentation consistently uses “compile-time value parameter”).
 
 > **Design basis**:
 > [RFC-011 §4.1 Compile-Time Value Parameters](../../rfc/accepted/011-generic-type-system.md).
 
-**Decision rules (two steps)**:
-
-1. **Syntactic screening**: A parameter annotated with a concrete type other than `Type`
-   (`Int`/`Bool`/`Float`) → candidate.
-2. **Usage screening**: The candidate name is referenced in a **type position** → a true
-   compile-time value parameter; otherwise → a **runtime value parameter**.
+The decision is driven by **strength declarations locally readable within the signature**: writing
+a reference to a value parameter in a type position (`(k: N)`, `Array(T, N)`, `Assert(N > 0)`)
+is a strength declaration, and the **quantity** is its mechanical reading. Every binding infers a
+quantity `q ∈ {0, 1, ω}`: q=0 computes at compile time, erases at runtime, and occupies no slot;
+q=1 is linear (Move); q=ω is unrestricted (Dup)—see Chapter 11 for 1/ω. This is not implicit: a
+value name in a type position is a declaration the author wrote by hand, the same act as writing
+`b: Positive(b)` (§8.3).
 
 **A “type position” means every `Type` subtree in a declaration**, not a fixed list of positions.
 The annotation type of a formal, a function's return type, a type body's field type, the type of an
@@ -726,49 +726,41 @@ misclassified as a runtime value parameter.
    having the same spelling **does not constitute shadowing**: the value and type namespaces do not
    use the same table (see the scope and shadowing rules in [modules](modules.md)); the two `Int`
    occurrences in `(Int: Int) -> Int` belong to different namespaces;
-3. If it cannot be resolved but a formal with the same name exists among the candidates, that
-   candidate is a compile-time value parameter (value dependency);
+3. If it cannot be resolved but a formal with the same name exists among the candidates, a strength
+   declaration is hit and the parameter is q=0;
 4. If neither can be resolved, an error is reported: a bare identifier in a type position may be
    “neither a type nor a type parameter.”
 
-**Self-reference is handled through a monotone fixed point**: Resolving `(k: N)` in
-`factorial: (N: Int) -> (k: N) -> Int` requires first knowing whether `N` is a type, but classifying
-`N` is precisely what this rule computes. The decision therefore uses a fixed-point procedure: the
-initial type namespace contains only declared types and type parameters; each round confirms names
-that cannot be resolved as types but match a candidate and adds them to the type namespace; the
-process terminates when the set no longer grows (at most |candidates| rounds). A declaration's own
-name (such as `Array` in `Array: ... -> Type`) enters the type namespace before its type body is
-resolved.
+Self-reference is handled through a monotone fixed point (the set only grows; at most |candidates|
+rounds).
 
-**Implications (two separate sequences)**: Compile-time value parameters occupy different positions
-in two **different** sequences and must not be merged.
+**Slot allocation takes q as its only input**; the call-site argument sequence and the
+implementation-header binding sequence are two **derived views** of the same function:
 
-- **Call-site argument sequence** = formals − type parameters (in declaration order). A compile-time
-  value parameter **still occupies** one argument slot: a call to `f: (N: Int) -> (n: N) -> Int` is
-  written `f(42)(5)`, with 42 supplied for N and 5 for n. The reason is that argument slots carry
-  “how many values the author supplied in declaration order,” independently of whether those values
-  are bound at runtime; RFC-011 §4.1's `factorial(k - 1)` precisely supplies a runtime-computed
-  value in N's position.
-- **Implementation-header binding sequence** = formals − type parameters − compile-time value
-  parameters (in declaration order). The implementation header binds only this sequence of names:
-  `= (n) => n` is valid, while `= (N, n) => n` reports E1112. The reason is that the implementation
-  header binds **runtime values**; a compile-time value parameter has no runtime value to bind.
+- **Call-site argument view** = formals − type parameters (in declaration order). A q=0 parameter
+  **still occupies** one argument slot: `f(42)(5)` supplies 42 for N and 5 for n; argument slots
+  carry “how many values the author supplied in declaration order.”
+- **Implementation-header binding view** = formals − type parameters − q=0 parameters (in declaration
+  order). The implementation header binds only names with runtime values to bind: `= (n) => n` is
+  valid, while `= (N, n) => n` reports E1112.
 
-E1011 and E1112 both count according to the **implementation-header binding sequence**.
+E1011 and E1112 both count according to the **implementation-header binding view**.
 
 | Form                                                       | Classification                      | Reason                                             |
 | ---------------------------------------------------------- | ----------------------------------- | -------------------------------------------------- |
-| `add: (a: Int, b: Int) -> Int = a + b`                     | a/b are runtime value parameters    | They appear only in value positions                |
+| `add: (a: Int, b: Int) -> Int = a + b`                     | a/b are runtime value parameters    | Value positions only; no strength declaration      |
 | `Array: (T: Type, N: Int) -> Type = { data: Array(T, N) }` | N is a compile-time value parameter | N appears in a type-construction argument position |
 | `factorial: (N: Int) -> (k: N) -> Int`                     | N is a compile-time value parameter | N serves as the type of inner parameter k          |
-| `Foo: (T: Type, N: Int) -> Type = { x: T }`                | N is unused → E1094                 | N is not referenced in the type body               |
+| `Foo: (T: Type, N: Int) -> Type = { x: T }`                | N is an ordinary parameter          | Not referenced in the type body; no strength declaration |
 
 **Core design**: Using the compile-time value parameter `(N: Int)` together with the runtime value
-parameter `(k: N)` distinguishes compile-time constants from runtime values. An unused candidate
-(syntactically a candidate but not matched by usage) is routed according to its **declared form**:
-on a function-level path it degenerates into a runtime value parameter (the unused candidate
-occupies one runtime value slot); on a type-constructor path it reports **E1094** (a type
-constructor is evaluated at compile time, and an unused candidate has no runtime slot to occupy).
+parameter `(k: N)` distinguishes compile-time constants from runtime values. **Call-side
+obligations are checked by declared strength**: the legality of `f(y)` equals whether the argument
+`y` carries compile-time evidence (literal, value environment, singleton pinning, Γ equation), not a
+global analysis of f's declaration; without evidence the call site reports, and the diagnostic
+points at the visible q=0 slot in f's type. An unused candidate (syntactically a candidate but not
+referenced in a type position) is an ordinary parameter without a strength declaration, processed
+normally with q=1/ω—no separate routing diagnostic exists.
 
 ```yaoxiang
 // Compile-time value parameter: N is referenced in a type position (the Array length slot)
@@ -783,10 +775,12 @@ arr: Measure(Int, factorial(5))  // The compiler computes factorial(5) = 120 at 
 // Value dependency: N serves as the type of the inner parameter k
 // N is a compile-time value parameter (it appears in the type position of (k: N));
 // k is a runtime value parameter whose type is the literal type N (a single-value type).
+// Singleton pinning: k's value is pinned by its single-value type and known at compile time,
+// so k - 1 carries compile-time evidence and may fill the N slot of the recursive call.
 factorial: (N: Int) -> (k: N) -> Int = {
     match k {
         0 => 1,
-        _ => k * factorial(k - 1)
+        _ => k * factorial(k - 1)(k - 1)
     }
 }
 ```
@@ -858,6 +852,12 @@ compile time.
 | ----------------------------------------------------------------------------------------- | ----------- | --------------------------------------------------------------------------------------------------- |
 | All free variables are known at compile time (generic parameters, compile-time constants) | CompileTime | Enters the proof pipeline: true → erased to Void; false → compile error (Never is uninhabited)      |
 | Runtime free variables exist (function parameters, external input)                        | Runtime     | Inserts a runtime Bool check and injects a refinement fact into the flow-sensitive assumption set Γ |
+
+Dispatch is the instance of **checking by declared strength** (§7.1) at the predicate position.
+The same principle covers the whole strength ladder: classical types without a strength declaration
+neither enter the proof pipeline nor undergo quantity inference; predicate annotations (this
+section), q=0 slots (§7.1), dependent record fields, and relational predicates each carry the
+checking their declared form implies—cost follows declared strength, not global analysis.
 
 **Flow-sensitive assumption set Γ**:
 

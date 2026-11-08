@@ -891,76 +891,58 @@ process_container: (T: Type, C: Container(T))(container: C) -> List(T) = {
 
 #### 4.1 Compile-Time Value Parameters
 
-**Core design**: `Type` in a generic signature marks a type parameter; parameters annotated with
-concrete types (such as `Int`/`Bool`/`Float`) are **candidates for compile-time value parameters**.
-Whether such a parameter becomes a compile-time value parameter depends on whether its value is
-**referenced in a type position** (value dependence). No `const` keyword is required.
+**Core design**: `Type` in a generic signature marks a type parameter; whether a parameter
+annotated with a concrete type (such as `Int`/`Bool`/`Float`) enters compile time depends on
+whether its value is referenced in a type position (value dependence). No `const` keyword is
+required.
 
-> The criterion is **being referenced in a type position**, not “being annotated with a concrete
-> type”: in `add: (a: Int, b: Int) -> Int = a + b`, `a`/`b` are runtime value parameters because
-> neither appears in any type position.
+The decision is driven by **strength declarations locally readable within the signature**: when the
+author writes a reference to a value parameter in a type position (`(k: N)`, `Array(T, N)`,
+`Assert(N > 0)`), that act is a strength declaration, and the **quantity** is its mechanical
+reading. This is not implicit—writing `n: N` places a value name in a type position, which is
+itself a declaration, the same act as writing `b: Positive(b)` (RFC-027 §3.1).
 
-**Decision rules (two steps)**:
+Every binding infers a quantity `q ∈ {0, 1, ω}`:
 
-1. **Syntactic prefilter**: a parameter annotated with a concrete type other than `Type` (such as
-   `Int`) becomes a candidate.
-2. **Usage refinement**: if the candidate name is **referenced in a type position**, it is confirmed
-   as a compile-time value parameter; otherwise, it is treated as a **runtime value parameter**.
+- **q = 0 (zero)**: the value is computed at compile time, erased at runtime, and occupies no slot.
+  A parameter referenced in a type position ⇒ q=0.
+- **q = 1 (linear)**: Move—assignment or passing transfers ownership (RFC-009).
+- **q = ω (unrestricted)**: Dup—copyable and shared (RFC-009).
 
-A “type position” = **all `Type` subtrees** in a declaration—parameter annotations, function return
-types, type-body fields, the types of inner `Fn` functions, `Assert` predicates, and
-type-constructor argument positions are all instances of `Type` subtrees in different syntactic
-positions. The decision traverses all subtrees and does not distinguish them by position; missing
-even one location—for example, the return type—would incorrectly classify a compile-time value
-parameter as a runtime value parameter.
+**Slot allocation takes q as its only input**. The call-site argument sequence and the
+implementation-head binding sequence thereby become two **derived views** of the same function, no
+longer two independent ledgers:
 
-“Referenced” is determined through **namespace resolution**, rather than literal comparison of
-names:
+- **Call-site argument view** = parameters − type parameters, in declaration order. A q=0 parameter
+  still occupies an argument position: `factorial(k - 1)` fills the position of `N` with a
+  compile-time value; argument positions record “how many values the author supplied in declaration
+  order.”
+- **Implementation-head binding view** = parameters − type parameters − q=0 parameters, in
+  declaration order. The implementation head binds only names with runtime values to bind:
+  `= (k) => k` is legal, whereas `= (N, k) => k` reports E1112.
 
-1. An identifier is first resolved in the **type namespace**—declared type names and type parameters
-   (`T: Type`). The declaration's own name enters the type namespace before its type body is
-   resolved, allowing `Array: (T: Type, N: Int) -> Type = { data: Array(T, N) }` to refer to itself.
-2. If resolution finds a declared type, it is unrelated to the parameter. A parameter name identical
-   to a type name **does not constitute shadowing**: the value namespace and type namespace do not
-   consult the same table, so the two `Int`s in `(Int: Int) -> Int` do not interfere with each
-   other—this rule therefore requires no shadowing exception.
-3. If resolution fails but the signature contains a candidate with the same name, that candidate is
-   a compile-time value parameter (value dependence).
-4. If neither applies, it is an error: no bare identifier that is “neither a type nor a type
-   parameter” exists in a type position.
+E1011 and E1112 are both counted according to the **implementation-head binding view**.
 
-**Self-reference is processed as a monotonic fixed point**. When resolving the `N` in `(k: N)` in
-`factorial: (N: Int) -> (k: N) -> Int`, the compiler must first determine whether `N` is a type, yet
-classifying `N` is precisely what this rule computes. Therefore: ① the initial type namespace =
-declared types + type parameters + the current declaration's name; ② resolve all type-position
-identifiers, and whenever a candidate is matched, confirm it as a compile-time value parameter and
-add it to the type namespace; ③ repeat ② until the set no longer grows. The set only grows ⇒
-monotonic; each round must add at least one candidate to continue ⇒ at most |candidates| rounds, and
-therefore it necessarily terminates.
+**Detecting a type-position reference** traverses all `Type` subtrees of the declaration (parameter
+annotations, return types, type-body fields, inner `Fn` types, `Assert` predicates,
+type-constructor argument positions) and confirms the reference target through namespace resolution
+(resolving to a declared type or type parameter ⇒ unrelated to the parameter; failing to resolve
+while the signature has a same-named candidate ⇒ a strength declaration is hit). Self-reference is
+processed as a monotonic fixed point (the set only grows; at most |candidates| rounds).
 
-This produces **two sequences**: compile-time value parameters occupy different positions in two
-**different** sequences and must not be merged.
-
-- **Call-site argument sequence** = parameters − type parameters, in declaration order. Compile-time
-  value parameters **still occupy** an argument position: in the `factorial` example above,
-  `factorial(k - 1)` fills the position of `N` with a value computed at runtime. If compile-time
-  value parameters did not occupy an argument position, this example could not be written. The
-  reason is that argument positions record “how many values the author supplied in declaration
-  order,” independently of whether those values are bound at runtime.
-- **Implementation-head binding sequence** = parameters − type parameters − compile-time value
-  parameters, in declaration order. The implementation head binds only this sequence of names:
-  `= (k) => k` is legal, whereas `= (N, k) => k` reports E1112. The reason is that the
-  implementation head binds **runtime values**; compile-time value parameters have no runtime value
-  to bind.
-
-E1011 and E1112 are both counted according to the **implementation-head binding sequence**.
+**Call-side obligations are checked by declared strength**: the legality of `f(y)` equals whether
+the argument `y` carries **compile-time evidence** (literal, value environment, singleton pinning,
+Γ equation—see RFC-027 §12), **not a global analysis of f's declaration**. Without evidence the
+call site reports, and the diagnostic points at the visible q=0 slot in f's type. Classical types
+(no strength declaration) neither enter the proof pipeline nor undergo quantity inference; cost
+follows declared strength.
 
 | Form                                                       | Decision                            | Reason                                                                          |
 | ---------------------------------------------------------- | ----------------------------------- | ------------------------------------------------------------------------------- |
 | `add: (a: Int, b: Int) -> Int = a + b`                     | a/b are runtime value parameters    | They appear only in value positions and do not participate in type construction |
 | `Array: (T: Type, N: Int) -> Type = { data: Array(T, N) }` | N is a compile-time value parameter | N appears in the type-constructor argument position of `Array(T, N)`            |
 | `factorial: (N: Int) -> (k: N) -> Int`                     | N is a compile-time value parameter | N serves as the type of the inner parameter `k`                                 |
-| `Foo: (T: Type, N: Int) -> Type = { x: T }`                | N falls through (see below)         | N is not referenced in the type body and degrades to a runtime value parameter  |
+| `Foo: (T: Type, N: Int) -> Type = { x: T }`                | N is an ordinary parameter (see below) | N is not referenced in the type body and degrades to a runtime value parameter  |
 
 > **Essence of value dependence**: a compile-time value parameter is precisely a value-dependent
 > type—a value needs to be determined at compile time only when it is used to **construct a type**.
@@ -983,22 +965,26 @@ m: Measure(Int, factorial(5))  # Measure(Int, 120)
 # ════════════════════════════════════════════════════════
 # Value dependence: N serves as the type of the inner parameter k
 # ════════════════════════════════════════════════════════
-# N is a compile-time value parameter (it appears in the type position of (k: N));
+# N is a compile-time value parameter (it appears in the type position of (k: N), q=0);
 # k is a runtime value parameter whose type is the literal type N (a single-value type).
+# Singleton pinning: k: N with N a compile-time value ⇒ k's value is pinned by its single-value
+# type and known at compile time, so k - 1 carries compile-time evidence and may fill the N slot
+# of the recursive call.
 factorial: (N: Int) -> (k: N) -> Int = {
     return match k {
         0 => 1,
-        _ => k * factorial(k - 1)
+        _ => k * factorial(k - 1)(k - 1)
     }
 }
 ```
 
 > **Handling of fall-through candidates**: a candidate annotated with a concrete type but not
-> referenced in a type position (such as `N` in `Foo` above) degrades to a runtime value parameter
-> on the function path. A fall-through candidate on the type-constructor path cannot occupy a
-> runtime slot (type constructors are evaluated at compile time), so the declaration reports [E1094]
-> directly: “N is declared as a compile-time value parameter but is not referenced in the type
-> body”—previously, silently discarding it caused inconsistent instantiation arity.
+> referenced in a type position (such as `N` in `Foo` above) is an **ordinary parameter without a
+> strength declaration**, processed normally with q=1/ω: on the function path it occupies a runtime
+> value slot; on the type-constructor path a candidate with no type-body reference has no
+> compile-time semantics, so the declaration reports “type-constructor parameter not referenced in
+> the type body”, advising the author to add the reference or turn it into an ordinary function—no
+> separate fall-through diagnostic code remains.
 
 #### 4.2 Compile-Time Computation
 

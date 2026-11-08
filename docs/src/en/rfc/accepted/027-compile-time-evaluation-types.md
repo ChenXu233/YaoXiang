@@ -1084,6 +1084,14 @@ invalid.
 **Branch merging**: when an `IF/ELSE` or `match` branch is merged, Γ takes the intersection of each
 branch's assumptions. Only propositions that hold on all paths are carried out of the branch.
 
+**Equation bridge (automatic evidence for q=0 slots)**: constant-equation facts in Γ are a legal
+evidence source for compile-time value parameters (RFC-011 §4.1, q=0 slots). Inside the guarded
+branch of `if y == 42 { f(y)(y) }`, Γ records `y == 42` ⇒ y is treated as 42 at the q=0 slot, and
+the call is checked along the existing `f(42)` path. One side of the equation must be a compile-time
+constant; a runtime value without equation evidence filling a q=0 slot is still reported at the
+call site. This is not a new mechanism—the verification condition `{y == 42} ⇒ {y ≡ 42}` goes
+through the existing implication check.
+
 ### 13. Erasure model clarification: witness erasure ≠ check erasure
 
 RFC-027's claim that "refinement types are **completely erased** at runtime" refers to the **proof
