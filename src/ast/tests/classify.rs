@@ -121,3 +121,113 @@ fn test_compile_time_value_param_spec_table() {
         "④ N 未在类型体引用 ⇒ 落空，退化为运行期值参数，got: {foo:?}"
     );
 }
+
+// ─────────────────────────────────────────────────────────────
+// 用途精筛的**扫描面**（`ast::name_used_as_type`）
+//
+// 规范：type-system.md §7.1「类型位置指声明中的全部 `Type` 子树」——形参标注、
+// 返回类型、内层 `Fn`、`Assert` 谓词（`ConstExpr`）、`Type[T]`（`MetaType`）、
+// 括号类型（`Paren` / `NamedParen`）都是同一棵树的子树，判定时一次递归收口。
+// 以下四条钉住四个此前落 `_ => false` 的变体（#528 §2-1 的共同缺口）。
+// ─────────────────────────────────────────────────────────────
+
+/// 构造 `Assert(N > 0)` 形态的类型（SPEC §7.1 把 `Assert` 列为类型位置实例）
+fn assert_gt_zero(operand: &str) -> ast::Type {
+    ast::Type::Generic {
+        name: "Assert".to_string(),
+        name_span: Span::dummy(),
+        args: vec![ast::Type::ConstExpr(Box::new(ast::Expr::BinOp {
+            op: ast::BinOp::Gt,
+            left: Box::new(ast::Expr::Var(operand.to_string(), Span::dummy())),
+            right: Box::new(ast::Expr::Lit(ast::Literal::Int(0), Span::dummy())),
+            span: Span::dummy(),
+        }))],
+    }
+}
+
+/// 规范：SPEC §7.1「类型位置指声明中的全部 `Type` 子树」——`Assert` 谓词的
+/// 操作数是类型位置上的名字引用。
+///
+/// 格 2：`f: (N: Int) -> (x: Assert(N > 0)) -> Int` 的 `N` 必须判定为「被当类型用」。
+/// 补 `ConstExpr` 臂之前本用例必红（该变体落 `_ => false`）。
+#[test]
+fn test_name_used_as_type_scans_const_expr() {
+    // Arrange — `f: (N: Int) -> (x: Assert(N > 0)) -> Int`
+    let ann = ast::Type::Fn {
+        params: vec![spec_param("N", name_ty("Int"))],
+        return_type: Box::new(ast::Type::Fn {
+            params: vec![spec_param("x", assert_gt_zero("N"))],
+            return_type: Box::new(name_ty("Int")),
+        }),
+    };
+
+    // Act
+    let referenced = ast::name_used_as_type("N", &ann, &|_| false);
+
+    // Assert
+    assert!(
+        referenced,
+        "`Assert(N > 0)` 里的 N 是类型位置引用 ⇒ 必须判为被当类型用"
+    );
+}
+
+/// 规范：SPEC §7.1 —— `Type[T]` 的实参是类型位置；`Type` 关键字本身不是候选名。
+#[test]
+fn test_name_used_as_type_scans_meta_type_args() {
+    // Arrange — `Type[N]` 形态的元类型实参位（`args`）
+    let ty = ast::Type::MetaType {
+        name_span: Span::dummy(),
+        args: vec![name_ty("N")],
+    };
+
+    // Act
+    let referenced = ast::name_used_as_type("N", &ty, &|_| false);
+
+    // Assert
+    assert!(
+        referenced,
+        "元类型实参 `Type[N]` 的 N 是类型位置引用 ⇒ 必须判为被当类型用"
+    );
+}
+
+/// 规范：SPEC §7.1 —— 括号类型透明（RFC-004：`(T)` 是完整类型，内层同义）。
+#[test]
+fn test_name_used_as_type_scans_paren_inner() {
+    // Arrange — `(N)`：括号未构成参数组 ⇒ `Type::Paren`
+    let ty = ast::Type::Paren(Box::new(name_ty("N")));
+
+    // Act
+    let referenced = ast::name_used_as_type("N", &ty, &|_| false);
+
+    // Assert
+    assert!(
+        referenced,
+        "括号类型 `(N)` 的内层是类型位置引用 ⇒ 必须判为被当类型用"
+    );
+}
+
+/// 规范：SPEC §7.1 与 RFC-027 §3 —— `(r: P(...))` 的 `r` 是**返回形式参数名的
+/// 声明**（binder），不是类型引用；只有内层类型是。
+#[test]
+fn test_name_used_as_type_scans_named_paren_inner_but_not_binder() {
+    // Arrange — `(r: N)`：binder 名 `r`，内层类型 `N`
+    let ty = ast::Type::NamedParen {
+        param: "r".to_string(),
+        param_span: Span::dummy(),
+        inner: Box::new(name_ty("N")),
+    };
+
+    // Act
+    let binder_referenced = ast::name_used_as_type("r", &ty, &|_| false);
+    let inner_referenced = ast::name_used_as_type("N", &ty, &|_| false);
+
+    // Assert
+    assert!(
+        !binder_referenced,
+        "binder 名 r 是声明而非引用 ⇒ 不得判为被当类型用"
+    );
+    assert!(
+        inner_referenced,
+        "具名括号的内层 N 是类型位置引用 ⇒ 必须判为被当类型用"
+    );
+}

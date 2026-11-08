@@ -89,7 +89,7 @@ gcd: (a: Int, b: Int) -> Terminates(b) = {
 ///
 /// 根因回归（T1 调查实证）：`classify_generic_params` 把「类型名 ∈
 /// CONST_PARAM_TYPES」的形参（`b: Int` 里的 Int）当作 const 泛型**候选**；
-/// 再用 `collect_used_in_type` 扫返回位，一旦测度里出现该形参名（`Terminates(b)`
+/// 再用 `ast::name_used_as_type` 扫返回位，一旦测度里出现该形参名（`Terminates(b)`
 /// 的 `b`）即判定「被当作类型引用」→ 建立 const binder → **把 `b` 替换成 `Int(64)`**。
 /// 测度表达式因此在到达终止检查层之前就丢了，报 E1092。
 ///

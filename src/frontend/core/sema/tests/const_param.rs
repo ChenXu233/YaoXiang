@@ -88,8 +88,8 @@ fn test_used_as_const_in_annotation_scans_own_group_param_annotation() {
     };
     let candidates: HashSet<String> = ["N".to_string()].into();
 
-    // Act
-    let used = used_as_const_in_annotation(&ann, &candidates, &|_| false);
+    // Act — 命名空间问答注入「否」：本格钉的是「本组形参自己的标注也属于类型位置」
+    let used = used_as_const_in_annotation(&ann, &candidates, &|_| false, &|_| false);
 
     // Assert
     assert!(
@@ -177,5 +177,27 @@ fn test_ast_type_to_const_kind_maps_annotation_forms() {
     assert!(
         matches!(ast_type_to_const_kind(&unknown_ty), ConstKind::Int(None)),
         "无法识别形态应回退 ConstKind::Int(None)"
+    );
+}
+
+/// 规范：SPEC §7.1「被引用按命名空间解析判定，不做名字的字面比对」——
+/// `f: (Int: Int) -> Int` 里两个 `Int` 分属值/类型命名空间，类型位上的 `Int`
+/// 解析到**类型** ⇒ 与形参无关，候选 `Int` 必须落空。
+#[test]
+fn test_used_as_const_in_annotation_resolves_type_name_first() {
+    // Arrange — `f: (Int: Int) -> Int`
+    let ann = Type::Fn {
+        params: vec![sig_param("Int", Some(int_type()))],
+        return_type: Box::new(int_type()),
+    };
+    let candidates: HashSet<String> = ["Int".to_string()].into();
+
+    // Act — `Int` 在类型命名空间里可解析（SPEC §7.1 第 1、2 条）
+    let used = used_as_const_in_annotation(&ann, &candidates, &|n| n == "Int", &|_| false);
+
+    // Assert
+    assert!(
+        used.is_empty(),
+        "类型位上的 Int 解析到类型命名空间 ⇒ 与形参无关，候选 Int 必须落空；实际: {used:?}"
     );
 }

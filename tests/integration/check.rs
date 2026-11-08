@@ -785,10 +785,11 @@ main = () => {
 // 由 checker.rs 注入点用 `is_predicate_application` 同源预计算——内置谓词 /
 // `predicate_defs` / `env.vars` 三源），若该判据回归为 3.20.8 前的窄化形态
 // （只认 `Terminates` 字面量 ∪ 证明函数基类型表判名），证明函数谓词
-// `IsPositive` 应用 `IsPositive(b)` 的实参位 `b` 会被 `collect_used_in_type`
-// 误计入 const 泛型用途——形参名被当作 const 绑定并替换成底层具体类型，
-// 精化约束在到达消费端之前就丢失（E1092 类症状，见 checker.rs
-// `collect_used_in_type` 的谓词排除注释）。
+// `IsPositive` 应用 `IsPositive(b)` 的实参位 `b` 会被类型位置扫描
+// （`ast::name_used_as_type` 的 `Generic` 臂）误计入 const 泛型用途——形参名被
+// 当作 const 绑定并替换成底层具体类型，精化约束在到达消费端之前就丢失
+// （E1092 类症状，见 `const_param::used_as_const_in_annotation` 的
+// `is_predicate` 注入）。
 
 /// 谓词应用实参位不得计入 const 泛型用途（判据窄化回归锚）。
 #[test]

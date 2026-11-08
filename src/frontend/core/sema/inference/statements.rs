@@ -135,7 +135,7 @@ pub struct StatementChecker {
     /// 谓词名字集（即注入的类型级命名空间 `probe::TypeLevelNamespace`：
     /// 内置谓词名 ∪ 全部可见单元的谓词声明名）。**谓词排除判据的单一
     /// 事实源**（3.20.8 收单点；3.20.9 / #522 起来源换声明级 namespace
-    /// ——由 checker.rs 注入点 clone 传入，与 A 面 `collect_used_in_type`
+    /// ——由 checker.rs 注入点 clone 传入，与 A 面 `used_as_const_in_annotation`
     /// 调用点的 `is_predicate_application`（现即 namespace 查询）by
     /// construction 同源）。消费者：const 用途精筛的 `is_predicate`
     /// 闭包——谓词应用的实参位是编译期表达式（值）不是类型引用，不得
@@ -447,7 +447,7 @@ impl StatementChecker {
     ///
     /// 由 checker.rs 注入点从类型级命名空间（`probe::TypeLevelNamespace`
     /// clone）传入——内置谓词名 ∪ 全部可见单元的谓词声明名，与 A 面两个
-    /// `collect_used_in_type` 调用点 by construction 同判据。
+    /// `used_as_const_in_annotation` 调用点 by construction 同判据。
     pub fn set_predicate_names(
         &mut self,
         names: HashSet<String>,
@@ -2098,7 +2098,7 @@ impl StatementChecker {
             //
             // RFC-027a：谓词应用的实参位是编译期表达式（值）而非类型引用
             //（`Terminates(b)` 的 `b`），不得计入 const 用途——见
-            // `collect_used_in_type` 的 `is_predicate` 参数。
+            // `ast::name_used_as_type` 的 `is_predicate` 参数。
             // 判据单源（3.20.8 / #511 t3 low 收单点；3.20.9 / #522 起来源
             // 换声明级）：读 `predicate_names`——checker.rs 注入点从类型级
             // 命名空间（`probe::TypeLevelNamespace`）clone 传入，与 A 面
@@ -2107,17 +2107,22 @@ impl StatementChecker {
             // 字面量 ∪ `proof_fn_bases` 判名」的窄化同义判据（不查
             // `predicate_defs`、漏无参证明函数），与 A 面不同构。
             let is_predicate = |n: &str| self.predicate_names.contains(n);
+            // 命名空间问答注入本面已有的类型名集合（`type_names`，与下方
+            // `ParamClassifier::is_type_name` 同一事实源）：候选名解析到已声明类型 ⇒
+            // 与形参无关，候选落空（SPEC §7.1 第 1、2 条）。
+            let is_type_name = |n: &str| self.type_names.contains(n);
             // 「类型位置」= 声明的**全部 `Type` 子树**（SPEC type-system §7.1）：形参标注、
             // 返回类型、内层 `Fn` 的形参类型都是同一棵树的子树。此前只扫「返回位 + 返回位
             // 内层 Fn 的形参标注」，**漏了本层形参自己的标注** ⇒ `f: (N: Int, M: N) -> Int`
             // 里 `M: N` 的 `N` 从未计入用途 ⇒ `const_binders` 为空 ⇒ `M` 的标注停在裸名
-            // `N`（实测 E1012「expected int64, found N」）。`collect_used_in_type` 的 `Fn`
-            // 臂本就递归形参与返回位，故整棵树一次收口，不按位置分情况。
+            // `N`（实测 E1012「expected int64, found N」）。扫描面（`ast::name_used_as_type`）
+            // 的 `Fn` 臂本就递归形参与返回位，故整棵树一次收口，不按位置分情况。
             if let Some(ann) = type_annotation {
                 used_as_const =
                     crate::frontend::core::sema::const_param::used_as_const_in_annotation(
                         ann,
                         &candidate_names,
+                        &is_type_name,
                         &is_predicate,
                     );
             }

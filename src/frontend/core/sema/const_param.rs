@@ -29,37 +29,41 @@ pub fn ast_type_to_const_kind(ty: &Type) -> ConstKind {
         .unwrap_or(ConstKind::Int(None))
 }
 
-/// 用途精筛的**扫描面**单点：声明标注（`type_annotation`）整棵树上的候选引用。
+/// 用途精筛的**唯一入口**：类型位置上对候选名的引用扫描（整棵 `Type` 子树）。
 ///
 /// 「类型位置」= 声明中的全部 `Type` 子树（SPEC type-system §7.1 / RFC-011 §4.1）：
-/// 形参标注、返回类型、内层 `Fn` 的形参与返回位、`Assert` 谓词、类型构造实参位
-/// 都是同一棵树在不同语法位置上的实例，故一次递归遍历收口，**不按位置分情况**。
-/// 只扫返回位、或只扫「返回位 + 返回位内层 Fn 的形参」，会漏掉本层形参自己的标注：
-/// `f: (N: Int, M: N) -> Int` 里 `M: N` 的 `N` 从未计入用途 ⇒ `const_binders`
-/// 为空 ⇒ `M` 的标注停在裸名 → E1012。
+/// 形参标注、返回类型、内层 `Fn` 的形参与返回位、`Assert` 谓词、类型构造实参位、
+/// 类型体字段类型都是同一棵树在不同语法位置上的实例，故一次递归遍历收口，
+/// **不按位置分情况**。只扫返回位、或只扫「返回位 + 返回位内层 Fn 的形参」，会漏掉
+/// 本层形参自己的标注：`f: (N: Int, M: N) -> Int` 里 `M: N` 的 `N` 从未计入用途 ⇒
+/// `const_binders` 为空 ⇒ `M` 的标注停在裸名 → E1012。
 ///
-/// 三个调用点共用本函数——Registry 面（`TypeChecker::collect_signatures`）、
-/// 签名面（`TypeChecker::collect_function_signature`）、函数体面
-/// （`StatementChecker`）——「类型位置」这条判据因此只有一份实现。
+/// 判定顺序与 `ast::classify_compile_time_value_params` 同序同义（SPEC §7.1）：
 ///
-/// 本函数**不**委托 `ast::name_used_as_type`：后者对 `ConstExpr` / `MetaType` /
-/// `Paren` / `NamedParen` 落 `_ => false`（见该函数的「已知共同缺口」），直接换会
-/// 把 `Assert(N > 0)` 判成落空。合并到唯一分类器须先补齐那四个变体。
+/// 1. **命名空间解析**（`is_type_name` 注入）：解析到已声明类型 ⇒ 与形参无关，
+///    候选落空——形参名与类型名同形不构成遮蔽（`(Int: Int)` 的两个 `Int` 分属
+///    值/类型命名空间）；
+/// 2. **用途精筛**（`ast::name_used_as_type`）：名字在任一 `Type` 子树被引用 ⇒ 命中。
+///
+/// 扫描面本身委托 `ast::name_used_as_type`（全仓唯一实现）；本函数只叠加候选集与
+/// 命名空间两层注入。四个调用点共用它——Registry 面
+/// （`TypeChecker::collect_signatures`）、签名面
+/// （`TypeChecker::collect_function_signature`）、函数体面（`StatementChecker`）、
+/// 类型构造器面（`TypeChecker::add_type_definition`）——「类型位置」这条判据因此
+/// 只有一份实现。
 pub fn used_as_const_in_annotation(
     annotation: &Type,
     candidates: &HashSet<String>,
+    is_type_name: &dyn Fn(&str) -> bool,
     is_predicate: &dyn Fn(&str) -> bool,
 ) -> HashSet<String> {
-    let mut used = HashSet::new();
-    if !candidates.is_empty() {
-        crate::frontend::core::sema::checker::collect_used_in_type(
-            annotation,
-            candidates,
-            &mut used,
-            is_predicate,
-        );
-    }
-    used
+    candidates
+        .iter()
+        .filter(|name| {
+            !is_type_name(name) && crate::ast::name_used_as_type(name, annotation, is_predicate)
+        })
+        .cloned()
+        .collect()
 }
 
 /// 用途精筛：候选中被 `used_as_const` 引用者进 const_binders，

@@ -515,14 +515,18 @@ impl TypeChecker {
                         // 「类型位置」指声明中的全部 `Type` 子树）。此前只扫返回位 +
                         // 返回位内层 Fn 的形参，漏掉本层形参自己的标注——`f: (N: Int, M: N)
                         // -> Int` 的 `N` 因此判不出 const 用途。单点见
-                        // `const_param::used_as_const_in_annotation`。
+                        // `const_param::used_as_const_in_annotation`（本面注入的两问答：
+                        // 命名空间 = `env.resolves_type_name`——「合法类型名」的唯一真相源；
+                        // 谓词 = 声明级类型级命名空间）。
                         let mut used_as_const = std::collections::HashSet::new();
                         if let Some(ann) = type_annotation {
                             let is_predicate = |n: &str| self.is_predicate_application(n);
+                            let is_type_name = |n: &str| self.env.resolves_type_name(n);
                             used_as_const =
                                 crate::frontend::core::sema::const_param::used_as_const_in_annotation(
                                     ann,
                                     &const_candidates,
+                                    &is_type_name,
                                     &is_predicate,
                                 );
                         }
@@ -608,7 +612,7 @@ impl TypeChecker {
         // 2. `predicate_names`——谓词名字集，**谓词排除判据的单一事实源**：
         //    即注入的类型级命名空间（`probe::TypeLevelNamespace`，内置谓词
         //    名 ∪ 全部可见单元的谓词声明名）。与 A 面（`collect_signatures`
-        //    与 `collect_function_signature` 的两个 `collect_used_in_type`
+        //    与 `collect_function_signature` 两个 `used_as_const_in_annotation`
         //    调用点）同一判定（`is_predicate_application` 现即 namespace
         //    查询），by construction 同源。消费者：inference/statements.rs
         //    const 用途精筛的 `is_predicate`——谓词应用的实参位是编译期
@@ -636,8 +640,11 @@ impl TypeChecker {
         body_checker.set_proof_fn_bases(proof_fn_bases);
         let predicate_names: HashSet<String> = self.type_level_namespace.predicates.clone();
         body_checker.set_predicate_names(predicate_names);
-        // SPEC §7.1：「被引用按命名空间解析」—— 类型命名空间（`env.types`：内置类型 ∪
-        // 用户声明类型）与谓词集同一注入点，供唯一分类器回答「名字是类型还是编译期值参数」。
+        // SPEC §7.1：「被引用按命名空间解析」——类型命名空间与谓词集同一注入点，
+        // 供唯一分类器回答「名字是类型还是编译期值参数」。注入面是 `env.types`
+        // （本单元可见的**类型定义**：用户声明类型 + use 导入的类型导出）；内置标量名
+        // （`Int`/`Bool`/…）不经此表解析（`MonoType::from_builtin_name` 承担），
+        // 故不在注入面内——**本表不含内置名**是事实，不是遗漏。
         let type_names: HashSet<String> = self.env.types.keys().cloned().collect();
         body_checker.set_type_names(type_names);
         // 如果启用收集模式，设置收集所有错误
@@ -1678,12 +1685,16 @@ impl TypeChecker {
                     //
                     // 扫描面单点在 `const_param::used_as_const_in_annotation`——
                     // 与 Registry 面（`collect_signatures`）与函数体面同一实现。
+                    // 命名空间问答注入 `env.resolves_type_name`（「合法类型名」唯一真相源）：
+                    // 候选名解析到已声明类型 ⇒ 与形参无关（SPEC §7.1 第 1、2 条）。
                     let is_predicate = |n: &str| self.is_predicate_application(n);
+                    let is_type_name = |n: &str| self.env.resolves_type_name(n);
                     if let Some(ann) = type_annotation {
                         used_as_const =
                             crate::frontend::core::sema::const_param::used_as_const_in_annotation(
                                 ann,
                                 &candidate_names,
+                                &is_type_name,
                                 &is_predicate,
                             );
                     }
@@ -3107,7 +3118,18 @@ impl TypeChecker {
                 .filter(|p| matches!(p.kind, GenericParamKind::Const { .. }))
                 .map(|p| p.name.clone())
                 .collect();
-            let used_as_const = collect_used_const_names(&candidate_names, definition);
+            // 构造器面的扫描面 = 定义体（SPEC §7.1 的「类型位置」在构造器面就是类型体里
+            // 的全部 `Type` 子树），走与函数三面**同一入口**；命名空间问答同样注入
+            // `env.resolves_type_name`。本面不做谓词短路：类型体里的应用项
+            // （`Assert(N > 0)` / 接口实例化）不是谓词应用的实参位语义——历史判据也
+            // 从不排除（`Assert` 不是谓词），改动会平移 E1094 的发射面。
+            let used_as_const =
+                crate::frontend::core::sema::const_param::used_as_const_in_annotation(
+                    definition,
+                    &candidate_names,
+                    &|n| self.env.resolves_type_name(n),
+                    &|_| false,
+                );
 
             let resolved_const = crate::frontend::core::sema::const_param::resolve_const_candidates(
                 &generic_params,
@@ -3293,109 +3315,6 @@ fn find_const_var_in_expr(
     }
 }
 
-/// 用途分析：扫描类型定义体，找出候选参数中哪些**被当编译期值/类型使用**。
-///
-/// 这是 const 判定的唯一裁判——取代旧的"CONST_PARAM_TYPES 名单 + 大小写猜测"。
-/// 用途 = 参数名出现在以下任一编译期位置：
-/// - `Array(T, N)` 里作为泛型实参的裸 `Name`（Generic.args）
-/// - `Assert(N > 0)` 里的 `ConstExpr` 表达式引用
-/// - `length: N` 里作为字段类型标注的裸 `Name`
-fn collect_used_const_names(
-    candidates: &HashSet<String>,
-    definition: &crate::ast::Type,
-) -> HashSet<String> {
-    use crate::ast::Type;
-    let mut found = HashSet::new();
-    if let Type::Struct { body } = definition {
-        for item in body {
-            match item {
-                TypeBodyItem::Expr(ty) => {
-                    collect_used_in_type(ty, candidates, &mut found, &|_| false)
-                }
-                TypeBodyItem::Field(f) => {
-                    collect_used_in_type(&f.ty, candidates, &mut found, &|_| false)
-                }
-                _ => {}
-            }
-        }
-    }
-    found
-}
-
-/// 递归扫描类型表达式，收集被引用的候选参数名。
-///
-/// `is_predicate` 判定「该类型应用名是否解析为编译期谓词」——谓词应用的
-/// 实参位是**编译期表达式操作数**（`Terminates(b)` 的 `b`），不是类型引用，
-/// 必须跳过（RFC-027a T1）。
-pub(crate) fn collect_used_in_type(
-    ty: &crate::ast::Type,
-    candidates: &HashSet<String>,
-    found: &mut HashSet<String>,
-    is_predicate: &dyn Fn(&str) -> bool,
-) {
-    use crate::ast::Type;
-    match ty {
-        Type::Name { name, .. } if candidates.contains(name) => {
-            found.insert(name.clone());
-        }
-        Type::ConstExpr(expr) => collect_used_in_expr(expr, candidates, found),
-        Type::Generic { name, args, .. } => {
-            // 谓词/证明函数应用：实参是编译期表达式，不是类型引用。
-            //
-            // `Terminates(b)` 的 `b`、`IsPositive(n)` 的 `n` 都是**值**——
-            // 把它们计入 const 泛型用途会让形参名被当作 const 绑定并被替换成
-            // 底层具体类型（`b` → `Int(64)`），精化约束/测度在到达消费端
-            // 前就丢了（E1092）。对照 `Array(T, N)`：`Array` 不是谓词，
-            // 其 `N` 确实是 const 泛型引用，照常计入。
-            if is_predicate(name) {
-                return;
-            }
-            for arg in args {
-                collect_used_in_type(arg, candidates, found, is_predicate);
-            }
-        }
-        Type::Fn {
-            params,
-            return_type,
-        } => {
-            for p in params {
-                if let Some(ty) = &p.ty {
-                    collect_used_in_type(ty, candidates, found, is_predicate);
-                }
-            }
-            collect_used_in_type(return_type, candidates, found, is_predicate);
-        }
-        Type::Ptr(inner) => {
-            collect_used_in_type(inner, candidates, found, is_predicate);
-        }
-        Type::Ref { inner, .. } => collect_used_in_type(inner, candidates, found, is_predicate),
-        Type::Tuple(types) => {
-            for t in types {
-                collect_used_in_type(t, candidates, found, is_predicate);
-            }
-        }
-        _ => {}
-    }
-}
-
-/// 递归扫描编译期表达式（如 `N > 0`），收集被引用的候选参数名。
-fn collect_used_in_expr(
-    expr: &Expr,
-    candidates: &HashSet<String>,
-    found: &mut HashSet<String>,
-) {
-    match expr {
-        Expr::Var(name, _) if candidates.contains(name) => {
-            found.insert(name.clone());
-        }
-        Expr::BinOp { left, right, .. } => {
-            collect_used_in_expr(left, candidates, found);
-            collect_used_in_expr(right, candidates, found);
-        }
-        Expr::UnOp { expr, .. } => collect_used_in_expr(expr, candidates, found),
-        _ => {}
-    }
-}
 impl TypeChecker {
     /// 为 Record 类型自动派生标准库 traits
     ///

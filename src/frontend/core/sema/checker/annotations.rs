@@ -76,31 +76,61 @@ impl TypeChecker {
         // 于是 `f: (bogus: Int) -> bogus = ...` 的返回位 `bogus` 被当合法类型
         // 放行，该函数的返回类型检查形同虚设（B5）。
         let generic_names: Vec<String> = {
-            // 6.4 合并后的单一实现。本站点与 6.4 之前**同判定**：不做谓词短路
-            // （传空谓词集）——谓词应用的实参位由本文件的 `is_predicate_head`
-            // 在别处单独排除，此处改动会改诊断发射面。
-            use crate::ast::name_used_as_type;
-            let not_predicate = &|_: &str| false;
+            // 扫描面走 `const_param::used_as_const_in_annotation`（全仓唯一入口）——
+            // 本站点回答的是「哪些形参名是声明处绑定的类型名」（E1003 的合法名集合），
+            // 与 const 用途精筛是同一次「名字是否出现在类型位置」的判定，不许第二份遍历。
+            //
+            // 两个注入问答在此都注入「否」，与 6.4 之前**同判定**：
+            // - `is_type_name`：本站点不查类型命名空间——解析到已声明类型的名字
+            //   本来就不会被 `check_type_names_in` 报未知名，无需在此剔除；
+            // - `is_predicate`：不做谓词短路——谓词应用的实参位由本文件的
+            //   `is_predicate_head` 在别处单独排除，此处改动会改诊断发射面。
+            let no = &|_: &str| false;
+            let candidates: HashSet<String> = params
+                .iter()
+                .filter(|p| !matches!(p.ty, Some(T::MetaType { .. })))
+                .map(|p| p.name.clone())
+                .collect();
+            let mut referenced: HashSet<String> = HashSet::new();
+            for p in &params {
+                if let Some(ty) = p.ty.as_ref() {
+                    referenced.extend(
+                        crate::frontend::core::sema::const_param::used_as_const_in_annotation(
+                            ty,
+                            &candidates,
+                            no,
+                            no,
+                        ),
+                    );
+                }
+            }
+            if let Some(t) = type_annotation {
+                referenced.extend(
+                    crate::frontend::core::sema::const_param::used_as_const_in_annotation(
+                        t,
+                        &candidates,
+                        no,
+                        no,
+                    ),
+                );
+            }
+            if let Some(t) = definition {
+                referenced.extend(
+                    crate::frontend::core::sema::const_param::used_as_const_in_annotation(
+                        t,
+                        &candidates,
+                        no,
+                        no,
+                    ),
+                );
+            }
+            // 类型参数（`A: Type` 形态）直接计入；值参数则看其名是否在**签名注解或
+            // 类型定义体的类型位**被引用（`(N: Int) -> (n: N) -> Int` 的内层 `N`；
+            // `SafeArray: (T: Type, N: Int) -> Type = { data: Array(T, N) }` 的 `N`）。
             let mut names: Vec<String> = inherited.to_vec();
             for p in &params {
                 let Some(ty) = p.ty.as_ref() else { continue };
-                // 类型参数（`A: Type` 形态）直接计入
-                if matches!(ty, T::MetaType { .. }) {
-                    names.push(p.name.clone());
-                    continue;
-                }
-                // 值参数：其名在**签名注解或类型定义体的类型位**被引用时才算类型名
-                // （`(N: Int) -> (n: N) -> Int` 的内层 `N`；
-                //   `SafeArray: (T: Type, N: Int) -> Type = { data: Array(T, N) }` 的 `N`）
-                let referenced = params.iter().any(|q| {
-                    q.ty.as_ref()
-                        .is_some_and(|t| name_used_as_type(&p.name, t, not_predicate))
-                }) || type_annotation
-                    .is_some_and(|t| name_used_as_type(&p.name, t, not_predicate))
-                    || definition
-                        .as_ref()
-                        .is_some_and(|t| name_used_as_type(&p.name, t, not_predicate));
-                if referenced {
+                if matches!(ty, T::MetaType { .. }) || referenced.contains(&p.name) {
                     names.push(p.name.clone());
                 }
             }

@@ -1165,25 +1165,34 @@ pub fn is_meta_type(ty: &Type) -> bool {
 
 /// 参数名是否在给定类型中被当作**类型引用**（`(N: Int) -> (n: N)` 的 `N`）。
 ///
-/// **单一实现**（RFC-039 P6 6.4 / 03 §5.3）：本函数是原先两份同义实现
-/// （本文件的 `name_used_as_type_in` 与 `statements/declarations.rs` 的
-/// `name_used_as_type`）合并后的**唯一**版本，后者已改为调用本函数。
-/// 合并口径 = 本文件版本（较新、修复更全）叠加上另一版的**谓词短路**：
+/// **全仓唯一实现**（RFC-039 P6 6.4 / 03 §5.3，6.8.8 补齐扫描面）：parser 与 sema
+/// 侧的同义遍历已全部收拢到本函数——「形参名是否在类型位置被引用」只有这一处判定。
 ///
-/// - `Generic` 的**头部**同样是类型引用（`F(A)` 的 `F` 是构造器变量）——
-///   本文件版本有、另一版没有；
-/// - `Struct` / `NamedStruct` 的字段类型递归——本文件版本有、另一版落
-///   `_ => false`；
-/// - **谓词应用的实参位是值**（`Terminates(b)` 的 `b`），故头名被判定为谓词时
-///   整个应用短路 false——另一版有、本文件版本缺（RFC-027a）。
+/// 扫描面 = 调用方传入的任意 `Type` 子树（SPEC type-system §7.1：「类型位置」指
+/// 声明中的全部 `Type` 子树，不按位置分情况）。判据要点：
+///
+/// - `Generic` 的**头部**同样是类型引用（`F(A)` 的 `F` 是构造器变量）；
+/// - `Generic` 的**谓词应用**短路：头名判定为编译期谓词时实参位是**值**
+///   （`Terminates(b)` 的 `b`），整个应用不构成类型引用（RFC-027a）；
+/// - `Struct` / `NamedStruct` 的字段类型递归；
+/// - `ConstExpr` 递归表达式里的名字引用（`Assert(N > 0)` 的 `N`），遍历复用
+///   `collect_expr_ident_refs`——不新写第二份表达式遍历；
+/// - `MetaType` 递归 `args`：`Type` 关键字本身不是可判定的候选名，只有实参是；
+/// - `Paren` / `NamedParen` 递归 `inner`（RFC-004：括号声明完整类型，内层同义）。
+///   `NamedParen` 的 `param` **不计**：它是**返回形式参数名的声明**（binder，
+///   `(r: IsPositive(r + 1))` 的 `r`），不是类型引用——把它计入会让声明名冒充引用；
+/// - `Type::Struct` 的 `TypeBodyItem::Binding` **不扫**：绑定项是类型体内的
+///   **方法绑定**（外部函数引用 / 匿名实现体），其签名属于被绑方法而非构造器的
+///   参数化面；把它计入会把「方法签名里提到的名字」等同于「类型参数的用途」，
+///   让 E1094（构造器级落空候选）对只在方法签名出现的名字漏报。绑定内的名字
+///   引用由 `collect_name_refs`（可达性 / 未用导入）负责，与本判定不同问题。
 ///
 /// `is_predicate` 是调用方注入的环境问答：parser 侧传「探针 ∪ 本遍已声明谓词」，
 /// L3 侧传语义探针。两边都不是字符串常量表。
 ///
-/// **已知共同缺口（本批刻意不动）**：`MetaType` / `ConstExpr` / `Paren` /
-/// `NamedParen` 四个变体两版原先都落 `_ => false`。补它们会改变
-/// 「const 参数是否被当类型用」的判定（进而改 IR 的 generic_params 与语料行为），
-/// 属语义修正，须按 07 的分流判据另立一轮，不在 6.4 的 C3 面内。
+/// 本函数只回答「名字是否出现在类型位置」，**不做**命名空间解析——「该名字是否
+/// 解析到已声明类型」（SPEC §7.1 第 1、2 条）是调用方注入的上游问答，见
+/// `ParamClassifier::is_type_name` 与 `const_param::used_as_const_in_annotation`。
 pub fn name_used_as_type(
     name: &str,
     ty: &Type,
@@ -1235,7 +1244,23 @@ pub fn name_used_as_type(
         Type::NamedStruct { fields, .. } => fields
             .iter()
             .any(|f| name_used_as_type(name, &f.ty, is_predicate)),
-        _ => false,
+        // 编译期表达式（`Assert(N > 0)` 的 `N > 0`）：名字引用只认 `Expr::Var` 叶子，
+        // 表达式遍历复用 `collect_expr_ident_refs`（与 `collect_name_refs` 的
+        // `ConstExpr` 臂同一份）——不新写第二份表达式遍历。
+        Type::ConstExpr(expr) => {
+            let mut refs = HashSet::new();
+            collect_expr_ident_refs(expr, &mut refs);
+            refs.contains(name)
+        }
+        // `Type[T]` / `Type[K, V]`：`Type` 关键字本身不是可判定的候选名，只有实参是。
+        Type::MetaType { args, .. } => args
+            .iter()
+            .any(|arg| name_used_as_type(name, arg, is_predicate)),
+        // 括号透明（RFC-004：括号声明完整类型，内层同义）。
+        Type::Paren(inner) => name_used_as_type(name, inner, is_predicate),
+        // 具名括号：`param` 是返回形式参数名的**声明**（binder），不是引用；
+        // 只有内层类型是（见函数文档）。
+        Type::NamedParen { inner, .. } => name_used_as_type(name, inner, is_predicate),
     }
 }
 
