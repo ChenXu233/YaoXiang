@@ -141,8 +141,12 @@ pub struct StatementChecker {
     /// 闭包——谓词应用的实参位是编译期表达式（值）不是类型引用，不得
     /// 计入 const 泛型用途（RFC-027a）。
     predicate_names: HashSet<String>,
-    /// 类型命名空间（已声明类型名 + 类型参数名；checker.rs 从 `env.types` 注入）：
-    /// SPEC §7.1「被引用按命名空间解析」的单一事实源——名字解析到类型即与形参无关。
+    /// 类型命名空间（**已声明类型**：`env.types` 的键 —— 本地类型定义 + `use` 导入的
+    /// 类型导出；checker.rs 从该表注入）：SPEC §7.1「被引用按命名空间解析」的单一事实源。
+    ///
+    /// 与 checker 三面的 `TypeChecker::is_declared_type_name` **同一集合**（四处同源；
+    /// 见 `const_param::used_as_const_in_annotation` 的口径说明）。不含内置名 / 编译器
+    /// 容器 / 接口名 / std 导出类型——那些属 `env.resolves_type_name` 的另一个问题。
     type_names: HashSet<String>,
     /// 循环嵌套深度（#311）：语句级 for 由本 walker 递归走体，循环上下文在此追踪。
     /// 委托表达式检查给 ExpressionInferrer 时经 set_loop_depth 传入，保证
@@ -2107,8 +2111,9 @@ impl StatementChecker {
             // 字面量 ∪ `proof_fn_bases` 判名」的窄化同义判据（不查
             // `predicate_defs`、漏无参证明函数），与 A 面不同构。
             let is_predicate = |n: &str| self.predicate_names.contains(n);
-            // 命名空间问答注入本面已有的类型名集合（`type_names`，与下方
-            // `ParamClassifier::is_type_name` 同一事实源）：候选名解析到已声明类型 ⇒
+            // 命名空间问答注入本面的「已声明类型」集合（`type_names`，与下方
+            // `ParamClassifier::is_type_name` 同一事实源，也与 checker 三面的
+            // `is_declared_type_name` 同一集合——四处同源）：候选名解析到已声明类型 ⇒
             // 与形参无关，候选落空（SPEC §7.1 第 1、2 条）。
             let is_type_name = |n: &str| self.type_names.contains(n);
             // 「类型位置」= 声明的**全部 `Type` 子树**（SPEC type-system §7.1）：形参标注、

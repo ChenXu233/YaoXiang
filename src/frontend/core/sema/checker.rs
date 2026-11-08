@@ -516,12 +516,13 @@ impl TypeChecker {
                         // 返回位内层 Fn 的形参，漏掉本层形参自己的标注——`f: (N: Int, M: N)
                         // -> Int` 的 `N` 因此判不出 const 用途。单点见
                         // `const_param::used_as_const_in_annotation`（本面注入的两问答：
-                        // 命名空间 = `env.resolves_type_name`——「合法类型名」的唯一真相源；
+                        // 命名空间 = `is_declared_type_name`（`env.types` 的键，SPEC §7.1
+                        // 的「已声明类型」口径，与函数体面 `type_names` 同一集合）；
                         // 谓词 = 声明级类型级命名空间）。
                         let mut used_as_const = std::collections::HashSet::new();
                         if let Some(ann) = type_annotation {
                             let is_predicate = |n: &str| self.is_predicate_application(n);
-                            let is_type_name = |n: &str| self.env.resolves_type_name(n);
+                            let is_type_name = |n: &str| self.is_declared_type_name(n);
                             used_as_const =
                                 crate::frontend::core::sema::const_param::used_as_const_in_annotation(
                                     ann,
@@ -642,9 +643,11 @@ impl TypeChecker {
         body_checker.set_predicate_names(predicate_names);
         // SPEC §7.1：「被引用按命名空间解析」——类型命名空间与谓词集同一注入点，
         // 供唯一分类器回答「名字是类型还是编译期值参数」。注入面是 `env.types`
-        // （本单元可见的**类型定义**：用户声明类型 + use 导入的类型导出）；内置标量名
+        // （本单元可见的**已声明类型**：用户声明类型 + use 导入的类型导出）；内置标量名
         // （`Int`/`Bool`/…）不经此表解析（`MonoType::from_builtin_name` 承担），
-        // 故不在注入面内——**本表不含内置名**是事实，不是遗漏。
+        // 故不在注入面内——**本表不含内置名**是事实，不是遗漏（SPEC §7.1 第 2 条的
+        // 字面口径；放宽的代价与未裁决点见 `const_param::used_as_const_in_annotation`）。
+        // 同一集合就是 checker 三面 `is_declared_type_name` 的回答——四处同源。
         let type_names: HashSet<String> = self.env.types.keys().cloned().collect();
         body_checker.set_type_names(type_names);
         // 如果启用收集模式，设置收集所有错误
@@ -1685,10 +1688,11 @@ impl TypeChecker {
                     //
                     // 扫描面单点在 `const_param::used_as_const_in_annotation`——
                     // 与 Registry 面（`collect_signatures`）与函数体面同一实现。
-                    // 命名空间问答注入 `env.resolves_type_name`（「合法类型名」唯一真相源）：
-                    // 候选名解析到已声明类型 ⇒ 与形参无关（SPEC §7.1 第 1、2 条）。
+                    // 命名空间问答注入 `is_declared_type_name`（`env.types` 的键 ——
+                    // SPEC §7.1 第 2 条的「已声明类型」，与函数体面 `type_names` 同一集合）：
+                    // 候选名解析到已声明类型 ⇒ 与形参无关。
                     let is_predicate = |n: &str| self.is_predicate_application(n);
-                    let is_type_name = |n: &str| self.env.resolves_type_name(n);
+                    let is_type_name = |n: &str| self.is_declared_type_name(n);
                     if let Some(ann) = type_annotation {
                         used_as_const =
                             crate::frontend::core::sema::const_param::used_as_const_in_annotation(
@@ -3120,14 +3124,14 @@ impl TypeChecker {
                 .collect();
             // 构造器面的扫描面 = 定义体（SPEC §7.1 的「类型位置」在构造器面就是类型体里
             // 的全部 `Type` 子树），走与函数三面**同一入口**；命名空间问答同样注入
-            // `env.resolves_type_name`。本面不做谓词短路：类型体里的应用项
+            // `is_declared_type_name`（四处同源）。本面不做谓词短路：类型体里的应用项
             // （`Assert(N > 0)` / 接口实例化）不是谓词应用的实参位语义——历史判据也
             // 从不排除（`Assert` 不是谓词），改动会平移 E1094 的发射面。
             let used_as_const =
                 crate::frontend::core::sema::const_param::used_as_const_in_annotation(
                     definition,
                     &candidate_names,
-                    &|n| self.env.resolves_type_name(n),
+                    &|n| self.is_declared_type_name(n),
                     &|_| false,
                 );
 
@@ -3459,6 +3463,26 @@ impl TypeChecker {
         name: &str,
     ) -> bool {
         self.type_level_namespace.predicates.contains(name)
+    }
+
+    /// 「名字是否解析到**已声明类型**」——SPEC type-system §7.1 第 2 条的字面口径：
+    /// 已声明类型 = `env.types`（本地类型定义 + `use` 导入的类型导出）。
+    ///
+    /// 这是 const 用途精筛 `is_type_name` 的**唯一注入实现**：Registry 面 / 签名面 /
+    /// 构造器面三处共用本方法，函数体面注入 `StatementChecker::type_names`
+    /// （checker.rs 从同一个 `env.types` 取的键集）——四处回答同一问题，与唯一分类器
+    /// `classify_compile_time_value_params` 的 `ParamClassifier::is_type_name` 同源。
+    ///
+    /// **不是** `TypeEnvironment::resolves_type_name`：后者回答「这名字能不能当
+    /// 类型标注用」（含内置名 / 编译器容器 / 接口名 / std 导出类型），是另一个问题；
+    /// 拿它当「形参名是否被类型遮蔽」判据会让 `(Bool: Int) -> Vec(Bool)` 这类病态
+    /// 形态在 sema 面放行、却在 IR 面仍按编译期值参数出 IR（6.8.10 裁决：按 SPEC
+    /// 字面取窄口径）。
+    fn is_declared_type_name(
+        &self,
+        name: &str,
+    ) -> bool {
+        self.env.types.contains_key(name)
     }
 
     /// 把 `Terminates` 精化的占位 base 换成**新类型变量**（RFC-027a）。

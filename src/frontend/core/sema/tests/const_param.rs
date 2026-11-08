@@ -201,3 +201,215 @@ fn test_used_as_const_in_annotation_resolves_type_name_first() {
         "类型位上的 Int 解析到类型命名空间 ⇒ 与形参无关，候选 Int 必须落空；实际: {used:?}"
     );
 }
+// ─────────────────────────────────────────────────────────────
+// 6.8.10：命名空间问答**四处同源**——用途精筛与唯一分类器对同一候选必须同判
+//
+// 判据来源：SPEC type-system §7.1 第 2 条「解析到**已声明类型**」= `env.types` 的键
+// （本地类型定义 + `use` 导入的类型导出）。四个调用点（Registry / 签名 / 构造器 /
+// 函数体面）注入同一集合：checker 三面经 `TypeChecker::is_declared_type_name`、
+// 函数体面经 `StatementChecker::type_names`。
+// ─────────────────────────────────────────────────────────────
+
+/// 构造 `Vec(T)` 形态的类型
+fn vec_of(arg: Type) -> Type {
+    Type::Generic {
+        name: "Vec".to_string(),
+        name_span: Span::default(),
+        args: vec![arg],
+    }
+}
+
+/// 构造 `Bool` 标注
+fn bool_type() -> Type {
+    Type::Name {
+        name: "Bool".to_string(),
+        span: Span::default(),
+    }
+}
+
+/// 两面对**同一份声明**逐候选比对：`used_as_const_in_annotation`（四调用点共用）
+/// 与 `classify_compile_time_value_params`（`runtime_value_params_cls` 的内核）同判。
+fn assert_faces_agree(
+    ann: &Type,
+    params: &[Param],
+    declared_types: &[&str],
+    label: &str,
+) {
+    let cls = crate::ast::ParamClassifier {
+        is_const_param_type: &|n| crate::frontend::core::sema::probe::is_const_param_type_name(n),
+        is_type_name: &|n| declared_types.contains(&n),
+        is_predicate: &|_| false,
+    };
+    // 粗筛候选：有名 + 标注是 const 参数类型名（与分类器粗筛同一判据）
+    let candidates: HashSet<String> = params
+        .iter()
+        .filter(|p| p.is_named())
+        .filter_map(|p| match p.ty.as_ref() {
+            Some(Type::Name { name, .. })
+                if crate::frontend::core::sema::probe::is_const_param_type_name(name) =>
+            {
+                Some(p.name.clone())
+            }
+            _ => None,
+        })
+        .collect();
+
+    let via_classifier = crate::ast::classify_compile_time_value_params(params, &[ann], &cls);
+    let via_annotation =
+        used_as_const_in_annotation(ann, &candidates, cls.is_type_name, cls.is_predicate);
+
+    assert_eq!(
+        via_annotation, via_classifier,
+        "{label}：用途精筛与唯一分类器必须同判（四处同一集合）；候选: {candidates:?}"
+    );
+}
+
+/// 格 1：真 const 参数（`(N: Int) -> (n: N)`）两面同判命中。
+#[test]
+fn test_const_param_faces_agree_on_real_const_param() {
+    // Arrange — 内层 `n: N` 的标注是 Name("N")，不是 const 参数类型 ⇒ 只有 N 是候选
+    let ann = Type::Fn {
+        params: vec![sig_param("N", Some(int_type()))],
+        return_type: Box::new(Type::Fn {
+            params: vec![sig_param("n", Some(name_type("N")))],
+            return_type: Box::new(int_type()),
+        }),
+    };
+    let params = vec![
+        sig_param("N", Some(int_type())),
+        sig_param("n", Some(name_type("N"))),
+    ];
+
+    // Act & Assert
+    assert_faces_agree(&ann, &params, &[], "(N: Int) -> (n: N)");
+}
+
+/// 格 2：候选名是内置名（`Bool`）——本轮口径下不解析到已声明类型 ⇒ 两面同判命中。
+#[test]
+fn test_const_param_faces_agree_on_builtin_name_candidate() {
+    // Arrange — `(Bool: Int) -> Vec(Bool)`
+    let ann = Type::Fn {
+        params: vec![sig_param("Bool", Some(int_type()))],
+        return_type: Box::new(vec_of(name_type("Bool"))),
+    };
+    let params = vec![sig_param("Bool", Some(int_type()))];
+
+    // Act & Assert
+    assert_faces_agree(&ann, &params, &[], "(Bool: Int) -> Vec(Bool)");
+}
+
+/// 格 3：候选名是内置名（`Int`）且标注不同类型（`Bool`）——两面同判命中。
+#[test]
+fn test_const_param_faces_agree_on_builtin_name_with_other_annotation() {
+    // Arrange — `(Int: Bool) -> Vec(Int)`
+    let ann = Type::Fn {
+        params: vec![sig_param("Int", Some(bool_type()))],
+        return_type: Box::new(vec_of(name_type("Int"))),
+    };
+    let params = vec![sig_param("Int", Some(bool_type()))];
+
+    // Act & Assert
+    assert_faces_agree(&ann, &params, &[], "(Int: Bool) -> Vec(Int)");
+}
+
+/// 格 4：候选名是 std 导出类型名（`Error`）——本轮口径下仍未声明 ⇒ 两面同判命中。
+#[test]
+fn test_const_param_faces_agree_on_std_export_name_candidate() {
+    // Arrange — `(Error: Int) -> Vec(Error)`
+    let ann = Type::Fn {
+        params: vec![sig_param("Error", Some(int_type()))],
+        return_type: Box::new(vec_of(name_type("Error"))),
+    };
+    let params = vec![sig_param("Error", Some(int_type()))];
+
+    // Act & Assert
+    assert_faces_agree(&ann, &params, &[], "(Error: Int) -> Vec(Error)");
+}
+
+/// 格 5（命名空间解析的正例）：候选名等于**已声明类型**（`Foo`）⇒ 两面同判落空。
+#[test]
+fn test_const_param_faces_agree_when_candidate_is_declared_type() {
+    // Arrange — `(Foo: Int) -> Vec(Foo)`，且 `Foo` 是已声明类型
+    let ann = Type::Fn {
+        params: vec![sig_param("Foo", Some(int_type()))],
+        return_type: Box::new(vec_of(name_type("Foo"))),
+    };
+    let params = vec![sig_param("Foo", Some(int_type()))];
+
+    // Act & Assert
+    assert_faces_agree(
+        &ann,
+        &params,
+        &["Foo"],
+        "(Foo: Int) -> Vec(Foo) [Foo 已声明]",
+    );
+}
+// ─────────────────────────────────────────────────────────────
+// 6.8.10 行为锚：本轮**不宣称**基线面——病态形态仍按编译期值参数判定（E1112），
+// 负控（真 const 参数）仍为编译期值参数。放行病态形态须先给 IR 面补命名空间通道。
+// ─────────────────────────────────────────────────────────────
+
+/// 源码 → 类型检查结果（与生产入口同一条语义探针）
+fn check_source(source: &str) -> crate::frontend::core::sema::types::TypeCheckResult {
+    use crate::frontend::core::lexer::tokenize;
+    use crate::frontend::core::parser::parse_with_probe;
+    use crate::frontend::core::sema::checker::TypeChecker;
+    use crate::frontend::core::sema::probe::TypeLevelNamespace;
+    use crate::frontend::core::sema::SemanticProbe;
+
+    let tokens = tokenize(source).expect("词法分析应成功");
+    let parsed = parse_with_probe(&tokens, &SemanticProbe);
+    assert!(
+        !parsed.has_errors,
+        "解析应无错误，实际: {:?}",
+        parsed.errors
+    );
+    let mut checker = TypeChecker::new("test");
+    checker.check_module(
+        &parsed.module,
+        &TypeLevelNamespace::scan_one(&parsed.module),
+    )
+}
+
+/// 五类「形参名恰为类型名」的病态形态：本轮口径下仍是编译期值参数 ⇒ 实现头多写一位报 E1112。
+///
+/// 这不是回归而是**预期结果**：形参名未解析到**已声明类型**（`env.types`），用途精筛命中
+/// ⇒ 0 个运行期值位。放行它们会让 IR 面（仍无命名空间通道）按错位出 IR。
+#[test]
+fn test_pathological_type_name_params_still_report_e1112() {
+    // Arrange — 五种名字来源：内置名 ×2 / std 导出名 / 接口名 / 编译器容器名
+    let shapes = [
+        "f: (Bool: Int) -> Bool = (x) => true\n",
+        "f: (Int: Bool) -> Int = (x) => 1\n",
+        "f: (Error: Int, e: Error) -> Int = (x, y) => 1\n",
+        "f: (Add: Int, a: Vec(Add)) -> Int = (x, y) => 1\n",
+        "f: (Vec: Int, v: Vec(Int)) -> Int = (x, y) => 1\n",
+    ];
+
+    // Act & Assert
+    for shape in shapes {
+        let result = check_source(shape);
+        assert!(
+            result.diagnostics.iter().any(|d| d.code == "E1112"),
+            "病态形态 {shape:?} 本轮仍按编译期值参数判定 ⇒ 实现头多出的一位必须报 E1112。实际: {:#?}",
+            result.diagnostics
+        );
+    }
+}
+
+/// 负控：真 const 参数仍是编译期值参数（`(N: Int) -> (n: N) -> Int = (n) => n` 零诊断）。
+#[test]
+fn test_real_const_param_still_compile_time_value_param() {
+    // Arrange — N 只作内层形参 n 的类型；实现头只绑运行期的 n
+    let source = "f: (N: Int) -> (n: N) -> Int = (n) => n\n";
+
+    // Act
+    let result = check_source(source);
+
+    // Assert
+    assert!(
+        result.diagnostics.is_empty(),
+        "真 const 参数 N 不占运行期值位 ⇒ 该声明应零诊断。实际: {:#?}",
+        result.diagnostics
+    );
+}

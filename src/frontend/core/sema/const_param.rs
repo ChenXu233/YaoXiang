@@ -40,7 +40,7 @@ pub fn ast_type_to_const_kind(ty: &Type) -> ConstKind {
 ///
 /// 判定顺序与 `ast::classify_compile_time_value_params` 同序同义（SPEC §7.1）：
 ///
-/// 1. **命名空间解析**（`is_type_name` 注入）：解析到已声明类型 ⇒ 与形参无关，
+/// 1. **命名空间解析**（`is_type_name` 注入）：解析到**已声明类型** ⇒ 与形参无关，
 ///    候选落空——形参名与类型名同形不构成遮蔽（`(Int: Int)` 的两个 `Int` 分属
 ///    值/类型命名空间）；
 /// 2. **用途精筛**（`ast::name_used_as_type`）：名字在任一 `Type` 子树被引用 ⇒ 命中。
@@ -51,6 +51,23 @@ pub fn ast_type_to_const_kind(ty: &Type) -> ConstKind {
 /// （`TypeChecker::collect_function_signature`）、函数体面（`StatementChecker`）、
 /// 类型构造器面（`TypeChecker::add_type_definition`）——「类型位置」这条判据因此
 /// 只有一份实现。
+///
+/// **`is_type_name` 的口径（四处同源）**：四个调用点注入的都是「**已声明类型**」
+/// 集合——`env.types` 的键（本地类型定义 + `use` 导入的类型导出），与唯一分类器
+/// `ast::classify_compile_time_value_params` 的 `ParamClassifier::is_type_name` 同一
+/// 集合。checker 三面经 `TypeChecker::is_declared_type_name`、函数体面经
+/// `StatementChecker::type_names`，回答同一问题。
+///
+/// 它**不是** `TypeEnvironment::resolves_type_name`：后者回答「这名字能不能当类型
+/// 标注用」（含内置名 / 编译器容器 / 接口名 / std 导出类型），问题不同。此处按
+/// SPEC §7.1 第 2 条的字面口径（「解析到**已声明类型**」）取窄。
+///
+/// ⚠ **未裁决的设计问题**：「已声明类型」是否应含内置名（`Int`/`Bool`…）——SPEC 的
+/// 例子（`(Int: Int) -> Int` 的两个 `Int` 分属不同命名空间）字面上要求内置名也算类型，
+/// 但本轮（6.8.10 丙案）按字面只取 `env.types`：放宽会让 `(Bool: Int) -> Vec(Bool)`
+/// 这类形态在 sema 面放行、而 IR 面（`ast::extract_generic_param_names` /
+/// `ir_gen::declaration_runtime_param_slots` 的命名空间问答）仍按编译期值参数出 IR，
+/// 变成「编译通过 + 运行期崩」。放宽须先补齐 IR 面通道，属另一裁决。
 pub fn used_as_const_in_annotation(
     annotation: &Type,
     candidates: &HashSet<String>,
