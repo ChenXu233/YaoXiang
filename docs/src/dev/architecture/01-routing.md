@@ -15,7 +15,7 @@
 | L3/L4 不得 `use` L2 | 扫描 `sema/`、`proof/`、`middle/`、`backends/` 中的 `use ...frontend::{lexer,parser,module}` | 当前为 0，基线取 0（AST 为顶层域，无需豁免条款） |
 | L4 不得反向引用 L1/L2 | 扫描 `src/backends/`、`src/middle/` 中的 `use ...frontend::core::{lexer,parser}` | 需先建立基线 |
 | opcode 词表唯一归属 `middle/bytecode/` | 扫描 `src/backends/` 不得定义 opcode 常量（只 import）；`sema/` 不得出现 opcode 引用 | 现状词表在 `backends/common/opcode.rs`（形成 L3→L4 反向），随字节码域合并迁移 |
-| `pub(crate)` 跨层泄漏只许减不许增 | 统计并入基线文件 | 至少 1 处（`collect_used_in_type` 被 `inference/statements.rs:16` 使用） |
+| `pub(crate)` 跨层泄漏只许减不许增 | 统计并入基线文件 | 仍存在跨层泄漏；当前计数由 `scripts/ci/check-boundary.py` 统计并报出（总数 + 分目录） |
 | 禁止硬编码类型/谓词名 | 扫描 `src/frontend/core/parser/` 内的类型名字符串字面量 | `"Terminates"` 等 |
 
 ## 目标目录结构（施工完成后）
