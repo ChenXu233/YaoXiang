@@ -607,6 +607,13 @@ impl Type {
     /// 供死代码分析（可达性）与未使用导入检测共享：
     /// 类型引用只出现在注解/类型体位置，普通表达式遍历看不到它们。
     /// 保守策略——拿不准的名字一律收集（宁可漏报也不误报死代码/未用导入）。
+    ///
+    /// 覆盖全部**承载名字**的变体：`Name` / `Struct`（体项）/ `NamedStruct`（字段类型）
+    /// / `Tuple` / `Fn`（形参标注 + 返回位）/ `Ptr` / `Generic`（头 + 实参）/
+    /// `Literal`（底层类型）/ `Ref` / `MetaType`（实参）/ `ConstExpr`（表达式标识符）/
+    /// `Paren` 与 `NamedParen`（透明，递归内层）。
+    /// `NamedParen` 的 binder 名（`param`）**不计**——它是返回形式参数名的声明，
+    /// 不是引用（RFC-027 §3）；谓词应用里对它的**使用**由内层递归照常收集。
     pub fn collect_name_refs(
         &self,
         out: &mut HashSet<String>,
@@ -659,7 +666,13 @@ impl Type {
                 }
             }
             Type::ConstExpr(expr) => collect_expr_ident_refs(expr, out),
-            _ => {}
+            // 括号是「完整类型」的声明，对名字收集透明（RFC-004）：内层与无括号同义。
+            // `NamedParen` 只多携带返回位 binder 名——那是**声明**不是引用
+            // （RFC-027 §3：binder 不进作用域），不计入；内层（含谓词应用里的
+            // binder **使用**）照常递归收集。
+            // 少了这两支会落进兜底 ⇒ 括号包裹的类型名漏收 ⇒ W1002/W1003 误报
+            // 与 `type_position_names` 漏名（#528 6.8.11）。
+            Type::Paren(inner) | Type::NamedParen { inner, .. } => inner.collect_name_refs(out),
         }
     }
 }
