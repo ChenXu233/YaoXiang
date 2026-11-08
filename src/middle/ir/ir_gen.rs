@@ -624,7 +624,9 @@ impl AstToIrGenerator {
             return Vec::new();
         };
         let flat: Vec<ast::Param> = inner.to_vec();
-        let generic = crate::ast::extract_generic_param_names(&flat, &SemanticProbe);
+        // 扫描面 = 内层 Fn 的整棵声明（形参标注 ∪ 返回位）：被返回闭包的编译期
+        // 形参若只在它的返回位被引用，也必须从运行期形参里剔除。
+        let generic = crate::ast::extract_generic_param_names(&flat, &[inner_ty], &SemanticProbe);
         flat.iter()
             .filter(|p| !generic.iter().any(|g| g.name == p.name))
             .map(|p| {
@@ -2134,7 +2136,12 @@ impl AstToIrGenerator {
                 // 提取泛型参数名。探针传 L3 语义实现：约束名 / 内置名定种必须以
                 // 类型环境的权威表为准，否则 `(T: Add)` 不登记为泛型参数、
                 // 单态化请求的类型实参与 IR 的 generic_params 对不上（E3018）。
-                let generic_params = extract_generic_param_names(&signature, &SemanticProbe);
+                // 扫描面 = 整棵声明注解（形参标注 ∪ 返回位）。构造器面里 const 名的
+                // 另一处引用面是**定义体**——那是单态化请求侧只携带类型实参的既有面
+                // （请求 arity 与本表逐字对齐），不属本函数的扫描面。
+                let type_positions: Vec<&ast::Type> = type_annotation.iter().collect();
+                let generic_params =
+                    extract_generic_param_names(&signature, &type_positions, &SemanticProbe);
                 let generic_param_names = if generic_params.is_empty() {
                     None
                 } else {
@@ -2286,8 +2293,14 @@ impl AstToIrGenerator {
                 } else {
                     (Vec::new(), Vec::new())
                 };
-                let generic_params =
-                    crate::ast::extract_generic_param_names(&signature, &SemanticProbe);
+                // 扫描面 = 整棵声明注解（形参标注 ∪ 返回位，SPEC §7.1「全部 Type 子树」）：
+                // 只在返回位被引用的编译期值参数同样要进 generic_params（#528 §4-4）。
+                let type_positions: Vec<&ast::Type> = type_annotation.iter().collect();
+                let generic_params = crate::ast::extract_generic_param_names(
+                    &signature,
+                    &type_positions,
+                    &SemanticProbe,
+                );
                 // 登记形参名，供命名参数调用（`add(b = 5, a = 3)`）重排实参。
                 //
                 // 名字取**声明形态**（WBS 6.8.2a / D54 ③）：函数收几个值、每一位叫什么
@@ -3986,8 +3999,13 @@ impl AstToIrGenerator {
                 };
                 // 如果有 params/body，是嵌套函数
                 if !params.is_empty() || !body.is_empty() {
-                    let generic_params =
-                        crate::ast::extract_generic_param_names(&signature, &SemanticProbe);
+                    // 同 Assign 面：扫描面 = 整棵声明注解（含返回位）。
+                    let type_positions: Vec<&ast::Type> = type_annotation.iter().collect();
+                    let generic_params = crate::ast::extract_generic_param_names(
+                        &signature,
+                        &type_positions,
+                        &SemanticProbe,
+                    );
                     let generic_param_names = if generic_params.is_empty() {
                         None
                     } else {

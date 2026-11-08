@@ -208,7 +208,8 @@ fn test_type_def_generic() {
         .as_ref()
         .map(crate::ast::Type::fn_params_flat)
         .unwrap_or_default();
-    let generic_params = extract_generic_param_names(&params, &NullProbe);
+    // 类型位置根传空：本用例钉形参标注面（(T: Type) → T）
+    let generic_params = extract_generic_param_names(&params, &[], &NullProbe);
 
     // Assert
     assert_eq!(name, "Option", "类型名应为 Option");
@@ -330,7 +331,7 @@ fn test_anonymous_param_never_yields_generic_name() {
     // 探针传 NullProbe：本用例只断言「无名形参不产泛型名」，const 参数判定不参与
     let classified =
         crate::ast::classify_generic_params(&params, &|name| name == "Add", &NullProbe);
-    let extracted = extract_generic_param_names(&params, &NullProbe);
+    let extracted = extract_generic_param_names(&params, &[], &NullProbe);
 
     // Assert
     assert!(
@@ -661,7 +662,8 @@ fn test_type_def_generic_sum_type_recognized_as_struct() {
         .as_ref()
         .map(crate::ast::Type::fn_params_flat)
         .unwrap_or_default();
-    let generic_params = extract_generic_param_names(&params, &NullProbe);
+    // 类型位置根传空：本用例钉形参标注面（和类型的 (T: Type) → T）
+    let generic_params = extract_generic_param_names(&params, &[], &NullProbe);
 
     // Assert
     assert_eq!(name, "Option", "类型名应为 Option");

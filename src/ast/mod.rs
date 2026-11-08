@@ -1371,8 +1371,17 @@ pub fn classify_compile_time_value_params(
 /// 约束名（探针判定的运算符接口）、类型级函数标注（构造器变量）。其余
 /// `Name` 标注（用户类型的值参数）保守跳过——trait 表不在 L2，带 trait 约束的
 /// 分类由 L3 的 `classify_generic_params` 另做。
+///
+/// `type_positions`：该声明中**除形参标注之外**的类型位置根（调用方传声明注解的
+/// `Type::Fn` 链；没有可传 `&[]`）。用途精筛的扫描面 = 形参标注 ∪ 全部
+/// `type_positions`（SPEC type-system §7.1：「类型位置」指声明中的全部 `Type`
+/// 子树，判定时遍历全部子树、不按位置分情况）。只扫形参标注时，名字**只在返回位**
+/// 被引用的编译期值参数判不出来：`f: (N: Int) -> Array(Int, N)` 的 `N` 因此既不在
+/// IR 的 `generic_params` 里、又在返回类型里留下无绑定的自由 `TypeRef("N")`
+/// （#528 §4-4）。
 pub fn extract_generic_param_names(
     params: &[Param],
+    type_positions: &[&Type],
     probe: &dyn TypeEnvProbe,
 ) -> Vec<GenericParamName> {
     params
@@ -1405,13 +1414,14 @@ pub fn extract_generic_param_names(
                 // 移到 L3 的 `sema::probe::CONST_PARAM_TYPES`）：parser 不再
                 // 持有自己的表、也不再用内置名表二次复核——探针说不就是不。
                 Type::Name { name, .. } if probe.is_const_param_type(name) => {
+                    let is_predicate = |n: &str| probe.kind_of(n) == NameKind::Predicate;
+                    // 扫描面 = 形参标注 ∪ `type_positions`（整棵声明）。
                     let used_as_type = params.iter().any(|q| {
-                        q.ty.as_ref().is_some_and(|qt| {
-                            name_used_as_type(&p.name, qt, &|n| {
-                                probe.kind_of(n) == NameKind::Predicate
-                            })
-                        })
-                    });
+                        q.ty.as_ref()
+                            .is_some_and(|qt| name_used_as_type(&p.name, qt, &is_predicate))
+                    }) || type_positions
+                        .iter()
+                        .any(|t| name_used_as_type(&p.name, t, &is_predicate));
                     if used_as_type {
                         Some(GenericParamName {
                             name: p.name.clone(),

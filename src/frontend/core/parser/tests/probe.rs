@@ -33,7 +33,8 @@ fn names_of(
     param_list: &[Param],
     probe: &dyn TypeEnvProbe,
 ) -> Vec<String> {
-    extract_generic_param_names(param_list, probe)
+    // 本文件的用例只钉「形参标注面」的 const 判定 ⇒ 类型位置根传空
+    extract_generic_param_names(param_list, &[], probe)
         .into_iter()
         .map(|p| p.name)
         .collect()

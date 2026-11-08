@@ -424,8 +424,12 @@ impl TypeChecker {
                         .as_ref()
                         .map(crate::ast::Type::fn_params_flat)
                         .unwrap_or_default();
+                    // 扫描面 = 整棵声明注解（形参标注 ∪ 返回位）：语义高亮的
+                    // Generic 修饰符与 IR 的 generic_params 必须同一判据面。
+                    let type_positions: Vec<&crate::ast::Type> = type_annotation.iter().collect();
                     let generic_params = crate::ast::extract_generic_param_names(
                         &signature,
+                        &type_positions,
                         &crate::frontend::core::sema::SemanticProbe,
                     );
                     let is_method = type_name.is_some();
@@ -663,8 +667,12 @@ impl TypeChecker {
                         .as_ref()
                         .map(crate::ast::Type::fn_params_flat)
                         .unwrap_or_default();
+                    // 扫描面 = 整棵声明注解（形参标注 ∪ 返回位）：语义高亮的
+                    // Generic 修饰符与 IR 的 generic_params 必须同一判据面。
+                    let type_positions: Vec<&crate::ast::Type> = type_annotation.iter().collect();
                     let generic_params = crate::ast::extract_generic_param_names(
                         &signature,
+                        &type_positions,
                         &crate::frontend::core::sema::SemanticProbe,
                     );
                     // 类型定义 → Type (定义)
