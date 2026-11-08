@@ -121,3 +121,48 @@ fn test_rfc011_type_constructor_const_param_in_paren_field_is_used() {
         result.diagnostics
     );
 }
+/// 规范：SPEC §7.1 第 2 条 —— 「解析到**已声明类型**」是窄口径（`env.types` 的键）。
+///
+/// `Bool` 是内置名（`MonoType::from_builtin_name` 认得）但**不在 `env.types` 里**，
+/// 故它作形参名时仍是编译期值参数候选；已在类型体 `Array(Bool, 1)` 被引用 ⇒ 命中
+/// ⇒ **零诊断**。
+///
+/// 这条钉的是**生产注入**（构造器面注入 `TypeChecker::is_declared_type_name`），
+/// 不是「两个函数在相同注入下同判」：把注入换回 `env.resolves_type_name`（宽口径）后
+/// `Bool` 被当成类型名 ⇒ 候选落空 ⇒ E1094（改前实测）。
+#[test]
+fn test_rfc011_type_constructor_builtin_name_param_uses_declared_type_namespace() {
+    // Arrange — 内置名作形参名，且该名字在类型体里被引用
+    let source = "SafeBox: (Bool: Int) -> Type = { data: Array(Bool, 1) }";
+
+    // Act
+    let result = check_source(source);
+
+    // Assert
+    assert!(
+        result.diagnostics.is_empty(),
+        "按 SPEC §7.1「已声明类型」窄口径，内置名 Bool 不在 env.types ⇒ 仍是编译期值参数候选，\
+         而它已在类型体被引用 ⇒ 命中，必须零诊断。实际: {:#?}",
+        result.diagnostics
+    );
+}
+
+/// 同族负控：同样内置名作形参名，但该名字**没有**出现在类型体 ⇒ 落空，必须报 E1094。
+///
+/// 两种注入下都应报（窄口径：候选命中不了；宽口径：候选被命名空间排除后同样落空），
+/// 用来证明上一条正控不是把 E1094 关掉了。
+#[test]
+fn test_rfc011_type_constructor_builtin_name_param_unused_still_e1094() {
+    // Arrange — 同一内置名作形参名，但类型体不引用它
+    let source = "SafeBoxNeg: (Bool: Int) -> Type = { data: Int }";
+
+    // Act
+    let result = check_source(source);
+
+    // Assert
+    assert!(
+        result.diagnostics.iter().any(|d| d.code == "E1094"),
+        "名字未出现在类型体 ⇒ 落空，必须报 E1094。实际: {:#?}",
+        result.diagnostics
+    );
+}
