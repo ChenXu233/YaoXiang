@@ -211,7 +211,7 @@ src/
 | `frontend/core/parser/pratt/`（手写 match 分派，两套 BP 阶梯） | `frontend/parser/grammar/` + 单套优先级表 | 05 |
 | `frontend/core/parser/ast.rs`（1166 行：`Expr`/`StmtKind`/`Type`/`Pattern` 定义） | 拆迁顶层 `ast/`（`expr`/`stmt`/`type_`/`pattern`） | 03 / D1 |
 | `frontend/core/parser/statements/declarations.rs`（1015 行，8-10 段职责） | `frontend/parser/` 拆分 + 删 120 行死旧语法 | 05 |
-| `typecheck/checker.rs`（4167 行 + 三个真子模块 `checker/annotations.rs` 470 行、`checker/refinement.rs` 1107 行、`checker/semantic_tokens.rs` 1553 行） | `sema/check/` + `sema/refine/`；`include!` 改真 `mod`（5.1 已完成）、精化块迁子模块与入口收口（5.2 已完成：入口为 `&self` + 返回诊断）、注解族迁子模块（5.3 已完成，`collect_used_in_type` 属共享面留在原处、无需再导出） | 02 / 05 |
+| `typecheck/checker.rs`（4167 行 + 三个真子模块 `checker/annotations.rs` 470 行、`checker/refinement.rs` 1107 行、`checker/semantic_tokens.rs` 1553 行） | `sema/check/` + `sema/refine/`；`include!` 改真 `mod`（5.1 已完成）、精化块迁子模块与入口收口（5.2 已完成：入口为 `&self` + 返回诊断）、注解族迁子模块（5.3 已完成） | 02 / 05 |
 | `typecheck/checker/semantic_tokens.rs`（1553 行，已是 `checker` 的真子模块） | `sema/check/semantic_tokens.rs` | 02 |
 | `typecheck/inference/expressions.rs`（5525 行） | `sema/infer/{call/,expr,stmt}.rs` | 05 / 04 |
 | `typecheck/inference/statements.rs`（2887 行） | `sema/infer/stmt.rs` + `sema/infer/mod.rs` | 05 |
