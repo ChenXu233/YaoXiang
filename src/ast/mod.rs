@@ -725,6 +725,12 @@ fn collect_binding_kind_refs(
 ///
 /// 用于 ConstExpr 等表达式位置的名字保守收集；
 /// 完整的引用分析在 L3 的类型检查与死代码分析各自的遍历中完成。
+///
+/// 递归覆盖的节点形态：`Var` / `Call`（被调表达式 + 位置实参 + **具名实参的值**；
+/// 具名实参的键是被调方形参名，不计）/ `FieldAccess` / `BinOp` / `UnOp` /
+/// `Cast`（被转换表达式 + **`target_type` 类型位置**）/ `Index` / `Tuple`·`List` /
+/// `Dict`。其余形态（控制流、块、lambda、`?`/`&`/`ref` 等）落兜底不递归——
+/// 这是文档化的保守近似：收不到的只是更深层的名字，不会误收。
 fn collect_expr_ident_refs(
     expr: &Expr,
     out: &mut HashSet<String>,
@@ -733,10 +739,20 @@ fn collect_expr_ident_refs(
         Expr::Var(name, _) => {
             out.insert(name.clone());
         }
-        Expr::Call { func, args, .. } => {
+        Expr::Call {
+            func,
+            args,
+            named_args,
+            ..
+        } => {
             collect_expr_ident_refs(func, out);
             for arg in args {
                 collect_expr_ident_refs(arg, out);
+            }
+            // 具名实参：**值**是引用；**键**是被调方的形参名（不在本命名空间里），
+            // 不计（#528 6.8.13）。
+            for (_, value) in named_args {
+                collect_expr_ident_refs(value, out);
             }
         }
         Expr::FieldAccess { expr, .. } => collect_expr_ident_refs(expr, out),
@@ -745,7 +761,14 @@ fn collect_expr_ident_refs(
             collect_expr_ident_refs(right, out);
         }
         Expr::UnOp { expr, .. } => collect_expr_ident_refs(expr, out),
-        Expr::Cast { expr, .. } => collect_expr_ident_refs(expr, out),
+        // `x as Foo` 的 `target_type` 是**类型位置**：漏掉它会让 `Foo` 不被计为引用，
+        // 未用导入 / 未用类型因此误报（#528 6.8.13，与 6.8.11 的括号缺口同类）。
+        Expr::Cast {
+            expr, target_type, ..
+        } => {
+            collect_expr_ident_refs(expr, out);
+            target_type.collect_name_refs(out);
+        }
         Expr::Index { expr, index, .. } => {
             collect_expr_ident_refs(expr, out);
             collect_expr_ident_refs(index, out);

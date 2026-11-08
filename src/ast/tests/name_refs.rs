@@ -12,6 +12,7 @@
 use std::collections::HashSet;
 
 use crate::ast::{Expr, Type};
+use crate::util::plan_id::PlanId;
 use crate::util::span::Span;
 
 fn name_ty(name: &str) -> Type {
@@ -112,5 +113,54 @@ fn test_collect_name_refs_named_paren_collects_predicate_heads_and_uses() {
     assert!(
         refs.contains("IsPositive") && refs.contains("r"),
         "谓词头与谓词里对 binder 的使用都必须计入（保守收集）；实际: {refs:?}"
+    );
+}
+/// `x as Foo` 的 `target_type` 是**类型位置**：这个名字必须计入引用。
+#[test]
+fn test_collect_name_refs_cast_target_type() {
+    // Arrange — 类型树的 ConstExpr 里出现 `x as Foo`
+    let ty = Type::ConstExpr(Box::new(Expr::Cast {
+        expr: Box::new(Expr::Var("x".to_string(), Span::dummy())),
+        target_type: name_ty("Foo"),
+        span: Span::dummy(),
+    }));
+
+    // Act
+    let refs = refs_of(&ty);
+
+    // Assert
+    assert!(
+        refs.contains("Foo"),
+        "`as Foo` 的目标类型名必须计入引用（否则未用导入/未用类型误报）；实际: {refs:?}"
+    );
+    assert!(
+        refs.contains("x"),
+        "被转换的表达式里的标识符照常计入；实际: {refs:?}"
+    );
+}
+
+/// 具名实参：`f(x: Foo)` 的**值**是引用，**键**（形参名）不是。
+#[test]
+fn test_collect_name_refs_named_call_arguments() {
+    // Arrange — ConstExpr 里出现具名实参调用
+    let ty = Type::ConstExpr(Box::new(Expr::Call {
+        func: Box::new(Expr::Var("f".to_string(), Span::dummy())),
+        args: vec![],
+        named_args: vec![("x".to_string(), Expr::Var("Foo".to_string(), Span::dummy()))],
+        span: Span::dummy(),
+        plan_id: PlanId::UNPLANNED,
+    }));
+
+    // Act
+    let refs = refs_of(&ty);
+
+    // Assert
+    assert!(
+        refs.contains("Foo"),
+        "具名实参的值里的标识符必须计入引用；实际: {refs:?}"
+    );
+    assert!(
+        !refs.contains("x"),
+        "具名实参的键是**形参名**（被调方命名空间的局部名），不是引用；实际: {refs:?}"
     );
 }
