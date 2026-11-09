@@ -84,7 +84,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **模板**：`未知变量：'{name}'`
 - **消息**：引用的变量未定义
 - **帮助**：检查变量名是否拼写正确，或先定义它
-- **发射点**：`src/frontend/core/sema/checker/refinement.rs:443`、`src/frontend/core/sema/inference/expressions.rs:3432`、`src/frontend/core/sema/inference/statements.rs:3200` 等 4 处
+- **发射点**：`src/frontend/core/sema/checker/refinement.rs:449`、`src/frontend/core/sema/inference/expressions.rs:3432`、`src/frontend/core/sema/inference/statements.rs:3200` 等 4 处
 
 ### E1002：类型不匹配
 

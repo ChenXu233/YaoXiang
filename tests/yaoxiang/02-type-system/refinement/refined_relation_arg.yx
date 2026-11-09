@@ -1,0 +1,41 @@
+// 02-type-system/refinement/refined_relation_arg.yx
+// 覆盖: RFC-027 §2/§3.1/§3.3/§3.4 —— 多形参关系谓词的调用点义务（已知实参）
+// 验证: 关系谓词 `Eq(a, b)` / `SumUpTo(n, s)` 的自由变量是**多个声明形参名**；
+//       `f(42, 42)` 与 `g(3, 6)` 把它们按声明序代入实参得闭合约束
+//       `Eq(42, 42)` / `SumUpTo(3, 6)`，证明函数编译期执行为真 ⇒ 编译通过、可运行。
+//       命名实参按**形参名**入槽：`g(s = 6, n = 3)` 的义务同样是 `SumUpTo(3, 6)`。
+// 状态: ✅ 可运行
+//
+// 与 06-compile-errors/refinement/refined_relation_arg_violates_err.yx /
+// refined_relation_arg_order_err.yx / refined_relation_arg_named_err.yx 成对：
+// 那三份钉住「违反即拒绝」「按位对齐」与「按名入槽」。
+// `g(3, 6)` 是**顺序**判据——非交换关系只有把第二实参代入 `s` 才成立
+//（错接成 `SumUpTo(6, 3)` 会得 3 == 12）；`g(s = 6, n = 3)` 再钉一次「按名」而非
+// 书写序。
+
+use std.assert
+
+Eq: (a: Int, b: Int) -> Type = { a == b }
+
+f: (N: Int, n: Eq(n, N)) -> Int = { n }
+
+SumUpTo: (n: Int, s: Int) -> Type = { s == n * 2 }
+
+g: (n: Int, s: SumUpTo(n, s)) -> Int = { s }
+
+main: () -> Void = {
+    x: Int = f(42, 42)
+    assert.assert(x == 42, "f(42, 42) 应返回 42")
+
+    y: Int = g(3, 6)
+    assert.assert(y == 6, "g(3, 6) 应返回 6（s == n * 2）")
+
+    z: Int = f(n = 42, N = 42)
+    assert.assert(z == 42, "f(n = 42, N = 42) 应返回 42（命名实参按形参名入槽）")
+
+    w: Int = g(s = 6, n = 3)
+    assert.assert(w == 6, "g(s = 6, n = 3) 应返回 6（非交换关系 + 命名实参按名入槽）")
+}
+
+// T4 入口语义：Script 模式的 main **不会**隐式执行——必须显式调用，运行期断言才生效。
+main()

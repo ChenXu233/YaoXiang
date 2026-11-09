@@ -858,10 +858,12 @@ sum: (arr: Array(Int)) -> Int = {
 
 ### 11. dispatch 分派管道：编译期与运行时的统一分派
 
-> **落地注记（2026-10-03，#377-2）**：本节的**语义**成立且已接入生产，但**结构**不是独立的
-> `layers/dispatch.rs` 模块。生产的分派由 `checker.rs` 三处**调用点义务**直接实现（直接调
-> `layers::predicate::check_predicate`）：绑定位重验证（`revalidate_refined`）、调用点实参
-> （`check_call_arg_refinements`）、返回位后置条件（`check_return_refinement`）。原
+> **落地注记（2026-10-03 登记，#377-2）**：本节的**语义**成立且已接入生产，但**结构**不是独立的
+> `layers/dispatch.rs` 模块。生产的分派由 `checker.rs` 的**三处调用点义务**实现——绑定位重验证
+> （`revalidate_refined`）、调用点实参（`check_call_arg_refinements`）、返回位后置条件
+> （`check_return_refinement`）；其中**直接调用** `layers::predicate::check_predicate` 的是**两处**：调用点实参与
+> 返回位后置条件共用唯一判定单元 `judge_refined_obligation`（`checker/refinement.rs`），
+> `revalidate_refined` 自带 E2030 口径。原
 > `layers/dispatch.rs` 零生产调用点，且其对 `Unproven { ProofFunctionRequired }` 的处置是
 > 「降级为 W1080 警告并注入 Γ」，与生产实做（`Unproven` 一律报错，见 `refined_unproven`）
 > 相冲突，故已整体删除。另需注意：本节表中 Runtime 行的「插入运行时 check」在生产**尚无**

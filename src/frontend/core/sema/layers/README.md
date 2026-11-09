@@ -16,7 +16,7 @@
 
 | 序 | 调用点（符号锚；括号内为现树行号） | 证明入口 | 返回 |
 |----|-----------------------------------|----------|------|
-| 1 | `check_module_impl` 的精化走查起点 `collect_refined_binding_checks`（`checker/refinement.rs`） | `predicate::check_predicate`（三个站点，分别由 `revalidate_refined` / `check_call_arg_refinements` / `check_return_refinement` 调用，均在 `checker/refinement.rs`） | `ProofResult` |
+| 1 | `check_module_impl` 的精化走查起点 `collect_refined_binding_checks`（`checker/refinement.rs`） | `predicate::check_predicate`（**两个**调用站点，均在 `checker/refinement.rs`：`revalidate_refined` 自带 E2030 口径；`judge_refined_obligation` 是调用点义务与返回位共用的唯一判定单元） | `ProofResult` |
 | 2 | `check_module_impl` 的终止检查块（`:1263`–`:1284`）：闭包内 `TerminationChecker::new()`（`:1272`）→ `check_module` → `count_unjudged_obligations`（`:1278`） | `termination::TerminationChecker` | `Vec<ProofResult>` |
 | 3 | `check_module_impl` 的所有权检查块（`:1296`–`:1340`）：`check_ownership`（`:1303`） | `ownership::check_ownership` | `(Vec<ProofResult>, ReleasePlan, HashSet<String>)` |
 | 4 | `check_module_impl` 尾部 `env.solver().solve()`（`:1343`） | 类型约束求解器 `TypeConstraintSolver`——**不在 `layers/`** | — |

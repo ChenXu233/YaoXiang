@@ -287,7 +287,7 @@ RFC-027 的三个单测（`src/frontend/core/sema/tests/rfc027_phase25_proof_fn.
 
 | 实际顺序 | 调用点 | 对应层 |
 | --- | --- | --- |
-| 1 | 精化走查驱动 `predicate::check_predicate`（`revalidate_refined` / `check_call_arg_refinements` / `check_return_refinement` 三个站点） | `predicate.rs` |
+| 1 | 精化走查驱动 `predicate::check_predicate`（两个站点：`revalidate_refined` 自带 E2030 口径；`judge_refined_obligation` 是调用点义务与返回位共用的唯一判定单元） | `predicate.rs` |
 | 2 | `termination::TerminationChecker::check_module` | `termination.rs` |
 | 3 | `ownership::check_ownership` | `ownership.rs` |
 | 4 | 类型约束求解 `env.solver().solve()`（不在 `layers/`） | — |

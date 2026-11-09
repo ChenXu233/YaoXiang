@@ -1,0 +1,20 @@
+// 06-compile-errors/refinement/refined_relation_arg_violates_err.yx
+// 覆盖: RFC-027 §2/§3.3/§3.4 —— 多形参关系谓词的调用点义务（issue #532）
+// 验证: `n: Eq(n, N)` 的自由变量是两个声明形参名；`f(42, 7)` 按声明序代入得
+//       闭合约束 `Eq(7, 42)`，证明函数编译期执行为 false ⇒ E4018。
+// 状态: ❌ 应被编译期拒绝
+//
+// 修复前本文件**静默通过**：调用点义务只在约束恰好只有一个自由变量时判定
+//（对 `free.len() != 1` 直接跳过），而多形参谓词不进编译期谓词注册表
+//（注册只收单参数定义），形参约束因此保持不透明应用 `Eq(n, N)`。
+
+// expect: compile-error E4018
+
+Eq: (a: Int, b: Int) -> Type = { a == b }
+
+f: (N: Int, n: Eq(n, N)) -> Int = { n }
+
+main: () -> Void = {
+    x: Int = f(42, 7)
+    print(x)
+}
