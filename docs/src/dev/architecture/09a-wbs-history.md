@@ -4198,3 +4198,64 @@ issue #529 的裁决 D62 把第一阶段（量词 IR）拆为 A/B/C：A 只落�
 - C（擦除与替换）未开工。
 - #527 零改动；其落地时需同批补 driver 级「并集 vs 单元素」判官。
 - 6.9.5 复用 `judge_refined_obligation` 的可见性前提见 §P6 6.9.1。
+
+## P6 6.9.2-B 编译期证据三态与 E1113（2026-11-10）
+
+### 一、范围
+
+RFC-039 D62 四阶段的第三阶段「证据强制」。t18 / t21 / t24 三轮落地，t20 / t23 / t26 三轮对抗复审；实现提交 `0504e42e`。C 阶段（擦除与替换）未开工。
+
+### 二、落地
+
+1. `collect_const_arg_instantiation_request` 由 `Option` 改三态 `ConstArgOutcome{NotTarget, Evidenced(Option<MonoType>), MissingEvidence(Diagnostic)}`——旧写法把「非目标」与「无证据」压成同一个 `None`，后者被静默按运行期传参。
+2. 新增 **E1113 `missing_compile_time_evidence`**（TypeCheck 级 error、非 warning，位置指向该实参，不借 E1092 / E1010）。四件套 = 码定义 + 六语 locale + RFC-013 表 + 生成物（E1xxx.md / index.md；其余生成物为纯行号平移）。
+3. 槽位登记 `TypeChecker.declared_call_site_params`（调用点实参序列形参名，非类型形参、q=0 保留），唯一登记点 `collect_function_signature`；调用点用共享 `bind_args_to_params` 对齐。
+4. 证据四类（RFC-011 §4.1「调用侧义务按声明强度检查」）：字面量 / 值环境 / 单值钉住（`k: N` 形参，值被单值类型钉死）/ 单值表达式（复用既有 `ConstGenericEval`，不新写求值器）。白名单是闭合枚举 + catch-all false（只放行 Lit / Var / BinOp / UnOp，Assign 与 Range 显式排除；调用、字段、块、索引、Cast 一律不算证据）。
+5. 证据判定**按绑定**而非按名字：钉住标志记在 `VarInfo::pinned`，`var_pinned` 走 `get_var_info` 同一条按名解析链取最内层绑定；`const_bindings()` 不再按作用域链摊平，先收候选名再逐个按最内层绑定取值（最内层无 const_value 则该名不参与求值）。
+6. 证据分级 `ConstEvidence{Specializable, CheckOnly}`：只有既有 6.8.5-1 面继续登记特化并沿用 6.8.7 单值收紧；新增两类只用于通过检查。
+
+### 三、错误类型（D59）按旧行为分列
+
+- 全应用 `f(y)(z)`：旧行为 = **0 诊断、编译通过、运行正确**（r==42）⇒ **D 类**。依据 D62 原文「不可逆：f(y) 无证据从静默通过变编译错误（D 类）」+ 2026-11-10 用户批准新增 E1113 ⇒ 非待裁决的新变更，但按 D 类如实登记。
+- 偏应用 `f(y)`：旧 = E1012「return type mismatch」⇒ **A 类**（旧行为非成功，码与实因不符）。
+- 命名 `f(N = y)`：旧 = **E1012** ⇒ **A 类**；命名 `f(N = y)(42)`：旧 = E1014 ⇒ **A 类**。
+- `f(N = 42)`（E1012）与 `f(N = 42)(42)`（E1014）、合法形态：零改判。
+- 附带（同一根因最小修改集内）：证据检查前置于命名/形态校验 ⇒ 命名形态的码由 E1012 / E1014 变 E1113。两种形态都拒绝，旧码把「证据缺失」错报成「名字不可用」或「返回类型不匹配」。
+
+### 四、口径更正
+
+1. `f(N = y)` 的改前码是 **E1012**（E1014 属带 `(42)` 的形态；t18 报告与 t20 复审曾把两形态混记）。
+2. 「嵌套块内同名」**语言不存在该遮蔽形态**——块内、if 分支、while 体的同名声明被判为对既有不可变绑定的赋值 ⇒ E2010，在证据判定之前即拒（块作用域本身存在，块外引用报 E1001）。
+
+### 五、复审发现与修复链
+
+- t20（F1，blocker）：RFC-011 §4.1 与 SPEC §7.1 逐字收录的 factorial 递归示例被 E1113 拒绝，而它在基线是成功程序（违反 RFC 明文证据定义、WBS 6.9.2「既有合法特化程序零回归」与 D59 条件②）⇒ t21 修（补单值钉住证据面）。
+- t23（F1'，high）：「钉住」判定按名字而非按绑定 ⇒ match 臂同名绑定遮蔽后运行期值被当作编译期证据放行（运行期 8 ≠ 应有 41）⇒ t24 修（`VarInfo::pinned` 按绑定 + `const_bindings` 取最内层）。
+- t26 独立复核 PASS；M1 / M2 / M3 三组变异各有独立牙齿，两份遮蔽语料负例在 M3 下静默通过 ⇒ 语料差分门禁对该修复有牙齿。
+
+### 六、F4（C 步闸门）
+
+`CheckOnly` 证据不进 `InstantiationRequest` ⇒ C 步擦除时 `factorial(k - 1)` 没有请求可消费，mono 不知道被调实例的 N。三条出路（本批不定）：
+
+1. `type_args` 承载复合符号表达式（新增表示与求值，架构变更）；
+2. 保持不特化（递归 const 泛型擦不干净，等于放弃本卡目标）；
+3. mono 侧对符号实参求值（给 name_map 加算术求值；与 1 同属设计面，但改动面更集中）。
+
+**C 步不得在 F4 裁决前开工。**
+
+### 七、已知边界
+
+- 方法面（`Type.method`，值接收者）：`callee_generic_name` 返回 `None` ⇒ 整段 `NotTarget`，当前零诊断；已钉 tripwire（`test_method_bound_const_generic_argument_is_currently_unchecked`）。追踪 issue #538。
+- 跨模块导入面：`Export` 只带 `type_params` / `param_names`、无 q=0 事实 ⇒ 导入调用维持 0 诊断（基线与终态同码），未回退运行期猜测。追踪 issue #539。
+
+### 八、机械面与数字
+
+- 工作区 27 项 = 19 改 + 8 新（单测 1 + IR 快照 2 + 语料 5）。
+- 语料 386 行 = 既有 381 行逐字节不变 + 5 行新；IR 快照仅 +2；`testsuite run fast` 2038 条全绿。
+- 错误码生成物重跑幂等：E2xxx / E5xxx / warning-codes 为纯行号平移（掩码行号后归一化 diff = 0）；E1xxx / index.md 的差异为新码注册 + 三处计数更正（58→59 / 154→155 / 159→160）。
+
+### 九、回退条件
+
+1. A 类两处码平移——若要求「不改既有诊断码」⇒ 回到旧码，单点 = 把证据检查排到形态门/命名校验之后（`infer_call_expr` 里 `collect_const_arg_instantiation_request` 的调用位置）。
+2. D 类部分——若否决 D62 的不可逆判定 ⇒ 撤下全应用形态的证据检查，单点 = 槽位扫描面。
+3. 证据面——若判定单值钉住/单值表达式应归 6.9.3 / 6.9.4 ⇒ 撤下这两个证据面并登记为后续阶段前置，单点 = `is_compile_time_known_var` 的两个分支。
