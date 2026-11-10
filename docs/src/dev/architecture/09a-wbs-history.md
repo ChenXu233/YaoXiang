@@ -4154,3 +4154,47 @@ issue [#532](https://github.com/ChenXu233/YaoXiang/issues/532) 的现象：多�
 - 本批实现的同步与推送由队长统一做（成员不得执行 `git push` / `git fetch` / `git pull`）。
 - 验证与复审在冻结的批次树上做（补丁冻结 + 机械可逆的 trial 变异），三个批次树已在收口时回收；工作区只剩本批应提交的文件（12 改 + 8 新，含本轮收口的 09 / 09a / RFC-027 三处登记），仓库外无本批新增目录。
 - **issue #532 的关闭建议**：6.9.1 的三条验收判据全部成立，未接管形态逐条登记并各有钉测试，#532 可以关闭。**#529**（6.9 落地线，6.9.2–6.9.5 未开工）与 **#527**（注册/解析面）**不因本轮关闭**。
+
+## P6 6.9.2-A 量词事实与两视图（2026-11-10）
+
+### 一、范围
+
+issue #529 的裁决 D62 把第一阶段（量词 IR）拆为 A/B/C：A 只落地「事实与视图」，不改 q=0 运行行为；B 做证据三态与无证据拒绝；C 做擦除与替换。本批只做 A。
+
+### 二、落地
+
+1. 新增 `ast::Quantity::{Zero,One,Omega}` 与 `ast::Param.quantity: Option<Quantity>`；`None` 只表示尚未解析，23 处 `Param` 直造点显式写 `None`（漏写即编译失败）。
+2. 唯一解析源 `ast::resolve_param_quantities`（只调唯一分类器 `classify_compile_time_value_params`）与 `Type::param_quantities`；`runtime_value_params`（调用点视图，保留 Zero）/ `runtime_value_params_cls` / `impl_head_runtime_params` / `extract_generic_param_names` 全部降为投影。
+3. `LocalSlot.quantity` 由 `note_slot_quantity` 唯一写入，柯里 env 与层形参按位携带；`verify` 新增「量词事实自洽」不变量（q=0 只许落在参数区具名槽）与正反例直驱测试。
+4. 谓词命名空间收敛：`State::type_level_namespace()` 成为唯一计算点（`scan(全部已解析单元)`，懒算缓存），Registry / Typecheck×2 / IrGeneration×4 共 7 处消费同一份；删除走查期 3 处局部扫描与生成期 4 处 `scan(once(module))` 自扫。`generate_ir_with_context` 与 `new_with_type_result` 的命名空间改为构造必需入参（18 处构造点全部传参，漏传即编译失败）。
+5. E1094 迁移：`ResolvedConstParams::fallen` 退休，落空判据改为 `quantity != Some(Zero)`；`used_as_const_in_annotation` 退休，四面合流到 `ast::name_used_as_type`。诊断码与发射点未动。
+
+### 三、判据与验证链
+
+- 先红后绿：`namespace_scope` 两锚——同一份 AST 喂并集 ⇒ `generic_params=None`，单元素负控 ⇒ `Some(["N"])`；另一锚证明走查期分类器与生成期同判。回注自扫即红。
+- 独立验证两轮：t13（仅 t12，九项）与 t16（t12+t15 累计，八项）。机械变异 M1（回注生成期自扫）与 M3（命名空间退回默认）均 CAUGHT；M2（并集 vs 单元素）NOT_CAUGHT——单元级判据不经 `State`，driver 的 122 条测试无跨单元谓词形参形态，该形态当前在类型检查期即被拒；判官待 #527 落地时同批补。
+- 对抗复审两轮：t14 needs_revision（F14-A/F14-B/F14-C）→ t15 修复 → t17 pass。
+
+### 四、复审发现与修复
+
+- F14-A（中）：生成期 `scan(once(module))` 与走查期并集范围不一致。当前不可观测（跨模块精化在类型检查期先被拒），但 #527 落地后会让真值参数被误登 `generic_params`、单态化删函数、调用侧 E6006，且两阶段裁决分歧。已改为生成期消费 driver 并集。
+- F14-B（低）：IR 生成器的命名空间默认空集，`proof_execution` 直调生成入口时静默退回旧宽口径；该路径上证明函数签名精化的调用方义务被静默丢弃（既有，非本轮引入）。本轮把命名空间改为必需入参、`proof_execution` 显式传空集并加 tripwire，未盲改行为。
+- F14-C（低）：本批登记。
+
+### 五、既有缺口 #537
+
+证明函数（返回 `Type` 的声明）的形参精化在调用点被静默丢弃：`Check: (n: Int, p: Eq(n, 0)) -> Type` 配 `f(42, 7)` 时 `Eq(7, 0)` 为假却零诊断；普通函数同形正确报 E4018。根因未隔离（把精化引用换成模块级常量同样丢义务）。修复会让原先通过的程序开始报错，按 D59 属 D 类，需用户裁决；已开 issue #537 承载裁决与根因隔离，事实、复现形态与 tripwire 指针在本节。
+
+### 六、机械面与数字
+
+- 工作区 50 项 = 47 改 + 3 新；本批增量 16 项 = 14 改 + 2 新（新文件 `src/middle/ir/tests/namespace_scope.rs`、`src/frontend/tests/proof_execution.rs`；`src/ast/tests/quantity.rs` 属 6.9.2-A 的前序增量）。
+- 机械面追认：`src/driver/{state,arms}.rs`（并集唯一计算点与 7 处接线）与 `src/driver/tests/named_import_calls.rs`（构造签名连带）。
+- 零漂移：语料 381 行逐字节一致；IR 快照仍只删 3 行；`testsuite run fast` 2026 条全绿；四份生成物（E0xxx / E1xxx / E2xxx / warning-codes）归一后为纯行号平移。
+- 更正：t15 报告中的 `src/middle/ir/tests/allocation_shape.rs` 是幻影（全仓零命中），实际增量与构成以上面两处为准。
+
+### 七、后续
+
+- B（证据三态与无证据拒绝）未开工：诊断码需用户先裁（新增码或复用既有码）。
+- C（擦除与替换）未开工。
+- #527 零改动；其落地时需同批补 driver 级「并集 vs 单元素」判官。
+- 6.9.5 复用 `judge_refined_obligation` 的可见性前提见 §P6 6.9.1。
