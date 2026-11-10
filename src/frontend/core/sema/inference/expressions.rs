@@ -29,6 +29,11 @@ static EMPTY_NATIVE_PARAM_NAMES: std::sync::LazyLock<
     HashMap<String, crate::frontend::core::sema::environment::ExportParamInfo>,
 > = std::sync::LazyLock::new(HashMap::new);
 
+/// E1113（6.9.2-B）：调用点形参名表空缺省（未注入时使用——直构测试 / 未走签名
+/// 收集的入口）。缺省 = **不判** E1113，绝不按位置猜。
+static EMPTY_CALL_SITE_PARAMS: std::sync::LazyLock<HashMap<String, Vec<String>>> =
+    std::sync::LazyLock::new(HashMap::new);
+
 /// RFC-009 读视图：剥离借用层，算术/比较按 inner 类型判定（读穿透）
 pub(super) fn read_view(ty: &MonoType) -> MonoType {
     let mut cur = ty;
@@ -59,6 +64,80 @@ static EMPTY_SUM_TYPES: std::sync::LazyLock<
 /// 空表：未注入声明序类型参数名时使用（测试/独立构造）。
 static EMPTY_FN_TYPE_PARAMS: std::sync::LazyLock<HashMap<String, Vec<String>>> =
     std::sync::LazyLock::new(HashMap::new);
+
+/// **编译期证据判定的三态结果**（RFC-039 D62 / issue #533，6.9.2-B）。
+///
+/// 此前用 `Option` 把「非 q=0 调用」与「目标调用缺证据」混成同一个 `None`：
+/// 两者都静默按运行期传参，没有任何诊断——错的是第二条（`f(y)` 该被拒绝），
+/// 不是第一条（`f(42)` 之外的普通调用本就与我无关）。
+enum ConstArgOutcome {
+    /// 非目标：被调不可解析 / 没有 q=0 形参 / 调用点没有需要证据的实参
+    NotTarget,
+    /// 证据齐备：`Some` = 已登记特化请求；`None` = 形态不支持特化（混合 /
+    /// 命名 / deferred）但证据检查已通过——本轮不因「不支持特化」跳过检查，
+    /// 也不谎称已特化
+    Evidenced(Option<MonoType>),
+    /// 目标但拿不到编译期证据 ⇒ E1113（调用点该实参处，不是 warning）
+    MissingEvidence(crate::util::diagnostic::Diagnostic),
+}
+
+/// 编译期证据及其**特化能力**（D62 / issue #533，6.9.2-B）。
+///
+/// # 对 C 步（q=0 擦除）的影响（F4 登记，2026-11-10）
+///
+/// `CheckOnly` 证据**不进** `InstantiationRequest`：既不登记特化，也不改运行期传参。
+/// 于是 C 步做擦除时缺一条信息——`factorial(k - 1)` 这类调用没有请求可消费，mono
+/// 不知道被调实例的 N 是什么。三条出路（都不是本批能定的）：
+/// ① 让 `InstantiationRequest.type_args` 承载**复合符号表达式**：现有机制只承载单个
+///    `TypeRef(参数名)`，由 mono 按 `containing_fn` 的 `name_map` 求值；算术节点要新增
+///    表示与求值，属架构变更（走设计文档）。
+/// ② 保持不特化（泛型留到运行期）：C 步对递归 const 泛型就擦不干净，等于放弃本卡目标。
+/// ③ 在 mono 侧对符号实参做**求值**（`k - 1` 在特化 N 已知后可算）：需要给 name_map
+///    加算术求值，与 ① 同属设计面，但改动面更集中。
+///
+/// 本批只留事实、不动 C；上表进 6.9.2-B/6.9.2-C 的交接清单。
+///
+/// 两类证据都能让调用**通过检查**（不再报 E1113），但只有既有 6.8.5-1 面
+/// （字面量 / 值环境变量）才继续登记特化请求——那会连带 6.8.7 的单值返回类型
+/// 收紧。单值钉住与单值表达式是本批新增的证据面，只用于**拒绝无证据调用**；
+/// 若让它们也收紧返回类型，`f(k - 1)(k - 1)` 的内层实参（算术结果 int64）会
+/// 撞上期望 int64::42 ⇒ E1002，与验收「该形态合法」冲突。收紧与否属 6.8.7 /
+/// 6.9.3 的裁决面，本批不改。
+/// 纯运算：只由编译期已知项构成的表达式里允许出现的二元运算符。
+///
+/// 不含 `Assign`（语句语义，不产生值）与 `Range`（产生区间值，不是编译期标量）。
+fn is_compile_time_op(op: crate::ast::BinOp) -> bool {
+    use crate::ast::BinOp;
+    matches!(
+        op,
+        BinOp::Add
+            | BinOp::Sub
+            | BinOp::Mul
+            | BinOp::Div
+            | BinOp::Mod
+            | BinOp::Eq
+            | BinOp::Neq
+            | BinOp::Lt
+            | BinOp::Le
+            | BinOp::Gt
+            | BinOp::Ge
+            | BinOp::And
+            | BinOp::Or
+            | BinOp::BitAnd
+            | BinOp::BitOr
+            | BinOp::BitXor
+            | BinOp::Shl
+            | BinOp::Shr
+    )
+}
+
+enum ConstEvidence {
+    /// 可特化（既有 6.8.5-1 面）：字面量 / 值环境变量
+    Specializable(crate::frontend::core::types::const_data::ConstValue),
+    /// 仅用于证据检查（本批新增面）：单值钉住 / 单值表达式。**不带值**——本批这
+    /// 两类只判「有没有证据」，不参与特化，携带值只会成为无人读取的载荷。
+    CheckOnly,
+}
 
 pub struct ExpressionInferrer<'a> {
     /// 共享的作用域管理器
@@ -163,6 +242,10 @@ pub struct ExpressionInferrer<'a> {
     /// 命名空间限定的原生调用据此按名绑定/判定未知名（此前整段静默跳过）。
     native_param_names:
         &'a HashMap<String, crate::frontend::core::sema::environment::ExportParamInfo>,
+    /// E1113（6.9.2-B）：本模块函数的**调用点实参序列**形参名表（函数名 → 名字；
+    /// 非类型形参、q=0 保留）。声明面由 checker 的签名收集登记，经 StatementChecker
+    /// 同一条注入链传入。缺项 = 事实不足（导入函数 / 直构场景）⇒ 不判、不猜。
+    declared_call_site_params: &'a HashMap<String, Vec<String>>,
     /// #389：match scrutinee 推断类型（match 节点 span 键控）——IR 生成期
     /// generate_match_expr_ir 按 span 回查，替代对复合 scrutinee 的 AST 猜测
     pub match_scrutinee_types: HashMap<crate::util::span::Span, MonoType>,
@@ -219,6 +302,7 @@ impl<'a> ExpressionInferrer<'a> {
             call_ownership: CallOwnershipTable::new(),
             native_arity: &EMPTY_ARITY,
             native_param_names: &EMPTY_NATIVE_PARAM_NAMES,
+            declared_call_site_params: &EMPTY_CALL_SITE_PARAMS,
             match_scrutinee_types: HashMap::new(),
             unevaluable_const_constraints: Vec::new(),
             proof_fn_bases: &EMPTY_SIGNATURES,
@@ -269,6 +353,7 @@ impl<'a> ExpressionInferrer<'a> {
             call_ownership: CallOwnershipTable::new(),
             native_arity: &EMPTY_ARITY,
             native_param_names: &EMPTY_NATIVE_PARAM_NAMES,
+            declared_call_site_params: &EMPTY_CALL_SITE_PARAMS,
             match_scrutinee_types: HashMap::new(),
             unevaluable_const_constraints: Vec::new(),
             proof_fn_bases: &EMPTY_SIGNATURES,
@@ -320,6 +405,7 @@ impl<'a> ExpressionInferrer<'a> {
             call_ownership: CallOwnershipTable::new(),
             native_arity: &EMPTY_ARITY,
             native_param_names: &EMPTY_NATIVE_PARAM_NAMES,
+            declared_call_site_params: &EMPTY_CALL_SITE_PARAMS,
             match_scrutinee_types: HashMap::new(),
             unevaluable_const_constraints: Vec::new(),
             proof_fn_bases: &EMPTY_SIGNATURES,
@@ -373,6 +459,7 @@ impl<'a> ExpressionInferrer<'a> {
             call_ownership: CallOwnershipTable::new(),
             native_arity: &EMPTY_ARITY,
             native_param_names: &EMPTY_NATIVE_PARAM_NAMES,
+            declared_call_site_params: &EMPTY_CALL_SITE_PARAMS,
             match_scrutinee_types: HashMap::new(),
             unevaluable_const_constraints: Vec::new(),
             proof_fn_bases: &EMPTY_SIGNATURES,
@@ -514,6 +601,14 @@ impl<'a> ExpressionInferrer<'a> {
         names: &'a HashMap<String, crate::frontend::core::sema::environment::ExportParamInfo>,
     ) {
         self.native_param_names = names;
+    }
+
+    /// 设置调用点形参名表（E1113 的槽位判据，见字段文档）
+    pub fn set_declared_call_site_params(
+        &mut self,
+        params: &'a HashMap<String, Vec<String>>,
+    ) {
+        self.declared_call_site_params = params;
     }
 
     /// 设置 native arity 区间表（#387）
@@ -2645,44 +2740,165 @@ impl<'a> ExpressionInferrer<'a> {
         }
     }
 
-    /// 6.8.5-1（A 路径）：const 实参的**编译期特化**请求。
+    /// 「单值钉住」的形参（RFC-011 §4.1）：类型是 `TypeRef(q)`，且 q 是本帧的
+    /// **编译期值参数**（q=0 binder）⇒ 该形参的值在编译期已知。
     ///
-    /// const 值编码成既有的 [`MonoType::Literal`]，走既有的
+    /// 这就是规范示例 `factorial: (N: Int) -> (k: N) -> Int` 里 `k` 的形态：运行期
+    /// 它是普通实参，编译期它是 N 的值（特化时 N 已知）。6.9.2-B 首版只认
+    /// `MonoType::Literal{v}`，把这条规范形态判成「无证据」——成功程序回归
+    /// （t20 F1）。本判据补上它，且**不**放宽到普通运行期形参：`f(y)` 里 `y: Int`
+    /// 没有钉住类型，仍报 E1113。
+    fn is_pinned_param(
+        &self,
+        name: &str,
+    ) -> bool {
+        // 事实来源：`check_fn_body` 绑形参时按**替换前**的声明类型，把标记写在
+        // **该绑定**上（`k: N` ⇒ TypeRef(N)，N 是本帧编译期值参数）。见
+        // `VarInfo::pinned`：
+        // 按绑定取（`get_var_info` 的解析链），同名新绑定不继承——`match r { k =>
+        // f(k - 1)(...) }` 里的 `k` 是运行期值，不是证据（t23 F1'）。
+        if self.scope.var_pinned(name) {
+            return true;
+        }
+        // 兜底：未经 `check_fn_body` 标记、但类型仍停在 `TypeRef(q)`（q 为本帧 binder）
+        // 的绑定——直构测试与小工具路径走这条。类型是**该绑定自己的**，遮蔽下不会
+        // 命中（臂绑定是基类型），故与上行同为准。
+        let Some(poly) = self.scope.get_var(name) else {
+            return false;
+        };
+        match self.solver.resolve_type(&poly.body) {
+            MonoType::TypeRef(q) => self.scope.is_compile_time_binder(&q),
+            _ => false,
+        }
+    }
+
+    /// 该变量在编译期是否可求值（值环境 / 单值类型 / 单值钉住三类）。
+    fn is_compile_time_known_var(
+        &self,
+        name: &str,
+    ) -> bool {
+        if self.scope.get_var_const_value(name).is_some() {
+            return true;
+        }
+        if let Some(poly) = self.scope.get_var(name) {
+            if matches!(
+                self.solver.resolve_type(&poly.body),
+                MonoType::Literal { .. }
+            ) {
+                return true;
+            }
+        }
+        self.is_pinned_param(name)
+    }
+
+    /// 表达式是否只由**编译期已知项**按纯运算构成（`k - 1`、`k == 0` 之类）。
+    ///
+    /// 硬边界：不是「任何表达式都算证据」——调用、字段访问、块、闭包一律不算；
+    /// 由此 `f(y)`（y 是普通运行期形参）仍报 E1113。不含 `Assign` / `Range`：
+    /// 它们不产生编译期标量。
+    fn is_compile_time_known_expr(
+        &self,
+        expr: &crate::ast::Expr,
+    ) -> bool {
+        use crate::ast::{Expr, UnOp};
+        match expr {
+            Expr::Lit(..) => true,
+            Expr::Var(name, _) => self.is_compile_time_known_var(name),
+            Expr::BinOp {
+                op, left, right, ..
+            } => {
+                is_compile_time_op(*op)
+                    && self.is_compile_time_known_expr(left)
+                    && self.is_compile_time_known_expr(right)
+            }
+            Expr::UnOp { op, expr, .. } => {
+                matches!(op, UnOp::Neg | UnOp::Pos | UnOp::Not)
+                    && self.is_compile_time_known_expr(expr)
+            }
+            _ => false,
+        }
+    }
+
+    /// const 实参的**编译期证据**（D62 / issue #533，6.9.2-B）。
+    ///
+    /// 三类证据，顺序即优先级；每一类都复用既有判据，不新写求值器：
+    /// 1. **字面量**：`f(42)`（`const_param::const_literal_of_expr`，与 6.8.5 同一判据）；
+    /// 2. **值环境 / 单值钉住**：非 mut、字面量初始化的绑定（`x: Int = 42` 的 `x`，
+    ///    `ScopeManager::get_var_const_value`）；类型已是单值 `Literal{v}` 的绑定
+    ///    （`k: 42 = 42` 的 `k`——值由类型给出，不再看初始化式）；
+    /// 3. **单值表达式**：其余形态交给既有 `ConstGenericEval`——表达式里的自由名
+    ///    从值环境绑定，故 `k - 1` 得 41。求值失败 = 没有证据（不报错、不猜）。
+    fn const_evidence_of_expr(
+        &self,
+        expr: &crate::ast::Expr,
+    ) -> Option<ConstEvidence> {
+        // 1. 字面量（既有 6.8.5-1 面 ⇒ 可特化）
+        if let Some(value) = crate::frontend::core::sema::const_param::const_literal_of_expr(expr) {
+            return Some(ConstEvidence::Specializable(value));
+        }
+        // 2. 变量：值环境 ⇒ 可特化（既有 6.8.5-2a 面）；其余编译期已知形态
+        //    （单值类型 / 单值钉住）⇒ 只作证据
+        if let crate::ast::Expr::Var(name, _) = expr {
+            if let Some(value) = self.scope.get_var_const_value(name) {
+                return Some(ConstEvidence::Specializable(value.clone()));
+            }
+            if self.is_compile_time_known_var(name) {
+                return Some(ConstEvidence::CheckOnly);
+            }
+        }
+        // 2b. 单值钉住 / 由钉住形参与字面量构成的表达式（RFC-011 §4.1）⇒ 只作证据
+        //     （`k - 1`：k 的类型是 `TypeRef("N")`，N 是本帧的编译期值参数；
+        //      它的值特化时才定，但「编译期可求值」已成立，故不需要数值求值）
+        if self.is_compile_time_known_expr(expr) {
+            return Some(ConstEvidence::CheckOnly);
+        }
+        // 3. 单值表达式：既有求值器 + 值环境绑定（引用名由求值器按需取用）
+        let const_expr =
+            crate::frontend::core::types::eval::const_eval::convert_expr_to_const_expr(expr)?;
+        let mut evaluator = crate::frontend::core::types::eval::const_eval::ConstGenericEval::new();
+        for (name, value) in self.scope.const_bindings() {
+            evaluator.bind_var(name, value);
+        }
+        evaluator
+            .eval(&const_expr)
+            .ok()
+            .map(|_| ConstEvidence::CheckOnly)
+    }
+
+    /// 6.8.5-1（A 路径）：const 实参的**编译期特化**请求 + 6.9.2-B 的**证据判定**。
+    ///
+    /// const 值编码成既有 [`MonoType::Literal`]，走既有的
     /// `InstantiationRequest.type_args`——mono 侧把它当普通类型实参：特化名形如
     /// `f(int64::42)`（与 `build_call_site_map` 同一 `type_name()` 口径），体内
     /// `TypeRef("N")` 由既有 `name_map` 换成该字面量。因此 `f(42)` 与 `f(7)`
     /// 各得一份独立 IR，无需新增任何类型/表。
     ///
-    /// 四条判据全中才登记：
-    /// 1. 被调方在本作用域有 `PolyType`，且 `const_binders` 非空（声明期登记口，
-    ///    与 `collect_function_signature` 的 `PolyType::new_with_const` 同一来源）；
-    /// 2. 声明期泛型名表（`generic_fn_type_params`）**恰好**就是这些 const 名——
-    ///    纯 const 泛型；类型泛型走下面既有两条路径；
-    /// 3. 首层形参数 == const 名数（该层全由编译期值参数组成）⇒ 位置实参前 n 位
-    ///    与 const 名按声明序一一对应；
-    /// 4. 前 n 位实参都是**编译期字面量**（`f(42)`），且调用不带命名实参。
-    ///
-    /// 非字面量 const 实参（`f(x)`）本轮**不登记**、保持现状的运行期传参：
-    /// 值环境（非 mut 绑定 / 字面量推导 / 初始化式非外部输入）属 WBS 6.8.5-2。
-    /// TODO(6.8.5-2)：值环境落地后按「不可变绑定 + 初始化式可证常量」判定，不再
-    /// 要求字面量；届时本函数的判据 4 换成值环境查询。
+    /// 判定顺序（6.9.2-B 起，「先定位槽位、再取证据、最后才谈特化」）：
+    /// 1. 被调方有 q=0 形参（`PolyType::const_binders`，声明期登记口）；
+    /// 2. 用**调用点实参序列**的形参名表 + 共享 `arg_binding::bind_args_to_params`
+    ///    把每个实参对到形参位（位置实参占前导槽、命名实参按名入槽）；表缺项
+    ///    （导入函数 / 直构场景）= 事实不足 ⇒ 不判、不按位置猜；
+    /// 3. 逐个 q=0 槽取证据，缺证据即 `MissingEvidence`（**命名、混合、deferred
+    ///    形态一律照判**——「不支持特化」不是跳过证据检查的理由）；
+    /// 4. 证据齐备后，只有既有支持的形态才登记特化请求：纯 const 泛型
+    ///    （声明名表 == const 名表）、首层全由 q=0 组成、无命名实参。
     fn collect_const_arg_instantiation_request(
         &mut self,
         func: &crate::ast::Expr,
         args: &[crate::ast::Expr],
-        named_args_len: usize,
+        named_args: &[(String, crate::ast::Expr)],
         span: crate::util::span::Span,
-    ) -> Option<MonoType> {
-        // 命名实参的位次由绑定规则决定，本轮不在这里推导（保持现状）
-        if named_args_len != 0 {
-            return None;
-        }
-        let fn_name = self.callee_generic_name(func)?;
-        // 1 + 3：声明期 const binder 表与首层形参数
-        let poly = self.scope.get_var(&fn_name)?;
+    ) -> ConstArgOutcome {
+        // 1. 被调方与 q=0 名表（声明期登记，与 `PolyType::new_with_const` 同一来源）
+        let Some(fn_name) = self.callee_generic_name(func) else {
+            return ConstArgOutcome::NotTarget;
+        };
+        let Some(poly) = self.scope.get_var(&fn_name) else {
+            return ConstArgOutcome::NotTarget;
+        };
         let const_names: Vec<String> = poly.const_binders.iter().map(|b| b.name.clone()).collect();
         if const_names.is_empty() {
-            return None;
+            return ConstArgOutcome::NotTarget;
         }
         let body = poly.body.clone();
         let MonoType::Fn {
@@ -2690,39 +2906,92 @@ impl<'a> ExpressionInferrer<'a> {
             return_type,
         } = &body
         else {
-            return None;
+            return ConstArgOutcome::NotTarget;
         };
-        if params.len() != const_names.len() {
-            return None;
+        // 2. 槽位：调用点形参名表 + 共享绑定判据（六条规则同在一处，不另写映射）
+        let Some(call_site_names) = self.declared_call_site_params.get(&fn_name).cloned() else {
+            // 事实不足：导入面尚未携带 q=0 事实（详见字段文档）⇒ 不判，不猜
+            return ConstArgOutcome::NotTarget;
+        };
+        let optional = vec![false; call_site_names.len()];
+        let positions = super::arg_binding::bind_args_to_params(
+            &fn_name,
+            &call_site_names,
+            args,
+            named_args,
+            0,
+            &optional,
+            span,
+        )
+        // 绑定畸形（未知名 / 争槽 / 命名后接位置 / 缺参）已由别处发射对应码，
+        // 这里退回位置对位，避免重复发射（与 refinement.rs 的调用点义务同一口径）。
+        .unwrap_or_else(|_| (0..args.len()).collect());
+        let arg_pairs: Vec<(&crate::ast::Expr, usize)> = args
+            .iter()
+            .enumerate()
+            .map(|(i, e)| (e, positions.get(i).copied().unwrap_or(i)))
+            .chain(named_args.iter().enumerate().map(|(i, (_, e))| {
+                let slot = positions
+                    .get(args.len() + i)
+                    .copied()
+                    .unwrap_or(args.len() + i);
+                (e, slot)
+            }))
+            .collect();
+        // 3. 逐个 q=0 槽取证据（缺证据即 E1113，指向该实参）
+        let mut evidence: HashMap<String, ConstEvidence> = HashMap::new();
+        for (arg_expr, slot) in arg_pairs {
+            let Some(param_name) = call_site_names.get(slot) else {
+                continue;
+            };
+            if !const_names.iter().any(|n| n == param_name) {
+                continue;
+            }
+            match self.const_evidence_of_expr(arg_expr) {
+                Some(value) => {
+                    evidence.insert(param_name.clone(), value);
+                }
+                None => {
+                    return ConstArgOutcome::MissingEvidence(
+                        ErrorCodeDefinition::missing_compile_time_evidence(param_name)
+                            .at(arg_expr.span())
+                            .build(),
+                    );
+                }
+            }
         }
-        // 2：纯 const 泛型（声明名表 == const 名表，顺序按声明序）
+        // 4. 证据齐备后才谈特化：形态门槛不变（纯 const 泛型 / 首层全 q=0 / 无命名实参）
         let type_params = self.lookup_type_params(&fn_name);
-        if type_params.is_empty() || type_params != const_names {
-            return None;
+        if type_params.is_empty()
+            || type_params != const_names
+            || params.len() != const_names.len()
+            || !named_args.is_empty()
+        {
+            return ConstArgOutcome::Evidenced(None);
         }
-        // 4：前 n 位实参是可求值的字面量
         let mut type_args: Vec<MonoType> = Vec::with_capacity(const_names.len());
-        for arg in args.iter().take(const_names.len()) {
-            // 6.8.5-2a：实参判据由「字面量」放宽为「字面量 **或** 值环境命中」——
-            // 后者是非 mut、字面量初始化的绑定（`x: Int = 5` 的 x）。
-            // 其余三条判据（纯 const 泛型 / 首层形参数 / 无命名实参）不变。
-            let value = crate::frontend::core::sema::const_param::const_literal_of_expr(arg)
-                .or_else(|| match arg {
-                    crate::ast::Expr::Var(n, _) => self.scope.get_var_const_value(n).cloned(),
-                    _ => None,
-                })?;
-            let base_type = match &value {
+        for name in &const_names {
+            let Some(evidence) = evidence.get(name) else {
+                // 该 q=0 形参没有实参（元数不足等）：证据无从谈起，交给既有缺参判定
+                return ConstArgOutcome::Evidenced(None);
+            };
+            // 仅「可特化」类证据沿用 6.8.5-1 的特化与 6.8.7 的单值收紧；单值钉住与
+            // 单值表达式只用于通过证据检查（见 ConstEvidence 的裁决面说明）。
+            let ConstEvidence::Specializable(value) = evidence else {
+                return ConstArgOutcome::Evidenced(None);
+            };
+            let base_type = match value {
                 crate::frontend::core::types::const_data::ConstValue::Int(_) => MonoType::Int(64),
                 crate::frontend::core::types::const_data::ConstValue::Bool(_) => MonoType::Bool,
                 crate::frontend::core::types::const_data::ConstValue::Float(_) => {
                     MonoType::Float(64)
                 }
-                _ => return None,
+                _ => return ConstArgOutcome::Evidenced(None),
             };
             type_args.push(MonoType::Literal {
                 name: format!("{value}"),
                 base_type: Box::new(base_type),
-                value,
+                value: value.clone(),
             });
         }
         let generic_id = GenericFunctionId::new(fn_name, type_params);
@@ -2738,7 +3007,7 @@ impl<'a> ExpressionInferrer<'a> {
         let mut request = InstantiationRequest::new(generic_id, type_args, span);
         request.containing_fn = self.scope.fn_context().map(str::to_owned);
         self.instantiation_requests.push(request);
-        Some(specialized_ret)
+        ConstArgOutcome::Evidenced(Some(specialized_ret))
     }
 
     /// 6.8.7：期望类型是**单值类型** Literal{v} 且字面量取值等于 v 时，返回该
@@ -4816,10 +5085,12 @@ impl<'a> ExpressionInferrer<'a> {
         // `n: N` 立即定成 `int64::42`（单值类型强制）。命中即返回：
         // 纯 const 泛型不会命中下面那条通用路径（它按 TypeVar / 声明类型名收实参），
         // 与显式类型实参路径（D6.3）同形。
-        if let Some(const_specialized) =
-            self.collect_const_arg_instantiation_request(func, args, named_args.len(), span)
-        {
-            return Ok(const_specialized);
+        // 三态（6.9.2-B）：非目标 / 证据齐备（可能带特化）/ 目标但缺证据。
+        // 缺证据必须**报错**（E1113），不再静默按运行期传参。
+        match self.collect_const_arg_instantiation_request(func, args, named_args, span) {
+            ConstArgOutcome::NotTarget | ConstArgOutcome::Evidenced(None) => {}
+            ConstArgOutcome::Evidenced(Some(specialized)) => return Ok(specialized),
+            ConstArgOutcome::MissingEvidence(diag) => return Err(diag),
         }
 
         // 收集实例化请求：检测泛型函数调用并记录

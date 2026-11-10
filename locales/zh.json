@@ -1028,6 +1028,14 @@
     "example": "f: () -> Int = (a: Int) => a",
     "error_output": "error[E1112]: 实现形参个数超出声明\n --> example.yx:1:19\n  |\n1 | f: () -> Int = (a: Int) => a\n  |                   ^ 函数 'f' 的标注只提供 0 个运行期形参位，实现头却写了 1 个；多出的那个没有值可绑"
   },
+  "E1113": {
+    "title": "编译期值参数缺少编译期证据",
+    "message": "编译期值参数 '{param}' 需要编译期证据，但实参无法在编译期确定",
+    "template": "编译期值参数 '{param}' 需要编译期证据，但实参无法在编译期确定",
+    "help": "传入字面量或编译期常量，或把该形参改为普通运行期值参数",
+    "example": "f: (N: Int) -> (n: N) -> Int = (n) => n\nk: (y: Int) -> Int = f(y)",
+    "error_output": "error[E1113]: 编译期值参数缺少编译期证据\n --> example.yx:2:24\n  |\n2 | k: (y: Int) -> Int = f(y)\n  |                        ^ 编译期值参数 'N' 需要编译期证据，但实参无法在编译期确定"
+  },
   "E1064": {
     "title": "绑定位置索引无效",
     "template": "绑定位置索引无效：{positions}（函数共 {total} 个参数）",

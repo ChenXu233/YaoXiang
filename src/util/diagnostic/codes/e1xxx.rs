@@ -148,4 +148,10 @@ define_codes!(E1XXX, {
     // check 绿，运行期 f() 拿到 void、f() + 1 到运行期才报 E6007。
     // 反向（实现少于声明）不报：缺席的位由声明名补上，函数照常按声明元数调用。
     ("E1112", TypeCheck, false, implementation_param_count_mismatch(name: &str, expected: usize, found: usize) => .param("name", name) .param("expected", expected.to_string()) .param("found", found.to_string())),
+    // E1113 编译期值参数缺少编译期证据（RFC-039 D62 / issue #533，6.9.2-B；
+    // 2026-11-10 用户裁决甲案新增）。q=0 形参的实参必须是**编译期可确定**的值
+    // （字面量 / 值环境 / 单值钉住 / 可求值单值表达式）——特化与依赖类型等式都
+    // 建立在「这个值在编译期已知」之上。旧行为是静默按运行期传参：`f(y)` 里
+    // `y` 未定时内层 `n: N` 的约束从未生效（静默失败），且特化永不发生。
+    ("E1113", TypeCheck, false, missing_compile_time_evidence(param: &str) => .param("param", param)),
 });

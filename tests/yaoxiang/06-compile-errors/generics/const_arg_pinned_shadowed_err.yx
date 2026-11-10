@@ -1,0 +1,18 @@
+// 06-compile-errors/generics/const_arg_pinned_shadowed_err.yx
+// match 臂的同名绑定不继承「单值钉住」身份——它绑到的是运行期值
+// expect: compile-error E1113
+// 覆盖: t23 F1'——证据面曾按**名字**判钉住：臂内 `k` 遮蔽了钉住形参 `k: N` 后，
+//       `k - 1` 仍被当成编译期证据放行（运行期 q=8，按名取到的是被遮蔽的 41）。
+// 状态: ❌ 应编译失败
+
+id: (x: Int) -> Int = x
+f: (N: Int) -> (n: N) -> Int = (n) => n
+g: (N: Int) -> (k: N) -> (r: Int) -> Int = {
+    return match r {
+        k => f(k - 1)(k - 1)
+    }
+}
+
+main: () -> Void = {
+    v: Int = g(41)(41)(id(9))
+}

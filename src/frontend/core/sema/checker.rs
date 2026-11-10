@@ -37,6 +37,19 @@ pub struct TypeChecker {
     /// 在签名收集阶段填充（`collect_signatures`），供 `embedded_std_module_info`
     /// 随导出暴露——跨模块单态化需要被调函数的声明名。
     declared_fn_type_params: HashMap<String, Vec<String>>,
+    /// 本模块函数的**调用点实参序列**形参名（函数名 → 声明序名字；非类型形参，
+    /// q=0 保留）。
+    ///
+    /// 用途（D62 / issue #533，6.9.2-B）：E1113 的槽位判据要按**调用点序列**把
+    /// 实参对到形参上，而 `MonoType` 侧已丢掉形参名——名字只在声明 AST 里
+    /// （`Type::runtime_value_params` 是这条序列的唯一实现）。登记面与
+    /// `declared_fn_type_params` 同一次 walk（Registry 的签名收集），故正文
+    /// 检查时全模块函数（含前向声明）都已在表内。
+    ///
+    /// 缺项 = 事实不足（导入函数 / 未走签名收集的直构场景）：调用点因此**不判**
+    /// E1113，也不得按位置猜——宁可少报，不可错猜（导入面待 Export 携带 q=0
+    /// 事实后再接线）。
+    declared_call_site_params: HashMap<String, Vec<String>>,
     /// 语句检查器
     body_checker: Option<inference::StatementChecker>,
     /// RFC-014 §项目模式：vendor 根目录（`<project>/.yaoxiang/vendor`）。
@@ -191,6 +204,7 @@ impl TypeChecker {
         Self {
             env,
             declared_fn_type_params: HashMap::new(),
+            declared_call_site_params: HashMap::new(),
             body_checker: None,
             vendor_root: None,
             semantic_db: semantic_db::SemanticDB::new(),
@@ -574,6 +588,8 @@ impl TypeChecker {
         body_checker.set_native_arities(self.env.native_arity.clone());
         // #454：native 形参名随签名表同源传递（命名实参按名绑定的唯一来源）
         body_checker.set_native_param_names(self.env.native_param_names.clone());
+        // E1113（6.9.2-B）：调用点形参名表随签名面同源注入（见字段文档）
+        body_checker.set_declared_call_site_params(self.declared_call_site_params.clone());
         // 设置模块注册表，支持函数体/块作用域 use
         body_checker.set_module_registry(self.env.module_registry.clone());
         // #396：模块别名集合——模块成员缺失报 E1043 而非 E1042
@@ -1285,6 +1301,9 @@ impl TypeChecker {
             body_checker.set_native_arities(self.env.native_arity.clone());
             // #454：native 形参名随签名表同源传递（命名实参按名绑定的唯一来源）
             body_checker.set_native_param_names(self.env.native_param_names.clone());
+            // E1113（6.9.2-B）：调用点形参名表随签名面同源注入——漏一处会让证据检查
+            // 静默退回「无事实、不判」，那正是本码要消灭的静默通道。
+            body_checker.set_declared_call_site_params(self.declared_call_site_params.clone());
             // 设置模块注册表，支持函数体/块作用域 use
             body_checker.set_module_registry(self.env.module_registry.clone());
             // #396：模块别名集合——模块成员缺失报 E1043 而非 E1042
@@ -1418,6 +1437,30 @@ impl TypeChecker {
         &mut self,
         stmt: &crate::ast::Stmt,
     ) {
+        // E1113（6.9.2-B）的槽位表（见字段文档）：本函数的**调用点实参序列**
+        // 形参名（非类型形参、q=0 保留）。两条签名收集路径（`check_module_impl`
+        // 的 pass2 与 `collect_signatures`）都经这里，故登记只有这一处。
+        if let crate::ast::StmtKind::Assign {
+            target,
+            type_annotation,
+            ..
+        } = &stmt.kind
+        {
+            if let (crate::ast::Expr::Var(name, _), Some(ann)) =
+                (target.as_ref(), type_annotation.as_ref())
+            {
+                let names: Vec<String> = ann
+                    .runtime_value_params()
+                    .into_iter()
+                    .map(|p| p.name)
+                    .collect();
+                if !names.is_empty() {
+                    self.declared_call_site_params
+                        .entry(name.clone())
+                        .or_insert(names);
+                }
+            }
+        }
         // #358：顶层函数**重复定义**检测（同名**同签名**才是重复）。
         //
         // 此前只有「与结构体重名」会报 E2002——同一文件写两次 `main`（或任何

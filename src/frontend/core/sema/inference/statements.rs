@@ -45,6 +45,10 @@ pub struct StatementChecker {
     native_arity: HashMap<String, (usize, Option<usize>)>,
     /// #454：Native 导出形参名（全限定名 + 短名 → 声明序形参名）
     native_param_names: HashMap<String, crate::frontend::core::sema::environment::ExportParamInfo>,
+    /// E1113（6.9.2-B）：本模块函数的**调用点实参序列**形参名表（函数名 → 声明序
+    /// 名字；非类型形参、q=0 保留）。由 checker 的签名收集登记，与
+    /// `native_param_names` 同一条注入链转发给表达式推断器。
+    declared_call_site_params: HashMap<String, Vec<String>>,
     /// 模块注册表（用于在函数体/块作用域中处理 use 语句）
     module_registry: ModuleRegistry,
     /// 模块别名集合（#396）：区分「模块别名 Struct」与真 struct，
@@ -224,6 +228,7 @@ impl StatementChecker {
             native_signatures: HashMap::new(),
             native_arity: HashMap::new(),
             native_param_names: HashMap::new(),
+            declared_call_site_params: HashMap::new(),
             module_registry: ModuleRegistry::with_std(),
             module_aliases: std::collections::HashSet::new(),
             module_namespaces: HashMap::new(),
@@ -591,6 +596,14 @@ impl StatementChecker {
         self.native_param_names = names;
     }
 
+    /// 设置本模块函数的调用点形参名表（E1113 的槽位判据，见字段文档）
+    pub fn set_declared_call_site_params(
+        &mut self,
+        names: HashMap<String, Vec<String>>,
+    ) {
+        self.declared_call_site_params = names;
+    }
+
     /// 设置模块注册表
     pub fn set_module_registry(
         &mut self,
@@ -915,6 +928,18 @@ impl StatementChecker {
         self.scope.add_param(name, poly, is_mut, definition_span);
     }
 
+    /// 添加**被单值钉住**的值参数（`k: N`）：标记随绑定入链，见 `VarInfo::pinned`。
+    pub fn add_pinned_param(
+        &mut self,
+        name: String,
+        poly: PolyType,
+        is_mut: bool,
+        definition_span: crate::util::span::Span,
+    ) {
+        self.scope
+            .add_pinned_param(name, poly, is_mut, definition_span);
+    }
+
     /// 添加**类型参数**（编译期名）：体内类型位置可解析，但不占运行时帧槽位。
     /// 嵌套函数体引用它不算「从外层帧取值」，故不受捕获屏障遮挡。
     pub fn add_type_param(
@@ -1190,6 +1215,13 @@ impl StatementChecker {
         let prev_fn_context = self.scope.fn_context().map(str::to_owned);
         self.scope.set_fn_context(Some(name.to_string()));
 
+        // 6.9.2-B 修复 F1：登记本帧的**编译期值参数名**（单值钉住判据）。
+        // 名字集合来自 `const_subst` 键——与 `const_binders` 同一来源（`resolve_const_candidates`
+        // 的命中者），故体里 `k: N` 的 `TypeRef("N")` 能凭它判成「编译期可求值」。
+        let saved_const_binders = self
+            .scope
+            .set_const_binders(const_subst.keys().cloned().collect());
+
         // RFC-009 §2.3 捕获屏障：函数定义体不得借参数链读**外层帧**的值
         // （外层参数 / 语句绑定值）。屏障按当前参数链深度定格——此后 enter_fn
         // 压入的本函数参数层在屏障之上，照常可见；类型参数（编译期名）不挡。
@@ -1273,6 +1305,11 @@ impl StatementChecker {
         // 改写的链路，替换成匿名 TypeVar 会断链——monomorphization.yx 嵌套泛型调用
         // 回归实证）；缺标注时取**声明标注原文**（parser 不再往实现头填声明类型之后，
         // 这是「实现头缺标注」的唯一来源；形态与旧口径逐字一致）。
+        // 单值钉住（RFC-011 §4.1）：形参的**声明类型**就是本帧某个编译期值参数
+        // （`k: N`）时，它的值在编译期已知——标记随**该绑定**入链（`VarInfo::pinned`）。
+        // 判据必须取**替换前**的类型：下行 `substitute(const_subst)` 会把 N 换成
+        // 基类型 Int(64)，替换后就分不出「钉住」与「普通 Int 形参」了。
+        // 标记挂在绑定上（不是按名旁表）：同名新绑定（match 臂、块内遮蔽）不继承。
         for (i, param) in params.iter().enumerate() {
             let param_ty = if let (None, Some(declared)) =
                 (param.ty.as_ref(), declared_value_params)
@@ -1295,13 +1332,23 @@ impl StatementChecker {
                     .map(|t| self.strip_refined_value_type(t))
                     .unwrap_or_else(|| self.solver.new_var())
             };
+            let pinned = matches!(&param_ty, MonoType::TypeRef(q) if const_subst.contains_key(q));
             let param_ty = param_ty.substitute(const_subst);
-            self.add_param(
-                param.name.clone(),
-                PolyType::mono(param_ty),
-                param.is_mut,
-                param.span,
-            );
+            if pinned {
+                self.add_pinned_param(
+                    param.name.clone(),
+                    PolyType::mono(param_ty),
+                    param.is_mut,
+                    param.span,
+                );
+            } else {
+                self.add_param(
+                    param.name.clone(),
+                    PolyType::mono(param_ty),
+                    param.is_mut,
+                    param.span,
+                );
+            }
         }
 
         // const 泛型参数（如 `gt: (t: Int) -> ...` 的 t）也进参数链：
@@ -1365,6 +1412,7 @@ impl StatementChecker {
             self.scope.restore_capture_barrier(saved_param_barrier);
             self.is_top_level = was_top_level;
             self.loop_depth = saved_loop_depth;
+            self.scope.set_const_binders(saved_const_binders.clone());
             self.scope.set_fn_context(prev_fn_context);
 
             match first_err {
@@ -1397,6 +1445,7 @@ impl StatementChecker {
             self.scope.restore_capture_barrier(saved_param_barrier);
             self.is_top_level = was_top_level;
             self.loop_depth = saved_loop_depth;
+            self.scope.set_const_binders(saved_const_binders.clone());
             self.scope.set_fn_context(prev_fn_context);
 
             match err {
@@ -3377,6 +3426,7 @@ impl StatementChecker {
                             );
                         inferrer.set_native_arities(&self.native_arity);
                         inferrer.set_native_param_names(&self.native_param_names);
+                        inferrer.set_declared_call_site_params(&self.declared_call_site_params);
                         inferrer.set_method_bindings(&self.method_bindings);
                         inferrer.set_interface_impl_registry(&self.interface_impl_registry);
                         inferrer.set_sum_types(&self.sum_types);
@@ -3490,6 +3540,7 @@ impl StatementChecker {
                 );
                 inferrer.set_native_arities(&self.native_arity);
                 inferrer.set_native_param_names(&self.native_param_names);
+                inferrer.set_declared_call_site_params(&self.declared_call_site_params);
                 inferrer.set_type_defs(&self.type_defs);
                 inferrer.set_interface_impl_registry(&self.interface_impl_registry);
                 inferrer.set_sum_types(&self.sum_types);

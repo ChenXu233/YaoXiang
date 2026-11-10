@@ -162,6 +162,14 @@ pub struct VarInfo {
     /// 挂在 VarInfo（per-binding）而不是按名字的旁表：按名的表在块内遮蔽下会取到
     /// 外层同名绑定的值，把程序特化成另一个常量——静默错值比报错严重。
     pub const_value: Option<crate::frontend::core::types::const_data::ConstValue>,
+    /// 该绑定是否**被单值钉住**（RFC-011 §4.1：声明类型就是本帧某个编译期值参数，
+    /// 如 `k: N`）——编译期已知，可作编译期证据。
+    ///
+    /// 挂在 VarInfo（per-binding）而不是按名字的旁表：同名**新绑定**（match 臂、
+    /// 块内遮蔽）不得继承钉住身份——`match r { k => f(k - 1)(...) }` 的 `k` 是
+    /// 运行期值，按名判会把它当编译期证据（t23 F1'：运行期 q=8、按名证据 41）。
+    /// 与 `const_value` 同一条理由：按名的表在遮蔽下取到的是外层绑定的事实。
+    pub pinned: bool,
 }
 
 /// 语义定义事件：绑定期单点采集，由 TypeChecker 排空进 SemanticDB（#433/D55）。
@@ -227,6 +235,18 @@ pub struct ScopeManager {
     /// containing_fn，mono 据此对占位类型实参（TypeRef(参数名)）求值。
     /// None = 上下文未知（eval/REPL 等场景）。
     fn_context: Option<String>,
+    /// 当前函数帧的**编译期值参数名**（q=0 binder；RFC-011 §4.1「单值钉住」判据）。
+    ///
+    /// 用途（6.9.2-B 修复 F1）：泛型体内 `k: N`（N 为编译期值参数）的**声明类型**是
+    /// `TypeRef("N")`——运行期它不是常量，但**编译期可求值**（特化时 N 已知）。
+    /// 名字集合只能由函数入口登记：它来自 `check_fn_body` 的 `const_subst` 键
+    /// （与 `const_binders` 同一来源）。注意绑形参时该类型随后会被 `substitute`
+    /// 换成基类型（`k` 最终是 `Int(64)`），故判据必须取替换前形态或登记后的名字表。
+    ///
+    /// 嵌套函数体用 [`ScopeManager::set_const_binders`] 的返回值保存/恢复
+    /// （与 `fn_context` 同款约定）；空表 = 当前帧没有编译期值参数。
+    const_binders: Vec<String>,
+
     /// 语义定义事件（#433）：四个 add_* 方法的采集漏斗
     binding_events: Vec<BindingEvent>,
     /// 语义引用事件（#433）：表达式解析臂经 record_reference 登记
@@ -251,6 +271,7 @@ impl ScopeManager {
             current_stmt_key: 0,
             type_ledger: HashMap::new(),
             fn_context: None,
+            const_binders: Vec::new(),
             binding_events: Vec::new(),
             reference_events: Vec::new(),
         }
@@ -326,6 +347,36 @@ impl ScopeManager {
     /// 获取当前函数上下文名
     pub fn fn_context(&self) -> Option<&str> {
         self.fn_context.as_deref()
+    }
+
+    /// 设置当前函数帧的编译期值参数名，返回**被替换掉的旧表**（调用方保存、退出时恢复）。
+    ///
+    /// 与 `set_fn_context` 同款约定；嵌套函数体各登记自己的表，不继承外层。
+    pub fn set_const_binders(
+        &mut self,
+        names: Vec<String>,
+    ) -> Vec<String> {
+        std::mem::replace(&mut self.const_binders, names)
+    }
+
+    /// 该名字是否当前函数帧的编译期值参数（`k: N` 的 N）。
+    pub fn is_compile_time_binder(
+        &self,
+        name: &str,
+    ) -> bool {
+        self.const_binders.iter().any(|n| n == name)
+    }
+
+    /// 该名字当前解析到的绑定是否**被单值钉住**（`k: N`）——编译期已知。
+    ///
+    /// 走 [`ScopeManager::get_var_info`]：与值环境取值**同一条按名解析链**
+    /// （局部 → 参数 → 全局 + 捕获屏障），故同名遮蔽下拿到的是最内层绑定的
+    /// 标记，不会把外层钉住形参的事实套到内层新绑定上。
+    pub fn var_pinned(
+        &self,
+        name: &str,
+    ) -> bool {
+        self.get_var_info(name).is_some_and(|info| info.pinned)
     }
 
     /// 变量类型账本（只读）——所有权检查的 Move/Dup 分类用（#256）
@@ -405,6 +456,7 @@ impl ScopeManager {
             imported: false,
             compile_time_only: false,
             const_value: None,
+            pinned: false,
         };
         if self.local_scopes.is_empty() {
             self.globals.insert(name, info);
@@ -434,6 +486,7 @@ impl ScopeManager {
             imported: false,
             compile_time_only: false,
             const_value: None,
+            pinned: false,
         };
         if self.local_scopes.is_empty() {
             self.globals.insert(name, info);
@@ -459,6 +512,7 @@ impl ScopeManager {
             imported: true,
             compile_time_only: false,
             const_value: None,
+            pinned: false,
         };
         if self.local_scopes.is_empty() {
             self.globals.insert(name, info);
@@ -475,7 +529,21 @@ impl ScopeManager {
         is_mut: bool,
         definition_span: Span,
     ) {
-        self.add_param_kind(name, poly, is_mut, definition_span, false);
+        self.add_param_kind(name, poly, is_mut, definition_span, false, false);
+    }
+
+    /// 添加**被单值钉住**的值参数（`k: N`，N 为本帧编译期值参数）。
+    ///
+    /// 与 [`ScopeManager::add_param`] 的唯一差异是置上 [`VarInfo::pinned`]：
+    /// 该绑定编译期已知（可作证据）。标记随绑定走，同名新绑定不继承。
+    pub fn add_pinned_param(
+        &mut self,
+        name: String,
+        poly: PolyType,
+        is_mut: bool,
+        definition_span: Span,
+    ) {
+        self.add_param_kind(name, poly, is_mut, definition_span, false, true);
     }
 
     /// 添加**类型参数**（`f: (T: Type) -> ...` 的 T）：同样进参数链（体内类型
@@ -487,7 +555,7 @@ impl ScopeManager {
         poly: PolyType,
         definition_span: Span,
     ) {
-        self.add_param_kind(name, poly, false, definition_span, true);
+        self.add_param_kind(name, poly, false, definition_span, true, false);
     }
 
     /// 参数链入链的唯一实现（值参数与类型参数共用；`compile_time_only` 是差异点）
@@ -498,6 +566,7 @@ impl ScopeManager {
         is_mut: bool,
         definition_span: Span,
         compile_time_only: bool,
+        pinned: bool,
     ) {
         self.type_ledger
             .insert((self.current_stmt_key, name.clone()), poly.clone());
@@ -510,6 +579,7 @@ impl ScopeManager {
             imported: false,
             compile_time_only,
             const_value: None,
+            pinned,
         };
         if let Some(scope) = self.param_scopes.last_mut() {
             scope.insert(name, info);
@@ -554,6 +624,42 @@ impl ScopeManager {
         name: &str,
     ) -> Option<&crate::frontend::core::types::const_data::ConstValue> {
         self.get_var_info(name).and_then(|i| i.const_value.as_ref())
+    }
+
+    /// 值环境里的**全部**编译期常量绑定（名字 → 值；可见面 = 全局 ∪ 参数链 ∪ 当前
+    /// 局部链，由外向内，内层同名后写覆盖——与按名查找的可见性一致）。
+    ///
+    /// 用途（D62 / issue #533，6.9.2-B 的第三类证据）：单值表达式（`k - 1`）的
+    /// 编译期求值要把表达式里的自由名绑进既有 `ConstGenericEval`；求值器按名取用，
+    /// 故这里给出可绑定的全集，不在调用点逐个反推自由变量。
+    ///
+    /// **不含** `saved_local_scopes`（`enter_fn` 移出的外层函数局部层）：那些绑定
+    /// 在当前函数体里本就不可见，把它们当证据会读到别的帧的值。
+    pub fn const_bindings(
+        &self
+    ) -> Vec<(String, crate::frontend::core::types::const_data::ConstValue)> {
+        // 候选名先收齐（各链的全集），再**逐个按名解析到最内层绑定**取值。
+        // 不能按链摊平后逐个 push：那样「臂内 `k0`（运行期绑定，无 const_value）」
+        // 会被跳过，外层全局 `k0 = 7` 顶上来，把 `k0 - 1` 算成 6——而运行期是 8
+        // （t23 F1' 的值环境面）。按名解析到绑定后，最内层没值即该名不参与求值。
+        let mut names: Vec<String> = Vec::new();
+        names.extend(self.globals.keys().cloned());
+        for scope in &self.param_scopes {
+            names.extend(scope.keys().cloned());
+        }
+        for scope in &self.local_scopes {
+            names.extend(scope.keys().cloned());
+        }
+        names.sort_unstable();
+        names.dedup();
+        names
+            .into_iter()
+            .filter_map(|name| {
+                // 与 `get_var_const_value` 同一条解析链（含捕获屏障）
+                let value = self.get_var_info(&name)?.const_value.clone()?;
+                Some((name, value))
+            })
+            .collect()
     }
 
     pub fn get_var(

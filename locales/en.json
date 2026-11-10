@@ -1210,6 +1210,14 @@
     "example": "f: () -> Int = (a: Int) => a",
     "error_output": "error[E1112]: implementation parameter count exceeds declaration\n --> example.yx:1:19\n  |\n1 | f: () -> Int = (a: Int) => a\n  |                   ^ The annotation for function 'f' provides only 0 runtime parameter slots, but the implementation header specifies 1 parameter; the extra one has no value to bind to"
   },
+  "E1113": {
+    "title": "Compile-time value parameter lacks compile-time evidence",
+    "message": "Compile-time value parameter '{param}' requires compile-time evidence, but the argument cannot be determined at compile time",
+    "template": "Compile-time value parameter '{param}' requires compile-time evidence, but the argument cannot be determined at compile time",
+    "help": "Pass a literal or a compile-time constant, or make that parameter an ordinary runtime value parameter",
+    "example": "f: (N: Int) -> (n: N) -> Int = (n) => n\nk: (y: Int) -> Int = f(y)",
+    "error_output": "error[E1113]: compile-time value parameter lacks compile-time evidence\n --> example.yx:2:24\n  |\n2 | k: (y: Int) -> Int = f(y)\n  |                        ^ compile-time value parameter 'N' requires compile-time evidence, but the argument cannot be determined at compile time"
+  },
   "W1007": {
     "title": "Module import cycle",
     "message": "Modules in the compilation set form an import cycle; initialization order inside the cycle is undecidable",

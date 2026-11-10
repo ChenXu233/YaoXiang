@@ -1,0 +1,84 @@
+module
+  fn f(Int(64)) -> Fn { params: [TypeRef("N")], return_type: Int(64) }
+    generic_params: ["N"]
+    locals_total=2
+    MakeClosure %0 <- __f_l0 env=[%1] (def=d0)
+    Ret %0
+  fn g(Int(64), Int(64)) -> Fn { params: [TypeRef("N")], return_type: Int(64) }
+    generic_params: ["N"]
+    locals_total=3
+    MakeClosure %0 <- __g_l0 env=[%1, %2] (def=d1)
+    Ret %0
+  fn main() -> Void
+    slot[0] x : Int(64) @depth1
+    slot[1] k : Int(64) @depth1
+    slot[2] a : Int(64) @depth1
+    slot[3] b : Int(64) @depth1
+    slot[4] c : Int(64) @depth1
+    slot[5] d : Int(64) @depth1
+    locals_total=11
+    Load %0 <- int(42)
+    Load %1 <- int(43)
+    Load %2 <- int(42)
+    Load %3 <- int(42)
+    Call %4 <- string("f") [%3] (def=d2)
+    CallDyn %5 <- %4 [%2]
+    Load %4 <- int(42)
+    Load %6 <- %0
+    Call %3 <- string("f") [%6] (def=d2)
+    CallDyn %2 <- %3 [%4]
+    Load %3 <- int(42)
+    Load %7 <- %1
+    Load %8 <- int(1)
+    Sub %9 <- %7, %8
+    Call %6 <- string("f") [%9] (def=d2)
+    CallDyn %4 <- %6 [%3]
+    Load %6 <- int(42)
+    Load %7 <- int(3)
+    Load %8 <- int(42)
+    Call %9 <- string("g") [%7, %8] (def=d3)
+    CallDyn %3 <- %9 [%6]
+    Load %7 <- %5
+    Load %8 <- int(42)
+    Eq %9 <- %7, %8
+    Load %10 <- string("literal evidence should return N")
+    Call %6 <- string("std.assert.assert") [%9, %10] (def=d4)
+    Load %7 <- %2
+    Load %8 <- int(42)
+    Eq %9 <- %7, %8
+    Load %10 <- string("value-env evidence should return N")
+    Call %6 <- string("std.assert.assert") [%9, %10] (def=d4)
+    Load %7 <- %4
+    Load %8 <- int(42)
+    Eq %9 <- %7, %8
+    Load %10 <- string("single-value expression evidence should return N")
+    Call %6 <- string("std.assert.assert") [%9, %10] (def=d4)
+    Load %7 <- %3
+    Load %8 <- int(42)
+    Eq %9 <- %7, %8
+    Load %10 <- string("mixed declaration keeps second-layer q=0 evidence")
+    Call %6 <- string("std.assert.assert") [%9, %10] (def=d4)
+    Drop %5
+    Drop %2
+    Drop %4
+    Drop %3
+    Drop %1
+    Drop %0
+    Ret %6
+  fn __f_l0(TypeRef("N")) -> Int(64)
+    slot[0] N : Int(64) @depth1
+    slot[1] n : Int(64) @depth1
+    locals_total=4
+    Load %0 <- %1
+    Ret %0
+    Ret
+  fn __g_l0(TypeRef("N")) -> Int(64)
+    slot[0] x : Int(64) @depth1
+    slot[1] N : Int(64) @depth1
+    slot[2] n : Int(64) @depth1
+    locals_total=5
+    Load %0 <- %1
+    Ret %0
+    Ret
+  init (locals=0)
+    Call %0 <- string("main") [] (def=d5)
