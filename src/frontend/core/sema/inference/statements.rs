@@ -2086,57 +2086,44 @@ impl StatementChecker {
             .filter(|p| matches!(p.kind, crate::ast::GenericParamKind::Type))
             .collect();
 
-        // === 函数 const 泛型判定（用途分析） ===
-        // 精筛唯一实现在 const_param::resolve_const_candidates（RFC-011 §4.1）
-        let candidate_names: std::collections::HashSet<String> = generic_params
-            .iter()
-            .filter(|p| matches!(p.kind, crate::ast::GenericParamKind::Const { .. }))
-            .map(|p| p.name.clone())
-            .collect();
-
-        let mut used_as_const: std::collections::HashSet<String> = std::collections::HashSet::new();
-        if !candidate_names.is_empty() {
-            // 扫描整棵声明标注判断 const 用途（扫描面单点：
-            // `const_param::used_as_const_in_annotation`，与 Registry 面 / 签名面
-            // 同一实现）。
-            //
+        // === 函数 const 泛型判定（量词事实） ===
+        // 判定不在这里发生：唯一分类器由唯一解析源 `ast::resolve_param_quantities`
+        // 调用，结论写成 `Param::quantity == Some(Zero)`（D62 / issue #533）；
+        // `const_binders` 只是该事实的投影。
+        let resolved_params = {
             // RFC-027a：谓词应用的实参位是编译期表达式（值）而非类型引用
             //（`Terminates(b)` 的 `b`），不得计入 const 用途——见
             // `ast::name_used_as_type` 的 `is_predicate` 参数。
-            // 判据单源（3.20.8 / #511 t3 low 收单点；3.20.9 / #522 起来源
-            // 换声明级）：读 `predicate_names`——checker.rs 注入点从类型级
-            // 命名空间（`probe::TypeLevelNamespace`）clone 传入，与 A 面
-            // （`is_predicate_application`，判据即同一 namespace 查询）
-            // 同一判据源 by construction。3.20.8 前这里是「`Terminates`
-            // 字面量 ∪ `proof_fn_bases` 判名」的窄化同义判据（不查
-            // `predicate_defs`、漏无参证明函数），与 A 面不同构。
-            let is_predicate = |n: &str| self.predicate_names.contains(n);
+            // 判据单源（3.20.9 / #522 起来源换声明级）：读 `predicate_names`——
+            // checker.rs 注入点从类型级命名空间（`probe::TypeLevelNamespace`）clone
+            // 传入，与 A 面（`is_predicate_application`，判据即同一 namespace 查询）
+            // 同一判据源 by construction。
+            //
             // 命名空间问答注入本面的「已声明类型」集合（`type_names`，与下方
             // `ParamClassifier::is_type_name` 同一事实源，也与 checker 三面的
-            // `is_declared_type_name` 同一集合——四处同源）：候选名解析到已声明类型 ⇒
+            // `is_declared_type_name` 同一集合）：候选名解析到已声明类型 ⇒
             // 与形参无关，候选落空（SPEC §7.1 第 1、2 条）。
-            let is_type_name = |n: &str| self.type_names.contains(n);
+            //
             // 「类型位置」= 声明的**全部 `Type` 子树**（SPEC type-system §7.1）：形参标注、
-            // 返回类型、内层 `Fn` 的形参类型都是同一棵树的子树。此前只扫「返回位 + 返回位
-            // 内层 Fn 的形参标注」，**漏了本层形参自己的标注** ⇒ `f: (N: Int, M: N) -> Int`
+            // 返回类型、内层 `Fn` 的形参类型都是同一棵树的子树。只扫「返回位 + 返回位
+            // 内层 Fn 的形参标注」会**漏掉本层形参自己的标注** ⇒ `f: (N: Int, M: N) -> Int`
             // 里 `M: N` 的 `N` 从未计入用途 ⇒ `const_binders` 为空 ⇒ `M` 的标注停在裸名
-            // `N`（实测 E1012「expected int64, found N」）。扫描面（`ast::name_used_as_type`）
-            // 的 `Fn` 臂本就递归形参与返回位，故整棵树一次收口，不按位置分情况。
-            if let Some(ann) = type_annotation {
-                used_as_const =
-                    crate::frontend::core::sema::const_param::used_as_const_in_annotation(
-                        ann,
-                        &candidate_names,
-                        &is_type_name,
-                        &is_predicate,
-                    );
-            }
-        }
+            // `N`（实测 E1012「expected int64, found N」）。`Fn` 臂本就递归形参与返回位，
+            // 故整棵树一次收口，不按位置分情况。
+            let cls = crate::ast::ParamClassifier {
+                is_const_param_type: &|n| {
+                    crate::frontend::core::sema::probe::is_const_param_type_name(n)
+                },
+                is_type_name: &|n| self.type_names.contains(n),
+                is_predicate: &|n| self.predicate_names.contains(n),
+            };
+            let type_positions: Vec<&crate::ast::Type> = type_annotation.iter().copied().collect();
+            crate::ast::resolve_param_quantities(&signature, &type_positions, &cls)
+        };
 
         let resolved = crate::frontend::core::sema::const_param::resolve_const_candidates(
             &generic_params,
-            &signature,
-            &used_as_const,
+            &resolved_params,
             type_generic_params.len(),
         );
         let const_binders: Vec<crate::frontend::core::types::const_data::ConstVarDef> =

@@ -2,7 +2,6 @@ module
   fn Eq(Int(64), Int(64)) -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
     type_decl []
   fn f(Int(64), Generic { name: "Eq", args: [TypeRef("n"), TypeRef("N")] }) -> Int(64)
-    generic_params: ["N"]
     slot[0] N : Int(64) @depth1
     slot[1] n : Int(64) @depth1
     locals_total=3
@@ -13,7 +12,6 @@ module
   fn SumUpTo(Int(64), Int(64)) -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
     type_decl []
   fn g(Int(64), Generic { name: "SumUpTo", args: [TypeRef("n"), TypeRef("s")] }) -> Int(64)
-    generic_params: ["n"]
     slot[0] n : Int(64) @depth1
     slot[1] s : Int(64) @depth1
     locals_total=3

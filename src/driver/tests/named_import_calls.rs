@@ -59,6 +59,7 @@ fn single_file_values(source: &str) -> Vec<String> {
         &tr,
         crate::frontend::module::registry::ModuleRegistry::with_std(),
         None,
+        TypeLevelNamespace::scan_one(&parsed.module),
     );
     let ir = generator
         .generate_module_ir(&parsed.module)

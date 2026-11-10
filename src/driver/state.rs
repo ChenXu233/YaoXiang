@@ -10,6 +10,7 @@ use std::path::PathBuf;
 
 use crate::frontend::core::parser::Module;
 use crate::frontend::core::sema::TypeCheckResult;
+use crate::frontend::core::sema::probe::TypeLevelNamespace;
 use crate::frontend::core::types::mono::MonoType;
 use crate::frontend::module::orchestrator::{self, OrchestratorError};
 use crate::frontend::module::registry::ModuleRegistry;
@@ -171,11 +172,39 @@ pub(in crate::driver) struct State {
     /// Lsp 形态在臂尾从 registry 注入非目标文件的顶层导出定义面
     /// （`external_definitions`）。FailFast 形态不产出（无消费者）。
     pub(in crate::driver) semantic_db: crate::frontend::core::sema::semantic_db::SemanticDB,
+    /// 类型级命名空间（谓词名可见面）的缓存：`None` = 尚未算，首次消费时由
+    /// [`State::type_level_namespace`] 算出并缓存。
+    ///
+    /// 缓存的意义是「**唯一一份**」：Registry / Typecheck / IrGeneration 三处
+    /// 消费同一个值，生成期不再按本单元自扫（F14-A：那会让生成期与走查期的
+    /// 范围分叉——`TypeLevelNamespace::scan` 的契约是「多文件项目传全部单元」）。
+    pub(in crate::driver) type_level_namespace: Option<TypeLevelNamespace>,
     /// 全程序实例化请求表（3.4.8 ②）：Linking 臂在**消费各单元 IR 之前**
     /// 聚合产出（`aggregate_instantiation_requests`）——`containing_fn`
     /// 限定化需要逐单元的函数名集合，而那正是 Linking 取走的产物；
     /// Monomorphization 臂读它（多文件形态的请求来源）。
     pub(in crate::driver) aggregated_requests: Vec<InstantiationRequest>,
+}
+
+impl State {
+    /// 类型级命名空间（谓词名可见面）的**唯一计算点**：全部已 parse 单元的
+    /// `scan` 并集，首次消费时算出并缓存。
+    ///
+    /// 为什么必须是并集：`TypeLevelNamespace::scan` 的契约是「多文件项目传全部
+    /// 单元」；走查期（Registry / Typecheck）与生成期（IrGeneration）必须消费
+    /// **同一份**（F14-A）。生成期曾按 `scan(once(module))` 自扫，范围比走查期窄；
+    /// #527 跨模块谓词注册落地后，两阶段会对同一形参给出相反裁决。
+    ///
+    /// 前提：Parsing 阶段已结束（所有消费点都在其拓扑后继）。在 parse 之前
+    /// 调用会缓存空集——`asts` 为空时的并集确实为空，不是静默降级。
+    pub(in crate::driver) fn type_level_namespace(&mut self) -> TypeLevelNamespace {
+        if let Some(namespace) = &self.type_level_namespace {
+            return namespace.clone();
+        }
+        let namespace = TypeLevelNamespace::scan(self.asts.iter().flatten());
+        self.type_level_namespace = Some(namespace.clone());
+        namespace
+    }
 }
 
 /// 逐编译单元的阶段产物（PerModule 阶段的执行粒度）。
@@ -234,6 +263,7 @@ impl State {
             merged_ir: None,
             semantic_db: crate::frontend::core::sema::semantic_db::SemanticDB::new(),
             aggregated_requests: Vec::new(),
+            type_level_namespace: None,
             obligations: ObligationSettlement::default(),
         }
     }

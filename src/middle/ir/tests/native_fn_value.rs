@@ -44,8 +44,12 @@ fn compile_ir(source: &str) -> ModuleIR {
         .filter(|d| matches!(d.severity, Severity::Error))
         .collect();
     assert!(errors.is_empty(), "夹具必须无类型错误: {errors:?}");
-    let mut generator =
-        AstToIrGenerator::new_with_type_result(&type_result, ModuleRegistry::with_std(), None);
+    let mut generator = AstToIrGenerator::new_with_type_result(
+        &type_result,
+        ModuleRegistry::with_std(),
+        None,
+        TypeLevelNamespace::scan_one(&parsed.module),
+    );
     generator
         .generate_module_ir(&parsed.module)
         .expect("夹具必须生成 IR")

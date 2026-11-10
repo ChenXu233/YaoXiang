@@ -177,6 +177,8 @@ impl FunctionMonomorphizer for super::Monomorphizer {
                     name: slot.name.clone(),
                     ty: self.substitute_single_type(&slot.ty, &type_param_map),
                     scope_depth: slot.scope_depth,
+                    // 量词是声明侧的绑定事实，与类型替换无关：原样投影。
+                    quantity: slot.quantity,
                 })
                 .collect(),
             _ => Vec::new(),

@@ -75,8 +75,12 @@ fn diagnostics_via_pipeline(
     if !codes.is_empty() {
         return codes;
     }
-    let mut generator =
-        AstToIrGenerator::new_with_type_result(&result, ModuleRegistry::with_std(), None);
+    let mut generator = AstToIrGenerator::new_with_type_result(
+        &result,
+        ModuleRegistry::with_std(),
+        None,
+        TypeLevelNamespace::scan_one(module),
+    );
     if let Err(diags) = generator.generate_module_ir(module) {
         codes.extend(diags.iter().map(|d| d.code.clone()));
     }

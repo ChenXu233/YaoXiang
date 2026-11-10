@@ -251,6 +251,7 @@ pub fn parse_type_annotation(state: &mut ParserState<'_>) -> Option<Type> {
                             name: name.clone(),
                             ty: Some(ty),
                             is_mut: false,
+                            quantity: None,
                             span: *span,
                         },
                         None => Param::from_type(ty),
@@ -484,6 +485,7 @@ pub fn parse_fn_type_with_names(state: &mut ParserState<'_>) -> Option<(Vec<Para
                 name,
                 ty,
                 is_mut,
+                quantity: None,
                 span: param_span,
             });
         }
@@ -877,6 +879,7 @@ fn extract_fn_type_info(ty: &Type) -> Option<(Vec<Param>, Type)> {
             name: format!("arg{}", i),
             ty: p.ty.clone(),
             is_mut: false,
+            quantity: None,
             span: Span::dummy(),
         })
         .collect();

@@ -78,6 +78,7 @@ pub fn parse_fn_stmt_with_name_simple(
                     name: param_name,
                     ty: None,
                     is_mut: false,
+                    quantity: None,
                     span: param_span,
                 }],
                 body: Box::new(Block { stmts: body, span }),
@@ -168,6 +169,7 @@ pub fn parse_fn_params(state: &mut ParserState<'_>) -> Option<Vec<Param>> {
             name,
             ty,
             is_mut,
+            quantity: None,
             span: param_span,
         });
     }

@@ -13,7 +13,6 @@ use crate::frontend::core::parser::{self, Module};
 use crate::frontend::core::sema::checker::TypeChecker;
 use crate::frontend::core::sema::environment::MethodOverloadCandidates;
 use crate::frontend::core::sema::SemanticProbe;
-use crate::frontend::core::sema::probe::TypeLevelNamespace;
 use crate::frontend::core::sema::TypeCheckResult;
 use crate::frontend::core::sema::passes::dead_code::DeadCodeAnalyzer;
 use crate::frontend::module::orchestrator::{self, OrchestratorError};
@@ -244,6 +243,10 @@ impl Driver {
         &self,
         state: &mut State,
     ) {
+        // 谓词名可见面（WBS 3.20.9 / #522）：**全部已 parse 单元的并集**，
+        // 与 Registry / IrGeneration 消费同一份（F14-A：生成期不再按本单元自扫）。
+        // 在拆借 `State` 字段之前取——缓存写法要 `&mut State`。
+        let namespace = state.type_level_namespace();
         let State {
             program,
             asts,
@@ -253,9 +256,6 @@ impl Driver {
             semantic_db,
             ..
         } = state;
-        // 谓词名可见面（WBS 3.20.9 / #522）：scan 全部已 parse 单元——
-        // 单文件形态通常只有入口一个，全集 scan 过包含方向安全
-        let namespace = TypeLevelNamespace::scan(asts.iter().flatten());
         for (i, us) in units.iter_mut().enumerate() {
             let Some(ast) = &asts[i] else {
                 continue; // CollectAll 下 parse 失败的单元（4.1.3 不可达）
@@ -305,6 +305,10 @@ impl Driver {
         &self,
         state: &mut State,
     ) {
+        // 谓词名可见面（WBS 3.20.9 / #522）：跨文件 use 的谓词（lib.yx 声明、
+        // main.yx 使用）在检查/签名/生成三侧必须同源可见——取共享缓存的并集。
+        // 在拆借 `State` 字段之前取——缓存写法要 `&mut State`。
+        let namespace = state.type_level_namespace();
         let State {
             program,
             asts,
@@ -330,10 +334,6 @@ impl Driver {
         let is_lsp = matches!(program.kind, ProgramKind::Lsp);
         let is_embedded = matches!(program.kind, ProgramKind::Embedded);
         let vendor_root = vendor_root.clone();
-        // 谓词名可见面（WBS 3.20.9 / #522）：scan 全部单元的 AST 全集——
-        // 跨文件 use 的谓词（lib.yx 声明、main.yx 使用）在检查/签名两侧
-        // 同源可见；全集 scan 过包含方向安全
-        let namespace = TypeLevelNamespace::scan(asts.iter().flatten());
         for (i, us) in units.iter_mut().enumerate() {
             let Some(ast) = &asts[i] else {
                 continue;
@@ -872,6 +872,9 @@ impl Driver {
         state: &mut State,
     ) {
         let rootless = orchestrator::find_project_root(&state.entry_path).is_none();
+        // 谓词名可见面（F14-A）：与走查期**同一份**并集；生成器不自扫。
+        // 在拆借 `State` 字段之前取——缓存写法要 `&mut State`。
+        let type_level = state.type_level_namespace();
         let State {
             program,
             asts,
@@ -908,6 +911,7 @@ impl Driver {
                 type_result,
                 registry.clone(),
                 Some(program.units[i].key.clone()),
+                type_level.clone(),
             )
             .with_script_mode(rootless);
             generator.seed_cross_file_types(&all_ast_refs);
@@ -933,6 +937,8 @@ impl Driver {
         state: &mut State,
     ) {
         debug_assert_eq!(state.program.units.len(), 1, "Embedded 程序恒为 1 单元");
+        // 谓词名可见面（F14-A）：与走查期同一份（并集；此处过包含方向安全）
+        let type_level = state.type_level_namespace();
         let State {
             program,
             asts,
@@ -965,6 +971,7 @@ impl Driver {
             registry,
             &program.units[0].key,
             false, // 嵌入模块：非 Script 语义（保持现状）
+            &type_level,
         ) {
             Ok(ir) => *ir_slot = Some(ir),
             Err(diags) => {
@@ -993,6 +1000,8 @@ impl Driver {
         if state.units.len() != 1 {
             return Err(DriverError::MultiUnitNotWired(Stage::IrGeneration));
         }
+        // 谓词名可见面（F14-A）：与走查期同一份（单文件形态是全集，过包含方向安全）
+        let type_level = state.type_level_namespace();
         let State {
             program,
             asts,
@@ -1017,8 +1026,12 @@ impl Driver {
         // 的一致，避免跨表 DefId 撞车错分发（#94）。
         let registry = ModuleRegistry::with_std();
         let mut ir = {
-            let mut generator =
-                AstToIrGenerator::new_with_type_result(type_result, registry.clone(), None);
+            let mut generator = AstToIrGenerator::new_with_type_result(
+                type_result,
+                registry.clone(),
+                None,
+                type_level.clone(),
+            );
             match generator.generate_module_ir(ast) {
                 Ok(ir) => ir,
                 Err(errs) => {
@@ -1053,6 +1066,9 @@ impl Driver {
         &self,
         state: &mut State,
     ) {
+        // 谓词名可见面（F14-A）：与走查期同一份并集；生成器不自扫。
+        // 在拆借 `State` 字段之前取——缓存写法要 `&mut State`。
+        let type_level = state.type_level_namespace();
         let State {
             program,
             asts,
@@ -1093,6 +1109,7 @@ impl Driver {
                 registry,
                 &program.units[i].key,
                 rootless,
+                &type_level,
             ) {
                 Ok(ir) => ir,
                 Err(diags) => {
@@ -1324,9 +1341,9 @@ impl Driver {
     ) {
         let mut registry = ModuleRegistry::with_std();
         // 谓词名可见面（WBS 3.20.9 / #522）：Registry 阶段不跑第零遍、导入
-        // 未并——谓词判定只能走声明级 namespace。对全部单元 AST 取 scan 并集
-        // 传入（过包含方向安全）
-        let namespace = TypeLevelNamespace::scan(state.asts.iter().flatten());
+        // 未并——谓词判定只能走声明级 namespace。取共享缓存的全部单元并集
+        // （与 Typecheck / IrGeneration 同一份，F14-A）
+        let namespace = state.type_level_namespace();
         for (unit, ast) in state.program.units.iter().zip(state.asts.iter()) {
             let Some(ast) = ast else {
                 continue; // 上游失败（FailFast 下 run 循环已中止，防御）

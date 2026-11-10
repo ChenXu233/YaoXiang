@@ -500,43 +500,40 @@ impl TypeChecker {
                             },
                             &super::probe::SemanticProbe,
                         );
-                        // Const 候选过 RFC-011 §4.1 两步判定的第二步（用途精筛）：
+                        // Const 候选过 RFC-011 §4.1 两步判定的第二步（精筛）：
                         // fn_params_flat 把全部 curry 组拍平，值参数段的
-                        // `(n: Int)` 同样是 CONST_PARAM_TYPES 候选——只有被后续
-                        // 段类型位引用的候选才是真 const 泛型，落空者不得进名字表
-                        // （普通函数不填表 ⇒ 跨单元走既有路径）。谓词应用的实参位
-                        // 是编译期表达式不是类型引用，照 RFC-027a 排除。
-                        let const_candidates: std::collections::HashSet<String> = generic_params
-                            .iter()
-                            .filter(|p| matches!(p.kind, GenericParamKind::Const { .. }))
-                            .map(|p| p.name.clone())
-                            .collect();
+                        // `(n: Int)` 同样是 CONST_PARAM_TYPES 候选——只有成为 q=0
+                        // 绑定（`quantity == Some(Zero)`）的候选才是真 const 泛型，
+                        // 落空者不得进名字表（普通函数不填表 ⇒ 跨单元走既有路径）。
+                        // 谓词应用的实参位是编译期表达式不是类型引用，照 RFC-027a 排除。
                         // 扫描面 = **整棵 `type_annotation`**（SPEC type-system §7.1：
                         // 「类型位置」指声明中的全部 `Type` 子树）。此前只扫返回位 +
                         // 返回位内层 Fn 的形参，漏掉本层形参自己的标注——`f: (N: Int, M: N)
-                        // -> Int` 的 `N` 因此判不出 const 用途。单点见
-                        // `const_param::used_as_const_in_annotation`（本面注入的两问答：
-                        // 命名空间 = `is_declared_type_name`（`env.types` 的键，SPEC §7.1
-                        // 的「已声明类型」口径，与函数体面 `type_names` 同一集合）；
-                        // 谓词 = 声明级类型级命名空间）。
-                        let mut used_as_const = std::collections::HashSet::new();
-                        if let Some(ann) = type_annotation {
-                            let is_predicate = |n: &str| self.is_predicate_application(n);
-                            let is_type_name = |n: &str| self.is_declared_type_name(n);
-                            used_as_const =
-                                crate::frontend::core::sema::const_param::used_as_const_in_annotation(
-                                    ann,
-                                    &const_candidates,
-                                    &is_type_name,
-                                    &is_predicate,
-                                );
-                        }
+                        // -> Int` 的 `N` 因此判不出 const 用途。判定单点是唯一分类器：
+                        // 本面注入命名空间（`env.types` 的键，SPEC §7.1 的「已声明类型」
+                        // 口径，与函数体面 `type_names` 同一集合）与谓词（声明级类型级
+                        // 命名空间）两个问答，结论落在 `Param::quantity` 上。
+                        let resolved_params = {
+                            let cls = crate::ast::ParamClassifier {
+                                is_const_param_type: &|n| {
+                                    crate::frontend::core::sema::probe::is_const_param_type_name(n)
+                                },
+                                is_type_name: &|n| self.is_declared_type_name(n),
+                                is_predicate: &|n| self.is_predicate_application(n),
+                            };
+                            let type_positions: Vec<&crate::ast::Type> =
+                                type_annotation.iter().collect();
+                            crate::ast::resolve_param_quantities(&params, &type_positions, &cls)
+                        };
                         let names: Vec<String> = generic_params
                             .iter()
                             .filter(|p| {
                                 matches!(p.kind, GenericParamKind::Type)
                                     || (matches!(p.kind, GenericParamKind::Const { .. })
-                                        && used_as_const.contains(&p.name))
+                                        && resolved_params.iter().any(|rp| {
+                                            rp.name == p.name
+                                                && rp.quantity == Some(crate::ast::Quantity::Zero)
+                                        }))
                             })
                             .map(|p| p.name.clone())
                             .collect();
@@ -1662,53 +1659,42 @@ impl TypeChecker {
                     .filter(|p| matches!(p.kind, crate::ast::GenericParamKind::Type))
                     .collect();
 
-                // === 函数 const 泛型判定（用途分析） ===
-                // 候选 = generic_params 中 annotation 为具体类型的参数（形态粗筛产物）。
-                // 扫描 curry 后续组的类型标注（内层 Fn 的 params），
-                // 被引用的候选 → const。精筛唯一实现在 const_param.rs（RFC-011 §4.1）。
-                let candidate_names: HashSet<String> = generic_params
-                    .iter()
-                    .filter(|p| matches!(p.kind, crate::ast::GenericParamKind::Const { .. }))
-                    .map(|p| p.name.clone())
-                    .collect();
-
-                let mut used_as_const = HashSet::new();
-                if !candidate_names.is_empty() {
-                    // 扫描面 = **整棵 `type_annotation`**（SPEC type-system §7.1：
-                    // 「类型位置」指声明中的全部 `Type` 子树——形参标注、返回类型、
-                    // 内层 `Fn` 的形参与返回位都是同一棵树的子树）。此前只扫返回位 +
-                    // 返回位内层 Fn 的形参，漏掉本层形参自己的标注：`f: (N: Int, M: N)
-                    // -> Int` 里 `M: N` 的 `N` 从未计入用途 ⇒ `const_binders` 为空
-                    // ⇒ `M` 的标注停在裸名 → E1012。
-                    //
-                    // RFC-027a：扫描需排除**谓词应用的实参位置**——`Terminates(b)`
-                    // 的 `b`、`IsPositive(n)` 的 `n` 是编译期表达式（值），不是类型
-                    // 引用。不排除则形参名被误判为 const 泛型参数并替换成底层类型，
-                    // 精化约束/测度在到达消费端之前就丢了（E1092）。
-                    //
-                    // 扫描面单点在 `const_param::used_as_const_in_annotation`——
-                    // 与 Registry 面（`collect_signatures`）与函数体面同一实现。
-                    // 命名空间问答注入 `is_declared_type_name`（`env.types` 的键 ——
-                    // SPEC §7.1 第 2 条的「已声明类型」，与函数体面 `type_names` 同一集合）：
-                    // 候选名解析到已声明类型 ⇒ 与形参无关。
-                    let is_predicate = |n: &str| self.is_predicate_application(n);
-                    let is_type_name = |n: &str| self.is_declared_type_name(n);
-                    if let Some(ann) = type_annotation {
-                        used_as_const =
-                            crate::frontend::core::sema::const_param::used_as_const_in_annotation(
-                                ann,
-                                &candidate_names,
-                                &is_type_name,
-                                &is_predicate,
-                            );
-                    }
-                }
+                // === 函数 const 泛型判定（量词事实） ===
+                // 判定不在这里发生：唯一分类器 `ast::classify_compile_time_value_params`
+                // 由唯一解析源 `ast::resolve_param_quantities` 调用，结论写成
+                // `Param::quantity == Some(Zero)`（D62 / issue #533）。本面只注入两个问答。
+                //
+                // 扫描面 = **整棵 `type_annotation`**（SPEC type-system §7.1：
+                // 「类型位置」指声明中的全部 `Type` 子树——形参标注、返回类型、
+                // 内层 `Fn` 的形参与返回位都是同一棵树的子树）。此前只扫返回位 +
+                // 返回位内层 Fn 的形参，漏掉本层形参自己的标注：`f: (N: Int, M: N)
+                // -> Int` 里 `M: N` 的 `N` 从未计入用途 ⇒ `const_binders` 为空
+                // ⇒ `M` 的标注停在裸名 → E1012。
+                //
+                // RFC-027a：扫描需排除**谓词应用的实参位置**——`Terminates(b)`
+                // 的 `b`、`IsPositive(n)` 的 `n` 是编译期表达式（值），不是类型
+                // 引用。不排除则形参名被误判为 const 泛型参数并替换成底层类型，
+                // 精化约束/测度在到达消费端之前就丢了（E1092）。
+                //
+                // 命名空间问答注入 `is_declared_type_name`（`env.types` 的键 ——
+                // SPEC §7.1 第 2 条的「已声明类型」，与函数体面 `type_names` 同一集合）：
+                // 候选名解析到已声明类型 ⇒ 与形参无关。
+                let resolved_params = {
+                    let cls = crate::ast::ParamClassifier {
+                        is_const_param_type: &|n| {
+                            crate::frontend::core::sema::probe::is_const_param_type_name(n)
+                        },
+                        is_type_name: &|n| self.is_declared_type_name(n),
+                        is_predicate: &|n| self.is_predicate_application(n),
+                    };
+                    let type_positions: Vec<&crate::ast::Type> = type_annotation.iter().collect();
+                    crate::ast::resolve_param_quantities(&signature, &type_positions, &cls)
+                };
 
                 let resolved_const =
                     crate::frontend::core::sema::const_param::resolve_const_candidates(
                         &generic_params,
-                        &signature,
-                        &used_as_const,
+                        &resolved_params,
                         type_generic_params.len(),
                     );
                 let const_binders: Vec<ConstVarDef> = resolved_const.const_binders;
@@ -3116,36 +3102,37 @@ impl TypeChecker {
                 .map(|p| p.name.clone())
                 .collect();
 
-            // const 判定：用途分析是唯一裁判（RFC-011 §4.1 精筛唯一实现在 const_param.rs）。
-            let candidate_names: HashSet<String> = generic_params
-                .iter()
-                .filter(|p| matches!(p.kind, GenericParamKind::Const { .. }))
-                .map(|p| p.name.clone())
-                .collect();
-            // 构造器面的扫描面 = 定义体（SPEC §7.1 的「类型位置」在构造器面就是类型体里
-            // 的全部 `Type` 子树），走与函数三面**同一入口**；命名空间问答同样注入
-            // `is_declared_type_name`（四处同源）。本面不做谓词短路：类型体里的应用项
-            // （`Assert(N > 0)` / 接口实例化）不是谓词应用的实参位语义——历史判据也
-            // 从不排除（`Assert` 不是谓词），改动会平移 E1094 的发射面。
-            let used_as_const =
-                crate::frontend::core::sema::const_param::used_as_const_in_annotation(
-                    definition,
-                    &candidate_names,
-                    &|n| self.is_declared_type_name(n),
-                    &|_| false,
-                );
+            // 量词事实的唯一解析源（D62 / issue #533）：构造器面的扫描面 = 定义体
+            // （SPEC §7.1 的「类型位置」在构造器面就是类型体里的全部 `Type` 子树），
+            // 与函数三面**同一分类器**；命名空间问答同样注入 `is_declared_type_name`
+            // （各处同源）。本面不做谓词短路：类型体里的应用项（`Assert(N > 0)` /
+            // 接口实例化）不是谓词应用的实参位语义——历史判据也从不排除（`Assert`
+            // 不是谓词），改动会平移 E1094 的发射面。
+            let resolved_params = {
+                let cls = crate::ast::ParamClassifier {
+                    is_const_param_type: &|n| {
+                        crate::frontend::core::sema::probe::is_const_param_type_name(n)
+                    },
+                    is_type_name: &|n| self.is_declared_type_name(n),
+                    is_predicate: &|_| false,
+                };
+                crate::ast::resolve_param_quantities(&signature, &[definition], &cls)
+            };
 
             let resolved_const = crate::frontend::core::sema::const_param::resolve_const_candidates(
                 &generic_params,
-                &signature,
-                &used_as_const,
+                &resolved_params,
                 type_param_names.len(),
             );
 
             // #297/F：落空 const 候选（标注具体类型但未在类型体任何类型位置引用）
             // 不能静默丢弃——否则实例化 arity 对不上，调用侧报风马牛不相及的 E1010。
-            // 按 RFC-011 §4.1 编译期值参数判定：声明侧直接报错。
-            for p in &resolved_const.fallen {
+            // 按 RFC-011 §4.1：声明侧直接报错。判据是**绑定事实**
+            // （`quantity != Some(Zero)` 派生），不再有第二条「落空通道」。
+            for p in crate::frontend::core::sema::const_param::fallen_const_candidates(
+                &generic_params,
+                &resolved_params,
+            ) {
                 self.add_error(
                     ErrorCodeDefinition::unused_const_param(&p.name, name)
                         .at(span)

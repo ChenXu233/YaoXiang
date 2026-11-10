@@ -171,3 +171,40 @@ main = () => {
         );
     }
 }
+
+/// 规范 / 病史：D62（issue #533）——q=0 形参的**具名绑定**必须在槽位上携带同一量词
+/// 事实（`ast::Param::quantity` 的投影），擦除前识别体内对它的引用要靠它。
+///
+/// 声明 `f: (N: Int) -> (n: N) -> Int = (n) => n` 的柯里最内层函数把外层形参 N 铺成
+/// env 槽：N 是编译期值参数（`n: N` 引用它）⇒ 该槽带 `Some(Zero)`；临时槽恒 `None`。
+#[test]
+fn test_const_param_slot_carries_zero_quantity() {
+    // Arrange
+    let src = r#"
+f: (N: Int) -> (n: N) -> Int = (n) => n
+main = () => {
+}
+"#;
+
+    // Act
+    let ir = compile(src);
+    let slots = locals_of(&ir, "__f_l0");
+
+    // Assert
+    let n_slot = slots
+        .iter()
+        .find(|s| s.name.as_deref() == Some("N"))
+        .unwrap_or_else(|| panic!("__f_l0 应把外层形参 N 铺成具名槽；实际: {slots:?}"));
+    assert_eq!(
+        n_slot.quantity,
+        Some(crate::ast::Quantity::Zero),
+        "N 被 `n: N` 当类型用 ⇒ 槽位必须携带 q=0 事实；实际: {slots:?}"
+    );
+    assert!(
+        slots
+            .iter()
+            .filter(|s| s.name.is_none())
+            .all(|s| s.quantity.is_none()),
+        "临时槽不携带任何量词事实；实际: {slots:?}"
+    );
+}

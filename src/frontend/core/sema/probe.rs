@@ -171,6 +171,47 @@ pub struct TypeLevelNamespace {
     pub predicates: HashSet<String>,
 }
 
+/// `TypeLevelNamespace` 本身就是**一个探针**：它在
+/// [`SemanticProbe`] 的问答之上叠加「本单元声明面的谓词名」——`Eq(n, N)` 这类
+/// 用户声明的谓词，静态探针答不出（不是内置名），于是谓词应用实参位被误计成
+/// 类型引用（RFC-027a 的反向错误：真值参数被当编译期值参数）。D62 起「名是不是
+/// 谓词」的判定统一走这里：判据源就是 namespace 的声明面扫描，不另建名字表。
+impl TypeEnvProbe for TypeLevelNamespace {
+    fn is_constraint(
+        &self,
+        name: &str,
+    ) -> bool {
+        is_constraint_name(name)
+    }
+
+    fn is_predicate(
+        &self,
+        name: &str,
+    ) -> bool {
+        self.predicates.contains(name)
+    }
+
+    /// 定种：谓词声明面优先（与 `ParserState::kind_of` 同序——本单元已声明的
+    /// 谓词优先，其余交静态探针）。
+    fn kind_of(
+        &self,
+        name: &str,
+    ) -> NameKind {
+        if self.predicates.contains(name) {
+            NameKind::Predicate
+        } else {
+            SemanticProbe.kind_of(name)
+        }
+    }
+
+    fn is_const_param_type(
+        &self,
+        name: &str,
+    ) -> bool {
+        is_const_param_type_name(name)
+    }
+}
+
 impl TypeLevelNamespace {
     /// 扫描全部可见单元的谓词声明名，与内置谓词名并成命名空间。
     ///

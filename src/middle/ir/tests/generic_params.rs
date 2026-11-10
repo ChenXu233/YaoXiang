@@ -36,8 +36,12 @@ fn module_ir(source: &str) -> ModuleIR {
         "类型检查应无诊断，实际: {:#?}",
         result.diagnostics
     );
-    let mut generator =
-        AstToIrGenerator::new_with_type_result(&result, ModuleRegistry::with_std(), None);
+    let mut generator = AstToIrGenerator::new_with_type_result(
+        &result,
+        ModuleRegistry::with_std(),
+        None,
+        TypeLevelNamespace::scan_one(&parsed.module),
+    );
     generator
         .generate_module_ir(&parsed.module)
         .expect("IR 生成应成功")
@@ -108,4 +112,36 @@ fn test_generic_params_excludes_const_param_never_referenced_in_types() {
         g.generic_params, None,
         "只在值位置出现的 N 不是编译期值参数 ⇒ generic_params 必须为空"
     );
+}
+
+/// 规范 / 病史：谓词应用的实参位是**值**，不得进 `generic_params`。
+///
+/// 判据锚：RFC-027 §2 / §3.1（谓词应用 = 显式函数调用，形参位与返回位同形）与
+/// RFC-027a（谓词应用实参位是编译期表达式，不是类型引用）。
+/// 病史：6.9.1 收口实录 §七 第 6 条——`refined_relation_arg` 的 `f`/`g` 被登记成
+/// `generic_params: ["N"]` / `["n"]`：**用户声明**的谓词（`Eq` / `SumUpTo`）不在
+/// 内置名表里，静态 `SemanticProbe` 答「不是谓词」⇒ 真值参数被当成类型引用。
+#[test]
+fn test_generic_params_excludes_predicate_application_arguments() {
+    // Arrange — 与 `02-type-system/refinement/refined_relation_arg.yx` 同形的两份关系谓词
+    let source = concat!(
+        "Eq: (a: Int, b: Int) -> Type = { a == b }\n",
+        "SumUpTo: (n: Int, s: Int) -> Type = { s == n * 2 }\n",
+        "f: (N: Int, n: Eq(n, N)) -> Int = { n }\n",
+        "g: (n: Int, s: SumUpTo(n, s)) -> Int = { s }\n",
+        "main: () -> Void = {\n",
+        "}\n",
+    );
+
+    // Act
+    let module = module_ir(source);
+
+    // Assert — 两份函数的形参都是运行期值位，不是泛型参数
+    for name in ["f", "g"] {
+        assert_eq!(
+            function(&module, name).generic_params,
+            None,
+            "{name} 的谓词应用实参是值 ⇒ generic_params 必须为空（谓词名来自声明面扫描，不得由静态探针独立判定）"
+        );
+    }
 }

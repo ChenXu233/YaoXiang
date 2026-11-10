@@ -18,9 +18,7 @@ use crate::frontend::module::symbol::{DefKind, SymbolTable};
 use crate::frontend::module::ExportKind;
 use crate::frontend::core::sema::layers::ownership::ReleasePlan;
 use crate::frontend::core::sema::types::OverloadResolutions;
-use crate::frontend::core::sema::{
-    is_constraint_name, MonoType, PolyType, SemanticProbe, TypeCheckResult,
-};
+use crate::frontend::core::sema::{is_constraint_name, MonoType, PolyType, TypeCheckResult};
 use crate::middle::ir::ir::{
     BasicBlock, ConstValue, FunctionBody, FunctionIR, Instruction, LocalSlot, ModuleIR, Operand,
     TypeDeclBody, TypeDeclField,
@@ -157,9 +155,19 @@ pub struct AstToIrGenerator {
     /// 否则 `use std.math` 后用户写 `PI: Type = ..; PI(7)` 会被解析成
     /// `std.math.PI`（常量）——调用常量得到 void，静默错值（D10）。
     declared_type_names: std::collections::HashSet<String>,
-    /// 编译期谓词名集（`generate_module_ir` 入口从 AST 扫出）：SPEC §7.1 的
-    /// 「谓词应用的实参位是值不是类型」判据要用它——保守假值会让同形不遮蔽失效。
-    predicate_names: std::collections::HashSet<String>,
+    /// 类型级命名空间（谓词名可见面）：SPEC §7.1 的「谓词应用的实参位是值不是
+    /// 类型」判据要用它——保守假值会让同形不遮蔽失效。
+    ///
+    /// **不得再用静态 `SemanticProbe` 独立判谓词**（6.9.1 观察项，D62 复核）：
+    /// 用户声明的谓词（`Eq` / `SumUpTo` / `IsPositive`）不在内置名表里，静态探针
+    /// 答「不是谓词」⇒ 谓词应用的实参位被当成类型引用 ⇒ 真值参数被误登进
+    /// `generic_params`（`refined_relation_arg` 的 `f`/`g`、`refined_param_cross_arg`
+    /// 的 `h`）。判据源只有这一份声明面扫描。
+    ///
+    /// **范围由调用方定，生成器不自扫**（F14-A）：多文件入口传 driver 算出的
+    /// `scan(全部单元)` 并集，单文件入口传 `scan_one(module)`；构造参数是必需的，
+    /// 故「空集 / 窄范围」只能是调用方的显式选择，不会因漏接而静默。
+    type_level: crate::frontend::core::sema::probe::TypeLevelNamespace,
     /// 类型绑定映射（类型名 -> (方法名 -> BindingInfo)）
     /// 用于方法调用时的参数重排和函数转发（RFC-004）
     type_bindings: HashMap<String, HashMap<String, BindingInfo>>,
@@ -344,11 +352,20 @@ struct CurryLayer {
 }
 
 impl AstToIrGenerator {
-    /// 创建新的 IR 生成器（带类型信息）
+    /// 创建新的 IR 生成器（带类型信息）。
+    ///
+    /// `type_level` 是**必需输入**（F14-B）：SPEC §7.1 分类器与泛型名扫描都要问
+    /// 「这个名字是不是谓词」，而答案只能在调用方那侧算对——单文件入口是
+    /// `TypeLevelNamespace::scan_one(module)`，多文件入口是 driver 的
+    /// `scan(全部单元)` 并集。此前构造器把它默认为空集，于是不经
+    /// `generate_module_ir` 的入口（`frontend/proof_execution.rs` 直调
+    /// `generate_function_ir`）静默拿到旧宽口径——空集不是「足够保守」，它会让
+    /// 用户声明的谓词被当普通类型应用（谓词实参位因此被误计为类型引用）。
     pub fn new_with_type_result(
         type_result: &TypeCheckResult,
         registry: ModuleRegistry,
         module_key: Option<String>,
+        type_level: crate::frontend::core::sema::probe::TypeLevelNamespace,
     ) -> Self {
         // Script/Bin 语义默认跟随 module_key（None = Script）；调用方可用
         // `with_script_mode` 覆盖（3.4.8 ③：与限定名键解耦）。
@@ -368,7 +385,7 @@ impl AstToIrGenerator {
             struct_definitions: HashMap::new(),
 
             declared_type_names: std::collections::HashSet::new(),
-            predicate_names: std::collections::HashSet::new(),
+            type_level,
             type_bindings: HashMap::new(),
             nested_functions: Vec::new(),
             closure_counter: 0,
@@ -610,7 +627,12 @@ impl AstToIrGenerator {
     /// 用途：闭包 IR 的形参定型。parser 不再往实现头填声明类型（D54 修复轮 F1），
     /// 闭包自己拿不到外层声明，只能由正在生成的函数把「返回位声明的形参」递下来。
     /// 编译期槽的剔除口径与别处同源（`extract_generic_param_names`）。
-    fn paren_return_value_params(type_annotation: Option<&ast::Type>) -> Vec<(String, MonoType)> {
+    /// **探针注入**：谓词问答取本单元声明面（`self.type_level`），不取静态
+    /// `SemanticProbe`——用户声明的谓词不在内置名表里（6.9.1 观察项）。
+    fn paren_return_value_params(
+        &self,
+        type_annotation: Option<&ast::Type>,
+    ) -> Vec<(String, MonoType)> {
         let Some(ast::Type::Fn { return_type, .. }) = type_annotation else {
             return Vec::new();
         };
@@ -626,7 +648,7 @@ impl AstToIrGenerator {
         let flat: Vec<ast::Param> = inner.to_vec();
         // 扫描面 = 内层 Fn 的整棵声明（形参标注 ∪ 返回位）：被返回闭包的编译期
         // 形参若只在它的返回位被引用，也必须从运行期形参里剔除。
-        let generic = crate::ast::extract_generic_param_names(&flat, &[inner_ty], &SemanticProbe);
+        let generic = crate::ast::extract_generic_param_names(&flat, &[inner_ty], &self.type_level);
         flat.iter()
             .filter(|p| !generic.iter().any(|g| g.name == p.name))
             .map(|p| {
@@ -691,19 +713,37 @@ impl AstToIrGenerator {
         type_annotation: Option<&ast::Type>,
         count: usize,
     ) -> Vec<ast::Param> {
-        let cls = ast::ParamClassifier {
-            is_const_param_type: &|n| {
-                crate::frontend::core::sema::probe::is_const_param_type_name(n)
-            },
-            is_type_name: &|n| self.declared_type_names.contains(n),
-            is_predicate: &|n| self.predicate_names.contains(n),
-        };
         type_annotation
-            .map(|ann| ann.runtime_value_params_cls(&cls))
+            .map(|ann| self.with_param_classifier(|cls| ann.runtime_value_params_cls(cls)))
             .unwrap_or_default()
             .into_iter()
             .take(count)
             .collect()
+    }
+
+    /// 以本单元注入的问答**借用**分类器：三个问答的取值只在这里写一次。
+    ///
+    /// - `is_const_param_type`：L3 权威表（`sema::probe::CONST_PARAM_TYPES`）；
+    /// - `is_type_name`：本单元声明的类型名（生成入口扫出）；
+    /// - `is_predicate`：本单元声明面的谓词名（`TypeLevelNamespace`，**不**用静态
+    ///   `SemanticProbe` 独立判谓词——用户声明的谓词不在内置名表里，6.9.1 观察项）。
+    ///
+    /// `ParamClassifier` 借用闭包，故用回调把「组装」与「消费」隔开——返回值
+    /// 不能直接产出分类器（悬垂引用）。
+    fn with_param_classifier<R>(
+        &self,
+        f: impl FnOnce(&ast::ParamClassifier<'_>) -> R,
+    ) -> R {
+        let is_const_param_type =
+            |n: &str| crate::frontend::core::sema::probe::is_const_param_type_name(n);
+        let is_type_name = |n: &str| self.declared_type_names.contains(n);
+        let is_predicate = |n: &str| self.type_level.predicates.contains(n);
+        let cls = ast::ParamClassifier {
+            is_const_param_type: &is_const_param_type,
+            is_type_name: &is_type_name,
+            is_predicate: &is_predicate,
+        };
+        f(&cls)
     }
 
     /// 实现头形参的 IR 类型表：作者标注优先，缺标注按声明同类位渲染，都没有时
@@ -1299,6 +1339,42 @@ impl AstToIrGenerator {
         }
     }
 
+    /// 把量词事实写进**当前作用域**里该名字的槽位（`LocalSlot::quantity` 的唯一写入点）。
+    ///
+    /// 只写**已解析**的事实（`Some`）：`None` 是「尚未解析」，写进去不产生信息，
+    /// 还会让下游把它误读成「已判定为非 q=0」。临时槽与无名来源因此保持 `None`。
+    fn note_slot_quantity(
+        &mut self,
+        name: &str,
+        quantity: Option<ast::Quantity>,
+    ) {
+        let Some(quantity) = quantity else {
+            return;
+        };
+        let Some(slot) = self.lookup_local(name) else {
+            return;
+        };
+        if let Some(local) = self.cur_locals.get_mut(slot) {
+            local.quantity = Some(quantity);
+        }
+    }
+
+    /// 实现头第 i 位 ↔ 声明运行期值位第 i 位（与 `note_param_written_types` **同一**
+    /// 对齐口径）：把声明侧已解析的量词事实写到该形参的槽位上。
+    ///
+    /// 按位而不是按名：实现头可以改名（`f: (a: Int) -> Int = (b) => b`），名字不是
+    /// 绑定身份，位次才是。
+    fn note_param_quantities(
+        &mut self,
+        params: &[ast::Param],
+        declared: &[ast::Param],
+    ) {
+        for (i, param) in params.iter().enumerate() {
+            let quantity = declared.get(i).and_then(|d| d.quantity);
+            self.note_slot_quantity(&param.name, quantity);
+        }
+    }
+
     /// 局部变量写出类型名的查找（作用域由符号表本身给出）。
     fn local_written_type(
         &self,
@@ -1524,18 +1600,16 @@ impl AstToIrGenerator {
         }
         // use 导入别名表（含 #245 条目别名）：生成期解析调用名用。
         self.use_aliases = self.build_import_aliases(module);
-        // SPEC §7.1 分类器的**真注入**：类型命名空间（本文件声明的类型名）与谓词名集
-        // 在入口处从 AST 扫出，供 `param_classifier` 回答命名空间解析——保守假值会
-        // 让「形参名与类型名同形不构成遮蔽」失效。
-        {
-            let namespace = crate::frontend::core::sema::probe::TypeLevelNamespace::scan(
-                std::iter::once(module),
-            );
-            self.predicate_names = namespace.predicates;
-            for stmt in &module.items {
-                if let ast::StmtKind::TypeDefinition { name, .. } = &stmt.kind {
-                    self.declared_type_names.insert(name.clone());
-                }
+        // 谓词名可见面**不在生成期扫描**（F14-A）：生成的可见范围必须与走查期
+        // （typecheck / registry）**同一份**，因此由调用方经 `new_with_type_result`
+        // 注入并在这里原样使用——`self.type_level` 已在构造期就位。
+        //
+        // 仍在入口扫的是**本文件声明的类型名**：那是逐单元的解析事实（`use std.math`
+        // 之后 `PI(7)` 该不该解析成 `std.math.PI`），范围天然是本单元，与谓词的
+        // 跨单元可见面不是同一个问题。
+        for stmt in &module.items {
+            if let ast::StmtKind::TypeDefinition { name, .. } = &stmt.kind {
+                self.declared_type_names.insert(name.clone());
             }
         }
 
@@ -2141,7 +2215,7 @@ impl AstToIrGenerator {
                 // （请求 arity 与本表逐字对齐），不属本函数的扫描面。
                 let type_positions: Vec<&ast::Type> = type_annotation.iter().collect();
                 let generic_params =
-                    extract_generic_param_names(&signature, &type_positions, &SemanticProbe);
+                    extract_generic_param_names(&signature, &type_positions, &self.type_level);
                 let generic_param_names = if generic_params.is_empty() {
                     None
                 } else {
@@ -2299,7 +2373,7 @@ impl AstToIrGenerator {
                 let generic_params = crate::ast::extract_generic_param_names(
                     &signature,
                     &type_positions,
-                    &SemanticProbe,
+                    &self.type_level,
                 );
                 // 登记形参名，供命名参数调用（`add(b = 5, a = 3)`）重排实参。
                 //
@@ -2582,6 +2656,8 @@ impl AstToIrGenerator {
             self.register_local(&param.name, runtime_indices.get(i).copied().unwrap_or(i));
         }
         self.note_param_written_types(params, &declared);
+        // 量词事实（q=0 槽位）随声明一起落到形参槽位，供擦除前识别。
+        self.note_param_quantities(params, &declared);
 
         // 记录局部变量起始位置（在参数之后）
         // 帧宽只看**实际用到的**槽位：`take(params.len())` 保证「声明比实现头多」的形态
@@ -2702,10 +2778,9 @@ impl AstToIrGenerator {
     ) -> Result<Option<FunctionIR>, Diagnostic> {
         // 括号返回 / 闭包包装形态：把声明**返回位**内层 Fn 的形参递给闭包 IR 定型
         //（parser 不再填 AST 标注；入口 save、出口还原，互不串味）。
-        let saved_closure_decl = std::mem::replace(
-            &mut self.closure_decl_params,
-            Self::paren_return_value_params(type_annotation),
-        );
+        let closure_decl_params = self.paren_return_value_params(type_annotation);
+        let saved_closure_decl =
+            std::mem::replace(&mut self.closure_decl_params, closure_decl_params);
 
         // 检测 native("symbol") 模式：函数体为空语句 + Native("...") 表达式
         // 检测 native("symbol") 模式：函数体为空语句 + Native("...") 表达式
@@ -2759,6 +2834,8 @@ impl AstToIrGenerator {
         // 写出类型名与形参类型同一来源（作者标注 → 声明同类位）。
         let declared = self.declaration_runtime_param_slots(type_annotation, params.len());
         self.note_param_written_types(params, &declared);
+        // 量词事实（q=0 槽位）随声明一起落到形参槽位，供擦除前识别。
+        self.note_param_quantities(params, &declared);
 
         // 记录局部变量起始位置（在参数之后）
         // 帧宽只看**实际用到的**槽位：`take(params.len())` 保证「声明比实现头多」的形态
@@ -2995,7 +3072,7 @@ impl AstToIrGenerator {
         &mut self,
         func_name: &str,
         layer: &CurryLayer,
-        env_param_names: &[String],
+        env_params: &[ast::Param],
         body: &[ast::Stmt],
         constants: &mut Vec<ConstValue>,
         generic_params: Option<Vec<String>>,
@@ -3007,16 +3084,22 @@ impl AstToIrGenerator {
         // 顶层函数体入口：清空槽位表，避免沿用上一个函数的局部名。
 
         let mut instructions = Vec::new();
-        let env_count = env_param_names.len();
+        let env_count = env_params.len();
 
         // 参数原位注册，不生成 LoadArg：args 槽布局 = [外层参数(0..env_count),
         // 本层参数(env_count..)]，正是 body 需要的最终布局。LoadArg 搬动会因
         // dst/src 槽重叠互相覆盖（#294：先写 slot[i] 再读 slot[i] 已坏）。
-        for (i, name) in env_param_names.iter().enumerate() {
-            self.register_local(name, i);
+        //
+        // 量词事实随形参一起落到槽位（`LocalSlot::quantity` 的唯一写入点之一）：
+        // 外层零号位（`(N: Int) -> (n: N)` 的 N）在本层正是「q=0 具名绑定」，
+        // 擦除前识别体内对它的引用要靠这条事实。
+        for (i, param) in env_params.iter().enumerate() {
+            self.register_local(&param.name, i);
+            self.note_slot_quantity(&param.name, param.quantity);
         }
         for (i, param) in layer.params.iter().enumerate() {
             self.register_local(&param.name, env_count + i);
+            self.note_slot_quantity(&param.name, param.quantity);
         }
         // curry 层形参全部来自声明注解本身（层参数由 `split_curry` 从注解切出），
         // 无需声明补位。
@@ -3121,14 +3204,20 @@ impl AstToIrGenerator {
     ) -> Result<Option<FunctionIR>, Diagnostic> {
         // 括号返回 / 闭包包装：把声明**返回位**内层 Fn 的形参递给闭包 IR 定型
         //（parser 不再填 AST 标注；入口 save、出口还原，见 generate_function_ir 同款）。
-        let saved_closure_decl = std::mem::replace(
-            &mut self.closure_decl_params,
-            Self::paren_return_value_params(Some(type_annotation)),
-        );
-        let layers = Self::split_curry(type_annotation, all_params);
+        let closure_decl_params = self.paren_return_value_params(Some(type_annotation));
+        let saved_closure_decl =
+            std::mem::replace(&mut self.closure_decl_params, closure_decl_params);
+        // 量词事实（唯一解析源）：层形参与 env 名都来自这份声明事实，故先把
+        // 「声明形参」解析成带 quantity 的同一批 `Param`，再按层切分——切分本身
+        // 仍是 `split_curry`（顺序/长度不变），不新增第二套参数数组。
+        let resolved_all_params = self.with_param_classifier(|cls| {
+            ast::resolve_param_quantities(all_params, &[type_annotation], cls)
+        });
+        let layers = Self::split_curry(type_annotation, &resolved_all_params);
 
         let mut layer_funcs: Vec<FunctionIR> = Vec::new();
-        let mut env_param_names: Vec<String> = Vec::new();
+        // env 追踪携带**完整形参**（名字 + 量词事实），不是名字平行数组。
+        let mut env_params: Vec<ast::Param> = Vec::new();
 
         // 保存外层状态，避免污染
         let saved_next_temp = self.next_temp;
@@ -3165,7 +3254,7 @@ impl AstToIrGenerator {
                 self.generate_curry_innermost_func(
                     &func_name,
                     layer,
-                    &env_param_names,
+                    &env_params,
                     body,
                     constants,
                     layer_generic_params,
@@ -3175,7 +3264,7 @@ impl AstToIrGenerator {
                 self.generate_curry_intermediate_func(
                     &func_name,
                     layer,
-                    env_param_names.len(),
+                    env_params.len(),
                     &next_name,
                     constants,
                     layer_generic_params,
@@ -3184,9 +3273,7 @@ impl AstToIrGenerator {
             self.exit_scope();
 
             // 累积本层参数到 env 追踪（给 innermost_func 用）
-            for p in &layer.params {
-                env_param_names.push(p.name.clone());
-            }
+            env_params.extend(layer.params.iter().cloned());
             layer_funcs.push(func);
         }
 
@@ -4004,7 +4091,7 @@ impl AstToIrGenerator {
                     let generic_params = crate::ast::extract_generic_param_names(
                         &signature,
                         &type_positions,
-                        &SemanticProbe,
+                        &self.type_level,
                     );
                     let generic_param_names = if generic_params.is_empty() {
                         None
@@ -5246,6 +5333,7 @@ impl AstToIrGenerator {
                 name: var_name.to_string(),
                 ty: None,
                 is_mut: false,
+                quantity: None,
                 span,
             }],
             body: Box::new(body.clone()),
@@ -9492,8 +9580,13 @@ pub fn generate_ir(
     result: &crate::frontend::core::sema::TypeCheckResult,
 ) -> Result<crate::middle::ModuleIR, Vec<Diagnostic>> {
     // 单文件模式：仅 std 注册表，module_key 为 None → 不启用模块限定。
-    let mut generator =
-        AstToIrGenerator::new_with_type_result(result, ModuleRegistry::with_std(), None);
+    // 谓词名可见面 = 本单元（单文件编译的走查面同样只有这一个单元）。
+    let mut generator = AstToIrGenerator::new_with_type_result(
+        result,
+        ModuleRegistry::with_std(),
+        None,
+        crate::frontend::core::sema::probe::TypeLevelNamespace::scan_one(ast),
+    );
     generator.generate_module_ir(ast)
 }
 
@@ -9516,11 +9609,16 @@ pub fn generate_ir_with_context(
     // 解耦（3.4.8 ③ 同源判据）：rootless（standalone）多单元形态传 true，
     // 项目（Bin）与嵌入模块传 false
     script_mode: bool,
+    // 谓词名可见面（F14-A）：**调用方算出的那一份**（多文件形态 = 全部单元
+    // 的 scan 并集，与走查期同一份）。生成器不自扫——按本单元自扫会让
+    // 生成期与走查期的范围分叉。
+    type_level: &crate::frontend::core::sema::probe::TypeLevelNamespace,
 ) -> Result<crate::middle::ModuleIR, Vec<Diagnostic>> {
     let mut generator = AstToIrGenerator::new_with_type_result(
         result,
         registry.clone(),
         Some(module_key.to_string()),
+        type_level.clone(),
     )
     .with_script_mode(script_mode);
     generator.seed_cross_file_types(cross_file_types);

@@ -57,8 +57,12 @@ fn probe_method_bind(source: &str) -> MethodBindProbe {
         .iter()
         .map(|d| d.code.clone())
         .collect();
-    let mut generator =
-        AstToIrGenerator::new_with_type_result(&type_result, ModuleRegistry::with_std(), None);
+    let mut generator = AstToIrGenerator::new_with_type_result(
+        &type_result,
+        ModuleRegistry::with_std(),
+        None,
+        TypeLevelNamespace::scan_one(&parsed.module),
+    );
     let ir_codes = match generator.generate_module_ir(&parsed.module) {
         Ok(_) => Vec::new(),
         Err(diags) => diags.iter().map(|d| d.code.clone()).collect(),

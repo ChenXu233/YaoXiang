@@ -11,6 +11,7 @@ pub mod fn_param_slots;
 pub mod generic_params;
 pub mod ir_build;
 pub mod local_slots;
+pub mod namespace_scope;
 pub mod native_fn_value;
 pub mod overload_resolutions;
 pub mod release_plan_spans;

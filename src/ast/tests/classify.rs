@@ -20,6 +20,7 @@ fn spec_param(
         name: name.to_string(),
         ty: Some(ty),
         is_mut: false,
+        quantity: None,
         span: Span::dummy(),
     }
 }

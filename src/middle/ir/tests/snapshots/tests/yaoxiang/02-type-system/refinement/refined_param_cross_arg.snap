@@ -2,7 +2,6 @@ module
   fn IsPositive(Int(64)) -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
     type_decl []
   fn h(Int(64), Generic { name: "IsPositive", args: [TypeRef("a")] }) -> Int(64)
-    generic_params: ["a"]
     slot[0] a : Int(64) @depth1
     slot[1] b : Int(64) @depth1
     locals_total=3

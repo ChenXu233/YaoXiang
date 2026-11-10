@@ -2,10 +2,15 @@
 
 // 6.6.12：**IR 层不再持有语法层类型**。此前的最后一处载体 `FunctionBody::TypeDecl`
 // 改携 IR 原生的收窄形状 [`TypeDeclBody`]（字段表 + 字节码类型表项），语法层 `ast::Type`
-// 在 IR 里彻底消失——本文件不再 `use crate::ast`（6.2 的四处载体、
-// 6.6.11 的两个零生产者指令变体之后的历史见 09a §P6 6.2 / 6.6.11 / 6.6.12）。
+// 在 IR 里彻底消失（6.2 的四处载体、6.6.11 的两个零生产者指令变体之后的历史见
+// 09a §P6 6.2 / 6.6.11 / 6.6.12）。
+//
+// 本文件唯一的 AST 侧 import 是 [`Quantity`]（RFC-039 D62 / issue #533）：量词是**绑定
+// 事实**的值域（`Option<Quantity>` 与 `ast::Param::quantity` 是同一个事实），不是语法
+// 载体——IR 不为它再开一张 `FunctionIR` 旁表，只在 `LocalSlot` 上做投影。
 use std::collections::HashMap;
 
+use crate::ast::Quantity;
 use crate::frontend::core::sema::MonoType;
 use crate::frontend::module::symbol::DefId;
 use crate::util::span::Span;
@@ -690,6 +695,12 @@ pub struct LocalSlot {
     pub ty: MonoType,
     /// 作用域深度（0 = 函数参数层），供嵌套作用域重名消歧
     pub scope_depth: usize,
+    /// 该槽绑定的**量词事实**（RFC-039 D62 / issue #533）。
+    ///
+    /// 具名绑定取声明侧同一份事实（`ast::Param::quantity` 的投影）；临时槽与
+    /// 无名来源为 `None`（= 未解析，不是「默认 q=1」）。擦除前识别 q=0 引用靠它，
+    /// 故它是**绑定事实的 IR 侧投影**，不是第二张旁表：`FunctionIR` 不挂 quantity 表。
+    pub quantity: Option<Quantity>,
 }
 
 impl LocalSlot {
@@ -699,6 +710,7 @@ impl LocalSlot {
             name: None,
             ty,
             scope_depth: 0,
+            quantity: None,
         }
     }
 }

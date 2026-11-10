@@ -186,6 +186,7 @@ fn test_expr_lambda() {
             name: "x".into(),
             ty: None,
             is_mut: false,
+            quantity: None,
             span: Span::dummy(),
         }],
         body: Box::new(Block {
@@ -859,6 +860,7 @@ fn test_expr_callable_parts_lambda_returns_params_and_body() {
             name: "x".into(),
             ty: None,
             is_mut: false,
+            quantity: None,
             span: Span::dummy(),
         }],
         body: Box::new(Block {

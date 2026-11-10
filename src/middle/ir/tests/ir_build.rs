@@ -19,6 +19,7 @@ pub fn named_slot(
         name: Some(name.to_string()),
         ty,
         scope_depth: 0,
+        quantity: None,
     }
 }
 

@@ -158,6 +158,7 @@ fn make_proof_fn_module(
         name: "x".into(),
         ty: Some(builtin_ty("Int64")),
         is_mut: false,
+        quantity: None,
         span: Span::dummy(),
     };
 

@@ -80,8 +80,12 @@ fn produced_vs_unconsumed(path: &Path) -> Option<(usize, Vec<PlanId>)> {
     if produced == 0 {
         return None;
     }
-    let mut generator =
-        AstToIrGenerator::new_with_type_result(&type_result, ModuleRegistry::with_std(), None);
+    let mut generator = AstToIrGenerator::new_with_type_result(
+        &type_result,
+        ModuleRegistry::with_std(),
+        None,
+        TypeLevelNamespace::scan_one(&parsed.module),
+    );
     generator.generate_module_ir(&parsed.module).ok()?;
     drop(generator);
     // 消费台账与计划同体（生成器持有的是克隆，账是同一个）——直接读计划自己的两侧事实
@@ -125,8 +129,12 @@ fn compile_plan_probe(source: &str) -> PlanProbe {
         .cloned()
         .collect();
     released.sort();
-    let mut generator =
-        AstToIrGenerator::new_with_type_result(&type_result, ModuleRegistry::with_std(), None);
+    let mut generator = AstToIrGenerator::new_with_type_result(
+        &type_result,
+        ModuleRegistry::with_std(),
+        None,
+        TypeLevelNamespace::scan_one(&parsed.module),
+    );
     let ir = generator
         .generate_module_ir(&parsed.module)
         .expect("夹具必须生成 IR");

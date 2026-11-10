@@ -690,8 +690,12 @@ fn test_verify_loose_corpus_green() {
         if !type_result.diagnostics.is_empty() {
             continue;
         }
-        let mut generator =
-            AstToIrGenerator::new_with_type_result(&type_result, ModuleRegistry::with_std(), None);
+        let mut generator = AstToIrGenerator::new_with_type_result(
+            &type_result,
+            ModuleRegistry::with_std(),
+            None,
+            TypeLevelNamespace::scan_one(&parsed.module),
+        );
         let Ok(module_ir) = generator.generate_module_ir(&parsed.module) else {
             continue;
         };
@@ -727,5 +731,60 @@ fn test_verify_loose_corpus_green() {
         "verify_loose 在现有 IR 上跑红（D38：不开豁免，红 = ir_gen 缺陷，
          files={files_checked} fns={fns_checked} instrs={instrs_checked}）：\n{}",
         failures.join("\n")
+    );
+}
+
+// =====================
+// 不变量 8：量词事实自洽（D62 / issue #533）
+// =====================
+
+/// 不变量 8 反例：**临时槽**不得携带 q=0 事实——量词是声明绑定的事实，
+/// 没有具名绑定的槽携带它就是投影串槽（静默错配）。
+#[test]
+fn test_quantity_zero_on_temp_slot_is_rejected() {
+    // Arrange — 参数区外的一个临时槽被写入 q=0
+    let mut slot = temp_slot(MonoType::Int(64));
+    slot.quantity = Some(crate::ast::Quantity::Zero);
+    let m = module_with(vec![func(
+        "f",
+        vec![MonoType::Int(64)],
+        MonoType::Void,
+        vec![temp_slot(MonoType::Int(64)), slot],
+        vec![ret_void()],
+    )]);
+
+    // Act
+    let result = verify_loose(&m);
+
+    // Assert
+    assert_eq!(
+        violations_of(&result, InvariantKind::QuantityFact),
+        1,
+        "临时槽带 q=0 必须被量词事实自洽判据拒绝；实际: {result:?}"
+    );
+}
+
+/// 不变量 8 正例：参数区的**具名**槽携带 q=0 是合法形态（`(N: Int) -> (n: N)` 的 N）。
+#[test]
+fn test_quantity_zero_on_named_param_slot_passes() {
+    // Arrange — 参数槽 0 具名且带 q=0
+    let mut param_slot = named_slot("N", MonoType::Int(64));
+    param_slot.quantity = Some(crate::ast::Quantity::Zero);
+    let m = module_with(vec![func(
+        "f",
+        vec![MonoType::Int(64)],
+        MonoType::Void,
+        vec![param_slot],
+        vec![ret_void()],
+    )]);
+
+    // Act
+    let result = verify_loose(&m);
+
+    // Assert
+    assert_eq!(
+        violations_of(&result, InvariantKind::QuantityFact),
+        0,
+        "参数区具名槽的 q=0 是合法绑定事实；实际: {result:?}"
     );
 }

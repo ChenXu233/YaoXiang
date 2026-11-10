@@ -26,6 +26,7 @@ fn module_with_point_param_annotation() -> Module {
                             span: Span::dummy(),
                         }),
                         is_mut: false,
+                        quantity: None,
                         span: Span::dummy(),
                     }],
                     body: Box::new(Block {

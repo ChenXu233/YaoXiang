@@ -203,10 +203,25 @@ pub(super) fn execute_single_proof_fn(
     use crate::backends::Executor;
     use crate::middle;
 
+    // tripwire（F14-B，**当前已知缺口，勿当正确行为读**）：这里显式传**空**谓词
+    // 命名空间。此前它是构造器的默认值（静默），现在改为必需输入——口径没变，
+    // 但「空集」从默认值变成这一行的显式选择。
+    //
+    // 空集的后果：`generate_function_ir` 的 SPEC §7.1 分类器与泛型名扫描都问
+    // 「这个名字是不是谓词」，空集答「都不是」⇒ 用户声明的谓词被当普通类型应用
+    // ⇒ 谓词应用的实参位被误计为类型引用。症状（**既有、非 D62 引入**）：证明函数
+    // 签名带精化时（`Check: (n: Int, p: Eq(n, 0)) -> Type`），调用点对该形参精化的
+    // 义务被静默丢弃——钉测试见 `src/frontend/tests/proof_execution.rs`
+    // （`test_proof_fn_param_refinement_obligation_is_currently_dropped`）。
+    //
+    // 为什么本轮不修：把 driver 的并集接进来会让这些义务重新出现，即**原先成功的
+    // 程序开始报错**（D 类行为变更），且根因尚未完全隔离（t14 复审：把精化引用换成
+    // 模块级常量同样丢义务）⇒ 须先隔离根因并走裁决。
     let mut ir_gen = middle::ir::ir_gen::AstToIrGenerator::new_with_type_result(
         type_result,
         crate::frontend::module::registry::ModuleRegistry::with_std(),
         None,
+        crate::frontend::core::sema::probe::TypeLevelNamespace::default(),
     );
     let mut constants: Vec<middle::ir::ir::ConstValue> = Vec::new();
     let func_ir = ir_gen

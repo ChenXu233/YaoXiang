@@ -256,6 +256,7 @@ fn make_binding(
                         name: n,
                         ty: None,
                         is_mut: false,
+                        quantity: None,
                         span: Span::default(),
                     })
                     .collect(),

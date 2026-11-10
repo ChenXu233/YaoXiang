@@ -91,38 +91,26 @@ impl TypeChecker {
                 .filter(|p| !matches!(p.ty, Some(T::MetaType { .. })))
                 .map(|p| p.name.clone())
                 .collect();
+            // 「名字出现在**类型位置**」的唯一实现是 `ast::name_used_as_type`
+            // （本文件避免第二份遍历）：三个扫描根逐名问，答案并入同一集合。
             let mut referenced: HashSet<String> = HashSet::new();
+            let mut scan = |root: &T| {
+                for name in &candidates {
+                    if crate::ast::name_used_as_type(name, root, no) {
+                        referenced.insert(name.clone());
+                    }
+                }
+            };
             for p in &params {
                 if let Some(ty) = p.ty.as_ref() {
-                    referenced.extend(
-                        crate::frontend::core::sema::const_param::used_as_const_in_annotation(
-                            ty,
-                            &candidates,
-                            no,
-                            no,
-                        ),
-                    );
+                    scan(ty);
                 }
             }
             if let Some(t) = type_annotation {
-                referenced.extend(
-                    crate::frontend::core::sema::const_param::used_as_const_in_annotation(
-                        t,
-                        &candidates,
-                        no,
-                        no,
-                    ),
-                );
+                scan(t);
             }
             if let Some(t) = definition {
-                referenced.extend(
-                    crate::frontend::core::sema::const_param::used_as_const_in_annotation(
-                        t,
-                        &candidates,
-                        no,
-                        no,
-                    ),
-                );
+                scan(t);
             }
             // 类型参数（`A: Type` 形态）直接计入；值参数则看其名是否在**签名注解或
             // 类型定义体的类型位**被引用（`(N: Int) -> (n: N) -> Int` 的内层 `N`；

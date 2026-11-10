@@ -31,6 +31,7 @@ fn curried_decl_params() -> Vec<Param> {
                 args: vec![],
             }),
             is_mut: false,
+            quantity: None,
             span: Span::dummy(),
         },
         Param {
@@ -40,6 +41,7 @@ fn curried_decl_params() -> Vec<Param> {
                 span: Span::dummy(),
             }),
             is_mut: false,
+            quantity: None,
             span: Span::dummy(),
         },
     ];
@@ -156,6 +158,7 @@ fn test_format_params_short() {
                 span: Span::dummy(),
             }),
             is_mut: false,
+            quantity: None,
             span: Span::dummy(),
         },
         Param {
@@ -165,6 +168,7 @@ fn test_format_params_short() {
                 span: Span::dummy(),
             }),
             is_mut: false,
+            quantity: None,
             span: Span::dummy(),
         },
     ];

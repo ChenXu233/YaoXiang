@@ -25,6 +25,7 @@ fn param(
             span: Span::dummy(),
         }),
         is_mut: false,
+        quantity: None,
         span: Span::dummy(),
     }
 }

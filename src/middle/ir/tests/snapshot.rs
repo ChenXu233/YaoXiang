@@ -65,8 +65,12 @@ fn normalize_corpus_file(path: &Path) -> Option<String> {
     if !type_result.diagnostics.is_empty() {
         return None;
     }
-    let mut generator =
-        AstToIrGenerator::new_with_type_result(&type_result, ModuleRegistry::with_std(), None);
+    let mut generator = AstToIrGenerator::new_with_type_result(
+        &type_result,
+        ModuleRegistry::with_std(),
+        None,
+        TypeLevelNamespace::scan_one(&parsed.module),
+    );
     let module_ir = generator.generate_module_ir(&parsed.module).ok()?;
     Some(normalize_module(&module_ir))
 }

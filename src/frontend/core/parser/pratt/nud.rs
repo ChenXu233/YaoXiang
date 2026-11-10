@@ -588,6 +588,7 @@ impl<'a> ParserState<'a> {
             name: first_name,
             ty: first_type,
             is_mut: first_is_mut,
+            quantity: None,
             span: first_span,
         }];
 
@@ -627,6 +628,7 @@ impl<'a> ParserState<'a> {
                 name: param_name,
                 ty: param_type,
                 is_mut: param_is_mut,
+                quantity: None,
                 span: param_span,
             });
         }

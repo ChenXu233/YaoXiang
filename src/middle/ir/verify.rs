@@ -47,6 +47,8 @@ use std::fmt;
 
 use crate::frontend::core::sema::MonoType;
 
+use crate::ast::Quantity;
+
 use super::ir::{ConstValue, FunctionBody, FunctionIR, Instruction, LocalSlot, ModuleIR, Operand};
 
 /// 校验模式（07 §207）：非 SSA 现状用 Loose；SSA 形态（P7 批 b 后）用 Ssa。
@@ -77,6 +79,8 @@ pub enum InvariantKind {
     TypeConsistency,
     /// 外层函数 locals 不含内层（闭包）函数的自有局部名
     InnerIsolation,
+    /// 量词事实自洽：q=0（`Quantity::Zero`）只出现在参数区的**具名**槽上
+    QuantityFact,
 }
 
 impl InvariantKind {
@@ -89,6 +93,7 @@ impl InvariantKind {
             Self::SlotBounds => "槽位越界",
             Self::TypeConsistency => "类型一致",
             Self::InnerIsolation => "内层隔离",
+            Self::QuantityFact => "量词事实自洽",
         }
     }
 }
@@ -273,6 +278,7 @@ fn check_fn(
     }
     check_jump_targets(view, out);
     check_slot_bounds(view, ir, out);
+    check_quantity_facts(view, out);
 
     let (succ, pred) = build_cfg(&view.instrs);
     let reachable = reachable_from(0, &succ);
@@ -296,6 +302,43 @@ fn check_fn(
         // Phi 一致性：Instruction::Phi 由 P7 批 b 引入（04 §273）。当前指令集
         // 无此变体——def/use 提取的穷尽 match 保证引入时编译失败，届时在
         // 此补「输入数 == CFG 前驱数 ∧ 逐输入类型一致」。
+    }
+}
+
+// =====================
+// 不变量 8：量词事实自洽（D62 / issue #533）
+// =====================
+
+/// `LocalSlot::quantity` 是**声明绑定**事实的投影：只有参数区的具名槽能携带
+/// `Some(Quantity::Zero)`。临时槽、非参数局部槽、模块初始化槽都没有声明载体——
+/// 它们若带 q=0，说明事实在投影时被串到了别的槽（静默错配）。
+///
+/// 这条闸门是 A 步（量词事实先行）的**消费端**：真消费者（mono 按 q=0 擦除）在
+/// 阶段 C 接入，先由校验器保证登记的事实不会落到无绑定的槽上。
+fn check_quantity_facts(
+    view: &FnView<'_>,
+    out: &mut Vec<Violation>,
+) {
+    if view.instrs.is_empty() {
+        return;
+    }
+    let param_end = view.env_len + view.params_len;
+    for (slot, local) in view.locals.iter().enumerate() {
+        if local.quantity != Some(Quantity::Zero) {
+            continue;
+        }
+        if local.name.is_some() && slot < param_end {
+            continue;
+        }
+        out.push(Violation {
+            invariant: InvariantKind::QuantityFact,
+            function: view.name.clone(),
+            instruction: None,
+            message: format!(
+                "槽 {slot} 携带 q=0 事实，但它不在参数区 0..{param_end} 或没有具名绑定（name={:?}）",
+                local.name
+            ),
+        });
     }
 }
 

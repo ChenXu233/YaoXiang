@@ -63,8 +63,12 @@ fn probe(source: &str) -> Probe {
         .iter()
         .map(|d| d.message.clone())
         .collect();
-    let mut generator =
-        AstToIrGenerator::new_with_type_result(&type_result, ModuleRegistry::with_std(), None);
+    let mut generator = AstToIrGenerator::new_with_type_result(
+        &type_result,
+        ModuleRegistry::with_std(),
+        None,
+        TypeLevelNamespace::scan_one(&parsed.module),
+    );
     let ir = generator.generate_module_ir(&parsed.module);
     // 诊断非空（含 IR 生成期诊断）时短路：后续阶段的前提不成立。
     // IR 生成期诊断同样并入 diagnostics——调用点错误可能只在这一侧响亮。
