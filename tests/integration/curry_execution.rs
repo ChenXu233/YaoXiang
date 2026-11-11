@@ -64,3 +64,28 @@ fn curry_with_capture_uses_outer_param() {
         "#,
     );
 }
+/// 6.9.2-C2c：闭项 const 实参被擦除后，体内读 N 仍取到**该实例**的值。
+///
+/// 两个实例（42 / 7）各自把 N 物化成常量，`k` 仍按运行期实参传入：
+/// `f(42)(42) == 84`、`f(7)(7) == 14`。擦除若把值算错（41 / 121 一类）或让两个实例
+/// 串味，这里的 assert 会直接抛。
+#[test]
+fn test_closed_const_arg_erasure_keeps_instance_value() {
+    run_ok(
+        r#"
+        use std.assert
+
+        f: (N: Int) -> (k: N) -> Int = {
+            x: Int = N
+            return x + k
+        }
+
+        main = () => {
+            a: Int = f(42)(42)
+            assert.assert(a == 84, "f(42)(42) should be 84")
+            b: Int = f(7)(7)
+            assert.assert(b == 14, "f(7)(7) should be 14")
+        }
+        "#,
+    );
+}

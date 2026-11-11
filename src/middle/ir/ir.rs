@@ -615,6 +615,229 @@ impl Instruction {
             Instruction::CloseUpvalue { span, .. } => *span,
         }
     }
+
+    /// 遍历本条指令的**全部操作数位**（定义位与使用位一视同仁），供 IR→IR 变换
+    /// 统一改写（槽位重排、常量物化等）。
+    ///
+    /// 与 `verify` 的 def/use 提取不是同一问题：那两处回答「这个操作数是被定义还是
+    /// 被使用」（数据流判据），本函数只回答「这个变体有哪些操作数位」。变换侧不需要
+    /// 区分——重排槽号要改所有位，物化被擦除的编译期槽也只按「所有位」扫一遍。
+    ///
+    /// 新增指令变体时必须在这里补臂（穷尽 match，无通配臂）。
+    pub fn for_each_operand_mut(
+        &mut self,
+        f: &mut impl FnMut(&mut Operand),
+    ) {
+        match self {
+            Instruction::Move { dst, src, .. }
+            | Instruction::Load { dst, src, .. }
+            | Instruction::Store { dst, src, .. }
+            | Instruction::Neg { dst, src, .. }
+            | Instruction::Not { dst, src, .. }
+            | Instruction::LoadField { dst, src, .. }
+            | Instruction::ArcNew { dst, src, .. }
+            | Instruction::RcNew { dst, src, .. }
+            | Instruction::ArcClone { dst, src, .. }
+            | Instruction::PtrFromRef { dst, src, .. }
+            | Instruction::PtrDeref { dst, src, .. }
+            | Instruction::PtrStore { dst, src, .. }
+            | Instruction::PtrLoad { dst, src, .. }
+            | Instruction::StringLength { dst, src, .. }
+            | Instruction::StringFromInt { dst, src, .. }
+            | Instruction::StringFromFloat { dst, src, .. } => {
+                f(dst);
+                f(src);
+            }
+            Instruction::Add { dst, lhs, rhs, .. }
+            | Instruction::Sub { dst, lhs, rhs, .. }
+            | Instruction::Mul { dst, lhs, rhs, .. }
+            | Instruction::Div { dst, lhs, rhs, .. }
+            | Instruction::Mod { dst, lhs, rhs, .. }
+            | Instruction::And { dst, lhs, rhs, .. }
+            | Instruction::Or { dst, lhs, rhs, .. }
+            | Instruction::Xor { dst, lhs, rhs, .. }
+            | Instruction::Shl { dst, lhs, rhs, .. }
+            | Instruction::Shr { dst, lhs, rhs, .. }
+            | Instruction::Sar { dst, lhs, rhs, .. }
+            | Instruction::Eq { dst, lhs, rhs, .. }
+            | Instruction::Ne { dst, lhs, rhs, .. }
+            | Instruction::Lt { dst, lhs, rhs, .. }
+            | Instruction::Le { dst, lhs, rhs, .. }
+            | Instruction::Gt { dst, lhs, rhs, .. }
+            | Instruction::Ge { dst, lhs, rhs, .. }
+            | Instruction::StringConcat { dst, lhs, rhs, .. } => {
+                f(dst);
+                f(lhs);
+                f(rhs);
+            }
+            Instruction::Pop { dst, .. }
+            | Instruction::AllocFixedArray { dst, .. }
+            | Instruction::HeapAlloc { dst, .. }
+            | Instruction::LoadUpvalue { dst, .. } => f(dst),
+            Instruction::Push { src, .. }
+            | Instruction::Free { src, .. }
+            | Instruction::Drop { src, .. }
+            | Instruction::ArcDrop { src, .. }
+            | Instruction::StoreUpvalue { src, .. }
+            | Instruction::CloseUpvalue { src, .. } => f(src),
+            Instruction::Dup { .. }
+            | Instruction::Swap { .. }
+            | Instruction::Jmp { .. }
+            | Instruction::Yield { .. }
+            | Instruction::UnsafeBlockStart { .. }
+            | Instruction::UnsafeBlockEnd { .. } => {}
+            Instruction::JmpIf { cond, .. } | Instruction::JmpIfNot { cond, .. } => f(cond),
+            Instruction::Call {
+                dst, func, args, ..
+            }
+            | Instruction::CallDyn {
+                dst, func, args, ..
+            } => {
+                if let Some(d) = dst {
+                    f(d);
+                }
+                f(func);
+                for a in args {
+                    f(a);
+                }
+            }
+            Instruction::CallVirt { dst, obj, args, .. } => {
+                if let Some(d) = dst {
+                    f(d);
+                }
+                f(obj);
+                for a in args {
+                    f(a);
+                }
+            }
+            Instruction::TailCall { func, args, .. } => {
+                f(func);
+                for a in args {
+                    f(a);
+                }
+            }
+            Instruction::Ret { value, .. } => {
+                if let Some(v) = value {
+                    f(v);
+                }
+            }
+            Instruction::Alloc { dst, size, .. } => {
+                f(dst);
+                f(size);
+            }
+            Instruction::AllocArray {
+                dst,
+                size,
+                elem_size,
+                ..
+            } => {
+                f(dst);
+                f(size);
+                f(elem_size);
+            }
+            Instruction::StoreField { dst, src, .. } => {
+                f(dst);
+                f(src);
+            }
+            Instruction::LoadIndex {
+                dst, src, index, ..
+            } => {
+                f(dst);
+                f(src);
+                f(index);
+            }
+            Instruction::StoreIndex {
+                dst, index, src, ..
+            } => {
+                f(dst);
+                f(index);
+                f(src);
+            }
+            Instruction::Contains {
+                dst,
+                elem,
+                container,
+                ..
+            } => {
+                f(dst);
+                f(elem);
+                f(container);
+            }
+            Instruction::Spawn {
+                closures, result, ..
+            } => {
+                for c in closures {
+                    f(c);
+                }
+                f(result);
+            }
+            Instruction::SpawnFromList {
+                closures_list,
+                result,
+                ..
+            } => {
+                f(closures_list);
+                f(result);
+            }
+            Instruction::CreateStruct { dst, fields, .. } => {
+                f(dst);
+                for x in fields {
+                    f(x);
+                }
+            }
+            Instruction::NewDict {
+                dst, keys, values, ..
+            } => {
+                f(dst);
+                for k in keys {
+                    f(k);
+                }
+                for v in values {
+                    f(v);
+                }
+            }
+            Instruction::NewTuple { dst, items, .. } => {
+                f(dst);
+                for i in items {
+                    f(i);
+                }
+            }
+            Instruction::NewRange {
+                dst,
+                start,
+                end,
+                step,
+                ..
+            } => {
+                f(dst);
+                f(start);
+                f(end);
+                f(step);
+            }
+            Instruction::CreateVariant { dst, payload, .. } => {
+                f(dst);
+                f(payload);
+            }
+            Instruction::VariantTag { dst, obj, .. }
+            | Instruction::VariantPayload { dst, obj, .. } => {
+                f(dst);
+                f(obj);
+            }
+            Instruction::MakeClosure { dst, env, .. } => {
+                f(dst);
+                for e in env {
+                    f(e);
+                }
+            }
+            Instruction::StringGetChar {
+                dst, src, index, ..
+            } => {
+                f(dst);
+                f(src);
+                f(index);
+            }
+        }
+    }
 }
 
 /// Basic block
