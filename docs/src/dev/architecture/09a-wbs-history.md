@@ -4307,3 +4307,38 @@ C1 首版把**原始项**放进请求，而类型位投影以空环境归一化 
 ### 九、后续
 
 C2（擦除机器）未开工，前置为 P0 中间层量词事实、P1 逐实例柯里层、P2 实例容器身份；C3（开项与递归）在其后。四条裁决（M1 擦除语义 / 分步落地 / 闭项失败即拒绝 / C2 先于 P7 7b.1b）已于 2026-11-10 获用户批准，记录在 t27 设计提案与本节。
+
+## P6 6.9.2-C2a 补齐柯里中间层量词事实（P0，2026-11-11）
+
+### 一、范围
+
+D62 第四阶段（q=0 擦除）的前置件 P0——只补**柯里中间层（包装层）**的具名绑定与量词事实；未克隆逐实例柯里层（P1）、未改改写键（P2）、未做擦除、未动 mono。实现提交 `91ccf457`。
+
+### 二、落地
+
+1. 新增 `IrGenerator::register_curry_layer_bindings(env_params, layer_params, env_count)` 作为**柯里路径写绑定与量词事实的唯一地方**；包装层（`generate_curry_intermediate_func`）与最内层（`generate_curry_innermost_func`）共用它（最内层原两段重复循环被删除：删 8 行、加回 1 行调用 + 2 行注释 ⇒ 该处净 −5；`ir_gen.rs` 整体净 +25）。
+2. 事实只来自声明侧 `ast::Param::quantity`（唯一解析源 `ast::resolve_param_quantities` 的产物）；`note_slot_quantity` 对 `None` 直接返回 ⇒ **未解析事实不会被写成 Some(Zero)**，代码面无「未解析 ⇒ 补 Zero」分支。
+3. 中间层生成器签名由 `env_count: usize` 改为 `env_params: &[ast::Param]`（与最内层同源）。
+4. 此前包装层既不写具名绑定也不写量词 ⇒ 擦除侧只能靠 `generic_params` + `params.len()` 反推 q=0 槽（D3 第 1 条）；P0 把该反推的**前提**去掉，代码面无残留反推。
+
+### 三、验证
+
+- 唯一写点：`note_slot_quantity` 全仓三个调用点中，普通函数/方法路径的 `note_param_quantities` 只在普通函数/方法生成处被调（柯里路径不经过），另两个在柯里 helper 内；柯里路径只有两个层生成器且都走 helper。
+- 三层柯里直驱测试（`h` / `__h_l0` / `__h_l1`）钉住：包装层 N 具名且 Zero、中间层 env N = Zero 且本层 m = None、中间层与最内层同名事实一致。
+- 机械变异「包装层不登记」⇒ 新测 FAILED（包装层槽位退化为 name/quantity 皆 None）= CAUGHT；还原后 `ir_gen.rs` blob 逐字节一致、复测绿。
+
+### 四、快照漂移
+
+**8/228 份**——漂移集合与「含真正柯里包装层（MakeClosure 目标 `__X_lN`）」的集合**完全相同**（双向差集为空）；另 20 份仅含普通 lambda 闭包的快照**无一被改**；漂移内容 = ADDED 12 行 / REMOVED 0 行，且 12 行**全部是 slot 行** ⇒ locals_total 与指令零变化。设计预估的「12」是行数口径，份数口径为 8。
+
+### 五、零回归
+
+语料基线逐字节一致；`testsuite run fast` 2044 条全绿；无 mono/擦除/改写键/指令操作数改动；无码表/locales/RFC 改动。
+
+### 六、已知边界与交接
+
+快照渲染器不渲染 `quantity` ⇒ 包装层的 q=0 事实目前由单测作证（事实本身在 IR 的 `LocalSlot.quantity` 里）。**C2b 的 post-mono 门禁必须直接读该 IR 字段**（不得读快照文本、不得用 `generic_params` + `params.len()` 反推），否则「擦除没发生」永远绿。C2b/C3 仍需 P1（逐实例克隆柯里层）与 P2（改写键容器维度改为「代码所属实例」）。
+
+### 七、流程
+
+本轮实施成员因路由故障两次更换：`architect-b` 连续三次 429（推理服务过载）、`verifier` 的 glm 到周/月上限（19:37 恢复），最终由 `implementer-b` 以最小步完成。为保持独立性，本轮验证由 `integrator` 代做、复审由 `reviewer-b` 承担（实现者与验证/复审者模型互不同族）。
