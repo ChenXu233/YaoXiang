@@ -1253,6 +1253,25 @@ fn test_check_generic_call_result_genuine_mismatch_still_reports() {
         errors, 1,
         "#442: expanding the call-site application must stay transparent to real mismatches — `b: Box(String) = make_box(9)` (T:=int64) must still be rejected with exactly one error; got {errors} error(s)"
     );
+
+    // Assert（文本面）：E1002 文本逐字钉住原始形态（expected 侧是记录名、
+    // found 侧是应用形态）。单靠计数断言会被「跳过统一引发 E1001 级联恰好
+    // 一条」的遮蔽形态巧合满足——文本面能区分。
+    let output = Command::new(env!("CARGO_BIN_EXE_yaoxiang-rs"))
+        .arg("check")
+        .arg(&file)
+        .current_dir(&dir)
+        .output()
+        .expect("failed to run yaoxiang-rs check");
+    let text = format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        text.contains("error [E1002] Expected type 'Box', found type 'Box(int64)'"),
+        "#442: genuine mismatch must report E1002 verbatim against the original forms (record name on the expected side, application form on the found side); got: {text}"
+    );
 }
 
 /// #442 边界探针：跨单元（use 导入）注解收泛型调用结果。
