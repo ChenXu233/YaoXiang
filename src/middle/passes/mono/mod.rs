@@ -155,8 +155,11 @@ impl Monomorphizer {
                 })
                 .and_then(|f| f.generic_params.clone())
                 .unwrap_or_default();
+            // 6.9.2-C1：符号判定只在**类型位**上做——编译期项位的自由名由
+            // `deferred` 的容器求值负责（C2 面），这里不猜。
             let symbolic = req
-                .type_args
+                .mono_args()
+                .unwrap_or_default()
                 .iter()
                 .any(|t| contains_type_ref(t, &container_params));
             if symbolic {
@@ -856,7 +859,8 @@ impl Monomorphizer {
     ) {
         if let Some(bucket) = self.deferred.get(container).cloned() {
             for r in bucket {
-                let new_args: Vec<MonoType> =
+                // 实参名字替换：类型位按 name_map 代入；项位原样（C2 的符号代入面）
+                let new_args: Vec<crate::frontend::core::types::mono::GenericArg> =
                     r.type_args.iter().map(|a| a.substitute(name_map)).collect();
                 let mut nr =
                     InstantiationRequest::new(r.generic_id.clone(), new_args, r.source_location);
@@ -913,7 +917,10 @@ impl Monomorphizer {
                         if !self.processed.contains(&key) {
                             let mut req = InstantiationRequest::new(
                                 GenericFunctionId::new(name.clone(), Vec::new()),
-                                args.clone(),
+                                args.iter()
+                                    .cloned()
+                                    .map(crate::frontend::core::types::mono::GenericArg::Type)
+                                    .collect(),
                                 crate::util::span::Span::default(),
                             );
                             req.depth = depth;

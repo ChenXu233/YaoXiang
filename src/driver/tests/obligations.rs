@@ -143,7 +143,9 @@ fn test_obligation_config_disabled_skip_is_not_owed() {
         type_result_with(|r| {
             r.instantiation_requests.push(InstantiationRequest::new(
                 GenericFunctionId::new("f".to_string(), vec!["T".to_string()]),
-                vec![MonoType::Int(64)],
+                vec![crate::frontend::core::types::mono::GenericArg::Type(
+                    MonoType::Int(64),
+                )],
                 Span::default(),
             ));
         }),

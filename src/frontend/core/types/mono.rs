@@ -402,6 +402,26 @@ fn clone_at_depth(
 }
 
 impl MonoType {
+    /// 常量值 → 字面量类型（**类型位的唯一派生**：项归一化成功后据此落类型）。
+    ///
+    /// `name` 口径 = `ConstValue` 的 `Display`（`42` / `true` / `1.5`），与 6.8.5-1
+    /// 以来的特化名与快照逐字一致；非标量值（库引用 / 外部引用）没有字面量类型，
+    /// 返回 `None`（不得用基类型顶替）。
+    pub fn literal_of_value(
+        value: &crate::frontend::core::types::const_data::ConstValue
+    ) -> Option<MonoType> {
+        let base_type = match value {
+            crate::frontend::core::types::const_data::ConstValue::Int(_) => MonoType::Int(64),
+            crate::frontend::core::types::const_data::ConstValue::Bool(_) => MonoType::Bool,
+            crate::frontend::core::types::const_data::ConstValue::Float(_) => MonoType::Float(64),
+            _ => return None,
+        };
+        Some(MonoType::Literal {
+            name: format!("{value}"),
+            base_type: Box::new(base_type),
+            value: value.clone(),
+        })
+    }
     /// 判断是否为指定名称的泛型类型
     pub fn is_generic_named(
         &self,
@@ -1250,6 +1270,77 @@ impl From<ast::Type> for MonoType {
     }
 }
 
+/// 泛型实参（6.9.2-C1 / RFC-039 D62）：**类型位**实参与**编译期项位**实参同列。
+///
+/// 为什么需要它（t27 设计 §1）：q=0 形参位的实参首先是一个**项**（`k - 1` 这类只有
+/// 代入后才可求值的表达式），`MonoType::Literal` 只表达「此刻已知值」那一时刻。
+/// 用类型位当唯一表示会逼出「可特化 / 仅证据」两条平行账本——项是「是什么」，
+/// 归一化是否成功是「此刻能否算值」，两者分开表达，账本随之消失。
+///
+/// 四个投影（`type_name` / `as_type` / `as_term` / `substitute`）**都在同一个
+/// impl 块的穷尽 match 里**：新增变体时编译器会逼着每处补臂（散落各文件 = D3 第 1 条）。
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum GenericArg {
+    /// 类型位实参（类型泛型 `Int` / `List(Int)`）
+    Type(MonoType),
+    /// 编译期项位实参（q=0 形参的实参）。C1 只放**闭项**：构造点已归一化。
+    Const(crate::frontend::core::types::const_data::ConstExpr),
+}
+
+impl GenericArg {
+    /// 名字（特化名 / 缓存键口径）：与 `MonoType::type_name` 同一渲染。
+    pub fn type_name(&self) -> String {
+        match self {
+            GenericArg::Type(ty) => ty.type_name(),
+            // 闭项 ⇒ 其类型位形态的名字（与 6.8.5-1 以来 `f(int64::42)` 逐字一致）；
+            // 开项没有类型位形态（C2 由 mono 代入后归一化再取名）。
+            GenericArg::Const(_) => match self.as_type() {
+                Some(ty) => ty.type_name(),
+                None => String::from("<open-term>"),
+            },
+        }
+    }
+
+    /// 类型位投影（**单向**：项 ⇒ 类型；不做类型 ⇒ 项的反向）。
+    ///
+    /// 闭项 ⇒ `Literal{name, base_type, value}`（`name` 口径 = `Display`，与既有
+    /// 特化名/快照逐字一致）；开项或非标量值 ⇒ `None`——**不得**用占位类型顶替
+    /// （C2 在 mono 代入后归一化再投影）。
+    pub fn as_type(&self) -> Option<MonoType> {
+        match self {
+            GenericArg::Type(ty) => Some(ty.clone()),
+            GenericArg::Const(term) => {
+                use crate::frontend::core::types::eval::const_eval::{normalize, TermEnv, TermOutcome};
+                match normalize(term, &TermEnv::default()) {
+                    TermOutcome::Value(value) => MonoType::literal_of_value(&value),
+                    // 开项 / 闭项求值失败：此刻没有类型位形态
+                    TermOutcome::Unproven | TermOutcome::Disproved => None,
+                }
+            }
+        }
+    }
+
+    /// 项位投影：只有 `Const` 有项（类型位实参不是项）。
+    pub fn as_term(&self) -> Option<&crate::frontend::core::types::const_data::ConstExpr> {
+        match self {
+            GenericArg::Type(_) => None,
+            GenericArg::Const(term) => Some(term),
+        }
+    }
+
+    /// 名字替换（mono 的 name_map）：类型位交给 `MonoType::substitute`；
+    /// 项位在 C1 原样——**项的自由名替换是 C2 的符号代入面**（那时项里的
+    /// `k` 由所在实例的 name_map 换成值再归一化），本批不动。
+    pub fn substitute(
+        &self,
+        subst: &std::collections::HashMap<String, MonoType>,
+    ) -> GenericArg {
+        match self {
+            GenericArg::Type(ty) => GenericArg::Type(ty.substitute(subst)),
+            GenericArg::Const(term) => GenericArg::Const(term.clone()),
+        }
+    }
+}
 /// 将 AST 类型注解转换为 PolyType
 ///
 /// 复用 `From<ast::Type> for MonoType` 实现，包装为 PolyType。

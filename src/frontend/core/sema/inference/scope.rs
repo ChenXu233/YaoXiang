@@ -367,6 +367,37 @@ impl ScopeManager {
         self.const_binders.iter().any(|n| n == name)
     }
 
+    /// 本帧**编译期符号名**：此刻无值、但按既有判据属于编译期的名字。
+    ///
+    /// 构成（6.9.2-C1 ②：只投影既有判据，不新增判据）：
+    /// ① 本帧 q=0 binder 名（`const_binders`：`N` 这类可在类型位置引用的编译期值参数）；
+    /// ② 按**绑定**解析到「单值钉住」的名字（`VarInfo::pinned`，遮蔽不继承——t23 F1'）。
+    ///
+    /// 用途：编期项的自由变量义务（项里出现这些名字 ⇒ 开项，归一化给 `Unproven`）。
+    pub fn symbolic_term_names(&self) -> Vec<String> {
+        let mut names: Vec<String> = Vec::new();
+        names.extend(self.const_binders.iter().cloned());
+        // 钉住形参按绑定解析：候选名取自可见链，逐个经 `get_var_info` 取最内层绑定
+        let mut candidates: Vec<String> = Vec::new();
+        candidates.extend(self.globals.keys().cloned());
+        for scope in &self.param_scopes {
+            candidates.extend(scope.keys().cloned());
+        }
+        for scope in &self.local_scopes {
+            candidates.extend(scope.keys().cloned());
+        }
+        candidates.sort_unstable();
+        candidates.dedup();
+        for name in candidates {
+            if self.var_pinned(&name) {
+                names.push(name);
+            }
+        }
+        names.sort_unstable();
+        names.dedup();
+        names
+    }
+
     /// 该名字当前解析到的绑定是否**被单值钉住**（`k: N`）——编译期已知。
     ///
     /// 走 [`ScopeManager::get_var_info`]：与值环境取值**同一条按名解析链**

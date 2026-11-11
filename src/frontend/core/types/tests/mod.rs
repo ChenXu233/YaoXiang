@@ -7,5 +7,6 @@ mod error;
 mod mono;
 mod solver;
 mod substitute;
+mod terms;
 mod trait_data;
 mod var;

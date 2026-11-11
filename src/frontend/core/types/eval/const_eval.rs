@@ -200,10 +200,141 @@ fn convert_ast_binop(op: &AstBinOp) -> Option<crate::frontend::core::types::cons
         // `&&`/`||` 连接的精化约束整体转换失败被静默丢弃（审计发现）
         AstBinOp::And => Some(BinOp::And),
         AstBinOp::Or => Some(BinOp::Or),
+        // 6.9.2-C1：位运算/移位补齐（求值器早已支持，此前仅转换表缺项 ⇒
+        // `N & 3` 这类编译期项整体转换失败被静默丢弃）。本表是**唯一**算子映射；
+        // `Assign`/`Range` 仍不转换（不产生编译期标量 / 区间另有表示）。
+        AstBinOp::BitAnd => Some(BinOp::BitAnd),
+        AstBinOp::BitOr => Some(BinOp::BitOr),
+        AstBinOp::BitXor => Some(BinOp::BitXor),
+        AstBinOp::Shl => Some(BinOp::Shl),
+        AstBinOp::Shr => Some(BinOp::Shr),
         _ => None,
     }
 }
 
+/// 编译期项的环境（6.9.2-C1 / RFC-039 D62）：一个**归一化入口**，两种环境。
+///
+/// - checker 侧：由 `frame_term_env()` 投影**既有判据**（本帧 q=0 binder、单值钉住
+///   形参、值环境的最内层绑定）——不新增判据；Γ（6.9.4）与 Σ 不在此列。
+/// - mono 侧（C2）：由特化 `name_map` 构造同一类型。
+#[derive(Debug, Default, Clone)]
+pub struct TermEnv {
+    /// 此刻**无值**的编译期名（q=0 binder 本身、单值钉住形参）：出现即 Unproven
+    symbolic: std::collections::HashSet<String>,
+    /// 此刻**有值**的编译期名（值环境最内层绑定）
+    values:
+        std::collections::BTreeMap<String, crate::frontend::core::types::const_data::ConstValue>,
+}
+
+/// 项归一化的结果（6.9.2-C1 ⑥）：三态，`Unproven` **不得**当 `Disproved`。
+#[derive(Debug, Clone, PartialEq)]
+pub enum TermOutcome {
+    /// 闭项求值成功：值已知
+    Value(crate::frontend::core::types::const_data::ConstValue),
+    /// 开项：含此刻无值的编译期名——不拒绝、也不特化（6.9.3 给类型化出口）
+    Unproven,
+    /// 闭项求值失败（如 `1 / 0`）——拒绝（D59 C 类：旧行为静默接受）
+    Disproved,
+}
+
+impl TermEnv {
+    /// 构造环境：符号名（无值）+ 值绑定（有值）。同名同时出现时以**值**为准
+    /// （有值即可算，符号只是「没有值」的另一种来源）。
+    pub fn new(
+        symbolic: impl IntoIterator<Item = String>,
+        values: impl IntoIterator<Item = (String, crate::frontend::core::types::const_data::ConstValue)>,
+    ) -> Self {
+        let values: std::collections::BTreeMap<_, _> = values.into_iter().collect();
+        let symbolic = symbolic
+            .into_iter()
+            .filter(|name| !values.contains_key(name))
+            .collect();
+        TermEnv { symbolic, values }
+    }
+
+    /// 自由变量义务：项里出现的每个名字都必须是**已知的编译期名**
+    /// （有值或符号）。运行期值（普通形参、局部变量）不在环境里 ⇒ 拒绝。
+    pub fn admits(
+        &self,
+        term: &crate::frontend::core::types::const_data::ConstExpr,
+    ) -> bool {
+        const_expr_free_names(term)
+            .iter()
+            .all(|name| self.values.contains_key(name) || self.symbolic.contains(name))
+    }
+
+    fn is_symbolic(
+        &self,
+        name: &str,
+    ) -> bool {
+        self.symbolic.contains(name)
+    }
+}
+
+/// 项里出现的自由名（`NamedVar` 与 `Var(ConstVar)` 都按名，与求值器的绑定键同一口径）。
+pub fn const_expr_free_names(
+    term: &crate::frontend::core::types::const_data::ConstExpr
+) -> Vec<String> {
+    use crate::frontend::core::types::const_data::ConstExpr as CE;
+    let mut out = Vec::new();
+    let mut stack = vec![term];
+    while let Some(node) = stack.pop() {
+        match node {
+            CE::Lit(_) => {}
+            CE::NamedVar(name) => out.push(name.clone()),
+            CE::Var(cv) => out.push(cv.to_string()),
+            CE::BinOp { left, right, .. } => {
+                stack.push(left);
+                stack.push(right);
+            }
+            CE::UnOp { expr, .. } => stack.push(expr),
+            CE::Call { args, .. } => stack.extend(args.iter()),
+            CE::If {
+                condition,
+                then_branch,
+                else_branch,
+            } => {
+                stack.push(condition);
+                stack.push(then_branch);
+                stack.push(else_branch);
+            }
+            CE::Range { start, end } => {
+                stack.push(start);
+                stack.push(end);
+            }
+        }
+    }
+    out
+}
+
+/// **项归一化的唯一入口**（6.9.2-C1）：checker 与 mono 同一函数、不同环境。
+///
+/// 判定顺序：先看自由变量义务（符号名 ⇒ `Unproven`，绝不尝试求值），再交给
+/// 既有 [`ConstGenericEval`]（不新写求值器）。
+pub fn normalize(
+    term: &crate::frontend::core::types::const_data::ConstExpr,
+    env: &TermEnv,
+) -> TermOutcome {
+    if const_expr_free_names(term)
+        .iter()
+        .any(|name| env.is_symbolic(name))
+    {
+        return TermOutcome::Unproven;
+    }
+    let mut evaluator = ConstGenericEval::new();
+    for (name, value) in &env.values {
+        evaluator.bind_var(name.clone(), value.clone());
+    }
+    // 求值失败时 `ConstGenericEval` 会经 span 强制的 builder 构造一条诊断；归一化
+    // 只关心「成不成」、不消费那条诊断，故给一个占位 span 上下文——本函数因此
+    // **不 panic**，C2 的 mono 路径（没有类型检查 walk 上下文）也能直接调用。
+    let _span_guard =
+        crate::util::diagnostic::push_current_span(crate::util::span::Span::default());
+    match evaluator.eval(term) {
+        Ok(value) => TermOutcome::Value(value),
+        Err(_) => TermOutcome::Disproved,
+    }
+}
 fn convert_ast_unop(op: &AstUnOp) -> Option<crate::frontend::core::types::const_data::UnOp> {
     use crate::frontend::core::types::const_data::UnOp;
     match op {

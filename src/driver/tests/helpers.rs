@@ -56,7 +56,9 @@ fn request(
 ) -> InstantiationRequest {
     let mut req = InstantiationRequest::new(
         GenericFunctionId::new(name.to_string(), vec!["T".to_string()]),
-        vec![MonoType::Int(64)],
+        vec![crate::frontend::core::types::mono::GenericArg::Type(
+            MonoType::Int(64),
+        )],
         Span::default(),
     );
     req.containing_fn = containing_fn.map(str::to_owned);

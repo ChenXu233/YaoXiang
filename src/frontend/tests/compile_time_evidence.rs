@@ -411,3 +411,68 @@ fn test_const_arg_value_env_shadowed_by_match_arm_is_not_evidence() {
         error.message()
     );
 }
+
+/// 6.9.2-C1 ⑥：**闭项求值失败**（`1 / 0`）必须拒绝。
+///
+/// 旧行为（B 步）：`1 / 0` 结构上是编译期项，检查期不求值 ⇒ 静默接受，运行期才炸。
+/// C1 起：归一化返回 `Disproved` ⇒ 与「缺证据」同一出口（E1113）拒绝（D59 C 类）。
+const CLOSED_TERM_THAT_FAILS: &str = concat!(
+    "f: (N: Int) -> (n: N) -> Int = (n) => n\n",
+    "main: () -> Void = {\n",
+    "    v: Int = f(1 / 0)(1)\n",
+    "}\n",
+);
+
+/// 闭项求值失败 ⇒ E1113（不得静默接受、不得当 `Unproven` 放行）。
+#[test]
+fn test_const_arg_closed_term_failure_is_reported() {
+    // Arrange
+    let mut compiler = Compiler::new();
+
+    // Act
+    let result = compiler.compile("closed_term_fails.yx", CLOSED_TERM_THAT_FAILS);
+
+    // Assert
+    let error = result.expect_err("`1 / 0` 是闭项但求值失败，必须拒绝");
+    assert_eq!(
+        error.diagnostic().map(|d| d.code.as_str()),
+        Some("E1113"),
+        "闭项求值失败应与缺证据同码 E1113 拒绝；实际: {}",
+        error.message()
+    );
+}
+
+/// 值环境证据的**单值收紧**（6.8.7）必须保持：`f(x)(5)`（`x: Int = 42`）报 E1002。
+///
+/// 这是 B 步的基线行为（t18 实测），C1 首版一度退化成「0 诊断」：请求里放的是
+/// **原始项** `NamedVar("x")`，而 `GenericArg::as_type()` 手里没有环境（空环境里该名
+/// 未绑定 ⇒ 求值失败 ⇒ **`Disproved`** ⇒ 无类型位投影）⇒ 请求未建 ⇒ 返回类型没被换成
+/// `int64::42`。
+/// C1 的约定是「请求只放闭项 ⇒ 项即其值」，即放归一化后的 `Lit(42)`，收紧随之恢复。
+/// 本条是**语义断言**（不是 tripwire）：值环境与字面量走同一条收紧路径。
+const VALUE_ENV_SINGLE_VALUE: &str = concat!(
+    "f: (N: Int) -> (n: N) -> Int = (n) => n\n",
+    "main: () -> Void = {\n",
+    "    x: Int = 42\n",
+    "    v: Int = f(x)(5)\n",
+    "}\n",
+);
+
+/// 值环境证据同样触发单值收紧（`5 ≠ 42` ⇒ E1002）。
+#[test]
+fn test_const_arg_value_env_keeps_single_value_enforcement() {
+    // Arrange
+    let mut compiler = Compiler::new();
+
+    // Act
+    let result = compiler.compile("value_env_single_value.yx", VALUE_ENV_SINGLE_VALUE);
+
+    // Assert
+    let error = result.expect_err("x = 42 的实参 5 与单值类型 int64::42 不符，应报 E1002");
+    assert_eq!(
+        error.diagnostic().map(|d| d.code.as_str()),
+        Some("E1002"),
+        "值环境证据与字面量走同一条单值收紧；实际: {}",
+        error.message()
+    );
+}

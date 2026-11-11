@@ -187,7 +187,7 @@ fn request(
     let params: Vec<String> = params.iter().map(|p| p.to_string()).collect();
     InstantiationRequest::new(
         GenericFunctionId::new(name.to_string(), params),
-        vec![arg],
+        vec![crate::frontend::core::types::mono::GenericArg::Type(arg)],
         span,
     )
 }
@@ -373,7 +373,9 @@ fn test_specialize_identity_with_int() {
 
     let req = InstantiationRequest::new(
         GenericFunctionId::new("identity".to_string(), vec!["T".to_string()]),
-        vec![MonoType::Int(64)],
+        vec![crate::frontend::core::types::mono::GenericArg::Type(
+            MonoType::Int(64),
+        )],
         Span::default(),
     );
 
@@ -406,7 +408,9 @@ fn test_specialize_missing_generic_function_returns_none() {
     let mono = Monomorphizer::new();
     let req = InstantiationRequest::new(
         GenericFunctionId::new("nonexistent".to_string(), vec!["T".to_string()]),
-        vec![MonoType::Int(64)],
+        vec![crate::frontend::core::types::mono::GenericArg::Type(
+            MonoType::Int(64),
+        )],
         Span::default(),
     );
 
@@ -433,7 +437,9 @@ fn test_fire_deferred_evaluates_placeholder_args() {
     // 占位请求：g 的实参为所在泛型函数 f 的参数名 T（TypeRef 形态）
     let req = InstantiationRequest::new(
         GenericFunctionId::new("identity".to_string(), vec!["T".to_string()]),
-        vec![MonoType::TypeRef("T".to_string())],
+        vec![crate::frontend::core::types::mono::GenericArg::Type(
+            MonoType::TypeRef("T".to_string()),
+        )],
         Span::default(),
     );
     mono.deferred.entry("f".to_string()).or_default().push(req);
@@ -448,8 +454,9 @@ fn test_fire_deferred_evaluates_placeholder_args() {
     // Assert：求值后的请求入队，占位被替换为具体类型
     assert_eq!(mono.pending_queue.len(), 1, "占位请求应求值入队");
     let fired = mono.pending_queue.front().unwrap();
+    // 6.9.2-C1：请求存 `GenericArg`，断言取**类型位投影**（语义不变：占位被求值成 int64）
     assert_eq!(
-        fired.type_args,
+        fired.type_args(),
         vec![MonoType::Int(64)],
         "TypeRef(\"T\") 占位应被 name_map 求值为 int64"
     );
@@ -749,7 +756,10 @@ fn test_type_specialization_arg_count_mismatch_returns_none() {
 
     let req = InstantiationRequest::new(
         GenericFunctionId::new("Pair".to_string(), vec!["T".to_string()]),
-        vec![MonoType::Int(64), MonoType::make_string()],
+        vec![
+            crate::frontend::core::types::mono::GenericArg::Type(MonoType::Int(64)),
+            crate::frontend::core::types::mono::GenericArg::Type(MonoType::make_string()),
+        ],
         Span::default(),
     );
 

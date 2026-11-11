@@ -3,6 +3,7 @@
 //! 单态化过程中的工作单元定义
 
 use crate::frontend::core::sema::MonoType;
+use crate::frontend::core::types::mono::GenericArg;
 use crate::util::span::Span;
 use std::fmt;
 use std::hash::{Hash, Hasher};
@@ -16,8 +17,8 @@ pub struct InstantiationRequest {
     /// 泛型函数ID
     pub generic_id: GenericFunctionId,
 
-    /// 类型参数列表
-    pub type_args: Vec<MonoType>,
+    /// 泛型实参列表（6.9.2-C1：类型位 + 编译期项位同列）
+    pub type_args: Vec<GenericArg>,
 
     /// 实例化来源（用于调试和追踪；调用点改写按 (泛型名, 此 span) 匹配）
     pub source_location: Span,
@@ -36,7 +37,7 @@ impl InstantiationRequest {
     /// 创建新的实例化请求
     pub fn new(
         generic_id: GenericFunctionId,
-        type_args: Vec<MonoType>,
+        type_args: Vec<GenericArg>,
         source_location: Span,
     ) -> Self {
         InstantiationRequest {
@@ -53,14 +54,32 @@ impl InstantiationRequest {
         &self.generic_id
     }
 
-    /// 获取类型参数列表
-    pub fn type_args(&self) -> &[MonoType] {
+    /// 获取泛型实参列表（类型位 + 编译期项位原样）
+    pub fn generic_args(&self) -> &[GenericArg] {
         &self.type_args
+    }
+
+    /// 类型位投影（6.9.2-C1）：闭项 ⇒ `Literal`；开项 / 非标量项 ⇒ `None`。
+    ///
+    /// `None` 不是错误——它表示「此刻没有类型位形态」（C2 在 mono 代入后归一化）。
+    /// 调用方必须**整体**看待：任一实参缺类型位形态即放弃类型位投影，不得跳过其中
+    /// 一个而让后面的位次前移（位置语义会错）。
+    pub fn mono_args(&self) -> Option<Vec<MonoType>> {
+        self.type_args
+            .iter()
+            .map(|arg| arg.as_type())
+            .collect::<Option<Vec<_>>>()
+    }
+
+    /// 类型位实参（与 `mono_args` 同源；`None` 时按空表处理——C1 只构造闭项，
+    /// 故仅开项（C2 面）会走到空表，那里不靠类型位定名）。
+    pub fn type_args(&self) -> Vec<MonoType> {
+        self.mono_args().unwrap_or_default()
     }
 
     /// 生成缓存键
     pub fn specialization_key(&self) -> SpecializationKey {
-        SpecializationKey::new(self.generic_id.name.clone(), self.type_args.clone())
+        SpecializationKey::new(self.generic_id.name.clone(), self.type_args())
     }
 }
 

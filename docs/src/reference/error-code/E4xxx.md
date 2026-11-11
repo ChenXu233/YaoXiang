@@ -90,7 +90,7 @@ description: '泛型约束、特质系统与常量求值相关的错误。'
 - **构造函数**：`ErrorCodeDefinition::const_division_by_zero()`
 - **模板**：`常量表达式除以零`
 - **帮助**：确保常量表达式中的除数不为零。
-- **发射点**：`src/frontend/core/types/eval/const_eval.rs:345`、`src/frontend/core/types/eval/const_eval.rs:352`、`src/frontend/core/types/eval/const_eval.rs:357`
+- **发射点**：`src/frontend/core/types/eval/const_eval.rs:476`、`src/frontend/core/types/eval/const_eval.rs:483`、`src/frontend/core/types/eval/const_eval.rs:488`
 
 ### E4011：常量溢出
 
@@ -99,7 +99,7 @@ description: '泛型约束、特质系统与常量求值相关的错误。'
 - **构造函数**：`ErrorCodeDefinition::const_overflow()`
 - **模板**：`常量表达式溢出`
 - **帮助**：常量表达式的结果超出了类型的范围。
-- **发射点**：`src/frontend/core/types/eval/const_eval.rs:376`、`src/frontend/core/types/eval/const_eval.rs:381`、`src/frontend/core/types/eval/const_eval.rs:386` 等 5 处
+- **发射点**：`src/frontend/core/types/eval/const_eval.rs:507`、`src/frontend/core/types/eval/const_eval.rs:512`、`src/frontend/core/types/eval/const_eval.rs:517` 等 5 处
 
 ### E4012：常量递归过深
 
@@ -108,7 +108,7 @@ description: '泛型约束、特质系统与常量求值相关的错误。'
 - **构造函数**：`ErrorCodeDefinition::const_recursion_too_deep(limit)`
 - **模板**：`常量求值超出最大递归深度 {limit}`
 - **帮助**：简化常量表达式以减少递归。
-- **发射点**：`src/frontend/core/types/eval/const_eval.rs:553`
+- **发射点**：`src/frontend/core/types/eval/const_eval.rs:684`
 
 ### E4014：常量求值失败
 
@@ -117,7 +117,7 @@ description: '泛型约束、特质系统与常量求值相关的错误。'
 - **构造函数**：`ErrorCodeDefinition::const_eval_failed(reason)`
 - **模板**：`无法求值常量表达式：{reason}`
 - **帮助**：确保表达式可以在编译期求值。
-- **发射点**：`src/frontend/core/types/eval/const_eval.rs:289`、`src/frontend/core/types/eval/const_eval.rs:293`、`src/frontend/core/types/eval/const_eval.rs:314` 等 10 处
+- **发射点**：`src/frontend/core/types/eval/const_eval.rs:420`、`src/frontend/core/types/eval/const_eval.rs:424`、`src/frontend/core/types/eval/const_eval.rs:445` 等 10 处
 
 ### E4018：精化谓词违反
 
