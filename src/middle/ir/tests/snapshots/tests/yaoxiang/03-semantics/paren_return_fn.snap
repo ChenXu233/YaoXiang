@@ -8,6 +8,7 @@ module
     MakeClosure %0 <- closure_1 env=[] (def=d1)
     Ret %0
   fn curried(Int(64)) -> Fn { params: [Int(64)], return_type: Int(64) }
+    slot[0] a : Int(64) @depth1
     locals_total=2
     MakeClosure %0 <- __curried_l0 env=[%1] (def=d2)
     Ret %0

@@ -1375,6 +1375,31 @@ impl AstToIrGenerator {
         }
     }
 
+    /// 把**一层 curry 的具名形参**写进槽位并携带量词事实——中间层与最内层共用。
+    ///
+    /// `env_params` 是外层各层累积的参数（按 `args` 槽序 0..），`layer_params` 是本层
+    /// 参数（`env_count..`）；这正是 `MakeClosure.env` 需要的顺序，也与最内层 body 的
+    /// 槽布局一致。
+    ///
+    /// 事实来源只有一个：`ast::Param::quantity`（声明侧由唯一解析源
+    /// `ast::resolve_param_quantities` 写入）。此处**不推导、不默认**——`None`（尚未
+    /// 解析）原样落进槽位，绝不当 `Some(Zero)`。
+    fn register_curry_layer_bindings(
+        &mut self,
+        env_params: &[ast::Param],
+        layer_params: &[ast::Param],
+        env_count: usize,
+    ) {
+        for (i, param) in env_params.iter().enumerate() {
+            self.register_local(&param.name, i);
+            self.note_slot_quantity(&param.name, param.quantity);
+        }
+        for (i, param) in layer_params.iter().enumerate() {
+            self.register_local(&param.name, env_count + i);
+            self.note_slot_quantity(&param.name, param.quantity);
+        }
+    }
+
     /// 局部变量写出类型名的查找（作用域由符号表本身给出）。
     fn local_written_type(
         &self,
@@ -3001,7 +3026,7 @@ impl AstToIrGenerator {
         &mut self,
         func_name: &str,
         layer: &CurryLayer,
-        env_count: usize,
+        env_params: &[ast::Param],
         next_func_name: &str,
         constants: &mut Vec<ConstValue>,
         generic_params: Option<Vec<String>>,
@@ -3012,6 +3037,11 @@ impl AstToIrGenerator {
         // 无需 LoadArg 搬动：args 槽布局 = [外层 env(0..env_count), 本层参数(env_count..)]
         // 正是下一层闭包 env 需要的顺序。搬动会因 dst/src 槽重叠互相覆盖（#294）。
         let param_count = layer.params.len();
+        let env_count = env_params.len();
+        // P0（6.9.2-C2a）：包装层与最内层**同一份**具名绑定事实——此前这里既不
+        // register_local 也不写量词，擦除侧只能靠 generic_params + params.len() 反推
+        // 哪一槽是 q=0（D3 第 1 条）。事实来自声明侧 `Param::quantity`，无第二套推导。
+        self.register_curry_layer_bindings(env_params, &layer.params, env_count);
         let full_env: Vec<Operand> = (0..env_count + param_count).map(Operand::Local).collect();
         self.next_temp = env_count + param_count;
         self.temp_high_water = env_count + param_count;
@@ -3093,14 +3123,9 @@ impl AstToIrGenerator {
         // 量词事实随形参一起落到槽位（`LocalSlot::quantity` 的唯一写入点之一）：
         // 外层零号位（`(N: Int) -> (n: N)` 的 N）在本层正是「q=0 具名绑定」，
         // 擦除前识别体内对它的引用要靠这条事实。
-        for (i, param) in env_params.iter().enumerate() {
-            self.register_local(&param.name, i);
-            self.note_slot_quantity(&param.name, param.quantity);
-        }
-        for (i, param) in layer.params.iter().enumerate() {
-            self.register_local(&param.name, env_count + i);
-            self.note_slot_quantity(&param.name, param.quantity);
-        }
+        // 与中间层**同一处**（`register_curry_layer_bindings`）写绑定与量词事实：
+        // 两个层的槽布局相同（env 在前、本层参数在后），事实同源（`Param::quantity`）。
+        self.register_curry_layer_bindings(env_params, &layer.params, env_count);
         // curry 层形参全部来自声明注解本身（层参数由 `split_curry` 从注解切出），
         // 无需声明补位。
         self.note_param_written_types(&layer.params, &[]);
@@ -3264,7 +3289,7 @@ impl AstToIrGenerator {
                 self.generate_curry_intermediate_func(
                     &func_name,
                     layer,
-                    env_params.len(),
+                    &env_params,
                     &next_name,
                     constants,
                     layer_generic_params,

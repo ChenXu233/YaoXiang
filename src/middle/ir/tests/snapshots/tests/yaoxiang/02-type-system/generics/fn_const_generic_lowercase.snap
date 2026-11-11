@@ -1,6 +1,7 @@
 module
   fn f(Int(64)) -> Fn { params: [TypeRef("m")], return_type: Int(64) }
     generic_params: ["m"]
+    slot[0] m : Int(64) @depth1
     locals_total=2
     MakeClosure %0 <- __f_l0 env=[%1] (def=d0)
     Ret %0

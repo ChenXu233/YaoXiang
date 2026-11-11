@@ -1,6 +1,7 @@
 module
   fn factorial(Int(64)) -> Fn { params: [TypeRef("N")], return_type: Int(64) }
     generic_params: ["N"]
+    slot[0] N : Int(64) @depth1
     locals_total=2
     MakeClosure %0 <- __factorial_l0 env=[%1] (def=d0)
     Ret %0

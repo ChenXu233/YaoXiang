@@ -208,3 +208,66 @@ main = () => {
         "临时槽不携带任何量词事实；实际: {slots:?}"
     );
 }
+
+/// P0（6.9.2-C2a）：柯里**包装层**（非最内层）的具名形参同样携带量词事实。
+///
+/// 此前包装层既不 `register_local` 也不写量词：擦除侧只能靠 `generic_params` +
+/// `params.len()` 反推哪一槽是 q=0（D3 第 1 条）。本条钉住三件事：
+/// ① 包装层形参**有具名槽**且事实正确（N ⇒ q=0）；② 事实来自声明侧同一份
+/// `Param::quantity`，`None` 不被默认成 `Zero`（`m` 未被类型位置使用 ⇒ None）；
+/// ③ 包装层与最内层对同一名字给出**相同**事实。
+#[test]
+fn test_curry_wrapper_layer_params_carry_quantity() {
+    // Arrange — 三层柯里：层0=[N]，层1=[m]，层2=[k]；只有 N 是 q=0
+    let src = r#"
+h: (N: Int) -> (m: Int) -> (k: N) -> Int = (k) => k
+main = () => {
+}
+"#;
+
+    // Act
+    let ir = compile(src);
+    let outermost = locals_of(&ir, "h");
+    let middle = locals_of(&ir, "__h_l0");
+    let innermost = locals_of(&ir, "__h_l1");
+
+    // Assert — ① 最外层包装层：本层形参 N 有具名槽 + q=0 事实
+    let outer_n = outermost
+        .iter()
+        .find(|s| s.name.as_deref() == Some("N"))
+        .unwrap_or_else(|| panic!("包装层 h 应把形参 N 铺成具名槽；实际: {outermost:?}"));
+    assert_eq!(
+        outer_n.quantity,
+        Some(crate::ast::Quantity::Zero),
+        "包装层的 N 被 `k: N` 当类型用 ⇒ 必须携带 q=0 事实；实际: {outermost:?}"
+    );
+
+    // Assert — ② 中间包装层：env 的 N 与本层 m 都在，且 m 不得被默认成 Zero
+    let mid_n = middle
+        .iter()
+        .find(|s| s.name.as_deref() == Some("N"))
+        .unwrap_or_else(|| panic!("中间层应把 env 形参 N 铺成具名槽；实际: {middle:?}"));
+    assert_eq!(
+        mid_n.quantity,
+        Some(crate::ast::Quantity::Zero),
+        "中间层的 env 形参 N 同样携带 q=0 事实；实际: {middle:?}"
+    );
+    let mid_m = middle
+        .iter()
+        .find(|s| s.name.as_deref() == Some("m"))
+        .unwrap_or_else(|| panic!("中间层应把本层形参 m 铺成具名槽；实际: {middle:?}"));
+    assert_eq!(
+        mid_m.quantity, None,
+        "m 未被类型位置使用 ⇒ 事实是「尚未解析」(None)，绝不默认成 Zero；实际: {middle:?}"
+    );
+
+    // Assert — ③ 与最内层同一名字的事实一致
+    let inner_n = innermost
+        .iter()
+        .find(|s| s.name.as_deref() == Some("N"))
+        .unwrap_or_else(|| panic!("最内层应保留 env 形参 N 的具名槽；实际: {innermost:?}"));
+    assert_eq!(
+        mid_n.quantity, inner_n.quantity,
+        "包装层与最内层必须给出同一份量词事实（唯一解析源）"
+    );
+}

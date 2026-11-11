@@ -13,6 +13,7 @@ module
     Load %0 <- %1
     Ret %0
   fn add2(Int(64)) -> Fn { params: [Int(64)], return_type: Int(64) }
+    slot[0] a : Int(64) @depth1
     locals_total=2
     MakeClosure %0 <- __add2_l0 env=[%1] (def=d0)
     Ret %0

@@ -1,9 +1,11 @@
 module
   fn gt(Int(64)) -> Fn { params: [Int(64)], return_type: Bool }
+    slot[0] t : Int(64) @depth1
     locals_total=2
     MakeClosure %0 <- __gt_l0 env=[%1] (def=d0)
     Ret %0
   fn make_adder(Int(64)) -> Fn { params: [Int(64)], return_type: Int(64) }
+    slot[0] n : Int(64) @depth1
     locals_total=2
     MakeClosure %0 <- __make_adder_l0 env=[%1] (def=d1)
     Ret %0
