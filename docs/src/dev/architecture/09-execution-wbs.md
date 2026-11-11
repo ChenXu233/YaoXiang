@@ -116,7 +116,7 @@ P10 其余清理与状态修正             06 §S2/S3/S4/S5/S6
 | --- | --- | --- | --- |
 | 2.1 IR 静态校验器 | 2.1.1 `verify.rs` 双模式 `verify_loose` / `verify_ssa`（**2026-10-06 已完成**：`src/middle/core/verify.rs`，07 §102 契约形态 `verify(ir, mode) -> Result<(), VerifyError>`，违规全收集非首错即停；def/use 提取穷尽 match 无通配臂，Phi 变体引入时编译失败强制补查） | — | C4 |
 | | 2.1.2 **`verify_loose` 在现有非 SSA IR 上跑绿**（**2026-10-06 已完成**：`test_verify_loose_corpus_green` 全语料 204 文件/536 函数/11990 指令绿，校验面非空断言内置；实测按 D38 修复 ir_gen 三缺陷，语料差分基线自比零差分证行为等价） | 2.1.1 | **硬门槛，P7 批 a 的准入条件**——**已解锁** |
-| | 2.1.3 实现 7 项不变量（支配性/唯一定义/Phi一致/jump目标/全局越界/类型一致/内层隔离）（**2026-10-06 已完成**：判定面按实测登记收窄——支配性=具名槽 must-defined（temp 槽 Void 预初始化是帧语义，ir_gen 有意依赖）、类型一致=参数槽签名+常量可信源（ir_gen 不写槽位类型表，完整面归 P7 值表 04 §262）、Phi 待批 b 变体引入；详见 verify.rs 文件头与 06 §G6） | 2.1.1 | C4 |
+| | 2.1.3 实现 7 项不变量（支配性、唯一定义、Phi 一致、跳转目标、全局越界、类型一致、内层隔离）（**2026-10-06 已完成**：判定面按实测登记收窄——支配性=具名槽 must-defined（temp 槽 Void 预初始化是帧语义，ir_gen 有意依赖）、类型一致=参数槽签名+常量可信源（ir_gen 不写槽位类型表，完整面归 P7 值表 04 §262）、Phi 待批 b 变体引入；详见 verify.rs 文件头与 06 §G6） | 2.1.1 | C4 |
 | 2.2 规范化快照 | 2.2.1 规范化工具（剥 Span / 临时值重命名 / 槽位相对化 / 前驱排序）（**2026-10-07 已完成**：`src/middle/core/normalize.rs`，07 五规则逐项实现；实测修正两处——DefId 按首次出现序相对化（intern 序跨进程不稳定，141/143 实测）、Arg 独立 arg% 前缀（与 Local 同池会丢变体区分）；指令打印穷尽 match） | — | C1/C3/C5 |
 | | 2.2.2 快照入库 + 人工 review 流程（`src/middle/ir/tests/snapshots/`）（**2026-10-07 已完成**：204 快照按语料相对路径镜像入库；更新流程 `UPDATE_SNAPSHOTS=1 cargo test --lib snapshot -- --ignored` + git diff review + 同 PR 入库，见 tests/snapshot.rs 文件头；篡改实测精准报红） | 2.2.1 | C1/C3/C5 |
 | 2.3 语料差分 | 2.3.1 差分框架 + 293 语料基线（**2026-10-06 已完成**：探针 `examples/corpus_probe.rs` + 基线 `tests/baselines/corpus-parity.jsonl`（322 条）+ 门禁 `check-corpus-parity.py` 入 CI（硬门禁）；归一化含指针形态 scrub，两次全量运行门禁自比零差分） | — | 诊断/退出码/stdout 逐项 |
