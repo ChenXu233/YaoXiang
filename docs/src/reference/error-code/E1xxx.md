@@ -627,7 +627,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **构造函数**：`ErrorCodeDefinition::constraint_dispatch_failed(dispatch, detail)`
 - **模板**：`约束方法派发失败：\`{dispatch}\`——{detail}`
 - **帮助**：为该类型实现对应接口（类型体内写接口实例化并定义方法），或改用已实现该接口的实参
-- **发射点**：`src/middle/passes/mono/mod.rs:770`
+- **发射点**：`src/middle/passes/mono/mod.rs:991`
 - **源码注释名**：约束方法派发失败（发射面：mono 特化改写——src/middle/passes/mono/mod.rs
 
 ### E1107：方法重载歧义
@@ -671,7 +671,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **模板**：`'{type}.{method}' 缺少签名标注`
 - **消息**：方法绑定 '{type}.{method}' 没有签名标注，编译器无法确定它的接收者、形参名与返回类型
 - **帮助**：补上签名标注：'{type}.{method}: (self: &{type}, ...) -> 返回类型 = 函数体'；要复用现成函数则写 '{type}.{method}: (…) -> 返回类型 = 函数名[位置]'
-- **发射点**：`src/middle/ir/ir_gen.rs:2437`
+- **发射点**：`src/middle/ir/ir_gen.rs:2462`
 - **源码注释名**：方法绑定缺少签名标注（WBS 3.13.1 / issue #451，D59 A 类：旧行为是
 
 ### E1111：实参重复占用或顺序非法

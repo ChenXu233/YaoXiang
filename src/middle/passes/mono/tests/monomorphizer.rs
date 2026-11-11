@@ -611,6 +611,10 @@ fn test_monomorphize_keeps_original_generic_when_call_site_lacks_request_key() {
 /// 泛型 `std.list.is_empty` **只**被一个「非改写面」站点（`MakeClosure` / `TailCall`）
 /// 按名引用，且该站点在请求集合里有键（span 对齐）——用于钉「非改写面站点一律计
 /// 未覆盖」。返回（模块, 请求）。
+///
+/// 注意本夹具的站点**不是**柯里包装体（`main` 的直接调用序列），故不经过逐实例
+/// 柯里层克隆路径（`emit_curry_layer_clones`，6.9.2-C2b P1）：那条路只改写「实例
+/// 体里形如 `[MakeClosure, Ret]` 的包装层目标」，对函数值 / 普通按名引用不适用。
 fn non_rewritable_ref_case(
     reference: Instruction,
     reference_span: Span,
@@ -642,9 +646,13 @@ fn non_rewritable_ref_case(
 }
 
 /// 指令形态不对称（3.4.8-R1+++ / t6）：扫描面（`by_name_call_target`）覆盖
-/// `Call`/`TailCall`/`MakeClosure`，改写面（`replace_calls_in_function`）**只**处理
-/// `Call`。`MakeClosure` 臂若照常查映射键，「有键」会被误判为「已覆盖」——原件被删
-/// 而该站点永不被改写 → 悬空（t3 同缺陷类）。钉住：一律计未覆盖 → 原件保留。
+/// `Call`/`TailCall`/`MakeClosure`，调用点改写面（`replace_calls_in_function`）**只**
+/// 处理 `Call`。`MakeClosure` 臂若照常查映射键，「有键」会被误判为「已覆盖」——原件
+/// 被删而该站点不被这个改写面改写 → 悬空（t3 同缺陷类）。钉住：一律计未覆盖 → 原件保留。
+///
+/// 6.9.2-C2b 起 `MakeClosure` 的**柯里包装层**目标会有另一条改写路（建实例时按实例
+/// 克隆，见 `emit_curry_layer_clones`），本夹具与那条路无关（它不是包装体），故本闸的
+/// 判据与断言不变：调用点改写面覆盖不到的目标，一律按未覆盖保守保留。
 #[test]
 fn test_restore_gate_keeps_generic_referenced_only_by_make_closure() {
     // Arrange：仅 MakeClosure 站点按名引用，且该站点有对齐的请求键
