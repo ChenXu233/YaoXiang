@@ -1128,3 +1128,164 @@ fn test_check_unimported_predicate_use_still_rejected() {
         "#524 visibility: an imported-gated predicate NOT brought in by use must fail resolution (use is the only cross-unit name introduction); got {errors} error(s)"
     );
 }
+
+// ============ 3.20.12 / #442：注解收泛型调用返回值的两侧表示统一 ============
+//
+// 泛型函数调用点（monomorphize）返回的代入形态是**应用**——
+// `Generic{Box, [Int64]}`；同名注解（`Box(Int)`）经 try_instantiate 展开成
+// **记录** `Struct{Box, ...}`（与构造器直造值侧同形）。两侧语义相同、表示
+// 不同，绑定校验直接 unify 必假拒绝：E1002 `Expected type 'Box', found type
+// 'Box(int64)'`（issue #442 复现）。
+//
+// 修法：绑定校验前把 init 的具体应用展开成记录形态再统一（与值侧构造共用
+// `expand_ctor_applications` 唯一实现）。mono 链不受影响——调用点返回位
+// 代入与 instantiation_requests 均未触碰。
+
+/// #442 主锚：带泛型类型实参的注解收泛型函数调用结果，零诊断。
+#[test]
+fn test_check_generic_call_result_binds_generic_annotated_type() {
+    // Arrange: 泛型类型 Box + 泛型构造函数 make_box（声明返回位 `Box(T)`）；
+    // `b: Box(Int) = make_box(9)` 是 issue #442 的假拒绝形态——修前报
+    // E1002 Expected type 'Box', found type 'Box(int64)'。
+    let dir = temp_dir();
+    let file = create_yx_file(
+        &dir,
+        "generic_call_annotated_result.yx",
+        "Box: (T: Type) -> Type = { value: T, tag: Int }\n\
+         make_box: (T: Type) -> (v: T) -> Box(T) = { return Box(v, 0) }\n\
+         main: () -> Void = {\n\
+         \x20   b: Box(Int) = make_box(9);\n\
+         \x20   print(b.value);\n\
+         }",
+    );
+
+    // Act
+    let result = check_file(&file);
+
+    // Assert: 返回类型在调用点已代入 T:=Int，注解侧展开形态与之一致 ⇒ 零诊断。
+    let errors = result.expect("generic call result should bind to annotated generic type");
+    assert_eq!(
+        errors, 0,
+        "#442: annotated binding `b: Box(Int) = make_box(9)` must be accepted — the call-site return type Box(T) is instantiated at the call, so annotation and init differ only in representation (Generic app vs expanded record), not in type; got {errors} error(s)"
+    );
+}
+
+/// #442 回归锚：无注解收泛型调用结果（既有绿形态不得变）。
+#[test]
+fn test_check_generic_call_unannotated_binding_still_accepted() {
+    // Arrange: 与主锚同族但无注解——推断面（不受表示统一影响的路径）。
+    let dir = temp_dir();
+    let file = create_yx_file(
+        &dir,
+        "generic_call_unannotated.yx",
+        "Box: (T: Type) -> Type = { value: T, tag: Int }\n\
+         make_box: (T: Type) -> (v: T) -> Box(T) = { return Box(v, 0) }\n\
+         main: () -> Void = {\n\
+         \x20   a = make_box(9);\n\
+         \x20   print(a.value);\n\
+         \x20   print(a.tag);\n\
+         }",
+    );
+
+    // Act
+    let result = check_file(&file);
+
+    // Assert: 无注解绑定与字段访问维持既有行为 ⇒ 零诊断。
+    let errors = result.expect("unannotated generic call binding should keep passing");
+    assert_eq!(
+        errors, 0,
+        "#442 regression: unannotated binding `a = make_box(9)` with field access was green before the fix and must stay green; got {errors} error(s)"
+    );
+}
+
+/// #442 回归锚：构造器直造收注解（既有绿形态不得变）。
+#[test]
+fn test_check_generic_ctor_direct_construction_still_accepted() {
+    // Arrange: `c: Box(Int) = Box(9, 0)`——值侧构造与注解同形（都是展开
+    // 记录），表示统一段不介入（init 不是应用形态）。
+    let dir = temp_dir();
+    let file = create_yx_file(
+        &dir,
+        "generic_ctor_direct.yx",
+        "Box: (T: Type) -> Type = { value: T, tag: Int }\n\
+         main: () -> Void = {\n\
+         \x20   c: Box(Int) = Box(9, 0);\n\
+         \x20   print(c.value);\n\
+         \x20   print(c.tag);\n\
+         }",
+    );
+
+    // Act
+    let result = check_file(&file);
+
+    // Assert: 构造器直造维持既有行为 ⇒ 零诊断。
+    let errors = result.expect("direct constructor call should keep passing");
+    assert_eq!(
+        errors, 0,
+        "#442 regression: direct construction `c: Box(Int) = Box(9, 0)` was green before the fix and must stay green; got {errors} error(s)"
+    );
+}
+
+/// #442 反向锚：表示统一对真不匹配透明，不遮蔽——注解实参真错仍拒绝。
+#[test]
+fn test_check_generic_call_result_genuine_mismatch_still_reports() {
+    // Arrange: 与主锚同构，但注解实参是 String——调用点代入的是 int64，
+    // 展开逐字段统一必然失败，必须仍报错。没有这条，「展开退化成跳过统一」
+    // 的遮蔽型回归会让主锚的零诊断失去含金量（#523 反向锚同构先例）。
+    let dir = temp_dir();
+    let file = create_yx_file(
+        &dir,
+        "generic_call_result_genuine_mismatch.yx",
+        "Box: (T: Type) -> Type = { value: T, tag: Int }\n\
+         make_box: (T: Type) -> (v: T) -> Box(T) = { return Box(v, 0) }\n\
+         main: () -> Void = {\n\
+         \x20   b: Box(String) = make_box(9);\n\
+         \x20   print(b.value);\n\
+         }",
+    );
+
+    // Act
+    let result = check_file(&file);
+
+    // Assert: 真不匹配仍被拒绝 ⇒ 恰一条诊断。
+    let errors = result.expect("check should complete for genuinely mismatched annotation");
+    assert_eq!(
+        errors, 1,
+        "#442: expanding the call-site application must stay transparent to real mismatches — `b: Box(String) = make_box(9)` (T:=int64) must still be rejected with exactly one error; got {errors} error(s)"
+    );
+}
+
+/// #442 边界探针：跨单元（use 导入）注解收泛型调用结果。
+#[test]
+fn test_check_cross_unit_generic_call_result_binds_annotation() {
+    // Arrange: lib.yx 定义 Box + make_box，main.yx use 后注解收返回值。
+    // 跨单元与单文件走同一绑定校验段（声明名管道 #511 提供的只是名字来源，
+    // 表示统一发生在消费端），修前同样假拒绝、修后同批转绿——钉住现状。
+    let dir = temp_dir();
+    create_yx_file(
+        &dir,
+        "lib.yx",
+        "Box: (T: Type) -> Type = { value: T, tag: Int }\n\
+         make_box: (T: Type) -> (v: T) -> Box(T) = { return Box(v, 0) }\n",
+    );
+    let main_file = create_yx_file(
+        &dir,
+        "main.yx",
+        "use lib.{Box, make_box}\n\
+         \n\
+         main: () -> Void = {\n\
+         \x20   b: Box(Int) = make_box(9);\n\
+         \x20   print(b.value);\n\
+         }\n",
+    );
+
+    // Act
+    let result = check_file(&main_file);
+
+    // Assert: 跨单元形态与单文件同判据同源 ⇒ 零诊断。
+    let errors = result.expect("cross-unit generic call result should bind to annotation");
+    assert_eq!(
+        errors, 0,
+        "#442: cross-unit `b: Box(Int) = make_box(9)` via use must be accepted — the binding-level representation unification is shared by both units; got {errors} error(s)"
+    );
+}

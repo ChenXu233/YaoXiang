@@ -2726,6 +2726,47 @@ impl StatementChecker {
                     MonoType::Refined { base, .. } => *base.clone(),
                     _ => ann_ty.clone(),
                 };
+                // #442：注解收泛型调用返回值的两侧表示统一。
+                //
+                // 泛型函数调用点（monomorphize）返回的代入形态是**应用**——
+                // `Generic{Box, [Int64]}`；而同名注解（`Box(Int)`）经
+                // `try_instantiate_generic_type` 展开成**记录**——
+                // `Struct{Box, value: Int, tag: Int}`（与构造器直造值侧同形）。
+                // 两侧语义相同、表示不同，直接 unify 必假拒绝（E1002
+                // `Expected type 'Box', found type 'Box(int64)'`——`Box` 是
+                // 记录名，`Box(int64)` 是应用形态）。
+                //
+                // 处置与值侧构造同判据同源：init 是应用、注解是同名记录、
+                // 且实参全部具体（resolve 后不含未绑定参数；构造器引用实参
+                // 本身就是类型实参，不算未绑定——与值构造臂同款防线）时，
+                // 把 init 的应用展开成记录形态再统一。展开复用
+                // `expand_ctor_applications` 唯一实现（它只对声明模板已知的
+                // 用户类型做，内置容器 `Vec`/`Array` 原样保留；实参含未绑定
+                // 参数的形态两侧同为应用，本就同形可统一，不进本段）。
+                // 展开不改变报错文本：诊断引用的是 ann_ty / init_ty 原始形态。
+                let init_is_concrete_app_of_ann_record = match (&resolved_init, &resolved_ann) {
+                    (MonoType::Generic { name, args }, MonoType::Struct(s_ann)) => {
+                        s_ann.name == *name
+                            && args.iter().all(|t| {
+                                let rt = self.solver.resolve_type(t);
+                                !contains_unresolved_param(&rt)
+                                    || super::expressions::is_ctor_reference(
+                                        &rt,
+                                        &self.generic_type_defs,
+                                    )
+                            })
+                    }
+                    _ => false,
+                };
+                let resolved_init = if init_is_concrete_app_of_ann_record {
+                    let fully_resolved = self.solver.resolve_type(&resolved_init);
+                    super::expressions::expand_ctor_applications(
+                        &fully_resolved,
+                        &self.generic_type_defs,
+                    )
+                } else {
+                    resolved_init
+                };
                 // Check Int → Float subtype (widening conversion is always safe)
                 let is_int_to_float = matches!(
                     (&resolved_ann, &resolved_init),

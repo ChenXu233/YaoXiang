@@ -6612,7 +6612,13 @@ fn body_uses_ctor_head(
 /// 记录形态 `Struct{Box, ...}`；两者必须同形才能 unify/取字段。展开只对
 /// 声明模板已知、实参元数吻合的**用户**类型构造器做（内置容器 `Vec`/`Array`
 /// 是运行时长度的表示，保持应用形态）。
-fn expand_ctor_applications(
+///
+/// 消费面（同源展开，无第二份实现）：
+/// - 调用点构造器变量的头部替换后展开（`specialize`）；
+/// - 值构造臂的类型实参展开（`instantiate_with_ctor_heads`）；
+/// - 绑定校验（#442）：init 是具体应用而注解是同名展开记录时，展开 init
+///   再统一（`check_var_stmt_inner`）。
+pub(super) fn expand_ctor_applications(
     ty: &MonoType,
     defs: &HashMap<String, crate::frontend::core::sema::environment::GenericTypeDef>,
 ) -> MonoType {
