@@ -1,0 +1,14 @@
+// 06-compile-errors/generics/const_arg_missing_evidence_err.yx
+// 编译期值参数（q=0）的实参必须是编译期可确定的值；运行期形参不构成证据
+// expect: compile-error E1113
+// 覆盖: RFC-039 D62 / 6.9.2-B——`f(y)` 里 y 是运行期形参，N 无编译期证据。
+//       改动前此处**零诊断**：静默按运行期传参、特化永不发生，内层 `n: N` 的
+//       约束从未生效（静默失败）。改动后按 E1113 公开拒绝。
+// 状态: ❌ 应编译失败
+
+f: (N: Int) -> (n: N) -> Int = (n) => n
+k: (y: Int) -> Int = f(y)
+
+main: () -> Void = {
+    r: Int = k(42)
+}

@@ -9,7 +9,7 @@ use std::rc::Rc;
 
 use super::symbol::{DefKind, SymbolTable};
 use super::{Export, ExportKind, ModuleError, ModuleInfo, ModuleSource};
-use crate::frontend::core::typecheck::environment::MethodOverloadCandidates;
+use crate::frontend::core::sema::environment::MethodOverloadCandidates;
 use crate::frontend::core::types::mono::MonoType;
 
 /// 模块注册表
@@ -375,6 +375,7 @@ impl ModuleRegistry {
                 param_names: None,
                 type_payload: None,
                 definition_span: None, // std 虚拟模块无源码定义位置（4.6.1）
+                predicate_def: None,   // std 虚拟子模块无谓词 def（#524 载荷面）
             });
 
             // 注册模块信息
@@ -445,6 +446,7 @@ impl ModuleRegistry {
                         param_names: None,
                         type_payload: None,
                         definition_span: None, // std 虚拟模块无源码定义位置（4.6.1）
+                        predicate_def: None,   // std 虚拟子模块无谓词 def（#524 载荷面）
                     });
                     self.register(info);
                 }
@@ -472,7 +474,7 @@ mod tests {
             .get("std.result")
             .expect("std.result should be registered");
         assert!(m.exports.contains_key("Result"), "yx type export missing");
-        for method in crate::frontend::core::typecheck::operator_interfaces::TRY_METHODS {
+        for method in crate::frontend::core::sema::operator_interfaces::TRY_METHODS {
             let key = format!("Result.{method}");
             assert!(
                 m.method_bindings.contains_key(&key),
@@ -512,6 +514,7 @@ mod tests {
             param_names: None,
             type_payload: None,
             definition_span: None,
+            predicate_def: None,
         }
     }
 

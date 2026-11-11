@@ -40,8 +40,22 @@ repos:
         pass_filenames: false
         stages: [pre-commit]
 
+      # 两段测试：第一段是快反馈（同一目标集的独立 testsuite 通道，带资源预算），
+      # 第二段是拦提交的全量口径。两段的命令串与 AGENTS.md 常用命令区、
+      # docs/src/dev/test-specification.md 规则 18.1、docs/src/dev/HOWTO.md
+      # 提交前验证（改代码）由 scripts/ci/check-test-channel.py 机械对账，
+      # 任一处口径不一致即红。
+      - id: cargo-test-fast
+        name: cargo test (fast 通道)
+        entry: python scripts/dev/testsuite.py run fast
+        language: system
+        types: [rust]
+        pass_filenames: false
+        always_run: false
+        stages: [pre-commit]
+
       - id: cargo-test
-        name: cargo test
+        name: cargo test (拦提交全量)
         entry: cargo test --all --quiet
         language: system
         types: [rust]
@@ -92,3 +106,20 @@ repos:
         language: system
         pass_filenames: false
         stages: [pre-commit]
+
+      - id: check-soundness
+        name: 健全性探针（阻塞）
+        # 宽口径 E0–E5：check 通过 ⇒ run 不得出现词法/语法/类型/语义/代码生成/泛型/模块
+        # 同族错误（WBS 0.6.3）。2026-11-06 翻闸：三类已知分叉归零 + 变异自证通过，
+        # entry 由 --report-only 换成 --strict（有分叉即 exit 1，阻塞提交）；
+        # --report-only 保留为手工排查形态，不进任何门禁。
+        # 临时放过走 coding-rules 第五部分（// reason: + 计数进门禁报告），不得改回 report-only。
+        # 只在暂存区含语料 .yx 或项目形态夹具时触发：378 条 × 2 次 CLI ≈ 30 s。
+        # 项目形态层（tests/project-corpus/）必须一并匹配——它是本探针唯一的真实判据面，
+        # 漏匹配就等于「改夹具时门禁不跑」，同一类洞会在新层复现。
+        entry: python scripts/ci/check-soundness.py --strict
+        language: system
+        files: '^(tests/yaoxiang/.*\.yx|src/std/tests/.*\.yx|tests/yaoxiang-multifile/.*\.yx|tests/project-corpus/.*)$'
+        pass_filenames: false
+        stages: [pre-commit]
+        verbose: true

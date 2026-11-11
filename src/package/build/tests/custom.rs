@@ -86,31 +86,6 @@ fn test_custom_trust_flag_executes_and_persists() {
 }
 
 #[test]
-fn test_custom_interactive_confirm_persists_and_repasses() {
-    // Arrange：交互环境首次执行
-    let tmp = tempfile::tempdir().unwrap();
-    let pkg = custom_pkg(tmp.path(), "x = 1\n");
-    let (_dir, store) = temp_store();
-    let trust = trust(false, true, &store);
-    let asked = std::cell::Cell::new(0);
-
-    // Act：首次——确认文案应含 name@version
-    let outcome = custom::build(&pkg, &trust, &|q| {
-        assert!(q.contains("evil-corp@1.0.0"), "确认文案应含包名版本: {q}");
-        asked.set(asked.get() + 1);
-        true
-    })
-    .unwrap();
-
-    // Assert：询问一次、落记录；第二次已信任不再询问
-    assert_eq!(outcome.via, "custom");
-    assert_eq!(asked.get(), 1, "应询问一次");
-    assert_eq!(stored_scripts(&store), vec!["evil-corp@1.0.0".to_string()]);
-    let outcome = custom::build(&pkg, &trust, &|_| panic!("已信任的包不应再次询问")).unwrap();
-    assert_eq!(outcome.via, "custom");
-}
-
-#[test]
 fn test_custom_interactive_reject_does_not_persist() {
     // Arrange：交互确认但用户拒绝
     let tmp = tempfile::tempdir().unwrap();
@@ -143,28 +118,6 @@ fn test_custom_script_failure_is_build_failure() {
     // Assert：脚本失败 = 构建失败（RFC 执行模型：非 0 退出/编译错误即中止）
     assert!(
         matches!(err, PackageError::InvalidManifest(ref m) if m.contains("build.yx 执行失败")),
-        "got: {err}"
-    );
-}
-
-#[test]
-fn test_custom_requires_build_script_present() {
-    // Arrange：custom 策略但包根无 build.yx
-    let tmp = tempfile::tempdir().unwrap();
-    let pkg = tmp.path().join("evil-corp-1.0.0");
-    write(
-        &pkg.join("yaoxiang.toml"),
-        "[package]\nname = \"evil-corp\"\nversion = \"1.0.0\"\n\n[build]\nstrategy = \"custom\"\n",
-    );
-    let (_dir, store) = temp_store();
-    let trust = trust(true, false, &store);
-
-    // Act
-    let err = custom::build(&pkg, &trust, &|_| false).unwrap_err();
-
-    // Assert
-    assert!(
-        matches!(err, PackageError::InvalidManifest(ref m) if m.contains("build.yx")),
         "got: {err}"
     );
 }

@@ -29,7 +29,7 @@ mod tests;
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
-use crate::frontend::core::typecheck::environment::MethodOverloadCandidates;
+use crate::frontend::core::sema::environment::MethodOverloadCandidates;
 use crate::frontend::core::types::mono::MonoType;
 use crate::util::span::Span;
 
@@ -105,21 +105,32 @@ pub struct Export {
     /// native std 导出无源码位置，为 `None`——导入方跨文件 `resolves_to`
     /// 据此回退到 use 行名源位置（现状语义）。
     pub definition_span: Option<Span>,
+    /// 编译期谓词 def 载荷（#524 甲案，仅谓词声明导出非 None）。
+    ///
+    /// 谓词（返回 `Type` 的单参数声明）解析为**类型**（TypeDefinition 形态）
+    /// 或函数（Assign 形态），但其消费面要两样数据：`env.predicate_defs`
+    /// 的约束体模板（正格化 `IsPositive(N)` → `N > 0`）与 proof-fn 形态
+    /// 变量（`proof_fn_bases` 剥基类型的判据源）。本地面两样由第零遍 +
+    /// `add_type_definition` 登记；导入面此前全缺 ⇒ E1012 + E1002。
+    /// def 构建判据单源在 `predicate_resolver::collect_predicate_defs`
+    /// （第零遍与导出提取共同委托）；导入方 `register_use_export` 按 use
+    /// 门控并入（未导入的谓词解析失败是正确行为，2026-11-03 用户裁决）。
+    pub predicate_def: Option<crate::frontend::core::sema::predicate_resolver::PredicateDef>,
 }
 
 /// 类型定义导出载荷（见 [`Export::type_payload`]）。
 #[derive(Debug, Clone)]
 pub struct TypeDefPayload {
     /// 泛型模板（声明序类型参数名 + poly），非泛型类型为 None
-    pub type_def: Option<crate::frontend::core::typecheck::environment::GenericTypeDef>,
+    pub type_def: Option<crate::frontend::core::sema::environment::GenericTypeDef>,
     /// 和类型变体（声明序即 variant_id）；非和类型为空
-    pub sum_variants: Vec<crate::frontend::core::typecheck::environment::SumVariantDef>,
+    pub sum_variants: Vec<crate::frontend::core::sema::environment::SumVariantDef>,
     /// 类型体内接口应用（`Try(Result(T, E), T, E)` / `Equal` 等）：
     /// （接口名，实现登记）列表。实参引用声明类型参数的抽象条目原样携带
     /// （与定义方待决队列同源），具体条目与 finalize 产物同构。
     pub interface_impls: Vec<(
         String,
-        crate::frontend::core::typecheck::environment::InterfaceImplEntry,
+        crate::frontend::core::sema::environment::InterfaceImplEntry,
     )>,
 }
 

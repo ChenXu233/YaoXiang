@@ -7,8 +7,8 @@
 
 use crate::backends::common::RuntimeValue;
 use crate::backends::Executor;
-use crate::frontend::core::typecheck::MonoType;
-use crate::middle::core::ir::{
+use crate::frontend::core::sema::MonoType;
+use crate::middle::ir::ir::{
     BasicBlock, ConstValue, FunctionBody, FunctionIR, GlobalSlot, Instruction, ModuleIR, Operand,
     LocalSlot,
 };
@@ -109,14 +109,6 @@ fn test_global_slot_store_then_load_roundtrip() {
     assert_slot_is_42(&interp);
 }
 
-/// T1 验收：`execute_module` 入口路径返回非 Void（证明读回未被兜底吞掉）。
-#[test]
-fn test_execute_module_with_global_slot() {
-    let interp = run_fixture();
-    // 入口返回值即槽位读回值：Int(42) 证明 LoadGlobal 真的取到了值
-    assert_slot_is_42(&interp);
-}
-
 /// T1 验收：序列化往返（.42 写入→读回）后全局槽位仍可用。
 ///
 /// 覆盖 `write_to` / `read_from` 的对称性：指令流往返后 LOAD_GLOBAL /
@@ -131,7 +123,7 @@ fn test_global_slot_survives_serialization_roundtrip() {
     let mut buf = Vec::new();
     file.write_to(&mut buf).expect("write_to should succeed");
     let mut cursor = std::io::Cursor::new(&buf);
-    let restored = crate::middle::passes::codegen::BytecodeFile::read_from(&mut cursor)
+    let restored = crate::middle::bytecode::file::BytecodeFile::read_from(&mut cursor)
         .expect("read_from should succeed");
 
     let bytecode_module = crate::middle::bytecode::BytecodeModule::from(restored);

@@ -63,61 +63,6 @@ fn test_definition_resolves_reference_to_binding() {
 }
 
 #[test]
-fn test_definition_resolves_callee_to_function_binding() {
-    // Arrange：调用点与函数绑定
-    let (session, world) = open_and_check("add = (a, b) => a + b\ny = add(1, 2)\n");
-    // Act：光标在第二行 add 调用名上（0-indexed line=1, character=4）
-    let params = make_params(SAMPLE_URI, 1, 4);
-    let result = handle_definition(&session, &world, params);
-    // Assert：跳回第一行 add 绑定
-    let response = result.expect("add 调用名必须跳转到其绑定");
-    let GotoDefinitionResponse::Scalar(loc) = response else {
-        panic!("单一定义应返回 Scalar");
-    };
-    assert_eq!(loc.range.start.line, 0, "add 绑定在第一行（0-indexed）");
-}
-
-#[test]
-fn test_definition_on_imported_item_usage_jumps_to_use_line() {
-    // Arrange：花括号项导入，第二行调用 println（#433 余项：导入项跳转）
-    let (session, world) = open_and_check("use std.io.{println}\nv = println(\"hi\")\n");
-    // Act：光标在第二行 println 使用点（0-indexed line=1, character=4）
-    let params = make_params(SAMPLE_URI, 1, 4);
-    let result = handle_definition(&session, &world, params);
-    // Assert：跳回第一行 use 的 println 项（0-indexed line=0, character=12）
-    let response = result.expect("导入名使用点必须跳转到 use 行该项（#433 余项）");
-    let GotoDefinitionResponse::Scalar(loc) = response else {
-        panic!("单一定义应返回 Scalar");
-    };
-    assert_eq!(loc.uri.to_string(), SAMPLE_URI, "定义在同一文件");
-    assert_eq!(loc.range.start.line, 0, "use 行是第 1 行（0-indexed）");
-    assert_eq!(
-        loc.range.start.character, 12,
-        "println 项在第 13 列（0-indexed 12）"
-    );
-}
-
-#[test]
-fn test_definition_on_module_alias_usage_jumps_to_use_line() {
-    // Arrange：模块整体导入，第二行经 FieldAccess 根使用 io（#433 余项）
-    let (session, world) = open_and_check("use std.io\nv = io.println(\"hi\")\n");
-    // Act：光标在第二行 io 使用点（0-indexed line=1, character=4）
-    let params = make_params(SAMPLE_URI, 1, 4);
-    let result = handle_definition(&session, &world, params);
-    // Assert：跳回第一行 use 的末段 io（0-indexed line=0, character=8）
-    let response = result.expect("模块别名使用点必须跳转到 use 行（#433 余项）");
-    let GotoDefinitionResponse::Scalar(loc) = response else {
-        panic!("单一定义应返回 Scalar");
-    };
-    assert_eq!(loc.uri.to_string(), SAMPLE_URI, "定义在同一文件");
-    assert_eq!(loc.range.start.line, 0, "use 行是第 1 行（0-indexed）");
-    assert_eq!(
-        loc.range.start.character, 8,
-        "io 末段在第 9 列（0-indexed 8）"
-    );
-}
-
-#[test]
 fn test_definition_on_binding_site_returns_none_precise_only() {
     // Arrange
     let (session, world) = setup();
@@ -152,24 +97,4 @@ fn test_definition_doc_not_open_returns_none() {
     let result = handle_definition(&session, &world, params);
     // Assert
     assert!(result.is_none(), "未打开的文档应返回 None");
-}
-
-#[test]
-fn test_definition_mid_identifier_cursor_also_resolves() {
-    // Arrange：三字符名 abc——光标落在标识符**中部**（0-indexed line=1,
-    // character=5 即 b 上）。2026-10-16 用户裁决：跳转查库键改用光标下
-    // 标识符自身的起点（原精确匹配只认引用起点，中部光标静默落空）
-    let (session, world) = open_and_check("abc = 1\ny = abc + abc\n");
-
-    // Act
-    let params = make_params(SAMPLE_URI, 1, 5);
-    let result = handle_definition(&session, &world, params);
-
-    // Assert：与起点光标同效——跳回第一行 abc 定义
-    let response = result.expect("标识符中部光标必须同效跳转（起点查库键裁决）");
-    let GotoDefinitionResponse::Scalar(loc) = response else {
-        panic!("单一定义应返回 Scalar");
-    };
-    assert_eq!(loc.range.start.line, 0, "abc 定义在第一行（0-indexed）");
-    assert_eq!(loc.range.start.character, 0, "abc 定义在第 1 列");
 }

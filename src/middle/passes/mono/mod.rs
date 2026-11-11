@@ -14,13 +14,15 @@ pub mod instance;
 
 use function::FunctionMonomorphizer;
 use instance::{GenericFunctionId, InstantiationRequest, SpecializationKey};
-use crate::frontend::core::typecheck::MonoType;
-use crate::middle::core::ir::{
+use crate::ast::Quantity;
+use crate::frontend::core::sema::MonoType;
+use crate::util::span::Span;
+use crate::middle::ir::ir::{
     BasicBlock, ConstValue, FunctionBody, FunctionIR, Instruction, LocalSlot, ModuleIR, Operand,
 };
 
 /// 原生类型显示名（约束派发改写面的类型头取值）。int64/float64/string/bool
-/// 经 [`crate::frontend::core::typecheck::operator_interfaces::
+/// 经 [`crate::frontend::core::sema::operator_interfaces::
 /// operator_type_display`] 的四条映射臂产出 `Int`/`Float`/`String`/`Bool`；
 /// 其余原语（`MonoType::Char`）走默认臂透传小写名 `char`。它们没有用户方法，
 /// 约束派发改写产生的 `{原语}.{method}` 只能落在运行期 FFI 背书（`src/std/
@@ -93,6 +95,91 @@ pub struct Monomorphizer {
     /// 实例化总数上限（#335：与递归深度分离——合法程序可含大量
     /// 互不相同的实例化，不应触发深度保护）
     max_total_instantiations: usize,
+    /// 柯里包装层的**定义**（输入模块原样；克隆只读这里）。
+    ///
+    /// 收集判据见 [`Self::curry_wrapper_target`]：包装体 = 「把本帧全部槽按序
+    /// 包成下一层闭包并返回」。判据**不看名字**——层名规则（`__{name}_l{i}`）
+    /// 只属于 ir_gen，mono 在这里解析名字就是同一规则的第二处实现。
+    curry_layers: HashMap<String, FunctionIR>,
+    /// 逐实例柯里层克隆 → 所属**实例**名（mono 建克隆时写入）。
+    ///
+    /// P2 的容器维度唯一来源：改写调用点与删除/放回闸都用它回答「这段代码属于
+    /// 哪个实例」，不从函数名反推（反推就是第五个名字映射）。
+    instance_owner: HashMap<String, String>,
+    /// 实例/克隆名 → 本实例的编译期实参值（**声明序**）。
+    ///
+    /// 来源 = 请求的类型位投影 `GenericArg::as_type` 的 `Literal` 载荷——归一化
+    /// 因此只有一处（`as_type` 内部的 `normalize`，与实例名、缓存键同源），不是为
+    /// 擦除另做一份求值。开项（C3 面）与非标量项没有 `Literal` 形态，此时条数会少于
+    /// q=0 槽数 ⇒ 擦除计划放弃该实例（宁可留运行期位，不猜）。
+    instance_const_values: HashMap<String, Vec<ConstValue>>,
+}
+
+/// 一个函数的闭项擦除计划（6.9.2-C2c）。
+///
+/// 判据**唯一来源** = `LocalSlot::quantity == Some(Zero)`（+ `MakeClosure` 的 env
+/// 槽数——IR 没有 env_len 字段，与 `verify` 的 FnView 同源）。计划把同一份事实
+/// **投影一次**给三个消费者：调用点删实参位、闭包调用点删 env 位、擦除本体删槽。
+/// 为什么不在三处各现算：被调在「调用点改写之后」才被擦除，改写时到不了已删的槽；
+/// 而三处各算一遍就是同一判据的第二、第三份（禁令三 A）。
+struct ConstErasePlan {
+    /// 该函数作为闭包体时的前置 env 槽数（非闭包体为 0）
+    env_len: usize,
+    /// 要删的 q=0 槽（升序）× 该槽的编译期值（同序）
+    slots: Vec<(usize, ConstValue)>,
+}
+
+impl ConstErasePlan {
+    /// 调用点实参位（= `FunctionIR.params` 的下标）
+    fn param_positions(&self) -> Vec<usize> {
+        self.slots
+            .iter()
+            .filter(|(slot, _)| *slot >= self.env_len)
+            .map(|(slot, _)| slot - self.env_len)
+            .collect()
+    }
+
+    /// `MakeClosure.env` 里要删的位（= 闭包 env 的下标）
+    fn env_positions(&self) -> Vec<usize> {
+        self.slots
+            .iter()
+            .filter(|(slot, _)| *slot < self.env_len)
+            .map(|(slot, _)| *slot)
+            .collect()
+    }
+}
+
+/// 编译期值（`frontend::core::types::const_data::ConstValue`）→ IR 常量
+///（`middle::ir::ir::ConstValue`）。
+///
+/// 两个同名类型是**不同层的事实**（前者的求值结果 / 后者的池化常量），这里是
+/// 唯一桥。只有 Int/Bool/Float 需要跨：`MonoType::literal_of_value` 只对这三种
+/// 产出 `Literal`，其余编译期值到不了擦除面（返回 `None` ⇒ 计划阶段放弃擦除）。
+fn ir_const_value(
+    value: &crate::frontend::core::types::const_data::ConstValue
+) -> Option<ConstValue> {
+    match value {
+        crate::frontend::core::types::const_data::ConstValue::Int(n) => Some(ConstValue::Int(*n)),
+        crate::frontend::core::types::const_data::ConstValue::Bool(b) => Some(ConstValue::Bool(*b)),
+        crate::frontend::core::types::const_data::ConstValue::Float(f) => {
+            Some(ConstValue::Float(f64::from(*f)))
+        }
+        _ => None,
+    }
+}
+
+/// 按位置删表项（逆序删，位置语义不变）。任一位置越界 ⇒ **整体不动**
+///（声明的位数与表的长度不符时不猜，宁可留运行期位，不做出半截擦除）。
+fn remove_positions<T>(
+    items: &mut Vec<T>,
+    positions: &[usize],
+) {
+    if positions.iter().any(|i| *i >= items.len()) {
+        return;
+    }
+    for i in positions.iter().rev() {
+        items.remove(*i);
+    }
 }
 
 impl Monomorphizer {
@@ -108,6 +195,9 @@ impl Monomorphizer {
             processed: HashSet::new(),
             max_depth: 100,
             max_total_instantiations: 10_000,
+            curry_layers: HashMap::new(),
+            instance_owner: HashMap::new(),
+            instance_const_values: HashMap::new(),
         }
     }
 
@@ -139,6 +229,8 @@ impl Monomorphizer {
     ) -> Result<ModuleIR, Diagnostic> {
         // 1. 收集泛型定义（函数和类型）
         self.collect_generic_definitions(module);
+        // 1b. 收集柯里包装层定义（P1 的克隆源；形状判据，不看名字）
+        self.collect_curry_layers(module);
 
         // 3. 初始化队列：含符号化 TypeRef 实参的请求进 deferred 桶
         //（泛型体内嵌套调用的实参在此形态——此前直接特化出 pair2(T, string)
@@ -155,8 +247,11 @@ impl Monomorphizer {
                 })
                 .and_then(|f| f.generic_params.clone())
                 .unwrap_or_default();
+            // 6.9.2-C1：符号判定只在**类型位**上做——编译期项位的自由名由
+            // `deferred` 的容器求值负责（C2 面），这里不猜。
             let symbolic = req
-                .type_args
+                .mono_args()
+                .unwrap_or_default()
                 .iter()
                 .any(|t| contains_type_ref(t, &container_params));
             if symbolic {
@@ -186,6 +281,11 @@ impl Monomorphizer {
         // 6. 替换调用点
         self.replace_call_sites(&mut output);
 
+        // 7. 闭项擦除（6.9.2-C2c）：删 q=0 形参与实参、物化读取、一次密位重排。
+        //    必须在调用点改写**之后**：改写要用被调实例的 `LocalSlot::quantity`，
+        //    而擦除会把那些槽删掉。开项与递归实例链属 C3，本轮不碰。
+        self.erase_const_params(&mut output);
+
         Ok(output)
     }
 
@@ -203,6 +303,571 @@ impl Monomorphizer {
                         .insert(func.name.clone(), func.clone());
                 }
             }
+        }
+    }
+
+    /// 特化名渲染：`base(Arg1, Arg2)`。
+    ///
+    /// 实例（`specialize_function` / `specialize_type`）、逐实例柯里层克隆、
+    /// 调用点映射（`build_call_site_map`）**共用**这一处——三处各拼一次正是
+    /// 「同一行为的多处复制」（禁令三 A）。
+    fn render_specialized_name(
+        base: &str,
+        args: &[MonoType],
+    ) -> String {
+        let rendered = args
+            .iter()
+            .map(|t| t.type_name())
+            .collect::<Vec<_>>()
+            .join(", ");
+        format!("{base}({rendered})")
+    }
+
+    /// 柯里包装体的**形状**判据：`[MakeClosure{dst, env}, Ret(dst)]`，且 `env`
+    /// 恰是本帧槽位的前缀（`0..env.len()`，顺序不变）、`dst == env.len()`。
+    ///
+    /// 这就是 `generate_curry_intermediate_func` 的产出形态：把本帧全部槽
+    /// （外层 env + 本层形参）按序包成下一层闭包并返回。
+    ///
+    /// 为什么判形状而不是「所有 MakeClosure 目标」：函数值与匿名闭包（`{ f }`、
+    /// lambda）同样发 MakeClosure，但它们不是柯里层；按实例克隆它们只会制造
+    /// 无意义的重复函数。为什么不按名字（`__f_l0`）：层名规则只属于 ir_gen，
+    /// mono 再解析一次就是同一规则的第二处实现（P2 要消灭的正是这种映射）。
+    fn curry_wrapper_target(func: &FunctionIR) -> Option<&str> {
+        let FunctionBody::Code { blocks, .. } = &func.body else {
+            return None;
+        };
+        if blocks.len() != 1 {
+            return None;
+        }
+        let [Instruction::MakeClosure {
+            dst: Operand::Local(dst),
+            func: target,
+            env,
+            ..
+        }, Instruction::Ret {
+            value: Some(Operand::Local(ret)),
+            ..
+        }] = blocks[0].instructions.as_slice()
+        else {
+            return None;
+        };
+        if dst != ret || *dst != env.len() {
+            return None;
+        }
+        let contiguous = env
+            .iter()
+            .enumerate()
+            .all(|(i, op)| matches!(op, Operand::Local(slot) if *slot == i));
+        if !contiguous {
+            return None;
+        }
+        Some(target.as_str())
+    }
+
+    /// 一段代码**所属的实例**名：逐实例柯里层属于它的实例，其余函数属于自己。
+    ///
+    /// 调用点改写与「未覆盖调用点」闸共用本判据：两处各写一遍会让「被改写」与
+    /// 「算已覆盖」分叉（t3 同型缺陷：改写落空 / 原件被删站点悬空）。
+    fn code_container<'a>(
+        &'a self,
+        func_name: &'a str,
+    ) -> &'a str {
+        self.instance_owner
+            .get(func_name)
+            .map(String::as_str)
+            .unwrap_or(func_name)
+    }
+
+    /// 收集柯里包装层定义（P1 的克隆源）。
+    ///
+    /// 从「包装体的目标」出发**逐层**收集（三层以上柯里：l0 → l1 → l2），只存
+    /// 层定义（每个柯里函数一层），不复制整张函数表。
+    fn collect_curry_layers(
+        &mut self,
+        module: &ModuleIR,
+    ) {
+        let index: HashMap<&str, &FunctionIR> = module
+            .functions
+            .iter()
+            .map(|f| (f.name.as_str(), f))
+            .collect();
+        let mut pending: Vec<String> = module
+            .functions
+            .iter()
+            .filter_map(|f| Self::curry_wrapper_target(f).map(str::to_string))
+            .collect();
+        let mut layers: HashMap<String, FunctionIR> = HashMap::new();
+        while let Some(name) = pending.pop() {
+            if layers.contains_key(&name) {
+                continue;
+            }
+            let Some(def) = index.get(name.as_str()) else {
+                continue;
+            };
+            if let Some(next) = Self::curry_wrapper_target(def) {
+                pending.push(next.to_string());
+            }
+            layers.insert(name, (*def).clone());
+        }
+        self.curry_layers = layers;
+    }
+
+    /// P1：把 `func`（某实例的体）里的柯里包装目标改写成**逐实例克隆**。
+    ///
+    /// 为什么必须克隆：同一份源码 span 在多个实例里各有一份调用点，目标随实例
+    /// 不同（类型实参 / 编译期实参不同），共享的层函数只有一份体——改不动，这正是
+    /// 「实例建了没人调用」的根因之一。
+    ///
+    /// 克隆体 = 层定义逐字节复制 + **类型位代入**（`subst` = 实例的 name_map，与包装体
+    /// `specialize_function` 的代入同源、同阶段）。三件事分工，各一处：
+    /// 1. 代入（本函数）：类型位带上实例身份。不代入就发，层声明里 `k: N` 的类型位是
+    ///    本函数内已无绑定的编译期 binder 名，带进函数表就是悬空名（C2c 复审 F2 的
+    ///    实测形态 `Params: (N)`）。
+    /// 2. 删 q=0 形参位与槽（`erase_in_function`）：由 `ConstErasePlan` 一份计划同时
+    ///    裁声明与槽——只做代入不裁会留下「有类型无槽」的形参位（比原状更隐蔽）。
+    /// 3. 裁剪顺序：代入在**建件时**（声明与体一起），裁剪在**擦除时**（按计划）。
+    ///
+    /// 递归：克隆体自身可能仍是包装体（三层以上柯里），按同一实例继续克隆。
+    /// `owner` 是**实例名**（不是层名），P2 的容器维度由它给出。
+    fn emit_curry_layer_clones(
+        &mut self,
+        func: &mut FunctionIR,
+        owner: &str,
+        args: &[MonoType],
+        values: &[ConstValue],
+        subst: &HashMap<String, MonoType>,
+    ) {
+        let Some(target) = Self::curry_wrapper_target(func).map(str::to_string) else {
+            return;
+        };
+        let Some(layer) = self.curry_layers.get(&target).cloned() else {
+            // 目标不是柯里层（函数值 / 匿名闭包）：不动
+            return;
+        };
+        if layer.generic_params.is_some() {
+            // 防御：柯里层由 ir_gen 生成、恒无 generic_params；真命中说明形状判据
+            // 误捕了一个泛型定义——不克隆（克隆成非泛型会是另一种语义）
+            return;
+        }
+        let clone_name = Self::render_specialized_name(&target, args);
+        if clone_name == target {
+            // 类型位投影为空（开项实例）：没有可区分的实例身份，不克隆
+            return;
+        }
+        if !self.specialized_functions.contains_key(&clone_name) {
+            let mut clone = FunctionIR {
+                name: clone_name.clone(),
+                // 与特化实例同一纪律：克隆不复用原 DefId（按名分发）
+                def: None,
+                // 声明签名与体一起代入（同一份 name_map，与包装体的
+                // `specialize_function` 同阶段）：不代入就发，层声明里 `k: N` 的
+                // 类型位是本函数内已无绑定的编译期 binder 名——带进函数表就是
+                // 悬空名（C2c 复审 F2 的实测形态 `Params: (N)`）。
+                params: layer.params.iter().map(|ty| ty.substitute(subst)).collect(),
+                return_type: layer.return_type.substitute(subst),
+                generic_params: None,
+                body: layer.body.clone(),
+            };
+            if let FunctionBody::Code { locals, .. } = &mut clone.body {
+                for slot in locals.iter_mut() {
+                    slot.ty = slot.ty.substitute(subst);
+                }
+            }
+            // 先递归（多层柯里），再登记：克隆体的目标也要指向它自己那一层的克隆
+            self.emit_curry_layer_clones(&mut clone, owner, args, values, subst);
+            self.instance_owner
+                .insert(clone_name.clone(), owner.to_string());
+            // 克隆与本实例共享同一批编译期实参值（擦除时逐槽对上；见 ConstErasePlan）
+            if !values.is_empty() {
+                self.instance_const_values
+                    .insert(clone_name.clone(), values.to_vec());
+            }
+            self.specialized_functions.insert(clone_name.clone(), clone);
+        }
+        Self::retarget_make_closure(func, &target, &clone_name);
+    }
+
+    /// 把 `func` 体里所有指向 `from` 的 `MakeClosure` 目标改名为 `to`。
+    fn retarget_make_closure(
+        func: &mut FunctionIR,
+        from: &str,
+        to: &str,
+    ) {
+        let FunctionBody::Code { blocks, .. } = &mut func.body else {
+            return;
+        };
+        for block in blocks {
+            for instr in &mut block.instructions {
+                if matches!(instr, Instruction::MakeClosure { func, .. } if func == from) {
+                    Self::set_static_target_name(instr, to);
+                }
+            }
+        }
+    }
+
+    /// 按名改写**静态调用目标**（`Call` / `TailCall` / `MakeClosure`）并清掉
+    /// DefId：名字与 DefId 是同一目标的两种标识，翻译器优先 DefId
+    ///（`translator.rs` 的 `translate_call` case 0 与 `translate_make_closure`
+    /// 的 DefId 主路径）。
+    ///
+    /// mono 只拥有**名字维度**：只改名字不清 def，改写会**静默失效**——原件被
+    /// 保留时它的 def 仍在输出函数表里，调用回到原件。实测（6.9.2-C2b 前）：
+    /// `factorial(5)(5)` 的调用点名字已改成 `factorial(int64::5)`，字节码仍指向
+    /// 原件 `factorial`——特化实例是**死码**，语料靠擦除后的原件跑通。
+    fn set_static_target_name(
+        instr: &mut Instruction,
+        to: &str,
+    ) {
+        match instr {
+            Instruction::Call { func, def, .. } | Instruction::TailCall { func, def, .. } => {
+                *func = Operand::Const(ConstValue::String(to.to_string()));
+                *def = None;
+            }
+            Instruction::MakeClosure { func, def, .. } => {
+                *func = to.to_string();
+                *def = None;
+            }
+            _ => {}
+        }
+    }
+
+    // ===== 闭项擦除（6.9.2-C2c）=====
+
+    /// 闭项擦除总开关（⑧ 回退单点）：`false` = 完全回到 C2b 形态（实例保留
+    /// q=0 形参与实参、槽位不重排）。全仓只有 [`Self::erase_const_params`] 读它。
+    const ERASE_CONST_PARAMS: bool = true;
+
+    /// 本实例的编译期实参值（声明序）= 请求的类型位投影里的 `Literal` 载荷。
+    ///
+    /// 归一化只此一处（`GenericArg::as_type` 内部就是 `normalize`），与实例名/缓存
+    /// 键同源；这里只做「取出来」不重算。开项 / 非标量项没有 `Literal` ⇒ 条数不足，
+    /// 计划阶段据此放弃擦除（不猜值）。
+    fn const_arg_values(req: &InstantiationRequest) -> Vec<ConstValue> {
+        req.generic_args()
+            .iter()
+            .filter_map(|arg| match arg.as_type() {
+                Some(MonoType::Literal { value, .. }) => ir_const_value(&value),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// 可擦除形状：柯里包装层实例，或逐实例柯里层克隆（P1 建的）。
+    ///
+    /// 为什么限制形状：这两类体的 q=0 槽**从不作 dst**（包装体只有一条 MakeClosure，
+    /// 克隆体的 q=0 位是 env / 形参），删槽因此不需要删指令。实现头形参（非柯里，
+    /// 体里有 `Load Local <- Arg`）的 q=0 位删起来要先删/改那条绑定指令——不在本轮
+    /// 范围（见 `tests/curry_erasure.rs` 的 tripwire）。
+    fn is_curry_shaped(
+        &self,
+        func: &FunctionIR,
+    ) -> bool {
+        self.instance_owner.contains_key(&func.name) || Self::curry_wrapper_target(func).is_some()
+    }
+
+    /// 每个函数作为闭包体时的 env 槽数（`MakeClosure` 的 env 长度）。
+    ///
+    /// IR 没有 env_len 字段，`verify` 的 FnView 也是从 `MakeClosure` 侧反推——同一来源，
+    /// 不是第二套判据。同名多站点取首个（同一函数的 env 长度恒相同）。
+    fn collect_env_lens(module: &ModuleIR) -> HashMap<String, usize> {
+        let mut env_lens: HashMap<String, usize> = HashMap::new();
+        for func in &module.functions {
+            let FunctionBody::Code { blocks, .. } = &func.body else {
+                continue;
+            };
+            for block in blocks {
+                for instr in &block.instructions {
+                    if let Instruction::MakeClosure { func, env, .. } = instr {
+                        env_lens.entry(func.clone()).or_insert(env.len());
+                    }
+                }
+            }
+        }
+        env_lens
+    }
+
+    /// 生成擦除计划（只读 IR；判据见 [`ConstErasePlan`]）。
+    fn plan_const_erasure(
+        &self,
+        module: &ModuleIR,
+    ) -> HashMap<String, ConstErasePlan> {
+        let env_lens = Self::collect_env_lens(module);
+        let mut plans: HashMap<String, ConstErasePlan> = HashMap::new();
+        for func in &module.functions {
+            // 只擦 mono 建的实例/克隆：原件与共享层是**未擦除的兜底**（开项调用点仍
+            // 按原名调它们），擦掉就会让那条路走空。
+            if !self.specialized_functions.contains_key(&func.name) {
+                continue;
+            }
+            if !self.is_curry_shaped(func) {
+                continue;
+            }
+            let FunctionBody::Code {
+                blocks,
+                entry,
+                locals,
+            } = &func.body
+            else {
+                continue;
+            };
+            // 物化前置落在平铺序首块；入口不是首块时不做（不发明第二种落点）
+            if *entry != 0 || blocks.is_empty() {
+                continue;
+            }
+            let slots: Vec<usize> = locals
+                .iter()
+                .enumerate()
+                .filter(|(_, slot)| slot.quantity == Some(Quantity::Zero))
+                .map(|(index, _)| index)
+                .collect();
+            if slots.is_empty() {
+                continue;
+            }
+            let Some(values) = self.instance_const_values.get(&func.name) else {
+                continue;
+            };
+            // 前提（当前请求门槛 = 纯 const 首层）：q=0 槽数 == 编译期实参值数，
+            // 且升序槽位 ↔ 声明序实参。不成立 ⇒ 不擦（开项、混合层等都落这里）。
+            if slots.len() != values.len() {
+                continue;
+            }
+            let env_len = env_lens.get(&func.name).copied().unwrap_or(0);
+            // q=0 槽必须全在「env ∪ 形参」区：落进 temp 区说明判据前提不成立
+            if slots
+                .iter()
+                .any(|slot| *slot >= env_len + func.params.len())
+            {
+                continue;
+            }
+            plans.insert(
+                func.name.clone(),
+                ConstErasePlan {
+                    env_len,
+                    slots: slots.into_iter().zip(values.iter().cloned()).collect(),
+                },
+            );
+        }
+        plans
+    }
+
+    /// 闭项擦除：删 q=0 形参与实参、物化读取、一次密位重排（6.9.2-C2c）。
+    ///
+    /// 五步对应 t27 设计 §3.5：① 归一化（值已在请求里）② 代入（`as_type` 投影）
+    /// ③ 物化读取 ④ 删形参与实参 ⑤ 一次 renumber。⑥ 克隆层同样走这条：克隆在
+    /// `specialized_functions` 里，且它的 q=0 位是 env 槽（由 `env_len` 区分）。
+    ///
+    /// 顺序有硬约束：**先删实参、再擦本体**。否则「把自己的 q=0 位传给被擦除的被调」
+    /// 会先被物化成一个 temp，再被按位置删掉——多一条死指令，且末位语义靠巧合。
+    fn erase_const_params(
+        &self,
+        module: &mut ModuleIR,
+    ) {
+        if !Self::ERASE_CONST_PARAMS {
+            return;
+        }
+        let plans = self.plan_const_erasure(module);
+        if plans.is_empty() {
+            return;
+        }
+        // ① 调用点：被调删了形参位 ⇒ 实参同位删除（判据来自被调的计划）
+        Self::drop_erased_call_args(module, &plans);
+        // ② 闭包调用点删 env 位 + 本位体的擦除（同一遍：先删 env 位，再删槽，
+        //    否则 env 里对 q=0 槽的读会被当成「体内读」物化出一个多余 temp）
+        for func in &mut module.functions {
+            Self::drop_erased_env_positions(func, &plans);
+            let Some(plan) = plans.get(&func.name) else {
+                continue;
+            };
+            Self::erase_in_function(func, plan);
+        }
+    }
+
+    /// 调用点实参：被调实例删掉的形参位，实参同位置删除（函数体与模块 init 同一条路）。
+    fn drop_erased_call_args(
+        module: &mut ModuleIR,
+        plans: &HashMap<String, ConstErasePlan>,
+    ) {
+        fn drop_in(
+            instr: &mut Instruction,
+            plans: &HashMap<String, ConstErasePlan>,
+        ) {
+            let Instruction::Call {
+                func: Operand::Const(ConstValue::String(target)),
+                args,
+                ..
+            } = instr
+            else {
+                return;
+            };
+            let Some(plan) = plans.get(target.as_str()) else {
+                return;
+            };
+            remove_positions(args, &plan.param_positions());
+        }
+        for func in &mut module.functions {
+            let FunctionBody::Code { blocks, .. } = &mut func.body else {
+                continue;
+            };
+            for block in blocks.iter_mut() {
+                for instr in &mut block.instructions {
+                    drop_in(instr, plans);
+                }
+            }
+        }
+        for instr in &mut module.init {
+            drop_in(instr, plans);
+        }
+    }
+
+    /// 闭包调用点：被调克隆删掉的 env 位，`MakeClosure.env` 同位置删除。
+    ///
+    /// 两侧必须同进同退：被调删了 env 槽仍传值 ⇒ 帧前段错位；调用侧删了位而
+    /// 被调没删 ⇒ 少传一个捕获。计划是同一份事实，故两侧由同一处推出。
+    fn drop_erased_env_positions(
+        func: &mut FunctionIR,
+        plans: &HashMap<String, ConstErasePlan>,
+    ) {
+        let FunctionBody::Code { blocks, .. } = &mut func.body else {
+            return;
+        };
+        for block in blocks.iter_mut() {
+            for instr in &mut block.instructions {
+                let Instruction::MakeClosure {
+                    func: target,
+                    env,
+                    def,
+                    ..
+                } = instr
+                else {
+                    continue;
+                };
+                let Some(plan) = plans.get(target.as_str()) else {
+                    continue;
+                };
+                let positions = plan.env_positions();
+                if positions.is_empty() {
+                    continue;
+                }
+                let before = env.len();
+                remove_positions(env, &positions);
+                if env.len() != before {
+                    // 位次变了：名字维度是唯一权威（与 set_static_target_name 同纪律）
+                    *def = None;
+                }
+            }
+        }
+    }
+
+    /// 擦除一个函数本体：③ 物化读取 ④ 删形参与槽 ⑤ 一次密位重排。
+    fn erase_in_function(
+        func: &mut FunctionIR,
+        plan: &ConstErasePlan,
+    ) {
+        let FunctionBody::Code { blocks, locals, .. } = &mut func.body else {
+            return;
+        };
+        if blocks.is_empty() {
+            return;
+        }
+        let old_len = locals.len();
+        let old_param_len = func.params.len();
+        let dropped: HashSet<usize> = plan.slots.iter().map(|(slot, _)| *slot).collect();
+
+        // ③ 物化判据：删掉 env 位之后，体里还有哪些被删槽的引用
+        let mut used: HashSet<usize> = HashSet::new();
+        for block in blocks.iter_mut() {
+            for instr in &mut block.instructions {
+                instr.for_each_operand_mut(&mut |op| {
+                    if let Operand::Local(slot) | Operand::Temp(slot) = op {
+                        used.insert(*slot);
+                    }
+                });
+            }
+        }
+
+        // ④ 删形参位与槽位（都按位置删，逆序）
+        let param_positions = plan.param_positions();
+        remove_positions(&mut func.params, &param_positions);
+        let slot_positions: Vec<usize> = plan.slots.iter().map(|(slot, _)| *slot).collect();
+        remove_positions(locals, &slot_positions);
+
+        // ⑤ 一次成型的映射：保留槽按原顺序密排（不逐点减一），被删且仍被读的槽
+        //    追加 temp（绝不是「留一个 q=0 槽继续跑」）。
+        let mut replace: HashMap<usize, Operand> = HashMap::new();
+        let mut next = 0usize;
+        for old in 0..old_len {
+            if dropped.contains(&old) {
+                continue;
+            }
+            replace.insert(old, Operand::Local(next));
+            next += 1;
+        }
+        let mut prelude: Vec<Instruction> = Vec::new();
+        for (slot, value) in &plan.slots {
+            if !used.contains(slot) {
+                continue;
+            }
+            let temp = next;
+            next += 1;
+            // 常量物化只能落进槽：除 `Load.src` 外代码生成只接受寄存器
+            //（`OperandResolver::to_reg` 拒绝 `Const`）。
+            locals.push(LocalSlot::temp(MonoType::Int(64)));
+            prelude.push(Instruction::Load {
+                dst: Operand::Local(temp),
+                src: Operand::Const(value.clone()),
+                span: Span::default(),
+            });
+            replace.insert(*slot, Operand::Local(temp));
+        }
+        // 形参位重排（Arg 是**实参下标**，不是帧槽位，故单独一张表；本轮擦除面
+        // 的柯里体不用 Arg，留着是为了同一处不出现第二份位置语义）
+        let mut arg_map: HashMap<usize, usize> = HashMap::new();
+        let mut next_arg = 0usize;
+        for old in 0..old_param_len {
+            if param_positions.contains(&old) {
+                continue;
+            }
+            arg_map.insert(old, next_arg);
+            next_arg += 1;
+        }
+        for block in blocks.iter_mut() {
+            for instr in &mut block.instructions {
+                instr.for_each_operand_mut(&mut |op| match op {
+                    Operand::Local(slot) | Operand::Temp(slot) => {
+                        if let Some(new) = replace.get(slot) {
+                            *op = new.clone();
+                        }
+                    }
+                    Operand::Arg(arg) => {
+                        if let Some(new) = arg_map.get(arg) {
+                            *arg = *new;
+                        }
+                    }
+                    _ => {}
+                });
+            }
+        }
+
+        // 物化前置插在平铺序最前，并**整体**平移跳转目标（每条跳转都加上位移，
+        // 这仍是「一次」重排：指令数量与位置只此一处变化）。
+        if !prelude.is_empty() {
+            let shift = prelude.len();
+            for block in blocks.iter_mut() {
+                for instr in &mut block.instructions {
+                    match instr {
+                        Instruction::Jmp { target, .. } => *target += shift,
+                        Instruction::JmpIf { target, .. }
+                        | Instruction::JmpIfNot { target, .. } => {
+                            *target += shift;
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            let mut head = prelude;
+            head.append(&mut blocks[0].instructions);
+            blocks[0].instructions = head;
         }
     }
 
@@ -360,10 +1025,25 @@ impl Monomorphizer {
             };
 
             match specialized {
-                Some(spec) => {
+                Some(mut spec) => {
                     let child_depth = req.depth + 1;
-                    // #335 路径 A：本次特化建立 泛型参数名 → 具体实参 绑定，
-                    // 据此求值挂在所在泛型函数下的占位请求（每个特化实例各一次）
+                    // P1（6.9.2-C2b）：逐实例柯里层。实例体里的柯里包装目标改写成
+                    // 本实例的克隆，克隆体记在 owner 名下（P2 的容器维度）。
+                    // 实参取**类型位投影**——与实例名（specialize_function 的渲染）
+                    // 同一来源，克隆名因此与实例名同构；投影为空（开项实例）时
+                    // 无法给出可区分的实例身份，不克隆。
+                    let instance_args = req.type_args();
+                    let instance_name = spec.name.clone();
+                    // 擦除（C2c）要的编译期实参值：与实例名同源的 `as_type` 投影
+                    //（归一化只此一处），开项/非标量项取不到就是空表 ⇒ 计划阶段放弃擦除
+                    let const_values = Self::const_arg_values(&req);
+                    if !const_values.is_empty() {
+                        self.instance_const_values
+                            .insert(instance_name.clone(), const_values.clone());
+                    }
+                    // #335 路径 A：本次特化建立 泛型参数名 → 具体实参 绑定。
+                    // 先建再用：克隆的**类型位代入**（C2c-F2）与占位请求求值共用这一份
+                    // name_map（同一处代入，不另造第二份绑定表）。
                     let param_names: Vec<String> =
                         if let Some(g) = self.generic_types.get(&generic_name) {
                             g.generic_params.clone().unwrap_or_default()
@@ -378,6 +1058,13 @@ impl Monomorphizer {
                         .filter(|(i, _)| *i < req.type_args().len())
                         .map(|(i, n)| (n.clone(), req.type_args()[i].clone()))
                         .collect();
+                    self.emit_curry_layer_clones(
+                        &mut spec,
+                        &instance_name,
+                        &instance_args,
+                        &const_values,
+                        &name_map,
+                    );
                     // deferred 桶键 = 容器函数的限定名（`aggregate_instantiation_requests`
                     // 在驱动侧已限定化，多文件下与 IR 函数表键同源），故用**已解析**
                     // 的定义名查桶——请求自带的裸名（`f`）与桶键（`lib.f`）不同源，
@@ -557,6 +1244,8 @@ impl Monomorphizer {
                     name: slot.name.clone(),
                     ty: self.substitute_single_type(&slot.ty, &type_map),
                     scope_depth: slot.scope_depth,
+                    // 量词是声明侧的绑定事实，与类型替换无关：原样投影。
+                    quantity: slot.quantity,
                 })
                 .collect(),
             _ => Vec::new(),
@@ -614,12 +1303,8 @@ impl Monomorphizer {
         };
 
         // 生成特化后的函数名: identity → identity(Int)
-        let type_args_str = type_args
-            .iter()
-            .map(|t| t.type_name())
-            .collect::<Vec<_>>()
-            .join(", ");
-        let specialized_name = format!("{}({})", generic.name, type_args_str);
+        //（与逐实例柯里层克隆、调用点映射共用同一渲染）
+        let specialized_name = Self::render_specialized_name(&generic.name, &type_args);
 
         // RFC-011b（约束同判据）：约束形参的运算符派发改写——泛型定义体的
         // `a + b`（T 带约束）发射 `Call "T.add"`，此处按类型实参改写为
@@ -639,7 +1324,7 @@ impl Monomorphizer {
                         let prefix = format!("{pn}.");
                         if name.starts_with(&prefix) {
                             if let Some(concrete) = type_args.get(i) {
-                                let display = crate::frontend::core::typecheck::operator_interfaces::operator_type_display(concrete);
+                                let display = crate::frontend::core::sema::operator_interfaces::operator_type_display(concrete);
                                 let bare = format!("{}.{}", display, &name[prefix.len()..]);
                                 match Self::qualify_deferred_method(
                                     &bare,
@@ -807,11 +1492,11 @@ impl Monomorphizer {
         // 已知窄缺口：字段类型是「内联匿名结构体/枚举」时 `substitute` 不深入
         // （`other => clone`），登记见 09a §P6 6.6.12（语料 0 例）。
         let new_body = match &generic.body {
-            FunctionBody::TypeDecl { body } => crate::middle::core::ir::TypeDeclBody {
+            FunctionBody::TypeDecl { body } => crate::middle::ir::ir::TypeDeclBody {
                 fields: body
                     .fields
                     .iter()
-                    .map(|f| crate::middle::core::ir::TypeDeclField {
+                    .map(|f| crate::middle::ir::ir::TypeDeclField {
                         ty: f.ty.substitute(&name_map),
                         ..f.clone()
                     })
@@ -821,13 +1506,8 @@ impl Monomorphizer {
             _ => return None,
         };
 
-        // 特化名：List → List(Int)
-        let type_args_str = type_args
-            .iter()
-            .map(|t| t.type_name())
-            .collect::<Vec<_>>()
-            .join(", ");
-        let specialized_name = format!("{}({})", generic.name, type_args_str);
+        // 特化名：List → List(Int)（与实例/克隆/调用点映射同一渲染）
+        let specialized_name = Self::render_specialized_name(&generic.name, &type_args);
 
         Some(FunctionIR {
             name: specialized_name,
@@ -854,7 +1534,8 @@ impl Monomorphizer {
     ) {
         if let Some(bucket) = self.deferred.get(container).cloned() {
             for r in bucket {
-                let new_args: Vec<MonoType> =
+                // 实参名字替换：类型位按 name_map 代入；项位原样（C2 的符号代入面）
+                let new_args: Vec<crate::frontend::core::types::mono::GenericArg> =
                     r.type_args.iter().map(|a| a.substitute(name_map)).collect();
                 let mut nr =
                     InstantiationRequest::new(r.generic_id.clone(), new_args, r.source_location);
@@ -911,7 +1592,10 @@ impl Monomorphizer {
                         if !self.processed.contains(&key) {
                             let mut req = InstantiationRequest::new(
                                 GenericFunctionId::new(name.clone(), Vec::new()),
-                                args.clone(),
+                                args.iter()
+                                    .cloned()
+                                    .map(crate::frontend::core::types::mono::GenericArg::Type)
+                                    .collect(),
                                 crate::util::span::Span::default(),
                             );
                             req.depth = depth;
@@ -957,10 +1641,14 @@ impl Monomorphizer {
         // 二元键下互相覆盖；三元键使每个特化实例改写到各自的嵌套特化
         let call_site_map = self.build_call_site_map(&self.site_requests);
 
-        // 遍历所有非泛型函数，替换调用点（含特化函数体内对其他泛型的嵌套调用）
+        // 遍历所有非泛型函数，替换调用点（含特化函数体内对其他泛型的嵌套调用）。
+        // P2：容器维度 = **这段代码所属的实例**——逐实例柯里层克隆属于它的实例，
+        // 其余函数属于自己。用容器而不是 func.name：克隆的 func.name 是层名，
+        // 请求里的 containing_fn 是实例名，二者不同源会让改写一律落空。
         for func in &mut module.functions {
             if func.generic_params.is_none() {
-                self.replace_calls_in_function(func, &call_site_map);
+                let container = self.code_container(&func.name).to_string();
+                self.replace_calls_in_function(func, &call_site_map, &container);
             }
         }
 
@@ -1004,15 +1692,10 @@ impl Monomorphizer {
                 continue;
             }
 
-            let type_args_str = req
-                .type_args()
-                .iter()
-                .map(|t| t.type_name())
-                .collect::<Vec<_>>()
-                .join(", ");
             // 特化名按**定义键**（`main.pick(int64)`——与 `specialize_function`
-            // 建件同名）；映射键的名字维度用请求自己的名字（与 IR 调用指令逐字一致）
-            let specialized_name = format!("{}({})", resolved, type_args_str);
+            // 建件同名，共用同一渲染）；映射键的名字维度用请求自己的名字
+            //（与 IR 调用指令逐字一致）
+            let specialized_name = Self::render_specialized_name(&resolved, &req.type_args());
             map.insert(
                 (req.containing_fn.clone(), generic_name, req.source_location),
                 specialized_name,
@@ -1081,16 +1764,24 @@ impl Monomorphizer {
                     let Some((callee, span)) = Self::by_name_call_target(instr) else {
                         continue;
                     };
-                    // 改写面只覆盖 `Call`（[`Self::call_form_is_rewritten`]）：
-                    // `TailCall` / `MakeClosure` 的按名目标永不被替换成特化名，
-                    // 故**一律计未覆盖**、不查映射键——「有键」只说明该站点在
-                    // typecheck 侧产过请求，不代表改写会发生。保守方向：宁保留
-                    //（该站点退回类型擦除执行，对应特化版可能成为死码）不悬空。
+                    // 调用点改写面只覆盖 `Call`（[`Self::call_form_is_rewritten`]）：
+                    // `TailCall` / `MakeClosure` 的按名目标**不经过它**——所以
+                    // 对本闸而言**一律计未覆盖**、不查映射键：「有键」只说明该站点
+                    // 在 typecheck 侧产过请求，不代表调用点改写面会动它。保守方向：
+                    // 宁保留（该站点退回类型擦除执行，对应特化版可能成为死码）不悬空。
+                    //
+                    // `MakeClosure` 的**柯里包装层**目标确实会被改写，但走的是
+                    // 另一条路（[`Self::emit_curry_layer_clones`] 在建实例时按实例
+                    // 克隆并重定向，6.9.2-C2b P1）；它只覆盖「实例体的包装层目标」，
+                    // 覆盖不到的函数值 / 匿名闭包目标仍需按未覆盖保守保留。
                     if !Self::call_form_is_rewritten(instr) {
                         names.insert(callee);
                         continue;
                     }
-                    let named = (Some(func.name.clone()), callee.clone(), span);
+                    // 与改写同一容器口径（P2）：两处各写一遍会让「已覆盖」与
+                    // 「被改写」分叉——被改写却没被算覆盖 = 原件被删、站点悬空
+                    let container = self.code_container(&func.name).to_string();
+                    let named = (Some(container), callee.clone(), span);
                     let anon = (None, callee.clone(), span);
                     if !call_site_map.contains_key(&named) && !call_site_map.contains_key(&anon) {
                         names.insert(callee);
@@ -1116,8 +1807,13 @@ impl Monomorphizer {
     /// 调用点改写面（[`Self::replace_calls_in_function`]）是否覆盖该形态的按名目标。
     ///
     /// **只覆盖 `Call`**（且 func 为字符串常量）：`TailCall` / `MakeClosure` 的按名
-    /// 目标不会被替换成特化名。扫描面（[`Self::by_name_call_target`]）比改写面宽，
+    /// 目标**不经过调用点改写面**。扫描面（[`Self::by_name_call_target`]）比改写面宽，
     /// 不对称只在此单点判定——非改写面形态一律按「未覆盖」保守处理，触发原件保留。
+    ///
+    /// 例外（不是本判据面）：`MakeClosure` 的**柯里包装层**目标由
+    /// [`Self::emit_curry_layer_clones`] 在**建实例时**按实例克隆并重定向
+    /// （6.9.2-C2b P1）——它发生在特化阶段，与调用点改写面无关；本函数回答的是
+    /// 「这个站点会不会被调用点改写面换掉」，故对它仍答「否」。
     fn call_form_is_rewritten(instr: &Instruction) -> bool {
         matches!(
             instr,
@@ -1131,10 +1827,11 @@ impl Monomorphizer {
     /// 指令的**按名调用目标**与调用点 span：IR 里以字符串名分发的三种形态
     ///（`Call` / `TailCall` / `MakeClosure`）。
     ///
-    /// 不要据此假定「取到名字即会被改写」：改写面只覆盖 `Call`——某形态是否被
-    /// 覆盖由 [`Self::call_form_is_rewritten`] 单点判定；扫描面更宽的那些形态在
+    /// 不要据此假定「取到名字即会被改写」：调用点改写面只覆盖 `Call`——某形态是否
+    /// 被它覆盖由 [`Self::call_form_is_rewritten`] 单点判定；扫描面更宽的那些形态在
     /// [`Self::uncovered_call_targets`] 里一律计未覆盖（保守保留原件，防删除后
-    /// 调用点悬空 → 运行期 E6006）。
+    /// 调用点悬空 → 运行期 E6006）。`MakeClosure` 的柯里包装层目标另由
+    /// [`Self::emit_curry_layer_clones`] 按实例改写（建实例时），不在本判据面内。
     fn by_name_call_target(instr: &Instruction) -> Option<(String, crate::util::span::Span)> {
         match instr {
             Instruction::Call {
@@ -1154,34 +1851,40 @@ impl Monomorphizer {
 
     /// 替换单个函数中所有 Call 指令的泛型函数名为特化函数名
     ///
-    /// 按 (所在函数名, 被调名, 指令 span) 三元精确匹配：IR Call 指令与
+    /// 按 (所属实例, 被调名, 指令 span) 三元精确匹配：IR Call 指令与
     /// typecheck 实例化请求同源持有 AST 调用表达式的 span；containing_fn
-    /// 为 None 的请求退化为 (None, 泛型名, span) 兜底键
+    /// 为 None 的请求退化为 (None, 泛型名, span) 兜底键。
+    ///
+    /// 第一维由调用方给（[`Self::code_container`]），**不是** `func.name`：
+    /// 逐实例柯里层克隆的名字是层名，请求里的是实例名。
     fn replace_calls_in_function(
         &self,
         func: &mut FunctionIR,
         call_site_map: &HashMap<(Option<String>, String, crate::util::span::Span), String>,
+        container: &str,
     ) {
         if let FunctionBody::Code { blocks, .. } = &mut func.body {
             for block in blocks {
                 for instr in &mut block.instructions {
-                    if let Instruction::Call {
-                        func: ref mut callee,
-                        span,
-                        ..
-                    } = instr
-                    {
-                        if let Operand::Const(ConstValue::String(name)) = callee {
-                            let named = (Some(func.name.clone()), name.clone(), *span);
+                    // 先把「要改成什么」算出来（借用到 instr 的名字与 span），
+                    // 再动指令——改名会同时清 DefId，见 set_static_target_name
+                    let target = match instr {
+                        Instruction::Call {
+                            func: Operand::Const(ConstValue::String(name)),
+                            span,
+                            ..
+                        } => {
+                            let named = (Some(container.to_string()), name.clone(), *span);
                             let anon = (None, name.clone(), *span);
-                            if let Some(specialized_name) = call_site_map
+                            call_site_map
                                 .get(&named)
                                 .or_else(|| call_site_map.get(&anon))
-                            {
-                                *callee =
-                                    Operand::Const(ConstValue::String(specialized_name.clone()));
-                            }
+                                .cloned()
                         }
+                        _ => None,
+                    };
+                    if let Some(target) = target {
+                        Self::set_static_target_name(instr, &target);
                     }
                 }
             }

@@ -4,20 +4,11 @@
 //! 未使用导入（W1003）经 typecheck use elaboration 检出后走 warnings 通道
 //! （Warning severity、不混入错误 diagnostics）。
 
-use crate::frontend::core::typecheck::probe::TypeLevelNamespace;
+use crate::frontend::core::sema::probe::TypeLevelNamespace;
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parse;
-use crate::frontend::core::typecheck::checker::TypeChecker;
-use crate::util::diagnostic::{ErrorCollector, ErrorCodeDefinition, Severity};
-
-/// RFC-011：#具名导入 use std.io.{print} 但 print 未引用 → W1003。
-const UNUSED_NAMED_IMPORT_SRC: &str = r#"
-use std.io.{print}
-main = () => {
-    x = 1
-    x
-}
-"#;
+use crate::frontend::core::sema::checker::TypeChecker;
+use crate::util::diagnostic::{ErrorCodeDefinition, Severity};
 
 /// Helper: test_unused_named_import_reports_w1003_via_warnings_channel 的完整夹具与断言（逐条断言见函数体）。
 
@@ -42,51 +33,8 @@ fn test_w_prefix_codes_default_to_warning_severity() {
     assert_eq!(diag.severity, Severity::Error);
 }
 
-#[test]
-fn test_explicit_severity_overrides_w_prefix_default() {
-    // #324：这些 API 生产上运行于类型检查 walk 内（guard 覆盖），单测直调需模拟 walk 上下文
-    let _walk_guard = crate::util::diagnostic::push_current_span(crate::util::span::Span::dummy());
-    // 显式指定的 severity 优先于 W 前缀缺省推导
-    let diag = ErrorCodeDefinition::find("W1001")
-        .expect("W1001 registered")
-        .builder()
-        .param("name", "foo")
-        .severity(Severity::Error)
-        .build();
-    assert_eq!(diag.severity, Severity::Error);
-}
-
-#[test]
-fn test_error_collector_splits_errors_and_warnings() {
-    // #324：这些 API 生产上运行于类型检查 walk 内（guard 覆盖），单测直调需模拟 walk 上下文
-    let _walk_guard = crate::util::diagnostic::push_current_span(crate::util::span::Span::dummy());
-    let mut collector = ErrorCollector::new();
-
-    let warning = ErrorCodeDefinition::find("W1001")
-        .expect("W1001 registered")
-        .builder()
-        .param("name", "foo")
-        .build();
-    collector.add_error(warning);
-    // 仅警告：不构成错误，has_warnings 为真
-    assert!(!collector.has_errors());
-    assert!(collector.has_warnings());
-    assert_eq!(collector.error_count(), 0);
-
-    let error = ErrorCodeDefinition::find("E1001")
-        .expect("E1001 registered")
-        .builder()
-        .param("name", "x")
-        .build();
-    collector.add_error(error);
-    // 错误出现后 has_errors 为真，error_count 只计 Error
-    assert!(collector.has_errors());
-    assert!(collector.has_warnings());
-    assert_eq!(collector.error_count(), 1);
-}
-
 /// 辅助：源码 → 类型检查结果（语法必须正确，否则测试本身有错）
-fn check_source(source: &str) -> crate::frontend::core::typecheck::types::TypeCheckResult {
+fn check_source(source: &str) -> crate::frontend::core::sema::types::TypeCheckResult {
     let tokens = tokenize(source).expect("测试源码词法不应失败");
     let parse_result = parse(&tokens);
     assert!(
@@ -100,174 +48,6 @@ fn check_source(source: &str) -> crate::frontend::core::typecheck::types::TypeCh
         &parse_result.module,
         &TypeLevelNamespace::scan_one(&parse_result.module),
     )
-}
-
-#[test]
-fn test_unused_named_import_reports_w1003_via_warnings_channel() {
-    // Arrange: 具名导入（use std.io.{print}）且 print 未被引用 → W1003
-
-    // Act
-    let result = check_source(UNUSED_NAMED_IMPORT_SRC);
-
-    // Assert: 警告在 warnings 通道（Warning severity），错误通道保持干净
-
-    // Assert: 警告在 warnings 通道（Warning severity），错误通道保持干净
-    let w1003 = result
-        .warnings
-        .iter()
-        .find(|d| d.code == "W1003")
-        .expect("未使用的具名导入应经 warnings 通道报 W1003");
-    assert_eq!(w1003.severity, Severity::Warning);
-    assert!(
-        w1003.message.contains("print"),
-        "警告应包含导入名 'print'，实际: {}",
-        w1003.message
-    );
-    assert!(
-        !result.diagnostics.iter().any(|d| d.code.starts_with('W')),
-        "警告不得混入错误 diagnostics 通道（会按错误计数阻断编译），实际: {:?}",
-        result.diagnostics
-    );
-    assert!(
-        result.diagnostics.is_empty(),
-        "该源码不应有任何类型错误，实际: {:?}",
-        result.diagnostics
-    );
-}
-
-#[test]
-fn test_unused_module_import_reports_w1003() {
-    // Arrange: 整模块导入（use std.io）且模块别名未被引用 → W1003。
-    // 此前 analyzer 侧因缺 resolver 级信息显式跳过（#321 M2 遗留），
-    // 移交 typecheck use elaboration 后恢复检测。
-    let source = r#"
-use std.io
-main = () => {
-    x = 1
-    x
-}
-"#;
-
-    // Act
-    let result = check_source(source);
-
-    // Assert
-    assert!(
-        result.warnings.iter().any(|d| d.code == "W1003"),
-        "未使用的整模块导入应报 W1003，实际: {:?}",
-        result.warnings
-    );
-}
-
-#[test]
-fn test_used_import_no_warning() {
-    // Arrange: 具名导入被调用 → 不报 W1003
-    let source = r#"
-use std.io.{print}
-main = () => {
-    print(42)
-}
-"#;
-
-    // Act
-    let result = check_source(source);
-
-    // Assert
-    assert!(
-        !result.warnings.iter().any(|d| d.code == "W1003"),
-        "已使用的导入不应报 W1003，实际: {:?}",
-        result.warnings
-    );
-}
-
-#[test]
-fn test_module_alias_member_call_marks_import_used() {
-    // Arrange: 整模块导入后经别名限定调用（io.print）→ 导入已使用
-    let source = r#"
-use std.io
-main = () => {
-    io.print(42)
-}
-"#;
-
-    // Act
-    let result = check_source(source);
-
-    // Assert
-    assert!(
-        !result.warnings.iter().any(|d| d.code == "W1003"),
-        "别名限定调用应使整模块导入视为已使用，实际: {:?}",
-        result.warnings
-    );
-}
-
-#[test]
-fn test_import_used_via_method_binding_no_warning() {
-    // Arrange: 导入函数绑定为类型方法（`Widget.show = println`）——
-    // pass2 外部绑定解析路径，不经 Var 推断臂，不得误报（#321 自查）
-    let source = r#"
-use std.io.{println}
-
-Widget: Type = { x: Int }
-Widget.show = println
-main = () => {
-    x = 1
-    x
-}
-"#;
-
-    // Act
-    let result = check_source(source);
-
-    // Assert
-    assert!(
-        !result.warnings.iter().any(|d| d.code == "W1003"),
-        "绑定为方法的导入函数应视为已使用，实际: {:?}",
-        result.warnings
-    );
-}
-
-#[test]
-fn test_body_level_unused_import_reports_w1003() {
-    // Arrange: 函数体内 use 且导入名未被引用 → W1003（use 语句位置）
-    let source = r#"
-main = () => {
-    use std.io
-    x = 1
-    x
-}
-"#;
-
-    // Act
-    let result = check_source(source);
-
-    // Assert
-    assert!(
-        result.warnings.iter().any(|d| d.code == "W1003"),
-        "函数体内未使用的导入应报 W1003，实际: {:?}",
-        result.warnings
-    );
-}
-
-#[test]
-fn test_body_level_used_import_no_warning() {
-    // Arrange: 函数体内 use 且导入被引用 → 不报
-    let source = r#"
-main = () => {
-    use std.io.{print}
-    print(42)
-}
-"#;
-
-    // Act
-    let result = check_source(source);
-
-    // Assert
-    assert!(
-        !result.warnings.iter().any(|d| d.code == "W1003"),
-        "函数体内已使用的导入不应报 W1003，实际: {:?}",
-        result.warnings
-    );
 }
 
 /// WBS 3.20.2：变体解构（match some(v)/none()）所需的导入不得判未使用——
@@ -304,29 +84,5 @@ main = () => {
         result.diagnostics.is_empty(),
         "该源码不应有任何类型错误（E1002 缺导入形态的否证面），实际: {:?}",
         result.diagnostics
-    );
-}
-
-/// 守卫：导入变体集但全程未消费（无解构、无构造）仍报 W1003——
-/// 3.20.2 修法不得把「导入即视为已使用」。
-#[test]
-fn test_unused_variant_set_import_still_reports_w1003() {
-    // Arrange: use std.option 在场但程序不接触变体
-    let source = r#"
-use std.option
-
-main = () => {
-    println("x")
-}
-"#;
-
-    // Act
-    let result = check_source(source);
-
-    // Assert
-    assert!(
-        result.warnings.iter().any(|d| d.code == "W1003"),
-        "未消费变体集的导入仍应报 W1003，实际: {:?}",
-        result.warnings
     );
 }

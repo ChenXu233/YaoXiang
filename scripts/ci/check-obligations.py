@@ -12,7 +12,7 @@ check-obligations.py —— 义务字段静态门禁（WBS 9.2 / 02-stage-contra
 
   1. 清单对账：三处逐字一致（义务条数以 02 §义务字段表表头为准）
        a) src/driver/obligations.rs 的 INVENTORY（字段名 / 消费者阶段 / 红名单）
-       b) src/frontend/core/typecheck/types.rs 的 TypeCheckResult 字段定义
+       b) src/frontend/core/sema/types.rs 的 TypeCheckResult 字段定义
        c) docs/src/dev/architecture/02-stage-contract.md §义务字段表
      反向 containment（F2）：TypeCheckResult 的字段集必须恰好等于「INVENTORY ∪
      NON_OBLIGATION_FIELDS（显式登记，含理由）」——两端都不许有未登记字段，
@@ -31,7 +31,7 @@ check-obligations.py —— 义务字段静态门禁（WBS 9.2 / 02-stage-contra
   3. 交付标记：非红名单义务必须在 src/driver/arms.rs 的交付点被标记
        （deliver(Obligation::X) 或 deliver_all(IR_GENERATION_DELIVERED)）；
        红名单义务反之不得被标记（标记了说明红名单已陈旧）
-  4. 红名单陈旧检测：红名单义务必须在 typecheck 树 + 本清单之外零真读取；
+  4. 红名单陈旧检测：红名单义务必须在 sema 树 + 本清单之外零真读取；
        每条必须带 WBS 任务 id 与「消费者为零」的证据指针
        （唯一允许的清单外读取点是 obligations.rs 自己的空义务探针 is_produced）
   5. 反例自检（--selftest）：自带七类夹具（幽灵义务 / 正例·红名单为空 / 清单滞后 /
@@ -55,15 +55,15 @@ ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 
 # 三处对账的路径（相对仓库根）
 MANIFEST = 'src/driver/obligations.rs'
-TYPES = 'src/frontend/core/typecheck/types.rs'
+TYPES = 'src/frontend/core/sema/types.rs'
 CONTRACT = 'docs/src/dev/architecture/02-stage-contract.md'
 DELIVERY_SITE = 'src/driver/arms.rs'
-TYPECHECK_TREE = 'src/frontend/core/typecheck'
+TYPECHECK_TREE = 'src/frontend/core/sema'
 
 # 消费者阶段 → 声明式消费者文件（判据 2 的扫描面）
 CONSUMER_FILES = {
     'ProofExecution': ['src/driver/arms.rs', 'src/frontend/proof_execution.rs'],
-    'IrGeneration': ['src/middle/core/ir_gen.rs'],
+    'IrGeneration': ['src/middle/ir/ir_gen.rs'],
     'Monomorphization': ['src/driver/arms.rs', 'src/driver/helpers.rs'],
 }
 
@@ -380,7 +380,7 @@ def reads_field(text, field):
 
 
 def collect_src_reads(root, field):
-    """全 src/ 扫描该字段的真读取（排除 typecheck 树与义务清单自身）。"""
+    """全 src/ 扫描该字段的真读取（排除 sema 树与义务清单自身）。"""
     hits = []
     src = os.path.join(root, 'src')
     for base, dirs, files in os.walk(src):
@@ -477,9 +477,9 @@ def check(root, verbose=False):
     # F5（范围锚点）：02 里写的 TypeCheckResult 行范围必须等于实际范围
     span = parse_struct_span(read(types_path), 'TypeCheckResult')
     if span:
-        # 只认完整路径形态的结构体范围（`src/frontend/core/typecheck/types.rs:A-B`）——
+        # 只认完整路径形态的结构体范围（`src/frontend/core/sema/types.rs:A-B`）——
         # 正文里裸写 `types.rs:47-48` 这类「某字段注释块」的行号不属本判据
-        for sm in re.finditer(r'core/typecheck/types\.rs:(\d+)-(\d+)', read(contract_path)):
+        for sm in re.finditer(r'core/sema/types\.rs:(\d+)-(\d+)', read(contract_path)):
             if (int(sm.group(1)), int(sm.group(2))) != span:
                 violations.append('02 里写的 struct 范围 types.rs:%s-%s 与实际 %d-%d 不一致（F5）'
                                   % (sm.group(1), sm.group(2), span[0], span[1]))
@@ -546,7 +546,7 @@ def check(root, verbose=False):
                 violations.append('红名单 %s 缺消费者为零的证据指针' % f)
             hits = collect_src_reads(root, f)
             if hits:
-                violations.append('红名单 %s 在 typecheck 树外出现真读取（陈旧）：%s'
+                violations.append('红名单 %s 在 sema 树外出现真读取（陈旧）：%s'
                                   % (f, ', '.join(hits[:3])))
             notes.append('红名单 %-24s WBS %-7s 树外真读取 0' % (f, e['wbs']))
             continue

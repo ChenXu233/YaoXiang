@@ -34,7 +34,7 @@ cargo run --manifest-path tools/type-tables/Cargo.toml -- --report --root <仓�
    由登记表 `REBUILD_FUNCTIONS` 判定。历史在册函数（`substitute_type_ast` /
    `substitute_type_in_ast` / `mono_to_ast_type` / `without_fn_param_names`）已在
    WBS 6.6.11 / 6.6.12 随 IR 载体收窄全部删除，**该表现为空**；
-3. **反向桥**——A：`middle/core/bytecode.rs` 的 `impl From<MonoType> for IrType`
+3. **反向桥**——A：`middle/bytecode/mod.rs` 的 `impl From<MonoType> for IrType`（6.7.1b 前在 middle/core/bytecode.rs）
    （按 `impl` 形态判定，不看登记表）；B：`MonoType → ast::Type` 的反向重建，
    同样由登记表判定（`mono_to_ast_type` 已删，故当前 0 点）。
 
@@ -68,7 +68,7 @@ T1.7 用同一口径核对四项：未登记的零构造变体、登记但已不
 | 表 | 位置 | 语义 |
 | --- | --- | --- |
 | A `from_builtin_name` | `src/frontend/core/types/mono.rs` | 名字 → `MonoType` 的解析表（每臂首写法=规范名） |
-| B `CONST_PARAM_TYPES` | `src/frontend/core/typecheck/probe.rs` | 可作 const 泛型参数的名字（**A 的子集**；WBS 6.6.9 从当时的 `parser/ast.rs`（6.7.1a 起为顶层 `ast/`）移回 L3） |
+| B `CONST_PARAM_TYPES` | `src/frontend/core/sema/probe.rs` | 可作 const 泛型参数的名字（**A 的子集**；WBS 6.6.9 从当时的 `parser/ast.rs`（6.7.1a 起为顶层 `ast/`）移回 L3） |
 | C LSP 内置类型名清单 | `src/lsp/world.rs` | hover/definition 展示名（**A 规范名的超集**） |
 
 三条检查：C1 B ⊆ A；C2 A 规范名 ⊆ C；C3 C ⊆ A。差异逐条给处置——处置表在

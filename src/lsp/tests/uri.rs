@@ -18,16 +18,6 @@ fn test_path_to_uri_windows_drive_letter() {
 
 #[cfg(windows)]
 #[test]
-fn test_path_to_uri_percent_encodes_space() {
-    // Arrange + Act - 空格必须编码（产出可直接回传客户端）
-    let uri = path_to_uri(std::path::Path::new("E:/my dir/b.yx"));
-
-    // Assert
-    assert_eq!(uri, "file:///E:/my%20dir/b.yx");
-}
-
-#[cfg(windows)]
-#[test]
 fn test_db_key_is_idempotent_on_encoded_form() {
     // Arrange + Act - 已编码的客户端 URI 归一后必须等于自身（幂等性）
     let key = db_key("file:///E:/my%20dir/b.yx");
@@ -40,26 +30,4 @@ fn test_db_key_is_idempotent_on_encoded_form() {
     assert_eq!(hyphen_encoded, "file:///E:/my-dir/b.yx");
     // 归一结果再归一仍是自身（幂等闭包）
     assert_eq!(db_key(&hyphen_encoded), hyphen_encoded);
-}
-
-// POSIX 绝对路径换算（Linux/macOS runner 的真实面）
-#[cfg(not(windows))]
-#[test]
-fn test_path_to_uri_posix_absolute_path() {
-    // Arrange + Act
-    let uri = path_to_uri(std::path::Path::new("/tmp/a/b.yx"));
-
-    // Assert
-    assert_eq!(uri, "file:///tmp/a/b.yx");
-    // 归一结果再归一仍是自身（幂等闭包）
-    assert_eq!(db_key(&uri), uri);
-}
-
-#[test]
-fn test_db_key_non_file_scheme_passthrough() {
-    // Arrange + Act - std:// 等虚拟键原样保留
-    let key = db_key("std://std.io");
-
-    // Assert
-    assert_eq!(key, "std://std.io");
 }

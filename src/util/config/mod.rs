@@ -176,6 +176,20 @@ pub struct ProjectConfig {
     pub mono: crate::frontend::config::MonoConfig,
 }
 
+impl ProjectConfig {
+    /// 把项目配置里**已实现**的编译闸门映射为编译配置（当前只有 `[mono]`，#471）。
+    ///
+    /// run 与 check 共用这一份映射：两处各写一遍 `CompileConfig { mono, .. }`
+    /// 会让「同一份 yaoxiang.toml 被两条路径读出不同闸门」重新长出来（禁令三 A）。
+    /// 其余 `CompileConfig` 字段没有 toml 来源，保持内置默认。
+    pub fn compile_config(&self) -> crate::frontend::config::CompileConfig {
+        crate::frontend::config::CompileConfig {
+            mono: self.mono.clone(),
+            ..Default::default()
+        }
+    }
+}
+
 /// [tool.*] 扩展命名空间（RFC-015）
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ToolConfig {

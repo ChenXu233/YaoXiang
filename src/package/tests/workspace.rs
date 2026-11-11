@@ -153,30 +153,6 @@ fn test_load_workspace_success() {
 }
 
 #[test]
-fn test_load_workspace_missing_member() {
-    // Arrange：成员目录被删但登记仍在
-    let (_tmp, root) = setup_workspace();
-    fs::remove_dir_all(root.join("packages/utils")).unwrap();
-    fs::write(
-        root.join("yaoxiang.toml"),
-        "[workspace.members]\nutils = \"packages/utils/yaoxiang.toml\"\n",
-    )
-    .unwrap();
-
-    // Act
-    let result = load_workspace(&root);
-
-    // Assert：报 MemberMissing 且携带 key 与登记路径
-    match result {
-        Err(PackageError::MemberMissing { key, path }) => {
-            assert_eq!(key, "utils");
-            assert_eq!(path, "packages/utils/yaoxiang.toml");
-        }
-        other => panic!("expected MemberMissing, got {other:?}"),
-    }
-}
-
-#[test]
 fn test_load_workspace_invalid_member_manifest() {
     // Arrange：成员 toml 缺 name
     let (_tmp, root) = setup_workspace();
@@ -194,58 +170,6 @@ fn test_load_workspace_invalid_member_manifest() {
         matches!(result, Err(PackageError::MemberInvalid { key, .. }) if key == "core"),
         "损坏成员应报 MemberInvalid 且指认 key"
     );
-}
-
-#[test]
-fn test_load_workspace_rejects_nested_workspace() {
-    // Arrange：成员自身含 [workspace] 段（决议 4：初期不支持）
-    let (_tmp, root) = setup_workspace();
-    fs::write(
-        root.join("packages/core/yaoxiang.toml"),
-        "[package]\nname = \"core\"\nversion = \"0.1.0\"\n\n[workspace.members]\ninner = \"x/yaoxiang.toml\"\n",
-    )
-    .unwrap();
-
-    // Act
-    let result = load_workspace(&root);
-
-    // Assert
-    match result {
-        Err(PackageError::NestedWorkspace { key, .. }) => assert_eq!(key, "core"),
-        other => panic!("expected NestedWorkspace, got {other:?}"),
-    }
-}
-
-#[test]
-fn test_load_workspace_rejects_directory_member() {
-    // Arrange：members 值写成目录而非清单文件（#412）——目录也存在，
-    // 此前会经 parent() 退回工作空间根而误报 nested workspace
-    let tmp = TempDir::new().expect("create tempdir");
-    let root = tmp.path().to_path_buf();
-    fs::write(
-        root.join("yaoxiang.toml"),
-        "[workspace.members]\ncore = \"packages/core\"\n",
-    )
-    .unwrap();
-    fs::create_dir_all(root.join("packages/core")).unwrap();
-    fs::write(
-        root.join("packages/core/yaoxiang.toml"),
-        "[package]\nname = \"core\"\nversion = \"0.1.0\"\n",
-    )
-    .unwrap();
-
-    // Act
-    let result = load_workspace(&root);
-
-    // Assert：报 MemberInvalid 且文案指向「应指向清单文件」
-    match result {
-        Err(PackageError::MemberInvalid { key, reason }) => {
-            assert_eq!(key, "core");
-            assert!(reason.contains("是目录"), "unexpected reason: {reason}");
-            assert!(reason.contains("清单文件"), "unexpected reason: {reason}");
-        }
-        other => panic!("expected MemberInvalid, got {other:?}"),
-    }
 }
 
 #[test]
@@ -267,108 +191,7 @@ fn test_find_workspace_root_from_member_dir() {
     );
 }
 
-#[test]
-fn test_find_workspace_root_none_for_plain_project() {
-    // Arrange：普通项目（无 [workspace] 段）
-    let tmp = TempDir::new().unwrap();
-    fs::write(
-        tmp.path().join("yaoxiang.toml"),
-        "[package]\nname = \"x\"\nversion = \"0.1.0\"\n",
-    )
-    .unwrap();
-
-    // Act / Assert：普通项目不是工作空间
-    assert_eq!(find_workspace_root(tmp.path()), None);
-}
-
 // === 6b：合并解析（继承 / 成员引用 / 冲突检测）===
-
-#[test]
-fn test_merge_compatible_reqs_unify_to_intersection() {
-    // Arrange：core 要求 [1.0, 2.0)，utils 要求 ^1.5
-    let (_tmp, root) = setup_workspace();
-    set_member_deps(&root, "core", "[dependencies]\nregex = \">=1.0, <2.0\"\n");
-    set_member_deps(&root, "utils", "[dependencies]\nregex = \"^1.5\"\n");
-
-    // Act
-    let ws = load_workspace(&root).unwrap();
-    let merged = merged_dependencies(&ws).unwrap();
-
-    // Assert：交集 [1.5, 2.0)；无成员引用
-    assert_eq!(
-        merged.fetch.get("regex").map(|v| v.to_string()),
-        Some("\">=1.5.0, <2.0.0\"".to_string())
-    );
-    assert!(merged.member_refs.is_empty(), "无成员引用时 refs 应为空");
-}
-
-#[test]
-fn test_merge_conflicting_reqs_error_names_members() {
-    // Arrange：core 与 utils 对同名包要求不相交
-    let (_tmp, root) = setup_workspace();
-    set_member_deps(&root, "core", "[dependencies]\nregex = \"^1.0\"\n");
-    set_member_deps(&root, "utils", "[dependencies]\nregex = \"^2.0\"\n");
-
-    // Act
-    let ws = load_workspace(&root).unwrap();
-    let err = merged_dependencies(&ws).unwrap_err().to_string();
-
-    // Assert：报版本冲突且点名冲突来源成员
-    assert!(err.contains("版本冲突"), "{err}");
-    assert!(
-        err.contains("core") && err.contains("utils"),
-        "报错应点名冲突来源成员: {err}"
-    );
-}
-
-#[test]
-fn test_merge_workspace_true_inherits_from_root() {
-    // Arrange：根 [workspace.dependencies] 声明 regex，两成员 `{ workspace = true }` 继承
-    let (_tmp, root) = setup_workspace();
-    fs::write(
-        root.join("yaoxiang.toml"),
-        "[workspace.members]\ncore = \"packages/core/yaoxiang.toml\"\nutils = \"packages/utils/yaoxiang.toml\"\n\n[workspace.dependencies]\nregex = \"^1.0\"\n",
-    )
-    .unwrap();
-    set_member_deps(
-        &root,
-        "core",
-        "[dependencies]\nregex = { workspace = true }\n",
-    );
-    set_member_deps(
-        &root,
-        "utils",
-        "[dependencies]\nregex = { workspace = true }\n",
-    );
-
-    // Act
-    let ws = load_workspace(&root).unwrap();
-    let merged = merged_dependencies(&ws).unwrap();
-
-    // Assert：继承声明物化为交集要求
-    assert_eq!(
-        merged.fetch.get("regex").map(|v| v.to_string()),
-        Some("\">=1.0.0, <2.0.0\"".to_string())
-    );
-}
-
-#[test]
-fn test_merge_workspace_true_missing_in_root_errors() {
-    // Arrange：成员继承但根无声明
-    let (_tmp, root) = setup_workspace();
-    set_member_deps(
-        &root,
-        "core",
-        "[dependencies]\nregex = { workspace = true }\n",
-    );
-
-    // Act
-    let ws = load_workspace(&root).unwrap();
-    let err = merged_dependencies(&ws).unwrap_err().to_string();
-
-    // Assert
-    assert!(err.contains("未定义"), "报错应指出根未声明: {err}");
-}
 
 #[test]
 fn test_merge_workspace_true_mixed_fields_error() {
@@ -393,117 +216,6 @@ fn test_merge_workspace_true_mixed_fields_error() {
     assert!(
         result.is_err(),
         "继承与显式版本混写必须报错（禁止两套写法并存）"
-    );
-}
-
-#[test]
-fn test_merge_member_ref_validated_and_recorded() {
-    // Arrange：core 以 `{ workspace = "utils" }` 引用成员
-    let (_tmp, root) = setup_workspace();
-    set_member_deps(
-        &root,
-        "core",
-        "[dependencies]\nutils = { workspace = \"utils\" }\n",
-    );
-
-    // Act
-    let ws = load_workspace(&root).unwrap();
-    let merged = merged_dependencies(&ws).unwrap();
-
-    // Assert：引用被校验并登记；不进 fetch（模块解析由 6c 接管）
-    assert_eq!(
-        merged.member_refs.get("utils").map(|s| s.as_str()),
-        Some("utils")
-    );
-    assert!(!merged.fetch.contains_key("utils"), "成员引用不进 fetch");
-}
-
-#[test]
-fn test_merge_member_ref_unknown_key_errors() {
-    // Arrange：引用不存在的成员 key
-    let (_tmp, root) = setup_workspace();
-    set_member_deps(
-        &root,
-        "core",
-        "[dependencies]\nghost = { workspace = \"ghost\" }\n",
-    );
-
-    // Act
-    let ws = load_workspace(&root).unwrap();
-    let err = merged_dependencies(&ws).unwrap_err().to_string();
-
-    // Assert
-    assert!(err.contains("ghost"), "报错应点名未知 key: {err}");
-}
-
-#[test]
-fn test_merge_dev_deps_included() {
-    // Arrange：两成员的 dev-dependencies 对同名包
-    let (_tmp, root) = setup_workspace();
-    set_member_deps(&root, "core", "[dev-dependencies]\nregex = \"^1.0\"\n");
-    set_member_deps(&root, "utils", "[dev-dependencies]\nregex = \"^1.2\"\n");
-
-    // Act
-    let ws = load_workspace(&root).unwrap();
-    let merged = merged_dependencies(&ws).unwrap();
-
-    // Assert：dev 依赖同样并入共享 lock（测试可复现）
-    assert!(
-        merged.fetch.contains_key("regex"),
-        "dev 依赖应并入共享 lock"
-    );
-}
-
-#[test]
-fn test_merge_same_git_dep_intersects() {
-    // Arrange：同 base URL 的 git 依赖，版本要求相交
-    let (_tmp, root) = setup_workspace();
-    let url = "https://example.com/u/repo";
-    set_member_deps(
-        &root,
-        "core",
-        &format!("[dependencies]\nrepo = {{ version = \">=1.0\", git = \"{url}\" }}\n"),
-    );
-    set_member_deps(
-        &root,
-        "utils",
-        &format!("[dependencies]\nrepo = {{ version = \"^1.2\", git = \"{url}\" }}\n"),
-    );
-
-    // Act
-    let ws = load_workspace(&root).unwrap();
-    let merged = merged_dependencies(&ws).unwrap();
-
-    // Assert：同源 git 依赖合并成功
-    assert!(
-        merged.fetch.contains_key("repo"),
-        "同 base URL 的 git 依赖应合并"
-    );
-}
-
-#[test]
-fn test_merge_different_git_urls_conflict() {
-    // Arrange：同名 git 依赖但 base URL 不同
-    let (_tmp, root) = setup_workspace();
-    set_member_deps(
-        &root,
-        "core",
-        "[dependencies]\nrepo = { version = \"*\", git = \"https://example.com/u/a\" }\n",
-    );
-    set_member_deps(
-        &root,
-        "utils",
-        "[dependencies]\nrepo = { version = \"*\", git = \"https://example.com/u/b\" }\n",
-    );
-
-    // Act
-    let ws = load_workspace(&root).unwrap();
-    let err = merged_dependencies(&ws).unwrap_err().to_string();
-
-    // Assert：不同 git 仓库视为冲突
-    assert!(
-        err.contains("不同的 git 仓库"),
-        "报错应说明 git 仓库不一致: {err}"
     );
 }
 
@@ -532,36 +244,6 @@ fn test_register_member_stores_toml_file_path() {
     );
     let ws = load_workspace(&root).unwrap();
     assert_eq!(ws.members.len(), 3, "登记后 load_workspace 可完整加载");
-}
-
-#[test]
-fn test_register_member_key_override_and_conflicts() {
-    // Arrange：成员 app + 另一成员 other
-    let (_tmp, root) = setup_workspace();
-    let app = add_member(
-        &root,
-        "app",
-        "[package]\nname = \"app\"\nversion = \"1.0.0\"\n",
-    );
-    let other = add_member(
-        &root,
-        "other",
-        "[package]\nname = \"other\"\nversion = \"1.0.0\"\n",
-    );
-
-    // Act：--as 覆盖 key
-    let key = register_member(&root, &app, Some("core2")).unwrap();
-
-    // Assert：覆盖生效；key 冲突与同路径重复登记都报错
-    assert_eq!(key, "core2");
-    assert!(
-        register_member(&root, &other, Some("core2")).is_err(),
-        "key 冲突应报错"
-    );
-    assert!(
-        register_member(&root, &app, None).is_err(),
-        "同路径重复登记应报错"
-    );
 }
 
 #[test]

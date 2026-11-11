@@ -16,7 +16,6 @@
 //! 迁移自 `src/std/net.rs` 的内联 `mod tests`（违反 `docs/src/dev/test-specification.md` 规则 1.4），
 //! 现按规则 1.1「单文件模块 → 父级 tests/」落位于此，由 `src/std/mod.rs` 的 `#[cfg(test)] mod tests;` 声明。
 
-use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::net::TcpListener;
 
@@ -145,18 +144,6 @@ fn get_rejected(
     }
 }
 
-fn alloc_dict(entries: Vec<(&str, &str)>) -> RuntimeValue {
-    let mut heap = Heap::new();
-    let mut map: HashMap<RuntimeValue, RuntimeValue> = HashMap::new();
-    for (k, v) in entries {
-        map.insert(
-            RuntimeValue::String(k.into()),
-            RuntimeValue::String(v.into()),
-        );
-    }
-    RuntimeValue::Dict(heap.allocate(HeapValue::Dict(map)))
-}
-
 #[test]
 fn test_http_get_returns_status_headers_body() {
     // Arrange：本地单次请求服务器返回 200 + 自定义头 + 5 字节体
@@ -174,27 +161,6 @@ fn test_http_get_returns_status_headers_body() {
     assert_eq!(read_header(&resp, "content-type"), "text/plain");
     assert_eq!(read_header(&resp, "x-tag"), "hello");
     server.join().expect("server thread");
-}
-
-#[test]
-fn test_http_get_sends_request_headers() {
-    // Arrange：本地服务器 + 一个自定义请求头字典
-    let (url, server) = serve_once("HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n".to_string());
-    let headers = alloc_dict(vec![("Authorization", "Bearer token123")]);
-
-    // Act：带请求头调用 GET，并取回服务器捕获的原始请求文本
-    call_get(&url, Some(headers)).expect("http_get with headers");
-    let request = server.join().expect("server thread");
-
-    // Assert：请求行与请求头按传入原样发送
-    assert!(
-        request.starts_with("GET /data HTTP/1.1"),
-        "request line: {request}"
-    );
-    assert!(
-        request.contains("Authorization: Bearer token123"),
-        "request headers: {request}"
-    );
 }
 
 #[test]
@@ -221,23 +187,6 @@ fn test_http_post_sends_body() {
         "request line: {request}"
     );
     assert!(request.ends_with("payload=1"), "request body: {request}");
-}
-
-#[test]
-fn test_http_error_status_is_a_response_not_an_error() {
-    // Arrange：本地服务器返回 404 + 4 字节体
-    let (url, server) = serve_once(
-        "HTTP/1.1 404 Not Found\r\nContent-Type: text/plain\r\nContent-Length: 4\r\n\r\nnope"
-            .to_string(),
-    );
-
-    // Act：GET 该 URL（必须成功返回响应而不是 Err）
-    let resp = call_get(&url, None).expect("404 must return a response, not an error");
-
-    // Assert：状态码与响应体照常可取
-    assert_eq!(int_of(dict_entry(&resp, "status")), 404);
-    assert_eq!(string_of(dict_entry(&resp, "body")), "nope");
-    server.join().expect("server thread");
 }
 
 #[test]

@@ -1,0 +1,10 @@
+// 06-compile-errors/fn-binding/fn_annotation_param_count_mismatch_err.yx
+// D54 / WBS 6.8.2c ②（改判登记）：实现头形参比声明的运行期形参位多一位——
+//   旧行为由 parser 报 **E0012**（「Parameter count mismatch」，parser 族、跨族复用），
+//   现由绑定位报 **E1112**（声明驱动的元数对照，类型位/const 位不占位）。
+// expect: compile-error E1112
+// 覆盖: 元数对照的**旧码退役**：E0012（parser）→ E1112（typecheck）
+// 验证: 同一程序在新口径下报 typecheck 族的精确码，且指向多出的那位形参
+// 状态: ❌ 应编译失败
+
+f: (a: Int) -> Int = (a, b) => a

@@ -203,7 +203,7 @@ SHARED_STAGE_PRIMITIVES = {
     # ——那类形态靠 review 兜底，不进本表的自动判据。
     # RoleClassification 按 2026-10-26 复审 F2 **收紧**为限定形态 roles::classify(
     # （仓内两处调用点都是它）：原裸名 \bclassify( 会与其它模块同名助手（如
-    # formatter/rules/sort_imports.rs 的 classify_import、typecheck/inference/scope.rs
+    # formatter/rules/sort_imports.rs 的 classify_import、sema/inference/scope.rs
     # 的 classify_binding 一类命名族）以子串/前缀形态相撞，属已知误报面；收紧后
     # 「use roles::classify 后只写 classify(」不再被咬，落在上面同一条已知局限里。
     'VendorConsistency': re.compile(r'\bensure_vendor_consistency\s*\('),

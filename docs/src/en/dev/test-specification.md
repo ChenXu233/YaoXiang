@@ -1,28 +1,29 @@
 ---
-title: 'Test Specification'
+title: 'Test Authoring Standards'
 description:
-  Hard specification for writing tests in the YaoXiang project, defining the standards for unit
-  tests, integration tests, benchmarks, doc tests, and property tests
+  'Mandatory test-authoring standards for the YaoXiang project, defining the standards for unit
+  tests, integration tests, benchmarks, documentation tests, and property tests'
 ---
 
-# Test Specification
+# Test Authoring Standards
 
-This document defines the hard specification for writing tests in the YaoXiang project. All
-contributors must follow the rules below; violations will be required to be modified in Code Review.
+This document defines the mandatory test-authoring standards for the YaoXiang project. All
+contributors must comply with the following rules. Violations will be required to be corrected
+during code review.
 
 ---
 
 ## Table of Contents
 
-- [General Rules](#general-rules)
-- [yx Corpus and Library Test Layers](#yx-corpus-and-library-test-layers)
-- [Unit Test Specification](#unit-test-specification)
-- [Integration Test Specification](#integration-test-specification)
-- [Benchmark Specification](#benchmark-specification)
-- [Doc Test Specification](#doc-test-specification)
-- [Property Test Specification](#property-test-specification)
-- [Coverage Requirements](#coverage-requirements)
-- [Appendix](#appendix)
+- [General Rules](#总则)
+- [yx Corpus and Library Test Levels](#yx-语料与库测试层级)
+- [Unit Test Standards](#单元测试规范)
+- [Integration Test Standards](#集成测试规范)
+- [Benchmark Test Standards](#基准测试规范)
+- [Documentation Test Standards](#文档测试规范)
+- [Property Test Standards](#属性测试规范)
+- [Coverage Requirements](#覆盖率要求)
+- [Appendix](#附录)
 
 ---
 
@@ -30,39 +31,39 @@ contributors must follow the rules below; violations will be required to be modi
 
 ### Scope
 
-This specification applies to all Rust test code in the YaoXiang project, including:
+These standards apply to all Rust test code in the YaoXiang project, including:
 
-| Test Type         | Location              | Framework                  |
-| ----------------- | --------------------- | -------------------------- |
-| Unit tests        | `src/<module>/tests/` | `#[test]` + `#[cfg(test)]` |
-| Integration tests | `tests/`              | `#[test]`                  |
-| Benchmarks        | `benches/`            | Criterion.rs               |
-| Doc tests         | API doc comments      | `cargo test --doc`         |
-| Property tests    | Any test location     | proptest / quickcheck      |
+| Test Type          | Location                   | Framework                  |
+| ------------------ | -------------------------- | -------------------------- |
+| Unit test          | `src/<module>/tests/`      | `#[test]` + `#[cfg(test)]` |
+| Integration test   | `tests/`                   | `#[test]`                  |
+| Benchmark test     | `benches/`                 | Criterion.rs               |
+| Documentation test | API documentation comments | `cargo test --doc`         |
+| Property test      | Any test location          | proptest / quickcheck      |
 
 ### Core Principles
 
-**Principle 0: The authoritative source for tests is the specification, not the code.** This is the
-most important principle in this document. Tests verify whether the code complies with the
-specification, not whether the code "runs with the current implementation". When a test discovers
-that the code behavior does not match the specification, **fix the code, never fix the test**.
+**Principle 0: The authoritative source of a test is the specification, not the code.** This is the
+most important principle in this document. A test verifies whether the code complies with the
+specification, not whether the code "works according to the current implementation." When a test
+finds that the code's behavior differs from the specification, **fix the code, never the test**.
 
-The specification documents are located at:
+The specification files are located at:
 
-- `docs/src/reference/language-spec/` —— language core specification
-- `docs/src/rfc/accepted/` —— accepted RFC design documents
+- `docs/src/reference/language-spec/` — core language specifications
+- `docs/src/rfc/accepted/` — accepted RFC design documents
 
-The top of every test file must declare the corresponding specification section (see Rule 2.1). Any
-developer should be able to take the specification document and cross-check it with the tests to
-verify the correctness of the implementation. Conversely—if a piece of code has no corresponding
-specification description, it should not exist, and certainly should not be tested.
+Every test file must declare its corresponding specification sections at the top (see Rule 2.1). Any
+developer should be able to compare the tests against the specification to verify the correctness of
+the implementation. Conversely, if a piece of code has no corresponding specification, it should not
+exist and should not be tested.
 
 ```rust
-// 🟢 Good — the test directly references the specification and verifies whether the code follows it
-//! Literal tests — based on language specification §2.6
+// 🟢 Good — the test directly references the specification and verifies whether the code complies
+//! Literal tests — based on Language Specification §2.6
 //!
-//! §2.6.1: Integer Decimal, Octal(0o), Hex(0x), Binary(0b)
-//! §2.6.2: Floating-point numbers (with decimal point and exponent)
+//! §2.6.1: Integers: Decimal, Octal(0o), Hex(0x), Binary(0b)
+//! §2.6.2: Floating-point numbers (with decimal points and exponents)
 //! §2.6.3: Strings (escape sequences \\nrt'"\\, \\x, \\u{})
 //! RFC-012: F-String interpolation
 
@@ -73,34 +74,35 @@ fn test_decimal_literal_parsing() {
     assert_eq!(result, Literal::Int(42));
 }
 
-// 🔴 Garbage — the test accommodates the current implementation's behavior, instead of verifying the specification
+// 🔴 Bad — the test accommodates the current implementation's behavior instead of verifying the specification
 #[test]
 fn test_literal_1() {
-    // Don't know which section of the specification this code corresponds to
-    // If parse_literal returns a wrong value, this test will "pass green"
-    // because it only verifies that the function does not panic
+    // I don't know which section of the specification this code corresponds to
+    // If parse_literal returns an incorrect value, this test will "pass with a green light"
+    // Because it only verifies that the function does not panic
     let result = parse_literal("42");
     assert!(result.is_ok());
 }
 ```
 
-**Scenario**: You write a test and find that the code behavior does not match the specification. You
+**Scenario**: You write a test and find that the code's behavior differs from the specification. You
 have two options:
 
-| Wrong Approach                                                       | Correct Approach                                               |
-| -------------------------------------------------------------------- | -------------------------------------------------------------- |
-| Modify the test to make it "pass"                                    | Modify the code to make behavior conform to the specification  |
-| Add `#[ignore]` to the test                                          | Fix the code implementation immediately                        |
-| Add special conditional branches in the test to accommodate the code | Remove the branch and let the test expose the problem directly |
+| Wrong Approach                                                       | Correct Approach                                                |
+| -------------------------------------------------------------------- | --------------------------------------------------------------- |
+| Modify the test so it "passes"                                       | Modify the code so its behavior complies with the specification |
+| Add `#[ignore]` to the test                                          | Fix the implementation immediately                              |
+| Add a special conditional branch to the test to accommodate the code | Remove the branch so the test directly exposes the problem      |
 
-Remember: **Red light = code is wrong, not the test.** (Unless your test itself has a bug, that's a
-different story.)
+Remember: **A red light means the code is wrong, not the test.** (Unless the test itself has a bug,
+which is a separate issue.)
 
 **Principle 1: Tests are documentation.** Any developer should be able to understand the behavior of
-the code under test by reading the tests, without needing extra comments or external documentation.
+the code under test by reading its tests, without needing additional comments or external
+documentation.
 
 ```rust
-// 🟢 Good — the test name says what is being tested and what is expected
+// 🟢 Good — the test name states what is being tested and what is expected
 #[test]
 fn test_tokenize_empty_input_returns_eof() {
     let tokens = tokenize("").unwrap();
@@ -108,7 +110,7 @@ fn test_tokenize_empty_input_returns_eof() {
     assert!(matches!(tokens[0].kind, TokenKind::Eof));
 }
 
-// 🔴 Garbage — no one knows what this is testing
+// 🔴 Bad — nobody knows what this tests
 #[test]
 fn test_tokenize_1() {
     let tokens = tokenize("").unwrap();
@@ -117,11 +119,11 @@ fn test_tokenize_1() {
 ```
 
 **Principle 2: Zero tolerance for flaky tests.** Tests must be repeatable in any environment. Tests
-that depend on random numbers, system time, or thread scheduling order must use fixed seeds or be
-replaced with mocks.
+that depend on random numbers, system time, or thread scheduling order must use fixed seeds or mocks
+instead.
 
-**Principle 3: One test, one thing.** If a test name needs to connect multiple behaviors with "and",
-split it into multiple tests.
+**Principle 3: Each test tests only one thing.** If the test name needs to connect multiple
+behaviors with "and," split it into multiple tests.
 
 ```rust
 // 🟢 Good — each test verifies only one scenario
@@ -130,101 +132,103 @@ fn test_parse_int_positive() { /* ... */ }
 #[test]
 fn test_parse_int_zero() { /* ... */ }
 
-// 🔴 Garbage — one test stuffed with too many unrelated things
+// 🔴 Bad — one test contains too many unrelated concerns
 #[test]
 fn test_parser() {
-    // Test tokenize, test parse, test typecheck, test codegen...
+    // Test tokenize, parse, typecheck, codegen...
 }
 ```
 
-**Principle 4: Test behavior, not implementation.** Refactoring internal implementation should not
-cause test failures. If changing one line of implementation code causes 10 tests to fail, your tests
-are written wrong.
+**Principle 4: Test behavior, not implementation.** Refactoring the internal implementation should
+not cause tests to fail. If changing one line of implementation code causes 10 tests to fail, your
+tests are written incorrectly.
 
-But there is a key distinction here: **the definition of "behavior" comes from the specification,
-not from the current code's performance.** If the code changes behavior (i.e., new behavior that
-does not match the specification), the test must fail. If you cannot do this, your test is an
-"accommodating test"—it lets bugs run rampant.
+However, there is one critical distinction: **the definition of "behavior" comes from the
+specification, not from the current code's observed behavior.** If the code changes its
+behavior—that is, adopts new behavior that does not comply with the specification—the tests must
+fail. If you cannot achieve this, your test is a "test that accommodates the code"—it lets bugs run
+rampant.
 
 ```
-Specification (language-spec.md / RFC)  ──defines──►  Expected behavior  ──drives──►  Tests
-                                                  │
-Current code  ──implements──►  Actual behavior  ──compares──►  Test result
+规范（language-spec.md / RFC）  ──定义──►  期望行为  ──驱动──►  测试
+                                           │
+当前代码  ──实现──►  实际行为  ──对比──►  测试结果
 
-If actual behavior ≠ expected behavior:
-  Test must fail (red)  ──►  Fix code  ──►  Test passes (green)
+如果实际行为 ≠ 期望行为：
+  测试必须失败（红灯）  ──►  修正代码  ──►  测试通过（绿灯）
 
-If actual behavior = expected behavior (but implementation is ugly):
-  Test passes  ──►  Refactor implementation  ──►  Test still passes  ← This is what Principle 4 means
+如果实际行为 = 期望行为（但实现很烂）：
+  测试通过  ──►  重构实现  ──►  测试仍然通过  ← 这才是原则 4 的含义
 ```
 
-**Principle 5: Do not write fallback/compatibility/condition-activated test code.** The test
-environment is one you can fully control. If you need `#[cfg(not(ci))]` to skip a certain test, it
-means there is a fundamental problem with that test's design.
+**Principle 5: Do not write fallback, compatibility, or mode-specific test code.** The test
+environment is one you can fully control. If you need `#[cfg(not(ci))]` to skip a test, the test has
+a fundamental design problem.
 
 ### Terminology
 
-| Term             | Definition                                                                       |
-| ---------------- | -------------------------------------------------------------------------------- |
-| Unit test        | Tests a single function or module behavior, no external system dependency        |
-| Integration test | Tests collaboration of multiple modules through public API or command-line entry |
-| Benchmark        | Measures code performance, detects performance regressions                       |
-| Doc test         | Executable code examples embedded in doc comments                                |
-| Property test    | Tests that verify invariants (properties) based on random inputs                 |
+| Term               | Definition                                                                                   |
+| ------------------ | -------------------------------------------------------------------------------------------- |
+| Unit test          | Tests the behavior of an individual function or module without depending on external systems |
+| Integration test   | Tests the collaboration of multiple modules through public APIs or command-line entry points |
+| Benchmark test     | Measures code performance and detects performance regressions                                |
+| Documentation test | Executable code examples embedded in documentation comments                                  |
+| Property test      | Verifies invariants using random inputs                                                      |
 
-### Relation to Commit Convention
+### Relationship to Commit Standards
 
-All test-related commits must use the `:white_check_mark: test:` type, refer to
-[Commit Convention](commit-convention.md).
+All test-related commits must use the `:white_check_mark: test:` type. See the
+[Commit Standards](commit-convention.md).
 
 ```
-:white_check_mark: test(parser): Add tests for infix expressions in Pratt parser
-:white_check_mark: test(codegen): Complete IR generation tests for switch statements
+:white_check_mark: test(parser): 添加 Pratt 解析器中缀表达式测试
+:white_check_mark: test(codegen): 补全 switch 语句 IR 生成测试
 ```
 
 ---
 
-## yx Corpus and Library Test Layers
+## yx Corpus and Library Test Levels
 
-This specification constrains **Rust-side test code**. Tests for the YaoXiang language itself (`.yx`
-corpus and library tests) are divided into two layers based on the object under test. The system
-design and judgment contract belong to RFC-036 (§7 Suite Collection / §8 Negative Three Layers / §9
-Test System Layering), and the corpus writing details belong to `tests/yaoxiang/TEST_STANDARDS.md`:
+These standards govern **Rust-side test code**. Tests of the YaoXiang language itself—`.yx` corpus
+and library tests—are divided into two levels according to the system under test. The system design
+and verdict contract are governed by RFC-036 (§7 suite collection / §8 three negative levels / §9
+test-system layering), while corpus-authoring details are governed by
+`tests/yaoxiang/TEST_STANDARDS.md`:
 
-- **Language usability corpus** (`tests/yaoxiang/`)——the object under test is the language itself;
-  std is only used as an assertion tool. Within the corpus, judgments are divided into three
-  categories based on the layer where failures occur: behavior tests / compile-time rejection tests
-  / runtime failure tests
-- **Library tests** (ship with the library)——the object under test is the library's public API
-  contract; std's yx-level tests are located at `src/std/tests/`, and future user package tests are
-  discovered within the package via `[tool.test]`
+- **Language usability corpus** (`tests/yaoxiang/`) — the system under test is the language itself;
+  std is used only as an assertion tool. Within the corpus, verdicts are divided into three
+  categories according to the layer at which failure occurs: behavior tests / compile-time rejection
+  tests / runtime failure tests
+- **Library tests** (distributed with the library) — the system under test is the library's public
+  API contract; std's yx-level tests are located in `src/std/tests/`, while tests for future user
+  packages are discovered within their packages via `[tool.test]`
 
-The file header format of `.yx` tests, the header directives (`// expect:` / `// skip:` /
-`// mode:`, RFC-036 §8.2), and the assertion conventions follow TEST_STANDARDS.md; judgment parsing
-is implemented by `src/util/test_markers.rs` shared by both runners (Rust side, constrained by this
-specification).
+The file-header format for `.yx` tests, header directives (`// expect:` / `// skip:` / `// mode:`,
+RFC-036 §8.2), and assertion conventions are defined in TEST_STANDARDS.md; verdict parsing is
+implemented by `src/util/test_markers.rs`, which is shared by both runners (Rust-side code and
+therefore subject to these standards).
 
 ---
 
-## Unit Test Specification
+## Unit Test Standards
 
 ### File Organization
 
-**Rule 1.1**: The unit test `tests/` directory must be **at the same level** as the `mod.rs` of the
-module under test. `tests/` does not aggregate upward or summarize across levels.
+**Rule 1.1**: A unit test's `tests/` directory must be at the same level as the `mod.rs` of the
+module under test. `tests/` must not aggregate upward or across module levels.
 
 ```
 src/frontend/core/parser/
-├── mod.rs              # #[cfg(test)] mod tests; ——declare same-level tests/
+├── mod.rs              # #[cfg(test)] mod tests; ——声明同级 tests/
 ├── ast.rs
 ├── pratt/
-│   ├── mod.rs          # #[cfg(test)] mod tests; ——pratt's own tests
+│   ├── mod.rs          # #[cfg(test)] mod tests; ——pratt 自己的测试
 │   └── tests/
 │       ├── mod.rs
 │       ├── led.rs
 │       ├── nud.rs
 │       └── precedence.rs
-└── tests/              # parser module-level tests (does not include pratt submodule content)
+└── tests/              # parser 模块级别的测试（不包含 pratt 子模块的内容）
     ├── mod.rs
     ├── ast.rs
     ├── expressions.rs
@@ -232,19 +236,19 @@ src/frontend/core/parser/
     └── parser_state.rs
 ```
 
-Key judgment criterion: **wherever the `tests/` directory is placed, that directory's `mod.rs` must
-use `#[cfg(test)] mod tests;` to declare it.**
+The key criterion is: **wherever the `tests/` directory is placed, that directory's `mod.rs` must
+declare it using `#[cfg(test)] mod tests;`.**
 
-**Rule 1.1 Supplement: Aggregation upward is forbidden.** Tests for submodule directories must be
-placed in that submodule's own `tests/`, and must not be aggregated to the parent-level `tests/`.
+**Rule 1.1 Supplement: Upward aggregation is prohibited.** A submodule's tests must be placed in
+that submodule's own `tests/` directory and must not be aggregated into a parent `tests/` directory.
 
-| Module Type                      | Test Location                 | Example                                      |
-| -------------------------------- | ----------------------------- | -------------------------------------------- |
-| Directory module (with `mod.rs`) | `tests/` under that directory | `emitter/tests/`, `codes/tests/`             |
-| Single-file module (only `.rs`)  | Parent's `tests/`             | `session.rs` → `diagnostic/tests/session.rs` |
+| Module Type                     | Test Location                 | Example                                      |
+| ------------------------------- | ----------------------------- | -------------------------------------------- |
+| Directory module (has `mod.rs`) | `tests/` under that directory | `emitter/tests/`, `codes/tests/`             |
+| Single-file module (only `.rs`) | Parent's `tests/`             | `session.rs` → `diagnostic/tests/session.rs` |
 
 ```text
-# ✅ Correct: each directory module's tests are independent
+# ✅ Correct: each directory module has independent tests
 src/util/diagnostic/
 ├── codes/
 │   ├── mod.rs              # #[cfg(test)] mod tests;
@@ -257,13 +261,13 @@ src/util/diagnostic/
 │       ├── mod.rs
 │       ├── text.rs
 │       └── ansi.rs
-└── tests/                  # ✅ diagnostic level (single-file modules)
+└── tests/                  # ✅ diagnostic-level tests (single-file modules)
     ├── mod.rs
     ├── session.rs
     ├── suggest.rs
     └── collect.rs
 
-# ❌ Wrong: aggregate emitter and codes' tests into diagnostic/tests/
+# ❌ Incorrect: aggregating emitter and codes tests into diagnostic/tests/
 src/util/diagnostic/
 └── tests/
     ├── mod.rs              # ❌ Forced to declare mod emitter; mod codes;
@@ -271,42 +275,42 @@ src/util/diagnostic/
     └── codes/              # ❌ Should be in codes/tests/
 ```
 
-#### Test Placement Rules for Single-File Modules vs Directory Modules
+#### Test Placement Rules for Single-File and Directory Modules
 
-**Core Difference**: The organization of a module determines the placement of its tests.
+**Core distinction**: the module's organizational form determines where its tests are placed.
 
-| Module Type            | Judgment Basis                                | Test Location                 | Example                                       |
-| ---------------------- | --------------------------------------------- | ----------------------------- | --------------------------------------------- |
-| **Directory module**   | Has an independent directory and `mod.rs`     | `tests/` under that directory | `inference/tests/`                            |
-| **Single-file module** | Has only `.rs` file, no independent directory | Parent module's `tests/`      | `overload.rs` → `typecheck/tests/overload.rs` |
+| Module Type            | Criterion                                          | Test Location                 | Example                                       |
+| ---------------------- | -------------------------------------------------- | ----------------------------- | --------------------------------------------- |
+| **Directory module**   | Has an independent directory and `mod.rs`          | `tests/` under that directory | `inference/tests/`                            |
+| **Single-file module** | Has only a `.rs` file and no independent directory | Parent module's `tests/`      | `overload.rs` → `typecheck/tests/overload.rs` |
 
-**Detailed Explanation**:
+**Detailed explanation**:
 
 ```
 src/frontend/core/typecheck/
 ├── mod.rs                          # typecheck module's mod.rs
-├── checker.rs                      # single-file module
-├── environment.rs                  # single-file module
-├── overload.rs                     # single-file module
-├── type_eval.rs                    # single-file module
-├── dead_code.rs                    # single-file module
-├── spawn_placement.rs              # single-file module
-├── signature.rs                    # single-file module
-├── types.rs                        # single-file module
+├── checker.rs                      # Single-file module
+├── environment.rs                  # Single-file module
+├── overload.rs                     # Single-file module
+├── type_eval.rs                    # Single-file module
+├── dead_code.rs                    # Single-file module
+├── spawn_placement.rs              # Single-file module
+├── signature.rs                    # Single-file module
+├── types.rs                        # Single-file module
 │
 ├── tests/                          # ✅ typecheck's test directory
-│   ├── mod.rs                      # Declare single-file module tests
-│   ├── checker.rs                  # tests for checker.rs
-│   ├── environment.rs              # tests for environment.rs
-│   ├── overload.rs                 # tests for overload.rs (single-file module tests go here)
-│   ├── type_eval.rs                # tests for type_eval.rs
-│   ├── dead_code.rs                # tests for dead_code.rs
-│   ├── spawn_placement.rs          # tests for spawn_placement.rs
-│   ├── signature.rs                # tests for signature.rs
-│   └── types.rs                    # tests for types.rs
+│   ├── mod.rs                      # Declares the single-file module tests
+│   ├── checker.rs                  # Tests for checker.rs
+│   ├── environment.rs              # Tests for environment.rs
+│   ├── overload.rs                 # Tests for overload.rs (single-file module tests go here)
+│   ├── type_eval.rs                # Tests for type_eval.rs
+│   ├── dead_code.rs                # Tests for dead_code.rs
+│   ├── spawn_placement.rs          # Tests for spawn_placement.rs
+│   ├── signature.rs                # Tests for signature.rs
+│   └── types.rs                    # Tests for types.rs
 │
-├── inference/                      # directory module (has mod.rs)
-│   ├── mod.rs                      # #[cfg(test)] mod tests; ——declare same-level tests/
+├── inference/                      # Directory module (has mod.rs)
+│   ├── mod.rs                      # #[cfg(test)] mod tests; ——声明同级 tests/
 │   ├── expressions.rs
 │   ├── statements.rs
 │   ├── patterns.rs
@@ -318,103 +322,103 @@ src/frontend/core/typecheck/
 │   ├── assignment.rs
 │   └── tests/                      # ✅ inference's test directory
 │       ├── mod.rs
-│       ├── expressions.rs          # tests for expressions.rs
-│       ├── statements.rs           # tests for statements.rs
+│       ├── expressions.rs          # Tests for expressions.rs
+│       ├── statements.rs           # Tests for statements.rs
 │       └── ...
 │
-└── traits/                         # removed (logic merged into types/trait_data.rs)
+└── traits/                         # Removed (logic merged into types/trait_data.rs)
 ```
 
 **Why are single-file module tests placed in the parent's `tests/`?**
 
-Because single-file modules (e.g., `overload.rs`) do not have their own `mod.rs`, they cannot
-declare `#[cfg(test)] mod tests;`. According to Rust's module system, test files must be declared by
-some `mod.rs` to be compiled. Therefore, tests for single-file modules can only be declared by the
-parent module's `mod.rs` and placed in the parent's `tests/` directory.
+A single-file module such as `overload.rs` has no `mod.rs` of its own, so it cannot declare
+`#[cfg(test)] mod tests;`. Under Rust's module system, a test file must be declared by some `mod.rs`
+before it can be compiled. Therefore, single-file module tests can only be declared by the parent
+module's `mod.rs` and placed in the parent's `tests/` directory.
 
-**Judgment Flow**:
-
-```
-Encounter a module, determine where to put the tests?
-│
-├── Is this module a directory (with mod.rs)?
-│   └── Yes → Create tests/ under that directory, declared by that directory's mod.rs
-│
-├── Is this module a single file (only .rs)?
-│   └── Yes → Place tests in parent's tests/ directory, declared by parent's mod.rs
-│
-└── Not sure?
-    └── Check if there is an independent directory and mod.rs
-```
-
-**Common Mistakes**:
+**Decision process**:
 
 ```
-# ❌ Mistake 1: Create an independent tests/ directory for a single-file module
+遇到一个模块，判断测试放哪里？
+│
+├── 该模块是目录（有 mod.rs）？
+│   └── 是 → 在该目录下创建 tests/，由该目录的 mod.rs 声明
+│
+├── 该模块是单文件（只有 .rs）？
+│   └── 是 → 测试放在父级的 tests/ 目录，由父级的 mod.rs 声明
+│
+└── 不确定？
+    └── 检查是否有独立目录和 mod.rs
+```
+
+**Common mistakes**:
+
+```
+# ❌ Mistake 1: creating an independent tests/ directory for a single-file module
 src/frontend/core/typecheck/
 ├── overload.rs
-└── overload/                       # ❌ Should not create a directory for a single-file module
+└── overload/                       # ❌ Do not create a directory for a single-file module
     └── tests/
         └── overload.rs
 
-# ❌ Mistake 2: Declare #[cfg(test)] mod tests; inside a single-file module
+# ❌ Mistake 2: declaring #[cfg(test)] mod tests; inside a single-file module
 # overload.rs
-#[cfg(test)]                        # ❌ A single-file module cannot declare this way
-mod tests;                          # because there is no overload/tests/ directory
+#[cfg(test)]                        # ❌ A single-file module cannot declare this
+mod tests;                          # Because there is no overload/tests/ directory
 
-# ✅ Correct approach: place tests in the parent's tests/
+# ✅ Correct approach: place the tests in the parent's tests/
 src/frontend/core/typecheck/
-├── overload.rs                     # source file
+├── overload.rs                     # Source file
 └── tests/
-    └── overload.rs                 # test file, declared by typecheck/mod.rs
+    └── overload.rs                 # Test file, declared by typecheck/mod.rs
 ```
 
-⚠️ **Anti-pattern——do not write it this way:**
+⚠️ **Anti-pattern — do not do this:**
 
 ```
-# ❌ Wrong: Submodule tests consolidated at the parent level
+# ❌ Incorrect: concentrating submodule tests in the parent
 src/frontend/core/types/
-├── mod.rs              # should only declare base and computation
+├── mod.rs              # Should only declare base and computation
 ├── base/
 │   ├── mod.rs
 │   └── var.rs
 └── tests/              # ❌ Parent tests/ contains submodule tests
     ├── mod.rs          # ❌ Forced to declare mod base; mod computation;
-    ├── base/           # ❌ This part should be in base/tests/
+    ├── base/           # ❌ This should be in base/tests/
     │   └── var.rs
-    └── computation/    # ❌ This part should be in computation/tests/
+    └── computation/    # ❌ This should be in computation/tests/
         └── ...
 ```
 
 ```
-# ✅ Correct approach: each module's tests are independent
+# ✅ Correct approach: each module has independent tests
 src/frontend/core/types/
-├── mod.rs              # only declare pub mod base; pub mod computation;
+├── mod.rs              # Only declares pub mod base; pub mod computation;
 ├── base/
-│   ├── mod.rs          # #[cfg(test)] mod tests; ——declare same-level tests/
+│   ├── mod.rs          # #[cfg(test)] mod tests; ——声明同级的 tests/
 │   ├── var.rs
 │   └── tests/
 │       ├── mod.rs
 │       └── var.rs
 └── computation/
-    ├── mod.rs          # #[cfg(test)] mod tests; ——declare same-level tests/
+    ├── mod.rs          # #[cfg(test)] mod tests; ——声明同级的 tests/
     ├── operations.rs
     └── tests/
         ├── mod.rs
         └── operations.rs
 ```
 
-**Why is upward aggregation not allowed?** Because Rust's module system requires
-`#[cfg(test)] mod tests;` to determine the compilation of test files at the declaration site. If
-`types/mod.rs` declares `mod tests;`, then the content of `types/tests/` is the private content of
-the `types` module—it should not reach into the territory of `base` or `computation`. Each module's
-tests should be internal implementation details of that module, not the parent module's. This rule
-also applies to module refactoring: when you split `types` into `base` and `computation`, the tests
-should follow the split modules, not stay where they are. **The test directory does not mirror the
-source structure, but follows the module boundaries.**
+**Why is upward aggregation prohibited?** Rust's module system requires `#[cfg(test)] mod tests;` to
+determine how test files are compiled at the declaration site. If `types/mod.rs` declares
+`mod tests;`, then the contents of `types/tests/` are private contents of the `types` module—they
+must not cross into the territory of `base` or `computation`. Each module's tests should be an
+internal implementation detail of that module, not of the parent module. This rule also applies
+during module refactoring: when you split `types` into `base` and `computation`, the tests should
+move with the refactored modules instead of remaining in place. **The test directory does not mirror
+the source tree; it follows module boundaries.**
 
-**Rule 1.2**: `tests/mod.rs` is only responsible for module declarations and re-exports, and does
-not contain test functions.
+**Rule 1.2**: `tests/mod.rs` is responsible only for module declarations and re-exports; it must not
+contain test functions.
 
 ```rust
 //! Parser core tests — mirrors src/frontend/core/parser/
@@ -428,20 +432,20 @@ mod integration;
 mod parser_state;
 ```
 
-**Rule 1.3**: Each test file corresponds to only one source file. Mixing tests for multiple source
-modules in one file is not allowed.
+**Rule 1.3**: Each test file must correspond to exactly one source file. Tests for multiple source
+modules must not be mixed into one file.
 
 **Rule 1.4**: Test declarations must use the file form `mod tests;` (with a semicolon), pointing to
-the same-level `tests/` directory. **The inline form `mod tests { ... }` that embeds test code
-directly in the source file is forbidden.**
+the sibling `tests/` directory. **Using the inline form `mod tests { ... }` to place test code
+directly in a source file is prohibited.**
 
 ```rust
-// ✅ Correct — file form declaration, test code is in independent files
+// ✅ Correct — file-form declaration; test code is in separate files
 // src/frontend/core/parser/mod.rs
 #[cfg(test)]
 mod tests;
 
-// 🔴 Forbidden — inline form, test code parasitic in the source file
+// 🔴 Forbidden — inline form; test code is embedded in the source file
 // src/frontend/core/parser/mod.rs
 #[cfg(test)]
 mod tests {
@@ -454,55 +458,55 @@ mod tests {
 }
 ```
 
-**Why is inline forbidden?**
+**Why are inline tests prohibited?**
 
-1. Single source file responsibility: source files only contain implementation, test files only
-   contain tests. When mixed, modifying tests requires scrolling to the bottom of the file,
-   modifying implementation requires skipping past tests.
-2. Clear module boundaries: the `tests/` directory is a physical boundary, making it immediately
-   clear which modules have tests and which don't.
-3. Refactoring safety: when modules are split, the `tests/` directory follows along; inline tests
-   need to be manually peeled out from the source file.
-4. Code review: in PR diffs, source code changes and test changes are separate files, not mixed
-   together.
+1. Single responsibility for source files: source files contain only implementation, while test
+   files contain only tests. Mixing them means scrolling to the bottom of a file to edit tests and
+   skipping over tests when editing implementation.
+2. Clear module boundaries: the `tests/` directory provides a physical boundary that makes it
+   immediately clear which modules have tests and which do not.
+3. Refactoring safety: when modules are split, the `tests/` directory moves with them; inline tests
+   must be manually extracted from the source files.
+4. Code review: source changes and test changes appear in separate files in the PR diff and are not
+   mixed together.
 
-### Module Declaration Specification
+### Module Declaration Standards
 
-**Rule 2.1**: All test files must have a module-level doc comment `//!` at the top, indicating the
-specification source (language specification section number + RFC number) covered by the tests. If a
-test does not reference any specification section, it means this code has no specification basis—it
-should not exist.
+**Rule 2.1**: Every test file must begin with a module-level documentation comment `//!` describing
+the specification sources covered by the test (language specification section numbers + RFC
+numbers). If a test does not reference any specification section, the code has no specification
+basis—it should not exist.
 
 ```rust
-//! Literal tests — based on language specification §2.6
+//! Literal tests — based on Language Specification §2.6
 //!
-//! §2.6.1: Integer Decimal, Octal(0o), Hex(0x), Binary(0b)
-//! §2.6.2: Floating-point numbers (with decimal point and exponent)
+//! §2.6.1: Integers: Decimal, Octal(0o), Hex(0x), Binary(0b)
+//! §2.6.2: Floating-point numbers (with decimal points and exponents)
 //! §2.6.3: Strings (escape sequences \\nrt'"\\, \\x, \\u{})
 //! RFC-012: F-String interpolation
 ```
 
-**Why must the specification be referenced?** Because the expected values of tests come from the
-specification, not from "the current code's output". If one day the code's output changes and the
-test is updated accordingly, then the test protected nothing. Only specification-anchored tests can
-distinguish between "intentional breaking change" and "unintentional regression".
+**Why must tests reference the specification?** A test's expected values come from the specification
+and should not come from the "current code's output." If one day the code's output changes and the
+test is updated accordingly, the test protects nothing. Only tests anchored to the specification can
+distinguish an "intentional breaking change" from an "unintentional regression."
 
-**Rule 2.2**: Test module `use` imports must be specific to concrete types/functions, glob imports
-`use super::*` are forbidden.
+**Rule 2.2**: A test module's `use` imports must be precise and name specific types/functions. Glob
+imports such as `use super::*` are prohibited.
 
 ```rust
-// 🟢 Good — specific imports
+// 🟢 Good — precise imports
 use crate::frontend::core::lexer::{tokenize, TokenKind};
 use crate::frontend::core::parser::{ParserState, ParseError};
 
-// 🔴 Garbage — others don't know what you're testing
+// 🔴 Bad — nobody knows what is being tested
 use super::*;
 ```
 
-### Naming Specification
+### Naming Standards
 
-**Rule 3.1**: Test function naming format is `test_<what>_<scenario>`, all lowercase with
-underscores.
+**Rule 3.1**: Test function names must follow the format `test_<what>_<scenario>`, in lowercase with
+underscores as separators.
 
 ```rust
 #[test]
@@ -513,21 +517,21 @@ fn test_parse_int_overflow() { /* ... */ }
 fn test_typecheck_fn_return_mismatch() { /* ... */ }
 ```
 
-**Rule 3.2**: Test function names must be self-explanatory. After reading the function name, you
-should know what is being tested and what is expected. Numeric serial naming is forbidden.
+**Rule 3.2**: Test function names must be self-explanatory. After reading the name, a developer
+should know what is being tested and what is expected. Numeric sequence names are prohibited.
 
 ```rust
 // 🟢 Good
 fn test_skip_semicolon_success() { /* ... */ }
 fn test_skip_semicolon_failure_when_identifier() { /* ... */ }
 
-// 🔴 Garbage — completely unknown what's being tested
+// 🔴 Bad — completely unclear what is being tested
 fn test_skip_1() { /* ... */ }
 fn test_skip_2() { /* ... */ }
 ```
 
-**Rule 3.3**: Helper functions do not need the `test_` prefix, they should describe their purpose
-with verbs or nouns.
+**Rule 3.3**: Helper functions do not need the `test_` prefix; use a verb or noun that describes
+their purpose.
 
 ```rust
 fn parse_expr(source: &str) -> Expr { /* ... */ }
@@ -535,10 +539,10 @@ fn tokenize_single(source: &str) -> Token { /* ... */ }
 fn setup_parser_with_tokens(tokens: &[Token]) -> ParserState { /* ... */ }
 ```
 
-### Test Structure Specification (Arrange-Act-Assert)
+### Test Structure Standards (Arrange-Act-Assert)
 
-**Rule 4.1**: Each test function must follow the three-section structure: Arrange → Act → Assert,
-separated by blank lines.
+**Rule 4.1**: Every test function must follow a three-part structure: Arrange → Act → Assert, with
+blank lines separating the three parts.
 
 ```rust
 #[test]
@@ -554,12 +558,13 @@ fn test_parse_binary_addition() {
 }
 ```
 
-**Rule 4.2**: Simple tests (single call + single assertion) may omit section comments, but cannot
-exceed 5 lines of logical code. Tests exceeding 5 lines must explicitly mark the three sections.
+**Rule 4.2**: Simple tests (a single call + a single assertion) may omit the section comments, but
+must not exceed 5 lines of logical code. Tests longer than 5 lines must explicitly mark all three
+sections.
 
-### Helper Function Specification
+### Helper Function Standards
 
-**Rule 5.1**: Setup logic that repeats 3 times or more must be extracted into a helper function.
+**Rule 5.1**: Setup logic that occurs three or more times must be extracted into a helper function.
 
 ```rust
 // 🟢 Good — extract common setup
@@ -581,36 +586,37 @@ fn test_current_returns_first_token() {
 }
 ```
 
-**Rule 5.2**: `unwrap()` / `expect()` in helper functions must print enough context on panic. Inside
-the test function body (`#[test] fn ...`), `unwrap()` is allowed directly—on failure Rust
-automatically prints the line number; but when failing in a helper function, the line number points
-to the helper function definition, and the calling context is not visible.
+**Rule 5.2**: `unwrap()` / `expect()` in helper functions must print sufficient context when they
+panic. They may be used directly in test function bodies (`#[test] fn ...`), because Rust
+automatically prints the line number on failure. However, a failure in a helper function points to
+the helper's definition, so the context at the call site is not visible.
 
 ```rust
-// 🟢 Good — print source content when helper function fails
+// 🟢 Good — print the source code when the helper fails
 fn run_ok(source: &str) {
     run(source).unwrap_or_else(|e| panic!("Execution failed:\nSource:\n{}\nError:\n{:?}", source, e));
 }
 
-// 🔴 Garbage — on failure you can't see which source file caused the problem
+// 🔴 Bad — on failure, you cannot see which source file caused the problem
 fn run_ok(source: &str) {
     run(source).unwrap();
 }
 ```
 
-**Rule 5.3**: Helper functions should be placed at the top of the test file, right after `use`
-imports. If shared by multiple test modules, place in `tests/mod.rs` and export as `pub(crate)`.
+**Rule 5.3**: Helper functions should be placed at the top of the test file, immediately after the
+`use` imports. If shared by multiple test modules, place them in `tests/mod.rs` and export them with
+`pub(crate)`.
 
 ### Assertion Style
 
-**Rule 6.1**: Enum variant matching should use `assert!(matches!(...))` preferentially, `if let` +
-`panic!` is not allowed.
+**Rule 6.1**: Enum variant matching should preferentially use `assert!(matches!(...))`. Using
+`if let` + `panic!` is prohibited.
 
 ```rust
 // 🟢 Good
 assert!(matches!(tokens[0].kind, TokenKind::IntLiteral(42)));
 
-// 🔴 Garbage
+// 🔴 Bad
 if let TokenKind::IntLiteral(v) = tokens[0].kind {
     assert_eq!(v, 42);
 } else {
@@ -618,55 +624,55 @@ if let TokenKind::IntLiteral(v) = tokens[0].kind {
 }
 ```
 
-**Rule 6.2**: Use `assert_eq!` for exact value comparisons, use `assert!` for boolean assertions.
-`assert!(a == b)` as a replacement for `assert_eq!(a, b)` is forbidden.
+**Rule 6.2**: Use `assert_eq!` for exact value comparisons and `assert!` for Boolean assertions.
+Using `assert!(a == b)` in place of `assert_eq!(a, b)` is prohibited.
 
-**Rule 6.3**: All assertions must have a custom error message, unless the assertion itself fully
-describes the failure reason.
+**Rule 6.3**: Every assertion must include a custom error message unless the assertion itself fully
+describes the reason for failure.
 
 ```rust
-// 🟢 Good — quickly locate on assertion failure
+// 🟢 Good — enables quick diagnosis when the assertion fails
 assert!(
     state.infix_info().is_some(),
     "infix_info should handle '{op}'"
 );
 
-// 🟢 Good — assert_eq! automatically prints value differences on failure, no extra message needed
+// 🟢 Good — assert_eq! automatically prints the value difference; no extra message is needed
 assert_eq!(error_count, 0);
 
-// 🔴 Garbage — on failure only "assertion failed" is known
+// 🔴 Bad — on failure, you only know "assertion failed"
 assert!(state.infix_info().is_some());
 ```
 
-**Rule 6.4**: Assertion order must be `assert_eq!(actual, expected)`, actual value first, expected
-value second.
+**Rule 6.4**: Assertions must use the order `assert_eq!(actual, expected)`, with the actual value
+first and the expected value second.
 
-### Anti-pattern List
+### Anti-Pattern Checklist
 
-The following are forbidden patterns and their replacements:
+The following practices are prohibited, along with their alternatives:
 
-| Anti-pattern                                   | Problem                                                              | Replacement                                                                                 |
-| ---------------------------------------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| `#[cfg(test)] mod tests { ... }` inline tests  | Source file bloat, blurred module boundaries, refactoring difficulty | Place test code in independent `tests/` directory, declare with `mod tests;` (see Rule 1.4) |
-| Test accommodates code's wrong behavior        | Conceals specification deviations, legalizes bugs                    | Fix code against the specification, keep tests unchanged                                    |
-| Derive test expectations from code output      | Test becomes "tape recorder of current implementation"               | Derive expected values from the specification                                               |
-| Permanent `#[ignore]` marking                  | Hides rotting tests                                                  | Fix or delete                                                                               |
-| `println!` debug output                        | Pollutes test output                                                 | Use `assert!` for clear assertions                                                          |
-| `thread::sleep`                                | Flaky + slow                                                         | Use synchronization mechanisms or mocks                                                     |
-| Manipulating real file system in tests         | Slow and unrepeatable                                                | Use `tempfile`                                                                              |
-| Depending on test execution order              | Flaky                                                                | Each test has independent setup                                                             |
-| A test function exceeding 30 lines of logic    | No one can understand it                                             | Split tests or use helper functions                                                         |
-| `unwrap()` in helper functions without context | Hard to locate                                                       | Use `expect("why")` or custom panic (see Rule 5.2)                                          |
-| Copy-paste the same setup 3+ times             | High modification cost                                               | Extract helper functions                                                                    |
+| Anti-Pattern                                        | Problem                                                                          | Alternative                                                                                    |
+| --------------------------------------------------- | -------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| Inline tests using `#[cfg(test)] mod tests { ... }` | Bloats source files, obscures module boundaries, and makes refactoring difficult | Put test code in a separate `tests/` directory and declare it with `mod tests;` (see Rule 1.4) |
+| Tests accommodate incorrect code behavior           | Hides specification deviations and legitimizes bugs                              | Correct the code against the specification and keep the tests unchanged                        |
+| Infer test expectations from code output            | Turns the test into a "recording of the current implementation"                  | Derive expected values from the specification                                                  |
+| Permanently marking tests with `#[ignore]`          | Hides rotting tests                                                              | Fix or delete them                                                                             |
+| `println!` debug output                             | Pollutes test output                                                             | Use explicit assertions with `assert!`                                                         |
+| `thread::sleep`                                     | Causes flaky tests and slows execution                                           | Use synchronization mechanisms or mocks                                                        |
+| Manipulating the real file system in tests          | Slow and non-repeatable                                                          | Use `tempfile`                                                                                 |
+| Dependence on test execution order                  | Causes flaky tests                                                               | Set up each test independently                                                                 |
+| A test function exceeding 30 lines of logic         | No one can understand it                                                         | Split the test or use helper functions                                                         |
+| `unwrap()` in a helper function without context     | Difficult to diagnose                                                            | Use `expect("why")` or a custom panic message (see Rule 5.2)                                   |
+| More than three copies of identical setup           | Expensive to maintain                                                            | Extract a helper function                                                                      |
 
 ---
 
-## Integration Test Specification
+## Integration Test Standards
 
 ### Test Organization
 
-**Rule 7.1**: Integration tests are placed in the `tests/` directory at the project root. The entry
-file `tests/integration.rs` uses the `#[path]` attribute to include submodules.
+**Rule 7.1**: Integration tests are placed in the project root's `tests/` directory. The entry file
+`tests/integration.rs` uses the `#[path]` attribute to include submodules.
 
 ```rust
 // tests/integration.rs
@@ -678,32 +684,33 @@ mod codegen;
 mod execution;
 ```
 
-**Rule 7.2**: Each `tests/integration/*.rs` file corresponds to one test topic (compiler backends,
-code generation, executor, etc.), and must not be mixed.
+**Rule 7.2**: Each `tests/integration/*.rs` file must correspond to one test topic (compiler
+backends, code generation, executors, etc.) and must not mix topics.
 
-**Rule 7.3**: Integration tests must be conducted through the project's public API. Direct reference
-to `crate::` internal modules in integration tests is forbidden. Use the `yaoxiang::` public path.
+**Rule 7.3**: Integration tests must exercise the project through its public APIs. Directly
+referencing `crate::` internal modules in integration tests is prohibited. Use the public
+`yaoxiang::` paths.
 
 ```rust
 // 🟢 Good — through the public API
 use yaoxiang::run;
 
-// 🔴 Garbage — bypasses the public API boundary
+// 🔴 Bad — bypasses the public API boundary
 use yaoxiang::middle::codegen::bytecode::BytecodeFile;
 ```
 
 ### Test Data Management
 
-**Rule 8.1**: Integration tests prefer inline source strings. Only when the source exceeds 30 lines
-should external fixture files (placed in `tests/fixtures/`) be used.
+**Rule 8.1**: Integration tests should preferentially use inline source strings. Use an external
+fixture file only when the source exceeds 30 lines, placing it in `tests/fixtures/`.
 
 ```rust
 #[test]
 fn test_fibonacci() {
     run_ok(
         r#"
-        // Inline source runs in Script mode: top-level statements are the program body (SPEC syntax §3.11).
-        // A typed main without explicit call is just a lazy lambda——the loop body never executes.
+        // 内联源码以 Script 模式运行：顶层语句即程序主体（SPEC syntax §3.11）。
+        // 带型 main 若不显式调用只是惰性 lambda——循环体永远不会执行。
         main: () -> Void = {
             mut a = 0
             mut b = 1
@@ -719,54 +726,82 @@ fn test_fibonacci() {
 }
 ```
 
-**Rule 8.2**: Fixture files must end with the `.yx` extension, and the file name describes the test
-intent.
+**Rule 8.2**: Fixture files must end with the `.yx` extension, and their filenames must describe the
+test's intent.
 
 ### E2E Coverage Principles
 
-**Rule 9.1**: The integration test for each language feature must cover three paths:
+**Rule 9.1**: The integration test for every language feature must cover three paths:
 
-| Path       | Description                                                 |
-| ---------- | ----------------------------------------------------------- |
-| Happy path | Legal input produces expected output                        |
-| Error path | Illegal input produces clear error information (not panic)  |
-| Boundary   | Boundary values (empty input, max value, max nesting depth) |
+| Path       | Description                                                         |
+| ---------- | ------------------------------------------------------------------- |
+| Happy path | Valid input produces the expected output                            |
+| Error path | Invalid input produces a clear error message, not a panic           |
+| Boundary   | Boundary values (empty input, maximum value, maximum nesting depth) |
 
 **Rule 9.2**: Integration tests must not depend on the network, system environment variables, or
 external services.
 
+**Rule 9.3**: After the `check` command for a corpus (`tests/yaoxiang/`, `src/std/tests/`,
+`tests/yaoxiang-multifile/`) exits with 0, `run` must not report errors from the same families as
+compile-time errors: E0 lexical/syntax, E1 type, E2 semantic, E3 code generation, E4 generic, or E5
+module. The authoritative source for family-to-category mapping is `ErrorCategory` in
+`src/util/diagnostic/codes/mod.rs`; reporting only E6–E8 (runtime / I/O / internal) from `run` does
+not constitute a violation.
+
+The criterion is enforced by `python scripts/ci/check-soundness.py`. It was **switched to blocking
+mode** on 2026-11-06: when the staging area contains corpus `.yx` files or project-shaped fixtures,
+`pre-commit` runs it with `--strict`; any divergence results in exit 1 and blocks the commit.
+`--report-only` remains a **manual troubleshooting** mode (it always exits with 0) and is not part
+of any gate. After blocking mode was enabled, a temporary pass may only be obtained through Part
+Five of the coding rules (`// reason:` + exemption count recorded in the gate report); the hook
+**must not** be changed back to report-only. The activation criteria (three known divergence classes
+reduced to zero + mutation self-verification + time budget) and measured figures are recorded in the
+script's header comments.
+
+The criterion has two layers: **project-shaped fixtures** are located in `tests/project-corpus/`
+(one fixture each for E3022 / E3020 / E3005, containing `yaoxiang.toml`), while the **single-file
+corpus** consists of the three locations listed above. The project-shaped layer is consumed only by
+this probe. It is not included in the corpus-difference baseline and is not collected by
+`yx_multifile_runner`—writing behavior corpus files would record violations as expected behavior.
+The three corresponding implementation defects were fixed on 2026-11-06 (E3005: `[mono]` now flows
+through the check chain; E3020 / E3022: entry-contract determination added to check). They have
+changed from "divergences" into regression guards that ensure "check and run use the same criteria":
+if any criterion is rolled back, check drops back to 0 while run still reports the same code, and
+the probe reports the divergence again.
+
 ---
 
-## Benchmark Specification
+## Benchmark Test Standards
 
-### Criterion.rs Usage Specification
+### Criterion.rs Usage Standards
 
-**Rule 10.1**: Benchmarks are uniformly placed in the `benches/` directory, with the entry file as
-`benches/lib.rs`. Files are separated by test topic.
+**Rule 10.1**: Benchmark tests must be placed in the `benches/` directory, with `benches/lib.rs` as
+the entry file. Organize them into files by test topic.
 
 ```
 benches/
-├── lib.rs              # entry, define criterion_group/criterion_main
+├── lib.rs              # Entry point; defines criterion_group/criterion_main
 ├── lang_compare/
-│   └── fibonacci.rs    # cross-language comparison benchmark
-├── parser.rs           # parser benchmark
-└── codegen.rs          # code generation benchmark
+│   └── fibonacci.rs    # Cross-language comparison benchmark
+├── parser.rs           # Parser benchmark
+└── codegen.rs          # Code generation benchmark
 ```
 
-**Rule 10.2**: Each benchmark function must include a module-level doc comment `//!` explaining the
-test purpose and measurement metrics.
+**Rule 10.2**: Every benchmark function must include a module documentation comment `//!` describing
+the test's purpose and measurement metrics.
 
 ```rust
-//! YaoXiang interpreter performance benchmarks
+//! YaoXiang interpreter performance benchmark
 //!
-//! Measurement metric: single iteration time (wall time)
-//! Baseline: Rust native implementation
+//! Measurement metric: time per iteration (wall time)
+//! Baseline: native Rust implementation
 ```
 
 ### Preventing Compiler Optimizations
 
-**Rule 11.1**: All benchmark outputs under test must use `criterion::black_box` to prevent the
-compiler from optimizing them away.
+**Rule 11.1**: The output of every benchmark must pass through `criterion::black_box` to prevent
+compiler optimizations from eliminating it.
 
 ```rust
 use criterion::{black_box, Criterion};
@@ -781,17 +816,17 @@ fn bench_parse(c: &mut Criterion) {
 }
 ```
 
-**Rule 11.2**: The input data for the benchmark must be `const` or `lazy_static`, and must not be
-dynamically generated inside the `iter` closure—otherwise what is measured is the total time of data
-generation + the logic under test.
+**Rule 11.2**: Benchmark input data must be `const` or `lazy_static`; it must not be generated
+dynamically inside the `iter` closure—otherwise, the measurement includes both data generation and
+the logic under test.
 
 ### Benchmark Grouping and Naming
 
-**Rule 12.1**: The benchmark naming format is `<module under test>_<scenario>`, all lowercase with
-underscores. Consistent with unit test naming rules.
+**Rule 12.1**: Benchmark names must follow the format `<module under test>_<scenario>`, in lowercase
+with underscores as separators. This is consistent with the unit test naming rules.
 
-**Rule 12.2**: You must use `criterion_group!` to logically group related benchmarks. Squeezing all
-benchmarks into one group is forbidden.
+**Rule 12.2**: `criterion_group!` must be used to logically group related benchmarks. Placing all
+benchmarks in one group is prohibited.
 
 ```rust
 criterion_group!(parser, bench_parse_expr, bench_parse_stmt);
@@ -801,15 +836,15 @@ criterion_main!(parser, codegen);
 
 ---
 
-## Doc Test Specification
+## Documentation Test Standards
 
 ### Use Cases
 
-**Rule 13.1**: All `pub` functions, types, and methods must include at least one runnable code
-example in their doc comments. The example is executed via `cargo test --doc`.
+**Rule 13.1**: Every `pub` function, type, and method must include at least one runnable code
+example in its documentation comments. The example is executed through `cargo test --doc`.
 
 ````rust
-/// Tokenize a source string into a Token sequence.
+/// Tokenizes a source string into a sequence of Tokens.
 ///
 /// ```
 /// use yaoxiang::frontend::core::lexer::tokenize;
@@ -822,42 +857,42 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, LexError> {
 }
 ````
 
-**Rule 13.2**: The code example in the doc test must compile and pass assertions. Examples marked
-with `ignore` are not allowed, unless the example demonstrates a compile-time error.
+**Rule 13.2**: Documentation test examples must compile successfully and their assertions must pass.
+Examples marked with `ignore` are prohibited unless the example demonstrates a compile-time error.
 
 ````rust
 /// ```ignore
-/// // Demonstrate compile-time error——can be ignored
+/// // Shows a compile-time error — can be ignored
 /// let x: int = "string";
 /// ```
 ````
 
 ### Coverage Requirements
 
-**Rule 14.1**: Doc tests only need to cover the happy path of the API. Boundary cases and error
+**Rule 14.1**: Documentation tests only need to cover an API's happy path. Boundary cases and error
 paths are covered by unit tests.
 
-**Rule 14.2**: The example code in doc tests must be concise—no more than 10 lines. If the example
-requires longer context, the API design has a problem.
+**Rule 14.2**: Documentation test examples must be concise—no more than 10 lines. If an example
+requires longer context, the API design is at fault.
 
 ---
 
-## Property Test Specification
+## Property Test Standards
 
 ### Use Cases
 
-**Rule 15.1**: The following scenarios must use property tests (proptest or quickcheck) instead of
-hand-written multiple boundary value cases:
+**Rule 15.1**: The following scenarios must use property tests (proptest or quickcheck) rather than
+multiple hand-written boundary-value cases:
 
-| Scenario                                  | Example                                |
-| ----------------------------------------- | -------------------------------------- |
-| Parser round-trip                         | `parse(pretty_print(ast)) == ast`      |
-| Serialization/deserialization             | `deserialize(serialize(data)) == data` |
-| Mathematical identity                     | `a + b == b + a`                       |
-| Compiler optimization preserves semantics | `eval(code) == eval(optimize(code))`   |
+| Scenario                                       | Example                                |
+| ---------------------------------------------- | -------------------------------------- |
+| Parser round-trip                              | `parse(pretty_print(ast)) == ast`      |
+| Serialization/deserialization                  | `deserialize(serialize(data)) == data` |
+| Mathematical identities                        | `a + b == b + a`                       |
+| Compiler optimizations do not change semantics | `eval(code) == eval(optimize(code))`   |
 
-**Rule 15.2**: Property tests use `proptest` as the primary property testing framework (already
-declared in `Cargo.toml` under `dev-dependencies`).
+**Rule 15.2**: Use `proptest` as the primary property-testing framework (already declared in
+`Cargo.toml`'s `dev-dependencies`).
 
 ```rust
 use proptest::prelude::*;
@@ -874,11 +909,11 @@ proptest! {
 
 ### Property Definition Principles
 
-**Rule 16.1**: Each property test must have a clear property declaration—the invariant being
-verified must be stated in a comment.
+**Rule 16.1**: Every property test must have an explicit property declaration—a comment describing
+the invariant being verified.
 
 ```rust
-// Property: any integer literal produces the same value after tokenize → tokens_to_string
+// Property: every integer literal has the same value after tokenize → tokens_to_string
 proptest! {
     #[test]
     fn test_int_literal_roundtrip(n in any::<i64>()) {
@@ -889,17 +924,17 @@ proptest! {
 }
 ```
 
-**Rule 16.2**: If a property test discovers a failure, the regression mechanism of `proptest` must
-be used—add the failing input to the `proptest-regressions/` directory, and do not manually write an
-ordinary test as a replacement.
+**Rule 16.2**: If a property test discovers a failure, use `proptest`'s regression mechanism—add the
+failing input to the `proptest-regressions/` directory. Do not substitute a hand-written ordinary
+test.
 
 ---
 
 ## Coverage Requirements
 
-### New Code Coverage Targets
+### Coverage Targets for New Code
 
-**Rule 17.1**: Test coverage requirements for new code:
+**Rule 17.1**: The test coverage requirements for new code are:
 
 | Code Type                                        | Line Coverage | Branch Coverage |
 | ------------------------------------------------ | ------------- | --------------- |
@@ -909,45 +944,50 @@ ordinary test as a replacement.
 | Standard library (std)                           | ≥ 75%         | ≥ 70%           |
 | Error handling and diagnostics                   | ≥ 90%         | ≥ 85%           |
 
-**Rule 17.2**: Error handling paths (all `Err` branches) must have 100% coverage. Error messages
-visible to users must be verified by tests.
+**Rule 17.2**: Error-handling paths (all `Err` branches) must have 100% coverage. User-visible error
+messages must be verified by tests.
 
 ### PR Review Checklist
 
-**Rule 18.1**: Before submitting a PR, the author must self-check the following items:
+**Rule 18.1**: Before submitting a PR, the author must verify the following:
 
-- [ ] `cargo test` all pass
-- [ ] `cargo test --doc` all pass
-- [ ] `cargo bench` has no performance regression (if hot path changes are involved)
-- [ ] New code meets coverage targets
-- [ ] Test naming follows the naming specification
-- [ ] Each test file declares the corresponding specification section (Rule 2.1)
-- [ ] Test expected values come from the specification definition, not "current code's output"
-- [ ] No tests marked with `#[ignore]` (unless there is a clear issue number comment)
-- [ ] No unnecessary `unwrap()` (should use `expect` or custom panic message)
-- [ ] Commit message uses the `:white_check_mark: test:` type
-- [ ] **No test expected values have been modified because "code behavior does not match the
-      specification"—what is changed is the code, not the test**
-- [ ] **No inline tests** (`#[cfg(test)] mod tests { ... }` must be changed to `mod tests;` +
-      independent file, see Rule 1.4)
+- [ ] `python scripts/dev/testsuite.py run fast` passes—the pre-submission self-check runs `--lib`
+      (src/ unit tests) and the four integration-side targets (`integration` /
+      `formatter_integration` / `yx_runner` / `yx_multifile_runner`); this is the first stage of
+      `pre-commit`, and the second stage runs `cargo test --all --quiet` to block the commit
+- [ ] `cargo test --doc` passes—doctests are not covered by `run fast` and are covered by the CI
+      test job
+- [ ] `cargo bench` shows no performance regressions (if hot-path code was changed)
+- [ ] New code meets the coverage targets
+- [ ] Test names comply with the naming standards
+- [ ] Every test file declares its corresponding specification sections (Rule 2.1)
+- [ ] Test expectations come from specification definitions, not "the current code's output"
+- [ ] There are no tests marked with `#[ignore]` (unless accompanied by an explicit issue-number
+      comment)
+- [ ] There are no unnecessary `unwrap()` calls (use `expect` or a custom panic message instead)
+- [ ] The commit message uses the `:white_check_mark: test:` type
+- [ ] **No test expectations were changed because "the code's behavior differs from the
+      specification"—change the code, not the test**
+- [ ] **There are no inline tests** (`#[cfg(test)] mod tests { ... }` must be changed to
+      `mod tests;` + separate files; see Rule 1.4)
 
-**Rule 18.2**: Reviewers must reject PRs that contain the following issues:
+**Rule 18.2**: Reviewers must reject PRs containing any of the following issues:
 
-- Only happy path tests, missing error paths
-- Tests contain `thread::sleep` or depend on execution order
-- Copy-pasted test code more than 3 times without extracting helper functions
-- Test names do not follow the naming specification
-- Existence of permanently `#[ignore]` tests
-- **Test accommodates code's wrong behavior** (when code does not match the specification, modifying
-  the test rather than the code)
-- **Test does not declare the corresponding specification section** (see Rule 2.1)
-- **Test expected values come from code output rather than specification definition**
-  (reverse-engineered tests are equivalent to no test)
-- **Existence of inline tests** (`#[cfg(test)] mod tests { ... }` rather than `mod tests;` +
-  independent file, see Rule 1.4)
-- Tests only verify "does not panic" without asserting specific behavior
-- Deleted failing tests that exposed code bugs (instead of fixing the code and then seeing them turn
-  green)
+- Only happy-path tests, with no error-path coverage
+- `thread::sleep` in tests or dependence on execution order
+- Copy-pasted test code repeated more than three times without extraction into a helper function
+- Test names that do not comply with the naming standards
+- Tests permanently marked with `#[ignore]`
+- **Tests that accommodate incorrect code behavior** (when the code differs from the specification,
+  the test is modified instead of the code)
+- **Tests that do not declare their corresponding specification sections** (see Rule 2.1)
+- **Test expectations derived from code output rather than specification definitions** (a test
+  inferred this way provides no protection)
+- **Inline tests** (`#[cfg(test)] mod tests { ... }` instead of `mod tests;` + separate files; see
+  Rule 1.4)
+- Tests that only verify "does not panic" without asserting specific behavior
+- A failing test that exposed a code bug was deleted instead of fixing the code and then observing
+  the test turn green
 
 ---
 
@@ -965,78 +1005,78 @@ cargo test --lib
 # Run only integration tests
 cargo test --test integration
 
-# Run only doc tests
+# Run only documentation tests
 cargo test --doc
 
-# Run specific tests (filter by name)
+# Run a specific test (filter by name)
 cargo test test_parse_expr
 
 # Run benchmarks
 cargo bench
 
-# Show test output (stdout hidden by default)
+# Display test output (stdout is hidden by default)
 cargo test -- --nocapture
 
 # Run single-threaded (for troubleshooting concurrency issues)
 cargo test -- --test-threads=1
 
-# Generate coverage report (requires cargo-llvm-cov)
+# Generate a coverage report (requires cargo-llvm-cov)
 cargo llvm-cov --html
 ```
 
 ### B. Commit Message Template
 
-Test-related commits must follow the following template:
+Test-related commits must follow this template:
 
 ```
-:white_check_mark: test(<scope>): <short description>
+:white_check_mark: test(<scope>): <简短描述>
 
-<optional: list of covered scenarios>
+<可选：覆盖的场景列表>
 ```
 
 Example:
 
 ```
-:white_check_mark: test(parser): Add infix operator tests for Pratt parser
+:white_check_mark: test(parser): 添加 Pratt 解析器中缀运算符测试
 
-Covered scenarios:
-- Arithmetic operator precedence (+, -, *, /, %)
-- Comparison operator chaining (1 < x < 10)
-- Logical operator short-circuit
-- Assignment operator right-associativity
+覆盖场景：
+- 算术运算符优先级（+, -, *, /, %）
+- 比较运算符链接（1 < x < 10）
+- 逻辑运算符短路
+- 赋值运算符右结合
 ```
 
 ### C. New Test File Checklist
 
-When creating a new test module, make sure to include the following files:
+When creating a new test module, ensure that it includes the following files:
 
 ```
 # Add tests under src/<module>/
 src/<module>/tests/
-├── mod.rs          # module declaration + public helper functions
-└── <subject>.rs    # test file, named after the source file under test
+├── mod.rs          # Module declarations + shared helpers
+└── <subject>.rs    # Test file, named after the module under test
 
 # Add integration tests under tests/
 tests/
 ├── integration.rs   # Update: add #[path] declaration
 └── integration/
-    └── <topic>.rs   # new test file
+    └── <topic>.rs   # New test file
 ```
 
 ### D. References
 
-- [YaoXiang Language Specification](../reference/language-spec/index.md) —— **Authoritative source
-  for tests**
-- [Accepted RFCs](../rfc/index.md) —— **Authoritative source for design decisions**
+- [YaoXiang Language Specification](../reference/language-spec/index.md) — **the authoritative
+  source for tests**
+- [Accepted RFCs](../rfc/index.md) — **the authoritative source for design decisions**
 - [Rust Testing Documentation](https://doc.rust-lang.org/book/ch11-00-testing.html)
 - [Criterion.rs User Guide](https://bheisler.github.io/criterion.rs/book/)
 - [proptest Documentation](https://docs.rs/proptest/latest/proptest/)
-- [Project Commit Convention](commit-convention.md)
-- [Project Contributing Guide](contributing.md)
+- [Project Commit Standards](commit-convention.md)
+- [Project Contribution Guide](contributing.md)
 
 ---
 
 > 💡 **Remember**: Tests do not verify whether your code "runs"—they verify whether your code
-> complies with the specification. The specification changes, and tests change with it. When the
-> code is wrong, fix the code, not the test. **The code serves the specification, and the tests
-> guard the specification. The moment a test accommodates the code, you lose all protection.**
+> complies with the specification. When the specification changes, the tests change with it. If the
+> code is wrong, fix the code, not the test. **Code serves the specification, and tests safeguard
+> the specification. The moment tests accommodate the code, you lose all protection.**

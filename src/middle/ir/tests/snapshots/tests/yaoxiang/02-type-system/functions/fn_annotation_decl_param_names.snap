@@ -1,0 +1,33 @@
+module
+  fn f(Int(64), Int(64)) -> Int(64)
+    slot[0] x : Int(64) @depth1
+    slot[1] y : Int(64) @depth1
+    locals_total=8
+    Load %0 <- arg%0
+    Load %1 <- arg%1
+    Load %2 <- %0
+    Load %3 <- int(10)
+    Mul %4 <- %2, %3
+    Load %5 <- %1
+    Add %6 <- %4, %5
+    Ret %6
+    Ret
+  fn main() -> Void
+    locals_total=7
+    Load %0 <- int(2)
+    Load %1 <- int(1)
+    Call %2 <- string("f") [%0, %1] (def=d0)
+    Load %3 <- int(21)
+    Eq %4 <- %2, %3
+    Load %5 <- string("named args bind by declared name")
+    Call %6 <- string("std.assert.assert") [%4, %5] (def=d1)
+    Load %0 <- int(2)
+    Load %1 <- int(1)
+    Call %2 <- string("f") [%0, %1] (def=d0)
+    Load %3 <- int(21)
+    Eq %4 <- %2, %3
+    Load %5 <- string("positional form is equivalent")
+    Call %6 <- string("std.assert.assert") [%4, %5] (def=d1)
+    Ret %6
+  init (locals=0)
+    Call %0 <- string("main") [] (def=d2)

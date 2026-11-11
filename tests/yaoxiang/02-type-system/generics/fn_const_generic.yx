@@ -1,13 +1,16 @@
 // 02-type-system/generics/fn_const_generic.yx
 // 覆盖: RFC-011 §4.1 函数级 const 泛型 — curry 形式参数化
 // 验证: 函数级 const 泛型 (N: Int) 定义、调用，并在运行时正确传值和计算
+//
+// 6.8.7 起 `n: N` 为单值类型（`int64::N`），实参必须等于 N：`f(42)(42)` 合法，
+// `f(42)(5)` 报 E1002（5 ≠ 42）。
 
 use std.assert
 
 f: (N: Int) -> (n: N) -> Int = (n) => n
 main: () -> Void = {
-    result = f(42)(5)
-    assert.assert(result == 5, "f(42)(5) should return 5")
+    result = f(42)(42)
+    assert.assert(result == 42, "f(42)(42) should return 42")
 }
 
 main()

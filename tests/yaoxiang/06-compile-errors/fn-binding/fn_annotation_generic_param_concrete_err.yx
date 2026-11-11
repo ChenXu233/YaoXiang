@@ -1,0 +1,11 @@
+// 06-compile-errors/fn-binding/fn_annotation_generic_param_concrete_err.yx
+// D54 修复轮 F2 覆盖：**泛型声明 + 具体标注** = 收窄，编译期拒绝。
+//   pick: (T: Type) -> (x: T) -> T 的形参位是类型参数 T；作者写成 (x: Int) 就是
+//   把「任意 T」收窄成 Int——旧判据在克隆沙箱里 unify（T:=Int 绑完即丢）判为相容，
+//   于是 check 绿、运行期 pick(String)("hi") 才报 E6007；现在按结构相等判不相容。
+// expect: compile-error E1011
+// 覆盖: E1011 的「具体标注 vs 未绑定类型变量」方向（收窄）
+// 验证: 编译期即拒；不退化到运行期
+// 状态: ❌ 应编译失败
+
+pick: (T: Type) -> (x: T) -> T = (x: Int) => x + 1

@@ -1,0 +1,19 @@
+// 06-compile-errors/generics/const_arg_value_env_shadowed_err.yx
+// 值环境名被 match 臂同名绑定遮蔽：最内层绑定没有编译期值，该名不得参与求值
+// expect: compile-error E1113
+// 覆盖: t23 F1' 的值环境面——`const_bindings` 曾按名摊平，外层全局 `k0 = 7` 顶上来
+//       把 `k0 - 1` 算成 6（运行期是 8）。
+// 状态: ❌ 应编译失败
+
+id: (x: Int) -> Int = x
+f: (N: Int) -> (n: N) -> Int = (n) => n
+k0: Int = 7
+g: (r: Int) -> Int = {
+    return match r {
+        k0 => f(k0 - 1)(k0 - 1)
+    }
+}
+
+main: () -> Void = {
+    v: Int = g(id(9))
+}

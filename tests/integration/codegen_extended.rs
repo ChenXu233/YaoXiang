@@ -5,7 +5,7 @@
 use yaoxiang::middle::codegen::CodegenContext;
 use yaoxiang::middle::ModuleIR;
 use yaoxiang::middle::bytecode::{BytecodeInstr, Reg, Label};
-use yaoxiang::backends::common::opcode;
+use yaoxiang::middle::bytecode::opcode;
 
 #[test]
 fn test_codegen_context_creation() {

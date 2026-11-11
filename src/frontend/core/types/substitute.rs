@@ -96,8 +96,8 @@ pub fn ctor_head_name(ty: &MonoType) -> Option<String> {
 /// 构造器变量在**应用头部**的替换：把 `F(A)` 的头部名按 `head_map`
 ///（构造器参数名 → 实参构造器名）改写为真实构造器。
 ///
-/// 共享实现在此（复审轮 1 F2 校正：此前 `typecheck/environment.rs` 与
-/// `typecheck/inference/expressions.rs` 各有一份内联改名，与当时「只有一处
+/// 共享实现在此（复审轮 1 F2 校正：此前 `sema/environment.rs` 与
+/// `sema/inference/expressions.rs` 各有一份内联改名，与当时「只有一处
 /// 实现」的表述不符；历史提交信息不改写，此处按事实更正）。两处调用点现均为
 /// 「先做各自的 TypeRef/变量遍历，再调用本函数」。
 ///
@@ -365,6 +365,10 @@ pub fn contains_type_vars(ty: &MonoType) -> bool {
             assoc_args,
             ..
         } => contains_type_vars(host_type) || assoc_args.iter().any(contains_type_vars),
+        // 借用类型 `&T` / `&mut T`：与 `TypeConstraintSolver::contains_var` 同族，
+        // 内层必须穿透——缺本臂时「含类型变量」对借用位恒为假，occurs check
+        // 一类的判据在借用位整段失灵（同一缺陷的两份实现，见 09a §P6 6.8.3）。
+        MonoType::Ref { inner, .. } => contains_type_vars(inner),
         _ => false,
     }
 }

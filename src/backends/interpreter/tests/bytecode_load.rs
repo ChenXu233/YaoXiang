@@ -11,7 +11,7 @@ use std::path::PathBuf;
 /// Fixture + Act：写入带方法（`Point.get_x`）的项目，编译为字节码并反序列化加载。
 fn compile_point_method_project(
     dir: &std::path::Path
-) -> crate::middle::passes::codegen::BytecodeFile {
+) -> crate::middle::bytecode::file::BytecodeFile {
     let source_path = dir.join("test.yx");
     let bytecode_path = dir.join("test.42");
     std::fs::write(
@@ -33,11 +33,11 @@ main = {
 
     crate::build_bytecode_with_options(&source_path, &bytecode_path, false)
         .expect("build bytecode");
-    crate::middle::passes::codegen::BytecodeFile::load(&bytecode_path).expect("load bytecode file")
+    crate::middle::bytecode::file::BytecodeFile::load(&bytecode_path).expect("load bytecode file")
 }
 
 /// Assert：vtables 段经序列化往返后仍携带 get_x（裸方法名 + 函数表索引）。
-fn assert_vtables_carry_get_x(bytecode_file: &crate::middle::passes::codegen::BytecodeFile) {
+fn assert_vtables_carry_get_x(bytecode_file: &crate::middle::bytecode::file::BytecodeFile) {
     assert!(
         bytecode_file
             .vtables
@@ -63,7 +63,7 @@ fn test_run_bytecode_file_roundtrip() {
     // Act
     crate::build_bytecode_with_options(&source_path, &bytecode_path, false)
         .expect("build bytecode");
-    let bytecode_file = crate::middle::passes::codegen::BytecodeFile::load(&bytecode_path)
+    let bytecode_file = crate::middle::bytecode::file::BytecodeFile::load(&bytecode_path)
         .expect("load bytecode file");
     let bytecode_module = crate::middle::bytecode::BytecodeModule::from(bytecode_file);
     let interp = crate::backends::interpreter::Interpreter::new();
@@ -110,7 +110,7 @@ fn test_run_bytecode_file_invalid_magic() {
     drop(f);
 
     // Act
-    let err = crate::middle::passes::codegen::BytecodeFile::load(&path)
+    let err = crate::middle::bytecode::file::BytecodeFile::load(&path)
         .expect_err("expected error for invalid magic");
 
     // Assert
@@ -134,7 +134,7 @@ fn test_run_bytecode_file_version_mismatch() {
     drop(f);
 
     // Act
-    let err = crate::middle::passes::codegen::BytecodeFile::load(&path)
+    let err = crate::middle::bytecode::file::BytecodeFile::load(&path)
         .expect_err("expected error for version mismatch");
 
     // Assert

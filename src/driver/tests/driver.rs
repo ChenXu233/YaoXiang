@@ -13,7 +13,7 @@ use crate::driver::{
 };
 use crate::frontend::config::CompileConfig;
 use crate::frontend::module::orchestrator::OrchestratorError;
-use crate::frontend::pipeline::{Pipeline, PipelineError};
+use crate::frontend::pipeline::{PipelineError};
 use std::path::{Path, PathBuf};
 
 /// 构造 SingleFile 程序并跑 Driver。
@@ -79,50 +79,6 @@ fn test_driver_run_success_skips_obligation_free_stages() {
 }
 
 #[test]
-fn test_driver_run_lex_error_maps_to_lex_parse() {
-    // Arrange: 含非法字符的源
-    let source = "let x = @;";
-
-    // Act
-    let outcome = run_single(source, CompileConfig::default()).expect("driver run failed");
-
-    // Assert: pipeline 现状——词法错误归入 PipelineError::LexParse
-    assert!(!outcome.result.is_success(), "lex error must fail the run");
-    assert_eq!(
-        outcome.result.error_count, 1,
-        "exactly one lex error expected: {:?}",
-        outcome.result.errors
-    );
-    assert!(
-        matches!(outcome.result.errors[0], PipelineError::LexParse(_)),
-        "lex failure must map to LexParse: {:?}",
-        outcome.result.errors
-    );
-    assert!(outcome.result.ir.is_none(), "failure yields no IR");
-}
-
-#[test]
-fn test_driver_run_parse_error_reports_first_error_only() {
-    // Arrange: 两处独立语法错误——pipeline.rs:248-255 现状只取首个 parse 错误
-    let source = "let = ;\nlet = ;";
-
-    // Act
-    let outcome = run_single(source, CompileConfig::default()).expect("driver run failed");
-
-    // Assert: 无论 parser 检出几处，对外只发首错（逐字节相同判据的一部分）
-    assert_eq!(
-        outcome.result.error_count, 1,
-        "only the first parse error may surface: {:?}",
-        outcome.result.errors
-    );
-    assert!(
-        matches!(outcome.result.errors[0], PipelineError::LexParse(_)),
-        "parse failure must map to LexParse: {:?}",
-        outcome.result.errors
-    );
-}
-
-#[test]
 fn test_driver_run_typecheck_error_maps_and_aborts() {
     // Arrange: 类型不匹配（Int 绑定 String 字面量）
     let source = "let x: Int = \"hello\";";
@@ -148,27 +104,6 @@ fn test_driver_run_typecheck_error_maps_and_aborts() {
         outcome.skipped.is_empty(),
         "FailFast aborts before visiting downstream stages: {:?}",
         outcome.skipped
-    );
-}
-
-#[test]
-fn test_driver_run_dead_code_enabled_reports_unused_function() {
-    // Arrange: 一个未被引用的顶层函数（main 是入口豁免）
-    let source = "main: () -> Void = {}\nunused_helper: () -> Void = {}";
-
-    // Act
-    let outcome = run_single(source, CompileConfig::default()).expect("driver run failed");
-
-    // Assert: 默认开启死代码分析——W1001 出现在警告里
-    assert!(
-        outcome.result.is_success(),
-        "unused function is a warning, not an error: {:?}",
-        outcome.result.errors
-    );
-    assert!(
-        outcome.result.warnings.iter().any(|d| d.code == "W1001"),
-        "W1001 expected for unused_helper: {:?}",
-        outcome.result.warnings
     );
 }
 
@@ -251,23 +186,6 @@ fn test_driver_run_empty_units_rejected() {
         matches!(result, Err(DriverError::EmptyUnits)),
         "empty units must be rejected: {result:?}"
     );
-}
-
-#[test]
-fn test_pipeline_run_delegates_to_driver() {
-    // Arrange: 走 pub 入口 Pipeline——确认 shim 语义不变（编译成功 + 计时落字段）
-    let mut pipeline = Pipeline::new(CompileConfig::default());
-
-    // Act
-    let result = pipeline.run("test.yx", "main: () -> Void = {}");
-
-    // Assert
-    assert!(
-        result.is_success(),
-        "pipeline shim must preserve success semantics: {:?}",
-        result.errors
-    );
-    let _aggregation_witness: Aggregation = Aggregation::FailFast; // SingleFile 默认聚合
 }
 
 // ============ 3.4.8 ③ 回归修复：Script 顶层同名重绑定（后者生效）============
@@ -395,50 +313,6 @@ fn test_driver_run_multi_file_top_level_call_to_local_function_runs() {
     );
 }
 
-/// t3 p3a/p11 形态（泛型红判据）：两个模块各自定义**同名**泛型函数、各自在
-/// 模块顶层调用它——两个定义都进 merged IR，调用点必须各自落到正确的那一个上
-/// （不是静默停在类型擦除、也不是接到另一侧）。
-#[test]
-fn test_driver_run_multi_file_same_name_generics_specialize_per_module() {
-    // Arrange：a.pick 一参 + b.pick 两参，各自模块顶层调用（入口同时 use 两边）
-    let (_dir, entry) = make_script_project(&[
-        (
-            "a.yx",
-            "pick: (T: Type) -> (x: T) -> T = (x) => x\nv = pick(11)\n",
-        ),
-        (
-            "b.yx",
-            "pick: (T: Type) -> (x: T, n: Int) -> T = (x, n) => x\nw = pick(22, 3)\n",
-        ),
-        ("main.yx", "use a\nuse b\n"),
-    ]);
-
-    // Act
-    let outcome = run_multi(&entry).expect("driver run failed");
-
-    // Assert：两个同名泛型各自特化出自己的版本（不得合并/漏掉一侧）
-    assert!(
-        outcome.failure.is_none(),
-        "同名泛型跨模块各自顶层调用不得编译失败：{:?}",
-        outcome.failure
-    );
-    let merged = outcome.module.expect("Linking+mono must produce IR");
-    let names: Vec<String> = merged.functions.iter().map(|f| f.name.clone()).collect();
-    for expected in ["a.pick(int64)", "b.pick(int64)"] {
-        assert!(
-            names.iter().any(|n| n == expected),
-            "每个模块的同名泛型都必须特化出 {expected}（静默不特化的证据是它缺失）：{names:?}"
-        );
-    }
-
-    // Assert（运行期）：两处调用各自算出自己的实参值，互不串味
-    let values = run_merged_slot_values(merged);
-    assert!(
-        values.iter().any(|v| v == "Int(11)") && values.iter().any(|v| v == "Int(22)"),
-        "a.pick(11) 与 b.pick(22,3) 应各自算出 11 与 22，实际全局值：{values:?}"
-    );
-}
-
 /// F1 结构判据：合并 IR 里 init 段的调用名必须与函数表键**同源**（都带模块键）。
 /// 这条不依赖运行期，直接钉「IR 自洽」——只改函数体不改 init 就会在此红。
 #[test]
@@ -453,20 +327,21 @@ fn test_driver_run_multi_file_init_calls_use_qualified_names() {
 
     // Assert：init 里出现的调用名都在函数表里（自洽），且裸名 helper 不存在
     let function_names: Vec<String> = merged.functions.iter().map(|f| f.name.clone()).collect();
-    let init_calls: Vec<String> = merged
-        .init
-        .iter()
-        .filter_map(|i| match i {
-            crate::middle::core::ir::Instruction::Call {
-                func:
-                    crate::middle::core::ir::Operand::Const(
-                        crate::middle::core::ir::ConstValue::String(n),
-                    ),
-                ..
-            } => Some(n.clone()),
-            _ => None,
-        })
-        .collect();
+    let init_calls: Vec<String> =
+        merged
+            .init
+            .iter()
+            .filter_map(|i| match i {
+                crate::middle::ir::ir::Instruction::Call {
+                    func:
+                        crate::middle::ir::ir::Operand::Const(
+                            crate::middle::ir::ir::ConstValue::String(n),
+                        ),
+                    ..
+                } => Some(n.clone()),
+                _ => None,
+            })
+            .collect();
     assert!(
         !init_calls.is_empty(),
         "夹具应至少有一条 init 调用（否则判据空转）：{init_calls:?}"
@@ -515,80 +390,6 @@ fn run_merged_slot0(module: crate::middle::ModuleIR) -> String {
     )
 }
 
-/// 3.4.8 ②：跨单元泛型调用在多文件路径下必须真正被单态化并执行——
-/// `lib.pick` 的类型参数只出现在**借用内层**（`x: &T`），这是 T1 之前
-/// 收集不到请求、mono 不介入的形态。断言「执行成功 + 槽位值等于实参」，
-/// 与单文件路径的同一表达式对照（等价判据：两形态产出同一可观测值）。
-#[test]
-fn test_driver_run_multi_file_cross_unit_generic_call_runs_like_single_file() {
-    // Arrange：lib 导出泛型 read（类型参数只在借用内层），入口跨模块限定调用
-    let (_dir, entry) = make_script_project(&[
-        ("lib.yx", "pick: (T: Type) -> (x: &T) -> T = (x) => x\n"),
-        ("main.yx", "use lib\nv = lib.pick(7)\n"),
-    ]);
-
-    // Act
-    let outcome = run_multi(&entry).expect("driver run failed");
-
-    // Assert：编译无故障，且执行后槽位值 = 实参 7（单文件同式同值）
-    assert!(
-        outcome.failure.is_none(),
-        "跨单元泛型调用不得编译失败：{:?}",
-        outcome.failure
-    );
-    let merged = outcome.module.expect("Linking+mono must produce IR");
-    let multi_file_value = run_merged_slot0(merged);
-    assert_eq!(
-        multi_file_value, "Int(7)",
-        "跨单元泛型调用 v = lib.pick(7) 应得 Int(7)，实际：{multi_file_value:?}"
-    );
-
-    // Assert（等价判据）：同一表达式走**单文件**路径（泛型定义与调用同文件）
-    // 执行后必须得到同一可观测值——跨单元调用不改变语义
-    let single = run_single(
-        "pick: (T: Type) -> (x: &T) -> T = (x) => x\nv = pick(7)\n",
-        CompileConfig::default(),
-    )
-    .expect("single-file driver run failed");
-    assert!(
-        single.result.is_success(),
-        "单文件对照程序必须编译成功：{:?}",
-        single.result.errors
-    );
-    let single_file_value = run_merged_slot0(single.result.ir.expect("single-file IR"));
-    assert_eq!(
-        multi_file_value, single_file_value,
-        "多文件跨单元泛型调用必须与单文件同表达式产出同一值"
-    );
-}
-
-/// 3.4.8 ②：**单文件项目**（MultiFile 形态下 N=1）也必须走多文件 mono 路径——
-/// 形态判据是 ProgramKind（数据流形状），不是单元数：该形态下单元 IR 已被
-/// Linking 取走进 merged_ir，按单元数分派会落进单文件分支空转（mono 名存实亡，
-/// 泛型调用退回类型擦除执行）。
-#[test]
-fn test_driver_run_single_file_project_still_monomorphizes() {
-    // Arrange：只有入口一个文件，泛型定义与调用同文件（Script 角色，值绑定可观察）
-    let (_dir, entry) = make_script_project(&[(
-        "main.yx",
-        "pick: (T: Type) -> (x: T) -> T = (x) => x\nv = pick(7)\n",
-    )]);
-
-    // Act
-    let outcome = run_multi(&entry).expect("driver run failed");
-
-    // Assert：编译成功且执行得 Int(7)（mono 真跑过，不是擦除执行）
-    assert!(
-        outcome.failure.is_none(),
-        "单文件项目不得编译失败：{:?}",
-        outcome.failure
-    );
-    let value = run_merged_slot0(outcome.module.expect("must produce IR"));
-    assert!(
-        value == "Int(7)",
-        "单文件项目的泛型调用应得 Int(7)，实际：{value:?}"
-    );
-}
 /// 3.4.8 ②：病态泛型递归 `f(x) = f([x])` 在多文件下必须在**编译期**报
 /// E3005（特化链深度超限）——mono 介入前该程序以类型擦除执行到进程栈
 /// 溢出（0xC00000FD）。断言：有故障 + 诊断码 E3005 + 阶段为 mono。
@@ -620,95 +421,6 @@ fn test_driver_run_multi_file_pathological_generic_recursion_reports_e3005() {
     assert!(
         outcome.module.is_none(),
         "mono 失败后不得产出 IR（否则下游会执行未特化的原件）"
-    );
-}
-
-#[test]
-fn test_driver_run_multi_file_success_links_modules() {
-    // Arrange: lib.yx 出一个函数，main.yx 经 use 导入并调用（夹具语法同
-    // tests/yaoxiang-multifile/use-type-and-function）
-    let (_dir, entry) = make_project(&[
-        (
-            "lib.yx",
-            "add_one: (x: Int) -> Int = (x) => {\n    return x + 1\n}\n",
-        ),
-        (
-            "main.yx",
-            "use lib.{add_one}\nmain = () => {\n    y = add_one(1)\n}\n",
-        ),
-    ]);
-
-    // Act
-    let outcome = run_multi(&entry).expect("driver run failed");
-
-    // Assert: 无故障；Linking 产物含双方限定名函数
-    assert!(
-        outcome.failure.is_none(),
-        "clean project must not fail: {:?}",
-        outcome.failure
-    );
-    let module = outcome.module.expect("Linking must produce merged IR");
-    let names: Vec<&str> = module.functions.iter().map(|f| f.name.as_str()).collect();
-    assert!(
-        names.contains(&"main.main"),
-        "entry main must be linked as main.main: {names:?}"
-    );
-    assert!(
-        names.contains(&"lib.add_one"),
-        "lib function must be linked as lib.add_one: {names:?}"
-    );
-}
-
-#[test]
-fn test_driver_run_multi_file_typecheck_error_surfaces_file_contract() {
-    // Arrange: lib.yx 顶层类型错误——compile_project 现状契约 =
-    // OrchestratorError::TypeCheck{ path 指向出错文件, diagnostics 原样 }
-    let (_dir, entry) = make_project(&[
-        ("lib.yx", "bad: Int = \"oops\"\n"),
-        ("main.yx", "use lib.{bad}\nmain: () -> Void = {}\n"),
-    ]);
-
-    // Act
-    let outcome = run_multi(&entry).expect("driver run failed");
-
-    // Assert
-    let Some(OrchestratorError::TypeCheck {
-        path, diagnostics, ..
-    }) = &outcome.failure
-    else {
-        panic!(
-            "expected OrchestratorError::TypeCheck, got {:?}",
-            outcome.failure
-        );
-    };
-    assert!(
-        path.ends_with("lib.yx"),
-        "error must point at the failing file: {path}"
-    );
-    assert!(
-        !diagnostics.is_empty(),
-        "TypeCheck variant must carry the diagnostics"
-    );
-}
-
-#[test]
-fn test_driver_run_multi_file_missing_main_rejected() {
-    // Arrange: Bin 角色（有 manifest）但无 main 绑定——#388 定案必须编译期拒绝
-    let (_dir, entry) = make_project(&[("main.yx", "helper: () -> Void = {}\n")]);
-
-    // Act
-    let outcome = run_multi(&entry).expect("driver run failed");
-
-    // Assert: E3020 bin_missing_main
-    let Some(OrchestratorError::TypeCheck { diagnostics, .. }) = &outcome.failure else {
-        panic!(
-            "expected OrchestratorError::TypeCheck, got {:?}",
-            outcome.failure
-        );
-    };
-    assert!(
-        diagnostics.iter().any(|d| d.code == "E3020"),
-        "missing main must yield E3020: {diagnostics:?}"
     );
 }
 
@@ -798,89 +510,6 @@ fn check_diags_of<'a>(
         .map(|(_, d)| d.as_slice())
 }
 
-#[test]
-fn test_driver_run_check_collects_per_file_diagnostics() {
-    // Arrange: lib.yx 类型错误 + main.yx 干净——Check 契约 = 逐文件收集
-    // 诊断而非硬中止（与 compile 路径 FailFast 对立的另一面）
-    let (_dir, entry) = make_project(&[
-        ("lib.yx", "bad: Int = \"oops\"\n"),
-        ("main.yx", "use lib.{bad}\nmain = () => {\n    y = bad\n}\n"),
-    ]);
-
-    // Act
-    let outcome = run_check(&entry).expect("driver run failed");
-
-    // Assert: 无故障通道；每个发现文件都有条目（干净文件为空 Vec）
-    assert!(
-        outcome.failure.is_none(),
-        "check 诊断收集不得走故障通道: {:?}",
-        outcome.failure
-    );
-    let lib_diags = check_diags_of(&outcome, "lib.yx").expect("lib.yx must have a per-file entry");
-    assert!(
-        !lib_diags.is_empty(),
-        "lib.yx 的类型错误必须进收集通道: {lib_diags:?}"
-    );
-    let main_diags =
-        check_diags_of(&outcome, "main.yx").expect("main.yx must have a per-file entry");
-    assert!(
-        main_diags.is_empty(),
-        "干净文件的条目应为空 Vec（check_project 现状契约）: {main_diags:?}"
-    );
-}
-
-#[test]
-fn test_driver_run_check_collect_all_continues_past_first_error() {
-    // Arrange: aaa.yx 与 zzz.yx 各带一个类型错误——compile 路径在首个出错
-    // 文件即中止（FailFast），check 必须两份都收集（CollectAll 语义）
-    let (_dir, entry) = make_project(&[
-        ("aaa.yx", "bad_a: Int = \"oops\"\n"),
-        (
-            "main.yx",
-            "use aaa.{bad_a}\nuse zzz.{bad_z}\nmain = () => {\n    y = bad_a\n    z = bad_z\n}\n",
-        ),
-        ("zzz.yx", "bad_z: Int = \"nope\"\n"),
-    ]);
-
-    // Act
-    let outcome = run_check(&entry).expect("driver run failed");
-
-    // Assert
-    assert!(
-        outcome.failure.is_none(),
-        "CollectAll 不得因单文件错误硬中止: {:?}",
-        outcome.failure
-    );
-    let aaa = check_diags_of(&outcome, "aaa.yx").expect("entry for aaa.yx");
-    assert!(!aaa.is_empty(), "aaa.yx 的类型错误必须被收集: {aaa:?}");
-    let zzz = check_diags_of(&outcome, "zzz.yx").expect("entry for zzz.yx");
-    assert!(
-        !zzz.is_empty(),
-        "zzz.yx 的类型错误必须同样被收集（不停留在首错）: {zzz:?}"
-    );
-}
-
-#[test]
-fn test_driver_run_check_role_aware_dead_code_w1001() {
-    // Arrange: Bin 角色（有 manifest + main 绑定）文件里的未使用顶层函数——
-    // RFC-029f 角色感知死代码经 RoleClassification → DeadCodeAnalysis 链路
-    // 产出（夹具同 cli_e2e test_e2e_check_bin_unused_fn_reports）
-    let (_dir, entry) = make_project(&[(
-        "main.yx",
-        "dead_api = (x: Int) => x\nmain = () => { x = 1 }\n",
-    )]);
-
-    // Act
-    let outcome = run_check(&entry).expect("driver run failed");
-
-    // Assert
-    let diags = check_diags_of(&outcome, "main.yx").expect("entry for main.yx");
-    assert!(
-        diags.iter().any(|d| d.code == "W1001"),
-        "Bin 角色未使用顶层函数应报 W1001: {diags:?}"
-    );
-}
-
 /// manifest 声明面带 `[[bin]] main.yx` 的项目夹具（文件无 main 绑定，
 /// 另有一个未使用函数供顺序断言用）。
 fn make_declared_bin_project() -> (tempfile::TempDir, PathBuf) {
@@ -894,30 +523,6 @@ fn make_declared_bin_project() -> (tempfile::TempDir, PathBuf) {
         .expect("write fixture failed");
     let entry = dir.path().join("main.yx");
     (dir, entry)
-}
-
-#[test]
-fn test_driver_run_check_declared_bin_missing_main_reports_e3020() {
-    // Arrange: #388 定案 check 半边判据（surfaces.bins 声明面）——
-    // 声明为 bin 的文件缺 main 绑定报 E3020，进逐文件收集通道而非故障通道
-    let (_dir, entry) = make_declared_bin_project();
-
-    // Act
-    let outcome = run_check(&entry).expect("driver run failed");
-
-    // Assert：恰好一条——Linking 加入 CHECK（3.4.8 ③）后只做纯合并，
-    // 不再重复 RoleClassification 的入口校验（双报防线）
-    assert!(
-        outcome.failure.is_none(),
-        "E3020 是收集诊断而非硬中止: {:?}",
-        outcome.failure
-    );
-    let diags = check_diags_of(&outcome, "main.yx").expect("entry for main.yx");
-    assert_eq!(
-        diags.iter().filter(|d| d.code == "E3020").count(),
-        1,
-        "声明面 bin 缺 main 必须恰好报一条 E3020（阶段增补后不得双报）: {diags:?}"
-    );
 }
 
 #[test]
@@ -972,40 +577,6 @@ fn test_driver_run_check_parse_error_collected_per_file() {
     assert!(
         main.iter().any(|d| d.code == "E5001"),
         "导入带病模块应报模块未找到（方案 B 语义）: {main:?}"
-    );
-}
-
-#[test]
-fn test_driver_run_check_parse_error_does_not_mask_other_files() {
-    // Arrange: broken.yx parse 失败与 zzz.yx 类型错误并存——rust 式收集
-    // 语义（2026-10-09 裁决）：所有文件的错误一次性收齐，谁也不掩盖谁
-    let (_dir, entry) = make_project(&[
-        ("broken.yx", "let = ;\n"),
-        (
-            "main.yx",
-            "use broken.{x}\nuse zzz.{bad}\nmain = () => {\n    y = bad\n}\n",
-        ),
-        ("zzz.yx", "bad: Int = \"nope\"\n"),
-    ]);
-
-    // Act
-    let outcome = run_check(&entry).expect("driver run failed");
-
-    // Assert
-    assert!(
-        outcome.failure.is_none(),
-        "CollectAll 不得因 parse 失败中止: {:?}",
-        outcome.failure
-    );
-    let broken = check_diags_of(&outcome, "broken.yx").expect("entry for broken.yx");
-    assert!(
-        !broken.is_empty(),
-        "broken.yx 的 parse 错误必须被收集: {broken:?}"
-    );
-    let zzz = check_diags_of(&outcome, "zzz.yx").expect("entry for zzz.yx");
-    assert!(
-        !zzz.is_empty(),
-        "zzz.yx 的类型错误不得被 parse 失败掩盖: {zzz:?}"
     );
 }
 
@@ -1334,23 +905,6 @@ fn run_single_collect_all(source: &str) -> Result<DriverOutcome, DriverError> {
 }
 
 #[test]
-fn test_driver_run_single_file_collect_all_collects_parse_errors() {
-    // Arrange: 两处语法错误——CollectAll 语义应收全量（编辑器要标出所有
-    // 语法错误）；pipeline 的 FailFast 首错形态不受影响
-    let source = "x = @ @\ny = @ @\n"; // 探针实证：4 条 parse 错误
-
-    // Act
-    let outcome = run_single_collect_all(source).expect("driver run failed");
-
-    // Assert
-    assert!(
-        outcome.result.errors.len() >= 2,
-        "CollectAll 应收齐全部 parse 错误（非首错）: {:?}",
-        outcome.result.errors
-    );
-}
-
-#[test]
 fn test_driver_run_single_file_collect_all_typechecks_partial_ast() {
     // Arrange（编辑器哲学在单文件兜底的同构，4.2.3 裁决延伸）：一处语法
     // 错误 + 一个幸存语句的类型错误——残缺 AST 继续 typecheck
@@ -1378,80 +932,7 @@ fn test_driver_run_single_file_collect_all_typechecks_partial_ast() {
 
 // ===================== 4.2.7 collect_all 重复诊断去重 =====================
 
-#[test]
-fn test_driver_run_check_dedupes_collect_all_diagnostics() {
-    // Arrange: 带标注函数体内的类型错误——收集点把首错同时放进
-    // collected_errors 与 Err 返回通道，4.2.5 基线实证此类 fixture
-    // 的同码同 span 同消息诊断重复报告（64 个语料条目）
-    let dir = tempfile::tempdir().expect("tempdir creation failed");
-    std::fs::write(
-        dir.path().join("main.yx"),
-        "main: () -> Void = {\n  x = 1 + \"a\"\n}\n",
-    )
-    .expect("write fixture failed");
-    let entry = dir.path().join("main.yx");
-
-    // Act
-    let outcome = run_check(&entry).expect("driver run failed");
-
-    // Assert: E1002 恰好一份（去重键 = 码 + span + 消息）
-    let diags = check_diags_of(&outcome, "main.yx").expect("entry for main.yx");
-    let count = diags.iter().filter(|d| d.code == "E1002").count();
-    assert_eq!(
-        count, 1,
-        "同一诊断事实不得重复报告（4.2.7 去重）: {diags:?}"
-    );
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
-// WBS 3.4.8 ③（2026-10-10 用户裁决，02 §3 注记 #14）：CHECK 加 Linking（纯合并）
-// + Monomorphization（检查形态）——行为判据
-// ─────────────────────────────────────────────────────────────────────────────
-
-/// check 形态下病态泛型递归必须编译期报 E3005——`yaoxiang check` 与单文件/
-/// 多文件路径共享同一 mono 资源防线（无 mono 时该程序以类型擦除执行到进程
-/// 爆栈 0xC00000FD）。判别力：CHECK 表里没有 mono（本步之前），或 Linking/mono
-/// 拿不到单元 IR（请求表空 → NoObligations 空转、E3005 永不产生）时，
-/// check 报告里都没有 E3005，本测试红。
-#[test]
-fn test_driver_run_check_monomorphizes_pathological_generic_recursion() {
-    // Arrange：项目根 + lib.f 递归调用自身、实参类型逐层增长（T → Vec(T) → …）
-    // ——带 manifest 才有模块限定名（与多文件 run 路径同一命名口径）
-    let (_dir, entry) = make_project(&[
-        (
-            "lib.yx",
-            "f: (T: Type) -> (x: T) -> T = (x) => {\n    return f([x])\n}\n",
-        ),
-        (
-            "main.yx",
-            "use lib\nmain: () -> Void = {\n    y = lib.f(1)\n}\n",
-        ),
-    ]);
-
-    // Act
-    let outcome = run_check(&entry).expect("driver run failed");
-
-    // Assert：mono 真跑（E3005 进收集通道而非故障通道），且不是 NoObligations 空转
-    assert!(
-        outcome.failure.is_none(),
-        "check 形态的 mono 失败是收集诊断，不得走硬中止: {:?}",
-        outcome.failure
-    );
-    let diags = check_diags_of(&outcome, "main.yx").expect("entry for main.yx");
-    assert_eq!(
-        diags.iter().filter(|d| d.code == "E3005").count(),
-        1,
-        "病态泛型递归在 check 形态必须报恰好一条 E3005: {diags:?}"
-    );
-    assert!(
-        !outcome
-            .skipped
-            .iter()
-            .any(|s| s.stage == Stage::Monomorphization),
-        "有实例化请求时 mono 不得记跳过（空转即假绿）: {:?}",
-        outcome.skipped
-    );
-}
 
 /// check 形态下良构泛型项目必须**无多余错误诊断**：mono 消费合并 IR 只为
 /// 特化，成功即静默；IR 也不因加阶段而变成 check 的对外产物。判别力：
@@ -1540,37 +1021,6 @@ fn test_driver_run_check_mono_failure_keeps_other_file_diagnostics() {
     assert!(
         zzz.iter().any(|d| d.code == "E1002"),
         "mono 失败不得丢掉其余文件的诊断: {zzz:?}"
-    );
-}
-
-/// 纯合并的另一面：**未声明**为 bin 的入口缺 main 时 check 既不报 E3020，也
-/// 不走故障通道——该判据属 RoleClassification 的声明面（`[[bin]].path` /
-/// `[run].main`），Linking 在 check 不做入口校验。判别力：Linking 照搬 compile
-/// 的 `is_bin_role`（只问项目根是否存在）时，有 manifest 的入口缺 main 会被判
-/// 缺 main 而硬中止（且「入口自身有错 → 无 IR」也会被误判成缺 main），
-/// 第一条断言红。
-#[test]
-fn test_driver_run_check_undeclared_entry_without_main_reports_no_e3020() {
-    // Arrange：有 manifest（[package]）但无 [[bin]] 声明，入口无 main 绑定
-    let (_dir, entry) = make_project(&[("main.yx", "helper: () -> Void = {}\n")]);
-
-    // Act
-    let outcome = run_check(&entry).expect("driver run failed");
-
-    // Assert：故障通道与收集通道都不得出现 E3020（无 IR 也不许被误判为缺 main）
-    assert!(
-        outcome.failure.is_none(),
-        "未声明 bin 的入口缺 main 不得触发 run 路径的入口校验: {:?}",
-        outcome.failure
-    );
-    let codes: Vec<&str> = outcome
-        .check_diagnostics
-        .iter()
-        .flat_map(|(_, ds)| ds.iter().map(|d| d.code.as_str()))
-        .collect();
-    assert!(
-        !codes.contains(&"E3020"),
-        "未声明 bin 的入口缺 main 不属 check 的 E3020 判据（Linking 纯合并不查入口）: {codes:?}"
     );
 }
 

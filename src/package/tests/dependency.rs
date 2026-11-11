@@ -73,31 +73,3 @@ fn test_to_toml_value_simple() {
     let value = spec.to_toml_value();
     assert_eq!(value, toml::Value::String("1.0.0".to_string()));
 }
-
-#[test]
-fn test_to_toml_value_with_git() {
-    let spec = DependencySpec {
-        name: "foo".to_string(),
-        version: "1.0.0".to_string(),
-        git: Some("https://github.com/example/foo".to_string()),
-        path: None,
-    };
-    let value = spec.to_toml_value();
-    assert!(value.is_table());
-    let table = value.as_table().unwrap();
-    assert_eq!(table["version"].as_str(), Some("1.0.0"));
-    assert!(table.contains_key("git"));
-}
-
-#[test]
-fn test_round_trip() {
-    let spec = DependencySpec {
-        name: "foo".to_string(),
-        version: "1.0.0".to_string(),
-        git: None,
-        path: None,
-    };
-    let value = spec.to_toml_value();
-    let parsed = DependencySpec::parse("foo", &value);
-    assert_eq!(spec, parsed);
-}

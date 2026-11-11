@@ -438,6 +438,7 @@ impl<'a> ParserState<'a> {
                 name: name.clone(),
                 ty: None,
                 is_mut: false,
+                quantity: None,
                 span: *span,
             }]),
             // Empty tuple: () => expr
@@ -451,6 +452,7 @@ impl<'a> ParserState<'a> {
                             name: name.clone(),
                             ty: None,
                             is_mut: false,
+                            quantity: None,
                             span: *span,
                         });
                     } else {

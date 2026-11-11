@@ -41,8 +41,8 @@ pub fn embedded_source_by_virtual_path(virtual_path: &str) -> Option<&'static st
 pub fn embedded_std_module_info(use_path: &str) -> Option<crate::frontend::module::ModuleInfo> {
     use crate::frontend::core::parser;
     use crate::frontend::core::tokenize;
-    use crate::frontend::core::typecheck::checker::TypeChecker;
-    use crate::frontend::core::typecheck::SemanticProbe;
+    use crate::frontend::core::sema::checker::TypeChecker;
+    use crate::frontend::core::sema::SemanticProbe;
     use crate::frontend::core::types::mono::MonoType;
     use crate::frontend::module::symbol::SymbolTable;
     use crate::frontend::module::{Export, ExportKind, ModuleInfo, ModuleSource};
@@ -57,7 +57,7 @@ pub fn embedded_std_module_info(use_path: &str) -> Option<crate::frontend::modul
     // 谓词名可见面（WBS 3.20.9 / #522）：嵌入 std 只见自身单元，scan 自身
     // 模块传入（std.yx 源里现无谓词声明，内置谓词名仍由 scan 收进）
     let namespace =
-        crate::frontend::core::typecheck::probe::TypeLevelNamespace::scan_one(&parsed.module);
+        crate::frontend::core::sema::probe::TypeLevelNamespace::scan_one(&parsed.module);
     checker.collect_signatures(&parsed.module, &namespace);
     let vars = checker.env().vars.clone();
     let types = checker.env().types.clone();
@@ -89,6 +89,7 @@ pub fn embedded_std_module_info(use_path: &str) -> Option<crate::frontend::modul
                         // embedded yx std 模块的定义文件是虚拟路径（`<std/…>`），
                         // 跨文件 resolves_to 对 std 一律回退 use 行（4.6.1 口径）
                         definition_span: None,
+                        predicate_def: None, // 嵌入 std 面当前无谓词声明（#524 载荷面）
                     });
                 }
             }
@@ -117,6 +118,7 @@ pub fn embedded_std_module_info(use_path: &str) -> Option<crate::frontend::modul
                             param_names,
                             type_payload: None,
                             definition_span: None, // 同上：std 无真实定义文件
+                            predicate_def: None,   // 嵌入 std 面当前无谓词声明（#524 载荷面）
                         });
                     }
                 }

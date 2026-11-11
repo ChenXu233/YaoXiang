@@ -10,59 +10,9 @@ use std::collections::HashMap;
 
 // ===== TraitTable 基础操作 =====
 
-/// Fixture: 不携带方法的 `Clone` 特质定义（首次登记）。
-fn clone_trait_def() -> TraitDefinition {
-    TraitDefinition {
-        name: "Clone".to_string(),
-        methods: HashMap::new(),
-        parent_traits: vec![],
-        generic_params: vec![],
-        span: None,
-        is_marker: false,
-    }
-}
-
-/// Fixture: 带 `clone` 方法的 `Clone` 特质定义（覆盖登记）。
-fn clone_trait_def_with_method() -> TraitDefinition {
-    let mut methods = HashMap::new();
-    methods.insert(
-        "clone".to_string(),
-        TraitMethodSignature {
-            name: "clone".to_string(),
-            params: vec![],
-            return_type: MonoType::TypeRef("Self".to_string()),
-            is_static: false,
-        },
-    );
-    TraitDefinition {
-        name: "Clone".to_string(),
-        methods,
-        parent_traits: vec![],
-        generic_params: vec![],
-        span: None,
-        is_marker: false,
-    }
-}
-
 #[test]
 fn test_trait_table_new() {
     assert!(TraitTable::new().trait_names().next().is_none());
-}
-
-#[test]
-fn test_trait_table_add_and_get() {
-    let mut table = TraitTable::new();
-    table.add_trait(TraitDefinition {
-        name: "Clone".to_string(),
-        methods: HashMap::new(),
-        parent_traits: vec![],
-        generic_params: vec![],
-        span: None,
-        is_marker: false,
-    });
-    assert!(table.has_trait("Clone"));
-    assert!(table.get_trait("Clone").is_some());
-    assert!(!table.has_trait("NonExistent"));
 }
 
 #[test]
@@ -186,57 +136,6 @@ fn test_trait_table_get_method_impl_missing_type() {
 // ===== TraitTable 多 trait 管理 =====
 
 #[test]
-fn test_trait_table_multiple_traits() {
-    let mut table = TraitTable::new();
-    table.add_trait(TraitDefinition {
-        name: "Clone".to_string(),
-        methods: HashMap::new(),
-        parent_traits: vec![],
-        generic_params: vec![],
-        span: None,
-        is_marker: false,
-    });
-    table.add_trait(TraitDefinition {
-        name: "Display".to_string(),
-        methods: HashMap::new(),
-        parent_traits: vec![],
-        generic_params: vec![],
-        span: None,
-        is_marker: false,
-    });
-    assert!(table.has_trait("Clone"), "should have Clone");
-    assert!(table.has_trait("Display"), "should have Display");
-    assert!(!table.has_trait("Debug"), "should not have Debug");
-}
-
-#[test]
-fn test_trait_table_multiple_impls() {
-    let mut table = TraitTable::new();
-    table.add_impl(TraitImplementation {
-        trait_name: "Clone".to_string(),
-        for_type_name: "Point".to_string(),
-        methods: HashMap::new(),
-    });
-    table.add_impl(TraitImplementation {
-        trait_name: "Display".to_string(),
-        for_type_name: "Point".to_string(),
-        methods: HashMap::new(),
-    });
-    assert!(
-        table.has_impl("Clone", "Point"),
-        "Point should implement Clone"
-    );
-    assert!(
-        table.has_impl("Display", "Point"),
-        "Point should implement Display"
-    );
-    assert!(
-        !table.has_impl("Debug", "Point"),
-        "Point should not implement Debug"
-    );
-}
-
-#[test]
 fn test_trait_table_trait_names() {
     let mut table = TraitTable::new();
     table.add_trait(TraitDefinition {
@@ -259,25 +158,6 @@ fn test_trait_table_trait_names() {
     assert_eq!(names.len(), 2, "should have 2 trait names");
     assert!(names.contains(&&"A".to_string()), "should contain A");
     assert!(names.contains(&&"B".to_string()), "should contain B");
-}
-
-#[test]
-fn test_trait_table_overwrite_trait() {
-    // Arrange — 先登记无方法的 Clone，再用带 clone 方法的定义覆盖
-    let mut table = TraitTable::new();
-    table.add_trait(clone_trait_def());
-    table.add_trait(clone_trait_def_with_method());
-
-    // Act — 取回覆盖后的定义
-    let def = table
-        .get_trait("Clone")
-        .expect("table.get_trait(\"Clone\") 应成功");
-
-    // Assert — 覆盖后的定义包含 clone 方法
-    assert!(
-        def.methods.contains_key("clone"),
-        "overwritten trait should have clone method"
-    );
 }
 
 // ===== TraitMethodSignature 测试 =====

@@ -12,21 +12,21 @@ edit `locales/*.json`; to change the code table, edit `define_codes!`, and then 
 
 Errors related to the module system and import resolution.
 
-This family contains **8** codes, all registered in the `define_codes!` registry under the `Module`
-category. See the [Error Code Index](./index.md) for the complete index.
+There are **8** codes in this family, all registered in the `define_codes!` registry, with the
+category `Module`. See the [error code index](./index.md) for the complete index.
 
 ## Code Overview
 
-| Code    | Name                 | Category | span Exemption | Template                                                                             | Emission Point    |
+| Code    | Name                 | Category | span Exemption | Template                                                                             | Emission Site     |
 | ------- | -------------------- | -------- | -------------- | ------------------------------------------------------------------------------------ | ----------------- |
-| `E5001` | Module not found     | `Module` | No             | `Module '{module}' not found`                                                        | ✅ 1 site         |
-| `E5002` | Import error         | `Module` | No             | `Failed to import module '{module}': {reason}`                                       | ⚠ Not yet emitted |
-| `E5003` | Export not found     | `Module` | No             | `Export '{export}' not found in module '{module}'`                                   | ✅ 1 site         |
-| `E5004` | Circular dependency  | `Module` | No             | `Circular dependency detected: {path}`                                               | ⚠ Not yet emitted |
-| `E5005` | Invalid module path  | `Module` | No             | `Invalid module path: '{path}'`                                                      | ⚠ Not yet emitted |
-| `E5006` | Duplicate import     | `Module` | No             | `Duplicate import: '{name}' has already been imported`                               | ✅ 1 site         |
-| `E5007` | Module exports       | `Module` | No             | `Module '{module}' exports: {available}`                                             | ⚠ Not yet emitted |
-| `E5008` | Import name conflict | `Module` | No             | `Import name '{name}' conflicts with an existing binding (imported from '{module}')` | ✅ 1 site         |
+| `E5001` | Module Not Found     | `Module` | No             | `Module '{module}' not found`                                                        | ✅ 1 location     |
+| `E5002` | Import Error         | `Module` | No             | `Failed to import module '{module}': {reason}`                                       | ⚠ Not yet emitted |
+| `E5003` | Export Not Found     | `Module` | No             | `Export '{export}' not found in module '{module}'`                                   | ✅ 1 location     |
+| `E5004` | Circular Dependency  | `Module` | No             | `Circular dependency detected: {path}`                                               | ⚠ Not yet emitted |
+| `E5005` | Invalid Module Path  | `Module` | No             | `Invalid module path: '{path}'`                                                      | ⚠ Not yet emitted |
+| `E5006` | Duplicate Import     | `Module` | No             | `Duplicate import: '{name}' has already been imported`                               | ✅ 1 location     |
+| `E5007` | Module Exports       | `Module` | No             | `Exports of module '{module}': {available}`                                          | ⚠ Not yet emitted |
+| `E5008` | Import Name Conflict | `Module` | No             | `Import name '{name}' conflicts with an existing binding (imported from '{module}')` | ✅ 1 location     |
 
 ## Code Details
 
@@ -36,9 +36,9 @@ category. See the [Error Code Index](./index.md) for the complete index.
 - **span Exemption**: No
 - **Constructor**: `ErrorCodeDefinition::module_not_found(module)`
 - **Template**: `Module '{module}' not found`
-- **Message**: The referenced module does not exist.
-- **Help**: Check the module path and make sure it exists.
-- **Emission Point**: `src/frontend/core/typecheck/inference/statements.rs:695`
+- **Message**: The referenced module does not exist
+- **Help**: Check the module path and make sure it exists
+- **Emission Site**: `src/frontend/core/sema/inference/statements.rs:744`
 
 ### E5002: Import Error
 
@@ -46,9 +46,9 @@ category. See the [Error Code Index](./index.md) for the complete index.
 - **span Exemption**: No
 - **Constructor**: `ErrorCodeDefinition::import_error(module, reason)`
 - **Template**: `Failed to import module '{module}': {reason}`
-- **Message**: Failed to import the module.
-- **Help**: Check the import path and module resolution.
-- **Emission Point**: ⚠ Not yet emitted (the code is retained in the registry, but there are no call
+- **Message**: Failed to import the module
+- **Help**: Check the import path and module resolution
+- **Emission Site**: ⚠ Not yet emitted (the code is retained in the registry, but there are no call
   sites outside test code, so users cannot trigger it)
 
 ### E5003: Export Not Found
@@ -57,9 +57,9 @@ category. See the [Error Code Index](./index.md) for the complete index.
 - **span Exemption**: No
 - **Constructor**: `ErrorCodeDefinition::export_not_found(export, module)`
 - **Template**: `Export '{export}' not found in module '{module}'`
-- **Message**: The export does not exist in the module.
-- **Help**: Check the module's exports.
-- **Emission Point**: `src/frontend/core/typecheck/inference/statements.rs:780`
+- **Message**: The export does not exist in the module
+- **Help**: Check the module's exports
+- **Emission Site**: `src/frontend/core/sema/inference/statements.rs:829`
 
 ### E5004: Circular Dependency
 
@@ -67,9 +67,9 @@ category. See the [Error Code Index](./index.md) for the complete index.
 - **span Exemption**: No
 - **Constructor**: `ErrorCodeDefinition::circular_dependency(path)`
 - **Template**: `Circular dependency detected: {path}`
-- **Message**: The module has a circular dependency.
-- **Help**: Refactor the code to remove the circular dependency.
-- **Emission Point**: ⚠ Not yet emitted (the code is retained in the registry, but there are no call
+- **Message**: The module has a circular dependency
+- **Help**: Refactor to remove the circular dependency
+- **Emission Site**: ⚠ Not yet emitted (the code is retained in the registry, but there are no call
   sites outside test code, so users cannot trigger it)
 
 ### E5005: Invalid Module Path
@@ -78,8 +78,8 @@ category. See the [Error Code Index](./index.md) for the complete index.
 - **span Exemption**: No
 - **Constructor**: `ErrorCodeDefinition::invalid_module_path(path)`
 - **Template**: `Invalid module path: '{path}'`
-- **Help**: Check the module path format.
-- **Emission Point**: ⚠ Not yet emitted (the code is retained in the registry, but there are no call
+- **Help**: Check the module path format
+- **Emission Site**: ⚠ Not yet emitted (the code is retained in the registry, but there are no call
   sites outside test code, so users cannot trigger it)
 
 ### E5006: Duplicate Import
@@ -88,19 +88,19 @@ category. See the [Error Code Index](./index.md) for the complete index.
 - **span Exemption**: No
 - **Constructor**: `ErrorCodeDefinition::duplicate_import(name)`
 - **Template**: `Duplicate import: '{name}' has already been imported`
-- **Help**: Remove the duplicate import, or use a different name or module alias.
-- **Emission Point**: `src/frontend/core/typecheck/inference/statements.rs:327`
+- **Help**: Remove the duplicate import, or use a different name or module alias
+- **Emission Site**: `src/frontend/core/sema/inference/statements.rs:349`
 
 ### E5007: Module Exports
 
 - **Category**: `Module`
 - **span Exemption**: No
 - **Constructor**: `ErrorCodeDefinition::module_exports_hint(module, available)`
-- **Template**: `Module '{module}' exports: {available}`
-- **Help**: The available exports are listed in the error message.
-- **Emission Point**: ⚠ Not yet emitted (the code is retained in the registry, but there are no call
+- **Template**: `Exports of module '{module}': {available}`
+- **Help**: The available exports are listed in the error message
+- **Emission Site**: ⚠ Not yet emitted (the code is retained in the registry, but there are no call
   sites outside test code, so users cannot trigger it)
-- **Source Comment Name**: Module export hint (used to supplement error messages)
+- **Source Comment Name**: Module export hint (used to assist error messages)
 
 ### E5008: Import Name Conflict
 
@@ -108,7 +108,7 @@ category. See the [Error Code Index](./index.md) for the complete index.
 - **span Exemption**: No
 - **Constructor**: `ErrorCodeDefinition::import_name_conflict(name, module)`
 - **Template**: `Import name '{name}' conflicts with an existing binding (imported from '{module}')`
-- **Help**: Use a different name or module alias.
-- **Emission Point**: `src/frontend/core/typecheck/inference/statements.rs:336`
+- **Help**: Use a different name or module alias
+- **Emission Site**: `src/frontend/core/sema/inference/statements.rs:358`
 - **Source Comment Name**: Import name conflicts with an existing binding (#414, RFC-029 §Import
   Conflict)

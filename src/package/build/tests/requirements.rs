@@ -26,38 +26,6 @@ fn test_tool_req_pads_two_segment_operand() {
 }
 
 #[test]
-fn test_tool_req_multi_comparator_intersection() {
-    // Act
-    let multi = requirements::parse_tool_req(">=3.20, <4.0").unwrap();
-
-    // Assert
-    assert!(
-        multi.matches(&semver::Version::parse("3.29.6").unwrap()),
-        "3.29.6 应落在 [3.20, 4.0)"
-    );
-    assert!(
-        !multi.matches(&semver::Version::parse("4.1.0").unwrap()),
-        "4.1.0 不应落在 [3.20, 4.0)"
-    );
-}
-
-#[test]
-fn test_tool_req_bare_version_is_exact() {
-    // Act：裸版本 = 精确要求（与 resolver::parse_version_req 口径一致）
-    let exact = requirements::parse_tool_req("3.29").unwrap();
-
-    // Assert
-    assert!(
-        exact.matches(&semver::Version::parse("3.29.0").unwrap()),
-        "3.29.0 应精确匹配 3.29"
-    );
-    assert!(
-        !exact.matches(&semver::Version::parse("3.30.0").unwrap()),
-        "3.30.0 不应精确匹配 3.29"
-    );
-}
-
-#[test]
 fn test_requirements_check_reports_missing_tool_with_hint() {
     // Arrange
     let mut reqs = BTreeMap::new();

@@ -43,7 +43,16 @@ pub fn run_check_command_once(
         eprintln!("Checking {} file(s)...", files.len());
     }
 
-    let result = check_files_with_diagnostics(&files)?;
+    // #471：与 run 臂同一份发现规则——读 cwd 的 yaoxiang.toml，把 [mono] 闸门
+    // 灌进 check 链。同一 cwd 下 check 与 run 必须读到同一个上限；文件存在但
+    // 不可读 = 显式报错（#520 与 run 同口径），不存在 = 合法默认。
+    let compile_config = crate::util::config::load_project_config_from(std::path::Path::new(
+        crate::package::manifest::MANIFEST_FILE,
+    ))
+    .with_context(|| "读取项目配置 yaoxiang.toml 失败")?
+    .compile_config();
+
+    let result = check_files_with_diagnostics(&files, compile_config)?;
 
     if json {
         output_check_json(&result)?;

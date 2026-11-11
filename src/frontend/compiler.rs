@@ -171,7 +171,7 @@ impl Compiler {
         tokens: &[super::core::lexer::Token],
     ) -> Result<super::core::parser::Module, CompileError> {
         let result =
-            super::core::parser::parse_with_probe(tokens, &super::core::typecheck::SemanticProbe);
+            super::core::parser::parse_with_probe(tokens, &super::core::sema::SemanticProbe);
         if result.has_errors {
             Err(CompileError::Parse(
                 result.errors.into_iter().next().unwrap_or_else(|| {
@@ -191,8 +191,8 @@ impl Compiler {
     pub fn typecheck(
         &mut self,
         ast: &super::core::parser::Module,
-    ) -> super::core::typecheck::TypeCheckResult {
-        super::core::typecheck::check_module(ast, &mut None)
+    ) -> super::core::sema::TypeCheckResult {
+        super::core::sema::check_module(ast, &mut None)
     }
 
     /// 生成 IR
@@ -201,7 +201,7 @@ impl Compiler {
     pub fn generate_ir(
         &mut self,
         ast: &super::core::parser::Module,
-        type_result: &super::core::typecheck::TypeCheckResult,
+        type_result: &super::core::sema::TypeCheckResult,
     ) -> Result<middle::ModuleIR, Vec<Diagnostic>> {
         middle::generate_ir(ast, type_result)
     }

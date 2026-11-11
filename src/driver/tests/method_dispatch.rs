@@ -15,7 +15,7 @@
 //! 是定义单元的限定名（结构层），以及两个实例的**值**各走各自单元的实现（行为层）。
 
 use super::driver::{make_script_project, run_multi, run_merged_slot_values};
-use crate::middle::core::ir::{ConstValue, Instruction, Operand};
+use crate::middle::ir::ir::{ConstValue, Instruction, Operand};
 
 /// a 单元：`Temp.tag` = v + 1.0（与 b 的实现可区分——两单元实现相同时测试对缺陷是盲的）。
 const UNIT_A: &str = "Temp: Type = { v: Float }\n\nTemp.tag: (self: &Temp) -> Float = (self) => {\n    self.v + 1.0\n}\n";

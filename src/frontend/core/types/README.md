@@ -13,6 +13,6 @@
 - `error.rs` — 类型错误
 - `eval/` — 类型代数操作（见 eval/README.md）
 
-**依赖**：无（不依赖 typecheck/、middle/、backends/）
+**依赖**：无（不依赖 sema/、middle/、backends/）
 
-**被依赖**：typecheck/、backends/、LSP、REPL、middle/
+**被依赖**：sema/、backends/、LSP、REPL、middle/

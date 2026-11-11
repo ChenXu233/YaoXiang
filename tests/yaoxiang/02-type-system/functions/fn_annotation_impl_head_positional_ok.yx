@@ -1,0 +1,18 @@
+// 02-type-system/functions/fn_annotation_impl_head_positional_ok.yx
+// D54 / WBS 6.8.2c ②（改判登记）：实现头是**位置**绑定器——名字不参与重排。
+//   旧行为：`(b, a)` 对声明 `(a: Int, b: Int)` 被 parser 报 **E0012**
+//   （「Parameter name mismatch at position 1」）；新口径按位置绑定 ⇒ 通过。
+// 验证:
+//   - f(1, 2) == 1：体内 b 指**第 1 位**（实参 1），a 指第 2 位（实参 2）
+//   - 若实现头又变回按名字重排，本夹具会得到 2 → 转红
+// 状态: ✅ 可运行
+
+use std.assert
+
+f: (a: Int, b: Int) -> Int = (b, a) => b
+
+main: () -> Void = {
+    assert.assert(f(1, 2) == 1, "实现头按位置绑定：名字不重排实参")
+}
+
+main()

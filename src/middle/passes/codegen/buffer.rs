@@ -2,7 +2,7 @@
 //!
 //! 管理常量池和字节码生成缓冲区。
 
-use crate::middle::core::ir::ConstValue;
+use crate::middle::ir::ir::ConstValue;
 
 /// 常量池
 #[derive(Debug, Default, Clone)]

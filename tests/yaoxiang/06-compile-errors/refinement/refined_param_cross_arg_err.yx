@@ -1,0 +1,17 @@
+// 06-compile-errors/refinement/refined_param_cross_arg_err.yx
+// 覆盖: RFC-027 §2/§3.1/§3.3/§3.4 —— 形参约束引用另一个形参时，被引用者必须满足约束
+// 验证: `h: (a: Int, b: IsPositive(a))` 的约束是 `a > 0`；`h(-5, 1)` 的
+//       `a = -5` 使约束为假 ⇒ E4018。修复前该调用把 `b` 的实参顶替进 `a` 的
+//       位置，反而**静默通过**（`1 > 0` 为真）。
+// 状态: ❌ 应被编译期拒绝
+
+// expect: compile-error E4018
+
+IsPositive: (x: Int) -> Type = { x > 0 }
+
+h: (a: Int, b: IsPositive(a)) -> Int = { a }
+
+main: () -> Void = {
+    x: Int = h(-5, 1)
+    print(x)
+}

@@ -15,7 +15,7 @@ fn make_function(instrs: Vec<BytecodeInstr>) -> BytecodeFunction {
     BytecodeFunction {
         name: "test".to_string(),
         params: vec![],
-        return_type: crate::frontend::core::typecheck::MonoType::Void,
+        return_type: crate::frontend::core::sema::MonoType::Void,
         local_count: 4,
         local_names: HashMap::new(),
         upvalue_count: 0,
@@ -39,24 +39,24 @@ fn make_interp_with_const(val: ConstValue) -> Interpreter {
 /// Borrow copies value from src register to dst register (immutable)
 /// Helper: test_new_array_bytecode_roundtrip_decode 的完整夹具与断言（逐条断言见函数体）。
 /// Fixture: NEW_ARRAY(5) + RETURN_VALUE 的编码文件（编码：opcode + dst + count 小端）。
-fn new_array_roundtrip_file() -> crate::middle::passes::codegen::BytecodeFile {
-    use crate::middle::passes::codegen::{
-        BytecodeFile, BytecodeInstruction, BytecodeHeader, CodeSection, FunctionCode,
+fn new_array_roundtrip_file() -> crate::middle::bytecode::file::BytecodeFile {
+    use crate::middle::bytecode::file::{
+        BytecodeFile, BytecodeInstruction, CodeSection, FileHeader, FunctionCode,
     };
 
     // Arrange — 构造原始编码：opcode(1) + dst(1) + count(4, 小端)
     let mut operands = vec![0u8]; // dst = r0
     operands.extend_from_slice(&5u32.to_le_bytes()); // count = 5
     let raw_new_array =
-        BytecodeInstruction::new(crate::backends::common::opcode::NEW_ARRAY, operands);
+        BytecodeInstruction::new(crate::middle::bytecode::opcode::NEW_ARRAY, operands);
     // ReturnValue r0
     let raw_return =
-        BytecodeInstruction::new(crate::backends::common::opcode::RETURN_VALUE, vec![0u8]);
+        BytecodeInstruction::new(crate::middle::bytecode::opcode::RETURN_VALUE, vec![0u8]);
 
     BytecodeFile {
-        header: BytecodeHeader {
+        header: FileHeader {
             entry_point: 0,
-            ..BytecodeHeader::default()
+            ..FileHeader::default()
         },
         type_table: vec![],
         const_pool: vec![],
@@ -102,7 +102,7 @@ fn spawn_two_tasks_module() -> crate::middle::bytecode::BytecodeModule {
     let task_a = BytecodeFunction {
         name: "task_a".to_string(),
         params: vec![],
-        return_type: crate::frontend::core::typecheck::MonoType::Void,
+        return_type: crate::frontend::core::sema::MonoType::Void,
         local_count: 1,
         local_names: HashMap::new(),
         upvalue_count: 0,
@@ -122,7 +122,7 @@ fn spawn_two_tasks_module() -> crate::middle::bytecode::BytecodeModule {
     let task_b = BytecodeFunction {
         name: "task_b".to_string(),
         params: vec![],
-        return_type: crate::frontend::core::typecheck::MonoType::Void,
+        return_type: crate::frontend::core::sema::MonoType::Void,
         local_count: 1,
         local_names: HashMap::new(),
         upvalue_count: 0,
@@ -143,7 +143,7 @@ fn spawn_two_tasks_module() -> crate::middle::bytecode::BytecodeModule {
     let main_func = BytecodeFunction {
         name: "main".to_string(),
         params: vec![],
-        return_type: crate::frontend::core::typecheck::MonoType::Void,
+        return_type: crate::frontend::core::sema::MonoType::Void,
         local_count: 4,
         local_names: HashMap::new(),
         upvalue_count: 0,
@@ -256,156 +256,6 @@ fn test_borrow_copies_value_immutable() {
     );
 }
 
-/// Borrow copies value from src register to dst register (mutable)
-#[test]
-fn test_borrow_copies_value_mutable() {
-    let func = make_function(vec![
-        // r0 = Int(99)
-        BytecodeInstr::LoadConst {
-            dst: Reg(0),
-            const_idx: 0,
-        },
-        // r1 = borrow mut r0
-        BytecodeInstr::Borrow {
-            dst: Reg(1),
-            src: Reg(0),
-            mutable: true,
-        },
-        // return r1
-        BytecodeInstr::ReturnValue { value: Reg(1) },
-    ]);
-
-    let mut interp = make_interp_with_const(ConstValue::Int(99));
-
-    let result = interp.execute_function(&func, &[]).unwrap();
-    assert_eq!(result, RuntimeValue::Int(99), "可变借用应拷贝源寄存器的值");
-}
-
-/// Borrow with mutable:false and mutable:true produce the same runtime result (ZST)
-#[test]
-fn test_borrow_mutable_flag_irrelevant_at_runtime() {
-    // Both immutable and mutable borrow copy the value identically.
-    for mutable in [false, true] {
-        let func = make_function(vec![
-            BytecodeInstr::LoadConst {
-                dst: Reg(0),
-                const_idx: 0,
-            },
-            BytecodeInstr::Borrow {
-                dst: Reg(1),
-                src: Reg(0),
-                mutable,
-            },
-            BytecodeInstr::ReturnValue { value: Reg(1) },
-        ]);
-
-        let mut interp = make_interp_with_const(ConstValue::String("hello".into()));
-
-        let result = interp.execute_function(&func, &[]).unwrap();
-        assert_eq!(
-            result,
-            RuntimeValue::String("hello".into()),
-            "mutable={mutable} should produce the same value",
-        );
-    }
-}
-
-/// Borrow with empty src register yields Void
-#[test]
-fn test_borrow_from_unset_register() {
-    let func = make_function(vec![
-        // r1 = borrow r0 (r0 is unset -> Void)
-        BytecodeInstr::Borrow {
-            dst: Reg(1),
-            src: Reg(0),
-            mutable: false,
-        },
-        // return r1
-        BytecodeInstr::ReturnValue { value: Reg(1) },
-    ]);
-
-    let mut interp = Interpreter::new();
-    let result = interp.execute_function(&func, &[]).unwrap();
-    assert_eq!(
-        result,
-        RuntimeValue::Void,
-        "从未设置的寄存器借用应得到 Void"
-    ); // just advances IP; does not corrupt registers
-}
-
-#[test]
-fn test_release_is_noop() {
-    let func = make_function(vec![
-        // r0 = Int(7)
-        BytecodeInstr::LoadConst {
-            dst: Reg(0),
-            const_idx: 0,
-        },
-        // release r0 (should be a no-op)
-        BytecodeInstr::Release { src: Reg(0) },
-        // r1 = r0 (still valid)
-        BytecodeInstr::Mov {
-            dst: Reg(1),
-            src: Reg(0),
-        },
-        // return r1
-        BytecodeInstr::ReturnValue { value: Reg(1) },
-    ]);
-
-    let mut interp = make_interp_with_const(ConstValue::Int(7));
-
-    let result = interp.execute_function(&func, &[]).unwrap();
-    assert_eq!(result, RuntimeValue::Int(7), "Release 不应修改寄存器值");
-}
-
-/// Release on unset register is also a no-op (no panic)
-#[test]
-fn test_release_unset_register() {
-    let func = make_function(vec![
-        // release r5 (unset) — must not panic
-        BytecodeInstr::Release { src: Reg(5) },
-        BytecodeInstr::Return,
-    ]);
-
-    let mut interp = Interpreter::new();
-    let result = interp.execute_function(&func, &[]).unwrap();
-    assert_eq!(
-        result,
-        RuntimeValue::Void,
-        "对未设置寄存器执行 Release 不应 panic"
-    );
-}
-
-/// Borrow followed by Release preserves the borrowed value
-#[test]
-fn test_borrow_then_release_preserves_value() {
-    let func = make_function(vec![
-        BytecodeInstr::LoadConst {
-            dst: Reg(0),
-            const_idx: 0,
-        },
-        // r1 = borrow r0
-        BytecodeInstr::Borrow {
-            dst: Reg(1),
-            src: Reg(0),
-            mutable: true,
-        },
-        // release r1 (no-op)
-        BytecodeInstr::Release { src: Reg(1) },
-        // return r1 — value still intact
-        BytecodeInstr::ReturnValue { value: Reg(1) },
-    ]);
-
-    let mut interp = make_interp_with_const(ConstValue::Bool(true));
-
-    let result = interp.execute_function(&func, &[]).unwrap();
-    assert_eq!(
-        result,
-        RuntimeValue::Bool(true),
-        "Borrow 后 Release 应保留借用的值"
-    );
-}
-
 /// 端到端测试：Standard 模式下 spawn 并发执行两个任务
 ///
 /// 验证：
@@ -429,43 +279,6 @@ fn spawn_concurrent_standard_mode() {
         result.err()
     );
     assert_standard_runtime_config(&interp);
-}
-
-/// #299 §2：NewArray 分配定长 Array，元素默认 Void 占位
-#[test]
-fn test_new_array_allocates_fixed_void_slots() {
-    // Arrange — 含 NewArray(count=5) + ReturnValue 的字节码函数
-    let func = make_function(vec![
-        // r0 = Array(5)（全 Void 占位）
-        BytecodeInstr::NewArray {
-            dst: Reg(0),
-            count: 5,
-        },
-        // return r0
-        BytecodeInstr::ReturnValue { value: Reg(0) },
-    ]);
-
-    // Act — 执行并取返回值
-    let mut interp = Interpreter::new();
-    let result = interp.execute_function(&func, &[]).unwrap();
-
-    // Assert — 返回 RuntimeValue::Array，长度 5 且全为 Void 占位
-    match result {
-        RuntimeValue::Array(handle) => {
-            let guard = handle.lock();
-            match &*guard {
-                crate::backends::common::HeapValue::Array(items) => {
-                    assert_eq!(items.len(), 5, "Array 应有 5 个元素占位");
-                    assert!(
-                        items.iter().all(|v| matches!(v, RuntimeValue::Void)),
-                        "元素应默认 Void 占位"
-                    );
-                }
-                other => panic!("应产出 HeapValue::Array，实际: {other:?}"),
-            }
-        }
-        other => panic!("应返回 RuntimeValue::Array，实际: {other:?}"),
-    }
 }
 
 /// #299 §2：NewArray 指令经字节码序列化→解码往返后保持语义

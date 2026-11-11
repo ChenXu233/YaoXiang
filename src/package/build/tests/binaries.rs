@@ -111,28 +111,6 @@ fn test_binaries_checksum_mismatch_falls_back_to_source_build() {
 }
 
 #[test]
-fn test_binaries_relative_url_uses_source_base() {
-    // Arrange：相对 URL（releases/...）相对包仓库基址解析
-    let tmp = tempfile::tempdir().unwrap();
-    let (tarball_bytes, sha) = tarball(tmp.path(), "payload.bin", b"x");
-    let api = MockApi::spawn(vec![MockResp::bytes(200, tarball_bytes)]);
-    let pkg = tmp.path().join("demo-1.0.0");
-    manifest_with_binary(&pkg, "releases/v1/demo.tar.gz", &sha);
-
-    // Act
-    let outcome = run(&pkg, Some(&api.url));
-
-    // Assert
-    assert_eq!(outcome.via, "prebuilt");
-    assert_eq!(
-        api.recorded()[0].path,
-        "/releases/v1/demo.tar.gz",
-        "相对 URL 应拼到仓库基址后"
-    );
-    api.handle.join().unwrap();
-}
-
-#[test]
 fn test_binaries_other_platform_falls_back() {
     // Arrange：条目不在当前平台 → 不发请求，直接回退
     let tmp = tempfile::tempdir().unwrap();

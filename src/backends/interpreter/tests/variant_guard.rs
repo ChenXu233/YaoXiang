@@ -9,7 +9,7 @@
 //! 值正确性（分发结果 == Woof/Meow）由 E2E interface_dynamic_dispatch.yx 覆盖。
 
 use crate::middle::bytecode::{BytecodeFunction, BytecodeInstr, BytecodeModule, ConstValue, Reg};
-use crate::frontend::core::typecheck::MonoType;
+use crate::frontend::core::sema::MonoType;
 use std::collections::HashMap;
 
 /// Vec(Animal) 异构容器 + 变体分发，经字节码落盘/加载往返后执行正确。
@@ -59,7 +59,7 @@ fn unwrapped_variant_tag_module() -> BytecodeModule {
 }
 
 /// Fixture + Act：Animal/Dog/Cat 动态分派项目 → 编译 → 落盘 → 反序列化加载。
-fn compile_dispatch_project(dir: &std::path::Path) -> crate::middle::passes::codegen::BytecodeFile {
+fn compile_dispatch_project(dir: &std::path::Path) -> crate::middle::bytecode::file::BytecodeFile {
     let source_path = dir.join("dispatch.yx");
     let bytecode_path = dir.join("dispatch.42");
     std::fs::write(
@@ -89,17 +89,17 @@ main = () => {
     .expect("write source file");
     crate::build_bytecode_with_options(&source_path, &bytecode_path, false)
         .expect("build bytecode");
-    crate::middle::passes::codegen::BytecodeFile::load(&bytecode_path).expect("load bytecode file")
+    crate::middle::bytecode::file::BytecodeFile::load(&bytecode_path).expect("load bytecode file")
 }
 
 /// Assert：编码侧仍含 CREATE_VARIANT（编解码链路完整）。
 fn assert_variant_opcode_survives_encode(
-    bytecode_file: &crate::middle::passes::codegen::BytecodeFile
+    bytecode_file: &crate::middle::bytecode::file::BytecodeFile
 ) {
     let has_variant_instr = bytecode_file.code_section.functions.iter().any(|f| {
         f.instructions
             .iter()
-            .any(|i| i.opcode == crate::backends::common::opcode::CREATE_VARIANT)
+            .any(|i| i.opcode == crate::middle::bytecode::opcode::CREATE_VARIANT)
     });
     assert!(has_variant_instr, "CREATE_VARIANT should survive encode");
 }

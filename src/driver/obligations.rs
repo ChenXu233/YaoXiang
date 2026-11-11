@@ -37,9 +37,9 @@
 //! - `method_overload_ir_names` → 3.4.5 **已清账**（删 `TypeCheckResult` 上的跨阶段镜像，
 //!   在相位候选名表与 `overload_resolutions` 保留）；
 //! - `interface_impl_registry` → 3.4.9 **已清账**（用户裁决甲：改判为**树内事实**——
-//!   它在 typecheck 树内有真实在相位消费（`src/frontend/core/typecheck/operator_interfaces.rs:623` 运算符查询、
-//!   `src/frontend/core/typecheck/inference/expressions.rs` 七处约束求解查询、
-//!   `src/frontend/core/typecheck/checker.rs:214-217` 只读访问器），
+//!   它在 typecheck 树内有真实在相位消费（`src/frontend/core/sema/operator_interfaces.rs:623` 运算符查询、
+//!   `src/frontend/core/sema/inference/expressions.rs` 七处约束求解查询、
+//!   `src/frontend/core/sema/checker.rs:214-217` 只读访问器），
 //!   而跨阶段读取为零（`src/middle` 0 命中）；删掉类型注释里「镜像供 middle 端/LSP
 //!   消费」的**声明**，保留字段本身与在相位消费。将来 LSP 真需要该表，按 4.6.x
 //!   新登记走，不在本轮造消费者）。
@@ -92,7 +92,7 @@
 
 use std::path::PathBuf;
 
-use crate::frontend::core::typecheck::TypeCheckResult;
+use crate::frontend::core::sema::TypeCheckResult;
 use crate::frontend::module::orchestrator::{is_vendor_path, OrchestratorError};
 use crate::frontend::pipeline::PipelineError;
 use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition, Severity};
@@ -106,7 +106,7 @@ pub const OBLIGATION_UNDRAINED_CODE: &str = "W1090";
 
 /// 义务字段——`TypeCheckResult` 中「产出即契约」的字段（条数见 [`Obligation::ALL`]）
 /// （02-stage-contract §义务字段表；定义见
-/// `src/frontend/core/typecheck/types.rs:16-77`）。
+/// `src/frontend/core/sema/types.rs:16-77`）。
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum Obligation {
     /// `proof_calls`：typecheck → 证明执行
@@ -181,11 +181,11 @@ pub const NON_OBLIGATION_FIELDS: &[NonObligationField] = &[
     },
     NonObligationField {
         field: "bindings",
-        reason: "类型绑定表：确有跨阶段读取（src/middle/core/ir_gen.rs:735/:5034），但文档注释未声明跨阶段契约 ⇒ 未收编进 02 义务字段表；登记在此闭合字段普查",
+        reason: "类型绑定表：确有跨阶段读取（src/middle/ir/ir_gen.rs:735/:5034），但文档注释未声明跨阶段契约 ⇒ 未收编进 02 义务字段表；登记在此闭合字段普查",
     },
     NonObligationField {
         field: "local_var_types",
-        reason: "诊断渲染用局部类型表：跨阶段读取在 src/middle/core/ir_gen.rs:852/:4543/:4794（错误消息），与 bindings 同——未声明契约",
+        reason: "诊断渲染用局部类型表：跨阶段读取在 src/middle/ir/ir_gen.rs:852/:4543/:4794（错误消息），与 bindings 同——未声明契约",
     },
     NonObligationField {
         field: "semantic_db",
@@ -193,7 +193,7 @@ pub const NON_OBLIGATION_FIELDS: &[NonObligationField] = &[
     },
     NonObligationField {
         field: "trait_table",
-        reason: "trait 表：跨阶段读取在 src/middle/core/ir_gen.rs:4336/:6867（与 local_var_types 配对传参），文档注释未声明契约",
+        reason: "trait 表：跨阶段读取在 src/middle/ir/ir_gen.rs:4336/:6867（与 local_var_types 配对传参），文档注释未声明契约",
     },
     NonObligationField {
         field: "warnings",
@@ -201,7 +201,7 @@ pub const NON_OBLIGATION_FIELDS: &[NonObligationField] = &[
     },
     NonObligationField {
         field: "interface_impl_registry",
-        reason: "树内事实（3.4.9 用户裁决甲）：在相位消费 src/frontend/core/typecheck/operator_interfaces.rs:623、src/frontend/core/typecheck/inference/expressions.rs:1514 等七处约束求解查询、src/frontend/core/typecheck/checker.rs:214-217 只读访问器；跨阶段零读取（src/middle 0 命中）",
+        reason: "树内事实（3.4.9 用户裁决甲）：在相位消费 src/frontend/core/sema/operator_interfaces.rs:623、src/frontend/core/sema/inference/expressions.rs:1514 等七处约束求解查询、src/frontend/core/sema/checker.rs:214-217 只读访问器；跨阶段零读取（src/middle 0 命中）",
     },
 ];
 

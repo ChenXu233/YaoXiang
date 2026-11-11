@@ -1,0 +1,22 @@
+// 02-type-system/functions/fn_annotation_partial_intersection_ok.yx
+// D54 修复轮 F1 覆盖：**部分名字交集**的实现头——旧链路里 parser 按名字交集挑声明
+//   形参（a、c 命中、b 落空 ⇒ 两个形参被填成 a/b 的类型），typecheck 按位置前 N 位
+//   对齐，两条判据在「部分交集」时互相矛盾，矛盾还被 E1011 当成作者标注冲突报出。
+//   现在两侧同一条规则（值级签名前 N 位），判定只由**位置关系**决定，名字无关。
+// 验证:
+//   - add3(7, "x", true) == 7：实现头 (a, c) 的第 0 位拿声明第 0 位（Int），返回它
+//   - pick2 与 add3 是**同一位置形状**、只是改了名字 ⇒ 必须同码（都通过）
+// 状态: ✅ 可运行
+
+use std.assert
+
+add3: (a: Int, b: String, c: Bool) -> Int = (a, c) => a
+
+pick2: (a: Int, b: String, c: Bool) -> Int = (x, y) => x
+
+main: () -> Void = {
+    assert.assert(add3(7, "x", true) == 7, "部分交集：第 0 位取声明第 0 位（Int）")
+    assert.assert(pick2(9, "y", false) == 9, "改名的同一位置形状必须同码")
+}
+
+main()

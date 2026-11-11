@@ -12,7 +12,7 @@
 //!
 //! ## 口径
 //!
-//! - 语料面与 IR 判据同口径（`src/middle/core/tests/corpus.rs`）：
+//! - 语料面与 IR 判据同口径（`src/middle/ir/tests/corpus.rs`）：
 //!   `tests/yaoxiang/**` + `src/std/tests/**`，skip 与 `expect: compile-error`
 //!   不到达 IR 生成，不属编译耗时基线面。判定语义复用 `TestFileSpec` 单点（禁令三）。
 //! - 每文件独立 `Compiler::new()`——语料文件编译相互隔离，

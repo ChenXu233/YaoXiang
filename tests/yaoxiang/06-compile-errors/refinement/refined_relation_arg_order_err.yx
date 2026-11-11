@@ -1,0 +1,21 @@
+// 06-compile-errors/refinement/refined_relation_arg_order_err.yx
+// 覆盖: RFC-027 §2/§3.3 —— 关系谓词实参的**按位对齐**（形参序 ↔ 实参位）
+// 验证: 非交换关系 `SumUpTo(n, s) = s == n * 2` 上，`g(6, 3)` 按声明序代入得
+//       `SumUpTo(6, 3)`（3 == 12 为假）⇒ E4018；若实现把形参与实参错接成
+//       `SumUpTo(3, 6)`，同一调用会被误判为成立而静默通过——本用例即是那条判据。
+//       同文件 `g(3, 7)` 覆盖「实参本身不满足关系」的普通违反。
+// 状态: ❌ 应被编译期拒绝
+//
+// 合法对照见 02-type-system/refinement/refined_relation_arg.yx 的 `g(3, 6)`。
+
+// expect: compile-error E4018
+
+SumUpTo: (n: Int, s: Int) -> Type = { s == n * 2 }
+
+g: (n: Int, s: SumUpTo(n, s)) -> Int = { s }
+
+main: () -> Void = {
+    a: Int = g(6, 3)
+    b: Int = g(3, 7)
+    print(a + b)
+}

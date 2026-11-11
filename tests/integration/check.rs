@@ -325,8 +325,12 @@ fn create_project(files: &[(&str, &str)]) -> TempDir {
 
 /// 检查单个文件并返回聚合结果（用于断言错误码）。
 fn check_result(path: &PathBuf) -> yaoxiang::util::diagnostic::CheckResult {
-    yaoxiang::util::diagnostic::check_files_with_diagnostics(std::slice::from_ref(path))
-        .expect("check should not fail at parse stage")
+    // 默认编译闸门：本文件的断言只看诊断码，不涉 [mono] 配置面
+    yaoxiang::util::diagnostic::check_files_with_diagnostics(
+        std::slice::from_ref(path),
+        yaoxiang::frontend::config::CompileConfig::default(),
+    )
+    .expect("check should not fail at parse stage")
 }
 
 fn error_codes(result: &yaoxiang::util::diagnostic::CheckResult) -> Vec<String> {
@@ -590,8 +594,11 @@ fn test_check_two_entries_sharing_module_reports_it_once() {
     let entries = vec![dir.path().join("a.yx"), dir.path().join("b.yx")];
 
     // Act
-    let result = yaoxiang::util::diagnostic::check_files_with_diagnostics(&entries)
-        .expect("check should not fail at parse stage");
+    let result = yaoxiang::util::diagnostic::check_files_with_diagnostics(
+        &entries,
+        yaoxiang::frontend::config::CompileConfig::default(),
+    )
+    .expect("check should not fail at parse stage");
     let lib_codes: Vec<String> = result
         .diagnostics
         .iter()
@@ -778,10 +785,11 @@ main = () => {
 // 由 checker.rs 注入点用 `is_predicate_application` 同源预计算——内置谓词 /
 // `predicate_defs` / `env.vars` 三源），若该判据回归为 3.20.8 前的窄化形态
 // （只认 `Terminates` 字面量 ∪ 证明函数基类型表判名），证明函数谓词
-// `IsPositive` 应用 `IsPositive(b)` 的实参位 `b` 会被 `collect_used_in_type`
-// 误计入 const 泛型用途——形参名被当作 const 绑定并替换成底层具体类型，
-// 精化约束在到达消费端之前就丢失（E1092 类症状，见 checker.rs
-// `collect_used_in_type` 的谓词排除注释）。
+// `IsPositive` 应用 `IsPositive(b)` 的实参位 `b` 会被类型位置扫描
+// （`ast::name_used_as_type` 的 `Generic` 臂）误计入 const 泛型用途——形参名被
+// 当作 const 绑定并替换成底层具体类型，精化约束在到达消费端之前就丢失
+// （E1092 类症状，见 `const_param::used_as_const_in_annotation` 的
+// `is_predicate` 注入）。
 
 /// 谓词应用实参位不得计入 const 泛型用途（判据窄化回归锚）。
 #[test]
@@ -1006,5 +1014,278 @@ fn test_check_curry_refined_param_genuine_mismatch_still_reports() {
     assert_eq!(
         errors, 1,
         "#523: stripping refinement must stay transparent to unification — a genuinely mismatched argument (String vs Int(64)) must still be rejected with exactly one error; got {errors} error(s)"
+    );
+}
+
+// ============ 3.20.11 / #524：导入谓词 def 跨单元传播（甲案）============
+//
+// 谓词 def（`PredicateDef { param_name, param_type, constraint }` 三元组）
+// 随 Registry 导出面携带：Export 增设 `predicate_def` 载荷，定义方
+// `extract_module_info` 用与第零遍同源的构建判据提取，导入方
+// `register_use_export` 按 use 门控并入 `env.predicate_defs`，并同构登记
+// proof-fn 形态变量（本地面的 `add_type_definition` RFC-027 Phase 2.5 分支
+// 同款）——模板面与剥基类型面在导入方同权可用。
+//
+// 可见性语义（2026-11-03 用户裁决，甲案的一部分）：use 是唯一跨单元名引入
+// 机制，**未导入的谓词解析失败是正确行为**——解析跟函数/类型走同一扇门。
+
+/// #524 主锚：导入谓词的精化签名在完整应用时零诊断。
+#[test]
+fn test_check_imported_predicate_def_propagates_full_application() {
+    // Arrange: lib.yx 声明谓词、main.yx `use lib.{IsPositive}` 后声明精化
+    // 签名并完整应用——修前 env.predicate_defs 与 proof_fn_bases 双缺，
+    // E1012 + E1002（CLI 复现：target/yx-scratch 同构夹具，2026-11-03）
+    let dir = temp_dir();
+    create_yx_file(&dir, "lib.yx", "IsPositive: (x: Int) -> Type = { x > 0 }\n");
+    let main_file = create_yx_file(
+        &dir,
+        "main.yx",
+        "use lib.{IsPositive}\n\
+         \n\
+         sum: (N: Int) -> (x: IsPositive(N)) -> Int = (x) => x\n\
+         \n\
+         main: () -> Void = {\n\
+         \x20   print(sum(5)(3))\n\
+         }\n",
+    );
+
+    // Act
+    let result = check_file(&main_file);
+
+    // Assert: def 随导出传播、按 use 门控并入 ⇒ 模板正格化与剥基类型在
+    // 导入方都可用 ⇒ 零诊断（义务验证含在内）
+    let errors = result.expect("imported predicate refinement should check cleanly");
+    assert_eq!(
+        errors, 0,
+        "#524: imported predicate def must propagate via Registry export surface — full application sum(5)(3) must check with 0 diagnostics; got {errors} error(s)"
+    );
+}
+
+/// #524 补锚：部分应用形态同样零诊断（#523 教训同轴——curry 内层精化位
+/// 在「先部分应用、再完整应用」路径上同样要按 base 统一）。
+#[test]
+fn test_check_imported_predicate_def_propagates_partial_application() {
+    // Arrange: 与主锚同构，部分应用先落一个绑定、再经绑定完整应用
+    let dir = temp_dir();
+    create_yx_file(&dir, "lib.yx", "IsPositive: (x: Int) -> Type = { x > 0 }\n");
+    let main_file = create_yx_file(
+        &dir,
+        "main.yx",
+        "use lib.{IsPositive}\n\
+         \n\
+         sum: (N: Int) -> (x: IsPositive(N)) -> Int = (x) => x\n\
+         \n\
+         main: () -> Void = {\n\
+         \x20   partial = sum(5)\n\
+         \x20   print(partial(3))\n\
+         }\n",
+    );
+
+    // Act
+    let result = check_file(&main_file);
+
+    // Assert: 部分应用产出的函数值与后续完整应用都按剥后基类型统一 ⇒ 零诊断
+    let errors = result.expect("imported predicate partial application should check cleanly");
+    assert_eq!(
+        errors, 0,
+        "#524: imported predicate def must propagate — partial application sum(5) then full application must check with 0 diagnostics; got {errors} error(s)"
+    );
+}
+
+/// #524 use 门控锚：**未导入**的谓词解析失败是正确行为（可见性语义，
+/// 2026-11-03 用户裁决）——use 是唯一跨单元名引入机制，解析跟函数/类型
+/// 走同一扇门。此锚常驻：若日后把全部 def 无视 use 门控整体并入，此处翻红。
+#[test]
+fn test_check_unimported_predicate_use_still_rejected() {
+    // Arrange: lib 声明两个谓词，main 只导入其一，另一谓词用于精化签名
+    let dir = temp_dir();
+    create_yx_file(
+        &dir,
+        "lib.yx",
+        "IsPositive: (x: Int) -> Type = { x > 0 }\n\
+         NonNegative: (x: Int) -> Type = { x >= 0 }\n",
+    );
+    let main_file = create_yx_file(
+        &dir,
+        "main.yx",
+        "use lib.{IsPositive}\n\
+         \n\
+         sum: (N: Int) -> (x: NonNegative(N)) -> Int = (x) => x\n\
+         \n\
+         main: () -> Void = {\n\
+         \x20   print(sum(5)(3))\n\
+         }\n",
+    );
+
+    // Act
+    let result = check_file(&main_file);
+
+    // Assert: 未导入谓词的使用必须被拒绝（不钉具体诊断码——那是解析失败
+    // 形态的实现细节；钉住的是「必须失败」这一语义决策面）
+    let errors = result.expect("check should complete for unimported predicate use");
+    assert!(
+        errors >= 1,
+        "#524 visibility: an imported-gated predicate NOT brought in by use must fail resolution (use is the only cross-unit name introduction); got {errors} error(s)"
+    );
+}
+
+// ============ 3.20.12 / #442：注解收泛型调用返回值的两侧表示统一 ============
+//
+// 泛型函数调用点（monomorphize）返回的代入形态是**应用**——
+// `Generic{Box, [Int64]}`；同名注解（`Box(Int)`）经 try_instantiate 展开成
+// **记录** `Struct{Box, ...}`（与构造器直造值侧同形）。两侧语义相同、表示
+// 不同，绑定校验直接 unify 必假拒绝：E1002 `Expected type 'Box', found type
+// 'Box(int64)'`（issue #442 复现）。
+//
+// 修法：绑定校验前把 init 的具体应用展开成记录形态再统一（与值侧构造共用
+// `expand_ctor_applications` 唯一实现）。mono 链不受影响——调用点返回位
+// 代入与 instantiation_requests 均未触碰。
+
+/// #442 主锚：带泛型类型实参的注解收泛型函数调用结果，零诊断。
+#[test]
+fn test_check_generic_call_result_binds_generic_annotated_type() {
+    // Arrange: 泛型类型 Box + 泛型构造函数 make_box（声明返回位 `Box(T)`）；
+    // `b: Box(Int) = make_box(9)` 是 issue #442 的假拒绝形态——修前报
+    // E1002 Expected type 'Box', found type 'Box(int64)'。
+    let dir = temp_dir();
+    let file = create_yx_file(
+        &dir,
+        "generic_call_annotated_result.yx",
+        "Box: (T: Type) -> Type = { value: T, tag: Int }\n\
+         make_box: (T: Type) -> (v: T) -> Box(T) = { return Box(v, 0) }\n\
+         main: () -> Void = {\n\
+         \x20   b: Box(Int) = make_box(9);\n\
+         \x20   print(b.value);\n\
+         }",
+    );
+
+    // Act
+    let result = check_file(&file);
+
+    // Assert: 返回类型在调用点已代入 T:=Int，注解侧展开形态与之一致 ⇒ 零诊断。
+    let errors = result.expect("generic call result should bind to annotated generic type");
+    assert_eq!(
+        errors, 0,
+        "#442: annotated binding `b: Box(Int) = make_box(9)` must be accepted — the call-site return type Box(T) is instantiated at the call, so annotation and init differ only in representation (Generic app vs expanded record), not in type; got {errors} error(s)"
+    );
+}
+
+/// #442 回归锚：无注解收泛型调用结果（既有绿形态不得变）。
+#[test]
+fn test_check_generic_call_unannotated_binding_still_accepted() {
+    // Arrange: 与主锚同族但无注解——推断面（不受表示统一影响的路径）。
+    let dir = temp_dir();
+    let file = create_yx_file(
+        &dir,
+        "generic_call_unannotated.yx",
+        "Box: (T: Type) -> Type = { value: T, tag: Int }\n\
+         make_box: (T: Type) -> (v: T) -> Box(T) = { return Box(v, 0) }\n\
+         main: () -> Void = {\n\
+         \x20   a = make_box(9);\n\
+         \x20   print(a.value);\n\
+         \x20   print(a.tag);\n\
+         }",
+    );
+
+    // Act
+    let result = check_file(&file);
+
+    // Assert: 无注解绑定与字段访问维持既有行为 ⇒ 零诊断。
+    let errors = result.expect("unannotated generic call binding should keep passing");
+    assert_eq!(
+        errors, 0,
+        "#442 regression: unannotated binding `a = make_box(9)` with field access was green before the fix and must stay green; got {errors} error(s)"
+    );
+}
+
+/// #442 回归锚：构造器直造收注解（既有绿形态不得变）。
+#[test]
+fn test_check_generic_ctor_direct_construction_still_accepted() {
+    // Arrange: `c: Box(Int) = Box(9, 0)`——值侧构造与注解同形（都是展开
+    // 记录），表示统一段不介入（init 不是应用形态）。
+    let dir = temp_dir();
+    let file = create_yx_file(
+        &dir,
+        "generic_ctor_direct.yx",
+        "Box: (T: Type) -> Type = { value: T, tag: Int }\n\
+         main: () -> Void = {\n\
+         \x20   c: Box(Int) = Box(9, 0);\n\
+         \x20   print(c.value);\n\
+         \x20   print(c.tag);\n\
+         }",
+    );
+
+    // Act
+    let result = check_file(&file);
+
+    // Assert: 构造器直造维持既有行为 ⇒ 零诊断。
+    let errors = result.expect("direct constructor call should keep passing");
+    assert_eq!(
+        errors, 0,
+        "#442 regression: direct construction `c: Box(Int) = Box(9, 0)` was green before the fix and must stay green; got {errors} error(s)"
+    );
+}
+
+/// #442 反向锚：表示统一对真不匹配透明，不遮蔽——注解实参真错仍拒绝。
+#[test]
+fn test_check_generic_call_result_genuine_mismatch_still_reports() {
+    // Arrange: 与主锚同构，但注解实参是 String——调用点代入的是 int64，
+    // 展开逐字段统一必然失败，必须仍报错。没有这条，「展开退化成跳过统一」
+    // 的遮蔽型回归会让主锚的零诊断失去含金量（#523 反向锚同构先例）。
+    let dir = temp_dir();
+    let file = create_yx_file(
+        &dir,
+        "generic_call_result_genuine_mismatch.yx",
+        "Box: (T: Type) -> Type = { value: T, tag: Int }\n\
+         make_box: (T: Type) -> (v: T) -> Box(T) = { return Box(v, 0) }\n\
+         main: () -> Void = {\n\
+         \x20   b: Box(String) = make_box(9);\n\
+         \x20   print(b.value);\n\
+         }",
+    );
+
+    // Act
+    let result = check_file(&file);
+
+    // Assert: 真不匹配仍被拒绝 ⇒ 恰一条诊断。
+    let errors = result.expect("check should complete for genuinely mismatched annotation");
+    assert_eq!(
+        errors, 1,
+        "#442: expanding the call-site application must stay transparent to real mismatches — `b: Box(String) = make_box(9)` (T:=int64) must still be rejected with exactly one error; got {errors} error(s)"
+    );
+}
+
+/// #442 边界探针：跨单元（use 导入）注解收泛型调用结果。
+#[test]
+fn test_check_cross_unit_generic_call_result_binds_annotation() {
+    // Arrange: lib.yx 定义 Box + make_box，main.yx use 后注解收返回值。
+    // 跨单元与单文件走同一绑定校验段（声明名管道 #511 提供的只是名字来源，
+    // 表示统一发生在消费端），修前同样假拒绝、修后同批转绿——钉住现状。
+    let dir = temp_dir();
+    create_yx_file(
+        &dir,
+        "lib.yx",
+        "Box: (T: Type) -> Type = { value: T, tag: Int }\n\
+         make_box: (T: Type) -> (v: T) -> Box(T) = { return Box(v, 0) }\n",
+    );
+    let main_file = create_yx_file(
+        &dir,
+        "main.yx",
+        "use lib.{Box, make_box}\n\
+         \n\
+         main: () -> Void = {\n\
+         \x20   b: Box(Int) = make_box(9);\n\
+         \x20   print(b.value);\n\
+         }\n",
+    );
+
+    // Act
+    let result = check_file(&main_file);
+
+    // Assert: 跨单元形态与单文件同判据同源 ⇒ 零诊断。
+    let errors = result.expect("cross-unit generic call result should bind to annotation");
+    assert_eq!(
+        errors, 0,
+        "#442: cross-unit `b: Box(Int) = make_box(9)` via use must be accepted — the binding-level representation unification is shared by both units; got {errors} error(s)"
     );
 }

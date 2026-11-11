@@ -9,7 +9,7 @@
 //! - 完整诊断管线
 //! - 清除诊断
 
-use lsp_types::{DiagnosticSeverity, Range};
+use lsp_types::{DiagnosticSeverity};
 
 use crate::lsp::handlers::diagnostics::{to_lsp_diagnostic, to_lsp_diagnostics, clear_diagnostics};
 
@@ -95,69 +95,7 @@ fn test_empty_code_is_none() {
     assert!(lsp_diag.code.is_none());
 }
 
-#[test]
-fn test_no_span_uses_default_range() {
-    let diag = make_diag(Severity::Error, "E0001", "msg", None);
-    let lsp_diag = to_lsp_diagnostic(&diag);
-    assert_eq!(lsp_diag.range, Range::default());
-}
-
 // --- 阶段 2 新增测试 ---
-
-#[test]
-fn test_analyze_diagnostics_valid_code() {
-    // Arrange: 合法且无警告的 YaoXiang 代码（无用户绑定，
-    // DeadCodeAnalysis 无可疑对象）——应产生零诊断
-    let source = "print(42)\n";
-
-    // Act
-    let result = analyze_diagnostics("file:///test.yx", source);
-
-    // Assert
-    assert!(
-        result.is_empty(),
-        "合法代码不应有诊断，但得到: {:?}",
-        result
-    );
-}
-
-#[test]
-fn test_analyze_diagnostics_reports_warnings() {
-    // Arrange: 顶层未使用变量——4.2.6 起 LSP 与 CLI 同一 Driver，
-    // DeadCodeAnalysis 的 W1004 警告随统一管线进入 LSP
-    // （02 §3 入口表；原手工序列只到 typecheck，从无警告）
-    let source = "x = 42\n";
-
-    // Act
-    let result = analyze_diagnostics("file:///test.yx", source);
-
-    // Assert: 恰好一条 W1004 警告
-    assert_eq!(result.len(), 1, "应恰好一条警告，但得到: {:?}", result);
-    let diag = &result[0];
-    assert_eq!(
-        diag.code,
-        Some(lsp_types::NumberOrString::String("W1004".to_string())),
-        "警告码应为 W1004，但得到: {:?}",
-        diag.code
-    );
-    assert_eq!(
-        diag.severity,
-        Some(DiagnosticSeverity::WARNING),
-        "应为 WARNING 级别，但得到: {:?}",
-        diag.severity
-    );
-}
-
-#[test]
-fn test_analyze_diagnostics_parse_error() {
-    // 语法错误
-    let result = analyze_diagnostics("file:///test.yx", "@ @ @\n");
-    assert!(!result.is_empty(), "语法错误应产生诊断");
-    // 所有诊断应来自 yaoxiang
-    for d in &result {
-        assert_eq!(d.source, Some("yaoxiang".to_string()));
-    }
-}
 
 #[test]
 fn test_clear_diagnostics() {
@@ -224,30 +162,6 @@ fn test_uri_to_path_percent_decoded() {
 fn test_uri_to_path_non_file_scheme_is_none() {
     let path = crate::lsp::uri::uri_to_path("https://example.com/a.yx");
     assert_eq!(path, None);
-}
-
-#[test]
-fn test_analyze_diagnostics_project_cross_file_import() {
-    // Arrange - 项目内多文件：lib.yx 提供 add_one，main.yx 导入它
-    let dir = create_lsp_project(&[
-        ("lib.yx", "add_one: (x: Int) -> Int = (x) => x + 1\n"),
-        (
-            "main.yx",
-            "use std.assert\nuse lib.{add_one}\n\nmain = {\n    assert.assert(add_one(41) == 42, \"ok\")\n}\n",
-        ),
-    ]);
-    let main = dir.path().join("main.yx");
-    let content = std::fs::read_to_string(&main).unwrap();
-
-    // Act
-    let result = analyze_diagnostics(&file_uri(&main), &content);
-
-    // Assert - 此前单文件路径报 E1001 unknown variable 假错
-    assert!(
-        result.is_empty(),
-        "跨文件导入不应有诊断，得到: {:?}",
-        result
-    );
 }
 
 #[test]

@@ -1,0 +1,1061 @@
+//! 类型环境模块
+//!
+//! 管理类型检查过程中的所有状态信息
+
+use std::collections::HashMap;
+
+use crate::frontend::core::types::{MonoType, PolyType, TypeConstraintSolver};
+use crate::frontend::core::types::eval::const_eval::ConstFunction;
+
+use super::passes::overload;
+use super::types::ImportInfo;
+use crate::frontend::core::sema::proof::verdict::ProofFailure;
+
+/// 类型错误收集器
+pub type TypeErrorCollector = crate::util::diagnostic::ErrorCollector;
+
+/// 泛型类型定义模板
+///
+/// 存储泛型类型构造器的模板信息，用于类型实例化展开。
+/// 例如 `List: (T: Type) -> Type = { data: Array(T), length: Int }` 中：
+/// - type_param_names = ["T"]
+/// - poly = PolyType { type_binders: [("T", Type)], body: Struct { ... } }
+#[derive(Debug, Clone)]
+pub struct GenericTypeDef {
+    /// 多态类型（type_binders + const_binders + body）
+    pub poly: PolyType,
+    /// 类型参数名，按声明顺序，与 poly.type_binders 一一对应
+    /// 用于实例化时匹配模板体中的 TypeRef 占位符
+    pub type_param_names: Vec<String>,
+}
+
+/// #454 / t14：原生导出一个签名的**形参名 + 必需下限**（同一签名串的两个事实）。
+///
+/// `required_min` = 至少要有实参的**值形参个数**（`?name` 可选位与 `...args` 变参
+/// 尾位不计入）。调用点把「第 required_min 位及其后」标为可选位喂共享判据；
+/// 两侧（typecheck 原生臂与 ir_gen）都必须从这里取，避免各算一份而分歧。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExportParamInfo {
+    /// 声明序形参名（不含接收者位；原生导出无接收者）
+    pub names: Vec<String>,
+    /// 必需个数下限（0..=names.len()）
+    pub required_min: usize,
+}
+
+/// 泛型类型实例化结果（WBS 3.4.1）。
+///
+/// `unevaluable_constraints` 携带编译期不可求值的 const 约束描述——
+/// environment 层产事实、调用方发诊断（W1063）；空 vec = 全部约束可判定。
+/// 此前 Unproven 在 `instantiate_generic_type` 被空臂静默丢弃（02 §41-52
+/// 「失败不产生信号」类缺陷，全仓零登记），本字段是其上达通道。
+#[derive(Debug, Clone)]
+pub struct InstantiatedGeneric {
+    /// 实例化得到的类型
+    pub ty: MonoType,
+    /// 编译期不可求值的 const 约束描述（调用方应发射 W1063）
+    pub unevaluable_constraints: Vec<String>,
+}
+
+/// RFC-011a §5.3: 实现证明——某类型完整实现了某接口的编译期凭证。
+/// 纯编译期概念，运行时擦除（RFC-011a §6.4）；阶段 3 动态分发的类型收集
+/// 将以此为依据枚举某接口的全部实现类型。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ImplementationProof {
+    /// 实现类型名（如 "Dog"）
+    pub type_name: String,
+    /// 接口名（如 "Animal"）
+    pub interface_name: String,
+    /// 已验证签名匹配的方法名列表
+    pub methods: Vec<String>,
+}
+
+/// RFC-010 记录式和类型：变体定义（声明序即 variant_id）。
+/// params 保留声明形态（形参名为 TypeRef），实例化时按类型实参替换。
+#[derive(Debug, Clone)]
+pub struct SumVariantDef {
+    pub name: String,
+    pub params: Vec<MonoType>,
+}
+
+/// RFC-011b: 接口实现登记表条目。
+///
+/// `ImplementationProof` 不带类型实参，无法区分同一接口的不同实例化
+/// （`Add(Int, Float, Float)` 与 `Add(Point, Point, Point)`）；运算符查询
+/// 与约束求解需要实参维度，故另立此表，与 proof 在实例化检查通过时
+/// 同步写入（check_interface_instantiation）。
+#[derive(Debug, Clone)]
+pub struct InterfaceImplEntry {
+    /// 实现类型头名（用户条目如 "Point"；native 条目为 "Int" 等基本类型名）
+    pub impl_type: String,
+    /// 接口类型实参，与接口形参表一一对应（如 [Point, Point, Point]）
+    pub args: Vec<MonoType>,
+    /// 已验证的方法名
+    pub methods: Vec<String>,
+    /// 核心默认登记：原生指令路径，无用户方法绑定（运算符代码生成不走方法调用）
+    pub native: bool,
+}
+
+/// 类型环境
+///
+/// 存储类型检查过程中的所有状态信息：
+/// - 变量绑定
+/// - 类型定义
+/// - 约束求解器
+/// - 错误收集
+/// - 导入/导出信息
+/// - 方法绑定
+/// - Trait 表
+/// - Native 函数签名
+///
+/// base 的语义归属：类型空间 / 类型值空间 / 未知（issue #180 F 组）。
+///
+/// typechecker 据此把 `X.字段 = 右值` 分流到类型空间或类型值空间，
+/// 不靠语法形式 / 大小写，查类型表与变量表。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BaseKind {
+    /// base 是类型（在类型表）→ 类型空间
+    TypeSpace,
+    /// base 是变量/实例（在变量表）→ 类型值空间
+    ValueSpace,
+    /// 既非类型也非已知变量
+    Unknown,
+}
+
+/// 定义侧方法重载候选的一个键位（RFC-029f 改进 4 / WBS 4.9.7 / issue #464）。
+///
+/// 打包而非三张平行表的理由：候选、混编 IR 名、声明期形参名是**同序**配对
+/// 不变式（调用点按候选序取名，定义侧按声明序混编）。跨单元传递若拆成三条
+/// 独立通路，任一条漏接或错序都会让调用名与定义名不再对应——这里让配对随值
+/// 一起走，注入侧只做**整组同序追加**。
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct MethodOverloadCandidates {
+    /// 候选签名（定义侧声明序）
+    pub candidates: Vec<MonoType>,
+    /// 与 `candidates` 同序的混编 IR 名（0 = 裸名 `{Type}.{method}`，其后 `#序`）
+    pub ir_names: Vec<String>,
+    /// 与 `candidates` 同序的声明期形参名（不可得时为空表 = 不按名匹配）
+    pub param_names: Vec<Vec<String>>,
+}
+
+impl MethodOverloadCandidates {
+    /// 同键位追加另一模块的候选组（候选组之间的**唯一**追加点：三向量同序追加）。
+    ///
+    /// 三向量等长是配对不变式（候选 ↔ 混编 IR 名 ↔ 声明期形参名）。不等长 ⇒ 合并
+    /// 结果必然错位，且错位是**静默**的（调用点会拿别人的名字派发）——debug 构建
+    /// （含全部 `cargo test`）在此当场响亮失败，不产出错位表。
+    pub fn merge_from(
+        &mut self,
+        other: &MethodOverloadCandidates,
+    ) {
+        debug_assert_eq!(
+            other.candidates.len(),
+            other.ir_names.len(),
+            "被并入的候选组自身必须等长（候选 {} / 混编名 {}）",
+            other.candidates.len(),
+            other.ir_names.len()
+        );
+        debug_assert_eq!(
+            other.candidates.len(),
+            other.param_names.len(),
+            "被并入的候选组自身必须等长（候选 {} / 形参名 {}）",
+            other.candidates.len(),
+            other.param_names.len()
+        );
+        self.candidates.extend(other.candidates.iter().cloned());
+        self.ir_names.extend(other.ir_names.iter().cloned());
+        self.param_names.extend(other.param_names.iter().cloned());
+        debug_assert_eq!(
+            self.candidates.len(),
+            self.ir_names.len(),
+            "合并后候选组必须保持等长（键位内的配对不得错位）"
+        );
+    }
+
+    /// 候选数
+    pub fn len(&self) -> usize {
+        self.candidates.len()
+    }
+
+    /// 是否没有候选
+    pub fn is_empty(&self) -> bool {
+        self.candidates.is_empty()
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct TypeEnvironment {
+    pub vars: HashMap<String, PolyType>,
+    pub types: HashMap<String, PolyType>,
+    pub solver: TypeConstraintSolver,
+    pub errors: TypeErrorCollector,
+    /// 导入追踪 - 模块导入信息
+    /// 包含源模块ID用于访问控制
+    pub imports: Vec<ImportInfo>,
+    /// 方法绑定关系: "Type.method" -> FunctionType
+    /// 用于存储显式绑定（RFC-004 组合形态）
+    pub method_bindings: HashMap<String, MonoType>,
+    /// RFC-011b: 同名方法的重载候选表（"Type.method" -> 全部签名）。
+    /// `method_bindings` 是单值表，同键互相覆盖；接口实例化的完整性检查
+    /// 需要「任一候选签名匹配」语义（同一类型的同名接口多实例化共存，
+    /// 如 Grid 同时实现 Index(Grid, Int, V) 与 Index(Grid, Tuple(Int,Int), V)）。
+    pub method_overloads: HashMap<String, Vec<MonoType>>,
+    /// RFC-011a §3：重载候选的 IR 混编名（与 method_overloads 候选序一一对应）
+    pub method_overload_ir_names: HashMap<String, Vec<String>>,
+    /// RFC-011a §3：重载候选的**声明期形参名**（与 method_overloads 候选序一一对应，
+    /// 每项含接收者位 self；内层空表 = 声明期拿不到名字）。
+    ///
+    /// 命名实参（#452）进入调用点决议的唯一名字来源：位置实参占前导槽位、
+    /// 命名实参按名入槽，两者落在同一槽位即冲突（不得静默择一）。名字拿不到
+    /// （形参数与候选签名对不齐、跨模块外部绑定）时**留空**——调用点据此退回
+    /// 「不按名匹配」，不伪装成「名字已核对」。
+    pub method_overload_param_names: HashMap<String, Vec<Vec<String>>>,
+    /// RFC-011a: 已通过的接口实现证明（编译期，运行时擦除）
+    pub implementation_proofs: Vec<ImplementationProof>,
+    /// RFC-011b: 接口实现登记表（接口名 → 实例化条目，带类型实参维度）。
+    /// 运算符查询与约束求解的唯一判据；不经普通名字解析（§名字与登记）。
+    pub interface_impl_registry: HashMap<String, Vec<InterfaceImplEntry>>,
+    /// RFC-010: 记录式和类型登记表（类型名 → 变体定义表，声明序）。
+    /// 判定规则见 RFC-010「记录式和类型的变体构造（权威定义）」：
+    /// 字段全为函数且返回自身 → 判定，全部函数字段升格为变体构造器。
+    pub sum_types: HashMap<String, Vec<SumVariantDef>>,
+    /// 模块名称
+    pub module_name: String,
+    /// 重载候选存储: 函数名 -> 多个重载版本
+    /// 用于支持函数重载解析
+    pub overload_candidates: HashMap<String, Vec<overload::OverloadCandidate>>,
+    /// Trait 表：存储所有已解析的 Trait 定义和实现
+    pub trait_table: crate::frontend::core::types::TraitTable,
+    /// Native 函数签名表：存储已注册的 native 函数类型签名
+    /// Key: 函数名（如 "std.io.println"），Value: 函数类型
+    pub native_signatures: HashMap<String, MonoType>,
+    /// Native 函数 arity 区间表（#387）：按签名 `?`（可选）/`...`（变参）标记
+    /// 解析出的 [min, max]。Key 与 native_signatures 同（全限定名 + 短名）；
+    /// max=None 表示变参不设上限。手注 FFI 签名（[`Self::add_native_signature`]
+    /// 路径）无表项——检查层对无表项的 native 维持旧宽容（#456 只补齐了形参名表，
+    /// arity 区间仍不灌，故元数判定维持原口径）。
+    ///
+    /// 形参名表（[`Self::native_param_names`]）与签名表**同键同源**：手注 FFI 与
+    /// std 导出都经 `signature::export_signature_param_info` 灌装（#456 已修，
+    /// 此前手注路径缺这张表 ⇒ 命名实参被静默丢弃）。
+    pub native_arity: HashMap<String, (usize, Option<usize>)>,
+    /// #454 / t14：原生导出的**形参名 + 必需下限**（全限定名 + 短名）。
+    /// 与 native_signatures / native_arity 同源灌装（同一签名串、同一解析入口
+    /// `signature::export_signature_param_info`）——命名实参在原生导出上的按名绑定、
+    /// 未知名/重复命名判定、以及「可选位允许缺席」都只从这张表取，调用点不各算一份。
+    pub native_param_names: HashMap<String, ExportParamInfo>,
+    /// 模块注册表 - 提供统一的模块查询接口
+    pub module_registry: crate::frontend::module::registry::ModuleRegistry,
+    /// 已注册为「模块 Struct」的别名集合（#396：register_module_as_struct 与
+    /// 分组导入的子模块命名空间登记）。FieldAccess 在这些别名上取成员失败时报
+    /// E1043（模块语义）而非 E1042（struct 语义）——模块不是 struct，码义不得借道。
+    pub module_aliases: std::collections::HashSet<String>,
+    /// Const 函数表 - 存储编译期常量函数
+    /// 用于值依赖类型的编译期求值
+    pub const_functions: HashMap<String, ConstFunction>,
+    /// 泛型类型定义模板表
+    /// 存储泛型类型构造器的模板，用于 List(Int) → { data: Array(Int), length: Int } 的展开
+    pub generic_type_defs: HashMap<String, GenericTypeDef>,
+    /// 编译期谓词定义表
+    /// 存储已注册的编译期谓词模板，供 PredicateResolver 使用
+    pub predicate_defs:
+        HashMap<String, crate::frontend::core::sema::predicate_resolver::PredicateDef>,
+}
+
+impl TypeEnvironment {
+    /// 创建新的类型环境
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// 创建新的类型环境（带模块名）
+    pub fn new_with_module(module_name: String) -> Self {
+        Self {
+            module_name,
+            trait_table: crate::frontend::core::types::TraitTable::default(),
+            module_registry: crate::frontend::module::registry::ModuleRegistry::with_std(),
+            ..Self::default()
+        }
+    }
+
+    /// RFC-011b: 登记方法重载候选（同签名去重）
+    pub fn add_method_overload(
+        &mut self,
+        key: &str,
+        ty: MonoType,
+    ) {
+        self.add_method_overload_with_params(key, ty, Vec::new());
+    }
+
+    /// RFC-011a §3 / #452：登记方法重载候选**并携带其声明期形参名**。
+    ///
+    /// 形参名是命名实参进入调用点决议的唯一依据（位置实参占前导槽位、命名实参
+    /// 按名入槽）。名字长度与候选签名对不齐时**留空**——调用点退回「不按名匹配」，
+    /// 宁可不匹配也不拿错位的名字去匹配（错位比缺失更危险）。
+    pub fn add_method_overload_with_params(
+        &mut self,
+        key: &str,
+        ty: MonoType,
+        param_names: Vec<String>,
+    ) {
+        // 形参名必须与候选签名逐一对应；对不齐视为「这个名字的来源不可信」。
+        let param_names = match &ty {
+            MonoType::Fn { params, .. } if params.len() == param_names.len() => param_names,
+            _ => Vec::new(),
+        };
+        // 同签名去重（RFC-011b 原口径）：已登记过同一签名 ⇒ 不占新声明序
+        if self
+            .method_overloads
+            .get(key)
+            .is_some_and(|list| list.contains(&ty))
+        {
+            return;
+        }
+        // RFC-011a §3：重载候选的 IR 混编名（注册序，0=裸名）——
+        // 定义侧 ir_gen 按同一 AST 序混编，调用点决议后按名派发
+        let ordinal = self.method_overloads.get(key).map_or(0, Vec::len);
+        let ir_name = if ordinal == 0 {
+            key.to_string()
+        } else {
+            format!("{key}#{ordinal}")
+        };
+        // 三张平行表经**唯一写入点**落表（顺序/配对规则只有一份）
+        self.append_overload_group(
+            key,
+            MethodOverloadCandidates {
+                candidates: vec![ty],
+                ir_names: vec![ir_name],
+                param_names: vec![param_names],
+            },
+        );
+    }
+
+    /// 定义侧候选表的**快照**（键升序）：跨单元方法调用的决议输入
+    /// （RFC-029f 改进 4 / WBS 4.9.7 / issue #464）。
+    ///
+    /// 返回有序 `Vec` 而非 `HashMap`：跨单元合并的确定性从这一层起——
+    /// 模块内按定义序、模块间按模块键序，HashMap 迭代序不外泄。
+    pub fn method_overload_snapshot(&self) -> Vec<(String, MethodOverloadCandidates)> {
+        let mut keys: Vec<&String> = self.method_overloads.keys().collect();
+        keys.sort();
+        keys.into_iter()
+            .map(|key| {
+                let candidates = self.method_overloads.get(key).cloned().unwrap_or_default();
+                let ir_names = self
+                    .method_overload_ir_names
+                    .get(key)
+                    .cloned()
+                    .unwrap_or_default();
+                let param_names = self
+                    .method_overload_param_names
+                    .get(key)
+                    .cloned()
+                    .unwrap_or_default();
+                // 快照是跨单元通路的出口：三表不等长在这里当场响亮失败，不让错位的
+                // 「候选 ↔ 名字」配对流到别的编译单元（配对不变式的最后一道闸）
+                debug_assert_eq!(
+                    candidates.len(),
+                    ir_names.len(),
+                    "快照三表必须等长（键 {key}：候选 {} / 混编名 {}）",
+                    candidates.len(),
+                    ir_names.len()
+                );
+                debug_assert_eq!(
+                    candidates.len(),
+                    param_names.len(),
+                    "快照三表必须等长（键 {key}：候选 {} / 形参名 {}）",
+                    candidates.len(),
+                    param_names.len()
+                );
+                (
+                    key.clone(),
+                    MethodOverloadCandidates {
+                        candidates,
+                        ir_names,
+                        param_names,
+                    },
+                )
+            })
+            .collect()
+    }
+
+    /// 注入跨模块的方法重载候选（WBS 4.9.7 / #464）：三张平行表**同序**追加。
+    ///
+    /// 与 `add_method_overload_with_params` 同源维护配对不变式——两处若各写
+    /// 一套追加逻辑，正是「候选 ↔ 名字」配对分叉的入口（禁令三）。
+    pub fn inject_method_overloads(
+        &mut self,
+        table: Vec<(String, MethodOverloadCandidates)>,
+    ) {
+        for (key, group) in table {
+            self.append_overload_group(&key, group);
+        }
+    }
+
+    /// 把一组候选**同序展开**进三张平行表——三张表**唯一**的写入点。
+    ///
+    /// 声明期登记（[Self::add_method_overload_with_params]）与跨单元注入
+    /// （[Self::inject_method_overloads]）都经此处落表：顺序/配对规则只有一份，
+    /// 两处各写一套「push candidate、push ir_name、push param_names」正是配对
+    /// 分叉的入口（禁令三）。落表前校验三向量等长（debug 构建响亮失败）。
+    fn append_overload_group(
+        &mut self,
+        key: &str,
+        group: MethodOverloadCandidates,
+    ) {
+        let MethodOverloadCandidates {
+            candidates,
+            ir_names,
+            param_names,
+        } = group;
+        debug_assert_eq!(
+            candidates.len(),
+            ir_names.len(),
+            "落表三表必须等长（键 {key}：候选 {} / 混编名 {}）",
+            candidates.len(),
+            ir_names.len()
+        );
+        debug_assert_eq!(
+            candidates.len(),
+            param_names.len(),
+            "落表三表必须等长（键 {key}：候选 {} / 形参名 {}）",
+            candidates.len(),
+            param_names.len()
+        );
+        self.method_overloads
+            .entry(key.to_string())
+            .or_default()
+            .extend(candidates);
+        self.method_overload_ir_names
+            .entry(key.to_string())
+            .or_default()
+            .extend(ir_names);
+        self.method_overload_param_names
+            .entry(key.to_string())
+            .or_default()
+            .extend(param_names);
+    }
+
+    /// RFC-011b: 查方法重载候选
+    pub fn get_method_overloads(
+        &self,
+        key: &str,
+    ) -> Option<&Vec<MonoType>> {
+        self.method_overloads.get(key)
+    }
+
+    /// RFC-010: 类型名是否为已判定的和类型
+    pub fn is_sum_type(
+        &self,
+        name: &str,
+    ) -> bool {
+        self.sum_types.contains_key(name)
+    }
+
+    /// RFC-011b: 登记接口实现（完全同参的重复条目去重）
+    pub fn add_interface_impl(
+        &mut self,
+        interface_name: &str,
+        entry: InterfaceImplEntry,
+    ) {
+        let list = self
+            .interface_impl_registry
+            .entry(interface_name.to_string())
+            .or_default();
+        if !list
+            .iter()
+            .any(|e| e.impl_type == entry.impl_type && e.args == entry.args)
+        {
+            list.push(entry);
+        }
+    }
+
+    /// 添加变量绑定
+    pub fn add_var(
+        &mut self,
+        name: String,
+        poly: PolyType,
+    ) {
+        self.vars.insert(name, poly);
+    }
+
+    /// 添加函数绑定（支持方法绑定）
+    ///
+    /// 统一处理 Binding 的注册：
+    /// - 如果 `type_name` 存在，则为方法绑定，同时注册到 vars 和 method_bindings
+    /// - 否则仅注册到 vars
+    ///
+    /// 这确保了 Binding 被正确转换为 MonoType::Fn 并注册到环境
+    pub fn add_fn_binding(
+        &mut self,
+        name: &str,
+        type_name: Option<&str>,
+        fn_type: MonoType,
+    ) {
+        // 注册到 vars
+        self.vars
+            .insert(name.to_string(), PolyType::mono(fn_type.clone()));
+
+        // 如果有 type_name，注册为方法绑定
+        if let Some(ty) = type_name {
+            self.add_method_binding(ty, name, fn_type);
+        }
+    }
+
+    /// 获取变量类型
+    pub fn get_var(
+        &self,
+        name: &str,
+    ) -> Option<&PolyType> {
+        self.vars.get(name)
+    }
+
+    /// 获取求解器
+    pub fn solver(&mut self) -> &mut TypeConstraintSolver {
+        &mut self.solver
+    }
+
+    /// 添加类型定义
+    pub fn add_type(
+        &mut self,
+        name: String,
+        poly: PolyType,
+    ) {
+        self.types.insert(name, poly);
+    }
+
+    /// 获取类型定义
+    pub fn get_type(
+        &self,
+        name: &str,
+    ) -> Option<&PolyType> {
+        self.types.get(name)
+    }
+
+    /// 语义解析 base：是类型还是值（issue #180 F 组）。
+    /// 不靠语法形式 / 大小写——查类型表（类型空间）与变量表（类型值空间）。
+    pub fn resolve_base_kind(
+        &self,
+        name: &str,
+    ) -> BaseKind {
+        if self.types.contains_key(name) {
+            BaseKind::TypeSpace
+        } else if self.vars.contains_key(name) {
+            BaseKind::ValueSpace
+        } else {
+            BaseKind::Unknown
+        }
+    }
+
+    /// 添加泛型类型定义模板
+    ///
+    /// 记录泛型类型构造器的模板信息，用于后续的类型实例化展开。
+    pub fn add_generic_type_def(
+        &mut self,
+        name: String,
+        def: GenericTypeDef,
+    ) {
+        self.generic_type_defs.insert(name, def);
+    }
+
+    /// 实例化泛型类型（静态方法，StatementChecker 也可调用）
+    ///
+    /// Layer 1: 类型匹配 — 验证 const 参数类型与 const_binders 的类型声明匹配
+    /// Layer 2: 值约束求值 — 求值约束表达式（const 泛型约束）
+    pub fn instantiate_generic_type(
+        def: &GenericTypeDef,
+        args: &[MonoType],
+    ) -> Result<InstantiatedGeneric, crate::util::diagnostic::Diagnostic> {
+        use crate::util::diagnostic::ErrorCodeDefinition;
+
+        // 3.4.1：不可求值 const 约束事实（Unproven 臂收集，随结果上达）
+        let mut unevaluable_constraints: Vec<String> = Vec::new();
+
+        let type_arg_count = def.type_param_names.len();
+        let const_arg_count = def.poly.const_binders.len();
+
+        if args.len() != type_arg_count + const_arg_count {
+            return Err(ErrorCodeDefinition::argument_count_mismatch(
+                "generic type",
+                type_arg_count + const_arg_count,
+                args.len(),
+            )
+            .build());
+        }
+
+        let type_args = &args[..type_arg_count];
+        let const_args = &args[type_arg_count..];
+
+        let body = Self::replace_type_params(&def.poly.body, &def.type_param_names, type_args);
+
+        // const 验证（Layer 1 + Layer 2）
+        if !const_args.is_empty() {
+            // Layer 1: 类型匹配
+            crate::frontend::core::sema::inference::bounds::validate_const_args(
+                &def.poly.const_binders,
+                const_args,
+            )?;
+
+            // Layer 2: 值约束求值
+            let checker = crate::frontend::core::sema::inference::bounds::BoundsChecker::new();
+            let result = checker.check_const_bounds(&def.poly.const_binders, const_args);
+            match result {
+                Ok(()) => {}
+                Err(ProofFailure::Disproved(_)) => {
+                    let var_info = def
+                        .poly
+                        .const_binders
+                        .iter()
+                        .zip(const_args.iter())
+                        .filter_map(|(b, a)| {
+                            if let crate::frontend::core::types::MonoType::Literal {
+                                value, ..
+                            } = a
+                            {
+                                Some(format!("{} = {}", b.name, value))
+                            } else {
+                                None
+                            }
+                        })
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    // #322 M3：走注册表快捷方法（i18n 模板渲染）
+                    return Err(ErrorCodeDefinition::const_constraint_failed(&var_info).build());
+                }
+                Err(ProofFailure::Unproven { reason, .. }) => {
+                    // WBS 3.4.1：约束无法求值不再静默——事实上达，由调用方
+                    // 发射 W1063（Warning，不阻断：实参非编译期常量 ≠ 程序错误，
+                    // 但「约束保护失效」必须让用户知情——此前这里是全仓零登记的
+                    // silent pass）。
+                    use crate::frontend::core::sema::proof::verdict::UnprovenReason;
+                    let desc = match &reason {
+                        UnprovenReason::Symbolic(s) => s.clone(),
+                        other => format!("{other:?}"),
+                    };
+                    unevaluable_constraints.push(desc);
+                }
+            }
+        }
+
+        Ok(InstantiatedGeneric {
+            ty: Self::resolve_type_refs(&body),
+            unevaluable_constraints,
+        })
+    }
+
+    /// 按名称查找并实例化泛型类型（TypeEnvironment 便捷方法）
+    pub fn instantiate_generic_type_by_name(
+        &self,
+        name: &str,
+        args: &[MonoType],
+    ) -> Result<InstantiatedGeneric, crate::util::diagnostic::Diagnostic> {
+        let def = self.generic_type_defs.get(name).ok_or_else(|| {
+            crate::util::diagnostic::ErrorCodeDefinition::unknown_type(name).build()
+        })?;
+        Self::instantiate_generic_type(def, args)
+    }
+
+    /// 替换类型参数：将 TypeRef(param_name) 替换为具体的类型实参
+    ///
+    /// 两步合成（复审轮 1 F2）：先做 TypeRef 结构遍历，再对结果按
+    /// 「构造器参数名 → 实参构造器名」改名——头部改名只有共享实现
+    /// `types::substitute::substitute_ctor_heads` 一处，本函数不再内联。
+    pub(crate) fn replace_type_params(
+        ty: &MonoType,
+        param_names: &[String],
+        args: &[MonoType],
+    ) -> MonoType {
+        // 构造器变量（高阶类型参数）在**应用头部**：`F(A)` 的 F 绑定实参表
+        // 对应位的真实构造器名（`Vec` / `Box`），不是普通类型实参的同位替换
+        // （WBS 3.5.1「合一器在头部位置匹配构造器变量」）。
+        let head_map: HashMap<String, String> = param_names
+            .iter()
+            .enumerate()
+            .filter_map(|(i, n)| {
+                args.get(i)
+                    .and_then(crate::frontend::core::types::substitute::ctor_head_name)
+                    .map(|head| (n.clone(), head))
+            })
+            .collect();
+        let walked = Self::replace_type_params_walk(ty, param_names, args);
+        crate::frontend::core::types::substitute::substitute_ctor_heads(&walked, &head_map)
+    }
+
+    /// `replace_type_params` 的结构遍历体：只替换 TypeRef 参数位，
+    /// 头部改名由调用方交给共享实现 `substitute_ctor_heads`（F2）。
+    fn replace_type_params_walk(
+        ty: &MonoType,
+        param_names: &[String],
+        args: &[MonoType],
+    ) -> MonoType {
+        match ty {
+            MonoType::TypeRef(name) => {
+                // Check if this TypeRef is a type parameter name
+                if let Some(pos) = param_names.iter().position(|p| p == name) {
+                    if let Some(replacement) = args.get(pos) {
+                        return replacement.clone();
+                    }
+                }
+                ty.clone()
+            }
+            MonoType::Struct(s) => {
+                let new_fields: Vec<(String, MonoType)> = s
+                    .fields
+                    .iter()
+                    .map(|(name, field_ty)| {
+                        (
+                            name.clone(),
+                            Self::replace_type_params_walk(field_ty, param_names, args),
+                        )
+                    })
+                    .collect();
+                MonoType::Struct(crate::frontend::core::types::mono::StructType {
+                    name: s.name.clone(),
+                    fields: new_fields,
+                    methods: s.methods.clone(),
+                    field_mutability: s.field_mutability.clone(),
+                    field_has_default: s.field_has_default.clone(),
+                    interfaces: s.interfaces.clone(),
+                })
+            }
+            MonoType::Fn {
+                params,
+                return_type,
+            } => {
+                let new_params: Vec<MonoType> = params
+                    .iter()
+                    .map(|p| Self::replace_type_params_walk(p, param_names, args))
+                    .collect();
+                let new_ret = Self::replace_type_params_walk(return_type, param_names, args);
+                MonoType::Fn {
+                    params: new_params,
+                    return_type: Box::new(new_ret),
+                }
+            }
+            MonoType::Generic { name, args } if name == "Range" && args.len() == 1 => {
+                let new_elem = Self::replace_type_params_walk(&args[0], param_names, args);
+                MonoType::Generic {
+                    name: "Range".into(),
+                    args: vec![new_elem],
+                }
+            }
+            MonoType::Generic {
+                name,
+                args: generic_args,
+            } => {
+                let new_args = generic_args
+                    .iter()
+                    .map(|a| Self::replace_type_params_walk(a, param_names, args))
+                    .collect();
+                MonoType::Generic {
+                    name: name.clone(),
+                    args: new_args,
+                }
+            }
+            // RFC-011a §3：impl 签名 = 接口签名经 Self↦具体类型替换——替换必须
+            // 结构递归。此前 Ref 落入兜底原样克隆，接口 `speak: (self: &Self)` 与
+            // impl `(self: &Dog)` 比较时 expected 侧内层仍是不变元 → E1099 误报。
+            MonoType::Ref { mutable, inner } => MonoType::Ref {
+                mutable: *mutable,
+                inner: Box::new(Self::replace_type_params_walk(inner, param_names, args)),
+            },
+            _ => ty.clone(),
+        }
+    }
+
+    /// 解析 TypeRef 中的内置类型名
+    /// TypeRef("Int") → Int(64), TypeRef("Float") → Float(64), 等等。
+    fn resolve_type_refs(ty: &MonoType) -> MonoType {
+        match ty {
+            MonoType::TypeRef(name) => {
+                MonoType::from_builtin_name(name).unwrap_or_else(|| ty.clone())
+            }
+            MonoType::Struct(s) => {
+                let new_fields: Vec<(String, MonoType)> = s
+                    .fields
+                    .iter()
+                    .map(|(name, field_ty)| (name.clone(), Self::resolve_type_refs(field_ty)))
+                    .collect();
+                MonoType::Struct(crate::frontend::core::types::mono::StructType {
+                    name: s.name.clone(),
+                    fields: new_fields,
+                    methods: s.methods.clone(),
+                    field_mutability: s.field_mutability.clone(),
+                    field_has_default: s.field_has_default.clone(),
+                    interfaces: s.interfaces.clone(),
+                })
+            }
+            MonoType::Generic { name, args } => {
+                let new_args = args.iter().map(Self::resolve_type_refs).collect();
+                MonoType::Generic {
+                    name: name.clone(),
+                    args: new_args,
+                }
+            }
+            MonoType::Fn {
+                params,
+                return_type,
+            } => MonoType::Fn {
+                params: params.iter().map(Self::resolve_type_refs).collect(),
+                return_type: Box::new(Self::resolve_type_refs(return_type)),
+            },
+            _ => ty.clone(),
+        }
+    }
+
+    /// 添加方法绑定
+    /// 例如: Point.distance = distance 存储为 "Point.distance" -> fn_type
+    pub fn add_method_binding(
+        &mut self,
+        type_name: &str,
+        method_name: &str,
+        fn_type: MonoType,
+    ) {
+        let key = format!("{}.{}", type_name, method_name);
+        self.method_bindings.insert(key, fn_type);
+    }
+
+    /// 获取方法绑定
+    pub fn get_method_binding(
+        &self,
+        type_name: &str,
+        method_name: &str,
+    ) -> Option<&MonoType> {
+        let key = format!("{}.{}", type_name, method_name);
+        self.method_bindings.get(&key)
+    }
+
+    // ============ Trait 相关方法 ============
+
+    /// 添加 Trait 定义
+    pub fn add_trait(
+        &mut self,
+        definition: crate::frontend::core::types::TraitDefinition,
+    ) {
+        self.trait_table.add_trait(definition);
+    }
+
+    /// 获取 Trait 定义
+    pub fn get_trait(
+        &self,
+        name: &str,
+    ) -> Option<&crate::frontend::core::types::TraitDefinition> {
+        self.trait_table.get_trait(name)
+    }
+
+    /// 检查 Trait 是否已定义
+    pub fn has_trait(
+        &self,
+        name: &str,
+    ) -> bool {
+        self.trait_table.has_trait(name)
+    }
+
+    /// 类型名在本环境里是否可解析（#371/#372）。
+    ///
+    /// **这是「合法类型名」的唯一真相源。** 此前不存在这样一个查询，各消费点
+    /// 各自判断（有查 `types`、有查 `generic_type_defs`、有查 `trait_table`），
+    /// 而 `MonoType::from(ast::Type)` 对 `Type::Name` 干脆不查——直接包成
+    /// `TypeRef(name)`。后果是形参/字段里的错拼类型名静默变成一个「合法类型」，
+    /// 该参数上的类型检查随之全部失效（任意实参都能传）。
+    ///
+    /// 允许集（按来源）：
+    /// - **内置名**：`Int`/`String`/... —— `from_builtin_name`
+    /// - **编译器级顶类型**：`Any` —— 与 `Void`/`Never` 同族，solver 特判，不需声明
+    /// - **已登记类型**：`types`（本地类型定义 + `use` 导入的类型）
+    /// - **泛型构造器**：`generic_type_defs`（`Vec`/`Array` + 用户泛型类型）
+    /// - **接口/特质**：`trait_table`（存在类型位置，RFC-011a）
+    /// - **std 导出类型**：`module_registry` 里标记为 `Type` 的导出
+    ///   （`Error`/`File`/`Iterator`... —— 它们由 Rust 侧 `export!` 宏登记，
+    ///   不进 `types`；此前完全无人可查，却能隐式通过）
+    ///
+    /// 注意：**不含**泛型参数名（`T`/`Self`）与编译期值参数名——那些是声明处
+    /// 绑定的局部名字，由调用方（`TypeNameScope`）先行剔除后再查询。
+    pub fn resolves_type_name(
+        &self,
+        name: &str,
+    ) -> bool {
+        if MonoType::from_builtin_name(name).is_some() {
+            return true;
+        }
+        // `Any` 是编译器级顶类型：`from_builtin_name` 不含它，solver 直接特判
+        // （`solver.rs` 的 `(TypeRef(n), _) if n == "Any" => Ok(())`）。
+        // `Self` 是语言关键字：在类型体/接口方法签名里指当前类型，
+        // 由接口实例化阶段替换（RFC-011a），同样没有也不可能有声明。
+        if name == "Any" || name == "Self" {
+            return true;
+        }
+        // RFC-027 §6.9：`Terminates` 是**内置谓词**，与 `Int`、`Never` 同属核心原语
+        // （内建名，不是关键字）——它把一个测度绑定到一段计算上声明该计算终止。
+        // 与 `Never` 同样不需也不可能存在源码声明；语义（测度与义务）由
+        // `resolve_type_annotation` 与终止检查层消费（RFC-027a）。
+        if crate::frontend::core::sema::is_builtin_predicate_name(name) {
+            return true;
+        }
+        // 编译器级容器/引用类型：这些名字在类型位置由编译器直接识别
+        // （`mono.rs` 的 `is_vec`/`is_arc`/`is_weak`/`is_range` 等谓词、
+        // `type_name()` 的专门臂），不需要也不存在源码声明。
+        // 注意：它们只在**类型位置**成立；值位置的构造器另有限制
+        // （见 `is_builtin_generic_type_name`，那里只放 `Vec`/`Array`）。
+        if Self::is_compiler_container_type(name) {
+            return true;
+        }
+        if self.types.contains_key(name) || self.generic_type_defs.contains_key(name) {
+            return true;
+        }
+        if self.has_trait(name) {
+            return true;
+        }
+        // std 导出类型：`Error`/`File`/`Native`/`Weak`/`Arc` 等由 Rust 侧登记，
+        // 只活在模块注册表里。逐个 std 子模块查同名 Type 导出。
+        self.std_export_type_name(name)
+    }
+
+    /// 编译器直接识别的容器/引用类型名（类型位置合法，无源码声明）。
+    ///
+    /// 与 `mono.rs` 的 `is_vec`/`is_arc`/`is_weak`/`is_range` 等谓词同源——
+    /// 那些谓词按名字判定，本表列出同一批名字，供名字解析查询。
+    /// 新增此类内置容器时**两处都要改**（谓词 + 本表）。
+    fn is_compiler_container_type(name: &str) -> bool {
+        matches!(
+            name,
+            "Vec"
+                | "Array"
+                | "List"
+                | "Dict"
+                | "Tuple"
+                | "Option"
+                | "Result"
+                | "Range"
+                | "Bytes"
+                | "Set"
+                | "Arc"
+                | "Weak"
+        )
+    }
+
+    /// 名字是否是某个 std 子模块导出的**类型**（`ExportKind::Type`）。
+    ///
+    /// 兜底顺序上放在最后：它要遍历子模块，比前几项的表查询贵，
+    /// 而绝大多数名字在前面就命中了。
+    fn std_export_type_name(
+        &self,
+        name: &str,
+    ) -> bool {
+        use crate::frontend::module::ExportKind;
+        self.module_registry
+            .std_submodule_names()
+            .iter()
+            .any(|sub| {
+                let path = format!("std.{sub}");
+                self.module_registry
+                    .get(&path)
+                    .and_then(|m| m.get_export(name))
+                    .is_some_and(|e| matches!(e.kind, ExportKind::Type))
+            })
+    }
+
+    /// 添加 Trait 实现
+    ///
+    /// 返回 `true` 表示新插入，`false` 表示已存在（冲突）
+    pub fn add_trait_impl(
+        &mut self,
+        impl_: crate::frontend::core::types::TraitImplementation,
+    ) -> bool {
+        self.trait_table.add_impl(impl_)
+    }
+
+    /// 检查类型是否实现了 Trait
+    pub fn has_trait_impl(
+        &self,
+        trait_name: &str,
+        for_type: &str,
+    ) -> bool {
+        self.trait_table.has_impl(trait_name, for_type)
+    }
+
+    /// 获取 Trait 实现
+    pub fn get_trait_impl(
+        &self,
+        trait_name: &str,
+        for_type: &str,
+    ) -> Option<&crate::frontend::core::types::TraitImplementation> {
+        self.trait_table.get_impl(trait_name, for_type)
+    }
+
+    /// 注册 native 函数签名（宿主嵌入 / 手注 FFI 路径）。
+    ///
+    /// 入参是**签名串**——与 stdlib 导出注册（`add_native_function_types`）同源：
+    /// 同一个串既解析出函数类型，又经 [`signature::export_signature_param_info`]
+    /// 灌装「形参名 + 必需下限」表。命名实参的按名绑定、未知名/重复命名判定、
+    /// 「可选位允许缺席」都只从那张表取（`arg_binding::bind_args_to_params` 是判据
+    /// 唯一实现），本函数**不得**自己解析形参名。
+    ///
+    /// 此前该 API 收 `MonoType`、只灌签名表：经它注册的宿主原生函数上命名实参
+    /// 既不入槽也不报错（#456，D59 C 类静默不动作）。零在仓调用者，故同步改签名；
+    /// 只拿得到 `MonoType` 的调用方应在自己那侧解析出签名串后再走本 API。
+    ///
+    /// 键与 `native_signatures` 完全一致（同一 `name`）——两张表必须同键，
+    /// 否则消费者按同一个名字查两张表会得到一半事实。
+    pub fn add_native_signature(
+        &mut self,
+        name: &str,
+        signature: &str,
+    ) -> crate::util::diagnostic::Result<()> {
+        let fn_ty = crate::frontend::core::sema::signature::parse_signature(signature, self)?;
+        self.native_signatures.insert(name.to_string(), fn_ty);
+        if let Some((names, required_min)) =
+            crate::frontend::core::sema::signature::export_signature_param_info(signature)
+        {
+            self.native_param_names.insert(
+                name.to_string(),
+                ExportParamInfo {
+                    names,
+                    required_min,
+                },
+            );
+        }
+        Ok(())
+    }
+
+    /// 获取 native 函数签名
+    pub fn get_native_signature(
+        &self,
+        name: &str,
+    ) -> Option<&MonoType> {
+        self.native_signatures.get(name)
+    }
+
+    /// 检查是否是已注册的 native 函数
+    pub fn is_native_function(
+        &self,
+        name: &str,
+    ) -> bool {
+        self.native_signatures.contains_key(name)
+    }
+
+    /// 注册 const 函数
+    /// 用于值依赖类型的编译期求值
+    pub fn add_const_function(
+        &mut self,
+        name: String,
+        func: ConstFunction,
+    ) {
+        self.const_functions.insert(name, func);
+    }
+
+    /// 获取 const 函数
+    pub fn get_const_function(
+        &self,
+        name: &str,
+    ) -> Option<&ConstFunction> {
+        self.const_functions.get(name)
+    }
+
+    /// 检查是否是 const 函数
+    pub fn is_const_function(
+        &self,
+        name: &str,
+    ) -> bool {
+        self.const_functions.contains_key(name)
+    }
+}

@@ -1,0 +1,17 @@
+// 02-type-system/functions/fn_annotation_block_param_ok.yx
+// D54 / WBS 6.8.2c ①：t1 矩阵的**「通过」格**防回归夹具——块体的形参由**声明**驱动
+//   （名字与类型都取自标注），体内直接用声明名。
+// 验证:
+//   - f(21) == 42：块体形参 a 拿到第 1 位实参且类型来自声明
+//   - 若块体形参退回 fresh var（旧洞），a * 2 会被推成未约束类型
+// 状态: ✅ 可运行
+
+use std.assert
+
+f: (a: Int) -> Int = { a * 2 }
+
+main: () -> Void = {
+    assert.assert(f(21) == 42, "块体形参由声明驱动（按位）")
+}
+
+main()

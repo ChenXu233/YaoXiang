@@ -1,0 +1,15 @@
+// 06-compile-errors/fn-binding/fn_annotation_return_forms_err.yx
+// D54 / WBS 6.8.2c ①：出口的**三种写法 × 两种出口形态**必须同一条诊断（E1012、位置指注解）——
+//   旧行为：尾表达式两格 E1012、显式 return 两格 E1002（指向载荷）。
+// expect: compile-error E1012
+// 覆盖: 出口两叉收一叉（StmtKind::Return ↔ Expr::Return）六格同码（t1 行为矩阵出口维度全覆盖）
+// 验证: 六格（三种写法 × 两种出口形态）的码与位置（注解行）由语料基线逐条钉住
+// 状态: ❌ 应编译失败
+
+tail_expr: () -> Int = () => "s"
+arrow_explicit_return: () -> Int = () => { return "s" }
+block_tail: () -> Int = { "s" }
+block_explicit_return: () -> Int = { return "s" }
+src: () -> String = () => "s"
+named_ref: () -> Int = src
+named_ref_explicit: () -> Int = { return src }

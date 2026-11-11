@@ -41,7 +41,7 @@ pub struct Image {
     /// 函数表（按索引分发：CallStatic / MakeClosure / CallDyn 全部走这里）
     pub functions_by_id: Vec<BytecodeFunction>,
     /// 类型表（与 `BytecodeModule::type_table` 同载体：MonoType）
-    pub type_table: Vec<crate::frontend::core::typecheck::MonoType>,
+    pub type_table: Vec<crate::frontend::core::sema::MonoType>,
     /// 类型 vtable 缓存（type_name → 方法表）
     ///
     /// 每类型的 vtable 只构建一次，消除「每次 CreateStruct 都 O(n) 扫函数表 +

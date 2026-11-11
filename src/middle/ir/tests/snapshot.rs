@@ -1,0 +1,246 @@
+//! WBS 2.2.2 / RFC-039 P2：规范化 IR 快照判据（07-equivalence-oracle 第二层）
+//!
+//! 判据形态：全语料（tests/yaoxiang/ + src/std/tests/，剔 skip / compile-error）
+//! 逐文件走 lex→parse→typecheck→ir_gen 真实生成序列，normalize_module 规范化后
+//! 与入库快照（snapshots/ 下按语料相对路径镜像存放）逐字节比对。
+//!
+//! 人工 review 流程（07 §128「输出必须入库，随 IR 定义变更显式更新，更新时
+//! 人工 review diff」）：
+//!   1. 更新：UPDATE_SNAPSHOTS=1 cargo test --lib snapshot -- --ignored 重写全部快照
+//!      （测试名 test_update_ir_snapshots_via_env_guard）
+//!   2. review：git diff 逐文件审阅（drift 即 IR 行为面变化，须能说清来源）
+//!   3. 提交：快照与引发 drift 的代码改动同一 PR 入库
+//!
+//! 更新模式带 #[ignore] 常驻：更新是显式人工动作，不参与 CI；比对模式
+//! test_ir_snapshots_stable 是常态判据（门禁 9.5 check-snapshot-drift.sh 驱动）。
+
+use crate::frontend::core::sema::probe::TypeLevelNamespace;
+use std::path::{Path, PathBuf};
+
+use crate::frontend::core::lexer::tokenize;
+use crate::frontend::core::parser::parse_with_probe;
+use crate::frontend::core::sema::checker::TypeChecker;
+use crate::frontend::core::sema::MonoType;
+use crate::frontend::core::sema::SemanticProbe;
+use crate::frontend::module::registry::ModuleRegistry;
+use crate::middle::ir::ir::{FunctionBody, Instruction};
+use crate::middle::ir::ir_gen::AstToIrGenerator;
+use crate::middle::ir::normalize::normalize_module;
+use crate::util::span::Span;
+
+use super::corpus::{corpus_files, reaches_ir_generation};
+
+/// 语料文件 → 快照路径：snapshots/ 下镜像语料相对路径，扩展名换 .snap。
+fn snapshot_path_for(yx: &Path) -> PathBuf {
+    let manifest = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let relative = yx.strip_prefix(manifest).unwrap_or(yx);
+    let mut p = manifest
+        .join("src")
+        .join("middle")
+        .join("ir")
+        .join("tests")
+        .join("snapshots");
+    for comp in relative.components() {
+        if let std::path::Component::Normal(s) = comp {
+            p.push(s);
+        }
+    }
+    p.set_extension("snap");
+    p
+}
+
+/// 逐文件生成规范化文本；生成前置阶段失败返回 None（不在判据合同面）。
+fn normalize_corpus_file(path: &Path) -> Option<String> {
+    let source = std::fs::read_to_string(path).ok()?;
+    let tokens = tokenize(&source).ok()?;
+    let parsed = parse_with_probe(&tokens, &SemanticProbe);
+    if parsed.has_errors {
+        return None;
+    }
+    let mut checker = TypeChecker::new(&path.display().to_string());
+    let type_result = checker.check_module(
+        &parsed.module,
+        &TypeLevelNamespace::scan_one(&parsed.module),
+    );
+    if !type_result.diagnostics.is_empty() {
+        return None;
+    }
+    let mut generator = AstToIrGenerator::new_with_type_result(
+        &type_result,
+        ModuleRegistry::with_std(),
+        None,
+        TypeLevelNamespace::scan_one(&parsed.module),
+    );
+    let module_ir = generator.generate_module_ir(&parsed.module).ok()?;
+    Some(normalize_module(&module_ir))
+}
+
+/// 一轮快照跑批的三段事实：应当覆盖的面 / 实际比对的面 / 被跳过的清单.
+///
+/// `skipped` 是这套判据**唯一**的缺口面：`reaches_ir_generation` 为真说明该文件在
+/// 判据合同面内，而 `normalize_corpus_file` 返回 `None` 说明它拿不到规范化文本——
+/// 这种文件既不会被比对也不会被更新，陈旧快照因此永不收敛。历史上这里用
+/// `compared > 200` 的松下限兜底，结果 218 → 214（静默跳过 4 个）**仍然绿**；
+/// 2026-11-01（WBS 6.6.16）改为「跳过即红 + 逐条点名」。
+struct SnapshotRun {
+    /// `reaches_ir_generation` 为真的语料数（判据应当覆盖的面）
+    reachable: usize,
+    /// 真正产出规范化文本、参与比对或更新的语料数
+    compared: usize,
+    /// 到达 IR 却拿不到规范化文本的语料（判据合同面内的缺口）
+    skipped: Vec<String>,
+    /// 比对模式下的漂移清单
+    drift: Vec<String>,
+}
+
+/// 全语料快照比对（常态判据）/ 更新（UPDATE_SNAPSHOTS=1 + --ignored）。
+fn run_snapshot_mode(update: bool) -> SnapshotRun {
+    let mut run = SnapshotRun {
+        reachable: 0,
+        compared: 0,
+        skipped: Vec::new(),
+        drift: Vec::new(),
+    };
+    for file in corpus_files() {
+        if !reaches_ir_generation(&file) {
+            continue;
+        }
+        run.reachable += 1;
+        let relative = file
+            .strip_prefix(env!("CARGO_MANIFEST_DIR"))
+            .unwrap_or(&file)
+            .display()
+            .to_string();
+        let Some(text) = normalize_corpus_file(&file) else {
+            run.skipped.push(relative);
+            continue;
+        };
+        let snap = snapshot_path_for(&file);
+        run.compared += 1;
+        if update {
+            std::fs::create_dir_all(snap.parent().unwrap()).unwrap();
+            std::fs::write(&snap, &text).unwrap();
+        } else {
+            match std::fs::read_to_string(&snap) {
+                Ok(expected) if expected == text => {}
+                Ok(_) => run.drift.push(format!("{relative}: 快照漂移")),
+                Err(_) => run.drift.push(format!(
+                    "{relative}: 快照缺失（先跑 UPDATE_SNAPSHOTS=1 更新流程）"
+                )),
+            }
+        }
+    }
+    run
+}
+
+#[test]
+fn test_ir_snapshots_stable() {
+    let run = run_snapshot_mode(false);
+    // 语料面存在性守卫：语料发现机制坏了（一个文件都到不了 IR）时不能静默绿。
+    assert!(
+        run.reachable > 200,
+        "到达 IR 的语料面异常收窄（{} / {} 个语料文件）——判据失效",
+        run.reachable,
+        corpus_files().len(),
+    );
+    // 跳过即红（WBS 6.6.16）：此前这里是 `compared > 200` 的松下限，218 → 214
+    // （t4 起静默跳过 4 个）**仍然绿**——判据自己会撒谎。现在凡到达 IR 却拿不到
+    // 规范化文本的，必须点名失败；否则陈旧快照既不会被比对也不会被更新。
+    assert!(
+        run.skipped.is_empty(),
+        "快照判据静默跳过了 {} 个到达 IR 的语料（覆盖 {} / {}）——跳过即红，逐条：\n{}",
+        run.skipped.len(),
+        run.compared,
+        run.reachable,
+        run.skipped.join("\n"),
+    );
+    assert_eq!(
+        run.compared, run.reachable,
+        "参与比对的文件数必须等于到达 IR 的语料数（否则有文件被静默跳过）"
+    );
+    assert!(
+        run.drift.is_empty(),
+        "IR 快照漂移（{}/{} 文件）——C1 zero-diff 判据红：\n{}\n",
+        run.drift.len(),
+        run.compared,
+        run.drift.join("\n"),
+    );
+}
+
+/// 快照更新模式：显式人工动作（07 §128 流程第 1 步），不参与常态套件。
+///
+/// `cost:` 标记（#486 第 1 项）：`mode=manual` —— 显式人工动作，`fast`/`full` 两条
+/// 通道都不得执行它（跑一次就会重写全部入库快照）。
+///
+/// 数值来源：比对模式 `test_ir_snapshots_stable`（同一语料、同一条生成序列）
+/// 2026-10-21 本机实测 **46.4 MiB 峰值工作集 / 18.1 s**（直接跑测试二进制，
+/// 30 ms 采样 PeakWorkingSetSize）；更新模式只把「比对」换成「写盘」，取同量级
+/// 加余量，**未在更新路径上实测**，故 `source=extrapolated`。
+// cost: peak=96MiB time=25s mode=manual source=extrapolated@corpus-348-ir-gen-compare-mode
+#[test]
+#[ignore = "快照更新是显式人工动作：UPDATE_SNAPSHOTS=1 cargo test --lib snapshot -- --ignored"]
+fn test_update_ir_snapshots_via_env_guard() {
+    assert!(
+        std::env::var_os("UPDATE_SNAPSHOTS").is_some(),
+        "更新快照必须显式设 UPDATE_SNAPSHOTS=1（防误触）"
+    );
+    let run = run_snapshot_mode(true);
+    assert!(
+        run.reachable > 200,
+        "更新面异常收窄（{} / {} 个语料文件）",
+        run.reachable,
+        corpus_files().len()
+    );
+    // 更新流程同样「跳过即红」：跳过意味着这些语料既不被更新也不被比对，
+    // 它们的陈旧快照会一直躺在库里（t4→t10 的 `measure_decreasing.snap` 就是这么来的）。
+    assert!(
+        run.skipped.is_empty(),
+        "更新流程静默跳过了 {} 个到达 IR 的语料（覆盖 {} / {}）——跳过即红，逐条：\n{}",
+        run.skipped.len(),
+        run.compared,
+        run.reachable,
+        run.skipped.join("\n"),
+    );
+    eprintln!(
+        "已更新 {} 个快照（覆盖 {} / {}）——下一步：git diff 人工 review",
+        run.compared, run.compared, run.reachable
+    );
+}
+
+// =====================
+// 规范化规则单元测试（07 §第二层表格逐项）
+// =====================
+
+use super::ir_build::{func, module_with, ret_void, temp_slot};
+
+/// 剥 Span 规则：仅 span 不同的两个模块，规范化文本必须全等。
+#[test]
+fn test_span_stripped_makes_identical_output() {
+    // Arrange：同一函数、两条仅 span 不同的 Ret 指令
+    let mk = |line: usize| {
+        let mut f = func(
+            "f",
+            vec![],
+            MonoType::Void,
+            vec![temp_slot(MonoType::Int(64))],
+            vec![ret_void()],
+        );
+        if let FunctionBody::Code { blocks, .. } = &mut f.body {
+            blocks[0].instructions[0] = Instruction::Ret {
+                value: None,
+                span: Span::new(
+                    crate::util::span::Position::with_offset(line, 1, 0),
+                    crate::util::span::Position::with_offset(line, 2, 1),
+                ),
+            };
+        }
+        module_with(vec![f])
+    };
+
+    // Act
+    let a = normalize_module(&mk(1));
+    let b = normalize_module(&mk(99));
+
+    // Assert
+    assert_eq!(a, b, "span 差异不得出现在规范化输出中：\nA={a}\nB={b}");
+}

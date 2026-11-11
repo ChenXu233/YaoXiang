@@ -15,7 +15,7 @@
 | L3/L4 不得 `use` L2 | 扫描 `sema/`、`proof/`、`middle/`、`backends/` 中的 `use ...frontend::{lexer,parser,module}` | 当前为 0，基线取 0（AST 为顶层域，无需豁免条款） |
 | L4 不得反向引用 L1/L2 | 扫描 `src/backends/`、`src/middle/` 中的 `use ...frontend::core::{lexer,parser}` | 需先建立基线 |
 | opcode 词表唯一归属 `middle/bytecode/` | 扫描 `src/backends/` 不得定义 opcode 常量（只 import）；`sema/` 不得出现 opcode 引用 | 现状词表在 `backends/common/opcode.rs`（形成 L3→L4 反向），随字节码域合并迁移 |
-| `pub(crate)` 跨层泄漏只许减不许增 | 统计并入基线文件 | 至少 1 处（`collect_used_in_type` 被 `inference/statements.rs:16` 使用） |
+| `pub(crate)` 跨层泄漏只许减不许增 | 统计并入基线文件 | 仍存在跨层泄漏；当前计数由 `scripts/ci/check-boundary.py` 统计并报出（总数 + 分目录） |
 | 禁止硬编码类型/谓词名 | 扫描 `src/frontend/core/parser/` 内的类型名字符串字面量 | `"Terminates"` 等 |
 
 ## 目标目录结构（施工完成后）
@@ -211,7 +211,7 @@ src/
 | `frontend/core/parser/pratt/`（手写 match 分派，两套 BP 阶梯） | `frontend/parser/grammar/` + 单套优先级表 | 05 |
 | `frontend/core/parser/ast.rs`（1166 行：`Expr`/`StmtKind`/`Type`/`Pattern` 定义） | 拆迁顶层 `ast/`（`expr`/`stmt`/`type_`/`pattern`） | 03 / D1 |
 | `frontend/core/parser/statements/declarations.rs`（1015 行，8-10 段职责） | `frontend/parser/` 拆分 + 删 120 行死旧语法 | 05 |
-| `typecheck/checker.rs`（4167 行 + 三个真子模块 `checker/annotations.rs` 470 行、`checker/refinement.rs` 1107 行、`checker/semantic_tokens.rs` 1553 行） | `sema/check/` + `sema/refine/`；`include!` 改真 `mod`（5.1 已完成）、精化块迁子模块与入口收口（5.2 已完成：入口为 `&self` + 返回诊断）、注解族迁子模块（5.3 已完成，`collect_used_in_type` 属共享面留在原处、无需再导出） | 02 / 05 |
+| `typecheck/checker.rs`（4167 行 + 三个真子模块 `checker/annotations.rs` 470 行、`checker/refinement.rs` 1107 行、`checker/semantic_tokens.rs` 1553 行） | `sema/check/` + `sema/refine/`；`include!` 改真 `mod`（5.1 已完成）、精化块迁子模块与入口收口（5.2 已完成：入口为 `&self` + 返回诊断）、注解族迁子模块（5.3 已完成） | 02 / 05 |
 | `typecheck/checker/semantic_tokens.rs`（1553 行，已是 `checker` 的真子模块） | `sema/check/semantic_tokens.rs` | 02 |
 | `typecheck/inference/expressions.rs`（5525 行） | `sema/infer/{call/,expr,stmt}.rs` | 05 / 04 |
 | `typecheck/inference/statements.rs`（2887 行） | `sema/infer/stmt.rs` + `sema/infer/mod.rs` | 05 |

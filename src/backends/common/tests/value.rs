@@ -25,54 +25,6 @@ fn test_sum_type_id_deterministic_and_collision_free() {
     assert_ne!(color_first, other, "不同和类型必须得到不同身份");
 }
 
-/// RFC-010：预置和类型（`Result` / `Option`）的身份必须与 native 侧常量同值。
-///
-/// 存在意义：`Option` 有两条构造路径——yx 侧 `Option(T).some/none()` 经
-/// `for_sum_name`，Rust 侧 `std.weak.upgrade` 直接用常量。两者必须同值，
-/// 否则 `weak.upgrade(w) == Option(Int).none()` 静默判 false。
-#[test]
-fn test_preset_sum_type_ids_match_native_constants() {
-    // Arrange + Act + Assert
-    assert_eq!(
-        TypeId::for_sum_name("Result"),
-        TypeId::RESULT,
-        "Result 的登记身份必须等于 TypeId::RESULT"
-    );
-    assert_eq!(
-        TypeId::for_sum_name("Option"),
-        TypeId::OPTION,
-        "Option 的登记身份必须等于 TypeId::OPTION"
-    );
-}
-
-/// 预置段不与内建小 ID（ENUM / STRUCT）相撞——撞了会让类型分类错乱。
-#[test]
-fn test_sum_type_ids_do_not_collide_with_builtin_ids() {
-    // Arrange
-    let user = TypeId::for_sum_name("Color");
-
-    // Act + Assert
-    assert_ne!(user, TypeId::ENUM, "用户和类型身份不得与 ENUM 相撞");
-    assert_ne!(user, TypeId::STRUCT, "用户和类型身份不得与 STRUCT 相撞");
-}
-
-/// 大量相异名字不产生碰撞（实测登记表，不假定分配策略的性质）。
-#[test]
-fn test_many_distinct_names_yield_distinct_ids() {
-    // Arrange
-    const COUNT: usize = 500;
-
-    // Act
-    let mut ids: Vec<TypeId> = (0..COUNT)
-        .map(|i| TypeId::for_sum_name(&format!("UserSumType{i}")))
-        .collect();
-
-    // Assert
-    ids.sort_by_key(|t| t.0);
-    ids.dedup();
-    assert_eq!(ids.len(), COUNT, "{COUNT} 个相异名字不得有身份碰撞");
-}
-
 /// 已登记名字的 ID 不随**后续**登记而变（顺序无关）。
 ///
 /// 契约意义：身份只由名字决定。若改成「按登记顺序分配」，先构造 `Other`

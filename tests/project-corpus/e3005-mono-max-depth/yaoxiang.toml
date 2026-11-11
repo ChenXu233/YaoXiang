@@ -1,0 +1,7 @@
+[package]
+name = "e3005-mono-max-depth"
+version = "0.1.0"
+
+# 单态化特化链深度上限：Run 臂读这里；check 不读（这正是本夹具的被测面）
+[mono]
+max_depth = 1

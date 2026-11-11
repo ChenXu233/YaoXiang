@@ -1,0 +1,23 @@
+// 02-type-system/generics/const_generic_recursive_factorial.yx
+// 覆盖: RFC-011 §4.1 / SPEC §7.1 的规范示例——递归 const 泛型函数，体内 `k: N`
+//       是被**单值钉住**的形参（N 是编译期值参数）。它的实参 `k - 1` 与 `k * ...`
+//       都在编译期可求值，构成编译期证据（D62 / 6.9.2-B 的 CheckOnly 面）。
+// 验证: `factorial(5)(5) == 120`。本条专堵「证据面只认字面量」的结构性失明：
+//       6.9.2-B 首版把这里的 `k - 1` 判成无证据（E1113），让基线里成功运行的
+//       规范示例回归——语料里此前没有任何递归 const 泛型用例。
+
+use std.assert
+
+factorial: (N: Int) -> (k: N) -> Int = {
+    return match k {
+        0 => 1,
+        _ => k * factorial(k - 1)(k - 1)
+    }
+}
+
+main: () -> Void = {
+    r: Int = factorial(5)(5)
+    assert.assert(r == 120, "factorial(5)(5) should be 120")
+}
+
+main()

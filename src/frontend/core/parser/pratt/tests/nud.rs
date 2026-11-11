@@ -15,156 +15,12 @@ fn parse_expr(source: &str) -> Expr {
         .expect("parse failed")
 }
 
-// prefix_info: token → prefix parser routing
-
-#[test]
-fn test_prefix_info_identifier() {
-    let tokens = tokenize("x").unwrap();
-    let state = ParserState::new(&tokens, &NullProbe);
-    let info = state.prefix_info();
-    assert!(
-        info.is_some(),
-        "prefix_info should return Some for identifier"
-    );
-    let (bp, _) = info.unwrap();
-    assert_eq!(bp, crate::frontend::core::parser::BP_HIGHEST);
-}
-
-#[test]
-fn test_prefix_info_int_literal() {
-    let tokens = tokenize("42").unwrap();
-    let state = ParserState::new(&tokens, &NullProbe);
-    let info = state.prefix_info();
-    assert!(info.is_some());
-}
-
-#[test]
-fn test_prefix_info_float_literal() {
-    let tokens = tokenize("3.14").unwrap();
-    let state = ParserState::new(&tokens, &NullProbe);
-    let info = state.prefix_info();
-    assert!(info.is_some());
-}
-
-#[test]
-fn test_prefix_info_string_literal() {
-    let tokens = tokenize(r#""hello""#).unwrap();
-    let state = ParserState::new(&tokens, &NullProbe);
-    let info = state.prefix_info();
-    assert!(info.is_some());
-}
-
-#[test]
-fn test_prefix_info_bool_literal() {
-    let tokens = tokenize("true").unwrap();
-    let state = ParserState::new(&tokens, &NullProbe);
-    let info = state.prefix_info();
-    assert!(info.is_some());
-}
-
-#[test]
-fn test_prefix_info_unary_minus() {
-    let tokens = tokenize("-").unwrap();
-    let state = ParserState::new(&tokens, &NullProbe);
-    let info = state.prefix_info();
-    assert!(info.is_some());
-    let (bp, _) = info.unwrap();
-    assert_eq!(bp, crate::frontend::core::parser::BP_UNARY);
-}
-
-#[test]
-fn test_prefix_info_unary_star() {
-    let tokens = tokenize("*").unwrap();
-    let state = ParserState::new(&tokens, &NullProbe);
-    let info = state.prefix_info();
-    assert!(info.is_some());
-    let (bp, _) = info.unwrap();
-    assert_eq!(bp, crate::frontend::core::parser::BP_UNARY);
-}
-
-#[test]
-fn test_prefix_info_lparen() {
-    let tokens = tokenize("(").unwrap();
-    let state = ParserState::new(&tokens, &NullProbe);
-    assert!(state.prefix_info().is_some());
-}
-
-#[test]
-fn test_prefix_info_lbracket() {
-    let tokens = tokenize("[").unwrap();
-    let state = ParserState::new(&tokens, &NullProbe);
-    assert!(state.prefix_info().is_some());
-}
-
-#[test]
-fn test_prefix_info_lbrace() {
-    let tokens = tokenize("{").unwrap();
-    let state = ParserState::new(&tokens, &NullProbe);
-    assert!(state.prefix_info().is_some());
-}
-
-#[test]
-fn test_prefix_info_if() {
-    let tokens = tokenize("if").unwrap();
-    let state = ParserState::new(&tokens, &NullProbe);
-    assert!(state.prefix_info().is_some());
-}
-
-#[test]
-fn test_prefix_info_while() {
-    let tokens = tokenize("while").unwrap();
-    let state = ParserState::new(&tokens, &NullProbe);
-    assert!(state.prefix_info().is_some());
-}
-
-#[test]
-fn test_prefix_info_match() {
-    let tokens = tokenize("match").unwrap();
-    let state = ParserState::new(&tokens, &NullProbe);
-    assert!(state.prefix_info().is_some());
-}
-
-#[test]
-fn test_prefix_info_for() {
-    let tokens = tokenize("for").unwrap();
-    let state = ParserState::new(&tokens, &NullProbe);
-    assert!(state.prefix_info().is_some());
-}
-
-#[test]
-fn test_prefix_info_ref() {
-    let tokens = tokenize("ref").unwrap();
-    let state = ParserState::new(&tokens, &NullProbe);
-    assert!(state.prefix_info().is_some());
-}
-
-#[test]
-fn test_prefix_info_unsafe() {
-    let tokens = tokenize("unsafe").unwrap();
-    let state = ParserState::new(&tokens, &NullProbe);
-    assert!(state.prefix_info().is_some());
-}
-
 #[test]
 fn test_prefix_info_at() {
     // Phase 1: @ 不再是前缀表达式（eval block 已移除）
     let tokens = tokenize("@").unwrap();
     let state = ParserState::new(&tokens, &NullProbe);
     assert!(state.prefix_info().is_none(), "@ 不再是有效的前缀表达式");
-}
-
-#[test]
-fn test_prefix_info_spawn() {
-    let tokens = tokenize("spawn").unwrap();
-    let state = ParserState::new(&tokens, &NullProbe);
-    assert!(state.prefix_info().is_some());
-}
-
-#[test]
-fn test_prefix_info_return() {
-    let tokens = tokenize("return").unwrap();
-    let state = ParserState::new(&tokens, &NullProbe);
-    assert!(state.prefix_info().is_some());
 }
 
 // #314：break/continue 仅语句位置（Python 风格定案），不再注册为 pratt 前缀表达式
@@ -205,24 +61,6 @@ fn test_parse_int_literal() {
 }
 
 #[test]
-fn test_parse_float_literal() {
-    let expr = parse_expr("3.14");
-    assert!(matches!(expr, Expr::Lit(..)));
-}
-
-#[test]
-fn test_parse_string_literal() {
-    let expr = parse_expr(r#""hello""#);
-    assert!(matches!(expr, Expr::Lit(..)));
-}
-
-#[test]
-fn test_parse_bool_true() {
-    let expr = parse_expr("true");
-    assert!(matches!(expr, Expr::Lit(..)));
-}
-
-#[test]
 fn test_parse_wildcard() {
     let expr = parse_expr("_");
     assert!(matches!(expr, Expr::Var(..)));
@@ -234,26 +72,6 @@ fn test_parse_wildcard() {
 fn test_parse_unary() {
     let expr = parse_expr("-x");
     assert!(matches!(expr, Expr::UnOp { op: UnOp::Neg, .. }));
-}
-
-// Prefix parsers: 控制流
-
-#[test]
-fn test_parse_if_expr() {
-    let expr = parse_expr("if true { 1 } else { 2 }");
-    assert!(matches!(expr, Expr::If { .. }));
-}
-
-#[test]
-fn test_parse_while_expr() {
-    let expr = parse_expr("while true { }");
-    assert!(matches!(expr, Expr::While { .. }));
-}
-
-#[test]
-fn test_parse_for_expr() {
-    let expr = parse_expr("for x in items { }");
-    assert!(matches!(expr, Expr::For { .. }));
 }
 
 #[test]

@@ -379,7 +379,7 @@ impl ForwardReport {
             ));
         }
         out.push_str(
-            "  3) 反向桥 A           ：middle/core/bytecode.rs 的 impl From<MonoType> for IrType\n",
+            "  3) 反向桥 A           ：middle/bytecode/mod.rs 的 impl From<MonoType> for IrType\n",
         );
         out.push_str(
             "     反向桥 B           ：mono_to_ast_type（MonoType → AST，同样按登记表判定）\n",

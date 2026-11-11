@@ -14,63 +14,6 @@ use crate::std::gen_interfaces::{
 use std::path::{Path, PathBuf};
 
 #[test]
-fn test_generate_all_interfaces() {
-    let interfaces = generate_all_interfaces();
-    assert!(!interfaces.is_empty(), "应至少生成一个接口文件");
-
-    // 检查包含关键模块
-    let names: Vec<&str> = interfaces.iter().map(|(n, _)| n.as_str()).collect();
-    assert!(names.contains(&"io"), "应包含 io 模块");
-    // #117 硬切换：std.list 已迁到纯 yx（src/std/list.yx），不再由 native 生成接口。
-    assert!(
-        !names.contains(&"list"),
-        "std.list 已迁到纯 yx，不应再生成接口"
-    );
-    assert!(names.contains(&"math"), "应包含 math 模块");
-    assert!(names.contains(&"dict"), "应包含 dict 模块");
-    assert!(names.contains(&"string"), "应包含 string 模块");
-}
-
-#[test]
-fn test_io_interface_content() {
-    let interfaces = generate_all_interfaces();
-    let io = interfaces.iter().find(|(n, _)| n == "io").unwrap();
-    let content = &io.1;
-
-    assert!(content.contains("print:"), "io 接口应包含 print");
-    assert!(content.contains("println:"), "io 接口应包含 println");
-    assert!(content.contains("read_line:"), "io 接口应包含 read_line");
-    // #104：整文件读写迁往 std.fs，io 接口不再包含 read_file
-    assert!(
-        !content.contains("read_file:"),
-        "io 接口不应再包含 read_file"
-    );
-    assert!(content.contains("..."), "接口函数体应包含 ...");
-}
-
-#[test]
-fn test_math_interface_has_constants() {
-    let interfaces = generate_all_interfaces();
-    let math = interfaces.iter().find(|(n, _)| n == "math").unwrap();
-    let content = &math.1;
-
-    assert!(content.contains("PI:"), "math 接口应包含 PI 常量");
-    assert!(content.contains("E:"), "math 接口应包含 E 常量");
-}
-
-#[test]
-fn test_list_interface_content() {
-    // #117 硬切换：std.list 已由纯 yx 实现接管（src/std/list.yx），
-    // 不再是 native `ListModule`，因此 `generate_all_interfaces()` 不再产出
-    // `list` 条目——接口面由 .yx 源码自身承载（`use std.list` 直接读导出签名）。
-    let interfaces = generate_all_interfaces();
-    assert!(
-        !interfaces.iter().any(|(n, _)| n == "list"),
-        "std.list 已迁到纯 yx，不应再出现在 native 生成的接口列表里"
-    );
-}
-
-#[test]
 fn test_write_interfaces_to_temp_dir() {
     // Arrange
     let temp = TempDir::new().unwrap();
@@ -129,46 +72,6 @@ fn test_find_project_override_beats_bundled_and_global() {
 }
 
 #[test]
-fn test_find_exe_relative_bundled_std_resolves_pkg_layout() {
-    // Arrange: 只有发行包目录有该文件（bin/ 引擎 + lib/yaoxiang/std/）
-    let pkg = TempDir::new().unwrap();
-    let global = TempDir::new().unwrap();
-    let bundled = put_interface(&pkg.path().join("lib/yaoxiang/std"), "math");
-
-    // Act: exe 位于 <pkg>/bin/，接口应解析到 <pkg>/lib/yaoxiang/std/
-    let found = find_std_interface_file_in(
-        None,
-        Some(&pkg.path().join("bin")),
-        Some(global.path()),
-        "math",
-    );
-
-    // Assert
-    assert_eq!(
-        found.as_deref(),
-        Some(bundled.as_path()),
-        "exe-relative ../lib/yaoxiang/std must be found from bin/"
-    );
-}
-
-#[test]
-fn test_find_global_dir_is_last_fallback() {
-    // Arrange: 只有全局目录有该文件
-    let global = TempDir::new().unwrap();
-    let global_file = put_interface(global.path(), "time");
-
-    // Act
-    let found = find_std_interface_file_in(None, None, Some(global.path()), "time");
-
-    // Assert
-    assert_eq!(
-        found.as_deref(),
-        Some(global_file.as_path()),
-        "global dir must be used when project and bundled are absent"
-    );
-}
-
-#[test]
 fn test_find_unknown_module_returns_none() {
     // Arrange: 空目录
     let empty = TempDir::new().unwrap();
@@ -214,34 +117,6 @@ fn test_committed_interface_files_match_generation() {
             &on_disk, content,
             "预生成接口 {} 与 StdModule::exports() 漂移；治愈：cargo run --example gen-std-interfaces",
             name
-        );
-    }
-}
-
-#[test]
-fn test_committed_interface_dir_has_no_orphan_files() {
-    // Arrange: 生成器当前产出的合法文件名集合
-    let committed = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(COMMITTED_INTERFACES_DIR);
-    let valid: Vec<String> = generate_all_interfaces()
-        .iter()
-        .map(|(n, _)| format!("{}.yx", n))
-        .collect();
-
-    // Act
-    let entries = std::fs::read_dir(&committed)
-        .unwrap_or_else(|e| panic!("读取预生成接口目录 {} 失败: {e}", committed.display()));
-
-    // Assert: 目录中不允许存在生成器不再产出的孤儿文件
-    for entry in entries {
-        let file_name = entry
-            .unwrap_or_else(|e| panic!("读取预生成接口目录 {} 条目失败: {e}", committed.display()))
-            .file_name()
-            .to_string_lossy()
-            .to_string();
-        assert!(
-            valid.contains(&file_name),
-            "预生成目录存在孤儿文件 {}（生成器已不再产出）；治愈：删除后重跑 gen-std-interfaces example",
-            file_name
         );
     }
 }

@@ -2,7 +2,7 @@
 //!
 //! 将 IR 操作数转换为寄存器编号。
 
-use crate::middle::core::ir::Operand;
+use crate::middle::ir::ir::Operand;
 use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};
 
 /// 操作数解析结果

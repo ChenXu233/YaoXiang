@@ -2,15 +2,15 @@
 //!
 //! 将中间表示（IR）翻译为字节码指令。
 
-use crate::backends::common::opcode;
-use crate::middle::core::ir::{
+use crate::middle::bytecode::opcode;
+use crate::middle::ir::ir::{
     BasicBlock, ConstValue, FunctionBody, FunctionIR, Instruction, LocalSlot, ModuleIR, Operand,
 };
-use crate::frontend::core::typecheck::MonoType;
-use crate::middle::core::Reg;
+use crate::frontend::core::sema::MonoType;
+use crate::middle::bytecode::Reg;
 use crate::middle::passes::codegen::emitter::Emitter;
 use crate::middle::passes::codegen::operand::OperandResolver;
-use crate::middle::passes::codegen::{BytecodeInstruction};
+use crate::middle::bytecode::file::BytecodeInstruction;
 use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};
 use crate::util::span::{DebugSpan, FileId, Span};
 use std::collections::HashMap;
@@ -104,7 +104,7 @@ impl Translator {
     ) -> Result<TranslatorOutput, Diagnostic> {
         // 消费 FFI 函数绑定 — 存储 mechanism/lib/symbol 元数据
         for binding in &module.ffi_bindings {
-            if let crate::middle::core::ir::FfiBinding::FuncBinding {
+            if let crate::middle::ir::ir::FfiBinding::FuncBinding {
                 func_name,
                 lib_id,
                 symbol,
@@ -142,7 +142,7 @@ impl Translator {
         self.closure_function_offset = Some(closure_offset);
         self.function_name_to_idx = Some(function_name_to_idx);
 
-        let mut code_section = super::CodeSection {
+        let mut code_section = crate::middle::bytecode::file::CodeSection {
             functions: Vec::new(),
         };
 
@@ -206,7 +206,7 @@ impl Translator {
         init: &[Instruction],
         locals: &[LocalSlot],
         file_ids: &[usize],
-    ) -> Result<super::FunctionCode, Diagnostic> {
+    ) -> Result<crate::middle::bytecode::file::FunctionCode, Diagnostic> {
         let mut instructions = Vec::new();
         let mut debug_map = HashMap::new();
         let mut pending_jumps: Vec<(usize, usize, u8)> = Vec::new();
@@ -247,11 +247,14 @@ impl Translator {
         ir_to_bytecode_map.insert(init.len(), instructions.len());
 
         // 末尾补 Return（初始化无返回值）
-        instructions.push(super::BytecodeInstruction::new(opcode::RETURN, vec![]));
+        instructions.push(crate::middle::bytecode::file::BytecodeInstruction::new(
+            opcode::RETURN,
+            vec![],
+        ));
 
         Self::backfill_jumps_impl(&mut instructions, &ir_to_bytecode_map, &pending_jumps);
 
-        Ok(super::FunctionCode {
+        Ok(crate::middle::bytecode::file::FunctionCode {
             name: MODULE_INIT_FUNCTION.to_string(),
             params: Vec::new(),
             return_type: MonoType::Void,
@@ -268,7 +271,7 @@ impl Translator {
     fn translate_function(
         &mut self,
         func: &FunctionIR,
-    ) -> Result<super::FunctionCode, Diagnostic> {
+    ) -> Result<crate::middle::bytecode::file::FunctionCode, Diagnostic> {
         self.current_function = Some(func.clone());
 
         let mut instructions = Vec::new();
@@ -329,7 +332,7 @@ impl Translator {
         // 回填跳转偏移
         Self::backfill_jumps_impl(&mut instructions, &ir_to_bytecode_map, &pending_jumps);
 
-        Ok(super::FunctionCode {
+        Ok(crate::middle::bytecode::file::FunctionCode {
             name: func.name.clone(),
             params: func.params.clone(),
             return_type: func.return_type.clone(),
@@ -351,14 +354,14 @@ impl Translator {
     fn synthesize_constructor(
         &mut self,
         type_func: &FunctionIR,
-        body: &crate::middle::core::ir::TypeDeclBody,
-    ) -> Result<super::FunctionCode, Diagnostic> {
+        body: &crate::middle::ir::ir::TypeDeclBody,
+    ) -> Result<crate::middle::bytecode::file::FunctionCode, Diagnostic> {
         let fields = &body.fields;
         let struct_name = &type_func.name;
 
         if fields.is_empty() {
             // 无字段类型（如枚举）——返回空构造函数
-            return Ok(super::FunctionCode {
+            return Ok(crate::middle::bytecode::file::FunctionCode {
                 name: struct_name.clone(),
                 params: Vec::new(),
                 return_type: type_func.return_type.clone(),
@@ -940,7 +943,7 @@ impl Translator {
     fn translate_spawn_multi(
         &mut self,
         closures: &[Operand],
-        plan: &crate::middle::core::ir::ExecutionPlan,
+        plan: &crate::middle::ir::ir::ExecutionPlan,
         result: &Operand,
     ) -> Result<BytecodeInstruction, Diagnostic> {
         let dst_reg = self.operand_resolver.to_reg(result)?;
@@ -994,7 +997,7 @@ impl Translator {
     fn translate_spawn_from_list(
         &mut self,
         closures_list: &Operand,
-        plan: &crate::middle::core::ir::ExecutionPlan,
+        plan: &crate::middle::ir::ir::ExecutionPlan,
         result: &Operand,
     ) -> Result<BytecodeInstruction, Diagnostic> {
         let dst_reg = self.operand_resolver.to_reg(result)?;
@@ -1560,6 +1563,6 @@ impl Default for Translator {
 
 /// 翻译器输出
 pub struct TranslatorOutput {
-    pub code_section: super::CodeSection,
+    pub code_section: crate::middle::bytecode::file::CodeSection,
     pub const_pool: Vec<ConstValue>,
 }

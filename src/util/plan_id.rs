@@ -5,7 +5,7 @@
 //! `ReleasePlan`（NLL 精确释放计划）原先以 **Span** 为键：所有权检查器按
 //! 「最后使用**表达式**的 span」记键，IR 生成按「**语句** span」查表——两个
 //! 跨层各自持有的位置量天然可以对不上（实测 173 个语料文件、533 个产出键
-//! 永不命中，见 `src/middle/core/tests/release_plan_spans.rs`），Drop 静默丢失。
+//! 永不命中，见 `src/middle/ir/tests/release_plan_spans.rs`），Drop 静默丢失。
 //!
 //! `PlanId` 把这条契约从「span 位置巧合」改成「AST 节点结构身份」：由解析器
 //! 在构造语句时**单调分配**（编译单元内唯一），随 `Stmt` 节点走——产出侧

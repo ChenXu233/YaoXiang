@@ -12,7 +12,7 @@
 //! 多文件路径被静默丢弃（02-stage-contract §正确性漏洞证据链，WBS 3.1.2）。
 //! 禁令三要求同一行为只有一处实现，故抽为中立模块供各入口共享。
 //!
-//! # 为什么不放 typecheck/proof/
+//! # 为什么不放 sema/proof/
 //!
 //! 执行要经 middle（IR/codegen）与 backends（解释器）——那是 L3 语义层
 //! 依赖 L4 执行层的反向依赖（check-boundary 判据 B3 拦截）。编排层
@@ -20,8 +20,8 @@
 //! 移入 driver 作为 `Stage::ProofExecution` 的实现。
 
 use crate::ast::Module;
-use crate::frontend::core::typecheck::proof::verdict::ProofFunctionCall;
-use crate::frontend::core::typecheck::TypeCheckResult;
+use crate::frontend::core::sema::proof::verdict::ProofFunctionCall;
+use crate::frontend::core::sema::TypeCheckResult;
 use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};
 
 /// 执行全部证明义务，返回错误诊断（空 = 全部证明通过）。
@@ -203,12 +203,27 @@ pub(super) fn execute_single_proof_fn(
     use crate::backends::Executor;
     use crate::middle;
 
-    let mut ir_gen = middle::core::ir_gen::AstToIrGenerator::new_with_type_result(
+    // tripwire（F14-B，**当前已知缺口，勿当正确行为读**）：这里显式传**空**谓词
+    // 命名空间。此前它是构造器的默认值（静默），现在改为必需输入——口径没变，
+    // 但「空集」从默认值变成这一行的显式选择。
+    //
+    // 空集的后果：`generate_function_ir` 的 SPEC §7.1 分类器与泛型名扫描都问
+    // 「这个名字是不是谓词」，空集答「都不是」⇒ 用户声明的谓词被当普通类型应用
+    // ⇒ 谓词应用的实参位被误计为类型引用。症状（**既有、非 D62 引入**）：证明函数
+    // 签名带精化时（`Check: (n: Int, p: Eq(n, 0)) -> Type`），调用点对该形参精化的
+    // 义务被静默丢弃——钉测试见 `src/frontend/tests/proof_execution.rs`
+    // （`test_proof_fn_param_refinement_obligation_is_currently_dropped`）。
+    //
+    // 为什么本轮不修：把 driver 的并集接进来会让这些义务重新出现，即**原先成功的
+    // 程序开始报错**（D 类行为变更），且根因尚未完全隔离（t14 复审：把精化引用换成
+    // 模块级常量同样丢义务）⇒ 须先隔离根因并走裁决。
+    let mut ir_gen = middle::ir::ir_gen::AstToIrGenerator::new_with_type_result(
         type_result,
         crate::frontend::module::registry::ModuleRegistry::with_std(),
         None,
+        crate::frontend::core::sema::probe::TypeLevelNamespace::default(),
     );
-    let mut constants: Vec<middle::core::ir::ConstValue> = Vec::new();
+    let mut constants: Vec<middle::ir::ir::ConstValue> = Vec::new();
     let func_ir = ir_gen
         .generate_function_ir(
             &call.func_name,
@@ -237,7 +252,7 @@ pub(super) fn execute_single_proof_fn(
         .generate()
         .map_err(|e| format!("证明函数 '{}' 字节码编译失败: {}", call.func_name, e))?;
 
-    let mut bytecode_module = crate::middle::core::bytecode::BytecodeModule::from(bytecode_file);
+    let mut bytecode_module = crate::middle::bytecode::BytecodeModule::from(bytecode_file);
     bytecode_module.entry_point = None;
 
     let args: Vec<RuntimeValue> = call.args.iter().map(from_const_value).collect();

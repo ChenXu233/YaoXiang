@@ -13,7 +13,7 @@
 //!    限定调用）都不得再触发 E3018；
 //! ② 跨单元矩阵的多文件执行结果与**单文件同表达式**等价。
 
-use crate::frontend::core::typecheck::probe::TypeLevelNamespace;
+use crate::frontend::core::sema::probe::TypeLevelNamespace;
 use super::driver::{make_script_project, run_multi};
 
 /// 跑合并 IR 的 codegen + 解释器，返回 (全部全局槽位值, 执行错误)。
@@ -45,7 +45,7 @@ fn single_file_values(source: &str) -> Vec<String> {
         "单文件源码必须可解析：{:?}",
         parsed.errors
     );
-    let mut checker = crate::frontend::core::typecheck::TypeChecker::new("main");
+    let mut checker = crate::frontend::core::sema::TypeChecker::new("main");
     let tr = checker.check_module_collect_all(
         &parsed.module,
         &TypeLevelNamespace::scan_one(&parsed.module),
@@ -55,10 +55,11 @@ fn single_file_values(source: &str) -> Vec<String> {
         "单文件对照程序必须类型检查通过：{:?}",
         tr.diagnostics
     );
-    let mut generator = crate::middle::core::ir_gen::AstToIrGenerator::new_with_type_result(
+    let mut generator = crate::middle::ir::ir_gen::AstToIrGenerator::new_with_type_result(
         &tr,
         crate::frontend::module::registry::ModuleRegistry::with_std(),
         None,
+        TypeLevelNamespace::scan_one(&parsed.module),
     );
     let ir = generator
         .generate_module_ir(&parsed.module)

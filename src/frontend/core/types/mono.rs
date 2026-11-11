@@ -402,6 +402,26 @@ fn clone_at_depth(
 }
 
 impl MonoType {
+    /// 常量值 → 字面量类型（**类型位的唯一派生**：项归一化成功后据此落类型）。
+    ///
+    /// `name` 口径 = `ConstValue` 的 `Display`（`42` / `true` / `1.5`），与 6.8.5-1
+    /// 以来的特化名与快照逐字一致；非标量值（库引用 / 外部引用）没有字面量类型，
+    /// 返回 `None`（不得用基类型顶替）。
+    pub fn literal_of_value(
+        value: &crate::frontend::core::types::const_data::ConstValue
+    ) -> Option<MonoType> {
+        let base_type = match value {
+            crate::frontend::core::types::const_data::ConstValue::Int(_) => MonoType::Int(64),
+            crate::frontend::core::types::const_data::ConstValue::Bool(_) => MonoType::Bool,
+            crate::frontend::core::types::const_data::ConstValue::Float(_) => MonoType::Float(64),
+            _ => return None,
+        };
+        Some(MonoType::Literal {
+            name: format!("{value}"),
+            base_type: Box::new(base_type),
+            value: value.clone(),
+        })
+    }
     /// 判断是否为指定名称的泛型类型
     pub fn is_generic_named(
         &self,
@@ -457,12 +477,122 @@ impl MonoType {
         self.is_generic_named("Range")
     }
 
+    /// 容器注解的**长度槽**：依赖类型里「元素个数」那一颗，不是元素类型。
+    ///
+    /// `Vec(3)` / `Array(Int, 3)` 里的字面量实参是**长度**（WBS 6.8.7-3）。它与值槽
+    /// （`n: N` 这类单值类型位，由 `sema::inference` 的期望传播消费）是两套判据：
+    /// 长度槽只回答「元素个数必须是 3」，不参与元素定型——`[1, 2, 3]` 与
+    /// `[1, 2, 4]` 都合法，`[1, 2]` 报长度不符。
+    ///
+    /// 「字面量实参即长度」的判据单点在这里：字面量类型 `int64::3` 在**元素位**
+    /// 不可构造（元素按 `int64` 定型），把它当元素期望会把每个元素都按 `int64::3`
+    /// 拒绝。
+    ///
+    /// 返回长度槽的类型（`Literal{...}`），由调用方取 `value` 与元素个数比对；
+    /// 以下情形返回 `None`（不做长度校验，保持既有行为）：非容器、长度位不是
+    /// 字面量（`Vec(Int)` 只有元素槽；`Array(Int, N)` 的 `N` 是符号常量，推迟）。
+    pub fn container_length_slot(&self) -> Option<&MonoType> {
+        let MonoType::Generic { name, args } = self else {
+            return None;
+        };
+        // 只回答**列表字面量种子**会落到的那两个内建容器：`Vec(T)`（运行时长度缓冲）
+        // 与 `Array(T, N)`（定长）。`List(T)` 是标准库类型，长度承载在它的
+        // `length: Int` 字段上，不由这条判据校验。
+        if !matches!(name.as_str(), "Vec" | "Array") {
+            return None;
+        }
+        let last = args.last()?;
+        matches!(last, MonoType::Literal { .. }).then_some(last)
+    }
+
+    /// 容器注解的**元素槽**：元素按什么定型。
+    ///
+    /// 与 [`MonoType::container_length_slot`] 是同一件事的两半：容器注解里的
+    /// 字面量实参是长度槽，故元素槽取它的**基类型**（`Vec(3)` 的元素是
+    /// `Int(64)`）；其余情形就是第一个实参（`Vec(Int)`、`Array(T, N)`、`List(T)`）。
+    ///
+    /// 非容器返回 `None`——`Dict(K, V)` 的第一位是键类型，不是元素类型，
+    /// 不得从这里误取。
+    pub fn container_element_slot(&self) -> Option<&MonoType> {
+        let MonoType::Generic { name, args } = self else {
+            return None;
+        };
+        if !matches!(name.as_str(), "Vec" | "Array" | "List") {
+            return None;
+        }
+        match args.first()? {
+            MonoType::Literal { base_type, .. } => Some(base_type.as_ref()),
+            first => Some(first),
+        }
+    }
+
     /// 取泛型参数（List→[T], Dict→[K,V]），非泛型类型返回 None
     pub fn generic_args(&self) -> Option<&[MonoType]> {
         match self {
             MonoType::Generic { args, .. } => Some(args),
             _ => None,
         }
+    }
+
+    /// 剥离**全部**顶层借用（递归）：`&&mut T` → `T`，非借用类型原样返回。
+    ///
+    /// 借用是编译期零大小类型（见 [`MonoType::Ref`]），`&T` 与 `T` 在值位是
+    /// 同一个值——调用点的实参对照（`sema::inference::expressions` 的先 unify、
+    /// 失败再剥一层补 unify）用本方法，因为那里是**推断**（要求出类型参数）。
+    ///
+    /// **不是**出口对照的判据：判定「形态是否相符」时无条件剥会把 `&Int` 与 `Int`
+    /// 判成同形（真实不符被放行）。出口对照用 [`MonoType::borrow_value_forms_match`]。
+    pub fn strip_ref(&self) -> MonoType {
+        match self {
+            MonoType::Ref { inner, .. } => inner.strip_ref(),
+            other => other.clone(),
+        }
+    }
+
+    /// 借用形 ↔ 值形的**同形态判据**（出口对照的判定单点，纯函数、无求解器）。
+    ///
+    /// 相容**当且仅当**：一侧是借用、另一侧恰是它的内层，且被剥的内层是**泛型位**
+    /// （类型变量 `TypeVar` / 类型参数名 `TypeRef`）。即 `&T` 与 `T` 同形态。
+    ///
+    /// 为什么只对泛型位：借用是编译期零大小令牌，在泛型位上「声明写 `&T`、体拿到
+    /// `T`」与「声明写 `T`、体拿到 `&T`」是同一件事（同一个值、同一个类型变量）——
+    /// 6.8.3 之前 `pick: (T: Type) -> (x: &T) -> T = (x) => x` 因此在出口被误判 E1012。
+    /// 而 `&Int` 与 `Int` 是**两种形态**：具体类型上的借用不是令牌的另一种写法。
+    ///
+    /// **「内层是泛型位」这一条是防回归，不是新语义**：6.8.3 之前的树上
+    /// `f: (x: &Int) -> Int = (x) => x` 本就报 E1012（`expected 'int64', found '&int64'`）。
+    /// 无条件剥借用是「声明来源」改造过程中出现过的**中间态**（出口一律剥一层），
+    /// 它会把这条已拒绝的形态放行成静默错答——真值表第三格（`&Int` 与 `Int` 不等）
+    /// 钉的就是「别把上一版已拒绝的形态放行」。故不得退回无条件剥借用。
+    ///
+    /// 判据承重在单元级：`tests::mono` 直接钉这张真值表（`&T`/`T` 相等；
+    /// `&Int`/`String`、`&Int`/`Int` 不等），端到端形态区分不了这两条边界。
+    pub fn borrow_value_forms_match(
+        found: &MonoType,
+        expected: &MonoType,
+    ) -> bool {
+        /// 借用包装且内层是泛型位时，返回它的值形。
+        fn value_form_of(ty: &MonoType) -> Option<&MonoType> {
+            match ty {
+                MonoType::Ref { inner, .. }
+                    if matches!(inner.as_ref(), MonoType::TypeVar(_) | MonoType::TypeRef(_)) =>
+                {
+                    Some(inner.as_ref())
+                }
+                _ => None,
+            }
+        }
+        if let Some(inner) = value_form_of(found) {
+            if inner == expected {
+                return true;
+            }
+        }
+        if let Some(inner) = value_form_of(expected) {
+            if inner == found {
+                return true;
+            }
+        }
+        false
     }
 
     /// 构造内建缓冲类型 `Vec(T)`（见 `is_list` 的名字分层说明）。
@@ -1140,6 +1270,80 @@ impl From<ast::Type> for MonoType {
     }
 }
 
+/// 泛型实参（6.9.2-C1 / RFC-039 D62）：**类型位**实参与**编译期项位**实参同列。
+///
+/// 为什么需要它（t27 设计 §1）：q=0 形参位的实参首先是一个**项**（`k - 1` 这类只有
+/// 代入后才可求值的表达式），`MonoType::Literal` 只表达「此刻已知值」那一时刻。
+/// 用类型位当唯一表示会逼出「可特化 / 仅证据」两条平行账本——项是「是什么」，
+/// 归一化是否成功是「此刻能否算值」，两者分开表达，账本随之消失。
+///
+/// 四个投影（`type_name` / `as_type` / `as_term` / `substitute`）**都在同一个
+/// impl 块的穷尽 match 里**：新增变体时编译器会逼着每处补臂（散落各文件 = D3 第 1 条）。
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum GenericArg {
+    /// 类型位实参（类型泛型 `Int` / `List(Int)`）
+    Type(MonoType),
+    /// 编译期项位实参（q=0 形参的实参）。C1 只放**闭项**：构造点已归一化。
+    Const(crate::frontend::core::types::const_data::ConstExpr),
+}
+
+impl GenericArg {
+    /// 名字（特化名 / 缓存键口径）：与 `MonoType::type_name` 同一渲染。
+    pub fn type_name(&self) -> String {
+        match self {
+            GenericArg::Type(ty) => ty.type_name(),
+            // 闭项 ⇒ 其类型位形态的名字（与 6.8.5-1 以来 `f(int64::42)` 逐字一致）；
+            // 开项没有类型位形态（C2 由 mono 代入后归一化再取名）。
+            GenericArg::Const(_) => match self.as_type() {
+                Some(ty) => ty.type_name(),
+                None => String::from("<open-term>"),
+            },
+        }
+    }
+
+    /// 类型位投影（**单向**：项 ⇒ 类型；不做类型 ⇒ 项的反向）。
+    ///
+    /// 闭项 ⇒ `Literal{name, base_type, value}`（`name` 口径 = `Display`，与既有
+    /// 特化名/快照逐字一致）；开项或非标量值 ⇒ `None`——**不得**用占位类型顶替
+    /// （C2 在 mono 代入后归一化再投影）。
+    pub fn as_type(&self) -> Option<MonoType> {
+        match self {
+            GenericArg::Type(ty) => Some(ty.clone()),
+            GenericArg::Const(term) => {
+                use crate::frontend::core::sema::proof::budget::BudgetTracker;
+                use crate::frontend::core::types::eval::const_eval::{normalize, TermEnv};
+                // 一次投影 = 一次判定：预算就地新建（与类型层同一「每次判定」口径）
+                match normalize(term, &TermEnv::default(), &BudgetTracker::for_judgment()) {
+                    Ok(value) => MonoType::literal_of_value(&value),
+                    // 开项（Unproven）或闭项失败（Disproved）：此刻**都**没有类型位形态。
+                    // 这里不做两臂合并的语义判断——两者都不投影，但绝不由 Unproven 推出 Disproved。
+                    Err(_) => None,
+                }
+            }
+        }
+    }
+
+    /// 项位投影：只有 `Const` 有项（类型位实参不是项）。
+    pub fn as_term(&self) -> Option<&crate::frontend::core::types::const_data::ConstExpr> {
+        match self {
+            GenericArg::Type(_) => None,
+            GenericArg::Const(term) => Some(term),
+        }
+    }
+
+    /// 名字替换（mono 的 name_map）：类型位交给 `MonoType::substitute`；
+    /// 项位在 C1 原样——**项的自由名替换是 C2 的符号代入面**（那时项里的
+    /// `k` 由所在实例的 name_map 换成值再归一化），本批不动。
+    pub fn substitute(
+        &self,
+        subst: &std::collections::HashMap<String, MonoType>,
+    ) -> GenericArg {
+        match self {
+            GenericArg::Type(ty) => GenericArg::Type(ty.substitute(subst)),
+            GenericArg::Const(term) => GenericArg::Const(term.clone()),
+        }
+    }
+}
 /// 将 AST 类型注解转换为 PolyType
 ///
 /// 复用 `From<ast::Type> for MonoType` 实现，包装为 PolyType。

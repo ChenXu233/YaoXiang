@@ -2,7 +2,7 @@
 //!
 //! 测试 CodegenContext 的基本创建和功能。
 
-use crate::middle::core::ir::ModuleIR;
+use crate::middle::ir::ir::ModuleIR;
 use crate::middle::passes::codegen::CodegenContext;
 
 #[test]

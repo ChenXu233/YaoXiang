@@ -141,4 +141,17 @@ define_codes!(E1XXX, {
     // 「命名实参之后又写位置实参」两类，用户每个实参只写了一次，用「参数重复
     // 指定」（E1015）描述与代码事实矛盾；E1015 只保留字面重复命名）。
     ("E1111", TypeCheck, false, argument_order_invalid(func: &str, name: &str) => .param("func", func) .param("name", name)),
+    // E1112 实现形参个数超出声明（WBS 6.8.2a / D54：声明驱动的 Fn 标注 ↔ 函数体
+    // 对照）。声明是权威源：函数能收几个运行期值由**声明**的形参位决定，实现头
+    // （=> 之后的形参表）只是位置绑定器。实现写的形参多于声明的运行期形参位时，
+    // 多出的位没有值可绑——旧行为是静默接受：实测 f: () -> Int = (a: Int) => a
+    // check 绿，运行期 f() 拿到 void、f() + 1 到运行期才报 E6007。
+    // 反向（实现少于声明）不报：缺席的位由声明名补上，函数照常按声明元数调用。
+    ("E1112", TypeCheck, false, implementation_param_count_mismatch(name: &str, expected: usize, found: usize) => .param("name", name) .param("expected", expected.to_string()) .param("found", found.to_string())),
+    // E1113 编译期值参数缺少编译期证据（RFC-039 D62 / issue #533，6.9.2-B；
+    // 2026-11-10 用户裁决甲案新增）。q=0 形参的实参必须是**编译期可确定**的值
+    // （字面量 / 值环境 / 单值钉住 / 可求值单值表达式）——特化与依赖类型等式都
+    // 建立在「这个值在编译期已知」之上。旧行为是静默按运行期传参：`f(y)` 里
+    // `y` 未定时内层 `n: N` 的约束从未生效（静默失败），且特化永不发生。
+    ("E1113", TypeCheck, false, missing_compile_time_evidence(param: &str) => .param("param", param)),
 });

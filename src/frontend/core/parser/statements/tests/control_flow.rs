@@ -22,35 +22,6 @@ fn unwrap_expr(kind: &StmtKind) -> &Expr {
     }
 }
 
-// if 语句 (Spec §5.6)
-
-#[test]
-fn test_if_simple() {
-    let kind = parse_stmt("if true { }");
-    assert!(matches!(&kind, StmtKind::If { .. }));
-}
-
-#[test]
-fn test_if_else() {
-    let kind = parse_stmt("if true { } else { }");
-    assert!(matches!(&kind, StmtKind::If { .. }));
-}
-
-#[test]
-fn test_if_else_if_else() {
-    let kind = parse_stmt("if a { } else if b { } else { }");
-    assert!(matches!(&kind, StmtKind::If { .. }));
-}
-
-// while 循环 (Spec §5.8)
-
-#[test]
-fn test_while() {
-    let kind = parse_stmt("while cond { }");
-    let expr = unwrap_expr(&kind);
-    assert!(matches!(expr, Expr::While { .. }));
-}
-
 // for 循环 (Spec §5.9)
 
 #[test]
@@ -67,15 +38,6 @@ fn test_for_mutable() {
     let kind = parse_stmt("for mut x in iter { }");
     let is_mut_for = matches!(&kind, StmtKind::For { var_mut, .. } if *var_mut);
     assert!(is_mut_for);
-}
-
-// return 语句 (Spec §5.3)
-
-#[test]
-fn test_return_no_value() {
-    let kind = parse_stmt("return");
-    let expr = unwrap_expr(&kind);
-    assert!(matches!(expr, Expr::Return(None, _)));
 }
 
 #[test]

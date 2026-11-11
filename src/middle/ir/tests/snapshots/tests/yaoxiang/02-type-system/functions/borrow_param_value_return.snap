@@ -1,0 +1,53 @@
+module
+  fn pick(Ref { mutable: false, inner: TypeRef("T") }) -> TypeRef("T")
+    generic_params: ["T"]
+    slot[0] x : Int(64) @depth1
+    locals_total=3
+    Load %0 <- %1
+    Ret %0
+    Ret
+  fn pick_tail(Ref { mutable: false, inner: TypeRef("T") }) -> TypeRef("T")
+    generic_params: ["T"]
+    slot[0] x : Int(64) @depth1
+    locals_total=2
+    Load %0 <- %1
+    Ret %0
+  fn pick_ret(Ref { mutable: false, inner: TypeRef("T") }) -> TypeRef("T")
+    generic_params: ["T"]
+    slot[0] x : Int(64) @depth1
+    locals_total=2
+    Load %0 <- %1
+    Ret %0
+    Ret %0
+  fn main() -> Void
+    slot[0] a : Int(64) @depth1
+    slot[1] b : Int(64) @depth1
+    slot[2] c : Int(64) @depth1
+    locals_total=8
+    Load %0 <- int(7)
+    Call %1 <- string("pick") [%0] (def=d0)
+    Load %2 <- %1
+    Load %3 <- int(7)
+    Eq %4 <- %2, %3
+    Load %5 <- string("pick(7) should be 7")
+    Call %0 <- string("std.assert.assert") [%4, %5] (def=d1)
+    Load %4 <- string("hi")
+    Call %0 <- string("pick_tail") [%4] (def=d2)
+    Load %3 <- %0
+    Load %5 <- string("hi")
+    Eq %2 <- %3, %5
+    Load %6 <- string("pick_tail should return the borrowed value")
+    Call %4 <- string("std.assert.assert") [%2, %6] (def=d1)
+    Load %2 <- int(3)
+    Call %4 <- string("pick_ret") [%2] (def=d3)
+    Load %5 <- %4
+    Load %6 <- int(3)
+    Eq %3 <- %5, %6
+    Load %7 <- string("pick_ret(3) should be 3")
+    Call %2 <- string("std.assert.assert") [%3, %7] (def=d1)
+    Drop %1
+    Drop %0
+    Drop %4
+    Ret %2
+  init (locals=0)
+    Call %0 <- string("main") [] (def=d4)

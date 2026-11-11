@@ -11,8 +11,8 @@ use crate::frontend::core::types::{MonoType, ConstValue};
 use crate::frontend::core::types::const_data::{BinOp, ConstExpr, UnOp};
 use super::TypeLevelError;
 use super::TypeLevelResult;
-use crate::frontend::core::typecheck::TypeEnvironment;
-use crate::frontend::core::typecheck::proof::budget::BudgetTracker;
+use crate::frontend::core::sema::TypeEnvironment;
+use crate::frontend::core::sema::proof::budget::BudgetTracker;
 use super::dependent_types::DependentTypeEnv;
 
 /// 类型求值错误

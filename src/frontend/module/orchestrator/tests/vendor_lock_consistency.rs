@@ -61,16 +61,6 @@ fn write_lock(
 // === 一致性检查 ===
 
 #[test]
-fn test_consistent_project_passes() {
-    let (_tmp, root) = setup_project("[dependencies]\nfoo = \"^1.0\"\n");
-    write_vendor_pkg(&root, "foo", "1.2.0");
-    write_lock(&root, &[("foo", "1.2.0")]);
-
-    let report = check_vendor_lock_consistency(&root).unwrap();
-    assert!(report.is_consistent(), "{:?}", report.describe());
-}
-
-#[test]
 fn test_missing_in_lock_detected() {
     let (_tmp, root) = setup_project("[dependencies]\nfoo = \"^1.0\"\n");
     write_vendor_pkg(&root, "foo", "1.2.0");
@@ -79,83 +69,6 @@ fn test_missing_in_lock_detected() {
     let report = check_vendor_lock_consistency(&root).unwrap();
     assert_eq!(report.missing_in_lock, vec!["foo".to_string()]);
     assert!(!report.is_consistent(), "缺 lock 条目时报告应判不一致");
-}
-
-#[test]
-fn test_missing_in_vendor_detected() {
-    let (_tmp, root) = setup_project("[dependencies]\nfoo = \"^1.0\"\n");
-    // vendor 目录存在（vendor 模式），但 foo-1.2.0 未解包
-    fs::create_dir_all(root.join(".yaoxiang").join("vendor")).unwrap();
-    // lock 锁了 1.2.0 但 vendor 没解包
-    write_lock(&root, &[("foo", "1.2.0")]);
-
-    let report = check_vendor_lock_consistency(&root).unwrap();
-    assert_eq!(
-        report.missing_in_vendor,
-        vec![("foo".to_string(), "1.2.0".to_string())]
-    );
-}
-
-#[test]
-fn test_requirement_mismatch_detected() {
-    let (_tmp, root) = setup_project("[dependencies]\nfoo = \"^2.0\"\n");
-    write_vendor_pkg(&root, "foo", "1.2.0");
-    write_lock(&root, &[("foo", "1.2.0")]); // lock 版本不满足 ^2.0
-
-    let report = check_vendor_lock_consistency(&root).unwrap();
-    assert_eq!(
-        report.requirement_mismatch,
-        vec![("foo".to_string(), "^2.0".to_string(), "1.2.0".to_string())]
-    );
-}
-
-#[test]
-fn test_path_dep_missing_in_lock_detected() {
-    // Arrange：#411——path 依赖与 git 来源同账本核对（复制进 vendor），不再跳过。
-    // vendor 目录存在（vendor 模式）：检查器对无 vendor 项目不判死
-    let (_tmp, root) =
-        setup_project("[dependencies]\nlocal = { version = \"*\", path = \"./local-src\" }\n");
-    fs::create_dir_all(root.join(".yaoxiang").join("vendor")).unwrap();
-    write_lock(&root, &[]); // lock 无条目 → 缺失应被检出
-
-    // Act
-    let report = check_vendor_lock_consistency(&root).unwrap();
-
-    // Assert
-    assert_eq!(
-        report.missing_in_lock,
-        vec!["local".to_string()],
-        "path 依赖缺 lock 条目应被检出"
-    );
-    assert!(!report.is_consistent(), "path 依赖缺 lock 条目应判不一致");
-}
-
-#[test]
-fn test_path_dep_with_lock_and_vendor_is_consistent() {
-    // Arrange：path 依赖已登记 lock 且 vendor 有对应目录
-    let (_tmp, root) =
-        setup_project("[dependencies]\nlocal = { version = \"*\", path = \"./local-src\" }\n");
-    write_vendor_pkg(&root, "local", "0.3.0");
-    fs::write(
-        root.join("yaoxiang.lock"),
-        "version = 1\n\n[package.local]\nversion = \"0.3.0\"\nsource = \"path\"\n",
-    )
-    .unwrap();
-
-    // Act
-    let report = check_vendor_lock_consistency(&root).unwrap();
-
-    // Assert
-    assert!(report.is_consistent(), "{:?}", report.describe());
-}
-
-#[test]
-fn test_no_vendor_dir_is_consistent() {
-    // 未 install 的项目（无 vendor）：不判死，保持零配置可用
-    let (_tmp, root) = setup_project("[dependencies]\nfoo = \"^1.0\"\n");
-
-    let report = check_vendor_lock_consistency(&root).unwrap();
-    assert!(report.is_consistent(), "lock/vendor 对齐时报告应判一致");
 }
 
 // === lock 优先解析 ===

@@ -101,7 +101,7 @@ pub fn eval_code(source: &str) -> Result<()> {
         .map_err(|e| anyhow::anyhow!("Lexer error: {:?}", e))?;
     let parse_result = crate::frontend::core::parser::parse_with_probe(
         &tokens,
-        &crate::frontend::core::typecheck::SemanticProbe,
+        &crate::frontend::core::sema::SemanticProbe,
     );
     let has_main = parse_result.module.items.iter().any(|stmt| {
         matches!(
@@ -249,7 +249,7 @@ pub fn build_bytecode_with_options(
         let mut sources = crate::util::span::SourceMap::new();
         sources.add_file(source_path_str.clone(), source.clone());
         bytecode_file.debug_section = Some(
-            crate::middle::passes::codegen::bytecode::DebugSection::with_global_names(
+            crate::middle::bytecode::file::DebugSection::with_global_names(
                 sources,
                 &bytecode_file.code_section.functions,
                 global_names,
@@ -280,7 +280,7 @@ pub fn build_bytecode_with_options(
 /// Dump bytecode for debugging
 #[cfg(not(target_arch = "wasm32"))]
 pub fn dump_bytecode(path: &Path) -> Result<()> {
-    use crate::middle::passes::codegen::bytecode::BytecodeFile;
+    use crate::middle::bytecode::file::BytecodeFile;
     use crate::middle::passes::codegen::CodegenContext;
 
     let path_str = path.display().to_string();
@@ -327,7 +327,7 @@ pub fn dump_bytecode(path: &Path) -> Result<()> {
 }
 
 /// 打印 BytecodeFile 的完整结构（header / type table / constants / functions）
-fn dump_bytecode_file(bytecode_file: &crate::middle::passes::codegen::bytecode::BytecodeFile) {
+fn dump_bytecode_file(bytecode_file: &crate::middle::bytecode::file::BytecodeFile) {
     tracing::info!(
         "{}",
         t_cur(
@@ -471,21 +471,21 @@ fn dump_bytecode_file(bytecode_file: &crate::middle::passes::codegen::bytecode::
 }
 
 /// Dump type information in detail
-fn dump_type_detail(ty: &crate::frontend::core::typecheck::MonoType) -> String {
+fn dump_type_detail(ty: &crate::frontend::core::sema::MonoType) -> String {
     match ty {
-        crate::frontend::core::typecheck::MonoType::Void => "void".to_string(),
-        crate::frontend::core::typecheck::MonoType::Never => "never".to_string(),
-        crate::frontend::core::typecheck::MonoType::Bool => "bool".to_string(),
-        crate::frontend::core::typecheck::MonoType::Int(n) => format!("i{}", n),
-        crate::frontend::core::typecheck::MonoType::Float(n) => format!("f{}", n),
-        crate::frontend::core::typecheck::MonoType::Char => "char".to_string(),
-        crate::frontend::core::typecheck::MonoType::Struct(struct_type) => {
+        crate::frontend::core::sema::MonoType::Void => "void".to_string(),
+        crate::frontend::core::sema::MonoType::Never => "never".to_string(),
+        crate::frontend::core::sema::MonoType::Bool => "bool".to_string(),
+        crate::frontend::core::sema::MonoType::Int(n) => format!("i{}", n),
+        crate::frontend::core::sema::MonoType::Float(n) => format!("f{}", n),
+        crate::frontend::core::sema::MonoType::Char => "char".to_string(),
+        crate::frontend::core::sema::MonoType::Struct(struct_type) => {
             format!("struct {:?}", struct_type)
         }
-        crate::frontend::core::typecheck::MonoType::Enum(enum_type) => {
+        crate::frontend::core::sema::MonoType::Enum(enum_type) => {
             format!("enum {:?}", enum_type)
         }
-        crate::frontend::core::typecheck::MonoType::Fn {
+        crate::frontend::core::sema::MonoType::Fn {
             params,
             return_type,
         } => {
@@ -497,9 +497,9 @@ fn dump_type_detail(ty: &crate::frontend::core::typecheck::MonoType) -> String {
             let ret_str = dump_type_detail(return_type);
             format!("fn({}) -> {}", params_str, ret_str)
         }
-        crate::frontend::core::typecheck::MonoType::TypeRef(name) => name.clone(),
-        crate::frontend::core::typecheck::MonoType::TypeVar(var) => format!("T{:?}", var),
-        crate::frontend::core::typecheck::MonoType::Union(types) => {
+        crate::frontend::core::sema::MonoType::TypeRef(name) => name.clone(),
+        crate::frontend::core::sema::MonoType::TypeVar(var) => format!("T{:?}", var),
+        crate::frontend::core::sema::MonoType::Union(types) => {
             let inner = types
                 .iter()
                 .map(dump_type_detail)
@@ -507,7 +507,7 @@ fn dump_type_detail(ty: &crate::frontend::core::typecheck::MonoType) -> String {
                 .join(" | ");
             format!("({})", inner)
         }
-        crate::frontend::core::typecheck::MonoType::Intersection(types) => {
+        crate::frontend::core::sema::MonoType::Intersection(types) => {
             let inner = types
                 .iter()
                 .map(dump_type_detail)
@@ -515,14 +515,14 @@ fn dump_type_detail(ty: &crate::frontend::core::typecheck::MonoType) -> String {
                 .join(" & ");
             format!("({})", inner)
         }
-        crate::frontend::core::typecheck::MonoType::Ref { mutable, inner } => {
+        crate::frontend::core::sema::MonoType::Ref { mutable, inner } => {
             if *mutable {
                 format!("&mut {}", dump_type_detail(inner))
             } else {
                 format!("&{}", dump_type_detail(inner))
             }
         }
-        crate::frontend::core::typecheck::MonoType::AssocType {
+        crate::frontend::core::sema::MonoType::AssocType {
             host_type,
             assoc_name,
             assoc_args,
@@ -546,14 +546,14 @@ fn dump_type_detail(ty: &crate::frontend::core::typecheck::MonoType) -> String {
                 args_str
             )
         }
-        crate::frontend::core::typecheck::MonoType::Literal {
+        crate::frontend::core::sema::MonoType::Literal {
             name: _,
             base_type,
             value,
         } => {
             format!("{}::{}", dump_type_detail(base_type), value)
         }
-        crate::frontend::core::typecheck::MonoType::MetaType {
+        crate::frontend::core::sema::MonoType::MetaType {
             universe_level,
             type_params,
         } => {
@@ -565,7 +565,7 @@ fn dump_type_detail(ty: &crate::frontend::core::typecheck::MonoType) -> String {
             }
         }
         // #299：容器/复合类型统一走 Generic（保持旧变体输出格式）
-        crate::frontend::core::typecheck::MonoType::Generic { name, args } => match name.as_str() {
+        crate::frontend::core::sema::MonoType::Generic { name, args } => match name.as_str() {
             "String" => "String".to_string(),
             "Bytes" => "bytes".to_string(),
             "Tuple" => format!(
@@ -601,10 +601,10 @@ fn dump_type_detail(ty: &crate::frontend::core::typecheck::MonoType) -> String {
                     .join(", ")
             ),
         },
-        crate::frontend::core::typecheck::MonoType::Refined { base, constraint } => {
+        crate::frontend::core::sema::MonoType::Refined { base, constraint } => {
             format!("{} {{{}}}", dump_type_detail(base), constraint)
         }
-        crate::frontend::core::typecheck::MonoType::DepFn {
+        crate::frontend::core::sema::MonoType::DepFn {
             params,
             return_type,
         } => {
@@ -622,23 +622,23 @@ fn dump_type_detail(ty: &crate::frontend::core::typecheck::MonoType) -> String {
     }
 }
 
-fn dump_const_detail(constant: &crate::middle::core::ir::ConstValue) -> &'static str {
+fn dump_const_detail(constant: &crate::middle::ir::ir::ConstValue) -> &'static str {
     match constant {
-        crate::middle::core::ir::ConstValue::Void => "void",
-        crate::middle::core::ir::ConstValue::Bool(_) => "bool",
-        crate::middle::core::ir::ConstValue::Int(_) => "int",
-        crate::middle::core::ir::ConstValue::Float(_) => "float",
-        crate::middle::core::ir::ConstValue::Char(_) => "char",
-        crate::middle::core::ir::ConstValue::String(_) => "String",
-        crate::middle::core::ir::ConstValue::Bytes(_) => "bytes",
-        crate::middle::core::ir::ConstValue::NativeFn(_) => "nativefn",
-        crate::middle::core::ir::ConstValue::LibraryRef { .. }
-        | crate::middle::core::ir::ConstValue::ExternRef { .. } => todo!(),
+        crate::middle::ir::ir::ConstValue::Void => "void",
+        crate::middle::ir::ir::ConstValue::Bool(_) => "bool",
+        crate::middle::ir::ir::ConstValue::Int(_) => "int",
+        crate::middle::ir::ir::ConstValue::Float(_) => "float",
+        crate::middle::ir::ir::ConstValue::Char(_) => "char",
+        crate::middle::ir::ir::ConstValue::String(_) => "String",
+        crate::middle::ir::ir::ConstValue::Bytes(_) => "bytes",
+        crate::middle::ir::ir::ConstValue::NativeFn(_) => "nativefn",
+        crate::middle::ir::ir::ConstValue::LibraryRef { .. }
+        | crate::middle::ir::ir::ConstValue::ExternRef { .. } => todo!(),
     }
 }
 
 /// Dump function parameters in detail
-fn dump_params_detail(params: &[crate::frontend::core::typecheck::MonoType]) -> String {
+fn dump_params_detail(params: &[crate::frontend::core::sema::MonoType]) -> String {
     if params.is_empty() {
         "()".to_string()
     } else {
@@ -662,14 +662,14 @@ fn format_operands(operands: &[u8]) -> String {
 
 /// Dump instructions in a readable format with opcode names
 fn dump_instructions(
-    instructions: &[crate::middle::passes::codegen::bytecode::BytecodeInstruction],
+    instructions: &[crate::middle::bytecode::file::BytecodeInstruction],
     debug_map: Option<&::std::collections::HashMap<usize, crate::util::span::DebugSpan>>,
-    debug_section: Option<&crate::middle::passes::codegen::bytecode::DebugSection>,
+    debug_section: Option<&crate::middle::bytecode::file::DebugSection>,
 ) {
     for (instr_idx, instr) in instructions.iter().enumerate() {
         // Try to decode the opcode
         let ops_str = format_operands(&instr.operands);
-        let name = crate::backends::common::opcode_name(instr.opcode);
+        let name = crate::middle::bytecode::opcode::opcode_name(instr.opcode);
         let loc = dump_instr_location(instr_idx, debug_map, debug_section);
         if name != "Unknown" {
             tracing::info!(
@@ -706,7 +706,7 @@ fn dump_instructions(
 fn dump_instr_location(
     instr_idx: usize,
     debug_map: Option<&::std::collections::HashMap<usize, crate::util::span::DebugSpan>>,
-    debug_section: Option<&crate::middle::passes::codegen::bytecode::DebugSection>,
+    debug_section: Option<&crate::middle::bytecode::file::DebugSection>,
 ) -> String {
     let Some(ds) = debug_map.and_then(|m| m.get(&instr_idx)) else {
         return String::new();

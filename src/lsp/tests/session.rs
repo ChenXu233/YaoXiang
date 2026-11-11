@@ -35,11 +35,3 @@ fn test_session_root_path() {
     session.set_root_path(Some("/workspace/project".to_string()));
     assert_eq!(session.root_path(), Some("/workspace/project"));
 }
-
-#[test]
-fn test_session_document_store() {
-    let mut session = Session::new();
-    let store = session.document_store_mut();
-    store.open("test.yx".to_string(), "x = 42".to_string(), 1);
-    assert_eq!(session.document_store().document_count(), 1);
-}

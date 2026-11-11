@@ -1,0 +1,14 @@
+// 06-compile-errors/fn-binding/fn_annotation_param_rename_err.yx
+// D54 / WBS 6.8.2a ①：实现头改名的形参必须按位拿到**声明**的类型——
+//   此前按名字交集合并（交集为空就整段跳过），b 成了 fresh var，
+//   `b + "s"` 顺利统一成 String：check 绿、运行期 E6007。
+// expect: compile-error E1002
+// 覆盖: 形参按位驱动（声明是权威源，实现头的名字只决定体内怎么引用第 i 位）
+// 验证: 同一语义三种语法（同名箭头 / 异名箭头 / block 体）给出同一诊断
+// 状态: ❌ 应编译失败
+
+f: (a: Int) -> Int = (b) => b + "s"
+
+main: () -> Void = {
+    x: Int = f(1)
+}

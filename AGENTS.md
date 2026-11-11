@@ -11,9 +11,29 @@ YaoXiang 是一门编程语言及其编译器（Rust 实现）。`src/` 约 16 �
 
 ## 改代码之前（强制）
 
+**先读，再动手——这条不分角色。** 主会话、子代理、带着明确任务的成员，只要这次会改代码（含测试、脚本、生成物、文档里的判据），**必须先读完** [实现者手册 HOWTO.md](docs/src/dev/HOWTO.md) 与 [coding-rules.md](docs/src/dev/coding-rules.md) 全文，再动第一行。
+
+- 「任务很明确」「只改一行」「我是子代理，任务写死了」**都不是豁免理由**——规则约束的是动作，不是身份。
+- **派工的 Lead 有责任**：给子代理的任务提示里必须带上这条要求（见「团队编排约定」第 14 条）。
+- **子代理的第一次改动前**，要在回复里说明**这次适用哪几条红线**（写不出 = 没读）。这是给人看的自检，不是机械门禁——它拦不住敷衍的人，但能让敷衍留下痕迹。
+
+**六条红线原文见下方「红线（review 必打回）」一节**（与本文件末尾那节同源，不重复列两遍）。
+
 1. **读 [实现者手册 HOWTO.md](docs/src/dev/HOWTO.md)**——动工前自检表 + “补丁式修复”判定（D3）。它是入口；规则本体在 [coding-rules.md](docs/src/dev/coding-rules.md)。
 2. 施工任务查 [09-execution-wbs.md](docs/src/dev/architecture/09-execution-wbs.md) 的三级任务表（带 `- [ ]` 看板）。
 3. 三条禁令（概要，全文见 [coding-rules.md](docs/src/dev/coding-rules.md)）：**不得生造**（新概念先证明与既有概念不重复）、**不得职责累积**（一个模块一类职责）、**该重构不补丁**（同一行为 ≥2 处复制 / 新增第 N 个入口 / 一次改 ≥3 处同义映射 → 停工走设计流程）。
+
+### 改文档之前（强制）
+
+**文档规则的唯一本体是 [docs-rules.md](docs/src/dev/docs-rules.md)，不是 coding-rules.md**——coding-rules 管代码，docs-rules 管文档（docs-rules 开头即写明二者同级）。改文档前先读它，再读下面三样。
+
+同一条「先读再动手」也适用于文档。改任何规范 / 设计 / 计划文档前，必须读：
+
+1. **上游设计依据**：这次改动对应的 RFC 决议（[RFC-039](docs/src/rfc/accepted/039-compiler-architecture.md) 的决议登记 D1–D59，或该领域的专题 RFC）；
+2. **同层相邻文档**：同一张表 / 同一组术语是否在别处已有定义（两处各写一份 = 「不得生造」的翻版）；
+3. **[docs-rules.md](docs/src/dev/docs-rules.md)**（文档规则本体；§5 是权威链与修改前提）。
+
+**方向规则**：RFC 是 SPEC 的设定依据——SPEC 可以写「设计依据见 RFC」，**RFC 不得以 SPEC 为依据**，否则 RFC 再也不能改 SPEC。**更正就地写入**，不留「勘误 / 原为…现改为…」的对照，历史在 git 里。
 
 ## 请求用户裁决时（强制）
 
@@ -38,7 +58,7 @@ YaoXiang 是一门编程语言及其编译器（Rust 实现）。`src/` 约 16 �
 4. **归档条件**：该二级任务下的**全部三级任务**收口——含验证/复审通过、**提交已推送**、**本地九门禁全绿**（CI 结论按第 13 条处理，不作归档前置）。
 5. **串行现实与上下文**：同一时刻只有一支活动团队；成员上下文跨轮次保留正是本条的目的之一——要给长上下文成员续派时**优先压缩上下文**，压缩不可用时才换人并在记录里写明原因。
 
-6. **契约编写（inScope 必须覆盖机械必需面）**：写 implementation / repair 类任务的 inScope 时，必须把该目标的**机械必需面**一并圈进来，至少三类——① 新引入或变更的对外契约产物（诊断码表、`locales/`、生成器再生的文档、`build.rs`/门禁要求同步的文件）；② 任何断言被改结构**形状**的直驱测试文件（改字段/变体/枚举成员会连带它们编译不过）；③ 与门禁判据做**多源对账**的文档表；④ **被裁决直接点名的声明载体**——含代码注释/文档注释（「声明与事实不符」本身就是这类裁决要修的对象，只改文档一侧等于判据没兑现）；⑤ **新增或变更枚举变体 / 指令 / 常量池条目时**：`inScope` 必须圈进「该类型的定义家」与「全仓所有穷尽 `match` 的补臂点」（`RuntimeValue`、`ConstValue`、`Instruction`、`BytecodeInstr` 一类；补臂点通常散在 3–5 个文件，含 `src/lib.rs` 的再导出与 `src/std/*.rs` 的 FFI 表）——判据：动手前先 grep 该变体的穷尽匹配点，数量 ≥1 就必须全部进 `inScope`；⑥ **基线文件是机械必需面**：任何改变 IR 形状或语料行为的任务，`inScope` 必须包含 `tests/baselines/`（语料差分）与 `src/middle/core/tests/snapshots/`（IR 快照）——它们与行为改动**必须同提交**（红线已有），但契约不圈就会被 `changedPaths` 校验拒收，判据：任务描述里出现「改 IR / 改行为 / 新增语料夹具」⇒ 两项必进；⑦ **repair 类任务同等适用「机械必需面」**：框架自动派生的修复轮常以「只改一处」为名省掉 inScope 声明，但修复触及 `src/` 任何一行都可能平移诊断发射点，新增测试又要登记家目录与 `mod.rs`——判据：写/审 repair 契约时同样回答「这轮改动会让哪份生成物再生、新测试放在哪个目录」，把 `docs/src/reference/` 与测试家目录写进 inScope，否则收口时必须按契约缺陷追认（2026-10-30 实例：6.5 的 t8 修复轮有 4 个机械必需面落在声明外）。写契约前先 grep「谁断言这个形状 / 谁与它交叉对账」。（2026-10-24 实例：同一批三个实现任务里漏了两回——`tests/baselines/` 被划进 outOfScope、值枚举家 `src/backends/common/value.rs` 与两处穷尽 `match` 补臂 + 三份生成物未进 `inScope`，均被迫在收口时以「契约缺陷」追认。）复核别人报的发现时，必须在**被复核的那个 revision** 上核（工作区可能在动——本会话实例：我在 t10 进行中的树上核 t8 的一条发现，得出「不可复现」，实际是那条已被 t10 顺手修掉；换成 `git show <rev>:<file>` 或先问清被核 SHA 即可避免）。**契约 `inScope` 一律写可被路径匹配器解析的路径前缀**：如 `src/util/diagnostic/codes/`、`docs/src/rfc/accepted/013-error-code-specification.md`；不得用散文限定（如 `docs/src/（仅限错误码生成物）`）——散文限定会被 `changedPaths` 校验拒绝，使机械必需面落在声明之外。**写入文档的提交号必须在 push 之后取**——push 前的 `pull --rebase` 会重写本地哈希（2026-10-13 实例：`94ad03ce4` → `631eb3e3c`；本会话共 3 次因 inScope 写窄被迫 amend）。
+6. **契约编写（inScope 必须覆盖机械必需面）**：写 implementation / repair 类任务的 inScope 时，必须把该目标的**机械必需面**一并圈进来，至少三类——① 新引入或变更的对外契约产物（诊断码表、`locales/`、生成器再生的文档、`build.rs`/门禁要求同步的文件）；② 任何断言被改结构**形状**的直驱测试文件（改字段/变体/枚举成员会连带它们编译不过）；③ 与门禁判据做**多源对账**的文档表；④ **被裁决直接点名的声明载体**——含代码注释/文档注释（「声明与事实不符」本身就是这类裁决要修的对象，只改文档一侧等于判据没兑现）；⑤ **新增或变更枚举变体 / 指令 / 常量池条目时**：`inScope` 必须圈进「该类型的定义家」与「全仓所有穷尽 `match` 的补臂点」（`RuntimeValue`、`ConstValue`、`Instruction`、`BytecodeInstr` 一类；补臂点通常散在 3–5 个文件，含 `src/lib.rs` 的再导出与 `src/std/*.rs` 的 FFI 表）——判据：动手前先 grep 该变体的穷尽匹配点，数量 ≥1 就必须全部进 `inScope`；⑥ **基线文件是机械必需面**：任何改变 IR 形状或语料行为的任务，`inScope` 必须包含 `tests/baselines/`（语料差分）与 `src/middle/ir/tests/snapshots/`（IR 快照）——它们与行为改动**必须同提交**（红线已有），但契约不圈就会被 `changedPaths` 校验拒收，判据：任务描述里出现「改 IR / 改行为 / 新增语料夹具」⇒ 两项必进；⑦ **repair 类任务同等适用「机械必需面」**：框架自动派生的修复轮常以「只改一处」为名省掉 inScope 声明，但修复触及 `src/` 任何一行都可能平移诊断发射点，新增测试又要登记家目录与 `mod.rs`——判据：写/审 repair 契约时同样回答「这轮改动会让哪份生成物再生、新测试放在哪个目录」，把 `docs/src/reference/` 与测试家目录写进 inScope，否则收口时必须按契约缺陷追认（2026-10-30 实例：6.5 的 t8 修复轮有 4 个机械必需面落在声明外）。写契约前先 grep「谁断言这个形状 / 谁与它交叉对账」。（2026-10-24 实例：同一批三个实现任务里漏了两回——`tests/baselines/` 被划进 outOfScope、值枚举家 `src/backends/common/value.rs` 与两处穷尽 `match` 补臂 + 三份生成物未进 `inScope`，均被迫在收口时以「契约缺陷」追认。）复核别人报的发现时，必须在**被复核的那个 revision** 上核（工作区可能在动——本会话实例：我在 t10 进行中的树上核 t8 的一条发现，得出「不可复现」，实际是那条已被 t10 顺手修掉；换成 `git show <rev>:<file>` 或先问清被核 SHA 即可避免）。**契约 `inScope` 一律写可被路径匹配器解析的路径前缀**：如 `src/util/diagnostic/codes/`、`docs/src/rfc/accepted/013-error-code-specification.md`；不得用散文限定（如 `docs/src/（仅限错误码生成物）`）——散文限定会被 `changedPaths` 校验拒绝，使机械必需面落在声明之外。**写入文档的提交号必须在 push 之后取**——push 前的 `pull --rebase` 会重写本地哈希（2026-10-13 实例：`94ad03ce4` → `631eb3e3c`；本会话共 3 次因 inScope 写窄被迫 amend）。
 7. **成员路由原则**：审核 / 验证 / 复审成员必须与实现者使用**不同的模型家族或档次**——让产出代码的同一个模型去审查，等于共享盲区，独立验证只剩形式。具体的 provider / 模型 / 额度回退属**各人的会话环境设定**（可用权限不同），**不写进本文件**。
 
 8. **提交自洽（每笔一个理由）**：一笔提交 = 一个可理解的理由 + 一个可独立 revert 的单元。
@@ -69,6 +89,7 @@ YaoXiang 是一门编程语言及其编译器（Rust 实现）。`src/` 约 16 �
    - ⑦ **提交期间的 stash 窗口（操作约定，2026-10-16 用户同意）**：`pre-commit` 在跑钩子前会把**全部未暂存改动** stash 走、跑完再恢复（日志行 `[INFO] Stashing unstaged files to …` / `Restored changes from …`）。因此提交进行中的那几分钟里，其他成员直接读工作树会看到「只剩已 staged 文件」的假象（本会话实例：验证者据此报告「轮 2 改动丢失」，实为窗口内读取）。约定：① 提交前先给未暂存改动留 patch 备份；② 提交期间他人只按冻结 sha 量测、不读工作树；③ 每笔提交完成后用 `git status` 核对剩余改动完整性。
    - ⑧ **推送与同步归属可核（2026-10-17）**：成员**不得**运行 `git push` / `git fetch` / `git pull`；同步与推送由队长统一做，同步一律 `git pull --rebase origin dev`，**出现 merge 提交即视为流程偏差**。两条都可用 `git reflog --date=iso` 与 `git reflog show origin/dev` 直接核验——**流程归因不得凭报告措辞推断**（实例：队长据「报告里写已在 origin/dev」断言某成员自行 push，reflog 显示实为命令面之外的 `pull --tags` + push，归因撤回）；发现远端/工作树被第三方改动须当场报告。派工消息里的口头约定不构成判据——可核项必须写进任务契约的验收。
    - ⑨ **文档提交必须本地真构建一次（2026-10-17）**：markdownlint 抓不到 VitePress 的 Vue 编译错误（尖括号占位符被当成元素，报 `Element is missing end tag`），且 pre-commit 的 markdownlint 钩子在仅含 docs 的提交里会被判 `no files to check` 跳过。故：**占位符一律进反引号**，文档提交推送前**本地跑一次真实构建**（`npm run docs:build`）。实例：`042c07860` 使 Deploy Docs 红（run 39011946793），修复提交 `0c837e1b4`。
+   - ⑩ **rebase 解冲突禁止整文件取一方（2026-11-01）**：解冲突不得用 `git checkout --ours/--theirs`（或等价手段）**整文件**取一侧——那会静默丢弃另一端的全部增量（实例：AST 顶层化搬移提交 56654352 因整取一方，把已收口的 3.20.9 类型级命名空间在 checker.rs/probe.rs 整体回退，dev HEAD 编译不过 13 错，次日由并行会话发现；对方同日自修 1c3feba0）。正确做法 = `git merge-file` 三方合并或逐 hunk 解；解完必须本地编译 + 跑受影响面测试后才能提交。**自称「纯搬移」的提交同样受此约束**——搬移的正确性判据是「除路径外零语义 diff」，不是「我没错」。
 11. **写入方负载上限（2026-10-14 用户裁决；依据 = 上下文过载会导致质量下滑，见 ⑧ 的实测）**——**注意 ⑨：本条是「当前无上下文压缩能力」时的替代措施，压缩可用后 ① 即作废**：
    - ① **单一成员 attempt 上限 3**：指派前先数 `agent_teams_status` 里该成员已完成/失败的 attempt；到限即换人（`agent_teams_add_member` 新建 → `agent_teams_reassign_task` 改派 → `agent_teams_remove_member` 收回）。
    - ② **同一工作项内部的多轮 review→repair→再评审属正常返工，不占这 3 个额度**（本会话：t1→t2→t3→t9→t10 算 1 个工作项；t6→t7→t8→t12→t13 算 1 个）。
@@ -87,11 +108,13 @@ YaoXiang 是一门编程语言及其编译器（Rust 实现）。`src/` 约 16 �
     - **归档条件**（第 4 条）：全部三级收口 + 提交已推送 + **本地九门禁全绿**；CI 结论不作前置。
     - 连推取消前一轮 run 属正常（`concurrency`），不必记录覆盖关系。
 
+14. **派工提示必须带读规则要求（2026-11-04 用户裁决）**：给任何成员的派工提示里，必须包含一句「动工前先读 [HOWTO.md](docs/src/dev/HOWTO.md) 与 [coding-rules.md](docs/src/dev/coding-rules.md) 全文」——子代理拿到的往往只有任务描述，仓库约束不在它的视野里。缺这句的派工视为无效。成员在第一次改动前要说明本次适用哪几条红线（见「改代码之前（强制）」）。
+
 **为什么**：按"轮"建队会把同一二级任务拆散，任务点过细，反复付建队成本、清空成员已积累的仓库认知，拖慢整体计划（2026-10-13 用户裁决：团队范围由三级抬到二级）。
 
 ## 发现值得记录的规则时
 
-工作中若发现值得固化的规则（如被反复纠正的做法、新的红线、新的判定标准），**先向用户提出，经同意后**再更新 [coding-rules.md](docs/src/dev/coding-rules.md) 等文档（HOWTO、红线清单、对应 RFC 决议登记等按归属就近落位）。规则以文档为准，不要只留在对话记录里。**且规则文本（不只是意图）必须先贴给用户过目，获同意后才能提交**——用户批准了「要加这条规则」不等于批准了你的措辞。
+工作中若发现值得固化的规则（如被反复纠正的做法、新的红线、新的判定标准），**先向用户提出，经同意后**再按归属落位——代码规则进 [coding-rules.md](docs/src/dev/coding-rules.md)，文档规则进 [docs-rules.md](docs/src/dev/docs-rules.md)，动工入口进 [HOWTO.md](docs/src/dev/HOWTO.md)，RFC 级裁决进对应 RFC 的决议登记。规则以文档为准，不要只留在对话记录里。**且规则文本（不只是意图）必须先贴给用户过目，获同意后才能提交**——用户批准了「要加这条规则」不等于批准了你的措辞。
 
 ## 常用命令
 
@@ -102,16 +125,18 @@ python scripts/rfc/check_tracking.py   # RFC 状态一致性
 
 # 测试怎么跑（#486：资源画像标记 + 预算通道）——
 python scripts/dev/testsuite.py plan             # 只打印计划：预算 / 波次 / 每波峰值 / 实际 jobs 与 threads
-python scripts/dev/testsuite.py run fast         # 本地提交前默认通道：非 ignore 全跑；mode=exclusive 各自独占一波
+python scripts/dev/testsuite.py run fast         # 提交前必跑：--lib + 集成侧四个 tests 目标；装不下的波逐条报「跳过 N 条」
 python scripts/dev/testsuite.py run full         # 推送前与 CI 口径：预算不足即 exit 2 并列出缺口，不静默跳过
 python scripts/dev/testsuite.py markers --check  # 标记 ↔ cargo test --list 双向对账（新增 #[ignore] 必须带 cost: 标记）
 CARGO_BUILD_JOBS=2 RUST_TEST_THREADS=1 cargo test   # 手跑兜底：必须自带资源上限，否则重测会与其它测试并发
 # 禁止裸跑 cargo test -- --ignored 全量：会执行 mode=manual（快照再生改写基线）与红态常驻用例。
-# 当前 pre-commit 仍跑 cargo test --all；把门禁切到 fast/full 的接线属 #486 后续排期。
-# 测试数只许增不许减。
+# pre-commit 两段：先跑上面的 run fast（快反馈），再跑 cargo test --all --quiet 拦提交。
+# doctest（cargo test --doc）与语料差分不在 run fast 覆盖面内，由 CI 兜底。
+python scripts/ci/check-test-channel.py         # 测试口径同源：本区 / test-specification 18.1 / pre-commit entry 三处一致
+# 测试的准入与退役见 coding-rules 第七部分（三扇门：条款 / 病史 / 证明）。
 
 # 基线再生——改动影响 IR 或语料行为时必跑，diff 人工 review 后同提交入库：
-UPDATE_SNAPSHOTS=1 cargo test --lib snapshot -- --ignored    # IR 快照（src/middle/core/tests/snapshots/）
+UPDATE_SNAPSHOTS=1 cargo test --lib snapshot -- --ignored    # IR 快照（src/middle/ir/tests/snapshots/）
 cargo run --quiet --example corpus_probe > tests/baselines/corpus-parity.jsonl  # 语料差分
 ```
 
@@ -135,12 +160,21 @@ git pull --rebase origin dev        # 与对端无冲突（merge-tree 干净）�
 
 - 不看代码就改：没打开文件、没 grep 过引用点，不许动
 - 核心功能留 `todo!()` / “Not implemented yet” / 无限期“独立 issue”
-- 删测试或放宽判据换绿灯（不存在 C5′；做不到是实现缺陷，如实报告）
+- 删测试或放宽判据换绿灯（做不到是实现缺陷，如实报告）；测试的**准入与退役**按 [coding-rules 第七部分](docs/src/dev/coding-rules.md)——三扇门（条款 / 病史 / 证明）一扇都过不了才可退役，「因为红了就删」永远打回
 - 裸跑 `cargo test -- --ignored` 全量（会执行快照再生的 `manual` 档与红态常驻用例——等于悄悄改写基线）
 - 写/改测试不读 [test-specification.md](docs/src/dev/test-specification.md)——命名必须 `test_<what>_<scenario>` 前缀、超 5 行必须 AAA 三段注释、断言必须带自定义消息、枚举匹配用 `assert!(matches!(...))`；判据红态常驻属设计形态（如 2.4.4），不是「永久 ignore」违规
 - 改 IR/语料行为而不同步基线：改 `src/`（前端/ir_gen/std）或语料 `.yx` 会改变 IR 或运行行为时，IR 快照与语料差分基线必须**同提交**更新（命令见常用命令区），各自 git diff 人工 review；快照/差分门禁红了说明基线欠账，不许绕
 - 用 import 别名弥合同语义概念（`as AstBinOp` 这类）
 - 新增 `include!`、新增跨层反向依赖（L2→L3 等）、`pub(crate)` 跨层泄漏增加
+
+### 规则本体六条（[coding-rules.md](docs/src/dev/coding-rules.md) 第三部分，原文）
+
+1. **不看的代码不改**——没有打开过被改文件、没有 grep 过相关引用点，不许动它。
+2. **核心功能不留待实现遗留**——不许新增 `todo!()`、`unimplemented!`、`Vec::new() // Not implemented yet` 式静默丢弃、无限期「独立 issue」。发现即修，或登记进当前阶段任务。
+3. **不删测试、不放宽判据换绿灯**——做不到是实现缺陷，如实报告并重新评估，不是修改判据的理由。测试的准入与退役按第七部分的三扇门，见 [coding-rules](docs/src/dev/coding-rules.md)。
+4. **不用 import 别名弥合同语义概念**（`as AstBinOp` 这类）。
+5. **不新增 `include!`、不新增跨层反向依赖**（L2→L3 等）、`pub(crate)` 跨层泄漏只许减不许增。
+6. **PR 必填块必须如实填写**——D0 权威源模块名写不出 = 没查，直接打回；「错误类型（A–F，按 D59）」漏标或与改动实际不符，同样打回。
 
 ## 关键文档地图
 
@@ -152,4 +186,5 @@ git pull --rebase origin dev        # 与对端无冲突（merge-tree 干净）�
 | [01](docs/src/dev/architecture/01-routing.md) | 加一个特性该改哪里、目录职责表 |
 | [07](docs/src/dev/architecture/07-equivalence-oracle.md) | 等价性判据 C1–C6 |
 | [test-specification](docs/src/dev/test-specification.md) | 测试怎么写（命名/AAA/断言消息——写测试前必读） |
+| [docs-rules](docs/src/dev/docs-rules.md) | 文档怎么写（分类/风格/权威链——改文档前必读） |
 | [RFC-039](docs/src/rfc/accepted/039-compiler-architecture.md) | 总纲、决议登记 D1–D59 |

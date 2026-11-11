@@ -37,8 +37,8 @@ fn test_z3_modules_available_on_native() {
     // Arrange & Act
     #[cfg(not(target_arch = "wasm32"))]
     {
-        let _ = crate::frontend::core::typecheck::proof::smt::z3_backend::Z3Backend::new();
-        use crate::frontend::core::typecheck::proof::smt::z3_ffi::Z3_context;
+        let _ = crate::frontend::core::sema::proof::smt::z3_backend::Z3Backend::new();
+        use crate::frontend::core::sema::proof::smt::z3_ffi::Z3_context;
         let _: Z3_context = std::ptr::null_mut();
     }
 

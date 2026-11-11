@@ -16,7 +16,7 @@ use std::path::{Path, PathBuf};
 
 use crate::driver::{Driver, DriverError, DriverOutcome, Program, ProgramKind, Unit};
 use crate::frontend::config::CompileConfig;
-use crate::frontend::core::typecheck::environment::TypeEnvironment;
+use crate::frontend::core::sema::environment::TypeEnvironment;
 use crate::frontend::core::types::MonoType;
 
 /// 合法 manifest（[package] 可解析 ⇒ 角色上下文可用）；入口 main.yx

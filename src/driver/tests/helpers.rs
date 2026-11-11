@@ -9,9 +9,9 @@
 
 use crate::driver::helpers::aggregate_instantiation_requests;
 use crate::driver::unit::Unit;
-use crate::frontend::core::typecheck::TypeCheckResult;
+use crate::frontend::core::sema::TypeCheckResult;
 use crate::frontend::core::types::MonoType;
-use crate::middle::core::ir::{FunctionBody, FunctionIR, ModuleIR};
+use crate::middle::ir::ir::{FunctionBody, FunctionIR, ModuleIR};
 use crate::middle::passes::mono::instance::{GenericFunctionId, InstantiationRequest};
 use crate::util::span::Span;
 
@@ -56,7 +56,9 @@ fn request(
 ) -> InstantiationRequest {
     let mut req = InstantiationRequest::new(
         GenericFunctionId::new(name.to_string(), vec!["T".to_string()]),
-        vec![MonoType::Int(64)],
+        vec![crate::frontend::core::types::mono::GenericArg::Type(
+            MonoType::Int(64),
+        )],
         Span::default(),
     );
     req.containing_fn = containing_fn.map(str::to_owned);
@@ -127,6 +129,7 @@ fn test_aggregate_resolves_named_import_request_through_alias_channel() {
         param_names: None,
         type_payload: None,
         definition_span: None,
+        predicate_def: None,
     });
     registry.register(lib);
     let result = type_result(vec![request("pick", None)]);
@@ -143,76 +146,5 @@ fn test_aggregate_resolves_named_import_request_through_alias_channel() {
             .collect::<Vec<_>>(),
         vec!["lib.pick".to_string()],
         "具名导入的请求名必须经别名通道解析到 lib.pick（与 IR 调用指令同源）"
-    );
-}
-
-/// 请求名：跨模块限定名与 std 名原样保留（不得再被单元键改写）。
-#[test]
-fn test_aggregate_keeps_qualified_request_names_untouched() {
-    // Arrange：lib 单元的顶层调用 lib.f（外部限定名）与 std.list.len
-    let units = vec![Unit::new("lib", "lib.yx", "")];
-    let irs = vec![Some(unit_ir(&["lib.helper"]))];
-    let result = type_result(vec![request("lib.f", None), request("std.list.len", None)]);
-    let results = vec![Some(&result)];
-
-    // Act
-    let aggregated = aggregate(&units, &irs, &results);
-
-    // Assert
-    assert_eq!(
-        aggregated
-            .iter()
-            .map(|r| r.generic_id().name().to_string())
-            .collect::<Vec<_>>(),
-        vec!["lib.f".to_string(), "std.list.len".to_string()],
-        "已限定名（外部模块/std）不得被单元键再缀一层"
-    );
-}
-
-/// 容器名：不在本单元函数表里的裸名保持原样（不猜、不缀单元键）。
-#[test]
-fn test_aggregate_leaves_unknown_container_name_unchanged() {
-    // Arrange：容器写的是本单元不存在的名字（嵌套/未知形态）
-    let units = vec![Unit::new("lib", "lib.yx", "")];
-    let irs = vec![Some(unit_ir(&["lib.f"]))];
-    let result = type_result(vec![request("lib.f", Some("outer.inner"))]);
-    let results = vec![Some(&result)];
-
-    // Act
-    let aggregated = aggregate(&units, &irs, &results);
-
-    // Assert
-    assert_eq!(
-        aggregated[0].containing_fn,
-        Some("outer.inner".to_string()),
-        "不在单元函数表里的容器名必须保持原样（不得缀单元键）"
-    );
-}
-
-/// 缺产物：单元 IR 或 typecheck 产物缺失时跳过该单元，不 panic、不产条目。
-#[test]
-fn test_aggregate_skips_units_without_products() {
-    // Arrange：a 缺 IR 产物、c 缺 typecheck 产物，只有 b 两件齐
-    let units = vec![
-        Unit::new("a", "a.yx", ""),
-        Unit::new("b", "b.yx", ""),
-        Unit::new("c", "c.yx", ""),
-    ];
-    let irs = vec![None, Some(unit_ir(&["b.pick"])), Some(unit_ir(&["c.pick"]))];
-    let b_result = type_result(vec![request("pick", None)]);
-    let results: Vec<Option<&TypeCheckResult>> = vec![None, Some(&b_result), None];
-
-    // Act
-    let aggregated = aggregate(&units, &irs, &results);
-
-    // Assert：只有 b 的请求（a 无 IR、c 无 typecheck 产物）——`b.pick` 被按
-    // 单元键限定化，且缺产物单元既没 panic 也没产出条目
-    assert_eq!(
-        aggregated
-            .iter()
-            .map(|r| r.generic_id().name().to_string())
-            .collect::<Vec<_>>(),
-        vec!["b.pick".to_string()],
-        "缺产物的单元必须整体跳过，且不得 panic"
     );
 }

@@ -8,7 +8,7 @@
 //! 只定义**判定的接口**，实现由调用方注入（依赖倒置）：
 //!
 //! - [`NullProbe`]：全 false，**无类型环境**入口与 parser 单元测试的基线；
-//! - L3 的语义探针 `SemanticProbe`（`typecheck::probe`）：以运算符接口表 / 内置谓词
+//! - L3 的语义探针 `SemanticProbe`（`sema::probe`）：以运算符接口表 / 内置谓词
 //!   判定 / 内置名表 / const 参数名表为准——9 个生产入口一律注入它（WBS 6.6.9）。
 //!
 //! **L2 不再持有任何名字表**（WBS 6.6.9）：6.4 曾在 parser 里留过两张封闭集
@@ -31,7 +31,7 @@
 /// 因而 `kind` 必须被保真回写），并连带 IR 快照与语料基线再生、与本批零漂移
 /// 判据冲突。那些重建函数已在 6.6.12 随 IR 载体收窄全部删除：IR 层如今**一处
 /// `ast::Type` 都不持**（`FunctionBody::TypeDecl` 改携 IR 原生的 `TypeDeclBody`，
-/// `middle/core/ir.rs` 也不再 import 语法层 `ast`）。故「`kind` 会经 AST 往返
+/// `middle/ir/ir.rs` 也不再 import 语法层 `ast`）。故「`kind` 会经 AST 往返
 /// 进 IR」这一障碍**今天已不存在**。
 ///
 /// **今天不字段化的理由只剩两条（须重新论证，不是 6.4 那套）**：① 字段化仍要
@@ -92,7 +92,7 @@ pub trait TypeEnvProbe {
 
     /// 该名字是否为**可作 const 泛型参数**的类型名（`(N: Int)` 的 `Int`）。
     ///
-    /// 权威集合在 L3（`typecheck::probe::CONST_PARAM_TYPES`，语义 =「内置名表里
+    /// 权威集合在 L3（`sema::probe::CONST_PARAM_TYPES`，语义 =「内置名表里
     /// 可被 const 参数接受的子集」）：parser 只提问、不建表。默认 `false` =
     /// 「本探针不提供这条知识」，调用方不能据此反推「该名字一定不是」——它只意味着
     /// parser 不会把它登记成 const 泛型参数。

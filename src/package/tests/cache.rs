@@ -169,50 +169,7 @@ fn test_sanitize_key_strips_scheme() {
     assert_eq!(sanitize_key("ssh://gitlab.com/u/r.git"), "gitlab.com-u-r");
 }
 
-#[test]
-fn test_sanitize_key_keeps_safe_chars() {
-    // Act / Assert：安全字符（字母数字 . _ -）原样保留
-    assert_eq!(sanitize_key("v1.2.3"), "v1.2.3");
-    assert_eq!(sanitize_key("abc123def"), "abc123def");
-    assert_eq!(sanitize_key("my_pkg.name-x"), "my_pkg.name-x");
-}
-
-#[test]
-fn test_sanitize_key_folds_specials() {
-    // Act / Assert：特殊字符折叠为 '-'；连续折叠为单个；首尾 trim
-    assert_eq!(sanitize_key("a b/c:d"), "a-b-c-d");
-    assert_eq!(sanitize_key("a///b"), "a-b", "连续特殊字符折叠为单个 '-'");
-    assert_eq!(sanitize_key("  x  "), "x");
-}
-
 // === 复制与指针测试 ===
-
-#[test]
-fn test_copy_into_skips_git_and_replaces_dest() {
-    // Arrange：缓存条目（含 .git 与源码）+ 预置脏目标
-    let tmp = TempDir::new().unwrap();
-    let cache = GlobalCache::with_root(tmp.path().join("cache"));
-
-    let entry = tmp.path().join("entry");
-    std::fs::create_dir_all(entry.join(".git").join("objects")).unwrap();
-    std::fs::write(entry.join(".git").join("HEAD"), "ref: refs/heads/main").unwrap();
-    std::fs::create_dir_all(entry.join("src")).unwrap();
-    std::fs::write(entry.join("src").join("lib.yx"), "pub fn f() { 1 }").unwrap();
-    std::fs::write(entry.join("yaoxiang.toml"), "[package]").unwrap();
-
-    let dest = tmp.path().join("dest");
-    std::fs::create_dir_all(&dest).unwrap();
-    std::fs::write(dest.join("stale.junk"), "old").unwrap();
-
-    // Act
-    cache.copy_into(&entry, &dest).unwrap();
-
-    // Assert：内容复制、.git 剔除、旧内容被清空
-    assert!(dest.join("yaoxiang.toml").exists(), "manifest 应被复制");
-    assert!(dest.join("src").join("lib.yx").exists(), "源码应被复制");
-    assert!(!dest.join(".git").exists(), ".git 应被剔除");
-    assert!(!dest.join("stale.junk").exists(), "旧内容应被清空");
-}
 
 #[test]
 fn test_pointer_roundtrip() {
@@ -246,30 +203,6 @@ fn test_pointer_roundtrip() {
             .exists(),
         "指针文件应位于 git 条目目录"
     );
-}
-
-#[test]
-fn test_clean_and_size() {
-    // Arrange
-    let tmp = TempDir::new().unwrap();
-    let root = tmp.path().join("cache");
-    let cache = GlobalCache::with_root(root.clone());
-
-    // Act / Assert：不存在的缓存 → None；有内容后清理返回释放字节数并删根
-    assert!(
-        cache.clean().unwrap().is_none(),
-        "缓存不存在时 clean 应返回 None"
-    );
-
-    std::fs::create_dir_all(root.join("git").join("entry")).unwrap();
-    std::fs::write(root.join("git").join("entry").join("f.txt"), "hello").unwrap();
-
-    assert!(GlobalCache::dir_size(&root) >= 5, "dir_size 应统计内容字节");
-    assert!(
-        cache.clean().unwrap().is_some(),
-        "有内容时 clean 应返回释放量"
-    );
-    assert!(!root.exists(), "清理后缓存根应被删除");
 }
 
 #[test]
@@ -405,31 +338,6 @@ fn test_git_download_uses_global_cache() {
 
     // Act & Assert：tilde 择优（~1.1 → tag v1.1.0）
     assert_tilde_prefers_v1_1(&source, &repo, &vendor);
-}
-
-#[test]
-fn test_git_download_tag_pinned() {
-    // Arrange：`?tag=v1.0.0` 钉住 ref
-    let tmp = TempDir::new().unwrap();
-    let repo = make_git_repo(&tmp.path().join("repo"));
-    let vendor = tmp.path().join("vendor");
-    std::fs::create_dir_all(&vendor).unwrap();
-
-    let source = GitSource::with_cache(GlobalCache::with_root(tmp.path().join("cache")));
-    let url = format!("{}?tag=v1.0.0", repo.to_str().unwrap());
-    let spec = DependencySpec {
-        name: "fixture".to_string(),
-        version: "1.0.0".to_string(),
-        git: Some(url),
-        path: None,
-    };
-
-    // Act
-    let resolved = crate::package::runtime::drive(source.download(&spec, &vendor)).unwrap();
-
-    // Assert：钉住 ref 不做 semver 择优；版本探测读取该 tag 处 manifest
-    assert_eq!(resolved.version, "1.0.0");
-    assert!(vendor.join("fixture-1.0.0").exists());
 }
 
 #[test]

@@ -1,0 +1,26 @@
+// 02-type-system/generics/const_arg_evidence_forms.yx
+// 覆盖: RFC-039 D62 / 6.9.2-B——编译期值参数（q=0）的**证据形态**：字面量、
+//       值环境变量、单值表达式（复用既有 Evaluator）；证据齐备才谈特化。
+// 验证: `f(42)(42)`（字面量）、`f(x)(42)`（值环境 x=42）、`f(k - 1)(42)`
+//       （单值表达式 k-1 ⇒ 42）三种形态都通过并返回 N；混合声明的
+//       `g(3, 42)(42)` 里 q=0 形参在第二层也照判。
+
+use std.assert
+
+f: (N: Int) -> (n: N) -> Int = (n) => n
+g: (x: Int, N: Int) -> (n: N) -> Int = (n) => n
+
+main: () -> Void = {
+    x: Int = 42
+    k: Int = 43
+    a: Int = f(42)(42)
+    b: Int = f(x)(42)
+    c: Int = f(k - 1)(42)
+    d: Int = g(3, 42)(42)
+    assert.assert(a == 42, "literal evidence should return N")
+    assert.assert(b == 42, "value-env evidence should return N")
+    assert.assert(c == 42, "single-value expression evidence should return N")
+    assert.assert(d == 42, "mixed declaration keeps second-layer q=0 evidence")
+}
+
+main()

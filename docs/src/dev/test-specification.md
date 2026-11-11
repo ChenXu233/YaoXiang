@@ -688,6 +688,25 @@ fn test_fibonacci() {
 
 **规则 9.2**：集成测试不得依赖网络、系统环境变量或外部服务。
 
+**规则 9.3**：语料（`tests/yaoxiang/`、`src/std/tests/`、`tests/yaoxiang-multifile/`）的
+`check` 退出 0 之后，`run` 不得报出与编译期同族的错误：E0 词法/语法、E1 类型、E2 语义、
+E3 代码生成、E4 泛型、E5 模块。族→类别的权威源是 `src/util/diagnostic/codes/mod.rs` 的
+`ErrorCategory`；`run` 只报 E6–E8（运行时 / I/O / 内部）不构成违反。
+
+判据由 `python scripts/ci/check-soundness.py` 执行。它已于 2026-11-06 **翻闸（阻塞）**：
+`pre-commit` 在暂存区含语料 `.yx` 或项目形态夹具时以 `--strict` 跑它，有分叉即 exit 1、
+阻塞提交。`--report-only` 保留为**手工排查**形态（任何情况 exit 0），不进任何门禁；翻闸后
+临时放过只能走 coding-rules 第五部分（`// reason:` + 豁免计数进门禁报告），**不得**把钩子
+改回 report-only。翻闸判据（三类已知分叉归零 + 变异自证 + 耗时预算）与实测数字写在脚本头部
+注释里。
+
+判据面分两层：**项目形态**在 `tests/project-corpus/`（含 `yaoxiang.toml` 的项目夹具，
+E3022 / E3020 / E3005 各一套），**单文件语料**是上列三处。项目形态层只由本探针消费，
+不进语料差分基线、也不被 `yx_multifile_runner` 收集——写进行为语料等于把违规录成
+期望行为。三套对应的实现缺陷已在 2026-11-06 修复（E3005：`[mono]` 贯通到 check 链；
+E3020 / E3022：入口契约判定补进 check），它们从「分叉」转为「check 与 run 同口径」的
+回归守卫——任一处判据被退回，check 会掉回 0 而 run 仍报同一个码，探针即重新报分叉。
+
 ---
 
 ## 基准测试规范
@@ -857,8 +876,11 @@ proptest! {
 
 **规则 18.1**：提交 PR 前，作者必须自查以下项目：
 
-- [ ] `cargo test` 全部通过
-- [ ] `cargo test --doc` 全部通过
+- [ ] `python scripts/dev/testsuite.py run fast` 通过——提交前自检跑 `--lib`（src/ 单元测试）
+      与四个集成侧目标（`integration` / `formatter_integration` / `yx_runner` /
+      `yx_multifile_runner`）；`pre-commit` 第一段就是这条命令，第二段跑
+      `cargo test --all --quiet` 拦提交
+- [ ] `cargo test --doc` 通过——doctest 不在 `run fast` 的覆盖面内，由 CI 的测试作业兜底
 - [ ] `cargo bench` 无性能回归（如涉及热路径变更）
 - [ ] 新增代码符合覆盖率目标
 - [ ] 测试命名符合命名规范

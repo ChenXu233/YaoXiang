@@ -1,0 +1,9804 @@
+//! AST 到 IR 的代码生成器
+//!
+//! 将抽象语法树（AST）转换为中间表示（IR）。
+//! 这是编译流程的第二步：解析 → 类型检查 → IR 生成 → 代码生成
+//!
+//! ## 设计原则
+//!
+//! 1. 单一职责：只负责 AST → IR 转换，不关心类型检查或代码生成
+//! 2. 简洁直接：IR 结构简单，生成逻辑清晰
+//! 3. 可测试性：独立的模块便于单元测试
+
+use crate::frontend::core::lexer::tokens::Literal;
+use crate::ast::{self, Expr};
+use crate::frontend::module::registry::ModuleRegistry;
+use crate::frontend::module::ModuleSource;
+use crate::frontend::module::resolver::Resolver;
+use crate::frontend::module::symbol::{DefKind, SymbolTable};
+use crate::frontend::module::ExportKind;
+use crate::frontend::core::sema::layers::ownership::ReleasePlan;
+use crate::frontend::core::sema::types::OverloadResolutions;
+use crate::frontend::core::sema::{is_constraint_name, MonoType, PolyType, TypeCheckResult};
+use crate::middle::ir::ir::{
+    BasicBlock, ConstValue, FunctionBody, FunctionIR, Instruction, LocalSlot, ModuleIR, Operand,
+    TypeDeclBody, TypeDeclField,
+};
+use crate::tlog;
+use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};
+use crate::util::i18n::MSG;
+use crate::util::plan_id::PlanId;
+use crate::util::span::Span;
+use std::collections::HashMap;
+
+/// 把命名空间表达式拆成「头 + 字段段列表」，供 [`Resolver`] 解析。
+///
+/// `std.io.println`（FieldAccess 链）→ `("std", ["io", "println"])`；
+/// 非 Var 结尾的表达式（如方法调用结果再取字段）返回 None。
+/// 纯 AST 机械操作；「头是不是命名空间」「拼成什么限定名」的语义归 [`Resolver`]。
+fn flatten_namespace(expr: &ast::Expr) -> Option<(&str, Vec<&str>)> {
+    let mut segs: Vec<&str> = Vec::new();
+    let mut cur = expr;
+    loop {
+        match cur {
+            ast::Expr::Var(name, _) => {
+                segs.push(name.as_str());
+                segs.reverse();
+                let head = segs[0];
+                return Some((head, segs[1..].to_vec()));
+            }
+            ast::Expr::FieldAccess { expr, field, .. } => {
+                segs.push(field.as_str());
+                cur = expr;
+            }
+            _ => return None,
+        }
+    }
+}
+
+/// 检查类型是否实现了 Stringable 接口（即有 to_string 方法）
+/// 用于 print/println 的零开销分发
+fn type_implements_stringable(mono_type: &MonoType) -> bool {
+    match mono_type {
+        // 具体类型：检查方法表中是否有 to_string
+        MonoType::Struct(struct_type) => struct_type.methods.contains_key("to_string"),
+        // 基础类型默认都有字符串表示
+        MonoType::Int(_) | MonoType::Float(_) | MonoType::Bool | MonoType::Char => true,
+        // #299：String/Bytes 现为 Generic，属可字符串化基础类型
+        MonoType::Generic { name, .. } if matches!(name.as_str(), "String" | "Bytes") => true,
+        // 其他类型使用兜底实现
+        _ => false,
+    }
+}
+
+/// 获取类型的字符串表示（用于兜底实现）
+fn get_type_fallback_string(mono_type: &MonoType) -> String {
+    match mono_type {
+        MonoType::Void => "void".to_string(),
+        MonoType::Bool => "bool".to_string(),
+        MonoType::Int(_) => "int".to_string(),
+        MonoType::Float(_) => "float".to_string(),
+        MonoType::Char => "char".to_string(),
+        MonoType::Struct(s) => s.name.clone(),
+        MonoType::Enum(e) => e.name.clone(),
+        MonoType::Generic { name, .. } => match name.as_str() {
+            "Tuple" => "tuple".to_string(),
+            "List" => "list".to_string(),
+            "Dict" => "dict".to_string(),
+            "Set" => "set".to_string(),
+            "String" => "string".to_string(),
+            "Bytes" => "bytes".to_string(),
+            "Range" => "Range".to_string(),
+            _ => "unknown".to_string(),
+        },
+        MonoType::Fn { .. } => "function".to_string(),
+        MonoType::TypeRef(name) => name.clone(),
+        // 其他类型使用默认名称
+        _ => "unknown".to_string(),
+    }
+}
+
+/// 符号表条目
+#[derive(Debug, Clone)]
+struct SymbolEntry {
+    local_idx: usize,
+    /// 该变量绑定时**写出**的类型名（`x: TempB = ..` 的注解原文，或构造器调用
+    /// `TempB(..)` / `ns.Temp(..)` 写出的名字）。WBS 4.9.8 / issue #465：
+    /// `MonoType` 对导入类型只留**定义侧裸名**，两单元的同名类型分不出来；
+    /// 「这个名字是从哪个单元带进来的」在本单元唯一有据的是 `use` 面
+    /// （[`AstToIrGenerator::imported_type_owner`]）——故把写出名留在符号表里，
+    /// 方法派发时据此归因到定义单元。
+    written_type: Option<String>,
+}
+
+/// AST 到 IR 的生成器
+///
+/// 将 AST 节点转换为 IR 指令序列。
+#[derive(Debug)]
+pub struct AstToIrGenerator {
+    /// 符号表（用于变量解析）
+    symbols: Vec<HashMap<String, SymbolEntry>>,
+    /// 类型检查结果（包含变量绑定信息）
+    type_result: Option<Box<TypeCheckResult>>,
+    /// 当前正在生成的函数绑定，其声明**返回位**若是 Fn（括号返回 / 闭包包装形态），
+    /// 这里放该内层 Fn 的形参（名字, 类型）。供闭包 IR 定型用：parser 已不再往
+    /// 实现头填声明类型，闭包自己拿不到外层声明（D54 修复轮 F1）。
+    closure_decl_params: Vec<(String, MonoType)>,
+    /// 下一个临时寄存器编号
+    next_temp: usize,
+    /// 本函数临时寄存器高水位（#393：语句级回收会回滚 next_temp，
+    /// total_locals 必须取真高水位，否则最后一条语句的临时槽位被裁掉）
+    temp_high_water: usize,
+    /// 循环态临时地板（#393：for 的 iterator/iterable 等临时跨语句存活，
+    /// 语句级回收回滚不得低于此值；enter/exit_loop_targets 维护）
+    temp_floor: usize,
+    /// 局部变量类型追踪（用于错误消息中显示实际类型）
+    local_var_types: HashMap<String, String>,
+    /// 顶层绑定**写出**的类型名（Script 形态的 `t = Temp(1.0)` 是全局槽位，
+    /// 与块内局部变量走同一条派发归因链——WBS 4.9.8 / issue #465）。
+    /// 键 = 本文件的绑定名（不含模块限定）。
+    global_written_types: HashMap<String, String>,
+    /// FFI 库绑定
+    ffi_libs: Vec<crate::middle::ir::ir::FfiLibBinding>,
+    /// FFI 绑定 — 不透明类型或外部函数
+    ffi_bindings: Vec<crate::middle::ir::ir::FfiBinding>,
+    /// 下一个库 ID
+    next_lib_id: usize,
+    /// 结构体定义映射（类型名 -> 字段列表）
+    /// 用于构造器调用时填充默认值
+    struct_definitions: HashMap<String, Vec<crate::ast::StructField>>,
+    /// RFC-010 和类型的类型参数名（载荷类型替换用，见 sum_type_variants）
+    sum_type_param_names: HashMap<String, Vec<String>>,
+    /// 本模块声明的**全部**类型名（含泛型类型定义）。
+    ///
+    /// 类型声明（含泛型，`E: (T: Type) -> Type = ..`）一律走 TypeDecl 函数路径；
+    /// 名字解析需要知道「这是用户自己的类型」，
+    /// 否则 `use std.math` 后用户写 `PI: Type = ..; PI(7)` 会被解析成
+    /// `std.math.PI`（常量）——调用常量得到 void，静默错值（D10）。
+    declared_type_names: std::collections::HashSet<String>,
+    /// 类型级命名空间（谓词名可见面）：SPEC §7.1 的「谓词应用的实参位是值不是
+    /// 类型」判据要用它——保守假值会让同形不遮蔽失效。
+    ///
+    /// **不得再用静态 `SemanticProbe` 独立判谓词**（6.9.1 观察项，D62 复核）：
+    /// 用户声明的谓词（`Eq` / `SumUpTo` / `IsPositive`）不在内置名表里，静态探针
+    /// 答「不是谓词」⇒ 谓词应用的实参位被当成类型引用 ⇒ 真值参数被误登进
+    /// `generic_params`（`refined_relation_arg` 的 `f`/`g`、`refined_param_cross_arg`
+    /// 的 `h`）。判据源只有这一份声明面扫描。
+    ///
+    /// **范围由调用方定，生成器不自扫**（F14-A）：多文件入口传 driver 算出的
+    /// `scan(全部单元)` 并集，单文件入口传 `scan_one(module)`；构造参数是必需的，
+    /// 故「空集 / 窄范围」只能是调用方的显式选择，不会因漏接而静默。
+    type_level: crate::frontend::core::sema::probe::TypeLevelNamespace,
+    /// 类型绑定映射（类型名 -> (方法名 -> BindingInfo)）
+    /// 用于方法调用时的参数重排和函数转发（RFC-004）
+    type_bindings: HashMap<String, HashMap<String, BindingInfo>>,
+    /// 嵌套函数列表（在函数体内定义的函数）
+    nested_functions: Vec<FunctionIR>,
+    /// 闭包计数器（用于生成唯一的闭包名称）
+    closure_counter: usize,
+    /// 全局变量表 (name, type, initial_value)。
+    /// 索引即全局槽位号（`Operand::Global(idx)`）。`initial_value` 恒为 None——
+    /// 初始化改由运行时 `module_init` 序列承载（T2）；字段保留供跨文件登记占位。
+    global_vars: Vec<(String, MonoType, Option<ConstValue>)>,
+    /// 跨文件全局布局（T5）：限定名 → 绝对槽位号。
+    /// 多文件模式下由编排器预先分配（各文件共享），使引用方与定义方
+    /// 用同一索引；单文件模式下为空，索引即 `global_vars` 下标。
+    global_slot_layout: HashMap<String, usize>,
+    /// 本文件顶层绑定的槽位起始号（多文件模式由编排器分配；单文件恒为 0）。
+    global_slot_base: usize,
+    /// 模块初始化序列（T2）：顶层绑定的求值 + 写入全局槽位的指令。
+    /// 按源码顺序生成（T3 改为依赖拓扑序），由运行时入口先执行。
+    module_init: Vec<Instruction>,
+    /// T3：顶层值绑定的待定初始化（拓扑排序前）。
+    /// 按源码顺序收集，在 `generate_module_ir` 尾部按依赖关系重排后
+    /// 写入 `module_init`——前向引用（`b = a + 1` 且 `a` 在后）需要 `a` 先初始化。
+    pending_inits: Vec<PendingInit>,
+    /// T4：顶层可执行语句（Script 模式），按书写顺序。
+    ///
+    /// 与绑定初始化分两段：绑定是**声明**（先全部就绪，拓扑序），
+    /// 语句是**程序主体**（后执行，源码序）。若不分开，语句会立即入队
+    /// 而绑定被推迟到末尾排序，导致 `io.println(v)` 先于 `v` 的初始化执行。
+    module_stmts: Vec<Instruction>,
+    /// 顶层已声明的绑定名（首次出现在 `name = ...` 的）。
+    ///
+    /// 用于区分**声明**与**重赋值**：Script 模式下顶层语句是程序主体，
+    /// `i = i + 1` 是赋值而非重声明。旧实现把两者混为一谈，
+    /// 导致重赋值被当成第二份初始化 → 自引用 → 误报 E3019。
+    declared_globals: std::collections::HashSet<String>,
+    /// 本模块**函数**的声明期形参名（函数名 → 按声明序的参数名）。
+    ///
+    /// `FunctionIR.params` 只有类型没有名字，而命名参数调用（`add(b = 5, a = 3)`）
+    /// 必须按**名字**把实参重排到声明序。struct 构造器有 `struct_definitions`
+    /// 提供字段名，普通函数原先没有对应表——于是 `named_args` 被静默丢弃，
+    /// 实参一个不进，运行期报 e6007 类型不符。此表补上那个缺口。
+    ///
+    /// curry 形态（`f: (A: Type) -> (x: A) -> R`）登记的是**最后一层**的形参名
+    /// ——调用点传的就是最后那层。
+    fn_param_names: HashMap<String, Vec<String>>,
+    /// 约束变量的具体类型映射（接口直接赋值优化）
+    /// 当 `d: Drawable = Circle(1)` 时，记录 d -> "Circle"（具体类型名）
+    /// 用于方法调用时选择直接调用而非 vtable 查找
+    constraint_var_concrete_types: HashMap<String, String>,
+    /// RFC-004: 匿名函数绑定生成的独立 FunctionIR 列表
+    anon_function_irs: Vec<FunctionIR>,
+    /// NLL 精确释放计划（所有权检查器产出；RFC-039 D20 / WBS 4.5.1）。
+    ///
+    /// 键 = 释放边界所在语句的 PlanId——本生成器在语句边界经
+    /// [`ReleasePlan::consume`] 取条目（取即记账），故计划本体同时携带
+    /// 「产出」与「已消费」两侧事实：结算（义务账本 W1090）读的是同一份账。
+    release_plan: ReleasePlan,
+    /// 待捕获的环境变量（由 spawn for 等设置，供下一个 Expr::Lambda 使用）
+    /// 在生成闭包函数体时，这些变量的当前寄存器值会被捕获到闭包环境中。
+    pending_env_vars: Vec<Operand>,
+    /// #254：待捕获变量名（与 pending_env_vars 一一对应，供闭包体 Var 解析）
+    pending_env_names: Vec<String>,
+    /// #254：当前闭包体的捕获表（变量名 → env 槽位索引）。
+    /// 生成闭包体期间设置，闭包体内 Var 命中则生成 LoadUpvalue。
+    closure_captures: HashMap<String, usize>,
+    /// RFC-029 #243：用户模块命名空间变量（别名 → 模块限定键）。
+    /// 由 `use lib` / `use lib as l` 等整体导入填充，使 `lib.helper()` 在 IR 生成
+    /// 阶段被识别为命名空间调用并解析为限定名 `lib.helper`（与 `qualify_module_ir`
+    /// 产出的函数定义名天然契合）。std 命名空间走原有 `is_std_submodule` 分支，不在此表。
+    user_namespaces: HashMap<String, String>,
+    /// 本文件 use 导入的本地名 → 限定名（含 #245 条目别名）。
+    /// 生成期解析调用名时优先于 registry 的全局短名表（文件级精确）。
+    use_aliases: HashMap<String, String>,
+    /// 本文件持有的模块注册表（std + 用户模块），取代生成期多处 `with_std()` 重建。
+    registry: ModuleRegistry,
+    /// 本文件的模块限定键（多文件模式 Some → 启用限定；单文件 None → 不限定）。
+    module_key: Option<String>,
+    /// Script/Bin 语义标志（E3023 的开关；3.4.8 ③ 回归修复与 `module_key` 解耦）：
+    /// `true` = Script（无 manifest：顶层语句即程序主体、顶层同名重绑定后者生效）；
+    /// `false` = Bin（顶层只允许定义，可执行语句报 E3023）。默认跟随 `module_key`
+    ///（None = Script）；调用方用 [`Self::with_script_mode`] 覆盖——rootless check
+    /// 需要「按单元键限定名 + Script 语义」这一组合：限定名是 Linking 合并无冲突的
+    /// 前提，Script 语义是 standalone 的对外契约。
+    script_mode: bool,
+    /// RFC-011a §6: 存在类型包装点（span → 接口名），来自 typecheck 强制点收集。
+    /// generate_expr_ir 入口查表命中 → 值生成后包 CreateVariant。
+    existential_wraps: HashMap<Span, String>,
+
+    /// RFC-011b: 运算符派发点（span → 接收者类型名, 方法名, 取反）。
+    /// `==`/`!=` 命中显式 Equal 实例化时，原生比较指令替换为方法调用。
+    operator_dispatches: HashMap<Span, (String, String, bool)>,
+    /// RFC-011b：`?` 表达式的 Try 实现类型名（span 键控）
+    try_expr_impls: HashMap<Span, String>,
+    /// RFC-011a §3：方法级重载决议（**调用点 PlanId** 键控 → 混编 IR 名；
+    /// RFC-039 D20 / WBS 4.5.2）。消费经 `OverloadResolutions::get`（命中即
+    /// 记账），故本字段携带决议表本体（含消费台账），结算读的是同一份账。
+    overload_resolutions: OverloadResolutions,
+    /// 方法定义序（key → 已生成定义数）：混编名的定义侧计数
+    method_def_ordinals: HashMap<String, usize>,
+
+    /// RFC-010: 和类型变体名表（类型名 → 变体名列表，声明序）。
+    /// 变体构造调用（形态检测命中）据此取变体序号。
+    sum_type_variants: HashMap<String, Vec<(String, Vec<MonoType>)>>,
+    /// RFC-011a §6.2: 编译期类型收集——接口 → 实现类型列表（ImplementationProof
+    /// 按类型名定序），变体分发与包装定序共用。
+    interface_variants: HashMap<String, Vec<String>>,
+    /// #311: 循环上下文栈——while/for 生成时进出栈。
+    /// break 跳到栈顶循环出口（占位 Jmp，出口确定后回填），continue 跳到栈顶条件重判点。
+    /// 嵌套函数体生成前保存并清空：闭包体不继承外层循环上下文（typecheck E1102 已拦截，
+    /// 此处为层间失联防御）。
+    loop_stack: Vec<LoopTargets>,
+    /// 当前语句的源码 span：语句生成循环在语句边界设置，指令构造处直接读取。
+    ///
+    /// 这是指令级 span 的唯一来源——每个 `Instruction::X { .., span: self.cur_span }`
+    /// 就地捕获当时的语句位置，不存在"先记录后配对"的时序契约。
+    /// 嵌套函数体生成前保存、之后恢复（与 next_temp 同款处理）。
+    cur_span: Span,
+    /// 当前正在生成的函数的局部槽位（含源码变量名）。
+    ///
+    /// 槽位下标即寄存器号；`name` 为 None 表示编译器临时寄存器。
+    /// `register_local` 就地把名字写进来，函数体生成结束后交给
+    /// `FunctionBody::Code::locals`。
+    /// 嵌套函数体生成前保存、之后恢复——**必须与 next_temp 的
+    /// 保存/恢复点物理相邻**，否则内层函数的名字会串到外层。
+    cur_locals: Vec<LocalSlot>,
+}
+
+/// 绑定信息（用于 IR 生成阶段的方法调用转发）
+///
+/// 按 RFC-004 设计：记录方法绑定到哪个原始函数的哪些参数位置
+#[derive(Debug, Clone)]
+struct BindingInfo {
+    /// 原始函数名
+    function: String,
+    /// 绑定位置列表（调用者 obj 填充到这些位置）
+    positions: Vec<i64>,
+}
+
+/// Lambda 函数体 IR 结果
+struct LambdaBodyIR {
+    instructions: Vec<Instruction>,
+    locals: Vec<LocalSlot>,
+}
+
+/// T3：一条待排序的顶层绑定初始化。
+///
+/// 收集后按依赖关系重排：`init_instructions` 里对其它绑定的全局写入
+/// 决定依赖边（“我依赖谁”）。
+#[derive(Debug)]
+struct PendingInit {
+    /// 本绑定名（与槽位名同形，多文件下为限定名）
+    name: String,
+    /// 初始化指令（已是“求值 + StoreGlobal”）
+    instructions: Vec<Instruction>,
+    /// 本初始化引用的其它顶层绑定名
+    deps: Vec<String>,
+    /// 声明位置（循环依赖诊断用）
+    span: Span,
+}
+
+/// 循环上下文（#311）：一次 while/for 生成期内的跳转目标记录
+#[derive(Debug)]
+struct LoopTargets {
+    /// 条件重判点（continue 的跳转目标），生成时即知
+    continue_target: usize,
+    /// break 占位 Jmp 的指令下标，循环出口确定后回填
+    break_fixups: Vec<usize>,
+    /// 进入循环时的 temp_floor（#393：出口恢复外层地板）
+    saved_temp_floor: usize,
+}
+
+/// 一层 curry 签名
+///
+/// 由 `split_curry` 从嵌套的 `Type::Fn` 拆出。
+/// `params` 是这层的参数（带名字），从拍平的 curry 形参切出。
+/// `return_type` 是这层的返回类型：还有下一层时是 `Type::Fn`，最后一层是值类型。
+/// 一层 curry 签名
+struct CurryLayer {
+    params: Vec<ast::Param>,
+    return_type: ast::Type,
+}
+
+impl AstToIrGenerator {
+    /// 创建新的 IR 生成器（带类型信息）。
+    ///
+    /// `type_level` 是**必需输入**（F14-B）：SPEC §7.1 分类器与泛型名扫描都要问
+    /// 「这个名字是不是谓词」，而答案只能在调用方那侧算对——单文件入口是
+    /// `TypeLevelNamespace::scan_one(module)`，多文件入口是 driver 的
+    /// `scan(全部单元)` 并集。此前构造器把它默认为空集，于是不经
+    /// `generate_module_ir` 的入口（`frontend/proof_execution.rs` 直调
+    /// `generate_function_ir`）静默拿到旧宽口径——空集不是「足够保守」，它会让
+    /// 用户声明的谓词被当普通类型应用（谓词实参位因此被误计为类型引用）。
+    pub fn new_with_type_result(
+        type_result: &TypeCheckResult,
+        registry: ModuleRegistry,
+        module_key: Option<String>,
+        type_level: crate::frontend::core::sema::probe::TypeLevelNamespace,
+    ) -> Self {
+        // Script/Bin 语义默认跟随 module_key（None = Script）；调用方可用
+        // `with_script_mode` 覆盖（3.4.8 ③：与限定名键解耦）。
+        let script_mode = module_key.is_none();
+        Self {
+            symbols: vec![HashMap::new()],
+            type_result: Some(Box::new(type_result.clone())),
+            closure_decl_params: Vec::new(),
+            next_temp: 0,
+            temp_high_water: 0,
+            temp_floor: 0,
+            local_var_types: HashMap::new(),
+            global_written_types: HashMap::new(),
+            ffi_libs: Vec::new(),
+            ffi_bindings: Vec::new(),
+            next_lib_id: 0,
+            struct_definitions: HashMap::new(),
+
+            declared_type_names: std::collections::HashSet::new(),
+            type_level,
+            type_bindings: HashMap::new(),
+            nested_functions: Vec::new(),
+            closure_counter: 0,
+            global_vars: Vec::new(),
+            global_slot_layout: HashMap::new(),
+            global_slot_base: 0,
+            module_init: Vec::new(),
+            pending_inits: Vec::new(),
+            module_stmts: Vec::new(),
+            declared_globals: std::collections::HashSet::new(),
+            fn_param_names: HashMap::new(),
+            constraint_var_concrete_types: HashMap::new(),
+            anon_function_irs: Vec::new(),
+            release_plan: type_result.release_plan.clone(),
+            pending_env_vars: Vec::new(),
+            pending_env_names: Vec::new(),
+            closure_captures: HashMap::new(),
+            user_namespaces: HashMap::new(),
+            use_aliases: HashMap::new(),
+            registry,
+            module_key,
+            script_mode,
+            existential_wraps: type_result
+                .existential_coercions
+                .iter()
+                .map(|c| (c.span, c.interface.clone()))
+                .collect(),
+            operator_dispatches: type_result
+                .operator_dispatches
+                .iter()
+                .map(|d| (d.span, (d.type_name.clone(), d.method.clone(), d.negate)))
+                .collect(),
+            try_expr_impls: type_result
+                .try_expr_impls
+                .iter()
+                .map(|(span, name)| (*span, name.clone()))
+                .collect(),
+            overload_resolutions: type_result.overload_resolutions.clone(),
+            method_def_ordinals: HashMap::new(),
+            sum_type_variants: type_result
+                .sum_types
+                .iter()
+                .map(|(n, vs)| {
+                    (
+                        n.clone(),
+                        vs.iter()
+                            .map(|v| (v.name.clone(), v.params.clone()))
+                            .collect::<Vec<(String, Vec<MonoType>)>>(),
+                    )
+                })
+                .collect(),
+            sum_type_param_names: type_result
+                .sum_type_param_names
+                .iter()
+                .map(|(n, ps)| (n.clone(), ps.clone()))
+                .collect(),
+            interface_variants: {
+                let mut map: HashMap<String, Vec<String>> = HashMap::new();
+                for proof in &type_result.implementation_proofs {
+                    let entry = map.entry(proof.interface_name.clone()).or_default();
+                    if !entry.contains(&proof.type_name) {
+                        entry.push(proof.type_name.clone());
+                    }
+                }
+                for list in map.values_mut() {
+                    list.sort();
+                }
+                map
+            },
+            loop_stack: Vec::new(),
+            cur_span: Span::dummy(),
+            cur_locals: Vec::new(),
+        }
+    }
+
+    /// 覆盖 Script/Bin 语义标志（默认跟随构造时的 `module_key`：None = Script）。
+    ///
+    /// 3.4.8 ③ 回归修复：`module_key` 此前**一职两用**——既决定是否限定名
+    /// （`qualify_names`），又派生 Script/Bin 语义（E3023 开关）。解耦后，无项目根
+    /// 的 standalone check 可以既按单元键限定名字（否则 Linking 合并把跨单元同名
+    /// 函数判成「模块限定名冲突」），又保持 Script 语义（顶层语句即程序主体）。
+    pub fn with_script_mode(
+        mut self,
+        script_mode: bool,
+    ) -> Self {
+        self.script_mode = script_mode;
+        self
+    }
+
+    /// 当前文件的模块限定键（单文件模式默认 `main`，与 TypeChecker 一致）。
+    fn module_key_or_main(&self) -> &str {
+        self.module_key.as_deref().unwrap_or("main")
+    }
+
+    /// 构造当前文件上下文的名字解析器（名字 → 限定名 → DefId 的唯一所有者）。
+    fn resolver(&self) -> Resolver<'_> {
+        Resolver::new(
+            self.registry.symbols(),
+            &self.registry,
+            self.module_key_or_main(),
+            &self.user_namespaces,
+        )
+    }
+
+    /// `recv` 是否是命名空间调用的接收者（头为 std / std 子模块 / 用户模块别名）。
+    /// 机械扁平化后委托 [`Resolver::is_namespace`]——语义归 Resolver。
+    fn is_namespace_receiver(
+        &self,
+        recv: &ast::Expr,
+    ) -> bool {
+        flatten_namespace(recv)
+            .map(|(head, _)| self.resolver().is_namespace(head))
+            .unwrap_or(false)
+    }
+
+    /// 解析 `recv.field` 的限定名（如 `std.io.println`），经 [`Resolver`] 统一解析。
+    /// 非 Var 结尾的接收者退回 `field` 本身（与既有行为一致）。
+    fn resolve_field_path(
+        &self,
+        recv: &ast::Expr,
+        field: &str,
+    ) -> String {
+        match flatten_namespace(recv) {
+            Some((head, mut fields)) => {
+                fields.push(field);
+                self.resolver().resolve_namespace(head, &fields)
+            }
+            None => field.to_string(),
+        }
+    }
+
+    /// #396：表达式位置命名空间数据访问的判定——接收者链（Var/FieldAccess 链）
+    /// 扁平化后头为命名空间，且头未被本文件局部绑定/闭包捕获遮蔽时，返回全链
+    /// 限定名（`lib.v` → `lib.v`，`io.println` → `std.io.println`）。
+    /// 语义归 [`Resolver`]（is_namespace / resolve_namespace），与调用位置同判据。
+    fn resolve_namespace_data_access(
+        &self,
+        expr: &ast::Expr,
+        field: &str,
+    ) -> Option<String> {
+        let (head, fields) = flatten_namespace(expr)?;
+        if self.closure_captures.contains_key(head) || self.lookup_local(head).is_some() {
+            return None;
+        }
+        if !self.resolver().is_namespace(head) {
+            return None;
+        }
+        let mut segs = fields;
+        segs.push(field);
+        Some(self.resolver().resolve_namespace(head, &segs))
+    }
+
+    /// 从限定/混编调用名取叶子段（形参名表的键就是声明处的短名）。
+    ///
+    /// `Temp.pick` / `Temp.pick#1` → `pick`；无分隔符时原样返回。
+    fn call_name_leaf(name: &str) -> &str {
+        name.rsplit('.')
+            .next()
+            .and_then(|leaf| leaf.split('#').next())
+            .unwrap_or(name)
+    }
+
+    /// 共享判据给出的「逐实参形参位」→ **按形参槽位序**重排的实参下标。
+    ///
+    /// #452 / #456：实参绑定的**判定**只有一处——`sema::inference::arg_binding::
+    /// `bind_args_to_params`（位置占前导槽、命名按名入槽、未知名/争槽/命名后接位置/
+    /// 重复命名/缺参六条规则全在那边）。本函数**只搬运**：把「逐实参的形参位」
+    /// 转成 IR 侧要的「按槽位序的实参序」，不判位、不判名、不判可选位。
+    ///
+    /// 此前 ir_gen 另有一份 `build_arg_slots`（约 60 行）在同一条生产路径上重判，
+    /// 与共享判据已经分歧（同一语义两个码：用户函数重复命名 E1015、方法/原生路径
+    /// E1010/E1111）——本次合并后全仓只剩共享判据一处（#456）。
+    ///
+    /// 槽位不重复由判据保证（同槽冲突已在那侧拒绝），故排序无并列。
+    fn slot_order_arg_indices(positions: &[usize]) -> Vec<usize> {
+        let mut order: Vec<usize> = (0..positions.len()).collect();
+        order.sort_by_key(|&arg_idx| positions[arg_idx]);
+        order
+    }
+
+    /// 查一个函数的**声明期形参名 + 必需下限**（供命名参数重排与「可选位放行」）。
+    ///
+    /// 两个来源，按就近优先：
+    /// 1. 本模块的 `fn_param_names`（定义与调用同文件）——同模块函数的形参表
+    ///    不含可选位语义，故 `required_min` 取全长（全必需）
+    /// 2. 模块注册表里的导出：优先用导出携带的 `param_names`（无必需下限信息，
+    ///    同样按全必需），否则走**与 typecheck 原生臂同一出口**
+    ///    `signature::export_signature_param_info`（同一签名串给出形参名与必需下限）。
+    ///    这层同源是 t14 的要点：ir_gen 曾硬编全必需位 ⇒ 合法省略可选位的命名调用
+    ///    被共享判据误报 E1010（实测 `assert.assert(cond = 1 == 1)`）。
+    ///
+    /// `full_path` 是解析后的限定名（如 `std.list.push`）；`leaf` 是短名。
+    fn lookup_param_info(
+        &self,
+        full_path: &str,
+        leaf: &str,
+    ) -> Option<crate::frontend::core::sema::environment::ExportParamInfo> {
+        // #466：先查**全名/混编名**键——重载候选的形参名按混编名精确登记，
+        // 叶子名键在同名重载下末次覆盖，会让决议命中的候选拿错名字表。
+        // 非重载路径全名不在本表（fn_param_names 只登记本模块定义），落回叶名。
+        if let Some(names) = self.fn_param_names.get(full_path) {
+            let names = names.clone();
+            let required_min = names.len();
+            return Some(crate::frontend::core::sema::environment::ExportParamInfo {
+                names,
+                required_min,
+            });
+        }
+        if let Some(names) = self.fn_param_names.get(leaf) {
+            let names = names.clone();
+            let required_min = names.len();
+            return Some(crate::frontend::core::sema::environment::ExportParamInfo {
+                names,
+                required_min,
+            });
+        }
+        let export = self.registry.resolve_export(full_path).ok()?;
+        if let Some(names) = export.param_names.clone() {
+            let required_min = names.len();
+            return Some(crate::frontend::core::sema::environment::ExportParamInfo {
+                names,
+                required_min,
+            });
+        }
+        // #454 / t14：原生导出的注册点（src/std/mod.rs）只带签名串、不带形参名表，
+        // 故第三个来源 = 从**签名串**提取形参名与必需下限——与 typecheck 原生臂
+        // 同一出口，避免两侧各算一份而分歧。
+        let (names, required_min) =
+            crate::frontend::core::sema::signature::export_signature_param_info(&export.signature)?;
+        Some(crate::frontend::core::sema::environment::ExportParamInfo {
+            names,
+            required_min,
+        })
+    }
+
+    /// 声明**返回位**若是完整 Fn（括号返回 / 闭包包装形态），取该内层 Fn 的
+    /// 运行期形参（名字, 类型）；否则空表。
+    ///
+    /// 用途：闭包 IR 的形参定型。parser 不再往实现头填声明类型（D54 修复轮 F1），
+    /// 闭包自己拿不到外层声明，只能由正在生成的函数把「返回位声明的形参」递下来。
+    /// 编译期槽的剔除口径与别处同源（`extract_generic_param_names`）。
+    /// **探针注入**：谓词问答取本单元声明面（`self.type_level`），不取静态
+    /// `SemanticProbe`——用户声明的谓词不在内置名表里（6.9.1 观察项）。
+    fn paren_return_value_params(
+        &self,
+        type_annotation: Option<&ast::Type>,
+    ) -> Vec<(String, MonoType)> {
+        let Some(ast::Type::Fn { return_type, .. }) = type_annotation else {
+            return Vec::new();
+        };
+        // 返回位可能是裸括号（`() -> ((a: Int) -> Int)`）——`Paren` 在语义层透明，
+        // 递归内层即可（见 `ast::Type::is_paren_complete` 的口径）。
+        let mut inner_ty: &ast::Type = return_type.as_ref();
+        while let ast::Type::Paren(inner) = inner_ty {
+            inner_ty = inner.as_ref();
+        }
+        let ast::Type::Fn { params: inner, .. } = inner_ty else {
+            return Vec::new();
+        };
+        let flat: Vec<ast::Param> = inner.to_vec();
+        // 扫描面 = 内层 Fn 的整棵声明（形参标注 ∪ 返回位）：被返回闭包的编译期
+        // 形参若只在它的返回位被引用，也必须从运行期形参里剔除。
+        let generic = crate::ast::extract_generic_param_names(&flat, &[inner_ty], &self.type_level);
+        flat.iter()
+            .filter(|p| !generic.iter().any(|g| g.name == p.name))
+            .map(|p| {
+                let ty =
+                    p.ty.clone()
+                        .map(MonoType::from)
+                        .unwrap_or_else(|| MonoType::Int(64));
+                (p.name.clone(), ty)
+            })
+            .collect()
+    }
+
+    /// 实现头形参的**声明来源**：运行期值位的前 N 位（N = 实现头形参数）。
+    ///
+    /// 与 typecheck 的绑定位对齐**同一条规则**（值级签名前 N 位），切法单点在
+    /// `ast::Type::runtime_value_params`（沿柯里链走到最内层值组、再剔除编译期位）。
+    /// IR 只**渲染**声明写下的类型与名字，不参与判定（WBS 6.8.2 / D54 修复轮 F1）。
+    ///
+    /// 一切「实现头第 i 位的声明信息」都从这里取：形参**类型**（`impl_param_types`）、
+    /// 形参**写出类型名**（`note_param_written_types`）、**调用侧可用名**
+    /// （`self.fn_param_names` 的登记）——同一 helper、同一顺序，不得各自再切一次。
+    /// SPEC §7.1 分类器的**真注入**：候选类型取 L3 权威表；类型命名空间与谓词集
+    /// 由 `generate_module_ir` 入口从 AST 扫出，不使用保守假值。
+    /// 实现头绑定序列第 i 位在**调用点实参序列**里的下标（SPEC §7.1「两条序列」）。
+    ///
+    /// 绑定序列 = 形参 − 类型参数 − 编译期值参数；调用点序列 = 形参 − 类型参数（编译期值
+    /// 参数**仍占**实参位）。故绑定第 i 位常常**不等于**运行期第 i 位：
+    /// `f: (N: Int, M: N) -> Int = (m) => m` 的 `m` 是绑定第 0 位、运行期第 1 位（第 0 位
+    /// 是 N）。名字在声明里唯一，故按名取下标；取不到时退回 i。
+    ///
+    /// 与 typecheck 侧同源：两侧都用 `runtime_value_params`（调用点序列）与
+    /// `declaration_runtime_param_slots`（绑定序列）这两个既有 helper，不另切一刀。
+    fn impl_head_runtime_indices(
+        &self,
+        type_annotation: Option<&ast::Type>,
+    ) -> Vec<usize> {
+        let Some(ann) = type_annotation else {
+            return Vec::new();
+        };
+        let call_seq: Vec<String> = ann
+            .runtime_value_params()
+            .into_iter()
+            .map(|p| p.name)
+            .collect();
+        let bindable = self.declaration_runtime_param_slots(Some(ann), call_seq.len());
+        // 两条序列等长 ⇒ 恒等映射（没有编译期值参数，或它们不与值参数同层）。只有确实
+        // 存在「不占绑定序列的编译期值参数」时才按下标重映射——否则柯里层/裸标识符形参
+        // 的既有槽位顺序会被打乱（语料 `01-syntax/basics/statement-termination.yx` 实测
+        // 因此 E6005）。
+        if bindable.len() == call_seq.len() {
+            return (0..bindable.len()).collect();
+        }
+        bindable
+            .into_iter()
+            .enumerate()
+            .map(|(i, p)| call_seq.iter().position(|n| *n == p.name).unwrap_or(i))
+            .collect()
+    }
+
+    fn declaration_runtime_param_slots(
+        &self,
+        type_annotation: Option<&ast::Type>,
+        count: usize,
+    ) -> Vec<ast::Param> {
+        type_annotation
+            .map(|ann| self.with_param_classifier(|cls| ann.runtime_value_params_cls(cls)))
+            .unwrap_or_default()
+            .into_iter()
+            .take(count)
+            .collect()
+    }
+
+    /// 以本单元注入的问答**借用**分类器：三个问答的取值只在这里写一次。
+    ///
+    /// - `is_const_param_type`：L3 权威表（`sema::probe::CONST_PARAM_TYPES`）；
+    /// - `is_type_name`：本单元声明的类型名（生成入口扫出）；
+    /// - `is_predicate`：本单元声明面的谓词名（`TypeLevelNamespace`，**不**用静态
+    ///   `SemanticProbe` 独立判谓词——用户声明的谓词不在内置名表里，6.9.1 观察项）。
+    ///
+    /// `ParamClassifier` 借用闭包，故用回调把「组装」与「消费」隔开——返回值
+    /// 不能直接产出分类器（悬垂引用）。
+    fn with_param_classifier<R>(
+        &self,
+        f: impl FnOnce(&ast::ParamClassifier<'_>) -> R,
+    ) -> R {
+        let is_const_param_type =
+            |n: &str| crate::frontend::core::sema::probe::is_const_param_type_name(n);
+        let is_type_name = |n: &str| self.declared_type_names.contains(n);
+        let is_predicate = |n: &str| self.type_level.predicates.contains(n);
+        let cls = ast::ParamClassifier {
+            is_const_param_type: &is_const_param_type,
+            is_type_name: &is_type_name,
+            is_predicate: &is_predicate,
+        };
+        f(&cls)
+    }
+
+    /// 实现头形参的 IR 类型表：作者标注优先，缺标注按声明同类位渲染，都没有时
+    /// 按 WBS 2.1.2 的惯例填 `Int(64)` 占位（`filter_map` 丢弃会让 params 长度与
+    /// 帧布局错位——verify 实测）。
+    fn impl_param_types(
+        &self,
+        params: &[ast::Param],
+        type_annotation: Option<&ast::Type>,
+    ) -> Vec<MonoType> {
+        let declared = self.declaration_runtime_param_slots(type_annotation, params.len());
+        params
+            .iter()
+            .enumerate()
+            .map(|(i, p)| {
+                p.ty.clone()
+                    .or_else(|| declared.get(i).and_then(|d| d.ty.clone()))
+                    .map(MonoType::from)
+                    .unwrap_or(MonoType::Int(64))
+            })
+            .collect()
+    }
+
+    ///
+    /// 输入：`type_annotation` 是 `Type::Fn` 的嵌套结构（如 `(N: Int) -> (n: N) -> Int`）
+    /// 输入：`curry_params` 是拍平的所有 curry 参数（如 `[N: Int, n: N]`）
+    /// 输出：按层切分的 `CurryLayer` 列表
+    ///
+    /// 非 curry 函数（如 `(a: Int, b: Int) -> Int`）返回 1 个 layer，
+    /// 其 `return_type` 不是 `Type::Fn`。
+    #[allow(clippy::while_let_loop)]
+    fn split_curry(
+        type_ann: &ast::Type,
+        curry_params: &[ast::Param],
+    ) -> Vec<CurryLayer> {
+        let mut layers = Vec::new();
+        // 用索引游标而非迭代器：Paren 分支需要把已取走的层参数“退回”。
+        let mut cursor = 0usize;
+        let mut current_type = type_ann.clone();
+
+        loop {
+            match current_type {
+                ast::Type::Fn {
+                    params: type_params,
+                    return_type,
+                } => {
+                    let start = cursor;
+                    // 运行期形参位只数**带类型**的形参（基线口径）：参数位的
+                    // 裸标识符（`(Int64)`→name="Int64"、ty=None）不占运行期槽位。
+                    // 它是否算参数由 WBS 8.9.1（参数位形态归一）裁决，6.5 只做
+                    // 零行为差分的表示重塑（锁定测试：middle/ir/tests/fn_param_slots.rs）。
+                    let runtime_param_count = type_params
+                        .iter()
+                        .filter(|p| p.occupies_runtime_param_slot())
+                        .count();
+                    cursor = (cursor + runtime_param_count).min(curry_params.len());
+                    let layer_params: Vec<ast::Param> = curry_params[start..cursor].to_vec();
+                    let ret_type = *return_type;
+                    current_type = ret_type.clone();
+                    // 类型参数层（如 `(T: Type)`）是编译期参数：不占运行时参数位，
+                    // 该层擦除（不生成运行时函数层）。调用点 T 由类型推断填充（RFC-011）。
+                    // ponytail: 仅处理纯类型参数层；类型/值参数混合同层视为值层（罕见，暂不拆）
+                    let is_type_layer = !type_params.is_empty()
+                        && type_params.iter().all(|p| {
+                            p.ty.as_ref().is_some_and(|t| {
+                                Self::is_type_param_ann(t) || Self::is_constraint_param_ann(t)
+                            })
+                        });
+
+                    // RFC-004 括号语义：返回位置的 `Paren` ⇔ 链条在此终止。
+                    // 该括号内的参数**不属于本函数**——它们是被返回函数的参数。
+                    // parser 把签名拍平成 `curry_params`（内层名供 body 对齐类型），
+                    // 故此处必须把游标退回，否则 `f: () -> ((a:Int)->Int)` 的 `a`
+                    // 会被当成本层参数，`f` 变成接受 `a` 而非返回闭包。
+                    // RFC-027 §3：具名括号（`(r: P(r))`）与 `Paren` 同款——
+                    // 括号声明“这是一个完整类型”，链条到此终止。
+                    // 判定收敛到 `Type::is_paren_complete` 单点（#510 收口备案
+                    // 的第三处：parser paren_return / typecheck 值级分解 /
+                    // 此处 split_curry 三点共用，防判据漂移）。
+                    let next_is_paren = ret_type.is_paren_complete();
+                    if next_is_paren {
+                        cursor = start;
+                    }
+
+                    if !is_type_layer {
+                        layers.push(CurryLayer {
+                            params: layer_params,
+                            return_type: ret_type,
+                        });
+                    }
+                    if next_is_paren {
+                        break;
+                    }
+                }
+                _ => break,
+            }
+        }
+        layers
+    }
+
+    /// 该类型注解是否为**类型位**——编译期擦除，不占运行时参数位。
+    ///
+    /// 两类：具体元类型 `Type`（`T: Type`），以及**高阶类型参数**的标注
+    /// `(T: Type) -> Type`（构造器变量，RFC-010 元类型层级的 Type1/Type2+）。
+    /// 后者此前被当成值层，`(F: (T: Type) -> Type, A: Type) -> (x: A) -> A`
+    /// 的 curry 外壳被保留，构造器类型实参对应的值级函数永不生成
+    /// （运行期返回值是闭包而非调用结果）。判据委托 parser 的
+    /// `is_type_level_fn`——与声明侧类型参数分类同一实现，不内联第二份。
+    fn is_type_param_ann(ty: &ast::Type) -> bool {
+        match ty {
+            ast::Type::MetaType { .. } => true,
+            ast::Type::Name { name, .. } => name == "Type",
+            ast::Type::Fn {
+                params,
+                return_type,
+            } => crate::ast::is_type_level_fn(params, return_type),
+            _ => false,
+        }
+    }
+
+    /// 约束形参判定（RFC-011 §2.1）：标注是运算符接口/约束名（`T: Add` 的
+    /// `Add`）→ 类型位。split_curry 的层擦除判据与它同源——漏判会让约束
+    /// 形参落成运行时参数（sum 外层 Parameters: (Add)），调用 arity 全错。
+    fn is_constraint_param_ann(ty: &ast::Type) -> bool {
+        match ty {
+            ast::Type::Name { name, .. } => is_constraint_name(name),
+            _ => false,
+        }
+    }
+
+    /// 进入新的作用域
+    fn enter_scope(&mut self) {
+        tlog!(debug, MSG::IrGenEnterScope, &self.symbols.len().to_string());
+        self.symbols.push(HashMap::new());
+        tlog!(debug, MSG::IrGenEnterScope, &self.symbols.len().to_string());
+    }
+
+    /// 退出当前作用域
+    fn exit_scope(&mut self) {
+        tlog!(debug, MSG::IrGenExitScope, &self.symbols.len().to_string());
+        self.symbols.pop();
+        tlog!(debug, MSG::IrGenExitScope, &self.symbols.len().to_string());
+    }
+
+    /// 获取约束变量的具体类型名（如果编译期可确定）
+    ///
+    /// 用于方法调用时选择直接调用（零开销）而非 vtable 查找
+    fn get_constraint_var_concrete_type(
+        &self,
+        var_name: &str,
+    ) -> Option<&String> {
+        self.constraint_var_concrete_types.get(var_name)
+    }
+
+    /// 注册局部变量
+    fn register_local(
+        &mut self,
+        name: &str,
+        local_idx: usize,
+    ) {
+        tlog!(
+            debug,
+            MSG::IrGenRegisterLocal,
+            &name.to_string(),
+            &local_idx.to_string()
+        );
+        if let Some(scope) = self.symbols.last_mut() {
+            scope.insert(
+                name.to_string(),
+                SymbolEntry {
+                    local_idx,
+                    written_type: None,
+                },
+            );
+        }
+        // 把源码名写进当前函数的槽位表：槽位可能尚未扩展到 local_idx
+        // （临时寄存器先于具名变量分配），先补齐空槽。
+        while self.cur_locals.len() <= local_idx {
+            self.cur_locals.push(LocalSlot::temp(MonoType::Int(64)));
+        }
+        self.cur_locals[local_idx].name = Some(name.to_string());
+        self.cur_locals[local_idx].scope_depth = self.symbols.len().saturating_sub(1);
+    }
+
+    /// 取出当前函数的局部槽位，补齐到 `total_locals` 长度后交给函数体。
+    ///
+    /// `register_local` 在生成期把源码名写进 `self.cur_locals`；
+    /// 临时寄存器分配的槽位没有名字，这里补空槽保证长度覆盖全部槽位。
+    /// 嵌套函数体在进入前已 `std::mem::take` 掉父函数的表，
+    /// 因此这里拿到的一定是本函数自己的名字。
+    fn take_cur_locals(
+        &mut self,
+        total_locals: usize,
+    ) -> Vec<LocalSlot> {
+        let mut slots = std::mem::take(&mut self.cur_locals);
+        // 必须**恰好** total_locals 个：该长度即 local_count，
+        // 多一个少一个都会改变字节码。register_local 会为槽位号较大的
+        // 具名变量临时补空槽，而最终寄存器数以 total_locals 为准。
+        slots.resize(total_locals, LocalSlot::temp(MonoType::Int(64)));
+        slots
+    }
+
+    /// 查找局部变量
+    fn lookup_local(
+        &self,
+        name: &str,
+    ) -> Option<usize> {
+        for scope in self.symbols.iter().rev() {
+            if let Some(entry) = scope.get(name) {
+                tlog!(
+                    debug,
+                    MSG::IrGenLookupLocal,
+                    &name.to_string(),
+                    &entry.local_idx.to_string()
+                );
+                return Some(entry.local_idx);
+            }
+        }
+        tlog!(debug, MSG::IrGenLookupLocalNotFound, &name.to_string());
+        None
+    }
+
+    /// 查找全局变量，返回**绝对槽位号**（`Operand::Global(idx)` 的值）。
+    ///
+    /// 先查跨文件布局（限定名 → 绝对槽位）；未命中则按本文件声明顺序，
+    /// 基址由编排器分配（单文件为 0）。
+    fn lookup_global(
+        &self,
+        name: &str,
+    ) -> Option<usize> {
+        if let Some(&idx) = self.global_slot_layout.get(name) {
+            return Some(idx);
+        }
+        for (i, (var_name, _, _)) in self.global_vars.iter().enumerate() {
+            if var_name == name {
+                return Some(self.global_slot_base + i);
+            }
+        }
+        None
+    }
+
+    /// `use lib.{v}` / `use lib.{v as w}` 的本地名解析到的**跨文件全局槽位**。
+    ///
+    /// 两表联查的唯一实现：`use_aliases`（本地名 → 限定名）取限定名，
+    /// `global_slot_layout`（限定名 → 槽位号）取槽位。变量求值路径
+    /// （[`Self::generate_var_expr_ir`] 的别名臂）与调用形态判据
+    /// （[`Self::is_static_fn_name`]）**同经此处**——同一解析规则只有一份，
+    /// 两条路径不会各自猜一个答案。
+    ///
+    /// 布局只收**值绑定**（`allocate_global_slots` 的判据：非函数），故导入的
+    /// 函数定义（`use lib.{double}`）不命中此路——它按名进函数表，仍是静态调用。
+    fn use_alias_value_slot(
+        &self,
+        name: &str,
+    ) -> Option<usize> {
+        self.use_aliases
+            .get(name)
+            .and_then(|qualified| self.global_slot_layout.get(qualified).copied())
+    }
+
+    /// 模块限定导出是否是**函数代码**——函数表里可物化成闭包的可调用体。
+    ///
+    /// 值路径的兜底臂把「不在跨文件值绑定布局里的导出」一律当 native 常量零参
+    /// 调用（`std.math.PI` 即此形态）。但函数定义（lambda/块绑定）同样不进值绑定
+    /// 布局——它按名进函数表，是**代码**而不是常量（#479：`f = greet` 装进了
+    /// greet() 的返回值，f() 得 void）。函数代码物化为 MakeClosure，与
+    /// `lib.greet` 作值的 #396/#348 表示一致。
+    ///
+    /// 判据落到**导出粒度**（#493）：模块来源不再单独决定结果。
+    /// - 用户/vendor 模块的 `Function` 导出是代码；
+    /// - **纯 yx 实现**的 std 导出同样是代码——`std.json.parse` / `std.list.map`
+    ///   定义在嵌入源里（`src/std/yx_sources.rs`），与用户模块走同一前端管道、
+    ///   按限定名进函数表。此前 `ModuleSource::Std` 一刀切把它们误判成 native
+    ///   常量：别名被降成零参 `Call`，非泛型静默拿到被调体的返回值，泛型直接
+    ///   运行期 E6007；
+    /// - native 导出不是（#492 给它们自己的形态，见 `emit_module_export_value`）。
+    fn qualified_export_is_code(
+        &self,
+        qualified: &str,
+    ) -> bool {
+        let Some((module_path, export_name)) = qualified.rsplit_once('.') else {
+            return false;
+        };
+        let Some(module) = self.registry.get(module_path) else {
+            return false;
+        };
+        if !matches!(
+            module.exports.get(export_name).map(|export| &export.kind),
+            Some(ExportKind::Function)
+        ) {
+            return false;
+        }
+        // std 面按导出粒度再判一次**实现来源**（native vs 嵌入 yx 定义）；
+        // 用户/vendor 导出不需要这次追问（它们的导出都是本仓源码）。
+        module.source != ModuleSource::Std || self.registry.is_yx_std_export(qualified)
+    }
+
+    /// **模块导出作值**的判据与发射点——值位置只有这一份实现（#479 / #493 / #492）。
+    ///
+    /// 三条别名/成员路径（`use lib.{f}` 的别名、`lib.f` 的命名空间成员、
+    /// `io.println` 的模块变量成员）都经此处，按导出**实现来源**分流：
+    ///
+    /// - 函数代码（用户/vendor 导出 + 纯 yx 实现的 std 导出）→ `MakeClosure`：
+    ///   函数值是一等值。零参 `Call` 会把被调体的返回值装进变量（静默错值、
+    ///   exit 0）；泛型纯 yx 导出更会直接运行期 E6007。
+    /// - 原生函数导出 → **原生函数值**（`ConstValue::NativeFn`）：原生函数没有
+    ///   IR 函数体，`MakeClosure` 按名查函数表必然落空；经 `CallDyn` 间接调用时
+    ///   按名分发到 FFI 注册表（#492）。
+    /// - 其余 native 名（native 常量，如 `std.math.PI`）→ 零参调用：既有成功
+    ///   形态，行为逐字节不变。
+    ///
+    /// 返回 `false` 表示该限定名不属上述三类，调用方按自己的既有分支继续。
+    fn emit_module_export_value(
+        &mut self,
+        qualified: &str,
+        result_reg: usize,
+        span: Span,
+        instructions: &mut Vec<Instruction>,
+    ) -> bool {
+        if self.qualified_export_is_code(qualified) {
+            instructions.push(Instruction::MakeClosure {
+                dst: Operand::Local(result_reg),
+                func: qualified.to_string(),
+                env: vec![],
+                def: None,
+                span,
+            });
+            return true;
+        }
+        if self.registry.is_native_fn_export(qualified) {
+            instructions.push(Instruction::Load {
+                dst: Operand::Local(result_reg),
+                src: Operand::Const(ConstValue::NativeFn(qualified.to_string())),
+                span,
+            });
+            return true;
+        }
+        if self.registry.is_native_name(qualified) {
+            instructions.push(Instruction::Call {
+                dst: Some(Operand::Local(result_reg)),
+                func: Operand::Const(ConstValue::String(qualified.to_string())),
+                args: vec![],
+                span,
+                def: None,
+            });
+            return true;
+        }
+        false
+    }
+
+    /// 查找变量的类型
+    /// 该名字是否为「函数值」——即 typecheck 的 bindings 里其类型是 `Fn`。
+    ///
+    /// 用于 `Expr::Var` 的函数名物化（#348）：函数的类型是 Fn，所以名字就是函数值。
+    fn binding_is_function(
+        &self,
+        name: &str,
+    ) -> bool {
+        matches!(
+            self.lookup_var_type(name).map(|p| &p.body),
+            Some(MonoType::Fn { .. })
+        )
+    }
+
+    fn lookup_var_type(
+        &self,
+        name: &str,
+    ) -> Option<&PolyType> {
+        if let Some(ref type_result) = self.type_result {
+            // 调试：打印所有绑定
+            tracing::debug!("Looking for variable '{}' in bindings", name);
+            tracing::debug!("All bindings: {:?}", type_result.bindings);
+
+            if let Some(poly_type) = type_result.bindings.get(name) {
+                // 使用 debug 日志记录类型信息
+                tracing::debug!("Found type for variable {}: {:?}", name, poly_type);
+                return Some(poly_type);
+            }
+        } else {
+            tracing::debug!("type_result is None!");
+        }
+        tracing::debug!("Type not found for variable: {}", name);
+        None
+    }
+
+    // 删除的函数：extract_type_name_from_poly
+    // 原因：根据设计文档，不再需要复杂的类型名提取逻辑
+    // 方法调用现在直接生成简单函数名（方法名）
+
+    /// 解析字段索引
+    ///
+    /// 从类型信息和结构体定义中动态查找字段在结构体中的位置。
+    /// 查找顺序：
+    /// 1. 从表达式的类型推导出结构体名，再从 struct_definitions 查找字段索引
+    /// 2. 遍历所有结构体定义查找匹配的字段名（兜底）
+    fn resolve_field_index(
+        &self,
+        expr: &ast::Expr,
+        field_name: &str,
+    ) -> Option<usize> {
+        // 0. 元组下标（`t.0` / `t.1`）：解析期已把数字下标转成十进制字段名。
+        // 元组的“字段索引”就是位置下标本身，直接解析返回。
+        if let Some(t) = self.get_expr_mono_type(expr) {
+            // 剥掉 Ref 层：`it: &(A, B)` 取 `it.1` 时类型是 `Ref{Tuple}`。
+            let mut resolved = t.clone();
+            while let crate::frontend::core::types::mono::MonoType::Ref { inner, .. } = resolved {
+                resolved = *inner;
+            }
+            let is_tuple = matches!(
+                &resolved,
+                crate::frontend::core::types::mono::MonoType::Generic { name, .. }
+                    if name == "Tuple"
+            );
+            if is_tuple {
+                if let Ok(i) = field_name.parse::<usize>() {
+                    return Some(i);
+                }
+            }
+        }
+
+        // 0. `Vec(T)` 的 `length`（RFC-011 容器命名分层）：内建缓冲的长度。
+        // 运行时以 `RuntimeValue::List/Array` 表示，长度即底层条目数；
+        // 写 `v.length = n` 语义为「把缓冲调整到 n 个元素」（截断或补 Void）。
+        // 用字段索引 0 作占位——执行器按**运行时值类型**与结构体字段区分。
+        if field_name == "length" {
+            if let Some(t) = self.get_expr_mono_type(expr) {
+                let mut resolved = t.clone();
+                while let crate::frontend::core::types::mono::MonoType::Ref { inner, .. } = resolved
+                {
+                    resolved = *inner;
+                }
+                if matches!(
+                    &resolved,
+                    crate::frontend::core::types::mono::MonoType::Generic { name, .. }
+                        if name == "Vec" || name == "Array"
+                ) {
+                    return Some(0);
+                }
+            }
+        }
+
+        // 0. #302：Range 具名字段（start=0, end=1, step=2）
+        if matches!(field_name, "start" | "end" | "step")
+            && self
+                .get_expr_mono_type(expr)
+                .map(|t| t.is_range())
+                .unwrap_or(false)
+        {
+            return match field_name {
+                "start" => Some(0),
+                "end" => Some(1),
+                _ => Some(2),
+            };
+        }
+
+        // 1. 尝试从表达式类型推导结构体名，精确查找
+        if let Some(type_name) = self.get_expr_struct_type_name(expr) {
+            if let Some(fields) = self.struct_definitions.get(&type_name) {
+                for (i, field) in fields.iter().enumerate() {
+                    if field.name == field_name {
+                        return Some(i);
+                    }
+                }
+            }
+        }
+
+        // 2. 兜底：遍历所有结构体定义查找字段名（当类型推导不可用时）
+        for fields in self.struct_definitions.values() {
+            for (i, field) in fields.iter().enumerate() {
+                if field.name == field_name {
+                    return Some(i);
+                }
+            }
+        }
+
+        // 3. 未找到，返回 None
+        None
+    }
+
+    /// 从表达式推导其结构体类型名称
+    ///
+    /// 用于 resolve_field_index 等需要知道表达式类型的场景
+    fn get_expr_struct_type_name(
+        &self,
+        expr: &ast::Expr,
+    ) -> Option<String> {
+        match expr {
+            ast::Expr::Var(name, _) => {
+                // 从类型检查结果查找变量类型
+                if let Some(ref type_result) = self.type_result {
+                    if let Some(mono_type) = type_result.local_var_types.get(name) {
+                        return Self::mono_type_to_struct_name(mono_type);
+                    }
+                }
+                // 从 bindings 查找
+                if let Some(poly_type) = self.lookup_var_type(name) {
+                    let mono_type = poly_type.body.clone();
+                    return Self::mono_type_to_struct_name(&mono_type);
+                }
+                // 从 IR 生成器追踪的类型查找
+                if let Some(type_name) = self.local_var_types.get(name) {
+                    // #266: &mut 令牌穿透——"&mut Point" 取底层 "Point"
+                    let base = Self::strip_ref_prefix(type_name);
+                    if self.struct_definitions.contains_key(base) {
+                        return Some(base.to_string());
+                    }
+                }
+                None
+            }
+            ast::Expr::Call { func, .. } => {
+                // 构造器调用：Point(...) -> 类型名为 "Point"
+                if let ast::Expr::Var(name, _) = func.as_ref() {
+                    if self.struct_definitions.contains_key(name) {
+                        return Some(name.clone());
+                    }
+                }
+                None
+            }
+            _ => None,
+        }
+    }
+
+    /// 从 MonoType 提取结构体类型名
+    fn mono_type_to_struct_name(mono_type: &MonoType) -> Option<String> {
+        match mono_type {
+            MonoType::TypeRef(name) => Some(name.clone()),
+            MonoType::Struct(st) => Some(st.name.clone()),
+            // RFC-011 §4.2：泛型类型实例（`ValList(Int)`）— 方法绑定注册在类型名上
+            // （`ValList.push`），故用 Generic 的名字取绑定；不给名字则方法调用
+            // 落到 native 查找（`m.push` → “Native function not found”）。
+            MonoType::Generic { name, .. } => Some(name.clone()),
+            // #266: &mut 令牌穿透——Ref 递归取 inner（m = &mut q 的类型是
+            // Ref { mutable, inner: Point }，方法派发应基于 Point）
+            MonoType::Ref { inner, .. } => Self::mono_type_to_struct_name(inner),
+            _ => None,
+        }
+    }
+
+    /// #266: 穿透 `&` / `&mut` 引用前缀取底层类型名
+    /// `"&mut Point"` → `"Point"`；`"&Point"` → `"Point"`；无前缀原样返回
+    fn strip_ref_prefix(type_name: &str) -> &str {
+        let t = type_name.trim();
+        if let Some(rest) = t.strip_prefix("&mut ") {
+            rest
+        } else if let Some(rest) = t.strip_prefix('&') {
+            rest.trim_start()
+        } else {
+            t
+        }
+    }
+
+    /// 记下局部变量**写出**的类型名（注解原文或构造器名）。
+    ///
+    /// 只记「用户写出来的名字」，不重判类型：`x: TempB` 记 `TempB`，
+    /// `u = TempB(2.0)` 记 `TempB`，`u = b.Temp(2.0)` 记 `b.Temp`。
+    /// 「这个名字属于哪个单元」的判定只在 [`Self::imported_type_owner`] 一处。
+    fn note_local_written_type(
+        &mut self,
+        name: &str,
+        written: &str,
+    ) {
+        for scope in self.symbols.iter_mut().rev() {
+            if let Some(entry) = scope.get_mut(name) {
+                entry.written_type = Some(written.to_string());
+                return;
+            }
+        }
+    }
+
+    /// 形参写出的类型名（注解原文）——与局部变量走同一条派发归因链。
+    ///
+    /// `declared` 是同一形参位在**声明**里的形参（`declaration_runtime_param_slots`）：
+    /// parser 不再往实现头填声明类型（WBS 6.8.3），故第 i 位「写出的是什么类型名」
+    /// 按「作者标注 → 声明同类位」取——与形参类型、调用侧可用名同一来源。
+    fn note_param_written_types(
+        &mut self,
+        params: &[ast::Param],
+        declared: &[ast::Param],
+    ) {
+        let written: Vec<(String, String)> = params
+            .iter()
+            .enumerate()
+            .filter_map(|(i, p)| {
+                let ty =
+                    p.ty.as_ref()
+                        .or_else(|| declared.get(i).and_then(|d| d.ty.as_ref()))
+                        .and_then(Self::written_type_name_of)?;
+                Some((p.name.clone(), ty.to_string()))
+            })
+            .collect();
+        for (name, ty) in written {
+            self.note_local_written_type(&name, &ty);
+        }
+    }
+
+    /// 把量词事实写进**当前作用域**里该名字的槽位（`LocalSlot::quantity` 的唯一写入点）。
+    ///
+    /// 只写**已解析**的事实（`Some`）：`None` 是「尚未解析」，写进去不产生信息，
+    /// 还会让下游把它误读成「已判定为非 q=0」。临时槽与无名来源因此保持 `None`。
+    fn note_slot_quantity(
+        &mut self,
+        name: &str,
+        quantity: Option<ast::Quantity>,
+    ) {
+        let Some(quantity) = quantity else {
+            return;
+        };
+        let Some(slot) = self.lookup_local(name) else {
+            return;
+        };
+        if let Some(local) = self.cur_locals.get_mut(slot) {
+            local.quantity = Some(quantity);
+        }
+    }
+
+    /// 实现头第 i 位 ↔ 声明运行期值位第 i 位（与 `note_param_written_types` **同一**
+    /// 对齐口径）：把声明侧已解析的量词事实写到该形参的槽位上。
+    ///
+    /// 按位而不是按名：实现头可以改名（`f: (a: Int) -> Int = (b) => b`），名字不是
+    /// 绑定身份，位次才是。
+    fn note_param_quantities(
+        &mut self,
+        params: &[ast::Param],
+        declared: &[ast::Param],
+    ) {
+        for (i, param) in params.iter().enumerate() {
+            let quantity = declared.get(i).and_then(|d| d.quantity);
+            self.note_slot_quantity(&param.name, quantity);
+        }
+    }
+
+    /// 把**一层 curry 的具名形参**写进槽位并携带量词事实——中间层与最内层共用。
+    ///
+    /// `env_params` 是外层各层累积的参数（按 `args` 槽序 0..），`layer_params` 是本层
+    /// 参数（`env_count..`）；这正是 `MakeClosure.env` 需要的顺序，也与最内层 body 的
+    /// 槽布局一致。
+    ///
+    /// 事实来源只有一个：`ast::Param::quantity`（声明侧由唯一解析源
+    /// `ast::resolve_param_quantities` 写入）。此处**不推导、不默认**——`None`（尚未
+    /// 解析）原样落进槽位，绝不当 `Some(Zero)`。
+    fn register_curry_layer_bindings(
+        &mut self,
+        env_params: &[ast::Param],
+        layer_params: &[ast::Param],
+        env_count: usize,
+    ) {
+        for (i, param) in env_params.iter().enumerate() {
+            self.register_local(&param.name, i);
+            self.note_slot_quantity(&param.name, param.quantity);
+        }
+        for (i, param) in layer_params.iter().enumerate() {
+            self.register_local(&param.name, env_count + i);
+            self.note_slot_quantity(&param.name, param.quantity);
+        }
+    }
+
+    /// 局部变量写出类型名的查找（作用域由符号表本身给出）。
+    fn local_written_type(
+        &self,
+        name: &str,
+    ) -> Option<&str> {
+        for scope in self.symbols.iter().rev() {
+            if let Some(entry) = scope.get(name) {
+                return entry.written_type.as_deref();
+            }
+        }
+        None
+    }
+
+    /// 变量写出的类型名：先查局部作用域，再查本文件顶层绑定位。
+    fn binding_written_type(
+        &self,
+        name: &str,
+    ) -> Option<&str> {
+        self.local_written_type(name)
+            .or_else(|| self.global_written_types.get(name).map(String::as_str))
+    }
+
+    /// 类型注解里**写出**的类型名：`Temp` / `TempB` / `&TempB` → 名字部分。
+    /// 内建类型、函数类型、结构体字面量返回 None（不是「某个单元的类型名」）。
+    fn written_type_name_of(ty: &ast::Type) -> Option<&str> {
+        match ty {
+            ast::Type::Name { name, .. } | ast::Type::Generic { name, .. } => Some(name.as_str()),
+            ast::Type::Ref { inner, .. }
+            | ast::Type::Ptr(inner)
+            | ast::Type::Paren(inner)
+            | ast::Type::NamedParen { inner, .. } => Self::written_type_name_of(inner),
+            _ => None,
+        }
+    }
+
+    /// 构造器表达式**写出**的类型名——**纯语法提取**，不做单元归属判定。
+    ///
+    /// `T(..)` → `T`；`ns.T(..)` / `ns.sub.T(..)` → 调用点原样的点分写法。
+    /// 「这个名字是不是类型、属于哪个单元」一律交给
+    /// [`Self::imported_type_owner`]（**唯一**归属判定点）——此处只记录用户写出的
+    /// 名字，避免同一判定在两处各做一遍（WBS 4.9.8 修复轮 R2 / issue #465：上一版
+    /// 在这里产出「权威限定名」再被归属判定二次解析，首段经命名空间别名表改写，
+    /// 权威名丢失）。
+    fn constructor_written_type_name(
+        &self,
+        expr: &ast::Expr,
+    ) -> Option<String> {
+        let ast::Expr::Call { func, .. } = expr else {
+            return None;
+        };
+        match func.as_ref() {
+            ast::Expr::Var(name, _) => Some(name.clone()),
+            ast::Expr::FieldAccess { .. } => {
+                let (head, fields) = flatten_namespace(func)?;
+                Some(
+                    std::iter::once(head)
+                        .chain(fields)
+                        .collect::<Vec<_>>()
+                        .join("."),
+                )
+            }
+            _ => None,
+        }
+    }
+
+    /// 「这个限定名是**类型导出**」——注册表导出面的唯一判据。
+    fn is_type_export(
+        &self,
+        qualified: &str,
+    ) -> bool {
+        self.registry
+            .resolve_export(qualified)
+            .map(|export| matches!(export.kind, ExportKind::Type))
+            .unwrap_or(false)
+    }
+
+    /// 把「写出的名字」解析成**别的单元**的类型限定名（本单元自有类型 → None）。
+    ///
+    /// **归属判定的唯一来源**（WBS 4.9.8 修复轮 R2）。三条判据按序，命中即返回：
+    /// 1. **权威限定名**（`b.Temp` / `p.q.Temp`）：注册表里就存在该模块与该类型导出
+    ///    ⇒ **原样返回，绝不再解析**。模块键是权威身份，命名空间别名表不得改写它
+    ///    （R2 实测：`use other as p` 会把 `p.q.Temp` 二次解析成 `other.q.Temp`）；
+    /// 2. **本地名**（`TempB`）→ 导入名表 `use_aliases`（`use b.{Temp as TempB}` 的条目）；
+    /// 3. **命名空间前缀写法**（`io.X` / 用户模块别名 `m.T`）→ [`Resolver`] 的命名空间
+    ///    解析（与调用名限定化同一实现，不另起路径解析）。
+    ///
+    /// 解析结果必须是注册表的类型导出；否则不给归属（宁可不限定，不回错单元）。
+    fn imported_type_owner(
+        &self,
+        written: &str,
+    ) -> Option<String> {
+        let written = Self::strip_ref_prefix(written);
+        // 本单元自有类型：裸名就是定义侧名字，限定化留给 `qualify_names`
+        if self.declared_type_names.contains(written) {
+            return None;
+        }
+        // ① 权威限定名：精确命中即用，不再过命名空间/别名解析
+        if self.is_type_export(written) {
+            return Some(written.to_string());
+        }
+        // ② 本地名 → 导入名表（含 `use M.{T as X}` 的内联别名条目）
+        if let Some(qualified) = self.use_aliases.get(written) {
+            if self.is_type_export(qualified) {
+                return Some(qualified.clone());
+            }
+        }
+        // ③ 命名空间前缀写法（std 子模块 / 用户模块别名）
+        let (head, rest) = written.split_once('.')?;
+        let fields: Vec<&str> = rest.split('.').collect();
+        let qualified = self.resolver().resolve_namespace(head, &fields);
+        self.is_type_export(&qualified).then_some(qualified)
+    }
+
+    /// 方法派发名的**唯一判据**：把「定义侧名字」的裸类型前缀按接收者所属单元
+    /// 限定化（`Temp.tag` → `b.Temp.tag`），使跨单元同名类型的方法落回各自单元。
+    ///
+    /// `definition_name` 的形态有三处生产者（RFC-004 绑定 / D20 重载决议 / 裸名
+    /// 推导），前缀一律是 typecheck 与 `type_bindings` 共用的**定义侧裸类型名**；
+    /// 三者都经本函数产出最终调用名，判据只此一份（D3）。
+    /// 接收者类型名与定义名前缀对不上时原样返回（不是这个类型的方法面）。
+    fn method_dispatch_name(
+        &self,
+        recv: &ast::Expr,
+        definition_name: &str,
+    ) -> String {
+        let owner = match recv {
+            ast::Expr::Var(name, _) => self
+                .binding_written_type(name)
+                .and_then(|written| self.imported_type_owner(written)),
+            _ => self
+                .constructor_written_type_name(recv)
+                .and_then(|written| self.imported_type_owner(&written)),
+        };
+        let Some(owner) = owner else {
+            return definition_name.to_string();
+        };
+        let Some((prefix, rest)) = definition_name.split_once('.') else {
+            return definition_name.to_string();
+        };
+        // 定义侧前缀是裸类型名；只有它就是接收者类型的叶子名时才替换
+        // （重载混编序 `#k` 原样保留——决议选的是**候选序**，单元由接收者定）。
+        if owner.rsplit('.').next() != Some(prefix) {
+            return definition_name.to_string();
+        }
+        format!("{owner}.{rest}")
+    }
+
+    /// 获取下一个临时寄存器编号
+    fn next_temp_reg(&mut self) -> usize {
+        let reg = self.next_temp;
+        self.next_temp += 1;
+        // #393：真高水位——语句级回收会回滚 next_temp，槽位总数以历史
+        // 最高占用为准（少一都会让尾部语句的临时落进未分配槽位）。
+        self.temp_high_water = self.temp_high_water.max(reg + 1);
+        reg
+    }
+
+    /// T3：预扫描模块，为所有顶层值绑定分配槽位。
+    ///
+    /// 必须在生成任何初始化指令**之前**跑：前向引用（`b = a + 1` 中 `a` 在后）
+    /// 要求 `a` 的槽位号在生成 `b` 的初始化时就已知。
+    /// 按源码顺序分配，故槽位号 = 声明序（与旧行为一致）。
+    fn register_global_slots(
+        &mut self,
+        module: &ast::Module,
+    ) {
+        // 本单元内按名判重（4.10.3）：Script 顶层对 `mut` 的赋值语句与声明
+        // 同形，逐语句计数会给同一变量重复配槽（初始化写后配的槽、读取用先
+        // 配的槽，运行时类型错配）。布局键在多文件是限定名、本检查是裸名拦
+        // 不到（见下行），故判重必须本单元局部做——与 extract_global_defs
+        // 同名判据同源。
+        let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+        for stmt in &module.items {
+            let ast::StmtKind::Assign {
+                target,
+                type_annotation,
+                value,
+                ..
+            } = &stmt.kind
+            else {
+                continue;
+            };
+            let ast::Expr::Var(name, _) = target.as_ref() else {
+                continue;
+            };
+            // 函数绑定进函数表，不占槽位；类型定义绑定无运行时代码
+            if ast::Expr::block_binding_is_function(type_annotation.as_ref(), value.as_deref())
+                || Self::is_type_def_binding(value.as_deref())
+            {
+                continue;
+            }
+            if !seen.insert(name.clone()) {
+                continue;
+            }
+            // 已登记（如跨文件布局已有同名的本文件绑定）则跳过
+            if self.global_slot_layout.contains_key(name) {
+                continue;
+            }
+            let ty = type_annotation
+                .as_ref()
+                .map(|t| MonoType::from(t.clone()))
+                .unwrap_or(MonoType::Int(64));
+            // 名字已限定（多文件）时布局键用限定名，否则用裸名
+            let key = match &self.module_key {
+                Some(k) => SymbolTable::qualify(k, name),
+                None => name.clone(),
+            };
+            let slot = self.global_slot_base + self.global_vars.len();
+            self.global_slot_layout.insert(key, slot);
+            self.global_vars.push((name.clone(), ty, None));
+        }
+    }
+
+    /// 从 AST 模块生成 IR 模块
+    pub fn generate_module_ir(
+        &mut self,
+        module: &ast::Module,
+    ) -> Result<ModuleIR, Vec<Diagnostic>> {
+        // RFC-029：用户模块命名空间别名（`use lib` / `use lib as l`）由 typecheck 登记
+        // （模块解析归 typecheck 所有），IR 生成直接消费，不再自行从 AST 重新推导。
+        if let Some(ref tr) = self.type_result {
+            self.user_namespaces = tr.module_namespaces.clone();
+        }
+        // use 导入别名表（含 #245 条目别名）：生成期解析调用名用。
+        self.use_aliases = self.build_import_aliases(module);
+        // 谓词名可见面**不在生成期扫描**（F14-A）：生成的可见范围必须与走查期
+        // （typecheck / registry）**同一份**，因此由调用方经 `new_with_type_result`
+        // 注入并在这里原样使用——`self.type_level` 已在构造期就位。
+        //
+        // 仍在入口扫的是**本文件声明的类型名**：那是逐单元的解析事实（`use std.math`
+        // 之后 `PI(7)` 该不该解析成 `std.math.PI`），范围天然是本单元，与谓词的
+        // 跨单元可见面不是同一个问题。
+        for stmt in &module.items {
+            if let ast::StmtKind::TypeDefinition { name, .. } = &stmt.kind {
+                self.declared_type_names.insert(name.clone());
+            }
+        }
+
+        // T3：先分配所有顶层值绑定的槽位，使前向引用在生成期可解析。
+        self.register_global_slots(module);
+
+        let mut functions = Vec::new();
+        let mut errors = Vec::new();
+        let mut constants = Vec::new();
+
+        for stmt in &module.items {
+            match self.generate_stmt_ir(stmt, &mut constants) {
+                Ok(Some(func_ir)) => functions.push(func_ir),
+                Ok(None) => {}
+                Err(e) => errors.push(e),
+            }
+        }
+
+        // Script 模式：顶层同名重绑定 = **后者生效**——被遮蔽的前一个定义从函数表
+        // 里去掉。语义依据是单文件扁平函数表的按序插入（后者覆盖前者）：
+        // `f: () -> Int = () => 1 / f = () => 2 / print(f())` 实测输出 2。
+        // 留着两份同名定义会让 Linking 的合并校验把「同一模块内的重绑定」误报成
+        // 「模块限定名冲突（同一路径 ×2）」并打红整个 check（3.4.8 ③ 回归，文档
+        // 示例门禁 10 项）。只在 `script_mode` 下做：Bin 形态的顶层重声明不在本
+        // 修复面（其合并校验现状保留），项目形态的 IR 不受影响。
+        if self.script_mode && functions.len() > 1 {
+            let mut last_index: HashMap<String, usize> = HashMap::new();
+            for (idx, func) in functions.iter().enumerate() {
+                last_index.insert(func.name.clone(), idx);
+            }
+            let mut idx = 0usize;
+            functions.retain(|func| {
+                let keep = last_index.get(&func.name) == Some(&idx);
+                idx += 1;
+                keep
+            });
+        }
+
+        if !errors.is_empty() {
+            return Err(errors);
+        }
+
+        // T3：顶层绑定的初始化按**依赖拓扑序**拼接（被依赖者先初始化）。
+        // 前向引用（`b = a + 1` 且 `a` 在后）靠它把 `a` 的初始化提到前面。
+        // 循环依赖在此报错（带环上的名字），而非运行时取到未初始化值。
+        let ordered = match self.topo_sort_pending_inits() {
+            Ok(v) => v,
+            Err(e) => return Err(vec![e]),
+        };
+        let ordered_inits: Vec<Vec<Instruction>> = ordered
+            .into_iter()
+            .map(|i| i.instructions.clone())
+            .collect();
+        for instrs in ordered_inits {
+            let base = self.module_init.len();
+            let mut instrs = instrs;
+            Self::rebase_jump_targets(&mut instrs, base);
+            self.module_init.extend(instrs);
+        }
+        // T4/T3：绑定初始化（声明，已拓扑排序）之后才跑顶层语句（程序主体，源码序）。
+        // 两段不可交换：语句可能读绑定（如 `io.println(v)`），必须先初始化。
+        //
+        // 跳转重定位：module_stmts 里的 target 是**段内**下标，
+        // 前面接上绑定初始化后必须整体平移——否则顶层 while 的回跳会指向函数头。
+        let base = self.module_init.len();
+        let mut stmts = std::mem::take(&mut self.module_stmts);
+        Self::rebase_jump_targets(&mut stmts, base);
+        self.module_init.extend(stmts);
+
+        // 添加嵌套函数到模块函数列表
+        functions.extend(std::mem::take(&mut self.nested_functions));
+
+        // RFC-004: 添加匿名函数绑定生成的 IR 到模块函数列表
+        functions.extend(std::mem::take(&mut self.anon_function_irs));
+
+        let mut ir = ModuleIR {
+            globals: self
+                .global_vars
+                .iter()
+                .enumerate()
+                .map(|(i, (name, ty, _))| crate::middle::ir::ir::GlobalSlot {
+                    name: name.clone(),
+                    ty: ty.clone(),
+                    index: self.global_slot_base + i,
+                })
+                .collect(),
+            functions,
+            init: std::mem::take(&mut self.module_init),
+            // 单文件：恒 file_id 0，空表（translator 回退 0）
+            init_file_ids: Vec::new(),
+            // #368：模块级槽位表随 init 一起交给 codegen。
+            // 顶层语句里的具名结构（如 `for i in ..` 的循环变量）在此登记，
+            // 取值时已覆盖到最大已注册槽位（register_local 会补空格）。
+            init_locals: std::mem::take(&mut self.cur_locals),
+            ffi_libs: std::mem::take(&mut self.ffi_libs),
+            ffi_bindings: std::mem::take(&mut self.ffi_bindings),
+            entry_function: None,
+            source_files: Vec::new(),
+            function_files: HashMap::new(),
+        };
+        // RFC-029: 有模块键时限定本文件的顶层函数名与调用引用（定义键、调用名
+        // 与 typecheck 的实例化请求名三者同源为 `{module_key}.{name}`）；
+        // `module_key` 为 None（单文件管线/无项目根 standalone）时不限定——
+        // 但 3.4.8 ③ 起「不限定」只发生在**单单元**程序上：多单元形态由调用方
+        // 传单元键（见 `with_script_mode` 的注释），否则合并时跨单元同名函数会
+        // 被判成「模块限定名冲突」。Script/Bin 语义与限定名开关已解耦，本闸门
+        // 只看 `module_key`。
+        if let Some(key) = &self.module_key {
+            let aliases = self.build_import_aliases(module);
+            Self::qualify_names(&mut ir, key, &aliases);
+        }
+        self.assign_defs(&mut ir);
+        // RFC-039 D20 / WBS 4.5.1：消费侧完整跑完一轮（生成成功返回）——
+        // 结算据此区分「消费者跑完但漏了条目」（响亮）与「消费者没跑完 / 失败」
+        //（不判：失败已按首因报出）。失败路径提前 `return Err`，不会标到这里。
+        self.release_plan.mark_consumption_completed();
+        // 同点标记重载决议表的消费侧（4.5.2 复用同一台账机制）
+        self.overload_resolutions.mark_consumption_completed();
+        Ok(ir)
+    }
+
+    /// Stage 3 尾部 pass：为所有函数分配 DefId 并解析静态引用。
+    ///
+    /// 名字此时已是最终形态（多文件已限定、单文件保持裸名）：
+    /// - intern 规则：多文件直接用限定名；单文件用 `qualify("main", bare)`——与
+    ///   `module_key_or_main` 一致，保证 `FunctionIR.def` 与调用侧解析结果同源。
+    /// - 方法在单文件首次 intern 时类别退化为 `Function`（多文件已在 register 期以
+    ///   `Method` intern，幂等保留）；下游只查 def 不查 kind，无行为差异。
+    /// - 泛型函数经 mono 特化后重命名，def 随之失效——mono 路径保持按名分发（现状），
+    ///   codegen 对 def 未命中回退按名，两条路径都正确。
+    fn assign_defs(
+        &self,
+        ir: &mut ModuleIR,
+    ) {
+        // intern 规则跟随**限定名开关**（不是 Script/Bin 语义）：未限定名的
+        // 程序用 `main.` 前缀兜底，与 `module_key_or_main` 一致。
+        let unqualified_names = self.module_key.is_none();
+        let mut symbols = self.registry.symbols_mut();
+        for func in &mut ir.functions {
+            let intern_name = if unqualified_names {
+                SymbolTable::qualify("main", &func.name)
+            } else {
+                func.name.clone()
+            };
+            let kind = if func.is_type_decl() {
+                crate::frontend::module::symbol::DefKind::Type
+            } else {
+                crate::frontend::module::symbol::DefKind::Function
+            };
+            func.def = Some(symbols.intern_full(&intern_name, kind));
+        }
+        // 解析静态引用：先直查（限定名 / std 原生），未限定名的程序裸名回退
+        // qualify("main", ·)。所有函数已 intern 完毕，前向引用在此必然可解。
+        let resolve = |name: &str| {
+            symbols.def(name).or_else(|| {
+                if unqualified_names {
+                    symbols.def(&SymbolTable::qualify("main", name))
+                } else {
+                    None
+                }
+            })
+        };
+        // 函数体：逐指令解析静态调用目标。
+        for func in &mut ir.functions {
+            if func.is_type_decl() {
+                continue; // TypeDecl 无指令体
+            }
+            for block in func.blocks_mut() {
+                for instr in &mut block.instructions {
+                    Self::resolve_static_targets(instr, &resolve);
+                }
+            }
+        }
+        // 模块顶层初始化序列：与函数体**同一套解析规则**（2026-10-11 裁甲）。
+        //
+        // 此前 init 段被有意跳过，于是同一张扁平函数表出现两套身份口径：函数体
+        // 走 DefId，init 段恒 None 只能按名回退。名字与 def 在 codegen 里指向同一
+        // 个函数表下标（名字由 `qualify_names` 与函数定义同源改写），故本改动
+        // 不改变翻译结果，只消除「def 是否为空」的口径分叉——将来任何假设
+        // 「def 恒有值」的 IR pass 不会在 init 段踩空。
+        for instr in &mut ir.init {
+            Self::resolve_static_targets(instr, &resolve);
+        }
+    }
+
+    /// 解析单条指令里的静态调用目标 DefId：`Call`/`TailCall` 的字符串操作数、
+    /// `MakeClosure` 的目标名，其余指令不动。
+    ///
+    /// 函数体与模块初始化序列**共用本实现**（禁令三：一处生产、一处消费）——
+    /// 两处若各写一套映射，正是 t12 要消除的口径分叉。
+    fn resolve_static_targets(
+        instr: &mut Instruction,
+        resolve: &impl Fn(&str) -> Option<crate::frontend::module::symbol::DefId>,
+    ) {
+        match instr {
+            Instruction::Call { func, def, .. } | Instruction::TailCall { func, def, .. } => {
+                if let Operand::Const(ConstValue::String(name)) = func {
+                    *def = resolve(name);
+                }
+            }
+            Instruction::MakeClosure { func, def, .. } => {
+                *def = resolve(func);
+            }
+            _ => {}
+        }
+    }
+
+    /// RFC-029 限定名：从一个文件的 `use` 语句构建导入别名表（本地短名 → 源模块限定名）。
+    ///
+    /// 供限定名重写解析跨文件调用目标。std 调用已由 IR 生成限定为 `std.*`，不在此表。
+    fn build_import_aliases(
+        &self,
+        module: &ast::Module,
+    ) -> HashMap<String, String> {
+        Self::import_aliases_from(module, &self.registry)
+    }
+
+    /// `use` 导入别名表（本地调用名 → 限定名）的**唯一生产实现**（t10）。
+    ///
+    /// 为什么抽成 pub 关联函数：驱动侧聚合实例化请求时要把 typecheck 的裸名请求
+    /// 对齐成 IR 调用指令里的名字，而那个名字正是由本表在 `qualify_names` 里
+    /// 改写出来的——两边必须**同源**。抽出来后驱动直接调它（传单元 AST 与同一
+    /// registry），不再另建平行表、也不复刻解析规则（禁令三：一处生产、一处消费）。
+    ///
+    /// 规则（原实现逐字迁移）：只登记 `use path.{item}` 的**项**形态（含 #245 内联
+    /// 别名），且仅对 Function/Constant/Type 类导出——#244：类型也限定，构造调用
+    /// `Point(...)` 与方法调用 `Point.get_x` 都要把本地短名别名到源模块限定名才能解析。
+    pub fn import_aliases_from(
+        module: &ast::Module,
+        registry: &crate::frontend::module::registry::ModuleRegistry,
+    ) -> HashMap<String, String> {
+        let mut aliases = HashMap::new();
+        for stmt in &module.items {
+            if let ast::StmtKind::Use {
+                path,
+                items,
+                item_aliases,
+                ..
+            } = &stmt.kind
+            {
+                let Some(exports) = registry.get_exports(path) else {
+                    continue;
+                };
+                if let Some(names) = items {
+                    // 本地名：内联别名（#245）> 原名
+                    for (i, item) in names.iter().enumerate() {
+                        if let Some(export) = exports.get(&item.name) {
+                            if matches!(
+                                export.kind,
+                                ExportKind::Function | ExportKind::Constant | ExportKind::Type
+                            ) {
+                                let local_name = item_aliases
+                                    .as_ref()
+                                    .and_then(|v| v.get(i))
+                                    .and_then(|a| a.as_ref())
+                                    .map(|a| &a.name)
+                                    .unwrap_or(&item.name);
+                                aliases.insert(local_name.clone(), export.full_path.clone());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        aliases
+    }
+
+    /// RFC-029 限定名：把本文件 IR 里的顶层函数名重写为 `{module_key}.{name}`，
+    /// 并把**函数体与模块顶层初始化序列**里对这些函数与导入函数的调用/闭包
+    /// 引用一并重写（init 段见 t3 F1——漏掉它就出现「定义已限定、调用仍裸名」
+    /// 的不自洽 IR，运行期 E6006）。
+    ///
+    /// module=record 语义：`a.helper` 与 `b.helper` 是两个 record 的不同字段，本就不冲突；
+    /// 解释器函数表是扁平 name→func，故用限定名作键使其共存。限定名统一经
+    /// [`SymbolTable::qualify`] 生成——全仓库限定名语法的唯一所有者。
+    fn qualify_names(
+        ir: &mut ModuleIR,
+        module_key: &str,
+        aliases: &HashMap<String, String>,
+    ) {
+        // 先收集本文件的类型名（TypeDecl），供方法派生函数前缀匹配。
+        let mut type_names: std::collections::HashSet<String> = std::collections::HashSet::new();
+        for func in &ir.functions {
+            if func.is_type_decl() {
+                type_names.insert(func.name.clone());
+            }
+        }
+
+        // 本文件要限定的函数：TypeDecl、方法派生（前缀是本地类型）、普通函数。
+        let mut rename: HashMap<String, String> = HashMap::new();
+        for func in &ir.functions {
+            let bare = &func.name;
+            if func.is_type_decl() {
+                rename.insert(bare.clone(), SymbolTable::qualify(module_key, bare));
+            } else if let Some(dot_pos) = bare.find('.') {
+                // 带点名字：只有限定点是本地类型时才限定，避免误伤 std 等已限定名。
+                let prefix = &bare[..dot_pos];
+                if type_names.contains(prefix) {
+                    rename.insert(bare.clone(), SymbolTable::qualify(module_key, bare));
+                }
+            } else {
+                rename.insert(bare.clone(), SymbolTable::qualify(module_key, bare));
+            }
+        }
+
+        // 重写函数定义名。
+        for func in &mut ir.functions {
+            if let Some(q) = rename.get(&func.name) {
+                func.name = q.clone();
+            }
+        }
+
+        // 重写全局槽位名（T5）：与 `allocate_global_slots` 的限定规则同源，
+        // 使槽位名与跨文件布局键（`lib.value`）一致，同名全局得以共存。
+        for slot in &mut ir.globals {
+            slot.name = SymbolTable::qualify(module_key, &slot.name);
+        }
+
+        // 重写调用/闭包引用：本文件函数（rename）+ 导入函数（aliases）。
+        for func in &mut ir.functions {
+            if func.is_type_decl() {
+                continue;
+            }
+            for block in func.blocks_mut() {
+                for instr in &mut block.instructions {
+                    Self::rewrite_call_names(instr, &rename, aliases);
+                }
+            }
+        }
+
+        // 模块顶层初始化序列（`ir.init`）走**同一张 rename/aliases 表与同一
+        // `rewrite_call_names`**（t3 F1）：此前只重写函数体，init 里对本文件
+        // 顶层函数的调用名保持裸名，而函数定义已被限定——运行期按裸名查扁平
+        // 函数表落空（E6006）。这与泛型无关，是既有的多文件正确性漏洞。
+        for instr in &mut ir.init {
+            Self::rewrite_call_names(instr, &rename, aliases);
+        }
+    }
+
+    /// **调用名解析的单点实现**：把一个调用名解析成 IR 函数表里的最终名字。
+    ///
+    /// 解析顺序：完全匹配 rename（本文件函数）→ 完全匹配 aliases（导入函数）→
+    /// 前缀匹配（方法调用 `Point.get_x` 经 `Point` 的 rename/alias 限定为
+    /// `lib.Point.get_x`）。
+    ///
+    /// 为什么单独成一个 pub 函数：驱动侧要把 typecheck 的实例化请求名对齐到
+    /// 「IR 调用指令里的名字」，而这正是本函数给出的结果。请求名与指令名只要
+    /// 有一处用了别的规则，就会一边限定、一边裸名——单态化改不到调用点
+    /// （E6006）或误报未限定化（E3018）。故本函数是**唯一**的解析规则所有者：
+    /// `rewrite_call_names` 在 IR 生成期用它改写指令，驱动在聚合期用它对齐请求名。
+    ///
+    /// 驱动侧传入的两张表与生成期同源：`rename` 是**已限定**名字的恒等映射
+    /// （`qualify_names` 之后的函数表），`aliases` 由驱动侧**直调**
+    /// [`Self::import_aliases_from`]`(单元 AST, 同一 registry)` 取得——即
+    /// `qualify_names` 改写调用名所用的同一个实现，不是驱动侧另建的表。
+    /// 细节见 `driver::helpers::aggregate_instantiation_requests` 的注释。
+    pub fn resolve_call_target(
+        name: &str,
+        rename: &HashMap<String, String>,
+        aliases: &HashMap<String, String>,
+    ) -> Option<String> {
+        rename
+            .get(name)
+            .cloned()
+            .or_else(|| aliases.get(name).cloned())
+            .or_else(|| {
+                let dot_pos = name.find('.')?;
+                let prefix = &name[..dot_pos];
+                let suffix = &name[dot_pos..]; // 含点
+                rename
+                    .get(prefix)
+                    .or_else(|| aliases.get(prefix))
+                    .map(|q| format!("{}{}", q, suffix))
+            })
+            .or_else(|| {
+                // 显式类型实参的预特化名（`mk(int64)`）：两层调用 `mk(Int)(5)`
+                // 由 ir_gen 按 D6.3 直接发特化名（mono 会剥掉未特化原件），其
+                // 基名同样是本单元函数——按同一套规则限定基名、类型参数串原样
+                // 保留，否则限定后查表落空（E6006；4.10.3 语料实证）。
+                let open = name.find('(')?;
+                let base = &name[..open];
+                let suffix = &name[open..]; // 含左括号
+                rename
+                    .get(base)
+                    .or_else(|| aliases.get(base))
+                    .map(|q| format!("{}{}", q, suffix))
+            })
+    }
+
+    /// 重写单条指令里的函数名引用（Call/TailCall 的字符串 func、MakeClosure 的 func）。
+    ///
+    /// 解析规则见 [`Self::resolve_call_target`]（单点实现）。
+    fn rewrite_call_names(
+        instr: &mut Instruction,
+        rename: &HashMap<String, String>,
+        aliases: &HashMap<String, String>,
+    ) {
+        let resolve =
+            |name: &str| -> Option<String> { Self::resolve_call_target(name, rename, aliases) };
+        match instr {
+            Instruction::Call { func, .. } | Instruction::TailCall { func, .. } => {
+                if let Operand::Const(ConstValue::String(name)) = func {
+                    if let Some(q) = resolve(name) {
+                        *name = q;
+                    }
+                }
+            }
+            Instruction::MakeClosure { func, .. } => {
+                if let Some(q) = resolve(func) {
+                    *func = q;
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// RFC-029 多文件编排：预注册其他文件的类型上下文（结构体字段布局 + 方法绑定），
+    /// 使本文件 IR 生成能解析跨文件的字段索引与方法调用重排。
+    ///
+    /// 仅注册类型上下文，**不生成函数 IR**——各文件的函数与匿名绑定 IR 由
+    /// 各自的 `generate_module_ir` 生成，链接后按名字解析。镜像 `generate_stmt_ir`
+    /// 中 `TypeDefinition` 的结构体上下文注册逻辑。
+    pub fn seed_cross_file_types(
+        &mut self,
+        modules: &[&ast::Module],
+    ) {
+        for module in modules {
+            for stmt in &module.items {
+                if let ast::StmtKind::TypeDefinition {
+                    name, definition, ..
+                } = &stmt.kind
+                {
+                    match definition {
+                        ast::Type::NamedStruct {
+                            name: struct_name,
+                            fields,
+                            ..
+                        } => {
+                            self.struct_definitions
+                                .insert(struct_name.clone(), fields.clone());
+                        }
+                        ast::Type::Struct { body } => {
+                            let fields: Vec<ast::StructField> = body
+                                .iter()
+                                .filter_map(|it| {
+                                    if let ast::TypeBodyItem::Field(f) = it {
+                                        Some(f.clone())
+                                    } else {
+                                        None
+                                    }
+                                })
+                                .collect();
+                            let bindings: Vec<ast::TypeBodyBinding> = body
+                                .iter()
+                                .filter_map(|it| {
+                                    if let ast::TypeBodyItem::Binding(b) = it {
+                                        Some(b.clone())
+                                    } else {
+                                        None
+                                    }
+                                })
+                                .collect();
+                            self.struct_definitions.insert(name.clone(), fields);
+                            self.register_type_bindings(name, &bindings);
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        }
+    }
+
+    /// RFC-029 多文件编排：登记跨文件全局布局（限定名 → 绝对槽位号）。
+    ///
+    /// 使本文件对跨文件全局（`use lib.{value}` → `lib.value`）的引用
+    /// 能用定义方的槽位号生成 `Load(Global(idx))`，而非误判为未定义。
+    pub fn seed_cross_file_globals(
+        &mut self,
+        layout: &[(String, usize)],
+    ) {
+        for (name, idx) in layout {
+            self.global_slot_layout.insert(name.clone(), *idx);
+        }
+    }
+
+    /// 本文件顶层绑定的槽位分配起点。
+    ///
+    /// 多文件模式下各文件必须用不相交的槽位区间（否则跨文件索引冲突），
+    /// 由编排器按发现顺序预先分配；单文件模式恒为 0（索引 = 声明序）。
+    pub fn set_global_slot_base(
+        &mut self,
+        base: usize,
+    ) {
+        self.global_slot_base = base;
+    }
+
+    /// 把一段指令序列里的跳转目标整体平移 `base`。
+    ///
+    /// `Instruction::Jmp` / `JmpIf` / `JmpIfNot` 的 target 是**函数内展平后的绝对下标**
+    /// （translator 按 `global_ir_index` 建表）。当一段指令在**空 Vec** 上生成、
+    /// 再拼进更大的序列时，原下标基准失效，必须平移。
+    ///
+    /// 顶层语句与顶层重赋值都在空 Vec 上生成（循环体的回跳会指向 0），
+    /// 拼进 `module_stmts` / `module_init` 前必须重定位。
+    fn rebase_jump_targets(
+        instrs: &mut [Instruction],
+        base: usize,
+    ) {
+        if base == 0 {
+            return;
+        }
+        for instr in instrs.iter_mut() {
+            match instr {
+                Instruction::Jmp { target, .. }
+                | Instruction::JmpIf { target, .. }
+                | Instruction::JmpIfNot { target, .. } => *target += base,
+                _ => {}
+            }
+        }
+    }
+
+    /// 类型声明在**字节码类型表**里的项。
+    ///
+    /// 等价于原 `codegen::type_from_ast`（WBS 6.6.12 前移）：载体只带 `MonoType`，
+    /// codegen 不再接触 AST。逐臂与原实现一致——`Name`→`TypeRef`、`Tuple`→`make_tuple`、
+    /// `Fn`→`Fn`（丢无名形参，与原实现相同）、`Generic`→`TypeRef("Name(arg, …)")`，
+    /// 其余（含 `Struct`/`NamedStruct`/`MetaType` 等）→ `Void`。
+    fn type_decl_self_type(ast_type: &ast::Type) -> MonoType {
+        match ast_type {
+            ast::Type::Name { name, .. } => MonoType::TypeRef(name.clone()),
+            ast::Type::Tuple(types) => {
+                MonoType::make_tuple(types.iter().map(Self::type_decl_self_type).collect())
+            }
+            ast::Type::Fn {
+                params,
+                return_type,
+                ..
+            } => MonoType::Fn {
+                params: params
+                    .iter()
+                    .filter_map(|p| p.ty.as_ref())
+                    .map(Self::type_decl_self_type)
+                    .collect(),
+                return_type: Box::new(Self::type_decl_self_type(return_type)),
+            },
+            ast::Type::Generic { name, args, .. } => MonoType::TypeRef(format!(
+                "{}({})",
+                name,
+                args.iter()
+                    .map(|t| Self::type_decl_self_type(t).type_name())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )),
+            _ => MonoType::Void,
+        }
+    }
+
+    /// 字段注解是否为**函数类型**（= 方法字段）。
+    ///
+    /// 剥掉透明包装（`Paren` / `NamedParen`）后再判——与 `From<ast::Type> for MonoType`
+    /// 的透明口径一致（RFC-004 / RFC-027 §3）。SPEC `type-system.md:443`：函数类型字段
+    /// 不生成构造参数；当前 `translator::synthesize_constructor` 仍把两类都算进构造参数
+    /// （已知不一致，登记见 09a §P6 6.6.12，本轮不改行为）。
+    fn field_is_method(ty: &ast::Type) -> bool {
+        let mut t = ty;
+        loop {
+            match t {
+                ast::Type::Paren(inner) => t = inner,
+                ast::Type::NamedParen { inner, .. } => t = inner,
+                ast::Type::Fn { .. } => return true,
+                _ => return false,
+            }
+        }
+    }
+
+    /// 生成语句的 IR
+    fn generate_stmt_ir(
+        &mut self,
+        stmt: &ast::Stmt,
+        constants: &mut Vec<ConstValue>,
+    ) -> Result<Option<FunctionIR>, Diagnostic> {
+        match &stmt.kind {
+            ast::StmtKind::TypeDefinition {
+                name,
+                type_annotation,
+                definition,
+            } => {
+                self.declared_type_names.insert(name.clone());
+                use crate::ast::extract_generic_param_names;
+                use crate::frontend::core::types::mono::UniverseLevel;
+
+                // 泛型形参的唯一来源：声明注解的 Type::Fn 链（6.5.2）
+                let signature = type_annotation
+                    .as_ref()
+                    .map(crate::ast::Type::fn_params_flat)
+                    .unwrap_or_default();
+
+                // 提取泛型参数名。探针传 L3 语义实现：约束名 / 内置名定种必须以
+                // 类型环境的权威表为准，否则 `(T: Add)` 不登记为泛型参数、
+                // 单态化请求的类型实参与 IR 的 generic_params 对不上（E3018）。
+                // 扫描面 = 整棵声明注解（形参标注 ∪ 返回位）。构造器面里 const 名的
+                // 另一处引用面是**定义体**——那是单态化请求侧只携带类型实参的既有面
+                // （请求 arity 与本表逐字对齐），不属本函数的扫描面。
+                let type_positions: Vec<&ast::Type> = type_annotation.iter().collect();
+                let generic_params =
+                    extract_generic_param_names(&signature, &type_positions, &self.type_level);
+                let generic_param_names = if generic_params.is_empty() {
+                    None
+                } else {
+                    Some(generic_params.iter().map(|p| p.name.clone()).collect())
+                };
+
+                // 签名：(T: Type) -> Type → params = [MetaType], return_type = MetaType
+                let params: Vec<MonoType> = signature
+                    .iter()
+                    .map(|p| {
+                        p.ty.as_ref()
+                            .map(|t| t.clone().into())
+                            .unwrap_or(MonoType::MetaType {
+                                universe_level: UniverseLevel::type1(),
+                                type_params: Vec::new(),
+                            })
+                    })
+                    .collect();
+                let return_type = MonoType::MetaType {
+                    universe_level: UniverseLevel::type1(),
+                    type_params: Vec::new(),
+                };
+
+                // 记录 struct_definitions（字段索引解析仍需要）
+                // 同时处理类型绑定和匿名函数 IR 生成
+                match definition {
+                    ast::Type::NamedStruct {
+                        name: struct_name,
+                        fields,
+                        ..
+                    } => {
+                        self.struct_definitions
+                            .insert(struct_name.clone(), fields.clone());
+                    }
+                    ast::Type::Struct { body } => {
+                        let fields: Vec<ast::StructField> = body
+                            .iter()
+                            .filter_map(|it| {
+                                if let ast::TypeBodyItem::Field(f) = it {
+                                    Some(f.clone())
+                                } else {
+                                    None
+                                }
+                            })
+                            .collect();
+                        let bindings: Vec<ast::TypeBodyBinding> = body
+                            .iter()
+                            .filter_map(|it| {
+                                if let ast::TypeBodyItem::Binding(b) = it {
+                                    Some(b.clone())
+                                } else {
+                                    None
+                                }
+                            })
+                            .collect();
+                        self.struct_definitions.insert(name.clone(), fields);
+                        // 记录绑定信息（用于方法调用时的参数重排，RFC-004）
+                        self.register_type_bindings(name, &bindings);
+                        // RFC-004: 为匿名函数绑定生成独立的 FunctionIR
+                        for binding in &bindings {
+                            if let ast::BindingKind::Anonymous {
+                                params: anon_params,
+                                return_type: anon_ret,
+                                positions: _,
+                                body,
+                            } = &binding.kind
+                            {
+                                let anon_func_name = format!("{}.__anon_{}", name, binding.name);
+                                match self.generate_anon_binding_ir(
+                                    &anon_func_name,
+                                    anon_params,
+                                    anon_ret,
+                                    body,
+                                    constants,
+                                ) {
+                                    Ok(Some(func_ir)) => {
+                                        self.anon_function_irs.push(func_ir);
+                                    }
+                                    Ok(None) => {}
+                                    Err(e) => return Err(e),
+                                }
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+
+                Ok(Some(FunctionIR {
+                    def: None, // 由 generate_module_ir 尾部 assign_defs 填充
+                    name: name.clone(),
+                    params,
+                    return_type,
+                    generic_params: generic_param_names,
+                    // 类型声明的 IR 原生收窄载体（WBS 6.6.12）：只带字段表与类型表项。
+                    // 形参名 / 默认值表达式 / const 界 / 匿名绑定 / span 都不进 IR，
+                    // 故 6.5 时代「入 IR 前剥形参名」的 `without_fn_param_names` 随之删除。
+                    body: FunctionBody::TypeDecl {
+                        body: TypeDeclBody {
+                            fields: definition
+                                .struct_fields()
+                                .into_iter()
+                                .map(|f| TypeDeclField {
+                                    name: f.name.clone(),
+                                    ty: f.ty.clone().into(),
+                                    is_mut: f.is_mut,
+                                    has_default: f.default.is_some(),
+                                    is_method: Self::field_is_method(&f.ty),
+                                })
+                                .collect(),
+                            self_type: Self::type_decl_self_type(definition),
+                        },
+                    },
+                }))
+            }
+            ast::StmtKind::Assign {
+                target,
+                type_annotation,
+                value,
+                ..
+            } => {
+                use crate::ast::Expr;
+                // 签名形参的唯一来源：注解的 Type::Fn 链（6.5.2）
+                let signature = type_annotation
+                    .as_ref()
+                    .map(crate::ast::Type::fn_params_flat)
+                    .unwrap_or_default();
+                let (name, type_name) = match target.as_ref() {
+                    Expr::Var(n, _) => (n.clone(), None),
+                    Expr::FieldAccess { expr, field, .. } => {
+                        if let Expr::Var(tn, _) = expr.as_ref() {
+                            (field.clone(), Some(tn.clone()))
+                        } else {
+                            (field.clone(), None)
+                        }
+                    }
+                    _ => return Ok(None),
+                };
+                // RFC-010a 附录D：`name = { ... }` 无注解时按内容推断（块值是尾表达式）；
+                // 非 Fn 注解→块值。后者不得当函数体处理，否则变量拿不到值。
+                let is_fn_binding = ast::Expr::block_binding_is_function(
+                    type_annotation.as_ref(),
+                    value.as_deref(),
+                );
+                let (params, body): (Vec<_>, Vec<_>) = if is_fn_binding {
+                    match value {
+                        Some(v) => v.callable_parts(),
+                        None => (Vec::new(), Vec::new()),
+                    }
+                } else {
+                    (Vec::new(), Vec::new())
+                };
+                // 扫描面 = 整棵声明注解（形参标注 ∪ 返回位，SPEC §7.1「全部 Type 子树」）：
+                // 只在返回位被引用的编译期值参数同样要进 generic_params（#528 §4-4）。
+                let type_positions: Vec<&ast::Type> = type_annotation.iter().collect();
+                let generic_params = crate::ast::extract_generic_param_names(
+                    &signature,
+                    &type_positions,
+                    &self.type_level,
+                );
+                // 登记形参名，供命名参数调用（`add(b = 5, a = 3)`）重排实参。
+                //
+                // 名字取**声明形态**（WBS 6.8.2a / D54 ③）：函数收几个值、每一位叫什么
+                // 由标注决定，实现头的名字只是体内的局部名。旧口径取 Lambda 头
+                //（`params`）的名字表，于是实现头一改名，**调用侧跟着改名**：实测
+                // `f: (a: Int) -> Int = (b) => b` 的 `f(a = 7)` 报 E1014
+                //（available: b），而声明里明明写着 a。声明名 = 签名里不占编译期位的
+                // 形参——剔除口径与解析/检查层同源（extract_generic_param_names 判类型位、
+                // const 位、约束位）。
+                //
+                // 与 typecheck 的按位对齐**同一条口径**：运行期值位排在声明序末尾
+                //（类型泛型位在首、柯里值层是最内层组），故取末尾 N 位（N = 本函数的
+                // 运行期形参数）——与 `check_fn_stmt` 的 `aligned_value_params` 同源。
+                // 两处必须用同一条切分规则，否则「调用侧可用名」与「体内形参类型」
+                // 会按两套规则切同一个签名（D54 要消灭的正是这种按形态分叉）。
+                if is_fn_binding && !params.is_empty() {
+                    // 调用侧可用名与形参**类型**同一来源（同一个 helper、同一个顺序）：
+                    // 旧口径类型取前 N、名字取末尾 N，在多层柯里声明上会错位
+                    // （实测 `f(a = 1, b = "s")` 报 E1014 available: b，而第 0 槽是 a 的槽）。
+                    let names: Vec<String> = self
+                        .declaration_runtime_param_slots(type_annotation.as_ref(), params.len())
+                        .into_iter()
+                        .map(|p| p.name)
+                        .collect();
+                    self.fn_param_names.insert(name.clone(), names);
+                }
+                if let Some(type_name) = type_name {
+                    // RFC-004 外部重绑定：`Type.method = fn` / `Type.method = fn[pos]`
+                    // 只登记 type_bindings（方法调用时参数重排），不生成新函数 IR。
+                    let rebind = match value.as_deref() {
+                        Some(Expr::Var(fn_name, _)) => Some((fn_name.clone(), vec![0i64])),
+                        Some(Expr::Index { expr, index, .. }) => match expr.as_ref() {
+                            Expr::Var(fn_name, _) => {
+                                Some((fn_name.clone(), ast::Expr::extract_binding_positions(index)))
+                            }
+                            _ => None,
+                        },
+                        _ => None,
+                    };
+                    if let Some((function, positions)) = rebind {
+                        self.register_type_bindings(
+                            &type_name,
+                            &[ast::TypeBodyBinding {
+                                name: name.clone(),
+                                kind: ast::BindingKind::External {
+                                    function,
+                                    positions,
+                                },
+                            }],
+                        );
+                        return Ok(None);
+                    }
+                    // MethodBind：签名标注是绑定语义的唯一来源（接收者位、形参名、
+                    // 返回类型都取自它）。无标注时**不得**对 None 执行 unwrap——
+                    // 那会把用户写法错误变成编译器进程 panic（#451，D59 A 类：
+                    // 实测 `exit=101`）；此处编译期拒绝并指明补全写法。
+                    let Some(method_type) = type_annotation.as_ref() else {
+                        // help 不在此硬编（issue #469 处 1）：E1110 的参数化模板
+                        // 已在 locales 六语言就位（{type}/{method} 由码表 param 供值）
+                        return Err(ErrorCodeDefinition::method_binding_without_signature(
+                            &type_name, &name,
+                        )
+                        .at(stmt.span)
+                        .build());
+                    };
+                    self.generate_method_ir(
+                        &type_name,
+                        &name,
+                        method_type,
+                        &params,
+                        &body,
+                        constants,
+                    )
+                } else if !params.is_empty() || !body.is_empty() || is_fn_binding {
+                    // Fn: 普通函数（含**空块体**的注解形态 `f: () -> Void = { }`——
+                    // 注解为 Fn 即函数；不能因 `body.is_empty()` 就落到
+                    // 值绑定分支，否则 `f()` 解析不到函数。
+                    //
+                    // 注：无注解的空块 `f = { }` 到不了这里——它在 parser 层就被
+                    // 认作**空 Dict 字面量**（`{}` 二义，见 #359），属值绑定。
+                    let generic_param_names = if generic_params.is_empty() {
+                        None
+                    } else {
+                        Some(generic_params.iter().map(|p| p.name.clone()).collect())
+                    };
+                    // curry 分流：如果 return_type 是 Type::Fn，走 curry 生成路径
+                    // 注意：必须传签名全层形参（signature），而非 params（仅 Lambda 参数）
+                    if let Some(ast::Type::Fn { return_type, .. }) = type_annotation.as_ref() {
+                        if matches!(return_type.as_ref(), ast::Type::Fn { .. }) {
+                            self.generate_curry_function_ir(
+                                &name,
+                                type_annotation.as_ref().unwrap(),
+                                &signature,
+                                &body,
+                                constants,
+                                generic_param_names,
+                            )
+                        } else {
+                            self.generate_function_ir(
+                                &name,
+                                type_annotation.as_ref(),
+                                &params,
+                                &body,
+                                constants,
+                                generic_param_names,
+                            )
+                        }
+                    } else {
+                        self.generate_function_ir(
+                            &name,
+                            type_annotation.as_ref(),
+                            &params,
+                            &body,
+                            constants,
+                            generic_param_names,
+                        )
+                    }
+                } else if Self::is_type_def_binding(value.as_deref()) {
+                    // RFC-010：`Db = unsafe { Db: Type = {...}; Db }` 是**类型定义绑定**，
+                    // 不是运行时全局变量。类型已在 typecheck 阶段注册（并提升到本作用域），
+                    // 此处不生成运行时代码。
+                    // 此前（T2 前）落入 `generate_global_var_ir`，因 `unsafe` 无法常量折叠而报
+                    // E3007（当时要求顶层初始化必须是编译期常量；T2 后该门槛已取消）。
+                    Ok(None)
+                } else {
+                    // spec §4.3：首次出现是**声明**（槽位 + 初始化），
+                    // 后续同名是**重赋值**（StoreGlobal，进模块语句段）。
+                    //
+                    // 此前无差别当声明，导致 `mut i = 0; i = i + 1` 被当成
+                    // 两份初始化 → 自引用 → 误报 E3019。
+                    let key = match &self.module_key {
+                        Some(k) => SymbolTable::qualify(k, &name),
+                        None => name.clone(),
+                    };
+                    if self.declared_globals.contains(&key) {
+                        // 重赋值：求值后写回已有槽位，进程序主体（顶层语句段）
+                        if let Some(slot) = self.lookup_global(&name) {
+                            let mut instrs = Vec::new();
+                            if let Some(v) = value.as_ref() {
+                                let reg = self.next_temp_reg();
+                                self.generate_expr_ir(v, reg, &mut instrs, constants)?;
+                                instrs.push(Instruction::Store {
+                                    dst: Operand::Global(slot),
+                                    src: Operand::Local(reg),
+                                    span: Self::get_expr_span(v),
+                                });
+                            }
+                            self.module_stmts.extend(instrs);
+                        }
+                        Ok(None)
+                    } else {
+                        self.declared_globals.insert(key);
+                        // 全局变量（T2：槽位 + 初始化指令）
+                        self.generate_global_var_ir(
+                            &name,
+                            type_annotation.as_ref(),
+                            value.as_ref().map(|v| v.as_ref()),
+                            constants,
+                        )
+                    }
+                }
+            }
+            // 导入语句：解析在独立 pass 完成（build_import_aliases），不生成运行时代码
+            ast::StmtKind::Use { .. } => Ok(None),
+            // T4：Script 模式（无 yaoxiang.toml）下顶层就是程序主体——
+            // 任意可执行语句按书写顺序编进模块初始化序列。
+            //
+            // Bin 模式（有 manifest）仍拒绝：那里程序入口是 `main`，
+            // 顶层散语句会让「先建什么后建什么」含糊。
+            // 注：初始化序列本身也是代码——所以顶层可执行语句不报错，
+            // 而是像 Python 一样按序执行。这是「默认情况零门槛」的代价与红利。
+            _ if self.script_mode => {
+                // T4：顶层可执行语句（Script 模式）——先收进 module_stmts，
+                // 待所有绑定初始化（拓扑序）就绪后再拼到后面。
+                //
+                // 跳转重定位：语句在空 Vec 上生成，内部回跳（如 while）
+                // 的 target 从 0 起算；拼进 module_stmts 后必须加基线偏移。
+                let base = self.module_stmts.len();
+                let mut instrs = Vec::new();
+                self.generate_local_stmt_ir(stmt, &mut instrs, constants)?;
+                Self::rebase_jump_targets(&mut instrs, base);
+                self.module_stmts.extend(instrs);
+                Ok(None)
+            }
+            _ => {
+                // 多文件/有 manifest：顶层只允许定义（绑定/类型/导入）；
+                // 可执行语句必须在 main 体内（规范 §3.11）。
+                //
+                // 这是**用户写法错误**，不是编译器缺陷——此前挨 E3005「IR 内部
+                // 错误，请报告此问题」并把 `Discriminant(N)` 泄给用户，既指错方向
+                // 又误导提单（同族：#360 索引赋值、#311 break）。
+                Err(ErrorCodeDefinition::bin_top_level_statement()
+                    .at(stmt.span)
+                    .build())
+            }
+        }
+    }
+
+    /// 生成方法 IR
+    #[allow(clippy::too_many_arguments)]
+    fn generate_method_ir(
+        &mut self,
+        type_name: &str,
+        method_name: &str,
+        method_type: &ast::Type,
+        params: &[ast::Param],
+        body: &[ast::Stmt],
+        constants: &mut Vec<ConstValue>,
+    ) -> Result<Option<FunctionIR>, Diagnostic> {
+        // 命名空间机制：方法函数名 = Type.method
+        // 例如：Point.get_x 生成函数名 "Point.get_x"
+        // 调用时：p.get_x() -> Point.get_x(p)
+        let base_name = format!("{}.{}", type_name, method_name);
+        // RFC-011a §3：同名重载的定义序混编（首定义裸名，后续 #序）——
+        // 与 typecheck 注册序（AST 序）对齐，调用点决议按名派发
+        let ordinal = self
+            .method_def_ordinals
+            .entry(base_name.clone())
+            .or_insert(0);
+        let counted = *ordinal;
+        *ordinal += 1;
+        let func_name = if counted == 0 {
+            base_name
+        } else {
+            format!("{base_name}#{counted}")
+        };
+
+        // #466：重载候选的形参名按**混编名**精确登记——叶子名键（Assign 臂
+        // 的登记）在同名重载下末次覆盖，决议命中 `Temp.pick` 的调用会按末候选
+        // `Temp.pick#1` 的形参名绑定（E1014 available: 错候选）。混编名与候选
+        // 一一对应，调用点按决议出的名字查（`lookup_param_info` 先全名后叶名）。
+        // 名字口径与普通函数绑定**同一规则**（D54 ③：调用侧可用名取声明，实现头的
+        // 名字只是体内局部名）。方法声明的首位是接收者位，suffix-N 仍按位置对齐。
+        if !params.is_empty() {
+            // 与普通函数绑定同一来源（同一个 helper）：方法声明的首位是接收者位，
+            // 位置口径一致 ⇒ 调用侧可用名与槽位不会错位。
+            let names: Vec<String> = self
+                .declaration_runtime_param_slots(Some(method_type), params.len())
+                .into_iter()
+                .map(|p| p.name)
+                .collect();
+            self.fn_param_names.insert(func_name.clone(), names);
+        }
+
+        // 注册方法到 type_bindings，使方法调用脱糖能找到绑定
+        let binding_entry = ast::TypeBodyBinding {
+            name: method_name.to_string(),
+            kind: ast::BindingKind::DefaultExternal {
+                function: func_name.clone(),
+            },
+        };
+        self.register_type_bindings(type_name, &[binding_entry]);
+
+        // 解析返回类型
+        let return_type = if let ast::Type::Fn { return_type, .. } = method_type {
+            (**return_type).clone().into()
+        } else {
+            // 非函数类型，报错
+            return Err(ErrorCodeDefinition::ir_internal_error(&format!(
+                "Method {} is not a function type",
+                method_name
+            ))
+            .build());
+        };
+
+        // 进入新作用域
+        self.enter_scope();
+
+        // 注册参数；类型按**方法自己的声明签名**渲染（与普通函数同一 helper：
+        // 作者标注优先、缺标注取声明同类位；IR 只渲染不判定——parser 已不再
+        // 往实现头填声明类型）。
+        let declared = self.declaration_runtime_param_slots(Some(method_type), params.len());
+        let param_types = self.impl_param_types(params, Some(method_type));
+        // 槽位取**调用点实参序列**里的下标：绑定第 i 位 ≠ 运行期第 i 位
+        //（见 `impl_head_runtime_indices`）。
+        let runtime_indices = self.impl_head_runtime_indices(Some(method_type));
+        for (i, param) in params.iter().enumerate() {
+            // 注册参数到符号表
+            self.register_local(&param.name, runtime_indices.get(i).copied().unwrap_or(i));
+        }
+        self.note_param_written_types(params, &declared);
+        // 量词事实（q=0 槽位）随声明一起落到形参槽位，供擦除前识别。
+        self.note_param_quantities(params, &declared);
+
+        // 记录局部变量起始位置（在参数之后）
+        // 帧宽只看**实际用到的**槽位：`take(params.len())` 保证「声明比实现头多」的形态
+        // 不会凭空加宽（`locals_total` 因此与改动前一致）。
+        let used_max = runtime_indices
+            .iter()
+            .take(params.len())
+            .max()
+            .map_or(0, |m| m + 1);
+        let local_var_start = params.len().max(used_max);
+        self.next_temp = local_var_start;
+        // #393：本函数是独立寄存器空间——高水位与循环态地板随之清零
+        self.temp_high_water = local_var_start;
+        self.temp_floor = 0;
+
+        // #311：嵌套函数体是独立指令流，循环栈属父函数——保存并清空
+        //（typecheck 已用 E1102 拦截函数体内的 break/continue，此处为层间失联防御）
+        let saved_loop_stack = std::mem::take(&mut self.loop_stack);
+
+        // 顶层函数体入口：接手槽位表，避免沿用上一个函数的局部名。
+        //
+        // 与 generate_function_ir 同款 take/restore：方法体可以嵌在模块级
+        // 生成流程里（顶层类型定义），直接 clear 会把已积累的模块级槽位表
+        // 抹掉——顶层 `for` 的循环变量名会因此丢失（#368）。
+        let saved_cur_locals = std::mem::take(&mut self.cur_locals);
+
+        // 生成指令序列
+        let mut instructions = Vec::new();
+
+        // RFC-010a 规则①：尾表达式给出函数值。沿用共用的 `generate_tail_stmt_ir`
+        // （与 generate_function_ir / generate_block_ir 同一实现），
+        // 否则 `Point.getX: (&Point) -> Float = { self.x }` 返回 Void；
+        // 取值不以注解为条件——注解只决定检查，不决定求值（#343 根因一）。
+        let last_idx = body.len().checked_sub(1);
+        let mut tail_handled = false;
+        for (i, stmt) in body.iter().enumerate() {
+            // 语句边界设定当前 span，供本条语句的所有指令构造就地捕获
+            self.set_cur_span(stmt.span);
+            if Some(i) == last_idx {
+                let result_reg = self.next_temp_reg();
+                if self.generate_tail_stmt_ir(stmt, result_reg, &mut instructions, constants)? {
+                    // 尾语句路径（RFC-039 D20 逐案核实项）：本条语句经
+                    // `generate_tail_stmt_ir` 提前返回，**必须**在同款语句边界上
+                    // 消费它的释放条目——漏这一处，尾语句的 Drop 就静默丢失
+                    //（实测红态里正是这一类：尾位置语句的计划键永不命中）。
+                    // 取值已完成（值在 result_reg），故 Drop 排在 Ret 之前。
+                    self.emit_release_drops(stmt.plan_id, &mut instructions);
+                    instructions.push(Instruction::Ret {
+                        value: Some(Operand::Local(result_reg)),
+                        span: self.cur_span,
+                    });
+                    self.set_cur_span(stmt.span);
+                    tail_handled = true;
+                    break;
+                }
+            }
+            self.generate_local_stmt_ir(stmt, &mut instructions, constants)?;
+            // NLL Release: 语句边界消费释放计划（RFC-039 D20）
+            self.emit_release_drops(stmt.plan_id, &mut instructions);
+            self.set_cur_span(stmt.span);
+        }
+        if !tail_handled {
+            instructions.push(Instruction::Ret {
+                value: None,
+                span: self.cur_span,
+            });
+        }
+
+        // 退出作用域
+        self.exit_scope();
+
+        // WBS 2.1.2 实测缺陷修复：此前传 param_types.len()，locals 表被截断到
+        // 参数数，方法体的临时槽（高水位之内）全部丢失——local_count 低估，
+        // 运行时靠 Frame::set_slot 越界 resize（frames.rs:103-105）静默容错。
+        // 与 generate_function_ir / generate_lambda_body_ir 对齐：以高水位为准。
+        // 行为等价论证：Frame 预分配槽位初值同为 Void，set_slot 容错路径不再
+        // 触发但结果相同；调试信息 local_names 只取具名槽，不受空槽扩展影响。
+        let locals_types: Vec<LocalSlot> = self.take_cur_locals(self.temp_high_water);
+
+        // 构建函数 IR
+        let func_ir = FunctionIR {
+            def: None, // 由 generate_module_ir 尾部 assign_defs 填充
+            name: func_name.clone(),
+            params: param_types.clone(),
+            return_type,
+            generic_params: None,
+            body: FunctionBody::Code {
+                blocks: vec![BasicBlock {
+                    label: 0,
+                    instructions,
+                    successors: Vec::new(),
+                }],
+                entry: 0,
+                locals: locals_types,
+            },
+        };
+
+        // #311：恢复父函数的循环上下文
+        self.loop_stack = saved_loop_stack;
+        // 恢复父函数的槽位表：本方法体可能嵌在模块级生成流程里，
+        // take 走后必须放回，否则模块级已登记的具名槽位会丢（#368）。
+        self.cur_locals = saved_cur_locals;
+
+        Ok(Some(func_ir))
+    }
+
+    /// 生成函数 IR
+    #[allow(clippy::too_many_arguments)]
+    #[allow(clippy::only_used_in_recursion)]
+    pub(crate) fn generate_function_ir(
+        &mut self,
+        name: &str,
+        type_annotation: Option<&ast::Type>,
+        params: &[ast::Param],
+        body: &[ast::Stmt],
+        constants: &mut Vec<ConstValue>,
+        generic_params: Option<Vec<String>>,
+    ) -> Result<Option<FunctionIR>, Diagnostic> {
+        // 括号返回 / 闭包包装形态：把声明**返回位**内层 Fn 的形参递给闭包 IR 定型
+        //（parser 不再填 AST 标注；入口 save、出口还原，互不串味）。
+        let closure_decl_params = self.paren_return_value_params(type_annotation);
+        let saved_closure_decl =
+            std::mem::replace(&mut self.closure_decl_params, closure_decl_params);
+
+        // 检测 native("symbol") 模式：函数体为空语句 + Native("...") 表达式
+        // 检测 native("symbol") 模式：函数体为空语句 + Native("...") 表达式
+        // 形如: my_add: (a: Int, b: Int) -> Int = Native("my_add")
+        //
+        // 通过 name resolution 检测，不再硬编码 Var("Native") 字符串匹配。
+        // Native 是 std.ffi 模块中真实存在的函数，名称通过 ModuleRegistry 解析。
+        if body.is_empty() {
+            // 空函数体，无法检测 native 模式
+        }
+
+        // 阶段3修复：改进返回类型解析，更好地与类型检查集成
+        let return_type = match type_annotation {
+            Some(ast::Type::Fn { return_type, .. }) => (**return_type).clone().into(),
+            Some(ty) => ty.clone().into(),
+            None => MonoType::Void,
+        };
+
+        // #311：嵌套函数体是独立指令流，循环栈属父函数——保存并清空
+        //（typecheck 已用 E1102 拦截函数体内的 break/continue，此处为层间失联防御）
+        let saved_loop_stack = std::mem::take(&mut self.loop_stack);
+
+        // 顶层函数体入口：接手槽位表，避免沿用上一个函数的局部名。
+        //
+        // 这里用 take 而非 save/restore——与 next_temp 不同，next_temp 由
+        // 本函数重置为参数个数（见下），而槽位表没有等价的“重置”动作，
+        // 因此只能先把当前表接走再在出口放回。
+        // 嵌套路径（curry/lambda/anon）则与 next_temp 成对 save/restore。
+        let saved_cur_locals = std::mem::take(&mut self.cur_locals);
+
+        // 生成函数体指令
+        let mut instructions = Vec::new();
+
+        // 进入函数体作用域
+        self.enter_scope();
+
+        // 为每个参数生成 LoadArg 指令并注册。槽位取**调用点实参序列**里的下标：
+        // 绑定第 i 位 ≠ 运行期第 i 位（见 `impl_head_runtime_indices`）——
+        // `f: (N: Int, M: N) -> Int = (m) => m` 的 `m` 是绑定第 0 位、运行期第 1 位。
+        let runtime_indices = self.impl_head_runtime_indices(type_annotation);
+        for (i, param) in params.iter().enumerate() {
+            let slot = runtime_indices.get(i).copied().unwrap_or(i);
+            instructions.push(Instruction::Load {
+                dst: Operand::Local(slot),
+                src: Operand::Arg(slot),
+                span: self.cur_span,
+            });
+
+            self.register_local(&param.name, slot);
+        }
+        // 写出类型名与形参类型同一来源（作者标注 → 声明同类位）。
+        let declared = self.declaration_runtime_param_slots(type_annotation, params.len());
+        self.note_param_written_types(params, &declared);
+        // 量词事实（q=0 槽位）随声明一起落到形参槽位，供擦除前识别。
+        self.note_param_quantities(params, &declared);
+
+        // 记录局部变量起始位置（在参数之后）
+        // 帧宽只看**实际用到的**槽位：`take(params.len())` 保证「声明比实现头多」的形态
+        // 不会凭空加宽（`locals_total` 因此与改动前一致）。
+        let used_max = runtime_indices
+            .iter()
+            .take(params.len())
+            .max()
+            .map_or(0, |m| m + 1);
+        let local_var_start = params.len().max(used_max);
+        self.next_temp = local_var_start;
+        // #393：本函数是独立寄存器空间——高水位与循环态地板随之清零
+        self.temp_high_water = local_var_start;
+        self.temp_floor = 0;
+
+        // 检查函数体是否为 FFI ExternRef 绑定
+        if let Some(ConstValue::ExternRef {
+            mechanism,
+            lib,
+            symbol,
+        }) = self.try_eval_body_as_extern_ref(body)
+        {
+            let lib_id = self.get_or_create_lib_id(&mechanism, &lib);
+            self.ffi_bindings
+                .push(crate::middle::ir::ir::FfiBinding::FuncBinding {
+                    func_name: name.to_string(),
+                    lib_id,
+                    symbol: symbol.clone(),
+                });
+            return Ok(None);
+        }
+
+        // 生成语句 IR
+        // RFC-010a 规则①：函数体的值 = 尾表达式。尾位置判断复用
+        // `generate_tail_stmt_ir`（与 `generate_block_ir` 同一实现），
+        // 否则 `{ if c {5} else {6} }` 这类尾位置 `if` 的值会被丢弃（#344）。
+        //
+        // 取值**不以注解为条件**：注解只决定要不要*检查*（typecheck 侧负责），
+        // 不决定要不要*求值*。此前用 `return_type != Void` 挡在取值前，
+        // 导致无注解的 `f = { 5 }` / `f = () => { 5 }` 尾表达式被静默丢弃、
+        // 返回 Void（#343 根因一）。
+        let last_idx = body.len().checked_sub(1);
+        let mut tail_handled = false;
+        for (i, stmt) in body.iter().enumerate() {
+            // 语句边界设定当前 span，供本条语句的所有指令构造就地捕获
+            self.set_cur_span(stmt.span);
+            if Some(i) == last_idx {
+                let result_reg = self.next_temp_reg();
+                if self.generate_tail_stmt_ir(stmt, result_reg, &mut instructions, constants)? {
+                    // 尾语句路径（RFC-039 D20 逐案核实项）：本条语句经
+                    // `generate_tail_stmt_ir` 提前返回，**必须**在同款语句边界上
+                    // 消费它的释放条目——漏这一处，尾语句的 Drop 就静默丢失
+                    //（实测红态里正是这一类：尾位置语句的计划键永不命中）。
+                    // 取值已完成（值在 result_reg），故 Drop 排在 Ret 之前。
+                    self.emit_release_drops(stmt.plan_id, &mut instructions);
+                    instructions.push(Instruction::Ret {
+                        value: Some(Operand::Local(result_reg)),
+                        span: self.cur_span,
+                    });
+                    self.set_cur_span(stmt.span);
+                    tail_handled = true;
+                    break;
+                }
+            }
+            tlog!(
+                debug,
+                MSG::IrGenBeforeProcessStmt,
+                &self.symbols.len().to_string()
+            );
+            self.generate_local_stmt_ir(stmt, &mut instructions, constants)?;
+            // NLL Release: 在语句边界消费释放计划并插入 Drop 指令
+            self.emit_release_drops(stmt.plan_id, &mut instructions);
+            // #393：语句级临时寄存器回收（同 generate_block_ir——临时不跨
+            // 语句存活，回滚到具名水位与循环态地板的较大者）
+            let named_watermark = self
+                .cur_locals
+                .iter()
+                .rposition(|slot| slot.name.is_some())
+                .map_or(0, |i| i + 1);
+            self.next_temp = named_watermark.max(self.temp_floor);
+            tlog!(
+                debug,
+                MSG::IrGenAfterProcessStmt,
+                &self.symbols.len().to_string()
+            );
+            self.set_cur_span(stmt.span);
+        }
+        if !tail_handled {
+            instructions.push(Instruction::Ret {
+                value: None,
+                span: self.cur_span,
+            });
+        }
+
+        // 退出函数体作用域
+        tlog!(
+            debug,
+            MSG::IrGenAboutToExitScope,
+            &self.symbols.len().to_string()
+        );
+        self.exit_scope();
+        tlog!(
+            debug,
+            MSG::IrGenAfterExitScope,
+            &self.symbols.len().to_string()
+        );
+
+        // E3014 寄存器溢出：寄存器索引是 u8（上限 255），故局部+临时寄存器
+        // 总数必须 ≤ 255。此前这里写 MAX_LOCALS = 65_535（与 u8 不符），
+        // 几百个局部变量会落进 OperandResolver 的溢出分支——该分支构造
+        // E3014（requires_span 码）时无 span 可挂，debug 构建直接 panic。
+        // 现在在 IR 层就拦住并带上函数 span（#271 静默/崩溃同类：宁可报错不崩）。
+        let total_locals = self.temp_high_water;
+        const MAX_REGISTERS: usize = 255;
+        if total_locals > MAX_REGISTERS {
+            return Err(ErrorCodeDefinition::register_overflow(
+                &total_locals.to_string(),
+                &MAX_REGISTERS.to_string(),
+            )
+            .build());
+        }
+        let locals_types: Vec<LocalSlot> = self.take_cur_locals(total_locals);
+
+        // 还原闭包定型上下文（避免串到下一个函数）
+        self.closure_decl_params = saved_closure_decl;
+
+        // 构建函数 IR
+        let func_ir = FunctionIR {
+            def: None, // 由 generate_module_ir 尾部 assign_defs 填充
+            name: name.to_string(),
+            // 形参类型：作者标注优先，缺标注按**函数自己的声明签名**同类位渲染
+            // （parser 不再往实现头填声明类型，声明是 IR 唯一的类型来源；D54 F1 /
+            // WBS 6.8.3）。拿不到声明类型时按 WBS 2.1.2 的惯例填 Int(64) 占位——
+            // filter_map 丢弃会让 params 长度与帧布局错位（verify 实测）。
+            params: self.impl_param_types(params, type_annotation),
+            return_type,
+            generic_params,
+            body: FunctionBody::Code {
+                blocks: vec![BasicBlock {
+                    label: 0,
+                    instructions,
+                    successors: Vec::new(),
+                }],
+                entry: 0,
+                locals: locals_types,
+            },
+        };
+
+        // #311：恢复父函数的循环上下文
+        self.loop_stack = saved_loop_stack;
+        // 恢复父函数的槽位表：本函数可能是在父函数体内生成的嵌套函数，
+        // 清空/取用后必须把父函数的名字放回去，否则父函数已记录的局部名会丢失。
+        self.cur_locals = saved_cur_locals;
+
+        Ok(Some(func_ir))
+    }
+
+    /// 生成 curry 中间层的 FunctionIR
+    ///
+    /// 中间层职责：LoadArg 本层参数 → MakeClosure 包装下一层 → Ret(闭包)
+    #[allow(clippy::too_many_arguments)]
+    fn generate_curry_intermediate_func(
+        &mut self,
+        func_name: &str,
+        layer: &CurryLayer,
+        env_params: &[ast::Param],
+        next_func_name: &str,
+        constants: &mut Vec<ConstValue>,
+        generic_params: Option<Vec<String>>,
+    ) -> Result<FunctionIR, Diagnostic> {
+        let _ = constants; // 中间层不生成常量
+        let mut instructions = Vec::new();
+
+        // 无需 LoadArg 搬动：args 槽布局 = [外层 env(0..env_count), 本层参数(env_count..)]
+        // 正是下一层闭包 env 需要的顺序。搬动会因 dst/src 槽重叠互相覆盖（#294）。
+        let param_count = layer.params.len();
+        let env_count = env_params.len();
+        // P0（6.9.2-C2a）：包装层与最内层**同一份**具名绑定事实——此前这里既不
+        // register_local 也不写量词，擦除侧只能靠 generic_params + params.len() 反推
+        // 哪一槽是 q=0（D3 第 1 条）。事实来自声明侧 `Param::quantity`，无第二套推导。
+        self.register_curry_layer_bindings(env_params, &layer.params, env_count);
+        let full_env: Vec<Operand> = (0..env_count + param_count).map(Operand::Local).collect();
+        self.next_temp = env_count + param_count;
+        self.temp_high_water = env_count + param_count;
+        let closure_dst = self.next_temp_reg();
+        instructions.push(Instruction::MakeClosure {
+            dst: Operand::Local(closure_dst),
+            func: next_func_name.to_string(),
+            env: full_env,
+            def: None,
+            span: self.cur_span,
+        });
+
+        // Ret(closure)
+        instructions.push(Instruction::Ret {
+            value: Some(Operand::Local(closure_dst)),
+            span: self.cur_span,
+        });
+
+        // 5. 构建 FunctionIR
+        // WBS 2.1.2：同上——无注解参数占位而非丢弃
+        let param_types: Vec<MonoType> = layer
+            .params
+            .iter()
+            .map(|p| {
+                p.ty.clone()
+                    .map(MonoType::from)
+                    .unwrap_or(MonoType::Int(64))
+            })
+            .collect();
+        let return_type: MonoType = layer.return_type.clone().into();
+        let total_locals = self.temp_high_water;
+        let locals_types: Vec<LocalSlot> = self.take_cur_locals(total_locals);
+
+        Ok(FunctionIR {
+            def: None, // 由 generate_module_ir 尾部 assign_defs 填充
+            name: func_name.to_string(),
+            params: param_types,
+            return_type,
+            generic_params,
+            body: FunctionBody::Code {
+                blocks: vec![BasicBlock {
+                    label: 0,
+                    instructions,
+                    successors: Vec::new(),
+                }],
+                entry: 0,
+                locals: locals_types,
+            },
+        })
+    }
+
+    /// 生成 curry 最内层的 FunctionIR
+    ///
+    /// 最内层职责：LoadUpvalue 读所有外层参数 → LoadArg 本层参数 → 执行原 body → Ret
+    /// env_param_names：所有外层参数名（按累积顺序）
+    #[allow(clippy::too_many_arguments)]
+    fn generate_curry_innermost_func(
+        &mut self,
+        func_name: &str,
+        layer: &CurryLayer,
+        env_params: &[ast::Param],
+        body: &[ast::Stmt],
+        constants: &mut Vec<ConstValue>,
+        generic_params: Option<Vec<String>>,
+    ) -> Result<FunctionIR, Diagnostic> {
+        // #311：嵌套函数体是独立指令流，循环栈属父函数——保存并清空
+        //（typecheck 已用 E1102 拦截函数体内的 break/continue，此处为层间失联防御）
+        let saved_loop_stack = std::mem::take(&mut self.loop_stack);
+
+        // 顶层函数体入口：清空槽位表，避免沿用上一个函数的局部名。
+
+        let mut instructions = Vec::new();
+        let env_count = env_params.len();
+
+        // 参数原位注册，不生成 LoadArg：args 槽布局 = [外层参数(0..env_count),
+        // 本层参数(env_count..)]，正是 body 需要的最终布局。LoadArg 搬动会因
+        // dst/src 槽重叠互相覆盖（#294：先写 slot[i] 再读 slot[i] 已坏）。
+        //
+        // 量词事实随形参一起落到槽位（`LocalSlot::quantity` 的唯一写入点之一）：
+        // 外层零号位（`(N: Int) -> (n: N)` 的 N）在本层正是「q=0 具名绑定」，
+        // 擦除前识别体内对它的引用要靠这条事实。
+        // 与中间层**同一处**（`register_curry_layer_bindings`）写绑定与量词事实：
+        // 两个层的槽布局相同（env 在前、本层参数在后），事实同源（`Param::quantity`）。
+        self.register_curry_layer_bindings(env_params, &layer.params, env_count);
+        // curry 层形参全部来自声明注解本身（层参数由 `split_curry` 从注解切出），
+        // 无需声明补位。
+        self.note_param_written_types(&layer.params, &[]);
+
+        // next_temp 起始 = 参数总数
+        self.next_temp = env_count + layer.params.len();
+        self.temp_high_water = env_count + layer.params.len();
+        self.temp_floor = 0;
+
+        let return_type: MonoType = layer.return_type.clone().into();
+
+        // RFC-010a 规则①：尾表达式给出函数值。沿用共用的 `generate_tail_stmt_ir`，
+        // 否则 `f: (a: Int) -> (b: Int) -> Int = { a + b }` 返回 Void；
+        // 取值不以注解为条件（#343 根因一）。
+        let last_idx = body.len().checked_sub(1);
+        let mut tail_handled = false;
+        for (i, stmt) in body.iter().enumerate() {
+            // 语句边界设定当前 span，供本条语句的所有指令构造就地捕获
+            self.set_cur_span(stmt.span);
+            if Some(i) == last_idx {
+                let result_reg = self.next_temp_reg();
+                if self.generate_tail_stmt_ir(stmt, result_reg, &mut instructions, constants)? {
+                    // 尾语句路径（RFC-039 D20 逐案核实项）：本条语句经
+                    // `generate_tail_stmt_ir` 提前返回，**必须**在同款语句边界上
+                    // 消费它的释放条目——漏这一处，尾语句的 Drop 就静默丢失
+                    //（实测红态里正是这一类：尾位置语句的计划键永不命中）。
+                    // 取值已完成（值在 result_reg），故 Drop 排在 Ret 之前。
+                    self.emit_release_drops(stmt.plan_id, &mut instructions);
+                    instructions.push(Instruction::Ret {
+                        value: Some(Operand::Local(result_reg)),
+                        span: self.cur_span,
+                    });
+                    self.set_cur_span(stmt.span);
+                    tail_handled = true;
+                    break;
+                }
+            }
+            self.generate_local_stmt_ir(stmt, &mut instructions, constants)?;
+            // NLL Release: 语句边界消费释放计划（RFC-039 D20）
+            self.emit_release_drops(stmt.plan_id, &mut instructions);
+            self.set_cur_span(stmt.span);
+        }
+        if !tail_handled {
+            instructions.push(Instruction::Ret {
+                value: None,
+                span: self.cur_span,
+            });
+        }
+
+        // WBS 2.1.2：同上——无注解参数占位而非丢弃
+        let param_types: Vec<MonoType> = layer
+            .params
+            .iter()
+            .map(|p| {
+                p.ty.clone()
+                    .map(MonoType::from)
+                    .unwrap_or(MonoType::Int(64))
+            })
+            .collect();
+        let total_locals = self.temp_high_water;
+        let locals_types: Vec<LocalSlot> = self.take_cur_locals(total_locals);
+
+        // #311：恢复父函数的循环上下文
+        self.loop_stack = saved_loop_stack;
+
+        Ok(FunctionIR {
+            def: None, // 由 generate_module_ir 尾部 assign_defs 填充
+            name: func_name.to_string(),
+            params: param_types,
+            return_type,
+            generic_params,
+            body: FunctionBody::Code {
+                blocks: vec![BasicBlock {
+                    label: 0,
+                    instructions,
+                    successors: Vec::new(),
+                }],
+                entry: 0,
+                locals: locals_types,
+            },
+        })
+    }
+
+    /// 生成 curry 函数的完整 IR 链
+    ///
+    /// 从外（layer 0）往内（layer N-1）遍历 layers，每层生成一个 FunctionIR。
+    /// 最外层用原名 `name`，内层用 `__{name}_l{index}`。
+    ///
+    /// env_param_names 在循环中累积：进入第 k 层时，它包含 layer 0..k-1 的所有参数名。
+    /// 中间层函数从 Arg(0..env_count) 加载外层参数作为 env，从 Arg(env_count..) 加载本层参数。
+    /// 最内层函数同理加载后执行原 body。
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn generate_curry_function_ir(
+        &mut self,
+        name: &str,
+        type_annotation: &ast::Type,
+        all_params: &[ast::Param],
+        body: &[ast::Stmt],
+        constants: &mut Vec<ConstValue>,
+        generic_params: Option<Vec<String>>,
+    ) -> Result<Option<FunctionIR>, Diagnostic> {
+        // 括号返回 / 闭包包装：把声明**返回位**内层 Fn 的形参递给闭包 IR 定型
+        //（parser 不再填 AST 标注；入口 save、出口还原，见 generate_function_ir 同款）。
+        let closure_decl_params = self.paren_return_value_params(Some(type_annotation));
+        let saved_closure_decl =
+            std::mem::replace(&mut self.closure_decl_params, closure_decl_params);
+        // 量词事实（唯一解析源）：层形参与 env 名都来自这份声明事实，故先把
+        // 「声明形参」解析成带 quantity 的同一批 `Param`，再按层切分——切分本身
+        // 仍是 `split_curry`（顺序/长度不变），不新增第二套参数数组。
+        let resolved_all_params = self.with_param_classifier(|cls| {
+            ast::resolve_param_quantities(all_params, &[type_annotation], cls)
+        });
+        let layers = Self::split_curry(type_annotation, &resolved_all_params);
+
+        let mut layer_funcs: Vec<FunctionIR> = Vec::new();
+        // env 追踪携带**完整形参**（名字 + 量词事实），不是名字平行数组。
+        let mut env_params: Vec<ast::Param> = Vec::new();
+
+        // 保存外层状态，避免污染
+        let saved_next_temp = self.next_temp;
+        let saved_temp_high_water = self.temp_high_water;
+        let saved_temp_floor = self.temp_floor;
+        let saved_cur_locals = std::mem::take(&mut self.cur_locals);
+        // cur_span 与 next_temp 同款：嵌套函数体是独立源码单元
+        let saved_cur_span = self.cur_span;
+
+        for (i, layer) in layers.iter().enumerate() {
+            let is_innermost = i == layers.len() - 1;
+            let is_outermost = i == 0;
+            let func_name = if i == 0 {
+                name.to_string()
+            } else {
+                format!("__{}_l{}", name, i - 1)
+            };
+
+            // 只有最外层函数保留 generic_params（用于单态化）
+            let layer_generic_params = if is_outermost {
+                generic_params.clone()
+            } else {
+                None
+            };
+
+            // 进入新作用域
+            self.enter_scope();
+            // 重置本层的临时寄存器（每层独立计数）
+            self.next_temp = 0;
+            self.temp_high_water = 0;
+            self.temp_floor = 0;
+
+            let func = if is_innermost {
+                self.generate_curry_innermost_func(
+                    &func_name,
+                    layer,
+                    &env_params,
+                    body,
+                    constants,
+                    layer_generic_params,
+                )?
+            } else {
+                let next_name = format!("__{}_l{}", name, i);
+                self.generate_curry_intermediate_func(
+                    &func_name,
+                    layer,
+                    &env_params,
+                    &next_name,
+                    constants,
+                    layer_generic_params,
+                )?
+            };
+            self.exit_scope();
+
+            // 累积本层参数到 env 追踪（给 innermost_func 用）
+            env_params.extend(layer.params.iter().cloned());
+            layer_funcs.push(func);
+        }
+
+        // 恢复外层状态
+        self.next_temp = saved_next_temp;
+        self.temp_high_water = saved_temp_high_water;
+        self.temp_floor = saved_temp_floor;
+        self.cur_locals = saved_cur_locals;
+        self.cur_span = saved_cur_span;
+
+        // 内层函数加入 nested_functions，最外层返回给调用者
+        // 第 0 个是最外层，其余是内层
+        let outer = layer_funcs.remove(0);
+        self.nested_functions.extend(layer_funcs);
+        // 还原闭包定型上下文（避免串到下一个函数）
+        self.closure_decl_params = saved_closure_decl;
+
+        Ok(Some(outer))
+    }
+    /// 尝试将表达式求值为编译时常量
+    #[allow(clippy::only_used_in_recursion)]
+    fn eval_const_expr(
+        &self,
+        expr: &ast::Expr,
+    ) -> Option<ConstValue> {
+        match expr {
+            ast::Expr::Lit(literal, _) => match literal {
+                ast::Literal::Int(n) => Some(ConstValue::Int(*n)),
+                ast::Literal::Float(f) => Some(ConstValue::Float(*f)),
+                ast::Literal::Bool(b) => Some(ConstValue::Bool(*b)),
+                ast::Literal::String(s) => Some(ConstValue::String(s.clone())),
+                ast::Literal::Char(c) => Some(ConstValue::Char(*c)),
+                ast::Literal::Void => None,
+            },
+            // RFC-027: 常量表达式折叠（#261）。
+            // 仅折叠纯数值/字符串/布尔的算术与比较，避开除法（除 0）与 Range/Assign。
+            // 任一子表达式不能折时整条不折，与 RFC-027 §362「失败回退 Unproven」一致。
+            ast::Expr::BinOp {
+                op, left, right, ..
+            } => {
+                use ast::BinOp as B;
+                let l = self.eval_const_expr(left)?;
+                let r = self.eval_const_expr(right)?;
+                // ponytail: 二元折叠的穷举不含 Range/Assign，后者语义不允许初始化于常量
+                match (l, r) {
+                    (ConstValue::Int(a), ConstValue::Int(b)) => match op {
+                        B::Add => Some(ConstValue::Int(a.wrapping_add(b))),
+                        B::Sub => Some(ConstValue::Int(a.wrapping_sub(b))),
+                        B::Mul => Some(ConstValue::Int(a.wrapping_mul(b))),
+                        // RFC-011b：`%` floor 取模（共享实现，见 util::arith）。
+                        // 溢出（MIN % -1）折不出 → 返回 None 交给运行时报错。
+                        B::Mod => (b != 0)
+                            .then(|| crate::util::arith::floor_mod_signed(a, b))
+                            .flatten()
+                            .map(ConstValue::Int),
+                        B::Eq => Some(ConstValue::Bool(a == b)),
+                        B::Neq => Some(ConstValue::Bool(a != b)),
+                        B::Lt => Some(ConstValue::Bool(a < b)),
+                        B::Le => Some(ConstValue::Bool(a <= b)),
+                        B::Gt => Some(ConstValue::Bool(a > b)),
+                        B::Ge => Some(ConstValue::Bool(a >= b)),
+                        B::And => Some(ConstValue::Bool(a != 0 && b != 0)),
+                        B::Or => Some(ConstValue::Bool(a != 0 || b != 0)),
+                        // #285: 位运算/移位常量折叠（与 const_eval 一致）
+                        B::BitAnd => Some(ConstValue::Int(a & b)),
+                        B::BitOr => Some(ConstValue::Int(a | b)),
+                        B::BitXor => Some(ConstValue::Int(a ^ b)),
+                        B::Shl => (0..=63)
+                            .contains(&b)
+                            .then(|| ConstValue::Int(a.wrapping_shl(b as u32))),
+                        B::Shr => (0..=63)
+                            .contains(&b)
+                            .then(|| ConstValue::Int(a.wrapping_shr(b as u32))),
+                        B::Div | B::Range | B::Assign => None,
+                    },
+                    (ConstValue::Float(a), ConstValue::Float(b)) => match op {
+                        B::Add => Some(ConstValue::Float(a + b)),
+                        B::Sub => Some(ConstValue::Float(a - b)),
+                        B::Mul => Some(ConstValue::Float(a * b)),
+                        // RFC-011b：`%` floor 取模（符号随除数）
+                        B::Mod => Some(ConstValue::Float(crate::util::arith::floor_mod_f64(a, b))),
+                        B::Eq => Some(ConstValue::Bool(a == b)),
+                        B::Neq => Some(ConstValue::Bool(a != b)),
+                        B::Lt => Some(ConstValue::Bool(a < b)),
+                        B::Le => Some(ConstValue::Bool(a <= b)),
+                        B::Gt => Some(ConstValue::Bool(a > b)),
+                        B::Ge => Some(ConstValue::Bool(a >= b)),
+                        // 位运算/移位仅限 Int：Float 折叠为 None（运行时同样受限）
+                        B::BitAnd | B::BitOr | B::BitXor | B::Shl | B::Shr => None,
+                        B::Div | B::Range | B::Assign => None,
+                        B::And | B::Or => None,
+                    },
+                    // RFC-011b：Int~Float 混合折叠——Int 侧提升为 f64，
+                    // 与运行时混合臂语义一致（Div 沿用不折纪律）
+                    (ConstValue::Int(a), ConstValue::Float(b)) => match op {
+                        B::Add => Some(ConstValue::Float(a as f64 + b)),
+                        B::Sub => Some(ConstValue::Float(a as f64 - b)),
+                        B::Mul => Some(ConstValue::Float(a as f64 * b)),
+                        B::Mod => Some(ConstValue::Float(crate::util::arith::floor_mod_f64(
+                            a as f64, b,
+                        ))),
+                        // 比较：混合 Int/Float **不折**，与运行时比较臂（无混合臂）
+                        // 及 typecheck 的「比较两侧同型」纪律保持一致（B9）。
+                        // 折了会让同一表达式在顶层能编、在函数体内报 E6007。
+                        B::Eq | B::Neq | B::Lt | B::Le | B::Gt | B::Ge => None,
+                        _ => None,
+                    },
+                    (ConstValue::Float(a), ConstValue::Int(b)) => match op {
+                        B::Add => Some(ConstValue::Float(a + b as f64)),
+                        B::Sub => Some(ConstValue::Float(a - b as f64)),
+                        B::Mul => Some(ConstValue::Float(a * b as f64)),
+                        B::Mod => Some(ConstValue::Float(crate::util::arith::floor_mod_f64(
+                            a, b as f64,
+                        ))),
+                        // 比较：同上，不折
+                        B::Eq | B::Neq | B::Lt | B::Le | B::Gt | B::Ge => None,
+                        _ => None,
+                    },
+                    (ConstValue::String(a), ConstValue::String(b)) => match op {
+                        B::Add => Some(ConstValue::String(format!("{a}{b}"))),
+                        B::Eq => Some(ConstValue::Bool(a == b)),
+                        B::Neq => Some(ConstValue::Bool(a != b)),
+                        _ => None,
+                    },
+                    (ConstValue::Bool(a), ConstValue::Bool(b)) => match op {
+                        B::And => Some(ConstValue::Bool(a && b)),
+                        B::Or => Some(ConstValue::Bool(a || b)),
+                        B::Eq => Some(ConstValue::Bool(a == b)),
+                        B::Neq => Some(ConstValue::Bool(a != b)),
+                        _ => None,
+                    },
+                    _ => None,
+                }
+            }
+            ast::Expr::UnOp { op, expr, .. } => {
+                use ast::UnOp as U;
+                let v = self.eval_const_expr(expr)?;
+                match (op, v) {
+                    (U::Neg, ConstValue::Int(n)) => Some(ConstValue::Int(n.wrapping_neg())),
+                    (U::Neg, ConstValue::Float(f)) => Some(ConstValue::Float(-f)),
+                    (U::Not, ConstValue::Bool(b)) => Some(ConstValue::Bool(!b)),
+                    _ => None,
+                }
+            }
+            // RFC-012: F-string 常量求值
+            ast::Expr::FString { segments, .. } => {
+                let mut result = String::new();
+                for seg in segments {
+                    match seg {
+                        ast::FStringSegment::Text(s) => result.push_str(s),
+                        ast::FStringSegment::Interpolation { expr, format_spec } => {
+                            let val = self.eval_const_expr(expr)?;
+                            let val_str = match &val {
+                                ConstValue::Int(n) => n.to_string(),
+                                ConstValue::Float(f) => f.to_string(),
+                                ConstValue::Bool(b) => b.to_string(),
+                                ConstValue::String(s) => s.clone(),
+                                ConstValue::Char(c) => c.to_string(),
+                                ConstValue::Void => String::new(),
+                                ConstValue::Bytes(b) => format!("{:?}", b),
+                                // #492：原生函数值不是可格式化常量，退回运行时求值
+                                ConstValue::NativeFn(_) => return None,
+                                ConstValue::LibraryRef { .. } | ConstValue::ExternRef { .. } => {
+                                    // FFI types cannot be formatted at compile time
+                                    return None;
+                                }
+                            };
+                            // 格式化说明符在常量求值中不处理，遇到则退回运行时
+                            if format_spec.is_some() {
+                                return None;
+                            }
+                            result.push_str(&val_str);
+                        }
+                    }
+                }
+                Some(ConstValue::String(result))
+            }
+            // 编译期 FFI 求值：Native.c("lib") → ConstValue::LibraryRef
+            // lib("sym") → ConstValue::ExternRef
+            ast::Expr::Call { func: _, args, .. } => {
+                // 通过 type_result 检查调用表达式的推断类型
+                if let Some(expr_type) = self.get_expr_mono_type(expr) {
+                    match expr_type {
+                        MonoType::LibraryRef { mechanism, .. } => {
+                            // Native.c("lib") — 需要提取 lib 名字符串
+                            if args.len() == 1 {
+                                if let Some(lib_str) = Self::extract_string_arg(args) {
+                                    return Some(ConstValue::LibraryRef {
+                                        mechanism,
+                                        lib: lib_str,
+                                    });
+                                }
+                            }
+                        }
+                        MonoType::ExternRef { mechanism, lib, .. }
+                            // lib("sym") — 需要提取 symbol 名字符串
+                            if args.len() == 1 => {
+                                if let Some(sym_str) = Self::extract_string_arg(args) {
+                                    return Some(ConstValue::ExternRef {
+                                        mechanism,
+                                        lib,
+                                        symbol: sym_str,
+                                    });
+                                }
+                            }
+                        _ => {}
+                    }
+                }
+                None
+            }
+            // TODO: 支持更复杂的常量表达式
+            _ => None,
+        }
+    }
+
+    /// 从函数调用的参数列表中提取第一个字符串字面量
+    fn extract_string_arg(args: &[ast::Expr]) -> Option<String> {
+        args.first().and_then(|arg| match arg {
+            ast::Expr::Lit(ast::Literal::String(s), _) => Some(s.clone()),
+            _ => None,
+        })
+    }
+
+    /// 获取或创建 FFI 库绑定 ID
+    fn get_or_create_lib_id(
+        &mut self,
+        mechanism: &str,
+        lib_name: &str,
+    ) -> usize {
+        if let Some(existing) = self
+            .ffi_libs
+            .iter()
+            .find(|l| l.mechanism == mechanism && l.lib_name == lib_name)
+        {
+            return existing.id;
+        }
+        let id = self.next_lib_id;
+        self.next_lib_id += 1;
+        self.ffi_libs.push(crate::middle::ir::ir::FfiLibBinding {
+            id,
+            mechanism: mechanism.to_string(),
+            lib_name: lib_name.to_string(),
+        });
+        id
+    }
+
+    /// 检查函数体（Stmt 列表）是否是对 ExternRef 的求值
+    fn try_eval_body_as_extern_ref(
+        &self,
+        body: &[ast::Stmt],
+    ) -> Option<ConstValue> {
+        if body.len() == 1 {
+            match &body[0].kind {
+                ast::StmtKind::Expr(expr) | ast::StmtKind::Return(Some(expr)) => {
+                    // 直接 eval 表达式（内部会走 eval_const_expr 的 Call 分支检查类型）
+                    return self.eval_const_expr(expr);
+                }
+                _ => {}
+            }
+        }
+        None
+    }
+
+    /// 判定 `name = <expr>` 是否为**类型定义绑定**（RFC-010）。
+    ///
+    /// 形态：`Db = unsafe { Db: Type = {...}; Db }` —— 块内定义类型并把类型名
+    /// 作为尾表达式交回。这是编译期构造（类型已在 typecheck 注册并提升），
+    /// 不应生成运行时全局变量，否则（T2 前）`unsafe` 无法常量折叠 → E3007。
+    /// T2 后 E3007 已不再产生，但本判定仍然必要：类型定义本就不该有运行时代码，
+    /// 生成多余初始化会把类型名当成值去求值。
+    fn is_type_def_binding(value: Option<&ast::Expr>) -> bool {
+        ast::Expr::is_type_def_binding(value)
+    }
+
+    /// T3：把待定初始化按依赖顺序重排（DFS + 三色标记）。
+    ///
+    /// 返回按可执行顺序排列的初始化列表（被依赖者在前）。
+    /// 检测到环时返回诊断，消息列出环上的名字——而非报一个无名的“循环依赖”。
+    fn topo_sort_pending_inits(&self) -> Result<Vec<&PendingInit>, Diagnostic> {
+        #[derive(Clone, Copy, PartialEq)]
+        enum Mark {
+            White,
+            Gray,
+            Black,
+        }
+        use std::collections::HashMap;
+        let mut marks: HashMap<&str, Mark> = self
+            .pending_inits
+            .iter()
+            .map(|p| (p.name.as_str(), Mark::White))
+            .collect();
+        let by_name: HashMap<&str, &PendingInit> = self
+            .pending_inits
+            .iter()
+            .map(|p| (p.name.as_str(), p))
+            .collect();
+        let mut order: Vec<&PendingInit> = Vec::with_capacity(self.pending_inits.len());
+        // 显式栈的 DFS：避免深依赖链（上千绑定）退化为递归崩溃
+        let mut stack: Vec<(&str, usize)> = Vec::new();
+        let mut path: Vec<&str> = Vec::new();
+
+        for root in &self.pending_inits {
+            if marks[root.name.as_str()] != Mark::White {
+                continue;
+            }
+            stack.push((root.name.as_str(), 0));
+            path.push(root.name.as_str());
+            marks.insert(root.name.as_str(), Mark::Gray);
+            while let Some((name, dep_i)) = stack.pop() {
+                let init = by_name[name];
+                if dep_i < init.deps.len() {
+                    let dep = init.deps[dep_i].as_str();
+                    stack.push((name, dep_i + 1));
+                    // 依赖不在本文件（跨文件布局、已由别的文件初始化或 std 常量）：跳过
+                    if !by_name.contains_key(dep) {
+                        continue;
+                    }
+                    match marks[dep] {
+                        Mark::White => {
+                            marks.insert(dep, Mark::Gray);
+                            path.push(dep);
+                            stack.push((dep, 0));
+                        }
+                        Mark::Gray => {
+                            // 回边：环。从 path 里截出环上名字
+                            let start = path.iter().position(|p| *p == dep).unwrap_or(0);
+                            let cycle = path[start..].join(" → ");
+                            return Err(ErrorCodeDefinition::global_init_cycle(&format!(
+                                "{cycle} → {dep}"
+                            ))
+                            .at(init.span)
+                            .build());
+                        }
+                        Mark::Black => {}
+                    }
+                } else {
+                    marks.insert(name, Mark::Black);
+                    path.pop();
+                    order.push(init);
+                }
+            }
+        }
+        Ok(order)
+    }
+
+    /// T3：本文件内某个绑定名的槽位号（不含跨文件布局）。
+    fn lookup_global_in_own_file(
+        &self,
+        name: &str,
+    ) -> Option<usize> {
+        let key = match &self.module_key {
+            Some(k) => SymbolTable::qualify(k, name),
+            None => name.to_string(),
+        };
+        self.global_slot_layout.get(&key).copied()
+    }
+
+    /// 生成全局变量 IR（T2：槽位 + 初始化）。
+    ///
+    /// 顶层绑定不再编译成零参访问器函数，而是：
+    /// 1. 在 `self.global_vars` 登记槽位（名字 + 类型）；
+    /// 2. 生成初始化指令（求值 init 表达式 → `Store(Global(idx))`），
+    ///    追加到 `self.module_init`（模块初始化序列）。
+    ///
+    /// 读取处（`Expr::Var`）走 `Load(Operand::Global(idx))`。
+    /// 初始化表达式可以是任意表达式（含块值）——运行时求值，不再要求常量折叠。
+    fn generate_global_var_ir(
+        &mut self,
+        name: &str,
+        type_annotation: Option<&ast::Type>,
+        initializer: Option<&ast::Expr>,
+        constants: &mut Vec<ConstValue>,
+    ) -> Result<Option<FunctionIR>, Diagnostic> {
+        let var_type = type_annotation
+            .map(|t| (*t).clone().into())
+            .unwrap_or(MonoType::Int(64));
+
+        // T3：槽位已在 register_global_slots 预分配（前向引用需要），此处取回。
+        // 未预分配的情形（非顶层语句路径）在此补登记，保持单一来源。
+        let slot_idx = match self.lookup_global_in_own_file(name) {
+            Some(idx) => idx,
+            None => {
+                let idx = self.global_slot_base + self.global_vars.len();
+                self.global_vars
+                    .push((name.to_string(), var_type.clone(), None));
+                idx
+            }
+        };
+
+        // WBS 4.9.8 / issue #465：顶层绑定同样记下**写出**的类型名（注解原文
+        // 优先，否则构造器名）——Script 形态的顶层 `t = Temp(1.0)` 是全局槽位，
+        // 与块内局部变量走同一条派发归因链。必须在生成初始化指令**之前**登记：
+        // 初始化里的 `t.tag()` 就是消费点（同一语句内的自引用不在本判据面）。
+        let written = type_annotation
+            .and_then(Self::written_type_name_of)
+            .map(str::to_string)
+            .or_else(|| initializer.and_then(|e| self.constructor_written_type_name(e)));
+        if let Some(written) = written {
+            self.global_written_types.insert(name.to_string(), written);
+        }
+
+        // 生成初始化指令：求值 init 表达式，写入槽位。
+        // 无 init 的绑定保留零初始化语义（C 风格默认值）。
+        // 旧实现（E3007）要求 init 必须是编译期常量；T2 后改为运行时求值，
+        // 「折叠不到」不再是错误，折叠仅作优化（能折就内联为常量）。
+        let result_reg = self.next_temp_reg();
+        // 先生成到局部缓冲（generate_expr_ir 需 &mut self，不能直接借 self.module_init）
+        let mut init_instrs: Vec<Instruction> = Vec::new();
+        if let Some(init) = initializer {
+            // 常量折叠优化：能折就直接写常量，省掉运行时求值。
+            // 折不出就走完整表达式生成（块值、调用、变量引用等）。
+            if let Some(const_val) = self.eval_const_expr(init) {
+                init_instrs.push(Instruction::Load {
+                    dst: Operand::Local(result_reg),
+                    src: Operand::Const(const_val),
+                    span: Self::get_expr_span(init),
+                });
+            } else {
+                self.generate_expr_ir(init, result_reg, &mut init_instrs, constants)?;
+            }
+        } else {
+            init_instrs.push(Instruction::Load {
+                dst: Operand::Local(result_reg),
+                src: Operand::Const(ConstValue::Int(0)),
+                span: Span::default(),
+            });
+        }
+        init_instrs.push(Instruction::Store {
+            dst: Operand::Global(slot_idx),
+            src: Operand::Local(result_reg),
+            span: initializer.map(Self::get_expr_span).unwrap_or_default(),
+        });
+        // T3：入待定队列（不直接追加到 module_init）——尾部按依赖拓扑排序后写入。
+        let key = match &self.module_key {
+            Some(k) => SymbolTable::qualify(k, name),
+            None => name.to_string(),
+        };
+        let deps = initializer
+            .map(|init| self.collect_global_deps(init))
+            .unwrap_or_default();
+        self.pending_inits.push(PendingInit {
+            name: key,
+            instructions: init_instrs,
+            deps,
+            span: initializer.map(Self::get_expr_span).unwrap_or_default(),
+        });
+
+        // 顶层绑定不再需要独立 FunctionIR
+        Ok(None)
+    }
+
+    /// T3：收集一个初始化表达式引用的其它顶层绑定名（依赖边）。
+    ///
+    /// 只统计“解析为本文件或跨文件全局槽位”的引用；局部变量、函数名不算。
+    /// 保守起见走完整 AST 遍历——多收一条依赖只会把顺序摆得更保守，
+    /// 漏收才会导致初始化顺序错误。
+    fn collect_global_deps(
+        &self,
+        expr: &ast::Expr,
+    ) -> Vec<String> {
+        let mut found = std::collections::HashSet::new();
+        let mut out = Vec::new();
+        Self::walk_expr_vars(expr, &mut |name: &str| {
+            let key = match &self.module_key {
+                Some(k) => SymbolTable::qualify(k, name),
+                None => name.to_string(),
+            };
+            // 自引用不算依赖（由循环检测单独报）
+            if self.global_slot_layout.contains_key(&key) && found.insert(key.clone()) {
+                out.push(key);
+            }
+        });
+        out
+    }
+
+    /// 遍历表达式中的所有 `Var` 名字（含嵌套块、二元、调用等）。
+    ///
+    /// 复用既有的 `collect_free_vars_expr`（AST 全形态遍历，已覆盖闭包捕获
+    /// 场景并经受测试）——`bound` 传空集即「所有 Var 都是自由变量」。
+    fn walk_expr_vars(
+        expr: &ast::Expr,
+        visit: &mut impl FnMut(&str),
+    ) {
+        let bound: std::collections::HashSet<&str> = std::collections::HashSet::new();
+        let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+        let mut names: Vec<String> = Vec::new();
+        collect_free_vars_expr(expr, &bound, &mut seen, &mut names);
+        for n in &names {
+            visit(n.as_str());
+        }
+    }
+
+    /// RFC-004: 为匿名函数绑定生成独立的 FunctionIR
+    ///
+    /// 匿名函数绑定在类型定义体内以 lambda 形式定义，需要生成独立的函数 IR。
+    /// 函数命名格式为 `TypeName.__anon_method_name`。
+    fn generate_anon_binding_ir(
+        &mut self,
+        name: &str,
+        params: &[ast::Param],
+        return_type: &ast::Type,
+        body: &ast::Expr,
+        constants: &mut Vec<ConstValue>,
+    ) -> Result<Option<FunctionIR>, Diagnostic> {
+        // 保存父函数状态
+        let saved_next_temp = self.next_temp;
+        let saved_temp_high_water = self.temp_high_water;
+        let saved_temp_floor = self.temp_floor;
+        let saved_cur_locals = std::mem::take(&mut self.cur_locals);
+        // cur_span 与 next_temp 同款：嵌套函数体是独立源码单元
+        let saved_cur_span = self.cur_span;
+
+        // #311：嵌套函数体是独立指令流，循环栈属父函数——保存并清空
+        //（typecheck 已用 E1102 拦截函数体内的 break/continue，此处为层间失联防御）
+        let saved_loop_stack = std::mem::take(&mut self.loop_stack);
+
+        // 顶层函数体入口：清空槽位表，避免沿用上一个函数的局部名。
+
+        let mut instructions = Vec::new();
+
+        // 进入匿名函数作用域
+        self.enter_scope();
+
+        // 为每个参数生成 LoadArg 指令并注册
+        for (i, param) in params.iter().enumerate() {
+            instructions.push(Instruction::Load {
+                dst: Operand::Local(i),
+                src: Operand::Arg(i),
+                span: self.cur_span,
+            });
+
+            self.register_local(&param.name, i);
+        }
+        // 匿名绑定 / 闭包的形参就是声明（绑定注解 / 返回位内层 Fn）本身，无需补位。
+        self.note_param_written_types(params, &[]);
+
+        // 记录局部变量起始位置
+        let local_var_start = params.len();
+        self.next_temp = local_var_start;
+        // #393：独立寄存器空间——高水位与循环态地板随之清零
+        self.temp_high_water = local_var_start;
+        self.temp_floor = 0;
+
+        // 生成表达式体的 IR，并返回结果
+        let result_reg = self.next_temp_reg();
+        self.generate_expr_ir(body, result_reg, &mut instructions, constants)?;
+        instructions.push(Instruction::Ret {
+            value: Some(Operand::Local(result_reg)),
+            span: self.cur_span,
+        });
+
+        // 退出作用域
+        self.exit_scope();
+
+        // 计算局部变量总数
+        let total_locals = self.temp_high_water;
+        let locals_types: Vec<LocalSlot> = self.take_cur_locals(total_locals);
+
+        // 恢复父函数状态
+        self.next_temp = saved_next_temp;
+        self.temp_high_water = saved_temp_high_water;
+        self.temp_floor = saved_temp_floor;
+        self.cur_locals = saved_cur_locals;
+        self.cur_span = saved_cur_span;
+
+        // 解析返回类型
+        let ret_type: MonoType = return_type.clone().into();
+
+        let func_ir = FunctionIR {
+            def: None, // 由 generate_module_ir 尾部 assign_defs 填充
+            name: name.to_string(),
+            params: params
+                .iter()
+                .filter_map(|p| p.ty.clone())
+                .map(|t| t.into())
+                .collect(),
+            return_type: ret_type,
+            generic_params: None,
+            body: FunctionBody::Code {
+                blocks: vec![BasicBlock {
+                    label: 0,
+                    instructions,
+                    successors: Vec::new(),
+                }],
+                entry: 0,
+                locals: locals_types,
+            },
+        };
+
+        // #311：恢复父函数的循环上下文
+        self.loop_stack = saved_loop_stack;
+
+        Ok(Some(func_ir))
+    }
+
+    /// 注册类型绑定信息（RFC-004）
+    ///
+    /// 将类型定义体内的绑定（外部函数绑定和匿名函数绑定）记录到 type_bindings 映射中，
+    /// 用于后续方法调用 IR 生成时的参数重排。
+    fn register_type_bindings(
+        &mut self,
+        type_name: &str,
+        bindings: &[ast::TypeBodyBinding],
+    ) {
+        use ast::BindingKind;
+
+        // 合并到已有的绑定映射中，而非覆盖
+        let mut binding_map = self.type_bindings.remove(type_name).unwrap_or_default();
+
+        for binding in bindings {
+            match &binding.kind {
+                BindingKind::External {
+                    function,
+                    positions,
+                } => {
+                    binding_map.insert(
+                        binding.name.clone(),
+                        BindingInfo {
+                            function: function.clone(),
+                            positions: positions.clone(),
+                        },
+                    );
+                }
+                BindingKind::Anonymous {
+                    params: _,
+                    return_type: _,
+                    positions,
+                    body: _,
+                } => {
+                    // 匿名函数绑定：函数名使用 "类型名.__anon_方法名" 格式
+                    // 后续生成匿名函数的 IR 时使用此名称
+                    let anon_func_name = format!("{}.__anon_{}", type_name, binding.name);
+                    binding_map.insert(
+                        binding.name.clone(),
+                        BindingInfo {
+                            function: anon_func_name,
+                            positions: positions.clone(),
+                        },
+                    );
+                }
+                BindingKind::DefaultExternal { function } => {
+                    // RFC-004: 默认绑定，位置由类型检查器自动推导，此处使用位置 0
+                    binding_map.insert(
+                        binding.name.clone(),
+                        BindingInfo {
+                            function: function.clone(),
+                            positions: vec![0],
+                        },
+                    );
+                }
+            }
+        }
+
+        if !binding_map.is_empty() {
+            self.type_bindings
+                .insert(type_name.to_string(), binding_map);
+        }
+    }
+
+    /// 在语句边界设定当前 span：之后所有指令构造就地捕获它。
+    fn set_cur_span(
+        &mut self,
+        span: Span,
+    ) {
+        if !span.is_dummy() {
+            self.cur_span = span;
+        }
+    }
+
+    /// 语句边界的释放计划消费（RFC-039 D20 / WBS 4.5.1）——**唯一消费点**。
+    ///
+    /// `ReleasePlan::consume` 命中即记账（消费台账随计划本体走），故
+    /// 「查表 → 记账 → 发 Drop」是一次动作，台账不可能与真实消费漂移。
+    /// 所有语句边界（函数体 / curry 层 / 方法体 / lambda 体 / 嵌套块 / 尾语句
+    /// 路径）都必须经过它：漏一处，该语句的计划键就没有消费，义务账本结算
+    /// 报 W1090（D41——差集必须为空，无白名单）。
+    fn emit_release_drops(
+        &mut self,
+        statement: PlanId,
+        instructions: &mut Vec<Instruction>,
+    ) {
+        let Some(vars) = self.release_plan.consume(statement) else {
+            return;
+        };
+        for var in vars {
+            if let Some(local_idx) = self.lookup_local(var) {
+                instructions.push(Instruction::Drop {
+                    src: Operand::Local(local_idx),
+                    span: self.cur_span,
+                });
+            }
+        }
+    }
+
+    fn generate_local_stmt_ir(
+        &mut self,
+        stmt: &ast::Stmt,
+        instructions: &mut Vec<Instruction>,
+        constants: &mut Vec<ConstValue>,
+    ) -> Result<(), Diagnostic> {
+        match &stmt.kind {
+            ast::StmtKind::Expr(expr) => {
+                let result_reg = self.next_temp_reg();
+                self.generate_expr_ir(expr, result_reg, instructions, constants)?;
+            }
+            ast::StmtKind::Assign {
+                target,
+                type_annotation,
+                value,
+                span,
+                ..
+            } => {
+                use crate::ast::Expr;
+                // 签名形参的唯一来源：注解的 Type::Fn 链（6.5.2）
+                let signature = type_annotation
+                    .as_ref()
+                    .map(crate::ast::Type::fn_params_flat)
+                    .unwrap_or_default();
+                // 字段赋值：q.x = v / m.x = v（m 是 &mut 令牌）。
+                // Struct 运行时值是堆句柄，StoreField 原地写共享对象——
+                // 令牌与自动借用天然写回，无需 copy-back（#266）。
+                if let Expr::FieldAccess {
+                    expr: obj_expr,
+                    field,
+                    ..
+                } = target.as_ref()
+                {
+                    let field_index =
+                        self.resolve_field_index(obj_expr, field).ok_or_else(|| {
+                            ErrorCodeDefinition::ir_internal_error(&format!(
+                                "无法解析字段索引: '{}'",
+                                field
+                            ))
+                            .at(Self::get_expr_span(obj_expr))
+                            .build()
+                        })?;
+                    let obj_reg = self.next_temp_reg();
+                    self.generate_expr_ir(obj_expr, obj_reg, instructions, constants)?;
+                    let val_reg = self.next_temp_reg();
+                    let value_expr = value.as_ref().ok_or_else(|| {
+                        ErrorCodeDefinition::ir_internal_error("字段赋值缺少右侧值")
+                            .at(*span)
+                            .build()
+                    })?;
+                    self.generate_expr_ir(value_expr, val_reg, instructions, constants)?;
+                    instructions.push(Instruction::StoreField {
+                        dst: Operand::Local(obj_reg),
+                        field: field_index,
+                        src: Operand::Local(val_reg),
+                        type_name: None,
+                        field_name: Some(field.clone()),
+                        span: *span,
+                    });
+                    return Ok(());
+                }
+                // 索引赋值：a[i] = v。
+                // 容器运行时值是堆句柄，StoreIndex 原地写共享对象——
+                // 与字段赋值同理（#266/#360）：Array/Vec/List 均按原地写处理，
+                // 语义与值语义的 list.set 区分开（后者在 std 层返回新列表）。
+                if let Expr::Index {
+                    expr: base_expr,
+                    index: index_expr,
+                    ..
+                } = target.as_ref()
+                {
+                    let value_expr = value.as_ref().ok_or_else(|| {
+                        ErrorCodeDefinition::ir_internal_error("索引赋值缺少右侧值")
+                            .at(*span)
+                            .build()
+                    })?;
+                    let base_reg = self.next_temp_reg();
+                    self.generate_expr_ir(base_expr, base_reg, instructions, constants)?;
+                    let index_reg = self.next_temp_reg();
+                    self.generate_expr_ir(index_expr, index_reg, instructions, constants)?;
+                    let val_reg = self.next_temp_reg();
+                    self.generate_expr_ir(value_expr, val_reg, instructions, constants)?;
+                    instructions.push(Instruction::StoreIndex {
+                        dst: Operand::Local(base_reg),
+                        index: Operand::Local(index_reg),
+                        src: Operand::Local(val_reg),
+                        span: *span,
+                    });
+                    return Ok(());
+                }
+                let name = match target.as_ref() {
+                    Expr::Var(n, _) => n.clone(),
+                    // 不认识的赋值目标：显式报错，不静默吞掉（#266）
+                    _ => {
+                        return Err(ErrorCodeDefinition::ir_internal_error(&format!(
+                            "不支持的赋值目标: {:?}",
+                            target
+                        ))
+                        .at(Self::get_expr_span(target))
+                        .build())
+                    }
+                };
+                // RFC-010a 附录D：`name = { ... }` 无注解时按内容推断（块值是尾表达式）；
+                // 非 Fn 注解→块值。
+                let is_fn_binding = ast::Expr::block_binding_is_function(
+                    type_annotation.as_ref(),
+                    value.as_deref(),
+                );
+                let (params, body): (Vec<_>, Vec<_>) = if is_fn_binding {
+                    match value {
+                        Some(v) => v.callable_parts(),
+                        None => (Vec::new(), Vec::new()),
+                    }
+                } else {
+                    (Vec::new(), Vec::new())
+                };
+                // 如果有 params/body，是嵌套函数
+                if !params.is_empty() || !body.is_empty() {
+                    // 同 Assign 面：扫描面 = 整棵声明注解（含返回位）。
+                    let type_positions: Vec<&ast::Type> = type_annotation.iter().collect();
+                    let generic_params = crate::ast::extract_generic_param_names(
+                        &signature,
+                        &type_positions,
+                        &self.type_level,
+                    );
+                    let generic_param_names = if generic_params.is_empty() {
+                        None
+                    } else {
+                        Some(generic_params.iter().map(|p| p.name.clone()).collect())
+                    };
+                    // curry 分流：如果 return_type 是 Type::Fn，走 curry 生成路径
+                    // 注意：必须传签名全层形参（signature），而非 params（仅 Lambda 参数）
+                    let func_result =
+                        if let Some(ast::Type::Fn { return_type, .. }) = type_annotation.as_ref() {
+                            if matches!(return_type.as_ref(), ast::Type::Fn { .. }) {
+                                self.generate_curry_function_ir(
+                                    &name,
+                                    type_annotation.as_ref().unwrap(),
+                                    &signature,
+                                    &body,
+                                    constants,
+                                    generic_param_names,
+                                )
+                            } else {
+                                self.generate_function_ir(
+                                    &name,
+                                    type_annotation.as_ref(),
+                                    &params,
+                                    &body,
+                                    constants,
+                                    generic_param_names,
+                                )
+                            }
+                        } else {
+                            self.generate_function_ir(
+                                &name,
+                                type_annotation.as_ref(),
+                                &params,
+                                &body,
+                                constants,
+                                generic_param_names,
+                            )
+                        };
+                    match func_result {
+                        Ok(Some(func_ir)) => {
+                            self.nested_functions.push(func_ir);
+                        }
+                        Ok(None) => {}
+                        Err(e) => return Err(e),
+                    }
+                    return Ok(());
+                }
+                // RFC-010：`T = unsafe { T: Type = {...}; T }` 是**类型定义绑定**
+                // （编译期构造，类型已提升到本作用域），不生成运行时变量。
+                // 否则体内引用 `T` 会报 E1001（未知变量）。
+                if Self::is_type_def_binding(value.as_deref()) {
+                    return Ok(());
+                }
+                // 普通变量
+                let initializer = value.as_ref().map(|v| v.as_ref());
+                // WBS 4.9.8 / issue #465：记下**写出**的类型名（注解原文优先，
+                // 否则取构造器名），供方法调用派发归因到定义单元。
+                let written_type = type_annotation
+                    .as_ref()
+                    .and_then(Self::written_type_name_of)
+                    .map(str::to_string)
+                    .or_else(|| initializer.and_then(|e| self.constructor_written_type_name(e)));
+                if let Some(type_ann) = type_annotation {
+                    let mono: MonoType = type_ann.clone().into();
+                    let type_name = mono.type_name();
+                    self.local_var_types.insert(name.clone(), type_name.clone());
+                    if mono.is_constraint() {
+                        if let Some(init_expr) = initializer {
+                            if let Some(concrete_type_name) =
+                                self.get_expr_struct_type_name(init_expr)
+                            {
+                                self.constraint_var_concrete_types
+                                    .insert(name.clone(), concrete_type_name);
+                            }
+                        }
+                    }
+                } else if let Some(init_expr) = initializer {
+                    let inferred = self.get_expr_type_name(init_expr);
+                    if inferred != "<unknown>" {
+                        self.local_var_types.insert(name.clone(), inferred);
+                    }
+                }
+                // 顶层绑定（Script 模式下 `mut i = 0` 在模块初始化序列里）：
+                // 重赋值写回全局槽位，不能新建局部（否则值被丢弃、循环永不推进）。
+                // 此路径在循环体内尤其关键——`while` 体里的 `i = i + 1`
+                // 走的就是 `generate_local_stmt_ir`。
+                if self.lookup_local(&name).is_none() {
+                    if let Some(slot) = self.lookup_global(&name) {
+                        if let Some(expr) = initializer {
+                            let reg = self.next_temp_reg();
+                            self.generate_expr_ir(expr, reg, instructions, constants)?;
+                            instructions.push(Instruction::Store {
+                                dst: Operand::Global(slot),
+                                src: Operand::Local(reg),
+                                span: Self::get_expr_span(expr),
+                            });
+                        }
+                        return Ok(());
+                    }
+                }
+                let var_idx = if let Some(existing_idx) = self.lookup_local(&name) {
+                    existing_idx
+                } else {
+                    let idx = self.next_temp_reg();
+                    self.register_local(&name, idx);
+                    idx
+                };
+                if let Some(written) = written_type {
+                    self.note_local_written_type(&name, &written);
+                }
+                if let Some(expr) = initializer {
+                    // #299 §2：字面量上下文落点——Array 注解直接作用于 List 字面量时，
+                    // 生成定长数组构造而非 List。禁止隐式 List→Array 转换：仅字面量种子直接落 Array。
+                    if let (Some(ann), ast::Expr::List(elems, lit_span)) = (type_annotation, expr) {
+                        let mono: MonoType = ann.clone().into();
+                        if mono.is_array() {
+                            let mut elem_regs = Vec::with_capacity(elems.len());
+                            for elem in elems {
+                                let reg = self.next_temp_reg();
+                                self.generate_expr_ir(elem, reg, instructions, constants)?;
+                                elem_regs.push(reg);
+                            }
+                            instructions.push(Instruction::AllocFixedArray {
+                                dst: Operand::Local(var_idx),
+                                count: elems.len(),
+                                span: *lit_span,
+                            });
+                            for (i, reg) in elem_regs.iter().enumerate() {
+                                let idx_reg = self.next_temp_reg();
+                                instructions.push(Instruction::Load {
+                                    dst: Operand::Local(idx_reg),
+                                    src: Operand::Const(ConstValue::Int(i as i128)),
+                                    span: self.cur_span,
+                                });
+                                instructions.push(Instruction::StoreIndex {
+                                    dst: Operand::Local(var_idx),
+                                    index: Operand::Local(idx_reg),
+                                    src: Operand::Local(*reg),
+                                    span: *lit_span,
+                                });
+                            }
+                            return Ok(());
+                        }
+                    }
+                    // 统一走 generate_expr_ir — 把 RHS 值直接放入 var_idx 槽
+                    self.generate_expr_ir(expr, var_idx, instructions, constants)?;
+                } else {
+                    instructions.push(Instruction::Load {
+                        dst: Operand::Local(var_idx),
+                        src: Operand::Const(ConstValue::Int(0)),
+                        span: self.cur_span,
+                    });
+                }
+            }
+            ast::StmtKind::If {
+                condition,
+                then_branch,
+                else_if_branches,
+                else_branch,
+                span: _,
+            } => {
+                // 生成 if 语句的 IR
+                self.generate_if_stmt_ir(
+                    condition,
+                    then_branch,
+                    else_if_branches,
+                    else_branch.as_deref(),
+                    instructions,
+                    constants,
+                )?;
+            }
+            ast::StmtKind::For {
+                var,
+                var_span: _,
+                var_mut,
+                iterable,
+                body,
+            } => {
+                self.generate_for_loop_ir(
+                    var,
+                    *var_mut,
+                    iterable,
+                    body,
+                    None, // No result needed for statement
+                    stmt.span,
+                    instructions,
+                    constants,
+                )?;
+            }
+            ast::StmtKind::DestructureAssign { names, rhs, span } => {
+                // 优化：如果 RHS 是元组字面量 (1, 2)，直接提取每个元素赋值
+                // 否则通过 LoadIndex 索引
+                if let ast::Expr::Tuple(elems, _) = rhs.as_ref() {
+                    for (i, name) in names.iter().enumerate() {
+                        let var_idx = self.next_temp_reg();
+                        self.register_local(&name.name, var_idx);
+
+                        if let Some(elem) = elems.get(i) {
+                            self.generate_expr_ir(elem, var_idx, instructions, constants)?;
+                        }
+                    }
+                } else {
+                    // 非字面量元组：生成 RHS，然后通过 LoadIndex 提取
+                    let rhs_reg = self.next_temp_reg();
+                    self.generate_expr_ir(rhs, rhs_reg, instructions, constants)?;
+
+                    for (i, name) in names.iter().enumerate() {
+                        let var_idx = self.next_temp_reg();
+                        self.register_local(&name.name, var_idx);
+
+                        let index_reg = self.next_temp_reg();
+                        instructions.push(Instruction::Load {
+                            dst: Operand::Local(index_reg),
+                            src: Operand::Const(ConstValue::Int(i as i128)),
+                            span: self.cur_span,
+                        });
+
+                        instructions.push(Instruction::LoadIndex {
+                            dst: Operand::Local(var_idx),
+                            src: Operand::Local(rhs_reg),
+                            index: Operand::Local(index_reg),
+                            span: *span,
+                        });
+                    }
+                }
+            }
+            ast::StmtKind::Return(expr) => match expr {
+                Some(e) => {
+                    let result_reg = self.next_temp_reg();
+                    self.generate_expr_ir(e, result_reg, instructions, constants)?;
+                    instructions.push(Instruction::Ret {
+                        value: Some(Operand::Local(result_reg)),
+                        span: self.cur_span,
+                    });
+                }
+                None => {
+                    instructions.push(Instruction::Ret {
+                        value: None,
+                        span: self.cur_span,
+                    });
+                }
+            },
+            // 合法不产生代码的语句：
+            // - Use：导入解析在独立 pass 完成，无运行时代码
+            // - Error：解析器恢复占位符；存在解析错误时编译已在此前终止
+            ast::StmtKind::Use { .. } | ast::StmtKind::Error(_) => {}
+            // 块内类型定义不受支持：此前被静默忽略（定义即无效，使用时才在远处报 E1001）
+            ast::StmtKind::TypeDefinition { name, .. } => {
+                return Err(ErrorCodeDefinition::ir_internal_error(&format!(
+                    "type definition `{}` inside a block is not supported; type definitions belong at the top level",
+                    name
+                ))
+                .at(stmt.span)
+                .build());
+            }
+        }
+        Ok(())
+    }
+
+    /// 生成 if 语句的 IR
+    fn generate_if_stmt_ir(
+        &mut self,
+        condition: &ast::Expr,
+        then_branch: &ast::Block,
+        else_if_branches: &[(Box<ast::Expr>, Box<ast::Block>)],
+        else_branch: Option<&ast::Block>,
+        instructions: &mut Vec<Instruction>,
+        constants: &mut Vec<ConstValue>,
+    ) -> Result<(), Diagnostic> {
+        // 进入新的作用域
+        self.enter_scope();
+
+        // 1. 评估条件
+        let condition_reg = self.next_temp_reg();
+        self.generate_expr_ir(condition, condition_reg, instructions, constants)?;
+
+        // 2. 跳转到下一个分支的占位符 (JmpIfNot to next_branch)
+        let jump_to_next_branch_idx = instructions.len();
+        instructions.push(Instruction::JmpIfNot {
+            cond: Operand::Local(condition_reg),
+            target: 0,
+            span: self.cur_span,
+        }); // 占位符
+
+        // 3. 生成 then 分支
+        self.generate_block_ir(then_branch, None, instructions, constants)?;
+
+        // 4. then 分支结束后，跳转到整个 if 语句的结束 (Jmp to end)
+        let mut jump_to_end_indices = Vec::new();
+        // 只有当有 else/else if 时才需要跳过它们，否则这里已经是 end
+        if !else_if_branches.is_empty() || else_branch.is_some() {
+            let idx = instructions.len();
+            instructions.push(Instruction::Jmp {
+                target: 0,
+                span: self.cur_span,
+            }); // 占位符
+            jump_to_end_indices.push(idx);
+        }
+
+        // 5. 修复条件跳转 (JmpIfNot)，使其指向 else if 或 else (即当前位置)
+        let len = instructions.len();
+        if let Instruction::JmpIfNot {
+            cond: _,
+            ref mut target,
+            span: _,
+        } = instructions[jump_to_next_branch_idx]
+        {
+            *target = len;
+        }
+
+        // 6. 处理 else if 分支
+        for (else_if_condition, else_if_body) in else_if_branches.iter() {
+            // 评估 else if 条件
+            let else_if_condition_reg = self.next_temp_reg();
+            self.generate_expr_ir(
+                else_if_condition,
+                else_if_condition_reg,
+                instructions,
+                constants,
+            )?;
+
+            // 跳转到下一个分支 (JmpIfNot)
+            let jump_to_next_else_if_idx = instructions.len();
+            instructions.push(Instruction::JmpIfNot {
+                cond: Operand::Local(else_if_condition_reg),
+                target: 0,
+                span: self.cur_span,
+            });
+
+            // 生成 else if 分支
+            self.generate_block_ir(else_if_body, None, instructions, constants)?;
+
+            // else if 分支结束后跳转到结束
+            let idx = instructions.len();
+            instructions.push(Instruction::Jmp {
+                target: 0,
+                span: self.cur_span,
+            }); // 占位符
+            jump_to_end_indices.push(idx);
+
+            // 修复条件跳转
+            let len = instructions.len();
+            if let Instruction::JmpIfNot {
+                cond: _,
+                ref mut target,
+                span: _,
+            } = instructions[jump_to_next_else_if_idx]
+            {
+                *target = len;
+            }
+        }
+
+        // 7. 生成 else 分支
+        if let Some(else_body) = else_branch {
+            self.generate_block_ir(else_body, None, instructions, constants)?;
+        }
+
+        // 8. 修复所有跳转到结束的指令
+        let end_pos = instructions.len();
+        for idx in jump_to_end_indices {
+            if let Instruction::Jmp {
+                ref mut target,
+                span: _,
+            } = instructions[idx]
+            {
+                *target = end_pos;
+            }
+        }
+
+        // 退出作用域
+        self.exit_scope();
+
+        Ok(())
+    }
+
+    /// 生成 if 表达式的 IR
+    #[allow(clippy::too_many_arguments)]
+    fn generate_if_expr_ir(
+        &mut self,
+        condition: &ast::Expr,
+        then_branch: &ast::Block,
+        else_if_branches: &[(Box<ast::Expr>, Box<ast::Block>)],
+        else_branch: Option<&ast::Block>,
+        result_reg: usize,
+        instructions: &mut Vec<Instruction>,
+        constants: &mut Vec<ConstValue>,
+    ) -> Result<(), Diagnostic> {
+        // 进入新的作用域
+        self.enter_scope();
+
+        // RFC-010a 规则③：`if` 无 `else` → 值为 `Void`。
+        // 此时分支的值不写入 result_reg（改写 scratch），最后统一写 Void；
+        // 否则 `x = if true { 19 }` 会拿到 19，与 typecheck 判定的 `x : Void` 矛盾（#346）。
+        let value_reg = if else_branch.is_some() {
+            result_reg
+        } else {
+            self.next_temp_reg()
+        };
+
+        // 1. 评估条件
+        let condition_reg = self.next_temp_reg();
+        self.generate_expr_ir(condition, condition_reg, instructions, constants)?;
+
+        // 2. 跳转到下一个分支的占位符 (JmpIfNot to next)
+        let jump_to_next_idx = instructions.len();
+        instructions.push(Instruction::JmpIfNot {
+            cond: Operand::Local(condition_reg),
+            target: 0,
+            span: self.cur_span,
+        }); // 占位符
+
+        // 3. then 分支
+        let then_result_reg = self.next_temp_reg();
+        self.generate_block_ir(then_branch, Some(then_result_reg), instructions, constants)?;
+        instructions.push(Instruction::Move {
+            dst: Operand::Local(value_reg),
+            src: Operand::Local(then_result_reg),
+            span: self.cur_span,
+        });
+
+        // 4. 跳转到结束 (Jmp to end)
+        let mut jumps_to_end = Vec::new();
+        let jmp_idx = instructions.len();
+        instructions.push(Instruction::Jmp {
+            target: 0,
+            span: self.cur_span,
+        }); // 占位符
+        jumps_to_end.push(jmp_idx);
+
+        // 5. 修复条件跳转
+        let len = instructions.len();
+        if let Instruction::JmpIfNot {
+            cond: _,
+            ref mut target,
+            span: _,
+        } = instructions[jump_to_next_idx]
+        {
+            *target = len;
+        }
+
+        // 6. else if 分支
+        for (else_if_condition, else_if_body) in else_if_branches.iter() {
+            let else_if_cond_reg = self.next_temp_reg();
+            self.generate_expr_ir(else_if_condition, else_if_cond_reg, instructions, constants)?;
+
+            let jump_idx = instructions.len();
+            instructions.push(Instruction::JmpIfNot {
+                cond: Operand::Local(else_if_cond_reg),
+                target: 0,
+                span: self.cur_span,
+            });
+
+            let else_if_res = self.next_temp_reg();
+            self.generate_block_ir(else_if_body, Some(else_if_res), instructions, constants)?;
+            instructions.push(Instruction::Move {
+                dst: Operand::Local(value_reg),
+                src: Operand::Local(else_if_res),
+                span: self.cur_span,
+            });
+
+            let jmp_end_idx = instructions.len();
+            instructions.push(Instruction::Jmp {
+                target: 0,
+                span: self.cur_span,
+            });
+            jumps_to_end.push(jmp_end_idx);
+            let len = instructions.len();
+            if let Instruction::JmpIfNot {
+                cond: _,
+                ref mut target,
+                span: _,
+            } = instructions[jump_idx]
+            {
+                *target = len;
+            }
+        }
+
+        // 7. Else 分支
+        if let Some(else_body) = else_branch {
+            let else_res = self.next_temp_reg();
+            self.generate_block_ir(else_body, Some(else_res), instructions, constants)?;
+            instructions.push(Instruction::Move {
+                dst: Operand::Local(value_reg),
+                src: Operand::Local(else_res),
+                span: self.cur_span,
+            });
+        }
+
+        // 8. 修复所有跳转到结束的指令
+        let end_len = instructions.len();
+        for idx in jumps_to_end {
+            if let Instruction::Jmp {
+                ref mut target,
+                span: _,
+            } = instructions[idx]
+            {
+                *target = end_len;
+            }
+        }
+
+        // 9. 无 else：值为 Void（RFC-010a 规则③）
+        if else_branch.is_none() {
+            instructions.push(Instruction::Load {
+                dst: Operand::Local(result_reg),
+                src: Operand::Const(ConstValue::Void),
+                span: self.cur_span,
+            });
+        }
+
+        self.exit_scope();
+        Ok(())
+    }
+
+    /// 生成代码块的 IR
+    ///
+    /// 当 `result_reg` 为 `Some(reg)` 时，表示块作为表达式使用：
+    /// 块中最后一条语句如果是表达式（`StmtKind::Expr`），
+    /// 其值直接写入 `reg` 作为块的返回值。
+    /// 块中没有 return 也没有尾部表达式时，`reg` 保持默认（Void）。
+    ///
+    /// 当 `result_reg` 为 `None` 时，块作为语句序列执行，不关心返回值。
+    /// 尾位置语句求值（RFC-010a 规则①）：把语句作为块值写入 `result_reg`。
+    ///
+    /// 返回 `true` 表示已处理（值已写入），调用方应跳过普通语句生成。
+    ///
+    /// 提取为共用方法是因为 `generate_block_ir`（块）与 `generate_function_ir`（函数体）
+    /// 各写了一套尾位置判断，两套不一致——函数体只认 `StmtKind::Expr`，
+    /// 导致 `f: () -> Int = { if c {5} else {6} }` 的 `if` 值被丢弃（#344）。
+    fn generate_tail_stmt_ir(
+        &mut self,
+        stmt: &ast::Stmt,
+        result_reg: usize,
+        instructions: &mut Vec<Instruction>,
+        constants: &mut Vec<ConstValue>,
+    ) -> Result<bool, Diagnostic> {
+        match &stmt.kind {
+            ast::StmtKind::Expr(expr) => {
+                self.generate_expr_ir(expr, result_reg, instructions, constants)?;
+                Ok(true)
+            }
+            ast::StmtKind::If {
+                condition,
+                then_branch,
+                else_if_branches,
+                else_branch,
+                ..
+            } => {
+                self.generate_if_expr_ir(
+                    condition,
+                    then_branch,
+                    else_if_branches,
+                    else_branch.as_deref(),
+                    result_reg,
+                    instructions,
+                    constants,
+                )?;
+                Ok(true)
+            }
+            // 其余语句形态（赋值 / return / 循环 / …）不贡献块值：
+            // 末位赋值语句值为 Void（RFC-010a 规则①）
+            _ => Ok(false),
+        }
+    }
+
+    fn generate_block_ir(
+        &mut self,
+        block: &ast::Block,
+        result_reg: Option<usize>,
+        instructions: &mut Vec<Instruction>,
+        constants: &mut Vec<ConstValue>,
+    ) -> Result<(), Diagnostic> {
+        // 进入新的作用域
+        self.enter_scope();
+
+        let last_idx = block.stmts.len().checked_sub(1);
+        for (i, stmt) in block.stmts.iter().enumerate() {
+            let is_last = Some(i) == last_idx;
+            // 语句边界设定当前 span，供本条语句的所有指令构造就地捕获
+            self.set_cur_span(stmt.span);
+            // 块作为表达式 + 最后一条语句贡献块值 → 值写入 result_reg
+            if let (Some(reg), true) = (result_reg, is_last) {
+                if self.generate_tail_stmt_ir(stmt, reg, instructions, constants)? {
+                    // 尾语句路径同款消费（块值已进 reg，Drop 排在块出口之前）
+                    self.emit_release_drops(stmt.plan_id, instructions);
+                    self.set_cur_span(stmt.span);
+                    continue;
+                }
+            }
+            // 其他情况正常生成语句
+            self.generate_local_stmt_ir(stmt, instructions, constants)?;
+            // NLL Release: 块内每条语句边界都消费释放计划（RFC-039 D20）——
+            // 嵌套块（if/for/while/块表达式的体）的语句也各有自己的条目，
+            // 作用域退出的 Drop 就归属在块的最后一条语句上
+            self.emit_release_drops(stmt.plan_id, instructions);
+            // #393：语句级临时寄存器回收——临时不跨语句存活，语句生成完
+            // 回滚到「具名局部水位 ⋈ 循环态地板」。具名水位取 cur_locals
+            // 最后一个具名槽（参数与全部具名绑定，含已退出作用域者，保守
+            // 不复用）；temp_floor 保住 for 迭代器等循环态临时。仅语句语境
+            // 块回收：result_reg=Some 的块处于表达式操作数位，外层可能持有
+            // 跨块存活的兄弟实参临时，回滚会踩坏它们。
+            if result_reg.is_none() {
+                let named_watermark = self
+                    .cur_locals
+                    .iter()
+                    .rposition(|slot| slot.name.is_some())
+                    .map_or(0, |i| i + 1);
+                self.next_temp = named_watermark.max(self.temp_floor);
+            }
+            self.set_cur_span(stmt.span);
+        }
+
+        // 退出作用域
+        self.exit_scope();
+
+        Ok(())
+    }
+
+    /// 进入循环体生成：压入跳转目标上下文（#311）
+    fn enter_loop_targets(
+        &mut self,
+        loop_start_idx: usize,
+    ) {
+        // #393：循环态临时地板 = 进入时的 next_temp——for 的 iterator/iterable
+        // 等临时在进入前分配、体内每轮读取，语句级回收不得回滚到它们之下。
+        // while 的 cond 在进入后分配、读点都在体内语句之前，地板盖不住它
+        // 也无害（每轮循环开头重写）。
+        let saved_temp_floor = self.temp_floor;
+        self.temp_floor = self.next_temp;
+        self.loop_stack.push(LoopTargets {
+            continue_target: loop_start_idx,
+            break_fixups: Vec::new(),
+            saved_temp_floor,
+        });
+    }
+
+    /// 离开循环体生成：把循环体内 break 的占位 Jmp 回填到循环出口 `end_idx`（#311）
+    fn exit_loop_targets(
+        &mut self,
+        end_idx: usize,
+        instructions: &mut [Instruction],
+    ) {
+        if let Some(targets) = self.loop_stack.pop() {
+            // #393：恢复外层地板（嵌套循环各保各的）
+            self.temp_floor = targets.saved_temp_floor;
+            for fixup in targets.break_fixups {
+                if let Instruction::Jmp {
+                    ref mut target,
+                    span: _,
+                } = instructions[fixup]
+                {
+                    *target = end_idx;
+                }
+            }
+        }
+    }
+
+    /// Generate While expression IR
+    fn generate_while_expr_ir(
+        &mut self,
+        condition: &ast::Expr,
+        body: &ast::Block,
+        result_reg: usize,
+        instructions: &mut Vec<Instruction>,
+        constants: &mut Vec<ConstValue>,
+    ) -> Result<(), Diagnostic> {
+        // #409（while/for 同款）：先给值寄存器写 Void（等价于 block_value_ty 的「空块 ⇒ Void」
+        // 分支），此后凡体尾产出值即覆写它。该初值同时覆盖两种情形：
+        //   1. 条件首次即为假（零迭代）；
+        //   2. 每次完整迭代的体尾都不产出值（如体尾是赋值语句）——continue
+        //      直接回跳条件重判点、不经过体尾，故保留上一轮的值。
+        //
+        // 零迭代取 Void 的依据（有意为之，非遗留）：循环体一次都没求值 ⇒ 没有
+        // 「末次迭代的体值」（`for` 同理：源集合为空时没有体值）⇒ 「未产出值」只能用 Void 表达。要给它一个按值类型
+        // 定制的默认值，需要在 IR 层知道该值寄存器的**静态类型**；但 ir_gen 拿不到
+        // 这个信息——LocalSlot.ty 由 register_local 置为 Int(64)（本文件 619 行），
+        // 注解类型不写回槽位，TypeCheckResult 也没有按节点索引的类型表。故按类型
+        // 定制默认值不是本层能做的事（ir_gen 内对 resolve_type 的调用数为 0）。
+        // 后果：零迭代时值寄存器是 Void，把它当非 Void 类型用会在运行期以
+        // 类型不匹配显式失败——是「响亮失败」而非静默错值。类型侧
+        // block_value_ty 给的是体尾表达式的类型（静态近似），它对「循环是否至少
+        // 执行一次」无判定能力（需要数据流/可证性分析），故本层不擅自改动它。
+        instructions.push(Instruction::Load {
+            dst: Operand::Local(result_reg),
+            src: Operand::Const(ConstValue::Void),
+            span: self.cur_span,
+        });
+
+        // Label: condition_check
+        let loop_start_idx = instructions.len();
+        // #311：压入循环上下文——continue 跳回条件重判点，break 占位待出口回填
+        self.enter_loop_targets(loop_start_idx);
+
+        // Evaluate condition
+        let cond_reg = self.next_temp_reg();
+        self.generate_expr_ir(condition, cond_reg, instructions, constants)?;
+
+        // Jump to end if false
+        let jump_end_idx = instructions.len();
+        instructions.push(Instruction::JmpIfNot {
+            cond: Operand::Local(cond_reg),
+            target: 0,
+            span: self.cur_span,
+        }); // Placeholder
+
+        // Body：尾表达式直接写入值寄存器（RFC-010a 规则① / spec §2.9：所有块的
+        // 值由尾表达式给出）。#409 之前此处传 None 丢掉体值，并在出口无条件覆写
+        // 成 Void，与类型侧 block_value_ty 的判据分叉。
+        self.generate_block_ir(body, Some(result_reg), instructions, constants)?;
+
+        // Jump back to start
+        instructions.push(Instruction::Jmp {
+            target: loop_start_idx,
+            span: self.cur_span,
+        });
+
+        // Fix JmpIfNot target
+        let end_idx = instructions.len();
+        if let Instruction::JmpIfNot {
+            cond: _,
+            ref mut target,
+            span: _,
+        } = instructions[jump_end_idx]
+        {
+            *target = end_idx;
+        }
+        // #311：回填循环体内 break 的占位跳转到出口
+        self.exit_loop_targets(end_idx, instructions);
+
+        Ok(())
+    }
+
+    /// Generate For loop IR
+    #[allow(clippy::too_many_arguments)]
+    fn generate_for_loop_ir(
+        &mut self,
+        var_name: &str,
+        #[allow(unused_variables)] var_mut: bool,
+        iterable: &ast::Expr,
+        body: &ast::Block,
+        result_reg: Option<usize>,
+        for_span: Span,
+        instructions: &mut Vec<Instruction>,
+        constants: &mut Vec<ConstValue>,
+    ) -> Result<(), Diagnostic> {
+        // #302：Range 特判已删——`for i in 0..10` / `for i in r` 统一走迭代器协议
+        // （std.range.iter/has_next/next，由下方按静态类型派发）
+        if let Some(_iter_ty) = self.get_expr_mono_type(iterable).filter(|t| {
+            // #299 去特殊化：List/Tuple/Dict 为 Generic，Range 仍为原生变体
+            t.is_list() || t.is_tuple() || t.is_dict() || t.is_range()
+        }) {
+            // 使用迭代器协议的 For 循环
+            self.generate_iterator_for_loop_ir(
+                var_name,
+                iterable,
+                body,
+                result_reg,
+                for_span,
+                instructions,
+                constants,
+            )
+        } else if let Some(_iter_ty) = self.get_expr_mono_type(iterable) {
+            // 不支持的迭代器类型，返回错误（使用实际类型名称）
+            let iter_type = self.get_expr_type_name(iterable);
+            let span = Self::get_expr_span(iterable);
+            Err(ErrorCodeDefinition::ir_unsupported_iterator(&iter_type)
+                .at(span)
+                .build())
+        } else {
+            // 不支持的迭代器类型，返回错误（使用实际类型名称）
+            let iter_type = self.get_expr_type_name(iterable);
+            let span = Self::get_expr_span(iterable);
+            Err(ErrorCodeDefinition::ir_unsupported_iterator(&iter_type)
+                .at(span)
+                .build())
+        }
+    }
+
+    /// #300 I 项：Range 值构造——三槽 [start, end, step]
+    ///
+    /// `(a..b)..c` 是 step 形态（左操作数已是 Range 构造）；否则 step 默认 1。
+    /// #302：动态 step=0 不在构造点拦截——消费点（std.range.iter/contains）显式报错；
+    /// step=0 的偏性未来升格为 Result(Range(Int), Error)，见 #301 错误系统。
+    #[allow(clippy::too_many_arguments)]
+    fn generate_range_construction_ir(
+        &mut self,
+        left: &ast::Expr,
+        right: &ast::Expr,
+        result_reg: usize,
+        _span: Span,
+        instructions: &mut Vec<Instruction>,
+        constants: &mut Vec<ConstValue>,
+    ) -> Result<(), Diagnostic> {
+        // 解构 step 形态：左操作数本身是 Range 构造
+        let (start_expr, end_expr, step_expr) = if let ast::Expr::BinOp {
+            op: ast::BinOp::Range,
+            left: inner_start,
+            right: inner_end,
+            ..
+        } = left
+        {
+            (inner_start.as_ref(), inner_end.as_ref(), Some(right))
+        } else {
+            (left, right, None)
+        };
+
+        let start_reg = self.next_temp_reg();
+        let end_reg = self.next_temp_reg();
+        let step_reg = self.next_temp_reg();
+        self.generate_expr_ir(start_expr, start_reg, instructions, constants)?;
+        self.generate_expr_ir(end_expr, end_reg, instructions, constants)?;
+        if let Some(step) = step_expr {
+            self.generate_expr_ir(step, step_reg, instructions, constants)?;
+        } else {
+            instructions.push(Instruction::Load {
+                dst: Operand::Local(step_reg),
+                src: Operand::Const(ConstValue::Int(1)),
+                span: self.cur_span,
+            });
+        }
+
+        // #302：动态 step=0 不在构造点拦截——消费点（std.range.iter/contains）
+        // 显式运行时报错，构造出的 Range 值本身无观察者时无害；
+        // 字面量零已被 typecheck 拒绝；Result 化挂 #301
+
+        // #302：正式运行时身份——不再借 Tuple 外壳
+        instructions.push(Instruction::NewRange {
+            dst: Operand::Local(result_reg),
+            start: Operand::Local(start_reg),
+            end: Operand::Local(end_reg),
+            step: Operand::Local(step_reg),
+            span: self.cur_span,
+        });
+        Ok(())
+    }
+
+    /// `elem in container` 的 IR 生成
+    ///
+    /// #302：Range 容器走 std.range.contains 调用；其余容器走 Contains 指令
+    #[allow(clippy::too_many_arguments)]
+    fn generate_in_ir(
+        &mut self,
+        elem: &ast::Expr,
+        container: &ast::Expr,
+        result_reg: usize,
+        span: Span,
+        instructions: &mut Vec<Instruction>,
+        constants: &mut Vec<ConstValue>,
+    ) -> Result<(), Diagnostic> {
+        let _ = span; // contains 调用的 span 经 Instruction::Call 携带
+                      // #302：Range 臂迁移——`x in r` 运行时路径走 std.range.contains
+                      // （界检查符号派发 + 步长对齐；动态 step=0 显式运行时错误）。
+                      // AST 形态保持 Expr::In 一等谓词不变——精化/SMT 管道直接识别区间命题，
+                      // 区间保持区间，不物化（#299 §3 同款定位）。
+        if self
+            .get_expr_mono_type(container)
+            .map(|t| t.is_range())
+            .unwrap_or(false)
+        {
+            let elem_reg = self.next_temp_reg();
+            let container_reg = self.next_temp_reg();
+            self.generate_expr_ir(elem, elem_reg, instructions, constants)?;
+            self.generate_expr_ir(container, container_reg, instructions, constants)?;
+            instructions.push(Instruction::Call {
+                dst: Some(Operand::Local(result_reg)),
+                func: Operand::Const(ConstValue::String("std.range.contains".to_string())),
+                args: vec![Operand::Local(container_reg), Operand::Local(elem_reg)],
+                span,
+                def: None,
+            });
+            // #316：contains 已 Result(Bool, Error) 化——`x in r` 糖降级统一解包，
+            // Err（动态 step=0）分支显式失败（Bool 谓词无可传播的 Result）
+            self.emit_result_unwrap_or_abort(
+                result_reg,
+                result_reg,
+                "std.range.abort_invalid_step",
+                Operand::Local(container_reg),
+                span,
+                instructions,
+            );
+            return Ok(());
+        }
+
+        // 其余容器：Contains 指令（List/Array/Tuple/Dict/String）
+        {
+            let elem_reg = self.next_temp_reg();
+            let container_reg = self.next_temp_reg();
+            self.generate_expr_ir(elem, elem_reg, instructions, constants)?;
+            self.generate_expr_ir(container, container_reg, instructions, constants)?;
+            instructions.push(Instruction::Contains {
+                dst: Operand::Local(result_reg),
+                elem: Operand::Local(elem_reg),
+                container: Operand::Local(container_reg),
+                span,
+            });
+        }
+        Ok(())
+    }
+
+    /// #316：Result 解包，Err 分支转显式失败——`for`/`in` 糖消费 Result API 的统一降级
+    ///
+    /// IR 序列同 #301 `?`（VariantTag/Eq/JmpIfNot/VariantPayload），差别在 Err
+    /// 分支：糖形态不产 Result 值（for 循环无返回、`x in r` 是 Bool 谓词），
+    /// 隐式 `?` 对非 Result 函数是类型违约——改为调用 abort native 显式失败
+    /// （失败点在用户消费处，消息明确，绝不静默续跑/死循环）。
+    fn emit_result_unwrap_or_abort(
+        &mut self,
+        result_reg: usize,
+        dst_reg: usize,
+        abort_fn: &str,
+        abort_arg: Operand,
+        span: Span,
+        instructions: &mut Vec<Instruction>,
+    ) {
+        let tag_reg = self.next_temp_reg();
+        instructions.push(Instruction::VariantTag {
+            dst: Operand::Local(tag_reg),
+            obj: Operand::Local(result_reg),
+            group: "Result".to_string(),
+            span,
+        });
+        let ok_const = self.next_temp_reg();
+        instructions.push(Instruction::Load {
+            dst: Operand::Local(ok_const),
+            src: Operand::Const(ConstValue::Int(0)),
+            span: self.cur_span,
+        });
+        let eq_reg = self.next_temp_reg();
+        instructions.push(Instruction::Eq {
+            dst: Operand::Local(eq_reg),
+            lhs: Operand::Local(tag_reg),
+            rhs: Operand::Local(ok_const),
+            span: self.cur_span,
+        });
+        // variant != 0（Err）→ 跳到显式失败
+        let is_err_idx = instructions.len();
+        instructions.push(Instruction::JmpIfNot {
+            cond: Operand::Local(eq_reg),
+            target: 0,
+            span: self.cur_span,
+        });
+        // Ok 路径：payload 原地解包为消费值
+        instructions.push(Instruction::VariantPayload {
+            dst: Operand::Local(dst_reg),
+            obj: Operand::Local(result_reg),
+            group: "Result".to_string(),
+            span,
+        });
+        let end_idx = instructions.len();
+        instructions.push(Instruction::Jmp {
+            target: 0,
+            span: self.cur_span,
+        });
+        // Err 路径：abort native 必返 ExecutorError，后续指令不可达
+        let err_target = instructions.len();
+        instructions[is_err_idx] = Instruction::JmpIfNot {
+            cond: Operand::Local(eq_reg),
+            target: err_target,
+            span: self.cur_span,
+        };
+        instructions.push(Instruction::Call {
+            dst: None,
+            func: Operand::Const(ConstValue::String(abort_fn.to_string())),
+            args: vec![abort_arg],
+            span,
+            def: None,
+        });
+        let end_target = instructions.len();
+        instructions[end_idx] = Instruction::Jmp {
+            target: end_target,
+            span: self.cur_span,
+        };
+    }
+
+    /// 生成基于迭代器协议的 For 循环 IR
+    /// 这是新的迭代器协议实现，调用 iter()/next()/has_next() 方法
+    #[allow(clippy::too_many_arguments)]
+    fn generate_iterator_for_loop_ir(
+        &mut self,
+        var_name: &str,
+        iterable: &ast::Expr,
+        body: &ast::Block,
+        result_reg: Option<usize>,
+        for_span: Span,
+        instructions: &mut Vec<Instruction>,
+        constants: &mut Vec<ConstValue>,
+    ) -> Result<(), Diagnostic> {
+        self.enter_scope();
+
+        // #409：零迭代兜底——先给值寄存器写 Void（等价于 block_value_ty 的
+        // 「空块 ⇒ Void」分支），随后每轮由体尾表达式覆写。与 while 同款语义
+        //（零迭代取 Void 的依据见 generate_while_expr_ir 的注释）。
+        if let Some(reg) = result_reg {
+            instructions.push(Instruction::Load {
+                dst: Operand::Local(reg),
+                src: Operand::Const(ConstValue::Void),
+                span: self.cur_span,
+            });
+        }
+
+        // 1. 计算可迭代对象
+        let iterable_reg = self.next_temp_reg();
+        self.generate_expr_ir(iterable, iterable_reg, instructions, constants)?;
+
+        // 1.5 #302：按静态类型派发协议函数名（Range → std.range.*，其余 → std.list.*）
+        let is_range = self
+            .get_expr_mono_type(iterable)
+            .map(|t| t.is_range())
+            .unwrap_or(false);
+        // 迭代协议函数名：range 仍是 native（限定名直用）；
+        // list 已迁到纯 yx（src/std/list.yx），其函数以裸名注册，
+        // 交给 `resolve_namespace` 决定最终名（命中限定名用限定名，否则退裸名）。
+        let (iter_fn, has_next_fn, next_fn) = if is_range {
+            (
+                "std.range.iter".to_string(),
+                "std.range.has_next".to_string(),
+                "std.range.next".to_string(),
+            )
+        } else {
+            (
+                self.resolver().resolve_namespace("list", &["iter"]),
+                self.resolver().resolve_namespace("list", &["has_next"]),
+                self.resolver().resolve_namespace("list", &["next"]),
+            )
+        };
+
+        // 2. 创建迭代器: iterator = iter(iterable)
+        let iterator_reg = self.next_temp_reg();
+        instructions.push(Instruction::Call {
+            dst: Some(Operand::Local(iterator_reg)),
+            func: Operand::Const(ConstValue::String(iter_fn.clone())),
+            args: vec![Operand::Local(iterable_reg)],
+            span: for_span,
+            def: None,
+        });
+        // #316：Range 协议 iter 已 Result(Iterator, Error) 化——糖降级统一解包，
+        // Err（动态 step=0）分支显式失败（for 循环无可传播的 Result，且绝不死循环）
+        if is_range {
+            self.emit_result_unwrap_or_abort(
+                iterator_reg,
+                iterator_reg,
+                "std.range.abort_invalid_step",
+                Operand::Local(iterable_reg),
+                for_span,
+                instructions,
+            );
+        }
+
+        // 3. 注册循环变量
+        let var_reg = self.next_temp_reg();
+        self.register_local(var_name, var_reg);
+
+        // 4. 循环开始
+        let loop_start_idx = instructions.len();
+        // #311：压入循环上下文——continue 跳回 has_next 检查点，break 占位待出口回填
+        self.enter_loop_targets(loop_start_idx);
+
+        // 5. 检查是否有更多元素: has_more = has_next(iterator)
+        let has_more_reg = self.next_temp_reg();
+        instructions.push(Instruction::Call {
+            dst: Some(Operand::Local(has_more_reg)),
+            func: Operand::Const(ConstValue::String(has_next_fn.to_string())),
+            args: vec![Operand::Local(iterator_reg)],
+            span: for_span,
+            def: None,
+        });
+
+        // 6. 如果没有更多元素，跳转到结束
+        let jump_end_idx = instructions.len();
+        instructions.push(Instruction::JmpIfNot {
+            cond: Operand::Local(has_more_reg),
+            target: 0,
+            span: self.cur_span,
+        });
+
+        // 7. 获取下一个元素: var = next(iterator)
+        let element_reg = self.next_temp_reg();
+        instructions.push(Instruction::Call {
+            dst: Some(Operand::Local(element_reg)),
+            func: Operand::Const(ConstValue::String(next_fn.to_string())),
+            args: vec![Operand::Local(iterator_reg)],
+            span: for_span,
+            def: None,
+        });
+        instructions.push(Instruction::Store {
+            dst: Operand::Local(var_reg),
+            src: Operand::Local(element_reg),
+            span: for_span,
+        });
+
+        // 8. 执行循环体
+        // #409：尾表达式直接写入值寄存器（RFC-010a 规则①；与 while 同款）。
+        // 此前此处传 None 并在出口把值覆写成 Void，故 for 作值在运行期恒 void。
+        self.generate_block_ir(body, result_reg, instructions, constants)?;
+
+        // 9. 跳转回循环开始
+        instructions.push(Instruction::Jmp {
+            target: loop_start_idx,
+            span: self.cur_span,
+        });
+
+        // 10. 修复跳转
+        let end_idx = instructions.len();
+        if let Instruction::JmpIfNot {
+            cond: _,
+            ref mut target,
+            span: _,
+        } = instructions[jump_end_idx]
+        {
+            *target = end_idx;
+        }
+        // #311：回填循环体内 break 的占位跳转到出口
+        self.exit_loop_targets(end_idx, instructions);
+
+        self.exit_scope();
+
+        Ok(())
+    }
+
+    /// 生成 spawn for 数据并行循环的 IR
+    ///
+    /// 将 `spawn for item in items { process(item) }` 展开为：
+    /// ```text
+    /// closures = []          // AllocArray
+    /// iterator = iter(items) // Call
+    /// while has_next(iterator) {
+    ///     item = next(iterator)
+    ///     closure = () => { body }  // Lambda
+    ///     push(closures, closure)   // Call std.list.push
+    /// }
+    /// Spawn { closures, plan, result }
+    /// ```
+    #[allow(clippy::too_many_arguments)]
+    fn generate_spawn_for_ir(
+        &mut self,
+        var_name: &str,
+        // ponytail: for-mut 的可变性由 typecheck 校验，ir_gen 无需追踪
+        _var_mut: bool,
+        iterable: &ast::Expr,
+        body: &ast::Block,
+        result_reg: usize,
+        span: Span,
+        instructions: &mut Vec<Instruction>,
+        constants: &mut Vec<ConstValue>,
+    ) -> Result<(), Diagnostic> {
+        use crate::frontend::core::spawn::analysis::analyze_spawn_for;
+
+        // 1. 分析循环体读写集
+        let (trait_table, local_var_types) = if let Some(ref type_result) = self.type_result {
+            (&type_result.trait_table, &type_result.local_var_types)
+        } else {
+            static EMPTY_TRAIT_TABLE: std::sync::LazyLock<
+                crate::frontend::core::types::TraitTable,
+            > = std::sync::LazyLock::new(crate::frontend::core::types::TraitTable::default);
+            static EMPTY_VAR_TYPES: std::sync::LazyLock<
+                std::collections::HashMap<String, crate::frontend::core::types::MonoType>,
+            > = std::sync::LazyLock::new(std::collections::HashMap::new);
+            (&*EMPTY_TRAIT_TABLE, &*EMPTY_VAR_TYPES)
+        };
+
+        let spawn_for_analysis =
+            analyze_spawn_for(var_name, iterable, body, trait_table, local_var_types);
+
+        // 2. 进入 spawn 作用域
+        self.enter_scope();
+
+        // 3. 创建空列表寄存器，用于收集闭包
+        let closures_list_reg = self.next_temp_reg();
+        instructions.push(Instruction::AllocArray {
+            dst: Operand::Local(closures_list_reg),
+            size: Operand::Const(ConstValue::Int(0)),
+            elem_size: Operand::Const(ConstValue::Int(1)),
+            span: self.cur_span,
+        });
+
+        // 4. 计算可迭代对象
+        let iterable_reg = self.next_temp_reg();
+        self.generate_expr_ir(iterable, iterable_reg, instructions, constants)?;
+
+        // 5. 创建迭代器: iterator = iter(iterable)
+        let iterator_reg = self.next_temp_reg();
+        instructions.push(Instruction::Call {
+            dst: Some(Operand::Local(iterator_reg)),
+            func: Operand::Const(ConstValue::String(
+                self.resolver().resolve_namespace("list", &["iter"]),
+            )),
+            args: vec![Operand::Local(iterable_reg)],
+            span,
+            def: None,
+        });
+
+        // 6. 注册循环变量
+        let var_reg = self.next_temp_reg();
+        self.register_local(var_name, var_reg);
+
+        // 7. 循环开始
+        let loop_start_idx = instructions.len();
+
+        // 8. has_next?
+        let has_more_reg = self.next_temp_reg();
+        instructions.push(Instruction::Call {
+            dst: Some(Operand::Local(has_more_reg)),
+            func: Operand::Const(ConstValue::String("std.list.has_next".to_string())),
+            args: vec![Operand::Local(iterator_reg)],
+            span,
+            def: None,
+        });
+
+        // 9. 如果没有更多元素，跳转到结束
+        let jump_end_idx = instructions.len();
+        instructions.push(Instruction::JmpIfNot {
+            cond: Operand::Local(has_more_reg),
+            target: 0,
+            span: self.cur_span,
+        });
+
+        // 10. 获取下一个元素: var = next(iterator)
+        let element_reg = self.next_temp_reg();
+        instructions.push(Instruction::Call {
+            dst: Some(Operand::Local(element_reg)),
+            func: Operand::Const(ConstValue::String("std.list.next".to_string())),
+            args: vec![Operand::Local(iterator_reg)],
+            span,
+            def: None,
+        });
+        instructions.push(Instruction::Store {
+            dst: Operand::Local(var_reg),
+            src: Operand::Local(element_reg),
+            span,
+        });
+
+        // 11. 在循环体内创建闭包：(item) => { body }
+        //     迭代变量作为参数传入，当前值通过 env 捕获
+        let closure_reg = self.next_temp_reg();
+        // 捕获迭代变量的当前值（element_reg 在 next() 返回后被设置）
+        self.pending_env_vars = vec![Operand::Local(element_reg)];
+        let lambda = ast::Expr::Lambda {
+            params: vec![ast::Param {
+                name: var_name.to_string(),
+                ty: None,
+                is_mut: false,
+                quantity: None,
+                span,
+            }],
+            body: Box::new(body.clone()),
+            span,
+        };
+        self.generate_expr_ir(&lambda, closure_reg, instructions, constants)?;
+
+        // 12. 将闭包推入列表: push(closures, closure)
+        instructions.push(Instruction::Call {
+            dst: Some(Operand::Local(closures_list_reg)),
+            func: Operand::Const(ConstValue::String("std.list.push".to_string())),
+            args: vec![
+                Operand::Local(closures_list_reg),
+                Operand::Local(closure_reg),
+            ],
+            span,
+            def: None,
+        });
+
+        // 13. 跳转回循环开始
+        instructions.push(Instruction::Jmp {
+            target: loop_start_idx,
+            span: self.cur_span,
+        });
+
+        // 14. 修复跳出循环的跳转目标
+        let end_idx = instructions.len();
+        if let Instruction::JmpIfNot {
+            cond: _,
+            ref mut target,
+            span: _,
+        } = instructions[jump_end_idx]
+        {
+            *target = end_idx;
+        }
+
+        // 15. 构建执行计划
+        //     所有迭代共享同一个读写集（编译期分析的循环体特征）
+        let read_write_sets = vec![(
+            spawn_for_analysis.reads.clone(),
+            spawn_for_analysis.writes.clone(),
+        )];
+        let resource_var_sets = vec![spawn_for_analysis.resource_vars.clone()];
+        let plan = crate::frontend::core::spawn::analysis::build_execution_plan(
+            &read_write_sets,
+            &resource_var_sets,
+        );
+
+        // 16. 生成 SpawnFromList 指令
+        //     closures_list 参数是闭包列表寄存器（运行时动态收集）
+        instructions.push(Instruction::SpawnFromList {
+            closures_list: Operand::Local(closures_list_reg),
+            plan,
+            result: Operand::Local(result_reg),
+            span: self.cur_span,
+        });
+
+        // 17. 退出 spawn 作用域
+        self.exit_scope();
+
+        Ok(())
+    }
+
+    // 迭代器协议已通过 Call 指令实现，不再需要独立的 IR 指令
+    // 保留指令定义以供将来使用
+
+    /// 获取表达式的 span
+    fn get_expr_span(expr: &ast::Expr) -> Span {
+        match expr {
+            ast::Expr::Lit(_, span) => *span,
+            ast::Expr::Var(_, span) => *span,
+            ast::Expr::BinOp { span, .. } => *span,
+            ast::Expr::UnOp { span, .. } => *span,
+            ast::Expr::Call { span, .. } => *span,
+            ast::Expr::If { span, .. } => *span,
+            ast::Expr::Match { span, .. } => *span,
+            ast::Expr::While { span, .. } => *span,
+            ast::Expr::For { span, .. } => *span,
+            ast::Expr::SpawnFor { span, .. } => *span,
+            ast::Expr::Block(block) => block.span,
+            ast::Expr::Return(_, span) => *span,
+            ast::Expr::Break(span) => *span,
+            ast::Expr::Continue(span) => *span,
+            ast::Expr::Cast { span, .. } => *span,
+            ast::Expr::Tuple(_, span) => *span,
+            ast::Expr::List(_, span) => *span,
+            ast::Expr::ListComp { span, .. } => *span,
+            ast::Expr::Dict(_, span) => *span,
+            ast::Expr::Index { span, .. } => *span,
+            ast::Expr::FieldAccess { span, .. } => *span,
+            ast::Expr::Try { span, .. } => *span,
+            ast::Expr::Ref { span, .. } => *span,
+            ast::Expr::Unsafe { span, .. } => *span,
+            ast::Expr::Spawn { span, .. } => *span,
+            ast::Expr::Lambda { span, .. } => *span,
+            ast::Expr::FString { span, .. } => *span,
+            ast::Expr::Error(span) => *span,
+            ast::Expr::Borrow { span, .. } => *span,
+            ast::Expr::In { span, .. } => *span,
+        }
+    }
+
+    /// 获取表达式的实际类型名称（用于错误消息）
+    ///
+    /// 通过查询类型检查结果获取表达式的真正类型，而不是仅描述 AST 节点结构。
+    /// 例如对于变量 `nums`，返回 `List<int64>` 而非 `变量 \`nums\``。
+    fn get_expr_type_name(
+        &self,
+        expr: &ast::Expr,
+    ) -> String {
+        // 如果表达式是变量，尝试从多个来源查找其类型
+        if let ast::Expr::Var(name, _) = expr {
+            // 1. 从类型检查结果中的 local_var_types 查找（最准确，包含具体类型）
+            if let Some(ref type_result) = self.type_result {
+                if let Some(mono_type) = type_result.local_var_types.get(name) {
+                    return mono_type.type_name();
+                }
+            }
+            // 2. 从 bindings 中查找全局绑定
+            if let Some(poly_type) = self.lookup_var_type(name) {
+                let mono_type = poly_type.body.clone();
+                return mono_type.type_name();
+            }
+            // 3. 从 IR 生成器本地追踪的类型中查找
+            if let Some(type_name) = self.local_var_types.get(name) {
+                return type_name.clone();
+            }
+        }
+
+        // 构造器调用：Point(1.0, 2.0) → 类型名为 "Point"
+        if let ast::Expr::Call { func, .. } = expr {
+            if let ast::Expr::Var(name, _) = func.as_ref() {
+                if self.struct_definitions.contains_key(name) {
+                    return name.clone();
+                }
+            }
+        }
+
+        // 对于其他表达式，不做 AST 猜测
+        "<unknown>".to_string()
+    }
+
+    /// 解析函数表达式为函数名 Operand（用于普通函数调用）
+    fn resolve_function_name(
+        &self,
+        func: &ast::Expr,
+    ) -> Result<Operand, Diagnostic> {
+        if let Expr::Var(name, _) = func {
+            // 用户**本模块**定义的类型/结构体优先于 `use` 导入的 std 名字。
+            // 否则 `use std.math` 后用户写 `PI: Type = { .. }; PI(7)` 会被解析成
+            // `std.math.PI`（圆周率常量）——调用常量得到 void，静默错值（D10）。
+            // 要访问被遮蔽的 std 名，写限定名 `math.PI` 即可。
+            let locally_defined = self.declared_type_names.contains(name);
+            let resolved_name = if locally_defined {
+                name.clone()
+            } else if let Some(qualified) = self.use_aliases.get(name) {
+                qualified.clone()
+            } else if self.registry.is_native_name(name) {
+                name.clone()
+            } else if let Some(qualified) = self.registry.short_to_qualified_map().get(name) {
+                qualified.clone()
+            } else {
+                name.clone()
+            };
+            Ok(Operand::Const(ConstValue::String(resolved_name)))
+        } else if let Expr::Call {
+            func: inner,
+            args: inner_args,
+            ..
+        } = func
+        {
+            // 两层调用 `X(T)(...)`：内层类型实参运行期擦除。
+            //
+            // - 结构体构造器（`Container(Int)(42, 43)`）：按类型名生成，
+            //   字段填充由调用点实参决定。
+            // - **泛型函数**（`mk(Int)(5)`）：内层是类型应用，运行期完全无表示。
+            //   单态化器把 `mk` 特化成 `mk(int64)` 并**剥掉未特化的 `mk`**，
+            //   所以这里必须发**特化名**，否则运行期找不到 `mk`（E6006，D6.3）。
+            if let Expr::Var(name, _) = inner.as_ref() {
+                if self.struct_definitions.contains_key(name) {
+                    return Ok(Operand::Const(ConstValue::String(name.clone())));
+                }
+                if self.lookup_local(name).is_none() {
+                    let base = self.resolve_function_name(inner)?;
+                    let base_name = match &base {
+                        Operand::Const(ConstValue::String(s)) => s.clone(),
+                        _ => name.clone(),
+                    };
+                    // 仅在实参确为类型值时叠特化后缀（值实参=部分应用，不在此列）
+                    if !inner_args.is_empty()
+                        && inner_args.iter().all(|a| self.expr_is_type_value(a))
+                    {
+                        let args_str = inner_args
+                            .iter()
+                            .map(Self::type_value_ir_name)
+                            .collect::<Vec<_>>()
+                            .join(", ");
+                        return Ok(Operand::Const(ConstValue::String(format!(
+                            "{}({})",
+                            base_name, args_str
+                        ))));
+                    }
+                    return Ok(base);
+                }
+            }
+            Err(ErrorCodeDefinition::ir_internal_error(&format!(
+                "无法解析函数名：非结构体构造器调用 {:?}",
+                func
+            ))
+            .at(Self::get_expr_span(func))
+            .build())
+        } else {
+            Err(ErrorCodeDefinition::ir_internal_error(&format!(
+                "无法解析函数名：非变量表达式 {:?}",
+                func
+            ))
+            .at(Self::get_expr_span(func))
+            .build())
+        }
+    }
+
+    /// 判断函数表达式是否可在编译期解析为静态函数名。
+    ///
+    /// 只有全局函数声明（通过 let/fn 定义的具名函数）才是静态的。
+    /// 局部变量、闭包表达式、函数调用返回值等全部走动态分发。
+    /// 该表达式是否是**类型值**（类型宇宙的值）：`Int`、`Vec(Int)` 等。
+    ///
+    /// 用于区分「类型实参层」（擦除）与「部分应用」（真实调用）：
+    /// `mk(Int)(5)` 的 `Int` 是类型值，内层不生成运行时代码；
+    /// `f(10)(5)` 的 `10` 是普通值，内层必须真的调用并返回闭包。
+    fn expr_is_type_value(
+        &self,
+        expr: &ast::Expr,
+    ) -> bool {
+        let ast::Expr::Var(name, _) = expr else {
+            return false;
+        };
+        // 本模块声明的局部变量/参数优先——变量叫 `Int` 也是值
+        if self.lookup_local(name).is_some() {
+            return false;
+        }
+        crate::frontend::core::types::mono::MonoType::from_builtin_name(name).is_some()
+            || matches!(
+                name.as_str(),
+                "Vec" | "Array" | "Dict" | "Tuple" | "Option" | "Result" | "Range" | "Iter"
+            )
+            || self.declared_type_names.contains(name)
+    }
+
+    /// 类型值表达式 → `MonoType`（`Int` → `Int(64)`，`Vec(Int)` → `Generic`）。
+    ///
+    /// 与 `typecheck` 侧的 `type_arg_of_expr` 同口径（两边都必须把类型名解成
+    /// 真实类型，而非笼统的 `MetaType`）。
+    fn type_arg_of_expr_ir(expr: &ast::Expr) -> MonoType {
+        match expr {
+            ast::Expr::Var(name, _) => {
+                crate::frontend::core::types::mono::MonoType::from_builtin_name(name)
+                    .unwrap_or_else(|| {
+                        crate::frontend::core::types::mono::MonoType::TypeRef(name.clone())
+                    })
+            }
+            ast::Expr::Call { func, args, .. } => {
+                if let ast::Expr::Var(cname, _) = func.as_ref() {
+                    MonoType::Generic {
+                        name: cname.clone(),
+                        args: args.iter().map(Self::type_arg_of_expr_ir).collect(),
+                    }
+                } else {
+                    MonoType::TypeRef("_".to_string())
+                }
+            }
+            _ => MonoType::TypeRef("_".to_string()),
+        }
+    }
+
+    /// 把类型值表达式转成单态化器的类型名（`Int` → `int64`，`String` → `string`）。
+    ///
+    /// 必须与 `middle::passes::mono` 生成特化名的口径**完全一致**
+    /// （那边用 `MonoType::type_name()`）：`mk(Int)(5)` 要调的函数叫
+    /// `mk(int64)`，名字对不上就 E6006。
+    fn type_value_ir_name(expr: &ast::Expr) -> String {
+        let ast::Expr::Var(name, _) = expr else {
+            return "_".to_string();
+        };
+        crate::frontend::core::types::mono::MonoType::from_builtin_name(name)
+            .unwrap_or_else(|| crate::frontend::core::types::mono::MonoType::TypeRef(name.clone()))
+            .type_name()
+    }
+
+    /// 该调用点是否为**静态调用**——callee 是函数表里的一个名字（代码），而非某个值。
+    ///
+    /// 名字解析与 [`Self::generate_var_expr_ir`] 同一条优先级（局部变量 → 全局
+    /// 槽位 → `use` 引入的跨文件值 → …）：命中就是**变量**，调用必须走 `CallDyn`
+    /// （间接调用，机制已在：闭包表达式路径即此）；全未命中才是函数表条目，按名 `Call`。
+    ///
+    /// 两条臂都是「值被当成函数名」的实证缺陷（WBS 3.6.1 / 3.6.2）：
+    /// - 顶层值绑定（`f = double`，查 [`Self::lookup_global`]）：它不是局部变量、
+    ///   却在 typecheck 的 bindings 里（类型是 `Fn`），于是被当成函数名。而函数表
+    ///   里没有叫 `f` 的代码——`f = double` 不进函数表，只占一个全局槽位（由
+    ///   `register_global_slots` 预分配，见其注释）。按名 `Call` 在运行期查扁平
+    ///   函数表落空，报 `E6006 Native function not found: f`。
+    /// - `use lib.{f}` / `use lib.{f as g}` 导入的函数类型值（查
+    ///   [`Self::use_alias_value_slot`]）：别名解析到的是对方单元的全局槽位，函数表
+    ///   里同样没有这个值，按名 `Call` 报 `E6006 Native function not found: lib.f`。
+    fn is_static_fn_name(
+        &self,
+        func: &ast::Expr,
+    ) -> bool {
+        match func {
+            ast::Expr::Var(name, _) => {
+                if self.lookup_local(name).is_some() {
+                    return false;
+                }
+                // 顶层值绑定是变量不是代码：与 `generate_var_expr_ir` 的
+                // 「局部 → 全局」优先级一致，走间接调用。
+                if self.lookup_global(name).is_some() {
+                    return false;
+                }
+                // 跨文件导入的值（`use lib.{f}` / `use lib.{f as g}`）：别名落在
+                // 跨文件值绑定槽位即是变量。联查与值路径同经 `use_alias_value_slot`
+                // ——同一实现，两条路径不会各猜一个答案。
+                if self.use_alias_value_slot(name).is_some() {
+                    return false;
+                }
+                self.lookup_var_type(name).is_some()
+            }
+            // 两层调用 `X(T)(...)`：
+            // - 内层是 struct 构造器（`Container(Int)(42, 43)`）——类型实参擦除
+            // - 内层是**普通函数**且实参均为**类型**（`mk(Int)(5)`）——擦除类型实参层，
+            //   外层才是真实调用。
+            //
+            // 关键判据：内层实参必须是类型（`MetaType`）而非值。否则会误伤
+            // 部分应用（`f(10)(5)` 里 `f(10)` 是**真的返回闭包**，不是类型实参层
+            // ——那会让 `f(10)(5)` 变成单次调用 `f(10, 5)` 而错值）。
+            ast::Expr::Call {
+                func: inner,
+                args: inner_args,
+                ..
+            } => match inner.as_ref() {
+                ast::Expr::Var(name, _) => {
+                    if self.struct_definitions.contains_key(name) {
+                        return true;
+                    }
+                    !inner_args.is_empty()
+                        && inner_args.iter().all(|a| self.expr_is_type_value(a))
+                        && self.lookup_local(name).is_none()
+                        && self.lookup_var_type(name).is_some()
+                }
+                _ => false,
+            },
+            _ => false,
+        }
+    }
+
+    /// 获取表达式的推断类型（用于 IR 生成阶段的分支）
+    /// 该字段访问是否为容器的 `.length`（`Vec(T)` / `Array(T, N)`）。
+    ///
+    /// 剥掉 `Ref` 层：`&Vec(A)` 的 `.length` 也是长度读取（RFC-009 §2.8 读透明）。
+    fn is_container_length_field(
+        &self,
+        expr: &Expr,
+        field: &str,
+    ) -> bool {
+        field == "length"
+            && matches!(self.get_expr_mono_type(expr), Some(ref t) if {
+                let mut r = t.clone();
+                while let crate::frontend::core::types::mono::MonoType::Ref { inner, .. } = r {
+                    r = *inner;
+                }
+                r.is_vec() || r.is_array()
+            })
+    }
+
+    /// 生成一个表达式的静态类型（IR 期视图）
+    fn get_expr_mono_type(
+        &self,
+        expr: &ast::Expr,
+    ) -> Option<MonoType> {
+        match expr {
+            ast::Expr::BinOp {
+                op: ast::BinOp::Range,
+                ..
+            } => {
+                // #300 I 项：Range 是一等值（start/end/step 三槽），类型恒为 Range(Int)
+                Some(MonoType::Generic {
+                    name: "Range".into(),
+                    args: vec![MonoType::Int(64)],
+                })
+            }
+            ast::Expr::Var(name, _) => {
+                if let Some(ref type_result) = self.type_result {
+                    if let Some(mono_type) = type_result.local_var_types.get(name) {
+                        return Some(mono_type.clone());
+                    }
+                }
+
+                self.lookup_var_type(name)
+                    .map(|poly_type| poly_type.body.clone())
+            }
+            // RFC-011a §6: 索引表达式——列表/数组元素的静态类型（存在类型
+            // 接收者解析依赖此臂：animals[0] → 元素类型 TypeRef(接口)）
+            ast::Expr::Index { expr: base, .. } => {
+                let base_ty = self.get_expr_mono_type(base);
+                match base_ty {
+                    Some(MonoType::Generic { name, args })
+                        if (name == "List" || name == "Vec" || name == "Array")
+                            && args.len() == 1 =>
+                    {
+                        Some(args[0].clone())
+                    }
+                    _ => None,
+                }
+            }
+            ast::Expr::List(_, _) => Some(MonoType::make_list(MonoType::Void)),
+            // `Vec(Int)(...)` / `Array(Int, 3)(...)` 的静态类型。
+            //
+            // 链式取字段（`Vec(Int)().length`）走 `get_expr_mono_type` 判类型，
+            // 没有本臂就落到「普通字段访问」分支 → 报
+            // E3005「无法解析字段索引: 'length'」。类型实参在 AST 里就是
+            // `Call{func: Var(容器名), args: [类型表达式...]}`，直接解出来。
+            ast::Expr::Call { func, .. } => {
+                if let ast::Expr::Call {
+                    func: inner,
+                    args: type_args,
+                    ..
+                } = func.as_ref()
+                {
+                    if let ast::Expr::Var(cname, _) = inner.as_ref() {
+                        if matches!(cname.as_str(), "Vec" | "Array")
+                            && !self.declared_type_names.contains(cname)
+                        {
+                            return Some(MonoType::Generic {
+                                name: cname.clone(),
+                                args: type_args.iter().map(Self::type_arg_of_expr_ir).collect(),
+                            });
+                        }
+                    }
+                }
+                None
+            }
+            ast::Expr::Tuple(items, _) => {
+                let elems = vec![MonoType::Void; items.len()];
+                Some(MonoType::make_tuple(elems))
+            }
+            ast::Expr::Dict(_, _) => Some(MonoType::make_dict(MonoType::Void, MonoType::Void)),
+            _ => None,
+        }
+    }
+
+    /// 生成 Lambda 函数体 IR
+    ///
+    /// 返回闭包函数体的指令列表和局部变量信息
+    fn generate_lambda_body_ir(
+        &mut self,
+        params: &[ast::Param],
+        body: &ast::Block,
+        constants: &mut Vec<ConstValue>,
+        env_count: usize,
+    ) -> Result<LambdaBodyIR, Diagnostic> {
+        // 保存父函数的临时寄存器计数
+        let saved_next_temp = self.next_temp;
+        let saved_temp_high_water = self.temp_high_water;
+        let saved_temp_floor = self.temp_floor;
+        let saved_cur_locals = std::mem::take(&mut self.cur_locals);
+        // cur_span 与 next_temp 同款：嵌套函数体是独立源码单元
+        let saved_cur_span = self.cur_span;
+
+        // #311：闭包体是独立指令流，循环栈属父函数——保存并清空
+        //（typecheck 已用 E1102 拦截函数体内的 break/continue，此处为层间失联防御）
+        let saved_loop_stack = std::mem::take(&mut self.loop_stack);
+
+        let mut instructions = Vec::new();
+
+        // 进入闭包函数体作用域
+        self.enter_scope();
+
+        // 注册参数槽位。
+        // env_count：闭包 env 在帧参数中占前段（运行时 `final_args = env + args`
+        // 且 `Frame::with_args` 已把它们铺进 slots[0..]）。因此本层参数直接位于
+        // `env_count + i`，**无需** LoadArg——那会与已铺好的槽位错位。
+        // 捕获变量同理：`closure_captures` 让 Var 解析走 LoadUpvalue。
+        for (i, param) in params.iter().enumerate() {
+            self.register_local(&param.name, env_count + i);
+        }
+        // 匿名绑定 / 闭包的形参就是声明（绑定注解 / 返回位内层 Fn）本身，无需补位。
+        self.note_param_written_types(params, &[]);
+
+        // 记录局部变量起始位置
+        let local_var_start = env_count + params.len();
+        self.next_temp = local_var_start;
+
+        // 处理函数体语句（RFC-010a 规则①：尾表达式给出 lambda 的值）。
+        // 此前无条件逐语句生成、末尾补 `Ret(None)`，导致块体内的
+        // `() => 7` 返回值被丢弃（`mk: () -> (() -> Int) = { () => 7 }` 得 void）。
+        let last_idx = body.stmts.len().checked_sub(1);
+        let mut tail_handled = false;
+        for (i, stmt) in body.stmts.iter().enumerate() {
+            // 语句边界设定当前 span，供本条语句的所有指令构造就地捕获
+            self.set_cur_span(stmt.span);
+            if Some(i) == last_idx {
+                let result_reg = self.next_temp_reg();
+                if self.generate_tail_stmt_ir(stmt, result_reg, &mut instructions, constants)? {
+                    // 尾语句路径（RFC-039 D20 逐案核实项）：本条语句经
+                    // `generate_tail_stmt_ir` 提前返回，**必须**在同款语句边界上
+                    // 消费它的释放条目——漏这一处，尾语句的 Drop 就静默丢失
+                    //（实测红态里正是这一类：尾位置语句的计划键永不命中）。
+                    // 取值已完成（值在 result_reg），故 Drop 排在 Ret 之前。
+                    self.emit_release_drops(stmt.plan_id, &mut instructions);
+                    instructions.push(Instruction::Ret {
+                        value: Some(Operand::Local(result_reg)),
+                        span: self.cur_span,
+                    });
+                    self.set_cur_span(stmt.span);
+                    tail_handled = true;
+                    break;
+                }
+            }
+            self.generate_local_stmt_ir(stmt, &mut instructions, constants)?;
+            // NLL Release: 语句边界消费释放计划（RFC-039 D20）
+            self.emit_release_drops(stmt.plan_id, &mut instructions);
+            // #393：语句级临时寄存器回收（同 generate_block_ir）
+            let named_watermark = self
+                .cur_locals
+                .iter()
+                .rposition(|slot| slot.name.is_some())
+                .map_or(0, |i| i + 1);
+            self.next_temp = named_watermark.max(self.temp_floor);
+            self.set_cur_span(stmt.span);
+        }
+
+        // 尾位置无值（末位为语句 / 空体）时补 Ret(None)
+        if !tail_handled {
+            let has_ret = instructions
+                .iter()
+                .any(|inst| matches!(inst, Instruction::Ret { value: _, span: _ }));
+            if !has_ret {
+                instructions.push(Instruction::Ret {
+                    value: None,
+                    span: self.cur_span,
+                });
+            }
+        }
+
+        // 退出作用域
+        self.exit_scope();
+
+        // 计算局部变量总数
+        let total_locals = self.temp_high_water;
+        let locals_types: Vec<LocalSlot> = self.take_cur_locals(total_locals);
+
+        // 恢复父函数的临时寄存器计数
+        self.next_temp = saved_next_temp;
+        self.temp_high_water = saved_temp_high_water;
+        self.temp_floor = saved_temp_floor;
+        self.cur_locals = saved_cur_locals;
+        self.cur_span = saved_cur_span;
+
+        // #311：恢复父函数的循环上下文
+        self.loop_stack = saved_loop_stack;
+
+        Ok(LambdaBodyIR {
+            instructions,
+            locals: locals_types,
+        })
+    }
+
+    // ==================== RFC-011a §6 存在类型变体分发 ====================
+
+    /// 接收者表达式是否为存在类型（接口构造器名）→ 接口名。
+    /// 支持 Var 与 Index（animals[0]；二段式 d = animals[0] 的 d 是 Var）。
+    fn existential_receiver_interface(
+        &self,
+        expr: &ast::Expr,
+    ) -> Option<String> {
+        match expr {
+            ast::Expr::Var(_, _) => {
+                let mono = self.get_expr_mono_type(expr);
+                if let Some(t) = mono.and_then(|t| self.existential_interface_of(&t)) {
+                    return Some(t);
+                }
+                // MonoType 表缺失时回退字符串类型名表（带注解 let 填充）
+                let var = Self::var_name(expr)?;
+                let name = self.local_var_types.get(&var)?;
+                self.interface_from_name(Self::strip_ref_prefix(name))
+            }
+            ast::Expr::Index { expr: base, .. } => {
+                let base_ty = self.receiver_base_mono_type(base)?;
+                match base_ty {
+                    MonoType::Generic { name, args }
+                        if (name == "List" || name == "Vec" || name == "Array")
+                            && args.len() == 1 =>
+                    {
+                        self.existential_interface_of(&args[0])
+                    }
+                    _ => None,
+                }
+            }
+            _ => None,
+        }
+    }
+
+    fn var_name(expr: &ast::Expr) -> Option<String> {
+        match expr {
+            ast::Expr::Var(n, _) => Some(n.clone()),
+            _ => None,
+        }
+    }
+
+    /// Index 链基底的静态类型（嵌套 Index 递归取元素类型）
+    fn receiver_base_mono_type(
+        &self,
+        expr: &ast::Expr,
+    ) -> Option<MonoType> {
+        match expr {
+            ast::Expr::Index { expr: base, .. } => self.receiver_base_mono_type(base),
+            other => self.get_expr_mono_type(other),
+        }
+    }
+
+    /// MonoType 是否为 RFC-011a 存在类型 → 接口名。
+    /// 判据：接口构造器在 bindings 中注册为全函数字段的记录（is_constraint）。
+    /// 遗留 trait 约束同样满足 is_constraint，但由调用方以 interface_variants
+    /// 成员性门控隔离（无 ImplementationProof 的约束类型不走变体分发）。
+    fn existential_interface_of(
+        &self,
+        ty: &MonoType,
+    ) -> Option<String> {
+        match ty {
+            MonoType::TypeRef(n) => self.interface_from_name(n),
+            MonoType::Struct(s) if !s.name.is_empty() && Self::is_constraint_struct(s) => {
+                self.interface_from_name(&s.name)
+            }
+            _ => None,
+        }
+    }
+
+    /// 按名字查接口构造器（bindings），确认是约束记录形态
+    fn interface_from_name(
+        &self,
+        name: &str,
+    ) -> Option<String> {
+        let body = self.type_result.as_ref()?.bindings.get(name)?.body.clone();
+        match body {
+            MonoType::Struct(s) if Self::is_constraint_struct(&s) => Some(name.to_string()),
+            _ => None,
+        }
+    }
+
+    /// mono.rs `MonoType::is_constraint` 的 Struct 臂本地镜像（该方法在
+    /// MonoType 上，这里只有 &StructType）
+    fn is_constraint_struct(s: &crate::frontend::core::types::mono::StructType) -> bool {
+        s.fields
+            .iter()
+            .all(|(_, ty)| matches!(ty, MonoType::Fn { .. }))
+    }
+
+    /// RFC-011a §6.4: 生成变体分发的 IR——
+    ///   tag = VariantTag(obj)
+    ///   逐变体: tag == i → payload = VariantPayload(obj) → Call 具体方法
+    /// 调用目标解析复用 RFC-004 绑定表（声明形式与 `Type.method = fn[n]`
+    /// 重绑定形式都支持），无绑定时静态 `Type.method`。
+    #[allow(clippy::too_many_arguments)]
+    fn emit_variant_dispatch(
+        &mut self,
+        iface: &str,
+        method: &str,
+        obj_reg: usize,
+        method_args: &[Operand],
+        result_reg: usize,
+        span: Span,
+        instructions: &mut Vec<Instruction>,
+        _constants: &mut Vec<ConstValue>,
+    ) -> Result<(), Diagnostic> {
+        let variants = self
+            .interface_variants
+            .get(iface)
+            .cloned()
+            .unwrap_or_default();
+        if variants.is_empty() {
+            // 编译期响亮失败：无实现收集（典型于跨模块存在类型——v1 边界）
+            return Err(ErrorCodeDefinition::ir_internal_error(&format!(
+                "接口 {} 在本编译单元无实现证明，无法生成变体分发",
+                iface
+            ))
+            .build());
+        }
+        let group = format!("{}$Group", iface);
+
+        let tag_reg = self.next_temp_reg();
+        instructions.push(Instruction::VariantTag {
+            dst: Operand::Local(tag_reg),
+            obj: Operand::Local(obj_reg),
+            group: group.clone(),
+            span,
+        });
+
+        let mut end_jumps: Vec<usize> = Vec::new();
+        for (i, impl_type) in variants.iter().enumerate() {
+            // tag == i ?
+            let const_reg = self.next_temp_reg();
+            instructions.push(Instruction::Load {
+                dst: Operand::Local(const_reg),
+                src: Operand::Const(ConstValue::Int(i as i128)),
+                span: self.cur_span,
+            });
+            let eq_reg = self.next_temp_reg();
+            instructions.push(Instruction::Eq {
+                dst: Operand::Local(eq_reg),
+                lhs: Operand::Local(tag_reg),
+                rhs: Operand::Local(const_reg),
+                span: self.cur_span,
+            });
+            let next_idx = instructions.len();
+            instructions.push(Instruction::JmpIfNot {
+                cond: Operand::Local(eq_reg),
+                target: 0,
+                span: self.cur_span,
+            });
+
+            // 解包负载
+            let payload_reg = self.next_temp_reg();
+            instructions.push(Instruction::VariantPayload {
+                dst: Operand::Local(payload_reg),
+                obj: Operand::Local(obj_reg),
+                group: group.clone(),
+                span,
+            });
+
+            // 调用目标：RFC-004 绑定重排优先，回退静态 Type.method
+            let binding = self
+                .type_bindings
+                .get(impl_type)
+                .and_then(|b| b.get(method).cloned());
+            match binding {
+                Some(b) => {
+                    let total = b.positions.len() + method_args.len();
+                    let positions: Vec<i64> = b
+                        .positions
+                        .iter()
+                        .map(|&p| if p < 0 { p + total as i64 } else { p })
+                        .collect();
+                    let mut final_args: Vec<Operand> = Vec::with_capacity(total);
+                    let mut extra = method_args.iter().cloned();
+                    for pos in 0..total {
+                        if positions.contains(&(pos as i64)) {
+                            final_args.push(Operand::Local(payload_reg));
+                        } else if let Some(a) = extra.next() {
+                            final_args.push(a);
+                        }
+                    }
+                    let func_name = self
+                        .registry
+                        .short_to_qualified_map()
+                        .get(&b.function)
+                        .cloned()
+                        .unwrap_or_else(|| b.function.clone());
+                    instructions.push(Instruction::Call {
+                        dst: Some(Operand::Local(result_reg)),
+                        func: Operand::Const(ConstValue::String(func_name.to_string())),
+                        args: final_args,
+                        span,
+                        def: None,
+                    });
+                }
+                None => {
+                    let mut final_args = vec![Operand::Local(payload_reg)];
+                    final_args.extend(method_args.iter().cloned());
+                    instructions.push(Instruction::Call {
+                        dst: Some(Operand::Local(result_reg)),
+                        func: Operand::Const(ConstValue::String(format!(
+                            "{}.{}",
+                            impl_type, method
+                        ))),
+                        args: final_args,
+                        span,
+                        def: None,
+                    });
+                }
+            }
+
+            let end_idx = instructions.len();
+            instructions.push(Instruction::Jmp {
+                target: 0,
+                span: self.cur_span,
+            });
+            end_jumps.push(end_idx);
+
+            // 回填：tag != i → 下一变体臂
+            let next_target = instructions.len();
+            if let Instruction::JmpIfNot {
+                cond: _,
+                ref mut target,
+                span: _,
+            } = instructions[next_idx]
+            {
+                *target = next_target;
+            }
+        }
+
+        // 汇合点（VariantTag 守卫保证 tag 恒在集合内）
+        let end = instructions.len();
+        for idx in end_jumps {
+            if let Instruction::Jmp {
+                ref mut target,
+                span: _,
+            } = instructions[idx]
+            {
+                *target = end;
+            }
+        }
+        Ok(())
+    }
+
+    /// 生成表达式 IR（入口分发器）
+    ///
+    /// RFC-011a §6: 查存在类型包装点表——命中则先生成裸值到临时寄存器，
+    /// 再包 CreateVariant。包装点由 typecheck 强制点收集产出（let 注解/实参/
+    /// return/字面量元素），span 键与 AST 节点一一对应。
+    fn generate_expr_ir(
+        &mut self,
+        expr: &ast::Expr,
+        result_reg: usize,
+        instructions: &mut Vec<Instruction>,
+        constants: &mut Vec<ConstValue>,
+    ) -> Result<(), Diagnostic> {
+        if let Some(iface) = self.lookup_existential_wrap(expr) {
+            let group = format!("{}$Group", iface);
+            let concrete = self.get_expr_struct_type_name(expr).ok_or_else(|| {
+                ErrorCodeDefinition::ir_internal_error(&format!(
+                    "存在类型 {} 的包装点无法确定实参具体类型（span {:?}）",
+                    iface,
+                    Self::expr_span(expr)
+                ))
+                .build()
+            })?;
+            let variant = self
+                .interface_variants
+                .get(&iface)
+                .and_then(|v| v.iter().position(|t| *t == concrete))
+                .ok_or_else(|| {
+                    ErrorCodeDefinition::ir_internal_error(&format!(
+                        "类型 {} 不在接口 {} 的实现收集表中",
+                        concrete, iface
+                    ))
+                    .build()
+                })? as u32;
+            let payload_reg = self.next_temp_reg();
+            self.generate_expr_ir_inner(expr, payload_reg, instructions, constants)?;
+            instructions.push(Instruction::CreateVariant {
+                dst: Operand::Local(result_reg),
+                group,
+                variant,
+                payload: Operand::Local(payload_reg),
+                span: Self::expr_span(expr),
+            });
+            return Ok(());
+        }
+        self.generate_expr_ir_inner(expr, result_reg, instructions, constants)
+    }
+
+    /// span → 接口名查表
+    fn lookup_existential_wrap(
+        &self,
+        expr: &ast::Expr,
+    ) -> Option<String> {
+        let span = Self::expr_span(expr);
+        self.existential_wraps.get(&span).cloned()
+    }
+
+    /// 从表达式提取源码 span（无法定位的形态返回 dummy——dummy 永远查不中
+    /// 包装表，安全方向失败）
+    fn expr_span(expr: &ast::Expr) -> Span {
+        match expr {
+            ast::Expr::Lit(_, s)
+            | ast::Expr::Var(_, s)
+            | ast::Expr::Return(_, s)
+            | ast::Expr::Break(s)
+            | ast::Expr::Continue(s) => *s,
+            ast::Expr::BinOp { span, .. }
+            | ast::Expr::UnOp { span, .. }
+            | ast::Expr::Call { span, .. }
+            | ast::Expr::If { span, .. }
+            | ast::Expr::Match { span, .. }
+            | ast::Expr::While { span, .. }
+            | ast::Expr::For { span, .. }
+            | ast::Expr::SpawnFor { span, .. }
+            | ast::Expr::Borrow { span, .. }
+            | ast::Expr::FieldAccess { span, .. }
+            | ast::Expr::Index { span, .. }
+            | ast::Expr::Tuple(_, span)
+            | ast::Expr::List(_, span)
+            | ast::Expr::Cast { span, .. }
+            | ast::Expr::Try { span, .. } => *span,
+            ast::Expr::Block(block) => block.span,
+            _ => Span::dummy(),
+        }
+    }
+
+    #[allow(clippy::only_used_in_recursion)]
+    fn generate_lit_expr_ir(
+        &mut self,
+        literal: &Literal,
+        result_reg: usize,
+        instructions: &mut Vec<Instruction>,
+        constants: &mut Vec<ConstValue>,
+    ) -> Result<(), Diagnostic> {
+        // 常量加载
+        let const_val = match literal {
+            Literal::Int(n) => ConstValue::Int(*n),
+            Literal::Float(f) => ConstValue::Float(*f),
+            Literal::Bool(b) => ConstValue::Bool(*b),
+            Literal::String(s) => ConstValue::String(s.clone()),
+            Literal::Char(c) => ConstValue::Char(*c),
+            Literal::Void => ConstValue::Void,
+        };
+        // 添加到常量池
+        constants.push(const_val.clone());
+        instructions.push(Instruction::Load {
+            dst: Operand::Local(result_reg),
+            src: Operand::Const(const_val),
+            span: self.cur_span,
+        });
+        Ok(())
+    }
+
+    fn generate_return_expr_ir(
+        &mut self,
+        expr: &Option<Box<Expr>>,
+        result_reg: usize,
+        instructions: &mut Vec<Instruction>,
+        constants: &mut Vec<ConstValue>,
+    ) -> Result<(), Diagnostic> {
+        // 生成返回指令
+        if let Some(e) = expr {
+            self.generate_expr_ir(e, result_reg, instructions, constants)?;
+            instructions.push(Instruction::Ret {
+                value: Some(Operand::Local(result_reg)),
+                span: self.cur_span,
+            });
+        } else {
+            instructions.push(Instruction::Ret {
+                value: None,
+                span: self.cur_span,
+            });
+        }
+        Ok(())
+    }
+
+    fn generate_break_expr_ir(
+        &mut self,
+        span: &Span,
+        instructions: &mut Vec<Instruction>,
+    ) -> Result<(), Diagnostic> {
+        // #311: break → 跳出最近一层循环；出口生成期未知，占位后由
+        // exit_loop_targets 回填。#314：标签语法已移除（Python 风格定案），
+        // break 恒指最近一层循环。
+        match self.loop_stack.last_mut() {
+            Some(top) => {
+                let fixup = instructions.len();
+                instructions.push(Instruction::Jmp {
+                    target: 0,
+                    span: self.cur_span,
+                });
+                top.break_fixups.push(fixup);
+            }
+            None => {
+                // 不变式：typecheck 已用 E1102 拦截循环外 break，走到这里说明层间失联
+                return Err(ErrorCodeDefinition::ir_internal_error(
+                    "break reached IR generation without enclosing loop",
+                )
+                .at(*span)
+                .build());
+            }
+        }
+        Ok(())
+    }
+
+    fn generate_continue_expr_ir(
+        &mut self,
+        span: &Span,
+        instructions: &mut Vec<Instruction>,
+    ) -> Result<(), Diagnostic> {
+        // #311: continue → 跳回最近一层循环的条件重判点（生成时即知）
+        match self.loop_stack.last() {
+            Some(top) => {
+                let target = top.continue_target;
+                instructions.push(Instruction::Jmp {
+                    target,
+                    span: self.cur_span,
+                });
+            }
+            None => {
+                return Err(ErrorCodeDefinition::ir_internal_error(
+                    "continue reached IR generation without enclosing loop",
+                )
+                .at(*span)
+                .build());
+            }
+        }
+        Ok(())
+    }
+
+    fn generate_match_expr_ir(
+        &mut self,
+        match_expr: &Expr,
+        arms: &Vec<ast::MatchArm>,
+        match_span: crate::util::span::Span,
+        result_reg: usize,
+        instructions: &mut Vec<Instruction>,
+        constants: &mut Vec<ConstValue>,
+    ) -> Result<(), Diagnostic> {
+        // Match 表达式 IR 生成（RFC-010b：递归模式编译器）
+        //
+        // 每臂统一结构：测试链（compile_pattern 递归发射，失败跳下一臂）→
+        // 守卫（可选，失败同样跳下一臂）→ 体 → Move 结果 → Jmp end。
+        // 绑定进臂专属 scope（遮蔽外层，出臂恢复外层槽位映射——否则后续
+        // match 以该名为 scrutinee 会读到从未写入的载荷槽 → 运行时 Void）。
+        //
+        // WBS 2.1.2 实测缺陷修复：结果槽先显式预置 Void——末臂守卫失败的
+        // 容错落点（fail_jumps 全跳到 end）此前依赖帧 Void 预初始化（隐式，
+        // frames.rs:55），汇合点读在 CFG 上存在无定义路径（verify_loose 支配性
+        // 判定无法覆盖隐式语义）。显式预置使定义显式化。行为等价：容错路径
+        // 读到的值同为 Void，非容错路径被臂内 Move 覆盖。
+        // （Load 而非 Move：translate_move 的 src 走寄存器解析，Const 会触发
+        // E3017；translate_load 的 Const 臂走 LOAD_CONST 常量表）
+        instructions.push(Instruction::Load {
+            dst: Operand::Local(result_reg),
+            src: Operand::Const(ConstValue::Void),
+            span: match_span,
+        });
+        //
+        // 1. 评估 scrutinee（类型信息驱动嵌套模式的载荷/字段/元组类型解析）
+        let scrutinee_reg = self.next_temp_reg();
+        self.generate_expr_ir(match_expr, scrutinee_reg, instructions, constants)?;
+        // #389：scrutinee 类型优先回查 checker 落的 span 表（推断权威），
+        // miss（无 type_result 的路径）回退 AST 猜测器。猜测器对调用/内联
+        // 构造/字段访问形态返回 None，Union 模式会被 #330 安全网误拦。
+        let scrutinee_ty = self
+            .type_result
+            .as_ref()
+            .and_then(|tr| tr.match_scrutinee_types.get(&match_span))
+            .cloned()
+            .or_else(|| self.get_expr_mono_type(match_expr));
+
+        let mut jumps_to_end: Vec<usize> = Vec::new();
+
+        for arm in arms {
+            // RFC-010b：守卫解包——`pat if cond => body`
+            let (pat, guard): (&ast::Pattern, Option<&Expr>) = match &arm.pattern {
+                ast::Pattern::Guard { pattern, condition } => (pattern, Some(condition)),
+                p => (p, None),
+            };
+
+            let mut fail_jumps: Vec<usize> = Vec::new();
+            let mut binds: Vec<(String, usize)> = Vec::new();
+            // 预分配绑定寄存器：或模式各备选对同名绑定的载荷提取落到
+            // 同一寄存器（体读到的必然是命中备选写入的值）
+            let bind_names = Self::collect_binding_names(pat);
+            let mut pre: HashMap<String, usize> = HashMap::new();
+            for bn in &bind_names {
+                pre.insert(bn.clone(), self.next_temp_reg());
+            }
+            let needs_scope = !bind_names.is_empty();
+            if needs_scope {
+                self.enter_scope();
+            }
+            self.compile_pattern(
+                scrutinee_reg,
+                pat,
+                scrutinee_ty.as_ref(),
+                &pre,
+                &mut fail_jumps,
+                &mut binds,
+                instructions,
+                constants,
+            )?;
+            for (bn, reg) in &binds {
+                self.register_local(bn, *reg);
+            }
+
+            // 守卫：绑定已注册（对守卫可见），失败同样落到下一臂
+            if let Some(cond) = guard {
+                let g_reg = self.next_temp_reg();
+                self.generate_expr_ir(cond, g_reg, instructions, constants)?;
+                let j = instructions.len();
+                instructions.push(Instruction::JmpIfNot {
+                    cond: Operand::Local(g_reg),
+                    target: 0,
+                    span: self.cur_span,
+                });
+                fail_jumps.push(j);
+            }
+
+            // 生成 arm body，结果放入 result_reg
+            let arm_result_reg = self.next_temp_reg();
+            self.generate_block_ir(&arm.body, Some(arm_result_reg), instructions, constants)?;
+            instructions.push(Instruction::Move {
+                dst: Operand::Local(result_reg),
+                src: Operand::Local(arm_result_reg),
+                span: self.cur_span,
+            });
+
+            // 跳转到 match 结束
+            let jmp_end_idx = instructions.len();
+            instructions.push(Instruction::Jmp {
+                target: 0,
+                span: self.cur_span,
+            });
+            jumps_to_end.push(jmp_end_idx);
+
+            // 绑定作用域结束（恢复外层槽位映射）
+            if needs_scope {
+                self.exit_scope();
+            }
+
+            // 修复本臂全部失败跳转 → 下一臂起点
+            let next_arm_pos = instructions.len();
+            for j in fail_jumps {
+                if let Instruction::JmpIfNot {
+                    cond: _,
+                    ref mut target,
+                    span: _,
+                } = instructions[j]
+                {
+                    *target = next_arm_pos;
+                }
+            }
+        }
+
+        // 修复所有跳转到结束的指令
+        let end_pos = instructions.len();
+        for idx in jumps_to_end {
+            if let Instruction::Jmp {
+                ref mut target,
+                span: _,
+            } = instructions[idx]
+            {
+                *target = end_pos;
+            }
+        }
+        Ok(())
+    }
+
+    /// 收集模式引入的绑定名（去重，声明序）——臂级预分配寄存器用
+    fn collect_binding_names(pattern: &ast::Pattern) -> Vec<String> {
+        fn walk(
+            p: &ast::Pattern,
+            out: &mut Vec<String>,
+        ) {
+            match p {
+                ast::Pattern::Identifier(n) => {
+                    if !out.contains(n) {
+                        out.push(n.clone());
+                    }
+                }
+                ast::Pattern::Tuple(ps) | ast::Pattern::Or(ps) => {
+                    for c in ps {
+                        walk(c, out);
+                    }
+                }
+                ast::Pattern::Struct { fields, .. } => {
+                    for (_, _, c) in fields {
+                        walk(c, out);
+                    }
+                }
+                ast::Pattern::Union { pattern, .. } => {
+                    if let Some(c) = pattern.as_deref() {
+                        walk(c, out);
+                    }
+                }
+                _ => {}
+            }
+        }
+        let mut out = Vec::new();
+        walk(pattern, &mut out);
+        out
+    }
+
+    /// RFC-010b：递归模式编译——按 `pattern` 匹配 `reg` 中的值。
+    ///
+    /// 失败路径：每处比较发射 JmpIfNot 占位，调用方回填 target = 下一臂起点；
+    /// 绑定：`(名字, 寄存器)` 收集进 `binds`，由调用方统一 register_local
+    ///（守卫与体都在注册后生成，绑定对两者可见）。
+    /// `ty`：被匹配值的静态类型——Union 载荷 / 元组元素 / 结构体字段的
+    /// 嵌套模式类型由此解析；None 时仅 Wildcard/Identifier/Literal 可用。
+    #[allow(clippy::too_many_arguments)]
+    fn compile_pattern(
+        &mut self,
+        reg: usize,
+        pattern: &ast::Pattern,
+        ty: Option<&MonoType>,
+        pre: &HashMap<String, usize>,
+        fail: &mut Vec<usize>,
+        binds: &mut Vec<(String, usize)>,
+        instructions: &mut Vec<Instruction>,
+        constants: &mut Vec<ConstValue>,
+    ) -> Result<(), Diagnostic> {
+        let cur_span = self.cur_span;
+        let unsupported = |label: &str| {
+            ErrorCodeDefinition::ir_unsupported_pattern(label)
+                .at(cur_span)
+                .build()
+        };
+        match pattern {
+            ast::Pattern::Wildcard => Ok(()),
+            ast::Pattern::Identifier(bn) => {
+                if let Some(r) = pre.get(bn) {
+                    // 或模式共享寄存器：把值拷进臂级预分配槽（仅命中路径执行）
+                    instructions.push(Instruction::Move {
+                        dst: Operand::Local(*r),
+                        src: Operand::Local(reg),
+                        span: self.cur_span,
+                    });
+                    binds.push((bn.clone(), *r));
+                } else {
+                    binds.push((bn.clone(), reg));
+                }
+                Ok(())
+            }
+            ast::Pattern::Literal(lit) => {
+                let const_val = match lit {
+                    ast::Literal::Int(n) => ConstValue::Int(*n),
+                    ast::Literal::Float(f) => ConstValue::Float(*f),
+                    ast::Literal::Bool(b) => ConstValue::Bool(*b),
+                    ast::Literal::String(s) => ConstValue::String(s.clone()),
+                    ast::Literal::Char(c) => ConstValue::Char(*c),
+                    ast::Literal::Void => ConstValue::Void,
+                };
+                constants.push(const_val.clone());
+                let cmp_reg = self.next_temp_reg();
+                instructions.push(Instruction::Load {
+                    dst: Operand::Local(cmp_reg),
+                    src: Operand::Const(const_val),
+                    span: self.cur_span,
+                });
+                let eq_reg = self.next_temp_reg();
+                instructions.push(Instruction::Eq {
+                    dst: Operand::Local(eq_reg),
+                    lhs: Operand::Local(reg),
+                    rhs: Operand::Local(cmp_reg),
+                    span: self.cur_span,
+                });
+                let j = instructions.len();
+                instructions.push(Instruction::JmpIfNot {
+                    cond: Operand::Local(eq_reg),
+                    target: 0,
+                    span: self.cur_span,
+                });
+                fail.push(j);
+                Ok(())
+            }
+            ast::Pattern::Tuple(ps) => {
+                let Some(MonoType::Generic { name, args }) = ty else {
+                    return Err(unsupported("tuple"));
+                };
+                if name != "Tuple" {
+                    return Err(unsupported("tuple"));
+                }
+                if args.len() != ps.len() {
+                    return Err(unsupported("tuple arity"));
+                }
+                for (i, p) in ps.iter().enumerate() {
+                    let elem_reg = self.next_temp_reg();
+                    instructions.push(Instruction::LoadField {
+                        dst: Operand::Local(elem_reg),
+                        src: Operand::Local(reg),
+                        field: i,
+                        span: self.cur_span,
+                    });
+                    self.compile_pattern(
+                        elem_reg,
+                        p,
+                        Some(&args[i]),
+                        pre,
+                        fail,
+                        binds,
+                        instructions,
+                        constants,
+                    )?;
+                }
+                Ok(())
+            }
+            ast::Pattern::Struct { name, fields } => {
+                // 非泛型结构体（struct_definitions 只收非泛型；泛型结构体
+                // 模式由 typecheck 前置拒绝——此处防御性报 unsupported）
+                let Some(decl_fields) = self.struct_definitions.get(name).cloned() else {
+                    return Err(unsupported(name));
+                };
+                for (fname, _fmut, fpat) in fields {
+                    let Some(pos) = decl_fields.iter().position(|f| &f.name == fname) else {
+                        return Err(unsupported(fname));
+                    };
+                    let field_ty = MonoType::from(decl_fields[pos].ty.clone());
+                    let elem_reg = self.next_temp_reg();
+                    instructions.push(Instruction::LoadField {
+                        dst: Operand::Local(elem_reg),
+                        src: Operand::Local(reg),
+                        field: pos,
+                        span: self.cur_span,
+                    });
+                    self.compile_pattern(
+                        elem_reg,
+                        fpat,
+                        Some(&field_ty),
+                        pre,
+                        fail,
+                        binds,
+                        instructions,
+                        constants,
+                    )?;
+                }
+                Ok(())
+            }
+            ast::Pattern::Union {
+                variant,
+                pattern: payload,
+                ..
+            } => {
+                // 和类型上下文从被匹配类型解析（载荷位可能是另一和类型）
+                let mut stripped = ty.cloned();
+                while let Some(MonoType::Ref { inner, .. }) = stripped {
+                    stripped = Some(*inner);
+                }
+                let (sum_name, args): (String, Vec<MonoType>) = match &stripped {
+                    Some(MonoType::Generic { name, args })
+                        if self.sum_type_variants.contains_key(name) =>
+                    {
+                        (name.clone(), args.clone())
+                    }
+                    Some(MonoType::Struct(s)) if self.sum_type_variants.contains_key(&s.name) => {
+                        (s.name.clone(), Vec::new())
+                    }
+                    Some(MonoType::TypeRef(n))
+                        if self.sum_type_variants.contains_key(n.as_str()) =>
+                    {
+                        (n.clone(), Vec::new())
+                    }
+                    _ => return Err(unsupported(variant)),
+                };
+                let Some(variants) = self.sum_type_variants.get(&sum_name).cloned() else {
+                    return Err(unsupported(variant));
+                };
+                let Some((variant_index, params)) = variants
+                    .iter()
+                    .enumerate()
+                    .find(|(_, (n, _))| n == variant)
+                    .map(|(i, (_, params))| (i, params.clone()))
+                else {
+                    return Err(unsupported(variant));
+                };
+                // tag 比较（VariantTag 取声明序 tag）
+                let tag_reg = self.next_temp_reg();
+                instructions.push(Instruction::VariantTag {
+                    dst: Operand::Local(tag_reg),
+                    obj: Operand::Local(reg),
+                    group: sum_name.clone(),
+                    span: self.cur_span,
+                });
+                let idx_reg = self.next_temp_reg();
+                instructions.push(Instruction::Load {
+                    dst: Operand::Local(idx_reg),
+                    src: Operand::Const(ConstValue::Int(variant_index as i128)),
+                    span: self.cur_span,
+                });
+                let eq_reg = self.next_temp_reg();
+                instructions.push(Instruction::Eq {
+                    dst: Operand::Local(eq_reg),
+                    lhs: Operand::Local(tag_reg),
+                    rhs: Operand::Local(idx_reg),
+                    span: self.cur_span,
+                });
+                let j = instructions.len();
+                instructions.push(Instruction::JmpIfNot {
+                    cond: Operand::Local(eq_reg),
+                    target: 0,
+                    span: self.cur_span,
+                });
+                fail.push(j);
+                // 载荷
+                match payload.as_deref() {
+                    None => {
+                        if !params.is_empty() {
+                            return Err(unsupported("variant payload arity"));
+                        }
+                        Ok(())
+                    }
+                    Some(p) => {
+                        if params.is_empty() {
+                            return Err(unsupported("variant payload arity"));
+                        }
+                        let payload_reg = self.next_temp_reg();
+                        instructions.push(Instruction::VariantPayload {
+                            dst: Operand::Local(payload_reg),
+                            obj: Operand::Local(reg),
+                            group: sum_name.clone(),
+                            span: self.cur_span,
+                        });
+                        // 载荷类型：变体参数按 scrutinee 实参（声明序）替换
+                        let param_names = self
+                            .sum_type_param_names
+                            .get(&sum_name)
+                            .cloned()
+                            .unwrap_or_default();
+                        let mut subst: HashMap<String, MonoType> = HashMap::new();
+                        for (i, pn) in param_names.iter().enumerate() {
+                            if let Some(a) = args.get(i) {
+                                subst.insert(pn.clone(), a.clone());
+                            }
+                        }
+                        let substituted: Vec<MonoType> =
+                            params.iter().map(|pty| pty.substitute(&subst)).collect();
+                        let payload_ty = match substituted.len() {
+                            1 => substituted.into_iter().next().unwrap(),
+                            _ => MonoType::make_tuple(substituted),
+                        };
+                        self.compile_pattern(
+                            payload_reg,
+                            p,
+                            Some(&payload_ty),
+                            pre,
+                            fail,
+                            binds,
+                            instructions,
+                            constants,
+                        )
+                    }
+                }
+            }
+            ast::Pattern::Or(alts) => {
+                // 各备选顺序发射：备选 i 的测试链失败 → 备选 i+1 起点
+                //（继续尝试）；命中则提取载荷后直接跳臂体（跳过后续备选）。
+                // 末位备选失败 → 下一臂（fail 交给调用方），成功自然落穿。
+                let last = alts.len().saturating_sub(1);
+                let mut success_jumps: Vec<usize> = Vec::new();
+                for (i, alt) in alts.iter().enumerate() {
+                    let mut alt_fail: Vec<usize> = Vec::new();
+                    self.compile_pattern(
+                        reg,
+                        alt,
+                        ty,
+                        pre,
+                        &mut alt_fail,
+                        binds,
+                        instructions,
+                        constants,
+                    )?;
+                    if i < last {
+                        let sj = instructions.len();
+                        instructions.push(Instruction::Jmp {
+                            target: 0,
+                            span: self.cur_span,
+                        });
+                        success_jumps.push(sj);
+                        let next_alt_pos = instructions.len();
+                        for j in alt_fail {
+                            if let Instruction::JmpIfNot {
+                                cond: _,
+                                ref mut target,
+                                span: _,
+                            } = instructions[j]
+                            {
+                                *target = next_alt_pos;
+                            }
+                        }
+                    } else {
+                        fail.append(&mut alt_fail);
+                    }
+                }
+                // 命中跳转回填到臂体起点（Or 全部发射完成处）
+                let body_pos = instructions.len();
+                for sj in success_jumps {
+                    if let Instruction::Jmp {
+                        ref mut target,
+                        span: _,
+                    } = instructions[sj]
+                    {
+                        *target = body_pos;
+                    }
+                }
+                Ok(())
+            }
+            ast::Pattern::Guard { .. } => Err(unsupported("guard")),
+        }
+    }
+
+    fn generate_tuple_expr_ir(
+        &mut self,
+        items: &Vec<Expr>,
+        result_reg: usize,
+        instructions: &mut Vec<Instruction>,
+        constants: &mut Vec<ConstValue>,
+    ) -> Result<(), Diagnostic> {
+        // SPEC §3.6 元组字面量：逐个求值元素，用 NewTuple 一次性构造
+        let mut item_regs = Vec::with_capacity(items.len());
+        for item_expr in items {
+            let item_reg = self.next_temp_reg();
+            self.generate_expr_ir(item_expr, item_reg, instructions, constants)?;
+            item_regs.push(Operand::Local(item_reg));
+        }
+        instructions.push(Instruction::NewTuple {
+            dst: Operand::Local(result_reg),
+            items: item_regs,
+            span: self.cur_span,
+        });
+        Ok(())
+    }
+
+    fn generate_index_expr_ir(
+        &mut self,
+        expr: &Expr,
+        index: &Expr,
+        span: &Span,
+        result_reg: usize,
+        instructions: &mut Vec<Instruction>,
+        constants: &mut Vec<ConstValue>,
+    ) -> Result<(), Diagnostic> {
+        let src_reg = self.next_temp_reg();
+        self.generate_expr_ir(expr, src_reg, instructions, constants)?;
+
+        let index_reg = self.next_temp_reg();
+        self.generate_expr_ir(index, index_reg, instructions, constants)?;
+
+        // RFC-011b：实现 Index 接口的用户容器——原生 LoadIndex 替换为
+        // `Call "Type.index"`（接收者居首，与 method_bindings 形态一致）
+        if let Some((type_name, method, _negate)) = self.operator_dispatches.get(span).cloned() {
+            let short_name = format!("{}.{}", type_name, method);
+            let func_name =
+                if let Some(qualified) = self.registry.short_to_qualified_map().get(&short_name) {
+                    qualified.clone()
+                } else {
+                    short_name
+                };
+            // WBS 4.9.8 修复轮 R1 / issue #465：算子接口派发与普通方法调用同一判据——
+            // 接收者是导入类型时把裸类型前缀换成它的定义单元限定名（`Temp.index`
+            // → `b.Temp.index`），否则同名类型的算子实现互相落错单元（静默错值）。
+            let dispatch_name = self.method_dispatch_name(expr, &func_name);
+            instructions.push(Instruction::Call {
+                dst: Some(Operand::Local(result_reg)),
+                func: Operand::Const(ConstValue::String(dispatch_name)),
+                args: vec![Operand::Local(src_reg), Operand::Local(index_reg)],
+                span: *span,
+                def: None,
+            });
+            return Ok(());
+        }
+
+        // #385 定案 D3：String 基底下标脱糖为 StringGetChar——标量值下标、
+        // 产出单字符 String（与 chars()/substring 同表示），越界运行时报
+        // E6003。其余容器走 LoadIndex。
+        let base_is_string = self.get_expr_mono_type(expr).is_some_and(|t| {
+            let mut r = t;
+            while let MonoType::Ref { inner, .. } = r {
+                r = *inner;
+            }
+            r.is_string()
+        });
+        if base_is_string {
+            instructions.push(Instruction::StringGetChar {
+                dst: Operand::Local(result_reg),
+                src: Operand::Local(src_reg),
+                index: Operand::Local(index_reg),
+                span: *span,
+            });
+            return Ok(());
+        }
+
+        instructions.push(Instruction::LoadIndex {
+            dst: Operand::Local(result_reg),
+            src: Operand::Local(src_reg),
+            index: Operand::Local(index_reg),
+            span: *span,
+        });
+        Ok(())
+    }
+
+    fn generate_unsafe_expr_ir(
+        &mut self,
+        body: &ast::Block,
+        result_reg: usize,
+        instructions: &mut Vec<Instruction>,
+        constants: &mut Vec<ConstValue>,
+    ) -> Result<(), Diagnostic> {
+        // unsafe 块：生成 UnsafeBlockStart/End 标记
+        instructions.push(Instruction::UnsafeBlockStart {
+            span: self.cur_span,
+        });
+
+        // RFC-010a 规则①：`unsafe {}` 是**有值块**，值出口为尾表达式。
+        // 此前 result_reg 传 None 并硬写 Void，导致 `v = unsafe { 42 }`
+        // 得 void（#347）。现按普通块处理，尾表达式写入 result_reg。
+        self.generate_block_ir(body, Some(result_reg), instructions, constants)?;
+
+        instructions.push(Instruction::UnsafeBlockEnd {
+            span: self.cur_span,
+        });
+        Ok(())
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn generate_spawn_for_expr_ir(
+        &mut self,
+        var: &str,
+        var_mut: &bool,
+        iterable: &Expr,
+        body: &ast::Block,
+        span: &Span,
+        result_reg: usize,
+        instructions: &mut Vec<Instruction>,
+        constants: &mut Vec<ConstValue>,
+    ) -> Result<(), Diagnostic> {
+        self.generate_spawn_for_ir(
+            var,
+            *var_mut,
+            iterable,
+            body,
+            result_reg,
+            *span,
+            instructions,
+            constants,
+        )?;
+        Ok(())
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn generate_for_expr_ir(
+        &mut self,
+        var: &str,
+        var_mut: &bool,
+        iterable: &Expr,
+        body: &ast::Block,
+        for_span: &Span,
+        result_reg: usize,
+        instructions: &mut Vec<Instruction>,
+        constants: &mut Vec<ConstValue>,
+    ) -> Result<(), Diagnostic> {
+        self.generate_for_loop_ir(
+            var,
+            *var_mut,
+            iterable,
+            body,
+            Some(result_reg),
+            *for_span,
+            instructions,
+            constants,
+        )?;
+        Ok(())
+    }
+
+    fn generate_un_op_expr_ir(
+        &mut self,
+        op: &ast::UnOp,
+        expr: &Expr,
+        result_reg: usize,
+        instructions: &mut Vec<Instruction>,
+        constants: &mut Vec<ConstValue>,
+    ) -> Result<(), Diagnostic> {
+        // 一元运算符
+        match op {
+            ast::UnOp::Deref => {
+                // 解引用：*ptr
+                // 生成指针表达式的 IR
+                let src_reg = self.next_temp_reg();
+                self.generate_expr_ir(expr, src_reg, instructions, constants)?;
+
+                // 生成 PtrDeref 指令
+                instructions.push(Instruction::PtrDeref {
+                    dst: Operand::Local(result_reg),
+                    src: Operand::Local(src_reg),
+                    span: self.cur_span,
+                });
+            }
+            ast::UnOp::Neg => {
+                // 负号：-x
+                let src_reg = self.next_temp_reg();
+                self.generate_expr_ir(expr, src_reg, instructions, constants)?;
+                instructions.push(Instruction::Neg {
+                    dst: Operand::Local(result_reg),
+                    src: Operand::Local(src_reg),
+                    span: self.cur_span,
+                });
+            }
+            ast::UnOp::Pos => {
+                // 正号：+x（无操作）
+                self.generate_expr_ir(expr, result_reg, instructions, constants)?;
+            }
+            ast::UnOp::Not => {
+                // 逻辑非：!x
+                let src_reg = self.next_temp_reg();
+                self.generate_expr_ir(expr, src_reg, instructions, constants)?;
+                instructions.push(Instruction::Not {
+                    dst: Operand::Local(result_reg),
+                    src: Operand::Local(src_reg),
+                    span: self.cur_span,
+                });
+            }
+        }
+        Ok(())
+    }
+
+    fn generate_ref_expr_ir(
+        &mut self,
+        expr: &Expr,
+        result_reg: usize,
+        instructions: &mut Vec<Instruction>,
+        constants: &mut Vec<ConstValue>,
+    ) -> Result<(), Diagnostic> {
+        // 生成内部表达式的 IR
+        let src_reg = self.next_temp_reg();
+        self.generate_expr_ir(expr, src_reg, instructions, constants)?;
+
+        // 逃逸分析：跨 spawn 使用 → Arc，否则 → Rc
+        let var_name = match expr {
+            ast::Expr::Var(name, _) => Some(name.clone()),
+            _ => None,
+        };
+        let use_arc = var_name.as_ref().is_some_and(|n| {
+            self.type_result
+                .as_ref()
+                .is_some_and(|tr| tr.escaped_refs.contains(n))
+        });
+
+        if use_arc {
+            instructions.push(Instruction::ArcNew {
+                dst: Operand::Local(result_reg),
+                src: Operand::Local(src_reg),
+                span: self.cur_span,
+            });
+        } else {
+            instructions.push(Instruction::RcNew {
+                dst: Operand::Local(result_reg),
+                src: Operand::Local(src_reg),
+                span: self.cur_span,
+            });
+        }
+        Ok(())
+    }
+
+    fn generate_borrow_expr_ir(
+        &mut self,
+        expr: &Expr,
+        result_reg: usize,
+        instructions: &mut Vec<Instruction>,
+        constants: &mut Vec<ConstValue>,
+    ) -> Result<(), Diagnostic> {
+        // 1. 生成内部表达式的 IR
+        let inner_reg = self.next_temp_reg();
+        self.generate_expr_ir(expr, inner_reg, instructions, constants)?;
+
+        // 借用令牌（& / &mut）是编译期品牌，运行时零大小：
+        // Struct 值是堆句柄，传参/赋值复制的是句柄，共享同一对象——
+        // 因此字段写（StoreField）经令牌自然写回底层，无需额外指令（#266）。
+        // 所有权与借用合法性已在 typecheck 层验证（RFC-009a）。
+        instructions.push(Instruction::Move {
+            dst: Operand::Local(result_reg),
+            src: Operand::Local(inner_reg),
+            span: self.cur_span,
+        });
+        Ok(())
+    }
+
+    fn generate_dict_expr_ir(
+        &mut self,
+        pairs: &Vec<(Expr, Expr)>,
+        result_reg: usize,
+        instructions: &mut Vec<Instruction>,
+        constants: &mut Vec<ConstValue>,
+    ) -> Result<(), Diagnostic> {
+        // 字典字面量：使用 NewDict 指令一次性创建
+        let mut keys = Vec::new();
+        let mut values = Vec::new();
+        for (key_expr, val_expr) in pairs {
+            let key_reg = self.next_temp_reg();
+            self.generate_expr_ir(key_expr, key_reg, instructions, constants)?;
+            keys.push(Operand::Local(key_reg));
+            let val_reg = self.next_temp_reg();
+            self.generate_expr_ir(val_expr, val_reg, instructions, constants)?;
+            values.push(Operand::Local(val_reg));
+        }
+        instructions.push(Instruction::NewDict {
+            dst: Operand::Local(result_reg),
+            keys,
+            values,
+            span: self.cur_span,
+        });
+        Ok(())
+    }
+
+    fn generate_list_expr_ir(
+        &mut self,
+        elements: &[Expr],
+        span: &Span,
+        result_reg: usize,
+        instructions: &mut Vec<Instruction>,
+        constants: &mut Vec<ConstValue>,
+    ) -> Result<(), Diagnostic> {
+        // 列表字面量：先创建空列表，再按索引写入元素
+        instructions.push(Instruction::AllocArray {
+            dst: Operand::Local(result_reg),
+            size: Operand::Const(ConstValue::Int(elements.len() as i128)),
+            elem_size: Operand::Const(ConstValue::Int(1)),
+            span: self.cur_span,
+        });
+
+        for (idx, element) in elements.iter().enumerate() {
+            let element_reg = self.next_temp_reg();
+            self.generate_expr_ir(element, element_reg, instructions, constants)?;
+
+            let index_reg = self.next_temp_reg();
+            instructions.push(Instruction::Load {
+                dst: Operand::Local(index_reg),
+                src: Operand::Const(ConstValue::Int(idx as i128)),
+                span: self.cur_span,
+            });
+
+            instructions.push(Instruction::StoreIndex {
+                dst: Operand::Local(result_reg),
+                index: Operand::Local(index_reg),
+                src: Operand::Local(element_reg),
+                span: *span,
+            });
+        }
+        Ok(())
+    }
+
+    /// 内置容器的类型构造器名：`Vec(Int)(...)` 的内层 `Vec`。
+    ///
+    /// 只认 RFC-011 明确规格化的 `Vec(T)` / `Array(T, N)`。用户自有同名类型
+    /// 优先（D10 同款纪律）。
+    fn builtin_container_ctor_name(
+        &self,
+        inner: &Expr,
+    ) -> Option<String> {
+        let Expr::Var(name, _) = inner else {
+            return None;
+        };
+        if self.declared_type_names.contains(name) {
+            return None;
+        }
+        matches!(name.as_str(), "Vec" | "Array").then(|| name.clone())
+    }
+
+    /// 生成内置容器构造（RFC-011 §「Vec(T) 的构造形式」）。
+    ///
+    /// 三条形态：
+    /// - `Vec(Int)()` → 空容器（长度 0，元素事后追加）
+    /// - `Vec(Int)(1, 2, 3)` → 元素构造（长度 = 元素个数）
+    /// - `Vec(Int)(len = 64)` → 槽位分配（64 个零值槽位）
+    ///
+    /// 前两者与容器字面量同形，直接复用 `generate_list_expr_ir`；
+    /// 第三者用 `AllocFixedArray` 分配 n 个 Void 占位（与 Array 字面量落点同款）。
+    fn generate_builtin_container_ir(
+        &mut self,
+        args: &[Expr],
+        named_args: &[(String, Expr)],
+        span: &Span,
+        result_reg: usize,
+        instructions: &mut Vec<Instruction>,
+        constants: &mut Vec<ConstValue>,
+    ) -> Result<(), Diagnostic> {
+        // `len = n`：分配 n 个零值槽位。
+        // 长度是**运行期**值（RFC-011：Vec 是运行时长度的地基），
+        // 故用 AllocArray 而非编译期定长的 AllocFixedArray。
+        if let Some((_, len_expr)) = named_args.iter().find(|(n, _)| n == "len") {
+            // 空缓冲 + 长度写入。
+            //
+            // 不走 `AllocArray.size`：字节码 `NewListWithCap` 的容量是**字面量**
+            // （`capacity: u16`），而 RFC-011 说 `Vec(T)` 的长度是运行期值
+            // （`len=self.data.length * 2`）——无法用现有字段表达动态长度。
+            // 改用已测试的「长度写入」路径（`v.length = n` 同一条
+            // SetField → resize(n, Void)），语义一致且无需扯动字节码格式。
+            let len_reg = self.next_temp_reg();
+            self.generate_expr_ir(len_expr, len_reg, instructions, constants)?;
+            instructions.push(Instruction::AllocArray {
+                dst: Operand::Local(result_reg),
+                size: Operand::Const(ConstValue::Int(0)),
+                elem_size: Operand::Const(ConstValue::Int(1)),
+                span: *span,
+            });
+            instructions.push(Instruction::StoreField {
+                dst: Operand::Local(result_reg),
+                field: 0,
+                src: Operand::Local(len_reg),
+                type_name: None,
+                field_name: Some("length".to_string()),
+                span: *span,
+            });
+            return Ok(());
+        }
+
+        // 元素构造 / 空构造：与 `[a, b, c]` / `[]` 同形
+        self.generate_list_expr_ir(args, span, result_reg, instructions, constants)
+    }
+
+    fn generate_try_expr_ir(
+        &mut self,
+        expr: &Expr,
+        span: &Span,
+        result_reg: usize,
+        instructions: &mut Vec<Instruction>,
+        constants: &mut Vec<ConstValue>,
+    ) -> Result<(), Diagnostic> {
+        // `?` 的接口驱动 lowering（RFC-011b 阶段 2 定案）：不再手写
+        // VariantTag/Eq/Payload 序列，统一生成 Try 四方法调用链——
+        //   is_failure(t) 为真 → Ret from_error(residual(t))
+        //   为假           → 表达式值为 success(t)
+        // Result / Option（std yx 实现）与用户自定义 Try 类型同一路径；
+        // 方法名经 std 方法绑定限定名映射改写（用户类型用 `Type.method`
+        // 原名）。typecheck 侧已拦截：未实现 Try（E1082）、外层返回类型
+        // 未实现 Try（E1081）、错误类型不匹配（E1083）。
+        //
+        // 特化说明：方法调用不产生单态化请求，`std.` 前缀函数按 mono
+        // 保留规则以未特化原版存活（解释器类型擦除执行），与显式方法
+        // 调用同一执行模型。
+        self.generate_expr_ir(expr, result_reg, instructions, constants)?;
+        let span = *span;
+
+        // 接收者类型名 → 四个方法的目标名。
+        // 优先按 span 查 typecheck 记录的实现类型名（接收者是任意表达式时
+        // 这是唯一来处）；退回表达式类型推导（局部变量形态）。
+        let base_name = self.try_expr_impls.get(&span).cloned().or_else(|| {
+            self.get_expr_mono_type(expr).and_then(|ty| {
+                let mut ty = ty;
+                while let crate::frontend::core::types::MonoType::Ref { inner, .. } = ty {
+                    ty = *inner;
+                }
+                match ty {
+                    crate::frontend::core::types::MonoType::Generic { name, .. } => Some(name),
+                    crate::frontend::core::types::MonoType::Struct(s) => Some(s.name.clone()),
+                    crate::frontend::core::types::MonoType::TypeRef(n) => Some(n.clone()),
+                    _ => None,
+                }
+            })
+        });
+        let method_names = base_name.map(|base| {
+            use crate::frontend::core::sema::operator_interfaces::TRY_METHODS;
+            let qualified = self.registry.std_method_binding_qualified_map();
+            // 名字集合的唯一真相源是 `TRY_METHODS`（typecheck 侧注册同表）；
+            // 此处不再手抄一遍，否则改名时两边静默漂移。
+            let names: Vec<String> = TRY_METHODS
+                .iter()
+                .map(|m| {
+                    let key = format!("{}.{}", base, m);
+                    qualified.get(&key).cloned().unwrap_or(key)
+                })
+                .collect();
+            // TRY_METHODS 恒为四元（见 operator_interfaces.rs 定义）
+            match <[String; 4]>::try_from(names) {
+                Ok(arr) => arr,
+                Err(_) => unreachable!("TRY_METHODS 必须是四个方法名"),
+            }
+        });
+        let Some([is_failure_name, success_name, residual_name, from_error_name]) = method_names
+        else {
+            // typecheck 已保证接收者实现 Try；无类型名属于防御性分支
+            return Err(ErrorCodeDefinition::ir_unsupported_pattern("try receiver")
+                .at(span)
+                .build());
+        };
+        let call_method = |name: &str, dst: usize, arg: usize| Instruction::Call {
+            dst: Some(Operand::Local(dst)),
+            func: Operand::Const(ConstValue::String(name.to_string())),
+            args: vec![Operand::Local(arg)],
+            span,
+            def: None,
+        };
+
+        // is_failure(t) 为真 → 失败路径
+        let f_reg = self.next_temp_reg();
+        instructions.push(call_method(&is_failure_name, f_reg, result_reg));
+        let fail_jmp_idx = instructions.len();
+        instructions.push(Instruction::JmpIf {
+            cond: Operand::Local(f_reg),
+            target: 0,
+            span: self.cur_span,
+        });
+        // 成功路径：表达式值为 success(t)
+        let s_reg = self.next_temp_reg();
+        instructions.push(call_method(&success_name, s_reg, result_reg));
+        instructions.push(Instruction::Load {
+            dst: Operand::Local(result_reg),
+            src: Operand::Local(s_reg),
+            span: self.cur_span,
+        });
+        let end_jmp_idx = instructions.len();
+        instructions.push(Instruction::Jmp {
+            target: 0,
+            span: self.cur_span,
+        });
+        // 失败路径：Ret from_error(residual(t))
+        let fail_target = instructions.len();
+        instructions[fail_jmp_idx] = Instruction::JmpIf {
+            cond: Operand::Local(f_reg),
+            target: fail_target,
+            span: self.cur_span,
+        };
+        let e_reg = self.next_temp_reg();
+        instructions.push(call_method(&residual_name, e_reg, result_reg));
+        let err_reg = self.next_temp_reg();
+        instructions.push(call_method(&from_error_name, err_reg, e_reg));
+        instructions.push(Instruction::Ret {
+            value: Some(Operand::Local(err_reg)),
+            span: self.cur_span,
+        });
+        let end_target = instructions.len();
+        instructions[end_jmp_idx] = Instruction::Jmp {
+            target: end_target,
+            span: self.cur_span,
+        };
+        Ok(())
+    }
+
+    fn generate_f_string_expr_ir(
+        &mut self,
+        segments: &Vec<ast::FStringSegment>,
+        span: &Span,
+        expr: &Expr,
+        result_reg: usize,
+        instructions: &mut Vec<Instruction>,
+        constants: &mut Vec<ConstValue>,
+    ) -> Result<(), Diagnostic> {
+        // 1. 尝试常量求值
+        if let Some(const_val) = self.eval_const_expr(expr) {
+            constants.push(const_val.clone());
+            instructions.push(Instruction::Load {
+                dst: Operand::Local(result_reg),
+                src: Operand::Const(const_val),
+                span: self.cur_span,
+            });
+            return Ok(());
+        }
+
+        // 2. 转换为 format() 调用
+        // 构建 format_str: "Hello {} is {} years old"
+        // 构建 args: [name, age]
+        let mut format_str = String::new();
+        let mut arg_regs = Vec::new();
+        let mut arg_index = 0usize;
+
+        for segment in segments {
+            match segment {
+                ast::FStringSegment::Text(text) => {
+                    // Text 段是解码后的字面内容（#402），可能含 `{`/`}`；
+                    // std.string.format 以 `{{`/`}}` 为字面花括号转义，
+                    // 这里翻倍以免被当成占位符
+                    for c in text.chars() {
+                        if c == '{' || c == '}' {
+                            format_str.push(c);
+                        }
+                        format_str.push(c);
+                    }
+                }
+                ast::FStringSegment::Interpolation {
+                    expr: interp_expr,
+                    format_spec,
+                } => {
+                    // Build format placeholder: {0}, {1}, or {0:.2f}
+                    if let Some(spec) = format_spec {
+                        format_str.push_str(&format!("{{{0}:{1}}}", arg_index, spec));
+                    } else {
+                        format_str.push_str(&format!("{{{}}}", arg_index));
+                    }
+                    arg_index += 1;
+
+                    // Generate IR for the interpolation expression
+                    let arg_reg = self.next_temp_reg();
+                    self.generate_expr_ir(interp_expr, arg_reg, instructions, constants)?;
+                    arg_regs.push(Operand::Local(arg_reg));
+                }
+            }
+        }
+
+        // Load format string constant
+        let fmt_reg = self.next_temp_reg();
+        let fmt_const = ConstValue::String(format_str);
+        constants.push(fmt_const.clone());
+        instructions.push(Instruction::Load {
+            dst: Operand::Local(fmt_reg),
+            src: Operand::Const(fmt_const),
+            span: self.cur_span,
+        });
+
+        // Build args: [format_str, arg0, arg1, ...]
+        let mut call_args = vec![Operand::Local(fmt_reg)];
+        call_args.extend(arg_regs);
+
+        // Generate Call to std.string.format
+        instructions.push(Instruction::Call {
+            dst: Some(Operand::Local(result_reg)),
+            func: Operand::Const(ConstValue::String("std.string.format".to_string())),
+            args: call_args,
+            span: *span,
+            def: None,
+        });
+        Ok(())
+    }
+
+    fn generate_var_expr_ir(
+        &mut self,
+        var_name: &str,
+        var_span: &Span,
+        result_reg: usize,
+        instructions: &mut Vec<Instruction>,
+    ) -> Result<(), Diagnostic> {
+        // #254：闭包体内——先查捕获表（外层变量经 env 捕获，LoadUpvalue 读）
+        if let Some(&env_idx) = self.closure_captures.get(var_name) {
+            instructions.push(Instruction::LoadUpvalue {
+                dst: Operand::Local(result_reg),
+                upvalue_idx: env_idx,
+                span: self.cur_span,
+            });
+        } else if let Some(local_idx) = self.lookup_local(var_name) {
+            // 局部变量：直接加载
+            instructions.push(Instruction::Load {
+                dst: Operand::Local(result_reg),
+                src: Operand::Local(local_idx),
+                span: self.cur_span,
+            });
+        } else if let Some(global_idx) = self.lookup_global(var_name) {
+            // 全局变量（T2）：直接从全局槽位加载，不再调用访问器函数
+            instructions.push(Instruction::Load {
+                dst: Operand::Local(result_reg),
+                src: Operand::Global(global_idx),
+                span: *var_span,
+            });
+        } else if let Some(slot) = self.use_alias_value_slot(var_name) {
+            // T5：`use lib.{value}`（含 `as` 别名）引入的跨文件顶层值 → 读全局槽位。
+            // 别名 → 限定名 → 槽位这两表联查归 `use_alias_value_slot`——调用形态
+            // 判据（`is_static_fn_name`）读同一实现，两条路径不会各猜一个答案。
+            instructions.push(Instruction::Load {
+                dst: Operand::Local(result_reg),
+                src: Operand::Global(slot),
+                span: *var_span,
+            });
+        } else if let Some(alias) = self.use_aliases.get(var_name).cloned() {
+            // 三条实现来源的判据与发射点只有一份（emit_module_export_value）：
+            // 代码 → MakeClosure、原生函数 → 原生函数值、native 常量 → 零参调用。
+            // 别名未命中上述三类时按既有零参调用兜底（与修复前同形态）。
+            if !self.emit_module_export_value(&alias, result_reg, *var_span, instructions) {
+                instructions.push(Instruction::Call {
+                    dst: Some(Operand::Local(result_reg)),
+                    func: Operand::Const(ConstValue::String(alias)),
+                    args: vec![],
+                    span: *var_span,
+                    def: None,
+                });
+            }
+        } else if matches!(
+            var_name,
+            "Int" | "Float" | "Bool" | "String" | "Char" | "Bytes" | "Type" | "Void" | "Never"
+        ) {
+            // 内置类型名作为类型实参（如 SafeArray(Int, 3)）：类型宇宙的值，
+            // 运行时无表示，加载 Void 占位（类型参数在编译期已被消费）
+            instructions.push(Instruction::Load {
+                dst: Operand::Local(result_reg),
+                src: Operand::Const(ConstValue::Void),
+                span: self.cur_span,
+            });
+        } else if self.binding_is_function(var_name) {
+            // #348：名字的类型是 Fn ⇒ 它就是函数值。运行时函数值的唯一表示是
+            // 闭包，故物化为 MakeClosure（env 为空：本处只处理顶层/自由函数名，
+            // 捕获变量已由上方 closure_captures 处理）。
+            //
+            // 此前落到下方兜底 → E3006（"变量无法解析"），使函数名不能
+            // 作一等值使用：`io.println(f)` / `g(f)` / `x = f` 全部失败。
+            instructions.push(Instruction::MakeClosure {
+                dst: Operand::Local(result_reg),
+                func: var_name.to_string(),
+                env: vec![],
+                def: None,
+                span: self.cur_span,
+            });
+        } else {
+            // #271 #3：未解析变量 → 硬错误（#254 spawn 捕获已落地，不再需要静默 Load 0 兜底）。
+            // 走到这里说明 typecheck 漏网，属编译器内部一致性问题。
+            return Err(ErrorCodeDefinition::unresolved_variable(var_name)
+                .at(*var_span)
+                .build());
+        }
+        Ok(())
+    }
+
+    fn generate_field_access_expr_ir(
+        &mut self,
+        expr: &Expr,
+        field: &str,
+        span: &Span,
+        result_reg: usize,
+        instructions: &mut Vec<Instruction>,
+        constants: &mut Vec<ConstValue>,
+    ) -> Result<(), Diagnostic> {
+        // #396：命名空间数据访问（`use lib;` 后 `lib.v` / `lib.sub.v`，以及
+        // `io.println` 这类 std 子模块成员作值）。此前只有**调用位置**有
+        // namespace 降级，表达式位置落到「普通字段访问」→ 生成对 `lib` 的
+        // 变量读取 → E3006 内部错误。
+        // 降级与 generate_var_expr_ir 的 T5 分支（use lib.{v} 别名）同一数据面：
+        // ① 跨文件全局槽位（顶层值绑定，键为限定名）→ Load Global；
+        // ② native 命名空间常量（std.math.PI）→ 零参调用；
+        // ③ 函数值（`lib.greet` 作一等值）→ MakeClosure（#348 的跨模块镜像）。
+        // 头被本文件局部绑定/闭包捕获遮蔽时不进此分支（与变量解析的局部优先序
+        // 一致）；①②③全未命中则落回下方既有逻辑——成员存在性已由 typecheck
+        // 保证（E1043），落到这里属 typecheck 漏网，按原逻辑响亮失败。
+        if let Some(qualified) = self.resolve_namespace_data_access(expr, field) {
+            if let Some(&slot) = self.global_slot_layout.get(&qualified) {
+                instructions.push(Instruction::Load {
+                    dst: Operand::Local(result_reg),
+                    src: Operand::Global(slot),
+                    span: *span,
+                });
+                return Ok(());
+            }
+            // ②③ 同一判据（emit_module_export_value）：native 常量 → 零参调用；
+            // 纯 yx 实现的 std 导出 → MakeClosure；原生函数 → 原生函数值（#492）。
+            if self.emit_module_export_value(&qualified, result_reg, *span, instructions) {
+                return Ok(());
+            }
+            if let Some(def) = self.registry.symbols().def(&qualified) {
+                if matches!(
+                    self.registry.symbols().kind(def),
+                    DefKind::Function | DefKind::Method
+                ) {
+                    instructions.push(Instruction::MakeClosure {
+                        dst: Operand::Local(result_reg),
+                        func: qualified,
+                        env: vec![],
+                        def: None,
+                        span: *span,
+                    });
+                    return Ok(());
+                }
+            }
+        }
+
+        // 首先检查是否是模块变量的字段访问（如 io.println）
+        // io 是通过 use std.{io} 导入的模块变量
+        if let Expr::Var(module_name, _) = expr {
+            if let Some(full_path) = {
+                let reg = &self.registry;
+                if reg.is_std_submodule(module_name) {
+                    let path = format!("std.{}", field);
+                    if reg.is_native_name(&path) {
+                        Some(path)
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            } {
+                // 模块变量成员作值（`io.println` / `json.parse`）：与 `use lib.{f}`
+                // 别名同一判据（emit_module_export_value）——代码 → MakeClosure、
+                // 原生函数 → 原生函数值（#492）、native 常量 → 零参调用。此前一律
+                // 生成零参调用：原生函数作值时 stdout 空、exit 0、零诊断。
+                if !self.emit_module_export_value(&full_path, result_reg, *span, instructions) {
+                    instructions.push(Instruction::Call {
+                        dst: Some(Operand::Local(result_reg)),
+                        func: Operand::Const(ConstValue::String(full_path)),
+                        args: vec![],
+                        span: *span,
+                        def: None,
+                    });
+                }
+            } else if field == "length"
+                && matches!(
+                    self.get_expr_mono_type(expr),
+                    // 剥掉 Ref 层：`&Vec(A)` 的 `.length` 也是长度读取
+                    // （RFC-009 §2.8 读透明）。此前未剥离，泛型函数的
+                    // `&Vec(A)` 形参上读长度会落到「普通字段访问」分支，
+                    // 生成 `GetField(0)` 去写元素槽位 0，静默读出错误值。
+                    Some(ref t) if {
+                        let mut r = t.clone();
+                        while let crate::frontend::core::types::mono::MonoType::Ref {
+                            inner, ..
+                        } = r
+                        {
+                            r = *inner;
+                        }
+                        r.is_vec() || r.is_array()
+                    }
+                )
+            {
+                // RFC-011 容器命名分层：`Vec(T)` / `Array(T, N)` 的 `.length`。
+                // 复用 StringLength 指令（已泛化为通用长度读取），
+                // 与 Range 具名字字段同模式：类型层认字段、IR 层脱糖成原语。
+                let obj_reg = self.next_temp_reg();
+                self.generate_expr_ir(expr, obj_reg, instructions, constants)?;
+                instructions.push(Instruction::StringLength {
+                    dst: Operand::Local(result_reg),
+                    src: Operand::Local(obj_reg),
+                    span: *span,
+                });
+            } else {
+                // 普通字段访问
+                let obj_reg = self.next_temp_reg();
+                self.generate_expr_ir(expr, obj_reg, instructions, constants)?;
+                let field_index = self.resolve_field_index(expr, field).ok_or_else(|| {
+                    ErrorCodeDefinition::ir_internal_error(&format!(
+                        "无法解析字段索引: '{}'",
+                        field
+                    ))
+                    .at(Self::get_expr_span(expr))
+                    .build()
+                })?;
+                instructions.push(Instruction::LoadField {
+                    dst: Operand::Local(result_reg),
+                    src: Operand::Local(obj_reg),
+                    field: field_index,
+                    span: *span,
+                });
+            }
+        } else {
+            // 提取完整的命名空间路径（如 std.math.PI）
+            let full_path = self.resolve_field_path(expr, field);
+
+            // 容器的 `.length` 读取（接收者非简单变量时）。
+            //
+            // 上面的 `.length` 分支嵌在 `if let Expr::Var(module_name, _) = expr`
+            // 内部，只对变量接收者生效；`Vec(Int)().length`（接收者是两层构造调用）
+            // 落到下面的普通字段分支，生成 `LoadField(0)`——那是**取元素 0**，
+            // 空容器上直接报「field index 0 out of range」。
+            if self.is_container_length_field(expr, field) {
+                let obj_reg = self.next_temp_reg();
+                self.generate_expr_ir(expr, obj_reg, instructions, constants)?;
+                instructions.push(Instruction::StringLength {
+                    dst: Operand::Local(result_reg),
+                    src: Operand::Local(obj_reg),
+                    span: *span,
+                });
+                return Ok(());
+            }
+
+            // 检查是否是命名空间常量访问
+            if self.registry.is_native_name(&full_path) {
+                // 命名空间常量访问：生成零参数函数调用
+                instructions.push(Instruction::Call {
+                    dst: Some(Operand::Local(result_reg)),
+                    func: Operand::Const(ConstValue::String(full_path)),
+                    args: vec![],
+                    span: *span,
+                    def: None,
+                });
+            } else {
+                // 普通字段访问
+                let obj_reg = self.next_temp_reg();
+                self.generate_expr_ir(expr, obj_reg, instructions, constants)?;
+                let field_index = self.resolve_field_index(expr, field).ok_or_else(|| {
+                    ErrorCodeDefinition::ir_internal_error(&format!(
+                        "无法解析字段索引: '{}'",
+                        field
+                    ))
+                    .at(Self::get_expr_span(expr))
+                    .build()
+                })?;
+                instructions.push(Instruction::LoadField {
+                    dst: Operand::Local(result_reg),
+                    src: Operand::Local(obj_reg),
+                    field: field_index,
+                    span: *span,
+                });
+            }
+        }
+        Ok(())
+    }
+
+    fn generate_lambda_expr_ir(
+        &mut self,
+        params: &[ast::Param],
+        body: &ast::Block,
+        result_reg: usize,
+        instructions: &mut Vec<Instruction>,
+        constants: &mut Vec<ConstValue>,
+    ) -> Result<(), Diagnostic> {
+        // Lambda 表达式 IR 生成
+        // 例如: (x, y) => x + y
+
+        // 1. 生成唯一的闭包函数名
+        let closure_name = format!("closure_{}", self.closure_counter);
+        self.closure_counter += 1;
+
+        // 2. 获取闭包的返回类型（简化处理：使用 Void）
+        // TODO: 可以通过类型检查结果获取更精确的返回类型
+        let return_type = MonoType::Void;
+
+        // 3. 为闭包参数分配寄存器索引
+        let _param_regs: Vec<usize> = (0..params.len()).collect();
+
+        // RFC-009a / #254：闭包需捕获自由变量。
+        // `pending_env_vars` 只由 spawn/for 路径填充；普通 lambda（如
+        // `adder: (n: Int) -> ((x: Int) -> Int) = (x) => x + n` 里的内层）
+        // 从未填充，导致 `MakeClosure` 的 env 为空，`n` 在闭包体内取不到
+        // （实测 `adder(10)(5)` 得 10 而非 15）。
+        // 此处按“body 中引用但非自身参数”收集自由变量，用外层寄存器作为 env。
+        let mut env_vars = std::mem::take(&mut self.pending_env_vars);
+        let mut env_names = std::mem::take(&mut self.pending_env_names);
+        if env_names.is_empty() {
+            let bound: std::collections::HashSet<&str> =
+                params.iter().map(|p| p.name.as_str()).collect();
+            let mut free = Vec::new();
+            let mut seen = std::collections::HashSet::new();
+            for stmt in &body.stmts {
+                super::ir_gen::collect_free_vars_stmt(stmt, &bound, &mut seen, &mut free);
+            }
+            for name in free {
+                if let Some(idx) = self.lookup_local(&name) {
+                    env_vars.push(Operand::Local(idx));
+                    env_names.push(name);
+                }
+            }
+        }
+        // #254：捕获表（变量名 → env 槽位），供闭包体内 Var 解析 → LoadUpvalue
+        self.closure_captures = env_names
+            .iter()
+            .enumerate()
+            .map(|(i, n)| (n.clone(), i))
+            .collect();
+
+        // 5. 生成闭包函数体 IR
+        // 类似于 generate_function_ir 的逻辑，但针对 Lambda
+        let closure_body =
+            self.generate_lambda_body_ir(params, body, constants, env_names.len())?;
+        // #254：闭包体生成完毕，清除捕获表
+        self.closure_captures.clear();
+
+        // 6. 创建闭包函数 IR
+        // WBS 2.1.2 实测缺陷修复：无注解参数此前被 filter_map 丢弃，
+        // params 长度与帧布局错位（参数槽仍在 env_count+i 占位，元数据却空）。
+        // 对齐 generate_method_ir:1749 惯例：无注解参数填 Int(64) 占位。
+        // 形参类型：外层声明若在返回位给了完整 Fn（括号返回 / 闭包包装形态），
+        // 按它渲染（与 typecheck 的声明驱动同一来源）；否则按作者标注；再否则 Int64
+        // 占位（WBS 2.1.2：长度必须与帧布局一致）。
+        let declared = &self.closure_decl_params;
+        let param_types: Vec<MonoType> = params
+            .iter()
+            .enumerate()
+            .map(|(i, p)| {
+                if declared.len() == params.len() {
+                    return declared[i].1.clone();
+                }
+                p.ty.clone().map(|t| t.into()).unwrap_or(MonoType::Int(64))
+            })
+            .collect();
+
+        let closure_func = FunctionIR {
+            def: None, // 由 generate_module_ir 尾部 assign_defs 填充
+            name: closure_name.clone(),
+            params: param_types,
+            return_type,
+            generic_params: None,
+            body: FunctionBody::Code {
+                blocks: vec![BasicBlock {
+                    label: 0,
+                    instructions: closure_body.instructions,
+                    successors: Vec::new(),
+                }],
+                entry: 0,
+                locals: closure_body.locals.clone(),
+            },
+        };
+
+        // 7. 将闭包函数添加到嵌套函数列表
+        self.nested_functions.push(closure_func);
+
+        // 9. 创建 MakeClosure 指令
+        // env 包含被捕获的外部变量的 Operand
+        instructions.push(Instruction::MakeClosure {
+            dst: Operand::Local(result_reg),
+            func: closure_name,
+            env: env_vars,
+            def: None,
+            span: self.cur_span,
+        });
+        Ok(())
+    }
+
+    fn generate_spawn_expr_ir(
+        &mut self,
+        body: &ast::Block,
+        span: &Span,
+        _expr: &Expr,
+        result_reg: usize,
+        instructions: &mut Vec<Instruction>,
+        constants: &mut Vec<ConstValue>,
+    ) -> Result<(), Diagnostic> {
+        // Spawn block: spawn { ... }
+        // RFC-024: DAG 分析识别直接子表达式，为每个生成独立闭包
+
+        // 1. DAG 分析：识别直接子表达式，生成执行计划
+        let (trait_table, local_var_types) = if let Some(ref type_result) = self.type_result {
+            (&type_result.trait_table, &type_result.local_var_types)
+        } else {
+            // 无类型信息时使用空表（向后兼容）
+            static EMPTY_TRAIT_TABLE: std::sync::LazyLock<
+                crate::frontend::core::types::TraitTable,
+            > = std::sync::LazyLock::new(crate::frontend::core::types::TraitTable::default);
+            static EMPTY_VAR_TYPES: std::sync::LazyLock<
+                std::collections::HashMap<String, crate::frontend::core::types::MonoType>,
+            > = std::sync::LazyLock::new(std::collections::HashMap::new);
+            (&*EMPTY_TRAIT_TABLE, &*EMPTY_VAR_TYPES)
+        };
+        let analysis = crate::frontend::core::spawn::analysis::analyze_spawn_body(
+            body,
+            trait_table,
+            local_var_types,
+        );
+
+        // 2. 进入 spawn 作用域
+        self.enter_scope();
+
+        // 3. 为每个直接子表达式生成闭包
+        let mut closure_regs = Vec::new();
+        for task in &analysis.tasks {
+            // 如果是赋值，注册目标变量到 spawn 作用域
+            if let Some(target) = &task.target {
+                if self.lookup_local(target).is_none() {
+                    let reg = self.next_temp_reg();
+                    self.register_local(target, reg);
+                }
+            }
+
+            // 将 RHS 包装为无参闭包：() => { rhs }
+            // #254：捕获 task 读取的外层变量（RFC-024 §2.3 Move 值捕获）
+            // 过滤：仅捕获能在当前作用域链解析的变量（spawn 内声明的由
+            // 任务间依赖传递，不在此捕获）；task.reads 由 spawn analysis 提供。
+            let mut env_ops = Vec::new();
+            let mut env_names = Vec::new();
+            for var in &task.reads {
+                if let Some(local_idx) = self.lookup_local(var) {
+                    env_ops.push(Operand::Local(local_idx));
+                    env_names.push(var.clone());
+                }
+            }
+            self.pending_env_vars = env_ops;
+            self.pending_env_names = env_names;
+            let closure_reg = self.next_temp_reg();
+            let lambda = ast::Expr::Lambda {
+                params: Vec::new(),
+                body: Box::new(ast::Block {
+                    stmts: vec![ast::Stmt {
+                        kind: ast::StmtKind::Expr(Box::new(task.expr.clone())),
+                        span: *span,
+                        plan_id: ast::PlanId::UNPLANNED,
+                    }],
+                    span: *span,
+                }),
+                span: *span,
+            };
+            self.generate_expr_ir(&lambda, closure_reg, instructions, constants)?;
+            self.pending_env_vars.clear();
+            self.pending_env_names.clear();
+            closure_regs.push(Operand::Local(closure_reg));
+        }
+
+        // 4. 生成 spawn 块剩余语句（非直接子表达式，如 var 声明等）
+        // 尾表达式跳过：它在第 6 步作为块值写出（#365）
+        for (i, stmt) in body.stmts.iter().enumerate() {
+            if !crate::frontend::core::spawn::analysis::is_direct_child(stmt)
+                || crate::frontend::core::spawn::analysis::is_spawn_tail_expr(body, i)
+            {
+                self.generate_local_stmt_ir(stmt, instructions, constants)?;
+                // NLL Release: 语句边界消费释放计划（RFC-039 D20）
+                self.emit_release_drops(stmt.plan_id, instructions);
+            }
+        }
+
+        // 5. 生成 Spawn 指令（多闭包 + 执行计划）
+        // Spawn 指令会等待所有闭包完成，之后 t1/t2 等变量才可用
+        instructions.push(Instruction::Spawn {
+            closures: closure_regs,
+            plan: analysis.plan,
+            result: Operand::Local(result_reg),
+            span: self.cur_span,
+        });
+
+        // 6. 块的结果值（RFC-010a 规则①：块的值 = 尾表达式）
+        // 必须在 Spawn 之后生成，因为 return / 尾表达式可能引用闭包的结果变量。
+        //
+        // 优先级：return 优先（显式退出函数体语义），否则取尾表达式。
+        // #365：此前只扫 return，尾表达式被当并行任务包装进闭包而丢值，
+        // 引用块内变量时还会报 E3006（变量由别的任务声明）。
+        let mut has_value = false;
+        for stmt in &body.stmts {
+            if let ast::StmtKind::Expr(ref expr_stmt) = stmt.kind {
+                if let ast::Expr::Return(Some(ret_expr), _) = expr_stmt.as_ref() {
+                    let ret_reg = self.next_temp_reg();
+                    self.generate_expr_ir(ret_expr, ret_reg, instructions, constants)?;
+                    instructions.push(Instruction::Move {
+                        dst: Operand::Local(result_reg),
+                        src: Operand::Local(ret_reg),
+                        span: self.cur_span,
+                    });
+                    has_value = true;
+                    break;
+                }
+            }
+        }
+        if !has_value {
+            // 尾表达式：值出口（空块 / 末位为赋值语句时为 Void，无需写出）
+            if let Some(last_idx) = body.stmts.len().checked_sub(1) {
+                if crate::frontend::core::spawn::analysis::is_spawn_tail_expr(body, last_idx) {
+                    if let ast::StmtKind::Expr(ref expr) = body.stmts[last_idx].kind {
+                        let tail_reg = self.next_temp_reg();
+                        self.generate_expr_ir(expr, tail_reg, instructions, constants)?;
+                        instructions.push(Instruction::Move {
+                            dst: Operand::Local(result_reg),
+                            src: Operand::Local(tail_reg),
+                            span: self.cur_span,
+                        });
+                    }
+                }
+            }
+        }
+
+        // 7. spawn 体语句的释放边界结算（RFC-039 D20 / WBS 4.5.1）
+        //
+        // 直接子表达式语句在第 3 步被**闭包化**（每条包成无参闭包），
+        // 尾表达式 / return 在第 6 步单独取值——这两类语句都不过通用语句循环。
+        // 但 ownership 同样走它们（`walk_expr` 的 `Expr::Spawn` 臂遍历
+        // `body.stmts`），条目必须有消费点：spawn 体的作用域退点就是此处
+        //（`Spawn` 指令已把所有闭包 join 回来）。漏掉这一处，spawn 体语句的
+        // 产出键就永远没人消费——义务结算报 W1090（实测红态残留 7 键即此类）。
+        for (i, stmt) in body.stmts.iter().enumerate() {
+            let generated_in_loop = !crate::frontend::core::spawn::analysis::is_direct_child(stmt)
+                || crate::frontend::core::spawn::analysis::is_spawn_tail_expr(body, i);
+            if !generated_in_loop {
+                self.emit_release_drops(stmt.plan_id, instructions);
+            }
+        }
+
+        // 8. 退出 spawn 作用域
+        self.exit_scope();
+        Ok(())
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn generate_list_comp_expr_ir(
+        &mut self,
+        element: &Expr,
+        generators: &[ast::ListCompGenerator],
+        span: &Span,
+        result_reg: usize,
+        instructions: &mut Vec<Instruction>,
+        constants: &mut Vec<ConstValue>,
+    ) -> Result<(), Diagnostic> {
+        // 列表推导式 IR 生成（#401：多生成器嵌套循环，每层可带 if 过滤）
+        // [e for x in a (if c)? for y in b (if d)?] 等价于:
+        //   1. 创建空结果列表
+        //   2. 逐层嵌套 for 循环：绑定期迭代变量 → has_next/next 取元素 →
+        //      过滤条件(可选)不满足则 continue → 最内层计算 element 并 push
+        //   3. 返回结果列表
+
+        // 1. 创建空结果列表
+        instructions.push(Instruction::AllocArray {
+            dst: Operand::Local(result_reg),
+            size: Operand::Const(ConstValue::Int(0)),
+            elem_size: Operand::Const(ConstValue::Int(1)),
+            span: self.cur_span,
+        });
+
+        self.generate_comp_generators_ir(
+            element,
+            generators,
+            0,
+            span,
+            result_reg,
+            instructions,
+            constants,
+        )
+    }
+
+    /// 递归展开第 `idx` 层生成器子句：非最内层时循环体是下一层子句，
+    /// 最内层循环体是元素计算 + push。过滤条件失败直接跳回本层循环头
+    /// （has_next 检查），即 continue 语义。
+    #[allow(clippy::too_many_arguments)]
+    fn generate_comp_generators_ir(
+        &mut self,
+        element: &Expr,
+        generators: &[ast::ListCompGenerator],
+        idx: usize,
+        span: &Span,
+        result_reg: usize,
+        instructions: &mut Vec<Instruction>,
+        constants: &mut Vec<ConstValue>,
+    ) -> Result<(), Diagnostic> {
+        let gen = &generators[idx];
+
+        // 计算可迭代对象
+        let iterable_reg = self.next_temp_reg();
+        self.generate_expr_ir(&gen.iterable, iterable_reg, instructions, constants)?;
+
+        // 创建迭代器
+        let iterator_reg = self.next_temp_reg();
+        instructions.push(Instruction::Call {
+            dst: Some(Operand::Local(iterator_reg)),
+            func: Operand::Const(ConstValue::String(
+                self.resolver().resolve_namespace("list", &["iter"]),
+            )),
+            args: vec![Operand::Local(iterable_reg)],
+            span: *span,
+            def: None,
+        });
+
+        // 注册循环变量
+        let var_reg = self.next_temp_reg();
+        self.register_local(&gen.var, var_reg);
+
+        // 循环开始
+        let loop_start_idx = instructions.len();
+
+        // has_next?
+        let has_next_reg = self.next_temp_reg();
+        instructions.push(Instruction::Call {
+            dst: Some(Operand::Local(has_next_reg)),
+            func: Operand::Const(ConstValue::String("std.list.has_next".to_string())),
+            args: vec![Operand::Local(iterator_reg)],
+            span: *span,
+            def: None,
+        });
+
+        let jump_end_idx = instructions.len();
+        instructions.push(Instruction::JmpIfNot {
+            cond: Operand::Local(has_next_reg),
+            target: 0, // 占位符
+            span: self.cur_span,
+        });
+
+        // next element
+        let element_reg = self.next_temp_reg();
+        instructions.push(Instruction::Call {
+            dst: Some(Operand::Local(element_reg)),
+            func: Operand::Const(ConstValue::String("std.list.next".to_string())),
+            args: vec![Operand::Local(iterator_reg)],
+            span: *span,
+            def: None,
+        });
+
+        // 存储到循环变量
+        instructions.push(Instruction::Store {
+            dst: Operand::Local(var_reg),
+            src: Operand::Local(element_reg),
+            span: *span,
+        });
+
+        // 过滤条件（可选）：不满足则跳回循环头
+        let mut cond_jump_idx = None;
+        if let Some(cond_expr) = &gen.condition {
+            let cond_reg = self.next_temp_reg();
+            self.generate_expr_ir(cond_expr, cond_reg, instructions, constants)?;
+
+            let j = instructions.len();
+            instructions.push(Instruction::JmpIfNot {
+                cond: Operand::Local(cond_reg),
+                target: 0, // 占位符
+                span: self.cur_span,
+            });
+            cond_jump_idx = Some(j);
+        }
+
+        // 循环体：内层生成器循环，或最内层的元素计算 + push
+        if idx + 1 < generators.len() {
+            self.generate_comp_generators_ir(
+                element,
+                generators,
+                idx + 1,
+                span,
+                result_reg,
+                instructions,
+                constants,
+            )?;
+        } else {
+            let comp_reg = self.next_temp_reg();
+            self.generate_expr_ir(element, comp_reg, instructions, constants)?;
+
+            instructions.push(Instruction::Call {
+                dst: Some(Operand::Local(result_reg)),
+                func: Operand::Const(ConstValue::String("std.list.push".to_string())),
+                args: vec![Operand::Local(result_reg), Operand::Local(comp_reg)],
+                span: *span,
+                def: None,
+            });
+        }
+
+        // 修复条件跳转：失败 → 跳回本层循环头
+        if let Some(j) = cond_jump_idx {
+            if let Instruction::JmpIfNot {
+                cond: _,
+                ref mut target,
+                span: _,
+            } = instructions[j]
+            {
+                *target = loop_start_idx;
+            }
+        }
+
+        // 跳回循环开始
+        instructions.push(Instruction::Jmp {
+            target: loop_start_idx,
+            span: self.cur_span,
+        });
+
+        // 修复跳出循环的跳转目标
+        let end_pos = instructions.len();
+        if let Instruction::JmpIfNot {
+            cond: _,
+            ref mut target,
+            span: _,
+        } = instructions[jump_end_idx]
+        {
+            *target = end_pos;
+        }
+        Ok(())
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn generate_bin_op_expr_ir(
+        &mut self,
+        op: &ast::BinOp,
+        left: &Expr,
+        right: &Expr,
+        span: &Span,
+        result_reg: usize,
+        instructions: &mut Vec<Instruction>,
+        constants: &mut Vec<ConstValue>,
+    ) -> Result<(), Diagnostic> {
+        tlog!(debug, MSG::DebugGeneratingIRBinOp, &format!("{:?}", op));
+        // 二元运算
+        let instr = match op {
+            ast::BinOp::Assign => {
+                if let Expr::Var(var_name, _) = left {
+                    let local_idx = if let Some(idx) = self.lookup_local(var_name) {
+                        idx
+                    } else {
+                        let idx = self.next_temp_reg();
+                        self.register_local(var_name, idx);
+                        idx
+                    };
+                    let val_reg = self.next_temp_reg();
+                    self.generate_expr_ir(right, val_reg, instructions, constants)?;
+
+                    // 更新变量的类型信息
+                    // 优先使用 typecheck 结果推导类型名，AST 推断仅作为兜底
+                    let inferred = self.get_expr_type_name(right);
+                    if inferred != "<unknown>" {
+                        self.local_var_types.insert(var_name.clone(), inferred);
+                    }
+                    // WBS 4.9.8 / issue #465：赋值的**写出**类型名（构造器形态）
+                    if let Some(written) = self.constructor_written_type_name(right) {
+                        self.note_local_written_type(var_name, &written);
+                    }
+
+                    // 统一走 Store — 消除 Var→Var 走 Move 的特殊情况
+                    instructions.push(Instruction::Store {
+                        dst: Operand::Local(local_idx),
+                        src: Operand::Local(val_reg),
+                        span: *span,
+                    });
+                    instructions.push(Instruction::Load {
+                        dst: Operand::Local(result_reg),
+                        src: Operand::Local(local_idx),
+                        span: self.cur_span,
+                    });
+                }
+                return Ok(());
+            }
+            // #300 I 项：Range 是一等值——三槽 [start, end, step]，复用 Tuple 载体
+            // （静态类型驱动一切消费，载体不透明；#302 落地 std.Range 后换正式身份）
+            ast::BinOp::Range => {
+                self.generate_range_construction_ir(
+                    left,
+                    right,
+                    result_reg,
+                    *span,
+                    instructions,
+                    constants,
+                )?;
+                return Ok(());
+            }
+            ast::BinOp::And | ast::BinOp::Or => {
+                // SPEC §2.2 / RFC-010 权威语义：and/or 短路求值
+                // a and b ≡ if a { b } else { false }；a or b ≡ if a { true } else { b }
+                let lhs_reg = self.next_temp_reg();
+                self.generate_expr_ir(left, lhs_reg, instructions, constants)?;
+                let is_and = matches!(op, ast::BinOp::And);
+                let short_idx = instructions.len();
+                if is_and {
+                    instructions.push(Instruction::JmpIfNot {
+                        cond: Operand::Local(lhs_reg),
+                        target: 0,
+                        span: self.cur_span,
+                    });
+                } else {
+                    instructions.push(Instruction::JmpIf {
+                        cond: Operand::Local(lhs_reg),
+                        target: 0,
+                        span: self.cur_span,
+                    });
+                }
+                self.generate_expr_ir(right, result_reg, instructions, constants)?;
+                let end_idx = instructions.len();
+                instructions.push(Instruction::Jmp {
+                    target: 0,
+                    span: self.cur_span,
+                });
+                // 短路值：and → false，or → true
+                let sc_target = instructions.len();
+                if let Instruction::JmpIf {
+                    cond: _,
+                    target: ref mut t,
+                    span: _,
+                } = instructions[short_idx]
+                {
+                    *t = sc_target;
+                }
+                if let Instruction::JmpIfNot {
+                    cond: _,
+                    target: ref mut t,
+                    span: _,
+                } = instructions[short_idx]
+                {
+                    *t = sc_target;
+                }
+                instructions.push(Instruction::Load {
+                    dst: Operand::Local(result_reg),
+                    src: Operand::Const(if is_and {
+                        ConstValue::Bool(false)
+                    } else {
+                        ConstValue::Bool(true)
+                    }),
+                    span: self.cur_span,
+                });
+                let end_target = instructions.len();
+                if let Instruction::Jmp {
+                    target: ref mut t,
+                    span: _,
+                } = instructions[end_idx]
+                {
+                    *t = end_target;
+                }
+                return Ok(());
+            }
+            _ => {
+                let left_reg = self.next_temp_reg();
+                let right_reg = self.next_temp_reg();
+                self.generate_expr_ir(left, left_reg, instructions, constants)?;
+                self.generate_expr_ir(right, right_reg, instructions, constants)?;
+
+                // RFC-011b: 显式接口派发——`==`/`!=` 命中 Equal 实例化时
+                // 生成方法调用（接收者居首），`!=` 对结果取反
+                if let Some((type_name, method, negate)) =
+                    self.operator_dispatches.get(span).cloned()
+                {
+                    let short_name = format!("{}.{}", type_name, method);
+                    let func_name = if let Some(qualified) =
+                        self.registry.short_to_qualified_map().get(&short_name)
+                    {
+                        qualified.clone()
+                    } else {
+                        short_name
+                    };
+                    // WBS 4.9.8 修复轮 R1 / issue #465：同 Index 臂——接收者（左操作数）
+                    // 是导入类型时按定义单元限定派发名，本地类型行为不变。
+                    let dispatch_name = self.method_dispatch_name(left, &func_name);
+                    instructions.push(Instruction::Call {
+                        dst: Some(Operand::Local(result_reg)),
+                        func: Operand::Const(ConstValue::String(dispatch_name)),
+                        args: vec![Operand::Local(left_reg), Operand::Local(right_reg)],
+                        span: self.cur_span,
+                        def: None,
+                    });
+                    if negate {
+                        instructions.push(Instruction::Not {
+                            dst: Operand::Local(result_reg),
+                            src: Operand::Local(result_reg),
+                            span: self.cur_span,
+                        });
+                    }
+                    return Ok(());
+                }
+
+                match op {
+                    ast::BinOp::Add => Instruction::Add {
+                        dst: Operand::Local(result_reg),
+                        lhs: Operand::Local(left_reg),
+                        rhs: Operand::Local(right_reg),
+                        span: self.cur_span,
+                    },
+                    ast::BinOp::Sub => Instruction::Sub {
+                        dst: Operand::Local(result_reg),
+                        lhs: Operand::Local(left_reg),
+                        rhs: Operand::Local(right_reg),
+                        span: self.cur_span,
+                    },
+                    ast::BinOp::Mul => Instruction::Mul {
+                        dst: Operand::Local(result_reg),
+                        lhs: Operand::Local(left_reg),
+                        rhs: Operand::Local(right_reg),
+                        span: self.cur_span,
+                    },
+                    ast::BinOp::Div => Instruction::Div {
+                        dst: Operand::Local(result_reg),
+                        lhs: Operand::Local(left_reg),
+                        rhs: Operand::Local(right_reg),
+                        span: *span,
+                    },
+                    ast::BinOp::Mod => Instruction::Mod {
+                        dst: Operand::Local(result_reg),
+                        lhs: Operand::Local(left_reg),
+                        rhs: Operand::Local(right_reg),
+                        span: *span,
+                    },
+                    // #285: 位运算/移位（SPEC §2.2 级 7/8）
+                    ast::BinOp::BitAnd => Instruction::And {
+                        dst: Operand::Local(result_reg),
+                        lhs: Operand::Local(left_reg),
+                        rhs: Operand::Local(right_reg),
+                        span: self.cur_span,
+                    },
+                    ast::BinOp::BitOr => Instruction::Or {
+                        dst: Operand::Local(result_reg),
+                        lhs: Operand::Local(left_reg),
+                        rhs: Operand::Local(right_reg),
+                        span: self.cur_span,
+                    },
+                    ast::BinOp::BitXor => Instruction::Xor {
+                        dst: Operand::Local(result_reg),
+                        lhs: Operand::Local(left_reg),
+                        rhs: Operand::Local(right_reg),
+                        span: self.cur_span,
+                    },
+                    ast::BinOp::Shl => Instruction::Shl {
+                        dst: Operand::Local(result_reg),
+                        lhs: Operand::Local(left_reg),
+                        rhs: Operand::Local(right_reg),
+                        span: self.cur_span,
+                    },
+                    ast::BinOp::Shr => Instruction::Shr {
+                        dst: Operand::Local(result_reg),
+                        lhs: Operand::Local(left_reg),
+                        rhs: Operand::Local(right_reg),
+                        span: self.cur_span,
+                    },
+                    ast::BinOp::Eq => Instruction::Eq {
+                        dst: Operand::Local(result_reg),
+                        lhs: Operand::Local(left_reg),
+                        rhs: Operand::Local(right_reg),
+                        span: self.cur_span,
+                    },
+                    ast::BinOp::Neq => Instruction::Ne {
+                        dst: Operand::Local(result_reg),
+                        lhs: Operand::Local(left_reg),
+                        rhs: Operand::Local(right_reg),
+                        span: self.cur_span,
+                    },
+                    ast::BinOp::Lt => Instruction::Lt {
+                        dst: Operand::Local(result_reg),
+                        lhs: Operand::Local(left_reg),
+                        rhs: Operand::Local(right_reg),
+                        span: self.cur_span,
+                    },
+                    ast::BinOp::Le => Instruction::Le {
+                        dst: Operand::Local(result_reg),
+                        lhs: Operand::Local(left_reg),
+                        rhs: Operand::Local(right_reg),
+                        span: self.cur_span,
+                    },
+                    ast::BinOp::Gt => Instruction::Gt {
+                        dst: Operand::Local(result_reg),
+                        lhs: Operand::Local(left_reg),
+                        rhs: Operand::Local(right_reg),
+                        span: self.cur_span,
+                    },
+                    ast::BinOp::Ge => Instruction::Ge {
+                        dst: Operand::Local(result_reg),
+                        lhs: Operand::Local(left_reg),
+                        rhs: Operand::Local(right_reg),
+                        span: self.cur_span,
+                    },
+                    // Assign 在上方分支处理；And/Or 走短路求值；Range 仅限 for/切片上下文。
+                    // 剩余运算符到达此处即内部错误——禁止静默兜底（教训：&&/|| 曾静默编译为常量 0，#251）
+                    _ => {
+                        return Err(ErrorCodeDefinition::ir_internal_error(&format!(
+                            "unhandled binary operator: {:?}",
+                            op
+                        ))
+                        .build());
+                    }
+                }
+            }
+        };
+        instructions.push(instr);
+        Ok(())
+    }
+
+    /// RFC-010: 变体构造形态检测——`Result(Int, String).ok(5)` / `Color.red()`。
+    /// 与 typecheck 的变体构造识别同一 AST 形态；span 键跨系统不可靠（两端
+    /// 对 Call 节点 span 的语义不同），故就地检测并从 sum_type_variants 取变体序。
+    fn detect_variant_ctor_call(
+        &self,
+        func: &Expr,
+    ) -> Option<(String, usize, usize)> {
+        use crate::ast::Expr;
+        if let Expr::FieldAccess {
+            expr: base_expr,
+            field: variant_name,
+            ..
+        } = func
+        {
+            // 两种 base 形态：泛型 `Call(Var(名), 类型实参)` / 非泛型 `Var(名)`
+            let type_name = match base_expr.as_ref() {
+                Expr::Call {
+                    func: inner_func, ..
+                } => match inner_func.as_ref() {
+                    Expr::Var(n, _) => Some(n),
+                    _ => None,
+                },
+                Expr::Var(n, _) => Some(n),
+                _ => None,
+            }?;
+            let variants = self.sum_type_variants.get(type_name)?;
+            let idx = variants.iter().position(|v| v.0 == *variant_name)?;
+            return Some((type_name.clone(), idx, 0));
+        }
+        None
+    }
+
+    /// 生成 Call 表达式 IR
+    ///
+    /// `call_plan_id` = **本调用节点的身份**（`Expr::Call::plan_id`，RFC-039 D20）：
+    /// 重载决议表的消费键就是它——与 typecheck 产出侧读同一个节点上的同一个值。
+    #[allow(clippy::too_many_arguments)]
+    fn generate_call_expr_ir(
+        &mut self,
+        func: &Expr,
+        args: &[Expr],
+        named_args: &[(String, Expr)],
+        span: &Span,
+        call_plan_id: PlanId,
+        result_reg: usize,
+        instructions: &mut Vec<Instruction>,
+        constants: &mut Vec<ConstValue>,
+    ) -> Result<(), Diagnostic> {
+        // RFC-010: 变体构造——`Result(Int, String).ok(5)` / `Color.red()`。
+        // 整个调用替换为 CreateVariant：载荷求值进寄存器（多载荷先打包
+        // Tuple、零载荷用 Void 哨兵），group 携带和类型名（解释器 intern
+        // 为类型身份），variant 为声明序号。
+        if let Some((type_name, variant_index, _)) = self.detect_variant_ctor_call(func) {
+            let payload_count = args.len();
+            let payload_reg = self.next_temp_reg();
+            if payload_count == 0 {
+                instructions.push(Instruction::Load {
+                    dst: Operand::Local(payload_reg),
+                    src: Operand::Const(ConstValue::Void),
+                    span: *span,
+                });
+            } else if payload_count == 1 {
+                self.generate_expr_ir(&args[0], payload_reg, instructions, constants)?;
+            } else {
+                // 多载荷打包 Tuple（与 match 变体模式的多参解包对称）
+                let mut elem_regs = Vec::with_capacity(payload_count);
+                for a in args {
+                    let r = self.next_temp_reg();
+                    self.generate_expr_ir(a, r, instructions, constants)?;
+                    elem_regs.push(Operand::Local(r));
+                }
+                instructions.push(Instruction::NewTuple {
+                    dst: Operand::Local(payload_reg),
+                    items: elem_regs,
+                    span: *span,
+                });
+            }
+            instructions.push(Instruction::CreateVariant {
+                dst: Operand::Local(result_reg),
+                group: type_name,
+                variant: variant_index as u32,
+                payload: Operand::Local(payload_reg),
+                span: *span,
+            });
+            return Ok(());
+        }
+
+        // RFC-011 §「Vec(T) 的构造形式」：内置容器的两层构造
+        // `Vec(Int)()` / `Vec(Int)(1, 2, 3)` / `Vec(Int)(len = 64)`。
+        //
+        // 内层 `Vec(Int)` 是**类型实参**，运行期擦除（与 struct 的
+        // `Container(Int)(42, 43)` 同一规则）；真正要生成的是外层构造：
+        //   - 无构造实参 → 空容器
+        //   - 位置实参   → 元素构造（长度 = 元素个数）
+        //   - `len = n`  → 槽位分配（n 个零值）
+        // 此前这条路径根本不存在：`Vec(Int)()` 在类型检查阶段就报
+        // E1001 unknown variable 'Vec'（类型名不在值位置的白名单里）。
+        if let Expr::Call { func: inner, .. } = func {
+            if let Some(_ctor) = self.builtin_container_ctor_name(inner) {
+                return self.generate_builtin_container_ir(
+                    args,
+                    named_args,
+                    span,
+                    result_reg,
+                    instructions,
+                    constants,
+                );
+            }
+        }
+        // 检查是否是方法调用：func 是 FieldAccess
+        if let Expr::FieldAccess { expr, field, .. } = func {
+            // 方法调用 - 转换为普通函数调用
+            // 命名空间机制：p.method() -> method(p)
+
+            // 只有非命名空间调用才需要添加 self 参数
+            // 命名空间调用（如 std.io.println）不需要隐式参数
+            if self.is_namespace_receiver(expr) {
+                // 命名空间调用：不需要隐式参数
+                //
+                // 命名参数（`list.push(list = v, item = 9)`）在命名空间路径上
+                // 同样要按形参名重排，否则实参一个不进——与普通函数调用同类
+                // 缺口（那边在 6.5k 行修，这里是它的镜像）。
+                let mut arg_regs = Vec::new();
+                for arg in args.iter() {
+                    let arg_reg = self.next_temp_reg();
+                    self.generate_expr_ir(arg, arg_reg, instructions, constants)?;
+                    arg_regs.push(Operand::Local(arg_reg));
+                }
+                let method_function_name = self.resolve_field_path(expr, field);
+
+                // WBS 3.6.4：命名空间限定名若落在**跨文件全局槽位**，它是顶层值绑定
+                // （函数类型值），不是函数表条目——按名 `Call` 在运行期查扁平函数表
+                // 落空（`E6006 Native function not found: lib.f`）。改走间接调用：
+                // 读槽位 → `CallDyn`。限定名解析与槽位查询与
+                // `generate_field_access_expr_ir` 的命名空间数据访问**同一分支**
+                // （`resolve_namespace_data_access` + `global_slot_layout` 两表联查），
+                // 调用机制与闭包/函数值调用同一实现（`CallDyn`），不新增解析表。
+                if named_args.is_empty() {
+                    if let Some(slot) = self
+                        .resolve_namespace_data_access(expr, field)
+                        .and_then(|qualified| self.global_slot_layout.get(&qualified))
+                        .copied()
+                    {
+                        let func_reg = self.next_temp_reg();
+                        instructions.push(Instruction::Load {
+                            dst: Operand::Local(func_reg),
+                            src: Operand::Global(slot),
+                            span: *span,
+                        });
+                        instructions.push(Instruction::CallDyn {
+                            dst: Some(Operand::Local(result_reg)),
+                            func: Operand::Local(func_reg),
+                            args: arg_regs,
+                            span: *span,
+                        });
+                        return Ok(());
+                    }
+                }
+                if !named_args.is_empty() {
+                    let leaf = method_function_name
+                        .rsplit('.')
+                        .next()
+                        .unwrap_or(&method_function_name);
+                    // 本模块表 → 跨模块导出携带的 `param_names`
+                    if let Some(info) = self.lookup_param_info(&method_function_name, leaf) {
+                        let names = &info.names;
+                        // t12-F1 / t14：槽位判定收敛到共享判据（此前是与另一处互抄的第二份
+                        // 内联副本，槽冲突报旧码 E1015、缺规则④）；可选位与形参名同出一源。
+                        let optional: Vec<bool> =
+                            (0..names.len()).map(|i| i >= info.required_min).collect();
+                        let positions = crate::frontend::core::sema::inference::arg_binding::bind_args_to_params(
+                            &method_function_name,
+                            names,
+                            args,
+                            named_args,
+                            0, // 命名空间调用无接收者位
+                            &optional,
+                            *span,
+                        )?;
+                        let mut slots: Vec<Option<Operand>> = vec![None; names.len()];
+                        for (arg_pos, pos) in positions.iter().enumerate() {
+                            if *pos >= slots.len() {
+                                continue; // 超签实参：由类型检查阶段报 E1010
+                            }
+                            let reg = if arg_pos < arg_regs.len() {
+                                arg_regs[arg_pos].clone()
+                            } else {
+                                let arg_expr = &named_args[arg_pos - arg_regs.len()].1;
+                                let arg_reg = self.next_temp_reg();
+                                self.generate_expr_ir(arg_expr, arg_reg, instructions, constants)?;
+                                Operand::Local(arg_reg)
+                            };
+                            slots[*pos] = Some(reg);
+                        }
+                        arg_regs = slots.into_iter().flatten().collect();
+                    }
+                }
+                instructions.push(Instruction::Call {
+                    dst: Some(Operand::Local(result_reg)),
+                    func: Operand::Const(ConstValue::String(method_function_name.to_string())),
+                    args: arg_regs,
+                    span: *span,
+                    def: None,
+                });
+            } else {
+                // 非命名空间调用：检查是否有绑定信息（RFC-004）
+                let binding_info = self.get_expr_struct_type_name(expr).and_then(|type_name| {
+                    self.type_bindings
+                        .get(&type_name)
+                        .and_then(|bindings| bindings.get(field).cloned())
+                });
+
+                if let Some(binding) = binding_info {
+                    // RFC-011a §3：方法级重载决议命中时，binding.function
+                    //（后定义覆盖的单值）替换为决议出的混编名
+                    let binding = if let Some(mangled) = self.overload_resolutions.get(call_plan_id)
+                    {
+                        // RFC-039 D20：按**调用点身份**消费重载决议（命中即记账）。
+                        // #452：命名实参调用同样消费——决议已把命名实参计入匹配，
+                        // 这里的名字必须真的被用到（消费侧不得再带形态门）。
+                        BindingInfo {
+                            function: mangled.to_string(),
+                            positions: binding.positions.clone(),
+                        }
+                    } else {
+                        binding
+                    };
+                    // 绑定方法调用：按 RFC-004 进行参数重排
+                    // obj.method(arg1, arg2) + binding positions [0]
+                    // → original_function(obj, arg1, arg2)
+                    //
+                    // obj.method(arg1) + binding positions [1]
+                    // → original_function(arg1, obj)
+
+                    // 首先生成对象表达式 IR
+                    let obj_reg = self.next_temp_reg();
+                    self.generate_expr_ir(expr, obj_reg, instructions, constants)?;
+
+                    // 生成所有方法参数 IR。
+                    // #452：命名实参先按绑定函数的**值形参名**入槽（位置实参占前导
+                    // 槽位），再交给绑定位置重排——两步各自有据，不互相顶替。
+                    // 只用**被绑函数**的形参名：绑定路径把实参交给 binding.positions
+                    // 重排，槽序以被绑函数的形参表为准；用方法键的声明序形参名会把
+                    // 接收者位的占位错算成实参（类型体绑定形态实测 E1010）。
+                    let bound_params = self
+                        .lookup_param_info(
+                            &binding.function,
+                            Self::call_name_leaf(&binding.function),
+                        )
+                        .map(|info| info.names);
+                    let mut method_arg_regs = Vec::new();
+                    if !named_args.is_empty() {
+                        if let Some(names) = bound_params {
+                            // F3：诊断用真实方法名（不是硬编 <method>，也不是 self）
+                            let diag_key = if field.is_empty() {
+                                Self::call_name_leaf(&binding.function)
+                            } else {
+                                field.as_str()
+                            };
+                            // #456：绑定**判定**走共享判据（形参表[0] 是接收者位，
+                            // 实参从槽 1 起）；本处只按槽位序搬运实参。
+                            //
+                            // `optional` 全置 true = 只重放**槽位绑定**（②未知名 / ③争槽 /
+                            // ④命名后接位置 / ⑤重复命名），不在 IR 侧重判⑥「缺参」：
+                            // 元数与缺参归 typecheck。RFC-004 绑定路径的实参是**被绑函数**
+                            // 调用的一部分，IR 按形参名表重建调用序时区分不了「缺席的接收者」
+                            // 与「缺席的必需位」；旧实现同样以空槽跳过，注释即「诊断归
+                            // typecheck」。
+                            let positions = crate::frontend::core::sema::inference::arg_binding::bind_args_to_params(
+                                diag_key,
+                                &names,
+                                args,
+                                named_args,
+                                1, // 方法形态：param_names[0] 是接收者位
+                                &vec![true; names.len()],
+                                *span,
+                            )?;
+                            for arg_pos in Self::slot_order_arg_indices(&positions) {
+                                let arg_expr = if arg_pos < args.len() {
+                                    &args[arg_pos]
+                                } else {
+                                    &named_args[arg_pos - args.len()].1
+                                };
+                                let arg_reg = self.next_temp_reg();
+                                self.generate_expr_ir(arg_expr, arg_reg, instructions, constants)?;
+                                method_arg_regs.push(Operand::Local(arg_reg));
+                            }
+                        }
+                    }
+                    if method_arg_regs.is_empty() {
+                        for arg in args.iter() {
+                            let arg_reg = self.next_temp_reg();
+                            self.generate_expr_ir(arg, arg_reg, instructions, constants)?;
+                            method_arg_regs.push(Operand::Local(arg_reg));
+                        }
+                    }
+
+                    // 按绑定位置重排参数。
+                    // total_params = 绑定位数 + 方法实参数 = 被绑函数元数（调用方
+                    // 恰好提供剩余参数），负索引据此归一化（[-1] = 最后一个参数）。
+                    let total_params = binding.positions.len() + method_arg_regs.len();
+                    let positions: Vec<i64> = binding
+                        .positions
+                        .iter()
+                        .map(|&p| if p < 0 { p + total_params as i64 } else { p })
+                        .collect();
+                    let mut final_args: Vec<Operand> = Vec::with_capacity(total_params);
+                    let mut method_arg_iter = method_arg_regs.into_iter();
+
+                    for pos in 0..total_params {
+                        if positions.contains(&(pos as i64)) {
+                            final_args.push(Operand::Local(obj_reg));
+                        } else if let Some(arg_reg) = method_arg_iter.next() {
+                            final_args.push(arg_reg);
+                        }
+                    }
+
+                    // 解析函数名
+                    let func_name = if let Some(qualified) = self
+                        .registry
+                        .short_to_qualified_map()
+                        .get(&binding.function)
+                    {
+                        qualified.clone()
+                    } else {
+                        binding.function.clone()
+                    };
+                    // WBS 4.9.8 / #465：接收者是导入类型时，派发名按定义单元限定
+                    let dispatch_name = self.method_dispatch_name(expr, &func_name);
+
+                    instructions.push(Instruction::Call {
+                        dst: Some(Operand::Local(result_reg)),
+                        func: Operand::Const(ConstValue::String(dispatch_name)),
+                        args: final_args,
+                        span: *span,
+                        def: None,
+                    });
+                } else {
+                    // 常规方法调用（无绑定）：obj.method(args) → method(obj, args)
+                    // RFC-011a §3：方法级重载决议命中时直接调用混编名
+                    //（typecheck 按 实参兼容 + 期望返回 决议，键 = 调用点 PlanId）
+                    if let Some(mangled) = self
+                        .overload_resolutions
+                        .get(call_plan_id)
+                        .map(str::to_string)
+                    {
+                        // #452：命名实参调用同样消费决议（消费侧不得再带
+                        // named_args.is_empty() 门——那会让决议出的名字被丢弃，
+                        // 实参也按位置错配）。实参按**形参声明序**重建：位置实参占
+                        // 前导槽位、命名实参按名入槽；名字不可得则响亮报错，
+                        // 不静默丢弃命名实参。
+                        let leaf = Self::call_name_leaf(&mangled).to_string();
+                        let names = self
+                            .lookup_param_info(&mangled, &leaf)
+                            .map(|info| info.names)
+                            .unwrap_or_default();
+                        // F3：诊断用决议出的真实方法名（叶子段），不再硬编 <method>
+                        // #456：绑定**判定**走共享判据（接收者占槽 0，实参从 1 起）；
+                        // 本处只按槽位序搬运实参。
+                        //
+                        // `optional` 全置 true：同上一处——IR 只重放槽位绑定，不重判
+                        // ⑥「缺参」。这里形参名表来自**声明**（同名重载取最后一条），
+                        // 而调用按 typecheck 决议出的候选（元数可能更小）发实参；
+                        // 按声明表重判缺参会把合法决议误报 E1010（`t.pick2(a = 2)`
+                        // 命中一元候选、声明表是二元那条的实测）。
+                        let positions = crate::frontend::core::sema::inference::arg_binding::bind_args_to_params(
+                            &leaf,
+                            &names,
+                            args,
+                            named_args,
+                            1, // 方法形态：param_names[0] 是接收者位
+                            &vec![true; names.len()],
+                            *span,
+                        )?;
+                        let obj_reg = self.next_temp_reg();
+                        self.generate_expr_ir(expr, obj_reg, instructions, constants)?;
+                        let mut call_args = vec![Operand::Local(obj_reg)];
+                        for arg_pos in Self::slot_order_arg_indices(&positions) {
+                            let arg_expr = if arg_pos < args.len() {
+                                &args[arg_pos]
+                            } else {
+                                &named_args[arg_pos - args.len()].1
+                            };
+                            let r = self.next_temp_reg();
+                            self.generate_expr_ir(arg_expr, r, instructions, constants)?;
+                            call_args.push(Operand::Local(r));
+                        }
+                        // WBS 4.9.8 / #465：决议给的是**定义侧裸名**（`Temp.tag`）；
+                        // 接收者是导入类型时把类型前缀换成它的定义单元限定名。
+                        let dispatch_name = self.method_dispatch_name(expr, &mangled);
+                        instructions.push(Instruction::Call {
+                            dst: Some(Operand::Local(result_reg)),
+                            func: Operand::Const(ConstValue::String(dispatch_name)),
+                            args: call_args,
+                            span: *span,
+                            def: None,
+                        });
+                        return Ok(());
+                    }
+                    // 接口直接赋值优化：检查对象是否是约束变量
+                    let mut arg_regs = Vec::new();
+
+                    // 生成对象表达式 IR（作为第一个参数）
+                    let obj_reg = self.next_temp_reg();
+                    self.generate_expr_ir(expr, obj_reg, instructions, constants)?;
+                    arg_regs.push(Operand::Local(obj_reg));
+
+                    // 生成方法参数 IR
+                    for arg in args.iter() {
+                        let arg_reg = self.next_temp_reg();
+                        self.generate_expr_ir(arg, arg_reg, instructions, constants)?;
+                        arg_regs.push(Operand::Local(arg_reg));
+                    }
+
+                    // RFC-011a §6.4: 存在类型接收者 → 编译期变体分发。
+                    // 门控：接口须有本单元实现证明（隔离遗留 trait 约束路径）
+                    if let Some(iface) = self.existential_receiver_interface(expr) {
+                        if self.interface_variants.contains_key(&iface) {
+                            let method_args: Vec<Operand> = arg_regs[1..].to_vec();
+                            self.emit_variant_dispatch(
+                                &iface,
+                                field,
+                                obj_reg,
+                                &method_args,
+                                result_reg,
+                                *span,
+                                instructions,
+                                constants,
+                            )?;
+                            return Ok(());
+                        }
+                    }
+
+                    // 检查对象是否是约束变量（接口直接赋值优化）
+                    let var_name = if let Expr::Var(name, _) = expr.as_ref() {
+                        Some(name.clone())
+                    } else {
+                        None
+                    };
+
+                    let concrete_type = var_name
+                        .as_ref()
+                        .and_then(|name| self.get_constraint_var_concrete_type(name).cloned());
+
+                    if let Some(concrete_type_name) = concrete_type {
+                        // 编译期可确定具体类型 → 直接调用（零开销）
+                        // d.draw(screen) → ConcreteType.draw(d, screen)
+                        let qualified_name = format!("{}.{}", concrete_type_name, field);
+
+                        let final_args: Vec<Operand> = arg_regs.clone();
+
+                        instructions.push(Instruction::Call {
+                            dst: Some(Operand::Local(result_reg)),
+                            func: Operand::Const(ConstValue::String(qualified_name)),
+                            args: final_args,
+                            span: *span,
+                            def: None,
+                        });
+                    } else if var_name.as_ref().is_some_and(|name| {
+                        // 检查变量的类型标注是否是约束类型（但具体类型未知）
+                        self.local_var_types
+                            .get(name)
+                            .and_then(|type_name| {
+                                // 如果变量类型是约束类型且不在 constraint_var_concrete_types 中
+                                // 说明具体类型无法在编译期确定，需要 vtable 调用
+                                if !self.struct_definitions.contains_key(type_name)
+                                    && !self.constraint_var_concrete_types.contains_key(name)
+                                {
+                                    // 简单启发式：如果变量类型不是已知结构体，可能是约束类型
+                                    Some(true)
+                                } else {
+                                    None
+                                }
+                            })
+                            .unwrap_or(false)
+                    }) {
+                        // 编译期无法确定具体类型 → CallVirt（vtable 调用）
+                        instructions.push(Instruction::CallVirt {
+                            dst: Some(Operand::Local(result_reg)),
+                            obj: Operand::Local(obj_reg),
+                            method_name: field.to_string(),
+                            args: arg_regs,
+                            span: *span,
+                        });
+                    } else {
+                        // 普通方法调用
+                        // 优先使用类型名（而非变量名）构建函数名
+                        // 例如：a.is_greater(b) 中 a 的类型是 Node
+                        // → 函数名应为 "Node.is_greater" 而非 "a.is_greater"
+                        let func_name = if let Expr::Var(name, _) = expr.as_ref() {
+                            if let Some(type_name) = self.local_var_types.get(name) {
+                                // #266: &mut 令牌穿透——变量类型可能是
+                                // "&mut Point"，方法名应基于底层结构体 "Point"
+                                let base = Self::strip_ref_prefix(type_name);
+                                format!("{}.{}", base, field)
+                            } else if let Some(ty) = self.get_expr_mono_type(expr) {
+                                // local_var_types 未收录时从类型检查结果取接收者
+                                // 类型名（`r.is_failure()` 的 r: Result(..)）；
+                                // std yx 方法经注册表限定名映射改写
+                                // （"Result.is_failure" → "std.result.is_failure"）。
+                                let mut ty = ty;
+                                while let crate::frontend::core::types::MonoType::Ref {
+                                    inner,
+                                    ..
+                                } = ty
+                                {
+                                    ty = *inner;
+                                }
+                                let base = match &ty {
+                                    crate::frontend::core::types::MonoType::Generic {
+                                        name,
+                                        ..
+                                    } => Some(name.clone()),
+                                    crate::frontend::core::types::MonoType::Struct(s) => {
+                                        Some(s.name.clone())
+                                    }
+                                    crate::frontend::core::types::MonoType::TypeRef(n) => {
+                                        Some(n.clone())
+                                    }
+                                    _ => None,
+                                };
+                                match base {
+                                    Some(base) => {
+                                        let key = format!("{}.{}", base, field);
+                                        self.registry
+                                            .std_method_binding_qualified_map()
+                                            .get(&key)
+                                            .cloned()
+                                            .unwrap_or(key)
+                                    }
+                                    None => self.resolve_field_path(expr, field),
+                                }
+                            } else {
+                                self.resolve_field_path(expr, field)
+                            }
+                        } else {
+                            self.resolve_field_path(expr, field)
+                        };
+
+                        let final_args: Vec<Operand> = arg_regs.clone();
+
+                        // WBS 4.9.8 / #465：普通方法调用同样按接收者的定义单元限定
+                        let dispatch_name = self.method_dispatch_name(expr, &func_name);
+                        instructions.push(Instruction::Call {
+                            dst: Some(Operand::Local(result_reg)),
+                            func: Operand::Const(ConstValue::String(dispatch_name)),
+                            args: final_args,
+                            span: *span,
+                            def: None,
+                        });
+                    }
+                }
+            }
+        } else {
+            // 普通函数调用
+            let mut arg_regs = Vec::new();
+            for arg in args.iter() {
+                let arg_reg = self.next_temp_reg();
+                self.generate_expr_ir(arg, arg_reg, instructions, constants)?;
+                arg_regs.push(Operand::Local(arg_reg));
+            }
+
+            // RFC-010: 处理命名参数构造 `Point(x=1, y=2)`
+            if !named_args.is_empty() {
+                if let Expr::Var(name, _) = func {
+                    if let Some(fields) = self.struct_definitions.get(name).cloned() {
+                        // 生成命名参数的 IR
+                        let mut named_regs: Vec<(String, Operand)> = Vec::new();
+                        for (arg_name, arg_expr) in named_args.iter() {
+                            let arg_reg = self.next_temp_reg();
+                            self.generate_expr_ir(arg_expr, arg_reg, instructions, constants)?;
+                            named_regs.push((arg_name.clone(), Operand::Local(arg_reg)));
+                        }
+
+                        // 按字段顺序重排参数
+                        let mut final_args: Vec<Option<Operand>> = vec![None; fields.len()];
+
+                        // 先放置位置参数
+                        for (i, reg) in arg_regs.iter().enumerate() {
+                            if i < fields.len() {
+                                final_args[i] = Some(reg.clone());
+                            }
+                        }
+
+                        // 再放置命名参数（按字段名匹配）
+                        for (name, reg) in &named_regs {
+                            if let Some(idx) = fields.iter().position(|f| &f.name == name) {
+                                final_args[idx] = Some(reg.clone());
+                            }
+                        }
+
+                        // 填充默认值
+                        for (i, slot) in final_args.iter_mut().enumerate() {
+                            if slot.is_none() {
+                                let default_reg = self.next_temp_reg();
+                                if let Some(default_expr) = &fields[i].default {
+                                    self.generate_expr_ir(
+                                        default_expr,
+                                        default_reg,
+                                        instructions,
+                                        constants,
+                                    )?;
+                                } else {
+                                    instructions.push(Instruction::Load {
+                                        dst: Operand::Local(default_reg),
+                                        src: Operand::Const(ConstValue::Int(0)),
+                                        span: self.cur_span,
+                                    });
+                                }
+                                *slot = Some(Operand::Local(default_reg));
+                            }
+                        }
+
+                        arg_regs = final_args.into_iter().map(|s| s.unwrap()).collect();
+                    }
+                }
+            }
+
+            // 检查是否是结构体构造器调用，需要填充默认值
+            // 两层调用 X(类型参数)(构造参数)：func 是 Call{func: Var(name)}，
+            // 内层类型实参运行期擦除，外层实参按字段位置填充。
+            let struct_ctor_name: Option<String> = match func {
+                Expr::Var(name, _) => Some(name.clone()),
+                Expr::Call { func: inner, .. } => match inner.as_ref() {
+                    Expr::Var(name, _) => Some(name.clone()),
+                    _ => None,
+                },
+                _ => None,
+            };
+            if let Some(name) = struct_ctor_name {
+                if let Some(fields) = self.struct_definitions.get(&name).cloned() {
+                    // 这是一个结构体构造器调用
+                    // 如果提供的参数数少于字段数，用默认值填充
+                    if arg_regs.len() < fields.len() {
+                        for field in fields.iter().skip(arg_regs.len()) {
+                            let default_reg = self.next_temp_reg();
+                            if let Some(default_expr) = &field.default {
+                                // 有默认值：生成默认值表达式 IR
+                                self.generate_expr_ir(
+                                    default_expr,
+                                    default_reg,
+                                    instructions,
+                                    constants,
+                                )?;
+                            } else {
+                                // 无默认值：用零值填充（语义检查阶段应已报错）
+                                instructions.push(Instruction::Load {
+                                    dst: Operand::Local(default_reg),
+                                    src: Operand::Const(ConstValue::Int(0)),
+                                    span: self.cur_span,
+                                });
+                            }
+                            arg_regs.push(Operand::Local(default_reg));
+                        }
+                    }
+                }
+            }
+
+            // 命名参数调用普通**函数**：`add(b = 5, a = 3)`。
+            //
+            // 上面的 struct 分支按字段名重排；普通函数原先无人处理 `named_args`，
+            // 于是它们被静默丢弃——实参一个不进调用，运行期报 e6007「类型不符」，
+            // 与真正的病因（参数没传进去）完全搭不上。这里按**声明序形参名**重排：
+            // 位置实参填前导槽位，命名实参按名入槽，重名/未知名报错。
+            if !named_args.is_empty() {
+                let callee = match func {
+                    Expr::Var(n, _) => Some(n.clone()),
+                    // 限定名调用 `list.push(...)`：取叶子名（表中键就是声明处的短名）
+                    Expr::FieldAccess { field, .. } => Some(field.clone()),
+                    // 两层调用 `f(T)(...)`：外层才是传值那层
+                    Expr::Call { func: inner, .. } => match inner.as_ref() {
+                        Expr::Var(n, _) => Some(n.clone()),
+                        Expr::FieldAccess { field, .. } => Some(field.clone()),
+                        _ => None,
+                    },
+                    _ => None,
+                };
+                let is_ctor = callee
+                    .as_ref()
+                    .is_some_and(|n| self.struct_definitions.contains_key(n));
+                // 本模块表 → 跨模块导出携带的 `param_names`。
+                // 限定名（`list.push`）保留完整路径去查导出。
+                let qualified = match func {
+                    Expr::FieldAccess { expr, field, .. } => {
+                        Some(self.resolve_field_path(expr, field))
+                    }
+                    _ => None,
+                };
+                if let Some(info) = callee
+                    .as_ref()
+                    .filter(|_| !is_ctor)
+                    .and_then(|n| self.lookup_param_info(qualified.as_deref().unwrap_or(n), n))
+                {
+                    let names = &info.names;
+                    // t12-F1 / t14：槽位判定收敛到共享判据（与方法与 typecheck 原生臂
+                    // 同一实现）——此前这里是第三份内联副本，槽冲突还报旧码
+                    // E1015、且缺规则④（命名后接位置）；可选位与形参名同出一源。
+                    let diag_key = callee.as_deref().unwrap_or("<fn>");
+                    let optional: Vec<bool> =
+                        (0..names.len()).map(|i| i >= info.required_min).collect();
+                    let positions =
+                        crate::frontend::core::sema::inference::arg_binding::bind_args_to_params(
+                            diag_key, names, args, named_args,
+                            0, // 命名空间调用无接收者位
+                            &optional, *span,
+                        )?;
+                    let mut slots: Vec<Option<Operand>> = vec![None; names.len()];
+                    for (arg_pos, pos) in positions.iter().enumerate() {
+                        if *pos >= slots.len() {
+                            continue; // 超签实参：由类型检查阶段报 E1010
+                        }
+                        let reg = if arg_pos < arg_regs.len() {
+                            arg_regs[arg_pos].clone()
+                        } else {
+                            let arg_expr = &named_args[arg_pos - arg_regs.len()].1;
+                            let arg_reg = self.next_temp_reg();
+                            self.generate_expr_ir(arg_expr, arg_reg, instructions, constants)?;
+                            Operand::Local(arg_reg)
+                        };
+                        slots[*pos] = Some(reg);
+                    }
+                    // 未覆盖的槽位：保持缺席，由类型检查阶段报 E1010。
+                    // 运行期为安全起见补 0（正常路径不会到这里）。
+                    arg_regs = slots
+                        .into_iter()
+                        .map(|s| {
+                            s.unwrap_or_else(|| {
+                                let r = self.next_temp_reg();
+                                instructions.push(Instruction::Load {
+                                    dst: Operand::Local(r),
+                                    src: Operand::Const(ConstValue::Int(0)),
+                                    span: self.cur_span,
+                                });
+                                Operand::Local(r)
+                            })
+                        })
+                        .collect();
+                }
+            }
+
+            // 检查是否是动态函数调用（非静态函数名的 Var）
+            if !self.is_static_fn_name(func) {
+                // 闭包调用：先加载函数值，然后使用 CallDyn
+                let func_reg = self.next_temp_reg();
+                self.generate_expr_ir(func, func_reg, instructions, constants)?;
+
+                instructions.push(Instruction::CallDyn {
+                    dst: Some(Operand::Local(result_reg)),
+                    func: Operand::Local(func_reg),
+                    args: arg_regs,
+                    span: *span,
+                });
+            } else {
+                // ========== print/println 零开销分发处理 ==========
+                // 检查是否是 print 或 println 调用
+                let is_print_call = if let Expr::Var(name, _) = func {
+                    matches!(
+                        name.as_str(),
+                        "print" | "println" | "std.io.print" | "std.io.println"
+                    )
+                } else {
+                    false
+                };
+
+                // 如果是 print/println 且有参数，尝试零开销分发
+                if is_print_call && !args.is_empty() {
+                    let arg_expr = &args[0];
+                    // 获取参数的类型信息
+                    let arg_type = self.get_expr_mono_type(arg_expr);
+
+                    if let Some(mono_type) = arg_type {
+                        // 检查类型是否实现了 Stringable（to_string 方法）
+                        if type_implements_stringable(&mono_type) {
+                            // 零开销路径：直接调用 to_string 方法
+                            // 生成: arg.to_string()
+                            let func_name =
+                                format!("{}.to_string", get_type_fallback_string(&mono_type));
+                            let mut arg_regs_for_method = Vec::new();
+
+                            // 先计算参数值
+                            let arg_reg = self.next_temp_reg();
+                            self.generate_expr_ir(arg_expr, arg_reg, instructions, constants)?;
+                            arg_regs_for_method.push(Operand::Local(arg_reg));
+
+                            // 调用 to_string 方法
+                            let to_string_reg = self.next_temp_reg();
+                            instructions.push(Instruction::Call {
+                                dst: Some(Operand::Local(to_string_reg)),
+                                func: Operand::Const(ConstValue::String(func_name)),
+                                args: arg_regs_for_method,
+                                span: *span,
+                                def: None,
+                            });
+
+                            // 然后调用 std.io.print 输出字符串
+                            // 使用 resolved name
+                            let print_func_name = if let Expr::Var(name, _) = func {
+                                if name == "print" || name == "println" {
+                                    if let Some(qualified) =
+                                        self.registry.short_to_qualified_map().get(name)
+                                    {
+                                        qualified.clone()
+                                    } else {
+                                        format!("std.io.{}", name)
+                                    }
+                                } else {
+                                    name.clone()
+                                }
+                            } else {
+                                "std.io.print".to_string()
+                            };
+
+                            instructions.push(Instruction::Call {
+                                dst: Some(Operand::Local(result_reg)),
+                                func: Operand::Const(ConstValue::String(print_func_name)),
+                                args: vec![Operand::Local(to_string_reg)],
+                                span: *span,
+                                def: None,
+                            });
+                        } else {
+                            // 兜底路径：类型未实现 Stringable，调用 std.io.print 输出类型信息
+                            // 生成: std.io.format_fallback(arg, type_name)
+                            let type_name = get_type_fallback_string(&mono_type);
+
+                            // 先计算参数值
+                            let arg_reg = self.next_temp_reg();
+                            self.generate_expr_ir(arg_expr, arg_reg, instructions, constants)?;
+
+                            // 调用 format_fallback 获取类型信息字符串
+                            // 类型名常量先 Load 进寄存器——Call 参数必须寄存器态
+                            // （Const 直传会被 codegen to_reg 拒收，老 bug，tuple 同款）
+                            let type_name_reg = self.next_temp_reg();
+                            instructions.push(Instruction::Load {
+                                dst: Operand::Local(type_name_reg),
+                                src: Operand::Const(ConstValue::String(type_name.clone())),
+                                span: self.cur_span,
+                            });
+                            let fallback_reg = self.next_temp_reg();
+                            instructions.push(Instruction::Call {
+                                dst: Some(Operand::Local(fallback_reg)),
+                                func: Operand::Const(ConstValue::String(
+                                    "std.io.format_fallback".to_string(),
+                                )),
+                                args: vec![Operand::Local(arg_reg), Operand::Local(type_name_reg)],
+                                span: *span,
+                                def: None,
+                            });
+
+                            // 然后调用 std.io.print 输出
+                            let print_func_name = if let Expr::Var(name, _) = func {
+                                if name == "print" || name == "println" {
+                                    if let Some(qualified) =
+                                        self.registry.short_to_qualified_map().get(name)
+                                    {
+                                        qualified.clone()
+                                    } else {
+                                        format!("std.io.{}", name)
+                                    }
+                                } else {
+                                    name.clone()
+                                }
+                            } else {
+                                "std.io.print".to_string()
+                            };
+
+                            instructions.push(Instruction::Call {
+                                dst: Some(Operand::Local(result_reg)),
+                                func: Operand::Const(ConstValue::String(print_func_name)),
+                                args: vec![Operand::Local(fallback_reg)],
+                                span: *span,
+                                def: None,
+                            });
+                        }
+                    } else {
+                        // 无法获取类型，使用默认处理
+                        let func_operand = self.resolve_function_name(func)?;
+                        instructions.push(Instruction::Call {
+                            dst: Some(Operand::Local(result_reg)),
+                            func: func_operand,
+                            args: arg_regs,
+                            span: *span,
+                            def: None,
+                        });
+                    }
+                } else {
+                    // 非 print 调用或无参数，使用默认处理
+                    // ========== 默认函数调用处理 ==========
+                    let final_args: Vec<Operand> = arg_regs.clone();
+
+                    let func_operand = self.resolve_function_name(func)?;
+                    instructions.push(Instruction::Call {
+                        dst: Some(Operand::Local(result_reg)),
+                        func: func_operand,
+                        args: final_args,
+                        span: *span,
+                        def: None,
+                    });
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn generate_expr_ir_inner(
+        &mut self,
+        expr: &ast::Expr,
+        result_reg: usize,
+        instructions: &mut Vec<Instruction>,
+        constants: &mut Vec<ConstValue>,
+    ) -> Result<(), Diagnostic> {
+        match expr {
+            Expr::Lit(literal, _) => {
+                self.generate_lit_expr_ir(literal, result_reg, instructions, constants)?;
+            }
+            Expr::Var(var_name, var_span) => {
+                self.generate_var_expr_ir(var_name, var_span, result_reg, instructions)?;
+            }
+            Expr::BinOp {
+                op,
+                left,
+                right,
+                span,
+                ..
+            } => {
+                self.generate_bin_op_expr_ir(
+                    op,
+                    left,
+                    right,
+                    span,
+                    result_reg,
+                    instructions,
+                    constants,
+                )?;
+            }
+            Expr::Call {
+                func,
+                args,
+                named_args,
+                span,
+                plan_id,
+            } => {
+                self.generate_call_expr_ir(
+                    func,
+                    args,
+                    named_args,
+                    span,
+                    *plan_id,
+                    result_reg,
+                    instructions,
+                    constants,
+                )?;
+            }
+            Expr::FieldAccess {
+                expr, field, span, ..
+            } => {
+                self.generate_field_access_expr_ir(
+                    expr,
+                    field,
+                    span,
+                    result_reg,
+                    instructions,
+                    constants,
+                )?;
+            }
+            Expr::ListComp {
+                element,
+                generators,
+                span,
+                ..
+            } => {
+                self.generate_list_comp_expr_ir(
+                    element,
+                    generators,
+                    span,
+                    result_reg,
+                    instructions,
+                    constants,
+                )?;
+            }
+            Expr::List(elements, span) => {
+                self.generate_list_expr_ir(elements, span, result_reg, instructions, constants)?;
+            }
+            Expr::Dict(pairs, _) => {
+                self.generate_dict_expr_ir(pairs, result_reg, instructions, constants)?;
+            }
+            Expr::Index {
+                expr, index, span, ..
+            } => {
+                self.generate_index_expr_ir(
+                    expr,
+                    index,
+                    span,
+                    result_reg,
+                    instructions,
+                    constants,
+                )?;
+            }
+            // #299 §3: membership 谓词 `elem in container`
+            // Range 字面量脱糖成比较链（left >= start && left < end），无需 Range 运行时值；
+            // 其余容器发 Contains 指令
+            Expr::In {
+                elem,
+                container,
+                span,
+            } => {
+                self.generate_in_ir(elem, container, result_reg, *span, instructions, constants)?;
+            }
+            Expr::Return(expr, _) => {
+                self.generate_return_expr_ir(expr, result_reg, instructions, constants)?;
+            }
+            Expr::Break(span) => {
+                self.generate_break_expr_ir(span, instructions)?;
+            }
+            Expr::Continue(span) => {
+                self.generate_continue_expr_ir(span, instructions)?;
+            }
+            Expr::Try { expr, span, .. } => {
+                self.generate_try_expr_ir(expr, span, result_reg, instructions, constants)?;
+            }
+            Expr::If {
+                condition,
+                then_branch,
+                else_if_branches,
+                else_branch,
+                span: _,
+            } => {
+                // 重新实现 if 表达式，使用更简单的方法
+                self.generate_if_expr_ir(
+                    condition,
+                    then_branch,
+                    else_if_branches,
+                    else_branch.as_deref(),
+                    result_reg,
+                    instructions,
+                    constants,
+                )?;
+            }
+            Expr::While {
+                condition,
+                body,
+                span: _,
+            } => {
+                self.generate_while_expr_ir(condition, body, result_reg, instructions, constants)?;
+            }
+            Expr::For {
+                var,
+                var_mut,
+                iterable,
+                body,
+                span: for_span,
+                ..
+            } => {
+                self.generate_for_expr_ir(
+                    var,
+                    var_mut,
+                    iterable,
+                    body,
+                    for_span,
+                    result_reg,
+                    instructions,
+                    constants,
+                )?;
+            }
+            Expr::Ref { expr, .. } => {
+                self.generate_ref_expr_ir(expr, result_reg, instructions, constants)?;
+            }
+            Expr::Unsafe { body, .. } => {
+                self.generate_unsafe_expr_ir(body, result_reg, instructions, constants)?;
+            }
+            // spawn for 数据并行循环（RFC-024 §2.4）
+            Expr::SpawnFor {
+                var,
+                var_mut,
+                iterable,
+                body,
+                span,
+                ..
+            } => {
+                self.generate_spawn_for_expr_ir(
+                    var,
+                    var_mut,
+                    iterable,
+                    body,
+                    span,
+                    result_reg,
+                    instructions,
+                    constants,
+                )?;
+            }
+            Expr::Spawn { body, span, .. } => {
+                self.generate_spawn_expr_ir(body, span, expr, result_reg, instructions, constants)?;
+            }
+            Expr::UnOp { op, expr, .. } => {
+                self.generate_un_op_expr_ir(op, expr, result_reg, instructions, constants)?;
+            }
+            Expr::Lambda { params, body, .. } => {
+                self.generate_lambda_expr_ir(params, body, result_reg, instructions, constants)?;
+            }
+            Expr::Borrow { expr, .. } => {
+                self.generate_borrow_expr_ir(expr, result_reg, instructions, constants)?;
+            }
+            Expr::Match {
+                expr: match_expr,
+                arms,
+                span,
+            } => {
+                self.generate_match_expr_ir(
+                    match_expr,
+                    arms,
+                    *span,
+                    result_reg,
+                    instructions,
+                    constants,
+                )?;
+            }
+            // RFC-012: F-string 代码生成
+            Expr::FString { segments, span, .. } => {
+                self.generate_f_string_expr_ir(
+                    segments,
+                    span,
+                    expr,
+                    result_reg,
+                    instructions,
+                    constants,
+                )?;
+            }
+            Expr::Tuple(items, _) => {
+                self.generate_tuple_expr_ir(items, result_reg, instructions, constants)?;
+            }
+            Expr::Block(block) => {
+                // 语句位置块表达式（SPEC §12.5 good_seq）：逐语句生成，
+                // 最后表达式值写入 result_reg（复用块 IR 生成）。
+                self.generate_block_ir(block, Some(result_reg), instructions, constants)?;
+            }
+            other => {
+                // 未实现的表达式变体：硬错误，禁止静默归零（#251：&&/|| 曾被同类兜底吞掉）
+                return Err(ErrorCodeDefinition::ir_internal_error(&format!(
+                    "unhandled expression in IR generation: {:?}",
+                    std::mem::discriminant(other)
+                ))
+                .at(Self::get_expr_span(other))
+                .build());
+            }
+        }
+        Ok(())
+    }
+}
+
+/// 这是编译器流程中的关键入口点：
+/// 类型检查 → IR 生成 → 代码生成
+pub fn generate_ir(
+    ast: &crate::ast::Module,
+    result: &crate::frontend::core::sema::TypeCheckResult,
+) -> Result<crate::middle::ModuleIR, Vec<Diagnostic>> {
+    // 单文件模式：仅 std 注册表，module_key 为 None → 不启用模块限定。
+    // 谓词名可见面 = 本单元（单文件编译的走查面同样只有这一个单元）。
+    let mut generator = AstToIrGenerator::new_with_type_result(
+        result,
+        ModuleRegistry::with_std(),
+        None,
+        crate::frontend::core::sema::probe::TypeLevelNamespace::scan_one(ast),
+    );
+    generator.generate_module_ir(ast)
+}
+
+/// RFC-029 多文件编排：在跨文件上下文下为单个文件生成 IR。
+///
+/// 预注册其他文件的类型布局（`cross_file_types`）与全局变量名（`cross_file_globals`），
+/// 使本文件的跨文件字段访问、方法调用与全局引用能正确解析；随后仅对 `ast`
+/// 这一个文件生成 IR。各文件产出的 `ModuleIR` 由编排器在 IR 层链接。
+#[allow(clippy::too_many_arguments)]
+pub fn generate_ir_with_context(
+    ast: &crate::ast::Module,
+    result: &crate::frontend::core::sema::TypeCheckResult,
+    cross_file_types: &[&crate::ast::Module],
+    global_layout: &[(String, usize)],
+    // 本文件顶层绑定的槽位起始号（编排器分配，保证各文件区间不相交）
+    global_slot_base: usize,
+    registry: &ModuleRegistry,
+    module_key: &str,
+    // Script/Bin 语义开关（顶层可执行语句是否放行，E3023）——与限定名键
+    // 解耦（3.4.8 ③ 同源判据）：rootless（standalone）多单元形态传 true，
+    // 项目（Bin）与嵌入模块传 false
+    script_mode: bool,
+    // 谓词名可见面（F14-A）：**调用方算出的那一份**（多文件形态 = 全部单元
+    // 的 scan 并集，与走查期同一份）。生成器不自扫——按本单元自扫会让
+    // 生成期与走查期的范围分叉。
+    type_level: &crate::frontend::core::sema::probe::TypeLevelNamespace,
+) -> Result<crate::middle::ModuleIR, Vec<Diagnostic>> {
+    let mut generator = AstToIrGenerator::new_with_type_result(
+        result,
+        registry.clone(),
+        Some(module_key.to_string()),
+        type_level.clone(),
+    )
+    .with_script_mode(script_mode);
+    generator.seed_cross_file_types(cross_file_types);
+    generator.seed_cross_file_globals(global_layout);
+    generator.set_global_slot_base(global_slot_base);
+    generator.generate_module_ir(ast)
+}
+
+/// 收集 lambda 体引用的自由变量（名字），按出现顺序去重。
+///
+/// 用途：闭包捕获（RFC-009a / #254）。`bound` 是 lambda 自身参数（不算自由），
+/// `seen` 跨调用累积去重，`out` 为结果。
+///
+/// 仅做保守的语法级遍历：多收集一个变量只会多一条 env 槽位（不影响正确性），
+/// 漏收集才会导致闭包体内 `LoadUpvalue` 越界，故宁多勿少。
+fn collect_free_vars_stmt(
+    stmt: &crate::ast::Stmt,
+    bound: &std::collections::HashSet<&str>,
+    seen: &mut std::collections::HashSet<String>,
+    out: &mut Vec<String>,
+) {
+    use crate::ast::StmtKind;
+    // 小工具：走一个块（避免闭包借用冲突）
+    fn walk_block(
+        b: &crate::ast::Block,
+        bound: &std::collections::HashSet<&str>,
+        seen: &mut std::collections::HashSet<String>,
+        out: &mut Vec<String>,
+    ) {
+        for s in &b.stmts {
+            collect_free_vars_stmt(s, bound, seen, out);
+        }
+    }
+    match &stmt.kind {
+        StmtKind::Expr(e) => collect_free_vars_expr(e, bound, seen, out),
+        StmtKind::Return(Some(e)) => collect_free_vars_expr(e, bound, seen, out),
+        StmtKind::Assign { target, value, .. } => {
+            collect_free_vars_expr(target, bound, seen, out);
+            if let Some(v) = value {
+                collect_free_vars_expr(v, bound, seen, out);
+            }
+        }
+        StmtKind::DestructureAssign { rhs, .. } => collect_free_vars_expr(rhs, bound, seen, out),
+        StmtKind::If {
+            condition,
+            then_branch,
+            else_if_branches,
+            else_branch,
+            ..
+        } => {
+            collect_free_vars_expr(condition, bound, seen, out);
+            walk_block(then_branch, bound, seen, out);
+            for (c, b) in else_if_branches {
+                collect_free_vars_expr(c, bound, seen, out);
+                walk_block(b, bound, seen, out);
+            }
+            if let Some(b) = else_branch {
+                walk_block(b, bound, seen, out);
+            }
+        }
+        StmtKind::For { iterable, body, .. } => {
+            collect_free_vars_expr(iterable, bound, seen, out);
+            walk_block(body, bound, seen, out);
+        }
+        _ => {}
+    }
+}
+
+/// 表达式层的自由变量收集（递归）。
+fn collect_free_vars_expr(
+    expr: &crate::ast::Expr,
+    bound: &std::collections::HashSet<&str>,
+    seen: &mut std::collections::HashSet<String>,
+    out: &mut Vec<String>,
+) {
+    use crate::ast::Expr;
+    match expr {
+        Expr::Var(name, _) => {
+            if !bound.contains(name.as_str()) && seen.insert(name.clone()) {
+                out.push(name.clone());
+            }
+        }
+        Expr::BinOp { left, right, .. } => {
+            collect_free_vars_expr(left, bound, seen, out);
+            collect_free_vars_expr(right, bound, seen, out);
+        }
+        Expr::UnOp { expr, .. } | Expr::Try { expr, .. } | Expr::Cast { expr, .. } => {
+            collect_free_vars_expr(expr, bound, seen, out);
+        }
+        Expr::Call { func, args, .. } => {
+            collect_free_vars_expr(func, bound, seen, out);
+            for a in args {
+                collect_free_vars_expr(a, bound, seen, out);
+            }
+        }
+        Expr::FieldAccess { expr, .. } | Expr::Borrow { expr, .. } => {
+            collect_free_vars_expr(expr, bound, seen, out);
+        }
+        Expr::Index { expr, index, .. } => {
+            collect_free_vars_expr(expr, bound, seen, out);
+            collect_free_vars_expr(index, bound, seen, out);
+        }
+        Expr::Tuple(items, _) | Expr::List(items, _) => {
+            for i in items {
+                collect_free_vars_expr(i, bound, seen, out);
+            }
+        }
+        Expr::Dict(entries, _) => {
+            for (k, v) in entries {
+                collect_free_vars_expr(k, bound, seen, out);
+                collect_free_vars_expr(v, bound, seen, out);
+            }
+        }
+        Expr::If {
+            condition,
+            then_branch,
+            else_if_branches,
+            else_branch,
+            ..
+        } => {
+            collect_free_vars_expr(condition, bound, seen, out);
+            for s in &then_branch.stmts {
+                collect_free_vars_stmt(s, bound, seen, out);
+            }
+            for (c, b) in else_if_branches {
+                collect_free_vars_expr(c, bound, seen, out);
+                for s in &b.stmts {
+                    collect_free_vars_stmt(s, bound, seen, out);
+                }
+            }
+            if let Some(b) = else_branch {
+                for s in &b.stmts {
+                    collect_free_vars_stmt(s, bound, seen, out);
+                }
+            }
+        }
+        Expr::Block(b) => {
+            for s in &b.stmts {
+                collect_free_vars_stmt(s, bound, seen, out);
+            }
+        }
+        Expr::While {
+            condition, body, ..
+        } => {
+            collect_free_vars_expr(condition, bound, seen, out);
+            for s in &body.stmts {
+                collect_free_vars_stmt(s, bound, seen, out);
+            }
+        }
+        Expr::For { iterable, body, .. } => {
+            collect_free_vars_expr(iterable, bound, seen, out);
+            for s in &body.stmts {
+                collect_free_vars_stmt(s, bound, seen, out);
+            }
+        }
+        _ => {}
+    }
+}

@@ -8,7 +8,7 @@
 //! LoadArg / 参数原位注册等是编译器实现细节，可随实现演进变化。
 
 use yaoxiang::frontend::Compiler;
-use yaoxiang::middle::core::ir::{FunctionIR, Instruction};
+use yaoxiang::middle::ir::ir::{FunctionIR, Instruction};
 
 /// 编译源码并返回第一个函数的 IR
 fn compile_first_func(src: &str) -> FunctionIR {

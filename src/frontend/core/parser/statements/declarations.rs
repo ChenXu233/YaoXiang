@@ -23,11 +23,23 @@ use crate::util::span::Span;
 // Import from sibling modules
 use super::types::{parse_type_annotation_required, parse_fn_type_with_names};
 
-/// 判断 annotation 是否为类型参数标注（`Type` / `MetaType`）。纯结构，不看名字。
+/// 该形参标注是否为**类型位**（编译期擦除，不占运行期形参位）：具体元类型
+/// `Type`（`(T: Type)`）与**类型级函数**（`(F: (T: Type) -> Type)`——构造器变量，
+/// RFC-010 元类型层级 Type1/Type2+）。
+///
+/// 判据与 `ast::classify_generic_params` / `ir_gen::split_curry` 的
+/// `is_type_param_ann` **必须同源**：此前此处缺类型级函数分支，同一份声明在
+/// parser 眼里 F 是值参数、在类型检查/IR 眼里是类型参数，于是「声明占几个运行期
+/// 形参位」两处答案不同（WBS 6.8.2a 的 E1112 元数对照当场把这种声明误判成
+/// 「实现形参超出声明」）。判据复用 `ast::is_type_level_fn` 单点。
 fn is_type_param_annotation(ty: Option<&Type>) -> bool {
     match ty {
         Some(Type::MetaType { .. }) => true,
         Some(Type::Name { name, .. }) => name == "Type",
+        Some(Type::Fn {
+            params,
+            return_type,
+        }) => crate::ast::is_type_level_fn(params, return_type),
         _ => false,
     }
 }
@@ -281,56 +293,38 @@ fn parse_assign_after_target(
                     ..
                 }) => {
                     // Lambda 形式: name: (a: Int, b: Int) -> Int = (a, b) => a + b
-                    let lambda_names: std::collections::HashSet<&str> =
-                        lambda_params.iter().map(|p| p.name.as_str()).collect();
-                    let value_params: Vec<&Param> = extracted_params
-                        .iter()
-                        .filter(|p| lambda_names.contains(p.name.as_str()))
-                        .collect();
-
-                    if !value_params.is_empty() {
-                        if lambda_params.len() != value_params.len() {
-                            state.error(parse_msg(state, format!(
-                            "Parameter count mismatch: signature has {} value parameters, lambda has {}",
-                            value_params.len(),
-                            lambda_params.len()
-                        )));
-                            return None;
-                        }
-
-                        for (i, (sig_param, lambda_param)) in
-                            value_params.iter().zip(lambda_params.iter()).enumerate()
-                        {
-                            if sig_param.name != lambda_param.name {
-                                state.error(parse_msg(state, format!(
-                                "Parameter name mismatch at position {}: signature has '{}', lambda has '{}'.",
-                                i + 1,
-                                sig_param.name,
-                                lambda_param.name
-                            )));
-                                return None;
-                            }
-                        }
-                    }
-
-                    // 值参数对齐（按位置）：上面已校验签名与 lambda 的值参数
-                    // **逐位同名**且个数一致，故按位置取类型等价于按名查表。
-                    // 6.5.2 commit ③ 删掉「按名重建 HashMap」这层派生——名字
-                    // 曾同时存在于签名与 lambda 头两处，只需这一份位置对齐。
-                    let merged: Vec<Param> = if value_params.is_empty() {
-                        lambda_params.to_vec()
-                    } else {
-                        lambda_params
-                            .iter()
-                            .zip(value_params.iter())
-                            .map(|(lam, sig)| Param {
-                                name: lam.name.clone(),
-                                ty: sig.ty.clone(),
-                                is_mut: lam.is_mut,
-                                span: lam.span,
-                            })
-                            .collect()
-                    };
+                    //
+                    // 实现头的形参是**位置**绑定器：第 i 位就是声明里第 i 个运行期
+                    // 形参位（WBS 6.8.2a / D54 ①③）。对齐与类型下传都归 typecheck
+                    //（`check_fn_stmt` 一处），parser 只产出作者写的东西。
+                    //
+                    // 两条旧判据在此退役（判据归口到后续各层，单一来源）：
+                    // - 「名字交集为空 ⇒ 整段跳过」：交集为空时签名类型从未到达实现头
+                    //   （`f: (a: Int) -> Int = (b) => b + "s"` 的 b 成了 fresh var，
+                    //   check 绿、运行期 E6007）——现在按位置补齐；
+                    // - 「个数/名字逐位相等，否则 E0012」：个数冲突归 typecheck 的
+                    //   E1112（声明是权威源，且只有那一层分得清类型位/const 位）；
+                    //   名字不再要求相等——「必须同名才能合并」正是「同一语义不同
+                    //   语法」的静默来源（`(b, a)` 与 `(a, b)` 得到两种命运）。
+                    //
+                    // 作者自带标注**保留原样**：冲突归 typecheck 的 E1011（D54 ④：
+                    // 声明是权威源，作者的标注不得被静默覆盖）。旧行为是按位**覆盖**，
+                    // 实测 `f: (a: Int) -> Int = (a: String) => a` check 绿、打印 1。
+                    // 实现头是**位置**绑定器：第 i 位对应声明里第 i 个运行期形参位
+                    //（WBS 6.8.2a / D54 ①③）。但 parser 只产出**作者写的东西**——
+                    // 名字、标注、个数都原样保留，不按声明补位。
+                    //
+                    // 为什么必须由 parser 断掉补位（WBS 6.8.3）：一旦这里把声明类型填进
+                    // 实现头，typecheck 就再也分不出「作者写的标注」与「parser 填的标注」。
+                    // E1011（实现形参标注与声明不符）的判据正是两者的差异——填过之后每个
+                    // 形参都「恰好与声明一致」，该判据恒真；E1112（实现形参多于声明）同理
+                    // 失去「作者写了几个形参」这个事实。
+                    //
+                    // 声明侧信息仍只有一处来源，由消费点按同一口径自取，parser 不参与：
+                    // - typecheck：`check_fn_stmt` 的按位对齐（aligned_value_params）；
+                    // - IR：`declaration_runtime_param_slots`（类型渲染与调用侧可用名同源）；
+                    // - 体内匿名闭包：`closure_decl_params`（返回位内层 Fn 的形参）。
+                    let impl_head_params: Vec<Param> = lambda_params.clone();
 
                     // RFC-004 括号语义：返回位置是 `Paren` ⇔ 链条在此终止。
                     // 作者写的 lambda（`(a) => a + 1`）就是**被返回的函数值**，
@@ -413,7 +407,7 @@ fn parse_assign_after_target(
                             && (!own_params.is_empty() || !first_group_has_type_params)
                         {
                             let inner = Expr::Lambda {
-                                params: merged,
+                                params: impl_head_params,
                                 body: body.clone(),
                                 span,
                             };
@@ -447,9 +441,9 @@ fn parse_assign_after_target(
                         // 首组全为类型参数：落穿到标准 Lambda value 路径
                     }
 
-                    // 构建 Lambda value（包含 merged params 和 body）
+                    // 构建 Lambda value（形态 = 作者写的实现头 + 作者写的 body）
                     let value = Expr::Lambda {
-                        params: merged,
+                        params: impl_head_params,
                         body: body.clone(),
                         span,
                     };
@@ -470,40 +464,35 @@ fn parse_assign_after_target(
                     // 直接表达式: name: (a: Int, b: Int) -> Int = a + b
                     state.skip(&TokenKind::Semicolon);
 
-                    // 值参数判定。
+                    // 块体 / 表达式体没有作者写的形参表：这里**合成**它。
                     //
-                    // RFC-027a：`name_used_as_type` 会把「类型应用实参位」也算作
-                    // 类型引用，于是 `-> Terminates(b)` 使 `b` 被当作 const 泛型参数
-                    // 从 lambda params 中剔除（实测退化为 `[a]`，函数体引用 `b` 报
-                    // E3006）。此处排除谓词应用。
-                    //
-                    // 判据的两个来源都不是 parser 自己的名字表：
-                    // ① 注入探针（`state.probe()`）——内置谓词与环境已知谓词；
-                    // ② 本遍已解析的声明累积（`declare_predicate`）。
-                    // `ParserState::is_predicate_app` 把两者合成一个问答。
-                    let value_params: Vec<Param> = extracted_params
-                        .iter()
-                        .filter(|p| {
-                            if is_type_param_annotation(p.ty.as_ref()) {
-                                return false;
-                            }
-                            // RFC-011 §2.1：约束形参（`T: Add`——标注名为运算符
-                            // 接口/约束名，非具体类型）是类型位，不占运行时参数。
-                            // 是不是约束名由注入探针判定（L2 不再持有该名字表）。
-                            if let Some(Type::Name { name: n, .. }) = &p.ty {
-                                if state.probe().is_constraint(n) {
-                                    return false;
-                                }
-                            }
-                            let used_as_const = type_annotation.as_ref().is_some_and(|ann| {
-                                name_used_as_type(&p.name, ann, &|n| {
-                                    state.kind_of(n) == NameKind::Predicate
-                                })
-                            });
-                            !used_as_const
+                    // 取哪一层、层内哪些是运行期值位，都由 `ast` 的单一实现回答
+                    //（`Type::impl_head_runtime_params`，与 typecheck 的体内绑定同一个
+                    // helper——WBS 6.8.2 / D54 F1 收口，6.8.3 F1d）。parser 不再自己写
+                    // 过滤：层选择（括号返回位 ⇒ 首组 / 其余 ⇒ 最内层组）、类型位、
+                    // 多约束并集、被当编译期常量用的名字都在那里判；本处只注入「是不是
+                    // 约束名」这一个探针问答（L2 没有约束名字表）。
+                    let value_params: Vec<Param> = type_annotation
+                        .as_ref()
+                        .map(|ann| {
+                            // 两个问答的可用性不同，别把「不知道」当「是」（WBS 6.8.4-1c F-2）：
+                            // - `is_const_param_type`：探针给出**真答案**（权威表在 L3 的
+                            //   `sema::probe::CONST_PARAM_TYPES`）；
+                            // - `is_type_name`：L2 拿不到「已声明类型名」表，`kind_of` 把
+                            //   「用户声明类型」与「无法定种」都答成 `UserType`，据此判「是类型」
+                            //   会把每个候选都 skip 掉 ⇒ 一个编译期值参数都剔不掉 ⇒ 合成头里
+                            //   仍带着它们 ⇒ E1112 误报。故此处取保守可靠值 `false`：
+                            //   分类只在**已声明类型与形参名同形**时可能过度，而那种形态的
+                            //   权威判定在 typecheck（它有真命名空间，E1011/E1112 都按它算）。
+                            //   不在 L2 复制 L3 名表（禁令一/二）：这里只表态「不提供该知识」。
+                            let cls = crate::ast::ParamClassifier {
+                                is_const_param_type: &|n| state.probe().is_const_param_type(n),
+                                is_type_name: &|_| false,
+                                is_predicate: &|n| state.kind_of(n) == NameKind::Predicate,
+                            };
+                            ann.impl_head_runtime_params(&|n| state.probe().is_constraint(n), &cls)
                         })
-                        .cloned()
-                        .collect();
+                        .unwrap_or_default();
 
                     // 构建 Lambda value（参数从签名提取，body 是表达式）
                     // 合成体语句：不经过 parse_statement，就地发放身份

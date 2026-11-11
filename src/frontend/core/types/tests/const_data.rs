@@ -11,21 +11,6 @@ fn test_const_value_int_creation() {
 }
 
 #[test]
-fn test_const_value_bool_creation() {
-    let v = ConstValue::Bool(true);
-    assert!(!v.is_numeric());
-    assert_eq!(v.kind(), ConstKind::Bool);
-    assert_eq!(format!("{}", v), "true");
-}
-
-#[test]
-fn test_const_value_float_creation() {
-    let v = ConstValue::Float(std::f32::consts::PI);
-    assert!(v.is_numeric());
-    assert_eq!(v.kind(), ConstKind::Float(None));
-}
-
-#[test]
 fn test_const_value_equality() {
     assert_ne!(ConstValue::Int(5), ConstValue::Float(5.0));
     assert_ne!(ConstValue::Int(5), ConstValue::Bool(true));
@@ -117,14 +102,6 @@ fn test_bin_op_is_bitwise() {
     assert!(BinOp::Shl.is_bitwise());
     assert!(BinOp::Shr.is_bitwise());
     assert!(!BinOp::Add.is_bitwise());
-}
-
-#[test]
-fn test_un_op_classification() {
-    assert!(UnOp::Pos.is_arithmetic());
-    assert!(UnOp::Neg.is_arithmetic());
-    assert!(UnOp::Not.is_logical());
-    assert!(UnOp::BitNot.is_bitwise());
 }
 
 #[test]

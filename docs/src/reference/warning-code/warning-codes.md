@@ -48,7 +48,7 @@ dead-code = "warn"
 - **span 豁免**：否
 - **模板**：`未使用的函数：'{name}'`
 - **帮助**：函数从未被引用，考虑移除或添加调用；被包内其它文件引用时不报此警告
-- **发射点**：`src/frontend/core/typecheck/passes/dead_code.rs:897`
+- **发射点**：`src/frontend/core/sema/passes/dead_code.rs:897`
 
 ### W1002：未使用的私有类型
 
@@ -56,7 +56,7 @@ dead-code = "warn"
 - **span 豁免**：否
 - **模板**：`未使用的类型：'{name}'`
 - **帮助**：类型从未被引用，考虑移除或使用该类型；被包内其它文件引用时不报此警告
-- **发射点**：`src/frontend/core/typecheck/passes/dead_code.rs:898`
+- **发射点**：`src/frontend/core/sema/passes/dead_code.rs:898`
 
 ### W1003：未使用的导入
 
@@ -64,7 +64,7 @@ dead-code = "warn"
 - **span 豁免**：否
 - **模板**：`未使用的导入：'{name}'`
 - **帮助**：考虑移除未使用的导入
-- **发射点**：`src/frontend/core/typecheck/checker.rs:2885`
+- **发射点**：`src/frontend/core/sema/checker.rs:2931`
 
 ### W1004：未使用的私有变量
 
@@ -72,7 +72,7 @@ dead-code = "warn"
 - **span 豁免**：否
 - **模板**：`未使用的变量：'{name}'`
 - **帮助**：变量从未被引用，考虑移除或使用该变量；被包内其它文件引用时不报此警告
-- **发射点**：`src/frontend/core/typecheck/passes/dead_code.rs:899`
+- **发射点**：`src/frontend/core/sema/passes/dead_code.rs:899`
 
 ### W1005：未使用的私有方法
 
@@ -80,7 +80,7 @@ dead-code = "warn"
 - **span 豁免**：否
 - **模板**：`未使用的方法：'{name}'`
 - **帮助**：方法从未被引用，考虑移除或添加调用；被包内其它文件引用时不报此警告
-- **发射点**：`src/frontend/core/typecheck/passes/dead_code.rs:900`
+- **发射点**：`src/frontend/core/sema/passes/dead_code.rs:900`
 
 ### W1006：本地模块遮蔽依赖包
 
@@ -88,7 +88,7 @@ dead-code = "warn"
 - **span 豁免**：否
 - **模板**：`本地模块 '{module}' 遮蔽了依赖包 '{dependency}'`
 - **帮助**：本地模块解析优先级最高（RFC-014）：'./src/{module}' 覆盖 .yaoxiang/vendor/ 中的依赖包 '{dependency}'。若遮蔽非本意请重命名本地模块；可用 --deny-shadowing 将其升级为错误
-- **发射点**：`src/driver/arms.rs:676`、`src/util/diagnostic/command.rs:78`
+- **发射点**：`src/driver/arms.rs:676`、`src/util/diagnostic/command.rs:87`
 
 ### W1007：模块导入环
 
@@ -96,7 +96,7 @@ dead-code = "warn"
 - **span 豁免**：否
 - **模板**：`模块导入环 {cycle}：环内初始化顺序不可判定，环内先后只按路径字典序作确定性约定（非语义保证）`
 - **帮助**：初始化顺序按 use 依赖的拓扑序决定；环内先后只有「环内路径字典序」这一确定性约定，不是语义保证。打破环（把环上某条 use 移出环，或改为函数体里的延迟求值）即可让初始化顺序可判定。与 E3019 的分工：E3019 判单元内顶层绑定之间的初始化成环，本码判模块之间的导入成环。
-- **发射点**：`src/driver/arms.rs:1812`
+- **发射点**：`src/driver/arms.rs:1853`
 
 ### W1063：const 泛型约束无法求值
 
@@ -104,7 +104,7 @@ dead-code = "warn"
 - **span 豁免**：否
 - **模板**：`const 泛型约束无法求值: \`{constraint}\``
 - **帮助**：确保 const 参数是编译期常量
-- **发射点**：`src/frontend/core/typecheck/checker.rs:1193`
+- **发射点**：`src/frontend/core/sema/checker.rs:1207`
 
 ### W1080：编译期证明降级
 
@@ -120,7 +120,7 @@ dead-code = "warn"
 - **span 豁免**：否
 - **模板**：`{count} 条终止性测度义务未判定（SMT 求解器不可用）`
 - **帮助**：安装 Z3 求解器后重新检查，以获得终止性判定；「未判定」不等于「不终止」，但义务的判定被跳过了
-- **发射点**：`src/frontend/core/typecheck/checker.rs:1180`
+- **发射点**：`src/frontend/core/sema/checker.rs:1194`
 
 ### W1082：所有权分析降级
 
@@ -128,7 +128,7 @@ dead-code = "warn"
 - **span 豁免**：否
 - **模板**：`所有权分析降级：本次编译没有函数体检查器（类型账本与调用点所有权表缺失），所有权判定按空账本进行、不检测借用冲突`
 - **帮助**：这是编译器内部的阶段契约缺陷，不是你的程序写错了：所有权层运行时拿不到函数体检查器提供的类型账本与调用点所有权表，于是「什么都不冲突」地放行——借用冲突检查被整体跳过。请把这条诊断连同最小复现程序报成 issue。
-- **发射点**：`src/frontend/core/typecheck/checker.rs:1266`
+- **发射点**：`src/frontend/core/sema/checker.rs:1280`
 
 ### W1090：义务已产出但无消费者
 

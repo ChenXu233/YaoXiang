@@ -1,14 +1,17 @@
 // 02-type-system/generics/fn_const_generic_lowercase.yx
 // 覆盖: RFC-011 §4.1 函数级 const 泛型 — 大小写等价
 // 验证: 小写 m 作为 const 泛型参数，大小写不决定分类，与大写 N 版行为一致
+//
+// 6.8.7 起 `n: m` 为单值类型（`int64::m`），实参必须等于 m：`f(42)(42)` 合法，
+// `f(42)(5)` 报 E1002（5 ≠ 42）。
 
 use std.assert
 
 f: (m: Int) -> (n: m) -> Int = (n) => n
 
 main: () -> Void = {
-    result = f(42)(5)
-    assert.assert(result == 5, "f(42)(5) with lowercase m should return 5")
+    result = f(42)(42)
+    assert.assert(result == 42, "f(42)(42) with lowercase m should return 42")
 }
 
 main()

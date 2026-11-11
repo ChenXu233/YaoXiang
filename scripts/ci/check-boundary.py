@@ -15,10 +15,13 @@ check-boundary.py —— 禁令二判据 C（边界侵蚀）门禁
                                  AST 自 6.7.1a 顶层化起不在 L2 路径下（`crate::ast::`），
                                  规则本身即不命中——无需豁免条款（01 §依赖方向规范）；
                                  测试目录豁免。现状生产命中 0，基线取 0
-  B4 L3 不得反向依赖 L4          现状 3 处（middle → backends::common::opcode，
-                                 P6/P10 随词表迁移消除）
-  B5 opcode 词表唯一归属          backends/ 内不得新增 opcode 常量定义文件
-                                （现状唯一：backends/common/opcode.rs，83 个）
+  B4 L3 不得反向依赖 L4          现状 0 处（D1 6.7.1b：opcode 词表从
+                                 backends/common/ 迁入 middle/bytecode/，3 处反向依赖随迁移消除；
+                                 此后 middle/ 再出现 crate::backends:: 即违规）
+  B5 opcode 词表唯一归属          唯一归属 middle/bytecode/opcode.rs（83 个常量）；
+                                 src/ 其余任何位置（含 backends/）出现 opcode 常量定义即违规。
+                                 D1 6.7.1b 前扫描面只有 backends/，词表迁走后必须扩到全域，
+                                 否则「别处再定义一份」无人抓
   B6 parser 内不得硬编码类型/谓词名  现状 0 文件（WBS 6.4 记 2：CONST_PARAM_TYPES 与
                                  BuiltinProbe 的内置谓词封闭集；WBS 6.6.9 删掉两张封闭集
                                  并把 CONST_PARAM_TYPES 移回 L3 后清零）；字面量匹配前
@@ -47,7 +50,10 @@ L2_DIRS = ('frontend/core/lexer/', 'frontend/core/parser/')
 # 「AST 为顶层域，无需豁免条款」）；但它是 parser 侧的构造面：B2/B6 继续按原口径扫它，
 # 扫描面与 6.7 之前一致（当时 ast.rs 落在 L2_DIRS 内），不得因搬迁而缩水。
 AST_DIRS = ('ast/',)
-L3_DIRS = ('frontend/core/typecheck/', 'frontend/core/types/', 'middle/')
+# D1（6.7.1c）：`middle/core/` 改名 `middle/ir/`。层表**不需要新增条目**——`middle/` 前缀
+# 同时覆盖 `middle/ir/` 与 `middle/bytecode/`（6.7.1b 合并出的字节码域）；此处只记一笔，
+# 免得后来者以为改名漏登记。子目录改名时同理：只要父目录前缀在表内，规则面就不缩水。
+L3_DIRS = ('frontend/core/sema/', 'frontend/core/types/', 'middle/')
 L4_DIRS = ('backends/', 'std/')
 
 # L3/L4 可消费的 L2 数据路径（字面量/Token 是词法数据域）。
@@ -60,17 +66,19 @@ L2_DATA_PREFIXES = ('lexer::tokens', 'lexer::TokenKind', 'lexer::Token', 'lexer:
 KNOWN_INCLUDE = {}
 # WBS 6.4：parser 的两处 typecheck 调用改为注入式探针（parser/probe.rs），库存清零。
 KNOWN_L2_CROSS = {}
-KNOWN_MIDDLE_TO_BACKENDS = {
-    'middle/core/bytecode.rs': 1,                     # :13 use ...::common::opcode
-    'middle/passes/codegen/translator.rs': 1,         # :5 同上
-    'middle/passes/codegen/emitter.rs': 1,            # :5 同上
-}
-KNOWN_OPCODE_DEF_FILES = {'backends/common/opcode.rs': 83}
+# D1 6.7.1b：opcode 词表迁入 middle/bytecode/ 后，原 3 条（middle/ir/bytecode.rs、
+# middle/passes/codegen/{translator,emitter}.rs 各自 use crate::backends::common::opcode）
+# 全部清零并删除——不删会一直打印「可清零」占位，且新命中会与死条目混在一起看不出。
+KNOWN_MIDDLE_TO_BACKENDS = {}
+# opcode 词表唯一归属（D1 6.7.1b 起）：唯一合法定义文件 + 常量数。
+# 扫描面由「只扫 backends/」扩到「扫 src/ 全域（排除 tests）」——词表迁出 L4 后，
+# backends/ 侧再无定义可抓，若仍只扫 backends/ 则「别处新写一份 opcode」不会被任何规则发现。
+KNOWN_OPCODE_DEF_FILES = {'middle/bytecode/opcode.rs': 83}
 # WBS 6.4 的 2 处：`"Terminates"`（parser/probe.rs 的 PREDICATE_NAMES）与
 # CONST_PARAM_TYPES（当时的 parser/ast.rs，现 ast/mod.rs）。
 # WBS 6.6.9 清零：两张封闭集随 `BuiltinProbe` 删除（约束名/谓词名的判定归 L3 的
 # operator_interfaces::SPECS 与 BUILTIN_PREDICATES），CONST_PARAM_TYPES 移回 L3
-# （typecheck/probe.rs）并只经注入探针回答。库存为空 ⇒ parser 内再出现内置名字面量即违规。
+# （sema/probe.rs）并只经注入探针回答。库存为空 ⇒ parser 内再出现内置名字面量即违规。
 KNOWN_PARSER_HARDCODE = {}
 
 BUILTIN_NAMES = {
@@ -80,7 +88,7 @@ BUILTIN_NAMES = {
 }
 
 RE_INCLUDE = re.compile(r'\binclude!\s*\(')
-RE_L2_CROSS = re.compile(r'crate::(?:frontend::core::(?:typecheck|types)|middle|backends)::')
+RE_L2_CROSS = re.compile(r'crate::(?:frontend::core::(?:sema|types)|middle|backends)::')
 RE_TO_L2 = re.compile(r'crate::frontend::core::(lexer|parser)::([A-Za-z_][\w:]*)')
 RE_MID_BACK = re.compile(r'crate::backends::')
 RE_OPCODE_DEF = re.compile(r'pub const [A-Za-z_]\w*: u8 = 0x')
@@ -203,7 +211,7 @@ def main():
     print()
 
     # ---- B4 L3 → L4（middle → backends）----
-    print('== B4 L3→L4 反向依赖（库存 %d 处，opcode 词表迁移消除）==' % sum(KNOWN_MIDDLE_TO_BACKENDS.values()))
+    print('== B4 L3→L4 反向依赖（库存 %d 处，D1 6.7.1b 已清零）==' % sum(KNOWN_MIDDLE_TO_BACKENDS.values()))
     for f in files:
         rp = rel(f)
         if not rp.startswith('middle/') or is_test_path(rp):
@@ -213,12 +221,12 @@ def main():
         check('B4', rp, hits, KNOWN_MIDDLE_TO_BACKENDS, 'middle→backends 引用')
     print()
 
-    # ---- B5 opcode 词表归属 ----
-    print('== B5 opcode 词表唯一归属（库存：%s，%d 个常量）=='
+    # ---- B5 opcode 词表归属（D1 6.7.1b：唯一归属 middle/bytecode/opcode.rs）----
+    print('== B5 opcode 词表唯一归属（唯一归属：%s，%d 个常量；其余位置出现定义即违规）=='
           % (next(iter(KNOWN_OPCODE_DEF_FILES)), next(iter(KNOWN_OPCODE_DEF_FILES.values()))))
     for f in files:
         rp = rel(f)
-        if not rp.startswith('backends/'):
+        if is_test_path(rp):
             continue
         hits, ex = count_hits(f, RE_OPCODE_DEF)
         exempt_total += ex

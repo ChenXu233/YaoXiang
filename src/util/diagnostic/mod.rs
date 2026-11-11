@@ -365,8 +365,9 @@ pub enum RunOutcome {
 ///
 /// # 参数
 /// - `file`: 源文件路径
-/// - `config`: 编译配置（单态化/死代码闸门）——run 链由 CLI 从 yaoxiang.toml
-///   读出后传入（#471）；无配置来源的调用方传 `CompileConfig::default()`
+/// - `config`: 编译配置（单态化/死代码闸门）——run 与 check 两条 CLI 链都由
+///   调用方从 cwd 的 yaoxiang.toml 读出后传入（#471）；无配置来源的库调用方传
+///   `CompileConfig::default()`
 ///
 /// # 返回
 /// 成功返回本次运行的结局 [`RunOutcome`]（rootless 形态下「定义了 `main` 却未调用」
@@ -383,8 +384,8 @@ pub fn run_file_with_diagnostics(
     // 通过文件头魔数判定字节码 vs 源码
     // 内容即身份：不依赖文件名，cat dist.42 > out.bin 也能执行
     // probe I/O 错误退化为源码路径（read_to_string 产生更好的错误信息）
-    if crate::middle::passes::codegen::BytecodeFile::probe(file).unwrap_or(false) {
-        let bytecode_file = crate::middle::passes::codegen::BytecodeFile::load(file)
+    if crate::middle::bytecode::file::BytecodeFile::probe(file).unwrap_or(false) {
+        let bytecode_file = crate::middle::bytecode::file::BytecodeFile::load(file)
             .map_err(|e| anyhow::anyhow!("Failed to load bytecode file: {}", e))?;
         let bytecode_module = crate::middle::bytecode::BytecodeModule::from(bytecode_file);
 
@@ -528,7 +529,7 @@ fn script_main_never_called(
     module: &crate::middle::ModuleIR,
     qualified_main: &str,
 ) -> bool {
-    use crate::middle::core::ir::{ConstValue, Instruction, Operand};
+    use crate::middle::ir::ir::{ConstValue, Instruction, Operand};
     use std::collections::HashSet;
 
     let defines_main = module
@@ -683,7 +684,12 @@ fn render_orchestrator_error(e: &crate::frontend::module::orchestrator::Orchestr
 /// 检查成功返回 `()`，失败返回错误
 #[cfg(feature = "cli")]
 pub fn check_file_with_diagnostics(file: &std::path::PathBuf) -> anyhow::Result<()> {
-    let result = check_files_with_diagnostics(std::slice::from_ref(file))?;
+    // 便捷包装没有配置来源（不做 cwd 的 yaoxiang.toml 发现）——用默认闸门；
+    // 需要 [mono] 口径的调用方走 run_check_command_once。
+    let result = check_files_with_diagnostics(
+        std::slice::from_ref(file),
+        crate::frontend::config::CompileConfig::default(),
+    )?;
     if result.error_count > 0 {
         return Err(anyhow::anyhow!("Type check failed"));
     }
@@ -744,8 +750,15 @@ fn push_diagnostic(
 ///
 /// 项目内文件（向上能找到 `yaoxiang.toml`）走 orchestrator——与 `yaoxiang run`
 /// 同一条多文件编译路径；非项目文件保持单文件检查。
+///
+/// `config` 与 `run` 链同源（#471）：CLI 的 check 命令从 cwd 的 yaoxiang.toml
+/// 读出 `[mono]` 闸门后传入，两条路径对同一项目读同一份闸门；无配置来源的
+/// 库调用方传 `CompileConfig::default()`。
 #[cfg(feature = "cli")]
-pub fn check_files_with_diagnostics(files: &[std::path::PathBuf]) -> anyhow::Result<CheckResult> {
+pub fn check_files_with_diagnostics(
+    files: &[std::path::PathBuf],
+    config: crate::frontend::config::CompileConfig,
+) -> anyhow::Result<CheckResult> {
     use crate::frontend::module::orchestrator;
     use std::collections::HashSet;
 
@@ -779,11 +792,10 @@ pub fn check_files_with_diagnostics(files: &[std::path::PathBuf]) -> anyhow::Res
         if seen.contains(entry) {
             continue;
         }
-        // #471：check 链的 toml 贯通不在本轮范围（issue 验收只验 run），此处
-        // 显式传默认配置保持既有行为；将来贯通时由 check 命令链灌入
-        let per_file =
-            orchestrator::check_project(entry, crate::frontend::config::CompileConfig::default())
-                .map_err(|e| anyhow::anyhow!("{}", e))?;
+        // #471：run 与 check 共用调用方传入的同一份编译闸门——同一份
+        // yaoxiang.toml 在两条路径上必须得到同一个 [mono] 上限。
+        let per_file = orchestrator::check_project(entry, config.clone())
+            .map_err(|e| anyhow::anyhow!("{}", e))?;
         for (path, diagnostics) in per_file {
             if !seen.insert(path.clone()) {
                 continue;

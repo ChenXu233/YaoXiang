@@ -1,5 +1,5 @@
 #![allow(unused_imports)]
-use yaoxiang::middle::codegen::bytecode::BytecodeFile;
+use yaoxiang::middle::bytecode::file::BytecodeFile;
 use yaoxiang::middle::codegen::CodegenContext;
 use yaoxiang::middle::ModuleIR;
 

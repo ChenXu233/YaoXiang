@@ -87,7 +87,7 @@ description: '词法分析器（Lexer）与语法分析器（Parser）阶段产�
 - **模板**：`意外的令牌：'{token}'`
 - **消息**：遇到了意外的令牌
 - **帮助**：删除或替换意外的令牌
-- **发射点**：`src/driver/arms.rs:95`、`src/frontend/compiler.rs:178`、`src/frontend/core/parser/mod.rs:65` 等 18 处
+- **发射点**：`src/driver/arms.rs:94`、`src/frontend/compiler.rs:178`、`src/frontend/core/parser/mod.rs:65` 等 18 处
 
 ### E0012：无效语法
 

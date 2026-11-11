@@ -15,7 +15,7 @@ use crate::backends::common::RuntimeValue;
 use crate::backends::interpreter::executor::Interpreter;
 use crate::backends::Executor;
 use crate::middle::bytecode::{BytecodeFunction, BytecodeInstr, CompareOp, ConstValue, Reg};
-use crate::frontend::core::typecheck::MonoType;
+use crate::frontend::core::sema::MonoType;
 use std::collections::HashMap;
 
 /// 构造一个函数：r0 = const[lhs], r1 = const[rhs], r2 = r0 <op> r1, return r2

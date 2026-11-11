@@ -208,7 +208,8 @@ fn test_type_def_generic() {
         .as_ref()
         .map(crate::ast::Type::fn_params_flat)
         .unwrap_or_default();
-    let generic_params = extract_generic_param_names(&params, &NullProbe);
+    // 类型位置根传空：本用例钉形参标注面（(T: Type) → T）
+    let generic_params = extract_generic_param_names(&params, &[], &NullProbe);
 
     // Assert
     assert_eq!(name, "Option", "类型名应为 Option");
@@ -330,7 +331,7 @@ fn test_anonymous_param_never_yields_generic_name() {
     // 探针传 NullProbe：本用例只断言「无名形参不产泛型名」，const 参数判定不参与
     let classified =
         crate::ast::classify_generic_params(&params, &|name| name == "Add", &NullProbe);
-    let extracted = extract_generic_param_names(&params, &NullProbe);
+    let extracted = extract_generic_param_names(&params, &[], &NullProbe);
 
     // Assert
     assert!(
@@ -343,10 +344,12 @@ fn test_anonymous_param_never_yields_generic_name() {
     );
 }
 #[test]
-fn test_value_params_no_merged_misalignment() {
-    // 覆盖: RFC-007 参数匹配 — params 存值参数，标注来自签名对应值参数而非错位 zip
-    // 验证: foo: (T: Type, x: Int) -> Int = (x) => x 的 params == [x: Int]
-    //       （修复前 merged 产出 x: MetaType 错位——x 配上了 T 的标注）
+fn test_impl_head_params_not_filled_from_declaration() {
+    // 覆盖: WBS 6.8.3 — parser 只产出**作者写的**形参：名字与标注都不动，不按声明补位
+    // 验证: foo: (T: Type, x: Int) -> Int = (x) => x 的实现头 == [x]（无标注）
+    //       旧口径在这里按位置把声明类型填进 x（曾修过一次错位），但「填过之后
+    //       typecheck 分不出作者标注与 parser 标注」使 E1011/E1112 两枚判据失效；
+    //       声明类型改由消费点按同一 helper 自取（typecheck 按位对齐 / IR 渲染）。
     let kind = parse_stmt("foo: (T: Type, x: Int) -> Int = (x) => x");
     let StmtKind::Assign { value, .. } = &kind else {
         panic!("Expected StmtKind::Binding, got {:?}", kind);
@@ -361,11 +364,17 @@ fn test_value_params_no_merged_misalignment() {
         Vec::new()
     };
 
-    assert_eq!(params.len(), 1, "params 应只含值参数（泛型 T 不在其中）");
-    assert_eq!(params[0].name, "x", "值参数名应为 x");
+    // Assert
+    assert_eq!(
+        params.len(),
+        1,
+        "params 应只含实现头写的形参（泛型 T 不在其中）"
+    );
+    assert_eq!(params[0].name, "x", "形参名应为作者写的 x");
     assert!(
-        matches!(&params[0].ty, Some(Type::Name { name, .. }) if name == "Int"),
-        "x 的标注应为 Int（来自签名值参数），而非 MetaType 错位"
+        params[0].ty.is_none(),
+        "parser 不得再按声明补位（作者没写标注就必须是 None），got: {:?}",
+        params[0].ty
     );
 }
 
@@ -400,12 +409,10 @@ fn test_generic_curried_fn_params_from_lambda() {
 }
 
 #[test]
-fn test_const_generic_no_merged_misalignment() {
-    // 覆盖: RFC-011 Const 泛型 — (N: Int) 被 extract_generic_params 判为 Const 泛型而非值参数
-    // 泛型参数名改用法判定（不再大小写猜测）。
-    // 验证: f: (N: Int, s: String) -> String = (s) => s 的 params == [s: String]
-    //       (N: Int) 是 Const 泛型（Int 由注入探针判为 const 参数类型），
-    //       不参与 lambda name 匹配 → 仅 s 匹配上
+fn test_impl_head_keeps_authored_names_without_fill() {
+    // 覆盖: WBS 6.8.3 — 实现头的名字只作体内引用，声明类型不再由 parser 补位
+    //       （按位对齐归 typecheck 的 aligned_value_params，IR 走 declaration_runtime_param_slots）
+    // 验证: f: (N: Int, s: String) -> String = (s) => s 的实现头 == [s]（作者写的名字、无标注）
     let kind = parse_stmt("f: (N: Int, s: String) -> String = (s) => s");
     let StmtKind::Assign { value, .. } = &kind else {
         panic!("Expected StmtKind::Binding, got {:?}", kind);
@@ -420,24 +427,39 @@ fn test_const_generic_no_merged_misalignment() {
         Vec::new()
     };
 
-    assert_eq!(
-        params.len(),
-        1,
-        "params 应只含值参数 s（Const 泛型 N 不参与值参数对齐）"
-    );
-    assert_eq!(params[0].name, "s", "值参数名应为 s");
+    // Assert
+    assert_eq!(params.len(), 1, "params 应只含实现头写的形参 s");
+    assert_eq!(params[0].name, "s", "形参名应为作者写的 s");
     assert!(
-        matches!(&params[0].ty, Some(Type::Name { name, .. }) if name == "String"),
-        "s 的标注应为 String（来自签名值参数），而非 N 的 Int 错位"
+        params[0].ty.is_none(),
+        "作者没写标注时 parser 不得补位（声明类型按位取自 typecheck/IR），got: {:?}",
+        params[0].ty
     );
 }
 
 #[test]
-fn test_const_generic_filtered_without_lambda_head() {
-    // 覆盖: RFC-011 §4.1 Const 泛型 — 无 lambda 头分支同样剔除 Const 泛型
-    // 泛型参数按"用途"判定（不再大小写/名单猜测）：
-    // N 被用在返回类型 Array(Int, N) 的类型位置 → 是 Const 泛型 → 从值参数剔除。
-    // 验证: f: (N: Int, s: String) -> Array(Int, N) = s 的 params == [s: String]
+fn test_impl_head_keeps_same_group_param_used_in_own_return() {
+    // 覆盖: RFC-011 §4.1 const 泛型剔除 + WBS 6.8.3 F-1（使用域订正）的**临时口径**
+    //
+    // **口径**：SPEC type-system §7.1「两条序列」——实现头绑定序列 = 形参 − 类型参数 −
+    // 编译期值参数，故本形态里 N 不进实现头绑定序列（原本同组的 s 仍占位）；调用点实参
+    // 序列另算（编译期值参数**仍占**实参位，RFC-011 §4.1 的 factorial 例即如此）。
+    // **已知回退**：const 位与值位同组、且只出现在本层返回位时，N 不再被识别为编译期值
+    // 参数（§7.1 规定「名字在任一 Type 子树被引用 ⇒ 编译期值参数」，该形态目前没有可运行
+    // 的合法写法）；规范裁决后可能恢复。
+    // 原「临时口径…待规范裁决」的措辞由本条取代。
+    // `(N: Int, s: String) -> Array(Int, N)` 的 `N` 与 `(a: Int) -> Vec(a)` 的 `a` 都是
+    // 「`Int` 形参名出现在返回位的泛型实参位置」，AST 层无法按名区分。当前选择是
+    // **不按本层返回位剔除**（否则 `f: (a: Int) -> Vec(a) = (a) => a` 会由 E1012
+    // 退化成静默通过，见 typecheck 侧的 F-1 判据）。待规范裁决。
+    //
+    // **已知回退**：原测试证的是 RFC-011 §4.1「const 泛型从值参数剔除」——这条能力
+    // 因此在「const 位与值位同组、且只出现在本层返回位」这一形态上**不再存在**
+    //（属能力移除，不是「改严」）：该形态里的 `N` 不再被识别为 const 位，同组形参
+    // 照常占值参数位。规范裁决后可能恢复（可选方向：为内建类型的 const 形参位建表，
+    // 使 AST 层能区分两者）。
+    //
+    // 验证: f: (N: Int, s: String) -> Array(Int, N) = s 的 params == [N: Int, s: String]
 
     // Arrange
     let kind = parse_stmt("f: (N: Int, s: String) -> Array(Int, N) = s");
@@ -458,12 +480,21 @@ fn test_const_generic_filtered_without_lambda_head() {
 
     assert_eq!(
         params.len(),
-        1,
-        "params 应只含值参数 s（Const 泛型 N 被当类型用，不是值参数）"
+        2,
+        "同组的 N 与 s 都是值参数位（本层返回位不构成剔除依据），got: {:?}",
+        params.iter().map(|p| p.name.clone()).collect::<Vec<_>>()
     );
-    assert_eq!(params[0].name, "s", "值参数名应为 s");
+    assert_eq!(
+        params[0].name, "N",
+        "第 0 位应是声明序上的 N（位次不得前移）"
+    );
     assert!(
-        matches!(&params[0].ty, Some(Type::Name { name, .. }) if name == "String"),
+        matches!(&params[0].ty, Some(Type::Name { name, .. }) if name == "Int"),
+        "N 的标注应为 Int"
+    );
+    assert_eq!(params[1].name, "s", "值参数名应为 s");
+    assert!(
+        matches!(&params[1].ty, Some(Type::Name { name, .. }) if name == "String"),
         "s 的标注应为 String"
     );
 }
@@ -631,7 +662,8 @@ fn test_type_def_generic_sum_type_recognized_as_struct() {
         .as_ref()
         .map(crate::ast::Type::fn_params_flat)
         .unwrap_or_default();
-    let generic_params = extract_generic_param_names(&params, &NullProbe);
+    // 类型位置根传空：本用例钉形参标注面（和类型的 (T: Type) → T）
+    let generic_params = extract_generic_param_names(&params, &[], &NullProbe);
 
     // Assert
     assert_eq!(name, "Option", "类型名应为 Option");

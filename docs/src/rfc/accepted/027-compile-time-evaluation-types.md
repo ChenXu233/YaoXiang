@@ -858,10 +858,12 @@ sum: (arr: Array(Int)) -> Int = {
 
 ### 11. dispatch 分派管道：编译期与运行时的统一分派
 
-> **落地注记（2026-10-03，#377-2）**：本节的**语义**成立且已接入生产，但**结构**不是独立的
-> `layers/dispatch.rs` 模块。生产的分派由 `checker.rs` 三处**调用点义务**直接实现（直接调
-> `layers::predicate::check_predicate`）：绑定位重验证（`revalidate_refined`）、调用点实参
-> （`check_call_arg_refinements`）、返回位后置条件（`check_return_refinement`）。原
+> **落地注记（2026-10-03 登记，#377-2）**：本节的**语义**成立且已接入生产，但**结构**不是独立的
+> `layers/dispatch.rs` 模块。生产的分派由 `checker.rs` 的**三处调用点义务**实现——绑定位重验证
+> （`revalidate_refined`）、调用点实参（`check_call_arg_refinements`）、返回位后置条件
+> （`check_return_refinement`）；其中**直接调用** `layers::predicate::check_predicate` 的是**两处**：调用点实参与
+> 返回位后置条件共用唯一判定单元 `judge_refined_obligation`（`checker/refinement.rs`），
+> `revalidate_refined` 自带 E2030 口径。原
 > `layers/dispatch.rs` 零生产调用点，且其对 `Unproven { ProofFunctionRequired }` 的处置是
 > 「降级为 W1080 警告并注入 Γ」，与生产实做（`Unproven` 一律报错，见 `refined_unproven`）
 > 相冲突，故已整体删除。另需注意：本节表中 Runtime 行的「插入运行时 check」在生产**尚无**
@@ -899,6 +901,11 @@ mut x = x - 5       // Γ = {}  ← x > 0 被 kill
 这是 soundness 的硬要求——变量值变了，旧假设无效。
 
 **分支合流**：IF/ELSE 或 match 分支合并时，Γ 取各分支假设的交集。只有所有路径都成立的命题才带出分支。
+
+**等式桥（q=0 槽的自动证据）**：Γ 中的常量等式事实是编译期值参数（RFC-011 §4.1，q=0 槽）的
+合法证据来源。`if y == 42 { f(y)(y) }` 在守卫分支内，Γ 记 `y == 42` ⇒ y 在 q=0 槽处视作 42，
+调用按 `f(42)` 的既有路径检查。等式的两端一侧为编译期常量；无等式证据的运行期值填入 q=0 槽
+仍在调用点报告。这不是新机制——验证条件 `{y == 42} ⇒ {y ≡ 42}` 走的就是既有蕴含判定。
 
 ### 13. 擦除模型澄清：witness 擦除 ≠ check 擦除
 

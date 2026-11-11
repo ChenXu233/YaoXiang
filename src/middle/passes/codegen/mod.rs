@@ -9,11 +9,9 @@
 //! - `translator.rs`: IR → 字节码翻译
 //! - `operand.rs`: 操作数解析
 //! - `buffer.rs`: 常量池 + 字节码缓冲区
-//! - `bytecode.rs`: 字节码格式定义 + 序列化
 //! - `flow.rs`: 寄存器分配 + 标签生成 + 符号表
 
 pub mod buffer;
-pub mod bytecode;
 pub mod emitter;
 pub mod flow;
 pub mod operand;
@@ -22,8 +20,9 @@ pub mod translator;
 #[cfg(test)]
 mod tests;
 
-use crate::frontend::core::typecheck::MonoType;
-use crate::middle::core::ir::{ConstValue, ModuleIR, Operand};
+use crate::frontend::core::sema::MonoType;
+use crate::middle::bytecode::file::{BytecodeFile, FileHeader};
+use crate::middle::ir::ir::{ConstValue, ModuleIR, Operand};
 use crate::middle::passes::codegen::translator::Translator;
 use crate::middle::passes::codegen::flow::{FlowManager, SymbolScopeManager};
 use crate::middle::passes::codegen::operand::OperandResolver;
@@ -172,7 +171,7 @@ impl CodegenContext {
             .functions
             .iter()
             .filter_map(|f| match &f.body {
-                crate::middle::core::ir::FunctionBody::TypeDecl { body } => {
+                crate::middle::ir::ir::FunctionBody::TypeDecl { body } => {
                     Some(body.self_type.clone())
                 }
                 _ => None,
@@ -228,7 +227,7 @@ impl CodegenContext {
                 .iter()
                 .map(|g| (g.index, g.name.clone()))
                 .collect();
-            super::codegen::bytecode::DebugSection::with_global_names(
+            crate::middle::bytecode::file::DebugSection::with_global_names(
                 sources,
                 &output.code_section.functions,
                 global_names,
@@ -247,7 +246,7 @@ impl CodegenContext {
     }
 
     /// 生成文件头
-    fn generate_header(&self) -> BytecodeHeader {
+    fn generate_header(&self) -> FileHeader {
         // T4：入口点用 `idx + 1` 编码，0 = 无入口。
         // 不能直接用 idx——0 号函数与“无入口”无法区分，而单函数文件里
         // main 常常就是 0 号。
@@ -255,7 +254,7 @@ impl CodegenContext {
             .find_entry_point()
             .map(|idx| idx as u32 + 1)
             .unwrap_or(0);
-        BytecodeHeader {
+        FileHeader {
             magic: YAOXIANG_MAGIC,
             version: BYTECODE_VERSION,
             flags: self.compute_flags(),
@@ -309,13 +308,9 @@ impl Default for CodegenContext {
     }
 }
 
-// 重新导出公共类型
-pub use bytecode::BytecodeFile;
-pub use bytecode::BytecodeInstruction;
-pub use bytecode::CodeSection;
-pub use bytecode::FileHeader as BytecodeHeader;
-pub use bytecode::FunctionCode;
+// 字节码容器 / 序列化类型自 D1 6.7.1b 起归 `middle/bytecode/file.rs`：
+// 这里不再 `pub use` 再导出——路径应指向归属域，不再由 codegen 代言。
 
 /// 常量定义
 pub const YAOXIANG_MAGIC: u32 = 0x59584243;
-pub const BYTECODE_VERSION: u32 = bytecode::VERSION;
+pub const BYTECODE_VERSION: u32 = crate::middle::bytecode::file::VERSION;

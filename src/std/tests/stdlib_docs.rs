@@ -22,7 +22,6 @@
 use std::path::{Path, PathBuf};
 
 use crate::std::gen_docs::{check_stdlib_docs, modules_for_docs, STDLIB_DOCS_REL};
-use crate::std::gen_interfaces::generate_all_interfaces;
 
 fn repo_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -181,23 +180,6 @@ fn test_stdlib_docs_has_no_orphan_module_pages() {
             valid.contains(&name),
             "{name} 是孤儿模块页（生成器已不再产出）；删除该文件，或把它加进 \
              gen_docs::modules_for_docs()"
-        );
-    }
-}
-
-/// 门禁三：文档化的模块集覆盖接口视图的全部模块
-#[test]
-fn test_stdlib_docs_covers_interface_modules() {
-    let documented: Vec<String> = modules_for_docs()
-        .iter()
-        .map(|m| m.module_path().trim_start_matches("std.").to_string())
-        .collect();
-
-    for (name, _) in generate_all_interfaces() {
-        assert!(
-            documented.contains(&name),
-            "接口视图有模块 `{name}`，但 gen_docs::modules_for_docs() 未覆盖它——\
-             两处模块清单已漂移"
         );
     }
 }

@@ -10,19 +10,18 @@ use std::path::{Path, PathBuf};
 
 use crate::frontend::core::lexer;
 use crate::frontend::core::parser::{self, Module};
-use crate::frontend::core::typecheck::checker::TypeChecker;
-use crate::frontend::core::typecheck::environment::MethodOverloadCandidates;
-use crate::frontend::core::typecheck::SemanticProbe;
-use crate::frontend::core::typecheck::probe::TypeLevelNamespace;
-use crate::frontend::core::typecheck::TypeCheckResult;
-use crate::frontend::core::typecheck::passes::dead_code::DeadCodeAnalyzer;
+use crate::frontend::core::sema::checker::TypeChecker;
+use crate::frontend::core::sema::environment::MethodOverloadCandidates;
+use crate::frontend::core::sema::SemanticProbe;
+use crate::frontend::core::sema::TypeCheckResult;
+use crate::frontend::core::sema::passes::dead_code::DeadCodeAnalyzer;
 use crate::frontend::module::orchestrator::{self, OrchestratorError};
 use crate::frontend::module::registry::ModuleRegistry;
 use crate::frontend::module::roles::{self, FileRole};
 use crate::frontend::module::ModuleSource;
 use crate::frontend::pipeline::PipelineError;
-use crate::middle::core::ir::{Instruction, Operand};
-use crate::middle::core::ir_gen::AstToIrGenerator;
+use crate::middle::ir::ir::{Instruction, Operand};
+use crate::middle::ir::ir_gen::AstToIrGenerator;
 use crate::middle::passes::mono::Monomorphizer;
 use crate::middle::ModuleIR;
 use crate::util::diagnostic::ErrorCodeDefinition;
@@ -244,6 +243,10 @@ impl Driver {
         &self,
         state: &mut State,
     ) {
+        // 谓词名可见面（WBS 3.20.9 / #522）：**全部已 parse 单元的并集**，
+        // 与 Registry / IrGeneration 消费同一份（F14-A：生成期不再按本单元自扫）。
+        // 在拆借 `State` 字段之前取——缓存写法要 `&mut State`。
+        let namespace = state.type_level_namespace();
         let State {
             program,
             asts,
@@ -253,9 +256,6 @@ impl Driver {
             semantic_db,
             ..
         } = state;
-        // 谓词名可见面（WBS 3.20.9 / #522）：scan 全部已 parse 单元——
-        // 单文件形态通常只有入口一个，全集 scan 过包含方向安全
-        let namespace = TypeLevelNamespace::scan(asts.iter().flatten());
         for (i, us) in units.iter_mut().enumerate() {
             let Some(ast) = &asts[i] else {
                 continue; // CollectAll 下 parse 失败的单元（4.1.3 不可达）
@@ -305,6 +305,10 @@ impl Driver {
         &self,
         state: &mut State,
     ) {
+        // 谓词名可见面（WBS 3.20.9 / #522）：跨文件 use 的谓词（lib.yx 声明、
+        // main.yx 使用）在检查/签名/生成三侧必须同源可见——取共享缓存的并集。
+        // 在拆借 `State` 字段之前取——缓存写法要 `&mut State`。
+        let namespace = state.type_level_namespace();
         let State {
             program,
             asts,
@@ -330,10 +334,6 @@ impl Driver {
         let is_lsp = matches!(program.kind, ProgramKind::Lsp);
         let is_embedded = matches!(program.kind, ProgramKind::Embedded);
         let vendor_root = vendor_root.clone();
-        // 谓词名可见面（WBS 3.20.9 / #522）：scan 全部单元的 AST 全集——
-        // 跨文件 use 的谓词（lib.yx 声明、main.yx 使用）在检查/签名两侧
-        // 同源可见；全集 scan 过包含方向安全
-        let namespace = TypeLevelNamespace::scan(asts.iter().flatten());
         for (i, us) in units.iter_mut().enumerate() {
             let Some(ast) = &asts[i] else {
                 continue;
@@ -437,7 +437,7 @@ impl Driver {
         // typecheck（「Lsp 只检目标文件」的性能契约不动）。std/嵌入模块
         // 无定义文件（definition_file 为 None），天然排除。
         if is_lsp {
-            use crate::frontend::core::typecheck::semantic_db::{DefId, DefinitionInfo, DefinitionKind};
+            use crate::frontend::core::sema::semantic_db::{DefId, DefinitionInfo, DefinitionKind};
             use crate::frontend::module::ExportKind;
             let mut externals = Vec::new();
             for unit in &program.units {
@@ -872,6 +872,9 @@ impl Driver {
         state: &mut State,
     ) {
         let rootless = orchestrator::find_project_root(&state.entry_path).is_none();
+        // 谓词名可见面（F14-A）：与走查期**同一份**并集；生成器不自扫。
+        // 在拆借 `State` 字段之前取——缓存写法要 `&mut State`。
+        let type_level = state.type_level_namespace();
         let State {
             program,
             asts,
@@ -908,6 +911,7 @@ impl Driver {
                 type_result,
                 registry.clone(),
                 Some(program.units[i].key.clone()),
+                type_level.clone(),
             )
             .with_script_mode(rootless);
             generator.seed_cross_file_types(&all_ast_refs);
@@ -933,6 +937,8 @@ impl Driver {
         state: &mut State,
     ) {
         debug_assert_eq!(state.program.units.len(), 1, "Embedded 程序恒为 1 单元");
+        // 谓词名可见面（F14-A）：与走查期同一份（并集；此处过包含方向安全）
+        let type_level = state.type_level_namespace();
         let State {
             program,
             asts,
@@ -965,6 +971,7 @@ impl Driver {
             registry,
             &program.units[0].key,
             false, // 嵌入模块：非 Script 语义（保持现状）
+            &type_level,
         ) {
             Ok(ir) => *ir_slot = Some(ir),
             Err(diags) => {
@@ -993,6 +1000,8 @@ impl Driver {
         if state.units.len() != 1 {
             return Err(DriverError::MultiUnitNotWired(Stage::IrGeneration));
         }
+        // 谓词名可见面（F14-A）：与走查期同一份（单文件形态是全集，过包含方向安全）
+        let type_level = state.type_level_namespace();
         let State {
             program,
             asts,
@@ -1017,8 +1026,12 @@ impl Driver {
         // 的一致，避免跨表 DefId 撞车错分发（#94）。
         let registry = ModuleRegistry::with_std();
         let mut ir = {
-            let mut generator =
-                AstToIrGenerator::new_with_type_result(type_result, registry.clone(), None);
+            let mut generator = AstToIrGenerator::new_with_type_result(
+                type_result,
+                registry.clone(),
+                None,
+                type_level.clone(),
+            );
             match generator.generate_module_ir(ast) {
                 Ok(ir) => ir,
                 Err(errs) => {
@@ -1053,6 +1066,9 @@ impl Driver {
         &self,
         state: &mut State,
     ) {
+        // 谓词名可见面（F14-A）：与走查期同一份并集；生成器不自扫。
+        // 在拆借 `State` 字段之前取——缓存写法要 `&mut State`。
+        let type_level = state.type_level_namespace();
         let State {
             program,
             asts,
@@ -1093,6 +1109,7 @@ impl Driver {
                 registry,
                 &program.units[i].key,
                 rootless,
+                &type_level,
             ) {
                 Ok(ir) => ir,
                 Err(diags) => {
@@ -1324,9 +1341,9 @@ impl Driver {
     ) {
         let mut registry = ModuleRegistry::with_std();
         // 谓词名可见面（WBS 3.20.9 / #522）：Registry 阶段不跑第零遍、导入
-        // 未并——谓词判定只能走声明级 namespace。对全部单元 AST 取 scan 并集
-        // 传入（过包含方向安全）
-        let namespace = TypeLevelNamespace::scan(state.asts.iter().flatten());
+        // 未并——谓词判定只能走声明级 namespace。取共享缓存的全部单元并集
+        // （与 Typecheck / IrGeneration 同一份，F14-A）
+        let namespace = state.type_level_namespace();
         for (unit, ast) in state.program.units.iter().zip(state.asts.iter()) {
             let Some(ast) = ast else {
                 continue; // 上游失败（FailFast 下 run 循环已中止，防御）
@@ -1449,10 +1466,20 @@ impl Driver {
             // 不门控即同一缺失双报（与 3.4.8 ③ 把入口校验留在 Linking 的
             // 「纯合并」决定同一条理由）。
             let check_channel = matches!(program.kind, ProgramKind::Check | ProgramKind::Lsp);
+            let declares_no_targets = surfaces
+                .as_ref()
+                .is_some_and(|s| s.bins.is_empty() && s.libs.is_empty());
+            let is_this_entry = path.as_path() == entry_path.as_path();
             if check_channel
-                && surfaces
+                && ((surfaces
                     .as_ref()
-                    .is_some_and(|s| s.bins.contains(&file_canon))
+                    .is_some_and(|s| s.bins.contains(&file_canon)))
+                    // 0.6（2026-11-06 用户裁决乙，E3020 与 run 同口径）：清单只说
+                    // [package]、不声明任何目标时，run 的 is_bin_role 仍要求入口有
+                    // main，而本臂此前只校验声明面 bins ⇒ check 放过、run 报 E3020。
+                    // 判据面保持 AST：入口自身编译失败时 IR 缺失，若改用 IR 会把
+                    // 「编译失败」误判成「缺 main」（Linking 臂注释的同一理由）。
+                    || (declares_no_targets && is_this_entry))
                 && !ast_has_main(ast)
             {
                 // 无源码位置的文件级诊断用占位 span（原 entry_span 语义）
@@ -1501,12 +1528,11 @@ impl Driver {
         {
             let unit_irs: Vec<Option<ModuleIR>> =
                 state.units.iter().map(|us| us.ir.clone()).collect();
-            let type_results: Vec<Option<&crate::frontend::core::typecheck::TypeCheckResult>> =
-                state
-                    .units
-                    .iter()
-                    .map(|us| us.type_result.as_ref())
-                    .collect();
+            let type_results: Vec<Option<&crate::frontend::core::sema::TypeCheckResult>> = state
+                .units
+                .iter()
+                .map(|us| us.type_result.as_ref())
+                .collect();
             let registry = state.registry.clone();
             state.aggregated_requests = aggregate_instantiation_requests(
                 &state.program.units,
@@ -1579,22 +1605,25 @@ impl Driver {
         // Script 无入口概念（顶层代码即程序）；Bin 要求存在名为 main 的绑定
         // （值/函数皆可）；带参 main 编译期拒绝（#357：入口恒零参调用）。
         //
-        // Check 形态整块跳过（纯合并）：E3020 的判据归 RoleClassification
-        // （双报防线，见臂注释）；E3022 属 run 路径的入口契约，check 现状不报
-        // 它——本臂在 check 只合并，不给 check 添新诊断。
+        // 形态分流（0.6，2026-11-06 用户裁决乙：check 与 run 同码同口径）：
         //
-        // 还有一层硬性理由：run 路径的入口校验以「merged IR 里有没有 main」
-        // 判定，而在 Check 的收集语义下，入口自身带错（parse/typecheck 失败）
-        // 就没有 IR——会被误判成「缺 main」而硬中止，把 rust 式收集退化成
-        // FailFast。并入纯合并即无此形状。
-        if !matches!(state.program.kind, ProgramKind::Check) && is_bin_role(&state.entry_path) {
+        // - **E3020（缺 main 绑定）**：run 在本臂 fail_with 硬中止；Check **不查**
+        //   ——判据归 RoleClassification（AST 面）。硬性理由：Check 的收集语义下，
+        //   入口自身带错（parse/typecheck 失败）就没有 IR，按 IR 判定会把「编译
+        //   失败」误判成「缺 main」并硬中止，把 CollectAll 退化成 FailFast。
+        // - **E3022（main 带参）**：判据本来就是 IR 面（merged IR 里 main 的参数表），
+        //   Check 形态同形可用——main 出现在 IR 里就说明它编译通过，不存在上述
+        //   误判。故 Check 也判，但进**逐文件收集通道**（与 run 的硬中止不同形：
+        //   CollectAll 语义下不得因一个入口中止整轮收集）。
+        if is_bin_role(&state.entry_path) {
+            let check_form = matches!(state.program.kind, ProgramKind::Check);
             let qualified_main = format!("{}.main", state.entry_key);
             let has_main_fn = merged.functions.iter().any(|f| f.name == qualified_main);
             let has_main_value = merged
                 .globals
                 .iter()
                 .any(|g| g.name == "main" || g.name == qualified_main);
-            if !has_main_fn && !has_main_value {
+            if !check_form && !has_main_fn && !has_main_value {
                 let diag =
                     ErrorCodeDefinition::bin_missing_main(&state.entry_path.display().to_string())
                         .at(Span::default())
@@ -1620,15 +1649,27 @@ impl Driver {
                     let diag = ErrorCodeDefinition::bin_main_signature("main", "()", &found)
                         .at(Span::default())
                         .build();
-                    state.fail_with(
-                        Stage::Linking,
-                        OrchestratorError::TypeCheck {
-                            path: state.entry_path.display().to_string(),
-                            message: diag.to_string(),
-                            diagnostics: vec![diag],
-                        },
-                    );
-                    return;
+                    if check_form {
+                        // 收集通道：诊断挂入口文件条目（与 RoleClassification 的
+                        // E3020 同一载体）；carrier 下标先算，避免同时借 program 与 units
+                        let carrier = state
+                            .program
+                            .units
+                            .iter()
+                            .position(|u| u.path == state.entry_path)
+                            .unwrap_or(0);
+                        state.units[carrier].check_diagnostics.push(diag);
+                    } else {
+                        state.fail_with(
+                            Stage::Linking,
+                            OrchestratorError::TypeCheck {
+                                path: state.entry_path.display().to_string(),
+                                message: diag.to_string(),
+                                diagnostics: vec![diag],
+                            },
+                        );
+                        return;
+                    }
                 }
             }
         }

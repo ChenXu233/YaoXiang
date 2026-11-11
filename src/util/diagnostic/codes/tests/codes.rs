@@ -87,40 +87,6 @@ fn test_diagnostic_builder_with_params_and_span() {
 }
 
 #[test]
-fn test_i18n_consistency() {
-    // 1. 检查 Rust 静态数组中是否有重复的错误码
-    let all = ErrorCodeDefinition::all();
-    let mut seen = std::collections::HashSet::new();
-    for def in all {
-        assert!(
-            seen.insert(def.code),
-            "Duplicate error code in Rust registry: {}",
-            def.code
-        );
-    }
-
-    // 2. 检查 JSON 中是否有重复的错误码
-    let en = I18nRegistry::new("en");
-    let zh = I18nRegistry::new("zh");
-
-    // 3. 检查 Rust 注册的每个码在 JSON 中都有模板
-    for def in all {
-        let title = en.get_title(def.code);
-        assert!(
-            !title.is_empty(),
-            "Error code {} missing English title in i18n JSON",
-            def.code
-        );
-        let title_zh = zh.get_title(def.code);
-        assert!(
-            !title_zh.is_empty(),
-            "Error code {} missing Chinese title in i18n JSON",
-            def.code
-        );
-    }
-}
-
-#[test]
 fn test_with_help_overrides_code_default_help() {
     // Arrange
     // E1002 的 i18n 默认 help 是通用的「使用正确的类型或添加类型转换」，

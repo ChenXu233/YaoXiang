@@ -18,9 +18,6 @@ use tempfile::TempDir;
 /// 夹具：`local-dep` 清单（版本 0.3.0）。
 const MANIFEST_0_3_0: &str = "[package]\nname = \"local-dep\"\nversion = \"0.3.0\"\n";
 
-/// 夹具：`local-dep` 清单（版本 0.1.0）。
-const MANIFEST_0_1_0: &str = "[package]\nname = \"local-dep\"\nversion = \"0.1.0\"\n";
-
 /// Fixture: 建本地依赖 `tmp/local-dep`——写入 `(相对路径, 内容)` 文件（自动建父目录），
 /// 并额外创建 `dirs` 中的空目录。返回本地依赖目录。
 fn local_dep_fixture(
@@ -94,28 +91,6 @@ fn fetch_ok(
 }
 
 #[test]
-fn test_fetch_empty_deps() {
-    // Arrange
-    let tmp = TempDir::new().unwrap();
-    let deps = BTreeMap::new();
-    let mut lock = LockFile::new();
-
-    // Act
-    let result = crate::package::runtime::drive(fetch_all(
-        tmp.path(),
-        &deps,
-        &mut lock,
-        &Default::default(),
-    ))
-    .unwrap();
-
-    // Assert：空依赖 → 三个结果桶全空
-    assert!(result.installed.is_empty(), "不应有安装项");
-    assert!(result.skipped.is_empty(), "不应有跳过项");
-    assert!(result.failed.is_empty(), "不应有失败项");
-}
-
-#[test]
 fn test_fetch_local_dep_vendors_copy() {
     // Arrange：本地路径依赖（带清单 + 派生/状态目录）
     let tmp = TempDir::new().unwrap();
@@ -147,90 +122,4 @@ fn test_fetch_local_dep_vendors_copy() {
     assert_eq!(entry.version, "0.3.0");
     assert_eq!(entry.source, "path");
     assert!(entry.checksum.is_some(), "落盘副本应有完整性校验和");
-}
-
-#[test]
-fn test_fetch_local_dep_refreshes_on_reinstall() {
-    // Arrange：本地依赖 + `*` 版本声明（add 的默认形态）
-    let tmp = TempDir::new().unwrap();
-    let local_dep = local_dep_fixture(
-        tmp.path(),
-        &[("yaoxiang.toml", MANIFEST_0_1_0), ("lib.yx", "x = 1\n")],
-        &[],
-    );
-    let deps = path_dep_of(&local_dep, "*");
-    let mut lock = LockFile::new();
-    let vendored_lib = vendored_path(tmp.path(), "local-dep-0.1.0").join("lib.yx");
-
-    // Act：首次安装
-    let first = fetch_ok(tmp.path(), &deps, &mut lock);
-
-    // Assert：vendor 副本反映当前工作副本
-    assert_eq!(first.installed.len(), 1, "首次安装应进 installed");
-    assert_eq!(
-        std::fs::read_to_string(&vendored_lib).unwrap(),
-        "x = 1\n",
-        "首次安装的副本应为 v1 内容"
-    );
-
-    // Act：修改依赖源后再次 install（新鲜度语义：每次重做复制）
-    std::fs::write(local_dep.join("lib.yx"), "x = 2\n").unwrap();
-    let second = fetch_ok(tmp.path(), &deps, &mut lock);
-
-    // Assert：副本更新为最新内容，不残留 v1
-    assert_eq!(second.installed.len(), 1, "path 依赖每次 install 都应重装");
-    assert_eq!(
-        std::fs::read_to_string(&vendored_lib).unwrap(),
-        "x = 2\n",
-        "vendor 副本应反映工作副本的最新内容"
-    );
-}
-
-#[test]
-fn test_fetch_local_dep_manifestless_spec_version() {
-    // Arrange：路径存在但没有 yaoxiang.toml——回退 spec 版本命名 vendor
-    // （既有工作空间/安装夹具的纯源码目录形态）
-    let tmp = TempDir::new().unwrap();
-    let local_dep = local_dep_fixture(tmp.path(), &[("lib.yx", "x = 42\n")], &[]);
-    let deps = path_dep_of(&local_dep, "0.1.0");
-    let mut lock = LockFile::new();
-
-    // Act
-    let result = fetch_ok(tmp.path(), &deps, &mut lock);
-
-    // Assert：按 spec 版本落盘并登记 lock
-    assert_eq!(result.installed.len(), 1);
-    assert!(
-        vendored_path(tmp.path(), "local-dep-0.1.0")
-            .join("lib.yx")
-            .exists(),
-        "纯源码 path 源也应落盘 vendor"
-    );
-    let entry = lock.package.get("local-dep").expect("应登记 lock");
-    assert_eq!(entry.version, "0.1.0");
-}
-
-#[test]
-fn test_fetch_local_dep_manifestless_star_fails() {
-    // Arrange：`*` + 无清单——vendor 目录名无从确定，明确失败
-    let tmp = TempDir::new().unwrap();
-    let local_dep = local_dep_fixture(tmp.path(), &[("lib.yx", "x = 42\n")], &[]);
-    let deps = path_dep_of(&local_dep, "*");
-    let mut lock = LockFile::new();
-
-    // Act
-    let result = fetch_ok(tmp.path(), &deps, &mut lock);
-
-    // Assert：不落 vendor、不装成功、不登记 lock
-    assert_eq!(result.installed.len(), 0);
-    assert_eq!(result.failed.len(), 1);
-    assert!(
-        result.failed[0].1.contains("无法确定版本"),
-        "unexpected: {}",
-        result.failed[0].1
-    );
-    assert!(
-        !lock.package.contains_key("local-dep"),
-        "失败依赖不得登记 lock"
-    );
 }

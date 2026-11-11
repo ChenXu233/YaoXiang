@@ -1128,7 +1128,7 @@ main = () => {
 #[test]
 fn test_multifile_namespace_qualified_fn_value_call_emits_call_dyn() {
     use yaoxiang::frontend::module::orchestrator::compile_project;
-    use yaoxiang::middle::core::ir::{ConstValue, FunctionBody, Instruction, Operand};
+    use yaoxiang::middle::ir::ir::{ConstValue, FunctionBody, Instruction, Operand};
 
     // Arrange：与行为测试同一项目形态
     let dir = tempfile::tempdir().expect("create tempdir");

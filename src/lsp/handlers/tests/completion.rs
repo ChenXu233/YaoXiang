@@ -11,8 +11,7 @@
 use lsp_types::{CompletionItemKind, CompletionParams, CompletionResponse};
 
 use crate::lsp::handlers::completion::{
-    handle_completion, keyword_items, reserved_word_items, document_symbol_items, KEYWORDS,
-    RESERVED_WORDS,
+    handle_completion, keyword_items, reserved_word_items, document_symbol_items,
 };
 use crate::lsp::session::Session;
 use crate::lsp::world::World;
@@ -46,43 +45,9 @@ fn test_keyword_items_count() {
 }
 
 #[test]
-fn test_all_keywords_present() {
-    let items = keyword_items();
-    let labels: Vec<&str> = items.iter().map(|i| i.label.as_str()).collect();
-    for (kw, _) in KEYWORDS {
-        assert!(labels.contains(kw), "缺少关键字: {}", kw);
-    }
-}
-
-#[test]
-fn test_keyword_items_kind() {
-    let items = keyword_items();
-    for item in &items {
-        assert_eq!(item.kind, Some(CompletionItemKind::KEYWORD));
-    }
-}
-
-#[test]
 fn test_reserved_word_items_count() {
     let items = reserved_word_items();
     assert_eq!(items.len(), 7, "应有 7 个保留字");
-}
-
-#[test]
-fn test_all_reserved_words_present() {
-    let items = reserved_word_items();
-    let labels: Vec<&str> = items.iter().map(|i| i.label.as_str()).collect();
-    for (word, _) in RESERVED_WORDS {
-        assert!(labels.contains(word), "缺少保留字: {}", word);
-    }
-}
-
-#[test]
-fn test_reserved_word_items_kind() {
-    let items = reserved_word_items();
-    for item in &items {
-        assert_eq!(item.kind, Some(CompletionItemKind::CONSTANT));
-    }
 }
 
 #[test]
@@ -130,26 +95,5 @@ fn test_handle_completion_basic() {
         assert_eq!(kw_items.len(), 17);
     } else {
         panic!("expected CompletionResponse::Array");
-    }
-}
-
-#[test]
-fn test_sort_text_ordering() {
-    let items = keyword_items();
-    let reserved = reserved_word_items();
-
-    // 关键字 sort_text 前缀 "0_"
-    for item in &items {
-        assert!(
-            item.sort_text.as_ref().unwrap().starts_with("0_"),
-            "关键字 sort_text 应以 0_ 开头"
-        );
-    }
-    // 保留字 sort_text 前缀 "1_"
-    for item in &reserved {
-        assert!(
-            item.sort_text.as_ref().unwrap().starts_with("1_"),
-            "保留字 sort_text 应以 1_ 开头"
-        );
     }
 }

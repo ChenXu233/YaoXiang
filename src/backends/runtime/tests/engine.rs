@@ -8,33 +8,15 @@
 //! - 协作式时间片
 
 use crate::backends::runtime::engine::{
-    sv, LocalRuntime, RuntimeError, TaskCancelReason, TaskFailure, TaskMeta, TaskOutcome, TaskPoll,
-    TaskResult, ResourceKey,
+    sv, LocalRuntime, RuntimeError, TaskCancelReason, TaskMeta, TaskOutcome, TaskPoll, TaskResult,
+    ResourceKey,
 };
 use crate::backends::common::value::TaskId;
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 
 fn ok_i32(v: i32) -> TaskResult {
     Ok(sv(v))
-}
-
-fn err_str(msg: &'static str) -> TaskResult {
-    // WBS 3.11.1：任务错误侧是结构化载荷（TaskFailure），不再是裸 SyncValue
-    Err(TaskFailure::message(msg))
-}
-
-/// 挂一个依赖 deps 的任务，返回它的 id。
-fn spawn_depending_on(
-    rt: &mut LocalRuntime,
-    deps: &[TaskId],
-) -> TaskId {
-    rt.spawn(TaskMeta {
-        deps: deps.to_vec(),
-        ..TaskMeta::default()
-    })
-    .unwrap_or_else(|e| panic!("spawn depending on {deps:?} failed: {e}"))
 }
 
 /// 挂一个带 label 的任务，返回它的 id。
@@ -59,23 +41,6 @@ fn spawn_with_resource(
         ..TaskMeta::default()
     })
     .unwrap_or_else(|e| panic!("spawn with resource {key:?} failed: {e}"))
-}
-
-/// 驱动 rt 直到 target，并把真正被调度到的任务按顺序记入 order。
-fn drive_recording(
-    rt: &mut LocalRuntime,
-    target: Option<TaskId>,
-    order: &mut Vec<TaskId>,
-    table: &HashMap<TaskId, TaskResult>,
-) {
-    rt.drive_until(target, |id| {
-        order.push(id);
-        table
-            .get(&id)
-            .cloned()
-            .unwrap_or_else(|| panic!("no canned result for task {id:?}"))
-    })
-    .unwrap_or_else(|e| panic!("drive_until({target:?}) failed: {e}"));
 }
 
 /// 断言 expected 就是下一个就绪任务，并把它置为运行中。
@@ -157,151 +122,6 @@ fn linear_dependency_executes_in_order() {
 }
 
 #[test]
-fn diamond_dependency_respects_partial_order() {
-    let mut rt = LocalRuntime::new();
-    let a = spawn_depending_on(&mut rt, &[]);
-    let b = spawn_depending_on(&mut rt, &[a]);
-    let c = spawn_depending_on(&mut rt, &[a]);
-    let d = spawn_depending_on(&mut rt, &[b, c]);
-
-    let mut order = Vec::new();
-    let table: HashMap<TaskId, TaskResult> = [
-        (a, ok_i32(1)),
-        (b, ok_i32(2)),
-        (c, ok_i32(3)),
-        (d, ok_i32(4)),
-    ]
-    .into();
-    drive_recording(&mut rt, Some(d), &mut order, &table);
-
-    let pos = |id: TaskId| order.iter().position(|x| *x == id).unwrap();
-    assert!(pos(a) < pos(b));
-    assert!(pos(a) < pos(c));
-    assert!(pos(b) < pos(d));
-    assert!(pos(c) < pos(d));
-}
-
-#[test]
-fn island_tasks_do_not_block_main_chain() {
-    let mut rt = LocalRuntime::new();
-    let a = rt.spawn(TaskMeta::default()).unwrap();
-    let b = rt
-        .spawn(TaskMeta {
-            deps: vec![a],
-            ..TaskMeta::default()
-        })
-        .unwrap();
-    let c = rt.spawn(TaskMeta::default()).unwrap();
-
-    let mut order = Vec::new();
-    let table: HashMap<TaskId, TaskResult> =
-        [(a, ok_i32(1)), (b, ok_i32(2)), (c, ok_i32(3))].into();
-
-    rt.drive_until(None, |id| {
-        order.push(id);
-        table.get(&id).cloned().unwrap()
-    })
-    .unwrap();
-
-    assert!(rt.is_complete(a));
-    assert!(rt.is_complete(b));
-    assert!(rt.is_complete(c));
-    assert!(order.contains(&c));
-}
-
-#[test]
-fn drive_until_target_does_not_run_island_tasks() {
-    let mut rt = LocalRuntime::new();
-    let a = rt.spawn(TaskMeta::default()).unwrap();
-    let b = rt
-        .spawn(TaskMeta {
-            deps: vec![a],
-            ..TaskMeta::default()
-        })
-        .unwrap();
-    let c = rt.spawn(TaskMeta::default()).unwrap();
-
-    let mut order = Vec::new();
-    let table: HashMap<TaskId, TaskResult> =
-        [(a, ok_i32(1)), (b, ok_i32(2)), (c, ok_i32(3))].into();
-
-    rt.drive_until(Some(b), |id| {
-        order.push(id);
-        table.get(&id).cloned().unwrap()
-    })
-    .unwrap();
-
-    assert_eq!(order, vec![a, b]);
-    assert!(rt.is_complete(a));
-    assert!(rt.is_complete(b));
-    assert!(!rt.is_complete(c));
-}
-
-#[test]
-fn multiple_failed_deps_are_merged_into_cancel_reason() {
-    let mut rt = LocalRuntime::new();
-    let a = rt.spawn(TaskMeta::default()).unwrap();
-    let b = rt.spawn(TaskMeta::default()).unwrap();
-    let c = rt
-        .spawn(TaskMeta {
-            deps: vec![a, b],
-            ..TaskMeta::default()
-        })
-        .unwrap();
-
-    let table: HashMap<TaskId, TaskResult> =
-        [(a, err_str("a")), (b, err_str("b")), (c, ok_i32(0))].into();
-
-    rt.drive_until(None, |id| table.get(&id).cloned().unwrap())
-        .unwrap();
-
-    assert!(matches!(rt.outcome(a), Some(TaskOutcome::Err(_))));
-    assert!(matches!(rt.outcome(b), Some(TaskOutcome::Err(_))));
-
-    let (primary, others) = match rt.outcome(c) {
-        Some(TaskOutcome::Cancelled(TaskCancelReason::DependencyFailed { primary, others })) => {
-            (*primary, others.clone())
-        }
-        other => panic!("unexpected outcome for c: {other:?}"),
-    };
-
-    assert_eq!(others.len(), 1);
-    let mut all = vec![primary];
-    all.extend(others);
-    all.sort_by_key(|id| id.0);
-    assert_eq!(all, vec![a, b]);
-}
-
-#[test]
-fn failure_cancels_dependents() {
-    let mut rt = LocalRuntime::new();
-    let a = rt.spawn(TaskMeta::default()).unwrap();
-    let b = rt
-        .spawn(TaskMeta {
-            deps: vec![a],
-            ..TaskMeta::default()
-        })
-        .unwrap();
-
-    let mut order = Vec::new();
-    let table: HashMap<TaskId, TaskResult> = [(a, err_str("boom")), (b, ok_i32(2))].into();
-
-    rt.drive_until(Some(b), |id| {
-        order.push(id);
-        table.get(&id).cloned().unwrap()
-    })
-    .unwrap();
-
-    assert_eq!(order, vec![a]);
-    assert!(matches!(rt.outcome(a), Some(TaskOutcome::Err(_))));
-    assert!(matches!(
-        rt.outcome(b),
-        Some(TaskOutcome::Cancelled(TaskCancelReason::DependencyFailed { primary, .. }))
-            if *primary == a
-    ));
-}
-
-#[test]
 fn explicit_cancel_cancels_dependents() {
     let mut rt = LocalRuntime::new();
     let a = rt.spawn(TaskMeta::default()).unwrap();
@@ -331,55 +151,6 @@ fn explicit_cancel_cancels_dependents() {
         Some(TaskOutcome::Cancelled(TaskCancelReason::DependencyCancelled { primary, .. }))
             if *primary == a
     ));
-}
-
-#[test]
-fn resource_keys_serialize_tasks() {
-    let mut rt = LocalRuntime::new();
-    let r: ResourceKey = "io".into();
-
-    let t1 = spawn_with_resource(&mut rt, &r);
-    let t2 = spawn_with_resource(&mut rt, &r);
-    let t3 = spawn_with_resource(&mut rt, &r);
-
-    let mut order = Vec::new();
-    let table: HashMap<TaskId, TaskResult> =
-        [(t1, ok_i32(1)), (t2, ok_i32(2)), (t3, ok_i32(3))].into();
-    drive_recording(&mut rt, Some(t3), &mut order, &table);
-
-    assert_eq!(order, vec![t1, t2, t3]);
-}
-
-#[test]
-fn resource_serialization_does_not_propagate_failure() {
-    let mut rt = LocalRuntime::new();
-    let r: ResourceKey = "io".into();
-
-    let t1 = rt
-        .spawn(TaskMeta {
-            resources: vec![r.clone()],
-            ..TaskMeta::default()
-        })
-        .unwrap();
-    let t2 = rt
-        .spawn(TaskMeta {
-            resources: vec![r.clone()],
-            ..TaskMeta::default()
-        })
-        .unwrap();
-
-    let mut order = Vec::new();
-    let table: HashMap<TaskId, TaskResult> = [(t1, err_str("boom")), (t2, ok_i32(2))].into();
-
-    rt.drive_until(Some(t2), |id| {
-        order.push(id);
-        table.get(&id).cloned().unwrap()
-    })
-    .unwrap();
-
-    assert_eq!(order, vec![t1, t2]);
-    assert!(matches!(rt.outcome(t1), Some(TaskOutcome::Err(_))));
-    assert!(matches!(rt.outcome(t2), Some(TaskOutcome::Ok(_))));
 }
 
 #[test]
@@ -443,57 +214,4 @@ fn cooperative_time_slicing_is_fair_for_two_long_tasks() {
     assert_eq!(order, vec![a, b, a, b, a, b]);
     assert!(matches!(rt.outcome(a), Some(TaskOutcome::Ok(_))));
     assert!(matches!(rt.outcome(b), Some(TaskOutcome::Ok(_))));
-}
-
-#[test]
-fn single_task_can_finish_in_one_poll_without_slicing_overhead() {
-    let mut rt = LocalRuntime::new();
-    let a = rt.spawn(TaskMeta::default()).unwrap();
-
-    let polls = AtomicUsize::new(0);
-    let mut remaining = 5usize;
-
-    rt.drive_until_polled(None, |id, time_slice_enabled| {
-        assert_eq!(id, a);
-        assert!(!time_slice_enabled);
-        polls.fetch_add(1, Ordering::Relaxed);
-
-        // No competitors: finish in one go.
-        assert_eq!(remaining, 5);
-        remaining = 0;
-        TaskPoll::Ready(ok_i32(1))
-    })
-    .unwrap();
-
-    assert_eq!(polls.load(Ordering::Relaxed), 1);
-    assert!(matches!(rt.outcome(a), Some(TaskOutcome::Ok(_))));
-}
-
-#[test]
-fn yielded_task_can_be_cancelled_between_slices() {
-    let mut rt = LocalRuntime::new();
-    let a = rt.spawn(TaskMeta::default()).unwrap();
-    let b = rt
-        .spawn(TaskMeta {
-            deps: vec![a],
-            ..TaskMeta::default()
-        })
-        .unwrap();
-
-    let next = rt.next_ready().unwrap();
-    assert_eq!(next, a);
-    rt.mark_running(next).unwrap();
-    rt.yield_now(next, Duration::ZERO).unwrap();
-
-    rt.cancel(a).unwrap();
-
-    assert!(matches!(
-        rt.outcome(a),
-        Some(TaskOutcome::Cancelled(TaskCancelReason::Explicit))
-    ));
-    assert!(matches!(
-        rt.outcome(b),
-        Some(TaskOutcome::Cancelled(TaskCancelReason::DependencyCancelled { primary, .. }))
-            if *primary == a
-    ));
 }

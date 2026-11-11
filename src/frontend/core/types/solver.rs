@@ -523,6 +523,11 @@ impl TypeConstraintSolver {
 
             // #300：字面量类型 unify——const 泛型实参（Array(T, N) 的 N）按值比较。
             // 缺失本臂时相同 Literal 落 catch-all，Array(Int,3) 无法跨函数边界。
+            // 6.8.7：单值类型 <: 基类型——`int64::3` 的值可以进 `int64` 槽位。
+            // 反向**不成立**（基类型不保证等于那个唯一值）：`f(42)(5)` 的 5 是
+            // int64，与形参 int64::42 因此仍报 E1002。
+            (MonoType::Literal { base_type, .. }, other) if base_type.as_ref() == other => Ok(()),
+
             (MonoType::Literal { value: v1, .. }, MonoType::Literal { value: v2, .. }) => {
                 if v1 == v2 {
                     Ok(())
@@ -733,6 +738,16 @@ impl TypeConstraintSolver {
             }
             // #299：容器/复合类型（List/Dict/Set/Tuple/Range/Arc/Weak/Option/Result/String/Bytes）统一走 Generic
             MonoType::Generic { args, .. } => args.iter().any(|t| self.contains_var(t, var)),
+            // 借用类型 `&T` / `&mut T`：内层是同一个值世界的类型，occurs check 必须
+            // **穿透**。缺本臂时 occurs check 对借用位失灵：`bind(t, &t)` 被判「不含 t」
+            // 而建立**自指绑定**，此后任何 `resolve_type(t)` → `expand_type` 展开
+            // `&t` → 再展开 `t`，无限自递归。
+            //
+            // 承重在**单元级**：`types::tests::solver` 直接构造 `bind(t, &t)` 并断言被拒、
+            // 且 `contains_var(&t, t)` 为真。端到端已不可达——6.8.3 把函数体形参的类型改成
+            // 取声明标注原文（`TypeRef` 名义类型）后，出口 unify 直接成功、走不到这条 bind
+            //（验证轮实测：闸掉本臂与出口对齐，全量用例仍绿）。
+            MonoType::Ref { inner, .. } => self.contains_var(inner, var),
             // 基本类型和类型引用不包含类型变量
             _ => false,
         }

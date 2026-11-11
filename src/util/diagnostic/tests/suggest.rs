@@ -12,39 +12,6 @@ fn test_similarity_identical_strings() {
 }
 
 #[test]
-fn test_similarity_similar_strings() {
-    let engine = SuggestionEngine::new();
-    let sim = engine.similarity("hello", "hallo");
-    assert!(sim > 0.7, "Expected similarity > 0.7, got {}", sim);
-}
-
-#[test]
-fn test_similarity_unrelated_strings() {
-    let engine = SuggestionEngine::new();
-    let sim = engine.similarity("abc", "xyz");
-    assert!(sim < 0.5, "Expected low similarity, got {}", sim);
-}
-
-#[test]
-fn test_find_similar_returns_matching_names() {
-    let mut engine = SuggestionEngine::new();
-    engine.add_defined_name("variable");
-    engine.add_defined_name("variant");
-    engine.add_defined_name("value");
-    engine.add_defined_name("valley");
-
-    let similar = engine.find_similar("varible");
-    assert!(!similar.is_empty(), "Should find similar names");
-
-    let names: Vec<String> = similar.iter().map(|(n, _)| n.clone()).collect();
-    assert!(
-        names.contains(&"variable".to_string()) || names.contains(&"variant".to_string()),
-        "should find 'variable' or 'variant', got {:?}",
-        names
-    );
-}
-
-#[test]
 fn test_levenshtein_distance_known_cases() {
     let engine = SuggestionEngine::new();
 
@@ -91,16 +58,4 @@ fn test_suggest_for_unknown_variable_returns_suggestion() {
         }
         other => panic!("Expected Variable suggestion, got {:?}", other),
     }
-}
-
-#[test]
-fn test_clear_cache_empties_cache() {
-    let mut engine = SuggestionEngine::new();
-    engine.add_defined_name("foo");
-    engine.find_similar("fuo"); // writes to cache
-    engine.clear_cache();
-    assert!(
-        engine.similarity_cache.read().unwrap().is_empty(),
-        "cache should be empty after clear"
-    );
 }

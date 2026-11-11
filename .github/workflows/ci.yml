@@ -1,9 +1,20 @@
 name: CI
 
 on:
+  # 触发面按「谁验一次」划分，同一份提交只跑一遍：
+  #  - push 只覆盖主干：dev（开发主干，日常推送都落这里）与 main（发布主干）。
+  #  - pull_request 只覆盖「合入 dev」的 PR（dependabot / 特性分支 / fork PR）。
+  #    dev→main 的发布 PR 不再触发 PR 运行——它的 head 就是 dev，同一提交已由 push
+  #    事件验过，push 的检查同样会显示在 PR 页面。此前的双份列表（(push) 与
+  #    (pull_request) 同名）就是这样来的：发布 PR 存活期间每次推 dev 都跑两遍。
+  #  - 已知取舍：base=main 且 head 不是 dev 的 PR（hotfix→main、升 docs 依赖的
+  #    dependabot PR）不再自动跑 PR CI；按仓库惯例这类提交会同时开一条 →dev 的 PR
+  #    由那条验，确需单独验时用下面的 workflow_dispatch 手动对目标分支触发。
   push:
-    branches: ['*']
+    branches: [dev, main]
   pull_request:
+    branches: [dev]
+  workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -134,6 +145,13 @@ jobs:
       - name: Check doc references are resolvable (no workspace-only paths)
         run: python3 scripts/ci/check-docs-refs.py
 
+      # 测试口径同源门禁（第五处 = 本 workflow 的测试步）：testsuite 的 EXPLICIT_TARGETS
+      # ↔ AGENTS.md 常用命令区 ↔ test-specification 18.1 ↔ HOWTO 提交前验证(改代码)
+      # ↔ pre-commit 两个 entry ↔ 上面的 "Run tests" 步，必须覆盖同一目标集。
+      # 只依赖 python + checkout，不需要 Rust 工具链。
+      - name: Check test channel consistency (testsuite ↔ docs ↔ pre-commit ↔ CI)
+        run: python3 scripts/ci/check-test-channel.py
+
       - name: Upload reports
         if: always()
         uses: actions/upload-artifact@v7
@@ -215,8 +233,13 @@ jobs:
           restore-keys: |
             test-${{ runner.os }}-cargo-
 
+      # 测试目标集与本地 fast 通道（scripts/dev/testsuite.py 的 EXPLICIT_TARGETS）同源。
+      # `--test formatter_integration` 曾在此漏掉：那 52 条只在 pre-commit 跑、CI 不跑，
+      # 于是 pre-commit 在这一面比 CI 严——口径不在默认路径上就等于不存在。
+      # 该步与三处文档 / pre-commit 两段由 scripts/ci/check-test-channel.py 机械对账
+      # （CI 是本门禁的第五处声明；漏目标即 exit 1）。
       - name: Run tests
-        run: cargo test --all-features --lib --bins --test integration --test yx_runner --test yx_multifile_runner
+        run: cargo test --all-features --lib --bins --test integration --test formatter_integration --test yx_runner --test yx_multifile_runner
 
       - name: Doc tests
         run: cargo test --doc --all-features

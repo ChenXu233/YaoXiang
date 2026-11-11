@@ -2,8 +2,8 @@
 //!
 //! 提供函数单态化相关的辅助函数和trait
 
-use crate::frontend::core::typecheck::MonoType;
-use crate::middle::core::ir::{BasicBlock, FunctionBody, FunctionIR, LocalSlot, ModuleIR};
+use crate::frontend::core::sema::MonoType;
+use crate::middle::ir::ir::{BasicBlock, FunctionBody, FunctionIR, LocalSlot, ModuleIR};
 use crate::middle::passes::mono::instance::{FunctionId, InstantiationRequest};
 use std::collections::HashMap;
 
@@ -109,11 +109,13 @@ impl FunctionMonomorphizer for super::Monomorphizer {
         let generic_id = request.generic_id();
         let generic_func = self.generic_functions.get(generic_id.name())?;
 
-        let type_args = request.type_args.clone();
+        // 6.9.2-C1：类型位投影（闭项 ⇒ `Literal`；开项由 C2 的代入后归一化处理，
+        // 本批不构造开项请求）。缺投影 = 不特化，绝不跳过某一位次让后面的前移。
+        let type_args = request.mono_args()?;
         let specialized_name = Self::generate_specialized_name(generic_id.name(), &type_args);
-        let func_id = FunctionId::new(specialized_name.clone(), type_args);
+        let func_id = FunctionId::new(specialized_name.clone(), type_args.clone());
 
-        let specialized_func = self.substitute_types(generic_func, &func_id, &request.type_args);
+        let specialized_func = self.substitute_types(generic_func, &func_id, &type_args);
 
         self.processed.insert(key);
         self.specialized_functions
@@ -177,6 +179,8 @@ impl FunctionMonomorphizer for super::Monomorphizer {
                     name: slot.name.clone(),
                     ty: self.substitute_single_type(&slot.ty, &type_param_map),
                     scope_depth: slot.scope_depth,
+                    // 量词是声明侧的绑定事实，与类型替换无关：原样投影。
+                    quantity: slot.quantity,
                 })
                 .collect(),
             _ => Vec::new(),

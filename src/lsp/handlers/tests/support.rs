@@ -8,10 +8,10 @@
 //! definitions/references**——消费端测试手工喂登记数据即静默通道
 //! （coding-rules 第六部分）。
 
-use crate::frontend::core::typecheck::probe::TypeLevelNamespace;
+use crate::frontend::core::sema::probe::TypeLevelNamespace;
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parse;
-use crate::frontend::core::typecheck::TypeChecker;
+use crate::frontend::core::sema::TypeChecker;
 use crate::lsp::session::Session;
 use crate::lsp::world::World;
 

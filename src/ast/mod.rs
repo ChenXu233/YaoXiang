@@ -546,7 +546,7 @@ impl Type {
     /// 括号 = 柯里链条终止 = 该类型是函数的**值**，不是下一层参数组。
     /// 两处共用同一判定，防止判据漂移：
     /// - parser 的 paren_return 包装（`parser/statements/declarations.rs`）；
-    /// - typecheck 的值级分解（`typecheck/inference/statements.rs`，issue #501）。
+    /// - typecheck 的值级分解（`sema/inference/statements.rs`，issue #501）。
     pub fn is_paren_complete(&self) -> bool {
         matches!(self, Type::Paren(_) | Type::NamedParen { .. })
     }
@@ -607,6 +607,13 @@ impl Type {
     /// 供死代码分析（可达性）与未使用导入检测共享：
     /// 类型引用只出现在注解/类型体位置，普通表达式遍历看不到它们。
     /// 保守策略——拿不准的名字一律收集（宁可漏报也不误报死代码/未用导入）。
+    ///
+    /// 覆盖全部**承载名字**的变体：`Name` / `Struct`（体项）/ `NamedStruct`（字段类型）
+    /// / `Tuple` / `Fn`（形参标注 + 返回位）/ `Ptr` / `Generic`（头 + 实参）/
+    /// `Literal`（底层类型）/ `Ref` / `MetaType`（实参）/ `ConstExpr`（表达式标识符）/
+    /// `Paren` 与 `NamedParen`（透明，递归内层）。
+    /// `NamedParen` 的 binder 名（`param`）**不计**——它是返回形式参数名的声明，
+    /// 不是引用（RFC-027 §3）；谓词应用里对它的**使用**由内层递归照常收集。
     pub fn collect_name_refs(
         &self,
         out: &mut HashSet<String>,
@@ -659,7 +666,13 @@ impl Type {
                 }
             }
             Type::ConstExpr(expr) => collect_expr_ident_refs(expr, out),
-            _ => {}
+            // 括号是「完整类型」的声明，对名字收集透明（RFC-004）：内层与无括号同义。
+            // `NamedParen` 只多携带返回位 binder 名——那是**声明**不是引用
+            // （RFC-027 §3：binder 不进作用域），不计入；内层（含谓词应用里的
+            // binder **使用**）照常递归收集。
+            // 少了这两支会落进兜底 ⇒ 括号包裹的类型名漏收 ⇒ W1002/W1003 误报
+            // 与 `type_position_names` 漏名（#528 6.8.11）。
+            Type::Paren(inner) | Type::NamedParen { inner, .. } => inner.collect_name_refs(out),
         }
     }
 }
@@ -712,6 +725,12 @@ fn collect_binding_kind_refs(
 ///
 /// 用于 ConstExpr 等表达式位置的名字保守收集；
 /// 完整的引用分析在 L3 的类型检查与死代码分析各自的遍历中完成。
+///
+/// 递归覆盖的节点形态：`Var` / `Call`（被调表达式 + 位置实参 + **具名实参的值**；
+/// 具名实参的键是被调方形参名，不计）/ `FieldAccess` / `BinOp` / `UnOp` /
+/// `Cast`（被转换表达式 + **`target_type` 类型位置**）/ `Index` / `Tuple`·`List` /
+/// `Dict`。其余形态（控制流、块、lambda、`?`/`&`/`ref` 等）落兜底不递归——
+/// 这是文档化的保守近似：收不到的只是更深层的名字，不会误收。
 fn collect_expr_ident_refs(
     expr: &Expr,
     out: &mut HashSet<String>,
@@ -720,10 +739,20 @@ fn collect_expr_ident_refs(
         Expr::Var(name, _) => {
             out.insert(name.clone());
         }
-        Expr::Call { func, args, .. } => {
+        Expr::Call {
+            func,
+            args,
+            named_args,
+            ..
+        } => {
             collect_expr_ident_refs(func, out);
             for arg in args {
                 collect_expr_ident_refs(arg, out);
+            }
+            // 具名实参：**值**是引用；**键**是被调方的形参名（不在本命名空间里），
+            // 不计（#528 6.8.13）。
+            for (_, value) in named_args {
+                collect_expr_ident_refs(value, out);
             }
         }
         Expr::FieldAccess { expr, .. } => collect_expr_ident_refs(expr, out),
@@ -732,7 +761,14 @@ fn collect_expr_ident_refs(
             collect_expr_ident_refs(right, out);
         }
         Expr::UnOp { expr, .. } => collect_expr_ident_refs(expr, out),
-        Expr::Cast { expr, .. } => collect_expr_ident_refs(expr, out),
+        // `x as Foo` 的 `target_type` 是**类型位置**：漏掉它会让 `Foo` 不被计为引用，
+        // 未用导入 / 未用类型因此误报（#528 6.8.13，与 6.8.11 的括号缺口同类）。
+        Expr::Cast {
+            expr, target_type, ..
+        } => {
+            collect_expr_ident_refs(expr, out);
+            target_type.collect_name_refs(out);
+        }
         Expr::Index { expr, index, .. } => {
             collect_expr_ident_refs(expr, out);
             collect_expr_ident_refs(index, out);
@@ -789,7 +825,40 @@ pub struct Param {
     pub name: String,
     pub ty: Option<Type>,
     pub is_mut: bool,
+    /// 量词事实（RFC-039 D62 / issue #533「q=0 槽位」）。
+    ///
+    /// `None` = **尚未解析**——它不表示任何一种 q，严禁按「默认 q=1」读。
+    /// 事实由唯一解析源 [`resolve_param_quantities`] 写入；只有
+    /// `Some(Quantity::Zero)` 是「该形参是编译期值参数」的正面事实。
+    /// 不进 `Debug` 文本（见下面 `Debug` 实现）：DEBUG 是 IR 快照的打印边界，
+    /// 量词是语义事实而不是表示形态，加进文本会平移到全部既有快照。
+    pub quantity: Option<Quantity>,
     pub span: Span,
+}
+
+/// 值形参的**量词**（RFC-039 D62 / issue #533）。
+///
+/// 量词是**绑定事实**，不是标注形态：同一个 `(N: Int)` 在
+/// `f: (N: Int) -> Array(Int, N)` 里是 [`Quantity::Zero`]（编译期值参数），
+/// 在 `g: (N: Int) -> Int` 里是运行期值参数。判定只发生在唯一分类器
+/// [`classify_compile_time_value_params`]（SPEC type-system §7.1 / RFC-011 §4.1），
+/// 本枚举只是它的**值域**。
+///
+/// - [`Quantity::Zero`]：q=0，编译期值参数——不占实现头绑定位，调用点实参仍占位
+///   （RFC-011 §4.1 的 `f(42)` 形态）；
+/// - [`Quantity::One`] / [`Quantity::Omega`]：运行期值参数的用量，取值源是
+///   RFC-009 的 Move/Dup 分类（`sema::layers::ownership::CopySemantics`：
+///   Move ⇒ 线性一次，Dup / ValueCopy ⇒ 无限制）。那是 L3 的类型事实，L2 的
+///   `ast` 拿不到，故本轮（6.9.2-A）只解析 `Zero`；运行期值参数保持 `None`
+///   （未解析），两个视图都**不读**具体值——视图只排除已确定的 `Zero`。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Quantity {
+    /// q=0：编译期值参数（不占实现头绑定位，调用点实参仍占位）
+    Zero,
+    /// q=1：运行期值参数，线性使用一次（RFC-009 Move 行）
+    One,
+    /// q=ω：运行期值参数，可复制/无限制（RFC-009 Dup / ValueCopy 行）
+    Omega,
 }
 
 impl Param {
@@ -802,6 +871,7 @@ impl Param {
             name: String::new(),
             ty,
             is_mut: false,
+            quantity: None,
             span,
         }
     }
@@ -819,7 +889,7 @@ impl Param {
 
     /// 是否占**运行期形参位**（IR 参数槽）：按基线口径 = **带类型标注**。
     /// 参数位裸标识符（形态 3，`ty = None`）不占位——此口径由 WBS 8.9.1
-    /// 重新裁定；改它必须同时改 `middle/core/tests/fn_param_slots.rs` 的
+    /// 重新裁定；改它必须同时改 `middle/ir/tests/fn_param_slots.rs` 的
     /// 锁定测试。
     pub fn occupies_runtime_param_slot(&self) -> bool {
         self.ty.is_some()
@@ -831,7 +901,7 @@ impl Param {
 /// 有名形参按完整结构打印（名字是语义，必须可见）。
 ///
 /// **为什么必须手写而不是再生基线**：规范化 IR 快照的 `type_decl` 行打印
-/// AST 类型的 `Debug` 文本（`middle/core/normalize.rs`），并已入库 216 条。
+/// AST 类型的 `Debug` 文本（`middle/ir/normalize.rs`），并已入库 216 条。
 /// 纯表示重塑（6.8.1）不改变 IR 语义，若靠 `UPDATE_SNAPSHOTS=1` 再生基线，
 /// 就会把「形参携带名字」这件事伪装成一次 IR 行为面变化，违反 07 §128
 /// 「漂移必须能说清来源」——复审时也无法区分「表示搬运」与「真实 IR 变化」。
@@ -858,13 +928,261 @@ impl std::fmt::Debug for Param {
 }
 
 impl Type {
-    /// 从 `Type::Fn` 链拍平出全部形参（curry 各组依次展开；`Paren`/
+    /// 声明里**运行期值位**（**拍平**口径：声明序、跨所有柯里层、按调用序）。
+    ///
+    /// 它回答的问题是「调用时要按序给几个值」——消费点：E1112 的元数对照、
+    /// IR 的形参类型与调用侧可用名（`fn_param_slots` 的 `declaration_runtime_param_slots`）。
+    ///
+    /// **不是**「实现体所绑的那一层」：那是 [`Type::impl_head_runtime_params`]（层内口径，
+    /// 供 parser 合成实现头、typecheck 按位取声明来源）。两者不可互换——多层柯里声明上
+    /// 拍平取前 N 会把内层实现头的 `x` 填成外层 `A` 的 Int（实测误报 E1011）。
+    ///
+    /// 过滤：仅「名字层编译期位」（`T: Type`、类型级函数）
+    /// 与「全裸名字并集且名字出现在类型位置」的多约束写法（`T: Add + Multiply`）。
+    ///
+    /// 与实现头视图的关系（RFC-039 D62 的两视图）：本函数 = **调用点实参视图**
+    /// 的类型面（非类型形参；`Zero` 仍占实参位，故这里**不**过滤 `quantity`）。
+    /// 要「再排除 Zero」用 [`Type::runtime_value_params_cls`]（实现头绑定序列）
+    /// 或 [`Type::impl_head_runtime_params`]（实现头所绑那一层）。三个视图共用
+    /// 唯一解析源 [`resolve_param_quantities`]，不得各自再判一次。
+    pub fn runtime_value_params(&self) -> Vec<Param> {
+        Self::value_slots(&self.fn_params_flat())
+    }
+
+    /// 最内层层（值组）的 Fn 节点（停层判据见 [`Type::impl_head_layer`]）。
+    fn innermost_fn(ty: &Type) -> Option<&Type> {
+        let mut cur = ty;
+        loop {
+            let Type::Fn { return_type, .. } = cur else {
+                return None;
+            };
+            // 返回位可以是括号包起来的函数类型（`(T) -> ((self: &R(T)) -> Bool)`）：
+            // 它表示「返回的是一个函数值」，而**实现头绑的是这个内层 Fn 的形参**
+            // （`= (self) => ...`）——与 `curry` 不同，不沿内层继续下钻。
+            let mut next: &Type = return_type;
+            loop {
+                match next {
+                    Type::Paren(inner) => next = inner,
+                    Type::NamedParen { inner, .. } => next = inner,
+                    _ => break,
+                }
+            }
+            if matches!(next, Type::Fn { .. }) {
+                cur = next;
+            } else {
+                return Some(cur);
+            }
+        }
+    }
+
+    /// 实现头（**合成**形参表：块体 / 表达式体没有作者写的头）绑定**哪一组**声明形参。
+    ///
+    /// 返回该组的原始形参（顺序即声明序、**不做编译期位过滤**——过滤要按用途判定，
+    /// 只有消费方判得出：parser 的探针问答 / sema 的 const 用途分析）。要「这一层
+    /// 有哪些运行期值位」请直接用 [`Type::impl_head_runtime_params`]（层选择 + 过滤
+    /// 的单一入口）；本方法只回答「哪一组」，供 parser 的括号包装分支按组取形参。
+    ///
+    /// 分组的唯一判据在**括号返回位**：`mk: (a: Int) -> ((b: Int) -> R)` 的链条在
+    /// 括号处终止（`Paren` 声明「返回的是一个函数值」），体是**外层**函数本体
+    ///（它产出被返回的函数值），故取**首组**；其余（裸 Fn 链柯里 / 普通函数）
+    /// 体是最内层值函数。与 typecheck 的值级分层（`check_fn_stmt`：闭包包装或
+    /// 括号返回 ⇒ 外层，否则剥层到最内层）是同一条分层规则（WBS 6.8.3 ③ 的口径），
+    /// 故 parser 合成出的形参与 typecheck 的逐位对齐按构造同源。
+    pub fn impl_head_layer(&self) -> Vec<Param> {
+        match self.impl_head_fn() {
+            Some(Type::Fn { params, .. }) => params.clone(),
+            _ => Vec::new(),
+        }
+    }
+
+    /// 实现头所绑那一层的 **Fn 节点**（层选择单点；`impl_head_layer` 与编译期位
+    /// 判据的使用域都从这里取）。
+    fn impl_head_fn(&self) -> Option<&Type> {
+        match self {
+            Type::Fn {
+                params,
+                return_type,
+            } if return_type.is_paren_complete() => {
+                // 首组全是**编译期位**（`(T: Type) -> ((self: &R(T)) -> Bool)`）时本层
+                // 不占运行期位，paren 层就是值层——作者写的 lambda 即值级函数本体
+                // （与 parser 的包装判定、typecheck 的类型泛型剥离同一条规则）。
+                if Self::value_slots(params).is_empty() {
+                    Self::paren_inner_fn(return_type)
+                } else {
+                    Some(self)
+                }
+            }
+            _ => Self::innermost_fn(self),
+        }
+    }
+
+    /// 括号返回位内层的 Fn 节点（`-> ((a: Int) -> R)`）；内层不是 Fn
+    ///（`-> (Int)` 一类）时为空。
+    fn paren_inner_fn(return_type: &Type) -> Option<&Type> {
+        let mut inner: &Type = return_type;
+        loop {
+            match inner {
+                Type::Paren(t) => inner = t,
+                Type::NamedParen { inner: t, .. } => inner = t,
+                Type::Fn { .. } => return Some(inner),
+                _ => return None,
+            }
+        }
+    }
+
+    /// 实现头所绑那一层的**运行期值位**——这一份切法的**单一实现**
+    ///（WBS 6.8.2 / D54 F1 收尾，6.8.3 F1d）。
+    ///
+    /// 消费点（各自不得再写过滤循环）：
+    /// - parser：块体 / 表达式体**合成**实现头的形参表（没有作者写的头时才合成）；
+    /// - typecheck：实现头第 i 位的**声明来源**——体内绑定与 E1011 标注对照按位对齐
+    ///   （`check_fn_stmt` 的 `declared_value_params`）。
+    ///
+    /// 四类编译期位在此一次剔除：
+    /// 1. **类型位**：`T: Type`、类型级函数 `(F: (T: Type) -> Type)`；
+    /// 2. **约束位**：标注是约束名（`T: Add`）——是不是约束由调用方注入
+    ///    （parser 传探针、sema 传 trait 表）；谓词应用（`Terminates(b)`）的实参位
+    ///    是**值**不是类型，故「被当类型用」的扫描另需调用方注入谓词问答；
+    /// 3. **多约束并集且名字出现在组内类型位置**（`T: Clone + Add`）；
+    /// 4. **被当编译期常量/类型用**：名字出现在**本层之外**的类型位置
+    ///    （`f: (N: Int, s: String) -> Array(Int, N)` 的 `N`，由唯一分类器
+    ///    `classify_compile_time_value_params` 判定）。
+    ///
+    /// **依赖类型的值形参不剔除**：`f: (a: Int, b: Vec(a)) -> Int` 的 `a` 名字虽出现在
+    /// `Vec(a)` 里，但那是**本组**形参标注——它的值参与类型，仍是运行期值位。剔掉它
+    /// 会让实现头少一位、位次整体前移（块体形态实测因此误报 E1011）。
+    pub fn impl_head_runtime_params(
+        &self,
+        is_constraint: &dyn Fn(&str) -> bool,
+        cls: &ParamClassifier<'_>,
+    ) -> Vec<Param> {
+        let Some(Type::Fn { .. }) = self.impl_head_fn() else {
+            return Vec::new();
+        };
+        let layer = self.impl_head_layer();
+        // 量词事实的**唯一解析源**（SPEC §7.1 / RFC-011 §4.1）：本视图只做投影，
+        // 不再自带第二份分类判据（此前这里直接调分类器，与调用点视图各算一次）。
+        let resolved = self.param_quantities(cls);
+        // 组内类型位置出现的名字——多约束并集判据用（`T: Clone + Add`）。
+        let mut type_position_names: std::collections::HashSet<String> =
+            std::collections::HashSet::new();
+        for p in &layer {
+            if let Some(ty) = p.ty.as_ref() {
+                ty.collect_name_refs(&mut type_position_names);
+            }
+        }
+        layer
+            .into_iter()
+            .map(|mut p| {
+                // 层形参按 (名字, span) 取回量词事实：声明内名字唯一，span 区分柯里
+                // 多层重名的形态；取不到时保持 `None`（未解析），不默认任何一种 q。
+                p.quantity = resolved
+                    .iter()
+                    .find(|r| r.name == p.name && r.span == p.span)
+                    .and_then(|r| r.quantity);
+                p
+            })
+            .filter(|p| {
+                let Some(ty) = p.ty.as_ref() else {
+                    return true;
+                };
+                if Self::is_name_level_type_slot(ty) {
+                    return false;
+                }
+                if matches!(ty, Type::Name { name, .. } if is_constraint(name)) {
+                    return false;
+                }
+                if let Type::Tuple(items) = ty {
+                    let all_names =
+                        !items.is_empty() && items.iter().all(|t| matches!(t, Type::Name { .. }));
+                    if all_names && type_position_names.contains(p.name.as_str()) {
+                        return false;
+                    }
+                }
+                // 实现头视图 = 非类型形参**再排除 Zero**（调用点实参视图才保留 Zero）。
+                p.quantity != Some(Quantity::Zero)
+            })
+            .collect()
+    }
+
+    /// 标注本身是否**类型位**：`T: Type`、名字恰为 `Type`、类型级函数
+    ///（`(F: (T: Type) -> Type)` 的构造器变量）。判据单点——`value_slots` 与
+    /// `impl_head_runtime_params` 共用，不得各写一份 `matches!`。
+    fn is_name_level_type_slot(ty: &Type) -> bool {
+        matches!(ty, Type::MetaType { .. })
+            || matches!(ty, Type::Name { name, .. } if name == "Type")
+            || matches!(ty, Type::Fn { params, return_type } if crate::ast::is_type_level_fn(params, return_type))
+    }
+
+    /// **实现头绑定序列**（拍平口径）：形参 − 类型参数 − 编译期值参数（SPEC §7.1）。
+    ///
+    /// 与**调用点实参序列**（形参 − 类型参数；编译期值参数仍占实参位）是两个序列，
+    /// 不得并成一个。本函数只回答「实现头第 i 位能绑到哪个声明位」，供 E1112 / E1011；
+    /// 调用点实参分配不走这里。
+    pub fn runtime_value_params_cls(
+        &self,
+        cls: &ParamClassifier<'_>,
+    ) -> Vec<Param> {
+        // 量词事实的唯一解析源（[`Type::param_quantities`]）；本视图只是
+        // 「非类型形参**再排除 Zero**」的投影（实现头绑定序列，拍平口径）。
+        Self::value_slots(&self.param_quantities(cls))
+            .into_iter()
+            .filter(|p| p.quantity != Some(Quantity::Zero))
+            .collect()
+    }
+
+    /// 声明形参的**量词事实表**（拍平口径：保序、保长，含类型形参与 `Zero`）——
+    /// 两个视图与泛型名扫描的**共同上游**（RFC-039 D62 / issue #533）。
+    ///
+    /// 只有这里调用唯一解析源 [`resolve_param_quantities`]；视图不做第二次判定。
+    /// 返回长度与 [`Type::fn_params_flat`] 相同，故按位对齐的消费方（柯里分层）
+    /// 可以把它当作同一序列使用。
+    pub fn param_quantities(
+        &self,
+        cls: &ParamClassifier<'_>,
+    ) -> Vec<Param> {
+        resolve_param_quantities(&self.fn_params_flat(), &[self], cls)
+    }
+
+    /// **拍平**口径的编译期位过滤（`runtime_value_params` 用；不含按用途判定的
+    /// 编译期常量位——那些要层与使用域信息，见 `impl_head_runtime_params`）。
+    fn value_slots(params: &[Param]) -> Vec<Param> {
+        let mut type_position_names: std::collections::HashSet<String> =
+            std::collections::HashSet::new();
+        for p in params {
+            if let Some(ty) = p.ty.as_ref() {
+                ty.collect_name_refs(&mut type_position_names);
+            }
+        }
+        params
+            .iter()
+            .filter(|p| {
+                let Some(ty) = p.ty.as_ref() else {
+                    return true;
+                };
+                if Self::is_name_level_type_slot(ty) {
+                    return false;
+                }
+                if let Type::Tuple(items) = ty {
+                    let all_names =
+                        !items.is_empty() && items.iter().all(|t| matches!(t, Type::Name { .. }));
+                    if all_names && type_position_names.contains(p.name.as_str()) {
+                        return false;
+                    }
+                }
+                true
+            })
+            .cloned()
+            .collect()
+    }
+
+    /// 从 `Type::Fn` 链**拍平**出全部形参（curry 各组依次展开；`Paren` /
     /// `NamedParen` 视为透明继续内层）。
     ///
     /// 这是「语句声明里的原始签名形参」的**唯一实现**（RFC-039 6.5.2）：
-    /// `Assign`/`TypeDefinition` 不再另存形参表，消费点一律经本方法取；
-    /// 非函数类型返回空。`NamedParen` 的 binder 名不在此列——它由该节点
-    /// 自身承载、由类型检查器显式解释（返回位精化）。
+    /// `Assign`/`TypeDefinition` 不再另存形参表，消费点一律经本方法取；非函数
+    /// 类型返回空。`NamedParen` 的 binder 名不在此列——它由该节点自身承载、
+    /// 由类型检查器显式解释（返回位精化）。
     pub fn fn_params_flat(&self) -> Vec<Param> {
         fn walk(
             ty: &Type,
@@ -943,25 +1261,34 @@ pub fn is_meta_type(ty: &Type) -> bool {
 
 /// 参数名是否在给定类型中被当作**类型引用**（`(N: Int) -> (n: N)` 的 `N`）。
 ///
-/// **单一实现**（RFC-039 P6 6.4 / 03 §5.3）：本函数是原先两份同义实现
-/// （本文件的 `name_used_as_type_in` 与 `statements/declarations.rs` 的
-/// `name_used_as_type`）合并后的**唯一**版本，后者已改为调用本函数。
-/// 合并口径 = 本文件版本（较新、修复更全）叠加上另一版的**谓词短路**：
+/// **全仓唯一实现**（RFC-039 P6 6.4 / 03 §5.3，6.8.8 补齐扫描面）：parser 与 sema
+/// 侧的同义遍历已全部收拢到本函数——「形参名是否在类型位置被引用」只有这一处判定。
 ///
-/// - `Generic` 的**头部**同样是类型引用（`F(A)` 的 `F` 是构造器变量）——
-///   本文件版本有、另一版没有；
-/// - `Struct` / `NamedStruct` 的字段类型递归——本文件版本有、另一版落
-///   `_ => false`；
-/// - **谓词应用的实参位是值**（`Terminates(b)` 的 `b`），故头名被判定为谓词时
-///   整个应用短路 false——另一版有、本文件版本缺（RFC-027a）。
+/// 扫描面 = 调用方传入的任意 `Type` 子树（SPEC type-system §7.1：「类型位置」指
+/// 声明中的全部 `Type` 子树，不按位置分情况）。判据要点：
+///
+/// - `Generic` 的**头部**同样是类型引用（`F(A)` 的 `F` 是构造器变量）；
+/// - `Generic` 的**谓词应用**短路：头名判定为编译期谓词时实参位是**值**
+///   （`Terminates(b)` 的 `b`），整个应用不构成类型引用（RFC-027a）；
+/// - `Struct` / `NamedStruct` 的字段类型递归；
+/// - `ConstExpr` 递归表达式里的名字引用（`Assert(N > 0)` 的 `N`），遍历复用
+///   `collect_expr_ident_refs`——不新写第二份表达式遍历；
+/// - `MetaType` 递归 `args`：`Type` 关键字本身不是可判定的候选名，只有实参是；
+/// - `Paren` / `NamedParen` 递归 `inner`（RFC-004：括号声明完整类型，内层同义）。
+///   `NamedParen` 的 `param` **不计**：它是**返回形式参数名的声明**（binder，
+///   `(r: IsPositive(r + 1))` 的 `r`），不是类型引用——把它计入会让声明名冒充引用；
+/// - `Type::Struct` 的 `TypeBodyItem::Binding` **不扫**：绑定项是类型体内的
+///   **方法绑定**（外部函数引用 / 匿名实现体），其签名属于被绑方法而非构造器的
+///   参数化面；把它计入会把「方法签名里提到的名字」等同于「类型参数的用途」，
+///   让 E1094（构造器级落空候选）对只在方法签名出现的名字漏报。绑定内的名字
+///   引用由 `collect_name_refs`（可达性 / 未用导入）负责，与本判定不同问题。
 ///
 /// `is_predicate` 是调用方注入的环境问答：parser 侧传「探针 ∪ 本遍已声明谓词」，
 /// L3 侧传语义探针。两边都不是字符串常量表。
 ///
-/// **已知共同缺口（本批刻意不动）**：`MetaType` / `ConstExpr` / `Paren` /
-/// `NamedParen` 四个变体两版原先都落 `_ => false`。补它们会改变
-/// 「const 参数是否被当类型用」的判定（进而改 IR 的 generic_params 与语料行为），
-/// 属语义修正，须按 07 的分流判据另立一轮，不在 6.4 的 C3 面内。
+/// 本函数只回答「名字是否出现在类型位置」，**不做**命名空间解析——「该名字是否
+/// 解析到已声明类型」（SPEC §7.1 第 1、2 条）是调用方注入的上游问答，见
+/// `ParamClassifier::is_type_name` 与 `const_param::used_as_const_in_annotation`。
 pub fn name_used_as_type(
     name: &str,
     ty: &Type,
@@ -1013,7 +1340,23 @@ pub fn name_used_as_type(
         Type::NamedStruct { fields, .. } => fields
             .iter()
             .any(|f| name_used_as_type(name, &f.ty, is_predicate)),
-        _ => false,
+        // 编译期表达式（`Assert(N > 0)` 的 `N > 0`）：名字引用只认 `Expr::Var` 叶子，
+        // 表达式遍历复用 `collect_expr_ident_refs`（与 `collect_name_refs` 的
+        // `ConstExpr` 臂同一份）——不新写第二份表达式遍历。
+        Type::ConstExpr(expr) => {
+            let mut refs = HashSet::new();
+            collect_expr_ident_refs(expr, &mut refs);
+            refs.contains(name)
+        }
+        // `Type[T]` / `Type[K, V]`：`Type` 关键字本身不是可判定的候选名，只有实参是。
+        Type::MetaType { args, .. } => args
+            .iter()
+            .any(|arg| name_used_as_type(name, arg, is_predicate)),
+        // 括号透明（RFC-004：括号声明完整类型，内层同义）。
+        Type::Paren(inner) => name_used_as_type(name, inner, is_predicate),
+        // 具名括号：`param` 是返回形式参数名的**声明**（binder），不是引用；
+        // 只有内层类型是（见函数文档）。
+        Type::NamedParen { inner, .. } => name_used_as_type(name, inner, is_predicate),
     }
 }
 
@@ -1037,18 +1380,156 @@ pub fn is_type_level_fn(
         && params.iter().all(|p| p.ty.as_ref().is_some_and(is_type))
 }
 
+/// 分类注入：SPEC §7.1 的三个问答都由调用方提供（L2 不持有任何名字表）。
+pub struct ParamClassifier<'a> {
+    /// 该类型名可作编译期值参数候选（非 `Type` 的具体类型；权威表在 L3）。
+    pub is_const_param_type: &'a dyn Fn(&str) -> bool,
+    /// 该名字在**类型命名空间**里可解析（已声明类型 + 类型参数）。
+    pub is_type_name: &'a dyn Fn(&str) -> bool,
+    /// 该名字是编译期谓词（谓词应用的实参位是**值**不是类型）。
+    pub is_predicate: &'a dyn Fn(&str) -> bool,
+}
+
+/// 编译期值参数分类——**唯一**分类器（SPEC type-system §7.1 / RFC-011 §4.1）。
+///
+/// 此前有三套独立判据（`extract_generic_param_names` 只扫其它形参、漏返回位；
+/// `Type::const_used_layer_names` 只看本层之外；`ir_gen::split_curry` 自带游标判据），
+/// 三者在「名字出现在类型位置」的形态上给出不同位次。本函数是它们的共同上游：
+/// 输出**编译期值参数的名单**，其余形参是运行期值参数（推论见 SPEC §7.1 末段：
+/// 编译期值参数不占**实现头绑定序列**的位；调用点实参序列另算）。
+///
+/// 判定按规范的顺序：形态粗筛（非 `Type` 的具体类型）→ 用途精筛（名字在**任一**
+/// `Type` 子树被引用）→ 命名空间解析（解析到类型即与形参无关）→ 单调不动点。
+/// 谓词应用的实参位是**值**不是类型（`Terminates(b)` 的 `b`），故扫描按 `is_predicate`
+/// 排除——否则值参数会被误判成编译期值参数。
+pub fn classify_compile_time_value_params(
+    params: &[Param],
+    type_positions: &[&Type],
+    cls: &ParamClassifier<'_>,
+) -> std::collections::HashSet<String> {
+    let is_const_param_type = cls.is_const_param_type;
+    let is_type_name = cls.is_type_name;
+    let is_predicate = cls.is_predicate;
+    // ① 形态粗筛：非 Type 的具体类型标注 + 有名形参
+    let candidates: Vec<String> = params
+        .iter()
+        .filter(|p| p.is_named())
+        .filter(|p| match p.ty.as_ref() {
+            Some(Type::Name { name, .. }) => name != "Type" && is_const_param_type(name),
+            _ => false,
+        })
+        .map(|p| p.name.clone())
+        .collect();
+    if candidates.is_empty() {
+        return std::collections::HashSet::new();
+    }
+
+    // ②③④ 用途精筛 + 命名空间解析 + 单调不动点
+    //
+    // **注意：这个循环在候选集内与单趟扫描等价，不是真迭代。**
+    // `is_type_name` 是注入的固定闭包，`confirmed` 集只参与循环头的自身检查、从不进入
+    // `is_type_name` 查询 ⇒ 第 2 轮对未确认候选的判定谓词逐字同第 1 轮，必无新增。
+    // 实测：把循环强制改成单趟，全量 lib 判据全绿（见 09a §P6 6.8.4 §六）。
+    //
+    // SPEC §7.1 第 3 条要求「已确认者进入类型命名空间」，**此处尚未实现**：候选标注必须
+    // 是具体类型（`Int`/`Bool`/…），任一候选的标注不可能引用另一候选，故该并集在当前
+    // 候选集下不会改变任何判定。若将来放宽候选形态（例如允许候选标注引用另一候选），
+    // 这里必须改成真迭代——否则会静默退化成单趟。
+    let mut confirmed: std::collections::HashSet<String> = std::collections::HashSet::new();
+    loop {
+        let mut grew = false;
+        for name in &candidates {
+            if confirmed.contains(name) {
+                continue;
+            }
+            // 解析到类型命名空间 ⇒ 该名字在类型位置上是类型引用，与形参无关。
+            // 命名空间 = 注入的声明面（`is_type_name`），不含 `confirmed`——见上面的说明。
+            if is_type_name(name) {
+                continue;
+            }
+            if type_positions
+                .iter()
+                .any(|t| name_used_as_type(name, t, is_predicate))
+            {
+                confirmed.insert(name.clone());
+                grew = true;
+            }
+        }
+        if !grew {
+            break;
+        }
+    }
+    confirmed
+}
+
+/// **量词事实的唯一解析源**（RFC-039 D62 / issue #533 阶段 0）。
+///
+/// 判定不在这里重新发生：本函数调用唯一分类器
+/// [`classify_compile_time_value_params`]（SPEC type-system §7.1 / RFC-011 §4.1），
+/// 把「命中的编译期值参数」写成 `Some(Quantity::Zero)`；其余形参保持 `None`
+/// （未解析）——运行期值参数的 `One` / `Omega` 取值源是 RFC-009 的 Move/Dup 分类
+/// （L3 的类型事实），不在本层的判定面内，故**不得**在这里猜一个值。
+///
+/// 三个消费视图都只做投影，不得自带第二份分类判据：
+/// - 调用点实参视图（[`Type::runtime_value_params`] 的类型面 + `Zero` 仍占位）；
+/// - 实现头绑定序列（[`Type::runtime_value_params_cls`]）：非类型形参再排除 `Zero`；
+/// - 实现头所绑那一层（[`Type::impl_head_runtime_params`]）：同上，另加层内判据；
+/// - 泛型名扫描（[`extract_generic_param_names`]）：形态位 ∪ `Zero`。
+pub fn resolve_param_quantities(
+    params: &[Param],
+    type_positions: &[&Type],
+    cls: &ParamClassifier<'_>,
+) -> Vec<Param> {
+    let zero = classify_compile_time_value_params(params, type_positions, cls);
+    params
+        .iter()
+        .map(|p| {
+            let mut resolved = p.clone();
+            if zero.contains(resolved.name.as_str()) {
+                resolved.quantity = Some(Quantity::Zero);
+            }
+            resolved
+        })
+        .collect()
+}
+
 /// 从签名形参里抽出**结构可判定**的泛型参数（名字 + 约束）。
 ///
 /// 三类来源：`Type`/`MetaType` 标注、探针判为 const 参数类型的注解、
 /// 约束名（探针判定的运算符接口）、类型级函数标注（构造器变量）。其余
 /// `Name` 标注（用户类型的值参数）保守跳过——trait 表不在 L2，带 trait 约束的
 /// 分类由 L3 的 `classify_generic_params` 另做。
+///
+/// `type_positions`：该声明中**除形参标注之外**的类型位置根（调用方传声明注解的
+/// `Type::Fn` 链；没有可传 `&[]`）。用途精筛的扫描面 = 形参标注 ∪ 全部
+/// `type_positions`（SPEC type-system §7.1：「类型位置」指声明中的全部 `Type`
+/// 子树，判定时遍历全部子树、不按位置分情况）。只扫形参标注时，名字**只在返回位**
+/// 被引用的编译期值参数判不出来：`f: (N: Int) -> Array(Int, N)` 的 `N` 因此既不在
+/// IR 的 `generic_params` 里、又在返回类型里留下无绑定的自由 `TypeRef("N")`
+/// （#528 §4-4）。
 pub fn extract_generic_param_names(
     params: &[Param],
+    type_positions: &[&Type],
     probe: &dyn TypeEnvProbe,
 ) -> Vec<GenericParamName> {
-    params
-        .iter()
+    // 量词事实由**唯一解析源**给出（D62 / #533）：本函数只做投影，不再自带
+    // 「名字是否被当类型用」的第二次判定。
+    //
+    // 命名空间问答：本函数按历史契约**不做**命名空间解析（调用方多为 parser，
+    // L2 拿不到「已声明类型」表——注入 `false` 即「不提供该知识」，不是
+    // 「一定不是类型」）。唯一分类器的注入点因此与三个视图同源同义，只有这一
+    // 条问答按各调用方的可得知识取保守值。
+    let cls = ParamClassifier {
+        is_const_param_type: &|n| probe.is_const_param_type(n),
+        is_type_name: &|_| false,
+        is_predicate: &|n| probe.is_predicate(n) || probe.kind_of(n) == NameKind::Predicate,
+    };
+    // 扫描面 = **形参标注 ∪ `type_positions`**（本函数的历史契约，见文档：本组形参
+    // 自己的标注同样是类型位置）。调用方传整棵声明时两者重叠，去重由集合合并完成。
+    let mut scan_roots: Vec<&Type> = params.iter().filter_map(|p| p.ty.as_ref()).collect();
+    scan_roots.extend(type_positions.iter().copied());
+    resolve_param_quantities(params, &scan_roots, &cls)
+        .into_iter()
         .filter_map(|p| {
             // 无名形参（形态 2：name 空串）不得产出泛型名——空串不是可检索的
             // 名字，任何按名查找都永不命中（守卫单点，见 Param 的三形态说明）。
@@ -1067,31 +1548,20 @@ pub fn extract_generic_param_names(
                     constraints: Vec::new(),
                 }),
                 // `(N: Int)` 是 const 泛型，但 `(a: Int)` 是普通值参数——
-                // 两者类型标注都是 `Int`，仅凭类型无法区分。
-                // 判据：参数名是否在**同一签名**的其它位置被当作类型引用
-                //（如 `f: (N: Int) -> (n: N) -> Int` 的 `N`）。
-                // 不做此判别会把 `plain: (a: Int) -> Int` 误标为泛型函数，
+                // 两者类型标注都是 `Int`，仅凭类型无法区分。判据是量词事实
+                // （唯一分类器：名字在**同一签名**的类型位置被引用）：
+                // `f: (N: Int) -> (n: N) -> Int` 的 `N` 是 `Zero`。
+                // 不判会把 `plain: (a: Int) -> Int` 误标为泛型函数，
                 // 单态化据此将其删除且永不重建（实测 E6006，#351）。
                 //
                 // 「哪些类型名可作 const 参数」由**注入探针**回答（WBS 6.6.9 把该表
-                // 移到 L3 的 `typecheck::probe::CONST_PARAM_TYPES`）：parser 不再
+                // 移到 L3 的 `sema::probe::CONST_PARAM_TYPES`）：parser 不再
                 // 持有自己的表、也不再用内置名表二次复核——探针说不就是不。
                 Type::Name { name, .. } if probe.is_const_param_type(name) => {
-                    let used_as_type = params.iter().any(|q| {
-                        q.ty.as_ref().is_some_and(|qt| {
-                            name_used_as_type(&p.name, qt, &|n| {
-                                probe.kind_of(n) == NameKind::Predicate
-                            })
-                        })
-                    });
-                    if used_as_type {
-                        Some(GenericParamName {
-                            name: p.name.clone(),
-                            constraints: Vec::new(),
-                        })
-                    } else {
-                        None
-                    }
+                    (p.quantity == Some(Quantity::Zero)).then(|| GenericParamName {
+                        name: p.name.clone(),
+                        constraints: Vec::new(),
+                    })
                 }
                 // RFC-011 §2.1：约束形参（`T: Add`——标注为约束名）。
                 // 是不是约束名由注入探针判定（权威表在 L3 的运算符接口表）；
@@ -1374,3 +1844,6 @@ impl Expr {
         }
     }
 }
+
+#[cfg(test)]
+mod tests;

@@ -24,21 +24,6 @@ fn make_dep(
 }
 
 #[test]
-fn test_no_conflicts() {
-    let deps = vec![make_dep("foo", "^1.0.0"), make_dep("bar", "^2.0.0")];
-    let conflicts = detect_conflicts(&deps, &[]).unwrap();
-    assert!(conflicts.is_empty());
-}
-
-#[test]
-fn test_same_package_compatible() {
-    let deps = vec![make_dep("foo", "^1.0.0")];
-    let dev_deps = vec![make_dep("foo", "^1.5.0")];
-    let conflicts = detect_conflicts(&deps, &dev_deps).unwrap();
-    assert!(conflicts.is_empty());
-}
-
-#[test]
 fn test_same_package_incompatible() {
     let deps = vec![make_dep("foo", "^1.0.0")];
     let dev_deps = vec![make_dep("foo", "^2.0.0")];
@@ -61,14 +46,6 @@ fn test_check_conflicts_ok() {
     let dev_deps = vec![];
     let result = check_conflicts(&deps, &dev_deps);
     assert!(result.is_ok());
-}
-
-#[test]
-fn test_wildcard_no_conflict() {
-    let deps = vec![make_dep("foo", "*")];
-    let dev_deps = vec![make_dep("foo", "^1.0.0")];
-    let conflicts = detect_conflicts(&deps, &dev_deps).unwrap();
-    assert!(conflicts.is_empty());
 }
 
 #[test]

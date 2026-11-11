@@ -38,8 +38,8 @@ VALID_SCOPES = {
     # 顶层模块
     "frontend", "middle", "backends", "std", "formatter",
     "lsp", "package", "util", "proof", "driver",
-    # 前端子模块
-    "parser", "lexer", "typecheck", "types",
+    # 前端子模块（`typecheck` 为 6.7.1d 前的历史名，保留以兼容旧提交信息；现行名是 `sema`）
+    "parser", "lexer", "typecheck", "types", "sema",
     # 中间层子模块
     "codegen", "monomorphize", "lifetime",
     # 后端子模块

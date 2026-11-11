@@ -41,8 +41,8 @@ use super::check_rootless_mono::{check_codes, make_rootless_project, run_check};
 use super::driver::{make_script_project, run_merged_slot_values, run_multi};
 use super::ref_pool::assert_warnings;
 use crate::driver::helpers::resolved_method_marks;
-use crate::frontend::core::typecheck::types::OverloadResolutions;
-use crate::frontend::core::typecheck::TypeCheckResult;
+use crate::frontend::core::sema::types::OverloadResolutions;
+use crate::frontend::core::sema::TypeCheckResult;
 use crate::util::plan_id::PlanId;
 
 /// 带 `[run].main` 声明面的多文件夹具——`yaoxiang check main.yx` 的直驱等价形态：

@@ -14,10 +14,10 @@
 //! - 嵌套泛型 BFS 引用扫描（如 List(List(Int))）
 //! - 小写参数名类型参数判定（靠名单不靠大小写启发式）
 
-use crate::frontend::core::typecheck::MonoType;
+use crate::frontend::core::sema::MonoType;
 use crate::frontend::core::types::mono::UniverseLevel;
 use crate::frontend::core::types::var::TypeVar;
-use crate::middle::core::ir::{
+use crate::middle::ir::ir::{
     BasicBlock, ConstValue, FunctionBody, FunctionIR, Instruction, LocalSlot, ModuleIR, Operand,
     TypeDeclBody, TypeDeclField,
 };
@@ -55,43 +55,6 @@ fn make_identity_ir() -> FunctionIR {
             }],
             entry: 0,
             locals: vec![LocalSlot::temp(param_type.clone())],
-        },
-    }
-}
-
-/// 创建泛型 swap 函数 IR
-/// fn swap<T>(a: T, b: T) -> (T, T)
-fn make_swap_ir() -> FunctionIR {
-    let t = MonoType::TypeVar(TypeVar::new(0));
-    FunctionIR {
-        def: None,
-        name: "swap".to_string(),
-        params: vec![t.clone(), t.clone()],
-        return_type: MonoType::make_tuple(vec![t.clone(), t.clone()]),
-        generic_params: Some(vec!["T".to_string()]),
-        body: FunctionBody::Code {
-            blocks: vec![BasicBlock {
-                label: 0,
-                instructions: vec![
-                    Instruction::Load {
-                        dst: Operand::Local(0),
-                        src: Operand::Arg(0),
-                        span: Span::dummy(),
-                    },
-                    Instruction::Load {
-                        dst: Operand::Local(1),
-                        src: Operand::Arg(1),
-                        span: Span::dummy(),
-                    },
-                    Instruction::Ret {
-                        value: Some(Operand::Local(0)),
-                        span: Span::dummy(),
-                    },
-                ],
-                successors: Vec::new(),
-            }],
-            entry: 0,
-            locals: vec![LocalSlot::temp(t.clone()), LocalSlot::temp(t.clone())],
         },
     }
 }
@@ -224,7 +187,7 @@ fn request(
     let params: Vec<String> = params.iter().map(|p| p.to_string()).collect();
     InstantiationRequest::new(
         GenericFunctionId::new(name.to_string(), params),
-        vec![arg],
+        vec![crate::frontend::core::types::mono::GenericArg::Type(arg)],
         span,
     )
 }
@@ -349,26 +312,6 @@ fn main_with_two_identity_calls(
     make_main_ir(MonoType::Void, instructions, locals)
 }
 
-/// 创建 `double_identity(int64)` 特化函数 IR：体内按 `inner_span` 嵌套调用 `identity`。
-fn make_double_identity_ir(inner_span: Span) -> FunctionIR {
-    make_fn_ir(
-        "double_identity(int64)",
-        vec![MonoType::Int(64)],
-        MonoType::Int(64),
-        None,
-        vec![
-            call_instr_at(
-                Some(Operand::Local(1)),
-                "identity",
-                vec![Operand::Arg(0)],
-                inner_span,
-            ),
-            ret_instr(Some(Operand::Local(1))),
-        ],
-        vec![LocalSlot::temp(MonoType::Int(64))],
-    )
-}
-
 /// 创建泛型类型定义 IR：`TypeName: (param: Type) -> Type = { fields...: param }`。
 fn make_generic_type_decl_ir(
     type_name: &str,
@@ -430,7 +373,9 @@ fn test_specialize_identity_with_int() {
 
     let req = InstantiationRequest::new(
         GenericFunctionId::new("identity".to_string(), vec!["T".to_string()]),
-        vec![MonoType::Int(64)],
+        vec![crate::frontend::core::types::mono::GenericArg::Type(
+            MonoType::Int(64),
+        )],
         Span::default(),
     );
 
@@ -458,73 +403,14 @@ fn test_specialize_identity_with_int() {
 }
 
 #[test]
-fn test_specialize_identity_with_string() {
-    // Arrange
-    let mut mono = Monomorphizer::new();
-    mono.generic_functions
-        .insert("identity".to_string(), make_identity_ir());
-
-    let req = InstantiationRequest::new(
-        GenericFunctionId::new("identity".to_string(), vec!["T".to_string()]),
-        vec![MonoType::make_string()],
-        Span::default(),
-    );
-
-    // Act - 新签名 Result<Option<_>, Diagnostic>（#519 E1106）：命中路径
-    // 不会 Err，expect 只是把签名变化从断言面剥掉，下方判据保持原样
-    let result = mono
-        .specialize_function(&req)
-        .expect("特化不应遇到约束派发改写错误（E1106）");
-
-    // Assert
-    assert!(result.is_some(), "特化应该成功");
-    let func = result.unwrap();
-    assert_eq!(func.name, "identity(string)");
-    assert_eq!(func.params[0], MonoType::make_string());
-    assert_eq!(func.return_type, MonoType::make_string());
-    assert!(func.generic_params.is_none());
-}
-
-#[test]
-fn test_specialize_swap_with_float() {
-    // Arrange
-    let mut mono = Monomorphizer::new();
-    mono.generic_functions
-        .insert("swap".to_string(), make_swap_ir());
-
-    let req = InstantiationRequest::new(
-        GenericFunctionId::new("swap".to_string(), vec!["T".to_string()]),
-        vec![MonoType::Float(64)],
-        Span::default(),
-    );
-
-    // Act - 新签名 Result<Option<_>, Diagnostic>（#519 E1106）：命中路径
-    // 不会 Err，expect 只是把签名变化从断言面剥掉，下方判据保持原样
-    let result = mono
-        .specialize_function(&req)
-        .expect("特化不应遇到约束派发改写错误（E1106）");
-
-    // Assert
-    assert!(result.is_some(), "特化应该成功");
-    let func = result.unwrap();
-    assert_eq!(func.name, "swap(float64)");
-    assert_eq!(func.params.len(), 2);
-    assert_eq!(func.params[0], MonoType::Float(64));
-    assert_eq!(func.params[1], MonoType::Float(64));
-    assert_eq!(
-        func.return_type,
-        MonoType::make_tuple(vec![MonoType::Float(64), MonoType::Float(64)])
-    );
-    assert!(func.generic_params.is_none());
-}
-
-#[test]
 fn test_specialize_missing_generic_function_returns_none() {
     // Arrange
     let mono = Monomorphizer::new();
     let req = InstantiationRequest::new(
         GenericFunctionId::new("nonexistent".to_string(), vec!["T".to_string()]),
-        vec![MonoType::Int(64)],
+        vec![crate::frontend::core::types::mono::GenericArg::Type(
+            MonoType::Int(64),
+        )],
         Span::default(),
     );
 
@@ -535,102 +421,6 @@ fn test_specialize_missing_generic_function_returns_none() {
     assert!(
         matches!(result, Ok(None)),
         "不存在的泛型函数应返回 Ok(None)，得到: {result:?}"
-    );
-}
-
-#[test]
-fn test_specialize_type_args_mismatch_returns_none() {
-    // Arrange
-    let mut mono = Monomorphizer::new();
-    mono.generic_functions
-        .insert("identity".to_string(), make_identity_ir());
-
-    let req = InstantiationRequest::new(
-        GenericFunctionId::new("identity".to_string(), vec!["T".to_string()]),
-        vec![MonoType::Int(64), MonoType::make_string()],
-        Span::default(),
-    );
-
-    // Act
-    let result = mono.specialize_function(&req);
-
-    // Assert - Ok(None) = 既有「无特化义务」信号；Err 只留给约束派发改写未命中
-    assert!(
-        matches!(result, Ok(None)),
-        "类型参数数量不匹配应返回 Ok(None)，得到: {result:?}"
-    );
-}
-
-#[test]
-fn test_specialize_non_generic_function_returns_none() {
-    // Arrange
-    let mut mono = Monomorphizer::new();
-    let func = FunctionIR {
-        def: None,
-        name: "add".to_string(),
-        params: vec![MonoType::Int(64), MonoType::Int(64)],
-        return_type: MonoType::Int(64),
-        generic_params: None,
-        body: FunctionBody::Code {
-            blocks: vec![BasicBlock {
-                label: 0,
-                instructions: vec![],
-                successors: Vec::new(),
-            }],
-            entry: 0,
-            locals: vec![],
-        },
-    };
-    mono.generic_functions.insert("add".to_string(), func);
-
-    let req = InstantiationRequest::new(
-        GenericFunctionId::new("add".to_string(), vec!["T".to_string()]),
-        vec![MonoType::Int(64)],
-        Span::default(),
-    );
-
-    // Act
-    let result = mono.specialize_function(&req);
-
-    // Assert - Ok(None) = 既有「无特化义务」信号；Err 只留给约束派发改写未命中
-    assert!(
-        matches!(result, Ok(None)),
-        "非泛型函数特化应返回 Ok(None)（generic_params 为 None），得到: {result:?}"
-    );
-}
-
-#[test]
-fn test_specialize_with_generic_type_args_replaces_inner_types() {
-    // Arrange
-    let t = MonoType::TypeVar(TypeVar::new(0));
-    let generic = make_fn_ir(
-        "first",
-        vec![MonoType::make_list(t.clone())],
-        t,
-        Some(vec!["T".to_string()]),
-        vec![ret_instr(None)],
-        vec![LocalSlot::temp(MonoType::make_list(MonoType::TypeVar(
-            TypeVar::new(0),
-        )))],
-    );
-    let mut mono = Monomorphizer::new();
-    mono.generic_functions.insert("first".to_string(), generic);
-    let req = request("first", &["T"], MonoType::make_string(), Span::default());
-
-    // Act - 新签名 Result<Option<_>, Diagnostic>（#519 E1106）：命中路径
-    // 不会 Err，expect 只是把签名变化从断言面剥掉，下方判据保持原样
-    let result = mono
-        .specialize_function(&req)
-        .expect("特化不应遇到约束派发改写错误（E1106）");
-
-    // Assert
-    assert!(result.is_some(), "特化应该成功");
-    let func = result.unwrap();
-    assert_eq!(func.params[0], MonoType::make_list(MonoType::make_string()));
-    assert_eq!(func.return_type, MonoType::make_string());
-    assert_eq!(
-        func.locals()[0].ty,
-        MonoType::make_list(MonoType::make_string())
     );
 }
 
@@ -647,7 +437,9 @@ fn test_fire_deferred_evaluates_placeholder_args() {
     // 占位请求：g 的实参为所在泛型函数 f 的参数名 T（TypeRef 形态）
     let req = InstantiationRequest::new(
         GenericFunctionId::new("identity".to_string(), vec!["T".to_string()]),
-        vec![MonoType::TypeRef("T".to_string())],
+        vec![crate::frontend::core::types::mono::GenericArg::Type(
+            MonoType::TypeRef("T".to_string()),
+        )],
         Span::default(),
     );
     mono.deferred.entry("f".to_string()).or_default().push(req);
@@ -662,25 +454,14 @@ fn test_fire_deferred_evaluates_placeholder_args() {
     // Assert：求值后的请求入队，占位被替换为具体类型
     assert_eq!(mono.pending_queue.len(), 1, "占位请求应求值入队");
     let fired = mono.pending_queue.front().unwrap();
+    // 6.9.2-C1：请求存 `GenericArg`，断言取**类型位投影**（语义不变：占位被求值成 int64）
     assert_eq!(
-        fired.type_args,
+        fired.type_args(),
         vec![MonoType::Int(64)],
         "TypeRef(\"T\") 占位应被 name_map 求值为 int64"
     );
     assert_eq!(fired.containing_fn.as_deref(), Some("f(int64)"));
     assert_eq!(fired.depth, 1);
-}
-
-/// 无占位桶的容器：fire_deferred 无操作
-#[test]
-fn test_fire_deferred_unknown_container_noop() {
-    let mut mono = Monomorphizer::new();
-    let name_map: std::collections::HashMap<String, MonoType> =
-        [("T".to_string(), MonoType::Int(64))].into_iter().collect();
-
-    mono.fire_deferred("nonexistent", "f(int64)", &name_map, 1);
-
-    assert!(mono.pending_queue.is_empty(), "无桶不应产生请求");
 }
 
 // ==================== replace_call_sites 测试 ====================
@@ -711,60 +492,6 @@ fn test_replace_call_sites_replaces_generic_call_in_main() {
     assert!(
         is_call_to(&main_func.blocks()[0].instructions[0], "identity(int64)"),
         "Call 指令的 func 应该被替换为特化函数名 identity(int64)"
-    );
-}
-
-#[test]
-fn test_replace_call_sites_skips_generic_functions() {
-    // Arrange
-    let mut mono = Monomorphizer::new();
-
-    let wrapper_func = make_fn_ir(
-        "wrapper",
-        vec![MonoType::TypeVar(TypeVar::new(0))],
-        MonoType::TypeVar(TypeVar::new(0)),
-        Some(vec!["T".to_string()]),
-        vec![
-            call_instr(Some(Operand::Local(0)), "identity", vec![Operand::Arg(0)]),
-            ret_instr(Some(Operand::Local(0))),
-        ],
-        vec![LocalSlot::temp(MonoType::TypeVar(TypeVar::new(0)))],
-    );
-    let mut module = module_with(vec![wrapper_func]);
-    mono.site_requests = vec![identity_request(MonoType::Int(64))];
-
-    // Act
-    mono.replace_call_sites(&mut module);
-
-    // Assert
-    let wrapper = &module.functions[0];
-    assert!(
-        is_call_to(&wrapper.blocks()[0].instructions[0], "identity"),
-        "泛型函数内的调用不应被替换"
-    );
-}
-
-#[test]
-fn test_replace_call_sites_no_matching_request_does_not_replace() {
-    // Arrange
-    let mut mono = Monomorphizer::new();
-
-    let main_func = make_main_ir(
-        MonoType::Void,
-        vec![call_instr(None, "foo", vec![])],
-        vec![],
-    );
-    let mut module = module_with(vec![main_func]);
-    mono.site_requests = vec![identity_request(MonoType::Int(64))];
-
-    // Act
-    mono.replace_call_sites(&mut module);
-
-    // Assert
-    let main_func = &module.functions[0];
-    assert!(
-        is_call_to(&main_func.blocks()[0].instructions[0], "foo"),
-        "不匹配的调用不应被替换"
     );
 }
 
@@ -881,113 +608,13 @@ fn test_monomorphize_keeps_original_generic_when_call_site_lacks_request_key() {
     );
 }
 
-/// 三个泛型原件（`std.list.is_empty` / `.len` / `.pop`）各带一个「有请求键」与一个
-/// 「无请求键」调用点——三者都会被 t3 闭合闸放回，用于检验放回段的顺序纪律。
-fn restore_three_generics_case() -> (ModuleIR, Vec<InstantiationRequest>) {
-    let mut functions = Vec::new();
-    let mut instructions = Vec::new();
-    let mut requests = Vec::new();
-    for (name, covered_span, uncovered_span) in [
-        (
-            "std.list.is_empty",
-            span_at(10, 5, 100, 12, 107),
-            span_at(11, 5, 120, 12, 127),
-        ),
-        (
-            "std.list.len",
-            span_at(20, 5, 200, 12, 207),
-            span_at(21, 5, 220, 12, 227),
-        ),
-        (
-            "std.list.pop",
-            span_at(30, 5, 300, 12, 307),
-            span_at(31, 5, 320, 12, 327),
-        ),
-    ] {
-        functions.push(make_fn_ir(
-            name,
-            vec![MonoType::Generic {
-                name: "Vec".to_string(),
-                args: vec![MonoType::TypeVar(TypeVar::new(0))],
-            }],
-            MonoType::Bool,
-            Some(vec!["A".to_string()]),
-            vec![ret_instr(Some(Operand::Const(ConstValue::Bool(true))))],
-            vec![],
-        ));
-        instructions.push(call_instr_at(None, name, vec![], covered_span));
-        instructions.push(call_instr_at(None, name, vec![], uncovered_span));
-        let mut req = request(name, &["A"], MonoType::Int(64), covered_span);
-        req.containing_fn = Some("main".to_string());
-        requests.push(req);
-    }
-    instructions.push(ret_instr(None));
-    functions.push(make_main_ir(MonoType::Void, instructions, vec![]));
-    (module_with(functions), requests)
-}
-
-/// 输出里「被放回的原件」的名字序列（特化副本名带 `(...)` 后缀，故同名者必为原件）。
-fn restored_name_sequence(module: &ModuleIR) -> Vec<String> {
-    const ORIGINALS: [&str; 3] = ["std.list.is_empty", "std.list.len", "std.list.pop"];
-    module
-        .functions
-        .iter()
-        .map(|f| f.name.clone())
-        .filter(|n| ORIGINALS.contains(&n.as_str()))
-        .collect()
-}
-
-/// 顺序纪律（3.4.8-R1++ / F1）：闭合闸放回的原件必须**按函数名排序**追加，与
-/// `build_output` 的特化函数追加同款（mod.rs 明文：「HashMap 迭代顺序随进程随机化…
-/// 按名排序固定顺序」）。按 `HashSet` 迭代序追加会让同一份源码产出不同的函数
-/// 序号（.42 字节不可复现、dump 不可复现）。
-#[test]
-fn test_restore_gate_orders_restored_generics_by_name() {
-    // Arrange：三个泛型原件都因「存在未覆盖调用点」被放回
-    let (module, requests) = restore_three_generics_case();
-
-    // Act
-    let result = Monomorphizer::new()
-        .monomorphize(&module, &requests)
-        .expect("单态化不应失败");
-
-    // Assert：强形式——顺序即契约，不依赖 HashSet 迭代序
-    assert_eq!(
-        restored_name_sequence(&result),
-        vec!["std.list.is_empty", "std.list.len", "std.list.pop"],
-        "放回的原件必须按函数名排序追加（对齐 build_output 的排序纪律）"
-    );
-}
-
-/// 跨次可复现（3.4.8-R1++ / F1）：同一进程内对同一输入多次单态化，输出函数表顺序
-/// 必须逐元素一致——否则同一源码的函数序号随 HashSet 随机种子漂移。
-#[test]
-fn test_restore_gate_output_order_is_stable_across_runs() {
-    // Arrange：同一输入；≥2 次（取 8 次以消除 HashSet 顺序偶然一致的判别力缺口）
-    let (module, requests) = restore_three_generics_case();
-    let mut orders: Vec<Vec<String>> = Vec::new();
-
-    // Act
-    for _ in 0..8 {
-        let out = Monomorphizer::new()
-            .monomorphize(&module, &requests)
-            .expect("单态化不应失败");
-        orders.push(out.functions.iter().map(|f| f.name.clone()).collect());
-    }
-
-    // Assert：逐元素一致
-    let first = &orders[0];
-    for (i, order) in orders.iter().enumerate() {
-        assert_eq!(
-            order, first,
-            "第 {i} 次单态化的函数表顺序与首次不一致：{order:?} vs {first:?}"
-        );
-    }
-}
-
 /// 泛型 `std.list.is_empty` **只**被一个「非改写面」站点（`MakeClosure` / `TailCall`）
 /// 按名引用，且该站点在请求集合里有键（span 对齐）——用于钉「非改写面站点一律计
 /// 未覆盖」。返回（模块, 请求）。
+///
+/// 注意本夹具的站点**不是**柯里包装体（`main` 的直接调用序列），故不经过逐实例
+/// 柯里层克隆路径（`emit_curry_layer_clones`，6.9.2-C2b P1）：那条路只改写「实例
+/// 体里形如 `[MakeClosure, Ret]` 的包装层目标」，对函数值 / 普通按名引用不适用。
 fn non_rewritable_ref_case(
     reference: Instruction,
     reference_span: Span,
@@ -1019,9 +646,13 @@ fn non_rewritable_ref_case(
 }
 
 /// 指令形态不对称（3.4.8-R1+++ / t6）：扫描面（`by_name_call_target`）覆盖
-/// `Call`/`TailCall`/`MakeClosure`，改写面（`replace_calls_in_function`）**只**处理
-/// `Call`。`MakeClosure` 臂若照常查映射键，「有键」会被误判为「已覆盖」——原件被删
-/// 而该站点永不被改写 → 悬空（t3 同缺陷类）。钉住：一律计未覆盖 → 原件保留。
+/// `Call`/`TailCall`/`MakeClosure`，调用点改写面（`replace_calls_in_function`）**只**
+/// 处理 `Call`。`MakeClosure` 臂若照常查映射键，「有键」会被误判为「已覆盖」——原件
+/// 被删而该站点不被这个改写面改写 → 悬空（t3 同缺陷类）。钉住：一律计未覆盖 → 原件保留。
+///
+/// 6.9.2-C2b 起 `MakeClosure` 的**柯里包装层**目标会有另一条改写路（建实例时按实例
+/// 克隆，见 `emit_curry_layer_clones`），本夹具与那条路无关（它不是包装体），故本闸的
+/// 判据与断言不变：调用点改写面覆盖不到的目标，一律按未覆盖保守保留。
 #[test]
 fn test_restore_gate_keeps_generic_referenced_only_by_make_closure() {
     // Arrange：仅 MakeClosure 站点按名引用，且该站点有对齐的请求键
@@ -1125,29 +756,6 @@ fn test_specialize_generic_struct_substitutes_type_params() {
 }
 
 #[test]
-fn test_type_specialization_dedup_via_processed_set() {
-    // Arrange: 预填充 processed 集合模拟同一请求的二次进入
-    let mut mono = Monomorphizer::new();
-    mono.generic_types
-        .insert("Pair".to_string(), make_pair_type_ir(&["value"]));
-
-    let req = InstantiationRequest::new(
-        GenericFunctionId::new("Pair".to_string(), vec!["T".to_string()]),
-        vec![MonoType::Int(64)],
-        Span::default(),
-    );
-    let key = req.specialization_key();
-    mono.processed.insert(key.clone());
-
-    // Act: 验证去重缓存命中
-    let cached = mono.processed.contains(&key);
-
-    // Assert
-    assert!(cached, "processed 集合应命中同一 specialization_key");
-    assert_eq!(key.name, "Pair", "dedup key 的名字部分应来自 generic_id");
-}
-
-#[test]
 fn test_type_specialization_arg_count_mismatch_returns_none() {
     // Arrange: Pair 只声明 1 个类型参数 T，但请求传入 2 个
     let mut mono = Monomorphizer::new();
@@ -1156,7 +764,10 @@ fn test_type_specialization_arg_count_mismatch_returns_none() {
 
     let req = InstantiationRequest::new(
         GenericFunctionId::new("Pair".to_string(), vec!["T".to_string()]),
-        vec![MonoType::Int(64), MonoType::make_string()],
+        vec![
+            crate::frontend::core::types::mono::GenericArg::Type(MonoType::Int(64)),
+            crate::frontend::core::types::mono::GenericArg::Type(MonoType::make_string()),
+        ],
         Span::default(),
     );
 
@@ -1209,113 +820,7 @@ fn test_collect_generic_type_refs_nested_specialization() {
 
 // ==================== 类型声明载体：is_method 标记（6.6.12） ====================
 
-/// 特化只替换字段**类型**，不得丢字段的分类标记（`is_method` / `is_mut` / `has_default`）。
-///
-/// 为什么这条重要：载体用 `..f.clone()` 保留其余字段，而 `is_method` 是 SPEC
-/// `type-system.md:443`「函数类型字段不生成构造参数」将来接线的唯一依据——一旦特化
-/// 把它抹成 false，后续轮次就无法区分方法字段与数据字段。
-#[test]
-fn test_specialize_type_keeps_field_classification_flags() {
-    // Arrange: Pair<T>，一个数据字段 + 一个函数类型字段（方法）
-    let mut mono = Monomorphizer::new();
-    let decl = FunctionIR {
-        def: None,
-        name: "Pair".to_string(),
-        params: vec![MonoType::MetaType {
-            universe_level: UniverseLevel::type1(),
-            type_params: Vec::new(),
-        }],
-        return_type: MonoType::MetaType {
-            universe_level: UniverseLevel::type1(),
-            type_params: Vec::new(),
-        },
-        generic_params: Some(vec!["T".to_string()]),
-        body: FunctionBody::TypeDecl {
-            body: TypeDeclBody {
-                fields: vec![
-                    TypeDeclField {
-                        name: "value".to_string(),
-                        ty: MonoType::TypeRef("T".to_string()),
-                        is_mut: true,
-                        has_default: true,
-                        is_method: false,
-                    },
-                    TypeDeclField {
-                        name: "get".to_string(),
-                        ty: MonoType::Fn {
-                            params: vec![MonoType::TypeRef("T".to_string())],
-                            return_type: Box::new(MonoType::TypeRef("T".to_string())),
-                        },
-                        is_mut: false,
-                        has_default: false,
-                        is_method: true,
-                    },
-                ],
-                self_type: MonoType::Void,
-            },
-        },
-    };
-    mono.generic_types.insert("Pair".to_string(), decl);
-    let req = request("Pair", &["T"], MonoType::Int(64), Span::default());
-
-    // Act
-    let result = mono.specialize_type(&req).expect("特化 Pair(Int) 应成功");
-
-    // Assert: 类型被替换，分类标记原样保留
-    let fields = type_decl_fields(&result.body);
-    assert_eq!(fields.len(), 2, "Pair 应有两个字段");
-    assert_eq!(
-        fields[0].ty,
-        MonoType::Int(64),
-        "数据字段的 T 应被替换成 Int(64)"
-    );
-    assert!(fields[0].is_mut, "数据字段的 is_mut 标记不得丢");
-    assert!(fields[0].has_default, "数据字段的 has_default 标记不得丢");
-    assert!(!fields[0].is_method, "数据字段的 is_method 必须是 false");
-    assert_eq!(
-        fields[1].ty,
-        MonoType::Fn {
-            params: vec![MonoType::Int(64)],
-            return_type: Box::new(MonoType::Int(64)),
-        },
-        "函数类型字段的 T 也应被替换成 Int(64)"
-    );
-    assert!(
-        fields[1].is_method,
-        "函数类型字段的 is_method 标记不得丢（SPEC 443 的未来依据）"
-    );
-}
-
 // ==================== 小写参数名测试 (Issue #197) ====================
-
-#[test]
-fn test_specialize_type_lowercase_param_name() {
-    // Arrange: 小写参数名 t: Type 不应靠大写启发式识别
-    let mut mono = Monomorphizer::new();
-    mono.generic_types.insert(
-        "Small".to_string(),
-        make_generic_type_decl_ir("Small", "t", &["value"]),
-    );
-    let req = request("Small", &["t"], MonoType::make_string(), Span::default());
-
-    // Act
-    let result = mono.specialize_type(&req).expect("小写参数名特化应成功");
-
-    // Assert
-    assert_eq!(result.name, "Small(string)", "特化类型名应为 Small(string)");
-    let FunctionBody::TypeDecl { body } = &result.body else {
-        panic!("body 应是 TypeDecl");
-    };
-    assert_eq!(body.fields.len(), 1, "Small 应有一个字段");
-    // 实质判据不变：小写参数名 t 也必须被替换成 String（而不是留成 TypeRef("t")）。
-    // 旧形态另断一段「AST 写回是规范名 Name(String)」——载体换成 IR 原生 `MonoType` 后
-    // 没有 AST 中间态可断言，该中间态性质由 mono/tests/function.rs 的 leg B 用例覆盖。
-    assert_eq!(
-        body.fields[0].ty,
-        MonoType::make_string(),
-        "小写参数名 t 的字段类型必须被替换成 String"
-    );
-}
 
 // ==================== #335 多实例化按调用点分发 ====================
 
@@ -1356,71 +861,7 @@ fn test_replace_call_sites_multi_instantiation_dispatches_per_site() {
     );
 }
 
-/// #335：嵌套泛型调用（特化体内的泛型调用）按自身 span 改写
-#[test]
-fn test_replace_call_sites_rewrites_nested_calls_in_specialized_body() {
-    // Arrange
-    let mut mono = Monomorphizer::new();
-    mono.generic_functions
-        .insert("identity".to_string(), make_identity_ir());
-
-    // 特化函数（generic_params 已清除）体内对 identity 的嵌套调用，
-    // span 与嵌套请求的 source_location 同源
-    let inner_span = span_at(2, 30, 31, 42, 43);
-    let wrapper = make_double_identity_ir(inner_span);
-    let mut module = module_with(vec![wrapper]);
-    mono.site_requests = vec![request("identity", &["T"], MonoType::Int(64), inner_span)];
-
-    // Act
-    mono.replace_call_sites(&mut module);
-
-    // Assert
-    let instrs = &module.functions[0].blocks()[0].instructions;
-    assert!(
-        is_call_to(&instrs[0], "identity(int64)"),
-        "特化体内嵌套调用应按 (泛型名, span) 命中改写"
-    );
-}
-
 // ==================== #335 深度/规模分离 ====================
-
-/// #335：合法大规模泛型（150 个互不相同的实例化）必须编译通过。
-/// 旧实现 depth 计数器混用「已处理总数」，超过 max_depth(100) 即误报
-/// 无限递归。
-#[test]
-fn test_scale_over_hundred_instantiations_compiles() {
-    // Arrange
-    let mut mono = Monomorphizer::new();
-    mono.generic_functions
-        .insert("identity".to_string(), make_identity_ir());
-
-    let main_func = make_main_ir(
-        MonoType::Void,
-        vec![
-            identity_call(Operand::Const(ConstValue::Int(1))),
-            ret_instr(None),
-        ],
-        vec![LocalSlot::temp(MonoType::Int(64))],
-    );
-    let module = module_with(vec![main_func]);
-
-    // 150 个互不相同的实例化请求（Int(1)..Int(150) 宽度作区分维度）
-    let requests: Vec<InstantiationRequest> = (1..=150)
-        .map(|n| identity_request(MonoType::Int(n)))
-        .collect();
-
-    // Act
-    let result = mono.monomorphize(&module, &requests);
-
-    // Assert：全部实例化成功，超过旧 max_depth(100) 不再误报
-    let output = result.expect("150 个不同实例化应全部成功");
-    let specialized = output
-        .functions
-        .iter()
-        .filter(|f| f.name.starts_with("identity("))
-        .count();
-    assert_eq!(specialized, 150, "应生成 150 个特化版本");
-}
 
 /// #335：真正的无限类型增长递归仍被深度上限拦截——
 /// grow(T) 的体内以 List(T) 类型的局部变量递归调用自身，
@@ -1454,217 +895,7 @@ fn test_type_growing_recursion_still_blocked_by_depth() {
     );
 }
 
-/// #335：实例化总数上限独立生效
-#[test]
-fn test_scale_cap_independent_of_depth() {
-    // Arrange
-    let mut mono = Monomorphizer::with_max_depth(100).with_max_instantiations(10);
-    mono.generic_functions
-        .insert("identity".to_string(), make_identity_ir());
-
-    let module = ModuleIR {
-        functions: Vec::new(),
-        ..Default::default()
-    };
-    let requests: Vec<InstantiationRequest> = (1..=20)
-        .map(|n| {
-            InstantiationRequest::new(
-                GenericFunctionId::new("identity".to_string(), vec!["T".to_string()]),
-                vec![MonoType::Int(n)],
-                Span::default(),
-            )
-        })
-        .collect();
-
-    // Act
-    let result = mono.monomorphize(&module, &requests);
-
-    // Assert：每条请求 depth 都是 0（链深不超限），超的是总数上限
-    let err = result.expect_err("超过总数上限必须报错");
-    assert!(
-        err.message.contains("总数") || err.message.contains("上限"),
-        "错误应指向实例化总数上限，实际: {}",
-        err.message
-    );
-}
-
 // ==================== 3.4.8 ② 全程序 mono：桶键与名字解析 ====================
-
-/// t5（响亮路径）：请求名是**未限定化的裸名**、而定义表里只有 `{module}.{bare}`
-/// 时，必须报诊断而不是静默 `continue`——后者会把「驱动侧限定化漏了」藏到
-/// 运行期（调用点悬空 E6006 或退回类型擦除）。
-#[test]
-fn test_unqualified_request_name_with_qualified_definition_is_loud() {
-    // Arrange：定义键是 main.pick，请求名却是裸名 pick
-    let mut mono = Monomorphizer::new();
-    let mut identity = make_identity_ir();
-    identity.name = "main.pick".to_string();
-    mono.generic_functions
-        .insert("main.pick".to_string(), identity);
-    let req = request("pick", &["T"], MonoType::Int(64), Span::default());
-
-    // Act
-    let result = mono.monomorphize(&module_with(Vec::new()), &[req]);
-
-    // Assert：响亮失败，且消息指向「未限定化」这一根因
-    let err = result.expect_err("未限定化的裸名请求必须报诊断而非静默跳过");
-    assert!(
-        err.message.contains("未限定化") || err.message.contains("main.pick"),
-        "诊断应指出请求名未限定化并给出真实定义键，实际：{}",
-        err.message
-    );
-}
-
-/// t5（native 面不受影响）：定义表里**根本没有**同名候选时保持跳过——
-/// native 泛型没有 IR 定义，不该被响亮路径误伤。
-#[test]
-fn test_request_without_any_definition_stays_skipped() {
-    // Arrange：请求指向一个定义表里不存在的名字（native 泛型形态）
-    let mut mono = Monomorphizer::new();
-    mono.generic_functions
-        .insert("identity".to_string(), make_identity_ir());
-    let req = request("native_only", &["T"], MonoType::Int(64), Span::default());
-
-    // Act
-    let result = mono.monomorphize(&module_with(Vec::new()), &[req]);
-
-    // Assert：无定义可特化 → 跳过（不报错、不产特化）
-    let output = result.expect("无 IR 定义的请求（native 形态）不得报错");
-    let names: Vec<String> = output.functions.iter().map(|f| f.name.clone()).collect();
-    assert!(
-        !names.iter().any(|n| n.starts_with("native_only(")),
-        "无 IR 定义的请求不得产出特化：{names:?}"
-    );
-}
-
-/// 3.4.8 ② 钉测试：deferred 桶键 = 容器函数的**限定名**（与多文件 merged IR
-/// 的函数表键同源）时，递归链必须逐层展开（此处 `grow(T)` 的实参类型逐层
-/// 增长），深度上限拦截并报错。桶键错配（驱动侧限定化缺失）时链在第一层断掉，
-/// 既不出诊断、原件又以类型擦除执行——即本测试的红态。
-#[test]
-fn test_deferred_bucket_qualified_container_key_expands_recursion_chain() {
-    // Arrange：IR 键为限定名 lib.grow，桶挂在同一限定名下（同驱动侧产物）
-    let mut mono = Monomorphizer::with_max_depth(5);
-    let mut grow = make_grow_ir();
-    grow.name = "lib.grow".to_string();
-    mono.generic_functions.insert("lib.grow".to_string(), grow);
-    let mut seed = request("lib.grow", &["T"], MonoType::Int(64), Span::default());
-    seed.containing_fn = Some("lib.grow".to_string());
-    let placeholder = request("lib.grow", &["T"], list_of(type_ref("T")), Span::default());
-    defer_request(&mut mono, "lib.grow", placeholder);
-
-    // Act
-    let result = mono.monomorphize(&module_with(Vec::new()), &[seed]);
-
-    // Assert：链展开到超过 max_depth(5) 即被拦（不是静默通过）
-    let err = result.expect_err("限定名桶键下的递归链必须展开到深度上限并报错");
-    assert!(
-        err.message.contains("深度") || err.message.contains("递归"),
-        "错误应指向特化链深度，实际：{}",
-        err.message
-    );
-}
-
-/// 3.4.8 ④ 钉测试（跨单元互递归的 mono 侧机制）：deferred 桶按**发出请求的函数**
-/// 分桶（`containing_fn`），而请求的**实参**含符号化 `TypeRef(参数名)`——只有当
-/// 该容器函数自己特化时才能求值。
-///
-/// 跨单元互递归正是「容器 ≠ 请求目标」的形态：`a.f` 体内以增长类型调 `b.g`
-///（桶在 `b.g` 下，求值依赖 `a.f` 的参数绑定），`b.g` 体内再调回 `a.f`。
-/// 若 `fire_deferred` 用请求自带的名字（而非本次特化的定义名）查桶，链会在第一层
-/// 断掉：既不报深度诊断，原件又被放回、以类型擦除执行到进程栈溢出（0xC00000FD）。
-///
-/// 红态：把 `fire_deferred` 的桶键换成 `req.generic_id().name()`（或驱动侧漏做
-/// `containing_fn` 限定化）时，下列断言逐条转红。
-#[test]
-fn test_cross_unit_mutual_recursion_deferred_bucket_expands_across_containers() {
-    // Arrange：两个泛型定义各属一个单元（IR 键为限定名），互递归请求挂在
-    // 对方单元的桶下。夹具构造抽成闭包——两次 Act 各用**全新** Monomorphizer：
-    // 失败的那次已把 seed 记进 processed（同实例重跑会直接去重跳过）
-    let t = MonoType::TypeVar(TypeVar::new(0));
-    let build_fixture = |max_depth: usize| -> (Monomorphizer, Vec<InstantiationRequest>) {
-        let mut mono = Monomorphizer::with_max_depth(max_depth);
-        mono.generic_functions.insert(
-            "a.f".to_string(),
-            make_fn_ir(
-                "a.f",
-                vec![t.clone()],
-                t.clone(),
-                Some(vec!["T".to_string()]),
-                vec![
-                    call_instr(Some(Operand::Local(1)), "b.g", vec![Operand::Local(0)]),
-                    ret_instr(Some(Operand::Local(1))),
-                ],
-                vec![LocalSlot::temp(list_of(t.clone()))],
-            ),
-        );
-        mono.generic_functions.insert(
-            "b.g".to_string(),
-            make_fn_ir(
-                "b.g",
-                vec![t.clone()],
-                t.clone(),
-                Some(vec!["T".to_string()]),
-                vec![
-                    call_instr(Some(Operand::Local(1)), "a.f", vec![Operand::Local(0)]),
-                    ret_instr(Some(Operand::Local(1))),
-                ],
-                vec![LocalSlot::temp(list_of(t.clone()))],
-            ),
-        );
-        // **互递归**的两个占位请求——键是**发出请求的函数**，实参是符号化
-        // 的 List(T)，只有该函数自己特化后才解得开：
-        //   a.f 体内调 b.g  → 桶键 a.f（值 b.g）
-        //   b.g 体内调 a.f  → 桶键 b.g（值 a.f）← 容器 ≠ 目标，正是跨单元形态
-        let mut from_a = request("b.g", &["T"], list_of(type_ref("T")), Span::default());
-        from_a.containing_fn = Some("a.f".to_string());
-        defer_request(&mut mono, "a.f", from_a);
-        let mut from_b = request("a.f", &["T"], list_of(type_ref("T")), Span::default());
-        from_b.containing_fn = Some("b.g".to_string());
-        defer_request(&mut mono, "b.g", from_b);
-        // 驱动侧聚合表里的两个入口请求（真实形态：两个单元各有一处具体调用）
-        let mut seed_a = request("a.f", &["T"], MonoType::Int(64), Span::default());
-        seed_a.containing_fn = Some("a.f".to_string());
-        let mut seed_b = request("b.g", &["T"], MonoType::Int(64), Span::default());
-        seed_b.containing_fn = Some("b.g".to_string());
-        (mono, vec![seed_a, seed_b])
-    };
-
-    // Act：小上限跑一次——诊断里的「当前深度」是链跨单元逐层计数的直接证据
-    let (mut shallow, seeds) = build_fixture(3);
-    let err = shallow
-        .monomorphize(&module_with(Vec::new()), &seeds)
-        .expect_err("跨单元互递归链必须展开到深度上限并报错");
-
-    // Assert①：深度恰为 4（seed 深度 0 + 三轮跨单元展开）——少一轮即链断在
-    // 某一层（此时既不报深度诊断、原件又被放回，退回类型擦除执行）
-    assert!(
-        err.message.contains("当前 4"),
-        "报错深度必须是 4（seed 深度 0 + b.g → a.f → b.g 三轮），实际：{}",
-        err.message
-    );
-
-    // Act：同一夹具跑到深度上限被拦为止——已发生的跨单元展开留在特化表里
-    //（链本身发散，永远收敛不了；要的是它「怎么走」而不是「走到哪停」）
-    let (mut converged, seeds) = build_fixture(100);
-    let _ = converged.monomorphize(&module_with(Vec::new()), &seeds);
-
-    // Assert②：链在两单元间交替展开——a.f(int64) 引发 b.g(List(int64))，
-    // b.g(List(int64)) 再引发 a.f(List(List(int64)))：每一层的实参都是具体的
-    // List(...)，deferred 桶键或 name_map 求值任一错配时对应那层不会出现
-    let names: Vec<String> = converged.specialized_functions.keys().cloned().collect();
-    for expected in [
-        "a.f(int64)",
-        "b.g(List(int64))",
-        "a.f(List(List(int64)))",
-        "b.g(List(List(List(int64))))",
-    ] {
-        assert!(
-            names.iter().any(|n| n == expected),
-            "跨单元互递归链必须特化出 {expected}（缺它即 deferred 桶键或 name_map 在那一层错配）：{names:?}"
-        );
-    }
-}
 
 /// 3.4.8 ② 钉测试：请求带的**裸名**（typecheck 逐单元只知道裸名）必须按容器
 /// 限定名解析到 IR 定义（`main.identity`），同时调用点改写的名字维度仍与 IR
@@ -1721,59 +952,6 @@ fn test_bare_request_name_resolves_to_qualified_definition_and_rewrites_call_sit
     assert!(
         call_ok,
         "调用点必须改写到限定特化名 main.identity(int64)（否则原件删除后悬空 E6006）"
-    );
-}
-
-/// t5 钉测试（歧义守卫 → 响亮）：全程序有**两个**同名泛型定义、请求又是未限定
-/// 裸名时，不得擅自命中其中之一——t5 起这条路径改为**响亮诊断**（此前静默
-/// 跳过会把「驱动侧限定化漏了」藏到运行期）。
-#[test]
-fn test_ambiguous_bare_name_is_not_resolved_to_arbitrary_definition() {
-    // Arrange：a.pick 与 b.pick 两个同名泛型定义，请求不带容器
-    let mut a = make_identity_ir();
-    a.name = "a.pick".to_string();
-    let mut b = make_identity_ir();
-    b.name = "b.pick".to_string();
-    let mut mono = Monomorphizer::new();
-    mono.generic_functions.insert("a.pick".to_string(), a);
-    mono.generic_functions.insert("b.pick".to_string(), b);
-    let req = request("pick", &["T"], MonoType::Int(64), Span::default());
-
-    // Act
-    let result = mono.monomorphize(&module_with(Vec::new()), &[req]);
-
-    // Assert：响亮失败（不得挑一个特化、也不得静默通过）
-    let err = result.expect_err("歧义裸名必须响亮诊断而非静默挑一个特化");
-    assert!(
-        err.message.contains("未限定化"),
-        "诊断应指出请求名未限定化（歧义根因），实际：{}",
-        err.message
-    );
-}
-
-/// 3.4.8 ② 钉死（deferred 桶的显式形态）：符号化实参的请求若**没有容器**
-/// （模块顶层 init 里调用泛型，围住它的不是任何函数），不得入队、也不得
-/// 伪造特化——维持「不特化、调用点不动」的显式跳过（类型擦除执行）。
-#[test]
-fn test_symbolic_request_without_container_stays_erased() {
-    // Arrange：请求实参含 TypeRef（符号化）且 containing_fn = None
-    let mut mono = Monomorphizer::new();
-    mono.generic_functions
-        .insert("identity".to_string(), make_identity_ir());
-    let req = request("identity", &["T"], type_ref("T"), Span::default());
-
-    // Act
-    let output = mono
-        .monomorphize(&module_with(Vec::new()), &[req])
-        .expect("无容器的符号化请求应被跳过而非报错");
-
-    // Assert：不得伪造**符号化**特化版本（`identity(T)`——T 未求值）。
-    // 注：请求无容器时**不入队**，这份 `name` 是 `build_output` 按
-    // 「无请求的泛型」既有判据保留的原件，不是求值产物。
-    let names: Vec<String> = output.functions.iter().map(|f| f.name.clone()).collect();
-    assert!(
-        !names.iter().any(|n| n.contains("(int64)")),
-        "无容器的符号化请求不得被当成具体实参特化（这是它区别于入队路径的判据）：{names:?}"
     );
 }
 

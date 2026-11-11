@@ -1,0 +1,52 @@
+//! Typecheck 模块测试 — 基于语言规范 §3 & RFC-010/011
+//!
+//! 测试覆盖：
+//! - §3.1-§3.17: 类型系统
+//! - §6: 函数定义
+//! - RFC-010: 统一类型语法
+//! - RFC-011: 泛型系统设计
+//!
+//! 单文件模块测试：
+//! - checker: TypeChecker 主检查器
+//! - environment: TypeEnvironment 类型环境
+//! - signature: 签名解析
+//! - types: 类型定义
+//!
+//! 规范测试：
+//! - rfc010: RFC-010 统一类型语法测试
+//! - rfc011: RFC-011 泛型系统测试
+
+mod checker;
+mod const_param;
+mod environment;
+mod fn_annotation_binding;
+mod gamma_assume_effect;
+mod hkt;
+mod named_args;
+mod named_args_loud;
+mod native_param_names;
+mod nested_fn_capture;
+mod overload_resolutions;
+mod paren_return_decomposition;
+mod predicate_resolver;
+mod probe;
+mod rfc010;
+mod rfc010a;
+mod rfc011;
+mod rfc011a;
+pub(crate) mod rfc011a_dispatch;
+mod rfc011b;
+mod rfc027_phase1_integration;
+mod rfc027_phase25_proof_fn;
+mod rfc027_phase2_smt;
+mod rfc027_phase31_dep_vc;
+mod rfc027_phase33_termination;
+mod rfc027_phase3_e2e;
+mod rfc027_phase4_e2e;
+mod rfc027_predicate_defs;
+mod rfc027_refined_transparency;
+mod rfc027_return_refinement;
+mod rfc027a;
+mod semantic_db;
+mod signature;
+mod types;
