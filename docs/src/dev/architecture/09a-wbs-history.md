@@ -4419,3 +4419,31 @@ P1 的形状判据与 ir_gen 的包装层产出形态耦合——「不再匹配
 ### 七、不宣称
 
 本步只覆盖闭项擦除；开项递归实例链（C3）、证据三态与缺失证据码（B 步）、类型化出口（6.9.3）均未落地；Π/Σ 完全体未收口。
+
+## P6 6.9.3a 失败代数与归一化类型化出口（2026-11-11）
+
+### 一、范围
+
+把证明/归一化的失败侧收敛成唯一失败代数，并把项层归一化的三态出口类型化；不实现判等（6.9.3b/6.9.3c）、不动 `can_assign` / `is_subtype` / `structurally_equal` / `check_type_equivalence` 的判据本体、不动码表与 locales。判据锚：RFC-027 §8（预算每次判定一份）、RFC-027 Phase 2.5（证明调用收集与执行）、RFC-039 D62 / issue #533。实现提交 `c8ecf44f`。
+
+### 二、实现
+
+1. **唯一失败代数**：`ProofResult` 由独立三值枚举改为类型别名 `Result<(), ProofFailure>`；`ProofFailure { Disproved(DisproofModel) | Unproven { reason, proof_calls, budget } }`（**三字段**——见偏离登记）；两臂互不降格（Disproved = 已算出命题为假、Unproven = 给定资源内算不出来）。失败→诊断的映射逐字沿用旧 `into_result`（同一个 `DisproofModel::into_diagnostic` / `UnprovenReason::to_diagnostic`；`_ => internal_error` 那臂未动，属 6.9.3c）。
+2. **归一化类型化出口**：`normalize(term, env, budget) -> Result<ConstValue, ProofFailure>`——符号名先拦并带名字（`Unproven{Symbolic(名字)}`）、预算按项节点数一节点一步扣（耗尽 ⇒ `Unproven{BudgetExceeded}` 带预算报告）、闭项求值失败 ⇒ `Disproved`（求值器 message 收进反例文本；占位 kind 从不经 `into_diagnostic` 发射，正式分类与文案留 6.9.3c）。
+3. **删 `TermOutcome`**（全仓零命中），三处消费者改毕：项层与类型层不再各有一套三值。
+4. **预算**：`BudgetTracker::for_judgment()` 为唯一工厂（语义仍是 RFC-027 §8「每次判定一份」，不是每编译单元配额），`with_steps` 供测试注入；生产面无 `BudgetTracker::new()` 残留。
+5. **偏离登记**：契约草案写 `Unproven { reason, budget }` 两字段，实现**保留 `proof_calls`**——它是 RFC-027 Phase 2.5 的活功能（checker 从失败值收集证明调用 → `TypeCheckResult::proof_calls` → `execute_proof_calls` 执行），删掉即静默废功，违反红线「核心功能不留待实现」；模式匹配与契约前缀兼容（`Unproven { reason, budget, .. }`），字段语义与 6.9.3a 之前逐字一致。**6.9.3 契约正文按三字段理解**，后续实现者不得按两字段删 `proof_calls`。
+
+### 三、实测（复审独立复核）
+
+机械改写保真——全 diff 逐类计数 `Proved`→`Ok(())` 23↔23、`Disproved`→`Err(Disproved)` 59↔62（多 3 处为新代码）、`Unproven`→`Err(Unproven)` 24↔30（多 6 处为新代码），无 `Unproven`↔`Disproved` 互换、无 `Ok`/`Proved` 语义写反；方法语义 `is_proved = is_ok()`、`into_result = map_err(into_diagnostic)` 与旧实现等价；项层归一化三态互不降格且 `Symbolic` 带名字；`TermOutcome` 全仓零命中；语料 386 行逐字节一致；IR 快照与基线零差异；terms 4/0、proof 13/0、rfc027 80/0；四份生成物归一化后与 HEAD 逐字节一致（发射点行号平移，42/42 口径两侧相等）；码表与 locales 零改动；`can_assign` / `is_subtype` / `structurally_equal` / `check_type_equivalence` 判据本体零改动。
+
+### 四、遗留登记
+
+1. 归一化的预算臂是**新增**失败态（此前无预算概念），消费面按「不特化、按既有语义运行」保守处理 ⇒ 对原先成功的程序无行为变化；6.9.3c 定码表时需区分「缺证据（E1113）」与「闭项失败（现在的占位 Disproved）」。
+2. `Unproven.proof_calls` 的保留见上文偏离登记（契约正文按三字段，否则下一轮实现者会按两字段删掉它）。
+3. 判等内核（`syntactic_eq` / `normalize_type` / `defeq` 三层）与删 `structurally_equal` 属 6.9.3b/6.9.3c，本步未动。
+
+### 五、不宣称
+
+本步只做失败代数与归一化出口；判等内核、类型化出口的码表轮、Σ/Π 均未落地；Π/Σ 完全体未收口。
