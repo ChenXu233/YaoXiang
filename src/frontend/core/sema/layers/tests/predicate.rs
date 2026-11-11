@@ -15,7 +15,7 @@ use std::collections::HashMap;
 
 use crate::frontend::core::sema::layers::predicate::check_predicate;
 use crate::frontend::core::sema::proof::context::ProofContext;
-use crate::frontend::core::sema::proof::verdict::ProofResult;
+use crate::frontend::core::sema::proof::verdict::{ProofFailure, ProofResultExt};
 use crate::frontend::core::sema::TypeEnvironment;
 use crate::frontend::core::types::const_data::{BinOp, ConstExpr, ConstValue};
 use crate::frontend::core::types::mono::MonoType;
@@ -57,7 +57,7 @@ fn test_direct_eval_with_bound_variable_disproved() {
     // Assert
     assert!(!result.is_proved(), "b=0 时 b>0 应直接求值为 Disproved");
     match result {
-        ProofResult::Disproved(model) => {
+        Err(ProofFailure::Disproved(model)) => {
             assert!(
                 model.assignments.iter().any(|(k, _)| k == "b"),
                 "反例模型应包含变量 b"
@@ -85,7 +85,7 @@ fn test_implication_unrelated_assumption_falls_through_to_level3() {
 
     // Assert — z > 0 不蕴含 y > 0 → Level 2b 返回 None → Level 3 找到反例 (y=0, z=1)
     assert!(
-        matches!(result, ProofResult::Disproved(_)),
+        matches!(result, Err(ProofFailure::Disproved(_))),
         "z>0 不蕴含 y>0，Level 3 应找到反例返回 Disproved，实际: {result:?}"
     );
 }

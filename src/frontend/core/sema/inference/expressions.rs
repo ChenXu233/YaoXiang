@@ -2730,7 +2730,7 @@ impl<'a> ExpressionInferrer<'a> {
         span: crate::util::span::Span,
     ) -> ConstArgOutcome {
         use crate::frontend::core::types::const_data::{ConstExpr, ConstValue};
-        use crate::frontend::core::types::eval::const_eval::TermOutcome;
+        use crate::frontend::core::sema::proof::verdict::ProofFailure;
         use crate::frontend::core::types::mono::GenericArg;
 
         // 1. 被调方与 q=0 名表（声明期登记，与 `PolyType::new_with_const` 同一来源）
@@ -2806,14 +2806,17 @@ impl<'a> ExpressionInferrer<'a> {
             let Some(term) = self.compile_time_term(arg_expr, &env) else {
                 return reject(param_name, arg_expr.span());
             };
-            match crate::frontend::core::types::eval::const_eval::normalize(&term, &env) {
-                TermOutcome::Value(value) => {
+            // 一次实参判定 = 一次判定预算（`for_judgment` 的唯一工厂）
+            let budget = crate::frontend::core::sema::proof::budget::BudgetTracker::for_judgment();
+            match crate::frontend::core::types::eval::const_eval::normalize(&term, &env, &budget) {
+                Ok(value) => {
                     closed.insert(param_name.clone(), value);
                 }
-                // 开项：不拒绝、不特化（6.9.3 给类型化出口；此刻按既有语义运行）
-                TermOutcome::Unproven => {}
+                // 开项（Unproven，含符号名/预算耗尽）：不拒绝、不特化（6.9.3 给类型化出口；
+                // 此刻按既有语义运行）。`Unproven` 绝不降格成 `Disproved`。
+                Err(ProofFailure::Unproven { .. }) => {}
                 // 闭项求值失败（如 `1 / 0`）：拒绝（D59 C 类，旧行为静默接受）
-                TermOutcome::Disproved => {
+                Err(ProofFailure::Disproved(_)) => {
                     return reject(param_name, arg_expr.span());
                 }
             }

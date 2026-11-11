@@ -1310,11 +1310,14 @@ impl GenericArg {
         match self {
             GenericArg::Type(ty) => Some(ty.clone()),
             GenericArg::Const(term) => {
-                use crate::frontend::core::types::eval::const_eval::{normalize, TermEnv, TermOutcome};
-                match normalize(term, &TermEnv::default()) {
-                    TermOutcome::Value(value) => MonoType::literal_of_value(&value),
-                    // 开项 / 闭项求值失败：此刻没有类型位形态
-                    TermOutcome::Unproven | TermOutcome::Disproved => None,
+                use crate::frontend::core::sema::proof::budget::BudgetTracker;
+                use crate::frontend::core::types::eval::const_eval::{normalize, TermEnv};
+                // 一次投影 = 一次判定：预算就地新建（与类型层同一「每次判定」口径）
+                match normalize(term, &TermEnv::default(), &BudgetTracker::for_judgment()) {
+                    Ok(value) => MonoType::literal_of_value(&value),
+                    // 开项（Unproven）或闭项失败（Disproved）：此刻**都**没有类型位形态。
+                    // 这里不做两臂合并的语义判断——两者都不投影，但绝不由 Unproven 推出 Disproved。
+                    Err(_) => None,
                 }
             }
         }

@@ -14,7 +14,7 @@ use std::collections::HashMap;
 use crate::frontend::core::sema::layers::predicate::check_predicate;
 use crate::frontend::core::sema::proof::context::ProofContext;
 use crate::frontend::core::sema::proof::dep_graph::TypeDepGraph;
-use crate::frontend::core::sema::proof::verdict::ProofResult;
+use crate::frontend::core::sema::proof::verdict::{ProofFailure, ProofResultExt};
 use crate::frontend::core::sema::TypeEnvironment;
 use crate::frontend::core::types::const_data::{BinOp, ConstExpr, ConstValue};
 use crate::frontend::core::types::mono::MonoType;
@@ -42,7 +42,7 @@ fn test_e2e_level1_direct_eval_disproved() {
 
     // Assert
     assert!(
-        matches!(result, ProofResult::Disproved(_)),
+        matches!(result, Err(ProofFailure::Disproved(_))),
         "E2E Level 1: x=0 时 x>0 应求值为 Disproved，实际: {result:?}"
     );
 }
@@ -80,7 +80,7 @@ fn test_e2e_disproved_counterexample_contains_variable_values() {
 
     // Assert — 反例模型应包含变量的具体值
     match result {
-        ProofResult::Disproved(model) => {
+        Err(ProofFailure::Disproved(model)) => {
             assert!(
                 !model.assignments.is_empty(),
                 "反例模型应包含至少一个变量赋值"
@@ -119,7 +119,7 @@ fn test_e2e_unproven_reason_readable() {
         "不存在的证明函数应返回 Unproven，实际: {result:?}"
     );
     assert!(
-        matches!(result, ProofResult::Unproven { .. }),
+        matches!(result, Err(ProofFailure::Unproven { .. })),
         "期望 Unproven，实际: {result:?}"
     );
 }

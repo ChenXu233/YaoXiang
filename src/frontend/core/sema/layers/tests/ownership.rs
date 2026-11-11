@@ -17,7 +17,7 @@ use crate::frontend::core::sema::layers::ownership::{
     fast_path_check, smt_cut,
 };
 use crate::frontend::core::types::const_data::{BinOp as CEBinOp, ConstExpr as CE, ConstValue};
-use crate::frontend::core::sema::proof::verdict::{DisproofKind, ProofResult};
+use crate::frontend::core::sema::proof::verdict::{DisproofKind, ProofFailure, ProofResult};
 use crate::util::span::Span;
 
 // ── BrandId 前缀匹配 ──────────────────────────────────
@@ -153,7 +153,7 @@ fn test_read_born_after_write_is_not_backtracked() {
 fn test_use_after_move_rejected() {
     let result = emit_move_predicate("x", true, Span::dummy());
     assert!(
-        matches!(result, ProofResult::Disproved { .. }),
+        matches!(result, Err(ProofFailure::Disproved { .. })),
         "move 后使用应返回 Disproved"
     );
 }
@@ -162,7 +162,7 @@ fn test_use_after_move_rejected() {
 fn test_use_after_drop_rejected() {
     let result = emit_drop_predicate("x", true, Span::dummy());
     assert!(
-        matches!(result, ProofResult::Disproved { .. }),
+        matches!(result, Err(ProofFailure::Disproved { .. })),
         "drop 后使用应返回 Disproved"
     );
 }
@@ -171,7 +171,7 @@ fn test_use_after_drop_rejected() {
 fn test_double_drop_rejected() {
     let result = emit_double_drop_predicate("x", true, Span::dummy());
     assert!(
-        matches!(result, ProofResult::Disproved { .. }),
+        matches!(result, Err(ProofFailure::Disproved { .. })),
         "double drop 应返回 Disproved"
     );
 }
@@ -180,7 +180,7 @@ fn test_double_drop_rejected() {
 fn test_mut_violation_rejected() {
     let result = emit_mut_predicate("x", false, Span::dummy());
     assert!(
-        matches!(result, ProofResult::Disproved { .. }),
+        matches!(result, Err(ProofFailure::Disproved { .. })),
         "非 mut 变量赋值应返回 Disproved"
     );
 }
@@ -398,7 +398,7 @@ fn run_fn(
 fn disproved(results: &[ProofResult]) -> Vec<&ProofResult> {
     results
         .iter()
-        .filter(|r| matches!(r, ProofResult::Disproved { .. }))
+        .filter(|r| matches!(r, Err(ProofFailure::Disproved { .. })))
         .collect()
 }
 
@@ -409,7 +409,7 @@ fn disproved_of_kind(
 ) -> Vec<&ProofResult> {
     results
         .iter()
-        .filter(|r| matches!(r, ProofResult::Disproved(model) if model.kind == kind))
+        .filter(|r| matches!(r, Err(ProofFailure::Disproved(model)) if model.kind == kind))
         .collect()
 }
 
@@ -514,7 +514,7 @@ fn test_e2e_use_after_move_detected() {
     // Assert
     let errors: Vec<_> = results
         .iter()
-        .filter(|r| matches!(r, ProofResult::Disproved { .. }))
+        .filter(|r| matches!(r, Err(ProofFailure::Disproved { .. })))
         .collect();
     assert!(!errors.is_empty(), "应该检测到 use after move，但结果为空");
 }
@@ -531,7 +531,7 @@ fn test_e2e_valid_move_no_error() {
     // Assert
     let errors: Vec<_> = results
         .iter()
-        .filter(|r| matches!(r, ProofResult::Disproved { .. }))
+        .filter(|r| matches!(r, Err(ProofFailure::Disproved { .. })))
         .collect();
     assert!(errors.is_empty(), "不应有错误，得: {:?}", errors);
 }
@@ -555,7 +555,7 @@ fn test_e2e_argument_passed_to_function_is_moved() {
     // Assert
     let errors: Vec<_> = results
         .iter()
-        .filter(|r| matches!(r, ProofResult::Disproved { .. }))
+        .filter(|r| matches!(r, Err(ProofFailure::Disproved { .. })))
         .collect();
     assert!(!errors.is_empty(), "应该检测到 x 被 move 进 f 后再使用");
 }
@@ -773,7 +773,7 @@ fn test_drop_at_scope_exit_via_release_plan() {
     // Assert
     let errors: Vec<_> = results
         .iter()
-        .filter(|r| matches!(r, ProofResult::Disproved { .. }))
+        .filter(|r| matches!(r, Err(ProofFailure::Disproved { .. })))
         .collect();
     assert!(errors.is_empty(), "不应有错误，得: {:?}", errors);
     // x 应出现在 ReleasePlan 中
@@ -945,7 +945,7 @@ fn test_e2e_return_moved_value() {
     // Assert
     let errors: Vec<_> = results
         .iter()
-        .filter(|r| matches!(r, ProofResult::Disproved { .. }))
+        .filter(|r| matches!(r, Err(ProofFailure::Disproved { .. })))
         .collect();
     assert!(
         errors.is_empty(),
@@ -976,7 +976,7 @@ fn test_e2e_use_after_return_rejected() {
     let errors: Vec<_> = results
         .iter()
         .filter(|r| {
-            matches!(r, ProofResult::Disproved(model)
+            matches!(r, Err(ProofFailure::Disproved(model))
                 if matches!(model.kind, DisproofKind::UseAfterMove))
         })
         .collect();
@@ -1047,7 +1047,7 @@ fn test_e2e_block_expression_variable_scope() {
     // Assert
     let errors: Vec<_> = results
         .iter()
-        .filter(|r| matches!(r, ProofResult::Disproved { .. }))
+        .filter(|r| matches!(r, Err(ProofFailure::Disproved { .. })))
         .collect();
     assert!(errors.is_empty(), "不应有错误，得: {:?}", errors);
     let dropped: Vec<&String> = plan.drops.values().flatten().collect();
@@ -1070,7 +1070,7 @@ fn test_e2e_sequential_moves() {
     // Assert: 无错误（x→y→z，每次都是正常 Move）
     let errors: Vec<_> = results
         .iter()
-        .filter(|r| matches!(r, ProofResult::Disproved { .. }))
+        .filter(|r| matches!(r, Err(ProofFailure::Disproved { .. })))
         .collect();
     assert!(
         errors.is_empty(),
@@ -1093,7 +1093,7 @@ fn test_e2e_double_move_rejected() {
     let errors: Vec<_> = results
         .iter()
         .filter(|r| {
-            matches!(r, ProofResult::Disproved(model)
+            matches!(r, Err(ProofFailure::Disproved(model))
                 if matches!(model.kind, DisproofKind::UseAfterMove))
         })
         .collect();
@@ -1122,7 +1122,7 @@ fn test_e2e_param_move_and_use_rejected() {
     let errors: Vec<_> = results
         .iter()
         .filter(|r| {
-            matches!(r, ProofResult::Disproved(model)
+            matches!(r, Err(ProofFailure::Disproved(model))
                 if matches!(model.kind, DisproofKind::UseAfterMove))
         })
         .collect();
@@ -1139,7 +1139,7 @@ fn test_e2e_param_not_in_release_plan() {
     // Assert
     let errors: Vec<_> = results
         .iter()
-        .filter(|r| matches!(r, ProofResult::Disproved { .. }))
+        .filter(|r| matches!(r, Err(ProofFailure::Disproved { .. })))
         .collect();
     assert!(errors.is_empty(), "不应有错误，得: {:?}", errors);
     let dropped: Vec<&String> = plan.drops.values().flatten().collect();
@@ -1165,7 +1165,7 @@ fn test_e2e_call_unknown_function_moves_args() {
     let errors: Vec<_> = results
         .iter()
         .filter(|r| {
-            matches!(r, ProofResult::Disproved(model)
+            matches!(r, Err(ProofFailure::Disproved(model))
                 if matches!(model.kind, DisproofKind::UseAfterMove))
         })
         .collect();
@@ -1190,7 +1190,7 @@ fn test_e2e_call_ref_param_does_not_move() {
     let errors: Vec<_> = results
         .iter()
         .filter(|r| {
-            matches!(r, ProofResult::Disproved(model)
+            matches!(r, Err(ProofFailure::Disproved(model))
                 if matches!(model.kind, DisproofKind::UseAfterMove))
         })
         .collect();
@@ -1341,7 +1341,7 @@ fn test_deref_in_unsafe_allowed() {
         !results.iter().any(|r| {
             matches!(
                 r,
-                ProofResult::Disproved(m) if m.kind == DisproofKind::UnsafeViolation
+                Err(ProofFailure::Disproved(m)) if m.kind == DisproofKind::UnsafeViolation
             )
         }),
         "unsafe 内的 deref 不应报 UnsafeViolation，但检测到: {:?}",
@@ -1358,7 +1358,7 @@ fn test_deref_outside_unsafe_error() {
         results.iter().any(|r| {
             matches!(
                 r,
-                ProofResult::Disproved(m) if m.kind == DisproofKind::UnsafeViolation
+                Err(ProofFailure::Disproved(m)) if m.kind == DisproofKind::UnsafeViolation
             )
         }),
         "应该检测到 deref outside unsafe 的 UnsafeViolation，但结果为空: {:?}",
@@ -1378,7 +1378,7 @@ fn test_spawn_ref_cycle_detected() {
         results.iter().any(|r| {
             matches!(
                 r,
-                ProofResult::Disproved(m) if m.kind == DisproofKind::SpawnCycleViolation
+                Err(ProofFailure::Disproved(m)) if m.kind == DisproofKind::SpawnCycleViolation
             )
         }),
         "应该检测到 spawn ref 循环的 SpawnCycleViolation，但结果为空: {:?}",
@@ -1398,7 +1398,7 @@ fn test_spawn_no_cycle_allowed() {
         !results.iter().any(|r| {
             matches!(
                 r,
-                ProofResult::Disproved(m) if m.kind == DisproofKind::SpawnCycleViolation
+                Err(ProofFailure::Disproved(m)) if m.kind == DisproofKind::SpawnCycleViolation
             )
         }),
         "spawn 内无循环不应报 SpawnCycleViolation，但检测到: {:?}",
@@ -1528,7 +1528,7 @@ fn test_e2e_spawn_accesses_outer() {
     // Assert
     let errors: Vec<_> = results
         .iter()
-        .filter(|r| matches!(r, ProofResult::Disproved { .. }))
+        .filter(|r| matches!(r, Err(ProofFailure::Disproved { .. })))
         .collect();
     assert!(
         errors.is_empty(),
@@ -1614,7 +1614,7 @@ fn test_check_ownership_entry_proves_valid_module() {
     assert!(
         results
             .iter()
-            .all(|r| !matches!(r, ProofResult::Disproved { .. })),
+            .all(|r| !matches!(r, Err(ProofFailure::Disproved { .. }))),
         "合法模块不应有所有权违例，实际: {:?}",
         results
     );

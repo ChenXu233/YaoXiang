@@ -11,7 +11,7 @@ use std::collections::HashMap;
 use crate::frontend::core::types::const_data::{BinOp, ConstExpr, ConstValue};
 use crate::frontend::core::sema::layers::predicate::check_predicate;
 use crate::frontend::core::sema::proof::context::ProofContext;
-use crate::frontend::core::sema::proof::verdict::ProofResult;
+use crate::frontend::core::sema::proof::verdict::{ProofFailure, ProofResultExt};
 use crate::frontend::core::sema::TypeEnvironment;
 
 /// 辅助：构造 GT 约束 (var > n)
@@ -59,7 +59,7 @@ fn test_smt_symbolic_variable_without_binding_detects_counterexample() {
     let result = check_predicate(&ctx, &refined, &HashMap::new());
     assert!(!result.is_proved(), "Z3 应找到 y>0 的反例 (如 y=0)");
     match result {
-        ProofResult::Disproved(model) => {
+        Err(ProofFailure::Disproved(model)) => {
             assert!(
                 !model.assignments.is_empty(),
                 "反例模型应包含至少一个赋值: {model:?}"

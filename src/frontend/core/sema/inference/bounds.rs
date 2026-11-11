@@ -6,7 +6,7 @@
 //! 支持鸭子类型：检查类型是否满足接口要求的所有方法（包括方法绑定）
 
 use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition, Result};
-use crate::frontend::core::sema::proof::verdict::BudgetReport;
+use crate::frontend::core::sema::proof::verdict::{BudgetReport, ProofFailure};
 use crate::frontend::core::sema::proof::verdict::DisproofKind;
 use crate::frontend::core::sema::proof::verdict::DisproofModel;
 use crate::frontend::core::sema::proof::verdict::ProofResult;
@@ -95,13 +95,13 @@ impl BoundsChecker {
     ) -> ProofResult {
         // Layer 1: 类型匹配（fast path）
         if let Err(diag) = validate_const_args(const_binders, const_args) {
-            return ProofResult::Disproved(DisproofModel {
+            return Err(ProofFailure::Disproved(DisproofModel {
                 kind: DisproofKind::TypeMismatch,
                 assignments: Vec::new(),
                 constraint: diag.message,
                 span: diag.span,
                 predicate_span: None,
-            });
+            }));
         }
 
         // Layer 2: 值约束求值（WBS 3.4.1 注：实参必为 Literal——
@@ -116,16 +116,16 @@ impl BoundsChecker {
                 match eval.eval(constraint) {
                     Ok(ConstValue::Bool(true)) => continue,
                     Ok(ConstValue::Bool(false)) => {
-                        return ProofResult::Disproved(DisproofModel {
+                        return Err(ProofFailure::Disproved(DisproofModel {
                             kind: DisproofKind::PredicateViolation,
                             assignments: Vec::new(),
                             constraint: format!("const 参数 `{}` 不满足约束", binder.name),
                             span: None,
                             predicate_span: None,
-                        });
+                        }));
                     }
                     Ok(_) | Err(_) => {
-                        return ProofResult::Unproven {
+                        return Err(ProofFailure::Unproven {
                             reason: UnprovenReason::Symbolic(format!(
                                 "`{constraint}`（const 参数 `{}` 的实参不是编译期常量）",
                                 binder.name
@@ -135,13 +135,13 @@ impl BoundsChecker {
                                 steps_used: 0,
                                 steps_limit: 0,
                             },
-                        };
+                        });
                     }
                 }
             }
         }
 
-        ProofResult::Proved
+        Ok(())
     }
 
     /// 检查类型是否满足约束（结构化匹配 - 鸭子类型）

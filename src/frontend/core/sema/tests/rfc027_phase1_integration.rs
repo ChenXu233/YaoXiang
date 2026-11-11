@@ -9,7 +9,7 @@ use crate::frontend::core::types::mono::MonoType;
 use crate::frontend::core::sema::environment::TypeEnvironment;
 use crate::frontend::core::sema::predicate_resolver::{PredicateDef, PredicateResolver};
 use crate::frontend::core::sema::proof::context::ProofContext;
-use crate::frontend::core::sema::proof::verdict::ProofResult;
+use crate::frontend::core::sema::proof::verdict::{ProofFailure, ProofResultExt};
 use crate::frontend::core::sema::layers::equivalence::check_type_equivalence;
 use crate::frontend::core::sema::layers::predicate::check_predicate;
 use std::collections::HashMap;
@@ -95,7 +95,7 @@ fn test_e2e_positive_zero_disproved() {
     let result = check_predicate(&ctx, &resolved, &bindings);
     assert!(!result.is_proved(), "0 > 0 应该被证伪");
     match result {
-        ProofResult::Disproved(_) => {}
+        Err(ProofFailure::Disproved(_)) => {}
         _ => panic!("Expected Disproved, got {:?}", result),
     }
 }
@@ -121,7 +121,7 @@ fn test_e2e_positive_with_binding_disproved() {
     let result = check_predicate(&ctx, &resolved, &bindings);
     assert!(!result.is_proved(), "-1 > 0 应该被证伪");
     match result {
-        ProofResult::Disproved(_) => {}
+        Err(ProofFailure::Disproved(_)) => {}
         _ => panic!("Expected Disproved"),
     }
 }

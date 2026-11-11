@@ -9,7 +9,7 @@
 
 use crate::frontend::core::sema::inference::bounds::BoundsChecker;
 use crate::frontend::core::types::{MonoType, StructType, TraitTable};
-use crate::frontend::core::sema::proof::verdict::ProofResult;
+use crate::frontend::core::sema::proof::verdict::{ProofResultExt};
 use crate::frontend::core::types::const_data::ConstVarDef;
 use std::collections::HashMap;
 
@@ -122,7 +122,7 @@ fn test_check_const_bounds_empty() {
 
     // Assert
     assert!(
-        matches!(result, ProofResult::Proved),
+        matches!(result, Ok(())),
         "Empty const args should trivially pass const bounds"
     );
 }

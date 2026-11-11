@@ -8,7 +8,7 @@
 //! - 语言规范 §控制流「while 循环」
 
 use crate::frontend::core::sema::layers::termination::{MeasureVerdict, TerminationChecker};
-use crate::frontend::core::sema::proof::verdict::ProofResult;
+use crate::frontend::core::sema::proof::verdict::{ProofFailure, ProofResult, ProofResultExt};
 use crate::ast::{BinOp, Block, Expr, Literal, PlanId, Stmt, StmtKind};
 use crate::frontend::core::types::const_data::{BinOp as ConstBinOp, ConstExpr};
 use crate::util::span::Span;
@@ -265,7 +265,7 @@ fn test_while_constant_condition_fails() {
         "Expected unproven result for non-terminating loop"
     );
     assert!(
-        matches!(&results[0], ProofResult::Unproven { .. }),
+        matches!(&results[0], Err(ProofFailure::Unproven { .. })),
         "Expected Unproven, got: {:?}",
         results[0]
     );
@@ -325,7 +325,7 @@ fn test_while_no_assignment_fails() {
         "Expected unproven result for loop with no progress"
     );
     assert!(
-        matches!(&results[0], ProofResult::Unproven { .. }),
+        matches!(&results[0], Err(ProofFailure::Unproven { .. })),
         "Expected Unproven, got: {:?}",
         results[0]
     );
@@ -342,7 +342,7 @@ fn test_while_decrement_wrong_direction_fails() {
         "Expected unproven result: i decreases when it should increase toward bound"
     );
     assert!(
-        matches!(&results[0], ProofResult::Unproven { .. }),
+        matches!(&results[0], Err(ProofFailure::Unproven { .. })),
         "Expected Unproven, got: {:?}",
         results[0]
     );

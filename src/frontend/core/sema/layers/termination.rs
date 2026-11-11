@@ -136,7 +136,7 @@ impl LinearMeasure {
 use crate::ast::{self, Expr, Stmt, StmtKind, BinOp, Type};
 use crate::frontend::core::sema::environment::TypeEnvironment;
 use crate::frontend::core::sema::proof::verdict::{
-    BudgetReport, DisproofKind, DisproofModel, ProofResult, UnprovenReason,
+    BudgetReport, DisproofKind, DisproofModel, ProofFailure, ProofResult, UnprovenReason,
 };
 use super::super::proof::smt::ast::{SMTExpr, SMTCommand, SMTSort, SMTResult};
 use super::super::proof::smt::backend::Solver;
@@ -452,13 +452,14 @@ impl<'a> TerminationChecker<'a> {
             ) {
                 continue;
             }
-            self.results.push(ProofResult::Disproved(DisproofModel {
-                kind: DisproofKind::MeasureNotDecreasing,
-                assignments: counterexample.clone(),
-                constraint: ob.measure.to_string(),
-                span: Some(ob.span),
-                predicate_span: None,
-            }));
+            self.results
+                .push(Err(ProofFailure::Disproved(DisproofModel {
+                    kind: DisproofKind::MeasureNotDecreasing,
+                    assignments: counterexample.clone(),
+                    constraint: ob.measure.to_string(),
+                    span: Some(ob.span),
+                    predicate_span: None,
+                })));
         }
     }
 
@@ -2185,7 +2186,7 @@ impl<'a> TerminationChecker<'a> {
         _measure: &LinearMeasure,
     ) {
         // 循环可证明终止——记录 Proved（不产生任何诊断）
-        self.results.push(ProofResult::Proved);
+        self.results.push(Ok(()));
     }
 
     fn emit_loop_not_terminating(
@@ -2197,14 +2198,14 @@ impl<'a> TerminationChecker<'a> {
         // 具体描述由 locales 提供，不在此写死中文以免污染其他语言。
         // span 随原因携带，使诊断指向具体循环（B10）。
         let reason = UnprovenReason::LoopTerminationUnproven { span };
-        self.results.push(ProofResult::Unproven {
+        self.results.push(Err(ProofFailure::Unproven {
             reason,
             proof_calls: vec![],
             budget: BudgetReport {
                 steps_used: 0,
                 steps_limit: 0,
             },
-        });
+        }));
     }
 }
 

@@ -15,7 +15,7 @@ use std::collections::HashMap;
 use crate::frontend::core::sema::layers::equivalence::check_type_equivalence;
 use crate::frontend::core::sema::layers::predicate::check_predicate;
 use crate::frontend::core::sema::proof::context::ProofContext;
-use crate::frontend::core::sema::proof::verdict::{DisproofKind, ProofResult};
+use crate::frontend::core::sema::proof::verdict::{DisproofKind, ProofFailure, ProofResultExt};
 use crate::frontend::core::sema::TypeEnvironment;
 use crate::frontend::core::types::const_data::{BinOp, ConstExpr, ConstValue};
 use crate::frontend::core::types::mono::MonoType;
@@ -57,7 +57,7 @@ fn test_e2e_phase4_disproved_model_has_constraint_text() {
 
     // Assert
     match result {
-        ProofResult::Disproved(model) => {
+        Err(ProofFailure::Disproved(model)) => {
             assert!(
                 model.constraint.contains("x > 0"),
                 "constraint 文本必须包含 'x > 0'，实际: '{}'",
@@ -87,7 +87,7 @@ fn test_e2e_phase4_smt_disproved_preserves_assignments() {
 
     // Assert
     match result {
-        ProofResult::Disproved(model) => {
+        Err(ProofFailure::Disproved(model)) => {
             assert!(!model.assignments.is_empty(), "SMT 反例模型必须有变量赋值");
             assert!(
                 model.assignments.iter().any(|(k, _)| k == "y"),
@@ -116,7 +116,7 @@ fn test_e2e_phase4_into_diagnostic_predicate_violation_e4018() {
 
     // Assert
     match result {
-        ProofResult::Disproved(model) => {
+        Err(ProofFailure::Disproved(model)) => {
             let diag = model.into_diagnostic();
             assert_eq!(
                 diag.code, "E4018",
@@ -199,7 +199,7 @@ fn test_e2e_phase4_type_equivalence_type_mismatch() {
 
     // Assert
     match result {
-        ProofResult::Disproved(model) => {
+        Err(ProofFailure::Disproved(model)) => {
             assert_eq!(
                 model.kind,
                 DisproofKind::TypeMismatch,
@@ -235,7 +235,7 @@ fn test_e2e_phase4_multiple_disproved_models_independent() {
 
     // Assert — 两个独立 Disproved 各自诊断正确
     match (&result1, &result2) {
-        (ProofResult::Disproved(m1), ProofResult::Disproved(m2)) => {
+        (Err(ProofFailure::Disproved(m1)), Err(ProofFailure::Disproved(m2))) => {
             let d1 = m1.clone().into_diagnostic();
             let d2 = m2.clone().into_diagnostic();
 

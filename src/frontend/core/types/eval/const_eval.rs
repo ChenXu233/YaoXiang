@@ -18,6 +18,10 @@
 use crate::frontend::core::types::ConstValue;
 use crate::ast::{Expr, BinOp as AstBinOp, UnOp as AstUnOp};
 use crate::frontend::core::lexer::tokens::Literal;
+use crate::frontend::core::sema::proof::budget::BudgetTracker;
+use crate::frontend::core::sema::proof::verdict::{
+    DisproofKind, DisproofModel, ProofFailure, UnprovenReason,
+};
 use crate::util::diagnostic::Diagnostic;
 use crate::util::diagnostic::codes::ErrorCodeDefinition;
 
@@ -226,17 +230,6 @@ pub struct TermEnv {
         std::collections::BTreeMap<String, crate::frontend::core::types::const_data::ConstValue>,
 }
 
-/// 项归一化的结果（6.9.2-C1 ⑥）：三态，`Unproven` **不得**当 `Disproved`。
-#[derive(Debug, Clone, PartialEq)]
-pub enum TermOutcome {
-    /// 闭项求值成功：值已知
-    Value(crate::frontend::core::types::const_data::ConstValue),
-    /// 开项：含此刻无值的编译期名——不拒绝、也不特化（6.9.3 给类型化出口）
-    Unproven,
-    /// 闭项求值失败（如 `1 / 0`）——拒绝（D59 C 类：旧行为静默接受）
-    Disproved,
-}
-
 impl TermEnv {
     /// 构造环境：符号名（无值）+ 值绑定（有值）。同名同时出现时以**值**为准
     /// （有值即可算，符号只是「没有值」的另一种来源）。
@@ -307,32 +300,98 @@ pub fn const_expr_free_names(
     out
 }
 
-/// **项归一化的唯一入口**（6.9.2-C1）：checker 与 mono 同一函数、不同环境。
+/// 项树的节点数（归一化的预算扣步单位：一个节点一步）。
+pub fn const_expr_node_count(term: &crate::frontend::core::types::const_data::ConstExpr) -> u32 {
+    use crate::frontend::core::types::const_data::ConstExpr as CE;
+    let mut count: u32 = 0;
+    let mut stack = vec![term];
+    while let Some(node) = stack.pop() {
+        count += 1;
+        match node {
+            CE::Lit(_) | CE::NamedVar(_) | CE::Var(_) => {}
+            CE::BinOp { left, right, .. } => {
+                stack.push(left);
+                stack.push(right);
+            }
+            CE::UnOp { expr, .. } => stack.push(expr),
+            CE::Call { args, .. } => stack.extend(args.iter()),
+            CE::If {
+                condition,
+                then_branch,
+                else_branch,
+            } => {
+                stack.push(condition);
+                stack.push(then_branch);
+                stack.push(else_branch);
+            }
+            CE::Range { start, end } => {
+                stack.push(start);
+                stack.push(end);
+            }
+        }
+    }
+    count
+}
+
+/// **项归一化的唯一入口**（6.9.2-C1 / 6.9.3a）：checker 与 mono 同一函数、不同环境。
 ///
-/// 判定顺序：先看自由变量义务（符号名 ⇒ `Unproven`，绝不尝试求值），再交给
-/// 既有 [`ConstGenericEval`]（不新写求值器）。
+/// 三态各有**类型化出口**，互不降格（失败侧走唯一失败代数 [`ProofFailure`]）：
+/// 1. 值已知 ⇒ `Ok(value)`；
+/// 2. 含此刻无值的编译期名 ⇒ `Err(Unproven { reason: Symbolic(名字), .. })`
+///    （名字**必须**带出去：6.9.3a 之前这里丢名字，诊断只能说「无法确定」）；
+/// 3. 预算耗尽 ⇒ `Err(Unproven { reason: BudgetExceeded, .. })`（预算语义仍是
+///    **每次判定**一份，调用方用 `BudgetTracker::for_judgment()` 新建）；
+/// 4. 闭项求值失败（除零/溢出/类型不合/不支持的算子）⇒ `Err(Disproved(..))`。
+///
+/// `Unproven` 永不降格成 `Disproved`：前者「还不能算」，后者「算出来是错的」。
 pub fn normalize(
     term: &crate::frontend::core::types::const_data::ConstExpr,
     env: &TermEnv,
-) -> TermOutcome {
-    if const_expr_free_names(term)
-        .iter()
-        .any(|name| env.is_symbolic(name))
+    budget: &BudgetTracker,
+) -> Result<ConstValue, ProofFailure> {
+    // 1. 自由变量义务：符号名是「此刻没有值」，不是「算错」
+    if let Some(name) = const_expr_free_names(term)
+        .into_iter()
+        .find(|name| env.is_symbolic(name))
     {
-        return TermOutcome::Unproven;
+        return Err(ProofFailure::Unproven {
+            reason: UnprovenReason::Symbolic(name),
+            proof_calls: Vec::new(),
+            budget: budget.report(),
+        });
     }
+    // 2. 预算：一次判定按项规模扣步（缺省 10k 步；测试可注入小预算触发）
+    for _ in 0..const_expr_node_count(term) {
+        if !budget.spend() {
+            return Err(ProofFailure::Unproven {
+                reason: UnprovenReason::BudgetExceeded,
+                proof_calls: Vec::new(),
+                budget: budget.report(),
+            });
+        }
+    }
+    // 3. 求值：唯一求值器（不新写）
     let mut evaluator = ConstGenericEval::new();
     for (name, value) in &env.values {
         evaluator.bind_var(name.clone(), value.clone());
     }
-    // 求值失败时 `ConstGenericEval` 会经 span 强制的 builder 构造一条诊断；归一化
-    // 只关心「成不成」、不消费那条诊断，故给一个占位 span 上下文——本函数因此
-    // **不 panic**，C2 的 mono 路径（没有类型检查 walk 上下文）也能直接调用。
+    // 求值失败时 `ConstGenericEval` 会经 span 强制的 builder 构造一条诊断；归一化只
+    // 关心「成不成」，但把它的 message 收进反例文本以免丢信息，故给一个占位 span
+    // 上下文——本函数因此 **不 panic**，mono 路径（没有类型检查 walk 上下文）也能调用。
     let _span_guard =
         crate::util::diagnostic::push_current_span(crate::util::span::Span::default());
     match evaluator.eval(term) {
-        Ok(value) => TermOutcome::Value(value),
-        Err(_) => TermOutcome::Disproved,
+        Ok(value) => Ok(value),
+        Err(diagnostic) => Err(ProofFailure::Disproved(DisproofModel {
+            // 占位 kind：该 Disproved **从不经** `into_diagnostic` 发射——消费方一律映射
+            // 成 E1113（缺编译期证据）或「无类型位投影」；求值失败文本收进 `constraint`，
+            // 正式分类与文案留给 6.9.3c 的码表轮（本轮不动码表/locales）。
+            kind: DisproofKind::PredicateViolation,
+            assignments: Vec::new(),
+            constraint: diagnostic.message,
+            span: None,
+            predicate_span: None,
+        })),
     }
 }
 fn convert_ast_unop(op: &AstUnOp) -> Option<crate::frontend::core::types::const_data::UnOp> {

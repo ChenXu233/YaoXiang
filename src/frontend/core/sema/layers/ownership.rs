@@ -15,7 +15,7 @@ use crate::util::consumption::ConsumptionLedger;
 use crate::util::plan_id::PlanId;
 use crate::util::span::Span;
 use super::super::proof::context::ProofContext;
-use super::super::proof::verdict::ProofResult;
+use super::super::proof::verdict::{ProofFailure, ProofResult, ProofResultExt};
 use crate::frontend::core::types::const_data::{BinOp, ConstExpr, UnOp};
 
 use crate::frontend::core::sema::proof::smt::ast::{SMTSort, SMTResult};
@@ -786,9 +786,9 @@ pub fn emit_borrow_predicate(
     span: Span,
 ) -> ProofResult {
     match fast_path_check(tree, cfg, token, node_idx) {
-        FastPathResult::Safe => ProofResult::Proved,
-        FastPathResult::Unsafe { live_tokens } => {
-            ProofResult::Disproved(super::super::proof::verdict::DisproofModel {
+        FastPathResult::Safe => Ok(()),
+        FastPathResult::Unsafe { live_tokens } => Err(ProofFailure::Disproved(
+            super::super::proof::verdict::DisproofModel {
                 kind: super::super::proof::verdict::DisproofKind::BorrowConflict,
                 assignments: vec![
                     ("token".into(), format!("{}", token)),
@@ -804,8 +804,8 @@ pub fn emit_borrow_predicate(
                 constraint: format!("{} 的冲突令牌仍存活", token),
                 span: Some(span),
                 predicate_span: None,
-            })
-        }
+            },
+        )),
     }
 }
 
@@ -816,15 +816,17 @@ pub fn emit_move_predicate(
     span: Span,
 ) -> ProofResult {
     if is_moved {
-        ProofResult::Disproved(super::super::proof::verdict::DisproofModel {
-            kind: super::super::proof::verdict::DisproofKind::UseAfterMove,
-            assignments: vec![("variable".into(), var_name.into())],
-            constraint: format!("{} 已被移动，不可再使用", var_name),
-            span: Some(span),
-            predicate_span: None,
-        })
+        Err(ProofFailure::Disproved(
+            super::super::proof::verdict::DisproofModel {
+                kind: super::super::proof::verdict::DisproofKind::UseAfterMove,
+                assignments: vec![("variable".into(), var_name.into())],
+                constraint: format!("{} 已被移动，不可再使用", var_name),
+                span: Some(span),
+                predicate_span: None,
+            },
+        ))
     } else {
-        ProofResult::Proved
+        Ok(())
     }
 }
 
@@ -835,15 +837,17 @@ pub fn emit_drop_predicate(
     span: Span,
 ) -> ProofResult {
     if is_dropped {
-        ProofResult::Disproved(super::super::proof::verdict::DisproofModel {
-            kind: super::super::proof::verdict::DisproofKind::UseAfterDrop,
-            assignments: vec![("variable".into(), var_name.into())],
-            constraint: format!("{} 已被释放，不可再使用", var_name),
-            span: Some(span),
-            predicate_span: None,
-        })
+        Err(ProofFailure::Disproved(
+            super::super::proof::verdict::DisproofModel {
+                kind: super::super::proof::verdict::DisproofKind::UseAfterDrop,
+                assignments: vec![("variable".into(), var_name.into())],
+                constraint: format!("{} 已被释放，不可再使用", var_name),
+                span: Some(span),
+                predicate_span: None,
+            },
+        ))
     } else {
-        ProofResult::Proved
+        Ok(())
     }
 }
 
@@ -854,15 +858,17 @@ pub fn emit_double_drop_predicate(
     span: Span,
 ) -> ProofResult {
     if is_dropped {
-        ProofResult::Disproved(super::super::proof::verdict::DisproofModel {
-            kind: super::super::proof::verdict::DisproofKind::DoubleDrop,
-            assignments: vec![("variable".into(), var_name.into())],
-            constraint: format!("{} 已被释放，不可重复释放", var_name),
-            span: Some(span),
-            predicate_span: None,
-        })
+        Err(ProofFailure::Disproved(
+            super::super::proof::verdict::DisproofModel {
+                kind: super::super::proof::verdict::DisproofKind::DoubleDrop,
+                assignments: vec![("variable".into(), var_name.into())],
+                constraint: format!("{} 已被释放，不可重复释放", var_name),
+                span: Some(span),
+                predicate_span: None,
+            },
+        ))
     } else {
-        ProofResult::Proved
+        Ok(())
     }
 }
 
@@ -873,15 +879,17 @@ pub fn emit_mut_predicate(
     span: Span,
 ) -> ProofResult {
     if !is_mutable {
-        ProofResult::Disproved(super::super::proof::verdict::DisproofModel {
-            kind: super::super::proof::verdict::DisproofKind::MutViolation,
-            assignments: vec![("variable".into(), var_name.into())],
-            constraint: format!("{} 不可变，不能赋值", var_name),
-            span: Some(span),
-            predicate_span: None,
-        })
+        Err(ProofFailure::Disproved(
+            super::super::proof::verdict::DisproofModel {
+                kind: super::super::proof::verdict::DisproofKind::MutViolation,
+                assignments: vec![("variable".into(), var_name.into())],
+                constraint: format!("{} 不可变，不能赋值", var_name),
+                span: Some(span),
+                predicate_span: None,
+            },
+        ))
     } else {
-        ProofResult::Proved
+        Ok(())
     }
 }
 
@@ -1317,7 +1325,7 @@ impl OwnershipChecker {
         src_name: &str,
         span: Span,
     ) -> ProofResult {
-        ProofResult::Disproved(super::super::proof::verdict::DisproofModel {
+        Err(ProofFailure::Disproved(super::super::proof::verdict::DisproofModel {
             kind: super::super::proof::verdict::DisproofKind::LinearTokenCopy,
             assignments: vec![("variable".into(), src_name.into())],
             constraint: format!(
@@ -1326,7 +1334,7 @@ impl OwnershipChecker {
             ),
             span: Some(span),
             predicate_span: None,
-        })
+        }))
     }
 
     /// 记录绑定：变量名 → 当前语句键（镜像作用域栈，#256）
@@ -1359,7 +1367,7 @@ impl OwnershipChecker {
             var: name.to_string(),
             span,
         });
-        ProofResult::Proved
+        Ok(())
     }
 
     /// #256：类型驱动的复制语义分类（SPEC §11.2）
@@ -2058,7 +2066,7 @@ impl OwnershipChecker {
             } => {
                 let mut results = Vec::new();
                 if !self.inside_unsafe {
-                    results.push(ProofResult::Disproved(
+                    results.push(Err(ProofFailure::Disproved(
                         super::super::proof::verdict::DisproofModel {
                             kind: super::super::proof::verdict::DisproofKind::UnsafeViolation,
                             assignments: vec![],
@@ -2066,7 +2074,7 @@ impl OwnershipChecker {
                             span: Some(*span),
                             predicate_span: None,
                         },
-                    ));
+                    )));
                 }
                 results.extend(self.walk_expr(expr));
                 results
@@ -2930,7 +2938,7 @@ impl OwnershipChecker {
 
         // 检测 spawn ref 循环
         if let Some(cycle) = self.detect_spawn_cycle() {
-            results.push(ProofResult::Disproved(
+            results.push(Err(ProofFailure::Disproved(
                 super::super::proof::verdict::DisproofModel {
                     kind: super::super::proof::verdict::DisproofKind::SpawnCycleViolation,
                     assignments: vec![],
@@ -2938,7 +2946,7 @@ impl OwnershipChecker {
                     span: None,
                     predicate_span: None,
                 },
-            ));
+            )));
         }
 
         (

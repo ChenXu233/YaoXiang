@@ -1,4 +1,5 @@
 use super::*;
+use crate::frontend::core::sema::proof::verdict::ProofFailure;
 
 impl TypeChecker {
     /// 常量折叠：表达式在字面量值环境下求成具体值（精化值环境的数据源）
@@ -613,8 +614,8 @@ impl TypeChecker {
             refined,
             &bindings,
         ) {
-            ProofResult::Proved => {}
-            ProofResult::Disproved(model) => {
+            Ok(()) => {}
+            Err(ProofFailure::Disproved(model)) => {
                 if let MonoType::Refined { constraint, .. } = refined {
                     // 闭合约束（无自由变量）为假 ⇒ **注解自身不成立**，与传给它
                     // 的值无关（`IsPositive(-5)`：`-5 > 0` 恒假）。这一支报 E4018
@@ -648,9 +649,9 @@ impl TypeChecker {
                     }
                 }
             }
-            ProofResult::Unproven {
+            Err(ProofFailure::Unproven {
                 proof_calls: calls, ..
-            } => {
+            }) => {
                 if calls.is_empty() {
                     // RFC-027 §4/§9：Unproven → 编译错误，无降级、无 silent pass。
                     // 此分支 = 绑定完备仍证不出（约束形态超出证明内核：If/Range
@@ -735,8 +736,8 @@ impl TypeChecker {
             ctx.shared_ctx.assumptions.exit_scope();
         }
         match outcome {
-            ProofResult::Proved => {}
-            ProofResult::Disproved(model) => {
+            Ok(()) => {}
+            Err(ProofFailure::Disproved(model)) => {
                 // issue #469 处 2a：反例段由 locales per-site 键渲染；模型未绑定
                 // 值时参数为空串——段整体缺席，不再输出悬空的「反例：」标题
                 let mut builder = ErrorCodeDefinition::refinement_violated(&model.constraint);
@@ -755,9 +756,9 @@ impl TypeChecker {
                 }
                 ctx.diags.push(builder.at(span).build());
             }
-            ProofResult::Unproven {
+            Err(ProofFailure::Unproven {
                 proof_calls: calls, ..
-            } => {
+            }) => {
                 if calls.is_empty() {
                     // 无证法可执行且证不出：报错，不静默放行（§3.4/§9）
                     ctx.diags.push(

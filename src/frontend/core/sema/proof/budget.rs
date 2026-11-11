@@ -24,6 +24,24 @@ impl Default for BudgetTracker {
 }
 
 impl BudgetTracker {
+    /// **一次判定**的预算（6.9.3a 的唯一工厂）。
+    ///
+    /// 语义仍是 RFC-027 §8 的既有口径「每次判定一份」：**不是**每编译单元配额。
+    /// 每次证明 / 每次项归一化前新建一份，互不共享、互不累计。
+    pub fn for_judgment() -> Self {
+        Self::new()
+    }
+
+    /// 指定步数上限（**测试**注入小预算用；生产一律走 [`Self::for_judgment`]）。
+    pub fn with_steps(steps_limit: u32) -> Self {
+        Self {
+            steps_used: Cell::new(0),
+            steps_limit,
+            time_ms_used: Cell::new(0),
+            time_ms_limit: 100,
+        }
+    }
+
     pub fn new() -> Self {
         Self {
             steps_used: Cell::new(0),

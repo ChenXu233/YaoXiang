@@ -10,7 +10,7 @@ use crate::frontend::core::types::const_data::{ConstExpr, ConstValue, BinOp, Con
 use crate::frontend::core::types::eval::const_eval::{ConstFunction, convert_expr_to_const_expr};
 use crate::frontend::core::sema::predicate_resolver::PredicateResolver;
 use crate::frontend::core::sema::is_builtin_predicate_name;
-use crate::frontend::core::sema::proof::verdict::ProofResult;
+use crate::frontend::core::sema::proof::verdict::{ProofFailure, ProofResultExt};
 use crate::frontend::core::sema::proof::dep_graph::{
     constraint_is_terminates, refined_free_vars, RefinedScopeUnit,
 };
@@ -969,8 +969,8 @@ impl TypeChecker {
             );
             for result in ownership_results {
                 match result {
-                    ProofResult::Proved => {}
-                    ProofResult::Disproved(model) => {
+                    Ok(()) => {}
+                    Err(ProofFailure::Disproved(model)) => {
                         // SpawnCycleViolation 的检测发生在全模块 ref 图上，模型无
                         // 语句级 span——挂模块 span 兜底，避免 spanless 构造在
                         // build() 走 debug panic / release 降级 E8001（显式 .at() 仍优先）
@@ -981,10 +981,10 @@ impl TypeChecker {
                     // Unproven 不得被空臂吞掉——记账（proof_calls 上抛，与
                     // 5179/5318/5448 三处精化分支同一契约）+ 诊断（into_result
                     // 既定转换路径，不新造第二个 Unproven→Diagnostic 实现）。
-                    result @ ProofResult::Unproven { .. } => {
-                        if let ProofResult::Unproven {
+                    result @ Err(ProofFailure::Unproven { .. }) => {
+                        if let Err(ProofFailure::Unproven {
                             proof_calls: calls, ..
-                        } = &result
+                        }) = &result
                         {
                             proof_calls.extend(calls.iter().cloned());
                         }

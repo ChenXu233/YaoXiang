@@ -40,7 +40,7 @@ impl<'a> ProofContext<'a> {
             assumptions: FlowSensitiveGamma::new(),
             env,
             dep_graph: TypeDepGraph::new(),
-            budget: BudgetTracker::new(),
+            budget: BudgetTracker::for_judgment(),
             dep_env,
         }
     }

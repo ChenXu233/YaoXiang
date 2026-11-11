@@ -17,7 +17,8 @@ use super::super::proof::smt::ast::SMTResult;
 use super::super::proof::smt::backend::{with_shared_solver, SolverConsumer};
 use super::super::proof::smt::translate;
 use super::super::proof::verdict::{
-    BudgetReport, DisproofKind, DisproofModel, ProofFunctionCall, ProofResult, UnprovenReason,
+    BudgetReport, DisproofKind, DisproofModel, ProofFailure, ProofFunctionCall, ProofResult,
+    ProofResultExt, UnprovenReason,
 };
 
 // 求解器获取面（RFC-039 D58）：本模块**不再**自持 `static SOLVER` 私有单例。
@@ -58,7 +59,7 @@ pub fn check_predicate(
 ) -> ProofResult {
     let constraint = match refined {
         MonoType::Refined { constraint, .. } => constraint,
-        _ => return ProofResult::Proved,
+        _ => return Ok(()),
     };
 
     // === 第 1 级：Evaluator 直接求值 ===
@@ -69,7 +70,7 @@ pub fn check_predicate(
     // === 第 2 级：假设栈蕴含 ===
     // 2a：精确匹配——零开销快速路径
     if ctx.assumptions.contains(constraint) {
-        return ProofResult::Proved;
+        return Ok(());
     }
     // 2b：SMT 蕴含——假设非空但不精确匹配
     if !ctx.assumptions.is_empty() {
@@ -85,7 +86,7 @@ pub fn check_predicate(
         ConstExpr::Call { .. } | ConstExpr::If { .. } | ConstExpr::Range { .. }
     ) {
         let smt_result = try_smt_solve(ctx, constraint, bindings);
-        if smt_result.is_proved() || matches!(smt_result, ProofResult::Disproved(_)) {
+        if smt_result.is_proved() || matches!(smt_result, Err(ProofFailure::Disproved(_))) {
             return smt_result;
         }
     }
@@ -105,8 +106,8 @@ fn try_direct_eval(
 ) -> Option<ProofResult> {
     let mut evaluator = Evaluator::new(ctx.env, &ctx.budget, &ctx.dep_env);
     match evaluator.eval_expr(constraint, bindings) {
-        Ok(ConstValue::Bool(true)) => Some(ProofResult::Proved),
-        Ok(ConstValue::Bool(false)) => Some(ProofResult::Disproved(DisproofModel {
+        Ok(ConstValue::Bool(true)) => Some(Ok(())),
+        Ok(ConstValue::Bool(false)) => Some(Err(ProofFailure::Disproved(DisproofModel {
             kind: DisproofKind::PredicateViolation,
             assignments: bindings
                 .iter()
@@ -115,12 +116,12 @@ fn try_direct_eval(
             constraint: format!("{}", constraint),
             span: None,
             predicate_span: None,
-        })),
-        Ok(_) => Some(ProofResult::Unproven {
+        }))),
+        Ok(_) => Some(Err(ProofFailure::Unproven {
             reason: UnprovenReason::BeyondKernel("约束表达式未求值为 Bool".into()),
             proof_calls: vec![],
             budget: ctx.budget.report(),
-        }),
+        })),
         Err(_) => None,
     }
 }
@@ -152,7 +153,7 @@ fn try_implication(
         solver.map(|solver| solver.solve(&commands, ctx.budget.time_ms_limit()))
     })?;
     match smt_result {
-        SMTResult::Unsat => Some(ProofResult::Proved),
+        SMTResult::Unsat => Some(Ok(())),
         // sat = 假设不蕴含，约束可能独立成立 → 升级
         SMTResult::Sat { .. } => None,
         // unknown = 无法判断 → 升级
@@ -176,19 +177,19 @@ fn try_smt_solve(
         None => solver_unavailable_result(),
     });
     match smt_result {
-        SMTResult::Unsat => ProofResult::Proved,
-        SMTResult::Sat { model } => ProofResult::Disproved(DisproofModel {
+        SMTResult::Unsat => Ok(()),
+        SMTResult::Sat { model } => Err(ProofFailure::Disproved(DisproofModel {
             kind: DisproofKind::PredicateViolation,
             assignments: model.assignments,
             constraint: format!("{}", constraint),
             span: None,
             predicate_span: None,
-        }),
-        SMTResult::Unknown { reason } => ProofResult::Unproven {
+        })),
+        SMTResult::Unknown { reason } => Err(ProofFailure::Unproven {
             reason: UnprovenReason::BeyondKernel(reason),
             proof_calls: vec![],
             budget: ctx.budget.report(),
-        },
+        }),
     }
 }
 
@@ -211,40 +212,40 @@ fn try_proof_fn_call(
                     if let Some(val) = bindings.get(name) {
                         const_args.push(val.clone());
                     } else {
-                        return ProofResult::Unproven {
+                        return Err(ProofFailure::Unproven {
                             reason: UnprovenReason::BeyondKernel(
                                 "证明函数实参包含未绑定变量".into(),
                             ),
                             proof_calls: vec![],
                             budget: budget_report,
-                        };
+                        });
                     }
                 }
                 _ => {
-                    return ProofResult::Unproven {
+                    return Err(ProofFailure::Unproven {
                         reason: UnprovenReason::BeyondKernel(
                             "证明函数实参必须是字面量或已绑定变量".into(),
                         ),
                         proof_calls: vec![],
                         budget: budget_report,
-                    };
+                    });
                 }
             }
         }
 
-        return ProofResult::Unproven {
+        return Err(ProofFailure::Unproven {
             reason: UnprovenReason::ProofFunctionRequired,
             proof_calls: vec![ProofFunctionCall {
                 func_name: func.clone(),
                 args: const_args,
             }],
             budget: budget_report,
-        };
+        });
     }
 
-    ProofResult::Unproven {
+    Err(ProofFailure::Unproven {
         reason: UnprovenReason::BeyondKernel("无法自动证明且无证明函数".into()),
         proof_calls: vec![],
         budget: budget_report,
-    }
+    })
 }

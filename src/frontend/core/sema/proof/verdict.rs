@@ -47,20 +47,68 @@ pub enum DisproofKind {
     MeasureNotDecreasing,
 }
 
-/// 证明结果
+/// 证明结果（6.9.3a：`Result<(), ProofFailure>` 的类型别名）
+///
+/// **唯一失败代数**：成功是 `()`，失败只能是 [`ProofFailure`]。6.9.3a 之前这里
+/// 是一套独立三值枚举，与项层的三值并列——两套三值各丢各的信息
+///（项层丢符号名、丢诊断），且判等/归一化各自就地造失败值。现在失败侧只有
+/// [`ProofFailure`] 一种类型，项层归一化（`const_eval::normalize`）也返回它。
+pub type ProofResult = Result<(), ProofFailure>;
+
+/// 证明失败（唯一失败类型）
+///
+/// 两臂语义互不降格：`Disproved` = 已算出「命题为假」（可给反例），
+/// `Unproven` = 在给定资源/推理规则内**算不出来**（不等于为假）。
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ProofResult {
-    /// 证明成立
-    Proved,
+pub enum ProofFailure {
     /// 证伪，带反例模型
     Disproved(DisproofModel),
     /// 在给定资源内无法证明（不等于命题为假）
     Unproven {
         reason: UnprovenReason,
         /// Phase 2.5: 需要被执行的证明函数。非空时 Pipeline 执行它们。
+        ///
+        /// 6.9.3a 的契约草案写的是 `Unproven { reason, budget }` 两字段；实现保留
+        /// 本字段，因为它是 RFC-027 Phase 2.5 的**活功能**：`checker` 从失败值里
+        /// 收集这些调用交给 `execute_proof_calls` 执行，删掉即静默废功（红线「核心
+        /// 功能不留待实现」）。语义与 6.9.3a 之前逐字一致。
         proof_calls: Vec<ProofFunctionCall>,
         budget: BudgetReport,
     },
+}
+
+impl ProofFailure {
+    /// 失败 → 用户可见诊断
+    ///
+    /// 映射逻辑与 6.9.3a 之前 `ProofResult::into_result` 逐字一致（同一个
+    /// `DisproofModel::into_diagnostic` / `UnprovenReason::to_diagnostic`）。
+    pub fn into_diagnostic(self) -> Diagnostic {
+        match self {
+            Self::Disproved(model) => model.into_diagnostic(),
+            Self::Unproven { reason, .. } => reason.to_diagnostic(),
+        }
+    }
+}
+
+/// `ProofResult` 的便捷方法（它是 `Result` 别名，方法只能由扩展 trait 提供）
+///
+/// 语义与 6.9.3a 之前同名方法一致：`is_proved` = 成功；`into_result` = 失败映射成
+/// 既有诊断（映射逻辑见 [`ProofFailure::into_diagnostic`]）。
+pub trait ProofResultExt {
+    /// 是否证明通过
+    fn is_proved(&self) -> bool;
+    /// 转换为 Result（用于 Result 风格错误处理）
+    fn into_result(self) -> Result<(), Diagnostic>;
+}
+
+impl ProofResultExt for ProofResult {
+    fn is_proved(&self) -> bool {
+        self.is_ok()
+    }
+
+    fn into_result(self) -> Result<(), Diagnostic> {
+        self.map_err(ProofFailure::into_diagnostic)
+    }
 }
 
 /// 反例模型
@@ -253,22 +301,6 @@ pub enum UnprovenReason {
 pub struct BudgetReport {
     pub steps_used: u32,
     pub steps_limit: u32,
-}
-
-impl ProofResult {
-    /// 是否证明通过
-    pub fn is_proved(&self) -> bool {
-        matches!(self, Self::Proved)
-    }
-
-    /// 转换为 Result（用于 Result 风格错误处理）
-    pub fn into_result(self) -> Result<(), Diagnostic> {
-        match self {
-            Self::Proved => Ok(()),
-            Self::Disproved(model) => Err(model.into_diagnostic()),
-            Self::Unproven { reason, .. } => Err(reason.to_diagnostic()),
-        }
-    }
 }
 
 impl UnprovenReason {

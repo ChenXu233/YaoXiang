@@ -15,7 +15,9 @@ use crate::frontend::core::types::const_data::{BinOp, ConstExpr, ConstValue};
 use crate::frontend::core::types::mono::MonoType;
 use crate::frontend::core::sema::layers::predicate::check_predicate;
 use crate::frontend::core::sema::proof::context::ProofContext;
-use crate::frontend::core::sema::proof::verdict::{ProofFunctionCall, ProofResult, UnprovenReason};
+use crate::frontend::core::sema::proof::verdict::{
+    ProofFailure, ProofFunctionCall, ProofResultExt, UnprovenReason,
+};
 use crate::frontend::core::sema::TypeEnvironment;
 
 /// `Sorted(42)` 调用的精化布尔类型——Phase 1/2 无法处理，期望 Unproven + proof_calls。
@@ -45,14 +47,14 @@ fn test_call_constraint_produces_proof_fn_call() {
 
     // Assert: 应返回 Unproven + proof_calls
     assert!(
-        matches!(&result, ProofResult::Unproven { .. }),
+        matches!(&result, Err(ProofFailure::Unproven { .. })),
         "期望 Unproven + proof_calls，实际: {result:?}"
     );
-    if let ProofResult::Unproven {
+    if let Err(ProofFailure::Unproven {
         proof_calls,
         reason,
         ..
-    } = &result
+    }) = &result
     {
         assert!(
             !proof_calls.is_empty(),
@@ -89,8 +91,8 @@ fn test_non_call_unproven_has_empty_proof_calls() {
     // Z3 可能 Disproved（unknown=0）或 Unproven，但均不应产生 proof_calls
     assert!(
         result.is_proved()
-            || matches!(&result, ProofResult::Disproved { .. })
-            || matches!(&result, ProofResult::Unproven { proof_calls, .. } if proof_calls.is_empty()),
+            || matches!(&result, Err(ProofFailure::Disproved { .. }))
+            || matches!(&result, Err(ProofFailure::Unproven { proof_calls, .. }) if proof_calls.is_empty()),
         "非 Call 约束不应产生 proof_calls，实际: {result:?}"
     );
 }
@@ -117,7 +119,7 @@ fn test_call_with_named_var_args() {
 
     // Assert: 应返回 Unproven + proof_calls
     assert!(
-        matches!(&result, ProofResult::Unproven { proof_calls, .. } if !proof_calls.is_empty()),
+        matches!(&result, Err(ProofFailure::Unproven { proof_calls, .. }) if !proof_calls.is_empty()),
         "Call + NamedVar 应产生 ProofFunctionCall，实际: {result:?}"
     );
 }

@@ -15,7 +15,9 @@
 use crate::frontend::core::sema::environment::TypeEnvironment;
 use crate::frontend::core::types::eval::evaluator::Evaluator;
 use crate::frontend::core::types::mono::MonoType;
-use super::super::proof::verdict::{DisproofKind, DisproofModel, ProofResult, UnprovenReason};
+use super::super::proof::verdict::{
+    DisproofKind, DisproofModel, ProofFailure, ProofResult, UnprovenReason,
+};
 use super::super::proof::context::ProofContext;
 
 /// 结构等价快速路径：O(n) 递归比较两个类型结构
@@ -224,19 +226,19 @@ pub fn check_type_equivalence(
 ) -> ProofResult {
     // 1. 结构等价快速路径
     if structurally_equal(lhs, rhs) {
-        return ProofResult::Proved;
+        return Ok(());
     }
 
     // 2. 子类型快速路径：双向子类型 ⇒ 等价
     if is_subtype(lhs, rhs, Some(ctx.env)) && is_subtype(rhs, lhs, Some(ctx.env)) {
-        return ProofResult::Proved;
+        return Ok(());
     }
 
     // 3. 确定性归约后比较
     let mut evaluator = Evaluator::new(ctx.env, &ctx.budget, &ctx.dep_env);
     match (evaluator.eval(lhs), evaluator.eval(rhs)) {
-        (Ok(l), Ok(r)) if l == r => ProofResult::Proved,
-        (Ok(l), Ok(r)) => ProofResult::Disproved(DisproofModel {
+        (Ok(l), Ok(r)) if l == r => Ok(()),
+        (Ok(l), Ok(r)) => Err(ProofFailure::Disproved(DisproofModel {
             kind: DisproofKind::TypeMismatch,
             assignments: vec![
                 ("expected".into(), format!("{:?}", l)),
@@ -245,11 +247,11 @@ pub fn check_type_equivalence(
             constraint: format!("{} == {}", l, r),
             span: None,
             predicate_span: None,
-        }),
-        (Err(e), _) | (_, Err(e)) => ProofResult::Unproven {
+        })),
+        (Err(e), _) | (_, Err(e)) => Err(ProofFailure::Unproven {
             reason: UnprovenReason::BeyondKernel(format!("{:?}", e)),
             proof_calls: vec![],
             budget: ctx.budget.report(),
-        },
+        }),
     }
 }

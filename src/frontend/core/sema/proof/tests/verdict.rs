@@ -7,7 +7,7 @@
 //! E4019: 类型等式不成立 → TypeMismatch → DisproofModel::into_diagnostic()
 
 use crate::frontend::core::sema::proof::verdict::{
-    BudgetReport, DisproofKind, DisproofModel, ProofResult, UnprovenReason,
+    BudgetReport, DisproofKind, DisproofModel, ProofFailure, ProofResultExt, UnprovenReason,
 };
 use crate::util::diagnostic::Severity;
 use crate::util::span::{Position, Span};
@@ -31,7 +31,7 @@ fn type_mismatch_model() -> DisproofModel {
 #[test]
 fn test_proved_is_proved_returns_true() {
     // Arrange
-    let result = ProofResult::Proved;
+    let result = Ok(());
 
     // Act & Assert
     assert!(result.is_proved(), "Proved::is_proved() must return true");
@@ -206,7 +206,7 @@ fn test_into_diagnostic_type_mismatch_single_assignment() {
 #[test]
 fn test_into_result_proved_returns_ok() {
     // Arrange
-    let result = ProofResult::Proved;
+    let result = Ok(());
 
     // Act
     let outcome = result.into_result();
@@ -227,7 +227,7 @@ fn test_into_result_disproved_returns_diagnostic_error() {
         span: None,
         predicate_span: None,
     };
-    let result = ProofResult::Disproved(model);
+    let result = Err(ProofFailure::Disproved(model));
 
     // Act
     let outcome = result.into_result();
@@ -256,7 +256,7 @@ fn test_into_result_disproved_returns_diagnostic_error() {
 #[test]
 fn test_into_result_loop_termination_unproven_is_user_domain_code() {
     // Arrange
-    let result = ProofResult::Unproven {
+    let result = Err(ProofFailure::Unproven {
         reason: UnprovenReason::LoopTerminationUnproven {
             span: crate::util::span::Span::default(),
         },
@@ -265,7 +265,7 @@ fn test_into_result_loop_termination_unproven_is_user_domain_code() {
             steps_used: 0,
             steps_limit: 0,
         },
-    };
+    });
 
     // Act
     let outcome = result.into_result();
@@ -283,14 +283,14 @@ fn test_into_result_loop_termination_unproven_is_user_domain_code() {
 #[test]
 fn test_into_result_unclassified_unproven_still_reports_ice() {
     // Arrange — BeyondKernel 目前无专属码，属未分类情况
-    let result = ProofResult::Unproven {
+    let result = Err(ProofFailure::Unproven {
         reason: UnprovenReason::BeyondKernel("未分类情形".into()),
         proof_calls: vec![],
         budget: BudgetReport {
             steps_used: 0,
             steps_limit: 0,
         },
-    };
+    });
 
     // Act
     let outcome = result.into_result();
@@ -314,13 +314,13 @@ fn test_into_result_measure_not_decreasing_is_user_domain_code() {
     use crate::frontend::core::sema::proof::verdict::{DisproofKind, DisproofModel};
 
     // Arrange —— 递减义务被判伪，反例 b = 0
-    let result = ProofResult::Disproved(DisproofModel {
+    let result = Err(ProofFailure::Disproved(DisproofModel {
         kind: DisproofKind::MeasureNotDecreasing,
         assignments: vec![("b".to_string(), "0".to_string())],
         constraint: "b".to_string(),
         span: Some(crate::util::span::Span::default()),
         predicate_span: None,
-    });
+    }));
 
     // Act
     let outcome = result.into_result();

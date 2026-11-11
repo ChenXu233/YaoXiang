@@ -9,6 +9,7 @@ use crate::frontend::core::types::eval::const_eval::ConstFunction;
 
 use super::passes::overload;
 use super::types::ImportInfo;
+use crate::frontend::core::sema::proof::verdict::ProofFailure;
 
 /// 类型错误收集器
 pub type TypeErrorCollector = crate::util::diagnostic::ErrorCollector;
@@ -598,8 +599,8 @@ impl TypeEnvironment {
             let checker = crate::frontend::core::sema::inference::bounds::BoundsChecker::new();
             let result = checker.check_const_bounds(&def.poly.const_binders, const_args);
             match result {
-                crate::frontend::core::sema::proof::verdict::ProofResult::Proved => {}
-                crate::frontend::core::sema::proof::verdict::ProofResult::Disproved(_) => {
+                Ok(()) => {}
+                Err(ProofFailure::Disproved(_)) => {
                     let var_info = def
                         .poly
                         .const_binders
@@ -620,10 +621,7 @@ impl TypeEnvironment {
                     // #322 M3：走注册表快捷方法（i18n 模板渲染）
                     return Err(ErrorCodeDefinition::const_constraint_failed(&var_info).build());
                 }
-                crate::frontend::core::sema::proof::verdict::ProofResult::Unproven {
-                    reason,
-                    ..
-                } => {
+                Err(ProofFailure::Unproven { reason, .. }) => {
                     // WBS 3.4.1：约束无法求值不再静默——事实上达，由调用方
                     // 发射 W1063（Warning，不阻断：实参非编译期常量 ≠ 程序错误，
                     // 但「约束保护失效」必须让用户知情——此前这里是全仓零登记的

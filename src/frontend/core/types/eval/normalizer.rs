@@ -169,7 +169,7 @@ impl Clone for TypeNormalizer {
             config: self.config.clone(),
             context: self.context.clone(),
             env: TypeEnvironment::new(),
-            budget: BudgetTracker::new(),
+            budget: BudgetTracker::for_judgment(),
             dep_env,
         }
     }
@@ -184,7 +184,7 @@ impl TypeNormalizer {
             config: ReductionConfig::default(),
             context: NormalizationContext::new(),
             env: TypeEnvironment::new(),
-            budget: BudgetTracker::new(),
+            budget: BudgetTracker::for_judgment(),
             dep_env,
         }
     }
@@ -197,7 +197,7 @@ impl TypeNormalizer {
             config,
             context: NormalizationContext::new(),
             env: TypeEnvironment::new(),
-            budget: BudgetTracker::new(),
+            budget: BudgetTracker::for_judgment(),
             dep_env,
         }
     }
