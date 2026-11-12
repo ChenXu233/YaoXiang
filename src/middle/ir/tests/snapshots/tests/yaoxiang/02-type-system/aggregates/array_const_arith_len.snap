@@ -1,0 +1,84 @@
+module
+  fn main() -> Void
+    slot[0] a : Int(64) @depth1
+    slot[1] b : Int(64) @depth1
+    slot[2] c : Int(64) @depth1
+    locals_total=14
+    Load %0 <- int(1)
+    Load %1 <- int(2)
+    Load %2 <- int(3)
+    Load %3 <- int(4)
+    Load %4 <- int(5)
+    AllocFixedArray %5 count=5
+    Load %6 <- int(0)
+    StoreIndex %5[%6] <- %0
+    Load %7 <- int(1)
+    StoreIndex %5[%7] <- %1
+    Load %8 <- int(2)
+    StoreIndex %5[%8] <- %2
+    Load %9 <- int(3)
+    StoreIndex %5[%9] <- %3
+    Load %10 <- int(4)
+    StoreIndex %5[%10] <- %4
+    Load %4 <- %5
+    Load %6 <- int(4)
+    LoadIndex %2 <- %4[%6]
+    Load %3 <- int(5)
+    Eq %1 <- %2, %3
+    Load %7 <- string("Array(Int, 2+3) 的长度是 5（下标 4 可读）")
+    Call %0 <- string("std.assert.assert") [%1, %7] (def=d0)
+    Load %1 <- int(1)
+    Load %2 <- int(2)
+    Load %3 <- int(3)
+    Load %4 <- int(4)
+    Load %6 <- int(5)
+    Load %7 <- int(6)
+    AllocFixedArray %0 count=6
+    Load %8 <- int(0)
+    StoreIndex %0[%8] <- %1
+    Load %9 <- int(1)
+    StoreIndex %0[%9] <- %2
+    Load %10 <- int(2)
+    StoreIndex %0[%10] <- %3
+    Load %11 <- int(3)
+    StoreIndex %0[%11] <- %4
+    Load %12 <- int(4)
+    StoreIndex %0[%12] <- %6
+    Load %13 <- int(5)
+    StoreIndex %0[%13] <- %7
+    Load %6 <- %0
+    Load %7 <- int(5)
+    LoadIndex %3 <- %6[%7]
+    Load %4 <- int(6)
+    Eq %2 <- %3, %4
+    Load %8 <- string("Array(Int, 2*3) 的长度是 6（下标 5 可读）")
+    Call %1 <- string("std.assert.assert") [%2, %8] (def=d0)
+    Load %2 <- int(1)
+    Load %3 <- int(2)
+    Load %4 <- int(3)
+    Load %6 <- int(4)
+    Load %7 <- int(5)
+    AllocFixedArray %1 count=5
+    Load %8 <- int(0)
+    StoreIndex %1[%8] <- %2
+    Load %9 <- int(1)
+    StoreIndex %1[%9] <- %3
+    Load %10 <- int(2)
+    StoreIndex %1[%10] <- %4
+    Load %11 <- int(3)
+    StoreIndex %1[%11] <- %6
+    Load %12 <- int(4)
+    StoreIndex %1[%12] <- %7
+    Load %7 <- %1
+    Load %8 <- int(0)
+    LoadIndex %4 <- %7[%8]
+    Load %6 <- int(1)
+    Eq %3 <- %4, %6
+    Load %9 <- string("Array(Int, 7-2) 的长度是 5")
+    Call %2 <- string("std.assert.assert") [%3, %9] (def=d0)
+    Drop %5
+    Drop %0
+    Drop %1
+    Ret %2
+  init (locals=0)
+    Call %0 <- string("main") [] (def=d1)

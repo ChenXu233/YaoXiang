@@ -142,21 +142,9 @@ pub fn parse_type_annotation(state: &mut ParserState<'_>) -> Option<Type> {
                 }
             }
             // 后视检查：如果不是类型语法专用的 token，则作为表达式解析（blacklist）
-            if state.infix_info().is_some()
-                && !matches!(
-                    state.current().map(|t| &t.kind),
-                    Some(TokenKind::Dot | TokenKind::Eq | TokenKind::KwAs)
-                )
-            {
-                // 使用完整的 Pratt 循环解析整个表达式（从 Var 开始）
-                let mut expr = Expr::Var(name.clone(), name_span);
-                while state.current().is_some() {
-                    let (_bp_left, bp_right, parser_fn) = match state.infix_info() {
-                        Some(info) => info,
-                        None => break,
-                    };
-                    expr = parser_fn(state, expr, bp_right)?;
-                }
+            if type_position_expr_continues(state) {
+                let expr =
+                    parse_type_position_const_expr(state, Expr::Var(name.clone(), name_span));
                 return Some(Type::ConstExpr(Box::new(expr)));
             }
             Some(Type::Name {
@@ -309,37 +297,83 @@ pub fn parse_type_annotation(state: &mut ParserState<'_>) -> Option<Type> {
             );
             None
         }
-        // 整数字面量类型：IsPositive(5) 中的 5
+        // 整数字面量类型：IsPositive(5) 中的 5；也支持算术表达式（`Array(Int, 2+3)`）
         Some(TokenKind::IntLiteral(n)) => {
             let n = *n;
             let span = state.span();
             state.bump();
-            Some(Type::ConstExpr(Box::new(Expr::Lit(
-                crate::frontend::core::lexer::tokens::Literal::Int(n),
-                span,
-            ))))
+            let expr = parse_type_position_const_expr(
+                state,
+                Expr::Lit(crate::frontend::core::lexer::tokens::Literal::Int(n), span),
+            );
+            Some(Type::ConstExpr(Box::new(expr)))
         }
-        // 负整数字面量类型：IsPositive(-1) 中的 -1
+        // 负整数字面量类型：IsPositive(-1) 中的 -1；同样接中缀（`-1+2`）
         Some(TokenKind::Minus) => {
             let span = state.span();
             state.bump();
             if let Some(TokenKind::IntLiteral(n)) = state.current().map(|t| &t.kind) {
                 let n = *n;
                 state.bump();
-                Some(Type::ConstExpr(Box::new(Expr::UnOp {
+                let seed = Expr::UnOp {
                     op: crate::ast::UnOp::Neg,
                     expr: Box::new(Expr::Lit(
                         crate::frontend::core::lexer::tokens::Literal::Int(n),
                         span,
                     )),
                     span,
-                })))
+                };
+                let expr = parse_type_position_const_expr(state, seed);
+                Some(Type::ConstExpr(Box::new(expr)))
             } else {
                 None
             }
         }
         // Note: fn type uses (Params) -> ReturnType syntax, not `fn` keyword
         _ => None,
+    }
+}
+
+/// 种子后面紧跟的是「表达式续接」还是类型 / 绑定分隔符？
+///
+/// 黑名单与标识符种子路径的既有判据同源：`=`（绑定的初始化符）、`.`（类型名路径）、
+/// `as`（转换）都**不**开启续接。少了这道闸门，`n: 3 = 3`（单值字面量类型标注）
+/// 会被读成 `3 = 3` 的赋值表达式，绑定丢掉初始化器。
+fn type_position_expr_continues(state: &ParserState<'_>) -> bool {
+    state.infix_info().is_some()
+        && !matches!(
+            state.current().map(|t| &t.kind),
+            Some(TokenKind::Dot | TokenKind::Eq | TokenKind::KwAs)
+        )
+}
+
+/// 类型位常量表达式的**中缀续接**：从已解析的种子（标识符 / 整数字面量 /
+/// 负字面量）继续走 Pratt 的 led 链，返回完整表达式。
+///
+/// 中缀解析的**唯一实现**是 `ParserState::parse_infix_from`（语句位表达式同一条
+/// 链），本函数不复制第二份运算符解析。三种种子因此同构：`N+1`、`2+3`、`-1+2`
+/// 都产出完整的 `BinOp` 树（issue #543：此前字面量种子解析完字面量就返回，中缀
+/// 算符留给外层 `expect(RParen)` 报成「expected RParen, found Plus」）。
+///
+/// 续接失败（`2+` 这类真语法错）时发 E0012 并**保留种子**做错误恢复：
+/// 诊断已经发出（不是静默），外层仍能闭合括号，不会再多报一条误导性的
+/// 「expected a type, found RParen」。
+fn parse_type_position_const_expr(
+    state: &mut ParserState<'_>,
+    seed: Expr,
+) -> Expr {
+    if !type_position_expr_continues(state) {
+        return seed;
+    }
+    match state.parse_infix_from(seed.clone(), 0) {
+        Some(expr) => expr,
+        None => {
+            state.error(parse_msg(
+                state,
+                "类型位的常量表达式不完整：运算符缺少右操作数",
+            ));
+            seed
+        }
     }
 }
 

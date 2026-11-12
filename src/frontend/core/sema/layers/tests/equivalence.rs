@@ -275,3 +275,35 @@ fn test_check_type_equivalence_delegates_to_defeq() {
         "兼容入口必须与 defeq 同判据（同一实现，不得有第二条判定路径）"
     );
 }
+
+/// issue #543 接收：类型位常量实参的**字面量种子**（`Array(Int, 2+3)`）与
+/// 字面量 `Array(Int, 5)` 判等。
+///
+/// 走真实链路：注解源码 → `parse_type_annotation` → `MonoType::from`
+///（常量折叠）→ `defeq`。折叠若退化成不可求值的 `<const-expr>`，本用例会红。
+#[test]
+fn test_defeq_array_length_arithmetic_equals_literal() {
+    // Arrange —— 两条注解都从源码解析，避免只比手工构造的 MonoType
+    use crate::frontend::core::lexer::tokenize;
+    use crate::frontend::core::parser::statements::types::parse_type_annotation;
+    use crate::frontend::core::parser::{NullProbe, ParserState};
+
+    let env = TypeEnvironment::new();
+    let ctx = ProofContext::new(&env);
+    let annotated = |src: &str| -> MonoType {
+        let tokens = tokenize(src).expect("tokenize 源码失败");
+        let mut state = ParserState::new(&tokens, &NullProbe);
+        MonoType::from(parse_type_annotation(&mut state).expect("类型注解解析失败"))
+    };
+    let lhs = annotated("Array(Int, 2+3)");
+    let rhs = annotated("Array(Int, 5)");
+
+    // Act
+    let result = defeq(&lhs, &rhs, &ctx);
+
+    // Assert
+    assert!(
+        result.is_ok(),
+        "Array(Int, 2+3) 与 Array(Int, 5) 应判等（常量折叠后同形）；实际: {result:?}"
+    );
+}

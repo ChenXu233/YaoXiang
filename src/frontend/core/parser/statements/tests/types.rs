@@ -757,3 +757,209 @@ fn has_anonymous_binding_with_unit_return(items: &[Stmt]) -> bool {
         })
     })
 }
+
+// ==================== 类型位常量表达式的种子形态（issue #543） ====================
+//
+// 类型位常量实参（`Array(Int, 2+3)` 的 `2+3`）由**同一个** Pratt 中缀入口续接：
+// 标识符种子（`N+1`）、整数字面量种子（`2+3`）、负字面量种子（`-1+2`）同构。
+// 修复前字面量种子解析完字面量就返回，中缀算符留给外层 `expect(RParen)` 报成
+// 「expected RParen, found Plus」。
+
+/// 取 `Array(Int, <expr>)` 的长度实参表达式。
+fn array_len_expr(ty: &Type) -> &Expr {
+    let Type::Generic { name, args, .. } = ty else {
+        panic!("Expected Type::Generic, got: {ty:?}");
+    };
+    assert_eq!(name, "Array", "类型名应为 Array，got: {name}");
+    assert_eq!(args.len(), 2, "Array 应有两个实参，got: {args:?}");
+    let Type::ConstExpr(expr) = &args[1] else {
+        panic!("长度实参应是 Type::ConstExpr，got: {:?}", args[1]);
+    };
+    expr
+}
+
+/// 字面量种子 + 加法：`Array(Int, 2+3)` 的 `2+3` 解析为完整加法表达式。
+#[test]
+fn test_type_position_literal_start_addition_parses() {
+    // Arrange & Act
+    with_type("Array(Int, 2+3)", |t| {
+        let expr = array_len_expr(&t);
+
+        // Assert
+        assert!(
+            matches!(expr, Expr::BinOp { op: BinOp::Add, .. }),
+            "2+3 应解析为加法表达式（不是悬空的字面量 2），got: {expr:?}"
+        );
+    });
+}
+
+/// 字面量种子 + 减法：`Array(Int, 7-2)` 解析为减法表达式。
+#[test]
+fn test_type_position_literal_start_subtraction_parses() {
+    // Arrange & Act
+    with_type("Array(Int, 7-2)", |t| {
+        let expr = array_len_expr(&t);
+
+        // Assert
+        assert!(
+            matches!(expr, Expr::BinOp { op: BinOp::Sub, .. }),
+            "7-2 应解析为减法表达式，got: {expr:?}"
+        );
+    });
+}
+
+/// 字面量种子 + 乘法与比较：约束位 `Assert(2 * 3 > 0)` 解析为完整嵌套表达式。
+#[test]
+fn test_type_position_literal_start_multiplication_and_comparison_parses() {
+    // Arrange & Act
+    with_type("{ _assert_n: Assert(2 * 3 > 0), data: Int }", |t| {
+        let expr = extract_assert_arg(&t);
+
+        // Assert
+        assert!(
+            matches!(
+                expr,
+                Expr::BinOp { op: BinOp::Gt, left, .. }
+                    if matches!(left.as_ref(), Expr::BinOp { op: BinOp::Mul, .. })
+            ),
+            "2 * 3 > 0 应解析为「乘法嵌在比较左操作数」，got: {expr:?}"
+        );
+    });
+}
+
+/// 负字面量种子：`Array(Int, -1+2)` 保留一元负号并续接加法。
+#[test]
+fn test_type_position_negative_literal_start_parses() {
+    // Arrange & Act
+    with_type("Array(Int, -1+2)", |t| {
+        let expr = array_len_expr(&t);
+
+        // Assert
+        assert!(
+            matches!(
+                expr,
+                Expr::BinOp { op: BinOp::Add, left, .. }
+                    if matches!(left.as_ref(), Expr::UnOp { op: crate::ast::UnOp::Neg, .. })
+            ),
+            "-1+2 应是「(-1) + 2」，got: {expr:?}"
+        );
+    });
+}
+
+/// **不回归**：标识符种子 `(N: Int) -> Array(Int, N+1)` 仍产出完整表达式。
+#[test]
+fn test_type_position_ident_start_annotation_still_parses() {
+    // Arrange & Act
+    with_type("(N: Int) -> Array(Int, N+1)", |t| {
+        let Type::Fn { return_type, .. } = &t else {
+            panic!("应是函数类型，got: {t:?}");
+        };
+        let expr = array_len_expr(return_type);
+
+        // Assert
+        assert!(
+            matches!(expr, Expr::BinOp { op: BinOp::Add, .. }),
+            "N+1 应保持为加法表达式（标识符种子路径不得回归），got: {expr:?}"
+        );
+    });
+}
+
+/// 真语法错：`Array(Int, 2+)` 的算符缺右操作数 ⇒ E0012，且半截 AST 不静默。
+#[test]
+fn test_type_position_incomplete_expression_reports_syntax_error() {
+    // Arrange
+    let tokens = tokenize("d: Array(Int, 2+) = [1]").expect("tokenize 源码失败");
+
+    // Act
+    let result = parse(&tokens);
+
+    // Assert
+    assert!(
+        result.has_errors,
+        "2+ 缺右操作数必须报解析错误，实际诊断: {:?}",
+        result.errors
+    );
+    assert!(
+        result
+            .errors
+            .iter()
+            .any(|e| e.code == "E0012" && e.message.contains("类型位的常量表达式不完整")),
+        "错误应是 E0012 且指出表达式不完整，实际: {:?}",
+        result.errors
+    );
+}
+
+/// **不回归**：单值字面量类型标注 `n: 3 = 3` 的类型位只取字面量，`=` 留给初始化符。
+///
+/// 续接闸门把 `=` 判为绑定分隔符（与标识符种子同一判据）——否则类型位会被读成
+/// `3 = 3` 的赋值表达式，绑定丢掉初始化器（「declaration requires an initializer」）。
+#[test]
+fn test_type_position_literal_type_annotation_keeps_initializer() {
+    // Arrange
+    let tokens = tokenize("n: 3 = 3").expect("tokenize 源码失败");
+
+    // Act
+    let result = parse(&tokens);
+
+    // Assert
+    assert!(
+        !result.has_errors,
+        "单值字面量类型标注应解析成功，实际: {:?}",
+        result.errors
+    );
+    let Some(StmtKind::Assign {
+        type_annotation,
+        value,
+        ..
+    }) = result.module.items.first().map(|s| &s.kind)
+    else {
+        panic!("应是绑定语句，实际: {:?}", result.module.items);
+    };
+    assert!(
+        matches!(type_annotation, Some(Type::ConstExpr(e)) if matches!(e.as_ref(), Expr::Lit(..))),
+        "类型位应是单个字面量表达式，got: {type_annotation:?}"
+    );
+    assert!(
+        value.is_some(),
+        "初始化器不得被类型位的续接吞掉，实际 AST: {:?}",
+        result.module.items
+    );
+}
+
+/// **不回归**：返回位字面量类型 `g: () -> 3 = { 3 }` 同样不被续接吞掉 `=`。
+#[test]
+fn test_type_position_literal_return_annotation_keeps_initializer() {
+    // Arrange
+    let tokens = tokenize("g: () -> 3 = { 3 }").expect("tokenize 源码失败");
+
+    // Act
+    let result = parse(&tokens);
+
+    // Assert
+    assert!(
+        !result.has_errors,
+        "返回位字面量类型应解析成功，实际: {:?}",
+        result.errors
+    );
+    let Some(StmtKind::Assign {
+        type_annotation,
+        value,
+        ..
+    }) = result.module.items.first().map(|s| &s.kind)
+    else {
+        panic!("应是绑定语句，实际: {:?}", result.module.items);
+    };
+    assert!(
+        matches!(
+            type_annotation,
+            Some(Type::Fn { return_type, .. })
+                if matches!(return_type.as_ref(), Type::ConstExpr(_))
+        ),
+        "返回位应是单个字面量表达式，got: {type_annotation:?}"
+    );
+    assert!(
+        value.is_some(),
+        "初始化器不得被类型位的续接吞掉，实际 AST: {:?}",
+        result.module.items
+    );
+}

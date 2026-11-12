@@ -55,6 +55,7 @@
 {"expectation":"behavior","file":"tests/yaoxiang/01-syntax/operators/range_compound_bound.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
 {"expectation":"behavior","file":"tests/yaoxiang/01-syntax/operators/range_equality.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
 {"expectation":"behavior","file":"tests/yaoxiang/01-syntax/operators/range_value.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/aggregates/array_const_arith_len.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
 {"expectation":"behavior","file":"tests/yaoxiang/02-type-system/aggregates/array_fn_boundary.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
 {"expectation":"behavior","file":"tests/yaoxiang/02-type-system/aggregates/array_literal.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
 {"expectation":"behavior","file":"tests/yaoxiang/02-type-system/aggregates/builtin_container_ctor.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
@@ -349,6 +350,7 @@
 {"check":{"diagnostics":[["E1002","tests/yaoxiang/06-compile-errors/types/range_step_zero_err.yx",9]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/types/range_step_zero_err.yx"}
 {"check":{"diagnostics":[["E0018","tests/yaoxiang/06-compile-errors/types/ref_keyword_bug.yx",14]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/types/ref_keyword_bug.yx"}
 {"check":{"diagnostics":[["E1105","tests/yaoxiang/06-compile-errors/types/sum_type_field_err.yx",15]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/types/sum_type_field_err.yx"}
+{"check":{"diagnostics":[["E0012","tests/yaoxiang/06-compile-errors/types/type_const_expr_incomplete_err.yx",9]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/types/type_const_expr_incomplete_err.yx"}
 {"check":{"diagnostics":[["E1001","tests/yaoxiang/06-compile-errors/types/type_def_in_local_err.yx",12],["E1071","tests/yaoxiang/06-compile-errors/types/type_def_in_local_err.yx",11]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/types/type_def_in_local_err.yx"}
 {"check":{"diagnostics":[["E1003","tests/yaoxiang/06-compile-errors/types/unknown_type_in_field_err.yx",15],["W1002","tests/yaoxiang/06-compile-errors/types/unknown_type_in_field_err.yx",13]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/types/unknown_type_in_field_err.yx"}
 {"check":{"diagnostics":[["E1003","tests/yaoxiang/06-compile-errors/types/unknown_type_in_param_err.yx",14]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/types/unknown_type_in_param_err.yx"}

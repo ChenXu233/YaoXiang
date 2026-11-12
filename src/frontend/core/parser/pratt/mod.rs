@@ -74,13 +74,27 @@ fn expr_end_line(expr: &Expr) -> usize {
 }
 
 impl ParserState<'_> {
-    /// Internal expression parsing method
+    /// Internal expression parsing method：前缀（nud）+ 中缀循环（led）。
     pub fn parse_expression_internal(
         &mut self,
         min_bp: u8,
     ) -> Option<Expr> {
         let left = self.parse_prefix()?;
+        self.parse_infix_from(left, min_bp)
+    }
 
+    /// 从**已解析的左侧表达式**继续走中缀循环（Pratt 的 led 半场）。
+    ///
+    /// `parse_expression_internal` = `parse_prefix()` + 本函数，所以这里是**全仓唯一**
+    /// 的中缀运算符循环。类型位的常量表达式（`Array(Int, 2+3)` 的 `2+3`）以字面量 /
+    /// 标识符为种子时也从这里续接，不得另写一份同构循环（此前 `statements/types.rs`
+    /// 内联过一份，字面量种子不在其中，故 `2+3` 被外层 `expect(RParen)` 报成
+    /// 「expected RParen, found Plus」——issue #543）。
+    pub fn parse_infix_from(
+        &mut self,
+        left: Expr,
+        min_bp: u8,
+    ) -> Option<Expr> {
         let mut left = left;
 
         while let Some(_token) = self.current().cloned() {
