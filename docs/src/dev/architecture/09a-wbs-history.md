@@ -4564,7 +4564,7 @@ P1 的形状判据与 ir_gen 的包装层产出形态耦合——「不再匹配
 
 > **三、锚四层（先红后绿）**：集成主锚（三模块导入环 CLI run 端到端，hint 两段子串断言）修前红（E6007 文本与 issue 报告逐字一致、无 hint）、修后绿；集成反向锚（无 Void 场景无 hint）；单元锚（字节码直驱兜底臂——Void 左/右形态有 hint，(Int, String) 无 hint 消息 assert_eq 逐字钉死，修前红 2 锚）；编译期守卫（排序比较拒绝跨类型，钉真实纪律——把「编译期拦截」判据钉在它真正成立的排序比较上）。
 
-> **四、t2 变异与等价性（批次号 t3.20.14-verify @ `2038ac6b`，trial 机械可逆 + 每轮 trial 后 rebuild）**：M1（摘 hint，Void 条件恒 false）⇒ 主锚红；M2（守卫删除，hint 无条件追加）⇒ 反向锚红（assert_eq 逐字失败）——「无 Void 逐字不变」判据有牙。修复态锚全绿；IR 快照比对 1 passed、语料差分逐字节零漂移；卫生 blob CLEAN + release 完成。
+> **四、t2 变异与等价性（批次号 t3.20.14-verify @ `2038ac6b`——push 前 rebase 重写为终态 `67ba8575`、树内容逐字节同，trial 机械可逆 + 每轮 trial 后 rebuild）**：M1（摘 hint，Void 条件恒 false）⇒ 主锚红；M2（守卫删除，hint 无条件追加）⇒ 反向锚红（assert_eq 逐字失败）——「无 Void 逐字不变」判据有牙。修复态锚全绿；IR 快照比对 1 passed、语料差分逐字节零漂移；卫生 blob CLEAN + release 完成。
 
 > **五、t3 对抗复审 APPROVE（七镜头）+ findings 处置**：①唯一发射点（hint 仅比较兜底臂一处，其他 type_error 臂未动）；②诊断语义（E6007 码与 Err 通路不变、注册表与 locales 零改动、反向锚钉死）；③注释与事实一致（队长修正后的 Eq/Neq 陈述与提交信息口径吻合）；④边界（5 文件全录，无 locales/生成物/基线/W1007 告警面触碰）；⑤W1007 引用正确（模块导入环告警、value_edge help 点名边与被读槽）；⑥测试规范；⑦诚实性。3 info 全备案：提交信息锚列举不全但无虚构（第四锚被行为声明隐含覆盖）、测试模块清单散文排序微瑕、门禁声称由 t2 批次树独立复测闭环。
 
