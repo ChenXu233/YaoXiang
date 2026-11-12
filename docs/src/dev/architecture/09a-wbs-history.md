@@ -4569,3 +4569,17 @@ P1 的形状判据与 ir_gen 的包装层产出形态耦合——「不再匹配
 > **五、t3 对抗复审 APPROVE（七镜头）+ findings 处置**：①唯一发射点（hint 仅比较兜底臂一处，其他 type_error 臂未动）；②诊断语义（E6007 码与 Err 通路不变、注册表与 locales 零改动、反向锚钉死）；③注释与事实一致（队长修正后的 Eq/Neq 陈述与提交信息口径吻合）；④边界（5 文件全录，无 locales/生成物/基线/W1007 告警面触碰）；⑤W1007 引用正确（模块导入环告警、value_edge help 点名边与被读槽）；⑥测试规范；⑦诚实性。3 info 全备案：提交信息锚列举不全但无虚构（第四锚被行为声明隐含覆盖）、测试模块清单散文排序微瑕、门禁声称由 t2 批次树独立复测闭环。
 
 > **六、计数与移交**：三级 +1 = 3.20.14（226→227）；二级不变。issue [#500](https://github.com/ChenXu233/YaoXiang/issues/500) **关闭**。Eq/Neq 编译期放行（跨类型相等与静态 Void 值比较编译期全绿、运行期落 E6007，与排序比较纪律不一致）归 [#549](https://github.com/ChenXu233/YaoXiang/issues/549)。批次树已 release。
+
+## P3 3.20.15 收口（嵌套括号声明的块体 return lambda 假拒绝——#546，2026-11-13）
+
+> **一、根因（两轴判别为轴 B，探针实测）**：return 语句在 parser 有**两种并存表示**——箭头糖路径产 `StmtKind::Return`（单表达式体糖化，parser/pratt/led.rs），手写 return 路径产 `StmtKind::Expr(Expr::Return)`（parser/statements/control_flow.rs）。值级分解的 wrapped_closure 探测只认 `StmtKind::Expr(Lambda)` 与 `StmtKind::Return(Some(Lambda))` 两种，漏认手写形态的载荷 lambda ⇒ 落进类型泛型注册分支剥一层 ⇒ expected 被剥到最内层标量（观测 `expected 'Box(t38)'`）。轴 A（parser 对包裹 Fn 的括号保留形态）未成主因——无泛型嵌套括号形态修前即绿（不同轴实证）。
+
+> **二、修法**：wrapped_closure 第三臂识别 `Expr(Return(Some(Lambda)))`（与既有两臂同轴：体是外层函数本体），expected 保括号声明层（内层 Fn 整体，#501 闭包包装语义）。括号语义/柯里链路/mono 面（TypeRef 声明名保留链路）零触碰。**生成物随代码**：statements.rs 净增 12 行致 E1001/E2010/E2013 四处发射点 +12 平移，生成器再生、二次运行幂等（diff 逐字节一致）、语义零变化（提交信息含 10⑤ 分类说明）。t1 首轮即被「生成物零 diff」门禁拦住、按门禁指引再生转绿——该门禁再次实证拦住行号平移欠账。
+
+> **三、锚**：主锚（issue 夹具 0 诊断，修前 E1012 逐字复现）+ **收口补充反向锚**（同形态真不匹配 `return (v) => 42` 恰 1 条 E1012；expected 侧语义形状断言 = 内层 Fn 整体 `expected 'fn(tX) -> Box(tX)'` 且无 `-> fn(t`——类型变量号随分配序漂移故不逐字钉全串的取舍记录在锚注释；实测诊断形状先于落锚）。回归锚全绿：#501 七锚 / #442 五锚 / #523 四锚 / 柯里集成锚 / 语料 generic_slot_alignment.yx 与 paren_return_fn.yx。
+
+> **四、t2 变异与等价性（批次号 t3.20.15-verify @ `0e0e5fce`，trial 机械可逆 + 每轮 trial 后 rebuild）**：M1（摘第三臂）⇒ 主锚红（假拒绝复现）；M2（摘 Lambda 载荷守卫，任意载荷都算 wrapped_closure）⇒ 自造裸链块体标量 return 夹具翻红——**守卫承重**；t2 非阻塞观察：M2 红态还连带 std 函数体 5 条 E1012（Vec/Iter 签名），「载荷必须 lambda」的承重面比 #546 单点更宽，误摘守卫 std 即碎（留档 m2-trial-full.log，批次树随 gc 回收，结论落此）。修复态锚全绿；IR 快照 1 passed、语料差分逐字节零漂移；卫生 blob CLEAN + release。
+
+> **五、t3 首轮 REJECT → 修复轮 → 聚焦复审 APPROVE**：REJECT 一 minor = 「值级形态」段注释计数残留（主注释已改「三种 parser 标记」、该段仍写「两种标记见上」——同一提交内注释更新不完整，与提交信息声称矛盾；否决理由 = 可读性）。队长修复 = 该行注释更正 + 提交信息 integration 计数 345→346（含收口补充的反向锚）amend（修复轮段落因原文换行匹配失败未入提交信息，由本节承载）；聚焦复审（新 ask 自包含前轮结论）APPROVE：修复面仅一行注释、无残留。t3 另两条 info：边界探针/生成器幂等声称在只读约束下未复跑（探针不入库约定 + 只读铁律，静态对账替代）——如实标注。
+
+> **六、计数与移交**：三级 +1 = 3.20.15（227→228）；二级不变。issue [#546](https://github.com/ChenXu233/YaoXiang/issues/546) **关闭**。修复笔推送终态 `82a8f2e8`（量测冻结版 `0e0e5fce`/amend 版 `f93fef84`，树内容逐字节同——本笔先推修复笔取终态号再写收口，避免 3.20.14 的修正笔循环）。相邻形态（T 无约束时 `(v) => v + 1` 的 E1002）系真拒绝非缺陷。批次树已 release。
