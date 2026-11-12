@@ -2,6 +2,10 @@
 //! 同一文件的客户端 URI 等价形式必须归一到同一个键，跨文件 `resolves_to`
 //! 的 DefId 才稳定命中。
 
+// 两个用点都在下方 #[cfg(windows)] 测试内——导入必须随平台门控，
+// 否则 Linux 上成为未使用导入，-D warnings 编译失败（2026-11-07 第五批
+// 退役删去 POSIX 面测试后暴露）
+#[cfg(windows)]
 use crate::lsp::uri::{db_key, path_to_uri};
 
 // 断言的是 Windows 盘符 URI 的换算（函数内 cfg!(windows) 分支），

@@ -4447,3 +4447,23 @@ P1 的形状判据与 ir_gen 的包装层产出形态耦合——「不再匹配
 ### 五、不宣称
 
 本步只做失败代数与归一化出口；判等内核、类型化出口的码表轮、Σ/Π 均未落地；Π/Σ 完全体未收口。
+
+## P3 3.20.12 收口（绑定校验统一泛型调用返回的两侧表示——#442，2026-11-12）
+
+**任务与归属**：D59 **C 类**假拒绝直修（P2 backlog；#523 同族不同位——那处 curry 内层参数位、本处返回位注解形态）。批次跨配额停机：t1 起跑当日 start-plan 配额耗尽（provider 侧停止），数日后配额重置、同 run 续跑（缓存零损失），期间同步并行队伍 6.9 系列十余笔。
+
+**根因（实现者探针推翻任务假说，如实登记）**：issue 与任务书假说「返回位未代入」**不成立**——临时探针实证调用点 monomorphize 返回位已代入（`Generic{Box,[Int64]}`，TypeVar 形态注册）；真缺陷 = 注解侧 `try_instantiate_generic_type` 展开成丢实参记录 `Struct{Box,...}`，两侧语义同、表示异，unify 必败。诊断文本 `Expected 'Box'` 是记录名、`Box(int64)` 是应用形态，与此完全吻合。
+
+**修法（检查面表示统一，mono 链零触碰，提交 `0b6595e2`，5 文件 +212/−4）**：绑定校验段（`check_var_stmt_inner`，resolved_ann 计算后）在 init 为具体应用 + 注解为同名记录 + 实参全具体（与值构造臂同款 `contains_unresolved_param` + `is_ctor_reference` 防线，德摩根反转形态）时，用唯一实现 `expand_ctor_applications`（提为 pub(super)，与值侧构造同源，无第二份）展开 init 再统一。注册签名本体与 instantiation_requests 不动——#511 的 TypeRef 声明名保留链路原样（t3 hunk 级核实：mono 链代码全部不在 diff hunk 内）。诊断引用原始形态，文本不变。
+
+**锚五条**：主锚（注解收泛型调用 0 诊断）/ 无注解回归 / 直造回归 / 真不匹配反向 / 跨单元边界（lib + use 形态同批转绿——#511 导出携带管道下单点顺修，未引入新判据，实现轮单独汇报）。红转绿机械自证 = stash 实现后主锚 FAILED、pop 后 ok。
+
+**验证链**：
+
+- t1 门禁 14 项全绿（integration 341、testsuite fast 2065、快照比对 3 passed、语料差分零漂移、生成器幂等 3 处行号平移同批入库）。
+- t2 **PASS**（批次树 t3.20.12-verify @ 0b6595e2）：M1（恒 false 短路展开）→ 主锚 + 跨单元锚红（E1002 `Expected type 'Box', found type 'Box(int64)'` 逐字复现）；M2（忠实遮蔽形态：跳过 unify、保留变量接受）→ 反向锚红（got 0 errors）。**验证工艺教训**：字面「提前 return」形态因跳过变量声明引发 E1001 级联、恰一条错误被计数断言巧合满足而不红——**遮蔽变异必须保变量注册才可检**；据此收口把反向锚升级为计数 + E1002 文本逐字双断言（文本面能区分级联形态）。trial 机械可逆（blob CLEAN）、每轮 trial 后 rebuild；等价性 = 快照 1 passed + 语料差分 386 行逐字节零漂移。
+- t3 **APPROVE** 七镜头：①单源（expand_ctor_applications 唯一定义、四消费面、守卫为既有防线德摩根反转非复制）；②mono 链零触碰（hunk 级核实）；③修本体非遮蔽（反向锚方向正确，#286 豁免在守卫下不误放行）；④诊断文本（发射点用原始形态，静态核实；动态逐字对比由收口补的文本断言闭环）；⑤边界（5 文件与 numstat 全录吻合，行号平移 +41 逐处对账，无 baselines/快照/locales/#523/#524 触碰）；⑥测试规范；⑦诚实性（integration #[test] 总数 341 实测与提交精确吻合；推翻初判记录在案不算缺陷）。**findings 处置**：1 low（「另案」缺可解析出处）→ 收口登记 [#546](https://github.com/ChenXu233/YaoXiang/issues/546)（嵌套括号声明形态 return 位既有 E1012 假拒绝）；1 low（WBS 无 3.20.12 条目）→ 本笔补；2 info 采纳（反向锚文本断言已补、expand_ctor_applications 消费面注释补全第四调用点）；1 info（组合谓词三处书写的可读性，可提取单点）→ 留 follow-up 不动（谓词本体是共享函数，非逻辑复制）。
+
+### 计数与环境
+
+三级 +1 = 3.20.12（224→225）；二级不变。issue [#442](https://github.com/ChenXu233/YaoXiang/issues/442) **关闭**；嵌套括号 return 位相邻缺陷归 [#546](https://github.com/ChenXu233/YaoXiang/issues/546)。批次树 t3.20.12-verify release + gc。批次存续期内并行会话发布 V0.8.8（含本修复随版），量测按冻结 revision 不受影响。
