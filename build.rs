@@ -10,7 +10,7 @@ use std::process::Command;
 const Z3_VERSION: &str = "4.16.0";
 
 fn main() {
-    // 重建触发面显式化：build.rs 只在这些路径（及自身/Cargo.toml）变化时重跑。
+    // 重建触发面显式化：build.rs 只在这些路径与环境变量（及自身/Cargo.toml）变化时重跑。
     //
     // locales 用目录级声明——触发面必须 ⊇ 构建期校验的输入面（#458）：下文
     // code_tables::validate 的输入面是全部 locale 文件。「孤立条目」判据对
@@ -22,6 +22,27 @@ fn main() {
     // 假告警停留在上一次运行的结论上（cargo 重放旧 output 的 warning），真孤立
     // 条目漏检。目录级声明由 cargo 扫描整个目录的变更，非 zh 文件变化即重跑。
     println!("cargo:rerun-if-changed=locales");
+    // #548：触发面补齐其余三处输入面缺口（判据同 #458：触发面 ⊇ build.rs 输出
+    // 结论的输入面）。cargo 一旦收到任意 rerun-if 声明就只跟踪已声明项，不再
+    // 默认跟踪包内全部文件——漏声明的输入永远不触发重跑，结论停留在上一次
+    // 运行的缓存上（cargo 重放旧 output）。
+    //
+    // 1) .z3 目录：host 分支的 find_local_z3 读它找本地 Z3，自动下载/解压写它。
+    //    目录级声明由 cargo 递归扫描：内部内容变化（文件 mtime 超过 build script
+    //    output 文件）或目录整个消失（删掉 .z3 后的增量构建也必须重新判定，禁
+    //    缓存跳过）都触发重跑；下载/解压写 .z3 的自触发是幂等重跑（下一轮结论
+    //    相同即停止传导），无害且正确。原 wasm 分支内的同名声明已合并至此——
+    //    顶部声明对全部目标（含 wasm32）生效，路径相对 package root 解析，两处
+    //    指向同一目录，保留两份只是平行事实。
+    println!("cargo:rerun-if-changed=.z3");
+    // 2) Z3_SYS_Z3_HEADER：host 分支读它决定是否改用系统 Z3（值对应路径存在 ⇒
+    //    链接系统 Z3 并提前返回）。rerun-if-env-changed 按「值或缺省」入指纹
+    //    哈希：从未设置→设置、值变化、设置→取消三种迁移都触发重跑。
+    println!("cargo:rerun-if-env-changed=Z3_SYS_Z3_HEADER");
+    // 3) CXXSTDLIB：link_z3 非 Windows 分支读它决定 cargo:rustc-link-lib 输出
+    //    （未设置时回退 stdc++）。只影响非 Windows 链接面；Windows 构建不读它，
+    //    声明本身无害（值不变即不触发）。
+    println!("cargo:rerun-if-env-changed=CXXSTDLIB");
     // RFC-013 路径单一源在 code_tables::RFC013_REL，此处复用避免双份漂移
     println!("cargo:rerun-if-changed={}", code_tables::RFC013_REL);
     println!("cargo:rerun-if-changed=src/util/diagnostic/codes");
@@ -95,8 +116,6 @@ fn main() {
         // 构建（8 天无人察觉的事故形态）；现在找不到 = 构建失败。
         let manifest = env::var("CARGO_MANIFEST_DIR").unwrap();
         let z3_root = Path::new(&manifest).join(".z3");
-        // 资产目录纳入指纹：删掉 .z3 后的增量构建也必须重新判定（禁缓存跳过）
-        println!("cargo:rerun-if-changed={}", z3_root.display());
         let Some(dir) = find_local_z3_wasm(&z3_root) else {
             panic!(
                 "wasm32 构建需要 Z3 wasm 预编译资产：\
