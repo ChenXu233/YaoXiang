@@ -4555,3 +4555,17 @@ P1 的形状判据与 ir_gen 的包装层产出形态耦合——「不再匹配
 > **六、流程事件**：会话流程事故——工作区曾出现未授权的 E9999 注入残留（一条被中断的探针命令部分执行所致），实现者 escalate、队长裁决 `git restore` 还原后继续；其 cargo 构建中断遗留的 rlib archive 损坏（LNK1120）由实现者删档重建恢复，均非仓库内容问题。教训（不入库，归队长记忆）：被中断的工具调用可能已部分执行，中断后必须核实工作树状态。
 
 > **七、计数与移交**：三级 +1 = 3.20.13（225→226）；二级不变。issue [#458](https://github.com/ChenXu233/YaoXiang/issues/458) **关闭**。同类缺口（host 分支 `.z3` 触发面、Z3_SYS_Z3_HEADER / CXXSTDLIB 环境变量 rerun-if-env-changed、两条非缺口备案）另案登记 [#548](https://github.com/ChenXu233/YaoXiang/issues/548)。批次树已 release。
+
+## P3 3.20.14 收口（E6007 比较兜底臂 Void 操作数初始化顺序 hint——#500，2026-11-13）
+
+> **一、判据与修法**：issue 自带甲案 A（只改文案/hint；乙案 B「解释器识别未初始化全局槽」需动运行期状态与 IR 表达，另议不采）+ 队长精确化：hint 进 **message 参数**（E6007 的 message 是参数、help 是该码静态模板——改 help 会打到全部 E6007 场景），条件 = 比较兜底臂**任一操作数是 `RuntimeValue::Void`**。修法 = 消息尾追加观测陈述 + 条件归因文案（a Void operand usually means a top-level value was read before initialization — if this happened during module initialization, check the initialization order inside the import cycle — compile-time warning W1007 reports that cycle），无 Void 操作数时消息**逐字不变**。
+
+> **二、查证（实现者推翻任务书一个前提，如实登记）**：实现者七源独立复核同意队长主体推导，但**「静态 Void vs Int 编译期拒绝」不成立**——Eq/Neq 的编译期类型规则走 `infer_equality`（非 `infer_binary` 的比较臂），对非记录形态吞掉 unify 结果恒返 Ok(Bool)：实测 `1 == "a"`、`v = void; v == 1`、`f: () -> Void; f() == 1` 三形态编译期全绿、运行期才落 E6007；排序比较（Lt/Le/Gt/Ge）才有两侧同型纪律（B9）。⇒ 运行期比较的 Void 操作数并非「未初始化读」单一来源，还可能是编译期放行的 Void 值比较——hint 按 usually/if 措辞容纳（#500 场景逐字准确）。Eq/Neq 与纪律的不一致另案登记 [#549](https://github.com/ChenXu233/YaoXiang/issues/549)（本笔只报告不修）。队长复审发现实现初版注释仍写「编译期比较规则已拦掉静态 Void」（与自身实测矛盾——成因断言过强，#519 批次同类），提交前修正为与实测一致。
+
+> **三、锚四层（先红后绿）**：集成主锚（三模块导入环 CLI run 端到端，hint 两段子串断言）修前红（E6007 文本与 issue 报告逐字一致、无 hint）、修后绿；集成反向锚（无 Void 场景无 hint）；单元锚（字节码直驱兜底臂——Void 左/右形态有 hint，(Int, String) 无 hint 消息 assert_eq 逐字钉死，修前红 2 锚）；编译期守卫（排序比较拒绝跨类型，钉真实纪律——把「编译期拦截」判据钉在它真正成立的排序比较上）。
+
+> **四、t2 变异与等价性（批次号 t3.20.14-verify @ `2038ac6b`，trial 机械可逆 + 每轮 trial 后 rebuild）**：M1（摘 hint，Void 条件恒 false）⇒ 主锚红；M2（守卫删除，hint 无条件追加）⇒ 反向锚红（assert_eq 逐字失败）——「无 Void 逐字不变」判据有牙。修复态锚全绿；IR 快照比对 1 passed、语料差分逐字节零漂移；卫生 blob CLEAN + release 完成。
+
+> **五、t3 对抗复审 APPROVE（七镜头）+ findings 处置**：①唯一发射点（hint 仅比较兜底臂一处，其他 type_error 臂未动）；②诊断语义（E6007 码与 Err 通路不变、注册表与 locales 零改动、反向锚钉死）；③注释与事实一致（队长修正后的 Eq/Neq 陈述与提交信息口径吻合）；④边界（5 文件全录，无 locales/生成物/基线/W1007 告警面触碰）；⑤W1007 引用正确（模块导入环告警、value_edge help 点名边与被读槽）；⑥测试规范；⑦诚实性。3 info 全备案：提交信息锚列举不全但无虚构（第四锚被行为声明隐含覆盖）、测试模块清单散文排序微瑕、门禁声称由 t2 批次树独立复测闭环。
+
+> **六、计数与移交**：三级 +1 = 3.20.14（226→227）；二级不变。issue [#500](https://github.com/ChenXu233/YaoXiang/issues/500) **关闭**。Eq/Neq 编译期放行（跨类型相等与静态 Void 值比较编译期全绿、运行期落 E6007，与排序比较纪律不一致）归 [#549](https://github.com/ChenXu233/YaoXiang/issues/549)。批次树已 release。
