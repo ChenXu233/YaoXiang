@@ -2304,7 +2304,7 @@ impl StatementChecker {
                 //（`Type::is_paren_complete`）。
                 let paren_return_ann = return_type.is_paren_complete();
 
-                // 闭包包装形态（体是外层函数本体）的两种 parser 标记：
+                // 闭包包装形态（体是外层函数本体）的三种 parser 标记：
                 //
                 // - `Expr(Lambda)`：parser paren_return 包装合成「外层 lambda 体
                 //   = [作者 lambda]」（parser/statements/declarations.rs，#501
@@ -2313,18 +2313,30 @@ impl StatementChecker {
                 //   单表达式（嵌套 lambda），parser 箭头糖把单表达式体糖成
                 //   `return` 语句（parser/pratt/led.rs；#501 形态 add——
                 //   integration test_curried_fn_assign_and_call，形态 gb2 的
-                //   判据测试 paren_return_decomposition）。
+                //   判据测试 paren_return_decomposition）；
+                // - `Expr(Return(Some(Lambda)))`：作者在块体里**手写** return
+                //   语句且载荷是 lambda——`parse_return_stmt`（parser/statements/
+                //   control_flow.rs）的表示是 `StmtKind::Expr` 包 `Expr::Return`，
+                //   与箭头糖的 `StmtKind::Return` 是两种并存表示。类型泛型 +
+                //   括号返回声明（`(T: Type) -> ((v: T) -> Box(T))`）下，漏认
+                //   该形态会落进下方类型泛型注册分支剥一层，expected 被剥到
+                //   最内层标量，E1012 假拒绝（issue #546）。
                 //
-                // 两者同轴：体是外层函数本体（吃外层参数、产出内层函数值），
+                // 三者同轴：体是外层函数本体（吃外层参数、产出内层函数值），
                 // 不是最内层值函数——RFC-004 括号语义 + RFC-010 §3 的统一推论，
                 // value_sig 必须取外层整体，不得被下方 while 剥层吸收（剥层把
                 // expected_return_type 剥到最内层标量，与体的 return 载荷
                 //（内层 Fn）错配成 E1012，#501 形态 A 同一轴）。
                 let wrapped_closure = body.stmts.len() == 1
                     && match &body.stmts[0].kind {
-                        crate::ast::StmtKind::Expr(e) => {
-                            matches!(e.as_ref(), crate::ast::Expr::Lambda { .. })
-                        }
+                        crate::ast::StmtKind::Expr(e) => match e.as_ref() {
+                            crate::ast::Expr::Lambda { .. } => true,
+                            // 作者手写 return 的载荷 lambda（issue #546）
+                            crate::ast::Expr::Return(Some(payload), _) => {
+                                matches!(payload.as_ref(), crate::ast::Expr::Lambda { .. })
+                            }
+                            _ => false,
+                        },
                         crate::ast::StmtKind::Return(Some(e)) => {
                             matches!(e.as_ref(), crate::ast::Expr::Lambda { .. })
                         }
@@ -2377,7 +2389,7 @@ impl StatementChecker {
                     (substituted_params, substituted_ret)
                 };
 
-                // 值级形态：闭包包装（体是外层本体，两种标记见上）与返回位
+                // 值级形态：闭包包装（体是外层本体，三种标记见上）与返回位
                 // 括号声明的完整类型（RFC-004，链条终止）都取外层整体——
                 // `value_ret` 保持内层 Fn 整体（issue #501 形态 A/B）；否则
                 //（裸 Fn 链柯里且体不是外层 lambda 本体：平铺柯里、const 柯里、

@@ -1340,3 +1340,92 @@ fn test_check_cross_type_ordered_comparison_rejected() {
         "跨类型排序比较（1 < \"x\"）必须编译期拒绝（infer_binary 比较臂纪律），实际 error_count = {error_count}"
     );
 }
+
+/// 规范来源：RFC-004 括号语义（返回位置的 `(T)` 是「完整类型（值）」，柯里链条
+/// 到此终止）+ RFC-010a 规则①（return 值与值级返回位统一，E1012）。
+/// 病史门：issue #546 —— `make_box: (T: Type) -> ((v: T) -> Box(T))` 的体是
+/// 块体 `return (v) => Box(v, 0)`（作者写的 return 语句，载荷是 lambda）时，
+/// 值级分解的 wrapped_closure 探测漏认 `StmtKind::Expr(Expr::Return(Some(Lambda)))`
+/// 表示（control_flow.rs 的 return 语句与 pratt 箭头糖是两种并存表示），
+/// 类型泛型注册分支剥到最内层，E1012 假拒绝（expected 'Box(t38)'）。修后
+/// expected = 括号声明的那一层（内层 Fn 整体）。
+#[test]
+fn test_check_paren_return_generic_block_body_lambda_accepted() {
+    // Arrange：issue #546 原文夹具——类型泛型 + 括号返回 + 块体 return lambda
+    let dir = temp_dir();
+    let file = create_yx_file(
+        &dir,
+        "issue546.yx",
+        r#"
+Box: (T: Type) -> Type = { value: T, tag: Int }
+make_box: (T: Type) -> ((v: T) -> Box(T)) = { return (v) => Box(v, 0) }
+"#,
+    );
+
+    // Act
+    let result = check_file(&file);
+
+    // Assert：括号声明的「返回内层函数值」形态必须零错误（E1012 假拒绝不得复发）
+    let error_count = result.expect("check should not panic on issue #546 fixture");
+    assert_eq!(
+        error_count, 0,
+        "嵌套括号声明（泛型 + 块体 return lambda）必须按 RFC-004 括号语义通过类型检查，实际 error_count = {error_count}"
+    );
+}
+
+/// 规范来源：RFC-010a 规则①（return 值与值级返回位统一，E1012）。
+/// 病史门：issue #546 修复的**拒绝面**——wrapped_closure 探测扩臂（认手写
+/// return 的载荷 lambda）后，同形态的**真不匹配**不得被吞成接受：块体
+/// return 的载荷 lambda 返回类型错误（应产 Box(T)，实产 Int）必须仍报
+/// E1012，且 expected 侧是括号声明层（内层 Fn 整体 `fn(T) -> Box(T)`）。
+/// 计数 + 文本逐字双断言（#442 批次工艺：计数面会被级联巧合满足，文本面
+/// 才能钉住诊断形状）。
+#[test]
+fn test_check_paren_return_generic_block_body_genuine_mismatch_still_reports() {
+    // Arrange：同主锚形态，但 return 载荷 lambda 返回 Int（真不匹配）
+    let dir = temp_dir();
+    let file = create_yx_file(
+        &dir,
+        "issue546_mismatch.yx",
+        r#"
+Box: (T: Type) -> Type = { value: T, tag: Int }
+make_box: (T: Type) -> ((v: T) -> Box(T)) = { return (v) => 42 }
+"#,
+    );
+
+    // Act
+    let result = check_file(&file);
+
+    // Assert：恰 1 条 E1012，expected 侧为括号声明层（内层 Fn 整体）
+    let error_count = result.expect("check should not panic on issue #546 mismatch fixture");
+    assert_eq!(
+        error_count, 1,
+        "块体 return 载荷真不匹配必须恰报 1 条错误（不吞成接受），实际 error_count = {error_count}"
+    );
+    let output = Command::new(env!("CARGO_BIN_EXE_yaoxiang-rs"))
+        .arg("check")
+        .arg(&file)
+        .current_dir(&dir)
+        .output()
+        .expect("failed to run yaoxiang-rs check");
+    let text = format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    // 文本面钉语义形状（类型变量号随分配序漂移，不逐字钉全串）：
+    // expected 必须是括号声明层（内层 Fn 整体 `fn(tX) -> Box(tX)`——出现
+    // `-> fn(t` 即剥到了整链或别的层），found 是 int64 载荷 lambda。
+    assert!(
+        text.contains("error [E1012] return type mismatch"),
+        "#546: genuine mismatch must still report E1012 (not swallowed into acceptance); got: {text}"
+    );
+    assert!(
+        text.contains("expected 'fn(t") && !text.contains("-> fn(t"),
+        "#546: expected side must be the paren-declared layer (inner Fn whole, no second fn group); got: {text}"
+    );
+    assert!(
+        text.contains("Box(t") && text.contains("-> int64'"),
+        "#546: found side must be the Int-returning lambda against a Box expectation; got: {text}"
+    );
+}
