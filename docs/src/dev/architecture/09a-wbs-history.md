@@ -4596,6 +4596,20 @@ P1 的形状判据与 ir_gen 的包装层产出形态耦合——「不再匹配
 
 > **五、计数与移交**：三级 +1 = 3.20.17（229→230）；二级不变。issue [#548](https://github.com/ChenXu233/YaoXiang/issues/548) **关闭**。批次树已 release。
 
+## P3 3.20.18 收口（单参数谓词导入/本地面同构——#551，2026-11-13）
+
+> **一、方向反转（探针实证，issue 框架被推翻）**：issue 按 #527 框架预期「本地面可解析、导入面拒绝」，实测恰好相反——无标注单参数谓词本地面**假拒绝**（Phase 2.5 臂 filter_map 丢弃无标注形参 ⇒ vars 形参表空 ⇒ params.first() 取不到基类型 ⇒ 不进 proof_fn_bases ⇒ 值绑定/返回位注解不精化，E1012+E1002 两错）、导入面**假放行**（#524 单参数臂按 def.param_type——collect_predicate_defs 对无标注形参的 Int(64) 默认值——重建 ⇒ 进 proof_fn_bases ⇒ 0 诊断）。任务契约预设「分歧方向以探针为准（假拒绝或假放行都算红）」，实现者按实测执行。
+
+> **二、修法**：导入 proof-fn 变量构造**统一 vars 直读口径**——orchestrator 取消「def 缺席」分流（proof_fn_params 提取器本身形态无关：Fn+MetaType 即 Some，改的是分流非判据）；checker 导入臂单/多参数同通道（def.param_type 构造降为现网不可达兜底臂）；def 仍进 env.predicate_defs（模板面 #524 语义不变）；Int(64) 默认值在模板面的消费保留（红线：模板面零变化）；本地面零变化。
+
+> **三、D59 边角披露**：修后导入面对「修前假放行」的程序转为拒绝（与本地面同判）——严格字面触及「改变原先成功程序」方向。按同族对称性修正归 C 类收口的依据：① 无标注形参谓词的语义本就未定义（本地面丢弃、导入面伪造 Int(64)，两 face 各自即兴、无设计行为）；② 统一到 vars 直读是判据单源的唯一自洽解（反向统一 = 本地面接纳伪造形参，更大的语义发明）；③ 暴露面实测为空（语料/测试无此类夹具、该形态属作者笔误域）。若日后出现真实受影响程序，语义取舍交用户裁决。本地面自身对该形态的假拒绝未动（与 #550 注解位精化同区，如需修属新裁决）。
+
+> **四、锚与验证**：前提锚（本地面现状 ==2 钉住）/ 主锚（导入与本地面同判，修前 import 0 vs local 2）/ 反向锚（真不满足仍拒 E1093 expected 1）/ 回归（#524 三锚 + #527 五锚 + #522 面锚 2 条全绿，integration 全量 354 passed）。t1 门禁 14 项全绿（testsuite fast 2071 条、IR/语料零漂移、生成器 5 条目 8 发射点行号平移再生二三次运行 diff 相同）。t2（批次号 t3.20.18-verify @ `0fe41d3f`，trial 机械可逆）：M1（恢复 def 分流）⇒ 主锚红（import 0 vs local 2 复现）；M2（注入 predicate_defs）⇒ #527 元数锚翻红（模板面守卫有牙）；修复态锚全绿；IR/语料零漂移；卫生 blob CLEAN + release。
+
+> **五、t3 对抗复审 APPROVE（七镜头）+ findings 处置**：2 low 备案 = 文档精度（Export.proof_fn_params 字段文档的机制模型未覆盖 Assign 形态谓词的 `_ =>` 臂双通道分工——该形态谓词的同权走 export_register_type 直读 + def 并入，不走 proof_fn_params；兜底臂「全部经它或显式双 None」两分法漏第三类 Assign 臂 Function 导出——行为正确无影响，随 #550 批次顺修）；1 info = 只读约束下未核实的运行时声称（主锚修前数字、门禁数字）由 t2 批次树独立复测闭环。
+
+> **六、计数与移交**：三级 +1 = 3.20.18（230→231）；二级不变。issue [#551](https://github.com/ChenXu233/YaoXiang/issues/551) **关闭**。修复笔推送终态 `0fe41d3f`。批次树已 release。
+
 ## P3 3.20.16 收口（多参数谓词导入面同构——#527，2026-11-13）
 
 > **一、查证与载体选型**：实现者七源查证确认 issue 双前提成立（本地面 add_type_definition RFC-027 Phase 2.5 臂登记 proof-fn Fn 形态变量、经 lookup_proof_fn_base_type 按全形参查可解析；导入面 collect_predicate_defs 单参数收窄拿不到 def → Export.predicate_def=None → register_use_export 回退 Struct poly → E1012+E1002）。载体选型 b 案 = Export 增 proof_fn_params（多参数谓词 proof-fn 形参清单）：生产端经对称提取器 PredicateDef::proof_fn_params（构造/解构同栖）从定义方 env.vars 已登记形态直读——判据单源仍 = add_type_definition + proof_fn_type，导出面不重推；a 案（PredicateDef 扩参数列表）被否：会把多参数 def 带进 env.predicate_defs 破坏模板面 try_resolve 阶段 1 单参数模型（E1093 设计面）。消费臂不并入 predicate_defs（与本地第零遍收窄一致）；Assign 形态多参数谓词本来就通（Fn 随 mono_type 走），缺陷面仅 TypeDefinition 形态。
