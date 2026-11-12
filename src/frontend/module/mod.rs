@@ -134,6 +134,14 @@ pub struct Export {
     /// 模板面分流不随行：多参数谓词的 def 仍不进 `env.predicate_defs`
     /// （阶段 1 单参数模型，E1093 设计面）；单参数 def 由 `predicate_def`
     /// 载荷照旧并入（#524 甲案语义不变）；use 门控不变。
+    ///
+    /// **本载荷只服务 Type 臂**（`ExportKind::Type`，TypeDefinition 形态
+    /// 谓词——`P: (x: Int) -> Type = { x > 0 }`）。Assign 形态谓词（体是
+    /// lambda/表达式，`StmtKind::Assign` 导出臂）走的是另一条双通道：
+    /// proof-fn 形态变量由导出 `mono_type` 直读携带（定义方 vars 已登记
+    /// 形态，`export_register_type` 原样入值空间）、约束体模板由
+    /// `predicate_def` 并入——`proof_fn_params` 对该形态恒为 None，
+    /// `register_use_export` 的非 Type 臂也不消费它。
     pub proof_fn_params: Option<Vec<MonoType>>,
 }
 

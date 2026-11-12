@@ -85,7 +85,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **模板**：`未知变量：'{name}'`
 - **消息**：引用的变量未定义
 - **帮助**：检查变量名是否拼写正确，或先定义它
-- **发射点**：`src/frontend/core/sema/checker/refinement.rs:450`、`src/frontend/core/sema/inference/expressions.rs:3563`、`src/frontend/core/sema/inference/statements.rs:3289` 等 4 处
+- **发射点**：`src/frontend/core/sema/checker/refinement.rs:450`、`src/frontend/core/sema/inference/expressions.rs:3563`、`src/frontend/core/sema/inference/statements.rs:3236` 等 4 处
 
 ### E1002：类型不匹配
 
@@ -410,7 +410,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **模板**：`类型定义 '{name}' 只能在模块级（模块顶层）`
 - **消息**：类型定义只能出现在模块顶层
 - **帮助**：将类型定义移到模块顶层
-- **发射点**：`src/frontend/core/sema/inference/expressions.rs:6470`、`src/frontend/core/sema/inference/statements.rs:2036`
+- **发射点**：`src/frontend/core/sema/inference/expressions.rs:6482`、`src/frontend/core/sema/inference/statements.rs:2036`
 
 ### E1081：`?` 仅允许在返回可传播类型的函数内使用
 
@@ -463,7 +463,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **模板**：`泛型元类型自引用不允许：'{decl}'`
 - **消息**：泛型元类型自引用是不允许的
 - **帮助**：类型构造器如 'Type[T]' 不能引用 Type 自身
-- **发射点**：`src/frontend/core/sema/checker.rs:3013`
+- **发射点**：`src/frontend/core/sema/checker.rs:3018`
 - **源码注释名**：泛型元类型自指错误
 
 ### E1092：精化类型实参形态非法
@@ -474,7 +474,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **模板**：`'{name}' 要求编译期常量实参，但所给实参无法转换`
 - **消息**：精化类型实参无法转换为编译期常量表达式
 - **帮助**：谓词/证明函数实参必须是字面量、变量或单参数类型应用，否则精化约束无法生成
-- **发射点**：`src/frontend/core/sema/checker.rs:3637`、`src/frontend/core/sema/checker.rs:3685`、`src/frontend/core/sema/checker.rs:3713`
+- **发射点**：`src/frontend/core/sema/checker.rs:3642`、`src/frontend/core/sema/checker.rs:3690`、`src/frontend/core/sema/checker.rs:3718`
 - **源码注释名**：精化类型实参形态非法（RFC-027，#263）
 
 ### E1093：精化实参个数不匹配
@@ -485,7 +485,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **模板**：`'{name}' 期望 {expected} 个实参，实际 {found} 个`
 - **消息**：谓词/证明函数实参个数不匹配
 - **帮助**：实参个数必须与谓词声明一致，否则精化约束无法生成
-- **发射点**：`src/frontend/core/sema/checker.rs:3620`、`src/frontend/core/sema/checker.rs:3710`
+- **发射点**：`src/frontend/core/sema/checker.rs:3625`、`src/frontend/core/sema/checker.rs:3715`
 - **源码注释名**：精化类型参数数量不匹配
 
 ### E1094：未使用的编译期值参数
@@ -496,7 +496,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **模板**：`'{param}' 声明为 '{type}' 的编译期值参数，但未在类型体中被引用`
 - **消息**：编译期值参数未在类型体中被引用
 - **帮助**：请在类型位置（字段类型、内层 Fn 参数类型、Assert/Array 类型实参）引用该参数，或从声明中移除
-- **发射点**：`src/frontend/core/sema/checker.rs:3211`
+- **发射点**：`src/frontend/core/sema/checker.rs:3216`
 - **源码注释名**：编译期值参数未在类型体引用（#297/F）
 
 ### E1095：未知接口

@@ -6355,6 +6355,18 @@ impl<'a> ExpressionInferrer<'a> {
                 // 静默通过并按推断类型注册。
                 if let (Some(ann), Some(_)) = (type_annotation, value) {
                     let ann_mono: MonoType = ann.clone().into();
+                    // RFC-027 Phase 2.5：绑定注解位的谓词精化正格化——与
+                    // `check_var_stmt_inner` 共用同一转换（refine_binding_annotation
+                    // 判据单源）。#550：此前本臂直接用 raw Generic 统一，块局部
+                    // 绑定（无注解块值 / if 分支 / 循环体 / spawn 体经 infer_block
+                    // 走查到这里）的谓词注解不发生 Refined 转换，可满足值被 E1002
+                    // 假拒绝。Refined 对统一透明（unify 入口剥基，RFC-027 §6.1）。
+                    let ann_mono = super::statements::refine_binding_annotation(
+                        ann,
+                        ann_mono,
+                        self.proof_fn_bases,
+                        self.solver,
+                    );
                     self.solver.unify(&init_ty, &ann_mono).map_err(|_| {
                         ErrorCodeDefinition::type_mismatch(
                             &format!("{}", ann_mono),

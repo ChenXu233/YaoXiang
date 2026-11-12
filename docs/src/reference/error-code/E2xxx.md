@@ -60,7 +60,7 @@ description: '语义分析阶段产生的错误，涵盖作用域、变量生命
 - **模板**：`重复定义：'{name}' 已在当前作用域中定义`
 - **消息**：变量在同一作用域中定义了多次
 - **帮助**：重命名或删除重复的定义
-- **发射点**：`src/frontend/core/sema/checker.rs:1476`、`src/frontend/core/sema/inference/expressions.rs:6378`、`src/frontend/core/sema/inference/statements.rs:2120` 等 4 处
+- **发射点**：`src/frontend/core/sema/checker.rs:1476`、`src/frontend/core/sema/inference/expressions.rs:6390`、`src/frontend/core/sema/inference/statements.rs:2120` 等 4 处
 
 ### E2003：所有权错误
 
@@ -81,7 +81,7 @@ description: '语义分析阶段产生的错误，涵盖作用域、变量生命
 - **模板**：`无法给不可变变量 '{name}' 赋值`
 - **消息**：试图修改不可变变量
 - **帮助**：使用 'mut' 声明可变变量
-- **发射点**：`src/frontend/core/sema/inference/expressions.rs:6373`、`src/frontend/core/sema/inference/statements.rs:2993`
+- **发射点**：`src/frontend/core/sema/inference/expressions.rs:6385`、`src/frontend/core/sema/inference/statements.rs:2940`
 
 ### E2011：使用未初始化变量
 
@@ -111,7 +111,7 @@ description: '语义分析阶段产生的错误，涵盖作用域、变量生命
 - **模板**：`Cannot shadow existing variable '{name}'`
 - **消息**：不能遮蔽已有变量
 - **帮助**：使用不同的变量名，或在不同的作用域中声明变量
-- **发射点**：`src/frontend/core/sema/inference/expressions.rs:6383`、`src/frontend/core/sema/inference/statements.rs:3007`、`src/frontend/core/sema/inference/statements.rs:3094`
+- **发射点**：`src/frontend/core/sema/inference/expressions.rs:6395`、`src/frontend/core/sema/inference/statements.rs:2954`、`src/frontend/core/sema/inference/statements.rs:3041`
 
 ### E2014：使用已移动的值
 

@@ -2643,67 +2643,14 @@ impl StatementChecker {
                     .unwrap_or_else(|| MonoType::from(type_ann.clone()));
                 // RFC-027 Phase 2.5: 证明函数类型解析（从 AST Type 直接提取）
                 // IsPositive(5) → Refined { base: Int(64), constraint: Call("IsPositive", [5]) }
-                let ann_ty = if let crate::ast::Type::Generic { name, args, .. } = type_ann {
-                    if !args.is_empty() {
-                        // RFC-027a：`Terminates(m)` 是内置谓词（无源码声明），
-                        // 故不在 `proof_fn_bases` 里——单独分支正格化为 `Refined`。
-                        // 基类型取新鲜变量：终止性见证不约束值类型。
-                        //
-                        // ⚠ 测度保真缺口（T2 范围）：下面只收 `Type::ConstExpr` 实参，
-                        // 而 `Terminates(b)` 的 `b` 在 AST 里是 `Type::Name`，故此处
-                        // `constraint_args` 可能为空。T1 的验收是「不报错」，已达成；
-                        // 测度的实际提取与保真由 T2 处理（需同时收 `Name` 与
-                        // `ConstExpr` 两种形态）。与证明函数路径同型限制。
-                        if crate::frontend::core::sema::is_builtin_predicate_name(name)
-                            && args.len() == 1
-                        {
-                            let constraint_args: Vec<crate::frontend::core::types::const_data::ConstExpr> = args
-                                .iter()
-                                .filter_map(|a| {
-                                    if let crate::ast::Type::ConstExpr(expr) = a {
-                                        crate::frontend::core::types::eval::const_eval::convert_expr_to_const_expr(expr)
-                                    } else {
-                                        None
-                                    }
-                                })
-                                .collect();
-                            MonoType::Refined {
-                                base: Box::new(self.solver.new_var()),
-                                constraint:
-                                    crate::frontend::core::types::const_data::ConstExpr::Call {
-                                        func: "Terminates".into(),
-                                        args: constraint_args,
-                                    },
-                            }
-                        } else if let Some(base) = self.proof_fn_bases.get(name) {
-                            let constraint_args: Vec<crate::frontend::core::types::const_data::ConstExpr> = args
-                                .iter()
-                                .filter_map(|a| {
-                                    if let crate::ast::Type::ConstExpr(expr) = a {
-                                        crate::frontend::core::types::eval::const_eval::convert_expr_to_const_expr(expr)
-                                    } else {
-                                        None
-                                    }
-                                })
-                                .collect();
-                            let constraint =
-                                crate::frontend::core::types::const_data::ConstExpr::Call {
-                                    func: name.clone(),
-                                    args: constraint_args,
-                                };
-                            MonoType::Refined {
-                                base: Box::new(base.clone()),
-                                constraint,
-                            }
-                        } else {
-                            ann_ty
-                        }
-                    } else {
-                        ann_ty
-                    }
-                } else {
-                    ann_ty
-                };
+                // 正格化判据单源（#550）：与本文件底部 `refine_binding_annotation`
+                // 共用，`infer_stmt` Assign 臂（块局部绑定）同判。
+                let ann_ty = refine_binding_annotation(
+                    type_ann,
+                    ann_ty,
+                    &self.proof_fn_bases,
+                    &mut self.solver,
+                );
                 // Check type assignment compatibility:
                 // - Float cannot be assigned to Int (no implicit narrowing)
                 //   Resolve TypeRef("Int") to Int(64) for comparison (§3.2: Int defaults to 8 bytes)
@@ -3707,4 +3654,84 @@ pub(super) fn strip_refined_with_proof_fns(
         }
         other => other,
     }
+}
+
+/// 绑定注解位的谓词精化正格化（RFC-027 Phase 2.5）——**判据单源**的共享实现。
+///
+/// `y: SumUpTo(1, 2) = 5` 这类绑定注解里的谓词应用，从 AST 注解直接正格化为
+/// `Refined { base, constraint }`：
+/// 1. 内置谓词一元形态（`Terminates(m)`，RFC-027a）→ base 取**新鲜类型变量**
+///    （终止性见证不约束值类型）；
+/// 2. 证明函数形态（`proof_fn_bases` 命中，即「返回 `Type` 的函数」声明，
+///    本地面 `add_type_definition` Phase 2.5 臂与导入面 `register_use_export`
+///    同构登记）→ base 取声明首形参类型；
+/// 3. 其余形态原样返回 `ann_ty`（非谓词应用的普通泛型注解不动）。
+///
+/// 两个消费面（同一判据，禁令三）：
+/// - `StatementChecker::check_var_stmt_inner`——顶层与带 `Fn` 注解函数体的
+///   绑定（`check_stmt` 走查面）；
+/// - `ExpressionInferrer::infer_stmt` 的 Assign 臂——**块局部绑定**（无注解
+///   块值 / if 分支 / 循环体 / spawn 体经 `infer_block` 走查到这里）。
+///   #550：此前第二处直接用 raw `Generic` 形态统一，块局部绑定注解位的谓词
+///   精化未发生，可满足值被 E1002 假拒绝。
+///
+/// 产出的 `Refined` 对统一**透明**：`TypeConstraintSolver::unify` 入口剥基
+/// （`strip_refined_for_unify`，RFC-027 §6.1），调用方无须再剥。
+/// 约束本身的满足性不在此消费——由证明管道消费（顶层与函数体绑定经
+/// `revalidate_refined` / proof_calls，RFC-027 §11 三处义务）。
+///
+/// ⚠ 测度保真缺口（T2 范围，随原实现平移）：实参只收 `Type::ConstExpr`，
+/// `Terminates(b)` 的 `b` 在 AST 里是 `Type::Name`，故 `constraint_args`
+/// 可能为空。与证明函数路径同型限制。
+pub(super) fn refine_binding_annotation(
+    type_ann: &crate::ast::Type,
+    ann_ty: MonoType,
+    proof_fn_bases: &HashMap<String, MonoType>,
+    solver: &mut TypeConstraintSolver,
+) -> MonoType {
+    let crate::ast::Type::Generic { name, args, .. } = type_ann else {
+        return ann_ty;
+    };
+    if args.is_empty() {
+        return ann_ty;
+    }
+    // RFC-027a：`Terminates(m)` 是内置谓词（无源码声明），故不在
+    // `proof_fn_bases` 里——单独分支正格化为 `Refined`。
+    if crate::frontend::core::sema::is_builtin_predicate_name(name) && args.len() == 1 {
+        let constraint_args = annotation_args_to_const_expr(args);
+        return MonoType::Refined {
+            base: Box::new(solver.new_var()),
+            constraint: crate::frontend::core::types::const_data::ConstExpr::Call {
+                func: "Terminates".into(),
+                args: constraint_args,
+            },
+        };
+    }
+    let Some(base) = proof_fn_bases.get(name) else {
+        return ann_ty;
+    };
+    let constraint_args = annotation_args_to_const_expr(args);
+    let constraint = crate::frontend::core::types::const_data::ConstExpr::Call {
+        func: name.clone(),
+        args: constraint_args,
+    };
+    MonoType::Refined {
+        base: Box::new(base.clone()),
+        constraint,
+    }
+}
+
+/// 绑定注解谓词应用的实参 → 编译期常量表达式（不可转换的实参被跳过）。
+fn annotation_args_to_const_expr(
+    args: &[crate::ast::Type]
+) -> Vec<crate::frontend::core::types::const_data::ConstExpr> {
+    args.iter()
+        .filter_map(|a| {
+            if let crate::ast::Type::ConstExpr(expr) = a {
+                crate::frontend::core::types::eval::const_eval::convert_expr_to_const_expr(expr)
+            } else {
+                None
+            }
+        })
+        .collect()
 }

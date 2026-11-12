@@ -2841,6 +2841,11 @@ impl TypeChecker {
                     // 兜底（#524 原构造）：vars 直读拿不到形态的路径（导出面
                     // 未走 `extract_module_info` 的构造点——现网导出面全部经它
                     // 或显式双 None，常态不达）按 def.param_type 重建。
+                    // 第三类（不达本臂，列于此防误读）：Assign 形态谓词的
+                    // Function/Constant 导出——kind 非 Type 不进 Type 臂，
+                    // `proof_fn_params` 恒 None，其 proof-fn 形态变量由导出
+                    // `mono_type` 直读携带（下方 `_ =>` 臂 `export_register_type`
+                    // 原样入值空间），def 并入模板面即同权，无需重建。
                     self.env
                         .add_var(
                             register_name.clone(),

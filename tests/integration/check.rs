@@ -1478,6 +1478,122 @@ fn test_check_imported_unannotated_singleparam_predicate_wrong_arity_reports_e10
     );
 }
 
+// ============ 3.20.19 / #550：绑定注解位谓词精化的块局部绑定同权 ============
+//
+// 绑定注解位（`y: SumUpTo(1, 2) = 5`）的谓词精化，规范面由 RFC-027 §3.1
+// 定义：「编译期谓词在绑定位置使用时（参数声明、变量声明、返回类型）」
+// 且「同样适用于局部变量声明」——SPEC type-system §7.1 同口径（写
+// `b: Positive(b)` 是与强度声明「同一个动作」，绑定注解位无排除）。
+//
+// 实现面此前的缺口轴：`StatementChecker::check_var_stmt_inner`（顶层与
+// 带 Fn 注解函数体的绑定）已做 Refined 正格化，而 `ExpressionInferrer::
+// infer_stmt` 的 Assign 臂（**块局部绑定**——无注解块值 / if 分支 /
+// 循环体 / spawn 体经 `infer_block` 走查）直接用 raw `Generic` 形态统一，
+// Refined 转换未发生 ⇒ 可满足值被 E1002 假拒绝。修法：正格化判据提取为
+// 共享 `refine_binding_annotation`（判据单源，禁令三），两处消费面同判。
+//
+// 已知相邻缺口（不在本修范围，另案）：导入面**多参数**谓词的约束求值
+// （proof_execution 在主模块 AST 中找证明函数）跨模块不可达，E4018
+// 「未在 AST 中找到」——顶层同样发生，与绑定注解位无关。
+
+/// #550 主锚（单参数）：块局部绑定注解位的可满足谓词应用零诊断。
+/// 修前红：E1002 `Expected type 'IsPositive(int64::5)', found type 'int64'`
+/// （raw Generic 统一，Refined 转换未发生）。
+#[test]
+fn test_check_binding_annotation_predicate_singleparam_block_local_accepted() {
+    // Arrange: 单参数谓词 + 主块（无注解块值，走 infer_block）内的绑定注解
+    let dir = temp_dir();
+    let file = create_yx_file(
+        &dir,
+        "binding_annotation_singleparam.yx",
+        "IsPositive: (x: Int) -> Type = { x > 0 }\n\
+         main = {\n\
+         \x20   y: IsPositive(5) = 3\n\
+         \x20   print(y)\n\
+         }",
+    );
+
+    // Act
+    let result = check_file(&file);
+
+    // Assert: RFC-027 §3.1 绑定注解位谓词——可满足值（3 > 0）零诊断；
+    // E1002 = Refined 转换未发生（回归）
+    let errors = result.expect("single-param block-local predicate binding should check");
+    assert_eq!(
+        errors, 0,
+        "#550: a satisfiable predicate application on a block-local binding annotation must be refined (RFC-027 §3.1 declares variable declarations as binding positions) and accepted with 0 diagnostics; got {errors} error(s)"
+    );
+}
+
+/// #550 主锚（多参数）：块局部绑定注解位的可满足多参谓词应用零诊断。
+/// 修前红：E1002 `Expected type 'SumUpTo(int64::1, int64::2)', found type 'int64'`。
+#[test]
+fn test_check_binding_annotation_predicate_multiparam_block_local_accepted() {
+    // Arrange: 多参数谓词 + 主块内绑定注解（2 == 1 * 2 可满足）
+    let dir = temp_dir();
+    let file = create_yx_file(
+        &dir,
+        "binding_annotation_multiparam.yx",
+        "SumUpTo: (n: Int, s: Int) -> Type = { s == n * 2 }\n\
+         main = {\n\
+         \x20   y: SumUpTo(1, 2) = 5\n\
+         \x20   print(y)\n\
+         }",
+    );
+
+    // Act
+    let result = check_file(&file);
+
+    // Assert: 多参数与本地面同判（issue #550 四组合矩阵的本地面多参数臂）
+    let errors = result.expect("multi-param block-local predicate binding should check");
+    assert_eq!(
+        errors, 0,
+        "#550: a satisfiable multi-param predicate application on a block-local binding annotation must be accepted with 0 diagnostics, matching the top-level surface; got {errors} error(s)"
+    );
+}
+
+/// #550 反向锚：块局部绑定注解位**真不满足**的谓词应用仍被拒——拒绝判据
+/// 走证明函数面（E4018 约束求值），不是退回类型不匹配（E1002），更不是吞诊断。
+/// E1002 缺席是「Refined 转换已发生、统一对剥基透明」的实证。
+#[test]
+fn test_check_binding_annotation_predicate_unsatisfiable_still_rejected() {
+    // Arrange: 与主锚同构，但约束不可满足（3 == 1 * 2 为假）
+    let dir = temp_dir();
+    let main_file = create_yx_file(
+        &dir,
+        "binding_annotation_unsatisfiable.yx",
+        "SumUpTo: (n: Int, s: Int) -> Type = { s == n * 2 }\n\
+         main = {\n\
+         \x20   y: SumUpTo(1, 3) = 5\n\
+         \x20   print(y)\n\
+         }",
+    );
+
+    // Act: 子进程跑 CLI check（E4018 的码面是判据面，run_check_command_once
+    // 只回计数）
+    let output = Command::new(env!("CARGO_BIN_EXE_yaoxiang-rs"))
+        .arg("check")
+        .arg(&main_file)
+        .current_dir(&dir)
+        .output()
+        .expect("failed to run yaoxiang-rs check");
+    let text = format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    // Assert: 拒绝来自证明函数面（E4018 约束不满足），而非类型不匹配（E1002）
+    assert!(
+        text.contains("E4018"),
+        "#550: an unsatisfiable predicate application on a block-local binding annotation must still be rejected via the proof-function face (E4018 constraint evaluation), not swallowed; got:\n{text}"
+    );
+    assert!(
+        !text.contains("E1002"),
+        "#550: the rejection must come from the constraint face — E1002 here would mean the refinement conversion did not happen and unification ran against the raw Generic form (the pre-fix false rejection); got:\n{text}"
+    );
+}
+
 // ============ 3.20.12 / #442：注解收泛型调用返回值的两侧表示统一 ============
 //
 // 泛型函数调用点（monomorphize）返回的代入形态是**应用**——
