@@ -2807,26 +2807,27 @@ impl TypeChecker {
                 // 门控即调用面：本函数只被 use 语句选中的导出调用，未导入的
                 // 谓词不进表 ⇒ 解析失败（正确行为，2026-11-03 用户裁决）。
                 if let Some(def) = &export.predicate_def {
-                    self.env
-                        .add_var(
-                            register_name.clone(),
-                            PolyType::mono(crate::frontend::core::sema::predicate_resolver::PredicateDef::proof_fn_type(
-                                std::slice::from_ref(&def.param_type),
-                            )),
-                        );
+                    // 模板面（#524 甲案，语义不变）：def 按 use 门控并入
+                    // `env.predicate_defs`——正格化（`try_resolve` 阶段 1 /
+                    // `refine_predicate_from_ast_args` 臂 1）的唯一模板源。
                     self.env
                         .predicate_defs
                         .insert(register_name.clone(), def.clone());
-                } else if let Some(params) = &export.proof_fn_params {
-                    // #527：多参数谓词——单参数收窄判据拿不到 def，形参清单随
-                    // 导出携带（定义方 vars 的已登记形态直读）。经形态构造单源
-                    // `proof_fn_type` 重建**与本地面 `add_type_definition`（RFC-027
-                    // Phase 2.5 分支）完全同构**的 proof-fn 形态变量——「导入谓词
-                    // 与本地面同权」（#524 甲案）在多参数形态成立。
-                    // **不并入 `env.predicate_defs`**：模板面（try_resolve 阶段 1 /
-                    // refine_predicate_from_ast_args 臂 1）是单参数模型，多参数
-                    // 谓词在本地面的第零遍同样不登记——导入面照抄即同权，
-                    // E1093 设计面不扩权（多参数的元数检查走
+                }
+                if let Some(params) = &export.proof_fn_params {
+                    // #527/#551：单参数与多参数谓词**同通道**——形参清单随导出
+                    // 携带（定义方 vars 的已登记形态直读，`orchestrator::
+                    // extract_module_info`）。经形态构造单源 `proof_fn_type`
+                    // 重建**与本地面 `add_type_definition`（RFC-027 Phase 2.5
+                    // 分支）完全同构**的 proof-fn 形态变量——「导入谓词与本地面
+                    // 同权」（#524 甲案）在全部 proof-fn 形态成立。
+                    // #551 前单参数形态曾按 `def.param_type` 重建：无标注形参时
+                    // `collect_predicate_defs` 的 Int(64) 默认值会造出本地面没有
+                    // 的形参表（本地面 Phase 2.5 臂丢弃无标注形参）——两臂构造
+                    // 的 Fn 形态分歧，本地拒绝、导入放行。
+                    // **不并入 `env.predicate_defs`**（上面的 def 臂才是模板面
+                    // 入口）：多参数谓词在本地面的第零遍同样不登记——导入面
+                    // 照抄即同权，E1093 设计面不扩权（多参数的元数检查走
                     // `lookup_proof_fn_base_type` 按全形参判）。
                     self.env.add_var(
                         register_name.clone(),
@@ -2836,6 +2837,17 @@ impl TypeChecker {
                             ),
                         ),
                     );
+                } else if let Some(def) = &export.predicate_def {
+                    // 兜底（#524 原构造）：vars 直读拿不到形态的路径（导出面
+                    // 未走 `extract_module_info` 的构造点——现网导出面全部经它
+                    // 或显式双 None，常态不达）按 def.param_type 重建。
+                    self.env
+                        .add_var(
+                            register_name.clone(),
+                            PolyType::mono(crate::frontend::core::sema::predicate_resolver::PredicateDef::proof_fn_type(
+                                std::slice::from_ref(&def.param_type),
+                            )),
+                        );
                 } else {
                     self.env.add_var(register_name.clone(), poly);
                 }

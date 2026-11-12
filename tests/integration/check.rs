@@ -1340,6 +1340,144 @@ fn test_check_imported_multiparam_predicate_wrong_arity_reports_e1093_by_declara
     );
 }
 
+// ============ 3.20.18 / #551：单参数无标注形参谓词的导入面与本地面同构 ============
+//
+// 单参数谓词且形参无类型标注（`P: (x) -> Type = { x > 0 }`，约束体可转
+// ConstExpr ⇒ def 有登记）时，两臂构造的 proof-fn 形态变量分歧：
+// - 本地面 `add_type_definition`（RFC-027 Phase 2.5 分支）按签名形参
+//   `filter_map` 收集——无标注形参被丢弃 ⇒ vars 形参表为空 ⇒ 不进
+//   `proof_fn_bases`（`params.first()` 取不到基类型）⇒ 注解不精化，
+//   值绑定/返回位使用被拒（E1012 + E1002，实测 HEAD 夹具）。
+// - 导入面 `register_use_export` 的 #524 单参数臂按 `def.param_type` 重建
+//   ——`collect_predicate_defs` 对无标注形参默认 Int(64) ⇒ 形参表
+//   [Int(64)] ⇒ 进 `proof_fn_bases` ⇒ 同形态使用被放行（0 诊断）。
+// 修法（#527 同族统一化）：`extract_module_info` 的 `proof_fn_params` 载荷
+// 取消「def 缺席」分流——全部 proof-fn 形态统一直读定义方 `env.vars` 的
+// 已登记形态；导入臂据此重建（单参数与多参数同通道），def 仍进
+// `env.predicate_defs`（模板面 #524 语义不变）。修后导入面与本地面逐字
+// 同判；本地面与带标注形态零变化。
+// 判据单源不变：vars 直读已是单源（`add_type_definition` +
+// `PredicateDef::proof_fn_type`），导入面照抄，不开第二份。
+
+/// #551 前提锚：无标注单参数谓词的**本地面**使用形态——钉住现状
+/// （本地面零变化：修前修后同红，恰 2 条诊断）。若本地面形态翻绿或
+/// 诊断数漂移，说明本地面被本修之外的改动触碰，先查那笔改动。
+#[test]
+fn test_check_local_unannotated_singleparam_predicate_use_rejected() {
+    // Arrange: 无标注单参数谓词 + 精化签名形参位使用（值经 curry 返回）
+    let dir = temp_dir();
+    let file = create_yx_file(
+        &dir,
+        "local_unannotated_singleparam_predicate.yx",
+        "P: (x) -> Type = { x > 0 }\n\
+         g: (b: Int) -> (v: P(b)) -> Int = (v) => v\n\
+         main: () -> Void = { print(g(3)(5)) }",
+    );
+
+    // Act
+    let result = check_file(&file);
+
+    // Assert: 现状恰 2 条（E1012 返回位 + E1002 绑定校验）——本地面形态
+    // 修前修后同红（钉现状，不钉诊断码：码面是发射点位置的实现细节）
+    let errors = result.expect("local unannotated predicate use should check completely");
+    assert_eq!(
+        errors, 2,
+        "#551 premise: local surface for an un-annotated single-param predicate must keep its current verdict (exactly 2 diagnostics: return-position + binding unification) — the fix only aligns the import surface, the local surface must not move; got {errors} error(s)"
+    );
+}
+
+/// #551 主锚：同一谓词 use 导入后，同形态使用与本地面**同判**（恰本地
+/// 同款 2 条诊断）。修前红：导入面 0 诊断（def.param_type 的 Int(64)
+/// 默认值造出本地面没有的形参表，假放行）；修后导入臂改从 vars 已登记
+/// 形态重建 ⇒ 与本地面逐字同判。
+#[test]
+fn test_check_imported_unannotated_singleparam_predicate_matches_local() {
+    // Arrange: 同一谓词与本地面同款使用，分别在单文件（本地面）与
+    // use 导入（导入面）两个夹具中跑 check
+    let local_dir = temp_dir();
+    let local_file = create_yx_file(
+        &local_dir,
+        "local.yx",
+        "P: (x) -> Type = { x > 0 }\n\
+         g: (b: Int) -> (v: P(b)) -> Int = (v) => v\n\
+         main: () -> Void = { print(g(3)(5)) }",
+    );
+    let import_dir = temp_dir();
+    create_yx_file(&import_dir, "lib.yx", "P: (x) -> Type = { x > 0 }\n");
+    let import_file = create_yx_file(
+        &import_dir,
+        "main.yx",
+        "use lib.{P}\n\
+         \n\
+         g: (b: Int) -> (v: P(b)) -> Int = (v) => v\n\
+         \n\
+         main: () -> Void = { print(g(3)(5)) }",
+    );
+
+    // Act
+    let local_errors =
+        check_file(&local_file).expect("local surface fixture should check completely");
+    let import_errors =
+        check_file(&import_file).expect("import surface fixture should check completely");
+
+    // Assert: 导入面与本地面同判，且确有拒绝（≥1 防 0==0 平凡通过）——
+    // 修前导入面 0 诊断与本地面 2 诊断分歧，本锚翻红
+    assert_eq!(
+        import_errors, local_errors,
+        "#551: an imported un-annotated single-param predicate must produce exactly the same verdict as the local surface (proof-fn form rebuilt from the defining unit's registered vars shape, not def.param_type's Int(64) default); got import {import_errors} vs local {local_errors} error(s)"
+    );
+    assert!(
+        import_errors >= 1,
+        "#551: the aligned import surface must still reject this use (same as the local premise anchor) — zero diagnostics would mean the fix swallowed the divergence instead of aligning it; got {import_errors} error(s)"
+    );
+}
+
+/// #551 反向锚：导入无标注谓词在**元数不符**的使用上仍被模板面拒绝
+/// （E1093，expected = 声明的单参数模型 1）——统一化只换 proof-fn 变量的
+/// 构造源，def 并入 `env.predicate_defs` 的模板面（#524 甲案）不得受影响。
+/// 此锚常驻：若 def 载荷在重构中被丢掉，此处翻红。
+#[test]
+fn test_check_imported_unannotated_singleparam_predicate_wrong_arity_reports_e1093() {
+    // Arrange: 导入无标注单参数谓词，绑定注解位给 2 个实参（声明 1 个）
+    let dir = temp_dir();
+    create_yx_file(&dir, "lib.yx", "P: (x) -> Type = { x > 0 }\n");
+    let main_file = create_yx_file(
+        &dir,
+        "main.yx",
+        "use lib.{P}\n\
+         \n\
+         main = {\n\
+         \x20   y: P(1, 2) = 5\n\
+         \x20   print(y)\n\
+         }",
+    );
+
+    // Act: 子进程跑 CLI check（E1093 的 expected 数是判据面，
+    // run_check_command_once 只回计数）
+    let output = Command::new(env!("CARGO_BIN_EXE_yaoxiang-rs"))
+        .arg("check")
+        .arg(&main_file)
+        .current_dir(&dir)
+        .output()
+        .expect("failed to run yaoxiang-rs check");
+    let text = format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    // Assert: E1093 发射且元数按声明的单参数模型判（expected = 1）——
+    // 模板面（try_resolve 阶段 1）未受统一化影响的实证
+    assert!(
+        text.contains("E1093"),
+        "#551: wrong-arity use of an imported un-annotated predicate must still be rejected by the template face (E1093) — def propagation into env.predicate_defs is #524 semantics and must survive the vars-direct-read unification; got:\n{text}"
+    );
+    assert!(
+        text.contains("expected 1 argument(s)"),
+        "#551: E1093 must keep the stage-1 single-param model (expected = 1) on the import surface, same as the local surface; got:\n{text}"
+    );
+}
+
 // ============ 3.20.12 / #442：注解收泛型调用返回值的两侧表示统一 ============
 //
 // 泛型函数调用点（monomorphize）返回的代入形态是**应用**——

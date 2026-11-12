@@ -1124,19 +1124,22 @@ pub(crate) fn extract_module_info(
                     // 形态导出（kind=Type），def 是导入方谓词正格化的唯一模板源
                     if let Some(def) = predicate_defs.get(name.as_str()) {
                         export.predicate_def = Some(def.clone());
-                    } else {
-                        // 多参数谓词（#527）：单参数收窄判据拿不到 def，但本地面
-                        // `add_type_definition`（RFC-027 Phase 2.5 分支）已把它登记
-                        // 成 proof-fn 形态变量——直读定义方 `env.vars` 的已登记
-                        // 形态（判据单源，不从 AST 重推），形参清单随导出携带，
-                        // 导入方经 `PredicateDef::proof_fn_type` 重建同构变量。
-                        // 模板面不随行：`predicate_def` 保持 None，与本地面的
-                        // 第零遍收窄一致（E1093 设计面不扩权）。
-                        export.proof_fn_params = vars.get(name.as_str())
-                            .and_then(|p| {
-                                crate::frontend::core::sema::predicate_resolver::PredicateDef::proof_fn_params(&p.body)
-                            });
                     }
+                    // proof-fn 形参清单随导出携带（#527/#551）：**全部** proof-fn
+                    // 形态（单参数与多参数）统一直读定义方 `env.vars` 的已登记
+                    // 形态（判据单源，不从 AST 重推），导入方经
+                    // `PredicateDef::proof_fn_type` 重建同构变量。
+                    // #551 缘起：此臂此前只在 def 缺席时走（#527 的多参数分流），
+                    // 单参数无标注形参的谓词 def 有登记但 vars 形参表为空（本地
+                    // Phase 2.5 臂丢弃无标注形参），导入面便拿 `def.param_type`
+                    // 的 Int(64) 默认值重建出本地面没有的形参表——两臂构造的
+                    // Fn 形态分歧，本地拒绝、导入放行。分流取消后两臂同源。
+                    // 模板面不随行：多参数谓词 `predicate_def` 保持 None，与
+                    // 本地面的第零遍收窄一致（E1093 设计面不扩权）。
+                    export.proof_fn_params = vars.get(name.as_str())
+                        .and_then(|p| {
+                            crate::frontend::core::sema::predicate_resolver::PredicateDef::proof_fn_params(&p.body)
+                        });
                     info.add_export(export);
                 }
             }

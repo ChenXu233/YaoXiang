@@ -64,7 +64,7 @@ dead-code = "warn"
 - **span 豁免**：否
 - **模板**：`未使用的导入：'{name}'`
 - **帮助**：考虑移除未使用的导入
-- **发射点**：`src/frontend/core/sema/checker.rs:2950`
+- **发射点**：`src/frontend/core/sema/checker.rs:2962`
 
 ### W1004：未使用的私有变量
 

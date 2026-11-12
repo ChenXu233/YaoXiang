@@ -116,18 +116,24 @@ pub struct Export {
     /// （第零遍与导出提取共同委托）；导入方 `register_use_export` 按 use
     /// 门控并入（未导入的谓词解析失败是正确行为，2026-11-03 用户裁决）。
     pub predicate_def: Option<crate::frontend::core::sema::predicate_resolver::PredicateDef>,
-    /// 多参数谓词的 proof-fn 形参类型清单（#527，声明序；非多参数谓词为 None）。
+    /// proof-fn 形态的形参类型清单（#527/#551，声明序；定义方 vars 形态不是
+    /// proof-fn 形态——`Fn` 且返回 `MetaType`——为 None）。
     ///
-    /// `predicate_def` 只覆盖单参数形态——def 构建判据按单参数收窄
-    /// （`PredicateResolver::try_resolve` 的阶段 1 模型即单参数），多参数
-    /// 谓词拿不到 def，导入面曾回退成 Struct poly，与本地面
-    /// `add_type_definition`（RFC-027 Phase 2.5 分支登记的 proof-fn 形态
-    /// 变量）不同构 ⇒ 导入使用被 E1012 + E1002 拒绝。本字段直读定义方
-    /// `env.vars` 的**已登记形态**（判据单源仍是 add_type_definition 与
+    /// 全部 proof-fn 形态（单参数与多参数）统一从定义方 `env.vars` 的
+    /// **已登记形态**直读（判据单源仍是 add_type_definition 与
     /// `PredicateDef::proof_fn_type`，导出面不重新推导）；导入方
-    /// `register_use_export` 据此经 `proof_fn_type` 重建同构变量。**不并入
-    /// `env.predicate_defs`**——模板面阶段 1 单参数（E1093 设计面），本地面
-    /// 对多参数同样不登记，导入面照抄即同权（use 门控不变）。
+    /// `register_use_export` 据此经 `proof_fn_type` 重建同构变量——
+    /// 「导入谓词与本地面同权」（#524 甲案）在全部 proof-fn 形态成立。
+    /// #527 缘起：多参数谓词拿不到 def（def 构建判据按单参数收窄，
+    /// `PredicateResolver::try_resolve` 的阶段 1 模型即单参数），导入面曾
+    /// 回退成 Struct poly ⇒ 导入使用被 E1012 + E1002 拒绝。#551 补齐单参数
+    /// 侧：**不再按「def 缺席」分流**——单参数无标注形参的谓词 def 有登记
+    /// 但 vars 形参表为空（本地 Phase 2.5 臂丢弃无标注形参），若此字段只在
+    /// def 缺席时携带，导入面会拿 `def.param_type` 的 Int(64) 默认值重建出
+    /// 本地面没有的形参表 ⇒ 两臂构造的 Fn 形态分歧（本地拒绝、导入放行）。
+    /// 模板面分流不随行：多参数谓词的 def 仍不进 `env.predicate_defs`
+    /// （阶段 1 单参数模型，E1093 设计面）；单参数 def 由 `predicate_def`
+    /// 载荷照旧并入（#524 甲案语义不变）；use 门控不变。
     pub proof_fn_params: Option<Vec<MonoType>>,
 }
 
