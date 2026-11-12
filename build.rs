@@ -39,8 +39,9 @@ fn main() {
     //    链接系统 Z3 并提前返回）。rerun-if-env-changed 按「值或缺省」入指纹
     //    哈希：从未设置→设置、值变化、设置→取消三种迁移都触发重跑。
     println!("cargo:rerun-if-env-changed=Z3_SYS_Z3_HEADER");
-    // 3) CXXSTDLIB：link_z3 非 Windows 分支读它决定 cargo:rustc-link-lib 输出
-    //    （未设置时回退 stdc++）。只影响非 Windows 链接面；Windows 构建不读它，
+    // 3) CXXSTDLIB：link_z3 非 Windows 且非 macOS 分支读它决定
+    //    cargo:rustc-link-lib 输出（未设置时回退 stdc++）——macOS 目标硬编码
+    //    c++、不读该变量。只影响那一部分链接面；Windows/macOS 构建不读它，
     //    声明本身无害（值不变即不触发）。
     println!("cargo:rerun-if-env-changed=CXXSTDLIB");
     // RFC-013 路径单一源在 code_tables::RFC013_REL，此处复用避免双份漂移
