@@ -10,8 +10,18 @@ use std::process::Command;
 const Z3_VERSION: &str = "4.16.0";
 
 fn main() {
-    // 重建触发面显式化：build.rs 只在这些路径（及自身/Cargo.toml）变化时重跑
-    println!("cargo:rerun-if-changed=locales/zh.json");
+    // 重建触发面显式化：build.rs 只在这些路径（及自身/Cargo.toml）变化时重跑。
+    //
+    // locales 用目录级声明——触发面必须 ⊇ 构建期校验的输入面（#458）：下文
+    // code_tables::validate 的输入面是全部 locale 文件。「孤立条目」判据对
+    // 任何语言（zh 与全部 bot 语言）都是 error：翻译残留 bot 不会清理，任何
+    // 语言的 locale 里出现实现未定义的码都拒绝编译；「bot 语言缺失」判据
+    // 覆盖 en/ja/ru/zh-classical/zh-x-miao 全部 bot 语言。而 i18n bot
+    // （auto-translate-i18n.yml）以 zh.json 为触发、异步写非 zh 文件；旧触发面
+    // 只声明 zh.json ⇒ 非 zh 变更（bot 落地、人工清理翻译残留）永不触发校验：
+    // 假告警停留在上一次运行的结论上（cargo 重放旧 output 的 warning），真孤立
+    // 条目漏检。目录级声明由 cargo 扫描整个目录的变更，非 zh 文件变化即重跑。
+    println!("cargo:rerun-if-changed=locales");
     // RFC-013 路径单一源在 code_tables::RFC013_REL，此处复用避免双份漂移
     println!("cargo:rerun-if-changed={}", code_tables::RFC013_REL);
     println!("cargo:rerun-if-changed=src/util/diagnostic/codes");
