@@ -4539,3 +4539,19 @@ P1 的形状判据与 ir_gen 的包装层产出形态耦合——「不再匹配
 
 1. `docs/src/dev/test-gate-census.tsv` 未收录本轮 4 个新测试（该表对 parser 测试文件有 39 处引用 ⇒ 是活表，需随本轮更新）。
 2. `docs/src/dev/architecture/03` 的 parser 行号引用已随本次改动漂移——按「文档里不得写行号」的口径，这批存量行号引用随 03 重写统一清零。
+
+## P3 3.20.13 收口（build.rs 的 locales 重建触发面对齐校验输入面——#458，2026-11-13）
+
+> **一、判据与修法**：判据 = **触发面 ⊇ 构建期校验的输入面**——任何能改变 build.rs 输出结论（告警/error/panic/链接指令）的文件输入都必须在触发声明里。修法 = `cargo:rerun-if-changed` 从 `locales/zh.json` 改目录级 `locales`（cargo 对目录按内容递归扫描变更，实测工具链 1.97.1），机理注释同步：validate 的「孤立条目」判据对任何语言（zh 与全部 bot 语言）都是 error（翻译残留 bot 不会清理）、「bot 语言缺失」判据覆盖全部 bot 语言，i18n bot（`.github/workflows/auto-translate-i18n.yml`）以 zh.json 为触发异步写全部非 zh 文件——旧触发面 ⇒ 非 zh 变更永不触发校验：假告警停留旧结论（cargo 重放旧 output 的 warning）、真孤立条目漏检。
+
+> **二、双轮独立查证（issue 正文不作事实源）**：队长与实现者各自独立推导、结论一致。五源：① `build.rs` 触发行与四处结论调用（parse_registry / validate / check_rfc_tables / type_tables::build_gate）；② code-tables 的 validate：孤立条目对 zh + 全部 bot 语言判 error、缺失对 bot 语言判 warning；③ 两个翻译 bot 工作流的分工（`.github/workflows/auto-translate-i18n.yml` 触发 zh.json、写 locales 全部非 zh 文件；`.github/workflows/auto-translate.yml` 只写 `docs/src/en/` 不触 locales）；④ RFC-013 三方一致性（诊断码注册源 ↔ locales ↔ 码表）与运行期码表注册源 `src/std/result.rs`；⑤ type-tables 基线为源内常量、build_gate 只跑 T1 且被扫描根目录级触发面覆盖。非缺口备案：MONO_REL / LSP_REL 触发声明对 build_gate 结论冗余但无害（T2 消费面保留触发正确）。
+
+> **三、红绿探针（mtime 实证，两轮独立）**：t1 主树——修前 touch locales/en.json（仅 mtime）后 build-script 重跑 0 次（非 zh 变更不触发校验；同期树上存在 E9999 哨兵孤立条目而校验未在其后运行 = 真孤立漏检的直接实证），修后同探针重跑 1 次、无 touch 全 Fresh 无虚假重跑循环、真跑告警面仅「type-tables T1 门禁通过」一行（6 语言齐备、无缺失告警）。t2 批次树（冻结 revision `41e69f10`）独立复测闭环一致。
+
+> **四、t2 变异与等价性（批次号 t3.20.13-verify @ `41e69f10`，trial 机械可逆 + 每轮 trial 后 rebuild）**：M1（触发行回退 zh.json）⇒ touch 后重跑 0 次（缺陷复现，判据能失败）；M2（en.json 注入 E9999 哨兵孤立键）⇒ 构建失败，「locales 孤立: E9999」+ 校验 panic 拒编——同时证明「非 zh 内容变更触发重跑」与「孤立判据端到端真跑」（t1 报告的「孤立判据无单元自测」证据缺口由此补上）。等价性：IR 快照比对 1 passed、语料差分逐字节零漂移；卫生：blob 比对 CLEAN + 树内 git status 干净 + release 完成。
+
+> **五、t3 对抗复审 APPROVE（七镜头）+ findings 处置**：①触发面对齐（注释机理与 validate 实码核对一致）；②无第二份路径来源（low 备案：locales 目录路径在 build.rs 与 code-tables lib 共三处字面量、无共享常量——父提交原状、本笔未新引入漂移面，与 RFC013_REL / type_tables 常量形态的差距随 #548 邻域观察）；③修本体非遮蔽（无校验逻辑改动、无 error 降级）；④边界（diff 仅 build.rs 触发行 + 注释两处）；⑤机理正确性（bot 分工与 cargo 目录扫描叙述与实文件一致）；⑥注释规范（无裸行号、无私有内容）；⑦诚实性（探针数字与 cargo 文档机理静态自洽，t3 未复跑探针——该缺口由 t2 批次树独立复测闭环）。info 备案两条：BOT_LOCALES 枚举的散文复述将来会失真（行为不受影响）；触发声明无入库测试守护（构建级指纹行为按约定探针不入库，重窄化只能靠 review）。
+
+> **六、流程事件**：会话流程事故——工作区曾出现未授权的 E9999 注入残留（一条被中断的探针命令部分执行所致），实现者 escalate、队长裁决 `git restore` 还原后继续；其 cargo 构建中断遗留的 rlib archive 损坏（LNK1120）由实现者删档重建恢复，均非仓库内容问题。教训（不入库，归队长记忆）：被中断的工具调用可能已部分执行，中断后必须核实工作树状态。
+
+> **七、计数与移交**：三级 +1 = 3.20.13（225→226）；二级不变。issue [#458](https://github.com/ChenXu233/YaoXiang/issues/458) **关闭**。同类缺口（host 分支 `.z3` 触发面、Z3_SYS_Z3_HEADER / CXXSTDLIB 环境变量 rerun-if-env-changed、两条非缺口备案）另案登记 [#548](https://github.com/ChenXu233/YaoXiang/issues/548)。批次树已 release。
