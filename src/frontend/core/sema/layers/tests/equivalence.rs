@@ -5,7 +5,9 @@
 //! 覆盖验收清单：同一性短路、ι 规范形态、`Generic` 实参递归归约、
 //! `Refined` 谓词不同 ⇒ Unproven（先红后绿）、Unproven 不降格、预算生效。
 
-use crate::frontend::core::sema::layers::equivalence::{check_type_equivalence, defeq, normalize_type};
+use crate::frontend::core::sema::layers::equivalence::{
+    DefeqContext, check_type_equivalence, defeq, normalize_type,
+};
 use crate::frontend::core::sema::proof::budget::BudgetTracker;
 use crate::frontend::core::sema::proof::context::ProofContext;
 use crate::frontend::core::sema::proof::verdict::{ProofFailure, UnprovenReason};
@@ -66,8 +68,8 @@ fn test_defeq_syntactic_identity_is_proved() {
     let int64 = MonoType::Int(64);
 
     // Act
-    let same = defeq(&int64, &MonoType::Int(64), &ctx);
-    let different = defeq(&int64, &MonoType::Int(32), &ctx);
+    let same = defeq(&int64, &MonoType::Int(64), &DefeqContext::from_proof(&ctx));
+    let different = defeq(&int64, &MonoType::Int(32), &DefeqContext::from_proof(&ctx));
 
     // Assert
     assert!(same.is_ok(), "结构相同的 Int(64) 应判等；实际: {same:?}");
@@ -87,7 +89,7 @@ fn test_defeq_generic_with_same_literal_argument_is_proved() {
     let rhs = generic("Array", vec![MonoType::Int(64), literal("3", 3)]);
 
     // Act
-    let result = defeq(&lhs, &rhs, &ctx);
+    let result = defeq(&lhs, &rhs, &DefeqContext::from_proof(&ctx));
 
     // Assert
     assert!(
@@ -106,7 +108,7 @@ fn test_defeq_generic_with_different_literal_argument_is_disproved() {
     let rhs = generic("Array", vec![MonoType::Int(64), literal("5", 5)]);
 
     // Act
-    let result = defeq(&lhs, &rhs, &ctx);
+    let result = defeq(&lhs, &rhs, &DefeqContext::from_proof(&ctx));
 
     // Assert
     assert!(
@@ -123,7 +125,11 @@ fn test_defeq_literal_versus_base_type_is_disproved() {
     let ctx = ProofContext::new(&env);
 
     // Act
-    let result = defeq(&literal("3", 3), &MonoType::Int(64), &ctx);
+    let result = defeq(
+        &literal("3", 3),
+        &MonoType::Int(64),
+        &DefeqContext::from_proof(&ctx),
+    );
 
     // Assert
     assert!(
@@ -143,7 +149,7 @@ fn test_defeq_refined_different_predicates_is_unproven() {
     let negative = refined_int(cmp_const("x", BinOp::Lt, 0));
 
     // Act
-    let result = defeq(&positive, &negative, &ctx);
+    let result = defeq(&positive, &negative, &DefeqContext::from_proof(&ctx));
 
     // Assert
     assert!(
@@ -162,7 +168,7 @@ fn test_defeq_refined_same_predicate_is_proved() {
     let rhs = refined_int(cmp_const("x", BinOp::Gt, 0));
 
     // Act
-    let result = defeq(&lhs, &rhs, &ctx);
+    let result = defeq(&lhs, &rhs, &DefeqContext::from_proof(&ctx));
 
     // Assert
     assert!(result.is_ok(), "同谓词精化类型应判等；实际: {result:?}");
@@ -177,7 +183,11 @@ fn test_defeq_refined_versus_plain_is_unproven() {
     let refined = refined_int(cmp_const("x", BinOp::Gt, 0));
 
     // Act
-    let result = defeq(&refined, &MonoType::Int(64), &ctx);
+    let result = defeq(
+        &refined,
+        &MonoType::Int(64),
+        &DefeqContext::from_proof(&ctx),
+    );
 
     // Assert
     assert!(
@@ -195,7 +205,7 @@ fn test_normalize_type_canonicalizes_literal_name() {
     let noncanonical = literal("0x3", 3);
 
     // Act
-    let normalized = normalize_type(&noncanonical, &ctx);
+    let normalized = normalize_type(&noncanonical, &DefeqContext::from_proof(&ctx));
 
     // Assert
     match normalized {
@@ -216,7 +226,7 @@ fn test_normalize_type_recurses_into_generic_arguments() {
     let ty = generic("Array", vec![MonoType::Int(64), literal("0x3", 3)]);
 
     // Act
-    let normalized = normalize_type(&ty, &ctx);
+    let normalized = normalize_type(&ty, &DefeqContext::from_proof(&ctx));
 
     // Assert
     match normalized {
@@ -240,7 +250,7 @@ fn test_normalize_type_budget_exhaustion_is_unproven() {
     let ty = MonoType::Int(64);
 
     // Act
-    let result = normalize_type(&ty, &ctx);
+    let result = normalize_type(&ty, &DefeqContext::from_proof(&ctx));
 
     // Assert
     match result {
@@ -267,7 +277,7 @@ fn test_check_type_equivalence_delegates_to_defeq() {
 
     // Act
     let via_legacy = check_type_equivalence(&ctx, &lhs, &rhs);
-    let via_defeq = defeq(&lhs, &rhs, &ctx);
+    let via_defeq = defeq(&lhs, &rhs, &DefeqContext::from_proof(&ctx));
 
     // Assert
     assert_eq!(
@@ -299,7 +309,7 @@ fn test_defeq_array_length_arithmetic_equals_literal() {
     let rhs = annotated("Array(Int, 5)");
 
     // Act
-    let result = defeq(&lhs, &rhs, &ctx);
+    let result = defeq(&lhs, &rhs, &DefeqContext::from_proof(&ctx));
 
     // Assert
     assert!(

@@ -30,7 +30,7 @@ description: '语义分析阶段产生的错误，涵盖作用域、变量生命
 | `E2027` | unsafe 解引用 | `Semantic` | 否 | `无法在 unsafe 块外解引用裸指针` | ✅ 1 处 |
 | `E2029` | spawn 内引用循环 | `Semantic` | 否 | `spawn 内引用循环: {cycle}` | ✅ 1 处 |
 | `E2030` | 精化类型约束违反 | `Semantic` | 否 | `对 '{assigned}' 赋值后，'{var}' 不再满足精化类型约束：{constraint}（反例：{counterexample}）` | ✅ 1 处 |
-| `E2031` | 精化约束无法证明 | `Semantic` | 否 | `对 '{assigned}' 赋值后，'{var}' 的精化类型约束：{constraint} 在证明内核内无法静态证明` | ✅ 2 处 |
+| `E2031` | 精化约束无法证明 | `Semantic` | 否 | `对 '{assigned}' 赋值后，'{var}' 的精化类型约束：{constraint} 在证明内核内无法静态证明` | ✅ 3 处 |
 | `E2090` | 无效签名 | `Semantic` | 否 | `无效签名：{reason}` | ✅ 3 处 |
 | `E2091` | 签名未知类型 | `Semantic` | 否 | `无效签名：未知类型 '{type_name}'` | ⚠ 暂未发射 |
 | `E2092` | 签名缺少箭头 | `Semantic` | 否 | `无效签名：缺少 '->'` | ✅ 1 处 |
@@ -197,7 +197,7 @@ description: '语义分析阶段产生的错误，涵盖作用域、变量生命
 - **构造函数**：`ErrorCodeDefinition::refined_unproven(assigned, var, constraint)`
 - **模板**：`对 '{assigned}' 赋值后，'{var}' 的精化类型约束：{constraint} 在证明内核内无法静态证明`
 - **帮助**：RFC-027 要求所有精化约束在编译期得到证明——证不出即编译错误。请改写约束使其实参可静态取值（字面量或字面量可折叠的表达式），或提供返回 Type 的证明函数参与编译期执行。
-- **发射点**：`src/frontend/core/sema/checker/refinement.rs:662`、`src/frontend/core/sema/checker/refinement.rs:765`
+- **发射点**：`src/frontend/core/sema/checker/refinement.rs:662`、`src/frontend/core/sema/checker/refinement.rs:765`、`src/frontend/core/sema/proof/verdict.rs:327`
 - **源码注释名**：精化约束无法证明（RFC-027 §4/§9：Unproven → 编译错误 + 未解命题，
 
 ### E2090：无效签名

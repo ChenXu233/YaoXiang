@@ -281,8 +281,9 @@ fn test_into_result_loop_termination_unproven_is_user_domain_code() {
 
 /// 未分类的 `Unproven` 仍走 ICE — 保证兜底未被本改动误伤
 #[test]
-fn test_into_result_unclassified_unproven_still_reports_ice() {
-    // Arrange — BeyondKernel 目前无专属码，属未分类情况
+fn test_into_result_unproven_reason_reuses_e2031_not_ice() {
+    // Arrange — BeyondKernel 无专属码：6.9.3c 起与 Symbolic/BudgetExceeded 一起
+    // **复用 E2031**（能力边界），不再落 ICE
     let result = Err(ProofFailure::Unproven {
         reason: UnprovenReason::BeyondKernel("未分类情形".into()),
         proof_calls: vec![],
@@ -295,11 +296,11 @@ fn test_into_result_unclassified_unproven_still_reports_ice() {
     // Act
     let outcome = result.into_result();
 
-    // Assert — 兜底保持 E8001（指引报 issue 是正确出路）
+    // Assert — 6.9.3c：三条「未武装」原因复用 E2031，`_` 臂已删，不再有 ICE 兜底
     let err = outcome.expect_err("Unproven 必须转成 Err(Diagnostic)");
     assert_eq!(
-        err.code, "E8001",
-        "未分类的 Unproven 应保持 E8001 兜底。实际: '{}'",
+        err.code, "E2031",
+        "未武装原因应复用 E2031（能力边界），不得落 E8001 ICE。实际: '{}'",
         err.code
     );
 }

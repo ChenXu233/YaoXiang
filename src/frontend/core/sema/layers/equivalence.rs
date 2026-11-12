@@ -26,6 +26,33 @@ use super::super::proof::verdict::{
     DisproofKind, DisproofModel, ProofFailure, ProofResult, UnprovenReason,
 };
 use super::super::proof::context::ProofContext;
+use crate::frontend::core::sema::proof::budget::BudgetTracker;
+
+/// 判等内核的最小环境（6.9.3c）：**不包含** `ProofContext.assumptions`。
+///
+/// 为什么单独抽一层：赋值检查（`assignment::can_assign`）只需要「类型环境 + 预算 +
+/// 依赖类型环境」，借用整个 `ProofContext` 会把它绑在证明管道的假设栈上——那是
+/// **证明的义务**，不是判等的输入。`ProofContext` 侧由 [`DefeqContext::from_proof`]
+/// 现场投影一份（只取三个字段，不碰 `assumptions`/`dep_graph`）。
+pub struct DefeqContext<'a> {
+    /// 类型环境（δ 展开用）
+    pub env: &'a TypeEnvironment,
+    /// 本次判定的预算（**每次判定**一份，见 `BudgetTracker::for_judgment`）
+    pub budget: &'a BudgetTracker,
+    /// 依赖类型环境（类型族实例化用）
+    pub dep_env: &'a crate::frontend::core::types::eval::dependent_types::DependentTypeEnv,
+}
+
+impl<'a> DefeqContext<'a> {
+    /// 从证明上下文投影（**只取** env / budget / dep_env）。
+    pub fn from_proof(ctx: &'a ProofContext<'a>) -> Self {
+        Self {
+            env: ctx.env,
+            budget: &ctx.budget,
+            dep_env: &ctx.dep_env,
+        }
+    }
+}
 
 /// 检查 A 是否为 B 的子类型（纯函数）
 ///
@@ -172,9 +199,9 @@ fn fn_signatures_match(
 /// 映射见 [`eval_error_to_failure`]——**单一**映射，没有第二处。
 pub fn normalize_type(
     ty: &MonoType,
-    ctx: &ProofContext<'_>,
+    ctx: &DefeqContext<'_>,
 ) -> Result<MonoType, ProofFailure> {
-    let mut evaluator = Evaluator::new(ctx.env, &ctx.budget, &ctx.dep_env);
+    let mut evaluator = Evaluator::new(ctx.env, ctx.budget, ctx.dep_env);
     normalize_type_with(&mut evaluator, ty, ctx)
 }
 
@@ -182,7 +209,7 @@ pub fn normalize_type(
 fn normalize_type_with(
     evaluator: &mut Evaluator<'_>,
     ty: &MonoType,
-    ctx: &ProofContext<'_>,
+    ctx: &DefeqContext<'_>,
 ) -> Result<MonoType, ProofFailure> {
     // 预算：**一类型节点一步**（`Evaluator::eval` 的类型路径自己不吃预算——只有
     // `eval_expr` 吃，见 t47 E5）⇒ 归一化入口自己扣，耗尽即 `Unproven{BudgetExceeded}`。
@@ -230,8 +257,10 @@ fn normalize_type_with(
 /// 绝不 `Disproved`（`Disproved` 只由 [`defeq`] 在两侧都成功归约且确实不等时给出）。
 fn eval_error_to_failure(
     error: EvalError,
-    ctx: &ProofContext<'_>,
+    ctx: &DefeqContext<'_>,
 ) -> ProofFailure {
+    // 诊断只用用户域措辞（6.9.3c）；Rust 侧细节留给日志，不进诊断。
+    tracing::debug!("类型归约失败: {:?}", error);
     let budget = ctx.budget.report();
     // `Evaluator` 把**预算耗尽**表达成 `MaxDepthExceeded`（与「结构过深」同名，见
     // t47 E5）——按预算是否真的耗尽分流，不把两者混成一类。
@@ -243,7 +272,7 @@ fn eval_error_to_failure(
         }
     } else {
         ProofFailure::Unproven {
-            reason: UnprovenReason::BeyondKernel(format!("{error:?}")),
+            reason: UnprovenReason::BeyondKernel("无法在编译期归约该类型（求值失败）".to_string()),
             proof_calls: vec![],
             budget,
         }
@@ -263,7 +292,7 @@ fn eval_error_to_failure(
 pub fn defeq(
     lhs: &MonoType,
     rhs: &MonoType,
-    ctx: &ProofContext<'_>,
+    ctx: &DefeqContext<'_>,
 ) -> ProofResult {
     // 0. 精化类型：先比谓词，再比归约后的基类型
     match (lhs, rhs) {
@@ -331,5 +360,5 @@ pub fn check_type_equivalence(
     lhs: &MonoType,
     rhs: &MonoType,
 ) -> ProofResult {
-    defeq(lhs, rhs, ctx)
+    defeq(lhs, rhs, &DefeqContext::from_proof(ctx))
 }
