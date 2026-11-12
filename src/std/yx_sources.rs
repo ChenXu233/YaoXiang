@@ -77,6 +77,13 @@ pub fn embedded_std_module_info(use_path: &str) -> Option<crate::frontend::modul
                 if let Some(ty) = types.get(name).map(|p| p.body.clone()) {
                     // 跨模块类型传播：泛型模板 + 和类型变体 + 接口实现随导出携带
                     let type_payload = checker.type_def_export_payload(name, definition);
+                    // 多参数谓词形参清单（#527）：与 `extract_module_info` 的
+                    // TypeDefinition 臂同一提取器（判据单源），直读本单元 vars
+                    // 的已登记形态。嵌入 std 面当前无谓词声明——正常情况下为
+                    // None，登记面与用户单元保持同构。
+                    let proof_fn_params = vars.get(name).and_then(|p| {
+                        crate::frontend::core::sema::predicate_resolver::PredicateDef::proof_fn_params(&p.body)
+                    });
                     info.add_export(Export {
                         name: name.clone(),
                         full_path: SymbolTable::qualify(use_path, name),
@@ -90,6 +97,7 @@ pub fn embedded_std_module_info(use_path: &str) -> Option<crate::frontend::modul
                         // 跨文件 resolves_to 对 std 一律回退 use 行（4.6.1 口径）
                         definition_span: None,
                         predicate_def: None, // 嵌入 std 面当前无谓词声明（#524 载荷面）
+                        proof_fn_params,
                     });
                 }
             }
@@ -119,6 +127,7 @@ pub fn embedded_std_module_info(use_path: &str) -> Option<crate::frontend::modul
                             type_payload: None,
                             definition_span: None, // 同上：std 无真实定义文件
                             predicate_def: None,   // 嵌入 std 面当前无谓词声明（#524 载荷面）
+                            proof_fn_params: None, // Assign 形态的 Fn 已随 mono_type 走（#527）
                         });
                     }
                 }

@@ -1129,6 +1129,217 @@ fn test_check_unimported_predicate_use_still_rejected() {
     );
 }
 
+// ============ 3.20.16 / #527：多参数谓词的导入面与本地面同构 ============
+//
+// 多参数带约束 TypeDefinition 形态谓词（`SumUpTo: (n: Int, s: Int) -> Type =
+// { s == n * 2 }`）在本地面由 `add_type_definition` 的 RFC-027 Phase 2.5 分支
+// 登记为 proof-fn 形态变量（形参类型 = 签名全部形参，经
+// `lookup_proof_fn_base_type` 按全形参查元数可解析）；导入面此前因 def 构建
+// 判据按单参数收窄（`PredicateDef` 是单参数三元组）拿不到 def，
+// `register_use_export` Type 臂回退 Struct poly，与本地面不同构 ⇒ 使用被
+// E1012 + E1002 拒绝——#524 甲案「导入谓词与本地面同权」在多参数形态的
+// 边界偏差。
+//
+// 修法 = proof-fn 形参清单随导出携带（`Export.proof_fn_params`，定义方
+// `env.vars` 已登记形态直读，判据单源仍是 `add_type_definition` 与
+// `PredicateDef::proof_fn_type`），导入方经形态构造单源重建同构变量。
+// 两条不变量由锚常驻钉住：
+// - 模板面不扩权：多参数谓词**不并入** `env.predicate_defs`（本地面的
+//   第零遍同样不登记）——元数检查只走证明函数面
+//   （`lookup_proof_fn_base_type`），expected = 声明形参个数；若模板面被
+//   扩权（def 并入后 `try_resolve` 阶段 1 接管），元数边界锚会因 E1093
+//   消失而翻红。
+// - use 门控不变：新载荷只随 use 选中的导出物化，未导入仍拒
+//   （2026-11-03 裁决语义，#524 门控锚同轴）。
+
+/// #527 本地面现状锚：多参数谓词在本文件的签名形参位使用——钉住现状
+/// （修前修后同绿：本地面的登记形态与解析路径零变化）。
+#[test]
+fn test_check_local_multiparam_predicate_signature_use_clean() {
+    // Arrange: 多参数带约束 TypeDefinition 谓词 + 签名形参位完整应用
+    let dir = temp_dir();
+    let file = create_yx_file(
+        &dir,
+        "local_multiparam_predicate.yx",
+        "SumUpTo: (n: Int, s: Int) -> Type = { s == n * 2 }\n\
+         g: (b: Int) -> (x: SumUpTo(b, 4)) -> Int = (x) => x\n\
+         main: () -> Void = { print(g(3)(5)) }",
+    );
+
+    // Act
+    let result = check_file(&file);
+
+    // Assert: 本地面多参数谓词可解析（现状零诊断，导入面修后须与此同判）
+    let errors = result.expect("local multiparam predicate should check cleanly");
+    assert_eq!(
+        errors, 0,
+        "#527: local surface for a multi-param constrained predicate must stay clean (registration form and resolution path unchanged by the fix); got {errors} error(s)"
+    );
+}
+
+/// #527 主锚：同一谓词 use 导入后，签名形参位使用与本地面同判（零诊断）。
+/// 修前红：E1012 `expected 'int64', found 'SumUpTo(b, int64::4)'` +
+/// E1002（导入面回退 Struct poly，正格化不发生）。
+#[test]
+fn test_check_imported_multiparam_predicate_matches_local() {
+    // Arrange: lib.yx 声明多参数谓词、main.yx `use lib.{SumUpTo}` 后同形态使用
+    let dir = temp_dir();
+    create_yx_file(
+        &dir,
+        "lib.yx",
+        "SumUpTo: (n: Int, s: Int) -> Type = { s == n * 2 }\n",
+    );
+    let main_file = create_yx_file(
+        &dir,
+        "main.yx",
+        "use lib.{SumUpTo}\n\
+         \n\
+         g: (b: Int) -> (x: SumUpTo(b, 4)) -> Int = (x) => x\n\
+         \n\
+         main: () -> Void = {\n\
+         \x20   print(g(3)(5))\n\
+         }\n",
+    );
+
+    // Act
+    let result = check_file(&main_file);
+
+    // Assert: 导入面拿到与本地同构的 proof-fn 形态登记 ⇒ 与本地面同判零诊断
+    //（#524 甲案同权语义在多参数形态成立）
+    let errors = result.expect("imported multiparam predicate should check cleanly");
+    assert_eq!(
+        errors, 0,
+        "#527: an imported multi-param predicate must resolve exactly like the local surface (proof-fn form registered via use-gated export payload); got {errors} error(s)"
+    );
+}
+
+/// #527 use 门控锚（多参数形态）：未由 use 引入的多参数谓词仍解析失败。
+/// 新载荷（`proof_fn_params`）只随 use 选中面物化——若导入面把多参数谓词
+/// 无视 use 门整体并入，此处翻红（与 #524 门控锚同轴，#524 锚只覆盖单参数）。
+#[test]
+fn test_check_unimported_multiparam_predicate_still_rejected() {
+    // Arrange: lib 声明多参数谓词，main 只导入另一谓词，多参数谓词用于精化签名
+    let dir = temp_dir();
+    create_yx_file(
+        &dir,
+        "lib.yx",
+        "SumUpTo: (n: Int, s: Int) -> Type = { s == n * 2 }\n\
+         NonNegative: (x: Int) -> Type = { x >= 0 }\n",
+    );
+    let main_file = create_yx_file(
+        &dir,
+        "main.yx",
+        "use lib.{NonNegative}\n\
+         \n\
+         g: (b: Int) -> (x: SumUpTo(b, 4)) -> Int = (x) => x\n\
+         \n\
+         main: () -> Void = {\n\
+         \x20   print(g(3)(5))\n\
+         }\n",
+    );
+
+    // Act
+    let result = check_file(&main_file);
+
+    // Assert: 未导入的多参数谓词使用必须被拒绝（不钉具体诊断码——同 #524
+    // 门控锚的口径：钉住「必须失败」这一语义决策面）
+    let errors = result.expect("check should complete for unimported multiparam predicate use");
+    assert!(
+        errors >= 1,
+        "#527 visibility: a multi-param predicate NOT brought in by use must fail resolution (the new proof_fn_params payload materializes only through use-selected exports); got {errors} error(s)"
+    );
+}
+
+/// #527 反向锚：导入后**真不满足**的使用仍被拒绝——同构化不得遮蔽统一
+/// 的真不匹配（与 #523 反向锚同轴：剥基类型对统一透明，不是跳过统一）。
+#[test]
+fn test_check_imported_multiparam_predicate_genuine_mismatch_still_reports() {
+    // Arrange: 与主锚同构，但第二实参是 String——对剥后基类型 Int(64)
+    // 是真不匹配
+    let dir = temp_dir();
+    create_yx_file(
+        &dir,
+        "lib.yx",
+        "SumUpTo: (n: Int, s: Int) -> Type = { s == n * 2 }\n",
+    );
+    let main_file = create_yx_file(
+        &dir,
+        "main.yx",
+        "use lib.{SumUpTo}\n\
+         \n\
+         g: (b: Int) -> (x: SumUpTo(b, 4)) -> Int = (x) => x\n\
+         \n\
+         main: () -> Void = {\n\
+         \x20   print(g(3)(\"str\"))\n\
+         }\n",
+    );
+
+    // Act
+    let result = check_file(&main_file);
+
+    // Assert: 真不匹配仍被拒绝 ⇒ 恰一条诊断（E1002 int64 vs string，与本地面
+    // 同形态逐字同判）；零诊断 = 同构化吞掉了真不匹配（回归）。
+    let errors =
+        result.expect("check should complete for genuinely mismatched imported predicate use");
+    assert_eq!(
+        errors, 1,
+        "#527: aligning the import surface with the local surface must stay transparent to unification — a genuinely mismatched argument (String vs Int(64) base) must still be rejected with exactly one error; got {errors} error(s)"
+    );
+}
+
+/// #527 元数边界锚（模板面不扩权的实证）：导入多参数谓词在绑定注解位用错
+/// 元数，E1093 必须发射且 expected = 声明形参个数（2）——判据走证明函数面
+/// （`lookup_proof_fn_base_type` 按全形参查）。若多参数 def 被错误并入
+/// `env.predicate_defs`（模板面扩权），`try_resolve` 阶段 1 的单参数模型会
+/// 吞掉本次元数失配（expected==1==found），E1093 消失——本锚翻红。
+/// 本地面同形态（修前实测）：E1002 + E1093 `'SumUpTo' expected 2 argument(s),
+/// found 1`，导入面修后须同判。
+#[test]
+fn test_check_imported_multiparam_predicate_wrong_arity_reports_e1093_by_declaration() {
+    // Arrange: 导入多参数谓词，绑定注解位只给 1 个实参（声明有 2 个）
+    let dir = temp_dir();
+    create_yx_file(
+        &dir,
+        "lib.yx",
+        "SumUpTo: (n: Int, s: Int) -> Type = { s == n * 2 }\n",
+    );
+    let main_file = create_yx_file(
+        &dir,
+        "main.yx",
+        "use lib.{SumUpTo}\n\
+         \n\
+         main = {\n\
+         \x20   y: SumUpTo(1) = 5\n\
+         \x20   print(y)\n\
+         }\n",
+    );
+
+    // Act: 子进程跑 CLI check（E1093 的 expected 数是判据面，
+    // run_check_command_once 只回计数）
+    let output = Command::new(env!("CARGO_BIN_EXE_yaoxiang-rs"))
+        .arg("check")
+        .arg(&main_file)
+        .current_dir(&dir)
+        .output()
+        .expect("failed to run yaoxiang-rs check");
+    let text = format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    // Assert: E1093 发射且元数按声明的 2 个形参判（模板面未扩权的实证——
+    // expected 数是「按声明形参查元数」与「阶段 1 单参数模型」的分界）
+    assert!(
+        text.contains("E1093"),
+        "#527: arity mismatch against an imported multi-param predicate must be rejected via the proof-fn face (E1093); if the template face were expanded, stage-1 try_resolve would swallow this mismatch and E1093 would vanish; got:\n{text}"
+    );
+    assert!(
+        text.contains("expected 2 argument(s)"),
+        "#527: E1093 must count against the declaration's full parameter list (expected = 2), not the stage-1 single-param model; got:\n{text}"
+    );
+}
+
 // ============ 3.20.12 / #442：注解收泛型调用返回值的两侧表示统一 ============
 //
 // 泛型函数调用点（monomorphize）返回的代入形态是**应用**——

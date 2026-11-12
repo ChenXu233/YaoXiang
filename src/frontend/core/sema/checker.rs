@@ -2817,6 +2817,25 @@ impl TypeChecker {
                     self.env
                         .predicate_defs
                         .insert(register_name.clone(), def.clone());
+                } else if let Some(params) = &export.proof_fn_params {
+                    // #527：多参数谓词——单参数收窄判据拿不到 def，形参清单随
+                    // 导出携带（定义方 vars 的已登记形态直读）。经形态构造单源
+                    // `proof_fn_type` 重建**与本地面 `add_type_definition`（RFC-027
+                    // Phase 2.5 分支）完全同构**的 proof-fn 形态变量——「导入谓词
+                    // 与本地面同权」（#524 甲案）在多参数形态成立。
+                    // **不并入 `env.predicate_defs`**：模板面（try_resolve 阶段 1 /
+                    // refine_predicate_from_ast_args 臂 1）是单参数模型，多参数
+                    // 谓词在本地面的第零遍同样不登记——导入面照抄即同权，
+                    // E1093 设计面不扩权（多参数的元数检查走
+                    // `lookup_proof_fn_base_type` 按全形参判）。
+                    self.env.add_var(
+                        register_name.clone(),
+                        PolyType::mono(
+                            crate::frontend::core::sema::predicate_resolver::PredicateDef::proof_fn_type(
+                                params,
+                            ),
+                        ),
+                    );
                 } else {
                     self.env.add_var(register_name.clone(), poly);
                 }

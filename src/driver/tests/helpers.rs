@@ -130,6 +130,7 @@ fn test_aggregate_resolves_named_import_request_through_alias_channel() {
         type_payload: None,
         definition_span: None,
         predicate_def: None,
+        proof_fn_params: None,
     });
     registry.register(lib);
     let result = type_result(vec![request("pick", None)]);

@@ -331,6 +331,7 @@ pub trait StdModule {
                 type_payload: None,
                 definition_span: None, // native std 导出无源码定义位置（4.6.1）
                 predicate_def: None,   // native std 无谓词 def（#524 载荷面）
+                proof_fn_params: None, // 同上（#527 载荷面）
             });
         }
 
@@ -347,6 +348,7 @@ pub trait StdModule {
                 type_payload: None,
                 definition_span: None, // native std 导出无源码定义位置（4.6.1）
                 predicate_def: None,   // native std 无谓词 def（#524 载荷面）
+                proof_fn_params: None, // 同上（#527 载荷面）
             });
         }
 

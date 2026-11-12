@@ -1124,6 +1124,18 @@ pub(crate) fn extract_module_info(
                     // 形态导出（kind=Type），def 是导入方谓词正格化的唯一模板源
                     if let Some(def) = predicate_defs.get(name.as_str()) {
                         export.predicate_def = Some(def.clone());
+                    } else {
+                        // 多参数谓词（#527）：单参数收窄判据拿不到 def，但本地面
+                        // `add_type_definition`（RFC-027 Phase 2.5 分支）已把它登记
+                        // 成 proof-fn 形态变量——直读定义方 `env.vars` 的已登记
+                        // 形态（判据单源，不从 AST 重推），形参清单随导出携带，
+                        // 导入方经 `PredicateDef::proof_fn_type` 重建同构变量。
+                        // 模板面不随行：`predicate_def` 保持 None，与本地面的
+                        // 第零遍收窄一致（E1093 设计面不扩权）。
+                        export.proof_fn_params = vars.get(name.as_str())
+                            .and_then(|p| {
+                                crate::frontend::core::sema::predicate_resolver::PredicateDef::proof_fn_params(&p.body)
+                            });
                     }
                     info.add_export(export);
                 }
@@ -1216,6 +1228,7 @@ fn make_export(
         type_payload: None,
         definition_span,
         predicate_def: None,
+        proof_fn_params: None,
     }
 }
 

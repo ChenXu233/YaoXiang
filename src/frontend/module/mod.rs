@@ -116,6 +116,19 @@ pub struct Export {
     /// （第零遍与导出提取共同委托）；导入方 `register_use_export` 按 use
     /// 门控并入（未导入的谓词解析失败是正确行为，2026-11-03 用户裁决）。
     pub predicate_def: Option<crate::frontend::core::sema::predicate_resolver::PredicateDef>,
+    /// 多参数谓词的 proof-fn 形参类型清单（#527，声明序；非多参数谓词为 None）。
+    ///
+    /// `predicate_def` 只覆盖单参数形态——def 构建判据按单参数收窄
+    /// （`PredicateResolver::try_resolve` 的阶段 1 模型即单参数），多参数
+    /// 谓词拿不到 def，导入面曾回退成 Struct poly，与本地面
+    /// `add_type_definition`（RFC-027 Phase 2.5 分支登记的 proof-fn 形态
+    /// 变量）不同构 ⇒ 导入使用被 E1012 + E1002 拒绝。本字段直读定义方
+    /// `env.vars` 的**已登记形态**（判据单源仍是 add_type_definition 与
+    /// `PredicateDef::proof_fn_type`，导出面不重新推导）；导入方
+    /// `register_use_export` 据此经 `proof_fn_type` 重建同构变量。**不并入
+    /// `env.predicate_defs`**——模板面阶段 1 单参数（E1093 设计面），本地面
+    /// 对多参数同样不登记，导入面照抄即同权（use 门控不变）。
+    pub proof_fn_params: Option<Vec<MonoType>>,
 }
 
 /// 类型定义导出载荷（见 [`Export::type_payload`]）。
