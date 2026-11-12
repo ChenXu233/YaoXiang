@@ -1179,12 +1179,25 @@ impl Interpreter {
             }
             // 类型不匹配的比较：硬错误，禁止静默返回 false
             // （同函数算术分支已报错，保持一致；类型检查器应先拦截，此处为底线防御）
+            //
+            // #500：操作数带 Void 时追加初始化顺序 hint。运行期 Void 的主来源是
+            // LoadGlobal 读尚未写入的全局槽（exec_reg 的 unwrap_or(Void)），环内
+            // 模块初始化顺序不可判定（编译期 W1007）时正落到这里。注意 Void 操作数
+            // 并非只有这一个来源：Eq/Neq 的编译期类型规则（infer_equality）对非记录
+            // 形态吞掉 unify 结果恒放行（实测 `1 == "a"` / 静态 Void 值比较均编译
+            // 通过、运行期才落这里），故 Void 是「未初始化读」或「编译期放行的
+            // Void 值比较」的信号——hint 按观测陈述措辞（usually / if），不断言
+            // 成因。无 Void 操作数时消息逐字不变。
             (op, l, r) => {
                 let stack = self.capture_stack();
-                return Err(ExecutorError::type_error(
-                    format!("type mismatch in comparison {:?}: {:?} vs {:?}", op, l, r),
-                    stack,
-                ));
+                let mut message =
+                    format!("type mismatch in comparison {:?}: {:?} vs {:?}", op, l, r);
+                if matches!(l, RuntimeValue::Void) || matches!(r, RuntimeValue::Void) {
+                    message.push_str(
+                        "; a Void operand usually means a top-level value was read before initialization — if this happened during module initialization, check the initialization order inside the import cycle (compile-time warning W1007 reports that cycle)",
+                    );
+                }
+                return Err(ExecutorError::type_error(message, stack));
             }
         };
 

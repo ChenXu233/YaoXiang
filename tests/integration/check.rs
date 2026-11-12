@@ -1308,3 +1308,35 @@ fn test_check_cross_unit_generic_call_result_binds_annotation() {
         "#442: cross-unit `b: Box(Int) = make_box(9)` via use must be accepted — the binding-level representation unification is shared by both units; got {errors} error(s)"
     );
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// #500：比较兜底臂的编译期守卫——排序比较拒绝跨类型（运行期 E6007 是底线防御）
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// #500 编译期守卫：跨类型**排序**比较（`1 < "x"`）在编译期被拒（E1002）。
+///
+/// 这守的是比较的层级防御关系：`infer_binary` 的比较臂（BinOp::Lt/Le/Gt/Ge）
+/// 对两侧 unify 失败按纪律拒绝（B9 修复，不再吞错误），运行期 exec_compare 的
+/// type mismatch 兜底臂只是底线防御——编译期已拦的形态不该再走到运行期。
+///
+/// 实测记录（2026-11-13 HEAD）：任务原文设想守卫「静态 Void vs Int 比较被编译
+/// 期拒绝」——该前提**不成立**：跨类型**相等**比较（`1 == "a"`、void 值 == Int）
+/// 经 `infer_equality` 对非记录类型吞掉 unify 结果而编译期放行、运行期落 E6007。
+/// 该差异属 #500 查证发现的同类问题，按任务边界只报告不顺路修；本守卫钉住
+/// 排序比较这一侧的既有纪律。
+#[test]
+fn test_check_cross_type_ordered_comparison_rejected() {
+    // Arrange
+    let dir = temp_dir();
+    let file = create_yx_file(&dir, "lt_mismatch.yx", r#"x = 1 < "x""#);
+
+    // Act
+    let result = check_file(&file);
+
+    // Assert
+    let error_count = result.expect("check should not panic on cross-type < comparison");
+    assert!(
+        error_count > 0,
+        "跨类型排序比较（1 < \"x\"）必须编译期拒绝（infer_binary 比较臂纪律），实际 error_count = {error_count}"
+    );
+}

@@ -1184,3 +1184,120 @@ fn test_multifile_namespace_qualified_fn_value_call_emits_call_dyn() {
         "不得再以 lib.f 为名字发静态 Call（运行期会 E6006 Native function not found）：{static_calls:?}"
     );
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// #500：导入环内读未初始化顶层值——运行期 E6007 的消息带初始化顺序 hint
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// #500 主锚（运行期）：三模块导入环（main → zlib → zother → zlib）中 main 的
+/// 顶层绑定读 zlib.z_val、main() 里拿它与 Int 比较——环内初始化顺序不可判定
+/// 使 z_val 尚未写入，运行期比较操作数为 Void，落 E6007 通用运行时错误
+///（RFC-013：ExecutorError 未映射变体统一落点）。
+///
+/// 判据：stderr 含 E6007 **且**消息带初始化顺序 hint 的两段关键片段——
+/// 观测陈述段（Void 通常来自未初始化读）与 W1007 指引段（编译期环告警）。
+/// 修前（issue #500 报告时）消息只有 type mismatch 文本，用户被引向错误方向，
+/// 本测试在那时红。hint 走 E6007 的 message 参数（单轨渲染链：
+/// exec_compare 兜底臂 → ExecutorError::Type → runtime_error(message) →
+/// locales 模板），不动 help 静态模板。
+#[test]
+fn test_multifile_import_cycle_void_comparison_runtime_hint_points_to_init_order() {
+    // Arrange：tempdir 落 manifest 项目——issue #500 报告的复现形态
+    //（zlib 与 zother 互相 use 成环，两者顶层值互读，main 只依赖 zlib）
+    let dir = tempfile::tempdir().expect("create tempdir");
+    std::fs::write(
+        dir.path().join("yaoxiang.toml"),
+        "[package]\nname = \"t\"\nversion = \"0.1.0\"\n",
+    )
+    .expect("write manifest");
+    std::fs::write(
+        dir.path().join("zlib.yx"),
+        "use zother.{o_val}\n\nz_val: Int = o_val\n",
+    )
+    .expect("write zlib.yx");
+    std::fs::write(
+        dir.path().join("zother.yx"),
+        "use zlib.{z_val}\n\no_val: Int = 1\n",
+    )
+    .expect("write zother.yx");
+    std::fs::write(
+        dir.path().join("main.yx"),
+        "use std.assert\nuse zlib.{z_val}\n\nm_val: Int = z_val\n\nmain = () => {\n    assert.assert(m_val == 1, \"probe\")\n}\n",
+    )
+    .expect("write main.yx");
+
+    // Act：CLI run 子进程——断言面是用户看到的 stderr 渲染文本
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_yaoxiang-rs"))
+        .arg("run")
+        .arg(dir.path().join("main.yx"))
+        .output()
+        .expect("spawn yaoxiang-rs run");
+    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+
+    // Assert：运行期失败；E6007 码出现；hint 两段关键片段各断一次
+    //（观测陈述段 + W1007 指引段，只断其一不足以钉住完整引导链）
+    assert!(
+        output.status.code().unwrap_or(-1) != 0,
+        "环内读未初始化顶层值必须运行期失败，实际退出成功:\nSTDERR:\n{stderr}"
+    );
+    assert!(
+        stderr.contains("E6007"),
+        "stderr 必须含 E6007 码，实际:\n{stderr}"
+    );
+    assert!(
+        stderr.contains(
+            "a Void operand usually means a top-level value was read before initialization"
+        ),
+        "E6007 消息必须带观测陈述段（Void 通常来自未初始化读），实际:\n{stderr}"
+    );
+    assert!(
+        stderr.contains("W1007"),
+        "E6007 消息必须指回编译期 W1007（环内初始化顺序），实际:\n{stderr}"
+    );
+}
+
+/// #500 反向锚（集成面）：比较类型不匹配**无 Void 操作数**时，E6007 消息必须
+/// **不含** hint——hint 的触发面只有 Void 操作数。
+///
+/// 现状链（实测，2026-11-13 HEAD）：跨类型**相等**比较（`1 == "a"`）编译期
+/// 放行（`infer_equality` 对非记录类型吞掉 unify 结果）、运行期落 E6007——
+/// 这是唯一能在端到端构造「无 Void 比较类型不匹配」的形态。本锚只钉运行期
+/// 消息形态（码 + 消息主体 + 无 hint），不断言编译期放行——若未来 Eq 也按
+/// 997 臂纪律编译期拒绝，本锚随该语义修正同步搬到编译期面。
+#[test]
+fn test_multifile_comparison_mismatch_without_void_message_has_no_hint() {
+    // Arrange：单文件 script（顶层语句即程序体，比较在模块初始化期求值）
+    let dir = tempfile::tempdir().expect("create tempdir");
+    let entry = dir.path().join("main.yx");
+    std::fs::write(&entry, "x = 1 == \"a\"\n").expect("write main.yx");
+
+    // Act
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_yaoxiang-rs"))
+        .arg("run")
+        .arg(&entry)
+        .output()
+        .expect("spawn yaoxiang-rs run");
+    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+
+    // Assert：E6007 出现且消息主体是裸 type mismatch；hint 关键片段不得出现
+    assert!(
+        output.status.code().unwrap_or(-1) != 0,
+        "无 Void 的比较类型不匹配必须运行期失败，实际退出成功:\nSTDERR:\n{stderr}"
+    );
+    assert!(
+        stderr.contains("E6007"),
+        "stderr 必须含 E6007 码，实际:\n{stderr}"
+    );
+    assert!(
+        stderr.contains(r#"type mismatch in comparison Eq: Int(1) vs String("a")"#),
+        "E6007 消息主体必须保持裸 type mismatch 文本，实际:\n{stderr}"
+    );
+    assert!(
+        !stderr.contains("read before initialization"),
+        "无 Void 操作数的比较错误不得携带初始化顺序 hint，实际:\n{stderr}"
+    );
+    assert!(
+        !stderr.contains("W1007"),
+        "无 Void 操作数的比较错误不得引用 W1007，实际:\n{stderr}"
+    );
+}
