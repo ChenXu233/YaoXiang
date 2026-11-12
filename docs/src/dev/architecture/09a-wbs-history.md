@@ -4583,3 +4583,17 @@ P1 的形状判据与 ir_gen 的包装层产出形态耦合——「不再匹配
 > **五、t3 首轮 REJECT → 修复轮 → 聚焦复审 APPROVE**：REJECT 一 minor = 「值级形态」段注释计数残留（主注释已改「三种 parser 标记」、该段仍写「两种标记见上」——同一提交内注释更新不完整，与提交信息声称矛盾；否决理由 = 可读性）。队长修复 = 该行注释更正 + 提交信息 integration 计数 345→346（含收口补充的反向锚）amend（修复轮段落因原文换行匹配失败未入提交信息，由本节承载）；聚焦复审（新 ask 自包含前轮结论）APPROVE：修复面仅一行注释、无残留。t3 另两条 info：边界探针/生成器幂等声称在只读约束下未复跑（探针不入库约定 + 只读铁律，静态对账替代）——如实标注。
 
 > **六、计数与移交**：三级 +1 = 3.20.15（227→228）；二级不变。issue [#546](https://github.com/ChenXu233/YaoXiang/issues/546) **关闭**。修复笔推送终态 `82a8f2e8`（量测冻结版 `0e0e5fce`/amend 版 `f93fef84`，树内容逐字节同——本笔先推修复笔取终态号再写收口，避免 3.20.14 的修正笔循环）。相邻形态（T 无约束时 `(v) => v + 1` 的 E1002）系真拒绝非缺陷。批次树已 release。
+
+## P3 3.20.16 收口（多参数谓词导入面同构——#527，2026-11-13）
+
+> **一、查证与载体选型**：实现者七源查证确认 issue 双前提成立（本地面 add_type_definition RFC-027 Phase 2.5 臂登记 proof-fn Fn 形态变量、经 lookup_proof_fn_base_type 按全形参查可解析；导入面 collect_predicate_defs 单参数收窄拿不到 def → Export.predicate_def=None → register_use_export 回退 Struct poly → E1012+E1002）。载体选型 b 案 = Export 增 proof_fn_params（多参数谓词 proof-fn 形参清单）：生产端经对称提取器 PredicateDef::proof_fn_params（构造/解构同栖）从定义方 env.vars 已登记形态直读——判据单源仍 = add_type_definition + proof_fn_type，导出面不重推；a 案（PredicateDef 扩参数列表）被否：会把多参数 def 带进 env.predicate_defs 破坏模板面 try_resolve 阶段 1 单参数模型（E1093 设计面）。消费臂不并入 predicate_defs（与本地第零遍收窄一致）；Assign 形态多参数谓词本来就通（Fn 随 mono_type 走），缺陷面仅 TypeDefinition 形态。
+
+> **二、锚五条**：本地面现状（修前修后同绿）/ 主锚（导入后与本地面同判，修前 `E1012 expected 'int64', found 'SumUpTo(b, int64::4)'` + E1002 逐字复现）/ 多参数 use 门控（#524 常驻锚只覆盖单参数，本条补多参数形态）/ 反向（真不满足恰 1 条 E1002，与本地同判）/ 元数边界（错元数 E1093 发射且 expected=2——模板面若被扩权该锚自动翻红的设计面守卫）。#524 三锚原样绿。
+
+> **三、t2 变异与等价性（批次号 t3.20.16-verify @ `2617c71c`，trial 机械可逆 + 每轮 trial 后 rebuild）**：M1（摘消费臂回退 Struct poly）⇒ 主锚红（假拒绝复现）；M2（注入 a 案行为——伪造多参数 PredicateDef 并入 predicate_defs）⇒ 元数边界锚翻红（模板面单参数模型吞掉元数失配、E1093 消失）——E1093 设计面守卫有牙。修复态五锚全绿；IR 快照 1 passed、语料差分逐字节零漂移；卫生 blob CLEAN + release。
+
+> **四、t3 对抗复审 APPROVE（七镜头）+ findings 处置**：1 low = 提交信息平移清单漏 E1091（invalid_generic_self_reference 同样 +19 平移且已再生——再生本身正确、8 处发射点与再生条目逐一对上，仅枚举不全）；1 info = **#524 时代既有的单参数臂参数源不对称**（无标注形参：collect_predicate_defs 默认 Int(64) vs 本地面 Phase 2.5 臂丢弃——两臂构造的 Fn 形态不同；暴露面 = def 有登记且形参无标注的边角；#527 多参数臂直读 vars 已登记形态恰是更忠实的口径）→ 登记 [#551](https://github.com/ChenXu233/YaoXiang/issues/551)；运行时声称（生成器 md5 幂等、门禁数字、修前逐字文本、Assign 形态实测）按只读铁律标「未核实」，由 t2 批次树独立复测与实现轮实跑闭环。
+
+> **五、实现轮观察项**：绑定注解位**正确元数**的谓词精化（`y: SumUpTo(1, 2) = 5`，值可满足）E1002 假拒绝——annotation 停留 raw Generic、Refined 转换未发生；单/多参数 × 本地/导入四组合实测逐字同判（不属导入面不同构轴），与 #442 注解面同族不同轴 → 登记 [#550](https://github.com/ChenXu233/YaoXiang/issues/550)。
+
+> **六、计数与移交**：三级 +1 = 3.20.16（228→229）；二级不变。issue [#527](https://github.com/ChenXu233/YaoXiang/issues/527) **关闭**。修复笔推送终态 `2617c71c`（先推修复笔再写收口，无修正笔）。批次树已 release。
