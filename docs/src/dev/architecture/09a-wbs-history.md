@@ -4610,6 +4610,20 @@ P1 的形状判据与 ir_gen 的包装层产出形态耦合——「不再匹配
 
 > **六、计数与移交**：三级 +1 = 3.20.18（230→231）；二级不变。issue [#551](https://github.com/ChenXu233/YaoXiang/issues/551) **关闭**。修复笔推送终态 `0fe41d3f`。批次树已 release。
 
+## P3 3.20.19 收口（块局部绑定的谓词注解精化——#550，2026-11-13）
+
+> **一、双出口查证 → 出口 A（设计缺口）**：RFC-027 §3.1 明文谓词约束「同样适用于局部变量声明」、SPEC type-system §7.1 无排除 ⇒ 绑定注解位精化是设计内行为，实现缺 = C 类直修。缺口精确层 = **走查器分叉**（不在注解位 vs 签名位）：StatementChecker::check_stmt 面（顶层 / 带 Fn 注解函数体）的正格化本已通（修前 CLI 绿、Refined Display「int64 {IsPositive(5)}」证实转换发生），ExpressionInferrer::infer_stmt 的 Assign 臂（块局部绑定：main 块 / if 分支 / while 体 / spawn 体经 infer_block 走查）直接 raw Generic 统一 ⇒ E1002。#550 issue 记载的「四组合逐字同判」与此吻合（四组合都落在 inferrer 面）。
+
+> **二、修法（判据单源，禁令三）**：check_var_stmt_inner 的内联正格化提取为共享自由函数 refine_binding_annotation——Terminates 内置谓词分支（base 新鲜变量）+ proof_fn_bases 分支（base = 声明首形参）语义逐行保留（含 RFC-027a T2 测度保真缺口注记随迁）；infer_stmt Assign 臂同源接入（Refined 对统一透明——unify 入口剥基，RFC-027 §6.1）；顺修 #527 t3 备案的 2 low 文档精度（proof_fn_params 字段文档补 Assign 形态谓词 `_ =>` 臂双通道分工、兜底臂两分法补第三类 Assign 臂 Function 导出）。**生成物随代码**：statements −53 / expressions +12 / checker +5，发射点行号平移再生，二次运行 GEN_IDEMPOTENT_OK。
+
+> **三、锚与验证**：主锚（块局部单参数 IsPositive(5)=3 与多参数 SumUpTo(1,2)=5 ⇒ 0 诊断，修前 E1002 逐字）/ 反向锚（SumUpTo(1,3)=5 不满足仍拒——E4018 在场 + E1002 缺席双断言，实测 E4018「约束不满足（参数: [Int(1), Int(3)]）」，判据走证明函数面非吞诊断）/ 回归（#524/#527/#551 全部既有锚 + statement 面四形态修前绿修后仍绿，integration 全量 357 passed）。t1 门禁 14 项全绿（testsuite fast 2074 条、IR 快照 / 语料差分零漂移）。t2（批次号 t3.20.19-verify @ `14cc97ce`，trial 机械可逆）：M1（摘接线）⇒ 块局部双主锚红（E1002 复现）；M2（遮蔽形态：调用但丢弃结果）⇒ 双主锚红——「接线结果被消费」承重（非仅调用即过）；修复态锚全绿；IR/语料零漂移；卫生 blob CLEAN + release。
+
+> **四、t3 对抗复审 APPROVE（七镜头）+ findings 处置**：2 info 备案：①反向锚的 E4018 在场 / E1002 缺席是对 CLI 合并输出的全局子串检查——对消息文本演化有耦合（当前 E4018 模板不含该串，现实不构成缺陷）；②生成器幂等与主锚修前逐字文本在只读约束下未直接复跑（发射点行号抽查全中 + 消息生成机理静态自洽作间接佐证），由 t2 批次树独立复测闭环。
+
+> **五、轴 2 另案（交裁决）**：导入面**多参数**谓词的约束求值跨模块不可达——post-pass3 refined walk 的证明执行只查主模块 AST ⇒ 导入多参谓词绑定注解（含顶层）在 Refined 转换与 unify 均已过后仍被 E4018 假拒绝（修前拒于 E1002、修后拒于 E4018——同拒换轴无回归）；导入单参数走模板面求值故绿。修复路径两条均有设计权重：proof_execution 接依赖模块 AST（pipeline + orchestrator 共 5 调用点签名贯通）或扩模板面（被 #527 元数边界锚显式封锁，走此路须先推翻 E1093 设计）⇒ 不满足 C 类顺路修条件，登记 [#552](https://github.com/ChenXu233/YaoXiang/issues/552) 交用户裁决。
+
+> **六、计数与移交**：三级 +1 = 3.20.19（231→232）；二级不变。issue [#550](https://github.com/ChenXu233/YaoXiang/issues/550) **关闭**。修复笔推送终态 `14cc97ce`。批次树已 release。
+
 ## P3 3.20.16 收口（多参数谓词导入面同构——#527，2026-11-13）
 
 > **一、查证与载体选型**：实现者七源查证确认 issue 双前提成立（本地面 add_type_definition RFC-027 Phase 2.5 臂登记 proof-fn Fn 形态变量、经 lookup_proof_fn_base_type 按全形参查可解析；导入面 collect_predicate_defs 单参数收窄拿不到 def → Export.predicate_def=None → register_use_export 回退 Struct poly → E1012+E1002）。载体选型 b 案 = Export 增 proof_fn_params（多参数谓词 proof-fn 形参清单）：生产端经对称提取器 PredicateDef::proof_fn_params（构造/解构同栖）从定义方 env.vars 已登记形态直读——判据单源仍 = add_type_definition + proof_fn_type，导出面不重推；a 案（PredicateDef 扩参数列表）被否：会把多参数 def 带进 env.predicate_defs 破坏模板面 try_resolve 阶段 1 单参数模型（E1093 设计面）。消费臂不并入 predicate_defs（与本地第零遍收窄一致）；Assign 形态多参数谓词本来就通（Fn 随 mono_type 走），缺陷面仅 TypeDefinition 形态。
