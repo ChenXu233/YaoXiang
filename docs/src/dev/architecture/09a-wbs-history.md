@@ -4582,7 +4582,19 @@ P1 的形状判据与 ir_gen 的包装层产出形态耦合——「不再匹配
 
 > **五、t3 首轮 REJECT → 修复轮 → 聚焦复审 APPROVE**：REJECT 一 minor = 「值级形态」段注释计数残留（主注释已改「三种 parser 标记」、该段仍写「两种标记见上」——同一提交内注释更新不完整，与提交信息声称矛盾；否决理由 = 可读性）。队长修复 = 该行注释更正 + 提交信息 integration 计数 345→346（含收口补充的反向锚）amend（修复轮段落因原文换行匹配失败未入提交信息，由本节承载）；聚焦复审（新 ask 自包含前轮结论）APPROVE：修复面仅一行注释、无残留。t3 另两条 info：边界探针/生成器幂等声称在只读约束下未复跑（探针不入库约定 + 只读铁律，静态对账替代）——如实标注。
 
-> **六、计数与移交**：三级 +1 = 3.20.15（227→228）；二级不变。issue [#546](https://github.com/ChenXu233/YaoXiang/issues/546) **关闭**。修复笔推送终态 `82a8f2e8`（量测冻结版 `0e0e5fce`/amend 版 `f93fef84`，树内容逐字节同——本笔先推修复笔取终态号再写收口，避免 3.20.14 的修正笔循环）。相邻形态（T 无约束时 `(v) => v + 1` 的 E1002）系真拒绝非缺陷。批次树已 release。
+> **六、计数与移交**：三级 +1 = 3.20.15（227→228）；二级不变。issue [#546](https://github.com/ChenXu233/YaoXiang/issues/546) **关闭**。修复笔推送终态 `82a8f2e8`（量测冻结版 `0e0e5fce`/amend 版 `f93fef84`，树内容逐字节同——本笔先推修复笔取终态号再写收口，避免 3.20.14 的修正笔循环）。修复笔推送终态 `2617c71c`（先推修复笔再写收口，无修正笔）。批次树已 release。
+
+## P3 3.20.17 收口（build.rs 触发面剩余三处——#548，2026-11-13）
+
+> **一、查证（cargo 源码级）**：实现者把 cargo 语义查到源码层——目录触发走 mtime_recursive 递归扫描且路径缺失 = MissingFile = stale（fingerprint 模块）；rerun-if-changed 路径相对 package root 解析、绝对路径在指纹存储时 strip_prefix 归一（wasm 合并依据）；rerun-if-env-changed 按「值或缺省」入指纹哈希，未设置→设置/值变/设置→取消三迁移全触发；cargo 收到任意 rerun-if 声明后只跟踪已声明项（缺口机理本体）。修法 = 顶部补 .z3 目录级触发 + Z3_SYS_Z3_HEADER / CXXSTDLIB 两条 env 触发；wasm 分支内重复声明合并（顶部块对全部目标无条件执行）。
+
+> **二、红绿探针矩阵（mtime/env 实证，cargo 1.97.1）**：修前 touch .z3 内文件 / 设置 Z3_SYS_Z3_HEADER / 设置 CXXSTDLIB 三探针重跑全 0（168 Fresh，缺口实态）；修后同探针全 ≥1、无变化全 Fresh（无虚假重跑循环）、env 三迁移逐一 1 次、幂等无循环（同 touch 第二轮 0）。探针只 touch 与 env 设置，.z3 内容零改动。
+
+> **三、t2 变异与等价性（批次号 t3.20.17-verify @ `534dc0ba`，trial 机械可逆）**：M1（摘 .z3 触发行）⇒ touch 探针翻 0；M2（摘两条 env 声明）⇒ env 探针翻 0（CXXSTDLIB 为 t2 超出任务点名的顺带加测，双向 0 均计入）。t2 诚实披露：探针锚经历三轮自修正（v1 只数 stdout 漏 stderr 进度行、v2 锚格式与本机 cargo -v 不符、v3 合并两流 + 排除 rustc.exe）后对四项全量重测，output 文件 mtime 交叉印证（触发后重写于 touch+0.25s）——量测工具自身的可靠性迭代在案。修复态探针全绿；语料差分零漂移；卫生 blob CLEAN + release。
+
+> **四、t3 首轮 REJECT → 修复轮 → 聚焦复审 APPROVE**：major = 修复笔 `534dc0ba` 提交信息「CI 交叉核查：无 target 指纹缓存层」**可静态证伪为假**——ci.yml 三作业（check/test/msrv）actions/cache 均缓存 target（含 .fingerprint 指纹库）与 .z3，指纹跨 run 存续；实现者与队长的 CI 交叉查证都只看了 cache 的 registry 面、未读 path 清单（workflow 文件声称与代码声称同需多源查证——教训固化）。该提交已推送不可 amend：事实更正由修复笔 `f3bc6a94` 提交信息（成因 + 实际结论——本修在 CI 缓存语义下同样生效且更有价值）与本节承载。low = CXXSTDLIB 注释读取面比实际宽（macOS 硬编码 c++ 不读该变量）→ 修复笔注释收窄。聚焦复审 APPROVE：修复面仅注释三行、CI 缓存事实独立确认。
+
+> **五、计数与移交**：三级 +1 = 3.20.17（229→230）；二级不变。issue [#548](https://github.com/ChenXu233/YaoXiang/issues/548) **关闭**。批次树已 release。
 
 ## P3 3.20.16 收口（多参数谓词导入面同构——#527，2026-11-13）
 
