@@ -11,9 +11,7 @@ pub mod evaluator;
 pub use evaluator::Evaluator;
 pub use evaluator::EvalConfig;
 pub use evaluator::EvalError;
-pub mod normalizer;
 pub mod operations;
-pub mod reducer;
 pub mod type_families;
 
 #[cfg(test)]

@@ -4,10 +4,9 @@
 
 **文件**：
 - `evaluator.rs` — Evaluator：常量折叠、If/Match/Nat 归约、ConstExpr 求值、β-归约
-- `normalizer.rs` — TypeNormalizer：βδι-规约 + 范式化
 - `conditional.rs` — 条件类型 + MatchType
 - `const_eval.rs` — Const 泛型求值 + ConstFunction
-- `reducer.rs` — TypeReducer + TypeUnifier
+- （已删除）`normalizer.rs` / `reducer.rs` — 生产零调用者，2026-11-12 随判等内核收口删除
 - `operations.rs` — 类型级运算
 - `type_families.rs` — 类型族
 - `dependent_types.rs` — 依赖类型
