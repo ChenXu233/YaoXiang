@@ -5008,3 +5008,85 @@ outOfScope：match/while/早返回；`&mut` 之外的非直接写面（索引/�
 - 只覆盖记录 Σ（witness 字段）；不碰 Π/`DepFn`；不宣称 Π/Σ 完全体。
 - 旧 D.0 的 A/V1-A 分析保留为历史；V1-A 不采用。
 - 设计包未确认前，不改 `src/`；B 的实现另立契约。
+
+## P6 6.9.4 契约与补丁计划（gamma-designer-2，2026-11-13）
+
+### 一、已实测
+
+- 裸 `assert(y == 42, ...)` 与 `assert.assert(y == 42, ...)` 在现有二进制上**都可解析、都通过**。
+- 语料：`assert.assert` 454 处、裸 `assert` 28 处；含 q=0 形参的 8 个语料文件里 `if` 与裸 `assert` 全为 0 ⇒ 两个新证据源在现有语料上**结构化零漂移**（预测，未构建）。
+
+### 二、Lead 确认
+
+- 函数体 / 闭包体 / spawn 体边界用 **barrier**：体内自己的守卫照常生效；外层事实不进入；不引入显式白名单。
+- 本批只覆盖**裸** `assert(...)`；`assert.assert`（`FieldAccess`）不扩，扩面另立裁决（454 处语料）。
+- `is_empty` 改走 `visible()`：口径为「当前 barrier 以上为空」，不是放宽断言。
+- T17/T18/T19/T20 重写：体外事实不入体、体内自产事实对体内可见、体内事实随体亡；T18(b) 为红→绿正控。
+- P1 修正（自捉）：`enter_barrier` 必须同时 `enter_scope` 并把 barrier 设在新深度；`restore_barrier` 必须先 `exit_scope` 再还原 barrier。只还原深度会漏掉体内裸 `assert` 的事实（T17c/T18c/T20 履行哨）。
+
+### 三、补丁计划 P1–P9
+
+P1 `FlowSensitiveGamma` 增 `barrier_depth`/`enter_barrier`/`restore_barrier`/`visible()`/`const_equalities()`；P2 `TermEnv::with_equalities`（values 优先、symbolic 剔除）；P3 `frame_term_env` 合并等式；P4 `check_if_stmt` 单收集点；P5 三处边界 barrier；P6 `checker.rs` 两处 `StatementChecker::new` 由 None→Some（**唯一行为翻转提交**）；P7 `&mut` kill；P8 新增 2 条语料 + 基线；P9 收口。
+
+### 四、风险
+
+R1：P6 后裸 `assert` 全量注入，语料交集为空但未构建；R2：`assert.assert` 不扩；R3：`is_empty` 口径；R4：`&mut` 的 Arc 语义未核实；R5：闭包边界按 soundness 推，语料无反例。
+
+## P6 6.9.5-B 设计包（sigma-reviewer，2026-11-13，只读）
+
+### 一、核心决策（推荐）
+
+1. **字段量词 1A**：witness = `Some(Quantity::Zero)`；数据字段 `None`；不新增 `FieldRole`/`Quantity::Witness`。同源 = 无运行期槽；不同源 = 证据规则（`ProofContext`/`judge_refined_obligation`，不是 q=0 四源）；调用点 arity 由记录构造规则单独定义。字段上下文的 `None` = 数据字段，不是「未解析」。
+2. **证明项 2A**：命题用 `ConstExpr`/`Refined`；证明搜索复用 `ProofContext`/`check_predicate`/`ProofFunctionCall`/`execute_proof_calls`；不新增 `Witness` term；witness 是 proof-irrelevant。
+3. **构造 arity 3B**：witness 不占构造参数位；运行期构造只含数据字段；`Box(v0)`，不是 `Box(v0,w0)`；证不出时用独立证明函数（RFC-027 §4.2），不是构造实参。
+4. **布局**：AST `StructField.quantity`；Mono `StructType.fields` → `Vec<StructFieldInfo>{name,ty,quantity,is_mut,has_default}`，删除 `field_mutability`/`field_has_default` 平行向量；IR `TypeDeclField.quantity`；`CreateStruct` 只装数据字段；数据字段索引单一 helper（`runtime_field_index`），`{v,w,z}` 的 `z` 索引必须是 1。
+5. **投影 4A（V1 推荐）**：值级 `b.w` 报错；类型级 `b.w` 无用户语法；witness 只在声明/构造义务/导出中用。若要求类型级 `b.w`，B.3-b 新增 `Type::WitnessProjection`/`ConstExpr::FieldPath`，另立设计。
+6. **可变性 5A**：witness-bearing 记录不可变；数据字段不得 `mut`；不得字段赋值/`&mut`；否则 proof 失效。D 类行为变更，需 D59 登记。
+7. **导出 6A**：`TypeDefPayload.field_obligations`；含 witness 的非泛型类型返回 `Some`；跨模块放 B.4，不放进 B.1–B.3。
+
+### 二、阶段
+
+B.0 设计（本节）→ B.1 表示/布局/擦除（`StructFieldInfo`/`TypeDeclField`/`CreateStruct`/数据索引/值级 `b.w` 拒绝）→ B.2 构造证明（`FieldObligation`/`bind_args_to_params`/自动证明/`ProofFunctionCall`）→ B.3 投影/类型级使用/不可变规则 → B.4 导出/跨模块/多文件夹具。
+
+### 三、硬前置 H1–H10
+
+H1 `StructFieldInfo` 重构（45+ 构造点）；H2 数据索引单一映射；H3 判定单元放 `checker/refinement.rs` 的 refined walk；H4 不可变/借用规则；H5 值级 `b.w` 拒绝 + 类型级决策；H6 `TypeDefPayload`；H7 诊断码；H8 预算一次判定一份；H9 生产可达性（CLI/语料）；H10 `StructType` 重构机械面（Hash/PartialEq/solver/substitute/快照/测试直造）。
+
+### 四、issue
+
+- **#537** 条件性（用单参数 `predicate_defs` 则不阻塞；用带形参精化的证明函数则硬前置）；**#539** 否（B.1–B.3），B.4 条件性；**#552** 条件性（B.4 导入多参数）。
+
+### 五、接口
+
+- 6.9.2：复用 `Quantity::Zero` 的「无运行期槽」事实，不复用 `ConstErasePlan`；q=0 四源证据不适用 witness。
+- 6.9.3：B.1–B.3 不需要 defeq；类型等式 witness 才需要，另案。
+- 6.9.4：B 构造用 `ProofContext.assumptions`（既有分支守卫）；`y==42` 等式桥未做；B V1 排除，等 6.9.4。
+- 6.9.1：只复用 `judge_refined_obligation`/`check_predicate`；构造检查放 refined walk；字段绑定复用 `bind_args_to_params`；预算 H8。
+
+### 六、未核实
+
+未跑测试；`CreateStruct`/`GetField`/`SetField` 跳过 witness 未实测；`resolve_field_index` 数据序未实现；`StructType` 45+ 构造点未逐点枚举；`TypeDefPayload` Some 后导入行为未实测；字段赋值/`&mut` 当前是否真的被接受未实测；`ProofFunctionCall` 只有 `ConstValue` 实参、符号字段值只能 Unproven；预算共享未核实；#537/#552 未复现。
+
+## P6 6.9.2-C3 F4 契约与原型计划（f4-analyst，2026-11-13，只读）
+
+### 一、目标与三不变量
+
+甲-闭：开项进 deferred；入队前代入 + 归一化；T-b 有界开火、到界退回原件不报错。单一表示（`GenericArg::Const(ConstExpr)`）、单一求值器（`normalize`/`ConstGenericEval`）、无第二本账（mono 绑定源仍只有 `name_map`）。
+
+### 二、五个补丁点
+
+P1 `VarInfo.pinned`: `bool` → `pin_binder: Option<String>`（按绑定解析，不并列保留 bool）；P2 `const_eval::substitute_term_names`（8 变体穷尽；substitution 不是 evaluation）；P3 `compile_time_term` 钉住消去 `k→N`，`collect_const_arg_instantiation_request` 开项入请求；P4 `monomorphize` 第 3 步 `has_open_term` 并入 symbolic（不改会 E3018）；P5 `GenericArg::substitute` 的 Const 臂 + `fire_deferred` 代入/归一化 + T-b。
+
+### 三、T-b
+
+键 =（container 定义名, callee, site Span），同一静态调用点跨实例累计；`MAX_OPEN_CHAIN` 建议 8（M3 定）；到界不建实例/不报错/不删原件（依赖 `restore_generics_with_uncovered_call_sites`）/登记 `OpenFireCutoff`；消费者 = 直驱测试 + driver debug（不得 info/warn；不做 State 字段）。
+
+### 四、Lead 决策
+
+- R4 = ①：mono 求值 `Disproved` 不建请求 + 登记，不报错（守住 T-b；不新增码/发射点；outOfScope codes/locales/generated 成立）。
+- R9：bound 初值 8，M3 的实例数/编译时间表定；不做配置项。
+
+### 五、测试/量测摘要
+
+M1 现状锚（无 `int64::4`；check/run 0）；M2 钉住载体；M5 `f(k+1)` 零请求/E3018；M3 无界 E3005 + bound 8/32 实例数；M4 语料/快照/生成器；M6 与 C2c 对接。A1–A4 typecheck、B1–B5 mono、C1–C3 直驱、D1–D4 用户可达、E1–E5 变异。
+**不宣称 I4 完全体**（到界边未擦除）；#541/#542 原样。
