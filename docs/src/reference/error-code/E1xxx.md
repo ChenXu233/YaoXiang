@@ -474,7 +474,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **模板**：`'{name}' 要求编译期常量实参，但所给实参无法转换`
 - **消息**：精化类型实参无法转换为编译期常量表达式
 - **帮助**：谓词/证明函数实参必须是字面量、变量或单参数类型应用，否则精化约束无法生成
-- **发射点**：`src/frontend/core/sema/checker.rs:3696`、`src/frontend/core/sema/checker.rs:3744`、`src/frontend/core/sema/checker.rs:3772`
+- **发射点**：`src/frontend/core/sema/checker.rs:3706`、`src/frontend/core/sema/checker.rs:3754`、`src/frontend/core/sema/checker.rs:3782`
 - **源码注释名**：精化类型实参形态非法（RFC-027，#263）
 
 ### E1093：精化实参个数不匹配
@@ -485,7 +485,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **模板**：`'{name}' 期望 {expected} 个实参，实际 {found} 个`
 - **消息**：谓词/证明函数实参个数不匹配
 - **帮助**：实参个数必须与谓词声明一致，否则精化约束无法生成
-- **发射点**：`src/frontend/core/sema/checker.rs:3679`、`src/frontend/core/sema/checker.rs:3769`
+- **发射点**：`src/frontend/core/sema/checker.rs:3689`、`src/frontend/core/sema/checker.rs:3779`
 - **源码注释名**：精化类型参数数量不匹配
 
 ### E1094：未使用的编译期值参数
@@ -496,7 +496,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **模板**：`'{param}' 声明为 '{type}' 的编译期值参数，但未在类型体中被引用`
 - **消息**：编译期值参数未在类型体中被引用
 - **帮助**：请在类型位置（字段类型、内层 Fn 参数类型、Assert/Array 类型实参）引用该参数，或从声明中移除
-- **发射点**：`src/frontend/core/sema/checker.rs:3270`
+- **发射点**：`src/frontend/core/sema/checker.rs:3280`
 - **源码注释名**：编译期值参数未在类型体引用（#297/F）
 
 ### E1095：未知接口

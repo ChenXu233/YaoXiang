@@ -2156,3 +2156,181 @@ main: () -> Void = {
         diag.message
     );
 }
+
+// ============ 3.20.22 / #537：证明函数形参精化的嵌套义务在调用点被静默丢弃 ============
+//
+// 证明函数（返回 `Type` 的声明）的形参带精化时，对该证明函数的每次编译期调用
+// 都须先满足其形参精化（以调用实参代入）——规范面是 RFC-027 §3.1（「`b: Positive(b)`
+// 和 `f(5)` 一样，就是函数调用」）与 §3.3（「函数前置条件：调用 `divide(a, b)` 时，
+// `b` 必须满足 `Positive` 的证据要么来自当前假设，要么来自实参自身的精化类型标注」）
+// 的组合，§12.2 另规定 Unproven 不得静默放行。
+//
+// 实现面缺口：证明执行器（frontend/proof_execution.rs）只求值被调函数**体**，
+// 从不检查其形参精化 ⇒ 义务链在第一层嵌套处断裂（issue #537：`f(42, 7)` 违反
+// `Eq(7, 0)` 却零诊断；普通函数对照面 g(7, 42) 正确报 E4018）。修法 = 在唯一
+// 执行点展开被调方自身的形参精化（实参代入 → 嵌套证明调用入队 / 闭合 Bool 判定），
+// 判据单源：被调签名取自 typecheck 的 `bindings`（checker 归一化的唯一真相源）。
+//
+// 隔离结论（探针矩阵，3.20.22 实录）：静默与 IR 生成器的谓词命名空间无关；
+// 模块级常量变体同一根因（常量值可由模块 AST 字面折叠解析）；嵌套实参含
+// 负literal时另报 E2031，属 try_proof_fn_call 既有边界，不在本修范围。
+
+/// #537 主锚：证明函数形参精化的嵌套义务违反必须报 E4018，且参数段是义务链
+/// 终点 `Eq(7, 0)` 的实参 `[Int(7), Int(0)]`（不是外层调用的 `[Int(7), Int(42)]`）。
+/// 修前红：零诊断（义务被静默丢弃）。
+#[test]
+fn test_check_proof_fn_param_refinement_nested_obligation_reported() {
+    // Arrange: Check 的形参 p 带精化 Eq(n, 0)；调用点 f(42, 7) 使 Check(7, 42)
+    // 的体为真，但 Check 自己的形参精化 Eq(7, 0) 为假
+    let dir = temp_dir();
+    let file = create_yx_file(
+        &dir,
+        "proof_fn_nested_obligation.yx",
+        "Eq: (a: Int, b: Int) -> Type = { a == b }\n\
+         Check: (n: Int, p: Eq(n, 0)) -> Type = { n > 0 }\n\
+         f: (n: Int, p: Check(7, n)) -> Int = { n }\n\
+         main: () -> Void = {\n\
+         \x20   y: Int = f(42, 7)\n\
+         }",
+    );
+
+    // Act: 子进程跑 CLI check（断言义务链终点的参数段文本）
+    let output = Command::new(env!("CARGO_BIN_EXE_yaoxiang-rs"))
+        .arg("check")
+        .arg(&file)
+        .current_dir(&dir)
+        .output()
+        .expect("failed to run yaoxiang-rs check");
+    let text = format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    // Assert: E4018 且参数段 = 被调证明函数自己形参精化的实参（义务链终点）
+    assert!(
+        text.contains("E4018"),
+        "#537: f(42, 7) violates Check's own param refinement Eq(7, 0) and must be rejected with E4018; zero diagnostics means the nested obligation was silently dropped (issue #537 regression); got:\n{text}"
+    );
+    assert!(
+        text.contains("[Int(7), Int(0)]"),
+        "#537: the E4018 must carry the nested obligation's args [Int(7), Int(0)] (Check's param refinement Eq(n, 0) substituted with Check's own args), not the outer call's args [Int(7), Int(42)]; got:\n{text}"
+    );
+}
+
+/// #537 模块级常量变体锚：精化引用模块级常量（`p: Eq(K, 0)`，`K: Int = 7`）时
+/// 嵌套义务同样必须判定——常量值由模块 AST 折叠解析（与函数面缺值闸门的
+/// 「非形参名不判」边界不同：这里常量编译期可知，义务可闭合）。
+/// 修前红：零诊断（issue 复审登记的第二个丢义务变体）。
+#[test]
+fn test_check_proof_fn_param_refinement_module_const_obligation_reported() {
+    // Arrange: Check 的形参精化引用模块级常量 K=7；Check(7, 0) 的体为真，
+    // 嵌套义务 Eq(K, 0) = Eq(7, 0) 为假
+    let dir = temp_dir();
+    let file = create_yx_file(
+        &dir,
+        "proof_fn_nested_obligation_module_const.yx",
+        "Eq: (a: Int, b: Int) -> Type = { a == b }\n\
+         K: Int = 7\n\
+         Check: (n: Int, p: Eq(K, 0)) -> Type = { n > -100 }\n\
+         f: (n: Int, p: Check(n, 0)) -> Int = { n }\n\
+         main: () -> Void = {\n\
+         \x20   y: Int = f(7, 0)\n\
+         }",
+    );
+
+    // Act
+    let output = Command::new(env!("CARGO_BIN_EXE_yaoxiang-rs"))
+        .arg("check")
+        .arg(&file)
+        .current_dir(&dir)
+        .output()
+        .expect("failed to run yaoxiang-rs check");
+    let text = format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    // Assert: 嵌套义务 Eq(7, 0)（常量代入后）违反，报 E4018 带义务链终点实参
+    assert!(
+        text.contains("E4018"),
+        "#537: the module-constant variant of the nested obligation (Eq(K, 0) with K=7) must be judged — constants are compile-time known, the obligation closes; got:\n{text}"
+    );
+    assert!(
+        text.contains("[Int(7), Int(0)]"),
+        "#537: the module-const variant must report the same obligation-chain endpoint args [Int(7), Int(0)]; got:\n{text}"
+    );
+}
+
+/// #537 内联形态锚：嵌套精化是**已注册单参谓词**（Checker 把它内联成 Bool 约束，
+/// 不留证明调用）时，嵌套义务同样必须判定——闭合 Bool 约束在执行器内直接求值。
+/// 修前红：零诊断。
+#[test]
+fn test_check_proof_fn_param_refinement_inline_predicate_reported() {
+    // Arrange: Check2 的形参精化 Positive(n) 走谓词内联面（约束 = n > 0 非 Call）；
+    // Check2(0, 0) 的体为真，嵌套义务 0 > 0 为假
+    let dir = temp_dir();
+    let file = create_yx_file(
+        &dir,
+        "proof_fn_nested_obligation_inline.yx",
+        "Positive: (x: Int) -> Type = { x > 0 }\n\
+         Check2: (n: Int, p: Positive(n)) -> Type = { n > -100 }\n\
+         f: (n: Int, p: Check2(n, 0)) -> Int = { n }\n\
+         main: () -> Void = {\n\
+         \x20   y: Int = f(0, 0)\n\
+         }",
+    );
+
+    // Act
+    let output = Command::new(env!("CARGO_BIN_EXE_yaoxiang-rs"))
+        .arg("check")
+        .arg(&file)
+        .current_dir(&dir)
+        .output()
+        .expect("failed to run yaoxiang-rs check");
+    let text = format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    // Assert: 闭合 Bool 约束违反 → E4018，约束文本是代入后的闭合式 (0 > 0)
+    assert!(
+        text.contains("E4018"),
+        "#537: the inline-predicate variant (Positive(n) inlined to a Bool constraint) must also be judged — the substituted constraint (0 > 0) is closed and false; got:\n{text}"
+    );
+    assert!(
+        text.contains("0 > 0"),
+        "#537: the inline variant's E4018 must show the substituted closed constraint (0 > 0); got:\n{text}"
+    );
+}
+
+/// #537 合法形态锚（分流判据第 2 条的控制面）：嵌套义务**成立**的合法程序
+/// 零诊断——修复只把「原先非成功」的路径变响亮，不得让合法链开始报错。
+#[test]
+fn test_check_proof_fn_param_refinement_nested_valid_chain_accepted() {
+    // Arrange: 同构于主锚，但实参使嵌套义务成立：Check(0, 0) 的体为真
+    //（0 > -100），Check 的形参精化 Eq(0, 0) 也成立
+    let dir = temp_dir();
+    let file = create_yx_file(
+        &dir,
+        "proof_fn_nested_obligation_valid.yx",
+        "Eq: (a: Int, b: Int) -> Type = { a == b }\n\
+         Check: (n: Int, p: Eq(n, 0)) -> Type = { n > -100 }\n\
+         f: (n: Int, p: Check(n, 0)) -> Int = { n }\n\
+         main: () -> Void = {\n\
+         \x20   y: Int = f(0, 0)\n\
+         }",
+    );
+
+    // Act
+    let result = check_file(&file);
+
+    // Assert: 合法义务链零诊断（原先成功的程序不得因修复变失败）
+    let errors = result.expect("valid nested obligation chain should check");
+    assert_eq!(
+        errors, 0,
+        "#537: a program whose nested refinement obligations all hold (Eq(0, 0) is true) must stay accepted with 0 diagnostics — the fix may only turn previously-failing obligations loud; got {errors} error(s)"
+    );
+}

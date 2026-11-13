@@ -3149,10 +3149,20 @@ impl TypeChecker {
                 )
             });
             if has_constraint && !signature.is_empty() {
+                // 形参精化与 Assign 臂同一归一化管线（`resolve_type_annotation`）：
+                // `Check: (n: Int, p: Eq(n, 0)) -> Type` 的 p 位必须正格化为
+                // `Refined { constraint: Call Eq(n, 0) }`，否则嵌套义务的判定面
+                // （证明执行器 `expand_callee_param_refinements` 读 `bindings`）
+                // 看到的形参位是裸 `Generic`，义务链在第一层嵌套处断裂——
+                // `Eq(7, 0)` 为假却零诊断（issue #537 的上游根因）。#263 口径
+                // 同步生效：非法用法（元数不符 / 实参不可转）写诊断，不静默。
+                let mut refined_diags = Vec::new();
                 let param_types: Vec<MonoType> = signature
                     .iter()
                     .filter_map(|p| p.ty.as_ref().map(|t| MonoType::from(t.clone())))
+                    .map(|ty| self.resolve_type_annotation(&ty, &mut refined_diags))
                     .collect();
+                self.env.errors.extend_errors(refined_diags);
                 // 形态构造单源（#524）：与导入面 register_use_export 共用
                 let fn_ty =
                     crate::frontend::core::sema::predicate_resolver::PredicateDef::proof_fn_type(

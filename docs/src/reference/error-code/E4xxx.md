@@ -24,7 +24,7 @@ description: '泛型约束、特质系统与常量求值相关的错误。'
 | `E4011` | 常量溢出 | `Generic` | 否 | `常量表达式溢出` | ✅ 5 处 |
 | `E4012` | 常量递归过深 | `Generic` | 否 | `常量求值超出最大递归深度 {limit}` | ✅ 1 处 |
 | `E4014` | 常量求值失败 | `Generic` | 是 | `无法求值常量表达式：{reason}` | ✅ 10 处 |
-| `E4018` | 精化谓词违反 | `Generic` | 是 | `精化谓词违反：{constraint}{counterexample}` | ✅ 5 处 |
+| `E4018` | 精化谓词违反 | `Generic` | 是 | `精化谓词违反：{constraint}{counterexample}` | ✅ 6 处 |
 | `E4019` | 类型等式不成立 | `Generic` | 否 | `类型等式不成立：期望 {expected}，实际 {found}` | ✅ 1 处 |
 | `E4020` | 需要证明函数 | `Generic` | 否 | `需要证明函数来验证约束` | ✅ 1 处 |
 | `E4021` | 循环终止性无法自动证明 | `Generic` | 否 | `无法自动证明循环终止：未找到有效的递减度量` | ✅ 1 处 |
@@ -128,7 +128,7 @@ description: '泛型约束、特质系统与常量求值相关的错误。'
 - **模板**：`精化谓词违反：{constraint}{counterexample}`
 - **消息**：精化类型约束被证伪
 - **帮助**：谓词被证伪——存在使约束为假的赋值。请检查变量值或放宽约束。
-- **发射点**：`src/frontend/proof_execution.rs:49`、`src/frontend/proof_execution.rs:59`、`src/frontend/core/sema/checker/refinement.rs:628` 等 5 处
+- **发射点**：`src/frontend/proof_execution.rs:99`、`src/frontend/proof_execution.rs:109`、`src/frontend/proof_execution.rs:259` 等 6 处
 
 ### E4019：类型等式不成立
 

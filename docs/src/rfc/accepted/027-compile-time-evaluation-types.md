@@ -863,7 +863,10 @@ sum: (arr: Array(Int)) -> Int = {
 > （`revalidate_refined`）、调用点实参（`check_call_arg_refinements`）、返回位后置条件
 > （`check_return_refinement`）；其中**直接调用** `layers::predicate::check_predicate` 的是**两处**：调用点实参与
 > 返回位后置条件共用唯一判定单元 `judge_refined_obligation`（`checker/refinement.rs`），
-> `revalidate_refined` 自带 E2030 口径。原
+> `revalidate_refined` 自带 E2030 口径。**第四处义务面在证明执行器**（`proof_execution.rs`，
+> 2026-11-14 接线，issue #537）：执行证明调用时先展开**被调证明函数自身的形参精化**（RFC-027 §3.3
+> 调用点前置条件的嵌套义务——广度优先工作清单，去重集 + §8 预算收口；闭合 Bool 约束判伪出
+> E4018，Call 形态入队继续执行）。原
 > `layers/dispatch.rs` 零生产调用点，且其对 `Unproven { ProofFunctionRequired }` 的处置是
 > 「降级为 W1080 警告并注入 Γ」，与生产实做（`Unproven` 一律报错，见 `refined_unproven`）
 > 相冲突，故已整体删除。另需注意：本节表中 Runtime 行的「插入运行时 check」在生产**尚无**
