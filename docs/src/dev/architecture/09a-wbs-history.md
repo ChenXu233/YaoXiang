@@ -5009,6 +5009,8 @@ outOfScope：match/while/早返回；`&mut` 之外的非直接写面（索引/�
 - 旧 D.0 的 A/V1-A 分析保留为历史；V1-A 不采用。
 - 设计包未确认前，不改 `src/`；B 的实现另立契约。
 
+> **2026-11-13 lead 第一性裁决：4A + 5A。** 4A = V1 不提供用户 `b.w` 投影；witness 仍是编译期字段、构造时证明、运行期擦除。理由：`b.w` 需要类型级字段路径（`ConstExpr::FieldPath`）与 proof token，属独立 term 语言设计；现在加会造第二 term world。4A 的字段表示（quantity + 命题类型）向前兼容 B.3-b，不构成“A 式运行期字段”。5A = witness-bearing 记录整体不可变；理由：字段可变会让 witness 命题失效，当前无 runtime check/revalidation，整体不可变是唯一 sound 规则；更细粒度留后续线性/唯一性设计。
+
 ## P6 6.9.4 契约与补丁计划（gamma-designer-2，2026-11-13）
 
 ### 一、已实测
