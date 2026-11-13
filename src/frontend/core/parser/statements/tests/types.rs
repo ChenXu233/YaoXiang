@@ -190,6 +190,26 @@ fn test_struct_type_fields() {
     });
 }
 
+/// R2：解析器产出的字段量词读数恒为 `None`（witness 的产出入 B.2，不在 B.1a）。
+#[test]
+fn test_struct_type_fields_default_quantity_is_none() {
+    with_type("{ x: Float, y: Float }", |t| {
+        // Arrange & Act
+        let fields = struct_fields(&t);
+
+        // Assert
+        assert_eq!(fields.len(), 2, "夹具必须有 2 个字段");
+        assert!(
+            fields.iter().all(|field| field.quantity.is_none()),
+            "解析器不得产出 witness 字段；实际: {:?}",
+            fields
+                .iter()
+                .map(|f| (&f.name, f.quantity))
+                .collect::<Vec<_>>()
+        );
+    });
+}
+
 #[test]
 fn test_struct_type_with_interface() {
     with_type("{ x: Float, Drawable, Serializable }", |t| {

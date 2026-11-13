@@ -1441,7 +1441,7 @@ impl OwnershipChecker {
                 if st
                     .fields
                     .iter()
-                    .all(|(_, field_ty)| self.is_copyable_field(field_ty, depth - 1))
+                    .all(|field| self.is_copyable_field(&field.ty, depth - 1))
                 {
                     CopySemantics::Dup
                 } else {
@@ -1571,8 +1571,8 @@ impl OwnershipChecker {
                 crate::frontend::core::types::MonoType::Struct(st) => st
                     .fields
                     .iter()
-                    .find(|(n, _)| n == fname)
-                    .map(|(_, ty)| ty.clone())?,
+                    .find(|field| &field.name == fname)
+                    .map(|field| field.ty.clone())?,
                 crate::frontend::core::types::MonoType::Ref { inner, .. } => inner.as_ref().clone(),
                 crate::frontend::core::types::MonoType::TypeRef(n) => {
                     let poly = env.types.get(n)?;
@@ -1581,8 +1581,8 @@ impl OwnershipChecker {
                         crate::frontend::core::types::MonoType::Struct(st) => st
                             .fields
                             .iter()
-                            .find(|(f, _)| f == fname)
-                            .map(|(_, ty)| ty.clone())?,
+                            .find(|field| &field.name == fname)
+                            .map(|field| field.ty.clone())?,
                         _ => return None,
                     }
                 }

@@ -120,7 +120,7 @@ pub fn is_subtype(
             a.fields
                 .iter()
                 .zip(b.fields.iter())
-                .all(|(af, bf)| af.0 == bf.0 && is_subtype(&af.1, &bf.1, env))
+                .all(|(af, bf)| af.name == bf.name && is_subtype(&af.ty, &bf.ty, env))
         }
         // 6.8.7：单值类型 <: 基类型（`int64::3 <: int64`）。递归到底层基类型再判，
         // 因此只可能比基类型更宽、不会退化成「任意类型都是子类型」。
@@ -144,19 +144,21 @@ fn satisfies_constraint(
         MonoType::Struct(s) => &s.fields,
         _ => return false,
     };
-    let sub_fn_fields: Vec<&(String, MonoType)> = match sub {
+    let sub_fn_fields: Vec<&crate::frontend::core::types::mono::StructFieldInfo> = match sub {
         MonoType::Struct(s) => s
             .fields
             .iter()
-            .filter(|(_, t)| matches!(t, MonoType::Fn { .. }))
+            .filter(|f| matches!(f.ty, MonoType::Fn { .. }))
             .collect(),
         _ => return false,
     };
-    for (field_name, constraint_fn) in constraint_fields {
+    for constraint_field in constraint_fields {
+        let field_name = &constraint_field.name;
+        let constraint_fn = &constraint_field.ty;
         let found = sub_fn_fields
             .iter()
-            .find(|(name, _)| name == field_name)
-            .map(|(_, t)| t);
+            .find(|field| &field.name == field_name)
+            .map(|field| &field.ty);
         match (found, None::<&MonoType>) {
             (Some(found_fn), _) => {
                 if !fn_signatures_match(found_fn, constraint_fn) {

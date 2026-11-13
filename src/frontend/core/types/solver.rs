@@ -3,7 +3,7 @@
 //! 实现类型系统的核心求解算法：
 //! - TypeConstraintSolver: 类型约束求解器（union-find 实现）
 
-use crate::frontend::core::types::mono::{TypeBinding, MonoType, StructType, EnumType};
+use crate::frontend::core::types::mono::{EnumType, MonoType, StructFieldInfo, StructType, TypeBinding};
 use crate::frontend::core::types::constraint::TypeConstraint;
 use crate::frontend::core::types::error::TypeConstraintError;
 use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};
@@ -236,11 +236,12 @@ impl TypeConstraintSolver {
                 fields: s
                     .fields
                     .iter()
-                    .map(|(n, t)| (n.clone(), self.expand_type(t)))
+                    .map(|field_info| StructFieldInfo {
+                        ty: self.expand_type(&field_info.ty),
+                        ..field_info.clone()
+                    })
                     .collect(),
                 methods: s.methods.clone(),
-                field_mutability: s.field_mutability.clone(),
-                field_has_default: s.field_has_default.clone(),
                 interfaces: s.interfaces.clone(),
             }),
             MonoType::Enum(e) => MonoType::Enum(EnumType {
@@ -389,11 +390,12 @@ impl TypeConstraintSolver {
                 fields: s
                     .fields
                     .iter()
-                    .map(|(n, t)| (n.clone(), self.expand_type_mut(t)))
+                    .map(|field_info| StructFieldInfo {
+                        ty: self.expand_type_mut(&field_info.ty),
+                        ..field_info.clone()
+                    })
                     .collect(),
                 methods: s.methods.clone(),
-                field_mutability: s.field_mutability.clone(),
-                field_has_default: s.field_has_default.clone(),
                 interfaces: s.interfaces.clone(),
             }),
             MonoType::Enum(e) => MonoType::Enum(EnumType {
@@ -619,25 +621,24 @@ impl TypeConstraintSolver {
 
             // 结构体类型 unify
             (MonoType::Struct(s1), MonoType::Struct(s2)) => {
-                if s1.name != s2.name
-                    || s1.fields.len() != s2.fields.len()
-                    || s1.field_mutability != s2.field_mutability
-                {
+                if s1.name != s2.name || s1.fields.len() != s2.fields.len() {
                     return Err(ErrorCodeDefinition::type_mismatch(
                         &t1.type_name(),
                         &t2.type_name(),
                     )
                     .build());
                 }
-                for ((n1, f1), (n2, f2)) in s1.fields.iter().zip(s2.fields.iter()) {
-                    if n1 != n2 {
+                for (f1, f2) in s1.fields.iter().zip(s2.fields.iter()) {
+                    // 可变性参与统一（旧实现显式比较与字段等长的可变性向量；收敛成
+                    // 单列后按字段比，零行为——两侧同源构造时逐位取值不变）。
+                    if f1.name != f2.name || f1.is_mut != f2.is_mut {
                         return Err(ErrorCodeDefinition::type_mismatch(
                             &t1.type_name(),
                             &t2.type_name(),
                         )
                         .build());
                     }
-                    self.unify(f1, f2)?;
+                    self.unify(&f1.ty, &f2.ty)?;
                 }
                 Ok(())
             }
@@ -769,7 +770,7 @@ impl TypeConstraintSolver {
     ) -> bool {
         match ty {
             MonoType::TypeVar(v) => f(*v),
-            MonoType::Struct(s) => s.fields.iter().any(|(_, t)| self.visit_vars(t, f)),
+            MonoType::Struct(s) => s.fields.iter().any(|field| self.visit_vars(&field.ty, f)),
             MonoType::Enum(_) => false, // 枚举变体名不包含类型变量
             MonoType::Fn {
                 params,

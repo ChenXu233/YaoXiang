@@ -691,15 +691,20 @@ impl StatementChecker {
     ) -> MonoType {
         let mut fields = Vec::new();
         for export in module.exports.values() {
-            fields.push((export.name.clone(), self.export_type(export)));
+            // 同命名空间口径（旧表示为空默认值向量 ⇒ required=0，零行为保持）。
+            fields.push(crate::frontend::core::types::mono::StructFieldInfo {
+                name: export.name.clone(),
+                ty: self.export_type(export),
+                quantity: None,
+                is_mut: false,
+                has_default: true,
+            });
         }
 
         MonoType::Struct(crate::frontend::core::types::mono::StructType {
             name: name.to_string(),
             fields,
             methods: HashMap::new(),
-            field_mutability: Vec::new(),
-            field_has_default: Vec::new(),
             interfaces: vec![],
         })
     }
@@ -2886,7 +2891,7 @@ impl StatementChecker {
                                         && s_init
                                             .fields
                                             .iter()
-                                            .any(|(_, fty)| contains_unresolved_param(fty))
+                                            .any(|field| contains_unresolved_param(&field.ty))
                                 }
                                 _ => false,
                             };
@@ -3678,7 +3683,10 @@ impl StatementChecker {
 pub(super) fn contains_unresolved_param(t: &MonoType) -> bool {
     match t {
         MonoType::TypeRef(_) | MonoType::TypeVar(_) => true,
-        MonoType::Struct(s) => s.fields.iter().any(|(_, f)| contains_unresolved_param(f)),
+        MonoType::Struct(s) => s
+            .fields
+            .iter()
+            .any(|field| contains_unresolved_param(&field.ty)),
         MonoType::Generic { args, .. } => args.iter().any(contains_unresolved_param),
         MonoType::Fn {
             params,

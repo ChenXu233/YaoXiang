@@ -59,12 +59,22 @@ fn point_struct_type() -> MonoType {
     MonoType::Struct(crate::frontend::core::sema::StructType {
         name: "Point".to_string(),
         fields: vec![
-            ("x".to_string(), MonoType::Int(64)),
-            ("y".to_string(), MonoType::Int(64)),
+            crate::frontend::core::types::mono::StructFieldInfo {
+                name: "x".to_string(),
+                ty: MonoType::Int(64),
+                quantity: None,
+                is_mut: false,
+                has_default: false,
+            },
+            crate::frontend::core::types::mono::StructFieldInfo {
+                name: "y".to_string(),
+                ty: MonoType::Int(64),
+                quantity: None,
+                is_mut: false,
+                has_default: false,
+            },
         ],
         methods: HashMap::new(),
-        field_mutability: vec![false, false],
-        field_has_default: vec![false, false],
         interfaces: vec![],
     })
 }

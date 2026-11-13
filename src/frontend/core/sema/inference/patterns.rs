@@ -72,20 +72,22 @@ impl PatternInferrer {
                 Ok(MonoType::make_tuple(element_types))
             }
             ast::Pattern::Struct { name, fields } => {
-                // 结构体模式：推断字段类型
-                let mut field_types = Vec::new();
-                let mut field_mutability = Vec::new();
+                // 结构体模式：推断字段类型（字段事实一列，R8：默认值标记按模式缺省为 false）
+                let mut field_infos = Vec::new();
                 for (field_name, is_mut, pattern) in fields {
                     let field_ty = self.infer_pattern(pattern)?;
-                    field_types.push((field_name.clone(), field_ty));
-                    field_mutability.push(*is_mut);
+                    field_infos.push(crate::frontend::core::types::mono::StructFieldInfo {
+                        name: field_name.clone(),
+                        ty: field_ty,
+                        quantity: None,
+                        is_mut: *is_mut,
+                        has_default: false,
+                    });
                 }
                 Ok(MonoType::Struct(crate::frontend::core::types::StructType {
                     name: name.clone(),
-                    fields: field_types,
+                    fields: field_infos,
                     methods: std::collections::HashMap::new(),
-                    field_mutability,
-                    field_has_default: Vec::new(),
                     interfaces: vec![],
                 }))
             }

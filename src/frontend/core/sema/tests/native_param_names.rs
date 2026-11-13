@@ -43,10 +43,23 @@ fn host_checker() -> TypeChecker {
         "host".to_string(),
         PolyType::mono(MonoType::Struct(crate::frontend::core::types::StructType {
             name: "host".to_string(),
-            fields: vec![("add".to_string(), add_ty), ("flag".to_string(), flag_ty)],
+            fields: vec![
+                crate::frontend::core::types::mono::StructFieldInfo {
+                    name: "add".to_string(),
+                    ty: add_ty,
+                    quantity: None,
+                    is_mut: false,
+                    has_default: false,
+                },
+                crate::frontend::core::types::mono::StructFieldInfo {
+                    name: "flag".to_string(),
+                    ty: flag_ty,
+                    quantity: None,
+                    is_mut: false,
+                    has_default: false,
+                },
+            ],
             methods: std::collections::HashMap::new(),
-            field_mutability: vec![false, false],
-            field_has_default: vec![false, false],
             interfaces: Vec::new(),
         })),
     );

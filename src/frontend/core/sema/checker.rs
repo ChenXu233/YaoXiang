@@ -2355,8 +2355,8 @@ impl TypeChecker {
                 MonoType::Struct(s) => s
                     .fields
                     .iter()
-                    .filter(|(_, t)| matches!(t, MonoType::Fn { .. }))
-                    .map(|(n, _)| n.clone())
+                    .filter(|f| matches!(f.ty, MonoType::Fn { .. }))
+                    .map(|f| f.name.clone())
                     .collect(),
                 _ => Vec::new(),
             })
@@ -2400,8 +2400,8 @@ impl TypeChecker {
                         MonoType::Struct(s) => s
                             .fields
                             .iter()
-                            .filter(|(_, t)| matches!(t, MonoType::Fn { .. }))
-                            .map(|(n, _)| n.clone())
+                            .filter(|f| matches!(f.ty, MonoType::Fn { .. }))
+                            .map(|f| f.name.clone())
                             .collect(),
                         _ => Vec::new(),
                     })
@@ -2601,7 +2601,7 @@ impl TypeChecker {
         // §1.2 命名空间共享：接口方法名与实现类型已有字段同名 → 冲突
         let impl_field_names: Vec<String> = match self.env.types.get(impl_type) {
             Some(poly) => match &poly.body {
-                MonoType::Struct(s) => s.fields.iter().map(|(n, _)| n.clone()).collect(),
+                MonoType::Struct(s) => s.fields.iter().map(|f| f.name.clone()).collect(),
                 _ => Vec::new(),
             },
             None => Vec::new(),
@@ -2788,14 +2788,21 @@ impl TypeChecker {
         let mut fields = Vec::new();
         for export in module.exports.values() {
             let field_ty = self.export_register_type(export);
-            fields.push((export.name.clone(), field_ty));
+            // 命名空间成员不是构造参数：旧表示用**空**默认值向量表达（required=0，
+            // 任意实参数被接受）。单列无法表达长度不匹配，故逐字段写 `has_default`
+            // 以保持旧 arity 行为（零行为；见 09a §P6 6.9.5-B.1a 的报告 §R8）。
+            fields.push(crate::frontend::core::types::mono::StructFieldInfo {
+                name: export.name.clone(),
+                ty: field_ty,
+                quantity: None,
+                is_mut: false,
+                has_default: true,
+            });
         }
         let module_ty = MonoType::Struct(crate::frontend::core::types::mono::StructType {
             name: module_alias.to_string(),
             fields,
             methods: HashMap::new(),
-            field_mutability: Vec::new(),
-            field_has_default: Vec::new(),
             interfaces: vec![],
         });
         self.env.module_aliases.insert(module_alias.to_string());
@@ -2826,7 +2833,14 @@ impl TypeChecker {
                 if let Some(sub_module) = self.env.module_registry.get(&sub_module_path).cloned() {
                     for sub_export in sub_module.exports.values() {
                         let field_ty = self.export_register_type(sub_export);
-                        fields.push((sub_export.name.clone(), field_ty));
+                        // 同命名空间口径（旧表示为空默认值向量 ⇒ required=0）。
+                        fields.push(crate::frontend::core::types::mono::StructFieldInfo {
+                            name: sub_export.name.clone(),
+                            ty: field_ty,
+                            quantity: None,
+                            is_mut: false,
+                            has_default: true,
+                        });
                         // 分组 use（`use std.{result}`）与整模块 use 同权：子模块内
                         // 带载荷的 Type 导出按裸名补镜像——裸名构造
                         // （`Result(Int, String)`）与 match 变体解构的变体集
@@ -2842,8 +2856,6 @@ impl TypeChecker {
                     name: export.name.clone(),
                     fields,
                     methods: HashMap::new(),
-                    field_mutability: Vec::new(),
-                    field_has_default: Vec::new(),
                     interfaces: vec![],
                 });
                 // 分组导入的子模块命名空间（`use std.{result}` 后 `result.nope`）
@@ -3103,8 +3115,6 @@ impl TypeChecker {
                     name: name.to_string(),
                     fields: s.fields.clone(),
                     methods: s.methods.clone(),
-                    field_mutability: s.field_mutability.clone(),
-                    field_has_default: s.field_has_default.clone(),
                     interfaces: s.interfaces.clone(),
                 })
             }

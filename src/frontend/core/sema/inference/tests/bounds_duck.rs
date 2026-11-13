@@ -26,20 +26,22 @@ fn create_interface(
     name: &str,
     methods: Vec<(&str, MonoType)>,
 ) -> MonoType {
-    let mut fields = Vec::new();
-    let mut field_mutability = Vec::new();
-    let mut field_has_default = Vec::new();
-    for (method_name, method_type) in methods {
-        fields.push((method_name.to_string(), method_type));
-        field_mutability.push(false);
-        field_has_default.push(false);
-    }
+    let fields = methods
+        .into_iter()
+        .map(
+            |(method_name, method_type)| crate::frontend::core::types::mono::StructFieldInfo {
+                name: method_name.to_string(),
+                ty: method_type,
+                quantity: None,
+                is_mut: false,
+                has_default: false,
+            },
+        )
+        .collect();
     MonoType::Struct(StructType {
         name: name.to_string(),
         fields,
         methods: HashMap::new(),
-        field_mutability,
-        field_has_default,
         interfaces: vec![],
     })
 }
@@ -53,10 +55,16 @@ fn create_struct(
     let mut env = TypeEnvironment::new();
     let struct_fields: Vec<_> = fields
         .into_iter()
-        .map(|(n, t)| (n.to_string(), t))
+        .map(
+            |(n, t)| crate::frontend::core::types::mono::StructFieldInfo {
+                name: n.to_string(),
+                ty: t,
+                quantity: None,
+                is_mut: false,
+                has_default: false,
+            },
+        )
         .collect();
-    let field_mutability = vec![false; struct_fields.len()];
-    let field_has_default = vec![false; struct_fields.len()];
     for (method_name, method_type) in method_bindings {
         env.add_method_binding(name, method_name, method_type);
     }
@@ -65,8 +73,6 @@ fn create_struct(
             name: name.to_string(),
             fields: struct_fields,
             methods: HashMap::new(),
-            field_mutability,
-            field_has_default,
             interfaces: vec![],
         }),
         env,

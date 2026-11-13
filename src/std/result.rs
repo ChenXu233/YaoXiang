@@ -56,12 +56,23 @@ impl StdModule for ResultModule {
                 crate::frontend::core::types::mono::StructType {
                     name: "Error".to_string(),
                     fields: vec![
-                        ("code".to_string(), MonoType::make_string()),
-                        ("message".to_string(), MonoType::make_string()),
+                        // 类型族结果记录：旧表示为空默认值向量（required=0），逐字段保持。
+                        crate::frontend::core::types::mono::StructFieldInfo {
+                            name: "code".to_string(),
+                            ty: MonoType::make_string(),
+                            quantity: None,
+                            is_mut: false,
+                            has_default: true,
+                        },
+                        crate::frontend::core::types::mono::StructFieldInfo {
+                            name: "message".to_string(),
+                            ty: MonoType::make_string(),
+                            quantity: None,
+                            is_mut: false,
+                            has_default: true,
+                        },
                     ],
                     methods: std::collections::HashMap::new(),
-                    field_mutability: Vec::new(),
-                    field_has_default: Vec::new(),
                     interfaces: vec![],
                 },
             )),

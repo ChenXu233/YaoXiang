@@ -67,6 +67,7 @@ fn make_pair_type_ir(fields: &[&str]) -> FunctionIR {
         .map(|name| TypeDeclField {
             name: (*name).to_string(),
             ty: MonoType::TypeRef("T".to_string()),
+            quantity: None,
             is_mut: false,
             has_default: false,
             is_method: false,
@@ -323,6 +324,7 @@ fn make_generic_type_decl_ir(
         .map(|name| TypeDeclField {
             name: (*name).to_string(),
             ty: MonoType::TypeRef(param.to_string()),
+            quantity: None,
             is_mut: false,
             has_default: false,
             is_method: false,

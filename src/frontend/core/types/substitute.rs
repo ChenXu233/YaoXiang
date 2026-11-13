@@ -2,6 +2,7 @@
 //!
 //! 提供通用的类型替换算法，消除各模块间的重复代码。
 
+use crate::frontend::core::types::mono::StructFieldInfo;
 use crate::frontend::core::types::{MonoType, TypeVar, StructType, EnumType};
 use std::collections::HashMap;
 
@@ -132,7 +133,10 @@ pub fn substitute_ctor_heads(
             fields: s
                 .fields
                 .iter()
-                .map(|(n, t)| (n.clone(), substitute_ctor_heads(t, head_map)))
+                .map(|field_info| StructFieldInfo {
+                    ty: substitute_ctor_heads(&field_info.ty, head_map),
+                    ..field_info.clone()
+                })
                 .collect(),
             ..s.clone()
         }),
@@ -292,16 +296,18 @@ impl Substituter {
                 let new_fields = struct_type
                     .fields
                     .iter()
-                    .map(|(name, field_ty)| {
-                        (name.clone(), self.substitute_internal(field_ty, lookup))
+                    .map(|field_info| {
+                        let field_ty = self.substitute_internal(&field_info.ty, lookup);
+                        StructFieldInfo {
+                            ty: field_ty,
+                            ..field_info.clone()
+                        }
                     })
                     .collect();
                 MonoType::Struct(StructType {
                     name: struct_type.name.clone(),
                     fields: new_fields,
                     methods: struct_type.methods.clone(),
-                    field_mutability: struct_type.field_mutability.clone(),
-                    field_has_default: struct_type.field_has_default.clone(),
                     interfaces: struct_type.interfaces.clone(),
                 })
             }
@@ -356,7 +362,7 @@ pub fn contains_type_vars(ty: &MonoType) -> bool {
         MonoType::Struct(struct_type) => struct_type
             .fields
             .iter()
-            .any(|(_, field_ty)| contains_type_vars(field_ty)),
+            .any(|field| contains_type_vars(&field.ty)),
         MonoType::Union(types) | MonoType::Intersection(types) => {
             types.iter().any(contains_type_vars)
         }

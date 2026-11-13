@@ -698,22 +698,20 @@ impl TypeEnvironment {
                 ty.clone()
             }
             MonoType::Struct(s) => {
-                let new_fields: Vec<(String, MonoType)> = s
+                let new_fields: Vec<crate::frontend::core::types::mono::StructFieldInfo> = s
                     .fields
                     .iter()
-                    .map(|(name, field_ty)| {
-                        (
-                            name.clone(),
-                            Self::replace_type_params_walk(field_ty, param_names, args),
-                        )
-                    })
+                    .map(
+                        |field_info| crate::frontend::core::types::mono::StructFieldInfo {
+                            ty: Self::replace_type_params_walk(&field_info.ty, param_names, args),
+                            ..field_info.clone()
+                        },
+                    )
                     .collect();
                 MonoType::Struct(crate::frontend::core::types::mono::StructType {
                     name: s.name.clone(),
                     fields: new_fields,
                     methods: s.methods.clone(),
-                    field_mutability: s.field_mutability.clone(),
-                    field_has_default: s.field_has_default.clone(),
                     interfaces: s.interfaces.clone(),
                 })
             }
@@ -770,17 +768,20 @@ impl TypeEnvironment {
                 MonoType::from_builtin_name(name).unwrap_or_else(|| ty.clone())
             }
             MonoType::Struct(s) => {
-                let new_fields: Vec<(String, MonoType)> = s
+                let new_fields: Vec<crate::frontend::core::types::mono::StructFieldInfo> = s
                     .fields
                     .iter()
-                    .map(|(name, field_ty)| (name.clone(), Self::resolve_type_refs(field_ty)))
+                    .map(
+                        |field_info| crate::frontend::core::types::mono::StructFieldInfo {
+                            ty: Self::resolve_type_refs(&field_info.ty),
+                            ..field_info.clone()
+                        },
+                    )
                     .collect();
                 MonoType::Struct(crate::frontend::core::types::mono::StructType {
                     name: s.name.clone(),
                     fields: new_fields,
                     methods: s.methods.clone(),
-                    field_mutability: s.field_mutability.clone(),
-                    field_has_default: s.field_has_default.clone(),
                     interfaces: s.interfaces.clone(),
                 })
             }

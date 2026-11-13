@@ -28,6 +28,7 @@ fn point_type_definition_stmt() -> Stmt {
                         },
                         is_mut: false,
                         default: None,
+                        quantity: None,
                     }),
                     ast::TypeBodyItem::Field(StructField {
                         name: "y".into(),
@@ -37,6 +38,7 @@ fn point_type_definition_stmt() -> Stmt {
                         },
                         is_mut: false,
                         default: None,
+                        quantity: None,
                     }),
                 ],
             },

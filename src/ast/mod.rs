@@ -332,6 +332,10 @@ pub struct StructField {
     pub ty: Type,
     /// 可选的默认值表达式
     pub default: Option<Box<Expr>>,
+    /// 量词读数（6.9.5-B.1a / H1）：`Some(Zero)` = witness 字段，`None` = data 字段。
+    ///
+    /// B.1a 只落表示：解析器产出的字段恒为 `None`；witness 的产出入 B.2。
+    pub quantity: Option<Quantity>,
 }
 
 impl StructField {
@@ -346,6 +350,7 @@ impl StructField {
             is_mut,
             ty,
             default: None,
+            quantity: None,
         }
     }
 
@@ -361,6 +366,7 @@ impl StructField {
             is_mut,
             ty,
             default: Some(Box::new(default)),
+            quantity: None,
         }
     }
 }
@@ -851,7 +857,8 @@ pub struct Param {
 ///   Move ⇒ 线性一次，Dup / ValueCopy ⇒ 无限制）。那是 L3 的类型事实，L2 的
 ///   `ast` 拿不到，故本轮（6.9.2-A）只解析 `Zero`；运行期值参数保持 `None`
 ///   （未解析），两个视图都**不读**具体值——视图只排除已确定的 `Zero`。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+// `Hash`：6.9.5-B.1a 起量词读数参与 `StructFieldInfo` 的 Hash（与 Eq 同口径）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Quantity {
     /// q=0：编译期值参数（不占实现头绑定位，调用点实参仍占位）
     Zero,

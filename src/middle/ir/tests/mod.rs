@@ -17,4 +17,5 @@ pub mod overload_resolutions;
 pub mod release_plan_spans;
 pub mod snapshot;
 pub mod type_decl;
+mod type_decl_quantity;
 pub mod verify;

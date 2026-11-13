@@ -188,7 +188,7 @@ impl TraitTable {
             }
 
             // 结构体：所有字段都满足
-            MonoType::Struct(s) => s.fields.iter().all(|(_, f)| self.satisfies(trait_name, f)),
+            MonoType::Struct(s) => s.fields.iter().all(|f| self.satisfies(trait_name, &f.ty)),
 
             // 枚举：变体仅含名称（无关联数据），视为满足
             MonoType::Enum(_) => true,
@@ -254,7 +254,7 @@ impl TraitTable {
         struct_ty
             .fields
             .iter()
-            .all(|(_, f)| self.satisfies(trait_name, f))
+            .all(|f| self.satisfies(trait_name, &f.ty))
     }
 
     /// 为 Record 类型生成自动派生实现

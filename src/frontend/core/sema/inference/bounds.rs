@@ -172,8 +172,8 @@ impl BoundsChecker {
             MonoType::Struct(s) => s
                 .fields
                 .iter()
-                .filter(|(_, ty)| matches!(ty, MonoType::Fn { .. }))
-                .map(|(name, ty)| (name.clone(), ty))
+                .filter(|field| matches!(field.ty, MonoType::Fn { .. }))
+                .map(|field| (field.name.clone(), &field.ty))
                 .collect(),
             _ => Vec::new(),
         };

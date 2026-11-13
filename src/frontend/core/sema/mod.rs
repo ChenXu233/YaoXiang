@@ -264,19 +264,22 @@ pub fn add_native_function_types(
         PolyType::mono(MonoType::Struct(crate::frontend::core::types::StructType {
             name: "Native".to_string(),
             fields: vec![
-                (
-                    "c".to_string(),
-                    MonoType::Fn {
+                crate::frontend::core::types::mono::StructFieldInfo {
+                    name: "c".to_string(),
+                    ty: MonoType::Fn {
                         params: vec![MonoType::make_string()],
                         return_type: Box::new(MonoType::LibraryRef {
                             mechanism: "c".to_string(),
                             lib: String::new(),
                         }),
                     },
-                ),
-                (
-                    "rs".to_string(),
-                    MonoType::Fn {
+                    quantity: None,
+                    is_mut: false,
+                    has_default: false,
+                },
+                crate::frontend::core::types::mono::StructFieldInfo {
+                    name: "rs".to_string(),
+                    ty: MonoType::Fn {
                         params: vec![MonoType::make_string()],
                         return_type: Box::new(MonoType::ExternRef {
                             mechanism: "rs".to_string(),
@@ -284,11 +287,12 @@ pub fn add_native_function_types(
                             symbol: String::new(),
                         }),
                     },
-                ),
+                    quantity: None,
+                    is_mut: false,
+                    has_default: false,
+                },
             ],
             methods: std::collections::HashMap::new(),
-            field_mutability: vec![false, false],
-            field_has_default: vec![false, false],
             interfaces: Vec::new(),
         })),
     );

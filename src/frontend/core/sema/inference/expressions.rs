@@ -1455,7 +1455,9 @@ impl<'a> ExpressionInferrer<'a> {
                     }
                 };
                 // 声明字段必须被完整覆盖（`..` 略名尚未支持）；未知字段拒绝
-                for (fname, fty) in &struct_ty.fields {
+                for field_info in &struct_ty.fields {
+                    let fname = &field_info.name;
+                    let fty = &field_info.ty;
                     let matched: Vec<&(String, bool, Box<Pattern>)> =
                         fields.iter().filter(|(n, _, _)| n == fname).collect();
                     if matched.is_empty() {
@@ -1473,7 +1475,7 @@ impl<'a> ExpressionInferrer<'a> {
                     self.check_pattern(&matched[0].2, fty, binds, span)?;
                 }
                 for (fname, _, _) in fields {
-                    if !struct_ty.fields.iter().any(|(n, _)| n == fname) {
+                    if !struct_ty.fields.iter().any(|f| &f.name == fname) {
                         return Err(ErrorCodeDefinition::field_not_found(fname, name)
                             .at(span)
                             .build());
@@ -1971,9 +1973,9 @@ impl<'a> ExpressionInferrer<'a> {
             | MonoType::Void
             | MonoType::Never => Ok(()),
             MonoType::Struct(s) => {
-                for (name, field_ty) in &s.fields {
-                    self.struct_comparable(field_ty, depth + 1)
-                        .map_err(|d| format!("{}: {}", name, d))?;
+                for field_info in &s.fields {
+                    self.struct_comparable(&field_info.ty, depth + 1)
+                        .map_err(|d| format!("{}: {}", field_info.name, d))?;
                 }
                 Ok(())
             }
@@ -2097,8 +2099,8 @@ impl<'a> ExpressionInferrer<'a> {
             }
             MonoType::Ref { inner, .. } => Self::collect_type_var_indices(inner, out),
             MonoType::Struct(s) => {
-                for (_, field_ty) in &s.fields {
-                    Self::collect_type_var_indices(field_ty, out);
+                for field_info in &s.fields {
+                    Self::collect_type_var_indices(&field_info.ty, out);
                 }
             }
             MonoType::Generic { args, .. } => {
@@ -2382,7 +2384,12 @@ impl<'a> ExpressionInferrer<'a> {
                 st.fields = st
                     .fields
                     .into_iter()
-                    .map(|(n, f)| (n, Self::substitute_type_refs(&f, subst)))
+                    .map(
+                        |field_info| crate::frontend::core::types::mono::StructFieldInfo {
+                            ty: Self::substitute_type_refs(&field_info.ty, subst),
+                            ..field_info.clone()
+                        },
+                    )
                     .collect();
                 MonoType::Struct(st)
             }
@@ -3403,12 +3410,12 @@ impl<'a> ExpressionInferrer<'a> {
 
         // 结构字段优先（同推断臂顺序）：同名函数字段是记录形态调用，非方法绑定
         let (type_name, has_field) = match &resolved {
-            MonoType::Struct(s) => (s.name.clone(), s.fields.iter().any(|(n, _)| n == field)),
+            MonoType::Struct(s) => (s.name.clone(), s.fields.iter().any(|f| &f.name == field)),
             MonoType::TypeRef(n) => {
                 if let Some(def_ty) = self.type_defs.get(n).map(|p| &p.body) {
                     let def_ty = self.solver.resolve_type(def_ty);
                     if let MonoType::Struct(s) = def_ty {
-                        (s.name.clone(), s.fields.iter().any(|(f, _)| f == field))
+                        (s.name.clone(), s.fields.iter().any(|fi| &fi.name == field))
                     } else {
                         (n.clone(), false)
                     }
@@ -4075,9 +4082,9 @@ impl<'a> ExpressionInferrer<'a> {
                         }
                     }
                     MonoType::Struct(struct_type) => {
-                        for (field_name, field_ty) in &struct_type.fields {
-                            if field_name == field {
-                                return Ok(field_ty.clone());
+                        for field_info in &struct_type.fields {
+                            if &field_info.name == field {
+                                return Ok(field_info.ty.clone());
                             }
                         }
                         // Field not found in struct — try method lookup
@@ -4095,7 +4102,7 @@ impl<'a> ExpressionInferrer<'a> {
                             let available = struct_type
                                 .fields
                                 .iter()
-                                .map(|(name, _)| name.as_str())
+                                .map(|f| f.name.as_str())
                                 .collect::<Vec<_>>()
                                 .join(", ");
                             return Err(ErrorCodeDefinition::module_has_no_export(
@@ -4112,9 +4119,9 @@ impl<'a> ExpressionInferrer<'a> {
                         if let Some(def_ty) = self.type_defs.get(type_name).map(|p| &p.body) {
                             let def_ty = self.solver.resolve_type(def_ty);
                             if let MonoType::Struct(ref struct_type) = def_ty {
-                                for (field_name, field_ty) in &struct_type.fields {
-                                    if field_name == field {
-                                        return Ok(field_ty.clone());
+                                for field_info in &struct_type.fields {
+                                    if &field_info.name == field {
+                                        return Ok(field_info.ty.clone());
                                     }
                                 }
                                 // Field not found in resolved struct — try method lookup
@@ -5519,7 +5526,7 @@ impl<'a> ExpressionInferrer<'a> {
                     if let MonoType::Struct(st) = &func_ty {
                         // 构造参数 arity（同普通 struct #271#1：有默认值字段可省略）
                         let total = st.fields.len();
-                        let required = st.field_has_default.iter().filter(|&&d| !d).count();
+                        let required = st.fields.iter().filter(|f| !f.has_default).count();
                         let provided = arg_types.len();
                         // 空构造 X(参数)()：字段取默认值/零值（RFC §9.3 模式），合法
                         if provided == 0 && named_args.is_empty() {
@@ -5540,9 +5547,8 @@ impl<'a> ExpressionInferrer<'a> {
                             let missing: Vec<&str> = st
                                 .fields
                                 .iter()
-                                .enumerate()
-                                .filter(|(i, _)| !st.field_has_default[*i])
-                                .map(|(_, (n, _))| n.as_str())
+                                .filter(|f| !f.has_default)
+                                .map(|f| f.name.as_str())
                                 .filter(|n| !provided_names.contains(n))
                                 .collect();
                             if !missing.is_empty() {
@@ -5559,7 +5565,8 @@ impl<'a> ExpressionInferrer<'a> {
                             }
                         }
                         // 位置实参与字段类型一致性（#286 同款：实例化后字段已具体）
-                        for (i, (_, field_ty)) in st.fields.iter().enumerate() {
+                        for (i, field_info) in st.fields.iter().enumerate() {
+                            let field_ty = &field_info.ty;
                             if i >= provided {
                                 break;
                             }
@@ -5789,11 +5796,7 @@ impl<'a> ExpressionInferrer<'a> {
                     // 类型参数从字段值类型推断。
                     {
                         let total = struct_body.fields.len();
-                        let required = struct_body
-                            .field_has_default
-                            .iter()
-                            .filter(|&&d| !d)
-                            .count();
+                        let required = struct_body.fields.iter().filter(|f| !f.has_default).count();
                         let provided = arg_types.len();
                         if provided < required || provided > total {
                             return Err(ErrorCodeDefinition::argument_count_mismatch(
@@ -5812,7 +5815,8 @@ impl<'a> ExpressionInferrer<'a> {
                         // 头部位置匹配（WBS 3.5.1）：声明体里的 `F(A)`，F 是构造器
                         // 参数名——F 只能绑定实参**类型的头部构造器**（`[1,2]` 的
                         // `Vec`、`Box(1)` 的 `Box`），不参与普通变量位匹配。
-                        for (i, (_, field_ty)) in struct_body.fields.iter().enumerate() {
+                        for (i, field_info) in struct_body.fields.iter().enumerate() {
+                            let field_ty = &field_info.ty;
                             if i >= provided {
                                 break;
                             }
@@ -5826,7 +5830,8 @@ impl<'a> ExpressionInferrer<'a> {
                                 &mut param_vars,
                             );
                         }
-                        for (i, (_, field_ty)) in struct_body.fields.iter().enumerate() {
+                        for (i, field_info) in struct_body.fields.iter().enumerate() {
+                            let field_ty = &field_info.ty;
                             if i >= provided {
                                 break;
                             }
@@ -5957,7 +5962,7 @@ impl<'a> ExpressionInferrer<'a> {
                         // 普通 struct 构造器：Point(1.0, 2.0)。
                         // 有默认值的字段可省略 → 必需参数数 = 无默认值字段数。
                         let total = st.fields.len();
-                        let required = st.field_has_default.iter().filter(|&&d| !d).count();
+                        let required = st.fields.iter().filter(|f| !f.has_default).count();
                         if named_args.is_empty() {
                             // 位置参数：Point(5) 缺参 / Point(5,6,7) 超参
                             if provided < required || provided > total {
@@ -5975,9 +5980,8 @@ impl<'a> ExpressionInferrer<'a> {
                             let missing: Vec<&str> = st
                                 .fields
                                 .iter()
-                                .enumerate()
-                                .filter(|(i, _)| !st.field_has_default[*i])
-                                .map(|(_, (n, _))| n.as_str())
+                                .filter(|f| !f.has_default)
+                                .map(|f| f.name.as_str())
                                 .filter(|n| !provided_names.contains(n))
                                 .collect();
                             if !missing.is_empty() {
@@ -6835,7 +6839,7 @@ fn body_uses_ctor_head(
         MonoType::Struct(s) => s
             .fields
             .iter()
-            .any(|(_, t)| body_uses_ctor_head(t, type_params)),
+            .any(|f| body_uses_ctor_head(&f.ty, type_params)),
         MonoType::Fn {
             params,
             return_type,
@@ -6898,7 +6902,12 @@ pub(super) fn expand_ctor_applications(
             fields: s
                 .fields
                 .iter()
-                .map(|(n, t)| (n.clone(), expand_ctor_applications(t, defs)))
+                .map(
+                    |field_info| crate::frontend::core::types::mono::StructFieldInfo {
+                        ty: expand_ctor_applications(&field_info.ty, defs),
+                        ..field_info.clone()
+                    },
+                )
                 .collect(),
             ..s.clone()
         }),
@@ -6980,12 +6989,12 @@ fn substitute_type_params_with_vars_walk(
             fields: s
                 .fields
                 .iter()
-                .map(|(n, t)| {
-                    (
-                        n.clone(),
-                        substitute_type_params_with_vars_walk(t, param_vars),
-                    )
-                })
+                .map(
+                    |field_info| crate::frontend::core::types::mono::StructFieldInfo {
+                        ty: substitute_type_params_with_vars_walk(&field_info.ty, param_vars),
+                        ..field_info.clone()
+                    },
+                )
                 .collect(),
             ..s.clone()
         }),

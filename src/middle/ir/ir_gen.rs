@@ -2345,6 +2345,7 @@ impl AstToIrGenerator {
                                 .map(|f| TypeDeclField {
                                     name: f.name.clone(),
                                     ty: f.ty.clone().into(),
+                                    quantity: f.quantity,
                                     is_mut: f.is_mut,
                                     has_default: f.default.is_some(),
                                     is_method: Self::field_is_method(&f.ty),
@@ -6010,9 +6011,7 @@ impl AstToIrGenerator {
     /// mono.rs `MonoType::is_constraint` 的 Struct 臂本地镜像（该方法在
     /// MonoType 上，这里只有 &StructType）
     fn is_constraint_struct(s: &crate::frontend::core::types::mono::StructType) -> bool {
-        s.fields
-            .iter()
-            .all(|(_, ty)| matches!(ty, MonoType::Fn { .. }))
+        s.fields.iter().all(|f| matches!(f.ty, MonoType::Fn { .. }))
     }
 
     /// RFC-011a §6.4: 生成变体分发的 IR——

@@ -13,22 +13,30 @@ use crate::frontend::core::sema::proof::verdict::{ProofResultExt};
 use crate::frontend::core::types::const_data::ConstVarDef;
 use std::collections::HashMap;
 
-/// 记录类型夹具：`methods`/`interfaces` 为空，两个元数据向量原样传入（沿用各用例既有形态）。
+/// 记录类型夹具：`methods`/`interfaces` 为空；可变性/默认值按位传入
+/// （测试夹具与被测事实无关，保持既有调用点形状）。
 fn record(
     name: &str,
     fields: Vec<(&str, MonoType)>,
-    field_mutability: Vec<bool>,
-    field_has_default: Vec<bool>,
+    mutability: Vec<bool>,
+    defaults: Vec<bool>,
 ) -> MonoType {
     MonoType::Struct(StructType {
         name: name.to_string(),
         fields: fields
             .into_iter()
-            .map(|(n, t)| (n.to_string(), t))
+            .enumerate()
+            .map(
+                |(i, (n, t))| crate::frontend::core::types::mono::StructFieldInfo {
+                    name: n.to_string(),
+                    ty: t,
+                    quantity: None,
+                    is_mut: mutability.get(i).copied().unwrap_or(false),
+                    has_default: defaults.get(i).copied().unwrap_or(false),
+                },
+            )
             .collect(),
         methods: HashMap::new(),
-        field_mutability,
-        field_has_default,
         interfaces: vec![],
     })
 }

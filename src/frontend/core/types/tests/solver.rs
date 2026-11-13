@@ -23,16 +23,21 @@ fn struct_ty(
     name: &str,
     fields: Vec<(&str, MonoType)>,
 ) -> MonoType {
-    let field_count = fields.len();
     MonoType::Struct(StructType {
         name: name.to_string(),
         fields: fields
             .into_iter()
-            .map(|(n, t)| (n.to_string(), t))
+            .map(
+                |(n, t)| crate::frontend::core::types::mono::StructFieldInfo {
+                    name: n.to_string(),
+                    ty: t,
+                    quantity: None,
+                    is_mut: false,
+                    has_default: false,
+                },
+            )
             .collect(),
         methods: std::collections::HashMap::new(),
-        field_mutability: vec![false; field_count],
-        field_has_default: vec![false; field_count],
         interfaces: vec![],
     })
 }
@@ -61,10 +66,14 @@ fn assert_contains_var_positive(
     // Struct field
     let s = MonoType::Struct(StructType {
         name: "W".to_string(),
-        fields: vec![("v".to_string(), MonoType::TypeVar(v))],
+        fields: vec![crate::frontend::core::types::mono::StructFieldInfo {
+            name: "v".to_string(),
+            ty: MonoType::TypeVar(v),
+            quantity: None,
+            is_mut: false,
+            has_default: false,
+        }],
         methods: std::collections::HashMap::new(),
-        field_mutability: vec![false],
-        field_has_default: vec![false],
         interfaces: vec![],
     });
     assert!(solver.contains_var(&s, v));
@@ -573,14 +582,21 @@ fn test_expand_mut_struct_with_bound_var() {
     let _ = solver.bind(v, &MonoType::Float(64));
     let s = MonoType::Struct(StructType {
         name: "P".to_string(),
-        fields: vec![("x".to_string(), MonoType::TypeVar(v))],
+        fields: vec![crate::frontend::core::types::mono::StructFieldInfo {
+            name: "x".to_string(),
+            ty: MonoType::TypeVar(v),
+            quantity: None,
+            is_mut: false,
+            has_default: false,
+        }],
         methods: std::collections::HashMap::new(),
-        field_mutability: vec![false],
-        field_has_default: vec![false],
         interfaces: vec![],
     });
     let resolved = solver.resolve(&s);
-    assert!(matches!(resolved, MonoType::Struct(ref ss) if ss.fields[0].1 == MonoType::Float(64)));
+    assert!(
+        matches!(resolved, MonoType::Struct(ref ss) if ss.fields[0].ty == MonoType::Float(64)),
+        "展开必须把字段位里的绑定变量抵到底层类型"
+    );
 }
 
 #[test]

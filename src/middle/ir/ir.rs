@@ -898,6 +898,11 @@ pub struct TypeDeclField {
     pub is_mut: bool,
     /// 是否有默认值**标记**（默认值表达式不进载体，它在 `ir_gen` 已降级成指令）
     pub has_default: bool,
+    /// 量词读数（6.9.5-B.1a / H1）：`Some(Zero)` = witness 字段，`None` = data 字段。
+    ///
+    /// 只服务快照与后续阶段的判定输入；B.1a 的所有构造点都写 `None`
+    ///（witness 的产出入 B.2）。
+    pub quantity: Option<crate::ast::Quantity>,
     /// 是否为**函数类型字段**（方法）。
     ///
     /// SPEC `type-system.md:443`：函数类型字段不生成构造参数。载体必须能表达这个

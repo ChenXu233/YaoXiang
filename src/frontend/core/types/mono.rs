@@ -11,7 +11,7 @@ use crate::frontend::core::types::var::TypeVar;
 use crate::frontend::core::types::const_data::{ConstExpr, ConstVarDef, ConstValue};
 use std::collections::HashMap;
 use std::fmt;
-use std::hash::Hash;
+use std::hash::{Hash, Hasher};
 
 /// RFC-010: 类型宇宙层级
 ///
@@ -684,7 +684,7 @@ impl MonoType {
             MonoType::Struct(s) => s
                 .fields
                 .iter()
-                .all(|(_, ty)| matches!(ty, MonoType::Fn { .. })),
+                .all(|field| matches!(field.ty, MonoType::Fn { .. })),
             // TypeRef 指向的可能是约束类型（需要结合类型环境判断）
             // 这里返回 false，具体判断在类型检查时结合环境确定
             MonoType::TypeRef(_) => false,
@@ -702,8 +702,8 @@ impl MonoType {
                 // 只返回函数字段
                 s.fields
                     .iter()
-                    .filter(|(_, ty)| matches!(ty, MonoType::Fn { .. }))
-                    .map(|(name, ty)| (name.clone(), ty))
+                    .filter(|field| matches!(field.ty, MonoType::Fn { .. }))
+                    .map(|field| (field.name.clone(), &field.ty))
                     .collect()
             }
             _ => Vec::new(),
@@ -1100,18 +1100,18 @@ impl From<ast::Type> for MonoType {
                 Self::from_builtin_name(&name).unwrap_or(MonoType::TypeRef(name))
             }
             ast::Type::Struct { body } => {
-                let mut field_names = Vec::new();
-                let mut field_types = Vec::new();
-                let mut field_mutability = Vec::new();
-                let mut field_has_default = Vec::new();
+                let mut fields = Vec::new();
                 let mut interfaces = Vec::new();
                 for item in body {
                     match item {
                         ast::TypeBodyItem::Field(f) => {
-                            field_names.push(f.name.clone());
-                            field_types.push(MonoType::from(f.ty.clone()));
-                            field_mutability.push(f.is_mut);
-                            field_has_default.push(f.default.is_some());
+                            fields.push(StructFieldInfo {
+                                name: f.name.clone(),
+                                ty: MonoType::from(f.ty.clone()),
+                                quantity: f.quantity,
+                                is_mut: f.is_mut,
+                                has_default: f.default.is_some(),
+                            });
                         }
                         ast::TypeBodyItem::Interface(s) => {
                             interfaces.push(s.clone());
@@ -1126,10 +1126,8 @@ impl From<ast::Type> for MonoType {
                 }
                 MonoType::Struct(StructType {
                     name: String::new(),
-                    fields: field_names.into_iter().zip(field_types).collect(),
+                    fields,
                     methods: HashMap::new(),
-                    field_mutability,
-                    field_has_default,
                     interfaces,
                 })
             }
@@ -1164,28 +1162,28 @@ impl From<ast::Type> for MonoType {
                 }
             }
             // NamedStruct and Sum types (placeholder implementations)
-            ast::Type::NamedStruct { name, fields, .. } => {
-                let (field_names, field_types, field_mutability) = fields
+            //
+            // R8（6.9.5-B.1a）：此前这里把「有无默认值」建成**空向量**（与字段表
+            // 等长契约不符：字段 N 个、默认值标记 0 个）。探针钉住的旧行为是：
+            // 该注解类型的 arity 判定从不被查询（构造调用的签名取自**定义**侧），
+            // 起作用的是按字段的可变性。收敛成单列后按字段写真实标记；该语法
+            // 不产生默认值本身，故每个字段的默认值标记与旧空向量在可达面等价
+            //（证据见 09a §P6 6.9.5-B.1a 的报告 §R8）。
+            ast::Type::NamedStruct { name, fields, .. } => MonoType::Struct(StructType {
+                name,
+                fields: fields
                     .into_iter()
-                    .map(|f| (f.name, MonoType::from(f.ty), f.is_mut))
-                    .fold(
-                        (Vec::new(), Vec::new(), Vec::new()),
-                        |(mut names, mut types, mut mutability), (n, t, m)| {
-                            names.push(n);
-                            types.push(t);
-                            mutability.push(m);
-                            (names, types, mutability)
-                        },
-                    );
-                MonoType::Struct(StructType {
-                    name,
-                    fields: field_names.into_iter().zip(field_types).collect(),
-                    methods: HashMap::new(),
-                    field_mutability,
-                    field_has_default: Vec::new(),
-                    interfaces: vec![],
-                })
-            }
+                    .map(|f| StructFieldInfo {
+                        name: f.name,
+                        ty: MonoType::from(f.ty),
+                        quantity: f.quantity,
+                        is_mut: f.is_mut,
+                        has_default: f.default.is_some(),
+                    })
+                    .collect(),
+                methods: HashMap::new(),
+                interfaces: vec![],
+            }),
             ast::Type::Literal {
                 name, base_type, ..
             } => {
@@ -1387,18 +1385,104 @@ pub fn get_ast_type_universe_level(ast_type: &ast::Type) -> usize {
     }
 }
 
+/// 记录的一个字段（6.9.5-B.1a：表示收敛，H1 + H10）。
+///
+/// 此前「字段名 + 字段类型」在 `fields`，而「可变性」「有无默认值」在同长的并行
+/// 向量里——三份事实两套下标，任何一处漏步进就静默错位。收敛成一列后，
+/// 字段的身份与它的全部事实同生同灭。
+///
+/// `quantity`：`Some(Quantity::Zero)` = witness 字段（编译期，运行期无数据槽）；
+/// `None` = data 字段。B.1a 只落**表示**，不产出 witness（构造点全部是 `None`）。
 #[derive(Debug, Clone)]
+pub struct StructFieldInfo {
+    /// 字段名（记录内的名字；不参与跨记录的名义身份）
+    pub name: String,
+    /// 字段类型
+    pub ty: MonoType,
+    /// 量词读数：`Some(Zero)` = witness，`None` = data（B.1a 恒为 `None`）
+    pub quantity: Option<crate::ast::Quantity>,
+    /// 是否可变（`mut` 字段）
+    pub is_mut: bool,
+    /// 该字段是否声明了默认值
+    pub has_default: bool,
+}
+
+#[derive(Clone)]
 pub struct StructType {
     pub name: String,
-    pub fields: Vec<(String, MonoType)>,
+    pub fields: Vec<StructFieldInfo>,
     /// 方法表：方法名 -> 方法类型
     pub methods: HashMap<String, PolyType>,
-    /// 字段可变性标记：与 fields 索引对应
-    pub field_mutability: Vec<bool>,
-    /// 字段默认值标记：与 fields 索引对应，标记哪些字段有默认值
-    pub field_has_default: Vec<bool>,
     /// RFC-010: 接口约束列表
     pub interfaces: Vec<String>,
+}
+
+/// 相等口径（R9 + 6.9.5-B.1a 的零行为约束）。
+///
+/// * `has_default` **不参与**：旧 `StructType` 的 Eq 只比 `name` + `fields`，
+///   默认值标记不在其中——零行为要求保持。
+/// * `is_mut` **也不参与**：同上（可变性由 `TypeConstraintSolver::unify` 的
+///   Struct 臂**单独**逐字段比较，与旧实现比较可变性向量的口径相同）。
+/// * `quantity` **参与**：`Some(Zero)`（witness-bearing 记录）与 `None`（data
+///   记录）是不同类型，缓存的键必须区分。
+impl PartialEq for StructFieldInfo {
+    fn eq(
+        &self,
+        other: &Self,
+    ) -> bool {
+        self.name == other.name && self.ty == other.ty && self.quantity == other.quantity
+    }
+}
+
+impl Eq for StructFieldInfo {}
+
+impl Hash for StructFieldInfo {
+    fn hash<H: Hasher>(
+        &self,
+        state: &mut H,
+    ) {
+        // 与 Eq 同口径（Eq 忽略的字段不得进 Hash）
+        self.name.hash(state);
+        self.ty.hash(state);
+        self.quantity.hash(state);
+    }
+}
+
+/// 打印边界：`StructType` 的 Debug 保持**旧形态**（6.9.5-B.1a / R7）。
+///
+/// 字段表从 `Vec<(String, MonoType)>` 收敛成 `Vec<StructFieldInfo>` 后，派生 Debug
+/// 会把每项打印成 `StructFieldInfo { .. }`，任何以 `{:?}` 渲染类型的快照、诊断、
+/// `dump` 都会跟着漂移。故在这里把一致性收在**打印边界**（同 `Param` 的先例）：
+/// `fields` 仍按 `[(名字, 类型)]` 打印，其余段与派生形态一致。
+///
+/// 被删掉的两个并行向量（旧的字段可变性/默认值标记）不再打印：它们已不是
+/// `StructType` 的事实，其信息在同一条记录里（`is_mut`/`has_default`）。
+impl fmt::Debug for StructType {
+    fn fmt(
+        &self,
+        f: &mut fmt::Formatter<'_>,
+    ) -> fmt::Result {
+        f.debug_struct("StructType")
+            .field("name", &self.name)
+            .field("fields", &LegacyFieldList(&self.fields))
+            .field("methods", &self.methods)
+            .field("interfaces", &self.interfaces)
+            .finish()
+    }
+}
+
+/// `StructType.fields` 的旧打印形态：`[(名字, 类型)]`。
+struct LegacyFieldList<'a>(&'a [StructFieldInfo]);
+
+impl fmt::Debug for LegacyFieldList<'_> {
+    fn fmt(
+        &self,
+        f: &mut fmt::Formatter<'_>,
+    ) -> fmt::Result {
+        f.debug_list()
+            .entries(self.0.iter().map(|field| (&field.name, &field.ty)))
+            .finish()
+    }
 }
 
 impl StructType {
@@ -1409,8 +1493,8 @@ impl StructType {
     ) -> Option<bool> {
         self.fields
             .iter()
-            .position(|(name, _)| name == field_name)
-            .map(|idx| self.field_mutability.get(idx).copied().unwrap_or(false))
+            .find(|field| field.name == field_name)
+            .map(|field| field.is_mut)
     }
 }
 
@@ -1433,7 +1517,6 @@ impl Hash for StructType {
     ) {
         self.name.hash(state);
         self.fields.hash(state);
-        self.field_mutability.hash(state);
     }
 }
 
