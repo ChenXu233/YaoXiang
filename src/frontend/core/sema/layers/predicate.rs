@@ -10,6 +10,7 @@
 use std::collections::HashMap;
 
 use crate::frontend::core::types::const_data::{ConstExpr, ConstValue};
+use crate::frontend::core::types::eval::const_eval::ConstGenericEval;
 use crate::frontend::core::types::eval::evaluator::Evaluator;
 use crate::frontend::core::types::mono::MonoType;
 use super::super::proof::context::ProofContext;
@@ -209,28 +210,13 @@ fn try_proof_fn_call(
     budget_report: BudgetReport,
 ) -> ProofResult {
     if let ConstExpr::Call { func, args } = constraint {
-        // 将 ConstExpr args 转为 ConstValue
+        // 将 ConstExpr args 转为 ConstValue（折叠失败 = 义务不进证明管道，
+        // 判定单元落 E2031——见 judge_refined_obligation 的空证法分支）
         let mut const_args: Vec<ConstValue> = Vec::with_capacity(args.len());
         for a in args {
-            match a {
-                ConstExpr::Lit(v) => const_args.push(v.clone()),
-                ConstExpr::NamedVar(name) => {
-                    if let Some(val) = bindings.get(name) {
-                        const_args.push(val.clone());
-                    } else {
-                        return Err(ProofFailure::Unproven {
-                            reason: UnprovenReason::BeyondKernel(
-                                "证明函数实参包含未绑定变量".into(),
-                            ),
-                            proof_calls: vec![],
-                            budget: budget_report,
-
-                            subject: Some(UnprovenSubject::Term(constraint.clone())),
-                            span: None,
-                        });
-                    }
-                }
-                _ => {
+            match fold_proof_call_arg(a, bindings) {
+                Some(value) => const_args.push(value),
+                None => {
                     return Err(ProofFailure::Unproven {
                         reason: UnprovenReason::BeyondKernel(
                             "证明函数实参必须是字面量或已绑定变量".into(),
@@ -266,4 +252,38 @@ fn try_proof_fn_call(
         subject: Some(UnprovenSubject::Term(constraint.clone())),
         span: None,
     })
+}
+
+/// 折叠单个证明函数实参（RFC-027 §3.1：实参就是函数调用的实参——`f(5)` 与
+/// `f(-5)` 同为合法调用形态，issue #556）。
+///
+/// 字面量直取、名字查绑定；一元运算（取负/取正/逻辑非）折叠内层后交**共享
+/// const 求值器** [`ConstGenericEval`]——取负走 i128 `checked_neg`，与 #507
+/// 备案的饱和极端形态同源，不在此另写第二套取负。其余形态（二元运算、嵌套
+/// 调用、If/Range 等）不可折叠 → `None`，由调用方走保守「不可折叠」分支
+/// （义务不进证明管道，判定单元落 E2031）。
+fn fold_proof_call_arg(
+    arg: &ConstExpr,
+    bindings: &HashMap<String, ConstValue>,
+) -> Option<ConstValue> {
+    match arg {
+        ConstExpr::Lit(v) => Some(v.clone()),
+        ConstExpr::NamedVar(name) => bindings.get(name).cloned(),
+        ConstExpr::UnOp { op, expr } => {
+            let inner = fold_proof_call_arg(expr, bindings)?;
+            let evaluator = ConstGenericEval::new();
+            // 求值失败（溢出/类型不合）时 `ConstGenericEval` 会经 span 强制的
+            // builder 构造诊断；折叠只要「成不成」，诊断被 `.ok()` 丢弃——
+            // 与 `normalize` 同款占位 span 守卫，避免在 walk 上下文外 panic。
+            let _span_guard =
+                crate::util::diagnostic::push_current_span(crate::util::span::Span::default());
+            evaluator
+                .eval(&ConstExpr::UnOp {
+                    op: *op,
+                    expr: Box::new(ConstExpr::Lit(inner)),
+                })
+                .ok()
+        }
+        _ => None,
+    }
 }

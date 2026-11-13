@@ -2330,8 +2330,9 @@ fn test_check_imported_const_generic_call_specialization_matches_local() {
 // 判据单源：被调签名取自 typecheck 的 `bindings`（checker 归一化的唯一真相源）。
 //
 // 隔离结论（探针矩阵，3.20.22 实录）：静默与 IR 生成器的谓词命名空间无关；
-// 模块级常量变体同一根因（常量值可由模块 AST 字面折叠解析）；嵌套实参含
-// 负literal时另报 E2031，属 try_proof_fn_call 既有边界，不在本修范围。
+// 模块级常量变体同一根因（常量值可由模块 AST 字面折叠解析）。嵌套实参含负
+// literal 的 E2031 是另一条独立边界（issue #556），3.20.24 已收编——折叠面
+// 经共享 const 求值器接受一元取负字面量形态（见下方 #556 锚）。
 
 /// #537 主锚：证明函数形参精化的嵌套义务违反必须报 E4018，且参数段是义务链
 /// 终点 `Eq(7, 0)` 的实参 `[Int(7), Int(0)]`（不是外层调用的 `[Int(7), Int(42)]`）。
@@ -2490,5 +2491,131 @@ fn test_check_proof_fn_param_refinement_nested_valid_chain_accepted() {
     assert_eq!(
         errors, 0,
         "#537: a program whose nested refinement obligations all hold (Eq(0, 0) is true) must stay accepted with 0 diagnostics — the fix may only turn previously-failing obligations loud; got {errors} error(s)"
+    );
+}
+
+// ---- issue #556：负字面量证明调用实参在 try_proof_fn_call 的折叠 ----
+//
+// RFC-027 §3.1：`f(5)` 与 `f(-5)` 同为函数调用实参形态（词法 `Literal::Int`
+// 为 i128，一元取负是表达式语法的一部分）——折叠面拒收负字面量 ⇒ 义务不进
+// 证明管道，合法程序被 E2031 假拒绝（修前实测，3.20.24 探针 p1/p2/p5）。
+// 修法：折叠面把一元取负形态交共享 const 求值器（i128 checked_neg，#507 口径）。
+//
+// 嵌套面无需改动（查证修正 issue 自述）：嵌套义务的实参来自①被调签名约束
+//（声明侧负字面量已在类型域经共享项归一化折叠为 `MonoType::Literal`，
+// mono.rs `GenericArg::as_type`）与②已折叠的 `ConstValue` 实参——`UnOp`
+// 形态在那里不可达；声明侧负字面量的嵌套义务修前已正常判定（探针 p6/p8）。
+
+/// #556 主锚（违反值）：`f(-5, 0)` 使义务 `Eq(-5, 0)` 为假——修前 E2031（合法
+/// 义务被假拒绝），修后必须进证明管道报 E4018，且参数段是折叠后的实参。
+#[test]
+fn test_check_proof_fn_call_neg_literal_violation_reports_e4018() {
+    // Arrange: Eq(-5, 0) 为假（a == b 证伪）
+    let dir = temp_dir();
+    let file = create_yx_file(
+        &dir,
+        "proof_fn_neg_literal_violation.yx",
+        "Eq: (a: Int, b: Int) -> Type = { a == b }\n\
+         f: (n: Int, p: Eq(n, 0)) -> Int = { n }\n\
+         main: () -> Void = {\n\
+         \x20   y: Int = f(-5, 0)\n\
+         }",
+    );
+
+    // Act: 子进程跑 CLI check（断言诊断码与折叠后的义务实参文本）
+    let output = Command::new(env!("CARGO_BIN_EXE_yaoxiang-rs"))
+        .arg("check")
+        .arg(&file)
+        .current_dir(&dir)
+        .output()
+        .expect("failed to run yaoxiang-rs check");
+    let text = format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    // Assert: E4018 且参数段为折叠后的 [Int(-5), Int(0)]——不得再是 E2031
+    assert!(
+        text.contains("E4018"),
+        "#556: f(-5, 0) violates Eq(-5, 0) and must be rejected via the proof pipeline with E4018; a bare E2031 means the negative-literal arg was not folded (issue #556 regression); got:\n{text}"
+    );
+    assert!(
+        text.contains("[Int(-5), Int(0)]"),
+        "#556: the E4018 must carry the folded args [Int(-5), Int(0)]; got:\n{text}"
+    );
+    assert!(
+        !text.contains("E2031"),
+        "#556: the negative-literal obligation must reach the proof pipeline, not fall through to E2031; got:\n{text}"
+    );
+}
+
+/// #556 满足值锚：`f(-5, 0)` 使义务 `Eq(-5, -5)` 成立——修前 E2031，修后
+/// 零诊断编译通过（合法程序的假拒绝被修复，且不得反向新增其它诊断）。
+#[test]
+fn test_check_proof_fn_call_neg_literal_satisfied_compiles_clean() {
+    // Arrange: Eq(n, n) 代入 -5 得 Eq(-5, -5)，义务成立
+    let dir = temp_dir();
+    let file = create_yx_file(
+        &dir,
+        "proof_fn_neg_literal_satisfied.yx",
+        "Eq: (a: Int, b: Int) -> Type = { a == b }\n\
+         f: (n: Int, p: Eq(n, n)) -> Int = { n }\n\
+         main: () -> Void = {\n\
+         \x20   y: Int = f(-5, 0)\n\
+         }",
+    );
+
+    // Act
+    let result = check_file(&file);
+
+    // Assert: 零诊断（修前 E2031 的合法程序，修后编译通过）
+    let errors = result.expect("satisfied negative-literal proof call should check");
+    assert_eq!(
+        errors, 0,
+        "#556: f(-5, 0) with the always-true obligation Eq(-5, -5) must compile with 0 diagnostics; got {errors} error(s)"
+    );
+}
+
+/// #556 嵌套面现状锚：被调签名里的声明侧负字面量（`p: Eq(n, -1)`）在嵌套
+/// 义务展开处修前已正常判定（声明侧经共享项归一化折叠为字面量值，见上方
+/// 查证注记）——本修不动嵌套面，该形态必须保持报 E4018。
+#[test]
+fn test_check_proof_fn_nested_declared_neg_literal_still_reported() {
+    // Arrange: Check 的形参精化 Eq(n, -1) 代入 n=5 得 Eq(5, -1)，为假；
+    // Check 的体 n > -100 在 n=5 处为真——E4018 只能来自嵌套义务
+    let dir = temp_dir();
+    let file = create_yx_file(
+        &dir,
+        "proof_fn_nested_declared_neg_literal.yx",
+        "Eq: (a: Int, b: Int) -> Type = { a == b }\n\
+         Check: (n: Int, p: Eq(n, -1)) -> Type = { n > -100 }\n\
+         f: (n: Int, p: Check(n, 0)) -> Int = { n }\n\
+         main: () -> Void = {\n\
+         \x20   y: Int = f(5, 0)\n\
+         }",
+    );
+
+    // Act
+    let output = Command::new(env!("CARGO_BIN_EXE_yaoxiang-rs"))
+        .arg("check")
+        .arg(&file)
+        .current_dir(&dir)
+        .output()
+        .expect("failed to run yaoxiang-rs check");
+    let text = format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    // Assert: 嵌套义务 Eq(5, -1) 判伪报 E4018，参数段 [Int(5), Int(-1)]
+    assert!(
+        text.contains("E4018"),
+        "#556: the nested obligation Eq(5, -1) with a declared negative literal must be judged (declaration-side negatives fold to literal values); got:\n{text}"
+    );
+    assert!(
+        text.contains("[Int(5), Int(-1)]"),
+        "#556: the nested E4018 must carry the substituted args [Int(5), Int(-1)]; got:\n{text}"
     );
 }
