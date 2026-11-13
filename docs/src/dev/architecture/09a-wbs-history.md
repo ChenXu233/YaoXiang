@@ -5130,6 +5130,44 @@ outOfScope：C3/F4；`check_var_stmt_inner` 阶梯面（只加注释）；类型
 批次树 CLEAN 已 release；两次 trial 机械还原 blob 一致，trial 后重建；主工作树未触碰。
 未核实：E4023 用户可写形态；`type_defs` 快照；E2 语义中性；预算/回滚数字；CollectAll/LSP；返回位红；`pinned k` 对照；#540。
 
+## P6 6.9.3d 实现轮（protocol-analyst，2026-11-13，批次树 → 主工作树）
+
+### 一、落地内容
+
+主工作树 29 文件 +1441/−621（含生成物）。生产侧 19 个判定点全部改走 `sema::judgement::decide`（14 在 `inference/expressions.rs`、5 在 `inference/statements.rs`）；最终调用图 = **19 判定 / 15 试探 / 2 克隆沙盒 / 1 模板绑定**。上一轮报的「16 试探 / 38 调用点」多算了一处 `.is_err()` 判定型——实测总数 37 处（另有 `solver.rs` 内部递归 8 处与 `solve()` 1 处不改）。
+
+`decide` 的形态：日志标记 → `unify` → 失败无条件回滚 → 回滚后取两侧展开形态 → 含类型变量则退回原文诊断（ground 门）→ 一次判定一份预算的 `defeq` → 三态（Proved 放行 / Disproved 原文 E1002 / Unproven E4023 并覆写命题与位置）。
+
+`TypeConstraintSolver`：`journal` 只在 `journal_depth > 0` 记 bind 覆盖前的旧值；`journal_mark/commit/rollback` 按层记账，最外层提交清空。`contains_var` 的形态遍历提成 `visit_vars`，`has_type_var` 从同一份遍历派生（ground 只排除类型变量，不排除 TypeRef——TypeRef 正是 δ 展开的输入）。
+
+`DefeqContext.env` → `types: &HashMap<String, PolyType>`；`Evaluator` 同步收窄，归约层不再依赖 `TypeEnvironment`。`StatementChecker.type_defs` 抬成 `PolyType` 表，与 `TypeEnvironment.types` 同型同源（不另造第二张表）。
+
+删死链：`TypeSystem::unify`（零调用、第二套错误映射）、`inference/assignment.rs` 134 行（`can_assign`/`check_assignment`/`AssignmentChecker`/`ConstraintAssignmentInfo`）与其直驱测试 193 行（随对象退役，按 6.1 先例登记）。
+
+### 二、设计补充：失败两臂（实现轮实测逼出）
+
+按契约字面让 `decide` 只回一个 `Diagnostic` 时，19 个站点都用 `.is_err()` + 自撰报文，**E4023 被全部改写成 E1002**（`--log-level debug` 里 `decide` 已判 Unproven，用户仍只见 E1002）。最终返回 `Result<(), JudgementFailure>`，两臂 `Mismatch`/`Unproven`，站点用 `or_site()`：Mismatch 用站点报文（零文本变化），Unproven 原样上抛。类型上逼每个站点显式选择，I5 在用户面才成立。替代方案（19 处按 code 字符串判断）可读性更差且容易漏。
+
+### 三、实测
+
+- **红→绿（P2）**：实现前干净二进制 `E1002 Expected type 'Array(int64, int64::5)', found type 'Array(int64, Five)'`；实现后 `test_alias_actual_arg_is_judged_equal` 绿。负控 `Idx: Type = Array(Int,5)` + `x: Idx = [..]` 仍 E1002。
+- **E4023 用户可达**：`A: Type = B` / `B: Type = A` + `take(b)`，CLI exit=1，`error [E4023] Cannot prove: Array(int64, A) ≡ Array(int64, int64::5) (无法在编译期归约该类型（求值失败）)`，位置 = 实参 `b`。101 层别名链同得 E4023（未做成测试，只留环形态）。
+- **预算**（全语料 348 个 `.yx`，逐文件新建 `Compiler`）：decide=22611、进入 defeq=30、Proved=0、steps_total=66、steps_max=5。解读：全语料只有 30 次判等尝试且无一放行，与「语料零改判」互相印证。
+- **语料差分 388 行逐字节相同**；IR 快照稳定；`testsuite.py run fast` 执行 2089 条 exit 0（标记通道 2092 个 `#[test]`，3 条 `#[ignore]` 均带 `cost:` 标记）。
+- **变异**：T1 把 subject 换 None → E4023 报文退化、测试红；T2 删 `journal_rollback` → 回滚与 ground 两条判据红；blob 机械还原 CLEAN。
+- **错误码生成物**：5 份文件 56/56 行，逐行核对为发射点行号平移 + E1002 73→71（删除的 `assignment.rs` 两处发射点退役）；生成器重跑零漂移。
+
+### 四、合入时的两处收敛（lead）
+
+- 批次里 `decide_with_budget` 与 `metrics` 是 `pub(crate)`（`check-boundary` 计数 173）；合入时改为 `pub(super)`，量测测试从 `frontend/tests/` 移入 `sema/tests/`——两者都只服务 `sema` 内的测试，不需要 crate 级可见。合入后计数 170（回到 6.9.3d 前的基线）。
+- 批次树 tree CLEAN、已 release；合入后 `scratch.py gc` 删除两棵批次树（释放约 13.2 GB）。
+
+### 五、未统一 / 风险
+
+- `is_subtype` 删 `can_assign` 后零生产调用者，契约只授权删三项，保留并登记待裁；`exit_type_matches` 仍是 bool 助手（Unproven 被吞成 false，最终报文由调用点构造）；`check_type_equivalence` 生产零调用者、单测直连 defeq。
+- `CollectAll`/LSP 聚合路径的诊断集变化未单独量测；别名环是否应在声明期拒绝是语义裁决（当前只在判定点报 E4023）；预算口径为「每文件新建 Compiler」；#540 深嵌套未触发（101 层未到边界）。
+- `or_site` 的「零文本变化」只在语料层验证（388 行零漂移），未逐一比对 19 站点报文形态。
+
 ## P6 6.9.5-B.1 契约（sigma-reviewer，2026-11-13，只读）
 
 ### 一、目标
