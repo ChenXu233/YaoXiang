@@ -1173,6 +1173,20 @@ pub(crate) fn extract_module_info(
                             Some(*name_span),
                         );
                         export.predicate_def = predicate_def;
+                        // q=0 事实随导出携带（#539）：**定义方已登记形态直读**
+                        //（判据单源，不从 AST 重推）——binder 清单读签名收集期
+                        // 写入 vars 的 `PolyType`（`collect_function_signature` 的
+                        // `new_with_const` 登记口），调用点形参名读同一次 walk 的
+                        // 槽位表（`call_site_slot`）。常量导出的 PolyType 无
+                        // binder、槽位表无条目，两字段自然为空表。
+                        export.const_binders = vars
+                            .get(name.as_str())
+                            .map(|p| p.const_binders.clone())
+                            .unwrap_or_default();
+                        export.call_site_params = checker
+                            .call_site_slot(name)
+                            .map(|s| s.names)
+                            .unwrap_or_default();
                         info.add_export(export);
                     } else if let Some(type_ann) = type_annotation {
                         // 普通常量（如 `value: Int = 7`）不会被当作签名收集，
@@ -1232,6 +1246,10 @@ fn make_export(
         definition_span,
         predicate_def: None,
         proof_fn_params: None,
+        // q=0 事实（#539）由调用方按定义方已登记形态填充；此处默认空表
+        //（非函数导出 / 无 q=0 位）。
+        const_binders: Vec::new(),
+        call_site_params: Vec::new(),
     }
 }
 

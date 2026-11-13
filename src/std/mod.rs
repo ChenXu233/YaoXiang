@@ -332,6 +332,8 @@ pub trait StdModule {
                 definition_span: None, // native std 导出无源码定义位置（4.6.1）
                 predicate_def: None,   // native std 无谓词 def（#524 载荷面）
                 proof_fn_params: None, // 同上（#527 载荷面）
+                const_binders: Vec::new(), // native 导出无 yx 登记面（#539 载荷面）
+                call_site_params: Vec::new(),
             });
         }
 
@@ -349,6 +351,8 @@ pub trait StdModule {
                 definition_span: None, // native std 导出无源码定义位置（4.6.1）
                 predicate_def: None,   // native std 无谓词 def（#524 载荷面）
                 proof_fn_params: None, // 同上（#527 载荷面）
+                const_binders: Vec::new(), // native 导出无 yx 登记面（#539 载荷面）
+                call_site_params: Vec::new(),
             });
         }
 

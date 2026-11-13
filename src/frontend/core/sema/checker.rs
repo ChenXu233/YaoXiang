@@ -46,9 +46,11 @@ pub struct TypeChecker {
     /// `declared_fn_type_params` 同一次 walk（Registry 的签名收集），故正文
     /// 检查时全模块函数（含前向声明）都已在表内。
     ///
-    /// 缺项 = 事实不足（导入函数 / 未走签名收集的直构场景）：调用点因此**不判**
-    /// E1113，也不得按位置猜——宁可少报，不可错猜（导入面待 Export 携带 q=0
-    /// 事实后再接线）。
+    /// 缺项 = 事实不足（未走签名收集的直构场景；方法面的类型体方法 / 外部
+    /// 绑定 / 跨模块方法——#553）：调用点因此**不判** E1113，也不得按位置
+    /// 猜——宁可少报，不可错猜。导入**函数**面的事实已随 Export 跨界携带
+    /// （#539：`Export::const_binders` + `Export::call_site_params`，导入方
+    /// `import_binding` 按本表同构登记），不再属于缺项。
     ///
     /// 键覆盖两个被调面：函数名（`f`）与方法键（`Box.get`，issue #538——方法
     /// 注册与函数签名收集同一次 walk，方法键与 `method_bindings` 的查找键同一
@@ -115,6 +117,10 @@ pub struct TypeChecker {
 ///   早于 `const_binders` 解出，故函数条目的 `const_params` 留空、不被消费）；
 /// - 方法面此前整段丢弃 `const_binders` ⇒ 调用点无事实可查、静默不判
 ///   （issue #538 的缺口），现随方法注册把 q=0 子集写进本表。
+/// - 导入**函数**面（issue #539）：两样事实随 Export 跨界携带
+///   （`Export::const_binders` + `Export::call_site_params`，定义方已登记形态
+///   直读），导入方 `import_binding` 按函数条目同款登记（`const_params`
+///   留空、q=0 名以导入重建的 `PolyType::const_binders` 为登记口）。
 #[derive(Debug, Clone, Default)]
 pub struct CallSiteSlots {
     /// 调用点实参序列的形参名（声明序、拍平口径；q=0 位保留）
@@ -375,6 +381,18 @@ impl TypeChecker {
             out.extend(c.generic_fn_type_params_snapshot());
         }
         out
+    }
+
+    /// 调用点槽位名表的**导出面读取口**（E1113 跨模块接线，issue #539）。
+    ///
+    /// 只读本表已登记形态（`collect_function_signature` 的产物），不重新推导
+    /// ——与 `generic_fn_type_params_snapshot` 同一条「导出面直读登记形态」
+    /// 纪律。`None` = 该名字没有槽位条目（无参绑定 / 常量 / 方法键不在此表）。
+    pub fn call_site_slot(
+        &self,
+        name: &str,
+    ) -> Option<CallSiteSlots> {
+        self.declared_call_site_params.get(name).cloned()
     }
 
     pub fn env(&mut self) -> &mut TypeEnvironment {

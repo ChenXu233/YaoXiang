@@ -195,8 +195,9 @@ pub struct ExpressionInferrer<'a> {
         &'a HashMap<String, crate::frontend::core::sema::environment::ExportParamInfo>,
     /// E1113（6.9.2-B）：本模块函数的**调用点实参序列**形参名表（函数名/方法键 →
     /// 名字；非类型形参、q=0 保留；条目见 `CallSiteSlots`）。声明面由 checker 的
-    /// 签名收集登记，经 StatementChecker 同一条注入链传入。缺项 = 事实不足
-    /// （导入函数 / 直构场景）⇒ 不判、不猜。
+    /// 签名收集登记，经 StatementChecker 同一条注入链传入；导入函数面由
+    /// `import_binding` 按 Export 载荷登记（#539）。缺项 = 事实不足
+    /// （直构场景 / 方法面剩余形态）⇒ 不判、不猜。
     declared_call_site_params:
         &'a HashMap<String, crate::frontend::core::sema::checker::CallSiteSlots>,
     /// #389：match scrutinee 推断类型（match 节点 span 键控）——IR 生成期
@@ -2793,8 +2794,8 @@ impl<'a> ExpressionInferrer<'a> {
                     return ConstArgOutcome::NotTarget;
                 };
                 let Some(slots) = self.declared_call_site_params.get(&method_key) else {
-                    // 事实不足（类型体方法 / 外部绑定 / 跨模块导入 / 非 const 方法）
-                    // ⇒ 不判，不猜
+                    // 事实不足（方法面的类型体方法 / 外部绑定 / 跨模块方法导入 /
+                    // 非 const 形态——#553）⇒ 不判，不猜
                     return ConstArgOutcome::NotTarget;
                 };
                 if slots.const_params.is_empty() {
@@ -2820,7 +2821,10 @@ impl<'a> ExpressionInferrer<'a> {
         };
         // 2. 槽位：调用点形参名表 + 共享绑定判据（六条规则同在一处，不另写映射）
         let Some(slots) = self.declared_call_site_params.get(&fn_name) else {
-            // 事实不足：导入面尚未携带 q=0 事实（详见字段文档）⇒ 不判，不猜
+            // 事实不足（未走签名收集的直构场景）⇒ 不判，不猜。导入函数面
+            // 的事实已随 Export 跨界携带（#539：`Export::const_binders` +
+            // `Export::call_site_params`，导入方 `import_binding` 按同构登记），
+            // 不再属于缺项。
             return ConstArgOutcome::NotTarget;
         };
         let call_site_names = slots.names.clone();

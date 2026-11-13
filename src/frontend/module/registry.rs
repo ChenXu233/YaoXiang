@@ -377,6 +377,8 @@ impl ModuleRegistry {
                 definition_span: None, // std 虚拟模块无源码定义位置（4.6.1）
                 predicate_def: None,   // std 虚拟子模块无谓词 def（#524 载荷面）
                 proof_fn_params: None, // 同上（#527 载荷面）
+                const_binders: Vec::new(), // native 导出无 yx 登记面（#539 载荷面）
+                call_site_params: Vec::new(),
             });
 
             // 注册模块信息
@@ -449,6 +451,8 @@ impl ModuleRegistry {
                         definition_span: None, // std 虚拟模块无源码定义位置（4.6.1）
                         predicate_def: None,   // std 虚拟子模块无谓词 def（#524 载荷面）
                         proof_fn_params: None, // 同上（#527 载荷面）
+                        const_binders: Vec::new(), // native 导出无 yx 登记面（#539 载荷面）
+                        call_site_params: Vec::new(),
                     });
                     self.register(info);
                 }
@@ -518,6 +522,8 @@ mod tests {
             definition_span: None,
             predicate_def: None,
             proof_fn_params: None,
+            const_binders: Vec::new(), // 测试桩导出无登记面（#539 载荷面）
+            call_site_params: Vec::new(),
         }
     }
 

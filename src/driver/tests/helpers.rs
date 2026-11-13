@@ -131,6 +131,8 @@ fn test_aggregate_resolves_named_import_request_through_alias_channel() {
         definition_span: None,
         predicate_def: None,
         proof_fn_params: None,
+        const_binders: Vec::new(), // 测试桩导出无登记面（#539 载荷面）
+        call_site_params: Vec::new(),
     });
     registry.register(lib);
     let result = type_result(vec![request("pick", None)]);

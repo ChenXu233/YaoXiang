@@ -143,6 +143,28 @@ pub struct Export {
     /// `predicate_def` 并入——`proof_fn_params` 对该形态恒为 None，
     /// `register_use_export` 的非 Type 臂也不消费它。
     pub proof_fn_params: Option<Vec<MonoType>>,
+    /// 该导出函数的 **q=0（编译期值）binder**（声明序；定义方
+    /// `PolyType::const_binders` 的已登记形态直读，不从 AST 重推），
+    /// 非 const 泛型函数为空表。
+    ///
+    /// E1113（6.9.2-B）的调用点证据检查要按 q=0 槽位判——定义方的
+    /// binder 清单登记在签名收集期写入的 `PolyType` 里，此前导出面只取
+    /// `body` 丢弃 binder，导入面 `const_names` 为空 ⇒ 整段判定
+    /// `NotTarget`，运行期值填 q=0 槽静默通过（issue #539 的缺口）。
+    /// 消费点唯一：导入方 `import_binding` 按本清单重建同构 `PolyType`
+    /// （与定义方 `check_fn_stmt` 的登记形态一致），判定函数零改动。
+    pub const_binders: Vec<crate::frontend::core::types::const_data::ConstVarDef>,
+    /// 该导出函数的**调用点实参序列形参名**（声明序拍平口径、q=0 位保留；
+    /// 定义方 `declared_call_site_params` 槽位表的已登记形态直读），
+    /// 无名可取为空表。
+    ///
+    /// E1113 的槽位判据按**调用点序列**把实参对到 q=0 槽上——名字只在
+    /// 声明 AST 里（`Type::runtime_value_params` 是这条序列的唯一实现），
+    /// 导入方拿不到定义方 AST，随导出携带。消费点唯一：导入方
+    /// `import_binding` 写进同一张 `declared_call_site_params` 表（函数条目
+    /// 同款：`const_params` 留空，q=0 名以 [`Export::const_binders`] 为登记口），
+    /// 判定函数零改动。
+    pub call_site_params: Vec<String>,
 }
 
 /// 类型定义导出载荷（见 [`Export::type_payload`]）。

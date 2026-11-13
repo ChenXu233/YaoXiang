@@ -2157,6 +2157,164 @@ main: () -> Void = {
     );
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// 3.20.23 / #539：跨模块导入的 const 泛型调用不检查证据（E1113，SPEC 6.9.2-B）
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// 病史门：issue #539 —— 定义方的 q=0（编译期值）事实登记在签名收集期写入的
+// `PolyType` 与槽位表里，两条都是 checker 本地状态；导出面只取 `body` 丢弃
+// binder，导入面构造 callable（`import_binding`）也不经槽位表注入链 ⇒ 两个
+// 事实在导入面双缺，判定整段 `NotTarget`：运行期值填 q=0 槽静默通过（对照：
+// 同签名本地定义报 E1113）。修前红态实测（2026-11-14，HEAD `a5f315f9` 的
+// CLI 探针）：`use lib.{pick}` + `mut y` 变体 check 0 error。
+//
+// 判据单源：修法 = `Export` 携带定义方**已登记形态**（`const_binders` 直读
+// vars 的 PolyType、`call_site_params` 直读签名收集期槽位表，不从 AST 重推），
+// 导入方 `import_binding` 按本地面 `check_fn_stmt` 的同款登记形态重建——
+// 判定函数（`collect_const_arg_instantiation_request`）零改动，本地面零变化。
+//
+// **判据口径注记（义务一查证结论）**：SPEC type-system §7.1 / RFC-011 §4.1
+// 明文「调用侧义务按声明强度检查……无证据时在调用点报告」，无跨模块豁免；
+// 义务本身的强制（静默通过 → 编译错误）已由 RFC-039 D62 用户裁决（不可逆），
+// 本批与 #538/#550/#551 同构——把已裁决义务接进尚未覆盖的面（D59 C 类）。
+//
+// **随本批对齐的既有差异（如实登记）**：特化强制（6.8.7 单值类型）与证据检查
+// 共用同一段判定与同一组事实，导入面供给事实后两者**同时**生效——issue 原文
+// 夹具（`y: Int = 3` 非 mut）修后与本地面同判：第二层调用报 E1002
+// （`int64::3` 单值强制），修前导入面 0 error（静默放行无效程序）。
+// 限定调用（`use lib` + `lib.pick(...)`）与方法面跨模块导入不经本批接线
+// （scope 无限定名条目 / 方法槽位不随导出——#553 面），保持既有不判。
+
+/// #539 主锚（先红后绿）：跨模块导入的 const 泛型函数，q=0 槽被**真运行期值**
+/// （`mut y`，无编译期值）填充必须报 E1113——与本地面同码同位置同被调方 binder。
+#[test]
+fn test_check_imported_const_generic_call_runtime_value_reports_e1113() {
+    // Arrange - issue #539 夹具的 `mut y` 变体：lib 定义 const 泛型函数，
+    // main 导入后用真运行期绑定填 q=0 槽
+    let dir = temp_dir();
+    create_yx_file(
+        &dir,
+        "lib.yx",
+        "pick: (N: Int) -> (n: N) -> Int = (n) => n\n",
+    );
+    let file = create_yx_file(
+        &dir,
+        "main.yx",
+        "use lib.{pick}\n\
+         \n\
+         main: () -> Void = {\n\
+         \x20   mut y: Int = 3\n\
+         \x20   r: Int = pick(y)(y)\n\
+         }\n",
+    );
+
+    // Act
+    let checked = check_result(&file);
+    let codes = error_codes(&checked);
+
+    // Assert - 翻面：check 从 0 错（修前红态实测）改为报恰 1 条 E1113，
+    // 点名被调方自己的 binder N、位置指向内层调用的运行期实参行
+    assert_eq!(
+        codes.len(),
+        1,
+        "#539: filling the q=0 slot of an imported const-generic call with a runtime value must be rejected (E1113), not silently accepted; got {codes:?}"
+    );
+    assert_eq!(
+        codes[0], "E1113",
+        "#539: the rejection must be E1113 (same code as the local face), got: {codes:?}"
+    );
+    let diag = &checked.diagnostics[0].diagnostic;
+    assert!(
+        diag.message.contains("'N'"),
+        "#539: the diagnostic must name the callee's own const binder N (carried through the export payload), got: {}",
+        diag.message
+    );
+    assert!(
+        !diag.message.contains("'n'"),
+        "#539: the diagnostic must not name the value param n — the judgment must use the callee's q=0 slot table; got: {}",
+        diag.message
+    );
+    assert_eq!(
+        diag.span.map(|s| s.start.line),
+        Some(5),
+        "#539: the diagnostic must sit on the inner call's runtime argument `y` (the `r:` line), not the declaration or the outer call"
+    );
+}
+
+/// #539 合法形态锚：字面量与 const 表达式填导入函数的 q=0 槽 ⇒ 修前修后同绿。
+///
+/// `pick(3)(3)`（字面量）与 `pick(2+3)(5)`（纯运算 const 表达式）都是
+/// 6.9.2-B 判据下的合法证据，导入面接线不得误伤（修前实测 0 错；
+/// 运行期两次调用分别产出 3 与 5——特化请求的跨模块消费不改变运行值）。
+#[test]
+fn test_check_imported_const_generic_call_compile_time_args_stay_accepted() {
+    // Arrange
+    let dir = temp_dir();
+    create_yx_file(
+        &dir,
+        "lib.yx",
+        "pick: (N: Int) -> (n: N) -> Int = (n) => n\n",
+    );
+    let file = create_yx_file(
+        &dir,
+        "main.yx",
+        "use lib.{pick}\n\
+         \n\
+         main: () -> Void = {\n\
+         \x20   r: Int = pick(3)(3)\n\
+         \x20   s: Int = pick(2+3)(5)\n\
+         }\n",
+    );
+
+    // Act
+    let result = check_file(&file);
+
+    // Assert
+    let errors = result.expect("check should not panic on legal imported const args");
+    assert_eq!(
+        errors, 0,
+        "#539: legal compile-time value arguments (literal / const expression) must stay accepted on the imported face; got {errors} error(s)"
+    );
+}
+
+/// #539 特化对齐锚（先红后绿）：导入面供给 q=0 事实后，6.8.7 单值类型强制
+/// 与本地面**同判**——`pick(3)(4)` 的第二层实参对 `int64::3` 是真不匹配，
+/// 必须报 E1002（修前导入面 0 error 静默放行；本地面同一夹具修前即报 E1002）。
+#[test]
+fn test_check_imported_const_generic_call_specialization_matches_local() {
+    // Arrange - 与本地面 E1002 形态同构的导入夹具
+    let dir = temp_dir();
+    create_yx_file(
+        &dir,
+        "lib.yx",
+        "pick: (N: Int) -> (n: N) -> Int = (n) => n\n",
+    );
+    let file = create_yx_file(
+        &dir,
+        "main.yx",
+        "use lib.{pick}\n\
+         \n\
+         main: () -> Void = {\n\
+         \x20   r: Int = pick(3)(4)\n\
+         }\n",
+    );
+
+    // Act
+    let checked = check_result(&file);
+    let codes = error_codes(&checked);
+
+    // Assert - 导入面与本地面同判（特化面机制随同一组事实对齐，不是新语义）
+    assert_eq!(
+        codes.len(),
+        1,
+        "#539: the imported face must enforce the single-value type exactly like the local face; got {codes:?}"
+    );
+    assert_eq!(
+        codes[0], "E1002",
+        "#539: the mismatched second-layer argument must be E1002 (specialization enforcement), got: {codes:?}"
+    );
+}
+
 // ============ 3.20.22 / #537：证明函数形参精化的嵌套义务在调用点被静默丢弃 ============
 //
 // 证明函数（返回 `Type` 的声明）的形参带精化时，对该证明函数的每次编译期调用

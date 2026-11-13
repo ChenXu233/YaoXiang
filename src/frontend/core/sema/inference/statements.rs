@@ -709,15 +709,35 @@ impl StatementChecker {
         module: &ModuleInfo,
     ) {
         let ty = self.export_type(export);
+        // E1113（6.9.2-B / issue #539）：导入函数与本地面**同权**——q=0 事实
+        // 随 Export 跨界携带（定义方 `PolyType::const_binders` 与签名收集期
+        // 槽位表的已登记形态直读，判据单源，不从签名形态反推），在此按
+        // `check_fn_stmt` 的本地登记形态重建同构 `PolyType`（binder 非空才包
+        // `new_with_const`，与本地两臂逐字一致），并把调用点形参名写进
+        // `declared_call_site_params`（函数条目同款：`const_params` 留空、
+        // q=0 名以 binder 清单为登记口）。判定函数零改动——本地面消费的
+        // 两个事实在导入面就位后，同一段判定自然成立。
+        // 键按**首登记为准**（`or_insert`，与函数面 `collect_function_signature`
+        // 同口径）；E5006/E5008 已拦同名冲突，不存在跨导入争键。
+        let poly = if export.const_binders.is_empty() {
+            PolyType::mono(ty)
+        } else {
+            PolyType::new_with_const(Vec::new(), export.const_binders.clone(), ty)
+        };
         // 标记为导入：导入名不是本文件的绑定，不参与 spec §4.3 的
         // 「沿作用域链查找」（否则 `ok = ...` 撞 `std.result.ok` 会误报 E2010）。
         // definition_span = use 行该项的名源位置：定义事件与引用 resolves_to
         // 同源落到 use 行（#433 余项：导入项跳转）。
-        self.scope.add_imported_var(
-            binding_name.to_string(),
-            PolyType::mono(ty),
-            definition_span,
-        );
+        self.scope
+            .add_imported_var(binding_name.to_string(), poly, definition_span);
+        if !export.call_site_params.is_empty() {
+            self.declared_call_site_params
+                .entry(binding_name.to_string())
+                .or_insert(crate::frontend::core::sema::checker::CallSiteSlots {
+                    names: export.call_site_params.clone(),
+                    const_params: Vec::new(),
+                });
+        }
         // 4.6.1：被导入符号在**定义文件**里有真实位置时（用户/vendor 模块
         // 的函数与常量导出），登记 use 行 span → 真实定义的映射；排空引用
         // 事件时据此把 resolves_to 重定向出本文件（跨文件跳转命中定义）。
