@@ -4938,6 +4938,8 @@ D.0 GO；6.9.5 实现 CONDITIONAL GO（先裁 H0 + V1-A scope + H1–H4 方案�
 
 未跑测试；非泛型构造字段检查缺口是否被其它路径兜住未实测；字段赋值可写性未实测；预算共享未核实；#537 根因/#552 触发面未复现；跨模块 `TypeDefPayload` 行为未实测；`NamedStruct` 的 `field_has_default` 空向量 panic 风险登记；09a 的 `pub(super)` 可见性前提被静态反驳。
 
+> **2026-11-13 用户裁决：H0 = B。** 本节 A/V1-A 分析保留为历史；V1-A 不采用，6.9.5 改按 B 设计包，见下节。
+
 ## P6 6.9.4 Γ 等式桥首轮设计（gamma-designer-2，2026-11-13，只读，HEAD `e4478d83`）
 
 ### 一、范围与方法
@@ -4979,3 +4981,30 @@ outOfScope：match/while/早返回；`&mut` 之外的非直接写面（索引/�
 ### 六、未核实
 
 `check_refined_obligation` 不存在；生产 Γ Some 后的语料/快照零漂移未实测（最高风险）；assert effect 是否变活未实测；跨函数泄漏是代码阅读；`&mut`/索引/字段/别名写未穷举（unsound 缺口需先定处置）；rfc027 tripwire 归属冲突；探针二进制早于最后一笔 src 提交（只 subject/span diff，未重建）；工作树脏；6.9.3/6.9.4 代码级耦合未找到，WBS「依赖 6.9.3」口径需 lead 确认。
+
+## P6 6.9.5 H0 裁决（2026-11-13）：B（witness 字段）
+
+用户裁决选 **B**：`w: Pos(v)` 的 `w` 是编译期 witness（证明 `Pos(v)`），不是运行期数据字段；A（运行期数据字段 + admission）放弃。理由：A 会把记录布局钉成「w 是 Int 数据字段」，后面做真 Σ 时要再改布局/构造/投影，代价更大。
+
+### 一、后果
+
+- 6.9.5 不再是 V1-A；旧 D 行「构造点逐字段验证 / 复用 defeq」作废。
+- B 设计先行，设计包确认前不实现。
+- 用户可见：`Box(3, 4)` 不再是「w=4」；witness 字段无运行期值；构造 arity/布局/投影变；原先写 `w: Pos(v)` 但静默不检查的程序会转为编译期拒绝/擦除（D/E 类，需 D59 分类）。
+
+### 二、B 设计包必须回答
+
+1. 字段量词：witness = 记录层 q=0（复用 `Quantity` / 6.9.2 擦除模型）还是新概念？优先复用，避免第二套擦除。
+2. 证明项表示：`ProofCall` / `ConstExpr` / 新 `Witness`；是否复用 `proof_calls`/`ProofContext`；单一表示，不造第二套证明世界。
+3. 构造 arity：witness 是否占调用点参数位；显式 proof vs 编译器自动证明（RFC-027 §4.2）；运行期构造只含数据字段。
+4. 布局/投影：`StructType`/`TypeDeclField`/bytecode 如何标记 witness；`CreateStruct`/字段索引如何跳过；`b.w` 只能类型级使用，值级报错。
+5. 可变性：被 witness 依赖的数据字段必须不可变/记录不可变，否则 proof 失效；soundness 规则。
+6. 导出：`TypeDefPayload` 携带字段量词/witness 类型；跨模块 Σ 是否 V1。
+7. 与 6.9.2 q=0 擦除、6.9.3 defeq、6.9.4 Γ 的接口；哪些是 B 的硬前置。
+8. 分阶段：B.0 设计 → B.1 表示/布局/擦除 → B.2 构造证明 → B.3 投影/类型级使用 → B.4 导出/测试；每阶段可失败判据。
+
+### 三、边界
+
+- 只覆盖记录 Σ（witness 字段）；不碰 Π/`DepFn`；不宣称 Π/Σ 完全体。
+- 旧 D.0 的 A/V1-A 分析保留为历史；V1-A 不采用。
+- 设计包未确认前，不改 `src/`；B 的实现另立契约。
