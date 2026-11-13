@@ -5222,3 +5222,42 @@ B.1 等 B.d 合并后再动（`solver.rs`/`inference/`/`environment.rs`/`checker
 - R7 `StructType` Debug 旧文本逐字；R8 `NamedStruct` 旧行为探针；R9 Eq 忽略 `has_default`。
 - B.1a 不写 `CreateStruct`/`b.w`/5A/E1114/E1115 的红测试；这些留 B.1b+c 同批。
 - B.1a 预期 15–20 生产文件 + 8–10 测试文件；`mono.rs` 是主体；`tests/baselines`/IR 快照/码表零 diff。
+
+## P6 6.9.5-B.1a 实现轮（protocol-analyst，2026-11-13，主工作树）
+
+### 一、落地内容
+
+35 文件 +747/−313（含 4 份错误码生成物与 1 个新测试）。`StructType` 从「`fields: Vec<(String, MonoType)>` + 两个等长 `Vec<bool>`」收敛为单列 `fields: Vec<StructFieldInfo>{name, ty, quantity, is_mut, has_default}`；AST `StructField.quantity`、IR `TypeDeclField.quantity` 同步（解析器与 B.1a 的全部构造点写 `None`）。
+
+Eq/Hash：`StructFieldInfo` 忽略 `is_mut`/`has_default`（旧 Eq 口径），`quantity` 参与；`StructType::hash` 与 Eq 同口径，修掉旧 Eq 忽略 mutability 而 Hash 含之的违例。`StructType` 自定义 Debug 让 `fields` 保持旧 `[(名字, 类型)]` 形态。`solver`/`substitute`/`environment`/`equivalence`/`ownership`/`overload`/`bounds`/`trait_data`/`ir_gen` 的读取点全部改为按字段访问；`unify` 的 Struct 臂按字段比 `is_mut`（等价于旧的等长向量比较）。AST `Quantity` 补 `Hash`。
+
+不新增诊断码；`CreateStruct`/`resolve_field_index`/`synthesize_constructor` 未改；E1114/E1115 与 5A 属 B.1b+c。
+
+### 二、R1–R9
+
+| R | 红态（改动前） | 绿态 |
+| --- | --- | --- |
+| R1 | `test_struct_type_eq_hash_contract_ignores_mutability` FAILED：Eq 相等而 Hash 不同 | 9 passed；Hash 只吃 `name/ty/quantity` |
+| R2–R5 | `cargo check --all-targets` 171 errors / 26 文件（`expected StructFieldInfo`、`no field field_mutability`、`missing field quantity`） | 0 error 0 warning；AST→Mono 与真实四段管线的 quantity 直读各 1 条 |
+| R6 | `rg` 搜 `field_mutability` / `field_has_default`（src 全树）52/51 次 | 0 命中 |
+| R7 | 中间态派生 Debug 打印 `StructFieldInfo { .. }` | 自定义 Debug 保持 `fields: [("x", Int(64))]`；`test_struct_type_debug_keeps_legacy_field_tuple_form` |
+| R8 | 探针集在 HEAD 上取旧行为（`Point()` E1010 expected 1；`Point(1,2)` expected 1；`mut` 两处语法位 E0010/E0011；正常构造/读/写 exit 0） | 改动后逐字相同 |
+| R9 | 中间态派生 PartialEq 比 `has_default` | 自定义 Eq 忽略它；`test_struct_type_eq_ignores_has_default` |
+
+### 三、两处裁定
+
+1. **R6 与 R7 互斥**。旧派生 Debug 逐字包含 `field_mutability`/`field_has_default` 两段；R6 要求这两个标识符在 `src` 全树 0 命中（含注释），R7 要求旧文本逐字——两者不能同时成立。实现取「R6 是硬门禁、R7 的判据是快照零漂移」：自定义 Debug 保留 `fields` 的旧元组形态与其余段，但不再打印两个已不存在的向量（打印它们等于伪造事实）。实测 229 份快照中 0 处渲染 `StructType`（`dump` 的类型明细会打印，但当前无基线/判据读它），故零漂移不依赖这两段。**登记**：`dump` 的类型明细文本会少两个空数组，属可观察的调试输出变化，不是语言行为。
+2. **骨架记录的 required=0**。旧表示用**空**默认值向量表达「命名空间/接口骨架的成员不是构造参数」；单列无法表达长度不匹配。5 处（整模块命名空间、分组导入、`get_module_type`、`operator_interfaces::empty_struct`、std `Error` 族）逐字段写 `has_default: true` 以保旧 arity。首轮语料差分 16 行 / 8 个原 exit 0 变 E1010（`assert(v == 5, "msg")` 被算成 3 个必需构造参数），即漏掉此转换的实测后果。`NamedStruct` 与结构体模式记录的旧向量亦空，但探针证明其 arity 路径不可达（构造签名取定义侧；模式记录不作 callee），按字段写真实标记并登记。
+
+**合入时的一处修正**：交接版本里 `operator_interfaces::empty_struct` 写的是 `false`（与其报告「5 处已改 true」不符）；lead 复核时按旧空向量语义改为 `true`，并重跑语料差分（仍 388 行相同）与 fast（2095 条 exit 0）。
+
+### 四、门禁
+
+fmt / clippy -D warnings / testsuite fast（2095 条 exit 0）/ corpus parity（388 行 SHA256 相同）/ IR 快照零漂移 / check-boundary（违规 0，计数 170）/ check-fanout（违规 0）/ check-docs-refs / check-docs-truth / check-test-channel / markers --check 全 exit 0；错误码生成器重跑，4 份生成物 36/36 行仅发射点行号平移，码表与计数未变。
+
+### 五、未核实 / 风险
+
+- `dump` 的 `StructType` 文本少两个空数组（见 §三.1），无基线消费者。
+- `ast::Pattern::Struct` 造的记录（`has_default: false`）未做 R8 式探针；判断其不作 callee。
+- 快照计数口径：契约写 204 份，树内实有 229 个 `.snap`；fast 的比对判据全绿，差额未追（不在 B.1a 判据内）。
+- E1114/E1115/CreateStruct/5A/B.2–B.4 全部未动；B.1b+c 仍须同批 ship。
