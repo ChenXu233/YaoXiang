@@ -5175,3 +5175,12 @@ grep 清单 41/45/64 需 `cargo check` 驱动补齐；`NamedStruct` 历史缺陷
 ### 七、顺序
 
 B.1 等 B.d 合并后再动（`solver.rs`/`inference/`/`environment.rs`/`checker.rs` 文件面冲突）；B.1a 先行；B.1b+c 同批；F4/Γ 批次树实验等 B.d 树释放后排队。
+
+### 八、B.1a first-red（sigma-reviewer 准备，HEAD 8a2a224f）
+
+- R1 `hash_eq_contract`：同 name/fields、不同 `is_mut` ⇒ Eq 与 Hash 都相等；当前 HEAD 红（Eq 忽略、Hash 含）。
+- R2–R5 编译红：`StructFieldInfo.quantity` / `StructField.quantity` / `TypeDeclField.quantity` / 构造器默认 `None`。
+- R6 源码门禁：`rg 'field_mutability|field_has_default' src` = 0；当前 45+45 红。
+- R7 `StructType` Debug 旧文本逐字；R8 `NamedStruct` 旧行为探针；R9 Eq 忽略 `has_default`。
+- B.1a 不写 `CreateStruct`/`b.w`/5A/E1114/E1115 的红测试；这些留 B.1b+c 同批。
+- B.1a 预期 15–20 生产文件 + 8–10 测试文件；`mono.rs` 是主体；`tests/baselines`/IR 快照/码表零 diff。
