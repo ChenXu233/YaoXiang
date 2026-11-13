@@ -45,10 +45,11 @@ pub struct StatementChecker {
     native_arity: HashMap<String, (usize, Option<usize>)>,
     /// #454：Native 导出形参名（全限定名 + 短名 → 声明序形参名）
     native_param_names: HashMap<String, crate::frontend::core::sema::environment::ExportParamInfo>,
-    /// E1113（6.9.2-B）：本模块函数的**调用点实参序列**形参名表（函数名 → 声明序
-    /// 名字；非类型形参、q=0 保留）。由 checker 的签名收集登记，与
+    /// E1113（6.9.2-B）：本模块函数的**调用点实参序列**形参名表（函数名/方法键 →
+    /// 声明序名字；非类型形参、q=0 保留；条目见 `CallSiteSlots`）。由 checker 的
+    /// 签名收集登记（函数名与方法键同一次 walk，issue #538），与
     /// `native_param_names` 同一条注入链转发给表达式推断器。
-    declared_call_site_params: HashMap<String, Vec<String>>,
+    declared_call_site_params: HashMap<String, crate::frontend::core::sema::checker::CallSiteSlots>,
     /// 模块注册表（用于在函数体/块作用域中处理 use 语句）
     module_registry: ModuleRegistry,
     /// 模块别名集合（#396）：区分「模块别名 Struct」与真 struct，
@@ -599,7 +600,7 @@ impl StatementChecker {
     /// 设置本模块函数的调用点形参名表（E1113 的槽位判据，见字段文档）
     pub fn set_declared_call_site_params(
         &mut self,
-        names: HashMap<String, Vec<String>>,
+        names: HashMap<String, crate::frontend::core::sema::checker::CallSiteSlots>,
     ) {
         self.declared_call_site_params = names;
     }

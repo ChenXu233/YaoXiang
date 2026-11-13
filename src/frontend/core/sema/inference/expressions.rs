@@ -31,8 +31,9 @@ static EMPTY_NATIVE_PARAM_NAMES: std::sync::LazyLock<
 
 /// E1113（6.9.2-B）：调用点形参名表空缺省（未注入时使用——直构测试 / 未走签名
 /// 收集的入口）。缺省 = **不判** E1113，绝不按位置猜。
-static EMPTY_CALL_SITE_PARAMS: std::sync::LazyLock<HashMap<String, Vec<String>>> =
-    std::sync::LazyLock::new(HashMap::new);
+static EMPTY_CALL_SITE_PARAMS: std::sync::LazyLock<
+    HashMap<String, crate::frontend::core::sema::checker::CallSiteSlots>,
+> = std::sync::LazyLock::new(HashMap::new);
 
 /// RFC-009 读视图：剥离借用层，算术/比较按 inner 类型判定（读穿透）
 pub(super) fn read_view(ty: &MonoType) -> MonoType {
@@ -162,6 +163,12 @@ pub struct ExpressionInferrer<'a> {
     /// 最近一次 `monomorphize` 解出的类型实参（按声明顺序），供紧随其后的
     /// `collect_instantiation_request` 取用。
     last_type_args: Vec<MonoType>,
+    /// 最近一次 FieldAccess 推断解析到的**方法绑定键**（`Box.get` 形态；与
+    /// `method_bindings` 的查找键同一构造）。FieldAccess 臂进体时清空、命中
+    /// 方法绑定时写入——紧随其后的调用点证据判定（E1113 的方法面，issue #538）
+    /// 经 `std::mem::take` 消费。与 `last_type_args` 同款「紧邻消费」状态位：
+    /// 只有同一表达式的 FieldAccess 臂与调用点之间成立，其余路径不读。
+    last_method_binding_key: Option<String>,
     /// RFC-011a §6 存在类型强制点（具体→存在包装点，ir_gen 按 span 查表注入包装）
     pub existential_coercions: Vec<super::existential::ExistentialCoercion>,
     /// RFC-011b: 运算符派发点（显式接口实现命中处，ir_gen 按 span 注入方法调用）
@@ -184,10 +191,12 @@ pub struct ExpressionInferrer<'a> {
     /// 命名空间限定的原生调用据此按名绑定/判定未知名（此前整段静默跳过）。
     native_param_names:
         &'a HashMap<String, crate::frontend::core::sema::environment::ExportParamInfo>,
-    /// E1113（6.9.2-B）：本模块函数的**调用点实参序列**形参名表（函数名 → 名字；
-    /// 非类型形参、q=0 保留）。声明面由 checker 的签名收集登记，经 StatementChecker
-    /// 同一条注入链传入。缺项 = 事实不足（导入函数 / 直构场景）⇒ 不判、不猜。
-    declared_call_site_params: &'a HashMap<String, Vec<String>>,
+    /// E1113（6.9.2-B）：本模块函数的**调用点实参序列**形参名表（函数名/方法键 →
+    /// 名字；非类型形参、q=0 保留；条目见 `CallSiteSlots`）。声明面由 checker 的
+    /// 签名收集登记，经 StatementChecker 同一条注入链传入。缺项 = 事实不足
+    /// （导入函数 / 直构场景）⇒ 不判、不猜。
+    declared_call_site_params:
+        &'a HashMap<String, crate::frontend::core::sema::checker::CallSiteSlots>,
     /// #389：match scrutinee 推断类型（match 节点 span 键控）——IR 生成期
     /// generate_match_expr_ir 按 span 回查，替代对复合 scrutinee 的 AST 猜测
     pub match_scrutinee_types: HashMap<crate::util::span::Span, MonoType>,
@@ -236,6 +245,7 @@ impl<'a> ExpressionInferrer<'a> {
             instantiation_requests: Vec::new(),
             generic_fn_type_params: &EMPTY_FN_TYPE_PARAMS,
             last_type_args: Vec::new(),
+            last_method_binding_key: None,
             existential_coercions: Vec::new(),
             interface_impl_registry: &EMPTY_INTERFACE_IMPL_REGISTRY,
             sum_types: &EMPTY_SUM_TYPES,
@@ -287,6 +297,7 @@ impl<'a> ExpressionInferrer<'a> {
             instantiation_requests: Vec::new(),
             generic_fn_type_params: &EMPTY_FN_TYPE_PARAMS,
             last_type_args: Vec::new(),
+            last_method_binding_key: None,
             existential_coercions: Vec::new(),
             interface_impl_registry: &EMPTY_INTERFACE_IMPL_REGISTRY,
             sum_types: &EMPTY_SUM_TYPES,
@@ -339,6 +350,7 @@ impl<'a> ExpressionInferrer<'a> {
             instantiation_requests: Vec::new(),
             generic_fn_type_params: &EMPTY_FN_TYPE_PARAMS,
             last_type_args: Vec::new(),
+            last_method_binding_key: None,
             existential_coercions: Vec::new(),
             interface_impl_registry: &EMPTY_INTERFACE_IMPL_REGISTRY,
             sum_types: &EMPTY_SUM_TYPES,
@@ -393,6 +405,7 @@ impl<'a> ExpressionInferrer<'a> {
             instantiation_requests: Vec::new(),
             generic_fn_type_params: &EMPTY_FN_TYPE_PARAMS,
             last_type_args: Vec::new(),
+            last_method_binding_key: None,
             existential_coercions: Vec::new(),
             interface_impl_registry: &EMPTY_INTERFACE_IMPL_REGISTRY,
             sum_types: &EMPTY_SUM_TYPES,
@@ -548,7 +561,7 @@ impl<'a> ExpressionInferrer<'a> {
     /// 设置调用点形参名表（E1113 的槽位判据，见字段文档）
     pub fn set_declared_call_site_params(
         &mut self,
-        params: &'a HashMap<String, Vec<String>>,
+        params: &'a HashMap<String, crate::frontend::core::sema::checker::CallSiteSlots>,
     ) {
         self.declared_call_site_params = params;
     }
@@ -2733,18 +2746,63 @@ impl<'a> ExpressionInferrer<'a> {
         use crate::frontend::core::sema::proof::verdict::ProofFailure;
         use crate::frontend::core::types::mono::GenericArg;
 
-        // 1. 被调方与 q=0 名表（声明期登记，与 `PolyType::new_with_const` 同一来源）
-        let Some(fn_name) = self.callee_generic_name(func) else {
-            return ConstArgOutcome::NotTarget;
-        };
-        let Some(poly) = self.scope.get_var(&fn_name) else {
-            return ConstArgOutcome::NotTarget;
-        };
-        let const_names: Vec<String> = poly.const_binders.iter().map(|b| b.name.clone()).collect();
+        // 1. 被调方与 q=0 名表（声明期登记，与 `PolyType::new_with_const` 同一来源）。
+        //
+        // 两个被调面对齐到同一组事实（`fn_name` / `const_names` / 被调签名）后
+        // 共用下方同一段判定（判据单源，issue #538）：
+        // - **函数面**（`Var` / 模块限定 `FieldAccess`）：`callee_generic_name`；
+        //   q=0 名取 `PolyType::const_binders`（声明期登记口）。
+        // - **方法面**（值接收者 `FieldAccess`）：方法绑定键取 FieldAccess 臂刚
+        //   解析出的 `last_method_binding_key`（臂内已排除 native 命名空间与记录
+        //   字段形态）；q=0 名与槽位名都来自方法注册写入的同一张槽位表
+        //   （此前方法注册丢弃 q=0 事实 ⇒ 静默不判——#538 的缺口）。
+        //
+        // 本批覆盖的方法形态 = 无接收者位的 `Type.method: sig = lambda` 声明
+        // （实参直对声明槽位，`recv_offset` 0，与函数面同款）。显式 `self` 接收者
+        // 形态（`method_binding_call_key` 命中、接收者占 params[0]）**不在本批
+        // 覆盖面**：其调用点槽位算术含接收者位偏移，未经本批验证 ⇒ 保持既有
+        // 不判（宁可少报，不可错猜）。
+        let fn_name;
+        let const_names: Vec<String>;
+        let body: MonoType;
+        match self.callee_generic_name(func) {
+            Some(name) => {
+                let Some(poly) = self.scope.get_var(&name) else {
+                    return ConstArgOutcome::NotTarget;
+                };
+                fn_name = name;
+                const_names = poly.const_binders.iter().map(|b| b.name.clone()).collect();
+                body = poly.body.clone();
+            }
+            None => {
+                // 显式接收者形态优先让路：`method_binding_call_key` 是「接收者占
+                // params[0]」的唯一判据（native 命名空间 / 记录字段 / 接收者校验
+                // 都在它内）。命中 ⇒ 本批不判，保持既有行为。
+                if self.method_binding_call_key(func).is_some() {
+                    return ConstArgOutcome::NotTarget;
+                }
+                let Some(method_key) = std::mem::take(&mut self.last_method_binding_key) else {
+                    return ConstArgOutcome::NotTarget;
+                };
+                let Some(slots) = self.declared_call_site_params.get(&method_key) else {
+                    // 事实不足（类型体方法 / 外部绑定 / 跨模块导入 / 非 const 方法）
+                    // ⇒ 不判，不猜
+                    return ConstArgOutcome::NotTarget;
+                };
+                if slots.const_params.is_empty() {
+                    return ConstArgOutcome::NotTarget;
+                }
+                let Some(method_ty) = self.method_bindings.get(&method_key) else {
+                    return ConstArgOutcome::NotTarget;
+                };
+                fn_name = method_key;
+                const_names = slots.const_params.clone();
+                body = method_ty.clone();
+            }
+        }
         if const_names.is_empty() {
             return ConstArgOutcome::NotTarget;
         }
-        let body = poly.body.clone();
         let MonoType::Fn {
             params,
             return_type,
@@ -2753,10 +2811,11 @@ impl<'a> ExpressionInferrer<'a> {
             return ConstArgOutcome::NotTarget;
         };
         // 2. 槽位：调用点形参名表 + 共享绑定判据（六条规则同在一处，不另写映射）
-        let Some(call_site_names) = self.declared_call_site_params.get(&fn_name).cloned() else {
+        let Some(slots) = self.declared_call_site_params.get(&fn_name) else {
             // 事实不足：导入面尚未携带 q=0 事实（详见字段文档）⇒ 不判，不猜
             return ConstArgOutcome::NotTarget;
         };
+        let call_site_names = slots.names.clone();
         let optional = vec![false; call_site_names.len()];
         let positions = super::arg_binding::bind_args_to_params(
             &fn_name,
@@ -3811,6 +3870,11 @@ impl<'a> ExpressionInferrer<'a> {
                 span,
                 ..
             } => {
+                // 方法绑定键状态位（`last_method_binding_key`）：本臂是它唯一的
+                // 写入点——进体先清空，命中方法绑定的每个返回点写入。紧随其后的
+                // 调用点证据判定（E1113 方法面，issue #538）按「同一表达式的
+                // FieldAccess 臂刚跑过」消费，其余路径不读。
+                self.last_method_binding_key = None;
                 let obj_ty = self.infer_expr(obj)?;
                 let obj_ty = self.solver.resolve_type(&obj_ty);
 
@@ -3837,9 +3901,9 @@ impl<'a> ExpressionInferrer<'a> {
                             )
                             .build());
                         }
-                        if let Some(method_ty) =
-                            self.method_bindings.get(&format!("{}.{}", sum_name, field))
-                        {
+                        let method_key = format!("{}.{}", sum_name, field);
+                        if let Some(method_ty) = self.method_bindings.get(&method_key) {
+                            self.last_method_binding_key = Some(method_key);
                             return Ok(method_ty.clone());
                         }
                         return Err(ErrorCodeDefinition::field_not_found(field, sum_name).build());
@@ -3930,6 +3994,7 @@ impl<'a> ExpressionInferrer<'a> {
                             // 回退方法查找（std.range 协议面）
                             let method_key = format!("Range.{}", field);
                             if let Some(method_ty) = self.method_bindings.get(&method_key) {
+                                self.last_method_binding_key = Some(method_key);
                                 return Ok(method_ty.clone());
                             }
                             Err(ErrorCodeDefinition::field_not_found(field, "Range").build())
@@ -3944,6 +4009,7 @@ impl<'a> ExpressionInferrer<'a> {
                         // Field not found in struct — try method lookup
                         let method_key = format!("{}.{}", struct_type.name, field);
                         if let Some(method_ty) = self.method_bindings.get(&method_key) {
+                            self.last_method_binding_key = Some(method_key);
                             return Ok(method_ty.clone());
                         }
                         // #396/#289：模块别名上取成员失败——模块不是 struct，
@@ -3980,6 +4046,7 @@ impl<'a> ExpressionInferrer<'a> {
                                 // Field not found in resolved struct — try method lookup
                                 let method_key = format!("{}.{}", struct_type.name, field);
                                 if let Some(method_ty) = self.method_bindings.get(&method_key) {
+                                    self.last_method_binding_key = Some(method_key);
                                     return Ok(method_ty.clone());
                                 }
                                 return Err(ErrorCodeDefinition::field_not_found(
@@ -3992,6 +4059,7 @@ impl<'a> ExpressionInferrer<'a> {
                         // Try method lookup on TypeRef (generic type or forward reference)
                         let method_key = format!("{}.{}", type_name, field);
                         if let Some(method_ty) = self.method_bindings.get(&method_key) {
+                            self.last_method_binding_key = Some(method_key);
                             return Ok(method_ty.clone());
                         }
                         Err(

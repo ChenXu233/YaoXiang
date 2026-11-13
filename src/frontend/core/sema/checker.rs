@@ -49,7 +49,11 @@ pub struct TypeChecker {
     /// 缺项 = 事实不足（导入函数 / 未走签名收集的直构场景）：调用点因此**不判**
     /// E1113，也不得按位置猜——宁可少报，不可错猜（导入面待 Export 携带 q=0
     /// 事实后再接线）。
-    declared_call_site_params: HashMap<String, Vec<String>>,
+    ///
+    /// 键覆盖两个被调面：函数名（`f`）与方法键（`Box.get`，issue #538——方法
+    /// 注册与函数签名收集同一次 walk，方法键与 `method_bindings` 的查找键同一
+    /// 构造）。
+    declared_call_site_params: HashMap<String, CallSiteSlots>,
     /// 语句检查器
     body_checker: Option<inference::StatementChecker>,
     /// RFC-014 §项目模式：vendor 根目录（`<project>/.yaoxiang/vendor`）。
@@ -98,6 +102,25 @@ pub struct TypeChecker {
     /// （单文件传自身；多文件传全集，过包含方向安全）。三个入口**不带
     /// 默认值**：漏接即编译错误，不存在默认空集的静默路径。
     type_level_namespace: super::probe::TypeLevelNamespace,
+}
+
+/// 调用点形参名表的**条目**（E1113 的槽位判据，6.9.2-B；issue #538）。
+///
+/// - `names`：被调方**调用点实参序列**的形参名（声明序、拍平口径，
+///   `Type::runtime_value_params`——q=0 位保留）；
+/// - `const_params`：其中 **q=0（编译期值）位的名字子集**。
+///
+/// 两个面的 q=0 事实来源不同（判据单源指**消费点**同一，登记口各随其签名面）：
+/// - 函数面的 q=0 事实以 `PolyType::const_binders` 为声明期登记口（本表登记点
+///   早于 `const_binders` 解出，故函数条目的 `const_params` 留空、不被消费）；
+/// - 方法面此前整段丢弃 `const_binders` ⇒ 调用点无事实可查、静默不判
+///   （issue #538 的缺口），现随方法注册把 q=0 子集写进本表。
+#[derive(Debug, Clone, Default)]
+pub struct CallSiteSlots {
+    /// 调用点实参序列的形参名（声明序、拍平口径；q=0 位保留）
+    pub names: Vec<String>,
+    /// q=0（编译期值）位的名字子集（方法面消费；函数条目留空）
+    pub const_params: Vec<String>,
 }
 
 /// 取顶层语句的函数**名与签名**（值/HOF 绑定也算函数）。
@@ -1440,6 +1463,8 @@ impl TypeChecker {
         // E1113（6.9.2-B）的槽位表（见字段文档）：本函数的**调用点实参序列**
         // 形参名（非类型形参、q=0 保留）。两条签名收集路径（`check_module_impl`
         // 的 pass2 与 `collect_signatures`）都经这里，故登记只有这一处。
+        // 函数条目的 `const_params` 留空——函数面的 q=0 事实以
+        // `PolyType::const_binders` 为声明期登记口（见 `CallSiteSlots` 文档）。
         if let crate::ast::StmtKind::Assign {
             target,
             type_annotation,
@@ -1457,7 +1482,10 @@ impl TypeChecker {
                 if !names.is_empty() {
                     self.declared_call_site_params
                         .entry(name.clone())
-                        .or_insert(names);
+                        .or_insert(CallSiteSlots {
+                            names,
+                            const_params: Vec::new(),
+                        });
                 }
             }
         }
@@ -1816,6 +1844,32 @@ impl TypeChecker {
                 if type_name.is_some() {
                     // RFC-011a §3: 同签名重复声明 = 覆盖 → E1100；不同签名 = 重载 → 放行
                     let tn = type_name.as_deref().unwrap_or_default();
+                    // E1113（6.9.2-B / issue #538）：方法面的**槽位名与 q=0 事实**。
+                    // 键与方法绑定同构（`{type}.{method}`——与 `add_method_binding`、
+                    // 调用点 FieldAccess 臂的 `method_bindings` 查找键同一构造）。
+                    // 此前方法注册整段丢弃 `const_binders`，调用点无事实可查、
+                    // 静默不判——#538 的缺口。条目按首登记为准（与函数面的
+                    // `or_insert` 同口径：重载方法不互相覆盖槽位事实）。
+                    let call_site_names: Vec<String> = type_annotation
+                        .as_ref()
+                        .map(|ann| {
+                            ann.runtime_value_params()
+                                .into_iter()
+                                .map(|p| p.name)
+                                .collect()
+                        })
+                        .unwrap_or_default();
+                    if !const_binders.is_empty() && !call_site_names.is_empty() {
+                        self.declared_call_site_params
+                            .entry(format!("{}.{}", tn, name))
+                            .or_insert(CallSiteSlots {
+                                names: call_site_names,
+                                const_params: const_binders
+                                    .iter()
+                                    .map(|b| b.name.clone())
+                                    .collect(),
+                            });
+                    }
                     let key = (tn.to_string(), name.clone());
                     if let Some(prev) = self.declared_methods.get(&key) {
                         if *prev == fn_ty {

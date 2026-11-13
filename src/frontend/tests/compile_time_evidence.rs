@@ -225,20 +225,21 @@ const NON_PINNED_PARAM: &str = concat!(
     "}\n",
 );
 
-/// F3 钉测试（tripwire，勿读成「正确行为」）：**方法面**（`接收者.方法(...)` 的
-/// `FieldAccess` 形态）当前**完全不判**编译期证据——`b.get(y)` 里 `y` 是运行期
-/// 形参，却不报 E1113。
+/// F3（tripwire 已翻面，WBS 3.20.21 / issue #538 修复）：**方法面**（`接收者.方法(...)`
+/// 的 `FieldAccess` 形态）现在与函数面共用同一证据检查——`y` 是**真运行期值**
+/// （`mut` 绑定，6.8.5-2a 不登记），填进 q=0 槽必须报 E1113。
 ///
-/// 事实：6.9.2-B 的槽位表只登记**函数名**，调用点 `callee_generic_name` 对「值接收者
-/// 的方法调用」返回 None（只认 `Var` 与模块限定的 `FieldAccess`），故整段判定走
-/// `NotTarget`。方法面的 q=0 事实（`Type.method` 声明 + `Export` 侧）不在本批覆盖面。
-/// 修好后本条必须改成「报 E1113」，在那之前不得把它当作「该形态合法」的证据。
+/// 修前史：6.9.2-B 的槽位表只登记**函数名**，方法注册整段丢弃 q=0 事实，调用点
+/// 整段判定走 `NotTarget`—— tripwire `test_method_bound_const_generic_argument_is_currently_unchecked`
+/// 钉住该静默，并约定修好后翻面为「必须报 E1113」。本条即该约定兑现。
+/// （issue 原文夹具的 `y: Int = 3` 非 mut 字面量绑定按 6.8.5-2a 是编译期已知值、
+/// 两个面都不报 E1113，其现状由 `tests/integration/check.rs` 的现状锚钉住。）
 const METHOD_FACE_CONST_ARG: &str = concat!(
     "Box: Type = { v: Int }\n",
     "Box.get: (N: Int) -> (n: N) -> Int = (n) => n\n",
     "main: () -> Void = {\n",
     "    b: Box = Box(v = 1)\n",
-    "    y: Int = 3\n",
+    "    mut y: Int = 3\n",
     "    r: Int = b.get(y)(y)\n",
     "}\n",
 );
@@ -315,20 +316,25 @@ fn test_const_arg_non_pinned_param_is_not_evidence() {
     );
 }
 
-/// F3 tripwire：方法面当前**零诊断**（未覆盖，见上方说明）。
+/// F3（tripwire 已翻面）：方法面的 q=0 槽被**真运行期值**填充 ⇒ E1113，
+/// 与函数面同码同出口（判据单源，issue #538）。
 #[test]
-fn test_method_bound_const_generic_argument_is_currently_unchecked() {
+fn test_method_bound_const_generic_argument_without_evidence_reports_e1113() {
     // Arrange
     let mut compiler = Compiler::new();
 
     // Act
     let result = compiler.compile("method_face_const_arg.yx", METHOD_FACE_CONST_ARG);
 
-    // Assert — tripwire：方法面当前不判证据（`callee_generic_name` 对值接收者返回 None）
-    assert!(
-        result.is_ok(),
-        "tripwire：方法面（接收者.方法）当前不判编译期证据；若这里开始失败，说明方法面已被接管——请把断言改成「必须报 E1113」并删掉本 tripwire。实际: {:?}",
-        result.err().map(|e| e.message().to_string())
+    // Assert — 方法面已接入同一证据检查：真运行期值填 q=0 槽必须报 E1113
+    // （修前该形态 0 诊断——tripwire 时期实测；红态取证见锚文件头注记）
+    let error =
+        result.expect_err("方法面（接收者.方法）的 q=0 槽被运行期值填充必须报 E1113（issue #538）");
+    assert_eq!(
+        error.diagnostic().map(|d| d.code.as_str()),
+        Some("E1113"),
+        "方法面缺证据应与函数面同码 E1113；实际: {}",
+        error.message()
     );
 }
 

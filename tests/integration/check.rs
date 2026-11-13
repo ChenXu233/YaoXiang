@@ -1894,3 +1894,136 @@ make_box: (T: Type) -> ((v: T) -> Box(T)) = { return (v) => 42 }
         "#546: found side must be the Int-returning lambda against a Box expectation; got: {text}"
     );
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 3.20.21 / #538：方法面的编译期值参数实参证据检查（E1113，SPEC 6.9.2-B）
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// 病史门：issue #538 —— 方法调用 `b.get(y)(y)` 的 q=0（编译期值）槽被运行期
+// 值填充时零诊断（整段判定走 NotTarget：调用点 `callee_generic_name` 对值
+// 接收者的 FieldAccess 返回 None），同形函数调用 `f(y)(y)` 报错。修前红态
+// 实测（2026-11-13，issue 修订 `0504e42e` 之后的 HEAD）：`mut y` 变体 check
+// 0 error（本锚先红后绿的红态取证）。
+//
+// 判据单源：方法面与函数面共用同一发射点（`collect_const_arg_instantiation_request`）
+// 与同一槽位判据（`bind_args_to_params` + 调用点形参名表），方法注册补写
+// q=0 事实（`CallSiteSlots::const_params`），不造第二份判定。
+//
+// **判据口径注记（义务一查证结论）**：issue 原文夹具的 `y: Int = 3` 不是
+// 运行期值——6.8.5-2a 值环境把「非 mut + 字面量初始化」的绑定登记为编译期
+// 已知（先例提交 2fa43b2a，早于 issue 复现 revision），两个面对它都不报
+// E1113。函数面对同一夹具报的是 E1002（特化类型强制机制：`f(3)` 把返回位
+// 定成 `int64::3` 后外层实参 `int64` 不匹配），该机制属特化面、不在本批
+// 接线范围（函数面零变化红线）。故本批的主锚用 `mut y` 变体钉住「真运行期
+// 值」的红转绿，issue 原文夹具单独作现状锚。
+
+/// #538 主锚（先红后绿）：方法面的 q=0 槽被**真运行期值**（`mut y`，无编译期
+/// 值）填充必须报 E1113，位置指向该实参——与函数面同判据同出口。
+#[test]
+fn test_check_method_call_runtime_value_in_const_slot_reports_e1113() {
+    // Arrange - issue #538 夹具的 `mut y` 变体：y 是真运行期绑定（6.8.5-2a
+    // 不登记 mut 绑定的编译期值），把它填进 q=0 槽必须被证据检查拒绝
+    let dir = temp_dir();
+    let file = create_yx_file(
+        &dir,
+        "method_const_slot_runtime_value.yx",
+        r#"
+Box: Type = { v: Int }
+Box.get: (N: Int) -> (n: N) -> Int = (n) => n
+main: () -> Void = {
+    b: Box = Box(v = 1)
+    mut y: Int = 3
+    r: Int = b.get(y)(y)
+}
+"#,
+    );
+
+    // Act
+    let result = check_file(&file);
+    let checked = check_result(&file);
+    let codes = error_codes(&checked);
+
+    // Assert - 翻面：check 从 0 错（修前红态实测）改为报 E1113
+    let errors = result.expect("check should surface the evidence miss as an error count");
+    assert_eq!(
+        errors, 1,
+        "#538: filling the q=0 slot of a method call with a runtime value must be rejected (E1113), not silently accepted; got {errors} error(s)"
+    );
+    assert_eq!(
+        codes.len(),
+        1,
+        "#538: exactly one diagnostic expected, got: {codes:?}"
+    );
+    assert_eq!(
+        codes[0], "E1113",
+        "#538: the rejection must be E1113 (compile-time evidence, same code as the function face), got: {codes:?}"
+    );
+}
+
+/// #538 合法形态锚：字面量与 const 表达式填 q=0 槽 ⇒ 修前修后同绿。
+///
+/// `b.get(3)(3)`（字面量）与 `b.get(2+3)(5)`（纯运算 const 表达式）都是
+/// 6.9.2-B 判据下的合法证据，方法面接线不得误伤（修前实测 0 错）。
+#[test]
+fn test_check_method_call_compile_time_value_args_stay_accepted() {
+    // Arrange
+    let dir = temp_dir();
+    let file = create_yx_file(
+        &dir,
+        "method_const_slot_legal_forms.yx",
+        r#"
+Box: Type = { v: Int }
+Box.get: (N: Int) -> (n: N) -> Int = (n) => n
+main: () -> Void = {
+    b: Box = Box(v = 1)
+    r: Int = b.get(3)(3)
+    s: Int = b.get(2+3)(5)
+}
+"#,
+    );
+
+    // Act
+    let result = check_file(&file);
+
+    // Assert
+    let errors = result.expect("check should not panic on legal method-face const args");
+    assert_eq!(
+        errors, 0,
+        "#538: legal compile-time value arguments (literal / const expression) must stay accepted on the method face; got {errors} error(s)"
+    );
+}
+
+/// #538 现状锚：issue 原文夹具（`y: Int = 3`，非 mut 字面量绑定）修后保持绿。
+///
+/// 判据：6.8.5-2a 值环境——非 mut + 字面量初始化的绑定编译期已知，是合法
+/// 证据；方法面与函数面对它**同判据**（都不报 E1113）。函数面对同一夹具
+/// 报 E1002 来自特化类型强制（`f(3)` 把 `n: N` 定成 `int64::3`），属特化面
+/// 机制，方法面本批不接（见本节头注记）——同绿即判据单源的现状。
+#[test]
+fn test_check_method_call_compile_time_known_binding_stays_accepted() {
+    // Arrange - issue #538 原文夹具逐字（`y: Int = 3` 非 mut）
+    let dir = temp_dir();
+    let file = create_yx_file(
+        &dir,
+        "method_const_slot_issue_fixture.yx",
+        r#"
+Box: Type = { v: Int }
+Box.get: (N: Int) -> (n: N) -> Int = (n) => n
+main: () -> Void = {
+    b: Box = Box(v = 1)
+    y: Int = 3
+    r: Int = b.get(y)(y)
+}
+"#,
+    );
+
+    // Act
+    let result = check_file(&file);
+
+    // Assert - `y` 按 6.8.5-2a 是编译期已知值（合法证据）⇒ 修前修后同绿
+    let errors = result.expect("check should not panic on the issue #538 fixture");
+    assert_eq!(
+        errors, 0,
+        "#538: the issue fixture's `y: Int = 3` is compile-time known per the value env (6.8.5-2a) — legal evidence on both faces; got {errors} error(s)"
+    );
+}
