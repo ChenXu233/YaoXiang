@@ -135,6 +135,11 @@ impl BoundsChecker {
                                 steps_used: 0,
                                 steps_limit: 0,
                             },
+
+                            // 该判定点无结构化命题（只有约束的文本描述，不是可渲染的项/等式），
+                            // 显式 None，不伪造命题
+                            subject: None,
+                            span: None,
                         });
                     }
                 }

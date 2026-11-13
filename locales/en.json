@@ -1130,6 +1130,12 @@
     "template": "Measure does not hold: this call site cannot prove that the measure strictly decreases\n\nCounterexample:\n{counterexample}",
     "help": "This is a termination obligation of refinement type propositions: for recursive functions annotated with the `Terminates` measure, every recursive call site must prove that the measure strictly decreases. The counterexample provides a set of values for which the decrease does not hold. Please check whether the measure is appropriate, or add branch guards so that the decrease holds on recursive paths. See RFC-027a."
   },
+  "E4023": {
+    "title": "Cannot be proven within the kernel",
+    "message": "The compiler could not prove this obligation within the given resources and inference rules (this does not mean the proposition is false)",
+    "template": "Cannot prove: {proposition} ({reason})",
+    "help": "This is a boundary of the compiler's reasoning, not a program error. Supply compile-time-known arguments or evidence, or rewrite the obligation into a form the kernel can decide (for example, give the type argument's value explicitly). See RFC-027 Section 12.3."
+  },
   "package_outdated_none": "All dependencies are up to date.",
   "package_outdated_found": "Found {0} outdated dependencies:",
   "package_outdated_row": "  {0}: {1} -> {2}",

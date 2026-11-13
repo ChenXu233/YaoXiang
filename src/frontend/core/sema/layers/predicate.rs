@@ -18,7 +18,7 @@ use super::super::proof::smt::backend::{with_shared_solver, SolverConsumer};
 use super::super::proof::smt::translate;
 use super::super::proof::verdict::{
     BudgetReport, DisproofKind, DisproofModel, ProofFailure, ProofFunctionCall, ProofResult,
-    ProofResultExt, UnprovenReason,
+    ProofResultExt, UnprovenReason, UnprovenSubject,
 };
 
 // 求解器获取面（RFC-039 D58）：本模块**不再**自持 `static SOLVER` 私有单例。
@@ -121,6 +121,9 @@ fn try_direct_eval(
             reason: UnprovenReason::BeyondKernel("约束表达式未求值为 Bool".into()),
             proof_calls: vec![],
             budget: ctx.budget.report(),
+
+            subject: Some(UnprovenSubject::Term(constraint.clone())),
+            span: None,
         })),
         Err(_) => None,
     }
@@ -189,6 +192,9 @@ fn try_smt_solve(
             reason: UnprovenReason::BeyondKernel(reason),
             proof_calls: vec![],
             budget: ctx.budget.report(),
+
+            subject: Some(UnprovenSubject::Term(constraint.clone())),
+            span: None,
         }),
     }
 }
@@ -218,6 +224,9 @@ fn try_proof_fn_call(
                             ),
                             proof_calls: vec![],
                             budget: budget_report,
+
+                            subject: Some(UnprovenSubject::Term(constraint.clone())),
+                            span: None,
                         });
                     }
                 }
@@ -228,6 +237,9 @@ fn try_proof_fn_call(
                         ),
                         proof_calls: vec![],
                         budget: budget_report,
+
+                        subject: Some(UnprovenSubject::Term(constraint.clone())),
+                        span: None,
                     });
                 }
             }
@@ -240,6 +252,9 @@ fn try_proof_fn_call(
                 args: const_args,
             }],
             budget: budget_report,
+
+            subject: Some(UnprovenSubject::Term(constraint.clone())),
+            span: None,
         });
     }
 
@@ -247,5 +262,8 @@ fn try_proof_fn_call(
         reason: UnprovenReason::BeyondKernel("无法自动证明且无证明函数".into()),
         proof_calls: vec![],
         budget: budget_report,
+
+        subject: Some(UnprovenSubject::Term(constraint.clone())),
+        span: None,
     })
 }

@@ -95,7 +95,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **模板**：`期望类型 '{expected}'，实际类型 '{found}'`
 - **消息**：期望类型与实际类型不匹配
 - **帮助**：使用正确的类型或添加类型转换
-- **发射点**：`src/frontend/core/sema/inference/assignment.rs:103`、`src/frontend/core/sema/inference/assignment.rs:116`、`src/frontend/core/sema/inference/bounds.rs:311` 等 73 处
+- **发射点**：`src/frontend/core/sema/inference/assignment.rs:103`、`src/frontend/core/sema/inference/assignment.rs:116`、`src/frontend/core/sema/inference/bounds.rs:316` 等 73 处
 
 ### E1003：未知类型
 

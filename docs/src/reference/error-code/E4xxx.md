@@ -9,7 +9,7 @@ description: '泛型约束、特质系统与常量求值相关的错误。'
 
 泛型约束、特质系统与常量求值相关的错误。
 
-本族共 **14** 个码，全部在 `define_codes!` 注册表中，类别为 `Generic`。完整索引见[错误码首页](./index.md)。
+本族共 **15** 个码，全部在 `define_codes!` 注册表中，类别为 `Generic`。完整索引见[错误码首页](./index.md)。
 
 ## 码一览
 
@@ -29,6 +29,7 @@ description: '泛型约束、特质系统与常量求值相关的错误。'
 | `E4020` | 需要证明函数 | `Generic` | 否 | `需要证明函数来验证约束` | ✅ 1 处 |
 | `E4021` | 循环终止性无法自动证明 | `Generic` | 否 | `无法自动证明循环终止：未找到有效的递减度量` | ✅ 1 处 |
 | `E4022` | 测度不成立 | `Generic` | 否 | `测度不成立：此调用点无法证明测度严格递减  反例： {counterexample}` | ✅ 1 处 |
+| `E4023` | 无法在内核内证明 | `Generic` | 否 | `无法证明：{proposition}（{reason}）` | ✅ 1 处 |
 
 ## 逐码说明
 
@@ -90,7 +91,7 @@ description: '泛型约束、特质系统与常量求值相关的错误。'
 - **构造函数**：`ErrorCodeDefinition::const_division_by_zero()`
 - **模板**：`常量表达式除以零`
 - **帮助**：确保常量表达式中的除数不为零。
-- **发射点**：`src/frontend/core/types/eval/const_eval.rs:535`、`src/frontend/core/types/eval/const_eval.rs:542`、`src/frontend/core/types/eval/const_eval.rs:547`
+- **发射点**：`src/frontend/core/types/eval/const_eval.rs:541`、`src/frontend/core/types/eval/const_eval.rs:548`、`src/frontend/core/types/eval/const_eval.rs:553`
 
 ### E4011：常量溢出
 
@@ -99,7 +100,7 @@ description: '泛型约束、特质系统与常量求值相关的错误。'
 - **构造函数**：`ErrorCodeDefinition::const_overflow()`
 - **模板**：`常量表达式溢出`
 - **帮助**：常量表达式的结果超出了类型的范围。
-- **发射点**：`src/frontend/core/types/eval/const_eval.rs:566`、`src/frontend/core/types/eval/const_eval.rs:571`、`src/frontend/core/types/eval/const_eval.rs:576` 等 5 处
+- **发射点**：`src/frontend/core/types/eval/const_eval.rs:572`、`src/frontend/core/types/eval/const_eval.rs:577`、`src/frontend/core/types/eval/const_eval.rs:582` 等 5 处
 
 ### E4012：常量递归过深
 
@@ -108,7 +109,7 @@ description: '泛型约束、特质系统与常量求值相关的错误。'
 - **构造函数**：`ErrorCodeDefinition::const_recursion_too_deep(limit)`
 - **模板**：`常量求值超出最大递归深度 {limit}`
 - **帮助**：简化常量表达式以减少递归。
-- **发射点**：`src/frontend/core/types/eval/const_eval.rs:743`
+- **发射点**：`src/frontend/core/types/eval/const_eval.rs:749`
 
 ### E4014：常量求值失败
 
@@ -117,7 +118,7 @@ description: '泛型约束、特质系统与常量求值相关的错误。'
 - **构造函数**：`ErrorCodeDefinition::const_eval_failed(reason)`
 - **模板**：`无法求值常量表达式：{reason}`
 - **帮助**：确保表达式可以在编译期求值。
-- **发射点**：`src/frontend/core/types/eval/const_eval.rs:479`、`src/frontend/core/types/eval/const_eval.rs:483`、`src/frontend/core/types/eval/const_eval.rs:504` 等 10 处
+- **发射点**：`src/frontend/core/types/eval/const_eval.rs:485`、`src/frontend/core/types/eval/const_eval.rs:489`、`src/frontend/core/types/eval/const_eval.rs:510` 等 10 处
 
 ### E4018：精化谓词违反
 
@@ -137,7 +138,7 @@ description: '泛型约束、特质系统与常量求值相关的错误。'
 - **模板**：`类型等式不成立：期望 {expected}，实际 {found}`
 - **消息**：类型等式在证明管道内证伪
 - **帮助**：检查组件的类型计算或提供证明函数。
-- **发射点**：`src/frontend/core/sema/proof/verdict.rs:194`
+- **发射点**：`src/frontend/core/sema/proof/verdict.rs:229`
 - **源码注释名**：类型等式不成立（证明管道内）
 
 ### E4020：需要证明函数
@@ -148,7 +149,7 @@ description: '泛型约束、特质系统与常量求值相关的错误。'
 - **模板**：`需要证明函数来验证约束`
 - **消息**：约束无法在编译期证明，需要提供证明函数
 - **帮助**：添加证明函数或提供运行时检查
-- **发射点**：`src/frontend/core/sema/proof/verdict.rs:339`
+- **发射点**：`src/frontend/core/sema/proof/verdict.rs:397`
 - **源码注释名**：需要证明函数来验证约束
 
 ### E4021：循环终止性无法自动证明
@@ -159,7 +160,7 @@ description: '泛型约束、特质系统与常量求值相关的错误。'
 - **模板**：`无法自动证明循环终止：未找到有效的递减度量`
 - **消息**：编译器无法为该循环合成递减度量，无法自动证明其终止
 - **帮助**：这是编译器自动推理的覆盖边界，并非程序错误。请改用带明确递减变量的循环形式（如每轮减小一个有下界的计数变量），或参考 RFC-027 §7 的度量策略与覆盖范围。
-- **发射点**：`src/frontend/core/sema/proof/verdict.rs:335`
+- **发射点**：`src/frontend/core/sema/proof/verdict.rs:393`
 
 ### E4022：测度不成立
 
@@ -169,5 +170,16 @@ description: '泛型约束、特质系统与常量求值相关的错误。'
 - **模板**：`测度不成立：此调用点无法证明测度严格递减  反例： {counterexample}`
 - **消息**：该递归调用点的测度未能严格递减，无法证明递归终止（已附反例）
 - **帮助**：这是精化类型主张的终止性义务：带 `Terminates` 测度的递归函数，每个递归调用点都必须证明测度严格递减。反例给出了一组使递减不成立的取值。请检查测度选择是否恰当，或补充分支守卫使递归路径上的下降成立。参考 RFC-027a。
-- **发射点**：`src/frontend/core/sema/proof/verdict.rs:179`
+- **发射点**：`src/frontend/core/sema/proof/verdict.rs:214`
 - **源码注释名**：测度不成立（RFC-027a §义务生成）
+
+### E4023：无法在内核内证明
+
+- **类别**：`Generic`
+- **span 豁免**：否
+- **构造函数**：`ErrorCodeDefinition::unproven_general(proposition, reason)`
+- **模板**：`无法证明：{proposition}（{reason}）`
+- **消息**：编译器无法在给定资源与推理规则内证明该义务（不等于命题为假）
+- **帮助**：这是编译器推理能力的边界，不是程序错误。请补充编译期已知的实参或证据，或把义务改写成内核可判定的形态（例如显式给出类型实参的值）。参见 RFC-027 §12.3。
+- **发射点**：`src/frontend/core/sema/proof/verdict.rs:372`
+- **源码注释名**：一般性「无法证明」（t64 / RFC-027 §12.3）

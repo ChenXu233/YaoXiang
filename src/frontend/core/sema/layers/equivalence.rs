@@ -23,7 +23,7 @@ use crate::frontend::core::sema::environment::TypeEnvironment;
 use crate::frontend::core::types::eval::evaluator::{EvalError, Evaluator};
 use crate::frontend::core::types::mono::MonoType;
 use super::super::proof::verdict::{
-    DisproofKind, DisproofModel, ProofFailure, ProofResult, UnprovenReason,
+    UnprovenSubject, DisproofKind, DisproofModel, ProofFailure, ProofResult, UnprovenReason,
 };
 use super::super::proof::context::ProofContext;
 use crate::frontend::core::sema::proof::budget::BudgetTracker;
@@ -218,6 +218,10 @@ fn normalize_type_with(
             reason: UnprovenReason::BudgetExceeded,
             proof_calls: vec![],
             budget: ctx.budget.report(),
+
+            // 单侧归约失败：该判定点无结构化命题（不是等式义务），显式 None 不伪造
+            subject: None,
+            span: None,
         });
     }
     match ty {
@@ -269,12 +273,20 @@ fn eval_error_to_failure(
             reason: UnprovenReason::BudgetExceeded,
             proof_calls: vec![],
             budget,
+
+            // 单侧归约失败：该判定点无结构化命题（不是等式义务），显式 None 不伪造
+            subject: None,
+            span: None,
         }
     } else {
         ProofFailure::Unproven {
             reason: UnprovenReason::BeyondKernel("无法在编译期归约该类型（求值失败）".to_string()),
             proof_calls: vec![],
             budget,
+
+            // 单侧归约失败：该判定点无结构化命题（不是等式义务），显式 None 不伪造
+            subject: None,
+            span: None,
         }
     }
 }
@@ -314,6 +326,12 @@ pub fn defeq(
                     )),
                     proof_calls: vec![],
                     budget: ctx.budget.report(),
+
+                    subject: Some(UnprovenSubject::TypeEquivalence(
+                        Box::new(lhs.clone()),
+                        Box::new(rhs.clone()),
+                    )),
+                    span: None,
                 });
             }
             return defeq(lhs_base, rhs_base, ctx);
@@ -326,6 +344,12 @@ pub fn defeq(
                 )),
                 proof_calls: vec![],
                 budget: ctx.budget.report(),
+
+                subject: Some(UnprovenSubject::TypeEquivalence(
+                    Box::new(lhs.clone()),
+                    Box::new(rhs.clone()),
+                )),
+                span: None,
             });
         }
         _ => {}

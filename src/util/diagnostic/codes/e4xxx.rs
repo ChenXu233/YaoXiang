@@ -37,4 +37,10 @@ define_codes!(E4XXX, {
     // 诊断须指向它而非豁免——与 E4021 同族（证明未成立类），但 E4021 的
     // span 由 `UnprovenReason` 透传，本码由发射处直接 `.at()`。
     ("E4022", Generic, false, measure_not_decreasing(counterexample: &str) => .param("counterexample", counterexample)),
+    // E4023 一般性「无法证明」（t64 / RFC-027 §12.3）
+    // span_exempt=false：位置由 `ProofFailure::Unproven { span }` 透传（义务点位置）；
+    // 确无位置时由 `to_diagnostic` 回落 `Span::dummy()` 并记日志。
+    // 与 E2031 的分工：E2031 只服务精化通道（带真实 assigned/var 两槽）；E4023 是
+    // 一般兜底（类型判等、符号名未绑定、预算耗尽等），模板 `无法证明：{proposition}（{reason}）`。
+    ("E4023", Generic, false, unproven_general(proposition: &str, reason: &str) => .param("proposition", proposition).param("reason", reason)),
 });

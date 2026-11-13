@@ -2205,6 +2205,11 @@ impl<'a> TerminationChecker<'a> {
                 steps_used: 0,
                 steps_limit: 0,
             },
+
+            // 该判定点无结构化命题：循环终止性不是项也不是类型等式，原因自带 span，
+            // 显式 None，不伪造命题
+            subject: None,
+            span: Some(span),
         }));
     }
 }

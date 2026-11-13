@@ -8,7 +8,10 @@
 
 use crate::frontend::core::sema::proof::verdict::{
     BudgetReport, DisproofKind, DisproofModel, ProofFailure, ProofResultExt, UnprovenReason,
+    UnprovenSubject,
 };
+use crate::frontend::core::types::const_data::{ConstExpr, ConstValue};
+use crate::frontend::core::types::mono::MonoType;
 use crate::util::diagnostic::Severity;
 use crate::util::span::{Position, Span};
 
@@ -265,6 +268,9 @@ fn test_into_result_loop_termination_unproven_is_user_domain_code() {
             steps_used: 0,
             steps_limit: 0,
         },
+        // 终止性原因自带 span（E4021 用它），失败值侧的载荷留空
+        subject: None,
+        span: None,
     });
 
     // Act
@@ -279,11 +285,10 @@ fn test_into_result_loop_termination_unproven_is_user_domain_code() {
     );
 }
 
-/// 未分类的 `Unproven` 仍走 ICE — 保证兜底未被本改动误伤
+/// t64：一般性 `Unproven` 走**专属 E4023**，消息含命题与原因，不再复用 E2031。
 #[test]
-fn test_into_result_unproven_reason_reuses_e2031_not_ice() {
-    // Arrange — BeyondKernel 无专属码：6.9.3c 起与 Symbolic/BudgetExceeded 一起
-    // **复用 E2031**（能力边界），不再落 ICE
+fn test_into_result_general_unproven_uses_e4023() {
+    // Arrange — BeyondKernel 属一般性「无法证明」；带命题 `false` 与位置
     let result = Err(ProofFailure::Unproven {
         reason: UnprovenReason::BeyondKernel("未分类情形".into()),
         proof_calls: vec![],
@@ -291,16 +296,20 @@ fn test_into_result_unproven_reason_reuses_e2031_not_ice() {
             steps_used: 0,
             steps_limit: 0,
         },
+        subject: Some(UnprovenSubject::Term(ConstExpr::Lit(ConstValue::Bool(
+            false,
+        )))),
+        span: None,
     });
 
     // Act
     let outcome = result.into_result();
 
-    // Assert — 6.9.3c：三条「未武装」原因复用 E2031，`_` 臂已删，不再有 ICE 兜底
+    // Assert — t64：一般性 Unproven 落**专属 E4023**（不再复用 E2031 的空串形态）
     let err = outcome.expect_err("Unproven 必须转成 Err(Diagnostic)");
     assert_eq!(
-        err.code, "E2031",
-        "未武装原因应复用 E2031（能力边界），不得落 E8001 ICE。实际: '{}'",
+        err.code, "E4023",
+        "一般性 Unproven 应有专属码 E4023，不得复用 E2031。实际: '{}'",
         err.code
     );
 }
@@ -332,5 +341,144 @@ fn test_into_result_measure_not_decreasing_is_user_domain_code() {
         err.code, "E4022",
         "测度判伪须映射到 E4022（用户域），不得为 E8001 ICE。实际: '{}'",
         err.code
+    );
+}
+
+/// t64 验收：三条「一般性」原因都走 **E4023**，消息含非空命题、原因文本可读，
+/// 且**不出现空占位**（`''` / `（）` 里空串）——命题缺失时用中性主语「该义务」。
+#[test]
+fn test_unproven_general_variants_render_e4023_with_proposition() {
+    // Arrange — (原因, 消息里必须出现的原因文本)
+    let cases = vec![
+        (UnprovenReason::Symbolic("k".into()), "k"),
+        (UnprovenReason::BudgetExceeded, "预算耗尽"),
+        (
+            UnprovenReason::BeyondKernel("超出内核能力".into()),
+            "超出内核能力",
+        ),
+    ];
+
+    for (reason, reason_text) in cases {
+        // Act
+        let result = Err(ProofFailure::Unproven {
+            reason,
+            proof_calls: vec![],
+            budget: BudgetReport {
+                steps_used: 3,
+                steps_limit: 10,
+            },
+            subject: Some(UnprovenSubject::Term(ConstExpr::Lit(ConstValue::Bool(
+                false,
+            )))),
+            span: None,
+        });
+        let outcome = result.into_result();
+
+        // Assert
+        let err = outcome.expect_err("unproven 必须转成 Err(Diagnostic)");
+        assert_eq!(
+            err.code, "E4023",
+            "一般性原因必须落 E4023，实际: {}",
+            err.code
+        );
+        assert!(
+            err.message.contains("false"),
+            "消息必须带出非空命题（`false`），实际: '{}'",
+            err.message
+        );
+        assert!(
+            err.message.contains(reason_text),
+            "消息必须带出可读原因（{reason_text}），实际: '{}'",
+            err.message
+        );
+        assert!(
+            !err.message.contains("''") && !err.message.contains("（）"),
+            "消息不得出现空占位，实际: '{}'",
+            err.message
+        );
+    }
+}
+
+/// t64 验收：命题缺失时用中性主语「该义务」，**不伪造**命题、不留空占位。
+#[test]
+fn test_unproven_general_without_proposition_uses_neutral_subject() {
+    // Arrange
+    let result = Err(ProofFailure::Unproven {
+        reason: UnprovenReason::BeyondKernel("超出内核能力".into()),
+        proof_calls: vec![],
+        budget: BudgetReport {
+            steps_used: 0,
+            steps_limit: 10,
+        },
+        subject: None,
+        span: None,
+    });
+
+    // Act
+    let outcome = result.into_result();
+
+    // Assert
+    let err = outcome.expect_err("unproven 必须转成 Err(Diagnostic)");
+    assert_eq!(err.code, "E4023", "实际: {}", err.code);
+    assert!(
+        err.message.contains("该义务"),
+        "无命题时应使用中性主语，实际: '{}'",
+        err.message
+    );
+    assert!(
+        !err.message.contains("''"),
+        "不得出现空占位，实际: '{}'",
+        err.message
+    );
+}
+
+/// t66 验收：**类型等式**命题（`A ≡ B`）可渲染——码 E4023、消息含 `≡` 与两侧
+/// 类型文本，且**不含**中性主语「该义务」。
+///
+/// t66 之前 `proposition: Option<ConstExpr>` 装不下等式命题，`equivalence` 的
+/// 判等失败点只能传 `None` ⇒ 消息退化成「无法证明：该义务（…）」，读不出在证什么。
+#[test]
+fn test_unproven_type_equivalence_renders_equiv_relation() {
+    // Arrange — 等式义务：`int64 ≡ int64::3`
+    let lhs = MonoType::Int(64);
+    let rhs = MonoType::Literal {
+        name: "3".to_string(),
+        base_type: Box::new(MonoType::Int(64)),
+        value: ConstValue::Int(3),
+    };
+    let result = Err(ProofFailure::Unproven {
+        reason: UnprovenReason::BeyondKernel("两侧归一化后不相等".into()),
+        proof_calls: vec![],
+        budget: BudgetReport {
+            steps_used: 2,
+            steps_limit: 10,
+        },
+        subject: Some(UnprovenSubject::TypeEquivalence(
+            Box::new(lhs.clone()),
+            Box::new(rhs.clone()),
+        )),
+        span: None,
+    });
+
+    // Act
+    let outcome = result.into_result();
+
+    // Assert
+    let err = outcome.expect_err("unproven 必须转成 Err(Diagnostic)");
+    assert_eq!(err.code, "E4023", "实际: {}", err.code);
+    assert!(
+        err.message.contains("≡"),
+        "类型等式命题必须渲染出 `≡`，实际: '{}'",
+        err.message
+    );
+    assert!(
+        err.message.contains(&format!("{}", lhs)) && err.message.contains(&format!("{}", rhs)),
+        "消息必须带出两侧类型文本，实际: '{}'",
+        err.message
+    );
+    assert!(
+        !err.message.contains("该义务"),
+        "有结构化命题时不得退化成中性主语，实际: '{}'",
+        err.message
     );
 }

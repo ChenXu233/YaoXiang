@@ -30,7 +30,7 @@ description: '语义分析阶段产生的错误，涵盖作用域、变量生命
 | `E2027` | unsafe 解引用 | `Semantic` | 否 | `无法在 unsafe 块外解引用裸指针` | ✅ 1 处 |
 | `E2029` | spawn 内引用循环 | `Semantic` | 否 | `spawn 内引用循环: {cycle}` | ✅ 1 处 |
 | `E2030` | 精化类型约束违反 | `Semantic` | 否 | `对 '{assigned}' 赋值后，'{var}' 不再满足精化类型约束：{constraint}（反例：{counterexample}）` | ✅ 1 处 |
-| `E2031` | 精化约束无法证明 | `Semantic` | 否 | `对 '{assigned}' 赋值后，'{var}' 的精化类型约束：{constraint} 在证明内核内无法静态证明` | ✅ 3 处 |
+| `E2031` | 精化约束无法证明 | `Semantic` | 否 | `对 '{assigned}' 赋值后，'{var}' 的精化类型约束：{constraint} 在证明内核内无法静态证明` | ✅ 2 处 |
 | `E2090` | 无效签名 | `Semantic` | 否 | `无效签名：{reason}` | ✅ 3 处 |
 | `E2091` | 签名未知类型 | `Semantic` | 否 | `无效签名：未知类型 '{type_name}'` | ⚠ 暂未发射 |
 | `E2092` | 签名缺少箭头 | `Semantic` | 否 | `无效签名：缺少 '->'` | ✅ 1 处 |
@@ -70,7 +70,7 @@ description: '语义分析阶段产生的错误，涵盖作用域、变量生命
 - **模板**：`所有权约束违反：{reason}`
 - **消息**：所有权约束未满足
 - **帮助**：检查值的所有权语义
-- **发射点**：`src/frontend/core/sema/proof/verdict.rs:268`
+- **发射点**：`src/frontend/core/sema/proof/verdict.rs:303`
 - **源码注释名**：所有权约束违反
 
 ### E2010：不可变赋值
@@ -120,7 +120,7 @@ description: '语义分析阶段产生的错误，涵盖作用域、变量生命
 - **构造函数**：`ErrorCodeDefinition::use_after_move(name)`
 - **模板**：`'{name}' 已被移动，无法再次使用`
 - **帮助**：该值已被移动到新的所有者。如需再次使用，请使用引用或克隆。
-- **发射点**：`src/frontend/core/sema/proof/verdict.rs:216`
+- **发射点**：`src/frontend/core/sema/proof/verdict.rs:251`
 - **源码注释名**：使用已移动的变量
 
 ### E2016：不可变赋值
@@ -130,7 +130,7 @@ description: '语义分析阶段产生的错误，涵盖作用域、变量生命
 - **构造函数**：`ErrorCodeDefinition::immutable_assign(name)`
 - **模板**：`无法给不可变变量 '{name}' 赋值`
 - **帮助**：使用 `mut` 声明变量以允许赋值。
-- **发射点**：`src/frontend/core/sema/proof/verdict.rs:246`
+- **发射点**：`src/frontend/core/sema/proof/verdict.rs:281`
 - **源码注释名**：不可变赋值（所有权检查器用）
 
 ### E2018：可变/不可变借用冲突
@@ -140,7 +140,7 @@ description: '语义分析阶段产生的错误，涵盖作用域、变量生命
 - **构造函数**：`ErrorCodeDefinition::mutable_immutable_borrow_conflict(name)`
 - **模板**：`无法可变借用 '{name}'（已被不可变借用）`
 - **帮助**：确保在创建可变引用前没有不可变引用存在。
-- **发射点**：`src/frontend/core/sema/proof/verdict.rs:206`
+- **发射点**：`src/frontend/core/sema/proof/verdict.rs:241`
 
 ### E2019：双重释放
 
@@ -149,7 +149,7 @@ description: '语义分析阶段产生的错误，涵盖作用域、变量生命
 - **构造函数**：`ErrorCodeDefinition::double_drop(name)`
 - **模板**：`值 '{name}' 被释放了两次`
 - **帮助**：确保值只被释放一次。
-- **发射点**：`src/frontend/core/sema/proof/verdict.rs:236`
+- **发射点**：`src/frontend/core/sema/proof/verdict.rs:271`
 
 ### E2020：释放后使用
 
@@ -158,7 +158,7 @@ description: '语义分析阶段产生的错误，涵盖作用域、变量生命
 - **构造函数**：`ErrorCodeDefinition::use_after_drop(name)`
 - **模板**：`'{name}' 在释放后被使用`
 - **帮助**：在值被释放前使用它，或重构代码。
-- **发射点**：`src/frontend/core/sema/proof/verdict.rs:226`
+- **发射点**：`src/frontend/core/sema/proof/verdict.rs:261`
 
 ### E2027：unsafe 解引用
 
@@ -167,7 +167,7 @@ description: '语义分析阶段产生的错误，涵盖作用域、变量生命
 - **构造函数**：`ErrorCodeDefinition::unsafe_deref()`
 - **模板**：`无法在 unsafe 块外解引用裸指针`
 - **帮助**：将解引用操作包裹在 `unsafe` 块中。
-- **发射点**：`src/frontend/core/sema/proof/verdict.rs:253`
+- **发射点**：`src/frontend/core/sema/proof/verdict.rs:288`
 
 ### E2029：spawn 内引用循环
 
@@ -177,7 +177,7 @@ description: '语义分析阶段产生的错误，涵盖作用域、变量生命
 - **模板**：`spawn 内引用循环: {cycle}`
 - **消息**：spawn 块内检测到引用形成循环
 - **帮助**：spawn 捕获的引用不能形成循环依赖，请检查捕获列表
-- **发射点**：`src/frontend/core/sema/proof/verdict.rs:261`
+- **发射点**：`src/frontend/core/sema/proof/verdict.rs:296`
 - **源码注释名**：spawn 内 ref 循环
 
 ### E2030：精化类型约束违反
@@ -197,7 +197,7 @@ description: '语义分析阶段产生的错误，涵盖作用域、变量生命
 - **构造函数**：`ErrorCodeDefinition::refined_unproven(assigned, var, constraint)`
 - **模板**：`对 '{assigned}' 赋值后，'{var}' 的精化类型约束：{constraint} 在证明内核内无法静态证明`
 - **帮助**：RFC-027 要求所有精化约束在编译期得到证明——证不出即编译错误。请改写约束使其实参可静态取值（字面量或字面量可折叠的表达式），或提供返回 Type 的证明函数参与编译期执行。
-- **发射点**：`src/frontend/core/sema/checker/refinement.rs:662`、`src/frontend/core/sema/checker/refinement.rs:765`、`src/frontend/core/sema/proof/verdict.rs:327`
+- **发射点**：`src/frontend/core/sema/checker/refinement.rs:662`、`src/frontend/core/sema/checker/refinement.rs:765`
 - **源码注释名**：精化约束无法证明（RFC-027 §4/§9：Unproven → 编译错误 + 未解命题，
 
 ### E2090：无效签名

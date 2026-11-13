@@ -20,7 +20,7 @@ use crate::ast::{Expr, BinOp as AstBinOp, UnOp as AstUnOp};
 use crate::frontend::core::lexer::tokens::Literal;
 use crate::frontend::core::sema::proof::budget::BudgetTracker;
 use crate::frontend::core::sema::proof::verdict::{
-    DisproofKind, DisproofModel, ProofFailure, UnprovenReason,
+    DisproofKind, DisproofModel, ProofFailure, UnprovenReason, UnprovenSubject,
 };
 use crate::util::diagnostic::Diagnostic;
 use crate::util::diagnostic::codes::ErrorCodeDefinition;
@@ -358,6 +358,9 @@ pub fn normalize(
             reason: UnprovenReason::Symbolic(name),
             proof_calls: Vec::new(),
             budget: budget.report(),
+
+            subject: Some(UnprovenSubject::Term(term.clone())),
+            span: None,
         });
     }
     // 2. 预算：一次判定按项规模扣步（缺省 10k 步；测试可注入小预算触发）
@@ -367,6 +370,9 @@ pub fn normalize(
                 reason: UnprovenReason::BudgetExceeded,
                 proof_calls: Vec::new(),
                 budget: budget.report(),
+
+                subject: Some(UnprovenSubject::Term(term.clone())),
+                span: None,
             });
         }
     }
