@@ -13,7 +13,8 @@ use crate::frontend::core::sema::proof::context::ProofContext;
 use crate::frontend::core::sema::proof::verdict::{ProofFailure, UnprovenReason};
 use crate::frontend::core::sema::TypeEnvironment;
 use crate::frontend::core::types::const_data::{BinOp, ConstExpr, ConstValue};
-use crate::frontend::core::types::mono::MonoType;
+use crate::frontend::core::types::eval::dependent_types::DependentTypeEnv;
+use crate::frontend::core::types::mono::{MonoType, PolyType};
 
 /// `<var> <op> <n>` 形态的约束表达式。
 fn cmp_const(
@@ -315,5 +316,56 @@ fn test_defeq_array_length_arithmetic_equals_literal() {
     assert!(
         result.is_ok(),
         "Array(Int, 2+3) 与 Array(Int, 5) 应判等（常量折叠后同形）；实际: {result:?}"
+    );
+}
+
+// ===== 6.9.3d：6.9.3b 遗留 2（非预算 EvalError 的分类断言）=====
+
+/// 非预算原因（求值深度上限）必须落 `Unproven{BeyondKernel}`，不得落 `BudgetExceeded`。
+///
+/// 判据锚：RFC-027 §12 的失败分类（「算不出来」的两条原因必须可区分）与 6.9.3b 遗留 2。
+/// 构造方式：101 层别名链使 `Evaluator` 的 `max_depth` 先于预算触发，而归约只花 1 步。
+#[test]
+fn test_normalize_type_depth_exceeded_is_beyond_kernel() {
+    // Arrange
+    let mut env = TypeEnvironment::default();
+    for i in 0..102 {
+        let body = if i == 101 {
+            MonoType::Int(64)
+        } else {
+            MonoType::TypeRef(format!("A{}", i + 1))
+        };
+        env.add_type(format!("A{i}"), PolyType::mono(body));
+    }
+    let budget = BudgetTracker::for_judgment();
+    let dep_env = DependentTypeEnv::new();
+    let ctx = DefeqContext {
+        types: &env.types,
+        budget: &budget,
+        dep_env: &dep_env,
+    };
+
+    // Act
+    let result = normalize_type(&MonoType::TypeRef("A0".to_string()), &ctx);
+
+    // Assert
+    let failure = result.expect_err("101 层别名链应触发求值深度上限");
+    assert!(
+        matches!(
+            failure,
+            ProofFailure::Unproven {
+                reason: UnprovenReason::BeyondKernel(_),
+                ..
+            }
+        ),
+        "非预算原因必须落 BeyondKernel；实际: {:?}",
+        failure
+    );
+    let report = budget.report();
+    assert!(
+        report.steps_used < report.steps_limit,
+        "本判据要求预算**未**耗尽（否则分不清两条原因）：已用 {} / 上限 {}",
+        report.steps_used,
+        report.steps_limit
     );
 }

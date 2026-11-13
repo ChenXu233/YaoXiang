@@ -13,7 +13,6 @@ pub mod statements;
 pub mod types;
 
 // ✅ 从 checking/ 移入的模块
-pub mod assignment;
 pub mod bounds;
 
 pub mod patterns;
@@ -26,8 +25,6 @@ pub use scope::ScopeManager;
 pub use types::TypeSystem;
 pub use statements::StatementChecker;
 pub use expressions::ExpressionInferrer;
-pub use assignment::AssignmentChecker;
-pub use assignment::ConstraintAssignmentInfo;
 pub use bounds::BoundsChecker;
 pub use patterns::PatternInferrer;
 

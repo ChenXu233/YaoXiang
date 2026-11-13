@@ -5,6 +5,7 @@
 //! 实现各种表达式的类型推断。
 //! 使用统一的 ScopeManager 管理变量作用域。
 
+use crate::frontend::core::sema::judgement::decide;
 use crate::util::diagnostic::{ErrorCodeDefinition, Result};
 use crate::ast::{BinOp, UnOp};
 use crate::frontend::core::types::{MonoType, PolyType, TypeConstraintSolver};
@@ -18,6 +19,10 @@ use super::call_ownership::{CallOwnership, CallOwnershipTable, ParamOwnership};
 
 /// 空的 Native 签名表（默认值）
 static EMPTY_SIGNATURES: std::sync::LazyLock<HashMap<String, MonoType>> =
+    std::sync::LazyLock::new(HashMap::new);
+
+/// 空的类型定义表（默认值）：与 `TypeEnvironment.types` 同型，判等判定点的 δ 表
+static EMPTY_POLY_TYPES: std::sync::LazyLock<HashMap<String, PolyType>> =
     std::sync::LazyLock::new(HashMap::new);
 
 /// #387：native arity 区间表空缺省
@@ -135,9 +140,11 @@ pub struct ExpressionInferrer<'a> {
         &'a HashMap<String, Vec<crate::frontend::core::sema::environment::InterfaceImplEntry>>,
     /// RFC-010: 和类型登记表（类型名 → 变体定义，声明序）
     sum_types: &'a HashMap<String, Vec<crate::frontend::core::sema::environment::SumVariantDef>>,
-    /// 类型定义表: type_name -> MonoType(Struct)
-    /// 用于 TypeRef → Struct 解析（字段访问等）
-    type_defs: &'a HashMap<String, MonoType>,
+    /// 类型定义表: type_name -> PolyType（与 `TypeEnvironment.types` 同型）
+    ///
+    /// 用于 TypeRef → Struct 解析（字段访问等）；6.9.3d 起同时是判等判定点的
+    /// δ 展开表（`decide` 把它交给 `DefeqContext.types`）。
+    type_defs: &'a HashMap<String, PolyType>,
     /// 泛型类型定义表
     /// 用于 List(1, 2, 3) 等泛型类型构造调用的实例化
     generic_type_defs:
@@ -237,7 +244,7 @@ impl<'a> ExpressionInferrer<'a> {
             return_annotation_span: None,
             unsafe_depth: 0,
             method_bindings: &EMPTY_SIGNATURES,
-            type_defs: &EMPTY_SIGNATURES,
+            type_defs: &EMPTY_POLY_TYPES,
             generic_type_defs: &EMPTY_GENERIC_TYPE_DEFS,
             current_fn_param_constraints: None,
             method_overloads: None,
@@ -289,7 +296,7 @@ impl<'a> ExpressionInferrer<'a> {
             return_annotation_span: None,
             unsafe_depth: 0,
             method_bindings: &EMPTY_SIGNATURES,
-            type_defs: &EMPTY_SIGNATURES,
+            type_defs: &EMPTY_POLY_TYPES,
             generic_type_defs: &EMPTY_GENERIC_TYPE_DEFS,
             current_fn_param_constraints: None,
             method_overloads: None,
@@ -342,7 +349,7 @@ impl<'a> ExpressionInferrer<'a> {
             return_annotation_span: None,
             unsafe_depth: 0,
             method_bindings: &EMPTY_SIGNATURES,
-            type_defs: &EMPTY_SIGNATURES,
+            type_defs: &EMPTY_POLY_TYPES,
             generic_type_defs: &EMPTY_GENERIC_TYPE_DEFS,
             current_fn_param_constraints: None,
             method_overloads: None,
@@ -397,7 +404,7 @@ impl<'a> ExpressionInferrer<'a> {
             return_annotation_span: None,
             unsafe_depth: 0,
             method_bindings,
-            type_defs: &EMPTY_SIGNATURES,
+            type_defs: &EMPTY_POLY_TYPES,
             generic_type_defs: &EMPTY_GENERIC_TYPE_DEFS,
             current_fn_param_constraints: None,
             method_overloads: None,
@@ -530,7 +537,7 @@ impl<'a> ExpressionInferrer<'a> {
     /// 设置类型定义表
     pub fn set_type_defs(
         &mut self,
-        defs: &'a HashMap<String, MonoType>,
+        defs: &'a HashMap<String, PolyType>,
     ) {
         self.type_defs = defs;
     }
@@ -732,13 +739,22 @@ impl<'a> ExpressionInferrer<'a> {
         if enforce_unify {
             if let Some(poly) = self.scope.get_var(name) {
                 let declared = poly.body.clone();
-                if self.solver.unify(&new_ty, &declared).is_err() {
-                    return Err(ErrorCodeDefinition::type_mismatch(
-                        &format!("{}", declared),
-                        &format!("{}", new_ty),
-                    )
-                    .at(span)
-                    .build());
+                if let Err(failure) = decide(
+                    self.solver,
+                    &new_ty,
+                    &declared,
+                    Some(span),
+                    self.type_defs,
+                    self.dep_env,
+                ) {
+                    return Err(failure.or_site(
+                        ErrorCodeDefinition::type_mismatch(
+                            &format!("{}", declared),
+                            &format!("{}", new_ty),
+                        )
+                        .at(span)
+                        .build(),
+                    ));
                 }
             }
         }
@@ -1018,13 +1034,22 @@ impl<'a> ExpressionInferrer<'a> {
                 // 折出结果——同一表达式写在顶层能折、写在函数体内就炸（B9）。
                 // RFC-011b 只承诺混合**算术**（Add/Sub/Mul/Div），比较保持
                 // 「两侧同型」的原生快路径，故此处按纪律拒绝。
-                if self.solver.unify(left, right).is_err() {
-                    return Err(ErrorCodeDefinition::type_mismatch(
-                        &format!("{}", self.solver.resolve_type(left)),
-                        &format!("{}", self.solver.resolve_type(right)),
-                    )
-                    .at(span)
-                    .build());
+                if let Err(failure) = decide(
+                    self.solver,
+                    left,
+                    right,
+                    Some(span),
+                    self.type_defs,
+                    self.dep_env,
+                ) {
+                    return Err(failure.or_site(
+                        ErrorCodeDefinition::type_mismatch(
+                            &format!("{}", self.solver.resolve_type(left)),
+                            &format!("{}", self.solver.resolve_type(right)),
+                        )
+                        .at(span)
+                        .build(),
+                    ));
                 }
                 Ok(MonoType::Bool)
             }
@@ -1106,7 +1131,7 @@ impl<'a> ExpressionInferrer<'a> {
                 if self.sum_types.contains_key(n) {
                     Some(n.clone())
                 } else {
-                    match self.type_defs.get(n) {
+                    match self.type_defs.get(n).map(|p| &p.body) {
                         Some(MonoType::Struct(st)) if self.sum_types.contains_key(&st.name) => {
                             Some(st.name.clone())
                         }
@@ -1247,15 +1272,24 @@ impl<'a> ExpressionInferrer<'a> {
             result_ty = Some(match result_ty {
                 None => arm_ty,
                 Some(prev) => {
-                    if self.solver.unify(&prev, &arm_ty).is_err() {
+                    if let Err(failure) = decide(
+                        self.solver,
+                        &prev,
+                        &arm_ty,
+                        Some(match_span),
+                        self.type_defs,
+                        self.dep_env,
+                    ) {
                         let prev_r = self.solver.resolve_type(&prev);
                         let arm_r = self.solver.resolve_type(&arm_ty);
-                        return Err(ErrorCodeDefinition::type_mismatch(
-                            &format!("{}", prev_r),
-                            &format!("{}", arm_r),
-                        )
-                        .at(arm.span)
-                        .build());
+                        return Err(failure.or_site(
+                            ErrorCodeDefinition::type_mismatch(
+                                &format!("{}", prev_r),
+                                &format!("{}", arm_r),
+                            )
+                            .at(arm.span)
+                            .build(),
+                        ));
                     }
                     self.solver.resolve_type(&prev)
                 }
@@ -1353,13 +1387,22 @@ impl<'a> ExpressionInferrer<'a> {
             }
             Pattern::Literal(lit) => {
                 let lit_ty = Self::literal_pattern_type(lit);
-                if self.solver.unify(&resolved, &lit_ty).is_err() {
-                    return Err(ErrorCodeDefinition::type_mismatch(
-                        &resolved.to_string(),
-                        &lit_ty.to_string(),
-                    )
-                    .at(span)
-                    .build());
+                if let Err(failure) = decide(
+                    self.solver,
+                    &resolved,
+                    &lit_ty,
+                    Some(span),
+                    self.type_defs,
+                    self.dep_env,
+                ) {
+                    return Err(failure.or_site(
+                        ErrorCodeDefinition::type_mismatch(
+                            &resolved.to_string(),
+                            &lit_ty.to_string(),
+                        )
+                        .at(span)
+                        .build(),
+                    ));
                 }
                 Ok(())
             }
@@ -1392,17 +1435,19 @@ impl<'a> ExpressionInferrer<'a> {
                 // 解析结构体类型：Struct 直接用；TypeRef 经类型镜像复核
                 let struct_ty: crate::frontend::core::types::mono::StructType = match &resolved {
                     MonoType::Struct(s) if &s.name == name => s.clone(),
-                    MonoType::TypeRef(n) if n == name => match self.type_defs.get(n) {
-                        Some(MonoType::Struct(s)) => s.clone(),
-                        _ => {
-                            return Err(ErrorCodeDefinition::type_mismatch(
-                                name,
-                                &resolved.to_string(),
-                            )
-                            .at(span)
-                            .build());
+                    MonoType::TypeRef(n) if n == name => {
+                        match self.type_defs.get(n).map(|p| &p.body) {
+                            Some(MonoType::Struct(s)) => s.clone(),
+                            _ => {
+                                return Err(ErrorCodeDefinition::type_mismatch(
+                                    name,
+                                    &resolved.to_string(),
+                                )
+                                .at(span)
+                                .build());
+                            }
                         }
-                    },
+                    }
                     other => {
                         return Err(ErrorCodeDefinition::type_mismatch(name, &other.to_string())
                             .at(span)
@@ -1633,13 +1678,19 @@ impl<'a> ExpressionInferrer<'a> {
             .build());
         }
         for (pty, aty) in subst_params.iter().zip(value_arg_types.iter()) {
-            if self.solver.unify(pty, aty).is_err() {
-                return Err(ErrorCodeDefinition::type_mismatch(
-                    &format!("{}", pty),
-                    &format!("{}", aty),
-                )
-                .at(span)
-                .build());
+            if let Err(failure) = decide(
+                self.solver,
+                pty,
+                aty,
+                Some(span),
+                self.type_defs,
+                self.dep_env,
+            ) {
+                return Err(failure.or_site(
+                    ErrorCodeDefinition::type_mismatch(&format!("{}", pty), &format!("{}", aty))
+                        .at(span)
+                        .build(),
+                ));
             }
         }
         Ok(MonoType::Generic {
@@ -1864,7 +1915,7 @@ impl<'a> ExpressionInferrer<'a> {
                     Some(n.clone())
                 } else {
                     // 注解形态经类型镜像复核（与 match 的和类型判定同款）
-                    match self.type_defs.get(n) {
+                    match self.type_defs.get(n).map(|p| &p.body) {
                         Some(MonoType::Struct(st)) if self.sum_types.contains_key(&st.name) => {
                             Some(st.name.clone())
                         }
@@ -1883,7 +1934,7 @@ impl<'a> ExpressionInferrer<'a> {
     ) -> Option<crate::frontend::core::types::StructType> {
         match ty {
             MonoType::Struct(s) => Some(s.clone()),
-            MonoType::TypeRef(name) => match self.type_defs.get(name) {
+            MonoType::TypeRef(name) => match self.type_defs.get(name).map(|p| &p.body) {
                 Some(MonoType::Struct(s)) => Some(s.clone()),
                 _ => None,
             },
@@ -1945,7 +1996,7 @@ impl<'a> ExpressionInferrer<'a> {
                 if crate::frontend::core::types::MonoType::from_builtin_name(name).is_some() {
                     return Ok(());
                 }
-                match self.type_defs.get(name) {
+                match self.type_defs.get(name).map(|p| &p.body) {
                     Some(resolved) => self.struct_comparable(resolved, depth + 1),
                     _ => Err(name.clone()),
                 }
@@ -3354,7 +3405,7 @@ impl<'a> ExpressionInferrer<'a> {
         let (type_name, has_field) = match &resolved {
             MonoType::Struct(s) => (s.name.clone(), s.fields.iter().any(|(n, _)| n == field)),
             MonoType::TypeRef(n) => {
-                if let Some(def_ty) = self.type_defs.get(n) {
+                if let Some(def_ty) = self.type_defs.get(n).map(|p| &p.body) {
                     let def_ty = self.solver.resolve_type(def_ty);
                     if let MonoType::Struct(s) = def_ty {
                         (s.name.clone(), s.fields.iter().any(|(f, _)| f == field))
@@ -3757,13 +3808,22 @@ impl<'a> ExpressionInferrer<'a> {
                 };
                 match member_ty {
                     Some(member) => {
-                        if self.solver.unify(&elem_ty, &member).is_err() {
-                            return Err(ErrorCodeDefinition::type_mismatch(
-                                &format!("{}", member),
-                                &format!("{}", elem_ty),
-                            )
-                            .at(*span)
-                            .build());
+                        if let Err(failure) = decide(
+                            self.solver,
+                            &elem_ty,
+                            &member,
+                            Some(*span),
+                            self.type_defs,
+                            self.dep_env,
+                        ) {
+                            return Err(failure.or_site(
+                                ErrorCodeDefinition::type_mismatch(
+                                    &format!("{}", member),
+                                    &format!("{}", elem_ty),
+                                )
+                                .at(*span)
+                                .build(),
+                            ));
                         }
                         Ok(MonoType::Bool)
                     }
@@ -4049,7 +4109,7 @@ impl<'a> ExpressionInferrer<'a> {
                     }
                     MonoType::TypeRef(ref type_name) => {
                         // Try to resolve TypeRef → Struct via type_defs for field lookup
-                        if let Some(def_ty) = self.type_defs.get(type_name) {
+                        if let Some(def_ty) = self.type_defs.get(type_name).map(|p| &p.body) {
                             let def_ty = self.solver.resolve_type(def_ty);
                             if let MonoType::Struct(ref struct_type) = def_ty {
                                 for (field_name, field_ty) in &struct_type.fields {
@@ -4179,22 +4239,42 @@ impl<'a> ExpressionInferrer<'a> {
                         // 无统一规则」而报错——而这里 A := Int 是合法的。
                         let bound_expected = Self::bind_type_params_from(expected, &ret_ty);
                         if bound_expected != *expected {
-                            self.solver.unify(&ret_ty, &bound_expected).map_err(|_| {
-                                ErrorCodeDefinition::return_type_mismatch(
-                                    &format!("{}", bound_expected),
-                                    &format!("{}", ret_ty),
+                            decide(
+                                self.solver,
+                                &ret_ty,
+                                &bound_expected,
+                                Some(at),
+                                self.type_defs,
+                                self.dep_env,
+                            )
+                            .map_err(|failure| {
+                                failure.or_site(
+                                    ErrorCodeDefinition::return_type_mismatch(
+                                        &format!("{}", bound_expected),
+                                        &format!("{}", ret_ty),
+                                    )
+                                    .at(at)
+                                    .build(),
                                 )
-                                .at(at)
-                                .build()
                             })?;
                         } else {
-                            self.solver.unify(&ret_ty, expected).map_err(|_| {
-                                ErrorCodeDefinition::return_type_mismatch(
-                                    &format!("{}", expected),
-                                    &format!("{}", ret_ty),
+                            decide(
+                                self.solver,
+                                &ret_ty,
+                                expected,
+                                Some(at),
+                                self.type_defs,
+                                self.dep_env,
+                            )
+                            .map_err(|failure| {
+                                failure.or_site(
+                                    ErrorCodeDefinition::return_type_mismatch(
+                                        &format!("{}", expected),
+                                        &format!("{}", ret_ty),
+                                    )
+                                    .at(at)
+                                    .build(),
                                 )
-                                .at(at)
-                                .build()
                             })?;
                         }
                         // RFC-011a §6: 具体值返回进存在类型返回位 → 检查实现并记录包装点
@@ -4502,13 +4582,22 @@ impl<'a> ExpressionInferrer<'a> {
             &expected,
         ) {
             Some((_, _, ret_err_ty)) => {
-                if self.solver.unify(&ret_err_ty, &err_ty).is_err() {
-                    return Err(ErrorCodeDefinition::try_error_type_mismatch(
-                        &self.solver.resolve_type(&ret_err_ty).to_string(),
-                        &self.solver.resolve_type(&err_ty).to_string(),
-                    )
-                    .at(span)
-                    .build());
+                if let Err(failure) = decide(
+                    self.solver,
+                    &ret_err_ty,
+                    &err_ty,
+                    Some(span),
+                    self.type_defs,
+                    self.dep_env,
+                ) {
+                    return Err(failure.or_site(
+                        ErrorCodeDefinition::try_error_type_mismatch(
+                            &self.solver.resolve_type(&ret_err_ty).to_string(),
+                            &self.solver.resolve_type(&err_ty).to_string(),
+                        )
+                        .at(span)
+                        .build(),
+                    ));
                 }
             }
             None => {
@@ -5490,25 +5579,43 @@ impl<'a> ExpressionInferrer<'a> {
                                 ) = (Some(field_ty), Some(&self.solver.resolve_type(arg_ty)))
                                 {
                                     if let (Some(fe), Some(ae)) = (fa.first(), aa.first()) {
-                                        if self.solver.unify(fe, ae).is_err() {
-                                            return Err(ErrorCodeDefinition::type_mismatch(
-                                                &format!("{}", fe),
-                                                &format!("{}", ae),
-                                            )
-                                            .at(span)
-                                            .build());
+                                        if let Err(failure) = decide(
+                                            self.solver,
+                                            fe,
+                                            ae,
+                                            Some(span),
+                                            self.type_defs,
+                                            self.dep_env,
+                                        ) {
+                                            return Err(failure.or_site(
+                                                ErrorCodeDefinition::type_mismatch(
+                                                    &format!("{}", fe),
+                                                    &format!("{}", ae),
+                                                )
+                                                .at(span)
+                                                .build(),
+                                            ));
                                         }
                                     }
                                 }
                                 continue;
                             }
-                            if self.solver.unify(field_ty, arg_ty).is_err() {
-                                return Err(ErrorCodeDefinition::type_mismatch(
-                                    &format!("{}", field_ty),
-                                    &format!("{}", arg_ty),
-                                )
-                                .at(span)
-                                .build());
+                            if let Err(failure) = decide(
+                                self.solver,
+                                field_ty,
+                                arg_ty,
+                                Some(span),
+                                self.type_defs,
+                                self.dep_env,
+                            ) {
+                                return Err(failure.or_site(
+                                    ErrorCodeDefinition::type_mismatch(
+                                        &format!("{}", field_ty),
+                                        &format!("{}", arg_ty),
+                                    )
+                                    .at(span)
+                                    .build(),
+                                ));
                             }
                         }
                         return Ok(func_ty.clone());
@@ -5737,13 +5844,22 @@ impl<'a> ExpressionInferrer<'a> {
                             } else {
                                 subst
                             };
-                            if self.solver.unify(&subst, arg_ty).is_err() {
-                                return Err(ErrorCodeDefinition::type_mismatch(
-                                    &format!("{}", subst),
-                                    &format!("{}", arg_ty),
-                                )
-                                .at(span)
-                                .build());
+                            if let Err(failure) = decide(
+                                self.solver,
+                                &subst,
+                                arg_ty,
+                                Some(span),
+                                self.type_defs,
+                                self.dep_env,
+                            ) {
+                                return Err(failure.or_site(
+                                    ErrorCodeDefinition::type_mismatch(
+                                        &format!("{}", subst),
+                                        &format!("{}", arg_ty),
+                                    )
+                                    .at(span)
+                                    .build(),
+                                ));
                             }
                         }
                         let type_args: Vec<MonoType> = generic_def
@@ -6177,13 +6293,20 @@ impl<'a> ExpressionInferrer<'a> {
                         // 再 type_defs 解析用户自定义类型；都不匹配则跳过
                         if let MonoType::TypeRef(name) = &resolved_param {
                             if !is_iface_param {
-                                resolved_param = match self.type_defs.get(name) {
+                                resolved_param = match self.type_defs.get(name).map(|p| &p.body) {
                                     Some(def_ty) => self.solver.resolve_type(def_ty),
                                     None => continue,
                                 };
                             }
                         }
-                        if self.solver.unify(&actual_arg, &resolved_param).is_err() {
+                        if let Err(failure) = decide(
+                            self.solver,
+                            &actual_arg,
+                            &resolved_param,
+                            Some(span),
+                            self.type_defs,
+                            self.dep_env,
+                        ) {
                             // RFC-011a §6.3: 接口形参收到未实现接口的具体类型
                             // → 精确报 E1101（成员检查），非笼统类型不匹配
                             if is_iface_param {
@@ -6199,12 +6322,14 @@ impl<'a> ExpressionInferrer<'a> {
                                     }
                                 }
                             }
-                            return Err(ErrorCodeDefinition::type_mismatch(
-                                &format!("{}", resolved_param),
-                                &format!("{}", arg_ty),
-                            )
-                            .at(span)
-                            .build());
+                            return Err(failure.or_site(
+                                ErrorCodeDefinition::type_mismatch(
+                                    &format!("{}", resolved_param),
+                                    &format!("{}", arg_ty),
+                                )
+                                .at(span)
+                                .build(),
+                            ));
                         }
                         if is_iface_param {
                             // 具体值进入存在类型形参位 → 检查实现并记录包装点
@@ -6465,13 +6590,23 @@ impl<'a> ExpressionInferrer<'a> {
                         self.proof_fn_bases,
                         self.solver,
                     );
-                    self.solver.unify(&init_ty, &ann_mono).map_err(|_| {
-                        ErrorCodeDefinition::type_mismatch(
-                            &format!("{}", ann_mono),
-                            &format!("{}", init_ty),
+                    decide(
+                        self.solver,
+                        &init_ty,
+                        &ann_mono,
+                        Some(*stmt_span),
+                        self.type_defs,
+                        self.dep_env,
+                    )
+                    .map_err(|failure| {
+                        failure.or_site(
+                            ErrorCodeDefinition::type_mismatch(
+                                &format!("{}", ann_mono),
+                                &format!("{}", init_ty),
+                            )
+                            .at(*stmt_span)
+                            .build(),
                         )
-                        .at(*stmt_span)
-                        .build()
                     })?;
                 }
                 // spec §4.3「赋值优先」：与 `StatementChecker` 同一判定
@@ -6896,7 +7031,7 @@ fn substitute_type_params_with_vars_walk(
 /// （不存具体类型名），实例化泛型类型前需从 AST 名称解包成具体 MonoType。
 fn concrete_type_from_expr_arg(
     expr: &crate::ast::Expr,
-    type_defs: &HashMap<String, MonoType>,
+    type_defs: &HashMap<String, PolyType>,
     generic_type_defs: &HashMap<String, crate::frontend::core::sema::environment::GenericTypeDef>,
 ) -> Option<MonoType> {
     match expr {
@@ -6914,7 +7049,7 @@ fn concrete_type_from_expr_arg(
                 // 泛型类型名同时登记在类型表里，故这一支必须排在 type_defs 之前。
                 Some(MonoType::TypeRef(name.clone()))
             } else {
-                type_defs.get(name).cloned()
+                type_defs.get(name).map(|p| p.body.clone())
             }
         }
         _ => None,

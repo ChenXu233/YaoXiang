@@ -15,7 +15,7 @@ impl TypeChecker {
     ) -> Option<ConstValue> {
         let const_expr = convert_expr_to_const_expr(expr)?;
         let mut evaluator = crate::frontend::core::types::eval::evaluator::Evaluator::new(
-            ctx.env,
+            &ctx.env.types,
             &ctx.budget,
             &ctx.dep_env,
         );

@@ -105,7 +105,7 @@ fn try_direct_eval(
     constraint: &ConstExpr,
     bindings: &HashMap<String, ConstValue>,
 ) -> Option<ProofResult> {
-    let mut evaluator = Evaluator::new(ctx.env, &ctx.budget, &ctx.dep_env);
+    let mut evaluator = Evaluator::new(&ctx.env.types, &ctx.budget, &ctx.dep_env);
     match evaluator.eval_expr(constraint, bindings) {
         Ok(ConstValue::Bool(true)) => Some(Ok(())),
         Ok(ConstValue::Bool(false)) => Some(Err(ProofFailure::Disproved(DisproofModel {

@@ -7,11 +7,11 @@
 
 use std::collections::{HashMap, HashSet};
 
+use crate::frontend::core::types::mono::PolyType;
 use crate::frontend::core::types::{MonoType, ConstValue};
 use crate::frontend::core::types::const_data::{BinOp, ConstExpr, UnOp};
 use super::TypeLevelError;
 use super::TypeLevelResult;
-use crate::frontend::core::sema::TypeEnvironment;
 use crate::frontend::core::sema::proof::budget::BudgetTracker;
 use super::dependent_types::DependentTypeEnv;
 
@@ -54,8 +54,13 @@ pub struct Evaluator<'a> {
     /// 记录类型之间的依赖关系
     dependencies: HashMap<MonoType, HashSet<MonoType>>,
 
-    /// 类型环境引用
-    env: &'a TypeEnvironment,
+    /// 类型名 → 声明体（δ 展开的唯一输入）。
+    ///
+    /// 取的是**表本身**而不是整个 `TypeEnvironment`：求值器只需要「名字 → 体」
+    /// 这一件事（此前唯一的 env 用法就是 `env.types.get`），收窄后归约层不再
+    /// 依赖 sema 的环境类型，判定点可以直接把体检查器手里那张已注入的同一张表
+    /// 传进来（6.9.3d / RFC-027 §12）。
+    types: &'a HashMap<String, PolyType>,
 
     /// 求解预算追踪器
     budget: &'a BudgetTracker,
@@ -72,14 +77,14 @@ pub struct Evaluator<'a> {
 impl<'a> Evaluator<'a> {
     /// 创建新的求值器
     pub fn new(
-        env: &'a TypeEnvironment,
+        types: &'a HashMap<String, PolyType>,
         budget: &'a BudgetTracker,
         dep_env: &'a DependentTypeEnv,
     ) -> Self {
         Self {
             cache: HashMap::new(),
             dependencies: HashMap::new(),
-            env,
+            types,
             budget,
             dep_env,
             visiting: HashSet::new(),
@@ -93,7 +98,7 @@ impl<'a> Evaluator<'a> {
 
     /// 创建带配置的求值器
     pub fn with_config(
-        env: &'a TypeEnvironment,
+        types: &'a HashMap<String, PolyType>,
         budget: &'a BudgetTracker,
         config: EvalConfig,
         dep_env: &'a DependentTypeEnv,
@@ -101,7 +106,7 @@ impl<'a> Evaluator<'a> {
         Self {
             cache: HashMap::new(),
             dependencies: HashMap::new(),
-            env,
+            types,
             budget,
             dep_env,
             visiting: HashSet::new(),
@@ -309,7 +314,7 @@ impl<'a> Evaluator<'a> {
         }
 
         // 检查类型环境中的类型定义
-        if let Some(poly) = self.env.types.get(name) {
+        if let Some(poly) = self.types.get(name) {
             return self.eval_with_depth(&poly.body, depth + 1);
         }
 

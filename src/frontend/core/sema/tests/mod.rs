@@ -22,6 +22,7 @@ mod environment;
 mod fn_annotation_binding;
 mod gamma_assume_effect;
 mod hkt;
+mod judgement_metrics;
 mod named_args;
 mod named_args_loud;
 mod native_param_names;

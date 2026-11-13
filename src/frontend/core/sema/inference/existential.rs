@@ -157,7 +157,7 @@ fn walk(
 pub fn collect_existential_coercions(
     solver: &TypeConstraintSolver,
     scope: &ScopeManager,
-    type_defs: &HashMap<String, MonoType>,
+    type_defs: &HashMap<String, PolyType>,
     generic_type_defs: &HashMap<String, GenericTypeDef>,
     expr: &Expr,
     expected: &MonoType,

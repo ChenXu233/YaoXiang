@@ -23,6 +23,14 @@ pub struct TypeConstraintSolver {
     next_var: usize,
     /// 泛型变量集合（不应被实例化）
     generic_vars: HashMap<usize, usize>,
+    /// 回滚日志（6.9.3d）：每次 `bind` **覆盖前**记下 (下标, 旧绑定)。
+    ///
+    /// 为什么不是整份 `bindings.clone()`：判定点（`decide`）在每次判定前都要能回滚，
+    /// 克隆是 O(全部变量)，日志是 O(本次尝试的绑定数)。RFC-027 §12.1 要求
+    /// 「回滚统一尝试产生的部分绑定」，日志正是这条要求的直接实现。
+    journal: Vec<(usize, TypeBinding)>,
+    /// 未提交的 `journal_mark` 层数。为 0 时不记日志（无回滚需求即零开销）。
+    journal_depth: usize,
 }
 
 /// RFC-027 §6.1：精化类型对统一**透明**——取其基类型。
@@ -45,6 +53,8 @@ impl TypeConstraintSolver {
             constraints: Vec::new(),
             next_var: 0,
             generic_vars: HashMap::new(),
+            journal: Vec::new(),
+            journal_depth: 0,
         }
     }
 
@@ -54,6 +64,8 @@ impl TypeConstraintSolver {
         self.constraints.clear();
         self.next_var = 0;
         self.generic_vars.clear();
+        self.journal.clear();
+        self.journal_depth = 0;
     }
 
     /// 创建新的类型变量
@@ -133,32 +145,72 @@ impl TypeConstraintSolver {
             .build());
         }
 
-        // 绑定
-        if let Some(binding) = self.bindings.get_mut(resolved_var.index()) {
-            match binding {
-                TypeBinding::Unbound => {
-                    *binding = TypeBinding::Bound(ty);
-                    Ok(())
+        // 绑定（唯一写点）：覆盖前把旧值记进日志，供 journal_rollback 还原。
+        //
+        // 取值先 clone 一次再写，避免同时持有 bindings 的可变借用与 journal 的
+        // 可变借用；Unbound 臂的 clone 是零成本形态，只有重复绑定才会复制 Bound
+        // 载荷（那条路径本来就要舍弃旧值）。
+        let index = resolved_var.index();
+        match self.bindings.get(index).cloned() {
+            Some(TypeBinding::Unbound) => {
+                if self.journal_depth > 0 {
+                    self.journal.push((index, TypeBinding::Unbound));
                 }
-                TypeBinding::Bound(existing) => {
-                    // 已绑定，检查是否一致
-                    if existing == &ty {
-                        Ok(())
-                    } else {
-                        Err(ErrorCodeDefinition::type_mismatch(
-                            &existing.type_name(),
-                            &ty.type_name(),
-                        )
-                        .build())
-                    }
-                }
-                TypeBinding::Link(_) => {
-                    // 不应该到这里
+                self.bindings[index] = TypeBinding::Bound(ty);
+                Ok(())
+            }
+            Some(TypeBinding::Bound(existing)) => {
+                // 已绑定，检查是否一致
+                if existing == ty {
                     Ok(())
+                } else {
+                    Err(
+                        ErrorCodeDefinition::type_mismatch(&existing.type_name(), &ty.type_name())
+                            .build(),
+                    )
                 }
             }
-        } else {
-            Ok(())
+            // Link 与越界都不该在 find 之后出现；保持既有「静默 Ok」形态。
+            _ => Ok(()),
+        }
+    }
+
+    /// 开一个回滚标记（返回日志位点）。与 journal_commit / journal_rollback 配对，
+    /// 成对关系由 journal_depth 记账；最外层提交时日志清空。
+    pub fn journal_mark(&mut self) -> usize {
+        self.journal_depth += 1;
+        self.journal.len()
+    }
+
+    /// 提交标记：保留本次绑定，丢弃窗口内的日志条目。
+    ///
+    /// 只在最外层（journal_depth 归零）清空——内层提交后外层仍可能回滚到更早位点。
+    pub fn journal_commit(&mut self) {
+        self.journal_depth = self.journal_depth.saturating_sub(1);
+        if self.journal_depth == 0 {
+            self.journal.clear();
+        }
+    }
+
+    /// 回滚到标记：按逆序还原被覆盖的绑定，并截断日志。
+    ///
+    /// 只还原 bind 写过的条目；find 的路径压缩写 Link（不改变解析结果），
+    /// 不记日志也不还原。
+    pub fn journal_rollback(
+        &mut self,
+        mark: usize,
+    ) {
+        debug_assert!(mark <= self.journal.len(), "回滚位点超出日志长度");
+        for i in (mark..self.journal.len()).rev() {
+            let (index, old) = self.journal[i].clone();
+            if index < self.bindings.len() {
+                self.bindings[index] = old;
+            }
+        }
+        self.journal.truncate(mark);
+        self.journal_depth = self.journal_depth.saturating_sub(1);
+        if self.journal_depth == 0 {
+            self.journal.clear();
         }
     }
 
@@ -706,38 +758,34 @@ impl TypeConstraintSolver {
         }
     }
 
-    /// 检查类型变量是否在作用域内
-    #[allow(clippy::only_used_in_recursion)]
-    pub fn contains_var(
+    /// 形态遍历：对类型树里的每个类型变量调用 f，f 返回 true 即短路。
+    ///
+    /// 单一实现：contains_var（含某个特定变量）与 has_type_var（含任何变量）
+    /// 都从这一份遍历派生，避免出现第二份同形 walk。
+    fn visit_vars(
         &self,
         ty: &MonoType,
-        var: super::var::TypeVar,
+        f: &mut dyn FnMut(super::var::TypeVar) -> bool,
     ) -> bool {
         match ty {
-            MonoType::TypeVar(v) => *v == var,
-            MonoType::Struct(s) => s.fields.iter().any(|(_, t)| self.contains_var(t, var)),
+            MonoType::TypeVar(v) => f(*v),
+            MonoType::Struct(s) => s.fields.iter().any(|(_, t)| self.visit_vars(t, f)),
             MonoType::Enum(_) => false, // 枚举变体名不包含类型变量
             MonoType::Fn {
                 params,
                 return_type,
                 ..
-            } => {
-                params.iter().any(|t| self.contains_var(t, var))
-                    || self.contains_var(return_type, var)
-            }
+            } => params.iter().any(|t| self.visit_vars(t, f)) || self.visit_vars(return_type, f),
             MonoType::AssocType {
                 host_type,
                 assoc_args,
                 ..
-            } => {
-                self.contains_var(host_type, var)
-                    || assoc_args.iter().any(|t| self.contains_var(t, var))
-            }
+            } => self.visit_vars(host_type, f) || assoc_args.iter().any(|t| self.visit_vars(t, f)),
             MonoType::Union(types) | MonoType::Intersection(types) => {
-                types.iter().any(|t| self.contains_var(t, var))
+                types.iter().any(|t| self.visit_vars(t, f))
             }
             // #299：容器/复合类型（List/Dict/Set/Tuple/Range/Arc/Weak/Option/Result/String/Bytes）统一走 Generic
-            MonoType::Generic { args, .. } => args.iter().any(|t| self.contains_var(t, var)),
+            MonoType::Generic { args, .. } => args.iter().any(|t| self.visit_vars(t, f)),
             // 借用类型 `&T` / `&mut T`：内层是同一个值世界的类型，occurs check 必须
             // **穿透**。缺本臂时 occurs check 对借用位失灵：`bind(t, &t)` 被判「不含 t」
             // 而建立**自指绑定**，此后任何 `resolve_type(t)` → `expand_type` 展开
@@ -747,10 +795,31 @@ impl TypeConstraintSolver {
             // 且 `contains_var(&t, t)` 为真。端到端已不可达——6.8.3 把函数体形参的类型改成
             // 取声明标注原文（`TypeRef` 名义类型）后，出口 unify 直接成功、走不到这条 bind
             //（验证轮实测：闸掉本臂与出口对齐，全量用例仍绿）。
-            MonoType::Ref { inner, .. } => self.contains_var(inner, var),
+            MonoType::Ref { inner, .. } => self.visit_vars(inner, f),
             // 基本类型和类型引用不包含类型变量
             _ => false,
         }
+    }
+
+    /// 检查类型变量是否在作用域内
+    pub fn contains_var(
+        &self,
+        ty: &MonoType,
+        var: super::var::TypeVar,
+    ) -> bool {
+        self.visit_vars(ty, &mut |v| v == var)
+    }
+
+    /// 类型是否**含任何类型变量**（6.9.3d 判定点的 ground 判据）。
+    ///
+    /// 与 contains_unresolved_param 的区别是语义，不是重复：后者把 TypeRef 也算
+    /// 「未解析」（#286 的构造器悬空实例判据），而判等需要的 ground 只排除类型变量
+    /// ——TypeRef 正是 δ 展开的输入。
+    pub fn has_type_var(
+        &self,
+        ty: &MonoType,
+    ) -> bool {
+        self.visit_vars(ty, &mut |_| true)
     }
 
     fn resolve_builtin_type_ref(

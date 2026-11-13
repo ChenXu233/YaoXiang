@@ -19,9 +19,12 @@
 //! 6.9.3b 删除了 `structurally_equal`——它是派生 `PartialEq` 的**第二份**结构
 //! 等价，且 `Refined` 臂只比 `base`（不同谓词判 true ⇒ 假等价，t47 E3）。
 
+use std::collections::HashMap;
+
 use crate::frontend::core::sema::environment::TypeEnvironment;
+
 use crate::frontend::core::types::eval::evaluator::{EvalError, Evaluator};
-use crate::frontend::core::types::mono::MonoType;
+use crate::frontend::core::types::mono::{MonoType, PolyType};
 use super::super::proof::verdict::{
     UnprovenSubject, DisproofKind, DisproofModel, ProofFailure, ProofResult, UnprovenReason,
 };
@@ -30,13 +33,17 @@ use crate::frontend::core::sema::proof::budget::BudgetTracker;
 
 /// 判等内核的最小环境（6.9.3c）：**不包含** `ProofContext.assumptions`。
 ///
-/// 为什么单独抽一层：赋值检查（`assignment::can_assign`）只需要「类型环境 + 预算 +
+/// 为什么单独抽一层：判定点（`sema::judgement::decide`）只需要「类型表 + 预算 +
 /// 依赖类型环境」，借用整个 `ProofContext` 会把它绑在证明管道的假设栈上——那是
 /// **证明的义务**，不是判等的输入。`ProofContext` 侧由 [`DefeqContext::from_proof`]
 /// 现场投影一份（只取三个字段，不碰 `assumptions`/`dep_graph`）。
 pub struct DefeqContext<'a> {
-    /// 类型环境（δ 展开用）
-    pub env: &'a TypeEnvironment,
+    /// 类型名 → 声明体（δ 展开用）。
+    ///
+    /// 只收「表」：判等只需要名字到体的映射，收窄后调用方既可以传
+    /// `TypeEnvironment.types`（证明管道），也可以传体检查器已注入的同一张表
+    /// （判定点），不需要把整个环境搬进来。
+    pub types: &'a HashMap<String, PolyType>,
     /// 本次判定的预算（**每次判定**一份，见 `BudgetTracker::for_judgment`）
     pub budget: &'a BudgetTracker,
     /// 依赖类型环境（类型族实例化用）
@@ -47,7 +54,7 @@ impl<'a> DefeqContext<'a> {
     /// 从证明上下文投影（**只取** env / budget / dep_env）。
     pub fn from_proof(ctx: &'a ProofContext<'a>) -> Self {
         Self {
-            env: ctx.env,
+            types: &ctx.env.types,
             budget: &ctx.budget,
             dep_env: &ctx.dep_env,
         }
@@ -201,7 +208,7 @@ pub fn normalize_type(
     ty: &MonoType,
     ctx: &DefeqContext<'_>,
 ) -> Result<MonoType, ProofFailure> {
-    let mut evaluator = Evaluator::new(ctx.env, ctx.budget, ctx.dep_env);
+    let mut evaluator = Evaluator::new(ctx.types, ctx.budget, ctx.dep_env);
     normalize_type_with(&mut evaluator, ty, ctx)
 }
 

@@ -42,6 +42,9 @@ pub mod types;
 pub mod proof;
 // 证明层（本目录无调度器：调用先后由 checker::check_module_impl 决定）
 pub mod layers;
+
+/// 判定点协议（6.9.3d）：unify → 回滚 → 判等的**唯一**入口
+pub mod judgement;
 // 独立分析遍
 pub mod passes;
 

@@ -651,12 +651,9 @@ impl TypeChecker {
         body_checker.set_interface_impl_registry(self.env.interface_impl_registry.clone());
         body_checker.set_sum_types(self.env.sum_types.clone());
         // 设置类型定义表（用于 TypeRef → Struct 解析）
-        let type_defs: HashMap<String, MonoType> = self
-            .env
-            .types
-            .iter()
-            .map(|(name, poly)| (name.clone(), poly.body.clone()))
-            .collect();
+        // 与 `env.types` **同型**（6.9.3d）：判等判定点的 δ 展开表直接复用这张注入表，
+        // 不再在此剥成 `MonoType` 体——那样判等还得另造一张同内容表。
+        let type_defs: HashMap<String, PolyType> = self.env.types.clone();
         body_checker.set_type_defs(type_defs);
         // 双表分工（3.20.8 收单点，3.20.9 起来源换声明级——#522）：
         //

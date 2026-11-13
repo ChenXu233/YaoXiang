@@ -5,6 +5,7 @@
 //! 合并原 checking/BodyChecker 和 inference/StmtInferrer
 //! 使用统一的 ScopeManager 管理变量作用域
 
+use crate::frontend::core::sema::judgement::decide;
 use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};
 
 use std::collections::{HashMap, HashSet};
@@ -91,9 +92,11 @@ pub struct StatementChecker {
     /// 区分。调用点要做正确的类型参数替换就必须知道**声明**了哪些名字。
     /// `PolyType.type_binders` 存的是 `TypeVar`（编号），拿不回名字，故单列。
     generic_fn_type_params: HashMap<String, Vec<String>>,
-    /// 类型定义表: type_name -> MonoType(Struct)
-    /// 用于 TypeRef → Struct 解析
-    type_defs: HashMap<String, MonoType>,
+    /// 类型定义表: type_name -> PolyType（**与 `TypeEnvironment.types` 同型**）
+    ///
+    /// 用途一：TypeRef → Struct 解析；用途二（6.9.3d）：判等判定点的 δ 展开表
+    /// ——`decide` 直接把它交给 `DefeqContext.types`，不需要为判等再造一张表。
+    type_defs: HashMap<String, PolyType>,
     /// 实例化请求（收集所有泛型函数实例化需求）
     pub instantiation_requests: Vec<InstantiationRequest>,
     /// WBS 3.4.1：编译期不可求值的 const 泛型约束（span + 约束描述）——
@@ -369,7 +372,7 @@ impl StatementChecker {
     /// 设置类型定义表
     pub fn set_type_defs(
         &mut self,
-        defs: HashMap<String, MonoType>,
+        defs: HashMap<String, PolyType>,
     ) {
         self.type_defs = defs;
     }
@@ -397,7 +400,7 @@ impl StatementChecker {
                     return builtin;
                 }
                 // 再查用户类型定义
-                if let Some(struct_ty) = self.type_defs.get(name) {
+                if let Some(struct_ty) = self.type_defs.get(name).map(|p| &p.body) {
                     return struct_ty.clone();
                 }
                 ty.clone()
@@ -1040,14 +1043,23 @@ impl StatementChecker {
         if enforce_unify {
             if let Some(poly) = self.scope.get_var(name) {
                 let declared = poly.body.clone();
-                if self.solver.unify(&new_ty, &declared).is_err() {
+                if let Err(failure) = decide(
+                    &mut self.solver,
+                    &new_ty,
+                    &declared,
+                    Some(span),
+                    &self.type_defs,
+                    Some(&self.dep_env),
+                ) {
                     return Err(Box::new(
-                        ErrorCodeDefinition::type_mismatch(
-                            &format!("{}", declared),
-                            &format!("{}", new_ty),
-                        )
-                        .at(span)
-                        .build(),
+                        failure.or_site(
+                            ErrorCodeDefinition::type_mismatch(
+                                &format!("{}", declared),
+                                &format!("{}", new_ty),
+                            )
+                            .at(span)
+                            .build(),
+                        ),
                     ));
                 }
             }
@@ -1608,7 +1620,16 @@ impl StatementChecker {
         found: &MonoType,
         expected: &MonoType,
     ) -> bool {
-        if self.solver.unify(found, expected).is_ok() {
+        if decide(
+            &mut self.solver,
+            found,
+            expected,
+            None,
+            &self.type_defs,
+            Some(&self.dep_env),
+        )
+        .is_ok()
+        {
             return true;
         }
         // 判定前先解析到当前形态：`unify` 可能已部分绑定，形态判据看的是解析后的样子。
@@ -2776,7 +2797,14 @@ impl StatementChecker {
                         seed_matched = true;
                         for elem in elems.iter() {
                             let elem_ty = self.check_expr(elem)?;
-                            if self.solver.unify(&elem_ty, elem_ann).is_err() {
+                            if let Err(failure) = decide(
+                                &mut self.solver,
+                                &elem_ty,
+                                elem_ann,
+                                Some(stmt_span),
+                                &self.type_defs,
+                                Some(&self.dep_env),
+                            ) {
                                 // 元素位是**接口构造器**（存在类型位）且元素是具体结构体时，
                                 // 报精确的 E1101「未实现接口」，而非笼统的类型不匹配。
                                 // 与 `existential::walk` 的叶子判定同源（RFC-011a §6.3）。
@@ -2795,12 +2823,14 @@ impl StatementChecker {
                                     }
                                 }
                                 return Err(Box::new(
-                                    ErrorCodeDefinition::type_mismatch(
-                                        &format!("{}", elem_ann),
-                                        &format!("{}", elem_ty),
-                                    )
-                                    .at(stmt_span)
-                                    .build(),
+                                    failure.or_site(
+                                        ErrorCodeDefinition::type_mismatch(
+                                            &format!("{}", elem_ann),
+                                            &format!("{}", elem_ty),
+                                        )
+                                        .at(stmt_span)
+                                        .build(),
+                                    ),
                                 ));
                             }
                         }
@@ -2831,7 +2861,14 @@ impl StatementChecker {
                         }
                     }
                     if !seed_matched {
-                        let unify_result = self.solver.unify(&resolved_init, &resolved_ann);
+                        let unify_result = decide(
+                            &mut self.solver,
+                            &resolved_init,
+                            &resolved_ann,
+                            Some(stmt_span),
+                            &self.type_defs,
+                            Some(&self.dep_env),
+                        );
                         if unify_result.is_err() {
                             // Unify failed — check structural subtyping (interface assignment)
                             let is_structural_subtype = matches!(
@@ -2854,14 +2891,19 @@ impl StatementChecker {
                                 _ => false,
                             };
                             if !is_structural_subtype && !is_generic_constructor {
-                                return Err(Box::new(
+                                // 站点报文只覆盖「真不等」；「算不出来」原样上抛（E4023）。
+                                let site = || {
                                     ErrorCodeDefinition::type_mismatch(
                                         &format!("{}", ann_ty),
                                         &format!("{}", init_ty),
                                     )
                                     .at(stmt_span)
-                                    .build(),
-                                ));
+                                    .build()
+                                };
+                                return Err(Box::new(match unify_result {
+                                    Err(failure) => failure.or_site(site()),
+                                    Ok(()) => site(),
+                                }));
                             }
                         }
                     }
@@ -3164,11 +3206,23 @@ impl StatementChecker {
                 for other in branch_tys.iter().filter(|t| **t != MonoType::Never) {
                     let a = self.solver.resolve_type(base);
                     let b = self.solver.resolve_type(other);
-                    if self.solver.unify(&a, &b).is_err() {
+                    if let Err(failure) = decide(
+                        &mut self.solver,
+                        &a,
+                        &b,
+                        Some(_stmt_span),
+                        &self.type_defs,
+                        Some(&self.dep_env),
+                    ) {
                         return Err(Box::new(
-                            ErrorCodeDefinition::type_mismatch(&format!("{a}"), &format!("{b}"))
+                            failure.or_site(
+                                ErrorCodeDefinition::type_mismatch(
+                                    &format!("{a}"),
+                                    &format!("{b}"),
+                                )
                                 .at(_stmt_span)
                                 .build(),
+                            ),
                         ));
                     }
                 }
