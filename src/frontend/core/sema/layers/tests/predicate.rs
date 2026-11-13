@@ -236,3 +236,43 @@ fn test_proof_fn_call_unary_neg_of_i128_min_stays_unfoldable() {
         other => panic!("期望 Unproven 空证法，实际: {other:?}"),
     }
 }
+
+/// issue #559 约束面锚：闭合约束含取负溢出极端形态（`-(0 - i128::MAX - 1) > 0`，
+/// 调用点实参位完整表达式文法可达）时判定单元不得 panic——修前实测探针 exit 101
+/// （`panicked at evaluator.rs: attempt to negate with overflow`）。Evaluator 报
+/// ArithmeticError 后 Level 1 直评失败，升级后续级别按 Disproved / Unproven
+/// 保守出判（随 SMT 可用性分流），无 Ok。
+#[test]
+fn test_check_predicate_neg_overflow_constraint_stays_err_not_panic() {
+    // Arrange — Gt(UnOp{Neg, Sub{Sub(0, MAX), 1}}, 0)：裸 Sub 链精确落 i128::MIN，
+    // 随后一元取负撞溢出分支（#559 修后）/ panic（修前）。
+    let neg_overflow = ConstExpr::UnOp {
+        op: UnOp::Neg,
+        expr: Box::new(ConstExpr::BinOp {
+            op: BinOp::Sub,
+            left: Box::new(ConstExpr::BinOp {
+                op: BinOp::Sub,
+                left: Box::new(ConstExpr::Lit(ConstValue::Int(0))),
+                right: Box::new(ConstExpr::Lit(ConstValue::Int(i128::MAX))),
+            }),
+            right: Box::new(ConstExpr::Lit(ConstValue::Int(1))),
+        }),
+    };
+    let constraint = ConstExpr::BinOp {
+        op: BinOp::Gt,
+        left: Box::new(neg_overflow),
+        right: Box::new(ConstExpr::Lit(ConstValue::Int(0))),
+    };
+    let refined = refined_int(constraint);
+
+    // Act
+    let env = TypeEnvironment::new();
+    let ctx = ProofContext::new(&env);
+    let result = check_predicate(&ctx, &refined, &HashMap::new());
+
+    // Assert — Err（Disproved / Unproven，随 SMT 可用性分流），绝不 Ok 静默通过
+    assert!(
+        result.is_err(),
+        "取负溢出极端形态必须保守报错（Disproved/Unproven），不得静默通过，实际: {result:?}"
+    );
+}

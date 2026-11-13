@@ -462,13 +462,24 @@ fn eval_binop(
 /// 与 `const_eval.rs` 的同名实现必须语义一致——两处曾不一致（本处缺
 /// Neg/Pos/BitNot），导致 `-5` 这类负字面量在所有走本求值器的路径上
 /// 静默折不出常量（实测：调用点实参 `-5` 折不出，义务被跳过）。
+///
+/// 溢出行为同样与 `const_eval.rs` 对齐（issue #559）：i128 裸取负在
+/// `n = i128::MIN` 时 overflow panic（本面算术是裸 `+`/`-`/`*`，而
+/// `0 - i128::MAX - 1` 两步都在值域内，可精确构造 MIN——实测探针
+/// `x = -(0 - i128::MAX - 1)` 经赋值折叠面与约束直评面均 exit 101）。
+/// 走 `checked_neg` 报本面既有算术错误通道（与上方 Div/0 的
+/// `ArithmeticError` 同构），构造与 #468（后端）/ #507（常量求值器）
+/// 同源；Err 由消费方保守降级（升级证明级别 / 缺值不送检），不再崩。
 fn eval_unop(
     op: UnOp,
     val: &ConstValue,
 ) -> Result<ConstValue, EvalError> {
     match (op, val) {
         (UnOp::Not, ConstValue::Bool(b)) => Ok(ConstValue::Bool(!*b)),
-        (UnOp::Neg, ConstValue::Int(n)) => Ok(ConstValue::Int(-*n)),
+        (UnOp::Neg, ConstValue::Int(n)) => n
+            .checked_neg()
+            .map(ConstValue::Int)
+            .ok_or_else(|| EvalError::ArithmeticError("取负溢出".into())),
         (UnOp::Pos, ConstValue::Int(n)) => Ok(ConstValue::Int(*n)),
         (UnOp::BitNot, ConstValue::Int(n)) => Ok(ConstValue::Int(!*n)),
         _ => Err(EvalError::TypeMismatch(format!(
