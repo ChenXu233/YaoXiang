@@ -5090,3 +5090,40 @@ P1 `VarInfo.pinned`: `bool` → `pin_binder: Option<String>`（按绑定解析�
 
 M1 现状锚（无 `int64::4`；check/run 0）；M2 钉住载体；M5 `f(k+1)` 零请求/E3018；M3 无界 E3005 + bound 8/32 实例数；M4 语料/快照/生成器；M6 与 C2c 对接。A1–A4 typecheck、B1–B5 mono、C1–C3 直驱、D1–D4 用户可达、E1–E5 变异。
 **不宣称 I4 完全体**（到界边未擦除）；#541/#542 原样。
+
+## P6 6.9.3d 契约与 M1/M2/M5 实测（protocol-analyst，2026-11-13）
+
+### 一、红判据实测（批次树 6.9-bd @ a8ccf78c）
+
+| 探针 | 形态 | 结果 |
+| --- | --- | --- |
+| P1 | 变量声明位 `b: Array(Int, Five) = [..]` | exit 0 放行（`seed_container`/长度槽阶梯绕过 unify） |
+| P2 | 调用实参位 `take(b)`，`take: (a: Array(Int,5)) -> Int` | exit 1 **E1002** `Expected 'Array(int64, int64::5)', found 'Array(int64, Five)'` |
+| P3 | `Idx: Type = Array(Int,5)` + `x: Idx = [..]` | exit 1 E1002 `Expected 'Idx', found 'Vec(int64)'` — 真不等，defeq Disproved（负控） |
+| P4 | `Array(Int,2+3)` 对 `Array(Int,5)` | exit 0 — AST→Mono 的 ConstExpr 臂已折叠成 Literal{5} |
+
+结论：**生产红判据 = P2**；P1/P4 不得当红判据；P3 是负控。
+
+### 二、契约
+
+inScope：`types/solver.rs`（日志回滚）、`eval/evaluator.rs`/`layers/equivalence.rs`（E2 收窄）、`inference/`（`decide` + 19 点 + 删 `can_assign` 链）、`environment.rs`/`checker.rs`（注入/死路径）、`tests/`、`layers/tests/`、codes/`docs/src/reference/error-code/`（发射点再生）、baselines/snapshots、09/09a。
+outOfScope：C3/F4；`check_var_stmt_inner` 阶梯面（只加注释）；类型族结构归约；E4020 带命题；`int64` vs `int64::5` 槽/声明差；#537/#539/#540/#541/#542；`ProofContext` 只注册 Assert。
+验收 10 条：P2 先红后绿；19/16/2/1 调用图表；Fn/Generic/Struct 回滚三形状；预算数字；E4023 用户可达；subject 覆写+变异；6.9.3b 遗留 2；E4020 不带；语料/IR 零漂移；单源门禁。
+
+### 三、生产调用图
+
+入口唯一：driver `Stage::Typecheck` → `check_module`/`check_module_collect_all` → `check_module_impl` → `init_body_checker` → StatementChecker/ExpressionInferrer；五张阶段表全含 Typecheck。
+19 判定（`assign_var`×2、`infer_binary`、`check_match_expr`×3、`collect_instantiation_request`×3、`infer_try_expr`、`infer_call_expr`×4、`infer_stmt`、`annotation_matches`、`check_var_stmt_inner`×3）→ `decide`。
+16 试探（`let _ =`）留 unify 并登记泄漏；2 克隆沙盒；1 模板点。
+死面：`can_assign`/`check_assignment`/`AssignmentChecker` 生产零；`is_subtype`/`defeq`/`check_type_equivalence` 生产零；`TypeSystem::unify` 零；`add_constraint` 零。
+
+### 四、M1/M2/M5
+
+- **M1**：dump 31 函数；`factorial` 原件、`factorial(int64::5)`、`__factorial_l0`、`__factorial_l0(int64::5)`；无 `int64::4`；克隆内部 `CallStatic #29` 原件；semacheck 1 条请求（main），mono 1 条；递归体内零请求。
+- **M2**：`k` 的 Literal 只在声明 params/返回；槽类型是基类型 `int64`；`N` 槽 `int64` + q=Zero；POST-ERASE `k` 1→0；`factorial` 原件不擦。
+- **M5**：`f(k+1)`（`k` 运行期）E1113，sema 请求 0；模拟开项入队 `type_args().len()=0` ⇒ **E3018**；F4 案① 必须改队列 symbolic 闸。
+
+### 五、卫生/未核实
+
+批次树 CLEAN 已 release；两次 trial 机械还原 blob 一致，trial 后重建；主工作树未触碰。
+未核实：E4023 用户可写形态；`type_defs` 快照；E2 语义中性；预算/回滚数字；CollectAll/LSP；返回位红；`pinned k` 对照；#540。
