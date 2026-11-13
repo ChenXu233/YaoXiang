@@ -4739,3 +4739,20 @@ P1 的形状判据与 ir_gen 的包装层产出形态耦合——「不再匹配
 > **四、锚与验证**：锚六条——**实质先红后绿 4/6（t3 minor 备案更正「六条先红后绿」声称）**：单测折叠值 [Int(-5), Int(0)] / 集成违反值 E4018 参数段正确且 E2031 缺席 / 集成满足值 0 错为红绿锚；i128::MIN 单测（溢出守卫）与嵌套面现状锚 [Int(5), Int(-1)] 为回归/守卫锚（修前即绿，性质本不应红）。t1 门禁 14 项全绿（integration 372、testsuite fast 2095、IR 快照 stable、语料差分零 diff、生成器 DOCS-UNCHANGED 零新码零平移）。t2（批次号 t3.20.24-verify @ `02a6a5d1`，trial 机械可逆）：M1（UnOp 臂改 None）⇒ 违反/满足双锚红（E2031 复现）；M2（取负丢失——直取内层不应用取负）⇒ 违反锚红且参数段错误——折叠面与取负应用各自承重；修复态锚全绿；IR / 语料零漂移；卫生 CLEAN + release。t3 七镜头 **APPROVE**：2 minor 备案（锚声称与出处归属——均由本节承载更正）+ 3 info（07 白名单提议、WBS 行收口义务、testsuite 数字与修前红态未独立复跑由 t2 变异红态闭环）。
 
 > **五、计数与移交**：三级 +1 = 3.20.24（236→237）；二级不变。issue [#556](https://github.com/ChenXuXu233/YaoXiang/issues/556) **关闭**。修复笔推送终态 `02a6a5d1`（rebase 重写前 `d73512b9`，树内容同）。批次树已 release。既有边界另案：[#559](https://github.com/ChenXuXu233/YaoXiang/issues/559)（一级求值器取负裸 -n 与常量求值器 checked_neg 口径不一致，可达性极端）。
+
+## P3 3.20.25 收口（一级求值器取负改 checked 通道——#559，2026-11-14）
+
+> **一、查证推翻「可达性极端」判断**：ConstValue::Int 为 i128（issue 前提成立）；i128::MIN 词法不可写但可经裸 Sub 链两步精确构造（`0 - i128::MAX - 1` 两步均在值域不溢出）——**两条生产可达路径实测 panic**（debug 构建 exit 101，panic 逐字 attempt to negate with overflow）：①赋值折叠面（refinement.rs fold_value，一行即触）；②约束直评面（语料原版 IsPositive 模板 + 调用点取负实参符号代入 → check_predicate 直评）。取负臂穷举对照表六面：backend arith.rs checked_neg（#468）/ const_eval checked_neg（#507）/ evaluator 裸（本条）/ ir_gen wrapping_neg（定义良好）/ operations.rs 裸（零生产调用方，今日不可达不改）/ ast/mod.rs i64 域裸（**用户源码可达**——另案 [#560](https://github.com/ChenXuXu233/YaoXiang/issues/560)）。
+
+> **二、修法与验证**：取负臂改 checked_neg，Err 走本面既有 EvalError::ArithmeticError 通道（与 Div/0、Mod/0 同构，不新增诊断码——本面无诊断码表，不照搬 E6007；构造与 #468/#507 同源）；三个生产消费方全保守降级。t1 门禁 14 项全绿（integration 372、testsuite fast 2095、IR 快照只读比对、语料差分零漂移、生成器零新码）。t2（批次号 t3.20.25-verify @ `001041c6`，trial 机械可逆）：M1（checked 摘除回裸 -*n）⇒ 主锚红 panic 复现；M2（wrap 代报错）⇒ 主锚红——错误通道承重（非仅不 panic）；修复态锚全绿；IR / 语料零漂移；卫生 CLEAN + release。
+
+> **三、t3 REJECT（声称面）与本节事实更正**：t2 PASS 后 t3 七镜头 **REJECT**，三条声称面更正由本节承载（代码行为经 t2 实测正确——panic 确实消失、锚全绿）：
+>
+> - **[medium] 直评面机理声称被静态证伪（承重墙级）**：提交信息称「Z3 真实整数语义判 MIN>0 为假 → E4018」——实际机理（frozen rev 逐环核实）= 39 位字面量 parse::<i64> 失败在 Z3 侧**落成自由 Int 变量** → 取反目标可满足 → Sat → Disproved → E4018 带伪变量反例；真实整数语义下该约束（i128::MAX + 1 > 0）恒真 → 应 Proved 零诊断。**直评面当前 E4018 是 SMT 翻译 artifact 的假拒绝**（修前是 panic——崩溃换错诊断，C 类改善但非终态）。artifact 与依赖登记 [#561](https://github.com/ChenXuXu233/YaoXiang/issues/561)：修复大字面量保真时必须同步翻 #559 直评面锚（现锚钉 E4018，保真后应钉 0 诊断）并全量核对 SMT 翻译面其它依赖判向。
+> - **[low] 锚双重计数更正**：提交信息「新测试 4 个先红后绿」不成立——实际 **2 条先红后绿**（i128::MIN ArithmeticError / 约束直评面不再 panic）+ **2 条对照锚载体**（-5 / -MAX / i64::MIN-1 与裸 Sub 链——即 c1-c4，修前即绿，被同一条消息双重计数）；「reverse-patch 机械演示红态」是演示手段名非已提交测试名。
+> - **[low] 回归锚计数更正**：#556 折叠锚实数 6（具名测试函数）非提交信息所写 7（若按子断言口径未写明）。
+> - **[info] 相邻既有缺陷另案**：字节码 Not 编码 I64_NEG 但解码一律还原 Neg（有损往返）→ [#562](https://github.com/ChenXuXu233/YaoXiang/issues/562)；z3_backend 超界截断 as i32（并入 [#561](https://github.com/ChenXuXu233/YaoXiang/issues/561) 同根）。
+
+> **四、教训**：t3 静态复审对「机理声称」的逐环核实的价值在本批达到峰值——修复行为正确（t2 实测）但提交信息的机理描述恰好把一个 artifact 假拒绝包装成「正确判定」；若无人逐环核实，未来 SMT 保真修复会让 #559 直评面锚静默翻面且无人知道判向依赖。**机理声称必须逐环对照冻结代码，不得以「实测出对了结果」反推机理正确**（结果正确 + 机理描述错误在此批同时成立）。
+
+> **五、计数与移交**：三级 +1 = 3.20.25（237→238）；二级不变。issue [#559](https://github.com/ChenXuXu233/YaoXiang/issues/559) **关闭**（panic 修复成立；直评面判向 artifact 移交 [#561](https://github.com/ChenXuXu233/YaoXiang/issues/561)）。修复笔推送终态 `001041c6`（rebase 重写前 `eefe1e7c`，树内容同）。批次树已 release。
