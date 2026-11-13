@@ -1958,6 +1958,16 @@ main: () -> Void = {
         codes[0], "E1113",
         "#538: the rejection must be E1113 (compile-time evidence, same code as the function face), got: {codes:?}"
     );
+    // F3（3.20.21 复审）：主锚钉住位置——诊断落在**内层调用实参 y** 那一行
+    // （`r: Int = b.get(y)(y)` 行；列指向第一个实参），与函数面先例
+    // （compile_time_evidence 的 test_const_arg_missing_evidence_is_reported
+    // 断言 `span.start.line`）同一纪律。行号按探针实测写死：夹具首行为空行。
+    let diag = &checked.diagnostics[0].diagnostic;
+    assert_eq!(
+        diag.span.map(|s| s.start.line),
+        Some(7),
+        "#538: the diagnostic must sit on the inner call's runtime argument `y` (the `r:` line), not the declaration or the outer call"
+    );
 }
 
 /// #538 合法形态锚：字面量与 const 表达式填 q=0 槽 ⇒ 修前修后同绿。
@@ -2025,5 +2035,124 @@ main: () -> Void = {
     assert_eq!(
         errors, 0,
         "#538: the issue fixture's `y: Int = 3` is compile-time known per the value env (6.8.5-2a) — legal evidence on both faces; got {errors} error(s)"
+    );
+}
+
+// ── #538 修复轮（WBS 3.20.21 复审 F1）：方法绑定键的「解析-消费」窗口 ──────
+//
+// 病史门：3.20.21 t3 复审（冻结 rev 8355a283）F1——`infer_call_expr` 的顺序
+// 是 infer(func) → 推断全部实参 → 判定，而判定函数的 None 分支才
+// `std::mem::take` 状态位；实参自身的 FieldAccess 臂会在消费前清空/覆盖键，
+// 判定读到的不再是被调方写入的键。修法：调用边界快照（infer(func) 之后立即
+// take，经参数消费），判定不再读状态位。两条锚对应两类可观测后果，修前红态
+// 均在 HEAD 8355a283 探针实测（2026-11-14）：
+// - 实参是**普通记录字段**（`b.v`）：FieldAccess 臂进体清空键 ⇒ 判定取到
+//   None ⇒ 正确的 E1113 被**静默吞掉**（check 0 error）；
+// - 实参是**method 引用**（`f.other` 命中 `Foo.other`）：其键覆盖被调方的键
+//   ⇒ 判定用**错方法**的槽位表发射 E1113，诊断点名错方法的 binder（'M'）。
+//
+// 修复轮另查出：状态位**不跨语句存活**（每条语句表达式新建 ExpressionInferrer，
+// 构造器置 None）且值位置 method 引用在合法程序里被类型面拒绝（E1002，
+// `fn(N)` 不与 `fn(int64)` 统一）——「残留键跨语句误读」在合法程序中不可构造，
+// 快照修法对它是结构性消除（契约恢复），不设可观测锚。
+
+/// #538 修复轮 F1 锚①（先红后绿）：实参里的**普通字段访问**清空方法绑定键，
+/// 不得让 q=0 槽的证据检查被静默吞掉——修后报恰 1 条 E1113 点名 `Box.get`
+/// 自己的 binder N，位置落在内层调用实参 `b.v` 上。
+#[test]
+fn test_check_method_call_field_access_arg_in_const_slot_reports_e1113() {
+    // Arrange - `b.v` 是合法实参形态（普通记录字段），但它的 FieldAccess 推断
+    // 会清空方法绑定键；q=0 槽 N 被运行期值填充的证据检查必须照常发射
+    let dir = temp_dir();
+    let file = create_yx_file(
+        &dir,
+        "method_const_slot_field_access_arg.yx",
+        r#"
+Box: Type = { v: Int }
+Box.get: (N: Int) -> (n: N) -> Int = (n) => n
+main: () -> Void = {
+    b: Box = Box(v = 1)
+    mut y: Int = 3
+    r: Int = b.get(b.v)(y)
+}
+"#,
+    );
+
+    // Act
+    let checked = check_result(&file);
+    let codes = error_codes(&checked);
+
+    // Assert - 修前红态实测：check 0 error（正确的 E1113 被清空键吞掉）
+    assert_eq!(
+        codes.len(),
+        1,
+        "an argument field access must not suppress the q=0 slot evidence check of the enclosing method call; got {codes:?}"
+    );
+    assert_eq!(
+        codes[0], "E1113",
+        "the rejection must be E1113 (compile-time evidence, same code as the function face), got: {codes:?}"
+    );
+    let diag = &checked.diagnostics[0].diagnostic;
+    assert!(
+        diag.message.contains("'N'"),
+        "the diagnostic must name Box.get's own const binder N, not another method's binder; got: {}",
+        diag.message
+    );
+    assert_eq!(
+        diag.span.map(|s| s.start.line),
+        Some(7),
+        "the diagnostic must sit on the inner call's argument `b.v` (the `r:` line), not the declaration or the outer call"
+    );
+}
+
+/// #538 修复轮 F1 锚②（先红后绿）：判定对象必须是被调方**自己的键**——
+/// 实参 method 引用写键覆盖后，判定不得借**别的方法**的槽位表与 q=0 名发射。
+#[test]
+fn test_check_method_call_evidence_names_callee_own_const_binder() {
+    // Arrange - 实参 `f.other` 命中方法绑定 `Foo.other`（写键覆盖被调方的键），
+    // 同时它对 `Box.get` 的 q=0 槽 N 确实缺编译期证据
+    let dir = temp_dir();
+    let file = create_yx_file(
+        &dir,
+        "method_const_slot_wrong_key_arg.yx",
+        r#"
+Box: Type = { v: Int }
+Box.get: (N: Int) -> (n: N) -> Int = (n) => n
+Foo: Type = { w: Int }
+Foo.other: (M: Int) -> (m: M) -> Int = (m) => m
+main: () -> Void = {
+    b: Box = Box(v = 1)
+    f: Foo = Foo(w = 2)
+    mut y: Int = 3
+    r: Int = b.get(f.other)(y)
+}
+"#,
+    );
+
+    // Act
+    let checked = check_result(&file);
+    let codes = error_codes(&checked);
+
+    // Assert - 修前红态实测：E1113 点名 'M'（错方法 Foo.other 的 binder）——
+    // 判定取到了实参覆盖写入的键；修后必须点名 'N'
+    assert_eq!(
+        codes.len(),
+        1,
+        "the evidence check must fire exactly once for the inner call's q=0 slot; got {codes:?}"
+    );
+    assert_eq!(
+        codes[0], "E1113",
+        "the rejection must be E1113, got: {codes:?}"
+    );
+    let diag = &checked.diagnostics[0].diagnostic;
+    assert!(
+        diag.message.contains("'N'"),
+        "the diagnostic must name Box.get's own const binder N (the callee's key), not the arg's method binder M; got: {}",
+        diag.message
+    );
+    assert!(
+        !diag.message.contains("'M'"),
+        "the diagnostic must not name the arg's method binder M — the judgment must use the callee's key; got: {}",
+        diag.message
     );
 }

@@ -163,11 +163,13 @@ pub struct ExpressionInferrer<'a> {
     /// 最近一次 `monomorphize` 解出的类型实参（按声明顺序），供紧随其后的
     /// `collect_instantiation_request` 取用。
     last_type_args: Vec<MonoType>,
-    /// 最近一次 FieldAccess 推断解析到的**方法绑定键**（`Box.get` 形态；与
-    /// `method_bindings` 的查找键同一构造）。FieldAccess 臂进体时清空、命中
-    /// 方法绑定时写入——紧随其后的调用点证据判定（E1113 的方法面，issue #538）
-    /// 经 `std::mem::take` 消费。与 `last_type_args` 同款「紧邻消费」状态位：
-    /// 只有同一表达式的 FieldAccess 臂与调用点之间成立，其余路径不读。
+    /// FieldAccess 臂解析到的**方法绑定键**（`Box.get` 形态；与
+    /// `method_bindings` 的查找键同一构造）。写入纪律：FieldAccess 臂进体先
+    /// 清空、命中方法绑定时写入（臂是唯一生产者）。消费在**调用边界**：
+    /// `infer_call_expr` 在 `infer_expr(func)` 之后立即 `take` 快照——被调方
+    /// 是 FieldAccess 时快照值经参数传入调用点证据判定（E1113 的方法面，
+    /// issue #538），否则丢弃。判定只消费快照、不读状态位——实参推断对状态
+    /// 位的覆盖不影响本次判定，残留在各调用边界被清除。
     last_method_binding_key: Option<String>,
     /// RFC-011a §6 存在类型强制点（具体→存在包装点，ir_gen 按 span 查表注入包装）
     pub existential_coercions: Vec<super::existential::ExistentialCoercion>,
@@ -2741,6 +2743,7 @@ impl<'a> ExpressionInferrer<'a> {
         args: &[crate::ast::Expr],
         named_args: &[(String, crate::ast::Expr)],
         span: crate::util::span::Span,
+        method_binding_key: Option<String>,
     ) -> ConstArgOutcome {
         use crate::frontend::core::types::const_data::{ConstExpr, ConstValue};
         use crate::frontend::core::sema::proof::verdict::ProofFailure;
@@ -2752,9 +2755,10 @@ impl<'a> ExpressionInferrer<'a> {
         // 共用下方同一段判定（判据单源，issue #538）：
         // - **函数面**（`Var` / 模块限定 `FieldAccess`）：`callee_generic_name`；
         //   q=0 名取 `PolyType::const_binders`（声明期登记口）。
-        // - **方法面**（值接收者 `FieldAccess`）：方法绑定键取 FieldAccess 臂刚
-        //   解析出的 `last_method_binding_key`（臂内已排除 native 命名空间与记录
-        //   字段形态）；q=0 名与槽位名都来自方法注册写入的同一张槽位表
+        // - **方法面**（值接收者 `FieldAccess`）：方法绑定键取**调用边界快照**
+        //   （`method_binding_key` 参数——`infer_call_expr` 在 `infer(func)` 之后
+        //   立即 `take` 传入；臂内已排除 native 命名空间与记录字段形态）；
+        //   q=0 名与槽位名都来自方法注册写入的同一张槽位表
         //   （此前方法注册丢弃 q=0 事实 ⇒ 静默不判——#538 的缺口）。
         //
         // 本批覆盖的方法形态 = 无接收者位的 `Type.method: sig = lambda` 声明
@@ -2781,7 +2785,11 @@ impl<'a> ExpressionInferrer<'a> {
                 if self.method_binding_call_key(func).is_some() {
                     return ConstArgOutcome::NotTarget;
                 }
-                let Some(method_key) = std::mem::take(&mut self.last_method_binding_key) else {
+                // 方法键来自**调用边界快照**（`method_binding_key` 参数——
+                // `infer_call_expr` 在 `infer(func)` 之后立即 take，见其注释）：
+                // 实参推断对状态位的覆盖不参与本次判定，非 FieldAccess 被调方
+                // 的调用边界不读走陈旧键。
+                let Some(method_key) = method_binding_key else {
                     return ConstArgOutcome::NotTarget;
                 };
                 let Some(slots) = self.declared_call_site_params.get(&method_key) else {
@@ -3871,9 +3879,11 @@ impl<'a> ExpressionInferrer<'a> {
                 ..
             } => {
                 // 方法绑定键状态位（`last_method_binding_key`）：本臂是它唯一的
-                // 写入点——进体先清空，命中方法绑定的每个返回点写入。紧随其后的
-                // 调用点证据判定（E1113 方法面，issue #538）按「同一表达式的
-                // FieldAccess 臂刚跑过」消费，其余路径不读。
+                // 写入点——进体先清空，命中方法绑定的每个返回点写入。消费在
+                // 调用边界：`infer_call_expr` 在 `infer_expr(func)` 之后立即快照
+                // （take）并经参数传入本次调用的证据判定（E1113 方法面，
+                // issue #538）；实参推断对状态位的覆盖不参与判定，非
+                // FieldAccess 被调方在调用边界丢弃并清残留。
                 self.last_method_binding_key = None;
                 let obj_ty = self.infer_expr(obj)?;
                 let obj_ty = self.solver.resolve_type(&obj_ty);
@@ -4595,6 +4605,16 @@ impl<'a> ExpressionInferrer<'a> {
         }
 
         let func_ty = self.infer_expr(func)?;
+        // 方法绑定键的「解析-消费」窗口收缩到本次调用的被调方（E1113 方法面，
+        // issue #538 状态位的判据收紧）：被调方是 FieldAccess 时，`infer_expr(func)`
+        // 刚写入的键是本次判定唯一合法的键——立即快照（take）；此后实参推断对
+        // 状态位的任何覆盖（实参自身的 FieldAccess 臂会清空/改写）都不影响本次
+        // 判定。被调方非 FieldAccess 时不存在合法生产者，快照丢弃——调用边界
+        // 顺带清除残留，陈旧键不再被任何判定读走。
+        let method_binding_key = self
+            .last_method_binding_key
+            .take()
+            .filter(|_| matches!(func, crate::ast::Expr::FieldAccess { .. }));
         // 可调用性校验：被调对象必须是函数（或 LibraryRef）。
         //
         // 此前完全不检——`x = 5; x()` 编译期静默通过，到运行时才报
@@ -5017,7 +5037,13 @@ impl<'a> ExpressionInferrer<'a> {
         // 与显式类型实参路径（D6.3）同形。
         // 三态（6.9.2-B）：非目标 / 证据齐备（可能带特化）/ 目标但缺证据。
         // 缺证据必须**报错**（E1113），不再静默按运行期传参。
-        match self.collect_const_arg_instantiation_request(func, args, named_args, span) {
+        match self.collect_const_arg_instantiation_request(
+            func,
+            args,
+            named_args,
+            span,
+            method_binding_key,
+        ) {
             ConstArgOutcome::NotTarget | ConstArgOutcome::Evidenced(None) => {}
             ConstArgOutcome::Evidenced(Some(specialized)) => return Ok(specialized),
             ConstArgOutcome::MissingEvidence(diag) => return Err(diag),
