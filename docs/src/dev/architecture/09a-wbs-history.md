@@ -4801,3 +4801,181 @@ P1 的形状判据与 ir_gen 的包装层产出形态耦合——「不再匹配
 ### 四、计数与边界
 
 三级仍 5 行（6.9.1–6.9.5），总数 232 不变；不新增编号。模型/阶段表不是三级任务，不计入 232。`#529` 的 P7 闸口改为「阶段 A/B/C 出口」，D（Σ）不阻塞；7.0 纯搬移批是 P7 前置，不受闸口约束。
+
+## P6 6.9.2-C3 F4 首轮分析（2026-11-13，只读，HEAD `e4478d83`）
+
+### 一、范围与方法
+
+f4-analyst 只读分析，未构建、未跑测试、未跑 CLI；所有运行期结论标注为「读码推断/待量测」。读了 AGENTS/HOWTO/coding-rules、09 §P6 6.9、09a §P6 6.9.2-B/C1/C2a/C2b/C2c、RFC-011 §4.1，以及 `collect_const_arg_instantiation_request`、`GenericArg`、`VarInfo`、`monomorphize`/`process_queue` 等代码。
+
+### 二、已核实的事实（结构性）
+
+1. **F4 前提表述过期**：`ConstEvidence` / `CheckOnly` 在 `src/` 全仓零命中（6.9.2-C1 已删）。现行机制是 `collect_const_arg_instantiation_request` 只把归一化后的闭项 `ConstExpr::Lit(value)` 放进 `type_args`；开项 `normalize` 返回 `Unproven(Symbolic)` 时该臂跳过，最终 `Evidenced(None)` ⇒ 不建请求。
+2. **表示已存在**：`GenericArg::Const(ConstExpr)` 是既有项语言，`BinOp` 能表达 `k-1`；`substitute` 的 `Const` 臂当前恒等，`as_type` 用 `TermEnv::default()` 归一化，失败给 `None`，`type_name` 给 `<open-term>`。甲不是「新增表示」。
+3. **k 的值不在 mono 的 name_map**：`VarInfo::pinned` 只有 `bool`；mono 的 `name_map` 只来自 `generic_params` ↔ `type_args()`。要在 mono 求值，必须先补「钉住消解」事实（推荐收集期把 `k` 消解到 binder，避免第二绑定源）。
+4. **开项直接入队会缺 type_args**：`monomorphize` 第 3 步的 symbolic 判据只看 `mono_args()`（类型位），开项请求的 `type_args()` 为空 ⇒ 读码预测 `type_args_len != n_type_params` 报 E3018（待量测）。
+5. **递归链终止没有值链机制**：每个实例原样克隆静态调用 `factorial(k-1)`，`fire_deferred` 对每个实例重发；`processed` 按 `SpecializationKey`（名+值）去重，5/4/3… 不去重；唯一护栏是 `req.depth > max_depth`（默认 100）⇒ `ir_internal_error`（E3005 面）。读码预测 `factorial(5)(5)` 的值链到 101 层撞 E3005，语料从「运行 120」变编译错误——这是三案共同的真正闸门（待量测）。
+
+### 三、三案重述
+
+旧「甲/乙/丙」不正交：甲答「请求里放什么」，丙答「在哪求值」；丙-1（第二字段）破单一表示，丙-2（从 IR 复原 `k-1`）破单一求值器且耦合擦除位次，丙-3（mono 读克隆声明 `Literal` 取值）仍要求项进请求 = 甲的取值细节。可裁的是 **D-a 表示（甲/乙）× D-b 求值点（mono）+ F4-T 终止**。
+
+### 四、首轮推荐
+
+**甲-闭**：`deferred` 桶允许存开项请求，`fire_deferred` 在入队前代入 + 归一化为 `Const(Lit(v))`；`Unproven` 不建请求（退回原件）。**配 F4-T**：优先 **T-b**（有界开火 + 到界退回原件不报错，登记「该边未特化」），T-a（实例内按钉住值折条件）另立三级任务，T-c（复用终止性层/改规范）属 E 类。理由：单一表示、单一求值器、无第二本账；乙让 I4/A 出口/P7 闸口落空。
+
+### 五、裁决前量测（M1–M6）
+
+| # | 指标 | 用途 |
+| --- | --- | --- |
+| M1 | 语料 `const_generic_recursive_factorial.yx` 的 exit/stdout；函数表无 `factorial(int64::4)`、克隆内部指原件 | 证明「开项未特化」是用户可观测现状 |
+| M2 | `factorial(int64::5)` / `__factorial_l0` 的 `params` 与 `LocalSlot.ty` | 选 `k` 取值来源（VarInfo 扩字段 vs 读克隆声明） |
+| M5 | `f(k+1)` 今天是否零请求；开项直接入队是否 E3018 | 确认 `monomorphize` 第 3 步必须改 |
+| M3 | 原型开火后的实例名序列、`req.depth` 峰值、是否 E3005、`processed` 规模 | F4-T 的 go/no-go |
+| M4 | 语料基线逐字节 diff、IR 快照 zero-diff、fast、错误码生成器幂等 | D59 分类与代价 |
+| M6 | 开项实例的 `slots.len()==values.len()`、`is_curry_shaped`、擦除自动覆盖 | 确认 C2c 零改动 |
+
+### 六、未核实
+
+所有运行期结论未实测；`max_depth` / `max_total_instantiations` 的生产配置链路未逐层核；`deferred` 两跳以上漏查未构造实验；`PINNED_EXPRESSION` 从「不特化」变「特化」的连带影响未核；`#541`/`#542` 暴露面未评估；09 的 A.C3 依赖 6.9.3c 的具体接口未核；英文镜像未逐字核对。
+
+## P6 6.9.3d 首轮分析：真实判定点与判定点协议（2026-11-13，只读，HEAD `e4478d83`）
+
+### 一、范围
+
+protocol-analyst 只读：38 处 `.unify(` 全量分类；未编译、未跑测试、未写文件；运行期结论标 [未核实]。
+
+### 二、已核实（静态）
+
+1. unify 唯一定义；生产入口 = driver `Stage::Typecheck` → `check_module` → body checker；单文件/多文件/check/LSP/wasm 五条用户可达。
+2. 38 点 = 19 判定 + 16 试探（`let _ =`）+ 2 克隆沙盒 + 1 模板绑定；递归内部 8 处。
+3. can_assign 唯一调用者 check_assignment，check_assignment 仅测试；AssignmentChecker 生产零实例化；is_subtype/defeq/check_type_equivalence 生产零；`TypeSystem::unify` 零调用者。
+4. solver 无 env/budget/dep_env，且被 `TypeEnvironment` 拥有 ⇒ solver 外层包装不可行；StatementChecker 无 env；`DefeqContext` 要 `&TypeEnvironment`。
+5. 回滚只有 Union/unordered 两处 `bindings.clone()`；Fn/Generic/Struct 的 `?` 递归失败留绑定（Fn 例子：形参位 `t:=Int` 落盘，返回位 Int vs String 报 E1002；调用方拿到 Err 但 t 已解析为 Int）。快照窗口内不得 `new_var`（`self.bindings = snapshot` 会截断 Vec）。
+6. defeq 相对 unify 的增益面 = δ 展开（TypeRef 别名）；字面量/Generic 结构/Refined/Never/Any 已由 unify 覆盖。`Array(Int,2+3)` 在 `From<ast::Type>` 的 ConstExpr 臂折叠成 Literal ⇒ 生产 unify 前已同形；`check_var_stmt_inner` 的 `seed_container` 阶梯绕过 unify。
+7. 诊断：unify E1002；defeq 的 Unproven 需上层填 subject/span；E4020 不由 decide 产；预算 `for_judgment` 唯一工厂，unify 不吃预算。
+
+### 三、协议推荐
+
+- 入口：sema 新 `decide` 层（solver 包装不可行；记录-后判 = 第二路径，否决）。
+- 归约输入：`DefeqContext.env` 收窄为 `types` 表（E2），`Evaluator` 同改；`type_defs` 已有注入链。
+- 回滚：日志式 `mark/rollback_to/commit`（J），替换 Union/unordered 两处克隆或登记不改理由。
+- 预算：一次判定一份（`for_judgment`，只在 unify 失败路径新建）。
+- 映射 b：Proved→Ok；Disproved→E1002（保留原文/span）；Unproven→E4023（subject=TypeEquivalence(展开后两侧)、span=判定点）。
+- 覆盖：19 判定点全接；16 试探点留 unify 并登记泄漏；2 沙盒点保留；1 模板点保留。
+- ground：回滚后判「无 TypeVar」；不得复用 `contains_unresolved_param`（TypeRef 不算未解析会挡 δ）；从 `contains_var` 的遍历提一份 `visit_vars` 派生。
+- 删除：`TypeSystem::unify`（零调用者 + 第二套错误映射）与 `can_assign`/`check_assignment`/`AssignmentChecker` 链（生产零可达）按 coding-rules 7.3 处置，需在契约里登记同批或另案。
+
+### 四、验收（契约草案要点）
+
+1. 生产红判据先实测为红：δ 展开形态（`Five: Type = 5` + 调用实参位/返回位），不得用 `Array(Int,2+3)` 冒充。
+2. 生产调用图 19 点表 + 16 试探/2 沙盒/1 模板不迁移理由；grep/门禁对账。
+3. 回滚三形状（Fn/Generic/Struct 前位成功后位失败）测试；Union/unordered 无泄漏保持；快照窗口不分配变量。
+4. 预算量测：decide 次数、进 defeq 次数、总步数、单次最大步数；生产零 `BudgetTracker::new()`。
+5. E4023 用户可达（`Compiler::compile`，code=E4023，含两侧/原因/span）；找不到用户形态则报裁决，不得单测直构。
+6. subject 门禁：decide 无条件覆写 subject/span + 变异测试；`unproven_general_diagnostic` 调用点唯一。
+7. 6.9.3b 遗留 2：非预算 `EvalError→Unproven{BeyondKernel}` 且 `budget.steps_used < limit`。
+8. E4020：结论不带（decide 不产 E4020），在 verdict 臂注释。
+9. 等价性：语料/IR 零漂移或逐条 D59 分类；fast/integration/生成器/五门禁。
+10. 单源门禁：unify 调用点 = 契约清单；defeq 调用点只有 decide + 测试。
+
+### 五、未核实
+
+验收形态能否先红（最高）；δ 是否真能救；`type_defs` 快照是否够；`EvalError` 用户可达；CollectAll/LSP 诊断集变化；日志 vs 克隆成本；is_subtype 去留；两处既有克隆是否同批改造。
+
+## P6 6.9.5 D.0 设计复核（sigma-reviewer，2026-11-13，只读，HEAD `e4478d83`）
+
+### 一、范围与方法
+
+只读；未跑测试/探针；所有「当前接受/拒绝」为静态阅读。读了 issue #536/#537/#539/#552、09/09a 6.9、AST/Mono/IR 字段载体、`infer_call_expr` 构造臂、`FieldAccess`、`add_type_definition`、`judge_refined_obligation`、`RuntimeOutcome`、`Export`/`TypeDefPayload`。
+
+### 二、已核实（静态）
+
+1. 字段载体没有 per-field binder：AST `StructField` 只有 name/ty/default；Mono `StructType.fields` 是 (String, MonoType)；IR `TypeDeclField` 同；`DepFn` 零生产者；`ConstExpr` 无字段路径项。
+2. 构造点：泛型两层构造检查位置实参类型，命名实参只查必需字段；非泛型 `Struct` 构造臂只查 arity/必需字段，无逐字段类型统一；未知命名实参不拦（静态）。
+3. 投影：`FieldAccess` 直接返回字段类型；没有把前序字段名替换成投影路径/值；保留 `Refined`/`Generic` 会把自由字段名泄漏到使用点（捕获风险）。
+4. `Refined`：类型体字段没有走 `resolve_type_annotation`；`add_type_definition` 只 `MonoType::from`；`judge_refined_obligation` 私有，自然构造点在 `inference/expressions.rs`，`pub(super)` 不可达，`ExpressionInferrer` 无 `TypeEnvironment`/`ProofContext`。
+5. witness 擦除存在（`Refined`→base），runtime check 不存在（`RuntimeOutcome`/`InsertCheck`/`RuntimeCheck` 零命中；W1080 无发射点）。
+6. 预算：`collect_refined_binding_checks` 一份 `ProofContext` 走全模块，`BudgetTracker` 无 reset；「一次判定一份」未兑现。
+
+### 三、决策 0（H0，必须先裁）
+
+A：w 是运行期 Int 数据字段，`Pos(v)` 是它的精化类型；构造点证明 v>0，w 只做 base 检查；witness 擦除，字段值保留；投影 `b.w : Int`。代价小，不满足 issue「w0 满足谓词」的字面读法。
+B：w 是 `Pos(v)` 的证明/见证，不是运行期数据；构造时证明 `Pos(v0)`，witness 整体擦除；构造 arity/布局/投影都变。代价大，需 proof-term/erased-field 设计，与 q=0 擦除/defeq 新依赖。
+首轮推荐 **V1-A（admission-only）**，issue #536 的「w0 必须满足 Pos(v0)」应改写为「构造点必须证明 Pos(v0)」。若选 B，6.9.5 不能按当前 D 阶段/旧行直接开工，另立设计。
+
+### 四、V1-A scope
+
+In：同模块、非泛型 `Type::Struct`；字段 i 只引用严格前序 0..i-1；只收单参数 `predicate_defs`；构造点用 `bind_args_to_params` 绑字段、base unify、谓词代入、`judge_refined_obligation`；投影擦 base；witness 擦除；admission-only。
+Out：Π/`DepFn`、完整 Σ 消去、泛型 Σ、类型位值依赖、跨模块、导入多参数谓词、runtime check、字段可写性强制、6.9.3d/defeq 生产化。
+
+### 五、硬前置 H1–H7
+
+H1 构造点字段绑定 + base 检查（现状非泛型构造不查字段类型；未知命名实参不拦）；
+H2 依赖字段存储擦 base（否则投影泄漏自由名/捕获）；
+H3 判定单元放 `checker/refinement.rs` 的 refined walk（`judge_refined_obligation` 私有；`pub(super)` 到不了 inference）；
+H4 admission-only（字段可写性当前未按 `is_mut` 强制；不承诺构造后不变量）；
+H5 预算一次判定一份（`ProofContext` 一份走全模块，无 reset）；
+H6 不支持形态声明处拒绝（泛型 Σ、类型位值依赖、多参数/证明函数形态），不得静默；
+H7 生产可达性（每个用户面锚 CLI check/run，不许单测直构）。
+
+### 六、三个 issue
+
+- **#537** 条件性硬前置：V1 限定单参数 `predicate_defs` 时不阻塞；若字段用带精化形参的证明函数，先裁/修。
+- **#539** 否（对 V1）：函数调用面 q=0 证据；V1 同模块；跨模块 Σ 还需字段依赖导出，仅修 #539 不够。
+- **#552** 条件性：V1 排除导入多参数谓词；若要求该形态，先修/裁。
+
+### 七、测试矩阵（摘要）
+
+T01 正锚 `Box(3,4)` 0 诊断；T02 负锚 `Box(-1,4)` E4018；T03 `Box(3,"x")` E1002（现状可能漏）；T04/T05 命名/乱序；T06 arity E1010 不重复；T07 未知名 E1014；T08 默认值；T09/T10 链式前序；T11 同名局部捕获；T12/T13 投影 base；T14–T18 声明拒绝（自引用/后向/未知名/泛型 Σ/多参数）；T19/T20 导入边界；T21 admission-only 字段改写；T22 IR 字段 base；T23 语料/快照零漂移；T24 预算边界；T25/T26 变异。
+
+### 八、go/no-go
+
+D.0 GO；6.9.5 实现 CONDITIONAL GO（先裁 H0 + V1-A scope + H1–H4 方案）；按旧 WBS 行直接开工 NO-GO；宣称 Π/Σ 完全体 NO-GO。
+破坏性：非泛型构造 base 检查会让原先「字段类型写错能编译」的程序报 E1002；未知命名实参检查会让原先忽略的形态报 E1014；B 读法改布局/arity/投影。均需 D59 分类/裁决。
+
+### 九、未核实
+
+未跑测试；非泛型构造字段检查缺口是否被其它路径兜住未实测；字段赋值可写性未实测；预算共享未核实；#537 根因/#552 触发面未复现；跨模块 `TypeDefPayload` 行为未实测；`NamedStruct` 的 `field_has_default` 空向量 panic 风险登记；09a 的 `pub(super)` 可见性前提被静态反驳。
+
+## P6 6.9.4 Γ 等式桥首轮设计（gamma-designer-2，2026-11-13，只读，HEAD `e4478d83`）
+
+### 一、范围与方法
+
+只读；未构建/未跑测试；「今天行为」= 5 条 stdin 探针 + 代码路径推断，其余为代码阅读。读了四份规则、09/09a 6.9、`assumptions.rs`/`ownership.rs`/`refinement.rs`/`expressions.rs`/`statements.rs`/`checker.rs`/`const_eval.rs` 等。
+
+### 二、已核实
+
+1. Γ 唯一实现 = `FlowSensitiveGamma`（ConstExpr 命题 + alive + scope_depth；inject/kill/enter/exit/current/contains）。`exit_scope` 已给分支合流交集语义；`kill` 按名保守整条作废；`ownership.rs` 的 `walk_if`/`walk_while` 与 `refinement.rs` 的 `refined_walk_branch_with_guard` 是真消费者；`statements.rs` 的 Reassign 与 `expressions.rs` 的 assert effect 注入。
+2. **生产 Γ 是 None**：`checker.rs` 的 `init_body_checker`/`body_checker_mut` 两处 `StatementChecker::new(..., None, ...)`；`check_module_impl` 的 refined/termination/ownership 都在函数体类型检查之后 ⇒ Γ 事实今天到不了 E1113；`check_if_stmt` 不碰 Γ。
+3. 证据接口唯一 = `TermEnv`；`frame_term_env` 是唯一生产构造点；`admits`/`normalize` 唯一判据；`TypeEnvironment` 不是证据接口。
+4. `judge_refined_obligation` 唯一精化判定单元，私有；`check_refined_obligation` 全仓零命中（任务书该名应指前者）。
+5. 今天：`f(y)(42)` E1113；`if y==42` 内仍 E1113；else/嵌套/谓词守卫全 E1113；`f(42)(y)` E1002（第二 y 不属 6.9.4）。
+6. 测试/语料：`compile_time_evidence.rs` 是 E1113 直驱范式；`gamma_assume_effect.rs` 直构 gamma（非生产可达）；`call_arg_evidence.yx` 是守卫证据正控；`rfc027_refined_transparency` 四条开约束 tripwire 记在 6.9.4 名下但形态是 `Eq(N,n)`。
+
+### 三、设计
+
+- Γ 事实 = `ConstExpr::BinOp(Eq, 一侧闭常量, 一侧唯一 NamedVar)`；42==y 同义；合取只分解；单点 `const_equalities()`。
+- 收集点 = `check_if_stmt`：check_expr → enter_scope → inject(condition_as_const) → check_block → exit_scope；else 用 `negate_guard`；不做 match/while/早返回。
+- kill set = 既有 Reassign + `&mut name` 借出；保守方向。
+- 分支合流 = `exit_scope` 既有交集，零新代码，只加测试。
+- 嵌套 = enter/exit 天然；必须补函数体帧成对 enter/exit，否则跨函数泄漏（unsound）。
+- 证据 = `frame_term_env` 把 `const_equalities` 并入 `TermEnv` values（同名 values 优先，从 symbolic 剔除）；admits/normalize 不改；生产 Γ = 两处 new 的 None→Some。
+- 不新增第二入口：`const_equalities` 单定义、`TermEnv::new` 调用点不增、`MissingEvidence` 单构造点。
+- 三态/E1113 码位文案不动；`Evidenced` 到达率提高。
+- assert effect 甲（接受为第二来源，推荐）/乙（只守卫）待裁；语料 `assert.assert(FieldAccess)` 可能使甲零漂移（未实测）。
+- RFC 示例收窄：交付 `if y==42 { f(y)(42) }`；`f(y)(y)` 第二 y 不属本项。
+
+### 四、测试矩阵（摘要）
+
+分支内正控/IR 同形；分支外/else E1113；反向 `42==y`；kill/`&mut`；分支合流；合取；嵌套；谓词守卫不产值；函数边界不泄漏；经典路径不变；方法面/导入面边界；新增 2 语料 + 基线零漂移；变异 `const_equalities`。
+
+### 五、契约要点
+
+inScope：`sema/proof/assumptions.rs`、`inference/statements.rs`、`inference/expressions.rs`、`checker.rs`、`checker/refinement.rs`、`types/eval/const_eval.rs`、测试家目录、直驱文件、语料/基线、README/注释、09/09a；若动码表则 codes/locales/generated。
+outOfScope：match/while/早返回；`&mut` 之外的非直接写面（索引/字段/别名；需先定 soundness 处置）；`f(y)(y)` 第二值位；#539/#537/Σ/defeq/E4023；`rfc027_refined_transparency` 的开约束 tripwire。
+验收：先红后绿（5 条今日 E1113）、生产入口、语料/快照零漂移、既有断言不放宽、D59 新增能力、门禁、禁第二入口判据。
+
+### 六、未核实
+
+`check_refined_obligation` 不存在；生产 Γ Some 后的语料/快照零漂移未实测（最高风险）；assert effect 是否变活未实测；跨函数泄漏是代码阅读；`&mut`/索引/字段/别名写未穷举（unsound 缺口需先定处置）；rfc027 tripwire 归属冲突；探针二进制早于最后一笔 src 提交（只 subject/span diff，未重建）；工作树脏；6.9.3/6.9.4 代码级耦合未找到，WBS「依赖 6.9.3」口径需 lead 确认。
