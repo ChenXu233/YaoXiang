@@ -5129,3 +5129,49 @@ outOfScope：C3/F4；`check_var_stmt_inner` 阶梯面（只加注释）；类型
 
 批次树 CLEAN 已 release；两次 trial 机械还原 blob 一致，trial 后重建；主工作树未触碰。
 未核实：E4023 用户可写形态；`type_defs` 快照；E2 语义中性；预算/回滚数字；CollectAll/LSP；返回位红；`pinned k` 对照；#540。
+
+## P6 6.9.5-B.1 契约（sigma-reviewer，2026-11-13，只读）
+
+### 一、目标
+
+把 witness 落到表示与布局，不做 B.2 构造证明、B.3 投影、B.4 导出：
+
+- `StructType` 字段收敛为 `Vec<StructFieldInfo>{name,ty,quantity,is_mut,has_default}`，删除 `field_mutability`/`field_has_default`；
+- AST `StructField.quantity` / IR `TypeDeclField.quantity`；`Some(Zero)` = witness，`None` = data；
+- `CreateStruct` 数据-only、`synthesize_constructor` 数据-only、`resolve_field_index` 数据索引、`GetField`/`SetField` 无 witness；
+- 值级 `b.w` 拒绝（E1114），类型级 `b.w` V1 无语法；
+- 5A 整体不可变（E1115：`mut_field`/`field_assign`/`mutable_borrow`/`method_receiver`）；
+- 既有语料/IR 快照零漂移。
+
+### 二、inScope / outOfScope
+
+inScope：`src/ast/mod.rs`、`types/mono.rs`、`types/solver.rs`、`types/substitute.rs`、`sema/environment.rs`、`sema/checker.rs`、`operator_interfaces.rs`、`sema/mod.rs`、`passes/overload.rs`、`inference/expressions.rs`、`inference/statements.rs`、`inference/patterns.rs`、`layers/ownership.rs`（若落点）、`middle/ir/ir.rs`、`ir_gen.rs`、`normalize.rs`、`translator.rs`、`mono/mod.rs`、`bytecode/mod.rs`、codes/locales/error-code 生成物、测试直造点、baselines/snapshots、09/09a。
+outOfScope：B.2 构造证明；B.3 `b.w` 类型级/`ConstExpr::FieldPath`/proof token；B.4 payload/跨模块；泛型 Σ/类型位值依赖/runtime check/defeq/`DepFn`/`ConstErasePlan`；新 parser 语法。
+
+### 三、三笔提交（lead 调整）
+
+- **B.1a 纯表示（H1+H10）**：`StructFieldInfo`/AST/IR quantity/构造点/Eq-Hash/Debug；零行为；既有语料/快照零漂移。
+- **B.1b 布局（H2）**：`CreateStruct` 数据-only/`runtime_field_index`/`synthesize_constructor` 跳过/`resolve_field_index` 数据索引/`b.w` 拒绝/`z` 索引。
+- **B.1c 5A**：`mut`/字段赋值/`&mut`/方法接收者；E1115。
+
+**B.1b 与 B.1c 必须同批 ship**：只做布局不做不可变，witness 擦除后 record 仍可写，B.2 一旦用 witness 就是 unsound；不得 push 中间态。
+
+### 四、Lead 决策
+
+- **E1114/E1115 新码**：接受；inScope 含 codes/locales/error-code 生成物；六语 + `gen-error-code-docs.py` 幂等。
+- **5A 覆盖必须含自动 `WriteBorrow`/方法接收者**；若 B.1 测出绕过，B.1c 停工补点，不得宣称 sound。
+- **`NamedStruct` 的 `field_has_default` 历史空向量**：先用探针钉旧行为，再决定修/保留；不得在重构里静默改 C 类行为。
+- **`StructType` Eq/Hash 当前不一致**（Eq 忽略 mutability，Hash 含）：B.1a 就地修正并加 `hash_eq_contract`；若缓存行为变化，按 D59。
+- **`StructType` Debug 自定义**，守住既有快照零漂移。
+
+### 五、验收/测试
+
+T01 数据-only `CreateStruct`（`Box(3)`，fields.len=1）；T02 `z` 索引 1；T03 `b.v` 读；T04 `b.w` E1114；T05 IR quantity 直读；T06 Mono quantity 直读；T07/T08 `mut` E1115；T09 字段赋值 E1115；T10/T11 `&mut` E1115；T12 普通记录不变；T13 Eq/Hash；T14 语料零漂移；T15 快照零漂移；T16 fast；T17–T23 变异（不跳 witness/声明索引/不拒 `b.w`/不拒 5A/计入 witness/Hash 含 mutability/打印 quantity）。
+
+### 六、风险
+
+grep 清单 41/45/64 需 `cargo check` 驱动补齐；`NamedStruct` 历史缺陷；Debug 快照；Eq/Hash 缓存；5A 自动借用；`b.w` 当前是运行期字段（D 类）；mono 克隆 quantity；解析副本 vs 原 AST；`runtime_field_index` 层归属；E1114/E1115 码表机械面。
+
+### 七、顺序
+
+B.1 等 B.d 合并后再动（`solver.rs`/`inference/`/`environment.rs`/`checker.rs` 文件面冲突）；B.1a 先行；B.1b+c 同批；F4/Γ 批次树实验等 B.d 树释放后排队。
