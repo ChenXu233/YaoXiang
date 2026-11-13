@@ -4713,3 +4713,17 @@ P1 的形状判据与 ir_gen 的包装层产出形态耦合——「不再匹配
 > **三、锚与验证**：锚四条——主锚（嵌套义务违反报 E4018 参数 [Int(7), Int(0)]，与 issue 期望逐字一致）/ 模块常量变体锚 / 内联形态锚 / 合法链控制锚（嵌套义务成立零诊断）；翻面 tripwire + 普通函数对照锚原样绿。t1 门禁 14 项全绿（integration 366、testsuite fast 2086、IR 快照稳定、语料差分逐字节一致、生成器再生 E4018 发射点 5→6 + E1092/93/94 行号平移幂等）。t2（批次号 t3.20.22-verify @ `bbe7168f`，trial 机械可逆）：M1（摘登记面归一化）⇒ 主锚红（签名精化位回裸 Generic、义务链静默断裂复现）；M2（摘执行器展开）⇒ 主锚红（只看体为真就放行复现）——两层各自独立承重；修复态锚全绿；IR / 语料零漂移；卫生 CLEAN + release。t3 七镜头 **APPROVE**：2 minor 备案——①RFC-027 章节归属笔误（代码注释与提交信息写「§8：预算硬限制是停机问题的工程解」，该原句实际在 §4.1，§8 提供预算表——实质主张两章都支持；**本节即事实更正**：预算工程解 = §4.1 原句 + §8 预算表组合；注释行随下次触碰 proof_execution.rs 顺修）；②预算耗尽的剩余静默面（>128 层合法深链自第 129 层起不判——已展开义务照常判定；实现者披露论据成立：改为报错会让义务链全真但超 128 层的原先成功程序报错，属 D 类；展开预算是 RFC §8 判定预算之外未明文覆盖的维度，属 D59 安全选择，记录在案）；1 info = 代码注释对「3.20.22 实录」的前向引用由本节兑现核销；未核实项（探针出处 / 修前红态 / 生成器幂等 / 语料零漂移）由 t2 批次树复测与静态对账闭环。
 
 > **四、计数与移交**：三级 +1 = 3.20.22（234→235）；二级不变。issue [#537](https://github.com/ChenXu233/YaoXiang/issues/537) **关闭**。修复笔推送终态 `bbe7168f`（rebase 重写前 `5be643c9`，树内容同）。批次树已 release。
+
+## P3 3.20.23 收口（跨模块导入的 const 泛型调用接入证据检查——#539，2026-11-14）
+
+> **一、机理细化（读码证实）**：导出面 lookup 只克隆 `PolyType.body` 丢掉 const_binders（binder 实际登记在签名收集期写入 env.vars 的 PolyType）+ `declared_call_site_params` 槽位表无导入条目——导入面**两样事实都缺**；推断器消费点在 statements.rs `import_binding`（pass3 入 body scope，`add_imported_var` HashMap 末写胜出 ⇒ 单点接线即全覆盖模块级 + 块级 use）。特化请求的跨模块消费通道已存在（driver aggregate_instantiation_requests 用 ir_gen 同一 resolve_call_target + 别名表）——字面量导入调用修前就能跑通特化，缺的只是证据判定面。
+
+> **二、D59 分类依据**：C 类（静默不动作）——义务本身已被 RFC-039 D62 裁决（「f(y) 无证据从静默通过变编译错误」，不可逆变更已获批准）；SPEC type-system §7.1 与 RFC-011 §4.1 同文「调用侧义务按声明强度检查」无跨模块豁免；RFC-027 §12 同向。**口径注记（t3 info 备案的事实更正）**：07 §分流判据的 C 行表格原文不含「静默不动作」字样——该标注依据为 AGENTS 概述与 09a 在案先例（3.21.1 等），属家族既定口径；oracle C 行是否补字属文档面另事，本批不改。另一处措辞更正：issue #539 原文原因段已列两样都缺，提交信息「查证修正 issue 前提」措辞略重——本笔真正细化的是机理（lookup 只克隆 body 的丢 binder 点）。
+
+> **三、修法（判据单源，判定函数零改动）**：Export 新增 `const_binders` + `call_site_params` 两载荷（定义方已登记形态直读，与 #527 proof_fn_params b 案同模式；三处导出面同构填充，native 与测试桩空表——native 导出无 yx 登记面）；checker 新增导出面读取口 `call_site_slot`（纯直读，与 `generic_fn_type_params_snapshot` 同一纪律）；`import_binding` 按本地面 check_fn_stmt 同款登记重建同构 PolyType（binder 非空才包 `new_with_const`，与本地两臂逐字一致）+ 写同一张 declared_call_site_params（or_insert 首登记，函数条目同款）。注释同步三处：#538 判定函数「导入面尚未携带事实」、CallSiteSlots 文档补导入面条目、checker 缺项注记（导入函数面不再是缺项）。
+
+> **四、行为变更披露与边界**：导入面特化强制同步生效——issue 原文夹具（非 mut y）修后 0 错 → E1002 与本地同判（修前「成功」实为静默放行本地语义下的无效程序，D62 已裁决该强制）；特化对齐锚钉住。保持不判边界另案：#558（模块限定调用 lib.pick(y)(y)——判定 face 分支对限定名取不到值条目，覆盖需值命名空间新增限定名条目，语义新增超范围）；#553（方法面跨模块——需方法槽位随 ModuleInfo.method_bindings 跨界的平行载体，函数面 Export 两载荷模式不直接适用；#553 已评论家族图更新）。
+
+> **五、锚与验证**：锚三条——主锚（跨模块 mut y 填 q=0 槽报恰 1 条 E1113 点名被调方 binder）/ 合法形态锚（字面量与 const 表达式导入调用修前修后同绿）/ 特化对齐锚（pick(3)(4) → E1002 与本地同判）。t1 门禁 14 项全绿（integration 369、lib 1665、yx_multifile_runner / formatter_integration 全过、IR 快照稳定、语料差分 388 行逐字节一致、生成器行号平移幂等）。t2（批次号 t3.20.23-verify @ `0ccd458e`，trial 机械可逆）：M1（摘 Export binder 载荷）⇒ 主锚红（导入重建回 mono、整段判定 NotTarget 静默复现）；M2（摘导入槽位登记）⇒ 主锚红（binder 在但槽位查表落空）——两载荷各自独立承重；修复态锚全绿；IR / 语料零漂移；卫生 CLEAN + release。t3 七镜头 **APPROVE**：1 low 备案 = 导入面「值环境证据」路线（非 mut y 夹具 0 错 → E1002）无直接锚——t3 在冻结 rev CLI 实测该行为与本地逐字同判为真（同码同位置），逐字翻面锚随下次触碰本区补；2 info = 上述口径注记两点。
+
+> **六、计数与移交**：三级 +1 = 3.20.23（235→236）；二级不变。issue [#539](https://github.com/ChenXu233/YaoXiang/issues/539) **关闭**。修复笔推送终态 `0ccd458e`（rebase 重写前 `d0ab294c`，树内容同）。批次树已 release。
