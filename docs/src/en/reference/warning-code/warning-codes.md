@@ -11,15 +11,15 @@ edit `locales/*.json`; to change the code table, edit `define_codes!`, and then 
 `python scripts/docs/gen-error-code-docs.py`.
 
 Warning codes start with `W` and indicate potential problems in the code. Their default emission
-level is `warn`, which does not prevent compilation. The exception is `W1090`, whose emission level
-is `error` (the same code was promoted to E by the user decision of 2026-10-13; see its entry for
-details). When triggered, it counts toward `error_count`, changes the exit code, and prevents
-compilation. The registry currently contains **12** warning codes. For the complete index, see the
-[Error Code Index](../error-code/index.md).
+level is `warn`, which does not prevent compilation. Exception: `W1090` has an emission level of
+`error` (per the 2026-10-13 user ruling promoting the same code to E; see its entry). When
+triggered, it counts toward `error_count` and changes the exit code, thereby preventing compilation.
+The registry currently contains **12** warning codes; see the
+[Error Code Index](../error-code/index.md) for the complete index.
 
 ## Configuration
 
-The behavior of dead-code warnings can be configured in `yaoxiang.toml`:
+You can configure dead-code warning behavior in `yaoxiang.toml`:
 
 ```toml
 [lint]
@@ -29,152 +29,154 @@ dead-code = "warn"
 
 - `off`: Disable warnings
 - `warn`: Display warnings (default)
-- `deny`: Treat warnings as errors and block compilation
+- `deny`: Treat warnings as errors and prevent compilation
 
 ## Code Overview
 
-| Code    | Name                                         | span exemption | Template                                                                                                                                                                                                                               | Emission points   |
-| ------- | -------------------------------------------- | -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- |
-| `W1001` | Unused private function                      | No             | `Unused function: '{name}'`                                                                                                                                                                                                            | ✅ 1 location     |
-| `W1002` | Unused private type                          | No             | `Unused type: '{name}'`                                                                                                                                                                                                                | ✅ 1 location     |
-| `W1003` | Unused import                                | No             | `Unused import: '{name}'`                                                                                                                                                                                                              | ✅ 1 location     |
-| `W1004` | Unused private variable                      | No             | `Unused variable: '{name}'`                                                                                                                                                                                                            | ✅ 1 location     |
-| `W1005` | Unused private method                        | No             | `Unused method: '{name}'`                                                                                                                                                                                                              | ✅ 1 location     |
-| `W1006` | Local module shadows dependency package      | No             | `Local module '{module}' shadows dependency package '{dependency}'`                                                                                                                                                                    | ✅ 2 locations    |
-| `W1007` | Module import cycle                          | No             | `Module import cycle {cycle}: the initialization order within the cycle cannot be determined; ordering within the cycle follows only a deterministic convention based on lexicographic path order (not a semantic guarantee)`          | ✅ 1 location     |
-| `W1063` | const generic constraint cannot be evaluated | No             | `const generic constraint cannot be evaluated: \`{constraint}\``                                                                                                                                                                       | ✅ 1 location     |
-| `W1080` | Compile-time proof downgraded                | No             | `The constraint could not be proven at compile time and has been downgraded to a runtime check`                                                                                                                                        | ⚠ Not yet emitted |
-| `W1081` | Termination obligation not determined        | No             | `{count} termination measure obligations not determined (SMT solver unavailable)`                                                                                                                                                      | ✅ 1 location     |
-| `W1082` | Ownership analysis downgraded                | No             | `Ownership analysis downgraded: this compilation has no function-body checker (the type ledger and call-site ownership table are missing), so ownership decisions are made with an empty ledger and borrow conflicts are not detected` | ✅ 1 location     |
-| `W1090` | Obligation produced but not consumed         | Yes            | `Obligation field \`{field}\` was produced in {file} but was never consumed: {detail}`                                                                                                                                                 | ✅ 2 locations    |
+| Code    | Name                                        | Span exemption | Template                                                                                                                                                                                                                                   | Emission sites    |
+| ------- | ------------------------------------------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------- |
+| `W1001` | Unused private function                     | No             | `Unused function: '{name}'`                                                                                                                                                                                                                | ✅ 1 site         |
+| `W1002` | Unused private type                         | No             | `Unused type: '{name}'`                                                                                                                                                                                                                    | ✅ 1 site         |
+| `W1003` | Unused import                               | No             | `Unused import: '{name}'`                                                                                                                                                                                                                  | ✅ 1 site         |
+| `W1004` | Unused private variable                     | No             | `Unused variable: '{name}'`                                                                                                                                                                                                                | ✅ 1 site         |
+| `W1005` | Unused private method                       | No             | `Unused method: '{name}'`                                                                                                                                                                                                                  | ✅ 1 site         |
+| `W1006` | Local module shadows dependency package     | No             | `Local module '{module}' shadows dependency package '{dependency}'`                                                                                                                                                                        | ✅ 2 sites        |
+| `W1007` | Module import cycle                         | No             | `Module import cycle {cycle}: initialization order within the cycle cannot be determined; ordering within the cycle follows only the deterministic convention of lexicographic path order (not a semantic guarantee)`                      | ✅ 1 site         |
+| `W1063` | Unable to evaluate const generic constraint | No             | `Unable to evaluate const generic constraint: \`{constraint}\``                                                                                                                                                                            | ✅ 1 site         |
+| `W1080` | Compile-time proof downgraded               | No             | `Unable to prove the constraint at compile time; downgraded to a runtime check`                                                                                                                                                            | ⚠ Not yet emitted |
+| `W1081` | Termination obligation not determined       | No             | `{count} termination measure obligations could not be determined (SMT solver unavailable)`                                                                                                                                                 | ✅ 1 site         |
+| `W1082` | Ownership analysis downgraded               | No             | `Ownership analysis downgraded: this compilation had no function-body checker (the type ledger and call-site ownership table were missing), so ownership decisions were made using an empty ledger and borrow conflicts were not detected` | ✅ 1 site         |
+| `W1090` | Obligation produced but never consumed      | Yes            | `Obligation field \`{field}\` was produced in {file} but was never consumed: {detail}`                                                                                                                                                     | ✅ 2 sites        |
 
-## Code-by-Code Details
+## Warning Code Details
 
 ### W1001: Unused private function
 
 - **Category**: `Warning`
-- **span exemption**: No
+- **Span exemption**: No
 - **Template**: `Unused function: '{name}'`
-- **Help**: The function is never referenced; consider removing it or adding a call. This warning is
-  not emitted if it is referenced by another file in the same package.
-- **Emission point**: `src/frontend/core/sema/passes/dead_code.rs:897`
+- **Help**: The function was never referenced. Consider removing it or adding a call; this warning
+  is not emitted when another file in the same package references it.
+- **Emission sites**: `src/frontend/core/sema/passes/dead_code.rs:897`
 
 ### W1002: Unused private type
 
 - **Category**: `Warning`
-- **span exemption**: No
+- **Span exemption**: No
 - **Template**: `Unused type: '{name}'`
-- **Help**: The type is never referenced; consider removing it or using the type. This warning is
-  not emitted if it is referenced by another file in the same package.
-- **Emission point**: `src/frontend/core/sema/passes/dead_code.rs:898`
+- **Help**: The type was never referenced. Consider removing it or using it; this warning is not
+  emitted when another file in the same package references it.
+- **Emission sites**: `src/frontend/core/sema/passes/dead_code.rs:898`
 
 ### W1003: Unused import
 
 - **Category**: `Warning`
-- **span exemption**: No
+- **Span exemption**: No
 - **Template**: `Unused import: '{name}'`
 - **Help**: Consider removing the unused import.
-- **Emission point**: `src/frontend/core/sema/checker.rs:3039`
+- **Emission sites**: `src/frontend/core/sema/checker.rs:3048`
 
 ### W1004: Unused private variable
 
 - **Category**: `Warning`
-- **span exemption**: No
+- **Span exemption**: No
 - **Template**: `Unused variable: '{name}'`
-- **Help**: The variable is never referenced; consider removing it or using the variable. This
-  warning is not emitted if it is referenced by another file in the same package.
-- **Emission point**: `src/frontend/core/sema/passes/dead_code.rs:899`
+- **Help**: The variable was never referenced. Consider removing it or using it; this warning is not
+  emitted when another file in the same package references it.
+- **Emission sites**: `src/frontend/core/sema/passes/dead_code.rs:899`
 
 ### W1005: Unused private method
 
 - **Category**: `Warning`
-- **span exemption**: No
+- **Span exemption**: No
 - **Template**: `Unused method: '{name}'`
-- **Help**: The method is never referenced; consider removing it or adding a call. This warning is
-  not emitted if it is referenced by another file in the same package.
-- **Emission point**: `src/frontend/core/sema/passes/dead_code.rs:900`
+- **Help**: The method was never referenced. Consider removing it or adding a call; this warning is
+  not emitted when another file in the same package references it.
+- **Emission sites**: `src/frontend/core/sema/passes/dead_code.rs:900`
 
 ### W1006: Local module shadows dependency package
 
 - **Category**: `Warning`
-- **span exemption**: No
+- **Span exemption**: No
 - **Template**: `Local module '{module}' shadows dependency package '{dependency}'`
-- **Help**: Local module resolution has the highest priority (RFC-014): './src/{module}' overrides
+- **Help**: Local module resolution has the highest precedence (RFC-014): './src/{module}' overrides
   the dependency package '{dependency}' in .yaoxiang/vendor/. If the shadowing is unintended, rename
   the local module; use --deny-shadowing to promote it to an error.
-- **Emission point**: `src/driver/arms.rs:676`, `src/util/diagnostic/command.rs:87`
+- **Emission sites**: `src/driver/arms.rs:676`, `src/util/diagnostic/command.rs:87`
 
 ### W1007: Module import cycle
 
 - **Category**: `Warning`
-- **span exemption**: No
+- **Span exemption**: No
 - **Template**:
-  `Module import cycle {cycle}: the initialization order within the cycle cannot be determined; ordering within the cycle follows only a deterministic convention based on lexicographic path order (not a semantic guarantee)`
-- **Help**: The initialization order is determined by the topological order of use dependencies;
-  ordering within a cycle follows only the deterministic convention of lexicographic path order and
-  is not a semantic guarantee. Breaking the cycle (moving one use in the cycle out of the cycle, or
-  switching to deferred evaluation in a function body) makes the initialization order determinable.
-  Division of responsibility with E3019: E3019 detects initialization cycles between top-level
-  bindings within a unit, whereas this code detects import cycles between modules.
-- **Emission point**: `src/driver/arms.rs:1853`
+  `Module import cycle {cycle}: initialization order within the cycle cannot be determined; ordering within the cycle follows only the deterministic convention of lexicographic path order (not a semantic guarantee)`
+- **Help**: Initialization order is determined by the topological order of `use` dependencies; the
+  only deterministic convention for ordering within a cycle is the “lexicographic order of paths
+  within the cycle,” which is not a semantic guarantee. Breaking the cycle (moving one `use`
+  declaration on the cycle out of the cycle, or changing it to deferred evaluation inside a function
+  body) makes the initialization order determinable. Division of responsibility with E3019: E3019
+  detects initialization cycles between top-level bindings within a compilation unit, whereas this
+  code detects import cycles between modules.
+- **Emission sites**: `src/driver/arms.rs:1853`
 
-### W1063: const generic constraint cannot be evaluated
+### W1063: Unable to evaluate const generic constraint
 
 - **Category**: `Warning`
-- **span exemption**: No
-- **Template**: `const generic constraint cannot be evaluated: \`{constraint}\``
-- **Help**: Ensure that the const parameter is a compile-time constant.
-- **Emission point**: `src/frontend/core/sema/checker.rs:1248`
+- **Span exemption**: No
+- **Template**: `Unable to evaluate const generic constraint: \`{constraint}\``
+- **Help**: Ensure the const parameter is a compile-time constant.
+- **Emission sites**: `src/frontend/core/sema/checker.rs:1245`
 
 ### W1080: Compile-time proof downgraded
 
 - **Category**: `Warning`
-- **span exemption**: No
-- **Template**:
-  `The constraint could not be proven at compile time and has been downgraded to a runtime check`
+- **Span exemption**: No
+- **Template**: `Unable to prove the constraint at compile time; downgraded to a runtime check`
 - **Help**: Consider adding a proof function to improve safety.
-- **Emission point**: ⚠ Not yet emitted (the code is retained in the registry, but there is no call
+- **Emission sites**: ⚠ Not yet emitted (the code is retained in the registry, but there is no call
   site in non-test code)
 
 ### W1081: Termination obligation not determined
 
 - **Category**: `Warning`
-- **span exemption**: No
-- **Template**: `{count} termination measure obligations not determined (SMT solver unavailable)`
-- **Help**: Install the Z3 solver and check again to obtain a termination decision; “not determined”
-  does not mean “does not terminate,” but the obligation's decision was skipped.
-- **Emission point**: `src/frontend/core/sema/checker.rs:1235`
+- **Span exemption**: No
+- **Template**:
+  `{count} termination measure obligations could not be determined (SMT solver unavailable)`
+- **Help**: Install the Z3 solver and run the check again to obtain a termination decision.
+  “Undetermined” does not mean “non-terminating,” but the obligation's determination was skipped.
+- **Emission sites**: `src/frontend/core/sema/checker.rs:1232`
 
 ### W1082: Ownership analysis downgraded
 
 - **Category**: `Warning`
-- **span exemption**: No
+- **Span exemption**: No
 - **Template**:
-  `Ownership analysis downgraded: this compilation has no function-body checker (the type ledger and call-site ownership table are missing), so ownership decisions are made with an empty ledger and borrow conflicts are not detected`
-- **Help**: This is a defect in the compiler's internal stage contract, not an error in your
-  program: the ownership layer cannot obtain the type ledger and call-site ownership table provided
-  by the function-body checker at runtime, so it allows everything through as if “nothing
-  conflicts”—the borrow-conflict check is skipped entirely. Please report this diagnostic, along
-  with a minimal reproducer, as an issue.
-- **Emission point**: `src/frontend/core/sema/checker.rs:1321`
+  `Ownership analysis downgraded: this compilation had no function-body checker (the type ledger and call-site ownership table were missing), so ownership decisions were made using an empty ledger and borrow conflicts were not detected`
+- **Help**: This is a stage-contract defect within the compiler, not an error in your program: at
+  runtime, the ownership layer cannot obtain the type ledger and call-site ownership table provided
+  by the function-body checker, so it lets everything pass on the premise that “nothing
+  conflicts”—the entire borrow-conflict check is skipped. Please report this diagnostic together
+  with a minimal reproducer as an issue.
+- **Emission sites**: `src/frontend/core/sema/checker.rs:1318`
 
-### W1090: Obligation produced but not consumed
+### W1090: Obligation produced but never consumed
 
 - **Category**: `Warning`
-- **span exemption**: Yes
+- **Span exemption**: Yes
 - **Template**: `Obligation field \`{field}\` was produced in {file} but was never consumed:
   {detail}`
-- **Help**: This is a defect in the compiler's internal stage contract, not an error in your
-  program: an obligation field produced by one stage is not read by the next stage, so the effect of
-  the obligation may have been silently discarded. Please report this diagnostic, along with the
-  field name and file path, as an issue, and attach a minimal reproducer. This code belongs to the
-  **W family** (code prefix W), but its **emission level is error**: the user decision of 2026-10-13
-  (WBS 4.3.2, terminal state of RFC-039 D5) **promotes the same code to E**—no new E code is added
-  (the two codes represent the same fact in parallel), and the emission level is determined by the
-  explicit severity. When triggered, it counts toward error_count and changes the exit code. Note:
-  healthy programs emit nothing (when all obligations have delivery markers), so the upgrade affects
-  the build result only when this defect actually occurs.
-- **Emission point**: `src/driver/obligations.rs:105`, `src/driver/obligations.rs:535`
+- **Help**: This is a stage-contract defect within the compiler, not an error in your program: an
+  obligation field produced by one stage was not read by the next stage, so the effect of the
+  obligation may have been silently discarded. Please report this diagnostic as an issue together
+  with the field name and file path, and include a minimal reproducer. This code belongs to the **W
+  family** (code prefix `W`), but its **emission level is `error`**: the 2026-10-13 user ruling (WBS
+  4.3.2, final state of RFC-039 D5) **promotes the same code to E**—no new E code is introduced
+  (using two codes for the same fact would merely create parallel representations). The emission
+  level is determined by the explicit severity; when triggered, the diagnostic counts toward
+  `error_count` and changes the exit code. Note: healthy programs emit nothing (nothing is reported
+  when all obligations have delivery markers), so this promotion affects the build outcome only when
+  the defect actually occurs.
+- **Emission sites**: `src/driver/obligations.rs:105`, `src/driver/obligations.rs:535`
 
 ## Warning Levels
 
@@ -182,20 +184,20 @@ dead-code = "warn"
 | ------ | --------------------------------------------------- |
 | `off`  | Completely disable this category of warnings        |
 | `warn` | Display warnings but continue compilation (default) |
-| `deny` | Treat warnings as errors and block compilation      |
+| `deny` | Treat warnings as errors and prevent compilation    |
 
-## Difference from Error Codes
+## Differences from Error Codes
 
-- **Error (`E` prefix)**: Prevents compilation and must be fixed.
-- **Warning (`W` prefix)**: Indicates a potential problem; the default emission level is `warn`, and
-  you may choose to fix it. The exception is `W1090`, whose emission level is `error`. When
-  triggered, it counts toward `error_count`, changes the exit code, and prevents compilation, so it
-  must be fixed (see its entry for details).
+- **Errors (`E` prefix)**: Prevent compilation and must be fixed.
+- **Warnings (`W` prefix)**: Indicate potential problems; their default emission level is `warn`,
+  and you may choose to fix them. Exception: `W1090` has an emission level of `error`; when
+  triggered, it counts toward `error_count`, changes the exit code, prevents compilation, and must
+  be fixed (see its entry).
 
-## Dead-Code Diagnostic Criteria
+## Criteria for Dead-Code Warnings
 
-`W1001`–`W1005` report **unused private** (non-`pub`) functions / types / variables / methods. `pub`
-declarations are public interfaces, and the compiler has no way of knowing whether external
-consumers exist, so these warnings are never emitted (#321 finalized decision B). If you see an
-“unused” warning, remove the corresponding `pub` to eliminate it; conversely, retain `pub` for
+`W1001`–`W1005` report **unused private** (non-`pub`) functions / types / variables / methods. A
+`pub` declaration is part of the external interface, and the compiler cannot know whether external
+consumers exist, so these warnings are never triggered (Decision B of #321). If you see an “unused”
+warning, remove the corresponding `pub` modifier to eliminate it; conversely, keep `pub` on
 declarations that need to be called externally.
