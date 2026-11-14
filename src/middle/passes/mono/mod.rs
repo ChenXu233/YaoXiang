@@ -76,6 +76,16 @@ pub struct Monomorphizer {
     generic_types: HashMap<String, FunctionIR>,
     /// 已生成的特化函数
     specialized_functions: HashMap<String, FunctionIR>,
+    /// 特化/克隆名 → **定义来源函数名**（mono 建件时写入，#443）。
+    ///
+    /// `function_files`（函数名 → source_files 下标）由 link 期按 mono **前**
+    /// 的函数名建表；特化名与柯里克隆名是 mono 期新生，不继承归属的话，
+    /// codegen 给 debug span 定 file_id 时按名查不到、回退 0（文件表首条目）
+    /// ——定义方的行号被贴到调用方文件上（issue #443：std.list 的 157 行
+    /// 显示成用户文件的第 157 行）。建件两处出生点各登记一条来源，
+    /// `build_output` 统一消费成 function_files 条目；不从特化名反推原件
+    /// （字符串反推 = 平行事实，禁令三）。
+    specialized_origins: HashMap<String, String>,
     /// 待处理的实例化队列
     pending_queue: VecDeque<InstantiationRequest>,
     /// 占位请求桶（#335 路径 A）：键 = 所在泛型函数名。含 TypeRef(参数名)
@@ -188,6 +198,7 @@ impl Monomorphizer {
             generic_functions: HashMap::new(),
             generic_types: HashMap::new(),
             specialized_functions: HashMap::new(),
+            specialized_origins: HashMap::new(),
             all_function_names: std::collections::HashSet::new(),
             pending_queue: VecDeque::new(),
             deferred: HashMap::new(),
@@ -483,6 +494,9 @@ impl Monomorphizer {
                 self.instance_const_values
                     .insert(clone_name.clone(), values.to_vec());
             }
+            // #443：克隆继承层函数的文件归属（层是 merged IR 具名函数）
+            self.specialized_origins
+                .insert(clone_name.clone(), target.clone());
             self.specialized_functions.insert(clone_name.clone(), clone);
         }
         Self::retarget_make_closure(func, &target, &clone_name);
@@ -1071,6 +1085,9 @@ impl Monomorphizer {
                     // 用它会漏查，递归链在第一层就断（E3005 永不触发，退回擦除执行）
                     self.fire_deferred(&generic_name, &spec.name, &name_map, child_depth);
                     self.scan_for_generic_types(&spec, child_depth);
+                    // #443：特化件继承定义方文件归属（build_output 消费）
+                    self.specialized_origins
+                        .insert(spec.name.clone(), generic_name.clone());
                     self.specialized_functions.insert(spec.name.clone(), spec);
                 }
                 None => {
@@ -1183,6 +1200,20 @@ impl Monomorphizer {
             functions.push(func.clone());
         }
 
+        // #443：特化/克隆名继承定义方的文件归属。`function_files` 是 link 期
+        // 按 mono 前的函数名建的；特化名缺条目时 codegen 的 debug span
+        // file_id 回退 0（文件表首条目），定义方行号贴到调用方文件
+        // （issue #443 的 std.list:157 实例）。来源在建件出生点登记
+        // （`specialized_origins`），此处统一消费——不从名字反推。
+        let mut function_files = module.function_files.clone();
+        for func in &functions {
+            if let Some(origin) = self.specialized_origins.get(&func.name) {
+                if let Some(&idx) = module.function_files.get(origin.as_str()) {
+                    function_files.insert(func.name.clone(), idx);
+                }
+            }
+        }
+
         ModuleIR {
             globals: module.globals.clone(),
             functions,
@@ -1193,7 +1224,7 @@ impl Monomorphizer {
             ffi_bindings: module.ffi_bindings.clone(),
             entry_function: module.entry_function.clone(),
             source_files: module.source_files.clone(),
-            function_files: module.function_files.clone(),
+            function_files,
         }
     }
 

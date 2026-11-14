@@ -1168,6 +1168,87 @@ fn test_e2e_script_mode_top_level_for_loop_completes() {
     );
 }
 
+/// 提取 std 栈帧声明的行号（`at std.list.remove_at(int64) (<std/list>:行:列)`）。
+/// 解析不出时返回 None——由调用方带着 combined 上下文断言。
+fn std_frame_line(combined: &str) -> Option<usize> {
+    combined
+        .split("at std.list.remove_at(int64) (<std/list>:")
+        .nth(1)
+        .and_then(|rest| rest.split(':').next())
+        .and_then(|num| num.parse::<usize>().ok())
+}
+
+#[test]
+fn test_e2e_std_frame_error_names_std_virtual_path() {
+    // Arrange: issue #443——运行期错误发生在内嵌 std 函数体内时，诊断位置
+    // 此前是「用户文件路径 + std 源行号」（file_id 按特化名查 function_files
+    // 落空回退 0），指向用户文件里不存在的行。修法：mono 建特化件时继承
+    // 定义方文件归属，std 帧以 RFC-036 §4 的虚拟路径（`<std/list>`）呈现。
+    // 夹具 = issue 同族形态：std.list.remove_at 上界越界（错误落 std
+    // 体内 `probe = list[index]` 入口探测行；issue 原文用空表、此处用
+    // [1, 2, 3] 取 5，同一发射点同一错配机理）。
+    let tmp = TempDir::new().unwrap();
+    let src = write_yx(
+        tmp.path(),
+        "std_span.yx",
+        "use std.io\nuse std.list\n\nio.println(list.remove_at([1, 2, 3], 5))\n",
+    );
+
+    // Act
+    let (code, stdout, stderr) = run_yx(&["run", src.to_str().unwrap()], tmp.path());
+    let combined = format!("{stdout}{stderr}");
+
+    // Assert: 运行期失败面不变（退出码、错误码）
+    assert_ne!(
+        code, 0,
+        "越界应是非零退出；stdout: {stdout:?} stderr: {stderr:?}"
+    );
+    assert!(
+        combined.contains("E6003"),
+        "应报 E6003 索引越界；combined: {combined:?}"
+    );
+
+    // Assert: 主错误与 std 栈帧的文件字段 = std 虚拟路径。行号数值不冻结
+    //（编辑 std/list.yx 会平移行号——正是 #443 指出的「错误绑定源码行号」
+    // 腐化模式），存在性由下方按嵌入源行数校验。
+    assert!(
+        combined.contains("--> <std/list>:"),
+        "主错误的文件字段应是 std 虚拟路径（#443）；combined: {combined:?}"
+    );
+    assert!(
+        combined.contains("(<std/list>:"),
+        "std 栈帧的位置应落在虚拟路径上（#443）；combined: {combined:?}"
+    );
+
+    // Assert: 修前错配形态不得复现——std 帧位置不得渲染成用户文件路径
+    let user_path = src.to_str().unwrap();
+    assert!(
+        !combined.contains(&format!("at std.list.remove_at(int64) ({user_path}")),
+        "std 帧不得把 std 行号贴到用户文件路径上（#443 修前形态）；combined: {combined:?}"
+    );
+
+    // Assert: 位置存在性（issue #443 验收判据 1）——声明的行号必须能在其
+    // 声明的文件中解析到行。std 源文本取自嵌入表（`<std/list>` 读盘必失败，
+    // 渲染由 #327 的嵌入回填承载）。
+    let std_line = std_frame_line(&combined).unwrap_or_else(|| {
+        panic!("std 栈帧应携带 <std/list>:行:列 形态的位置；combined: {combined:?}")
+    });
+    let std_source = yaoxiang::std::yx_sources::embedded_source_by_virtual_path("<std/list>")
+        .expect("std/list 应在嵌入源表内（RFC-036 §4）");
+    let total_lines = std_source.lines().count();
+    assert!(
+        (1..=total_lines).contains(&std_line),
+        "std 帧行号 {std_line} 应落在 std/list.yx 行数范围内（1..={total_lines}）——位置存在性"
+    );
+
+    // Assert: 对照锚——用户单元初始化帧的位置仍指向用户文件路径
+    //（本修只给特化名补归属，用户文件诊断零变化）
+    assert!(
+        combined.contains(&format!("at __yx_module_init ({user_path}")),
+        "用户单元初始化帧的位置应仍指向用户文件；combined: {combined:?}"
+    );
+}
+
 #[test]
 fn test_e2e_bin_mode_top_level_statement_is_user_error() {
     // Arrange: 规范 §3.11——Bin 角色（有 yaoxiang.toml）顶层不允许可执行语句。

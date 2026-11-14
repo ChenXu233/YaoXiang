@@ -629,7 +629,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **构造函数**：`ErrorCodeDefinition::constraint_dispatch_failed(dispatch, detail)`
 - **模板**：`约束方法派发失败：\`{dispatch}\`——{detail}`
 - **帮助**：为该类型实现对应接口（类型体内写接口实例化并定义方法），或改用已实现该接口的实参
-- **发射点**：`src/middle/passes/mono/mod.rs:1450`
+- **发射点**：`src/middle/passes/mono/mod.rs:1481`
 - **源码注释名**：约束方法派发失败（发射面：mono 特化改写——src/middle/passes/mono/mod.rs
 
 ### E1107：方法重载歧义

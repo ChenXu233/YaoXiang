@@ -147,8 +147,10 @@ impl Translator {
         };
 
         for func in &module.functions {
-            // 多文件模式（#252）：按函数来源文件设置 debug span 的 file_id；
-            // 单文件/未记录（mono 特化新名）回退 0（CLI SourceMap 首条目）。
+            // 多文件模式（#252）：按函数来源文件设置 debug span 的 file_id。
+            // mono 特化/克隆名自 #443 起随建件继承定义方归属（mono
+            // `build_output` 补 function_files 条目）；回退 0 只剩单文件
+            // 管线（function_files 恒空，唯一文件即入口）兜底。
             self.source_file_id =
                 module.function_files.get(&func.name).copied().unwrap_or(0) as FileId;
             match &func.body {

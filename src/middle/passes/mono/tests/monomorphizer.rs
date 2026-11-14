@@ -1030,3 +1030,61 @@ fn test_native_fn_const_is_not_a_by_name_call_target() {
         "原生函数值常量不得被计为按名调用目标，实际: {target:?}",
     );
 }
+
+// ==================== function_files 归属继承（#443 / WBS 3.20.28） ====================
+
+/// #443 不变量：特化名必须继承定义方的 `function_files` 归属。
+///
+/// `function_files`（函数名 → source_files 下标）由 link 期按 mono **前**的
+/// 函数名建表；特化名是 mono 期新生——缺条目时 codegen 给 debug span 定
+/// file_id 按名查不到、回退 0（文件表首条目），定义方的行号被贴到调用方
+/// 文件上（issue #443 的 std.list:157 实例：std 第 157 行的错误显示为用户
+/// 文件第 157 行，而该文件根本没有那么多行）。修法 = 建件出生点登记来源、
+/// `build_output` 统一消费成 function_files 条目；本测试钉登记面（生产端），
+/// 消费端（运行期渲染 `<std/list>` 虚拟路径）由 tests/integration/cli_e2e.rs
+/// 的 #443 锚直驱覆盖。
+///
+/// 规范：RFC-036 §4（嵌入 std 以虚拟路径作为种子模块走正常前端管道——虚拟
+/// 路径就是 std 模块的文件身份）+ RFC-011 §4（泛型函数特化）。
+#[test]
+fn test_monomorphize_specialized_inherits_function_files_entry() {
+    // Arrange: 泛型 `identity` 定义在文件表 0 号单元（模拟 `<std/list>`），
+    // 调用方 main 在 1 号单元
+    let identity = make_identity_ir();
+    let main_func = make_main_ir(
+        MonoType::Int(64),
+        vec![
+            identity_call(Operand::Const(ConstValue::Int(42))),
+            ret_instr(Some(Operand::Local(0))),
+        ],
+        vec![LocalSlot::temp(MonoType::Int(64))],
+    );
+    let mut module = module_with(vec![identity, main_func]);
+    module.source_files = vec!["<std/list>".to_string(), "main.yx".to_string()];
+    module.function_files.insert("identity".to_string(), 0);
+    module.function_files.insert("main".to_string(), 1);
+    let mut mono = Monomorphizer::new();
+
+    // Act
+    let result = mono
+        .monomorphize(&module, &[identity_request(MonoType::Int(64))])
+        .unwrap();
+
+    // Assert: 特化名继承定义方的文件归属（0 号单元），不再缺条目
+    assert_eq!(
+        result.function_files.get("identity(int64)"),
+        Some(&0),
+        "特化名应继承定义方的 function_files 条目（#443）"
+    );
+    // Assert: 原件与调用方的既有条目原样保留（继承只增不改）
+    assert_eq!(
+        result.function_files.get("identity"),
+        Some(&0),
+        "原件条目不得被继承改写"
+    );
+    assert_eq!(
+        result.function_files.get("main"),
+        Some(&1),
+        "调用方条目不得被继承改写"
+    );
+}
