@@ -153,6 +153,20 @@ extern "C" {
         v: i32,
         ty: Z3_sort,
     ) -> Z3_ast;
+    /// 任意精度 numeral 构造：`numeral` 是十进制字符串（含可选前导负号），
+    /// 签名与 z3_api.h（Z3 4.16.0）逐字对应（issue #561：整数字面量保真通道，
+    /// 替代 i32 域 `Z3_mk_int` + `as i32` 截断）。
+    pub fn Z3_mk_numeral(
+        c: Z3_context,
+        numeral: Z3_string,
+        ty: Z3_sort,
+    ) -> Z3_ast;
+    /// 一元负号：`Z3_mk_sub` 官方语义是 `args[0] - ... - args[n-1]`，单参数
+    /// 退化为恒等；取负必须走本 API（issue #561：`App("-")` 单参数翻译）。
+    pub fn Z3_mk_unary_minus(
+        c: Z3_context,
+        arg: Z3_ast,
+    ) -> Z3_ast;
     pub fn Z3_mk_const(
         c: Z3_context,
         s: Z3_symbol,

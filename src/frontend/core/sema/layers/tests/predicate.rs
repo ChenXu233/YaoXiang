@@ -237,14 +237,25 @@ fn test_proof_fn_call_unary_neg_of_i128_min_stays_unfoldable() {
     }
 }
 
-/// issue #559 约束面锚：闭合约束含取负溢出极端形态（`-(0 - i128::MAX - 1) > 0`，
-/// 调用点实参位完整表达式文法可达）时判定单元不得 panic——修前实测探针 exit 101
-/// （`panicked at evaluator.rs: attempt to negate with overflow`）。Evaluator 报
-/// ArithmeticError 后 Level 1 直评失败，升级后续级别按 Disproved / Unproven
-/// 保守出判（随 SMT 可用性分流），无 Ok。
+/// issue #559/#561 直评面锚：闭合约束含取负溢出极端形态（`-(0 - i128::MAX - 1) > 0`，
+/// 调用点实参位完整表达式文法可达）。Evaluator 的 i128 域 `checked_neg` 对
+/// i128::MIN 无表示 → Level 1 直评失败升级 SMT 面（#559 修复：不再 panic）。
+/// SMT 翻译面整数字面量精确 + 一元负号正确翻译后（issue #561），该约束的
+/// 真实整数语义 `i128::MAX + 1 > 0` 恒真 → Proved 零诊断。
+///
+/// 病史门（issue #561）：修前该形态被 SMT 翻译 artifact 假拒绝——39 位字面量
+/// `parse::<i64>` 失败落自由变量 + 一元负号翻译丢失（`Z3_mk_sub` 单参数官方
+/// 语义恒等），探针实测 E4018 带伪变量反例
+/// `170141183460469231731687303715884105727 = (- 1)`。本锚随 #561 修复翻转
+/// 判向（此前钉保守 Err：Disproved/Unproven）。
 #[test]
-fn test_check_predicate_neg_overflow_constraint_stays_err_not_panic() {
-    // Arrange — Gt(UnOp{Neg, Sub{Sub(0, MAX), 1}}, 0)：裸 Sub 链精确落 i128::MIN，
+fn test_check_predicate_neg_overflow_constraint_proved_after_smt_literal_faithfulness() {
+    // Arrange — Z3 运行期不可用时 SMT 判向无法观测（保守降级 Unknown），
+    // 与 proof/smt/tests/backend.rs 同模式跳过
+    if crate::frontend::core::sema::proof::smt::backend::default_solver().is_none() {
+        return;
+    }
+    // Gt(UnOp{Neg, Sub{Sub(0, MAX), 1}}, 0)：裸 Sub 链精确落 i128::MIN，
     // 随后一元取负撞溢出分支（#559 修后）/ panic（修前）。
     let neg_overflow = ConstExpr::UnOp {
         op: UnOp::Neg,
@@ -270,9 +281,9 @@ fn test_check_predicate_neg_overflow_constraint_stays_err_not_panic() {
     let ctx = ProofContext::new(&env);
     let result = check_predicate(&ctx, &refined, &HashMap::new());
 
-    // Assert — Err（Disproved / Unproven，随 SMT 可用性分流），绝不 Ok 静默通过
+    // Assert — Proved（真实整数语义恒真；SMT artifact 消除后判向翻转，issue #561）
     assert!(
-        result.is_err(),
-        "取负溢出极端形态必须保守报错（Disproved/Unproven），不得静默通过，实际: {result:?}"
+        result.is_proved(),
+        "取负溢出极端形态在 SMT 字面量保真修复后应按真实整数语义判 Proved，实际: {result:?}"
     );
 }
