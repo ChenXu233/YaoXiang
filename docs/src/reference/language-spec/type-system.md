@@ -926,7 +926,7 @@ evidence 字段生成一条证明义务：
 ```yaoxiang
 Pos: (v: Int) -> Type = { v > 0 }
 
-Cell: (T: Type, P: (T) -> Type) -> Type = {
+Cell: (T: Type, P: (T: Type) -> Type) -> Type = {
     v: T,        // 数据字段
     w: P(v),     // evidence：P 是 Proof 族，实参 v 是严格前序数据字段
 }
@@ -1536,7 +1536,7 @@ factorial: (N: Int)(k: N) -> Int = { ... }
 Measure: (T: Type, N: Int) -> Type = { data: Array(T, N), length: N }
 
 // proof family 参数：kind 是 T -> Proposition（结果空间必须是 Proof）
-Cell: (T: Type, P: (T) -> Type) -> Type = { v: T, w: P(v) }
+Cell: (T: Type, P: (T: Type) -> Type) -> Type = { v: T, w: P(v) }
 
 // 条件类型
 If: (C: Bool, T: Type, E: Type) -> Type = match C { True => T, False => E }

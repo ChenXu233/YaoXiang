@@ -1254,13 +1254,13 @@ CertificateRef { id: CertId, signature_hash: ContentHash }  // 指向 §13 编�
 
 #### 14.3 泛型记录：proof family 参数 `P`（kind `T -> Proposition`）
 
-类型是「参数化记录 + **proof family 参数**」，不是「泛型 witness 留待后续」。`P` 的 kind 与 §14.1 的 proof-space 判据同源：**结果 sort 必须是 `space=Proof`**，即 `P` 是 proof/type family（命题族），不是 data family（数据类型族）。`T -> Proposition` 是 kind 记法（`Proposition` 是 §4.1 `SortSpace::Proof` 的 sort 别名），**不是源级类型名**：下面的 `yaoxiang` 块用当前解析器可接受的 `P: (T) -> Type` 形态，kind 约束在声明与实例化处判定，不写进可解析代码块。
+类型是「参数化记录 + **proof family 参数**」，不是「泛型 witness 留待后续」。`P` 的 kind 与 §14.1 的 proof-space 判据同源：**结果 sort 必须是 `space=Proof`**，即 `P` 是 proof/type family（命题族），不是 data family（数据类型族）。`T -> Proposition` 是 kind 记法（`Proposition` 是 §4.1 `SortSpace::Proof` 的 sort 别名），**不是源级类型名**：下面的 `yaoxiang` 块用当前解析器可接受的 `P: (T: Type) -> Type` 形态，kind 约束在声明与实例化处判定，不写进可解析代码块。
 
 ```yaoxiang
 Pos: (v: Int) -> Type = { v > 0 }
 
 // 源级形态：P 是类型级函数参数；kind 约束 (结果 space=Proof) 在正文说明
-Cell: (T: Type, P: (T) -> Type) -> Type = {
+Cell: (T: Type, P: (T: Type) -> Type) -> Type = {
     v: T,            // 数据字段
     w: P(v),         // evidence：P 是 Proof 族, 实参 v 是严格前序数据字段
 }
