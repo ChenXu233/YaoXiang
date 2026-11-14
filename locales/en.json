@@ -1236,7 +1236,7 @@
     "title": "Witness field is not readable at value level",
     "message": "Witness field '{field}' is compile-time evidence of record '{type}' and has no runtime data slot; it cannot be read at value level",
     "template": "Witness field '{field}' is compile-time evidence of record '{type}' and has no runtime data slot; it cannot be read at value level",
-    "help": "Witness fields are used at the type level: `b.w` denotes the evidence term and can be used as a proof premise; it is not a value-level read (there is no runtime data slot). If you need runtime data, declare an ordinary data field instead.",
+    "help": "The witness field is used at the type level: `b.w` is an evidence item that can serve as a premise in a proof; it is not a value-level read (there is no data slot at runtime). When runtime data is needed, define the field as a regular data field.",
     "example": "Box: Type = { v: Int, w: Pos(v) }  // w is a witness field with no runtime data slot\nmain: () -> Void = {\n    b: Box = Box(v = 1)\n    b.w\n}",
     "error_output": "error[E1114]: witness field is not readable at value level\n --> example.yx:5:5\n  |\n5 |     b.w\n  |     ^^^ witness field 'w' is compile-time evidence of record 'Box' and has no runtime data slot; it cannot be read at value level"
   },
