@@ -90,6 +90,24 @@ pub const ABOUT: &str =
 pub fn run(source: &str) -> Result<()> {
     run_with_source_name("<input>", source)
 }
+
+/// 编排线程的栈大小（issue #540）。
+///
+/// 编译走查（parser 递归 / 类型检查 / IR 下降 / 格式化器 / LSP 语义收集）
+/// 都是深递归：1MB 主线程栈实测在 ~130-283 层嵌套表达式即栈溢出崩溃
+/// （0xC00000FD 零诊断）。CLI 编排把子命令派发放到本大小的栈线程上，
+/// 与解析闸 `MAX_PARSE_DEPTH`（1024，见
+/// `frontend::core::parser::parser_state`）配合构成两分法：闸内程序
+/// 逐字保持既有行为，闸外程序得到 E0019。
+///
+/// 数值依据：实测最坏 ~7.7KB/层（类型检查·调用嵌套形态），闸内程序
+/// 解析峰值 ≤ ~3MB，此处留 8 倍以上余量；同时把闸外残余崩溃面推到
+/// ~8500 层（仅理论可达）。
+///
+/// 深度夹具的测试同样经本常量在测试线程内镜像生产环境（测试线程默认
+/// 栈远小于解析闸允许的解析峰值）。
+pub const COMPILE_STACK_SIZE: usize = 64 * 1024 * 1024;
+
 /// Evaluate YaoXiang code (eval mode: auto-wrap if no main function)
 ///
 /// Unlike `run()`, this function:

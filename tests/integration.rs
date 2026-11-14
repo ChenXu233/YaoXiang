@@ -50,6 +50,10 @@ mod cli;
 #[path = "integration/cli_e2e.rs"]
 mod cli_e2e;
 
+/// LSP 分析面深表达式锚（issue #540：didOpen 深表达式修前进程栈溢出）
+#[path = "integration/lsp_analysis.rs"]
+mod lsp_analysis;
+
 /// #471（WBS 3.21.3）：yaoxiang.toml `[mono]` 节贯通到单态化深度闸（端到端）
 #[path = "integration/mono_config.rs"]
 mod mono_config;

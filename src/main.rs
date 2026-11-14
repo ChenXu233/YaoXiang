@@ -461,6 +461,36 @@ fn main() -> Result<()> {
         info!("Host: {}", std::env::consts::OS);
     }
 
+    // issue #540：编译走查（parser 递归 / 类型检查 / IR 下降 / 格式化器 /
+    // LSP 语义收集）都是深递归，主线程默认栈（Windows 1MB）在 ~130-283 层
+    // 嵌套表达式即栈溢出崩溃（0xC00000FD 零诊断）。整个子命令派发放进
+    // 大栈线程执行——主线程仅等待；栈常量与登记依据见
+    // yaoxiang::COMPILE_STACK_SIZE。REPL/LSP 的长驻循环也在本线程上跑：
+    // stdin/stdout 交互与线程归属无关，退出码经 join 透传（进程内
+    // process::exit 不受影响）。
+    let child = std::thread::Builder::new()
+        .name("yaoxiang-main".to_string())
+        .stack_size(yaoxiang::COMPILE_STACK_SIZE)
+        .spawn(move || dispatch_command(command))
+        .map_err(|e| anyhow::anyhow!("Failed to spawn compile thread: {e}"))?;
+    match child.join() {
+        Ok(result) => result,
+        Err(payload) => {
+            // 线程 panic：与主线程 panic 同面呈现（Rust 默认 abort/panic 消息
+            // 已在线程侧打印），这里只补退出语义。
+            let msg = payload
+                .downcast_ref::<String>()
+                .cloned()
+                .or_else(|| payload.downcast_ref::<&str>().map(|s| s.to_string()))
+                .unwrap_or_else(|| "compile thread panicked".to_string());
+            Err(anyhow::anyhow!("{msg}"))
+        }
+    }
+}
+
+/// 子命令派发本体（原 `main` 的 `match command` 逐字迁入，issue #540：
+/// 迁移动机见 main 的大栈线程注释）。
+fn dispatch_command(command: Commands) -> Result<()> {
     match command {
         Commands::Run {
             file,

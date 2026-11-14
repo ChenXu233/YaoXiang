@@ -577,10 +577,13 @@ fn parse_assign_after_target(
         let initializer = match state.parse_expression(BP_LOWEST) {
             Some(expr) => expr,
             None => {
-                state.error(parse_msg(
-                    state,
-                    "Expected expression after '='".to_string(),
-                ));
+                // 深度闸拒绝（E0019 已发射）时跳过恢复诊断（issue #540 恰 1 条判据）
+                if !state.is_depth_rejected() {
+                    state.error(parse_msg(
+                        state,
+                        "Expected expression after '='".to_string(),
+                    ));
+                }
                 return None;
             }
         };
@@ -704,10 +707,13 @@ pub fn parse_identifier_stmt(
         None => {
             // 解析失败，可能是旧语法残留
             if is_mut {
-                state.error(parse_msg(
-                    state,
-                    "Expected expression after mut".to_string(),
-                ));
+                // 深度闸拒绝（E0019 已发射）时跳过恢复诊断（issue #540 恰 1 条判据）
+                if !state.is_depth_rejected() {
+                    state.error(parse_msg(
+                        state,
+                        "Expected expression after mut".to_string(),
+                    ));
+                }
                 return None;
             }
             return parse_expr_stmt(state, span);
@@ -779,10 +785,13 @@ pub fn parse_identifier_stmt(
         let rhs = match state.parse_expression(BP_LOWEST) {
             Some(expr) => expr,
             None => {
-                state.error(parse_msg(
-                    state,
-                    "Expected expression after '=' in tuple destructuring".to_string(),
-                ));
+                // 深度闸拒绝（E0019 已发射）时跳过恢复诊断（issue #540 恰 1 条判据）
+                if !state.is_depth_rejected() {
+                    state.error(parse_msg(
+                        state,
+                        "Expected expression after '=' in tuple destructuring".to_string(),
+                    ));
+                }
                 return None;
             }
         };
@@ -812,10 +821,13 @@ pub fn parse_identifier_stmt(
         let value = match state.parse_expression(BP_LOWEST) {
             Some(expr) => expr,
             None => {
-                state.error(parse_msg(
-                    state,
-                    "Expected expression after '='".to_string(),
-                ));
+                // 深度闸拒绝（E0019 已发射）时跳过恢复诊断（issue #540 恰 1 条判据）
+                if !state.is_depth_rejected() {
+                    state.error(parse_msg(
+                        state,
+                        "Expected expression after '='".to_string(),
+                    ));
+                }
                 return None;
             }
         };
@@ -928,10 +940,13 @@ pub fn parse_paren_destructure_stmt(
     let rhs = match state.parse_expression(BP_LOWEST) {
         Some(expr) => expr,
         None => {
-            state.error(parse_msg(
-                state,
-                "Expected expression after '=' in tuple destructuring".to_string(),
-            ));
+            // 深度闸拒绝（E0019 已发射）时跳过恢复诊断（issue #540 恰 1 条判据）
+            if !state.is_depth_rejected() {
+                state.error(parse_msg(
+                    state,
+                    "Expected expression after '=' in tuple destructuring".to_string(),
+                ));
+            }
             return None;
         }
     };

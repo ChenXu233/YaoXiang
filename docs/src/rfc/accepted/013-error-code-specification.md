@@ -285,6 +285,7 @@ E1001::unknown_variable(&var_name)
 | E0014 | 缺少分号    |
 | E0016 | 期望表达式   |
 | E0018 | 关键字作名称  |
+| E0019 | 表达式嵌套过深 |
 <!-- code-table:E0xxx end -->
 
 #### E1xxx：类型检查

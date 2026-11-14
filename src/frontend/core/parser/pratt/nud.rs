@@ -365,7 +365,7 @@ impl<'a> ParserState<'a> {
         let token = self.current().cloned()?;
         if let TokenKind::FStringLiteral(raw) = token.kind {
             self.bump();
-            let segments = Self::parse_fstring_segments(&raw, span, self.probe())?;
+            let segments = self.parse_fstring_segments(&raw, span)?;
             Some(Expr::FString { segments, span })
         } else {
             None
@@ -381,10 +381,13 @@ impl<'a> ParserState<'a> {
     /// brace sequences verbatim, so the text side resolves `{{` → `{` and
     /// `}}` → `}` here; a lone `}` is kept literal. Escapes never apply
     /// inside interpolation.
+    ///
+    /// 实例方法（原静态关联函数改法，issue #540）：内嵌表达式另起解析器
+    /// 实例，解析深度必须从外层继承——静态函数拿不到 `self` 的深度。
     fn parse_fstring_segments(
+        &mut self,
         raw: &str,
         span: Span,
-        probe: &dyn crate::frontend::core::parser::probe::TypeEnvProbe,
     ) -> Option<Vec<FStringSegment>> {
         let mut segments = Vec::new();
         let mut chars = raw.chars().peekable();
@@ -447,7 +450,11 @@ impl<'a> ParserState<'a> {
                 match tokens_result {
                     Ok(tokens) => {
                         let mut parser =
-                            crate::frontend::core::parser::ParserState::new(&tokens, probe);
+                            crate::frontend::core::parser::ParserState::new(&tokens, self.probe());
+                        // f-string 内嵌表达式深度继承外层（issue #540）：
+                        // 内外各数各的会让「1024 层外层 + 1024 层内嵌」
+                        // 双闸都拦不住，真实栈深已翻倍。
+                        parser.inherit_parse_depth_from(self);
                         if let Some(expr) =
                             parser.parse_expression(crate::frontend::core::parser::pratt::BP_LOWEST)
                         {

@@ -2673,3 +2673,78 @@ T.m = f[-1]
     );
     assert_eq!(result.unwrap(), 0, "[-1] 负位绑定不应产生错误");
 }
+
+// ==================== 深表达式资源闸锚（issue #540 / WBS 3.20.30） ====================
+//
+// 规范来源：RFC-013 错误码规范 E0019/E3014 + D59 C 类崩溃面直修授权
+// （用户裁决：大栈线程消解 razor + 解析深度闸 1024 + 新码 E0019）。
+//
+// razor 区实测基线（debug 构建 / 1MB 主线程栈，探针留档
+// target/yx-scratch/3.20.30-probe/——不入库，结论以注释为准）：
+// - 调用嵌套 121..124 层修前编译器崩溃（exit 0xC00000FD 零诊断），
+//   修后（大栈线程）编译成功——修前非成功面，换行为合法；
+// - 块嵌套 220 层修前编译成功（exit 0），修后必须逐字不变
+//   （「原先成功程序对外表现不变」判据的 razor 锚）。
+
+#[test]
+fn test_check_deep_call_razor_boundary_compiles_without_crash() {
+    // Arrange：125 层调用嵌套——修前实测崩溃（exit 127 / 0xC00000FD），
+    // 修后大栈线程上编译成功（寄存器占用未超 E3014 上限）
+    let dir = temp_dir();
+    let expr = format!("{}1{}", "id(".repeat(125), ")".repeat(125));
+    let file = create_yx_file(
+        &dir,
+        "razor_call.yx",
+        &format!(
+            "id: (Int) -> Int = (x) => x\nmain = () => {{\n    y = {expr}\n    print(y)\n}}\n"
+        ),
+    );
+
+    // Act
+    let result = check_file(&file);
+
+    // Assert：非崩溃且恰 0 错误（崩溃 → 成功的 C 类转换锚）
+    assert!(
+        result.is_ok(),
+        "125 层调用嵌套不得崩溃（修前 exit 0xC00000FD）"
+    );
+    assert_eq!(result.unwrap(), 0, "125 层调用嵌套修后编译成功");
+}
+
+#[test]
+fn test_check_deep_block_razor_boundary_unchanged() {
+    // Arrange：220 层块嵌套——修前编译成功（razor 区通过锚），修后
+    // 必须保持零诊断（原先成功程序逐字不变）
+    let dir = temp_dir();
+    let source = format!("main = () => {}1{}\n", "{ ".repeat(220), " }".repeat(220));
+    let file = create_yx_file(&dir, "razor_block.yx", &source);
+
+    // Act
+    let result = check_file(&file);
+
+    // Assert
+    assert!(result.is_ok(), "220 层块嵌套不得报错（修前即编译成功）");
+    assert_eq!(result.unwrap(), 0, "修前成功的 razor 形态行为逐字不变");
+}
+
+#[test]
+fn test_check_normal_depth_expression_zero_diagnostics() {
+    // Arrange：50 项二元链实参——远低于一切资源闸的正常形态（对照锚：
+    // 限内程序诊断零变化）
+    let dir = temp_dir();
+    let expr = "1 + ".repeat(50) + "1";
+    let file = create_yx_file(
+        &dir,
+        "normal_depth.yx",
+        &format!(
+            "id: (Int) -> Int = (x) => x\nmain = () => {{\n    y = id({expr})\n    print(y)\n}}\n"
+        ),
+    );
+
+    // Act
+    let result = check_file(&file);
+
+    // Assert
+    assert!(result.is_ok(), "正常深度形态不得报错");
+    assert_eq!(result.unwrap(), 0, "对照锚：限内程序零诊断");
+}

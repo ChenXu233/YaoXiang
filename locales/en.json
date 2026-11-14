@@ -898,6 +898,14 @@
     "example": "if = 1;",
     "error_output": "error[E0018]: keyword used as name\n --> example.yx:1:1\n  |\n1 | if = 1;\n  | ^^ 'if' is a keyword"
   },
+  "E0019": {
+    "title": "expression nesting too deep",
+    "message": "expressions nested deeper than {limit} levels exceed the parser recursion limit",
+    "template": "expression nesting exceeds the maximum recursion depth ({limit})",
+    "help": "simplify the expression or split deeply nested parts into intermediate variables or helper functions",
+    "example": "main = () => { y = - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 1\n    print(y) }",
+    "error_output": "error[E0019]: expression nesting too deep\n --> example.yx:1:24\n  |\n1 | main = () => { y = - - - ...\n  |                        ^ expression nesting exceeds the maximum recursion depth (1024)"
+  },
   "E1092": {
     "title": "invalid refinement type argument form",
     "message": "refinement type argument cannot be converted to a compile-time constant expression",

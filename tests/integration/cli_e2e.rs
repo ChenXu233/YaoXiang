@@ -1903,3 +1903,102 @@ fn test_e2e_check_explicit_path_under_target_is_honored() {
         "被 --exclude 排除后应报零发现；stderr: {err_ex:?}"
     );
 }
+
+// ==================== 深表达式崩溃面锚（issue #540 / WBS 3.20.30） ====================
+//
+// 规范来源：RFC-013 错误码规范 E0019/E3014 + D59 C 类崩溃面直修授权
+// （用户裁决：编排层大栈线程 + 解析深度闸 1024）。
+//
+// 修前崩溃形态逐字留档（debug 构建，探针 target/yx-scratch/3.20.30-probe/
+// repro300_prefix_check.txt——不入库，结论以注释为准）：
+//   Checking 1 file(s)...
+//
+//   thread 'main' (25620) has overflowed its stack
+//   （Windows 原生退出码 3221225725 = 0xC00000FD；Git Bash 呈现 127）
+//
+// 本节锚在子进程级验证用户真实路径：崩溃退出码不得再现。
+
+/// Windows 栈溢出的原生进程退出码（STATUS_STACK_OVERFLOW）
+const STATUS_STACK_OVERFLOW: i32 = -1_073_741_571;
+
+#[test]
+fn test_check_deep_binop_argument_reports_e3014_not_stack_overflow() {
+    // Arrange：issue #540 主夹具——300 项二元链作普通函数实参。
+    // 修前：进程栈溢出（0xC00000FD 零诊断）。修后：解析闸（1024）不触发
+    // （扁平二元链在 parser 是迭代），由 IR 层既有 E3014 寄存器上限给出
+    // 正式诊断——该形态的真实根因。
+    let dir = TempDir::new().expect("temp dir");
+    let expr = "1 + ".repeat(300) + "1";
+    let file = dir.path().join("deep300.yx");
+    std::fs::write(
+        &file,
+        format!(
+            "id: (Int) -> Int = (x) => x\nmain = () => {{\n    y = id({expr})\n    print(y)\n}}\n"
+        ),
+    )
+    .expect("write fixture");
+
+    // Act
+    let output = Command::new(yx_bin())
+        .arg("check")
+        .arg(&file)
+        .output()
+        .expect("run yaoxiang-rs check");
+
+    // Assert：退出码必须是正常诊断失败（1），绝非栈溢出崩溃码
+    assert_eq!(
+        output.status.code(),
+        Some(1),
+        "深表达式实参必须以正式诊断退出，不得再现 0xC00000FD"
+    );
+    assert_ne!(
+        output.status.code(),
+        Some(STATUS_STACK_OVERFLOW),
+        "修前崩溃形态不得再现"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("E3014"),
+        "必须给出 E3014 正式诊断: {stderr}"
+    );
+    assert_eq!(
+        stderr.matches("E3014").count(),
+        1,
+        "恰 1 条正式诊断: {stderr}"
+    );
+}
+
+#[test]
+fn test_check_parser_recursive_deep_nesting_reports_e0019_once() {
+    // Arrange：1100 层一元链（解析真递归形态，闸值 1024）。修前 1MB 栈
+    // 在 282 层即崩溃；修后解析闸在拒绝点给出恰 1 条 E0019。
+    let dir = TempDir::new().expect("temp dir");
+    let expr = format!("{}1", "- ".repeat(1100));
+    let file = dir.path().join("deep_unary.yx");
+    std::fs::write(
+        &file,
+        format!("main = () => {{\n    y = {expr}\n    print(y)\n}}\n"),
+    )
+    .expect("write fixture");
+
+    // Act
+    let output = Command::new(yx_bin())
+        .arg("check")
+        .arg(&file)
+        .output()
+        .expect("run yaoxiang-rs check");
+
+    // Assert
+    assert_eq!(output.status.code(), Some(1), "超限形态必须以正式诊断退出");
+    assert_ne!(
+        output.status.code(),
+        Some(STATUS_STACK_OVERFLOW),
+        "修前崩溃形态不得再现"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(
+        stderr.matches("E0019").count(),
+        1,
+        "恰 1 条 E0019（禁止恢复级联）: {stderr}"
+    );
+}

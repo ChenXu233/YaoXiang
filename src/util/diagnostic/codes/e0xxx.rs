@@ -25,4 +25,12 @@ define_codes!(E0XXX, {
     ("E0016", Parser, false, expected_expression(context: &str) => .param("context", context)),
     // E0018 关键字作变量名
     ("E0018", Parser, false, keyword_as_name(keyword: &str) => .param("keyword", keyword)),
+    // E0019 解析递归深度超限（issue #540：深嵌套表达式此前让编译器栈溢出
+    // 崩溃，0xC00000FD 零诊断）。闸值 1024 的登记依据见
+    // parser_state.rs 的 MAX_PARSE_DEPTH 文档（实测括号嵌套 600 层通过、
+    // 崩溃起点 ~650 ⇒ 下限 ~640；大栈线程 64MB 崩溃阈值 ~8500 ⇒ 上限
+    // 8499）；语义是「解析递归（语句/表达式嵌套）超限」——覆盖 parser
+    // 真递归形态（一元链/调用嵌套/括号/块/列表等）。扁平二元链在 parser
+    // 是迭代、不经本闸，由 IR 层既有 E3014 寄存器上限拒绝。
+    ("E0019", Parser, false, expression_too_deep(limit: usize) => .param("limit", limit.to_string())),
 });
