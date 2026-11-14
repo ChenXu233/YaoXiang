@@ -1830,12 +1830,13 @@ impl Expr {
                     // `[N] -> N as i64` 同一截断口径（运行时 Int 即 i64，超 i64
                     // 字面量全仓口径是截断）。字面量经词法器 parse::<i128> 恒
                     // 非负，checked_neg 的 None 分支只对手工构造的
-                    // Neg(Lit(i128::MIN)) 可达；哨兵 i128::MIN 截断成 i64::MIN，
-                    // 必落 normalize_binding_positions 的「归一化后仍负」E1064
+                    // Neg(Lit(i128::MIN)) 可达；溢出哨兵取 i64::MIN 的 i128
+                    // 表示，转回 i64 恒等于 i64::MIN（无截断歧义），必落
+                    // normalize_binding_positions 的「归一化后仍负」E1064
                     // 判域（#560：修前 `-(i64::MIN)` 在此处 panic，debug 构建
                     // exit 101，与 #559/#507/#468 的 checked_neg 同族）。
                     Expr::Lit(Literal::Int(n), _) => {
-                        Some((*n).checked_neg().unwrap_or(i128::MIN) as i64)
+                        Some((*n).checked_neg().unwrap_or(i64::MIN as i128) as i64)
                     }
                     _ => None,
                 },

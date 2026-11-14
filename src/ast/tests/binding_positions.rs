@@ -6,7 +6,8 @@
 //! - E1064 绑定位置索引无效（RFC-004）：极端值由 checker 的
 //!   `normalize_binding_positions` 既有校验拒绝，提取器不在此判域
 //!
-//! 覆盖: 负位提取语义（issue #560：取负臂 checked 化，i64::MIN 形态不再 panic）
+//! 覆盖: 负位提取语义（issue #560：取负臂 checked 化，i64::MIN 形态不再 panic）、
+//! checked_neg 溢出哨兵分支（仅手工构造 AST 可达，见 i128::MIN 形态锚）
 //! 与正位/元组提取对照。
 
 use crate::ast::{Expr, Literal, UnOp};
@@ -40,6 +41,32 @@ fn test_extract_binding_positions_neg_i64_min_form_returns_min_not_panic() {
         positions,
         vec![i64::MIN],
         "i64::MIN 形态应精确取负为 i64::MIN（负位，交下游 E1064 判域）而非 panic"
+    );
+}
+
+/// 病史锚（coding-rules 第七部分·病史门）：#560 修复笔曾把取负溢出哨兵写成
+/// i128::MIN，但其低 64 位全零、`as i64` 截断得 0——哨兵与「直接回退 0」行为
+/// 完全等价，溢出形态会静默绑定位 0、绕过 checker E1064 校验，且该等价性使
+/// 任何只观测返回值的锚都无法区分两种哨兵（变异不可杀死）。3.20.26 补锚轮
+/// 实测暴露此缺陷：既有锚无一覆盖 checked_neg 的 None 路径（各自内层字面量
+/// 经 checked_neg 均成功），探针锚在当时的修复态即为红。哨兵遂更正为 i64::MIN
+/// 的 i128 表示。本锚构造该 None 路径唯一可达形态 Neg(Lit(i128::MIN))（用户
+/// 源码整数字面量经词法 parse::<i128> 恒非负），钉死溢出必须落 E1064 判域
+/// 而非静默绑定位 0。
+#[test]
+fn test_extract_binding_positions_neg_i128_min_overflow_sentinel_returns_i64_min() {
+    // Arrange — 手工构造 Neg(Lit(i128::MIN))：checked_neg 唯一溢出返回 None 的形态。
+    let index = neg_int_lit(i128::MIN);
+
+    // Act
+    let positions = Expr::extract_binding_positions(&index);
+
+    // Assert
+    assert_eq!(
+        positions,
+        vec![i64::MIN],
+        "取负溢出哨兵必须取 i64::MIN（负位极端，交 checker normalize 判 E1064）；\
+         回退 0 会静默绑定位 0、绕过校验"
     );
 }
 
