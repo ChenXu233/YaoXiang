@@ -4756,3 +4756,15 @@ P1 的形状判据与 ir_gen 的包装层产出形态耦合——「不再匹配
 > **四、教训**：t3 静态复审对「机理声称」的逐环核实的价值在本批达到峰值——修复行为正确（t2 实测）但提交信息的机理描述恰好把一个 artifact 假拒绝包装成「正确判定」；若无人逐环核实，未来 SMT 保真修复会让 #559 直评面锚静默翻面且无人知道判向依赖。**机理声称必须逐环对照冻结代码，不得以「实测出对了结果」反推机理正确**（结果正确 + 机理描述错误在此批同时成立）。
 
 > **五、计数与移交**：三级 +1 = 3.20.25（237→238）；二级不变。issue [#559](https://github.com/ChenXuXu233/YaoXiang/issues/559) **关闭**（panic 修复成立；直评面判向 artifact 移交 [#561](https://github.com/ChenXuXu233/YaoXiang/issues/561)）。修复笔推送终态 `001041c6`（rebase 重写前 `eefe1e7c`，树内容同）。批次树已 release。
+
+## P3 3.20.26 收口（ast 层 fn[pos] 位置取负改 checked——#560，2026-11-14）
+
+> **一、查证定案**：RFC-004 附录 A 负数索引是合法语义（从末尾计数）；checker normalize_binding_positions 既有 E1064 承载无效位置判域（对应伪代码 InvalidBindingPosition——t3 备案：实现判域为伪代码超集，「归一化后仍负」是附录 A 决策后的合理扩展，非逐字复制）；panic 在提取阶段（修前 `-(n as i64)` 对截断成 i64::MIN 的形态 overflow，debug exit 101 探针逐字）。前置校验形态否决（正确性/可读性判据）：extract 无错误通道，前置校验要么改签名（新机制）要么 ast 层第二套校验（同义重复）——下游既有校验已覆盖。
+
+> **二、修复笔与复审修复轮（t2 FAIL 揭出生产哨兵算术错误）**：修复笔 `c4e70011` 的 [-N] 臂改 i128 域 checked_neg + 溢出哨兵 unwrap_or(i128::MIN)。t2 FAIL——但 FAIL 的判据成立性证伪揭出**生产哨兵算术错误**：i128::MIN（0x8000…0000）低 64 位全零、`as i64` 截断实得 **0**（非注释所称 i64::MIN）——探针四项实测（checked_neg()=None / unwrap_or(i128::MIN) as i64=0 / 纯 Lit 臂 [0] / Neg 臂 [0]）；后果 = 哨兵与 unwrap_or(0) 对所有输入行为等价（M2 不可杀死）+ 极端形态静默绑定位 0（注释契约「必落 E1064」未兑现）。补锚轮实现者升级裁决（四项实测 + 逐文件直读），队长裁决 A 最小形态：哨兵改 `unwrap_or(i64::MIN as i128)`（转回 i64 恒等、无截断歧义、必落 E1064）+ 注释更正 + None 路径病史锚（test_extract_binding_positions_neg_i128_min_overflow_sentinel_returns_i64_min，断言 vec![i64::MIN]）；实现者的「normalize 对 i64::MIN 加法会溢出」担忧被裁决纠正（i64::MIN + 小正数向零方向移动恒可表示，checked_add 不需要——实现者自行复算确认）。**复核失误登记：队长 review c4e70011 diff 时未抓住 i128::MIN 截断歧义**（t2 首轮 FAIL 被误判为纯测试面缺口，实为生产错误）。
+
+> **三、验证链**：t1 门禁 14 项全绿（integration 372、testsuite fast 2095、IR 快照只读、语料差分零漂移、生成器 DOCS-UNCHANGED）→ t2 FAIL（哨兵等价不可杀死——判据无法满足，如实上报升级）→ 复审修复笔 `b9d327ca`（补锚轮 14 门禁全绿：testsuite fast 2106、M2 自查翻红 [0] vs [i64::MIN]、还原字节级比对 BYTE-IDENTICAL）→ t3 **APPROVE** 七镜头（2 info：运行侧声称只读不可重现——修前 panic 路径静态必然性核实（父 rev 同臂截断后取负为 Rust 溢出语义必然 panic）+ E1064 超集备案）→ t2r 聚焦复验 **PASS**（M1 回修复前原形态 `-(*n as i64)`——任务原公式 `-(n as i64)` 因引用绑定不可编译 E0606——主锚红 panic 复现；M2 哨兵丢失新锚红 [0] vs [i64::MIN]——哨兵选值从等价变为可杀死；IR / 语料零漂移；卫生 CLEAN + release）。运行面 stash 对照：[-1] 绑末位、[0] 绑首位（37/73 输出）——RFC-004 负位语义修前修后正确。
+
+> **四、教训**：①哨兵选值必须做**截断等价性自查**（哨兵经同一转换链后是否仍落在预期判域——i128::MIN as i64 = 0 的低 64 位全零陷阱）；②「M2 变异不可杀死」不是测试面缺陷的同义词——它可能证明生产代码两形态语义等价，验证者如实上报判据不可能满足 + 实现者升级裁决是本批抓出生产错误的正确链路；③队长 diff review 抓不住位级算术歧义（i128::MIN 低 64 位全零）——位级哨兵的注释声称（「必落 X 判域」）需要锚实际钉住而非读注释信任。
+
+> **五、计数与移交**：三级 +1 = 3.20.26（238→239）；二级不变。issue [#560](https://github.com/ChenXuXu233/YaoXiang/issues/560) **关闭**。修复笔推送终态 `c4e70011` + 复审修复笔推送终态 `b9d327ca`。批次树已 release。披露另案 [#563](https://github.com/ChenXuXu233/YaoXiang/issues/563)（超 i64 字面量位置静默截断落合法域——语言级语义 D/E 类待用户裁决；checker total=0 窗口）。
