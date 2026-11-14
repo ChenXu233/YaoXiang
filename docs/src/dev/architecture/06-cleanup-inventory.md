@@ -115,7 +115,7 @@
 | B7 | `src/frontend/core/parser/statements/declarations.rs:82`、`:120-122`、`:145-167` | 约 120 行 | `is_old_function_syntax` 在 `:719` 被调用、`skip_old_function_syntax` 在 `:725` 被调用——**它们是运行中的旧语法拒绝门禁，不是无引用死代码**。`skip_old_function_syntax`（`:120-122`）函数体只有一行注释 `// 旧语法已移除`，但**该函数被调用后不消费任何 token**——这是一个独立的行为问题（拒绝路径是否正确推进解析位置），不是死代码。**处置是随 05-frontend-paradigm.md 一并审查行为（决议 D27：随文法迁移自然删除），而非当作死代码直接删** |
 | B8 | `Instruction::TailCall`（`src/middle/core/ir.rs`） | — | 全仓只有 match、无构造点。`bytecode.rs:2156` 的"无生成点（死路径）"注释**准确**（`translator.rs:530`/`1109` 的编码分支存在但不可达） |
 | B9 | `Switch` opcode | — | `backends/common/opcode.rs` 已定义、有变体、有 `opcode()`/`size()` 臂、有解码臂，**但全仓零构造点**。解释器 `ops/control.rs:90` 有活跃实现。**已被测试显式登记为已知死路径**：`tests/bytecode.rs:1035-1040` 的 `WHITELIST: &[&str] = &["SWITCH"]`（差集非空即失败） |
-| B10 | `UnaryOp::Not`（`bytecode.rs:101`） | — | `opcode()` 在 `:590` 用 `BytecodeInstr::UnaryOp { .. } => opcode::I64_NEG` **忽略 `op` 字段**，解码器 `1236-1248` 也只构造 `Neg`。**经 `opcode()` 映射路径静默退化为 I64_NEG**（`.42` 直跑时 `!x` 变 `-x`；解释器内存路径 `ops/arith.rs:46-49` 反而正确）。仅由解释器 `ops/arith.rs:46,49` 与 `tests/logical_not.rs` 使用 |
+| B10 | `UnaryOp::Not`（bytecode 一元逻辑非） | — | **已修（WBS 3.20.29，2026-11-14，issue #562 关闭）**。原缺陷 = `opcode()` 编码忽略 `op` 字段（Not 与 Neg 同发 `I64_NEG`），解码器也只构造 `Neg`——编码/解码往返把逻辑非改写为取负（`.42` 直跑时 `!x` 变 `-x`；解释器内存路径的 Neg-on-Bool 补偿臂反而兜对答案，故缺陷面 = 编码保真而非现行错答案）。修法 = 新增专用指令码 `I64_NOT`（0x2C）：`opcode()` 按 `op` 字段分码 + 解码新臂还原 `Not` + translator `Not` 臂换发 + `opcode_name` 登记；执行器既有 `Not` 执行臂自然接通；旧 `.42` 的 `I64_NEG` 解码行为不变。判据链见 [09a](./09a-wbs-history.md) §P3 3.20.29 |
 | B11 | `#[allow(dead_code)]` 4 处 | — | `ownership.rs:36` `ParamOwnership` / `emitter/text.rs:237` `hint_prefix`（这两处是真实死代码）；`proof/smt/z3_ffi.rs:104` `Z3_solver_get_reason_unknown`（extern 绑定的保守豁免，**合理保留**）；`std/tests/stdlib_docs.rs:250` `docs_path_for`（测试辅助） |
 | B12 | `src/frontend/core/parser/ast.rs:37-43` `Expr::FnDef` | — | **生产零构造**（唯一构造点是 `parser/tests/ast.rs:828` 测试手工造节点），但有 **12 处生产消费 + 2 处穷举臂**（完整清单见 03-type-unification.md §2.6）：`spawn/placement.rs:122`、`spawn/analysis.rs:912`、`formatter/handlers/expr.rs:43`、`frontend/module/orchestrator.rs:1492`、`ir_gen.rs:4325/5097`、`checker.rs:1642`、`semantic_tokens.rs:1416`、`inference/expressions.rs:3374`、`inference/existential.rs:55`、`passes/dead_code.rs:305`、`layers/ownership.rs:1207`、`layers/termination.rs:752`，另有 `ast.rs:1026` `Expr::span()`、`pratt/mod.rs:47` `expr_end_line`。函数定义实际走 `Expr::Lambda`(`nud.rs:425-429`) + `StmtKind::Assign`(`declarations.rs:462-479`)。删除归 P6（03 §5.5 的 16 项改动清单） |
 | B13 | `Instruction::Cast` / `Instruction::TypeTest`（`src/middle/core/ir.rs`） | — | 全仓只有消费臂、**无构造点**（同型于 B8），且载荷还被下游丢弃——`translate_cast` 拿不到 `target_type`、`TypeTest` 臂发 `vec![0, 0, 0]` 空操作数占位。**WBS 6.6.11 已删除**（两个变体 + `normalize`/`verify`/`mono`/`translator` 全部消费臂 + 因此失去唯一调用者的 `substitute_block`/`substitute_instruction`/`substitute_type_ast`/`translate_cast`）；216 个 IR 快照对该形态 grep 0 命中。**删除不触及语法的 `as` 支持**，但让「`as` 语义未落地」这一既有缺口更显眼 ⇒ 缺口与证据链登记在 [09a](./09a-wbs-history.md) §P6 6.6.11，SPEC 侧注记见 `docs/src/reference/language-spec/syntax.md` §2.6 |
@@ -356,7 +356,7 @@ $ git grep -rn 'cfg!(target_arch' b5e68b3c9 -- '*.rs' | wc -l
 | **状态与实现不符的 RFC** | **改状态** | C4（RFC-018）移回 `draft` 或补 `impl_status: 'not-started'`；C5（RFC-028）补 `impl_status: 'not-started'`。**不删**——设计本身可能有价值，问题是状态标记失真 |
 | **有真实断言的孤儿测试** | **复活，不是删除** | 合计 **1005 行 / 78 个测试**：lexer 629 行 / 55 个 + 藏在活目录里的 311 行 / 16 个（`precedence_inline` / `overload_inline` / `json`）+ `package/template/tests/` 65 行 / 7 个。**复活成本是一行 `mod` 声明，价值是让 CI 重新获得这些覆盖**。删除它们是净损失 |
 | **零调用但语义重要的 `pub` 项** | **降可见性而非删除** | B2（`TypeSystem`）、B4（`check_type_equivalence`）——移到 `pub(crate)` 让编译器指认，或补实现。**B4 的 `is_subtype` 必须保留** |
-| **产不出值的 opcode / 指令** | **补构造点或删 opcode** | B8（`TailCall`）、B9（`Switch`，opcode 往返测试已以 `WHITELIST=["SWITCH"]` 显式登记）、B10（`UnaryOp::Not` 静默退化）。三选一，不能维持现状；D32/D33/D34 已裁决为删，随 `.42` 升版一并处理 |
+| **产不出值的 opcode / 指令** | **补构造点或删 opcode** | B8（`TailCall`）、B9（`Switch`，opcode 往返测试已以 `WHITELIST=["SWITCH"]` 显式登记）。B10 已按 D33 修复完成（2026-11-14：`opcode()` 区分 `op` 字段 + 专用码 `I64_NOT`，见 [09a](./09a-wbs-history.md) §P3 3.20.29），移出本待办。剩余项三选一，不能维持现状；D32/D33/D34 已裁决，随 `.42` 升版一并处理 |
 | **数据丢失缺陷** | ~~独立 issue~~ **P7 批 e（D52）** | E 节三条硬编码丢弃——不是死代码 |
 | **无模块身份但有效** | **改造不删除** | F1（`semantic_tokens.rs`）改 `include!` → 真 `mod`（见 `02`） |
 | **需要决策的** | **列为开放问题** | F2 的 wasm32 清理已登记为 [09](09-execution-wbs.md) §P10 **S7**（wasm32 门控 project-mode 子树，2026-10-18 用户裁决 B；含三条未核实原样保留）；层序修正会暴露新诊断 |
@@ -378,7 +378,7 @@ $ git grep -rn 'cfg!(target_arch' b5e68b3c9 -- '*.rs' | wc -l
 | S3 | 空头设计文档处置（C1-C3 + E6 同步清理 `config.js`） | 文档站构建无 404；`scripts/ci/check-docs-truth.py` 通过 |
 | S4 | RFC 状态修正（C4/C5/F3——`TRACKING.md` 加「实现状态」列） | `python scripts/rfc/check_tracking.py` 通过（`TRACKING.md` 会自动重新生成，**不手改**） |
 | S5 | `pub` 项降可见性（B2/B4） | 编译器能指出真正的死代码 |
-| S6 | opcode 产不出值项决策落地（B8/B9/B10/F8，按 D32/D33/D34 执行） | 删 `Switch` / `TailCall` 死路径；B10 的 `opcode()` 区分 `op` 字段；F8 门禁落地 |
+| S6 | opcode 产不出值项决策落地（B8/B9/F8 待做，按 D32/D33/D34 执行；**B10 已完成**） | 删 `Switch` / `TailCall` 死路径；F8 门禁落地；B10 已完成（2026-11-14，WBS 3.20.29：`opcode()` 区分 `op` 字段 + 专用码 `I64_NOT`，见 [09a](./09a-wbs-history.md) §P3 3.20.29） |
 | S7 | `include!` 改造（F1，施工步骤归 [09](09-execution-wbs.md) §P5 5.1）+ 层序修正（F4，归 P4 的 4.4.1） | 见 `02-stage-contract.md` |
 
 **S1 必须最先做，且必须预留缺陷修复时间。** 它的价值不是"清理"，而是**让 CI 重新获得 1005 行 / 78 个从未运行过的测试**——在此之前，任何关于测试覆盖率的判断都建立在虚假数字上。

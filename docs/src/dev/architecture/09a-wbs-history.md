@@ -5323,3 +5323,15 @@ E1114/E1115 用户可达留 B.2；本批无新语法、无 witness 产出；不�
 > **五、验证链与 t3 备案**：t1 门禁 14 项全绿 → t2 **PASS**（M1 登记面摘除 ⇒ 单元锚红；M2 消费面摘除 ⇒ 单元锚红——登记与消费各自承重，trial 机械可逆 blob 比对；修复态双锚绿 + list_remove_at_oob_err 夹具 CLI 实跑文件字段 = `<std/list>` 行号 157；IR 快照零漂移；语料差分对再生后基线逐字节零漂移）→ t3 **APPROVE**（5 条 info 备案，无阻塞）：①E8001 终态措辞按点位不够精确（实质成立，见四）；②「git stash 先红后绿手法」只记录在提交信息、两处新测试注释无 stash 字样——缓解 = 修前红态由断言机械蕴含（`function_files` 无条目 → assert_eq 失败）+ 基线冻结的缺陷行独立佐证；③提交信息回归计数 mono 81 / predicate 30 属 cargo filter 口径静态不可精确重构，可静态核对的四个计数（integration 375 / cli_e2e 64 / binding_positions 5 / evaluator 16）全精确命中；④基线再生裁决记录在冻结 rev 仅存提交信息——按团队编排第 8 条收口文档最后落属正常时序（本节即落档兑现）；⑤build_output 消费点 origin 查不到时静默跳过——按出生点不变式该分支不可达（两出生点 origin 均在 link 期建表覆盖集内），防御性残留非缺陷。
 
 > **六、计数与移交**：三级 +1 = 3.20.28（240→241）；二级不变。issue [#443](https://github.com/ChenXu233/YaoXiang/issues/443) **关闭**。修复笔推送终态 `794430f0`（含 rebase 冲突解决终态）。批次树已 release。
+
+## P3 3.20.29 收口（字节码 Not 与 Neg 分码 I64_NOT——往返保真，#562，2026-11-14）
+
+> **一、查证（issue 成立 + 事实细化）**：issue 来源 = 3.20.25 批次 t3 穷举发现。实测证实：IR `Not` 经 translator 与 `Neg` 同发 `I64_NEG`，解码一律还原 `UnaryOp::Neg`——编码/解码往返把逻辑非改写为取负。关键细化：语言规范限定 `!` 操作数为 Bool（`infer_unary` 非 Bool 即报 E1051），修前**用户可见答案靠解释器 Neg-on-Bool 补偿臂运行期兜对**——缺陷面 = 编码保真（`.42` 往返/直跑改写语义）而非现行错答案；且执行器 `UnaryOp::Not` 执行臂既有（Int/Bool 两臂 + 既有 logical_not.rs 测试），缺的只是编码/解码分码。分类 = RFC-039 决议 **D33** 判别为修（「静默改变语义是最危险的一类」）。`opcode()` 方法本身产线零调用（仅测试消费），但它是 bytecode 层编码映射的声明面——B10 债的登记本体。
+
+> **二、修法**：新增专用指令码 `I64_NOT`（0x2C，位于 I64_NEG 0x2B 之后、比较段 0x60 之前无冲突）：opcode() 编码按 `op` 字段分码（Neg→I64_NEG / Not→I64_NOT，不再 `{ .. }` 忽略）+ 解码新臂还原 `UnaryOp::Not` + translator `Not` 臂换发 `I64_NOT` + `opcode_name` 登记。执行器既有 `Not` 臂自然接通；旧 `.42` 文件 I64_NEG 解码仍还原 Neg（对照锚钉住——兼容零变化）。穷尽匹配补臂点核验（队长 grep）：encode/decode/opcode_name/translator 四面全覆盖，执行器臂既有，无遗漏分发点。
+
+> **三、错误码生成物再生（提交信息归因更正，t3 info 备案）**：修复笔在 translator.rs 插 2 行注释、bytecode/mod.rs 插 14 行——t1 第一轮门禁抓到 E8xxx.md 漂移，重跑生成器后恰 1 行（E8001 发射点 translator.rs 1380→1382），幂等验证（二次运行零 diff）。**t3 备案更正提交信息归因**：提交信息写「translator.rs 与 bytecode/mod.rs 的插入平移 E8001」——实测 bytecode/mod.rs 全文件零诊断发射点，其插入不平移任何文档行；平移仅来自 translator.rs +2 注释行。E8xxx 恰 1 行的声称经静态复核为真。
+
+> **四、验证链与 t2 FAIL 归因（队长派工失误登记）**：t1 门禁 14 项（第一轮抓生成器行号平移欠账 → 重跑幂等后全绿）→ 队长 diff review 通过 → t2 **FAIL**——归因 = **契约处方错误非修复缺陷**：M1 处方只摘 opcode() 的 UnaryOp 臂 ⇒ 主锚未红，因为主锚的编码面是 translator 直发 `I64_NOT`、opcode() 产线零调用（**队长派工失误如实登记：写 M1 处方时未核对锚-机制接线**，预核 grep 过 opcode 常量但没追 opcode() 方法的产线调用面）。验证者当轮实测更正补丁（translator Not 臂回退 + opcode() 臂塌缩 = 精确复现修前编码面）下主锚红 + 变异态与修前 blob 逐字节一致 → **t2r 聚焦复验 PASS**（trial 机械可逆；端到端锚绿 = Neg-on-Bool 补偿臂兜对，与查证事实互证——这正是「修前答案正确、缺陷在编码保真」的行为学证据）→ t3 **APPROVE**（3 条：①06 清单 B10 行未随修注记 low——收口兑现（B10 行重写为已修态 + 汇总行移出待办 + S6 标记 B10 完成，B13 先例）；②提交信息 E8001 归因措辞 info——本节三承载事实更正；③端到端锚 match+panic 断言形态 info——与同文件既有惯例一致，不要求改）。其余 t2 量测全过：修复态六锚绿 + CLI 实跑探针（`!b` 发射 I64Not、取负仍 I64Neg）+ M2 解码锚红 + IR 快照/语料差分零漂移 + 卫生全清。
+
+> **五、计数与移交**：三级 +1 = 3.20.29（241→242）；二级不变。issue [#562](https://github.com/ChenXu233/YaoXiang/issues/562) **关闭**。修复笔推送终态 `b5624a35`。06-cleanup-inventory B10 债清账（S6 剩 B8/B9/F8）。批次树已 release。
