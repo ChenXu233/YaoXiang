@@ -51,3 +51,4 @@ mod rfc027a;
 mod semantic_db;
 mod signature;
 mod types;
+mod witness_fields;

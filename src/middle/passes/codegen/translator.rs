@@ -372,22 +372,39 @@ impl Translator {
             });
         }
 
-        // 构造函数 IR 指令序列：Load(每个字段) + CreateStruct + Ret
+        // 6.9.5-B.1b / H2：构造参数与运行期槽**只含数据字段**。
+        //
+        // witness 字段是编译期证据、运行期无数据槽，故不占构造参数位
+        //（`Box(v0)`，不是 `Box(v0, w0)`）；声明序 → 运行期序的映射只走
+        // `runtime_field_index`（唯一映射点，见 `types/mono.rs`）。
+        // B.1a 保证生产路径不产出 `Some(Zero)`，故对现存程序是恒等变换。
+        let quantities: Vec<_> = fields.iter().map(|field| field.quantity).collect();
+        let data_field_count =
+            crate::frontend::core::types::mono::runtime_field_count(quantities.iter().copied());
+
+        // 构造函数 IR 指令序列：Load(每个数据字段) + CreateStruct + Ret
         let mut ir_instructions = Vec::new();
         let mut field_operands = Vec::new();
+        let mut param_types: Vec<MonoType> = Vec::new();
 
-        for (i, _field) in fields.iter().enumerate() {
-            let local_reg = i;
+        for (declared_index, field) in fields.iter().enumerate() {
+            let Some(runtime_index) = crate::frontend::core::types::mono::runtime_field_index(
+                quantities.iter().copied(),
+                declared_index,
+            ) else {
+                continue;
+            };
             ir_instructions.push(Instruction::Load {
-                dst: Operand::Local(local_reg),
-                src: Operand::Arg(i),
+                dst: Operand::Local(runtime_index),
+                src: Operand::Arg(runtime_index),
                 // 合成构造函数：无源码对应语句，位置诚实留空
                 span: Span::dummy(),
             });
-            field_operands.push(Operand::Local(local_reg));
+            field_operands.push(Operand::Local(runtime_index));
+            param_types.push(field.ty.clone());
         }
 
-        let result_reg = fields.len();
+        let result_reg = data_field_count;
         ir_instructions.push(Instruction::CreateStruct {
             dst: Operand::Local(result_reg),
             type_name: struct_name.clone(),
@@ -400,7 +417,6 @@ impl Translator {
         });
 
         // 创建临时 FunctionIR 用于 translate_instruction
-        let param_types: Vec<MonoType> = fields.iter().map(|f| f.ty.clone()).collect();
         let mut locals: Vec<LocalSlot> = param_types.iter().cloned().map(LocalSlot::temp).collect();
         locals.push(LocalSlot::temp(MonoType::TypeRef(struct_name.clone())));
 

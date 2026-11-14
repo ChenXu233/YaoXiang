@@ -3107,6 +3107,26 @@ impl TypeChecker {
             }
         }
 
+        // 6.9.5-B.1c / 5A：witness-bearing 记录整体不可变——声明面拒绝 mut 字段。
+        // 字段量词读数在 AST 侧可见（B.1a 起）；判据只有一条：记录含 witness 且
+        // 任一字段 is_mut。B.1a 保证生产路径不产出 Some(Zero)，故对现存程序是
+        // 恒等变换（本批为直驱可达，用户可达留 B.2）。
+        let declared_fields: Vec<&crate::ast::StructField> = match definition {
+            crate::ast::Type::Struct { .. } => definition.struct_fields(),
+            crate::ast::Type::NamedStruct { fields, .. } => fields.iter().collect(),
+            _ => Vec::new(),
+        };
+        if crate::frontend::core::types::mono::quantities_are_witness_bearing(
+            declared_fields.iter().map(|field| field.quantity),
+        ) && declared_fields.iter().any(|field| field.is_mut)
+        {
+            self.add_error(
+                ErrorCodeDefinition::witness_record_immutable(name)
+                    .at(span)
+                    .build(),
+            );
+        }
+
         let poly = PolyType::mono(MonoType::from(definition.clone()));
         // Inject the type name into StructType if it's missing (plain Type::Struct has no name)
         let poly = PolyType::mono(match &poly.body {

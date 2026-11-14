@@ -154,4 +154,16 @@ define_codes!(E1XXX, {
     // 建立在「这个值在编译期已知」之上。旧行为是静默按运行期传参：`f(y)` 里
     // `y` 未定时内层 `n: N` 的约束从未生效（静默失败），且特化永不发生。
     ("E1113", TypeCheck, false, missing_compile_time_evidence(param: &str) => .param("param", param)),
+    // E1114 witness 字段不可值级读取（6.9.5-B.1b；RFC-039 D62 / issue #536 的 B 路线，
+    // H0=B）。witness = 记录层 q=0 字段，运行期没有数据槽；类型级投影与用法留 B.3，
+    // 本批只做**值级拒绝**：`b.w` 出现在任何取值位置一律报本码，而不是生成一个
+    // 读不到数据槽的 LoadField。B.1a 保证生产路径不产出 Some(Zero)，故本码当前
+    // 只有直驱可达（用户可达留 B.2）。
+    ("E1114", TypeCheck, false, witness_field_not_readable(type_: &str, field: &str) => .param("type", type_) .param("field", field)),
+    // E1115 witness-bearing 记录不可变（6.9.5-B.1c / 5A 整体不可变；RFC-039 D62 /
+    // issue #536）。witness 记录的证据依赖「构造后字段不变」，故四类写入点统一
+    // 拒绝：声明 mut 字段、字段赋值、&mut 借用、需要写借用的方法接收者。这些写法
+    // 在无 witness 的记录上本来就合法，本码只对 witness-bearing 记录生效；B.1a
+    // 保证生产路径不产出 witness，本批为直驱可达（用户可达留 B.2）。
+    ("E1115", TypeCheck, false, witness_record_immutable(type_: &str) => .param("type", type_)),
 });

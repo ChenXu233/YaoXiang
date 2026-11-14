@@ -857,3 +857,115 @@ fn test_struct_field_quantity_survives_ast_to_mono() {
         "witness 字段的量词读数必须穿到单态表示（否则 B.2 没有输入）"
     );
 }
+
+// ===== 6.9.5-B.1b / H2：运行期数据索引的唯一映射（T01/T02 的单元锚）=====
+
+/// 量词取自参数：`Some(Zero)` = witness，`None` = data。
+fn record_with_quantities(
+    name: &str,
+    fields: Vec<(&str, Option<ast::Quantity>)>,
+) -> StructType {
+    StructType {
+        name: name.to_string(),
+        fields: fields
+            .into_iter()
+            .map(
+                |(field_name, quantity)| crate::frontend::core::types::mono::StructFieldInfo {
+                    name: field_name.to_string(),
+                    ty: MonoType::Int(64),
+                    quantity,
+                    is_mut: false,
+                    has_default: false,
+                },
+            )
+            .collect(),
+        methods: HashMap::new(),
+        interfaces: vec![],
+    }
+}
+
+/// T02：声明序索引必须按「跳过 witness」换算成运行期数据索引。
+#[test]
+fn test_runtime_field_index_maps_data_positions_after_witness() {
+    // Arrange — `Box(v, w, z, q)`，w 与 q 是 witness
+    let record = record_with_quantities(
+        "Box",
+        vec![
+            ("v", None),
+            ("w", Some(ast::Quantity::Zero)),
+            ("z", None),
+            ("q", Some(ast::Quantity::Zero)),
+        ],
+    );
+    let quantities = || record.fields.iter().map(|field| field.quantity);
+
+    // Act + Assert — 每个声明序下标单独求值（判定函数是纯函数，无副作用）
+    let indices: Vec<Option<usize>> = (0..5)
+        .map(|index| crate::frontend::core::types::mono::runtime_field_index(quantities(), index))
+        .collect();
+
+    assert_eq!(
+        indices,
+        vec![Some(0), None, Some(1), None, None],
+        "witness 字段无运行期槽（None），其后的数据字段前移一位；越界也是 None"
+    );
+}
+
+/// T01：运行期数据槽个数 = 非 witness 字段数。
+#[test]
+fn test_runtime_field_count_excludes_witness() {
+    // Arrange
+    let record = record_with_quantities(
+        "Box",
+        vec![("v", None), ("w", Some(ast::Quantity::Zero)), ("z", None)],
+    );
+
+    // Act
+    let count = crate::frontend::core::types::mono::runtime_field_count(
+        record.fields.iter().map(|field| field.quantity),
+    );
+
+    // Assert
+    assert_eq!(count, 2, "三个声明字段中只有两个数据字段占运行期槽");
+}
+
+/// 记录是否 witness-bearing 只由「任一字段 q=0」回答（唯一读数）。
+#[test]
+fn test_struct_type_is_witness_bearing_reads_quantity() {
+    // Arrange
+    let witness =
+        record_with_quantities("Box", vec![("v", None), ("w", Some(ast::Quantity::Zero))]);
+    let data = record_with_quantities("Box", vec![("v", None), ("w", None)]);
+
+    // Act
+    let witness_bearing = crate::frontend::core::types::mono::is_witness_bearing(&witness.fields);
+    let data_bearing = crate::frontend::core::types::mono::is_witness_bearing(&data.fields);
+
+    // Assert
+    assert!(witness_bearing, "含 q=0 字段的记录必须是 witness-bearing");
+    assert!(!data_bearing, "全 None 的记录不得被误判为 witness-bearing");
+}
+
+/// T13：`quantity` 参与 Eq（witness 与 data 记录是不同类型），且 Eq/Hash 契约不回退。
+#[test]
+fn test_witness_record_eq_distinguishes_quantity_and_hash_stays_consistent() {
+    // Arrange — 只差一个字段的量词读数
+    let witness =
+        record_with_quantities("Box", vec![("v", None), ("w", Some(ast::Quantity::Zero))]);
+    let data = record_with_quantities("Box", vec![("v", None), ("w", None)]);
+    let witness_again =
+        record_with_quantities("Box", vec![("v", None), ("w", Some(ast::Quantity::Zero))]);
+
+    // Act
+    let differs = witness == data;
+    let same = witness == witness_again;
+    let hash_same = hash_of(&witness) == hash_of(&witness_again);
+
+    // Assert
+    assert!(
+        !differs,
+        "quantity 必须参与 Eq：witness 记录与 data 记录不得相等（缓存键必须区分）"
+    );
+    assert!(same, "同 name/fields/quantity 的记录必须相等");
+    assert!(hash_same, "Eq 相等 ⇒ Hash 必须相等（B.1a 的契约不得回退）");
+}

@@ -19,3 +19,4 @@ pub mod snapshot;
 pub mod type_decl;
 mod type_decl_quantity;
 pub mod verify;
+mod witness_quantity;

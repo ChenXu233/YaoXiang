@@ -9,7 +9,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 
 类型检查阶段产生的错误，涵盖类型匹配、模式匹配、泛型实例化、接口约束与 `?` 错误传播等。
 
-本族共 **59** 个码，全部在 `define_codes!` 注册表中，类别为 `TypeCheck`。完整索引见[错误码首页](./index.md)。
+本族共 **61** 个码，全部在 `define_codes!` 注册表中，类别为 `TypeCheck`。完整索引见[错误码首页](./index.md)。
 
 ## 码一览
 
@@ -74,6 +74,8 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 | `E1111` | 实参重复占用或顺序非法 | `TypeCheck` | 否 | `函数 '{func}' 的形参 '{name}' 收到多个实参（或实参顺序非法）` | ✅ 2 处 |
 | `E1112` | 实现形参个数超出声明 | `TypeCheck` | 否 | `函数 '{name}' 的标注只提供 {expected} 个运行期形参位，实现头却写了 {found} 个；多出的那个没有值可绑` | ✅ 1 处 |
 | `E1113` | 编译期值参数缺少编译期证据 | `TypeCheck` | 否 | `编译期值参数 '{param}' 需要编译期证据，但实参无法在编译期确定` | ✅ 1 处 |
+| `E1114` | witness 字段不可值级读取 | `TypeCheck` | 否 | `witness 字段 '{field}' 是记录 '{type}' 的编译期证据，运行期没有数据槽，不能在值级读取` | ✅ 2 处 |
+| `E1115` | witness-bearing 记录不可变 | `TypeCheck` | 否 | `记录 '{type}' 含 witness 字段，其全部字段在构造后必须保持不变` | ✅ 4 处 |
 
 ## 逐码说明
 
@@ -85,7 +87,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **模板**：`未知变量：'{name}'`
 - **消息**：引用的变量未定义
 - **帮助**：检查变量名是否拼写正确，或先定义它
-- **发射点**：`src/frontend/core/sema/checker/refinement.rs:450`、`src/frontend/core/sema/inference/expressions.rs:3692`、`src/frontend/core/sema/inference/statements.rs:3316` 等 4 处
+- **发射点**：`src/frontend/core/sema/checker/refinement.rs:450`、`src/frontend/core/sema/inference/expressions.rs:3719`、`src/frontend/core/sema/inference/statements.rs:3336` 等 4 处
 
 ### E1002：类型不匹配
 
@@ -136,7 +138,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **模板**：`返回类型不匹配：期望 '{expected}'，实际 '{found}'`
 - **消息**：函数返回类型不正确
 - **帮助**：函数体的值与声明的返回类型不符。要么修改函数体，要么修正注解——注意 `h: () -> Int = f` 的含义是「h 返回 Int」，而不是「h 就是 f」；若想给函数起别名请写 `h = f`。
-- **发射点**：`src/frontend/core/sema/inference/expressions.rs:4259`、`src/frontend/core/sema/inference/expressions.rs:4278`、`src/frontend/core/sema/inference/statements.rs:1587` 等 4 处
+- **发射点**：`src/frontend/core/sema/inference/expressions.rs:4309`、`src/frontend/core/sema/inference/expressions.rs:4328`、`src/frontend/core/sema/inference/statements.rs:1587` 等 4 处
 
 ### E1013：函数未找到
 
@@ -156,7 +158,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **模板**：`函数 '{func}' 没有名为 '{name}' 的参数（可用：{params}）`
 - **消息**：调用时使用的参数名不在函数的形参表里
 - **帮助**：改用形参表里列出的名字，或改为按位置传参
-- **发射点**：`src/frontend/core/sema/inference/arg_binding.rs:79`、`src/frontend/core/sema/inference/expressions.rs:5456`
+- **发射点**：`src/frontend/core/sema/inference/arg_binding.rs:79`、`src/frontend/core/sema/inference/expressions.rs:5534`
 - **源码注释名**：命名参数名未知（与调用者写的名字不在形参表里）
 
 ### E1015：参数重复指定
@@ -284,7 +286,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **模板**：`模块 '{module}' 没有导出 '{name}'`
 - **消息**：访问了模块未导出的成员
 - **帮助**：该模块的可用导出：{available}
-- **发射点**：`src/frontend/core/sema/inference/expressions.rs:4108`
+- **发射点**：`src/frontend/core/sema/inference/expressions.rs:4145`
 - **源码注释名**：模块成员未找到（#396：模块别名上取成员失败。模块不是 struct，
 
 ### E1050：需要布尔操作数
@@ -327,7 +329,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **模板**：`无法在非结构体类型 '{type}' 上访问字段`
 - **消息**：无法在非结构体类型上访问字段
 - **帮助**：字段访问仅适用于结构体类型
-- **发射点**：`src/frontend/core/sema/inference/expressions.rs:4147`、`src/frontend/core/sema/inference/expressions.rs:4151`
+- **发射点**：`src/frontend/core/sema/inference/expressions.rs:4197`、`src/frontend/core/sema/inference/expressions.rs:4201`
 - **源码注释名**：不能在非结构体类型上访问字段
 
 ### E1054：条件类型不匹配
@@ -338,7 +340,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **模板**：`条件必须是布尔类型，实际为 '{type}'`
 - **消息**：条件表达式必须是布尔类型
 - **帮助**：使用布尔表达式或转换为布尔类型
-- **发射点**：`src/frontend/core/sema/inference/expressions.rs:4188`、`src/frontend/core/sema/inference/expressions.rs:4449`、`src/frontend/core/sema/inference/expressions.rs:6457` 等 4 处
+- **发射点**：`src/frontend/core/sema/inference/expressions.rs:4238`、`src/frontend/core/sema/inference/expressions.rs:4499`、`src/frontend/core/sema/inference/expressions.rs:6535` 等 4 处
 - **源码注释名**：条件必须是布尔类型
 
 ### E1055：约束在非泛型上下文中
@@ -400,7 +402,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **构造函数**：`ErrorCodeDefinition::not_callable(type_)`
 - **模板**：`类型 \`{type}\` 不可调用——它不是函数`
 - **帮助**：只有函数值才能被调用。请检查该位置表达式的类型；若要定义函数，需写 Fn 注解 `f: () -> T = { ... }`。
-- **发射点**：`src/frontend/core/sema/inference/expressions.rs:4738`
+- **发射点**：`src/frontend/core/sema/inference/expressions.rs:4798`
 
 ### E1071：类型定义只能在模块级
 
@@ -410,7 +412,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **模板**：`类型定义 '{name}' 只能在模块级（模块顶层）`
 - **消息**：类型定义只能出现在模块顶层
 - **帮助**：将类型定义移到模块顶层
-- **发射点**：`src/frontend/core/sema/inference/expressions.rs:6719`、`src/frontend/core/sema/inference/statements.rs:2083`
+- **发射点**：`src/frontend/core/sema/inference/expressions.rs:6797`、`src/frontend/core/sema/inference/statements.rs:2103`
 
 ### E1081：`?` 仅允许在返回可传播类型的函数内使用
 
@@ -420,7 +422,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **模板**：`\`?\` 仅允许在返回实现 \`Try\` 的类型的函数内使用`
 - **消息**：`?` 只能在返回实现 Try 的类型的函数内使用
 - **帮助**：`?` 的失败值要沿函数返回类型传播——返回类型须实现 `Try` 接口（如 `Result(T, E)`）
-- **发射点**：`src/frontend/core/sema/inference/expressions.rs:4578`、`src/frontend/core/sema/inference/expressions.rs:4611`
+- **发射点**：`src/frontend/core/sema/inference/expressions.rs:4638`、`src/frontend/core/sema/inference/expressions.rs:4671`
 - **源码注释名**：`?` 仅允许在返回 Result 的函数内使用
 
 ### E1082：`?` 只能用于实现 Try 的类型
@@ -431,7 +433,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **模板**：`'{type}' 未实现 \`Try\` 接口，不能使用 \`?\``
 - **消息**：`?` 只能用于实现 Try 接口的类型的表达式
 - **帮助**：为该类型实现 `Try` 接口四成员（is_failure/success/residual/from_error），或改用 `Result(T, E)`
-- **发射点**：`src/frontend/core/sema/inference/expressions.rs:4569`
+- **发射点**：`src/frontend/core/sema/inference/expressions.rs:4629`
 - **源码注释名**：`?` 只能用于 Result 表达式
 
 ### E1083：`?` 的错误类型不匹配
@@ -442,7 +444,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **模板**：`\`?\` 的错误类型不匹配：期望 '{expected}'，实际 '{found}'`
 - **消息**：`expr?` 的错误类型与外层函数返回类型不匹配
 - **帮助**：请确保当前函数返回类型 `Result[_, E]` 的错误类型 `E` 与被解包的 `Result[_, E]` 的错误类型一致。
-- **发射点**：`src/frontend/core/sema/inference/expressions.rs:4601`
+- **发射点**：`src/frontend/core/sema/inference/expressions.rs:4661`
 
 ### E1090：✨ 不可言说 ✨
 
@@ -474,7 +476,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **模板**：`'{name}' 要求编译期常量实参，但所给实参无法转换`
 - **消息**：精化类型实参无法转换为编译期常量表达式
 - **帮助**：谓词/证明函数实参必须是字面量、变量或单参数类型应用，否则精化约束无法生成
-- **发射点**：`src/frontend/core/sema/checker.rs:3731`、`src/frontend/core/sema/checker.rs:3779`、`src/frontend/core/sema/checker.rs:3807`
+- **发射点**：`src/frontend/core/sema/checker.rs:3751`、`src/frontend/core/sema/checker.rs:3799`、`src/frontend/core/sema/checker.rs:3827`
 - **源码注释名**：精化类型实参形态非法（RFC-027，#263）
 
 ### E1093：精化实参个数不匹配
@@ -485,7 +487,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **模板**：`'{name}' 期望 {expected} 个实参，实际 {found} 个`
 - **消息**：谓词/证明函数实参个数不匹配
 - **帮助**：实参个数必须与谓词声明一致，否则精化约束无法生成
-- **发射点**：`src/frontend/core/sema/checker.rs:3714`、`src/frontend/core/sema/checker.rs:3804`
+- **发射点**：`src/frontend/core/sema/checker.rs:3734`、`src/frontend/core/sema/checker.rs:3824`
 - **源码注释名**：精化类型参数数量不匹配
 
 ### E1094：未使用的编译期值参数
@@ -496,7 +498,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **模板**：`'{param}' 声明为 '{type}' 的编译期值参数，但未在类型体中被引用`
 - **消息**：编译期值参数未在类型体中被引用
 - **帮助**：请在类型位置（字段类型、内层 Fn 参数类型、Assert/Array 类型实参）引用该参数，或从声明中移除
-- **发射点**：`src/frontend/core/sema/checker.rs:3305`
+- **发射点**：`src/frontend/core/sema/checker.rs:3325`
 - **源码注释名**：编译期值参数未在类型体引用（#297/F）
 
 ### E1095：未知接口
@@ -584,7 +586,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **模板**：`'{keyword}' 出现在循环外`
 - **消息**：break/continue 只能在 while/for 循环体内使用
 - **帮助**：把 '{keyword}' 移入 while/for 循环体内
-- **发射点**：`src/frontend/core/sema/inference/expressions.rs:4300`、`src/frontend/core/sema/inference/expressions.rs:4310`
+- **发射点**：`src/frontend/core/sema/inference/expressions.rs:4350`、`src/frontend/core/sema/inference/expressions.rs:4360`
 - **源码注释名**：break/continue 出现在循环外（#311：仅 while/for 体内允许循环控制流）
 
 ### E1103：类型位置不能使用方括号
@@ -617,7 +619,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **模板**：`'{variant}' 是和类型 '{type}' 的变体构造器，不是数据字段`
 - **消息**：变体构造器只能以 类型.变体(...) 的调用形态使用
 - **帮助**：构造值写 `{type}.{variant}(...)`；从和类型值取回载荷用 match 变体解构（RFC-010b）。和类型的记录字段全部升格为变体，运行时值不携带字段表
-- **发射点**：`src/frontend/core/sema/inference/expressions.rs:3980`
+- **发射点**：`src/frontend/core/sema/inference/expressions.rs:4007`
 - **源码注释名**：变体构造器被当作字段访问（RFC-010 记录式和类型：变体名升格，
 
 ### E1106：约束方法派发失败
@@ -638,7 +640,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **模板**：`方法重载歧义：'{key}' 有 {count} 个候选匹配且无法区分`
 - **消息**：'{key}' 有 {count} 个候选匹配，无法决议
 - **帮助**：为调用结果添加类型注解（如 `x: T = obj.m()`），或让重载候选的参数类型可区分
-- **发射点**：`src/frontend/core/sema/inference/expressions.rs:5392`
+- **发射点**：`src/frontend/core/sema/inference/expressions.rs:5470`
 - **源码注释名**：方法重载歧义（RFC-011a §3：多候选且无期望类型可区分）
 
 ### E1108：空块落入容器期望位
@@ -649,7 +651,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **模板**：`此处期望容器类型，但 \`{}\` 是空块（值 Void）`
 - **消息**：`{}` 是空块（值 Void），不是容器字面量
 - **帮助**：B 方案语义（SPEC syntax §1.6.4）：`{}` 是空块，不是空字典。空字典用 `dict.new()`，空列表用 `[]`
-- **发射点**：`src/frontend/core/sema/inference/expressions.rs:4335`、`src/frontend/core/sema/inference/expressions.rs:5027`
+- **发射点**：`src/frontend/core/sema/inference/expressions.rs:4385`、`src/frontend/core/sema/inference/expressions.rs:5087`
 - **源码注释名**：空块 `{}` 落入容器期望位（#394：B 方案定案的 `{}` = 空块 Void，
 
 ### E1109：return 出现在函数外
@@ -660,7 +662,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **模板**：`'return' 出现在函数外`
 - **消息**：return 只能在函数体内使用；Script 顶层是模块初始化层，没有函数边界可退
 - **帮助**：把 'return' 移入函数体；Script 模式下顶层语句即程序主体，要提前结束一段顶层逻辑请收进函数、在调用点控制
-- **发射点**：`src/frontend/core/sema/inference/expressions.rs:4223`、`src/frontend/core/sema/inference/statements.rs:2025`、`src/frontend/core/sema/inference/statements.rs:2040`
+- **发射点**：`src/frontend/core/sema/inference/expressions.rs:4273`、`src/frontend/core/sema/inference/statements.rs:2045`、`src/frontend/core/sema/inference/statements.rs:2060`
 - **源码注释名**：return 出现在函数外（RFC-010a 规则②边界条件：`return` 退出最近的
 
 ### E1110：方法绑定缺少签名标注
@@ -671,7 +673,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **模板**：`'{type}.{method}' 缺少签名标注`
 - **消息**：方法绑定 '{type}.{method}' 没有签名标注，编译器无法确定它的接收者、形参名与返回类型
 - **帮助**：补上签名标注：'{type}.{method}: (self: &{type}, ...) -> 返回类型 = 函数体'；要复用现成函数则写 '{type}.{method}: (…) -> 返回类型 = 函数名[位置]'
-- **发射点**：`src/middle/ir/ir_gen.rs:2463`
+- **发射点**：`src/middle/ir/ir_gen.rs:2474`
 - **源码注释名**：方法绑定缺少签名标注（WBS 3.13.1 / issue #451，D59 A 类：旧行为是
 
 ### E1111：实参重复占用或顺序非法
@@ -693,7 +695,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **模板**：`函数 '{name}' 的标注只提供 {expected} 个运行期形参位，实现头却写了 {found} 个；多出的那个没有值可绑`
 - **消息**：函数体写的形参多于标注提供的运行期形参位，多出的形参没有值可以绑
 - **帮助**：函数能收几个运行期值由标注决定：删掉实现头多出的形参，或把它们的位补进标注（`f: (a: Int, b: Int) -> Int = (a, b) => ...`）。只在类型位置用到的形参是编译期值参数，不占运行期位。
-- **发射点**：`src/frontend/core/sema/inference/statements.rs:2295`
+- **发射点**：`src/frontend/core/sema/inference/statements.rs:2315`
 - **源码注释名**：实现形参个数超出声明（WBS 6.8.2a / D54：声明驱动的 Fn 标注 ↔ 函数体
 
 ### E1113：编译期值参数缺少编译期证据
@@ -705,3 +707,23 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **帮助**：传入字面量或编译期常量，或把该形参改为普通运行期值参数
 - **发射点**：`src/frontend/core/sema/inference/expressions.rs:2920`
 - **源码注释名**：编译期值参数缺少编译期证据（RFC-039 D62 / issue #533，6.9.2-B；
+
+### E1114：witness 字段不可值级读取
+
+- **类别**：`TypeCheck`
+- **span 豁免**：否
+- **构造函数**：`ErrorCodeDefinition::witness_field_not_readable(type_, field)`
+- **模板**：`witness 字段 '{field}' 是记录 '{type}' 的编译期证据，运行期没有数据槽，不能在值级读取`
+- **帮助**：witness 字段只在编译期用于证明（构造义务与导出），值级读取与类型级投影留待后续阶段；需要运行期数据时，请把该字段建成普通数据字段。
+- **发射点**：`src/frontend/core/sema/inference/expressions.rs:4117`、`src/frontend/core/sema/inference/expressions.rs:4166`
+- **源码注释名**：witness 字段不可值级读取（6.9.5-B.1b；RFC-039 D62 / issue #536 的 B 路线，
+
+### E1115：witness-bearing 记录不可变
+
+- **类别**：`TypeCheck`
+- **span 豁免**：否
+- **构造函数**：`ErrorCodeDefinition::witness_record_immutable(type_)`
+- **模板**：`记录 '{type}' 含 witness 字段，其全部字段在构造后必须保持不变`
+- **帮助**：witness-bearing 记录不能声明 `mut` 字段、不能字段赋值、不能 `&mut` 借用，也不能调用需要写借用的方法；需要可变的数据请拆到不含 witness 的记录。
+- **发射点**：`src/frontend/core/sema/checker.rs:3124`、`src/frontend/core/sema/inference/expressions.rs:4544`、`src/frontend/core/sema/inference/expressions.rs:5264` 等 4 处
+- **源码注释名**：witness-bearing 记录不可变（6.9.5-B.1c / 5A 整体不可变；RFC-039 D62 /

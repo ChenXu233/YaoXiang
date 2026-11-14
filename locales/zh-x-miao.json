@@ -1215,6 +1215,22 @@
     "example": "f: (N: Int) -> (n: N) -> Int = (n) => n\nk: (y: Int) -> Int = f(y)",
     "error_output": "error[E1113]: 编译期值参数缺编译期证据喵~\n --> example.yx:2:24\n  |\n2 | k: (y: Int) -> Int = f(y)\n  |                        ^ 编译期值参数 'N' 需要有编译期证据喵~，可是实参在编译期确定不了喵~"
   },
+  "E1114": {
+    "title": "witness 字段不能在值级读取喵~",
+    "message": "witness 字段 '{field}' 是记录 '{type}' 的编译期证据喵~，运行期没有数据槽，所以不能在值级读取nya~",
+    "template": "witness 字段 '{field}' 是记录 '{type}' 的编译期证据喵~，运行期没有数据槽，所以不能在值级读取nya~",
+    "help": "witness 字段只在编译期用来做证明喵~（构造义务和导出），值级读取和类型级投影留到后面的阶段nya。需要运行期数据的话，请把它建成普通的数据字段喵~",
+    "example": "Box: Type = { v: Int, w: Pos(v) }  // w 是 witness 字段喵~，运行期没有数据槽nya~\nmain: () -> Void = {\n    b: Box = Box(v = 1)\n    b.w\n}",
+    "error_output": "error[E1114]: witness 字段不能在值级读取喵~\n --> example.yx:5:5\n  |\n5 |     b.w\n  |     ^^^ witness 字段 'w' 是记录 'Box' 的编译期证据喵~，运行期没有数据槽，所以不能在值级读取nya~"
+  },
+  "E1115": {
+    "title": "带 witness 的记录不能变喵~",
+    "message": "记录 '{type}' 含 witness 字段喵~，所以它所有字段在构造后都必须保持不变nya~",
+    "template": "记录 '{type}' 含 witness 字段喵~，所以它所有字段在构造后都必须保持不变nya~",
+    "help": "带 witness 的记录不能声明 `mut` 字段喵~，不能字段赋值，不能 `&mut` 借用，也不能调用需要写借用的方法nya~；可变的数据请拆到不含 witness 的记录里喵~",
+    "example": "Box: Type = { v: Int, w: Pos(v) }\nmain: () -> Void = {\n    b: Box = Box(v = 1)\n    b.v = 2\n}",
+    "error_output": "error[E1115]: 带 witness 的记录不能变喵~\n --> example.yx:4:5\n  |\n4 |     b.v = 2\n  |     ^^^^^^^ 记录 'Box' 含 witness 字段喵~，所以它所有字段在构造后都必须保持不变nya~"
+  },
   "W1082": {
     "title": "所有权分析降级喵~",
     "message": "没有函数体检查器喵，所有权分析已按空账本降级运行nya~",

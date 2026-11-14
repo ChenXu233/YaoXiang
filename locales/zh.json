@@ -1036,6 +1036,22 @@
     "example": "f: (N: Int) -> (n: N) -> Int = (n) => n\nk: (y: Int) -> Int = f(y)",
     "error_output": "error[E1113]: 编译期值参数缺少编译期证据\n --> example.yx:2:24\n  |\n2 | k: (y: Int) -> Int = f(y)\n  |                        ^ 编译期值参数 'N' 需要编译期证据，但实参无法在编译期确定"
   },
+  "E1114": {
+    "title": "witness 字段不可值级读取",
+    "message": "witness 字段 '{field}' 是记录 '{type}' 的编译期证据，运行期没有数据槽，不能在值级读取",
+    "template": "witness 字段 '{field}' 是记录 '{type}' 的编译期证据，运行期没有数据槽，不能在值级读取",
+    "help": "witness 字段只在编译期用于证明（构造义务与导出），值级读取与类型级投影留待后续阶段；需要运行期数据时，请把该字段建成普通数据字段。",
+    "example": "Box: Type = { v: Int, w: Pos(v) }  // w 是 witness 字段，运行期无数据槽\nmain: () -> Void = {\n    b: Box = Box(v = 1)\n    b.w\n}",
+    "error_output": "error[E1114]: witness 字段不可值级读取\n --> example.yx:5:5\n  |\n5 |     b.w\n  |     ^^^ witness 字段 'w' 是记录 'Box' 的编译期证据，运行期没有数据槽，不能在值级读取"
+  },
+  "E1115": {
+    "title": "witness-bearing 记录不可变",
+    "message": "记录 '{type}' 含 witness 字段，其全部字段在构造后必须保持不变",
+    "template": "记录 '{type}' 含 witness 字段，其全部字段在构造后必须保持不变",
+    "help": "witness-bearing 记录不能声明 `mut` 字段、不能字段赋值、不能 `&mut` 借用，也不能调用需要写借用的方法；需要可变的数据请拆到不含 witness 的记录。",
+    "example": "Box: Type = { v: Int, w: Pos(v) }\nmain: () -> Void = {\n    b: Box = Box(v = 1)\n    b.v = 2\n}",
+    "error_output": "error[E1115]: witness-bearing 记录不可变\n --> example.yx:4:5\n  |\n4 |     b.v = 2\n  |     ^^^^^^^ 记录 'Box' 含 witness 字段，其全部字段在构造后必须保持不变"
+  },
   "E1064": {
     "title": "绑定位置索引无效",
     "template": "绑定位置索引无效：{positions}（函数共 {total} 个参数）",

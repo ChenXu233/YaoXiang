@@ -1224,6 +1224,22 @@
     "example": "f: (N: Int) -> (n: N) -> Int = (n) => n\nk: (y: Int) -> Int = f(y)",
     "error_output": "error[E1113]: compile-time value parameter lacks compile-time evidence\n --> example.yx:2:24\n  |\n2 | k: (y: Int) -> Int = f(y)\n  |                        ^ compile-time value parameter 'N' requires compile-time evidence, but the argument cannot be determined at compile time"
   },
+  "E1114": {
+    "title": "Witness field is not readable at value level",
+    "message": "Witness field '{field}' is compile-time evidence of record '{type}' and has no runtime data slot; it cannot be read at value level",
+    "template": "Witness field '{field}' is compile-time evidence of record '{type}' and has no runtime data slot; it cannot be read at value level",
+    "help": "Witness fields are used only for compile-time proofs (construction obligations and exports); value-level reads and type-level projections are left for later stages. If you need runtime data, declare an ordinary data field instead.",
+    "example": "Box: Type = { v: Int, w: Pos(v) }  // w is a witness field with no runtime data slot\nmain: () -> Void = {\n    b: Box = Box(v = 1)\n    b.w\n}",
+    "error_output": "error[E1114]: witness field is not readable at value level\n --> example.yx:5:5\n  |\n5 |     b.w\n  |     ^^^ witness field 'w' is compile-time evidence of record 'Box' and has no runtime data slot; it cannot be read at value level"
+  },
+  "E1115": {
+    "title": "Witness-bearing record is immutable",
+    "message": "Record '{type}' carries a witness field, so all of its fields must stay unchanged after construction",
+    "template": "Record '{type}' carries a witness field, so all of its fields must stay unchanged after construction",
+    "help": "A witness-bearing record cannot declare `mut` fields, assign fields, take `&mut` borrows, or call methods that require a write borrow; move mutable data into a record without witnesses.",
+    "example": "Box: Type = { v: Int, w: Pos(v) }\nmain: () -> Void = {\n    b: Box = Box(v = 1)\n    b.v = 2\n}",
+    "error_output": "error[E1115]: witness-bearing record is immutable\n --> example.yx:4:5\n  |\n4 |     b.v = 2\n  |     ^^^^^^^ record 'Box' carries a witness field, so all of its fields must stay unchanged after construction"
+  },
   "W1007": {
     "title": "Module import cycle",
     "message": "Modules in the compilation set form an import cycle; initialization order inside the cycle is undecidable",

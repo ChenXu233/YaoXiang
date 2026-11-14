@@ -1133,9 +1133,14 @@ impl AstToIrGenerator {
     // 原因：根据设计文档，不再需要复杂的类型名提取逻辑
     // 方法调用现在直接生成简单函数名（方法名）
 
-    /// 解析字段索引
+    /// 解析字段索引（6.9.5-B.1b / H2：返回**运行期数据索引**）
     ///
-    /// 从类型信息和结构体定义中动态查找字段在结构体中的位置。
+    /// 从类型信息和结构体定义中动态查找字段在结构体中的位置。记录字段命中后
+    /// 不返回声明序下标，而是走 `runtime_field_index`（唯一映射点）换算成
+    /// 运行期槽下标——witness 字段运行期无槽，命中即 `None`（值级访问在
+    /// 类型检查层已被 E1114 拒绝，这里只保证 IR 不会为 witness 造槽）。
+    /// 非记录分支（元组下标 / Vec.length / Range）保持恒等。
+    ///
     /// 查找顺序：
     /// 1. 从表达式的类型推导出结构体名，再从 struct_definitions 查找字段索引
     /// 2. 遍历所有结构体定义查找匹配的字段名（兜底）
@@ -1204,7 +1209,10 @@ impl AstToIrGenerator {
             if let Some(fields) = self.struct_definitions.get(&type_name) {
                 for (i, field) in fields.iter().enumerate() {
                     if field.name == field_name {
-                        return Some(i);
+                        return crate::frontend::core::types::mono::runtime_field_index(
+                            fields.iter().map(|f| f.quantity),
+                            i,
+                        );
                     }
                 }
             }
@@ -1214,7 +1222,10 @@ impl AstToIrGenerator {
         for fields in self.struct_definitions.values() {
             for (i, field) in fields.iter().enumerate() {
                 if field.name == field_name {
-                    return Some(i);
+                    return crate::frontend::core::types::mono::runtime_field_index(
+                        fields.iter().map(|f| f.quantity),
+                        i,
+                    );
                 }
             }
         }

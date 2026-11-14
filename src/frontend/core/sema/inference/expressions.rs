@@ -3481,6 +3481,33 @@ impl<'a> ExpressionInferrer<'a> {
         }
     }
 
+    /// 类型是否是 witness-bearing 记录（6.9.5-B.1c / 5A）。形状归一在
+    /// `inference::mono_type_is_witness_bearing`（唯一读取点）。
+    fn is_witness_bearing_type(
+        &self,
+        ty: &MonoType,
+    ) -> bool {
+        super::mono_type_is_witness_bearing(ty, self.type_defs)
+    }
+
+    /// 调用接收者的**静态类型**（无副作用）：只覆盖变量接收者。
+    ///
+    /// 5A 的方法接收者判定只需要「接收者是不是 witness-bearing 记录」；为此
+    /// 重新推断接收者会产生引用登记/实例化请求等副作用，故这里只做 scope
+    /// 查表（拿不到就返回 None——宁漏检不误报，嵌套接收者留待 B.2 的探针）。
+    fn call_receiver_static_type(
+        &self,
+        func: &crate::ast::Expr,
+    ) -> Option<MonoType> {
+        let crate::ast::Expr::FieldAccess { expr: receiver, .. } = func else {
+            return None;
+        };
+        let crate::ast::Expr::Var(name, _) = receiver.as_ref() else {
+            return None;
+        };
+        self.get_var(name).map(|poly| poly.body.clone())
+    }
+
     /// Any 多态槽位判定：`TypeRef("Any")`（可带 Ref 壳）。求解器对
     /// `unify(Any, T)` 恒放行，期望传播时此类位退回 fresh var。
     fn is_any_slot(ty: &MonoType) -> bool {
@@ -4084,6 +4111,16 @@ impl<'a> ExpressionInferrer<'a> {
                     MonoType::Struct(struct_type) => {
                         for field_info in &struct_type.fields {
                             if &field_info.name == field {
+                                // 6.9.5-B.1b：witness 字段无运行期数据槽，值级读取
+                                // 一律拒绝（E1114）；类型级投影留 B.3。
+                                if field_info.is_witness() {
+                                    return Err(ErrorCodeDefinition::witness_field_not_readable(
+                                        &struct_type.name,
+                                        field,
+                                    )
+                                    .at(*span)
+                                    .build());
+                                }
                                 return Ok(field_info.ty.clone());
                             }
                         }
@@ -4121,6 +4158,19 @@ impl<'a> ExpressionInferrer<'a> {
                             if let MonoType::Struct(ref struct_type) = def_ty {
                                 for field_info in &struct_type.fields {
                                     if &field_info.name == field {
+                                        // 6.9.5-B.1b：注解类型通常是 TypeRef，经
+                                        // type_defs 解析后才看得到字段量词；witness
+                                        // 字段同样在值级拒绝。
+                                        if field_info.is_witness() {
+                                            return Err(
+                                                ErrorCodeDefinition::witness_field_not_readable(
+                                                    &struct_type.name,
+                                                    field,
+                                                )
+                                                .at(*span)
+                                                .build(),
+                                            );
+                                        }
                                         return Ok(field_info.ty.clone());
                                     }
                                 }
@@ -4485,9 +4535,19 @@ impl<'a> ExpressionInferrer<'a> {
             crate::ast::Expr::Borrow {
                 mutable,
                 expr: inner,
-                ..
+                span,
             } => {
                 let inner_ty = self.infer_expr(inner)?;
+                // 6.9.5-B.1c / 5A：witness-bearing 记录整体不可变——`&mut` 拒绝。
+                // witness 记录的证据依赖「构造后字段不变」；可变借出即可写回。
+                if *mutable && self.is_witness_bearing_type(&inner_ty) {
+                    return Err(ErrorCodeDefinition::witness_record_immutable(&format!(
+                        "{}",
+                        inner_ty
+                    ))
+                    .at(*span)
+                    .build());
+                }
                 Ok(MonoType::Ref {
                     mutable: *mutable,
                     inner: Box::new(inner_ty),
@@ -5193,6 +5253,24 @@ impl<'a> ExpressionInferrer<'a> {
                     }
                 }
             }
+            // 6.9.5-B.1c / 5A：写借用的接收者若是 witness-bearing 记录，整体不可变。
+            // 两条子路径收在同一点：impl 方法的接收者位（co.receiver）与 std
+            // 容器方法的首实参（co.args[0] 由本函数改写为 WriteBorrow）。
+            let writes_receiver = co.receiver == Some(ParamOwnership::WriteBorrow)
+                || co.args.first() == Some(&ParamOwnership::WriteBorrow);
+            if writes_receiver {
+                if let Some(receiver_ty) = self.call_receiver_static_type(func) {
+                    if self.is_witness_bearing_type(&receiver_ty) {
+                        return Err(ErrorCodeDefinition::witness_record_immutable(&format!(
+                            "{}",
+                            receiver_ty
+                        ))
+                        .at(span)
+                        .build());
+                    }
+                }
+            }
+
             self.call_ownership.insert(span, co);
         }
 

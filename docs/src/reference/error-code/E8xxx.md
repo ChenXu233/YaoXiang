@@ -29,7 +29,7 @@ description: '编译器内部错误，通常表示编译器自身的缺陷。遇
 - **模板**：`内部编译器错误：{message}`
 - **消息**：编译器发生内部错误
 - **帮助**：请在 https://github.com/ChenXu233/YaoXiang/issues/new 报告此错误
-- **发射点**：`src/driver/helpers.rs:69`、`src/middle/passes/codegen/translator.rs:295`、`src/middle/passes/codegen/translator.rs:1362` 等 5 处
+- **发射点**：`src/driver/helpers.rs:69`、`src/middle/passes/codegen/translator.rs:295`、`src/middle/passes/codegen/translator.rs:1378` 等 5 处
 
 ### E8002：意外 Panic
 

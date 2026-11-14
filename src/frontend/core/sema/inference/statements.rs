@@ -1744,6 +1744,26 @@ impl StatementChecker {
                         Expr::Var(tn, _) if self.type_defs.contains_key(tn.as_str())
                     );
                     if !recv_is_type {
+                        // 6.9.5-B.1c / 5A：witness-bearing 记录整体不可变——字段赋值
+                        // 拒绝。接收者只做无副作用查表（变量）；拿不到静态类型时不
+                        // 误报（嵌套接收者留 B.2 探针）。
+                        if let Expr::Var(recv_name, _) = recv.as_ref() {
+                            if let Some(poly) = self.get_var(recv_name) {
+                                if crate::frontend::core::sema::inference::mono_type_is_witness_bearing(
+                                    &poly.body,
+                                    &self.type_defs,
+                                ) {
+                                    return Err(Box::new(
+                                        ErrorCodeDefinition::witness_record_immutable(&format!(
+                                            "{}",
+                                            poly.body
+                                        ))
+                                        .at(*stmt_span)
+                                        .build(),
+                                    ));
+                                }
+                            }
+                        }
                         if let Some(v) = value.as_deref() {
                             self.check_expr(v)?;
                         }

@@ -1498,6 +1498,79 @@ impl StructType {
     }
 }
 
+/// 字段量词事实的唯一读数：`Some(Quantity::Zero)` = witness 字段。
+///
+/// **这是全仓唯一把「量词读数」翻译成「witness 布尔」的地方**（6.9.5-B.1b /
+/// H2）。AST 的 `crate::ast::StructField::quantity`、IR 的
+/// `crate::middle::ir::ir::TypeDeclField::quantity` 与本文件的
+/// `StructFieldInfo::quantity` 是同一事实的三个投影；任何「跳过 witness」
+/// 的映射都必须从本函数派生，不得各写一份 `== Some(Zero)`。
+pub fn quantity_is_witness(quantity: Option<crate::ast::Quantity>) -> bool {
+    quantity == Some(crate::ast::Quantity::Zero)
+}
+
+/// 声明序字段索引 → 运行期数据索引（6.9.5-B.1b / H2 的唯一映射点）。
+///
+/// witness 字段不占运行期槽：命中 witness ⇒ `None`（值级访问必须被拒绝，
+/// 不是「字段不存在」）；数据字段返回它前面有多少个数据字段。
+/// 越界同样返回 `None`。
+///
+/// 接受 `Option<Quantity>` 的迭代器而不是具体字段类型：AST / IR / Mono 三侧
+/// 的字段表结构不同，但映射只有这一份实现（调用方传
+/// `fields.iter().map(|f| f.quantity)`）。
+pub fn runtime_field_index<I>(
+    quantities: I,
+    declared_index: usize,
+) -> Option<usize>
+where
+    I: IntoIterator<Item = Option<crate::ast::Quantity>>,
+{
+    let mut runtime_index = 0usize;
+    for (index, quantity) in quantities.into_iter().enumerate() {
+        if index == declared_index {
+            return if quantity_is_witness(quantity) {
+                None
+            } else {
+                Some(runtime_index)
+            };
+        }
+        if !quantity_is_witness(quantity) {
+            runtime_index += 1;
+        }
+    }
+    None
+}
+
+/// 运行期数据槽个数 = 非 witness 字段数（构造参数个数、局部槽布局的唯一来源）。
+pub fn runtime_field_count<I>(quantities: I) -> usize
+where
+    I: IntoIterator<Item = Option<crate::ast::Quantity>>,
+{
+    quantities
+        .into_iter()
+        .filter(|quantity| !quantity_is_witness(*quantity))
+        .count()
+}
+
+/// 量词序列中是否存在 witness 字段（记录是否 witness-bearing）。
+pub fn quantities_are_witness_bearing<I>(quantities: I) -> bool
+where
+    I: IntoIterator<Item = Option<crate::ast::Quantity>>,
+{
+    quantities.into_iter().any(quantity_is_witness)
+}
+
+impl StructFieldInfo {
+    /// 本字段是否 witness（编译期证据，运行期无数据槽）。
+    pub fn is_witness(&self) -> bool {
+        quantity_is_witness(self.quantity)
+    }
+}
+
+/// 记录是否 witness-bearing：任一字段是 witness。
+pub fn is_witness_bearing(fields: &[StructFieldInfo]) -> bool {
+    quantities_are_witness_bearing(fields.iter().map(|field| field.quantity))
+}
 // 为 StructType 实现自定义的 Hash 和 Eq
 impl PartialEq for StructType {
     fn eq(
