@@ -517,7 +517,9 @@ impl Translator {
             Shr { dst, lhs, rhs, .. } => self.translate_binary_op(opcode::I64_SHR, dst, lhs, rhs),
             Sar { dst, lhs, rhs, .. } => self.translate_binary_op(opcode::I64_SAR, dst, lhs, rhs),
             Neg { dst, src, .. } => self.translate_unary_op(opcode::I64_NEG, dst, src),
-            Not { dst, src, .. } => self.translate_unary_op(opcode::I64_NEG, dst, src),
+            // RFC-039 D33 / issue #562：Not 与 Neg 分码（I64_NOT），否则编码/
+            // 解码往返把逻辑非改写为取负
+            Not { dst, src, .. } => self.translate_unary_op(opcode::I64_NOT, dst, src),
 
             Eq { dst, lhs, rhs, .. } => {
                 self.translate_compare(opcode::I64_EQ, opcode::I64_NE, dst, lhs, rhs)

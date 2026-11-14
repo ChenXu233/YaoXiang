@@ -44,6 +44,9 @@ pub const I64_SHL: u8 = 0x28;
 pub const I64_SAR: u8 = 0x29;
 pub const I64_SHR: u8 = 0x2A;
 pub const I64_NEG: u8 = 0x2B;
+/// 一元逻辑非（`!`，RFC-039 D33 / issue #562）：与 `I64_NEG`（取负 `-`）分码，
+/// 编码/解码往返不再把 Not 改写为 Neg
+pub const I64_NOT: u8 = 0x2C;
 
 // Comparison Operations (0x60-0x65)
 pub const I64_EQ: u8 = 0x60;
@@ -152,6 +155,7 @@ pub fn opcode_name(code: u8) -> &'static str {
         I64_SAR => "I64Sar",
         I64_SHR => "I64Shr",
         I64_NEG => "I64Neg",
+        I64_NOT => "I64Not",
         I64_EQ => "I64Eq",
         I64_NE => "I64Ne",
         I64_LT => "I64Lt",

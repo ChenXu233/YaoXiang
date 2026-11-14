@@ -977,3 +977,73 @@ fn test_opcodes_without_encoder_are_documented() {
         "以下 opcode 已出现在 translator.rs 中（疑似已接通前端），请从          EXPECTED_UNENCODED 移除，使本表保持为「当前未启用」的准确快照：{newly_encoded:?}"
     );
 }
+
+// -- 一元指令分码（RFC-039 D33 / issue #562）--
+
+/// `I64_NOT` 解码还原 `UnaryOp::Not`，dst/src 字段位置保真。
+///
+/// 缺陷形态：Not 与 Neg 同发 `I64_NEG`，解码一律还原 `UnaryOp::Neg`——
+/// 编码/解码往返把逻辑非改写为取负（issue #562）。分码后往返保真。
+#[test]
+fn test_decode_i64_not_restores_unary_op_not() {
+    // Arrange / Act / Assert
+    match decode_one(opcode::I64_NOT, vec![0x11, 0x22]) {
+        BytecodeInstr::UnaryOp { dst, src, op } => {
+            assert_eq!(dst, Reg(0x11), "I64Not.dst 位置错误（可能 dst/src 写反）");
+            assert_eq!(src, Reg(0x22), "I64Not.src 位置错误");
+            assert!(
+                matches!(op, crate::middle::bytecode::UnaryOp::Not),
+                "I64_NOT 必须解码为 UnaryOp::Not，实际 {op:?}"
+            );
+        }
+        other => panic!("I64_NOT 应解码为 UnaryOp，实际 {other:?}"),
+    }
+}
+
+/// 对照锚：`I64_NEG` 解码仍还原 `UnaryOp::Neg`（分码只加新臂，既有 Neg
+/// 解码行为逐字不变）。
+#[test]
+fn test_decode_i64_neg_restores_unary_op_neg() {
+    // Arrange / Act / Assert
+    match decode_one(opcode::I64_NEG, vec![0x33, 0x44]) {
+        BytecodeInstr::UnaryOp { dst, src, op } => {
+            assert_eq!(dst, Reg(0x33), "I64Neg.dst 位置错误");
+            assert_eq!(src, Reg(0x44), "I64Neg.src 位置错误");
+            assert!(
+                matches!(op, crate::middle::bytecode::UnaryOp::Neg),
+                "I64_NEG 必须解码为 UnaryOp::Neg，实际 {op:?}"
+            );
+        }
+        other => panic!("I64_NEG 应解码为 UnaryOp，实际 {other:?}"),
+    }
+}
+
+/// `opcode()` 必须区分 `UnaryOp` 的 `op` 字段（RFC-039 D33 的直接验收）：
+/// Neg → `I64_NEG`，Not → `I64_NOT`，不得共用同码。
+#[test]
+fn test_opcode_method_distinguishes_unary_op_field() {
+    // Arrange
+    use crate::middle::bytecode::UnaryOp;
+    let neg = BytecodeInstr::UnaryOp {
+        dst: Reg(0),
+        src: Reg(1),
+        op: UnaryOp::Neg,
+    };
+    let not = BytecodeInstr::UnaryOp {
+        dst: Reg(0),
+        src: Reg(1),
+        op: UnaryOp::Not,
+    };
+
+    // Act
+    let neg_code = neg.opcode();
+    let not_code = not.opcode();
+
+    // Assert
+    assert_eq!(neg_code, opcode::I64_NEG, "UnaryOp::Neg 应映射 I64_NEG");
+    assert_eq!(not_code, opcode::I64_NOT, "UnaryOp::Not 应映射 I64_NOT");
+    assert_ne!(
+        neg_code, not_code,
+        "取负与逻辑非必须分码——同码即编码/解码往返有损（issue #562）"
+    );
+}
