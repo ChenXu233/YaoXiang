@@ -148,11 +148,6 @@ extern "C" {
 extern "C" {
     pub fn Z3_mk_true(c: Z3_context) -> Z3_ast;
     pub fn Z3_mk_false(c: Z3_context) -> Z3_ast;
-    pub fn Z3_mk_int(
-        c: Z3_context,
-        v: i32,
-        ty: Z3_sort,
-    ) -> Z3_ast;
     /// 任意精度 numeral 构造：`numeral` 是十进制字符串（含可选前导负号），
     /// 签名与 z3_api.h（Z3 4.16.0）逐字对应（issue #561：整数字面量保真通道，
     /// 替代 i32 域 `Z3_mk_int` + `as i32` 截断）。
