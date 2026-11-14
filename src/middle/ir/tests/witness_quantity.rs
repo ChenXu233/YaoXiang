@@ -88,7 +88,7 @@ fn test_field_access_uses_runtime_data_index() {
         "Box: Type = { v: Int, w: Int, z: Int }\n",
         "\n",
         "main: () -> Void = {\n",
-        "    b: Box = Box(v = 1, w = 2, z = 3)\n",
+        "    b: Box = Box(v = 1, z = 3)\n",
         "    x: Int = b.z\n",
         "    y: Int = b.v\n",
         "}\n",
@@ -135,7 +135,7 @@ fn test_type_decl_field_quantity_is_read_directly_from_ast() {
         "Box: Type = { v: Int, w: Int, z: Int }\n",
         "\n",
         "main: () -> Void = {\n",
-        "    b: Box = Box(v = 1, w = 2, z = 3)\n",
+        "    b: Box = Box(v = 1, z = 3)\n",
         "    _ = b.z\n",
         "}\n",
     );

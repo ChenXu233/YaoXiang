@@ -58,6 +58,30 @@ pub fn check_predicate(
     refined: &MonoType,
     bindings: &HashMap<String, ConstValue>,
 ) -> ProofResult {
+    check_predicate_with_mode(ctx, refined, bindings, PredicateMode::Full)
+}
+
+/// 判定档位（RFC-027 §4 三值判定的来源限制）。
+///
+/// `Full` = 现有四级（direct eval → 精确 Γ → SMT 蕴含/求解 → 证明函数）。
+/// `NoSmt` = 只走 direct eval / 精确 Γ / 证明函数：SMT 只作加速提示、**不作
+/// 证明来源**。依赖记录 Σ 的构造点义务用这一档（09a 契约 §四 的 D3 待裁形态；
+/// 裁决前不得把 SMT 的 Unsat 当成构造义务的证明）。
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum PredicateMode {
+    /// 全部四级（既有调用点口径）
+    Full,
+    /// 不用 SMT 作证明来源（构造点义务口径）
+    NoSmt,
+}
+
+/// 按档位判定（唯一实现：[check_predicate] 是 `Full` 的薄包装）。
+pub fn check_predicate_with_mode(
+    ctx: &ProofContext<'_>,
+    refined: &MonoType,
+    bindings: &HashMap<String, ConstValue>,
+    mode: PredicateMode,
+) -> ProofResult {
     let constraint = match refined {
         MonoType::Refined { constraint, .. } => constraint,
         _ => return Ok(()),
@@ -73,22 +97,24 @@ pub fn check_predicate(
     if ctx.assumptions.contains(constraint) {
         return Ok(());
     }
-    // 2b：SMT 蕴含——假设非空但不精确匹配
-    if !ctx.assumptions.is_empty() {
-        if let Some(result) = try_implication(ctx, constraint, bindings) {
-            return result;
+    if mode == PredicateMode::Full {
+        // 2b：SMT 蕴含——假设非空但不精确匹配
+        if !ctx.assumptions.is_empty() {
+            if let Some(result) = try_implication(ctx, constraint, bindings) {
+                return result;
+            }
         }
-    }
 
-    // === 第 3 级：SMT 求解 ===
-    // SMT 翻译不支持 Call/If/Range 形式——跳过，直接进入第 4 级
-    if !matches!(
-        constraint,
-        ConstExpr::Call { .. } | ConstExpr::If { .. } | ConstExpr::Range { .. }
-    ) {
-        let smt_result = try_smt_solve(ctx, constraint, bindings);
-        if smt_result.is_proved() || matches!(smt_result, Err(ProofFailure::Disproved(_))) {
-            return smt_result;
+        // === 第 3 级：SMT 求解 ===
+        // SMT 翻译不支持 Call/If/Range 形式——跳过，直接进入第 4 级
+        if !matches!(
+            constraint,
+            ConstExpr::Call { .. } | ConstExpr::If { .. } | ConstExpr::Range { .. }
+        ) {
+            let smt_result = try_smt_solve(ctx, constraint, bindings);
+            if smt_result.is_proved() || matches!(smt_result, Err(ProofFailure::Disproved(_))) {
+                return smt_result;
+            }
         }
     }
 

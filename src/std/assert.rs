@@ -8,7 +8,7 @@
 
 use crate::backends::common::value::RuntimeValue;
 use crate::ExecutorError;
-use crate::frontend::core::types::eval::dependent_types::AssociatedTypeDef;
+use crate::frontend::core::types::eval::dependent_types::{AssociatedTypeDef, SortSpace};
 use crate::frontend::core::types::mono::MonoType;
 use crate::std::{NativeContext, NativeExport, StdModule, TypeFamilyExport};
 
@@ -34,6 +34,7 @@ impl StdModule for AssertModule {
             TypeFamilyExport::new(
                 "IsTrue",
                 vec!["b"],
+                SortSpace::Proof,
                 AssociatedTypeDef::Match {
                     arg_index: 0,
                     arms: vec![
@@ -45,6 +46,7 @@ impl StdModule for AssertModule {
             TypeFamilyExport::new(
                 "Assert",
                 vec!["cond"],
+                SortSpace::Proof,
                 AssociatedTypeDef::Direct(MonoType::TypeRef("IsTrue(cond)".into())),
             ),
         ]

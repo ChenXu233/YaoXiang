@@ -240,6 +240,8 @@ pub struct TypeFamilyExport {
     pub name: &'static str,
     /// 类型参数名（如 ["cond"]）
     pub params: Vec<&'static str>,
+    /// 所属空间（Proof/Data；RFC-027 §14.1 的 space 判据唯一登记点）
+    pub space: crate::frontend::core::types::eval::dependent_types::SortSpace,
     /// 关联类型定义
     pub definition: crate::frontend::core::types::eval::dependent_types::AssociatedTypeDef,
 }
@@ -248,11 +250,13 @@ impl TypeFamilyExport {
     pub fn new(
         name: &'static str,
         params: Vec<&'static str>,
+        space: crate::frontend::core::types::eval::dependent_types::SortSpace,
         definition: crate::frontend::core::types::eval::dependent_types::AssociatedTypeDef,
     ) -> Self {
         Self {
             name,
             params,
+            space,
             definition,
         }
     }
@@ -303,6 +307,7 @@ pub trait StdModule {
                 export.params.iter().map(|s| s.to_string()).collect(),
                 vec![],
                 export.definition.clone(),
+                export.space,
             );
             dep_env.register_type_family(family);
         }

@@ -5335,3 +5335,316 @@ E1114/E1115 用户可达留 B.2；本批无新语法、无 witness 产出；不�
 > **四、验证链与 t2 FAIL 归因（队长派工失误登记）**：t1 门禁 14 项（第一轮抓生成器行号平移欠账 → 重跑幂等后全绿）→ 队长 diff review 通过 → t2 **FAIL**——归因 = **契约处方错误非修复缺陷**：M1 处方只摘 opcode() 的 UnaryOp 臂 ⇒ 主锚未红，因为主锚的编码面是 translator 直发 `I64_NOT`、opcode() 产线零调用（**队长派工失误如实登记：写 M1 处方时未核对锚-机制接线**，预核 grep 过 opcode 常量但没追 opcode() 方法的产线调用面）。验证者当轮实测更正补丁（translator Not 臂回退 + opcode() 臂塌缩 = 精确复现修前编码面）下主锚红 + 变异态与修前 blob 逐字节一致 → **t2r 聚焦复验 PASS**（trial 机械可逆；端到端锚绿 = Neg-on-Bool 补偿臂兜对，与查证事实互证——这正是「修前答案正确、缺陷在编码保真」的行为学证据）→ t3 **APPROVE**（3 条：①06 清单 B10 行未随修注记 low——收口兑现（B10 行重写为已修态 + 汇总行移出待办 + S6 标记 B10 完成，B13 先例）；②提交信息 E8001 归因措辞 info——本节三承载事实更正；③端到端锚 match+panic 断言形态 info——与同文件既有惯例一致，不要求改）。其余 t2 量测全过：修复态六锚绿 + CLI 实跑探针（`!b` 发射 I64Not、取负仍 I64Neg）+ M2 解码锚红 + IR 快照/语料差分零漂移 + 卫生全清。
 
 > **五、计数与移交**：三级 +1 = 3.20.29（241→242）；二级不变。issue [#562](https://github.com/ChenXu233/YaoXiang/issues/562) **关闭**。修复笔推送终态 `b5624a35`。06-cleanup-inventory B10 债清账（S6 剩 B8/B9/F8）。批次树已 release。
+
+## P6 6.9.5-B.2 契约（b2-impl，2026-11-14，只读；lead 复核）
+
+> 本节点是 **B.2 实现轮的契约**，不是实现记录：只落接口、判据、测试矩阵与红态实测，不动 `src/`。它把 RFC-027 §14.1–§14.3 与 §14.6、SPEC §3.4/§4.3/§8.3.1–§8.3.3/§8.3.6 落成可执行契约；§14.4（跨模块）与 §14.5（类型级 `b.w`）分别归 B.4 / B.3，逐条在「覆盖矩阵」点名。实现验收以 09 的 6.9.5-B 行 + 本节为准。
+>
+> **红态口径**：下表「红态」是本节写作时在 HEAD `3892ea81` 的 `check` 上**实测**的现状（同一台机器、同一二进制），不是推断；「绿态」是 B.2 验收期望。每条判据都必须先红：实现轮先落红测试，确认它抓住的是当前行为，再改代码。**负控/保持型判据**（T02/T08/T18/T21/T26）今天本就为绿：它们的「红」由 §七 的变异表给出（对应变异下必须红），不是当前失败。
+
+### 一、目标与两笔提交
+
+B.2 把「命题形态的字段」从数据字段变成 evidence 字段，并让构造点按 §14.2 产出证明义务。落到现有管线分两笔，**各自 sound、可独立 revert**：
+
+- **B.2a（非泛型记录）**：`RecordModel` 与声明期分类一遍（§14.1）；构造点字段绑定、字段类型检查（B.0 的 H1：非泛型构造 arm 今天不查字段类型）与命题义务（§14.2）；IR 量词传播与数据序（§14.6）；C 类构造字段检查（D59）；E4018/E2031/E1114/E1115 用户可达；每次判定一份预算（B.0 的 H8）。B.2a 不对泛型记录建模型（保持今天的 None 与 arity）。
+- **B.2b（泛型记录）**：编译期值参数证据（`Matrix`/`SafeArray` 的 `Assert(Rows > 0)`）；proof family 参数（`Cell`）的声明期按 `space=Proof` 假设分类、实例化处 kind 校验、实例化后重判定、未绑定 ⇒ 构造点 `Unproven`（E2031）；每实例的 IR 量词保留。B.2b 的源级形态见 §十二 的 D0。
+- 顺序：B.2a 先；B.2b 不得单独先于 B.2a。B.2a 单独 ship 时泛型记录**保持今天的形态**（不分类、不产 witness、arity 不变）——这是「中间态不引入 unsound」的边界，不是「泛型 Σ 留后续」。
+
+**不做（outOfScope，逐条有归属）**：§14.4 跨模块导出与签名哈希（B.4）；§14.5 类型级 `b.w`、`ConstExpr::FieldPath`、`EvidenceTerm`（B.3）；`Kernel::check`/`LogicSignature`/`Certificate` 的完整落地与 §13 证书留存（超出 B.2，见映射表）；§8.6 的 SMT 裸信缺口（不修、不加剧）；#537/#539/#552；defeq/6.9.3；Π/`DepFn`；runtime check/revalidation；方法字段不进构造参数的 6.6.12 已知不一致（**保持现状**，B.2 不得顺手改）；`NamedStruct`/和类型字段；更细粒度可变性。
+
+### 二、唯一模型与唯一判定单元（接口）
+
+**位置与所有权**：
+
+- 数据类型（`RecordModel` 等）落 `src/frontend/core/sema/record_model.rs`（新模块，`sema/mod.rs` 声明，类型 `pub`）；纯分类辅助函数同文件。
+- 声明期一遍的编排是 `TypeChecker` 方法，落 `src/frontend/core/sema/checker/record_model.rs`（`checker` 的私有子模块；可调 `checker.rs` 的私有 `resolve_type_annotation`，自身以 `pub(super)` 供 `add_type_definition` 调用——**不得**把 `resolve_type_annotation`/`judge_refined_obligation` 放宽成 `pub(crate)`，`pub(crate)` 计数只许不变）。
+- 记录模型表挂 `TypeEnvironment.record_models: HashMap<String, RecordModel>`；唯一写入点 = 声明期一遍。
+
+**结构（字段名与语义；任务书点名的五个部分逐项落位）**：
+
+```text
+RecordModel {
+    name        : String
+    type_params : [RecordTypeParam]        // 声明序；kind = Type | Const{const_type} | Family{arity}
+    fields      : [StructFieldInfo]        // 声明序；与 StructType.fields 同一表示，quantity 已写
+    obligations : [FieldObligation]        // 每条 evidence 字段一条；与 evidence 同长同序
+    evidence    : [EvidenceSlot]           // 证据槽；B.2 只填 field/quantity/proposition
+    field_path  : [(String, usize)]        // 字段名 → 声明序（§14.1 位置判据与构造代入的唯一查找）
+}
+FieldObligation {
+    record      : String
+    field       : usize                    // 声明序
+    proposition : Proposition
+    depends_on  : [usize]                  // 严格前序数据字段（声明序；代入位）
+    param_refs  : [usize]                  // 命题引用的编译期值参数（type_params 下标）
+}
+Proposition      { base: MonoType, constraint: ConstExpr }      // base = Refined.base；Assert 取 Void
+EvidenceSlot     { field: usize, quantity: Quantity, proposition: Option<Proposition> }   // Registry 面为 None
+RecordTypeParam  { name: String, kind: RecordTypeParamKind }
+RecordTypeParamKind = Type | Const{const_type: MonoType} | Family{arity: usize}
+```
+
+规则：
+
+- `fields[i].quantity` 是分类的**唯一落点**：`Some(Quantity::Zero)` = evidence，`None` = 数据字段。不新增 `role`/`is_evidence` 平行字段（禁令三 A）。
+- `field_path` 是**声明期索引**（名字 → 声明序；`Vec` 保声明序、导出可比）；运行期索引仍只由 `mono::runtime_field_index` 回答（唯一映射点）。两套索引不得互相顶替。B.3 的 `ConstExpr::FieldPath` 在 `field_path` 之上构造，不另造第二张表。
+- `FieldObligation` 是 RFC §14.2 的**子集**：`evidence_ref`/`certificate_ref` 两槽随显式证据声明与证书缓存在 B.3/B.4 加入。B.2 的显式证据路径 = 约束里的证明函数（`ConstExpr::Call` → `ProofFunctionCall` → 编译期执行），与 §4.3 同一机制，**不新增** `EvidenceRef` 载体。**不宣称** §13 的 `Proved(checked)` 留存与复用。
+- 命题项只用统一项世界的既有表示：谓词/证明函数/`Terminates` 应用由 `PredicateResolver`/`refine_predicate_from_ast_args` 正格化为 `Refined`；`Assert(x)` 的命题 = 其布尔实参的 `ConstExpr`（`ast_type_to_const_expr`）；族参数应用 `P(v)` 的命题由实例化后的类型解析产出（B.2b）。
+- `obligations` 与 `evidence` 不是同一事实的两份表示：前者是**构造期代入模板**（`depends_on`/`param_refs` 直接服务 `substitute_const_expr`），后者是 RFC §14.4 `EvidenceSlot` 的前置形态（B.4 再加 `evidence_ref`/`certificate_ref`/`signature_hash`）；两者同长同序只因为同一条 evidence 字段各占一个面，B.2 一起给出可避免 B.4 再拆一次结构。
+
+**唯一判定单元（构造期「同 helper」）**：`checker/refinement.rs` 的 `judge_refined_obligation`——三值映射、E4018/E2031 发射、`proof_calls` 上抛、Γ 作用域都在它里面，B.2 **一行判据都不复制**。构造义务的调用方只做四步：① 取记录模型；② 按名/按位绑定数据字段（`bind_args_to_params`，六条规则同源）；③ 用 `substitute_const_expr` 代入命题；④ 交单元。
+
+- **预算**：进入单元时重设一份 `BudgetTracker::for_judgment()`（B.0 的 H8，「一次判定一份」）。今天 `ProofContext` 一份走全模块、从不 reset；不修则模块后段的构造义务会被前序判定的步数拖成 E2031（静默错判，C 类）。变异：摘掉重设 ⇒ 长链义务后的构造点红。
+- **空间判据（§14.1 第一步）的唯一读数**：`field_space` 查询。`Proof` 集合 = 归一化后的 `Refined{..}` ∪ 注册为 Proof 空间的内置类型族 ∪ `Family` 参数应用；其余一律 `Data`。内置类型族空间的载体是 `TypeFamilyExport`（新增 `space: SortSpace`：`Assert`/`IsTrue` = Proof，`Error` = Data）——这是 §4.1 `SortDecl.space` 的种子：表是数据，`field_space` 只查表，B.4/内核批次用 `signature.sorts` 替换时分类逻辑零改动。**不硬编码信任根**：不出现按库名/求解器名/字段名分支的判据。
+- **消费面只有三处**：声明期自己（结果落 `env.record_models`）、refined walk（构造义务）、IR 生成（量词传播）。IR 只经 `TypeCheckResult.record_models` 读，不自行重算分类（禁令三 A）。
+
+**与 RFC §4 的映射与差距（B.2 的「内核」= 现管线）**：
+
+| RFC 接口 | B.2 的落点 | 状态 |
+| --- | --- | --- |
+| `Kernel::check(signature, certificate, proposition)` | `layers::predicate::check_predicate` + 证明调用执行 | 三值职责成立；**无显式 certificate**（§8.6 缺口保持） |
+| `LogicSignature.sorts` | `field_space` 的 Proof/Data 表（本批的 `space` 登记） | 种子；`rules/axioms/libraries/hash` 未落（B.4/内核批次） |
+| `Certificate` / `EvidenceRef` / `ProducerHint` | 证明函数路径（`ProofFunctionCall`）与 SMT verdict | 不物化证明项；§4.2 的重放未落 |
+| §13 证书留存/复用 | 无 | **不宣称**：构造义务每次编译重证 |
+| 跨签名三路径 | 无 | B.4 |
+
+> 这张表是**覆盖承诺的边界**：B.2 只保证「构造点命题经既有证明管道三值判定、E4018/E2031 分派正确、证明函数路径可达」，不宣称 §4 的完整内核。
+
+### 三、声明期一遍（§14.1 / §14.2 / §14.3）
+
+B.2a 只对 `type_params` 为空的非泛型 `Type::Struct` 调本遍（泛型分支由 B.2b 落同一函数，中间态边界见 §一）。`add_type_definition` 在构造 `poly` **之前**调一次 `classify_record`；`poly` 的 `StructType.fields[i].quantity` 就地写分类结果（`env.types`/`env.vars`/`GenericTypeDef.poly` 三处因此同源），`env.record_models.insert(name, model)`。算法：
+
+1. 只处理 `Type::Struct{body}` 的 `TypeBodyItem::Field`；`Binding`/`Interface`/`Expr` 项不动（类型体级 `Assert(...)` 仍是既有 const-bound 面，E1062 保持）。
+2. 按源码序收集字段；`type_params` 由 `classify_generic_params` 的结论投影（`Type`/`Const{..}`/`is_type_level_fn` 标注 → `Family{arity}`）。
+3. 逐字段三步：**space → position → category**。
+   - **space**：先 `refine_predicate_from_ast_args`（AST 无损）正格化谓词/证明函数应用；非谓词头再查 `field_space` 表（内置族 / `Family` 参数 / 其余 Data）。**不改写字段的 `MonoType`**——`StructType` 只写 `quantity`，命题只进模型。这样避免 `Refined` 字段类型改变下游 unify/投影语义（B.1 的「解析副本 vs 原 AST」风险不重演）。
+   - **position**：命题自由名经 `const_eval::const_expr_free_names` 收集（不新增第二份遍历）；自由名分三类：本记录字段（按 `field_path` 查）、类型参数、其余（模块级编译期常量等）。**只有 `space=Proof` 才做位置判据**；`space=Data` 一律数据字段（`Buf` 的 `data: Array(Int, n)` 不因引用前序字段变 witness）。
+   - **category**：
+
+     | 形态 | 判定 | quantity |
+     | --- | --- | --- |
+     | Proof + 自由名字段 ⊆ 严格前序数据字段（空集：只引用编译期值参数/常量） | evidence | `Some(Zero)` |
+     | Proof + 自由名字段 = {本字段} 且无其他字段引用（自引用精化 admission） | 数据字段 | `None` |
+     | Data（含数据类型族应用、普通记录、方法字段、类型参数） | 数据字段 | `None` |
+     | Proof + 前向引用后序字段 / 引用另一 evidence 字段 / 把自身当 evidence 实参（与其它字段混用） | **声明期拒绝**（§14.1 第 4 行；`P` 的 kind 为 data family 是另一类，由 D1 在实例化处判） | — |
+
+   - evidence 字段额外检查：不得有默认值（SPEC §3.1.1/§8.3）；记录含任一 evidence ⇒ 声明面 `mut` 走既有 E1115（B.1c 的判据改读模型的 quantity，不再读 AST 的空 `quantity`）；`Terminates(...)` 字段照 §14.1 归 evidence，但字段位无计算可终止 ⇒ 构造点 E2031（见 §四 义务生成），**不**声明期拒（保持 §14.6 的拒绝清单不变）。
+4. 拒绝类诊断码是**裁决点 D2**（§十二）：RFC §14.1 第 4 行与 §14.6 只写「声明期拒绝」未给码。按「四码各管一面、不借码」的原则推荐**新增一个声明期码**（reason 区分前向引用/证据引用/自身混用/默认值）；若裁复用，则前向 → E1001、引用 evidence → E1114、默认值 → E1092，并在 09a 登记借码理由。
+5. **两阶段一致性**：`collect_signatures`（Registry 面）也走同一 `classify_record`，但 `predicate_defs` 为空 ⇒ 只填 `fields[].quantity` 与 `evidence` 槽（`proposition = None`），`obligations` 留空；`check_module` 面填全。判据：同一 fixture 两阶段的 `fields[].quantity` 逐位相等（T07）。**不得**让 Registry 面停在「全 data」——那会让导出面与实检面分叉。
+6. 判定源单点：space 表、`refine_predicate_from_ast_args`、`const_expr_free_names`、`runtime_field_index`、`quantity_is_witness` 全部复用既有实现；本批新增的只有 `field_space` 壳与 `space` 登记项。
+7. 派生（SPEC §11.2）：`auto_derive_traits` 的字段集改为「非 witness 字段」——evidence 不参与 Clone/Debug 派生判定；拒绝/接受规则本身不动。
+
+### 四、构造期（§14.2 + 构造字段检查）
+
+**构造点收敛到一个绑定 helper**。今天的实际状态（B.0 已登记、本节实测）：非泛型 `Struct` 构造 arm 只查 arity/必需名，**不查字段类型**，未知命名实参静默丢弃；泛型两层/值构造 arm 查字段类型但按「全部字段」计 arity；IR 的默认值填充与命名重排按 AST 全字段切片。B.2 判据：
+
+1. **构造参数 = 非 witness 字段**（数据字段 + 方法字段——方法字段的 6.6.12 已知不一致保持，不改）。`bind_args_to_params` 是唯一绑定入口：`param_names` = 非 witness 字段名（声明序）、`optional` = `has_default`、`recv_offset=0`；位置/命名/争槽/未知名/重复名/缺参六条诊断由它发（E1010/E1014/E1111/E1015），**不重复发射**。
+2. **逐字段类型检查**：位置实参按「非 witness 字段序」对齐、命名实参按名入槽后，逐个 `decide`（6.9.3d 判定协议）字段类型与实参类型；不匹配走 E1002（与泛型 arm 同码同判）。这是 D59 的 **C 类**修复：今天 `Point("a", 2)` 的 `check` 通过、`run` 打印 `a`（静默给错答案），修后编译期 E1002。
+3. 证据字段**不占位**：多传实参（`Box(3, 5, evidence)`）落不到任何数据形参槽 ⇒ E1010/E1014 一族；命名实参指向 witness 字段 ⇒ E1014（可用名列表 = 非 witness 字段名）。
+4. **构造义务生成**（refined walk，`checker/refinement.rs`）：对每个「callee 解析到带 obligations 的记录」的构造点，按声明序逐条生成义务：
+   - 绑定：与 typecheck 同一 helper（数据字段序；缺省字段取默认值表达式，空构造的零值填充与 IR 同口径）；
+   - 代入：`depends_on` → 相应实参的 `ConstExpr`（`convert_expr_to_const_expr`；折叠不出则保留符号项）；`param_refs` → 编译期值参数实参；`substitute_const_expr` 一次代入；
+   - 判定：`judge_refined_obligation(ctx, &MonoType::Refined{base, constraint}, &bindings, record_name, field_name, display, call_span, None)`；`bindings` = walk 的值环境（`unit.values`）；
+   - 三值：`Proved` 无诊断；`Disproved` E4018（带反例）；`Unproven` 有证法 → `proof_calls` 上抛；无证法 → E2031。**一条字段一条义务、声明序、不短路**（前面的失败不吞后面的诊断）；
+   - 判定不了模型（callee 是带 obligations 的泛型模板但给不出实例，或族参数未绑定）⇒ **E2031**，不静默跳过（§14.3：未实例化 = 构造点 Unproven）；
+   - `Terminates` 约束字段 ⇒ 直接 E2031（不支持形态；`constraint_is_terminates` 同源判据）。
+5. **遍历覆盖必须满覆盖，不能沿用 6.9.1 的语句级缺口**：构造点在**表达式任意位置**都要判。实现为 refined walk 的表达式遍历：`walk_constructions_in_expr` 递归 `Call` 实参、`BinOp`/`UnOp` 操作数、`FieldAccess` 基、`List`/`Tuple`/`Map` 元素、`If` 分支、`Return` 载荷；`Expr::Block` 路由回 `refined_walk_stmts`（同一语句只走一次，避免双判）；`Lambda` 体走既有 `refined_walk_fn_body`（独立单元）。调用点精化（`check_call_arg_refinements`）的覆盖面**不动**（不顺势扩嵌套调用——那是另一条修复，避免本批夹带）。变异：把遍历改成只看语句位置 ⇒ 嵌套构造锚红（T14）。
+6. IR 构造点同源：`ir_gen` 的默认值填充与命名重排按「非 witness 字段序」切片（`struct_definitions` 的量词来自模型），`synthesize_constructor` 已是 data-only（B.1b），两者必须同序——判据是 T28 的指令形状，不是「看起来对」。
+7. **不得**改变：普通记录的既有诊断集与退出码；方法字段的 arity；`CreateStruct` 的数据序（B.1b 已定）。
+
+### 五、IR quantity 传播（§14.6 擦除面）
+
+1. `TypeCheckResult` 新增 `record_models: HashMap<String, RecordModel>`（产出 = typecheck 声明期一遍；消费 = `ir_gen`）。它是**义务字段**：必须同时登记 `src/driver/obligations.rs` 的 `Obligation::RecordModels`/`INVENTORY`/`IR_GENERATION_DELIVERED`、`docs/src/dev/architecture/02-stage-contract.md` §义务字段表（表头 13→14、定义行、结构体范围 F5 锚点）、以及消费端 `ir_gen.rs` 的真读取——`scripts/ci/check-obligations.py` 的清单对账/读出证据/交付标记/F1/F4/F5 全部要绿。**这是机械必需面，不许用旁路（如塞 `semantic_db`）绕开登记。**
+2. `ir_gen` 建 `TypeDeclBody.fields` 时 quantity 取自模型（同名类型），不再读 AST `StructField.quantity`（生产恒 `None`）；`struct_definitions` 的字段切片同样用模型的量词投影（同一个 helper），使 `resolve_field_index`/`synthesize_constructor`/默认值填充看到同一份分类。
+3. mono 透传：`MonoType::substitute`/`replace_type_params_walk`/`solver` 的 Struct 臂已按字段 `..clone()` 透传 quantity（B.1a），B.2 只加断言（T26）；B.2b 的实例化必须保留该事实。
+4. **快照零漂移的机制**：`normalize` 的 `type_decl` 行不打印 quantity（已核实），故 B.2a 的 quantity 变化不产生快照文本 diff；**不**靠再生快照「消漂移」。B.2b 的 6 个 `Assert` 语料文件同理（待实测）。
+
+### 六、诊断码分工与 D59 分类
+
+| 码 | 触发面 | B.2 的动作 | 红态（HEAD 实测） |
+| --- | --- | --- | --- |
+| E4018 | 构造点 evidence 命题被判伪 | 复用既有发射（判定单元） | `Box(-1, 99)` exit 0 |
+| E2031 | 构造点 Unproven（含未实例化/不支持形态/预算） | 复用 | 见 T12/T25 |
+| E1114 | 值级读 witness | 已实现；B.2 使其用户可达 | `b.w` exit 0 |
+| E1115 | witness-bearing 记录的写 | 已实现 4 发射点；声明面改读模型 | `mut`/字段赋值 exit 0 |
+| E1062 | 类型实例化的 Assert 常量约束 | **保留不动**（语料 2 例依赖：`assert_compile_error` / `assert_lt_compile_error`） | 既有绿 |
+| E1002 | 构造字段类型 / 泛型 kind 不符 | 复用（C 类补齐 + B.2b kind） | `Point("a", 2)` exit 0 |
+| E1010/E1014/E1111/E1015 | 构造实参绑定 | 复用共享 helper | `Box(v=3, w=9, z=5)` exit 0 |
+| 声明期新码 | 前向引用/证据引用/自身混用/默认值 | **D2 裁决** | `w: Pos(z)` exit 0 |
+
+**D59 分类**：主错 **C**（静默错配/静默给错答案——把命题族字段当数据字段、构造字段类型不查）；交付面的用户可见变化（构造 arity/布局、`b.w` 可读性）属 **D 类**，已由 2026-11-13 的 H0=B 用户裁决覆盖。四条照办：先红后绿（§七 每条红态）、不改变「原先成功」的对外表现（普通记录/不带证据的程序零变化；带证据的程序按 H0=B 的既定变更）、同提交登记（09/09a + PR 错误类型行）、基线同提交再生 + 人工 review。**语料影响面**：`Assert` 字段仅 6 个文件、全部只作类型位使用、无值构造 ⇒ B.2a 预期零漂移；B.2b 的 quantity 变化不改快照文本，仍需实测。
+
+### 七、测试矩阵 T01–T29（先红后绿）
+
+测试落点：声明期/构造期/负控 → `src/frontend/core/sema/tests/`（新文件 `record_evidence.rs`，真实 lex→parse→check）；IR → `src/middle/ir/tests/`（新文件 `record_evidence_layout.rs`，走真实四段管线）；语料 → `tests/yaoxiang/`。命名/AAA/断言消息按 `test-specification.md`。
+
+**声明期（B.2a）**
+
+| # | 判据 | 红态（HEAD 实测） | 绿态 |
+| --- | --- | --- | --- |
+| T01 | `Box: Type = { v: Int, w: Pos(v), z: Int }` 分类：`fields[].quantity = [None, Some(Zero), None]`、`evidence.len()=1`、`obligations.len()=1`、`field_path` 三项 | 全 `None`（无 witness 产出） | 三投影一致；`runtime_field_index` 给 z=1 |
+| T02 | 数据族反例 `Buf: Type = { n: Int, data: Array(Int, n) }`：`data` 仍是数据字段 | 通过（负控） | 全 `None`；arity=2 不变 |
+| T03 | admission `Box: Type = { v: Positive(v) }`：判数据字段 + 构造点义务（`Box(5)` 0 诊断；`Box(-5)` E4018） | `Box(-5)` exit 0 | 数据字段 + E4018 |
+| T04 | 前向引用 `{ w: Pos(z), z: Int }` ⇒ 声明期拒绝（D2 码） | exit 0 | 硬错误，不静默降级 |
+| T05 | 引用另一 evidence 字段 `{ v, w: Pos(v), e: NonNeg(w) }` ⇒ 声明期拒绝（D2 码） | exit 0 | 硬错误 |
+| T06 | evidence 字段带默认值 `w: Pos(v) = 7` ⇒ 声明期拒绝（D2 码） | exit 0 | 硬错误 |
+| T07 | 两阶段一致：同一 fixture 在 `collect_signatures` 与 `check_module` 的 `quantity` 逐位相等且非全 None | 两阶段都全 `None`（恒等） | 相等且非全 None |
+| T08 | 只引用编译期值参数/模块常量的 evidence（`Assert(Rows > 0)` 泛型模板、`K` 常量）不被误拒 | 通过（负控） | evidence + `param_refs` 正确 |
+| T09 | 非法精化实参（`Pos(1, 2)` 元数错 / 实参不可转换）⇒ 既有 E1093/E1092 | 字段位今天无诊断 | 既有码在字段位发射 |
+
+**构造期（B.2a）**
+
+| # | 判据 | 红态（HEAD 实测） | 绿态 |
+| --- | --- | --- | --- |
+| T10 | 正锚 `Box(3, 5)`（v、z 数据实参；w 不占位） | E1010 expected 3 found 2 | 0 诊断；`Pos(3)` Proved |
+| T11 | 负锚 `Box(-3, 5)` | E1010（同上） | E4018（带反例） |
+| T12 | Unproven 形态：证明函数实参不可折叠（`f: (n: Int) -> Void = { b: Box2 = Box2(n, 0) }`，`w: Eq(v, 3)`） | exit 0（w 当数据字段静默接受） | E2031（未解命题 + 原因） |
+| T13 | 证明函数证据：`w: Eq(v, 3)` + `Box(3)` 0 诊断；`Box(4)` E4018（`ProofFunctionCall` 编译期执行） | `Box(3, 0)`/`Box(4, 0)` 都 exit 0 | 正 0 诊断、负 E4018 |
+| T14 | 嵌套位置构造（`Box: Type = { v: Int, w: Pos(v) }`）：`take(Box(-1, 99))` 的义务仍生成 | exit 0（2 参构造把 w 当数据字段） | E4018 |
+| T15 | 命名实参：`Box(v=3, z=5)` 0 诊断；`Box(w=9)` E1014；`Box(v=3, v=4, w=9, z=5)` E1015 | 分别：E1002（缺 w，把它当必需字段）/ E1002（缺 v、z）/ exit 0（重复命名静默） | 三条各自命中 |
+| T16 | 证据实参/缺参：`Box(3, 5, 9)` E1010；`Box(3)`（z 无默认）E1010 | 前者 exit 0；后者 E1010 expected 3 found 1 | 前者 E1010、后者 E1010（期望值改为 2） |
+| T17 | 构造字段类型（C 类）：`Point("a", 2)` E1002；`Point(1, 2)` 0 诊断 | `check` exit 0、`run` 打印 `a` | 编译期 E1002；正锚 0 诊断 |
+| T18 | 普通记录负控：构造/读/写全路径零 E1114/E1115/E4018/E2031 | 通过（负控） | 保持零 |
+| T19 | E1114 用户可达：`Box` 含 witness 时 `b.w` ⇒ E1114 | `b.w` exit 0（3 参构造） | E1114，位置在 `b.w` |
+| T20 | E1115 用户可达（4 发射点）：声明 `mut` / 字段赋值 / `&mut` / 方法接收者 | 声明 `mut` 与函数体内字段赋值实测 exit 0；`&mut`/方法接收者由 B.1c 直驱覆盖（用户面需 `mut` 绑定） | 四条各 E1115 |
+| T21 | 方法字段 arity 保持：方法字段仍算构造参数（6.6.12 不一致不被顺手改） | 现状（方法字段算参数） | 逐字保持 |
+
+**泛型（B.2b）**
+
+| # | 判据 | 红态（HEAD 实测） | 绿态 |
+| --- | --- | --- | --- |
+| T22 | const 参数证据：`SafeArray(Int, 3)([1, 2, 3])` 0 诊断；`SafeArray(Int, 0)` 仍 E1062 | 前者 E1010 expected 2 found 1 | 前者 0 诊断；后者 E1062 原样 |
+| T23 | proof family：`Cell(Int, Pos)(3)` 0 诊断且 w 义务 `Pos(3)` Proved；`Cell(Int, Pos)(-3)` E4018（源级形态按 D0 裁定） | `(3)` ⇒ E1010 expected 2 found 1；`(3, 9)` ⇒ E1002（`Pos(v)` vs int） | 正 0 诊断、负 E4018 |
+| T24 | kind 不符：`Cell(Int, Array)` ⇒ E1002（expected proof family / found data family） | exit 0（annotation 放行） | E1002 |
+| T25 | 未实例化/外层族参数：泛型函数体内构造 `Cell(T, P)(x)` ⇒ E2031 | exit 0（`Cell(T, P)(x)` 与 `(x, 0)` 都静默通过，实测） | E2031（开项 Unproven） |
+| T26 | 实例化/替换透传 quantity：`substitute`/`replace_type_params_walk`/`solver` Struct 臂保留 `Some(Zero)` | 直断（B.1a 已实现，无用户路径） | 断言保留 |
+
+**IR / 能力 / 语料**
+
+| # | 判据 | 红态（HEAD 实测） | 绿态 |
+| --- | --- | --- | --- |
+| T27 | IR quantity 传播：真实管线产出的 `TypeDeclBody.fields[].quantity = [None, Some(Zero), None]` | 全 `None` | 三值如上；量词来自模型 |
+| T28 | IR 零 witness / 构造代码同形：`Box(3, 5)` 的构造函数 IR = `Load × 2 + CreateStruct{2 operands} + Ret`、`local_count = 3`；`b.z` 的 `LoadField.field = 1`；无任何指令引用 witness 槽 | 3 个 Load/CreateStruct{3}/local_count=4 | 如上（与等价 data-only 记录的构造形状逐项相同） |
+| T29 | 语料/快照零漂移 + fast：B.2a 的语料差分与 IR 快照逐字节零 diff；`testsuite run fast` 全绿 | — | 零 diff；B.2b 的 6 文件如产生 diff 须逐条分类 |
+
+**变异（M；每条机械可逆，`git apply -R` + blob 比对）**：M01 构造 arity 不跳 witness（`runtime_field_count` 返回全字段数）⇒ T10/T28 红；M02 声明期不写 quantity ⇒ T01/T27 红；M03 构造义务不生成 ⇒ T10/T11/T13 红；M04 义务不走同一单元（换一个不注入 Γ 的判定）⇒ T14 与守卫负控红；M05 IR `struct_definitions` 不注入量词 ⇒ T28 的 z 索引红；M06 摘掉 kind 校验 ⇒ T24 红。
+
+### 八、能力/性能验收（P01–P04）
+
+- **P01（IR 零 witness）**：无 `CreateStruct`/`local_count`/`GetField`/`SetField`/`LoadField`/构造形参指向 witness 字段；IR 量词必须「在运行时零槽位」又「事实不丢」——两条都断言（T27/T28）。
+- **P02（构造代码同形）**：同一数据字段序列下，witness-bearing 记录的构造 IR 与「把这些 witness 声明成数据字段」的对照记录相比，数据侧指令形状逐项相同（多出的只有对照记录自己的数据槽）；判据是断言，不是目测。
+- **P03（语料编译时间）**：`tests/yaoxiang` 全量 348 个 `.yx` 逐文件 `check` 单轮基线（2026-11-14 实测）70.2 s；B.2 后同法三次取中位数 ≤ 110% 基线。B.2a 的语料义务数为 0（无构造证据记录），分类只做线性扫描；若超阈值须给出归因或改判据，不得静默。
+- **P04（门禁）**：`check-obligations.py`（含 `--selftest`）、`check-docs-truth.py`、`check-boundary.py`、`check-fanout.py`、`check-docs-refs.py`、`check-test-channel.py`、`markers --check`、错误码生成器幂等、`testsuite.py run fast`、语料差分、IR 快照全部 exit 0；改动错误码/发射点时必须重跑生成器并确认零 diff。
+
+### 九、覆盖矩阵（RFC/SPEC → 阶段）
+
+| 规范条款 | 内容 | B.2 落点 |
+| --- | --- | --- |
+| RFC §4 / §4.1 / §4.2 | 内核三值、逻辑签名、证书与重放 | 现管线承接（§二 映射表）；不宣称 certificate/签名 JSON |
+| RFC §4.3 / §13 | 显式证据、证书留存 | 显式证据 = 约束里的证明函数（B.2 落地）；留存不宣称 |
+| RFC §8 / §8.6 | SMT 是不可信 producer、裸信缺口 | **不修、不加剧**；构造义务继承现状 |
+| RFC §14.1 | 三步判据、四行表、`base` 不进布局、接口名 | B.2a 非泛型；B.2b 泛型/族 |
+| RFC §14.2 | data-only 构造、`FieldObligation`、两 Option 槽、多传实参报错 | B.2a 构造视图与义务；两槽落子集；多传 E1010/E1014 |
+| RFC §14.3 | proof family 参数、实例化重判、未绑定 Unproven | B.2b（源级形态见 D0） |
+| RFC §14.4 | `TypeDefPayload`/`EvidenceSlot`/`libraries`/签名哈希 | **B.4** |
+| RFC §14.5 | `ConstExpr::FieldPath`/`EvidenceTerm`/类型级 `b.w`/值级 E1114 | **B.3**；B.2 落 `field_path` 底座 + E1114 用户可达 |
+| RFC §14.6 | 5A、擦除、五码分工、声明期拒绝清单（前向/证据引用/`P` kind） | B.2a/b；`P` kind 走 D1；E4023/E4020 不动；声明期码 D2 |
+| SPEC §3.4 | 构造参数=数据字段、arity、多传实参、构造义务 | B.2a |
+| SPEC §4.3 | 泛型构造调用规则、`Matrix` 例 | B.2a arity 收敛；B.2b const 参数证据 |
+| SPEC §8.3.1 / §8.3.2 | proof-space 判据、四行表、admission、构造点义务与三值 | B.2a |
+| SPEC §8.3.3 | proof family、实例化重判、未实例化 | B.2b |
+| SPEC §8.3.4 | 跨模块导出与导入方验证 | **B.4** |
+| SPEC §8.3.5 | 类型级 `b.w` 与值级 E1114 | B.3 + B.2 的 E1114 |
+| SPEC §8.3.6 | 5A、擦除、码分工 | B.2a（用户可达）+ B.4（跨模块擦除证据） |
+| SPEC §3.1.1 / §11.2 | evidence 无默认值、不参与 Dup 派生 | B.2a |
+
+### 十、inScope / outOfScope
+
+**inScope（路径前缀）**：
+
+`src/frontend/core/sema/record_model.rs`、`src/frontend/core/sema/checker/record_model.rs`、`src/frontend/core/sema/mod.rs`、`src/frontend/core/sema/checker.rs`、`src/frontend/core/sema/checker/`、`src/frontend/core/sema/environment.rs`、`src/frontend/core/sema/types.rs`、`src/frontend/core/sema/inference/`、`src/frontend/core/types/mono.rs`、`src/frontend/core/types/eval/dependent_types.rs`、`src/frontend/core/types/eval/const_eval.rs`、`src/std/mod.rs`、`src/std/assert.rs`、`src/std/result.rs`、`src/middle/ir/ir_gen.rs`、`src/middle/passes/mono/mod.rs`、`src/driver/obligations.rs`、`src/driver/arms.rs`、`src/util/diagnostic/codes/`、`locales/`、`docs/src/reference/error-code/`、`src/frontend/core/sema/tests/`、`src/middle/ir/tests/`、`src/middle/passes/codegen/tests/`、`tests/yaoxiang/`、`tests/yaoxiang-multifile/`、`tests/baselines/`、`src/middle/ir/tests/snapshots/`、`docs/src/dev/architecture/02-stage-contract.md`、`docs/src/dev/architecture/09-execution-wbs.md`、`docs/src/dev/architecture/09a-wbs-history.md`。
+
+其中**机械必需面**（AGENTS.md 契约要求）：`TypeCheckResult` 字段 ⇒ obligations 三处对账（`src/driver/obligations.rs` + `02-stage-contract.md` + 消费端读取）；新语料 ⇒ `tests/baselines/` + `src/middle/ir/tests/snapshots/`；错误码/发射点 ⇒ `src/util/diagnostic/codes/` + `locales/` 六语 + `docs/src/reference/error-code/` 生成物；声明期 E1115 判据改源 ⇒ B.1c 的直驱测试与 locale 示例同步。
+
+**outOfScope**：B.3（`ConstExpr::FieldPath`/`EvidenceTerm`/类型级 `b.w`）；B.4（`TypeDefPayload`/`EvidenceSlot` 导出/`signature_hash`/`libraries`/跨模块/多文件）；`Kernel::check`/`LogicSignature`/`Certificate`/§13 证书留存；§8.6 SMT 裸信；defeq/6.9.3；Π/`DepFn`；runtime check/revalidation；#537/#539/#552；方法字段 arity（6.6.12）；`NamedStruct`/和类型字段；更细粒度可变性；`f(y)(y)` 第二值位。
+
+### 十一、风险与未核实
+
+- **语料重分类的零漂移是预期、未实测**：6 个 `Assert` 文件只作类型位使用（已 grep），但 `StructType` Eq/Hash 因 quantity 变化改缓存键、`instantiate_generic_type` 的实例化产物是否被其它路径消费，需 B.2b 实测（T29）。
+- **两阶段一致性**：Registry 面 `predicate_defs` 为空是既有事实；分类器必须对「PROOF/非 PROOF」可判而命题可空，否则两阶段 quantity 分叉。T07 是唯一硬判据。
+- **refined walk 的表达式遍历**是本批新增面：Block/Lambda 的单次路由若写错会重复判定（重复 E4018/E2031）或漏判；T14 + 全语料零漂移是底线。
+- **IR `struct_definitions` 的切片改造**触及 B.1b 的 data-only 假设与默认值填充：方法与证据字段的 kind 不同（方法算构造参数、证据不算），切片必须区分，不得按「非 data」一刀切。
+- **`Assert` 作为 Proof 空间的登记位置**：本契约推荐 `TypeFamilyExport.space`；若实现时发现注册路径不在 `TypeChecker` 可达面，需在契约外补一个登记通道（须先报 lead，不得改用名字硬编码）。
+- **声明期拒绝的 D2 码**未定：若裁复用，E1114 的文案是「值级读取」，用在声明位置语义偏移；借码理由必须登记。
+- **B.2b 的 proof family 源级形态**：RFC/SPEC 现写 `P: (T) -> Type`，但该形态的 `P` **不被 `classify_generic_params` 识别为类型参数**（实测 `Cell(Int, Pos)` ⇒ E1010 expected 1 found 2）；`P: (T: Type) -> Type` 可用（实测 `Cell(Int, Pos)(3)` 报的是 arity 2，说明 P 已是类型参数）。D0 必须先裁（§十二）。
+- **T25 的可写形态**：泛型函数体内的**带注解**写法 `c: Cell(T, P)` 今天先撞 E1003 `Unknown type: 'P'`（类型级函数参数没有进嵌套注解的合法类型名集，既有缺口，非 B.2 引入）；**不带注解**的 `c = Cell(T, P)(x)` 今天 exit 0（实测），T25 按该形态写。若 B.2b 需要注解形态，须把「类型级函数参数」并进 `check_annotation_type_names` 的 `generic_names`（小改，登记在实现轮；不属本契约新增判据）。
+- **未核实（实现前必须实测/确认）**：`Assert` 字段被分类后 `process_body_expr_item` 的 const-bound 是否仍按原路径注册（E1062 保持）；`TypeCheckResult` 加字段引发的 obligations 门禁行号平移量；`const_expr_free_names` 对 `Var(ConstVar)` 的收集是否会把 q=0 形参误判为字段引用（需在分类器里按 `type_params` 先分流）。
+
+### 十二、裁决点（D0–D2，需 lead/用户裁）
+
+- **D0（proof family 源级形态）**：RFC-027 §14.3 与 SPEC §8.3.3 的 `Cell: (T: Type, P: (T) -> Type)` 在当前实现里 `P` 不是类型参数（`Cell(Int, Pos)` ⇒ E1010 expected 1 found 2，实测）；`P: (T: Type) -> Type` 可被判为类型参数（`Cell(Int, Pos)(3)` 只余 arity 2 的既有错）。**推荐**：把 RFC/SPEC 的源级写法改为 `P: (T: Type) -> Type`（kind 记法 `T -> Proposition` 保留在正文），并把 `yaoxiang` 示例同步；这是文档修正，零实现风险。**备选**：保留现写法，B.2b 扩展 `classify_generic_params`/`is_type_level_fn` 接受「裸名参数且是同一声明已声明的类型参数」——会扩大泛型参数启发式的面，须单独红态与回归。
+- **D1（kind 不符的诊断码）**：实例化 `Cell(Int, Array)` 的 kind 不符推荐复用 **E1002**（expected `proof family (T -> Proposition)` / found `data family (T -> Type)`），不新增码；备选 E1061（无实参槽）。
+- **D2（声明期非法位置的诊断码）**：RFC §14.6 只写「声明期拒绝」未给码。**推荐新增一个声明期码**（reason 区分前向引用/引用 evidence/自身混用/evidence 默认值；机械面 = 码表 + 六 locales + 013 + 生成物）；备选复用（E1001/E1114/E1092）并登记借码理由。若裁新增，属 E 类对外契约变化，需用户裁决。
+
+### 十三、顺序与交接
+
+1. 裁决 D0–D2（lead/用户）→ 若 D0 选文档修正，先由 docs 面同步 RFC/SPEC，再开 B.2b。
+2. B.2a：先落红测试（T01–T21 的当前红态）→ `RecordModel`/声明期 → 构造 helper 与义务 → IR 传播 → obligations 登记 → E1114/E1115 可达 → 语料/门禁收口；一次可 revert 的提交。
+3. B.2b：const 参数证据 → proof family 假设/kind → 实例化义务 → mono 量词 → 语料分类；独立提交。
+4. 收口证据：09a 实现轮记录（红→绿、语料/快照 diff 分类、fast/门禁计数、D59 登记、本节 §七/§八 逐项对号）+ 09 行状态更新。**不宣称** Π/Σ 完全体、不宣称 B.3/B.4 的接口已落。
+5. 本节点提交只含 `docs/src/dev/architecture/09-execution-wbs.md` 与本节所在文件；`src/` 零改动——这是「不先写代码」的机械判据。
+
+## P6 6.9.5-B.2a 实现轮（b2-impl，2026-11-14；B.2b 与 D2/D3 待裁决）
+
+> 契约见 §P6 6.9.5-B.2。本轮按 captain 指示只落**不依赖裁决**的 B.2a 面：泛型记录分类（B.2b）、D2 的专用声明期码、D3 的 SMT 档位留到裁决后。工作方式：主工作树、不 commit/push，lead 复核提交；工作树原有 `.gitignore` 修改与未跟踪 blog 文件未触碰。
+
+### 一、落地内容
+
+- **记录模型与声明期一遍**（新模块 `sema/record_model.rs` + `sema/checker/record_model.rs`）：space（谓词 / 证明函数 / Proof 空间类型族）→ position（前向 / 证据 / 自身 / 常量）→ category；`fields[].quantity` 是唯一落点；admission 字段的值类型写成命题 base；`apply_quantities` 把量词写进 `poly`（`env.types` / `env.vars` / `generic_type_defs` 三处同源）；auto-derive 只看数据字段（SPEC §11.2）；5A 的声明面判据改读模型。B.1 的直驱预标量词通道保留（生产 parser 恒 `None`）。
+- **构造期收敛**：`bind_record_ctor_args`（共享 `bind_args_to_params` 六规则 + 超参上限）与 `check_ctor_field_type`（List/Vec 字面量豁免、引用字段边界）；非泛型 / 两层泛型 / 泛型值构造三个 arm 使用同一份判据。非泛型构造 arm 首次有逐字段类型检查（D59 C 类：`Point("a", 2)` 编译期 E1002，此前 check 通过、run 静默给错答案）。
+- **构造义务**：refined walk 增表达式遍历（Call 实参 / BinOp / FieldAccess / List / Tuple / Index / Cast / Return / If 条件 / For iterable），evidence 义务与 admission 义务都交唯一判定单元 `judge_refined_obligation_with_mode`；新增 `PredicateMode::NoSmt` 档 = direct eval / 精确 Γ / 证明函数（**SMT 不作证明来源**，D3 待裁）；每条义务前重设一份判定预算（H8）。依赖折叠不出时保留符号项 → Unproven（E2031），失败闭合、不静默放行。
+- **IR 传播**：`TypeCheckResult.record_models` 是第 14 个义务字段（obligations 三处对账 + IR 生成交付标记）；`ir_gen` 的 `TypeDeclBody` / `struct_definitions` 从模型取量词，构造默认值填充与命名重排按数据字段投影；`resolve_field_index` 经同一份 `struct_definitions` 自动前移。
+- **声明期拒绝**：T04–T06 的检测落地，码位集中在 `record_rejection_diagnostic` 一处（当前是契约 §三 的 fallback：前向 → E1001、引用 evidence → E1114、自身混用 → E1001、默认值 → E1092；**D2 裁决后只改该函数**）；T09 的字段位非法实参转发既有解析器诊断（E1092/E1093）。
+- **E1114 / E1115 生产可达**；E1114 的码注释与六语 help 改为「类型级用法合法、值级读取拒绝」（t3 finding 4），错误码生成物同批再生（E1001 4→6、E1002 71→69、E1010 19→18、E1092 3→4 的站点计数变化来自本轮收敛，机械再生、未手改）。
+
+### 二、红→绿（红态见 §P6 6.9.5-B.2 §七，均为 HEAD `3892ea81` 实测）
+
+| 判据 | 绿态证据 |
+| --- | --- |
+| T01 / T02 | 量词序列、`field_path`、evidence/obligations 同长；`Buf` 的数据族自引用仍是数据字段 |
+| T03 | self-refined 字段值类型 = base；`Box(-5)` E4018（`(-5 > 0)`） |
+| T04–T06 | 前向引用 / 引用 evidence / evidence 默认值各产硬错误（码位待 D2） |
+| T07 | Registry 面与实检面的 `quantity` 逐位相等且非全 `None` |
+| T08 | `Assert(K > 0)` 的无构造模板不被拒；`Box(3)` 零诊断 |
+| T09 | 字段位 `Pos(1, 2)` 报 E1093 |
+| T10 / T11 / T14 / T15 / T16 | `Box(3, 5)` 零诊断；`Box(-3, 5)` E4018；嵌套 `take(Box(-1, 99))` E4018；`Box(v=3, z=5)` 零诊断 / `Box(w=9)` E1014；`Box(3,5,9)`、`Box(3)` E1010 |
+| T12 / T13 | 参数依赖的构造义务 → E2031；`Eq(3, 3)` 零诊断 / `Eq(4, 3)` E4018（证明函数执行器直驱） |
+| T17 | `Point("a", 2)` E1002 / `Point(1, 2)` 零诊断 |
+| T18 | 普通记录的构造/读/写零新码 |
+| T19 / T20 | 生产源码 `b.w` → E1114；`mut` 字段 → E1115 |
+| T27 / T28 | 真实四段管线：TypeDecl 量词 `[None, Some(Zero), None]`；`b.z` 的 `LoadField.field = 1`；合成构造函数 2 个 LOAD_ARG / CreateStruct 2 字段 / `local_count = 3` |
+| T29 | 语料 348 条差分为空；IR 快照零漂移 |
+
+新增测试 18 条：`sema/tests/record_evidence.rs` 15 条 + `middle/ir/tests/record_evidence_layout.rs` 3 条。
+
+### 三、语料 / 快照（三轮收窄，逐条登记）
+
+- **首轮 11 个语料改判**：`use std.assert` 后裸名 `assert(...)` 解析成模块命名空间 Struct（导出面也以 Struct 形态挂在 `vars` 上），旧的 Struct 分支只查 arity 故静默通过；新判据把它当记录构造做字段检查。修法 = 只对**已声明记录**（`env.types[name]` 是 Struct）走 Σ 构造判据，命名空间/导出面保留旧宽容。
+- **第二轮 3 个语料**：List 字面量落 `List` 字段（容器命名分层，原判据只豁免 `Vec` 字段）；`&mut Int` / `&Point` 引用字段的构造实参桥接归所有权层（显式登记为边界豁免）。修后 `equal_linear_token_err` 恢复 E1101、`compare_rust_side_by_side` 恢复 exit 0。
+- **终轮**：`corpus_probe` 348 条与 `tests/baselines/corpus-parity.jsonl` **逐字节相同**；`UPDATE_SNAPSHOTS=1 cargo test --lib snapshot -- --ignored` 后快照目录 `git status` 为 0 个改动（normalize 不打印 quantity）。
+
+### 四、门禁与量测
+
+- `cargo fmt --all`、`cargo clippy --all --all-features --all-targets -- -D warnings`：0。
+- `testsuite.py run fast`：2174 条、exit 0（跳过 0 波；3 条 `#[ignore]`、2 条 manual 按计划不跑）。
+- `check-obligations.py`：PASS（14 义务 / 14 交付 / 字段数 22 − 义务 14 − 非义务 8 = 0）。
+- `check-boundary` / `check-fanout` / `check-test-channel` / `check-docs-truth` / `check-docs-orphan` / `check-docs-refs` / `docs:build`：exit 0；错误码生成器幂等。
+- B.1 的直驱测试随构造 arity 收敛更新夹具（`Box(v = 1, w = 2)` → `Box(v = 1)`）：预标 witness 后构造参数只含数据字段，这是 B.2a 的既定语义，不是放宽判据。
+
+### 五、边界与未完成（如实）
+
+- **B.2b 未做**：泛型记录不分类（`SafeArray(Int, 3)([...])` 仍 E1010 expected 2 found 1）；proof family（D0）、实例化构造义务、默认值入模型均未落。
+- **D2 码位 provisional**；**D3** 已按 NoSmt 落地（SMT 不是构造义务的证明来源），裁决若允许 SMT，只改该档位。
+- 构造义务的诊断文案沿用既有 `judge_refined_obligation` 形态（subject/assigned 仍写 `Box.w` / `Box2`），文案打磨未做。
+- 预算重设只覆盖构造义务；其它判定点沿用既有口径。
+- 引用字段与 List/Vec 字面量落点是既有语义边界，本轮显式豁免并登记，不扩大检查面。

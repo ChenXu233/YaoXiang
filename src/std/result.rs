@@ -52,6 +52,7 @@ impl StdModule for ResultModule {
         vec![TypeFamilyExport::new(
             "Error",
             vec![],
+            crate::frontend::core::types::eval::dependent_types::SortSpace::Data,
             AssociatedTypeDef::Direct(MonoType::Struct(
                 crate::frontend::core::types::mono::StructType {
                     name: "Error".to_string(),

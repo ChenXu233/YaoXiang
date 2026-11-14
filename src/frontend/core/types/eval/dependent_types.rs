@@ -238,6 +238,21 @@ fn substitute_type_params(
 /// ```yaoxiang
 /// type Result[T, E] = Ok(T) | Err(E)  # Result 是 T 和 E 的类型族
 /// ```
+/// 类型族所属的**空间**（RFC-027 §4.1 `SortDecl.space` 的种子）。
+///
+/// 依赖记录 Σ 的第一步判据（RFC-027 §14.1）按字段类型的空间分流：
+/// `Proof` 空间的字段类型是命题（谓词应用/证明函数应用/证明空间类型族），
+/// `Data` 空间是普通数据。空间是**登记在类型族表里的数据**，分类逻辑只查表——
+/// 内核批次用 `signature.sorts` 替换该表时，分类判据零改动。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum SortSpace {
+    /// 数据类型空间（值有运行期表示）
+    #[default]
+    Data,
+    /// 命题空间（无运行期表示，参与证明）
+    Proof,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct TypeFamily {
     /// 类型族名称
@@ -251,6 +266,9 @@ pub struct TypeFamily {
 
     /// 定义（类型表达式）
     pub definition: AssociatedTypeDef,
+
+    /// 所属空间（Proof/Data；唯一登记点是 `TypeFamilyExport`）
+    pub space: SortSpace,
 }
 
 impl TypeFamily {
@@ -260,12 +278,14 @@ impl TypeFamily {
         type_params: Vec<String>,
         associated_types: Vec<AssociatedType>,
         definition: AssociatedTypeDef,
+        space: SortSpace,
     ) -> Self {
         Self {
             name,
             type_params,
             associated_types,
             definition,
+            space,
         }
     }
 
@@ -546,6 +566,14 @@ impl DependentTypeEnv {
         name: &str,
     ) -> Option<&TypeFamily> {
         self.type_families.get(name)
+    }
+
+    /// 查询类型族的空间（依赖记录 Σ 的 space 判据读数；未登记 ⇒ None）。
+    pub fn type_family_space(
+        &self,
+        name: &str,
+    ) -> Option<SortSpace> {
+        self.type_families.get(name).map(|family| family.space)
     }
 
     /// 注册效应声明

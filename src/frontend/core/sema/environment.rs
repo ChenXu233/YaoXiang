@@ -259,6 +259,9 @@ pub struct TypeEnvironment {
     /// 存储已注册的编译期谓词模板，供 PredicateResolver 使用
     pub predicate_defs:
         HashMap<String, crate::frontend::core::sema::predicate_resolver::PredicateDef>,
+    /// 依赖记录 Σ 的记录模型（类型名 → 模型）。B.2 声明期一遍的**唯一写入点**；
+    /// 消费面 = 构造义务（refined walk）与 IR 量词传播（经 `TypeCheckResult`）。
+    pub record_models: HashMap<String, crate::frontend::core::sema::record_model::RecordModel>,
 }
 
 impl TypeEnvironment {

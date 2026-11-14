@@ -38,6 +38,8 @@ pub mod checker;
 pub mod signature;
 // 类型定义
 pub mod types;
+// 依赖记录 Σ 的记录模型（RFC-027 §14 / SPEC §8.3；声明期一遍的产出）
+pub mod record_model;
 // 证明管道基础设施
 pub mod proof;
 // 证明层（本目录无调度器：调用先后由 checker::check_module_impl 决定）

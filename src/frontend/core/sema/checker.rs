@@ -1282,6 +1282,7 @@ impl TypeChecker {
                 .map(|(name, d)| (name.clone(), d.type_param_names.clone()))
                 .collect(),
             module_namespaces: std::mem::take(&mut self.module_namespaces),
+            record_models: self.env.record_models.clone(),
             warnings,
         }
     }
@@ -3107,24 +3108,25 @@ impl TypeChecker {
             }
         }
 
-        // 6.9.5-B.1c / 5A：witness-bearing 记录整体不可变——声明面拒绝 mut 字段。
-        // 字段量词读数在 AST 侧可见（B.1a 起）；判据只有一条：记录含 witness 且
-        // 任一字段 is_mut。B.1a 保证生产路径不产出 Some(Zero)，故对现存程序是
-        // 恒等变换（本批为直驱可达，用户可达留 B.2）。
+        // 6.9.5-B.2 声明期一遍（RFC-027 §14.1）：space → position → category。
+        // 记录模型是唯一产出；量词经 `apply_quantities` 写进 `poly`，命题只进模型
+        // （字段的 `MonoType` 不改写——下游 unify/投影语义因此不受影响）。
+        let record_model = self.classify_record(name, definition, &generic_params, span);
         let declared_fields: Vec<&crate::ast::StructField> = match definition {
             crate::ast::Type::Struct { .. } => definition.struct_fields(),
             crate::ast::Type::NamedStruct { fields, .. } => fields.iter().collect(),
             _ => Vec::new(),
         };
-        if crate::frontend::core::types::mono::quantities_are_witness_bearing(
-            declared_fields.iter().map(|field| field.quantity),
-        ) && declared_fields.iter().any(|field| field.is_mut)
-        {
-            self.add_error(
-                ErrorCodeDefinition::witness_record_immutable(name)
-                    .at(span)
-                    .build(),
-            );
+        // 6.9.5-B.1c / 5A：witness-bearing 记录整体不可变——声明面拒绝 mut 字段。
+        // 判据读记录模型的量词（B.2 起生产路径产出 witness）。
+        if let Some(model) = &record_model {
+            if model.has_evidence() && declared_fields.iter().any(|field| field.is_mut) {
+                self.add_error(
+                    ErrorCodeDefinition::witness_record_immutable(name)
+                        .at(span)
+                        .build(),
+                );
+            }
         }
 
         let poly = PolyType::mono(MonoType::from(definition.clone()));
@@ -3140,6 +3142,13 @@ impl TypeChecker {
             }
             _ => poly.body.clone(),
         });
+        let poly = PolyType::mono(crate::frontend::core::sema::record_model::apply_quantities(
+            poly.body.clone(),
+            record_model.as_ref(),
+        ));
+        if let Some(model) = record_model {
+            self.env.record_models.insert(name.to_string(), model);
+        }
         self.env.add_type(name.to_string(), poly.clone());
         // 同时注册到 vars，使类型名可以在表达式中使用（如 Point(1.0, 2.0) 构造器调用）
         self.env.add_var(name.to_string(), poly.clone());
@@ -3361,8 +3370,9 @@ impl TypeChecker {
             self.env.add_generic_type_def(name.to_string(), def);
         }
 
-        // 自动为 Record 类型派生标准库 traits
-        self.auto_derive_traits(name, definition);
+        // 自动为 Record 类型派生标准库 traits（evidence 字段不参与派生，SPEC §11.2）
+        let derive_model = self.env.record_models.get(name).cloned();
+        self.auto_derive_traits(name, definition, derive_model.as_ref());
 
         // RFC-010: 记录式和类型判定（全有或全无，见「变体构造（权威定义）」节）
         if let Some(variants) = detect_sum_type(name, &param_names, definition) {
@@ -3504,6 +3514,7 @@ impl TypeChecker {
         &mut self,
         type_name: &str,
         definition: &crate::ast::Type,
+        record_model: Option<&crate::frontend::core::sema::record_model::RecordModel>,
     ) {
         // 提取字段列表
         let fields: Vec<crate::ast::StructField> = match definition {
@@ -3519,6 +3530,16 @@ impl TypeChecker {
                 })
                 .collect(),
             _ => return,
+        };
+        // SPEC §11.2：evidence 字段不参与 Dup 派生（派生视图只看数据字段）
+        let fields: Vec<crate::ast::StructField> = match record_model {
+            Some(model) => fields
+                .into_iter()
+                .enumerate()
+                .filter(|(index, _)| !model.is_witness(*index))
+                .map(|(_, field)| field)
+                .collect(),
+            None => fields,
         };
 
         // 获取 trait 表的引用（用于检查）
@@ -4219,5 +4240,6 @@ pub(crate) fn extract_fn_body(value: Option<&crate::ast::Expr>) -> Option<&crate
 }
 
 mod annotations;
+mod record_model;
 mod refinement;
 mod semantic_tokens;

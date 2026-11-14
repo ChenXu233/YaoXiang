@@ -14,6 +14,7 @@ pub mod local_slots;
 pub mod namespace_scope;
 pub mod native_fn_value;
 pub mod overload_resolutions;
+mod record_evidence_layout;
 pub mod release_plan_spans;
 pub mod snapshot;
 pub mod type_decl;

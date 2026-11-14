@@ -3348,8 +3348,114 @@ impl<'a> ExpressionInferrer<'a> {
         }
     }
 
+    /// 记录构造器的唯一绑定入口（B.2）：构造参数 = **数据字段**（witness 不占槽位），
+    /// 位置/命名/争槽/未知名/重复名/缺参都交共享判据 `bind_args_to_params`。
+    /// 额外结算「超参」——共享判据只查必需位，上限由各调用面自己声明。
+    fn bind_record_ctor_args(
+        key: &str,
+        data_field_names: &[String],
+        optional: &[bool],
+        args: &[crate::ast::Expr],
+        named_args: &[(String, crate::ast::Expr)],
+        call_span: crate::util::span::Span,
+    ) -> Result<Vec<usize>> {
+        let provided = args.len() + named_args.len();
+        if provided > data_field_names.len() {
+            return Err(ErrorCodeDefinition::argument_count_mismatch(
+                key,
+                data_field_names.len(),
+                provided,
+            )
+            .at(call_span)
+            .build());
+        }
+        super::arg_binding::bind_args_to_params(
+            key,
+            data_field_names,
+            args,
+            named_args,
+            0,
+            optional,
+            call_span,
+        )
+    }
+
+    /// 构造字段的逐字段类型检查（E1002；与泛型两层构造同源判据）。
+    ///
+    /// `Vec` 字段接受 List 字面量（RFC-011 容器命名分层，与变量声明落点同款豁免），
+    /// 逐元素 unify 仍执行；其余走 6.9.3d 判定点 `decide`。
+    fn check_ctor_field_type(
+        &mut self,
+        field_ty: &MonoType,
+        arg_ty: &MonoType,
+        arg_expr: &crate::ast::Expr,
+        span: crate::util::span::Span,
+    ) -> Result<()> {
+        // 引用字段（&T / &mut T）：构造实参到引用的桥接归所有权层，B.2 不判
+        // （既有语料 Token(&mut Int) / PointView(&Point) 依赖该边界，见 09a B.2a 记录）。
+        if matches!(field_ty, MonoType::Ref { .. }) {
+            return Ok(());
+        }
+        // 容器命名分层：List 字面量可落 Vec/List 字段（RFC-011；与变量声明落点
+        // 同款豁免），逐元素 unify 仍执行。此前只豁免 Vec 字段——List 字段的
+        // 同类落点由本判据补齐（普通构造 arm 原先完全不查，故无回归面）。
+        let vec_seed_ok = matches!(
+            field_ty,
+            MonoType::Generic { name, .. } if name == "Vec" || name == "List"
+        ) && matches!(arg_expr, crate::ast::Expr::List(_, _));
+        if vec_seed_ok {
+            if let (
+                Some(MonoType::Generic {
+                    args: field_args, ..
+                }),
+                MonoType::Generic { args: arg_args, .. },
+            ) = (Some(field_ty), &self.solver.resolve_type(arg_ty))
+            {
+                if let (Some(field_element), Some(arg_element)) =
+                    (field_args.first(), arg_args.first())
+                {
+                    if let Err(failure) = decide(
+                        self.solver,
+                        field_element,
+                        arg_element,
+                        Some(span),
+                        self.type_defs,
+                        self.dep_env,
+                    ) {
+                        return Err(failure.or_site(
+                            ErrorCodeDefinition::type_mismatch(
+                                &format!("{}", field_element),
+                                &format!("{}", arg_element),
+                            )
+                            .at(span)
+                            .build(),
+                        ));
+                    }
+                }
+            }
+            return Ok(());
+        }
+        if let Err(failure) = decide(
+            self.solver,
+            field_ty,
+            arg_ty,
+            Some(span),
+            self.type_defs,
+            self.dep_env,
+        ) {
+            return Err(failure.or_site(
+                ErrorCodeDefinition::type_mismatch(
+                    &format!("{}", field_ty),
+                    &format!("{}", arg_ty),
+                )
+                .at(span)
+                .build(),
+            ));
+        }
+        Ok(())
+    }
+
     /// 方法调用的实参绑定：收敛到共享判据 `arg_binding::bind_args_to_params`
-    /// （#452 / #454 / t12-F1：判据不再有第二份）。
     fn bind_named_args(
         key: &str,
         param_names: &[String],
@@ -5602,106 +5708,57 @@ impl<'a> ExpressionInferrer<'a> {
             if let crate::ast::Expr::Var(inner_name, _) = &**inner_func {
                 if self.generic_type_defs.contains_key(inner_name) {
                     if let MonoType::Struct(st) = &func_ty {
-                        // 构造参数 arity（同普通 struct #271#1：有默认值字段可省略）
-                        let total = st.fields.len();
-                        let required = st.fields.iter().filter(|f| !f.has_default).count();
-                        let provided = arg_types.len();
                         // 空构造 X(参数)()：字段取默认值/零值（RFC §9.3 模式），合法
-                        if provided == 0 && named_args.is_empty() {
+                        if arg_types.is_empty() && named_args.is_empty() {
                             return Ok(func_ty.clone());
                         }
-                        if named_args.is_empty() {
-                            if provided < required || provided > total {
-                                return Err(ErrorCodeDefinition::argument_count_mismatch(
-                                    inner_name, total, provided,
-                                )
-                                .at(span)
-                                .build());
-                            }
-                        } else {
-                            // 命名参数：必需字段（无默认值）必须全部提供
-                            let provided_names: std::collections::HashSet<&str> =
-                                named_args.iter().map(|(n, _)| n.as_str()).collect();
-                            let missing: Vec<&str> = st
-                                .fields
+                        // 构造参数 = **数据字段**（witness 不占槽位）；位置/命名/缺参/
+                        // 超参/争槽全部交共享判据（与普通构造同一入口），逐字段类型
+                        // 检查同源（`check_ctor_field_type`，Vec 字面量豁免只留一处）。
+                        let data_fields: Vec<crate::frontend::core::types::mono::StructFieldInfo> =
+                            st.fields
                                 .iter()
-                                .filter(|f| !f.has_default)
-                                .map(|f| f.name.as_str())
-                                .filter(|n| !provided_names.contains(n))
-                                .collect();
-                            if !missing.is_empty() {
-                                return Err(ErrorCodeDefinition::type_mismatch(
-                                    &format!(
-                                        "{} constructor missing required field(s): {}",
-                                        inner_name,
-                                        missing.join(", ")
-                                    ),
-                                    &format!("provided {}", provided_names.len()),
-                                )
-                                .at(span)
-                                .build());
-                            }
-                        }
-                        // 位置实参与字段类型一致性（#286 同款：实例化后字段已具体）
-                        for (i, field_info) in st.fields.iter().enumerate() {
-                            let field_ty = &field_info.ty;
-                            if i >= provided {
-                                break;
-                            }
-                            let Some(arg_ty) = arg_types.get(i) else {
-                                break;
-                            };
-                            // RFC-011 容器命名分层：`Vec(T)` 字段接受 List 字面量。
-                            // 与变量声明的落点规则一致（statements.rs 同款豁免）——
-                            // Vec 是运行时长度的可增长缓冲，语义与字面量一致；
-                            // 逐元素 unify(T) 仍然执行，不做整段豁免。
-                            let vec_seed_ok = matches!(field_ty, MonoType::Generic { name, .. } if name == "Vec")
-                                && matches!(args.get(i), Some(crate::ast::Expr::List(_, _)));
-                            if vec_seed_ok {
-                                if let (
-                                    Some(MonoType::Generic { args: fa, .. }),
-                                    Some(MonoType::Generic { args: aa, .. }),
-                                ) = (Some(field_ty), Some(&self.solver.resolve_type(arg_ty)))
-                                {
-                                    if let (Some(fe), Some(ae)) = (fa.first(), aa.first()) {
-                                        if let Err(failure) = decide(
-                                            self.solver,
-                                            fe,
-                                            ae,
-                                            Some(span),
-                                            self.type_defs,
-                                            self.dep_env,
-                                        ) {
-                                            return Err(failure.or_site(
-                                                ErrorCodeDefinition::type_mismatch(
-                                                    &format!("{}", fe),
-                                                    &format!("{}", ae),
-                                                )
-                                                .at(span)
-                                                .build(),
-                                            ));
-                                        }
-                                    }
-                                }
-                                continue;
-                            }
-                            if let Err(failure) = decide(
-                                self.solver,
-                                field_ty,
-                                arg_ty,
-                                Some(span),
-                                self.type_defs,
-                                self.dep_env,
-                            ) {
-                                return Err(failure.or_site(
-                                    ErrorCodeDefinition::type_mismatch(
-                                        &format!("{}", field_ty),
-                                        &format!("{}", arg_ty),
+                                .filter(|field| {
+                                    !crate::frontend::core::types::mono::quantity_is_witness(
+                                        field.quantity,
                                     )
-                                    .at(span)
-                                    .build(),
-                                ));
-                            }
+                                })
+                                .cloned()
+                                .collect();
+                        let param_names: Vec<String> =
+                            data_fields.iter().map(|field| field.name.clone()).collect();
+                        let optional: Vec<bool> =
+                            data_fields.iter().map(|field| field.has_default).collect();
+                        let positions = Self::bind_record_ctor_args(
+                            inner_name,
+                            &param_names,
+                            &optional,
+                            args,
+                            named_args,
+                            span,
+                        )?;
+                        for (arg_index, slot) in positions.iter().enumerate() {
+                            let named_offset = arg_index.saturating_sub(arg_types.len());
+                            let arg_ty = if arg_index < arg_types.len() {
+                                arg_types[arg_index].clone()
+                            } else {
+                                named_types
+                                    .get(named_offset)
+                                    .map(|ty| (**ty).clone())
+                                    .unwrap_or(MonoType::Void)
+                            };
+                            let arg_expr = if arg_index < args.len() {
+                                &args[arg_index]
+                            } else {
+                                match named_args.get(named_offset) {
+                                    Some((_, expr)) => expr,
+                                    None => continue,
+                                }
+                            };
+                            let Some(field) = data_fields.get(*slot) else {
+                                continue;
+                            };
+                            self.check_ctor_field_type(&field.ty, &arg_ty, arg_expr, span)?;
                         }
                         return Ok(func_ty.clone());
                     }
@@ -6037,44 +6094,77 @@ impl<'a> ExpressionInferrer<'a> {
                     });
                 match &mono_func_ty {
                     MonoType::Struct(st) => {
-                        // 普通 struct 构造器：Point(1.0, 2.0)。
-                        // 有默认值的字段可省略 → 必需参数数 = 无默认值字段数。
-                        let total = st.fields.len();
-                        let required = st.fields.iter().filter(|f| !f.has_default).count();
-                        if named_args.is_empty() {
-                            // 位置参数：Point(5) 缺参 / Point(5,6,7) 超参
-                            if provided < required || provided > total {
+                        // 只有**记录类型**的构造才按 Σ 语义结算（数据字段绑定 +
+                        // 逐字段类型检查）。模块命名空间/导出面也以 Struct 形态
+                        // 挂在 vars 上（use std.assert 后裸名 assert(...) 即此
+                        // 形态），它们没有记录模型——保留旧的 arity 宽容，不把
+                        // 「命名空间值被调用」误判成记录构造的字段类型错。
+                        let is_declared_record = matches!(
+                            self.type_defs.get(&st.name).map(|poly| &poly.body),
+                            Some(MonoType::Struct(_))
+                        );
+                        if !is_declared_record {
+                            let total = st.fields.len();
+                            let required =
+                                st.fields.iter().filter(|field| !field.has_default).count();
+                            if named_args.is_empty() && (provided < required || provided > total) {
                                 return Err(ErrorCodeDefinition::argument_count_mismatch(
                                     &st.name, total, provided,
                                 )
                                 .at(span)
                                 .build());
                             }
-                        } else {
-                            // 命名参数：Point(x=6) 缺必需字段 → 静默 0（#271#1）。
-                            // 检查必需字段（无默认值）是否全部提供。
-                            let provided_names: std::collections::HashSet<&str> =
-                                named_args.iter().map(|(n, _)| n.as_str()).collect();
-                            let missing: Vec<&str> = st
-                                .fields
+                            return Ok(func_ty.clone());
+                        }
+                        // 普通 struct 构造器：Point(1.0, 2.0)。构造参数 = **数据字段**
+                        // （witness 字段不占槽位，B.2）；位置/命名/争槽/未知名/重复名/
+                        // 缺参/超参统一交共享判据，命名未知不再静默丢弃（#271#1 的
+                        // bespoke 计数退场）。逐字段类型检查是 D59 C 类修复：此前
+                        // Point("a", 2) 编译期通过、运行期才静默给错答案。
+                        let data_fields: Vec<crate::frontend::core::types::mono::StructFieldInfo> =
+                            st.fields
                                 .iter()
-                                .filter(|f| !f.has_default)
-                                .map(|f| f.name.as_str())
-                                .filter(|n| !provided_names.contains(n))
+                                .filter(|field| {
+                                    !crate::frontend::core::types::mono::quantity_is_witness(
+                                        field.quantity,
+                                    )
+                                })
+                                .cloned()
                                 .collect();
-                            if !missing.is_empty() {
-                                let msg = format!(
-                                    "{} constructor missing required field(s): {}",
-                                    st.name,
-                                    missing.join(", ")
-                                );
-                                return Err(ErrorCodeDefinition::type_mismatch(
-                                    &msg,
-                                    &format!("provided {}", provided_names.len()),
-                                )
-                                .at(span)
-                                .build());
-                            }
+                        let param_names: Vec<String> =
+                            data_fields.iter().map(|field| field.name.clone()).collect();
+                        let optional: Vec<bool> =
+                            data_fields.iter().map(|field| field.has_default).collect();
+                        let positions = Self::bind_record_ctor_args(
+                            &st.name,
+                            &param_names,
+                            &optional,
+                            args,
+                            named_args,
+                            span,
+                        )?;
+                        for (arg_index, slot) in positions.iter().enumerate() {
+                            let named_offset = arg_index.saturating_sub(arg_types.len());
+                            let arg_ty = if arg_index < arg_types.len() {
+                                arg_types[arg_index].clone()
+                            } else {
+                                named_types
+                                    .get(named_offset)
+                                    .map(|ty| (**ty).clone())
+                                    .unwrap_or(MonoType::Void)
+                            };
+                            let arg_expr = if arg_index < args.len() {
+                                &args[arg_index]
+                            } else {
+                                match named_args.get(named_offset) {
+                                    Some((_, expr)) => expr,
+                                    None => continue,
+                                }
+                            };
+                            let Some(field) = data_fields.get(*slot) else {
+                                continue;
+                            };
+                            self.check_ctor_field_type(&field.ty, &arg_ty, arg_expr, span)?;
                         }
                     }
                     MonoType::Fn { params, .. } => {

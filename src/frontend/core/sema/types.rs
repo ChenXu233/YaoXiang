@@ -73,6 +73,10 @@ pub struct TypeCheckResult {
     /// 警告诊断（#321：未使用导入 W1003 等，Warning 级、不阻断编译）。
     /// 与 diagnostics 分离——混入会被管线按错误计数，破坏非阻断契约。
     pub warnings: Vec<crate::util::diagnostic::Diagnostic>,
+    /// 依赖记录 Σ 的记录模型（类型名 → 模型；typecheck 声明期产出 → IR 生成消费）。
+    /// B.2 起生产路径产出 witness 字段，IR 的 `TypeDeclField.quantity` 与构造
+    /// 参数/默认值填充都从这张表读量词；消费端不得自行重算分类。
+    pub record_models: HashMap<String, super::record_model::RecordModel>,
 }
 
 /// 方法级重载决议表（RFC-011a §3 / RFC-039 D20 / WBS 4.5.2）。

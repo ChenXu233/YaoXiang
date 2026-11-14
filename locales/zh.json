@@ -1048,7 +1048,7 @@
     "title": "witness 字段不可值级读取",
     "message": "witness 字段 '{field}' 是记录 '{type}' 的编译期证据，运行期没有数据槽，不能在值级读取",
     "template": "witness 字段 '{field}' 是记录 '{type}' 的编译期证据，运行期没有数据槽，不能在值级读取",
-    "help": "witness 字段只在编译期用于证明（构造义务与导出），值级读取与类型级投影留待后续阶段；需要运行期数据时，请把该字段建成普通数据字段。",
+    "help": "witness 字段在类型级使用：`b.w` 是证据项，可作为证明的前提；它不是值级读取（运行期没有数据槽）。需要运行期数据时，请把该字段建成普通数据字段。",
     "example": "Box: Type = { v: Int, w: Pos(v) }  // w 是 witness 字段，运行期无数据槽\nmain: () -> Void = {\n    b: Box = Box(v = 1)\n    b.w\n}",
     "error_output": "error[E1114]: witness 字段不可值级读取\n --> example.yx:5:5\n  |\n5 |     b.w\n  |     ^^^ witness 字段 'w' 是记录 'Box' 的编译期证据，运行期没有数据槽，不能在值级读取"
   },

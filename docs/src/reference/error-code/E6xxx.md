@@ -64,7 +64,7 @@ description: '程序运行期（VM / std 原生函数）产生的错误。'
 - **模板**：`断言失败：{condition}`
 - **消息**：运行时断言失败
 - **帮助**：修复断言条件或提供有效输入
-- **发射点**：`src/backends/mod.rs:202`、`src/std/assert.rs:94`、`src/util/diagnostic/mod.rs:232`
+- **发射点**：`src/backends/mod.rs:202`、`src/std/assert.rs:96`、`src/util/diagnostic/mod.rs:232`
 
 ### E6006：函数未找到（运行时）
 

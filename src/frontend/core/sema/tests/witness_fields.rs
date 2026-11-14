@@ -103,7 +103,7 @@ fn test_witness_record_data_field_read_is_allowed() {
         "Box: Type = { v: Int, w: Int }\n",
         "\n",
         "main: () -> Void = {\n",
-        "    b: Box = Box(v = 1, w = 2)\n",
+        "    b: Box = Box(v = 1)\n",
         "    x: Int = b.v\n",
         "}\n",
     );
@@ -127,7 +127,7 @@ fn test_witness_field_value_read_is_rejected() {
         "Box: Type = { v: Int, w: Int }\n",
         "\n",
         "main: () -> Void = {\n",
-        "    b: Box = Box(v = 1, w = 2)\n",
+        "    b: Box = Box(v = 1)\n",
         "    x: Int = b.w\n",
         "}\n",
     );
@@ -197,7 +197,7 @@ fn test_witness_record_field_assignment_is_rejected() {
         "Box: Type = { v: Int, w: Int }\n",
         "\n",
         "main: () -> Void = {\n",
-        "    b: Box = Box(v = 1, w = 2)\n",
+        "    b: Box = Box(v = 1)\n",
         "    b.v = 3\n",
         "}\n",
     );
@@ -245,7 +245,7 @@ fn test_witness_record_mutable_borrow_is_rejected() {
         "Box: Type = { v: Int, w: Int }\n",
         "\n",
         "main: () -> Void = {\n",
-        "    mut b: Box = Box(v = 1, w = 2)\n",
+        "    mut b: Box = Box(v = 1)\n",
         "    r: &mut Box = &mut b\n",
         "}\n",
     );
@@ -297,7 +297,7 @@ fn test_witness_record_method_receiver_write_borrow_is_rejected() {
         "Box.shift: (self: &mut Box) -> Void = {}\n",
         "\n",
         "main: () -> Void = {\n",
-        "    b: Box = Box(v = 1, w = 2)\n",
+        "    b: Box = Box(v = 1)\n",
         "    b.shift()\n",
         "}\n",
     );

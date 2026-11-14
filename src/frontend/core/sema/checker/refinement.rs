@@ -164,6 +164,8 @@ impl TypeChecker {
                 // RFC-027 §3.4：绑定初始值若为调用，校验其实参
                 if let Some(v) = value.as_deref() {
                     self.check_call_arg_refinements(v, unit, ctx);
+                    // B.2：构造点义务（表达式任意位置，含嵌套）
+                    self.walk_ctor_obligations(v, unit, ctx);
                 }
                 registered
             }
@@ -211,6 +213,10 @@ impl TypeChecker {
                     }
                     _ => {}
                 }
+                // B.2：构造点义务（Block/Lambda 已由上面的路由独立走查）
+                if !matches!(rhs.as_ref(), Expr::Block(_) | Expr::Lambda { .. }) {
+                    self.walk_ctor_obligations(rhs, unit, ctx);
+                }
                 Vec::new()
             }
             StmtKind::If {
@@ -224,6 +230,7 @@ impl TypeChecker {
                 // 的分支（不可达分支不产生验证义务、不并进汇合）；不可判定时
                 // 保守展开。各路径从同一前置值环境出发，汇合取等值交集——
                 // 仅部分分支改写（或声明）的变量出块即值未知
+                self.walk_ctor_obligations(condition, unit, ctx);
                 let paths = self.refined_walk_if_paths(
                     condition,
                     &then_branch.stmts,
@@ -235,11 +242,20 @@ impl TypeChecker {
                 unit.values = meet_value_paths(paths);
                 Vec::new()
             }
-            StmtKind::For { var, body, .. } => {
+            StmtKind::For {
+                var,
+                iterable,
+                body,
+                ..
+            } => {
+                self.walk_ctor_obligations(iterable, unit, ctx);
                 self.refined_walk_loop_body(Some(var), body, unit, ctx);
                 Vec::new()
             }
             StmtKind::Expr(expr) => {
+                // B.2：构造点义务（语句位置的表达式树；Block/While/For 的体由
+                // 下面的路由独立走查，不重复下钻）
+                self.walk_ctor_obligations(expr, unit, ctx);
                 match expr.as_ref() {
                     // 值块：当前作用域顺序执行
                     Expr::Block(block) => {
@@ -261,6 +277,10 @@ impl TypeChecker {
                     }
                     _ => {}
                 }
+                Vec::new()
+            }
+            StmtKind::Return(Some(value)) => {
+                self.walk_ctor_obligations(value, unit, ctx);
                 Vec::new()
             }
             _ => Vec::new(),
@@ -463,7 +483,7 @@ impl TypeChecker {
     ///
     /// 取不出实参（不是谓词、形态不可转换、元数不符）时返回 `None` 且**不报诊断**：
     /// 那几条路径的诊断归属注册路径，此处只负责「按 AST 无损代入」。
-    fn refine_predicate_from_ast_args(
+    pub(super) fn refine_predicate_from_ast_args(
         &self,
         name: &str,
         args: &[crate::ast::Type],
@@ -510,7 +530,7 @@ impl TypeChecker {
     /// 后才变成占位 `"<const-expr>"`。取不出时退回 `MonoType` 形态（与
     /// `mono_type_to_const_expr` 同源：裸名 → `NamedVar`、字面量 → `Lit`），
     /// 使实参覆盖面与既有路径一致。
-    fn ast_type_to_const_expr(
+    pub(super) fn ast_type_to_const_expr(
         &self,
         ty: &crate::ast::Type,
     ) -> Option<ConstExpr> {
@@ -720,6 +740,33 @@ impl TypeChecker {
         span: crate::util::span::Span,
         evidence: Option<crate::frontend::core::types::const_data::ConstExpr>,
     ) {
+        Self::judge_refined_obligation_with_mode(
+            ctx,
+            substituted,
+            bindings,
+            assigned,
+            subject,
+            display,
+            span,
+            evidence,
+            crate::frontend::core::sema::layers::predicate::PredicateMode::Full,
+        );
+    }
+
+    /// 判定单元的档位版（唯一实现；构造点义务用 `NoSmt`——SMT 只作提示，
+    /// 不作证明来源，D3 裁决前不得把 SMT Unsat 当成构造义务的证明）。
+    #[allow(clippy::too_many_arguments)]
+    fn judge_refined_obligation_with_mode(
+        ctx: &mut RefinedWalkCtx<'_, '_>,
+        substituted: &MonoType,
+        bindings: &HashMap<String, ConstValue>,
+        assigned: &str,
+        subject: &str,
+        display: &str,
+        span: crate::util::span::Span,
+        evidence: Option<crate::frontend::core::types::const_data::ConstExpr>,
+        mode: crate::frontend::core::sema::layers::predicate::PredicateMode,
+    ) {
         let scoped = evidence.is_some();
         if scoped {
             ctx.shared_ctx.assumptions.enter_scope();
@@ -727,10 +774,11 @@ impl TypeChecker {
                 ctx.shared_ctx.assumptions.inject(evidence);
             }
         }
-        let outcome = crate::frontend::core::sema::layers::predicate::check_predicate(
+        let outcome = crate::frontend::core::sema::layers::predicate::check_predicate_with_mode(
             ctx.shared_ctx,
             substituted,
             bindings,
+            mode,
         );
         if scoped {
             ctx.shared_ctx.assumptions.exit_scope();
@@ -770,6 +818,229 @@ impl TypeChecker {
                     ctx.proof_calls.extend(calls);
                 }
             }
+        }
+    }
+
+    /// 构造点义务（RFC-027 §14.2 / SPEC §8.3.2）：记录构造实参逐条证明 evidence。
+    ///
+    /// 调用方（[Self::walk_ctor_obligations]）负责遍历；本函数只做：
+    /// ① 取记录模型；② 按共享判据绑定数据字段；③ 用 `substitute_const_expr`
+    /// 把字段名代换成实参项；④ 交**唯一判定单元**（NoSmt 档：direct eval /
+    /// 精确 Γ / 证明函数；SMT 不作证明来源，D3 裁决前不借码）。
+    ///
+    /// 判定不了的模型（参数/缺省折叠不出）保留符号项 `NamedVar`：判定降为
+    /// Unproven（E2031 或证明调用），**不静默放行**。
+    fn check_record_ctor_obligations(
+        &self,
+        expr: &Expr,
+        unit: &RefinedScopeUnit,
+        ctx: &mut RefinedWalkCtx<'_, '_>,
+    ) {
+        let Expr::Call {
+            func,
+            args,
+            named_args,
+            span,
+            ..
+        } = expr
+        else {
+            return;
+        };
+        // 非泛型构造 `Box(...)` 与两层构造 `SafeArray(Int, 3)(...)`（内层是类型
+        // 构造调用，运行期擦除）都归到记录名上。
+        let callee: &str = match func.as_ref() {
+            Expr::Var(name, _) => name,
+            Expr::Call { func: inner, .. } => match inner.as_ref() {
+                Expr::Var(name, _) => name,
+                _ => return,
+            },
+            _ => return,
+        };
+        let Some(model) = self.env.record_models.get(callee) else {
+            return;
+        };
+        if model.obligations.is_empty() && model.admission_fields.is_empty() {
+            return;
+        }
+        let data_indices: Vec<usize> = model.data_field_indices().collect();
+        // 超参调用已被推断层拒（E1010）——本走查不重复发射，也不按错位实参造义务。
+        if args.len() + named_args.len() > data_indices.len() {
+            return;
+        }
+        let param_names: Vec<String> = data_indices
+            .iter()
+            .map(|index| model.fields[*index].name.clone())
+            .collect();
+        let optional: Vec<bool> = data_indices
+            .iter()
+            .map(|index| model.fields[*index].has_default)
+            .collect();
+        // 绑定畸形（缺参/未知名/争槽/重复命名/超参）已由推断层报码；本走查
+        // 只消费映射，不重复发射。
+        let Ok(slots) = crate::frontend::core::sema::inference::arg_binding::bind_args_to_params(
+            callee,
+            &param_names,
+            args,
+            named_args,
+            0,
+            &optional,
+            *span,
+        ) else {
+            return;
+        };
+        for obligation in &model.obligations {
+            let field = match model.fields.get(obligation.field) {
+                Some(field) => field,
+                None => continue,
+            };
+            // 依赖位的实参项：位置实参在前、命名实参按书写序（与 IR 侧同一坐标）；
+            // 缺省字段取声明默认值。折叠不出时保留字段名作符号项 → 判定降为
+            // Unproven（E2031 / 证明调用），不静默放行。
+            let mut substituted_names: Vec<String> = Vec::new();
+            let mut substituted_values: Vec<ConstExpr> = Vec::new();
+            for dependency in &obligation.depends_on {
+                let Some(dependency_field) = model.fields.get(*dependency) else {
+                    continue;
+                };
+                let Some(slot) = data_indices.iter().position(|index| index == dependency) else {
+                    continue;
+                };
+                let value = match slots.iter().position(|bound| *bound == slot) {
+                    Some(argument) if argument < args.len() => {
+                        convert_expr_to_const_expr(&args[argument])
+                    }
+                    Some(argument) => named_args
+                        .get(argument.saturating_sub(args.len()))
+                        .and_then(|(_, expr)| convert_expr_to_const_expr(expr)),
+                    // 缺省字段：默认值表达式不在 `StructFieldInfo` 里（模型只记
+                    // `has_default`）。B.2a 先按符号项处理（判定降为 Unproven，
+                    // 失败闭合）；把默认值折进模型随 B.2b 的实例化面落地。
+                    None => None,
+                };
+                substituted_names.push(dependency_field.name.clone());
+                substituted_values.push(
+                    value.unwrap_or_else(|| ConstExpr::NamedVar(dependency_field.name.clone())),
+                );
+            }
+            let constraint =
+                crate::frontend::core::sema::layers::termination::substitute_const_expr(
+                    &obligation.proposition.constraint,
+                    &substituted_names,
+                    &substituted_values,
+                );
+            let refined = MonoType::Refined {
+                base: Box::new(obligation.proposition.base.clone()),
+                constraint,
+            };
+            // RFC-027 §8 / H8：一次判定一份预算（构造义务不继承前序判定步数）。
+            ctx.shared_ctx.budget =
+                crate::frontend::core::sema::proof::budget::BudgetTracker::for_judgment();
+            Self::judge_refined_obligation_with_mode(
+                ctx,
+                &refined,
+                &unit.values,
+                callee,
+                &format!("{}.{}", callee, field.name),
+                &format!("{}", obligation.proposition.constraint),
+                *span,
+                None,
+                crate::frontend::core::sema::layers::predicate::PredicateMode::NoSmt,
+            );
+        }
+        // admission（自引用精化）：值类型是 base，构造点证明自引用命题。
+        for admission in &model.admission_fields {
+            let Some(field) = model.fields.get(admission.field) else {
+                continue;
+            };
+            let Some(slot) = data_indices
+                .iter()
+                .position(|index| *index == admission.field)
+            else {
+                continue;
+            };
+            let value = match slots.iter().position(|bound| *bound == slot) {
+                Some(argument) if argument < args.len() => {
+                    convert_expr_to_const_expr(&args[argument])
+                }
+                Some(argument) => named_args
+                    .get(argument.saturating_sub(args.len()))
+                    .and_then(|(_, expr)| convert_expr_to_const_expr(expr)),
+                None => None,
+            };
+            let self_term = value.unwrap_or_else(|| ConstExpr::NamedVar(field.name.clone()));
+            let constraint =
+                crate::frontend::core::sema::layers::termination::substitute_const_expr(
+                    &admission.proposition.constraint,
+                    std::slice::from_ref(&field.name),
+                    std::slice::from_ref(&self_term),
+                );
+            let refined = MonoType::Refined {
+                base: Box::new(admission.proposition.base.clone()),
+                constraint,
+            };
+            ctx.shared_ctx.budget =
+                crate::frontend::core::sema::proof::budget::BudgetTracker::for_judgment();
+            Self::judge_refined_obligation_with_mode(
+                ctx,
+                &refined,
+                &unit.values,
+                callee,
+                &format!("{}.{}", callee, field.name),
+                &format!("{}", admission.proposition.constraint),
+                *span,
+                None,
+                crate::frontend::core::sema::layers::predicate::PredicateMode::NoSmt,
+            );
+        }
+    }
+
+    /// 表达式树里的构造点遍历（B.2：构造义务必须**满覆盖**，不能只查语句位置）。
+    ///
+    /// `Block` / `Lambda` 不在此下钻：语句走查与函数体走查已各自路由到
+    /// `refined_walk_stmts` / `refined_walk_fn_body`，重复下钻会双判。
+    fn walk_ctor_obligations(
+        &self,
+        expr: &Expr,
+        unit: &RefinedScopeUnit,
+        ctx: &mut RefinedWalkCtx<'_, '_>,
+    ) {
+        match expr {
+            Expr::Call {
+                func,
+                args,
+                named_args,
+                ..
+            } => {
+                self.check_record_ctor_obligations(expr, unit, ctx);
+                self.walk_ctor_obligations(func, unit, ctx);
+                for arg in args {
+                    self.walk_ctor_obligations(arg, unit, ctx);
+                }
+                for (_, arg) in named_args {
+                    self.walk_ctor_obligations(arg, unit, ctx);
+                }
+            }
+            Expr::BinOp { left, right, .. } => {
+                self.walk_ctor_obligations(left, unit, ctx);
+                self.walk_ctor_obligations(right, unit, ctx);
+            }
+            Expr::UnOp { expr, .. } => self.walk_ctor_obligations(expr, unit, ctx),
+            Expr::FieldAccess { expr, .. } => self.walk_ctor_obligations(expr, unit, ctx),
+            Expr::Tuple(items, _) | Expr::List(items, _) => {
+                for item in items {
+                    self.walk_ctor_obligations(item, unit, ctx);
+                }
+            }
+            // 表达式形态的 `if`：分支是 Block（语句走查的覆盖面），此处只走条件，
+            // 不下钻分支——避免与语句路由重复判定。
+            Expr::If { condition, .. } => self.walk_ctor_obligations(condition, unit, ctx),
+            Expr::Cast { expr, .. } => self.walk_ctor_obligations(expr, unit, ctx),
+            Expr::Index { expr, index, .. } => {
+                self.walk_ctor_obligations(expr, unit, ctx);
+                self.walk_ctor_obligations(index, unit, ctx);
+            }
+            Expr::Return(Some(value), _) => self.walk_ctor_obligations(value, unit, ctx),
+            _ => {}
         }
     }
 

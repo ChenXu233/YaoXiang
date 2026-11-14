@@ -1227,7 +1227,7 @@
     "title": "witness 字段不能在值级读取喵~",
     "message": "witness 字段 '{field}' 是记录 '{type}' 的编译期证据喵~，运行期没有数据槽，所以不能在值级读取nya~",
     "template": "witness 字段 '{field}' 是记录 '{type}' 的编译期证据喵~，运行期没有数据槽，所以不能在值级读取nya~",
-    "help": "witness 字段只在编译期用来做证明喵~（构造义务和导出），值级读取和类型级投影留到后面的阶段nya。需要运行期数据的话，请把它建成普通的数据字段喵~",
+    "help": "witness 字段是在类型级用的喵~ `b.w` 是证据项，可以当证明的前提，不是值级读取（运行期没有数据槽）nya。需要运行期数据的话，请把它建成普通的数据字段喵~",
     "example": "Box: Type = { v: Int, w: Pos(v) }  // w 是 witness 字段喵~，运行期没有数据槽nya~\nmain: () -> Void = {\n    b: Box = Box(v = 1)\n    b.w\n}",
     "error_output": "error[E1114]: witness 字段不能在值级读取喵~\n --> example.yx:5:5\n  |\n5 |     b.w\n  |     ^^^ witness 字段 'w' 是记录 'Box' 的编译期证据喵~，运行期没有数据槽，所以不能在值级读取nya~"
   },

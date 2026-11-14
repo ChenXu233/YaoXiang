@@ -2108,6 +2108,7 @@ impl AstToIrGenerator {
                                     }
                                 })
                                 .collect();
+                            let fields = self.classified_fields(name, &fields);
                             self.struct_definitions.insert(name.clone(), fields);
                             self.register_type_bindings(name, &bindings);
                         }
@@ -2116,6 +2117,40 @@ impl AstToIrGenerator {
                 }
             }
         }
+    }
+
+    /// 声明期分类的量词投影（`TypeCheckResult.record_models` 是唯一来源）。
+    ///
+    /// `struct_definitions` 与 `TypeDeclBody` 都从这里取字段：AST 的
+    /// `StructField.quantity` 生产恒为 `None`，量词只在记录模型里。
+    fn classified_fields(
+        &self,
+        name: &str,
+        fields: &[ast::StructField],
+    ) -> Vec<ast::StructField> {
+        let mut patched = fields.to_vec();
+        if let Some(model) = self
+            .type_result
+            .as_ref()
+            .and_then(|result| result.record_models.get(name))
+        {
+            for (field, classified) in patched.iter_mut().zip(model.fields.iter()) {
+                field.quantity = classified.quantity;
+            }
+        }
+        patched
+    }
+
+    /// 构造参数/布局的**数据字段投影**：witness 字段运行期无槽位、也不是构造实参。
+    fn data_ctor_fields(fields: &[ast::StructField]) -> Vec<(usize, ast::StructField)> {
+        fields
+            .iter()
+            .enumerate()
+            .filter(|(_, field)| {
+                !crate::frontend::core::types::mono::quantity_is_witness(field.quantity)
+            })
+            .map(|(index, field)| (index, field.clone()))
+            .collect()
     }
 
     /// RFC-029 多文件编排：登记跨文件全局布局（限定名 → 绝对槽位号）。
@@ -2307,6 +2342,7 @@ impl AstToIrGenerator {
                                 }
                             })
                             .collect();
+                        let fields = self.classified_fields(name, &fields);
                         self.struct_definitions.insert(name.clone(), fields);
                         // 记录绑定信息（用于方法调用时的参数重排，RFC-004）
                         self.register_type_bindings(name, &bindings);
@@ -2350,18 +2386,21 @@ impl AstToIrGenerator {
                     // 故 6.5 时代「入 IR 前剥形参名」的 `without_fn_param_names` 随之删除。
                     body: FunctionBody::TypeDecl {
                         body: TypeDeclBody {
-                            fields: definition
-                                .struct_fields()
-                                .into_iter()
-                                .map(|f| TypeDeclField {
-                                    name: f.name.clone(),
-                                    ty: f.ty.clone().into(),
-                                    quantity: f.quantity,
-                                    is_mut: f.is_mut,
-                                    has_default: f.default.is_some(),
-                                    is_method: Self::field_is_method(&f.ty),
-                                })
-                                .collect(),
+                            fields: {
+                                let declared: Vec<ast::StructField> =
+                                    definition.struct_fields().into_iter().cloned().collect();
+                                self.classified_fields(name, &declared)
+                                    .into_iter()
+                                    .map(|f| TypeDeclField {
+                                        name: f.name.clone(),
+                                        ty: f.ty.clone().into(),
+                                        quantity: f.quantity,
+                                        is_mut: f.is_mut,
+                                        has_default: f.default.is_some(),
+                                        is_method: Self::field_is_method(&f.ty),
+                                    })
+                                    .collect()
+                            },
                             self_type: Self::type_decl_self_type(definition),
                         },
                     },
@@ -9034,19 +9073,23 @@ impl AstToIrGenerator {
                             named_regs.push((arg_name.clone(), Operand::Local(arg_reg)));
                         }
 
-                        // 按字段顺序重排参数
-                        let mut final_args: Vec<Option<Operand>> = vec![None; fields.len()];
+                        // 按**数据字段**顺序重排参数（witness 字段不占构造槽位）
+                        let data_fields = Self::data_ctor_fields(&fields);
+                        let mut final_args: Vec<Option<Operand>> = vec![None; data_fields.len()];
 
                         // 先放置位置参数
                         for (i, reg) in arg_regs.iter().enumerate() {
-                            if i < fields.len() {
+                            if i < data_fields.len() {
                                 final_args[i] = Some(reg.clone());
                             }
                         }
 
                         // 再放置命名参数（按字段名匹配）
                         for (name, reg) in &named_regs {
-                            if let Some(idx) = fields.iter().position(|f| &f.name == name) {
+                            if let Some(idx) = data_fields
+                                .iter()
+                                .position(|(_, field)| &field.name == name)
+                            {
                                 final_args[idx] = Some(reg.clone());
                             }
                         }
@@ -9055,7 +9098,7 @@ impl AstToIrGenerator {
                         for (i, slot) in final_args.iter_mut().enumerate() {
                             if slot.is_none() {
                                 let default_reg = self.next_temp_reg();
-                                if let Some(default_expr) = &fields[i].default {
+                                if let Some(default_expr) = &data_fields[i].1.default {
                                     self.generate_expr_ir(
                                         default_expr,
                                         default_reg,
@@ -9092,9 +9135,10 @@ impl AstToIrGenerator {
             if let Some(name) = struct_ctor_name {
                 if let Some(fields) = self.struct_definitions.get(&name).cloned() {
                     // 这是一个结构体构造器调用
-                    // 如果提供的参数数少于字段数，用默认值填充
-                    if arg_regs.len() < fields.len() {
-                        for field in fields.iter().skip(arg_regs.len()) {
+                    // 数据字段数才是构造参数上限；witness 字段不占槽位
+                    let data_fields = Self::data_ctor_fields(&fields);
+                    if arg_regs.len() < data_fields.len() {
+                        for (_, field) in data_fields.iter().skip(arg_regs.len()) {
                             let default_reg = self.next_temp_reg();
                             if let Some(default_expr) = &field.default {
                                 // 有默认值：生成默认值表达式 IR
