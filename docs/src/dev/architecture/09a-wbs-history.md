@@ -5651,8 +5651,8 @@ B.2a 只对 `type_params` 为空的非泛型 `Type::Struct` 调本遍（泛型�
 
 ### 六、变异验证（t12 补登，2026-11-14；scratch.py trial，机械可逆）
 
-> t6 复审 F3（medium）指出契约 §七 的 M01–M05 无执行登记。本节由复审成员在同一台机器、批次树
-> 批次树 `t6-mutations`（`init --rev a8e98587` → `build` 全量 49 s）上补跑；
+> t6 复审 F3（medium）指出契约 §七 的 M01–M05 无执行登记。本节由复审成员在同一台机器、同一批次树
+> `t6-mutations`（`init --rev a8e98587` → `build` 全量 49 s）上补跑；
 > 补丁文件与原始输出随批次树回收（`gc`，不入库、不作为引用出处），登记的硬证据是下表的 blob 对与红态测试名。
 > 命令口径：`python scripts/dev/scratch.py trial t6-mutations --patch <p> -- cargo test --lib <filter>`；
 > 每个 trial 的机械还原能力由 trial 本身保证（apply → 跑 → apply -R → 逐文件 blob 对 HEAD + `git status` CLEAN）。
@@ -5727,6 +5727,10 @@ M03 此前已由 t6 复审探针证成（禁用 `check_record_ctor_obligations` 
 - **默认值字段作 evidence 依赖**仍按符号项 → E2031（B.2a 起的登记边界）。
 - **D2 码位**仍 provisional（单点 helper，裁决后只改一处）；**D3** 维持 NoSmt。
 - **proof family 旧写法不再支持**：`P: (T) -> Type` 的 `P` 不被 `classify_generic_params` 认作类型参数；RFC-027 §14.3 / SPEC §8.3.3 已改为 `P: (T: Type) -> Type`，kind 记法 `T -> Proposition` 只留正文。
+
+### 六、复审（t14，2026-11-15）
+
+verdict=pass，对齐提交版 `3dafb813`。四项验收全过：① F1/F2/F3 的文档与变异证据在提交版消除失实/方向违规/缺登记；② B.2b 红态在冻结 `a8e98587` 批次树独立复现，绿态在 B.2b 树独立复现 T22–T26，`record_evidence` 27/27；③ 修复轮三处缺陷（kind 去重吞站点 / 槽位散文 / 级联 E2031）均有守卫测试；④ NoSmt 未被绕过（`predicate.rs` 零改动，构造义务两处消费面仍 NoSmt，新增诊断不经 SMT）。obligations 14/14、docs-refs/truth/markdownlint 绿；快照 1 文件已分类；批次已 release+gc（2308.1 MB）。非阻断观察：本节“批次树”重复措辞已改正；t16 交办的 SPEC §8.3.1 第 4 行对齐已在提交版完成，无遗留。
 
 ## P3 3.20.30 收口（深嵌套表达式栈溢出改正式诊断——大栈线程 + 解析闸 E0019，#540，2026-11-14）
 
