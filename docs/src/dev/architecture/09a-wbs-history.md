@@ -5309,3 +5309,17 @@ fmt / clippy -D warnings / testsuite fast（2095 条 exit 0）/ corpus parity（
 ### 四、边界
 
 E1114/E1115 用户可达留 B.2；本批无新语法、无 witness 产出；不宣称 Σ 完全体。`z` 索引、`CreateStruct`/`local_count` 的证据均在直驱 IR/bytecode 测试内。
+
+## P3 3.20.28 收口（mono 特化名缺 function_files 条目——std 诊断行号贴用户文件，#443，2026-11-14）
+
+> **一、查证（出处归属修正）**：issue 自述根因指向展示层；实测根因在 mono 层——`function_files` 由 link 期按 mono **前**的函数名建表，特化名与柯里克隆名是 mono 期新生、缺条目；codegen 给 debug span 定 file_id 时按名查不到、`unwrap_or(0)` 回退文件表首条目；且首条目是入口还是 `<std/list>` 取决于入口路径与虚拟路径的 Path 排序（Windows Prefix 组件排前的平台偶然）。症状：std.list 第 157 行的错误被贴成仅 15 行用户文件的第 157 行——诊断指向不存在的行，用户照行号查不到内容。分类按 07 oracle 表登记 **B 类**（任务书预设 C 类，判据以 07 表为准）。
+
+> **二、修法（判据单源）**：Monomorphizer 增 `specialized_origins` 登记面——特化件与柯里克隆件两个出生点各登记来源函数名（特化出生点 = 泛型原函数名，克隆出生点 = 柯里层名），`build_output` 统一消费成 `function_files` 条目；不从特化名反推原件（字符串反推 = 平行事实，禁令三）。修后诊断文件字段 = RFC-036 §4 虚拟路径 `<std/list>`、行号落在 std 源真实行（157 行 `probe = list[index]` 逐字核对）——用户照诊断能找到真实现场。
+
+> **三、基线再生（升级裁决）**：语料基线把 #443 缺陷形态逐字冻结（旧条目 list_remove_at_oob_err 的 E6003 文件字段 = 用户文件 + std 行号 157）。按批次协议升级裁决（队长批准，2026-11-14）：漂移即修复的预期可观察变化 ⇒ 由实现者再生，diff 恰 1 行（该条目文件字段 → `<std/list>`，行号与 W1004/check 半边逐字不变，其余 387 条零变化，numstat 1/1），与修复同提交（红线：基线与行为改动同提交），队长提交前人工亲核该行（旧形态 = 缺陷本身的记录，新形态 = 修复行为）。
+
+> **四、冲突解决（红线 10⑩）**：本笔与并行会话 6.9.5-B.1b+c（`74c92c3b`）的 translator.rs 编辑同文件相撞——rebase 中双方 E8xxx 发射点行号平移冲突。解法 = 逐 hunk 解（不整文件取一方）+ 在合并树上重跑 gen-error-code-docs.py（生成器是唯一事实源），E8001 发射点终态 297/1380；解后本地编译 + cli_e2e 64 / monomorphize 17 全绿才 `git rebase --continue`。t3 备案：终态 297 与 rebase 前原笔同值是算术巧合（对方净增行全部落在该发射点之后），「非任一侧」按点位只对第 2 点严格成立，实质（合并树重跑、双方编辑共存）成立——措辞按点位须精确的教训。
+
+> **五、验证链与 t3 备案**：t1 门禁 14 项全绿 → t2 **PASS**（M1 登记面摘除 ⇒ 单元锚红；M2 消费面摘除 ⇒ 单元锚红——登记与消费各自承重，trial 机械可逆 blob 比对；修复态双锚绿 + list_remove_at_oob_err 夹具 CLI 实跑文件字段 = `<std/list>` 行号 157；IR 快照零漂移；语料差分对再生后基线逐字节零漂移）→ t3 **APPROVE**（5 条 info 备案，无阻塞）：①E8001 终态措辞按点位不够精确（实质成立，见四）；②「git stash 先红后绿手法」只记录在提交信息、两处新测试注释无 stash 字样——缓解 = 修前红态由断言机械蕴含（`function_files` 无条目 → assert_eq 失败）+ 基线冻结的缺陷行独立佐证；③提交信息回归计数 mono 81 / predicate 30 属 cargo filter 口径静态不可精确重构，可静态核对的四个计数（integration 375 / cli_e2e 64 / binding_positions 5 / evaluator 16）全精确命中；④基线再生裁决记录在冻结 rev 仅存提交信息——按团队编排第 8 条收口文档最后落属正常时序（本节即落档兑现）；⑤build_output 消费点 origin 查不到时静默跳过——按出生点不变式该分支不可达（两出生点 origin 均在 link 期建表覆盖集内），防御性残留非缺陷。
+
+> **六、计数与移交**：三级 +1 = 3.20.28（240→241）；二级不变。issue [#443](https://github.com/ChenXu233/YaoXiang/issues/443) **关闭**。修复笔推送终态 `794430f0`（含 rebase 冲突解决终态）。批次树已 release。
