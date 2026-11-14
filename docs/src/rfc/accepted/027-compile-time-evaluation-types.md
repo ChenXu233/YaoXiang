@@ -3,7 +3,7 @@ title: 'RFC-027：编译期谓词与统一静态验证'
 status: '已接受'
 author: '晨煦'
 created: '2026-06-07'
-updated: '2026-10-03'
+updated: '2026-11-14'
 impl_status: 'in-progress'
 impl_detail:
   'Phase 1-2 完成，Phase 3 部分完成，Phase 4 部分完成。assert/Assert 统一方案 6 Phase
@@ -11,7 +11,12 @@ impl_detail:
   set、类型级递归、宇宙分层弱检查。§11 的 dispatch 分派**语义**已由调用点义务实现
   （`checker.rs` 三处直接调 `check_predicate`：绑定位 / 调用点实参 / 返回位），但**独立的
   `layers/dispatch.rs` 模块已删除**——它零生产调用点，且对 `Unproven` 的处置（降级为 W1080
-  警告）与生产实做（一律报错）相冲突（#377-2）。'
+  警告）与生产实做（一律报错）相冲突（#377-2）。证明内核、逻辑签名、证书与 SMT 角色按
+  RFC-039 D62 的统一项世界重写（§4、§8、§13）：SMT/tactics/proof search 是**不可信
+  certificate producer**，`unsat` 只是搜索结果，必须构造出证书经 `Kernel::check` 验证才得
+  Proved。`predicate.rs` 当前的 `SMTResult::Unsat => Ok(())` 是裸信 SMT 的缺口，见 §8.6。
+  §14 就地补完依赖记录 Σ：proof-space 字段判据、构造器 data-only + 自动合成证据、proof family 参数 `P: T -> Proposition`、
+  `TypeDefPayload` 跨模块证据槽、`ConstExpr::FieldPath` 类型级 `b.w`、5A 不可变与四码分工。'
 impl_percent: 82
 issue_number: 90
 issue_url: 'https://github.com/ChenXu233/YaoXiang/issues/90'
@@ -35,7 +40,14 @@ issue: '#90'
 
 本文提出为 YaoXiang 引入**编译期谓词**作为一等公民，将所有编译期静态验证统一为一条**证明管道**。编译期谓词不是外挂的规约注释——它就是函数。一个返回 Type 的函数，可在类型位置使用，编译器在编译期调用它并检查返回值。类型即命题，编译期求值即证明。
 
-**核心论点**：类型检查在编译期唯一的工作就是构造和验证证明项。类型等式、令牌冲突、依赖类型归约、编译期谓词求值、霍尔逻辑蕴含——全部是编译期证明管道中的不同类型检查，共享同一条管道。SMT 求解器是类型检查器的加速模块，不是独立的信任边界。当编译器返回 Unproven 时，程序员写一个 YaoXiang 函数作为证明——类型检查器以与验证任何函数返回类型完全相同的方式验证它。一切都是 YaoXiang 代码，一切由类型检查器验证。
+**核心论点**：类型检查在编译期唯一的工作就是构造和验证证明项。类型等式、令牌冲突、依赖类型归约、
+编译期谓词求值、霍尔逻辑蕴含——全部是编译期证明管道中的不同类型检查，共享同一条管道、同一个证明
+内核 `Kernel::check`。证明项与命题都住在同一套**统一项世界**（RFC-039 D62）；命题由**逻辑签名**
+`LogicSignature` 赋予意义，证明项以**证书** `Certificate` 表示，证书相对签名而言，只由内核按签名
+的规则验证。SMT 求解器、tactic、proof search 都是**不可信的 certificate producer**：它们只负责找
+证书，`unsat` 不是 `Proved`。当内核返回 Unproven 时，程序员写一个 YaoXiang 证明函数作为显式证据
+——它就是一个证明项，内核以与验证任何函数返回类型完全相同的方式验证它。一切都是 YaoXiang 代码，
+一切由证明内核验证。
 
 ## 动机
 
@@ -61,7 +73,8 @@ max: (T: Ord) -> ((arr: Array(T, n)) -> T) = {
 - RFC-022 的 `//!` 注释是独立于类型系统的外挂语法
 - 规约类型和普通类型是两套体系，造成概念冗余
 - Debug Build 验证 / Release Build 忽略的分裂模式破坏了统一性
-- SMT 求解器在传统认知中被定位为外部工具——YaoXiang 将其作为类型检查器的加速模块内置
+- SMT 求解器在传统认知中被定位为外部工具或「信任 Z3 的 unsat」——YaoXiang 将其定位为不可信的
+  certificate producer：产出候选证书，由证明内核验证
 - 类型检查、借用验证、编译期谓词检查、宏展开各自走不同的路径
 
 ### 正确的心智模型
@@ -69,19 +82,21 @@ max: (T: Ord) -> ((arr: Array(T, n)) -> T) = {
 类型检查可以抽象为一个函数：
 
 ```
-verify : Program → Proved | Disproved(Model) | Unproven
+Kernel::check(signature, certificate, proposition) → Proved | Disproved(Model) | Unproven
 ```
 
 所有编译期检查——简单类型匹配、借用冲突检测、编译期谓词验证——都是这个函数的子任务。它们共享同一条证明管道，区别仅在于证明项复杂度和构造策略。
 
-当编译器返回 Unproven 时，程序员提供一个证明函数——该函数的返回类型等于待证命题。类型检查器验证它。这和平常的类型检查是同一个操作。
+每个义务都携带当前生效的 `LogicSignature`。当内核返回 Unproven 时，程序员补显式证据：
+提供一个证明函数（其返回类型等于待证命题）作为证书。内核用同一签名验证它——这和平常的
+类型检查是同一个操作。签名可替换：换签名就是换一套推理规则，但内核与三值结果不变（§4.1）。
 
 ## 提案
 
 ### 1. `{}` 是证明空间：类型即断言，验证即类型检查
 
 YaoXiang 的 `{}`
-是编译期证明空间。里面的一切都是断言，编译器保证每一项为 True——要么自动证明，要么由程序员提供证明函数。
+是编译期证明空间。里面的一切都是断言，证明内核按当前 `LogicSignature` 保证每一项有可验证的证书——要么由 producer 自动找到，要么由程序员补显式证据（§4.3）。
 
 ```
 Point: Type = { x: Float, y: Float }
@@ -123,8 +138,7 @@ sum: (arr: Array(Int)) -> Int = {
 }
 ```
 
-编译器对循环体生成一次验证条件——归纳假设（类型标注）→ 赋值操作 → 新值是否满足类型标注。证明管道验证归纳步成立后，所有迭代自动覆盖。不需要
-`: decreases`，不需要 `: Invariant`，不需要归纳证明——编译器把归纳分解为每个赋值的局部 VC。
+编译器对循环体生成一次验证条件——归纳假设（类型标注）→ 赋值操作 → 新值是否满足类型标注。producer 为归纳步产出候选证书、`Kernel::check` 验证成立后，所有迭代自动覆盖。不需要 `: decreases`，不需要 `: Invariant`，不需要归纳证明——归纳被分解为每个赋值的局部 VC。
 
 ### 2. 前置/后置条件：参数类型和返回类型上的编译期谓词
 
@@ -186,7 +200,9 @@ max: (T: Ord) -> ((arr: NonEmpty(arr))) -> (result: IsMax(T, arr, result)) = {
 
 ### 3. 路径条件传播：运行时值的编译期验证
 
-编译期谓词在绑定位置使用时，参数由程序员显式传入。当运行时值进入精化类型参数时，编译器通过路径条件收集和 SMT 蕴含判断完成验证——无需程序员显式传递证明。
+编译期谓词在绑定位置使用时，参数由程序员显式传入。当运行时值进入精化类型参数时，producer
+收集路径条件并产出候选证书，由 `Kernel::check` 按当前 `LogicSignature` 验证——无需程序员
+隐式传递证明，显式证据是补证据时的一等形态（§4.3）。
 
 #### 3.1 显式函数调用
 
@@ -270,7 +286,7 @@ if y > 0 {
   `b > 0`）
 - **赋值**：`let z = y` 时，`y` 上已有的精化条件传递到 `z`
 
-所有假设进入编译期证明管道。当进入 SMT 加速路径时，翻译为 SMT-LIB 背景断言。
+所有假设进入 `Certificate` 的 `context` 字段（`Γ`），随候选证书一并交给 `Kernel::check`；producer 需要 SMT 时，才把同一份 `Γ` 翻译为 SMT-LIB 背景断言。
 
 #### 3.4 无静态证据则编译错误
 
@@ -291,7 +307,7 @@ divide_user_input: (x: Int, y: Int) -> Int = divide(x, y)
 > 无法证明参数 `b` 在 `divide` 调用中满足 `Positive`。 `y`
 > 来自函数输入，无已证明的界。考虑用 if 分支守卫调用：`if y > 0 { divide(x, y) }`。
 
-YaoXiang 不接受运行时值直接进入精化类型参数而不提供静态证据。这不是限制——这是硬安全哲学的核心。凡编译器无法静态证明的代码，不得通过编译。
+YaoXiang 不接受运行时值直接进入精化类型参数而不提供静态证据。这不是限制——这是硬安全哲学的核心：凡 `Kernel::check` 在当前签名下验证不出证书的代码，不得通过编译。
 
 #### 3.5 与统一管道的关系
 
@@ -301,81 +317,191 @@ YaoXiang 不接受运行时值直接进入精化类型参数而不提供静态�
 | ------------ | -------------------------------------------------------------------------------------------------------- |
 | 路径条件收集 | 编译器控制流分析阶段，为每个基本块标注假设集                                                             |
 | 验证条件生成 | 遇到需验证的类型约束时，合并路径条件 + 实参类型信息                                                      |
-| 证明管道求值 | 编译器内核 → SMT 加速 → 得出 Proved / Disproved / Unproven                                               |
-| 结果         | `Proved` → 通过；`Disproved` → 编译错误 + 反例；`Unproven` → 编译错误 + 未解命题（程序员可提供证明函数） |
+| 证明管道判定 | certificate producer 产出候选证书 → `Kernel::check(signature, certificate, proposition)` → 三值 |
+| 结果         | `Proved` → 通过；`Disproved` → 编译错误 + 反例；`Unproven` → 编译错误 + 未解命题 + 补证据提示       |
 
-没有新部件。没有特殊规则。路径条件就是证明管道的背景知识——和类型等式、借用约束共享同一条管道、同一套预算系统。
+没有新部件。没有特殊规则。路径条件就是 `LogicSignature` 的局部假设集 `Γ`，它与类型等式、借用约束共享同一条管道、同一套预算系统。
 
-### 4. 编译期证明管道
+### 4. 证明内核：`Kernel::check`
 
-所有编译期检查共享同一条管道。管道的核心操作是**类型检查**——检查一个证明项的类型是否等于待证明的命题。一切皆类型检查。
+所有编译期检查共享同一条管道、同一个**证明内核**。内核的唯一判定入口是：
+
+```text
+Kernel::check(
+    signature   : LogicSignature,
+    certificate : Certificate,
+    proposition : Proposition,
+) -> CheckVerdict<Certificate>
+```
+
+`check` 是**纯函数**：给定同一签名、同一证书、同一命题，它永远返回同一结果；不读求解器状态、
+不读时钟、不读文件路径。它只做一件事——按 `signature` 的 `rules` 逐步重放 `certificate`
+的推导步，检查每一步的规则实例、前提、上下文与替换是否合法，并核对最终结论是否就是
+`proposition`。内核不搜索、不猜测、不补全证书；证书缺一步、用错规则、或结论对不上，都不得出
+`Proved`。
+
+这与 RFC-039 D62 的**统一项世界**是同一幅图：类型位置与值位置共享同一套编译期项；命题
+`Proposition`、证明项 `Certificate`、以及签名里的 sorts/rules/axioms 全是这一套项，不另立
+第二套证明语言。判等（§12.1）是纯判定，`q=0` 槽的证据（RFC-011 §4.1）是调用侧义务，
+Σ witness（§13）是构造点义务——三者都汇入同一个 `check`，不各开一条信任通道。
+
+`CheckVerdict<Certificate>` 的三值与 §4.1 一致：`Proved(checked)` 携带经内核验证的证书，
+`Disproved(model)` 携带反例，`Unproven` 携带未解命题与原因。只有 `Proved(checked)` 能使义务
+通过；`checked` 是可被编译期缓存与增量复用的那一份证书。
 
 ```
-编译期遇到 Bool 表达式需要求值（即：需要构造一个证明项）
+编译期义务（命题 + 当前 LogicSignature）
         │
-        ├── 类型等式（T1 == T2）
-        │   → 编译器直接判定（结构等价）
+        ├── producer 编排（都不可信，见 §8）
+        │   ├── 内核直判规则：结构等价、βδι-归约、令牌活性事实
+        │   ├── Γ 等式桥 / 调用侧 q=0 证据（RFC-011 §4.1）
+        │   ├── 显式证据：证明函数、axiom library / proof library 条目
+        │   └── SMT / tactics / proof search：产出候选 Certificate
         │
-        ├── 令牌冲突条件（!conflicting(tokens)）
-        │   → 流敏感活性分析（Dup/Linear 属性追踪）
+        ▼
+Kernel::check(signature, certificate, proposition)
+        │  按 signature.rules 重放每一步；不用「unsat」顶替检查
+        ▼
+ ┌──────────────────────────────────────────────┐
+ │ Proved(checked)   → 编译通过（证书编译期留存）│
+ │ Disproved(model)  → 编译错误 + 反例           │
+ │ Unproven          → 未解命题 + 原因 + 补证据  │
+ └──────────────────────────────────────────────┘
         │
-        ├── 依赖类型归约（n + m 化简）
-        │   → 编译期项重写系统（βδι-规约）
+        ▼
+Unproven → 提示补显式证据（证明函数 / 换签名 / 补公理）
         │
-        ├── 编译期谓词（x > 0, forall...）
-        │   → 编译器自身 + SMT 加速模块
-        │
-        └── 霍尔逻辑蕴含式（P ⇒ Q）
-            → 编译器 + SMT 加速模块
-                    │
-                    ▼
-             ┌──────────┐
-             │ Proved   │  → 编译通过
-             │ Disproved│  → 编译错误 + 反例
-             │ Unproven │  → 编译错误 + 未解命题
-             └────┬─────┘
-                  │
-                  ▼
-         程序员写证明函数（YaoXiang 代码）
-                  │
-                  ▼
-         类型检查器验证 ──→ Proved ──→ 编译通过
-                  │
-                  ▼
-            验证失败 → 编译错误："证明不成立"
+        ▼
+再次 check ──→ Proved(checked) ──→ 编译通过
 ```
 
-#### 4.1 证明结果：三值代数
+#### 4.1 `CheckVerdict`：三值代数与逻辑签名
 
-编译期求值返回三种结果——这是停机问题的必然结论，也是证明论的自然分划：
+`check` 返回三种结果——这是停机问题的必然结论，也是证明论的自然分划：
 
-```
-eval_compile_time : BoolExpr → Proved | Disproved(Model) | Unproven
-```
-
-- **Proved** → 停机，证明项已构造，类型检查通过。编译继续。
-- **Disproved(M)** → 停机，存在反例 M。编译错误 + 反例 + 源码位置。
-- **Unproven** → 在给定资源上限内未构造出证明。编译错误 + 未解命题 + 预算消耗报告。
-
-**Unproven ≠ False。**
-编译器说"我证明不了"不等价于命题为假——只是超出了当前自动证明的能力。这是诚实，不是缺陷。
-
-预算硬限制是停机问题的工程解。不给 knob——给了就是在问用户"你觉得你的程序会不会停机"，用户不知道，编译器也不知道。
-
-#### 4.2 Unproven 之后：程序员写证明
-
-当编译器返回 Unproven 时，程序员可以写一个**证明函数**——就是一个 YaoXiang 函数，其返回类型等于待证明的命题。类型检查器验证这个函数——和它验证
-`add(a, b): Int` 是同一个机制。
-
-```
-命题  = 类型
-证明  = 程序（该类型的一个值）
-验证  = 类型检查（唯一的信任根）
+```text
+CheckVerdict<C> = Proved(checked: C) | Disproved(model: Model) | Unproven(reason, subject)
 ```
 
-SMT 求解器不是独立的信任边界——它是**类型检查器的加速模块**。SMT 帮忙找证明，但验证证明的始终是类型检查器。SMT 返回
-`unsat`
-时，编译器将其结果重构为类型检查器可验证的证明项。如果重构失败（SMT 的推理步骤超出编译器内核的推理规则），则回退到 Unproven——程序员可以手动写证明函数。
+- **`Proved(checked)`** → 停机，证书已按 `signature` 逐步验证，结论等于 `proposition`。义务通过；`checked` 是编译期可缓存的那一份证书（§13）。
+- **`Disproved(model)`** → 停机，存在反例 `model`。编译错误 + 反例 + 源码位置。
+- **`Unproven(reason, subject)`** → 在当前签名、证据与资源上限内，producer 没交出可验证的证书。编译错误 + 未解命题 + 原因 + **补证据提示**（§12.3 的诊断形状）。
+
+**Unproven ≠ False。** 内核说「算不出来」不等价于命题为假——它只说明当前 `signature` 下、当前证据集里没有一份能通过检查的证书。这是诚实，不是缺陷。
+
+**逻辑签名 `LogicSignature`** 决定「什么算一步有效推导」。它是一个可替换的数据：
+
+```text
+LogicSignature {
+    sorts        : Map<SortName, SortDecl>          // 项与命题的类别
+    rules        : Map<RuleId, InferenceRule>       // 内核可重放的推导规则
+    axioms       : Map<AxiomId, Proposition>        // 本签名接受的公理
+    libraries    : [LibraryRef]                     // 全部 axiom/proof 库，见下
+    hash         : ContentHash                     // 覆盖 sorts/rules/axioms + libraries 全部条目
+}
+LibraryRef {
+    kind         : LibraryKind                     // Axiom | Proof
+    id           : LibraryId                       // 库内条目 id 的命名空间
+    manifest     : Manifest                        // 条目 id + 命题/规则形态 + 来源
+    hash         : ContentHash                     // 对 manifest 规范字节的内容哈希
+}
+SortDecl {
+    space        : SortSpace                       // Proof | Data，见下
+    arity        : [SortName]                      // 该 sort 构造子接受的实参 sort
+}
+SortSpace = Proof | Data
+```
+
+`sorts` 里每个 `SortDecl` 带一个 `space`，它是**「一个类型族应用是命题还是数据」的唯一判据**。`space = Proof` 表示该 sort 的 inhabitant 是证明项（命题 / 精化类型 / proof family 的结果），`space = Data` 表示 inhabitant 是运行期数据（`Int`、`Array`、`Vec`、普通记录）。`Pos`（`{ v > 0 }` 一类精化谓词）、`Assert`、`Terminates`，以及返回 `space=Proof` 类型的 `proof/type family`，其 `space=Proof`；`Array: (T: Type, N: Int) -> Type` 这类**数据类型族**的 `space=Data`。`space` 由库 manifest / 谓词声明登记，不由字段名、实参形态或「看起来像谓词」的语法猜；§14.1 的 evidence 分类只读这一个字段。数据类型族即使依赖严格前序字段，结果仍是数据字段。
+
+`libraries` 是**列表**：一个签名可同时采用多个 axiom library 与多个 proof library（例：内置 `linarith` 公理库 + 用户 `zfc-core` 公理库 + `std-proofs` 证明库 + 项目私有证明库）。每个库自带 `kind`、`id`、`manifest` 与 `hash`；`axioms` 里的每一条按 `LibraryId` 归属到某个 `kind=Axiom` 的库，证明库条目按 `LibraryId` 归属到 `kind=Proof` 的库。`signature.hash` 覆盖 `sorts/rules/axioms` **与 `libraries` 的全部条目**（不止一个）；增删任一库、改任一 manifest 的一个字节，都换一个签名，缓存键、证书与增量复用全部按 `hash` 失效。
+
+- `sorts`、`rules`、`axioms` 是签名本体；`axioms` 里的每一条都必须归属到 `libraries` 中某个 `kind=Axiom` 库的 `manifest` 登记条目，证书引用任一库登记外的公理 ⇒ `check` 拒绝。
+- `libraries` 里每个 `LibraryRef` 各自有 manifest 与内容哈希：manifest 列出条目 id、命题/规则
+  形态与来源，`hash` 对 manifest 的规范字节计算；`kind` 区分 axiom library 与 proof library。
+  签名 `hash` 覆盖 `sorts/rules/axioms` 与 `libraries` **全部** `LibraryRef`（不是两个）。
+- 内置库（`Int` 线性算术、`Array` 长度、`Assert` 桥接等）也是 `libraries` 里的普通 `LibraryRef`，
+  只是随编译器分发；它们与用户库、项目库同列，**不在内核里硬编码信任根**。信任来自
+  「该签名及其 `libraries` 列表被本次编译采用」这一事实，不来自某个库或求解器的名字。
+
+签名可替换，且替换是数据替换、不是换内核：
+
+| 签名 | sorts / rules 的取值 | 典型用途 |
+| --- | --- | --- |
+| 经典算术片段 | 线性算术 sorts + 无量词规则 | `x > 0`、`0 <= idx < arr.len` |
+| 经典一阶（含排中） | 经典 sequent 规则 + 排中公理 | 经典蕴含、反证 |
+| 构造主义 | 构造规则，无排中、无双否消去 | 提取见证、避免非构造证明 |
+| ZFC 片段 | 集合论 sorts + 选择/外延等登记公理 | 需要集合论词汇的命题 |
+
+`Proved` 永远是**签名相对**的：同一命题在经典签名下 `Proved`、在构造主义签名下可能 `Unproven`。
+证书携带 `signature_hash`，`check` 先验哈希一致再重放；哈希不符直接 `Unproven`，不尝试
+「大致兼容」。
+
+**跨签名必须显式。** 设 `A`/`B` 为两个签名、`P` 为 `A` 中的命题、`certA` 为 `A` 下已验证的证书，要把结论用到 `B`，只有三条合法路径，每条都必须留下可检查的痕迹：
+
+1. **翻译项**：给 `translate: A.Proposition → B.Proposition` 及其在 `B` 下经 `check` 验证的证书；
+   得到 `Q = translate(P)`，再在 `B` 下证 `Q`。
+2. **桥接公理**：在 `B.libraries` 的某个 `kind=Axiom` 库里登记一条显式桥接公理（如「`A` 的该规则在 `B` 的该 sort 上有对应解释」），证书引用 `(LibraryId, AxiomId)`；`B.hash` 随该登记变化。
+3. **重新证明**：在 `B` 下对 `P` 直接构造新证书。
+
+绝不允许「`A` 下 `Proved` ⇒ `B` 下 `Proved`」的隐式搬运，也不允许把 `certA` 换个签名哈希就复用。Σ 的跨模块导出（§13）与 `q=0` 证据的跨模块形态同样走这三条路径。
+
+预算硬限制是停机问题的工程解（数值见 §8.4）。不给 knob——给了就是在问用户「你觉得你的程序
+会不会停机」，用户不知道，编译器也不知道。预算耗尽归入 `Unproven(reason=BudgetExceeded)`，
+不是 `Disproved`。
+
+#### 4.2 `Certificate`：签名相对的证明项
+
+**证书**是「证明项」在编译期的表示，相对某个 `LogicSignature` 才有意义：
+
+```text
+Certificate {
+    signature_hash : ContentHash            // 必须等于 signature.hash
+    proposition    : Proposition           // 结论，统一项世界里的项
+    steps          : [ProofStep]           // 按 signature.rules 的推导序列
+    evidence_refs  : [EvidenceRef]         // 显式证据的引用
+}
+ProofStep {
+    rule       : RuleId                   // 必须命中 signature.rules
+    premises   : [StepId | AxiomId | GammaId | EvidenceId]
+    context    : Γ                       // 局部假设（路径条件、等式桥、q=0 证据）
+    conclusion : Proposition
+    subst      : Substitution            // 项替换，统一项世界的项
+}
+EvidenceRef = ExplicitProof(AstNodeId)     // 证明函数 / 用户写的显式证据
+            | LibraryAxiom(LibraryId, AxiomId)
+            | LibraryProof(LibraryId, ProofId)
+            | ProducerHint(bytes)          // SMT/tactics/proof search 的提示，不直接信任
+```
+
+`check` 对每个 `ProofStep` 做四件机械的事：① `rule` 在 `signature.rules` 中存在；
+② `premises` 指向早先步骤、登记公理、`Γ` 事实或显式证据，且各自可解析；
+③把 `subst` 应用到规则模式后与 `conclusion` 同一（判等按 §12.1 的纯判定）；
+④最后一步的 `conclusion` 与 `certificate.proposition` 同一。任何一件不成立 ⇒ `Unproven`，
+并指出是哪一步；**不因为 producer 说「unsat」就跳过这四件**。
+
+`ProducerHint` 只是提示：producer 可以把它附在候选证书里（例如 SMT-LIB 脚本、模型、tactic
+轨迹），内核既不执行它，也不把它当规则；提示只服务于「如何把候选补全成可检查的 `steps`」。
+补全失败就还是 `Unproven`。
+
+#### 4.3 Unproven 之后：补显式证据（证明函数是第一类）
+
+当内核返回 `Unproven` 时，诊断必须提示**补证据**，而不是把「算不出」渲染成「不成立」（诊断形状见 §12.3）。补证据的合法形态按「第一类」对待——它们就是统一项世界里的证明项，不是外挂：
+
+- **证明函数**：一个 YaoXiang 函数，其返回类型等于待证命题。它是 `ExplicitProof(AstNodeId)`，内核验证它与验证 `add(a, b): Int` 是同一个机制。
+- **axiom library 条目**：在签名登记的公理，`EvidenceRef::LibraryAxiom`。
+- **proof library 条目**：命名证明（可复用、可单测、带 manifest hash），`EvidenceRef::LibraryProof`。
+- **已有内核证书**：同一 `signature_hash` 下已 `Proved(checked)` 的证书，直接复用或作为前提。
+- **换签名 / 加公理 / 写翻译项**：按 §4.1 的跨签名三路径，显式登记后重新 `check`。
+
+```text
+命题    = 类型（统一项世界里的 Proposition）
+证明    = 程序（该类型的一个值，即 Certificate 的 steps）
+验证    = Kernel::check(signature, certificate, proposition)
+信任    = 该签名被本次编译采用 + 证书逐步可重放；不来自求解器
+```
+
+SMT/tactics/proof search 产出的候选证书若补全不出 `steps`，回退到 `Unproven`——程序员补显式证据，或让 producer 换一条搜索路径。不需要 AI，不需要导出到 Coq，不需要新概念。
 
 ```yaoxiang
 # 命题：编译器无法自动证明的精化属性
@@ -383,32 +509,33 @@ FirstIsMin: (T: Ord, arr: Sorted(T)) -> Type = {
     forall i in 0..arr.len: arr[0] <= arr[i]
 }
 
-# 证明：程序员写一个函数，返回类型就是上面的命题
-# 类型检查器验证这个函数——和验证 add(a,b): Int 完全一致
+# 显式证据：程序员写一个函数，返回类型就是上面的命题
+# 内核验证它——和验证 add(a,b): Int 完全一致
 first_is_min: (T: Ord, arr: Sorted(T)) -> FirstIsMin(T, arr) = {
-    # 编译器在此验证：函数体的类型 = FirstIsMin(T, arr)
     ...
 }
 ```
 
-不需要 AI，不需要导出到 Coq，不需要新概念。**编译期无法自动证明的属性 → 程序员用 YaoXiang 代码写证明 → 类型检查器验证。**
-整个过程是平滑的梯度——编译器替你做了简单的证明，把脑子留给难的。
+**编译期无法自动证明的属性 → 程序员补显式证据（一类证明项）→ 内核按签名验证。** 整个过程是平滑的梯度——producer 替你找简单的证书，把脑子留给难的。
 
-#### 4.3 管道内的分层依赖
+#### 4.4 管道内的分层依赖
 
-以上求值器共享同一接口但存在求值顺序。类型等式是所有后续分析的先决条件；所有权/令牌检查依赖类型信息；精化谓词验证依赖前两层的结果。编译器按层求值，底层失败的表达式不进入上层——避免在类型错误的程序上浪费求解预算。
+以上 producer 共享同一个 `Kernel::check` 接口，但存在编排顺序。类型等式是所有后续分析的先决条件；
+所有权/令牌检查依赖类型信息；精化谓词验证依赖前两层的结果。编译器按层编排，底层失败的表达式
+不进入上层——避免在类型错误的程序上浪费搜索预算；**每一层的结论仍必须由 `check` 验证，层序只
+决定先向 producer 要哪份候选证书**。
 
 ```
-求值顺序（同一管道，分层调度）
+编排顺序（同一内核，分层调度）
 ├── 第 0 层：类型等式（T1 == T2）
-│   └── 结构合一 → 失败则后续无意义，直接返回 Disproved
+│   └── 内核直判规则（defeq）→ 产出候选证书 → check
 ├── 第 1 层：所有权/令牌冲突
-│   └── 流敏感活性分析 → 失败则内存安全不成立，直接返回 Disproved
+│   └── 流敏感活性事实 → 产出候选证书 → check
 └── 第 2 层：精化谓词/霍尔蕴含
-    └── 编译器自身 → SMT 加速 → 得出 Proved / Disproved / Unproven
+    └── producer（Γ 证据 / proof library / SMT 搜索）→ 候选证书 → check
 ```
 
-每一层仍返回 `Proved/Disproved/Unproven`，共享同一接口和同一预算系统。
+每一层仍返回 `Proved/Disproved/Unproven`，共享同一接口、同一 `signature` 与同一预算系统。
 
 ### 5. 三层函数统一
 
@@ -528,7 +655,7 @@ s += arr[i]   # 不可达
 
 #### 6.2 策略 1：线性秩函数自动合成
 
-当变量有线性界标注时，编译器枚举候选线性度量并 SMT 验证。
+当变量有线性界标注时，producer 枚举候选线性度量并产出递减义务的候选证书，由 `Kernel::check` 验证。
 
 ```
 输入：
@@ -540,8 +667,8 @@ s += arr[i]   # 不可达
   1. 从类型标注提取每个变量的界：[low_i, high_i]
   2. 枚举候选度量：v_i, u_i - v_i, v_i - v_j, 等线性组合
   3. 对每个候选度量 m：
-     - SMT 验证 m ≥ 0（从类型界推导）
-     - 对循环体的每条执行路径，SMT 验证 m' < m（严格递减）
+     - 产出 m ≥ 0 的候选证书（从类型界推导）→ check
+     - 对循环体的每条执行路径，产出 m' < m 的候选证书 → check
   4. 找到符合条件的线性组合 → 终止得证
 ```
 
@@ -666,7 +793,7 @@ gcd: (a: Int, b: NonNegative(b)) -> Int = {
 > 此循环无法自动证明终止。循环变量依赖于不可分析的函数
 > `f`。请使用可被编译器分析的迭代模式，或为该循环绑定一个名字并在类型位提供测度（§6.9）。
 
-这不是编译器的失败。凡无法静态证明安全的代码，不得通过编译。即使给出显式测度，也必须经 SMT 判定为真才能通过——测度写得不对会被反例打回，人只能证不出来，不能证错。
+这不是编译器的失败。凡无法静态证明安全的代码，不得通过编译。即使给出显式测度，也必须为递减与良基性各交出一份经 `Kernel::check` 验证的证书——测度写得不对会被反例打回，人只能证不出来，不能证错。
 
 #### 6.9 显式测度：`Terminates`
 
@@ -737,58 +864,116 @@ loop: (n: Int) -> Int = {
 **测度不限制返回类型。**
 测度可以是任意类型的表达式（不强制自然数）；其上的「严格递减」由该类型上可用的适定序给出。测度是否良基（如返回
 `Int` 时是否
-`>= 0`）是一条**独立的义务**，与递减义务同样交给精化推导或 SMT；两者都推不出时，诊断**不直接拒绝**，而是建议检查方向（测度是否下界成立、递归参数是否真的朝该方向走）。
+`>= 0`）是一条**独立的义务**，与递减义务同样由 producer 产出候选证书、交 `Kernel::check` 验证；两者都推不出时，诊断**不直接拒绝**，而是建议检查方向（测度是否下界成立、递归参数是否真的朝该方向走）。
 
-**与自动探索的关系**：显式测度不是另一条管线，而是探索失败后的输入。给出测度后仍走同一台 SMT 验证递减与良基性；不成立则报错并附反例。
+**与自动探索的关系**：显式测度不是另一条管线，而是 producer 探索失败后的输入。给出测度后仍由 producer 产出候选证书、交同一个 `Kernel::check` 验证递减与良基性；不成立则报错并附反例。
 
 义务生成、判定管线、诊断方向、互递归的测度共享（SCC）等落地机制见
 [RFC-027a: 终止检查的显式测度](../accepted/027a-termination-explicit-measure.md)。
 
-### 8. SMT 求解器：类型检查器的加速模块
+### 8. Certificate Producer：SMT / tactics / proof search 都不可信
 
-SMT 求解器在传统语言中是外部工具（如 F\* 调用 Z3，Dafny 调用 Z3）。在 YaoXiang 中，它是**类型检查器的一个加速模块**——仅当编译器内核自身无法直接判定时才被调用。SMT 帮忙找证明，但验证证明的是类型检查器。
+SMT 求解器、tactic 脚本、proof search 过程在本设计中归属同一个角色：**certificate producer
+（证书生产者）**。它们不可信：编译器不把它们的返回值当证明，只把它们当「找到一份候选证书」
+的提示。唯一可信的是 `Kernel::check(signature, certificate, proposition)`（§4）。
 
-**信任模型**：类型检查器是唯一的信任根。SMT 求解器是加速模块——它帮忙找证明，但 SMT 不是独立的信任边界。编译器信任 Z3 的
-`unsat`
-结果（与 F\*/Dafny 路线一致——Z3 出错的概率低于编译器自身的 bug 率，是工程上的务实选择）。真正的不可靠性控制在 SMT 翻译层——如果翻译有 bug，编译器会在其他测试中暴露。
+#### 8.1 信任模型
 
-**接口**：编译器内部翻译为 SMT-LIB
-2.6 标准格式，而非绑定特定求解器 API。SMT-LIB 是 ISO 标准，Z3、CVC5、MathSAT、Yices 全部原生支持。
+- **内核是验证者**：`check` 按 `signature.rules` 重放 `certificate.steps`（§4.2）。它不调用求解器、不解析 `unsat`、不读 producer 的日志。
+- **producer 是搜索者**：给定 `signature` 与 `proposition`，producer 尽力交出一份 `Certificate`。它返回什么、说什么，都不构成 `Proved`。
+- **禁止 `Unsat ⇒ Proved`**：`unsat` 至多说明「在 producer 自己的翻译与理论下，没找到否定模型」。
+  它既不是一份证书，也不保证 `certificate.steps` 存在。把 `unsat` 直接映射成 `Proved` 等于把
+  信任根外包给求解器，与 §4 的纯函数内核正面冲突。**本 RFC 明确禁止该映射**。
+- **`sat` 也不是 `Disproved` 的充分条件**：`sat + model` 只是 producer 给出的候选反例；
+  它必须变成 `Kernel::check` 可判的证伪证书（按 `signature` 的证伪规则重放，或由内核直判
+  规则算出「两侧归一化后不同」，见 §12.1），才能出 `Disproved(model)`。翻译失真
+  （例：整数字面量保真问题，issue #561）会让 `sat` 携带伪模型，裸信它会假拒绝合法程序。
+- **`unknown` / 超时 / 预算耗尽 ⇒ `Unproven`**：诊断带未解命题、原因与补证据提示（§12.3），不得降级为内部编译器错误（E8001）。
 
-**默认后端**：Z3（MIT 协议，最广泛的文档和社区验证）。CVC5 作为 SMT-LIB 兼容的备选——用户在编译时可以通过编译器标志切换。
+#### 8.2 producer 到内核的数据流
 
-不做"通用求解器抽象层"——SMT-LIB 就是抽象层。未来如果 CVC5 在特定理论上有突破，切换只需换二进制，不需改编译器代码。
-
-```
-编译期 Bool 表达式
+```text
+proposition + signature
         │
-        ├── 编译器内核可直接判定（结构等价、简单算术、
-        │   常量折叠后的平凡公式）
-        │   → 直接返回 Proved / Disproved
+        ▼
+┌───────────────────────────────────────────────┐
+│ certificate producer（不可信）                  │
+│  · 内核直判规则（结构等价、βδι、defeq）         │
+│  · Γ 等式桥 / q=0 证据（RFC-011 §4.1）         │
+│  · axiom library / proof library 条目           │
+│  · 证明函数（显式证据，§4.3）                   │
+│  · SMT-LIB 2.6 / Z3 / CVC5                     │
+│  · tactics / proof search                       │
+└───────────────────────────────────────────────┘
+        │  候选 Certificate（steps 可能为空 / 只带 ProducerHint）
+        ▼
+Kernel::check(signature, certificate, proposition)
         │
-        └── 编译器内核无法直接判定（量词、符号变量）
-            → 依赖类型预归约（factorial(5) → 120）
-            → 翻译为 SMT-LIB 格式
-            → 发送给 Z3/CVC5（带预算限制）
-            → 返回值：unsat → Proved  │  sat + 模型 → Disproved  │  unknown → Unproven
+        ├── steps 齐备且逐步合法、结论同一 → Proved(checked)
+        ├── 证伪证书经 check 确认（或内核直判）→ Disproved(model)
+        └── 证书缺步 / 规则未登记 / 哈希不符 → Unproven（补证据提示）
 ```
 
-**求解预算——硬限制，像栈深度一样**：
+producer 可以并行跑、可以缓存、可以换后端；这些自由都不改变「必须交出可重放证书」这一条。
+SMT-LIB 2.6 仍是翻译目标（ISO 标准，Z3 / CVC5 / MathSAT / Yices 原生支持），默认后端 Z3、
+备选 CVC5、编译时切换——**SMT-LIB 是 producer 的输入格式，不是信任边界**。不做「通用求解器
+抽象层」，也不做「通用 producer 抽象层」：producer 只有一条出口契约「交出 `Certificate`」。
 
-| 预算维度       | 默认值 | 说明                                                                                      |
-| -------------- | ------ | ----------------------------------------------------------------------------------------- |
-| 求解步数       | 10,000 | Z3 对线性算术通常在百步以内。10,000 步覆盖 99% 的实际谓词。                               |
-| 时间           | 100ms  | 单谓词超过 100ms = 用户在写编译期程序而非类型标注。100ms × 50 个谓词 = 5 秒编译时间上限。 |
-| 量词实例化深度 | 3      | 三层嵌套量词覆盖实际模式。超过三层大概率在写逻辑练习题。                                  |
+#### 8.3 从 `unsat` 到合法证书：翻译规则登记
 
-超预算返回 Unproven，编译错误 + 谓词位置 + 消耗量。没有降级，没有运行时检查，没有 silent pass。
+`unsat` 要变得有用，必须先把 producer 的理论折叠成 `signature` 登记过的规则。例如线性算术
+片段在 `libraries` 的某个 `kind=Axiom` 库的 `manifest` 里登记一组 `linarith` 规则（含其适用 sort 与前提形态）；SMT-LIB
+的 `unsat` 结果经一个 **proof-producing 适配器**展开成这组规则的 `ProofStep` 序列，再交
+`check`。适配器本身也是不可信 producer：它产出的步骤照样逐步重放。
 
-**为什么这实际可行**：工程中 95% 的实际谓词是线性算术——`x > 0`、`arr.len > 0`、`0 <= idx < arr.len`——全在可判定片段内，SMT 求解器对这类问题毫秒级返回。遇到极少数超预算的复杂谓词，程序员写证明函数即可。
+这条要求把「信任 Z3 的 unsat」改造成「信任 `linarith` 规则在签名里登记、且证书逐步可检查」。
+翻译 bug 不再靠「其他测试会暴露」这种祈祷兜底——它产出的证书缺步或用错规则，`check` 当场给
+`Unproven`。未登记理论的 `unsat` 一律不得进 `Proved` 通道。
 
-依赖类型在 SMT 调用前做了一层预归约：`factorial(5)` 直接编译期求值得 `120`，`append([1,2], [3])`
-直接求值得 `[1,2,3]`。这些确定性的值计算不消耗 SMT 预算。
+在 proof-producing 适配器落地之前，允许**保守降级**：算术片段走内核直判规则（结构等价、常量
+折叠、βδι-归约）与已登记的证明库条目；producer 的 `unsat` 只作为 `ProducerHint` 附在候选证书里，
+不单独触发 `Proved`。降级面比裸信 `unsat` 小，不 silent pass。
 
-程序员不需要知道 SMT 的存在。心智模型是：**编译器能证明就通过，不能就报错——如果编译器不会，你可以写个函数证明给它看。**
+#### 8.4 预算（生产者的，不是内核的）
+
+预算约束 producer 的搜索，不约束 `check` 的正确性——`check` 是确定性的重放，步数由证书长度决定。
+
+| 预算维度       | 默认值 | 说明                                                     |
+| -------------- | ------ | -------------------------------------------------------- |
+| 搜索步数       | 10,000 | producer 的求解/搜索步数上限；超了返回 `Unproven`      |
+| 时间           | 100ms  | 单义务搜索时间上限                                       |
+| 量词实例化深度 | 3      | producer 翻译的嵌套量词深度                              |
+| 证书重放步数   | 硬上限 | `check` 的最大 `steps.len()`；超限 ⇒ `Unproven`    |
+
+超预算返回 `Unproven`，编译错误 + 谓词位置 + 一行预算摘要（§12.3）。没有降级、没有运行时检查、
+没有 silent pass。依赖类型预归约（`factorial(5) → 120`、`append([1,2],[3]) → [1,2,3]`）
+是内核直判规则，不消耗 producer 预算。
+
+#### 8.5 与三值结果、Γ、q=0 证据的关系
+
+`Γ` 中的常量等式事实（§12）与 `q=0` 槽的四源证据（RFC-011 §4.1：字面量、值环境、单值钉住、
+Γ 等式）都是 producer 可引用的 `EvidenceRef` 来源；它们不是另一条判定通道。§3.5 的「路径条件
+就是背景知识」在此精确化为「路径条件是 `signature` 在本地的 `Γ` 上下文，随 `Certificate` 的
+`context` 字段一并交给 `check`」。
+
+#### 8.6 当前实现的缺口：`predicate.rs` 裸信 SMT
+
+本节的设计与当前生产实现不一致，缺口如实登记，不假装已落地：
+
+- `src/frontend/core/sema/layers/predicate.rs` 的 `try_implication` 把 `SMTResult::Unsat` 直接映射为 `Some(Ok(()))`；`try_smt_solve` 把 `SMTResult::Unsat` 直接映射为 `Ok(())`。`Ok(())` 就是 `ProofResult` 的 `Proved` 臂——这就是**裸信 `unsat`**，没有构造、也没有重放任何 `Certificate`。
+- 同文件的 `SMTResult::Sat { model }` 直接构造 `ProofFailure::Disproved`，反例未经内核按签名验证；翻译失真时（issue #561）会假拒绝合法程序。
+- `ProofContext`（`src/frontend/core/sema/proof/context.rs`）目前只携带 `env / assumptions / dep_graph / budget / dep_env`，**没有 `LogicSignature` 字段**；`ProofFailure`、`ProofResult` 是三值结果，但没有 `Certificate` 类型。
+- 因此当前管道是「producer 的返回值 = 判定结果」，而目标管道是「producer 交证书 → `Kernel::check` → 判定结果」。二者不是措辞差异，是信任模型差异：前者把 Z3 的结果当信任根，后者把签名与内核当信任根。
+- 修复方向（不在本文写代码）：① 引入 `LogicSignature` 与 `Certificate` 表示，并在 `ProofContext` 携带当前签名；② 把 `try_implication` / `try_smt_solve` 改造成「产出候选证书」，`unsat` 只作为 `ProducerHint`；③ 让 `Kernel::check` 成为 `Proved` 的唯一出口，`Sat` 反例也经 `check` 确认；④ 按 §8.3 登记 `linarith` 等翻译规则。落地按 RFC-039 D62 的「证据强制 / Π/Σ 完全体」阶段推进，本轮只定契约。
+
+#### 8.7 wasm 与后端差异
+
+wasm 下无 Z3（SMT 代码 `cfg(not(target_arch = "wasm32"))` 排除）时，producer 少一条搜索路径，
+降级为 `Unproven`（保守、少报）。这与「签名是否一致」无关：同一 `signature` 下，native 多一个
+producer 候选，wasm 少一个，`Kernel::check` 的行为完全相同。既有 native/wasm 差异表（§开放问题）
+按「producer 可得性」解释，不再按「判定精度」解释。
+
+程序员不需要知道 SMT 的存在。心智模型是：**编译器能按当前签名验证证书就通过，不能就报 Unproven 并提示补证据——如果自动 producer 找不到，你写个证明函数（一类显式证据）交给内核看。**
 
 ### 9. 编译期谓词组合
 
@@ -878,7 +1063,7 @@ sum: (arr: Array(Int)) -> Int = {
 
 | 判据                                                   | 模式            | 行为                                                                |
 | ------------------------------------------------------ | --------------- | ------------------------------------------------------------------- |
-| 所有自由变量编译期已知（泛型参数、编译期常量）         | **CompileTime** | 进证明管道：Proved → 擦除，Disproved → 编译错误，Unknown → 要求证明 |
+| 所有自由变量编译期已知（泛型参数、编译期常量）         | **CompileTime** | 进证明管道：certificate producer 交候选证书 → `Kernel::check` → Proved 擦除 / Disproved 编译错误 / Unproven 补证据 |
 | 存在自由变量来自运行时（函数参数、外部输入、mut 变量） | **Runtime**     | 插入运行时 check，并向流敏感假设集 Γ 注入精化事实                   |
 
 **关键**：「判不了」≠「证伪」。CompileTime 模式下 Unknown 要求证明（不静默降级），Runtime 模式下命题在编译期根本没有真假可言——prover 再强也无法为「用户可能输入了负数」写出恒真证明，运行时 check 是唯一 sound 选择。这不是 prover 不够强，是理论必然。
@@ -929,7 +1114,7 @@ mut x = x - 5       // Γ = {}  ← x > 0 被 kill
 
 §4.1 的三值代数适用于全部义务点，类型等式是其中之一。本节把「Unproven ≠ False」落到这一层。
 
-- 义务点返回 `Unproven` 时，编译器**必须**报编译错误，不得放行。程序员的补救路径是补证据：精化域写证明函数（§4.2），等式域给出可归一化的形态。
+- 义务点返回 `Unproven` 时，编译器**必须**报编译错误，不得放行。诊断必须提示补证据：精化域写证明函数或引用 proof library 条目（§4.3），等式域给出可归一化的形态；换签名 / 加桥接公理按 §4.1 的跨签名三路径。
 - `Unproven` 与 `Disproved` 必须可区分：`Disproved` 带反例（具体赋值或不等价的两侧），`Unproven` 带未解命题与其原因。把 `Unproven` 渲染成「不成立」是错误报告。
 - `Unproven` **不得**降级为内部编译器错误（E8001）。E8001 只表示编译器自身的一致性故障；预算耗尽与能力边界是编译器推理能力的边界，属用户域诊断（RFC-013「消息质量规范」5）。
 - `Unproven` **不得**静默放行。判定点以失败收场时，用户看到的诊断只能来自既有失败路径；不新增第二条诊断，也不因判不出而接受。
@@ -946,15 +1131,206 @@ mut x = x - 5       // Γ = {}  ← x > 0 被 kill
 
 本节是对 §4.1「Unproven → 编译错误 + 未解命题 + 预算消耗报告」的**形式放松**：实质不变——用户仍必须能区分「算不动」与「不成立」；放松的只是「预算消耗报告」的呈现粒度。理由：完整步数对用户无行动价值（用户无法据此修改程序），且随实现细节漂移；限缩为一行摘要后，诊断的稳定性与可读性提高，可区分性由「原因」一栏保证。
 
-一般性 `Unproven` 与精化专用码的分工见 RFC-013 的码表草案节（E4023 / E2031）。
+`Unproven` 的「补证据提示」属于诊断的**原因**一栏：能力边界说明超出当前 `signature.rules`，预算耗尽给一行摘要，含未绑定符号名指出待补证据的名字。一般性 `Unproven` 与精化专用码的分工见 RFC-013 的码表草案节（E4023 / E2031）。
 
-### 13. 擦除模型澄清：witness 擦除 ≠ check 擦除
+### 13. 擦除模型：证书编译期留存、运行期擦除
 
-RFC-027 的「精化类型在运行时**完全擦除**」论断指的是 **proof
-witness（证明令牌）**——编译期已验证的证明项不产生运行时代码。但 Runtime 模式下 dispatch 插入的
-**运行时 check** 是保留的——它是在值层面执行的 Bool 检查，不是类型层面的 witness。
+三种「擦除」必须分清，它们作用在不同对象上：
 
-总结：witness 擦除，check 保留。两件事不冲突，RFC-027 原论断不变。
+| 对象 | 编译期 | 运行期 | 依据 |
+| --- | --- | --- | --- |
+| `Certificate`（经 `Kernel::check` 验证的证明项） | 留存：`Proved(checked)` 进编译期缓存，供增量复用与 Σ 构造义务核对 | 完全擦除：不产生运行时代码、不占数据槽 | §4.1、§4.2 |
+| `q=0` 编译期值参数 / Σ witness 字段 | 作为量词事实与证据义务存在（§14） | 不占槽、`CreateStruct` 只含数据字段、值级 `b.w` 拒绝（E1114） | RFC-011 §4.1、D62 I4/I6、§14 |
+| Runtime 模式下 dispatch 插入的 Bool check | 不是 witness、不是证书 | 保留：在值层面执行 | §11 |
+
+**证书是编译期对象。** `check` 通过后，`Proved(checked)` 只活在编译期：它钉住「该义务已按 `signature.hash` 验证」，缓存键含 `signature_hash + proposition + certificate`，签名一换即失效（§4.1）。运行期不需要、也不得携带证书——类型层面的证明已擦除，`q=0` 槽与 Σ witness 同样不占运行期布局（D62 I4「擦除完备」、I6「witness 擦除 ≠ runtime check」）。
+
+**Runtime check 与证书无关。** §11 分派到 Runtime 模式时插入的是值层面的 Bool 检查，它检查运行期值，不是内核验证过的证明项。保留它不违反「证书运行期擦除」；两者作用对象不同，互不替代：witness 擦除、证书擦除、check 保留。
+
+**与 D62 统一项世界一致**：命题、证书、`q=0` 项、Σ witness 都是同一套编译期项；擦除是「编译期项不进入运行期布局」这一条后果，不是为证明项另开一套擦除规则。Σ 记录字段如何成为 evidence 义务、构造器如何产出证书、`b.w` 如何类型级使用，见 §14。§13 与 §8.6 的实现缺口并列记录：当前 `predicate.rs` 尚未产出 `Certificate`，故「证书编译期留存」尚未落地。
+
+### 14. 依赖记录 Σ：evidence 字段、构造与类型级使用
+
+Σ 依赖记录是统一项世界里的**记录类型**：后面的字段可以引用前面字段的名字。本节的记录是 §4 证明内核的一个义务来源——构造器必须为每条 evidence 字段交出经 `Kernel::check(signature, certificate, proposition)` 验证的证书；证书按 §13 编译期留存、运行期擦除。
+
+本节给出完整语义：位置规则（§14.1）、构造与布局（§14.2）、泛型（§14.3）、跨模块导出（§14.4）、类型级使用（§14.5）、不可变与诊断（§14.6）。泛型、跨模块、类型级使用都是本节当场定义的语义，不登记为后续。
+
+#### 14.1 字段位置规则：evidence 的 proof-space 判据
+
+设记录声明 `R` 的字段按源码顺序为 `f₀, f₁, …, fₙ₋₁`，字段 `fᵢ` 的类型为 `Tᵢ`。判定分三步：**先定 `space`（是命题族还是数据族），再定实参位置（前序 / 自身 / 前向），最后定字段类别**，不做跨字段推断、不按字段名猜：
+
+**第一步（proof-space 判据，唯一判据）。** 把 `Tᵢ` 归一化，取其结果类型族的 `SortDecl.space`（§4.1）：
+
+- `space = Proof`（`Tᵢ` 归约后是命题 / 精化类型 / `Assert` / `Terminates` / proof family 结果）⇒ 进入 evidence 判定；
+- `space = Data`（`Tᵢ` 是 `Int`、`Array`、`Vec`、普通记录，或**数据类型族应用**）⇒ **数据字段**，无论它引用了几个前序字段。
+
+`Array(Int, n)` 的 `n` 引用前序数据字段，改变的是「数据槽的长度」，不是「生成一条证明」。把它判成 witness 会把缓冲区从运行期布局里抹掉——这是本节要根除的误分类。`space` 由 `signature.sorts` / 库 manifest 登记，`Kernel::check` 与字段分类读同一份登记。
+
+**第二步（位置判据）。** 仅对 `space = Proof` 的 `Tᵢ = P(a₀,…,aₖ)` 生效，按实参指向的位置分三种：
+
+- 实参全是**严格前序数据字段** `fₕ (h < i)`、**编译期常量**、**编译期值参数**（RFC-011 §4.1 / SPEC §4.3 的 `Matrix` 的 `Rows`、`Cols` 一类 q=0 参数）或**类型参数** ⇒ 第三步定为 evidence。编译期值参数在实例化后取到具体常量，按编译期常量计（与 SPEC §8.3.1 逐字一致）；未实例化的开项留到构造点判 `Unproven`（§14.3）；
+- 实参**就是 `fᵢ` 自身**（自引用精化，如 `v: Pos(v)`）⇒ 第三步定为**数据字段（admission）**：该字段是承载值的变量，`Refined` 约束只是对它自身取值的检查，不是对别处事实的证明；
+- 前向引用后序字段、引用另一个 evidence 字段、或把 `fᵢ` 自身当 evidence 实参 ⇒ 声明期拒绝。
+
+**第三步（类别判据）。** `space=Data` ⇒ 数据字段；`space=Proof` + 前序实参（含编译期值参数 / 编译期常量 / 类型参数）⇒ evidence；`space=Proof` + 自引用 ⇒ 数据字段（admission）。
+
+| # | 形态 | 判定 | 量词 | 运行期布局 |
+| --- | --- | --- | --- | --- |
+| 1 | `space=Proof` 且实参全为严格前序数据字段 / 编译期常量 / 编译期值参数 / 类型参数（正例 `w: Pos(v)`） | **evidence / witness 字段** | `Some(Quantity::Zero)` | 不占槽、不进 `CreateStruct`、`base` 不进运行期布局 |
+| 2 | `space=Data`：普通值类型（`n: Int`）、数据类型族应用（正例 `data: Array(Int, n)`）、普通记录 | **数据字段** | `None` | 占数据槽、进 `CreateStruct` |
+| 3 | `space=Proof` 但实参就是 `fᵢ` 自身（自引用精化 `v: Pos(v)`） | **数据字段（admission）** | `None` | 占数据槽；`Refined` 约束在构造点按 §3.1 / §3.3 既有义务检查 |
+| 4 | `space=Proof` 但**前向引用**后序字段 `fₕ (h > i)`、引用另一个 evidence 字段、或把 `fᵢ` 自身当 evidence 实参 | **非法**：声明期拒绝，不静默降级 | — | 不产生任何字段 |
+
+四行互不混淆：第 2 行是「普通值类型 / 数据族」一律数据字段；第 3 行是「命题族但自引用」的 admission 数据字段；第 4 行是「命题族但位置不合法」一律声明期拒绝。**不存在「前向引用也算数据字段」这条路径**——前向引用既不占数据槽，也不进 `runtime_field_index`。
+
+**witness 只能依赖严格前序数据字段。** evidence 字段 `fᵢ: P(fₕ,…)` 的实参不得引用另一个 evidence 字段、不得前向引用后序字段、不得引用 `fᵢ` 自身；`P` 的 kind 判据由 §14.3 给出。这条「proof-space + 严格前序 + 只吃数据字段」保证构造点按声明序走到 `fᵢ` 时，所有实参已有编译期值，命题是闭项，可交 `check`。
+
+**正例（evidence）与反例（数据族）：**
+
+```yaoxiang
+Pos: (v: Int) -> Type = { v > 0 }        // space=Proof
+
+Box: Type = {                            // 正例：w 是 evidence
+    v: Int,          // f0 数据字段
+    w: Pos(v),       // f1 evidence：P=Pos 是 Proof, 实参 v 是严格前序数据字段 => q=0
+    z: Int,          // f2 数据字段；运行期索引 = 1 (跳过 w) 
+}
+
+Buf: Type = {                            // 反例：data 仍是数据字段
+    n: Int,                 // f0 数据字段
+    data: Array(Int, n),    // f1 数据字段：Array 是 Data 族, n 只决定长度, 不生成证明
+                            // 运行期索引 = 1, 占槽、进 CreateStruct
+}
+
+Admission: Type = {                      // 自引用精化：数据字段, 不是 evidence
+    v: Pos(v),              // Proof 族但实参是自身 => admission (表第 3 行) 
+}
+
+// 编译期值参数作 evidence 实参 (RFC-011 §4.1 / SPEC §4.3、§8.3.1) 
+Matrix: (T: Type, Rows: Int, Cols: Int) -> Type = {
+    _assert_rows: Assert(Rows > 0),   // Rows 是编译期值参数 (q=0) => evidence
+    data: Array(Array(T, Cols), Rows), // Array 是 Data 族 => 数据字段
+}
+```
+
+`Matrix` 的 `Rows`、`Cols` 是编译期值参数（实例化后取具体常量），`Assert(Rows > 0)` 的 `space=Proof` 且实参为编译期值参数 ⇒ `_assert_rows` 是 evidence 字段；`data` 引用同样的编译期值参数，但 `Array` 是 `space=Data` ⇒ 仍是数据字段。B.2 判定器对「编译期值参数」的判据因此明确：看它是否在类型位被引用（RFC-011 §4.1 的强度声明），不按字段名猜。
+
+**`base` 不进运行期布局**：`w: Pos(v)` 的 `w` 不是「一个 Int 值」，而是「`Pos(v)` 的证明」。它的 `Refined.base`（`Int`）只是内核判等/归一化的类型信息，绝不为 `w` 分配运行期槽位。`StructType.fields` 用 `Vec<StructFieldInfo>{ name, ty, quantity, is_mut, has_default }` 单列表示：`quantity == Some(Quantity::Zero)` 为 witness，`None` 为数据字段；`None` 在此表示「数据字段」，不是「未解析」。
+
+表示层接口：`ast::StructField.quantity`、`mono::StructFieldInfo.quantity`、`ir::TypeDeclField.quantity` 三处同型；`mono::quantity_is_witness` / `StructFieldInfo::is_witness` / `is_witness_bearing` 是唯一判定；`mono::runtime_field_index` 是声明序 → 运行期数据序的**唯一映射点**（witness 命中返回 `None`）。分类前的 `space` 查询读 `signature.sorts` / `LibraryRef.manifest`，不是第二套分类表。
+
+#### 14.2 构造器：源级 data-only，编译期自动合成证据
+
+**源级构造只有一个形态：`Box(v, z)`（数据参数，按声明序）。** evidence 字段**不占任何构造实参位**——既没有「把 witness 当值传进去」的写法，也没有「证据参数位」；`Box` 的 arity 只数数据字段 `v` / `z`，不数 `w`。**证据不来自构造实参，来自构造点自动生成的证明义务**。三个视图由此分清：
+
+| 视图 | 形态 | arity | 谁产出证据 |
+| --- | --- | --- | --- |
+| 源级 / 编译期构造视图 | `Box(3, 5)` | **compile-time arity = runtime arity = 数据字段数（此处 2：v、z）** | 构造点自动生成 `FieldObligation`，producer 交候选 `Certificate` → `Kernel::check` |
+| 运行期构造视图（`translator::synthesize_constructor` / `CreateStruct`） | `Box(3, 5)` | runtime arity = 2 | 无：`CreateStruct.operands` 只含数据字段局部槽 `v=3, z=5`（`z` 的运行期索引 = 1，跳过 `w`），`local_count` 按数据字段数计，没有 `w` |
+
+自动合成的路径：把严格前序数据字段的编译期值代入 `P` 得到闭命题，producer（§8：内核直判规则 / `Γ` 证据 / proof library / SMT 搜索）交候选 `Certificate`，`Kernel::check(signature, certificate, proposition)` 验证；`Proved(checked)` 按 §13 编译期留存、运行期擦除。
+
+**显式证据不是构造实参，是独立声明。** 当自动 producer 交不出可验证证书（`Unproven`）时，程序员按 §4.3 补显式证据——写一个**独立证明函数**（返回类型等于待证命题）或在 `proof library` 登记命名证明，作为 `EvidenceRef::ExplicitProof` / `LibraryProof` 被 `FieldObligation` 引用；不改写构造表达式、不新增 `Box(..., proof)` 形态。**源级构造多传一个证据实参**（`Box(3, 5, evidence)`）**不允许**：按 D60 六条绑定规则，多出的实参落不到任何数据形参槽，报 E1010 / E1014 一族参数错误，不静默吞掉。
+
+`FieldObligation` 必须能同时表示「还没产出证书」与「已验证证书」两种状态，故把原 `evidence: EvidenceRef`（只能指显式证据，装不下 producer 合成的 `Certificate`）拆成两槽：
+
+```text
+FieldObligation {
+    record         : TypeId,
+    field          : FieldId,
+    proposition    : Proposition,
+    evidence_ref   : Option<EvidenceRef>,   // 程序员补的显式证据；自动合成时为 None
+    certificate_ref: Option<CertificateRef>,// producer 合成并经 check 的证书；未验证时为 None
+    signature_hash : ContentHash,
+}
+CertificateRef { id: CertId, signature_hash: ContentHash }  // 指向 §13 编译期缓存里的 Proved(checked)
+```
+
+两槽的合法组合：`(Some(ev), None)` = 显式证据待重放；`(None, Some(cr))` = 自动合成且已验证；`(None, None)` = 待 producer 搜索；`(Some, Some)` 非法（一条义务不消费两份证明）。`check` 通过后写 `certificate_ref`，`evidence_ref` 保留为来源标注。
+
+`FieldObligation` 在 `checker/refinement.rs` 的 refined walk 里生成；字段绑定复用 `bind_args_to_params`（D60 六条规则），判定复用唯一单元 `judge_refined_obligation`。**证不出时不补值**：按 §4.3 补显式证据或返回 `Unproven`（E2031 / 一般性 E4023），没有「写错的 witness 值」这回事。
+
+自引用精化字段（`v: Pos(v)`）是数据字段：它的 `Refined` 约束在构造点按既有调用点义务判定（§3.1 / §3.3），不是 evidence 字段，不产生 `FieldObligation`，也不改变 `runtime_field_index`。
+
+#### 14.3 泛型记录：proof family 参数 `P`（kind `T -> Proposition`）
+
+类型是「参数化记录 + **proof family 参数**」，不是「泛型 witness 留待后续」。`P` 的 kind 与 §14.1 的 proof-space 判据同源：**结果 sort 必须是 `space=Proof`**，即 `P` 是 proof/type family（命题族），不是 data family（数据类型族）。`T -> Proposition` 是 kind 记法（`Proposition` 是 §4.1 `SortSpace::Proof` 的 sort 别名），**不是源级类型名**：下面的 `yaoxiang` 块用当前解析器可接受的 `P: (T) -> Type` 形态，kind 约束在声明与实例化处判定，不写进可解析代码块。
+
+```yaoxiang
+Pos: (v: Int) -> Type = { v > 0 }
+
+// 源级形态：P 是类型级函数参数；kind 约束 (结果 space=Proof) 在正文说明
+Cell: (T: Type, P: (T) -> Type) -> Type = {
+    v: T,            // 数据字段
+    w: P(v),         // evidence：P 是 Proof 族, 实参 v 是严格前序数据字段
+}
+```
+
+- **kind 判据**（正文记法，不是源级语法）：`P: T -> Proposition` 中 `Proposition` 是 `SortSpace::Proof` 的 sort 别名（§4.1）；等价于 `P` 的应用结果 `space=Proof`。`Array: (T: Type, N: Int) -> Type` 的 `space=Data`，把它传给 `Cell` 是 **kind 不符，声明期拒绝**（参数声明的 kind 就是 `T -> Proposition`，绑定 data family 是类型错误，不是「`w` 退化成数据字段」；§14.1 第 2 行只管**直接写出**数据类型族的字段）。多元形态 `(T, U) -> Proposition` 同理，实参按声明序全部落在严格前序数据字段上。
+- `P` 与 `T: Type` 同属编译期参数位（q=0，RFC-011 §4.1）。实例化 `Cell(Int, Pos)` 时 `P` 绑定到具体谓词 `Pos`（`space=Proof`），`w` 的命题变成 `Pos(v)`，位置规则与 §14.1 逐字相同；`Cell(Int, Array)` 在声明/实例化处因 kind 不符拒绝。
+- `P` 不是值参数、不占运行期槽；`P` 未绑定（泛型未实例化）时 `w` 的结果 sort 仍是 `Proof`（kind 已声明），但命题是开项，**构造点返回 `Unproven`**（不是声明期拒绝），不静默放行、也不退化成数据字段。实例化后判定按 §14.1 重跑。
+- 泛型记录的 evidence 判定在**实例化后**按 §14.1 重跑一次：`StructType` 的 `quantity` 随 `substitute` 代入 `P` 后仍为 `Some(Zero)`；`mono::substitute` 与 `types::solver` 的 Struct 臂按字段透传 `quantity`，不另造第二份判定。
+- 泛型 `Cell` 的导出随 `TypeDefPayload` 携带 `P` 的 kind（`T -> Proposition` 记法）与字段 obligation 模板（§14.4）；源级 `(T) -> Type` 与 kind 记法的对应由声明/实例化处的判据给出。
+
+#### 14.4 跨模块导出：`TypeDefPayload` 携带命题/证据槽
+
+含 evidence 字段的记录跨模块使用时，命题与证据槽必须随类型定义一起导出，不能让导入方「按字段名重猜」。载体是 `frontend::module::TypeDefPayload`：
+
+```text
+TypeDefPayload {
+    // …既有字段…
+    type_params      : [TypeParam { name, kind }]        // 含 P: T -> Proposition（§14.3）
+    field_obligations: [FieldObligation]                 // 见 §14.2；无 witness 的记录为 []
+    evidence_slots   : [EvidenceSlot {
+        field          : FieldId,
+        quantity       : Quantity,                       // 恒为 Zero
+        proposition    : Proposition,                    // 可含 FieldPath 前序引用
+        evidence_ref   : Option<EvidenceRef>,            // 显式证据来源；自动合成时为 None
+        certificate_ref: Option<CertificateRef>,         // 已验证证书引用；未验证时为 None
+        signature_hash : ContentHash,                    // 随 §4.1 签名失效
+    }]
+    libraries        : [LibraryRef]                      // 命题/证据引用到的库，跨模块随导出携带
+}
+```
+
+- 导出面：`checker.rs` 构造 `TypeDefPayload` 时，对每个 `quantity == Some(Zero)` 的字段填一条 `EvidenceSlot`；`field_obligations` 与 `evidence_slots` 同源，不各写一份。
+- 导入面：导入方拿到 `EvidenceSlot` 后，用**自己的当前 `LogicSignature`** 验证——`signature_hash` 不符时按 §4.1 的跨签名三路径处理（翻译项 / 桥接公理 / 重新证明），不得直接复用导出方的 `Proved`；`libraries` 里引用到的库必须出现在导入方 `libraries` 列表里，否则 `Unproven` 并提示登记该库或写桥接。
+- 多文件/多模块构造点复用同一 `judge_refined_obligation`；跨模块不新增第二套判定入口（RFC-039 D55 静默通道禁令）。
+
+#### 14.5 类型级 `b.w`：`ConstExpr::FieldPath` + evidence term
+
+witness 字段**只能类型级使用**（`b.w` 是用户可写的类型级语法，见本节末对 4A 的取代说明），值级读取一律拒绝：
+
+- **项表示**：`ConstExpr::FieldPath { base: Box<ConstExpr>, field: FieldId }` 是统一项世界里的字段路径项。`b.w` 在类型位置解析为 `FieldPath(NamedVar("b"), "w")`；它指称的不是运行期值，而是 `EvidenceSlot.evidence_ref` 对应的 **evidence term**（证明项）。
+- **evidence term**：`EvidenceTerm(FieldPath, EvidenceRef, signature_hash)` 是 `Certificate` 的一个 `EvidenceRef` 来源（§4.2），对应 `FieldObligation.evidence_ref` / `certificate_ref` 两槽（§14.2）里的显式证据或已验证证书。把 `b.w` 用于另一个命题（如 `Q(b.w)`）时，producer 把 `EvidenceTerm` 作为候选证书的前提，`Kernel::check` 按签名重放；`signature_hash` 不符则不复用。
+- **类型级用途**：`FieldPath` 可出现在谓词实参、类型构造实参位、另一命题的 evidence term 前提、以及 `TypeDefPayload.evidence_slots[i].proposition`（逐槽索引）。注意：`FieldPath` 指向 witness 时是**证明项前提**，不是「数据字段实参」——§14.1 的「evidence 字段实参只吃严格前序数据字段」约束的是 `P` 的数据实参，不禁止把前序 evidence 的证明项当作新命题的前提（后者经 `EvidenceTerm` 交 `check` 重放）。`b.w` 不产生运行期值、不占数据槽。
+- **值级拒绝**：`b.w` 出现在值表达式（`FieldAccess` 的 `Struct` 臂与 `TypeRef→Struct` 臂）报 **E1114**（`witness_field_not_readable`）。`FieldPath` 不是值项，`Evaluator` 与 IR 生成都不为它产物化值。
+- `ConstExpr` 的穷尽 `match` 补臂点（`const_eval::substitute`、`free_names`、`Display`、`translate::` 系列、`proof_execution`、`fold_proof_call_arg` 等）必须处理 `FieldPath`；未支持项语言的求值器遇到 `FieldPath` 返回 `Unproven`，不静默当 `NamedVar`。
+
+```text
+// 设计示意（非可编译片段：Proved / FieldPath / evidence term 是内核项，见本节的接口定义）
+// 类型级使用：把 b.w 当证据前提, 不是取值
+useWitness: (b: Box) -> Type = { Proved(b.w) }   // b.w 解析为 FieldPath + evidence term
+// 值级 b.w => E1114
+```
+
+> **取代 4A 的「类型级无用户语法」**。4A 裁决（09a §P6 6.9.5 H0 裁决，2026-11-13）的前提是「`b.w` 需要 `ConstExpr::FieldPath` 与 proof token，属独立 term 语言设计，现在加会造第二 term world」，故裁定 V1 不提供用户 `b.w` 投影。`ConstExpr::FieldPath`、`EvidenceTerm`、`TypeDefPayload.evidence_slots` 都属于**同一套统一项世界**（§4，不是第二 term world），该前提不成立：**类型级 `b.w` 是用户可用语法**（上例 `useWitness`），4A 的「类型级 `b.w` 无用户语法」一条由本节取代，不再有效。4A 的其余两条——witness 是编译期字段、构造时证明、运行期擦除；字段表示 `quantity` + 命题类型——继续成立。值级 `b.w` 仍按 4A 拒绝（E1114）。`FieldPath` 只活在类型/命题位置，不是运行期字段路径，不构成「A 式运行期字段」。
+
+#### 14.6 不可变、擦除与诊断码
+
+- **5A 整体不可变**：含任一 evidence 字段的记录整体不可变——数据字段不得声明 `mut`、不得字段赋值、不得 `&mut` 借用、不得作为写方法接收者（含自动 `WriteBorrow`）。否则 witness 命题可能因字段改写失效，且当前无 runtime check / revalidation；违反报 **E1115**（`witness_record_immutable`）。更细粒度的线性/唯一性设计另案。
+- **擦除**：evidence 字段的 `quantity=Zero` ⇒ 不占运行期槽；`CreateStruct` / `GetField` / `SetField` / `resolve_field_index` 只认 `runtime_field_index` 的数据序；`Proved(checked)` 证书按 §13 编译期留存、运行期擦除；Runtime 模式的 Bool check 与 witness 无关。
+- **诊断码分工**（四码各管一面，不借码、不静默）：
+
+| 码 | 触发 | 语义 |
+| --- | --- | --- |
+| **E4018** | 构造点 evidence 命题被判伪（经 `check` 确认的反例 / 内核直判） | 精化谓词违反，带反例 |
+| **E2031** | 构造点 evidence 命题 `Unproven`（精化通道，带 `assigned`/`var`/`constraint` 三槽） | 精化约束无法证明，提示补显式证据（§4.3） |
+| **E1114** | 值级读取 witness 字段 `b.w` | witness 字段不可值级读取 |
+| **E1115** | witness-bearing 记录的 `mut` / 字段赋值 / `&mut` / 写接收者 | 记录整体不可变 |
+| **E4023** | 非精化通道的一般性 `Unproven`（如 `FieldPath` 求值器不支持） | 一般性无法证明，带命题/原因/位置（§12.3） |
+
+`ProofFunctionRequired` 仍走 E4020；一般性 `Unproven` 与 E2031 的分工不变（§12.3、RFC-013）。**声明期拒绝只保留三类**：`space=Proof` 但前向引用后序字段、引用另一 evidence 字段、`P` 的 kind 为 data family（§14.3）。它们在声明处直接拒绝，不进构造点、不静默降级为数据字段。`space=Data` 的数据类型族应用（含 `Array(Int, n)`）与 `space=Proof` 的自引用精化（`v: Pos(v)`，admission）都是合法数据字段。**泛型未实例化不属声明期拒绝**：按 §14.3，`P` 未绑定时 `w` 的结果 sort 仍是 `Proof`、命题为开项，在**构造点**返回 `Unproven`（E2031 / E4023），不静默放行、也不退化成数据字段。
 
 ## 详细设计
 
@@ -967,6 +1343,7 @@ witness（证明令牌）**——编译期已验证的证明项不产生运行�
 | `/*! invariant: ... !*/`              | 变量上的编译期谓词类型标注——Floyd-Hoare 不变式                               |
 | `//! decreases: n`                    | 测度写在精化类型位（`Terminates`）；编译器先自动探索，探索不出才要求显式给出 |
 | 规约是注释                            | 规约是类型系统                                                               |
+| `/*! invariant: ... !*/` 之外无记录证据 | 依赖记录 Σ：按 proof-space 判据区分 evidence 字段（q=0）与数据族字段，见 §14   |
 
 ### 语法
 
@@ -987,7 +1364,7 @@ predicate ::= identifier ':' params '->' 'Type' '=' '{' assertions '}'
 
 **新增语法概念：返回值形参**——`-> (name: Type)` 中 `name` 是返回值形参。
 
-返回值形参是 YaoXiang 在现有函数语法上引入的**唯一一个语法概念**。它的语义：
+返回值形参是 YaoXiang 在现有函数语法上引入的语法概念之一（记录 evidence 字段复用既有字段语法，见 §14）。它的语义：
 
 - `name` 的值由 `return` 语句提供
 - `name` 仅存在于类型签名中，被后置条件谓词引用（如 `-> (result: IsMax(T, arr, result))`）
@@ -1012,15 +1389,14 @@ predicate ::= identifier ':' params '->' 'Type' '=' '{' assertions '}'
 - **泛型交互**：编译期谓词可带泛型参数，如 `NonEmpty: (T: Type) -> (arr: Array(T)) -> Type`
 - **所有权交互**：编译期谓词中的表达式遵守所有权规则，只能读不能写
 - **类型推导**：编译期谓词的参数参与 HM 类型推导
+- **依赖记录 Σ**：记录字段按 §14 的 proof-space + 位置规则分为数据字段与 evidence 字段（`Quantity::Zero`）；proof family 参数 `P: T -> Proposition` 与 `TypeDefPayload.evidence_slots` 给出泛型与跨模块的完整语义
 
 ### 运行时表示
 
 编译期谓词在运行时**按 dispatch 分派结果处理**：
 
-- **CompileTime 模式**（所有自由变量编译期已知）：证明通过后见证令牌（witness）完全擦除。`Positive: (x: Int) -> Type = { x > 0 }`——参数
-  `b: Positive(5)` 在运行时的表示就是 `Int`。精化条件 `{ 5 > 0 }` 已通过，擦除。
-- **Runtime 模式**（存在运行时自由变量）：保留运行时 check——在值层面执行 Bool 检查，注入流敏感假设集 Γ。详见 §11
-  dispatch 分派管道和 §13 擦除模型澄清。
+- **CompileTime 模式**（所有自由变量编译期已知）：`Kernel::check` 验证证书后，`Proved(checked)` 在编译期留存、运行期完全擦除。`Positive: (x: Int) -> Type = { x > 0 }`——参数 `b: Positive(5)` 在运行时的表示就是 `Int`；精化条件 `{ 5 > 0 }` 已通过，证书不进入运行期布局。Σ evidence 字段按 §14 同此：`base` 不进布局、`CreateStruct` data-only、值级 `b.w` 报 E1114。
+- **Runtime 模式**（存在运行时自由变量）：保留运行时 check——在值层面执行 Bool 检查，注入流敏感假设集 Γ。详见 §11 的 dispatch 分派管道与 §13 的擦除模型。
 
 将编译期谓词放在类型位置（如 `f(x: Positive(x))`）不产生包装类型、不分配额外内存。但 `x`
 来自运行时输入时，**会**插入运行时 Bool 检查。
@@ -1030,43 +1406,44 @@ predicate ::= identifier ':' params '->' 'Type' '=' '{' assertions '}'
 
 ### 编译器改动
 
-1. **解析器**：编译期谓词使用标准函数语法，无需额外解析规则
-2. **编译期证明管道**：统一 Proved/Disproved/Unproven 返回接口，自动策略选择
-3. **SMT 加速模块**：SMT-LIB 2.6 翻译层，默认后端 Z3，CVC5 备选
-4. **类型检查器内核**：推理规则实现——结构等价、βδι-规约、全称量词引入/消去。这是唯一的信任根，SMT 和程序员证明都经由此验证
-5. **验证条件生成**：WP/SP 演算 + 循环不变式证明义务
-6. **错误报告**：反例格式化 + 未解命题报告 + 源码位置关联
+1. **解析器**：编译期谓词与证明函数使用标准函数语法，无需额外解析规则
+2. **证明内核**：`Kernel::check(signature, certificate, proposition)` 与 `CheckVerdict`；按 `signature.rules` 重放 `Certificate.steps`，是 `Proved` 的唯一出口
+3. **逻辑签名与库**：`LogicSignature`（sorts / rules / axioms / `libraries: [LibraryRef]` / hash），每个 `LibraryRef` 带 `kind/id/manifest/hash`，签名 hash 覆盖全部库；签名可替换，跨签名走显式翻译或桥接公理
+4. **Certificate producer**（不可信）：内核直判规则、Γ/`q=0` 证据、证明函数、SMT-LIB 2.6 翻译（默认 Z3、备选 CVC5）、tactics、proof search；全部只交候选 `Certificate`，`unsat` 不直达 `Proved`（§8）
+5. **验证条件生成**：WP/SP 演算、循环不变式、以及 §14 记录构造的 `FieldObligation`（字段位置规则 / `bind_args_to_params` / `judge_refined_obligation`），产出命题与候选证书，不自行判定
+6. **错误报告**：反例（经 `check` 确认）+ 未解命题 + 原因 + 补证据提示 + 源码位置关联（§12.3）
 
 ### 向后兼容性
 
 - ✅ 未使用编译期谓词的代码完全不变
 - ✅ 编译期谓词在 CompileTime 模式下零运行时开销，Runtime 模式下仅保留必要的 Bool 检查
 - ⚠️ RFC-022 的 `//!` 语法不再支持——但 022 从未被实现，无迁移负担
+- ⚠️ 记录类型新增 §14 的 evidence 字段位置规则：原先「字段名恰好是谓词应用、静默当数据字段」的程序转为编译期 witness 判定（值级读取 E1114、witness-bearing 记录不可变 E1115），属对外行为变更，按 RFC-039 D59 的 D/E 类登记
 
 ## 权衡
 
 ### 优点
 
-- **Curry-Howard 同构完整兑现**：类型即命题，程序即证明，`name: Proposition = Proof`
+- **Curry-Howard 同构完整兑现**：类型即命题，程序即证明，`name: Proposition = Proof`；命题与证书同住 D62 的统一项世界
 - **统一性**：编译期谓词与普通函数使用完全相同的语法，无概念分裂
-- **SMT 透明**：程序员不需要知道 SMT 的存在，心智模型与类型检查一致
+- **producer 透明**：程序员不需要知道 SMT 的存在，心智模型是「补显式证据 → 内核按签名验证」；后端可替换
 - **渐进式采用**：可从一个编译期谓词开始，逐步增加覆盖
-- **最小运行时开销**：CompileTime 模式零开销，Runtime 模式仅保留必要的 Bool 检查
+- **最小运行时开销**：证书与 `q=0` 项编译期留存、运行期擦除；Runtime 模式仅保留必要的 Bool 检查
 
 ### 缺点
 
-- **编译时间**：SMT 求解增加编译时间，但预算硬限制保证上限可控
-- **自动证明边界**：超越一阶线性算术的复杂谓词可能需要程序员写证明函数。这不是语言缺陷——这是停机问题的必然结论。编译器诚实报告 Unproven 而非伪报 True/False
-- **学习曲线**：编写有效的编译期谓词和证明函数需要理解 Curry-Howard 同构的基本直觉
+- **编译时间**：certificate producer 的搜索与内核重放都增加编译时间，但 producer 预算（§8.4）与证书步数上限保证可控
+- **自动证明边界**：producer 交不出可验证证书时内核返回 `Unproven` 并提示补证据。这不是语言缺陷——这是停机问题的必然结论。内核诚实区分「算不出」与「不成立」
+- **学习曲线**：编写有效的编译期谓词、证明函数与选择逻辑签名需要理解 Curry-Howard 同构与「签名相对」的基本直觉
 - **实现复杂度**：编译期证明管道的统一需要精心设计
 
 ### 风险缓解
 
-- SMT 求解预算硬限制（步数 10,000 / 时间 100ms / 实例化深度 3），超预算返回 Unproven
-- 依赖类型预归约：确定性的值计算先吃掉，SMT 只啃非确定部分
-- Unproven 不是死路：正确性域写证明函数（返回类型即命题），终止域在类型位给出测度（§6.9）——两者都由类型检查器验证
-- 增量验证：仅验证变更模块
-- 清晰的错误信息 + 反例展示 + 预算消耗报告 + 未解命题 + 建议（如果编译器能给出）
+- producer 预算硬限制（搜索步数 10,000 / 时间 100ms / 实例化深度 3）与证书重放步数上限，超预算返回 `Unproven`（§8.4）
+- 依赖类型预归约：确定性的值计算由内核直判规则先吃掉，producer 只啃非确定部分
+- `Unproven` 不是死路：补显式证据（证明函数、proof library 条目、换签名 / 桥接公理，§4.3）；终止域在类型位给出测度（§6.9）——全部经 `Kernel::check` 验证
+- 增量验证：`Proved(checked)` 按 `signature_hash + proposition + certificate` 缓存，仅重算签名变更或证书失效的模块
+- 清晰的错误信息 + 经 `check` 确认的反例 + 未解命题 + 原因 + 补证据提示 + 一行预算摘要（§12.3）
 
 ## 替代方案
 
@@ -1075,19 +1452,19 @@ predicate ::= identifier ':' params '->' 'Type' '=' '{' assertions '}'
 | RFC-022：`//!` 注释式规约          | 规约与类型分裂，违反 Curry-Howard 同构                                                                      |
 | 独立规约文件（如 CVL）             | 规约与代码分离，增加维护成本                                                                                |
 | 仅运行时断言                       | 无法静态保证正确性                                                                                          |
-| 外部证明助手（如 Coq）             | 与编译器割裂，需要独立的证明语言和信任边界。YaoXiang 的选择：证明就是 YaoXiang 代码，类型检查器是唯一信任根 |
+| 外部证明助手（如 Coq）             | 与编译器割裂，需要独立的证明语言和信任边界。YaoXiang 的选择：证明就是 YaoXiang 代码，证书经 `Kernel::check` 按可替换签名验证，不硬编码信任根 |
 | **本方案：编译期谓词作为一等公民** | ✅                                                                                                          |
 
 ## 实现策略
 
 ### 阶段划分
 
-| 阶段       | 内容                                                                                               |
-| ---------- | -------------------------------------------------------------------------------------------------- |
-| **阶段 1** | 编译器内核：结构等价 + βδι-规约 + 全称量词引入/消去。支持简单算术谓词（`x > 0`、`arr.len > 0`）    |
-| **阶段 2** | SMT-LIB 翻译层 + Z3/CVC5 集成。管道返回 Proved/Disproved/Unproven。Unproven 时支持程序员写证明函数 |
-| **阶段 3** | 循环不变式 VC 生成 + 终止检查（测度探索四策略 + `Terminates` 显式测度，§6、§6.9）                  |
-| **阶段 4** | 增量验证 + 缓存 + IDE 支持                                                                         |
+| 阶段       | 内容                                                                                                       |
+| ---------- | ---------------------------------------------------------------------------------------------------------- |
+| **阶段 1** | `Kernel::check` + `LogicSignature` + `Certificate` + `CheckVerdict`；内核直判规则（结构等价、βδι-归约、defeq） |
+| **阶段 2** | axiom library / proof library 的 manifest 与哈希；证明函数与显式证据接入；proof-producing 适配器把 `unsat` 展开成登记规则的 `ProofStep` |
+| **阶段 3** | 循环不变式 VC 生成 + 终止检查（§6、§6.9）+ 依赖记录 Σ 的字段位置规则、构造义务、`FieldPath` 类型级使用（§14）走同一 `check` |
+| **阶段 4** | 按 `signature_hash` 的证书缓存 + 增量验证 + `TypeDefPayload` 跨模块证据槽 + 跨签名翻译/桥接公理 + IDE 支持（§14.4） |
 
 ### 依赖关系
 
@@ -1113,21 +1490,19 @@ predicate ::= identifier ':' params '->' 'Type' '=' '{' assertions '}'
   | 良基性判定 | 判定 | `Unjudged` | 不报 E4022（少报） |
   | 精化谓词的 SMT 蕴含级 | 执行 | 跳过 | 落到 `Unproven` |
 
-  均为**保守**方向（少收窄、少报），不影响 soundness。若要精度一致，
+  均为**保守**方向（producer 少一条搜索路径 ⇒ 候选证书少 ⇒ `Unproven`，`Kernel::check` 本身不变），不影响 soundness。按 §8.7 的口径，下表按「producer 可得性」解释，不再按「判定精度」解释。若要精度一致，
   方案与代价见 issue #376（结论：优先 JS 侧 Z3 实例，而非把 Z3 链进主 wasm——
   后者需换 emcc 构建体系且产物从 3 MB 涨到 ~20 MB）。
-- [x] **SMT 求解器选择**：默认 Z3（MIT 协议，最广泛验证）。CVC5 作为 SMT-LIB 兼容备选，编译器标志切换。编译器内部翻译目标为 SMT-LIB
-  2.6 标准格式——SMT-LIB 就是抽象层，不做自定义通用求解器接口。
-- [x] **求解预算的具体数值**：步数 10,000 / 时间 100ms
-  / 量词实例化深度 3。编译器内部固定，不给 knob。实际使用中如有真实用例证明不够（非"用户写错了"），再调整。
-- [x] **量词支持范围**：语言层面不限制量词阶数。编译期谓词接受 Type 参数——Type 包括函数类型——因此高阶量词是类型系统的自然推论，不需要特殊语法。SMT 求解器可自动判定一阶量词（forall/exists，支持交错嵌套，由预算深度 3 限制）。高阶量词：SMT 返回 Unproven，编译器提示"此谓词超出自动证明范围，请提供证明函数"。程序员写一个返回类型等于该命题的 YaoXiang 函数——类型检查器验证该函数。不需要外部导出，不需要 AI，不需要交互式证明模式。一切都是 YaoXiang 代码，一切由类型检查器验证。
-- [x] **反例格式化**：源码变量名直接用作 SMT 变量名（加上模块前缀避免冲突）。Z3 模型返回时按变量名反查。输出格式：变量名 = 具体值 + 源码位置 + 谓词定义位置。不做复杂映射层。
+- [x] **SMT 求解器选择**：默认 Z3（MIT 协议，最广泛验证）。CVC5 作为 SMT-LIB 兼容备选，编译器标志切换。SMT-LIB 2.6 是 producer 的翻译目标——它是候选证书的输入格式，不是信任边界；`Proved` 的唯一出口仍是 `Kernel::check`（§8）。不做自定义通用求解器接口，也不把 `unsat` 当判定结果。
+- [x] **求解预算的具体数值**：producer 搜索步数 10,000 / 时间 100ms / 量词实例化深度 3，另设证书重放步数上限（§8.4）。编译器内部固定，不给 knob。实际使用中如有真实用例证明不够（非「用户写错了」），再调整。
+- [x] **量词支持范围**：语言层面不限制量词阶数。编译期谓词接受 Type 参数——Type 包括函数类型——因此高阶量词是类型系统的自然推论，不需要特殊语法。producer 可处理一阶量词（forall/exists，支持交错嵌套，由预算深度 3 限制）并交出候选证书；高阶量词交不出可验证证书时，内核返回 `Unproven` 并提示补显式证据——写一个返回类型等于该命题的 YaoXiang 证明函数（§4.3），由 `Kernel::check` 按当前签名验证。不需要外部导出，不需要 AI，不需要交互式证明模式。一切都是 YaoXiang 代码，一切由证明内核验证。
+- [x] **反例格式化**：源码变量名直接用作 SMT 变量名（加上模块前缀避免冲突）。producer 返回的 `sat + model` 是候选反例，必须经 `Kernel::check` 确认使命题为假后才渲染。输出格式：变量名 = 具体值 + 源码位置 + 谓词定义位置。不做复杂映射层。
 - [x] ~~**与 `ref` 智能指针的编译期谓词交互？**~~
       → 已决策：编译期谓词只允许不可变借用或已转移所有权的值。可变借用的值不可出现在编译期谓词中。
 - [x] **`forall` 谓词违反计数量度对非相邻操作的扩展？**
       → 不扩展。当前覆盖范围（相邻交换、相邻移动）由策略 1（线性秩函数）互补覆盖——快排外层区间收缩由策略 1 兜底，堆排序由策略 1（数组索引模式）兜底。不能由任何策略证明终止的循环，编译器直接报错——这是硬安全哲学，不是缺陷。如果未来有真实场景（非学术构造）的算法四种策略都无法覆盖，再重新讨论。→
-      **再讨论已触发（2026-09-14，#318）**：非结构递归（gcd 类非直接递减、相互递归、归并分区）即本条款预期的真实场景——测度探索的模板序列无法自动拿下它们，且它们无法在不破坏可读性的前提下改写为可分析的迭代模式。结论：硬安全哲学不变（测度写得不对仍被 SMT 反例打回，人只能证不出来、不能证错），但「探索不出即拒绝」放宽为「探索不出可由程序员在类型位显式给出测度」——见 §6.9。
-- [x] **线性秩函数枚举组合爆炸**：候选枚举上限为 3 个有界变量。≤3 时枚举所有线性组合并 SMT 逐一验证。>3 时只尝试单变量度量（`v_i`、`u_i - v_i`），失败直接报编译错误——提示程序员"循环有 >3 个有界变量，编译器无法自动合成多变量度量"。这不是工程妥协——是迫使程序员写更简单的循环。
+      **再讨论已触发（2026-09-14，#318）**：非结构递归（gcd 类非直接递减、相互递归、归并分区）即本条款预期的真实场景——测度探索的模板序列无法自动拿下它们，且它们无法在不破坏可读性的前提下改写为可分析的迭代模式。结论：硬安全哲学不变（测度写得不对仍被经 `check` 确认的反例打回，人只能证不出来、不能证错），但「探索不出即拒绝」放宽为「探索不出可由程序员在类型位显式给出测度」——见 §6.9。
+- [x] **线性秩函数枚举组合爆炸**：候选枚举上限为 3 个有界变量。≤3 时枚举所有线性组合、逐个产出候选证书交 `Kernel::check`。>3 时只尝试单变量度量（`v_i`、`u_i - v_i`），失败直接报编译错误——提示程序员「循环有 >3 个有界变量，自动 producer 无法合成多变量度量，请补显式证据」。这不是工程妥协——是迫使程序员写更简单的循环。
 
 ## 参考文献
 

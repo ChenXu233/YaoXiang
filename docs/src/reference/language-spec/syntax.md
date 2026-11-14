@@ -697,7 +697,7 @@ BreakStmt   ::= 'break'
   循环体内（含体内嵌套的块/if/match），出现在循环外编译报错（E1102 `'break' outside of a loop`）
 - **不影响终止性证明**：`break`
   不参与终止性论证——它既不提供测度，也不构成测度的递减步骤；循环的终止义务与 `break`
-  无关，由精化类型触发（见 [type-system §8.4](type-system.md#84-terminates终止测度谓词)）。
+  无关，由精化类型触发（见 [type-system §8.5](type-system.md#85-terminates终止测度谓词)）。
 - **借用语义**：break 的控制流边参与 RFC-009a 反向 BFS 活性分析的结构性切断（跳出的迭代不参与回边活性推导）
 
 ```yaoxiang
