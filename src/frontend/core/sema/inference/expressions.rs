@@ -3401,7 +3401,8 @@ impl<'a> ExpressionInferrer<'a> {
         // 同类落点由本判据补齐（普通构造 arm 原先完全不查，故无回归面）。
         let vec_seed_ok = matches!(
             field_ty,
-            MonoType::Generic { name, .. } if name == "Vec" || name == "List"
+            MonoType::Generic { name, .. }
+                if matches!(name.as_str(), "Vec" | "List" | "Array")
         ) && matches!(arg_expr, crate::ast::Expr::List(_, _));
         if vec_seed_ok {
             if let (

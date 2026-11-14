@@ -42,6 +42,17 @@ pub struct RecordTypeParam {
     pub kind: RecordTypeParamKind,
 }
 
+/// 记录参数实例的空间（proof family / data family 的 kind 判据结果）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RecordParamSpace {
+    /// 证明族：可作为 proof family 参数
+    Proof,
+    /// 数据族/普通类型：不可作为 proof family 参数
+    Data,
+    /// 未实例化或无法定种：构造点按 Unproven 处理
+    Unknown,
+}
+
 /// 一条 evidence 字段的构造义务（RFC-027 §14.2 的子集）。
 #[derive(Debug, Clone)]
 pub struct FieldObligation {

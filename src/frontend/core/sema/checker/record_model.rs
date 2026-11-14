@@ -9,10 +9,11 @@
 //! 把结论写进 `poly`（`env.types` / `env.vars` / `generic_type_defs` 因此同源）。
 //! **不改写字段的 `MonoType`**——`StructType` 只写 `quantity`，命题只进模型。
 //!
-//! B.2a 边界：泛型记录不分类（B.2b 待 D0 裁决，见 09a 契约 §一）。
+//! B.2b 起泛型记录与 proof family 模板同样进入本遍；实例化后的 kind 与命题
+//! 代换在构造面和注解面消费 `RecordModel.type_params`。
 
 use super::TypeChecker;
-use crate::ast::{GenericParam, GenericParamKind, StructField, Type as AstType};
+use crate::ast::{Param, StructField, Type as AstType};
 use crate::frontend::core::sema::record_model::{
     AdmissionField, EvidenceSlot, FieldObligation, Proposition, RecordModel, RecordRejection,
     RecordTypeParam, RecordTypeParamKind, record_rejection_diagnostic,
@@ -37,41 +38,34 @@ enum FieldPosition {
 impl TypeChecker {
     /// 声明期一遍。
     ///
-    /// 返回 `Some(model)` 表示本记录已分类；`None` 表示不在 B.2a 面
-    /// （非记录体 / 泛型记录）。非法位置在这里就地报诊断并返回 `None`
-    /// （编译失败，量词不写，后续阶段不运行）。
+    /// 返回 `Some(model)` 表示本记录已分类；`None` 表示不是记录体。
+    /// 非法位置在这里就地报诊断并返回 `None`（编译失败，量词不写，后续阶段
+    /// 不运行）。B.2b 起泛型记录同样进入本遍：类型参数从**原始签名**
+    /// `Type::fn_params_flat` 构造，不从 `classify_generic_params` 的筛选结果
+    /// 反推——后者会丢掉只在定义体类型位引用的 const 形参（`SafeArray` 的 N）。
     pub(super) fn classify_record(
         &mut self,
         name: &str,
         definition: &AstType,
-        generic_params: &[GenericParam],
+        signature: &[Param],
         span: Span,
     ) -> Option<RecordModel> {
         let fields: Vec<&StructField> = match definition {
             AstType::Struct { .. } => definition.struct_fields(),
             _ => return None,
         };
-        // B.2a 边界：泛型记录的分类与实例化义务归 B.2b（D0 未裁）。
-        if !generic_params.is_empty() {
+        // 无字段类型体（proof family 的约束体 / 空积木）没有字段量词、构造义务或
+        // evidence 槽可供 Σ 投影；B.2b 不把它登记成记录模型，否则证明执行阶段
+        // 首因失败后会在义务账本上多出一条 record_models 未交付诊断。
+        if fields.is_empty() {
             return None;
         }
-
-        let type_param_names: Vec<String> = generic_params
-            .iter()
-            .map(|param| param.name.clone())
-            .collect();
+        let type_params = Self::record_type_params(signature);
+        let type_param_names: Vec<String> =
+            type_params.iter().map(|param| param.name.clone()).collect();
         let mut model = RecordModel {
             name: name.to_string(),
-            type_params: generic_params
-                .iter()
-                .map(|param| RecordTypeParam {
-                    name: param.name.clone(),
-                    kind: match param.kind {
-                        GenericParamKind::Type => RecordTypeParamKind::Type,
-                        GenericParamKind::Const { .. } => RecordTypeParamKind::Const,
-                    },
-                })
-                .collect(),
+            type_params,
             fields: Vec::with_capacity(fields.len()),
             obligations: Vec::new(),
             evidence: Vec::new(),
@@ -94,7 +88,7 @@ impl TypeChecker {
             let proposition = if preset.is_some() {
                 None
             } else {
-                self.proof_proposition(&field.ty)
+                self.proof_proposition(&field.ty, &model.type_params)
             };
             // 不是命题形态时，仍让既有解析器对**谓词/证明函数应用**发声——
             // 字段位的非法实参（元数不符 / 实参不可转换）原先静默接受，T09 的
@@ -126,8 +120,18 @@ impl TypeChecker {
                     }
                     Ok(FieldPosition::Evidence {
                         depends_on,
-                        param_refs,
+                        mut param_refs,
                     }) => {
+                        if let ConstExpr::Call { func, .. } = &proposition.constraint {
+                            if let Some(family) = model.type_params.iter().position(|param| {
+                                matches!(param.kind, RecordTypeParamKind::Family { .. })
+                                    && param.name.as_str() == func.as_str()
+                            }) {
+                                if !param_refs.contains(&family) {
+                                    param_refs.push(family);
+                                }
+                            }
+                        }
                         if field.default.is_some() {
                             rejected = true;
                             self.add_error(record_rejection_diagnostic(
@@ -196,10 +200,48 @@ impl TypeChecker {
         Some(model)
     }
 
+    /// 从声明签名逐个登记记录类型参数（B.2b）。
+    ///
+    /// `classify_generic_params` 是泛型实例化用的**筛选表**：const 形参只有在
+    /// 唯一分类器的扫描面命中时才登记。记录模型的 `param_refs` 需要模板命题
+    /// 与内层实参按声明序对位，故这里按原始 `fn_params_flat` 构造——三种
+    /// 源级形态与实例化形参数一致，未命名 / 裸名参数跳过。
+    fn record_type_params(signature: &[Param]) -> Vec<RecordTypeParam> {
+        signature
+            .iter()
+            .filter_map(|param| {
+                let ty = param.ty.as_ref()?;
+                let kind = match ty {
+                    AstType::MetaType { .. } => RecordTypeParamKind::Type,
+                    AstType::Name { name, .. } if name == "Type" => RecordTypeParamKind::Type,
+                    AstType::Name { name, .. }
+                        if crate::frontend::core::sema::probe::is_const_param_type_name(name) =>
+                    {
+                        RecordTypeParamKind::Const
+                    }
+                    AstType::Fn {
+                        params,
+                        return_type,
+                    } if crate::ast::is_type_level_fn(params, return_type) => {
+                        RecordTypeParamKind::Family {
+                            arity: params.len(),
+                        }
+                    }
+                    _ => return None,
+                };
+                (!param.name.is_empty()).then(|| RecordTypeParam {
+                    name: param.name.clone(),
+                    kind,
+                })
+            })
+            .collect()
+    }
+
     /// space + 命题：字段类型落在命题空间时返回要证明的命题。
     fn proof_proposition(
         &self,
         ty: &AstType,
+        type_params: &[RecordTypeParam],
     ) -> Option<Proposition> {
         let AstType::Generic {
             name: head, args, ..
@@ -224,7 +266,25 @@ impl TypeChecker {
                 constraint,
             });
         }
-        // 3. 内建谓词（Terminates）：不透明 Call，构造点判不了（E2031）
+        // 3. proof family 参数模板：P(v) 先留不透明 Call，实例化时改 func
+        //    成具体族名；谓词定义命中则内联谓词体。
+        if type_params.iter().any(|param| {
+            matches!(param.kind, RecordTypeParamKind::Family { .. })
+                && param.name.as_str() == head.as_str()
+        }) {
+            let args: Option<Vec<ConstExpr>> = args
+                .iter()
+                .map(|arg| self.ast_type_to_const_expr(arg))
+                .collect();
+            return Some(Proposition {
+                base: MonoType::Void,
+                constraint: ConstExpr::Call {
+                    func: head.clone(),
+                    args: args?,
+                },
+            });
+        }
+        // 4. 内建谓词（Terminates）：不透明 Call，构造点判不了（E2031）
         if crate::frontend::core::sema::probe::is_builtin_predicate_name(head) {
             let args: Option<Vec<ConstExpr>> = args
                 .iter()

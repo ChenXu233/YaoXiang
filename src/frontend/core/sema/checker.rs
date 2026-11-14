@@ -14,7 +14,8 @@ use crate::frontend::core::sema::proof::verdict::{ProofFailure, ProofResultExt};
 use crate::frontend::core::sema::proof::dep_graph::{
     constraint_is_terminates, refined_free_vars, RefinedScopeUnit,
 };
-use crate::frontend::core::types::eval::dependent_types::DependentTypeEnv;
+use crate::frontend::core::types::eval::dependent_types::{DependentTypeEnv, SortSpace};
+use crate::frontend::core::sema::record_model::{RecordModel, RecordParamSpace, RecordTypeParamKind};
 use crate::std::StdModule;
 
 use super::inference;
@@ -25,6 +26,7 @@ use super::environment::TypeEnvironment;
 use super::environment::ImplementationProof;
 use super::{add_builtin_types, add_std_traits, add_native_function_types};
 use super::Diagnostic;
+use crate::util::diagnostic::DiagnosticBuilder;
 use crate::util::diagnostic::ErrorCodeDefinition;
 
 /// 类型检查器
@@ -127,6 +129,105 @@ pub struct CallSiteSlots {
     pub names: Vec<String>,
     /// q=0（编译期值）位的名字子集（方法面消费；函数条目留空）
     pub const_params: Vec<String>,
+}
+
+/// B.2b 的 kind oracle：记录模型模板面用环境事实定种，调用面用 AST 定种。
+///
+/// proof family = 谓词应用 / 谓词定义 / Proof 空间类型族；data family = 已声明
+/// 类型 / 泛型类型定义 / Data 空间类型族。未解析的名字保持 Unknown，由调用点
+/// 的 E2031 或 kind 检查决定，不在这里猜。
+#[derive(Clone, Copy)]
+pub(super) enum RecordKindOracle<'a> {
+    Environment {
+        types: &'a HashMap<String, PolyType>,
+        generic_type_defs: &'a HashMap<String, super::environment::GenericTypeDef>,
+        predicate_defs: &'a HashMap<String, super::predicate_resolver::PredicateDef>,
+        namespace_predicates: &'a HashSet<String>,
+        dep_env: &'a DependentTypeEnv,
+    },
+}
+
+impl<'a> RecordKindOracle<'a> {
+    /// 定种一个族实参名；未解析的名字为 Unknown。
+    fn space_of(
+        &self,
+        name: &str,
+    ) -> RecordParamSpace {
+        let (types, generic_type_defs, predicate_defs, predicates, dep_env) = match self {
+            Self::Environment {
+                types,
+                generic_type_defs,
+                predicate_defs,
+                namespace_predicates,
+                dep_env,
+            } => (
+                *types,
+                *generic_type_defs,
+                *predicate_defs,
+                *namespace_predicates,
+                Some(*dep_env),
+            ),
+        };
+        if predicates.contains(name)
+            || predicate_defs.contains_key(name)
+            || dep_env
+                .and_then(|env| env.type_family_space(name))
+                .is_some_and(|space| space == SortSpace::Proof)
+        {
+            return RecordParamSpace::Proof;
+        }
+        if types.contains_key(name)
+            || generic_type_defs.contains_key(name)
+            || MonoType::from_builtin_name(name).is_some()
+            || dep_env
+                .and_then(|env| env.type_family_space(name))
+                .is_some_and(|space| space == SortSpace::Data)
+        {
+            return RecordParamSpace::Data;
+        }
+        RecordParamSpace::Unknown
+    }
+
+    /// proof family 模板位是否绑定了 data family（kind 不符）；命中返回该实参名。
+    ///
+    /// `actuals` 与 `model.type_params` 逐位对齐；`None` 表示该位实参不是可解析
+    /// 的类型族名（字面量 / 复合表达式），不做 kind 判定。
+    fn family_kind_error(
+        &self,
+        model: &RecordModel,
+        actuals: &[Option<String>],
+    ) -> Option<String> {
+        for (index, param) in model.type_params.iter().enumerate() {
+            if !matches!(param.kind, RecordTypeParamKind::Family { .. }) {
+                continue;
+            }
+            let Some(actual) = actuals.get(index).and_then(Option::as_deref) else {
+                continue;
+            };
+            if self.space_of(actual) == RecordParamSpace::Data {
+                return Some(actual.to_string());
+            }
+        }
+        None
+    }
+}
+
+/// 类型族 kind 不符统一走 E1002（D1）：两槽填**类型形态**而不是成品散文，
+/// 用户可见句子全部由 locales 渲染（发射点不硬编任一语言的文案）。
+fn record_family_kind_error(found: &str) -> DiagnosticBuilder {
+    ErrorCodeDefinition::type_mismatch(
+        "proof family (T -> Proposition)",
+        &format!("data family {found}"),
+    )
+}
+
+/// 未实例化模板保持 Unproven：E2031（RFC-027 §14.3）。
+fn record_uninstantiated_obligation(
+    record: &str,
+    field: &str,
+    constraint: &str,
+) -> DiagnosticBuilder {
+    ErrorCodeDefinition::refined_unproven(record, field, constraint)
 }
 
 /// 取顶层语句的函数**名与签名**（值/HOF 绑定也算函数）。
@@ -3111,7 +3212,7 @@ impl TypeChecker {
         // 6.9.5-B.2 声明期一遍（RFC-027 §14.1）：space → position → category。
         // 记录模型是唯一产出；量词经 `apply_quantities` 写进 `poly`，命题只进模型
         // （字段的 `MonoType` 不改写——下游 unify/投影语义因此不受影响）。
-        let record_model = self.classify_record(name, definition, &generic_params, span);
+        let record_model = self.classify_record(name, definition, &signature, span);
         let declared_fields: Vec<&crate::ast::StructField> = match definition {
             crate::ast::Type::Struct { .. } => definition.struct_fields(),
             crate::ast::Type::NamedStruct { fields, .. } => fields.iter().collect(),
@@ -3719,6 +3820,44 @@ impl TypeChecker {
         }
     }
 
+    /// 注解面的 B.2b kind 检查：泛型记录的 proof family 位绑定 data family 时发 E1002。
+    ///
+    /// 构造面在 refined walk 里用同一 oracle 判定（那里是 kind 的唯一发射点）；
+    /// 未知名不在这里预判——实例化不到构造点才发 E2031。
+    fn check_record_family_kind_annotation(
+        &self,
+        ty: &MonoType,
+        diags: &mut Vec<Diagnostic>,
+    ) {
+        let MonoType::Generic { name, args, .. } = ty else {
+            return;
+        };
+        let Some(model) = self.env.record_models.get(name) else {
+            return;
+        };
+        let actuals: Vec<Option<String>> = args
+            .iter()
+            .map(|arg| match arg {
+                MonoType::TypeRef(actual) => Some(actual.clone()),
+                MonoType::Generic { name, .. } => Some(name.clone()),
+                _ => None,
+            })
+            .collect();
+        if actuals.len() != model.type_params.len() {
+            return;
+        }
+        let oracle = RecordKindOracle::Environment {
+            types: &self.env.types,
+            generic_type_defs: &self.env.generic_type_defs,
+            predicate_defs: &self.env.predicate_defs,
+            namespace_predicates: &self.type_level_namespace.predicates,
+            dep_env: &self.dependent_type_env,
+        };
+        if let Some(actual) = oracle.family_kind_error(model, &actuals) {
+            diags.push(record_family_kind_error(&actual).build());
+        }
+    }
+
     /// 解析类型标注：如果是编译期谓词调用，正格化为 Refined（#263：非法用法写诊断汇入 diags，不静默）
     ///
     /// Generic("Positive", [arg]) -> 尝试 PredicateResolver::try_resolve
@@ -3728,6 +3867,7 @@ impl TypeChecker {
         ty: &MonoType,
         diags: &mut Vec<Diagnostic>,
     ) -> MonoType {
+        self.check_record_family_kind_annotation(ty, diags);
         match ty {
             MonoType::Generic { name, args } if !args.is_empty() => {
                 // RFC-027a：`Terminates(m)` —— 终止测度标注（一元形态）。

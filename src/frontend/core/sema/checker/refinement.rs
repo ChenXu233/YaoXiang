@@ -846,12 +846,25 @@ impl TypeChecker {
         else {
             return;
         };
-        // 非泛型构造 `Box(...)` 与两层构造 `SafeArray(Int, 3)(...)`（内层是类型
-        // 构造调用，运行期擦除）都归到记录名上。
-        let callee: &str = match func.as_ref() {
-            Expr::Var(name, _) => name,
-            Expr::Call { func: inner, .. } => match inner.as_ref() {
-                Expr::Var(name, _) => name,
+        self.check_record_family_kind_in_call(expr, ctx);
+
+        let (callee, generic_actual_exprs, generic_call_span) = match func.as_ref() {
+            // 单括号调用由推断层按「类型构造位逐位匹配 / 值构造」分流；此处的
+            // 义务判定只处理裸记录构造与已完成内层实例化的两层构造。
+            Expr::Var(name, _) if !self.env.generic_type_defs.contains_key(name) => {
+                (name.as_str(), None, None)
+            }
+            Expr::Call {
+                func: inner,
+                args: generic_args,
+                span: inner_span,
+                ..
+            } => match inner.as_ref() {
+                Expr::Var(name, _) => (
+                    name.as_str(),
+                    Some(generic_args.as_slice()),
+                    Some(*inner_span),
+                ),
                 _ => return,
             },
             _ => return,
@@ -863,10 +876,17 @@ impl TypeChecker {
             return;
         }
         let data_indices: Vec<usize> = model.data_field_indices().collect();
-        // 超参调用已被推断层拒（E1010）——本走查不重复发射，也不按错位实参造义务。
         if args.len() + named_args.len() > data_indices.len() {
             return;
         }
+        // 内层类型构造已失败（同一 span 上有 Error 级诊断：const 约束 E1062、
+        // 实参位 E1010 / E1002）时，实例化命题并不存在——义务判定的输入是
+        // 「实例化后的命题」，输入没成型就不判，避免同一处错误叠三条。
+        if generic_call_span.is_some_and(|inner_span| self.instantiation_already_failed(inner_span))
+        {
+            return;
+        }
+        let template_args = Self::record_template_args(model, generic_actual_exprs);
         let param_names: Vec<String> = data_indices
             .iter()
             .map(|index| model.fields[*index].name.clone())
@@ -875,8 +895,6 @@ impl TypeChecker {
             .iter()
             .map(|index| model.fields[*index].has_default)
             .collect();
-        // 绑定畸形（缺参/未知名/争槽/重复命名/超参）已由推断层报码；本走查
-        // 只消费映射，不重复发射。
         let Ok(slots) = crate::frontend::core::sema::inference::arg_binding::bind_args_to_params(
             callee,
             &param_names,
@@ -893,46 +911,48 @@ impl TypeChecker {
                 Some(field) => field,
                 None => continue,
             };
-            // 依赖位的实参项：位置实参在前、命名实参按书写序（与 IR 侧同一坐标）；
-            // 缺省字段取声明默认值。折叠不出时保留字段名作符号项 → 判定降为
-            // Unproven（E2031 / 证明调用），不静默放行。
-            let mut substituted_names: Vec<String> = Vec::new();
-            let mut substituted_values: Vec<ConstExpr> = Vec::new();
-            for dependency in &obligation.depends_on {
-                let Some(dependency_field) = model.fields.get(*dependency) else {
-                    continue;
-                };
-                let Some(slot) = data_indices.iter().position(|index| index == dependency) else {
-                    continue;
-                };
-                let value = match slots.iter().position(|bound| *bound == slot) {
-                    Some(argument) if argument < args.len() => {
-                        convert_expr_to_const_expr(&args[argument])
-                    }
-                    Some(argument) => named_args
-                        .get(argument.saturating_sub(args.len()))
-                        .and_then(|(_, expr)| convert_expr_to_const_expr(expr)),
-                    // 缺省字段：默认值表达式不在 `StructFieldInfo` 里（模型只记
-                    // `has_default`）。B.2a 先按符号项处理（判定降为 Unproven，
-                    // 失败闭合）；把默认值折进模型随 B.2b 的实例化面落地。
-                    None => None,
-                };
-                substituted_names.push(dependency_field.name.clone());
-                substituted_values.push(
-                    value.unwrap_or_else(|| ConstExpr::NamedVar(dependency_field.name.clone())),
+            if !model.type_params.is_empty() && template_args.is_none() {
+                ctx.diags.push(
+                    super::record_uninstantiated_obligation(
+                        callee,
+                        &Self::obligation_subject(model, obligation),
+                        &format!("{}", obligation.proposition.constraint),
+                    )
+                    .at(*span)
+                    .build(),
                 );
+                continue;
             }
-            let constraint =
-                crate::frontend::core::sema::layers::termination::substitute_const_expr(
+            let constraint = match template_args.as_ref() {
+                Some(template) => match self.instantiate_record_constraint(
+                    model,
+                    obligation,
+                    template,
+                    &data_indices,
+                    &slots,
+                    args,
+                    named_args,
+                    callee,
+                    ctx,
+                    *span,
+                ) {
+                    Some(constraint) => constraint,
+                    None => continue,
+                },
+                None => self.substitute_record_fields(
                     &obligation.proposition.constraint,
-                    &substituted_names,
-                    &substituted_values,
-                );
+                    model,
+                    obligation,
+                    &data_indices,
+                    &slots,
+                    args,
+                    named_args,
+                ),
+            };
             let refined = MonoType::Refined {
                 base: Box::new(obligation.proposition.base.clone()),
                 constraint,
             };
-            // RFC-027 §8 / H8：一次判定一份预算（构造义务不继承前序判定步数）。
             ctx.shared_ctx.budget =
                 crate::frontend::core::sema::proof::budget::BudgetTracker::for_judgment();
             Self::judge_refined_obligation_with_mode(
@@ -947,7 +967,6 @@ impl TypeChecker {
                 crate::frontend::core::sema::layers::predicate::PredicateMode::NoSmt,
             );
         }
-        // admission（自引用精化）：值类型是 base，构造点证明自引用命题。
         for admission in &model.admission_fields {
             let Some(field) = model.fields.get(admission.field) else {
                 continue;
@@ -991,6 +1010,238 @@ impl TypeChecker {
                 None,
                 crate::frontend::core::sema::layers::predicate::PredicateMode::NoSmt,
             );
+        }
+    }
+
+    /// 泛型记录的内层实参：按记录模型声明序对位；const 位折叠成常量项，
+    /// family/type 位保留 Expr::Var 名。开项或形态不支持时返回 None。
+    fn record_template_args(
+        model: &super::RecordModel,
+        generic_actual_exprs: Option<&[Expr]>,
+    ) -> Option<Vec<crate::frontend::core::types::const_data::ConstExpr>> {
+        let actuals = generic_actual_exprs?;
+        if actuals.len() != model.type_params.len() {
+            return None;
+        }
+        let mut terms = Vec::with_capacity(actuals.len());
+        for (param, actual) in model.type_params.iter().zip(actuals.iter()) {
+            let term = match (&param.kind, actual) {
+                (super::RecordTypeParamKind::Const, _) => convert_expr_to_const_expr(actual)?,
+                (_, Expr::Var(name, _)) => ConstExpr::NamedVar(name.clone()),
+                _ => return None,
+            };
+            terms.push(term);
+        }
+        Some(terms)
+    }
+
+    /// 内层类型构造是否已经报过错（同一 span 上的 Error 级诊断）。
+    ///
+    /// 义务判定的输入是「实例化后的命题」；内层构造自己失败（const 约束、
+    /// 实参位、元数）时命题没有成型，再补一条义务诊断只是把同一处错误说三遍。
+    fn instantiation_already_failed(
+        &self,
+        span: crate::util::span::Span,
+    ) -> bool {
+        self.env.errors.errors().iter().any(|diagnostic| {
+            diagnostic.severity == crate::util::diagnostic::Severity::Error
+                && diagnostic.span == Some(span)
+        })
+    }
+
+    /// 义务诊断的主体名（E2031 的 var 槽）：`记录名.字段名`。
+    fn obligation_subject(
+        model: &super::RecordModel,
+        obligation: &crate::frontend::core::sema::record_model::FieldObligation,
+    ) -> String {
+        match model.fields.get(obligation.field) {
+            Some(field) => format!("{}.{}", model.name, field.name),
+            None => model.name.clone(),
+        }
+    }
+
+    /// 数据字段依赖代入：depends_on 下标不变，折叠不出的值保留符号项。
+    #[allow(clippy::too_many_arguments)]
+    fn substitute_record_fields(
+        &self,
+        template: &crate::frontend::core::types::const_data::ConstExpr,
+        model: &super::RecordModel,
+        obligation: &crate::frontend::core::sema::record_model::FieldObligation,
+        data_indices: &[usize],
+        slots: &[usize],
+        args: &[Expr],
+        named_args: &[(String, Expr)],
+    ) -> crate::frontend::core::types::const_data::ConstExpr {
+        let mut field_names = Vec::new();
+        let mut field_terms = Vec::new();
+        for dependency in &obligation.depends_on {
+            let Some(dependency_field) = model.fields.get(*dependency) else {
+                continue;
+            };
+            let Some(slot) = data_indices.iter().position(|index| index == dependency) else {
+                continue;
+            };
+            let value = match slots.iter().position(|bound| *bound == slot) {
+                Some(argument) if argument < args.len() => {
+                    convert_expr_to_const_expr(&args[argument])
+                }
+                Some(argument) => named_args
+                    .get(argument.saturating_sub(args.len()))
+                    .and_then(|(_, expr)| convert_expr_to_const_expr(expr)),
+                None => None,
+            };
+            field_names.push(dependency_field.name.clone());
+            field_terms
+                .push(value.unwrap_or_else(|| ConstExpr::NamedVar(dependency_field.name.clone())));
+        }
+        crate::frontend::core::sema::layers::termination::substitute_const_expr(
+            template,
+            &field_names,
+            &field_terms,
+        )
+    }
+
+    /// 模板命题代换：const 代常量项，family 改 Call.func 并校验 kind；
+    /// predicate_defs 命中则内联谓词体，否则保留 Call 走证明函数执行。
+    #[allow(clippy::too_many_arguments)]
+    fn instantiate_record_constraint(
+        &self,
+        model: &super::RecordModel,
+        obligation: &crate::frontend::core::sema::record_model::FieldObligation,
+        template_args: &[crate::frontend::core::types::const_data::ConstExpr],
+        data_indices: &[usize],
+        slots: &[usize],
+        args: &[Expr],
+        named_args: &[(String, Expr)],
+        callee: &str,
+        ctx: &mut RefinedWalkCtx<'_, '_>,
+        span: crate::util::span::Span,
+    ) -> Option<crate::frontend::core::types::const_data::ConstExpr> {
+        use crate::frontend::core::types::const_data::ConstExpr as CE;
+        let param_names: Vec<String> = model
+            .type_params
+            .iter()
+            .map(|param| param.name.clone())
+            .collect();
+        let mut constraint =
+            crate::frontend::core::sema::layers::termination::substitute_const_expr(
+                &obligation.proposition.constraint,
+                &param_names,
+                template_args,
+            );
+        let oracle = RecordKindOracle::Environment {
+            types: &self.env.types,
+            generic_type_defs: &self.env.generic_type_defs,
+            predicate_defs: &self.env.predicate_defs,
+            namespace_predicates: &self.type_level_namespace.predicates,
+            dep_env: &self.dependent_type_env,
+        };
+        for index in &obligation.param_refs {
+            let Some(param) = model.type_params.get(*index) else {
+                continue;
+            };
+            if !matches!(param.kind, super::RecordTypeParamKind::Family { .. }) {
+                continue;
+            }
+            let Some(CE::NamedVar(actual)) = template_args.get(*index) else {
+                continue;
+            };
+            match oracle.space_of(actual) {
+                // kind 错误由内层调用面的 kind 检查发射（walk 必走到同一个 Call
+                // 节点）——此处只停止义务判定，不重复发射同一处错误。
+                super::RecordParamSpace::Data => return None,
+                super::RecordParamSpace::Unknown => {
+                    ctx.diags.push(
+                        super::record_uninstantiated_obligation(
+                            callee,
+                            &Self::obligation_subject(model, obligation),
+                            &format!("{}", obligation.proposition.constraint),
+                        )
+                        .at(span)
+                        .build(),
+                    );
+                    return None;
+                }
+                super::RecordParamSpace::Proof => {}
+            }
+            let call_args = if let CE::Call { func, args, .. } = &mut constraint {
+                *func = actual.clone();
+                args.clone()
+            } else {
+                Vec::new()
+            };
+            if let Some(def) = self.env.predicate_defs.get(actual) {
+                if call_args.len() == 1 {
+                    constraint =
+                        crate::frontend::core::sema::layers::termination::substitute_const_expr(
+                            &def.constraint,
+                            std::slice::from_ref(&def.param_name),
+                            std::slice::from_ref(&call_args[0]),
+                        );
+                }
+            }
+        }
+        Some(self.substitute_record_fields(
+            &constraint,
+            model,
+            obligation,
+            data_indices,
+            slots,
+            args,
+            named_args,
+        ))
+    }
+
+    /// 构造面 kind 检查：泛型类型构造若把 proof family 位绑定 data family，
+    /// 直接在 walk 阶段发 E1002（D1 复用类型不匹配码），避免进入 IR 内部错误。
+    ///
+    /// 三个发射面里这是**唯一**的 kind 发射点：两层构造的内层调用必被
+    /// `walk_ctor_obligations` 走到（它先走外层、再走 `func`），故实例化面不再
+    /// 重复发射（见 `instantiate_record_constraint` 的 Data 分支）。按位判定，
+    /// 不做跨站点去重——两处各自写错必须各报一条。
+    fn check_record_family_kind_in_call(
+        &self,
+        expr: &Expr,
+        ctx: &mut RefinedWalkCtx<'_, '_>,
+    ) {
+        let Expr::Call {
+            func, args, span, ..
+        } = expr
+        else {
+            return;
+        };
+        let Expr::Var(name, _) = func.as_ref() else {
+            return;
+        };
+        let Some(model) = self.env.record_models.get(name) else {
+            return;
+        };
+        // 元数不符由推断层报 E1010：逐位对齐才谈得上 kind。
+        if args.len() != model.type_params.len() {
+            return;
+        }
+        let actuals: Vec<Option<String>> = args
+            .iter()
+            .map(|arg| match arg {
+                // 族名可写成裸名（`Pos`）或类型应用（`Pos(...)`）：kind 只看头名。
+                Expr::Var(actual, _) => Some(actual.clone()),
+                Expr::Call { func, .. } => match func.as_ref() {
+                    Expr::Var(actual, _) => Some(actual.clone()),
+                    _ => None,
+                },
+                _ => None,
+            })
+            .collect();
+        let oracle = RecordKindOracle::Environment {
+            types: &self.env.types,
+            generic_type_defs: &self.env.generic_type_defs,
+            predicate_defs: &self.env.predicate_defs,
+            namespace_predicates: &self.type_level_namespace.predicates,
+            dep_env: &self.dependent_type_env,
+        };
+        if let Some(actual) = oracle.family_kind_error(model, &actuals) {
+            ctx.diags
+                .push(super::record_family_kind_error(&actual).at(*span).build());
         }
     }
 

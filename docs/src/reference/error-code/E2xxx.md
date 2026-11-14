@@ -30,7 +30,7 @@ description: '语义分析阶段产生的错误，涵盖作用域、变量生命
 | `E2027` | unsafe 解引用 | `Semantic` | 否 | `无法在 unsafe 块外解引用裸指针` | ✅ 1 处 |
 | `E2029` | spawn 内引用循环 | `Semantic` | 否 | `spawn 内引用循环: {cycle}` | ✅ 1 处 |
 | `E2030` | 精化类型约束违反 | `Semantic` | 否 | `对 '{assigned}' 赋值后，'{var}' 不再满足精化类型约束：{constraint}（反例：{counterexample}）` | ✅ 1 处 |
-| `E2031` | 精化约束无法证明 | `Semantic` | 否 | `对 '{assigned}' 赋值后，'{var}' 的精化类型约束：{constraint} 在证明内核内无法静态证明` | ✅ 2 处 |
+| `E2031` | 精化约束无法证明 | `Semantic` | 否 | `对 '{assigned}' 赋值后，'{var}' 的精化类型约束：{constraint} 在证明内核内无法静态证明` | ✅ 3 处 |
 | `E2090` | 无效签名 | `Semantic` | 否 | `无效签名：{reason}` | ✅ 3 处 |
 | `E2091` | 签名未知类型 | `Semantic` | 否 | `无效签名：未知类型 '{type_name}'` | ⚠ 暂未发射 |
 | `E2092` | 签名缺少箭头 | `Semantic` | 否 | `无效签名：缺少 '->'` | ✅ 1 处 |
@@ -60,7 +60,7 @@ description: '语义分析阶段产生的错误，涵盖作用域、变量生命
 - **模板**：`重复定义：'{name}' 已在当前作用域中定义`
 - **消息**：变量在同一作用域中定义了多次
 - **帮助**：重命名或删除重复的定义
-- **发射点**：`src/frontend/core/sema/checker.rs:1520`、`src/frontend/core/sema/inference/expressions.rs:6795`、`src/frontend/core/sema/inference/statements.rs:2187` 等 4 处
+- **发射点**：`src/frontend/core/sema/checker.rs:1621`、`src/frontend/core/sema/inference/expressions.rs:6796`、`src/frontend/core/sema/inference/statements.rs:2187` 等 4 处
 
 ### E2003：所有权错误
 
@@ -81,7 +81,7 @@ description: '语义分析阶段产生的错误，涵盖作用域、变量生命
 - **模板**：`无法给不可变变量 '{name}' 赋值`
 - **消息**：试图修改不可变变量
 - **帮助**：使用 'mut' 声明可变变量
-- **发射点**：`src/frontend/core/sema/inference/expressions.rs:6790`、`src/frontend/core/sema/inference/statements.rs:3028`
+- **发射点**：`src/frontend/core/sema/inference/expressions.rs:6791`、`src/frontend/core/sema/inference/statements.rs:3028`
 
 ### E2011：使用未初始化变量
 
@@ -111,7 +111,7 @@ description: '语义分析阶段产生的错误，涵盖作用域、变量生命
 - **模板**：`Cannot shadow existing variable '{name}'`
 - **消息**：不能遮蔽已有变量
 - **帮助**：使用不同的变量名，或在不同的作用域中声明变量
-- **发射点**：`src/frontend/core/sema/inference/expressions.rs:6800`、`src/frontend/core/sema/inference/statements.rs:3042`、`src/frontend/core/sema/inference/statements.rs:3129`
+- **发射点**：`src/frontend/core/sema/inference/expressions.rs:6801`、`src/frontend/core/sema/inference/statements.rs:3042`、`src/frontend/core/sema/inference/statements.rs:3129`
 
 ### E2014：使用已移动的值
 
@@ -197,7 +197,7 @@ description: '语义分析阶段产生的错误，涵盖作用域、变量生命
 - **构造函数**：`ErrorCodeDefinition::refined_unproven(assigned, var, constraint)`
 - **模板**：`对 '{assigned}' 赋值后，'{var}' 的精化类型约束：{constraint} 在证明内核内无法静态证明`
 - **帮助**：RFC-027 要求所有精化约束在编译期得到证明——证不出即编译错误。请改写约束使其实参可静态取值（字面量或字面量可折叠的表达式），或提供返回 Type 的证明函数参与编译期执行。
-- **发射点**：`src/frontend/core/sema/checker/refinement.rs:682`、`src/frontend/core/sema/checker/refinement.rs:813`
+- **发射点**：`src/frontend/core/sema/checker.rs:230`、`src/frontend/core/sema/checker/refinement.rs:682`、`src/frontend/core/sema/checker/refinement.rs:813`
 - **源码注释名**：精化约束无法证明（RFC-027 §4/§9：Unproven → 编译错误 + 未解命题，
 
 ### E2090：无效签名

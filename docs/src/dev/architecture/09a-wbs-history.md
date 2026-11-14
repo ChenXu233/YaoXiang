@@ -5677,6 +5677,57 @@ M03 此前已由 t6 复审探针证成（禁用 `check_record_ctor_obligations` 
 该面归 B.4（跨模块导出）补齐测试后此变异才有红态。
 **首次全量构建**：`build` 49 s（复用主仓缓存）；批次已 `release` + `gc`（回收 4881.9 MB）。
 
+## P6 6.9.5-B.2b 实现轮（2026-11-14；D0 文档修正收口，D2/D3 维持）
+
+> 契约见 §P6 6.9.5-B.2。本轮落 B.2b 的五个断点（`type_params` 来源、proof family 实例化、容器字面量 `Array` 落点、模板命题代换、kind oracle）。D0（proof family 源级形态）已按文档修正收口（RFC-027 §14.3 / SPEC §8.3.3 改为解析器可接受的 `P: (T: Type) -> Type`，`33ac1b55`）；D2 仍用借码 fallback（单点 `record_rejection_diagnostic`）；D3 维持 `PredicateMode::NoSmt`（SMT 只提示、不作证明来源）。工作方式：主工作树、不 commit/push，lead 复核提交；工作树原有 `.gitignore` 修改与未跟踪 blog 文件未触碰。
+
+### 一、落地内容
+
+- **`RecordModel.type_params` 改从原始签名构造**：新增 `checker/record_model.rs::record_type_params`，`MetaType` / `Name(Type)` → `Type`、`is_type_level_fn` → `Family{arity}`、`is_const_param_type_name` → `Const`。不再从 `classify_generic_params` 的筛选结果反推——后者只捞签名内被类型位引用的 const 形参。实测后果：改前 `SafeArray(Int, 3)([...])` 报 E2031（`N` 掉出 `type_params`，模板命题没有可对位的实参）。
+- **无字段类型体不登记记录模型**：proof family 的约束体（`Pos: (v: Int) -> Type = { v > 0 }`）解析成零字段 `Type::Struct`；若登记成 Σ，义务账本会多出一条 `record_models` 未交付诊断（`add_type_definition` 的交付标记与模型落库同一判据）。
+- **proof family 模板与实例化**（`refinement.rs::instantiate_record_constraint`）：声明期 `P(v)` 留不透明 `Call{P, args}`；实例化时 const 位折 `convert_expr_to_const_expr`、family 位取内层实参名并过 kind；`predicate_defs` 命中则内联谓词体，否则保留 `Call` 走证明函数执行器。`depends_on` 下标不变（依赖数据字段的实参另行代入）。
+- **kind oracle 单一实现**（`checker.rs::RecordKindOracle`）：proof family = 谓词名 / `predicate_defs` / Proof 空间类型族；data family = `env.types` / `generic_type_defs` / 内建类型名 / Data 空间类型族；未解析名 = Unknown → E2031。消费面三处：构造面 walk（**唯一** kind 发射点——两层构造的内层调用必被 `walk_ctor_obligations` 先外层后 `func` 地走到）、注解面 `resolve_type_annotation`、实例化面（kind 不符只停止义务判定，不重复发射）。
+- **容器字面量落点补 `Array`**：`check_ctor_field_type` 的 List 字面量豁免原只认 `Vec` / `List`；不补则 arity 修好后 `SafeArray(Int, 3)([1, 2, 3])` 先报 `E1002 Array(int64, N) vs Vec(int64)`。
+- **内层实例化失败的抑制**：内层类型构造在同一 span 上已有 Error 级诊断（const binder 约束 E1062、实参位 E1010 / E1002）时，构造义务不再判定——义务的输入是实例化后的命题，输入没成型。判据是 span + severity，顺带消掉 `Cell(Int)(3)` 的 E1010→E2031 级联。
+- **诊断形态**：kind 不符复用 E1002（D1），两槽填类型形态（`proof family (T -> Proposition)` / `data family Array`），用户可见句子留在 locales（发射点不再硬编散文）；E2031 的 var 槽统一为 `记录名.字段名`（此前 Unknown 分支误填族实参名）。
+
+### 二、红→绿（红态在 B.2a 绿态 `a8e98587` 的 CLI 上实测）
+
+| 判据 | 绿态证据 |
+| --- | --- |
+| T22 const 参数记录 | `SafeArray(Int, 3)([1, 2, 3])` 零诊断；`SafeArray(Int, 0)([1, 2, 3])` 报 E1062（`N = 0` 不成立——`Assert(N > 0)` 字段位经 `process_body_expr_item` 同时登记为 binder 约束，是 B.1 起的既有路径，故此处不重复发 E4018） |
+| T23 proof family 实例化 | `Cell(Int, Pos)(3)` 零诊断；`Cell(Int, Pos)(-3)` 报 E4018（`(-3 > 0)`，谓词体内联）；二元族 `Cell2: (T: Type, P: (T: Type, Int) -> Type)` 的 `Cell2(Int, Eq)(4)` 报 E4018（证明函数 `Eq` 返回 false，保留 `Call` 走执行器） |
+| T24 kind | 构造面 `Cell(Int, Array)` 与注解面 `c: Cell(Int, Array) = 1` 各报一条 E1002；两处各自写错 data family 时**各报一条**（跨站点全局去重会静默吞掉后一处，该去重已删除） |
+| T25 未实例化 | 泛型函数体内 `Cell(T, P)(x)` 报 E2031（主体 `Cell.w`） |
+| T26 mono 量词 | 模板模型的 `w` 仍为 `Some(Quantity::Zero)`；泛型记录实例化不改写字段 `MonoType`，量词随模型走 |
+| 泛型 + 数据字段依赖 | `G: (T: Type) -> Type = { v: T, w: Pos(v) }`：`G(Int)(3)` 零诊断、`G(Int)(-3)` E4018 |
+| 级联抑制 | `Cell(Int)(3)` 只报 E1010，不再补 E2031 |
+| 证明函数族 | `Eq: (a: Int, b: Int) -> Type` 作 family 实参：`Cell2(Int, Eq)(3)` 零诊断（族名代换后 `Call` 保留，交证明执行器） |
+
+新增测试 9 条（`sema/tests/record_evidence.rs`）：T22 / T23 / T24（构造 + 注解）/ T25 / T26 五条判据，加四条边界守卫（单括号类型构造不补 E2031、约束体不登记模型、跨站点各报一条、内层实例化失败不补 E2031）。
+
+### 三、语料 / 快照（逐条分类）
+
+- **语料差分**：`cargo run --quiet --example corpus_probe` 的产出与 `tests/baselines/corpus-parity.jsonl` **逐字节相同**（388 行）——语料均是诊断面判据，B.2b 不改变任何语料文件的诊断。
+- **IR 快照 1 个文件变更**：`tests/yaoxiang/02-type-system/generics/const_generic_lt_le_bound.snap`。`Capped(Int, 3)` 是单括号**类型构造**；B.2b 起泛型记录被分类，`_assert_lt` / `_assert_le` 是 evidence 而非数据字段，故 IR 不再为它补第三个构造操作数（`Load %2 <- int(0)` 消失、后续局部编号前移一位）。这是 B.2b 的既定语义（泛型记录的 evidence 不占构造槽），不是格式漂移；diff 人工 review 后与代码同提交。
+- 其余 228 个快照文件零漂移（`test_ir_snapshots_stable` 绿）。
+
+### 四、门禁与量测
+
+- `cargo fmt --all` 0；`cargo clippy --all --all-features --all-targets -- -D warnings` 0。
+- `python scripts/dev/testsuite.py run fast`：2210 条、exit 0、1 波、171.3 s、跳过 0 条（`#[ignore]` 3 条 + `mode=manual` 2 条按计划不执行）。
+- `check-obligations.py` PASS（14 义务 / 14 交付 / 字段 22 − 义务 14 − 非义务 8 = 0）；`check-boundary` / `check-fanout` / `check-test-channel` / `check-docs-truth` / `check-docs-orphan` / `check-docs-refs` / `check-concepts` 全部 exit 0（boundary / fanout 为 report-only；本轮改动不含 `src/middle/bytecode/`，既有 opcode 常量计数 84 vs 库存 83 与本轮无关）。
+- 错误码生成物：`python scripts/docs/gen-error-code-docs.py` 幂等（连跑两次生成物哈希一致）；站点计数变化（E1002 69→70、E2031 2→3）来自本轮 kind 发射点与 B.2a 收敛，机械再生、未手改。
+- `docs:build`（VitePress 真实构建）exit 0；改动的 7 个 md 文件 markdownlint exit 0；prettier 对这 7 个文件仍红，但同文件 HEAD 版本单独检查同样红（既有全仓 126 md 债务，非本轮回归）。
+
+### 五、边界与未完成（如实）
+
+- **嵌套容器字面量**：`Array(Array(T, N), M)` 字段吃 `[[1, 2], [3, 4]]` 仍报 E1002。根因在 List 字面量推断（`[[1, 2], [3, 4]]` 推断为 `Vec(Vec(int64))`）与落点豁免只逐层 unify 一层元素；**非 B.2b 引入**——非泛型记录构造（`Matrix: Type = { data: Array(Array(Int, 2), 2) }`）与变量注解（`d: Array(Array(Int, 2), 2) = [[1, 2], [3, 4]]`）在位同形同样报错，归容器 / 字面量推断面。
+- **族实参不是裸名或类型应用**（如 `Cell(Int, Wrap(Pos))(...)`）走 E2031 未实例化；kind 判定不做表达式级反向推导。
+- **默认值字段作 evidence 依赖**仍按符号项 → E2031（B.2a 起的登记边界）。
+- **D2 码位**仍 provisional（单点 helper，裁决后只改一处）；**D3** 维持 NoSmt。
+- **proof family 旧写法不再支持**：`P: (T) -> Type` 的 `P` 不被 `classify_generic_params` 认作类型参数；RFC-027 §14.3 / SPEC §8.3.3 已改为 `P: (T: Type) -> Type`，kind 记法 `T -> Proposition` 只留正文。
+
 ## P3 3.20.30 收口（深嵌套表达式栈溢出改正式诊断——大栈线程 + 解析闸 E0019，#540，2026-11-14）
 
 > **一、查证（崩溃环测绘 + razor 区判死静态单闸）**：issue 夹具（300 项 binop 实参）修前 check 逐字崩溃（thread 'main' has overflowed its stack，Git Bash exit 127 / Windows 0xC00000FD，零诊断）。崩溃环 ≥4 个实测：parser pratt 真递归（一元/调用/括号/块）、typecheck infer_expr（call/field 形态）、ir_gen 下降（binop/unary/list/ifnest——E3014 检查在走完之后不挡下降）、LSP semantic_tokens collect_expr_tokens；运行面被 E3014 寄存器上限间接兜住无崩溃（登记）。**各形态 razor 区**（debug 构建 / 1MB 主线程栈实测）：call 通过 ≤120 崩 @125、block 通过 ≤220 崩 @230、unary 通过 ~≤255 崩 @282、binop 129..282 为 E3014 拒绝区、括号嵌套 600 层通过 / 崩溃起点 ~650——通过与崩溃边界相邻，**任何静态单阈值要么拒掉 razor 区原先成功程序（违 D59）要么漏崩溃**。规范判据：SPEC/RFC 无表达式嵌套深度口径；闸门先例 mono.max_depth=100/E3005、const_eval DEFAULT_MAX_DEPTH=256；码表 E0xxx 最大 E0018 → E0019 空闲走新码流程。分类 D59 C 类崩溃面直修。

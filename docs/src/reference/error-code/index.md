@@ -70,7 +70,7 @@ YaoXiang 的每个诊断都带一个稳定码号（如 `E1001`），便于检索
 | `E0018` | 关键字作名称 | `Parser` | 否 | `'{keyword}' 是关键字，不能用作名称` | ✅ 1 处 |
 | `E0019` | 表达式嵌套过深 | `Parser` | 否 | `表达式嵌套超过最大递归深度（{limit}）` | ✅ 1 处 |
 | `E1001` | 未知变量 | `TypeCheck` | 否 | `未知变量：'{name}'` | ✅ 6 处 |
-| `E1002` | 类型不匹配 | `TypeCheck` | 否 | `期望类型 '{expected}'，实际类型 '{found}'` | ✅ 69 处 |
+| `E1002` | 类型不匹配 | `TypeCheck` | 否 | `期望类型 '{expected}'，实际类型 '{found}'` | ✅ 70 处 |
 | `E1003` | 未知类型 | `TypeCheck` | 否 | `未知类型：'{type}'` | ✅ 3 处 |
 | `E1010` | 参数数量不匹配 | `TypeCheck` | 否 | `函数 '{func}' 期望 {expected} 个参数，找到 {found} 个` | ✅ 19 处 |
 | `E1011` | 实现形参标注与声明不符 | `TypeCheck` | 否 | `实现形参标注与声明不符：期望 '{expected}'，实际 '{found}'` | ✅ 1 处 |
@@ -152,7 +152,7 @@ YaoXiang 的每个诊断都带一个稳定码号（如 `E1001`），便于检索
 | `E2096` | 签名裸容器类型 | `Semantic` | 否 | `无效签名：容器类型 '{name}' 缺少类型实参` | ✅ 1 处 |
 | `E2029` | spawn 内引用循环 | `Semantic` | 否 | `spawn 内引用循环: {cycle}` | ✅ 1 处 |
 | `E2030` | 精化类型约束违反 | `Semantic` | 否 | `对 '{assigned}' 赋值后，'{var}' 不再满足精化类型约束：{constraint}（反例：{counterexample}）` | ✅ 1 处 |
-| `E2031` | 精化约束无法证明 | `Semantic` | 否 | `对 '{assigned}' 赋值后，'{var}' 的精化类型约束：{constraint} 在证明内核内无法静态证明` | ✅ 2 处 |
+| `E2031` | 精化约束无法证明 | `Semantic` | 否 | `对 '{assigned}' 赋值后，'{var}' 的精化类型约束：{constraint} 在证明内核内无法静态证明` | ✅ 3 处 |
 | `E3004` | 不支持的迭代器 | `Codegen` | 否 | `不支持的迭代器类型：{iter_type}` | ✅ 2 处 |
 | `E3005` | IR 生成错误 | `Codegen` | 否 | `IR 生成错误：{message}` | ✅ 19 处 |
 | `E3006` | 未解析变量 | `Codegen` | 否 | `IR 生成内部错误：变量 '{name}' 未能解析` | ✅ 1 处 |

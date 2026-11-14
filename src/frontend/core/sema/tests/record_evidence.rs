@@ -1,8 +1,8 @@
-//! 依赖记录 Σ 的声明期分类与构造期义务 — 6.9.5-B.2（B.2a）
+//! 依赖记录 Σ 的声明期分类与构造期义务 — 6.9.5-B.2（B.2a + B.2b）
 //!
 //! 规范锚：RFC-027 §14.1（space→position→category）/ §14.2（构造点义务）/
-//! §14.6（擦除与码分工）；SPEC §8.3.1 / §8.3.2 / §8.3.6；09a
-//! §P6 6.9.5-B.2 契约 §七（T01–T21 的 B.2a 面）。
+//! §14.3（泛型与 proof family 实例化）/ §14.6（擦除与码分工）；SPEC §8.3.1 /
+//! §8.3.2 / §8.3.3 / §8.3.6；09a §P6 6.9.5-B.2 契约 §七（T01–T26）。
 //!
 //! 本文件用**真实源码**走 lex → parse → check：B.2 起声明期分类产 witness，
 //! 不再需要 B.1 的直驱标量词（那条通道保留在 witness_fields.rs，作为表示层判据）。
@@ -640,5 +640,289 @@ fn test_registry_and_full_stage_quantities_agree() {
         Some(vec![None, Some(Quantity::Zero), None]),
         "两阶段都必须认出 w 是 evidence；实际: {:?}",
         registry_quantities
+    );
+}
+/// T22：const 参数记录实例化的 evidence 命题按内层实参折叠。
+#[test]
+fn test_generic_const_record_instantiates_evidence() {
+    // Arrange
+    let positive = concat!(
+        "use std.assert\n",
+        "SafeArray: (T: Type, N: Int) -> Type = {\n",
+        "    _assert_n: Assert(N > 0),\n",
+        "    data: Array(T, N),\n",
+        "}\n",
+        "arr = SafeArray(Int, 3)([1, 2, 3])\n",
+    );
+    let negative = concat!(
+        "use std.assert\n",
+        "SafeArray: (T: Type, N: Int) -> Type = {\n",
+        "    _assert_n: Assert(N > 0),\n",
+        "    data: Array(T, N),\n",
+        "}\n",
+        "arr = SafeArray(Int, 0)([1, 2, 3])\n",
+    );
+
+    // Act
+    let positive_result = check(positive);
+    let negative_result = check(negative);
+
+    // Assert
+    assert!(
+        !has_code(&positive_result, "E2031"),
+        "SafeArray(Int, 3)([1, 2, 3]) 必须折叠 Assert(3 > 0)；实际: {:?}",
+        codes_of(&positive_result)
+    );
+    assert!(
+        has_code(&negative_result, "E1062"),
+        "SafeArray(Int, 0) 仍必须报 E1062；实际: {:?}",
+        codes_of(&negative_result)
+    );
+}
+
+/// T23：proof family 实例化后把 Call.func 改成实际谓词名并内联谓词体。
+#[test]
+fn test_proof_family_instantiation_uses_concrete_predicate() {
+    // Arrange
+    let positive = concat!(
+        "Pos: (v: Int) -> Type = { v > 0 }\n",
+        "Cell: (T: Type, P: (T: Type) -> Type) -> Type = {\n",
+        "    v: T,\n",
+        "    w: P(v),\n",
+        "}\n",
+        "c = Cell(Int, Pos)(3)\n",
+    );
+    let negative = concat!(
+        "Pos: (v: Int) -> Type = { v > 0 }\n",
+        "Cell: (T: Type, P: (T: Type) -> Type) -> Type = {\n",
+        "    v: T,\n",
+        "    w: P(v),\n",
+        "}\n",
+        "c = Cell(Int, Pos)(-3)\n",
+    );
+
+    // Act
+    let positive_result = check(positive);
+    let negative_result = check(negative);
+
+    // Assert
+    assert!(
+        !positive_result
+            .diagnostics
+            .iter()
+            .any(|d| d.code == "E2031" || d.code == "E4018"),
+        "Cell(Int, Pos)(3) 的 Pos(3) 必须 Proved；实际: {:?}",
+        codes_of(&positive_result)
+    );
+    assert!(
+        has_code(&negative_result, "E4018"),
+        "Cell(Int, Pos)(-3) 的 Pos(-3) 必须报 E4018；实际: {:?}",
+        codes_of(&negative_result)
+    );
+}
+
+/// T24：data family 绑定 proof family 参数在注解面与构造面都报 E1002。
+#[test]
+fn test_proof_family_rejects_data_family_kind() {
+    // Arrange
+    let construction = concat!(
+        "Pos: (v: Int) -> Type = { v > 0 }\n",
+        "Cell: (T: Type, P: (T: Type) -> Type) -> Type = {\n",
+        "    v: T,\n",
+        "    w: P(v),\n",
+        "}\n",
+        "c = Cell(Int, Array)\n",
+    );
+    let annotation = concat!(
+        "Pos: (v: Int) -> Type = { v > 0 }\n",
+        "Cell: (T: Type, P: (T: Type) -> Type) -> Type = {\n",
+        "    v: T,\n",
+        "    w: P(v),\n",
+        "}\n",
+        "c: Cell(Int, Array) = 1\n",
+    );
+
+    // Act
+    let construction_result = check(construction);
+    let annotation_result = check(annotation);
+
+    // Assert
+    for (name, result) in [
+        ("构造面", &construction_result),
+        ("注解面", &annotation_result),
+    ] {
+        assert!(
+            result
+                .diagnostics
+                .iter()
+                .any(|d| d.code == "E1002" && d.message.contains("proof family")),
+            "{name}把 Array 绑到 proof family 参数必须报 kind E1002；实际: {:?}",
+            codes_of(result)
+        );
+    }
+}
+
+/// T25：外层泛型函数体内未实例化 proof family 在构造点返回 Unproven。
+#[test]
+fn test_uninstantiated_proof_family_is_unproven() {
+    // Arrange
+    let source = concat!(
+        "Pos: (v: Int) -> Type = { v > 0 }\n",
+        "Cell: (T: Type, P: (T: Type) -> Type) -> Type = {\n",
+        "    v: T,\n",
+        "    w: P(v),\n",
+        "}\n",
+        "make: (T: Type, P: (T: Type) -> Type, x: T) -> Void = {\n",
+        "    c = Cell(T, P)(x)\n",
+        "}\n",
+    );
+
+    // Act
+    let result = check(source);
+
+    // Assert
+    assert!(
+        has_code(&result, "E2031"),
+        "未实例化的 Cell(T, P)(x) 必须报 E2031；实际: {:?}",
+        codes_of(&result)
+    );
+}
+
+/// T26：实例化后的记录模型仍保留 witness 量词（substitute 透传）。
+#[test]
+fn test_generic_record_model_preserves_witness_quantity() {
+    // Arrange
+    let source = concat!(
+        "Pos: (v: Int) -> Type = { v > 0 }\n",
+        "Cell: (T: Type, P: (T: Type) -> Type) -> Type = {\n",
+        "    v: T,\n",
+        "    w: P(v),\n",
+        "}\n",
+    );
+
+    // Act
+    let result = check(source);
+    let model = model_of(&result, "Cell");
+
+    // Assert
+    assert_eq!(
+        quantities(model),
+        vec![None, Some(Quantity::Zero)],
+        "泛型记录模板的 w 必须保留 witness 量词；实际: {:?}",
+        quantities(model)
+    );
+}
+/// B.2b：单括号泛型类型构造调用在已报逐位匹配错误时，构造义务层不得再补 E2031。
+#[test]
+fn test_generic_ctor_type_error_does_not_add_uninstantiated_evidence() {
+    // Arrange
+    let source = concat!(
+        "use std.assert\n",
+        "Matrix: (T: Type, Rows: Int, Cols: Int) -> Type = {\n",
+        "    _assert_rows: Assert(Rows > 0),\n",
+        "    data: Array(Array(T, Cols), Rows),\n",
+        "}\n",
+        "main: () -> Void = {\n",
+        "    m = Matrix(42)\n",
+        "}\n",
+    );
+
+    // Act
+    let result = check(source);
+
+    // Assert
+    assert!(
+        has_code(&result, "E1002"),
+        "Matrix(42) 必须保留类型实参位 E1002；实际: {:?}",
+        codes_of(&result)
+    );
+    assert!(
+        !has_code(&result, "E2031"),
+        "单括号类型构造错误不得再由未实例化 evidence 补 E2031；实际: {:?}",
+        codes_of(&result)
+    );
+}
+/// proof family 的约束体无字段：B.2b 不得把它登记成依赖记录 Σ。
+#[test]
+fn test_proof_family_constraint_body_does_not_become_record_model() {
+    // Arrange
+    let source = concat!(
+        "SumUpTo: (n: Int, s: Int) -> Type = { s == n * 2 }\n",
+        "f: () -> (r: SumUpTo(3, r)) = {\n",
+        "    return 7\n",
+        "}\n",
+    );
+
+    // Act
+    let result = check(source);
+
+    // Assert
+    assert!(
+        result.record_models.is_empty(),
+        "无字段约束体不得产 record_models；实际: {:?}",
+        result.record_models.keys().collect::<Vec<_>>()
+    );
+}
+/// T24：kind 错误按站点逐条报——两处各自绑错 data family，各得一条 E1002。
+#[test]
+fn test_family_kind_errors_report_per_site() {
+    // Arrange
+    let source = concat!(
+        "Arrow: Type = {\n",
+        "    v: Int,\n",
+        "}\n",
+        "Cell: (T: Type, P: (T: Type) -> Type) -> Type = {\n",
+        "    v: T,\n",
+        "    w: P(v),\n",
+        "}\n",
+        "a = Cell(Int, Array)\n",
+        "b = Cell(Int, Arrow)\n",
+    );
+
+    // Act
+    let result = check(source);
+    let kind_errors = result
+        .diagnostics
+        .iter()
+        .filter(|diagnostic| {
+            diagnostic.code == "E1002" && diagnostic.message.contains("proof family")
+        })
+        .count();
+
+    // Assert
+    assert_eq!(
+        kind_errors,
+        2,
+        "两处各自的 kind 错误必须各报一条（跨站点去重会静默吞掉第二处）；实际: {:?}",
+        codes_of(&result)
+    );
+}
+
+/// T24：内层类型构造自己失败（这里是元数 E1010）时，构造义务不再补 E2031。
+#[test]
+fn test_failed_inner_instantiation_does_not_add_unproven_evidence() {
+    // Arrange
+    let source = concat!(
+        "Pos: (v: Int) -> Type = { v > 0 }\n",
+        "Cell: (T: Type, P: (T: Type) -> Type) -> Type = {\n",
+        "    v: T,\n",
+        "    w: P(v),\n",
+        "}\n",
+        "c = Cell(Int)(3)\n",
+    );
+
+    // Act
+    let result = check(source);
+
+    // Assert
+    assert!(
+        has_code(&result, "E1010"),
+        "Cell(Int)(3) 必须报元数 E1010；实际: {:?}",
+        codes_of(&result)
+    );
+    assert!(
+        !has_code(&result, "E2031"),
+        "内层实例化已失败时不得再由构造义务补 E2031；实际: {:?}",
+        codes_of(&result)
     );
 }

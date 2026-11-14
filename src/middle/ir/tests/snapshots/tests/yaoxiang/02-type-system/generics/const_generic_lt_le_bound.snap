@@ -7,12 +7,11 @@ module
     locals_total=4
     Load %0 <- void
     Load %1 <- int(3)
-    Load %2 <- int(0)
-    Call %3 <- string("Capped") [%0, %1, %2] (def=d0)
+    Call %2 <- string("Capped") [%0, %1] (def=d0)
     Load %1 <- bool(true)
-    Load %2 <- string("Capped(Int, 3) with N < 100 and N <= 100 compiled and ran")
-    Call %0 <- string("std.assert.assert") [%1, %2] (def=d1)
-    Drop %3
+    Load %3 <- string("Capped(Int, 3) with N < 100 and N <= 100 compiled and ran")
+    Call %0 <- string("std.assert.assert") [%1, %3] (def=d1)
+    Drop %2
     Ret %0
   init (locals=0)
     Call %0 <- string("main") [] (def=d2)
