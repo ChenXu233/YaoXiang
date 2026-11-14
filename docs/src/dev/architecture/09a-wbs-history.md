@@ -5648,3 +5648,31 @@ B.2a 只对 `type_params` 为空的非泛型 `Type::Struct` 调本遍（泛型�
 - 构造义务的诊断文案沿用既有 `judge_refined_obligation` 形态（subject/assigned 仍写 `Box.w` / `Box2`），文案打磨未做。
 - 预算重设只覆盖构造义务；其它判定点沿用既有口径。
 - 引用字段与 List/Vec 字面量落点是既有语义边界，本轮显式豁免并登记，不扩大检查面。
+
+### 六、变异验证（t12 补登，2026-11-14；scratch.py trial，机械可逆）
+
+> t6 复审 F3（medium）指出契约 §七 的 M01–M05 无执行登记。本节由复审成员在同一台机器、批次树
+> 批次树 `t6-mutations`（`init --rev a8e98587` → `build` 全量 49 s）上补跑；
+> 补丁文件与原始输出随批次树回收（`gc`，不入库、不作为引用出处），登记的硬证据是下表的 blob 对与红态测试名。
+> 命令口径：`python scripts/dev/scratch.py trial t6-mutations --patch <p> -- cargo test --lib <filter>`；
+> 每个 trial 的机械还原能力由 trial 本身保证（apply → 跑 → apply -R → 逐文件 blob 对 HEAD + `git status` CLEAN）。
+> 两点登记口径：① M01 首跑用 `record_evidence witness_quantity` 双词过滤器实际命中 0 条（cargo 单模式匹配），
+> 基线探针（M00 无操作补丁 + `--list`）确认单 filter `record_evidence` 命中 15 条语义面测试后重跑；
+> ② M05 首补丁摘的是 `seed_cross_file_types`（多文件面，ir_gen.rs:2111）的注入，测试走单文件面未红——
+> **多文件面的量词注入当前无测试钉住**（见下表 M05a 结论行）；M05b 摘 `generate_stmt_ir` 面（ir_gen.rs:2345）后即红。
+
+| 变异 | 补丁（改坏点 → 行为） | 判定命令（--lib filter） | 红态 | blob 对（HEAD → 变异 → 还原） |
+| --- | --- | --- | --- | --- |
+| M00（基线探针） | mono.rs 注释行注入（无行为变化） | `record_evidence -- --list` | 15 条命中、exit 0 | e401c8b1 → 6d7cc9cf → e401c8b1 |
+| M01 | `mono.rs` `runtime_field_count` 去掉 witness 过滤（witness 重新占构造位） | `test_runtime_field_count_excludes_witness` | **FAILED**，exit 101 | e401c8b1 → fbb5776e → e401c8b1 |
+| M01（面观察） | 同上 | `record_evidence` / `translator` | 18/18 绿、4/4 绿（语义面消费 `data_field_indices`，不经 `runtime_field_count`） | 同上 |
+| M02 | `checker.rs` 声明期 `apply_quantities` 改恒等（量词不进 poly） | `record_evidence` | **9 FAILED / 9 passed**（T01 分类、T03 admission、T10/T16 arity、T13 证明函数、T15 命名、T19 E1114、T20 E1115、T27 TypeDecl 量词、T28 构造形状/索引全红），exit 101 | d9e603a1 → 7a34dbc0 → d9e603a1 |
+| M04 | `refinement.rs` 判定单元 NoSmt 臂改直接 `Ok(())`（构造义务静默放行） | `record_evidence` | **4 FAILED**：T11 E4018、T12 E2031、T13 证明函数、T14 嵌套构造，exit 101 | 61e71af8 → f60b9807 → 61e71af8 |
+| M05a | `ir_gen.rs` `seed_cross_file_types`（多文件面）量词注入摘除 | `record_evidence` | 18/18 绿——**判据抓不到**：多文件面无测试；登记为守卫缺口，随 B.4 跨模块面补钉 | e20fcc76 → 76f6a509 → e20fcc76 |
+| M05b | `ir_gen.rs` `generate_stmt_ir`（单文件构造面）量词注入摘除 | `record_evidence` | **1 FAILED**：T28 `test_runtime_field_index_skips_witness`（b.z 索引 1 断言红），exit 101 | e20fcc76 → 5bc97514 → e20fcc76 |
+
+**结论**：M01/M02/M04/M05b 四条判据全部可失败且机械可逆（还原后 blob 与 HEAD 一致、status CLEAN）；
+M03 此前已由 t6 复审探针证成（禁用 `check_record_ctor_obligations` 调用后 T11/T12/T13/T14 转红，14 passed/4 failed）。
+**新缺口**：M05a 证明 `seed_cross_file_types` 的多文件量词注入零守卫——契约 §七 的「M05 ⇒ T28 红」在多文件面不成立，
+该面归 B.4（跨模块导出）补齐测试后此变异才有红态。
+**首次全量构建**：`build` 49 s（复用主仓缓存）；批次已 `release` + `gc`（回收 4881.9 MB）。

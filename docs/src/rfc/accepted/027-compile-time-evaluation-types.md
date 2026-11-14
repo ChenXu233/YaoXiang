@@ -1170,7 +1170,7 @@ mut x = x - 5       // Γ = {}  ← x > 0 被 kill
 
 - 实参全是**严格前序数据字段** `fₕ (h < i)`、**编译期常量**、**编译期值参数**（RFC-011 §4.1 / SPEC §4.3 的 `Matrix` 的 `Rows`、`Cols` 一类 q=0 参数）或**类型参数** ⇒ 第三步定为 evidence。编译期值参数在实例化后取到具体常量，按编译期常量计（与 SPEC §8.3.1 逐字一致）；未实例化的开项留到构造点判 `Unproven`（§14.3）；
 - 实参**就是 `fᵢ` 自身**（自引用精化，如 `v: Pos(v)`）⇒ 第三步定为**数据字段（admission）**：该字段是承载值的变量，`Refined` 约束只是对它自身取值的检查，不是对别处事实的证明；
-- 前向引用后序字段、引用另一个 evidence 字段、或把 `fᵢ` 自身当 evidence 实参 ⇒ 声明期拒绝。
+- **前向引用**后序字段 `fₕ (h > i)`、**引用另一个 evidence 字段**、或**把 `fᵢ` 自身当 evidence 实参且与其它字段混用**（SelfMixed：`P(fᵢ, fₕ)`；纯自身 `P(fᵢ)` 是上一行的 admission，二者不混淆）⇒ 声明期拒绝。`P` 的 kind 为 data family 是另一类，由 §14.3 在声明/实例化处判。
 
 **第三步（类别判据）。** `space=Data` ⇒ 数据字段；`space=Proof` + 前序实参（含编译期值参数 / 编译期常量 / 类型参数）⇒ evidence；`space=Proof` + 自引用 ⇒ 数据字段（admission）。
 
@@ -1179,11 +1179,11 @@ mut x = x - 5       // Γ = {}  ← x > 0 被 kill
 | 1 | `space=Proof` 且实参全为严格前序数据字段 / 编译期常量 / 编译期值参数 / 类型参数（正例 `w: Pos(v)`） | **evidence / witness 字段** | `Some(Quantity::Zero)` | 不占槽、不进 `CreateStruct`、`base` 不进运行期布局 |
 | 2 | `space=Data`：普通值类型（`n: Int`）、数据类型族应用（正例 `data: Array(Int, n)`）、普通记录 | **数据字段** | `None` | 占数据槽、进 `CreateStruct` |
 | 3 | `space=Proof` 但实参就是 `fᵢ` 自身（自引用精化 `v: Pos(v)`） | **数据字段（admission）** | `None` | 占数据槽；`Refined` 约束在构造点按 §3.1 / §3.3 既有义务检查 |
-| 4 | `space=Proof` 但**前向引用**后序字段 `fₕ (h > i)`、引用另一个 evidence 字段、或把 `fᵢ` 自身当 evidence 实参 | **非法**：声明期拒绝，不静默降级 | — | 不产生任何字段 |
+| 4 | `space=Proof` 但**前向引用**后序字段 `fₕ (h > i)`、**引用另一个 evidence 字段**、或**把 `fᵢ` 自身当 evidence 实参且与其它字段混用**（SelfMixed；纯自身见第 3 行） | **非法**：声明期拒绝，不静默降级 | — | 不产生任何字段 |
 
-四行互不混淆：第 2 行是「普通值类型 / 数据族」一律数据字段；第 3 行是「命题族但自引用」的 admission 数据字段；第 4 行是「命题族但位置不合法」一律声明期拒绝。**不存在「前向引用也算数据字段」这条路径**——前向引用既不占数据槽，也不进 `runtime_field_index`。
+四行互不混淆：第 2 行是「普通值类型 / 数据族」一律数据字段；第 3 行是「命题族但**纯**自引用」的 admission 数据字段；第 4 行是「命题族但位置不合法」一律声明期拒绝。**SelfMixed 落在第 4 行**：`P(fᵢ)` 纯自引用是第 3 行的 admission，`P(fᵢ, fₕ)` 把自身与其它字段混用当 evidence 实参则是声明期拒绝，两者按「自由名集合是否恰为 `{fᵢ}`」区分。**不存在「前向引用也算数据字段」这条路径**——前向引用既不占数据槽，也不进 `runtime_field_index`。
 
-**witness 只能依赖严格前序数据字段。** evidence 字段 `fᵢ: P(fₕ,…)` 的实参不得引用另一个 evidence 字段、不得前向引用后序字段、不得引用 `fᵢ` 自身；`P` 的 kind 判据由 §14.3 给出。这条「proof-space + 严格前序 + 只吃数据字段」保证构造点按声明序走到 `fᵢ` 时，所有实参已有编译期值，命题是闭项，可交 `check`。
+**witness 只能依赖严格前序数据字段。** evidence 字段 `fᵢ: P(fₕ,…)` 的实参不得引用另一个 evidence 字段、不得前向引用后序字段、不得把 `fᵢ` 自身当 evidence 实参（纯自身是表第 3 行 admission，自身混用是表第 4 行 SelfMixed 的声明期拒绝）；`P` 的 kind 判据由 §14.3 给出。这条「proof-space + 严格前序 + 只吃数据字段」保证构造点按声明序走到 `fᵢ` 时，所有实参已有编译期值，命题是闭项，可交 `check`。
 
 **正例（evidence）与反例（数据族）：**
 
@@ -1217,6 +1217,8 @@ Matrix: (T: Type, Rows: Int, Cols: Int) -> Type = {
 
 **`base` 不进运行期布局**：`w: Pos(v)` 的 `w` 不是「一个 Int 值」，而是「`Pos(v)` 的证明」。它的 `Refined.base`（`Int`）只是内核判等/归一化的类型信息，绝不为 `w` 分配运行期槽位。`StructType.fields` 用 `Vec<StructFieldInfo>{ name, ty, quantity, is_mut, has_default }` 单列表示：`quantity == Some(Quantity::Zero)` 为 witness，`None` 为数据字段；`None` 在此表示「数据字段」，不是「未解析」。
 
+**evidence 字段不得有默认值（源头条款）。** evidence 字段没有运行期值可给，§14.2 的构造视图也没有它的实参位，故 `field: Type = expression` 形态不得出现在 evidence 字段上；`StructFieldInfo.has_default` 对 witness 恒为 `false`。给 evidence 字段写默认值（`w: Pos(v) = expr`）在声明期拒绝（DefaultOnEvidence），不按「有默认值的数据字段」静默处理、也不进构造器的默认值填充。数据字段的默认值规则（构造时可选 / 无默认值必填）只作用于数据字段；SPEC §3.1.1 与 §8.3.1 的对应条款以本条为依据。
+
 表示层接口：`ast::StructField.quantity`、`mono::StructFieldInfo.quantity`、`ir::TypeDeclField.quantity` 三处同型；`mono::quantity_is_witness` / `StructFieldInfo::is_witness` / `is_witness_bearing` 是唯一判定；`mono::runtime_field_index` 是声明序 → 运行期数据序的**唯一映射点**（witness 命中返回 `None`）。分类前的 `space` 查询读 `signature.sorts` / `LibraryRef.manifest`，不是第二套分类表。
 
 #### 14.2 构造器：源级 data-only，编译期自动合成证据
@@ -1230,7 +1232,9 @@ Matrix: (T: Type, Rows: Int, Cols: Int) -> Type = {
 
 自动合成的路径：把严格前序数据字段的编译期值代入 `P` 得到闭命题，producer（§8：内核直判规则 / `Γ` 证据 / proof library / SMT 搜索）交候选 `Certificate`，`Kernel::check(signature, certificate, proposition)` 验证；`Proved(checked)` 按 §13 编译期留存、运行期擦除。
 
-**显式证据不是构造实参，是独立声明。** 当自动 producer 交不出可验证证书（`Unproven`）时，程序员按 §4.3 补显式证据——写一个**独立证明函数**（返回类型等于待证命题）或在 `proof library` 登记命名证明，作为 `EvidenceRef::ExplicitProof` / `LibraryProof` 被 `FieldObligation` 引用；不改写构造表达式、不新增 `Box(..., proof)` 形态。**源级构造多传一个证据实参**（`Box(3, 5, evidence)`）**不允许**：按 D60 六条绑定规则，多出的实参落不到任何数据形参槽，报 E1010 / E1014 一族参数错误，不静默吞掉。
+**默认值只服务数据字段。** 由 §14.1 的源头条款，evidence 字段不得有默认值：`bind_args_to_params` 的 `optional` 只由**数据字段**的 `has_default` 生成，witness 字段既不进 `param_names` 也不进 `optional`；`translator::synthesize_constructor` 的默认值填充、`ir_gen` 的缺省字段切片都按非 witness 字段序，不会为 evidence 字段生成默认值表达式或零值寄存器。`Box(3, 5)` 省略数据字段时按数据字段默认值/零值填充，省略 evidence 字段无从谈起——它没有实参位可供省略。
+
+**显式证据不是构造实参，是独立声明。** 当自动 producer 交不出可验证证书（`Unproven`）时，程序员按 §4.3 补显式证据——写一个**独立证明函数**（返回类型等于待证命题）或在 `proof library` 登记命名证明，作为 `EvidenceRef::ExplicitProof` / `LibraryProof` 被 `FieldObligation` 引用；不改写构造表达式、不新增 `Box(..., proof)` 形态、也不给 evidence 字段写默认值（§14.1 的 DefaultOnEvidence 在声明期拒绝）。**源级构造多传一个证据实参**（`Box(3, 5, evidence)`）**不允许**：按 D60 六条绑定规则，多出的实参落不到任何数据形参槽，报 E1010 / E1014 一族参数错误，不静默吞掉。
 
 `FieldObligation` 必须能同时表示「还没产出证书」与「已验证证书」两种状态，故把原 `evidence: EvidenceRef`（只能指显式证据，装不下 producer 合成的 `Certificate`）拆成两槽：
 
@@ -1320,7 +1324,7 @@ useWitness: (b: Box) -> Type = { Proved(b.w) }   // b.w 解析为 FieldPath + ev
 
 - **5A 整体不可变**：含任一 evidence 字段的记录整体不可变——数据字段不得声明 `mut`、不得字段赋值、不得 `&mut` 借用、不得作为写方法接收者（含自动 `WriteBorrow`）。否则 witness 命题可能因字段改写失效，且当前无 runtime check / revalidation；违反报 **E1115**（`witness_record_immutable`）。更细粒度的线性/唯一性设计另案。
 - **擦除**：evidence 字段的 `quantity=Zero` ⇒ 不占运行期槽；`CreateStruct` / `GetField` / `SetField` / `resolve_field_index` 只认 `runtime_field_index` 的数据序；`Proved(checked)` 证书按 §13 编译期留存、运行期擦除；Runtime 模式的 Bool check 与 witness 无关。
-- **诊断码分工**（四码各管一面，不借码、不静默）：
+- **诊断码分工**（各码各管一面，不借码、不静默）：
 
 | 码 | 触发 | 语义 |
 | --- | --- | --- |
@@ -1330,7 +1334,18 @@ useWitness: (b: Box) -> Type = { Proved(b.w) }   // b.w 解析为 FieldPath + ev
 | **E1115** | witness-bearing 记录的 `mut` / 字段赋值 / `&mut` / 写接收者 | 记录整体不可变 |
 | **E4023** | 非精化通道的一般性 `Unproven`（如 `FieldPath` 求值器不支持） | 一般性无法证明，带命题/原因/位置（§12.3） |
 
-`ProofFunctionRequired` 仍走 E4020；一般性 `Unproven` 与 E2031 的分工不变（§12.3、RFC-013）。**声明期拒绝只保留三类**：`space=Proof` 但前向引用后序字段、引用另一 evidence 字段、`P` 的 kind 为 data family（§14.3）。它们在声明处直接拒绝，不进构造点、不静默降级为数据字段。`space=Data` 的数据类型族应用（含 `Array(Int, n)`）与 `space=Proof` 的自引用精化（`v: Pos(v)`，admission）都是合法数据字段。**泛型未实例化不属声明期拒绝**：按 §14.3，`P` 未绑定时 `w` 的结果 sort 仍是 `Proof`、命题为开项，在**构造点**返回 `Unproven`（E2031 / E4023），不静默放行、也不退化成数据字段。
+`ProofFunctionRequired` 仍走 E4020；一般性 `Unproven` 与 E2031 的分工不变（§12.3、RFC-013）。**声明期拒绝清单**（与 §14.1 第 4 行 + §14.3 的 kind 判据逐条对齐，共四类）：
+
+| # | 拒绝形态 | 说明 |
+| --- | --- | --- |
+| 1 | `space=Proof` 但**前向引用**后序字段 `fₕ (h > i)` | 位置非法 |
+| 2 | **引用另一个 evidence 字段**作实参 | 位置非法 |
+| 3 | **把 `fᵢ` 自身当 evidence 实参且与其它字段混用**（SelfMixed：`P(fᵢ, fₕ)`） | 位置非法；纯自身 `P(fᵢ)` 是 §14.1 第 3 行的 admission 数据字段，不拒绝 |
+| 4 | `P` 的 **kind 为 data family**（§14.3） | kind 不符，声明/实例化处类型错误 |
+
+**此外，给 evidence 字段写默认值**（`w: Pos(v) = expr`，DefaultOnEvidence，§14.1 源头条款 / §14.2 构造条款）也在声明期拒绝——它没有运行期值可给，不静默按数据字段处理。上表（1）–（3）是 §14.1 第 4 行的位置非法形态（第 3 项即 SelfMixed），第（4）项是 §14.3 的 kind 不符；四者共同构成四类声明期拒绝。默认值是独立的字段声明检查，不与四类合并计数。
+
+以上各项在声明处直接拒绝，不进构造点、不静默降级为数据字段。`space=Data` 的数据类型族应用（含 `Array(Int, n)`）与 `space=Proof` 的纯自引用精化（`v: Pos(v)`，admission）都是合法数据字段。**泛型未实例化不属声明期拒绝**：按 §14.3，`P` 未绑定时 `w` 的结果 sort 仍是 `Proof`、命题为开项，在**构造点**返回 `Unproven`（E2031 / E4023），不静默放行、也不退化成数据字段。声明期诊断码的归属（新增声明期码或复用 E1001/E1114/E1092）按实现轮 D2 裁决处理，本节只定拒绝清单与语义，不预占码位。
 
 ## 详细设计
 
