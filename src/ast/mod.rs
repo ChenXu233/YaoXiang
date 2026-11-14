@@ -1815,7 +1815,8 @@ impl Expr {
 
     /// RFC-004: 从绑定语句 `Type.method = fn[pos]` 的 index 部分提取位置列表。
     /// 支持单个整数与整数元组；负索引（`-1` 从末尾计数）原样保留，
-    /// 由调用方按被绑函数元数归一化。无法识别时回退 `[0]`（与既有行为一致）。
+    /// 由调用方按被绑函数元数归一化；超出 i64 表示域的极端值同样按负位/超界
+    /// 交下游归一化校验（E1064 判域）。无法识别时回退 `[0]`（与既有行为一致）。
     pub fn extract_binding_positions(index: &Expr) -> Vec<i64> {
         fn one(e: &Expr) -> Option<i64> {
             match e {
@@ -1825,7 +1826,17 @@ impl Expr {
                     expr,
                     ..
                 } => match expr.as_ref() {
-                    Expr::Lit(Literal::Int(n), _) => Some(-(*n as i64)),
+                    // [-N]：i128 域精确取负后一次转 i64（截断）——与 Lit 臂
+                    // `[N] -> N as i64` 同一截断口径（运行时 Int 即 i64，超 i64
+                    // 字面量全仓口径是截断）。字面量经词法器 parse::<i128> 恒
+                    // 非负，checked_neg 的 None 分支只对手工构造的
+                    // Neg(Lit(i128::MIN)) 可达；哨兵 i128::MIN 截断成 i64::MIN，
+                    // 必落 normalize_binding_positions 的「归一化后仍负」E1064
+                    // 判域（#560：修前 `-(i64::MIN)` 在此处 panic，debug 构建
+                    // exit 101，与 #559/#507/#468 的 checked_neg 同族）。
+                    Expr::Lit(Literal::Int(n), _) => {
+                        Some((*n).checked_neg().unwrap_or(i128::MIN) as i64)
+                    }
                     _ => None,
                 },
                 _ => None,

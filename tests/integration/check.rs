@@ -2619,3 +2619,57 @@ fn test_check_proof_fn_nested_declared_neg_literal_still_reported() {
         "#556: the nested E4018 must carry the substituted args [Int(5), Int(-1)]; got:\n{text}"
     );
 }
+
+// ---- RFC-004 外部重绑定：fn[pos] 极端位置值（issue #560）----
+
+#[test]
+fn test_check_binding_i64_min_position_reports_e1064_not_panic() {
+    // Arrange — `T.m = f[-9223372036854775808]`：提取臂裸取负在溢出检查构建下
+    // panic（探针 p1 实测 exit 101，panic 逐字 "attempt to negate with
+    // overflow"，ast/mod.rs 取负臂）；修后极端负位（从末尾倒数 2^63 位）
+    // 落 normalize_binding_positions 既有 E1064 判域（#560）。
+    let dir = temp_dir();
+    let file = create_yx_file(
+        &dir,
+        "binding_i64min.yx",
+        r#"f: (a: Int, b: Int) -> Int = { return a + b }
+T: Type = { x: Int }
+T.m = f[-9223372036854775808]
+"#,
+    );
+
+    // Act
+    let result = check_result(&file);
+
+    // Assert
+    let codes = error_codes(&result);
+    assert!(
+        codes.contains(&"E1064".to_string()),
+        "i64::MIN 形态绑定位置应报 E1064 而非 panic（#560）: {codes:?}"
+    );
+}
+
+#[test]
+fn test_check_binding_negative_position_valid_compiles() {
+    // Arrange — 对照锚：边界内负位 [-1]（RFC-004 附录 A 从末尾计数），
+    // 修前修后行为不变。
+    let dir = temp_dir();
+    let file = create_yx_file(
+        &dir,
+        "binding_neg1.yx",
+        r#"f: (a: Int, b: Int) -> Int = { return a + b }
+T: Type = { x: Int }
+T.m = f[-1]
+"#,
+    );
+
+    // Act
+    let result = check_file(&file);
+
+    // Assert
+    assert!(
+        result.is_ok(),
+        "[-1] 负位绑定应通过类型检查（RFC-004 附录 A）"
+    );
+    assert_eq!(result.unwrap(), 0, "[-1] 负位绑定不应产生错误");
+}
