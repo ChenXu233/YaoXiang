@@ -4750,7 +4750,7 @@ P1 的形状判据与 ir_gen 的包装层产出形态耦合——「不再匹配
 
 > **三、t3 REJECT（声称面）与本节事实更正**：t2 PASS 后 t3 七镜头 **REJECT**，三条声称面更正由本节承载（代码行为经 t2 实测正确——panic 确实消失、锚全绿）：
 >
-> - **[medium] 直评面机理声称被静态证伪（承重墙级）**：提交信息称「Z3 真实整数语义判 MIN>0 为假 → E4018」——实际机理（frozen rev 逐环核实）= 39 位字面量 parse::<i64> 失败在 Z3 侧**落成自由 Int 变量** → 取反目标可满足 → Sat → Disproved → E4018 带伪变量反例；真实整数语义下该约束（i128::MAX + 1 > 0）恒真 → 应 Proved 零诊断。**直评面当前 E4018 是 SMT 翻译 artifact 的假拒绝**（修前是 panic——崩溃换错诊断，C 类改善但非终态）。artifact 与依赖登记 [#561](https://github.com/ChenXuXu233/YaoXiang/issues/561)：修复大字面量保真时必须同步翻 #559 直评面锚（现锚钉 E4018，保真后应钉 0 诊断）并全量核对 SMT 翻译面其它依赖判向。
+> - **[medium] 直评面机理声称被静态证伪（承重墙级）**：提交信息称「Z3 真实整数语义判 MIN>0 为假 → E4018」——实际机理（frozen rev 逐环核实）= 39 位字面量 `parse::<i64>` 失败在 Z3 侧**落成自由 Int 变量** → 取反目标可满足 → Sat → Disproved → E4018 带伪变量反例；真实整数语义下该约束（i128::MAX + 1 > 0）恒真 → 应 Proved 零诊断。**直评面当前 E4018 是 SMT 翻译 artifact 的假拒绝**（修前是 panic——崩溃换错诊断，C 类改善但非终态）。artifact 与依赖登记 [#561](https://github.com/ChenXuXu233/YaoXiang/issues/561)：修复大字面量保真时必须同步翻 #559 直评面锚（现锚钉 E4018，保真后应钉 0 诊断）并全量核对 SMT 翻译面其它依赖判向。
 > - **[low] 锚双重计数更正**：提交信息「新测试 4 个先红后绿」不成立——实际 **2 条先红后绿**（i128::MIN ArithmeticError / 约束直评面不再 panic）+ **2 条对照锚载体**（-5 / -MAX / i64::MIN-1 与裸 Sub 链——即 c1-c4，修前即绿，被同一条消息双重计数）；「reverse-patch 机械演示红态」是演示手段名非已提交测试名。
 > - **[low] 回归锚计数更正**：#556 折叠锚实数 6（具名测试函数）非提交信息所写 7（若按子断言口径未写明）。
 > - **[info] 相邻既有缺陷另案**：字节码 Not 编码 I64_NEG 但解码一律还原 Neg（有损往返）→ [#562](https://github.com/ChenXuXu233/YaoXiang/issues/562)；z3_backend 超界截断 as i32（并入 [#561](https://github.com/ChenXuXu233/YaoXiang/issues/561) 同根）。
@@ -5265,12 +5265,47 @@ fmt / clippy -D warnings / testsuite fast（2095 条 exit 0）/ corpus parity（
 
 ## P3 3.20.27 收口（SMT/Z3 整数字面量翻译保真——#561，2026-11-14）
 
-> **一、查证（三层失真）**：确认 #561 两层失真属实 + 实测发现第三处同根——①Atom 分支 parse::<i64> 失败落自由变量（超 i64 字面量被 Z3 当变量）；②可 parse 但超 i32 的字面量 `as i32` 截断（5e9 → 705032704，判向失真）；③`App("-")` 单参数经 Z3_mk_sub——官方语义 args[0]-...-args[n-1] 单参数恒等、一元负号整体丢失（`(- 5) > 0` 被判成 `5 > 0`）——第三处是 #559 直评面锚翻 Proved 的前置条件（只修 Atom 达不到）。D59 C 类（静默错配——截断与自由变量都不是任何已裁决语义；RFC-027 §8 无字面量精度口径）。
+> **一、查证（三层失真）**：确认 #561 两层失真属实 + 实测发现第三处同根——①Atom 分支 `parse::<i64>` 失败落自由变量（超 i64 字面量被 Z3 当变量）；②可 parse 但超 i32 的字面量 `as i32` 截断（5e9 → 705032704，判向失真）；③`App("-")` 单参数经 Z3_mk_sub——官方语义 args[0]-...-args[n-1] 单参数恒等、一元负号整体丢失（`(- 5) > 0` 被判成 `5 > 0`）——第三处是 #559 直评面锚翻 Proved 的前置条件（只修 Atom 达不到）。D59 C 类（静默错配——截断与自由变量都不是任何已裁决语义；RFC-027 §8 无字面量精度口径）。
 
 > **二、修法**：z3_backend Atom 分支整数字面量判据 `is_decimal_integer`（可选负号 + 纯 ASCII 数字；变量名不可能全数字，与变量分支无歧义）原样交 **Z3_mk_numeral** 任意精度十进制串（不经任何固定宽度解析）；FFI 补 Z3_mk_numeral / Z3_mk_unary_minus 声明（与官方头 z3_api.h 逐字对应，机械必需面）；App("-") 单参数走 unary_minus。**scope 扩张披露**：任务义务二只授权 Atom 分支，义务三要求 #559 锚翻 Proved——实测证实二者不能同时成立除非 unary_minus 一并修，同根一并修并在提交信息披露。
 
 > **三、行为变更与锚**：#559 直评面锚同步翻转（极端形态 E4018 伪反例 → Proved 零诊断——语义正确方向，#561 依赖登记义务兑现）；4e9 蕴含对 / x+(-x)=0 截断错判纠正；伪反例文本全仓无测试断言（回读同步清单为空）。锚 8 条——**实质先红后绿 7/8（t3 low 备案更正口径）**：负小字面量回归对照锚修前修后同绿（Atom("-5") 修前 mk_int(-5)、修后 numeral "-5" 判向相同）；首版截断锚断言错误自查更正（两侧同截断保序不翻转——更正为一侧截断一侧不截断的蕴含对后真红）。基线锚逐字不变（-5 → E4018、5 → 零诊断）。回归全绿：proof::smt 27 / predicate 7 / rfc027 系列 82 / termination 18 / ownership 62。
 
-> **四、验证链与复审修复轮**：t1 门禁 14 项全绿（IR 快照与语料差分零漂移、生成器零改动）→ t2 **PASS**（M1 numeral 摘除回 parse::<i64>/mk_int ⇒ 截断/自由变量锚红 artifact 复现 + #559 翻转锚红；M2 App 单参数回 mk_sub ⇒ 单参数取负锚红 Unsat 假接受复现——两通道独立承重，trial 机械可逆）→ t3 **REJECT（孤儿声明）**：修复笔把 Z3_mk_int 全仓唯一调用点替换后未删旧声明，z3_ffi 文件头「仅包含 YaoXiang 实际使用的函数」收纳契约失真（词边界 grep 实测零代码调用）→ 复审修复笔 `2844e7d4`（删除 5 行裸声明，注释文字的历史提及保留，14 门禁全绿，零行为影响）→ 收口备案（2 low/info：锚口径 7/8 更正；"+5" 形态与旧 parse 通道的理论分歧行态经生产面 Atom 产出穷举不可达——translate.rs 五处 + termination.rs 两处均不可产生 '+' 前缀串，备案不处理）。
+> **四、验证链与复审修复轮**：t1 门禁 14 项全绿（IR 快照与语料差分零漂移、生成器零改动）→ t2 **PASS**（M1 numeral 摘除回 `parse::<i64>`/mk_int ⇒ 截断/自由变量锚红 artifact 复现 + #559 翻转锚红；M2 App 单参数回 mk_sub ⇒ 单参数取负锚红 Unsat 假接受复现——两通道独立承重，trial 机械可逆）→ t3 **REJECT（孤儿声明）**：修复笔把 Z3_mk_int 全仓唯一调用点替换后未删旧声明，z3_ffi 文件头「仅包含 YaoXiang 实际使用的函数」收纳契约失真（词边界 grep 实测零代码调用）→ 复审修复笔 `2844e7d4`（删除 5 行裸声明，注释文字的历史提及保留，14 门禁全绿，零行为影响）→ 收口备案（2 low/info：锚口径 7/8 更正；"+5" 形态与旧 parse 通道的理论分歧行态经生产面 Atom 产出穷举不可达——translate.rs 五处 + termination.rs 两处均不可产生 '+' 前缀串，备案不处理）。
 
 > **五、计数与移交**：三级 +1 = 3.20.27（239→240）；二级不变。issue [#561](https://github.com/ChenXuXu233/YaoXiang/issues/561) **关闭**。修复笔推送终态 `93901c2e` + 复审修复笔推送终态 `2844e7d4`。批次树已 release。
+
+## P6 6.9.5-B.1b+c 实现轮（b1bc-impl-2，2026-11-14，主工作树）
+
+推送终态 = `74c92c3b`。B.1b 布局/擦除与 B.1c 5A 同批 ship；只消费 `quantity == Some(Quantity::Zero)`，不生产 witness、不新增 parser 语法；E1114/E1115 本批直驱可达，用户可达留 B.2。
+
+### 一、落地内容
+
+主工作树 26 文件 +1268/−43（含 3 个新测试文件 731 行、4 份生成物、6 份 locales、013 两行）。
+
+- **唯一映射点**（`types/mono.rs`）：`quantity_is_witness`、`runtime_field_index`（声明序 → 运行期数据序；witness 命中返回 `None`）、`runtime_field_count`、`quantities_are_witness_bearing`、`StructFieldInfo::is_witness`、`is_witness_bearing`。只吃 `Option`（元素为 `Quantity`）迭代器，AST/IR/Mono 三侧共用。
+- **构造数据-only**（`translator::synthesize_constructor`）：Load / Arg / `CreateStruct` / 局部槽 / 结果槽只含数据字段。`Box(v,w,z)`（w=witness）实测 2 条 Load、`CreateStruct` operands `[0,1]`、`dst=2`、`local_count=3`；`b.z` 的 `LoadField.field == 1`。
+- **字段索引**（`ir_gen::resolve_field_index`）：仅命中记录字段的两条路径换算运行期数据索引；tuple / `Vec.length` / Range 恒等；witness 命中返回 `None`。
+- **E1114**（2 发射点）：值级 `b.w` 在 FieldAccess 的 `Struct` 臂与 `TypeRef→Struct` 臂均拒绝。
+- **E1115**（4 发射点）：声明 `mut` 字段 / 字段赋值 / `&mut` / 方法接收者（`co.receiver` 与 `co.args[0]` 的 `WriteBorrow` 收在同一点，覆盖用户不写 `&mut` 的自动写借用）。
+- 码表 + 六 locales + 013 + 生成物：index 156→158、E1xxx 59→61、合计 161→163；E1114「2 处」/E1115「4 处」。生成器重跑 11 份生成物 hash 全不变。
+
+### 二、判据
+
+- 19 条新测试：codegen 3（T01/T02/T12）、IR 1（T05）、sema 10（T03/T04/T07–T12，含 4 条普通记录负控）、types 4（映射/计数/witness-bearing/T13）。
+- 5A 方法接收者探针：`Box.shift(self: &mut Box)` + `b.shift()` ⇒ E1115；同形普通记录零 E1114/E1115。
+- 零行为：语料 388 行 SHA256 与基线逐字节相同；IR 快照零漂移；fast 2147 条 exit 0；普通记录四类写入负控全放行。
+- 变异 T17–T23 均机械可逆（`git apply -R` + blob 前后一致）；T20 拆 3 个补丁分别红；T22/T23 红在 Eq/Hash 与 Debug。T21 首版只断 `local_count` 为绿，补 `CreateStruct.dst` 断言后转录为红（测试强度修正，非放宽判据）。
+
+### 三、裁定/偏离
+
+1. **E1115 单码单文案、四发射点**：未拆四个构造函数/四条文案（`site` 参数会污染六语文案）；四类写入共用「记录整体不可变」判据。lead 接受。
+2. **`inference::mono_type_is_witness_bearing`（`pub(super)`）**：只做剥 `Ref` 与 `TypeRef` 一层解析，避免三处各写一份；witness 判定本体仍唯一（`mono.rs`）。
+3. **E1114 的 `Struct` 字面量臂未单独直驱**：测试走 `TypeRef` 路径；两臂共用 `is_witness` 判据。
+4. **方法接收者只覆盖 `Var` 接收者**：`b.inner.method()` 等嵌套接收者未检（宁漏检不误报）；泛型记录实例留 B.4。
+5. **声明面 `Box.shift: (self: &mut Box)` 本身不拒绝**：只拒调用点；若契约要求声明面也拒，需追加。
+6. **locale example 用 `w: Pos(v)`**（设计包形态）；B.1 无用户语法，B.2 定义声明形式时同步校正。
+
+### 四、边界
+
+E1114/E1115 用户可达留 B.2；本批无新语法、无 witness 产出；不宣称 Σ 完全体。`z` 索引、`CreateStruct`/`local_count` 的证据均在直驱 IR/bytecode 测试内。
