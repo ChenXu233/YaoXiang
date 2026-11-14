@@ -313,7 +313,7 @@ fn test_eval_unop_neg_i128_min_returns_arithmetic_error_not_panic() {
     let budget = BudgetTracker::new();
     let mut dep_env = DependentTypeEnv::new();
     crate::std::assert::AssertModule.register_type_families(&mut dep_env);
-    let mut evaluator = Evaluator::new(&env, &budget, &dep_env);
+    let mut evaluator = Evaluator::new(&env.types, &budget, &dep_env);
     let expr = ConstExpr::UnOp {
         op: UnOp::Neg,
         expr: Box::new(ConstExpr::Lit(ConstValue::Int(i128::MIN))),
@@ -341,7 +341,7 @@ fn test_eval_unop_neg_values_in_range_unchanged() {
     let budget = BudgetTracker::new();
     let mut dep_env = DependentTypeEnv::new();
     crate::std::assert::AssertModule.register_type_families(&mut dep_env);
-    let mut evaluator = Evaluator::new(&env, &budget, &dep_env);
+    let mut evaluator = Evaluator::new(&env.types, &budget, &dep_env);
     let cases: [(i128, i128); 3] = [
         (-5, 5),
         (-i128::MAX, i128::MAX),
@@ -376,7 +376,7 @@ fn test_eval_binop_sub_chain_constructs_i128_min_exactly() {
     let budget = BudgetTracker::new();
     let mut dep_env = DependentTypeEnv::new();
     crate::std::assert::AssertModule.register_type_families(&mut dep_env);
-    let mut evaluator = Evaluator::new(&env, &budget, &dep_env);
+    let mut evaluator = Evaluator::new(&env.types, &budget, &dep_env);
     let inner = ConstExpr::BinOp {
         op: BinOp::Sub,
         left: Box::new(ConstExpr::Lit(ConstValue::Int(0))),
