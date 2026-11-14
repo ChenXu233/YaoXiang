@@ -37,6 +37,12 @@ pub fn parse_type_annotation_required(state: &mut ParserState<'_>) -> Option<Typ
     if let Some(ty) = parse_type_annotation(state) {
         return Some(ty);
     }
+    // 深度闸拒绝（issue #540 修复轮）：E0019 已在拒绝点发射，此处再报
+    // E0010 是同因双诊断——保持「恰 1 条正式诊断」，与 expect() 的压制
+    // 语义同构。标志在每条语句开始时复位，不影响后续语句的正常恢复。
+    if state.is_depth_rejected() {
+        return None;
+    }
     let span = state.span();
     let found = state
         .current()
@@ -52,7 +58,26 @@ pub fn parse_type_annotation_required(state: &mut ParserState<'_>) -> Option<Typ
 }
 
 /// Parse type annotation
+///
+/// 解析递归深度闸的**类型汇点**（issue #540 修复轮）：Ptr/Ref/泛型构造/
+/// 具名 struct/函数类型/元组/类型体各臂的自递归与互递归都回入本函数，
+/// 全部经同一 enter/exit 计数（与语句/表达式两汇点同机制、同一
+/// [`MAX_PARSE_DEPTH`](crate::frontend::core::parser::parser_state::MAX_PARSE_DEPTH)
+/// 常数，不另设第二套计数）。实测登记（1MB 参照线程，debug 构建）：
+/// 类型递归崩溃起点 struct 386 / generic 595 / Ptr 928 / Ref 930 / Fn 930
+/// 层——全部 ≤ 闸值 1024，按「类型闸值 ≥ 实测崩溃起点」判据并入单闸；
+/// 闸上（≥1025 层）发射 E0019 并以 `None` 逐层弹出。
 pub fn parse_type_annotation(state: &mut ParserState<'_>) -> Option<Type> {
+    if !state.enter_nested_parse() {
+        return None;
+    }
+    let result = parse_type_annotation_nested(state);
+    state.exit_nested_parse();
+    result
+}
+
+/// [`parse_type_annotation`] 的闸内本体（原实现逐字保留）。
+fn parse_type_annotation_nested(state: &mut ParserState<'_>) -> Option<Type> {
     match state.current().map(|t| &t.kind) {
         Some(TokenKind::Star) => {
             // Raw pointer type: *T
@@ -221,6 +246,11 @@ pub fn parse_type_annotation(state: &mut ParserState<'_>) -> Option<Type> {
             }
 
             if !state.skip(&TokenKind::RParen) {
+                // 深度闸拒绝弹出期（issue #540 修复轮）：元组回退重试同样只
+                // 会以错位起点重扫残骸——直退，残骸交给语句层的 drain。
+                if state.is_depth_rejected() {
+                    return None;
+                }
                 state.restore_position(saved);
                 return parse_tuple_type(state);
             }
@@ -368,10 +398,14 @@ fn parse_type_position_const_expr(
     match state.parse_infix_from(seed.clone(), 0) {
         Some(expr) => expr,
         None => {
-            state.error(parse_msg(
-                state,
-                "类型位的常量表达式不完整：运算符缺少右操作数",
-            ));
+            // 深度闸拒绝（issue #540 修复轮）：E0019 已发射，同因双诊断压制，
+            // 与 expect() 的弹出期压制同构。
+            if !state.is_depth_rejected() {
+                state.error(parse_msg(
+                    state,
+                    "类型位的常量表达式不完整：运算符缺少右操作数",
+                ));
+            }
             seed
         }
     }
@@ -455,7 +489,22 @@ fn parse_constructor_type(
 /// Returns (Vec<Param>, return_type)
 /// This is for RFC-010 unified syntax: `name: (a: Int, b: Int) -> Ret = body`
 /// Also supports const generic literal types: `factorial: [n: Int](n: n) -> Int`
+///
+/// 解析递归深度闸的**柯里组汇点**（issue #540 修复轮）：curry 组与括号
+/// 返回位的自递归（`-> (a: Int) -> (b: Int) -> …`）不经
+/// [`parse_type_annotation`]，须在本入口过同一 enter/exit 计数——否则深
+/// 柯里链是真递归栈膨胀的绕闸入口。
 pub fn parse_fn_type_with_names(state: &mut ParserState<'_>) -> Option<(Vec<Param>, Box<Type>)> {
+    if !state.enter_nested_parse() {
+        return None;
+    }
+    let result = parse_fn_type_with_names_nested(state);
+    state.exit_nested_parse();
+    result
+}
+
+/// [`parse_fn_type_with_names`] 的闸内本体（原实现逐字保留）。
+fn parse_fn_type_with_names_nested(state: &mut ParserState<'_>) -> Option<(Vec<Param>, Box<Type>)> {
     if !state.expect(&TokenKind::LParen) {
         return None;
     }
@@ -575,6 +624,12 @@ pub fn parse_fn_type_with_names(state: &mut ParserState<'_>) -> Option<(Vec<Para
                 return_type: inner_ret,
             };
             return Some((params, Box::new(nested_fn)));
+        }
+        // 深度闸拒绝弹出期（issue #540 修复轮）：内层已报 E0019，回退重试
+        // 只会以错位起点重解析残骸（同因第二诊断 + 二次方重扫）——残骸交给
+        // 语句层的 drain_broken_construct，与 expect() 的弹出期压制同构。
+        if state.is_depth_rejected() {
+            return None;
         }
         state.restore_position(saved);
     }

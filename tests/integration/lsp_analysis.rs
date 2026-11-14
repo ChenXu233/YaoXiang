@@ -5,7 +5,7 @@
 //!
 //! LSP 形态的阶段表（Parsing → Registry → Typecheck → ProofExecution）在
 //! 编辑器路径上同样吃深递归：修前 didOpen 深表达式（300 项）实测进程
-//! 栈溢出（0xC00000FD，探针留档 target/yx-scratch/3.20.30-probe/——不入库）。
+//! 栈溢出（0xC00000FD）。
 //! 修复两半在此面各锚一半：
 //! - 解析闸（E0019）：超限树在解析期即被拒绝，LSP 专属走查
 //!   （semantic_tokens 等）不再接触深树——本文件主锚；

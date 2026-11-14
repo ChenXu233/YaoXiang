@@ -1909,11 +1909,10 @@ fn test_e2e_check_explicit_path_under_target_is_honored() {
 // 规范来源：RFC-013 错误码规范 E0019/E3014 + D59 C 类崩溃面直修授权
 // （用户裁决：编排层大栈线程 + 解析深度闸 1024）。
 //
-// 修前崩溃形态逐字留档（debug 构建，探针 target/yx-scratch/3.20.30-probe/
-// repro300_prefix_check.txt——不入库，结论以注释为准）：
+// 修前崩溃形态逐字留档（debug 构建 / 1MB 主线程栈实测）：
 //   Checking 1 file(s)...
 //
-//   thread 'main' (25620) has overflowed its stack
+//   thread 'main' has overflowed its stack
 //   （Windows 原生退出码 3221225725 = 0xC00000FD；Git Bash 呈现 127）
 //
 // 本节锚在子进程级验证用户真实路径：崩溃退出码不得再现。
@@ -2000,5 +1999,79 @@ fn test_check_parser_recursive_deep_nesting_reports_e0019_once() {
         stderr.matches("E0019").count(),
         1,
         "恰 1 条 E0019（禁止恢复级联）: {stderr}"
+    );
+}
+
+#[test]
+fn test_run_deep_fstring_interpolation_reports_e0019_not_literal_text() {
+    // Arrange：顶层 f-string 内嵌 1100 层括号（外层+内层合计超解析闸 1024）。
+    // 修前实测留档（WBS 3.20.30 t1r 探针，HEAD 3dab6db6）：check 0 错误、
+    // run exit 0 且 stdout 输出字面插值源文本「{(((…1…)))}」——内层闸拒绝
+    // 推进内嵌实例自己的 errors、实例随字面文本回退被整体丢弃（D59 C 类
+    // 静默给错答案）。修后：内层拒绝传导到外层诊断集，恰 1 条 E0019。
+    let dir = TempDir::new().expect("temp dir");
+    let expr = format!("{}1{}", "(".repeat(1100), ")".repeat(1100));
+    let file = dir.path().join("deep_fstring.yx");
+    std::fs::write(&file, format!("s = f\"{{{expr}}}\"\nprint(s)\n")).expect("write fixture");
+
+    // Act
+    let output = Command::new(yx_bin())
+        .arg("run")
+        .arg(&file)
+        .output()
+        .expect("run yaoxiang-rs");
+
+    // Assert：不得再以「编译成功 + 字面改写」静默通过
+    assert_eq!(output.status.code(), Some(1), "深内插必须以正式诊断退出");
+    assert_ne!(
+        output.status.code(),
+        Some(STATUS_STACK_OVERFLOW),
+        "修前崩溃形态不得再现"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(
+        stderr.matches("E0019").count(),
+        1,
+        "恰 1 条 E0019（内层拒绝传导、同因不得双诊断）: {stderr}"
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        !stdout.contains("{(((("),
+        "运行输出不得再出现字面插值源文本（静默给错答案）: {stdout}"
+    );
+}
+
+#[test]
+fn test_check_deep_call_razor_125_compiles_in_subprocess() {
+    // Arrange：125 层调用嵌套——修前崩溃区内（1MB 主线程实测崩溃起点
+    // 124 层），修后大栈线程编译成功。既有 razor 锚（check.rs 的
+    // razor_call 形态）在内联测试线程上跑、无法机械复现修前崩溃；本锚
+    // 在子进程级钉住 crash→success 的披露面：用户真实路径上 exit 0。
+    let dir = TempDir::new().expect("temp dir");
+    let expr = format!("{}1{}", "id(".repeat(125), ")".repeat(125));
+    let file = dir.path().join("razor_call125.yx");
+    std::fs::write(
+        &file,
+        format!("id: (Int) -> Int = (x) => x\nmain = () => {{\n    y = {expr}\n    print(y)\n}}\n"),
+    )
+    .expect("write fixture");
+
+    // Act
+    let output = Command::new(yx_bin())
+        .arg("check")
+        .arg(&file)
+        .output()
+        .expect("run yaoxiang-rs check");
+
+    // Assert：非崩溃且零错误（修前 exit 0xC00000FD 零诊断）
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "125 层调用嵌套在用户真实路径上必须编译成功（修前崩溃区内形态）"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        !stderr.contains("E0019") && !stderr.contains("E3014"),
+        "razor 区形态不得触发任何资源闸: {stderr}"
     );
 }

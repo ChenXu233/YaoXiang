@@ -25,9 +25,17 @@ pub fn parse_msg(
 /// 上限为大栈线程（64MB）崩溃阈值 ~8500 层的 ~1/8——1024 位于窗口
 /// [640, 8499] 内，是裁决登记值：解析递归 ≥1025 层的形态（修前在 1MB
 /// 栈上全部崩溃或已被 E3014 拒绝）在此得到 E0019，≤1024 层的既有通过
-/// 程序逐字不变。深度按**语句 + 表达式两汇点合计**计数（解析真实递归
-/// 栈），扁平二元链不经本闸（parser 迭代处理），由 IR 层既有 E3014
-/// 寄存器上限拒绝。
+/// 程序逐字不变。深度按**语句 / 表达式 / 类型标注 / 模式四个汇点共用**
+/// 的同一计数器合计（解析真实递归栈），扁平二元链不经本闸（parser 迭代
+/// 处理），由 IR 层既有 E3014 寄存器上限拒绝。
+///
+/// 类型/模式面的闸位登记（issue #540 修复轮实测，1MB 参照线程）：类型
+/// 标注递归崩溃起点 struct 386 / 泛型构造 595 / 裸指针链 928 / 引用链
+/// 930 / 函数类型 930 / 柯里组 958 层，模式嵌套 980 层——全部 ≤ 1024，
+/// 按「闸值 ≥ 实测崩溃起点（闸上 ⊆ 修前崩溃集）且 < 8499」判据并入本
+/// 单闸，不设类型面第二常数。闸下形态在 1MB 参照栈可能仍崩溃（帧成本
+/// 高的形态如 struct 嵌套 386..1023 层），由生产路径的大栈线程兜底——
+/// 与块嵌套的既有 razor 语义同构。
 pub(crate) const MAX_PARSE_DEPTH: usize = 1024;
 
 pub struct ParserState<'a> {
@@ -53,10 +61,13 @@ pub struct ParserState<'a> {
     /// 语句身份由此按解析序分配，见 [`Self::alloc_plan_id`]。
     next_plan_id: u32,
     /// 当前解析递归深度（issue #540）：每进入一层嵌套语句/表达式加一。
-    /// 唯一的进入/退出点是 [`Self::parse_statement`] 与
-    /// [`Self::parse_expression_internal`]——parser 的全部递归都经这两个
-    /// 汇点之一（块体递归走 `parse_statement`，pratt 前缀臂/调用实参/
-    /// 括号/列表走表达式汇点）。
+    /// 进入/退出点共四处汇点——语句（[`Self::parse_statement`]）、表达式
+    /// （`parse_expression_internal`）、类型标注（`parse_type_annotation` 与
+    /// `parse_fn_type_with_names`，含全部互递归臂）、模式（`parse_pattern`
+    /// 字段臂）——parser 的全部真递归形态都经其中之一（块体递归走语句
+    /// 汇点，pratt 前缀臂/调用实参/括号/列表走表达式汇点，Ptr/Ref/泛型/
+    /// struct/Fn 链与柯里组走类型汇点，struct 模式嵌套走模式汇点）。四处
+    /// 共用同一个计数器与同一条深度闸，不另设第二套计数。
     parse_depth: usize,
     /// 深度闸拒绝标志：E0019 已在本语句内发射。恢复路径（「Expected
     /// expression after '='」一族）见此标志即跳过追加恢复诊断——否则
@@ -132,6 +143,32 @@ impl<'a> ParserState<'a> {
         outer: &Self,
     ) {
         self.parse_depth = outer.parse_depth;
+    }
+
+    /// f-string 内嵌解析实例的深度闸拒绝传导（issue #540 修复轮）。
+    ///
+    /// 内嵌表达式在独立 [`ParserState`] 实例上解析（[`Self::inherit_parse_depth_from`]），
+    /// 内层闸拒绝时 E0019 推进的是内层实例自己的 errors——实例随后随「字面
+    /// 文本回退」被整体丢弃，程序以「编译成功」继续、运行输出字面插值源
+    /// 文本（静默给错答案）。调用方（nud.rs 的内嵌回退分支）以内层
+    /// [`Self::is_depth_rejected`] + [`Self::take_errors`] 提取后交本方法吸收：
+    /// 外层尚未因同一原因处于拒绝态（同因双诊断压制，语义与
+    /// [`Self::enter_nested_parse`] 的标志协同）时搬入诊断集并同步置位外层
+    /// 拒绝标志；内层**其余解析失败的既有回退语义（字面文本）不变**——只有
+    /// 深度闸拒绝这一条路径传导。外层标志置位后，本语句后续的恢复诊断
+    /// （[`Self::expect`]）与后续内嵌实例的同因拒绝都被既有压制机制静默，
+    /// 保持「恰 1 条正式诊断」。
+    pub(crate) fn absorb_depth_rejection(
+        &mut self,
+        inner_errors: Vec<Diagnostic>,
+    ) {
+        if self.depth_rejected {
+            return;
+        }
+        for diagnostic in inner_errors {
+            self.errors.push(diagnostic);
+        }
+        self.depth_rejected = true;
     }
 
     /// 类型环境探针：约束名 / 谓词名 / 内置名定种一律经此判定。
@@ -294,6 +331,14 @@ impl<'a> ParserState<'a> {
         while !self.at_end() {
             if self.at(&TokenKind::Semicolon) {
                 self.bump();
+                break;
+            }
+            // 外层块的闭合符也是恢复边界（issue #540 修复轮）：RBrace 属于
+            // 调用方的块帧，吞掉会让外层 expect(RBrace) 失败、且各层块帧
+            // 的深度计数不回收——深块居函数中部的恢复随后每条后续语句都
+            // 在闸值上重新进闸被拒，逐语句重发 E0019。留在流上，交给块体
+            // 循环的 `at(RBrace)` 收尾条件逐层闭合、逐层退栈。
+            if self.at(&TokenKind::RBrace) {
                 break;
             }
             if let Some(TokenKind::Identifier(_)) = self.current().map(|t| &t.kind) {

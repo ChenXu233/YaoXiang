@@ -249,3 +249,224 @@ fn test_parse_flat_binop_chain_bypasses_depth_gate() {
         "扁平二元链不经解析闸（迭代形态）: {codes:?}"
     );
 }
+
+#[test]
+fn test_parse_deep_fstring_interpolation_reports_single_e0019() {
+    // Arrange：f-string 内嵌 1100 层括号——外层语句深度 + 内层解析深度合计
+    // 超闸（1024）。修前（#540 修复笔）内层闸拒绝推进的是内嵌解析实例
+    // 自己的 errors，实例随「字面文本回退」被整体丢弃——程序编译成功、
+    // 运行输出字面插值源文本（D59 C 类静默给错答案）。修后内层拒绝必须
+    // 传导到外层诊断集。
+    let expr = format!("{}1{}", "(".repeat(1100), ")".repeat(1100));
+    let source = format!("main = () => {{\n    s = f\"{{{expr}}}\"\n    print(s)\n}}\n");
+
+    // Act
+    let result = parse_on_production_stack(source);
+
+    // Assert：恰 1 条诊断且为 E0019（同因不得双诊断）
+    let codes = error_codes(&result);
+    assert_eq!(codes.len(), 1, "恰 1 条诊断: {codes:?}");
+    assert_eq!(codes[0], "E0019", "深内插必须经内层闸传导 E0019: {codes:?}");
+}
+
+#[test]
+fn test_parse_shallow_fstring_interpolation_still_interpolates() {
+    // Arrange：浅内插对照——内层闸不触发，R1 传导路径不得误伤既有插值
+    let source = "main = () => {\n    s = f\"{1 + 1}\"\n}\n";
+
+    // Act
+    let result = parse_on_production_stack(source.to_string());
+
+    // Assert
+    let codes = error_codes(&result);
+    assert!(codes.is_empty(), "浅内插零变化: {codes:?}");
+}
+
+#[test]
+fn test_parse_deep_generic_type_annotation_reports_single_e0019() {
+    // Arrange：1100 层嵌套泛型构造类型 `A(A(…A(Int)…))`。实测登记（WBS
+    // 3.20.30 t1r 探针，1MB 参照线程）：类型标注递归崩溃起点 595——闸上
+    // 深度在 1MB 栈上全部崩溃，闸值必须拦在崩溃之前。修前类型递归不经
+    // 解析闸（parser_state.rs 的两汇点不含它），闸上形态在生产 64MB 栈
+    // 编译成功、无任何诊断（真递归栈膨胀无人拦）。
+    let ty = format!("{}Int{}", "A(".repeat(1100), ")".repeat(1100));
+    let source = format!("x: {ty} = 1\n");
+
+    // Act
+    let result = parse_on_production_stack(source);
+
+    // Assert：恰 1 条诊断且为 E0019
+    let codes = error_codes(&result);
+    assert_eq!(codes.len(), 1, "恰 1 条诊断: {codes:?}");
+    assert_eq!(codes[0], "E0019", "深类型标注必须报 E0019: {codes:?}");
+}
+
+#[test]
+fn test_parse_deep_struct_type_annotation_reports_single_e0019() {
+    // Arrange：1100 层嵌套 struct 类型 `{a: {a: …{a: Int}…}}`——实测登记
+    // 同上，崩溃起点 386（类型面最深崩溃形态，帧成本最高）。
+    let ty = format!("{}Int{}", "{a: ".repeat(1100), "}".repeat(1100));
+    let source = format!("x: {ty} = 1\n");
+
+    // Act
+    let result = parse_on_production_stack(source);
+
+    // Assert
+    let codes = error_codes(&result);
+    assert_eq!(codes.len(), 1, "恰 1 条诊断: {codes:?}");
+    assert_eq!(codes[0], "E0019", "深 struct 类型必须报 E0019: {codes:?}");
+}
+
+#[test]
+fn test_parse_deep_ptr_type_annotation_reports_single_e0019() {
+    // Arrange：1100 层裸指针链 `***…Int`——实测登记同上，崩溃起点 928。
+    let ty = format!("{}Int", "*".repeat(1100));
+    let source = format!("x: {ty} = 1\n");
+
+    // Act
+    let result = parse_on_production_stack(source);
+
+    // Assert
+    let codes = error_codes(&result);
+    assert_eq!(codes.len(), 1, "恰 1 条诊断: {codes:?}");
+    assert_eq!(codes[0], "E0019", "深 Ptr 链必须报 E0019: {codes:?}");
+}
+
+#[test]
+fn test_parse_deep_ref_type_annotation_reports_single_e0019() {
+    // Arrange：1100 层 `&mut ` 引用链——实测登记同上，崩溃起点 930。
+    let ty = format!("{}Int", "&mut ".repeat(1100));
+    let source = format!("x: {ty} = 1\n");
+
+    // Act
+    let result = parse_on_production_stack(source);
+
+    // Assert
+    let codes = error_codes(&result);
+    assert_eq!(codes.len(), 1, "恰 1 条诊断: {codes:?}");
+    assert_eq!(codes[0], "E0019", "深 Ref 链必须报 E0019: {codes:?}");
+}
+
+#[test]
+fn test_parse_deep_fn_type_annotation_reports_single_e0019() {
+    // Arrange：1100 层嵌套函数类型 `() -> () -> …Int`——实测登记同上，
+    // 崩溃起点 930。
+    let ty = format!("{}Int", "() -> ".repeat(1100));
+    let source = format!("x: {ty} = 1\n");
+
+    // Act
+    let result = parse_on_production_stack(source);
+
+    // Assert
+    let codes = error_codes(&result);
+    assert_eq!(codes.len(), 1, "恰 1 条诊断: {codes:?}");
+    assert_eq!(codes[0], "E0019", "深 Fn 类型必须报 E0019: {codes:?}");
+}
+
+#[test]
+fn test_parse_deep_curry_signature_reports_single_e0019() {
+    // Arrange：1100 层柯里组签名 `f: (x: Int) -> (x: Int) -> …Int`——
+    // parse_fn_type_with_names 的 curry 组自递归同样不经解析闸。
+    let ty = format!("{}Int", "(x: Int) -> ".repeat(1100));
+    let source = format!("f: {ty} Int = 1\n");
+
+    // Act
+    let result = parse_on_production_stack(source);
+
+    // Assert
+    let codes = error_codes(&result);
+    assert_eq!(codes.len(), 1, "恰 1 条诊断: {codes:?}");
+    assert_eq!(codes[0], "E0019", "深柯里组签名必须报 E0019: {codes:?}");
+}
+
+#[test]
+fn test_parse_deep_pattern_nesting_reports_single_e0019() {
+    // Arrange：1100 层嵌套 struct 模式 `P{a: P{a: …1…}}`（match 臂）——
+    // parse_pattern 字段臂自递归每层的表达式探针 enter/exit 成对、不累积
+    // 计数，模式递归栈不受闸保护（实测登记同上，1MB 崩溃起点 980）。
+    let pat = format!("{}1{}", "P{a: ".repeat(1100), "}".repeat(1100));
+    let source = format!("main = () => {{\n    x = match 1 {{ {pat} => 1, _ => 0 }}\n}}\n");
+
+    // Act
+    let result = parse_on_production_stack(source);
+
+    // Assert
+    let codes = error_codes(&result);
+    assert_eq!(codes.len(), 1, "恰 1 条诊断: {codes:?}");
+    assert_eq!(codes[0], "E0019", "深模式嵌套必须报 E0019: {codes:?}");
+}
+
+#[test]
+fn test_parse_struct_type_800_below_gate_parses_clean() {
+    // Arrange：800 层嵌套 struct 类型——闸值（1024）之下、生产 64MB 栈
+    // 上修前即编译成功的形态（razor 对照：修前修后零变化；1MB 参照栈
+    // 崩溃起点 386 之上由大栈线程兜底，与表达式面 block-1000 同构）。
+    let ty = format!("{}Int{}", "{a: ".repeat(800), "}".repeat(800));
+    let source = format!("x: {ty} = 1\n");
+
+    // Act
+    let result = parse_on_production_stack(source);
+
+    // Assert
+    let codes = error_codes(&result);
+    assert!(codes.is_empty(), "闸下类型形态必须零诊断: {codes:?}");
+}
+
+#[test]
+fn test_parse_pattern_800_below_gate_parses_clean() {
+    // Arrange：800 层嵌套 struct 模式——闸下形态 razor 对照。
+    let pat = format!("{}1{}", "P{a: ".repeat(800), "}".repeat(800));
+    let source = format!("main = () => {{\n    x = match 1 {{ {pat} => 1, _ => 0 }}\n}}\n");
+
+    // Act
+    let result = parse_on_production_stack(source);
+
+    // Assert
+    let codes = error_codes(&result);
+    assert!(codes.is_empty(), "闸下模式形态必须零诊断: {codes:?}");
+}
+
+#[test]
+fn test_parse_deep_block_mid_body_reports_single_e0019() {
+    // Arrange：main 体中部 1100 层深块 + 后续正常语句。修前实测留档
+    // （WBS 3.20.30 t1r 探针）：E0019 ×3 级联——深块拒后 drain 停在余额
+    // 归零的闭合 `}`，块体恢复循环的 synchronize 不识别 RBrace、把外层
+    // 闭合逐个吃掉，后续语句在闸值上逐条重新进闸被拒、逐语句重发 E0019。
+    let source = format!(
+        "main = () => {{\n    {}1{}\n    y = 1 + 1\n    print(y)\n}}\n",
+        "{ ".repeat(1100),
+        " }".repeat(1100)
+    );
+
+    // Act
+    let result = parse_on_production_stack(source);
+
+    // Assert：恰 1 条 E0019（后续语句不得级联重发）
+    let codes = error_codes(&result);
+    assert_eq!(
+        codes.iter().filter(|c| c.as_str() == "E0019").count(),
+        1,
+        "恰 1 条 E0019: {codes:?}"
+    );
+    assert_eq!(codes.len(), 1, "禁止同因级联与恢复噪声: {codes:?}");
+}
+
+#[test]
+fn test_parse_shallow_block_recovery_still_reports_e0011_once() {
+    // Arrange：块内普通语法错误（非深度闸，`::` 标签语法已移除的语句起点
+    // 形态）——synchronize 是共享恢复机制，RBrace 停步点不得改变普通路径
+    // 的既有诊断形态（E0011 指向肇事行）。
+    let source = "main = () => {\n    break ::123\n    y = 1\n}\n";
+
+    // Act
+    let result = parse_on_production_stack(source.to_string());
+
+    // Assert：E0011 恰 1 条（既有恢复面锚，形态同 error_recovery 的
+    // break-with-label 锚）
+    let codes = error_codes(&result);
+    assert_eq!(
+        codes.iter().filter(|c| c.as_str() == "E0011").count(),
+        1,
+        "普通恢复路径必须恰报 1 条 E0011: {codes:?}"
+    );
+}

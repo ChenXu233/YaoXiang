@@ -78,7 +78,7 @@ description: '词法分析器（Lexer）与语法分析器（Parser）阶段产�
 - **模板**：`期望 {expected}，找到 {found}`
 - **消息**：解析器期望特定的令牌
 - **帮助**：检查语法并添加期望的令牌
-- **发射点**：`src/frontend/core/parser/parser_state.rs:236`、`src/frontend/core/parser/statements/bindings.rs:131`、`src/frontend/core/parser/statements/bindings.rs:162` 等 4 处
+- **发射点**：`src/frontend/core/parser/parser_state.rs:273`、`src/frontend/core/parser/statements/bindings.rs:131`、`src/frontend/core/parser/statements/bindings.rs:162` 等 4 处
 
 ### E0011：意外的令牌
 
@@ -138,7 +138,7 @@ description: '词法分析器（Lexer）与语法分析器（Parser）阶段产�
 - **模板**：`'{keyword}' 是关键字，不能用作名称`
 - **消息**：关键字不能用作变量或表达式名称
 - **帮助**：换一个不同的标识符代替关键字
-- **发射点**：`src/frontend/core/parser/parser_state.rs:432`
+- **发射点**：`src/frontend/core/parser/parser_state.rs:477`
 - **源码注释名**：关键字作变量名
 
 ### E0019：表达式嵌套过深
@@ -149,5 +149,5 @@ description: '词法分析器（Lexer）与语法分析器（Parser）阶段产�
 - **模板**：`表达式嵌套超过最大递归深度（{limit}）`
 - **消息**：表达式嵌套超过 {limit} 层，超出解析器递归上限
 - **帮助**：简化表达式，或把深层嵌套的部分拆成中间变量或辅助函数
-- **发射点**：`src/frontend/core/parser/parser_state.rs:104`
+- **发射点**：`src/frontend/core/parser/parser_state.rs:115`
 - **源码注释名**：解析递归深度超限（issue #540：深嵌套表达式此前让编译器栈溢出

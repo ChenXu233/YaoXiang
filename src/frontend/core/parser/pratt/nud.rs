@@ -463,6 +463,14 @@ impl<'a> ParserState<'a> {
                                 format_spec,
                             });
                         } else {
+                            // 深度闸拒绝传导（issue #540 修复轮）：内层实例的
+                            // E0019 推进在它自己的 errors 里，实例本随回退丢弃
+                            // ——不传导则程序编译成功、运行输出字面插值源文本。
+                            // 其余解析失败的既有回退语义（字面文本）逐字保留，
+                            // 只有深度闸拒绝这一条路径传导。
+                            if parser.is_depth_rejected() {
+                                self.absorb_depth_rejection(parser.take_errors());
+                            }
                             // Failed to parse expression, treat as text
                             segments.push(FStringSegment::Text(format!("{{{}}}", expr_buf)));
                         }
@@ -1056,7 +1064,24 @@ impl<'a> ParserState<'a> {
     /// Var+LParen 变体调用重组（`ok(v)` 停成裸 Var 的特判）、Var+LBrace
     /// 结构体模式（`Point { x, y: b }`，字段为简写绑定或 `名: 子模式`）、
     /// 其余经 expr_to_pattern 转换
+    ///
+    /// 解析递归深度闸的**模式汇点**（issue #540 修复轮）：struct 模式
+    /// 字段臂（`名: 子模式`）直接自递归，每层的表达式探针 enter/exit 成对
+    /// 不累积计数——模式递归栈不受闸保护（实测登记：`P{a: …}` 嵌套 1MB
+    /// 参照线程崩溃起点 980 层）。本入口与类型汇点同机制过同一
+    /// [`MAX_PARSE_DEPTH`](crate::frontend::core::parser::parser_state::MAX_PARSE_DEPTH)
+    /// 计数，闸上发射 E0019 并以 `None` 逐层弹出。
     fn parse_pattern(&mut self) -> Option<Pattern> {
+        if !self.enter_nested_parse() {
+            return None;
+        }
+        let result = self.parse_pattern_nested();
+        self.exit_nested_parse();
+        result
+    }
+
+    /// [`Self::parse_pattern`] 的闸内本体（原实现逐字保留）。
+    fn parse_pattern_nested(&mut self) -> Option<Pattern> {
         let probe = self.parse_expression(12)?;
         if self.at(&TokenKind::LParen) && matches!(&probe, Expr::Var(_, _)) {
             let called = match self.parse_call(probe.clone(), 0) {

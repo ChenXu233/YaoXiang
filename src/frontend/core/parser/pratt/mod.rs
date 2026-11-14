@@ -76,10 +76,13 @@ fn expr_end_line(expr: &Expr) -> usize {
 impl ParserState<'_> {
     /// Internal expression parsing method：前缀（nud）+ 中缀循环（led）。
     ///
-    /// 解析递归深度闸的唯一表达式汇点（issue #540）：pratt 的全部递归
-    /// （前缀臂回入 `parse_expression`、调用实参、括号、列表等）都再进本
-    /// 函数；超限在 [`MAX_PARSE_DEPTH`](crate::frontend::core::parser::parser_state::MAX_PARSE_DEPTH)
-    /// 处发射 E0019 并以 `None` 逐层弹出。
+    /// 解析递归深度闸的**表达式**汇点（issue #540）：pratt 的全部表达式
+    /// 递归（前缀臂回入 `parse_expression`、调用实参、括号、列表等）都再进
+    /// 本函数；pratt 内不经本函数的递归面只有模式汇点（`parse_pattern` 的
+    /// 字段臂自递归）——它与类型汇点（`parse_type_annotation` /
+    /// `parse_fn_type_with_names`）同机制过同一计数器，见
+    /// [`MAX_PARSE_DEPTH`](crate::frontend::core::parser::parser_state::MAX_PARSE_DEPTH)。
+    /// 超限在闸值处发射 E0019 并以 `None` 逐层弹出。
     pub fn parse_expression_internal(
         &mut self,
         min_bp: u8,
