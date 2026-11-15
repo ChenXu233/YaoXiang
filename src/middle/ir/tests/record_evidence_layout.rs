@@ -203,3 +203,63 @@ fn test_synthesized_constructor_shape_from_real_pipeline() {
         constructor.local_count
     );
 }
+/// T17（6.9.5-B.3）：类型级证据字段路径不引入运行期槽位——加入 `Holds`/`needW`
+/// 后 `Box` 的构造形状与无类型级使用等价（2 数据字段 + 1 结果槽）。
+#[test]
+fn test_type_level_field_path_adds_no_runtime_slots() {
+    // Arrange
+    let source = concat!(
+        "Pos: (v: Int) -> Type = { v > 0 }\n",
+        "\n",
+        "Box: Type = {\n",
+        "    v: Int,\n",
+        "    w: Pos(v),\n",
+        "    z: Int,\n",
+        "}\n",
+        "\n",
+        "Holds: (bb: Box) -> Type = { bb.w }\n",
+        "\n",
+        "needW: (b: Box, h: Holds(b)) -> Int = { b.v }\n",
+        "\n",
+        "main: () -> Void = {\n",
+        "    b = Box(3, 5)\n",
+        "    z = b.z\n",
+        "    x = needW(b, Box(3, 5))\n",
+        "}\n",
+    );
+    let module = module_ir(source);
+
+    // Act
+    let output = crate::middle::passes::codegen::translator::Translator::new()
+        .translate_module(&module)
+        .expect("真实模块 IR 必须能翻译");
+    let constructor = output
+        .code_section
+        .functions
+        .into_iter()
+        .find(|function| function.name == "Box")
+        .expect("函数表里应有合成构造函数 Box");
+    let load_args = constructor
+        .instructions
+        .iter()
+        .filter(|instruction| instruction.opcode == crate::middle::bytecode::opcode::LOAD_ARG)
+        .count();
+    let create = constructor
+        .instructions
+        .iter()
+        .find(|instruction| instruction.opcode == crate::middle::bytecode::opcode::CREATE_STRUCT)
+        .expect("构造函数必须含 CreateStruct");
+
+    // Assert
+    assert_eq!(load_args, 2, "witness 不占构造参数位，实际 {load_args}");
+    assert_eq!(
+        create.operands[5], 2,
+        "CreateStruct 字段计数只含数据字段，实际 {}",
+        create.operands[5]
+    );
+    assert_eq!(
+        constructor.local_count, 3,
+        "局部槽 = 2 数据字段 + 1 结果槽（witness 不占槽），实际 {}",
+        constructor.local_count
+    );
+}

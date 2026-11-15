@@ -772,6 +772,8 @@ fn collect_var_sorts(
             collect_numeric(start, sorts);
             collect_numeric(end, sorts);
         }
+        // 证据字段路径不是 ownership 约束的变量：不登记 sort（编译完整性补臂）
+        ConstExpr::FieldPath { .. } => {}
     }
 }
 

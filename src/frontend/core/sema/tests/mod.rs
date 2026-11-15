@@ -32,6 +32,7 @@ mod paren_return_decomposition;
 mod predicate_resolver;
 mod probe;
 mod record_evidence;
+mod record_witness_term;
 mod rfc010;
 mod rfc010a;
 mod rfc011;

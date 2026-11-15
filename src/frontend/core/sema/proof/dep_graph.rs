@@ -148,6 +148,7 @@ fn collect_free_vars(
             collect_free_vars(end, out);
         }
         ConstExpr::Lit(_) => {}
+        ConstExpr::FieldPath { base, .. } => collect_free_vars(base, out),
     }
 }
 

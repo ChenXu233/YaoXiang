@@ -166,10 +166,38 @@ fn parse_type_annotation_nested(state: &mut ParserState<'_>) -> Option<Type> {
                     return parse_constructor_type(name, name_span, state);
                 }
             }
+            // RFC-027 §14.5：类型位单层证据字段路径 `b.w`。V1 只允许 `ident.ident`；
+            // 多级路径在这里也先按嵌套 `FieldAccess` 解析，由转换点拒绝（T03）。
+            // 复用下方同一个 `Type::ConstExpr` 构造点（类型表门禁 T1 的构造点计数不含新站）。
+            let mut field_path_seed: Option<Expr> = None;
+            if state.at(&TokenKind::Dot)
+                && matches!(
+                    state.peek().map(|t| &t.kind),
+                    Some(TokenKind::Identifier(_))
+                )
+            {
+                let mut expr = Expr::Var(name.clone(), name_span);
+                while state.at(&TokenKind::Dot) {
+                    state.bump(); // '.'
+                    let Some(TokenKind::Identifier(field)) = state.current().map(|t| &t.kind)
+                    else {
+                        break;
+                    };
+                    let field = field.clone();
+                    state.bump();
+                    // 字段名 span 不参与语义；基名 span 供诊断定位（与值级读取不同，值级另有发射点）
+                    expr = Expr::FieldAccess {
+                        expr: Box::new(expr),
+                        field,
+                        span: name_span,
+                    };
+                }
+                field_path_seed = Some(expr);
+            }
             // 后视检查：如果不是类型语法专用的 token，则作为表达式解析（blacklist）
-            if type_position_expr_continues(state) {
-                let expr =
-                    parse_type_position_const_expr(state, Expr::Var(name.clone(), name_span));
+            if field_path_seed.is_some() || type_position_expr_continues(state) {
+                let seed = field_path_seed.unwrap_or_else(|| Expr::Var(name.clone(), name_span));
+                let expr = parse_type_position_const_expr(state, seed);
                 return Some(Type::ConstExpr(Box::new(expr)));
             }
             Some(Type::Name {
@@ -819,6 +847,17 @@ fn parse_struct_type(state: &mut ParserState<'_>) -> Option<Type> {
                     format!("Expected ':' after 'mut' in field '{}'", name),
                 ));
                 return None;
+            } else if state.at(&TokenKind::Dot)
+                && matches!(
+                    state.peek().map(|t| &t.kind),
+                    Some(TokenKind::Identifier(_))
+                )
+            {
+                // 类型体里的证据字段路径（形如 { bb.w }，RFC-027 §14.5）：整条路径作为
+                // 类型体表达式项，交汇到 parse_type_annotation 的同一入口（不另写解析）。
+                state.restore_position(name_start);
+                let ty = parse_type_annotation(state)?;
+                body.push(TypeBodyItem::Expr(ty));
             } else if matches!(
                 state.current().map(|t| &t.kind),
                 Some(

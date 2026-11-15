@@ -192,6 +192,10 @@ pub enum ConstExpr {
     /// 命名变量引用（谓词体中引用程序变量，如 `{ x > 0 }` 中的 x）
     /// 与 Var(ConstVar) 不同：ConstVar 是索引化的 const 泛型变量，NamedVar 是名字化的程序变量
     NamedVar(String),
+    /// 类型级证据字段路径（RFC-027 §14.5）：`b.w`。
+    /// V1 的 `base` 只允许 `NamedVar`（应用面/判定面拒绝其他基座，见 09a §P6 6.9.5-B.3 §五）；
+    /// `field` 是源码字段名，声明序由 `RecordModel.field_path` 解析（不固化下标）。
+    FieldPath { base: Box<ConstExpr>, field: String },
 }
 
 impl fmt::Display for ConstExpr {
@@ -231,6 +235,7 @@ impl fmt::Display for ConstExpr {
             ),
             ConstExpr::Range { start, end } => write!(f, "{}..{}", start, end),
             ConstExpr::NamedVar(name) => write!(f, "{}", name),
+            ConstExpr::FieldPath { base, field } => write!(f, "{}.{}", base, field),
         }
     }
 }

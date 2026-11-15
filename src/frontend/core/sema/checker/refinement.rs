@@ -500,10 +500,40 @@ impl TypeChecker {
                     std::slice::from_ref(&def.param_name),
                     std::slice::from_ref(&arg_expr),
                 );
-            return Some(MonoType::Refined {
+            let refined = MonoType::Refined {
                 base: Box::new(def.param_type.clone()),
                 constraint,
-            });
+            };
+            // 应用面（B.3 §五）：证据字段路径的基名必须与**应用实参名**一致；
+            // 非 NamedVar 基座（字面量/调用/嵌套路径）一律拒绝——返回 None 交既有
+            // 「实参不可转换/未知类型」诊断面，不静默把漏代入的 `bb` 当前提。
+            if matches!(
+                &refined,
+                MonoType::Refined {
+                    constraint: ConstExpr::FieldPath { .. },
+                    ..
+                }
+            ) {
+                let actual = match &args[0] {
+                    crate::ast::Type::Name { name, .. } => Some(name.as_str()),
+                    crate::ast::Type::ConstExpr(expr) => match expr.as_ref() {
+                        crate::ast::Expr::Var(name, _) => Some(name.as_str()),
+                        _ => None,
+                    },
+                    _ => None,
+                };
+                let matched = actual
+                    .map(|name| {
+                        crate::frontend::core::sema::record_model::field_path_base_matches(
+                            &refined, name,
+                        )
+                    })
+                    .unwrap_or(false);
+                if !matched {
+                    return None;
+                }
+            }
+            return Some(refined);
         }
         // 2. 证明函数（源码定义、返回 `Type`）：约束是不透明应用
         let mono_args: Vec<MonoType> = args.iter().map(|a| MonoType::from(a.clone())).collect();

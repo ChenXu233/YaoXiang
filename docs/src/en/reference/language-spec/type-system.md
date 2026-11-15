@@ -402,7 +402,7 @@ b = Box(3, 5)       // Arity = 2 (v, z); at runtime only v=3 and z=5 exist; w is
 > constructor arguments count only data fields, and evidence-field evidence is synthesized and
 > determined automatically at the construction site—a false determination reports E4018, and an
 > unproven one reports E2031. Value-level reads report E1114, and mutable writes report E1115.
-> Type-level `b.w` (B.3) and cross-module export (B.4) have not yet landed.
+> Type-level `b.w` (B.3) has landed (the admission reading; D2 ruling A); cross-module export (B.4) has not yet landed.
 
 ### 3.5 Function Types
 
@@ -943,11 +943,11 @@ This section calls these **evidence fields**; diagnostic messages call them **wi
 > through the record model to the IR, and user-reachable E4018 / E2031 / E1114 / E1115 have landed
 > (WBS 6.9.5 B.2a). Instantiation determination for generic records, const parameters, and proof
 > families has also landed (B.2b). Quantity representation, runtime erasure, and the 5A criterion
-> proper belong to an earlier round (WBS 6.9.5 B.1). Type-level `b.w` (B.3) and cross-module export
-> (B.4) have not yet landed. `evidence_ref` / `certificate_ref` slots will be added with B.3 / B.4;
-> B.2's explicit evidence entry point is a proof function in a constraint, not a constructor
-> argument. The diagnostic code for illegal declaration positions is pending a ruling (currently a
-> borrowed-code fallback).
+> proper belong to an earlier round (WBS 6.9.5 B.1). Type-level (B.3) has landed (the admission reading; D2 ruling A); cross-module export (B.4) has not yet
+> landed. The `evidence_ref` / `certificate_ref` slots are **not added with B.3** (B.3 does not
+> materialize either slot); they are added with B.4. B.2's explicit evidence entry point is a proof
+> function in a constraint, not a constructor argument. Illegal declaration positions reuse
+> E1092 / E1042 (D1 ruling).
 
 #### 8.3.1 Field-Position Rules: Proof-Space Criterion
 
@@ -1115,8 +1115,10 @@ axiom.
 
 Evidence fields **may only be used at the type level**. A `b.w` in a type position is
 **user-writable type-level syntax** referring to that field's **evidence item** (proof item), not a
-runtime value. It points to the evidence reference registered for the field, may serve as a premise
-for another proposition, and is replayed by the proof kernel under the current logical signature.
+runtime value. It points to the evidence reference registered for the field, and may serve as a
+premise for another proposition. The V1 semantics is **admission** (the slot's proposition was
+proved at the construction site; see 09a §P6 6.9.5-B.3 §5), not replay under the logical signature
+(§4.2 has not landed).
 
 ```yaoxiang
 Pos: (v: Int) -> Type = { v > 0 }
@@ -1126,9 +1128,9 @@ Box: Type = {
     w: Pos(v),
 }
 
-// Type-level use: treat b.w as an evidence premise, not as a value read
-// `Proved` here denotes proposition construction "with this evidence item as a premise"
-useWitness: (b: Box) -> Type = { Proved(b.w) }
+// Type-level use: treat bb.w as an evidence premise, not as a value read
+Holds: (bb: Box) -> Type = { bb.w }
+needW: (b: Box, h: Holds(b)) -> Int = { b.v }
 ```
 
 **Value-level reads of evidence fields are always rejected**: reading `b.w` in a value expression
@@ -1143,8 +1145,8 @@ x = b.w        // ❌ Value-level read of a witness field -> E1114
 
 > **Design basis**: [RFC-027 §14.5](../../rfc/accepted/027-compile-time-evaluation-types.md) (the
 > term form for type-level use and its replacement of the “no user syntax at the type level” rule in
-> 4A). The syntax and parsing of type-level field paths have not yet landed—the parser currently
-> does not accept a field path in a proof position; this form will be connected with 6.9.5 B.3.
+> 4A). The syntax and parsing of type-level field paths have landed (WBS 6.9.5 B.3): a type
+> position accepts a single-level `ident.ident`; value-level reads still report E1114.
 
 #### 8.3.6 Immutability, Erasure, and Diagnostic Codes
 

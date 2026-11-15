@@ -979,6 +979,10 @@ impl TypeChecker {
             }
         }
 
+        // B.3 §五 声明面：证据字段路径必须是「谓词唯一形参名 + 该记录类型的 evidence 字段」。
+        // 唯一校验点（判定面只判模型/槽；应用面判基名一致性）。
+        self.validate_predicate_witness_paths(module.span);
+
         // 第二遍：收集所有函数签名（使其可被前向引用）
         for stmt in &module.items {
             // #324：模块级阶段挂当前语句 span，诊断自动获得位置
@@ -3986,6 +3990,61 @@ impl TypeChecker {
             }
             PredicateResolveError::ArgNotConst => {
                 ErrorCodeDefinition::refined_arg_not_const(name).build()
+            }
+            // D1 裁决：不新增码，沿用 E1092（类型位的字段路径不是可判定的证据前提）
+            PredicateResolveError::WitnessPathBaseMismatch => {
+                ErrorCodeDefinition::refined_arg_not_const(name).build()
+            }
+        }
+    }
+
+    /// B.3 §五 声明面：证据字段路径必须是「谓词唯一形参名 + 该记录类型的 evidence 字段」。
+    ///
+    /// 唯一校验点（判定面只判模型/槽，应用面判基名一致性）。D1 裁决：不新增码——
+    /// 未知字段报 E1042，数据字段/非前提位置报 E1092。
+    fn validate_predicate_witness_paths(
+        &mut self,
+        module_span: crate::util::span::Span,
+    ) {
+        use crate::frontend::core::types::const_data::ConstExpr;
+        let entries: Vec<(String, String, MonoType, ConstExpr)> = self
+            .env
+            .predicate_defs
+            .iter()
+            .filter(|(_, def)| matches!(&def.constraint, ConstExpr::FieldPath { .. }))
+            .map(|(name, def)| {
+                (
+                    name.clone(),
+                    def.param_name.clone(),
+                    def.param_type.clone(),
+                    def.constraint.clone(),
+                )
+            })
+            .collect();
+        let _span_guard = crate::util::diagnostic::push_current_span(module_span);
+        for (name, param_name, param_type, constraint) in entries {
+            let ConstExpr::FieldPath { base, field } = &constraint else {
+                continue;
+            };
+            let base_is_param = matches!(base.as_ref(), ConstExpr::NamedVar(n) if n == &param_name);
+            let Some(model) = crate::frontend::core::sema::record_model::resolve_record_model(
+                &self.env.record_models,
+                &param_type,
+            )
+            .cloned() else {
+                self.add_error(ErrorCodeDefinition::refined_arg_not_const(&name).build());
+                continue;
+            };
+            if !base_is_param {
+                self.add_error(ErrorCodeDefinition::refined_arg_not_const(&name).build());
+                continue;
+            }
+            let Some(index) = model.field_index(field) else {
+                self.add_error(ErrorCodeDefinition::field_not_found(field, &model.name).build());
+                continue;
+            };
+            if !model.evidence.iter().any(|slot| slot.field == index) {
+                self.add_error(ErrorCodeDefinition::refined_arg_not_const(&name).build());
             }
         }
     }

@@ -139,6 +139,11 @@ impl<'a> Evaluator<'a> {
                 "ConstVar 求值需要类型环境上下文".into(),
             )),
 
+            // RFC-027 §14.5：证据字段路径不产物化值（值级读取由 E1114 在检查面拒绝）
+            ConstExpr::FieldPath { .. } => {
+                Err(EvalError::TypeMismatch("证据字段路径不是值项".into()))
+            }
+
             ConstExpr::BinOp { op, left, right } => {
                 let l = self.eval_expr(left, bindings)?;
                 let r = self.eval_expr(right, bindings)?;

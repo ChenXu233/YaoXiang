@@ -60,7 +60,7 @@ description: '语义分析阶段产生的错误，涵盖作用域、变量生命
 - **模板**：`重复定义：'{name}' 已在当前作用域中定义`
 - **消息**：变量在同一作用域中定义了多次
 - **帮助**：重命名或删除重复的定义
-- **发射点**：`src/frontend/core/sema/checker.rs:1621`、`src/frontend/core/sema/inference/expressions.rs:6796`、`src/frontend/core/sema/inference/statements.rs:2187` 等 4 处
+- **发射点**：`src/frontend/core/sema/checker.rs:1625`、`src/frontend/core/sema/inference/expressions.rs:6796`、`src/frontend/core/sema/inference/statements.rs:2187` 等 4 处
 
 ### E2003：所有权错误
 

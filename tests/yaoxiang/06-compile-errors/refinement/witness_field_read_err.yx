@@ -1,0 +1,18 @@
+// 06-compile-errors/refinement/witness_field_read_err.yx
+// 覆盖: RFC-027 §14.5 / SPEC §8.3.5 —— 值级读取 witness 字段一律拒绝
+// 验证: `x = b.w` 在值表达式里读 evidence 字段 ⇒ E1114；类型级使用见
+//       02-type-system/refinement/type_level_evidence_path.yx。
+// 状态: ❌ 应被编译期拒绝（E1114）
+// expect: compile-error E1114
+
+Pos: (v: Int) -> Type = { v > 0 }
+
+Box: Type = {
+    v: Int,
+    w: Pos(v),
+}
+
+main: () -> Void = {
+    b = Box(3)
+    x = b.w
+}

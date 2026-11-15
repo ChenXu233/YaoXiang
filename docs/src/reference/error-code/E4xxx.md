@@ -23,7 +23,7 @@ description: '泛型约束、特质系统与常量求值相关的错误。'
 | `E4010` | 常量除零 | `Generic` | 否 | `常量表达式除以零` | ✅ 3 处 |
 | `E4011` | 常量溢出 | `Generic` | 否 | `常量表达式溢出` | ✅ 5 处 |
 | `E4012` | 常量递归过深 | `Generic` | 否 | `常量求值超出最大递归深度 {limit}` | ✅ 1 处 |
-| `E4014` | 常量求值失败 | `Generic` | 是 | `无法求值常量表达式：{reason}` | ✅ 10 处 |
+| `E4014` | 常量求值失败 | `Generic` | 是 | `无法求值常量表达式：{reason}` | ✅ 11 处 |
 | `E4018` | 精化谓词违反 | `Generic` | 是 | `精化谓词违反：{constraint}{counterexample}` | ✅ 6 处 |
 | `E4019` | 类型等式不成立 | `Generic` | 否 | `类型等式不成立：期望 {expected}，实际 {found}` | ✅ 1 处 |
 | `E4020` | 需要证明函数 | `Generic` | 否 | `需要证明函数来验证约束` | ✅ 1 处 |
@@ -91,7 +91,7 @@ description: '泛型约束、特质系统与常量求值相关的错误。'
 - **构造函数**：`ErrorCodeDefinition::const_division_by_zero()`
 - **模板**：`常量表达式除以零`
 - **帮助**：确保常量表达式中的除数不为零。
-- **发射点**：`src/frontend/core/types/eval/const_eval.rs:541`、`src/frontend/core/types/eval/const_eval.rs:548`、`src/frontend/core/types/eval/const_eval.rs:553`
+- **发射点**：`src/frontend/core/types/eval/const_eval.rs:559`、`src/frontend/core/types/eval/const_eval.rs:566`、`src/frontend/core/types/eval/const_eval.rs:571`
 
 ### E4011：常量溢出
 
@@ -100,7 +100,7 @@ description: '泛型约束、特质系统与常量求值相关的错误。'
 - **构造函数**：`ErrorCodeDefinition::const_overflow()`
 - **模板**：`常量表达式溢出`
 - **帮助**：常量表达式的结果超出了类型的范围。
-- **发射点**：`src/frontend/core/types/eval/const_eval.rs:572`、`src/frontend/core/types/eval/const_eval.rs:577`、`src/frontend/core/types/eval/const_eval.rs:582` 等 5 处
+- **发射点**：`src/frontend/core/types/eval/const_eval.rs:590`、`src/frontend/core/types/eval/const_eval.rs:595`、`src/frontend/core/types/eval/const_eval.rs:600` 等 5 处
 
 ### E4012：常量递归过深
 
@@ -109,7 +109,7 @@ description: '泛型约束、特质系统与常量求值相关的错误。'
 - **构造函数**：`ErrorCodeDefinition::const_recursion_too_deep(limit)`
 - **模板**：`常量求值超出最大递归深度 {limit}`
 - **帮助**：简化常量表达式以减少递归。
-- **发射点**：`src/frontend/core/types/eval/const_eval.rs:749`
+- **发射点**：`src/frontend/core/types/eval/const_eval.rs:767`
 
 ### E4014：常量求值失败
 
@@ -118,7 +118,7 @@ description: '泛型约束、特质系统与常量求值相关的错误。'
 - **构造函数**：`ErrorCodeDefinition::const_eval_failed(reason)`
 - **模板**：`无法求值常量表达式：{reason}`
 - **帮助**：确保表达式可以在编译期求值。
-- **发射点**：`src/frontend/core/types/eval/const_eval.rs:485`、`src/frontend/core/types/eval/const_eval.rs:489`、`src/frontend/core/types/eval/const_eval.rs:510` 等 10 处
+- **发射点**：`src/frontend/core/types/eval/const_eval.rs:498`、`src/frontend/core/types/eval/const_eval.rs:502`、`src/frontend/core/types/eval/const_eval.rs:523` 等 11 处
 
 ### E4018：精化谓词违反
 

@@ -61,6 +61,17 @@ impl TypeChecker {
         let params = annotation_for_params
             .map(crate::ast::Type::fn_params_flat)
             .unwrap_or_default();
+
+        // B.3 §五 注解面：谓词应用实参里的证据字段路径一律拒绝（V1 不支持把证据项当实参）。
+        // 谓词声明的**体**不在本走查面（由声明面 validate_predicate_witness_paths 判定）。
+        if let Some(ann) = annotation_for_params {
+            self.reject_witness_path_args(ann);
+        }
+        for param in &params {
+            if let Some(ty) = &param.ty {
+                self.reject_witness_path_args(ty);
+            }
+        }
         let type_annotation: Option<&T> = match &stmt.kind {
             StmtKind::Assign {
                 type_annotation, ..
@@ -359,6 +370,51 @@ impl TypeChecker {
                 ErrorCodeDefinition::unknown_type(&name)
             };
             self.add_error(code.at(span).build());
+        }
+    }
+
+    /// 注解面：拒绝类型位谓词应用实参中的证据字段路径（B.3 §五）。
+    ///
+    /// 只走注解位置（泛型实参/函数形参与返回/元组/括号/指针/引用）；类型体由声明面判。
+    fn reject_witness_path_args(
+        &mut self,
+        ty: &crate::ast::Type,
+    ) {
+        use crate::ast::{Expr, Type as T};
+        match ty {
+            T::Generic { name, args, .. } => {
+                for arg in args {
+                    if let T::ConstExpr(expr) = arg {
+                        if matches!(expr.as_ref(), Expr::FieldAccess { .. }) {
+                            self.add_error(
+                                ErrorCodeDefinition::refined_arg_not_const(name).build(),
+                            );
+                            continue;
+                        }
+                    }
+                    self.reject_witness_path_args(arg);
+                }
+            }
+            T::Fn {
+                params,
+                return_type,
+            } => {
+                for p in params {
+                    if let Some(t) = &p.ty {
+                        self.reject_witness_path_args(t);
+                    }
+                }
+                self.reject_witness_path_args(return_type);
+            }
+            T::Tuple(items) => {
+                for item in items {
+                    self.reject_witness_path_args(item);
+                }
+            }
+            T::Paren(inner) | T::Ptr(inner) => self.reject_witness_path_args(inner),
+            T::NamedParen { inner, .. } => self.reject_witness_path_args(inner),
+            T::Ref { inner, .. } => self.reject_witness_path_args(inner),
+            _ => {}
         }
     }
 

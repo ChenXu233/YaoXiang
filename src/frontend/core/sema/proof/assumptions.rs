@@ -125,6 +125,7 @@ fn references_var(
             references_var(left, var_name) || references_var(right, var_name)
         }
         ConstExpr::UnOp { expr: operand, .. } => references_var(operand, var_name),
+        ConstExpr::FieldPath { base, .. } => references_var(base, var_name),
         _ => false,
     }
 }

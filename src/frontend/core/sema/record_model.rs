@@ -108,6 +108,69 @@ pub struct RecordModel {
     pub field_path: Vec<(String, usize)>,
 }
 
+/// 记录类型解析：`Refined`/`Ref` 透明；`Struct`/`TypeRef`/`Generic` 按名查模型。
+///
+/// 判定面与声明面共用同一解析（禁令一 B 的可见性判据：两个调用点）。
+pub(crate) fn resolve_record_model<'a>(
+    models: &'a std::collections::HashMap<String, RecordModel>,
+    ty: &MonoType,
+) -> Option<&'a RecordModel> {
+    match ty {
+        MonoType::Refined { base, .. } => resolve_record_model(models, base),
+        MonoType::Ref { inner, .. } => resolve_record_model(models, inner),
+        MonoType::Struct(structure) => models.get(&structure.name),
+        MonoType::TypeRef(name) => models.get(name),
+        MonoType::Generic { name, .. } => models.get(name),
+        _ => None,
+    }
+}
+
+/// 判定面 admission：`Refined { base: R, constraint: FieldPath { base: NamedVar, field: f } }`
+/// 当 `R` 解析到含 evidence 槽的记录模型、`f` 是 evidence 字段 ⇒ 准入。
+///
+/// **不判 base 名与实参名的一致性**（判定面拿不到应用实参；那一半在应用面
+/// `field_path_base_matches`，09a §P6 6.9.5-B.3 §五）。
+pub(crate) fn witness_premise_admitted(
+    models: &std::collections::HashMap<String, RecordModel>,
+    refined: &MonoType,
+) -> bool {
+    let MonoType::Refined { base, constraint } = refined else {
+        return false;
+    };
+    let ConstExpr::FieldPath {
+        base: path_base,
+        field,
+    } = constraint
+    else {
+        return false;
+    };
+    if !matches!(path_base.as_ref(), ConstExpr::NamedVar(_)) {
+        return false;
+    }
+    let Some(model) = resolve_record_model(models, base) else {
+        return false;
+    };
+    let Some(index) = model.field_index(field) else {
+        return false;
+    };
+    model.evidence.iter().any(|slot| slot.field == index)
+}
+
+/// 应用面 base 名一致性：代入后 `FieldPath` 基名必须等于该谓词应用的唯一实参名。
+/// 非 `NamedVar` 基座（字面量 / 调用 / 嵌套路径）一律 false。
+pub(crate) fn field_path_base_matches(
+    refined: &MonoType,
+    actual_name: &str,
+) -> bool {
+    let MonoType::Refined { constraint, .. } = refined else {
+        return false;
+    };
+    let ConstExpr::FieldPath { base, .. } = constraint else {
+        return false;
+    };
+    matches!(base.as_ref(), ConstExpr::NamedVar(name) if name == actual_name)
+}
+
 impl RecordModel {
     /// 字段名 → 声明序。
     pub fn field_index(

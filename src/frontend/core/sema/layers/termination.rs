@@ -2284,6 +2284,7 @@ fn const_expr_refs(
                 || const_expr_refs(else_branch, name)
         }
         CE::Range { start, end } => const_expr_refs(start, name) || const_expr_refs(end, name),
+        CE::FieldPath { base, .. } => const_expr_refs(base, name),
         _ => false,
     }
 }
@@ -2355,6 +2356,11 @@ pub(crate) fn substitute_const_expr(
         CE::Range { start, end } => CE::Range {
             start: Box::new(sub(start)),
             end: Box::new(sub(end)),
+        },
+        // 证据字段路径：基座可能引用形参（`b.w` 的 `b`），必须递归代入；`field` 是字段名不可替换
+        CE::FieldPath { base, field } => CE::FieldPath {
+            base: Box::new(sub(base)),
+            field: field.clone(),
         },
         // Lit / Var(ConstVar)：不引用程序变量，原样
         other => other.clone(),

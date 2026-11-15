@@ -5732,6 +5732,572 @@ M03 此前已由 t6 复审探针证成（禁用 `check_record_ctor_obligations` 
 
 verdict=pass，对齐提交版 `3dafb813`。四项验收全过：① F1/F2/F3 的文档与变异证据在提交版消除失实/方向违规/缺登记；② B.2b 红态在冻结 `a8e98587` 批次树独立复现，绿态在 B.2b 树独立复现 T22–T26，`record_evidence` 27/27；③ 修复轮三处缺陷（kind 去重吞站点 / 槽位散文 / 级联 E2031）均有守卫测试；④ NoSmt 未被绕过（`predicate.rs` 零改动，构造义务两处消费面仍 NoSmt，新增诊断不经 SMT）。obligations 14/14、docs-refs/truth/markdownlint 绿；快照 1 文件已分类；批次已 release+gc（2308.1 MB）。非阻断观察：本节“批次树”重复措辞已改正；t16 交办的 SPEC §8.3.1 第 4 行对齐已在提交版完成，无遗留。
 
+## P6 6.9.5-B.3 契约（impl，2026-11-15，只读；HEAD `e64139dc` 实测）
+
+> 本节是 **B.3 实现轮的契约**，不是实现记录：只落语义、代码落点、判据、测试矩阵与红态实测，不动 `src/`。它把 RFC-027 §14.5 与 SPEC §8.3.5 落成可执行判据；§14.4（跨模块导出）归 B.4。实现验收以 09 的 6.9.5-B 行 + 本节为准。
+>
+> **红态口径**：下表「红态」是本节写作时在 HEAD `e64139dc` 的 `check` 上**实测**的现状（同一二进制；`cargo build --bin yaoxiang-rs` 后运行），不是推断；「绿态」是 B.3 验收期望。负控/保持型判据今天本就为绿：它们的「红」由 §七 的变异表给出，不是当前失败。探针文件是工作区产物，只登记形态与实测输出，不作引用出处。
+
+### 一、目标与能力边界（先说做不到的）
+
+B.3 让类型级 `b.w` 成为**可解析、可判定、不可值级读取**的统一项。三件可做，一件明确不做：
+
+1. **项表示**：`ConstExpr::FieldPath { base: Box<ConstExpr>, field: String }`（§三）。
+2. **源级语法**：类型位单层字段路径（`bb.w`）由解析器接受并转成上述项（§四）。
+3. **判定语义（V1 = admission）**：`b.w` 是「该证据槽命题在构造点已被证明」的**准入前提**；判定点唯一（`check_predicate_with_mode` 第 1 级之前，只看类型与槽）；base 名与实参名的一致性在**应用面**校验（§五 分层）。值级读取保持 E1114、运行期零槽位（§六）。
+4. **不可做（本批不做）**：RFC §14.5 的 `EvidenceTerm(FieldPath, EvidenceRef, signature_hash)` 所要求的**证书重放**（§4.2 `Certificate` + §13 留存 + `LogicSignature`）。仓库当前没有 `Certificate`/`Kernel::check` 的物化实现（B.2 契约 §二映射表已登记「不物化证明项」）；在 B.3 内实现它会把 §4.2/§13 整个内核拉进 6.9.5。故 B.3 的 evidence term 语义 = **admission 读法**；能力缺口按 §十一 的 D2 四件套处置，默认推荐 A 案。
+
+**不宣称**：§4.2 证书重放、§4.1 跨签名三路径、Σ 完全体、`b.w` 跨模块（B.4 之前导入记录没有 `RecordModel`，见 §六.3）。
+
+### 二、逐条映射（RFC-027 §14.5 / SPEC §8.3.5）
+
+| # | 条款 | 要求 | B.3 落点 / 裁决 | 判据 |
+| --- | --- | --- | --- | --- |
+| 1 | RFC §14.5「项表示」 | `ConstExpr::FieldPath { base, field }` 是统一项世界的字段路径项 | 唯一定义处 `types/const_data.rs` 的 `ConstExpr` 增变体；全 match 补臂见 §三.5 | T01–T03、§三.5 表 |
+| 2 | RFC §14.5「`b.w` 解析」 | 类型位置解析为 `FieldPath(NamedVar("b"), "w")` | parser 接受单层 `ident.ident`；`convert_expr_to_const_expr` 增 `Expr::FieldAccess` 臂（只接受 `Var.field`） | T01–T03 |
+| 3 | RFC §14.5「evidence term」 | `EvidenceTerm(FieldPath, EvidenceRef, signature_hash)` 指向该槽的证据 | **不新增结构**：evidence term ≡ `(FieldPath, RecordModel.evidence[slot])` 读法；B.2 的 `EvidenceSlot{field, quantity, proposition}` 是同一事实的导出槽，B.4 补 `evidence_ref`/`certificate_ref`/`signature_hash` 后与 RFC 同构 | §三.3、§三.5 表 |
+| 4 | RFC §14.5「类型级用途」四类位置 | 谓词实参、类型构造实参、另一命题前提、`evidence_slots[i].proposition` | V1 只支持「谓词体整条路径 + `Refined{base=记录类型}`」一类；其余为**明确拒绝面**（§五 拒绝面、§十 D1）；`evidence_slots.proposition` 交给 B.4 消费同一项表示 | T05、T09、T10 |
+| 5 | RFC §14.5 / SPEC §8.3.5「值级拒绝」 | 值级 `b.w` 报 E1114 | 既有 2 发射点（`inference/expressions.rs` 的 `Struct` 臂与 `TypeRef→Struct` 臂）不动；B.3 只加回归钉 | T06、M08 |
+| 6 | RFC §14.5「不产生运行期值」 | `FieldPath` 不进求值器、不产物化、不占槽 | evaluator / ConstGenericEval 遇 FieldPath 返回错误（不静默当 NamedVar）；IR 零槽位判据 | T15、T18、M03 |
+| 7 | RFC §14.5「穷尽 match 补臂」 | `substitute`、`free_names`、`Display`、`translate`、`proof_execution`、`fold_proof_call_arg` 等 | §三.5 的逐点表（含 catch-all 的行为相关面） | T15–T17、M03–M05 |
+| 8 | RFC §14.5「未支持求值器」 | 遇 FieldPath 返回 Unproven，不静默当 NamedVar | `Evaluator::eval_expr`、`ConstGenericEval::eval`、SMT gate 三处（§三.5） | T15、T16 |
+| 9 | RFC §14.5 末「取代 4A」 | 类型级 `b.w` 是用户可写语法 | 规范正文已写；B.3 修正 SPEC 的**五处**现状陈述（§8.3.5 末段/示例/重放句 + §3.4/§8.3 实现状态注的 B.3 半句；§8.3 的槽句改随 B.4），en 镜像同改（§八 机械必需面） | T20 + docs 门禁 |
+| 10 | SPEC §8.3.5 示例 `Proved(b.w)` +「按当前逻辑签名重放」 | 证据项前提、内核重放 | `Proved` 是内核项、不是源级构造（RFC §14.5 已标「非可编译片段」）；V1 源级形态 = **谓词体里的裸 `b.w`**（§四），语义 = admission（§五），§4.2 未落地。SPEC 示例与「重放」句按 §八 机械必需面改写，en 镜像同改 | T04、T05 + docs 门禁 |
+
+### 三、项表示、字段 id 规则与穷尽 match 补臂点
+
+```text
+ConstExpr::FieldPath { base: Box<ConstExpr>, field: String }
+```
+
+1. `field` 存**源码字段名**，不固化声明序。理由：term 在 substitute / SMT / 诊断里跨类型浮动；`FieldId` 的解析唯一源是 `RecordModel.field_path`（B.2 已有），由消费点解析一次。固化声明序会造第二套索引，并与 `runtime_field_index`（运行期数据序）混淆——两套索引不得互相顶替。
+2. `base` 在 V1 只接受 `NamedVar`（裸值名）。`a.b.c`、`f().w`、字面量基座在转换点返回 `None`（走既有「实参不可转换」诊断形态），不产生 FieldPath。
+3. **EvidenceTerm 关系单一定义**：`EvidenceTerm ≡ (FieldPath, RecordModel.evidence[slot])`。B.2 的 `EvidenceSlot{field, quantity, proposition}` 与 `FieldObligation` 是同一事实的两个面；B.4 在槽上补 `evidence_ref`/`certificate_ref`/`signature_hash` 后，`(FieldPath, slot)` 与 RFC 的三字段同构。**B.3 不新增 `EvidenceTerm`/`Witness` 等任何结构**——第二个 term world 的唯一正确形态是没有第二个。
+4. `FieldPath` 在 `Refined` 里只作为**整条 constraint** 出现（V1）；出现于 `BinOp`/`Call` 实参等组合位置一律拒绝（§五 拒绝面）。
+
+#### 三.5 穷尽 match 补臂点（全仓；符号定位，不写行号）
+
+**编译强制面**（对 `ConstExpr` 的穷尽 `match`；加变体即编译错误，漏补即红）：
+
+| 文件 / 符号 | 当前形态 | `FieldPath` 臂行为 | 备注 |
+| --- | --- | --- | --- |
+| `types/const_data.rs` / `impl Display for ConstExpr` | 穷尽 | 打印 `base.field`（诊断显示用） | 不得打印成占位名 |
+| `types/eval/const_eval.rs` / `const_expr_free_names` | 穷尽（栈遍历） | 递归 base，收集 base 的自由名；`field` 不计自由名 | 与 `normalize` 的符号名闸门同口径 |
+| `types/eval/const_eval.rs` / `const_expr_node_count` | 穷尽（栈遍历） | `1 + base` 节点数 | 预算扣步单位与既有项一致 |
+| `types/eval/const_eval.rs` / `ConstGenericEval::eval` | 穷尽 | `Err(const_eval_failed)` | **不得**查 bindings 当 NamedVar（RFC §14.5 末条） |
+| `types/eval/evaluator.rs` / `Evaluator::eval_expr` | 穷尽 | `Err(EvalError::TypeMismatch)` | direct-eval 因而升级，不产出值 |
+| `sema/proof/dep_graph.rs` / `collect_free_vars` | 穷尽 | 递归 base | 与 `const_expr_free_names` 同口径 |
+| `sema/layers/ownership.rs` / `collect_var_sorts` | 穷尽 | 不登记 sort | ownership 约束不读用户谓词；补臂为编译完整性 |
+| `sema/predicate_resolver.rs` / `substitute_in_const_expr` | catch-all（`_ => expr.clone()`） | 递归 base 后重建 | **行为相关**：漏臂则谓词实参代入不进 base（§七 M05） |
+| `sema/layers/termination.rs` / `substitute_const_expr` | catch-all（`other => other.clone()`） | 递归 base 后重建 | **行为相关**：构造义务/返回位都经它代入 |
+| `sema/layers/termination.rs` / `const_expr_refs` | catch-all（`_ => false`） | 递归 base | 漏臂会让测度引用漏名 |
+| `sema/proof/assumptions.rs` / `references_var` | catch-all（`_ => false`） | 递归 base | 保证重绑/改名对 `b.w` 的 kill 覆盖 |
+| `sema/proof/smt/translate.rs` / `translate_expr` | catch-all（`_ => {:?} atom`） | 不产出伪造 SMT atom | 实现取 §九 R5 的 gate + 显式拒绝 |
+| `sema/proof/smt/translate.rs` / `infer_sorts_in_expr` | catch-all（`_ => {}`） | 不计 sort | 与 translate 同一 gate |
+| `sema/layers/predicate.rs` / SMT 跳过闸（只放行 Call/If/Range 三形态） | 白名单 | 含 `FieldPath` 的约束不进 SMT | 两入口都 gate：`try_implication` 的 assumptions 与 `try_smt_solve` 的 constraint |
+| `sema/layers/predicate.rs` / `fold_proof_call_arg` | catch-all（`_ => None`） | 显式返回 `None` | 证明函数实参不闭合 → 保守不判 |
+| `frontend/proof_execution.rs` / `const_expr_args_to_values` | catch-all（`_ => None`） | 显式返回 `None` | 同上 |
+| `frontend/proof_execution.rs` / 嵌套证明调用前提的 `match substituted` | catch-all（`ref constraint` 分支） | 显式跳过（不判） | 证明函数前提含 FieldPath 属未支持形态（§九 R6） |
+| `sema/layers/ownership.rs` / `collect_numeric` | catch-all（`_ => {}`） | 不登记 sort | 同 `collect_var_sorts` |
+
+**语法/形状面**（不是 match，但形状改变必须同名落点）：
+
+| 文件 / 符号 | B.3 动作 | 备注 |
+| --- | --- | --- |
+| `sema/record_model.rs` | 新增纯函数 `resolve_record_model` / `witness_premise_admitted` | `resolve_record_model` 为 `pub(crate)`，**两个调用点**（判定面 `witness_premise_admitted` + 声明面 `validate_predicate_witness_paths`，满足禁令一 B 的可见性判据）；`witness_premise_admitted` 只判「R→模型 + f 是 evidence 字段」，**不判 base 名**（§五）；`RecordModel.field_path` 是字段名 → 声明序的唯一解析源 |
+| `sema/checker/refinement.rs` + `sema/predicate_resolver.rs` | 应用面 base 名一致性：`refine_predicate_from_ast_args` / `PredicateResolver::try_resolve` 代入后基名必须 == 唯一实参名 | 两处共用同一 helper `field_path_base_matches`；判定面不重复（§五） |
+| `parser/statements/types.rs` / `parse_type_annotation_nested` + `type_position_expr_continues` | 标识符种子后允许单层 `.ident`，产出 `Type::ConstExpr(Expr::FieldAccess)` | 只允许单层；`a.b.c` 由转换点拒绝（T03） |
+| `types/eval/const_eval.rs` / `convert_expr_to_const_expr` | 增 `Expr::FieldAccess` 臂（base 必须是 `Var`） | 其他基座返回 `None`，走既有诊断 |
+| `sema/checker/annotations.rs` / `collect_unknown_type_names` 的 `Type::Generic` 臂 | 在 `is_predicate_head` 提前返回之前，拒绝谓词实参里的 `FieldAccess` | 注解面拒绝（§五 拒绝面第 2 条） |
+| `sema/checker.rs` / `check_module_impl` | 第 1 遍后新增 `validate_predicate_witness_paths` | 声明面唯一校验点（§五 拒绝面第 1 条） |
+| `ast/mod.rs` / `collect_expr_ident_refs` 的 `FieldAccess` 臂 | **零改动**（已收基名）；补测试钉住 | `name_used_as_type` 经它已覆盖；不得再写第二份表达式遍历 |
+| `sema/inference/expressions.rs` / E1114 两发射点 | **零改动**；只加回归钉 | 值级拒绝保持 |
+
+### 四、源级形态、真实用户可达场景与 HEAD 红态
+
+**V1 唯一支持的写法（Form B，推荐）**：
+
+```yaoxiang
+Pos: (v: Int) -> Type = { v > 0 }
+Box: Type = { v: Int, w: Pos(v) }
+
+// 证据前提谓词：体 = 唯一形参名 + 该记录类型的 witness 字段
+Holds: (bb: Box) -> Type = { bb.w }
+
+// 使用：参数/返回位用该谓词；调用点由 admission 规则放行
+needW: (b: Box, h: Holds(b)) -> Int = { b.v }
+
+main: () -> Void = {
+    b = Box(3)
+    x = needW(b, Box(5))
+}
+```
+
+正控判据：`needW(b, Box(5))` 0 诊断。负控：值级 `b.w` E1114；谓词体写数据字段 `bb.v` 声明期拒绝；未知字段 `bb.zzz` 报 E1042。
+
+**为什么必须是谓词整条路径**：`Refined{base, constraint}` 的 `base` 是谓词的参数类型（记录类型本身），admission 规则只靠它就能解析记录模型，不需要变量类型环境；而 `Q(b.w)`（Q 的参数为 Int）会让 `base=Int`，语义上是把证明项当值用，V1 必须拒绝（§五 拒绝面）。
+
+**HEAD 红态实测（同一二进制，HEAD `e64139dc`）**：
+
+| 探针 | 形态 | HEAD 结果 |
+| --- | --- | --- |
+| P1 | 值级 `x = b.w`（`Box` 含 witness） | **E1114 ×1，exit 1**（保持型判据） |
+| P2 | `useW: (b: Box) -> Type = { Q(b.w) }` | **E0010 ×2**：`expected RParen, found Dot` + `expected a type, found Dot`，exit 1 |
+| P3 | `useW: (b: Box) -> Type = { b.w }` | **E0010 ×1**：`expected a type, found Dot`，exit 1 |
+| P4 | `Q(b.v)`（数据字段路径） | **E0010 ×2**（同 P2 两行），exit 1 |
+| P5 | 记录字段类型 `e: Q(b.w)` | **E0010 ×2 + E0011 ×2**（级联），exit 1 |
+| P6 | TypeDefinition 体 `{ true }` | **E0010**：`expected a type, found BoolLiteral(true)`（类型体表达式只接受受限种子） |
+| P7 | Assign 形谓词 `Holds: (bb: Box) -> Type = ((bb) => { true })` + 使用 | 仅 **E2014**（`f(b, b)` 二次 move），exit 1；**无 E1003/E1112** ⇒ Assign 形 `(bb: Box) -> Type` 声明被接受、`Holds(b)` 可解析（是否进 `predicate_defs` 由 P0 钉） |
+| P8 | 同 P7 但体为 `{ bb.w }` | **E1114**（体被当值级读取）+ **E2031**（`Holds(b)` 当证明函数 `Call` 判不成立）+ E2014 |
+| P9 | TypeDefinition 体 `{ 1 > 0 }` | **E0010**：`expected a type, found IntLiteral(1)`，exit 1（类型体表达式的整数字面量种子不可用） |
+| P10 | Assign 形谓词 `Pos2: (v: Int) -> Type = ((v) => { v > 0 })`（无使用） | **exit 0，仅 W1001**（unused function）⇒ Assign 形谓词体作为**值表达式**被正常检查，`bb.w` 体因此触发 E1114（P8） |
+| P11/P12 | TypeDefinition 形 `Holds: (bb: Box) -> Type = { Pos(3) }` + 使用 | **E1002** `Expected type 'Holds(b)', found type 'Box'` + E2014；**无声明期错误** ⇒ 记录型形参的类型定义被接受，但体不是 `Type::ConstExpr` 时**不登记谓词**，`Holds(b)` 仍是类型应用 |
+
+结论：语法红态 = 所有类型位 `b.w` 形态都在 **Dot 处被解析器拒绝**（E0010，P2–P5）；类型级 `b.w` 的语义当前为零。**类型体种子**：标识符可用（`v > 0`，P7/P10），整数字面量与布尔字面量不可用（P9 `IntLiteral(1)`、P6 `BoolLiteral(true)`）——Form B 的谓词体以标识符 `bb` 开头，故必须走标识符种子路径。Assign 形声明可用但体被当值级表达式检查（P8/P10）；TypeDefinition 形的体不走值级检查，但要求体是常量表达式项（P11/P12）。
+
+**P0（实现第一步，强制）**：先只落「解析器接受单层路径 + `convert_expr_to_const_expr` 的 FieldAccess 臂」两处，**不接任何语义**，用 Form B 形态探针确认：`predicate_defs["Holds"].constraint == FieldPath{NamedVar("bb"), "w"}`、`param_type == TypeRef("Box")`、声明期零新诊断、`Holds(b)` 解析成 `Refined{base: Box, constraint: FieldPath(NamedVar("b"), "w")}`。P0 不成立（例如类型定义的记录型形参被拒绝/改判）时**停工报 lead**：此时在「Form A + 返回 `Type` 的函数体不走值级 E1114 检查」与「新增专用谓词声明形态」之间裁决，不得擅自换形态。
+
+### 五、语义：admission 规则（唯一判定点）
+
+**规则（分两面，F1）**：判定面 `witness_premise_admitted(models, refined)` 只看两条——`Refined{ base: R, constraint: FieldPath{ base: NamedVar(_), field: f } }` 中 `R` 解析到含证据槽的记录模型、`f` 是 `R` 的 **evidence 字段**；满足即 `Proved`。**base 名与实参名的一致性不在判定面**（判定面拿不到「应用实参」这一事实），而在**应用面**：`refine_predicate_from_ast_args` / `PredicateResolver::try_resolve` 在代入之后校验 `FieldPath` 基名 == 该谓词应用唯一实参名，不一致即拒绝（§五 拒绝面第 3 条）。两面合起来才是完整规则；判定不读值环境、不扣预算、不起 SMT。**基座形态**：两面都只接受 `FieldPath.base = NamedVar`；字面量实参 `Holds(3)` 代入后基座是 `Lit(3)`，以及 `Call`/嵌套 `FieldPath` 基座，一律拒绝（应用面给硬诊断，判定面返回 false），不得当 `NamedVar("<const-expr>")` 静默占位。
+
+**soundness 依据（三条，逐条可核）**：
+
+1. **构造点已证**：`f` 的命题是构造义务（B.2 的 `FieldObligation` / `judge_refined_obligation`），任何生成 `R` 值的构造点都必须证过它；证不出/判伪 ⇒ 编译错误（E2031/E4018），不存在「带假 witness 的 `R` 值」。
+2. **5A 不可变**：witness-bearing 记录整体不可变（B.1c：`mut`/字段赋值/`&mut`/写接收者均 E1115），构造后命题不会失效；故「值存在 ⇒ 槽命题成立」对任意 `R` 值成立，无需 runtime check/revalidation。
+3. **无第二生产者**：`R` 的运行期值只有构造器一条产出路径（`CreateStruct` / `synthesize_constructor`），模式匹配/解构不造新值；B.2 的构造义务 walk 覆盖表达式任意位置。**边界**：`unsafe`/FFI 若把外部字节解释成 witness-bearing 记录，则规则不成立——V1 按既有 admission-only 边界**排除**（不宣称），登记为风险（§九 R1）。
+
+**落点（单点）**：`layers/predicate.rs::check_predicate_with_mode` 在第 1 级 direct eval **之前**插入 admission。实现为 `record_model.rs` 的纯函数：
+
+```text
+resolve_record_model(models, ty) -> Option<&RecordModel>   // 两调用点：判定面 witness_premise_admitted + 声明面 validate_predicate_witness_paths（禁令一 B）
+witness_premise_admitted(models, refined) -> bool          // 只判：R→模型 + f 是 evidence 字段（不看 base 名）
+field_path_base_matches(refined, actual_name) -> bool      // 应用面专用：代入后 FieldPath 基名 == 应用实参名
+```
+
+`check_predicate_with_mode` 只调用第二者；`field_path_base_matches` 只在两个应用面调用（见拒绝面第 3 条）。**不新增第二判定入口**：所有消费面（调用点实参、返回位、构造义务、`revalidate_refined`）都已经过 `check_predicate`/`check_predicate_with_mode`，而 `judge_refined_obligation_with_mode` 是唯一包装——admission 因此在同一条管道内生效。
+
+**不注入 Γ**：admission 不往 `FlowSensitiveGamma` 写任何事实。`b.w` 的前提是类型事实（对所有 `R` 值成立），不是路径条件；写进 Γ 会让它跨函数/跨分支泄漏，并需要额外 kill 语义。Γ 的 `references_var`、`collect_var_sorts` 等面只做编译完整性补臂（§三.5 表），不改变行为。
+
+**拒绝面（声明面 + 注解面 + 应用面）**：
+
+1. **声明面**：`check_module_impl` 第 1 遍（类型定义）之后、谓词表与记录模型都就绪时，新增 `validate_predicate_witness_paths`：遍历 `env.predicate_defs` 中 constraint 含 `FieldPath` 的条目，用 `resolve_record_model`（与判定面**同一解析**，不另写按名查表）解析其唯一形参类型 → 记录模型，要求「整条 constraint 是该谓词唯一形参名 + 其记录类型的 evidence 字段」；否则硬诊断（D1 定码）。未知字段 → **E1042**（`field_not_found`，既有码）；数据字段/非前提位置 → 默认 **E1092**（`refined_arg_not_const`）或 D1 裁定的新码。
+2. **注解面**：`checker/annotations.rs` 的注解类型名走查（`collect_unknown_type_names` 的 `Type::Generic` 臂在 `is_predicate_head` 提前返回之前）新增：谓词应用实参里的 `Type::ConstExpr(Expr::FieldAccess)` 一律拒绝（V1 不支持把证据项当实参）。该走查覆盖绑定/函数注解/返回位/类型定义体；谓词声明的**体**不在本走查的拒绝面（体由声明面第 1 条判定）。
+3. **应用面（base 名一致性，F1）**：`refine_predicate_from_ast_args` / `PredicateResolver::try_resolve` 组装出 `Refined` 后做两道校验：①`field_path_base_matches`——代入后 `FieldPath` 基名必须等于该谓词应用唯一实参名（挡住 substitute 漏臂，§七 M05；判定面不重复判此条）；②`witness_premise_admitted` 的模型/字段前置（base 非记录 / 字段非 evidence ⇒ 拒绝）；③基座不是 `NamedVar`（字面量 / `Call` / 嵌套 `FieldPath`；`Holds(3)` 代入后的 `Lit(3)` 属此类）⇒ 拒绝。任一不成立即返回诊断，不得静默 `Unproven`。T11 钉应用面两向，T12 钉判定面五个断言——两者判据互斥即契约缺陷。
+
+**码位分工（不借码）**：E1114 仍只表示「值级读取」；E1042 表示「字段不存在」；E1092（或 D1 新码）表示「类型位的字段路径不是可判定的证据前提」。E4018/E2031/E4023 一个都不改。
+
+### 六、擦除、持久与跨模块边界
+
+1. **运行期零槽位**：`FieldPath` 是类型/命题位置项，不进 `CreateStruct`/`GetField`/`local_count`/字节码；B.1b/B.2 的 data-only 布局不改。判据：加入正控场景后 IR 与「无 witness 的等价记录」逐项同形（复用 B.2 的 T28/P02 口径）。
+2. **IR 快照零漂移**：`normalize` 不打印 `ConstExpr`（B.2 已核实量词不打印）；B.3 预期既有快照零漂移，新增语料与快照另行同提交。
+3. **跨模块边界**：导入记录的 `RecordModel` 不在 `env.record_models`（B.2 只登记本模块）；B.3 的 admission 对导入记录**不触发** ⇒ 诚实落到 E2031，不静默放行、也不冒充成立。B.4 的 `TypeDefPayload` 导入面把模型放进同一张表后，同一 admission 规则自动生效。B.3 不实现 payload、不读 `libraries`、不碰 `signature_hash`。
+4. **泛型记录**：`resolve_record_model` 按名接受 `Struct`/`Generic`（模板模型）；实例化后的证据已由 B.2b 逐实例检查，admission 只读模型的字段量词与 `field_path`，不重新分类。
+
+### 七、测试矩阵（先红后绿）
+
+测试落点（全部写入 §八 inScope）：`src/frontend/core/sema/tests/`（新文件 `record_witness_term.rs`，真实 lex→parse→check）、`src/frontend/core/parser/statements/tests/types.rs`（语法）、`src/frontend/core/types/eval/tests/const_eval.rs`（转换）、`src/frontend/core/sema/proof/smt/tests/translate.rs`（SMT 拒绝面）、`src/middle/ir/tests/`（IR 零变化）、`src/ast/tests/name_refs.rs`（AST 名字收集，T21）、`tests/yaoxiang/`（语料）。命名/AAA/断言消息按 `test-specification.md`；每条红测试必须先在 P0 状态红。
+
+| # | 判据 | 红态 | 绿态 |
+| --- | --- | --- | --- |
+| T01 | 语法：`Holds: (bb: Box) -> Type = { bb.w }` 产出 `Type::ConstExpr(Expr::FieldAccess)` | E0010（P3） | AST 断言（基名/字段名/单层） |
+| T02 | 转换：`convert_expr_to_const_expr` 对 `Var.field` 产出 `FieldPath` | 返回 `None`（当前无 FieldAccess 臂） | 项断言（`base=NamedVar`、`field` 名） |
+| T03 | 项规则：`a.b.c` / `f().w` / 字面量基座 → 不产生 FieldPath | 不可写（Dot 拒绝） | 转换返回 `None`，走既有 E1092 形态 |
+| T04 | P0 登记：Form B 进 `predicate_defs`（constraint/param_type 断言） | 未登记（P11/P12） | def 三字段断言 |
+| T05 | 正控：`needW(b, Box(5))` 0 诊断 | E0010（P2/P3 形态） | 0 诊断，exit 0 |
+| T06 | 负控（保持型）：值级 `x = b.w` 仍 E1114 | 绿（P1） | 保持；反向由 M08 给红 |
+| T07 | 负控：谓词体写数据字段 `bb.v` ⇒ 声明期硬拒绝（D1 码） | E0010 | 恰 1 条硬错误，无 E4018/E2031 级联 |
+| T08 | 负控：未知字段 `bb.zzz` ⇒ E1042 | E0010 | E1042 |
+| T09 | 负控：证据项出现在非前提位置（`Q(b.w)`、`Assert(b.w)`、字段类型 `e: Q(b.w)`）⇒ 注解面拒绝 | E0010 / 静默占位 | 硬错误，不得变 `NamedVar("<const-expr>")` |
+| T10 | 负控：路径基名不是谓词形参（如模块级变量 `other.w`）⇒ 拒绝 | E0010 | 硬错误 |
+| T11 | 应用面基名一致性（两向）：模拟 substitute 漏臂（`Refined{base=Box, constraint=FieldPath(NamedVar("bb"),"w")}`，应用实参名 `zz`）⇒ 拒绝；正常代入（基名 `zz` == 实参 `zz`）⇒ 放行 | 无判据 | `field_path_base_matches` 两向断言；**M05 不影响本行**（直驱 helper，不经 substitute） |
+| T12 | 判定面纯函数直驱（不传 base 名）：`witness_premise_admitted(Box, b.w)`⇒true；`(Box, b.v)`、`(Int, b.w)`、`(Point, p.x)`、`(Box, Lit(3).w)`（`Holds(3)` 代入后的字面量基座）⇒false | 函数不存在 | 五条断言（与 T11 无交集） |
+| T13 | 管道端到端：真实 `check` 的调用点义务经 `check_predicate_with_mode` 放行 | E0010 | 0 诊断；M05/M06 下红（base 名不符 / 字段丢失） |
+| T14 | 返回位同源：`make: () -> (r: Holds(r)) = { Box(3) }` 0 诊断 | E0010 | 0 诊断 |
+| T15 | 未支持求值器：`ConstGenericEval::eval` 与 `Evaluator::eval_expr` 对 FieldPath 返回 Err（不是 NamedVar）；`const_expr_free_names` 取 base 自由名；`const_expr_node_count` = 1+base | 编译错误（无臂） | 逐项断言 |
+| T16 | SMT 不参与：`translate_expr(FieldPath)` 不产出伪造 atom（见 §九 R4 的两案）；`Full` 档下含 FieldPath 的约束不得由 SMT 判 Proved/Disproved | 编译错误 | 升级为 Unproven 路径 |
+| T17 | 面补臂直驱：`substitute_const_expr`/`substitute_in_const_expr` 递归 base；`const_expr_refs`/`references_var`/`collect_free_vars` 递归 base；`fold_proof_call_arg`/`const_expr_args_to_values` 返回 None；`collect_var_sorts`/`infer_sorts_in_expr` 不计 sort | 编译错误（穷尽面） | 逐项断言 |
+| T18 | IR：正控场景与等价 data-only 记录逐项同形、零 witness 槽、构造 arity 不变 | 不可写 | 指令形状断言 |
+| T19 | 语料：新增正控 `.yx`（0 error；警告集与既有行为夹具同口径）+ 值级读取负控（E1114/E1115 形态）；`corpus_probe` 与基线 diff 逐条分类 | 不可写 | 基线同提交 + 逐条登记 |
+| T20 | 门禁：fmt / clippy / `testsuite run fast` / 五门禁 / 生成器幂等 / `markers --check` / `docs:build` | — | 全 exit 0 |
+| T21 | AST 名字收集保持型：`ast::collect_expr_ident_refs` 对 `Expr::FieldAccess` 收**基名**（`Type::ConstExpr` 经它进 `name_used_as_type`）；直驱断言 `bb.w` 收集到 `bb`、`w` 不计；全仓 grep 无第二份表达式遍历（§三.5 的零改动行） | 绿（`FieldAccess` 臂既有；B.3 不新增形态） | 断言通过；若新增第二份遍历则红（review 打回） |
+
+**变异（M；每条机械可逆，`git apply -R` + blob 比对）**：
+
+- **M01** admission 去掉字段 evidence 判据（只看 witness-bearing 记录）⇒ T12（`Box` 的 `b.v` 象限）红；声明面 T07 由独立校验负责，不受此变异影响。
+- **M02** admission 去掉 base 模型解析（任何 FieldPath 都放行）⇒ T12（`Int`/`Point` base）红。
+- **M03** `ConstGenericEval::eval` 的 FieldPath 臂改成查 bindings（NamedVar 语义）⇒ T15 红。
+- **M04** SMT gate 去掉 FieldPath 跳过 ⇒ T16 红（伪造 atom 或非 Unproven）。
+- **M05** `substitute_const_expr` 漏 FieldPath 臂（走 clone）⇒ **T13** 红（端到端：base 名仍是 `bb`，应用面拒绝）；T11 **不受影响**（它直驱 `field_path_base_matches`，不经 substitute）。
+- **M06** 转换把 FieldAccess 折成 `NamedVar(base)`（丢 field）⇒ T02/T13 红（E2031 而非 Proved）。
+- **M07** 声明面校验移除 ⇒ T07/T08 红（错误降级到使用点或静默）。
+- **M08** 值级 E1114 检查移除 ⇒ T06 红（保持型判据的反向锚）。
+
+**负控清单**（与上表对应）：T06 值级读取；T07 数据字段路径；T08 未知字段；T09 非前提位置；T10 非形参基名；T11 应用面基名不一致；T12 判定面五象限；T18 IR 零槽位；T21 AST 名字收集。
+
+### 八、inScope / outOfScope
+
+**inScope（路径前缀）**：
+
+`src/frontend/core/types/const_data.rs`、`src/frontend/core/types/eval/const_eval.rs`、`src/frontend/core/types/eval/evaluator.rs`、`src/frontend/core/sema/record_model.rs`、`src/frontend/core/sema/predicate_resolver.rs`、`src/frontend/core/sema/checker.rs`、`src/frontend/core/sema/checker/annotations.rs`、`src/frontend/core/sema/checker/refinement.rs`、`src/frontend/core/sema/layers/predicate.rs`、`src/frontend/core/sema/layers/termination.rs`、`src/frontend/core/sema/layers/ownership.rs`、`src/frontend/core/sema/proof/assumptions.rs`、`src/frontend/core/sema/proof/dep_graph.rs`、`src/frontend/core/sema/proof/smt/translate.rs`、`src/frontend/core/sema/proof/smt/tests/translate.rs`、`src/frontend/proof_execution.rs`、`src/frontend/core/parser/statements/types.rs`、`src/frontend/core/parser/statements/tests/types.rs`、`src/frontend/core/parser/pratt/`、`src/frontend/core/sema/tests/`、`src/frontend/core/types/eval/tests/`、`src/frontend/core/sema/layers/tests/`、`src/middle/ir/tests/`、`src/ast/tests/`、`tests/yaoxiang/`、`tests/baselines/`、`src/middle/ir/tests/snapshots/`、`docs/src/dev/architecture/09-execution-wbs.md`、`docs/src/dev/architecture/09a-wbs-history.md`、`docs/src/reference/language-spec/type-system.md`、`docs/src/en/reference/language-spec/type-system.md`、`src/util/diagnostic/codes/`、`locales/`、`docs/src/reference/error-code/`。**后三项无条件**：D1 即使复用 E1092/E1042 也要改 locale help 与生成物的发射点计数/行号；`src/ast/tests/` 承载 T21。
+
+**机械必需面**（逐项同提交）：① SPEC 的**五处**现状陈述（行号为写作时证据、会漂移，实现时按句子定位）——(a) §8.3.5 重放句（写作时 :967-968）「由证明内核按当前逻辑签名重放」改为 admission 口径或显式标注「§4.2 未落地」；(b) §8.3.5 `Proved(b.w)` 示例（:970-981）改为 V1 可达形态（`Holds: (bb: Box) -> Type = { bb.w }` 的谓词体裸路径）或显式标注「内核项，非可编译片段」；(c) §8.3.5 末段（:992-994）「类型级字段路径的语法与解析尚未落地」改为已落地事实；(d) §3.4 实现状态注末句（:367）「类型级 `b.w`（B.3）与跨模块导出（B.4）尚未落地」的 **B.3 半句**改为已落地（B.4 半句归 B.4 轮，§P6 6.9.5-B.4 已列）；(e) §8.3 实现状态注（:826-827）同句的 B.3 半句改已落地（B.4 半句归 B.4 轮），且其中「`evidence_ref` / `certificate_ref` 槽随 B.3 / B.4 加入」按 §三.3 改为**随 B.4 加入**（B.3 不物化两槽）。② en 镜像 `docs/src/en/reference/language-spec/type-system.md` 同改、逐句对齐五处：§3.4 状态句（:405）、§8.3 状态句（:946-947，槽句改 "with B.4"）、§8.3.5 重放句（:1119）、`Proved` 示例（:1131）、末段（:1146）。③ 新增语料 ⇒ `tests/baselines/` + IR 快照同提交；④ 动码表/发射点/文案 ⇒ `python scripts/docs/gen-error-code-docs.py` 重跑并确认**幂等**（连跑两次产物哈希一致、`git diff` 只含预期行）；D1 复用 E1092/E1042 时 locale help 六语同改；⑤ 测试家目录（含 `src/ast/tests/`）随新测试落位。
+
+**outOfScope**：B.4（`TypeDefPayload`、`EvidenceSlot` 的 `evidence_ref`/`certificate_ref`/`signature_hash`/`libraries`、跨模块导入模型）；`Certificate`/`Kernel::check`/`LogicSignature`/§13 留存与重放；`FieldPath` 的组合位置（`Q(b.w)`、算术、`Call` 实参、类型构造实参）；多级路径 `a.b.c`；数据字段路径作为编译期项；Γ 注入与路径条件；runtime check/revalidation；泛型模板未实例化判据；显式证据语法（§4.3 证明函数仍按既有面）；Π/`DepFn`；defeq；E1114/E1115 文案；B.2 构造义务 walk；#537/#539/#552。
+
+### 九、风险与未核实
+
+- **R1（高）**：admission 的 soundness 依赖「witness-bearing 记录只有构造器一条产出路径 + 记录不可变」。`unsafe`/FFI/外部字节伪造该类型的值会破坏它；B.3 按 admission-only 边界排除并登记，不在本批新增 runtime check。
+- **R2（高）**：Form B 的记录型形参在类型定义里被接受（P11/P12 实测），但它同时可能作为**类型构造器**进 `env.types`/`generic_type_defs`；`Holds` 的双重身份对 `check_record_family_kind_annotation`、`auto_derive_traits`、E1094 面的影响未核实。P0 必须把「声明期诊断集」与「`param_type == TypeRef("Box")`」实测钉住。
+- **R3（中）**：`bb` 在类型体被引用（`name_used_as_type` 经 `Type::ConstExpr` → `collect_expr_ident_refs` 已收 `FieldAccess` 基名）会把 `bb` 计为「被当类型用」；`bb: Box` 不是 const 参数类型 ⇒ 不入 q=0 候选，但类型定义泛型参数分类是否把它当类型参数未核实（P0 判据之一）。
+- **R4（中）**：parser 的 `type_position_expr_continues` 当前把 `Dot` 列为「类型名路径」不续接；本批只允许 `identifier . identifier` 单层。必须钉住 `n: 3.14`（单个 FloatLiteral token，不经 Dot）与既有类型注解零变化；模块名点路径在语料实测 0 处，但解析器当前同样不接受，属新增语法面而非回归面。
+- **R5（中）**：SMT 面若维持 `translate_expr` 的既有签名，则必须两处 gate（`try_implication` 的 assumptions 与 `try_smt_solve` 的 constraint）都跳过 FieldPath；任一漏 gate 就会把 FieldPath 翻成伪造 atom（静默错判）。契约取「gate + 显式不产出 atom 的臂」，测试同时钉两处。
+- **R6（中）**：`proof_execution` 的 `match substituted` 兜底臂会把 FieldPath 送进内联求值（求值失败 → 静默不判）；本批显式跳过（保守），并把「证明函数前提含 FieldPath」登记为未支持。
+- **R7（低）**：正控需要两个 `Box` 值（move 语义），`needW(b, Box(5))` 避开 E2014；带 witness 记录首次进语料，`run` 面（擦除后输出）需实测。
+- **R8（低）**：若 P0 失败、改走 Form A（`((bb) => { bb.w })`），需让返回 `Type` 的函数体不触发值级 E1114——会改动值级检查面（影响所有 Type 返回函数），必须另立裁决，不在默认路径。
+- **未核实**：P0 三项（登记/param_type/解析形态）；类型定义的记录型形参分类；`Holds` 双身份副作用；`ProofContext.env.record_models` 在精化走查时的填充时机（B.2 声明期一遍与 walk 的先后在本契约中按「walk 在模块检查尾部」推定）；导入记录的 E2031 形态；语料/快照零漂移（预期、未实测）；`translate_expr` 的调用点数量与改造面。
+
+### 十、裁决点（D0–D2）
+
+> **四件套模板**：D0–D2 若需用户裁决，一律按 AGENTS「请求用户裁决时」与 §十一 的模板给全四件——情况（现状 + 证据：file:line / grep 输出）、逐项优缺点、明确推荐 + 代价、破坏性点名。**D0 默认由 P0 门控自动关闭**（P0 成立即无需裁决）；P0 失败时与 D1 合并，按模板一次给全四件，不拆成两次问。
+
+- **D0（源级形态，实现前置）**：Form B（推荐，§四）vs Form A（备选，§九 R8）。**情况**：P0 探针（§四）钉「Form B 是否登记为谓词、`param_type == TypeRef("Box")`、声明期零新诊断」；P0 绿 ⇒ 自动关闭。**若 P0 红**：与 D1 合并给四件——选项 = Form A + 返回 `Type` 函数体豁免值级 E1114 / 新增专用谓词声明形态；缺点 = 分别改动值级检查面或扩声明语法；推荐 = 依 P0 实测决定；破坏性 = A 类语法扩展面变化。
+- **D1（拒绝面码位）**：**情况**：RFC/SPEC 只写「声明期拒绝/Unproven」，未给码；无生产者证据见 §十一 情况（grep 0 命中同类结构）。**选项**：A（推荐）复用 **E1092**（类型位实参不是编译期常量项）+ **E1042**（未知字段），零码表变更，locale 补一条「证据项前提」help；B 新增专用码（E 类对外契约变化，六语 + 013 + 生成物）。**推荐 A**：正确性上 E1092 覆盖「不是可判定的编译期项」、E1042 覆盖未知字段；可读性上不扩码表；边界后果 = 文案不如新码精确，由 help 补偿。**破坏性**：A 不改任何「原先成功」程序；B 改对外码表。
+- **D2（EvidenceTerm 语义）**：见 §十一 的完整四件套，推荐 A 案。
+
+### 十一、D2 四件套：类型级 `b.w` 的语义档位
+
+> 本节是 **D0–D2 共用的四件套模板**：D2 给完整实例（情况+证据、逐项优缺点、推荐+代价、破坏性）；D0/D1 按同一四件填写（情况见 §十 与 §四 P0；证据 = file:line/grep 输出）。
+
+**情况**：RFC §14.5 要求 `b.w` 指称 `EvidenceTerm(FieldPath, EvidenceRef, signature_hash)`，并由 `Kernel::check` 按签名重放。证据：`src/frontend/core/sema/record_model.rs:83-90` 的 `EvidenceSlot` 只有 `field`/`quantity`/`proposition` 三字段（无 `evidence_ref`/`certificate_ref`/`signature_hash`）；B.2 契约 §二 映射表（本文件 5407 行）已登记 `Certificate`/`EvidenceRef`/`ProducerHint`「不物化证明项；§4.2 的重放未落」；`rg -n -e '\bEvidenceRef\b' -e '\bCertificateRef\b' -e '\bLogicSignature\b' src/` = **0 命中**（exit 1）。因此「证据项作为另一命题前提」的完整语义在本批不可实现；可用的只有 admission 读法（值的类型保证槽命题成立）。
+
+**选项与优缺点**：
+
+- **A（推荐）admission V1**：本契约 §五 的规则。优点 = 用户语法可用、sound（三条依据）、零运行期面、与 B.4 的 `evidence_slots.proposition` 共用同一项表示；缺点 = `b.w` 的信息量等于类型事实（对任何 `R` 值恒成立），不提供证书复用/跨签名，不宣称 §4.2。
+- **B parse-only**：语法接受、语义一律 Unproven。优点 = 零语义风险；缺点 = 写法永远证不出（用户面不可用），等于「核心功能留待实现」，违反红线第 2 条。
+- **C 推迟 B.3**：等 §4.2/§13 内核批次。优点 = 一次到位。缺点（正确性）= `b.w` 的语法与 admission 语义继续缺失，B.4 的 `evidence_slots.proposition` 面只能携带不含 FieldPath 的项，规范（RFC §14.5 已写类型级可写）与实现的读法长期不一致，读者无法从代码确认边界。范围/进度（D 阶段收口、B.4 排期）只作附带影响，不构成否决理由。
+- **D 在 B.3 内实现 §4.2 + §13**：优点 = 语义完整、可复用导出方证书。缺点（正确性）= 在无 §4.1 `LogicSignature`/§13 缓存的前提下，必须在本批现定签名、证书与重放语义——这些是尚未裁决的内核契约，凭空落地会把未定语义固化；可读性 = 一个批次同时引入项语言、内核与证据缓存，边界无法从提交信息读出。范围/成本只作附带影响，不构成否决理由。
+
+**推荐**：A。理由（判据只取正确性与可读性）= 正确性上 sound（§五 三条 + 判定面/应用面分层）、可读性上单一 term world 与单一判定点；边界后果 = 只覆盖「构造已证 + 5A 不可变」的记录值，跨签名/跨模块/证书复用明确不宣称。范围与进度只作附带影响；推荐项自身代价与风险如实写在 §九（FFI 伪造边界、证书语义不宣称）。
+
+**不可逆/破坏性**：A 新增 A 类语法（原先 E0010 的写法变成可编译）与拒绝面；若 D1 选新码，则是 E 类对外契约变化（码表/六语/生成物），需用户裁决后才落。无基线破坏性再生（预期零漂移；若语料出现漂移须逐条分类并报 lead）。
+
+### 十二、顺序与交接
+
+1. P0 探针（只开 parser + 转换）→ 记录结论；不成立则停工报 lead（D0）。
+2. 红测试：T01–T03（语法/转换/项规则）、T04（P0 登记）、T05–T11（语义/负控）、T15–T17（面）、T21（AST 名字收集保持型），确认红态与 §三.5 表一致。
+3. 实现：项变体 + 全 match 臂 → parser + 转换 → 应用面 base 名一致性（`refine_predicate_from_ast_args` / `PredicateResolver::try_resolve`）→ 判定面 admission 单点 + 记录模型解析助手（`resolve_record_model` 两调用点：判定面 + 声明面）→ 声明面/注解面拒绝 → SMT gate/translate 面。
+4. 语料/快照/文档：新增正控 + 值级负控语料；基线同提交；SPEC **五处**现状陈述与 en 镜像同改（§8.3.5 三处 + §3.4/§8.3 状态注的 B.3 半句，§八 机械必需面）；`src/ast/tests/` 的 T21 落位；09/09a 状态更新。
+5. 门禁：fmt / clippy / `testsuite run fast` / 五门禁 / `python scripts/docs/gen-error-code-docs.py` 幂等（连跑两次哈希一致）/ `markers --check` / `docs:build`；变异 M01–M08 走 `scripts/dev/scratch.py trial`（机械可逆）。
+6. 收口证据：09a 实现轮（红→绿、语料/快照 diff 分类、D59 分类、门禁计数、变异表）+ 09 行状态。**不宣称**证书重放/跨签名/跨模块（B.4）。
+
+### 十三、实现轮（收口，2026-11-15；D2 裁决 A）
+
+> 本节记录 B.3 实现轮的**红→绿、变异、等价面与门禁**；09 WBS 状态已同步为已落地。
+
+**裁决**：B.3 D2 = A（admission V1）；B.3 D1（拒绝面码位）按契约推荐复用 **E1092 + E1042**，不新增码。
+
+**已落（工作树）**：
+
+1. **项表示**：`ConstExpr::FieldPath { base, field }` 是唯一新增变体；`Display` 打印 `base.field`。全仓编译强制面补齐（`const_expr_free_names`/`node_count`、`ConstGenericEval::eval` 报错、`Evaluator::eval_expr` 报错、`dep_graph::collect_free_vars`、`ownership::collect_var_sorts`、`predicate_resolver::substitute_in_const_expr`、`termination::substitute_const_expr`/`const_expr_refs`、`assumptions::references_var`）。
+2. **语法**：类型注解位接受单层 `ident.ident`（`parse_type_annotation_nested`，复用既有 `Type::ConstExpr` 构造点）；类型体 `{ bb.w }` 走 `parse_struct_type` 的 dot 分支（契约 §三.5 补记的第 8 个语法落点）；`convert_expr_to_const_expr` 只对 `Var` 基座产出 `FieldPath`。
+3. **admission**：`record_model.rs` 增 `resolve_record_model`（`pub(crate)`，两调用点）、`witness_premise_admitted`（只判 R→模型 + f 是 evidence 字段）、`field_path_base_matches`（应用面基名 == 实参名；非 `NamedVar` 基座拒绝）。`check_predicate_with_mode` 在第 1 级之前调用 admission；`PredicateResolver::try_resolve` 在应用面校验（新 `WitnessPathBaseMismatch` → E1092）。
+4. **拒绝面**：声明面 `validate_predicate_witness_paths`（E1042 未知字段 / E1092 数据字段或非形参基座）；注解面 `reject_witness_path_args`（谓词实参里的 `FieldAccess` → E1092）。
+5. **SMT 面**：含 `FieldPath` 的约束不进 `try_smt_solve`；含该形态的假设整条跳过 `try_implication`（不产出伪造 atom）。
+
+**红→绿（实测）**：先只落变体+编译强制臂+测试，回退 parser+converter 后 `cargo test --lib record_witness_term` = 3 failed / 1 passed——T01/T04 为 `E0010 expected a type, found Dot`、T02 为「Var.field 必须转换为 FieldPath；实际: None」、T03（非 Var 基座负控）pass；恢复实现后 10/10 green（T01–T09 + T11/T12 + T15 项）。
+
+**变异（目标锚均红）**：M01 关 admission ⇒ T05 红；M02 关应用面校验 ⇒ T09 红；M03 求值器把 FieldPath 当值 ⇒ T15 红；M04 摘 SMT gate 且关 admission ⇒ T16 以求解器错（`Sort mismatch`）失败（gate 在 admission 短路下不可单独达，故标注依赖 M01）；M05 `substitute_const_expr` 漏臂 ⇒ T05/T14/T09 面红；M06 转换器丢 field ⇒ T02/T05 红；M07 关声明面 ⇒ T07/T08 红；M08 摘两处 witness 值级拒绝 ⇒ T06 红。
+
+**T17/T21/T19（本轮补齐）**：T17 在 `src/middle/ir/tests/record_evidence_layout.rs` 断言「加 `Holds`/`needW` 后 `Box` 的 `LOAD_ARG`=2 / `CREATE_STRUCT` 字段数=2 / `local_count`=3」（零 witness 槽）；T21 在 `src/ast/tests/name_refs.rs` 钉 `Type::ConstExpr(FieldAccess)` 只收基名 `bb`、字段名不计引用；T19 新增语料 `02-type-system/refinement/type_level_evidence_path.yx`（behavior，exit 0，警告集与既有 `call_arg_evidence.yx` 同类）与 `06-compile-errors/refinement/witness_field_read_err.yx`（`// expect: compile-error E1114`，E1114 在第 17 行），`corpus-parity.jsonl` 同批 **+2 行**（一条 behavior、一条 compile-error），新增 IR 快照 **1 个**（`type_level_evidence_path.snap`，负控不达 IR）。
+
+**等价面（最终字节）**：`testsuite run fast` exit 0——lib 1787 passed / 1 ignored、integration 52、yx_runner 383、formatter_integration 1、yx_multifile_runner 2，全 0 failed；`corpus_probe` 与基线逐行一致；IR 快照比对 0 漂移（新增 1 个快照入库）。
+
+**已同改文档**：SPEC §3.4 / §8.3 实现状态注的 B.3 半句、§8.3.5 重放句/`Proved(b.w)` 示例/末段，en 镜像五处；错误码生成物按新发射点机械再生（E1xxx/E2xxx/E4xxx/index 29 行替换 + warning-codes 行号随 `checker.rs` 平移，第二次运行产物稳定）。
+
+**门禁（最终字节）**：`cargo fmt --check` 0；clippy `-D warnings` 0；docs markdownlint / refs / truth / `docs:build` 0；`check-obligations` / `check-boundary` / `check-fanout` / `check-test-channel` / `markers --check` / `rfc/check_tracking` 0。
+
+## P6 6.9.5-B.4 契约（impl，2026-11-15，只读；HEAD `e64139dc` 实测）
+
+> 本节是 **B.4 实现轮的契约**，不是实现记录：只落 payload 形状、导出一条链、导入一条链、哈希对象、libraries 与缺失诊断、测试矩阵与红态实测，不动 `src/`。它把 RFC-027 §14.4 与 SPEC §8.3.4 落成可执行判据；B.3（类型级 `b.w`/admission）已在 §P6 6.9.5-B.3 定契约，B.4 实现轮在其之后。
+>
+> **红态口径**：下表「红态」是本节写作时在 HEAD `e64139dc` 的 `check` 上**实测**的现状（同一二进制；`cargo build --bin yaoxiang-rs` 后运行），不是推断；「绿态」是 B.4 验收期望。探针文件是工作区产物，只登记形态与实测输出，不作引用出处。
+
+### 一、目标、硬前置与能力边界
+
+B.4 做四件事：①把**含证据字段的记录模型**随 `TypeDefPayload` 导出（非泛型记录从 `None` 变 `Some`）；②导入方把模型**原样恢复**进 `env.record_models`（含 `field_path`/量词/义务/证据槽），构造义务继续走**唯一判定单元** `judge_refined_obligation_with_mode`；③给 payload 一个**真实可算**的 `signature_hash`（导出侧证据环境指纹，不是 §4.1 逻辑签名）；④登记 RFC `libraries` 并以「证明来源可否在导入单元本地执行 **且本地同名来源指纹与导出登记一致**」给出**缺失/漂移诊断**，不硬编码信任根（F1）。
+
+**硬前置（H1–H7，实现顺序即此序）**：
+
+- **H1 Registry 面分类补种**：`collect_signatures` 在 pass1 之前要能看到本单元谓词定义，否则 Registry 面把 `w: Pos(v)` 分类成 **`Call{Pos,[v]}`** 而不是内联命题 `v > 0`（实测依据：分组导入下 Registry 面导出的 `Box` arity 已按数据字段=2 计 ⇒ 量词对；命题形态在无谓词表时只能来自 proof-fn 回退路径 `Call{Pos,[v]}`——这是代码阅读结论，T01 是其实测判据）。payload 的命题必须与定义方 check 面同形，故 `collect_signatures` 增谓词表参数并在 pass1 前写入 `env.predicate_defs`；两个生产调用方（用户模块 `extract_module_info`、嵌入 std `embedded_std_module_info`）都先算 `collect_predicate_defs(ast)` 再传入。
+- **H2 导出构造单点**：`checker::type_def_export_payload` 是 payload 的**唯一构造点**（Registry 面两调用方共用），不得在导入方或 IR 侧重算。
+- **H3 None→Some 触发条件**：见 §三.2；数据-only 记录保持 `None`（零行为）。
+- **H4 导入恢复单点（扩展既有方法，F5）**：`register_type_payload`（`checker.rs` 既有方法，已由 `register_use_export` 的 Type 臂调用）是 `env.record_models` 的**唯一导入写入点**；B.4 **只扩展该方法体**，不新增入口/调用点。键 = 导入本地名（别名优先），并在记录定义名与本地名不同时**同源双键**（同一模型 clone，不新增第二张表）——IR 侧 `classified_fields` 按定义名查（§五.4）。
+- **H5 构造义务前置检查**：导入记录（`model.from_payload`）的证明来源**不可本地执行**或**本地同名来源指纹与 `LibraryRef.hash` 不符**时，在构造点报 **Unproven 家族**（D2 码位）而不是落进证明函数执行器被误标 E4018（§八）。
+- **H6 哈希设施单源**：`ContentHash` + SHA-256 文本指纹落 `src/util/content_hash.rs`；`package/vendor/checksum.rs` 的字节校验改调同一设施（禁令三 A，防第二套 hex/摘要）。
+- **H7 门禁与夹具**：多文件夹具与 `yx_multifile_runner`、错误码生成物（E4020/E5002 新发射点）、09/09a 状态；**SPEC §8.3.4 的 B.4 半句加实施状态注**（V1 只实现「重新证明」；「用自己的逻辑签名验证」在 V1 = 逐库内容指纹比对 + 重证；三路径其余两条待 §4.1 内核）。**B.3 半句**（类型级 `b.w` 尚未落地、两槽随 B.3/B.4 加入）归 B.3 轮/t15，t14 不重复改——两轮改同一 status blockquote，逐句对齐、不留半句失实。en 镜像同改（只改 B.4 半句）。
+
+**不做（边界，逐条有归属）**：`LogicSignature`/`Kernel::check`/`Certificate`/§13 证书留存与重放；跨签名**翻译项**与**桥接公理**（无逻辑签名项语言、无公理库 manifest 与内核，见 §七）；跨模块**证明函数执行**（#552，执行器按单元 AST 查函数，见 §七/§八）；记录定义引用**导入谓词**时的 pass1 分类（B.2 既有边界，§十二 R2）；proof-fn 声明序硬化（D3）；runtime check；Π/`DepFn`；defeq；显式证据声明语法（§4.3）。
+
+### 二、RFC-027 §14.4 / SPEC §8.3.4 逐条映射
+
+| # | 条款 | 要求 | B.4 落点 / 裁决 | 判据 |
+| --- | --- | --- | --- | --- |
+| 1 | RFC §14.4「载体」 | `frontend::module::TypeDefPayload` 携带命题/证据槽 | 既有三字段不动，新增 `record_model` / `signature_hash`（§三） | T01/T02 |
+| 2 | RFC §14.4 `type_params` | 含 `P: T -> Proposition` 的 kind | ≡ `record_model.type_params`（B.2 的 `Type\|Const\|Family`）；非记录类型走既有 `type_def.poly` binders，不复制第二份 | T01 |
+| 3 | RFC §14.4 `field_obligations` | 每条 evidence 字段一条义务 | ≡ `record_model.obligations`（唯一表示，payload 不另存列表） | T01/T02 |
+| 4 | RFC §14.4 `evidence_slots` 的 `field/quantity/proposition` | 每条证据槽三面 | ≡ `record_model.evidence`（B.2 子集；与 obligations 同长同序） | T01 |
+| 5 | RFC §14.4 `evidence_slots[].evidence_ref/certificate_ref` | 显式证据来源 / 已验证证书 | **D1 裁决点**：V1 无生产者（无显式证据声明面、无证书缓存），不物化空壳字段；§十二 风险登记 | — |
+| 6 | RFC §14.4 `evidence_slots[].signature_hash` | 随 §4.1 签名失效 | 同值不逐槽复制：统一为 `payload.signature_hash`（§六；语义 = 导出侧证据环境指纹，不是 §4.1） | T04 |
+| 7 | RFC §14.4 `libraries` | 命题/证据引用到的库随导出携带 | ≡ `record_model.libraries`（`LibraryRef`，§八）；V1 只产 `Proof` 类来源 | T05 |
+| 8 | RFC §14.4「导出面」 | 构造 `TypeDefPayload` 时逐槽填 `EvidenceSlot`；两表同源 | `type_def_export_payload` 从同一 `RecordModel` 投影（不各写一份）；`field_obligations` 与 `evidence_slots` 的同源由 B.2 保证 | T01–T08 |
+| 9 | RFC §14.4「导入面」 | 导入方拿槽后验证 | `register_type_payload`：完整性校验 + 恢复模型 + IR 量词同源（§五） | T06/T13/T18 |
+| 10 | RFC §14.4 / SPEC §8.3.4「用自己的签名验证」 | 不得直接复用导出方 `Proved` | V1 无一复用路径；义务先在构造点比对**逐库来源指纹**（§八.3），一致后经同一判定单元**重证**（路径 3，§七） | T10–T12、T22 |
+| 11 | SPEC §8.3.4「签名不一致三路径」 | 翻译 / 桥接 / 重证 | V1 只实施**重证**；翻译与桥接不可实施（无 §4.1 项语言/公理库），D2 边界登记（§七）；SPEC §8.3.4 加实施状态注，en 镜像同改（§八 机械必需面） | §七 表 + docs 门禁 |
+| 12 | SPEC §8.3.4「库缺失」 | 结论 Unproven，提示登记库或写桥接 | 构造点前置检查：来源不可本地执行 **或本地同名来源指纹不符** ⇒ Unproven 家族（D2 码位）；**不得**静默放行或误标 E4018（§八） | T09/T10/T22 |
+| 13 | RFC §14.4「不新增第二套判定入口」 | 多文件构造点复用同一 `judge_refined_obligation` | 构造义务仍走 `check_record_ctor_obligations` → `judge_refined_obligation_with_mode`；B.4 只加模型恢复与前置检查，不新判定入口 | T09/T18 |
+
+### 三、payload 字段精确类型与语义
+
+**新增/使用的类型（所有路径相对仓库根）**：
+
+```text
+// src/util/content_hash.rs（新，H6）
+pub struct ContentHash([u8; 32]);          // Debug/Clone/Copy/PartialEq/Eq/Hash; Display = 64 位小写 hex
+impl ContentHash {
+    pub fn of_bytes(bytes: &[u8]) -> Self; // SHA-256
+    pub fn of_text(text: &str) -> Self;    // of_bytes(text.as_bytes())
+    pub fn to_hex(&self) -> String;
+}
+
+// src/frontend/core/sema/record_model.rs（B.2 结构上追加）
+pub struct RecordModel {
+    // …B.2 既有字段（name/type_params/fields/obligations/evidence/admission_fields/field_path）…
+    pub libraries: Vec<LibraryRef>,        // 导出构造时填；本地定义面恒空（§八）
+    pub from_payload: bool,                // 导入面标记：只在 register_type_payload 置 true（§八.3）
+}
+pub enum LibraryKind { Proof, Axiom }      // Axiom：V1 零生产者（无公理库语法），保留 RFC 形状的种子
+pub struct LibraryRef {
+    pub kind: LibraryKind,
+    pub id: String,                        // 被引用的本地定义名（证明函数头）
+    pub hash: ContentHash,                 // 该定义在导出方的规范文本指纹（§六）
+}
+
+// src/frontend/module/mod.rs（payload 追加）
+pub struct TypeDefPayload {
+    // …既有 type_def / sum_variants / interface_impls 不动…
+    pub record_model: Option<RecordModel>, // 证据/自引用义务的导出载体；无义务记录为 None
+    pub signature_hash: ContentHash,       // 导出侧证据环境指纹（§六），不是 §4.1 签名
+}
+```
+
+1. **单源**：RFC 的 `type_params` / `field_obligations` / `evidence_slots` / `libraries` 四面都由 `record_model` 承载（§二 #2/#3/#4/#7）。payload 不复制这些列表——B.2 已裁决 obligations 与 evidence 不各写一份，B.4 延续；复制会造第二真相（禁令三 A）。
+2. **`record_model: None → Some` 的触发条件（精确）**：`type_def_export_payload` 的返回值由下式决定（`model` 为 `self.env.record_models.get(name)`，仅在 Registry 面 pass1 已分类时存在）：
+
+   ```text
+   let carrier = model.filter(|m| m.has_evidence() || !m.admission_fields.is_empty());
+   if type_def.is_none() && sum_variants.is_empty()
+      && interface_impls.is_empty() && carrier.is_none() { return None; }
+   payload.record_model = carrier;                 // 其余情况 Some(payload)，carrier 可 None
+   ```
+
+   即：**证据字段或自引用精化字段至少一个**的记录，payload 从 `None` 变 `Some`；泛型记录本来因 `type_def` 非空已是 `Some`，B.4 只补 `record_model`；纯数据记录保持 `None`（零行为、零克隆成本）。谓词（proof family 约束体）与空类型体在 B.2 起就**不登记**记录模型，故不产生 payload。
+3. **键与名字**：`RecordModel.name` 恒为**定义名**（导出口径）；`register_type_payload` 以**导入本地名**为键写入 `env.record_models`（别名导入时二者不同），并同时以 `model.name` 写一份同源 clone（IR 的 `classified_fields` 按定义名查；见 §五.4）。不得改写 `model.name`。
+4. **本地面不变**：定义模块自身 `env.record_models` 的 `libraries` 恒空；`type_def_export_payload` 在 clone 上填 `libraries` 与 `signature_hash`，不回写 env（导出是纯投影）。
+5. **字段序**：`libraries` 按 `(id 字典序)` 去重排序后导出，使指纹与哈希稳定（不依赖 `HashMap` 迭代序）。
+6. **导入面标记**：`RecordModel.from_payload: bool` 默认 `false`，只在 `register_type_payload` 恢复模型时置 `true`；构造点据此启用**来源指纹校验**（§八.3）。它**不进 `canonical_text`**（导出面恒 `false`，导入面写回态不改变 payload 完整性）。
+
+### 四、导出链（构造点）
+
+1. **H1 补种**：`TypeChecker::collect_signatures` 增加 `predicate_defs: &HashMap<String, PredicateDef>` 参数，在 pass1 之前写入 `self.env.predicate_defs`（仅本单元声明，与 check 面第零遍同一张表、同一构建判据 `collect_predicate_defs`）。`extract_module_info` 与 `embedded_std_module_info` 先算该表再调用；`extract_module_info` 既有`predicate_defs`局部变量前移复用（同一结果同时服务 `export.predicate_def` 与补种，不重复计算）。
+2. **构造算法**（`type_def_export_payload`，`&self`）：
+   ① 取 `env.generic_type_defs` / `sum_types` / `interface_impls`（既有三面）；
+   ② 取 `env.record_models.get(name)` 并按 §三.2 过滤，得到 `carrier`；
+   ③ `carrier` 有值时：派生 `libraries`（§八.1）→ 填 `libraries` → 算 `signature_hash = model.signature_hash()`（§六）；
+   ④ 按 §三.2 判定返回 `None` 或 `Some(TypeDefPayload)`。
+3. **两个调用方**：`orchestrator::extract_module_info`（用户模块 Registry 臂）与 `std::yx_sources::embedded_std_module_info`（嵌入 std）。两者都在 `collect_signatures` 之后调用本函数；**不得**在别处复制构造逻辑（含 `std` 侧当前硬写 `predicate_def: None` 的臂——B.4 改为从同一 `collect_predicate_defs` 结果取值，与用户面同构）。
+4. **与 check 面同形**：H1 之后，Registry 面 `Box` 的命题是内联 `v > 0`（与 check 面相同）；不补种时是 `Call{Pos,[v]}`（代码阅读；T01 钉其红态）——后者会让导入方被迫执行 `Pos`（跨单元不可执行），使**合法的导入构造全部变成 Unproven**。H1 是 B.4 的硬前置，不是优化。
+5. **可观察差异（HEAD 实测）**：Registry 面导出的 `Box` arity 已是 2（数据字段 v/z；`use lib.{Box}` 后 `Box(-3)` 报 E1010 expected 2），证明量词在 Registry 面正确；B.4 不改量词，只补命题形态。
+
+### 五、导入链（消费点）
+
+1. **注册（扩展既有单点，F5）**：`register_type_payload`（`checker.rs` 既有方法，`register_use_export` 的 `Type` 臂在既有三张表之后已调用它）**只扩展方法体**——不新增入口、不改调用图、不新增调用点。后者：
+   ① 若 `payload.record_model` 为 `Some`：用**同一指纹函数**重算 `model.signature_hash()` 并与 `payload.signature_hash` 比对；不一致 ⇒ 发 `E5002 import_error(<导出全路径 export.full_path>, "证据载荷指纹不一致")`（**硬错误**，挂 use 行 span），**不注册**该模型；
+   ② 一致 ⇒ 复制模型（含 `libraries`，置 `from_payload = true`），写入 `env.record_models[register_name]`，并在 `register_name != model.name` 时再写一份 `env.record_models[model.name]`（同源 clone）；
+   ③ 既有三张表的恢复逻辑不变，但**两侧形态不同源（F6）**：env 侧落点是 `env.interface_impl_registry: HashMap<String, Vec<InterfaceImplEntry>>`（`environment.rs:216`）；payload 侧是 `interface_impls: Vec<(String, InterfaceImplEntry)>`（按接口名扁平聚合）。投影口径 = 逐对 `env.add_interface_impl(interface_name, entry.clone())`（既有投影，B.4 不改、不另写第二套）；`generic_type_defs`/`sum_types` 分别由 `type_def`/`sum_variants` 一对一恢复；
+   ④ 谓词 def 的恢复逻辑不变（`use` 门控）。
+2. **span 接线**：`register_use_export` 增 `span: Span` 参数（7 个调用点均在 `collect_function_signature` 的 `Use` 臂内，逐点传 `stmt.span`；子模块递归点传外层 use span）。注册面诊断（E5002）因此落在用户 wrote 的 `use` 行。
+3. **构造义务不变**：`check_record_ctor_obligations` 仍按 `env.record_models.get(callee)` 取模型、按数据字段序绑定、用 `substitute_const_expr` 代入、交 `judge_refined_obligation_with_mode`（`NoSmt`）。B.4 只在判定前插入 `§八.3 前置检查`（本地可执行 + 来源指纹一致）；**不新增**任何证明入口、不改 E4018/E2031 映射。
+4. **IR 量词同源**：`TypeCheckResult.record_models = env.record_models.clone()`（既有），导入模型因此自然进入当前单元结果；`ir_gen::classified_fields` 按定义名查到模型后把 AST 字段量词补齐（`seed_cross_file_types` 与 `generate_stmt_ir` 两处同一 helper）。这同时补上 B.2 变异 M05a 登记的空缺：**多文件面量词注入此前无测试钉住**——B.4 的 IR 测试必须钉住「导入记录构造只装数据字段、witness 不占槽」。
+5. **整模块导入的裸名登记**：`register_use_export` 的两处「整模块/分组别名」臂只对 `type_payload.is_some()` 的 Type 导出补裸名镜像。B.4 之后证据记录也满足条件 ⇒ `use lib` 后裸名 `Box(...)` 从 HEAD 的 **E1001 Unknown variable** 变为可构造（A 类行为扩展：原先被拒、现在接受）。这是一致化（泛型导出早已如此），登记为可观察变化。
+6. **别名导入**：`use lib.{Box as B}` 时模型以 `B` 为键注册；构造 `B(-3,5)` 的 E1010/E4018 判定走同一模型。HEAD 实测别名路径当前报 `E1010 expected 3 found 2`（witness 被当构造位），B.4 后应为 arity 2 + E4018（§九 m6）。
+7. **未构造不拒绝**（负控）：导入证据记录但从不构造（只传值/只作形参类型）时零诊断；缺失来源的前置检查只在**构造点**触发（§八.3）——导入本身不承担重证义务。
+8. **B.3 联合**：导入的 `Box` 模型恢复后，B.3 的 admission 分两面规则（判定面只看「R→模型 + f 是 evidence 字段」；应用面要求 `FieldPath` 基名 == 应用实参名，B.3 §五）在导入方同样生效：`Holds(b)` 参数位的义务可证。B.4 不为 B.3 增设第二通道；测试见 T17。
+
+### 六、`signature_hash` 的真实哈希对象（不伪造内核）
+
+`signature_hash` 的语义在本批**明确限定**为「导出侧证据环境指纹」：
+
+```text
+model.signature_hash() = ContentHash::of_text(model.canonical_text())
+canonical_text(RecordModel) =
+  "record " name
+  for p in type_params:  "param " p.name " " kind_tag(p)              // Type / Const / Family(arity)
+  for f in fields:       "field " f.name " " quantity_tag " " ty_display " " is_mut " " has_default
+  for o in obligations:  "obligation " o.field " " base_display " " constraint_display
+                         " " depends_on_debug " " param_refs_debug
+  for a in admission:    "admission " a.field " " base_display " " constraint_display
+  for s in evidence:     "evidence " s.field " " quantity_tag " " proposition_display?
+  for l in libraries:    "library " kind_tag " " l.id " " l.hash.to_hex()
+```
+
+1. **取哈希的对象**：记录模型的**证据相关投影**——类型参数 kind、字段量词、构造义务命题（`base` + `constraint` 的 `Display`）、`depends_on`/`param_refs`、证据槽命题、`libraries` 清单（含每条 `hash`）。**不覆盖** `type_def`/`sum_variants`/`interface_impls`（它们不是证据面，且已有各自的跨单元完整性通路）；不覆盖导入面写回的 `unresolved` 状态（不存在该字段，见 §八.3 的做法）。
+2. **每条 `LibraryRef.hash`**：导出方按**本地已登记定义**算规范文本指纹，**必须覆盖定义体**（只哈希签名会漏掉语义漂移）：谓词 → `PredicateDef { param_name, param_type Display, constraint Display }`；证明函数 → `Fn` 形态的形参/返回 `Display` + **约束体表达式** `Display`（来自 `type_definition_bodies` 里该定义的 `TypeBodyItem::Expr(Type::ConstExpr(expr))`，即 `Eq: (a,b) -> Type = { a > b }` 的 `a > b`）。两者共用一个 `TypeChecker::proof_source_digest(name) -> Option<ContentHash>`（导出口与导入构造前置检查**同源**，不得各写一份）；**无约束体可辨的来源**（Assign 形证明函数、无体的证明入口）返回 `None` ⇒ 导出登记 `unresolved:<id>` 哨兵，导入构造必然拒绝（不静默，R5）。导出方算一次随 payload 携带；**导入方在构造点前置检查中必须比对**：本地同名来源的指纹与 `LibraryRef.hash` 不一致 ⇒ 拒绝（§八.3）；一致 ⇒ 允许继续重证（必要非充分，见 3）。
+3. **`Display` 非单射的诚实声明（必要非充分）**：`MonoType`/`ConstExpr` 的 `Display` 把 `Neg(Lit(3))` 与 `Lit(-3)` 都渲染成 `-3` 一类同形（其余形态同理）。因此：**指纹不一致 ⇒ 两项来源必不同**（`Display` 是项的确定性函数，不同输出不可能来自同一项）——构造点据此**拒绝**是 sound 的；**指纹一致 ⇏ 语义同一**（非单射碰撞）——放行只是**必要条件**，最终仍由本地重证判定。碰撞的残留面 = 两个结构不同但 `Display` 同形的定义被误当同源；缓解备选 = 导出时对**可转换体**的证明函数内联命题体（与 B.2 谓词内联同机制，另案），或等 §4.1 `LogicSignature.hash`（D1/§七）。V1 不把 fingerprint 当证明依据。
+4. **不是 §4.1 签名**：RFC §14.4 的 `signature_hash` 语义是「随 §4.1 签名失效」；仓库当前无 `LogicSignature`/`Kernel::check`/`ContentHash` for sorts/rules/axioms（B.2 契约 §二映射表已登记「不物化」）。B.4 **不伪造**该对象：字段名保留 `signature_hash`，正文与实现注释写明「V1 = 证据载荷指纹；§4.1 落地后切换为 `signature.hash`，字段与消费点不换名」。这是 D1 的一部分。
+5. **单源设施**：`ContentHash` 与 SHA-256 只在 `src/util/content_hash.rs` 实现；`package/vendor/checksum.rs` 的 `compute_bytes_checksum` 改调 `ContentHash::of_bytes(...).to_hex()`（输出逐字不变，既有 package 测试为判据），不再保留第二份 hex/摘要实现（禁令三 A）。
+6. **两个比较点，职责不同**：①payload 级 `signature_hash`——导入方在 `register_type_payload` 重算（§五.1①），只覆盖「进程内 payload 被篡改/陈旧」的编译器不变量；②逐库 `LibraryRef.hash`——导入方在**构造点**与本地同名来源比对（§八.3），覆盖「同名不同义」的语义漂移，是 F1 的修复点。两者都不覆盖跨签名的翻译/桥接。
+
+### 七、导入方验证与三路径的可实施边界
+
+| §4.1 路径 | 前提 | V1 可实施 | 落点 / 边界 |
+| --- | --- | --- | --- |
+| 翻译项（`translate: A.Prop → B.Prop` + B 下证书） | 两种逻辑签名的项语言与翻译器 | **否** | 无 `LogicSignature`、无跨签名项语言；D2 边界登记，不伪造 |
+| 桥接公理（B.libraries 的 Axiom 条目 + 证书引用） | 公理库 manifest/hash + 内核 check | **否** | `LibraryKind::Axiom` 只作 RFC 形状种子（零生产者）；无内核 |
+| 重新证明（在 B 下对 P 直接构造新证书） | B 的本地同名定义 + **来源指纹一致（必要条件）** + 唯一判定单元 | **是（V1 唯一路径）** | 导入方构造点先按 `LibraryRef.hash` 比对本地来源（§八.3），一致后交 `judge_refined_obligation_with_mode` 重跑；从不复用导出方结论（本来也无证书可复用） |
+
+**结论**：V1 不比较**全局**「导出方签名 vs 导入方签名」（没有可比较的签名对象），一切义务在导入方**重证**；但**逐库内容指纹必须比对**——本地同名来源与导出登记不一致 ⇒ 拒绝（Unproven，D2 码位），不得静默改写定义方义务语义（F1）。指纹一致只是**必要非充分**（`Display` 非单射，§六.3）；残留碰撞的备选见 §六.3/§十二 R6。跨签名其余两条路径待 §4.1 内核；D2 记录「当 §4.1 落地，指纹不符必须路由到三路径选择」的切换点。
+
+### 八、`libraries` 表示与缺失诊断
+
+1. **表示与产出**：`record_model.libraries` 由 `type_def_export_payload` 在 clone 上派生：遍历 `obligations[].proposition.constraint` 与 `evidence[].proposition.constraint` 的 `ConstExpr::Call` 头（新增 `ConstExpr::call_heads(&self) -> Vec<&str>` 收集器，单源），过滤三类：① `record_model.type_params` 里的 proof family 参数（`P` 不是库，是参数）；② 内置谓词头：`probe::BUILTIN_PREDICATES` 当前**只有 `Terminates`**（`sema/probe.rs`，`is_builtin_predicate_name` 是其唯一判定入口）——编译器内置，不是可导入库；`Assert` 是 Proof 族、B.2 分类期已内联为布尔命题，不会成为 `Call` 头，无需过滤（F4）；③ 重复名。每个剩余头经 `self.proof_source_digest(name)`（§六.2 单源）取导出方指纹（谓词 → def 指纹；证明函数 → 形参/返回 + **约束体**指纹）；`None`（无体可辨）⇒ 头本身仍登记（`hash = "unresolved:<id>"` 的文本指纹）并在导出面**不静默**（该形态只能来自 B.2 的 proof-fn 回退，实测可达；登记为风险 R5）。`kind` 恒 `Proof`（V1 无公理库语法，`Axiom` 零生产者）。
+2. **为什么谓词一般不在 `libraries` 里**：H1 之后，记录定义位可解析的谓词在分类时**内联**为命题体（`Pos(v)` → `v > 0`），`Call` 头消失；只有证明函数证据（`w: Eq(v,3)`，`Eq` 非单参数谓词）保留 `Call`。故 V1 的库 = **证明函数来源**。
+3. **构造点前置检查（唯一；F1 修复点）**：仅对 `model.from_payload == true` 的导入模型生效（本地记录不受影响）。`check_record_ctor_obligations` 在每条义务的 `constraint` 代入完成之后、交判定单元之前扫描 `call_heads`；对每个头 `head`：
+
+   ```text
+   本地可执行 = !self.imported_names.iter().any(|(n, _)| n == head)     // 别名为导入（即使同形）不可执行（执行器按本单元 AST 查函数）
+              && matches!(self.env.vars.get(head).map(|p| &p.body),
+                          Some(MonoType::Fn { return_type, .. }) if matches!(**return_type, MetaType))
+   来源指纹   = self.proof_source_digest(head)                          // 与导出口同源（§六.2；含约束体）
+   登记       = model.libraries.iter().find(|l| l.id == head)
+
+   通过 ⇔ 本地可执行 && 登记.is_some() && 登记.hash == 来源指纹
+   ```
+
+   不通过（不可执行 / 导出未登记该来源 / 指纹不符）⇒ 该构造点发**一条** Unproven 家族诊断（D2 码位，推荐 E4020 `proof_function_required`；span = 构造调用；不逐义务重复），并**跳过本记录其余义务判定**（失败闭合，不连锁 E4018）。没有这条检查，导出方 `Eq{a>b}` 与本地 `Eq{a>=b}` 会让 `Box2(3)` 被静默接受（m8）——F1 的 soundness 洞。指纹一致**才**进入判定单元重证（必要非充分，§六.3）；判据读**项**的 `Call` 头 + `libraries` 的登记（两处都来自 payload），不另写第二套来源表。
+4. **正控/负控（路径 3）**：导入方**在本地**定义**同源**同名证明函数（文本与定义方一致、指纹相符）时，头命中且指纹一致 → 交判定单元 → 本单元执行器执行 → 通过。负控两条：①只 `use lib.{Eq}` 而不本地定义 → 不可执行 → Unproven（即使同形也执行不了，因为执行器按单元 AST 查函数；#552 边界）；②本地同名但**语义漂移**（导出 `Eq: a > b`、本地 `Eq: a >= b`）→ 指纹不符 → Unproven，**必须拒绝**（m8 夹具；不得只登记风险）。
+5. **不硬编码信任根**：可执行性来自本单元 AST/env 事实（`imported_names` + `env.vars` 的 proof-fn 形态），不来自库名/求解器名白名单；内置头过滤来自既有 `probe::is_builtin_predicate_name` 单源。
+
+### 九、多文件夹具与用户可达场景（HEAD `e64139dc` 实测）
+
+**对照（同模块，已绿）**：本地 `Box(-3,5)` → E4018 `(-3 > 0)`；本地 `G(Int)(-3)` → E4018；本地 `Box2(4)`（`w: Eq(v,3)`）→ E4018（证明函数返回 false）。三者 exit 1——证明义务在**同模块**生效。
+
+**跨模块红态（HEAD 实测，全部 exit 0 或错误码不符）**：
+
+| 编号 | 夹具形态（lib → main） | main 动作 | HEAD 结果 | B.4 绿态 |
+| --- | --- | --- | --- | --- |
+| m1 | lib: `Pos` + `Box{v,w: Pos(v),z}`；main: `use lib.{Box}` | `Box(-3, 5)` | **exit 0**（义务被整体丢弃；W1002 `Pos` 未用） | E4018 `(-3 > 0)`，exit 1 |
+| m2 | lib: `Pos` + 泛型 `G(T) = {v: T, w: Pos(v)}`；main: `use lib.{G, Pos}` | `G(Int)(-3)` | **exit 0**（泛型记录模型未随导出） | E4018，exit 1 |
+| m3 | lib: `Eq` + `Box2{v, w: Eq(v,3)}`；main: `use lib.{Box2}` | `Box2(3)` | **exit 0**（无模型，义务丢弃） | Unproven 家族（D2，推荐 E4020：来源 `Eq` 不可本地执行），exit 1 |
+| m4 | 同 m3 | main **本地**定义 `Eq` 后 `Box2(3)` | **exit 0**（同因；不能区分路径） | 0 诊断，exit 0（路径 3 重证正控） |
+| m5 | 同 m1 | `use lib`（整模块）后裸名 `Box(-3,5)` | **E1001 Unknown variable 'Box'**，exit 1 | E4018，exit 1（A 类扩展：裸名可构造） |
+| m6 | 同 m1 | `use lib.{Box as B}` 后 `B(-3, 5)` | **E1010 function 'Box' expected 3 arguments, found 2**，exit 1 | E4018，exit 1（arity 修正为 2 + 义务生效） |
+| m7 | 同 m1 | `use lib.{Box}`，只声明 `(b: Box) -> Int` 形参，不构造 | **exit 0**（负控：不得因导入而拒绝） | 保持 exit 0 |
+| m8 | lib: `Eq: (a,b) -> Type = { a > b }` + `Box2{v, w: Eq(v,3)}`；main: **本地** `Eq: (a,b) -> Type = { a >= b }` | `Box2(3)` | **exit 0**（模型缺失，义务被丢弃；语义漂移无从暴露） | Unproven 家族（D2，推荐 E4020：`LibraryRef.hash` 与本地 `Eq` 指纹不符），exit 1（F1 负控） |
+
+**D59 分类（按 [07](07-equivalence-oracle.md) §语义修正的分流判据，F3）**：本批**主错 = A 类静默失败**——m1–m4/m8 的跨模块证据义务被整体丢弃、exit 0（该报的错误被吞掉）。m5（E1001 → 裸名可构造）与 m6（E1010 expected 3 → arity 2）原先均**不是成功**，属同一根因最小修改集的**附带行为变更**，在 PR 的 **D3 补丁判定行**逐条列出，**不归 C 类**（C 类 = 崩溃/爆栈/未初始化槽位/字节码版本不符）。
+
+**用户可达场景（多文件夹具，check/run 期望）**——落 `tests/yaoxiang-multifile/`（README 的表同步扩行）：
+
+| 夹具 | 类别 | main 形态 | 期望 |
+| --- | --- | --- | --- |
+| `record-evidence-import` | 行为 | lib 证据记录 + main 构造合法值并 `run` 读数据字段 | `check`/`run` exit 0，值断言通过 |
+| `record-evidence-import-violation` | compile-error | main 构造 `Box(-3, 5)` | `expect: compile-error E4018` |
+| `record-evidence-proof-source-missing` | compile-error | main 构造证明函数证据记录且不本地定义 `Eq` | `expect: compile-error E4020`（D2 码位） |
+| `record-evidence-proof-source-local` | 行为 | main 本地定义**同源** `Eq` 后构造 `Box2(3)` | exit 0（路径 3 重证） |
+| `record-evidence-source-drift` | compile-error | lib `Eq: a > b` + `Box2`；main 本地 `Eq: a >= b` 后构造 `Box2(3)` | `expect: compile-error E4020`（F1 负控：同名不同义必须拒绝） |
+| `record-evidence-import-unused` | 行为 | main 仅导入/传递记录值，不构造 | exit 0（不因导入拒绝） |
+| `record-evidence-witness-premise` | 行为 | lib `Box`+`Holds`；main 导入后 `needW(b, Box(3))` + 值级 `b.w` 负控（B.3 联合） | 正控 exit 0；负控 `expect: compile-error E1114`（拆两个夹具：正控行为夹具 + 负控 compile-error 夹具） |
+
+### 十、测试矩阵（先红后绿）
+
+测试落点：payload/哈希 → `src/frontend/module/tests/type_def_payload.rs`（新文件 + `tests/mod.rs` 挂载）；导入恢复/构造前置 → `src/frontend/core/sema/tests/record_evidence_import.rs`（新文件 + `tests/mod.rs`）；多文件语义 → `tests/integration/multifile.rs`；契约语料 → `tests/yaoxiang-multifile/`；IR → `src/middle/ir/tests/record_evidence_layout.rs`（扩）。命名/AAA/断言消息按 `test-specification.md`。
+
+| # | 判据 | 红态 | 绿态 |
+| --- | --- | --- | --- |
+| T01 | 证据记录 payload `None→Some`：`Box` 的 `record_model` 有 evidence 1 / obligations 1 / type_params / field_path；命题为**内联** `(-3 > 0)` 形态（非 `Call{Pos}`） | `type_payload == None` | 逐字段断言 |
+| T02 | 泛型证据记录 `G` 的 payload 含 record_model（既有 `type_def` 已是 Some） | payload 有 `type_def`、无 `record_model` | `record_model.is_some()` |
+| T03 | 负控：纯数据记录 `Point` payload 仍为 `None`（零行为） | 绿（保持） | 保持；M01 反向 |
+| T04 | `signature_hash` 可算且自洽：等于 `record_model.signature_hash()`、非零、同模型重算相等；`ContentHash` Display 为 64 位小写 hex | 字段不存在（编译红） | 断言通过 |
+| T05 | `libraries`：`Box2` 导出 `[LibraryRef{Proof,"Eq",digest}]`；`Box`（谓词内联）导出空表 | 字段不存在 | 逐项断言 |
+| T06 | 完整性：注册指纹不符的 payload（直驱构造）⇒ `E5002` 且模型不注册 | 无校验 | E5002 一条 + `record_models` 无条目 |
+| T07 | 导入正控：`Box(3,5)` 0 诊断（保持型，M02 反向） | HEAD 亦 0（因无义务） | 0 诊断 |
+| T08 | 导入违规：`Box(-3,5)` ⇒ E4018（m1 形态） | exit 0 | E4018 |
+| T09 | 泛型导入违规：`G(Int)(-3)` ⇒ E4018（m2） | exit 0 | E4018 |
+| T10 | 来源不可用：`Box2(3)` 且无本地 `Eq`（m3），或本地同名但**指纹不符**（m8）⇒ Unproven 家族（D2，推荐 E4020），不得 E4018 | exit 0 | 期望码 + exit 1；M03/M09 下红 |
+| T11 | 路径 3 正控：本地定义**同源** `Eq`（文本一致、`LibraryRef.hash` 相符）后 `Box2(3)` ⇒ 0 诊断（m4） | exit 0（不可区分） | 0 诊断；M03/M09 下红 |
+| T12 | 整模块导入裸名：`use lib` 后 `Box(-3,5)` ⇒ E4018（m5） | E1001 | E4018 |
+| T13 | 别名导入：`use lib.{Box as B}`，`B(-3,5)` ⇒ E4018（m6） | E1010 expected 3 | E4018 |
+| T14 | 不构造负控：导入 `Box` 仅作形参类型 ⇒ 0 诊断（m7） | 绿（保持） | 保持 |
+| T15 | IR：导入记录的构造代码 `CreateStruct` operands = 数据字段数、`local_count` 不含 witness，`b.z` 的 `LoadField.field = 1`（补 B.2 M05a 空缺） | 整模块/别名形态 HEAD 不可达（E1001/E1010），分组导入形态可达但义务被丢弃；多文件量词注入此前无测试 | 指令形状断言 |
+| T16 | 直接驱：`register_type_payload` 后 `env.record_models` 有本地名与定义名两键、同源；`TypeCheckResult.record_models` 含导入模型 | 无函数/无字段 | 三断言 |
+| T17 | B.3 联合（按修订后 B.3 §五 两面）：导入 `Box`+`Holds` 后，应用面基名 == 实参名、判定面模型+evidence 槽命中 ⇒ `Holds(b)` 参数位义务 0 诊断；值级 `b.w` E1114 | 缺模型 ⇒ E2031（B.3 红） | 0 / E1114 |
+| T18 | 单源判定：导入构造点的 E4018/E4020 由 `judge_refined_obligation_with_mode` 或唯一前置检查发出；全仓无第二证明入口（grep 级 + 测试断言） | — | 判据通过 |
+| T19 | 哈希设施：`compute_bytes_checksum` 委托后输出逐字不变（既有 package 测试）；`ContentHash` 单测 | 实现不存在 | 全绿 |
+| T20 | 门禁：fmt/clippy/`testsuite run fast`/`yx_multifile_runner`/五门禁/生成器幂等/`markers --check`/`docs:build`；语料与 IR 快照零漂移（预期） | — | 全 exit 0 |
+| T22 | **语义漂移负控（F1 必测）**：lib `Eq{a>b}` + 本地 `Eq{a>=b}` + `Box2(3)` ⇒ 拒绝（m8） | exit 0（静默接受） | E4020 + exit 1 |
+| T23 | 未登记来源负控：手工构造 `from_payload` 模型，`Call` 头无对应 `LibraryRef` ⇒ 拒绝（防「列表缺项时静默放行」） | 无判据 | E4020 |
+
+**变异（M；机械可逆，`git apply -R` + blob 比对）**：
+
+- **M01** `type_def_export_payload` 对证据记录仍返回 `None` ⇒ T01/T08/T12/T13 红。
+- **M02** 不恢复导入模型（跳过 `env.record_models` 写入）⇒ T08/T09/T15 红。
+- **M03** 去掉构造点来源前置检查 ⇒ T10/T22/T23 红（不可执行与指纹不符都退化为静默/E4018）。
+- **M04** H1 补种摘除（Registry 面 `predicate_defs` 置空）⇒ T01（命题变 `Call`）/T08/T12 红（导入退化为不可执行来源）。
+- **M05** 别名导入按定义名注册（不用本地名）⇒ T13 红（别名构造查不到模型）。
+- **M06** 指纹函数改常量（不覆盖模型）⇒ T04/T06 红。
+- **M07** `libraries` 派生不排除 family 参数 ⇒ T05（`Cell` 模板出现 `P` 库）/T10 红。
+- **M08** 导入侧按定义名改写 `model.name` 为本地名 ⇒ T16（双键断言）/T15 红。
+- **M09** 前置检查跳过 `LibraryRef.hash` 比对（只判可执行）⇒ T22 红（语义漂移被静默接受——F1 反向锚）。
+
+**负控清单**：T03 纯数据记录、T07 合法构造、T14 未构造导入、T17 值级 E1114、T19 校验和逐字、T20 语料零漂移、T22 语义漂移、T23 未登记来源。
+
+### 十一、inScope / outOfScope
+
+**inScope（路径前缀）**：`src/util/content_hash.rs`（新）、`src/util/mod.rs`、`src/package/vendor/checksum.rs`、`src/frontend/module/mod.rs`、`src/frontend/module/orchestrator.rs`、`src/frontend/module/tests/`、`src/frontend/core/sema/record_model.rs`、`src/frontend/core/sema/checker.rs`、`src/frontend/core/sema/checker/record_model.rs`、`src/frontend/core/sema/checker/refinement.rs`、`src/frontend/core/sema/predicate_resolver.rs`、`src/frontend/core/sema/types.rs`（若 `TypeCheckResult` 需派生）、`src/frontend/core/sema/tests/`、`src/frontend/core/types/const_data.rs`（`call_heads` 收集器）、`src/frontend/core/types/mono.rs`（若 `Display` 需稳定化）、`src/std/yx_sources.rs`、`src/middle/ir/ir_gen.rs`（仅 `classified_fields` 查找与测试；量词逻辑不改）、`src/middle/ir/tests/`、`tests/integration/multifile.rs`、`tests/yaoxiang-multifile/`、`tests/baselines/`（预期零漂移；若语料受影响则同提交）、`src/middle/ir/tests/snapshots/`（同上）、`src/util/diagnostic/codes/`（仅注释/发射点计数）、`locales/`（仅兜底/多语一致性）、`docs/src/reference/error-code/`（生成物）、`docs/src/reference/language-spec/type-system.md`、`docs/src/en/reference/language-spec/type-system.md`、`docs/src/dev/architecture/09-execution-wbs.md`、`docs/src/dev/architecture/09a-wbs-history.md`。
+
+**机械必需面**：**SPEC §8.3.4 只改 B.4 半句**——「跨模块导出（B.4）尚未落地」及正文「用自己的逻辑签名验证 / 三路径 / 库必须在导入方列表」的实施状态口径（加状态注：V1 只重证、逐库指纹比对、翻译/桥接待 §4.1 内核）；两条 language-spec 路径（中英）已列入 §十一 inScope，`changedPaths` 可解析。**同一 status blockquote 两轮都改、按句分工、不得互相覆盖**：**B.3 半句**（类型级 `b.w` 尚未落地；`evidence_ref`/`certificate_ref` 槽句的时序从「B.3/B.4」收敛为「B.4」）归 t15/B.3 轮；**B.4 半句**（跨模块导出尚未落地 + 正文签名/三路径/库列表状态注）归 B.4 轮。先后：契约修订由 t15 先定 B.3 五处、本节只补 B.4 半句与两条 language-spec 路径；实现轮按 B.3（t5）→ B.4 的顺序落地，B.4 轮基于 B.3 终态逐句对齐；若两轮并行，合并时逐句 diff、不得整段替换。**D1 联动**：若 D1 裁 A（V1 不物化两槽），B.4 轮在**自己的状态注**里写明「V1 不物化两槽、随 §4.1 内核批次加入」；槽句最终措辞由两轮对齐后落地，不允许任一轮静默覆盖另一轮。en 镜像同改（只改 B.4 半句）。E4020/E5002 新发射点 ⇒ 重跑 `gen-error-code-docs.py` 并同提交生成物（行号/计数变化逐条分类）；`RecordModel` 形状变化 ⇒ B.2 直驱测试与构造点同步（机械）；多文件夹具 ⇒ `tests/yaoxiang-multifile/README.md` 表同步；`collect_signatures` 签名变化 ⇒ 2 个生产调用方 + 2 个测试调用方同步。
+
+**outOfScope**：`LogicSignature`/`Kernel::check`/`Certificate`/§13 留存/重放；翻译项与桥接公理（§七）；跨模块证明函数执行（#552）；记录定义引用导入谓词的 pass1 分类（R2）；proof-fn 声明序硬化（D3）；`evidence_ref`/`certificate_ref` 物化（D1）；公理库 manifest/语法；序列化格式（payload 是进程内结构，无磁盘格式）；Π/`DepFn`/defeq/runtime check；B.2 构造义务遍历与 E4018/E2031 映射；B.3 的语法/语义（联合测试除外）。
+
+### 十二、风险与未核实
+
+- **R1（高）**：H1 让 Registry 面分类看到谓词表，命题从 `Call{Pos}` 变内联 `v > 0`。这改变的是**导出 payload 的内容**；Registry 面 checker 的诊断是否被消费未核实（当前 `extract_module_info` 丢弃 env.errors），预期零用户可见变化，须以语料/多文件全量实测确认。
+- **R2（高）**：记录定义引用**导入谓词**时，pass1（两个面）都还没有导入表 ⇒ 该字段静默分类成数据字段（B.2 既有边界；按 07 属**静默错配/静默失败**，A/B 类）。B.4 不修；夹具约定「谓词/证明函数先声明、且定义单元内可解析」，并在 09a 登记为移交项（建议另立先红后绿批次）。
+- **R3（中）**：整模块导入对证据记录新增裸名镜像注册（m5），可能与其他整模块导入的同名证据记录冲突（`register_use_export` 早退静默取先到者）。B.4 不加冲突诊断，登记为负控/风险；若测试发现静默错绑，须报 D3 扩裁决。
+- **R4（中）**：别名导入 + `run` 形态的 IR 名字映射（构造名 `B` vs 定义名 `Box`）未实测；契约只要求别名夹具走 `check`（compile-error E4018），`run` 面风险登记、不阻塞。
+- **R5（中）**：`libraries` 派生遇到本地也解析不到的 `Call` 头（B.2 proof-fn 回退可达，如声明序在前/引用导入证明函数）⇒ 用 `unresolved:<id>` 指纹登记而不是丢弃；**Assign 形证明函数**没有约束体可哈希，同样落 `unresolved` 哨兵 ⇒ 导入构造被拒绝（诚实边界，V1 只支持 TypeDefinition 约束体作为库来源；R5 与 R2 同属声明期边界）。须在导出侧加断言/测试钉住「不 panic、不静默丢条目」。
+- **R6（中）**：逐库指纹用 `Display`（非单射）：**不一致必拒**是 sound 的，残留面是**碰撞导致误判同源**（必要非充分，§六.3）；缓解备选 = 导出时内联可转换证明函数体（另案）或 §4.1 `LogicSignature.hash`。V1 不把指纹当证明依据，最终判定仍是本地重证。
+- **R7（中）**：D2 若复用 E4020，会扩展该码的可见语境——它当前只有 1 处构造点（`verdict.rs` 的 `ProofFunctionRequired → E4020` 映射，生成物口径「✅ 1 处」），不在精化义务面；B.2 裁决「E4020 不带命题」不变，但语境从「需要证明函数」扩到「导入来源不可本地执行」，locale 文案与 013 说明需同步核对。
+- **R8（低）**：`RecordModel` 加入 `libraries` 后，B.2 的直驱测试与 `RecordModel::default()` 构造点（若有 struct literal）需机械补字段；`TypeCheckResult.record_models` 的 obligations 计数等既有断言不受影响（新字段不进 obligations 门禁）。
+- **R9（低）**：payload 克隆成本（模型含 obligations/evidence/fields）与 Registry 面分类成本上升；语料无证据记录 ⇒ 预期零增量，须量测或说明。
+- **未核实**：H1 后 Registry 面命题内联是否与 check 面逐字一致（T01 判据）；别名/整模块导入的 IR 可达性；E5002 挂 use 行 span 的实际形态；`extract_module_info` 丢弃的 Registry 面诊断是否含新告警；`std` 嵌入模块是否存在证据记录；多文件 runner 对新增夹具的路径/分类；错误码生成物行号漂移量。
+
+### 十三、裁决点（D1–D3）
+
+- **D1（payload 的两个引用槽与 `signature_hash` 语义）**：**情况**——RFC §14.4 要求 `evidence_slots[].evidence_ref/certificate_ref/signature_hash`；仓库无显式证据声明面（§4.3 未落地）、无证书缓存（§13 不宣称），两个引用字段在 V1 **零生产者**；`LogicSignature` 也不存在。**选项**：A（推荐）不物化两引用槽，payload 只带**证据载荷指纹** `signature_hash` + 逐库 `LibraryRef.hash`（字段名保留，语义限定并在实现注释/09a 登记；§4.1 落地后切到 `signature.hash`）；B 物化空壳枚举/结构（RFC 形状齐，但零生产者、违反禁令一 B，且诱导误读为「已支持证书复用」——可读性上把未实现的路径伪装成已实现）；C 推迟整个 B.4 到内核批次（B.4 的 payload/libraries/导入重证不依赖内核；推迟会让 SPEC §8.3.4 的读法与实现持续缺口）。**推荐 A**：正确性上不伪造、且 F1 的逐库指纹比对有实际行为作用；可读性上单一真相、字段名与 RFC 对齐；边界后果 = 明确不宣称证书复用/跨签名。**破坏性/D59（F3，按 07 §语义修正的分流判据）**：本批**主错 = A 类静默失败**（跨模块证据义务被整体丢弃；m1–m4/m8 红态 exit 0），按 07 可随重构顺路修（先红后绿、不改变原先成功程序、同提交登记、基线同提交）；m5（E1001 → 裸名可构造）与 m6（E1010 expected 3 → arity 2）原先均**不是成功**，属同一根因最小修改集的**附带行为变更**，在 PR 的 **D3 补丁判定行**逐条列出，**不归 C 类**（C 类 = 崩溃/爆栈/未初始化槽位/字节码版本不符）；若实现中发现二者改变「原先成功」程序，升级 D 类，需用户裁决。
+- **D2（导入来源不可本地执行的诊断码）**：**情况**——导入记录的证据命题引用证明函数时，执行器只查本单元 AST，导入的函数不可执行；V1 只能路径 3（本地重定义同名证明函数）。需要一个**用户可见、可测**的 Unproven 诊断。**选项**：A（推荐）复用 **E4020 `proof_function_required`**（无参、语义即「补证明函数」，与路径 3 的补救动作一致；B.2 已裁 E4020 不带命题）；B 复用 **E2031**（精化通道 Unproven；但需把来源名塞进 `constraint` 槽，混语言散文，B.2 文案边界）；C 新增专用码（E 类对外契约变化，六语 + 013 + 生成物，需用户裁决）。**推荐 A**：零码表变更、语义贴合、可测；代价是 locale help 需从「写证明函数」覆盖到「本地定义/导入来源」两种语境（六语文案微调，机械面）。**破坏性（F7）**：A 不新增码，只扩展 E4020 的可见语境（当前 1 处构造点，R7），不改任何「原先成功」程序；B 把来源名塞进 E2031 约束槽，改变 E2031 既有诊断文本形态（D 类，需用户裁决）；C 新增码（E 类，需用户裁决）。
+- **D3（proof-fn 声明序硬化）**：**情况**——记录定义引用证明函数时，若证明函数声明在记录之后，pass1 分类看不到其 proof-fn 形态，字段静默降级为数据字段（B.2 既有静默缺口；按 07 属**静默错配/失败**，A/B 类）。B.4 的导出 payload 会把这个分类结果原样跨模块传播，放大影响。**选项**：A（推荐）B.4 不修，夹具约定「证明函数先声明」，把硬化登记为独立先红后绿批次（要动 `add_type_definition`/分类两面的注册顺序）；B 在 B.4 内做预注册（复制 Phase 2.5 注册逻辑或抽公共 helper，触及 B.2 分类面）。**推荐 A**：正确性上硬化属声明期分类、与跨模块 payload 的正确性面不同，混批会让红态不可区分；可读性上独立提交边界更清晰；边界后果 = 声明序依赖作为 B.2 既有缺口被显式登记（R2），不扩大 B.4 裁决面。**破坏性（F7）**：A 不改任何「原先成功」程序（只把静默降级登记为移交项）；B 会改变 B.2 声明期分类结果（原先静默通过的记录可能变为证据字段并产生新错误），属 D 类，需用户裁决后才可并入。
+
+### 十四、顺序与交接
+
+1. **H1 先落**（`collect_signatures` 补种 + 两调用方），用 T01 钉住「Registry 面命题 = check 面内联形态」；H1 不成立则停工报 lead（不得先做 payload 再补命题）。
+2. 哈希设施（H6）与 `ContentHash` 单测 → payload 形状（`record_model`/`signature_hash`/`libraries`）→ 导出构造 → 红测试 T01–T06。
+3. 导入链（H4/H5）：恢复模型/双键/完整性校验 → 构造点前置检查（可执行 + **指纹一致**）→ T08–T16、T18、T22–T23。
+4. IR 同源（T15）与多文件夹具（§九 表 + README）→ `yx_multifile_runner` 全绿。
+5. 门禁与生成物：fmt/clippy/fast/五门禁/生成器幂等/`markers --check`/`docs:build`；语料与 IR 快照逐条分类（预期零漂移）；变异 M01–M09 走 `scratch.py trial`。
+6. 收口证据：09a 实现轮（红→绿、语料/快照 diff 分类、D59 分类、门禁计数、变异表）+ 09 行状态。**不宣称** §4.1 签名/翻译/桥接/跨模块证明执行（#552）；D1/D2/D3 按 lead/用户裁决结果落地。
+
 ## P3 3.20.30 收口（深嵌套表达式栈溢出改正式诊断——大栈线程 + 解析闸 E0019，#540，2026-11-14）
 
 > **一、查证（崩溃环测绘 + razor 区判死静态单闸）**：issue 夹具（300 项 binop 实参）修前 check 逐字崩溃（thread 'main' has overflowed its stack，Git Bash exit 127 / Windows 0xC00000FD，零诊断）。崩溃环 ≥4 个实测：parser pratt 真递归（一元/调用/括号/块）、typecheck infer_expr（call/field 形态）、ir_gen 下降（binop/unary/list/ifnest——E3014 检查在走完之后不挡下降）、LSP semantic_tokens collect_expr_tokens；运行面被 E3014 寄存器上限间接兜住无崩溃（登记）。**各形态 razor 区**（debug 构建 / 1MB 主线程栈实测）：call 通过 ≤120 崩 @125、block 通过 ≤220 崩 @230、unary 通过 ~≤255 崩 @282、binop 129..282 为 E3014 拒绝区、括号嵌套 600 层通过 / 崩溃起点 ~650——通过与崩溃边界相邻，**任何静态单阈值要么拒掉 razor 区原先成功程序（违 D59）要么漏崩溃**。规范判据：SPEC/RFC 无表达式嵌套深度口径；闸门先例 mono.max_depth=100/E3005、const_eval DEFAULT_MAX_DEPTH=256；码表 E0xxx 最大 E0018 → E0019 空闲走新码流程。分类 D59 C 类崩溃面直修。

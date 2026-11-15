@@ -93,6 +93,15 @@ pub fn convert_expr_to_const_expr(
             _ => None,
         },
         Expr::Var(name, _) => Some(CE::NamedVar(name.clone())),
+        // RFC-027 §14.5：`b.w` 是类型级证据项，不是常量值。V1 只接受 `Var.field`；
+        // 其他基座（调用/字面量/嵌套路径）返回 None，走既有「实参不可转换」诊断形态。
+        Expr::FieldAccess { expr, field, .. } => match expr.as_ref() {
+            Expr::Var(name, _) => Some(CE::FieldPath {
+                base: Box::new(CE::NamedVar(name.clone())),
+                field: field.clone(),
+            }),
+            _ => None,
+        },
         Expr::BinOp {
             op, left, right, ..
         } => {
@@ -295,6 +304,8 @@ pub fn const_expr_free_names(
                 stack.push(start);
                 stack.push(end);
             }
+            // `field` 不是自由名；基座递归（与 normalize 的符号名闸门同口径）
+            CE::FieldPath { base, .. } => stack.push(base),
         }
     }
     out
@@ -328,6 +339,8 @@ pub fn const_expr_node_count(term: &crate::frontend::core::types::const_data::Co
                 stack.push(start);
                 stack.push(end);
             }
+            // `1 + base` 节点：FieldPath 节点自身计 1，基座入栈
+            CE::FieldPath { base, .. } => stack.push(base),
         }
     }
     count
@@ -512,6 +525,11 @@ impl ConstGenericEval {
             },
             CE::Range { .. } => Err(ErrorCodeDefinition::const_eval_failed(
                 "Range cannot be evaluated as a scalar constraint",
+            )
+            .build()),
+            // RFC-027 §14.5：证据字段路径不是运行期/常量值项。不得查 bindings 当 NamedVar。
+            CE::FieldPath { .. } => Err(ErrorCodeDefinition::const_eval_failed(
+                "evidence field path cannot be evaluated as a constant value",
             )
             .build()),
         }

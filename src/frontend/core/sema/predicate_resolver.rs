@@ -120,6 +120,8 @@ pub enum PredicateResolveError {
     ArityMismatch { expected: usize, found: usize },
     /// 实参形态不可转换为编译期常量表达式（E1092）
     ArgNotConst,
+    /// 证据字段路径的基名与应用实参名不一致，或基座不是 NamedVar（E1092）
+    WitnessPathBaseMismatch,
 }
 
 /// 编译期谓词解析器
@@ -163,7 +165,30 @@ impl PredicateResolver {
         bindings.insert(def.param_name.clone(), arg_expr);
         let constraint = Self::substitute_in_const_expr(&def.constraint, &bindings);
 
-        // 5. 构建 Refined 类型
+        // 5. 应用面：证据字段路径的基名必须与**应用实参名**一致；非 NamedVar 基座拒绝
+        //    （`Holds(3)` 代入后基座是 `Lit(3)`；`a.b.c` 是嵌套路径）。
+        if matches!(&constraint, ConstExpr::FieldPath { .. }) {
+            let actual_name = match arg {
+                MonoType::TypeRef(name) => Some(name.as_str()),
+                _ => None,
+            };
+            let matches_actual = actual_name
+                .map(|name| {
+                    crate::frontend::core::sema::record_model::field_path_base_matches(
+                        &MonoType::Refined {
+                            base: Box::new(def.param_type.clone()),
+                            constraint: constraint.clone(),
+                        },
+                        name,
+                    )
+                })
+                .unwrap_or(false);
+            if !matches_actual {
+                return Some(Err(PredicateResolveError::WitnessPathBaseMismatch));
+            }
+        }
+
+        // 6. 构建 Refined 类型
         Some(Ok(MonoType::Refined {
             base: Box::new(def.param_type.clone()),
             constraint,
@@ -223,6 +248,10 @@ impl PredicateResolver {
                     .iter()
                     .map(|a| Self::substitute_in_const_expr(a, bindings))
                     .collect(),
+            },
+            ConstExpr::FieldPath { base, field } => ConstExpr::FieldPath {
+                base: Box::new(Self::substitute_in_const_expr(base, bindings)),
+                field: field.clone(),
             },
             // Lit, Var(ConstVar) 不变
             _ => expr.clone(),

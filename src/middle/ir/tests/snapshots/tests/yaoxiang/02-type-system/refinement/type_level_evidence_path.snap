@@ -1,0 +1,32 @@
+module
+  global[0] b : Int(64)
+  global[1] x : Int(64)
+  fn Pos(Int(64)) -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
+    type_decl []
+  fn Box() -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
+    type_decl [v: Int(64) ; w: Generic { name: "Pos", args: [TypeRef("v")] }]
+  fn Holds(TypeRef("Box")) -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
+    type_decl []
+  fn needW(TypeRef("Box"), Generic { name: "Holds", args: [TypeRef("b")] }) -> Int(64)
+    slot[0] b : Int(64) @depth1
+    slot[1] h : Int(64) @depth1
+    locals_total=4
+    Load %0 <- arg%0
+    Load %1 <- arg%1
+    Load %2 <- %0
+    LoadField %3 <- %2.0
+    Ret %3
+  init (locals=0)
+    Load %0 <- int(3)
+    Call %1 <- string("Box") [%0] (def=d0)
+    Store @0 <- %1
+    Load %2 <- @0
+    Load %3 <- int(3)
+    Call %4 <- string("Box") [%3] (def=d0)
+    Call %5 <- string("needW") [%2, %4] (def=d1)
+    Store @1 <- %5
+    Load %6 <- @1
+    Load %7 <- int(3)
+    Eq %8 <- %6, %7
+    Load %9 <- string("类型级证据路径 admission 放行")
+    Call %10 <- string("std.assert.assert") [%8, %9] (def=d2)

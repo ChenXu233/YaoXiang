@@ -87,6 +87,15 @@ pub fn check_predicate_with_mode(
         _ => return Ok(()),
     };
 
+    // RFC-027 §14.5 / 09a §P6 6.9.5-B.3 §五：evidence 字段路径是**准入前提**，不是值求值。
+    // 唯一判定点；判据只看「R→记录模型 + f 是 evidence 字段」（应用面负责基名一致性）。
+    if crate::frontend::core::sema::record_model::witness_premise_admitted(
+        &ctx.env.record_models,
+        refined,
+    ) {
+        return Ok(());
+    }
+
     // === 第 1 级：Evaluator 直接求值 ===
     if let Some(result) = try_direct_eval(ctx, constraint, bindings) {
         return result;
@@ -99,7 +108,10 @@ pub fn check_predicate_with_mode(
     }
     if mode == PredicateMode::Full {
         // 2b：SMT 蕴含——假设非空但不精确匹配
-        if !ctx.assumptions.is_empty() {
+        // 含证据字段路径的假设不是 SMT 可翻译项（RFC-027 §14.5）：整条蕴含跳过，
+        // 免得把 FieldPath 翻成伪造 atom 后得到错误结论。
+        let assumptions_have_field_path = ctx.assumptions.current().iter().any(contains_field_path);
+        if !ctx.assumptions.is_empty() && !assumptions_have_field_path {
             if let Some(result) = try_implication(ctx, constraint, bindings) {
                 return result;
             }
@@ -107,9 +119,14 @@ pub fn check_predicate_with_mode(
 
         // === 第 3 级：SMT 求解 ===
         // SMT 翻译不支持 Call/If/Range 形式——跳过，直接进入第 4 级
+        // 证据字段路径同样不是 SMT 可翻译项（RFC-027 §14.5）：不进求解器，
+        // 由 admission / 第 4 级处理。
         if !matches!(
             constraint,
-            ConstExpr::Call { .. } | ConstExpr::If { .. } | ConstExpr::Range { .. }
+            ConstExpr::Call { .. }
+                | ConstExpr::If { .. }
+                | ConstExpr::Range { .. }
+                | ConstExpr::FieldPath { .. }
         ) {
             let smt_result = try_smt_solve(ctx, constraint, bindings);
             if smt_result.is_proved() || matches!(smt_result, Err(ProofFailure::Disproved(_))) {
@@ -278,6 +295,29 @@ fn try_proof_fn_call(
         subject: Some(UnprovenSubject::Term(constraint.clone())),
         span: None,
     })
+}
+
+/// 约束树里是否含证据字段路径（SMT 面 gate：不翻译、不产物化 atom）。
+fn contains_field_path(expr: &ConstExpr) -> bool {
+    match expr {
+        ConstExpr::FieldPath { .. } => true,
+        ConstExpr::BinOp { left, right, .. } => {
+            contains_field_path(left) || contains_field_path(right)
+        }
+        ConstExpr::UnOp { expr, .. } => contains_field_path(expr),
+        ConstExpr::Call { args, .. } => args.iter().any(contains_field_path),
+        ConstExpr::If {
+            condition,
+            then_branch,
+            else_branch,
+        } => {
+            contains_field_path(condition)
+                || contains_field_path(then_branch)
+                || contains_field_path(else_branch)
+        }
+        ConstExpr::Range { start, end } => contains_field_path(start) || contains_field_path(end),
+        _ => false,
+    }
 }
 
 /// 折叠单个证明函数实参（RFC-027 §3.1：实参就是函数调用的实参——`f(5)` 与
