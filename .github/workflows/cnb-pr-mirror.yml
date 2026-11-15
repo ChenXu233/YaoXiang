@@ -27,14 +27,19 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
+      # 脚本与 dev 同源：工作流本身必须在默认分支（main）才能按 schedule 调度，
+      # 但实现放在 dev，这里固定检出 dev，避免两份脚本各自漂移。
       - uses: actions/checkout@v7
+        with:
+          ref: dev
 
       - name: Sync CNB pull requests to GitHub
         env:
           CNB_REPO: ChenXu233/YaoXiang
           CNB_TOKEN: ${{ secrets.CNB_TOKEN }}
-          # 用 PAT（细粒度：contents + pull-requests 写）时，镜像 PR 的 push 会正常触发 ci.yml；
-          # 未配置时回退到 GITHUB_TOKEN——它产生的事件不会拉起工作流，脚本会改为显式派发一次 ci.yml。
+          # 用 PAT（细粒度：contents + pull-requests 写）时 PR 由人触发，检查自动运行；
+          # 未配置时回退到 GITHUB_TOKEN——PR 由 Actions 自身创建，PR 上的检查会停在「等待批准」，
+          # 脚本改为显式派发一次 ci.yml，并把运行链接评论到 PR 上。
           GH_TOKEN: ${{ secrets.CNB_SYNC_PAT || github.token }}
           SYNC_PAT_PRESENT: ${{ secrets.CNB_SYNC_PAT != '' }}
         run: python3 .github/scripts/cnb-pr-mirror.py
