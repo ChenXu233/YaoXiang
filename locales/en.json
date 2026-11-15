@@ -271,7 +271,7 @@
     "title": "field not found",
     "message": "accessed a non-existent struct field",
     "template": "field '{field}' not found in struct '{struct}'",
-    "help": "check the available fields of the struct For an evidence field path in a predicate body, check the evidence field name in the record definition.",
+    "help": "Check the fields available on the struct; for an evidence field path in a predicate body, verify the evidence field name in the record definition.",
     "example": "point.z;",
     "error_output": "error[E1042]: field not found\n --> example.yx:1:7\n  |\n1 | point.z;\n  |       ^ field 'z' not found in struct 'Point'"
   },
@@ -910,7 +910,7 @@
     "title": "invalid refinement type argument form",
     "message": "refinement type argument cannot be converted to a compile-time constant expression",
     "template": "'{name}' requires a compile-time constant argument, but the given argument cannot be converted",
-    "help": "predicate/proof function arguments must be literals, variables, or single-argument type applications, otherwise the refinement constraint cannot be generated For type-level or predicate-body evidence paths: the whole predicate body must be one evidence field of the predicate's sole parameter, and the base name must match the applied argument name.",
+    "help": "Predicate/proof function arguments must be literals, variables, or single-parameter type applications; otherwise, a refinement constraint cannot be generated. In a type position or predicate body, an evidence field path must consist solely of the evidence field of the predicate's sole formal parameter, and its base name must match the name of the applied argument.",
     "example": "y: IsSmall(List(Int)) = 9999",
     "error_output": "error[E1092]: 'IsSmall' requires a compile-time constant argument, but the given argument cannot be converted",
     "messageinement type argument cannot be converted to a": "ref compile-time constant expression"
