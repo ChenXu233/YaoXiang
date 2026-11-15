@@ -260,9 +260,28 @@ fn link_z3(z3_dir: &Path) {
     }
 }
 
+/// 从 OUT_DIR 上溯定位 cargo 的 profile 目录（`target/<triple>/<profile>`）。
+///
+/// 不按固定层数上溯：cargo 1.100 起把单元产物目录从
+/// `<profile>/build/<pkg>-<hash>/out` 改为 `<profile>/build/<pkg>/<hash>/out`，
+/// OUT_DIR 与 profile 的层距随工具链版本变化（旧布局 3 层、新布局 4 层）。
+/// 两种布局的共同锚点是路径中最近的 `build` 目录：它的父目录恒为 profile
+/// 目录，带 target triple 时（`target/<triple>/<profile>/build/...`）同样成立。
+fn profile_dir(out: &Path) -> Option<&Path> {
+    out.ancestors()
+        .find(|p| p.file_name().is_some_and(|name| name == "build"))?
+        .parent()
+}
+
 /// 把 Z3 共享库复制进 target profile 目录，本地 cargo run/测试才能加载；
 /// Z3 许可证（MIT 分发义务）随库一并落盘。发版产物由 package-dist.sh
 /// 从同一目录取用，不重复维护平台映射。
+///
+/// 布局差异：cargo < 1.100 的测试二进制落在 `<profile>/deps`，与依赖库同目录，
+/// 因此旧布局还要副本进 `deps`；cargo >= 1.100 取消 `deps`，每个单元各占
+/// `<profile>/build/<pkg>/<hash>/out`，构建脚本无法预知这些目录——该布局下
+/// 跑测试须把 Z3 共享库所在目录加入动态库搜索路径（Windows `PATH`、
+/// Linux `LD_LIBRARY_PATH`）。
 fn copy_shared_lib(z3_dir: &Path) {
     let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap();
     let name = match target_os.as_str() {
@@ -287,17 +306,15 @@ fn copy_shared_lib(z3_dir: &Path) {
         None => return,
     };
     let out = env::var("OUT_DIR").unwrap();
-    let profile = Path::new(&out)
-        .parent()
-        .unwrap()
-        .parent()
-        .unwrap()
-        .parent()
-        .unwrap();
-    let deps = profile.join("deps");
-    let _ = fs::create_dir_all(&deps);
+    let Some(profile) = profile_dir(Path::new(&out)) else {
+        return;
+    };
     let _ = fs::copy(&src, profile.join(name));
-    let _ = fs::copy(&src, deps.join(name));
+    // 旧布局的共享测试库目录；新布局不创建它，也就不复制
+    let deps = profile.join("deps");
+    if deps.is_dir() {
+        let _ = fs::copy(&src, deps.join(name));
+    }
     // MIT 要求分发二进制时附带许可文本；Z3 发行包根有 LICENSE.txt
     for license in ["LICENSE.txt", "LICENSE"] {
         let license_src = z3_dir.join(license);
