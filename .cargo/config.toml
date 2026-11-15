@@ -28,6 +28,27 @@ ar = "x86_64-w64-mingw32-ar"
 # linker = "clang"  # macOS 上默认使用系统 clang
 
 # =============================================================================
+# 运行期 Z3 共享库查找（cargo runner）
+# =============================================================================
+#
+# `build.rs` 把 libz3 复制到 <profile>，主程序与它同目录，加载没有问题。但
+# cargo 1.100 起单元产物落在 `<profile>/build/<包名>/<哈希>/out`，`deps/` 不再
+# 创建：测试与基准二进制各自散在哈希目录里，构建脚本无法预知这些路径，动态
+# 链接的 libz3 在启动时找不到（Windows STATUS_DLL_NOT_FOUND / Linux 缺少共享
+# 对象）。
+#
+# runner 在 cargo 运行任何产物（run / test / bench）前执行
+# `scripts/dev/z3_runner.py`，把 `.z3` 资产里的共享库目录前置进
+# PATH / LD_LIBRARY_PATH / DYLD_LIBRARY_PATH，再原样转交产物与退出码；找不到
+# 资产时原样透传。脚本路径相对仓库根，从仓库根调用 cargo 即可。
+
+[target.'cfg(windows)']
+runner = "python scripts/dev/z3_runner.py"
+
+[target.'cfg(unix)']
+runner = "python3 scripts/dev/z3_runner.py"
+
+# =============================================================================
 # 优化配置
 # =============================================================================
 
