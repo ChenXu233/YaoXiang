@@ -950,12 +950,11 @@ E1115). Both terms refer to the same category of field.
 > also been implemented (B.2b). Quantity representation, runtime erasure, and the 5A criterion
 > itself belong to an earlier round (WBS 6.9.5 B.1). Type-level `b.w` (B.3) has been implemented
 > (admission reading, D2 decision A); cross-module export (B.4) has landed (V1 re-proof only:
-> per-library source fingerprint + importer re-proof; translation/bridging wait for the §4.1
-> kernel; the two slots stay unmaterialized, D1 ruling A). The `evidence_ref` / `certificate_ref`
-> slots **are not added with B.3**; B.4 also leaves them unmaterialized (no producer until the
-> §4.1 kernel batch, D1 ruling A). The explicit evidence entry point in B.2 is a proof function in a
-> constraint, not a constructor argument. Illegal declaration positions reuse E1092 / E1042 (D1
-> decision).
+> per-library source fingerprint + importer re-proof; translation/bridging wait for the §4.1 kernel;
+> the two slots stay unmaterialized, D1 ruling A). The `evidence_ref` / `certificate_ref` slots
+> **are not added with B.3**; B.4 also leaves them unmaterialized (no producer until the §4.1 kernel
+> batch, D1 ruling A). The explicit evidence entry point in B.2 is a proof function in a constraint,
+> not a constructor argument. Illegal declaration positions reuse E1092 / E1042 (D1 decision).
 
 #### 8.3.1 Field Position Rules: Proof-Space Criterion
 
@@ -1119,9 +1118,9 @@ A referenced proof-library entry must appear in the importing module's library l
 conclusion is Unproven, and the diagnostic asks the user to register the library or write a bridging
 axiom.
 
-> **Implementation status (V1)**: the current implementation performs only importer-side re-proof plus
-> per-library source fingerprint comparison; translation terms and bridging axioms await the RFC-027
-> §4.1 kernel; the `evidence_ref`/`certificate_ref` slots stay unmaterialized (D1 A), and
+> **Implementation status (V1)**: the current implementation performs only importer-side re-proof
+> plus per-library source fingerprint comparison; translation terms and bridging axioms await the
+> RFC-027 §4.1 kernel; the `evidence_ref`/`certificate_ref` slots stay unmaterialized (D1 A), and
 > `signature_hash` is the export-side evidence-payload fingerprint.
 
 #### 8.3.5 Type-Level Use and Value-Level Rejection
