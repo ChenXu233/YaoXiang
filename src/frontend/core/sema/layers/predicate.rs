@@ -110,8 +110,11 @@ pub fn check_predicate_with_mode(
         // 2b：SMT 蕴含——假设非空但不精确匹配
         // 含证据字段路径的假设不是 SMT 可翻译项（RFC-027 §14.5）：整条蕴含跳过，
         // 免得把 FieldPath 翻成伪造 atom 后得到错误结论。
+        // 约束**整棵树**含证据字段路径时也不进 SMT（根形态 gate 不够：`{ bb.w > 0 }` 的根是 BinOp）。
+        let constraint_has_field_path = contains_field_path(constraint);
         let assumptions_have_field_path = ctx.assumptions.current().iter().any(contains_field_path);
-        if !ctx.assumptions.is_empty() && !assumptions_have_field_path {
+        if !ctx.assumptions.is_empty() && !assumptions_have_field_path && !constraint_has_field_path
+        {
             if let Some(result) = try_implication(ctx, constraint, bindings) {
                 return result;
             }
@@ -121,13 +124,12 @@ pub fn check_predicate_with_mode(
         // SMT 翻译不支持 Call/If/Range 形式——跳过，直接进入第 4 级
         // 证据字段路径同样不是 SMT 可翻译项（RFC-027 §14.5）：不进求解器，
         // 由 admission / 第 4 级处理。
-        if !matches!(
-            constraint,
-            ConstExpr::Call { .. }
-                | ConstExpr::If { .. }
-                | ConstExpr::Range { .. }
-                | ConstExpr::FieldPath { .. }
-        ) {
+        if !constraint_has_field_path
+            && !matches!(
+                constraint,
+                ConstExpr::Call { .. } | ConstExpr::If { .. } | ConstExpr::Range { .. }
+            )
+        {
             let smt_result = try_smt_solve(ctx, constraint, bindings);
             if smt_result.is_proved() || matches!(smt_result, Err(ProofFailure::Disproved(_))) {
                 return smt_result;
@@ -297,8 +299,11 @@ fn try_proof_fn_call(
     })
 }
 
-/// 约束树里是否含证据字段路径（SMT 面 gate：不翻译、不产物化 atom）。
-fn contains_field_path(expr: &ConstExpr) -> bool {
+/// 约束树里是否含证据字段路径（SMT 面 gate 与声明面共用的**单一收集器**）。
+///
+/// `pub(crate)`：第二个调用点是 `checker::validate_predicate_witness_paths`
+/// （禁令一 B：复用同一遍历，不写第二份）。
+pub(crate) fn contains_field_path(expr: &ConstExpr) -> bool {
     match expr {
         ConstExpr::FieldPath { .. } => true,
         ConstExpr::BinOp { left, right, .. } => {

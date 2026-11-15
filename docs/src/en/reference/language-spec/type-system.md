@@ -943,8 +943,8 @@ This section calls these **evidence fields**; diagnostic messages call them **wi
 > through the record model to the IR, and user-reachable E4018 / E2031 / E1114 / E1115 have landed
 > (WBS 6.9.5 B.2a). Instantiation determination for generic records, const parameters, and proof
 > families has also landed (B.2b). Quantity representation, runtime erasure, and the 5A criterion
-> proper belong to an earlier round (WBS 6.9.5 B.1). Type-level (B.3) has landed (the admission reading; D2 ruling A); cross-module export (B.4) has not yet
-> landed. The `evidence_ref` / `certificate_ref` slots are **not added with B.3** (B.3 does not
+> proper belong to an earlier round (WBS 6.9.5 B.1). Type-level `b.w` (B.3) has landed (the
+> admission reading; D2 ruling A); cross-module export (B.4) has not yet landed. The `evidence_ref` / `certificate_ref` slots are **not added with B.3** (B.3 does not
 > materialize either slot); they are added with B.4. B.2's explicit evidence entry point is a proof
 > function in a constraint, not a constructor argument. Illegal declaration positions reuse
 > E1092 / E1042 (D1 ruling).

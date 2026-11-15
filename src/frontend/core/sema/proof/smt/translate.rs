@@ -32,13 +32,19 @@ pub fn translate_constraint(
     }
 
     // 2. 背景断言（假设栈）
+    // 不可翻译项（含证据字段路径）：整组命令不产出，由调用方 gate 到非 SMT 路径。
     for assumption in assumptions {
-        commands.push(SMTCommand::Assert(translate_expr(assumption)));
+        let Some(expr) = translate_expr(assumption) else {
+            return Vec::new();
+        };
+        commands.push(SMTCommand::Assert(expr));
     }
 
     // 3. 目标取反：(assert (not constraint))
     //    Z3 返回 unsat = 目标在所有假设下成立
-    let goal = translate_expr(constraint);
+    let Some(goal) = translate_expr(constraint) else {
+        return Vec::new();
+    };
     let not_goal = SMTExpr::App("not".into(), vec![goal]);
     commands.push(SMTCommand::Assert(not_goal));
 
@@ -49,27 +55,33 @@ pub fn translate_constraint(
     commands
 }
 
-/// ConstExpr → SMTExpr 翻译
-pub(crate) fn translate_expr(expr: &ConstExpr) -> SMTExpr {
+/// ConstExpr → SMTExpr 翻译。
+///
+/// 返回 `None` 表示该项不是 SMT 可翻译项——**不产出伪造 atom**。
+/// V1 的 `FieldPath`（证据字段路径，RFC-027 §14.5）走此路：SMT 面无项语言。
+pub(crate) fn translate_expr(expr: &ConstExpr) -> Option<SMTExpr> {
     match expr {
         // 字面量
-        ConstExpr::Lit(value) => match value {
+        ConstExpr::Lit(value) => Some(match value {
             ConstValue::Int(n) => SMTExpr::Atom(n.to_string()),
             ConstValue::Bool(true) => SMTExpr::Atom("true".into()),
             ConstValue::Bool(false) => SMTExpr::Atom("false".into()),
-            _ => SMTExpr::Atom(format!("{:?}", value)),
-        },
+            _ => return None,
+        }),
 
         // 变量引用
-        ConstExpr::NamedVar(name) => SMTExpr::Atom(name.clone()),
+        ConstExpr::NamedVar(name) => Some(SMTExpr::Atom(name.clone())),
 
         // Const 变量引用
-        ConstExpr::Var(var) => SMTExpr::Atom(var.to_string()),
+        ConstExpr::Var(var) => Some(SMTExpr::Atom(var.to_string())),
+
+        // 证据字段路径不是 SMT 项（RFC-027 §14.5）：显式拒绝，不产物化 atom。
+        ConstExpr::FieldPath { .. } => None,
 
         // 二元运算
         ConstExpr::BinOp { op, left, right } => {
-            let l = translate_expr(left);
-            let r = translate_expr(right);
+            let l = translate_expr(left)?;
+            let r = translate_expr(right)?;
             let smt_op = match op {
                 BinOp::Gt => ">",
                 BinOp::Ge => ">=",
@@ -85,29 +97,25 @@ pub(crate) fn translate_expr(expr: &ConstExpr) -> SMTExpr {
                 BinOp::And => "and",
                 BinOp::Or => "or",
                 // 位运算暂不支持 SMT 翻译
-                _ => {
-                    return SMTExpr::Atom(format!("{:?}", expr));
-                }
+                _ => return None,
             };
-            SMTExpr::App(smt_op.into(), vec![l, r])
+            Some(SMTExpr::App(smt_op.into(), vec![l, r]))
         }
 
         // 一元运算
         ConstExpr::UnOp { op, expr: inner } => {
-            let i = translate_expr(inner);
+            let i = translate_expr(inner)?;
             let smt_op = match op {
                 UnOp::Not => "not",
                 UnOp::Neg => "-",
-                UnOp::Pos => return i, // 正号直接透传
-                _ => {
-                    return SMTExpr::Atom(format!("{:?}", expr));
-                }
+                UnOp::Pos => return Some(i), // 正号直接透传
+                _ => return None,
             };
-            SMTExpr::App(smt_op.into(), vec![i])
+            Some(SMTExpr::App(smt_op.into(), vec![i]))
         }
 
         // If/Range/Call 在阶段 2 不做 SMT 翻译——走 Evaluator 直接求值路径
-        _ => SMTExpr::Atom(format!("{:?}", expr)),
+        _ => None,
     }
 }
 

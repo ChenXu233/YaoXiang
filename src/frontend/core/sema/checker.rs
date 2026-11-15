@@ -4007,11 +4007,15 @@ impl TypeChecker {
         module_span: crate::util::span::Span,
     ) {
         use crate::frontend::core::types::const_data::ConstExpr;
+        // 整棵树含 FieldPath 的条目都进校验（不是只看根形态）：与 SMT gate 共用
+        // predicate.rs 的单一收集器（禁令一 B，不写第二份遍历）。
         let entries: Vec<(String, String, MonoType, ConstExpr)> = self
             .env
             .predicate_defs
             .iter()
-            .filter(|(_, def)| matches!(&def.constraint, ConstExpr::FieldPath { .. }))
+            .filter(|(_, def)| {
+                crate::frontend::core::sema::layers::predicate::contains_field_path(&def.constraint)
+            })
             .map(|(name, def)| {
                 (
                     name.clone(),
@@ -4023,7 +4027,10 @@ impl TypeChecker {
             .collect();
         let _span_guard = crate::util::diagnostic::push_current_span(module_span);
         for (name, param_name, param_type, constraint) in entries {
+            // 契约 §五：整条 constraint 必须**恰为** FieldPath{ base == 唯一形参名, field ∈ evidence }。
             let ConstExpr::FieldPath { base, field } = &constraint else {
+                // 含路径但不满足「整条恰为 FieldPath」的形态 ⇒ 硬诊断，不落到判定面。
+                self.add_error(ErrorCodeDefinition::refined_arg_not_const(&name).build());
                 continue;
             };
             let base_is_param = matches!(base.as_ref(), ConstExpr::NamedVar(n) if n == &param_name);

@@ -46,7 +46,7 @@ fn test_translate_simple_constraint() {
 #[test]
 fn test_translate_expr_gt_to_smt_gt() {
     let expr = make_gt("x", 10);
-    let result = translate_expr(&expr);
+    let result = translate_expr(&expr).expect("GT 必须可翻译");
     assert_eq!(
         result.to_string(),
         "(> x 10)",
@@ -71,5 +71,29 @@ fn test_infer_var_sorts_from_arithmetic_constraints() {
     assert!(
         sorts.contains_key("y"),
         "约束中的 y 变量应被推断: {sorts:?}"
+    );
+}
+/// T16/R5：证据字段路径不是 SMT 项——显式拒绝，不产出伪造 atom。
+#[test]
+fn test_translate_field_path_is_not_translatable() {
+    // Arrange
+    let path = ConstExpr::FieldPath {
+        base: Box::new(ConstExpr::NamedVar("bb".into())),
+        field: "w".into(),
+    };
+    let composite = ConstExpr::BinOp {
+        op: BinOp::Gt,
+        left: Box::new(path.clone()),
+        right: Box::new(ConstExpr::Lit(ConstValue::Int(0))),
+    };
+
+    // Act + Assert
+    assert!(
+        translate_expr(&path).is_none(),
+        "translate_expr(FieldPath) 必须返回 None（不产物化 atom）"
+    );
+    assert!(
+        translate_expr(&composite).is_none(),
+        "含 FieldPath 的组合式同样不可翻译（不得伪造 atom）"
     );
 }

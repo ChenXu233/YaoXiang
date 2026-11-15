@@ -52,7 +52,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 | `E1083` | `?` 的错误类型不匹配 | `TypeCheck` | 否 | `\`?\` 的错误类型不匹配：期望 '{expected}'，实际 '{found}'` | ✅ 1 处 |
 | `E1090` | ✨ 不可言说 ✨ | `TypeCheck` | 否 | `Type: Type = Type` | ⚠ 暂未发射 |
 | `E1091` | 无效的泛型元类型 | `TypeCheck` | 否 | `泛型元类型自引用不允许：'{decl}'` | ✅ 1 处 |
-| `E1092` | 精化类型实参形态非法 | `TypeCheck` | 否 | `'{name}' 要求编译期常量实参，但所给实参无法转换` | ✅ 9 处 |
+| `E1092` | 精化类型实参形态非法 | `TypeCheck` | 否 | `'{name}' 要求编译期常量实参，但所给实参无法转换` | ✅ 10 处 |
 | `E1093` | 精化实参个数不匹配 | `TypeCheck` | 否 | `'{name}' 期望 {expected} 个实参，实际 {found} 个` | ✅ 2 处 |
 | `E1094` | 未使用的编译期值参数 | `TypeCheck` | 否 | `'{param}' 声明为 '{type}' 的编译期值参数，但未在类型体中被引用` | ✅ 1 处 |
 | `E1095` | 未知接口 | `TypeCheck` | 否 | `未知接口：'{name}'（类型体引用的名字不是已注册的类型构造器）` | ✅ 1 处 |
@@ -275,8 +275,8 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **构造函数**：`ErrorCodeDefinition::field_not_found(field, struct_)`
 - **模板**：`在结构体 '{struct}' 中找不到字段 '{field}'`
 - **消息**：访问了不存在的结构体字段
-- **帮助**：检查结构体的可用字段
-- **发射点**：`src/backends/mod.rs:158`、`src/frontend/core/sema/checker.rs:4043`、`src/frontend/core/sema/inference/expressions.rs:1479` 等 10 处
+- **帮助**：检查结构体的可用字段；若为谓词体的证据字段路径，请核对记录定义中的 evidence 字段名
+- **发射点**：`src/backends/mod.rs:158`、`src/frontend/core/sema/checker.rs:4050`、`src/frontend/core/sema/inference/expressions.rs:1479` 等 10 处
 
 ### E1043：模块成员未找到
 
@@ -475,8 +475,8 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **构造函数**：`ErrorCodeDefinition::refined_arg_not_const(name)`
 - **模板**：`'{name}' 要求编译期常量实参，但所给实参无法转换`
 - **消息**：精化类型实参无法转换为编译期常量表达式
-- **帮助**：谓词/证明函数实参必须是字面量、变量或单参数类型应用，否则精化约束无法生成
-- **发射点**：`src/frontend/core/sema/checker.rs:3916`、`src/frontend/core/sema/checker.rs:3964`、`src/frontend/core/sema/checker.rs:3992` 等 9 处
+- **帮助**：谓词/证明函数实参必须是字面量、变量或单参数类型应用，否则精化约束无法生成；若在类型位或谓词体：证据字段路径必须整条为该谓词唯一形参的 evidence 字段，基名须与应用实参名一致
+- **发射点**：`src/frontend/core/sema/checker.rs:3916`、`src/frontend/core/sema/checker.rs:3964`、`src/frontend/core/sema/checker.rs:3992` 等 10 处
 - **源码注释名**：精化类型实参形态非法（RFC-027，#263）
 
 ### E1093：精化实参个数不匹配

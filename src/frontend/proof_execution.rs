@@ -244,6 +244,11 @@ fn expand_callee_param_refinements(
                 });
             }
             ref constraint => {
+                // 证据字段路径前提（RFC-027 §14.5）：V1 未支持——保守跳过，不内联求值、
+                // 不静默当作已证（组合形态已在声明面被硬诊断拒绝，此处为防御性第二道）。
+                if matches!(constraint, ConstExpr::FieldPath { .. }) {
+                    continue;
+                }
                 // 谓词内联形态：闭合 Bool 约束直接判定（值环境 = 形参实参 + 模块常量）
                 let mut bindings = state.constants.clone();
                 for (name, value) in declared_names.iter().zip(call.args.iter()) {

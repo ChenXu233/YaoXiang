@@ -456,3 +456,59 @@ fn test_admission_short_circuits_before_smt() {
         "admission 必须在求值器/SMT 之前放行；实际: {verdict:?}"
     );
 }
+/// F2（t19）：含证据路径但整条不是 FieldPath 的谓词体——声明面恰 1 条 E1092，
+/// 不得落到判定面（无 E4018/E2031 级联）。
+#[test]
+fn test_composite_field_path_constraints_rejected_at_declaration() {
+    // Arrange
+    for body in ["bb.w > 0", "bb.w == bb.w", "bb.w >= bb.w"] {
+        let source = format!(
+            "Pos: (v: Int) -> Type = {{ v > 0 }}\n\nBox: Type = {{\n    v: Int,\n    w: Pos(v),\n}}\n\nBad: (bb: Box) -> Type = {{ {body} }}\n"
+        );
+
+        // Act
+        let (result, _) = check_collect(&source);
+        let codes: Vec<&str> = result.diagnostics.iter().map(|d| d.code.as_str()).collect();
+
+        // Assert
+        assert_eq!(
+            codes.iter().filter(|c| **c == "E1092").count(),
+            1,
+            "`{body}` 必须恰 1 条 E1092（声明面硬诊断）；实际: {codes:?}"
+        );
+        assert!(
+            !codes.contains(&"E4018") && !codes.contains(&"E2031"),
+            "`{body}` 不得落到判定面（无 E4018/E2031）；实际: {codes:?}"
+        );
+    }
+}
+
+/// F9（t19）：FieldPath 的项级助手断言——求值器 Err、自由名只收基名、节点数 1+base。
+#[test]
+fn test_field_path_term_helpers() {
+    // Arrange
+    use crate::frontend::core::sema::proof::budget::BudgetTracker;
+    use crate::frontend::core::types::eval::const_eval::{const_expr_free_names, const_expr_node_count};
+    use crate::frontend::core::types::eval::evaluator::Evaluator;
+    let term = ConstExpr::FieldPath {
+        base: Box::new(ConstExpr::NamedVar("b".into())),
+        field: "w".into(),
+    };
+    let types = std::collections::HashMap::new();
+    let budget = BudgetTracker::for_judgment();
+    let dep_env = crate::frontend::core::types::eval::dependent_types::DependentTypeEnv::new();
+    let mut evaluator = Evaluator::new(&types, &budget, &dep_env);
+
+    // Act
+    let evaluated = evaluator.eval_expr(&term, &std::collections::HashMap::new());
+    let free = const_expr_free_names(&term);
+    let nodes = const_expr_node_count(&term);
+
+    // Assert
+    assert!(
+        evaluated.is_err(),
+        "Evaluator 遇 FieldPath 必须 Err，实际: {evaluated:?}"
+    );
+    assert_eq!(free, vec!["b".to_string()], "自由名只收基名 b，字段名不计");
+    assert_eq!(nodes, 2, "FieldPath 节点数 = 1 + base = 2；实际: {nodes}");
+}
