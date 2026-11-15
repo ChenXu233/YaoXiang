@@ -70,6 +70,8 @@ impl TypeChecker {
             obligations: Vec::new(),
             evidence: Vec::new(),
             admission_fields: Vec::new(),
+            libraries: Vec::new(),
+            from_payload: false,
             field_path: fields
                 .iter()
                 .enumerate()

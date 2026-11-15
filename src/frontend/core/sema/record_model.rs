@@ -11,6 +11,7 @@
 
 use crate::frontend::core::types::const_data::ConstExpr;
 use crate::frontend::core::types::mono::{MonoType, StructFieldInfo};
+use crate::util::content_hash::ContentHash;
 
 /// 一条 evidence 字段要证明的命题。
 #[derive(Debug, Clone)]
@@ -89,6 +90,26 @@ pub struct EvidenceSlot {
     pub proposition: Option<Proposition>,
 }
 
+/// 证据来源类别（RFC-027 §14.4 `libraries`）。V1 零生产者：无公理库语法。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LibraryKind {
+    /// 证明函数来源（谓词已内联，见 B.4 §八.2）
+    Proof,
+    /// 公理库（仅保留 RFC 形状；V1 无生产者）
+    Axiom,
+}
+
+/// 一条随 payload 导出的证据来源。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LibraryRef {
+    /// 来源类别
+    pub kind: LibraryKind,
+    /// 被引用的本地定义名（证明函数头）
+    pub id: String,
+    /// 该定义在导出方的规范文本指纹（含约束体）
+    pub hash: ContentHash,
+}
+
 /// 记录的依赖记录 Σ 模型。
 #[derive(Debug, Clone, Default)]
 pub struct RecordModel {
@@ -106,6 +127,10 @@ pub struct RecordModel {
     pub admission_fields: Vec<AdmissionField>,
     /// 字段名 → 声明序（声明期索引；运行期索引只由 `runtime_field_index` 回答）
     pub field_path: Vec<(String, usize)>,
+    /// 证据来源清单（仅导出构造时填；本地定义面恒空）
+    pub libraries: Vec<LibraryRef>,
+    /// 导入面标记：只在 `register_type_payload` 恢复模型时置 true
+    pub from_payload: bool,
 }
 
 /// 记录类型解析：`Refined`/`Ref` 透明；`Struct`/`TypeRef`/`Generic` 按名查模型。
@@ -197,6 +222,90 @@ impl RecordModel {
             .get(index)
             .map(|field| matches!(field.quantity, Some(crate::ast::Quantity::Zero)))
             .unwrap_or(false)
+    }
+
+    /// 记录模型的规范文本（`signature_hash` 的哈希对象）。
+    ///
+    /// 只覆盖**证据相关投影**：类型参数 kind、字段量词、构造义务、admission、
+    /// 证据槽、libraries；不覆盖 type_def/sum_variants/interface_impls，也不含
+    /// `from_payload`（导入写回态不改变 payload 完整性）。
+    pub fn canonical_text(&self) -> String {
+        fn kind_tag(kind: &RecordTypeParamKind) -> String {
+            match kind {
+                RecordTypeParamKind::Type => "type".to_string(),
+                RecordTypeParamKind::Const => "const".to_string(),
+                RecordTypeParamKind::Family { arity } => format!("family({arity})"),
+            }
+        }
+        fn quantity_tag(quantity: Option<crate::ast::Quantity>) -> &'static str {
+            match quantity {
+                Some(crate::ast::Quantity::Zero) => "zero",
+                _ => "one",
+            }
+        }
+        fn kind_name(kind: LibraryKind) -> &'static str {
+            match kind {
+                LibraryKind::Proof => "proof",
+                LibraryKind::Axiom => "axiom",
+            }
+        }
+        let mut text = format!("record {}", self.name);
+        for param in &self.type_params {
+            text.push_str(&format!("\nparam {} {}", param.name, kind_tag(&param.kind)));
+        }
+        for field in &self.fields {
+            text.push_str(&format!(
+                "\nfield {} {} {} mut={} default={}",
+                field.name,
+                quantity_tag(field.quantity),
+                field.ty,
+                field.is_mut,
+                field.has_default
+            ));
+        }
+        for obligation in &self.obligations {
+            text.push_str(&format!(
+                "\nobligation {} {} {} depends={:?} params={:?}",
+                obligation.field,
+                obligation.proposition.base,
+                obligation.proposition.constraint,
+                obligation.depends_on,
+                obligation.param_refs
+            ));
+        }
+        for admission in &self.admission_fields {
+            text.push_str(&format!(
+                "\nadmission {} {} {}",
+                admission.field, admission.proposition.base, admission.proposition.constraint
+            ));
+        }
+        for slot in &self.evidence {
+            let proposition = slot
+                .proposition
+                .as_ref()
+                .map(|p| format!("{} {}", p.base, p.constraint))
+                .unwrap_or_default();
+            text.push_str(&format!(
+                "\nevidence {} {} {}",
+                slot.field,
+                quantity_tag(slot.quantity),
+                proposition
+            ));
+        }
+        for library in &self.libraries {
+            text.push_str(&format!(
+                "\nlibrary {} {} {}",
+                kind_name(library.kind),
+                library.id,
+                library.hash.to_hex()
+            ));
+        }
+        text
+    }
+
+    /// 导出侧证据环境指纹（不是 §4.1 签名；见 B.4 §六.4）。
+    pub fn signature_hash(&self) -> ContentHash {
+        ContentHash::of_text(&self.canonical_text())
     }
 
     /// 数据字段的声明序（构造参数与运行期布局的口径）。

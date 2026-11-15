@@ -60,6 +60,14 @@ P4「统一 Driver」是全计划最大风险点，本层是 P4 唯一可执行�
 | init-order-entry-reads-dep-value | 初始化按 `use` 依赖拓扑序：入口顶层绑定读**被依赖单元**顶层值（修复前读到 void → 运行期 E6007，#467 / WBS 4.10.4） | 行为 |
 | init-order-dep-fn-reads-own-value | 同上序：入口顶层绑定调用依赖单元的函数，该函数读**本单元**顶层值（修复前运行期 E6007，#467 / WBS 4.10.4） | 行为 |
 | import-cycle-reads-before-init | 模块导入环：环内初始化顺序不可判定，编译期发 W1007（消息含环路径 + 被违反的边）；check/run 退出码均不变（#491 / WBS 4.10.5） | runtime-error |
+| record-evidence-import | 导入含 evidence 记录后构造合法值（B.4 导出/导入链） | 行为 |
+| record-evidence-import-violation | 导入记录构造 `Box(-3, 5)` 触发证据义务 E4018 | compile-error |
+| record-evidence-proof-source-missing | 证明函数来源不可本地执行 ⇒ E4020 | compile-error |
+| record-evidence-proof-source-local | 本地同源证明函数 ⇒ 重证通过（路径 3 正控） | 行为 |
+| record-evidence-source-drift | 同名不同义来源指纹不符 ⇒ E4020（F1 负控） | compile-error |
+| record-evidence-import-unused | 只导入/传递、不构造 ⇒ 0 诊断 | 行为 |
+| record-evidence-witness-premise | 导入记录 + B.3 类型级 `b.w` 前提 admission 正控 | 行为 |
+| record-evidence-witness-premise-value-err | 导入记录值级读 `b.w` ⇒ E1114 | compile-error |
 
 ## 计划扩展（登记用，落地时勾掉）
 

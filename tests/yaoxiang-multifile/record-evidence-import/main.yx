@@ -1,0 +1,6 @@
+use lib.{Box}
+
+main: () -> Void = {
+    b = Box(3, 5)
+    x = b.z
+}

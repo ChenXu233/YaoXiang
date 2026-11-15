@@ -1,0 +1,5 @@
+use lib.{Box}
+
+f: (b: Box) -> Int = { b.v }
+
+main: () -> Void = { }

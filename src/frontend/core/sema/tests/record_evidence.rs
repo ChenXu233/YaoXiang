@@ -620,6 +620,7 @@ fn test_registry_and_full_stage_quantities_agree() {
     registry_checker.collect_signatures(
         &parsed.module,
         &TypeLevelNamespace::scan_one(&parsed.module),
+        &std::collections::HashMap::new(),
     );
     let registry_quantities = registry_checker
         .env()

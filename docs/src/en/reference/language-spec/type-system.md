@@ -403,7 +403,8 @@ b = Box(3, 5)       // arity = 2 (v, z); at runtime only v=3, z=5 exist; w is co
 > evidence is automatically synthesized and judged at the construction site—disproof reports E4018,
 > failure to prove reports E2031, value-level reads report E1114, and mutable writes report E1115.
 > Type-level `b.w` (B.3) has been implemented (admission reading, D2 decision A); cross-module
-> export (B.4) has not yet been implemented.
+> export (B.4) has landed (V1 re-proof only: per-library source fingerprint + importer re-proof;
+> translation/bridging wait for the §4.1 kernel; the two slots stay unmaterialized, D1 ruling A).
 
 ### 3.5 Function Types
 
@@ -948,9 +949,11 @@ E1115). Both terms refer to the same category of field.
 > B.2a); instantiation classification for generic records, const parameters, and proof families has
 > also been implemented (B.2b). Quantity representation, runtime erasure, and the 5A criterion
 > itself belong to an earlier round (WBS 6.9.5 B.1). Type-level `b.w` (B.3) has been implemented
-> (admission reading, D2 decision A); cross-module export (B.4) has not yet been implemented. The
-> `evidence_ref` / `certificate_ref` slots **are not added with B.3** (B.3 does not materialize two
-> slots); they are added with B.4. The explicit evidence entry point in B.2 is a proof function in a
+> (admission reading, D2 decision A); cross-module export (B.4) has landed (V1 re-proof only:
+> per-library source fingerprint + importer re-proof; translation/bridging wait for the §4.1
+> kernel; the two slots stay unmaterialized, D1 ruling A). The `evidence_ref` / `certificate_ref`
+> slots **are not added with B.3**; B.4 also leaves them unmaterialized (no producer until the
+> §4.1 kernel batch, D1 ruling A). The explicit evidence entry point in B.2 is a proof function in a
 > constraint, not a constructor argument. Illegal declaration positions reuse E1092 / E1042 (D1
 > decision).
 

@@ -26,7 +26,7 @@ description: '泛型约束、特质系统与常量求值相关的错误。'
 | `E4014` | 常量求值失败 | `Generic` | 是 | `无法求值常量表达式：{reason}` | ✅ 11 处 |
 | `E4018` | 精化谓词违反 | `Generic` | 是 | `精化谓词违反：{constraint}{counterexample}` | ✅ 6 处 |
 | `E4019` | 类型等式不成立 | `Generic` | 否 | `类型等式不成立：期望 {expected}，实际 {found}` | ✅ 1 处 |
-| `E4020` | 需要证明函数 | `Generic` | 否 | `需要证明函数来验证约束` | ✅ 1 处 |
+| `E4020` | 需要证明函数 | `Generic` | 否 | `需要证明函数来验证约束` | ✅ 2 处 |
 | `E4021` | 循环终止性无法自动证明 | `Generic` | 否 | `无法自动证明循环终止：未找到有效的递减度量` | ✅ 1 处 |
 | `E4022` | 测度不成立 | `Generic` | 否 | `测度不成立：此调用点无法证明测度严格递减  反例： {counterexample}` | ✅ 1 处 |
 | `E4023` | 无法在内核内证明 | `Generic` | 否 | `无法证明：{proposition}（{reason}）` | ✅ 1 处 |
@@ -149,7 +149,7 @@ description: '泛型约束、特质系统与常量求值相关的错误。'
 - **模板**：`需要证明函数来验证约束`
 - **消息**：约束无法在编译期证明，需要提供证明函数
 - **帮助**：添加证明函数或提供运行时检查
-- **发射点**：`src/frontend/core/sema/proof/verdict.rs:397`
+- **发射点**：`src/frontend/core/sema/checker/refinement.rs:952`、`src/frontend/core/sema/proof/verdict.rs:397`
 - **源码注释名**：需要证明函数来验证约束
 
 ### E4021：循环终止性无法自动证明

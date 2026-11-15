@@ -595,8 +595,17 @@ impl TypeChecker {
         &mut self,
         module: &Module,
         namespace: &super::probe::TypeLevelNamespace,
+        predicate_defs: &std::collections::HashMap<
+            String,
+            crate::frontend::core::sema::predicate_resolver::PredicateDef,
+        >,
     ) {
         self.type_level_namespace = namespace.clone();
+        // H1：先补种本单元谓词表，使 pass1 的记录模型分类看到内联命题体
+        //（`Pos(v)` → `v > 0`），而不是 `Call{Pos,[v]}`。
+        for (name, def) in predicate_defs {
+            self.env.predicate_defs.insert(name.clone(), def.clone());
+        }
         // pass1: 类型定义
         for stmt in &module.items {
             // #324：模块级阶段挂当前语句 span，诊断自动获得位置
@@ -2081,9 +2090,14 @@ impl TypeChecker {
                                 if matches!(export.kind, crate::frontend::module::ExportKind::Type)
                                     && export.type_payload.is_some()
                                 {
-                                    self.register_use_export(&export.name, export, false);
+                                    self.register_use_export(
+                                        &export.name,
+                                        export,
+                                        false,
+                                        stmt.span,
+                                    );
                                 }
-                                self.register_use_export(module_alias, export, true);
+                                self.register_use_export(module_alias, export, true, stmt.span);
                             }
                         }
                         // use path as alias → 整个模块用别名注册
@@ -2105,9 +2119,14 @@ impl TypeChecker {
                                         crate::frontend::module::ExportKind::Type
                                     ) && export.type_payload.is_some()
                                     {
-                                        self.register_use_export(&export.name, export, false);
+                                        self.register_use_export(
+                                            &export.name,
+                                            export,
+                                            false,
+                                            stmt.span,
+                                        );
                                     }
-                                    self.register_use_export(alias_name, export, true);
+                                    self.register_use_export(alias_name, export, true, stmt.span);
                                 }
                             }
                         }
@@ -2141,8 +2160,11 @@ impl TypeChecker {
                                     None => self.record_import_name(&item.name, stmt.span),
                                 }
                                 match local_name {
-                                    Some(local) => self.register_use_export(local, export, true),
-                                    None => self.register_use_export(&item.name, export, false),
+                                    Some(local) => {
+                                        self.register_use_export(local, export, true, stmt.span)
+                                    }
+                                    None => self
+                                        .register_use_export(&item.name, export, false, stmt.span),
                                 }
                             }
                         }
@@ -2523,14 +2545,134 @@ impl TypeChecker {
                 ));
             }
         }
-        if type_def.is_none() && sum_variants.is_empty() && interface_impls.is_empty() {
+        // B.4 §三.2：仅含证据字段或自引用精化字段的记录携带模型；纯数据记录 None。
+        let carrier = self
+            .env
+            .record_models
+            .get(name)
+            .filter(|model| model.has_evidence() || !model.admission_fields.is_empty())
+            .cloned();
+        if type_def.is_none()
+            && sum_variants.is_empty()
+            && interface_impls.is_empty()
+            && carrier.is_none()
+        {
             return None;
         }
+        let record_model = carrier.map(|mut model| {
+            model.libraries = self.derive_libraries(&model);
+            model
+        });
+        let signature_hash = record_model
+            .as_ref()
+            .map(|model| model.signature_hash())
+            .unwrap_or_else(|| crate::util::content_hash::ContentHash::of_text(""));
         Some(crate::frontend::module::TypeDefPayload {
             type_def,
             sum_variants,
             interface_impls,
+            record_model,
+            signature_hash,
         })
+    }
+
+    /// B.4 §八.1：从义务/证据槽的 `Call` 头派生证据来源清单。
+    ///
+    /// 过滤 proof family 参数与内置谓词（`probe::is_builtin_predicate_name` 单源），
+    /// 按 id 字典序去重；来源规范文本由 `proof_source_digest`（与导入前置检查同源）。
+    fn derive_libraries(
+        &self,
+        model: &crate::frontend::core::sema::record_model::RecordModel,
+    ) -> Vec<crate::frontend::core::sema::record_model::LibraryRef> {
+        let mut heads: Vec<&str> = Vec::new();
+        for obligation in &model.obligations {
+            heads.extend(obligation.proposition.constraint.call_heads());
+        }
+        for slot in &model.evidence {
+            if let Some(proposition) = &slot.proposition {
+                heads.extend(proposition.constraint.call_heads());
+            }
+        }
+        let family_params: std::collections::HashSet<&str> = model
+            .type_params
+            .iter()
+            .filter(|param| {
+                matches!(
+                    param.kind,
+                    crate::frontend::core::sema::record_model::RecordTypeParamKind::Family { .. }
+                )
+            })
+            .map(|param| param.name.as_str())
+            .collect();
+        let mut ids: std::collections::BTreeMap<String, crate::util::content_hash::ContentHash> =
+            std::collections::BTreeMap::new();
+        for head in heads {
+            if family_params.contains(head)
+                || crate::frontend::core::sema::probe::is_builtin_predicate_name(head)
+            {
+                continue;
+            }
+            let hash = self.proof_source_digest(head).unwrap_or_else(|| {
+                crate::util::content_hash::ContentHash::of_text(&format!("unresolved:{head}"))
+            });
+            ids.insert(head.to_string(), hash);
+        }
+        ids.into_iter()
+            .map(
+                |(id, hash)| crate::frontend::core::sema::record_model::LibraryRef {
+                    kind: crate::frontend::core::sema::record_model::LibraryKind::Proof,
+                    id,
+                    hash,
+                },
+            )
+            .collect()
+    }
+
+    /// B.4 §六.2：来源定义的规范文本指纹（导出口与导入构造前置检查的**单源**）。
+    ///
+    /// 谓词 → `PredicateDef` 三元；证明函数 → 形参/返回 + 约束体表达式。
+    /// 无约束体可辨（Assign 形证明函数）⇒ `None`（导出登记 unresolved 哨兵）。
+    fn proof_source_digest(
+        &self,
+        name: &str,
+    ) -> Option<crate::util::content_hash::ContentHash> {
+        if let Some(def) = self.env.predicate_defs.get(name) {
+            return Some(crate::util::content_hash::ContentHash::of_text(&format!(
+                "predicate {} {} {}",
+                def.param_name, def.param_type, def.constraint
+            )));
+        }
+        let var = self.env.vars.get(name)?;
+        let crate::frontend::core::types::mono::MonoType::Fn {
+            params,
+            return_type,
+            ..
+        } = &var.body
+        else {
+            return None;
+        };
+        if !matches!(
+            **return_type,
+            crate::frontend::core::types::mono::MonoType::MetaType { .. }
+        ) {
+            return None;
+        }
+        let body = self.type_definition_bodies.get(name)?;
+        let constraint = body.iter().find_map(|item| match item {
+            crate::ast::TypeBodyItem::Expr(crate::ast::Type::ConstExpr(expr)) => {
+                crate::frontend::core::types::eval::const_eval::convert_expr_to_const_expr(expr)
+            }
+            _ => None,
+        })?;
+        let params_text = params
+            .iter()
+            .map(|param| param.to_string())
+            .collect::<Vec<_>>()
+            .join(",");
+        Some(crate::util::content_hash::ContentHash::of_text(&format!(
+            "prooffn ({params_text}) -> {} body {}",
+            return_type, constraint
+        )))
     }
 
     /// RFC-011a: 展开接口成员列表（递归支持接口继承，Self 延迟替换）。
@@ -2923,6 +3065,7 @@ impl TypeChecker {
         prefix: &str,
         export: &crate::frontend::module::Export,
         use_alias: bool,
+        span: crate::util::span::Span,
     ) {
         let register_name = if use_alias {
             prefix.to_string()
@@ -2969,7 +3112,7 @@ impl TypeChecker {
                 self.env.module_aliases.insert(register_name.clone());
                 self.env.add_var(register_name, PolyType::mono(module_ty));
                 for sub_export in &payload_type_exports {
-                    self.register_use_export(&sub_export.name, sub_export, false);
+                    self.register_use_export(&sub_export.name, sub_export, false, span);
                 }
             }
             crate::frontend::module::ExportKind::Type => {
@@ -2983,9 +3126,31 @@ impl TypeChecker {
                 {
                     return;
                 }
+                // 量词必须随导入类型表示一起落地（在 add_type/add_var **之前**）：
+                // Registry 签名可能丢字段量词，构造 arity 与字段访问读的是这里。
                 let ty = self.export_register_type(export);
+                let ty = match export
+                    .type_payload
+                    .as_ref()
+                    .and_then(|p| p.record_model.as_ref())
+                {
+                    Some(model) => {
+                        crate::frontend::core::sema::record_model::apply_quantities(ty, Some(model))
+                    }
+                    None => ty,
+                };
                 let poly = PolyType::mono(ty);
                 self.env.add_type(register_name.clone(), poly.clone());
+                // 定义名同源镜像：IR/构造 arity 按定义名查（B.4 §五.4）。
+                if let Some(model) = export
+                    .type_payload
+                    .as_ref()
+                    .and_then(|payload| payload.record_model.as_ref())
+                {
+                    if model.name != register_name {
+                        self.env.add_type(model.name.clone(), poly.clone());
+                    }
+                }
                 // #524 甲案：谓词 def 随导出携带、按 use 门控在此并入导入方
                 // `env.predicate_defs`（模板面：正格化 `IsPositive(N)` → `N > 0`），
                 // 并同构登记 proof-fn 形态变量（剥基类型面：`proof_fn_bases` 的
@@ -3046,7 +3211,7 @@ impl TypeChecker {
                 // 跨模块类型传播：恢复定义方三张表（泛型模板 / 和类型变体 /
                 // 接口实现登记）——变体构造、match 变体解构、`?` 与运算符
                 // 分发的唯一判据都在这三张表里
-                self.register_type_payload(&register_name, export);
+                self.register_type_payload(&register_name, export, span);
             }
             _ => {
                 // 如果变量已存在（比如已经是 Struct 类型），则跳过
@@ -3072,10 +3237,25 @@ impl TypeChecker {
         &mut self,
         name: &str,
         export: &crate::frontend::module::Export,
+        span: crate::util::span::Span,
     ) {
         let Some(payload) = &export.type_payload else {
             return;
         };
+        // B.4 §五.1①：完整性校验——重算模型指纹，不符即硬错误且不注册。
+        if let Some(model) = &payload.record_model {
+            if model.signature_hash() != payload.signature_hash {
+                self.add_error(
+                    crate::util::diagnostic::ErrorCodeDefinition::import_error(
+                        &export.full_path,
+                        "证据载荷指纹不一致",
+                    )
+                    .at(span)
+                    .build(),
+                );
+                return;
+            }
+        }
         if let Some(def) = &payload.type_def {
             self.env.add_generic_type_def(name.to_string(), def.clone());
         }
@@ -3086,6 +3266,39 @@ impl TypeChecker {
         }
         for (interface_name, entry) in &payload.interface_impls {
             self.env.add_interface_impl(interface_name, entry.clone());
+        }
+        // B.4 §五.1②：恢复记录模型（本地名键 + 定义名同源双键）。
+        if let Some(model) = &payload.record_model {
+            let mut imported = model.clone();
+            imported.from_payload = true;
+            self.env
+                .record_models
+                .insert(name.to_string(), imported.clone());
+            if name != model.name {
+                self.env
+                    .record_models
+                    .entry(model.name.clone())
+                    .or_insert(imported);
+            }
+            // 量词同源（B.2/B.4）：导入类型表示可能来自 Registry 签名（字段
+            // quantity 未随模型携带）；用刚恢复的模型把 witness 量词写回
+            // `types`/`vars` 的同名 Struct，构造 arity 与字段访问共享这一份。
+            for key in [name, model.name.as_str()] {
+                for poly in [self.env.types.get_mut(key), self.env.vars.get_mut(key)]
+                    .into_iter()
+                    .flatten()
+                {
+                    if let crate::frontend::core::types::mono::MonoType::Struct(structure) =
+                        &mut poly.body
+                    {
+                        for (index, field) in structure.fields.iter_mut().enumerate() {
+                            if model.is_witness(index) {
+                                field.quantity = Some(crate::ast::Quantity::Zero);
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 

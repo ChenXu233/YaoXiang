@@ -425,6 +425,7 @@ fn collect_signatures_declared_names(
     checker.collect_signatures(
         &parse_result.module,
         &TypeLevelNamespace::scan_one(&parse_result.module),
+        &std::collections::HashMap::new(),
     );
     checker.generic_fn_type_params_snapshot()
 }

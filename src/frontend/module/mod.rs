@@ -181,6 +181,10 @@ pub struct TypeDefPayload {
         String,
         crate::frontend::core::sema::environment::InterfaceImplEntry,
     )>,
+    /// 证据/自引用义务的导出载体；无义务记录为 None（B.4 §三.2）
+    pub record_model: Option<crate::frontend::core::sema::record_model::RecordModel>,
+    /// 导出侧证据环境指纹（不是 §4.1 签名；B.4 §六）
+    pub signature_hash: crate::util::content_hash::ContentHash,
 }
 
 /// 模块源类型

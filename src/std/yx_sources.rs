@@ -58,7 +58,10 @@ pub fn embedded_std_module_info(use_path: &str) -> Option<crate::frontend::modul
     // 模块传入（std.yx 源里现无谓词声明，内置谓词名仍由 scan 收进）
     let namespace =
         crate::frontend::core::sema::probe::TypeLevelNamespace::scan_one(&parsed.module);
-    checker.collect_signatures(&parsed.module, &namespace);
+    // H1：与用户模块面同构——pass1 前补种本单元谓词表
+    let predicate_defs =
+        crate::frontend::core::sema::predicate_resolver::collect_predicate_defs(&parsed.module);
+    checker.collect_signatures(&parsed.module, &namespace, &predicate_defs);
     let vars = checker.env().vars.clone();
     let types = checker.env().types.clone();
     // 声明期类型参数名（按声明序）：跨模块调用的单态化需要它们绑定签名里的

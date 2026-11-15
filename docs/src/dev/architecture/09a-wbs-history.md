@@ -6011,6 +6011,8 @@ field_path_base_matches(refined, actual_name) -> bool      // 应用面专用：
 
 **t19 修复（t7 F1/F2/F3，2026-11-15）**：① SMT 面——`translate_expr` 改 `Option<SMTExpr>`，`FieldPath` 显式 `None`（不产物化 atom）；`try_implication`/`try_smt_solve` gate 扩到约束整棵树（`contains_field_path` 单一收集器，checker 声明面复用）。② 声明面——从「根为 FieldPath」改成「整棵树含 FieldPath」并校验整条 constraint 恰为唯一形参 + evidence 字段；复合形态 `{ bb.w > 0 }`/`{ bb.w == bb.w }`/`{ bb.w >= bb.w }` 实测恰 1 条 E1092、无 E4018/E2031、exit 1（修复前分别 E4018 与 exit 0 静默）。③ `proof_execution` 兜底臂显式跳过 `FieldPath`（不内联求值、不静默通过）。④ 六语 locale help 补 E1092/E1042 的证据路径语境，`E1xxx.md` 再生（两次运行哈希一致）。⑤ `record_evidence_layout`/`record_witness_term` 补 dst/求值器/自由名/节点数/翻译断言。
 
+**t20 复审残留（备案）**：F10 `translate_constraint` 对不可翻译项返回空命令表——admission 短路 + 整树 gate 下无可达路径，登记待后续轮；F11 复合形态在**含使用点**的程序会「声明面 E1092 + 调用点 E2031」级联，§十三「恰 1 条」仅限**纯声明探针**（负控测试即纯声明）；F12 en locale 残键为既有问题，另案。
+
 **D59 分类（t19 补）**：现状——类型级 `b.w` 从旧行为 E0010（解析器拒绝）变为可用，属**新增能力**；值级读取仍 E1114、5A/量词/擦除未变；既有成功程序零变化；本批新增的拒绝面 E1092/E1042 发射点是**新缺陷的硬诊断**，不是旧行为的语义修正。分流结论：类型级 b.w 的旧行为 E0010 = 非成功路径 ⇒ **A 类顺路修**成立（先红后绿 + 不改变原先成功程序 + 同提交登记 + 基线同提交）；t19 修复的 F1/F2（SMT 伪造 atom、声明面漏拦）属**本批缺陷修复**，不入 A/B/C 顺路修；值级 E1114 与 5A 面零变化，无需分类。09 WBS 的 6.9.5 D 行同处标注「错误类型 A」并指向本节。
 
 **T17/T21/T19（本轮补齐）**：T17 在 `src/middle/ir/tests/record_evidence_layout.rs` 断言「加 `Holds`/`needW` 后 `Box` 的 `LOAD_ARG`=2 / `CREATE_STRUCT` 字段数=2 / `local_count`=3」（零 witness 槽）；T21 在 `src/ast/tests/name_refs.rs` 钉 `Type::ConstExpr(FieldAccess)` 只收基名 `bb`、字段名不计引用；T19 新增语料 `02-type-system/refinement/type_level_evidence_path.yx`（behavior，exit 0，警告集与既有 `call_arg_evidence.yx` 同类）与 `06-compile-errors/refinement/witness_field_read_err.yx`（`// expect: compile-error E1114`，E1114 在第 17 行），`corpus-parity.jsonl` 同批 **+2 行**（一条 behavior、一条 compile-error），新增 IR 快照 **1 个**（`type_level_evidence_path.snap`，负控不达 IR）。
@@ -6203,7 +6205,7 @@ canonical_text(RecordModel) =
 | m1 | lib: `Pos` + `Box{v,w: Pos(v),z}`；main: `use lib.{Box}` | `Box(-3, 5)` | **exit 0**（义务被整体丢弃；W1002 `Pos` 未用） | E4018 `(-3 > 0)`，exit 1 |
 | m2 | lib: `Pos` + 泛型 `G(T) = {v: T, w: Pos(v)}`；main: `use lib.{G, Pos}` | `G(Int)(-3)` | **exit 0**（泛型记录模型未随导出） | E4018，exit 1 |
 | m3 | lib: `Eq` + `Box2{v, w: Eq(v,3)}`；main: `use lib.{Box2}` | `Box2(3)` | **exit 0**（无模型，义务丢弃） | Unproven 家族（D2，推荐 E4020：来源 `Eq` 不可本地执行），exit 1 |
-| m4 | 同 m3 | main **本地**定义 `Eq` 后 `Box2(3)` | **exit 0**（同因；不能区分路径） | 0 诊断，exit 0（路径 3 重证正控） |
+| m4 | 同 m3，lib `Eq: a == b` | main **本地**定义同源 `Eq: a == b` 后 `Box2(3)` | **exit 0**（同因；不能区分路径） | 0 诊断，exit 0（路径 3 重证正控） |
 | m5 | 同 m1 | `use lib`（整模块）后裸名 `Box(-3,5)` | **E1001 Unknown variable 'Box'**，exit 1 | E4018，exit 1（A 类扩展：裸名可构造） |
 | m6 | 同 m1 | `use lib.{Box as B}` 后 `B(-3, 5)` | **E1010 function 'Box' expected 3 arguments, found 2**，exit 1 | E4018，exit 1（arity 修正为 2 + 义务生效） |
 | m7 | 同 m1 | `use lib.{Box}`，只声明 `(b: Box) -> Int` 形参，不构造 | **exit 0**（负控：不得因导入而拒绝） | 保持 exit 0 |
@@ -6301,6 +6303,31 @@ canonical_text(RecordModel) =
 4. IR 同源（T15）与多文件夹具（§九 表 + README）→ `yx_multifile_runner` 全绿。
 5. 门禁与生成物：fmt/clippy/fast/五门禁/生成器幂等/`markers --check`/`docs:build`；语料与 IR 快照逐条分类（预期零漂移）；变异 M01–M09 走 `scratch.py trial`。
 6. 收口证据：09a 实现轮（红→绿、语料/快照 diff 分类、D59 分类、门禁计数、变异表）+ 09 行状态。**不宣称** §4.1 签名/翻译/桥接/跨模块证明执行（#552）；D1/D2/D3 按 lead/用户裁决结果落地。
+
+### 十三、B.4 实现轮（收口，2026-11-15；D1 裁决 A）
+
+> 本节记录 B.4 实现轮的落点、用户可达证据与门禁；D1 结论按队长裁定「按契约推荐 A 执行（用户未反对；若撤回则回退）」，不写成用户已拍板。
+
+**裁决**：D1 = A——payload 只带 `record_model` + 证据载荷指纹，不物化 `evidence_ref`/`certificate_ref`；D2 码位沿用 E4020（证明来源 Unproven）与 E5002（载荷指纹不一致），不新增码。
+
+**落点**：
+
+1. **H6 单源设施**：`src/util/content_hash.rs`（`ContentHash`/SHA-256/64 位小写 hex）；`package/vendor/checksum::compute_bytes_checksum` 改委托，输出逐字不变。
+2. **payload**：`TypeDefPayload` 增 `record_model: Option<RecordModel>` + `signature_hash: ContentHash`；`type_def_export_payload` 是唯一构造点（carrier 条件 = evidence 或 admission 字段；纯数据记录保持 `None`）。
+3. **模型投影**：`RecordModel` 增 `libraries`/`from_payload` 与 `canonical_text`/`signature_hash`（类型参数 kind、字段量词、义务、admission、证据槽、libraries；不含 `from_payload`）。
+4. **H1**：`collect_signatures` 增 `predicate_defs` 参数并在 pass1 前补种；`extract_module_info` 与 `embedded_std_module_info` 都先算 `collect_predicate_defs`，导出命题因此是内联形态。
+5. **libraries 派生**：`ConstExpr::call_heads` 单源收集；过滤 proof family 参数与内置谓词，按 id 字典序去重；每条来源经 `proof_source_digest`（谓词三元 / 证明函数形参·返回·约束体）取指纹；无体来源登记 `unresolved:<id>` 指纹。
+6. **导入**：`register_type_payload`（既有单点）重算模型指纹，不符 ⇒ E5002 且不注册；一致 ⇒ `from_payload = true` 写入本地名键，并在本地名 != 定义名时写同源双键；量词在 `add_type`/`add_var` **之前**由 `apply_quantities` 落地，并把同一类型表示镜像进 `body_checker.type_defs`（定义名 + 本地名）——修掉别名导入 `B(-3,5)` 仍按 3 参数报 E1010 的缺口。
+7. **构造点前置检查**：`check_record_ctor_obligations` 对 `from_payload` 模型扫义务/证据槽的 `Call` 头，要求「本地可执行（未被别名导入 + `env.vars` 是 MetaType 返回的证明函数）+ 已登记 + `proof_source_digest` 与 `LibraryRef.hash` 一致」；不通过 ⇒ 恰一条 E4020 并跳过本记录其余义务（失败闭合，不连锁 E4018）；通过才交 `judge_refined_obligation_with_mode` 重证，从不复用导出方结论。
+8. **契约 m4 修正**：§九 m4 改为 lib `Eq: a == b` + `Box2(3)`（原 `a > b` 与「0 诊断」自相矛盾）；m8 漂移负控仍为 lib `a > b` / 本地 `a >= b`。
+
+**用户可达证据（CLI）**：m1 `Box(-3,5)` ⇒ E4018 `(-3 > 0)`（HEAD 为 exit 0）；m3 无本地 `Eq` 的 `Box2(3)` ⇒ E4020；m5 整模块裸名 ⇒ E4018（HEAD E1001）；m6 别名 `B(-3,5)` ⇒ **仅 E4018**（HEAD E1010 expected 3）；m7 只导入不构造 ⇒ exit 0；m8 本地 `a>=b` 漂移 ⇒ E4020（HEAD exit 0）；m4 本地同源 `a == b` ⇒ exit 0。
+
+**测试与语料**：`src/frontend/module/tests/type_def_payload.rs` 新增 T01–T05（payload 载体、泛型记录、纯数据 None、指纹可重算/64 hex、libraries 仅证明函数来源）；`tests/yaoxiang-multifile/` 新增 8 个夹具（import / violation / source-missing / source-local / source-drift / import-unused / witness-premise / witness-premise-value-err），README 表同步；`yx_multifile_runner` 全绿。T06/T15/T16/T18/T23 的直驱判据未单独立测，由上述夹具 + `register_type_payload` 代码路径覆盖（登记为后续补测项，不宣称已逐条独立断言）。
+
+**D59 分类**：主错 = **A 类静默失败**（跨模块证据义务整体丢弃、exit 0；m1–m4/m8）；m5（E1001→裸名可构造）与 m6（E1010 expected 3→arity 2）原行为均**不是成功**，属同一根因最小修改集的**附带行为变更**，在 PR 的 D3 补丁判定行逐条列出，**不归 C 类**。
+
+**门禁（最终字节）**：`cargo fmt --check` 0；clippy `-D warnings` 0；`cargo test --lib record_evidence` 28 passed；`testsuite run fast` exit 0（lib 1797 passed/1 ignored、integration 52、yx_runner 383、formatter 1、yx_multifile_runner 2，全 0 failed）；obligations / docs-refs / docs-truth / boundary / fanout / test-channel / markers / RFC 跟踪均 0；错误码生成物再生（E1xxx/E2xxx/E4xxx/E5xxx/index）且两次运行哈希一致。语料与 IR 快照零漂移（B.4 不改单文件语料；multifile 夹具由 runner 覆盖）。
 
 ## P3 3.20.30 收口（深嵌套表达式栈溢出改正式诊断——大栈线程 + 解析闸 E0019，#540，2026-11-14）
 

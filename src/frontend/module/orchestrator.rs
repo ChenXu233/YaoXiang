@@ -1066,7 +1066,12 @@ pub(crate) fn extract_module_info(
     namespace: &crate::frontend::core::sema::probe::TypeLevelNamespace,
 ) -> ModuleInfo {
     let mut checker = TypeChecker::new(module_key);
-    checker.collect_signatures(ast, namespace);
+    // 编译期谓词 def（#524 甲案）：构建判据与第零遍同源（单源自由函数，
+    // `predicate_resolver::collect_predicate_defs`）。H1：必须在 pass1 前补种，
+    // 否则 Registry 面把谓词分类成 `Call{Pos,[v]}`（B.4 §四.1）。
+    let predicate_defs =
+        crate::frontend::core::sema::predicate_resolver::collect_predicate_defs(ast);
+    checker.collect_signatures(ast, namespace, &predicate_defs);
     // #397：无标注顶层绑定也要进导出面——收割推断出的具体类型。
     // 此前这类绑定既不在签名表也无标注可读，导出面直接丢弃，
     // 导入方访问时报误导性的「成员未找到」。
@@ -1077,13 +1082,10 @@ pub(crate) fn extract_module_info(
     // （反推区分不了类型参数与普通类型名，会误伤 `Dict(K,V)` / `File` 等）。
     let fn_type_params = checker.generic_fn_type_params_snapshot();
 
-    // 编译期谓词 def（#524 甲案）：构建判据与第零遍同源（单源自由函数，
-    // `predicate_resolver::collect_predicate_defs`）。按名附到对应导出上随
-    // Registry 面携带——导入方 `register_use_export` 按 use 门控并入
-    // `env.predicate_defs`；未导入的谓词解析失败是正确行为（2026-11-03
-    // 用户裁决：use 是唯一跨单元名引入机制）。
-    let predicate_defs =
-        crate::frontend::core::sema::predicate_resolver::collect_predicate_defs(ast);
+    // 谓词 def 随导出携带（#524 甲案）：按名附到对应导出上随 Registry 面
+    // 携带——导入方 `register_use_export` 按 use 门控并入 `env.predicate_defs`；
+    // 未导入的谓词解析失败是正确行为（2026-11-03 用户裁决：use 是唯一跨单元
+    // 名引入机制）。同一结果已在 pass1 前补种给签名收集器（H1）。
 
     // TypeEnvironment 不实现 Clone，只克隆需要的几张表。
     let vars = checker.env().vars.clone();

@@ -1,0 +1,6 @@
+Eq: (a: Int, b: Int) -> Type = { a > b }
+
+Box2: Type = {
+    v: Int,
+    w: Eq(v, 3),
+}

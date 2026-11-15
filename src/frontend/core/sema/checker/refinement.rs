@@ -905,6 +905,57 @@ impl TypeChecker {
         if model.obligations.is_empty() && model.admission_fields.is_empty() {
             return;
         }
+        // B.4 §八.3：导入模型的证明来源前置检查（唯一；F1 修复点）。
+        // 本地可执行 + 导出已登记 + 逐库指纹一致；任一不通过 ⇒ 一条 E4020，
+        // 跳过本记录其余义务判定（失败闭合，不连锁 E4018）。
+        if model.from_payload {
+            let mut heads: Vec<&str> = Vec::new();
+            for obligation in &model.obligations {
+                heads.extend(obligation.proposition.constraint.call_heads());
+            }
+            for admission in &model.admission_fields {
+                heads.extend(admission.proposition.constraint.call_heads());
+            }
+            for slot in &model.evidence {
+                if let Some(proposition) = &slot.proposition {
+                    heads.extend(proposition.constraint.call_heads());
+                }
+            }
+            let mut rejected = false;
+            for head in heads {
+                let locally_executable = !self
+                    .imported_names
+                    .iter()
+                    .any(|(imported, _)| imported == head)
+                    && matches!(
+                        self.env.vars.get(head).map(|poly| &poly.body),
+                        Some(crate::frontend::core::types::mono::MonoType::Fn {
+                            return_type,
+                            ..
+                        }) if matches!(
+                            **return_type,
+                            crate::frontend::core::types::mono::MonoType::MetaType { .. }
+                        )
+                    );
+                let registered = model.libraries.iter().find(|library| library.id == head);
+                let digest_matches = registered.is_some_and(|library| {
+                    self.proof_source_digest(head)
+                        .is_some_and(|digest| digest == library.hash)
+                });
+                if !locally_executable || !digest_matches {
+                    rejected = true;
+                    break;
+                }
+            }
+            if rejected {
+                ctx.diags.push(
+                    crate::util::diagnostic::ErrorCodeDefinition::proof_function_required()
+                        .at(*span)
+                        .build(),
+                );
+                return;
+            }
+        }
         let data_indices: Vec<usize> = model.data_field_indices().collect();
         if args.len() + named_args.len() > data_indices.len() {
             return;

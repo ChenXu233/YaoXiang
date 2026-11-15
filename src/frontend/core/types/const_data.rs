@@ -198,6 +198,51 @@ pub enum ConstExpr {
     FieldPath { base: Box<ConstExpr>, field: String },
 }
 
+impl ConstExpr {
+    /// 收集表达式树中所有函数调用头（`Call.func`，含实参内的嵌套调用）。
+    ///
+    /// B.4 `libraries` 派生的**单源**收集器（不写第二份遍历）。
+    pub fn call_heads(&self) -> Vec<&str> {
+        let mut out = Vec::new();
+        self.collect_call_heads(&mut out);
+        out
+    }
+
+    fn collect_call_heads<'a>(
+        &'a self,
+        out: &mut Vec<&'a str>,
+    ) {
+        match self {
+            ConstExpr::Call { func, args } => {
+                out.push(func.as_str());
+                for arg in args {
+                    arg.collect_call_heads(out);
+                }
+            }
+            ConstExpr::BinOp { left, right, .. } => {
+                left.collect_call_heads(out);
+                right.collect_call_heads(out);
+            }
+            ConstExpr::UnOp { expr, .. } => expr.collect_call_heads(out),
+            ConstExpr::If {
+                condition,
+                then_branch,
+                else_branch,
+            } => {
+                condition.collect_call_heads(out);
+                then_branch.collect_call_heads(out);
+                else_branch.collect_call_heads(out);
+            }
+            ConstExpr::Range { start, end } => {
+                start.collect_call_heads(out);
+                end.collect_call_heads(out);
+            }
+            ConstExpr::FieldPath { base, .. } => base.collect_call_heads(out),
+            ConstExpr::Lit(_) | ConstExpr::Var(_) | ConstExpr::NamedVar(_) => {}
+        }
+    }
+}
+
 impl fmt::Display for ConstExpr {
     fn fmt(
         &self,
