@@ -1119,6 +1119,11 @@ A referenced proof-library entry must appear in the importing module's library l
 conclusion is Unproven, and the diagnostic asks the user to register the library or write a bridging
 axiom.
 
+> **Implementation status (V1)**: the current implementation performs only importer-side re-proof plus
+> per-library source fingerprint comparison; translation terms and bridging axioms await the RFC-027
+> §4.1 kernel; the `evidence_ref`/`certificate_ref` slots stay unmaterialized (D1 A), and
+> `signature_hash` is the export-side evidence-payload fingerprint.
+
 #### 8.3.5 Type-Level Use and Value-Level Rejection
 
 Evidence fields **may only be used at the type level**. `b.w` in a type position is **user-writable
