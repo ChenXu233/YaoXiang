@@ -148,7 +148,8 @@ def dispatch_ci(branch: str) -> str | None:
         time.sleep(5)
         runs = gh_json(
             "run", "list", "--repo", GH_REPO, "--workflow", "ci.yml",
-            "--branch", branch, "--limit", "1", "--json", "url",
+            "--event", "workflow_dispatch", "--branch", branch,
+            "--limit", "1", "--json", "url",
         ) or []
         if runs:
             return runs[0]["url"]
@@ -223,8 +224,11 @@ def sync_pr(pr: dict) -> str:
         run_url = dispatch_ci(mirror_branch)
         if run_url:
             subprocess.run(
-                ["gh", "pr", "comment", "--repo", GH_REPO, str(existing["number"]) if existing else gh_url,
-                 "--body", f"提交来自 CNB，已用 GITHUB_TOKEN 推送（不会自动触发工作流），这里显式派发了一次 CI：{run_url}"],
+                ["gh", "pr", "comment", "--repo", GH_REPO,
+                 str(existing["number"]) if existing else gh_url, "--body",
+                 "CI 已派发：" + run_url +
+                 "\n\n镜像 PR 由 GitHub Actions 自身创建，PR 上的检查会停在「等待批准」。"
+                 "如需检查自动运行，配置仓库密钥 CNB_SYNC_PAT（细粒度 PAT：contents + pull-requests 写）即可。"],
                 capture_output=True, text=True,
             )
 
