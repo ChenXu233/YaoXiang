@@ -1,0 +1,40 @@
+name: CNB PR Mirror
+
+# 备份仓库（cnb.cool/ChenXu233/YaoXiang）上 open 的合并请求——多数由 NPC 发起——镜像到本仓库，
+# 评审、CI 与合并都在 GitHub 完成；合并后由本工作流关闭 CNB 侧同编号的 PR。
+# 数据方向：CNB PR -> GitHub PR（单向）；合并结果由 CNB 的定时任务（.cnb.yml）回灌到 CNB 的 dev/main。
+#
+# 注意：GitHub 的定时工作流只在默认分支（main）上调度，所以本文件必须同时存在于 main。
+
+on:
+  schedule:
+    # 每 15 分钟一次（GitHub 定时任务最小 5 分钟，实际触发可能有延迟）
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: write
+
+concurrency:
+  group: cnb-pr-mirror
+  cancel-in-progress: false
+
+jobs:
+  mirror:
+    name: Mirror CNB pull requests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Sync CNB pull requests to GitHub
+        env:
+          CNB_REPO: ChenXu233/YaoXiang
+          CNB_TOKEN: ${{ secrets.CNB_TOKEN }}
+          # 用 PAT（细粒度：contents + pull-requests 写）时，镜像 PR 的 push 会正常触发 ci.yml；
+          # 未配置时回退到 GITHUB_TOKEN——它产生的事件不会拉起工作流，脚本会改为显式派发一次 ci.yml。
+          GH_TOKEN: ${{ secrets.CNB_SYNC_PAT || github.token }}
+          SYNC_PAT_PRESENT: ${{ secrets.CNB_SYNC_PAT != '' }}
+        run: python3 .github/scripts/cnb-pr-mirror.py
