@@ -98,6 +98,18 @@ python scripts/ci/check-test-channel.py                # 四处口径同源（�
 doctest（`cargo test --doc`）与语料差分不在 `run fast` 的覆盖面内，由 CI 兜底。
 预算装不下的独占波会在结束时逐条列出「跳过 N 条测试」并提供降级路径，不静默跳过。
 
+推送前另跑 CI 独有的门禁——它们不在本地清单里，就等于不存在：
+
+```bash
+python scripts/ci/check-docs-truth.py
+python scripts/ci/check-boundary.py
+python scripts/ci/check-fanout.py
+python scripts/ci/check-docs-refs.py
+python scripts/docs/gen-error-code-docs.py && git diff --quiet
+```
+
+改动诊断码或其发射点（增、删、行号平移）都必须重跑生成器并确认 `git diff --quiet`；生成物禁止手改，提交信息须分类说明。
+
 ## 二、改文档
 
 ### 分类：这篇文档属于哪个目录
@@ -144,13 +156,27 @@ pnpm format:md:check                           # prettier
 python ../scripts/ci/check-docs-examples.py    # 文档示例真实执行
 python ../scripts/ci/check-docs-orphan.py      # 孤儿页与重复 H1
 python ../scripts/ci/check-docs-truth.py       # 版本注入与事实对账
+python ../scripts/ci/check-docs-refs.py        # 引用路径可解析（入库路径才算）
 ```
+
+markdownlint 抓不到 VitePress 的 Vue 编译错误（尖括号占位符被当成元素，报 `Element is missing end tag`），而它在仅含 docs 的提交里会被判 `no files to check` 跳过——**真构建是唯一判据**。占位符一律进反引号。
 
 改了 `rfc/` 的，再加一条：
 
 ```bash
 python ../scripts/rfc/check_tracking.py        # RFC 状态一致性
 ```
+
+## 三、验证量测（批次树）
+
+量测必须在**冻结的 revision** 上做。cargo 的指纹含源码路径——**换树 = 全量重建，同一棵树切 revision = 增量**，所以一个批次一棵树，固定建在仓库内 `target/yx-scratch/<batch>/tree`（已被 `.gitignore` 覆盖）。禁止直接 `git worktree add` / `git clone` / 在仓库外新建目录。
+
+流程：`init <batch>` 建树（首次全量约 5 分钟 / 约 3 GB）→ `use <batch> --rev <sha> --by <成员> --task <id>` 上锁切 revision → `build <batch>` 统一构建（固定 `cargo build --bin yaoxiang-rs`，不要自创命令）→ 量测 → `release <batch>` 解锁 → 收口 `gc` 并把 `status` 输出贴进任务输出。参数见 `python scripts/dev/scratch.py --help`。
+
+- **同一时刻只允许一个持有者**；实现者不进这棵树（它在主仓工作树写代码）。
+- 确需两人真并行量测不同 revision 时，才开 `<batch>-b` 第二棵树，并在批次记录里写明理由（代价 = 再一次全量构建）。
+- **`trial` 之后必须 `build` 再量测**：trial 的机械还原只覆盖源码文件，变异版测试已把批次树二进制重编——不重建则后续量测全部出自变异产物。
+- 探针（`.yx`）也放 `target/yx-scratch/<batch>/`（`target/` 被忽略，不进语料差分）；它是工作区产物，不是文档出处（见 AGENTS 元规则 ①）。
 
 ## 参考
 

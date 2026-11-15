@@ -1849,7 +1849,7 @@ fn test_e2e_run_standalone_value_main_evaluated_at_init_exits_zero() {
 #[test]
 fn test_e2e_check_explicit_path_under_target_is_honored() {
     // Arrange - issue #463：默认排除表（`.git`/`.yaoxiang`/`target`）只应作用于**遍历到的子项**，
-    // 不应作用于**用户显式给出的路径**——AGENTS.md 第 9 条要求零散探针可放 `target/yx-scratch/<batch>/` 下直接跑。
+    // 不应作用于**用户显式给出的路径**——AGENTS.md 团队编排约定「验证证据」要求零散探针可放 `target/yx-scratch/<batch>/` 下直接跑。
     // 夹具写在仓库 `target/` 下（这正是判据要覆盖的位置），含①显式文件 ②显式目录 ③嵌套默认排除子项 三形态。
     let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let root = repo
@@ -1887,7 +1887,7 @@ fn test_e2e_check_explicit_path_under_target_is_honored() {
         code_dir, 0,
         "显式给出的 target/ 下目录应被遍历（不是只看文件分支）；stderr: {err_dir:?}"
     );
-    // Assert - 反向判据：嵌套在显式目录里的 `target/` 子目录仍须跳过（AGENTS 第 9 条「不进语料差分」的依赖面）
+    // Assert - 反向判据：嵌套在显式目录里的 `target/` 子目录仍须跳过（探针位置见 AGENTS.md 团队编排约定「验证证据」）
     let nested_content = std::fs::read_to_string(&nested_probe).expect("nested probe readable");
     assert!(
         nested_content.contains("main"),

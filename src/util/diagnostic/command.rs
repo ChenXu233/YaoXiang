@@ -188,7 +188,7 @@ fn collect_yx_files_from_paths(
         }
         // issue #463：显式给出的路径只受 `--exclude` 约束。默认排除表（`.git` /
         // `.yaoxiang` / `target`）描述的是「遍历时该跳过哪些子项」，不是「用户点名
-        // 要看的路径也要拒绝」——否则 AGENTS.md 第 9 条指定的探针位置
+        // 要看的路径也要拒绝」——否则 AGENTS.md 团队编排约定「验证证据」指定的探针位置
         // （`target/yx-scratch/<batch>/`）无法直接跑。判据序：`--exclude` >
         // 显式路径 > 默认排除表。
         if is_user_excluded(path, &excludes) {

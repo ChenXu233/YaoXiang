@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""批次验证树（scratch tree）的唯一入口 —— AGENTS.md 团队编排约定第 9 条。
+"""批次验证树（scratch tree）的唯一入口 —— AGENTS.md 团队编排约定「验证证据」。
 
 为什么需要它
 ------------
@@ -221,7 +221,7 @@ def cmd_release(args):
 def cmd_trial(args):
     """变异试验：git apply 变异补丁 → 跑命令 → git apply -R 还原 → 校验逐文件 blob 回到 HEAD。
 
-    为什么必须机械可逆（AGENTS.md 第 10 条②）：验证者要证明「判据能失败」，
+    为什么必须机械可逆（AGENTS.md 团队编排约定「验证证据」）：验证者要证明「判据能失败」，
     唯一硬证据是故意把修复改坏看测试会不会红。但手工改文件、手工改回来，
     既可能忘、也可能改得不逐字节一致 —— 于是把它做成补丁 + 自动还原。
     """
@@ -350,7 +350,7 @@ def cmd_gc(args):
 
 
 def main(argv=None):
-    p = argparse.ArgumentParser(description="批次验证树的唯一入口（AGENTS.md 第 9 条）")
+    p = argparse.ArgumentParser(description="批次验证树的唯一入口（AGENTS.md 团队编排约定「验证证据」）")
     sub = p.add_subparsers(dest="cmd", required=True)
 
     s = sub.add_parser("init", help="建批次树"); s.add_argument("batch"); s.add_argument("--rev"); s.set_defaults(f=cmd_init)

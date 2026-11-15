@@ -561,7 +561,7 @@ def iter_source_files(root: Path):
         if not base.is_dir():
             continue
         for path in sorted(base.rglob("*.rs")):
-            # 判据必须按**相对 root** 的路径组件算：AGENTS 第 9 条把批次树
+            # 判据必须按**相对 root** 的路径组件算：AGENTS.md 团队编排约定「验证证据」把批次树
             # 定在 <repo>/target/yx-scratch/<batch>/tree，若按绝对路径判，
             # 树内每个文件都含 "target" 组件而被全部跳过——扫描恒为 0 项，
             # fast/full 通道会「绿但空」（2026-10-30 实测：树内 0 项 /
