@@ -34,7 +34,7 @@ description: '模块系统与导入解析相关的错误。'
 - **模板**：`模块 '{module}' 未找到`
 - **消息**：引用的模块不存在
 - **帮助**：检查模块路径，确保它存在
-- **发射点**：`src/frontend/core/sema/inference/statements.rs:784`
+- **发射点**：`src/frontend/core/sema/inference/statements.rs:773`
 
 ### E5002：导入错误
 
@@ -44,7 +44,7 @@ description: '模块系统与导入解析相关的错误。'
 - **模板**：`导入模块 '{module}' 失败：{reason}`
 - **消息**：导入模块失败
 - **帮助**：检查导入路径和模块解析
-- **发射点**：`src/frontend/core/sema/checker.rs:3263`
+- **发射点**：`src/frontend/core/sema/checker.rs:3249`
 
 ### E5003：导出未找到
 
@@ -54,7 +54,7 @@ description: '模块系统与导入解析相关的错误。'
 - **模板**：`在模块 '{module}' 中找不到导出 '{export}'`
 - **消息**：模块中不存在的导出
 - **帮助**：检查模块的导出
-- **发射点**：`src/frontend/core/sema/inference/statements.rs:869`
+- **发射点**：`src/frontend/core/sema/inference/statements.rs:858`
 
 ### E5004：循环依赖
 
