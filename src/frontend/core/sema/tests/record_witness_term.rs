@@ -368,13 +368,18 @@ fn test_const_evaluator_rejects_field_path() {
         field: "w".into(),
     };
 
-    // Act
-    let evaluated = ConstGenericEval::new().eval(&term);
+    // Act：基名已绑定也必须拒绝（不得按 NamedVar 查表取值）
+    let mut evaluator = ConstGenericEval::new();
+    evaluator.bind_var(
+        "b".to_string(),
+        crate::frontend::core::types::const_data::ConstValue::Int(3),
+    );
+    let evaluated = evaluator.eval(&term);
 
     // Assert
     assert!(
         evaluated.is_err(),
-        "FieldPath 不得被求值器当值算出；实际: {evaluated:?}"
+        "FieldPath 在基名已绑定时仍不得被求值器当值算出；实际: {evaluated:?}"
     );
 }
 /// T10：声明面拒绝非形参基座（other.w）——E1092（不是静默 Unproven）。

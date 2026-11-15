@@ -253,6 +253,11 @@ fn test_type_level_field_path_adds_no_runtime_slots() {
     // Assert
     assert_eq!(load_args, 2, "witness 不占构造参数位，实际 {load_args}");
     assert_eq!(
+        create.operands[0], 2,
+        "构造器结果寄存器 dst = 数据字段数（witness 不占槽），实际 {}",
+        create.operands[0]
+    );
+    assert_eq!(
         create.operands[5], 2,
         "CreateStruct 字段计数只含数据字段，实际 {}",
         create.operands[5]
