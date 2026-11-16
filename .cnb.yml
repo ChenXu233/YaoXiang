@@ -1,25 +1,44 @@
 # CNB（备份仓库）侧的全部镜像逻辑。
 #
-# 定时任务每 10 分钟跑一次，两件事：
-#  1) CNB 上 open 的合并请求（多数由 NPC 发起）-> GitHub 的 cnb/pr-<编号> 分支与 PR；
-#     在 GitHub 评审、跑 CI、合并，合并后回关 CNB 的同号 PR。
-#  2) 每 30 分钟（:00 / :30 那一轮）把 GitHub 主仓库的 dev/main 与全部 tag 回灌到 CNB。
+# 两条方向，触发方式按「有没有事件可用」分别选：
+#  1) CNB 上 open 的合并请求（多数由 NPC 发起）-> GitHub 的 cnb/pr-<编号> 分支与 PR。
+#     新建 / 重开 / 源分支推送都是 CNB 自己的事件，用 pull_request.target 即刻镜像，不必等轮询。
+#     GitHub 侧的合并与关闭不回传事件，只能靠定时发现，故保留一条低频兜底。
+#  2) GitHub 主仓库的 dev/main 与全部 tag -> CNB。CNB 收不到 GitHub 的推送事件，只能定时。
 #
 # GitHub 凭据放在密钥仓库 ChenXu233/secrets 的 yaoxiang-pr-sync.yml（GH_USER / GH_TOKEN）。
-# 只有定时任务与 api_trigger 这类可信事件引用它；pull_request 属不可信事件（配置可能来自源分支），不在此列。
+# pull_request.target 属可信事件（代码版本取自目标分支、不做触发者权限检查），可以引用密钥；
+# pull_request / pull_request.comment 等不可信事件不在此列。
+#
+# 镜像任务只做 git 与 curl，不吃 CPU：显式声明 cpus: 1，否则默认按 8 核计费。
 dev:
-  "crontab: */10 * * * *":
+  # 事件驱动：PR 新建 / 重开 / 源分支有新提交 -> 立刻镜像这一条。
+  pull_request.target:
+    - name: mirror-pr-on-event
+      runner:
+        cpus: 1
+      imports:
+        - https://cnb.cool/ChenXu233/secrets/-/blob/main/yaoxiang-pr-sync.yml
+      stages:
+        - name: mirror-prs
+          script: bash .cnb/scripts/mirror-prs.sh
+
+  # 兜底轮询：GitHub 侧合并 / 关闭 CNB 的 PR 不会回传事件，只能定时发现。
+  # 幂等——已在 GitHub 合并的会回关 CNB PR，无新提交的直接跳过，故 30 分钟一次足够。
+  "crontab: */30 * * * *":
     - name: mirror-prs-and-repos
+      runner:
+        cpus: 1
       imports:
         - https://cnb.cool/ChenXu233/secrets/-/blob/main/yaoxiang-pr-sync.yml
       stages:
         - name: sync-repos
           script: |
-            # 全量裸克隆一次 40+MB，不必每 10 分钟都做：:00 / :30 那一轮回灌主干。
-            if [ $(( $(date +%-M) % 30 )) -lt 10 ]; then
+            # 全量裸克隆一次 40+MB，不必每 30 分钟都做：整点那一轮回灌主干。
+            if [ $(( $(date +%-M) % 60 )) -lt 10 ]; then
               bash .cnb/scripts/mirror-repos.sh
             else
-              echo "本轮跳过 GitHub -> CNB 主干回灌（每 30 分钟一次）"
+              echo "本轮跳过 GitHub -> CNB 主干回灌（每小时一次）"
             fi
         - name: mirror-prs
           script: bash .cnb/scripts/mirror-prs.sh
@@ -27,6 +46,8 @@ dev:
   # 手动触发（Open API 的 api_trigger，或页面上的运行按钮）：两个方向各跑一遍
   api_trigger:
     - name: manual-mirror
+      runner:
+        cpus: 1
       imports:
         - https://cnb.cool/ChenXu233/secrets/-/blob/main/yaoxiang-pr-sync.yml
       stages:

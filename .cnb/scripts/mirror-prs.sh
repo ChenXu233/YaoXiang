@@ -92,9 +92,14 @@ while IFS="$TAB" read -r num head_ref head_repo base_ref sha title author nick i
   esac
 
   existing="$(gh_call GET "/pulls?state=all&head=$GH_OWNER:$mirror&per_page=1")"
-  gh_state="$(printf '%s' "$existing" | jq -r 'if length > 0 then .[0].state else "" end')"
+  # GitHub 的 pulls 列表接口返回小写 state（open / closed），且**不含** merged 布尔字段；
+  # 合并后的 PR 其 state 仍是 closed，只能用 merged_at 非空来区分。
+  gh_state="$(printf '%s' "$existing" | jq -r '
+    if length == 0 then "none"
+    elif .[0].merged_at != null then "merged"
+    else .[0].state end')"
 
-  if [ "$gh_state" = "MERGED" ]; then
+  if [ "$gh_state" = "merged" ]; then
     gh_url="$(printf '%s' "$existing" | jq -r '.[0].html_url')"
     body="$(jq -n --arg b "已在 GitHub 合并：$gh_url" '{body: $b}')"
     cnb_call POST "/-/pulls/$num/comments" "$body" > /dev/null
@@ -103,12 +108,12 @@ while IFS="$TAB" read -r num head_ref head_repo base_ref sha title author nick i
     continue
   fi
 
-  if [ "$gh_state" = "CLOSED" ]; then
+  if [ "$gh_state" = "closed" ]; then
     echo "PR #$num：跳过（GitHub PR 已关闭但未合并）"
     continue
   fi
 
-  if [ "$gh_state" = "OPEN" ]; then
+  if [ "$gh_state" = "open" ]; then
     old_body="$(printf '%s' "$existing" | jq -r '.[0].body // ""')"
     if printf '%s' "$old_body" | grep -q "cnb-pr-mirror sha=$sha"; then
       echo "PR #$num：无新提交"
@@ -150,7 +155,7 @@ while IFS="$TAB" read -r num head_ref head_repo base_ref sha title author nick i
 
   pr_title="[CNB #$num] $title"
 
-  if [ "$gh_state" = "OPEN" ]; then
+  if [ "$gh_state" = "open" ]; then
     pr_number="$(printf '%s' "$existing" | jq -r '.[0].number')"
     payload="$(jq -n --arg t "$pr_title" --arg b "$body_md" '{title: $t, body: $b}')"
     gh_call PATCH "/pulls/$pr_number" "$payload" > /dev/null
