@@ -672,7 +672,10 @@ pub(crate) fn smt_cut(
         let mut var_sorts: HashMap<String, SMTSort> = HashMap::new();
         collect_var_sorts(&conj, &mut var_sorts);
 
-        let commands = translate_constraint(&constraint, &[], &var_sorts);
+        // 不可翻译（F10）：判不了就不切断（保守方向 = 回边穿越），不送空表给求解器
+        let Some(commands) = translate_constraint(&constraint, &[], &var_sorts) else {
+            return false;
+        };
 
         // 共享口（RFC-039 D58）：此前每次回边判定新建 Z3 实例，缓存计数与
         // CACHE_CAP 空转；改走进程级共享单例后，同形回边的查询可命中缓存。

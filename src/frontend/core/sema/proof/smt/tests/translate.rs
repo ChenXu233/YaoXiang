@@ -28,7 +28,8 @@ fn test_translate_simple_constraint() {
     let mut var_sorts = HashMap::new();
     var_sorts.insert("x".into(), SMTSort::Int);
 
-    let commands = translate_constraint(&constraint, &[], &var_sorts);
+    let commands = translate_constraint(&constraint, &[], &var_sorts)
+        .expect("可翻译约束必须给出命令序列（不是 None）");
 
     assert!(
         commands.len() >= 3,
@@ -95,5 +96,82 @@ fn test_translate_field_path_is_not_translatable() {
     assert!(
         translate_expr(&composite).is_none(),
         "含 FieldPath 的组合式同样不可翻译（不得伪造 atom）"
+    );
+}
+
+/// F10：不可翻译的**目标**必须显式 None（不得是空表——空表在求解器侧恒 sat ⇒ 伪反例）。
+#[test]
+fn test_translate_constraint_untranslatable_goal_returns_none() {
+    // Arrange — 位运算不是 SMT 项（translate_expr 返回 None）
+    let goal = ConstExpr::BinOp {
+        op: BinOp::Gt,
+        left: Box::new(ConstExpr::BinOp {
+            op: BinOp::BitAnd,
+            left: Box::new(ConstExpr::NamedVar("y".into())),
+            right: Box::new(ConstExpr::Lit(ConstValue::Int(3))),
+        }),
+        right: Box::new(ConstExpr::Lit(ConstValue::Int(0))),
+    };
+
+    // Act
+    let commands = translate_constraint(&goal, &[], &HashMap::new());
+
+    // Assert
+    assert!(
+        commands.is_none(),
+        "不可翻译的目标必须返回 None，而不是空命令表；实际: {commands:?}"
+    );
+}
+
+/// F10：任一**假设**不可翻译 ⇒ 整组命令 None（假设无法作为背景断言时不能假装无关）。
+#[test]
+fn test_translate_constraint_untranslatable_assumption_returns_none() {
+    // Arrange
+    let goal = make_gt("y", 0);
+    let assumption = ConstExpr::BinOp {
+        op: BinOp::Eq,
+        left: Box::new(ConstExpr::BinOp {
+            op: BinOp::BitAnd,
+            left: Box::new(ConstExpr::NamedVar("y".into())),
+            right: Box::new(ConstExpr::Lit(ConstValue::Int(3))),
+        }),
+        right: Box::new(ConstExpr::Lit(ConstValue::Int(0))),
+    };
+
+    // Act
+    let commands = translate_constraint(&goal, &[assumption], &HashMap::new());
+
+    // Assert
+    assert!(
+        commands.is_none(),
+        "不可翻译的假设必须让整组命令为 None；实际: {commands:?}"
+    );
+}
+
+/// F10 反向不变量：**成功翻译**的命令表永不为空（至少 CheckSat + GetModel）。
+///
+/// 这条钉住「None 与空表」「翻译成功」三态互不混同：空表若出现，调用方无法与
+/// 「不可翻译」区分，正是 F10 的根因。
+#[test]
+fn test_translate_constraint_success_is_never_empty() {
+    // Arrange
+    let constraint = make_gt("x", 0);
+    let assumption = make_gt("y", 5);
+    let mut var_sorts = HashMap::new();
+    var_sorts.insert("x".into(), SMTSort::Int);
+    var_sorts.insert("y".into(), SMTSort::Int);
+
+    // Act
+    let commands = translate_constraint(&constraint, &[assumption], &var_sorts)
+        .expect("可翻译约束不应为 None");
+
+    // Assert
+    assert!(
+        !commands.is_empty(),
+        "成功翻译的命令表不得为空（空表无法与不可翻译区分）"
+    );
+    assert!(
+        matches!(commands.last(), Some(SMTCommand::GetModel)),
+        "命令表必须以实现 check-sat + get-model 收尾；实际: {commands:?}"
     );
 }

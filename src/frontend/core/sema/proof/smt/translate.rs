@@ -18,12 +18,18 @@ use super::ast::{SMTCommand, SMTExpr, SMTSort};
 /// - `var_sorts`: 变量名 → SMT 排序的映射
 ///
 /// # 返回
-/// 完整的 SMT 命令序列（declare-const + assert + 目标取反 + check-sat + get-model）
+/// - `Some(commands)`：完整命令序列（declare-const + assert + 目标取反 + check-sat +
+///   get-model）——**永不为空**（最少 CheckSat + GetModel 两条）；
+/// - `None`：约束或任一假设**不可翻译**（位运算 / Float 字面量 / FieldPath 等，
+///   见 [`translate_expr`]）。
+///
+/// 调用方必须把 `None` 当「**无法判断**」（Unproven / 升级），**不得**把空断言集
+/// 交给求解器：空集 check-sat 恒 `sat`，会被读成反例（F10，09a §P6 6.9.5-B.4 §十三）。
 pub fn translate_constraint(
     constraint: &ConstExpr,
     assumptions: &[ConstExpr],
     var_sorts: &HashMap<String, SMTSort>,
-) -> Vec<SMTCommand> {
+) -> Option<Vec<SMTCommand>> {
     let mut commands = Vec::new();
 
     // 1. 声明所有变量
@@ -32,19 +38,16 @@ pub fn translate_constraint(
     }
 
     // 2. 背景断言（假设栈）
-    // 不可翻译项（含证据字段路径）：整组命令不产出，由调用方 gate 到非 SMT 路径。
+    // 不可翻译项（含证据字段路径）：整组命令不产出——显式 None，由调用方 gate 到
+    // 非 SMT 路径（**不**返回空表：空表在求解器侧等价「无条件成立」= 伪反例）。
     for assumption in assumptions {
-        let Some(expr) = translate_expr(assumption) else {
-            return Vec::new();
-        };
+        let expr = translate_expr(assumption)?;
         commands.push(SMTCommand::Assert(expr));
     }
 
     // 3. 目标取反：(assert (not constraint))
     //    Z3 返回 unsat = 目标在所有假设下成立
-    let Some(goal) = translate_expr(constraint) else {
-        return Vec::new();
-    };
+    let goal = translate_expr(constraint)?;
     let not_goal = SMTExpr::App("not".into(), vec![goal]);
     commands.push(SMTCommand::Assert(not_goal));
 
@@ -52,7 +55,7 @@ pub fn translate_constraint(
     commands.push(SMTCommand::CheckSat);
     commands.push(SMTCommand::GetModel);
 
-    commands
+    Some(commands)
 }
 
 /// ConstExpr → SMTExpr 翻译。

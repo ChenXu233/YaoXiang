@@ -6458,6 +6458,105 @@ canonical_text(RecordModel) =
 
 **t10 复审 residual（2026-11-15）**：N1 §十一 inScope 缺 `docs/src/reference/warning-code/`——本收口笔补入（生成器产物）；N2 SPEC §8.3.4 正文缺 V1 状态注——本收口笔在中英 §8.3.4 末补；N3 `derive_libraries` 只扫 obligations/evidence，而构造前置额外扫 `admission_fields`，含未内联 `Call` 头的 admission 会被保守 E4020（fail-closed；未构造可达形态，另案）；N4 t9 报告「T06 直驱单测」与 t8「未独立立测」措辞不一致，以本节为准（T06 未独立立测，登记为后续补测项）。以上均非阻断。
 
+### 十四、B.3/B.4 残留补测轮（t3，2026-11-16；F10 + T06/T15/T16/T18/T23）
+
+> 来源 = §十三 **t20 复审残留**（F10 latent）与 §十 的「T06/T15/T16/T18/T23 未独立立测」。
+> 本轮只补登记面与一条实质修复（F10）；F11/F12 按派工只登记，不修。
+
+**一、F10（修）：空 SMT 命令表不得映射成 Disproved**
+
+- 改法：`proof/smt/translate.rs` 的 `translate_constraint` 返回类型 `Vec<SMTCommand>` →
+  **`Option<Vec<SMTCommand>>`**：约束或任一假设不可翻译（位运算 / Float 字面量 / `FieldPath` /
+  嵌套 `Call`，判据仍在 `translate_expr` 单点）⇒ 显式 `None`；成功路径**永不为空**
+  （最少 `CheckSat` + `GetModel`）。
+- 五个调用点各自把 `None` 映射成「**无法判断**」（旧行为是拿空表去询问解器）：
+  - `layers/predicate.rs::try_implication` → 返回 `None`（升级）；
+  - `layers/predicate.rs::try_smt_solve` → `Unproven{BeyondKernel}`——**F10 的实质修复点**：
+    旧路径把空断言集交给 Z3，空集 check-sat 恒 `sat`，于是被判成反例（E4018 + 伪造赋值）；
+  - `layers/termination.rs` 两处 → `MeasureVerdict::NotProved`（与 Unknown 同向）；
+  - `layers/ownership.rs::smt_cut` → 不切断（保守 = 回边穿越）。
+- **inScope 缺口（如实登记）**：本轮契约 inScope 只有 `src/frontend/core/sema/proof/smt/`，
+  但改签名强制 4 个调用方文件（`sema/layers/` 下）机械同步。按 AGENTS「契约的 inScope 必须
+  覆盖机械必需面」就地补做；未触碰任何 outOfScope 项。
+
+**二、F10 红→绿（实测）**
+
+夹具 = **不可翻译的分支守卫**（`if y & 3 == 0`）+ 无法证明的义务（`f: (x: Pos(x))` 里 `f(y)`）：
+
+| 阶段 | 实测 |
+| --- | --- |
+| 改前 | `E4018 Refinement predicate violated: (y > 0)` + `Counterexample:` **`y = 0`**（空表伪造反例） |
+| 改后 | `E2031`（Unproven，无 `Counterexample` 段） |
+| 保持型负控 | 可翻译的真反例（`f(0)` 对 `x > 0`）仍 `E4018` |
+| 变异 **MF10** | 把 `None` 退回「空表交求解器」⇒ 该用例由绿转红（回到 E4018） |
+
+单测另有一条结构不变量（`proof/smt/tests/translate.rs`）：**成功翻译的命令表永不为空**——
+把「None / 空表 / 成功」三态钉开，空表不再可能与「不可翻译」混同。
+
+**三、T06/T16/T18/T23（直驱，新文件 `sema/tests/record_evidence_import.rs`）**
+
+生产端到端：payload 由**生产导出构造点** `orchestrator::extract_module_info` 产出，导入侧走
+`TypeChecker::check_module` 的 `use` 解析 → `register_use_export` → `register_type_payload`
+（生产唯一导入写入点）——不是手工拼登记表。
+
+| # | 判据 | 断言要点 |
+| --- | --- | --- |
+| T06 | 指纹不符的 payload（注册前篡改 `signature_hash`） | 恰一条 **E5002**（message 含 reason 段「证据载荷指纹不一致」）且 `record_models` 空 |
+| T16 | 别名导入 `use lib.{Box as B}` 后 `record_models` 双键同源 | `B` 与 `Box` 都在、都 `from_payload`、`canonical_text()` 相等、`name == "Box"`、witness 量词已恢复 |
+| T23 | 手工构造「`Call` 头无对应 `LibraryRef`」的模型（清空 libraries 后重算指纹） | 本地**确有**可执行同源 `Eq` 也恰一条 **E4020**（凭「未登记」拒绝，不连锁 E4018） |
+| T23 正控 | libraries 完整 + 本地同源 `Eq` | 前置检查通过、义务交唯一判定单元重证（`Eq(5,3)`=`5>3` 成立）⇒ 0 诊断 |
+| T18 行为面 | 导入构造 `Box2(3)`（`3 > 3` 假） | **E4018**，且消息点名模型里的证明函数 `Eq` 与实参 `[Int(3), Int(3)]`（判定单元/其证明执行结算） |
+| T18 grep 级 | 全仓生产源码（排除 `tests/`） | `check_record_ctor_obligations` **只在 `checker/refinement.rs`、共 2 处**（定义 + 唯一调用点）；`judge_refined_obligation_with_mode` 只在该文件；E4020 发射点在该文件恰 1 处 |
+
+**四、T15（IR，扩 `middle/ir/tests/record_evidence_layout.rs`）**
+
+- 夹具镜像 driver 的 IrGeneration 臂：`seed_cross_file_types(&[定义方 AST, 入口 AST])`。**不预注册
+  时导入字段访问在 IR 侧报 E3005「无法解析字段索引」**——这是测试夹具要求，不是生产缺口
+  （生产由 `driver/arms.rs` 注入）。
+- 断言 1（导入单元）：`B(3, 5)` 构造调用只装 **2** 个数据字段；`b.z` 的 `LoadField.field = 1`；
+  导入单元**不复制** `TypeDecl`（witness 类型声明不重复进 IR）。
+- 断言 2（定义方单元，导入构造实际解析到的构造函数）：`CreateStruct` 字段计数 = **2**、
+  `local_count = 3`（2 数据字段 + 1 结果槽，witness 不占槽）。
+- **判据面更正（如实登记）**：T15 原文把三条断言都写在「导入 IR」上，但 `CreateStruct`/`local_count`
+  只存在于**定义方**的合成构造函数（导入单元没有 TypeDecl）；三条判据跨两个单元成立，本轮按此落测。
+
+**五、T 系列变异（手工改—测—还原，均已还原）**
+
+| 变异 | 红掉的测试 |
+| --- | --- |
+| **MT06** 去掉 `register_type_payload` 的指纹校验 | T06（唯一红） |
+| **MT16** 丢掉定义名同源键 | T16 双键 + T15（`LoadField` 变 2：量词按名从 `record_models` 补齐，丢键即丢量词） |
+| **MT15（=契约 M02）** 跳过导入模型恢复 | T15 + T16 + T23 + T18 行为面（4 红） |
+| **MT23（=契约 M03）** 去掉构造点来源前置检查 | T23（唯一红：`[]`——既不 E4020 也不 E4018 的静默放行） |
+
+**六、查证结论与登记（不宣称）**
+
+- **E5002 不可用户触发**：payload 的 `record_model` 与 `signature_hash` 由同一构造点产出、同源，
+  正常编译路径造不出不符；它的「用户可见形态」= 码表项 + reason 文案（本轮以直驱篡改断言），
+  触发面只有内存/载体被改写。登记为**防御性检查**，不宣称 CLI 可达。
+- **T15 的单元归属**见上；导入字段访问依赖 driver 的类型上下文预注册，单文件入口（`Compiler`）
+  不走跨文件预注册、也不覆盖导入形态。
+- **F11 / F12（只登记，不修，与 §十三 t20 复审残留同文）**：
+  - **F11**：复合形态在**含使用点**的程序会「声明面 E1092 + 调用点 E2031」级联；§十三「恰 1 条」
+    仅限**纯声明探针**（负控测试即纯声明）。触发面 = 同一谓词既被拒绝又被使用；本轮未触碰。
+  - **F12**：en locale 残键是既有问题（与 B.3/B.4 无关的六语面欠账），另案；本轮未触碰。
+- `#552`（跨模块证明函数执行）、`#537/#539/#541/#542`、C3/F4、runtime check、Π/DepFn：本轮未触碰。
+
+**七、门禁（本机实测，2026-11-16）**
+
+| 命令 | 结果 |
+| --- | --- |
+| `cargo fmt --check` | exit 0 |
+| `cargo clippy --all --all-features --all-targets -- -D warnings` | exit 0 |
+| `cargo test --lib record_evidence` | 36 passed / 0 failed（含本轮 6 条直驱 + 2 条 T15 IR） |
+| `cargo test --lib smt_untranslatable` | 2 passed / 0 failed（F10 红→绿 + 真反例保持型负控） |
+| `cargo test --lib` 内的 `translate` / `record_evidence_layout` | 全绿（`translate` 新增 3 条结构不变量） |
+| `python scripts/dev/testsuite.py run fast` | exit 0：1 波 2279 条，跳过 0 波 |
+| `python scripts/dev/testsuite.py markers --check` | exit 0（2282 条 `#[test]` 清单 = 2279 执行 + 3 `#[ignore]`） |
+| `python scripts/ci/check-obligations.py` / `check-docs-refs.py` / `check-docs-truth.py` / `check-boundary.py` / `check-fanout.py` / `check-test-channel.py` / `rfc/check_tracking.py` | 全部 exit 0（boundary / fanout 为 report-only，存量项见 6.9.4 轮的登记，本轮未新增） |
+| 语料 / IR 快照 | `corpus_probe` 400/400 **差异空**（F10 修复不改任何语料行为）；IR 快照零漂移（`test_ir_snapshots_stable` 在 fast 内绿） |
+| `cargo fmt --check` / `cargo clippy --all --all-features --all-targets -- -D warnings` | exit 0（clippy 首轮被 `question_mark` lint 拦下，改 `?` 后转绿） |
+
 ## P3 3.20.30 收口（深嵌套表达式栈溢出改正式诊断——大栈线程 + 解析闸 E0019，#540，2026-11-14）
 
 > **一、查证（崩溃环测绘 + razor 区判死静态单闸）**：issue 夹具（300 项 binop 实参）修前 check 逐字崩溃（thread 'main' has overflowed its stack，Git Bash exit 127 / Windows 0xC00000FD，零诊断）。崩溃环 ≥4 个实测：parser pratt 真递归（一元/调用/括号/块）、typecheck infer_expr（call/field 形态）、ir_gen 下降（binop/unary/list/ifnest——E3014 检查在走完之后不挡下降）、LSP semantic_tokens collect_expr_tokens；运行面被 E3014 寄存器上限间接兜住无崩溃（登记）。**各形态 razor 区**（debug 构建 / 1MB 主线程栈实测）：call 通过 ≤120 崩 @125、block 通过 ≤220 崩 @230、unary 通过 ~≤255 崩 @282、binop 129..282 为 E3014 拒绝区、括号嵌套 600 层通过 / 崩溃起点 ~650——通过与崩溃边界相邻，**任何静态单阈值要么拒掉 razor 区原先成功程序（违 D59）要么漏崩溃**。规范判据：SPEC/RFC 无表达式嵌套深度口径；闸门先例 mono.max_depth=100/E3005、const_eval DEFAULT_MAX_DEPTH=256；码表 E0xxx 最大 E0018 → E0019 空闲走新码流程。分类 D59 C 类崩溃面直修。

@@ -194,7 +194,8 @@ fn try_implication(
         }
     }
 
-    let commands = translate::translate_constraint(constraint, &assumptions, &var_sorts);
+    // 不可翻译（F10）：不送空表给求解器——与「假设不蕴含」同向升级（None）
+    let commands = translate::translate_constraint(constraint, &assumptions, &var_sorts)?;
 
     // 共享口（RFC-039 D58）；求解器不可用（None）= 无法判断 →
     // 经 `?` 返回升级（与 Unknown 同一降级方向）
@@ -218,7 +219,20 @@ fn try_smt_solve(
 ) -> ProofResult {
     let var_sorts = translate::infer_var_sorts(constraint, bindings);
     let assumptions = ctx.assumptions.current();
-    let commands = translate::translate_constraint(constraint, &assumptions, &var_sorts);
+    // 不可翻译（F10）：约束或任一假设不是 SMT 项 ⇒ **无法判断**（Unproven），
+    // 不得把空断言集交给求解器（空集恒 sat ⇒ 伪造反例 E4018）。
+    let Some(commands) = translate::translate_constraint(constraint, &assumptions, &var_sorts)
+    else {
+        return Err(ProofFailure::Unproven {
+            reason: UnprovenReason::BeyondKernel(
+                "约束或假设含 SMT 不可翻译项（位运算/浮点/证据字段路径）".into(),
+            ),
+            proof_calls: vec![],
+            budget: ctx.budget.report(),
+            subject: Some(UnprovenSubject::Term(constraint.clone())),
+            span: None,
+        });
+    };
 
     // 共享口（RFC-039 D58）；Z3 缺失不 panic——按 Unknown 保守降级（WBS 3.3.1）
     let smt_result = with_shared_solver(SolverConsumer::Predicate, |solver| match solver {

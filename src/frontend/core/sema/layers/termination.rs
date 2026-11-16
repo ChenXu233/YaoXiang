@@ -514,12 +514,17 @@ impl<'a> TerminationChecker<'a> {
                             &goal,
                             &std::collections::HashMap::new(),
                         );
-                    let commands =
+                    // 不可翻译（F10）：无法判断（与 Unknown 同向），不送空表给求解器
+                    let Some(commands) =
                         crate::frontend::core::sema::proof::smt::translate::translate_constraint(
                             &goal,
                             &assumptions,
                             &var_sorts,
-                        );
+                        )
+                    else {
+                        out.insert(fn_name.clone(), MeasureVerdict::NotProved);
+                        continue;
+                    };
                     match solver.solve(&commands, 100) {
                         SMTResult::Unsat => MeasureVerdict::Proved,
                         // 良基性 Sat = 「下界推不出」，而**不是**义务为假：
@@ -583,12 +588,16 @@ impl<'a> TerminationChecker<'a> {
                     .cloned()
                     .unwrap_or_default();
                 assumptions.extend(ob.guards.iter().cloned());
-                let commands =
+                // 不可翻译（F10）：判不了 ≠ 义务为假（与 Unknown 同向）
+                let Some(commands) =
                     crate::frontend::core::sema::proof::smt::translate::translate_constraint(
                         &decreasing,
                         &assumptions,
                         &var_sorts,
-                    );
+                    )
+                else {
+                    return MeasureVerdict::NotProved;
+                };
                 match solver.solve(&commands, 100) {
                     SMTResult::Unsat => MeasureVerdict::Proved,
                     // 判伪：存在使递减不成立的取值（b 取 0）。反例进 E4022。

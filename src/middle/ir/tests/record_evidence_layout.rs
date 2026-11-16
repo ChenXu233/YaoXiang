@@ -268,3 +268,148 @@ fn test_type_level_field_path_adds_no_runtime_slots() {
         constructor.local_count
     );
 }
+
+/// 导入面夹具：lib 模块用**生产导出构造点**产出导出面，入口走真实导入检查后生成 IR。
+fn module_ir_with_import(
+    entry_source: &str,
+    lib_source: &str,
+) -> ModuleIR {
+    let lib_tokens = tokenize(lib_source).expect("lib 源码必须可词法分析");
+    let lib_parsed = parse_with_probe(&lib_tokens, &SemanticProbe);
+    assert!(!lib_parsed.has_errors, "lib 源码必须可解析");
+    let lib_module = crate::frontend::module::orchestrator::extract_module_info(
+        "lib",
+        &lib_parsed.module,
+        &TypeLevelNamespace::scan_one(&lib_parsed.module),
+    );
+
+    let entry_tokens = tokenize(entry_source).expect("入口源码必须可词法分析");
+    let entry_parsed = parse_with_probe(&entry_tokens, &SemanticProbe);
+    assert!(!entry_parsed.has_errors, "入口源码必须可解析");
+    let mut checker = TypeChecker::new("entry");
+    checker.env().module_registry.register(lib_module);
+    let type_result = checker.check_module(
+        &entry_parsed.module,
+        &TypeLevelNamespace::scan_one(&entry_parsed.module),
+    );
+    assert!(
+        type_result.diagnostics.is_empty(),
+        "导入夹具必须无诊断；实际: {:?}",
+        type_result.diagnostics
+    );
+    let mut generator = AstToIrGenerator::new_with_type_result(
+        &type_result,
+        ModuleRegistry::with_std(),
+        None,
+        TypeLevelNamespace::scan_one(&entry_parsed.module),
+    );
+    // 与 driver 的 IrGeneration 臂同源（arms.rs 的 seed_cross_file_types）：
+    // 导入类型的字段布局由**定义方 AST** 预注册，量词再由 record_models 补齐。
+    // 不预注册时导入字段访问会在 IR 侧报 E3005「无法解析字段索引」。
+    generator.seed_cross_file_types(&[&lib_parsed.module, &entry_parsed.module]);
+    generator
+        .generate_module_ir(&entry_parsed.module)
+        .expect("导入夹具必须能生成 IR")
+}
+
+/// T15（B.4）：导入记录的构造代码——构造调用只装**数据字段**（witness 不占槽），
+/// `b.z` 的 `LoadField.field = 1`（声明序 2 前移一位）。
+///
+/// 断言面说明：`CreateStruct` / `local_count` 只存在于**定义方**的合成构造函数
+/// （导入单元没有 TypeDecl，构造由定义方那一个构造函数承担）——那一半由下一条
+/// 测试在定义方 IR 上钉住，本条同时断言导入单元**不复制** witness 类型声明。
+#[test]
+fn test_imported_record_construction_ir_shape() {
+    // Arrange — 别名导入（B.4 后可达；此前 E1010/E1001）
+    let lib = "Pos: (v: Int) -> Type = { v > 0 }\n\nBox: Type = {\n    v: Int,\n    w: Pos(v),\n    z: Int,\n}\n";
+    let entry = "use lib.{Box as B}\n\nmain: () -> Void = {\n    b = B(3, 5)\n    z = b.z\n}\n";
+
+    // Act
+    let module = module_ir_with_import(entry, lib);
+    let main = module
+        .functions
+        .iter()
+        .find(|function| function.name == "main")
+        .expect("main 必须进 IR");
+    let blocks = match &main.body {
+        FunctionBody::Code { blocks, .. } => blocks,
+        _ => panic!("main 必须是代码块函数"),
+    };
+    let mut ctor_args: Option<usize> = None;
+    let mut loaded_field: Option<usize> = None;
+    for instruction in blocks.iter().flat_map(|block| block.instructions.iter()) {
+        match instruction {
+            Instruction::Call {
+                func:
+                    crate::middle::ir::ir::Operand::Const(crate::middle::ir::ir::ConstValue::String(
+                        name,
+                    )),
+                args,
+                ..
+            } => {
+                if name == "B" || name == "Box" || name == "lib.Box" {
+                    ctor_args = Some(args.len());
+                }
+            }
+            Instruction::LoadField { field, .. } => loaded_field = Some(*field),
+            _ => {}
+        }
+    }
+
+    // Assert — 构造只装 2 个数据字段 + 字段索引按 witness 擦除前移
+    assert_eq!(
+        ctor_args,
+        Some(2),
+        "导入记录的构造调用只装数据字段（witness 不占运行期槽）"
+    );
+    assert_eq!(
+        loaded_field,
+        Some(1),
+        "b.z 的声明序是 2，运行期字段索引必须是 1（witness 擦除后前移）"
+    );
+    // Assert — 导入单元不复制 witness 类型声明（零 witness 槽面）
+    assert!(
+        !module
+            .functions
+            .iter()
+            .any(|function| matches!(&function.body, FunctionBody::TypeDecl { .. })),
+        "导入单元不得复制导入类型的 TypeDecl（构造与布局归定义方那一份）"
+    );
+}
+
+/// T15（续）：导入构造所解析到的**合成构造函数**布局——`CreateStruct` 的字段计数
+/// 只含数据字段、`local_count` 不含 witness（定义方 IR → 字节码）。
+#[test]
+fn test_imported_record_constructor_layout_matches_definition() {
+    // Arrange — 定义方源码（与导入夹具同形）
+    let lib = "Pos: (v: Int) -> Type = { v > 0 }\n\nBox: Type = {\n    v: Int,\n    w: Pos(v),\n    z: Int,\n}\n";
+
+    // Act
+    let module = module_ir(lib);
+    let output = crate::middle::passes::codegen::translator::Translator::new()
+        .translate_module(&module)
+        .expect("定义方真实模块 IR 必须能翻译");
+    let constructor = output
+        .code_section
+        .functions
+        .into_iter()
+        .find(|function| function.name == "Box")
+        .expect("函数表里应有合成构造函数 Box");
+    let create = constructor
+        .instructions
+        .iter()
+        .find(|instruction| instruction.opcode == crate::middle::bytecode::opcode::CREATE_STRUCT)
+        .expect("构造函数必须含 CreateStruct");
+
+    // Assert
+    assert_eq!(
+        create.operands[5], 2,
+        "CreateStruct 的字段计数只含数据字段（witness 不占槽）；实际 {}",
+        create.operands[5]
+    );
+    assert_eq!(
+        constructor.local_count, 3,
+        "局部槽 = 2 个数据字段 + 1 个结果槽（witness 不占槽）；实际 {}",
+        constructor.local_count
+    );
+}
