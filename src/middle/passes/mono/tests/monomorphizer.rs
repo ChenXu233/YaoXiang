@@ -683,15 +683,43 @@ fn test_restore_gate_keeps_generic_referenced_only_by_make_closure() {
     );
 }
 
-/// 同上缺陷类：`TailCall` 也不在改写面内，同样一律计未覆盖（注释早已如此声明，
-/// 修复前代码却仍查映射键）。钉住行为与声明一致。
+/// 帮助函数：静态按名目标（`Call` / `TailCall` 的字符串 func）。
+fn static_target_name(instr: &Instruction) -> Option<&str> {
+    match instr {
+        Instruction::Call {
+            func: Operand::Const(ConstValue::String(name)),
+            ..
+        }
+        | Instruction::TailCall {
+            func: Operand::Const(ConstValue::String(name)),
+            ..
+        } => Some(name),
+        _ => None,
+    }
+}
+
+/// 帮助函数：静态调用的实参表（`Call` / `TailCall` 同一操作数布局）。
+fn static_call_args(instr: &Instruction) -> Option<&Vec<Operand>> {
+    match instr {
+        Instruction::Call { args, .. } | Instruction::TailCall { args, .. } => Some(args),
+        _ => None,
+    }
+}
+
+/// #541 第一半：`TailCall` 站点**进入调用点改写面**——与 `Call` 同一份映射键、
+/// 同一份改名操作（名字 + 清 DefId）。
+///
+/// 前身是 t3 的 tripwire（断言「TailCall 一律计未覆盖、原件必须保留」）：当时改写面
+/// 只放行 `Call`，于是扫描面覆盖 `TailCall` 而改写面落空，「有键→判覆盖→原件被删」
+/// ⇒ 站点悬空（运行期 E6006）。本条把那个 tripwire 换成性质判据：改写面覆盖的形态
+/// 集合与 [`Monomorphizer::call_form_is_rewritten`] 一致，`TailCall` 在内。
 #[test]
-fn test_restore_gate_keeps_generic_referenced_only_by_tail_call() {
-    // Arrange：仅 TailCall 站点按名引用，且该站点有对齐的请求键
+fn test_tail_call_site_is_rewritten_to_specialized_name() {
+    // Arrange：泛型 std.list.is_empty + main 里一个 TailCall 站点（有对齐请求键）
     let reference_span = span_at(20, 5, 200, 12, 207);
     let reference = Instruction::TailCall {
         func: Operand::Const(ConstValue::String("std.list.is_empty".to_string())),
-        args: vec![],
+        args: vec![Operand::Local(0)],
         def: None,
         span: reference_span,
     };
@@ -702,13 +730,218 @@ fn test_restore_gate_keeps_generic_referenced_only_by_tail_call() {
         .monomorphize(&module, &requests)
         .expect("单态化不应失败");
 
-    // Assert：原件保留（TailCall 站点不会被改写，删除即悬空）
+    // Assert 1：TailCall 站点被改写成特化名
+    let main_out = find_fn(&result, "main", "模块中应存在 main 函数");
+    let site = &main_out.blocks()[0].instructions[0];
+    assert_eq!(
+        static_target_name(site),
+        Some("std.list.is_empty(int64)"),
+        "TailCall 站点必须与 Call 一样被改写成特化名（#541）；实际: {:?}",
+        static_target_name(site)
+    );
+    // Assert 2：改名同时清 DefId（翻译器优先 DefId，只改名不改 def = 静默失效）
+    match site {
+        Instruction::TailCall { def, .. } => assert!(
+            def.is_none(),
+            "改写后 TailCall 的 DefId 必须清空（与 set_static_target_name 同纪律）"
+        ),
+        other => panic!("站点应仍是 TailCall；实际: {other:?}"),
+    }
+    // Assert 3：站点指到的实例在函数表里（无悬空）
     assert!(
         result
             .functions
             .iter()
-            .any(|f| f.name == "std.list.is_empty"),
-        "TailCall 按名目标一律计未覆盖：原件必须保留（修复前「有键→判覆盖→被删」）"
+            .any(|f| f.name == "std.list.is_empty(int64)"),
+        "改写后的目标必须在输出函数表里；实际函数表: {:?}",
+        result.functions.iter().map(|f| &f.name).collect::<Vec<_>>()
+    );
+}
+
+/// #541 第二半：`TailCall` 站点的 **q=0 实参按被调计划裁剪**——与 `Call` 同一份
+/// `ConstErasePlan`（同一位置集合），且**只裁一次**（无双重擦除）。
+///
+/// 夹具：泛型 `g` 的被擦除实例（q=0 形参 + 柯里包装体形状），`main` 用 `TailCall`
+/// 传两个实参（q=0 位 + 普通位）。修复前三处不同进同退：站点不改名（第一半红）且
+/// 实参不裁（本半红）——被调删了形参位而站点仍传两个 ⇒ 帧前段错位。
+#[test]
+fn test_tail_call_site_drops_erased_const_arg_once() {
+    // Arrange：泛型 g（q=0 形参 + 包装体）与 main 的 TailCall 站点
+    use crate::frontend::core::types::const_data::{ConstExpr as CE, ConstValue as CoreCV};
+    use crate::frontend::core::types::mono::GenericArg;
+    let call_span = span_at(30, 5, 300, 12, 307);
+    let wrapper_ty = MonoType::Fn {
+        params: vec![MonoType::Int(64)],
+        return_type: Box::new(MonoType::Int(64)),
+    };
+    let mut param_slot = LocalSlot::temp(MonoType::TypeRef("N".to_string()));
+    param_slot.name = Some("n".to_string());
+    param_slot.quantity = Some(crate::ast::Quantity::Zero);
+    let generic = make_fn_ir(
+        "g",
+        vec![MonoType::TypeRef("N".to_string())],
+        wrapper_ty.clone(),
+        Some(vec!["N".to_string()]),
+        vec![
+            Instruction::MakeClosure {
+                dst: Operand::Local(1),
+                func: "inner".to_string(),
+                def: None,
+                env: vec![Operand::Local(0)],
+                span: Span::default(),
+            },
+            ret_instr(Some(Operand::Local(1))),
+        ],
+        vec![param_slot, LocalSlot::temp(wrapper_ty)],
+    );
+    let main_func = make_main_ir(
+        MonoType::Void,
+        vec![
+            Instruction::TailCall {
+                func: Operand::Const(ConstValue::String("g".to_string())),
+                args: vec![
+                    Operand::Const(ConstValue::Int(5)),
+                    Operand::Const(ConstValue::Int(7)),
+                ],
+                def: None,
+                span: call_span,
+            },
+            ret_instr(None),
+        ],
+        vec![],
+    );
+    let module = module_with(vec![generic, main_func]);
+    let mut req = InstantiationRequest::new(
+        GenericFunctionId::new("g".to_string(), vec!["N".to_string()]),
+        vec![GenericArg::Const(CE::Lit(CoreCV::Int(5)))],
+        call_span,
+    );
+    req.containing_fn = Some("main".to_string());
+
+    // Act
+    let result = Monomorphizer::new()
+        .monomorphize(&module, &[req])
+        .expect("单态化不应失败");
+
+    // Assert 1：站点改写到实例名（第一半）
+    let main_out = find_fn(&result, "main", "模块中应存在 main 函数");
+    let site = &main_out.blocks()[0].instructions[0];
+    assert_eq!(
+        static_target_name(site),
+        Some("g(int64::5)"),
+        "TailCall 站点应改写到 g(int64::5)；实际: {:?}",
+        static_target_name(site)
+    );
+    // Assert 2：q=0 实参被裁掉、普通位保持原位（只裁一次：2 ⇒ 1，不是 0）
+    let args = static_call_args(site).expect("站点应是静态调用");
+    assert_eq!(
+        args,
+        &vec![Operand::Const(ConstValue::Int(7))],
+        "q=0 实参（位置 0）应被裁掉且只裁一次（2 ⇒ 1）；实际: {args:?}"
+    );
+    // Assert 3：被调实例已擦除 q=0 形参位（两侧同进同退，不只是调用侧）
+    let instance = find_fn(&result, "g(int64::5)", "应生成 g(int64::5) 实例");
+    assert!(
+        instance.params.is_empty(),
+        "实例的 q=0 形参位应已被擦除；实际: {:?}",
+        instance.params
+    );
+}
+
+/// 形态集合**单点**：`call_form_is_rewritten` 与 `rewritten_call_target` 同源，
+/// 覆盖 `Call` / `TailCall`（字符串常量 func），不覆盖 `MakeClosure` / `CallDyn` /
+/// 非常量 func 的 `Call`。
+#[test]
+fn test_call_form_coverage_matches_rewritten_call_target() {
+    // Arrange
+    let string_call = call_instr(None, "f", vec![]);
+    let string_tail = Instruction::TailCall {
+        func: Operand::Const(ConstValue::String("f".to_string())),
+        args: vec![],
+        def: None,
+        span: Span::default(),
+    };
+    let make_closure = Instruction::MakeClosure {
+        dst: Operand::Local(0),
+        func: "f".to_string(),
+        def: None,
+        env: vec![],
+        span: Span::default(),
+    };
+    let call_dyn = Instruction::CallDyn {
+        dst: None,
+        func: Operand::Local(0),
+        args: vec![],
+        span: Span::default(),
+    };
+    let int_call = Instruction::Call {
+        dst: None,
+        func: Operand::Const(ConstValue::Int(3)),
+        args: vec![],
+        def: None,
+        span: Span::default(),
+    };
+
+    // Act / Assert：三处判据一致（覆盖 ⇔ 有改写目标），且集合就是 Call|TailCall
+    for (instr, want) in [
+        (&string_call, true),
+        (&string_tail, true),
+        (&make_closure, false),
+        (&call_dyn, false),
+        (&int_call, false),
+    ] {
+        assert_eq!(
+            Monomorphizer::call_form_is_rewritten(instr),
+            want,
+            "覆盖判定与形态不符：{instr:?}"
+        );
+        assert_eq!(
+            Monomorphizer::rewritten_call_target(instr).is_some(),
+            want,
+            "改写目标与覆盖判定必须同源（单点）：{instr:?}"
+        );
+    }
+}
+
+/// 模块 init 段（顶层语句）与函数体**共用**同一份站点改写：`TailCall` 同样被改写。
+/// 前身是 init 段的平行 `Call`-only 实现——改写面扩形态时它不跟着走，悬空会在
+/// init 段复现。
+#[test]
+fn test_module_init_tail_call_is_rewritten() {
+    // Arrange：init 段一个 TailCall 站点（anon 键：containing_fn = None）
+    let call_span = span_at(40, 5, 400, 12, 407);
+    let generic = make_fn_ir(
+        "identity",
+        vec![MonoType::TypeVar(TypeVar::new(0))],
+        MonoType::TypeVar(TypeVar::new(0)),
+        Some(vec!["T".to_string()]),
+        vec![ret_instr(Some(Operand::Arg(0)))],
+        vec![],
+    );
+    let mut module = module_with(vec![generic]);
+    module.init = vec![
+        Instruction::TailCall {
+            func: Operand::Const(ConstValue::String("identity".to_string())),
+            args: vec![Operand::Const(ConstValue::Int(42))],
+            def: None,
+            span: call_span,
+        },
+        ret_instr(None),
+    ];
+    let mut req = identity_request(MonoType::Int(64));
+    req.source_location = call_span;
+
+    // Act
+    let result = Monomorphizer::new()
+        .monomorphize(&module, &[req])
+        .expect("单态化不应失败");
+
+    // Assert：init 段的 TailCall 目标被改写到实例名
+    assert_eq!(
+        static_target_name(&result.init[0]),
+        Some("identity(int64)"),
+        "init 段的 TailCall 站点也必须被改写（与函数体同一份实现）；实际: {:?}",
+        static_target_name(&result.init[0])
     );
 }
 

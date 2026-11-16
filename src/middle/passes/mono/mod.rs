@@ -757,16 +757,18 @@ impl Monomorphizer {
             instr: &mut Instruction,
             plans: &HashMap<String, ConstErasePlan>,
         ) {
-            let Instruction::Call {
-                func: Operand::Const(ConstValue::String(target)),
-                args,
-                ..
-            } = instr
-            else {
+            // 形态判据与改写面同一单点（[`Monomorphizer::rewritten_call_target`]）：
+            // 少覆盖一种形态 = 被调删了形参位而站点仍传那个实参（帧前段错位）；
+            // 多覆盖 = 对不改名的站点降实参（位置语义错乱）。三处同进同退。
+            let Some((target, _)) = Monomorphizer::rewritten_call_target(instr) else {
                 return;
             };
             let Some(plan) = plans.get(target.as_str()) else {
                 return;
+            };
+            let args = match instr {
+                Instruction::Call { args, .. } | Instruction::TailCall { args, .. } => args,
+                _ => return,
             };
             remove_positions(args, &plan.param_positions());
         }
@@ -1829,19 +1831,7 @@ impl Monomorphizer {
         // 顶层调用点保留原泛型名——原泛型又被特化删除，运行期按原名查表
         // 落空（E6006，「Native function not found」，#416 家族）
         for instr in &mut module.init {
-            if let Instruction::Call {
-                func: ref mut callee,
-                span,
-                ..
-            } = instr
-            {
-                if let Operand::Const(ConstValue::String(name)) = callee {
-                    if let Some(specialized_name) = call_site_map.get(&(None, name.clone(), *span))
-                    {
-                        *callee = Operand::Const(ConstValue::String(specialized_name.clone()));
-                    }
-                }
-            }
+            Self::replace_static_call_site(instr, &call_site_map, None);
         }
     }
 
@@ -1936,11 +1926,12 @@ impl Monomorphizer {
                     let Some((callee, span)) = Self::by_name_call_target(instr) else {
                         continue;
                     };
-                    // 调用点改写面只覆盖 `Call`（[`Self::call_form_is_rewritten`]）：
-                    // `TailCall` / `MakeClosure` 的按名目标**不经过它**——所以
-                    // 对本闸而言**一律计未覆盖**、不查映射键：「有键」只说明该站点
-                    // 在 typecheck 侧产过请求，不代表调用点改写面会动它。保守方向：
-                    // 宁保留（该站点退回类型擦除执行，对应特化版可能成为死码）不悬空。
+                    // 改写面覆盖 `Call` / `TailCall`（[`Self::call_form_is_rewritten`]）：
+                    // 这两种形态查映射键，有键即算已覆盖。
+                    // `MakeClosure` 的按名目标**不经过改写面**——对本闸而言**一律计
+                    // 未覆盖**、不查映射键：「有键」只说明该站点在 typecheck 侧产过请求，
+                    // 不代表调用点改写面会动它。保守方向：宁保留（该站点退回类型擦除
+                    // 执行，对应特化版可能成为死码）不悬空。
                     //
                     // `MakeClosure` 的**柯里包装层**目标确实会被改写，但走的是
                     // 另一条路（[`Self::emit_curry_layer_clones`] 在建实例时按实例
@@ -1976,31 +1967,41 @@ impl Monomorphizer {
         names
     }
 
+    /// 改写面形态的按名目标（`Call` / `TailCall`）：与扫描面
+    /// [`Self::by_name_call_target`] **同一名字口径**，只窄掉 `MakeClosure`。
+    ///
+    /// 为什么以扫描面为基而不是再写一遍 match：「IR 用字符串名分发的静态调用形态」
+    /// 的唯一事实在 [`Self::by_name_call_target`]；改写面 = 其中会被
+    /// [`Self::set_static_target_name`] 改名的那些（`Call` / `TailCall` 同一操作数
+    /// 布局），`MakeClosure` 另由柯里层克隆路径负责（[`Self::emit_curry_layer_clones`]，
+    /// 6.9.2-C2b P1）。两处各写一遍形态集合 = 平行事实——#541 的现状正是扫描面覆盖
+    /// `TailCall`、改写面只放行 `Call`：站点不改名而原件被按「已覆盖」删除 ⇒ 悬空
+    /// （运行期 E6006）。
+    fn rewritten_call_target(instr: &Instruction) -> Option<(String, crate::util::span::Span)> {
+        match instr {
+            Instruction::Call { .. } | Instruction::TailCall { .. } => {
+                Self::by_name_call_target(instr)
+            }
+            _ => None,
+        }
+    }
+
     /// 调用点改写面（[`Self::replace_calls_in_function`]）是否覆盖该形态的按名目标。
     ///
-    /// **只覆盖 `Call`**（且 func 为字符串常量）：`TailCall` / `MakeClosure` 的按名
-    /// 目标**不经过调用点改写面**。扫描面（[`Self::by_name_call_target`]）比改写面宽，
-    /// 不对称只在此单点判定——非改写面形态一律按「未覆盖」保守处理，触发原件保留。
-    ///
-    /// 例外（不是本判据面）：`MakeClosure` 的**柯里包装层**目标由
-    /// [`Self::emit_curry_layer_clones`] 在**建实例时**按实例克隆并重定向
-    /// （6.9.2-C2b P1）——它发生在特化阶段，与调用点改写面无关；本函数回答的是
-    /// 「这个站点会不会被调用点改写面换掉」，故对它仍答「否」。
+    /// 覆盖 `Call` / `TailCall`（func 为字符串常量）——形态集合由
+    /// [`Self::rewritten_call_target`] **单点**给出，本函数只把它折成布尔。
+    /// `MakeClosure` 不在改写面内（其柯里包装层目标由 [`Self::emit_curry_layer_clones`]
+    /// 在建实例时按实例克隆并重定向；函数值 / 匿名闭包目标仍按未覆盖保守保留）。
     fn call_form_is_rewritten(instr: &Instruction) -> bool {
-        matches!(
-            instr,
-            Instruction::Call {
-                func: Operand::Const(ConstValue::String(_)),
-                ..
-            }
-        )
+        Self::rewritten_call_target(instr).is_some()
     }
 
     /// 指令的**按名调用目标**与调用点 span：IR 里以字符串名分发的三种形态
     ///（`Call` / `TailCall` / `MakeClosure`）。
     ///
-    /// 不要据此假定「取到名字即会被改写」：调用点改写面只覆盖 `Call`——某形态是否
-    /// 被它覆盖由 [`Self::call_form_is_rewritten`] 单点判定；扫描面更宽的那些形态在
+    /// 不要据此假定「取到名字即会被改写」：调用点改写面覆盖 `Call` / `TailCall`
+    /// ——某形态是否被它覆盖由 [`Self::rewritten_call_target`]（经
+    /// [`Self::call_form_is_rewritten`]）单点判定；扫描面更宽的 `MakeClosure` 在
     /// [`Self::uncovered_call_targets`] 里一律计未覆盖（保守保留原件，防删除后
     /// 调用点悬空 → 运行期 E6006）。`MakeClosure` 的柯里包装层目标另由
     /// [`Self::emit_curry_layer_clones`] 按实例改写（建实例时），不在本判据面内。
@@ -2038,28 +2039,38 @@ impl Monomorphizer {
         if let FunctionBody::Code { blocks, .. } = &mut func.body {
             for block in blocks {
                 for instr in &mut block.instructions {
-                    // 先把「要改成什么」算出来（借用到 instr 的名字与 span），
-                    // 再动指令——改名会同时清 DefId，见 set_static_target_name
-                    let target = match instr {
-                        Instruction::Call {
-                            func: Operand::Const(ConstValue::String(name)),
-                            span,
-                            ..
-                        } => {
-                            let named = (Some(container.to_string()), name.clone(), *span);
-                            let anon = (None, name.clone(), *span);
-                            call_site_map
-                                .get(&named)
-                                .or_else(|| call_site_map.get(&anon))
-                                .cloned()
-                        }
-                        _ => None,
-                    };
-                    if let Some(target) = target {
-                        Self::set_static_target_name(instr, &target);
-                    }
+                    Self::replace_static_call_site(instr, call_site_map, Some(container));
                 }
             }
+        }
+    }
+
+    /// 单个静态调用站点的按名改写（函数体与模块 init 段**共用**这一份）。
+    ///
+    /// 不共用的历史形态：init 段曾有一段只认 `Call` 的平行实现——与函数体不同源，
+    /// 改写面扩形态时它不会跟着走，于是「扫描面覆盖、改写面落空、原件被删」的悬空
+    /// 会在 init 段复现（#541 的同类）。`container = None` 即 anon 键（顶层语句没有
+    /// 所属函数），函数体传所属实例名。
+    fn replace_static_call_site(
+        instr: &mut Instruction,
+        call_site_map: &HashMap<(Option<String>, String, crate::util::span::Span), String>,
+        container: Option<&str>,
+    ) {
+        // 先把「要改成什么」算出来（借用到 instr 的名字与 span），再动指令——
+        // 改名会同时清 DefId，见 set_static_target_name。形态判据单点 =
+        // rewritten_call_target（Call / TailCall）：与 call_form_is_rewritten /
+        // drop_erased_call_args 同一集合。
+        let target = Self::rewritten_call_target(instr).and_then(|(name, span)| {
+            if let Some(container) = container {
+                let named = (Some(container.to_string()), name.clone(), span);
+                if let Some(hit) = call_site_map.get(&named) {
+                    return Some(hit.clone());
+                }
+            }
+            call_site_map.get(&(None, name, span)).cloned()
+        });
+        if let Some(target) = target {
+            Self::set_static_target_name(instr, &target);
         }
     }
 }
