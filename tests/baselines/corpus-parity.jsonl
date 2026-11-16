@@ -88,6 +88,7 @@
 {"expectation":"behavior","file":"tests/yaoxiang/02-type-system/functions/method_overload.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
 {"expectation":"behavior","file":"tests/yaoxiang/02-type-system/generics/const_arg_evidence_forms.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
 {"expectation":"behavior","file":"tests/yaoxiang/02-type-system/generics/const_arg_gamma_equality.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/generics/const_arg_gamma_equality_shadow_ok.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
 {"expectation":"behavior","file":"tests/yaoxiang/02-type-system/generics/const_generic_assert.yx","run":{"diagnostics":[["W1002","tests/yaoxiang/02-type-system/generics/const_generic_assert.yx",8]],"exit":0,"stderr":[],"stdout":[]}}
 {"expectation":"behavior","file":"tests/yaoxiang/02-type-system/generics/const_generic_instantiate.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
 {"expectation":"behavior","file":"tests/yaoxiang/02-type-system/generics/const_generic_lt_le_bound.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
@@ -292,6 +293,7 @@
 {"check":{"diagnostics":[["E1002","tests/yaoxiang/06-compile-errors/patterns/array_n_mismatch_err.yx",9]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/patterns/array_n_mismatch_err.yx"}
 {"check":{"diagnostics":[["E1002","tests/yaoxiang/06-compile-errors/patterns/block_value_type_mismatch_err.yx",9]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/patterns/block_value_type_mismatch_err.yx"}
 {"check":{"diagnostics":[["E1002","tests/yaoxiang/06-compile-errors/patterns/if_tail_branch_mismatch_err.yx",15]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/patterns/if_tail_branch_mismatch_err.yx"}
+{"check":{"diagnostics":[["E1113","tests/yaoxiang/06-compile-errors/patterns/match_arm_shadow_fact_err.yx",25],["E1113","tests/yaoxiang/06-compile-errors/patterns/match_arm_shadow_fact_err.yx",40],["E1113","tests/yaoxiang/06-compile-errors/patterns/match_arm_shadow_fact_err.yx",54],["E1113","tests/yaoxiang/06-compile-errors/patterns/match_arm_shadow_fact_err.yx",73]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/patterns/match_arm_shadow_fact_err.yx"}
 {"check":{"diagnostics":[["E1002","tests/yaoxiang/06-compile-errors/patterns/match_arm_type_mismatch_err.yx",18]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/patterns/match_arm_type_mismatch_err.yx"}
 {"check":{"diagnostics":[["E1002","tests/yaoxiang/06-compile-errors/patterns/match_variant_pattern_err.yx",18]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/patterns/match_variant_pattern_err.yx"}
 {"check":{"diagnostics":[["E1002","tests/yaoxiang/06-compile-errors/patterns/option_annotation_mismatch_err.yx",15]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/patterns/option_annotation_mismatch_err.yx"}

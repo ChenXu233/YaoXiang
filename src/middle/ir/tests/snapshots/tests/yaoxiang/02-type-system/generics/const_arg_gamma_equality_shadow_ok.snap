@@ -1,0 +1,166 @@
+module
+  fn f(Int(64)) -> Fn { params: [TypeRef("N")], return_type: Int(64) }
+    generic_params: ["N"]
+    slot[0] N : Int(64) @depth1
+    locals_total=2
+    MakeClosure %0 <- __f_l0 env=[%1] (def=d0)
+    Ret %0
+  fn restored(Int(64)) -> Int(64)
+    slot[0] y : Int(64) @depth1
+    slot[6] r : Int(64) @depth3
+    slot[9] y : Int(64) @depth4
+    locals_total=23
+    Load %0 <- arg%0
+    Load %1 <- %0
+    Load %2 <- int(42)
+    Eq %3 <- %1, %2
+    JmpIfNot %3 -> instr(31)
+    Load %4 <- void
+    Load %5 <- int(7)
+    CreateVariant %6 <- Option::0 %5
+    VariantTag %7 <- %6 : Option
+    Load %8 <- int(0)
+    Eq %9 <- %7, %8
+    JmpIfNot %9 -> instr(17)
+    VariantPayload %10 <- %6 : Option
+    Move %11 <- %10
+    Load %12 <- %11
+    Move %4 <- %12
+    Jmp -> instr(24)
+    VariantTag %13 <- %6 : Option
+    Load %14 <- int(1)
+    Eq %15 <- %13, %14
+    JmpIfNot %15 -> instr(24)
+    Load %16 <- int(0)
+    Move %4 <- %16
+    Jmp -> instr(24)
+    Load %17 <- int(42)
+    Load %18 <- %0
+    Call %19 <- string("f") [%18] (def=d1)
+    CallDyn %20 <- %19 [%17]
+    Drop %4
+    Move %21 <- %20
+    Jmp -> instr(33)
+    Load %22 <- int(0)
+    Move %21 <- %22
+    Ret %21
+  fn own_fact() -> Int(64)
+    slot[0] r : Int(64) @depth1
+    slot[3] y : Int(64) @depth2
+    locals_total=21
+    Load %0 <- void
+    Load %1 <- int(7)
+    CreateVariant %2 <- Option::0 %1
+    VariantTag %3 <- %2 : Option
+    Load %4 <- int(0)
+    Eq %5 <- %3, %4
+    JmpIfNot %5 -> instr(20)
+    VariantPayload %6 <- %2 : Option
+    Move %7 <- %6
+    Load %8 <- %7
+    Load %9 <- int(7)
+    Eq %10 <- %8, %9
+    Load %11 <- string("臂内自产事实")
+    Call %12 <- string("std.assert.assert") [%10, %11] (def=d2)
+    Load %13 <- int(7)
+    Load %14 <- %7
+    Call %15 <- string("f") [%14] (def=d1)
+    CallDyn %16 <- %15 [%13]
+    Move %0 <- %16
+    Jmp -> instr(27)
+    VariantTag %17 <- %2 : Option
+    Load %18 <- int(1)
+    Eq %19 <- %17, %18
+    JmpIfNot %19 -> instr(27)
+    Load %20 <- int(0)
+    Move %0 <- %20
+    Jmp -> instr(27)
+    Load %3 <- %0
+    Drop %0
+    Ret %3
+  fn other_name(Int(64), Int(64)) -> Int(64)
+    slot[0] y : Int(64) @depth1
+    slot[1] z : Int(64) @depth1
+    slot[10] r : Int(64) @depth3
+    slot[13] y : Int(64) @depth4
+    locals_total=27
+    Load %0 <- arg%0
+    Load %1 <- arg%1
+    Load %2 <- %0
+    Load %3 <- int(42)
+    Eq %4 <- %2, %3
+    JmpIfNot %4 -> instr(10)
+    Load %5 <- %1
+    Load %6 <- int(7)
+    Eq %7 <- %5, %6
+    Jmp -> instr(11)
+    Load %7 <- bool(false)
+    JmpIfNot %7 -> instr(38)
+    Load %8 <- void
+    Load %9 <- int(0)
+    CreateVariant %10 <- Option::0 %9
+    VariantTag %11 <- %10 : Option
+    Load %12 <- int(0)
+    Eq %13 <- %11, %12
+    JmpIfNot %13 -> instr(24)
+    VariantPayload %14 <- %10 : Option
+    Move %15 <- %14
+    Load %16 <- %15
+    Move %8 <- %16
+    Jmp -> instr(31)
+    VariantTag %17 <- %10 : Option
+    Load %18 <- int(1)
+    Eq %19 <- %17, %18
+    JmpIfNot %19 -> instr(31)
+    Load %20 <- int(0)
+    Move %8 <- %20
+    Jmp -> instr(31)
+    Load %21 <- int(7)
+    Load %22 <- %1
+    Call %23 <- string("f") [%22] (def=d1)
+    CallDyn %24 <- %23 [%21]
+    Drop %8
+    Move %25 <- %24
+    Jmp -> instr(40)
+    Load %26 <- int(0)
+    Move %25 <- %26
+    Ret %25
+  fn main() -> Void
+    slot[0] a : Int(64) @depth1
+    slot[1] b : Int(64) @depth1
+    slot[2] c : Int(64) @depth1
+    locals_total=8
+    Load %0 <- int(42)
+    Call %1 <- string("restored") [%0] (def=d3)
+    Load %2 <- %1
+    Load %3 <- int(42)
+    Eq %4 <- %2, %3
+    Load %5 <- string("遮蔽臂之后外层事实仍成立")
+    Call %0 <- string("std.assert.assert") [%4, %5] (def=d2)
+    Call %0 <- string("own_fact") [] (def=d4)
+    Load %3 <- %0
+    Load %5 <- int(7)
+    Eq %2 <- %3, %5
+    Load %6 <- string("臂内自产等式事实可用")
+    Call %4 <- string("std.assert.assert") [%2, %6] (def=d2)
+    Load %2 <- int(42)
+    Load %3 <- int(7)
+    Call %4 <- string("other_name") [%2, %3] (def=d5)
+    Load %5 <- %4
+    Load %6 <- int(7)
+    Eq %3 <- %5, %6
+    Load %7 <- string("未被遮蔽的名字不受影响")
+    Call %2 <- string("std.assert.assert") [%3, %7] (def=d2)
+    Drop %1
+    Drop %0
+    Drop %4
+    Ret %2
+  fn __f_l0(TypeRef("N")) -> Int(64)
+    slot[0] N : Int(64) @depth1
+    slot[1] n : Int(64) @depth1
+    locals_total=4
+    Load %0 <- %1
+    Ret %0
+    Ret
+  init (locals=0)
+    Call %0 <- string("main") [] (def=d6)

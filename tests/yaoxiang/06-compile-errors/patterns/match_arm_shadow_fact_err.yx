@@ -1,0 +1,90 @@
+// 06-compile-errors/patterns/match_arm_shadow_fact_err.yx
+// expect: compile-error E1113
+// 覆盖: RFC-039 D62 / 6.9.4（issue #534）修复 F-1——Γ 等式事实按**绑定身份**解析：
+//       值环境取最内层绑定，Γ 事实却按名字索引，于是 match 臂的模式绑定遮蔽
+//       同名外层绑定后，外层守卫事实会串进臂内（编译期按守卫值特化、运行期是载荷）。
+//       与 t23 F1'（06-compile-errors/generics/const_arg_pinned_shadowed_err.yx，
+//       值环境/钉住面）同一病史、同一口径：证据必须按绑定解析，不能按名字。
+// 验证: 四道串事实形态都必须拒绝：
+//       ① 外层 if y == 42 + 臂 some(y) 的 f(y)(42)；
+//       ② 同形再加臂内 assert.assert(y == 7)（运行期文档不是 Γ 事实）；
+//       ③ 模式守卫内消费证据（some(y) if f(y)(42) > 0）；
+//       ④ 嵌套 match 再遮蔽后仍用臂绑定的 f(y)(42)。
+//       反面对照（不误杀）在 02-type-system/generics/const_arg_gamma_equality_shadow_ok.yx。
+// 状态: ❌ 应编译失败（四形态都必须报 E1113）
+
+use std.assert
+use std.option
+
+f: (N: Int) -> (n: N) -> Int = (n) => n
+
+// ① 臂内遮蔽外层绑定
+shadowed: (y: Int) -> Int = {
+    if y == 42 {
+        r = match Option(Int).some(7) {
+            some(y) => f(y)(42),
+            none() => 0,
+        }
+        r
+    } else {
+        0
+    }
+}
+
+// ② 臂内 assert.assert 不是 Γ 事实
+asserted: (y: Int) -> Int = {
+    if y == 42 {
+        r = match Option(Int).some(7) {
+            some(y) => {
+                assert.assert(y == 7, "臂内载荷是 7")
+                f(y)(42)
+            },
+            none() => 0,
+        }
+        r
+    } else {
+        0
+    }
+}
+
+// ③ 模式守卫消费证据
+guarded_arm: (y: Int) -> Int = {
+    if y == 42 {
+        r = match Option(Int).some(7) {
+            some(y) if f(y)(42) > 0 => y,
+            some(_) => 0,
+            none() => 0,
+        }
+        r
+    } else {
+        0
+    }
+}
+
+// ④ 嵌套遮蔽
+nested_shadow: (y: Int) -> Int = {
+    if y == 42 {
+        r = match Option(Int).some(7) {
+            some(y) => {
+                inner = match Option(Int).some(9) {
+                    some(y) => y,
+                    none() => 0,
+                }
+                f(y)(42)
+            },
+            none() => 0,
+        }
+        r
+    } else {
+        0
+    }
+}
+
+main: () -> Void = {
+    shadowed(42)
+    asserted(42)
+    guarded_arm(42)
+    nested_shadow(42)
+}
+
+main()

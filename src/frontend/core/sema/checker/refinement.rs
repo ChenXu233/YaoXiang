@@ -937,11 +937,21 @@ impl TypeChecker {
                             crate::frontend::core::types::mono::MonoType::MetaType { .. }
                         )
                     );
-                let registered = model.libraries.iter().find(|library| library.id == head);
-                let digest_matches = registered.is_some_and(|library| {
-                    self.proof_source_digest(head)
-                        .is_some_and(|digest| digest == library.hash)
-                });
+                // 来源身份 = **(定义名, 指纹)**：同名多条**不同指纹** ⇒ 无法确定
+                // 这条义务指的是哪一次绑定（按名取第一条 = F-1 同病史的按名不按绑定），
+                // 失败闭合。
+                let mut digests: Vec<crate::util::content_hash::ContentHash> = model
+                    .libraries
+                    .iter()
+                    .filter(|library| library.id == head)
+                    .map(|library| library.hash)
+                    .collect();
+                digests.sort_unstable();
+                digests.dedup();
+                let digest_matches = digests.len() == 1
+                    && self
+                        .proof_source_digest(head)
+                        .is_some_and(|digest| digest == digests[0]);
                 if !locally_executable || !digest_matches {
                     rejected = true;
                     break;

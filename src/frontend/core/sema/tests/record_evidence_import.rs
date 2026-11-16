@@ -386,3 +386,36 @@ fn test_constructor_obligation_judgment_has_single_entry() {
         "构造点来源前置检查必须恰一条发射点；实际: {e4020:?}"
     );
 }
+// ── T23 增补（契约增补）：同名不同绑定的来源不得被当作同一来源 ──────────
+
+/// T23 增补：payload 的 `libraries` 里同名两条**不同指纹**（= 同名两次绑定）⇒ 拒绝。
+///
+/// 旧行为按名字取第一条（`find(|l| l.id == head)`）——正好命中匹配的那条就放行，
+/// 等于把「同名不同绑定」当成同一来源（F-1 同病史：按名不按绑定）。
+#[test]
+fn test_imported_model_with_ambiguous_library_ref_is_rejected() {
+    // Arrange — 复制一份 Eq 来源并改指纹（模拟同名两次绑定），重算 payload 指纹
+    let mut module = lib_module(LIB_BOX2);
+    {
+        let payload = payload_mut(&mut module, "Box2");
+        let model = payload
+            .record_model
+            .as_mut()
+            .expect("Box2 必须携带 record_model");
+        let mut second = model.libraries[0].clone();
+        second.hash = ContentHash::of_text("another-eq-binding");
+        model.libraries.push(second);
+        payload.signature_hash = model.signature_hash();
+    }
+
+    // Act
+    let result = check_entry(ENTRY_BOX2_WITH_LOCAL_EQ, vec![module]);
+
+    // Assert
+    assert_eq!(
+        codes_of(&result),
+        vec!["E4020"],
+        "同名不同绑定的来源必须失败闭合（不得按名字取第一条放行）；实际: {:?}",
+        result.diagnostics
+    );
+}

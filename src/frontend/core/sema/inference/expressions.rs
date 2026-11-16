@@ -1228,15 +1228,23 @@ impl<'a> ExpressionInferrer<'a> {
                                 arm.span,
                             );
                         }
-                        match guard {
-                            Some(cond) => self.check_guard_condition(cond),
-                            None => Ok(()),
-                        }
+                        Ok(())
                     }
                 };
                 match checked {
                     Err(e) => Err(e),
-                    Ok(()) => self.infer_block(&arm.body, true, None),
+                    Ok(()) => {
+                        // F-1（6.9.4 修复）：臂的模式绑定**遮蔽**同名外层绑定。Γ 的等式
+                        // 读取口按**绑定身份**校验（`const_equalities_resolved` 逐名比对
+                        // 注入时的 `VarInfo::definition_span`，与值环境同一条解析链），
+                        // 故这里不需要额外动作：臂内的 `y` 解析到臂绑定，外层守卫事实
+                        // 自然不产值；出臂后解析回外层绑定，事实照旧可用（不误杀）。
+                        match guard {
+                            Some(cond) => self.check_guard_condition(cond),
+                            None => Ok(()),
+                        }
+                        .and_then(|()| self.infer_block(&arm.body, true, None))
+                    }
                 }
             };
             self.scope.exit_block();
@@ -2768,15 +2776,18 @@ impl<'a> ExpressionInferrer<'a> {
     ///
     /// 唯一生产构造点：`TermEnv::new` 的调用点不增。Σ 不在此列；导入面（#539）也不在此列。
     fn frame_term_env(&self) -> crate::frontend::core::types::eval::const_eval::TermEnv {
+        // F-1：等式事实按**绑定身份**过滤——与值环境 `const_bindings` 同一条按名
+        // 解析链（`VarInfo::definition_span`）；同名但不同绑定的事实不产值。
+        let equalities = match self.gamma.as_deref() {
+            Some(gamma) => gamma.const_equalities_resolved(&|name| {
+                crate::frontend::core::sema::proof::assumptions::scope_binding_key(self.scope, name)
+            }),
+            None => Vec::new(),
+        };
         crate::frontend::core::types::eval::const_eval::TermEnv::with_equalities(
             self.scope.symbolic_term_names(),
             self.scope.const_bindings(),
-            self.gamma
-                .as_deref()
-                .map(
-                    crate::frontend::core::sema::proof::assumptions::FlowSensitiveGamma::const_equalities,
-                )
-                .unwrap_or_default(),
+            equalities,
         )
     }
 
@@ -6101,8 +6112,11 @@ impl<'a> ExpressionInferrer<'a> {
                     for crate::frontend::core::types::eval::dependent_types::Effect::GammaAssume { predicate_arg } in &spec.effects {
                             if let Some(arg_expr) = args.get(*predicate_arg) {
                                 if let Some(pred) = crate::frontend::core::types::eval::const_eval::convert_expr_to_const_expr(arg_expr) {
+                                    // F-1：证据面事实带**绑定身份快照**（自由名逐个按值
+                                    // 环境同一解析链取最内层绑定），读取侧据此校验。
+                                    let snapshot = crate::frontend::core::sema::proof::assumptions::binding_snapshot(self.scope, &pred);
                                     if let Some(gamma) = self.gamma.as_deref_mut() {
-                                        gamma.inject(pred);
+                                        gamma.inject_boundings(pred, snapshot);
                                     }
                                 }
                             }

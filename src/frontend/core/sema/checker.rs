@@ -2615,8 +2615,10 @@ impl TypeChecker {
             })
             .map(|param| param.name.as_str())
             .collect();
-        let mut ids: std::collections::BTreeMap<String, crate::util::content_hash::ContentHash> =
-            std::collections::BTreeMap::new();
+        // 来源身份 = **(定义名, 规范文本指纹)**：同名不同绑定必须各自成条。
+        // 按名去重（旧实现）会把第二条绑定静默丢掉——导入面于是看不到「同名不同
+        // 绑定」，前置检查就只能按名字匹配（T23 的按名不按绑定，F-1 同病史）。
+        let mut refs: Vec<crate::frontend::core::sema::record_model::LibraryRef> = Vec::new();
         for head in heads {
             if family_params.contains(head)
                 || crate::frontend::core::sema::probe::is_builtin_predicate_name(head)
@@ -2626,17 +2628,15 @@ impl TypeChecker {
             let hash = self.proof_source_digest(head).unwrap_or_else(|| {
                 crate::util::content_hash::ContentHash::of_text(&format!("unresolved:{head}"))
             });
-            ids.insert(head.to_string(), hash);
+            refs.push(crate::frontend::core::sema::record_model::LibraryRef {
+                kind: crate::frontend::core::sema::record_model::LibraryKind::Proof,
+                id: head.to_string(),
+                hash,
+            });
         }
-        ids.into_iter()
-            .map(
-                |(id, hash)| crate::frontend::core::sema::record_model::LibraryRef {
-                    kind: crate::frontend::core::sema::record_model::LibraryKind::Proof,
-                    id,
-                    hash,
-                },
-            )
-            .collect()
+        refs.sort_by(|a, b| (a.id.as_str(), a.hash).cmp(&(b.id.as_str(), b.hash)));
+        refs.dedup_by(|a, b| a.id == b.id && a.hash == b.hash);
+        refs
     }
 
     /// B.4 §六.2：来源定义的规范文本指纹（导出口与导入构造前置检查的**单源**）。
@@ -2648,6 +2648,13 @@ impl TypeChecker {
         name: &str,
     ) -> Option<crate::util::content_hash::ContentHash> {
         if let Some(def) = self.env.predicate_defs.get(name) {
+            // 来源必须是**本地声明**的绑定：导入的谓词只并进 `predicate_defs`
+            // （`register_use_export` 按 use 门控并入），没有本地定义体。用它的三元
+            // 做指纹等于把「别处定义的同名绑定」当成自己的来源（按名不按绑定）——
+            // 失败闭合，交给前置检查报 E4020。
+            if !self.type_definition_bodies.contains_key(name) {
+                return None;
+            }
             return Some(crate::util::content_hash::ContentHash::of_text(&format!(
                 "predicate {} {} {}",
                 def.param_name, def.param_type, def.constraint

@@ -402,6 +402,216 @@ main: () -> Void = {
 main()
 "#;
 
+/// F-1（6.9.4 修复）：`match` 臂模式绑定**遮蔽**同名外层绑定——外层守卫事实
+/// `y == 42` 不得串进臂内（臂里的 `y` 是载荷 7，不是 42）。
+const MATCH_ARM_SHADOW_SOURCE: &str = r#"use std.assert
+use std.option
+
+f: (N: Int) -> (n: N) -> Int = (n) => n
+
+shadowed: (y: Int) -> Int = {
+    if y == 42 {
+        r = match Option(Int).some(7) {
+            some(y) => f(y)(42),
+            none() => 0,
+        }
+        r
+    } else {
+        0
+    }
+}
+
+main: () -> Void = {
+    shadowed(42)
+}
+
+main()
+"#;
+
+/// F-1 对照（去守卫）：无外层事实时本就 E1113——用于证明上面的红来自**串事实**，
+/// 不是「match 形态一概拒绝」。
+const MATCH_ARM_NO_GUARD_SOURCE: &str = r#"use std.assert
+use std.option
+
+f: (N: Int) -> (n: N) -> Int = (n) => n
+
+unguarded: (y: Int) -> Int = {
+    r = match Option(Int).some(7) {
+        some(y) => f(y)(42),
+        none() => 0,
+    }
+    r
+}
+
+main: () -> Void = {
+    unguarded(42)
+}
+
+main()
+"#;
+
+/// F-1（p33/p34 形态）：臂内 `assert.assert(y == 7)` 是运行期文档，不是 Γ 事实；
+/// 臂内 `f(y)(42)` 仍不得借用外层 `y == 42`（否则编译期按 42 特化、运行期是 7）。
+const MATCH_ARM_ASSERT_ONLY_SOURCE: &str = r#"use std.assert
+use std.option
+
+f: (N: Int) -> (n: N) -> Int = (n) => n
+
+asserted: (y: Int) -> Int = {
+    if y == 42 {
+        r = match Option(Int).some(7) {
+            some(y) => {
+                assert.assert(y == 7, "臂内载荷是 7，不是外层守卫的 42")
+                f(y)(42)
+            },
+            none() => 0,
+        }
+        r
+    } else {
+        0
+    }
+}
+
+main: () -> Void = {
+    asserted(42)
+}
+
+main()
+"#;
+
+/// F-1 对照（p35）：同一形态走**值环境**——臂里的 `y` 是运行期载荷，值环境本就
+/// 不认外层 `y = 7`；Γ 面修好后两面同判（都比 E1113），不许一面放行一面拒绝。
+const MATCH_ARM_VALUE_ENV_SOURCE: &str = r#"use std.assert
+use std.option
+
+f: (N: Int) -> (n: N) -> Int = (n) => n
+
+value_env: () -> Int = {
+    y = 7
+    r = match Option(Int).some(7) {
+        some(y) => f(y)(42),
+        none() => 0,
+    }
+    r
+}
+
+main: () -> Void = {
+    value_env()
+}
+
+main()
+"#;
+
+/// F-1（守卫面）：模式绑定在**查守卫之前**已注册，故守卫里的 `y` 同样解析到臂
+/// 绑定——守卫不得借用外层事实（读取侧按绑定身份校验，不区分守卫与臂体）。
+const MATCH_ARM_GUARD_SOURCE: &str = r#"use std.assert
+use std.option
+
+f: (N: Int) -> (n: N) -> Int = (n) => n
+
+guarded_arm: (y: Int) -> Int = {
+    if y == 42 {
+        r = match Option(Int).some(7) {
+            some(y) if f(y)(42) > 0 => y,
+            some(_) => 0,
+            none() => 0,
+        }
+        r
+    } else {
+        0
+    }
+}
+
+main: () -> Void = {
+    guarded_arm(42)
+}
+
+main()
+"#;
+
+/// F-1 不误杀正控：遮蔽是**作用域局部**的——臂内遮蔽同名外层绑定后，臂**外**的
+/// 外层事实仍成立（出臂还原；不是永久 kill）。
+const MATCH_ARM_SHADOW_RESTORED_SOURCE: &str = r#"use std.assert
+use std.option
+
+f: (N: Int) -> (n: N) -> Int = (n) => n
+
+restored: (y: Int) -> Int = {
+    if y == 42 {
+        r = match Option(Int).some(7) {
+            some(y) => y,
+            none() => 0,
+        }
+        f(y)(42)
+    } else {
+        0
+    }
+}
+
+main: () -> Void = {
+    assert.assert(restored(42) == 42, "遮蔽臂之后外层事实仍成立")
+}
+
+main()
+"#;
+
+/// F-1 臂内自产事实正控：臂内**裸** `assert(y == 7)` 命中的是臂绑定，必须可用
+/// （遮蔽只杀外层旧事实，不杀本帧自产）。
+const MATCH_ARM_OWN_FACT_SOURCE: &str = r#"use std.assert
+use std.option
+
+f: (N: Int) -> (n: N) -> Int = (n) => n
+
+own_fact: () -> Int = {
+    r = match Option(Int).some(7) {
+        some(y) => {
+            assert(y == 7, "臂内自产事实")
+            f(y)(7)
+        },
+        none() => 0,
+    }
+    r
+}
+
+main: () -> Void = {
+    assert.assert(own_fact() == 7, "臂内自产等式事实可用")
+}
+
+main()
+"#;
+
+/// F-1 嵌套遮蔽：外层臂绑定 `y` 遮蔽形参后，内层 match 再绑 `y`——内层退出后
+/// 仍是**外层臂绑定**（运行期载荷），事实不得复活成形参的 42。
+const MATCH_ARM_NESTED_SHADOW_SOURCE: &str = r#"use std.assert
+use std.option
+
+f: (N: Int) -> (n: N) -> Int = (n) => n
+
+nested_shadow: (y: Int) -> Int = {
+    if y == 42 {
+        r = match Option(Int).some(7) {
+            some(y) => {
+                inner = match Option(Int).some(9) {
+                    some(y) => y,
+                    none() => 0,
+                }
+                f(y)(42)
+            },
+            none() => 0,
+        }
+        r
+    } else {
+        0
+    }
+}
+
+main: () -> Void = {
+    nested_shadow(42)
+}
+
+main()
+"#;
+
 // ── 分支内：等式事实成为 q=0 证据（今日 E1113 ⇒ 绿）──────────────────────
 
 #[test]
@@ -669,5 +879,132 @@ fn test_gamma_equality_killed_by_body_reassign_reports_missing_evidence() {
         code,
         Some("E1113".to_string()),
         "体内重赋值后旧等式不得再作证据，必须报 E1113"
+    );
+}
+// ── F-1（6.9.4 修复）：match 臂遮蔽同名外层绑定，Γ 事实不串 ──────────────
+
+#[test]
+fn test_match_arm_shadow_does_not_inherit_outer_fact() {
+    // Arrange — 外层守卫 y == 42；臂里 some(y) 的 y 是载荷 7
+    let source = MATCH_ARM_SHADOW_SOURCE;
+
+    // Act
+    let code = compile_error_code(source);
+
+    // Assert
+    assert_eq!(
+        code,
+        Some("E1113".to_string()),
+        "臂内 y 是运行期载荷，不得借用外层 y == 42 当 q=0 证据（F-1 串事实）"
+    );
+}
+
+#[test]
+fn test_match_arm_without_guard_reports_missing_evidence() {
+    // Arrange — 去守卫对照：无外层事实
+    let source = MATCH_ARM_NO_GUARD_SOURCE;
+
+    // Act
+    let code = compile_error_code(source);
+
+    // Assert
+    assert_eq!(
+        code,
+        Some("E1113".to_string()),
+        "无外层事实时本就 E1113（证明上面的红是串事实而非 match 形态）"
+    );
+}
+
+#[test]
+fn test_match_arm_assert_dot_assert_reports_missing_evidence() {
+    // Arrange — p33/p34：臂内 assert.assert(y == 7) 是运行期文档，不是 Γ 事实
+    let source = MATCH_ARM_ASSERT_ONLY_SOURCE;
+
+    // Act
+    let code = compile_error_code(source);
+
+    // Assert
+    assert_eq!(
+        code,
+        Some("E1113".to_string()),
+        "臂内 assert.assert 不注入 Γ；外层 y == 42 不得让臂内 f(y)(42) 通过"
+    );
+}
+
+#[test]
+fn test_match_arm_shadow_matches_value_env_verdict() {
+    // Arrange — p35：外层 y = 7 走值环境，臂里 y 仍是载荷
+    let source = MATCH_ARM_VALUE_ENV_SOURCE;
+
+    // Act
+    let code = compile_error_code(source);
+
+    // Assert
+    assert_eq!(
+        code,
+        Some("E1113".to_string()),
+        "值环境与 Γ 面必须同判（两面对同名遮蔽都按绑定解析）"
+    );
+}
+
+#[test]
+fn test_match_arm_guard_does_not_borrow_outer_fact() {
+    // Arrange — 守卫与臂体同帧消费 Γ
+    let source = MATCH_ARM_GUARD_SOURCE;
+
+    // Act
+    let code = compile_error_code(source);
+
+    // Assert
+    assert_eq!(
+        code,
+        Some("E1113".to_string()),
+        "模式绑定在守卫之前已注册：守卫里的 q=0 调用也不得借用外层事实"
+    );
+}
+
+#[test]
+fn test_match_arm_shadow_restores_after_arm() {
+    // Arrange — 不误杀正控：臂内遮蔽，臂外仍用外层 y
+    let source = MATCH_ARM_SHADOW_RESTORED_SOURCE;
+
+    // Act
+    let code = compile_error_code(source);
+
+    // Assert
+    assert_eq!(
+        code, None,
+        "遮蔽是作用域局部的：出臂后外层事实仍成立，不得被永久 kill（不误杀）"
+    );
+}
+
+#[test]
+fn test_match_arm_own_assert_fact_provides_evidence() {
+    // Arrange — 臂内裸 assert 命中臂绑定
+    let source = MATCH_ARM_OWN_FACT_SOURCE;
+
+    // Act
+    let code = compile_error_code(source);
+
+    // Assert
+    assert_eq!(
+        code, None,
+        "臂内自产事实必须可用（遮蔽只杀外层旧事实，不杀本帧自产）"
+    );
+}
+
+#[test]
+fn test_nested_match_arm_shadow_does_not_restore_outer_fact() {
+    // Arrange — 内层 match 再遮蔽，退出后仍是外层臂绑定
+    let source = MATCH_ARM_NESTED_SHADOW_SOURCE;
+
+    // Act
+    let code = compile_error_code(source);
+
+    // Assert
+    assert_eq!(
+        code,
+        Some("E1113".to_string()),
+        "内层遮蔽退出只还原内层，外层臂绑定仍遮蔽形参的同名事实"
     );
 }

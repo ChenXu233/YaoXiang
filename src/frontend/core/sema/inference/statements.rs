@@ -3225,12 +3225,28 @@ impl StatementChecker {
         &mut self,
         facts: Vec<crate::frontend::core::types::const_data::ConstExpr>,
     ) {
+        if self.gamma.is_none() {
+            return;
+        }
+        // F-1：先按**此刻的绑定**取快照（此时分支体尚未进入，同名遮蔽还不存在；
+        // `match` 臂/嵌套体里的同名绑定会在读取侧让这些事实失效），再交给 Γ。
+        // 快照与读取侧同一条解析链（`scope_binding_key`），故分两步而非一个调用。
+        let snapshots: Vec<crate::frontend::core::sema::proof::assumptions::BindingSnapshot> =
+            facts
+                .iter()
+                .map(|fact| {
+                    crate::frontend::core::sema::proof::assumptions::binding_snapshot(
+                        &self.scope,
+                        fact,
+                    )
+                })
+                .collect();
         let Some(gamma) = self.gamma.as_mut() else {
             return;
         };
         gamma.enter_scope();
-        for fact in facts {
-            gamma.inject(fact);
+        for (fact, bindings) in facts.into_iter().zip(snapshots) {
+            gamma.inject_boundings(fact, bindings);
         }
     }
 
