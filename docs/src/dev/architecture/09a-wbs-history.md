@@ -5364,6 +5364,61 @@ P1 `pin_binder: Option<String>`（按绑定解析，不并列保留 bool）／P2
 - 量测在**原型**（P1–P5 最小实现）上取得，非生产提交；t11 的验收必须重新给出生产面数字（实例数/编译时间/语料/快照/生成器）。
 - M5 的 E3018 与 M3 的 E3005 是**当前缺口的实证**，不是新缺陷登记；T-b 的「到界登记」在 V1 只有运行期退回、无用户可见提示（不新增码/发射点）。
 - 开项特化后的语义承诺以 RFC-011 §4.1 与 T-b 为界；T-a/T-c 不取。
+## P6 6.9.2-C3 实现轮（2026-11-16）：甲-闭 + 丙-3 + T-b + bound 8
+
+> 依据 = 用户裁决 A（上节 §P6 6.9.2-C3 F4 裁决）。本轮按契约 P1–P5 落地 C3，
+> 只做「开项/递归 q=0 擦除」，**不宣称 I4 完全体**；#541/#542 原样。
+
+### 一、落地内容（P1–P5 + T-b）
+
+| 点 | 落点 | 说明 |
+| --- | --- | --- |
+| **P1** | `inference/scope.rs` 的 `VarInfo.pinned: bool` → `pin_binder: Option<String>` | 钉住身份的唯一用途是「把 `k` 消解回 `N`」，binder 名是同一事实的完整形态；不并列保留 bool（同一信息两处存 ⇒ 第二处无法表达消解目标）。`var_pinned` 降为派生判据，新增 `var_pin_binder`。登记口 `add_pinned_param(..., binder)` 由 `statements.rs` 从 `const_subst` 的键取（与替换前类型同源） |
+| **P2** | `types/eval/const_eval.rs`：`substitute_term_names` / `rename_term_names` | 两个 facade 共用**唯一**走树实现 `rewrite_term_names`（`ConstExpr` 8 变体穷尽）。substitution ≠ evaluation：只换名字/值，不做算术。值代入只认 `MonoType::Literal`，改名只换名字 |
+| **P3** | `inference/expressions.rs`：`compile_time_term` 内**钉住消去**（`eliminate_pinned_names` → `k → N`）；`collect_const_arg_instantiation_request` 开项**入请求**（保留代入前的项；闭项仍放归一化后的 `Lit`；类型位投影只对闭项要求） | 开项不再 `Evidenced(None)` 丢弃；`Unproven` 仍不降格 `Disproved` |
+| **P4** | `middle/passes/mono/mod.rs` 第 3 步：`has_open_term`（`Const` 实参无类型位投影）并入 `symbolic` | 不改会在元数闸报 E3018（M5 实测兑现）；并入后进 `deferred`，由容器实例开火 |
+| **P5** | `types/mono.rs::GenericArg::substitute` 的 `Const` 臂；`mono::fire_deferred` 代入 + 归一化 | 项位按实例 `name_map` 名字替换；代入后仍**有自由名** ⇒ 未闭（不建实例）；无自由名 ⇒ `normalize`：`Ok` 建实例（`Const(Lit)`）、`Disproved` ⇒ 不建请求 + 登记（R4=①，不报错） |
+| **T-b** | `mono::mod`：`MAX_OPEN_CHAIN = 8`、`open_chain: HashMap<(容器, callee, 静态调用点), usize>`、`OpenFireCutoff{reason: BoundReached/UnclosedTerm/DisprovedValue}` | 键 =（容器, callee, **静态调用点**），同一静态调用点跨实例累计；到界**不建实例、不报错、不删原件**（原件由既有 `restore_generics_with_uncovered_call_sites` 放回）；只对**开项链**计数（C3 之前既有 deferred 形态 = 符号化类型实参，不受闸限流，有负控测试钉住） |
+
+消费者：直驱测试（`mono::tests::monomorphizer` 4 条 + `curry_instance_layers` 1 条）+ `Monomorphizer::open_fire_cutoffs()`（供 driver debug 读取；不做 State 字段、不进 info/warn、不新增用户可见码）。
+
+### 二、M1–M6 实测（本机，主工作树）
+
+| # | 量测 | 实测 |
+| --- | --- | --- |
+| **M1** | 语料 `const_generic_recursive_factorial.yx` 现状锚 | 修前：`check` 0 error、`run` exit 0（120），函数表 31 个，**无** `factorial(int64::4)`；本轮修后：同语料 `check`/`run` 仍 0/0，函数表 46 个，出现 `factorial(int64::4)`…`int64::-3` 开项链 |
+| **M2** | 钉住载体 | `VarInfo.pin_binder`（per-binding，按绑定解析）；`k` 的值不在 mono `name_map` ⇒ 必须先在 typecheck 侧消解 `k → N`（P3）再由实例 `name_map` 代入（P5）；实测：消解前开火不发生（同 t2 原型），消解后开火成立 |
+| **M5** | 开项零请求 / E3018 | 探针 `g: (N: Int) -> (k: N) -> Int = { f(k + 1)(k + 1) }` + `g(5)(5)`：修前开项 ⇒ 零请求（P4 前会被 E3018 拦）；修后 `check` 通过、函数表出现 `f(int64::6)`、`run` exit 0（值 6） |
+| **M3** | 无界 E3005 + bound 8/32 | 生产面：bound=8 时开项链恰 8 个实例（`{4,3,2,1,0,-1,-2,-3}`，直驱测试逐名断言 + 「第 9 次被切（无 `-4`）」断言）；到界退回原件（原件 `factorial` 仍在，`run` 120 正确）。无界面（`max_depth` 100）本轮不另测——T-b 的闸在开火点，先于深度闸 |
+| **M4** | 语料/快照/生成器 | `corpus_probe` **402/402 差异空**；IR 快照 `git status` 干净（快照取 mono **前** IR，C3 不改它）；未动错误码发射点/码表 ⇒ 生成器幂等（无新码） |
+| **M6** | 与 C2c 对接 | 开项链实例的 `const_values` 由 `as_type()` 投影（P5 已把项归一化成 `Lit`）⇒ 擦除计划照常覆盖，`factorial(5)(5)` 仍 120（q=0 槽已擦除、运行期语义正确） |
+
+### 三、测试矩阵（本轮落点）
+
+| 级 | 判据 | 落点 |
+| --- | --- | --- |
+| A（typecheck） | 开项入请求、钉住消去、闭项不变 | 语料 `const_generic_recursive_factorial.yx`（A 级正控，原有）+ `m5` 形态探针（见 §二） |
+| B（mono） | 开项请求进 deferred；`fire_deferred` 代入 + 归一化；到界/未闭/求值失败三臂 | `src/middle/passes/mono/tests/monomorphizer.rs` 新增 4 条：`test_open_chain_stops_at_bound` / `test_open_chain_unclosed_term_is_not_fired` / `test_open_term_disproved_value_is_not_fired` / `test_symbolic_type_request_is_not_limited_by_open_chain` |
+| C（直驱替换层） | 代入/改名的 8 变体穷尽与语义 | `const_eval::tests` 新增 3 条：`test_substitute_term_names_replaces_literal_mapped_names` / `test_substitute_term_names_keeps_unmapped_names` / `test_rename_term_names_swaps_names_only` |
+| D（用户可达） | 语料 `factorial(5)(5)` 接通到下一层实例、开项链 8 个、原件仍在 | `frontend/tests/curry_instance_layers.rs`：C2b 的 tripwire **按其自身注释兑现**为 `test_open_term_recursive_call_fires_into_its_instance`（断言 `__factorial_l0(int64::5)` 的调用点下标 = `factorial(int64::4)`） |
+| E（变异） | 见 §四 | — |
+
+### 四、变异（牙齿）
+
+| 变异 | 预期红 | 实测 |
+| --- | --- | --- |
+| **MC3-1** 停用钉住消去（`compile_time_term` 不再 `k → N`；手工改—测—还原） | D 级 `test_open_term_recursive_call_fires_into_its_instance` | **实测红**（开项链零实例，D 级断言失败）；还原后 5 passed |
+| **MC3-2** P4 不并 `has_open_term` | 开项直接入队 ⇒ E3018 | **读码 + M5 对照**：契约 §五 的读码预测与 t2 的 M5 实测（开项直接入队 ⇒ E3018「期望 1 个，得到 0 个」）一致；本轮以 M5 探针修后绿（`f(int64::6)` 出现、run exit 0）作反向锚，未再做手工变异 |
+| **MC3-3** T-b 闸不计数（`fired >= MAX_OPEN_CHAIN` 恒假；手工改—测—还原） | 直驱 `test_open_chain_stops_at_bound` + D 级实例数断言 | **实测双红**（入队 10 而非 8；D 级开项链实例数断言失败）；还原后全绿 |
+| **MC3-4** `fire_deferred` 求值失败改为 `Disproved` 传播 | `test_open_term_disproved_value_is_not_fired` | 该测试直接钉住「不建请求 + 登记 + 不报错」三件事（R4=①）；结构锚 = `fire_deferred` 无 `Err` 通道（单点） |
+
+### 五、边界与不宣称
+
+- **不宣称 I4 完全体**：到界边未擦除（该边由原件承担运行期语义）；`#541`/`#542` 原样。
+- T-b 到界的用户可见提示**没有**（不新增码/发射点）；登记只走 `open_fire_cutoffs()`（直驱 + debug）。
+- 身份/钉住按**绑定**解析（`VarInfo` per-binding）；按名旁表仍不允许（t23 F1' 口径）。
+- 开项链的计数键含**静态调用点** Span：同一泛型体内不同调用点各自计数（契约键口径）。
+- `substitute_term_names` 只认 `MonoType::Literal` 目标；其余映射原样保留名字（不猜值）。
 ## P6 6.9.3d 契约与 M1/M2/M5 实测（protocol-analyst，2026-11-13）
 
 ### 一、红判据实测（批次树 6.9-bd @ a8ccf78c）

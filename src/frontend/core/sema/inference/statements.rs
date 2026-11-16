@@ -957,16 +957,18 @@ impl StatementChecker {
         self.scope.add_param(name, poly, is_mut, definition_span);
     }
 
-    /// 添加**被单值钉住**的值参数（`k: N`）：标记随绑定入链，见 `VarInfo::pinned`。
+    /// 添加**被单值钉住**的值参数（`k: N`）：binder 名随绑定入链
+    /// （`VarInfo::pin_binder`），供 C3 的钉住消去 `k → N`。
     pub fn add_pinned_param(
         &mut self,
         name: String,
         poly: PolyType,
         is_mut: bool,
         definition_span: crate::util::span::Span,
+        binder: String,
     ) {
         self.scope
-            .add_pinned_param(name, poly, is_mut, definition_span);
+            .add_pinned_param(name, poly, is_mut, definition_span, binder);
     }
 
     /// 添加**类型参数**（编译期名）：体内类型位置可解析，但不占运行时帧槽位。
@@ -1370,14 +1372,20 @@ impl StatementChecker {
                     .map(|t| self.strip_refined_value_type(t))
                     .unwrap_or_else(|| self.solver.new_var())
             };
-            let pinned = matches!(&param_ty, MonoType::TypeRef(q) if const_subst.contains_key(q));
+            // 钉住身份 = **本帧哪一个编译期值参数**（binder 名），不只是 bool：
+            // C3 的钉住消去要把 `k` 消解回 `N`（P3），故这里就落成 binder 名。
+            let pin_binder = match &param_ty {
+                MonoType::TypeRef(q) if const_subst.contains_key(q) => Some(q.clone()),
+                _ => None,
+            };
             let param_ty = param_ty.substitute(const_subst);
-            if pinned {
+            if let Some(binder) = pin_binder {
                 self.add_pinned_param(
                     param.name.clone(),
                     PolyType::mono(param_ty),
                     param.is_mut,
                     param.span,
+                    binder,
                 );
             } else {
                 self.add_param(

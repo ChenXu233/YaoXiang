@@ -123,6 +123,41 @@ pub struct Monomorphizer {
     /// 擦除另做一份求值。开项（C3 面）与非标量项没有 `Literal` 形态，此时条数会少于
     /// q=0 槽数 ⇒ 擦除计划放弃该实例（宁可留运行期位，不猜）。
     instance_const_values: HashMap<String, Vec<ConstValue>>,
+    /// C3 T-b（F4 裁决 A）的**开项链计数器**：键 = (容器, callee, 静态调用点)。
+    /// 同一静态调用点跨实例累计；到 `MAX_OPEN_CHAIN` 不再建实例（不报错、不删原件）。
+    open_chain: HashMap<(String, String, crate::util::span::Span), usize>,
+    /// 开项链的**未开火登记**（唯一一条登记通道）：到界 / 代入后仍未闭 / 求值失败。
+    /// 消费者 = 直驱测试 + driver 的 debug 通道；不是用户可见诊断（不新增码）。
+    open_fire_cutoffs: Vec<OpenFireCutoff>,
+}
+
+/// 开项链每次开火的上限（C3 T-b，bound 初值 8；R9：不做配置项）。
+const MAX_OPEN_CHAIN: usize = 8;
+
+/// 开项链未开火的原因（同一条登记通道，三个来源）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OpenFireCutoffReason {
+    /// 同一静态调用点已开火 `MAX_OPEN_CHAIN` 次（到界不建实例、不报错）
+    BoundReached,
+    /// 按实例 name_map 代入后仍是开项（容器参数未被本实例钉住）
+    UnclosedTerm,
+    /// 代入后归一化**求值失败**（R4=①：不建请求 + 登记，不报错）
+    DisprovedValue,
+}
+
+/// 一条开项链未开火登记。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OpenFireCutoff {
+    /// 容器函数（实例体的来源泛型名）
+    pub container: String,
+    /// 被调方名
+    pub callee: String,
+    /// 静态调用点（泛型体内的调用位置）
+    pub site: crate::util::span::Span,
+    /// 到界时已开火次数（非到界原因为已尝试次数）
+    pub fired: usize,
+    /// 未开火原因
+    pub reason: OpenFireCutoffReason,
 }
 
 /// 一个函数的闭项擦除计划（6.9.2-C2c）。
@@ -209,7 +244,14 @@ impl Monomorphizer {
             curry_layers: HashMap::new(),
             instance_owner: HashMap::new(),
             instance_const_values: HashMap::new(),
+            open_chain: HashMap::new(),
+            open_fire_cutoffs: Vec::new(),
         }
+    }
+
+    /// 开项链的未开火登记（C3 T-b）。消费者：直驱测试与 driver 的 debug 通道。
+    pub fn open_fire_cutoffs(&self) -> &[OpenFireCutoff] {
+        &self.open_fire_cutoffs
     }
 
     pub fn with_max_depth(max_depth: usize) -> Self {
@@ -260,11 +302,20 @@ impl Monomorphizer {
                 .unwrap_or_default();
             // 6.9.2-C1：符号判定只在**类型位**上做——编译期项位的自由名由
             // `deferred` 的容器求值负责（C2 面），这里不猜。
-            let symbolic = req
-                .mono_args()
-                .unwrap_or_default()
+            // C3 P4（F4 裁决 A 甲-闭）：**开项也判 symbolic**——项位没有类型位投影
+            // （`as_type()` 为 None）说明实参里还有容器参数；直接入队会在
+            // `monomorphize` 第 3 步的元数闸报 E3018。并入 symbolic 后进 deferred，
+            // 由容器实例开火时按 name_map 代入 + 归一化（P5）。
+            let has_open_term = req
+                .type_args
                 .iter()
-                .any(|t| contains_type_ref(t, &container_params));
+                .any(|arg| arg.as_term().is_some() && arg.as_type().is_none());
+            let symbolic = has_open_term
+                || req
+                    .mono_args()
+                    .unwrap_or_default()
+                    .iter()
+                    .any(|t| contains_type_ref(t, &container_params));
             if symbolic {
                 if let Some(cf) = &req.containing_fn {
                     self.deferred
@@ -1563,19 +1614,109 @@ impl Monomorphizer {
         name_map: &HashMap<String, MonoType>,
         depth: usize,
     ) {
-        if let Some(bucket) = self.deferred.get(container).cloned() {
-            for r in bucket {
-                // 实参名字替换：类型位按 name_map 代入；项位原样（C2 的符号代入面）
-                let new_args: Vec<crate::frontend::core::types::mono::GenericArg> =
-                    r.type_args.iter().map(|a| a.substitute(name_map)).collect();
-                let mut nr =
-                    InstantiationRequest::new(r.generic_id.clone(), new_args, r.source_location);
-                nr.depth = depth;
-                nr.containing_fn = Some(specialized_name.to_string());
-                // 记录求值后的请求：调用点三元键映射的数据源
-                self.site_requests.push(nr.clone());
-                self.pending_queue.push_back(nr);
+        let Some(bucket) = self.deferred.get(container).cloned() else {
+            return;
+        };
+        for r in bucket {
+            // C3 P5（F4 裁决 A 甲-闭）：实参名字替换——类型位按 name_map 代入；
+            // **项位**按同一 name_map 做名字替换后再归一化（代入 ≠ 求值，P2 的函数）。
+            let mut new_args: Vec<crate::frontend::core::types::mono::GenericArg> =
+                Vec::with_capacity(r.type_args.len());
+            let mut closed_ok = true;
+            let mut disproved = false;
+            for arg in &r.type_args {
+                let crate::frontend::core::types::mono::GenericArg::Const(term) = arg else {
+                    new_args.push(arg.substitute(name_map));
+                    continue;
+                };
+                let substituted =
+                    crate::frontend::core::types::eval::const_eval::substitute_term_names(
+                        term, name_map,
+                    );
+                // 代入后**仍有自由名** ⇒ 仍是开项（容器参数未被本实例钉住）。
+                // 必须先按自由名判「未闭」再进求值器：求值器对未知名字报 Disproved
+                // （「算错」），而这里的事实是「还不能算」——两者不许混（6.9.3a 口径）。
+                if !crate::frontend::core::types::eval::const_eval::const_expr_free_names(
+                    &substituted,
+                )
+                .is_empty()
+                {
+                    closed_ok = false;
+                    break;
+                }
+                let budget =
+                    crate::frontend::core::sema::proof::budget::BudgetTracker::for_judgment();
+                match crate::frontend::core::types::eval::const_eval::normalize(
+                    &substituted,
+                    &crate::frontend::core::types::eval::const_eval::TermEnv::default(),
+                    &budget,
+                ) {
+                    Ok(value) => {
+                        new_args.push(crate::frontend::core::types::mono::GenericArg::Const(
+                            crate::frontend::core::types::const_data::ConstExpr::Lit(value),
+                        ))
+                    }
+                    // 代入后仍是开项（容器参数未被本实例钉住）：不建实例（T-b 的
+                    // 「不建实例」与「不报错」同臂）。
+                    Err(crate::frontend::core::sema::proof::verdict::ProofFailure::Unproven {
+                        ..
+                    }) => {
+                        closed_ok = false;
+                        break;
+                    }
+                    // R4=①：项求值失败 ⇒ 不建请求 + 登记，**不报错**（T-b 的边界）。
+                    Err(crate::frontend::core::sema::proof::verdict::ProofFailure::Disproved(
+                        _,
+                    )) => {
+                        disproved = true;
+                        break;
+                    }
+                }
             }
+            // T-b 键 =（容器, callee, 静态调用点）：同一静态调用点跨实例累计。
+            // 只对**开项链**计数：项位此刻已有类型位投影的请求是 C3 之前的既有
+            // deferred 形态（符号化**类型**实参），不能因 C3 引入的闸被限流。
+            let is_open_term_request = r
+                .type_args
+                .iter()
+                .any(|arg| arg.as_term().is_some() && arg.as_type().is_none());
+            let key = (
+                container.to_string(),
+                r.generic_id.name().to_string(),
+                r.source_location,
+            );
+            let fired = *self.open_chain.get(&key).unwrap_or(&0);
+            let reason = if disproved {
+                Some(OpenFireCutoffReason::DisprovedValue)
+            } else if !closed_ok {
+                Some(OpenFireCutoffReason::UnclosedTerm)
+            } else if is_open_term_request && fired >= MAX_OPEN_CHAIN {
+                Some(OpenFireCutoffReason::BoundReached)
+            } else {
+                None
+            };
+            if let Some(reason) = reason {
+                // 到界 / 未闭 / 失败都不建实例、不报错、不删原件（原件由
+                // restore_generics_with_uncovered_call_sites 放回）。
+                self.open_fire_cutoffs.push(OpenFireCutoff {
+                    container: container.to_string(),
+                    callee: r.generic_id.name().to_string(),
+                    site: r.source_location,
+                    fired,
+                    reason,
+                });
+                continue;
+            }
+            if is_open_term_request {
+                *self.open_chain.entry(key).or_insert(0) += 1;
+            }
+            let mut nr =
+                InstantiationRequest::new(r.generic_id.clone(), new_args, r.source_location);
+            nr.depth = depth;
+            nr.containing_fn = Some(specialized_name.to_string());
+            // 记录求值后的请求：调用点三元键映射的数据源
+            self.site_requests.push(nr.clone());
+            self.pending_queue.push_back(nr);
         }
     }
 

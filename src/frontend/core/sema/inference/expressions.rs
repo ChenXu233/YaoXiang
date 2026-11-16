@@ -2804,7 +2804,32 @@ impl<'a> ExpressionInferrer<'a> {
     ) -> Option<crate::frontend::core::types::const_data::ConstExpr> {
         let term =
             crate::frontend::core::types::eval::const_eval::convert_expr_to_const_expr(expr)?;
+        // C3 P3（6.9.2-C3，F4 裁决 A 甲-闭）：**钉住消去**——`k: N` 的 `k` 在本帧
+        // 编译期已知，把它消解回 binder 名 `N`（`k - 1` ⇒ `N - 1`）。消解后是**开项**，
+        // 由 P4 进 deferred 桶、P5 在具体实例按 name_map 代入后再归一化。
+        let term = self.eliminate_pinned_names(term);
         env.admits(&term).then_some(term)
+    }
+
+    /// 钉住消去（C3 P3）：把项里被单值钉住的名字换成本帧的 binder 名。
+    ///
+    /// 判据单源：`ScopeManager::var_pin_binder`（按绑定解析，遮蔽不继承）；
+    /// 换名走 `const_eval::rename_term_names`（与值代入共用同一遍走树）。
+    fn eliminate_pinned_names(
+        &self,
+        term: crate::frontend::core::types::const_data::ConstExpr,
+    ) -> crate::frontend::core::types::const_data::ConstExpr {
+        let mut renames: std::collections::HashMap<String, String> =
+            std::collections::HashMap::new();
+        for name in crate::frontend::core::types::eval::const_eval::const_expr_free_names(&term) {
+            if let Some(binder) = self.scope.var_pin_binder(&name) {
+                renames.insert(name, binder.to_string());
+            }
+        }
+        if renames.is_empty() {
+            return term;
+        }
+        crate::frontend::core::types::eval::const_eval::rename_term_names(&term, &renames)
     }
 
     /// q=0 实参的**编译期项**判定与特化请求（6.8.5-1 / 6.9.2-C1）。
@@ -2946,6 +2971,9 @@ impl<'a> ExpressionInferrer<'a> {
         let env = self.frame_term_env();
         // 闭项的归一化值：请求里放**归一化后**的项（见下方构造点说明）
         let mut closed: HashMap<String, ConstValue> = HashMap::new();
+        // 开项（C3 甲-闭）：保留**代入前**的项（容器 binder 名原样），入请求后由 mono
+        // 的 deferred 桶在具体实例按 name_map 代入 + 归一化（P5）。
+        let mut open: HashMap<String, ConstExpr> = HashMap::new();
         for (arg_expr, slot) in arg_pairs {
             let Some(param_name) = call_site_names.get(slot) else {
                 continue;
@@ -2962,9 +2990,12 @@ impl<'a> ExpressionInferrer<'a> {
                 Ok(value) => {
                     closed.insert(param_name.clone(), value);
                 }
-                // 开项（Unproven，含符号名/预算耗尽）：不拒绝、不特化（6.9.3 给类型化出口；
-                // 此刻按既有语义运行）。`Unproven` 绝不降格成 `Disproved`。
-                Err(ProofFailure::Unproven { .. }) => {}
+                // 开项（Unproven，含符号名/预算耗尽）：不拒绝——C3 起**入请求**，
+                // 由 mono 在具体实例代入后再归一化（甲-闭 + T-b）。`Unproven` 绝不
+                // 降格成 `Disproved`。
+                Err(ProofFailure::Unproven { .. }) => {
+                    open.insert(param_name.clone(), term.clone());
+                }
                 // 闭项求值失败（如 `1 / 0`）：拒绝（D59 C 类，旧行为静默接受）
                 Err(ProofFailure::Disproved(_)) => {
                     return reject(param_name, arg_expr.span());
@@ -2981,18 +3012,19 @@ impl<'a> ExpressionInferrer<'a> {
             return ConstArgOutcome::Evidenced(None);
         }
         let mut type_args: Vec<GenericArg> = Vec::with_capacity(const_names.len());
+
         for name in &const_names {
-            let Some(value) = closed.get(name) else {
-                // 缺项（元数不足）或开项：不特化；缺项交给既有缺参判定
-                return ConstArgOutcome::Evidenced(None);
+            // 闭项 ⇒ 归一化值；开项 ⇒ 保留代入前的项（C3 甲-闭）。两者都**入请求**：
+            // 开项由 mono 判 symbolic 进 deferred，到具体实例再代入 + 归一化。
+            let term = match (closed.get(name), open.get(name)) {
+                (Some(value), _) => ConstExpr::Lit(value.clone()),
+                (None, Some(term)) => term.clone(),
+                // 缺项（元数不足）：不特化；缺项交给既有缺参判定
+                (None, None) => return ConstArgOutcome::Evidenced(None),
             };
-            // 请求里放**归一化后**的项：C1 只让闭项进请求，故项即其值
-            // （`ConstExpr::Lit(value)`）。原始项形态不含额外信息——特化名与类型位
-            // 投影都只取决于值；开项（C2）才需要保留自由名、由 mono 代入后再归一化。
-            let term = ConstExpr::Lit(value.clone());
-            // 类型位投影必须存在（非标量值没有字面量类型）：不存在即不特化，
-            // 与 6.8.5-1 以来对非 Int/Bool/Float 值的处理逐字一致。
-            if GenericArg::Const(term.clone()).as_type().is_none() {
+            // 类型位投影：闭项必须存在（非标量值没有字面量类型，与 6.8.5-1 一致）；
+            // 开项此刻**没有**类型位形态（由 mono 代入后归一化再投影），不在此拦。
+            if closed.contains_key(name) && GenericArg::Const(term.clone()).as_type().is_none() {
                 return ConstArgOutcome::Evidenced(None);
             }
             type_args.push(GenericArg::Const(term));

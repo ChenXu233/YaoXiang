@@ -1329,16 +1329,18 @@ impl GenericArg {
         }
     }
 
-    /// 名字替换（mono 的 name_map）：类型位交给 `MonoType::substitute`；
-    /// 项位在 C1 原样——**项的自由名替换是 C2 的符号代入面**（那时项里的
-    /// `k` 由所在实例的 name_map 换成值再归一化），本批不动。
+    /// 名字替换（mono 的 name_map）：类型位交给 `MonoType::substitute`；项位交给
+    /// `const_eval::substitute_term_names`（C3 P5：`N-1` 在 `N→Literal{5}` 的
+    /// name_map 下变成 `5-1`，再由调用方归一化成 `4`——代入不是求值）。
     pub fn substitute(
         &self,
         subst: &std::collections::HashMap<String, MonoType>,
     ) -> GenericArg {
         match self {
             GenericArg::Type(ty) => GenericArg::Type(ty.substitute(subst)),
-            GenericArg::Const(term) => GenericArg::Const(term.clone()),
+            GenericArg::Const(term) => GenericArg::Const(
+                crate::frontend::core::types::eval::const_eval::substitute_term_names(term, subst),
+            ),
         }
     }
 }

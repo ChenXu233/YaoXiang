@@ -1335,6 +1335,95 @@ pub(crate) fn split_args_at_depth_zero(args_str: &str) -> Result<Vec<String>, ()
     Ok(args)
 }
 
+// ── C3（6.9.2-C3，F4 裁决 A）：项的自由名替换 ──────────────────────────────
+
+/// 项的自由名替换（C3 P2）：把 `subst` 里映射到**字面量类型**的名字换成该值。
+///
+/// 这是 **substitution（符号代入）**，不是 evaluation：不做算术、不判真假、不归一化。
+/// 只按 name_map 把名字换成值；映射缺项或映射目标不是字面量（容器参数仍是
+/// `TypeRef` / 符号名）时**原样保留**——「是否已成闭项」由 `normalize` 判定。
+///
+/// 为什么需要它：开项请求在 `deferred` 桶里带着容器参数（`k-1` ⇒ 消解成 `N-1`），
+/// 到具体实例开火时按该实例的 name_map（`N → Literal{5}`）代入，再归一化得 `4`。
+pub fn substitute_term_names(
+    term: &crate::frontend::core::types::const_data::ConstExpr,
+    subst: &std::collections::HashMap<String, crate::frontend::core::types::mono::MonoType>,
+) -> crate::frontend::core::types::const_data::ConstExpr {
+    rewrite_term_names(term, &|name| match subst.get(name) {
+        Some(crate::frontend::core::types::mono::MonoType::Literal { value, .. }) => Some(
+            crate::frontend::core::types::const_data::ConstExpr::Lit(value.clone()),
+        ),
+        _ => None,
+    })
+}
+
+/// 项的自由名**改名**（C3 P3 的钉住消去 `k → N`）：`renames` 命中即以新名替换。
+///
+/// 与 [`substitute_term_names`] 共用同一遍走树（同一个核心），差别只在「换成什么」：
+/// 这里换成**名字**（容器 binder），那里换成**值**（字面量）。
+pub fn rename_term_names(
+    term: &crate::frontend::core::types::const_data::ConstExpr,
+    renames: &std::collections::HashMap<String, String>,
+) -> crate::frontend::core::types::const_data::ConstExpr {
+    rewrite_term_names(term, &|name| {
+        renames
+            .get(name)
+            .map(|to| crate::frontend::core::types::const_data::ConstExpr::NamedVar(to.clone()))
+    })
+}
+
+/// 自由名替换的**唯一**走树实现（8 变体穷尽；新增变体由编译器逼着补臂）。
+fn rewrite_term_names(
+    term: &crate::frontend::core::types::const_data::ConstExpr,
+    resolve: &dyn Fn(&str) -> Option<crate::frontend::core::types::const_data::ConstExpr>,
+) -> crate::frontend::core::types::const_data::ConstExpr {
+    use crate::frontend::core::types::const_data::ConstExpr as CE;
+    match term {
+        CE::Lit(value) => CE::Lit(value.clone()),
+        CE::Var(var) => match resolve(&var.to_string()) {
+            Some(replacement) => replacement,
+            None => CE::Var(*var),
+        },
+        CE::NamedVar(name) => match resolve(name) {
+            Some(replacement) => replacement,
+            None => CE::NamedVar(name.clone()),
+        },
+        CE::BinOp { op, left, right } => CE::BinOp {
+            op: *op,
+            left: Box::new(rewrite_term_names(left, resolve)),
+            right: Box::new(rewrite_term_names(right, resolve)),
+        },
+        CE::UnOp { op, expr } => CE::UnOp {
+            op: *op,
+            expr: Box::new(rewrite_term_names(expr, resolve)),
+        },
+        CE::Call { func, args } => CE::Call {
+            func: func.clone(),
+            args: args
+                .iter()
+                .map(|arg| rewrite_term_names(arg, resolve))
+                .collect(),
+        },
+        CE::If {
+            condition,
+            then_branch,
+            else_branch,
+        } => CE::If {
+            condition: Box::new(rewrite_term_names(condition, resolve)),
+            then_branch: Box::new(rewrite_term_names(then_branch, resolve)),
+            else_branch: Box::new(rewrite_term_names(else_branch, resolve)),
+        },
+        CE::Range { start, end } => CE::Range {
+            start: Box::new(rewrite_term_names(start, resolve)),
+            end: Box::new(rewrite_term_names(end, resolve)),
+        },
+        CE::FieldPath { base, field } => CE::FieldPath {
+            base: Box::new(rewrite_term_names(base, resolve)),
+            field: field.clone(),
+        },
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1404,5 +1493,90 @@ mod tests {
         // 变量容器需类型信息判定 Range，语法层不猜 → None（守卫降级，不中断）
         let e = in_expr(var("x"), var("ys"));
         assert!(convert_expr_to_const_expr(&e).is_none());
+    }
+
+    // ── C3 P2：项的自由名替换（substitution ≠ evaluation）──────────────────
+
+    /// 值代入：`N-1` 在 `N → Literal{5}` 下变成 `5-1`，**不求值**（仍是一棵 BinOp）。
+    #[test]
+    fn test_substitute_term_names_replaces_literal_mapped_names() {
+        // Arrange
+        use crate::frontend::core::types::const_data::{
+            BinOp as CBinOp, ConstExpr as CE, ConstValue as CV,
+        };
+        let term = CE::BinOp {
+            op: CBinOp::Sub,
+            left: Box::new(CE::NamedVar("N".into())),
+            right: Box::new(CE::Lit(CV::Int(1))),
+        };
+        let subst = std::collections::HashMap::from([(
+            "N".to_string(),
+            crate::frontend::core::types::mono::MonoType::Literal {
+                name: "5".into(),
+                base_type: Box::new(crate::frontend::core::types::mono::MonoType::Int(64)),
+                value: CV::Int(5),
+            },
+        )]);
+
+        // Act
+        let substituted = substitute_term_names(&term, &subst);
+
+        // Assert：仍是表达式树（代入不是求值），且不再有自由名
+        assert!(
+            !matches!(substituted, CE::Lit(_)),
+            "代入不是求值：结果必须仍是表达式树，不得直接折成字面量"
+        );
+        let names = const_expr_free_names(&substituted);
+        assert!(
+            names.is_empty(),
+            "代入后不得再有自由名（N 已被换成字面量）；实际: {names:?}"
+        );
+    }
+
+    /// 映射目标不是字面量（容器参数仍是 TypeRef/符号名）⇒ **原样保留**该名字。
+    #[test]
+    fn test_substitute_term_names_keeps_unmapped_names() {
+        // Arrange
+        use crate::frontend::core::types::const_data::ConstExpr as CE;
+        let term = CE::NamedVar("M".into());
+        let subst = std::collections::HashMap::from([(
+            "N".to_string(),
+            crate::frontend::core::types::mono::MonoType::Int(64),
+        )]);
+
+        // Act
+        let substituted = substitute_term_names(&term, &subst);
+
+        // Assert
+        assert_eq!(
+            const_expr_free_names(&substituted),
+            vec!["M".to_string()],
+            "未映射的名字必须原样保留（留给 normalize 判是否已闭）"
+        );
+    }
+
+    /// 改名（C3 P3 的钉住消去）：`k → N`，名字换成名字，不引入值。
+    #[test]
+    fn test_rename_term_names_swaps_names_only() {
+        // Arrange
+        use crate::frontend::core::types::const_data::{
+            BinOp as CBinOp, ConstExpr as CE, ConstValue as CV,
+        };
+        let term = CE::BinOp {
+            op: CBinOp::Sub,
+            left: Box::new(CE::NamedVar("k".into())),
+            right: Box::new(CE::Lit(CV::Int(1))),
+        };
+        let renames = std::collections::HashMap::from([("k".to_string(), "N".to_string())]);
+
+        // Act
+        let renamed = rename_term_names(&term, &renames);
+
+        // Assert
+        assert_eq!(
+            const_expr_free_names(&renamed),
+            vec!["N".to_string()],
+            "钉住消去只换名：k 换成 binder 名 N"
+        );
     }
 }

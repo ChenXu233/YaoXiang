@@ -1088,3 +1088,191 @@ fn test_monomorphize_specialized_inherits_function_files_entry() {
         "调用方条目不得被继承改写"
     );
 }
+
+// ==================== C3（6.9.2-C3，F4 裁决 A）：甲-闭 + T-b ====================
+
+/// 开项请求夹具：q=0 实参是**项**（含容器 binder 的表达式，无类型位投影）。
+fn open_term_request(
+    term: crate::frontend::core::types::const_data::ConstExpr
+) -> InstantiationRequest {
+    InstantiationRequest::new(
+        GenericFunctionId::new("identity".to_string(), vec!["N".to_string()]),
+        vec![crate::frontend::core::types::mono::GenericArg::Const(term)],
+        Span::default(),
+    )
+}
+
+/// 容器实例的 name_map：`N → Literal{v}`。
+fn binder_map(v: i128) -> std::collections::HashMap<String, MonoType> {
+    [(
+        "N".to_string(),
+        MonoType::Literal {
+            name: format!("{v}"),
+            base_type: Box::new(MonoType::Int(64)),
+            value: crate::frontend::core::types::const_data::ConstValue::Int(v),
+        },
+    )]
+    .into_iter()
+    .collect()
+}
+
+/// T-b：同一静态调用点最多开火 `MAX_OPEN_CHAIN`(8) 次；到界不建实例、不报错，
+/// 并登记 `OpenFireCutoff{BoundReached}`。
+#[test]
+fn test_open_chain_stops_at_bound() {
+    // Arrange —— 开项链：`N - 1`（P3 的钉住消解产物）
+    use crate::frontend::core::types::const_data::{BinOp as CBinOp, ConstExpr as CE};
+    let mut mono = Monomorphizer::new();
+    mono.generic_functions
+        .insert("identity".to_string(), make_identity_ir());
+    let chain = CE::BinOp {
+        op: CBinOp::Sub,
+        left: Box::new(CE::NamedVar("N".into())),
+        right: Box::new(CE::Lit(
+            crate::frontend::core::types::const_data::ConstValue::Int(1),
+        )),
+    };
+    mono.deferred
+        .entry("f".to_string())
+        .or_default()
+        .push(open_term_request(chain));
+
+    // Act —— 10 次开火（对应实例 5..-4）
+    for v in (-4..=5).rev() {
+        mono.fire_deferred("f", &format!("f(int64::{v})"), &binder_map(v), 1);
+    }
+
+    // Assert 1：恰好 8 个实例入队（bound），前 8 次开火成功
+    assert_eq!(
+        mono.pending_queue.len(),
+        8,
+        "同一静态调用点最多开火 MAX_OPEN_CHAIN=8 次；实际入队 {}",
+        mono.pending_queue.len()
+    );
+    // Assert 2：入队请求的 q=0 实参已归一化为字面量（代入 + 归一化，不是原样转手）
+    let first = mono.pending_queue.front().unwrap();
+    assert_eq!(
+        first.type_args(),
+        vec![MonoType::Literal {
+            name: "4".into(),
+            base_type: Box::new(MonoType::Int(64)),
+            value: crate::frontend::core::types::const_data::ConstValue::Int(4),
+        }],
+        "第 1 次开火应把 N-1 归一化成 int64::4"
+    );
+    // Assert 3：到界登记（2 次被切：-3、-4 那一层）
+    let cutoffs = mono.open_fire_cutoffs();
+    assert_eq!(
+        cutoffs.len(),
+        2,
+        "10 次开火 − 8 次上限 = 2 条到界登记；实际: {cutoffs:?}"
+    );
+    assert!(
+        cutoffs
+            .iter()
+            .all(|c| c.reason == crate::middle::passes::mono::OpenFireCutoffReason::BoundReached),
+        "到界登记的原因必须是 BoundReached；实际: {cutoffs:?}"
+    );
+    assert_eq!(cutoffs[0].container, "f", "登记必须带容器名");
+    assert_eq!(cutoffs[0].callee, "identity", "登记必须带 callee 名");
+}
+
+/// 代入后仍是开项（容器参数未被本实例钉住）⇒ 不建实例 + 登记 `UnclosedTerm`。
+#[test]
+fn test_open_chain_unclosed_term_is_not_fired() {
+    // Arrange —— 项里引用未映射的 `M`
+    use crate::frontend::core::types::const_data::ConstExpr as CE;
+    let mut mono = Monomorphizer::new();
+    mono.generic_functions
+        .insert("identity".to_string(), make_identity_ir());
+    mono.deferred
+        .entry("f".to_string())
+        .or_default()
+        .push(open_term_request(CE::NamedVar("M".into())));
+
+    // Act
+    mono.fire_deferred("f", "f(int64::5)", &binder_map(5), 1);
+
+    // Assert
+    assert!(
+        mono.pending_queue.is_empty(),
+        "未闭的项不得建实例（不能把开项当闭项入队）"
+    );
+    let cutoffs = mono.open_fire_cutoffs();
+    assert_eq!(cutoffs.len(), 1, "必须登记一条未开火；实际: {cutoffs:?}");
+    assert_eq!(
+        cutoffs[0].reason,
+        crate::middle::passes::mono::OpenFireCutoffReason::UnclosedTerm
+    );
+}
+
+/// R4=①：代入后**求值失败**（如 `1 / 0`）⇒ 不建请求 + 登记，**不报错**。
+#[test]
+fn test_open_term_disproved_value_is_not_fired() {
+    // Arrange
+    use crate::frontend::core::types::const_data::{BinOp as CBinOp, ConstExpr as CE};
+    let mut mono = Monomorphizer::new();
+    mono.generic_functions
+        .insert("identity".to_string(), make_identity_ir());
+    let bad = CE::BinOp {
+        op: CBinOp::Div,
+        left: Box::new(CE::Lit(
+            crate::frontend::core::types::const_data::ConstValue::Int(1),
+        )),
+        right: Box::new(CE::Lit(
+            crate::frontend::core::types::const_data::ConstValue::Int(0),
+        )),
+    };
+    mono.deferred
+        .entry("f".to_string())
+        .or_default()
+        .push(open_term_request(bad));
+
+    // Act —— 不 panic、不返回 Err（fire_deferred 无错误通道 = 不报错）
+    mono.fire_deferred("f", "f(int64::5)", &binder_map(5), 1);
+
+    // Assert
+    assert!(mono.pending_queue.is_empty(), "求值失败不得建请求");
+    let cutoffs = mono.open_fire_cutoffs();
+    assert_eq!(
+        cutoffs[0].reason,
+        crate::middle::passes::mono::OpenFireCutoffReason::DisprovedValue,
+        "求值失败必须登记 DisprovedValue（R4=①）；实际: {cutoffs:?}"
+    );
+}
+
+/// 既有 deferred 形态（符号化**类型**实参）不受 T-b 闸限流——闸只圈开项**项位**。
+#[test]
+fn test_symbolic_type_request_is_not_limited_by_open_chain() {
+    // Arrange
+    let mut mono = Monomorphizer::new();
+    mono.generic_functions
+        .insert("identity".to_string(), make_identity_ir());
+    let req = InstantiationRequest::new(
+        GenericFunctionId::new("identity".to_string(), vec!["T".to_string()]),
+        vec![crate::frontend::core::types::mono::GenericArg::Type(
+            MonoType::TypeRef("T".to_string()),
+        )],
+        Span::default(),
+    );
+    mono.deferred.entry("f".to_string()).or_default().push(req);
+
+    // Act —— 10 次开火，每次 T 映射到同一具体类型
+    for _ in 0..10 {
+        let map: std::collections::HashMap<String, MonoType> =
+            [("T".to_string(), MonoType::Int(64))].into_iter().collect();
+        mono.fire_deferred("f", "f(int64)", &map, 1);
+    }
+
+    // Assert：全部入队、零登记（C3 的闸不得改变 C2 之前的语义）
+    assert_eq!(
+        mono.pending_queue.len(),
+        10,
+        "符号化类型实参的既有 deferred 路径不得被 T-b 限流"
+    );
+    assert!(
+        mono.open_fire_cutoffs().is_empty(),
+        "该路径不应产生任何到界登记；实际: {:?}",
+        mono.open_fire_cutoffs()
+    );
+}
