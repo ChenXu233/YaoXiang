@@ -5443,7 +5443,7 @@ outOfScope：C3/F4；`check_var_stmt_inner` 阶梯面（只加注释）；类型
 
 - **t5 复审 pass（2 medium / 3 low）**：T5-F1 `4e19c2ae` 附两处 runner 转发（`benches/shootout/runner/scripts/dev/z3_runner.py`、`tools/yx/scripts/dev/z3_runner.py`），不在 6.9.4 契约 inScope；因共享工作树 pre-commit 阻塞无法拆笔，内容为构建面、不改产品行为，PR 必填块登记，后续可单独拆；T5-F2 `DestructureAssign` 绑定不经 `classify_binding`/`gamma.kill`，静态论证当前 HEAD 不产生错证（解构定义 span 与快照不同 ⇒ 事实失效），但缺判据，另案补测；T5-F3 6.9.4 错误类型 **A**（旧行为非成功：应通过而报 E1113 的程序现在通过；先红后绿 + 原先成功程序零漂移 + 同提交登记）；T5-F4 `assumptions.rs` 注释「一次判定一份预算」与实现不符，登记；T5-F5 谓词形态事实进 SMT 假设通道未受绑定身份校验，无可达反例，登记 guard 另案；T5-F6 E5002 为防御性检查、payload 内存同源不可用户触发（口径登记）。
 - **t7 复审 pass**：T7-F1 已由 t10 补证（MT06/MT16/MT15 三条 trial 全红且机械还原，fast 2279）；T7-F2 grep 判据按名、T7-F3 layers 三文件 inScope 外、T7-F4 D59、T7-F5 文件头、T7-F6 E5002 口径，均登记。
-- **t10**：MT06 指纹校验、MT16 双键、MT15 `quantity_is_witness` 三条 trial 在 `bf64039f` 批次树红→还原→恢复绿；证据留 `target/yx-scratch/t10-evidence/`。
+- **t10**：MT06 指纹校验、MT16 双键、MT15 `quantity_is_witness` 三条 trial 在 `bf64039f` 批次树红→还原→恢复绿；trial 补丁与 blob 比对按 09a §P6 6.9.4 修复轮 §七 的批次树流程复现（冻结 `bf64039f`，apply/apply -R + blob 比对），不引用工作区路径。
 
 ## P6 6.9.5-B.1 契约（sigma-reviewer，2026-11-13，只读）
 
