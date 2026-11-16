@@ -4405,7 +4405,7 @@ P1 的形状判据与 ir_gen 的包装层产出形态耦合——「不再匹配
 
 ### 五、三条更正（t43 复审判定，t44 修复，t46 复核兑现）
 
-- **F1（成立，仍开放）**：IR 校验器（`verify` / `verify_loose` / `verify_ssa`）全仓**无生产调用点**——只有 IR 测试面与本批的 post-mono 门禁调用它（`yxpkg` 的 verify 是包校验，同名不同物）⇒「覆盖闸删原件 ⇒ `verify_loose` Dominance 红」目前不可观测。触发条件：校验器升为生产门禁（RFC-039 D38 / 04-ssa.md 批 a 准入）时，「删除原件」不得与「共享层读 env 之外的槽」同时成立；本批靠保守保留原件规避（原件仍带 q=0 槽，克隆体把体内读物化成常量），该规避在 verify 升门禁前不得移除。
+- **F1（成立，仍开放）**：IR 校验器（`verify` / `verify_loose` / `verify_ssa`）全仓**无生产调用点**——只有 IR 测试面与本批的 post-mono 门禁调用它（`yxpkg` 的 verify 是包校验，同名不同物）⇒「覆盖闸删原件 ⇒ `verify_loose` Dominance 红」目前不可观测。触发条件：**post-mono 生产门禁接线时**（P7 批 a 只用 ir_gen-only IR，不被 #542 阻断；见 09a §P6 6.9.2 #542 §二.3），「删除原件」不得与「共享层读 env 之外的槽」同时成立；本批靠保守保留原件规避（原件仍带 q=0 槽，克隆体把体内读物化成常量），该规避在 verify 升门禁前不得移除。
 - **F2（已修，措辞更正）**：原判据「克隆代入 Literal 会让 verify 红」**不成立**——verify 的 `types_compatible` 对任一侧 `TypeVar`/`TypeRef` 一律判相容，校验器结构上看不见代入与否（实测：克隆带未代入条目时 `verify_loose` 照样绿）。真正的欠账是**克隆的声明向量没有随槽一起裁剪**（它是原层 params 的逐字副本），实测形态为发射函数表里克隆显示 `Params: (N)` 而实例显示 `Params: ()`。该欠账已修：建件时代入 + 擦除时同源裁剪，两半各有门禁。
 - **F3（表述准确，仍开放）**：扩 `TailCall` 需三处单点同进同退——`call_form_is_rewritten`（当前只放行 `Call` + 字符串常量 func）、`replace_calls_in_function`（受其门控）、`drop_erased_call_args`（当前只 match `Instruction::Call`）；缺一处则擦除侧与改写侧单边不一致。扫描面 `by_name_call_target` 已覆盖 `Call`/`TailCall`/`MakeClosure`，今日保守策略使 `TailCall` 形态不悬空、只是不被特化 ⇒ 覆盖缺口而非正确性缺陷；触发条件：`TailCall` 指向带 q=0 形参的函数。
 
@@ -5455,7 +5455,7 @@ t13 的 5 项 low 与处置见 §八。
 
 ### 二、登记证据（全部实证，来源 = t16 裁决包，HEAD 2fae8202）
 
-1. **触发面在现网语料里就存在**：`tests/yaoxiang/02-type-system/generics/fn_const_generic.yx` 的 .42 字节码表 = `__f_l0` + `__f_l0(int64::42)`，**原件 `f` 不在**——共享层失去唯一 `MakeClosure` 引用者成为孤立死 IR（非假设形态）。全调用点覆盖的双实例探针同形（`f(42)(42)` + `f(7)(7)` ⇒ `__f_l0` 孤留）。
+1. **触发面在现网语料里就存在**：`tests/yaoxiang/02-type-system/generics/fn_const_generic.yx` 的 .42 字节码表 = `__f_l0` + `__f_l0(int64::42)`，**原件 `f` 不在**——共享层失去唯一 `MakeClosure` 引用者成为孤立死 IR（非假设形态）。全调用点覆盖的双实例探针同形（`f(42)(42)` + `f(7)(7)` ⇒ `__f_l0` 孤留）。代码锚：mono `build_output:1195` 的删除判据只删 `requested_generic_names`（泛型原件），`emit_curry_layer_clones` 把实例 `MakeClosure` 重定向到克隆、共享层失去唯一引用者；`fn_const_generic.yx` 是单调用点全覆盖形态。形态复核需重建并 dump——`corpus-parity` 只记诊断/退出码/stdout，不记函数表。
 
 2. **为什么阻断 verify 升门禁（静态证明）**：`verify`（src/middle/ir/verify.rs）的 env 槽数**只能从 `MakeClosure` 侧反推**（`env_lens` 只由 `MakeClosure{func, env}` 建立，查不到 = 0；`FnView::from_function(func, env_len)`）。孤立 `__f_l0` 的槽形 = `Params: (N)` + `Locals: N@0, k@1, x@2`，体内 `LoadLocal 05 01` 读槽 1；`env_len` 反推为 0 ⇒ `entry_defined_range = 0..(0+1)` 只覆盖槽 0 ⇒ 槽 1 的读无入口定义路径 ⇒ `check_dominance` 报 `InvariantKind::Dominance`（use-before-def）。仓内两处文字独立记载同一条红路：`src/frontend/tests/curry_erasure.rs`（「共享层 `__f_l0` 失去唯一 `MakeClosure` 引用……被判成 env 长度 0」）与 issue #542 正文。
 
@@ -5503,17 +5503,19 @@ init 段（模块顶层语句）还另有一份只认 `Call` 的平行改写实�
 
 **A 类**（旧行为非成功：站点悬空 ⇒ E6006；实参错位 ⇒ 静默错配），按条款顺路修：先红后绿成立（见 §四）、不改变「原先成功」程序的对外表现——TailCall 无 IR 生成点，语料里不存在该形态，故 **corpus_probe 402/402 差异空、IR 快照 `git status` 干净**（快照取 mono 前 IR，本改动全在 mono 之后）。
 
+**init 段 DefId 副作用（T19-F2 登记）**：init 段旧平行实现只换名、不动 `DefId`；统一到 `set_static_target_name` 后同时清 `DefId`。翻译面优先 `DefId`（`translate_call` 先判 `def_idx`），旧路径下 init 段的特化实例是死码；新路径与函数体同一纪律，语义等价、零漂移，同属 A 类。
+
 ### 四、判据（mono 直驱，`src/middle/passes/mono/tests/monomorphizer.rs`）
 
 | 判据 | 钉住的性质 |
 | --- | --- |
-| `test_tail_call_site_is_rewritten_to_specialized_name` | `TailCall` 站点进改写面：目标改成特化名 + DefId 清空 + 目标在输出函数表里（无悬空）。前身是 t3 的 tripwire（断言「一律计未覆盖、原件保留」），按**其自身注释**交接为本条 |
+| `test_tail_call_site_is_rewritten_to_specialized_name` | `TailCall` 站点进改写面：目标改成特化名 + DefId 清空 + 目标在输出函数表里（无悬空）。前身是 t3 的 tripwire（断言「一律计未覆盖、原件保留」）；其注释只刻画修复前行为、并无交接指示，本条是在前提被修复使命失效后新立的更强性质判据（MakeClosure 负控保留，退役合规） |
 | `test_tail_call_site_drops_erased_const_arg_once` | `TailCall` 站点按被调计划裁 q=0 实参：2 ⇒ 1（**只裁一次**）、剩余实参保持位置语义、被调实例的 q=0 形参位也被裁（两侧同进同退） |
 | `test_call_form_coverage_matches_rewritten_call_target` | 形态集合单点：覆盖判定 ⇔ 有改写目标；集合恰为 `Call`/`TailCall`（字符串常量 func），`MakeClosure`/`CallDyn`/Int-func 的 `Call` 均不覆盖 |
 | `test_module_init_tail_call_is_rewritten` | init 段与函数体共用同一份站点改写（`TailCall` 在 init 段同样被改名） |
 | `test_restore_gate_keeps_generic_referenced_only_by_make_closure`（既有，未改） | 负控：`MakeClosure` 仍不在改写面内 ⇒ 有键也一律计未覆盖、原件保留 |
 
-### 五、变异（手工改—测—还原，实测红后还原全绿）
+### 五、变异（M541-1/2/3 先手工红；t18 已用 scratch.py trial 机械重跑同三条，以 trial 轮为准）
 
 | 变异 | 预期红 | 实测 |
 | --- | --- | --- |
