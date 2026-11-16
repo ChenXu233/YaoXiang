@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # CNB -> GitHub：把 CNB 上 open 的合并请求镜像成 GitHub 上的 cnb/pr-<编号> 分支与 PR。
 #
-# 由 CNB 的定时任务（可信事件，以负责人身份运行）驱动，不依赖 GitHub Actions。
+# 由 CNB 的 pull_request.target 事件、按需 api_trigger 或每日兜底定时任务驱动
+# （均为可信事件，以负责人身份运行）。
 # 评审、CI 与合并都在 GitHub 进行；GitHub PR 合并后，本脚本回关 CNB 的同号 PR。
+# GitHub 侧合并/关闭 PR 时，由 .github/workflows/cnb-sync.yml 戳 api_trigger 及时回关。
 #
 # 需要环境变量：CNB_TOKEN（流水线临时令牌）、GH_USER / GH_TOKEN（密钥仓库 imports 注入）。
 set -e

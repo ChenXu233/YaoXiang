@@ -1,0 +1,77 @@
+name: Sync mirror to CNB
+
+# GitHub -> CNB 方向的按需通知。
+#
+# CNB 侧收不到 GitHub 的 push / merge 事件，故由本 workflow 在 GitHub 有动作时
+# 调 CNB OpenAPI（StartBuild）戳一次 CNB 的 api_trigger 流水线做增量镜像。
+# CNB 侧定时已降为按天兜底，只防本链路失效（token 轮换遗漏、workflow 被禁用）。
+#
+# 不会成环：CNB 的 api_trigger 只推 git ref / 改 PR 状态，CNB 的 dev 未配 push 事件，
+# 不会反过来触发本 workflow。
+#
+# 所需凭据：GitHub Secrets 里的 CNB_TOKEN —— CNB 访问令牌，仅需对
+# ChenXu233/YaoXiang 有触发构建权限。令牌写进 secrets、不要落到代码或日志；
+# 轮换时改 secrets 即可，无需改本文件。
+
+on:
+  push:
+    branches: [dev, main]
+    tags: ['**']
+  pull_request:
+    types: [closed]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# 多个 push 排成一列，避免并发触发多个 CNB 构建互相 force-push 打架。
+# cancel-in-progress 必须为 false：取消会连带丢掉那一次按需通知。
+concurrency:
+  group: cnb-sync
+  cancel-in-progress: false
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # GitHub 上合掉的 PR 里，只有从 CNB 镜像来的 cnb/pr-* 需要在 CNB 侧回关；
+      # 其余（dev→main 发布、dependabot 等）在 CNB 没有对应 PR，跳过。
+      - name: Decide mirror scope
+        id: decide
+        env:
+          EVENT: ${{ github.event_name }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          SELF_REPO: ${{ github.repository }}
+        run: |
+          if [ "$EVENT" = "pull_request" ]; then
+            # 只认本仓库的 cnb/pr-* 镜像分支；fork 上的同名分支不算。
+            if [ "$HEAD_REPO" = "$SELF_REPO" ] && [[ "$HEAD_REF" == cnb/pr-* ]]; then
+              echo "scope=prs" >> "$GITHUB_OUTPUT"
+            else
+              echo "scope=skip" >> "$GITHUB_OUTPUT"
+            fi
+          else
+            echo "scope=repos" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Trigger CNB mirror
+        if: steps.decide.outputs.scope != 'skip'
+        env:
+          CNB_TOKEN: ${{ secrets.CNB_TOKEN }}
+          MIRROR_SCOPE: ${{ steps.decide.outputs.scope }}
+        run: |
+          if [ -z "$CNB_TOKEN" ]; then
+            echo "::error::GitHub Secret CNB_TOKEN 未配置，无法触发 CNB 镜像；请在仓库 Settings > Secrets 添加"
+            exit 1
+          fi
+          payload="$(jq -n --arg scope "$MIRROR_SCOPE" \
+            '{event: "api_trigger", branch: "dev", title: "GH 反向通知-\($scope)", env: {MIRROR_SCOPE: $scope}}')"
+          curl -sS -f -X POST \
+            -H "Authorization: Bearer $CNB_TOKEN" \
+            -H "accept: application/json" \
+            -H "content-type: application/json" \
+            --data "$payload" \
+            "https://api.cnb.cool/ChenXu233/YaoXiang/-/build/start"
+          echo "已触发 CNB 镜像（$MIRROR_SCOPE）"
