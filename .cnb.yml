@@ -1,27 +1,28 @@
 # CNB（备份仓库）侧的全部镜像逻辑。
 #
-# 方向一（每 30 分钟）：GitHub 主仓库的 dev/main 与全部 tag -> CNB 备份仓库。
-# 方向二（每 10 分钟）：CNB 上 open 的合并请求（多数由 NPC 发起）-> GitHub 的 cnb/pr-<编号> 分支与 PR；
-#                       在 GitHub 评审、跑 CI、合并，合并后回关 CNB 的同号 PR。
+# 定时任务每 10 分钟跑一次，两件事：
+#  1) CNB 上 open 的合并请求（多数由 NPC 发起）-> GitHub 的 cnb/pr-<编号> 分支与 PR；
+#     在 GitHub 评审、跑 CI、合并，合并后回关 CNB 的同号 PR。
+#  2) 每 30 分钟（:00 / :30 那一轮）把 GitHub 主仓库的 dev/main 与全部 tag 回灌到 CNB。
 #
 # GitHub 凭据放在密钥仓库 ChenXu233/secrets 的 yaoxiang-pr-sync.yml（GH_USER / GH_TOKEN）。
 # 只有定时任务与 api_trigger 这类可信事件引用它；pull_request 属不可信事件（配置可能来自源分支），不在此列。
 dev:
-  # 每 10 分钟：CNB 的 PR -> GitHub
   "crontab: */10 * * * *":
-    - name: mirror-prs-to-github
+    - name: mirror-prs-and-repos
       imports:
         - https://cnb.cool/ChenXu233/secrets/-/blob/main/yaoxiang-pr-sync.yml
       stages:
-        - name: mirror
+        - name: sync-repos
+          script: |
+            # 全量裸克隆一次 40+MB，不必每 10 分钟都做：:00 / :30 那一轮回灌主干。
+            if [ $(( $(date +%-M) % 30 )) -lt 10 ]; then
+              bash .cnb/scripts/mirror-repos.sh
+            else
+              echo "本轮跳过 GitHub -> CNB 主干回灌（每 30 分钟一次）"
+            fi
+        - name: mirror-prs
           script: bash .cnb/scripts/mirror-prs.sh
-
-  # 每小时的第 5、35 分：GitHub 的分支与标签 -> CNB
-  "crontab: 5,35 * * * *":
-    - name: mirror-from-github
-      stages:
-        - name: sync
-          script: bash .cnb/scripts/mirror-repos.sh
 
   # 手动触发（Open API 的 api_trigger，或页面上的运行按钮）：两个方向各跑一遍
   api_trigger:
