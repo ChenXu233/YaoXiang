@@ -4413,7 +4413,7 @@ P1 的形状判据与 ir_gen 的包装层产出形态耦合——「不再匹配
 
 1. `TailCall` 未进调用点改写面（覆盖缺口，触发条件如上；扩面时三处同进同退）⇒ issue [#541](https://github.com/ChenXu233/YaoXiang/issues/541)。
 2. 校验器升生产门禁时的「保守保留原件」规避不得移除（见 F1）。
-3. 孤立的共享层（原件与其兜底件）属死代码消除遗留，登记口径不变 ⇒ issue [#542](https://github.com/ChenXu233/YaoXiang/issues/542)（须在校验器升门禁前落地或同步豁免）。
+3. 孤立的共享层（原件与其兜底件）属死代码消除遗留，登记口径不变 ⇒ issue [#542](https://github.com/ChenXu233/YaoXiang/issues/542)（须在校验器升门禁前落地或同步豁免）。**处置已定（2026-11-16，用户裁决 B）**：按「排期另案」处理——P7 批 a 后、post-mono 生产门禁接线前做 DCE；见 §P6 6.9.2 #542。
 4. 已修项留档：克隆声明与槽同源的两半修复及其门禁（见上）。
 
 ### 七、不宣称
@@ -4794,7 +4794,7 @@ P1 的形状判据与 ir_gen 的包装层产出形态耦合——「不再匹配
 1. **F4 三案未裁**（C3 前置）：`type_args` 承载符号表达式 / 保持不特化 / mono 侧求值；裁决前 C3 不得开工（09a §P6 6.9.2-B §六）。
 2. **判定点协议未成文**（d 前置）：入口、ground 条件、回滚边界、预算共享方式均无裁决；接线契约已因假设 `can_assign` 是判定点而浪费两轮（09a §P6 6.9.3c §六/七）。
 3. **#537 D 类未裁**：证明函数形参精化在调用点静默丢弃；修复会让原先通过的程序报错，需用户裁决。
-4. **#542 未落地/豁免**：孤立共享层必须在 `verify`/`verify_loose` 升生产门禁前处置。
+4. **#542 未落地/未写豁免**：孤立共享层必须在 `verify`/`verify_loose` 升生产门禁前处置——2026-11-16 用户裁决 B 定为「排期另案」（P7 批 a 后、post-mono 门禁接线前做 DCE），故本条在排期完成前**持续成立**，见 §P6 6.9.2 #542。
 5. **#538 已修未登记**：提交 `8355a283` 修方法面 E1113 证据检查（9 文件、+133 行 integration），提交自称「WBS 3.20.21」；但 09 的 3.20 线无 3.20.20/21，三级计数仍 232。本次按 C 阶段表面收口登记，不新增 3.20 行；3.20.21 号不再使用。
 6. **6.9.3b 遗留 2 未补**：非预算 `EvalError → BeyondKernel` 的分类断言未进 `layers/tests/equivalence.rs`；遗留 4（预算共享）同样无归属。
 7. **E4023 无用户可达路径**：6.9.3c 的 15 个生产构造点去向已逐个核过，零差异是「没走到」而非「没影响」。
@@ -5443,6 +5443,89 @@ t13 的 5 项 low 与处置见 §八。
 | **T13-F4** | `src/frontend/tests/curry_instance_layers.rs` 不在 t11 inScope（tripwire 按自身注释交接，已文字申报） | **登记进 PR 必填块**（契约边界，非越界实现） |
 | **T13-F5** | D59 处置未写 | **本轮已闭**：见 §七（按「机制补齐」记，无行为变更 ⇒ 无裁决事项） |
 
+## P6 6.9.2 #542：孤立共享层 = 排期另案（2026-11-16，用户裁决 B）
+
+### 一、裁决与排期（本节的规范内容）
+
+用户裁决（2026-11-16）采纳分析师的**时机**建议、不采纳「现在落地或现在写豁免」：
+
+- **#542 记为「排期另案」**：DCE（回收孤立共享层）排在 **P7 批 a 完成后、post-mono 生产门禁接线前**执行。
+- **现在不做**：不删除原件/兜底共享层、不写 D38 豁免、不动 `verify`/`verify_loose` 的门禁时点。
+- **6.9 保持打开**：排期完成（DCE 落地且 post-mono 门禁绿）才收口。09/09a 均不得写「#542 已完成」。
+
+### 二、登记证据（全部实证，来源 = t16 裁决包，HEAD 2fae8202）
+
+1. **触发面在现网语料里就存在**：`tests/yaoxiang/02-type-system/generics/fn_const_generic.yx` 的 .42 字节码表 = `__f_l0` + `__f_l0(int64::42)`，**原件 `f` 不在**——共享层失去唯一 `MakeClosure` 引用者成为孤立死 IR（非假设形态）。全调用点覆盖的双实例探针同形（`f(42)(42)` + `f(7)(7)` ⇒ `__f_l0` 孤留）。
+
+2. **为什么阻断 verify 升门禁（静态证明）**：`verify`（src/middle/ir/verify.rs）的 env 槽数**只能从 `MakeClosure` 侧反推**（`env_lens` 只由 `MakeClosure{func, env}` 建立，查不到 = 0；`FnView::from_function(func, env_len)`）。孤立 `__f_l0` 的槽形 = `Params: (N)` + `Locals: N@0, k@1, x@2`，体内 `LoadLocal 05 01` 读槽 1；`env_len` 反推为 0 ⇒ `entry_defined_range = 0..(0+1)` 只覆盖槽 0 ⇒ 槽 1 的读无入口定义路径 ⇒ `check_dominance` 报 `InvariantKind::Dominance`（use-before-def）。仓内两处文字独立记载同一条红路：`src/frontend/tests/curry_erasure.rs`（「共享层 `__f_l0` 失去唯一 `MakeClosure` 引用……被判成 env 长度 0」）与 issue #542 正文。
+
+3. **P7 批 a 不被 #542 阻断**：批 a 的前置是 `verify_loose` 在**现有非 SSA IR**（`lex→parse→typecheck→ir_gen`，不含 mono）上跑绿——今日已绿（测试级判据 `test_verify_loose_corpus_green`）。孤立共享层只在 **post-mono** IR 上出现，故批 a 可先行；被阻断的是更后一步的「post-mono 生产门禁」。
+
+4. **C3 之后面收窄**：C3 的 T-b 到界退回使「第 9 次开火」的调用点留在原件上 ⇒ 原件被 `restore_generics_with_uncovered_call_sites` 放回 ⇒ 共享层仍有引用者 ⇒ **递归形态（factorial 族）不再孤立**；#542 的面收窄到**非递归全覆盖形态**（`fn_const_generic` 族）。
+
+### 三、边界（本轮不做的事）
+
+- **src/ 与 tests/ 零 diff**：本轮只改 09/09a 两份文档。
+- **不删代码**：删除属不可逆（函数表裁剪 + 可达性根集），须与 DCE 一并做，且 DCE 是新 pass（`middle/passes/` 现无 DCE），按 D1 需先论证「既有概念无法表达」。
+- **不写豁免**：任何 D38 豁免都会污染「`verify_loose` 跑不绿不开豁免」的口径，故不写。
+- **不动门禁时点**：`verify`/`verify_loose` 的生产接线时点不在本任务（outOfScope）。
+
+### 四、复核点（排期完成时必须逐条回答）
+
+1. DCE 的**可达性根集**是否完备：`main`、模块 init、native/FFI 导出面、跨模块 `Export`/`TypeDefPayload` 引用（#539 未闭时尤其要核）。
+2. 删除后 **`verify_loose` 在 post-mono IR 上绿**（并给出红→绿判据：删除前 `fn_const_generic` 的孤立层必须红）。
+3. C2c 的「保守保留原件」规避**与 #542 同批移除**（09 的 A/I4 保留条件段），不得单边移除。
+4. 语料/IR 零漂移或逐条分类；若字节码函数表变化，逐条说明。
+
+## P6 6.9.2 #541：TailCall 进调用点改写/擦除面（2026-11-16）
+
+### 一、缺陷形态
+
+IR 里以**字符串名**分发的静态调用有三种：`Call` / `TailCall` / `MakeClosure`。扫描面（`by_name_call_target`）三种都收，调用点改写面（`call_form_is_rewritten` → `replace_calls_in_function`）与**擦除面**（`drop_erased_call_args`）只放行 `Call`。于是 `TailCall` 站点同时踩两个坑：
+
+1. **该改名的没改名**：站点仍按原名调，而泛型原件已按「已覆盖」被删 ⇒ 运行期按原名查表落空（E6006 家族）。t3 的闭合闸（`restore_generics_with_uncovered_call_sites`）当时把 `TailCall` 一律计「未覆盖」保守保留原件——这只是把悬空变成「少特化」，不是闭合。
+2. **该裁实参的没裁**：被调实例删了 q=0 形参位，而站点仍传那个实参 ⇒ 帧前段错位（静默错配）。
+
+init 段（模块顶层语句）还另有一份只认 `Call` 的平行改写实现：改写面扩形态时它不会跟着走，悬空会在 init 段复现（同一行为两处实现 = 禁令三 A）。
+
+### 二、落地（单点 + 三处同进同退）
+
+| 点 | 做法 |
+| --- | --- |
+| **形态集合单点** | 新增 `rewritten_call_target(instr)`：以扫描面 `by_name_call_target` 为基，只窄掉 `MakeClosure`；`call_form_is_rewritten` 降为 `rewritten_call_target(instr).is_some()` |
+| **改写面** | `replace_calls_in_function` 改用该单点取 (名, span)，改名仍走 `set_static_target_name`（该函数本就同时覆盖 `Call`/`TailCall`，同时清 DefId） |
+| **擦除面** | `drop_erased_call_args::drop_in` 改用同一单点取目标名，再按 `Call`/`TailCall` 同一操作数布局取 `&mut args` 调 `remove_positions`（同一份 `ConstErasePlan`，同一位置集合） |
+| **init 段** | 抽出 `replace_static_call_site(instr, map, container)`：函数体（`container=Some(实例名)`，named 键优先、anon 兜底）与 init 段（`container=None`，anon 键）**共用一份**，删掉 init 段的 `Call`-only 平行实现 |
+
+不改 opcode 语义，也不动 `translate_tail_call`（TailCall 至今**无 IR 生成点**，翻译面本轮不涉及）。
+
+### 三、D59 分类与零漂移
+
+**A 类**（旧行为非成功：站点悬空 ⇒ E6006；实参错位 ⇒ 静默错配），按条款顺路修：先红后绿成立（见 §四）、不改变「原先成功」程序的对外表现——TailCall 无 IR 生成点，语料里不存在该形态，故 **corpus_probe 402/402 差异空、IR 快照 `git status` 干净**（快照取 mono 前 IR，本改动全在 mono 之后）。
+
+### 四、判据（mono 直驱，`src/middle/passes/mono/tests/monomorphizer.rs`）
+
+| 判据 | 钉住的性质 |
+| --- | --- |
+| `test_tail_call_site_is_rewritten_to_specialized_name` | `TailCall` 站点进改写面：目标改成特化名 + DefId 清空 + 目标在输出函数表里（无悬空）。前身是 t3 的 tripwire（断言「一律计未覆盖、原件保留」），按**其自身注释**交接为本条 |
+| `test_tail_call_site_drops_erased_const_arg_once` | `TailCall` 站点按被调计划裁 q=0 实参：2 ⇒ 1（**只裁一次**）、剩余实参保持位置语义、被调实例的 q=0 形参位也被裁（两侧同进同退） |
+| `test_call_form_coverage_matches_rewritten_call_target` | 形态集合单点：覆盖判定 ⇔ 有改写目标；集合恰为 `Call`/`TailCall`（字符串常量 func），`MakeClosure`/`CallDyn`/Int-func 的 `Call` 均不覆盖 |
+| `test_module_init_tail_call_is_rewritten` | init 段与函数体共用同一份站点改写（`TailCall` 在 init 段同样被改名） |
+| `test_restore_gate_keeps_generic_referenced_only_by_make_closure`（既有，未改） | 负控：`MakeClosure` 仍不在改写面内 ⇒ 有键也一律计未覆盖、原件保留 |
+
+### 五、变异（手工改—测—还原，实测红后还原全绿）
+
+| 变异 | 预期红 | 实测 |
+| --- | --- | --- |
+| **M541-1** `rewritten_call_target` 退回只认 `Call`（= 修复前行为） | 四条 TailCall 判据 + 单点判据 | **实测 4 红**（站点名仍 `g` / `std.list.is_empty` / init 段 `identity`；覆盖判定不符） |
+| **M541-2** 擦除面只认 `Call`（改写面仍覆盖 `TailCall`）= 单边 | `test_tail_call_site_drops_erased_const_arg_once` | **实测红**（实参仍 `[Int(5), Int(7)]`）；改名半仍绿 ⇒ 两半判据相互独立，能分开抓「单边」 |
+| **M541-3** 双重擦除（同一位置删两次） | 同上 | **实测红**（实参 `[]`，期望 `[Int(7)]`） |
+
+### 六、边界
+
+- 不改 opcode 语义；`translate_tail_call`（IR 侧 `func` 取 `Int` 形态）保持原样——TailCall 无生成点，翻译面与 IR 生成面均不在本轮。
+- `#542`（孤立共享层）另案，不在本轮：本轮的改写面扩形态不改变「共享层只有一份体」的事实。
+- 新增的 `rewritten_call_target` / `replace_static_call_site` 是**共享层**（供四处调用），不是第 4、5 份同义映射：形态集合与站点改写各只剩一个写点。
 ## P6 6.9.3d 契约与 M1/M2/M5 实测（protocol-analyst，2026-11-13）
 
 ### 一、红判据实测（批次树 6.9-bd @ a8ccf78c）
