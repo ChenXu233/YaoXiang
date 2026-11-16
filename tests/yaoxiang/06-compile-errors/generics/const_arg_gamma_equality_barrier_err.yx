@@ -1,0 +1,38 @@
+// 06-compile-errors/generics/const_arg_gamma_equality_barrier_err.yx
+// expect: compile-error E1113
+// 覆盖: RFC-039 D62 / 6.9.4（issue #534）——Γ 等式事实的**证据边界（barrier）**
+// 验证: 两道边界都不让等式跨过去：
+//       ① **体外事实不入体**：外层守卫 `y == 42` 的事实不得进入嵌套函数体——体内
+//          同名形参是新的运行期绑定，拿外层同名事实当证据会把运行期值当常量；
+//       ② **体内事实随体亡**：spawn 体内裸 `assert` 的等式出体即失效。
+// 状态: ❌ 应编译失败（两条边界都必须报 E1113）
+
+use std.assert
+
+f: (N: Int) -> (n: N) -> Int = (n) => n
+
+// ① 外层守卫事实不得进入嵌套函数体
+outer_fact: (y: Int) -> Int = {
+    if y == 42 {
+        inner: (y: Int) -> Int = f(y)(42)
+        inner(42)
+    } else {
+        0
+    }
+}
+
+// ② spawn 体内自产的事实随体亡
+body_fact: (y: Int) -> Int = {
+    r = spawn {
+        assert(y == 42, "体内自产")
+        return 0
+    }
+    f(y)(42)
+}
+
+main: () -> Void = {
+    outer_fact(42)
+    body_fact(42)
+}
+
+main()

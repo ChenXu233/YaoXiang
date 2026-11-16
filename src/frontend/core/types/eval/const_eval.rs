@@ -228,7 +228,8 @@ fn convert_ast_binop(op: &AstBinOp) -> Option<crate::frontend::core::types::cons
 /// 编译期项的环境（6.9.2-C1 / RFC-039 D62）：一个**归一化入口**，两种环境。
 ///
 /// - checker 侧：由 `frame_term_env()` 投影**既有判据**（本帧 q=0 binder、单值钉住
-///   形参、值环境的最内层绑定）——不新增判据；Γ（6.9.4）与 Σ 不在此列。
+///   形参、值环境的最内层绑定）+ Γ 的**常量等式事实**（6.9.4，见
+///   [`TermEnv::with_equalities`]）——不新增判据；Σ 不在此列。
 /// - mono 侧（C2）：由特化 `name_map` 构造同一类型。
 #[derive(Debug, Default, Clone)]
 pub struct TermEnv {
@@ -252,6 +253,28 @@ impl TermEnv {
             .filter(|name| !values.contains_key(name))
             .collect();
         TermEnv { symbolic, values }
+    }
+
+    /// 构造环境并并入**等式事实**（6.9.4 的第四证据源）：
+    /// 形如 (名字, 值) 的对，表示该名字此刻有常量值（来自分支守卫 `y == 42` / 裸
+    /// `assert(y == 42)`）。
+    ///
+    /// 合并口径（两条都必要）：
+    /// - **值优先**：值环境已有的绑定不被等式覆盖——既有证据源排在前面，等式只补空缺；
+    /// - **符号剔除**：同名在符号集里被剔除——此刻它「有值」，不再是「没有值」。
+    pub fn with_equalities(
+        symbolic: impl IntoIterator<Item = String>,
+        values: impl IntoIterator<Item = (String, crate::frontend::core::types::const_data::ConstValue)>,
+        equalities: impl IntoIterator<
+            Item = (String, crate::frontend::core::types::const_data::ConstValue),
+        >,
+    ) -> Self {
+        let mut env = Self::new(symbolic, values);
+        for (name, value) in equalities {
+            env.symbolic.remove(&name);
+            env.values.entry(name).or_insert(value);
+        }
+        env
     }
 
     /// 自由变量义务：项里出现的每个名字都必须是**已知的编译期名**

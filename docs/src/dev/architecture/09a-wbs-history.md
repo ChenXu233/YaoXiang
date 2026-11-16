@@ -5035,6 +5035,133 @@ P1 `FlowSensitiveGamma` 增 `barrier_depth`/`enter_barrier`/`restore_barrier`/`v
 
 R1：P6 后裸 `assert` 全量注入，语料交集为空但未构建；R2：`assert.assert` 不扩；R3：`is_empty` 口径；R4：`&mut` 的 Arc 语义未核实；R5：闭包边界按 soundness 推，语料无反例。
 
+## P6 6.9.4 实现轮（2026-11-15，契约见本节上文「6.9.4 契约与补丁计划」）
+
+### 一、落地（P1–P9 → 代码）
+
+| 步 | 内容 | 落点 |
+| --- | --- | --- |
+| P1 | `FlowSensitiveGamma` 增 `barrier_depth` / `enter_barrier` / `restore_barrier` / `visible()` / `const_equalities()`；`is_empty` 与 `current` 统一走 `is_visible`（口径 =「当前 barrier 以上」） | `src/frontend/core/sema/proof/assumptions.rs` |
+| P2 | `TermEnv::with_equalities`（等式并入**值**侧；值环境同名的值优先，符号集同名剔除） | `src/frontend/core/types/eval/const_eval.rs` |
+| P3 | `frame_term_env` 合并 `const_equalities()`；`TermEnv::new` 的调用点不增（唯一生产构造点不变） | `src/frontend/core/sema/inference/expressions.rs` |
+| P4 | `check_if_stmt` 单收集点：then / else-if 注入自身守卫（合取逐项分解），else 注入 `negate_guard`；分支帧在**错误路径**也出栈（`gamma_push_guard` / `gamma_pop_guard` 成对） | `src/frontend/core/sema/inference/statements.rs` |
+| P5 | 三处边界 barrier：函数体（`check_fn_body` 两条退出路径各一次 restore）、lambda 体（`infer_lambda`）、spawn 体（`infer_expr` 的 Spawn 臂） | statements.rs / expressions.rs |
+| P6 | `checker.rs` 两处 `StatementChecker::new` 由 `None`→`Some(FlowSensitiveGamma::new())`（**唯一行为翻转点**）；并补 `AssertModule.effect_specs()` 的生产登记（见 §二） | `src/frontend/core/sema/checker.rs` |
+| P7 | `&mut name` 借出时 `gamma.kill(name)`（与既有 Reassign kill 同一保守方向；只认直接 `Var` 写形态）；**并在表达式侧 walker 的 `BindingAction::Reassign` 臂补同一个 kill**（spawn / lambda 体内的语句走 `infer_stmt`，与语句侧共用同一 `classify_binding` 判定；不补则体内 `assert(y == 42); y = 43` 之后旧等式仍被当证据，见 §四末条） | expressions.rs |
+| P8 | 新增 2 条语料 + 语料基线 + 1 条 IR 快照 | `tests/yaoxiang/`、`tests/baselines/`、`src/middle/ir/tests/snapshots/` |
+| P9 | 本记录 + [09](./09-execution-wbs.md) 状态更新 | 本文 / 09 |
+
+### 二、查证结论：`assert` 效应在生产端从未接线（本轮实质发现）
+
+- 消费端已有：`inference/expressions.rs` 调用成功后按 `dep_env.get_effect_spec(fn_name)` 把
+  `GammaAssume` 的谓词注入 Γ（只覆盖 `Expr::Var` 被调方 = **裸** `assert`；`assert.assert`
+  是 `FieldAccess`，天然不进）。
+- 生产端缺失：`AssertModule.effect_specs()` 只被 `src/std/mod.rs` 的 `register_all`（FFI 注册表
+  路径）消费；`TypeChecker` 初始化 `dependent_type_env` 时只调了 `register_type_families`，
+  **没有登记效应**。因此生产 Γ 即使变 Some，裸 `assert(y == 42)` 也永不注入
+  （`get_effect_spec` 恒 `None`）。
+- 此前唯一覆盖是 `sema/tests/gamma_assume_effect.rs` 手工构造 `dep_env` 的直驱测试——
+  正是 coding-rules 第六部分点名的「消费端测试手工构造登记数据 = 静默通道」。
+- 修法：`checker.rs` 在初始化 `dependent_type_env` 处按**同一** `AssertModule` 声明面登记
+  `effect_specs()`（不新增第二来源、不新增证据入口、不碰 `src/std/`）。端到端直驱由 T18(b) 承担。
+
+### 三、先红后绿（实测）
+
+只加测试、未改实现时，`cargo test --lib gamma_equality` = **6 failed / 11 passed**（当时 17 条）；
+6 条失败全部是「应通过而报 E1113」：分支内等式、反向书写、合取、嵌套分支、函数体内裸
+`assert`、嵌套体退出后外层体事实。实现后同一命令 **17 passed / 0 failed**（该文件现为 18 条，
+补了体内重赋值 kill 一条）。
+
+### 四、T17–T20（barrier 三性质）与正控
+
+| 编号 | 性质 | 观察点（测试） |
+| --- | --- | --- |
+| T17(a)(b)(c) | **体外事实不入体** | 外层守卫事实不进入嵌套**函数体** / **lambda 体** / **spawn 体**：体内 `f(y)(42)` 仍 E1113（T17(a) 是 soundness 正题：体内同名形参是新的运行期绑定） |
+| T18 | **体内自产事实对体内可见** | (a) 函数体内 `if y == 42` 分支 → 合法；(b) **正控**：函数体内裸 `assert(y == 42, …)` 后 `f(y)(42)` → 合法（改前红）；(c) 嵌套体退出后外层体事实仍可见 |
+| T19 | **体内事实随体亡** | spawn 体内裸 `assert` 的等式出体即失效：出体后 `f(y)(42)` 仍 E1113 |
+| T20 | 嵌套边界还原到**外层体**深度（不是 0） | 函数体事实 + 嵌套 lambda 体：体外两层各自成立 |
+
+补充（**体内重赋值 kill**）：spawn 体共享外层帧，体内 `assert(y == 42)` 之后再 `y = 43`，
+其后的 `f(y)(42)` 必须仍报 E1113。该形态由表达式侧 walker 的 `BindingAction::Reassign` 承担
+（与语句侧同一判定）；关掉这个 kill 镜像（变异 M5）该用例实测由绿转红 ⇒ 判据有牙齿。
+lambda 体无此形态：lambda 体的外层**局部**不可见、外层**形参**不可变，故不可达。
+
+γ 层的对应原语另有直驱单测（`proof/tests/assumptions.rs`）：`enter_barrier` 后
+`visible()/is_empty()/const_equalities()` 均按新边界口径、`restore_barrier` 先 `exit_scope`
+再还原（只还原深度会漏体内事实）。
+
+### 五、语料 / 快照 / 基线
+
+- 新增 `tests/yaoxiang/02-type-system/generics/const_arg_gamma_equality.yx`（正控：if 守卫 /
+  反向 / 合取 / 体内裸 `assert` 四形态，运行 `exit 0`、零诊断，并与 `f(42)(42)` 同值）。
+- 新增 `tests/yaoxiang/06-compile-errors/generics/const_arg_gamma_equality_barrier_err.yx`
+  （`// expect: compile-error E1113`；两条：嵌套函数体第 17 行、spawn 出体第 30 行）。
+- **「与 `f(42)(42)` 同形」的判据面**：同形的落点是**证据值**，不是 IR 文本——Γ 等式与
+  字面量在唯一判定点产出的都是 `ConstValue::Int(42)`，请求里存的是 `ConstExpr::Lit(42)`
+  （`collect_const_arg_instantiation_request` 第 4 步），故两个调用点登记**同一个**特化。
+  `middle/ir` 快照只到「特化请求之前」（q=0 擦除在 mono 阶段），因此不以快照文本比对充当
+  同形判据；运行期同值由新语料的 `assert.assert(guarded_value == literal, …)` 钉住。
+- IR 快照：**+1**（`const_arg_gamma_equality.snap`），其余既有快照 **0 漂移**
+  （`git status` 只多一个 `??` 快照文件）——Γ 桥不改 IR 形状。
+- 语料基线 `tests/baselines/corpus-parity.jsonl`：**+10 行 / -0 行**，逐条分类：
+  - 2 行 = 本轮新增语料（正控 `exit 0` + 负控两条 E1113）；
+  - 8 行 = `tests/yaoxiang-multifile/record-evidence-*` 的**欠账补录**：这 8 个夹具由
+    6.9.5-B.4（`14faf419`）新增，但当时的基线再生（最后一次是 `8c4ee8f1`）没有覆盖
+    `tests/yaoxiang-multifile` 新增目录 ⇒ 基线在 HEAD 上已缺这 8 条。它们的行为记录与各自
+    `// expect:` 一致（`W1001/W1002` 警告、`E4018/E4020/E1114` 拒绝），不含本轮代码的任何影响。
+
+### 六、生产调用图 / 用户可达
+
+- `TypeChecker::check_module_impl` → `init_body_checker`（`checker.rs`）→
+  `StatementChecker::new(…, Some(Γ), …)`；模块级语句与函数体走 `body_checker_mut()`，
+  后者是**第二处**构造点（懒初始化）。
+- 用户可达 = 常规 `yaoxiang check` / `yaoxiang run` 单文件路径（无需测试专用开关）；
+  新语料正控与 T18(b) 都是这一条链上的 CLI 级证据。
+- 证据判定出口仍是唯一一处：`collect_const_arg_instantiation_request` →
+  `ConstArgOutcome::MissingEvidence`（E1113）。本批**不新增**第二证据入口：
+  `const_equalities` 单定义、`TermEnv::new` 调用点不增、`MissingEvidence` 单构造点。
+
+### 七、门禁（本机实测，2026-11-15）
+
+| 命令 | 结果 |
+| --- | --- |
+| `cargo fmt --check` | exit 0 |
+| `cargo clippy --all --all-features --all-targets -- -D warnings` | exit 0 |
+| `cargo test --lib record_evidence` | 28 passed / 0 failed |
+| `cargo test --lib gamma` | 30 passed / 0 failed（18 条 6.9.4 端到端 + 10 条 γ 原语 + 2 条既有 Γ 注入） |
+| `python scripts/dev/testsuite.py run fast` | exit 0：1 波 2266 条，跳过 0 波 |
+| `python scripts/dev/testsuite.py markers --check` | exit 0（2269 条 `#[test]` 清单 = 2266 执行 + 3 条 `#[ignore]`；`cost:` 标记 3 条全对上） |
+| `python scripts/ci/check-obligations.py` | exit 0（TypeCheckResult 22 字段 − 接线 14 − 归档登记 8 = 0） |
+| `python scripts/ci/check-docs-refs.py` | exit 0（1201 个跟踪文本文件 / 12199 个路径状 token，零不可解析引用） |
+| `python scripts/ci/check-docs-truth.py` | exit 0（错误码/模块/版本/CLI/关键字五面对账一致） |
+| `python scripts/ci/check-boundary.py` | exit 0（report-only；**存量 1 处与本轮无关**：`middle/bytecode/opcode.rs` 实测 84 个 opcode 常量 / 库存 83，来源是 `b5624a35` 的 Not/Neg 分码） |
+| `python scripts/ci/check-fanout.py` | exit 0（report-only；存量 8 处 / 库存 7 处，全部在 `driver/`，本轮未触碰该目录） |
+| `python scripts/ci/check-test-channel.py` | exit 0（fast 目标集四处同源） |
+| `python scripts/rfc/check_tracking.py` | exit 0（53 个 RFC 文件 / 7 条不一致沿前，全部 WARNING） |
+
+变异（手工改—测—还原，用于证明 T17–T20 有牙齿）：
+
+| 变异 | 红掉的测试 |
+| --- | --- |
+| M1 关闭函数体 barrier（`enter_barrier` 换成 `None`） | T17(a) `test_gamma_barrier_function_body_blocks_outer_fact`（唯一红） |
+| M2 `restore_barrier` 只还原深度、不退 scope | T19 `test_gamma_barrier_body_fact_dies_with_spawn_body` + γ 层 T19/T20 两条（共 3 红） |
+| M3 关闭 lambda 体 barrier | T17(b) `test_gamma_barrier_lambda_body_blocks_outer_fact`（唯一红） |
+| M4 证据读取忽略 barrier（`is_visible` 去掉深度判据） | γ 层 `test_gamma_barrier_hides_outer_facts` + T17(a)(b)(c) 三条（共 4 红） |
+| M5 关闭体内重赋值 kill（表达式侧 `Reassign` 臂的 `gamma.kill`） | `test_gamma_equality_killed_by_body_reassign_reports_missing_evidence`（唯一红：旧等式仍被当证据，用例由 E1113 变通过） |
+
+### 八、边界与残留（不宣称）
+
+- 只覆盖裸 `assert`；`assert.assert`（`FieldAccess`）**不扩**（新测试钉住它仍报 E1113）。
+- 只做常量等式：谓词守卫（`y > 0`）、不等式、两侧都是名字（`y == z`）都不产值；
+  `f(y)(y)` 的第二值位不属本项（E1002 另案）。
+- 收集点只有 `check_if_stmt`：`match` / `while` / 早返回**不收集**；lambda / spawn 体内的
+  `if` 走 `infer_if_expr`，同样不收集（它们的证据只来自裸 `assert`）。
+- `&mut name` 之外的写面（索引 / 字段 / 别名写）不进 kill set（与契约的 outOfScope 一致）。
+- #539（导入面 q=0）未闭 ⇒ 只覆盖模块内；#537 不修也不依赖；`rfc027_refined_transparency`
+  的四条开约束 tripwire 未动，仍不属本项。
+- 未核实：生产 Γ Some 后 `tests/yaoxiang-multifile` 的 8 条 6.9.5 夹具行为只能靠本轮
+  **首次**记录（无前值可比），它们的「零漂移」是相对补录后基线成立，不是相对历史基线。
+
 ## P6 6.9.5-B 设计包（sigma-reviewer，2026-11-13，只读）
 
 ### 一、核心决策（推荐）

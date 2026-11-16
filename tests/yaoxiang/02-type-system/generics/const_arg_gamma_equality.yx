@@ -1,0 +1,60 @@
+// 02-type-system/generics/const_arg_gamma_equality.yx
+// 覆盖: RFC-039 D62 / 6.9.4（issue #534）——Γ 常量等式作为 q=0 槽的**第四证据源**
+// 验证: 分支守卫 `y == 42` 与裸 `assert(y == 42, ...)` 都给出编译期等式事实，
+//       分支内 / 函数体内的 `f(y)(42)` 因此与字面量形态 `f(42)(42)` 同形通过；
+//       合取逐项、反向书写同义；证据只在守卫成立的路径上有效。
+// 状态: ✅ 可运行
+
+use std.assert
+
+f: (N: Int) -> (n: N) -> Int = (n) => n
+
+// 证据来自 if 守卫（6.9.4 的唯一收集点：check_if_stmt）
+guarded: (y: Int) -> Int = {
+    if y == 42 {
+        f(y)(42)
+    } else {
+        0
+    }
+}
+
+// 反向书写同义
+reversed: (y: Int) -> Int = {
+    if 42 == y {
+        f(y)(42)
+    } else {
+        0
+    }
+}
+
+// 合取逐项分解
+conjunction: (y: Int, z: Int) -> Int = {
+    if y == 42 and z == 7 {
+        f(z)(7)
+    } else {
+        0
+    }
+}
+
+// 证据来自函数体内的裸 assert（GammaAssume 效应 → Γ；离开函数体即失效）
+asserted: (y: Int) -> Int = {
+    assert(y == 42, "y 应为 42 才有编译期证据")
+    f(y)(42)
+}
+
+main: () -> Void = {
+    literal: Int = f(42)(42)
+    guarded_value: Int = guarded(42)
+    guarded_miss: Int = guarded(7)
+    reversed_value: Int = reversed(42)
+    conjunction_value: Int = conjunction(42, 7)
+    asserted_value: Int = asserted(42)
+
+    assert.assert(guarded_value == literal, "分支内等式证据与字面量同形")
+    assert.assert(reversed_value == literal, "反向等式同义")
+    assert.assert(conjunction_value == 7, "合取第二项的等式可用")
+    assert.assert(asserted_value == literal, "体内裸 assert 的等式可用")
+    assert.assert(guarded_miss == 0, "守卫不成立的分支不调用")
+}
+
+main()

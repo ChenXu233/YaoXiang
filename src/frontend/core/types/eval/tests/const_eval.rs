@@ -743,3 +743,108 @@ fn test_eval_negate_i128_min_returns_overflow_error_not_panic() {
         "Neg(普通值) 行为不变（#507 只堵 MIN 溢出点）"
     );
 }
+
+// ── 6.9.4：TermEnv::with_equalities（Γ 等式并入值侧）────────────────────
+
+#[test]
+fn test_term_env_with_equalities_admits_and_normalizes_name() {
+    use crate::frontend::core::types::eval::const_eval::{normalize, TermEnv};
+    use crate::frontend::core::sema::proof::budget::BudgetTracker;
+
+    // Arrange — 分支守卫 `y == 42` 给出等式事实
+    let env = TermEnv::with_equalities(
+        Vec::<String>::new(),
+        Vec::<(String, ConstValue)>::new(),
+        vec![("y".to_string(), ConstValue::Int(42))],
+    );
+    let term = ConstExpr::NamedVar("y".to_string());
+
+    // Act
+    let admitted = env.admits(&term);
+    let value = normalize(&term, &env, &BudgetTracker::for_judgment());
+
+    // Assert — 名字此刻有值：自由变量义务通过，归一化得 42（与字面量证据同值同形）
+    assert!(admitted, "等式事实应让名字通过自由变量义务");
+    assert_eq!(
+        value,
+        Ok(ConstValue::Int(42)),
+        "等式事实应把名字归一化成该常量（与 `Lit(42)` 同一特化值）"
+    );
+}
+
+#[test]
+fn test_term_env_with_equalities_removes_symbolic_name() {
+    use crate::frontend::core::types::eval::const_eval::{normalize, TermEnv};
+    use crate::frontend::core::sema::proof::budget::BudgetTracker;
+
+    // Arrange — 同名同时出现在符号集与等式里
+    let env = TermEnv::with_equalities(
+        vec!["y".to_string()],
+        Vec::<(String, ConstValue)>::new(),
+        vec![("y".to_string(), ConstValue::Int(42))],
+    );
+
+    // Act
+    let value = normalize(
+        &ConstExpr::NamedVar("y".to_string()),
+        &env,
+        &BudgetTracker::for_judgment(),
+    );
+
+    // Assert — 符号集里的同名被剔除，不再是「无值」
+    assert_eq!(
+        value,
+        Ok(ConstValue::Int(42)),
+        "等式应剔除同名符号，而不是被 `Unproven` 挡住"
+    );
+}
+
+#[test]
+fn test_term_env_with_equalities_prefers_existing_values() {
+    use crate::frontend::core::types::eval::const_eval::{normalize, TermEnv};
+    use crate::frontend::core::sema::proof::budget::BudgetTracker;
+
+    // Arrange — 值环境已有 y = 7，等式说 y = 42（不可能同时成立；既有证据源优先）
+    let env = TermEnv::with_equalities(
+        Vec::<String>::new(),
+        vec![("y".to_string(), ConstValue::Int(7))],
+        vec![("y".to_string(), ConstValue::Int(42))],
+    );
+
+    // Act
+    let value = normalize(
+        &ConstExpr::NamedVar("y".to_string()),
+        &env,
+        &BudgetTracker::for_judgment(),
+    );
+
+    // Assert
+    assert_eq!(
+        value,
+        Ok(ConstValue::Int(7)),
+        "值环境已有的绑定优先于等式事实"
+    );
+}
+
+#[test]
+fn test_term_env_without_equalities_keeps_runtime_name_unproven() {
+    use crate::frontend::core::types::eval::const_eval::{normalize, TermEnv};
+    use crate::frontend::core::sema::proof::budget::BudgetTracker;
+
+    // Arrange — 无任何环境（运行期名不在场）
+    let env = TermEnv::default();
+    let term = ConstExpr::NamedVar("y".to_string());
+
+    // Act
+    let admitted = env.admits(&term);
+
+    // Assert — 运行期值不构成证据（E1113 的义务面不变）
+    assert!(
+        !admitted,
+        "运行期名不得因 with_equalities 的默认空表而被放行"
+    );
+    assert!(
+        normalize(&term, &env, &BudgetTracker::for_judgment()).is_err(),
+        "运行期名归一化应失败（Unproven），不得静默给值"
+    );
+}

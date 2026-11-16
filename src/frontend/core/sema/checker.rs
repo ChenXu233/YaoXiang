@@ -330,6 +330,13 @@ impl TypeChecker {
         // 初始化依赖类型环境并通过 std::assert 注册类型族
         let mut dependent_type_env = DependentTypeEnv::new();
         crate::std::assert::AssertModule.register_type_families(&mut dependent_type_env);
+        // 6.9.4：裸 `assert` 的 **GammaAssume 效应**与类型族同源登记（同一
+        // `AssertModule` 声明面）。生产 Γ 自本批起为 Some，效应未登记则
+        // `dep_env.get_effect_spec("assert")` 恒 None——体断言事实永不注入（静默不动作）。
+        // 此前只有直构测试手工建 dep_env，生产端从未接过这条线。
+        for spec in crate::std::assert::AssertModule.effect_specs() {
+            dependent_type_env.register_effect_spec(spec);
+        }
 
         Self {
             env,
@@ -727,9 +734,11 @@ impl TypeChecker {
         collect_all: bool,
     ) {
         let trait_table = self.env.trait_table.clone();
+        // 6.9.4 P6（**唯一行为翻转点**）：生产 Γ 从 None 变 Some——分支守卫与裸
+        // `assert` 的常量等式事实自此进入 q=0 槽的证据判定（此前单测可达、用户不可达）。
         let mut body_checker = inference::StatementChecker::new(
             self.env.solver(),
-            None,
+            Some(crate::frontend::core::sema::proof::assumptions::FlowSensitiveGamma::new()),
             self.dependent_type_env.clone(),
             trait_table,
         );
@@ -1442,9 +1451,11 @@ impl TypeChecker {
     fn body_checker_mut(&mut self) -> &mut inference::StatementChecker {
         if self.body_checker.is_none() {
             let trait_table = self.env.trait_table.clone();
+            // 6.9.4 P6（唯一行为翻转点的第二处）：与 `init_body_checker` 同源，
+            // 漏一处会让该入口下 Γ 仍为 None（证据判定退回单测可达）。
             let mut body_checker = inference::StatementChecker::new(
                 self.env.solver(),
-                None,
+                Some(crate::frontend::core::sema::proof::assumptions::FlowSensitiveGamma::new()),
                 self.dependent_type_env.clone(),
                 trait_table,
             );

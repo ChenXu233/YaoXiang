@@ -1421,6 +1421,12 @@ impl StatementChecker {
         // §2.3）；本函数参数与全局/模块级名照常可见。类型参数（编译期名）不受遮挡。
         // 例外：lambda **表达式**体（#254 创建点固化）不走本屏障，行为保持原样。
 
+        // 6.9.4 P5 / T17(a)：函数体是 **Γ 证据边界**。体外（模块层 / 外层分支）的
+        // 常量等式事实不得进入本函数体——本体的同名形参是**新的运行期绑定**，拿外层
+        // 同名事实当编译期证据会把运行期值错当常量（unsound）。体内自产的事实
+        // （守卫 / 裸 assert）落在新深度，只在本体内可见，出体即亡。
+        let saved_gamma_barrier = self.gamma.as_mut().map(|gamma| gamma.enter_barrier());
+
         if self.collect_all_errors {
             // 收集模式：收集所有错误，不短路
             let mut first_err = None;
@@ -1443,6 +1449,12 @@ impl StatementChecker {
             // 退出函数作用域前，保存所有变量（解决退出作用域后变量丢失的问题）
             for (name, poly) in self.scope.vars() {
                 self.function_local_vars.insert(name, poly);
+            }
+
+            // 6.9.4 P5：退出函数体的 Γ 证据边界（与上方 enter_barrier 成对；
+            // 两条退出路径都不能漏，否则体内事实泄漏成体外证据）
+            if let (Some(gamma), Some(saved)) = (self.gamma.as_mut(), saved_gamma_barrier) {
+                gamma.restore_barrier(saved);
             }
 
             // 退出函数作用域
@@ -1476,6 +1488,12 @@ impl StatementChecker {
             // 退出函数作用域前，保存所有变量（解决退出作用域后变量丢失的问题）
             for (name, poly) in self.scope.vars() {
                 self.function_local_vars.insert(name, poly);
+            }
+
+            // 6.9.4 P5：退出函数体的 Γ 证据边界（与上方 enter_barrier 成对；
+            // 两条退出路径都不能漏，否则体内事实泄漏成体外证据）
+            if let (Some(gamma), Some(saved)) = (self.gamma.as_mut(), saved_gamma_barrier) {
+                gamma.restore_barrier(saved);
             }
 
             // 退出函数作用域
@@ -3178,6 +3196,53 @@ impl StatementChecker {
         }
     }
 
+    /// `if` 守卫事实的分解（6.9.4 P4 唯一收集点的配套判据）：合取逐项展开，
+    /// 其余形态整条作为一个事实；不可转换的守卫（调用 / 字段访问等）不产值。
+    ///
+    /// 「合取只分解」：`a and b` 成立蕴含 a 与 b 各自成立；`or` / `not` 不展开
+    /// （析取不产能；取反走既有 `negate_guard` 的形态）。
+    fn guard_facts(condition: &Expr) -> Vec<crate::frontend::core::types::const_data::ConstExpr> {
+        if let Expr::BinOp {
+            op: crate::ast::BinOp::And,
+            left,
+            right,
+            ..
+        } = condition
+        {
+            let mut facts = Self::guard_facts(left);
+            facts.extend(Self::guard_facts(right));
+            return facts;
+        }
+        crate::frontend::core::types::eval::const_eval::convert_expr_to_const_expr(condition)
+            .into_iter()
+            .collect()
+    }
+
+    /// 6.9.4 P4：开一个 `if` 分支的 Γ 守卫帧并注入该分支的守卫事实。
+    ///
+    /// 无 Γ（直构测试 / 未启用证明管道）时整体 no-op，与 `gamma_pop_guard` 成对。
+    fn gamma_push_guard(
+        &mut self,
+        facts: Vec<crate::frontend::core::types::const_data::ConstExpr>,
+    ) {
+        let Some(gamma) = self.gamma.as_mut() else {
+            return;
+        };
+        gamma.enter_scope();
+        for fact in facts {
+            gamma.inject(fact);
+        }
+    }
+
+    /// 6.9.4 P4：退出 `if` 分支的 Γ 守卫帧。
+    ///
+    /// 分支体报错时也必须走到（否则 Γ 的 scope 深度失衡，后续分支的可见性判错）。
+    fn gamma_pop_guard(&mut self) {
+        if let Some(gamma) = self.gamma.as_mut() {
+            gamma.exit_scope();
+        }
+    }
+
     /// 检查 if 语句
     fn check_if_stmt(
         &mut self,
@@ -3202,7 +3267,16 @@ impl StatementChecker {
         // 开完后再写回“if 整个表达式的类型”。无 else 分支时 if 的值恒为 Void。
         let saved_tail = self.last_expr_stmt_ty.take();
 
-        self.check_block(then_branch)?;
+        // 6.9.4 P4（Γ 的**唯一收集点**）：分支入口把守卫事实注入流敏感 Γ，分支出口
+        // 出栈——分支内 `y == 42` 因此成为 q=0 槽的第四证据源（`frame_term_env` 把
+        // 等式并入 `TermEnv` 值侧），合流后事实不残留。只注入**成立**的事实：
+        // then/else-if 取自身守卫（合取逐项分解），else 取条件取反。
+        // 不做 match / while / 早返回的收集（本批边界）；谓词守卫照常注入但
+        // `const_equalities()` 只采用等式形态。
+        self.gamma_push_guard(Self::guard_facts(condition));
+        let then_result = self.check_block(then_branch);
+        self.gamma_pop_guard();
+        then_result?;
         let mut branch_tys: Vec<MonoType> =
             vec![self.last_expr_stmt_ty.take().unwrap_or(MonoType::Void)];
 
@@ -3217,13 +3291,23 @@ impl StatementChecker {
             }
         }
 
-        for (_, else_if_block) in else_if_branches {
-            self.check_block(else_if_block)?;
+        for (else_if_cond, else_if_block) in else_if_branches {
+            self.gamma_push_guard(Self::guard_facts(else_if_cond));
+            let else_if_result = self.check_block(else_if_block);
+            self.gamma_pop_guard();
+            else_if_result?;
             branch_tys.push(self.last_expr_stmt_ty.take().unwrap_or(MonoType::Void));
         }
 
         let if_ty = if let Some(else_block) = else_branch {
-            self.check_block(else_block)?;
+            self.gamma_push_guard(
+                crate::frontend::core::sema::layers::termination::negate_guard(condition)
+                    .into_iter()
+                    .collect(),
+            );
+            let else_result = self.check_block(else_block);
+            self.gamma_pop_guard();
+            else_result?;
             branch_tys.push(self.last_expr_stmt_ty.take().unwrap_or(MonoType::Void));
             // 各分支类型必须互相兼容（取首个非 Never 分支为基准）
             let base = branch_tys.iter().find(|t| **t != MonoType::Never).cloned();

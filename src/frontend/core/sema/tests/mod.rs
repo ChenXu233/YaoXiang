@@ -21,6 +21,7 @@ mod const_param;
 mod environment;
 mod fn_annotation_binding;
 mod gamma_assume_effect;
+mod gamma_equality_bridge;
 mod hkt;
 mod judgement_metrics;
 mod named_args;

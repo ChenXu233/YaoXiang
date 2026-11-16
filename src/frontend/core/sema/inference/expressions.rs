@@ -2756,17 +2756,27 @@ impl<'a> ExpressionInferrer<'a> {
         }
     }
 
-    /// 调用点视图的**一帧编译期环境**（6.9.2-C1）：只投影既有判据，不新增判据。
+    /// 调用点视图的**一帧编译期环境**（6.9.2-C1 / 6.9.4）：只投影既有判据，不新增判据。
     ///
     /// - **有值**：值环境的**最内层绑定**（`ScopeManager::const_bindings`，t23 F1' 口径：
     ///   遮蔽按绑定解析，外层同名绑定的值不得顶上来）；
-    /// - **无值（符号）**：本帧 q=0 binder 名 ∪ 被单值钉住的形参（按绑定解析，名字不继承）。
+    /// - **无值（符号）**：本帧 q=0 binder 名 ∪ 被单值钉住的形参（按绑定解析，名字不继承）；
+    /// - **等式事实（6.9.4 第四证据源）**：Γ 的常量等式
+    ///   （`FlowSensitiveGamma::const_equalities`）并入**值**侧——分支守卫与裸 `assert`
+    ///   给出的 `y == 42` 让 `y` 此刻有值。值环境已有的同名值优先（既有证据源在前），
+    ///   符号集里的同名被剔除。
     ///
-    /// Γ（6.9.4）与 Σ 不在此列；导入面（#539）也不在此列。
+    /// 唯一生产构造点：`TermEnv::new` 的调用点不增。Σ 不在此列；导入面（#539）也不在此列。
     fn frame_term_env(&self) -> crate::frontend::core::types::eval::const_eval::TermEnv {
-        crate::frontend::core::types::eval::const_eval::TermEnv::new(
+        crate::frontend::core::types::eval::const_eval::TermEnv::with_equalities(
             self.scope.symbolic_term_names(),
             self.scope.const_bindings(),
+            self.gamma
+                .as_deref()
+                .map(
+                    crate::frontend::core::sema::proof::assumptions::FlowSensitiveGamma::const_equalities,
+                )
+                .unwrap_or_default(),
         )
     }
 
@@ -3680,6 +3690,10 @@ impl<'a> ExpressionInferrer<'a> {
             });
 
         self.scope.enter_fn();
+        // 6.9.4 P5 / T17(b)：lambda 体是**Γ 证据边界**。闭包体延迟执行，外层分支守卫
+        // 的事实到调用时刻未必仍成立 ⇒ 体外事实不入体；体内自产的事实只在本体内可见
+        // （restore_barrier 同时退 scope ⇒ 随体亡）。
+        let saved_gamma_barrier = self.gamma.as_deref_mut().map(|gamma| gamma.enter_barrier());
         // #295：三链模型——enter_fn 推新局部层，外层函数局部变量不在链上（闭包不捕获），
         // 参数链跨边界累积可见（柯里化固化）。
         for (i, param) in params.iter().enumerate() {
@@ -3741,6 +3755,11 @@ impl<'a> ExpressionInferrer<'a> {
         self.expected_return_type = saved_expected_ret;
         self.return_annotation_span = saved_ann_span;
         self.result_err = saved_result_err;
+        // 6.9.4 P5：退出 lambda 体的证据边界（与上方 enter_barrier 成对；
+        // 箭头 lambda 的载荷重推也在边界内，故放在其后）
+        if let (Some(gamma), Some(saved)) = (self.gamma.as_deref_mut(), saved_gamma_barrier) {
+            gamma.restore_barrier(saved);
+        }
 
         self.scope.exit_fn();
         let body_ty = body_ty?;
@@ -4560,7 +4579,15 @@ impl<'a> ExpressionInferrer<'a> {
                 // spawn 体是函数边界（RFC-010a 规则②）：体内 return 退出 spawn（E1109 判定）
                 let saved_fn_depth = self.fn_depth;
                 self.fn_depth += 1;
+                // 6.9.4 P5 / T17(c)：spawn 体也是**Γ 证据边界**（新函数边界，体内
+                // return 退出的是 spawn 体）——外层守卫事实不入体，体内自产事实随体亡。
+                let saved_gamma_barrier =
+                    self.gamma.as_deref_mut().map(|gamma| gamma.enter_barrier());
                 let result = self.infer_block(body, true, None);
+                if let (Some(gamma), Some(saved)) = (self.gamma.as_deref_mut(), saved_gamma_barrier)
+                {
+                    gamma.restore_barrier(saved);
+                }
                 self.fn_depth = saved_fn_depth;
                 self.expected_return_type = saved;
                 self.return_annotation_span = saved_ann_span;
@@ -4645,6 +4672,16 @@ impl<'a> ExpressionInferrer<'a> {
                 span,
             } => {
                 let inner_ty = self.infer_expr(inner)?;
+                // 6.9.4 P7：`&mut name` 把名字借出去做可变访问 ⇒ 该名的常量等式事实不再
+                // 成立（保守方向：kill 多了只需重新 assert，不会用旧证明保证新值）。
+                // 只有直接写形态（Var）进 kill set；索引/字段/别名的写面不在本批。
+                if *mutable {
+                    if let crate::ast::Expr::Var(name, _) = inner.as_ref() {
+                        if let Some(gamma) = self.gamma.as_deref_mut() {
+                            gamma.kill(name);
+                        }
+                    }
+                }
                 // 6.9.5-B.1c / 5A：witness-bearing 记录整体不可变——`&mut` 拒绝。
                 // witness 记录的证据依赖「构造后字段不变」；可变借出即可写回。
                 if *mutable && self.is_witness_bearing_type(&inner_ty) {
@@ -6803,6 +6840,13 @@ impl<'a> ExpressionInferrer<'a> {
                             .build());
                     }
                     BindingAction::Reassign => {
+                        // 6.9.4 P7 的镜像执行点：本 walker（spawn / lambda 体内的语句）
+                        // 与 `StatementChecker::check_var_stmt` 共用**同一** `classify_binding`
+                        // 判定，重赋值的 kill 也必须同口径——否则体内自产的等式事实在
+                        // `y = …` 之后仍被当作证据（旧值证新值）。
+                        if let Some(gamma) = self.gamma.as_deref_mut() {
+                            gamma.kill(&name);
+                        }
                         self.assign_var(&name, init_ty, *stmt_span, true)?;
                         return Ok(MonoType::Void);
                     }
