@@ -5328,6 +5328,42 @@ P1 `VarInfo.pinned`: `bool` → `pin_binder: Option<String>`（按绑定解析�
 M1 现状锚（无 `int64::4`；check/run 0）；M2 钉住载体；M5 `f(k+1)` 零请求/E3018；M3 无界 E3005 + bound 8/32 实例数；M4 语料/快照/生成器；M6 与 C2c 对接。A1–A4 typecheck、B1–B5 mono、C1–C3 直驱、D1–D4 用户可达、E1–E5 变异。
 **不宣称 I4 完全体**（到界边未擦除）；#541/#542 原样。
 
+## P6 6.9.2-C3 F4 裁决（用户裁决 A，2026-11-16）：甲-闭 + 丙-3 + T-b + bound 8
+
+> 本节 = 裁决落定 + t2 的 M1–M6 量测包（只读，批次树冻结 revision `ecdd095b`，已 release + gc）。
+> 裁决面见上两节（首轮分析的三案重述、契约与原型计划 P1–P5/R4/R9）；**C3 实现另立任务（t11）**，
+> 本节只登记裁决与量测，不改代码。
+
+### 一、裁决内容（D-a / D-b / F4-T / bound）
+
+| 决策点 | 裁决 | 依据 |
+| --- | --- | --- |
+| **D-a 表示** | **甲-闭**：`deferred` 桶允许存**开项**请求；`fire_deferred` 在入队前代入 + 归一化为 `Const(Lit(v))`；`Unproven` 不建请求（退回原件） | 单一表示（`GenericArg::Const(ConstExpr)`）、单一求值器（`normalize`/`ConstGenericEval`）、无第二本账；乙（第二字段）让 I4/A 出口/P7 闸口落空 |
+| **D-b 求值点** | **丙-3**：mono 读克隆声明的 `Literal` 取值（作为甲的取值细节，不并列保留 `VarInfo::pinned: bool`） | P1 把 `pinned: bool` 换成 `pin_binder: Option<String>`（按绑定解析）；M2 实测「k 的值不在 mono `name_map`」——不补钉住消解则开火不发生（函数表与 HEAD 全同），补 `k→N` 后开火成立 ⇒ P1 是机械必需面 |
+| **F4-T 终止** | **T-b**：有界开火，到界**退回原件、不入队、不报错**，登记「该边未特化」；T-a（实例内按钉住值折条件）另立三级任务；T-c（复用终止性层/改规范）属 E 类不取 | M3 实测：无界 ⇒ **E3005（特化链深度超过 100，当前 101）**，语料从「运行 120」变编译错误；T-b bound=8 ⇒ run exit 0（120 正确）；bound=32 同绿 |
+| **bound** | **8**（不做配置项） | M3：bound 8/32 都使语料 run exit 0；8 的实例面（40 个函数表条目）远小于 32（95 个）；到界退回由既有 `restore_generics_with_uncovered_call_sites` 闭合闸自然兑现，**零新代码** |
+
+### 二、M1–M6 量测包（实测，批次树 `ecdd095b`）
+
+| # | 量测 | 实测结论 |
+| --- | --- | --- |
+| **M1** | 语料 `const_generic_recursive_factorial.yx` 现状锚 | `check` 0 error 0 warning exit 0；`run` exit 0；函数表 31 个：`__factorial_l0`（原件，params `(N)`）、`__factorial_l0(int64::5)`（#27 克隆，体内 `I64Sub` 运行期算 k-1，`CallStatic` const#29 → 原件）、`factorial(int64::5)`、`factorial`（原件）；**无 `factorial(int64::4)`** ⇒ 开项未特化是用户可观测现状 |
+| **M2** | 钉住载体 | `VarInfo.pinned: bool`（`statements.rs:1373` 判定后 `add_pinned_param` 置位）；替换后槽类型是基类型 `int64`（钉住标记随绑定不随类型）；k 的值**不在** mono `name_map`（2. name_map 只来自 `generic_params ↔ type_args()`）。原型实测：无钉住消去时开火**不发生**（函数表与 HEAD 全同），补 `k→N` 消去后开火成立 |
+| **M5** | 开项零请求 / E3018 | 探针 `inner(k+1)(k)`（k 钉住）：`check` exit 0；`dump` 无任何 `inner(int64::X)` 实例 ⇒ 开项**零请求**。开项直接入队 ⇒ **E3018**（`类型实参数不匹配：期望 1 个，得到 0 个`；同型在语料 14:27 处复现）⇒ `monomorphize` 第 3 步必须扩符号闸（P4） |
+| **M3** | 无界 E3005 + bound 8/32 | 原型 = P1–P5 忠实最小实现（9 个可重放 `.diff`）。无界：**E3005 深度超过 100（当前 101）**，exit 1。T-b bound=8：run exit 0（120 正确），函数表 40 个，开项链恰 8 实例 `{4,3,2,1,0,-1,-2,-3}` + 闭项 `::5`；bound=32：run exit 0，开项链恰 32 实例 `{4..0,-1..-27}`，函数表 95 个 |
+| **M4** | 语料/快照/生成器 | 补丁树 vs HEAD 树 `corpus_probe` **逐字节 0 行差异**；与冻结基线差 8 行 = `record-evidence-*` 多文件语料（**基线欠账**，HEAD 无补丁侧同差 8 行，归因干净）；IR 快照 zero-diff；错误码生成器幂等 |
+| **M6** | 与 C2c 对接 | 开项实例 `slots.len()==values.len()`、`is_curry_shaped` 一致；擦除自动覆盖 ⇒ **C2c 零改动** |
+
+### 三、落地面（交 t11 执行，本节不实现）
+
+P1 `pin_binder: Option<String>`（按绑定解析，不并列保留 bool）／P2 `const_eval::substitute_term_names`（8 变体穷尽；substitution 不是 evaluation）／P3 开项入请求 + `eliminate_pinned_names`(`k→N`)／P4 符号闸加 `has_open_term`／P5 `fire_deferred` Const 臂代入 + 归一化；R4=①（mono 求值 `Disproved` 不建请求 + 登记，不报错）；bound 初值 8。
+
+### 四、边界与不宣称
+
+- 本裁决**只定方案与量测数字**，C3 一行未实现；`const_generic_recursive_factorial.yx` 现状仍是无开项特化。
+- 量测在**原型**（P1–P5 最小实现）上取得，非生产提交；t11 的验收必须重新给出生产面数字（实例数/编译时间/语料/快照/生成器）。
+- M5 的 E3018 与 M3 的 E3005 是**当前缺口的实证**，不是新缺陷登记；T-b 的「到界登记」在 V1 只有运行期退回、无用户可见提示（不新增码/发射点）。
+- 开项特化后的语义承诺以 RFC-011 §4.1 与 T-b 为界；T-a/T-c 不取。
 ## P6 6.9.3d 契约与 M1/M2/M5 实测（protocol-analyst，2026-11-13）
 
 ### 一、红判据实测（批次树 6.9-bd @ a8ccf78c）
@@ -5402,6 +5438,12 @@ outOfScope：C3/F4；`check_var_stmt_inner` 阶梯面（只加注释）；类型
 - `is_subtype` 删 `can_assign` 后零生产调用者，契约只授权删三项，保留并登记待裁；`exit_type_matches` 仍是 bool 助手（Unproven 被吞成 false，最终报文由调用点构造）；`check_type_equivalence` 生产零调用者、单测直连 defeq。
 - `CollectAll`/LSP 聚合路径的诊断集变化未单独量测；别名环是否应在声明期拒绝是语义裁决（当前只在判定点报 E4023）；预算口径为「每文件新建 Compiler」；#540 深嵌套未触发（101 层未到边界）。
 - `or_site` 的「零文本变化」只在语料层验证（388 行零漂移），未逐一比对 19 站点报文形态。
+
+## P6 6.9 第一批收口 residual（t5/t7/t10，2026-11-16）
+
+- **t5 复审 pass（2 medium / 3 low）**：T5-F1 `4e19c2ae` 附两处 runner 转发（`benches/shootout/runner/scripts/dev/z3_runner.py`、`tools/yx/scripts/dev/z3_runner.py`），不在 6.9.4 契约 inScope；因共享工作树 pre-commit 阻塞无法拆笔，内容为构建面、不改产品行为，PR 必填块登记，后续可单独拆；T5-F2 `DestructureAssign` 绑定不经 `classify_binding`/`gamma.kill`，静态论证当前 HEAD 不产生错证（解构定义 span 与快照不同 ⇒ 事实失效），但缺判据，另案补测；T5-F3 6.9.4 错误类型 **A**（旧行为非成功：应通过而报 E1113 的程序现在通过；先红后绿 + 原先成功程序零漂移 + 同提交登记）；T5-F4 `assumptions.rs` 注释「一次判定一份预算」与实现不符，登记；T5-F5 谓词形态事实进 SMT 假设通道未受绑定身份校验，无可达反例，登记 guard 另案；T5-F6 E5002 为防御性检查、payload 内存同源不可用户触发（口径登记）。
+- **t7 复审 pass**：T7-F1 已由 t10 补证（MT06/MT16/MT15 三条 trial 全红且机械还原，fast 2279）；T7-F2 grep 判据按名、T7-F3 layers 三文件 inScope 外、T7-F4 D59、T7-F5 文件头、T7-F6 E5002 口径，均登记。
+- **t10**：MT06 指纹校验、MT16 双键、MT15 `quantity_is_witness` 三条 trial 在 `bf64039f` 批次树红→还原→恢复绿；证据留 `target/yx-scratch/t10-evidence/`。
 
 ## P6 6.9.5-B.1 契约（sigma-reviewer，2026-11-13，只读）
 
