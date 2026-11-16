@@ -5380,13 +5380,13 @@ P1 `pin_binder: Option<String>`（按绑定解析，不并列保留 bool）／P2
 | **P5** | `types/mono.rs::GenericArg::substitute` 的 `Const` 臂；`mono::fire_deferred` 代入 + 归一化 | 项位按实例 `name_map` 名字替换；代入后仍**有自由名** ⇒ 未闭（不建实例）；无自由名 ⇒ `normalize`：`Ok` 建实例（`Const(Lit)`）、`Disproved` ⇒ 不建请求 + 登记（R4=①，不报错） |
 | **T-b** | `mono::mod`：`MAX_OPEN_CHAIN = 8`、`open_chain: HashMap<(容器, callee, 静态调用点), usize>`、`OpenFireCutoff{reason: BoundReached/UnclosedTerm/DisprovedValue}` | 键 =（容器, callee, **静态调用点**），同一静态调用点跨实例累计；到界**不建实例、不报错、不删原件**（原件由既有 `restore_generics_with_uncovered_call_sites` 放回）；只对**开项链**计数（C3 之前既有 deferred 形态 = 符号化类型实参，不受闸限流，有负控测试钉住） |
 
-消费者：直驱测试（`mono::tests::monomorphizer` 4 条 + `curry_instance_layers` 1 条）+ `Monomorphizer::open_fire_cutoffs()`（供 driver debug 读取；不做 State 字段、不进 info/warn、不新增用户可见码）。
+消费者：**直驱测试**（`mono::tests::monomorphizer` 4 条 + `curry_instance_layers` 1 条）+ `Monomorphizer::open_fire_cutoffs()` 公开 getter（**能力声明**：可被 driver debug 读取；当前**无** driver 侧消费者，偏差见 §八 T13-F1）。不做 State 字段、不进 info/warn、不新增用户可见码。
 
 ### 二、M1–M6 实测（本机，主工作树）
 
 | # | 量测 | 实测 |
 | --- | --- | --- |
-| **M1** | 语料 `const_generic_recursive_factorial.yx` 现状锚 | 修前：`check` 0 error、`run` exit 0（120），函数表 31 个，**无** `factorial(int64::4)`；本轮修后：同语料 `check`/`run` 仍 0/0，函数表 46 个，出现 `factorial(int64::4)`…`int64::-3` 开项链 |
+| **M1** | 语料 `const_generic_recursive_factorial.yx` 现状锚 | 修前：`check` 0 error、`run` exit 0（120），函数表 31 个，**无** `factorial(int64::4)`；本轮修后：同语料 `check`/`run` 仍 0/0，函数表 46 个（t12 在冻结提交上按全量 dump 计 **47**，差 1 为本机 dump 过滤口径），出现 `factorial(int64::4)`…`int64::-3` 开项链 |
 | **M2** | 钉住载体 | `VarInfo.pin_binder`（per-binding，按绑定解析）；`k` 的值不在 mono `name_map` ⇒ 必须先在 typecheck 侧消解 `k → N`（P3）再由实例 `name_map` 代入（P5）；实测：消解前开火不发生（同 t2 原型），消解后开火成立 |
 | **M5** | 开项零请求 / E3018 | 探针 `g: (N: Int) -> (k: N) -> Int = { f(k + 1)(k + 1) }` + `g(5)(5)`：修前开项 ⇒ 零请求（P4 前会被 E3018 拦）；修后 `check` 通过、函数表出现 `f(int64::6)`、`run` exit 0（值 6） |
 | **M3** | 无界 E3005 + bound 8/32 | 生产面：bound=8 时开项链恰 8 个实例（`{4,3,2,1,0,-1,-2,-3}`，直驱测试逐名断言 + 「第 9 次被切（无 `-4`）」断言）；到界退回原件（原件 `factorial` 仍在，`run` 120 正确）。无界面（`max_depth` 100）本轮不另测——T-b 的闸在开火点，先于深度闸 |
@@ -5408,9 +5408,9 @@ P1 `pin_binder: Option<String>`（按绑定解析，不并列保留 bool）／P2
 | 变异 | 预期红 | 实测 |
 | --- | --- | --- |
 | **MC3-1** 停用钉住消去（`compile_time_term` 不再 `k → N`；手工改—测—还原） | D 级 `test_open_term_recursive_call_fires_into_its_instance` | **实测红**（开项链零实例，D 级断言失败）；还原后 5 passed |
-| **MC3-2** P4 不并 `has_open_term` | 开项直接入队 ⇒ E3018 | **读码 + M5 对照**：契约 §五 的读码预测与 t2 的 M5 实测（开项直接入队 ⇒ E3018「期望 1 个，得到 0 个」）一致；本轮以 M5 探针修后绿（`f(int64::6)` 出现、run exit 0）作反向锚，未再做手工变异 |
+| **MC3-2** P4 不并 `has_open_term`（手工改—测—还原） | 开项直接入队 ⇒ E3018 | **实测红**（D 级 `test_open_term_recursive_call_fires_into_its_instance` 编译即失败：`E3018 类型实参数不匹配：期望 1 个，得到 0 个`）；还原后全绿 |
 | **MC3-3** T-b 闸不计数（`fired >= MAX_OPEN_CHAIN` 恒假；手工改—测—还原） | 直驱 `test_open_chain_stops_at_bound` + D 级实例数断言 | **实测双红**（入队 10 而非 8；D 级开项链实例数断言失败）；还原后全绿 |
-| **MC3-4** `fire_deferred` 求值失败改为 `Disproved` 传播 | `test_open_term_disproved_value_is_not_fired` | 该测试直接钉住「不建请求 + 登记 + 不报错」三件事（R4=①）；结构锚 = `fire_deferred` 无 `Err` 通道（单点） |
+| **MC3-4** `fire_deferred` 求值失败改为 `Disproved` 传播（手工改—测—还原） | `test_open_term_disproved_value_is_not_fired` | **实测红**（求值失败也照常入队 ⇒ 「不得建请求」断言失败）；还原后全绿 |
 
 ### 五、边界与不宣称
 
@@ -5419,6 +5419,30 @@ P1 `pin_binder: Option<String>`（按绑定解析，不并列保留 bool）／P2
 - 身份/钉住按**绑定**解析（`VarInfo` per-binding）；按名旁表仍不允许（t23 F1' 口径）。
 - 开项链的计数键含**静态调用点** Span：同一泛型体内不同调用点各自计数（契约键口径）。
 - `substitute_term_names` 只认 `MonoType::Literal` 目标；其余映射原样保留名字（不猜值）。
+
+### 六、独立验证（t12）与复审（t13）
+
+| 环节 | 结论（逐条要点） |
+| --- | --- |
+| **t12 独立验证**（批次树冻结 C3 提交） | P1–P5 静态对号逐条成立；CLI 实测：语料 check 0 诊断 / run exit 0（120 正确），dump 函数表 **47** 个、开项链恰 8（4,3,2,1,0,-1,-2,-3）+ 对应 `__factorial_l0` 克隆、**无 `-4`（第 9 次被切）**、闭项 `::5` 与原件在；**到界退回逐实例核验**：`__factorial_l0(int64::-3)` 的 CallStatic = 原件下标（越过 0 的边由原件承担运行期语义），`__factorial_l0(int64::4)` 指 `factorial(int64::3)`（链内逐层）；D 级断言 `__factorial_l0(int64::5)` → `factorial(int64::4)`（tripwire 改指兑现）；M5 探针 run 打印 6、出现 `f(int64::6)`/`__f_l0(int64::6)`（非只有 `k-1` 形态）；MC3-1/MC3-3 补做 trial 机械变异（均红、还原后全绿） |
+| **t13 复审 verdict = pass**（5 项 low，无 blocking/high） | P1–P5、甲-闭、丙-3、单表示/单求值器/单账、T-b 键与 bound、到界三臂、测试未删/放宽逐条成立；**实现比契约更强的一处**：`ConstExpr` 枚举实为 **9 个变体**（契约写 8），`rewrite_term_names` 穷尽 9 臂——按实现记录，不按契约数字回改代码；跨实例累计的关键被点名核对（`fire_deferred` 首参是 `generic_name` 而非实例名） |
+
+t13 的 5 项 low 与处置见 §八。
+
+### 七、D59 处置（C3）
+
+**不属 A/B/C 类语义修正，按「机制补齐」记**：C3 之前生产路径上开项**不特化**（开项零请求），C3 之后特化到 bound 8、到界由原件承担运行期语义 ⇒ **对外可观察行为零变化**（`corpus_probe` 402/402 差异空、IR 快照零漂移、语料 `factorial(5)(5)=120` 不变）。旧行为既非崩溃也非静默错答（只是少特化），故不套用 D59 的 A/B/C 顺路修条款；本轮无行为变更需裁决。**若将来放开 bound 或改到界语义（例如给用户可见提示），那才是 D 类，需裁决。**
+
+### 八、残余与处置（t13 findings）
+
+| # | 残余 | 处置 |
+| --- | --- | --- |
+| **T13-F1** | `OpenFireCutoff` 只有直驱测试读，**无 driver 侧消费者**；§一「供 driver debug 读取」是能力声明而非既有消费者 | **登记偏差，不修**：裁决要求「消费者 = 直驱测试 + driver debug」，当前仅直驱达成；到界在生产侧只写不读。补 driver debug 通道需先定调试面口径（本项目无 info/warn 之外的调试通道），另立三级任务；本轮把 §一 的措辞收窄为「能力声明」 |
+| **T13-F2** | 「越过 0 的边退回原件」只被 t12 字节级实测与语料端到端值间接覆盖，**无单测断言**钉住 `__factorial_l0(int64::-3)` → 原件 | **登记**：t12 已给出可复现的字节级证据，未落成判据；建议随下一判据轮补一条断言（`static_target(functions, "__factorial_l0(int64::-3)", CALL_STATIC) == index_of("factorial")`） |
+| **T13-F3** | MC3-2/MC3-4 无 trial 机械证据 | **本轮已闭**：MC3-2（停用 P4 的 `has_open_term` 并入）⇒ D 级测试红（E3018「期望 1 个，得到 0 个」）；MC3-4（`Disproved` 照常入队）⇒ `test_open_term_disproved_value_is_not_fired` 红；均还原后全绿 |
+| **T13-F4** | `src/frontend/tests/curry_instance_layers.rs` 不在 t11 inScope（tripwire 按自身注释交接，已文字申报） | **登记进 PR 必填块**（契约边界，非越界实现） |
+| **T13-F5** | D59 处置未写 | **本轮已闭**：见 §七（按「机制补齐」记，无行为变更 ⇒ 无裁决事项） |
+
 ## P6 6.9.3d 契约与 M1/M2/M5 实测（protocol-analyst，2026-11-13）
 
 ### 一、红判据实测（批次树 6.9-bd @ a8ccf78c）
