@@ -3,8 +3,11 @@ title: 'RFC-010b: 模式匹配完备化（变体解构与穷尽性）'
 status: '已接受'
 author: '晨煦'
 created: '2026-09-03'
-updated: '2026-09-27'
+updated: '2026-11-17'
 issue: '#330'
+issues_impl:
+  - '#330'
+  - '#389'
 parent: 'RFC-010'
 ---
 
