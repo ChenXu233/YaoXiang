@@ -213,7 +213,7 @@ src/
 | `frontend/core/parser/statements/declarations.rs`（1015 行，8-10 段职责） | `frontend/parser/` 拆分 + 删 120 行死旧语法 | 05 |
 | `typecheck/checker.rs`（4167 行 + 三个真子模块 `checker/annotations.rs` 470 行、`checker/refinement.rs` 1107 行、`checker/semantic_tokens.rs` 1553 行） | `sema/check/` + `sema/refine/`；`include!` 改真 `mod`（5.1 已完成）、精化块迁子模块与入口收口（5.2 已完成：入口为 `&self` + 返回诊断）、注解族迁子模块（5.3 已完成） | 02 / 05 |
 | `typecheck/checker/semantic_tokens.rs`（1553 行，已是 `checker` 的真子模块） | `sema/check/semantic_tokens.rs` | 02 |
-| `typecheck/inference/expressions.rs`（5525 行） | `sema/infer/{call/,expr,stmt}.rs` | 05 / 04 |
+| `typecheck/inference/expressions.rs`（原单文件） | `sema/inference/expressions/{mod,expr}.rs` + `expressions/call/{mod,args,instantiation,method}.rs`（7.0.4 已拆分；`statements.rs` 归并与 `inference/` 改名另案） | 05 / 04 |
 | `typecheck/inference/statements.rs`（2887 行） | `sema/infer/stmt.rs` + `sema/infer/mod.rs` | 05 |
 | `typecheck/types/mono.rs`（1077 行，含同义词表） | `sema/types/{repr,universe}.rs` | 03 |
 | `typecheck/types/const_data.rs`（第二套运算符枚举） | 与 `ast::Type` 的运算符合一 | 03 |
@@ -221,7 +221,7 @@ src/
 | `typecheck/layers/dispatch.rs`（整链零调用） | 删除 | 06 |
 | `typecheck/layers/` | `sema/layers/` + `README.md` 改为实际层序 | 06 |
 | `typecheck/proof/` | 提为一级 `proof/` | 02 |
-| `middle/core/ir_gen.rs`（8448 行，零测试） | `middle/lower/`（14 个模块） | 04 |
+| `middle/core/ir_gen.rs`（原单文件，零测试） | `middle/lower/{mod,scope,query,stmt,loops,globals,module_ir,const_eval,curry}.rs` + `lower/expr/{mod,call,access,control,container,lit,op,reference,closure,spawn}.rs`（7.0.1–7.0.3 已拆分） | 04 |
 | `middle/core/ir.rs`（905 行） | `middle/ir/` + `verify.rs` | 04 |
 | `middle/core/bytecode.rs`（2422 行，1400 行 `From`）+ `middle/passes/codegen/bytecode.rs`（763 行，序列化） | 合并为 `middle/bytecode/`：`opcode.rs` 词表 + `file.rs` 容器序列化 + `decode/`（10 个模块） | 06 |
 | `backends/common/opcode.rs`（83 常量词表） | `middle/bytecode/opcode.rs`（消除 L3→L4 反向） | 06 |

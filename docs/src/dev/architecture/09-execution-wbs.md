@@ -482,7 +482,7 @@ P10 其余清理与状态修正             06 §S2/S3/S4/S5/S6
 
 来源：[04](04-ssa.md) §实施要点 批 a–d，判据 C4，**批内严格串行**。
 
-- [ ] **7.0 纯搬移拆分（P7 前置批）**（6 个三级任务；2026-11-12 登记，用户批准插队 7a 之前）
+- [x] **7.0 纯搬移拆分（P7 前置批）**（6 个三级任务；2026-11-12 登记，用户批准插队 7a 之前；2026-11-17 完成，实录见 [09a](./09a-wbs-history.md) §P7 7.0）
 
 > **7.0 设计依据与边界**：目标布局来自 [01-routing](01-routing.md) 的目录树与迁移表——`middle/ir/ir_gen.rs` → `middle/lower/`、`sema/inference/expressions.rs` → `sema/infer/`（调用裁决族 `call/`）。本批**只做纯搬移**，验收判据为「除路径外零语义 diff」（逐文件人工 review）+ C1 快照 zero-diff。它与 [RFC-039](../../rfc/accepted/039-compiler-architecture.md) 替代方案 A「只拆文件、不动范式」的否决不冲突：被否决的是以搬移**替代**范式工作，本批是范式工作的**前置**——7c.1 的 `lower/synth.rs` 依赖 `lower/` 目录就位，7d.1 的 `generate_call_expr_ir` 方法级拆分在搬移后的小文件上进行。expressions 侧按用户裁决走甲案（只拆调用裁决族，`statements.rs` 原地不动）；`inference/ → infer/` 整体改名与 statements 归并属全量迁移，不在本批，留 P7 后另立设计轮。`synth.rs` 是新边界不是搬移，归 7c.1。勘察基线（2026-11-12）：`ir_gen.rs` 9804 行、148 个方法，主体为单个 `impl AstToIrGenerator` 块（约 9250 行）；`expressions.rs` 6825 行、93 个方法，主体为单个 `impl ExpressionInferrer` 块（约 6280 行）；最大方法 `infer_call_expr` 1671 行、`generate_call_expr_ir` 866 行（后者为 7d.1 对象）。
 

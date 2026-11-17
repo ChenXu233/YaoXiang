@@ -91,7 +91,7 @@ description: '泛型约束、特质系统与常量求值相关的错误。'
 - **构造函数**：`ErrorCodeDefinition::const_division_by_zero()`
 - **模板**：`常量表达式除以零`
 - **帮助**：确保常量表达式中的除数不为零。
-- **发射点**：`src/frontend/core/types/eval/const_eval.rs:559`、`src/frontend/core/types/eval/const_eval.rs:566`、`src/frontend/core/types/eval/const_eval.rs:571`
+- **发射点**：`src/frontend/core/types/eval/const_eval.rs:582`、`src/frontend/core/types/eval/const_eval.rs:589`、`src/frontend/core/types/eval/const_eval.rs:594`
 
 ### E4011：常量溢出
 
@@ -100,7 +100,7 @@ description: '泛型约束、特质系统与常量求值相关的错误。'
 - **构造函数**：`ErrorCodeDefinition::const_overflow()`
 - **模板**：`常量表达式溢出`
 - **帮助**：常量表达式的结果超出了类型的范围。
-- **发射点**：`src/frontend/core/types/eval/const_eval.rs:590`、`src/frontend/core/types/eval/const_eval.rs:595`、`src/frontend/core/types/eval/const_eval.rs:600` 等 5 处
+- **发射点**：`src/frontend/core/types/eval/const_eval.rs:613`、`src/frontend/core/types/eval/const_eval.rs:618`、`src/frontend/core/types/eval/const_eval.rs:623` 等 5 处
 
 ### E4012：常量递归过深
 
@@ -109,7 +109,7 @@ description: '泛型约束、特质系统与常量求值相关的错误。'
 - **构造函数**：`ErrorCodeDefinition::const_recursion_too_deep(limit)`
 - **模板**：`常量求值超出最大递归深度 {limit}`
 - **帮助**：简化常量表达式以减少递归。
-- **发射点**：`src/frontend/core/types/eval/const_eval.rs:767`
+- **发射点**：`src/frontend/core/types/eval/const_eval.rs:790`
 
 ### E4014：常量求值失败
 
@@ -118,7 +118,7 @@ description: '泛型约束、特质系统与常量求值相关的错误。'
 - **构造函数**：`ErrorCodeDefinition::const_eval_failed(reason)`
 - **模板**：`无法求值常量表达式：{reason}`
 - **帮助**：确保表达式可以在编译期求值。
-- **发射点**：`src/frontend/core/types/eval/const_eval.rs:498`、`src/frontend/core/types/eval/const_eval.rs:502`、`src/frontend/core/types/eval/const_eval.rs:523` 等 11 处
+- **发射点**：`src/frontend/core/types/eval/const_eval.rs:521`、`src/frontend/core/types/eval/const_eval.rs:525`、`src/frontend/core/types/eval/const_eval.rs:546` 等 11 处
 
 ### E4018：精化谓词违反
 
@@ -149,7 +149,7 @@ description: '泛型约束、特质系统与常量求值相关的错误。'
 - **模板**：`需要证明函数来验证约束`
 - **消息**：约束无法在编译期证明，需要提供证明函数
 - **帮助**：添加证明函数或提供运行时检查
-- **发射点**：`src/frontend/core/sema/checker/refinement.rs:952`、`src/frontend/core/sema/proof/verdict.rs:397`
+- **发射点**：`src/frontend/core/sema/checker/refinement.rs:962`、`src/frontend/core/sema/proof/verdict.rs:397`
 - **源码注释名**：需要证明函数来验证约束
 
 ### E4021：循环终止性无法自动证明

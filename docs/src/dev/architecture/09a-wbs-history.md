@@ -5253,6 +5253,7 @@ B.4 的导入构造前置（`checker/refinement.rs`）与来源指纹（`checker
   即「同名不同绑定」在 V1 里是**拒绝**而不是「选出正确的那条」。
 - 不新增 Γ 收集点；`match` / `while` / 早返回**仍不收集**事实（6.9.4 的边界不变）。
 - `assert.assert` 仍不注入 Γ（上节的边界不变）；#537/#539 边界不变；C3/F4、Π/DepFn 不碰。
+
 ### 七、门禁（本机实测，2026-11-16）
 
 | 命令 | 结果 |
@@ -5267,7 +5268,6 @@ B.4 的导入构造前置（`checker/refinement.rs`）与来源指纹（`checker
 | 语料 / IR 快照 | `corpus_probe` **402/402 差异空**（既有 400 条 + 本轮 2 条语料）；IR 快照 +1（新语料），既有快照 0 漂移 |
 
 **一次工具面事故（如实登记）**：本轮中途 `cargo test --lib` 链接失败（`LNK1120: 552 个无法解析的外部命令`，全部是 `anon.*.llvm.*` 与 `alloc` 泛型符号）。排查：源码无外来改动（`git status` 仅本轮文件），`cargo build` 正常，仅**测试可执行文件**链接失败——判定为 `target/` 里并发 cargo（本机多个成员共用 target）留下的**陈旧/被截断的中间产物**；`cargo clean -p yaoxiang` 后重建即恢复（`1m51s`）。登记为共享工作树的构建产物污染，与本轮代码无关；后续同类现象先 `clean -p` 再排查。
-
 
 ## P6 6.9.5-B 设计包（sigma-reviewer，2026-11-13，只读）
 
@@ -5364,6 +5364,7 @@ P1 `pin_binder: Option<String>`（按绑定解析，不并列保留 bool）／P2
 - 量测在**原型**（P1–P5 最小实现）上取得，非生产提交；t11 的验收必须重新给出生产面数字（实例数/编译时间/语料/快照/生成器）。
 - M5 的 E3018 与 M3 的 E3005 是**当前缺口的实证**，不是新缺陷登记；T-b 的「到界登记」在 V1 只有运行期退回、无用户可见提示（不新增码/发射点）。
 - 开项特化后的语义承诺以 RFC-011 §4.1 与 T-b 为界；T-a/T-c 不取。
+
 ## P6 6.9.2-C3 实现轮（2026-11-16）：甲-闭 + 丙-3 + T-b + bound 8
 
 > 依据 = 用户裁决 A（上节 §P6 6.9.2-C3 F4 裁决）。本轮按契约 P1–P5 落地 C3，
@@ -5528,6 +5529,7 @@ init 段（模块顶层语句）还另有一份只认 `Call` 的平行改写实�
 - 不改 opcode 语义；`translate_tail_call`（IR 侧 `func` 取 `Int` 形态）保持原样——TailCall 无生成点，翻译面与 IR 生成面均不在本轮。
 - `#542`（孤立共享层）另案，不在本轮：本轮的改写面扩形态不改变「共享层只有一份体」的事实。
 - 新增的 `rewritten_call_target` / `replace_static_call_site` 是**共享层**（供四处调用），不是第 4、5 份同义映射：形态集合与站点改写各只剩一个写点。
+
 ## P6 6.9.3d 契约与 M1/M2/M5 实测（protocol-analyst，2026-11-13）
 
 ### 一、红判据实测（批次树 6.9-bd @ a8ccf78c）
@@ -6891,3 +6893,54 @@ canonical_text(RecordModel) =
 > **二、本轮实质 = 新发现的 SPEC 失实条目**：syntax.md §1.6.4「复合表达式（如 2+1）解析期拒绝」与 HEAD 行为直接矛盾（最后实质修改 fe405233 早于 b352b360，未同步且不在任何债务清单——查证工作流新发现）。就地更正两行：①文法形态 = 字面量/常量名/编译期值参数引用起始的中缀常量表达式、按折叠值参与个数校验；②解析期拒绝 = 浮点/字符串种子（E0010）、不完整表达式（E0012）、标识符+`(` 走构造器类型路径（E1003）。**语法边界三处未决登记**（将来若做「完整 ConstExpr 进类型位」D 类扩展，此即边界事实）：调用形态实参、浮点/字符串种子、转换通道不产 Call/If/Range（求值器反而支持）。
 
 > **三、遗留与移交**：09a §P6 #543 已登记的两条文档债维持登记不动（test-gate-census.tsv 缺 4 个新 parser 测试、03 行号漂移——归属原批顺修）。issue [#543](https://github.com/ChenXu233/YaoXiang/issues/543) **关闭**（证据评论引 owner 更正原文 + `b352b360` + HEAD 实测 + SPEC 更正笔）。SPEC 更正笔与 WBS/09a 收口同提交；三级 +1 = 3.20.31（243→244）。本轮无代码改动、无批次树。
+
+## P7 7.0 纯搬移拆分收口（2026-11-17）
+
+> 计划见 [09](./09-execution-wbs.md) §P7 7.0（7.0.1–7.0.6）。本批只做纯搬移：`middle/ir/ir_gen.rs` → `middle/lower/`（7.0.1–7.0.3）、`sema/inference/expressions.rs` → `sema/inference/expressions/`（7.0.4，甲案）。判据 = 除路径外零语义 diff + IR 快照与语料基线零漂移。
+
+### 一、判据链
+
+- **C1 快照**：`test_ir_snapshots_stable` 232 条零漂移；语料差分 402/402 行，搬移前后两 revision 的产出 SHA256 相同。
+- **除路径外零语义 diff**：逐文件人工 review；复审按「impl 方法 + 文件级自由函数」逐方法对齐 token 流，归一化差异只有 `pub(...)` 可见性前缀、`super::` 路径简化与 rustfmt 换行。
+- **对外路径**：`middle` 的 `pub use ir_gen::*` 收敛为显式 3 项（`generate_ir` / `generate_ir_with_context` / `AstToIrGenerator`）；`sema::inference::expressions` 的模块路径不变。
+- **规模不变**：`generate_call_expr_ir`（871 行）与 `infer_call_expr`（1719 行）保持单块，方法级拆分仍归 7d.1。
+
+### 二、方法计数对照
+
+计数口径：只数 `fn` 定义（`impl` 块内方法 + 文件级自由函数），不含测试函数与宏生成；两 revision 同口径、按名称多重集比对。
+
+| 批次 | 搬移前 | 搬移后 | 落点 |
+| --- | --- | --- | --- |
+| 7.0.1–7.0.3 | 158（151 方法 + 7 自由函数） | 158（同口径） | `lower/` 19 个文件 |
+| 7.0.4 | 113（99 方法 + 14 自由函数） | 113（同口径） | `expressions/` 6 个文件 |
+
+- 7.0.1：`lower/{mod,scope,query}.rs`；7.0.2：`lower/{stmt,loops,globals,module_ir,const_eval}.rs`；7.0.3：`lower/curry.rs` + `lower/expr/` 10 个文件；7.0.4：`expressions/{mod,expr}.rs` + `expressions/call/{mod,args,instantiation,method}.rs`。
+- 可见性：`pub(crate)` 181→181 净零；新增的 `pub(in crate::middle)` 是多文件 impl 的机械需要，逐项 grep 证明 `lower/` 外零消费者。
+
+### 三、门禁与量测
+
+- `cargo fmt --check` 0；`cargo clippy --all --all-features --all-targets -- -D warnings` 0。
+- `python scripts/dev/testsuite.py run fast`：2306 条、0 跳过、exit 0。
+- `check-obligations.py` PASS（14 义务 / 14 交付 / 红名单 0 / 非义务登记 8）；`check-boundary` / `check-fanout` / `check-test-channel` / `check-docs-*` 全部 exit 0（boundary B5 为既有 report-only，见 §六）。
+- 批次树按 `scripts/dev/scratch.py` 规程冻结 revision 后量测并 release + gc；rebase 后复核 `git diff -- src tests Cargo.toml Cargo.lock` 为空（内容等价）。
+
+### 四、复审结论
+
+独立复审 verdict=pass，无 findings。五项判据独立复算：①方法唯一且无转发壳/副本（名称多重集一致、新家零重复名）；②外部路径全仓无 `middle::ir::ir_gen` 代码引用；③方法级拆分未偷跑；④`tests/yaoxiang` 零 diff、`tests/baselines` 仅 obligations-gate 夹具同内容改名；⑤无 `include!`、无跨层反向依赖，`pub(crate)` 净零。方法计数按 §二 口径统一为 158/158 与 113/113。
+
+### 五、偏差登记
+
+1. **rebase 后内容等价**：收口提交经 rebase 重排后与冻结 revision 的代码内容逐字节等价，量测只在冻结 revision 上取证。
+2. **契约口径偏差**：7.0.1 的搬运清单最初按「第一批方法数」表述，实际按「一方法一份」收口（158）；7.0.4 的目录名按甲案实际落为 `expressions/`，计划文里 `sema/infer/` 是整体改名的目标名，不在本批执行。
+3. **`lower/*.rs` provenance 头保留**：19 个文件头保留「方法体逐字搬自原 `middle/ir/ir_gen.rs`」的来源说明，属刻意保留的可审计线索，非活动指针。
+4. **`ir_gen` 阶段名残留**：`ast`、`parser`、`spawn/analysis` 等处 6 行「ir_gen」是行为/阶段名描述（无 file:line 指针），按既有登记保留，本批不统一改名。
+
+### 六、验证轮三项发现登记
+
+1. **错误码文档既有欠账**：`scripts/docs/gen-error-code-docs.py` 再生后 58 行变更，逐条归因 = 33 行搬移路径改写（`expressions.rs` / `ir_gen.rs` 锚点改指新家）+ 25 行纯行号欠账；在搬移前 revision 上再生同样产生 55 行 diff，当前 58 行的旧行全部包含于其中、0 行只在基线出现，证明欠账先于本批存在。本批再生随提交入库，只改「发射点」锚点，码表、locales 与计数未动，无诊断语义变化。
+2. **check-boundary B5 既有 report-only**：opcode 常量 84 vs 库存 83，搬移前同样存在，非本批引入。
+3. **批次树 Z3 资产解压静默失败**（环境侧）：自动下载/解压报 LNK1181 但未响亮失败；改用 build.rs 支持的本地 `.z3/` 路径供给后构建绿。只登记，不修。
+
+### 七、提交
+
+7.0.1–7.0.3 与 7.0.4 分两笔本地提交（未 push），pre-commit 全链绿；本收口文档与错误码生成物同笔提交。
