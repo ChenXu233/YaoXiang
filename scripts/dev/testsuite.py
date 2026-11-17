@@ -605,6 +605,18 @@ def cargo_env(limits: Limits) -> dict:
     env = os.environ.copy()
     env["CARGO_BUILD_JOBS"] = str(limits.cargo_build_jobs)
     env["RUST_TEST_THREADS"] = str(limits.rust_test_threads)
+    # cargo 的 target runner（.cargo/config.toml，Windows 侧现为
+    # `scripts/dev/z3_runner.cmd` 包装）把 libz3 动态链接的库路径注入到测试
+    # 二进制的子进程环境。runner 内部对解释器有确定位置探测（SystemRoot 的
+    # py → 按用户 Launcher → PATH 上的 python/python3），但最后一档
+    # `where python` 仍走 cargo 进程继承的 PATH：门禁宿主可能以**绝对解释器
+    # 路径**调起本脚本而 PATH 不含 python 目录。把本解释器所在目录前置进
+    # PATH：能跑起本脚本的解释器必然存在，兜底档随之必可解析；PATH 本已可
+    # 解析时前置同一目录不改变语义。runner 的库名注入由 z3_runner.py 自己做
+    # （它把 .z3 目录前置进子进程 PATH，晚于本次前置，优先级不受影响）。
+    interpreter_dir = os.path.dirname(sys.executable)
+    if interpreter_dir:
+        env["PATH"] = interpreter_dir + os.pathsep + env.get("PATH", "")
     return env
 
 

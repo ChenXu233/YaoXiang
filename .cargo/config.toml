@@ -41,9 +41,19 @@ ar = "x86_64-w64-mingw32-ar"
 # `scripts/dev/z3_runner.py`，把 `.z3` 资产里的共享库目录前置进
 # PATH / LD_LIBRARY_PATH / DYLD_LIBRARY_PATH，再原样转交产物与退出码；找不到
 # 资产时原样透传。脚本路径相对仓库根，从仓库根调用 cargo 即可。
+#
+# Windows 的 runner 指向 `scripts/dev/z3_runner.cmd` 包装（cmd.exe 解释，
+# Rust std 对 .cmd 走 cmd.exe 转交）：runner 串里直接写解释器名字
+# （`python`/`py`）要靠 cargo 进程继承的 PATH 解析——门禁宿主可能以
+# 绝对解释器路径调起门禁而 PATH 不含任何 Python 目录，runner 生成即
+# 失败（实测 program not found，快照门禁没跑到任何测试）。包装按确定
+# 位置探测解释器（%SystemRoot%\py.exe → 按用户 Launcher → PATH 上的
+# python/python3），只要求 cmd.exe 与 %SystemRoot% 存在；z3_runner.py
+# 本体由 %~dp0 定位，与调用 cwd 无关。unix 侧 CI 环境恒有 python3，维持
+# 直连。
 
 [target.'cfg(windows)']
-runner = "python scripts/dev/z3_runner.py"
+runner = "scripts\\dev\\z3_runner.cmd"
 
 [target.'cfg(unix)']
 runner = "python3 scripts/dev/z3_runner.py"
