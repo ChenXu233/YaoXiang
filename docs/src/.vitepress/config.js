@@ -398,6 +398,13 @@ export default defineConfig({
               ],
             },
             {
+              text: "后端设计",
+              collapsed: true,
+              items: [
+                { text: "LLVM AOT 后端接入执行计划", link: "/dev/design/llvm-aot-execution" },
+              ],
+            },
+            {
               text: "工具设计",
               collapsed: true,
               items: [
