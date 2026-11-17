@@ -378,6 +378,12 @@ jobs:
           echo "::error::五次推送均失败（dev 上持续有并发提交）"
           exit 1
 
+      - name: Notify CNB mirror
+        uses: ./.github/actions/notify-cnb
+        with:
+          token: ${{ secrets.CNB_TOKEN }}
+
+
       # 数据已经落库并推送，此时才让 job 变红：入库与报警分开，避免报警把数据一起吞掉
       - name: Fail if any suite was missing
         if: steps.append.outputs.rc != '0'
