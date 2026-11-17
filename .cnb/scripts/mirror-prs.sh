@@ -14,12 +14,15 @@ GH_OWNER="ChenXu233"
 CNB_API="https://api.cnb.cool/$CNB_REPO"
 GH_API="https://api.github.com/repos/$CNB_REPO"
 CNB_GIT="https://cnb:$CNB_TOKEN@cnb.cool/$CNB_REPO.git"
-GH_GIT="https://$GH_USER:$GH_TOKEN@github.com/$CNB_REPO.git"
+GH_GIT="https://github.com/$CNB_REPO.git"
 
 if [ -z "$GH_USER" ] || [ -z "$GH_TOKEN" ]; then
   echo "缺少 GH_USER / GH_TOKEN：检查密钥仓库 ChenXu233/secrets 的 yaoxiang-pr-sync.yml" >&2
   exit 1
 fi
+
+# 凭据走 credential helper，URL 里不带令牌：git 的报错信息才不会把 PAT 打进构建日志。
+git config credential.helper '!f() { echo username=$GH_USER; echo password=$GH_TOKEN; }; f'
 
 cnb_call() {
   if [ $# -ge 3 ] && [ -n "$3" ]; then
@@ -129,8 +132,10 @@ while IFS="$TAB" read -r num head_ref head_repo base_ref sha title author nick i
   fi
   fetched="$(git rev-parse "refs/remotes/cnb/$head_ref")"
 
-  if ! git push --quiet --force "$GH_GIT" "refs/remotes/cnb/$head_ref:refs/heads/$mirror" > /dev/null 2>&1; then
-    echo "PR #$num：推送到 GitHub 失败" >&2
+  # 失败时把 git 的原始报错打出来；令牌在 credential helper 里，报错不会带令牌。
+  if ! push_err="$(git push --quiet --force "$GH_GIT" "refs/remotes/cnb/$head_ref:refs/heads/$mirror" 2>&1)"; then
+    echo "PR #$num：推送到 GitHub 失败：" >&2
+    printf '%s\n' "$push_err" | sed 's/^/    /' >&2
     continue
   fi
 
