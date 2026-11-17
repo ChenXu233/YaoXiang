@@ -8,6 +8,7 @@ use crate::frontend::core::sema::MonoType;
 use crate::middle::ir::ir::{
     BasicBlock, ConstValue, FunctionBody, FunctionIR, Instruction, LocalSlot, Operand,
 };
+use crate::middle::lower::scope::NestedBodyGuard;
 use crate::middle::lower::AstToIrGenerator;
 use crate::util::diagnostic::Diagnostic;
 
@@ -28,22 +29,14 @@ impl AstToIrGenerator {
         constants: &mut Vec<ConstValue>,
         env_count: usize,
     ) -> Result<LambdaBodyIR, Diagnostic> {
-        // 保存父函数的临时寄存器计数
-        let saved_next_temp = self.next_temp;
-        let saved_temp_high_water = self.temp_high_water;
-        let saved_temp_floor = self.temp_floor;
-        let saved_cur_locals = std::mem::take(&mut self.cur_locals);
-        // cur_span 与 next_temp 同款：嵌套函数体是独立源码单元
-        let saved_cur_span = self.cur_span;
-
-        // #311：闭包体是独立指令流，循环栈属父函数——保存并清空
-        //（typecheck 已用 E1102 拦截函数体内的 break/continue，此处为层间失联防御）
-        let saved_loop_stack = std::mem::take(&mut self.loop_stack);
+        // WBS 7a.2：lambda 体是独立指令流——父帧（槽位表 / 循环栈 / 当前 span /
+        // 三项计数）整体摘进 guard，Drop 时原样返回。
+        let mut frame = NestedBodyGuard::enter(self);
 
         let mut instructions = Vec::new();
 
         // 进入闭包函数体作用域
-        self.enter_scope();
+        frame.enter_scope();
 
         // 注册参数槽位。
         // env_count：闭包 env 在帧参数中占前段（运行时 `final_args = env + args`
@@ -51,14 +44,15 @@ impl AstToIrGenerator {
         // `env_count + i`，**无需** LoadArg——那会与已铺好的槽位错位。
         // 捕获变量同理：`closure_captures` 让 Var 解析走 LoadUpvalue。
         for (i, param) in params.iter().enumerate() {
-            self.register_local(&param.name, env_count + i);
+            frame.register_local(&param.name, env_count + i);
         }
         // 匿名绑定 / 闭包的形参就是声明（绑定注解 / 返回位内层 Fn）本身，无需补位。
-        self.note_param_written_types(params, &[]);
+        frame.note_param_written_types(params, &[]);
 
-        // 记录局部变量起始位置
+        // 记录局部变量起始位置（env 段之后）。口径与改动前逐字一致：lambda 只
+        // 重置 next_temp，不动高水位与循环态地板（既有行为的 C1 约束）。
         let local_var_start = env_count + params.len();
-        self.next_temp = local_var_start;
+        frame.next_temp = local_var_start;
 
         // 处理函数体语句（RFC-010a 规则①：尾表达式给出 lambda 的值）。
         // 此前无条件逐语句生成、末尾补 `Ret(None)`，导致块体内的
@@ -67,36 +61,36 @@ impl AstToIrGenerator {
         let mut tail_handled = false;
         for (i, stmt) in body.stmts.iter().enumerate() {
             // 语句边界设定当前 span，供本条语句的所有指令构造就地捕获
-            self.set_cur_span(stmt.span);
+            frame.set_cur_span(stmt.span);
             if Some(i) == last_idx {
-                let result_reg = self.next_temp_reg();
-                if self.generate_tail_stmt_ir(stmt, result_reg, &mut instructions, constants)? {
+                let result_reg = frame.next_temp_reg();
+                if frame.generate_tail_stmt_ir(stmt, result_reg, &mut instructions, constants)? {
                     // 尾语句路径（RFC-039 D20 逐案核实项）：本条语句经
                     // `generate_tail_stmt_ir` 提前返回，**必须**在同款语句边界上
                     // 消费它的释放条目——漏这一处，尾语句的 Drop 就静默丢失
                     //（实测红态里正是这一类：尾位置语句的计划键永不命中）。
                     // 取值已完成（值在 result_reg），故 Drop 排在 Ret 之前。
-                    self.emit_release_drops(stmt.plan_id, &mut instructions);
+                    frame.emit_release_drops(stmt.plan_id, &mut instructions);
                     instructions.push(Instruction::Ret {
                         value: Some(Operand::Local(result_reg)),
-                        span: self.cur_span,
+                        span: frame.cur_span,
                     });
-                    self.set_cur_span(stmt.span);
+                    frame.set_cur_span(stmt.span);
                     tail_handled = true;
                     break;
                 }
             }
-            self.generate_local_stmt_ir(stmt, &mut instructions, constants)?;
+            frame.generate_local_stmt_ir(stmt, &mut instructions, constants)?;
             // NLL Release: 语句边界消费释放计划（RFC-039 D20）
-            self.emit_release_drops(stmt.plan_id, &mut instructions);
+            frame.emit_release_drops(stmt.plan_id, &mut instructions);
             // #393：语句级临时寄存器回收（同 generate_block_ir）
-            let named_watermark = self
+            let named_watermark = frame
                 .cur_locals
                 .iter()
                 .rposition(|slot| slot.name.is_some())
                 .map_or(0, |i| i + 1);
-            self.next_temp = named_watermark.max(self.temp_floor);
-            self.set_cur_span(stmt.span);
+            frame.next_temp = named_watermark.max(frame.temp_floor);
+            frame.set_cur_span(stmt.span);
         }
 
         // 尾位置无值（末位为语句 / 空体）时补 Ret(None)
@@ -107,27 +101,16 @@ impl AstToIrGenerator {
             if !has_ret {
                 instructions.push(Instruction::Ret {
                     value: None,
-                    span: self.cur_span,
+                    span: frame.cur_span,
                 });
             }
         }
 
         // 退出作用域
-        self.exit_scope();
+        frame.exit_scope();
 
-        // 计算局部变量总数
-        let total_locals = self.temp_high_water;
-        let locals_types: Vec<LocalSlot> = self.take_cur_locals(total_locals);
-
-        // 恢复父函数的临时寄存器计数
-        self.next_temp = saved_next_temp;
-        self.temp_high_water = saved_temp_high_water;
-        self.temp_floor = saved_temp_floor;
-        self.cur_locals = saved_cur_locals;
-        self.cur_span = saved_cur_span;
-
-        // #311：恢复父函数的循环上下文
-        self.loop_stack = saved_loop_stack;
+        // 槽位表 + 寄存器预算（E3014）单点
+        let locals_types: Vec<LocalSlot> = frame.take_body_locals()?;
 
         Ok(LambdaBodyIR {
             instructions,

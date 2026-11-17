@@ -3,6 +3,7 @@
 //! 覆盖语句入口、函数与方法体装配、语句级 span/释放计划边界、块与 if 语句。
 //! 方法体逐字搬自原 `middle/ir/ir_gen.rs`（WBS 7.0.2），语义未改。
 
+use super::scope::NestedBodyGuard;
 use super::AstToIrGenerator;
 use crate::ast;
 use crate::frontend::core::sema::MonoType;
@@ -506,21 +507,15 @@ impl AstToIrGenerator {
             .max()
             .map_or(0, |m| m + 1);
         let local_var_start = params.len().max(used_max);
-        self.next_temp = local_var_start;
+        // WBS 7a.2：方法体是独立指令流——父帧的表（槽位表 / 循环栈 / 当前 span）
+        // 整体摘进 guard，Drop 时原样放回。声明面入口（`enter_decl`）：方法体属于
+        // 模块级声明，模块初始化序列的寄存器计数沿用既有口径（接着用子体终值），
+        // 不改编号（C1 zero-diff）。#368：模块级已登记的具名槽位随 Drop 原样放回。
+        let mut frame = NestedBodyGuard::enter_decl(self);
+        frame.next_temp = local_var_start;
         // #393：本函数是独立寄存器空间——高水位与循环态地板随之清零
-        self.temp_high_water = local_var_start;
-        self.temp_floor = 0;
-
-        // #311：嵌套函数体是独立指令流，循环栈属父函数——保存并清空
-        //（typecheck 已用 E1102 拦截函数体内的 break/continue，此处为层间失联防御）
-        let saved_loop_stack = std::mem::take(&mut self.loop_stack);
-
-        // 顶层函数体入口：接手槽位表，避免沿用上一个函数的局部名。
-        //
-        // 与 generate_function_ir 同款 take/restore：方法体可以嵌在模块级
-        // 生成流程里（顶层类型定义），直接 clear 会把已积累的模块级槽位表
-        // 抹掉——顶层 `for` 的循环变量名会因此丢失（#368）。
-        let saved_cur_locals = std::mem::take(&mut self.cur_locals);
+        frame.temp_high_water = local_var_start;
+        frame.temp_floor = 0;
 
         // 生成指令序列
         let mut instructions = Vec::new();
@@ -533,39 +528,39 @@ impl AstToIrGenerator {
         let mut tail_handled = false;
         for (i, stmt) in body.iter().enumerate() {
             // 语句边界设定当前 span，供本条语句的所有指令构造就地捕获
-            self.set_cur_span(stmt.span);
+            frame.set_cur_span(stmt.span);
             if Some(i) == last_idx {
-                let result_reg = self.next_temp_reg();
-                if self.generate_tail_stmt_ir(stmt, result_reg, &mut instructions, constants)? {
+                let result_reg = frame.next_temp_reg();
+                if frame.generate_tail_stmt_ir(stmt, result_reg, &mut instructions, constants)? {
                     // 尾语句路径（RFC-039 D20 逐案核实项）：本条语句经
                     // `generate_tail_stmt_ir` 提前返回，**必须**在同款语句边界上
                     // 消费它的释放条目——漏这一处，尾语句的 Drop 就静默丢失
                     //（实测红态里正是这一类：尾位置语句的计划键永不命中）。
                     // 取值已完成（值在 result_reg），故 Drop 排在 Ret 之前。
-                    self.emit_release_drops(stmt.plan_id, &mut instructions);
+                    frame.emit_release_drops(stmt.plan_id, &mut instructions);
                     instructions.push(Instruction::Ret {
                         value: Some(Operand::Local(result_reg)),
-                        span: self.cur_span,
+                        span: frame.cur_span,
                     });
-                    self.set_cur_span(stmt.span);
+                    frame.set_cur_span(stmt.span);
                     tail_handled = true;
                     break;
                 }
             }
-            self.generate_local_stmt_ir(stmt, &mut instructions, constants)?;
+            frame.generate_local_stmt_ir(stmt, &mut instructions, constants)?;
             // NLL Release: 语句边界消费释放计划（RFC-039 D20）
-            self.emit_release_drops(stmt.plan_id, &mut instructions);
-            self.set_cur_span(stmt.span);
+            frame.emit_release_drops(stmt.plan_id, &mut instructions);
+            frame.set_cur_span(stmt.span);
         }
         if !tail_handled {
             instructions.push(Instruction::Ret {
                 value: None,
-                span: self.cur_span,
+                span: frame.cur_span,
             });
         }
 
         // 退出作用域
-        self.exit_scope();
+        frame.exit_scope();
 
         // WBS 2.1.2 实测缺陷修复：此前传 param_types.len()，locals 表被截断到
         // 参数数，方法体的临时槽（高水位之内）全部丢失——local_count 低估，
@@ -573,7 +568,7 @@ impl AstToIrGenerator {
         // 与 generate_function_ir / generate_lambda_body_ir 对齐：以高水位为准。
         // 行为等价论证：Frame 预分配槽位初值同为 Void，set_slot 容错路径不再
         // 触发但结果相同；调试信息 local_names 只取具名槽，不受空槽扩展影响。
-        let locals_types: Vec<LocalSlot> = self.take_cur_locals(self.temp_high_water);
+        let locals_types: Vec<LocalSlot> = frame.take_body_locals()?;
 
         // 构建函数 IR
         let func_ir = FunctionIR {
@@ -592,12 +587,6 @@ impl AstToIrGenerator {
                 locals: locals_types,
             },
         };
-
-        // #311：恢复父函数的循环上下文
-        self.loop_stack = saved_loop_stack;
-        // 恢复父函数的槽位表：本方法体可能嵌在模块级生成流程里，
-        // take 走后必须放回，否则模块级已登记的具名槽位会丢（#368）。
-        self.cur_locals = saved_cur_locals;
 
         Ok(Some(func_ir))
     }
@@ -637,44 +626,15 @@ impl AstToIrGenerator {
             None => MonoType::Void,
         };
 
-        // #311：嵌套函数体是独立指令流，循环栈属父函数——保存并清空
-        //（typecheck 已用 E1102 拦截函数体内的 break/continue，此处为层间失联防御）
-        let saved_loop_stack = std::mem::take(&mut self.loop_stack);
-
-        // 顶层函数体入口：接手槽位表，避免沿用上一个函数的局部名。
+        // WBS 7a.2：函数体是独立指令流——父帧的表（槽位表 / 循环栈 / 当前 span）
+        // 整体摘进 guard，Drop 时原样返回；三项计数装到 local_var_start。
+        // 声明面入口（`enter_decl`）：模块级声明的函数体不改模块初始化序列的计数
+        // 编号（C1 zero-diff）；函数体内的嵌套定义由调用点的 guard 保护（第 7 处）。
         //
-        // 这里用 take 而非 save/restore——与 next_temp 不同，next_temp 由
-        // 本函数重置为参数个数（见下），而槽位表没有等价的“重置”动作，
-        // 因此只能先把当前表接走再在出口放回。
-        // 嵌套路径（curry/lambda/anon）则与 next_temp 成对 save/restore。
-        let saved_cur_locals = std::mem::take(&mut self.cur_locals);
-
-        // 生成函数体指令
-        let mut instructions = Vec::new();
-
-        // 进入函数体作用域
-        self.enter_scope();
-
-        // 为每个参数生成 LoadArg 指令并注册。槽位取**调用点实参序列**里的下标：
-        // 绑定第 i 位 ≠ 运行期第 i 位（见 `impl_head_runtime_indices`）——
-        // `f: (N: Int, M: N) -> Int = (m) => m` 的 `m` 是绑定第 0 位、运行期第 1 位。
+        // 槽位取**调用点实参序列**里的下标：绑定第 i 位 ≠ 运行期第 i 位
+        //（见 `impl_head_runtime_indices`）——`f: (N: Int, M: N) -> Int = (m) => m`
+        // 的 `m` 是绑定第 0 位、运行期第 1 位。
         let runtime_indices = self.impl_head_runtime_indices(type_annotation);
-        for (i, param) in params.iter().enumerate() {
-            let slot = runtime_indices.get(i).copied().unwrap_or(i);
-            instructions.push(Instruction::Load {
-                dst: Operand::Local(slot),
-                src: Operand::Arg(slot),
-                span: self.cur_span,
-            });
-
-            self.register_local(&param.name, slot);
-        }
-        // 写出类型名与形参类型同一来源（作者标注 → 声明同类位）。
-        let declared = self.declaration_runtime_param_slots(type_annotation, params.len());
-        self.note_param_written_types(params, &declared);
-        // 量词事实（q=0 槽位）随声明一起落到形参槽位，供擦除前识别。
-        self.note_param_quantities(params, &declared);
-
         // 记录局部变量起始位置（在参数之后）
         // 帧宽只看**实际用到的**槽位：`take(params.len())` 保证「声明比实现头多」的形态
         // 不会凭空加宽（`locals_total` 因此与改动前一致）。
@@ -684,20 +644,45 @@ impl AstToIrGenerator {
             .max()
             .map_or(0, |m| m + 1);
         let local_var_start = params.len().max(used_max);
-        self.next_temp = local_var_start;
+        let mut frame = NestedBodyGuard::enter_decl(self);
+        frame.next_temp = local_var_start;
         // #393：本函数是独立寄存器空间——高水位与循环态地板随之清零
-        self.temp_high_water = local_var_start;
-        self.temp_floor = 0;
+        frame.temp_high_water = local_var_start;
+        frame.temp_floor = 0;
+
+        // 生成函数体指令
+        let mut instructions = Vec::new();
+
+        // 进入函数体作用域
+        frame.enter_scope();
+
+        // 为每个参数生成 LoadArg 指令并注册
+        for (i, param) in params.iter().enumerate() {
+            let slot = runtime_indices.get(i).copied().unwrap_or(i);
+            instructions.push(Instruction::Load {
+                dst: Operand::Local(slot),
+                src: Operand::Arg(slot),
+                span: frame.cur_span,
+            });
+
+            frame.register_local(&param.name, slot);
+        }
+        // 写出类型名与形参类型同一来源（作者标注 → 声明同类位）。
+        let declared = frame.declaration_runtime_param_slots(type_annotation, params.len());
+        frame.note_param_written_types(params, &declared);
+        // 量词事实（q=0 槽位）随声明一起落到形参槽位，供擦除前识别。
+        frame.note_param_quantities(params, &declared);
 
         // 检查函数体是否为 FFI ExternRef 绑定
         if let Some(ConstValue::ExternRef {
             mechanism,
             lib,
             symbol,
-        }) = self.try_eval_body_as_extern_ref(body)
+        }) = frame.try_eval_body_as_extern_ref(body)
         {
-            let lib_id = self.get_or_create_lib_id(&mechanism, &lib);
-            self.ffi_bindings
+            let lib_id = frame.get_or_create_lib_id(&mechanism, &lib);
+            frame
+                .ffi_bindings
                 .push(crate::middle::ir::ir::FfiBinding::FuncBinding {
                     func_name: name.to_string(),
                     lib_id,
@@ -719,21 +704,21 @@ impl AstToIrGenerator {
         let mut tail_handled = false;
         for (i, stmt) in body.iter().enumerate() {
             // 语句边界设定当前 span，供本条语句的所有指令构造就地捕获
-            self.set_cur_span(stmt.span);
+            frame.set_cur_span(stmt.span);
             if Some(i) == last_idx {
-                let result_reg = self.next_temp_reg();
-                if self.generate_tail_stmt_ir(stmt, result_reg, &mut instructions, constants)? {
+                let result_reg = frame.next_temp_reg();
+                if frame.generate_tail_stmt_ir(stmt, result_reg, &mut instructions, constants)? {
                     // 尾语句路径（RFC-039 D20 逐案核实项）：本条语句经
                     // `generate_tail_stmt_ir` 提前返回，**必须**在同款语句边界上
                     // 消费它的释放条目——漏这一处，尾语句的 Drop 就静默丢失
                     //（实测红态里正是这一类：尾位置语句的计划键永不命中）。
                     // 取值已完成（值在 result_reg），故 Drop 排在 Ret 之前。
-                    self.emit_release_drops(stmt.plan_id, &mut instructions);
+                    frame.emit_release_drops(stmt.plan_id, &mut instructions);
                     instructions.push(Instruction::Ret {
                         value: Some(Operand::Local(result_reg)),
-                        span: self.cur_span,
+                        span: frame.cur_span,
                     });
-                    self.set_cur_span(stmt.span);
+                    frame.set_cur_span(stmt.span);
                     tail_handled = true;
                     break;
                 }
@@ -741,30 +726,30 @@ impl AstToIrGenerator {
             tlog!(
                 debug,
                 MSG::IrGenBeforeProcessStmt,
-                &self.symbols.len().to_string()
+                &frame.symbols.len().to_string()
             );
-            self.generate_local_stmt_ir(stmt, &mut instructions, constants)?;
+            frame.generate_local_stmt_ir(stmt, &mut instructions, constants)?;
             // NLL Release: 在语句边界消费释放计划并插入 Drop 指令
-            self.emit_release_drops(stmt.plan_id, &mut instructions);
+            frame.emit_release_drops(stmt.plan_id, &mut instructions);
             // #393：语句级临时寄存器回收（同 generate_block_ir——临时不跨
             // 语句存活，回滚到具名水位与循环态地板的较大者）
-            let named_watermark = self
+            let named_watermark = frame
                 .cur_locals
                 .iter()
                 .rposition(|slot| slot.name.is_some())
                 .map_or(0, |i| i + 1);
-            self.next_temp = named_watermark.max(self.temp_floor);
+            frame.next_temp = named_watermark.max(frame.temp_floor);
             tlog!(
                 debug,
                 MSG::IrGenAfterProcessStmt,
-                &self.symbols.len().to_string()
+                &frame.symbols.len().to_string()
             );
-            self.set_cur_span(stmt.span);
+            frame.set_cur_span(stmt.span);
         }
         if !tail_handled {
             instructions.push(Instruction::Ret {
                 value: None,
-                span: self.cur_span,
+                span: frame.cur_span,
             });
         }
 
@@ -772,33 +757,21 @@ impl AstToIrGenerator {
         tlog!(
             debug,
             MSG::IrGenAboutToExitScope,
-            &self.symbols.len().to_string()
+            &frame.symbols.len().to_string()
         );
-        self.exit_scope();
+        frame.exit_scope();
         tlog!(
             debug,
             MSG::IrGenAfterExitScope,
-            &self.symbols.len().to_string()
+            &frame.symbols.len().to_string()
         );
 
-        // E3014 寄存器溢出：寄存器索引是 u8（上限 255），故局部+临时寄存器
-        // 总数必须 ≤ 255。此前这里写 MAX_LOCALS = 65_535（与 u8 不符），
-        // 几百个局部变量会落进 OperandResolver 的溢出分支——该分支构造
-        // E3014（requires_span 码）时无 span 可挂，debug 构建直接 panic。
-        // 现在在 IR 层就拦住并带上函数 span（#271 静默/崩溃同类：宁可报错不崩）。
-        let total_locals = self.temp_high_water;
-        const MAX_REGISTERS: usize = 255;
-        if total_locals > MAX_REGISTERS {
-            return Err(ErrorCodeDefinition::register_overflow(
-                &total_locals.to_string(),
-                &MAX_REGISTERS.to_string(),
-            )
-            .build());
-        }
-        let locals_types: Vec<LocalSlot> = self.take_cur_locals(total_locals);
+        // 槽位表 + 寄存器预算（E3014）单点：函数体形态共用 take_body_locals，
+        // 越界在这里带 span 报错（#271 静默/崩溃同类：宁可报错不崩）。
+        let locals_types: Vec<LocalSlot> = frame.take_body_locals()?;
 
-        // 还原闭包定型上下文（避免串到下一个函数）
-        self.closure_decl_params = saved_closure_decl;
+        // 还原闭包定型上下文（避免串到下一个函数）——非寄存器状态，仍手工配对
+        frame.closure_decl_params = saved_closure_decl;
 
         // 构建函数 IR
         let func_ir = FunctionIR {
@@ -808,7 +781,7 @@ impl AstToIrGenerator {
             // （parser 不再往实现头填声明类型，声明是 IR 唯一的类型来源；D54 F1 /
             // WBS 6.8.3）。拿不到声明类型时按 WBS 2.1.2 的惯例填 Int(64) 占位——
             // filter_map 丢弃会让 params 长度与帧布局错位（verify 实测）。
-            params: self.impl_param_types(params, type_annotation),
+            params: frame.impl_param_types(params, type_annotation),
             return_type,
             generic_params,
             body: FunctionBody::Code {
@@ -821,12 +794,6 @@ impl AstToIrGenerator {
                 locals: locals_types,
             },
         };
-
-        // #311：恢复父函数的循环上下文
-        self.loop_stack = saved_loop_stack;
-        // 恢复父函数的槽位表：本函数可能是在父函数体内生成的嵌套函数，
-        // 清空/取用后必须把父函数的名字放回去，否则父函数已记录的局部名会丢失。
-        self.cur_locals = saved_cur_locals;
 
         Ok(Some(func_ir))
     }
@@ -996,12 +963,19 @@ impl AstToIrGenerator {
                     } else {
                         Some(generic_params.iter().map(|p| p.name.clone()).collect())
                     };
+                    // WBS 7a.2 第 7 处：嵌套函数定义自带独立帧（子体在 `enter_decl` 里
+                    // 自行复位计数），**父函数的帧必须在调用返回后原样恢复**——否则父体
+                    // 后续语句从子体基数继续分配临时槽：槽位互踩，且父体 `locals_total`
+                    // 可能小于它已引用的槽位（越界）。此前只有 curry/lambda/anon 路径与
+                    // next_temp 成对 save/restore，这条路径漏了（本条即补上）。
+                    //
                     // curry 分流：如果 return_type 是 Type::Fn，走 curry 生成路径
                     // 注意：必须传签名全层形参（signature），而非 params（仅 Lambda 参数）
-                    let func_result =
+                    let func_result = {
+                        let mut guard = NestedBodyGuard::enter(self);
                         if let Some(ast::Type::Fn { return_type, .. }) = type_annotation.as_ref() {
                             if matches!(return_type.as_ref(), ast::Type::Fn { .. }) {
-                                self.generate_curry_function_ir(
+                                guard.generate_curry_function_ir(
                                     &name,
                                     type_annotation.as_ref().unwrap(),
                                     &signature,
@@ -1010,7 +984,7 @@ impl AstToIrGenerator {
                                     generic_param_names,
                                 )
                             } else {
-                                self.generate_function_ir(
+                                guard.generate_function_ir(
                                     &name,
                                     type_annotation.as_ref(),
                                     &params,
@@ -1020,7 +994,7 @@ impl AstToIrGenerator {
                                 )
                             }
                         } else {
-                            self.generate_function_ir(
+                            guard.generate_function_ir(
                                 &name,
                                 type_annotation.as_ref(),
                                 &params,
@@ -1028,7 +1002,8 @@ impl AstToIrGenerator {
                                 constants,
                                 generic_param_names,
                             )
-                        };
+                        }
+                    };
                     match func_result {
                         Ok(Some(func_ir)) => {
                             self.nested_functions.push(func_ir);

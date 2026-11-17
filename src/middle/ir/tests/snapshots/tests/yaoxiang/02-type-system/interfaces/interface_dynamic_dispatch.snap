@@ -50,7 +50,7 @@ module
     Ret %7
   fn describe(TypeRef("Animal")) -> Generic { name: "String", args: [] }
     slot[0] a : Int(64) @depth1
-    locals_total=10
+    locals_total=12
     Load %0 <- arg%0
     Load %1 <- %0
     VariantTag %2 <- %1 : Animal$Group
@@ -59,13 +59,16 @@ module
     JmpIfNot %4 -> instr(9)
     VariantPayload %5 <- %1 : Animal$Group
     Call %6 <- string("Cat.speak") [%5] (def=d0)
-    Jmp -> instr(15)
+    Jmp -> instr(18)
     Load %7 <- int(1)
     Eq %8 <- %2, %7
     JmpIfNot %8 -> instr(15)
     VariantPayload %9 <- %1 : Animal$Group
     Call %6 <- string("Dog.speak") [%9] (def=d1)
-    Jmp -> instr(15)
+    Jmp -> instr(18)
+    Load %10 <- bool(false)
+    Load %11 <- string("interface dispatch: unknown variant tag for Animal::speak")
+    Call %6 <- string("std.assert.assert") [%10, %11] (def=d2)
     Ret %6
     Ret %6
   fn main() -> Void
@@ -75,16 +78,16 @@ module
     slot[3] a1 : Int(64) @depth1
     slot[4] d : Int(64) @depth1
     slot[5] animals2 : Int(64) @depth1
-    locals_total=21
+    locals_total=23
     AllocArray %0 size=int(2), elem=int(1)
     Load %1 <- string("Rex")
     Load %2 <- int(3)
-    Call %3 <- string("Dog") [%1, %2] (def=d2)
+    Call %3 <- string("Dog") [%1, %2] (def=d3)
     CreateVariant %4 <- Animal$Group::1 %3
     Load %5 <- int(0)
     StoreIndex %0[%5] <- %4
     Load %6 <- int(9)
-    Call %7 <- string("Cat") [%6] (def=d3)
+    Call %7 <- string("Cat") [%6] (def=d4)
     CreateVariant %8 <- Animal$Group::0 %7
     Load %9 <- int(1)
     StoreIndex %0[%9] <- %8
@@ -97,39 +100,45 @@ module
     JmpIfNot %7 -> instr(22)
     VariantPayload %6 <- %3 : Animal$Group
     Call %4 <- string("Cat.speak") [%6] (def=d0)
-    Jmp -> instr(28)
+    Jmp -> instr(31)
     Load %9 <- int(1)
     Eq %10 <- %5, %9
     JmpIfNot %10 -> instr(28)
     VariantPayload %11 <- %3 : Animal$Group
     Call %4 <- string("Dog.speak") [%11] (def=d1)
-    Jmp -> instr(28)
+    Jmp -> instr(31)
+    Load %12 <- bool(false)
+    Load %13 <- string("interface dispatch: unknown variant tag for Animal::speak")
+    Call %4 <- string("std.assert.assert") [%12, %13] (def=d2)
     Load %2 <- %4
     Load %5 <- string("Woof")
     Eq %1 <- %2, %5
     Load %8 <- string("Dog element dispatches speak -> Woof")
-    Call %3 <- string("std.assert.assert") [%1, %8] (def=d4)
+    Call %3 <- string("std.assert.assert") [%1, %8] (def=d2)
     Load %2 <- %0
     Load %5 <- int(1)
     LoadIndex %1 <- %2[%5]
     VariantTag %8 <- %1 : Animal$Group
     Load %7 <- int(0)
     Eq %6 <- %8, %7
-    JmpIfNot %6 -> instr(43)
+    JmpIfNot %6 -> instr(46)
     VariantPayload %9 <- %1 : Animal$Group
     Call %3 <- string("Cat.speak") [%9] (def=d0)
-    Jmp -> instr(49)
+    Jmp -> instr(55)
     Load %10 <- int(1)
     Eq %11 <- %8, %10
-    JmpIfNot %11 -> instr(49)
+    JmpIfNot %11 -> instr(52)
     VariantPayload %12 <- %1 : Animal$Group
     Call %3 <- string("Dog.speak") [%12] (def=d1)
-    Jmp -> instr(49)
+    Jmp -> instr(55)
+    Load %13 <- bool(false)
+    Load %14 <- string("interface dispatch: unknown variant tag for Animal::speak")
+    Call %3 <- string("std.assert.assert") [%13, %14] (def=d2)
     Load %5 <- %3
     Load %8 <- string("Meow")
     Eq %2 <- %5, %8
     Load %7 <- string("Cat element dispatches speak -> Meow")
-    Call %1 <- string("std.assert.assert") [%2, %7] (def=d4)
+    Call %1 <- string("std.assert.assert") [%2, %7] (def=d2)
     Load %5 <- %0
     Load %8 <- int(1)
     LoadIndex %2 <- %5[%8]
@@ -137,21 +146,24 @@ module
     VariantTag %6 <- %2 : Animal$Group
     Load %9 <- int(0)
     Eq %10 <- %6, %9
-    JmpIfNot %10 -> instr(65)
+    JmpIfNot %10 -> instr(71)
     VariantPayload %11 <- %2 : Animal$Group
     Call %1 <- string("Cat.age_up") [%11, %7] (def=d5)
-    Jmp -> instr(71)
+    Jmp -> instr(80)
     Load %12 <- int(1)
     Eq %13 <- %6, %12
-    JmpIfNot %13 -> instr(71)
+    JmpIfNot %13 -> instr(77)
     VariantPayload %14 <- %2 : Animal$Group
     Call %1 <- string("Dog.age_up") [%14, %7] (def=d6)
-    Jmp -> instr(71)
+    Jmp -> instr(80)
+    Load %15 <- bool(false)
+    Load %16 <- string("interface dispatch: unknown variant tag for Animal::age_up")
+    Call %1 <- string("std.assert.assert") [%15, %16] (def=d2)
     Load %8 <- %1
     Load %7 <- int(28)
     Eq %5 <- %8, %7
     Load %6 <- string("Cat age_up(1) dispatches with argument (27+1)")
-    Call %2 <- string("std.assert.assert") [%5, %6] (def=d4)
+    Call %2 <- string("std.assert.assert") [%5, %6] (def=d2)
     Load %5 <- %0
     Load %8 <- int(0)
     LoadIndex %2 <- %5[%8]
@@ -159,20 +171,23 @@ module
     VariantTag %10 <- %9 : Animal$Group
     Load %11 <- int(0)
     Eq %12 <- %10, %11
-    JmpIfNot %12 -> instr(87)
+    JmpIfNot %12 -> instr(96)
     VariantPayload %13 <- %9 : Animal$Group
     Call %7 <- string("Cat.speak") [%13] (def=d0)
-    Jmp -> instr(93)
+    Jmp -> instr(105)
     Load %14 <- int(1)
     Eq %15 <- %10, %14
-    JmpIfNot %15 -> instr(93)
+    JmpIfNot %15 -> instr(102)
     VariantPayload %16 <- %9 : Animal$Group
     Call %7 <- string("Dog.speak") [%16] (def=d1)
-    Jmp -> instr(93)
+    Jmp -> instr(105)
+    Load %17 <- bool(false)
+    Load %18 <- string("interface dispatch: unknown variant tag for Animal::speak")
+    Call %7 <- string("std.assert.assert") [%17, %18] (def=d2)
     Load %6 <- string("Woof")
     Eq %8 <- %7, %6
-    Load %17 <- string("two-step element dispatch")
-    Call %5 <- string("std.assert.assert") [%8, %17] (def=d4)
+    Load %19 <- string("two-step element dispatch")
+    Call %5 <- string("std.assert.assert") [%8, %19] (def=d2)
     Load %10 <- %0
     Load %11 <- int(0)
     LoadIndex %9 <- %10[%11]
@@ -180,7 +195,7 @@ module
     Load %6 <- string("Woof")
     Eq %8 <- %7, %6
     Load %12 <- string("fn param polymorphism (Dog)")
-    Call %5 <- string("std.assert.assert") [%8, %12] (def=d4)
+    Call %5 <- string("std.assert.assert") [%8, %12] (def=d2)
     Load %10 <- %0
     Load %11 <- int(1)
     LoadIndex %9 <- %10[%11]
@@ -188,11 +203,11 @@ module
     Load %6 <- string("Meow")
     Eq %8 <- %7, %6
     Load %12 <- string("fn param polymorphism (Cat)")
-    Call %5 <- string("std.assert.assert") [%8, %12] (def=d4)
+    Call %5 <- string("std.assert.assert") [%8, %12] (def=d2)
     Load %8 <- %0
     Load %9 <- string("Bella")
     Load %10 <- int(5)
-    Call %6 <- string("Dog") [%9, %10] (def=d2)
+    Call %6 <- string("Dog") [%9, %10] (def=d3)
     CreateVariant %7 <- Animal$Group::1 %6
     Call %5 <- string("std.list.append") [%8, %7] (def=d8)
     Drop %0
@@ -202,20 +217,23 @@ module
     VariantTag %13 <- %10 : Animal$Group
     Load %14 <- int(0)
     Eq %15 <- %13, %14
-    JmpIfNot %15 -> instr(130)
+    JmpIfNot %15 -> instr(142)
     VariantPayload %16 <- %10 : Animal$Group
     Call %6 <- string("Cat.speak") [%16] (def=d0)
-    Jmp -> instr(136)
+    Jmp -> instr(151)
     Load %17 <- int(1)
     Eq %18 <- %13, %17
-    JmpIfNot %18 -> instr(136)
+    JmpIfNot %18 -> instr(148)
     VariantPayload %19 <- %10 : Animal$Group
     Call %6 <- string("Dog.speak") [%19] (def=d1)
-    Jmp -> instr(136)
+    Jmp -> instr(151)
+    Load %20 <- bool(false)
+    Load %21 <- string("interface dispatch: unknown variant tag for Animal::speak")
+    Call %6 <- string("std.assert.assert") [%20, %21] (def=d2)
     Load %9 <- string("Woof")
     Eq %7 <- %6, %9
-    Load %20 <- string("append implements-member then dispatch")
-    Call %8 <- string("std.assert.assert") [%7, %20] (def=d4)
+    Load %22 <- string("append implements-member then dispatch")
+    Call %8 <- string("std.assert.assert") [%7, %22] (def=d2)
     Drop %1
     Drop %0
     Drop %5

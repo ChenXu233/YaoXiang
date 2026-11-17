@@ -14,7 +14,7 @@ module
   fn main() -> Void
     slot[0] zoo : Int(64) @depth1
     slot[1] s : Int(64) @depth1
-    locals_total=9
+    locals_total=11
     AllocArray %0 size=int(1), elem=int(1)
     Load %1 <- string("Kiwi")
     Call %2 <- string("Bird") [%1] (def=d0)
@@ -30,7 +30,10 @@ module
     JmpIfNot %7 -> instr(16)
     VariantPayload %8 <- %2 : Animal$Group
     Call %3 <- string("animal_speak") [%8] (def=d1)
-    Jmp -> instr(16)
+    Jmp -> instr(19)
+    Load %9 <- bool(false)
+    Load %10 <- string("interface dispatch: unknown variant tag for Animal::speak")
+    Call %3 <- string("std.assert.assert") [%9, %10] (def=d2)
     Load %4 <- %3
     Load %5 <- string("Tweet")
     Eq %1 <- %4, %5

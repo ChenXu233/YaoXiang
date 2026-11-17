@@ -4,13 +4,22 @@
 //! `temp_floor`）、全局槽位查询，以及 `note_*` written-type/量词事实的写入与读回。
 //! 方法体逐字搬自原 `middle/ir/ir_gen.rs`（WBS 7.0.1），语义未改。
 
-use super::{AstToIrGenerator, SymbolEntry};
+use super::{AstToIrGenerator, LoopTargets, SymbolEntry};
 use crate::ast;
 use crate::frontend::core::sema::MonoType;
 use crate::middle::ir::ir::LocalSlot;
 use crate::tlog;
+use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};
 use crate::util::i18n::MSG;
+use crate::util::span::Span;
 use std::collections::HashMap;
+
+/// 寄存器索引是 u8（middle/passes/codegen/operand.rs 的 OperandResolver 上限）：
+/// 一个函数体的局部槽 + 临时槽总数不得超过它。
+///
+/// **唯一定义点**：预算闸只有 [`AstToIrGenerator::take_body_locals`] 一处，所有
+/// 函数体形态（函数 / 方法 / lambda / 匿名绑定 / curry 层）都经那里取槽位表。
+pub(super) const MAX_REGISTERS: usize = 255;
 
 impl AstToIrGenerator {
     /// 进入新的作用域
@@ -243,5 +252,113 @@ impl AstToIrGenerator {
     ) -> Option<&str> {
         self.local_written_type(name)
             .or_else(|| self.global_written_types.get(name).map(String::as_str))
+    }
+}
+
+impl AstToIrGenerator {
+    /// 取本函数体的槽位表，并检查寄存器预算（E3014）——**唯一取表点**。
+    ///
+    /// 所有函数体形态（函数 / 方法 / lambda / 匿名绑定 / curry 层）都从这里取表，
+    /// 因此预算闸覆盖全部形态、槽位数口径只有一份：本次生成期间的真高水位
+    /// （`temp_high_water`）。越界必须在 IR 层带 span 报错——留到下游
+    /// `OperandResolver` 就只剩无 span 的构造点（debug 直接 panic，见 #271/#324）。
+    pub(in crate::middle) fn take_body_locals(&mut self) -> Result<Vec<LocalSlot>, Diagnostic> {
+        let total_locals = self.temp_high_water;
+        if total_locals > MAX_REGISTERS {
+            return Err(ErrorCodeDefinition::register_overflow(
+                &total_locals.to_string(),
+                &MAX_REGISTERS.to_string(),
+            )
+            .at(self.cur_span)
+            .build());
+        }
+        Ok(self.take_cur_locals(total_locals))
+    }
+}
+
+/// 被 [`NestedBodyGuard`] 摘下来的父帧。
+///
+/// `counters` 为 `None` 表示这次帧边界**不回滚**三项计数（声明面口径，见
+/// [`NestedBodyGuard::enter_decl`]）；表与当前 span 一律回滚。
+struct SavedFrame {
+    counters: Option<(usize, usize, usize)>,
+    cur_span: Span,
+    cur_locals: Vec<LocalSlot>,
+    loop_stack: Vec<LoopTargets>,
+}
+
+/// 嵌套函数体的寄存器帧 guard（WBS 7a.2）。
+///
+/// 一个**独立指令流**——函数 / 方法 / lambda / 匿名绑定 / curry 层——有自己一套
+/// 寄存器帧：临时槽从本体基数起算，槽位表与循环栈从空开始。进入时把父帧整体摘进
+/// 本 guard，离开时由 [`Drop`] 整体放回。
+///
+/// **类型强制**：帧的「摘走」只发生在两个构造函数里，「放回」只发生在 `Drop` 里。
+/// guard 在生命周期内**独占借用**生成器（`&'a mut AstToIrGenerator`），本体代码
+/// 只能经 `Deref` / `DerefMut` 触达它——作用域里不再有第二份 `&mut` 可用。于是
+/// 「重置了却忘了恢复」「恢复写在 `?`/`return` 之后」这两类手工纪律都失去了可写的
+/// 落点：恢复只有一份实现，且它在 guard 离开作用域时无条件执行。
+#[must_use = "寄存器帧由 guard 持有：立即丢弃等于没有隔离，函数体必须在它上面生成"]
+pub(super) struct NestedBodyGuard<'a> {
+    gen: &'a mut AstToIrGenerator,
+    saved: SavedFrame,
+}
+
+impl<'a> NestedBodyGuard<'a> {
+    /// **本体帧入口**：摘走父帧（槽位表 / 循环栈 / 当前 span / 三项计数）。
+    ///
+    /// 父确实是一个帧（函数体 / 方法体 / lambda / 匿名绑定 / curry 层）时用它：
+    /// 调用点随后按本体的口径把计数装到基态（见各调用点的注释），`Drop` 时父帧
+    /// 原样放回——`next_temp` / `temp_high_water` / `temp_floor` 不再串到父体。
+    pub(super) fn enter(gen: &'a mut AstToIrGenerator) -> Self {
+        let saved = SavedFrame {
+            counters: Some((gen.next_temp, gen.temp_high_water, gen.temp_floor)),
+            cur_span: gen.cur_span,
+            cur_locals: std::mem::take(&mut gen.cur_locals),
+            loop_stack: std::mem::take(&mut gen.loop_stack),
+        };
+        Self { gen, saved }
+    }
+
+    /// **声明面入口**：帧边界只覆盖槽位表 / 循环栈 / 当前 span，**三项计数不回滚**。
+    ///
+    /// 模块级声明（顶层函数、类型定义里的方法）用它：模块初始化序列不是函数体帧，
+    /// 它的寄存器计数沿用既有口径——接着用子体的终值（WBS 7a.2 保持 C1 zero-diff；
+    /// 计数的帧回滚只发生在父确实是一个帧的场合，见 [`Self::enter`]）。
+    pub(super) fn enter_decl(gen: &'a mut AstToIrGenerator) -> Self {
+        let saved = SavedFrame {
+            counters: None,
+            cur_span: gen.cur_span,
+            cur_locals: std::mem::take(&mut gen.cur_locals),
+            loop_stack: std::mem::take(&mut gen.loop_stack),
+        };
+        Self { gen, saved }
+    }
+}
+
+impl std::ops::Deref for NestedBodyGuard<'_> {
+    type Target = AstToIrGenerator;
+
+    fn deref(&self) -> &Self::Target {
+        self.gen
+    }
+}
+
+impl std::ops::DerefMut for NestedBodyGuard<'_> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.gen
+    }
+}
+
+impl Drop for NestedBodyGuard<'_> {
+    fn drop(&mut self) {
+        self.gen.cur_locals = std::mem::take(&mut self.saved.cur_locals);
+        self.gen.loop_stack = std::mem::take(&mut self.saved.loop_stack);
+        self.gen.cur_span = self.saved.cur_span;
+        if let Some((next_temp, temp_high_water, temp_floor)) = self.saved.counters {
+            self.gen.next_temp = next_temp;
+            self.gen.temp_high_water = temp_high_water;
+            self.gen.temp_floor = temp_floor;
+        }
     }
 }

@@ -4,6 +4,7 @@
 //! 常量初始化体与类型定义绑定判定。方法体逐字搬自原 `middle/ir/ir_gen.rs`
 //! （WBS 7.0.2），语义未改。
 
+use super::scope::NestedBodyGuard;
 use super::AstToIrGenerator;
 use crate::ast;
 use crate::frontend::core::sema::MonoType;
@@ -354,66 +355,48 @@ impl AstToIrGenerator {
         body: &ast::Expr,
         constants: &mut Vec<ConstValue>,
     ) -> Result<Option<FunctionIR>, Diagnostic> {
-        // 保存父函数状态
-        let saved_next_temp = self.next_temp;
-        let saved_temp_high_water = self.temp_high_water;
-        let saved_temp_floor = self.temp_floor;
-        let saved_cur_locals = std::mem::take(&mut self.cur_locals);
-        // cur_span 与 next_temp 同款：嵌套函数体是独立源码单元
-        let saved_cur_span = self.cur_span;
-
-        // #311：嵌套函数体是独立指令流，循环栈属父函数——保存并清空
-        //（typecheck 已用 E1102 拦截函数体内的 break/continue，此处为层间失联防御）
-        let saved_loop_stack = std::mem::take(&mut self.loop_stack);
-
-        // 顶层函数体入口：清空槽位表，避免沿用上一个函数的局部名。
+        // WBS 7a.2：匿名绑定体是独立指令流——父帧（槽位表 / 循环栈 / 当前 span /
+        // 三项计数）整体摘进 guard，Drop 时原样返回。
+        let mut frame = NestedBodyGuard::enter(self);
 
         let mut instructions = Vec::new();
 
         // 进入匿名函数作用域
-        self.enter_scope();
+        frame.enter_scope();
 
         // 为每个参数生成 LoadArg 指令并注册
         for (i, param) in params.iter().enumerate() {
             instructions.push(Instruction::Load {
                 dst: Operand::Local(i),
                 src: Operand::Arg(i),
-                span: self.cur_span,
+                span: frame.cur_span,
             });
 
-            self.register_local(&param.name, i);
+            frame.register_local(&param.name, i);
         }
         // 匿名绑定 / 闭包的形参就是声明（绑定注解 / 返回位内层 Fn）本身，无需补位。
-        self.note_param_written_types(params, &[]);
+        frame.note_param_written_types(params, &[]);
 
         // 记录局部变量起始位置
         let local_var_start = params.len();
-        self.next_temp = local_var_start;
+        frame.next_temp = local_var_start;
         // #393：独立寄存器空间——高水位与循环态地板随之清零
-        self.temp_high_water = local_var_start;
-        self.temp_floor = 0;
+        frame.temp_high_water = local_var_start;
+        frame.temp_floor = 0;
 
         // 生成表达式体的 IR，并返回结果
-        let result_reg = self.next_temp_reg();
-        self.generate_expr_ir(body, result_reg, &mut instructions, constants)?;
+        let result_reg = frame.next_temp_reg();
+        frame.generate_expr_ir(body, result_reg, &mut instructions, constants)?;
         instructions.push(Instruction::Ret {
             value: Some(Operand::Local(result_reg)),
-            span: self.cur_span,
+            span: frame.cur_span,
         });
 
         // 退出作用域
-        self.exit_scope();
+        frame.exit_scope();
 
-        // 计算局部变量总数
-        let total_locals = self.temp_high_water;
-        let locals_types: Vec<LocalSlot> = self.take_cur_locals(total_locals);
-
-        // 恢复父函数状态
-        self.next_temp = saved_next_temp;
-        self.temp_high_water = saved_temp_high_water;
-        self.temp_floor = saved_temp_floor;
-        self.cur_locals = saved_cur_locals;
-        self.cur_span = saved_cur_span;
+        // 槽位表 + 寄存器预算（E3014）单点
+        let locals_types: Vec<LocalSlot> = frame.take_body_locals()?;
 
         // 解析返回类型
         let ret_type: MonoType = return_type.clone().into();
@@ -438,9 +421,6 @@ impl AstToIrGenerator {
                 locals: locals_types,
             },
         };
-
-        // #311：恢复父函数的循环上下文
-        self.loop_stack = saved_loop_stack;
 
         Ok(Some(func_ir))
     }

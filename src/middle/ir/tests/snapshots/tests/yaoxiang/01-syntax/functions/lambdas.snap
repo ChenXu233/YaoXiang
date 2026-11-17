@@ -1,6 +1,6 @@
 module
   fn main() -> Void
-    locals_total=8
+    locals_total=7
     Load %0 <- int(21)
     Call %1 <- string("double") [%0] (def=d0)
     Load %2 <- int(42)

@@ -199,7 +199,41 @@ impl AstToIrGenerator {
             }
         }
 
-        // 汇合点（VariantTag 守卫保证 tag 恒在集合内）
+        // 兜底臂：tag 不在实现集合内。VariantTag 是**运行期**取值，静态没有
+        // 「tag 恒在集合内」的守卫（此处原先的注释正是这个错误假设）：末臂
+        // JmpIfNot 失败时直接落到汇合点，结果槽从未被写——`s = a.speak()`
+        // 这类把具名槽直接交给分发链的构造因此触犯支配性不变量
+        // （verify_loose: 读取槽位 Local(n) 存在无定义路径）。
+        //
+        // 修复口径：未知 tag 路径也**定义结果槽**，并且不静默返回陈旧值——
+        // 走既有「Never 返回的 native 即陷阱」的写法（`std.assert.assert` 声明
+        // 返回 Never，`Never <: T` 使其可写进任意结果槽；IR 层的 Call dst 即
+        // 一次定义）。失败点在运行期、消息写明接口与方法，不新增诊断码，
+        // 也不改动任何命中分支的指令与顺序。
+        let false_reg = self.next_temp_reg();
+        instructions.push(Instruction::Load {
+            dst: Operand::Local(false_reg),
+            src: Operand::Const(ConstValue::Bool(false)),
+            span,
+        });
+        let msg_reg = self.next_temp_reg();
+        instructions.push(Instruction::Load {
+            dst: Operand::Local(msg_reg),
+            src: Operand::Const(ConstValue::String(format!(
+                "interface dispatch: unknown variant tag for {}::{}",
+                iface, method
+            ))),
+            span,
+        });
+        instructions.push(Instruction::Call {
+            dst: Some(Operand::Local(result_reg)),
+            func: Operand::Const(ConstValue::String("std.assert.assert".to_string())),
+            args: vec![Operand::Local(false_reg), Operand::Local(msg_reg)],
+            span,
+            def: None,
+        });
+
+        // 汇合点：命中臂的 Jmp 跳过兜底臂，末臂 JmpIfNot 正落在兜底臂入口。
         let end = instructions.len();
         for idx in end_jumps {
             if let Instruction::Jmp {

@@ -9,6 +9,7 @@ use crate::middle::ir::ir::{
     BasicBlock, ConstValue, FunctionBody, FunctionIR, Instruction, LocalSlot, Operand,
 };
 use crate::util::diagnostic::Diagnostic;
+use super::scope::NestedBodyGuard;
 use super::AstToIrGenerator;
 
 /// 一层 curry 签名
@@ -209,8 +210,8 @@ impl AstToIrGenerator {
             })
             .collect();
         let return_type: MonoType = layer.return_type.clone().into();
-        let total_locals = self.temp_high_water;
-        let locals_types: Vec<LocalSlot> = self.take_cur_locals(total_locals);
+        // 槽位表 + 寄存器预算（E3014）单点
+        let locals_types: Vec<LocalSlot> = self.take_body_locals()?;
 
         Ok(FunctionIR {
             def: None, // 由 generate_module_ir 尾部 assign_defs 填充
@@ -244,14 +245,12 @@ impl AstToIrGenerator {
         constants: &mut Vec<ConstValue>,
         generic_params: Option<Vec<String>>,
     ) -> Result<FunctionIR, Diagnostic> {
-        // #311：嵌套函数体是独立指令流，循环栈属父函数——保存并清空
-        //（typecheck 已用 E1102 拦截函数体内的 break/continue，此处为层间失联防御）
-        let saved_loop_stack = std::mem::take(&mut self.loop_stack);
-
-        // 顶层函数体入口：清空槽位表，避免沿用上一个函数的局部名。
+        let env_count = env_params.len();
+        // WBS 7a.2：curry 最内层是独立指令流——父帧（curry 函数那一层）整体摘进
+        // guard，Drop 时原样返回。
+        let mut frame = NestedBodyGuard::enter(self);
 
         let mut instructions = Vec::new();
-        let env_count = env_params.len();
 
         // 参数原位注册，不生成 LoadArg：args 槽布局 = [外层参数(0..env_count),
         // 本层参数(env_count..)]，正是 body 需要的最终布局。LoadArg 搬动会因
@@ -262,15 +261,15 @@ impl AstToIrGenerator {
         // 擦除前识别体内对它的引用要靠这条事实。
         // 与中间层**同一处**（`register_curry_layer_bindings`）写绑定与量词事实：
         // 两个层的槽布局相同（env 在前、本层参数在后），事实同源（`Param::quantity`）。
-        self.register_curry_layer_bindings(env_params, &layer.params, env_count);
+        frame.register_curry_layer_bindings(env_params, &layer.params, env_count);
         // curry 层形参全部来自声明注解本身（层参数由 `split_curry` 从注解切出），
         // 无需声明补位。
-        self.note_param_written_types(&layer.params, &[]);
+        frame.note_param_written_types(&layer.params, &[]);
 
         // next_temp 起始 = 参数总数
-        self.next_temp = env_count + layer.params.len();
-        self.temp_high_water = env_count + layer.params.len();
-        self.temp_floor = 0;
+        frame.next_temp = env_count + layer.params.len();
+        frame.temp_high_water = env_count + layer.params.len();
+        frame.temp_floor = 0;
 
         let return_type: MonoType = layer.return_type.clone().into();
 
@@ -281,34 +280,34 @@ impl AstToIrGenerator {
         let mut tail_handled = false;
         for (i, stmt) in body.iter().enumerate() {
             // 语句边界设定当前 span，供本条语句的所有指令构造就地捕获
-            self.set_cur_span(stmt.span);
+            frame.set_cur_span(stmt.span);
             if Some(i) == last_idx {
-                let result_reg = self.next_temp_reg();
-                if self.generate_tail_stmt_ir(stmt, result_reg, &mut instructions, constants)? {
+                let result_reg = frame.next_temp_reg();
+                if frame.generate_tail_stmt_ir(stmt, result_reg, &mut instructions, constants)? {
                     // 尾语句路径（RFC-039 D20 逐案核实项）：本条语句经
                     // `generate_tail_stmt_ir` 提前返回，**必须**在同款语句边界上
                     // 消费它的释放条目——漏这一处，尾语句的 Drop 就静默丢失
                     //（实测红态里正是这一类：尾位置语句的计划键永不命中）。
                     // 取值已完成（值在 result_reg），故 Drop 排在 Ret 之前。
-                    self.emit_release_drops(stmt.plan_id, &mut instructions);
+                    frame.emit_release_drops(stmt.plan_id, &mut instructions);
                     instructions.push(Instruction::Ret {
                         value: Some(Operand::Local(result_reg)),
-                        span: self.cur_span,
+                        span: frame.cur_span,
                     });
-                    self.set_cur_span(stmt.span);
+                    frame.set_cur_span(stmt.span);
                     tail_handled = true;
                     break;
                 }
             }
-            self.generate_local_stmt_ir(stmt, &mut instructions, constants)?;
+            frame.generate_local_stmt_ir(stmt, &mut instructions, constants)?;
             // NLL Release: 语句边界消费释放计划（RFC-039 D20）
-            self.emit_release_drops(stmt.plan_id, &mut instructions);
-            self.set_cur_span(stmt.span);
+            frame.emit_release_drops(stmt.plan_id, &mut instructions);
+            frame.set_cur_span(stmt.span);
         }
         if !tail_handled {
             instructions.push(Instruction::Ret {
                 value: None,
-                span: self.cur_span,
+                span: frame.cur_span,
             });
         }
 
@@ -322,11 +321,8 @@ impl AstToIrGenerator {
                     .unwrap_or(MonoType::Int(64))
             })
             .collect();
-        let total_locals = self.temp_high_water;
-        let locals_types: Vec<LocalSlot> = self.take_cur_locals(total_locals);
-
-        // #311：恢复父函数的循环上下文
-        self.loop_stack = saved_loop_stack;
+        // 槽位表 + 寄存器预算（E3014）单点
+        let locals_types: Vec<LocalSlot> = frame.take_body_locals()?;
 
         Ok(FunctionIR {
             def: None, // 由 generate_module_ir 尾部 assign_defs 填充
@@ -381,13 +377,9 @@ impl AstToIrGenerator {
         // env 追踪携带**完整形参**（名字 + 量词事实），不是名字平行数组。
         let mut env_params: Vec<ast::Param> = Vec::new();
 
-        // 保存外层状态，避免污染
-        let saved_next_temp = self.next_temp;
-        let saved_temp_high_water = self.temp_high_water;
-        let saved_temp_floor = self.temp_floor;
-        let saved_cur_locals = std::mem::take(&mut self.cur_locals);
-        // cur_span 与 next_temp 同款：嵌套函数体是独立源码单元
-        let saved_cur_span = self.cur_span;
+        // WBS 7a.2：curry 的各层是独立指令流——父帧整体摘进 guard，Drop 时原样
+        // 返回；每一层在循环内自设基态（见下）。
+        let mut frame = NestedBodyGuard::enter(self);
 
         for (i, layer) in layers.iter().enumerate() {
             let is_innermost = i == layers.len() - 1;
@@ -406,14 +398,14 @@ impl AstToIrGenerator {
             };
 
             // 进入新作用域
-            self.enter_scope();
+            frame.enter_scope();
             // 重置本层的临时寄存器（每层独立计数）
-            self.next_temp = 0;
-            self.temp_high_water = 0;
-            self.temp_floor = 0;
+            frame.next_temp = 0;
+            frame.temp_high_water = 0;
+            frame.temp_floor = 0;
 
             let func = if is_innermost {
-                self.generate_curry_innermost_func(
+                frame.generate_curry_innermost_func(
                     &func_name,
                     layer,
                     &env_params,
@@ -423,7 +415,7 @@ impl AstToIrGenerator {
                 )?
             } else {
                 let next_name = format!("__{}_l{}", name, i);
-                self.generate_curry_intermediate_func(
+                frame.generate_curry_intermediate_func(
                     &func_name,
                     layer,
                     &env_params,
@@ -432,26 +424,19 @@ impl AstToIrGenerator {
                     layer_generic_params,
                 )?
             };
-            self.exit_scope();
+            frame.exit_scope();
 
             // 累积本层参数到 env 追踪（给 innermost_func 用）
             env_params.extend(layer.params.iter().cloned());
             layer_funcs.push(func);
         }
 
-        // 恢复外层状态
-        self.next_temp = saved_next_temp;
-        self.temp_high_water = saved_temp_high_water;
-        self.temp_floor = saved_temp_floor;
-        self.cur_locals = saved_cur_locals;
-        self.cur_span = saved_cur_span;
-
         // 内层函数加入 nested_functions，最外层返回给调用者
         // 第 0 个是最外层，其余是内层
         let outer = layer_funcs.remove(0);
-        self.nested_functions.extend(layer_funcs);
-        // 还原闭包定型上下文（避免串到下一个函数）
-        self.closure_decl_params = saved_closure_decl;
+        frame.nested_functions.extend(layer_funcs);
+        // 还原闭包定型上下文（避免串到下一个函数）——非寄存器状态，仍手工配对
+        frame.closure_decl_params = saved_closure_decl;
 
         Ok(Some(outer))
     }
