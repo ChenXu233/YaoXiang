@@ -487,7 +487,7 @@ P10 其余清理与状态修正             06 §S2/S3/S4/S5/S6
 
 > **7.0 设计依据与边界**：目标布局来自 [01-routing](01-routing.md) 的目录树与迁移表——`middle/ir/ir_gen.rs` → `middle/lower/`、`sema/inference/expressions.rs` → `sema/infer/`（调用裁决族 `call/`）。本批**只做纯搬移**，验收判据为「除路径外零语义 diff」（逐文件人工 review）+ C1 快照 zero-diff。它与 [RFC-039](../../rfc/accepted/039-compiler-architecture.md) 替代方案 A「只拆文件、不动范式」的否决不冲突：被否决的是以搬移**替代**范式工作，本批是范式工作的**前置**——7c.1 的 `lower/synth.rs` 依赖 `lower/` 目录就位，7d.1 的 `generate_call_expr_ir` 方法级拆分在搬移后的小文件上进行。expressions 侧按用户裁决走甲案（只拆调用裁决族，`statements.rs` 原地不动）；`inference/ → infer/` 整体改名与 statements 归并属全量迁移，不在本批，留 P7 后另立设计轮。`synth.rs` 是新边界不是搬移，归 7c.1。勘察基线（2026-11-12）：`ir_gen.rs` 9804 行、148 个方法，主体为单个 `impl AstToIrGenerator` 块（约 9250 行）；`expressions.rs` 6825 行、93 个方法，主体为单个 `impl ExpressionInferrer` 块（约 6280 行）；最大方法 `infer_call_expr` 1671 行、`generate_call_expr_ir` 866 行（后者为 7d.1 对象）。
 
-- [ ] **7a 切断多次定义**（3 个三级任务）
+- [x] **7a 切断多次定义**（7a.2 / 7a.3 落地；7a.1 拆出，移至批 b，与 7b.4 同批；2026-11-18 收口，实录见 [09a](./09a-wbs-history.md) §P7 7a）
 - [ ] **7b SSA 形态切换**（6 个三级任务；7b.1 已按 DoD 6 拆为 1a/1b）
 
 > **A/I4 的保留条件（2026-11-13 重写）**：6.9.2-C2c 的「保守保留原件」是 I4 未完成前的临时形态——原件仍带 q=0 槽，克隆体把体内读物化成常量。该规避在 `verify`/`verify_loose` 升为生产门禁前不得移除；#542 是同一前置的清理项。**C3 完成后的重评估（2026-11-16）**：C3 的 T-b 到界退回使「第 9 次开火」的调用点留在原件上 ⇒ 原件被放回、共享层仍有引用者，故 #542 的面收窄到**非递归全覆盖形态**（`fn_const_generic` 族）；处置按用户裁决 B = **排期另案**（P7 批 a 后、post-mono 门禁接线前做 DCE，届时连同本条规避一起移除），见 09a §P6 6.9.2 #542。
@@ -504,14 +504,15 @@ P10 其余清理与状态修正             06 §S2/S3/S4/S5/S6
 | | 7.0.4 `inference/expressions.rs` → `inference/expressions/`（甲案）：调用裁决族拆出 `call/`（入口签名不变，子模块划分按方法簇定），其余为 `expr.rs`；目录名按命名约定「`foo.rs` 的子模块目录叫 `foo/`」；`statements.rs` 与 `inference/` 改名均不动 | 7.0.3 | 同 7.0.1 |
 | | 7.0.5 独立验证轮（覆盖 7.0.1–7.0.4 全部）：IR 快照与语料差分基线同提交再生并人工 review（预期零漂移）；本地九门禁全绿；批次树按 `scripts/dev/scratch.py` 规程 gc | 7.0.4 | 快照与语料基线零漂移；九门禁 exit 0 |
 | | 7.0.6 收口：`01-routing.md` 迁移表两行的落地状态更新、`inference/README.md` 结构段同步、实录进 09a | 7.0.5 | 迁移表状态与实际目录一致；实录登记 |
-| 7a 切断多次定义 | 7a.1 删 3 处语句级回收 | **2.1.2 `verify_loose` 跑绿** | C4 |
-| | 7a.2 6 处 save/restore 换 RAII guard | 7a.1 | C1 快照 zero-diff |
-| | 7a.3 口径统一（`1798` vs `2001`） | 7a.2 | C1 |
+| 7a 切断多次定义 | ~~7a.1 删 3 处语句级回收~~ **拆出，移至批 b，与 7b.4 同批**（删回滚会让槽位数失控：2 条语料 354 / 323 槽越过 255，其余语料峰值 51→211） | **2.1.2 `verify_loose` 跑绿** | C4 |
+| | 7a.2 6 处 save/restore 换 RAII guard（另含第 7 处：嵌套函数定义路径的缺失保存）；实录见 [09a](./09a-wbs-history.md) §P7 7a | 2.1.2 | C1 快照 zero-diff |
+| | 7a.3 口径统一 + E3014 共享检查（`take_body_locals` 单点，覆盖全部函数体形态） | 7a.2 | C1 |
+| | 7a.3a 接口分发链兜底臂（既有缺陷：未知 tag 路径不写结果槽 ⇒ use-before-def）；登记见 [09a](./09a-wbs-history.md) §P7 7a | 7a.3 | verify_loose 绿 + 语料零 diff；D59 C 类 |
 | 7b SSA 形态切换 | 7b.1a `ir.rs` 结构变更 #1-2（`Operand` 变体收敛 + `Instruction::Phi` 引入） | 7a.3 + **P6 完成** | C4；独占 commit |
 | | 7b.1b `ir.rs` 结构变更 #3-5（`FunctionIR` / `BasicBlock` / 类型标注字段） | 7b.1a | C4；独占 commit |
 | | 7b.2 `next_temp_reg` 改 `Operand::Value` | 7b.1 | 同上 |
 | | 7b.3 `translator.rs` 加 `Phi` 臂 | 7b.1 | C4 + `.42` 往返测试 |
-| | 7b.4 线性扫描分配器（u8/255 槽模型内） | 7b.3 | 同上（+500~1000 行） |
+| | 7b.4 线性扫描分配器（u8/255 槽模型内） | 7b.3 + **7a.1**（拆出的删回滚同批） | 同上（+500~1000 行） |
 | 7c 隐式契约显式化 | 7c.1 `synth.rs` 边界 + 边界检查脚本 | 7b.4 | C4 + 新脚本入 CI |
 | | 7c.2 span 消费计数 | 7c.1 | 消费计数**零触发** |
 | | 7c.3 `method_def_ordinals` 只读化 | 7c.1 | 归属存疑（C7） |

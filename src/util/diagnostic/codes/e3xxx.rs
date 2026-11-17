@@ -21,9 +21,11 @@ define_codes!(E3XXX, {
     ("E3008", Codegen, false, ir_unsupported_pattern(pattern: &str) => .param("pattern", pattern)),
     // E3018 单态化实例化失败（#335：此前静默跳过，下游表现为 E6006 函数表缺失）
     ("E3018", Codegen, false, ir_instantiation_failed(func: &str, reason: &str) => .param("func", func).param("reason", reason)),
-    // E3014 寄存器溢出（span 豁免：寄存器索引上限 u8=255 是编译器内部资源限制，
-    // 与具体源码位置无关；两个触发点（IR 层局部变量总数、OperandResolver 单操作数）
-    // 都拿不到函数 span。此前标 false → debug 构建直接 panic，用户看到内部堆栈）
+    // E3014 寄存器溢出。上限 u8=255 是编译器内部资源限制（与源码位置无因果）。
+    // 两个触发点：① IR 层函数体槽位预算闸（lower/scope.rs 的 take_body_locals，
+    // 带函数体 span，诊断准确定位）；② codegen 的 OperandResolver 单操作数解析
+    // （拿不到函数 span）。②无从取 span，故本码保持 span_exempt=true：缺 span 不
+    // panic。（此前标 false → debug 构建直接 panic，用户看到内部堆栈）
     ("E3014", Codegen, true, register_overflow(id: &str, limit: &str) => .param("id", id).param("limit", limit)),
     // E3017 无效操作数（代码生成）
     ("E3017", Codegen, false, codegen_invalid_operand(reason: &str) => .param("reason", reason)),

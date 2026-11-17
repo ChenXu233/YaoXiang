@@ -6956,3 +6956,89 @@ canonical_text(RecordModel) =
 > **四、验证链与 t3 事实更正**：t1 门禁 14 项一轮过（integration 389 = 383+6、fast 2207 条 0 跳过、IR/语料零漂移）→ 队长 diff review（recv_offset 三处回退同步、登记口覆盖 grep、声明与事实一致）→ t2 **PASS**（M1 接收者路由摘除 ⇒ 显式接收者锚红 / M2 登记摘除 ⇒ 外部绑定锚红——两机制各自承重，trial 机械可逆；偏差备案：M2 trial 首跑 cargo 用法拒绝后重跑未作判据、CLI 探针 8 文件为任务 5 项超集全部符合预期）→ t3 **REJECT**（2 条）：①[low] **提交信息 E5xxx 归因错误——事实更正由本节承载（提交已推送不改写）**：E5xxx.md 恰 1 行（E5002 import_error 发射点 checker.rs:3267→3339，+72）实为本修复自身 checker.rs 净 +72 插入（文档注释 +5、绑定口 +9、帮助函数 +64）平移 **6.9 B.4 批引入的 E5002 发射点**；7.0 搬移批两笔 --stat 不含 checker.rs（其引起的 +18 平移已被 P7 收口批 `2ac633fe` 吸收）；修前修复笔 0d198305 未触 E5xxx.md 是因为基线 72f12e99 树尚无该发射点。生成物本身正确（checker.rs:3339 确为该发射点，文档与代码一致）——缺陷仅提交信息因果记录，追溯者以本节为准。②[info] 运行时声称（修前探针/回归计数/幂等/E1014 修前对照）属运行时证据复审未重放——t2 已全部独立实测闭环；静态侧核到：四形态修前静默与 diff 删除行一致、p1_named_const 的 E1014 与调用侧 bind_named_args（#452 既有、offset 1 硬编）路径一致——**E1014 为修前既有边界备案**（命名调用面对接收者形态声明），非本批引入。
 
 > **五、锚与移交**：锚 6 条新（tests/integration/check.rs：显式接收者 / 外部绑定 ×2 / 类型体外部绑定 / 对照 ×2，修前红态逐字留档段头）；回归 #538/#539/#556/#537 系列原样绿。三级 +1 = 3.20.32（244→245）；二级不变。issue [#553](https://github.com/ChenXu233/YaoXiang/issues/553) **关闭**；face ④ 另案立新 issue（跨模块方法导入载体，S-needs-decision）。修复笔推送终态 `3a3fad47`。批次树已 release + gc。
+## P7 7a 切断多次定义收口（2026-11-18）
+
+> 计划见 [09](./09-execution-wbs.md) §P7 7a。原定三笔：7a.1 删三处语句级回收 / 7a.2 save-restore 换 RAII guard / 7a.3 口径统一与 E3014 共享检查。**7a.1 在开工第一轮被实测证伪前提，经用户裁决 C 拆出，移至批 b 与 7b.4 同批**；批 a 落 7a.2 + 7a.3，并顺路修两处既有缺陷（第 7 处缺失保存、接口分发链缺兜底臂）。代码与 3 份快照提交 `cf88580b`（父 `50bd3c3e`，9 files / +380 / −285）。
+
+### 一、判据链
+
+- **C1 快照**：`test_ir_snapshots_stable` 232 条。前 6 处纯重构靠分阶段实证——只留 6 处 guard 化、临时撤掉第 7 处时，232/232 与父 revision 全等；加第 7 处后唯一漂移是 `lambdas.snap` 的 `locals_total 8→7`（§四）。
+- **C4 行为等价**：语料差分 402/402、diff 为空（`check-corpus-parity` exit 0）。
+- **verify_loose**：`cargo test --lib verify` 21 条全绿，含全语料 `verify_loose`。
+- **门禁**：`cargo fmt --check` / `cargo clippy --all --all-features --all-targets -- -D warnings` / `testsuite run fast`（2306 条）/ `check-docs-truth` / `check-fanout` / `check-test-channel` 全 exit 0；`check-docs-refs` 与 `check-boundary --strict` 是既有项（§七）。
+- **04 的两处推论就此定稿**：`04-ssa.md` §可行性前提「其二」的「去掉回滚不会让槽位失控」被删回滚试验证伪（§二）；`verify_loose` 的 temp 槽豁免掩盖了分发链的 use-before-def（§三）。
+
+### 二、7a.1 的前提证伪与用户裁决 C
+
+删掉三处语句级回收（`src/middle/lower/stmt.rs` 的 `generate_function_ir` 与 `generate_block_ir`、`src/middle/lower/expr/closure.rs` 的 `generate_lambda_body_ir`）后，在冻结 revision 的批次树上跑全语料：
+
+| 观测 | 删回滚后 |
+| --- | --- |
+| 槽位越界转 E3014 | 2 条语料：`src/std/tests/string_ops.yx` 354 槽、`tests/yaoxiang/01-syntax/control-flow/list_comp.yx` 323 槽（上限 255） |
+| 全语料槽位峰值 | 51 → 211 |
+| `verify_loose` 转红 | 接口分发两条语料共 8 处 use-before-def：`interface_dynamic_dispatch.yx` / `interface_rebind_dispatch.yx` |
+| IR 快照漂移 | 208 / 232 |
+
+**用户裁决 C（2026-11-17）**：三处回收保留，`next_temp` 仍可回滚，**不改成单调计数器**；7a.1 拆出本批、移至批 b，与 7b.4 同批。理由即上表：删回滚要求分配器先承担槽位复用，否则槽位数失控（354 / 323 越 255、峰值 51→211）。**04 的可行性前提据此就地更正**，09 的 7a.1 行标注「拆出，移至批 b，与 7b.4 同批」并在 7b.4 行登记前置。
+
+### 三、两处前置修复与判据链
+
+两处都是**既有缺陷**（父 revision 上同样可复现），旧行为非成功（槽位越界未被捕获 / 静默错值），按 D59 随重构顺路修并同提交登记。
+
+**修复 1：第 7 处 = 嵌套函数定义路径的缺失保存。** `generate_method_ir` / `generate_function_ir` 走 `enter_decl`，三项计数不回滚——这是 C1 的约束（模块初始化流接着子体终值编号）。但嵌套函数定义的调用点原先没有对应的 guard：子体把父的 `next_temp` / `temp_high_water` / `temp_floor` 换成子体终值后，父体继续分配就从偏低的水位起算，父体已引用的槽位可能落在 `locals_total` 之外。
+
+- 红色判据（父 revision 二进制，冻结 revision 上复现）：`main` 体内先分配若干临时槽、末尾一个嵌套函数定义 ⇒ `verify_loose` 报「local 槽位 4/5/6 越界（上限 4）」；HEAD 同夹具绿。
+- 修复：该调用点改用 `NestedBodyGuard::enter`（含三项计数），父帧在调用返回后原样恢复。
+
+**修复 2：接口动态分发链缺兜底臂（7a.3a）。** `src/middle/lower/expr/call.rs` 的 `emit_variant_dispatch` 逐变体生成 `JmpIfNot` / `VariantPayload` / `Call result`，末臂 `JmpIfNot` 失败时直接落到汇合点——未知 tag 路径**从不写结果槽**。
+
+- 红色判据（父 revision）：`probe = (a: Animal) -> Void = { s = a.speak(); assert.assert(s == "Woof", "probe") }` ⇒ `verify_loose` 报「[use-before-def 支配性] probe: 读取槽位 Local(1) 存在无定义路径」；HEAD 同夹具绿。`Local(1)` 是具名绑定 `s`——`generate_local_stmt_ir` 的赋值臂把具名槽直接交给 `generate_expr_ir`，分发链的结果槽因此是具名槽。
+- **为什么此前看不见**：`verify` 的支配性判定按槽名生效，无名字的 temp 槽不参与（`src/middle/ir/verify.rs` 的 `check_dominance` 里 `name.is_none()` 的分支）。语料里分发结果槽多先落 temp 再 `Store` 进具名槽，于是静态不可见；运行时后果是**静默错值**（未知 tag 时该 temp 保留上一条语句留下的值），不是读 Void。
+- 修复：兜底臂三条指令——`Load false` / `Load msg`（`interface dispatch: unknown variant tag for {iface}::{method}`）/ `Call result std.assert.assert`。`std.assert.assert` 声明返回 `Never`（`Never <: T`），写进任意结果槽合规；IR 的 def 集合把 `Call{dst}` 计为定义，故全路径有定义。运行期 false 走既有 native 陷阱，**不新增诊断码**，命中臂的指令与顺序逐字未变。
+
+### 四、快照漂移逐份归因（3 份，232 条中）
+
+| 快照 | 行数 | 归因 |
+| --- | --- | --- |
+| `01-syntax/functions/lambdas.snap` | +1 / −1 | `main` 的 `locals_total 8→7`：旧 8 是末尾嵌套 lambda 体（`max`）自己的 `locals_total`，被子体终值污染；新 7 = `main` 内最大引用 `%6` + 1。同文件其余三个函数（`double` / `add` / `max`）逐字节不变。 |
+| `02-type-system/interfaces/interface_rebind_dispatch.snap` | +5 / −2 | 1 条分发链的兜底臂 3 条指令 + 2 行替换（跳过兜底臂的 `Jmp` 目标、`locals_total 9→11`）。 |
+| `02-type-system/interfaces/interface_dynamic_dispatch.snap` | +52 / −34 | 6 条链 × 3 = 18 条兜底臂指令；其余 +34 / −34 是等量替换（`Jmp` 下标平移、temp 编号、def id 首现序）；`locals_total` 只有 `describe 10→12` 与 `main 21→23` 两处 +2。 |
+
+**归因口径（勿再误写）**：兜底臂的两个 temp（false / msg）是**每条链各自分配**的；`locals_total` 的 +2 来自**峰值位移**——语句级回收让下一条链从不高于上一条的水位起算，6 条链不叠加，只有最高的那条把峰值抬高 2 槽。不是「逐链复用同一对 temp」。
+
+剥离兜底三行并把数字掩码后，两份接口快照与父 revision 逐行全等（`rebind` 44 行、`dynamic` 230 行）⇒ 命中臂的指令、顺序、分支未变，只有兜底插入与编号位移。
+
+### 五、E3014 红→绿（预算单点）
+
+- **单点**：`src/middle/lower/scope.rs` 的 `take_body_locals` 是唯一的取表 + 预算点（按 `temp_high_water` 截取，越界 `.at(cur_span)` 报 E3014）；`MAX_REGISTERS = 255` 全仓一处定义；`take_cur_locals` 只在它内部调用。六个函数体形态（函数 / 方法 / lambda / 匿名绑定 / curry 中间层 / curry 最内层）全经它取表。
+- **红（父 revision 二进制）**：>255 槽的函数体有 E3014 但**无 span**；方法体 / curry 层 / 匿名绑定**静默 exit 0**（方法体此前按参数个数截表、且无预算检查）。
+- **绿（HEAD）**：五种形态的 >255 探针全部报 E3014 并带 `--> file:line:col`（探针槽位数 303 / 900 / 303 / 901 / 303，诊断指到声明处）。
+
+### 六、验证与复审结论
+
+- **独立验证两轮**：首轮在冻结 revision 上复跑全部判据；第二轮（冻结 revision 未变，`cf88580b` / `277dfbb4…`，父 `50bd3c3e`）独立复跑同一批判据，结论一致：语料 402/402 零 diff、快照 3 份漂移逐份归因、`verify_loose` 绿、`fast` 2306 条 exit 0；`check-docs-refs` 为既有项（§七）。
+- **变异试验**（机械还原、每条之后重新构建）：M1 删空 guard 的 `Drop` 恢复体 ⇒ 44/232 快照漂移（证明 guard 承重）；M2 回退三处回收 ⇒ 两条语料 E3014（§二，证明裁决 C 的前提）；M3 预算闸短路 ⇒ `integration` 的 `test_check_deep_binop_argument_reports_e3014_not_stack_overflow` 转红（证明闸有回归测试承重）。
+- **复审 verdict=pass**：五项判据独立复算——7 个 guard 构造点与父 6 对 `saved_*` 的消失、第 7 处修复是修复而非掩盖（父二进制复现越界）、预算单点与 E3014 带 span、分发兜底 7 条链全部满足「末臂落兜底 / 兜底定义结果槽 / 命中臂跳过兜底」、快照恰好 3 份。四条非阻塞观察见 §七。
+
+### 七、偏差与既有项登记
+
+**编排偏差**
+
+1. **契约轮与实现轮合并**：7a.1 的前提实测在实现前完成，第一轮直接产出「不落地」结论（§二），未单独成契约轮。
+2. **收口轮重建**：验证/复审完成后，收口契约因 7a.1 拆出与两处顺路修而重写，收口轮以新契约重建。
+3. **验证与复审的同家族偏差**：原定的异家族验证/复审因子模型配额耗尽而中断，改用同家族成员承担。补偿证据：①全部量测在冻结 revision 的批次树上做，两次独立复跑同内容；②独立复算（快照逐行掩码比对、3 份漂移逐份归因、方法/指令计数）；③三条变异试验（M1/M2/M3，机械还原后每条重新构建）；④**真双二进制探针**——父 revision 与 HEAD 各自构建二进制、对同一夹具各跑一遍（第 7 处槽位越界、分发 use-before-def、E3014 五种形态）。本节如实登记，不宣称异家族独立。
+
+**复审观察登记（不改）**
+
+4. `enter_decl` **额外**恢复了 `cur_span`：声明面的口径是「回滚槽位表、三项计数不回滚」，实际 guard 连 `cur_span` 一起恢复。影响面：`cur_span` 只决定诊断定位，不改变编号与指令，量测无可见差异（提交信息已登记）。
+5. `generate_lambda_body_ir` 的 `enter` 恢复父帧，但子体自己不重置 `temp_high_water` / `temp_floor`：沿用 C1 既有约束（重置会改变编号）；方向是「只会多算不会少算」，不会掩盖越界。
+
+**既有项（非本批引入，登记不修）**
+
+6. `check-docs-refs` 红：`docs/src/en/dev/architecture/09-execution-wbs.md` 有一条证据出处写成了被 `.gitignore` 规则命中的工作区路径（`coverage` 之下的字段产物）。父 revision `50bd3c3e` 同红；该文件在 `be0be749`（自动翻译提交）之前不含该串 ⇒ 归属上游翻译流水线，不在 7a 面。
+7. `check-boundary --strict` 红：`middle/bytecode/opcode.rs` 的 opcode 常量 84 处 vs 库存 83。父 revision 同值；CI 跑的是 plain 模式（report-only，exit 0），`--strict` 是 P9 转硬后的目标模式。属 bytecode 库存欠账，登记不修。
+8. `04-ssa.md` 其余行号引用（缺陷类 2–4 与「代码位置」附录中未纳入本批的条目）仍指向搬移前的 `ir_gen.rs` 行号：本批只把 7a 触及的段落（§可行性前提、§缺陷类 1、逐项处置表 1/1b/1c、风险节、缺陷类 1 附录）改为符号路径，其余随各自批次的收口转换，登记为文档欠账。
+
+### 八、提交
+
+代码与 3 份快照：`cf88580b`（9 files / +380 / −285），pre-commit 全链绿。本收口提交 = `04-ssa.md` / `09-execution-wbs.md` / 本文三份文档 + `src/util/diagnostic/codes/e3xxx.rs` 的 E3014 span 注释（复审观察 (a)：IR 闸已带 span，注释改为现状；只改注释、零可执行语句改动）。
