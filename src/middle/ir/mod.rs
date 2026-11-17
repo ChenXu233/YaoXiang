@@ -8,7 +8,6 @@
 // 04 任务拆分 ir.rs（operand/instr/block/fn_）后消失，届时本豁免一并删除。
 #[allow(clippy::module_inception)]
 pub mod ir;
-pub mod ir_gen;
 pub mod normalize;
 pub mod verify;
 
@@ -16,4 +15,3 @@ pub mod verify;
 mod tests;
 
 pub use ir::*;
-pub use ir_gen::*;

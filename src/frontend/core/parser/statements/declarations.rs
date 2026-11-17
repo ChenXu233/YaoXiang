@@ -27,7 +27,7 @@ use super::types::{parse_type_annotation_required, parse_fn_type_with_names};
 /// `Type`（`(T: Type)`）与**类型级函数**（`(F: (T: Type) -> Type)`——构造器变量，
 /// RFC-010 元类型层级 Type1/Type2+）。
 ///
-/// 判据与 `ast::classify_generic_params` / `ir_gen::split_curry` 的
+/// 判据与 `ast::classify_generic_params` / `lower/curry.rs` 的 `split_curry` /
 /// `is_type_param_ann` **必须同源**：此前此处缺类型级函数分支，同一份声明在
 /// parser 眼里 F 是值参数、在类型检查/IR 眼里是类型参数，于是「声明占几个运行期
 /// 形参位」两处答案不同（WBS 6.8.2a 的 E1112 元数对照当场把这种声明误判成

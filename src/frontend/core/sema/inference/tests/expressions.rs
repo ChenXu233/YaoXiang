@@ -3,7 +3,7 @@
 //! §3.2: 原类型（Int 默认 8 字节 = Int(64)）
 //! §4.1-§4.10: 表达式分类
 //! RFC-010: 统一类型语法
-//! RFC-029: 模块限定名 `{module_key}.{bare}`（ir_gen 的 `qualify_names` 与
+//! RFC-029: 模块限定名 `{module_key}.{bare}`（`lower/module_ir.rs` 的 `qualify_names` 与
 //!   `SymbolTable::qualify` 同源）
 //! RFC-039 §3.4.8 ①: 跨模块限定调用 `lib.f(x)` 发泛型实例化请求（generic_id
 //!   用限定名，与 merged-IR 的函数表键对齐）
@@ -168,7 +168,7 @@ fn test_infer_undefined_variable() {
 
 /// RFC-039 §3.4.8 ① / RFC-029：`use lib` 后限定调用泛型函数 `lib.f(x)` 必须
 /// 发出实例化请求，且 `generic_id` 用与 merged-IR 同源的限定名 `lib.f`
-///（ir_gen 的 `qualify_names` 把每个模块的顶层函数重写为 `{module_key}.{bare}`；
+///（`lower/module_ir.rs` 的 `qualify_names` 把每个模块的顶层函数重写为 `{module_key}.{bare}`；
 /// 用裸名 `f` 在 merged-IR 的函数表里匹配不到，请求会被下游静默跳过）。
 ///
 /// D2 裁甲（2026-10-10）：用户模块导出随 `Export::type_params` 携带声明期

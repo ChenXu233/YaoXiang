@@ -63,7 +63,13 @@ TYPECHECK_TREE = 'src/frontend/core/sema'
 # 消费者阶段 → 声明式消费者文件（判据 2 的扫描面）
 CONSUMER_FILES = {
     'ProofExecution': ['src/driver/arms.rs', 'src/frontend/proof_execution.rs'],
-    'IrGeneration': ['src/middle/ir/ir_gen.rs'],
+    'IrGeneration': [
+        'src/middle/lower/mod.rs',
+        'src/middle/lower/query.rs',
+        'src/middle/lower/module_ir.rs',
+        'src/middle/lower/expr/control.rs',
+        'src/middle/lower/expr/reference.rs',
+    ],
     'Monomorphization': ['src/driver/arms.rs', 'src/driver/helpers.rs'],
 }
 

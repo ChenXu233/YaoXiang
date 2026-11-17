@@ -78,7 +78,7 @@ pub struct Export {
     ///    导入方 `export_type` 据它登记短名与限定名两个键，调用点才拿得到
     ///    类型参数名（`lookup_type_params`）与实例化请求的 `generic_id`。
     /// 2. **兜底**：从签名形态反推——真实落点是 `collect_instantiation_request`
-    ///    的第二条分支（`expressions.rs` 里 `let mut type_var_indices = …` 那段
+    ///    的第二条分支（`inference/expressions/call/instantiation.rs` 的 `collect_instantiation_request` 里 `let mut type_var_indices = …` 那段
     ///    位置直扫：只收「参数位直接是 TypeVar」的位），底层取变量用
     ///    `collect_type_vars_positional`。只在第 1 条拿不到名字时生效，且
     ///    **收不全**——类型参数只出现在嵌套/借用位置（`x: &T`、`Vec(T)`）时

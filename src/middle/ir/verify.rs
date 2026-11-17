@@ -6,12 +6,12 @@
 //! - docs/src/dev/architecture/04-ssa.md（批 a 准入硬前置：verify_loose 必须先在
 //!   现有非 SSA IR 上跑绿；D 方案与本校验器是前置关系）
 //! - docs/src/rfc/accepted/039-compiler-architecture.md D38（verify_loose 跑不绿
-//!   不开豁免——跑不绿说明 ir_gen 存在隐式「同槽多次写」依赖，必须先修缺陷）
+//!   不开豁免——跑不绿说明 lower 存在隐式「同槽多次写」依赖，必须先修缺陷）
 //!
 //! 现实语义记录（实现以现实 IR 语义为准，与 07 文本的描述性差异如实登记）：
 //! - 07 按「label 键控块图」描述 jump 目标不变量；现实 IR 中
 //!   Jmp / JmpIf / JmpIfNot 的 target 是**函数内展平后的绝对指令下标**
-//!   （ir_gen.rs:1344 rebase_jump_targets 明文 + translator.rs:301 global_ir_index
+//!   （lower/module_ir.rs 的 rebase_jump_targets 明文 + translator.rs:301 global_ir_index
 //!   回填），BasicBlock.label 与 successors 不参与控制流（successors 构造恒为空）。
 //!   因此 CFG 以**指令级**构建：Jmp → {target}；JmpIf/JmpIfNot → {target, i+1}；
 //!   Ret/TailCall → ∅；其余 → {i+1}。jump 目标有效性 = target < 指令总数。
@@ -23,22 +23,22 @@
 //!   落地后收紧为逐值精确比对。当前覆盖面：Move/Load/Store、算术与位运算、
 //!   比较双端、Neg/Not、Ret 与 return_type——其余指令的 dst 类型在无值表时
 //!   不可静态推导，不查不等于豁免（无判定依据，非已知违规）。
-//! - **槽位类型表整体不可信**（2026-10-06 语料实测登记）：ir_gen 从不写
-//!   LocalSlot.ty——register_local（ir_gen.rs:623-627）只写 name，temp 槽由
-//!   Int(64) 占位填充（624/644）；globals 无注解时同样是 Int(64) 占位
-//!   （930-933）。故「类型一致」判定的可信源收窄为**参数槽签名类型**（
+//! - **槽位类型表整体不可信**（2026-10-06 语料实测登记）：lower 从不写
+//!   LocalSlot.ty——register_local（lower/scope.rs）只写 name，temp 槽由
+//!   Int(64) 占位填充（take_cur_locals）；globals 无注解时同样是 Int(64) 占位
+//!   （register_local）。故「类型一致」判定的可信源收窄为**参数槽签名类型**（
 //!   FunctionIR.params，注解转换）与**常量字面量**；其余槽位不参与比对。
 //!   这不是豁免——豁免是「已知违规不修」，此处是「判定依据不存在」；
 //!   完整判定面依赖 SSA 值表（04 §262 ValueInfo，P7 批 b 落地）。
 //! - init 序列的 Local 越界不查：`init_locals` 是 #368 调试信息视角的表，
 //!   不是分配上限（实测语料 init 用槽 4 而表长 1）。函数体 locals 表是完整
-//!   分配表（ir_gen.rs:644 按高水位 resize），Local 越界判定仅在函数体生效。
+//!   分配表（lower/scope.rs 的 take_cur_locals 按高水位 resize），Local 越界判定仅在函数体生效。
 //! - 「Phi 一致」不变量：Instruction::Phi 变体由 P7 批 b 引入（04 §273，IR-only
 //!   伪指令，translator 展开为 Move 串），当前指令集无此变体。本模块的
 //!   def/use 提取是**穷尽 match、刻意无通配臂**（与 ir.rs span() 同款强制哲学）：
 //!   Phi 引入时编译失败强制补查（输入数 == 前驱数、逐输入类型一致）。
-//! - 「内层隔离」的 ModuleIR 级可操作化：ir_gen 的 save/restore 契约
-//!   （ir_gen.rs:252-253）失败形态是外层函数 locals 混入内层局部名。嵌套关系
+//! - 「内层隔离」的 ModuleIR 级可操作化：lower 的 save/restore 契约
+//!   （lower/mod.rs 的 `next_temp` / `cur_span` 字段）失败形态是外层函数 locals 混入内层局部名。嵌套关系
 //!   从 MakeClosure{func, env} 引用恢复：外层具名非参数槽名集 ∩ 闭包具名
 //!   自有槽名集（env 槽与参数槽排除）必须为空。
 
@@ -55,7 +55,7 @@ use super::ir::{ConstValue, FunctionBody, FunctionIR, Instruction, LocalSlot, Mo
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum VerifyMode {
     /// 宽松模式：支配性 + jump 目标 + 槽位越界 + 类型一致 + 内层隔离。
-    /// 允许同槽多次定义（现状临时槽位语句级回收，ir_gen.rs #393）。
+    /// 允许同槽多次定义（现状临时槽位语句级回收，#393）。
     Loose,
     /// 严格模式：Loose 全部 + 值定义唯一性 + Phi 一致性。
     /// 现有 IR 必然红（多次定义是现行分配策略），P7 批 b 后转绿。
@@ -149,7 +149,7 @@ pub fn verify(
     let mut violations = Vec::new();
 
     // 第一遍：从 MakeClosure{func, env} 恢复闭包 env 槽数（帧前段布局，
-    // ir_gen.rs:4743-4748）——闭包体的参数槽区间判定依赖它。
+    // lower/expr/closure.rs 的 generate_lambda_expr_ir）——闭包体的参数槽区间判定依赖它。
     let mut env_lens: HashMap<&str, usize> = HashMap::new();
     for func in &ir.functions {
         for instr in func.all_instructions() {
@@ -200,7 +200,7 @@ struct FnView<'a> {
     name: String,
     params_len: usize,
     params: &'a [MonoType],
-    /// 闭包 env 槽数（运行时铺入帧前段，ir_gen.rs:4743-4748）：
+    /// 闭包 env 槽数（运行时铺入帧前段，lower/expr/closure.rs 的 generate_lambda_expr_ir）：
     /// 闭包体的参数槽位于 env_len..env_len+params_len，普通函数为 0..params_len。
     env_len: usize,
     return_type: Option<&'a MonoType>,
@@ -389,7 +389,7 @@ fn check_slot_bounds(
             };
             // init_locals 是 #368 调试信息视角的表而非分配上限（实测 init
             // 用槽 4 而表长 1）——init 序列的 local 越界无判定依据，跳过；
-            // 函数体 locals 是完整分配表（ir_gen.rs:644 高水位 resize），正常查。
+            // 函数体 locals 是完整分配表（lower/scope.rs 的 take_cur_locals 按高水位 resize），正常查。
             // Global / Arg 越界全量查。
             if kind == "local" && view.return_type.is_none() {
                 continue;
@@ -815,7 +815,7 @@ fn check_dominance(
             continue;
         }
         // temp 槽（name=None）不做支配性判定：Frame 槽位以 Void 预初始化
-        // （frames.rs:55），ir_gen 有意依赖此语义表达 Void 值绑定——实测
+        // （frames.rs:55），lower 有意依赖此语义表达 Void 值绑定——实测
         // empty_block_semantics.yx「empty: Void = {}」的 init Store 直接读
         // 未写槽；match 末臂守卫失败的容错落点同族（运行时路径不可达）。
         // temp 槽的错位缺陷形态是「读错值」而非「读未定义」，归 07 第三层
@@ -903,8 +903,8 @@ fn const_type(c: &ConstValue) -> Option<MonoType> {
 }
 
 /// 可信类型源（2026-10-06 语料实测登记，文件头「现实语义记录」）：
-/// ir_gen **从不写 LocalSlot.ty**（624/626/644 只写 name 或占位），globals
-/// 无注解时同样是 Int(64) 占位（ir_gen.rs:930-933）——槽位类型表整体不可信。
+/// lower **从不写 LocalSlot.ty**（lower/scope.rs 的 register_local / take_cur_locals 只写 name 或占位），globals
+/// 无注解时同样是 Int(64) 占位（lower/scope.rs 的 register_local）——槽位类型表整体不可信。
 /// 仅存的可信源：参数槽（函数签名的 params，经注解转换）与常量字面量。
 /// 返回 owned 值：参数类型 clone，常量类型现场构造（校验器不在热路径）。
 fn operand_type(
@@ -1025,7 +1025,7 @@ fn check_type_consistency(
 
 /// 具名非参数槽名集：locals[skip..] 中 name = Some 的槽。
 /// skip = params.len()（普通函数）或 env_len + params.len()（闭包，
-/// env 槽是运行时铺入的捕获，ir_gen.rs:4743-4748）。
+/// env 槽是运行时铺入的捕获，lower/expr/closure.rs 的 generate_lambda_expr_ir）。
 fn named_locals(
     f: &FunctionIR,
     skip: usize,

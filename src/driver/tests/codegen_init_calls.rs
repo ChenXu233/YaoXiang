@@ -2,7 +2,7 @@
 //!
 //! 规范来源：RFC-039 §3.7.4「init 段 DefId 与函数体同口径」。
 //!
-//! 背景：ir_gen::assign_defs 原只覆盖 ir.functions，ir.init（模块顶层语句序列）
+//! 背景：`lower/module_ir.rs` 的 `assign_defs` 原只覆盖 ir.functions，ir.init（模块顶层语句序列）
 //! 的调用目标 def 恒为 None；translator::translate_call 的解析优先级是
 //! DefId 命中 → FFI 元数据 → 名字命中 → std native 回退，故 init 段恒定走
 //! 「名字命中」。两套口径（函数体有 def、init 段无 def）本身不是活体缺陷——名字

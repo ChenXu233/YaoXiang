@@ -15,7 +15,7 @@ use crate::frontend::core::sema::probe::TypeLevelNamespace;
 use crate::frontend::core::sema::SemanticProbe;
 use crate::frontend::module::registry::ModuleRegistry;
 use crate::middle::ir::ir::{FunctionIR, ModuleIR};
-use crate::middle::ir::ir_gen::AstToIrGenerator;
+use crate::middle::lower::AstToIrGenerator;
 
 /// 源码 → IR：与 IR 快照判据同一条真实生成序列（词法 → 语法 → 三遍类型检查 → ir_gen）。
 fn module_ir(source: &str) -> ModuleIR {

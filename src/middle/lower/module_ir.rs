@@ -1,0 +1,624 @@
+//! 模块装配族（`AstToIrGenerator` 的 ModuleIR 装配）
+//!
+//! `generate_module_ir` 入口、DefId 分配、限定名/导入别名/调用名改写、跨文件
+//! 类型与全局布局登记、跳转目标平移。方法体逐字搬自原 `middle/ir/ir_gen.rs`
+//! （WBS 7.0.2），语义未改。
+
+use super::AstToIrGenerator;
+use crate::ast;
+use crate::frontend::module::ExportKind;
+use crate::frontend::module::symbol::SymbolTable;
+use crate::middle::ir::ir::{ConstValue, Instruction, ModuleIR, Operand};
+use crate::util::diagnostic::Diagnostic;
+use std::collections::HashMap;
+use super::BindingInfo;
+
+impl AstToIrGenerator {
+    /// 从 AST 模块生成 IR 模块
+    pub fn generate_module_ir(
+        &mut self,
+        module: &ast::Module,
+    ) -> Result<ModuleIR, Vec<Diagnostic>> {
+        // RFC-029：用户模块命名空间别名（`use lib` / `use lib as l`）由 typecheck 登记
+        // （模块解析归 typecheck 所有），IR 生成直接消费，不再自行从 AST 重新推导。
+        if let Some(ref tr) = self.type_result {
+            self.user_namespaces = tr.module_namespaces.clone();
+        }
+        // use 导入别名表（含 #245 条目别名）：生成期解析调用名用。
+        self.use_aliases = self.build_import_aliases(module);
+        // 谓词名可见面**不在生成期扫描**（F14-A）：生成的可见范围必须与走查期
+        // （typecheck / registry）**同一份**，因此由调用方经 `new_with_type_result`
+        // 注入并在这里原样使用——`self.type_level` 已在构造期就位。
+        //
+        // 仍在入口扫的是**本文件声明的类型名**：那是逐单元的解析事实（`use std.math`
+        // 之后 `PI(7)` 该不该解析成 `std.math.PI`），范围天然是本单元，与谓词的
+        // 跨单元可见面不是同一个问题。
+        for stmt in &module.items {
+            if let ast::StmtKind::TypeDefinition { name, .. } = &stmt.kind {
+                self.declared_type_names.insert(name.clone());
+            }
+        }
+
+        // T3：先分配所有顶层值绑定的槽位，使前向引用在生成期可解析。
+        self.register_global_slots(module);
+
+        let mut functions = Vec::new();
+        let mut errors = Vec::new();
+        let mut constants = Vec::new();
+
+        for stmt in &module.items {
+            match self.generate_stmt_ir(stmt, &mut constants) {
+                Ok(Some(func_ir)) => functions.push(func_ir),
+                Ok(None) => {}
+                Err(e) => errors.push(e),
+            }
+        }
+
+        // Script 模式：顶层同名重绑定 = **后者生效**——被遮蔽的前一个定义从函数表
+        // 里去掉。语义依据是单文件扁平函数表的按序插入（后者覆盖前者）：
+        // `f: () -> Int = () => 1 / f = () => 2 / print(f())` 实测输出 2。
+        // 留着两份同名定义会让 Linking 的合并校验把「同一模块内的重绑定」误报成
+        // 「模块限定名冲突（同一路径 ×2）」并打红整个 check（3.4.8 ③ 回归，文档
+        // 示例门禁 10 项）。只在 `script_mode` 下做：Bin 形态的顶层重声明不在本
+        // 修复面（其合并校验现状保留），项目形态的 IR 不受影响。
+        if self.script_mode && functions.len() > 1 {
+            let mut last_index: HashMap<String, usize> = HashMap::new();
+            for (idx, func) in functions.iter().enumerate() {
+                last_index.insert(func.name.clone(), idx);
+            }
+            let mut idx = 0usize;
+            functions.retain(|func| {
+                let keep = last_index.get(&func.name) == Some(&idx);
+                idx += 1;
+                keep
+            });
+        }
+
+        if !errors.is_empty() {
+            return Err(errors);
+        }
+
+        // T3：顶层绑定的初始化按**依赖拓扑序**拼接（被依赖者先初始化）。
+        // 前向引用（`b = a + 1` 且 `a` 在后）靠它把 `a` 的初始化提到前面。
+        // 循环依赖在此报错（带环上的名字），而非运行时取到未初始化值。
+        let ordered = match self.topo_sort_pending_inits() {
+            Ok(v) => v,
+            Err(e) => return Err(vec![e]),
+        };
+        let ordered_inits: Vec<Vec<Instruction>> = ordered
+            .into_iter()
+            .map(|i| i.instructions.clone())
+            .collect();
+        for instrs in ordered_inits {
+            let base = self.module_init.len();
+            let mut instrs = instrs;
+            Self::rebase_jump_targets(&mut instrs, base);
+            self.module_init.extend(instrs);
+        }
+        // T4/T3：绑定初始化（声明，已拓扑排序）之后才跑顶层语句（程序主体，源码序）。
+        // 两段不可交换：语句可能读绑定（如 `io.println(v)`），必须先初始化。
+        //
+        // 跳转重定位：module_stmts 里的 target 是**段内**下标，
+        // 前面接上绑定初始化后必须整体平移——否则顶层 while 的回跳会指向函数头。
+        let base = self.module_init.len();
+        let mut stmts = std::mem::take(&mut self.module_stmts);
+        Self::rebase_jump_targets(&mut stmts, base);
+        self.module_init.extend(stmts);
+
+        // 添加嵌套函数到模块函数列表
+        functions.extend(std::mem::take(&mut self.nested_functions));
+
+        // RFC-004: 添加匿名函数绑定生成的 IR 到模块函数列表
+        functions.extend(std::mem::take(&mut self.anon_function_irs));
+
+        let mut ir = ModuleIR {
+            globals: self
+                .global_vars
+                .iter()
+                .enumerate()
+                .map(|(i, (name, ty, _))| crate::middle::ir::ir::GlobalSlot {
+                    name: name.clone(),
+                    ty: ty.clone(),
+                    index: self.global_slot_base + i,
+                })
+                .collect(),
+            functions,
+            init: std::mem::take(&mut self.module_init),
+            // 单文件：恒 file_id 0，空表（translator 回退 0）
+            init_file_ids: Vec::new(),
+            // #368：模块级槽位表随 init 一起交给 codegen。
+            // 顶层语句里的具名结构（如 `for i in ..` 的循环变量）在此登记，
+            // 取值时已覆盖到最大已注册槽位（register_local 会补空格）。
+            init_locals: std::mem::take(&mut self.cur_locals),
+            ffi_libs: std::mem::take(&mut self.ffi_libs),
+            ffi_bindings: std::mem::take(&mut self.ffi_bindings),
+            entry_function: None,
+            source_files: Vec::new(),
+            function_files: HashMap::new(),
+        };
+        // RFC-029: 有模块键时限定本文件的顶层函数名与调用引用（定义键、调用名
+        // 与 typecheck 的实例化请求名三者同源为 `{module_key}.{name}`）；
+        // `module_key` 为 None（单文件管线/无项目根 standalone）时不限定——
+        // 但 3.4.8 ③ 起「不限定」只发生在**单单元**程序上：多单元形态由调用方
+        // 传单元键（见 `with_script_mode` 的注释），否则合并时跨单元同名函数会
+        // 被判成「模块限定名冲突」。Script/Bin 语义与限定名开关已解耦，本闸门
+        // 只看 `module_key`。
+        if let Some(key) = &self.module_key {
+            let aliases = self.build_import_aliases(module);
+            Self::qualify_names(&mut ir, key, &aliases);
+        }
+        self.assign_defs(&mut ir);
+        // RFC-039 D20 / WBS 4.5.1：消费侧完整跑完一轮（生成成功返回）——
+        // 结算据此区分「消费者跑完但漏了条目」（响亮）与「消费者没跑完 / 失败」
+        //（不判：失败已按首因报出）。失败路径提前 `return Err`，不会标到这里。
+        self.release_plan.mark_consumption_completed();
+        // 同点标记重载决议表的消费侧（4.5.2 复用同一台账机制）
+        self.overload_resolutions.mark_consumption_completed();
+        Ok(ir)
+    }
+
+    /// Stage 3 尾部 pass：为所有函数分配 DefId 并解析静态引用。
+    ///
+    /// 名字此时已是最终形态（多文件已限定、单文件保持裸名）：
+    /// - intern 规则：多文件直接用限定名；单文件用 `qualify("main", bare)`——与
+    ///   `module_key_or_main` 一致，保证 `FunctionIR.def` 与调用侧解析结果同源。
+    /// - 方法在单文件首次 intern 时类别退化为 `Function`（多文件已在 register 期以
+    ///   `Method` intern，幂等保留）；下游只查 def 不查 kind，无行为差异。
+    /// - 泛型函数经 mono 特化后重命名，def 随之失效——mono 路径保持按名分发（现状），
+    ///   codegen 对 def 未命中回退按名，两条路径都正确。
+    fn assign_defs(
+        &self,
+        ir: &mut ModuleIR,
+    ) {
+        // intern 规则跟随**限定名开关**（不是 Script/Bin 语义）：未限定名的
+        // 程序用 `main.` 前缀兜底，与 `module_key_or_main` 一致。
+        let unqualified_names = self.module_key.is_none();
+        let mut symbols = self.registry.symbols_mut();
+        for func in &mut ir.functions {
+            let intern_name = if unqualified_names {
+                SymbolTable::qualify("main", &func.name)
+            } else {
+                func.name.clone()
+            };
+            let kind = if func.is_type_decl() {
+                crate::frontend::module::symbol::DefKind::Type
+            } else {
+                crate::frontend::module::symbol::DefKind::Function
+            };
+            func.def = Some(symbols.intern_full(&intern_name, kind));
+        }
+        // 解析静态引用：先直查（限定名 / std 原生），未限定名的程序裸名回退
+        // qualify("main", ·)。所有函数已 intern 完毕，前向引用在此必然可解。
+        let resolve = |name: &str| {
+            symbols.def(name).or_else(|| {
+                if unqualified_names {
+                    symbols.def(&SymbolTable::qualify("main", name))
+                } else {
+                    None
+                }
+            })
+        };
+        // 函数体：逐指令解析静态调用目标。
+        for func in &mut ir.functions {
+            if func.is_type_decl() {
+                continue; // TypeDecl 无指令体
+            }
+            for block in func.blocks_mut() {
+                for instr in &mut block.instructions {
+                    Self::resolve_static_targets(instr, &resolve);
+                }
+            }
+        }
+        // 模块顶层初始化序列：与函数体**同一套解析规则**（2026-10-11 裁甲）。
+        //
+        // 此前 init 段被有意跳过，于是同一张扁平函数表出现两套身份口径：函数体
+        // 走 DefId，init 段恒 None 只能按名回退。名字与 def 在 codegen 里指向同一
+        // 个函数表下标（名字由 `qualify_names` 与函数定义同源改写），故本改动
+        // 不改变翻译结果，只消除「def 是否为空」的口径分叉——将来任何假设
+        // 「def 恒有值」的 IR pass 不会在 init 段踩空。
+        for instr in &mut ir.init {
+            Self::resolve_static_targets(instr, &resolve);
+        }
+    }
+
+    /// 解析单条指令里的静态调用目标 DefId：`Call`/`TailCall` 的字符串操作数、
+    /// `MakeClosure` 的目标名，其余指令不动。
+    ///
+    /// 函数体与模块初始化序列**共用本实现**（禁令三：一处生产、一处消费）——
+    /// 两处若各写一套映射，正是 t12 要消除的口径分叉。
+    fn resolve_static_targets(
+        instr: &mut Instruction,
+        resolve: &impl Fn(&str) -> Option<crate::frontend::module::symbol::DefId>,
+    ) {
+        match instr {
+            Instruction::Call { func, def, .. } | Instruction::TailCall { func, def, .. } => {
+                if let Operand::Const(ConstValue::String(name)) = func {
+                    *def = resolve(name);
+                }
+            }
+            Instruction::MakeClosure { func, def, .. } => {
+                *def = resolve(func);
+            }
+            _ => {}
+        }
+    }
+
+    /// RFC-029 限定名：从一个文件的 `use` 语句构建导入别名表（本地短名 → 源模块限定名）。
+    ///
+    /// 供限定名重写解析跨文件调用目标。std 调用已由 IR 生成限定为 `std.*`，不在此表。
+    fn build_import_aliases(
+        &self,
+        module: &ast::Module,
+    ) -> HashMap<String, String> {
+        Self::import_aliases_from(module, &self.registry)
+    }
+
+    /// `use` 导入别名表（本地调用名 → 限定名）的**唯一生产实现**（t10）。
+    ///
+    /// 为什么抽成 pub 关联函数：驱动侧聚合实例化请求时要把 typecheck 的裸名请求
+    /// 对齐成 IR 调用指令里的名字，而那个名字正是由本表在 `qualify_names` 里
+    /// 改写出来的——两边必须**同源**。抽出来后驱动直接调它（传单元 AST 与同一
+    /// registry），不再另建平行表、也不复刻解析规则（禁令三：一处生产、一处消费）。
+    ///
+    /// 规则（原实现逐字迁移）：只登记 `use path.{item}` 的**项**形态（含 #245 内联
+    /// 别名），且仅对 Function/Constant/Type 类导出——#244：类型也限定，构造调用
+    /// `Point(...)` 与方法调用 `Point.get_x` 都要把本地短名别名到源模块限定名才能解析。
+    pub fn import_aliases_from(
+        module: &ast::Module,
+        registry: &crate::frontend::module::registry::ModuleRegistry,
+    ) -> HashMap<String, String> {
+        let mut aliases = HashMap::new();
+        for stmt in &module.items {
+            if let ast::StmtKind::Use {
+                path,
+                items,
+                item_aliases,
+                ..
+            } = &stmt.kind
+            {
+                let Some(exports) = registry.get_exports(path) else {
+                    continue;
+                };
+                if let Some(names) = items {
+                    // 本地名：内联别名（#245）> 原名
+                    for (i, item) in names.iter().enumerate() {
+                        if let Some(export) = exports.get(&item.name) {
+                            if matches!(
+                                export.kind,
+                                ExportKind::Function | ExportKind::Constant | ExportKind::Type
+                            ) {
+                                let local_name = item_aliases
+                                    .as_ref()
+                                    .and_then(|v| v.get(i))
+                                    .and_then(|a| a.as_ref())
+                                    .map(|a| &a.name)
+                                    .unwrap_or(&item.name);
+                                aliases.insert(local_name.clone(), export.full_path.clone());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        aliases
+    }
+
+    /// RFC-029 限定名：把本文件 IR 里的顶层函数名重写为 `{module_key}.{name}`，
+    /// 并把**函数体与模块顶层初始化序列**里对这些函数与导入函数的调用/闭包
+    /// 引用一并重写（init 段见 t3 F1——漏掉它就出现「定义已限定、调用仍裸名」
+    /// 的不自洽 IR，运行期 E6006）。
+    ///
+    /// module=record 语义：`a.helper` 与 `b.helper` 是两个 record 的不同字段，本就不冲突；
+    /// 解释器函数表是扁平 name→func，故用限定名作键使其共存。限定名统一经
+    /// [`SymbolTable::qualify`] 生成——全仓库限定名语法的唯一所有者。
+    fn qualify_names(
+        ir: &mut ModuleIR,
+        module_key: &str,
+        aliases: &HashMap<String, String>,
+    ) {
+        // 先收集本文件的类型名（TypeDecl），供方法派生函数前缀匹配。
+        let mut type_names: std::collections::HashSet<String> = std::collections::HashSet::new();
+        for func in &ir.functions {
+            if func.is_type_decl() {
+                type_names.insert(func.name.clone());
+            }
+        }
+
+        // 本文件要限定的函数：TypeDecl、方法派生（前缀是本地类型）、普通函数。
+        let mut rename: HashMap<String, String> = HashMap::new();
+        for func in &ir.functions {
+            let bare = &func.name;
+            if func.is_type_decl() {
+                rename.insert(bare.clone(), SymbolTable::qualify(module_key, bare));
+            } else if let Some(dot_pos) = bare.find('.') {
+                // 带点名字：只有限定点是本地类型时才限定，避免误伤 std 等已限定名。
+                let prefix = &bare[..dot_pos];
+                if type_names.contains(prefix) {
+                    rename.insert(bare.clone(), SymbolTable::qualify(module_key, bare));
+                }
+            } else {
+                rename.insert(bare.clone(), SymbolTable::qualify(module_key, bare));
+            }
+        }
+
+        // 重写函数定义名。
+        for func in &mut ir.functions {
+            if let Some(q) = rename.get(&func.name) {
+                func.name = q.clone();
+            }
+        }
+
+        // 重写全局槽位名（T5）：与 `allocate_global_slots` 的限定规则同源，
+        // 使槽位名与跨文件布局键（`lib.value`）一致，同名全局得以共存。
+        for slot in &mut ir.globals {
+            slot.name = SymbolTable::qualify(module_key, &slot.name);
+        }
+
+        // 重写调用/闭包引用：本文件函数（rename）+ 导入函数（aliases）。
+        for func in &mut ir.functions {
+            if func.is_type_decl() {
+                continue;
+            }
+            for block in func.blocks_mut() {
+                for instr in &mut block.instructions {
+                    Self::rewrite_call_names(instr, &rename, aliases);
+                }
+            }
+        }
+
+        // 模块顶层初始化序列（`ir.init`）走**同一张 rename/aliases 表与同一
+        // `rewrite_call_names`**（t3 F1）：此前只重写函数体，init 里对本文件
+        // 顶层函数的调用名保持裸名，而函数定义已被限定——运行期按裸名查扁平
+        // 函数表落空（E6006）。这与泛型无关，是既有的多文件正确性漏洞。
+        for instr in &mut ir.init {
+            Self::rewrite_call_names(instr, &rename, aliases);
+        }
+    }
+
+    /// **调用名解析的单点实现**：把一个调用名解析成 IR 函数表里的最终名字。
+    ///
+    /// 解析顺序：完全匹配 rename（本文件函数）→ 完全匹配 aliases（导入函数）→
+    /// 前缀匹配（方法调用 `Point.get_x` 经 `Point` 的 rename/alias 限定为
+    /// `lib.Point.get_x`）。
+    ///
+    /// 为什么单独成一个 pub 函数：驱动侧要把 typecheck 的实例化请求名对齐到
+    /// 「IR 调用指令里的名字」，而这正是本函数给出的结果。请求名与指令名只要
+    /// 有一处用了别的规则，就会一边限定、一边裸名——单态化改不到调用点
+    /// （E6006）或误报未限定化（E3018）。故本函数是**唯一**的解析规则所有者：
+    /// `rewrite_call_names` 在 IR 生成期用它改写指令，驱动在聚合期用它对齐请求名。
+    ///
+    /// 驱动侧传入的两张表与生成期同源：`rename` 是**已限定**名字的恒等映射
+    /// （`qualify_names` 之后的函数表），`aliases` 由驱动侧**直调**
+    /// [`Self::import_aliases_from`]`(单元 AST, 同一 registry)` 取得——即
+    /// `qualify_names` 改写调用名所用的同一个实现，不是驱动侧另建的表。
+    /// 细节见 `driver::helpers::aggregate_instantiation_requests` 的注释。
+    pub fn resolve_call_target(
+        name: &str,
+        rename: &HashMap<String, String>,
+        aliases: &HashMap<String, String>,
+    ) -> Option<String> {
+        rename
+            .get(name)
+            .cloned()
+            .or_else(|| aliases.get(name).cloned())
+            .or_else(|| {
+                let dot_pos = name.find('.')?;
+                let prefix = &name[..dot_pos];
+                let suffix = &name[dot_pos..]; // 含点
+                rename
+                    .get(prefix)
+                    .or_else(|| aliases.get(prefix))
+                    .map(|q| format!("{}{}", q, suffix))
+            })
+            .or_else(|| {
+                // 显式类型实参的预特化名（`mk(int64)`）：两层调用 `mk(Int)(5)`
+                // 由 ir_gen 按 D6.3 直接发特化名（mono 会剥掉未特化原件），其
+                // 基名同样是本单元函数——按同一套规则限定基名、类型参数串原样
+                // 保留，否则限定后查表落空（E6006；4.10.3 语料实证）。
+                let open = name.find('(')?;
+                let base = &name[..open];
+                let suffix = &name[open..]; // 含左括号
+                rename
+                    .get(base)
+                    .or_else(|| aliases.get(base))
+                    .map(|q| format!("{}{}", q, suffix))
+            })
+    }
+
+    /// 重写单条指令里的函数名引用（Call/TailCall 的字符串 func、MakeClosure 的 func）。
+    ///
+    /// 解析规则见 [`Self::resolve_call_target`]（单点实现）。
+    fn rewrite_call_names(
+        instr: &mut Instruction,
+        rename: &HashMap<String, String>,
+        aliases: &HashMap<String, String>,
+    ) {
+        let resolve =
+            |name: &str| -> Option<String> { Self::resolve_call_target(name, rename, aliases) };
+        match instr {
+            Instruction::Call { func, .. } | Instruction::TailCall { func, .. } => {
+                if let Operand::Const(ConstValue::String(name)) = func {
+                    if let Some(q) = resolve(name) {
+                        *name = q;
+                    }
+                }
+            }
+            Instruction::MakeClosure { func, .. } => {
+                if let Some(q) = resolve(func) {
+                    *func = q;
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// RFC-029 多文件编排：预注册其他文件的类型上下文（结构体字段布局 + 方法绑定），
+    /// 使本文件 IR 生成能解析跨文件的字段索引与方法调用重排。
+    ///
+    /// 仅注册类型上下文，**不生成函数 IR**——各文件的函数与匿名绑定 IR 由
+    /// 各自的 `generate_module_ir` 生成，链接后按名字解析。镜像 `generate_stmt_ir`
+    /// 中 `TypeDefinition` 的结构体上下文注册逻辑。
+    pub fn seed_cross_file_types(
+        &mut self,
+        modules: &[&ast::Module],
+    ) {
+        for module in modules {
+            for stmt in &module.items {
+                if let ast::StmtKind::TypeDefinition {
+                    name, definition, ..
+                } = &stmt.kind
+                {
+                    match definition {
+                        ast::Type::NamedStruct {
+                            name: struct_name,
+                            fields,
+                            ..
+                        } => {
+                            self.struct_definitions
+                                .insert(struct_name.clone(), fields.clone());
+                        }
+                        ast::Type::Struct { body } => {
+                            let fields: Vec<ast::StructField> = body
+                                .iter()
+                                .filter_map(|it| {
+                                    if let ast::TypeBodyItem::Field(f) = it {
+                                        Some(f.clone())
+                                    } else {
+                                        None
+                                    }
+                                })
+                                .collect();
+                            let bindings: Vec<ast::TypeBodyBinding> = body
+                                .iter()
+                                .filter_map(|it| {
+                                    if let ast::TypeBodyItem::Binding(b) = it {
+                                        Some(b.clone())
+                                    } else {
+                                        None
+                                    }
+                                })
+                                .collect();
+                            let fields = self.classified_fields(name, &fields);
+                            self.struct_definitions.insert(name.clone(), fields);
+                            self.register_type_bindings(name, &bindings);
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        }
+    }
+
+    /// RFC-029 多文件编排：登记跨文件全局布局（限定名 → 绝对槽位号）。
+    ///
+    /// 使本文件对跨文件全局（`use lib.{value}` → `lib.value`）的引用
+    /// 能用定义方的槽位号生成 `Load(Global(idx))`，而非误判为未定义。
+    pub fn seed_cross_file_globals(
+        &mut self,
+        layout: &[(String, usize)],
+    ) {
+        for (name, idx) in layout {
+            self.global_slot_layout.insert(name.clone(), *idx);
+        }
+    }
+
+    /// 本文件顶层绑定的槽位分配起点。
+    ///
+    /// 多文件模式下各文件必须用不相交的槽位区间（否则跨文件索引冲突），
+    /// 由编排器按发现顺序预先分配；单文件模式恒为 0（索引 = 声明序）。
+    pub fn set_global_slot_base(
+        &mut self,
+        base: usize,
+    ) {
+        self.global_slot_base = base;
+    }
+
+    /// 把一段指令序列里的跳转目标整体平移 `base`。
+    ///
+    /// `Instruction::Jmp` / `JmpIf` / `JmpIfNot` 的 target 是**函数内展平后的绝对下标**
+    /// （translator 按 `global_ir_index` 建表）。当一段指令在**空 Vec** 上生成、
+    /// 再拼进更大的序列时，原下标基准失效，必须平移。
+    ///
+    /// 顶层语句与顶层重赋值都在空 Vec 上生成（循环体的回跳会指向 0），
+    /// 拼进 `module_stmts` / `module_init` 前必须重定位。
+    pub(super) fn rebase_jump_targets(
+        instrs: &mut [Instruction],
+        base: usize,
+    ) {
+        if base == 0 {
+            return;
+        }
+        for instr in instrs.iter_mut() {
+            match instr {
+                Instruction::Jmp { target, .. }
+                | Instruction::JmpIf { target, .. }
+                | Instruction::JmpIfNot { target, .. } => *target += base,
+                _ => {}
+            }
+        }
+    }
+
+    /// 注册类型绑定信息（RFC-004）
+    ///
+    /// 将类型定义体内的绑定（外部函数绑定和匿名函数绑定）记录到 type_bindings 映射中，
+    /// 用于后续方法调用 IR 生成时的参数重排。
+    pub(super) fn register_type_bindings(
+        &mut self,
+        type_name: &str,
+        bindings: &[ast::TypeBodyBinding],
+    ) {
+        use ast::BindingKind;
+
+        // 合并到已有的绑定映射中，而非覆盖
+        let mut binding_map = self.type_bindings.remove(type_name).unwrap_or_default();
+
+        for binding in bindings {
+            match &binding.kind {
+                BindingKind::External {
+                    function,
+                    positions,
+                } => {
+                    binding_map.insert(
+                        binding.name.clone(),
+                        BindingInfo {
+                            function: function.clone(),
+                            positions: positions.clone(),
+                        },
+                    );
+                }
+                BindingKind::Anonymous {
+                    params: _,
+                    return_type: _,
+                    positions,
+                    body: _,
+                } => {
+                    // 匿名函数绑定：函数名使用 "类型名.__anon_方法名" 格式
+                    // 后续生成匿名函数的 IR 时使用此名称
+                    let anon_func_name = format!("{}.__anon_{}", type_name, binding.name);
+                    binding_map.insert(
+                        binding.name.clone(),
+                        BindingInfo {
+                            function: anon_func_name,
+                            positions: positions.clone(),
+                        },
+                    );
+                }
+                BindingKind::DefaultExternal { function } => {
+                    // RFC-004: 默认绑定，位置由类型检查器自动推导，此处使用位置 0
+                    binding_map.insert(
+                        binding.name.clone(),
+                        BindingInfo {
+                            function: function.clone(),
+                            positions: vec![0],
+                        },
+                    );
+                }
+            }
+        }
+
+        if !binding_map.is_empty() {
+            self.type_bindings
+                .insert(type_name.to_string(), binding_map);
+        }
+    }
+}

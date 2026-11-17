@@ -1400,7 +1400,7 @@ pub struct ParamClassifier<'a> {
 /// 编译期值参数分类——**唯一**分类器（SPEC type-system §7.1 / RFC-011 §4.1）。
 ///
 /// 此前有三套独立判据（`extract_generic_param_names` 只扫其它形参、漏返回位；
-/// `Type::const_used_layer_names` 只看本层之外；`ir_gen::split_curry` 自带游标判据），
+/// `Type::const_used_layer_names` 只看本层之外；`lower/curry.rs` 的 `split_curry` 自带游标判据），
 /// 三者在「名字出现在类型位置」的形态上给出不同位次。本函数是它们的共同上游：
 /// 输出**编译期值参数的名单**，其余形参是运行期值参数（推论见 SPEC §7.1 末段：
 /// 编译期值参数不占**实现头绑定序列**的位；调用点实参序列另算）。

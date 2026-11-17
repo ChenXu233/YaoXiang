@@ -3,7 +3,7 @@
 //! 规范来源:
 //! - issue [#451](https://github.com/ChenXu233/YaoXiang/issues/451)（现象 / 最小复现 /
 //!   根因 / 判据要求：「不 panic 且产出诊断」，**不得**用 `#[should_panic]` 把崩溃钉成期望行为）
-//! - docs/src/dev/architecture/09-execution-wbs.md 3.13 行（`ir_gen.rs` 的 MethodBind 分支）
+//! - docs/src/dev/architecture/09-execution-wbs.md 3.13 行（原 `ir_gen.rs` 的 MethodBind 分支，现 `lower/expr/call.rs`）
 //!
 //! # 改前实测（红态，2026-10-14）
 //!
@@ -30,7 +30,7 @@ use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parse;
 use crate::frontend::core::sema::checker::TypeChecker;
 use crate::frontend::module::registry::ModuleRegistry;
-use crate::middle::ir::ir_gen::AstToIrGenerator;
+use crate::middle::lower::AstToIrGenerator;
 
 /// 真实链路探针：类型检查诊断码 / IR 生成结果（诊断码集合）。
 struct MethodBindProbe {

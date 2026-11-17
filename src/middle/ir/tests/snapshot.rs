@@ -24,7 +24,7 @@ use crate::frontend::core::sema::MonoType;
 use crate::frontend::core::sema::SemanticProbe;
 use crate::frontend::module::registry::ModuleRegistry;
 use crate::middle::ir::ir::{FunctionBody, Instruction};
-use crate::middle::ir::ir_gen::AstToIrGenerator;
+use crate::middle::lower::AstToIrGenerator;
 use crate::middle::ir::normalize::normalize_module;
 use crate::util::span::Span;
 

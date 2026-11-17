@@ -20,7 +20,7 @@ use crate::frontend::core::parser::parse;
 use crate::frontend::core::sema::checker::TypeChecker;
 use crate::frontend::module::registry::ModuleRegistry;
 use crate::middle::ir::ir::{ConstValue, FunctionBody, Instruction, ModuleIR, Operand};
-use crate::middle::ir::ir_gen::AstToIrGenerator;
+use crate::middle::lower::AstToIrGenerator;
 use crate::util::diagnostic::Severity;
 
 /// 源码 → 真实生成序列（lex → parse → typecheck → ir_gen）的直驱探针。

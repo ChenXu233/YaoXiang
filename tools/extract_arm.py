@@ -14,7 +14,7 @@
 import re
 import sys
 
-SRC = 'src/middle/ir/ir_gen.rs'
+SRC = 'src/middle/lower/expr/mod.rs'
 AST = 'src/ast/mod.rs'
 
 # 顶层臂：恰好 12 空格缩进以 Expr:: 开头。模式本身可能跨多行
@@ -188,8 +188,15 @@ def rust_type(ast_ty):
     return '&' + rust_type_inner(t)
 
 
-# 已在 ir_gen.rs 作用域内的类型（见文件头部 use）
-IN_SCOPE = {'Span', 'Literal', 'Expr', 'String', 'ConstValue', 'Instruction'}
+# 目标文件（src/middle/lower/expr/mod.rs）作用域内已有的类型（见其文件头 use）
+IN_SCOPE = {'Expr', 'String', 'ConstValue', 'Instruction'}
+# 目标文件未 import 的 AST 字段类型：生成签名里写全路径，避免「裸名可解析」的旧假设。
+# 旧家的文件头曾 import Span/Literal；搬移后目标文件不再 import，
+# 裸名在生成的方法签名里无法解析（7.0.3a 实测：多数臂签名含 &Span）。
+FULL_PATH = {
+    'Span': 'crate::util::span::Span',
+    'Literal': 'crate::frontend::core::lexer::tokens::Literal',
+}
 PRIMITIVES = {'usize', 'bool', 'u8', 'u32', 'u64', 'i32', 'i64',
               'f32', 'f64', 'isize', 'char'}
 
@@ -206,6 +213,8 @@ def rust_type_inner(t):
     if t.startswith('(') and t.endswith(')'):
         parts = [rust_type_inner(x) for x in t[1:-1].split(',') if x.strip()]
         return '(' + ', '.join(parts) + ')'
+    if t in FULL_PATH:
+        return FULL_PATH[t]
     if t in IN_SCOPE or t in PRIMITIVES:
         return t
     return 'ast::' + t

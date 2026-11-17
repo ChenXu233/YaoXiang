@@ -38,7 +38,7 @@
 //!   在相位候选名表与 `overload_resolutions` 保留）；
 //! - `interface_impl_registry` → 3.4.9 **已清账**（用户裁决甲：改判为**树内事实**——
 //!   它在 typecheck 树内有真实在相位消费（`src/frontend/core/sema/operator_interfaces.rs:623` 运算符查询、
-//!   `src/frontend/core/sema/inference/expressions.rs` 七处约束求解查询、
+//!   `src/frontend/core/sema/inference/expressions/expr.rs` 七处约束求解查询、
 //!   `src/frontend/core/sema/checker.rs:214-217` 只读访问器），
 //!   而跨阶段读取为零（`src/middle` 0 命中）；删掉类型注释里「镜像供 middle 端/LSP
 //!   消费」的**声明**，保留字段本身与在相位消费。将来 LSP 真需要该表，按 4.6.x
@@ -62,7 +62,7 @@
 //! # 消费台账（4.5.1，D20/D41）——把「交付」推进到「消费」
 //!
 //! `release_plan` 这条义务曾经最隐蔽：它以 Span 为键，ownership 按「最后使用
-//! 表达式的 span」记键、ir_gen 按「语句 span」查表，两个跨层各自持有的位置量
+//! 表达式的 span」记键、`lower/stmt.rs` 的 `emit_release_drops` 按「语句 span」查表，两个跨层各自持有的位置量
 //! 对不上 ⇒ Drop 静默丢失（实测 173 语料文件 / 533 个产出键永不命中）。修法
 //! 是键改 `PlanId`（解析期分配、随 AST 节点走的语句身份），IR 生成在**每条
 //! 语句边界**经 `ReleasePlan::consume` 取条目——**取即记账**，消费台账随计划
@@ -183,11 +183,11 @@ pub const NON_OBLIGATION_FIELDS: &[NonObligationField] = &[
     },
     NonObligationField {
         field: "bindings",
-        reason: "类型绑定表：确有跨阶段读取（src/middle/ir/ir_gen.rs:735/:5034），但文档注释未声明跨阶段契约 ⇒ 未收编进 02 义务字段表；登记在此闭合字段普查",
+        reason: "类型绑定表：确有跨阶段读取（`lower/query.rs` 的 `lookup_var_type` / `interface_from_name`），但文档注释未声明跨阶段契约 ⇒ 未收编进 02 义务字段表；登记在此闭合字段普查",
     },
     NonObligationField {
         field: "local_var_types",
-        reason: "诊断渲染用局部类型表：跨阶段读取在 src/middle/ir/ir_gen.rs:852/:4543/:4794（错误消息），与 bindings 同——未声明契约",
+        reason: "诊断渲染用局部类型表：跨阶段读取在 `lower/query.rs` 的 `get_expr_type_name` / `get_expr_mono_type` / `existential_receiver_interface`（错误消息），与 bindings 同——未声明契约",
     },
     NonObligationField {
         field: "semantic_db",
@@ -195,7 +195,7 @@ pub const NON_OBLIGATION_FIELDS: &[NonObligationField] = &[
     },
     NonObligationField {
         field: "trait_table",
-        reason: "trait 表：跨阶段读取在 src/middle/ir/ir_gen.rs:4336/:6867（与 local_var_types 配对传参），文档注释未声明契约",
+        reason: "trait 表：跨阶段读取在 `lower/loops.rs` 的 `generate_spawn_for_ir` 与 `lower/expr/spawn.rs` 的 `generate_spawn_expr_ir`（与 local_var_types 配对传参），文档注释未声明契约",
     },
     NonObligationField {
         field: "warnings",
@@ -203,7 +203,7 @@ pub const NON_OBLIGATION_FIELDS: &[NonObligationField] = &[
     },
     NonObligationField {
         field: "interface_impl_registry",
-        reason: "树内事实（3.4.9 用户裁决甲）：在相位消费 src/frontend/core/sema/operator_interfaces.rs:623、src/frontend/core/sema/inference/expressions.rs:1514 等七处约束求解查询、src/frontend/core/sema/checker.rs:214-217 只读访问器；跨阶段零读取（src/middle 0 命中）",
+        reason: "树内事实（3.4.9 用户裁决甲）：在相位消费 src/frontend/core/sema/operator_interfaces.rs:623、src/frontend/core/sema/inference/expressions/expr.rs 的 check_pattern 等七处约束求解查询、src/frontend/core/sema/checker.rs:214-217 只读访问器；跨阶段零读取（src/middle 0 命中）",
     },
 ];
 

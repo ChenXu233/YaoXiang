@@ -2,7 +2,7 @@
 //!
 //! 覆盖 T1 基础设施：`Operand::Global` 经 translator 编成 `LOAD_GLOBAL` /
 //! `STORE_GLOBAL`，解释器的 `global_slots` 承接读写。
-//! 这些测试手工构造 IR——不依赖 ir_gen 的顶层绑定改造（T2），
+//! 这些测试手工构造 IR——不依赖 lower 的顶层绑定改造（T2），
 //! 故 T1 可独立验证。
 
 use crate::backends::common::RuntimeValue;

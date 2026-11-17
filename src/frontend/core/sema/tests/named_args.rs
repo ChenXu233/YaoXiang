@@ -16,7 +16,7 @@ use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parse;
 use crate::frontend::core::sema::checker::TypeChecker;
 use crate::frontend::module::registry::ModuleRegistry;
-use crate::middle::ir::ir_gen::AstToIrGenerator;
+use crate::middle::lower::AstToIrGenerator;
 
 /// 夹具的收尾：一个可观察的顶层值绑定（解释器全局槽位可见）。
 const TAIL: &str = "\nr: Int = main()\n";

@@ -259,7 +259,7 @@ pub fn add_native_function_types(
 
     // 显式注册 Native 模块变量，使 Native.c / Native.rs 在 FieldAccess 中可解析
     // 注意：add_var 循环（line 280-282）只注册"Native.c"和"Native.rs"这样的点分全名，
-    // 不注册"Native"本身。而 FieldAccess（expressions.rs:961）通过 extract_namespace_path
+    // 不注册"Native"本身。而 FieldAccess（`inference/expressions/expr.rs` 的 `infer_expr` 分支）通过 extract_namespace_path
     // 从 Var("Native") 开始构建路径，因此"Native"必须在作用域中且类型为 Struct（有字段）。
     env.add_var(
         "Native".to_string(),

@@ -20,7 +20,7 @@
 //! ## 夹具为什么是「两条值层」
 //!
 //! 类型层在 IR 层已擦除（`A: Type` 不占运行期槽），柯里包装层只在**值层 ≥ 2** 时出现
-//! （`ir_gen::generate_curry_function_ir` 按值层切层）；单值层的泛型函数直接就是目标
+//! （`lower/curry.rs` 的 `generate_curry_function_ir` 按值层切层）；单值层的泛型函数直接就是目标
 //! 函数本身，没有包装层可克隆。
 
 use crate::frontend::compiler::Compiler;

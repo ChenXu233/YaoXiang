@@ -108,7 +108,7 @@ fn test_aggregate_resolves_named_import_request_through_alias_channel() {
     ];
     let irs = vec![Some(unit_ir(&["main.main"])), Some(unit_ir(&["lib.pick"]))];
     // 入口单元的真实 `use lib.{pick}` AST + 同一 registry：聚合函数据此调
-    // ir_gen 的 import_aliases_from 取别名表（与生成期同源）
+    // `lower/module_ir.rs` 的 `import_aliases_from` 取别名表（与生成期同源）
     let tokens =
         crate::frontend::core::lexer::tokenize("use lib.{pick}\n").expect("use 行可词法分析");
     let parsed = crate::frontend::core::parser::parse(&tokens);

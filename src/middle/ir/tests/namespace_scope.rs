@@ -20,7 +20,7 @@ use crate::frontend::core::sema::probe::TypeLevelNamespace;
 use crate::frontend::core::sema::{SemanticProbe, TypeCheckResult};
 use crate::frontend::module::registry::ModuleRegistry;
 use crate::middle::ir::ir::ModuleIR;
-use crate::middle::ir::ir_gen::AstToIrGenerator;
+use crate::middle::lower::AstToIrGenerator;
 
 /// 词法 + 语法（语义探针入口与生产一致）；语法错误直接失败并列出。
 fn parse_module(source: &str) -> ast::Module {

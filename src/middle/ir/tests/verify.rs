@@ -15,7 +15,7 @@ use crate::frontend::core::sema::MonoType;
 use crate::frontend::core::sema::checker::TypeChecker;
 use crate::frontend::module::registry::ModuleRegistry;
 use crate::middle::ir::ir::{ConstValue, Instruction, Operand};
-use crate::middle::ir::ir_gen::AstToIrGenerator;
+use crate::middle::lower::AstToIrGenerator;
 use crate::middle::ir::verify::{verify_loose, verify_ssa, InvariantKind, VerifyError};
 use crate::util::span::Span;
 
@@ -551,7 +551,7 @@ fn test_ssa_shaped_ir_passes_verify_ssa() {
 // =====================
 
 /// 不变量 7 反例：外层 MakeClosure 引用的闭包，其自有局部名混入外层 locals——
-/// save/restore 契约（ir_gen.rs:252-253）违反形态。
+/// save/restore 契约（lower/mod.rs 的 `next_temp` / `cur_span` 字段）违反形态。
 #[test]
 fn test_inner_local_name_leaking_to_outer_fails() {
     // Arrange：外层 locals 含 inner_var；闭包自有局部也叫 inner_var

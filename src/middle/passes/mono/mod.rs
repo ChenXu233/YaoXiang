@@ -109,7 +109,7 @@ pub struct Monomorphizer {
     ///
     /// 收集判据见 [`Self::curry_wrapper_target`]：包装体 = 「把本帧全部槽按序
     /// 包成下一层闭包并返回」。判据**不看名字**——层名规则（`__{name}_l{i}`）
-    /// 只属于 ir_gen，mono 在这里解析名字就是同一规则的第二处实现。
+    /// 只属于 lower，mono 在这里解析名字就是同一规则的第二处实现。
     curry_layers: HashMap<String, FunctionIR>,
     /// 逐实例柯里层克隆 → 所属**实例**名（mono 建克隆时写入）。
     ///
@@ -393,7 +393,7 @@ impl Monomorphizer {
     ///
     /// 为什么判形状而不是「所有 MakeClosure 目标」：函数值与匿名闭包（`{ f }`、
     /// lambda）同样发 MakeClosure，但它们不是柯里层；按实例克隆它们只会制造
-    /// 无意义的重复函数。为什么不按名字（`__f_l0`）：层名规则只属于 ir_gen，
+    /// 无意义的重复函数。为什么不按名字（`__f_l0`）：层名规则只属于 lower，
     /// mono 再解析一次就是同一规则的第二处实现（P2 要消灭的正是这种映射）。
     fn curry_wrapper_target(func: &FunctionIR) -> Option<&str> {
         let FunctionBody::Code { blocks, .. } = &func.body else {
@@ -508,7 +508,7 @@ impl Monomorphizer {
             return;
         };
         if layer.generic_params.is_some() {
-            // 防御：柯里层由 ir_gen 生成、恒无 generic_params；真命中说明形状判据
+            // 防御：柯里层由 lower 生成、恒无 generic_params；真命中说明形状判据
             // 误捕了一个泛型定义——不克隆（克隆成非泛型会是另一种语义）
             return;
         }

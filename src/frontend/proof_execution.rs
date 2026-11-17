@@ -439,7 +439,7 @@ fn execute_single_proof_fn(
     // 只求值体、不展开被调方自身形参精化；该缺口已由 1.5 步的
     // `expand_callee_param_refinements` 接线（RFC-027 §3.3）。单文件证明执行
     // 不消费跨模块谓词名，空集与本路径的裁决面一致。
-    let mut ir_gen = middle::ir::ir_gen::AstToIrGenerator::new_with_type_result(
+    let mut ir_gen = middle::lower::AstToIrGenerator::new_with_type_result(
         type_result,
         crate::frontend::module::registry::ModuleRegistry::with_std(),
         None,

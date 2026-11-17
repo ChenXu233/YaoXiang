@@ -21,7 +21,7 @@ use crate::frontend::module::roles::{self, FileRole};
 use crate::frontend::module::ModuleSource;
 use crate::frontend::pipeline::PipelineError;
 use crate::middle::ir::ir::{Instruction, Operand};
-use crate::middle::ir::ir_gen::AstToIrGenerator;
+use crate::middle::lower::AstToIrGenerator;
 use crate::middle::passes::mono::Monomorphizer;
 use crate::middle::ModuleIR;
 use crate::util::diagnostic::ErrorCodeDefinition;
@@ -851,7 +851,7 @@ impl Driver {
 
     /// Check 形态（4.2.5，用户裁决）：IR 生成在 check 里是**检查**不是
     /// 产物——逐文件收集 IR 级错误（E3019 初始化环 / E1014-E1015 命名
-    /// 参数 / E3023 等，ir_gen 是这些码的唯一产生点），不中止。standalone
+    /// 参数 / E3023 等，lower 是这些码的唯一产生点），不中止。standalone
     /// check 旧路径（pipeline 全链）本就跑 IR 生成；项目 check 从此补上
     /// 这一层（02 不一致表第 11 行缺口）。typecheck 失败的单元无
     /// type_result，自然跳过（与 run 路径门控一致）。
@@ -1523,7 +1523,7 @@ impl Driver {
         // Monomorphization 臂消费。
         //
         // t10：请求名要对齐成 IR 调用指令里的名字，故这里连同单元 AST 与 registry
-        // 一起交给聚合函数——它用 ir_gen 的 `import_aliases_from`（`qualify_names`
+        // 一起交给聚合函数——它用 `lower/module_ir.rs` 的 `import_aliases_from`（`qualify_names`
         // 改写调用名用的同一实现）现场取别名表，驱动侧不另建表。
         {
             let unit_irs: Vec<Option<ModuleIR>> =

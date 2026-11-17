@@ -165,7 +165,7 @@ impl CodegenContext {
         // 3. 生成类型表（从 TypeDecl 函数中收集）
         //
         // 6.6.12 起类型声明的 TypeDecl 载体自带类型表项（`TypeDeclBody::self_type`，
-        // 由 ir_gen 在 AST 降级期算好），codegen 不再摸语法层 AST。
+        // 由 lower 在 AST 降级期算好），codegen 不再摸语法层 AST。
         let type_table: Vec<MonoType> = self
             .module
             .functions

@@ -86,7 +86,7 @@ const MULTI_FILE_STAGES: &[Stage] = &[
 // 诊断集相同（C2 集合语义），仅文件内诊断顺序归一（02 §1 修订注记）。
 // 4.2.5（用户裁决）：CHECK 加 GlobalSlotAlloc + IrGeneration——standalone
 // check 旧路径（pipeline 全链）本就跑 IR 生成，E3019/E1014/E1015 等只在
-// ir_gen 产生；不加则 standalone check 能力回归（runner 门禁实证）。项目
+// lower 产生；不加则 standalone check 能力回归（runner 门禁实证）。项目
 // check 从此也捕获 IR 级错误（02 不一致表第 11 行缺口填上）。
 //
 // 3.4.8 ③（2026-10-10 用户裁决，02 §3 注记 #14）：CHECK 再加 Linking 与

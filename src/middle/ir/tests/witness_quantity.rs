@@ -16,7 +16,7 @@ use crate::frontend::core::sema::probe::TypeLevelNamespace;
 use crate::frontend::core::sema::SemanticProbe;
 use crate::frontend::module::registry::ModuleRegistry;
 use crate::middle::ir::ir::{FunctionBody, ModuleIR};
-use crate::middle::ir::ir_gen::AstToIrGenerator;
+use crate::middle::lower::AstToIrGenerator;
 
 /// 把 `module.items` 里指定类型定义的指定字段标成 witness（q=0）。
 fn mark_field_witness(

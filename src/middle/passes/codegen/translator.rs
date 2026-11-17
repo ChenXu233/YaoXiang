@@ -128,7 +128,7 @@ impl Translator {
         for (idx, func) in module.functions.iter().enumerate() {
             function_name_to_idx.insert(func.name.clone(), idx);
         }
-        // 建立 DefId 到索引的映射（Stage 3 主路径；FunctionIR.def 由 ir_gen 尾部 assign_defs 填充）
+        // 建立 DefId 到索引的映射（Stage 3 主路径；FunctionIR.def 由 lower 的 `assign_defs` 填充）
         self.function_def_to_idx = module
             .functions
             .iter()
@@ -347,7 +347,7 @@ impl Translator {
 
     /// 从类型定义机械合成构造函数
     ///
-    /// 等价于旧 ir_gen 的 `generate_struct_constructor_ir`，但在 codegen 阶段执行。
+    /// 等价于旧 IR 生成器的 `generate_struct_constructor_ir`，但在 codegen 阶段执行。
     /// 数据源自 6.6.12 起是 IR 原生的 [`TypeDeclBody`]（收窄载体），不再读语法层 AST。
     ///
     /// **本轮不改行为**：仍按历史行为把**全部**字段（含函数类型字段/方法）算进构造

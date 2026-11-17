@@ -9,7 +9,7 @@
 //!
 //! # 键的同一性
 //!
-//! 产出（`inference/expressions.rs` 的 `infer_call_expr`）与消费（`ir_gen` 的两处
+//! 产出（`inference/expressions/call/mod.rs` 的 `infer_call_expr`）与消费（`lower/expr/call.rs` 的两处
 //! 方法调用命名）都读**同一个 `Expr::Call` 节点**上的 `plan_id`——不再靠「Call 的
 //! span 两处各算一遍」的位置巧合。未分配身份（`PlanId::UNPLANNED`，解析器之外的
 //! 合成调用）**不可被消费**（`get` 返回 `None`），故任何「合成调用进了决议表」都会

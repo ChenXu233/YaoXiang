@@ -61,7 +61,7 @@ pub struct StatementChecker {
     ///
     /// 用途（RFC-039 §3.4.8 ①）：限定调用 `lib.f(x)` 发实例化请求时，
     /// `generic_id` 必须用与 merged-IR 同源的限定名 `{module_key}.{f}`。
-    /// 与 `TypeChecker::module_namespaces`（同名概念，供 ir_gen 的 Resolver 用）
+    /// 与 `TypeChecker::module_namespaces`（同名概念，供 lower 的 Resolver 用）
     /// 的差别：那张表按 `is_std_submodule` 规则**排除 std 裸子模块**，
     /// 本表是 body 检查期的完整视图（std 子模块一并登记），只服务请求的
     /// 限定名生成，不改任何既有名字解析。
@@ -1147,7 +1147,7 @@ impl StatementChecker {
     /// `value_params`：见 [`Self::check_fn_def_with_subst`]。
     // 形参已含 self 共 8 个：函数体检查需同时拿到声明返回类型（RFC-010a 规则①）
     // 与值级形参签名（#泛型柯里化下传），两者来源不同不宜合并。与仓库既有
-    // ir_gen.rs / formatter/handlers/stmt.rs 的同类签名一致。
+    // lower/stmt.rs 的 `generate_function_ir` / formatter/handlers/stmt.rs 的同类签名一致。
     #[allow(clippy::too_many_arguments)]
     /// 实现头标注与声明同位的值级类型是否**指同一个类型**（D54 修复轮 F2）。
     ///
@@ -1223,7 +1223,7 @@ impl StatementChecker {
 
     // 形参已含 self 共 8 个：函数体检查需同时拿到声明返回类型（RFC-010a 规则①）
     // 与值级形参签名（#泛型柯里化下传），两者来源不同不宜合并。与仓库既有
-    // ir_gen.rs / formatter/handlers/stmt.rs 的同类签名一致。
+    // lower/stmt.rs 的 `generate_function_ir` / formatter/handlers/stmt.rs 的同类签名一致。
     #[allow(clippy::too_many_arguments)]
     fn check_fn_body(
         &mut self,
@@ -3163,7 +3163,7 @@ impl StatementChecker {
             var_span,
         );
         // #303：循环变量类型同步进 function_local_vars——块作用域 exit 即销毁，
-        // 活不到函数退出时的统一保存，ir_gen 的 get_expr_mono_type(Var) 会查不到。
+        // 活不到函数退出时的统一保存，lower 的 get_expr_mono_type(Var) 会查不到。
         // 同名嵌套循环内层覆盖外层（与块作用域遮蔽语义一致）。
         self.function_local_vars
             .insert(var.to_string(), PolyType::mono(elem_ty));

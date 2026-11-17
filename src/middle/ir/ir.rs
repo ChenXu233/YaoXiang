@@ -315,7 +315,7 @@ pub enum Instruction {
     },
     /// membership 谓词（#299 §3）：`dst = elem in container` → Bool
     /// 容器：List/Array/Tuple 线性扫、Dict 键查、String 子串；
-    /// Range 不走此指令——ir_gen 直接脱糖成比较链
+    /// Range 不走此指令——lower 直接脱糖成比较链
     Contains {
         dst: Operand,
         elem: Operand,
@@ -873,7 +873,7 @@ pub enum FunctionBody {
 /// **收窄口径**（WBS 6.6.12）：IR 只消费三样东西——① 字段的个数与顺序；② 每个字段的
 /// 类型（`MonoType`）；③ 该类型在字节码类型表里的项（[`TypeDeclBody::self_type`]）。
 /// **默认值表达式 / const 界表达式 / 匿名方法绑定 / span 一律不进**：默认值在
-/// `ir_gen` 已降级成指令、const 界在类型检查层消费、匿名绑定在 `register_type_bindings`
+/// `lower` 已降级成指令、const 界在类型检查层消费、匿名绑定在 `register_type_bindings`
 /// 另有归宿；span 只在源码诊断里有意义，而 IR 快照按文本比对（保留 span 会让快照
 /// 携带源码偏移，见 07 §快照规范化表「剥离 Span」一项此前并未真正成立）。
 #[derive(Debug, Clone)]
@@ -892,11 +892,11 @@ pub struct TypeDeclBody {
 pub struct TypeDeclField {
     /// 字段名。IR 不按名查找；AST 侧字段恒有名字，故这里不是 `Option`。
     pub name: String,
-    /// 字段类型（构造参数类型；AST→`MonoType` 的降级在 `ir_gen` 完成）
+    /// 字段类型（构造参数类型；AST→`MonoType` 的降级在 `lower` 完成）
     pub ty: MonoType,
     /// 字段可变性标记（快照显示用）
     pub is_mut: bool,
-    /// 是否有默认值**标记**（默认值表达式不进载体，它在 `ir_gen` 已降级成指令）
+    /// 是否有默认值**标记**（默认值表达式不进载体，它在 `lower` 已降级成指令）
     pub has_default: bool,
     /// 量词读数（6.9.5-B.1a / H1）：`Some(Zero)` = witness 字段，`None` = data 字段。
     ///

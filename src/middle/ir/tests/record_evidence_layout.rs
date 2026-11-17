@@ -15,7 +15,7 @@ use crate::frontend::core::sema::probe::TypeLevelNamespace;
 use crate::frontend::core::sema::SemanticProbe;
 use crate::frontend::module::registry::ModuleRegistry;
 use crate::middle::ir::ir::{FunctionBody, Instruction, ModuleIR};
-use crate::middle::ir::ir_gen::AstToIrGenerator;
+use crate::middle::lower::AstToIrGenerator;
 
 /// 走真实四段管线产出模块 IR（类型检查必须无诊断）。
 fn module_ir(source: &str) -> ModuleIR {

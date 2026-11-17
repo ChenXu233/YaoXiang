@@ -113,7 +113,7 @@ pub(in crate::driver) fn allocate_global_slots(
 ///
 /// 同名只登记一次（4.10.3）：Script 顶层对 `mut` 的**赋值语句**与声明同形
 ///（`counter = counter + 1` 也是 `Assign { target: Var, .. }`），逐语句计数
-/// 会给同一变量重复配槽——与 ir_gen `register_global_slots` 的按名合并同一
+/// 会给同一变量重复配槽——与 `lower/globals.rs` 的 `register_global_slots` 的按名合并同一
 /// 判据（裸名）。
 pub(in crate::driver) fn extract_global_defs(ast: &Module) -> Vec<(String, MonoType)> {
     let mut out: Vec<(String, MonoType)> = Vec::new();
@@ -129,7 +129,7 @@ pub(in crate::driver) fn extract_global_defs(ast: &Module) -> Vec<(String, MonoT
                 // RFC-010a 附录D + B 方案（33f2ebbe）：Lambda → 函数；注解是
                 // Fn → 函数；其余（含无注解块，内容决定类型）→ 块值。
                 // 此前这里写「Block 就是函数」，把 `x: Int = { 5 }`
-                // 误判为函数——与 ir_gen 的注册口径不一致，导致跨文件引用
+                // 误判为函数——与 `lower/globals.rs` 的注册口径不一致，导致跨文件引用
                 // `use lib.{x}` 找不到槽位（T5）。
                 let is_fn =
                     Expr::block_binding_is_function(type_annotation.as_ref(), value.as_deref())
@@ -581,7 +581,7 @@ pub(in crate::driver) fn link_module_irs(
 /// 为什么需要限定化：`containing_fn` 是 mono 的 deferred 桶键（泛型体内的嵌套
 /// 调用请求按所在函数暂存，待该函数特化时求值），也是调用点改写三元键的容器
 /// 维度。typecheck 逐单元运行，`scope.fn_context()` 只知道**裸名**（`f`）；
-/// 而 ir_gen 的 `qualify_names` 已把每个单元的顶层函数重命名为
+/// 而 `lower/module_ir.rs` 的 `qualify_names` 已把每个单元的顶层函数重命名为
 /// `{module_key}.{bare}`，Linking 之后 merged IR 的函数表只有限定名。
 /// 不限定化则 deferred 桶**永不排水**：桶建在裸名下、特化按限定名查桶——
 /// 递归泛型（`f(x) = f([x])`）的整条特化链不展开，既不出深度诊断，
@@ -633,21 +633,19 @@ pub(in crate::driver) fn aggregate_instantiation_requests(
             .iter()
             .map(|name| ((*name).to_string(), (*name).to_string()))
             .collect();
-        // 模块别名表（本地名 → 限定名）：调 ir_gen 的**同一实现**
+        // 模块别名表（本地名 → 限定名）：调 `lower/module_ir.rs` 的**同一实现**
         // `import_aliases_from`（`qualify_names` 改写调用名用的就是它跑出来的表），
         // 传本单元 AST 与同一 registry——一处生产、一处消费，不在驱动侧另建表，
         // 也不复刻任何解析/优先级规则。
         let aliases: HashMap<String, String> = unit_asts
             .get(i)
             .and_then(|a| a.as_ref())
-            .map(|ast| {
-                crate::middle::ir::ir_gen::AstToIrGenerator::import_aliases_from(ast, registry)
-            })
+            .map(|ast| crate::middle::lower::AstToIrGenerator::import_aliases_from(ast, registry))
             // 无 AST（上游失败）时无可解析：空表等价于纯单元键限定化
             .unwrap_or_default();
         let resolver = |name: &str| -> Option<String> {
-            // 解析走 ir_gen 的**单点实现**（与生成期改写指令同一函数）
-            let raw = crate::middle::ir::ir_gen::AstToIrGenerator::resolve_call_target(
+            // 解析走 `lower/module_ir.rs` 的**单点实现**（与生成期改写指令同一函数）
+            let raw = crate::middle::lower::AstToIrGenerator::resolve_call_target(
                 name, &rename, &aliases,
             );
             let raw = raw.filter(|r| program_functions.contains(r.as_str()));
@@ -1142,7 +1140,7 @@ pub(in crate::driver) fn resolved_method_marks(
 ///
 /// `fn_type_params`（函数名 → 形参名表，见 [`declared_type_param_names`]）服务
 /// **跨单元兜底路径**的请求：限定/花括号导入的调用走签名形态反推
-/// （expressions.rs 的 `collect_instantiation_request` 第二条路径），发出的请求
+/// （`inference/expressions/call/instantiation.rs` 的 `collect_instantiation_request` 第二条路径），发出的请求
 /// `type_params` 为**空**（探针实测 params=[]）——此时按函数名查表补名再 zip。
 /// 函数名做**尾段**匹配（`lib.sum` → `sum`）：AST 表按绑定裸名建，两种调用
 /// 形态都命中；同名跨模块的短名误配方向 = 展开出多余组 ⇒ 至多漏报 W1005
