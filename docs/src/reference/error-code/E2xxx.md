@@ -60,7 +60,7 @@ description: '语义分析阶段产生的错误，涵盖作用域、变量生命
 - **模板**：`重复定义：'{name}' 已在当前作用域中定义`
 - **消息**：变量在同一作用域中定义了多次
 - **帮助**：重命名或删除重复的定义
-- **发射点**：`src/frontend/core/sema/checker.rs:1645`、`src/frontend/core/sema/inference/statements.rs:2213`、`src/frontend/core/sema/inference/statements.rs:3061` 等 4 处
+- **发射点**：`src/frontend/core/sema/checker.rs:1650`、`src/frontend/core/sema/inference/statements.rs:2213`、`src/frontend/core/sema/inference/statements.rs:3061` 等 4 处
 
 ### E2003：所有权错误
 
@@ -197,7 +197,7 @@ description: '语义分析阶段产生的错误，涵盖作用域、变量生命
 - **构造函数**：`ErrorCodeDefinition::refined_unproven(assigned, var, constraint)`
 - **模板**：`对 '{assigned}' 赋值后，'{var}' 的精化类型约束：{constraint} 在证明内核内无法静态证明`
 - **帮助**：RFC-027 要求所有精化约束在编译期得到证明——证不出即编译错误。请改写约束使其实参可静态取值（字面量或字面量可折叠的表达式），或提供返回 Type 的证明函数参与编译期执行。
-- **发射点**：`src/frontend/core/sema/checker.rs:230`、`src/frontend/core/sema/checker/refinement.rs:712`、`src/frontend/core/sema/checker/refinement.rs:843`
+- **发射点**：`src/frontend/core/sema/checker.rs:235`、`src/frontend/core/sema/checker/refinement.rs:712`、`src/frontend/core/sema/checker/refinement.rs:843`
 - **源码注释名**：精化约束无法证明（RFC-027 §4/§9：Unproven → 编译错误 + 未解命题，
 
 ### E2090：无效签名

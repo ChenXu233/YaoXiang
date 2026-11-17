@@ -2749,3 +2749,290 @@ fn test_check_normal_depth_expression_zero_diagnostics() {
     assert!(result.is_ok(), "正常深度形态不得报错");
     assert_eq!(result.unwrap(), 0, "对照锚：限内程序零诊断");
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 3.20.32 / #553：方法面证据检查的剩余形态（E1113，SPEC type-system §7.1）
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// 病史门：issue #553 —— #538（3.20.21）接线了「变量接收者 + 无接收者位声明」
+// 形态后，其余方法形态的 q=0（编译期值）槽被运行期值填充仍零诊断：
+// ① 显式 self 接收者（`Box.get: (self: &Box, N: Int) -> (n: N) -> Int`）——
+//    接收者占签名 params[0]，`method_binding_call_key` 命中后判定整段让路；
+//    且柯里化签名的槽位表是全链拍平名，首次调用只填外层位 ⇒ 共享绑定判据的
+//    缺参校验把内层位当缺参退回恒等对位，恒等落在接收者槽上（非 const 位）；
+// ③ 外部绑定（`Box.get = f`，含类型体 `get = f`）——只登记 `method_bindings`，
+//    调用点槽位查表缺项 ⇒ NotTarget。
+// 修前红态实测（2026-11-17，CLI 探针，HEAD `72f12e99` 纯净构建）：下列四个
+// 主锚夹具的 `mut y` 变体全部 check 0 error；对照夹具（字面量实参）同批实测
+// 0 error（合法证据两形态都放行）。
+//
+// 形态②查证结论（如实登记）：类型体方法带**方法自带 q=0 槽**的注解在当前
+// 语言不可构造——方法自己的 q=0 参数名在类型体注解作用域外（E1003，探针
+// p2_min_curried）；借类型自身的 q=0 参数名且体未引用时报 E1094（探针
+// p2_anon_typeslot）；补引用后构造位报 E1002（探针 p2_anon_typeslot2）。可构造
+// 的类型体方法是 External/DefaultExternal 绑定（`{ get = f }`），它与顶层
+// `Type.method = f` 走同一登记口 ⇒ 本批由同一条槽位登记路径覆盖（主锚②）。
+// 类型体 Anonymous 绑定（`((..)->R)[pos] = lambda`）注册 method_bindings 但
+// 无法声明 q=0 槽 ⇒ 无 E1113 面，不登记空条目。无 [pos] 的
+// `{ get: FnType = lambda }` 是**默认值字段**而非方法绑定，其调用是记录形态
+// 调用（`method_binding_call_key` 依既有判据返回 None），不经方法面链路。
+//
+// 判据单源：本批不改 E1113 判定（槽位定位、证据判据、发射点沿用 #538 同段）；
+// 修法只有两处注入——① 判定入口的接收者位偏移（`method_binding_call_key` 的
+// 既有接收者校验为唯一判据，实参对位沿用共享 `bind_args_to_params` 的
+// `recv_offset` 形参——与调用侧 `bind_named_args` 的 offset 1 同一口径），
+// ③ 外部绑定登记口补写槽位事实（直读被绑函数已登记形态，#539 同纪律）。
+//
+// 跨模块方法导入不在本批（issue #553 face ④ / #539 轴）：方法槽位事实需随
+// `ModuleInfo.method_bindings` 跨界的平行载体（该方法类型本身已跨界——
+// `extract_module_info` 克隆 env.method_bindings、driver 注入 env——但槽位表
+// `declared_call_site_params` 无对应载体），且方法随 use 的门控粒度属语义设计
+// 面 ⇒ 另案登记，本批保持既有不判。
+
+/// #553 主锚①（先红后绿）：显式 `self` 接收者方法的 q=0 槽被**真运行期值**
+/// （`mut y`）填充必须报 E1113，点名被调方自己的 binder N——与 #538 锚同判据。
+#[test]
+fn test_check_method_with_explicit_receiver_runtime_value_in_const_slot_reports_e1113() {
+    // Arrange - 形态①：声明含接收者位（params[0] = &Box），q=0 槽 N 在内层
+    // 柯里位；`mut y` 按 6.8.5-2a 是真运行期绑定（无编译期值）
+    let dir = temp_dir();
+    let file = create_yx_file(
+        &dir,
+        "method_self_recv_const_slot_runtime_value.yx",
+        r#"
+Box: Type = { v: Int }
+Box.get: (self: &Box, N: Int) -> (n: N) -> Int = (n) => n
+main: () -> Void = {
+    b: Box = Box(v = 1)
+    mut y: Int = 3
+    r: Int = b.get(y)(y)
+}
+"#,
+    );
+
+    // Act
+    let checked = check_result(&file);
+    let codes = error_codes(&checked);
+
+    // Assert - 翻面：check 从 0 错（修前红态实测）改为恰 1 条 E1113，
+    // 点名被调方 binder N、位置指向填槽实参行
+    assert_eq!(
+        codes.len(),
+        1,
+        "#553 form①: filling the q=0 slot of an explicit-receiver method call with a runtime value must be rejected (E1113), not silently accepted; got {codes:?}"
+    );
+    assert_eq!(
+        codes[0], "E1113",
+        "#553 form①: the rejection must be E1113 (same code as the function face), got: {codes:?}"
+    );
+    let diag = &checked.diagnostics[0].diagnostic;
+    assert!(
+        diag.message.contains("'N'"),
+        "#553 form①: the diagnostic must name Box.get's own const binder N; got: {}",
+        diag.message
+    );
+    assert_eq!(
+        diag.span.map(|s| s.start.line),
+        Some(7),
+        "#553 form①: the diagnostic must sit on the slot-filling argument `y` (the `r:` line), not the declaration"
+    );
+}
+
+/// #553 主锚③a（先红后绿）：顶层外部绑定 `Box.get = f` 的 q=0 槽被运行期值
+/// 填充必须报 E1113——绑定登记口补写槽位事实后，与本地方法声明同判。
+#[test]
+fn test_check_external_binding_runtime_value_in_const_slot_reports_e1113() {
+    // Arrange - 形态③（接收者无位绑定）：被绑函数首参不是接收者类型 ⇒
+    // `method_binding_call_key` 不命中，实参直对声明槽位（recv_offset 0）
+    let dir = temp_dir();
+    let file = create_yx_file(
+        &dir,
+        "external_binding_const_slot_runtime_value.yx",
+        r#"
+Box: Type = { v: Int }
+get_impl: (N: Int) -> (n: N) -> Int = (n) => n
+Box.get = get_impl
+main: () -> Void = {
+    b: Box = Box(v = 1)
+    mut y: Int = 3
+    r: Int = b.get(y)(y)
+}
+"#,
+    );
+
+    // Act
+    let checked = check_result(&file);
+    let codes = error_codes(&checked);
+
+    // Assert - 翻面：check 从 0 错（修前红态实测）改为恰 1 条 E1113，
+    // 点名被绑函数登记的 q=0 名 N
+    assert_eq!(
+        codes.len(),
+        1,
+        "#553 form③: filling the q=0 slot of an externally bound method with a runtime value must be rejected (E1113); got {codes:?}"
+    );
+    assert_eq!(
+        codes[0], "E1113",
+        "#553 form③: the rejection must be E1113 (same code as the declaration face), got: {codes:?}"
+    );
+    let diag = &checked.diagnostics[0].diagnostic;
+    assert!(
+        diag.message.contains("'N'"),
+        "#553 form③: the diagnostic must name the bound function's q=0 name N; got: {}",
+        diag.message
+    );
+}
+
+/// #553 主锚③b（先红后绿）：被绑函数**首参是接收者类型**的外部绑定
+/// （`get_impl: (b: Box, ..)`，实例占住 params[0]）——实参从 params[1..] 对位
+/// （接收者位偏移 1），q=0 槽被运行期值填充必须报 E1113。
+#[test]
+fn test_check_external_binding_receiver_typed_fn_runtime_value_reports_e1113() {
+    // Arrange - 形态③（接收者占位绑定）：`method_binding_call_key` 的接收者
+    // 校验命中（params[0] = Box）⇒ 槽位对位必须跳过接收者槽，实参 y 才对到
+    // q=0 名 N
+    let dir = temp_dir();
+    let file = create_yx_file(
+        &dir,
+        "external_binding_receiver_fn_const_slot.yx",
+        r#"
+Box: Type = { v: Int }
+get_impl: (b: Box, N: Int) -> (n: N) -> Int = (n) => n
+Box.get = get_impl
+main: () -> Void = {
+    b: Box = Box(v = 1)
+    mut y: Int = 3
+    r: Int = b.get(y)(y)
+}
+"#,
+    );
+
+    // Act
+    let checked = check_result(&file);
+    let codes = error_codes(&checked);
+
+    // Assert - 翻面：check 从 0 错（修前红态实测）改为恰 1 条 E1113
+    assert_eq!(
+        codes.len(),
+        1,
+        "#553 form③b: a receiver-occupying external binding must align args past the receiver slot and reject a runtime value in the q=0 slot (E1113); got {codes:?}"
+    );
+    assert_eq!(
+        codes[0], "E1113",
+        "#553 form③b: the rejection must be E1113, got: {codes:?}"
+    );
+    let diag = &checked.diagnostics[0].diagnostic;
+    assert!(
+        diag.message.contains("'N'"),
+        "#553 form③b: the diagnostic must name the bound function's q=0 name N (not the receiver b); got: {}",
+        diag.message
+    );
+}
+
+/// #553 主锚②（先红后绿）：类型体外部绑定（`{ get = f }`，DefaultExternal）
+/// 与顶层 `Type.method = f` 走同一登记口——q=0 槽被运行期值填充必须报 E1113。
+#[test]
+fn test_check_type_body_external_binding_runtime_value_in_const_slot_reports_e1113() {
+    // Arrange - 形态②的可构造形态：类型体 DefaultExternal 绑定；被绑函数带
+    // q=0 槽（柯里化签名，首次调用只填外层位）
+    let dir = temp_dir();
+    let file = create_yx_file(
+        &dir,
+        "type_body_external_binding_const_slot.yx",
+        r#"
+Box: Type = { v: Int, get = get_impl }
+get_impl: (N: Int) -> (n: N) -> Int = (n) => n
+main: () -> Void = {
+    b: Box = Box(v = 1)
+    mut y: Int = 3
+    r: Int = b.get(y)(y)
+}
+"#,
+    );
+
+    // Act
+    let checked = check_result(&file);
+    let codes = error_codes(&checked);
+
+    // Assert - 翻面：check 从 0 错（修前红态实测）改为恰 1 条 E1113
+    assert_eq!(
+        codes.len(),
+        1,
+        "#553 form②: filling the q=0 slot of a type-body external binding with a runtime value must be rejected (E1113); got {codes:?}"
+    );
+    assert_eq!(
+        codes[0], "E1113",
+        "#553 form②: the rejection must be E1113, got: {codes:?}"
+    );
+    let diag = &checked.diagnostics[0].diagnostic;
+    assert!(
+        diag.message.contains("'N'"),
+        "#553 form②: the diagnostic must name the bound function's q=0 name N; got: {}",
+        diag.message
+    );
+}
+
+/// #553 对照锚①：显式接收者方法的**编译期常量实参**（字面量 / 纯 const 表达式）
+/// 修前修后同绿——证据齐备的合法调用不得被新增的接收者位对位误伤。
+#[test]
+fn test_check_method_with_explicit_receiver_compile_time_args_stay_accepted() {
+    // Arrange - 同一形态①声明，q=0 槽填字面量与 const 表达式（修前实测 0 错）
+    let dir = temp_dir();
+    let file = create_yx_file(
+        &dir,
+        "method_self_recv_const_slot_legal_args.yx",
+        r#"
+Box: Type = { v: Int }
+Box.get: (self: &Box, N: Int) -> (n: N) -> Int = (n) => n
+main: () -> Void = {
+    b: Box = Box(v = 1)
+    r: Int = b.get(3)(3)
+    s: Int = b.get(2+3)(5)
+}
+"#,
+    );
+
+    // Act
+    let result = check_file(&file);
+
+    // Assert
+    let errors = result.expect("check should not panic on legal receiver-ful const args");
+    assert_eq!(
+        errors, 0,
+        "#553: legal compile-time value arguments must stay accepted on the explicit-receiver method face; got {errors} error(s)"
+    );
+}
+
+/// #553 对照锚③：外部绑定方法的编译期常量实参修前修后同绿（两条绑定路径
+/// 各一形态——接收者无位与接收者占位）。
+#[test]
+fn test_check_external_binding_compile_time_args_stay_accepted() {
+    // Arrange - 形态③两变体的合法形态（修前实测 0 错）
+    let dir = temp_dir();
+    let file = create_yx_file(
+        &dir,
+        "external_binding_const_slot_legal_args.yx",
+        r#"
+Box: Type = { v: Int }
+get_impl: (N: Int) -> (n: N) -> Int = (n) => n
+get_recv_impl: (b: Box, N: Int) -> (n: N) -> Int = (n) => n
+Box.get = get_impl
+Box.get2 = get_recv_impl
+main: () -> Void = {
+    b: Box = Box(v = 1)
+    r: Int = b.get(3)(3)
+    s: Int = b.get2(2+3)(5)
+}
+"#,
+    );
+
+    // Act
+    let result = check_file(&file);
+
+    // Assert
+    let errors = result.expect("check should not panic on legal external-binding const args");
+    assert_eq!(
+        errors, 0,
+        "#553: legal compile-time value arguments must stay accepted on both external-binding registration paths; got {errors} error(s)"
+    );
+}

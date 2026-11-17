@@ -44,7 +44,7 @@ description: '模块系统与导入解析相关的错误。'
 - **模板**：`导入模块 '{module}' 失败：{reason}`
 - **消息**：导入模块失败
 - **帮助**：检查导入路径和模块解析
-- **发射点**：`src/frontend/core/sema/checker.rs:3267`
+- **发射点**：`src/frontend/core/sema/checker.rs:3339`
 
 ### E5003：导出未找到
 

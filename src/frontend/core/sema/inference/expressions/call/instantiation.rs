@@ -738,11 +738,16 @@ impl<'a> ExpressionInferrer<'a> {
         //   q=0 名与槽位名都来自方法注册写入的同一张槽位表
         //   （此前方法注册丢弃 q=0 事实 ⇒ 静默不判——#538 的缺口）。
         //
-        // 本批覆盖的方法形态 = 无接收者位的 `Type.method: sig = lambda` 声明
-        // （实参直对声明槽位，`recv_offset` 0，与函数面同款）。显式 `self` 接收者
-        // 形态（`method_binding_call_key` 命中、接收者占 params[0]）**不在本批
-        // 覆盖面**：其调用点槽位算术含接收者位偏移，未经本批验证 ⇒ 保持既有
-        // 不判（宁可少报，不可错猜）。
+        // 方法面覆盖形态（issue #538 + #553）：无接收者位声明（#538）与显式
+        // `self` 接收者（#553 形态①）两类。接收者形态的实参从 params[1..] 对位
+        // （`recv_offset` 1——`method_binding_call_key` 是「接收者占 params[0]」的
+        // 唯一判据，与调用侧方法绑定 `bind_named_args` 的 offset 1 同一口径，共用
+        // 同一 `bind_args_to_params` 判据）；无接收者位形态实参直对声明槽位
+        //（offset 0，与函数面同款）。显式接收者 + 槽位事实齐备的声明
+        //（`Type.method: (self: .., N: Int) -> (n: N) -> ..`）的槽位条目由 #538 的
+        // 方法注册口同款登记（`runtime_value_params` 全序含接收者位，q=0 子集
+        // 不含接收者），本函数只补对位偏移、不造第二份判据。
+        let mut recv_offset = 0usize;
         let fn_name;
         let const_names: Vec<String>;
         let body: MonoType;
@@ -756,11 +761,11 @@ impl<'a> ExpressionInferrer<'a> {
                 body = poly.body.clone();
             }
             None => {
-                // 显式接收者形态优先让路：`method_binding_call_key` 是「接收者占
+                // 显式接收者形态：`method_binding_call_key` 是「接收者占
                 // params[0]」的唯一判据（native 命名空间 / 记录字段 / 接收者校验
-                // 都在它内）。命中 ⇒ 本批不判，保持既有行为。
+                // 都在它内）。命中 ⇒ 下方槽位对位从 params[1..] 起（#553 形态①）。
                 if self.method_binding_call_key(func).is_some() {
-                    return ConstArgOutcome::NotTarget;
+                    recv_offset = 1;
                 }
                 // 方法键来自**调用边界快照**（`method_binding_key` 参数——
                 // `infer_call_expr` 在 `infer(func)` 之后立即 take，见其注释）：
@@ -770,8 +775,9 @@ impl<'a> ExpressionInferrer<'a> {
                     return ConstArgOutcome::NotTarget;
                 };
                 let Some(slots) = self.declared_call_site_params.get(&method_key) else {
-                    // 事实不足（方法面的类型体方法 / 外部绑定 / 跨模块方法导入 /
-                    // 非 const 形态——#553）⇒ 不判，不猜
+                    // 事实不足（方法面的跨模块方法导入——#553 face ④ / #539 轴，
+                    // 方法槽位尚无跨界载体；无 q=0 事实的类型体匿名绑定等非 const
+                    // 形态——方法自带 q=0 槽被 E1003/E1094 拦在声明面）⇒ 不判，不猜
                     return ConstArgOutcome::NotTarget;
                 };
                 if slots.const_params.is_empty() {
@@ -810,22 +816,26 @@ impl<'a> ExpressionInferrer<'a> {
             &call_site_names,
             args,
             named_args,
-            0,
+            recv_offset,
             &optional,
             span,
         )
         // 绑定畸形（未知名 / 争槽 / 命名后接位置 / 缺参）已由别处发射对应码，
         // 这里退回位置对位，避免重复发射（与 refinement.rs 的调用点义务同一口径）。
-        .unwrap_or_else(|_| (0..args.len()).collect());
+        // 回退对位沿用 `bind_args_to_params` 自己的规则（slot = recv_offset + i，
+        // issue #553 形态①）：柯里化签名（`f: (N: Int) -> (n: N) -> Int`）的槽位表
+        // 是全链拍平名，首次调用只填外层位 ⇒ 缺参校验把内层位当缺参 ⇒ Err 落回退；
+        // 回退必须跳过接收者位，否则显式接收者形态的实参会错对到接收者槽。
+        .unwrap_or_else(|_| (recv_offset..recv_offset + args.len()).collect());
         let arg_pairs: Vec<(&crate::ast::Expr, usize)> = args
             .iter()
             .enumerate()
-            .map(|(i, e)| (e, positions.get(i).copied().unwrap_or(i)))
+            .map(|(i, e)| (e, positions.get(i).copied().unwrap_or(recv_offset + i)))
             .chain(named_args.iter().enumerate().map(|(i, (_, e))| {
                 let slot = positions
                     .get(args.len() + i)
                     .copied()
-                    .unwrap_or(args.len() + i);
+                    .unwrap_or(recv_offset + args.len() + i);
                 (e, slot)
             }))
             .collect();

@@ -48,15 +48,16 @@ pub struct TypeChecker {
     /// `declared_fn_type_params` 同一次 walk（Registry 的签名收集），故正文
     /// 检查时全模块函数（含前向声明）都已在表内。
     ///
-    /// 缺项 = 事实不足（未走签名收集的直构场景；方法面的类型体方法 / 外部
-    /// 绑定 / 跨模块方法——#553）：调用点因此**不判** E1113，也不得按位置
-    /// 猜——宁可少报，不可错猜。导入**函数**面的事实已随 Export 跨界携带
-    /// （#539：`Export::const_binders` + `Export::call_site_params`，导入方
-    /// `import_binding` 按本表同构登记），不再属于缺项。
+    /// 缺项 = 事实不足（未走签名收集的直构场景；方法面的**跨模块方法导入**
+    /// ——#553 face ④ / #539 轴，方法槽位尚无跨界载体）：调用点因此**不判**
+    /// E1113，也不得按位置猜——宁可少报，不可错猜。导入**函数**面的事实已随
+    /// Export 跨界携带（#539：`Export::const_binders` + `Export::call_site_params`，
+    /// 导入方 `import_binding` 按本表同构登记），不再属于缺项。
     ///
     /// 键覆盖两个被调面：函数名（`f`）与方法键（`Box.get`，issue #538——方法
     /// 注册与函数签名收集同一次 walk，方法键与 `method_bindings` 的查找键同一
-    /// 构造）。
+    /// 构造；外部绑定方法的条目由 `register_external_method_slots` 随绑定登记
+    /// 补写——issue #553 形态③）。
     declared_call_site_params: HashMap<String, CallSiteSlots>,
     /// 语句检查器
     body_checker: Option<inference::StatementChecker>,
@@ -118,7 +119,11 @@ pub struct TypeChecker {
 /// - 函数面的 q=0 事实以 `PolyType::const_binders` 为声明期登记口（本表登记点
 ///   早于 `const_binders` 解出，故函数条目的 `const_params` 留空、不被消费）；
 /// - 方法面此前整段丢弃 `const_binders` ⇒ 调用点无事实可查、静默不判
-///   （issue #538 的缺口），现随方法注册把 q=0 子集写进本表。
+///   （issue #538 的缺口），现随方法注册把 q=0 子集写进本表；外部绑定方法
+///   （`Type.method = f` / 类型体 `get = f`——issue #553 形态③）的条目由
+///   `register_external_method_slots` 随绑定登记补写（直读被绑函数的已登记
+///   形态），显式接收者形态的实参对位偏移在判定侧按 `method_binding_call_key`
+///   的接收者校验对齐（issue #553 形态①）。
 /// - 导入**函数**面（issue #539）：两样事实随 Export 跨界携带
 ///   （`Export::const_binders` + `Export::call_site_params`，定义方已登记形态
 ///   直读），导入方 `import_binding` 按函数条目同款登记（`const_params`
@@ -2240,6 +2245,13 @@ impl TypeChecker {
                         let method_ty = Self::method_type_after_binding(&fn_ty, &positions);
                         self.env
                             .add_method_binding(&type_name, &method_name, method_ty);
+                        // E1113（6.9.2-B / issue #553 形态③）：外部绑定的槽位事实
+                        self.register_external_method_slots(
+                            &type_name,
+                            &method_name,
+                            &func_name,
+                            &positions,
+                        );
                     }
                 }
             }
@@ -3008,6 +3020,8 @@ impl TypeChecker {
             let method_ty = Self::method_type_after_binding(&fn_ty, &positions);
             self.env
                 .add_method_binding(type_name, method_name, method_ty.clone());
+            // E1113（6.9.2-B / issue #553 形态③）：类型体外部绑定的槽位事实
+            self.register_external_method_slots(type_name, method_name, func_name, &positions);
             // RFC-011b: 绑定形态同样进重载候选表（接口完整性检查按候选集匹配）。
             // #452：外部绑定的形参名在 typecheck 侧拿不到（被绑函数只留签名、
             // 不留名字），留空 = 调用点不按名匹配（不冒充「名字已核对」）。
@@ -3020,6 +3034,64 @@ impl TypeChecker {
     /// 从 Index 表达式的 index 部分提取位置列表
     fn extract_positions(index: &crate::ast::Expr) -> Vec<i64> {
         crate::ast::Expr::extract_binding_positions(index)
+    }
+
+    /// E1113（6.9.2-B / issue #553 形态③）：外部绑定方法的**槽位事实**登记。
+    ///
+    /// 两条方法绑定登记口——顶层 `Type.method = f[pos]`（`collect_function_signature`
+    /// 的 Assign 臂）与类型体 External/DefaultExternal（`register_external_method_
+    /// binding`）——此前只登记 `method_bindings`，调用点槽位查表缺项 ⇒ 静默不判。
+    /// 本帮助函数把事实补进 `declared_call_site_params`：键与 `add_method_binding`
+    /// 同一构造（`{type}.{method}`），`names` 直读被绑函数**签名收集期已登记**的
+    /// 槽位条目、q=0 子集直读其 `PolyType::const_binders`（定义方已登记形态直读，
+    /// 不从签名形态反推——#539 同纪律），判定函数零改动。
+    ///
+    /// 名字集合同步 `method_type_after_binding` 的挖位规则：单位绑定保留全签名
+    /// （实例占住被绑位——接收者位由判定侧 `recv_offset` 对齐 `method_binding_
+    /// call_key` 的接收者校验），多位绑定挖掉被绑位。q=0 名单与名字集合求交
+    /// （被绑位恰是 q=0 槽的多位绑定语义归 6.6.x 绑定面，不在此猜）。
+    /// 被绑函数无 q=0 事实（`const_binders` 空）时不登记——空 `const_params`
+    /// 条目在判定侧恒 `NotTarget`，登记了也无行为面。条目按**首登记为准**
+    ///（`or_insert`，与方法声明口 #538 的登记同口径：重载方法不互相覆盖槽位事实）。
+    fn register_external_method_slots(
+        &mut self,
+        type_name: &str,
+        method_name: &str,
+        func_name: &str,
+        positions: &[i64],
+    ) {
+        let Some(slots) = self.declared_call_site_params.get(func_name) else {
+            return;
+        };
+        let Some(poly) = self.env.get_var(func_name) else {
+            return;
+        };
+        let q0_names: Vec<String> = poly.const_binders.iter().map(|b| b.name.clone()).collect();
+        if q0_names.is_empty() {
+            return;
+        }
+        let names: Vec<String> = if positions.len() <= 1 {
+            slots.names.clone()
+        } else {
+            slots
+                .names
+                .iter()
+                .enumerate()
+                .filter(|(i, _)| !positions.contains(&(*i as i64)))
+                .map(|(_, n)| n.clone())
+                .collect()
+        };
+        let const_params: Vec<String> =
+            q0_names.into_iter().filter(|n| names.contains(n)).collect();
+        if const_params.is_empty() {
+            return;
+        }
+        self.declared_call_site_params
+            .entry(format!("{}.{}", type_name, method_name))
+            .or_insert(CallSiteSlots {
+                names,
+                const_params,
+            });
     }
 
     /// 将模块注册为 Struct 类型（包含所有导出作为字段）
