@@ -6944,3 +6944,15 @@ canonical_text(RecordModel) =
 ### 七、提交
 
 7.0.1–7.0.3 与 7.0.4 分两笔本地提交（未 push），pre-commit 全链绿；本收口文档与错误码生成物同笔提交。
+
+## P3 3.20.32 收口（方法面证据检查剩余形态——显式接收者 + 外部绑定，#553，2026-11-18）
+
+> **一、查证（四形态修前红态 + 形态②前提更正）**：HEAD 纯净构建 CLI 探针实测四形态修前全部 0 error 静默通过——①显式 self 接收者（`b.get(y)(y)` mut y）、③顶层外部绑定（`Box.get=f` mut y）、接收者型被绑函数、类型体外部绑定（`{ get = f }`）。**形态②原文语法更正**：`{ get: FnType = lambda }`（无 [pos]）是默认值字段非方法绑定；Anonymous 带 q=0 槽被 E1003/E1094/E1002 三道既有门拦死——无 E1113 面；可构造的类型体方法即外部绑定（与③同一登记口）。分类 = D59 C 类静默不动作（同 #538 判据）。链路测绘：#538 链路（method_binding_key 快照 → collect_const_arg_instantiation_request → CallSiteSlots）逐环节读码，grep method_binding 全部消费点确认无第四形态。
+
+> **二、修法（判定函数零改动，判据单源）**：①显式接收者形态——判定入口以 `method_binding_call_key` 既有接收者校验为唯一判据改 `recv_offset` 路由（0→1；回退对位三处同步 `recv_offset+i`——柯里化签名槽位表是全链拍平名、首次调用只填外层位 ⇒ 回退必须跳过接收者位，否则实参错对到接收者槽；与 `bind_named_args` 的 offset 1 同口径，共用同一 `bind_args_to_params` 判据，不造第二份）。②③外部绑定——新增 `register_external_method_slots` 在顶层与类型体两条绑定登记口补写槽位事实：直读被绑函数已登记形态 + `const_binders` 过滤位置绑定，无事实早退（不猜），#539 同纪律。字段文档同步更新（缺项收窄为 face ④）。**face ④ 跨模块方法导入另案不修**：`ModuleInfo.method_bindings` 携带方法类型跨界但槽位事实（declared_call_site_params）无载体；Export 两载荷模式不直接适用（方法非导出，需 ModuleInfo 平行表 + 方法随 use 的门控粒度设计）——裁决素材登记新 issue（S-needs-decision）。
+
+> **三、rebase 冲突解决（红线 10⑩ 第三次实战）**：修复笔与并行会话周末大搬移相撞——7.0.4 把 `inference/expressions.rs` 拆为 `expressions/` 目录（修复 hunk 落在被删文件 → DU）、7.0.1–7.0.3 ir_gen 拆 lower、P7 收口批重跑生成物（E1xxx/E2xxx/warning-codes 三份 UU）。解法 = 修复 hunk 逐字重放至新家 `expressions/call/instantiation.rs` + 旧文件 git rm（内容已迁）+ 生成物从合并树重跑生成器；解后本地编译 + compile_time_evidence 14 / method 锚 7 / external 锚 3 / integration 全量 389 全绿才 `git rebase --continue`。t3 核对重放语义同一性：`git diff 0d198305 3a3fad47 -- src/frontend/core/sema/` 除文件路径外零逻辑 diff（纯搬移判据兑现）。
+
+> **四、验证链与 t3 事实更正**：t1 门禁 14 项一轮过（integration 389 = 383+6、fast 2207 条 0 跳过、IR/语料零漂移）→ 队长 diff review（recv_offset 三处回退同步、登记口覆盖 grep、声明与事实一致）→ t2 **PASS**（M1 接收者路由摘除 ⇒ 显式接收者锚红 / M2 登记摘除 ⇒ 外部绑定锚红——两机制各自承重，trial 机械可逆；偏差备案：M2 trial 首跑 cargo 用法拒绝后重跑未作判据、CLI 探针 8 文件为任务 5 项超集全部符合预期）→ t3 **REJECT**（2 条）：①[low] **提交信息 E5xxx 归因错误——事实更正由本节承载（提交已推送不改写）**：E5xxx.md 恰 1 行（E5002 import_error 发射点 checker.rs:3267→3339，+72）实为本修复自身 checker.rs 净 +72 插入（文档注释 +5、绑定口 +9、帮助函数 +64）平移 **6.9 B.4 批引入的 E5002 发射点**；7.0 搬移批两笔 --stat 不含 checker.rs（其引起的 +18 平移已被 P7 收口批 `2ac633fe` 吸收）；修前修复笔 0d198305 未触 E5xxx.md 是因为基线 72f12e99 树尚无该发射点。生成物本身正确（checker.rs:3339 确为该发射点，文档与代码一致）——缺陷仅提交信息因果记录，追溯者以本节为准。②[info] 运行时声称（修前探针/回归计数/幂等/E1014 修前对照）属运行时证据复审未重放——t2 已全部独立实测闭环；静态侧核到：四形态修前静默与 diff 删除行一致、p1_named_const 的 E1014 与调用侧 bind_named_args（#452 既有、offset 1 硬编）路径一致——**E1014 为修前既有边界备案**（命名调用面对接收者形态声明），非本批引入。
+
+> **五、锚与移交**：锚 6 条新（tests/integration/check.rs：显式接收者 / 外部绑定 ×2 / 类型体外部绑定 / 对照 ×2，修前红态逐字留档段头）；回归 #538/#539/#556/#537 系列原样绿。三级 +1 = 3.20.32（244→245）；二级不变。issue [#553](https://github.com/ChenXu233/YaoXiang/issues/553) **关闭**；face ④ 另案立新 issue（跨模块方法导入载体，S-needs-decision）。修复笔推送终态 `3a3fad47`。批次树已 release + gc。
