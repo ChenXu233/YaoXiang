@@ -575,6 +575,27 @@ pub(in crate::driver) fn link_module_irs(
     Ok(merged)
 }
 
+/// post-mono DCE 的唯一序列点（单文件 / 多文件两个 mono 臂共用）。
+///
+/// 序列：mono 成功之后、codegen 之前。根集 / 删除判据全在
+/// `middle/passes/dce`（模块 doc 的九行根集表是单一事实源）——本层只负责序列位置
+/// 与归因日志，不复制任何名字 / 可达性判断。Check 形态无产物、诊断面必须不变，
+/// 故不调用（调用臂按 ProgramKind 门控）；mono 被 ConfigDisabled / NoObligations
+/// 跳过时两臂都不会到调用点（调用点在 mono 成功分支内），故「mono 跳过 ⇒ DCE 跳过」
+/// 由序列位置保证。
+pub(in crate::driver) fn run_post_mono_dce(ir: &mut ModuleIR) -> Result<(), Diagnostic> {
+    let report = crate::middle::passes::dce::eliminate(ir)?;
+    if !report.deleted.is_empty() {
+        tracing::debug!(
+            deleted = report.deleted.len(),
+            kept = report.kept,
+            names = ?report.deleted,
+            "post-mono DCE：删除不可达函数"
+        );
+    }
+    Ok(())
+}
+
 /// 多文件形态（3.4.8 ②）：把各单元的实例化请求聚合为**全程序一张请求表**，
 /// 并把 `containing_fn` 的裸名限定化为 merged IR 的函数表键。
 ///
@@ -585,8 +606,7 @@ pub(in crate::driver) fn link_module_irs(
 /// `{module_key}.{bare}`，Linking 之后 merged IR 的函数表只有限定名。
 /// 不限定化则 deferred 桶**永不排水**：桶建在裸名下、特化按限定名查桶——
 /// 递归泛型（`f(x) = f([x])`）的整条特化链不展开，既不出深度诊断，
-/// 原件又被 `restore_generics_with_uncovered_call_sites` 放回、以类型擦除
-/// 执行到进程栈溢出（0xC00000FD）。
+/// 调用点也退回按名（类型擦除）执行，病态递归在运行期爆栈（0xC00000FD）。
 ///
 /// 判据「该单元是否定义了这个名字」：`containing_fn` 只可能是**本单元**的
 /// 函数（AST 属于本单元），故按单元自己的函数名集合匹配。合并后重名不冲突

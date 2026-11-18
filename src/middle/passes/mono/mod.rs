@@ -332,13 +332,8 @@ impl Monomorphizer {
         // 4. 队列循环（BFS）
         self.process_queue()?;
 
-        // 5. 构建输出
+        // 5. 构建输出（保留全部原件；删除职责归 post-mono DCE，见 build_output）
         let mut output = self.build_output(module);
-
-        // 5b. t3 闭合闸：删除判据（按泛型名）与改写判据（按 (containing_fn, 名, span)
-        //     三元键）粒度不同——未覆盖的调用点在原件被删后会悬空（运行期 E6006）。
-        //     放回「仍被按名调用且调用点不在改写映射里」的原件，使两个判据闭合。
-        self.restore_generics_with_uncovered_call_sites(module, &mut output);
 
         // 6. 替换调用点
         self.replace_call_sites(&mut output);
@@ -1156,94 +1151,22 @@ impl Monomorphizer {
         Ok(())
     }
 
-    /// 收集一个函数体内所有「按名调用的目标名」（`Call`/`CallStatic` 的字符串操作数）。
+    /// 构建单态化输出：**保留全部原件** + 追加实例/克隆（按名排序）。
     ///
-    /// 用于判断一个未特化的泛型函数是否仍被调用——被调用就必须保留。
-    fn call_target_names(func: &FunctionIR) -> Vec<String> {
-        let FunctionBody::Code { blocks, .. } = &func.body else {
-            return Vec::new();
-        };
-        let mut out = Vec::new();
-        for block in blocks {
-            for instr in &block.instructions {
-                if let Instruction::Call {
-                    func: Operand::Const(ConstValue::String(name)),
-                    ..
-                } = instr
-                {
-                    out.push(name.clone());
-                }
-            }
-        }
-        out
-    }
-
+    /// 为什么不再按名删泛型原件（#542）：删除判据按「泛型名集合」、改写判据按
+    /// (containing_fn, 名, span) 三元键——两个粒度不闭合：未覆盖的调用点在原件被删后
+    /// 悬空（运行期 E6006），此前靠「事后放回未覆盖调用点的原件」闭合闸打补丁，
+    /// 删除面与恢复面互为前提。现在删除职责归 post-mono DCE：可达性
+    ///（名字 / DefId / MakeClosure 三面）是唯一判据，mono 只负责生成特化件，不再维护
+    /// 「按名删 + 恢复」这对互相抵消的判据。原件留给 DCE 按边判死；不可达者由 DCE 删除
+    ///（#542 的孤立共享层正是其一，见 `middle/passes/dce` 模块 doc 的根集表）。
     fn build_output(
         &self,
         module: &ModuleIR,
     ) -> ModuleIR {
-        // 保留哪些函数？
-        //
-        // 1. 非泛型函数——当然保留。
-        // 2. 泛型 TypeDecl 构造器——typecheck 对构造器调用不生成 request，
-        //    mono 启用时若删除则函数表缺 Entry → 运行时 E6006（#255）。
-        // 3. 泛型函数但**未产生任何特化**且**仍被某处按名调用**——
-        //    `std.list` 系列（`list.yx` 里声明为 `(A: Type) -> ...`）就是这类：
-        //    它们随嵌入 std 合并进来，调用点写的是 `std.list.push`（原名叫，
-        //    不是特化名）。若一并删掉，一旦别的泛型（如 `mk(Int)`）触发 mono，
-        //    `std.list.push` 就凭空消失，运行时报「Native function not found」
-        //    （实测：不调 `mk` 就正常，一调就崩）。
-        // 本次请求涉及的泛型名（这些会被特化版替换，原泛型应删）。
-        // 用 `self.site_requests` 而非全部请求：`build_output` 在队列处理完后调用，
-        // 此时 `site_requests` 就是最终确定要特化的集合。
-        let requested_generic_names: std::collections::HashSet<String> = self
-            .site_requests
-            .iter()
-            .map(|r| r.generic_id().name().to_string())
-            .collect();
-        let names_called_by_name: std::collections::HashSet<String> = module
-            .functions
-            .iter()
-            .flat_map(Self::call_target_names)
-            // init 段（模块顶层语句）的按名调用同属保留依据：它不在
-            // module.functions 里，漏扫会让「只被顶层调用的泛型」在别的泛型
-            // 触发特化时从函数表消失（与 std.list.push 同型，运行时 E6006）
-            .chain(
-                module
-                    .init
-                    .iter()
-                    .filter_map(|instr| match instr {
-                        Instruction::Call {
-                            func: Operand::Const(ConstValue::String(name)),
-                            ..
-                        } => Some(name.clone()),
-                        _ => None,
-                    })
-                    .collect::<Vec<_>>(),
-            )
-            .collect();
-
-        let mut functions: Vec<FunctionIR> = module
-            .functions
-            .iter()
-            .filter(|f| {
-                if f.generic_params.is_none() || f.is_type_decl() {
-                    return true;
-                }
-                // 已被特化的泛型：删原泛型，保留特化版（特化版由下方追加）。
-                // 判据用「实例化请求里的泛型名」而非特化名前缀——
-                // 特化名形如 `identity(int64)`，前缀匹配无法区分
-                // `identity` 与 `identity2` 这类同名前缀。
-                if requested_generic_names.contains(f.name.as_str()) {
-                    return false;
-                }
-                // 未产生实例化请求，但仍有调用点按名引用（如嵌入 std 的
-                // `std.list.push`）：必须保留，否则一旦别的泛型触发 mono，
-                // 这些函数的定义就从函数表里消失，运行时「function not found」。
-                f.name.starts_with("std.") || names_called_by_name.contains(&f.name)
-            })
-            .cloned()
-            .collect();
+        // 先放全部原件（保序），再由下方按名排序追加实例/克隆——两段都确定性，
+        // 同一源码不会因 HashMap 迭代序产出不同函数序号（dump/.42 可复现）。
+        let mut functions: Vec<FunctionIR> = module.functions.clone();
 
         // HashMap 迭代顺序随进程随机化，直接发射会让同一份源码产出不同的
         // 函数序号（进而 .42 字节不同、dump 不可复现）。按名排序固定顺序。
@@ -1698,8 +1621,8 @@ impl Monomorphizer {
                 None
             };
             if let Some(reason) = reason {
-                // 到界 / 未闭 / 失败都不建实例、不报错、不删原件（原件由
-                // restore_generics_with_uncovered_call_sites 放回）。
+                // 到界 / 未闭 / 失败都不建实例、不报错；原件保留，可达性由
+                // post-mono DCE 判定（本处不删任何原件）。
                 self.open_fire_cutoffs.push(OpenFireCutoff {
                     container: container.to_string(),
                     callee: r.generic_id.name().to_string(),
@@ -1866,107 +1789,6 @@ impl Monomorphizer {
         map
     }
 
-    /// t3 闭合闸：把「输出里仍被按名调用、但调用点不在改写映射里」的泛型原件放回函数表。
-    ///
-    /// 缺口成因：`build_output` 的删除判据按**泛型名**（`site_requests` 的名字集合，
-    /// mod.rs `requested_generic_names`），而改写判据按 **(containing_fn, 名, span)**
-    /// 三元键（[`Self::build_call_site_map`]）。同一泛型的多个调用点里只要有一个
-    /// 没有请求键——实参符号化使请求进 `deferred` 桶、且所在函数非泛型时不排水；
-    /// 或该调用点从未产出请求——删除原件就让那个调用点悬空：运行期按原名查表落空
-    /// （E6006。实证：`src/std/tests/list_ops.yx:53` 的 `list.is_empty(list.empty(Int))`，
-    /// 该泛型名的请求只存在于同函数内另一调用点）。
-    ///
-    /// 判据与改写**同一份映射**：映射里查不到即视为未覆盖。放回的原件让该调用点
-    /// 退回类型擦除执行——正是单态化未介入时的既有语义；这不是「一律保留」：
-    /// 全部调用点都被覆盖的泛型仍按原判据删除（[`Self::build_output`]）。
-    fn restore_generics_with_uncovered_call_sites(
-        &self,
-        input: &ModuleIR,
-        output: &mut ModuleIR,
-    ) {
-        let call_site_map = self.build_call_site_map(&self.site_requests);
-        // 放回的原件体内可能再引用别的已删泛型 → 迭代到不动点。每轮至少放回一个，
-        // 上界为输入模块函数数，必然终止。
-        loop {
-            // 名单**按函数名排序**后追加：与 `build_output` 的特化函数追加同一纪律
-            //（`specialized.sort_by(|a, b| a.name.cmp(&b.name))`）。`HashSet` 迭代顺序
-            // 随进程/实例随机化（F1 实证：同一输入 4 次构建出 2 个不同的 .42 SHA256），
-            // 直接按迭代序追加会让同一份源码产出不同的函数序号——数序号即产物
-            //（dump/字节码不可复现）。
-            let mut pending: Vec<&FunctionIR> = self
-                .uncovered_call_targets(output, &call_site_map)
-                .into_iter()
-                .filter(|name| !output.functions.iter().any(|f| &f.name == name))
-                // 按名目标不是本模块定义（std native 等）——不归本闸管
-                .filter_map(|name| input.functions.iter().find(|f| f.name == name))
-                .collect();
-            if pending.is_empty() {
-                break;
-            }
-            pending.sort_by(|a, b| a.name.cmp(&b.name));
-            for original in pending {
-                output.functions.push(original.clone());
-            }
-        }
-    }
-
-    /// 输出模块里**按名调用**的目标名中，调用点不在改写映射里的那些（去重）。
-    fn uncovered_call_targets(
-        &self,
-        output: &ModuleIR,
-        call_site_map: &HashMap<(Option<String>, String, crate::util::span::Span), String>,
-    ) -> HashSet<String> {
-        let mut names = HashSet::new();
-        for func in &output.functions {
-            let FunctionBody::Code { blocks, .. } = &func.body else {
-                continue;
-            };
-            for block in blocks {
-                for instr in &block.instructions {
-                    let Some((callee, span)) = Self::by_name_call_target(instr) else {
-                        continue;
-                    };
-                    // 改写面覆盖 `Call` / `TailCall`（[`Self::call_form_is_rewritten`]）：
-                    // 这两种形态查映射键，有键即算已覆盖。
-                    // `MakeClosure` 的按名目标**不经过改写面**——对本闸而言**一律计
-                    // 未覆盖**、不查映射键：「有键」只说明该站点在 typecheck 侧产过请求，
-                    // 不代表调用点改写面会动它。保守方向：宁保留（该站点退回类型擦除
-                    // 执行，对应特化版可能成为死码）不悬空。
-                    //
-                    // `MakeClosure` 的**柯里包装层**目标确实会被改写，但走的是
-                    // 另一条路（[`Self::emit_curry_layer_clones`] 在建实例时按实例
-                    // 克隆并重定向，6.9.2-C2b P1）；它只覆盖「实例体的包装层目标」，
-                    // 覆盖不到的函数值 / 匿名闭包目标仍需按未覆盖保守保留。
-                    if !Self::call_form_is_rewritten(instr) {
-                        names.insert(callee);
-                        continue;
-                    }
-                    // 与改写同一容器口径（P2）：两处各写一遍会让「已覆盖」与
-                    // 「被改写」分叉——被改写却没被算覆盖 = 原件被删、站点悬空
-                    let container = self.code_container(&func.name).to_string();
-                    let named = (Some(container), callee.clone(), span);
-                    let anon = (None, callee.clone(), span);
-                    if !call_site_map.contains_key(&named) && !call_site_map.contains_key(&anon) {
-                        names.insert(callee);
-                    }
-                }
-            }
-        }
-        // init 段（模块顶层语句）的按名调用：改写侧用 (None, 名, span) 兜底键；
-        // 「非改写面形态一律计未覆盖」同规则适用。
-        for instr in &output.init {
-            let Some((callee, span)) = Self::by_name_call_target(instr) else {
-                continue;
-            };
-            if !Self::call_form_is_rewritten(instr)
-                || !call_site_map.contains_key(&(None, callee.clone(), span))
-            {
-                names.insert(callee);
-            }
-        }
-        names
-    }
-
     /// 改写面形态的按名目标（`Call` / `TailCall`）：与扫描面
     /// [`Self::by_name_call_target`] **同一名字口径**，只窄掉 `MakeClosure`。
     ///
@@ -1974,9 +1796,9 @@ impl Monomorphizer {
     /// 的唯一事实在 [`Self::by_name_call_target`]；改写面 = 其中会被
     /// [`Self::set_static_target_name`] 改名的那些（`Call` / `TailCall` 同一操作数
     /// 布局），`MakeClosure` 另由柯里层克隆路径负责（[`Self::emit_curry_layer_clones`]，
-    /// 6.9.2-C2b P1）。两处各写一遍形态集合 = 平行事实——#541 的现状正是扫描面覆盖
-    /// `TailCall`、改写面只放行 `Call`：站点不改名而原件被按「已覆盖」删除 ⇒ 悬空
-    /// （运行期 E6006）。
+    /// 6.9.2-C2b P1）。两处各写一遍形态集合 = 平行事实——#541 的病史正是扫描面覆盖
+    /// `TailCall`、改写面只放行 `Call`：站点不改名而原件按「已覆盖」被删 ⇒ 悬空
+    /// （运行期 E6006）。本条只服务改写面；可达性删除已由 post-mono DCE 接管。
     fn rewritten_call_target(instr: &Instruction) -> Option<(String, crate::util::span::Span)> {
         match instr {
             Instruction::Call { .. } | Instruction::TailCall { .. } => {
@@ -1986,25 +1808,14 @@ impl Monomorphizer {
         }
     }
 
-    /// 调用点改写面（[`Self::replace_calls_in_function`]）是否覆盖该形态的按名目标。
-    ///
-    /// 覆盖 `Call` / `TailCall`（func 为字符串常量）——形态集合由
-    /// [`Self::rewritten_call_target`] **单点**给出，本函数只把它折成布尔。
-    /// `MakeClosure` 不在改写面内（其柯里包装层目标由 [`Self::emit_curry_layer_clones`]
-    /// 在建实例时按实例克隆并重定向；函数值 / 匿名闭包目标仍按未覆盖保守保留）。
-    fn call_form_is_rewritten(instr: &Instruction) -> bool {
-        Self::rewritten_call_target(instr).is_some()
-    }
-
     /// 指令的**按名调用目标**与调用点 span：IR 里以字符串名分发的三种形态
     ///（`Call` / `TailCall` / `MakeClosure`）。
     ///
-    /// 不要据此假定「取到名字即会被改写」：调用点改写面覆盖 `Call` / `TailCall`
-    /// ——某形态是否被它覆盖由 [`Self::rewritten_call_target`]（经
-    /// [`Self::call_form_is_rewritten`]）单点判定；扫描面更宽的 `MakeClosure` 在
-    /// [`Self::uncovered_call_targets`] 里一律计未覆盖（保守保留原件，防删除后
-    /// 调用点悬空 → 运行期 E6006）。`MakeClosure` 的柯里包装层目标另由
-    /// [`Self::emit_curry_layer_clones`] 按实例改写（建实例时），不在本判据面内。
+    /// 不要据此假定「取到名字即会被改写」：调用点改写面只覆盖 `Call` / `TailCall`
+    /// ——某形态是否被它覆盖由 [`Self::rewritten_call_target`] 单点判定。
+    /// `MakeClosure` 不在改写面内：其柯里包装层目标另由
+    /// [`Self::emit_curry_layer_clones`] 按实例改写；函数值 / 匿名闭包目标由
+    /// post-mono DCE 的第 5 类根接管（见 `middle/passes/dce` 模块 doc）。
     fn by_name_call_target(instr: &Instruction) -> Option<(String, crate::util::span::Span)> {
         match instr {
             Instruction::Call {
@@ -2058,8 +1869,8 @@ impl Monomorphizer {
     ) {
         // 先把「要改成什么」算出来（借用到 instr 的名字与 span），再动指令——
         // 改名会同时清 DefId，见 set_static_target_name。形态判据单点 =
-        // rewritten_call_target（Call / TailCall）：与 call_form_is_rewritten /
-        // drop_erased_call_args 同一集合。
+        // rewritten_call_target（Call / TailCall）：与 drop_erased_call_args
+        // 同一集合。
         let target = Self::rewritten_call_target(instr).and_then(|(name, span)| {
             if let Some(container) = container {
                 let named = (Some(container.to_string()), name.clone(), span);

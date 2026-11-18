@@ -516,10 +516,15 @@ fn test_monomorphize_end_to_end_specializes_and_replaces_calls() {
     let requests = [identity_request(MonoType::Int(64))];
 
     // Act
-    let result = mono.monomorphize(&module, &requests).unwrap();
+    let mut result = mono.monomorphize(&module, &requests).unwrap();
 
-    // Assert: 应有 2 个函数：main（调用已替换）+ identity(int64)
-    assert_eq!(result.functions.len(), 2);
+    // Assert: mono 输出保留全部原件 + 实例 ⇒ 3 个函数（main / identity(int64) / identity）
+    assert_eq!(
+        result.functions.len(),
+        3,
+        "mono 不再按名删原件（删除职责归 DCE）：实际 {:?}",
+        result.functions.iter().map(|f| &f.name).collect::<Vec<_>>()
+    );
 
     // Assert: main 中的调用应被替换为 identity(int64)
     let main_out = find_fn(&result, "main", "模块中应存在 main 函数");
@@ -534,18 +539,32 @@ fn test_monomorphize_end_to_end_specializes_and_replaces_calls() {
         specialized.generic_params.is_none(),
         "特化函数的泛型标记应已清除"
     );
+
+    // Assert: 删除职责归 DCE——全部调用点已改写成实例名 ⇒ 原件不可达、被删
+    crate::middle::passes::dce::eliminate(&mut result).expect("DCE 不应失败");
+    assert!(
+        !result.functions.iter().any(|f| f.name == "identity"),
+        "全部调用点改写后原件不可达，应由 DCE 删除；实际 {:?}",
+        result.functions.iter().map(|f| &f.name).collect::<Vec<_>>()
+    );
+    assert!(
+        result.functions.iter().any(|f| f.name == "identity(int64)"),
+        "实例必须存活（main 的调用点已指向它）"
+    );
 }
 
 /// 「identity(int64) 特化函数应存在」的失败文案。
 const MISSING_SPECIALIZED: &str = "应该存在 identity(int64) 特化函数";
 
-/// 机制（3.4.8-R1+ / t3）：删除判据按**泛型名**（site_requests 的名字集合），
-/// 调用点改写判据按 **(containing_fn, 名, span)** 三元键。同一泛型的两个调用点
-/// 里只要有一个没有请求键（请求因符号化实参进 deferred 桶未排水，或该调用点
-/// 从未产出请求），删除原件就让那个调用点悬空——运行期按原名查表落空（E6006）。
+/// 机制（3.4.8-R1+ / #542-D3）：mono 不再按泛型名删原件——**保留全部原件**，
+/// 删除职责归 post-mono DCE。同一泛型的两个调用点里只要有一个没有请求键
+///（请求因符号化实参进 deferred 桶未排水，或该调用点从未产出请求），该站点
+/// 仍按原名引用原件；DCE 的 Call 名字边据此判活 ⇒ 原件保留、站点不悬空
+///（运行期不会 E6006）。
 ///
-/// 规范：RFC-011 §4 泛型函数特化。实证现场：src/std/tests/list_ops.yx:53 的
-/// `list.is_empty(list.empty(Int))`——该泛型的请求只存在于同一函数内的另一调用点。
+/// 规范：RFC-011 §4 泛型函数特化与 §7 可达性删除。实证现场：
+/// src/std/tests/list_ops.yx:53 的 `list.is_empty(list.empty(Int))`——该泛型的
+/// 请求只存在于同一函数内的另一调用点。
 #[test]
 fn test_monomorphize_keeps_original_generic_when_call_site_lacks_request_key() {
     // Arrange：泛型 std.list.is_empty + main 里两个调用点（仅前者有请求键）
@@ -582,7 +601,7 @@ fn test_monomorphize_keeps_original_generic_when_call_site_lacks_request_key() {
     let requests = [covered_request];
 
     // Act
-    let result = Monomorphizer::new()
+    let mut result = Monomorphizer::new()
         .monomorphize(&module, &requests)
         .expect("单态化不应失败");
 
@@ -600,19 +619,28 @@ fn test_monomorphize_keeps_original_generic_when_call_site_lacks_request_key() {
         is_call_to(&main_out.blocks()[0].instructions[1], "std.list.is_empty"),
         "无请求键的调用点应保持原名 std.list.is_empty"
     );
-    // Assert 3：原件必须保留——删除会让 Assert 2 的调用点悬空（运行期 E6006）
+    // Assert 3：mono 输出保留全部原件（删除职责已归 DCE）
     assert!(
         result
             .functions
             .iter()
             .any(|f| f.name == "std.list.is_empty"),
-        "存在未覆盖调用点时不得删除原件（否则运行期按原名查表落空 E6006）"
+        "mono 输出必须保留原件（按名删 + 恢复闸已由 post-mono DCE 接管）"
+    );
+    // Assert 4：DCE 后原件仍在——未覆盖调用点仍按原名引用它（名字边判活）
+    crate::middle::passes::dce::eliminate(&mut result).expect("DCE 不应失败");
+    assert!(
+        result
+            .functions
+            .iter()
+            .any(|f| f.name == "std.list.is_empty"),
+        "DCE 后原件必须保留：未覆盖的按名调用点仍引用它（否则运行期 E6006）"
     );
 }
 
-/// 泛型 `std.list.is_empty` **只**被一个「非改写面」站点（`MakeClosure` / `TailCall`）
-/// 按名引用，且该站点在请求集合里有键（span 对齐）——用于钉「非改写面站点一律计
-/// 未覆盖」。返回（模块, 请求）。
+/// 泛型 `std.list.is_empty` 被一个指定形态的站点（`MakeClosure` / `TailCall`）按名
+/// 引用，且该站点在请求集合里有键（span 对齐）——用于钉「非改写面形态的引用面」。
+/// 返回（模块, 请求）。
 ///
 /// 注意本夹具的站点**不是**柯里包装体（`main` 的直接调用序列），故不经过逐实例
 /// 柯里层克隆路径（`emit_curry_layer_clones`，6.9.2-C2b P1）：那条路只改写「实例
@@ -647,16 +675,16 @@ fn non_rewritable_ref_case(
     (module_with(vec![generic, main_func]), vec![req])
 }
 
-/// 指令形态不对称（3.4.8-R1+++ / t6）：扫描面（`by_name_call_target`）覆盖
-/// `Call`/`TailCall`/`MakeClosure`，调用点改写面（`replace_calls_in_function`）**只**
-/// 处理 `Call`。`MakeClosure` 臂若照常查映射键，「有键」会被误判为「已覆盖」——原件
-/// 被删而该站点不被这个改写面改写 → 悬空（t3 同缺陷类）。钉住：一律计未覆盖 → 原件保留。
+/// 指令形态不对称（3.4.8-R1+++ / #542-D3）：调用点改写面只覆盖 `Call` / `TailCall`；
+/// 只被 `MakeClosure` 按名引用的泛型原件**不经过改写面**，但它也不是死码——
+/// post-mono DCE 的第 5 类根（MakeClosure 目标是无条件根）保住它。mono 侧只保留
+/// 全部原件、不判死；DCE 按边判活后原件仍在 ⇒ 站点不悬空。
 ///
-/// 6.9.2-C2b 起 `MakeClosure` 的**柯里包装层**目标会有另一条改写路（建实例时按实例
-/// 克隆，见 `emit_curry_layer_clones`），本夹具与那条路无关（它不是包装体），故本闸的
-/// 判据与断言不变：调用点改写面覆盖不到的目标，一律按未覆盖保守保留。
+/// 6.9.2-C2b 起 `MakeClosure` 的**柯里包装层**目标另有逐实例克隆路径
+///（`emit_curry_layer_clones`）；本夹具不是包装体，钉的是「函数值 / 匿名闭包目标」
+/// 这条更宽的根面。
 #[test]
-fn test_restore_gate_keeps_generic_referenced_only_by_make_closure() {
+fn test_dce_keeps_generic_referenced_only_by_make_closure() {
     // Arrange：仅 MakeClosure 站点按名引用，且该站点有对齐的请求键
     let reference_span = span_at(10, 5, 100, 12, 107);
     let reference = Instruction::MakeClosure {
@@ -669,17 +697,18 @@ fn test_restore_gate_keeps_generic_referenced_only_by_make_closure() {
     let (module, requests) = non_rewritable_ref_case(reference, reference_span);
 
     // Act
-    let result = Monomorphizer::new()
+    let mut result = Monomorphizer::new()
         .monomorphize(&module, &requests)
         .expect("单态化不应失败");
+    crate::middle::passes::dce::eliminate(&mut result).expect("DCE 不应失败");
 
-    // Assert：原件保留（MakeClosure 站点不会被改写，删除即悬空）
+    // Assert：原件保留（MakeClosure 目标是无条件根；删除即悬空）
     assert!(
         result
             .functions
             .iter()
             .any(|f| f.name == "std.list.is_empty"),
-        "MakeClosure 按名目标一律计未覆盖：原件必须保留（修复前「有键→判覆盖→被删」）"
+        "MakeClosure 是 DCE 的无条件根：原件必须保留（否则闭包目标悬空）"
     );
 }
 
@@ -712,7 +741,7 @@ fn static_call_args(instr: &Instruction) -> Option<&Vec<Operand>> {
 /// 前身是 t3 的 tripwire（断言「TailCall 一律计未覆盖、原件必须保留」）：当时改写面
 /// 只放行 `Call`，于是扫描面覆盖 `TailCall` 而改写面落空，「有键→判覆盖→原件被删」
 /// ⇒ 站点悬空（运行期 E6006）。本条把那个 tripwire 换成性质判据：改写面覆盖的形态
-/// 集合与 [`Monomorphizer::call_form_is_rewritten`] 一致，`TailCall` 在内。
+/// 集合与 [`Monomorphizer::rewritten_call_target`] 一致，`TailCall` 在内。
 #[test]
 fn test_tail_call_site_is_rewritten_to_specialized_name() {
     // Arrange：泛型 std.list.is_empty + main 里一个 TailCall 站点（有对齐请求键）
@@ -848,11 +877,11 @@ fn test_tail_call_site_drops_erased_const_arg_once() {
     );
 }
 
-/// 形态集合**单点**：`call_form_is_rewritten` 与 `rewritten_call_target` 同源，
-/// 覆盖 `Call` / `TailCall`（字符串常量 func），不覆盖 `MakeClosure` / `CallDyn` /
-/// 非常量 func 的 `Call`。
+/// 改写面形态集合**单点**：`rewritten_call_target` 只覆盖 `Call` / `TailCall`
+/// （字符串常量 func），不覆盖 `MakeClosure` / `CallDyn` / 非常量 func 的 `Call`。
+/// 删除面（`MakeClosure` 目标）已由 post-mono DCE 接管，不在本判据里。
 #[test]
-fn test_call_form_coverage_matches_rewritten_call_target() {
+fn test_rewritten_call_target_covers_only_static_call_forms() {
     // Arrange
     let string_call = call_instr(None, "f", vec![]);
     let string_tail = Instruction::TailCall {
@@ -882,7 +911,7 @@ fn test_call_form_coverage_matches_rewritten_call_target() {
         span: Span::default(),
     };
 
-    // Act / Assert：三处判据一致（覆盖 ⇔ 有改写目标），且集合就是 Call|TailCall
+    // Act / Assert：改写目标存在 ⇔ 形态属于 Call|TailCall（字符串常量 func）
     for (instr, want) in [
         (&string_call, true),
         (&string_tail, true),
@@ -891,14 +920,9 @@ fn test_call_form_coverage_matches_rewritten_call_target() {
         (&int_call, false),
     ] {
         assert_eq!(
-            Monomorphizer::call_form_is_rewritten(instr),
-            want,
-            "覆盖判定与形态不符：{instr:?}"
-        );
-        assert_eq!(
             Monomorphizer::rewritten_call_target(instr).is_some(),
             want,
-            "改写目标与覆盖判定必须同源（单点）：{instr:?}"
+            "改写面形态集合与改写目标不符：{instr:?}"
         );
     }
 }
@@ -1242,9 +1266,10 @@ fn test_deep_nested_type_operations_survive_default_stack() {
 
 /// #492 不变量：原生函数作值的**常量形态不是按名调用目标**。
 ///
-/// `uncovered_call_targets` 只把 `Call`/`TailCall`/`MakeClosure` 的按名目标算
-/// 「未覆盖」（进而保留原件）。原生函数没有 IR 函数体——把它计成按名调用目标，
-/// 保留逻辑会去找一个不存在的原件；不计则它随指令留在 IR 里，运行时按名分发。
+/// 扫描面（`by_name_call_target`）只认 `Call`/`TailCall`/`MakeClosure` 的字符串
+/// 名字；原生函数没有 IR 函数体——把它计成按名目标没有表项可指向。DCE 侧同一条
+/// 不变量由「名字不在表里就跳过、不报错、不建根」承担（`middle/passes/dce` 的
+/// N5 直驱测试）。
 #[test]
 fn test_native_fn_const_is_not_a_by_name_call_target() {
     // Arrange：原生函数作值的 IR 形态（#492 的单一常量形态）
