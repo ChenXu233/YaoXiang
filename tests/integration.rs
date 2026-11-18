@@ -40,6 +40,10 @@ mod multifile;
 #[path = "integration/named_args_native.rs"]
 mod named_args_native;
 
+/// RFC-018 AOT-0/AOT-1：原生构建、诊断与失败原子性
+#[path = "integration/native_aot.rs"]
+mod native_aot;
+
 /// RFC-039 P2 漏洞专门判据：证明义务静默丢弃（先红后绿）
 #[path = "integration/proof_obligations.rs"]
 mod proof_obligations;

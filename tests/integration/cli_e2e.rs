@@ -133,7 +133,14 @@ fn test_e2e_run_42_file() {
 
     // 先 build
     let (code, _, _) = run_yx(
-        &["build", src.to_str().unwrap(), "-o", out.to_str().unwrap()],
+        &[
+            "build",
+            "--emit",
+            "bytecode",
+            src.to_str().unwrap(),
+            "-o",
+            out.to_str().unwrap(),
+        ],
         tmp.path(),
     );
     assert_eq!(code, 0, "build should succeed before running .42 file");
@@ -161,6 +168,8 @@ fn test_e2e_run_bytecode_by_content_not_extension() {
     let (code, _, _) = run_yx(
         &[
             "build",
+            "--emit",
+            "bytecode",
             src.to_str().unwrap(),
             "-o",
             out_42.to_str().unwrap(),
@@ -217,7 +226,14 @@ fn test_e2e_build_valid_source_produces_bytecode_file() {
 
     // Act
     let (code, _stdout, _stderr) = run_yx(
-        &["build", src.to_str().unwrap(), "-o", out.to_str().unwrap()],
+        &[
+            "build",
+            "--emit",
+            "bytecode",
+            src.to_str().unwrap(),
+            "-o",
+            out.to_str().unwrap(),
+        ],
         tmp.path(),
     );
 
@@ -239,7 +255,14 @@ fn test_e2e_build_compile_error_exits_nonzero() {
 
     // Act
     let (code, _stdout, _stderr) = run_yx(
-        &["build", src.to_str().unwrap(), "-o", out.to_str().unwrap()],
+        &[
+            "build",
+            "--emit",
+            "bytecode",
+            src.to_str().unwrap(),
+            "-o",
+            out.to_str().unwrap(),
+        ],
         tmp.path(),
     );
 
@@ -1189,6 +1212,8 @@ fn test_e2e_dump_bytecode_file_carries_source_path() {
     let (build_code, _o, build_err) = run_yx(
         &[
             "build",
+            "--emit",
+            "bytecode",
             src.to_str().unwrap(),
             "--debug-info",
             "-o",
@@ -1452,6 +1477,8 @@ fn test_e2e_dump_local_names_survive_bytecode_roundtrip() {
     let (build_code, _, build_err) = run_yx(
         &[
             "build",
+            "--emit",
+            "bytecode",
             "--debug-info",
             src.to_str().unwrap(),
             "-o",
