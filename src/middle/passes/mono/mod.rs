@@ -5,21 +5,21 @@
 //! 1. 按需特化：只对实际使用的类型组合生成代码
 //! 2. 队列驱动：BFS 处理实例化请求，自动处理嵌套泛型调用
 
-use std::collections::{HashMap, HashSet, VecDeque};
 use crate::util::diagnostic::Diagnostic;
 use crate::util::diagnostic::ErrorCodeDefinition;
+use std::collections::{HashMap, HashSet, VecDeque};
 
 pub mod function;
 pub mod instance;
 
-use function::FunctionMonomorphizer;
-use instance::{GenericFunctionId, InstantiationRequest, SpecializationKey};
 use crate::ast::Quantity;
 use crate::frontend::core::sema::MonoType;
-use crate::util::span::Span;
 use crate::middle::ir::ir::{
     BasicBlock, ConstValue, FunctionBody, FunctionIR, Instruction, LocalSlot, ModuleIR, Operand,
 };
+use crate::util::span::Span;
+use function::FunctionMonomorphizer;
+use instance::{GenericFunctionId, InstantiationRequest, SpecializationKey};
 
 /// 原生类型显示名（约束派发改写面的类型头取值）。int64/float64/string/bool
 /// 经 [`crate::frontend::core::sema::operator_interfaces::

@@ -12,9 +12,9 @@ use crate::frontend::core::lexer;
 use crate::frontend::core::parser::{self, Module};
 use crate::frontend::core::sema::checker::TypeChecker;
 use crate::frontend::core::sema::environment::MethodOverloadCandidates;
+use crate::frontend::core::sema::passes::dead_code::DeadCodeAnalyzer;
 use crate::frontend::core::sema::SemanticProbe;
 use crate::frontend::core::sema::TypeCheckResult;
-use crate::frontend::core::sema::passes::dead_code::DeadCodeAnalyzer;
 use crate::frontend::module::orchestrator::{self, OrchestratorError};
 use crate::frontend::module::registry::ModuleRegistry;
 use crate::frontend::module::roles::{self, FileRole};
@@ -27,7 +27,6 @@ use crate::middle::ModuleIR;
 use crate::util::diagnostic::ErrorCodeDefinition;
 use crate::util::span::Span;
 
-use super::obligations::{Obligation, IR_GENERATION_DELIVERED};
 use super::helpers::{
     aggregate_instantiation_requests, allocate_global_slots, ast_has_main,
     collect_compilation_refs, collect_package_refs, declared_type_param_names,
@@ -35,6 +34,7 @@ use super::helpers::{
     link_module_irs, merge_embedded_std_ir, resolved_method_marks, role_context, ImportCycle,
     InitOrder, RoleContext,
 };
+use super::obligations::{Obligation, IR_GENERATION_DELIVERED};
 use super::state::{DriverError, SkipReason, SkippedStage, State, UnitState};
 use super::{Aggregation, Driver, ProgramKind, Stage, Unit};
 

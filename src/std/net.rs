@@ -8,7 +8,7 @@
 
 use std::collections::HashMap;
 
-use crate::backends::common::{RuntimeValue, HeapValue};
+use crate::backends::common::{HeapValue, RuntimeValue};
 use crate::backends::ExecutorError;
 use crate::std::{NativeContext, NativeExport, StdModule};
 

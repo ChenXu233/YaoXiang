@@ -4,7 +4,9 @@
 //!
 //! **状态**：阶段 2 实现
 
-use lsp_types::{DidOpenTextDocumentParams, DidChangeTextDocumentParams, DidCloseTextDocumentParams};
+use lsp_types::{
+    DidChangeTextDocumentParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams,
+};
 use tracing::info;
 
 use crate::lsp::session::Session;

@@ -12,19 +12,19 @@ mod instantiation;
 mod method;
 
 use crate::frontend::core::sema::judgement::decide;
-use crate::util::diagnostic::{ErrorCodeDefinition, Result};
-use crate::frontend::core::types::MonoType;
 use crate::frontend::core::sema::passes::overload;
+use crate::frontend::core::types::MonoType;
+use crate::util::diagnostic::{ErrorCodeDefinition, Result};
 use std::collections::{HashMap, HashSet};
 
-use crate::frontend::core::sema::inference::call_ownership::{self, CallOwnership, ParamOwnership};
-use super::{ConstArgOutcome, ExpressionInferrer};
 use super::{
     body_uses_ctor_head, concrete_type_from_expr_arg, expand_ctor_applications,
     extract_const_value_from_expr, extract_namespace_path, extract_string_literal_from_expr,
     instantiate_with_ctor_heads, is_ctor_reference, substitute_type_params_with_vars,
 };
+use super::{ConstArgOutcome, ExpressionInferrer};
 use crate::frontend::core::sema::inference::arg_binding;
+use crate::frontend::core::sema::inference::call_ownership::{self, CallOwnership, ParamOwnership};
 use crate::frontend::core::sema::inference::statements;
 
 impl<'a> ExpressionInferrer<'a> {

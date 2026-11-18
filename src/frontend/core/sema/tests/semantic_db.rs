@@ -10,11 +10,11 @@
 //! 静默通道判定（coding-rules 第六部分）：本文件即「生产端直驱」测试——
 //! 语义数据全部来自真实 tokenize → parse → check 管线，不手工构造登记数据。
 
-use crate::frontend::core::sema::probe::TypeLevelNamespace;
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parse;
-use crate::frontend::core::sema::TypeChecker;
+use crate::frontend::core::sema::probe::TypeLevelNamespace;
 use crate::frontend::core::sema::semantic_db::{DefinitionInfo, SemanticDB};
+use crate::frontend::core::sema::TypeChecker;
 use crate::util::span::Span;
 
 /// 以生产管线检查源码，返回文件键为 `uri` 的 SemanticDB

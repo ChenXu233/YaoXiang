@@ -13,10 +13,10 @@
 //! `speak: (self: Self) -> String` 变为 `speak: (self: Dog) -> String`，
 //! 实例占住参数位、剩余参数柯里化（RFC-004 位置绑定语义）。
 
-use crate::frontend::core::sema::probe::TypeLevelNamespace;
-use crate::frontend::core::sema::checker::TypeChecker;
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parse;
+use crate::frontend::core::sema::checker::TypeChecker;
+use crate::frontend::core::sema::probe::TypeLevelNamespace;
 
 /// 辅助函数：解析源代码并类型检查，同时返回 checker 以检查实现证明
 pub(crate) fn check_source_with_checker(

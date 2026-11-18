@@ -18,11 +18,11 @@ fn safe_canonicalize(path: &Path) -> PathBuf {
     })
 }
 
-use super::{ErrorCodeDefinition, ErrorInfo, I18nRegistry, JsonEmitter};
-#[cfg(feature = "cli")]
-use super::{CheckResult, EmitterConfig, TextEmitter};
 #[cfg(feature = "cli")]
 use super::check_files_with_diagnostics;
+#[cfg(feature = "cli")]
+use super::{CheckResult, EmitterConfig, TextEmitter};
+use super::{ErrorCodeDefinition, ErrorInfo, I18nRegistry, JsonEmitter};
 
 #[cfg(feature = "cli")]
 pub fn run_check_command_once(

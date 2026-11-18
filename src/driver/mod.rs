@@ -58,8 +58,8 @@ mod helpers;
 mod state;
 
 pub use obligations::{
-    Obligation, ObligationFinding, ObligationSettlement, OBLIGATION_UNDRAINED_CODE, RedListEntry,
-    UndrainedCause,
+    Obligation, ObligationFinding, ObligationSettlement, RedListEntry, UndrainedCause,
+    OBLIGATION_UNDRAINED_CODE,
 };
 pub use program::{Aggregation, Program, ProgramKind};
 pub use stage::{Stage, StageScope};

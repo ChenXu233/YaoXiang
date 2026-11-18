@@ -11,10 +11,10 @@
 //! 本文件是四形态（纯命名 / 混合 / 命名与位置冲突 / 命名重复绑定）的判据所在，
 //! 并为验收矩阵（值级 oracle）提供逐条钉板。
 
-use crate::frontend::core::sema::probe::TypeLevelNamespace;
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parse;
 use crate::frontend::core::sema::checker::TypeChecker;
+use crate::frontend::core::sema::probe::TypeLevelNamespace;
 use crate::frontend::module::registry::ModuleRegistry;
 use crate::middle::lower::AstToIrGenerator;
 

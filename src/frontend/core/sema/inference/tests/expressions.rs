@@ -8,11 +8,11 @@
 //! RFC-039 §3.4.8 ①: 跨模块限定调用 `lib.f(x)` 发泛型实例化请求（generic_id
 //!   用限定名，与 merged-IR 的函数表键对齐）
 
-use crate::frontend::core::sema::probe::TypeLevelNamespace;
+use crate::ast::Expr;
 use crate::frontend::core::sema::inference::expressions::ExpressionInferrer;
 use crate::frontend::core::sema::inference::scope::ScopeManager;
+use crate::frontend::core::sema::probe::TypeLevelNamespace;
 use crate::frontend::core::types::{MonoType, TypeConstraintSolver};
-use crate::ast::Expr;
 use crate::util::span::Span;
 
 use std::collections::HashMap;

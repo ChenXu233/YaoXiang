@@ -8,8 +8,8 @@ pub mod tokenizer;
 pub mod tokens;
 
 // Re-export types
-pub use tokens::{Token, TokenKind, Literal, LexError};
 pub use tokenizer::Lexer;
+pub use tokens::{LexError, Literal, Token, TokenKind};
 
 /// Tokenize source code with RFC support
 /// Supports:

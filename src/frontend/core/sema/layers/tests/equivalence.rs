@@ -6,7 +6,7 @@
 //! `Refined` 谓词不同 ⇒ Unproven（先红后绿）、Unproven 不降格、预算生效。
 
 use crate::frontend::core::sema::layers::equivalence::{
-    DefeqContext, check_type_equivalence, defeq, normalize_type,
+    check_type_equivalence, defeq, normalize_type, DefeqContext,
 };
 use crate::frontend::core::sema::proof::budget::BudgetTracker;
 use crate::frontend::core::sema::proof::context::ProofContext;

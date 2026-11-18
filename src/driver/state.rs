@@ -9,8 +9,8 @@ use std::fmt;
 use std::path::PathBuf;
 
 use crate::frontend::core::parser::Module;
-use crate::frontend::core::sema::TypeCheckResult;
 use crate::frontend::core::sema::probe::TypeLevelNamespace;
+use crate::frontend::core::sema::TypeCheckResult;
 use crate::frontend::core::types::mono::MonoType;
 use crate::frontend::module::orchestrator::{self, OrchestratorError};
 use crate::frontend::module::registry::ModuleRegistry;

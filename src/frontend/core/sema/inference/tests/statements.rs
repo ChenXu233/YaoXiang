@@ -3,10 +3,10 @@
 //! §5.1-§5.9: 语句分类
 //! RFC-010: 统一类型语法
 
+use crate::ast::{self, BinOp, Block, Expr, PlanId, Stmt, StmtKind};
+use crate::frontend::core::lexer::tokens::Literal;
 use crate::frontend::core::sema::inference::statements::StatementChecker;
 use crate::frontend::core::types::{MonoType, PolyType, TraitTable, TypeConstraintSolver};
-use crate::ast::{self, Stmt, StmtKind, Expr, BinOp, Block, PlanId};
-use crate::frontend::core::lexer::tokens::Literal;
 use crate::util::span::Span;
 
 // 辅助函数

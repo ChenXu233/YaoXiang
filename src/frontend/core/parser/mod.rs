@@ -8,9 +8,9 @@ pub mod statements;
 #[cfg(test)]
 pub mod tests;
 
-pub use parser_state::{ParserState, parse_msg};
-pub use probe::{NameKind, NullProbe, TypeEnvProbe};
+pub use parser_state::{parse_msg, ParserState};
 pub use pratt::*;
+pub use probe::{NameKind, NullProbe, TypeEnvProbe};
 // D1（6.7.1a）：AST 顶层化后 parser 不再拥有 ast 子模块，只把顶层 `crate::ast` 的项
 // 再导出，使 `parser::Stmt` / `parser::Module` 这类既有路径继续成立。
 pub use crate::ast::*;

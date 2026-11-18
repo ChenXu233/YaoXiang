@@ -14,10 +14,10 @@
 //! A 函数名 RHS、B lambda 块体 return、C lambda 尾表达式（基线已绿）、
 //! D 单层标量返回 + 函数名 RHS（合法报错，必须保持红）。
 
-use crate::frontend::core::sema::probe::TypeLevelNamespace;
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parse;
 use crate::frontend::core::sema::checker::TypeChecker;
+use crate::frontend::core::sema::probe::TypeLevelNamespace;
 use crate::frontend::core::sema::types::TypeCheckResult;
 
 /// 辅助函数：解析源代码并类型检查（与 rfc010a.rs 同一 harness 形态）

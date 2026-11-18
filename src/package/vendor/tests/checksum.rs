@@ -11,7 +11,7 @@
 
 use std::path::Path;
 
-use crate::package::vendor::checksum::{compute_directory_checksum};
+use crate::package::vendor::checksum::compute_directory_checksum;
 
 #[test]
 fn test_compute_directory_checksum_deterministic() {

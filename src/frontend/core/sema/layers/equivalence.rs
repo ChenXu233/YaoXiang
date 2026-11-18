@@ -23,13 +23,13 @@ use std::collections::HashMap;
 
 use crate::frontend::core::sema::environment::TypeEnvironment;
 
+use super::super::proof::context::ProofContext;
+use super::super::proof::verdict::{
+    DisproofKind, DisproofModel, ProofFailure, ProofResult, UnprovenReason, UnprovenSubject,
+};
+use crate::frontend::core::sema::proof::budget::BudgetTracker;
 use crate::frontend::core::types::eval::evaluator::{EvalError, Evaluator};
 use crate::frontend::core::types::mono::{MonoType, PolyType};
-use super::super::proof::verdict::{
-    UnprovenSubject, DisproofKind, DisproofModel, ProofFailure, ProofResult, UnprovenReason,
-};
-use super::super::proof::context::ProofContext;
-use crate::frontend::core::sema::proof::budget::BudgetTracker;
 
 /// 判等内核的最小环境（6.9.3c）：**不包含** `ProofContext.assumptions`。
 ///

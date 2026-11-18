@@ -8,9 +8,9 @@ pub mod const_eval;
 pub mod dependent_types;
 pub mod evaluator;
 
-pub use evaluator::Evaluator;
 pub use evaluator::EvalConfig;
 pub use evaluator::EvalError;
+pub use evaluator::Evaluator;
 pub mod operations;
 pub mod type_families;
 

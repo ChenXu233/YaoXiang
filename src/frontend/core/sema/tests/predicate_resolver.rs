@@ -5,10 +5,10 @@
 //! try_resolve 三值语义——未注册谓词返回 None，已注册但用法非法返回
 //! Some(Err)，精化约束绝不静默丢弃。
 
-use crate::frontend::core::sema::test_util::{binop};
 use crate::frontend::core::sema::predicate_resolver::{
     PredicateDef, PredicateResolveError, PredicateResolver,
 };
+use crate::frontend::core::sema::test_util::binop;
 use crate::frontend::core::sema::TypeEnvironment;
 use crate::frontend::core::types::const_data::{BinOp, ConstExpr, ConstValue};
 use crate::frontend::core::types::mono::MonoType;

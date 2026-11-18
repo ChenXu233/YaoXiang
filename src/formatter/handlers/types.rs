@@ -1,8 +1,8 @@
 //! 类型格式化处理器
 
-use crate::ast::*;
 use super::super::context::FormatContext;
 use super::super::source_map::SourceMap;
+use crate::ast::*;
 
 /// 格式化类型
 pub fn format_type(

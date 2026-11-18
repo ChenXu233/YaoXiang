@@ -10,9 +10,9 @@
 //! - 诊断发布
 
 use lsp_server::{Connection, Message, Request};
-use lsp_types::notification::{PublishDiagnostics};
-use lsp_types::request::{Completion, GotoDefinition, Initialize, References};
+use lsp_types::notification::PublishDiagnostics;
 use lsp_types::request::HoverRequest;
+use lsp_types::request::{Completion, GotoDefinition, Initialize, References};
 use lsp_types::InitializeParams;
 
 use crate::lsp::server::{analyze_and_publish, handle_request};

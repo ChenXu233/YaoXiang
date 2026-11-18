@@ -2,8 +2,8 @@
 //!
 //! 核心 trait 系统：数据结构 + 标准库初始化 + trait 满足性检查 + 自动派生。
 
-use std::collections::HashMap;
 use crate::frontend::core::types::mono::MonoType;
+use std::collections::HashMap;
 
 // 数据结构
 

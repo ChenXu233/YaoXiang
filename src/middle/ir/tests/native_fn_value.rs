@@ -14,14 +14,14 @@
 //! 零漂移反向判据：native **常量**（`std.math.PI`）作值必须仍走零参 `Call`，
 //! 那是既有成功程序的表现，本修复不得改变它。
 
-use crate::frontend::core::sema::probe::TypeLevelNamespace;
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parse;
 use crate::frontend::core::sema::checker::TypeChecker;
+use crate::frontend::core::sema::probe::TypeLevelNamespace;
 use crate::frontend::module::registry::ModuleRegistry;
-use crate::middle::ir::ir::{ModuleIR};
-use crate::middle::lower::AstToIrGenerator;
+use crate::middle::ir::ir::ModuleIR;
 use crate::middle::ir::verify::verify_loose;
+use crate::middle::lower::AstToIrGenerator;
 use crate::util::diagnostic::Severity;
 
 /// 源码 → 真实生成序列（lex → parse → typecheck → ir_gen）的直驱探针。

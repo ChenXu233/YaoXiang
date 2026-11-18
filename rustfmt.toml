@@ -10,7 +10,7 @@ max_width = 100
 tab_spaces = 4
 
 # Import settings (stable)
-reorder_imports = false
+reorder_imports = true
 
 # Function parameters layout (stable)
 fn_params_layout = "Vertical"

@@ -6,8 +6,8 @@ use std::path::Path;
 use crate::package::error::{PackageError, PackageResult};
 use crate::package::lock::LockFile;
 use crate::package::manifest::PackageManifest;
-use crate::package::template::{generate_gitignore, generate_main_yx, generate_lib_yx};
-use crate::util::i18n::{t, current_lang, MSG};
+use crate::package::template::{generate_gitignore, generate_lib_yx, generate_main_yx};
+use crate::util::i18n::{current_lang, t, MSG};
 
 /// Options for project initialization
 pub struct InitOptions {

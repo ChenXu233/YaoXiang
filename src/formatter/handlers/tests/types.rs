@@ -2,11 +2,11 @@
 //!
 //! 对应 formatter 规范 §9 (type annotations)
 
+use crate::ast::*;
 use crate::formatter::context::FormatContext;
 use crate::formatter::handlers::types::format_type;
 use crate::formatter::options::FormatOptions;
 use crate::formatter::source_map::SourceMap;
-use crate::ast::*;
 use crate::util::span::Span;
 
 fn default_ctx() -> FormatContext {

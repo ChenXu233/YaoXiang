@@ -16,8 +16,8 @@
 //!     IteratorType: Iterator[T],  # 关联类型依赖于 T
 //! }
 //! ```
-use crate::frontend::core::types::MonoType;
 use crate::frontend::core::types::eval::type_families::Nat;
+use crate::frontend::core::types::MonoType;
 use std::collections::HashMap;
 
 /// 关联类型定义

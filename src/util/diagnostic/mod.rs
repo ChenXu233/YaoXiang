@@ -32,13 +32,13 @@ pub mod result;
 pub mod suggest;
 
 // 重新导出
-pub use codes::{ErrorCategory, ErrorCodeDefinition, I18nRegistry, DiagnosticBuilder, ErrorInfo};
 pub use codes::builder::{current_span, push_current_span, SpanGuard};
+pub use codes::{DiagnosticBuilder, ErrorCategory, ErrorCodeDefinition, ErrorInfo, I18nRegistry};
 pub use collect::ErrorCollector;
 pub use command::render_explain_output;
 #[cfg(feature = "cli")]
 pub use command::run_check_command_once;
-pub use emitter::{TextEmitter, JsonEmitter, EmitterConfig};
+pub use emitter::{EmitterConfig, JsonEmitter, TextEmitter};
 pub use error::{Diagnostic, Severity};
 pub use result::Result;
 pub use suggest::SuggestionEngine;

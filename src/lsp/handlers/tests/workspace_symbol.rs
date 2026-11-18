@@ -12,7 +12,7 @@
 use lsp_types::WorkspaceSymbolParams;
 
 use crate::frontend::core::sema::semantic_db::{DefId, DefinitionInfo, DefinitionKind};
-use crate::lsp::handlers::workspace_symbol::{handle_workspace_symbol, fuzzy_match, match_score};
+use crate::lsp::handlers::workspace_symbol::{fuzzy_match, handle_workspace_symbol, match_score};
 use crate::lsp::world::World;
 use crate::util::span::{Position, Span};
 

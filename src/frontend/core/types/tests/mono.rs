@@ -3,10 +3,10 @@
 //! §3.2-§3.17: From<ast::Type> 转换 — 覆盖所有 AST 类型到 MonoType 的转换路径
 //! + 补充 expand_type 各类容器变体的测试
 
-use crate::frontend::core::types::{MonoType, PolyType, StructType, TypeVar};
 use crate::ast;
 use crate::frontend::core::lexer::tokens::Literal;
 use crate::frontend::core::types::EnumType;
+use crate::frontend::core::types::{MonoType, PolyType, StructType, TypeVar};
 use crate::util::span::Span;
 use std::collections::HashMap;
 

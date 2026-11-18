@@ -1,12 +1,12 @@
 //! Tests for all AST type definitions: Expr, StmtKind, Type, Pattern, operators.
 //! 基于语言规范 §3（AST 结构）
 
-use crate::frontend::core::lexer::tokens::Literal;
 use crate::ast::{
-    self, BindingKind, BinOp, Block, Expr, FStringSegment, GenericParam, GenericParamKind,
-    MatchArm, Param, Pattern, PlanId, SpannedIdent, Stmt, StmtKind, StructField, Type,
-    TypeBodyBinding, UnOp, is_meta_type,
+    self, is_meta_type, BinOp, BindingKind, Block, Expr, FStringSegment, GenericParam,
+    GenericParamKind, MatchArm, Param, Pattern, PlanId, SpannedIdent, Stmt, StmtKind, StructField,
+    Type, TypeBodyBinding, UnOp,
 };
+use crate::frontend::core::lexer::tokens::Literal;
 use crate::util::span::Span;
 
 // Expr variants

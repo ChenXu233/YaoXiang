@@ -4,11 +4,11 @@
 //! 仅去掉外层 `match` 包裹并统一以 `return` 形式返回，语义不变。
 
 use crate::backends::common::RuntimeValue;
+use crate::backends::interpreter::executor::debug::index_arg_at;
 use crate::backends::interpreter::executor::debug::StepOutcome;
 use crate::backends::interpreter::executor::Interpreter;
 use crate::backends::ExecutorError;
 use crate::middle::bytecode::{BytecodeInstr, Reg};
-use crate::backends::interpreter::executor::debug::index_arg_at;
 
 impl Interpreter {
     /// 执行「容器与聚合」族指令。

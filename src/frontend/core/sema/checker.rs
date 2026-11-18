@@ -5,27 +5,31 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::ast::{classify_generic_params, Expr, GenericParamKind, Module, TypeBodyItem};
-use crate::frontend::core::types::{MonoType, PolyType, TraitTable};
-use crate::frontend::core::types::const_data::{ConstExpr, ConstValue, BinOp, ConstKind, ConstVarDef};
-use crate::frontend::core::types::eval::const_eval::{ConstFunction, convert_expr_to_const_expr};
-use crate::frontend::core::sema::predicate_resolver::PredicateResolver;
 use crate::frontend::core::sema::is_builtin_predicate_name;
-use crate::frontend::core::sema::proof::verdict::{ProofFailure, ProofResultExt};
+use crate::frontend::core::sema::predicate_resolver::PredicateResolver;
 use crate::frontend::core::sema::proof::dep_graph::{
     constraint_is_terminates, refined_free_vars, RefinedScopeUnit,
 };
+use crate::frontend::core::sema::proof::verdict::{ProofFailure, ProofResultExt};
+use crate::frontend::core::sema::record_model::{
+    RecordModel, RecordParamSpace, RecordTypeParamKind,
+};
+use crate::frontend::core::types::const_data::{
+    BinOp, ConstExpr, ConstKind, ConstValue, ConstVarDef,
+};
+use crate::frontend::core::types::eval::const_eval::{convert_expr_to_const_expr, ConstFunction};
 use crate::frontend::core::types::eval::dependent_types::{DependentTypeEnv, SortSpace};
-use crate::frontend::core::sema::record_model::{RecordModel, RecordParamSpace, RecordTypeParamKind};
+use crate::frontend::core::types::{MonoType, PolyType, TraitTable};
 use crate::std::StdModule;
 
+use super::environment::ImplementationProof;
+use super::environment::TypeEnvironment;
 use super::inference;
 use super::semantic_db;
-use crate::frontend::core::spawn;
 use super::types::TypeCheckResult;
-use super::environment::TypeEnvironment;
-use super::environment::ImplementationProof;
-use super::{add_builtin_types, add_std_traits, add_native_function_types};
 use super::Diagnostic;
+use super::{add_builtin_types, add_native_function_types, add_std_traits};
+use crate::frontend::core::spawn;
 use crate::util::diagnostic::DiagnosticBuilder;
 use crate::util::diagnostic::ErrorCodeDefinition;
 

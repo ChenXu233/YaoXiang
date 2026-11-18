@@ -6,6 +6,7 @@
 
 use super::scope::NestedBodyGuard;
 use super::AstToIrGenerator;
+use super::PendingInit;
 use crate::ast;
 use crate::frontend::core::sema::MonoType;
 use crate::frontend::module::symbol::SymbolTable;
@@ -15,7 +16,6 @@ use crate::middle::ir::ir::{
 use crate::middle::lower::expr::collect_free_vars_expr;
 use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};
 use crate::util::span::Span;
-use super::PendingInit;
 
 impl AstToIrGenerator {
     /// T3：预扫描模块，为所有顶层值绑定分配槽位。

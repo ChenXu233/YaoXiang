@@ -7,9 +7,9 @@
 //!   - §7.5 策略 4：乘法缩放度量
 //! - 语言规范 §控制流「while 循环」
 
+use crate::ast::{BinOp, Block, Expr, Literal, PlanId, Stmt, StmtKind};
 use crate::frontend::core::sema::layers::termination::{MeasureVerdict, TerminationChecker};
 use crate::frontend::core::sema::proof::verdict::{ProofFailure, ProofResult, ProofResultExt};
-use crate::ast::{BinOp, Block, Expr, Literal, PlanId, Stmt, StmtKind};
 use crate::frontend::core::types::const_data::{BinOp as ConstBinOp, ConstExpr};
 use crate::util::span::Span;
 

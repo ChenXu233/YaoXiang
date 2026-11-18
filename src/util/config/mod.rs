@@ -23,8 +23,8 @@
 //! ```
 
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
 use std::fs;
+use std::path::PathBuf;
 
 #[cfg(test)]
 mod tests;

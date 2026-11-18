@@ -5,7 +5,9 @@
 //! - 卸载前置检查的护栏语义（默认版本与项目 pin 均拒绝）
 
 use crate::error::Error;
-use crate::toolchain::{check_uninstall_allowed, compare_versions_desc, parse_tag_from_release_url};
+use crate::toolchain::{
+    check_uninstall_allowed, compare_versions_desc, parse_tag_from_release_url,
+};
 
 #[test]
 fn test_parse_tag_extracts_version_from_release_landing_url() {

@@ -2,11 +2,11 @@
 //!
 //! 提供符合 Language Server Protocol (LSP) 规范的 JSON 输出
 
-use serde::{Serialize, Deserialize};
-use serde_json::to_string_pretty;
 use crate::util::diagnostic::Diagnostic;
 use crate::util::diagnostic::Severity;
 use crate::util::span::Span;
+use serde::{Deserialize, Serialize};
+use serde_json::to_string_pretty;
 
 /// LSP 诊断严重级别
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

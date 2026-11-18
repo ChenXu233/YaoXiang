@@ -2,9 +2,9 @@
 //!
 //! Note: while/return/break/continue are Expr variants wrapped in StmtKind::Expr.
 
+use crate::ast::{Expr, StmtKind};
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parse;
-use crate::ast::{Expr, StmtKind};
 
 fn parse_stmt(source: &str) -> StmtKind {
     let tokens = tokenize(source).unwrap();

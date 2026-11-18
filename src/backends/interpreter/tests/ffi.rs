@@ -13,10 +13,10 @@
 //! - std.result 模块（is_ok, is_err, unwrap, unwrap_or）
 //! - std.string.parse_int / parse_float
 
-use crate::backends::common::RuntimeValue;
 use crate::backends::common::Heap;
-use crate::backends::ExecutorError;
+use crate::backends::common::RuntimeValue;
 use crate::backends::interpreter::ffi::FfiRegistry;
+use crate::backends::ExecutorError;
 use crate::std::NativeContext;
 
 /// Helper to create a test NativeContext
@@ -93,7 +93,9 @@ fn test_read_file_missing_args() {
 
 // std.result 和 std.string.parse_int/parse_float 测试
 
-use crate::std::result::{error_new, native_result_is_ok, native_result_unwrap, result_err, result_ok};
+use crate::std::result::{
+    error_new, native_result_is_ok, native_result_unwrap, result_err, result_ok,
+};
 use crate::std::string::{native_parse_float, native_parse_int};
 
 /// 规范 §1.3：Result.ok(value) → unwrap → value

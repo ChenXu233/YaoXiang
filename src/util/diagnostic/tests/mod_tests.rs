@@ -3,18 +3,18 @@
 //! §4.4: 错误处理修复（E1-E8）
 //! §5.2: 跨文件分析流程（check_modules_with_shared_env）
 
+use crate::backends::{ExecutorError, StackFrame};
+use crate::frontend::config::CompileConfig;
+use crate::middle::bytecode::{BytecodeFunction, BytecodeInstr, BytecodeModule};
+use crate::util::diagnostic::emitter::ansi::strip_ansi;
 use crate::util::diagnostic::{
-    parse_compile_error, check_files_with_diagnostics, render_runtime_error, ErrorCodeDefinition,
+    check_files_with_diagnostics, parse_compile_error, render_runtime_error, ErrorCodeDefinition,
     TextEmitter,
 };
-use crate::frontend::config::CompileConfig;
-use crate::util::span::{DebugSpan, SourceFile, SourceMap, Span, Position};
-use crate::backends::{ExecutorError, StackFrame};
-use crate::middle::bytecode::{BytecodeModule, BytecodeFunction, BytecodeInstr};
+use crate::util::span::{DebugSpan, Position, SourceFile, SourceMap, Span};
 use std::collections::HashMap;
 use std::fs;
 use tempfile::tempdir;
-use crate::util::diagnostic::emitter::ansi::strip_ansi;
 
 /// Helper: test_render_runtime_function_not_found_with_span 的完整夹具与断言（逐条断言见函数体）。
 /// Fixture: `error.yx = main() { foo() }` 的源表 + 单函数模块（ip=0 → 2:3-2:6）。

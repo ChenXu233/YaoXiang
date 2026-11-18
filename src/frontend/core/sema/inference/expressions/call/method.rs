@@ -5,8 +5,8 @@
 
 use crate::frontend::core::types::MonoType;
 
-use super::super::ExpressionInferrer;
 use super::super::extract_namespace_path;
+use super::super::ExpressionInferrer;
 
 impl<'a> ExpressionInferrer<'a> {
     /// #317：FieldAccess 调用目标是否解析自 method_bindings（impl 方法绑定形态）

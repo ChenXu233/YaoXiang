@@ -2,17 +2,17 @@
 //!
 //! This module contains the Executor trait implementation with the main bytecode execution loop.
 
-use crate::backends::{Executor, ExecutorResult, ExecutorError, ExecutionState};
-use crate::backends::common::RuntimeValue;
-use crate::backends::common::value::{FunctionId, FunctionValue};
-use crate::middle::bytecode::{BytecodeModule, BytecodeFunction};
-use crate::backends::interpreter::frames::MAX_LOCALS;
-use std::sync::Arc;
-use crate::backends::runtime::Runtime;
-use crate::backends::runtime::facade::RuntimeConfig;
-use crate::util::i18n::MSG;
-use crate::tlog;
 use super::executor::Interpreter;
+use crate::backends::common::value::{FunctionId, FunctionValue};
+use crate::backends::common::RuntimeValue;
+use crate::backends::interpreter::frames::MAX_LOCALS;
+use crate::backends::runtime::facade::RuntimeConfig;
+use crate::backends::runtime::Runtime;
+use crate::backends::{ExecutionState, Executor, ExecutorError, ExecutorResult};
+use crate::middle::bytecode::{BytecodeFunction, BytecodeModule};
+use crate::tlog;
+use crate::util::i18n::MSG;
+use std::sync::Arc;
 
 impl Executor for Interpreter {
     fn execute_module(

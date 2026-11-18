@@ -60,22 +60,21 @@ mod tests;
 
 // 使用 core 层的类型系统（显式导出以避免 ambiguous glob re-exports）
 pub use crate::frontend::core::types::{
-    MonoType, PolyType, TypeVar, TypeBinding, StructType, EnumType, TypeConstraint,
-    TypeConstraintSolver, TypeConstraintError, ConstValue, ConstExpr, ConstKind, ConstVarDef,
-    UniverseLevel,
+    ConstExpr, ConstKind, ConstValue, ConstVarDef, EnumType, MonoType, PolyType, StructType,
+    TypeBinding, TypeConstraint, TypeConstraintError, TypeConstraintSolver, TypeVar, UniverseLevel,
 };
 
 // 重新导出子模块
-pub use probe::{is_builtin_predicate_name, is_constraint_name, SemanticProbe};
-pub use environment::*;
-pub use inference::*;
 pub use crate::frontend::core::types::eval::evaluator::*;
 pub use checker::*;
+pub use environment::*;
+pub use inference::*;
+pub use probe::{is_builtin_predicate_name, is_constraint_name, SemanticProbe};
 pub use signature::*;
 pub use types::*;
 
 // 导入诊断系统
-pub use crate::util::diagnostic::{Diagnostic, ErrorCollector, ErrorCodeDefinition, I18nRegistry};
+pub use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition, ErrorCollector, I18nRegistry};
 
 /// 类型推断结果
 pub type TypeResult<T> = Result<T, Diagnostic>;

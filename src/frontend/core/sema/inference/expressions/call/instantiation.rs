@@ -3,10 +3,10 @@
 //! 自 `inference/expressions.rs` 纯搬移（WBS 7.0.4）：方法体与文档注释零改动，
 //! 仅补跨模块可见性（`pub(super)`）与相对路径（`super::` 改指 crate 路径）。
 
-use crate::util::diagnostic::ErrorCodeDefinition;
 use crate::frontend::core::types::MonoType;
 use crate::frontend::module::symbol::SymbolTable;
 use crate::middle::passes::mono::instance::{GenericFunctionId, InstantiationRequest};
+use crate::util::diagnostic::ErrorCodeDefinition;
 use std::collections::{HashMap, HashSet};
 
 use super::super::{ConstArgOutcome, ExpressionInferrer};
@@ -722,8 +722,8 @@ impl<'a> ExpressionInferrer<'a> {
         span: crate::util::span::Span,
         method_binding_key: Option<String>,
     ) -> ConstArgOutcome {
-        use crate::frontend::core::types::const_data::{ConstExpr, ConstValue};
         use crate::frontend::core::sema::proof::verdict::ProofFailure;
+        use crate::frontend::core::types::const_data::{ConstExpr, ConstValue};
         use crate::frontend::core::types::mono::GenericArg;
 
         // 1. 被调方与 q=0 名表（声明期登记，与 `PolyType::new_with_const` 同一来源）。

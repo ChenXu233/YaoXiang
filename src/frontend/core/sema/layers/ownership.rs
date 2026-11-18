@@ -10,17 +10,17 @@
 //! § 快速通道: 反向 BFS 活性分析
 //! § 慢速通道: SMT 逻辑切断
 
-use std::collections::{HashMap, HashSet};
-use crate::util::consumption::ConsumptionLedger;
-use crate::util::plan_id::PlanId;
-use crate::util::span::Span;
 use super::super::proof::context::ProofContext;
 use super::super::proof::verdict::{ProofFailure, ProofResult, ProofResultExt};
 use crate::frontend::core::types::const_data::{BinOp, ConstExpr, UnOp};
+use crate::util::consumption::ConsumptionLedger;
+use crate::util::plan_id::PlanId;
+use crate::util::span::Span;
+use std::collections::{HashMap, HashSet};
 
-use crate::frontend::core::sema::proof::smt::ast::{SMTSort, SMTResult};
-use crate::frontend::core::sema::proof::smt::translate::translate_constraint;
+use crate::frontend::core::sema::proof::smt::ast::{SMTResult, SMTSort};
 use crate::frontend::core::sema::proof::smt::backend::{with_shared_solver, SolverConsumer};
+use crate::frontend::core::sema::proof::smt::translate::translate_constraint;
 
 // ── ReleasePlan ───────────────────────────────────────────
 

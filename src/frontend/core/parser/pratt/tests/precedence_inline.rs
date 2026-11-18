@@ -7,8 +7,8 @@
 //! - 优先级上下文操作
 
 use crate::frontend::core::parser::pratt::precedence::{
-    Precedence, PrecedenceContext, BP_ASSIGN, BP_COMPARISON, BP_EQUALITY, BP_FACTOR, BP_HIGHEST,
-    BP_LOGICAL_AND, BP_LOGICAL_OR, BP_LOWEST, BP_TERM, BP_UNARY, BP_CALL,
+    Precedence, PrecedenceContext, BP_ASSIGN, BP_CALL, BP_COMPARISON, BP_EQUALITY, BP_FACTOR,
+    BP_HIGHEST, BP_LOGICAL_AND, BP_LOGICAL_OR, BP_LOWEST, BP_TERM, BP_UNARY,
 };
 
 #[test]

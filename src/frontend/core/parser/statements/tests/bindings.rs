@@ -12,10 +12,12 @@
 //!   { method = func[N] }                    类型体内绑定
 //!   { method: (FnType)[N] = (params) => body }  匿名函数绑定
 
+use crate::ast::{BindingKind, StmtKind, Type, TypeBodyBinding, TypeBodyItem};
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parse;
-use crate::ast::{StmtKind, BindingKind, Type, TypeBodyBinding, TypeBodyItem};
-use crate::frontend::core::parser::statements::bindings::{BindingParser, BindingPositionValidator};
+use crate::frontend::core::parser::statements::bindings::{
+    BindingParser, BindingPositionValidator,
+};
 
 fn parse_stmt(source: &str) -> StmtKind {
     let tokens = tokenize(source).unwrap();

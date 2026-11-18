@@ -23,10 +23,10 @@
 
 use std::sync::OnceLock;
 
-use std::sync::LazyLock;
 use std::collections::HashMap;
+use std::sync::LazyLock;
 
-pub use crate::util::config::{I18nConfig as ConfigI18n};
+pub use crate::util::config::I18nConfig as ConfigI18n;
 
 /// Cache for merged i18n config to avoid repeated file reads
 static MERGED_CONFIG: OnceLock<ConfigI18n> = OnceLock::new();

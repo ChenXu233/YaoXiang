@@ -3,10 +3,10 @@
 //! 所有编译期检查（类型等式、所有权、终止性、精化谓词）
 //! 统一返回此类型。这是 RFC-027 Section 4.1 的核心数据类型。
 
-use crate::util::diagnostic::Diagnostic;
-use crate::util::diagnostic::codes::ErrorCodeDefinition;
-use crate::frontend::core::types::MonoType;
 use crate::frontend::core::types::const_data::ConstExpr;
+use crate::frontend::core::types::MonoType;
+use crate::util::diagnostic::codes::ErrorCodeDefinition;
+use crate::util::diagnostic::Diagnostic;
 use crate::util::span::Span;
 
 /// TypeChecker 发出的信号：这个证明函数需要被编译期执行

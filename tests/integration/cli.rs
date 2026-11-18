@@ -13,12 +13,12 @@
 
 use std::path::{Path, PathBuf};
 use tempfile::TempDir;
+use yaoxiang::formatter::{format_source, run_format_command, FormatOptions};
 use yaoxiang::package::commands::init::{exec_in, InitOptions};
-use yaoxiang::package::commands::{add, rm, install, list, update};
-use yaoxiang::package::manifest::PackageManifest;
+use yaoxiang::package::commands::{add, install, list, rm, update};
 use yaoxiang::package::error::PackageError;
-use yaoxiang::formatter::{format_source, FormatOptions, run_format_command};
-use yaoxiang::{run, run_file, build_bytecode, build_bytecode_with_options, eval_code};
+use yaoxiang::package::manifest::PackageManifest;
+use yaoxiang::{build_bytecode, build_bytecode_with_options, eval_code, run, run_file};
 
 // 辅助函数
 

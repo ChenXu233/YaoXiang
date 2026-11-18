@@ -2,7 +2,9 @@
 //!
 //! 实现 `textDocument/formatting` 和 `textDocument/rangeFormatting` 功能。
 
-use lsp_types::{DocumentFormattingParams, DocumentRangeFormattingParams, TextEdit, Range, Position};
+use lsp_types::{
+    DocumentFormattingParams, DocumentRangeFormattingParams, Position, Range, TextEdit,
+};
 
 use crate::formatter::{format_source, FormatOptions};
 use crate::lsp::session::Session;

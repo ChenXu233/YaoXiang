@@ -2,7 +2,7 @@
 //!
 //! RFC-024 §2.1: spawn 块可以出现在任何表达式位置
 
-use crate::ast::{Module};
+use crate::ast::Module;
 use crate::frontend::core::spawn::placement::check_spawn_placement;
 use crate::util::span::Span;
 

@@ -4,11 +4,11 @@
 //! 方法体逐字搬自原 `middle/ir/ir_gen.rs`（WBS 7.0.2），语义未改。
 
 use super::AstToIrGenerator;
+use super::LoopTargets;
 use crate::ast;
 use crate::middle::ir::ir::{ConstValue, Instruction, Operand};
 use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};
 use crate::util::span::Span;
-use super::LoopTargets;
 
 impl AstToIrGenerator {
     /// 进入循环体生成：压入跳转目标上下文（#311）

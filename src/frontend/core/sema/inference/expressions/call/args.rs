@@ -4,8 +4,8 @@
 //! 仅补跨模块可见性（`pub(super)`）与相对路径（`super::` 改指 crate 路径）。
 
 use crate::frontend::core::sema::judgement::decide;
-use crate::util::diagnostic::{ErrorCodeDefinition, Result};
 use crate::frontend::core::types::MonoType;
+use crate::util::diagnostic::{ErrorCodeDefinition, Result};
 
 use super::super::ExpressionInferrer;
 use crate::frontend::core::sema::inference::arg_binding;

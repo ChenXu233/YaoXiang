@@ -5,14 +5,14 @@
 //! RFC-011 §4.3: Assert 定义为 IsTrue(cond)
 //! spec 2026-07-12-assert-refinement-unification-design.md §1.3: IsTrue 桥
 
-use crate::frontend::core::types::MonoType;
 use crate::frontend::core::types::eval::dependent_types::{
-    AssociatedType, AssociatedTypeDef, DependentTypeEnv, RecursiveArm, RecursivePattern, SortSpace,
-    TypeFamily, check_structural_termination, parse_nat_from_type, nat_to_type,
+    check_structural_termination, nat_to_type, parse_nat_from_type, AssociatedType,
+    AssociatedTypeDef, DependentTypeEnv, RecursiveArm, RecursivePattern, SortSpace, TypeFamily,
 };
 use crate::frontend::core::types::eval::type_families::Nat;
-use std::collections::HashMap;
+use crate::frontend::core::types::MonoType;
 use crate::std::StdModule;
+use std::collections::HashMap;
 
 /// Helper: test_istrue_type_family_instantiate 的完整夹具与断言（逐条断言见函数体）。
 /// Assert: `IsTrue(true)` 可实例化并归约为 Void（spec §1.3）。

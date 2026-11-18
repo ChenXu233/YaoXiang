@@ -3,16 +3,16 @@
 //! 方法体与文档注释逐字搬自原 `inference/expressions.rs`，语义未改；仅补跨模块可见性
 //! （`pub(super)`）与相对路径（`super::` 改指 crate 路径）。调用裁决族见 `super::call`。
 
-use crate::frontend::core::sema::judgement::decide;
-use crate::util::diagnostic::{ErrorCodeDefinition, Result};
 use crate::ast::{BinOp, UnOp};
+use crate::frontend::core::sema::judgement::decide;
 use crate::frontend::core::types::{MonoType, PolyType, TypeConstraintSolver};
+use crate::util::diagnostic::{ErrorCodeDefinition, Result};
 use std::collections::{HashMap, HashSet};
 
 use super::ExpressionInferrer;
 use super::{extract_namespace_path, is_builtin_type_name, local_pattern_label, read_view};
-use crate::frontend::core::sema::inference::mono_type_is_witness_bearing;
 use crate::frontend::core::sema::inference::existential;
+use crate::frontend::core::sema::inference::mono_type_is_witness_bearing;
 use crate::frontend::core::sema::inference::statements;
 use crate::frontend::core::sema::operator_interfaces;
 
@@ -442,8 +442,8 @@ impl<'a> ExpressionInferrer<'a> {
         right: &crate::ast::Expr,
         span: crate::util::span::Span,
     ) -> Result<MonoType> {
-        use crate::frontend::core::lexer::tokens::Literal;
         use crate::ast::Expr;
+        use crate::frontend::core::lexer::tokens::Literal;
 
         let left_ty = self.infer_expr(left)?;
         let right_ty = self.infer_expr(right)?;

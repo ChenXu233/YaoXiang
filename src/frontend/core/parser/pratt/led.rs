@@ -2,11 +2,11 @@
 //!
 //! This module implements infix parsing for the Pratt parser with RFC-010/011 support.
 
-use crate::frontend::core::lexer::tokens::*;
 use crate::ast::*;
-use crate::frontend::core::parser::{ParserState};
-use crate::util::diagnostic::ErrorCodeDefinition;
+use crate::frontend::core::lexer::tokens::*;
 use crate::frontend::core::parser::pratt::precedence::*;
+use crate::frontend::core::parser::ParserState;
+use crate::util::diagnostic::ErrorCodeDefinition;
 
 impl<'a> ParserState<'a> {
     /// Parse infix expression with given left binding power

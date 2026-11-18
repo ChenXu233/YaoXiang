@@ -9,17 +9,17 @@
 //! - 非标识符位置
 //! - 未打开文档
 
-use lsp_types::{ReferenceParams};
+use lsp_types::ReferenceParams;
 use std::str::FromStr;
 
-use super::support::{SAMPLE_URI, open_and_check};
+use super::support::{open_and_check, SAMPLE_URI};
 use crate::lsp::handlers::references::handle_references;
 use crate::lsp::session::Session;
 use crate::lsp::world::World;
 
 use lsp_types::{
-    PartialResultParams, ReferenceContext, TextDocumentIdentifier, TextDocumentPositionParams,
-    WorkDoneProgressParams, Uri,
+    PartialResultParams, ReferenceContext, TextDocumentIdentifier, TextDocumentPositionParams, Uri,
+    WorkDoneProgressParams,
 };
 
 fn make_params(

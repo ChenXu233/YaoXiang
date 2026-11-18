@@ -3,11 +3,11 @@
 //! This layer stays decoupled from interpreter/compiler internals: it schedules
 //! generic tasks and returns type-erased (`Any`) payloads.
 
+use crate::util::time_compat::Instant;
 use std::collections::HashMap;
 #[cfg(not(target_arch = "wasm32"))]
 use std::thread::JoinHandle;
 use std::time::Duration;
-use crate::util::time_compat::Instant;
 
 #[cfg(not(target_arch = "wasm32"))]
 use crossbeam_channel::{Receiver, Sender};

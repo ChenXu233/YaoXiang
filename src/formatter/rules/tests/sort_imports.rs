@@ -2,9 +2,9 @@
 //!
 //! 对应 formatter 规范 §14 (imports)
 
+use crate::ast::*;
 use crate::formatter::rules::sort_imports::{classify_import, sort_imports, ImportKind};
 use crate::formatter::source_map::SourceMap;
-use crate::ast::*;
 use crate::util::span::Span;
 
 fn default_source_map() -> SourceMap {

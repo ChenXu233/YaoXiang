@@ -5,9 +5,9 @@
 //! - `use path.{item1, item2};`
 //! - `use path as alias;`
 
-use crate::frontend::core::lexer::tokens::*;
 use crate::ast::*;
-use crate::frontend::core::parser::{ParserState};
+use crate::frontend::core::lexer::tokens::*;
+use crate::frontend::core::parser::ParserState;
 use crate::util::diagnostic::ErrorCodeDefinition;
 use crate::util::span::Span;
 

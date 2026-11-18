@@ -5,13 +5,13 @@
 //! （WBS 7.0.2），语义未改。
 
 use super::AstToIrGenerator;
+use super::BindingInfo;
 use crate::ast;
-use crate::frontend::module::ExportKind;
 use crate::frontend::module::symbol::SymbolTable;
+use crate::frontend::module::ExportKind;
 use crate::middle::ir::ir::{ConstValue, Instruction, ModuleIR, Operand};
 use crate::util::diagnostic::Diagnostic;
 use std::collections::HashMap;
-use super::BindingInfo;
 
 impl AstToIrGenerator {
     /// 从 AST 模块生成 IR 模块

@@ -21,7 +21,7 @@ pub mod yxpkg;
 #[cfg(test)]
 pub(crate) mod tests;
 
-pub use error::{PackageError, PackageResult};
-pub use manifest::PackageManifest;
-pub use lock::LockFile;
 pub use dependency::DependencySpec;
+pub use error::{PackageError, PackageResult};
+pub use lock::LockFile;
+pub use manifest::PackageManifest;

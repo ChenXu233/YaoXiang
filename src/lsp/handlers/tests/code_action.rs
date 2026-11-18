@@ -5,8 +5,8 @@
 //! - 有选区时的代码操作
 //! - 诊断相关的快速修复
 
-use lsp_types::{CodeActionParams, Range};
 use lsp_types::{CodeActionContext, Position, TextDocumentIdentifier, Uri};
+use lsp_types::{CodeActionParams, Range};
 use std::str::FromStr;
 
 use crate::lsp::handlers::code_action::handle_code_action;

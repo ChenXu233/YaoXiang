@@ -1,7 +1,7 @@
 //! 解包与校验辅助测试（RFC-037：版本目录 = 发行包解压根目录）
 
-use std::fs;
 use sha2::Digest;
+use std::fs;
 use tempfile::TempDir;
 
 use crate::dl::{entry_path_is_safe, strip_first, verify_sha256};

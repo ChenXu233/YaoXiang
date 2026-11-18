@@ -9,10 +9,6 @@
 
 use std::collections::HashMap;
 
-use crate::frontend::core::types::const_data::{ConstExpr, ConstValue};
-use crate::frontend::core::types::eval::const_eval::ConstGenericEval;
-use crate::frontend::core::types::eval::evaluator::Evaluator;
-use crate::frontend::core::types::mono::MonoType;
 use super::super::proof::context::ProofContext;
 use super::super::proof::smt::ast::SMTResult;
 use super::super::proof::smt::backend::{with_shared_solver, SolverConsumer};
@@ -21,6 +17,10 @@ use super::super::proof::verdict::{
     BudgetReport, DisproofKind, DisproofModel, ProofFailure, ProofFunctionCall, ProofResult,
     ProofResultExt, UnprovenReason, UnprovenSubject,
 };
+use crate::frontend::core::types::const_data::{ConstExpr, ConstValue};
+use crate::frontend::core::types::eval::const_eval::ConstGenericEval;
+use crate::frontend::core::types::eval::evaluator::Evaluator;
+use crate::frontend::core::types::mono::MonoType;
 
 // 求解器获取面（RFC-039 D58）：本模块**不再**自持 `static SOLVER` 私有单例。
 //

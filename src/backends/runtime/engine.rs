@@ -7,11 +7,11 @@
 //! - Resource serialization (coarse-grained control edges)
 //! - Failure propagation and cancellation
 
+use crate::util::time_compat::Instant;
 use std::any::Any;
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 use std::time::Duration;
-use crate::util::time_compat::Instant;
 
 use crate::backends::common::value::TaskId;
 

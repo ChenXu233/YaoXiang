@@ -4,7 +4,7 @@ use std::path::Path;
 
 use crate::package::error::{PackageError, PackageResult};
 use crate::package::manifest::PackageManifest;
-use crate::util::i18n::{t, current_lang, MSG};
+use crate::util::i18n::{current_lang, t, MSG};
 
 /// Add a dependency to a project at the given directory
 ///

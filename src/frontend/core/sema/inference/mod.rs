@@ -21,12 +21,12 @@ pub mod patterns;
 pub mod existential;
 
 // 重新导出核心类型
-pub use scope::ScopeManager;
-pub use types::TypeSystem;
-pub use statements::StatementChecker;
-pub use expressions::ExpressionInferrer;
 pub use bounds::BoundsChecker;
+pub use expressions::ExpressionInferrer;
 pub use patterns::PatternInferrer;
+pub use scope::ScopeManager;
+pub use statements::StatementChecker;
+pub use types::TypeSystem;
 
 // 向后兼容别名
 pub use expressions::ExprInferrer;

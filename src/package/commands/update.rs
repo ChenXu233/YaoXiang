@@ -8,7 +8,7 @@ use crate::package::lock::LockFile;
 use crate::package::manifest::PackageManifest;
 use crate::package::vendor::fetcher;
 use crate::package::vendor::VendorManager;
-use crate::util::i18n::{t, t_simple, current_lang, MSG};
+use crate::util::i18n::{current_lang, t, t_simple, MSG};
 
 /// Update all dependencies in the lock file at the given directory
 ///

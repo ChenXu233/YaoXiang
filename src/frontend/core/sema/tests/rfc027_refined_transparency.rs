@@ -30,12 +30,12 @@
 //! 一节钉住四条**未修面**（绑定位开约束 / 嵌套调用 / 柯里声明 / 模块级常量引用），
 //! 每条都断言「现在不报」——它们归 6.9.4 的 Γ 等式桥与后续遍历器工作。
 
-use crate::frontend::core::sema::probe::TypeLevelNamespace;
-use crate::frontend::core::sema::checker::TypeChecker;
-use crate::frontend::core::sema::types::TypeCheckResult;
-use crate::frontend::core::types::const_data::ConstValue;
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parse;
+use crate::frontend::core::sema::checker::TypeChecker;
+use crate::frontend::core::sema::probe::TypeLevelNamespace;
+use crate::frontend::core::sema::types::TypeCheckResult;
+use crate::frontend::core::types::const_data::ConstValue;
 use crate::util::diagnostic::Diagnostic;
 
 /// 下界谓词：`x >= 0`。源码内定义（语言里没有内建的非负类型）。

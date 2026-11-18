@@ -15,11 +15,11 @@ mod op;
 mod reference;
 mod spawn;
 
-use crate::ast::Expr;
+use super::AstToIrGenerator;
 use crate::ast;
+use crate::ast::Expr;
 use crate::middle::ir::ir::{ConstValue, Instruction, Operand};
 use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};
-use super::AstToIrGenerator;
 
 /// 收集 lambda 体引用的自由变量（名字），按出现顺序去重。
 ///

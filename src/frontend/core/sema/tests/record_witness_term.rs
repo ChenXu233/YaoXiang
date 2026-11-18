@@ -11,7 +11,9 @@ use crate::frontend::core::parser::parse;
 use crate::frontend::core::sema::checker::TypeChecker;
 use crate::frontend::core::sema::predicate_resolver::PredicateResolver;
 use crate::frontend::core::sema::probe::TypeLevelNamespace;
-use crate::frontend::core::sema::record_model::{field_path_base_matches, witness_premise_admitted};
+use crate::frontend::core::sema::record_model::{
+    field_path_base_matches, witness_premise_admitted,
+};
 use crate::frontend::core::sema::TypeCheckResult;
 use crate::frontend::core::types::const_data::ConstExpr;
 use crate::frontend::core::types::eval::const_eval::convert_expr_to_const_expr;
@@ -488,7 +490,9 @@ fn test_composite_field_path_constraints_rejected_at_declaration() {
 fn test_field_path_term_helpers() {
     // Arrange
     use crate::frontend::core::sema::proof::budget::BudgetTracker;
-    use crate::frontend::core::types::eval::const_eval::{const_expr_free_names, const_expr_node_count};
+    use crate::frontend::core::types::eval::const_eval::{
+        const_expr_free_names, const_expr_node_count,
+    };
     use crate::frontend::core::types::eval::evaluator::Evaluator;
     let term = ConstExpr::FieldPath {
         base: Box::new(ConstExpr::NamedVar("b".into())),

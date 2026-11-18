@@ -1,8 +1,8 @@
 //! Import statement tests — based on spec §7.2
 
+use crate::ast::StmtKind;
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parse;
-use crate::ast::StmtKind;
 
 fn parse_use(source: &str) -> StmtKind {
     let tokens = tokenize(source).unwrap();

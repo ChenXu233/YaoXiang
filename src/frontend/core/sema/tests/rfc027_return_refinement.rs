@@ -25,10 +25,10 @@
 //! `tests/yaoxiang/06-compile-errors/refinement/return_refinement_multi_arg_predicate_err.yx`、
 //! `tests/yaoxiang/06-compile-errors/refinement/return_refinement_multi_arg_literal_err.yx`。
 
-use crate::frontend::core::sema::probe::TypeLevelNamespace;
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parse;
 use crate::frontend::core::sema::checker::TypeChecker;
+use crate::frontend::core::sema::probe::TypeLevelNamespace;
 use crate::frontend::core::sema::types::TypeCheckResult;
 use crate::frontend::core::types::const_data::ConstValue;
 use crate::util::diagnostic::Diagnostic;

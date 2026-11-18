@@ -10,7 +10,7 @@ use crate::package::lock::LockFile;
 use crate::package::manifest::PackageManifest;
 use crate::package::source::git::{GitRef, GitSource};
 use crate::package::source::resolver::{parse_version, parse_version_req};
-use crate::util::i18n::{t, t_simple, current_lang, MSG};
+use crate::util::i18n::{current_lang, t, t_simple, MSG};
 
 /// 单条依赖的过时检查结果
 #[derive(Debug)]

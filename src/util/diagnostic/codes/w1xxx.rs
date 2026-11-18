@@ -1,6 +1,6 @@
 //! 错误码定义（define_codes! 单源条目，#326）
 
-use super::{ErrorCategory, ErrorCodeDefinition, DiagnosticBuilder};
+use super::{DiagnosticBuilder, ErrorCategory, ErrorCodeDefinition};
 
 define_codes!(W1XXX, {
     // W1001 未使用的私有函数（pub = 对外接口永不报，#321 定案 B）

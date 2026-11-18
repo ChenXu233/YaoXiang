@@ -2,7 +2,7 @@
 
 use crate::package::error::PackageResult;
 use crate::package::workspace::{find_workspace_root, load_workspace};
-use crate::util::i18n::{t, current_lang, MSG};
+use crate::util::i18n::{current_lang, t, MSG};
 
 /// `yaoxiang workspace list`：列出工作空间成员
 ///

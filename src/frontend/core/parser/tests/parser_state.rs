@@ -1,10 +1,10 @@
 //! Tests for ParserState: helpers, error tracking, save/restore.
 
 use crate::frontend::core::lexer::tokenize;
-use crate::frontend::core::parser::{NullProbe, ParserState};
-use crate::util::plan_id::PlanId;
 use crate::frontend::core::lexer::tokens::TokenKind;
 use crate::frontend::core::parser::parse_msg;
+use crate::frontend::core::parser::{NullProbe, ParserState};
+use crate::util::plan_id::PlanId;
 
 fn with_state<F>(
     source: &str,

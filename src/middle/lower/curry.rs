@@ -3,14 +3,14 @@
 //! `split_curry` 按 `Type::Fn` 链切层，`generate_curry_*` 生成中间层/最内层与完整 IR 链；
 //! `CurryLayer` 是一层签名的载体。方法体逐字搬自原 `middle/ir/ir_gen.rs`（WBS 7.0.3），语义未改。
 
+use super::scope::NestedBodyGuard;
+use super::AstToIrGenerator;
 use crate::ast;
-use crate::frontend::core::sema::{MonoType, is_constraint_name};
+use crate::frontend::core::sema::{is_constraint_name, MonoType};
 use crate::middle::ir::ir::{
     BasicBlock, ConstValue, FunctionBody, FunctionIR, Instruction, LocalSlot, Operand,
 };
 use crate::util::diagnostic::Diagnostic;
-use super::scope::NestedBodyGuard;
-use super::AstToIrGenerator;
 
 /// 一层 curry 签名
 ///

@@ -9,8 +9,8 @@ use crate::backends::common::RuntimeValue;
 use crate::backends::Executor;
 use crate::frontend::core::sema::MonoType;
 use crate::middle::ir::ir::{
-    BasicBlock, ConstValue, FunctionBody, FunctionIR, GlobalSlot, Instruction, ModuleIR, Operand,
-    LocalSlot,
+    BasicBlock, ConstValue, FunctionBody, FunctionIR, GlobalSlot, Instruction, LocalSlot, ModuleIR,
+    Operand,
 };
 use crate::middle::passes::codegen::CodegenContext;
 use crate::util::span::Span;

@@ -2,10 +2,10 @@
 //!
 //! §4.8: 模式匹配
 
-use crate::frontend::core::sema::inference::patterns::PatternInferrer;
 use crate::ast::Pattern;
 use crate::frontend::core::lexer::tokens::Literal;
-use crate::frontend::core::types::{MonoType};
+use crate::frontend::core::sema::inference::patterns::PatternInferrer;
+use crate::frontend::core::types::MonoType;
 
 fn new_inferrer() -> PatternInferrer {
     PatternInferrer::new()

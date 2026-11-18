@@ -7,8 +7,8 @@
 use super::state::LexerState;
 
 use super::literals::{
-    scan_number, scan_string, scan_char, scan_leading_dot, scan_fstring, is_identifier_start,
-    is_identifier_char, is_digit,
+    is_digit, is_identifier_char, is_identifier_start, scan_char, scan_fstring, scan_leading_dot,
+    scan_number, scan_string,
 };
 
 use crate::frontend::core::lexer::tokens::*;

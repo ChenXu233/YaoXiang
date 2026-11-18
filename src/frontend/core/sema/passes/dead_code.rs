@@ -16,10 +16,10 @@
 
 use std::collections::{HashMap, HashSet, VecDeque};
 
-use crate::util::span::Span;
 use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};
+use crate::util::span::Span;
 
-use crate::ast::{Module, Stmt, StmtKind, Expr, Block};
+use crate::ast::{Block, Expr, Module, Stmt, StmtKind};
 
 /// 死代码分析器
 pub struct DeadCodeAnalyzer {

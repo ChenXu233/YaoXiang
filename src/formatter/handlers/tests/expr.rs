@@ -2,14 +2,14 @@
 //!
 //! 对应 formatter 规范 §3, §4, §7, §8, §10, §11, §12, §13, §17, §18
 
+use crate::ast::*;
+use crate::formatter::context::FormatContext;
 use crate::formatter::handlers::expr::{
     format_binop, format_block, format_call, format_dict, format_expr, format_fn_signature,
     format_list, format_literal, format_params,
 };
-use crate::formatter::context::FormatContext;
 use crate::formatter::source_map::SourceMap;
 use crate::formatter::FormatOptions;
-use crate::ast::*;
 use crate::util::span::Span;
 
 fn default_ctx() -> FormatContext {

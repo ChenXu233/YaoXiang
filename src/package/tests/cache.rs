@@ -11,9 +11,9 @@ use std::path::Path;
 
 use tempfile::TempDir;
 
-use crate::package::cache::{GlobalCache, sanitize_key};
+use crate::package::cache::{sanitize_key, GlobalCache};
 use crate::package::dependency::DependencySpec;
-use crate::package::source::git::{GitRef, GitSource, git_command};
+use crate::package::source::git::{git_command, GitRef, GitSource};
 use crate::package::source::Source;
 
 // === sanitize_key 测试 ===

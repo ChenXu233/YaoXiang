@@ -5,15 +5,15 @@ use clap::{Parser, Subcommand, ValueEnum};
 use std::io::{IsTerminal, Read};
 use std::path::PathBuf;
 use tracing::info;
-use yaoxiang::repl::Repl;
 use yaoxiang::formatter::run_format_command;
-use yaoxiang::{dump_bytecode, ABOUT, VERSION};
+use yaoxiang::package;
+use yaoxiang::repl::Repl;
 use yaoxiang::util::diagnostic::{
     render_explain_output, run_check_command_once, run_file_with_diagnostics, RunOutcome,
 };
 use yaoxiang::util::i18n::set_lang_from_string;
 use yaoxiang::util::logger::LogLevel;
-use yaoxiang::package;
+use yaoxiang::{dump_bytecode, ABOUT, VERSION};
 
 /// Log level enum for CLI
 #[derive(Debug, Clone, Copy, ValueEnum)]

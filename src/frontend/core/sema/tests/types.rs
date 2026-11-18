@@ -3,7 +3,7 @@
 //! §3.1-§3.17: 类型系统定义
 //! RFC-010: 统一类型语法
 
-use crate::frontend::core::sema::types::{TypeCheckResult, ImportInfo};
+use crate::frontend::core::sema::types::{ImportInfo, TypeCheckResult};
 use crate::frontend::core::types::{MonoType, PolyType};
 
 // Happy path 测试

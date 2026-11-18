@@ -7,8 +7,8 @@
 //!
 //! 设计原则：一次遍历（typecheck），多处使用
 
-use std::collections::HashMap;
 use crate::util::span::Span;
+use std::collections::HashMap;
 
 // ============ 核心数据结构 ============
 
