@@ -276,7 +276,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **模板**：`在结构体 '{struct}' 中找不到字段 '{field}'`
 - **消息**：访问了不存在的结构体字段
 - **帮助**：检查结构体的可用字段；若为谓词体的证据字段路径，请核对记录定义中的 evidence 字段名
-- **发射点**：`src/backends/mod.rs:158`、`src/frontend/core/sema/checker.rs:4357`、`src/frontend/core/sema/inference/expressions/expr.rs:1069` 等 10 处
+- **发射点**：`src/backends/mod.rs:158`、`src/frontend/core/sema/checker.rs:4359`、`src/frontend/core/sema/inference/expressions/expr.rs:1069` 等 10 处
 
 ### E1043：模块成员未找到
 
@@ -476,7 +476,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **模板**：`'{name}' 要求编译期常量实参，但所给实参无法转换`
 - **消息**：精化类型实参无法转换为编译期常量表达式
 - **帮助**：谓词/证明函数实参必须是字面量、变量或单参数类型应用，否则精化约束无法生成；若在类型位或谓词体：证据字段路径必须整条为该谓词唯一形参的 evidence 字段，基名须与应用实参名一致
-- **发射点**：`src/frontend/core/sema/checker.rs:4223`、`src/frontend/core/sema/checker.rs:4271`、`src/frontend/core/sema/checker.rs:4299` 等 10 处
+- **发射点**：`src/frontend/core/sema/checker.rs:4225`、`src/frontend/core/sema/checker.rs:4273`、`src/frontend/core/sema/checker.rs:4301` 等 10 处
 - **源码注释名**：精化类型实参形态非法（RFC-027，#263）
 
 ### E1093：精化实参个数不匹配
@@ -487,7 +487,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **模板**：`'{name}' 期望 {expected} 个实参，实际 {found} 个`
 - **消息**：谓词/证明函数实参个数不匹配
 - **帮助**：实参个数必须与谓词声明一致，否则精化约束无法生成
-- **发射点**：`src/frontend/core/sema/checker.rs:4206`、`src/frontend/core/sema/checker.rs:4296`
+- **发射点**：`src/frontend/core/sema/checker.rs:4208`、`src/frontend/core/sema/checker.rs:4298`
 - **源码注释名**：精化类型参数数量不匹配
 
 ### E1094：未使用的编译期值参数
@@ -498,7 +498,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **模板**：`'{param}' 声明为 '{type}' 的编译期值参数，但未在类型体中被引用`
 - **消息**：编译期值参数未在类型体中被引用
 - **帮助**：请在类型位置（字段类型、内层 Fn 参数类型、Assert/Array 类型实参）引用该参数，或从声明中移除
-- **发射点**：`src/frontend/core/sema/checker.rs:3746`
+- **发射点**：`src/frontend/core/sema/checker.rs:3748`
 - **源码注释名**：编译期值参数未在类型体引用（#297/F）
 
 ### E1095：未知接口

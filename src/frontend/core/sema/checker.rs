@@ -3607,12 +3607,14 @@ impl TypeChecker {
         // RFC-027 Phase 2.5: 带约束表达式的类型定义同时注册为 proof 函数
         // IsPositive: (x: Int) -> Type = { x > 0 }
         // → 注册 `IsPositive` 为 `Fn { params: [Int], return_type: MetaType }`
+        // #441：约束项判据单源 `probe::is_constraint_body_item`——内核形态
+        // （ConstExpr）行为不变，调用形态（`{ check_nn(x) }` 纯断言体）同批
+        // 登记 proof-fn 形态变量：单参数谓词的既有双登记形状（模板面 def +
+        // 本变量）对调用形态与内核形态同构，`is_predicate_head`（注解实参位
+        // 值/类型分类）、`proof_fn_bases`、导出 payload 三面因此同判。
         if let crate::ast::Type::Struct { body } = definition {
             let has_constraint = body.iter().any(|item| {
-                matches!(
-                    item,
-                    crate::ast::TypeBodyItem::Expr(crate::ast::Type::ConstExpr(_))
-                )
+                crate::frontend::core::sema::probe::is_constraint_body_item(item, body)
             });
             if has_constraint && !signature.is_empty() {
                 // 形参精化与 Assign 臂同一归一化管线（`resolve_type_annotation`）：

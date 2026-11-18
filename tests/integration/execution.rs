@@ -358,3 +358,54 @@ main = () => {
         "#,
     );
 }
+
+// ============ 3.20.35 / #441：调用形谓词体的精化入口（运行时面） ============
+//
+// 谓词体是用户函数调用（`{ check_nn(x) }` 形 / lambda 形 `(x) => check_nn(x)`）
+// 时，满足值经第 4 级证明调用编译期执行为真 → 程序编译并通过运行；
+// 精化变量的运行时类型是 base（Int），可原样参与运算。编译期拒绝面（违反值
+// E4018 / 缺失被调）由语料锚钉住：06-compile-errors/refinement/call_form_*.yx。
+
+/// #441 端到端：TypeDefinition 形调用形谓词体（`= { check_nn(x) }`）的
+/// 满足值编译通过且运行正确——精化变量按 base 类型参与 Int 运算。
+/// 修前假拒绝：E1003（实参落类型命名空间）+ E1002。
+#[test]
+fn test_call_form_predicate_body_satisfied_value_runs_and_uses_base_type() {
+    run_ok(
+        r#"
+use std.assert
+
+check_nn: (v: Int) -> Bool = { v >= 0 }
+NonNegative: (x: Int) -> Type = { check_nn(x) }
+
+main = () => {
+    mut y: Int = 5
+    z: NonNegative(y) = y
+    w: NonNegative(7) = 7
+    assert.assert(z + w == 12, "call-form predicate refinement erases to Int base")
+}
+        "#,
+    );
+}
+
+/// #441 端到端：lambda 声明形调用形谓词体（`= (x) => check_nn(x)`）与
+/// TypeDefinition 形同判——满足值编译通过且运行正确。
+/// 修前该形态经证明函数面 IR 路径执行，链接不了用户被调
+/// （「Native function not found: check_nn」→ E4018 执行失败）。
+#[test]
+fn test_call_form_predicate_lambda_body_satisfied_value_runs() {
+    run_ok(
+        r#"
+use std.assert
+
+check_nn: (v: Int) -> Bool = { v >= 0 }
+NonNegativeA: (x: Int) -> Type = (x) => check_nn(x)
+
+main = () => {
+    mut y: Int = 5
+    z: NonNegativeA(y) = y
+    assert.assert(z == 5, "lambda-form call-body predicate refinement passes")
+}
+        "#,
+    );
+}

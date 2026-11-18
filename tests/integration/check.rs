@@ -1340,6 +1340,248 @@ fn test_check_imported_multiparam_predicate_wrong_arity_reports_e1093_by_declara
     );
 }
 
+// ============ 3.20.35 / #441：调用形谓词体的精化入口 ============
+//
+// 谓词体是用户函数调用（`{ check_nn(x) }` 形）时，类型应用走精化判定
+// （RFC-027 §3.1 应用即调用 + Phase 2.5 第 4 级）。修法 = 声明面判据单源
+// `probe::is_constraint_body_item` 收宽（内核 ConstExpr 形态之外认**纯断言
+// 体**里的 `Expr(Generic)` 调用项），模板面（`predicate_defs`）与 proof-fn
+// 登记面（`add_type_definition` Phase 2.5 分支）同批登记。
+//
+// 本组锚（准入门：条款 = RFC-027 §3.1/§4.3 + 病史 = issue #441 修前假拒绝
+// E1003+E1002 实测）分四面：①主锚红→绿（违反值 E4018，子进程 CLI 断码）；
+// ②缺失被调的当前映射（E4018 proof_error 位——E4020 保持既有消费面，
+// 「缺失 → E4020」是 #441 期望中未实现的部分，登记为后续工作项）；
+// ③lambda 声明形同判；④守卫与导入面边界。运行时满足值面在
+// execution.rs（run_ok 端到端）。锚不进语料差分基线面（tests/yaoxiang），
+// 本批红线零基线再生。
+
+/// #441 守卫锚：带字段记录体里的 `Assert` 项不进谓词登记——调用形收窄到
+/// **纯断言体**。若守卫失效（谓词模板面劫持带字段记录），`Wrap(3)` 注解
+/// 会被正格化为 `Refined` 而非记录构造面，此处从 0 诊断翻红。
+#[test]
+fn test_check_record_with_assert_item_keeps_record_face() {
+    // Arrange: 单参数记录 + Assert 表达式项（字段与断言并存 = RFC-027 §14
+    // 依赖记录形态，不是 `{ 断言 }` 谓词形态）
+    let dir = temp_dir();
+    let file = create_yx_file(
+        &dir,
+        "record_assert_item.yx",
+        "Wrap: (N: Int) -> Type = { v: Int, Assert(N > 0) }\n\
+         \n\
+         main: () -> Int = {\n\
+         \x20   mut z: Wrap(3) = Wrap(3)\n\
+         \x20   return z.v\n\
+         }\n",
+    );
+
+    // Act
+    let result = check_file(&file);
+
+    // Assert: 记录构造面照常工作（修前修后同为 0 诊断）
+    let errors = result.expect("check should complete for record with Assert item");
+    assert_eq!(
+        errors, 0,
+        "#441 guard: a record body with fields must keep its record-construction face — the call-form entry widens to assertion-only bodies (`{{ assertion }}`) and must not hijack records with Assert items; got {errors} error(s)"
+    );
+}
+
+/// #441 导入面同权锚：调用形谓词随 `use` 导入后，签名形参位使用与本地面
+/// 同判（0 诊断）。def（模板面）与 proof-fn 形态变量随导出 payload 同批
+/// 携带——若导入面漏掉任一登记，注解实参位会落类型命名空间（E1003 族），
+/// 此处翻红。
+#[test]
+fn test_check_imported_call_form_predicate_signature_use_matches_local() {
+    // Arrange: lib 声明调用形谓词体；main 导入后在签名形参位使用
+    //（符号实参、柯里形态——与 #527 同款，义务面不触发证明执行）
+    let dir = temp_dir();
+    create_yx_file(
+        &dir,
+        "lib.yx",
+        "check_nn: (v: Int) -> Bool = { v >= 0 }\n\
+         NonNegative: (x: Int) -> Type = { check_nn(x) }\n",
+    );
+    let main_file = create_yx_file(
+        &dir,
+        "main.yx",
+        "use lib.{NonNegative}\n\
+         \n\
+         g: (b: Int) -> (x: NonNegative(b)) -> Int = (x) => x\n\
+         \n\
+         main: () -> Void = {\n\
+         \x20   print(g(3)(5))\n\
+         }\n",
+    );
+
+    // Act
+    let result = check_file(&main_file);
+
+    // Assert: 导入面拿到与本地同构的登记（def 进模板面 + proof-fn 形态
+    // 变量重建），签名位使用零诊断
+    let errors = result.expect("check should complete for imported call-form predicate use");
+    assert_eq!(
+        errors, 0,
+        "#441: an imported call-form predicate must resolve its annotation exactly like the local surface (predicate_def and proof-fn form var travel with the use-gated export payload); got {errors} error(s)"
+    );
+}
+
+/// #441 主锚（红→绿）：调用形谓词体 + 违反值（y=-5 → check_nn(-5)=false）
+/// 必须报 E4018（第 4 级证明调用经 pipeline `execute_proof_calls` 编译期
+/// 执行被调函数，返回 false）。修前同夹具假拒绝 E1003（实参 `y` 落类型
+/// 命名空间）+ E1002——两条旧码必须**消失**（红→绿证据）。
+/// 证明调用诊断在 check_module **之后**执行，`check_file` 的计数通道只给
+/// 数量——码级断言走子进程 CLI。
+#[test]
+fn test_check_call_form_predicate_body_violating_value_reports_e4018() {
+    // Arrange: issue #441 原夹具（违反值）
+    let dir = temp_dir();
+    let file = create_yx_file(
+        &dir,
+        "call_form_violates.yx",
+        "check_nn: (v: Int) -> Bool = { v >= 0 }\n\
+         NonNegative: (x: Int) -> Type = { check_nn(x) }\n\
+         \n\
+         main: () -> Int = {\n\
+         \x20   mut y: Int = -5\n\
+         \x20   mut z: NonNegative(y) = y\n\
+         \x20   return z\n\
+         }\n",
+    );
+
+    // Act: 子进程跑 CLI check（E4018 的码是判据面，计数通道只回数量）
+    let output = Command::new(env!("CARGO_BIN_EXE_yaoxiang-rs"))
+        .arg("check")
+        .arg(&file)
+        .current_dir(&dir)
+        .output()
+        .expect("failed to run yaoxiang-rs check");
+    let text = format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    // Assert: 精化违反经证明调用执行被调 → E4018；修前假拒绝的两条旧码
+    // 不得复活
+    assert!(
+        !output.status.success(),
+        "#441: the violating value must be rejected at compile time; got success:\n{text}"
+    );
+    assert!(
+        text.contains("E4018"),
+        "#441: the violating value must reach the level-4 proof call (execute_proof_calls runs check_nn(-5) = false → E4018); got:\n{text}"
+    );
+    assert!(
+        !text.contains("E1003"),
+        "#441: the pre-fix false rejection (E1003: annotation argument resolved as a type name) must be gone; got:\n{text}"
+    );
+    assert!(
+        !text.contains("E1002"),
+        "#441: the pre-fix secondary false rejection (E1002: annotation stayed a generic application) must be gone; got:\n{text}"
+    );
+}
+
+/// #441 缺失被调锚（当前映射）：谓词体调用的函数不在模块内时，精化入口
+/// 照常正格化，证明调用进 pipeline 后被调找不到 → E4018（proof_error
+/// 说明位「未在 AST 中找到」）。诊断码口径：E4020 保持既有消费面不变
+/// （生产发射点 = 导入记录模型证明来源前置检查 + `UnprovenReason::
+/// ProofFunctionRequired` 的 verdict 映射）；「缺失 → E4020」是 #441 期望
+/// 中未实现的部分，登记为后续工作项——本锚钉住当前真实映射，后续轮若
+/// 转 E4020 须随该轮裁决同步改锚。
+#[test]
+fn test_check_call_form_predicate_body_missing_callee_reports_e4018() {
+    // Arrange: 调用形谓词体，但 check_nn 无定义
+    let dir = temp_dir();
+    let file = create_yx_file(
+        &dir,
+        "call_form_missing_callee.yx",
+        "NonNegative: (x: Int) -> Type = { check_nn(x) }\n\
+         \n\
+         main: () -> Int = {\n\
+         \x20   mut y: Int = 5\n\
+         \x20   mut z: NonNegative(y) = y\n\
+         \x20   return z\n\
+         }\n",
+    );
+
+    // Act: 子进程跑 CLI check
+    let output = Command::new(env!("CARGO_BIN_EXE_yaoxiang-rs"))
+        .arg("check")
+        .arg(&file)
+        .current_dir(&dir)
+        .output()
+        .expect("failed to run yaoxiang-rs check");
+    let text = format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    // Assert: 入口面不因被调缺失而拒绝声明（无 E1003 族），执行面缺被调
+    // → E4018 proof_error 位
+    assert!(
+        !output.status.success(),
+        "#441: a missing callee must fail the proof-call execution; got success:\n{text}"
+    );
+    assert!(
+        text.contains("E4018"),
+        "#441: missing callee must surface as E4018 (proof_error slot: callee not found in module AST); got:\n{text}"
+    );
+    assert!(
+        !text.contains("E1003"),
+        "#441: the annotation must still resolve (entry face is independent of callee existence); got:\n{text}"
+    );
+}
+
+/// #441 lambda 声明形主锚：同一调用形谓词体的 Assign/lambda 形
+/// （`= (x) => check_nn(x)`）与 TypeDefinition 形同判——违反值 E4018。
+/// 修前该形态经证明函数面 IR 路径执行，链接不了用户被调
+/// （E4018 执行失败位「Native function not found」）——同码不同因。
+#[test]
+fn test_check_call_form_lambda_body_violating_value_reports_e4018() {
+    // Arrange: lambda 形调用体谓词 + 违反值
+    let dir = temp_dir();
+    let file = create_yx_file(
+        &dir,
+        "call_form_lambda_violates.yx",
+        "check_nn: (v: Int) -> Bool = { v >= 0 }\n\
+         NonNegativeA: (x: Int) -> Type = (x) => check_nn(x)\n\
+         \n\
+         main: () -> Int = {\n\
+         \x20   mut y: Int = -5\n\
+         \x20   mut z: NonNegativeA(y) = y\n\
+         \x20   return z\n\
+         }\n",
+    );
+
+    // Act: 子进程跑 CLI check
+    let output = Command::new(env!("CARGO_BIN_EXE_yaoxiang-rs"))
+        .arg("check")
+        .arg(&file)
+        .current_dir(&dir)
+        .output()
+        .expect("failed to run yaoxiang-rs check");
+    let text = format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    // Assert: lambda 形走模板面正确执行被调体 → E4018（返回 false）
+    assert!(
+        !output.status.success(),
+        "#441: the lambda-form violating value must be rejected at compile time; got success:\n{text}"
+    );
+    assert!(
+        text.contains("E4018"),
+        "#441: the lambda-form violating value must reach the level-4 proof call via the template face (check_nn(-5) = false → E4018); got:\n{text}"
+    );
+    assert!(
+        !text.contains("E1003"),
+        "#441: the lambda form must not fall back to generic-application rejection (E1003); got:\n{text}"
+    );
+}
+
 // ============ 3.20.18 / #551：单参数无标注形参谓词的导入面与本地面同构 ============
 //
 // 单参数谓词且形参无类型标注（`P: (x) -> Type = { x > 0 }`，约束体可转
