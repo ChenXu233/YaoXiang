@@ -19,7 +19,7 @@
 ----
   python scripts/dev/scratch.py init    <batch> [--rev <sha>]
   python scripts/dev/scratch.py use     <batch> --rev <sha> --by <member> --task <id> [--steal]
-  python scripts/dev/scratch.py build   <batch> [--quiet]
+  python scripts/dev/scratch.py build   <batch> [--quiet] [--features llvm]
   python scripts/dev/scratch.py release <batch> --by <member>
   python scripts/dev/scratch.py trial   <batch> --patch <p> -- <command...>   # 变异：apply→跑→restore 全自动
   python scripts/dev/scratch.py status  [--json] [--size]
@@ -192,9 +192,12 @@ def cmd_build(args):
     repo = repo_root()
     meta = load_meta(repo, args.batch)
     path = Path(meta["path"])
-    print(f"[scratch] 在 {path} 构建（{' '.join(BUILD_CMD)}）")
+    command = list(BUILD_CMD)
+    if args.features:
+        command.extend(["--features", args.features])
+    print(f"[scratch] 在 {path} 构建（{' '.join(command)}）")
     env = dict(os.environ)
-    r = subprocess.run(BUILD_CMD, cwd=path, env=env, capture_output=args.quiet,
+    r = subprocess.run(command, cwd=path, env=env, capture_output=args.quiet,
                        text=True, encoding="utf-8", errors="replace")
     if r.returncode != 0:
         if args.quiet:
@@ -356,7 +359,9 @@ def main(argv=None):
     s = sub.add_parser("init", help="建批次树"); s.add_argument("batch"); s.add_argument("--rev"); s.set_defaults(f=cmd_init)
     s = sub.add_parser("use", help="上锁并切 revision"); s.add_argument("batch"); s.add_argument("--rev", required=True)
     s.add_argument("--by", required=True); s.add_argument("--task", required=True); s.add_argument("--steal", action="store_true"); s.set_defaults(f=cmd_use)
-    s = sub.add_parser("build", help="在树里构建 CLI 二进制"); s.add_argument("batch"); s.add_argument("--quiet", action="store_true"); s.set_defaults(f=cmd_build)
+    s = sub.add_parser("build", help="在树里构建 CLI 二进制"); s.add_argument("batch"); s.add_argument("--quiet", action="store_true")
+    s.add_argument("--features", choices=["llvm"], help="显式启用 RFC-018 可选 LLVM 后端")
+    s.set_defaults(f=cmd_build)
     s = sub.add_parser("release", help="解锁"); s.add_argument("batch"); s.add_argument("--by", required=True); s.add_argument("--force", action="store_true"); s.set_defaults(f=cmd_release)
     s = sub.add_parser("trial", help="变异试验（apply→跑→restore 全自动）")
     s.add_argument("batch")

@@ -116,6 +116,9 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - name: Setup pinned LLVM for optional AOT
+        uses: ./.github/actions/setup-llvm
+
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:

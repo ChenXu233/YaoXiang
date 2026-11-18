@@ -1,0 +1,15 @@
+name: Setup LLVM 18
+description: Install the LLVM version pinned by the optional RFC-018 AOT backend.
+runs:
+  using: composite
+  steps:
+    - name: Install LLVM 18 and Clang
+      shell: bash
+      run: |
+        set -euo pipefail
+        sudo apt-get update
+        sudo apt-get install -y --no-install-recommends llvm-18-dev clang build-essential
+        echo "LLVM_SYS_181_PREFIX=/usr/lib/llvm-18" >> "$GITHUB_ENV"
+        echo "LLVM_SYS_181_STRICT_VERSIONING=YES" >> "$GITHUB_ENV"
+        llvm-config-18 --version
+        clang --version
