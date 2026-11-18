@@ -60,7 +60,7 @@ description: '语义分析阶段产生的错误，涵盖作用域、变量生命
 - **模板**：`重复定义：'{name}' 已在当前作用域中定义`
 - **消息**：变量在同一作用域中定义了多次
 - **帮助**：重命名或删除重复的定义
-- **发射点**：`src/frontend/core/sema/checker.rs:1654`、`src/frontend/core/sema/inference/statements.rs:2213`、`src/frontend/core/sema/inference/statements.rs:3061` 等 4 处
+- **发射点**：`src/frontend/core/sema/checker.rs:1654`、`src/frontend/core/sema/inference/statements.rs:2262`、`src/frontend/core/sema/inference/statements.rs:3110` 等 4 处
 
 ### E2003：所有权错误
 
@@ -81,7 +81,7 @@ description: '语义分析阶段产生的错误，涵盖作用域、变量生命
 - **模板**：`无法给不可变变量 '{name}' 赋值`
 - **消息**：试图修改不可变变量
 - **帮助**：使用 'mut' 声明可变变量
-- **发射点**：`src/frontend/core/sema/inference/statements.rs:3054`、`src/frontend/core/sema/inference/expressions/expr.rs:3158`
+- **发射点**：`src/frontend/core/sema/inference/statements.rs:3103`、`src/frontend/core/sema/inference/expressions/expr.rs:3158`
 
 ### E2011：使用未初始化变量
 
@@ -111,7 +111,7 @@ description: '语义分析阶段产生的错误，涵盖作用域、变量生命
 - **模板**：`Cannot shadow existing variable '{name}'`
 - **消息**：不能遮蔽已有变量
 - **帮助**：使用不同的变量名，或在不同的作用域中声明变量
-- **发射点**：`src/frontend/core/sema/inference/statements.rs:3068`、`src/frontend/core/sema/inference/statements.rs:3155`、`src/frontend/core/sema/inference/expressions/expr.rs:3168`
+- **发射点**：`src/frontend/core/sema/inference/statements.rs:3117`、`src/frontend/core/sema/inference/statements.rs:3204`、`src/frontend/core/sema/inference/expressions/expr.rs:3168`
 
 ### E2014：使用已移动的值
 
@@ -208,7 +208,7 @@ description: '语义分析阶段产生的错误，涵盖作用域、变量生命
 - **模板**：`无效签名：{reason}`
 - **消息**：函数签名解析失败
 - **帮助**：检查函数签名格式是否正确
-- **发射点**：`src/frontend/core/sema/signature.rs:58`、`src/frontend/core/sema/signature.rs:63`、`src/frontend/core/sema/signature.rs:528`
+- **发射点**：`src/frontend/core/sema/signature.rs:58`、`src/frontend/core/sema/signature.rs:63`、`src/frontend/core/sema/signature.rs:518`
 - **源码注释名**：签名解析失败（通用）
 
 ### E2091：签名未知类型
@@ -271,5 +271,5 @@ description: '语义分析阶段产生的错误，涵盖作用域、变量生命
 - **模板**：`无效签名：容器类型 '{name}' 缺少类型实参`
 - **消息**：签名中的容器类型缺少类型实参
 - **帮助**：容器类型是泛型类型构造器（SPEC type-system §4.1.1），裸名不是合法类型表达式。写成参数化形态：List(T)、Dict(K, V)、Vec(T)、Array(T, N)、Set(T)、Tuple(T, ...)
-- **发射点**：`src/frontend/core/sema/signature.rs:521`
+- **发射点**：`src/frontend/core/sema/signature.rs:511`
 - **源码注释名**：签名裸容器类型（#391：容器是泛型构造器，SPEC §4.1.1，构造期拒绝）

@@ -18,6 +18,55 @@ use std::collections::{HashMap, HashSet};
 
 use super::scope::ScopeManager;
 
+/// 委托 [`ExpressionInferrer`] 前两处委托点**共有**的上下文灌注（#473：此前
+/// 两处各抄一份 setter 序列且字段顺序已漂移——收敛为单一来源，新增字段只在
+/// 这里登记一次）。
+///
+/// 必须是宏而非方法：`inferrer` 持有 `$self.scope` / `$self.solver` 的可变
+/// 借用贯穿整个灌注期，任何 `&self` / `&mut self` 方法都与它冲突；宏在调用点
+/// 展开，`$self.<field>` 保持**字段级**借用，与既有委托代码同型。
+///
+/// setter 排序依据 [`ExpressionInferrer`] 的字段声明序（`expressions/mod.rs`
+/// 的结构体定义——该类型字段的唯一声明处），#473 的顺序漂移以此归一。
+/// 各委托点的**差异项**留在调用侧：二元运算符委托点另传
+/// `set_method_bindings`；表达式兜底委托点另传 `set_return_annotation_span`。
+macro_rules! apply_shared_inferrer_context {
+    ($self:ident, $inferrer:ident) => {{
+        // #311：把 checker 侧循环深度传入，E1102 判定跨 walker 一致
+        $inferrer.set_loop_depth($self.loop_depth);
+        // RFC-010a 规则②：函数边界深度随语句侧上下文下传——命名函数体内
+        // is_top_level=false → 1，模块初始化层 → 0，E1109（return 函数外）
+        // 判定跨 walker 同源
+        $inferrer.set_fn_depth(if $self.is_top_level { 0 } else { 1 });
+        // #396：模块别名集合随委托传入（E1043 判定）
+        $inferrer.set_module_aliases(&$self.module_aliases);
+        // RFC-039 §3.4.8 ①：模块别名 → 模块限定键（限定调用 `lib.f(x)` 的
+        // 实例化请求按它生成限定名）
+        $inferrer.set_module_namespaces(&$self.module_namespaces);
+        $inferrer.set_interface_impl_registry(&$self.interface_impl_registry);
+        $inferrer.set_sum_types(&$self.sum_types);
+        $inferrer.set_type_defs(&$self.type_defs);
+        $inferrer.set_generic_type_defs(&$self.generic_type_defs);
+        $inferrer.set_current_fn_param_constraints($self.current_fn_param_constraints.as_ref());
+        $inferrer.set_method_overloads(&$self.method_overloads, &$self.method_overload_ir_names);
+        $inferrer.set_method_overload_param_names(&$self.method_overload_param_names);
+        $inferrer.set_current_expected($self.current_expected.clone());
+        // #523：证明函数基类型表随委托传入——调用点剥精化与注册期同一判据
+        // （strip_refined_with_proof_fns 单源）
+        $inferrer.set_generic_fn_type_params(&$self.generic_fn_type_params);
+        $inferrer.set_dep_env(&$self.dep_env);
+        if let Some(gamma) = &mut $self.gamma {
+            $inferrer.set_gamma(gamma);
+        }
+        // #321 W1003：导入名监视集随委托传入
+        $inferrer.set_import_watch(&$self.import_watch);
+        $inferrer.set_native_arities(&$self.native_arity);
+        $inferrer.set_native_param_names(&$self.native_param_names);
+        $inferrer.set_declared_call_site_params(&$self.declared_call_site_params);
+        $inferrer.set_proof_fn_bases(&$self.proof_fn_bases);
+    }};
+}
+
 /// 语句检查器
 ///
 /// 负责检查函数体中的语句和表达式的类型正确性。
@@ -3632,44 +3681,9 @@ impl StatementChecker {
                                 &self.native_signatures,
                                 current_result_err,
                             );
-                        inferrer.set_native_arities(&self.native_arity);
-                        inferrer.set_native_param_names(&self.native_param_names);
-                        inferrer.set_declared_call_site_params(&self.declared_call_site_params);
+                        // 本委托点独有：方法绑定表随调用点传入（构造函数不带它）
                         inferrer.set_method_bindings(&self.method_bindings);
-                        inferrer.set_interface_impl_registry(&self.interface_impl_registry);
-                        inferrer.set_sum_types(&self.sum_types);
-                        inferrer.set_type_defs(&self.type_defs);
-                        // #523：证明函数基类型表随委托传入——调用点剥精化与
-                        // 注册期同一判据（strip_refined_with_proof_fns 单源）
-                        inferrer.set_proof_fn_bases(&self.proof_fn_bases);
-                        inferrer.set_generic_fn_type_params(&self.generic_fn_type_params);
-                        inferrer.set_generic_type_defs(&self.generic_type_defs);
-                        inferrer.set_current_fn_param_constraints(
-                            self.current_fn_param_constraints.as_ref(),
-                        );
-                        inferrer.set_method_overloads(
-                            &self.method_overloads,
-                            &self.method_overload_ir_names,
-                        );
-                        inferrer.set_method_overload_param_names(&self.method_overload_param_names);
-                        inferrer.set_current_expected(self.current_expected.clone());
-                        inferrer.set_dep_env(&self.dep_env);
-                        // #311：把 checker 侧循环深度传入，E1102 判定跨 walker 一致
-                        inferrer.set_loop_depth(self.loop_depth);
-                        // RFC-010a 规则②：函数边界深度随语句侧上下文下传——
-                        // 命名函数体内 is_top_level=false → 1，模块初始化层 → 0，
-                        // E1109（return 函数外）判定跨 walker 同源
-                        inferrer.set_fn_depth(if self.is_top_level { 0 } else { 1 });
-                        // #321 W1003：导入名监视集随委托传入
-                        inferrer.set_import_watch(&self.import_watch);
-                        // #396：模块别名集合随委托传入（E1043 判定）
-                        inferrer.set_module_aliases(&self.module_aliases);
-                        // RFC-039 §3.4.8 ①：模块别名 → 模块限定键（限定调用
-                        // `lib.f(x)` 的实例化请求按它生成限定名）
-                        inferrer.set_module_namespaces(&self.module_namespaces);
-                        if let Some(gamma) = &mut self.gamma {
-                            inferrer.set_gamma(gamma);
-                        }
+                        apply_shared_inferrer_context!(self, inferrer);
                         let result = inferrer.infer_expr(expr).map_err(Box::new);
                         self.imported_used.extend(inferrer.take_import_used());
                         self.instantiation_requests
@@ -3746,42 +3760,11 @@ impl StatementChecker {
                     self.expected_return_type.clone(),
                     &self.method_bindings,
                 );
-                inferrer.set_native_arities(&self.native_arity);
-                inferrer.set_native_param_names(&self.native_param_names);
-                inferrer.set_declared_call_site_params(&self.declared_call_site_params);
-                inferrer.set_type_defs(&self.type_defs);
-                inferrer.set_interface_impl_registry(&self.interface_impl_registry);
-                inferrer.set_sum_types(&self.sum_types);
-                inferrer.set_generic_type_defs(&self.generic_type_defs);
-                // #523：证明函数基类型表随委托传入——调用点剥精化与
-                // 注册期同一判据（strip_refined_with_proof_fns 单源）
-                inferrer.set_proof_fn_bases(&self.proof_fn_bases);
-                inferrer.set_generic_fn_type_params(&self.generic_fn_type_params);
-                inferrer
-                    .set_current_fn_param_constraints(self.current_fn_param_constraints.as_ref());
-                inferrer
-                    .set_method_overloads(&self.method_overloads, &self.method_overload_ir_names);
-                inferrer.set_method_overload_param_names(&self.method_overload_param_names);
-                inferrer.set_current_expected(self.current_expected.clone());
-                inferrer.set_dep_env(&self.dep_env);
-                // #311：把 checker 侧循环深度传入，E1102 判定跨 walker 一致
-                inferrer.set_loop_depth(self.loop_depth);
-                // RFC-010a 规则②：函数边界深度随语句侧上下文下传（E1109 判定）
-                inferrer.set_fn_depth(if self.is_top_level { 0 } else { 1 });
-                // #353 口径 / WBS 6.8.2a D54 ②：函数声明注解位置随委托下传——
-                // 体内显式 `return X` 的类型不符与箭头糖（语句形态）同一落点：
-                // 指向注解，不指向体内那个值。
+                // 本委托点独有：声明注解位置随委托下传（#353 口径 / WBS
+                // 6.8.2a D54 ②）——体内显式 `return X` 的类型不符与箭头糖
+                // （语句形态）同一落点：指向注解，不指向体内那个值。
                 inferrer.set_return_annotation_span(self.tail_annotation_span);
-                // #321 W1003：导入名监视集随委托传入
-                inferrer.set_import_watch(&self.import_watch);
-                // #396：模块别名集合随委托传入（E1043 判定）
-                inferrer.set_module_aliases(&self.module_aliases);
-                // RFC-039 §3.4.8 ①：模块别名 → 模块限定键（限定调用
-                // `lib.f(x)` 的实例化请求按它生成限定名）
-                inferrer.set_module_namespaces(&self.module_namespaces);
-                if let Some(gamma) = &mut self.gamma {
-                    inferrer.set_gamma(gamma);
-                }
+                apply_shared_inferrer_context!(self, inferrer);
                 let result = inferrer.infer_expr(expr).map_err(Box::new);
                 self.imported_used.extend(inferrer.take_import_used());
                 self.instantiation_requests
