@@ -353,15 +353,25 @@ fn test_from_ast_type_generic() {
 
 #[test]
 fn test_from_ast_type_generic_custom() {
+    // Arrange - 真正自定义的泛型名：不得撞上内建容器名，也不得是 #403 A 案
+    // 在本臂做源名归一的 `List`（它落 `Vec` 面，不再是「自定义」反例）。
     let ast_ty = ast::Type::Generic {
-        name: "List".to_string(),
+        name: "Matrix".to_string(),
         name_span: Span::dummy(),
         args: vec![name_ty("Int32")],
     };
+
+    // Act
     let mono: MonoType = ast_ty.into();
-    // #299：泛型不再 lower 成原生变体，保持 Generic
+
+    // Assert - #299：泛型不再 lower 成原生变体，保持 Generic；自定义名与实参
+    // 逐字保留（#403 A 案的源名归一只收 `List`→`Vec`，自定义名不经改写）。
     assert!(
-        matches!(mono, MonoType::Generic { name, args } if name == "List" && args[0] == MonoType::Int(32))
+        matches!(
+            &mono,
+            MonoType::Generic { name, args } if name == "Matrix" && args[0] == MonoType::Int(32)
+        ),
+        "自定义泛型名应原样保留（不 lower、不归一），实际 {mono:?}"
     );
 }
 

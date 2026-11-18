@@ -1005,7 +1005,12 @@ impl AstToIrGenerator {
             ast::Expr::Call { func, args, .. } => {
                 if let ast::Expr::Var(cname, _) = func.as_ref() {
                     MonoType::Generic {
-                        name: cname.clone(),
+                        // #403：与 typecheck 侧 `type_arg_of_expr` 同判据——源名进
+                        // 类型域落点归一（单源 [`MonoType::source_container_face`]）。
+                        // `Vec(List(Int))(…)` 直造形态的内层 `List(Int)` 走本臂
+                        // 递归，不过归一会在 L3 IR 视图产出 `Generic{"List"}`，
+                        // 与 L2 表示劈叉。
+                        name: MonoType::source_container_face(cname),
                         args: args.iter().map(Self::type_arg_of_expr_ir).collect(),
                     }
                 } else {

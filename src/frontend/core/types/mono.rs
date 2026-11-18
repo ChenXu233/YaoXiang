@@ -449,14 +449,20 @@ impl MonoType {
     /// 迭代都被 E1002 假拒绝（修前合法程序假拒绝 = 旧行为非成功，D59 C 类，
     /// #556/#538 同族判据）。
     ///
-    /// 判据单源：源名进类型域的门共三处——AST 注解（[`From<ast::Type>`]）、
-    /// 调用点显式类型实参（`type_arg_of_expr`）、native 签名串解析
-    /// （`parse_type_str_with_generics`）——穷尽扫描动态名 `MonoType::Generic`
-    /// 构造无第四门，三处都调本函数，不各写一份映射。
+    /// 判据单源：源名进类型域的门共四处——AST 注解（[`From<ast::Type>`]）、
+    /// 调用点显式类型实参（`type_arg_of_expr`，typecheck 侧）、native 签名串
+    /// 解析（`parse_type_str_with_generics`）、L3 IR 视图提取（`lower/query.rs`
+    /// 的 `type_arg_of_expr_ir`）——穷尽扫描动态名 `MonoType::Generic` 构造
+    /// 以这四处为全口径，四处都调本函数，不各写一份映射。
     ///
     /// 注意：这是**源名**归一，不是类型域内的名字重写——替换/传播走
-    /// `Substituter` 等既有通道，`Generic{"List"}` 在类型域内不再新生
-    /// （既有按名特判的 List 臂成为不可达余留，保持原样不动）。
+    /// `Substituter` 等既有通道，`Generic{"List"}` 在**幽灵面口径**（经上述
+    /// 各门进类型域的源名）下不再新生，既有按名特判的 List 臂在该口径下
+    /// 不可达，保持原样不动。user-List 遮挡形态下值面仍可达：用户自定义
+    /// `List` 和类型时，`call` 侧 sum_types 守卫链按和类型名直造值面
+    /// `Generic{"List"}`（`inference/expressions/call` 的类型实参应用臂，
+    /// 不经本归一），按名特判臂会把用户容器误判为内建 List 臂——修前既有
+    /// 歧义，非 #403 引入，备案不修。
     pub(crate) fn source_container_face(name: &str) -> String {
         if name == "List" {
             "Vec".to_string()

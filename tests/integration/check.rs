@@ -3257,7 +3257,7 @@ main()
 /// type: Array(int64, int64::3)`，恰 1 条；此前 CLI 探针只报 E1001 print_int
 /// 是变量解析错误挡住了后续阶段），修后逐字不变。
 #[test]
-fn test_check_array_type_annotation_for_iteration_stays_accepted() {
+fn test_check_array_type_annotation_for_iteration_reports_existing_e3004() {
     // Arrange - Array(Int, 3) 注解形态（#403 的对照面）
     let dir = temp_dir();
     let file = create_yx_file(
@@ -3294,5 +3294,47 @@ main()
         diag.message.contains("Array(int64, int64::3)"),
         "#403 control: E3004 must name the fixed-length face Array(int64, int64::3); got: {}",
         diag.message
+    );
+}
+
+/// #403 对照锚④：user-List 遮挡下的容器直造形态 `Vec(List(Int))(…)`——
+/// 内层 `List(Int)` 作显式类型实参走 lower 侧 `type_arg_of_expr_ir`（#403
+/// 单源判据的第四门）。探针实测（2026-11-19，主仓工作树）：用户自定义
+/// `List` 和类型 + 直造调用编译通过、运行打印 2——修前修后行为不变（L3
+/// 视图不 unify），本锚钉住的是**可接受性**：表示归一（无论 L2 还是 L3 门）
+/// 不得把这一原先成功形态变成任何诊断。
+#[test]
+fn test_check_user_list_shadowed_type_arg_direct_construction_stays_accepted() {
+    // Arrange - user-List 遮挡 + Vec(List(Int)) 直造（#403 单源判据第四门的可达面）
+    let dir = temp_dir();
+    let file = create_yx_file(
+        &dir,
+        "user_list_direct_constr.yx",
+        r#"
+use std.io
+
+List: (T: Type) -> Type = {
+    item: (T) -> List(T),
+    empty: () -> List(T),
+}
+
+main: () -> Void = {
+    a = List(Int).item(1)
+    b = List(Int).empty()
+    n = Vec(List(Int))(a, b).length
+    io.print(n)
+}
+main()
+"#,
+    );
+
+    // Act
+    let result = check_result(&file);
+    let codes = error_codes(&result);
+
+    // Assert - 对照：修前修后逐字不变（0 诊断）
+    assert!(
+        codes.is_empty(),
+        "#403 control: user-List shadowed `Vec(List(Int))(...)` direct construction must stay accepted (the L3 view normalization in type_arg_of_expr_ir is view-only and must not reject); got {codes:?}"
     );
 }
