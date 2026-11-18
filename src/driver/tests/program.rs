@@ -83,7 +83,7 @@ fn expected_stages(kind: ProgramKind) -> &'static [Stage] {
             Linking,
             Monomorphization,
         ],
-        // check_source_in_project：check 骨架但无角色分类/死代码（现状）
+        // analyze_source_in_project：check 骨架但无角色分类/死代码（现状）
         ProgramKind::Lsp => &[
             VendorConsistency,
             Discovery,

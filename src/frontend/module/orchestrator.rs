@@ -228,8 +228,14 @@ pub struct LspAnalysis {
 /// 用项目上下文分析一份**内存源码**（LSP 脏缓冲区 / 未落盘编辑）——
 /// 一次编译同时产出诊断与语义数据（WBS 4.6.1）。
 ///
-/// 管线与降级策略同 `check_source_in_project`（本函数即其诊断半边的
-/// 实现，4.6.1 起它转调本函数）。
+/// 注册表来自磁盘发现（同 `check_project`），被检查的模块用传入源码——
+/// 编辑器因此能得到与 `yaoxiang check` 一致的跨文件解析结果。
+///
+/// 入口瘦身为 `Program { kind: Lsp }` 构造器并转调 Driver（02 §改动清单，
+/// WBS 4.2.3 / 4.6.1）。降级策略按文件来源分流（2026-10-09 用户裁决）：磁盘
+/// 文件 parse 失败同 Check 的方案 B（收集 + 退出编译单元——修复旧行为对无关
+/// 磁盘文件硬中止、handler 静默退回单文件路径的怪癖）；被编辑缓冲区 parse
+/// 失败保留残缺 AST 继续 typecheck（编辑器哲学）。
 pub fn analyze_source_in_project(
     path: &Path,
     source: &str,
@@ -267,29 +273,6 @@ pub fn analyze_source_in_project(
             semantic_db: outcome.semantic_db,
         }),
     }
-}
-
-/// 用项目上下文检查一份**内存源码**（LSP 脏缓冲区 / 未落盘编辑）。
-///
-/// 注册表来自磁盘发现（同 `check_project`），被检查的模块用传入源码——
-/// 编辑器因此能得到与 `yaoxiang check` 一致的跨文件解析结果。
-///
-/// 02 §改动清单（WBS 4.2.3）：入口已瘦身为 `Program { kind: Lsp }` 构造器
-/// 并转调 Driver。降级策略按文件来源分流（2026-10-09 用户裁决）：磁盘
-/// 文件 parse 失败同 Check 的方案 B（收集 + 退出编译单元——修复旧行为
-/// 对无关磁盘文件硬中止、handler 静默退回单文件路径的怪癖）；被编辑
-/// 缓冲区 parse 失败保留残缺 AST 继续 typecheck（编辑器哲学）。返回
-/// 目标文件的诊断集（其余文件的收集条目不返回——LSP 按文档发布模型，
-/// 诊断由各自的 didOpen/didChange 驱动）。
-///
-/// WBS 4.6.1：实现转调 `analyze_source_in_project` 并只取诊断半边；
-/// 语义数据面由 LSP 的分析入口消费。
-pub fn check_source_in_project(
-    path: &Path,
-    source: &str,
-    config: crate::frontend::config::CompileConfig,
-) -> Result<Vec<Diagnostic>, OrchestratorError> {
-    Ok(analyze_source_in_project(path, source, config)?.diagnostics)
 }
 
 /// RFC-014 §项目模式前置检查（2026-09-15 决议）。

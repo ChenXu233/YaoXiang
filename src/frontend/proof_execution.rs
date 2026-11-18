@@ -7,7 +7,7 @@
 //!
 //! 义务的**生产端**在 checker（三处 extend 分支），**消费端**却分布在每条
 //! 编译路径：单文件 Pipeline 与 orchestrator 四入口（compile_project /
-//! check_project / check_source_in_project / compile_embedded_module）。
+//! check_project / analyze_source_in_project / compile_embedded_module）。
 //! 此前实现只挂在 pipeline.rs 一个方法里，orchestrator 够不到，义务在
 //! 多文件路径被静默丢弃（02-stage-contract §正确性漏洞证据链，WBS 3.1.2）。
 //! 禁令三要求同一行为只有一处实现，故抽为中立模块供各入口共享。

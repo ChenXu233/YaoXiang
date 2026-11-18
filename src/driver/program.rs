@@ -23,7 +23,7 @@ pub enum ProgramKind {
     MultiFile,
     /// 多文件检查（orchestrator::check_project / yaoxiang check）
     Check,
-    /// LSP 项目内检查（orchestrator::check_source_in_project，结果过滤到目标文件）
+    /// LSP 项目内检查（orchestrator::analyze_source_in_project，结果过滤到目标文件）
     Lsp,
     /// 嵌入 std 模块编译（orchestrator::compile_embedded_module，RFC-036 §4）
     Embedded,

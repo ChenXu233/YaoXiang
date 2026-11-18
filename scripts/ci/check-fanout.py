@@ -284,17 +284,17 @@ RETIRED_WIRING_SITES = {
     ('frontend/pipeline.rs', 'run_typecheck'): '函数已不存在（P4 并入 Driver）',
     ('frontend/pipeline.rs', 'run_ir_generation'): '函数已不存在（P4 并入 Driver）',
     ('frontend/module/orchestrator.rs', 'collect_project_refs'): '函数已不存在（P4 并入 Driver）',
+    ('frontend/module/orchestrator.rs', 'check_source_in_project'): '函数已不存在（#472 清账删除；此前为②类：转调 analyze_source_in_project 后不再直接调用阶段原语）',
     ('lsp/server.rs', 'update_semantic_db'): 'lsp/server.rs 内该函数已不存在（同名存活者在 src/lsp/world.rs）',
     ('lsp/handlers/diagnostics.rs', 'run_diagnostics'): '函数已不存在（4.2.6 LSP 单文件兜底统一）',
     # ② 函数仍在，但已不再直接调用阶段原语（改为委托 Driver）——实测 0/1 阶段
-    # （下一个条目的 check_project / check_source_in_project 早前显示「只剩
+    # （下一组条目的 check_project / check_source_in_project 早前显示「只剩
     # Typecheck 1 个阶段」是签名自匹配造成的虚报：TC 的 check_project 命中的是
     # 它们自己的 fn 签名行；2026-10-26 修根因后被测体不含签名，实测 0 阶段。）
     ('frontend/pipeline.rs', 'run'): '函数仍在，已不再直接调用阶段原语（委托 Driver）',
     ('frontend/module/orchestrator.rs', 'compile_project'): '函数仍在，已不再直接调用阶段原语（委托 Driver）',
     ('frontend/module/orchestrator.rs', 'compile_embedded_module'): '函数仍在，已不再直接调用阶段原语（委托 Driver）',
     ('frontend/module/orchestrator.rs', 'check_project'): '函数仍在，已不再直接调用阶段原语（委托 Driver）',
-    ('frontend/module/orchestrator.rs', 'check_source_in_project'): '函数仍在，已不再直接调用阶段原语（委托 Driver）',
     # ③ 消除 LEX（并入 PARSE）后只剩 Parsing 1 个阶段
     ('lib.rs', 'eval_code'): '只剩 Parsing 1 个阶段（LEX 并入 PARSE）',
     ('frontend/module/orchestrator.rs', 'parse_file'): '只剩 Parsing 1 个阶段（LEX 并入 PARSE）',
