@@ -364,7 +364,8 @@ main = () => {
 // 谓词体是用户函数调用（`{ check_nn(x) }` 形 / lambda 形 `(x) => check_nn(x)`）
 // 时，满足值经第 4 级证明调用编译期执行为真 → 程序编译并通过运行；
 // 精化变量的运行时类型是 base（Int），可原样参与运算。编译期拒绝面（违反值
-// E4018 / 缺失被调）由语料锚钉住：06-compile-errors/refinement/call_form_*.yx。
+// E4018 / 缺失被调）由 check.rs 的子进程锚钉住
+// （test_check_call_form_predicate_body_*：语料夹具因基线红线改挂集成测试）。
 
 /// #441 端到端：TypeDefinition 形调用形谓词体（`= { check_nn(x) }`）的
 /// 满足值编译通过且运行正确——精化变量按 base 类型参与 Int 运算。
