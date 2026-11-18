@@ -151,9 +151,9 @@ impl AstToIrGenerator {
         // RFC-039 D20 / WBS 4.5.1：消费侧完整跑完一轮（生成成功返回）——
         // 结算据此区分「消费者跑完但漏了条目」（响亮）与「消费者没跑完 / 失败」
         //（不判：失败已按首因报出）。失败路径提前 `return Err`，不会标到这里。
-        self.release_plan.mark_consumption_completed();
+        self.release_plan.consumption().mark_completed();
         // 同点标记重载决议表的消费侧（4.5.2 复用同一台账机制）
-        self.overload_resolutions.mark_consumption_completed();
+        self.overload_resolutions.consumption().mark_completed();
         Ok(ir)
     }
 

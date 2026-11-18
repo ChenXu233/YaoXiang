@@ -69,17 +69,15 @@ impl ReleasePlan {
         ids
     }
 
-    /// 标记消费侧已完整跑完一轮（IR 生成成功返回时调用；幂等）。
+    /// 消费台账（**标记与结算的唯一入口**：`mark_completed` 标记、
+    /// `is_completed` 读取「消费者真的跑过」判据——失败 / 未运行时不标，
+    /// 此时未消费键不判，见 [`ConsumptionLedger`] 文档）。
     ///
-    /// 结算的「消费者真的跑过」判据——失败 / 未运行时不标，此时未消费键不判
-    /// （见 [`ConsumptionLedger::is_completed`]）。
-    pub fn mark_consumption_completed(&self) {
-        self.consumption.mark_completed();
-    }
-
-    /// 消费侧是否完整跑完一轮（IR 生成成功返回）。
-    pub fn consumption_completed(&self) -> bool {
-        self.consumption.is_completed()
+    /// #460：此前 `mark_consumption_completed` / `consumption_completed` 两个
+    /// 转发在本类型与 `OverloadResolutions` 各抄一份（禁令三 A），现收敛到
+    /// [`ConsumptionLedger`] 单一入口。
+    pub fn consumption(&self) -> &ConsumptionLedger<PlanId> {
+        &self.consumption
     }
 }
 

@@ -289,7 +289,8 @@ fn test_release_plan_unconsumed_is_reported_loudly() {
         .as_ref()
         .expect("合成产物已在场")
         .release_plan
-        .mark_consumption_completed();
+        .consumption()
+        .mark_completed();
 
     // Act：唯一结算点的纯函数
     let settlement = state.settle_obligations();
@@ -345,7 +346,8 @@ fn test_release_plan_unconsumed_is_reported_in_check_kind() {
         .as_ref()
         .expect("合成产物已在场")
         .release_plan
-        .mark_consumption_completed();
+        .consumption()
+        .mark_completed();
 
     // Act
     let settlement = state.settle_obligations();

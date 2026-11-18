@@ -433,11 +433,11 @@ impl Obligation {
         match self {
             Obligation::ReleasePlan => {
                 let plan = &type_result.release_plan;
-                consumption_state(plan.consumption_completed(), plan.unconsumed().len())
+                consumption_state(plan.consumption().is_completed(), plan.unconsumed().len())
             }
             Obligation::OverloadResolutions => {
                 let table = &type_result.overload_resolutions;
-                consumption_state(table.consumption_completed(), table.unconsumed().len())
+                consumption_state(table.consumption().is_completed(), table.unconsumed().len())
             }
             _ => ConsumptionState::Untracked,
         }
