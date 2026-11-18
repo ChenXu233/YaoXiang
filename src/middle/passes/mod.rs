@@ -3,6 +3,7 @@
 //! 包含中间层的各个编译阶段。
 
 pub mod codegen;
+pub mod dce;
 pub mod mono;
 
 // IR 生成器在 middle/lower（WBS 7.0.1–7.0.3 迁入）
