@@ -127,7 +127,6 @@
 | C1 | `docs/src/dev/design/check/incremental-checking.md` | 53 行 | 描述的 `CheckSession`（含 `:31-42` 的 Rust 代码草稿）、`ModuleDependencyGraph`、`affected_modules`、`ModuleCache`、`HotReloader` **全仓零命中**。`:46-47` 的"已知限制"自承 `check_incremental` 内部仍调 `check_files_with_diagnostics`（全量路径）；`:46` 还引用 `command.rs` 的 busy-wait 防抖——**`command.rs` 中既无 `Instant` 也无 `recv_timeout`**（全仓 `recv_timeout` 只出现在 `backends/runtime/tests/facade.rs`） |
 | C2 | `docs/src/dev/design/check/cross-file-analysis.md` | 43 行 | `:37` 声称 `traits/` 占位实现（coherence / impl_check / object_safety / resolution）未完成——**`traits/` 目录不存在**（`Test-Path` = False），且这些标识符全仓零命中。`:38` 声称 `check_single_module` 为每文件建独立 Compiler——**该函数不存在**，只在 `util/diagnostic/tests/mod_tests.rs:248` 的注释里出现 |
 | C3 | `docs/src/dev/design/check/index.md` | 29 行 | `:14` 声称"watch 模式只重检查受影响的文件"、`:27` 声称"check 只做前两步"。实际：`check_project` 还做 vendor 一致性、项目角色判定、死代码分析、W1006；`main.rs` 的 `Check` 子命令**没有 `--watch` 标志**（已逐个核对全部 `#[arg]` 声明） |
-| C4 | `RFC-018` LLVM AOT | 1037 行设计 / **0 行代码** | `backends/mod.rs:5,16,355` + `runtime/facade.rs:139` + `diagnostic/error.rs:8` 的 AOT 命中**全是注释**。`Cargo.toml` 无 cranelift / llvm / inkwell。`:861-876` 自己留了一份全 `- [ ]` 的实现清单，但状态标 `accepted` |
 | C5 | `RFC-028` JIT | 419 行设计 / **0 行代码** | `028-jit-compiler.md:99-126` 要求 `src/backends/jit/` 6 个文件 + `middle/passes/ir_normalize.rs`，**全部不存在**。状态是 `draft`（较诚实） |
 | C6 | `src/frontend/pipeline/tests/compilation_cache.rs` + `incremental_scheduler.rs` | 各 3 行 | **物证级证据**：文件名精准对应 C1 设计中的 `ModuleCache` 与增量调度。**有人按设计建了测试骨架，发现管线里没有对应实现，就搁下了** |
 | C7 | `docs/superpowers/specs/2026-05-29-yaoxiang-check-improvement-design.md` | — | `util/diagnostic/tests/mod.rs:4` 的 `//! §6.1: CheckSession 增量检查` 与 `mod_tests.rs:4` 的 `§4.4` / `§5.2` 引用的是这份**被 gitignore 的计划文档**（`.gitignore` 含 `superpowers/`）。这些 § 引用是**对已废弃 API 的考古层引用** |
@@ -353,7 +352,7 @@ $ git grep -rn 'cfg!(target_arch' b5e68b3c9 -- '*.rs' | wc -l
 | --- | --- | --- |
 | **纯占位**（无断言、无实现的骨架） | **删** | B1（415 行）、B3（dispatch 链）、B6（96 行）、B7（空函数）、C6（14 行）、E1（空目录） |
 | **空头设计文档** | **删或重写** | C1、C2 删除后重写为指向实际实现；C3 改写边界表；**必须同步清理 `config.js:259-268`**（E6） |
-| **状态与实现不符的 RFC** | **改状态** | C4（RFC-018）移回 `draft` 或补 `impl_status: 'not-started'`；C5（RFC-028）补 `impl_status: 'not-started'`。**不删**——设计本身可能有价值，问题是状态标记失真 |
+| **状态与实现不符的 RFC** | **改状态** | C5（RFC-028）补 `impl_status: 'not-started'`。**不删**——设计本身可能有价值，问题是状态标记失真 |
 | **有真实断言的孤儿测试** | **复活，不是删除** | 合计 **1005 行 / 78 个测试**：lexer 629 行 / 55 个 + 藏在活目录里的 311 行 / 16 个（`precedence_inline` / `overload_inline` / `json`）+ `package/template/tests/` 65 行 / 7 个。**复活成本是一行 `mod` 声明，价值是让 CI 重新获得这些覆盖**。删除它们是净损失 |
 | **零调用但语义重要的 `pub` 项** | **降可见性而非删除** | B2（`TypeSystem`）、B4（`check_type_equivalence`）——移到 `pub(crate)` 让编译器指认，或补实现。**B4 的 `is_subtype` 必须保留** |
 | **产不出值的 opcode / 指令** | **补构造点或删 opcode** | B8（`TailCall`）、B9（`Switch`，opcode 往返测试已以 `WHITELIST=["SWITCH"]` 显式登记）。B10 已按 D33 修复完成（2026-11-14：`opcode()` 区分 `op` 字段 + 专用码 `I64_NOT`，见任务 3.20.29 的提交信息），移出本待办。剩余项三选一，不能维持现状；D32/D33/D34 已裁决，随 `.42` 升版一并处理 |
@@ -376,7 +375,7 @@ $ git grep -rn 'cfg!(target_arch' b5e68b3c9 -- '*.rs' | wc -l
 | S1 | 复活有断言的孤儿测试（**1005 行 / 78 个测试**） | `cargo test` 中 lexer / pratt / passes / emitter / template 五个模块的测试数上升；**预期会暴露真实缺陷**（`literals.rs` 的溢出路径、`\x`/`\u` 非法转义此前从未被测过），需预留修复时间 |
 | S2 | 删纯占位死代码（B1/B3/B6/B7 随 05 收口/C6/E1） | `cargo test` 通过；`cargo clippy -D warnings` 无新增警告 |
 | S3 | 空头设计文档处置（C1-C3 + E6 同步清理 `config.js`） | 文档站构建无 404；`scripts/ci/check-docs-truth.py` 通过 |
-| S4 | RFC 状态修正（C4/C5/F3——`TRACKING.md` 加「实现状态」列） | `python scripts/rfc/check_tracking.py` 通过（`TRACKING.md` 会自动重新生成，**不手改**） |
+| S4 | RFC 状态修正（C5/F3——`TRACKING.md` 加「实现状态」列） | `python scripts/rfc/check_tracking.py` 通过（`TRACKING.md` 会自动重新生成，**不手改**） |
 | S5 | `pub` 项降可见性（B2/B4） | 编译器能指出真正的死代码 |
 | S6 | opcode 产不出值项决策落地（B8/B9/F8 待做，按 D32/D33/D34 执行；**B10 已完成**） | 删 `Switch` / `TailCall` 死路径；F8 门禁落地；B10 已完成（2026-11-14，WBS 3.20.29：`opcode()` 区分 `op` 字段 + 专用码 `I64_NOT`，见任务 3.20.29 的提交信息） |
 | S7 | `include!` 改造（F1，施工步骤归 [09](09-execution-wbs.md) §P5 5.1）+ 层序修正（F4，归 P4 的 4.4.1） | 见 `02-stage-contract.md` |
@@ -390,7 +389,7 @@ $ git grep -rn 'cfg!(target_arch' b5e68b3c9 -- '*.rs' | wc -l
 - **C1-C3 删除后，跨文件分析的能力文档会短暂缺位**，直到 `check/cross-file-analysis.md` 被重写为指向 `src/frontend/module/` 的实际架构。
 - **可达性分析只能发现"不可达"，不能发现"可达但无意义"**。形态 2 之外的判断必须逐项人工进行，且**本清单不构成穷尽证明**。
 - **`pub` 项在 Rust 中不触发 `dead_code` 警告**，因此零调用的 `pub` 类型（B2、B4）不会被编译器自动发现，只能靠搜索。
-- **删除 RFC-023 的半截残留**（B1）能兑现"闭包已从语言中删除"这个决策；**修正状态失真**（C4/C5/F3）能让 `TRACKING.md` 恢复参考价值。
+- **删除 RFC-023 的半截残留**（B1）能兑现"闭包已从语言中删除"这个决策；**修正状态失真**（C5/F3）能让 `TRACKING.md` 恢复参考价值。
 
 > **本节原列的开放问题已全部裁决。** 逐条决定见 [RFC-039 决议登记](../../rfc/accepted/039-compiler-architecture.md)（D1–D50）。**本文不留任何待定项。**
 >
@@ -398,7 +397,7 @@ $ git grep -rn 'cfg!(target_arch' b5e68b3c9 -- '*.rs' | wc -l
 
 - [RFC-023 闭包捕获模型（已废弃）](../../rfc/deprecated/023-closure-capture-model.md) — B1 残留的来源决策
 - [RFC-027 编译期求值与类型](../../rfc/accepted/027-compile-time-evaluation-types.md) — B3 未接线的 `§4.1` 运行时检查插入
-- [RFC-018 LLVM AOT](../../rfc/accepted/018-llvm-aot-compiler.md) — C4
+- [RFC-018 LLVM AOT](../../rfc/accepted/018-llvm-aot-compiler.md) — AOT-0/AOT-1 原型已落地：`src/backends/llvm/`，可选 `llvm` feature，仅 Linux x86-64；发布验收未完成
 - [RFC-028 JIT 编译器（草案）](../../rfc/draft/028-jit-compiler.md) — C5
 - [RFC-029a 模块缓存与增量重编译（草案）](../../rfc/draft/029a-module-cache-incremental.md) — C1/C6 的正式载体
 - [RFC-039 编译器功能路由目录设计](../../rfc/accepted/039-compiler-architecture.md) — 上位总纲
