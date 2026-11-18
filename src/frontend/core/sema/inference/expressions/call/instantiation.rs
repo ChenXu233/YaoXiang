@@ -117,7 +117,10 @@ impl<'a> ExpressionInferrer<'a> {
             Expr::Call { func, args, .. } => {
                 if let Expr::Var(cname, _) = func.as_ref() {
                     MonoType::Generic {
-                        name: cname.clone(),
+                        // #403：与注解同一落点判据——`List(Int)` 作类型实参
+                        // 同样落 `Vec` 面（单源 `MonoType::source_container_face`，
+                        // 源名进类型域的门共用）。
+                        name: MonoType::source_container_face(cname),
                         args: args.iter().map(Self::type_arg_of_expr).collect(),
                     }
                 } else {

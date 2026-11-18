@@ -164,9 +164,10 @@ Array       ::= '[' Expr (',' Expr)* ']'   // The literal resolves to a fixed-le
 > Set has no literal grammar and no runtime representation—set types are still being planned, and
 > when the requirement arises they should be completed following the Dict model (std.set +
 > HeapValue::Set). The destination of List/Dict literals is determined by the contextual type
-> annotation: bare literals and `List(T)` annotations resolve to growable lists; an `Array(T, N)`
-> annotation applied directly to a literal resolves to a fixed-length array. Implicit List→Array
-> conversion is forbidden.
+> annotation: bare literals and `List(T)` annotations resolve to the same growable list — the
+> growable-list type face has the single name `Vec(T)`, and a `List(T)` annotation lands on that
+> same face through source-name unification; an `Array(T, N)` annotation applied directly to a
+> literal resolves to a fixed-length array. Implicit List→Array conversion is forbidden.
 >
 > Array literal semantics:
 >

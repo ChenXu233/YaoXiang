@@ -208,7 +208,7 @@ description: '语义分析阶段产生的错误，涵盖作用域、变量生命
 - **模板**：`无效签名：{reason}`
 - **消息**：函数签名解析失败
 - **帮助**：检查函数签名格式是否正确
-- **发射点**：`src/frontend/core/sema/signature.rs:58`、`src/frontend/core/sema/signature.rs:63`、`src/frontend/core/sema/signature.rs:526`
+- **发射点**：`src/frontend/core/sema/signature.rs:58`、`src/frontend/core/sema/signature.rs:63`、`src/frontend/core/sema/signature.rs:528`
 - **源码注释名**：签名解析失败（通用）
 
 ### E2091：签名未知类型
@@ -271,5 +271,5 @@ description: '语义分析阶段产生的错误，涵盖作用域、变量生命
 - **模板**：`无效签名：容器类型 '{name}' 缺少类型实参`
 - **消息**：签名中的容器类型缺少类型实参
 - **帮助**：容器类型是泛型类型构造器（SPEC type-system §4.1.1），裸名不是合法类型表达式。写成参数化形态：List(T)、Dict(K, V)、Vec(T)、Array(T, N)、Set(T)、Tuple(T, ...)
-- **发射点**：`src/frontend/core/sema/signature.rs:519`
+- **发射点**：`src/frontend/core/sema/signature.rs:521`
 - **源码注释名**：签名裸容器类型（#391：容器是泛型构造器，SPEC §4.1.1，构造期拒绝）

@@ -2075,3 +2075,54 @@ fn test_check_deep_call_razor_125_compiles_in_subprocess() {
         "razor 区形态不得触发任何资源闸: {stderr}"
     );
 }
+
+// ── #403 主锚运行时面（WBS 3.20.33）：`List(Int)` 注解值的迭代取值 ─────────
+// 条款门：SPEC syntax.md §1.6.4——裸字面量与 `List(Int)` 注解落可增长列表。
+// 病史门：issue #403——修前注解落幽灵面 Generic{"List"} 被 E1002 假拒绝，
+// 程序根本无法运行；修后迭代取值/计数/求和与空构造长度在运行时逐项正确。
+// 修前红态（CLI 探针逐字留档，2026-11-18，dev@8ff9f21d）：check 报
+// error [E1002] Expected type 'List(int64)', found type 'Vec(int64)'
+// error [E1002] Expected type 'List/Array/Range/String/Dict/Tuple（可迭代）',
+// found type 'never'（run 同因编译失败退出非零）。
+
+#[test]
+fn test_e2e_run_list_type_annotation_iteration_prints_counts_and_sums() {
+    // Arrange - 注解值迭代 + 计数/求和 + 空列表构造（stdout 三行：2 / 3 / 0）
+    let tmp = TempDir::new().unwrap();
+    let src = write_yx(
+        tmp.path(),
+        "list_annot_iteration.yx",
+        r#"
+use std.io
+
+main: () -> Void = {
+    v: List(Int) = [1, 2]
+    mut count = 0
+    mut total = 0
+    for x in v {
+        count = count + 1
+        total = total + x
+    }
+    io.println(count)
+    io.println(total)
+
+    w: List(Int) = []
+    io.println(w.length)
+}
+main()
+"#,
+    );
+
+    // Act
+    let (code, stdout, stderr) = run_yx(&["run", src.to_str().unwrap()], tmp.path());
+
+    // Assert - 编译零诊断（修前 E1002 双条），运行时迭代值/计数/求和/空构造正确
+    assert_eq!(
+        code, 0,
+        "List(Int)-annotated iteration must compile and run after the landing-face unification; stderr: {stderr:?}"
+    );
+    assert!(
+        stdout.contains("2\n3\n0"),
+        "iteration over a List(Int)-annotated value must yield the elements (count 2, sum 3) and the empty construction must report length 0; got: {stdout:?}"
+    );
+}

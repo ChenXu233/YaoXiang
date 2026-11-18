@@ -705,7 +705,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **构造函数**：`ErrorCodeDefinition::missing_compile_time_evidence(param)`
 - **模板**：`编译期值参数 '{param}' 需要编译期证据，但实参无法在编译期确定`
 - **帮助**：传入字面量或编译期常量，或把该形参改为普通运行期值参数
-- **发射点**：`src/frontend/core/sema/inference/expressions/call/instantiation.rs:848`
+- **发射点**：`src/frontend/core/sema/inference/expressions/call/instantiation.rs:851`
 - **源码注释名**：编译期值参数缺少编译期证据（RFC-039 D62 / issue #533，6.9.2-B；
 
 ### E1114：witness 字段不可值级读取

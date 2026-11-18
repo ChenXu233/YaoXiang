@@ -2997,7 +2997,7 @@ impl StatementChecker {
                     // 依赖型精化（`s: SumUpTo(n, 6)`，n 变更后重验证）是另一条独立
                     // 缺口：VC 生成器查 env 得 None 而静默跳过，见 #379。
                     (**base).clone()
-                } else if let crate::ast::Type::Generic { name, args, .. } = type_ann {
+                } else if let crate::ast::Type::Generic { .. } = type_ann {
                     // 泛型注解（`L(Int)`）：存回 **Generic 形态**而非展开后的 Struct。
                     //
                     // 展开后的 Struct 只能携带字段布局，**丢掉类型实参**（`L(Int)` → 只余
@@ -3007,15 +3007,15 @@ impl StatementChecker {
                     //
                     // 例外：实参含未绑定类型参数（泛型方法体内引用自身参数）时，
                     // try_instantiate 已返回 None，ann_ty 本就是 Generic，取之即可。
+                    //
+                    // 此前这里的手写构造与 `MonoType::from(ast::Type::Generic)` 同形
+                    // （同义重复）——#403 起统一走 From：源名落点归一（`List` 落
+                    // `Vec` 面，判据单源 `MonoType::source_container_face`）只
+                    // 在 From 一处生效，不再各写一份名字直传。
                     if matches!(ann_ty, MonoType::Generic { .. }) {
                         ann_ty
                     } else {
-                        let arg_types: Vec<MonoType> =
-                            args.iter().map(|a| MonoType::from(a.clone())).collect();
-                        MonoType::Generic {
-                            name: name.clone(),
-                            args: arg_types,
-                        }
+                        MonoType::from(type_ann.clone())
                     }
                 } else {
                     ann_ty

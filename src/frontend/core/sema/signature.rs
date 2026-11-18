@@ -494,7 +494,9 @@ fn parse_type_str_with_generics(
             }
             if !args.is_empty() {
                 return Ok(MonoType::Generic {
-                    name: base.to_string(),
+                    // #403：与注解同一落点判据——native 签名串里的 `List(...)`
+                    // 同样落 `Vec` 面（单源 `MonoType::source_container_face`）。
+                    name: MonoType::source_container_face(base),
                     args,
                 });
             }

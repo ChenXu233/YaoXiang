@@ -3036,3 +3036,263 @@ main: () -> Void = {
         "#553: legal compile-time value arguments must stay accepted on both external-binding registration paths; got {errors} error(s)"
     );
 }
+
+// ── #403：`List(T)` 注解落点归一（WBS 3.20.33）───────────────────────────
+//
+// 条款门：SPEC syntax.md §1.6.4 与 type-system.md §4.1.1 关键规则——
+// 「裸字面量与 `List(T)` 注解落可增长列表」。当前架构里可增长列表就是
+// `Vec(T)`（`MonoType::is_list`），源名 `List` 进类型域统一落 `Vec` 面
+// （判据单源 `MonoType::source_container_face`，源名进类型域的门共三处：
+// AST 注解 From、调用点显式类型实参 `type_arg_of_expr`、native 签名串解析
+// `parse_type_str_with_generics`）。
+//
+// 病史门：issue #403——修前 `List(T)` 注解落成幽灵面 `Generic{"List"}`（无
+// 定义无值），与字面量/构造器/std.list 的 `Vec` 面必败 unify，合法程序被
+// E1002 假拒绝（旧行为非成功，D59 C 类，#556/#538 同族判据）。
+//
+// 修前红态（CLI 探针逐字留档，2026-11-18，dev@8ff9f21d 的 check 输出）：
+// - `v: List(Int) = [1, 2]` + `for x in v` →
+//   error [E1002] Expected type 'List(int64)', found type 'Vec(int64)'
+//     --> …:2:5（注解 vs 字面量）
+//   error [E1002] Expected type 'List/Array/Range/String/Dict/Tuple（可迭代）',
+//   found type 'never' --> …:3:14（迭代位；另有 E2014 'x' moved 传导次生）
+// - `v: List(Int) = []` →
+//   error [E1002] Expected type 'List(int64)', found type 'Vec(t37)'
+// 本锚块在摘除归一补丁的同一树上复测（stash 摘 4 源文件后重建）：主锚①
+// 得 ["E1002","E1002","E2014"]、主锚②得 ["E1002"]、遮挡锚 0 诊断、运行锚
+// exit 1 双 E1002——与探针留档逐字一致；对照锚①②绿、对照锚③恰 1 条
+// E3004（既有形态，见其注释）。
+//
+// 遮挡退出（用户裁决 A 案，2026-11-18）：用户自定义 `List` 记录使 `List(T)`
+// 注解**不再展开为该记录**——注解统一落 `Vec` 面，记录字段访问报正式诊断
+// （恰 1 条 E1053）。修前该形态 0 诊断成功（CLI 探针实测 exit=0）。
+
+/// #403 主锚①（先红后绿）：`v: List(Int) = [1, 2]` 与对它做 `for x in v`
+/// 迭代——修前双 E1002（形态见上方留档），修后 0 诊断。
+#[test]
+fn test_check_list_type_annotation_literal_and_for_iteration_zero_diagnostics() {
+    // Arrange - issue #403 主形态：List(Int) 注解 + 字面量初始化 + for 迭代
+    let dir = temp_dir();
+    let file = create_yx_file(
+        &dir,
+        "list_annot_literal_for.yx",
+        r#"
+use std.io
+main: () -> Void = {
+    v: List(Int) = [1, 2]
+    for x in v {
+        io.print(x)
+    }
+}
+main()
+"#,
+    );
+
+    // Act
+    let result = check_result(&file);
+    let codes = error_codes(&result);
+
+    // Assert - 翻面：check 从 2 条 E1002（修前红态实测）改为 0 诊断
+    assert!(
+        codes.is_empty(),
+        "#403: `v: List(Int) = [1, 2]` + `for x in v` must type-check clean — the List(T) annotation lands on the growable-list face (same face as the literal), not on a ghost Generic{{\"List\"}}; got {codes:?}"
+    );
+}
+
+/// #403 主锚②（先红后绿）：空字面量构造 `v: List(Int) = []`——修前
+/// E1002 'List(int64)' vs 'Vec(t37)'（形态见上方留档），修后 0 诊断。
+#[test]
+fn test_check_list_type_annotation_empty_literal_zero_diagnostics() {
+    // Arrange - 空字面量形态：无元素可推断，注解是唯一落点依据
+    let dir = temp_dir();
+    let file = create_yx_file(
+        &dir,
+        "list_annot_empty.yx",
+        r#"
+use std.io
+main: () -> Void = {
+    v: List(Int) = []
+    io.print(v.length)
+}
+main()
+"#,
+    );
+
+    // Act
+    let result = check_result(&file);
+    let codes = error_codes(&result);
+
+    // Assert - 翻面：check 从 1 条 E1002（修前红态实测）改为 0 诊断
+    assert!(
+        codes.is_empty(),
+        "#403: `v: List(Int) = []` must type-check clean — an empty literal under a List(Int) annotation lands on the growable-list face; got {codes:?}"
+    );
+}
+
+/// #403 遮挡退出锚（用户裁决 A 案，2026-11-18）：用户自定义 `List` 记录定义
+/// 后，`List(Int)` 注解不再展开为该记录（注解统一落 `Vec` 面）——记录字段
+/// 访问报恰 1 条正式诊断（E1053）。修前该程序 0 诊断成功（CLI 探针实测）。
+#[test]
+fn test_check_user_list_definition_shadowing_list_annotation_reports_e1053() {
+    // Arrange - 遮挡类程序逐字（用户自定义 List 记录 + 字段访问求和）
+    let dir = temp_dir();
+    let file = create_yx_file(
+        &dir,
+        "user_list_def_shadow.yx",
+        r#"
+use std.io
+
+List: (T: Type) -> Type = {
+    data: Vec(T),
+    length: Int,
+}
+
+sum: (l: List(Int)) -> Int = {
+    mut acc = 0
+    mut i = 0
+    while i < l.length {
+        acc = acc + l.data[i]
+        i = i + 1
+    }
+    return acc
+}
+
+main: () -> Void = {
+    l: List(Int) = List([1, 2, 3], 3)
+    total = sum(l)
+    io.print(total)
+}
+main()
+"#,
+    );
+
+    // Act
+    let result = check_result(&file);
+    let codes = error_codes(&result);
+    let diag = &result.diagnostics[0].diagnostic;
+
+    // Assert - 翻面：check 从 0 诊断（修前成功形态实测）改为恰 1 条 E1053
+    assert_eq!(
+        codes.len(),
+        1,
+        "#403 ruling A: a user-defined `List` record must make `List(Int)` annotations report exactly one formal diagnostic (annotation lands on the Vec face, the record is no longer expanded); got {codes:?}"
+    );
+    assert_eq!(
+        codes[0], "E1053",
+        "#403 ruling A: the shadow-exit diagnostic must be E1053 (field access on the non-struct growable-list face); got: {codes:?}"
+    );
+    assert!(
+        diag.message.contains("Vec(int64)"),
+        "#403 ruling A: the diagnostic must name the landing face Vec(int64); got: {}",
+        diag.message
+    );
+}
+
+/// #403 对照锚①：裸字面量 `for x in [1, 2]` 迭代——修前修后同绿
+/// （落点不受注解面影响；修前探针实测无 E1002）。
+#[test]
+fn test_check_bare_list_literal_for_iteration_stays_accepted() {
+    // Arrange - 无注解的裸字面量迭代（#403 的对照面）
+    let dir = temp_dir();
+    let file = create_yx_file(
+        &dir,
+        "bare_literal_for.yx",
+        r#"
+use std.io
+main: () -> Void = {
+    for x in [1, 2] {
+        io.print(x)
+    }
+}
+main()
+"#,
+    );
+
+    // Act
+    let result = check_result(&file);
+    let codes = error_codes(&result);
+
+    // Assert - 对照：修前修后逐字不变（0 诊断）
+    assert!(
+        codes.is_empty(),
+        "#403 control: bare literal `for x in [1, 2]` must stay accepted unchanged by the landing-face unification; got {codes:?}"
+    );
+}
+
+/// #403 对照锚②：`Vec(Int)` 注解 + for 迭代——修前修后同绿
+///（修前探针实测 exit=0，CLI 全绿形态逐字）。
+#[test]
+fn test_check_vec_type_annotation_for_iteration_stays_accepted() {
+    // Arrange - Vec(Int) 注解形态（#403 的对照面，修前已绿的同一形态）
+    let dir = temp_dir();
+    let file = create_yx_file(
+        &dir,
+        "vec_annot_for.yx",
+        r#"
+use std.io
+main: () -> Void = {
+    v: Vec(Int) = [1, 2]
+    for x in v {
+        io.print(x)
+    }
+}
+main()
+"#,
+    );
+
+    // Act
+    let result = check_result(&file);
+    let codes = error_codes(&result);
+
+    // Assert - 对照：修前修后逐字不变（0 诊断）
+    assert!(
+        codes.is_empty(),
+        "#403 control: `v: Vec(Int) = [1, 2]` + `for x in v` must stay accepted unchanged; got {codes:?}"
+    );
+}
+
+/// #403 对照锚③：`Array(Int, 3)` 注解 + for 迭代——定长数组面不受落点归一
+/// 影响。`Array` 作 for 迭代源在 ir_gen 层不支持（E3004 正式诊断）——这是
+/// **修前既有形态**（修前探针实测逐字：`error [E3004] Unsupported iterator
+/// type: Array(int64, int64::3)`，恰 1 条；此前 CLI 探针只报 E1001 print_int
+/// 是变量解析错误挡住了后续阶段），修后逐字不变。
+#[test]
+fn test_check_array_type_annotation_for_iteration_stays_accepted() {
+    // Arrange - Array(Int, 3) 注解形态（#403 的对照面）
+    let dir = temp_dir();
+    let file = create_yx_file(
+        &dir,
+        "array_annot_for.yx",
+        r#"
+use std.io
+main: () -> Void = {
+    v: Array(Int, 3) = [1, 2, 3]
+    for x in v {
+        io.print(x)
+    }
+}
+main()
+"#,
+    );
+
+    // Act
+    let result = check_result(&file);
+    let codes = error_codes(&result);
+    let diag = &result.diagnostics[0].diagnostic;
+
+    // Assert - 对照：修前修后逐字不变（恰 1 条 E3004，点名 Array 面）
+    assert_eq!(
+        codes.len(),
+        1,
+        "#403 control: `v: Array(Int, 3) = [1, 2, 3]` + `for x in v` must stay unchanged by the landing-face unification (exactly the pre-existing E3004 — fixed-length arrays are not an ir_gen iterator source); got {codes:?}"
+    );
+    assert_eq!(
+        codes[0], "E3004",
+        "#403 control: the sole diagnostic must remain the pre-existing E3004, got: {codes:?}"
+    );
+    assert!(
+        diag.message.contains("Array(int64, int64::3)"),
+        "#403 control: E3004 must name the fixed-length face Array(int64, int64::3); got: {}",
+        diag.message
+    );
+}

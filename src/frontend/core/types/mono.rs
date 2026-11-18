@@ -431,12 +431,38 @@ impl MonoType {
     }
     /// 内建**运行时长度缓冲**：`Vec(T)`。D8-B 之前这个角色叫 `List`。
     ///
-    /// 名字分层（RFC-011）：内置层只有 `Vec(T)`（运行时长度的原始缓冲）
-    /// 与 `Array(T, N)`（定长）；`List(T)` 是**标准库类型**
-    /// （`std/list.yx` 里的 `{ data: Vec(T), length: Int }`），不在内置层。
+    /// 名字分层：内置层的可增长列表只有 `Vec(T)`（运行时长度的原始缓冲），
+    /// 定长形态是 `Array(T, N)`。`std/list.yx` 自 22a67d93 起整体以
+    /// `Vec(T)` 为底座（"Vec(T) 即列表"），不再定义 `List` 记录。
     /// 因此 `[1,2,3]` 字面量的类型是 `Vec(Int)`，可直接传给库函数。
     pub fn is_list(&self) -> bool {
         self.is_generic_named("Vec")
+    }
+
+    /// 源面容器名的**落点归一**（#403）：源名 `List` 进类型域即落 `Vec` 面。
+    ///
+    /// SPEC syntax.md §1.6.4 与 type-system.md §4.1.1 关键规则同口径：
+    /// 「裸字面量与 `List(T)` 注解落可增长列表」——当前架构里可增长列表就是
+    /// `Vec(T)`（见 [`Self::is_list`]）。若放行 `Generic{"List"}` 进类型域，
+    /// 它没有任何 unify 对象：字面量、构造器、std.list 全部产 `Vec` 面，
+    /// `v: List(Int) = [1,2]`、`v: List(Int) = []` 与对 List 标注值做 for
+    /// 迭代都被 E1002 假拒绝（修前合法程序假拒绝 = 旧行为非成功，D59 C 类，
+    /// #556/#538 同族判据）。
+    ///
+    /// 判据单源：源名进类型域的门共三处——AST 注解（[`From<ast::Type>`]）、
+    /// 调用点显式类型实参（`type_arg_of_expr`）、native 签名串解析
+    /// （`parse_type_str_with_generics`）——穷尽扫描动态名 `MonoType::Generic`
+    /// 构造无第四门，三处都调本函数，不各写一份映射。
+    ///
+    /// 注意：这是**源名**归一，不是类型域内的名字重写——替换/传播走
+    /// `Substituter` 等既有通道，`Generic{"List"}` 在类型域内不再新生
+    /// （既有按名特判的 List 臂成为不可达余留，保持原样不动）。
+    pub(crate) fn source_container_face(name: &str) -> String {
+        if name == "List" {
+            "Vec".to_string()
+        } else {
+            name.to_string()
+        }
     }
     pub fn is_dict(&self) -> bool {
         self.is_generic_named("Dict")
@@ -1156,8 +1182,13 @@ impl From<ast::Type> for MonoType {
             },
             ast::Type::Generic { name, args, .. } => {
                 // #299：不再对 Option/Result/List/Dict/Set/Arc/Weak lower 成原生变体，统一走 Generic
+                // #403：源名落点归一——`List` 进类型域即落 `Vec` 面（判据见
+                // [`MonoType::source_container_face`]）。用户自定义 `List` 类型
+                // 不经此臂定格：注解消费侧的 `try_instantiate_generic_type`
+                // 先查 `generic_type_defs`，命中用户定义按记录展开，本归一只
+                // 兜住无定义时的落点。
                 MonoType::Generic {
-                    name,
+                    name: MonoType::source_container_face(&name),
                     args: args.into_iter().map(MonoType::from).collect(),
                 }
             }

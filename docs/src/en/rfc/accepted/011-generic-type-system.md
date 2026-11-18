@@ -89,11 +89,11 @@ Matrix: (T: Type, Rows: Int, Cols: Int) -> Type  # The matrix type depends on th
 The language layer has three container concepts. The fundamental distinction between them is where
 length information belongs:
 
-| Type          | Length        | Semantics                                     | Underlying implementation                |
-| ------------- | ------------- | --------------------------------------------- | ---------------------------------------- |
-| `Array(T, N)` | Type          | **Fixed-length** array; N is part of the type | Core primitive (stack/inline preferred)  |
-| `Vec(T)`      | Runtime value | **Runtime-length primitive buffer**, growable | Core primitive (contiguous heap buffer)  |
-| `List(T)`     | Runtime value | Standard-library type                         | Library: `{ data: Vec(T), length: Int }` |
+| Type          | Length        | Semantics                                     | Underlying implementation                          |
+| ------------- | ------------- | --------------------------------------------- | -------------------------------------------------- |
+| `Array(T, N)` | Type          | **Fixed-length** array; N is part of the type | Core primitive (stack/inline preferred)            |
+| `Vec(T)`      | Runtime value | **Runtime-length primitive buffer**, growable | Core primitive (contiguous heap buffer)            |
+| `List(T)`     | Runtime value | Source-name annotation of the growable list   | Same as `Vec(T)` (source-name landing unification) |
 
 The division of labor among the three is as follows:
 
@@ -104,10 +104,11 @@ The division of labor among the three is as follows:
   allocation, length retrieval, reading and writing, and growth. Capacity policies, growth factors,
   and shrinkage decisions are all deliberately left unspecified. It is the raw material for building
   other containers.
-- **`List(T)` is a library type, not a primitive**—it is defined in `std.list` using YaoXiang itself
-  (`{ data: Vec(T), length: Int }`) and receives the same treatment as user-defined generic records.
-  All growable-semantics policies—when to grow, how much to grow, and whether storage may be
-  shared—live in the library and do not involve the compiler.
+- **`List(T)` is not a type independent of `Vec(T)`**—since 22a67d93, `std/list.yx` is built
+  entirely on the `Vec(T)` substrate and no longer defines a `List` record; the source name `List`
+  lands on the `Vec` face uniformly when it enters the type domain (#403 landing unification). All
+  growable-semantics policies—when to grow, how much to grow, and whether storage may be shared—live
+  in the library and do not involve the compiler.
 
 The construction form of `Vec(T)` has two layers: type parameters first, constructor arguments
 second:
@@ -129,17 +130,18 @@ buf = Vec(Int)(len=64)         # Length 64, with all elements initialized to zer
 > rules for generic construction: named-field arguments are bound by name and are unaffected by
 > positional inference.
 >
-> This is the only primitive required for `List` growth—`List` allocates new slots when necessary
-> and moves the elements into them:
+> This is the only primitive required for library-side growth—the `push` of `std.list` writes
+> directly at the end of the buffer (a growing `Vec` leaves gaps), and growth and element moving are
+> done by the library on top of the `Vec` primitive:
 >
 > ```yaoxiang
-> new_data = Vec(T)(len=self.data.length * 2)
+> new_data = Vec(T)(len=self.length * 2)
 > ```
 >
-> When to grow, how much to grow, and whether to shrink are all decided by `List`. `Vec` does not
-> implement a capacity policy.
+> When to grow, how much to grow, and whether to shrink are all decided by `std.list`. `Vec` does
+> not implement a capacity policy.
 
-From bottom to top, performance decreases while flexibility increases: `Array` > `Vec` > `List`.
+From bottom to top, performance decreases while flexibility increases: `Array` > `Vec`.
 
 > Naming rationale: `Vec`/`vector` denotes a runtime-length growable sequence in mainstream
 > languages such as Rust and C++; `Array` denotes a fixed length.

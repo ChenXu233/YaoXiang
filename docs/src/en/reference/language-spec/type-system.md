@@ -506,18 +506,18 @@ treatment as user-defined generics and are processed through a unified generic-i
 The ownership of length information is the fundamental distinction among the three container
 concepts:
 
-| Type          | Length        | Semantics                               | Substrate                                |
-| ------------- | ------------- | --------------------------------------- | ---------------------------------------- |
-| `Array(T, N)` | Type          | Fixed-length array (const generic N)    | Core primitive (stack/inline preferred)  |
-| `Vec(T)`      | Runtime value | Growable raw buffer with runtime length | Core primitive (contiguous heap buffer)  |
-| `List(T)`     | Runtime value | Standard-library type (growable list)   | Library: `{ data: Vec(T), length: Int }` |
-| `Dict(K, V)`  | Runtime value | Key-value mapping                       | `HeapValue::Dict`                        |
+| Type          | Length        | Semantics                                   | Substrate                                          |
+| ------------- | ------------- | ------------------------------------------- | -------------------------------------------------- |
+| `Array(T, N)` | Type          | Fixed-length array (const generic N)        | Core primitive (stack/inline preferred)            |
+| `Vec(T)`      | Runtime value | Growable raw buffer with runtime length     | Core primitive (contiguous heap buffer)            |
+| `List(T)`     | Runtime value | Source-name annotation of the growable list | Same as `Vec(T)` (source-name landing unification) |
+| `Dict(K, V)`  | Runtime value | Key-value mapping                           | `HeapValue::Dict`                                  |
 
-> `List(T)` is a **standard-library type, not a compiler primitive**: it is defined by YaoXiang
-> itself in `std.list` and receives the same treatment as user-defined generic records. All policies
-> for growable semantics (when to grow, by how much, and whether sharing is possible) live in the
-> library, and the compiler is not involved. `Vec(T)` is the minimal foundational primitive on which
-> it depends.
+> `List(T)` is not a type independent of `Vec(T)`: since 22a67d93, `std/list.yx` is built entirely
+> on the `Vec(T)` substrate and no longer defines a `List` record; the source name `List` lands on
+> the `Vec` face uniformly when it enters the type domain. All policies for growable semantics (when
+> to grow, by how much, and whether sharing is possible) live in the library, and the compiler is
+> not involved. `Vec(T)` is the minimal foundational primitive.
 >
 > Set(T) has been retired: there is no literal, no runtime representation, and no std.set. If the
 > requirement arises, it should be completed following the Dict model.
@@ -525,14 +525,18 @@ concepts:
 Key rules:
 
 - **The placement of literals is determined by context**: A bare literal `[...]` and a `List(T)`
-  annotation produce a growable list; when an `Array(T, N)` annotation is applied directly to a
-  literal, it produces a fixed-length array. Placement validation: the number of elements == N and
-  the element types are compatible with T; otherwise E1002 is reported at compile time. When N is a
-  symbolic constant (a const parameter), count validation is deferred to the refinement-type phase.
+  annotation produce a growable list — the growable-list type face has the single name `Vec(T)`, and
+  a `List(T)` annotation lands on that same face through source-name unification; when an
+  `Array(T, N)` annotation is applied directly to a literal, it produces a fixed-length array.
+  Placement validation: the number of elements == N and the element types are compatible with T;
+  otherwise E1002 is reported at compile time. When N is a symbolic constant (a const parameter),
+  count validation is deferred to the refinement-type phase. A user-defined `List` record is no
+  longer expanded through the `List(T)` annotation — the annotation lands on the `Vec` face
+  uniformly, and field access on that record reports a formal diagnostic (E1053).
 - **Implicit List→Array conversion is prohibited**: Fixed-lengthness is guaranteed by the type
-  layer—push accepts only a `List(A)` receiver.
+  layer—push accepts only a `Vec(A)` receiver.
 - **Performance hierarchy**: From lowest to highest in performance, and from lowest to highest in
-  flexibility: `Array` > `Vec` > `List`.
+  flexibility: `Array` > `Vec`.
 - **Index-failure contract** (runtime errors are a transitional state; the target state is
   compile-time refinement coverage, using value-dependent types; see §8.5):
   - Index out of bounds (including a negative index) → `E6003`
