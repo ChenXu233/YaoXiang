@@ -9,10 +9,10 @@
 //! - §4: 编译期泛型（N: Int、编译期计算）
 //! - §6: 函数重载特化
 
-use crate::frontend::core::sema::probe::TypeLevelNamespace;
-use crate::frontend::core::sema::checker::TypeChecker;
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parse;
+use crate::frontend::core::sema::checker::TypeChecker;
+use crate::frontend::core::sema::probe::TypeLevelNamespace;
 
 /// 辅助函数：解析源代码并类型检查
 fn check_source(source: &str) -> crate::frontend::core::sema::types::TypeCheckResult {

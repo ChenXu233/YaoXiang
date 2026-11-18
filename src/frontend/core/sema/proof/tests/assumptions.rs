@@ -3,8 +3,8 @@
 //! §3.2-3.3: 流敏感假设集 Γ — 路径条件收集与 kill set
 //! spec 2026-07-12-assert-refinement-unification-design.md §4.1-4.2: Γ 语义 + mut 失效
 
-use crate::frontend::core::sema::test_util::{binop};
 use crate::frontend::core::sema::proof::assumptions::{AssumptionStack, FlowSensitiveGamma};
+use crate::frontend::core::sema::test_util::binop;
 use crate::frontend::core::types::const_data::{BinOp, ConstExpr, ConstValue};
 
 fn make_gt(

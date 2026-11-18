@@ -5,9 +5,9 @@
 //! §3.5.2: 标准接口（Clone、Equal）
 //! RFC-010 §3: 接口交集满足性
 
-use crate::frontend::core::types::{MonoType, StructType};
-use crate::frontend::core::sema::inference::bounds::BoundsChecker;
 use crate::frontend::core::sema::environment::TypeEnvironment;
+use crate::frontend::core::sema::inference::bounds::BoundsChecker;
+use crate::frontend::core::types::{MonoType, StructType};
 use std::collections::HashMap;
 
 /// 创建一个简单的函数类型

@@ -1,8 +1,8 @@
-use crate::frontend::core::types::MonoType;
 use crate::frontend::core::types::eval::type_families::{
-    Bool, Nat, bool_family, nat_family, TypeFamilyOps,
+    bool_family, nat_family, Bool, Nat, TypeFamilyOps,
 };
 use crate::frontend::core::types::eval::TypeLevelResult;
+use crate::frontend::core::types::MonoType;
 
 #[test]
 fn test_bool() {

@@ -8,10 +8,10 @@
 //! §4.3: SizeExpr 表达式
 
 use crate::frontend::core::types::const_data::{BinOp, ConstExpr, UnOp};
-use crate::frontend::core::types::{ConstValue, MonoType};
 use crate::frontend::core::types::eval::const_eval::{
     ConstFunction, ConstGenericEval, ConstGenericResult, GenericSize, SizeResult,
 };
+use crate::frontend::core::types::{ConstValue, MonoType};
 use crate::util::diagnostic::Diagnostic;
 
 /// 辅助函数：断言 eval 结果等于期望值
@@ -702,8 +702,8 @@ fn test_const_un_op_debug() {
 fn test_convert_expr_to_const_expr_int_literal() {
     use crate::ast::Expr;
     use crate::frontend::core::lexer::tokens::Literal;
-    use crate::util::span::Span;
     use crate::frontend::core::types::eval::const_eval::convert_expr_to_const_expr;
+    use crate::util::span::Span;
 
     // Act
     let result = convert_expr_to_const_expr(&Expr::Lit(Literal::Int(42), Span::dummy()));
@@ -748,8 +748,8 @@ fn test_eval_negate_i128_min_returns_overflow_error_not_panic() {
 
 #[test]
 fn test_term_env_with_equalities_admits_and_normalizes_name() {
-    use crate::frontend::core::types::eval::const_eval::{normalize, TermEnv};
     use crate::frontend::core::sema::proof::budget::BudgetTracker;
+    use crate::frontend::core::types::eval::const_eval::{normalize, TermEnv};
 
     // Arrange — 分支守卫 `y == 42` 给出等式事实
     let env = TermEnv::with_equalities(
@@ -774,8 +774,8 @@ fn test_term_env_with_equalities_admits_and_normalizes_name() {
 
 #[test]
 fn test_term_env_with_equalities_removes_symbolic_name() {
-    use crate::frontend::core::types::eval::const_eval::{normalize, TermEnv};
     use crate::frontend::core::sema::proof::budget::BudgetTracker;
+    use crate::frontend::core::types::eval::const_eval::{normalize, TermEnv};
 
     // Arrange — 同名同时出现在符号集与等式里
     let env = TermEnv::with_equalities(
@@ -801,8 +801,8 @@ fn test_term_env_with_equalities_removes_symbolic_name() {
 
 #[test]
 fn test_term_env_with_equalities_prefers_existing_values() {
-    use crate::frontend::core::types::eval::const_eval::{normalize, TermEnv};
     use crate::frontend::core::sema::proof::budget::BudgetTracker;
+    use crate::frontend::core::types::eval::const_eval::{normalize, TermEnv};
 
     // Arrange — 值环境已有 y = 7，等式说 y = 42（不可能同时成立；既有证据源优先）
     let env = TermEnv::with_equalities(
@@ -828,8 +828,8 @@ fn test_term_env_with_equalities_prefers_existing_values() {
 
 #[test]
 fn test_term_env_without_equalities_keeps_runtime_name_unproven() {
-    use crate::frontend::core::types::eval::const_eval::{normalize, TermEnv};
     use crate::frontend::core::sema::proof::budget::BudgetTracker;
+    use crate::frontend::core::types::eval::const_eval::{normalize, TermEnv};
 
     // Arrange — 无任何环境（运行期名不在场）
     let env = TermEnv::default();

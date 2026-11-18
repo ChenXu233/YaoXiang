@@ -5,7 +5,7 @@ use std::path::Path;
 use crate::package::error::PackageResult;
 use crate::package::lock::LockFile;
 use crate::package::vendor::VendorManager;
-use crate::util::i18n::{t, t_simple, current_lang, MSG};
+use crate::util::i18n::{current_lang, t, t_simple, MSG};
 
 /// 清理项目目录
 ///

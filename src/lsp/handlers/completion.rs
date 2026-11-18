@@ -10,9 +10,9 @@
 use lsp_types::{CompletionItem, CompletionItemKind, CompletionParams, CompletionResponse};
 use tracing::debug;
 
+use crate::ast::{Module, StmtKind};
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parse_with_probe;
-use crate::ast::{Module, StmtKind};
 use crate::frontend::core::sema::semantic_db::DefinitionKind;
 use crate::frontend::core::sema::SemanticProbe;
 use crate::lsp::session::Session;

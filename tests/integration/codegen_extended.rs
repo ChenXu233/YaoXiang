@@ -2,10 +2,10 @@
 //!
 //! Tests for the code generation pipeline from high-level IR to bytecode.
 
+use yaoxiang::middle::bytecode::opcode;
+use yaoxiang::middle::bytecode::{BytecodeInstr, Label, Reg};
 use yaoxiang::middle::codegen::CodegenContext;
 use yaoxiang::middle::ModuleIR;
-use yaoxiang::middle::bytecode::{BytecodeInstr, Reg, Label};
-use yaoxiang::middle::bytecode::opcode;
 
 #[test]
 fn test_codegen_context_creation() {

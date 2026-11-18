@@ -4,7 +4,7 @@
 //! - 文档格式化
 //! - 范围格式化
 
-use lsp_types::{DocumentFormattingParams, DocumentRangeFormattingParams, Range, Position};
+use lsp_types::{DocumentFormattingParams, DocumentRangeFormattingParams, Position, Range};
 use lsp_types::{FormattingOptions, TextDocumentIdentifier, Uri, WorkDoneProgressParams};
 use std::str::FromStr;
 

@@ -4,7 +4,7 @@
 //! Substituter: substitute 经过所有容器类型 (Struct, Tuple, Dict, Set, Enum, Range, Arc, Weak, Union, Intersection, AssocType, Fn, Option, Result)
 
 use crate::frontend::core::types::substitute::contains_type_vars;
-use crate::frontend::core::types::{MonoType, Substitution, Substituter, TypeVar};
+use crate::frontend::core::types::{MonoType, Substituter, Substitution, TypeVar};
 use std::collections::HashMap;
 
 // ─────────────────────────────────────────────────────────────────────────────

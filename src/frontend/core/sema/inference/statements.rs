@@ -8,13 +8,13 @@
 use crate::frontend::core::sema::judgement::decide;
 use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};
 
-use std::collections::{HashMap, HashSet};
-use crate::frontend::module::{Export, ExportKind, ModuleInfo};
-use crate::frontend::module::registry::ModuleRegistry;
-use crate::frontend::core::types::{MonoType, PolyType, TraitTable, TypeConstraintSolver};
 use crate::ast::{classify_generic_params, Block, Expr, Param, PlanId, Stmt};
 use crate::frontend::core::sema::scope::VarInfo;
+use crate::frontend::core::types::{MonoType, PolyType, TraitTable, TypeConstraintSolver};
+use crate::frontend::module::registry::ModuleRegistry;
+use crate::frontend::module::{Export, ExportKind, ModuleInfo};
 use crate::middle::passes::mono::instance::InstantiationRequest;
+use std::collections::{HashMap, HashSet};
 
 use super::scope::ScopeManager;
 

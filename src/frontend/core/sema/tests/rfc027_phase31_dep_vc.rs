@@ -7,8 +7,8 @@
 //! 旧测试直接 `add_dep` 打边，生产路径坏了测试照样绿）。
 
 use crate::frontend::core::sema::proof::dep_graph::TypeDepGraph;
-use crate::frontend::core::types::MonoType;
 use crate::frontend::core::types::const_data::{BinOp, ConstExpr};
+use crate::frontend::core::types::MonoType;
 
 /// 构造 `{ name == d1 + d2 + ... }` 形精化类型（自由变量 = deps ∪ {name}）
 fn refined_summing(

@@ -10,11 +10,11 @@
 
 use std::fs;
 
-use crate::package::commands::init::{exec_in, exec_here, InitOptions};
+use crate::package::commands::init::{exec_here, exec_in, InitOptions};
 use crate::package::error::PackageError;
 use crate::package::manifest::PackageManifest;
-use tempfile::TempDir;
 use std::sync::Mutex;
+use tempfile::TempDir;
 
 /// `std::env::set_current_dir` 改的是**进程级 cwd**，进程内所有线程共享。
 /// 三个 `exec_here` 测试如果并行跑，A 的 `_guard` drop 时会把 cwd 切回 original，

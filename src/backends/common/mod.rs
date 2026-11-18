@@ -9,8 +9,8 @@ pub mod heap;
 pub mod value;
 
 // Re-exports for convenience
-pub use value::RuntimeValue;
 pub use heap::{Handle, Heap, HeapValue};
+pub use value::RuntimeValue;
 
 #[cfg(test)]
 mod tests;

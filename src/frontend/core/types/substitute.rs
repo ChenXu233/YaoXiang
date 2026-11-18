@@ -3,7 +3,7 @@
 //! 提供通用的类型替换算法，消除各模块间的重复代码。
 
 use crate::frontend::core::types::mono::StructFieldInfo;
-use crate::frontend::core::types::{MonoType, TypeVar, StructType, EnumType};
+use crate::frontend::core::types::{EnumType, MonoType, StructType, TypeVar};
 use std::collections::HashMap;
 
 /// 类型替换映射（使用类型变量索引）

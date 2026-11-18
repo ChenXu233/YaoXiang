@@ -43,11 +43,11 @@ mod tests;
 
 use std::sync::MutexGuard;
 
+use crate::backends::common::{Handle, Heap, HeapValue, RuntimeValue};
 use crate::backends::interpreter::ffi::FfiRegistry;
-use crate::backends::common::{Handle, RuntimeValue, Heap, HeapValue};
 use crate::backends::ExecutorError;
-use crate::frontend::module::{Export, ExportKind, ModuleInfo, ModuleSource};
 pub use crate::frontend::core::types::eval::dependent_types::{Effect, EffectSpec};
+use crate::frontend::module::{Export, ExportKind, ModuleInfo, ModuleSource};
 
 /// Type alias for native function call signature
 /// Simplifies complex type definitions

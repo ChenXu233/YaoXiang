@@ -13,8 +13,8 @@
 //!    限定调用）都不得再触发 E3018；
 //! ② 跨单元矩阵的多文件执行结果与**单文件同表达式**等价。
 
-use crate::frontend::core::sema::probe::TypeLevelNamespace;
 use super::driver::{make_script_project, run_multi};
+use crate::frontend::core::sema::probe::TypeLevelNamespace;
 
 /// 跑合并 IR 的 codegen + 解释器，返回 (全部全局槽位值, 执行错误)。
 fn run_codegen(module: crate::middle::ModuleIR) -> (Vec<String>, Option<String>) {

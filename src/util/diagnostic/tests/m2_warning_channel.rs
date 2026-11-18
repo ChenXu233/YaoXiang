@@ -4,10 +4,10 @@
 //! 未使用导入（W1003）经 typecheck use elaboration 检出后走 warnings 通道
 //! （Warning severity、不混入错误 diagnostics）。
 
-use crate::frontend::core::sema::probe::TypeLevelNamespace;
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parse;
 use crate::frontend::core::sema::checker::TypeChecker;
+use crate::frontend::core::sema::probe::TypeLevelNamespace;
 use crate::util::diagnostic::{ErrorCodeDefinition, Severity};
 
 /// Helper: test_unused_named_import_reports_w1003_via_warnings_channel 的完整夹具与断言（逐条断言见函数体）。

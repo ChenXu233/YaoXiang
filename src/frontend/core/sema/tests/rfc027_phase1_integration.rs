@@ -3,15 +3,15 @@
 //! 验证从类型标注到证明结果的完整数据流：
 //! PredicateResolver → Refined → check_predicate → ProofResult
 
-use crate::frontend::core::sema::test_util::{binop};
-use crate::frontend::core::types::const_data::{BinOp, ConstExpr, ConstValue};
-use crate::frontend::core::types::mono::MonoType;
 use crate::frontend::core::sema::environment::TypeEnvironment;
+use crate::frontend::core::sema::layers::equivalence::check_type_equivalence;
+use crate::frontend::core::sema::layers::predicate::check_predicate;
 use crate::frontend::core::sema::predicate_resolver::{PredicateDef, PredicateResolver};
 use crate::frontend::core::sema::proof::context::ProofContext;
 use crate::frontend::core::sema::proof::verdict::{ProofFailure, ProofResultExt};
-use crate::frontend::core::sema::layers::equivalence::check_type_equivalence;
-use crate::frontend::core::sema::layers::predicate::check_predicate;
+use crate::frontend::core::sema::test_util::binop;
+use crate::frontend::core::types::const_data::{BinOp, ConstExpr, ConstValue};
+use crate::frontend::core::types::mono::MonoType;
 use std::collections::HashMap;
 
 // 辅助函数

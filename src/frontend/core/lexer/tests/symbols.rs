@@ -6,7 +6,9 @@
 //! - 泛型参数验证
 //! - 类型系统验证
 
-use crate::frontend::core::lexer::symbols::{BindingValidator, GenericValidator, TypeSystemValidator};
+use crate::frontend::core::lexer::symbols::{
+    BindingValidator, GenericValidator, TypeSystemValidator,
+};
 
 #[test]
 fn test_binding_validator() {

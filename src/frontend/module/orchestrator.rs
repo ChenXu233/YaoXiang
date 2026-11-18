@@ -25,11 +25,10 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::{Path, PathBuf};
 
 use crate::ast::{Expr, StmtKind};
-use crate::util::diagnostic::Diagnostic;
 use crate::frontend::core::parser::{self, Module};
-use crate::frontend::core::tokenize;
 use crate::frontend::core::sema::checker::TypeChecker;
 use crate::frontend::core::sema::SemanticProbe;
+use crate::frontend::core::tokenize;
 use crate::frontend::core::types::mono::MonoType;
 use crate::frontend::core::types::PolyType;
 use crate::frontend::module::registry::ModuleRegistry;
@@ -37,6 +36,7 @@ use crate::frontend::module::roles;
 use crate::frontend::module::symbol::SymbolTable;
 use crate::frontend::module::{Export, ExportKind, ModuleInfo, ModuleSource};
 use crate::middle::ModuleIR;
+use crate::util::diagnostic::Diagnostic;
 
 // manifest 解析依赖 package 模块（wasm32 下不编译）——角色上下文在 wasm 降级
 #[cfg(not(target_arch = "wasm32"))]

@@ -2,8 +2,8 @@
 //!
 //! 提供变量拼写建议、类型推断建议等智能辅助功能
 
-use std::collections::{HashMap, HashSet};
 use std::cmp::Ordering;
+use std::collections::{HashMap, HashSet};
 use std::sync::RwLock;
 
 /// 相似度阈值

@@ -14,7 +14,7 @@
 use lsp_types::{GotoDefinitionParams, GotoDefinitionResponse, Uri};
 use std::str::FromStr;
 
-use super::support::{SAMPLE_URI, open_and_check};
+use super::support::{open_and_check, SAMPLE_URI};
 use crate::lsp::handlers::definition::handle_definition;
 use crate::lsp::session::Session;
 use crate::lsp::world::World;

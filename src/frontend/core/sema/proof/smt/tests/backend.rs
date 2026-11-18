@@ -23,7 +23,7 @@
 #[cfg(not(target_arch = "wasm32"))]
 use crate::frontend::core::sema::proof::smt::ast::{SMTCommand, SMTExpr, SMTResult, SMTSort};
 #[cfg(not(target_arch = "wasm32"))]
-use crate::frontend::core::sema::proof::smt::backend::{Solver, default_solver};
+use crate::frontend::core::sema::proof::smt::backend::{default_solver, Solver};
 
 /// 一个完全不含 Z3 的 `Solver` 实现——固定返回 `Unsat`。
 ///

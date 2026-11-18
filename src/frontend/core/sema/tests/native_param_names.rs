@@ -14,11 +14,11 @@
 //! 2. 四形态各一判据，且**与普通用户函数同码**（同一判据、同一码）；
 //! 3. 可选位（`?name`）与必需下限同出一源：省略可选位的命名调用放行、缺必需位报 E1010。
 
-use crate::frontend::core::sema::probe::TypeLevelNamespace;
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parse;
 use crate::frontend::core::sema::checker::TypeChecker;
 use crate::frontend::core::sema::environment::ExportParamInfo;
+use crate::frontend::core::sema::probe::TypeLevelNamespace;
 use crate::frontend::core::sema::{MonoType, PolyType};
 use crate::frontend::module::registry::ModuleRegistry;
 use crate::middle::lower::AstToIrGenerator;

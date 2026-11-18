@@ -8,9 +8,11 @@
 //! - RFC-010 废弃语法的错误路径回归
 //! - 记录类型体里的匿名函数绑定 `name: FnType[pos] = lambda`（WBS 6.6.7：非 Fn 注解报诊断）
 
+use crate::ast::{
+    BinOp, BindingKind, Expr, Param, Stmt, StmtKind, StructField, Type, TypeBodyItem,
+};
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::statements::types::parse_type_annotation;
-use crate::ast::{BinOp, BindingKind, Expr, Param, Stmt, StmtKind, StructField, Type, TypeBodyItem};
 use crate::frontend::core::parser::{parse, NullProbe, ParserState};
 
 fn with_type<F>(

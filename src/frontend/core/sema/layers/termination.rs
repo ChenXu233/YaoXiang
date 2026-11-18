@@ -133,13 +133,13 @@ impl LinearMeasure {
 // 1. 识别直接递归调用
 // 2. 检查调用参数是否严格递减（`f(n-1)` where `n-1 < n`）
 
-use crate::ast::{self, Expr, Stmt, StmtKind, BinOp, Type};
+use super::super::proof::smt::ast::{SMTCommand, SMTExpr, SMTResult, SMTSort};
+use super::super::proof::smt::backend::Solver;
+use crate::ast::{self, BinOp, Expr, Stmt, StmtKind, Type};
 use crate::frontend::core::sema::environment::TypeEnvironment;
 use crate::frontend::core::sema::proof::verdict::{
     BudgetReport, DisproofKind, DisproofModel, ProofFailure, ProofResult, UnprovenReason,
 };
-use super::super::proof::smt::ast::{SMTExpr, SMTCommand, SMTSort, SMTResult};
-use super::super::proof::smt::backend::Solver;
 
 /// 显式测度在递归回边上产生的**义务原料**（RFC-027a §义务生成）。
 ///

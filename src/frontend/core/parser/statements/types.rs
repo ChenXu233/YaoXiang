@@ -9,11 +9,11 @@
 //! - Constructor types: `Name(Type1, Type2)` — the ONLY generic application syntax
 //! - Meta types: `Type`
 
-use crate::frontend::core::lexer::tokens::*;
-use crate::ast::*;
 use crate::ast::StructField;
-use crate::frontend::core::parser::{ParserState, BP_LOWEST};
+use crate::ast::*;
+use crate::frontend::core::lexer::tokens::*;
 use crate::frontend::core::parser::parse_msg;
+use crate::frontend::core::parser::{ParserState, BP_LOWEST};
 use crate::util::diagnostic::ErrorCodeDefinition;
 use crate::util::span::Span;
 

@@ -13,15 +13,15 @@
 //! - `functions` - Function definition parsing (fn stmts with params and body)
 //! - `imports` - Use/import statement parsing
 
-use crate::frontend::core::lexer::tokens::*;
 use crate::ast::*;
-use crate::frontend::core::parser::{NameKind, ParserState, BP_LOWEST, BP_ASSIGN};
-use crate::util::diagnostic::ErrorCodeDefinition;
+use crate::frontend::core::lexer::tokens::*;
 use crate::frontend::core::parser::parse_msg;
+use crate::frontend::core::parser::{NameKind, ParserState, BP_ASSIGN, BP_LOWEST};
+use crate::util::diagnostic::ErrorCodeDefinition;
 use crate::util::span::Span;
 
 // Import from sibling modules
-use super::types::{parse_type_annotation_required, parse_fn_type_with_names};
+use super::types::{parse_fn_type_with_names, parse_type_annotation_required};
 
 /// 该形参标注是否为**类型位**（编译期擦除，不占运行期形参位）：具体元类型
 /// `Type`（`(T: Type)`）与**类型级函数**（`(F: (T: Type) -> Type)`——构造器变量，

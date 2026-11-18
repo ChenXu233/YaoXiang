@@ -8,10 +8,10 @@
 //! - 块值不是函数边界：顶层绑定值块内的 `return` 同样拒绝
 //! - 合法位置回归：命名函数体 / lambda 体 / spawn 体内的 `return` 不受影响
 
-use crate::frontend::core::sema::probe::TypeLevelNamespace;
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parse;
 use crate::frontend::core::sema::checker::TypeChecker;
+use crate::frontend::core::sema::probe::TypeLevelNamespace;
 
 /// 辅助函数：解析源代码并类型检查（与 rfc010.rs 同一 harness 形态）
 fn check_source(source: &str) -> crate::frontend::core::sema::types::TypeCheckResult {

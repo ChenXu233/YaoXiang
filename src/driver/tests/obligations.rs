@@ -25,7 +25,7 @@ use crate::frontend::config::CompileConfig;
 use crate::frontend::core::sema::TypeCheckResult;
 use crate::frontend::core::types::MonoType;
 use crate::middle::passes::mono::instance::{GenericFunctionId, InstantiationRequest};
-use crate::util::diagnostic::{Severity};
+use crate::util::diagnostic::Severity;
 use crate::util::plan_id::PlanId;
 use crate::util::span::Span;
 

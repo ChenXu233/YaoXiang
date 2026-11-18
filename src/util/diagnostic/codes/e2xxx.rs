@@ -1,6 +1,6 @@
 //! 错误码定义（define_codes! 单源条目，#326）
 
-use super::{ErrorCategory, ErrorCodeDefinition, DiagnosticBuilder};
+use super::{DiagnosticBuilder, ErrorCategory, ErrorCodeDefinition};
 
 define_codes!(E2XXX, {
     // E2001 变量不在作用域中

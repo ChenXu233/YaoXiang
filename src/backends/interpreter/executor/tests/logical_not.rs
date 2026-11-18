@@ -12,8 +12,8 @@
 use crate::backends::common::RuntimeValue;
 use crate::backends::interpreter::executor::Interpreter;
 use crate::backends::Executor;
-use crate::middle::bytecode::{BytecodeFunction, BytecodeInstr, ConstValue, Reg, UnaryOp};
 use crate::frontend::core::sema::MonoType;
+use crate::middle::bytecode::{BytecodeFunction, BytecodeInstr, ConstValue, Reg, UnaryOp};
 use std::collections::HashMap;
 
 /// 构造一个函数：r0 = const[val], r1 = !r0, return r1

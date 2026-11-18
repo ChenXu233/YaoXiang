@@ -43,9 +43,9 @@ pub use anyhow::{Context, Result};
 pub use thiserror::Error;
 
 // Backend re-exports
-pub use backends::{Executor, DebuggableExecutor, ExecutorError, ExecutorResult, ExecutorConfig};
-pub use backends::common::{RuntimeValue, Heap, Handle};
+pub use backends::common::{Handle, Heap, RuntimeValue};
 pub use backends::interpreter::Interpreter;
+pub use backends::{DebuggableExecutor, Executor, ExecutorConfig, ExecutorError, ExecutorResult};
 #[cfg(not(target_arch = "wasm32"))]
 pub use repl::Repl;
 

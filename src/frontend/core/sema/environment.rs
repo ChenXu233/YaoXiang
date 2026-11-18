@@ -4,8 +4,8 @@
 
 use std::collections::HashMap;
 
-use crate::frontend::core::types::{MonoType, PolyType, TypeConstraintSolver};
 use crate::frontend::core::types::eval::const_eval::ConstFunction;
+use crate::frontend::core::types::{MonoType, PolyType, TypeConstraintSolver};
 
 use super::passes::overload;
 use super::types::ImportInfo;

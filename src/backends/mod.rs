@@ -25,8 +25,8 @@ pub mod common;
 pub mod interpreter;
 pub mod runtime;
 
-use crate::middle::bytecode::{BytecodeModule, BytecodeFunction};
 use crate::backends::common::RuntimeValue;
+use crate::middle::bytecode::{BytecodeFunction, BytecodeModule};
 
 /// Stack frame information for error reporting
 #[derive(Debug, Clone, PartialEq, Eq)]

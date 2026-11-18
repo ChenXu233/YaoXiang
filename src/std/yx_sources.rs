@@ -40,9 +40,9 @@ pub fn embedded_source_by_virtual_path(virtual_path: &str) -> Option<&'static st
 /// 直接遍历 vars 会把全部 std native 误标成 `std.test.*` 导出。
 pub fn embedded_std_module_info(use_path: &str) -> Option<crate::frontend::module::ModuleInfo> {
     use crate::frontend::core::parser;
-    use crate::frontend::core::tokenize;
     use crate::frontend::core::sema::checker::TypeChecker;
     use crate::frontend::core::sema::SemanticProbe;
+    use crate::frontend::core::tokenize;
     use crate::frontend::core::types::mono::MonoType;
     use crate::frontend::module::symbol::SymbolTable;
     use crate::frontend::module::{Export, ExportKind, ModuleInfo, ModuleSource};

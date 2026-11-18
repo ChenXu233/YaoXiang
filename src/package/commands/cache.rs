@@ -2,7 +2,7 @@
 
 use crate::package::cache::GlobalCache;
 use crate::package::error::PackageResult;
-use crate::util::i18n::{t, t_simple, current_lang, MSG};
+use crate::util::i18n::{current_lang, t, t_simple, MSG};
 
 /// `yaoxiang cache clean`：清空全局缓存目录
 pub fn clean() -> PackageResult<()> {

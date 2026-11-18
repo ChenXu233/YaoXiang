@@ -5,8 +5,8 @@
 use crate::backends::common::{Heap, RuntimeValue};
 use crate::backends::ExecutorError;
 use crate::std::io::format_value_with_prefix;
-use crate::std::{NativeContext, NativeExport, StdModule};
 use crate::std::result::{error_new, result_err, result_ok};
+use crate::std::{NativeContext, NativeExport, StdModule};
 
 // StringModule - StdModule Implementation
 

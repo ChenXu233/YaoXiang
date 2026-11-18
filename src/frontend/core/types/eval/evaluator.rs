@@ -7,13 +7,13 @@
 
 use std::collections::{HashMap, HashSet};
 
-use crate::frontend::core::types::mono::PolyType;
-use crate::frontend::core::types::{MonoType, ConstValue};
-use crate::frontend::core::types::const_data::{BinOp, ConstExpr, UnOp};
+use super::dependent_types::DependentTypeEnv;
 use super::TypeLevelError;
 use super::TypeLevelResult;
 use crate::frontend::core::sema::proof::budget::BudgetTracker;
-use super::dependent_types::DependentTypeEnv;
+use crate::frontend::core::types::const_data::{BinOp, ConstExpr, UnOp};
+use crate::frontend::core::types::mono::PolyType;
+use crate::frontend::core::types::{ConstValue, MonoType};
 
 /// 类型求值错误
 #[derive(Debug, Clone, PartialEq, Eq)]

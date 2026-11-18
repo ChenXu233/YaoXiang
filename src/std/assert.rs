@@ -7,10 +7,10 @@
 //!   （返回 Never = ⊥：爆炸原理 `Never <: T`，规格 type-system.md §2.2）
 
 use crate::backends::common::value::RuntimeValue;
-use crate::ExecutorError;
 use crate::frontend::core::types::eval::dependent_types::{AssociatedTypeDef, SortSpace};
 use crate::frontend::core::types::mono::MonoType;
 use crate::std::{NativeContext, NativeExport, StdModule, TypeFamilyExport};
+use crate::ExecutorError;
 
 #[derive(Default)]
 pub struct AssertModule;

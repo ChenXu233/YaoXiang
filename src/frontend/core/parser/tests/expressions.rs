@@ -1,9 +1,9 @@
 //! Pratt parser expression tests — based on spec §4, §4.2, §4.10
 
-use crate::frontend::core::lexer::tokenize;
-use crate::frontend::core::parser::parse_expression;
 use crate::ast::{BinOp, Expr, FStringSegment, UnOp};
+use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::lexer::tokens::Literal;
+use crate::frontend::core::parser::parse_expression;
 
 fn parse_expr(source: &str) -> Expr {
     let tokens = tokenize(source).unwrap();

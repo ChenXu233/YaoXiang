@@ -7,11 +7,11 @@
 //! - Borrow/Release round-trip encode-decode via `build_and_decode`
 //! - 解码保真：Ref / Struct 型不被塌缩（type_table 原样搬运，6.2.2）
 
-use crate::middle::bytecode::{BytecodeInstr, BytecodeModule, Label, Reg};
-use std::collections::HashMap;
-use crate::middle::bytecode::opcode;
 use crate::frontend::core::sema::MonoType;
 use crate::middle::bytecode::file::BytecodeInstruction;
+use crate::middle::bytecode::opcode;
+use crate::middle::bytecode::{BytecodeInstr, BytecodeModule, Label, Reg};
+use std::collections::HashMap;
 
 // -- 辅助函数与测试数据表（规则 5.3：辅助函数集中在文件顶部）--
 

@@ -6,16 +6,18 @@
 //! - 文档关闭
 //! - 变更返回 URI
 
-use lsp_types::{DidOpenTextDocumentParams, DidChangeTextDocumentParams, DidCloseTextDocumentParams};
+use lsp_types::{
+    DidChangeTextDocumentParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams,
+};
 
-use crate::lsp::handlers::text_document::{handle_did_open, handle_did_change, handle_did_close};
+use crate::lsp::handlers::text_document::{handle_did_change, handle_did_close, handle_did_open};
 use crate::lsp::session::Session;
 
-use std::str::FromStr;
 use lsp_types::{
-    TextDocumentIdentifier, TextDocumentItem, VersionedTextDocumentIdentifier,
-    TextDocumentContentChangeEvent, Uri,
+    TextDocumentContentChangeEvent, TextDocumentIdentifier, TextDocumentItem, Uri,
+    VersionedTextDocumentIdentifier,
 };
+use std::str::FromStr;
 
 fn test_uri(name: &str) -> Uri {
     Uri::from_str(&format!("file:///test/{}", name)).unwrap()

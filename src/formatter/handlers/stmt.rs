@@ -4,7 +4,7 @@ use crate::ast::*;
 
 use super::super::context::FormatContext;
 use super::super::source_map::SourceMap;
-use super::expr::{format_block, format_expr, format_params, format_decl_params};
+use super::expr::{format_block, format_decl_params, format_expr, format_params};
 use super::types::format_type;
 
 /// 格式化语句

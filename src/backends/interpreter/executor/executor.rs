@@ -3,25 +3,25 @@
 //! This module implements the main interpreter that executes bytecode.
 //! It follows the standard fetch-decode-execute cycle.
 
-use std::collections::HashMap;
-use std::fmt;
-use std::sync::Arc;
-use crate::backends::{ExecutorConfig, ExecutorError, ExecutorResult, ExecutionState};
-use crate::backends::common::{RuntimeValue, Heap, HeapValue};
 use crate::backends::common::value::{
     AsyncState, AsyncValue, FunctionId, FunctionValue, TaskId, ValueType,
 };
-use crate::middle::bytecode::{BytecodeFunction, Reg, BinaryOp, CompareOp, ConstValue};
+use crate::backends::common::{Heap, HeapValue, RuntimeValue};
+use crate::backends::interpreter::ffi::FfiRegistry;
 use crate::backends::interpreter::image::Image;
 use crate::backends::interpreter::{Frame, PendingCall, ReturnTarget};
-use crate::backends::interpreter::ffi::FfiRegistry;
-use crate::backends::runtime::{Runtime, RuntimeConfig};
 use crate::backends::runtime::engine::{
-    SyncValue, TaskCancelReason, TaskFailure, TaskMeta, TaskOutcome, TaskResult, sv,
+    sv, SyncValue, TaskCancelReason, TaskFailure, TaskMeta, TaskOutcome, TaskResult,
 };
-use crate::util::i18n::MSG;
-use crate::tlog;
+use crate::backends::runtime::{Runtime, RuntimeConfig};
+use crate::backends::{ExecutionState, ExecutorConfig, ExecutorError, ExecutorResult};
+use crate::middle::bytecode::{BinaryOp, BytecodeFunction, CompareOp, ConstValue, Reg};
 use crate::std::NativeContext;
+use crate::tlog;
+use crate::util::i18n::MSG;
+use std::collections::HashMap;
+use std::fmt;
+use std::sync::Arc;
 
 /// Maximum call stack depth
 const DEFAULT_MAX_STACK_DEPTH: usize = 1024;

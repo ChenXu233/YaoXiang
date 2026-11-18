@@ -14,8 +14,8 @@
 use std::collections::HashMap;
 
 use crate::ast::Expr;
-use crate::frontend::core::types::{MonoType, PolyType, TypeConstraintSolver};
 use crate::frontend::core::sema::environment::GenericTypeDef;
+use crate::frontend::core::types::{MonoType, PolyType, TypeConstraintSolver};
 use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};
 
 use super::scope::ScopeManager;

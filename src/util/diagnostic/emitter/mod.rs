@@ -4,8 +4,8 @@ pub mod ansi;
 pub mod json;
 pub mod text;
 
-pub use text::{TextEmitter, EmitterConfig};
 pub use json::JsonEmitter;
+pub use text::{EmitterConfig, TextEmitter};
 
 #[cfg(test)]
 mod tests;

@@ -1,8 +1,8 @@
 //! Function definition parsing tests — based on spec §6.1–§6.4
 
+use crate::ast::{Expr, StmtKind};
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parse;
-use crate::ast::{Expr, StmtKind};
 
 fn parse_fn(source: &str) -> StmtKind {
     let tokens = tokenize(source).unwrap();

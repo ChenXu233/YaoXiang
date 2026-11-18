@@ -45,8 +45,8 @@ pub mod lower;
 // 对外导出
 pub use ir::ir::*;
 pub use lower::{generate_ir, generate_ir_with_context, AstToIrGenerator};
-pub use passes::mono::*;
 pub use passes::codegen;
+pub use passes::mono::*;
 
 // 特别导出：monomorphize的实例化相关类型
 pub use passes::mono::instance::*;

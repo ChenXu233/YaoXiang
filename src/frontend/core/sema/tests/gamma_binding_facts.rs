@@ -14,7 +14,7 @@
 
 use crate::frontend::core::sema::inference::scope::ScopeManager;
 use crate::frontend::core::sema::proof::assumptions::{
-    BindingKey, FlowSensitiveGamma, binding_snapshot,
+    binding_snapshot, BindingKey, FlowSensitiveGamma,
 };
 use crate::frontend::core::types::const_data::{BinOp, ConstExpr, ConstValue};
 use crate::frontend::core::types::mono::MonoType;

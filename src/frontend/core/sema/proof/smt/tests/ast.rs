@@ -3,7 +3,9 @@
 //! §8: SMT-LIB 2.6 中间表示（纯数据结构）
 //! 验证 SMTExpr/SMTCommand/SMTSort 的 Display 输出符合 SMT-LIB 2.6 标准格式。
 
-use crate::frontend::core::sema::proof::smt::ast::{SMTCommand, SMTExpr, SMTModel, SMTResult, SMTSort};
+use crate::frontend::core::sema::proof::smt::ast::{
+    SMTCommand, SMTExpr, SMTModel, SMTResult, SMTSort,
+};
 
 #[test]
 fn test_display_atom_int() {

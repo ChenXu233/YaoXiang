@@ -32,8 +32,8 @@
 //! 栈帧将**从 1 帧变为完整链**。`full_chain` 测试按 T1 的目标行为书写，
 //! 故当前标记 `#[ignore]`。
 
-use crate::backends::Executor;
 use crate::backends::interpreter::executor::Interpreter;
+use crate::backends::Executor;
 use crate::middle::bytecode::{BytecodeFunction, BytecodeInstr, ConstValue, Label, Reg};
 use std::collections::HashMap;
 

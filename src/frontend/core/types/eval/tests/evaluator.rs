@@ -9,11 +9,11 @@
 //! 注：issue #267 退役字符串协议——If/Match/Nat 字符串求值机器已删除，
 //! 其 #262 回归测试随机器一并退役；三值语义由 conditional.rs/operations.rs 承担。
 
+use crate::frontend::core::sema::proof::budget::BudgetTracker;
+use crate::frontend::core::sema::TypeEnvironment;
+use crate::frontend::core::types::eval::dependent_types::DependentTypeEnv;
 use crate::frontend::core::types::eval::evaluator::{EvalConfig, Evaluator};
 use crate::frontend::core::types::MonoType;
-use crate::frontend::core::sema::TypeEnvironment;
-use crate::frontend::core::sema::proof::budget::BudgetTracker;
-use crate::frontend::core::types::eval::dependent_types::DependentTypeEnv;
 use crate::std::StdModule;
 
 // Happy path 测试

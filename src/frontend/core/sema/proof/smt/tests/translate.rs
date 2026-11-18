@@ -5,11 +5,11 @@
 
 use std::collections::HashMap;
 
-use crate::frontend::core::types::const_data::{BinOp, ConstExpr, ConstValue};
 use crate::frontend::core::sema::proof::smt::ast::{SMTCommand, SMTSort};
 use crate::frontend::core::sema::proof::smt::translate::{
     infer_var_sorts, translate_constraint, translate_expr,
 };
+use crate::frontend::core::types::const_data::{BinOp, ConstExpr, ConstValue};
 
 fn make_gt(
     var: &str,

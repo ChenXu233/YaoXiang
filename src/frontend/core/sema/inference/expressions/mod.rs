@@ -18,13 +18,13 @@
 mod call;
 mod expr;
 
-use crate::frontend::core::types::{MonoType, PolyType, TypeConstraintSolver};
 use crate::frontend::core::sema::passes::overload;
+use crate::frontend::core::types::{MonoType, PolyType, TypeConstraintSolver};
 use crate::middle::passes::mono::instance::InstantiationRequest;
 use std::collections::{HashMap, HashSet};
 
-use super::scope::ScopeManager;
 use super::call_ownership::CallOwnershipTable;
+use super::scope::ScopeManager;
 
 /// 空的 Native 签名表（默认值）
 static EMPTY_SIGNATURES: std::sync::LazyLock<HashMap<String, MonoType>> =

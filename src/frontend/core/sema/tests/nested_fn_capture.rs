@@ -14,10 +14,10 @@
 //! 回归防线：模块级函数 / 模块级绑定 / 类型参数照常可用；lambda **表达式**体
 //! （#254 创建点固化）行为不变；同块兄弟嵌套函数引用维持既有 E1001（先于本任务）。
 
-use crate::frontend::core::sema::probe::TypeLevelNamespace;
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parse;
 use crate::frontend::core::sema::checker::TypeChecker;
+use crate::frontend::core::sema::probe::TypeLevelNamespace;
 use crate::util::diagnostic::Diagnostic;
 
 /// 解析 + 类型检查，返回全部诊断（收集模式：不短路，逐条可查）。

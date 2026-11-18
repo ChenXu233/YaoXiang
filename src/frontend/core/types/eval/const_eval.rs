@@ -15,15 +15,15 @@
 //! ```
 
 // 重新导出主要类型
-use crate::frontend::core::types::ConstValue;
-use crate::ast::{Expr, BinOp as AstBinOp, UnOp as AstUnOp};
+use crate::ast::{BinOp as AstBinOp, Expr, UnOp as AstUnOp};
 use crate::frontend::core::lexer::tokens::Literal;
 use crate::frontend::core::sema::proof::budget::BudgetTracker;
 use crate::frontend::core::sema::proof::verdict::{
     DisproofKind, DisproofModel, ProofFailure, UnprovenReason, UnprovenSubject,
 };
-use crate::util::diagnostic::Diagnostic;
+use crate::frontend::core::types::ConstValue;
 use crate::util::diagnostic::codes::ErrorCodeDefinition;
+use crate::util::diagnostic::Diagnostic;
 
 /// Const泛型求值结果
 #[derive(Debug, Clone, PartialEq)]
@@ -828,7 +828,7 @@ impl ConstFunction {
 
 /// 预定义的Const函数
 pub mod functions {
-    use crate::frontend::core::types::const_data::{ConstExpr as CE, BinOp, ConstValue};
+    use crate::frontend::core::types::const_data::{BinOp, ConstExpr as CE, ConstValue};
 
     /// Factorial 函数
     pub fn factorial() -> super::ConstFunction {
@@ -1121,7 +1121,7 @@ pub mod predefined_sizes {
 /// - 字面量类型到 ConstValue 的转换
 /// - Const 参数的类型验证
 /// - 字面量类型约束检查
-use crate::ast::{Type, GenericParam, GenericParamKind};
+use crate::ast::{GenericParam, GenericParamKind, Type};
 use crate::frontend::core::types::ConstKind;
 
 /// Integer types for const parameters

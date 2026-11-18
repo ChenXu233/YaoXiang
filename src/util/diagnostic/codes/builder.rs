@@ -2,9 +2,9 @@
 //!
 //! 支持模板参数化的错误消息构建器，替代 trait-per-error 设计
 
-use crate::util::span::Span;
 use crate::util::diagnostic::{Diagnostic, Severity};
 use crate::util::i18n::error_lang;
+use crate::util::span::Span;
 use std::cell::RefCell;
 use std::collections::HashMap;
 
@@ -428,8 +428,8 @@ impl I18nRegistry {
 
     /// 根据语言代码获取注册表（从统一 locale 加载器读取，与 MSG 翻译同源）
     pub fn new(lang: &str) -> &'static Self {
-        use std::sync::LazyLock;
         use std::collections::HashMap;
+        use std::sync::LazyLock;
 
         static REGISTRIES: LazyLock<HashMap<String, I18nRegistry>> = LazyLock::new(|| {
             let mut map = HashMap::new();

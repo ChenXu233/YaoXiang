@@ -23,11 +23,11 @@ mod tests;
 use crate::frontend::core::sema::MonoType;
 use crate::middle::bytecode::file::{BytecodeFile, FileHeader};
 use crate::middle::ir::ir::{ConstValue, ModuleIR, Operand};
-use crate::middle::passes::codegen::translator::Translator;
 use crate::middle::passes::codegen::flow::{FlowManager, SymbolScopeManager};
 use crate::middle::passes::codegen::operand::OperandResolver;
-use crate::util::i18n::{t, t_simple, MSG};
+use crate::middle::passes::codegen::translator::Translator;
 use crate::util::diagnostic::Diagnostic;
+use crate::util::i18n::{t, t_simple, MSG};
 use crate::util::logger::get_lang;
 use tracing::debug;
 

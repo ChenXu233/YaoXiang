@@ -84,7 +84,7 @@ pub use compiler::Compiler;
 pub use config::{CompileConfig, DeadCodeConfig, MonoConfig};
 
 // 编译流水线
-pub use pipeline::{Pipeline, CompilationResult};
+pub use pipeline::{CompilationResult, Pipeline};
 
 // 编译结果
 pub use compiler::CompileError;

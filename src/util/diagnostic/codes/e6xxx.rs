@@ -1,6 +1,6 @@
 //! 错误码定义（define_codes! 单源条目，#326）
 
-use super::{ErrorCategory, ErrorCodeDefinition, DiagnosticBuilder};
+use super::{DiagnosticBuilder, ErrorCategory, ErrorCodeDefinition};
 
 // E6xxx 族整体 span_exempt（第三段 true）：运行时诊断由 build_runtime_diagnostic
 // 按栈帧 debug_map 解析位置，解析失败（如无 DebugSection 的 .42、栈溢出无帧）时

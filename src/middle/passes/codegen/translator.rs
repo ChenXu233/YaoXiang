@@ -2,15 +2,15 @@
 //!
 //! 将中间表示（IR）翻译为字节码指令。
 
+use crate::frontend::core::sema::MonoType;
+use crate::middle::bytecode::file::BytecodeInstruction;
 use crate::middle::bytecode::opcode;
+use crate::middle::bytecode::Reg;
 use crate::middle::ir::ir::{
     BasicBlock, ConstValue, FunctionBody, FunctionIR, Instruction, LocalSlot, ModuleIR, Operand,
 };
-use crate::frontend::core::sema::MonoType;
-use crate::middle::bytecode::Reg;
 use crate::middle::passes::codegen::emitter::Emitter;
 use crate::middle::passes::codegen::operand::OperandResolver;
-use crate::middle::bytecode::file::BytecodeInstruction;
 use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};
 use crate::util::span::{DebugSpan, FileId, Span};
 use std::collections::HashMap;

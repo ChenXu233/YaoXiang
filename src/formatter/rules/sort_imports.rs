@@ -2,8 +2,8 @@
 
 use std::collections::HashSet;
 
-use crate::formatter::source_map::SourceMap;
 use crate::ast::*;
+use crate::formatter::source_map::SourceMap;
 
 /// 导入类型
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]

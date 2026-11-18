@@ -8,11 +8,11 @@
 use crate::frontend::core::sema::test_util::{binop, refined_int};
 use std::collections::HashMap;
 
-use crate::frontend::core::types::const_data::{BinOp, ConstExpr, ConstValue, UnOp};
 use crate::frontend::core::sema::layers::predicate::check_predicate;
 use crate::frontend::core::sema::proof::context::ProofContext;
 use crate::frontend::core::sema::proof::verdict::{ProofFailure, ProofResultExt};
 use crate::frontend::core::sema::TypeEnvironment;
+use crate::frontend::core::types::const_data::{BinOp, ConstExpr, ConstValue, UnOp};
 
 /// 辅助：构造 GT 约束 (var > n)
 fn constraint_gt(

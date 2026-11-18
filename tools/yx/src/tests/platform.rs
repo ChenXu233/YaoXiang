@@ -1,7 +1,9 @@
 //! 平台识别与发行包命名测试（RFC-037 §平台支持 / §发布目录结构）
 
 use crate::error::Error;
-use crate::platform::{archive_ext_for, asset_name, engine_file_name_for, triple_for, yx_file_name_for};
+use crate::platform::{
+    archive_ext_for, asset_name, engine_file_name_for, triple_for, yx_file_name_for,
+};
 
 #[test]
 fn test_triple_for_maps_all_five_supported_targets() {

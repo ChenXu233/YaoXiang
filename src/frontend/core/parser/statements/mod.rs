@@ -12,9 +12,9 @@ pub mod types;
 mod tests;
 
 // Re-export commonly used items
-pub use types::*;
+pub use bindings::*;
+pub use control_flow::*;
 pub use declarations::*;
 pub use functions::*;
 pub use imports::*;
-pub use control_flow::*;
-pub use bindings::*;
+pub use types::*;

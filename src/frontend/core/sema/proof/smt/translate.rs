@@ -7,8 +7,8 @@
 
 use std::collections::HashMap;
 
-use crate::frontend::core::types::const_data::{BinOp, ConstExpr, ConstValue, UnOp};
 use super::ast::{SMTCommand, SMTExpr, SMTSort};
+use crate::frontend::core::types::const_data::{BinOp, ConstExpr, ConstValue, UnOp};
 
 /// 翻译编译期约束为 SMT 命令序列
 ///

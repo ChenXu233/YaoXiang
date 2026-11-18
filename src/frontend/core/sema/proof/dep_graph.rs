@@ -7,8 +7,8 @@
 
 use std::collections::{HashMap, HashSet};
 
-use crate::frontend::core::types::MonoType;
 use crate::frontend::core::types::const_data::{ConstExpr, ConstValue};
+use crate::frontend::core::types::MonoType;
 
 /// 内置终止测度谓词名（RFC-027a）。
 ///

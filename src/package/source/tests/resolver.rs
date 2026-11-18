@@ -9,7 +9,9 @@
 //! 注：本文件的 `assert!(r.matches(&v("1.2.3")))` 式比较断言按规则 6.3 例外
 //! 条款不加消息——失败输出打印的完整表达式已包含输入值与期望关系。
 
-use crate::package::source::resolver::{is_compatible, parse_version, parse_version_req, select_best};
+use crate::package::source::resolver::{
+    is_compatible, parse_version, parse_version_req, select_best,
+};
 
 fn v(s: &str) -> semver::Version {
     parse_version(s).expect("parse fixture version")

@@ -12,8 +12,8 @@ use std::path::Path;
 
 use tempfile::TempDir;
 
-use crate::frontend::module::consistency::{check_vendor_lock_consistency, lock_versions};
 use super::resolve_in_vendor_with_lock;
+use crate::frontend::module::consistency::{check_vendor_lock_consistency, lock_versions};
 
 /// 项目骨架：yaoxiang.toml + 可选依赖表（TOML 正文直接内联）
 fn setup_project(extra: &str) -> (TempDir, std::path::PathBuf) {

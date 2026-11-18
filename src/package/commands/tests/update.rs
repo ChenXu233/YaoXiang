@@ -7,7 +7,7 @@
 //! - 单个依赖更新
 
 use crate::package::commands::init;
-use crate::package::commands::update::{exec_in};
+use crate::package::commands::update::exec_in;
 use crate::package::lock::LockFile;
 use tempfile::TempDir;
 

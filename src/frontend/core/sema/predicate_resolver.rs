@@ -4,9 +4,9 @@
 //! 不参与求值，不参与证明——只做"名称 → 内部表示"的翻译。
 
 use crate::ast::Module;
-use crate::frontend::core::types::mono::MonoType;
-use crate::frontend::core::types::const_data::ConstExpr;
 use crate::frontend::core::sema::TypeEnvironment;
+use crate::frontend::core::types::const_data::ConstExpr;
+use crate::frontend::core::types::mono::MonoType;
 use std::collections::HashMap;
 
 /// 编译期谓词定义模板

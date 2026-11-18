@@ -3,8 +3,8 @@
 //! 管理所有已注册的模块，支持按路径查询和注册。
 //! 提供统一的模块发现接口，合并 std 模块和用户模块。
 
-use std::collections::HashMap;
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::rc::Rc;
 
 use super::symbol::{DefKind, SymbolTable};

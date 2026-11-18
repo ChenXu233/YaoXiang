@@ -15,8 +15,8 @@
 use super::TypeChecker;
 use crate::ast::{Param, StructField, Type as AstType};
 use crate::frontend::core::sema::record_model::{
-    AdmissionField, EvidenceSlot, FieldObligation, Proposition, RecordModel, RecordRejection,
-    RecordTypeParam, RecordTypeParamKind, record_rejection_diagnostic,
+    record_rejection_diagnostic, AdmissionField, EvidenceSlot, FieldObligation, Proposition,
+    RecordModel, RecordRejection, RecordTypeParam, RecordTypeParamKind,
 };
 use crate::frontend::core::types::const_data::ConstExpr;
 use crate::frontend::core::types::eval::const_eval::const_expr_free_names;

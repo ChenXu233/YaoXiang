@@ -1,9 +1,9 @@
 //! 公共格式化函数
 
-use crate::ast::*;
 use super::super::context::FormatContext;
 use super::super::source_map::SourceMap;
-use super::expr::{format_expr, format_block};
+use super::expr::{format_block, format_expr};
+use crate::ast::*;
 
 /// 格式化 if-else-if-else 结构
 pub fn format_if(

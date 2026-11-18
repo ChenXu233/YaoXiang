@@ -7,7 +7,7 @@
 #[cfg(not(target_arch = "wasm32"))]
 use std::io::BufRead;
 
-use crate::backends::common::{RuntimeValue, HeapValue};
+use crate::backends::common::{HeapValue, RuntimeValue};
 use crate::backends::ExecutorError;
 use crate::std::{NativeContext, NativeExport, StdModule};
 

@@ -6,8 +6,8 @@
 //! 注意：对于包含语法错误的输入，格式化器会返回 Err。
 //! 因此我们只验证能成功解析的输入。
 
-use proptest::prelude::*;
 use crate::formatter::{format_source, FormatOptions};
+use proptest::prelude::*;
 
 fn default_options() -> FormatOptions {
     FormatOptions::default()

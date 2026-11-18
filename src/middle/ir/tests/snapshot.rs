@@ -24,8 +24,8 @@ use crate::frontend::core::sema::MonoType;
 use crate::frontend::core::sema::SemanticProbe;
 use crate::frontend::module::registry::ModuleRegistry;
 use crate::middle::ir::ir::{FunctionBody, Instruction};
-use crate::middle::lower::AstToIrGenerator;
 use crate::middle::ir::normalize::normalize_module;
+use crate::middle::lower::AstToIrGenerator;
 use crate::util::span::Span;
 
 use super::corpus::{corpus_files, reaches_ir_generation};

@@ -17,8 +17,8 @@ use std::collections::HashMap;
 
 use crate::backends::interpreter::executor::Interpreter;
 use crate::backends::{Executor, ExecutorError};
-use crate::middle::bytecode::{BytecodeFunction, BytecodeInstr, CompareOp, ConstValue, Reg};
 use crate::frontend::core::sema::MonoType;
+use crate::middle::bytecode::{BytecodeFunction, BytecodeInstr, CompareOp, ConstValue, Reg};
 
 /// hint 观测陈述段——与 exec_compare 兜底臂的追加文案逐字同源（断言值）。
 const INIT_ORDER_HINT_OBSERVATION: &str =

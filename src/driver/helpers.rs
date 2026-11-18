@@ -6,11 +6,11 @@
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
-use crate::frontend::core::lexer;
 use crate::ast::{classify_generic_params, Expr, GenericParamKind, StmtKind};
+use crate::frontend::core::lexer;
 use crate::frontend::core::parser::{self, Module};
-use crate::frontend::core::sema::SemanticProbe;
 use crate::frontend::core::sema::passes::dead_code::DeadCodeAnalyzer;
+use crate::frontend::core::sema::SemanticProbe;
 use crate::frontend::core::sema::TypeCheckResult;
 use crate::frontend::core::types::mono::MonoType;
 use crate::frontend::module::orchestrator;
