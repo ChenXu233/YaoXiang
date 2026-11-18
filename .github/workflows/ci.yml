@@ -31,6 +31,9 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - name: Setup pinned LLVM for optional AOT
+        uses: ./.github/actions/setup-llvm
+
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -210,6 +213,24 @@ jobs:
       - name: Self-test the gate (negative must be red, positive must be green)
         run: python3 scripts/ci/check-obligations.py --selftest
 
+  check-no-llvm:
+    name: Default build without LLVM
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+
+      - name: Check default channel
+        run: cargo check
+
+      - name: Native requests fail without bytecode fallback
+        run: cargo test --lib --test integration --test formatter_integration --test yx_runner --test yx_multifile_runner native_aot -- --test-threads=1
+
   test:
     name: Test
     runs-on: ubuntu-latest
@@ -217,6 +238,9 @@ jobs:
     needs: check
     steps:
       - uses: actions/checkout@v7
+
+      - name: Setup pinned LLVM for optional AOT
+        uses: ./.github/actions/setup-llvm
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -353,9 +377,13 @@ jobs:
   test-msrv:
     name: MSRV Check
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    # --all-features 在 Linux 上会编译可选 LLVM 后端；LLVM 18 的安装与全量全特性构建需要更宽的时限。
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
+
+      - name: Setup pinned LLVM for optional AOT
+        uses: ./.github/actions/setup-llvm
 
       - name: Get MSRV from Cargo.toml
         id: msrv

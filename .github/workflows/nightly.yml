@@ -150,6 +150,9 @@ jobs:
         with:
           toolchain: ${{ vars.RUST_TOOLCHAIN }}
 
+      - name: Setup pinned LLVM for optional AOT
+        uses: ./.github/actions/setup-llvm
+
       - name: Cache cargo
         uses: actions/cache@v6
         with:
@@ -447,6 +450,9 @@ jobs:
 
       - name: Install cargo-llvm-cov
         run: cargo install cargo-llvm-cov --quiet
+
+      - name: Setup pinned LLVM for optional AOT
+        uses: ./.github/actions/setup-llvm
 
       - name: Cache cargo
         uses: actions/cache@v6
