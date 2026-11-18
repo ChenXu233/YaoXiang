@@ -3,13 +3,25 @@
 use std::io::Read;
 use std::path::Path;
 
+use ureq::ResponseExt;
+
 use crate::error::{Error, Result};
 
 const DOWNLOAD_TIMEOUT_SECS: u64 = 300;
 
-/// 共享 HTTP agent 构造（统一连接超时；大文件下载另行加读超时）
-fn http_agent() -> ureq::AgentBuilder {
-    ureq::AgentBuilder::new().timeout_connect(std::time::Duration::from_secs(30))
+/// 重定向上限。ureq 2 默认 `redirects: 5`；ureq 3 默认 10——显式对齐 2.x 行为（#489）。
+const UREQ_MAX_REDIRECTS: u32 = 5;
+
+/// 共享 HTTP agent 构造（统一连接超时与重定向上限；大文件下载另行加读超时）。
+///
+/// 自定义 ConfigBuilder 链不拾取环境代理变量——与 ureq 2（无 proxy-from-env
+/// feature）一致；4xx/5xx 保持默认按错误处理（对位 ureq 2 的默认）。
+fn http_agent() -> ureq::Agent {
+    ureq::Agent::config_builder()
+        .timeout_connect(Some(std::time::Duration::from_secs(30)))
+        .max_redirects(UREQ_MAX_REDIRECTS)
+        .build()
+        .into()
 }
 
 /// 把 URL 内容流式下载到 `dest`，返回字节数
@@ -21,10 +33,13 @@ pub fn download_to_file(
         std::fs::create_dir_all(parent)?;
     }
     let mut reader = http_agent()
-        .timeout_read(std::time::Duration::from_secs(DOWNLOAD_TIMEOUT_SECS))
-        .build()
         .get(url)
+        // 大文件下载：读段逐次限时（对位 ureq 2 的 AgentBuilder::timeout_read）
+        .config()
+        .timeout_per_read(Some(std::time::Duration::from_secs(DOWNLOAD_TIMEOUT_SECS)))
+        .build()
         .call()?
+        .into_body()
         .into_reader();
     let mut file = std::fs::File::create(dest)?;
     let mut count = 0u64;
@@ -42,13 +57,13 @@ pub fn download_to_file(
 
 /// GET 一个短文本（版本号查询等）
 pub fn get_text(url: &str) -> Result<String> {
-    Ok(http_agent().build().get(url).call()?.into_string()?)
+    Ok(http_agent().get(url).call()?.body_mut().read_to_string()?)
 }
 
 /// GET 只为拿最终落地 URL（releases/latest 页面会 302 到 /releases/tag/v<ver>），
 /// 借此在 API 不可达时探测最新版本；不读 body
 pub fn get_redirect_target(url: &str) -> Result<String> {
-    Ok(http_agent().build().get(url).call()?.get_url().to_string())
+    Ok(http_agent().get(url).call()?.get_uri().to_string())
 }
 
 /// 文件的 SHA-256（与 package-dist.sh 产出的 .sha256 比对）。

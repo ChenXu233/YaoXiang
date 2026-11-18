@@ -1,17 +1,21 @@
 //! `std.net` 模块的单元测试
 //!
 //! 覆盖范围与依据：
-//! - HTTP 请求为**真实实现**（#56）：基于 `ureq`（同步阻塞 + rustls TLS）；
+//! - HTTP 请求为**真实实现**（#56）：基于 `ureq` 3（同步阻塞 + rustls TLS；#489 从 2.x 迁移）；
 //! - 响应为结构化字典 `{status: Int, headers: Dict<String,String>, body: String}`；
 //! - **4xx/5xx 是合法响应而非传输错误**（携带状态码与响应体）；
-//! - 响应头名大小写不敏感；请求头按传入原样发送；POST 体按原样发送；
+//! - 响应头名统一小写（HTTP/1.1 语义本就不区分大小写；ureq 3 经 http crate 归一，
+//!   2.x 原样保留头名大小写——#489 对账差异，语义等价）；请求头值按传入原样发送；
+//!   POST 体按原样发送；
 //! - 「非正数 timeout_secs」报运行时错误、参数类型不符报类型错误。
 //!
 //! 规范来源：`std.net` 无独立 RFC（`docs/src/rfc/` 内无 std.net 专章），
 //! 故断言对象为上述实现契约，其出处是 `src/std/net.rs` 模块头注释（#56 真实实现 +
-//! 响应字典结构）与 `native_http_get` / `response_to_value` 的文档注释；错误码段位依据
-//! RFC-013（`013-error-code-specification.md:560`「E7xxx 为 std.io / std.net 错误值预留段位」）；
-//! 阻塞式调用只阻塞当前 worker 的并发前提见 RFC-008（`008-runtime-concurrency-model.md`）。
+//! 响应字典结构）与 `native_http_get` / `response_to_value` 的文档注释；用户可见契约
+//! 的文档条款在 `docs/src/reference/stdlib/net.md`（「4xx/5xx 是正常响应」）；
+//! 错误码段位依据 RFC-013（`013-error-code-specification.md:560`「E7xxx 为 std.io /
+//! std.net 错误值预留段位」）；阻塞式调用只阻塞当前 worker 的并发前提见 RFC-008
+//! （`008-runtime-concurrency-model.md`）。
 //!
 //! 迁移自 `src/std/net.rs` 的内联 `mod tests`（违反 `docs/src/dev/test-specification.md` 规则 1.4），
 //! 现按规则 1.1「单文件模块 → 父级 tests/」落位于此，由 `src/std/mod.rs` 的 `#[cfg(test)] mod tests;` 声明。
@@ -187,6 +191,26 @@ fn test_http_post_sends_body() {
         "request line: {request}"
     );
     assert!(request.ends_with("payload=1"), "request body: {request}");
+}
+
+#[test]
+fn test_http_get_returns_error_status_with_body() {
+    // Arrange：本地单次请求服务器返回 404 + 响应头 + 响应体
+    // （契约出处：docs/src/reference/stdlib/net.md「4xx/5xx 是正常响应，不是错误」；
+    //   #489 迁移后由 ureq_agent 的 http_status_as_error(false) 兑现——检查准入按
+    //   coding-rules 7.2 条款门，防「错误状态被当传输错误吞掉」回归）
+    let (url, server) = serve_once(
+        "HTTP/1.1 404 Not Found\r\nX-Reason: gone\r\nContent-Length: 7\r\n\r\nmissing".to_string(),
+    );
+
+    // Act：GET 该 URL
+    let resp = call_get(&url, None).expect("4xx/5xx must return a response dict, not an error");
+
+    // Assert：状态码、响应体、响应头按结构化字典携带（而非 Err 吞掉响应）
+    assert_eq!(int_of(dict_entry(&resp, "status")), 404);
+    assert_eq!(string_of(dict_entry(&resp, "body")), "missing");
+    assert_eq!(read_header(&resp, "x-reason"), "gone");
+    server.join().expect("server thread");
 }
 
 #[test]
