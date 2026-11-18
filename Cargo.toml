@@ -20,6 +20,8 @@ repository = "https://github.com/ChenXu233/yaoxiang"
 
 [features]
 default = ["cli"]
+# RFC-018 AOT-0：LLVM 只进入显式启用的 Linux x86-64 原生构建。
+llvm = ["dep:inkwell", "dep:llvm-sys"]
 cli = [
     "rustyline", "lsp-server",
     "clap", "crossbeam-channel",
@@ -135,6 +137,12 @@ tokio = { version = "1", default-features = false, features = ["net"] }
 ureq = { version = "2", default-features = false, features = ["tls"] }
 # 临时文件/目录创建（std.fs #104；安全唯一名语义，std 无对位）
 tempfile = "3.27.0"
+
+[target.'cfg(all(target_os = "linux", target_arch = "x86_64"))'.dependencies]
+# 锁定的兼容组合；prefer-dynamic 避免要求发行环境携带整套静态 LLVM 组件。
+inkwell = { version = "=0.11.0", optional = true, default-features = false, features = ["llvm18-1-prefer-dynamic", "target-x86"] }
+# 只初始化 x86；同时让 no-llvm-linking 的纯类型检查无需 llvm-config。
+llvm-sys = { version = "=181.3.1", optional = true, features = ["disable-alltargets-init"] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 web-time = "1"

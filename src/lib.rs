@@ -213,6 +213,23 @@ pub fn run_project(entry: &Path) -> Result<()> {
     Ok(())
 }
 
+/// 读取并编译一份单文件源码，供两种构建产物共用同一 Driver 管线。
+#[cfg(not(target_arch = "wasm32"))]
+fn compile_source_file(source_path: &Path) -> Result<(String, String, middle::ModuleIR)> {
+    let source_path_str = source_path.display().to_string();
+    let source = fs::read_to_string(source_path).map_err(|e| {
+        anyhow::anyhow!(
+            "Failed to read source {}: {}",
+            source_path.display(),
+            crate::util::diagnostic::io_error_reason(&e)
+        )
+    })?;
+    debug!("{}", t_cur(MSG::ReadingFile, Some(&[&source_path_str])));
+    let mut compiler = frontend::Compiler::new();
+    let module = compiler.compile_with_source(&source_path_str, &source)?;
+    Ok((source_path_str, source, module))
+}
+
 /// Build bytecode file (.42)
 #[cfg(not(target_arch = "wasm32"))]
 pub fn build_bytecode(
@@ -231,22 +248,10 @@ pub fn build_bytecode_with_options(
 ) -> Result<()> {
     use crate::middle::passes::codegen::CodegenContext;
 
-    let source_path_str = source_path.display().to_string();
     let output_path_str = output_path.display().to_string();
 
     debug!("{}", t_cur_simple(MSG::BuildBytecode));
-    let source = fs::read_to_string(source_path).map_err(|e| {
-        anyhow::anyhow!(
-            "Failed to read source {}: {}",
-            source_path.display(),
-            crate::util::diagnostic::io_error_reason(&e)
-        )
-    })?;
-    debug!("{}", t_cur(MSG::ReadingFile, Some(&[&source_path_str])));
-
-    // Compile
-    let mut compiler = frontend::Compiler::new();
-    let module = compiler.compile_with_source(&source_path_str, &source)?;
+    let (source_path_str, source, module) = compile_source_file(source_path)?;
 
     // #368：全局槽位名表在 move 进 codegen 前收集——
     // 顶层绑定的名字只能从 ModuleIR.globals 取。
@@ -293,6 +298,45 @@ pub fn build_bytecode_with_options(
     })?;
 
     Ok(())
+}
+
+/// Build a native executable from one YaoXiang source file.
+///
+/// `optimize = false` selects O0; `optimize = true` selects LLVM O2. AOT-1
+/// rejects `--debug-info` because DWARF emission belongs to a later batch.
+///
+/// ```no_run
+/// use std::path::Path;
+/// use yaoxiang::build_native_with_options;
+///
+/// build_native_with_options(Path::new("demo.yx"), Path::new("demo"), false, false)?;
+/// # Ok::<(), anyhow::Error>(())
+/// ```
+#[cfg(not(target_arch = "wasm32"))]
+pub fn build_native_with_options(
+    source_path: &Path,
+    output_path: &Path,
+    debug_info: bool,
+    optimize: bool,
+) -> Result<()> {
+    #[cfg(all(feature = "llvm", target_os = "linux", target_arch = "x86_64"))]
+    {
+        if debug_info {
+            anyhow::bail!(
+                "native AOT --debug-info is not supported in AOT-1; omit it or use --emit bytecode"
+            );
+        }
+        let (source_path_str, _source, module) = compile_source_file(source_path)?;
+        backends::llvm::compile_ir_to_executable(&module, &source_path_str, output_path, optimize)
+    }
+
+    #[cfg(not(all(feature = "llvm", target_os = "linux", target_arch = "x86_64")))]
+    {
+        let _ = (source_path, output_path, debug_info, optimize);
+        anyhow::bail!(
+            "native executable support requires an x86-64 Linux engine built with --features llvm; no bytecode was written"
+        )
+    }
 }
 
 /// Dump bytecode for debugging

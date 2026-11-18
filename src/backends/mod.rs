@@ -23,6 +23,8 @@
 
 pub mod common;
 pub mod interpreter;
+#[cfg(all(feature = "llvm", target_os = "linux", target_arch = "x86_64"))]
+pub mod llvm;
 pub mod runtime;
 
 use crate::middle::bytecode::{BytecodeModule, BytecodeFunction};

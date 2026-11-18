@@ -3,16 +3,18 @@ title: 'RFC-018：LLVM AOT 编译器设计'
 status: '已接受'
 author: '晨煦'
 created: '2026-02-15'
-updated: '2026-07-05（同步 GitHub Issue #14、#134；添加实施状态分析）'
+updated: '2026-11-17'
 issue: '#14'
 tracking_issue: 'https://github.com/ChenXu233/YaoXiang/issues/134'
 ---
 
 # RFC-018：LLVM AOT 编译器设计
 
-> **⚠️ 实现现状（2026-10-02 核查）**：本 RFC 状态仍为「已接受」，但**实现尚未启动**——
-> 仓库 `Cargo.toml` 中无 `inkwell` / `llvm` / `cranelift` 依赖，`src/backends/` 仅有
-> `common` / `interpreter` / `runtime`，正文「实现策略」条目均未勾选。排期待定。
+> **实现现状**：AOT-0/AOT-1 原型位于 `src/backends/llvm/`，由 Cargo
+> feature `llvm` 显式启用，固定使用 Inkwell 0.11.0 与 LLVM 18.1。当前只支持
+> Linux x86-64 单文件直线标量子集，包含直接调用、模块初始化、checked 整数运算和最小原生诊断。
+> 通用控制流、多文件、运行时值/闭包/资源、外部 FFI、并作、调试格式及目标平台发布验收仍未完成。
+> 裸 `build` 继续默认生成 `.42`；`--emit exe` 选择原型原生路径，`--emit bytecode` 显式选择字节码。
 >
 > **参考**:
 >
@@ -992,6 +994,7 @@ FFI 调用默认使用平台的 C 调用约定。用户可通过 `native("symbol
 | DAG 分析范围   | spawn 块内，不跨 spawn 块（对齐 RFC-024）                 | 2026-06-05 |
 | 所有权模型对齐 | 对齐 RFC-009 v9：`&T`/`&mut T` 令牌 + `ref` 关键字        | 2026-06-10 |
 | 双后端模型     | VM（开发）+ LLVM（生产），对齐 RFC-008                    | 2026-05-11 |
+| 构建产物入口   | `yx build` 终态默认生成原生可执行文件；`--emit exe` 显式选择原生产物，`--emit bytecode` 显式生成 `.42`。先增加 `--emit` 并保持旧默认，达到发布门槛后一次性切换默认值；不使用 `--backend llvm` 作为长期用户接口 | 2026-11-17 |
 | 调度器形态     | 静态库链接进 exe，约 500KB-1MB（取决于平台与功能），无 GC | 2026-05-11 |
 | FFI 代码生成   | 整合 RFC-026：`native()` declare + marshalling            | 2026-06-10 |
 | 析构函数       | `.drop` → RAII cleanup 插入，对齐 RFC-026 §7              | 2026-06-10 |

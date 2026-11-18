@@ -236,7 +236,10 @@ result = sqrt(16.0)  // 4.0
 yx run hello.yx
 
 # 构建字节码
-yx build hello.yx -o hello.42
+yx build hello.yx --emit bytecode -o hello.42
+
+# Linux x86-64：构建原生可执行文件（引擎需启用 llvm feature）
+yx build hello.yx --emit exe -o hello
 
 # 解释执行
 yx eval 'println("Hello")'

@@ -71,6 +71,13 @@ enum ColorChoice {
     Never,
 }
 
+/// Build artifact selected by `--emit` (RFC-018 附录 B).
+#[derive(Debug, Clone, Copy, ValueEnum)]
+enum EmitKind {
+    Exe,
+    Bytecode,
+}
+
 /// A high-performance programming language with "everything is type" philosophy
 #[derive(Parser, Debug)]
 #[command(name = "yaoxiang-rs")]
@@ -232,13 +239,17 @@ enum Commands {
         file: PathBuf,
     },
 
-    /// Build bytecode file
+    /// Build a bytecode or native executable file
     Build {
         /// Source file to compile
         #[arg(value_name = "FILE")]
         file: PathBuf,
 
-        /// Output file (optional, defaults to <input>.42)
+        /// Artifact kind (bytecode keeps the current default; exe requires LLVM)
+        #[arg(long, value_enum, default_value = "bytecode")]
+        emit: EmitKind,
+
+        /// Output file (defaults to <input>.42 for bytecode, or <input> for exe)
         #[arg(short, long)]
         output: Option<PathBuf>,
 
@@ -708,17 +719,34 @@ fn dispatch_command(command: Commands) -> Result<()> {
         }
         Commands::Build {
             file,
+            emit,
             output,
             debug_info,
-        } => {
-            let output_path = output.unwrap_or_else(|| {
-                let mut path = file.clone();
-                path.set_extension("42");
-                path
-            });
-            yaoxiang::build_bytecode_with_options(&file, &output_path, debug_info)
-                .with_context(|| format!("Failed to build: {}", file.display()))?;
-        }
+        } => match emit {
+            EmitKind::Bytecode => {
+                let output_path = output.unwrap_or_else(|| {
+                    let mut path = file.clone();
+                    path.set_extension("42");
+                    path
+                });
+                yaoxiang::build_bytecode_with_options(&file, &output_path, debug_info)
+                    .with_context(|| format!("Failed to build bytecode: {}", file.display()))?;
+            }
+            EmitKind::Exe => {
+                let output_path = output.unwrap_or_else(|| {
+                    let mut path = file.clone();
+                    path.set_extension("");
+                    path
+                });
+                if output_path == file {
+                    anyhow::bail!("native output would overwrite the source; pass -o FILE");
+                }
+                yaoxiang::build_native_with_options(&file, &output_path, debug_info, false)
+                    .with_context(|| {
+                        format!("Failed to build native executable: {}", file.display())
+                    })?;
+            }
+        },
         Commands::Explain { code, json, lang } => {
             // 语言优先级：explain 自己的 --lang > 顶层 -L/--lang > YAOXIANG_LANG
             // > 默认。顶层 -L 已在 main 开头写进 YAOXIANG_LANG，故子命令未显式
