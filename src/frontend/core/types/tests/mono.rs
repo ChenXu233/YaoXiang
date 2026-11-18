@@ -376,6 +376,37 @@ fn test_from_ast_type_generic_custom() {
 }
 
 #[test]
+fn test_from_ast_type_list_annotation_lands_on_vec_face() {
+    // Arrange — #403 A 案核心行为的 L2 直接 pin：源名 `List(T)` 注解经
+    // From<ast::Type> 的 Generic 臂进类型域，按 [`MonoType::source_container_face`]
+    // 落点归一（四门之一；判据源即该函数文档，规范锚 SPEC type-system.md §4.1.1
+    // 「源名 List 进类型域统一落 Vec 面」）。
+    let ast_ty = ast::Type::Generic {
+        name: "List".to_string(),
+        name_span: Span::dummy(),
+        args: vec![name_ty("Int32")],
+    };
+
+    // Act
+    let mono: MonoType = ast_ty.into();
+
+    // Assert — M1 变异自证（摘 From 臂的 source_container_face 调用，name 退回
+    // 源名原样）实测红（cargo test --lib 本测试，M1 挂载时）：
+    //   panicked at src\frontend\core\types\tests\mono.rs:
+    //   `… 实际 Generic { name: "List", args: [Int(32)] }`
+    //   `test result: FAILED. 0 passed; 1 failed`
+    // 同时域的 L3 pin（middle::lower::tests::query）在 M1 下保持绿——两 pin 各自
+    // 杀死本面变异（M3），互不搭便车。
+    assert!(
+        matches!(
+            &mono,
+            MonoType::Generic { name, args } if name == "Vec" && args[0] == MonoType::Int(32)
+        ),
+        "List(Int) 注解必须落 Vec 面（归一摘除即红：Generic{{\"List\"}} 无 unify 对象，字面量/构造器/std.list 全产 Vec 面必被 E1002 假拒绝），实际 {mono:?}"
+    );
+}
+
+#[test]
 fn test_from_ast_type_generic_tuple() {
     // Tuple 的 AST 常态是 Generic（回写桥也用它），与 Tuple 变体经 make_tuple
     // 的结果逐字相同。

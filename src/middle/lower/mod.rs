@@ -25,6 +25,9 @@ mod query;
 mod scope;
 mod stmt;
 
+#[cfg(test)]
+mod tests;
+
 use crate::frontend::core::sema::layers::ownership::ReleasePlan;
 use crate::frontend::core::sema::types::OverloadResolutions;
 use crate::frontend::core::sema::{MonoType, TypeCheckResult};
