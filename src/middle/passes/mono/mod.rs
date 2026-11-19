@@ -841,7 +841,7 @@ impl Monomorphizer {
         for block in blocks.iter_mut() {
             for instr in &mut block.instructions {
                 instr.for_each_operand_mut(&mut |op| {
-                    if let Operand::Local(slot) | Operand::Temp(slot) = op {
+                    if let Operand::Local(slot) = op {
                         used.insert(*slot);
                     }
                 });
@@ -896,7 +896,7 @@ impl Monomorphizer {
         for block in blocks.iter_mut() {
             for instr in &mut block.instructions {
                 instr.for_each_operand_mut(&mut |op| match op {
-                    Operand::Local(slot) | Operand::Temp(slot) => {
+                    Operand::Local(slot) => {
                         if let Some(new) = replace.get(slot) {
                             *op = new.clone();
                         }

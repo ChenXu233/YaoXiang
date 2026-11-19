@@ -36,14 +36,14 @@ impl OperandResolver {
                 }
                 Ok(*id as u8)
             }
-            Operand::Temp(id) => {
-                if *id > 255 {
-                    return Err(
-                        ErrorCodeDefinition::register_overflow(&id.to_string(), "255").build(),
-                    );
-                }
-                Ok(*id as u8)
-            }
+            // 占位（09a §P7 7b.1a 契约 §三 占位 2，7b.2 换槽位解析）：
+            // `ValueId` 是 SSA 值编号，7b.2 起由 `next_temp_reg` 产出。本批生产
+            // 构造点 0；若真出现，显式诊断优于静默映射到错误槽位。
+            Operand::Value(id) => Err(ErrorCodeDefinition::codegen_invalid_operand(&format!(
+                "Operand::Value({}) 尚不可解析为槽位（SSA 值槽位解析归 7b.2）",
+                id.0
+            ))
+            .build()),
             Operand::Arg(id) => {
                 if *id > 255 {
                     return Err(
@@ -66,14 +66,14 @@ impl OperandResolver {
     }
 
     /// 检查操作数是否为寄存器类型
+    ///
+    /// `Operand::Value` 要等 7b.2 才能解析为槽位（09a §P7 7b.1a 契约 §三
+    /// 占位 2），本批不把它读成「已是寄存器」。
     pub fn is_register(
         &self,
         operand: &Operand,
     ) -> bool {
-        matches!(
-            operand,
-            Operand::Local(_) | Operand::Temp(_) | Operand::Arg(_)
-        )
+        matches!(operand, Operand::Local(_) | Operand::Arg(_))
     }
 
     /// 检查操作数是否为常量

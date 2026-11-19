@@ -692,6 +692,15 @@ impl Translator {
                 plan,
                 result,
             } => self.translate_spawn_from_list(closures_list, plan, result),
+
+            // 占位（09a §P7 7b.1a 契约 §三 占位 1，7b.3 换真翻译）：
+            // Phi 是 IR-only 伪指令，方案 A 在 7b.3 展开为本块入口的 Move 串。
+            // 本批 lowering 不生产 Phi（生产构造点 0）——若执行到此，说明有生产
+            // 点漏登记；响亮失败，不做 NOP 静默跳过、也不静默错值。
+            Phi { .. } => unreachable!(
+                "Instruction::Phi 于 7b.1a 引入但生产构造点 0；真翻译归 7b.3\
+                 （09a §P7 7b.1a 契约 §三 占位 1）"
+            ),
         }
     }
 

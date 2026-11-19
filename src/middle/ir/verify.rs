@@ -33,10 +33,14 @@
 //! - init 序列的 Local 越界不查：`init_locals` 是 #368 调试信息视角的表，
 //!   不是分配上限（实测语料 init 用槽 4 而表长 1）。函数体 locals 表是完整
 //!   分配表（lower/scope.rs 的 take_cur_locals 按高水位 resize），Local 越界判定仅在函数体生效。
-//! - 「Phi 一致」不变量：Instruction::Phi 变体由 P7 批 b 引入（04 §273，IR-only
-//!   伪指令，translator 展开为 Move 串），当前指令集无此变体。本模块的
-//!   def/use 提取是**穷尽 match、刻意无通配臂**（与 ir.rs span() 同款强制哲学）：
-//!   Phi 引入时编译失败强制补查（输入数 == 前驱数、逐输入类型一致）。
+//! - 「Phi 一致」不变量：`Instruction::Phi` 由 P7 批 b（7b.1a）引入（04 §273，
+//!   IR-only 伪指令，translator 展开为 Move 串）。本模块的 def/use 提取是
+//!   **穷尽 match、刻意无通配臂**（与 ir.rs span() 同款强制哲学）：Phi 的
+//!   `dst` 计定义点、每个 `incoming` 输入计使用点（`def_operands` /
+//!   `use_operands`）。`verify_ssa` 的 Phi 一致性本批落两条可判定约束
+//!   （`dst` 必为 `Operand::Value`、`incoming` 按前驱 label 严格升序）；
+//!   「输入数 == 前驱数」与逐输入类型一致依赖值表与块级 CFG，登记
+//!   09a §P7 7b.1a 契约 §三 占位 3，由 7b.1b 替换。
 //! - 「内层隔离」的 ModuleIR 级可操作化（WBS 2.1.4 改为**按槽身份**）：lower 的
 //!   save/restore 契约（lower/mod.rs 的 `cur_locals` / `next_temp` / `cur_span` 字段）
 //!   失败形态是**同一张槽位表被两个函数体生成期共用**。身份维度 = `LocalSlot::origin`
@@ -77,7 +81,8 @@ pub enum InvariantKind {
     Dominance,
     /// 值定义唯一性（仅 Ssa）
     UniqueDefinition,
-    /// Phi 输入数 == 前驱数且类型一致（仅 Ssa；变体待 P7 批 b）
+    /// Phi 输入数 == 前驱数且类型一致（仅 Ssa；7b.1a 落 `dst` 与升序两条，
+    /// 前驱数/类型一致归 7b.1b，见 09a §P7 7b.1a 契约 §三 占位 3）
     PhiConsistency,
     /// 跳转目标是合法指令下标
     JumpTarget,
@@ -307,9 +312,7 @@ fn check_fn(
 
     if mode == VerifyMode::Ssa {
         check_unique_definition(view, &defs, &entry_defined, out);
-        // Phi 一致性：Instruction::Phi 由 P7 批 b 引入（04 §273）。当前指令集
-        // 无此变体——def/use 提取的穷尽 match 保证引入时编译失败，届时在
-        // 此补「输入数 == CFG 前驱数 ∧ 逐输入类型一致」。
+        check_phi_structure(view, out);
     }
 }
 
@@ -389,10 +392,10 @@ fn check_slot_bounds(
     for (i, instr) in view.instrs.iter().enumerate() {
         for op in def_operands(instr).into_iter().chain(use_operands(instr)) {
             let (kind, idx, bound) = match op {
-                Operand::Local(n) | Operand::Temp(n) => ("local", *n, view.locals.len()),
+                Operand::Local(n) => ("local", *n, view.locals.len()),
                 Operand::Arg(n) => ("arg", *n, view.params_len),
                 Operand::Global(n) => ("global", *n, ir.globals.len()),
-                // Const / Label / Register 不是槽位引用
+                // Const / Value 不是槽位引用
                 _ => continue,
             };
             // init_locals 是 #368 调试信息视角的表而非分配上限（实测 init
@@ -658,6 +661,8 @@ fn def_operands(instr: &Instruction) -> Vec<&Operand> {
         | Instruction::PtrStore { .. }
         | Instruction::StoreUpvalue { .. }
         | Instruction::CloseUpvalue { .. } => Vec::new(),
+        // Phi 的 dst 是 SSA 值的定义点（07 第一层「值定义唯一性」的 def 面）
+        Instruction::Phi { dst, .. } => vec![dst],
     }
 }
 
@@ -756,6 +761,8 @@ fn use_operands(instr: &Instruction) -> Vec<&Operand> {
         Instruction::PtrFromRef { src, .. } | Instruction::PtrDeref { src, .. } => vec![src],
         Instruction::PtrStore { dst, src, .. } => vec![dst, src],
         Instruction::StringGetChar { src, index, .. } => vec![src, index],
+        // Phi 的每个 incoming 输入都是使用点（来自前驱的值）
+        Instruction::Phi { incoming, .. } => incoming.iter().map(|(_, op)| op).collect(),
     }
 }
 
@@ -775,13 +782,13 @@ fn collect_defs_uses(
     let mut uses: Vec<(usize, usize)> = Vec::new();
     for (i, instr) in view.instrs.iter().enumerate() {
         for op in def_operands(instr) {
-            if let Operand::Local(n) | Operand::Temp(n) = op {
+            if let Operand::Local(n) = op {
                 defs.entry(*n).or_default().push(i);
                 defs_at[i].push(*n);
             }
         }
         for op in use_operands(instr) {
-            if let Operand::Local(n) | Operand::Temp(n) = op {
+            if let Operand::Local(n) = op {
                 uses.push((*n, i));
             }
         }
@@ -869,6 +876,48 @@ fn check_unique_definition(
 }
 
 // =====================
+// 不变量 3：Phi 一致性（仅 Ssa；7b.1a 落两条构造侧约束）
+// =====================
+
+/// `Phi` 的两条可判定约束（04 §目标设计「`Phi` 作为新 `Instruction` 变体」）：
+///
+/// 1. `dst` 必为 `Operand::Value`——Phi 定义的是 SSA 值，不是存储槽；
+/// 2. `incoming` 按前驱 block label 严格升序——构造方保证、渲染与校验共用
+///    同一规范形态（升序也是 `normalize` 的前驱排序规则）。
+///
+/// 未落地的两条（09a §P7 7b.1a 契约 §三 占位 3，由 7b.1b 替换）：
+/// `incoming.len() == 该块前驱数` 与逐输入类型一致需要 `values` 值表与块级
+/// 前驱关系；当前 IR 的控制流是指令级（文件头「现实语义记录」第 1 条），
+/// 块 label 与前驱集合没有可判定载体。
+fn check_phi_structure(
+    view: &FnView<'_>,
+    out: &mut Vec<Violation>,
+) {
+    for (i, instr) in view.instrs.iter().enumerate() {
+        let Instruction::Phi { dst, incoming, .. } = instr else {
+            continue;
+        };
+        if !matches!(dst, Operand::Value(_)) {
+            out.push(Violation {
+                invariant: InvariantKind::PhiConsistency,
+                function: view.name.clone(),
+                instruction: Some(i),
+                message: format!("Phi 的 dst 必须是 Operand::Value（SSA 值），实际 {dst:?}"),
+            });
+        }
+        let labels: Vec<usize> = incoming.iter().map(|(label, _)| *label).collect();
+        if !labels.windows(2).all(|w| w[0] < w[1]) {
+            out.push(Violation {
+                invariant: InvariantKind::PhiConsistency,
+                function: view.name.clone(),
+                instruction: Some(i),
+                message: format!("Phi 的 incoming 未按前驱 label 严格升序：{labels:?}"),
+            });
+        }
+    }
+}
+
+// =====================
 // 不变量 6：类型一致
 // =====================
 
@@ -921,9 +970,9 @@ fn operand_type(
     _ir: &ModuleIR,
 ) -> Option<MonoType> {
     match op {
-        Operand::Local(n) | Operand::Temp(n) => view.param_slot_type(*n).cloned(),
+        Operand::Local(n) => view.param_slot_type(*n).cloned(),
         Operand::Const(c) => const_type(c),
-        // Global：无注解占位不可信；Arg / Label / Register：无类型表可查
+        // Global：无注解占位不可信；Arg / Value：无类型表可查
         _ => None,
     }
 }

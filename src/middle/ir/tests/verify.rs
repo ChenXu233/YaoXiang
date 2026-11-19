@@ -15,7 +15,7 @@ use crate::frontend::core::sema::checker::TypeChecker;
 use crate::frontend::core::sema::probe::TypeLevelNamespace;
 use crate::frontend::core::sema::MonoType;
 use crate::frontend::module::registry::ModuleRegistry;
-use crate::middle::ir::ir::{ConstValue, FrameId, Instruction, LocalSlot, Operand};
+use crate::middle::ir::ir::{ConstValue, FrameId, Instruction, LocalSlot, Operand, ValueId};
 use crate::middle::ir::verify::{verify_loose, verify_ssa, InvariantKind, VerifyError};
 use crate::middle::lower::AstToIrGenerator;
 use crate::util::span::Span;
@@ -1036,5 +1036,110 @@ fn test_quantity_zero_on_named_param_slot_passes() {
         violations_of(&result, InvariantKind::QuantityFact),
         0,
         "参数区具名槽的 q=0 是合法绑定事实；实际: {result:?}"
+    );
+}
+
+// =====================
+// 不变量 3：Phi 一致性（仅 Ssa；7b.1a 落两条构造侧约束）
+// =====================
+
+/// 7b.1a 正例：dst 为 Value、incoming 按 label 严格升序的 Phi 在 verify_ssa 下合法。
+#[test]
+fn test_ssa_phi_well_formed_passes() {
+    // Arrange
+    let f = func(
+        "f",
+        vec![],
+        MonoType::Void,
+        vec![],
+        vec![
+            Instruction::Phi {
+                dst: Operand::Value(ValueId(0)),
+                incoming: vec![
+                    (0, Operand::Value(ValueId(1))),
+                    (1, Operand::Value(ValueId(2))),
+                ],
+                span: Span::dummy(),
+            },
+            ret_void(),
+        ],
+    );
+    let m = module_with(vec![f]);
+
+    // Act
+    let r = verify_ssa(&m);
+
+    // Assert
+    assert!(
+        r.is_ok(),
+        "结构合法的 Phi 不应产生违规：{:?}",
+        r.err().map(|e| e.to_string())
+    );
+}
+
+/// 7b.1a 反例：Phi 的 dst 不是 Operand::Value，必报 1 项 PhiConsistency。
+#[test]
+fn test_ssa_phi_with_slot_dst_fails() {
+    // Arrange：dst 落存储槽 Local(0)，不是 SSA 值
+    let f = func(
+        "f",
+        vec![],
+        MonoType::Void,
+        vec![temp_slot(MonoType::Int(64))],
+        vec![
+            Instruction::Phi {
+                dst: Operand::Local(0),
+                incoming: vec![(0, Operand::Value(ValueId(1)))],
+                span: Span::dummy(),
+            },
+            ret_void(),
+        ],
+    );
+    let m = module_with(vec![f]);
+
+    // Act
+    let r = verify_ssa(&m);
+    let detail = r.as_ref().err().map(|e| e.to_string()).unwrap_or_default();
+
+    // Assert
+    assert_eq!(
+        violations_of(&r, InvariantKind::PhiConsistency),
+        1,
+        "非 Value 的 Phi dst 应恰好报 1 项 PhiConsistency 违规：{detail}"
+    );
+}
+
+/// 7b.1a 反例：incoming 的 label 未严格升序，必报 1 项 PhiConsistency。
+#[test]
+fn test_ssa_phi_incoming_not_ascending_fails() {
+    // Arrange：label 顺序为 2、1（降序）
+    let f = func(
+        "f",
+        vec![],
+        MonoType::Void,
+        vec![],
+        vec![
+            Instruction::Phi {
+                dst: Operand::Value(ValueId(0)),
+                incoming: vec![
+                    (2, Operand::Value(ValueId(1))),
+                    (1, Operand::Value(ValueId(2))),
+                ],
+                span: Span::dummy(),
+            },
+            ret_void(),
+        ],
+    );
+    let m = module_with(vec![f]);
+
+    // Act
+    let r = verify_ssa(&m);
+    let detail = r.as_ref().err().map(|e| e.to_string()).unwrap_or_default();
+
+    // Assert
+    assert_eq!(
+        violations_of(&r, InvariantKind::PhiConsistency),
+        1,
+        "未升序的 Phi incoming 应恰好报 1 项 PhiConsistency 违规：{detail}"
     );
 }

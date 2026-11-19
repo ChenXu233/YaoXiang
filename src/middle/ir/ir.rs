@@ -15,16 +15,24 @@ use crate::frontend::core::sema::MonoType;
 use crate::frontend::module::symbol::DefId;
 use crate::util::span::Span;
 
+/// SSA 值标识：函数内稠密编号，单调递增、永不回滚（04-ssa.md §值标识方式）。
+///
+/// 本批（7b.1a）只建立表示：生产构造点 0、无求值/分配语义；7b.2 起
+/// `next_temp_reg` 改产出 `Operand::Value`（09a §P7 7b.1a 契约 §三 占位 2）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct ValueId(pub u32);
+
 /// Instruction operand
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Operand {
     Const(ConstValue),
+    /// SSA 值：函数内稠密编号，唯一定义（04-ssa.md §SSA 形态定义）
+    Value(ValueId),
+    /// 具名局部变量的存储槽：可寻址、允许多次定义（非 SSA 部分）
     Local(usize),
+    /// 函数入口的隐式定义（参数即块 0 的定义）
     Arg(usize),
-    Temp(usize),
     Global(usize),
-    Label(usize),
-    Register(u8), // Added for codegen
 }
 
 /// 任务组：组内任务可并行执行，组间串行
@@ -530,6 +538,24 @@ pub enum Instruction {
         src: Operand,
         span: Span,
     },
+    // =====================
+    // SSA 汇合
+    // =====================
+    /// 汇合点：每个前驱基本块提供该值的一个定义（04-ssa.md §`Phi` 作为新
+    /// `Instruction` 变体）。
+    ///
+    /// 构造约定：
+    /// - `dst` 必为 [`Operand::Value`]；
+    /// - `incoming` 按前驱 block label **升序**排列（构造时保证，便于规范化；
+    ///   `verify_ssa` 检查、`normalize` 渲染前再排序）。
+    ///
+    /// 本批（7b.1a）只引入变体：lowering 生产构造点 0，translator 的消费臂是
+    /// 带不变量注释的占位，真翻译归 7b.3（09a §P7 7b.1a 契约 §二/§三）。
+    Phi {
+        dst: Operand,
+        incoming: Vec<(usize, Operand)>,
+        span: Span,
+    },
 }
 
 impl Instruction {
@@ -613,6 +639,7 @@ impl Instruction {
             Instruction::LoadUpvalue { span, .. } => *span,
             Instruction::StoreUpvalue { span, .. } => *span,
             Instruction::CloseUpvalue { span, .. } => *span,
+            Instruction::Phi { span, .. } => *span,
         }
     }
 
@@ -835,6 +862,13 @@ impl Instruction {
                 f(dst);
                 f(src);
                 f(index);
+            }
+            // `dst` 是定义位，每个 `incoming` 输入是使用位——本函数一视同仁。
+            Instruction::Phi { dst, incoming, .. } => {
+                f(dst);
+                for (_, op) in incoming {
+                    f(op);
+                }
             }
         }
     }

@@ -6,9 +6,9 @@
 //!
 //! | 07 规则 | 本模块实现 |
 //! | 剥离 Span | 不打印 span 字段 |
-//! | 临时值重命名 | Local/Temp/Arg(n) 按函数内首次出现顺序重写为 %0 %1 ...（保留定义-使用拓扑顺序） |
+//! | 临时值重命名 | Local/Arg(n) 按函数内首次出现顺序重写为 %0 %1 ...；SSA 值按函数内首次出现顺序重写为 v0 v1 ...（保留定义-使用拓扑顺序） |
 //! | 全局槽位相对化 | Global(n) 按模块内首次出现顺序重写为 @0 @1 ... |
-//! | 前驱排序 | successors 打印前按序排列（现状恒为空，规则预留）；Phi 输入随 P7 批 b 变体引入处理 |
+//! | 前驱排序 | successors 打印前按序排列（现状恒为空，规则预留）；Phi 的 incoming 打印前按前驱 label 升序 |
 //! | 结构体字段排序 | **不排序**——构造顺序是语义（07 原文） |
 //!
 //! 07 已知局限（原文照搬）：规范化会抹掉「第 N 个实参用了哪个寄存器」——
@@ -62,6 +62,9 @@ impl Renamer {
 struct FnCtx {
     locals: Renamer,
     args: Renamer,
+    /// SSA 值（`Operand::Value`）：函数内首现序相对化，编号本身无语义
+    /// （04-ssa.md §值标识方式：函数内稠密编号，单调递增）。
+    values: Renamer,
 }
 
 struct ModCtx {
@@ -76,11 +79,10 @@ fn fmt_operand(
     m: &mut ModCtx,
 ) -> String {
     match op {
-        Operand::Local(n) | Operand::Temp(n) => format!("%{}", f.locals.rename(*n)),
+        Operand::Local(n) => format!("%{}", f.locals.rename(*n)),
         Operand::Arg(n) => format!("arg%{}", f.args.rename(*n)),
         Operand::Global(n) => format!("@{}", m.globals.rename(*n)),
-        Operand::Label(n) => format!("label({n})"),
-        Operand::Register(n) => format!("reg({n})"),
+        Operand::Value(v) => format!("v{}", f.values.rename(v.0 as usize)),
         Operand::Const(c) => fmt_const(c),
     }
 }
@@ -453,6 +455,19 @@ fn fmt_instruction(
             o(closures_list, f, m),
             fmt_plan(plan)
         ),
+        // ---- SSA 汇合（07 第二层「前驱排序」：打印前按前驱 label 升序） ----
+        Instruction::Phi { dst, incoming, .. } => {
+            // 先登记 dst 的规范名，值编号按打印顺序首现分配（定义在读之前）。
+            let dst = o(dst, f, m);
+            let mut entries: Vec<(usize, &Operand)> =
+                incoming.iter().map(|(label, op)| (*label, op)).collect();
+            entries.sort_by_key(|(label, _)| *label);
+            let inner: Vec<String> = entries
+                .iter()
+                .map(|(label, op)| format!("{label}: {}", o(op, f, m)))
+                .collect();
+            format!("Phi {dst} <- [{}]", inner.join(", "))
+        }
     }
 }
 
@@ -603,6 +618,7 @@ pub fn normalize_module(ir: &ModuleIR) -> String {
                 let mut fctx = FnCtx {
                     locals: Renamer::new(),
                     args: Renamer::new(),
+                    values: Renamer::new(),
                 };
                 for block in blocks {
                     // successors 恒空（现状）；排序规则预留（07 前驱排序）
@@ -636,6 +652,7 @@ pub fn normalize_module(ir: &ModuleIR) -> String {
         let mut fctx = FnCtx {
             locals: Renamer::new(),
             args: Renamer::new(),
+            values: Renamer::new(),
         };
         for instr in &ir.init {
             writeln!(out, "    {}", fmt_instruction(instr, &mut fctx, &mut mctx)).unwrap();
