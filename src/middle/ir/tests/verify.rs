@@ -8,19 +8,22 @@
 //!    序列产出的 ModuleIR 上 verify_loose 必须跑绿，且校验面非空（9.6 门禁的
 //!    防假门禁断言：函数数与指令数必须 > 0）。
 
+use crate::frontend::compiler::Compiler;
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parse;
 use crate::frontend::core::sema::checker::TypeChecker;
 use crate::frontend::core::sema::probe::TypeLevelNamespace;
 use crate::frontend::core::sema::MonoType;
 use crate::frontend::module::registry::ModuleRegistry;
-use crate::middle::ir::ir::{ConstValue, Instruction, Operand};
+use crate::middle::ir::ir::{ConstValue, FrameId, Instruction, LocalSlot, Operand};
 use crate::middle::ir::verify::{verify_loose, verify_ssa, InvariantKind, VerifyError};
 use crate::middle::lower::AstToIrGenerator;
 use crate::util::span::Span;
 
 use super::corpus::{corpus_files, reaches_ir_generation};
-use super::ir_build::{func, int_const, module_with, move_instr, named_slot, ret_void, temp_slot};
+use super::ir_build::{
+    func, int_const, module_with, move_instr, named_slot, named_slot_in_frame, ret_void, temp_slot,
+};
 
 fn violations_of(
     result: &Result<(), VerifyError>,
@@ -547,67 +550,61 @@ fn test_ssa_shaped_ir_passes_verify_ssa() {
 }
 
 // =====================
-// 不变量 7：内层隔离
+// 不变量 7：内层隔离（WBS 2.1.4 起按**槽身份**判定：LocalSlot::origin）
 // =====================
 
-/// 不变量 7 反例：外层 MakeClosure 引用的闭包，其自有局部名混入外层 locals——
-/// save/restore 契约（lower/mod.rs 的 `next_temp` / `cur_span` 字段）违反形态。
+/// 不变量 7 负控（手工 IR 直驱）：一张槽位表混入**两个生成帧** ⇒ 必红。
+///
+/// 身份证据而非名字：两个槽都是 temp（连名字都没有），只有 `LocalSlot::origin`
+/// 不同；且全模块**没有 MakeClosure** —— 判据不再从「谁引用了谁」反推词法嵌套。
 #[test]
-fn test_inner_local_name_leaking_to_outer_fails() {
-    // Arrange：外层 locals 含 inner_var；闭包自有局部也叫 inner_var
-    let outer = func(
-        "outer",
-        vec![],
-        MonoType::Void,
-        vec![
-            temp_slot(MonoType::Int(64)),
-            named_slot("inner_var", MonoType::Int(64)),
-        ],
-        vec![
-            Instruction::MakeClosure {
-                dst: Operand::Local(0),
-                func: "closure_0".to_string(),
-                def: None,
-                env: vec![],
-                span: Span::dummy(),
-            },
-            ret_void(),
-        ],
-    );
-    let closure = func(
+fn test_inner_isolation_foreign_frame_slot_rejected() {
+    // Arrange：同一函数的表里，槽 0 来自帧 1、槽 1 来自帧 2
+    let leaked = func(
         "closure_0",
         vec![],
         MonoType::Void,
-        vec![named_slot("inner_var", MonoType::Int(64))],
+        vec![
+            LocalSlot::temp_in(MonoType::Int(64), FrameId(1)),
+            LocalSlot::temp_in(MonoType::Int(64), FrameId(2)),
+        ],
         vec![ret_void()],
     );
-    let m = module_with(vec![outer, closure]);
+    let m = module_with(vec![leaked]);
 
     // Act
     let r = verify_loose(&m);
     let detail = r.as_ref().err().map(|e| e.to_string()).unwrap_or_default();
 
-    // Assert
+    // Assert：负控必须红，且 IR 里没有任何 MakeClosure（判据不依赖嵌套推断）
+    assert!(
+        m.functions.iter().all(|f| !f
+            .all_instructions()
+            .any(|i| matches!(i, Instruction::MakeClosure { .. }))),
+        "负控前置：被判定的 IR 不得含 MakeClosure（否则证明不了判据已脱离嵌套推断）"
+    );
     assert_eq!(
         violations_of(&r, InvariantKind::InnerIsolation),
         1,
-        "内层局部名串入外层应恰好报 1 项 InnerIsolation 违规：{detail}"
+        "同一张槽位表混入两个生成帧必须报 1 项 InnerIsolation：{detail}"
     );
 }
 
-/// 不变量 7 正例：闭包自有局部名与外层不相交；同名名处于参数槽位不参与比较
-///（参数遮蔽是合法语义）。
+/// 不变量 7 负控（真泄漏形态）：内层函数的表里带着**外层帧**的具名槽。
+///
+/// 这是 lower 的 `cur_locals` save/restore 失败后 IR 的真实样子（2.1.4 的 M2
+/// 变异实测：闭包表里出现外层的 bb/cc/ys）。违规归属**混入帧的那张表**，
+/// 不是外层函数。
 #[test]
-fn test_disjoint_inner_locals_pass() {
-    // Arrange：外层局部 outer_var；闭包参数槽同名（idx 0 < params.len() 排除），
-    // 自有局部 inner_only 不相交
+fn test_inner_isolation_inherited_outer_slot_rejected() {
+    // Arrange：外层帧 1 登记 outer_var；闭包表里既有外层帧的槽，也有本帧（2）的参数槽
     let outer = func(
         "outer",
         vec![],
         MonoType::Void,
         vec![
             temp_slot(MonoType::Int(64)),
-            named_slot("outer_var", MonoType::Int(64)),
+            named_slot_in_frame("outer_var", MonoType::Int(64), FrameId(1)),
         ],
         vec![
             Instruction::MakeClosure {
@@ -625,12 +622,69 @@ fn test_disjoint_inner_locals_pass() {
         vec![MonoType::Int(64)],
         MonoType::Void,
         vec![
-            named_slot("outer_var", MonoType::Int(64)),
-            named_slot("inner_only", MonoType::Int(64)),
+            named_slot_in_frame("outer_var", MonoType::Int(64), FrameId(1)),
+            named_slot_in_frame("x", MonoType::Int(64), FrameId(2)),
         ],
         vec![ret_void()],
     );
     let m = module_with(vec![outer, closure]);
+
+    // Act
+    let r = verify_loose(&m);
+    let detail = r.as_ref().err().map(|e| e.to_string()).unwrap_or_default();
+
+    // Assert
+    assert_eq!(
+        violations_of(&r, InvariantKind::InnerIsolation),
+        1,
+        "继承外层槽的内层表必须报 1 项 InnerIsolation：{detail}"
+    );
+    assert!(
+        r.as_ref()
+            .err()
+            .is_some_and(|e| e.violations.iter().any(|v| v.function == "closure_0")),
+        "违规必须归属混入帧的表（closure_0）而非外层：{detail}"
+    );
+}
+
+/// 不变量 7 正例（假阳性回归，手工 IR）：两个**独立声明**用同一个源码名、
+/// 各自一个生成帧 ⇒ 绿。
+///
+/// 这正是 2.1.4 的两处误报形态：`main` 的局部 `r` 与 `std.json.parse` 自己的 `r`。
+/// 旧判据（MakeClosure 反推嵌套 + 名字交集）报红，身份判据不报。
+#[test]
+fn test_inner_isolation_same_local_name_across_frames_pass() {
+    // Arrange：外层帧 1 的 `r` 与「作值引用的函数」（帧 2）自己的 `r` 同名
+    let outer = func(
+        "main",
+        vec![],
+        MonoType::Void,
+        vec![
+            temp_slot(MonoType::Int(64)),
+            named_slot_in_frame("r", MonoType::Int(64), FrameId(1)),
+        ],
+        vec![
+            Instruction::MakeClosure {
+                dst: Operand::Local(0),
+                func: "std.json.parse".to_string(),
+                def: None,
+                env: vec![],
+                span: Span::dummy(),
+            },
+            ret_void(),
+        ],
+    );
+    let parse = func(
+        "std.json.parse",
+        vec![MonoType::Int(64)],
+        MonoType::Void,
+        vec![
+            named_slot_in_frame("s", MonoType::Int(64), FrameId(2)),
+            named_slot_in_frame("r", MonoType::Int(64), FrameId(2)),
+        ],
+        vec![ret_void()],
+    );
+    let m = module_with(vec![outer, parse]);
 
     // Act
     let result = verify_loose(&m);
@@ -638,8 +692,204 @@ fn test_disjoint_inner_locals_pass() {
     // Assert
     assert!(
         result.is_ok(),
-        "内外层局部名不相交（同名参数属合法遮蔽）不应产生违规：{:?}",
+        "同名不同绑定（各自一个生成帧）不得报内层隔离：{:?}",
         result.err().map(|e| e.to_string())
+    );
+}
+
+// =====================
+// 不变量 7 定向回归（WBS 2.1.4）：两语料形态走**生产入口**后 post-mono 必须绿
+// =====================
+
+/// 走生产单文件入口（lex→parse→typecheck→ir_gen→合并嵌入 std→mono→post-mono DCE）
+/// 拿到 post-mono `ModuleIR`。
+///
+/// 为什么不用 ir_gen 直驱：本组判据的失效点（MakeClosure 作函数值、std 模块与入口同表）
+/// 只在 std 合并后出现，直驱 IR 看不到。
+fn compile_post_mono(
+    name: &str,
+    source: &str,
+) -> crate::middle::ModuleIR {
+    Compiler::new().compile(name, source).unwrap_or_else(|e| {
+        panic!(
+            "夹具源码必须通过生产入口编译（{name}）：
+{source}
+错误：{e}"
+        )
+    })
+}
+
+/// 定向回归（语料形态 1「同名局部跨帧复用」）：两个独立函数各自用同名局部，
+/// 其中一个**作函数值**传递 —— post-mono `verify_loose` 必须绿。
+///
+/// 病史：2.1.4 的两处红正是这条形态（旧的名字交集判据把名字复用当泄漏）。
+///
+/// 两个夹具缺一不可：只测撞名，判不出「结论是否取决于名字」——第二个夹具逐字相同、
+/// 只把外层局部改名，两者必须同判。
+#[test]
+fn test_inner_isolation_independent_functions_same_local_name_pass() {
+    // Arrange：撞名夹具 + 只改外层局部名的对照夹具
+    let collision = r#"
+use std.io
+
+calc: (x: Int) -> Int = (x) => {
+    acc = x + 1
+    acc
+}
+
+main: () -> Void = {
+    acc = 3
+    g = calc
+    n = g(acc)
+    io.println("done")
+}
+
+main()
+"#;
+    let renamed = r#"
+use std.io
+
+calc: (x: Int) -> Int = (x) => {
+    acc = x + 1
+    acc
+}
+
+main: () -> Void = {
+    total = 3
+    g = calc
+    n = g(total)
+    io.println("done")
+}
+
+main()
+"#;
+
+    // Act
+    let collision_ir = compile_post_mono("independent_same_local_name.yx", collision);
+    let renamed_ir = compile_post_mono("independent_same_local_name_renamed.yx", renamed);
+
+    // Assert：两者同判——判据不得由名字决定
+    assert!(
+        verify_loose(&collision_ir).is_ok(),
+        "同名局部跨帧复用不是泄漏，post-mono 必须绿：{:?}",
+        verify_loose(&collision_ir).err()
+    );
+    assert!(
+        verify_loose(&renamed_ir).is_ok(),
+        "同结构只改外层局部名后同样必须绿（判据与名字无关）：{:?}",
+        verify_loose(&renamed_ir).err()
+    );
+}
+
+/// 定向回归（假阳性族补充）：被提升为具名函数的 lambda 体里，for 循环变量与外层
+/// 局部同名 —— 那是内层帧自己的声明（槽号与作用域深度都不同），不是泄漏。
+///
+/// 该提升函数再**作函数值**传递（MakeClosure），旧判据在这里会误报。
+#[test]
+fn test_inner_isolation_lifted_lambda_for_var_name_reuse_pass() {
+    // Arrange
+    let source = r#"
+use std.io
+use std.list
+
+main: () -> Void = {
+    item = 1
+    f: () -> Int = () => {
+        mut total = 0
+        for item in [1, 2, 3] {
+            total = total + item
+        }
+        total
+    }
+    g = f
+    x = g()
+    io.println("done")
+}
+
+main()
+"#;
+
+    // Act
+    let m = compile_post_mono("lifted_lambda_for_var.yx", source);
+
+    // Assert
+    assert!(
+        verify_loose(&m).is_ok(),
+        "提升函数的 for 变量与外层同名不是泄漏，post-mono 必须绿：{:?}",
+        verify_loose(&m).err()
+    );
+}
+
+/// 定向回归（语料形态 2「库解析函数作值」）：两语料本体（`io.println` 原生成员 /
+/// `json.parse`、`parse` 纯 yx 导出作值）post-mono `verify_loose` 必须绿。
+#[test]
+fn test_inner_isolation_library_fn_as_value_post_mono_pass() {
+    // Arrange：语料本体（include_str! 绑定语料，避免夹具与语料漂移）
+    let member = include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/yaoxiang/03-modules/native_fn_member_value.yx"
+    ));
+    let pure = include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/yaoxiang/03-modules/pureyx_export_fn_value.yx"
+    ));
+
+    // Act
+    let member_ir = compile_post_mono("native_fn_member_value.yx", member);
+    let pure_ir = compile_post_mono("pureyx_export_fn_value.yx", pure);
+
+    // Assert
+    assert!(
+        verify_loose(&member_ir).is_ok(),
+        "native_fn_member_value post-mono 必须绿：{:?}",
+        verify_loose(&member_ir).err()
+    );
+    assert!(
+        verify_loose(&pure_ir).is_ok(),
+        "pureyx_export_fn_value post-mono 必须绿：{:?}",
+        verify_loose(&pure_ir).err()
+    );
+}
+
+/// 定向回归（真闭包卫生，save/restore 契约的正向守卫）：lambda 表达式作实参时
+/// 生成 `closure_N`，它的槽位表只含本帧 —— 外层 `main` 的具名局部不得混进去。
+///
+/// 它是负控（变异驱动）的正向对应：把 `NestedBodyGuard` 的「摘走父帧槽位表」
+/// 改坏，本测试必须红。
+#[test]
+fn test_inner_isolation_nested_lambda_frames_isolated() {
+    // Arrange
+    let source = r#"
+use std.io
+use std.list
+
+main: () -> Void = {
+    aa = 1
+    bb = 2
+    cc = 3
+    ys = list.map([1, 2, 3], (x: Int) => {
+        x + 1
+    })
+    r = list.len(ys)
+    io.println("done")
+}
+
+main()
+"#;
+
+    // Act
+    let m = compile_post_mono("nested_lambda.yx", source);
+
+    // Assert：夹具必须真的生成嵌套体（否则判据空转），且 post-mono 绿
+    assert!(
+        m.functions.iter().any(|f| f.name.starts_with("closure_")),
+        "夹具必须真的生成 closure_N（否则本条判据空转）；实际函数表：{:?}",
+        m.functions.iter().map(|f| &f.name).collect::<Vec<_>>()
+    );
+    assert!(
+        verify_loose(&m).is_ok(),
+        "真闭包与外层各自一帧，post-mono 必须绿：{:?}",
+        verify_loose(&m).err()
     );
 }
 // =====================

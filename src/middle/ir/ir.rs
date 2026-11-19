@@ -911,7 +911,19 @@ pub struct TypeDeclField {
     pub is_method: bool,
 }
 
-/// 局部变量槽位：类型 + 源码名 + 作用域深度。
+/// 生成帧身份（WBS 2.1.4）。
+///
+/// 一次**嵌套函数体**生成（函数 / 方法 / lambda / 匿名绑定 / 柯里层）对应一个帧号，
+/// 由 `lower::scope::NestedBodyGuard` 的两个构造函数发放；同一帧内登记的全部槽位
+/// 共享同一个号码。
+///
+/// 与 `DefId` 的分工：`DefId` 是**绑定名**的身份（`assign_defs` 按最终名字 intern，
+/// mono 特化重命名后失效）；帧号是**生成期槽位表归属**的身份，与名字无关，也不受
+/// mono 改名影响。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct FrameId(pub u32);
+
+/// 局部变量槽位：类型 + 源码名 + 作用域深度 + 登记帧。
 ///
 /// `name` 为 `None` 表示编译器内部临时寄存器（无对应源码变量）。
 /// 用 `Option` 而非空串：调用方必须显式处理“无名字”，
@@ -929,16 +941,43 @@ pub struct LocalSlot {
     /// 无名来源为 `None`（= 未解析，不是「默认 q=1」）。擦除前识别 q=0 引用靠它，
     /// 故它是**绑定事实的 IR 侧投影**，不是第二张旁表：`FunctionIR` 不挂 quantity 表。
     pub quantity: Option<Quantity>,
+    /// 登记该槽的**生成帧**（见 [`FrameId`]）——槽位身份，不是名字。
+    ///
+    /// 一张槽位表里出现两种帧号 = 该表被两个函数体生成期共用（lower 的
+    /// `cur_locals` save/restore 失败）。这正是「内层隔离」不变量要抓的形态，
+    /// 它在判据里取代了「按名字求交集」。
+    ///
+    /// `None` = 无生成来源：只出现在手工构造的测试 IR 与 mono/codegen 合成的
+    /// 槽位上——不参与判定（「未解析」不是「本帧」）。
+    pub origin: Option<FrameId>,
 }
 
 impl LocalSlot {
-    /// 无名槽位（编译器临时寄存器）
+    /// 无名槽位（编译器临时寄存器），无生成帧归属。
     pub fn temp(ty: MonoType) -> Self {
         Self {
             name: None,
             ty,
             scope_depth: 0,
             quantity: None,
+            origin: None,
+        }
+    }
+
+    /// 无名槽位，且**归属指定生成帧**：`lower` 在自己的帧内补空槽时用它。
+    ///
+    /// 与 [`Self::temp`] 的区别是身份：`temp` 表示「无来源」（手工 IR / 合成槽），
+    /// 本构造函数表示「本帧登记的空槽」——泄漏判定靠的正是这个区别。
+    pub fn temp_in(
+        ty: MonoType,
+        origin: FrameId,
+    ) -> Self {
+        Self {
+            name: None,
+            ty,
+            scope_depth: 0,
+            quantity: None,
+            origin: Some(origin),
         }
     }
 }

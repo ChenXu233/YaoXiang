@@ -112,6 +112,8 @@ fn named_local(name: &str) -> LocalSlot {
         ty: MonoType::Int(64),
         scope_depth: 0,
         quantity: None,
+        // 直构夹具无生成来源：不参与「内层隔离」的帧归属判定（WBS 2.1.4）。
+        origin: None,
     }
 }
 

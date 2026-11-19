@@ -7,7 +7,7 @@
 use super::{AstToIrGenerator, LoopTargets, SymbolEntry};
 use crate::ast;
 use crate::frontend::core::sema::MonoType;
-use crate::middle::ir::ir::LocalSlot;
+use crate::middle::ir::ir::{FrameId, LocalSlot};
 use crate::tlog;
 use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};
 use crate::util::i18n::MSG;
@@ -60,10 +60,24 @@ impl AstToIrGenerator {
         // 把源码名写进当前函数的槽位表：槽位可能尚未扩展到 local_idx
         // （临时寄存器先于具名变量分配），先补齐空槽。
         while self.cur_locals.len() <= local_idx {
-            self.cur_locals.push(LocalSlot::temp(MonoType::Int(64)));
+            self.cur_locals
+                .push(LocalSlot::temp_in(MonoType::Int(64), self.cur_frame));
         }
         self.cur_locals[local_idx].name = Some(name.to_string());
         self.cur_locals[local_idx].scope_depth = self.symbols.len().saturating_sub(1);
+        // 帧归属随名字一起写：槽位可能被本帧**覆盖**（内层用同名变量复用旧槽号），
+        // 此时它已经属于本帧——不重盖会把本帧的槽误判成外层来的泄漏。
+        self.cur_locals[local_idx].origin = Some(self.cur_frame);
+    }
+
+    /// 发放一个新生成帧号并切入（帧号的**唯一发放点**，WBS 2.1.4）。
+    ///
+    /// 只有 `NestedBodyGuard` 的两个构造函数调用它；入口点仍是那 7 处嵌套函数体
+    /// （函数 / 方法 / lambda / 匿名绑定 / 柯里层 / spawn 体 / 模块级声明），
+    /// 因此「帧边界」与「槽位表边界」是同一件事。
+    fn alloc_frame(&mut self) -> FrameId {
+        self.next_frame += 1;
+        FrameId(self.next_frame)
     }
 
     /// 取出当前函数的局部槽位，补齐到 `total_locals` 长度后交给函数体。
@@ -80,7 +94,11 @@ impl AstToIrGenerator {
         // 必须**恰好** total_locals 个：该长度即 local_count，
         // 多一个少一个都会改变字节码。register_local 会为槽位号较大的
         // 具名变量临时补空槽，而最终寄存器数以 total_locals 为准。
-        slots.resize(total_locals, LocalSlot::temp(MonoType::Int(64)));
+        // 补出来的空槽属于本帧（它们由本帧的寄存器预算产生），故带本帧号。
+        slots.resize(
+            total_locals,
+            LocalSlot::temp_in(MonoType::Int(64), self.cur_frame),
+        );
         slots
     }
 
@@ -284,6 +302,7 @@ struct SavedFrame {
     counters: Option<(usize, usize, usize)>,
     cur_span: Span,
     cur_locals: Vec<LocalSlot>,
+    cur_frame: FrameId,
     loop_stack: Vec<LoopTargets>,
 }
 
@@ -315,8 +334,10 @@ impl<'a> NestedBodyGuard<'a> {
             counters: Some((gen.next_temp, gen.temp_high_water, gen.temp_floor)),
             cur_span: gen.cur_span,
             cur_locals: std::mem::take(&mut gen.cur_locals),
+            cur_frame: gen.cur_frame,
             loop_stack: std::mem::take(&mut gen.loop_stack),
         };
+        gen.cur_frame = gen.alloc_frame();
         Self { gen, saved }
     }
 
@@ -330,8 +351,10 @@ impl<'a> NestedBodyGuard<'a> {
             counters: None,
             cur_span: gen.cur_span,
             cur_locals: std::mem::take(&mut gen.cur_locals),
+            cur_frame: gen.cur_frame,
             loop_stack: std::mem::take(&mut gen.loop_stack),
         };
+        gen.cur_frame = gen.alloc_frame();
         Self { gen, saved }
     }
 }
@@ -353,6 +376,7 @@ impl std::ops::DerefMut for NestedBodyGuard<'_> {
 impl Drop for NestedBodyGuard<'_> {
     fn drop(&mut self) {
         self.gen.cur_locals = std::mem::take(&mut self.saved.cur_locals);
+        self.gen.cur_frame = self.saved.cur_frame;
         self.gen.loop_stack = std::mem::take(&mut self.saved.loop_stack);
         self.gen.cur_span = self.saved.cur_span;
         if let Some((next_temp, temp_high_water, temp_floor)) = self.saved.counters {

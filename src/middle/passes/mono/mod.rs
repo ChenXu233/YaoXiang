@@ -1253,6 +1253,8 @@ impl Monomorphizer {
                     scope_depth: slot.scope_depth,
                     // 量词是声明侧的绑定事实，与类型替换无关：原样投影。
                     quantity: slot.quantity,
+                    // 生成帧同理：特化不改槽位归属，内层隔离判据按它比对（WBS 2.1.4）。
+                    origin: slot.origin,
                 })
                 .collect(),
             _ => Vec::new(),

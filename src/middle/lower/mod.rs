@@ -32,7 +32,7 @@ use crate::frontend::core::sema::layers::ownership::ReleasePlan;
 use crate::frontend::core::sema::types::OverloadResolutions;
 use crate::frontend::core::sema::{MonoType, TypeCheckResult};
 use crate::frontend::module::registry::ModuleRegistry;
-use crate::middle::ir::ir::{ConstValue, FunctionIR, Instruction, LocalSlot, Operand};
+use crate::middle::ir::ir::{ConstValue, FrameId, FunctionIR, Instruction, LocalSlot, Operand};
 use crate::util::diagnostic::Diagnostic;
 use crate::util::span::Span;
 use std::collections::HashMap;
@@ -234,6 +234,13 @@ pub struct AstToIrGenerator {
     /// 嵌套函数体生成前保存、之后恢复——**必须与 next_temp 的
     /// 保存/恢复点物理相邻**，否则内层函数的名字会串到外层。
     pub(super) cur_locals: Vec<LocalSlot>,
+    /// 当前生成帧号（`LocalSlot::origin` 的**唯一来源**，WBS 2.1.4）。
+    ///
+    /// 由 `NestedBodyGuard` 的两个构造函数切换、`Drop` 还原；`register_local`
+    /// 与槽位补空处把它写进槽位。模块级初始化序列也占一个帧（构造时的初始帧）。
+    pub(super) cur_frame: FrameId,
+    /// 已发放的帧数（帧号唯一性来源，只增不减）。
+    pub(super) next_frame: u32,
 }
 
 /// 绑定信息（用于 IR 生成阶段的方法调用转发）
@@ -381,6 +388,9 @@ impl AstToIrGenerator {
             loop_stack: Vec::new(),
             cur_span: Span::dummy(),
             cur_locals: Vec::new(),
+            // 帧 0 = 模块级初始化序列；嵌套函数体在 NestedBodyGuard 里领新帧号。
+            cur_frame: FrameId(0),
+            next_frame: 0,
         }
     }
 

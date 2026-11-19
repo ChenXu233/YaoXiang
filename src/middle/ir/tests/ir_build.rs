@@ -3,7 +3,8 @@
 
 use crate::frontend::core::sema::MonoType;
 use crate::middle::ir::ir::{
-    BasicBlock, ConstValue, FunctionBody, FunctionIR, Instruction, LocalSlot, ModuleIR, Operand,
+    BasicBlock, ConstValue, FrameId, FunctionBody, FunctionIR, Instruction, LocalSlot, ModuleIR,
+    Operand,
 };
 use crate::util::span::Span;
 
@@ -20,6 +21,22 @@ pub fn named_slot(
         ty,
         scope_depth: 0,
         quantity: None,
+        origin: None,
+    }
+}
+
+/// 具名槽，且**归属指定生成帧**（不变量 7「内层隔离」的负控/正控夹具用）。
+pub fn named_slot_in_frame(
+    name: &str,
+    ty: MonoType,
+    origin: FrameId,
+) -> LocalSlot {
+    LocalSlot {
+        name: Some(name.to_string()),
+        ty,
+        scope_depth: 0,
+        quantity: None,
+        origin: Some(origin),
     }
 }
 

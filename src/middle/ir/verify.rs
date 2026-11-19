@@ -37,19 +37,27 @@
 //!   伪指令，translator 展开为 Move 串），当前指令集无此变体。本模块的
 //!   def/use 提取是**穷尽 match、刻意无通配臂**（与 ir.rs span() 同款强制哲学）：
 //!   Phi 引入时编译失败强制补查（输入数 == 前驱数、逐输入类型一致）。
-//! - 「内层隔离」的 ModuleIR 级可操作化：lower 的 save/restore 契约
-//!   （lower/mod.rs 的 `next_temp` / `cur_span` 字段）失败形态是外层函数 locals 混入内层局部名。嵌套关系
-//!   从 MakeClosure{func, env} 引用恢复：外层具名非参数槽名集 ∩ 闭包具名
-//!   自有槽名集（env 槽与参数槽排除）必须为空。
+//! - 「内层隔离」的 ModuleIR 级可操作化（WBS 2.1.4 改为**按槽身份**）：lower 的
+//!   save/restore 契约（lower/mod.rs 的 `cur_locals` / `next_temp` / `cur_span` 字段）
+//!   失败形态是**同一张槽位表被两个函数体生成期共用**。身份维度 = `LocalSlot::origin`
+//!   （生成帧 `FrameId`，由 lower/scope.rs 的 NestedBodyGuard 发放）：一张表里出现的
+//!   帧号至多一种，否则红。
+//!   为什么不再用「MakeClosure 反推嵌套 + 名字交集」：`MakeClosure` 是**函数值的一等
+//!   表示**（lower/expr/access.rs 的 emit_module_export_value），不是词法嵌套关系；
+//!   按名交集会把「两个独立声明用同一个源码名」判成泄漏（2.1.4 的两处误报即
+//!   `main` 的局部 `r` 与 std.json.parse 自己的 `r`），而真正的泄漏一旦把外层表
+//!   清空又会让名交集的外侧变空（假阴性）。身份判据两头都堵上。
 
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use std::fmt;
 
 use crate::frontend::core::sema::MonoType;
 
 use crate::ast::Quantity;
 
-use super::ir::{ConstValue, FunctionBody, FunctionIR, Instruction, LocalSlot, ModuleIR, Operand};
+use super::ir::{
+    ConstValue, FrameId, FunctionBody, FunctionIR, Instruction, LocalSlot, ModuleIR, Operand,
+};
 
 /// 校验模式（07 §207）：非 SSA 现状用 Loose；SSA 形态（P7 批 b 后）用 Ssa。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1023,53 +1031,68 @@ fn check_type_consistency(
 // 不变量 7：内层隔离
 // =====================
 
-/// 具名非参数槽名集：locals[skip..] 中 name = Some 的槽。
-/// skip = params.len()（普通函数）或 env_len + params.len()（闭包，
-/// env 槽是运行时铺入的捕获，lower/expr/closure.rs 的 generate_lambda_expr_ir）。
-fn named_locals(
-    f: &FunctionIR,
-    skip: usize,
-) -> HashSet<&str> {
-    f.locals()
-        .iter()
-        .skip(skip)
-        .filter_map(|s| s.name.as_deref())
-        .collect()
+/// 一张槽位表里出现的生成帧（`FrameId` → 该帧登记的槽位下标），按帧号有序。
+///
+/// `None`（无来源：手工 IR / mono 与 codegen 合成的槽）不入表——「未解析」不是
+/// 「本帧」，把它算成一个帧只会制造假阳性。
+fn slot_frames(locals: &[LocalSlot]) -> BTreeMap<FrameId, Vec<usize>> {
+    let mut by_frame: BTreeMap<FrameId, Vec<usize>> = BTreeMap::new();
+    for (idx, slot) in locals.iter().enumerate() {
+        if let Some(frame) = slot.origin {
+            by_frame.entry(frame).or_default().push(idx);
+        }
+    }
+    by_frame
 }
 
+/// 不变量 7：内层隔离（WBS 2.1.4 起**按槽身份**判定）。
+///
+/// 判据：一个函数体（或模块初始化序列）的槽位表里出现的生成帧**至多一种**。
+/// 两种即该表被两个生成期共用——lower 的 `cur_locals` save/restore 失败，
+/// 内层函数继承了外层的槽位（或外层被内层覆盖）。
+///
+/// 为什么不看名字、也不看 `MakeClosure`：名字是源码巧合（同名不同绑定合法），
+/// `MakeClosure` 是函数值表示（不是嵌套关系）。身份只看 `LocalSlot::origin`。
 fn check_inner_isolation(
     ir: &ModuleIR,
     out: &mut Vec<Violation>,
 ) {
-    let by_name: HashMap<&str, &FunctionIR> =
-        ir.functions.iter().map(|f| (f.name.as_str(), f)).collect();
+    let mut report = |function: &str, locals: &[LocalSlot]| {
+        let by_frame = slot_frames(locals);
+        if by_frame.len() <= 1 {
+            return;
+        }
+        let detail = by_frame
+            .iter()
+            .map(|(frame, slots)| {
+                let names: Vec<String> = slots
+                    .iter()
+                    .map(|&i| {
+                        let name = locals[i].name.as_deref().unwrap_or("<temp>");
+                        format!("{name}@{i}")
+                    })
+                    .collect();
+                format!("帧{} 的槽 {:?}", frame.0, names)
+            })
+            .collect::<Vec<_>>()
+            .join("；");
+        out.push(Violation {
+            invariant: InvariantKind::InnerIsolation,
+            function: function.to_string(),
+            instruction: None,
+            message: format!(
+                "同一张槽位表混入 {} 个生成帧（cur_locals save/restore 契约违反）：{detail}",
+                by_frame.len()
+            ),
+        });
+    };
 
-    for outer in &ir.functions {
-        if outer.is_type_decl() {
+    for func in &ir.functions {
+        if func.is_type_decl() {
             continue;
         }
-        let outer_names = named_locals(outer, outer.params.len());
-        if outer_names.is_empty() {
-            continue;
-        }
-        for instr in outer.all_instructions() {
-            if let Instruction::MakeClosure { func, env, .. } = instr {
-                let Some(closure) = by_name.get(func.as_str()) else {
-                    continue;
-                };
-                let inner_names = named_locals(closure, env.len() + closure.params.len());
-                let leaked: Vec<&str> = outer_names.intersection(&inner_names).copied().collect();
-                if !leaked.is_empty() {
-                    out.push(Violation {
-                        invariant: InvariantKind::InnerIsolation,
-                        function: outer.name.clone(),
-                        instruction: None,
-                        message: format!(
-                            "外层 locals 与闭包 {func} 自有局部名交集非空（save/restore 契约违反）：{leaked:?}"
-                        ),
-                    });
-                }
-            }
-        }
+        report(&func.name, func.locals());
     }
+    // 模块初始化序列与函数体同一判据：它是帧 0 的槽位表。
+    report("__module_init", &ir.init_locals);
 }
