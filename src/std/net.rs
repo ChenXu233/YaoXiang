@@ -12,7 +12,9 @@
 //!   （携带状态码与响应体），不是传输错误；
 //! - 超时用 `timeout_global`（DNS→读体全段一个预算，对位 2.x 的 `Request::timeout`）；
 //! - 重定向上限显式设 5（对位 2.x 默认 `redirects: 5`；3.x 默认是 10）；
-//! - 自定义 ConfigBuilder 链不读环境代理变量（对位 2.x 无 proxy-from-env feature 的默认）；
+//! - 环境代理变量显式禁用（`.proxy(None)`——ureq 3 从环境拾取代理是默认行为，
+//!   `Config::default()` 即含 `Proxy::try_from_env()`；对位 2.x 未启用
+//!   proxy-from-env feature 的不读默认）；
 //! - 请求头名经 http crate 归一为小写写入报文（HTTP 语义大小写不敏感；2.x 原样保留），
 //!   非法头名/头值在 `call()` 时报错（2.x 是延迟校验，同为 call 时报错）。
 
@@ -81,13 +83,18 @@ const UREQ_MAX_REDIRECTS: u32 = 5;
 /// 按调用级超时与重定向上限构建 ureq Agent。
 ///
 /// `http_status_as_error(false)`：4xx/5xx 作为正常响应返回（保留状态码与响应体），
-/// 传输层故障仍走 `Err`。自定义 ConfigBuilder 链不拾取环境代理变量——与 ureq 2
-/// （无 proxy-from-env feature）一致，不要改用 `Agent::new_with_defaults()`。
+/// 传输层故障仍走 `Err`。`.proxy(None)` 显式禁用环境代理——ureq 3 从环境拾取代理
+/// 是默认行为（`Config::default()` 即含 `Proxy::try_from_env()`，读 ALL_PROXY/
+/// HTTPS_PROXY/HTTP_PROXY 等），且 `Agent::config_builder()` 与
+/// `Agent::new_with_defaults()` 的起点同为 `Config::default()`，不显式禁用就会读；
+/// 禁用对位 ureq 2（proxy-from-env 为 opt-in feature 且本仓未启用，不读环境代理）。
+/// 「std.net 是否应支持环境代理」是语言级设计问题，另行裁决。
 #[cfg(not(target_arch = "wasm32"))]
 fn ureq_agent(timeout_secs: u64) -> ureq::Agent {
     ureq::Agent::config_builder()
         .http_status_as_error(false)
         .max_redirects(UREQ_MAX_REDIRECTS)
+        .proxy(None)
         .timeout_global(Some(std::time::Duration::from_secs(timeout_secs)))
         .build()
         .into()

@@ -14,10 +14,14 @@ const UREQ_MAX_REDIRECTS: u32 = 5;
 
 /// 共享 HTTP agent 构造（统一连接超时与重定向上限；大文件下载另行加读超时）。
 ///
-/// 自定义 ConfigBuilder 链不拾取环境代理变量——与 ureq 2（无 proxy-from-env
-/// feature）一致；4xx/5xx 保持默认按错误处理（对位 ureq 2 的默认）。
+/// `.proxy(None)` 显式禁用环境代理——ureq 3 从环境拾取代理是默认行为（
+/// `Config::default()` 即含 `Proxy::try_from_env()`），且 `Agent::config_builder()`
+/// 的起点同为 `Config::default()`，不显式禁用就会读；禁用对位 ureq 2（
+/// proxy-from-env 为 opt-in feature 且未启用，不读环境代理），与 src/std/net.rs
+/// 的 ureq_agent 同链一致。4xx/5xx 保持默认按错误处理（对位 ureq 2 的默认）。
 fn http_agent() -> ureq::Agent {
     ureq::Agent::config_builder()
+        .proxy(None)
         .timeout_connect(Some(std::time::Duration::from_secs(30)))
         .max_redirects(UREQ_MAX_REDIRECTS)
         .build()

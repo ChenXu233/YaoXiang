@@ -7,7 +7,11 @@
 //! - 响应头名统一小写（HTTP/1.1 语义本就不区分大小写；ureq 3 经 http crate 归一，
 //!   2.x 原样保留头名大小写——#489 对账差异，语义等价）；请求头值按传入原样发送；
 //!   POST 体按原样发送；
-//! - 「非正数 timeout_secs」报运行时错误、参数类型不符报类型错误。
+//! - 「非正数 timeout_secs」报运行时错误、参数类型不符报类型错误；
+//! - **环境代理变量被显式禁用**（HTTP_PROXY 注入假代理地址时 http_get 仍直连本地目标）。
+//!   代理变量是进程级的，ureq agent 每次请求都重新构造——进程内 set_var 会污染同进程
+//!   并行运行的其它测试，这两个用例走「重新拉起本测试可执行文件、只在子进程注入环境」
+//!   的探针形态（先例：`src/package/source/tests/git.rs` 的 GIT_DIR 重拉形态）。
 //!
 //! 规范来源：`std.net` 无独立 RFC（`docs/src/rfc/` 内无 std.net 专章），
 //! 故断言对象为上述实现契约，其出处是 `src/std/net.rs` 模块头注释（#56 真实实现 +
@@ -148,6 +152,50 @@ fn get_rejected(
     }
 }
 
+/// 探针环境变量：标记子进程为代理探针形态。
+const PROXY_PROBE_ENV: &str = "YX_NET_PROXY_PROBE";
+
+/// 环境代理变量全集：ureq `Proxy::try_from_env` 的读取面（ALL_PROXY/HTTPS_PROXY/
+/// HTTP_PROXY 及小写形态）+ NO_PROXY 旁路面。
+const PROXY_ENV_VARS: [&str; 8] = [
+    "ALL_PROXY",
+    "all_proxy",
+    "HTTPS_PROXY",
+    "https_proxy",
+    "HTTP_PROXY",
+    "http_proxy",
+    "NO_PROXY",
+    "no_proxy",
+];
+
+/// 重新拉起本测试可执行文件（只跑 `probe_test` 一个用例），先清掉全部代理变量，
+/// 再按 `http_proxy` 决定是否注入 HTTP_PROXY。
+fn relaunch_self_with_proxy_env(
+    http_proxy: Option<&str>,
+    probe_test: &str,
+) -> std::process::Output {
+    let exe = std::env::current_exe().expect("测试可执行文件路径");
+    let mut cmd = std::process::Command::new(exe);
+    cmd.arg("--exact").arg(probe_test).env(PROXY_PROBE_ENV, "1");
+    for var in PROXY_ENV_VARS {
+        cmd.env_remove(var);
+    }
+    if let Some(value) = http_proxy {
+        cmd.env("HTTP_PROXY", value);
+    }
+    cmd.output().expect("重新拉起测试进程")
+}
+
+/// Assert: 探针必须真的跑到了本用例并通过，否则探针形同虚设。
+fn assert_probe_child_passed(output: &std::process::Output) {
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        output.status.success() && stdout.contains("1 passed"),
+        "探针进程应通过其 1 个用例；stdout={stdout} stderr={}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
 #[test]
 fn test_http_get_returns_status_headers_body() {
     // Arrange：本地单次请求服务器返回 200 + 自定义头 + 5 字节体
@@ -263,4 +311,58 @@ fn test_http_get_rejects_bad_argument_types() {
         matches!(err, ExecutorError::Runtime(_, _)),
         "timeout > 0 guard"
     );
+}
+
+#[test]
+fn test_http_get_ignores_http_proxy_env_var() {
+    // Arrange：HTTP_PROXY 注入必失败的假代理地址（127.0.0.1:1 无监听）。
+    // 契约：std.net 的 agent 显式禁用环境代理（对位 ureq 2 未启用 proxy-from-env
+    // 的不读默认，#489 迁移对账）——若读了环境代理，请求会改道假代理而必败。
+    if std::env::var_os(PROXY_PROBE_ENV).is_none() {
+        // Act：重新拉起自身，只在子进程注入假代理
+        let output = relaunch_self_with_proxy_env(
+            Some("http://127.0.0.1:1"),
+            "std::tests::net::test_http_get_ignores_http_proxy_env_var",
+        );
+
+        // Assert
+        assert_probe_child_passed(&output);
+        return;
+    }
+
+    // 子进程形态：本地真目标已在监听，http_get 必须直连它成功
+    let (url, server) = serve_once("HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok".to_string());
+
+    // Act
+    let resp = call_get(&url, None)
+        .expect("HTTP_PROXY 指向无监听地址时 http_get 仍应直连本地目标（不读环境代理）");
+
+    // Assert
+    assert_eq!(int_of(dict_entry(&resp, "status")), 200);
+    server.join().expect("server thread");
+}
+
+#[test]
+fn test_http_get_direct_connection_without_proxy_env() {
+    // Arrange：对照形态——清空全部代理变量后，直连行为不变。
+    if std::env::var_os(PROXY_PROBE_ENV).is_none() {
+        // Act
+        let output = relaunch_self_with_proxy_env(
+            None,
+            "std::tests::net::test_http_get_direct_connection_without_proxy_env",
+        );
+
+        // Assert
+        assert_probe_child_passed(&output);
+        return;
+    }
+
+    let (url, server) = serve_once("HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok".to_string());
+
+    // Act
+    let resp = call_get(&url, None).expect("清空代理环境变量后 http_get 应直连本地目标");
+
+    // Assert
+    assert_eq!(int_of(dict_entry(&resp, "status")), 200);
+    server.join().expect("server thread");
 }
