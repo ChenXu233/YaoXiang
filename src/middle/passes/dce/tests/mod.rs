@@ -9,7 +9,8 @@ use std::collections::{HashMap, HashSet};
 use crate::frontend::core::sema::MonoType;
 use crate::frontend::module::symbol::DefId;
 use crate::middle::ir::ir::{
-    BasicBlock, ConstValue, FunctionBody, FunctionIR, Instruction, ModuleIR, Operand, TypeDeclBody,
+    BasicBlock, ConstValue, FunctionBody, FunctionIR, Instruction, LocalSlot, ModuleIR, Operand,
+    TypeDeclBody,
 };
 use crate::middle::ir::normalize::normalize_module;
 use crate::middle::ir::verify::verify_loose;
@@ -101,6 +102,16 @@ fn type_decl_fn(name: &str) -> FunctionIR {
                 self_type: MonoType::Void,
             },
         },
+    }
+}
+
+/// 具名局部槽（支配性判定只覆盖具名槽：temp 槽由帧语义预初始化）。
+fn named_local(name: &str) -> LocalSlot {
+    LocalSlot {
+        name: Some(name.to_string()),
+        ty: MonoType::Int(64),
+        scope_depth: 0,
+        quantity: None,
     }
 }
 
@@ -795,4 +806,58 @@ fn test_post_mono_dce_removes_mono_retained_originals_and_keeps_instances() {
         report.deleted
     );
     assert_references_closed(&before, &ir);
+}
+/// 红侧负控（直构 IR）：**没有 MakeClosure 站点**的孤儿共享层必须让 verify 红。
+///
+/// 这是上一条用例退役掉的「删除前红」的可控替身。它钉的性质与语料当年的形态同构、
+/// 但不依赖 mono 的删除语义：共享层按 env=1 的帧布局生成（参数落在槽 1），而
+/// `verify` 只能从 `MakeClosure` 反推 env 槽数——没有站点就按 env=0 算，
+/// 槽 1 的读落在无定义路径上（支配性红）。判据有判别力这件事由此钉住。
+#[test]
+fn test_orphan_shared_layer_without_site_is_dominance_red() {
+    // Arrange：共享层形如 [Move r0 <- r1, Ret]，无人以 MakeClosure 引用它
+    let orphan = FunctionIR {
+        name: "__f_l0".to_string(),
+        def: None,
+        params: vec![MonoType::Int(64)],
+        return_type: MonoType::Void,
+        generic_params: None,
+        body: FunctionBody::Code {
+            blocks: vec![BasicBlock {
+                label: 0,
+                instructions: vec![
+                    Instruction::Move {
+                        dst: Operand::Local(0),
+                        src: Operand::Local(1),
+                        span: span(),
+                    },
+                    ret_void(),
+                ],
+                successors: Vec::new(),
+            }],
+            entry: 0,
+            // 具名槽才是支配性判定的面（temp 槽是帧语义的预初始化，永远不算未定义）：
+            // 槽 1 是「env 槽」——真实共享层里它是捕获名，读它但没有指令定义它。
+            locals: vec![LocalSlot::temp(MonoType::Int(64)), named_local("n")],
+        },
+    };
+    let m = module_with(vec![orphan]);
+
+    // Act
+    let result = verify_loose(&m);
+    let detail = result
+        .as_ref()
+        .err()
+        .map(|e| e.to_string())
+        .unwrap_or_default();
+
+    // Assert：负控必须红（且红在支配性，不是别的类别）
+    assert!(
+        result.is_err(),
+        "无 MakeClosure 站点的共享层必须让 verify_loose 红（env 槽数反推失效）：{detail}"
+    );
+    assert!(
+        detail.contains("use-before-def"),
+        "红必须落在支配性不变量上（env 反推失效的形态）；实际：{detail}"
+    );
 }
