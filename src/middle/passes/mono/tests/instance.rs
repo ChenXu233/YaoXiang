@@ -578,6 +578,12 @@ fn test_type_name_pin_renders_frozen_strings_for_all_variants() {
     ];
 
     // Act + Assert — 渲染串逐条对照 pin 表；漂移（含语义等价的文本变化）即红。
+    // 长度守卫：zip 会静默截断——两表只增其一则新案例不上钉仍全绿，先断言等长。
+    assert_eq!(
+        pinned_cases().len(),
+        cases.len(),
+        "pinned_cases 与期望表长度不一致：zip 会静默截断，新案例不上钉（t3 low 守卫）"
+    );
     for ((label, ty), (_, expected)) in pinned_cases().into_iter().zip(cases) {
         assert_eq!(ty.type_name(), expected, "type_name 渲染漂移（{label}）");
     }
@@ -635,6 +641,12 @@ fn test_type_name_hash_pin_freezes_hash_values_for_all_variants() {
     ];
 
     // Act + Assert — 哈希值逐条对照 pin 表；写入序或内容的任何漂移即红。
+    // 长度守卫：zip 会静默截断——两表只增其一则新案例不上钉仍全绿，先断言等长。
+    assert_eq!(
+        pinned_cases().len(),
+        cases.len(),
+        "pinned_cases 与期望表长度不一致：zip 会静默截断，新案例不上钉（t3 low 守卫）"
+    );
     for ((label, ty), (_, expected)) in pinned_cases().into_iter().zip(cases) {
         assert_eq!(
             pinned_hash(&ty),
