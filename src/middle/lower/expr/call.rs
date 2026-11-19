@@ -995,8 +995,12 @@ impl AstToIrGenerator {
                         if type_implements_stringable(&mono_type) {
                             // 零开销路径：直接调用 to_string 方法
                             // 生成: arg.to_string()
-                            let func_name =
+                            // WBS 3.18.3 / issue #506：调用名同经 method_dispatch_name
+                            // 单一判据——短类型名是裸名义名（#465 同族），接收者类型经
+                            // 导入面引入时按定义单元限定；基础类型 / 本单元类型原样返回。
+                            let short_name =
                                 format!("{}.to_string", get_type_fallback_string(&mono_type));
+                            let func_name = self.method_dispatch_name(arg_expr, &short_name);
                             let mut arg_regs_for_method = Vec::new();
 
                             // 先计算参数值

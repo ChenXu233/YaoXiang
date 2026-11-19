@@ -112,7 +112,13 @@ impl AstToIrGenerator {
                 .iter()
                 .map(|m| {
                     let key = format!("{}.{}", base, m);
-                    qualified.get(&key).cloned().unwrap_or(key)
+                    let std_qualified = qualified.get(&key).cloned().unwrap_or(key);
+                    // WBS 3.18.3 / issue #506：派发名同经 method_dispatch_name 单一
+                    // 判据——base 是定义侧裸类型名（#465 同族），接收者类型经导入面
+                    // （含别名）引入时按定义单元限定；std 已限定名与本单元类型
+                    // 原样返回。可达路径上该改写与 qualify_names 的终点一致
+                    // （已限定名经 resolve_call_target 原样通过），零漂移。
+                    self.method_dispatch_name(expr, &std_qualified)
                 })
                 .collect();
             // TRY_METHODS 恒为四元（见 operator_interfaces.rs 定义）

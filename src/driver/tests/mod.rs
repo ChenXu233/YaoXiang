@@ -17,6 +17,7 @@ mod overload_injection;
 mod program;
 mod ref_pool;
 mod run_rootless;
+mod short_name_dispatch_pins;
 mod stage;
 mod unit;
 mod warning_parity;
