@@ -5446,6 +5446,8 @@ t13 的 5 项 low 与处置见 §八。
 
 ## P6 6.9.2 #542：孤立共享层 = 排期另案（2026-11-16，用户裁决 B）
 
+> **状态（2026-11-19）**：DCE 已落地并接到 post-mono 两个生产入口；复核点逐条回答与 6.9 收口建议见下一节 §P6 6.9.2 #542 落地轮。
+
 ### 一、裁决与排期（本节的规范内容）
 
 用户裁决（2026-11-16）采纳分析师的**时机**建议、不采纳「现在落地或现在写豁免」：
@@ -5477,6 +5479,75 @@ t13 的 5 项 low 与处置见 §八。
 2. 删除后 **`verify_loose` 在 post-mono IR 上绿**（并给出红→绿判据：删除前 `fn_const_generic` 的孤立层必须红）。
 3. C2c 的「保守保留原件」规避**与 #542 同批移除**（09 的 A/I4 保留条件段），不得单边移除。
 4. 语料/IR 零漂移或逐条分类；若字节码函数表变化，逐条说明。
+
+## P6 6.9.2 #542 落地轮（2026-11-19）：DCE pass + post-mono 接线 + C2c 规避移除
+
+> 依据 = 用户裁决 B（2026-11-16，见上节）与 09 的 6.9 收口判据。本机落库两笔：`46998477`（DCE pass，3 文件 +1261 行）、`cfdf9cf0`（post-mono 接线 + C2c 规避移除，7 文件 +344/−294）。本轮不 push；量测在批次树按冻结 revision 执行。§二–§五逐条回答上节 §四的四条复核点。
+
+### 一、落地内容与生产调用图
+
+**新 pass（`46998477`）**：`src/middle/passes/dce/` —— post-mono `ModuleIR` 上的可达性 mark-sweep。唯一入口 `dce::eliminate(&mut ModuleIR) -> Result<DceReport, Diagnostic>`；`DceReport { deleted, kept }`；模块 doc 的九行根集表是根集判据的单一事实源。运营开关 `DCE_ENABLED`（默认 true）的唯一读取点是 `eliminate`（回滚见 §六）。
+
+**接线（`cfdf9cf0`）**：
+
+- 单文件：`Pipeline::run`（`ProgramKind::SingleFile`）→ `Driver` → `Stage::Monomorphization` 臂 `arms::monomorphization` → mono 成功后、codegen 前调 `helpers::run_post_mono_dce`。
+- 多文件：`ProgramKind::MultiFile` → `arms::monomorphization_multi_file` → mono 成功后同一 helper。
+- Check 形态无产物、诊断面必须不变 ⇒ 在调用前按 `ProgramKind::Check` 早退；mono 因 `ConfigDisabled` / `NoObligations` 早退时调用点不可达 ⇒ DCE 同步跳过。
+- helper `run_post_mono_dce` 只做序列位置、错误映射与归因日志；根集/删除判据仍单点在 `middle/passes/dce`。
+- 生产可达性判据：`src/driver/tests/dce_wiring.rs` 三条（单文件入口 / 多文件入口 / 语料孤立共享层）；`git grep run_post_mono_dce` = 1 定义 + 2 调用点（两臂各一）。
+
+### 二、复核点①：根集完备
+
+九类根（与 `middle/passes/dce` 模块 doc 同表）：①entry/main（含 `main`/`.main` 与 #476 script-main 提示契约）；②模块 init 的按名/DefId 目标；③native/FFI 显式非根（无 IR 体，NativeFn 不是表键）；④跨模块 `Export`/`TypeDefPayload` 引用在 IR 的投影（限定名字符串；#539 未闭 ⇒ 不以请求表当不可达证据）；⑤`MakeClosure` 目标（无条件根；另有「目标活 ⇒ 全部引用者活」的反向闭合，防删除唯一引用者使存活闭包体 env 槽反推失效）；⑥字符串常量名的全部形态（`Call`/`TailCall`/`MakeClosure` 是表键；NativeFn/LibraryRef/ExternRef/类型名不是）；⑦方法面/vtable（存活 `TypeDecl` 的 `t.` 前缀函数恒根；**禁猜名**：不从 `CallVirt.method_name` 反推表键）；⑧DefId 边；⑨非根不动面（`TypeDecl`/init 项/globals/FFI 表/类型表/const pool 一律不删）。删除面只动 `functions` 中不可达的 Code 表项与按名键的 `function_files`；no-renumber（下标记由 codegen 重建）；遇 `Const(Int)` 索引调用目标、重复函数名或重复 DefId 即中止。
+
+直驱测试 N1–N6（`src/middle/passes/dce/tests/`）与附加格：N1 字符串常量名保留；N2 `MakeClosure` 目标保留；N3 跨模块限定名经 init 保留；N4 仅 `CallVirt` 可达的方法经 `TypeDecl` 前缀保留（合成 IR——语料无 `CALL_VIRT` 生成点）；N5 NativeFn 常量不建根、同名表项按死码处理；N6 无引用函数与传递死链必删。附加：类型名字符串不是函数根、entry/main/#476、DefId-only 目标、反向 `MakeClosure` 闭合、`Const(Int)` 中止且 IR 不变、`DCE_ENABLED=false` 逐字节不变、幂等、`function_files` 修剪。共 20 条直驱测试。
+
+### 三、复核点②：verify_loose 红→绿
+
+冻结 revision 对照（同一探针补丁，批次树）：
+
+- 接线前 `46998477`：`fn_const_generic.yx` 的 post-mono `verify_loose` 报 `Dominance`（`function="__f_l0"`，读 `Local(1)` 无定义路径）；同族 6 文件全红（`curry_tail_expr`、`const_arg_evidence_forms`、`const_arg_gamma_equality`、`const_arg_gamma_equality_shadow_ok`、`fn_const_generic`、`fn_const_generic_lowercase`）。
+- 接线后 `cfdf9cf0`：同 6 文件全部 OK，无新增红。
+- 字节码函数表（6 文件 `dump`）：200 → 50，removed=150、added=0（每文件 -25 个不可达 std 函数）；`fn_const_generic` 单文件 30 → 5（`main` / `std.list.Iter`（TypeDecl）/ `__f_l0(int64::42)` / `f(int64::42)` / 模块 init），CLI `check`/`run` exit 0。
+- 非本族红（如实登记）：`native_fn_member_value.yx` / `pureyx_export_fn_value.yx` 的 `InnerIsolation` 在接线前即红、接线后诊断逐字不变；它们是**不同不变量**（内层局部名隔离），不是 #542 族，`verify` 未放宽。登记为 2.1.4（见 09），**verify 升门禁前必须处置**。
+
+### 四、复核点③：C2c 边界（删/留逐条）
+
+**删（t1 判定的临时规避，全部同批移除）**：`build_output` 的按泛型名删除分支（`requested_generic_names`）与 `names_called_by_name` / `std.` 前缀保留名单、其私有辅助 `call_target_names`；`restore_generics_with_uncovered_call_sites`（整函数）；`uncovered_call_targets`（整函数）；`call_form_is_rewritten`（整函数，唯一生产消费者是被删的 `uncovered_call_targets`）。
+
+**留（长期正确，未动）**：`rewritten_call_target`（改写面形态单点，生产用于 curry 目标重定向与站点改写）；`by_name_call_target`（其扫描面基；NativeFn 仍不计按名目标）；`emit_curry_layer_clones`（逐实例柯里层克隆）；`ERASE_CONST_PARAMS` / `plan_const_erasure` 的「只擦实例/克隆、原件不擦」。`uncovered_call_targets` 的 `MakeClosure` 臂语义转写为 DCE 第 ⑤ 类根；mono 的两条闸测试按性质 retarget（不删测试），不以删测试或放宽判据换绿。
+
+证据：`git grep` 三个已删符号在 `src/` 0 命中；`src/driver/tests/dce_wiring.rs` 走两个生产入口钉接线可达；`middle/passes/mono/tests/monomorphizer.rs` 的 retarget 测试分别钉「未覆盖调用点的名字边保活」「MakeClosure 根保活」「改写面形态集合」与「mono 保留全部原件 + DCE 删不可达原件」。
+
+### 五、复核点④：零漂移与函数表逐条归因
+
+- 语料：`corpus_probe` 402/402 与基线**差异为空**（行为等价）。
+- IR 快照：`test_ir_snapshots_stable` 绿（快照取 mono **前** IR，与 DCE 不相交），快照目录零改动。
+- 全语料 232 文件生产 IR 前后对照：6687 → 5835 个函数，removed=852、added=0；每个被删名在 post 存活 IR 的名字/DefId/`MakeClosure` 引用面中均无出现（无悬空引用、无入口命中、无存活 TypeDecl 家族命中）。分类：`std.` 纯 yx 死原件 845（旧 `std.` 前缀规则放过、DCE 按可达性删）；孤立共享层 6（`__g_l0` 1 + `__f_l0` 5）；其它死原件 1（`lambdas.yx` 的 `max`）。
+- 顺序：仅 2 文件 3 个名字从「恢复闸尾追加」移回模块位置（`list_ops.yx` 的 `std.list.is_empty`、`std.list.pop`；`const_generic_recursive_factorial.yx` 的 `factorial`）；全语料函数多重集相等（无新增/改名/重名），其余相对顺序不变。函数下标由 codegen 重建（no-renumber），402/402 行为等价。
+- `dump` 样本（6 个族内文件）字节码函数表只减不增：200 → 50。
+
+### 六、DCE_ENABLED 回滚与保守面
+
+`DCE_ENABLED` 默认 true，唯一读取点 `dce::eliminate`；false 时立即返回空报告且**不触碰 `ModuleIR`**（函数表、`function_files` 与指令逐字节不变，直驱测试断言）。回滚 = 翻这一个 const，无数据迁移、无配置项；回滚后 #542 红判据按预期复现——那是红灯信号，不得用豁免表掩盖。
+
+保留的保守面（登记，不静默）：mono 因 `ConfigDisabled`/`NoObligations` 跳过 ⇒ DCE 不跑，残留死码属既有行为（无共享层克隆 ⇒ 无 #542 红）；`TypeDecl` 及其 `t.` 前缀方法恒留（vtable/类型表面）；`main`/`.main` 恒留（#476）；反向 `MakeClosure` 闭合会保留死引用者（宁可多留）。
+
+### 七、偏差与编排登记
+
+- **编排偏差（如实登记）**：复审成员 reviewer-dce 连续三次 PI_AI_ERROR，无法承接复审；复审改由 verifier-dce 承接——同模型家族，且同一会话已做过验证轮。降偏措施：①七项判据命令全部重跑、零证据引用验证轮输出；②对抗用例独立重新构造（首轮曾因夹具 bug 真实失败，证明判据有判别力）；③代码审计以 `git show <sha>:<path>` 绑定被复核 revision，不读工作树；④生成物表检查器独立重写。复审结论 verdict=pass。
+- **同一会话完成验证与复审**：t4 验证与 t5 复审在同一会话内完成，本条按事实登记，不宣称两者独立于彼此；独立于实现轮的依据见上条。
+- **提交 amend**：接线笔曾 amend 一次，仅修正 `mono_cross_unit` 注释中对已删恢复闸的引用（2 行注释）；最终 revision `cfdf9cf0`，生产代码与被复核 revision 逐字节一致。
+- **门禁口径**：`verify_loose` 全仓无生产调用点，本轮的「绿」是测试/验证面判据；把它升为生产门禁仍是 2.1.2 / 7b 的独立事项，不在本项宣称。
+- **形态门控**：Check 形态不跑 DCE（无产物、诊断面不变）；`WasmPlayground` 与单文件同通道（跑 DCE）。
+
+### 八、6.9 收口建议（不自行勾选）
+
+**建议：可收口。** 按 09「6.9 收口判据」逐条：①I1–I3、I5、I7 成立（09 现行口径）；②I4：闭项 C2c、开项/递归 C3（甲-闭 + 丙-3 + T-b bound 8）与 #542（DCE 删除死码）均已落地，「无死槽/死码」有本节的函数表归因证据——到界边由原件承担是 C3 已裁决语义，故 I4 仍按既有口径「不宣称完全体」；若评审要求 I4 字面完全体，本条是唯一保留；③I6 按 6.9.5 设计复核结论收口；④I8 每片有证据（本片：402/402 差异空、IR 零漂移、函数表 852/0）。残留项：#537（D 类，用户裁决前不修，6.9.4/6.9.5 已明确不依赖）、#539（导入面 q=0，6.9.4 只覆盖模块内，已登记边界）、#540 关闭、#541 已收、#542 已落地、#552 另案。**唯一未裁事项 = #537**；若收口口径要求它先经用户裁决，需在勾选前补裁决。勾选动作由队长/用户执行。
+
+### 九、不宣称/边界
+
+不把 DCE 接到 Check/LSP；不删 `TypeDecl`/init/globals/FFI/类型表/const pool；不宣称 I4 完全体；2 个 `InnerIsolation` 红是另案（2.1.4），本项未放宽 `verify`；函数表删除面只覆盖不可达 Code 函数，不做类型流/死存储/重编号。
 
 ## P6 6.9.2 #541：TailCall 进调用点改写/擦除面（2026-11-16）
 
@@ -6956,7 +7027,7 @@ canonical_text(RecordModel) =
 > **四、验证链与 t3 事实更正**：t1 门禁 14 项一轮过（integration 389 = 383+6、fast 2207 条 0 跳过、IR/语料零漂移）→ 队长 diff review（recv_offset 三处回退同步、登记口覆盖 grep、声明与事实一致）→ t2 **PASS**（M1 接收者路由摘除 ⇒ 显式接收者锚红 / M2 登记摘除 ⇒ 外部绑定锚红——两机制各自承重，trial 机械可逆；偏差备案：M2 trial 首跑 cargo 用法拒绝后重跑未作判据、CLI 探针 8 文件为任务 5 项超集全部符合预期）→ t3 **REJECT**（2 条）：①[low] **提交信息 E5xxx 归因错误——事实更正由本节承载（提交已推送不改写）**：E5xxx.md 恰 1 行（E5002 import_error 发射点 checker.rs:3267→3339，+72）实为本修复自身 checker.rs 净 +72 插入（文档注释 +5、绑定口 +9、帮助函数 +64）平移 **6.9 B.4 批引入的 E5002 发射点**；7.0 搬移批两笔 --stat 不含 checker.rs（其引起的 +18 平移已被 P7 收口批 `2ac633fe` 吸收）；修前修复笔 0d198305 未触 E5xxx.md 是因为基线 72f12e99 树尚无该发射点。生成物本身正确（checker.rs:3339 确为该发射点，文档与代码一致）——缺陷仅提交信息因果记录，追溯者以本节为准。②[info] 运行时声称（修前探针/回归计数/幂等/E1014 修前对照）属运行时证据复审未重放——t2 已全部独立实测闭环；静态侧核到：四形态修前静默与 diff 删除行一致、p1_named_const 的 E1014 与调用侧 bind_named_args（#452 既有、offset 1 硬编）路径一致——**E1014 为修前既有边界备案**（命名调用面对接收者形态声明），非本批引入。
 
 > **五、锚与移交**：锚 6 条新（tests/integration/check.rs：显式接收者 / 外部绑定 ×2 / 类型体外部绑定 / 对照 ×2，修前红态逐字留档段头）；回归 #538/#539/#556/#537 系列原样绿。三级 +1 = 3.20.32（244→245）；二级不变。issue [#553](https://github.com/ChenXu233/YaoXiang/issues/553) **关闭**；face ④ 另案立新 issue（跨模块方法导入载体，S-needs-decision）。修复笔推送终态 `3a3fad47`。批次树已 release + gc。
->
+
 ## P7 7a 切断多次定义收口（2026-11-18）
 
 > 计划见 [09](./09-execution-wbs.md) §P7 7a。原定三笔：7a.1 删三处语句级回收 / 7a.2 save-restore 换 RAII guard / 7a.3 口径统一与 E3014 共享检查。**7a.1 在开工第一轮被实测证伪前提，经用户裁决 C 拆出，移至批 b 与 7b.4 同批**；批 a 落 7a.2 + 7a.3，并顺路修两处既有缺陷（第 7 处缺失保存、接口分发链缺兜底臂）。代码与 3 份快照提交 `cf88580b`（父 `50bd3c3e`，9 files / +380 / −285）。

@@ -136,6 +136,7 @@ src/
 │   │   └── synth.rs               #     唯一允许构造 ast::Expr 的地方
 │   ├── passes/                    #   IR 上的 pass
 │   │   ├── mono/                  #     单态化（删 415 行闭包残余）
+│   │   ├── dce/                   #     post-mono 死代码消除（根集 mark-sweep）
 │   │   └── ...
 │   ├── codegen/                   #   IR → 字节码 lowering
 │   │   ├── mod.rs                 #     CodegenContext
@@ -198,6 +199,7 @@ src/
 | `middle/bytecode/` | 字节码域：opcode 词表 + `.42` 容器 + 编解码 | **opcode 词表唯一归属**；`backends/` 只消费不定义；`sema` 不感知 opcode |
 | `backends/` | 执行 | **不得**反向引用 L1/L2；不感知 AST |
 | `middle/passes/mono/` | IR 上的 pass | 不得引用 `frontend` |
+| `middle/passes/dce/` | IR 上的 pass（post-mono 可达性删除） | 不得引用 `frontend`；根集/删除判据单点在本模块 |
 | `formatter/`、`lsp/`、`repl/`、`package/` | 外围工具层（不在 L1-L4 模型内） | 只消费 L1-L4 的 `pub` API；不得触碰 `pub(crate)`（该泄漏计数同样约束它们） |
 
 ### 现状 → 目标映射
