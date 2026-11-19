@@ -65,3 +65,8 @@ mod config_error;
 /// RFC-039 WBS 3.6.1：局部函数类型值按名调用走间接调用（先红后绿）
 #[path = "integration/fn_value_call.rs"]
 mod fn_value_call;
+
+/// issue #509（WBS 3.21.5）：诊断文案与 locales 同源——E4018/E1002 迁移面的
+/// 渲染级锚（CLI 子进程级，YAOXIANG_LANG 钉语言）
+#[path = "integration/diagnostic_i18n.rs"]
+mod diagnostic_i18n;

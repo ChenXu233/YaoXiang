@@ -128,7 +128,7 @@ description: '泛型约束、特质系统与常量求值相关的错误。'
 - **模板**：`精化谓词违反：{constraint}{counterexample}`
 - **消息**：精化类型约束被证伪
 - **帮助**：谓词被证伪——存在使约束为假的赋值。请检查变量值或放宽约束。
-- **发射点**：`src/frontend/proof_execution.rs:99`、`src/frontend/proof_execution.rs:109`、`src/frontend/proof_execution.rs:264` 等 6 处
+- **发射点**：`src/frontend/proof_execution.rs:102`、`src/frontend/proof_execution.rs:114`、`src/frontend/proof_execution.rs:269` 等 6 处
 
 ### E4019：类型等式不成立
 

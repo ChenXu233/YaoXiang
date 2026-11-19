@@ -689,6 +689,8 @@
     "example": "",
     "error_output": ""
   },
+  "E8001.span_missing.message": "诊断 {code} 缺少 span：调用点未 .at(span) 且不在类型检查 walk 上下文中（编译器 bug，见 #324）",
+  "E8001.span_missing.help": "请在调用点补 .at(span)，或在类型检查 walk 上下文内构造",
   "E8002": {
     "title": "意外 Panic",
     "message": "编译器遇到意外 panic",
@@ -876,6 +878,8 @@
   "E4018.no_free_var.note": "\n\n（约束不含自由变量，注解自身不成立）",
   "E4018.proof_false.note": "\n\n（证明函数返回 false，无具体反例）",
   "E4018.proof_error.note": "\n\n（证明函数执行出错，无具体反例）",
+  "E4018.proof_false.constraint": "证明函数 '{func}' 返回 false，约束不满足（参数: {args}）；检查约束条件或修改传入值",
+  "E4018.proof_error.constraint": "证明函数 '{func}' 执行失败: {error}",
   "E4019": {
     "title": "类型等式不成立",
     "message": "类型等式在证明管道内证伪",

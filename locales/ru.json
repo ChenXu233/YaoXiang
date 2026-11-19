@@ -179,8 +179,8 @@
     "example": "x: Int = \"hello\";",
     "error_output": "error[E1002]: несоответствие типов\n --> example.yx:1:12\n  |\n1 | x: Int = \"hello\";\n  |            ^ ожидается 'Int', найдено 'String'"
   },
-  "E1002.borrowed_arith.help": "The left side reads as '{l}' and the right side as '{r}'; when a borrow (&T) participates in arithmetic its inner type is used — to operate on a container, index into it (e.g. v[0]) or dereference it (*t) first",
-  "E1002.binop_mismatch.help": "The left and right types are '{l}' and '{r}', which do not support this operator; check whether a conversion is missing or an operand is wrong",
+  "E1002.borrowed_arith.help": "Слева читается как '{l}', справа — как '{r}'. Когда заимствование (&T) участвует в арифметике, тип определяется по внутреннему типу. Чтобы выполнить операцию над контейнером, сначала извлеките элемент (например, v[0]) или разыменуйте его (*t)",
+  "E1002.binop_mismatch.help": "Типы слева и справа — '{l}' и '{r}' соответственно; для них этот оператор не поддерживается. Проверьте, не пропущено ли преобразование типа и не перепутан ли операнд",
   "E1003": {
     "title": "Неизвестный тип",
     "message": "Используемый тип не существует",
@@ -197,7 +197,7 @@
     "example": "add(1, 2, 3);",
     "error_output": "error[E1010]: несоответствие количества аргументов\n --> example.yx:1:1\n  |\n1 | add(1, 2, 3);\n  |     ^ функция ожидает 2 аргумента, найдено 3"
   },
-  "E1010.missing_named.help": "Missing required parameters: {missing} (named arguments fill slots by parameter name and do not occupy leading positions)",
+  "E1010.missing_named.help": "Отсутствуют обязательные параметры: {missing} (именованные аргументы занимают слоты только по имени параметра и не занимают начальные позиции)",
   "E1011": {
     "title": "Несоответствие типа аргумента",
     "message": "Проверка типа аргумента не пройдена",
@@ -528,7 +528,7 @@
     "example": "use foo::bar;",
     "error_output": "error[E5001]: Модуль не найден\n --> example.yx:1:5\n  |\n1 | use foo::bar;\n  |     ^ Модуль 'foo' не найден"
   },
-  "E5001.vendor_missing.help": "Dependency package '{pkg}' is not installed in .yaoxiang/vendor/; run `yaoxiang install`",
+  "E5001.vendor_missing.help": "Пакет зависимостей '{pkg}' не установлен в .yaoxiang/vendor/; выполните `yaoxiang install`",
   "E5002": {
     "title": "Ошибка импорта",
     "message": "Не удалось импортировать модуль",
@@ -631,6 +631,8 @@
     "example": "",
     "error_output": ""
   },
+  "E8001.span_missing.message": "Диагностика {code} без span: в точке вызова не указан .at(span), и она не находится внутри контекста обхода проверки типов (ошибка компилятора, см. #324)",
+  "E8001.span_missing.help": "Добавьте .at(span) в точке вызова или создайте диагностику внутри контекста обхода проверки типов",
   "E8002": {
     "title": "Непредвиденный panic",
     "message": "Компилятор столкнулся с непредвиденным panic",
@@ -779,10 +781,12 @@
     "template": "Нарушение предиката уточнения: {constraint}{counterexample}",
     "help": "Предикат опровергнут — существует присваивание, при котором ограничение ложно. Проверьте значения переменных или ослабьте ограничения."
   },
-  "E4018.counterexample.section": "\n\nCounterexample:\n{assignments}",
-  "E4018.no_free_var.note": "\n\n(The constraint has no free variables; the annotation itself is unsatisfiable.)",
-  "E4018.proof_false.note": "\n\n(Proof function returned false; no concrete counterexample.)",
-  "E4018.proof_error.note": "\n\n(Proof function failed to execute; no concrete counterexample.)",
+  "E4018.counterexample.section": "\n\nКонтрпример:\n{assignments}",
+  "E4018.no_free_var.note": "\n\n(ограничение не содержит свободных переменных, сама аннотация невыполнима)",
+  "E4018.proof_false.note": "\n\n(функция-доказательство вернула false, конкретного контрпримера нет)",
+  "E4018.proof_error.note": "\n\n(выполнение функции-доказательства завершилось ошибкой, конкретного контрпримера нет)",
+  "E4018.proof_false.constraint": "Функция-доказательство '{func}' вернула false: ограничение не выполнено (аргументы: {args}); проверьте условие ограничения или измените передаваемые значения",
+  "E4018.proof_error.constraint": "Не удалось выполнить функцию-доказательство '{func}': {error}",
   "E4019": {
     "title": "Равенство типов не выполняется",
     "message": "Равенство типов опровергнуто в конвейере доказательства",
@@ -1258,7 +1262,7 @@
     "example": "// zlib.yx: use zother.{o_val}\n// zother.yx: use zlib.{z_val}\n// => zlib → zother → zlib: модули импортируют друг друга; внутри цикла действует только соглашение о лексикографическом порядке путей",
     "error_output": "warning[W1007]: циклический импорт модулей zlib → zother → zlib: порядок инициализации внутри цикла нельзя определить; внутри цикла действует лишь детерминированное соглашение о лексикографическом порядке путей (без семантических гарантий)\n --> zother.yx:2:1\n  |\n2 | use zlib.{z_val}\n  | ^^^^^^^^^^^^^^^^^\n  |\nhelp: зависимость по значению внутри цикла противоречит порядку use: когда zlib читает zother.o_val, модуль zother ещё не инициализирован (нарушенное ребро: zother импортирует zlib, поэтому при топологической сортировке zlib окажется перед zother). Порядок инициализации определяется зависимостями use, но в цикле невозможно одновременно удовлетворить все зависимости по значениям — разорвите цикл или превратите это значение верхнего уровня в функцию с ленивым вычислением"
   },
-  "W1007.value_edge.help": "The value dependency runs against the use order: {reader} reads {slot} while {owner} is not yet initialized (violated edge: {owner} imports {reader}; the topological order therefore places {reader} first). Initialization follows use dependencies; inside a cycle both cannot hold — break the cycle, or defer the top-level value behind a function.",
+  "W1007.value_edge.help": "Зависимость по значению противоречит порядку use: когда {reader} читает {slot}, {owner} ещё не инициализирован (нарушенное ребро: {owner} импортирует {reader}, поэтому топологический порядок ставит {reader} раньше). Порядок инициализации определяется зависимостями use, и внутри цикла невозможно одновременно удовлетворить зависимости по значениям — разорвите цикл или превратите это значение верхнего уровня в функцию с ленивым вычислением",
   "E3024": {
     "title": "Конфигурация проекта нечитаема",
     "template": "Конфигурация проекта {path} нечитаема: {detail}",

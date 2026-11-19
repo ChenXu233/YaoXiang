@@ -58,6 +58,51 @@ pub(super) fn read_view(ty: &MonoType) -> MonoType {
     cur.clone()
 }
 
+/// E1002 的 expected 参数——Add/Sub/Mul/Div 白名单接受集的描述文（issue #509
+/// 残留③）。
+///
+/// 两个遍历器（`ExpressionInferrer::infer_binary` 与 `StatementChecker` 的
+/// 二元运算臂）报告的是**同一个接受集**，文面必须同源——各自硬编一份即
+/// 「同一行为 ≥2 处复制」（禁令三 A，#509 前正是两份拷贝且带后缀漂移）。
+/// `StatementChecker` 臂用基文；`ExpressionInferrer` 臂保持既有文面、拼接
+/// 「或实现对应算术接口」后缀（本常量只收公共部分，两处输出逐字节不变）。
+pub(super) const E1002_ARITH_EXPECTED: &str = "Int/Float/String/List（两侧同型）";
+
+/// 二元运算 Never 短路的裁决（issue #509 残留④：判据收敛为共享纯函数）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum NeverShortCircuit {
+    /// 两侧都是 `Never`：无具体类型可依，调用方发 fresh var 推迟
+    Both,
+    /// 仅左侧是 `Never`：结果取右侧的具体形态
+    TakeRight,
+    /// 仅右侧是 `Never`：结果取左侧的具体形态
+    TakeLeft,
+}
+
+/// 二元运算 Never 短路判据——两个遍历器共用的**纯函数裁决**（issue #509
+/// 残留④）。
+///
+/// #469 处 3：绑定失败以 `Never` 毒化登记（`StatementChecker` 与
+/// `ExpressionInferrer` 各自的环境写入点），毒化引用参与二元运算不施加类型
+/// 约束——unify 爆炸原理（`solver.rs` 的 `Never <: T`）在运算位的延伸，否则
+/// E1001 消了、E1002 又冒出来。判据原为两份逐字拷贝（仅注释互指，#509），
+/// 一处改另一处忘改即两路径裁决分歧，故收敛为本函数：按引用取操作数返回
+/// 裁决，不持推断器状态——fresh var 的发放需 `&mut solver`，由调用方执行
+/// （3.20.34 C 组 fn helper 因借用冲突不可编译的教训）。
+///
+/// 返回 `None` 表示两侧都非 `Never`，按正常推断走。
+pub(super) fn never_short_circuit(
+    left: &MonoType,
+    right: &MonoType,
+) -> Option<NeverShortCircuit> {
+    match (left, right) {
+        (MonoType::Never, MonoType::Never) => Some(NeverShortCircuit::Both),
+        (MonoType::Never, _) => Some(NeverShortCircuit::TakeRight),
+        (_, MonoType::Never) => Some(NeverShortCircuit::TakeLeft),
+        _ => None,
+    }
+}
+
 static EMPTY_GENERIC_TYPE_DEFS: std::sync::LazyLock<
     HashMap<String, crate::frontend::core::sema::environment::GenericTypeDef>,
 > = std::sync::LazyLock::new(HashMap::new);

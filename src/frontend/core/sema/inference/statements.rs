@@ -3534,17 +3534,16 @@ impl StatementChecker {
                 let left_ty = self.check_expr(left)?;
 
                 // 底部类型 vacuous（issue #469 处 3）：绑定失败毒化登记（`Never`
-                // 占位）的变量参与运算不施加类型约束——与 infer_binary 的 Never
-                // 短路同款（两个遍历器、同一判据，见该函数注释）。结果取另一侧
-                // 的具体形态；两侧都是 Never 时无信息可依，取 fresh 推迟。
-                let left_never = matches!(left_ty, MonoType::Never);
-                let right_never = matches!(right_ty, MonoType::Never);
-                if left_never || right_never {
-                    return Ok(match (left_never, right_never) {
-                        (true, true) => self.solver.new_var(),
-                        (true, false) => right_ty,
-                        (false, true) => left_ty,
-                        (false, false) => unreachable!("上方 if 已排除"),
+                // 占位）的变量参与运算不施加类型约束——判据收敛为共享纯函数
+                // `super::expressions::never_short_circuit`（issue #509 残留④，
+                // 与 infer_binary 同源）。结果取另一侧的具体形态；两侧都是
+                // Never 时无信息可依，由调用方发 fresh var 推迟。
+                if let Some(verdict) = super::expressions::never_short_circuit(&left_ty, &right_ty)
+                {
+                    return Ok(match verdict {
+                        super::expressions::NeverShortCircuit::Both => self.solver.new_var(),
+                        super::expressions::NeverShortCircuit::TakeRight => right_ty,
+                        super::expressions::NeverShortCircuit::TakeLeft => left_ty,
                     });
                 }
 
@@ -3656,7 +3655,9 @@ impl StatementChecker {
                             };
                             Err(Box::new(
                                 ErrorCodeDefinition::type_mismatch(
-                                    "Int/Float/String/List（两侧同型）",
+                                    // 接受集文面与 infer_binary 同源（issue #509
+                                    // 残留③，expressions::E1002_ARITH_EXPECTED）
+                                    super::expressions::E1002_ARITH_EXPECTED,
                                     &format!("{l} 与 {r}"),
                                 )
                                 .at(*span)

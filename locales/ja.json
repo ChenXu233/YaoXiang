@@ -179,8 +179,8 @@
     "example": "x: Int = \"hello\";",
     "error_output": "error[E1002]: 型の不一致\n --> example.yx:1:12\n  |\n1 | x: Int = \"hello\";\n  |            ^ 'Int' が必要ですが、'String' が見つかりました"
   },
-  "E1002.borrowed_arith.help": "The left side reads as '{l}' and the right side as '{r}'; when a borrow (&T) participates in arithmetic its inner type is used — to operate on a container, index into it (e.g. v[0]) or dereference it (*t) first",
-  "E1002.binop_mismatch.help": "The left and right types are '{l}' and '{r}', which do not support this operator; check whether a conversion is missing or an operand is wrong",
+  "E1002.borrowed_arith.help": "左側は '{l}' と読み、右側は '{r}' と読みます。借用（&T）が算術に参加する場合は内部の型で判定されます。コンテナに対して演算したい場合は、先に要素を取り出す（例：v[0]）か、参照外し（*t）してください",
+  "E1002.binop_mismatch.help": "左右の型はそれぞれ '{l}' と '{r}' で、この演算子はサポートされていません。型変換が不足しているか、オペランドを書き間違えていないか確認してください",
   "E1003": {
     "title": "未知の型",
     "message": "参照された型が存在しません",
@@ -197,7 +197,7 @@
     "example": "add(1, 2, 3);",
     "error_output": "error[E1010]: 引数の数が一致しません\n --> example.yx:1:1\n  |\n1 | add(1, 2, 3);\n  |     ^ 関数は 2 個の引数を期待していますが、3 個見つかりました"
   },
-  "E1010.missing_named.help": "Missing required parameters: {missing} (named arguments fill slots by parameter name and do not occupy leading positions)",
+  "E1010.missing_named.help": "必須の仮引数が不足しています：{missing}（名前付き実引数は仮引数名だけでスロットに入り、先行位置を占有しません）",
   "E1011": {
     "title": "引数の型が一致しません",
     "message": "引数の型チェックに失敗しました",
@@ -528,7 +528,7 @@
     "example": "use foo::bar;",
     "error_output": "error[E5001]: モジュールが見つかりません\n --> example.yx:1:5\n  |\n1 | use foo::bar;\n  |     ^ モジュール 'foo' が見つかりません"
   },
-  "E5001.vendor_missing.help": "Dependency package '{pkg}' is not installed in .yaoxiang/vendor/; run `yaoxiang install`",
+  "E5001.vendor_missing.help": "依存パッケージ '{pkg}' が .yaoxiang/vendor/ にインストールされていません。`yaoxiang install` を実行してください",
   "E5002": {
     "title": "インポートエラー",
     "message": "モジュールのインポートに失敗しました",
@@ -631,6 +631,8 @@
     "example": "",
     "error_output": ""
   },
+  "E8001.span_missing.message": "診断 {code} に span がありません：呼び出し点で .at(span) が指定されておらず、型検査 walk のコンテキスト内にもありません（コンパイラのバグ、#324 を参照）",
+  "E8001.span_missing.help": "呼び出し点で .at(span) を補うか、型検査 walk のコンテキスト内で構築してください",
   "E8002": {
     "title": "予期しないパニック",
     "message": "コンパイラが予期しないパニックを検出しました",
@@ -779,10 +781,12 @@
     "template": "精化述語違反：{constraint}{counterexample}",
     "help": "述語が反証されました——制約を偽にする代入が存在します。変数の値を確認するか、制約を緩和してください。"
   },
-  "E4018.counterexample.section": "\n\nCounterexample:\n{assignments}",
-  "E4018.no_free_var.note": "\n\n(The constraint has no free variables; the annotation itself is unsatisfiable.)",
-  "E4018.proof_false.note": "\n\n(Proof function returned false; no concrete counterexample.)",
-  "E4018.proof_error.note": "\n\n(Proof function failed to execute; no concrete counterexample.)",
+  "E4018.counterexample.section": "\n\n反例：\n{assignments}",
+  "E4018.no_free_var.note": "\n\n（制約に自由変数がなく、注釈自体が成立しません）",
+  "E4018.proof_false.note": "\n\n（証明関数が false を返し、具体的な反例はありません）",
+  "E4018.proof_error.note": "\n\n（証明関数の実行でエラーが発生し、具体的な反例はありません）",
+  "E4018.proof_false.constraint": "証明関数 '{func}' が false を返しました：制約を満たしていません（引数: {args}）；制約条件を確認するか、渡す値を修正してください",
+  "E4018.proof_error.constraint": "証明関数 '{func}' の実行に失敗しました：{error}",
   "E4019": {
     "title": "型等式が成立しません",
     "message": "型等式が証明パイプライン内で反証されました",
@@ -1258,7 +1262,7 @@
     "example": "// zlib.yx: use zother.{o_val}\n// zother.yx: use zlib.{z_val}\n// => zlib → zother → zlib：両モジュールが相互にインポートしています。サイクル内の順序はパスの辞書順による規約にすぎません",
     "error_output": "warning[W1007]: モジュールインポートサイクル zlib → zother → zlib：サイクル内の初期化順序は判定不能。サイクル内の順序はパスの辞書順による決定的な規約にすぎない（意味的保証なし）\n --> zother.yx:2:1\n  |\n2 | use zlib.{z_val}\n  | ^^^^^^^^^^^^^^^^^\n  |\nhelp: サイクル内の値依存関係が use の順序と逆になっています：zlib が zother.o_val を読み込む時点では zother がまだ初期化されていません（違反された辺：zother が zlib をインポートするため、トポロジカル順序では zlib が先に置かれます）。初期化順序は use の依存関係に従いますが、サイクル内では値依存関係を同時に満たすことはできません——サイクルを壊すか、このトップレベル値を遅延評価する関数に変更してください"
   },
-  "W1007.value_edge.help": "The value dependency runs against the use order: {reader} reads {slot} while {owner} is not yet initialized (violated edge: {owner} imports {reader}; the topological order therefore places {reader} first). Initialization follows use dependencies; inside a cycle both cannot hold — break the cycle, or defer the top-level value behind a function.",
+  "W1007.value_edge.help": "環内の値依存が use の順序と逆になっています：{reader} が {slot} を読む時点で {owner} はまだ初期化されていません（違反された辺：{owner} が {reader} をインポートするため、トポロジカル順序では {reader} が先に置かれます）。初期化順序は use の依存に従って決まりますが、環内では値依存を同時に満たすことができません——環を断ち切るか、このトップレベル値を遅延評価する関数に変更してください",
   "E3024": {
     "title": "プロジェクト設定を読み取れません",
     "template": "プロジェクト設定 {path} を読み取れません：{detail}",

@@ -10,8 +10,16 @@
 //! issue #537），2026-11-14 的 3.20.22 修复轮翻面为真锚。隔离结论（探针矩阵见该轮
 //! 实录）：静默丢义务的根因是证明执行器只求值被调函数**体**、从不检查其形参精化，
 //! 与 IR 生成器的谓词命名空间无关（负literal实参不可折叠另报 E2031，属另一既有边界）。
+//!
+//! 追加（issue #509 残留②，WBS 3.21.5）：E4018 proof_false/proof_error 形态的
+//! constraint 参数位句式在 locales（E4018.proof_*.constraint）随 error_lang
+//! 渲染——端到端渲染级锚钉住 en 逐字形态。
 
 use crate::frontend::compiler::Compiler;
+use crate::frontend::core::sema::proof::verdict::ProofFunctionCall;
+use crate::frontend::core::types::const_data::ConstValue;
+use crate::frontend::proof_execution::execute_proof_calls;
+use crate::util::span::Span;
 
 /// 证明函数 `Check` 的形参 `p` 带精化 `Eq(n, 0)`；使用点给 `n = 7` ⇒ `Eq(7, 0)` 为假。
 const PROOF_FN_REFINED_PARAM: &str = concat!(
@@ -72,5 +80,105 @@ fn test_plain_fn_param_refinement_obligation_is_reported() {
         Some("E4018"),
         "普通函数面应报 E4018（证明义务存在）；实际: {}",
         error.message()
+    );
+}
+
+/// 判据（issue #509 残留②）：E4018 proof_false 形态的 constraint 参数位句式
+/// 在 locales（E4018.proof_false.constraint）随 error_lang 渲染——经生产入口
+/// `Compiler::compile_with_source` 的端到端锚，钉住 en 逐字形态（默认即 en，
+/// 显式设定使断言与环境配置无关，arg_binding.rs 先例）。
+///
+/// 夹具取返回位义务形态（proof_obligations.rs 的 RETURN_POSITION 同源）：
+/// `SumUpTo(3, 7)` 的体 `s == n * 2` 判 false ⇒ 证明执行器 proof_false 臂
+/// （`constraint_is_terminates` 不命中、前三级不闭合，义务入第四级）。
+/// 绑定注解形态（`IsPositive(-1)` 类）走 refinement 的闭合约束支，不经本臂。
+#[test]
+fn test_proof_fn_false_message_renders_constraint_from_locales() {
+    // Arrange：SumUpTo(3, 7) 判 false ⇒ E4018（proof_false 路径）
+    crate::util::i18n::set_lang_from_string("en".to_string());
+    let source = concat!(
+        "SumUpTo: (n: Int, s: Int) -> Type = { s == n * 2 }
+",
+        "f: () -> (r: SumUpTo(3, r)) = {
+",
+        "    return 7
+",
+        "}
+",
+        "
+",
+        "main: () -> Void = {}
+",
+    );
+    let mut compiler = Compiler::new();
+
+    // Act
+    let error = compiler
+        .compile_with_source("test.yao", source)
+        .expect_err("SumUpTo(3, 7) 判 false，必须编译失败（E4018）");
+
+    // Assert：constraint 参数位来自 locales 键渲染（en 逐字），非硬编中文
+    let diag = error.diagnostic().expect("编译失败必须带诊断");
+    assert_eq!(
+        diag.code,
+        "E4018",
+        "证明函数判伪必须报 E4018；实际: {}",
+        error.message()
+    );
+    assert!(
+        diag.message
+            .contains("Proof function 'SumUpTo' returned false: constraint not satisfied (args: [Int(3), Int(7)]); check the constraint or change the arguments"),
+        "constraint 参数位必须来自 E4018.proof_false.constraint 键渲染（en 逐字，issue #509 残留②）。Got: {}",
+        diag.message
+    );
+    assert!(
+        diag.message
+            .contains("(Proof function returned false; no concrete counterexample.)"),
+        "反例段注记必须来自 E4018.proof_false.note 键渲染。Got: {}",
+        diag.message
+    );
+}
+
+/// 判据（issue #509 残留②）：E4018 proof_error 形态的 wrapper 句式在 locales
+/// （E4018.proof_error.constraint）——经生产入口 `execute_proof_calls` 直驱
+/// （func 不在 AST ⇒ 执行失败路径）。{error} 是内部 Err 文本的插值位（登记
+/// 不迁移，issue 原意），不在断言面；wrapper 与注记为迁移面，逐字断言。
+#[test]
+fn test_proof_fn_execution_failure_message_renders_wrapper_from_locales() {
+    // Arrange：AST 中不存在名为 Missing 的函数 ⇒ execute_single_proof_fn 返回 Err
+    crate::util::i18n::set_lang_from_string("en".to_string());
+    let ast = crate::ast::Module {
+        items: vec![],
+        span: Span::dummy(),
+    };
+    let call = ProofFunctionCall {
+        func_name: "Missing".to_string(),
+        args: vec![ConstValue::Int(1)],
+    };
+
+    // Act
+    let errors = execute_proof_calls(std::slice::from_ref(&call), &ast, &Default::default());
+
+    // Assert
+    assert_eq!(
+        errors.len(),
+        1,
+        "执行失败必须产出恰好一条 E4018 诊断；实际: {:?}",
+        errors.iter().map(|d| d.code.clone()).collect::<Vec<_>>()
+    );
+    assert_eq!(errors[0].code, "E4018", "执行失败形态保持 E4018 码");
+    assert!(
+        errors[0]
+            .message
+            .contains("Proof function 'Missing' failed to execute: "),
+        "wrapper 必须来自 E4018.proof_error.constraint 键渲染（en 逐字，issue #509 残留②）。Got: {}",
+        errors[0].message
+    );
+    assert!(
+        errors[0]
+            .message
+            .ends_with("(Proof function failed to execute; no concrete counterexample.)"),
+        "反例段注记必须来自 E4018.proof_error.note 键渲染。Got: {}",
+        errors[0].message
     );
 }

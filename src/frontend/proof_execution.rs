@@ -94,24 +94,29 @@ pub(crate) fn execute_proof_calls(
             Ok(false) => {
                 // #322 M3：走注册表快捷方法（i18n 模板渲染）；
                 // 证明函数返回 false 属"无具体反例"的证伪场景——说明文字走
-                // locales per-site 键（issue #469 处 1/2a），随 error_lang 渲染
+                // locales per-site 键（issue #469 处 1/2a），随 error_lang 渲染。
+                // message 的 constraint 参数位同走 per-site 键（issue #509
+                // 残留②）：句式在 locales（E4018.proof_false.constraint），
+                // func/args 作模板参数登记，发射点不硬编成品串。
                 state.errors.push(
-                    ErrorCodeDefinition::refinement_violated(&format!(
-                        "证明函数 '{}' 返回 false，约束不满足（参数: {:?}）；检查约束条件或修改传入值",
-                        call.func_name, call.args,
-                    ))
-                    .param_from_key("counterexample", "E4018.proof_false.note")
-                    .build(),
+                    ErrorCodeDefinition::refinement_violated("")
+                        .param("func", call.func_name.clone())
+                        .param("args", format!("{:?}", call.args))
+                        .param_from_key("constraint", "E4018.proof_false.constraint")
+                        .param_from_key("counterexample", "E4018.proof_false.note")
+                        .build(),
                 );
             }
             Err(e) => {
+                // 执行失败：句式同走 per-site 键（issue #509 残留②）；{error}
+                // 是内部 Err 文本（登记不迁移，见残留清单）
                 state.errors.push(
-                    ErrorCodeDefinition::refinement_violated(&format!(
-                        "证明函数 '{}' 执行失败: {}",
-                        call.func_name, e
-                    ))
-                    .param_from_key("counterexample", "E4018.proof_error.note")
-                    .build(),
+                    ErrorCodeDefinition::refinement_violated("")
+                        .param("func", call.func_name.clone())
+                        .param("error", e)
+                        .param_from_key("constraint", "E4018.proof_error.constraint")
+                        .param_from_key("counterexample", "E4018.proof_error.note")
+                        .build(),
                 );
             }
         }

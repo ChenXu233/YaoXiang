@@ -10,7 +10,10 @@ use crate::util::diagnostic::{ErrorCodeDefinition, Result};
 use std::collections::{HashMap, HashSet};
 
 use super::ExpressionInferrer;
-use super::{extract_namespace_path, is_builtin_type_name, local_pattern_label, read_view};
+use super::{
+    extract_namespace_path, is_builtin_type_name, local_pattern_label, never_short_circuit,
+    read_view, NeverShortCircuit, E1002_ARITH_EXPECTED,
+};
 use crate::frontend::core::sema::inference::existential;
 use crate::frontend::core::sema::inference::mono_type_is_witness_bearing;
 use crate::frontend::core::sema::inference::statements;
@@ -508,15 +511,14 @@ impl<'a> ExpressionInferrer<'a> {
         // 或不可达表达式里的运算不施加任何类型约束——unify 的爆炸原理
         // （`solver.rs` 的 `Never <: T`）在运算位的同款延伸。毒化的引用参与
         // 算术/比较时必须静默通过，否则 E1001 消了、E1002 又冒出来。
-        // 结果取另一侧的具体形态；两侧都是 Never 时无信息可依，取 fresh 推迟。
-        let left_never = matches!(left, MonoType::Never);
-        let right_never = matches!(right, MonoType::Never);
-        if left_never || right_never {
-            return Ok(match (left_never, right_never) {
-                (true, true) => self.solver.new_var(),
-                (true, false) => right.clone(),
-                (false, true) => left.clone(),
-                (false, false) => unreachable!("上方 if 已排除"),
+        // 判据收敛为共享纯函数 `never_short_circuit`（issue #509 残留④，与
+        // StatementChecker 二元运算臂同源）；结果取另一侧的具体形态，两侧都
+        // 是 Never 时无信息可依，由调用方发 fresh var 推迟。
+        if let Some(verdict) = never_short_circuit(left, right) {
+            return Ok(match verdict {
+                NeverShortCircuit::Both => self.solver.new_var(),
+                NeverShortCircuit::TakeRight => right.clone(),
+                NeverShortCircuit::TakeLeft => left.clone(),
             });
         }
         match op {
@@ -573,7 +575,10 @@ impl<'a> ExpressionInferrer<'a> {
                     // 类型层不认的组合宁拒不静默：fresh var 兜底会让
                     // `1 + "a"` 纸面通过、运行期错译（#271 同款纪律）
                     Err(ErrorCodeDefinition::type_mismatch(
-                        "Int/Float/String/List（两侧同型）或实现对应算术接口",
+                        // 接受集文面与 StatementChecker 同源（issue #509 残留③，
+                        // 基文见 expressions::E1002_ARITH_EXPECTED）；本臂 miss
+                        // 后仍查接口派发，保留既有后缀
+                        &format!("{E1002_ARITH_EXPECTED}或实现对应算术接口"),
                         &format!("{l} 与 {r}"),
                     )
                     .build())
@@ -602,6 +607,9 @@ impl<'a> ExpressionInferrer<'a> {
                         return Ok(result);
                     }
                     Err(ErrorCodeDefinition::type_mismatch(
+                        // #509 残留③同族登记：Mod 的白名单接受集与 Add 族不同
+                        // （Int/Float，无 String/List），不与 E1002_ARITH_EXPECTED
+                        // 收敛——同一常量承载两个接受集才是错。文面单点，无拷贝。
                         "Int/Float（两侧同型）或实现 Modulo 接口",
                         &format!("{l} 与 {r}"),
                     )

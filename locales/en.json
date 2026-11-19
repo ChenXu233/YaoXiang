@@ -657,6 +657,8 @@
     "example": "",
     "error_output": ""
   },
+  "E8001.span_missing.message": "Diagnostic {code} missing span: no .at(span) at the emission point and not inside a typecheck walk context (compiler bug, see #324)",
+  "E8001.span_missing.help": "Add .at(span) at the emission point, or construct the diagnostic inside a typecheck walk context",
   "E8002": {
     "title": "Unexpected Panic",
     "message": "The compiler encountered an unexpected panic",
@@ -851,6 +853,8 @@
   "E4018.no_free_var.note": "\n\n(The constraint has no free variables; the annotation itself is unsatisfiable.)",
   "E4018.proof_false.note": "\n\n(Proof function returned false; no concrete counterexample.)",
   "E4018.proof_error.note": "\n\n(Proof function failed to execute; no concrete counterexample.)",
+  "E4018.proof_false.constraint": "Proof function '{func}' returned false: constraint not satisfied (args: {args}); check the constraint or change the arguments",
+  "E4018.proof_error.constraint": "Proof function '{func}' failed to execute: {error}",
   "E4019": {
     "title": "Type equality does not hold",
     "message": "Type equality falsified within the proof pipeline",
