@@ -1,4 +1,4 @@
-//! DCE 直驱测试：N1–N6 负控矩阵 + 根面/自洽/回滚/幂等 + 真实 post-mono 红→绿。
+//! DCE 直驱测试：N1–N6 负控矩阵 + 根面/自洽/回滚/幂等 + 真实 post-mono 直驱（pre-DCE 自洽 → DCE 删除，重锚后判据见 test_post_mono_dce_removes_mono_retained_originals_and_keeps_instances 头注释）。
 //!
 //! 规范：t1 设计包 §2（根集九行表，单一事实源在 dce 模块 doc）、§3（删除判据）。
 //! 每个测试只钉一个可证伪的区分；四格基线 = 死函数删除 / 导出面保留 /
