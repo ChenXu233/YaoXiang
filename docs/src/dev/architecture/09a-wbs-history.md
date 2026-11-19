@@ -7205,3 +7205,15 @@ canonical_text(RecordModel) =
 > **四、锚与变异**：8 条面板 pin（registry 形态矩阵 3 条——10 形态 × 3 关注面全矩阵；lower 消费臂 4 条——命名空间常量零参 Call / 别名常量零参 Call / 原生函数 Load NativeFn / 方法 def MakeClosure；query 臂序 1 条）。三变异 **trial 正典**（t2 批次树机械可逆）：M1 FunctionCodeExport 摘 yx 析取 ⇒ 面板 FunctionCodeExport 列红 + alias_fn_value 红、其余列绿（面间独立性）；M2 拆名基底改首点分割 ⇒ 5 pin / 3 文件同红（同源接线证明；query 2 pin 不经嵌套拆名正确保持绿）；M3 FunctionOrMethodDef 摘 Method ⇒ def 面 pin 红。**如实登记两条**：①别名路由下 NativeName 变异不可观测（别名兜底臂发出同一条零参 Call）；②std.result 的 Try 方法不 intern（register 的 surface-merge 分支 def=None → E3005）为既有行为，不在收敛面。P1/P6 复测：标签出自外部批次复审报告、仓库内无定义，按语义映射——P1 捕获函数 = nested_fn_capture 9/9、P6 泛型函数 = alias_fn_value 1/1、#479 三转钉 = fn_value_call 10/10，收敛前后均绿。
 
 > **五、验证链**：t1 一轮全绿（14 门禁；变异预演为主树自查形态，t2 在批次树以 trial 正典重做）→ 队长 diff review → 提交推送 `480a00b7` → t2 **PASS**（六组锚复测 + 三变异 trial 机械可逆 + 溶解核账旧符号零残留 + IR/语料零漂移 + 卫生）→ t3 **APPROVE**（2 条：面板三测试 AAA 合并段 low → 注释笔 `c27aa3fa` 循环体内拆显式 // Act 与 // Assert；动态量测声称归 t2 的 info 分工说明）→ 收口笔（本节）。批次树已 release + gc。
+
+## P3 3.18.3 收口（#506 两条短名派发臂同经唯一判据，2026-11-20）
+
+> **一、范围与终态**：issue [#506](https://github.com/ChenXu233/YaoXiang/issues/506)（2026-10-25 登记）。行为不变收敛（D59 分类不适用）——可达路径上判据改写与 qualify_names 终点一致，IR 快照/语料 402 行零漂移实测。推送终态一笔：`e09c38e1`（refactor(middle)，4 文件，含钉测试新家 driver/tests/short_name_dispatch_pins.rs）。**三级计数不变**（3.18.3 已计入 2026-10-25 的 +2 登记）。issue [#506](https://github.com/ChenXu233/YaoXiang/issues/506) 关闭（证据评论）。
+
+> **二、可达性前提复测（修正 issue 两处，如实登记）**：①to_string 臂对**基础类型可达**——带类型信息实参 → `int.to_string`（std/convert.rs 原生注册）；裸字面量 print(42) 无类型信息走默认处理臂；issue 的「不可达」仅对用户结构体成立，机制 = MonoType::Struct.methods 在全部推断构造点恒为空表，type_implements_stringable 对用户结构体恒假。②Try 臂**非别名导入今天可达**且终点名已限定（qualify_names/resolve_call_target）——#465 同族错派面不可达的前提精确化：别名导入（use lib.{Maybe as MaybeB}）被 E1082 挡（expr.rs:2842；operator_interfaces.rs:403 按定义侧类型名键控）、同名非别名导入被 E5006 挡、**撞本地绑定形态被 E5008 挡**（statements.rs:408-415——t3 low 更正：提交信息只列 E5006 属措辞不完整，三形态都是硬错，错派面不可达的结论不变，本节承载更正）。③call.rs:715-760 判定：已是 3.18.1 收敛形态，不在本批面。
+
+> **三、修法（两臂最小接入）**：call.rs 零开销臂短名拼好后经 `method_dispatch_name`（print 实参为接收者）；op.rs Try 四方法链在 std 方法绑定映射后逐名经 `method_dispatch_name`（? 操作数为接收者）——与 call.rs:760 既有收敛臂同构；短类型名是裸名义名（#465 同族），接收者类型经导入面（含别名）引入时按定义单元限定，基础类型/本单元类型原样返回。E1082 与 type_implements_stringable **未被放开**（放开属 D59 裁决面，本批纪律）。
+
+> **四、锚与变异**：钉测试 6 条（新家 driver/tests/short_name_dispatch_pins.rs）——钉① test_print_user_struct_with_to_string_keeps_fallback_repr（临时让 Stringable 对 Struct 返回 true ⇒ FAILED 零开销臂产出 Point.to_string → 机械还原回绿）；钉② test_aliased_imported_user_try_type_rejected_by_e1082（临时让 query_try_impl 别名感知 ⇒ FAILED → 还原回绿）；对照 4 条（基础类型 int.to_string / 同单元 Try 终点名 main.Maybe.*/ 非别名跨单元 Try 终点名 lib.Maybe.* / ? 载荷值断言 Int(5)）钉住收敛零漂移；既有 method_dispatch 10 条 #465 守卫无回归。t2 三变异 **trial 正典**：M1/M2 = 前提钉敏感性（分别重演钉①②的红态）；M3 = **接线证明**——method_dispatch_name 基础类型透传臂加 mangling ⇒ 对照钉 int.to_string 红 + 既有 method_dispatch 单元测试红 + 非别名跨单元 Try 终点名钉红（判据改动传导两臂输出；若某臂本地拼名绕过判据则其 pin 保持绿 = 接线缺口暴露——实测无缺口）。
+
+> **五、验证链**：t1 一轮全绿（14 门禁）→ 队长 diff review（两 hunk 最小、接收者选择正确）→ 推送 `e09c38e1` → t2 **PASS**（四组锚复测 + M1/M2/M3 trial 机械可逆 + 等价性 + 卫生，全部量测项实跑无未跑项）→ t3 **APPROVE**（1 low = E5006/E5008 措辞更正，本节二承载）→ 收口笔（本节）。批次树已 release + gc。
