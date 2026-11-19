@@ -699,16 +699,25 @@ fn test_dce_is_idempotent() {
     );
 }
 
-/// 真实 post-mono 红→绿：语料 fn_const_generic 的孤儿共享层在删除前 verify 红、删除后绿。
+/// 真实 post-mono 直驱：mono 保留原件与共享层（75c28a09 起删除职责唯一归 DCE），
+/// DCE 恰好删掉两者、保留实例与逐实例克隆，前后 verify_loose 均绿。
 ///
-/// 前身 = t1 设计包的 §4 红判据（冻结 revision 实测）。本测试不走 driver 接线，
-/// 直接取 post-mono IR 再调 pass——红线与绿线都由同一份真实 IR 承担。
+/// 判据门 = 病史 + 证明。病史：#542（共享层失去唯一 MakeClosure 引用者成孤儿，
+/// verify 红）与 #542-D3（删除职责单点归 DCE，mono 不再按名删原件——75c28a09
+/// 「build_output 保留全部原件」）。证明：mono 只生成不删除 ⇒ 每个共享层/克隆
+/// 都有其 MakeClosure 引用者，pre-DCE 产物必须自洽（verify_loose 绿）——这是
+/// #542 类孤儿缺陷在现架构下**唯一的单元级观察点**（接线测试只看 DCE 后终态，
+/// DCE 会把孤儿静默清掉；生产入口测试无法区分「谁删的」）；本测试同时钉住
+/// 职责划分：若 mono 重新自删原件或 DCE 根集破洞（漏删原件 / 误删实例），此处红。
+///
+/// 前身 = t1 设计包 §4 的「删除前 verify 红」判据——该前提随 75c28a09 的设计
+/// 变更作废（原件保留后共享层有引用者、不再成孤儿），本测试随之 retarget 到
+/// 新架构不变量（同提交对 mono 两条闸测试的 retarget 先例，不删测试）。
 #[test]
-fn test_post_mono_shared_layer_turns_verify_green_after_dce() {
+fn test_post_mono_dce_removes_mono_retained_originals_and_keeps_instances() {
     // Arrange：语料本体（include_str，不复制源码，避免探针与语料漂移）。
     // 走 lex→parse→typecheck→ir_gen→mono 的真实生成序列而不是 Compiler 外观：
-    // 即使接线轮把 DCE 接进 driver，本测试仍取到「删除前」的 post-mono IR，
-    // 红→绿判据不因接线而失效。
+    // 只有直驱能取到「DCE 前」的 post-mono IR，pre-DCE 自洽性才可观察。
     let source =
         include_str!("../../../../../tests/yaoxiang/02-type-system/generics/fn_const_generic.yx");
     let tokens = crate::frontend::core::lexer::tokenize(source).expect("语料必须通过词法分析");
@@ -735,23 +744,44 @@ fn test_post_mono_shared_layer_turns_verify_green_after_dce() {
         .monomorphize(&ir_pre, &type_result.instantiation_requests)
         .expect("语料必须通过单态化");
 
-    // Act：删除前红
+    // Assert（pre-DCE，75c28a09 设计形态）：mono 保留全部原件——共享层与原件
+    // 都在函数表里；每个 MakeClosure 目标都有引用者 ⇒ verify_loose 绿（#542 类
+    // 孤儿缺陷的回归守卫：mono 一旦再产出孤儿，此处红）。
     assert!(
-        verify_loose(&ir).is_err(),
-        "删除前 verify_loose 必须红（孤儿共享层 Dominance）"
+        has(&ir, "f"),
+        "mono 必须保留泛型原件 f（删除职责唯一归 DCE）"
     );
-    assert!(has(&ir, "__f_l0"), "删除前函数表应含孤儿共享层 __f_l0");
-    assert!(!has(&ir, "f"), "post-mono 已按名删掉原件 f（#542 形态）");
+    assert!(
+        has(&ir, "__f_l0"),
+        "mono 必须保留共享层 __f_l0（原件 f 的 MakeClosure 目标）"
+    );
+    assert!(
+        verify_loose(&ir).is_ok(),
+        "pre-DCE post-mono 产物必须自洽（mono 只生成不删除，不得有孤儿共享层；实际 {:?}）",
+        verify_loose(&ir).err()
+    );
+
+    // Act：DCE
     let before = ir.clone();
     let report = eliminate(&mut ir).expect("真实 post-mono IR 上 DCE 应成功");
 
-    // Assert：删除后绿 + 孤儿消失 + 实例/克隆保留 + 未引用 std 被裁
+    // Assert（post-DCE）：mono 保留的原件/共享层恰好被删，实例与克隆保留，
+    // 结构合法，删除归因闭合。
     assert!(
         verify_loose(&ir).is_ok(),
         "删除后 verify_loose 必须绿；实际 {:?}",
         verify_loose(&ir).err()
     );
-    assert!(!has(&ir, "__f_l0"), "孤儿共享层必须被删（#542 的修复对象）");
+    assert!(
+        !has(&ir, "f"),
+        "不可达泛型原件 f 必须由 DCE 删除（75c28a09：删除职责唯一归 DCE）；实际函数表: {:?}",
+        ir.functions.iter().map(|fn_| &fn_.name).collect::<Vec<_>>()
+    );
+    assert!(
+        !has(&ir, "__f_l0"),
+        "失去引用者的共享层 __f_l0 必须随原件一起被删（#542 的修复对象）；实际函数表: {:?}",
+        ir.functions.iter().map(|fn_| &fn_.name).collect::<Vec<_>>()
+    );
     assert!(has(&ir, "f(int64::42)"), "实例必须保留（main 按名调用）");
     assert!(
         has(&ir, "__f_l0(int64::42)"),
@@ -760,8 +790,9 @@ fn test_post_mono_shared_layer_turns_verify_green_after_dce() {
     // 直驱生成序列只含本单元函数（嵌入 std 由 driver 侧合并，不在本测试合同面）；
     // 通用死码裁剪行为由 N6/传递死链与接线轮的语料差分承担。
     assert!(
-        report.deleted.iter().any(|n| n == "__f_l0"),
-        "归因清单应含孤儿共享层"
+        report.deleted.iter().any(|n| n == "f") && report.deleted.iter().any(|n| n == "__f_l0"),
+        "归因清单应恰含被删的原件与共享层；实际 {:?}",
+        report.deleted
     );
     assert_references_closed(&before, &ir);
 }

@@ -15,7 +15,7 @@ use crate::frontend::compiler::Compiler;
 use crate::middle::ir::ir::ModuleIR;
 use crate::middle::ir::verify::verify_loose;
 
-use super::driver::{make_script_project, run_multi, run_merged_slot_values};
+use super::driver::{make_script_project, run_merged_slot_values, run_multi};
 
 /// 函数表里是否有该名字（精确匹配）。
 fn has(
