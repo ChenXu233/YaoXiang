@@ -7276,3 +7276,102 @@ canonical_text(RecordModel) =
 > **七、偏差登记（流程面，与本次红测试同一根因）**：#542 收口笔 `75c28a09` 同时带进两件东西——(a) 使 `test_post_mono_shared_layer_turns_verify_green_after_dce` 的两条前提失效（`build_output` 不再按泛型名删原件、恢复闸删除 ⇒ 原件 `f` 留在表里且 `__f_l0` 的 `MakeClosure` 站点仍在，`verify` 的 env 槽数反推成立 ⇒ 删除前不再红），(b) `src/driver/tests/dce_wiring.rs` 的 1 行 import 顺序漂移（`cargo fmt --check` 在 `ae47df55` 上本就红在这一行）。可判定事实：`75c28a09` 之后到 `ae47df55` 之间**没有任何一笔改动 `src/**/*.rs`**（区间内全是 docs / 自动翻译 / `chore(bench)[skip ci]` / 依赖清单），而 pre-commit 的 Rust 钩子按 `types: [rust]` 触发 ⇒ `fmt` 与 `fast` 再没在任何最终版上跑过。不可判定项：git 不记录钩子执行结果，无法从仓库判定当时是 `--no-verify`、`SKIP=<hook>` 还是钩子未生效。处置：`f95883fc` 退役两条陈旧断言（改成断言新形态：mono 保留原件 `f` 且 `f` 仍持有 `__f_l0` 的站点）并补直构红侧负控，`fmt` 漂移同笔机械修正；其余绿侧断言全部保留。**建议**（未落规则）：把「docs-only 提交之前的最后一个 Rust 提交」列为必须人工跑一次 `fmt` + `fast` 的检查点。
 >
 > **八、提交与归口**：`f95883fc`（测试自洽：退役 + 负控 + fmt 漂移）、`53d5291d`（判据按槽身份 + 7 条负控/回归）、本笔（09 勾选与本文收口）。`LocalSlot.origin` 属 `ir.rs` 结构变更，归口 WBS 7b.1b（独占 commit / C4），需在 7b.1b 落地时一并计入。
+
+## P7 7b.1a 契约（`Operand` 变体收敛 + `Instruction::Phi` 引入，2026-11-19）
+
+> 计划见 [09](./09-execution-wbs.md) §P7 7b 表 7b.1a 行；设计依据 [04](./04-ssa.md) §目标设计（`Operand` 变体 / `Phi` / 值标识）与 §IR 结构变更的连锁影响。本段在动工前写下改动面、占位与回滚点；实测数字取冻结 revision `ed6f91b2`（`git grep -n`，行号以该 revision 为准）。代码按本段落地，收口轮在本文件追加实测与偏差。
+
+### 一、全仓 `Operand` 构造点 / 匹配点实测
+
+**定义**（`src/middle/ir/ir.rs:20-28`）：7 变体 `Const(ConstValue)` / `Local(usize)` / `Arg(usize)` / `Temp(usize)` / `Global(usize)` / `Label(usize)` / `Register(u8)`。
+
+**三个死变体（本批删除）**：`Operand::Temp|Label|Register` 全仓 **11 处匹配臂、0 处构造点**（与任务书初查一致），逐处：
+
+| # | 位置 | 当前形态 | 处置 |
+| 1 | `src/middle/ir/normalize.rs:79` | `Operand::Local(n) \| Operand::Temp(n)` 渲染 | 收敛为 `Local(n)`（`Temp` 0 构造点，输出不变） |
+| 2 | `src/middle/ir/normalize.rs:82` | `Operand::Label(n)` 渲染 | 删臂 |
+| 3 | `src/middle/ir/normalize.rs:83` | `Operand::Register(n)` 渲染 | 删臂 |
+| 4 | `src/middle/ir/verify.rs:384` | `Local \| Temp` 槽位越界分类 | 收敛为 `Local` |
+| 5 | `src/middle/ir/verify.rs:770` | `if let Local \| Temp` 定义点收集 | 收敛为 `Local` |
+| 6 | `src/middle/ir/verify.rs:776` | `if let Local \| Temp` 使用点收集 | 收敛为 `Local` |
+| 7 | `src/middle/ir/verify.rs:916` | `Local \| Temp` 参数槽类型查询 | 收敛为 `Local` |
+| 8 | `src/middle/passes/codegen/operand.rs:39` | `Operand::Temp(id)` 解析为 u8 槽 | 删臂；`Value` 臂改为显式诊断（§三 占位 2） |
+| 9 | `src/middle/passes/codegen/operand.rs:75` | `is_register` 的 `Local \| Temp \| Arg` | 收敛为 `Local \| Arg`（`Value` 待 7b.2 纳入，§三） |
+| 10 | `src/middle/passes/mono/mod.rs:844` | `if let Local \| Temp` 擦除期物化判据 | 收敛为 `Local` |
+| 11 | `src/middle/passes/mono/mod.rs:899` | `Local \| Temp` 槽位重排 | 收敛为 `Local` |
+
+变体定义行 `src/middle/ir/ir.rs:24`（`Temp(usize)`）、`:26`（`Label(usize)`）、`:27`（`Register(u8) // Added for codegen`）删除。
+
+**同名非同物（不删）**：`src/middle/passes/codegen/flow.rs:248` 的 `Storage::Temp(usize)` 是符号表存储位置枚举，不是 `Operand`；`src/middle/bytecode/mod.rs:57` 的 `Label(pub u32)` 是字节码跳转标签。两者都不在本批改动面。
+
+**保留变体实测规模**（`src/` 全量含测试，`git grep -c` 按文件求和）：
+
+| 变体 | 文件数 | 命中数 | 本批处置 |
+| --- | --- | --- | --- |
+| `Const` | 33 | 137 | 不变 |
+| `Local` | 29 | 414 | 不变；与 `Temp` 的联合臂收敛后语义不变 |
+| `Arg` | 8 | 11 | 不变（函数入口的隐式定义，04 §243） |
+| `Global` | 17 | 27 | 不变 |
+| `Value(ValueId)` | 0 | 0 | **新增**；生产构造点 0，匹配点仅下列表示面 |
+
+**`Operand` 穷尽 match 全仓仅 1 处**：`src/middle/ir/normalize.rs:78` 的 `fmt_operand`（加 `Value` 臂）。其余操作数匹配都带通配臂：`codegen/operand.rs:30`、`ir/verify.rs:383` 与 `:915`、`codegen/translator.rs:728`、`mono/mod.rs:898` 的回调、`lower/query.rs:928`。
+
+### 二、`Instruction::Phi` 引入后的穷尽 match 清单与逐处处置
+
+新增变体：
+
+```rust
+Phi {
+    dst: Operand,                    // 约定：必为 Operand::Value
+    incoming: Vec<(usize, Operand)>, // (前驱 block label, 来自该前驱的值)，按 label 升序
+    span: Span,
+}
+```
+
+本批 `lower/` 不生产 `Phi`（生产构造点 = 0）。`incoming` 升序由构造方保证、`verify_ssa` 检查、`normalize` 渲染前再排序。全仓对 `Instruction` 的穷尽 match 共 6 处，逐处处置：
+
+| # | 位置 | 处置 |
+| --- | --- | --- |
+| 1 | `src/middle/ir/ir.rs:541` `span()` | 加 `Phi { span, .. } => *span` |
+| 2 | `src/middle/ir/ir.rs:631` `for_each_operand_mut()` | 加臂：`f(dst)` 加逐 `(_, op)` 调 `f(op)`（定义位与使用位一视同仁） |
+| 3 | `src/middle/ir/normalize.rs:125` `fmt_instruction` | 加渲染臂：`Phi <dst> <- [<label>: <op>, ...]`；`incoming` 渲染前按 label 升序排序（07 第二层「前驱排序」规则）；`fmt_operand` 的 `Value` 臂按函数内首现序相对化（`Renamer`），不泄漏原编号 |
+| 4 | `src/middle/ir/verify.rs:577` `def_operands` | `Phi { dst, .. } => vec![dst]`（Phi 是 dst 的定义点） |
+| 5 | `src/middle/ir/verify.rs:657` `use_operands` | `Phi { incoming, .. } => incoming.iter().map(\|(_, op)\| op).collect()`（每个输入是使用点） |
+| 6 | `src/middle/passes/codegen/translator.rs:502` `translate_instruction` | **占位**：`unreachable!` 加不变量注释，登记 7b.3 换真翻译（方案 A：展开为 Move 串） |
+
+构造点口径：生产构造点 = `src/` 内非测试模块的 `Instruction::Phi` 值位置构造，落地后以 `git grep` 验证为 0；测试夹具为直驱新臂会在 `src/middle/ir/tests/` 构造 `Phi`（只进测试编译单元，不进入编译器生产路径），逐处登记在收口轮。
+
+非穷尽、逐处确认无需 Phi 臂（通配臂语义正确，不是静默跳过）：`codegen/translator.rs:453` 的 `get_jump_target`（`_ => None`）、`ir/verify.rs:355` 的 `check_jump_targets`（`_ => continue`）、`ir/verify.rs:420` 的 `build_cfg`（`_ => next`，Phi 无控制流效果）、`ir/verify.rs:942` 的 `check_type_consistency`（`_ => {}`，单列于 §三 占位 3）、`util/diagnostic/mod.rs:546/571/579`、`dce/mod.rs:144/160/173`、`driver/arms.rs:1844`、`lower/module_ir.rs:233/438/552`、`mono/mod.rs:582/764/920/1803/1820`，以及各测试文件内的 `if let` / `_` 匹配。
+
+`verify_ssa` 的 Phi 一致性（`src/middle/ir/verify.rs:300-305` 现为注释占位）：本批落两条可判定约束——`dst` 必为 `Operand::Value`、`incoming` 的 label 严格升序（04 三条构造约束 1/2 的构造侧部分），违规报 `InvariantKind::PhiConsistency`；`incoming.len() == 该块前驱数` 与逐输入类型一致依赖值表与块级 CFG（7b.1b），登记于 §三。
+
+### 三、占位登记（每处由哪个批次替换）
+
+| # | 占位 | 位置（本契约时） | 形态 | 替换批次 | 不变量与当前不可达理由 |
+| --- | --- | --- | --- | --- | --- |
+| 1 | translator `Phi` 臂 | `codegen/translator.rs:502` | `unreachable!` 加注释 | 7b.3 | 本批 Phi 生产构造点 0，lowering 产不出 Phi；若到达说明有生产点漏登记，响亮失败优于 NOP 静默错值 |
+| 2 | `OperandResolver::to_reg` 的 `Value` 臂 | `codegen/operand.rs:30` | 显式诊断 `codegen_invalid_operand`，消息点名 7b.2 前不可解析 | 7b.2 | 本批 `Value` 生产构造点 0；7b.2 起 `next_temp_reg` 产 `Value`，届时解析为 u8 槽位 |
+| 3 | `verify_ssa` 的 Phi 前驱数 / 逐输入类型一致 | `ir/verify.rs:300-305` | 违规类别已建，两条判据未落 | 7b.1b | 需要 `values` 值表与块级前驱关系；本批语料无 Phi，不掩盖任何现有违规 |
+
+三处都不新增 `todo!()` / `unimplemented!()`，不做静默跳过或静默错值。
+
+### 四、快照与语料影响预判
+
+- **IR 快照**：零漂移。三个死变体全仓 0 构造点，不出现在任何现有 IR 文本；保留变体渲染文本逐字不变；`Value` / `Phi` 渲染只对新形态生效，语料无 Phi。基线份数 = 232（`src/middle/ir/tests/snapshots/**/*.snap` 实测 232 份；`test_ir_snapshots_stable` 于 `ed6f91b2` 实测绿）。
+- **语料差分**：402/402 零 diff。本批不改 lowering、翻译与执行，语料产出逐字节不变。
+- **verify**：`verify_loose` 行为不变；`verify_ssa` 只对含 Phi 的 IR 新增结构检查（现有语料无 Phi）。
+- **槽位预算**：不变。`next_temp`、三处语句级回收、`take_body_locals` 均不在本批改动面（分别归 7b.2、7b.4 与 7a.1）。
+
+### 五、测试面与范围
+
+- **直驱测试**：`span()`、`for_each_operand_mut()`（`src/middle/ir/tests/ir.rs`，新建）、`Phi` 渲染（`src/middle/ir/tests/snapshot.rs`）、`verify_ssa` 的 Phi 结构检查（`src/middle/ir/tests/verify.rs`），各一条；先红后绿由落地后的机械变异取证。
+- **inScope**：`src/middle/ir/`、`src/middle/passes/mono/mod.rs`、`src/middle/passes/codegen/operand.rs`、`src/middle/passes/codegen/translator.rs`、`tests/baselines/`、本文件。
+- **out of scope**：`src/middle/lower/`、`src/backends/`、`src/frontend/`、`src/std/`、`tests/yaoxiang/`、`09-execution-wbs.md`、`04-ssa.md`。
+- **D59 错误类型**：无行为变更（表示重塑），不属于 A–F 任何语义修正类：本批不修旧行为缺陷，也不改变原先成功程序的对外表现。
+- **文档欠账登记**：`04-ssa.md:335` 与 `docs/src/en/dev/architecture/04-ssa.md:514` 仍以「`Operand::Register(u8)` 全仓 0 构造点」论证寄存器分配器选型；变体删除后该句成为历史事实陈述。04 不在本批 inScope，登记给后续 P7 收口轮同步（与 7a §七第 8 条同类欠账）。
+
+### 六、回滚点
+
+- 本契约段单独一笔文档提交，先于代码提交。
+- 代码与测试为**独占一笔提交**：`git revert <code-sha>` 整笔回滚 `ir.rs` 形状变更。`Operand` 变体增删波及全仓编译，不可增量回滚（04 §回滚策略），因此不与任何无关改动混笔。
+- 回滚基线 = 本契约提交后的 HEAD；回滚后工作树干净，快照与语料零漂移（本批不产生基线变更）。
