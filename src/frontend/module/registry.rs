@@ -12,13 +12,48 @@ use super::{Export, ExportKind, ModuleError, ModuleInfo, ModuleSource};
 use crate::frontend::core::sema::environment::MethodOverloadCandidates;
 use crate::frontend::core::types::mono::MonoType;
 
+/// 「限定名指向什么」的关注面——issue #494（WBS 3.6.6）三臂收敛后的查询参数。
+///
+/// 收敛前「这个限定名指向什么」在三处各答一次：原生名判定（原
+/// `ModuleRegistry::is_native_name`）/ 命名空间臂（lower 侧
+/// `registry.symbols().def + DefKind` 分派）/ 别名判据（lower 侧
+/// `qualified_export_is_code`，#479 引入、#493 改导出粒度）。按禁令三
+/// （同一行为 ≥2 处复制 ⇒ 收敛到共享层），判据本体只保留在
+/// [`ModuleRegistry::qualified_name_is`] 一处，调用点按本枚举传关注面；
+/// **新增第四处消费走同一接口，不得再各写一份拆名/查表**。
+///
+/// 三个变体**不是同一谓词的三个别名**：对同一形态答案可以相反——
+/// native 函数导出（`std.io.println`）对 [`QualifiedNameConcern::NativeName`]
+/// 是「是」（Std 模块的已注册导出）、对 [`QualifiedNameConcern::FunctionCodeExport`]
+/// 是「否」（native 导出没有 yx 函数体，不可物化为闭包）、对
+/// [`QualifiedNameConcern::FunctionOrMethodDef`] 又是「是」（注册期已 intern
+/// 为 Function def）。合并成单一布尔答案属行为变更；各臂语义与收敛前逐字节
+/// 一致，形态全集 × 三关注面的答案表钉在 `src/frontend/module/tests/registry.rs`。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum QualifiedNameConcern {
+    /// **原生名**（原 `ModuleRegistry::is_native_name` 判据，语义原样）：
+    /// 末点拆名后命中**已注册 Std 模块**的导出——函数/常量/子模块导出都算
+    /// （不看导出类别与实现来源）；用户/vendor 模块导出、未知名、无点裸名不算。
+    NativeName,
+    /// **函数代码**（原 lower 侧 `qualified_export_is_code` 判据，#479/#493，
+    /// 语义原样）：导出类别是 Function **且**实现是 yx 源码——用户/vendor
+    /// 模块的函数导出，或嵌入 yx 源（`src/std/yx_sources.rs`）的 std 函数导出；
+    /// native 导出（#492 自己的形态）、常量、类型、子模块导出不算。
+    /// 是「可物化为闭包的函数表条目」判据：作值时发 `MakeClosure`，零参调用
+    /// 会把被调体的返回值装进变量（#479 的静默错值）。
+    FunctionCodeExport,
+    /// **可调用 def**（原 lower 侧命名空间臂判据，语义原样）：项目符号表
+    /// （[`SymbolTable`]）里已 intern 的 Function/Method 绑定——不看模块表、
+    /// 不看实现来源；方法 def（`Type.method`）与生成期合成 def 不是导出，
+    /// 只有这一面能答。
+    FunctionOrMethodDef,
+}
+
 /// 模块注册表
 ///
 /// 存储所有已注册的模块信息，支持按路径查询。
 /// 对外提供统一的模块发现接口。
 ///
-/// 同时拥有项目级 [`SymbolTable`]：每个模块 `register` 时其顶层绑定（函数/类型/常量/方法）
-/// 被增量 intern 为唯一 DefId。注册表是「项目有哪些模块」的权威，也是「绑定身份」的权威。
 /// 同时拥有项目级 [`SymbolTable`]：每个模块 `register` 时其顶层绑定（函数/类型/常量/方法）
 /// 被增量 intern 为唯一 DefId。注册表是「项目有哪些模块」的权威，也是「绑定身份」的权威。
 ///
@@ -266,20 +301,68 @@ impl ModuleRegistry {
         names
     }
 
-    /// 检查完整路径是否是已注册的 native 函数/常量
-    pub fn is_native_name(
+    /// 限定名指向什么——registry 侧单一查询接口（issue #494 / WBS 3.6.6）。
+    ///
+    /// 收敛前三份判据（原生名 / lower 侧 `qualified_export_is_code`（#479/#493）/
+    /// lower 侧命名空间臂 `symbols().def + DefKind`）各答一次「这个限定名指向
+    /// 什么」，拆名与查表的机械面随之复制——按禁令三收拢为本接口；调用点各自
+    /// 传关注面参数（[`QualifiedNameConcern`]），**新增第四处消费不得再各写一份**。
+    /// 三臂语义与收敛前逐字节一致（形态全集 × 三关注面的答案表钉在
+    /// `src/frontend/module/tests/registry.rs` 的面板 pin）。
+    pub fn qualified_name_is(
         &self,
-        full_path: &str,
+        qualified: &str,
+        concern: QualifiedNameConcern,
     ) -> bool {
-        // 尝试从路径中解析模块路径和导出名
-        if let Some(dot_pos) = full_path.rfind('.') {
-            let module_path = &full_path[..dot_pos];
-            let export_name = &full_path[dot_pos + 1..];
-            if let Some(module) = self.modules.get(module_path) {
-                return module.has_export(export_name) && module.source == ModuleSource::Std;
+        match concern {
+            QualifiedNameConcern::NativeName => {
+                self.split_qualified(qualified)
+                    .is_some_and(|(module, leaf)| {
+                        module.has_export(leaf) && module.source == ModuleSource::Std
+                    })
+            }
+            QualifiedNameConcern::FunctionCodeExport => {
+                // 原 lower 侧 qualified_export_is_code 判据原样：Function 导出 +
+                // 实现来源按导出粒度追问（只有 std 面需要这次追问——用户/vendor
+                // 导出都是本仓源码）。
+                let Some((module, leaf)) = self.split_qualified(qualified) else {
+                    return false;
+                };
+                if !matches!(
+                    module.exports.get(leaf).map(|export| &export.kind),
+                    Some(ExportKind::Function)
+                ) {
+                    return false;
+                }
+                module.source != ModuleSource::Std || self.is_yx_std_export(qualified)
+            }
+            QualifiedNameConcern::FunctionOrMethodDef => {
+                // 原 lower 侧命名空间臂判据原样：项目符号表 def 类别分派。
+                let symbols = self.symbols.borrow();
+                symbols.def(qualified).is_some_and(|def| {
+                    matches!(symbols.kind(def), DefKind::Function | DefKind::Method)
+                })
             }
         }
-        false
+    }
+
+    /// 限定名 → (所属已注册模块, 叶子名) 的唯一拆名基底（issue #494）。
+    ///
+    /// 「按末点拆名 → 查模块表」此前在 is_native_name / is_yx_std_export /
+    /// is_native_fn_export / lower 侧 qualified_export_is_code 四处各写一份
+    /// （`rfind` 与 `rsplit_once` 两种写法并存，语义等价：都取**最后一个**点）；
+    /// 收敛后经本基底，不得再各写一份。
+    ///
+    /// 与 [`Self::resolve_export`] 语义**不同、不可互替**：后者先试「整名即模块
+    /// 路径」的命名空间分支（命中时返回该模块的第一个导出），本基底只按末点
+    /// 拆名查所属模块——模块不存在（含无点裸名）即 `None`。
+    fn split_qualified<'a>(
+        &'a self,
+        qualified: &'a str,
+    ) -> Option<(&'a ModuleInfo, &'a str)> {
+        let (module_path, leaf) = qualified.rsplit_once('.')?;
+        let module = self.modules.get(module_path)?;
+        Some((module, leaf))
     }
 
     /// 限定名导出是否**纯 yx 实现**（导出粒度，#493）。
@@ -295,18 +378,15 @@ impl ModuleRegistry {
         &self,
         full_path: &str,
     ) -> bool {
-        let Some((module_path, export_name)) = full_path.rsplit_once('.') else {
-            return false;
-        };
-        self.modules
-            .get(module_path)
-            .is_some_and(|module| module.is_yx_defined_export(export_name))
+        self.split_qualified(full_path)
+            .is_some_and(|(module, leaf)| module.is_yx_defined_export(leaf))
     }
 
     /// 限定名导出是否是**原生函数**导出（#492：原生函数作值）。
     ///
-    /// 判据 = 已注册的 native 导出（ModuleRegistry::is_native_name）**且** 不是纯 yx
-    /// 实现（ModuleRegistry::is_yx_std_export 的补集）**且** 类别是 Function。
+    /// 判据 = 已注册的 native 导出（[`Self::qualified_name_is`] 的
+    /// [`QualifiedNameConcern::NativeName`] 面）**且** 不是纯 yx 实现
+    /// （[`Self::is_yx_std_export`] 的补集）**且** 类别是 Function。
     /// 三个来源都是既有判据，这里只做组合，不在别处再写一份名字判断。
     ///
     /// native **常量**（std.math.PI）不算：它们作值的既有表示是零参调用臂，
@@ -315,17 +395,16 @@ impl ModuleRegistry {
         &self,
         full_path: &str,
     ) -> bool {
-        if !self.is_native_name(full_path) || self.is_yx_std_export(full_path) {
+        if !self.qualified_name_is(full_path, QualifiedNameConcern::NativeName)
+            || self.is_yx_std_export(full_path)
+        {
             return false;
         }
-        let Some((module_path, export_name)) = full_path.rsplit_once('.') else {
+        let Some((module, leaf)) = self.split_qualified(full_path) else {
             return false;
         };
         matches!(
-            self.modules
-                .get(module_path)
-                .and_then(|module| module.exports.get(export_name))
-                .map(|export| &export.kind),
+            module.exports.get(leaf).map(|export| &export.kind),
             Some(ExportKind::Function)
         )
     }

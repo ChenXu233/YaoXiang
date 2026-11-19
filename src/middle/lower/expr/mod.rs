@@ -15,6 +15,9 @@ mod op;
 mod reference;
 mod spawn;
 
+#[cfg(test)]
+mod tests;
+
 use super::AstToIrGenerator;
 use crate::ast;
 use crate::ast::Expr;

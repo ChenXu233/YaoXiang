@@ -6,8 +6,9 @@
 use super::AstToIrGenerator;
 use crate::ast::{self, Expr};
 use crate::frontend::core::sema::{MonoType, PolyType};
+use crate::frontend::module::registry::QualifiedNameConcern;
 use crate::frontend::module::resolver::Resolver;
-use crate::frontend::module::{ExportKind, ModuleSource};
+use crate::frontend::module::ExportKind;
 use crate::middle::ir::ir::{ConstValue, Operand};
 use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};
 use crate::util::span::Span;
@@ -338,43 +339,6 @@ impl AstToIrGenerator {
         var_name: &str,
     ) -> Option<&String> {
         self.constraint_var_concrete_types.get(var_name)
-    }
-
-    /// 模块限定导出是否是**函数代码**——函数表里可物化成闭包的可调用体。
-    ///
-    /// 值路径的兜底臂把「不在跨文件值绑定布局里的导出」一律当 native 常量零参
-    /// 调用（`std.math.PI` 即此形态）。但函数定义（lambda/块绑定）同样不进值绑定
-    /// 布局——它按名进函数表，是**代码**而不是常量（#479：`f = greet` 装进了
-    /// greet() 的返回值，f() 得 void）。函数代码物化为 MakeClosure，与
-    /// `lib.greet` 作值的 #396/#348 表示一致。
-    ///
-    /// 判据落到**导出粒度**（#493）：模块来源不再单独决定结果。
-    /// - 用户/vendor 模块的 `Function` 导出是代码；
-    /// - **纯 yx 实现**的 std 导出同样是代码——`std.json.parse` / `std.list.map`
-    ///   定义在嵌入源里（`src/std/yx_sources.rs`），与用户模块走同一前端管道、
-    ///   按限定名进函数表。此前 `ModuleSource::Std` 一刀切把它们误判成 native
-    ///   常量：别名被降成零参 `Call`，非泛型静默拿到被调体的返回值，泛型直接
-    ///   运行期 E6007；
-    /// - native 导出不是（#492 给它们自己的形态，见 `emit_module_export_value`）。
-    pub(in crate::middle) fn qualified_export_is_code(
-        &self,
-        qualified: &str,
-    ) -> bool {
-        let Some((module_path, export_name)) = qualified.rsplit_once('.') else {
-            return false;
-        };
-        let Some(module) = self.registry.get(module_path) else {
-            return false;
-        };
-        if !matches!(
-            module.exports.get(export_name).map(|export| &export.kind),
-            Some(ExportKind::Function)
-        ) {
-            return false;
-        }
-        // std 面按导出粒度再判一次**实现来源**（native vs 嵌入 yx 定义）；
-        // 用户/vendor 导出不需要这次追问（它们的导出都是本仓源码）。
-        module.source != ModuleSource::Std || self.registry.is_yx_std_export(qualified)
     }
 
     /// 查找变量的类型
@@ -898,7 +862,10 @@ impl AstToIrGenerator {
                 name.clone()
             } else if let Some(qualified) = self.use_aliases.get(name) {
                 qualified.clone()
-            } else if self.registry.is_native_name(name) {
+            } else if self
+                .registry
+                .qualified_name_is(name, QualifiedNameConcern::NativeName)
+            {
                 name.clone()
             } else if let Some(qualified) = self.registry.short_to_qualified_map().get(name) {
                 qualified.clone()

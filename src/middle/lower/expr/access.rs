@@ -3,7 +3,7 @@
 //! 方法体逐字搬自原 `middle/ir/ir_gen.rs`（WBS 7.0.3），语义未改。
 
 use crate::ast::Expr;
-use crate::frontend::module::symbol::DefKind;
+use crate::frontend::module::registry::QualifiedNameConcern;
 use crate::middle::ir::ir::{ConstValue, Instruction, Operand};
 use crate::middle::lower::AstToIrGenerator;
 use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};
@@ -32,7 +32,10 @@ impl AstToIrGenerator {
         span: Span,
         instructions: &mut Vec<Instruction>,
     ) -> bool {
-        if self.qualified_export_is_code(qualified) {
+        if self
+            .registry
+            .qualified_name_is(qualified, QualifiedNameConcern::FunctionCodeExport)
+        {
             instructions.push(Instruction::MakeClosure {
                 dst: Operand::Local(result_reg),
                 func: qualified.to_string(),
@@ -50,7 +53,10 @@ impl AstToIrGenerator {
             });
             return true;
         }
-        if self.registry.is_native_name(qualified) {
+        if self
+            .registry
+            .qualified_name_is(qualified, QualifiedNameConcern::NativeName)
+        {
             instructions.push(Instruction::Call {
                 dst: Some(Operand::Local(result_reg)),
                 func: Operand::Const(ConstValue::String(qualified.to_string())),
@@ -182,20 +188,21 @@ impl AstToIrGenerator {
             if self.emit_module_export_value(&qualified, result_reg, *span, instructions) {
                 return Ok(());
             }
-            if let Some(def) = self.registry.symbols().def(&qualified) {
-                if matches!(
-                    self.registry.symbols().kind(def),
-                    DefKind::Function | DefKind::Method
-                ) {
-                    instructions.push(Instruction::MakeClosure {
-                        dst: Operand::Local(result_reg),
-                        func: qualified,
-                        env: vec![],
-                        def: None,
-                        span: *span,
-                    });
-                    return Ok(());
-                }
+            // ③ 可调用 def（命名空间臂）：项目符号表 Function/Method def →
+            // MakeClosure。判据已收敛进 registry 单一查询接口（issue #494），
+            // 与①②的三路判据同源不同面（def 面不看实现来源）。
+            if self
+                .registry
+                .qualified_name_is(&qualified, QualifiedNameConcern::FunctionOrMethodDef)
+            {
+                instructions.push(Instruction::MakeClosure {
+                    dst: Operand::Local(result_reg),
+                    func: qualified,
+                    env: vec![],
+                    def: None,
+                    span: *span,
+                });
+                return Ok(());
             }
         }
 
@@ -206,7 +213,7 @@ impl AstToIrGenerator {
                 let reg = &self.registry;
                 if reg.is_std_submodule(module_name) {
                     let path = format!("std.{}", field);
-                    if reg.is_native_name(&path) {
+                    if reg.qualified_name_is(&path, QualifiedNameConcern::NativeName) {
                         Some(path)
                     } else {
                         None
@@ -298,7 +305,10 @@ impl AstToIrGenerator {
             }
 
             // 检查是否是命名空间常量访问
-            if self.registry.is_native_name(&full_path) {
+            if self
+                .registry
+                .qualified_name_is(&full_path, QualifiedNameConcern::NativeName)
+            {
                 // 命名空间常量访问：生成零参数函数调用
                 instructions.push(Instruction::Call {
                     dst: Some(Operand::Local(result_reg)),
