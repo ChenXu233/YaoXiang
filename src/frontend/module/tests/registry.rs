@@ -97,7 +97,9 @@ fn test_qualified_name_native_name_answers_by_form() {
         ("ghost.thing", false),     // 未知名
         ("println", false),         // 无点裸名
     ] {
+        // Act：查询该形态在 NativeName 关注面的答案
         let actual = registry.qualified_name_is(name, QualifiedNameConcern::NativeName);
+        // Assert：答案必须与面板一致
         assert_eq!(
             actual, expected,
             "NativeName 对 {name} 的回答必须为 {expected}（#494 面板）"
@@ -127,7 +129,9 @@ fn test_qualified_name_function_code_export_answers_by_form() {
         ("ghost.thing", false),     // 未知名
         ("println", false),         // 无点裸名
     ] {
+        // Act：查询该形态在 FunctionCodeExport 关注面的答案
         let actual = registry.qualified_name_is(name, QualifiedNameConcern::FunctionCodeExport);
+        // Assert：答案必须与面板一致
         assert_eq!(
             actual, expected,
             "FunctionCodeExport 对 {name} 的回答必须为 {expected}（#494 面板）"
@@ -157,7 +161,9 @@ fn test_qualified_name_function_or_method_def_answers_by_form() {
         ("ghost.thing", false),    // 未知名
         ("println", false),        // 无点裸名
     ] {
+        // Act：查询该形态在 FunctionOrMethodDef 关注面的答案
         let actual = registry.qualified_name_is(name, QualifiedNameConcern::FunctionOrMethodDef);
+        // Assert：答案必须与面板一致
         assert_eq!(
             actual, expected,
             "FunctionOrMethodDef 对 {name} 的回答必须为 {expected}（#494 面板）"
