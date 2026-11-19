@@ -762,10 +762,11 @@ impl MonoType {
         }
 
         /// 逆序压入「子节点 + 分隔符」，使弹出顺序 = 书写顺序。
+        /// `children` 来自 [`MonoType::type_children`]（书写序）。
         fn push_joined<'a>(
             stack: &mut Vec<Task<'a>>,
             sep: &'static str,
-            children: &'a [MonoType],
+            children: &[&'a MonoType],
         ) {
             for (i, child) in children.iter().enumerate().rev() {
                 stack.push(Task::Node(child));
@@ -803,73 +804,88 @@ impl MonoType {
                 MonoType::Generic { name, args } if name == "Tuple" && !args.is_empty() => {
                     out.push('(');
                     stack.push(Task::Lit(")"));
-                    push_joined(&mut stack, ", ", args);
+                    push_joined(&mut stack, ", ", &ty.type_children());
                 }
                 MonoType::Generic { name, args } if name == "Tuple" && args.is_empty() => {
                     out.push_str("()");
                 }
                 MonoType::Generic { name, args } if name == "Option" && !args.is_empty() => {
+                    // 渲染只消费 walker 序列的首实参（其余实参不参与渲染）
+                    let children = ty.type_children();
                     stack.push(Task::Lit("?"));
-                    stack.push(Task::Node(&args[0]));
+                    stack.push(Task::Node(children[0]));
                 }
                 MonoType::Generic { name, args } if name == "Result" && args.len() == 2 => {
+                    // 渲染消费 walker 序列前缀 2（恰为全集）
+                    let children = ty.type_children();
                     out.push_str("Result(");
                     stack.push(Task::Lit(")"));
-                    stack.push(Task::Node(&args[1]));
+                    stack.push(Task::Node(children[1]));
                     stack.push(Task::Lit(", "));
-                    stack.push(Task::Node(&args[0]));
+                    stack.push(Task::Node(children[0]));
                 }
-                MonoType::Fn {
-                    params,
-                    return_type,
-                } => {
+                MonoType::Fn { .. } => {
                     out.push_str("fn(");
+                    // walker 序列 = 参数类型在前、return_type 恒最后
+                    let mut children = ty.type_children();
+                    let return_type = children
+                        .pop()
+                        .expect("Fn 的 walker 序列恒以 return_type 收尾");
                     stack.push(Task::Node(return_type));
                     stack.push(Task::Lit(") -> "));
-                    push_joined(&mut stack, ", ", params);
+                    push_joined(&mut stack, ", ", &children);
                 }
                 MonoType::TypeVar(v) => out.push_str(&format!("{}", v)),
                 MonoType::TypeRef(name) => out.push_str(name),
                 MonoType::Generic { name, args } if name == "Range" && !args.is_empty() => {
+                    // 渲染只消费 walker 序列的首实参
+                    let children = ty.type_children();
                     out.push_str("Range(");
                     stack.push(Task::Lit(")"));
-                    stack.push(Task::Node(&args[0]));
+                    stack.push(Task::Node(children[0]));
                 }
-                MonoType::Union(types) => {
+                MonoType::Union(_) => {
                     out.push('(');
                     stack.push(Task::Lit(")"));
-                    push_joined(&mut stack, " | ", types);
+                    push_joined(&mut stack, " | ", &ty.type_children());
                 }
-                MonoType::Intersection(types) => {
+                MonoType::Intersection(_) => {
                     out.push('(');
                     stack.push(Task::Lit(")"));
-                    push_joined(&mut stack, " & ", types);
+                    push_joined(&mut stack, " & ", &ty.type_children());
                 }
                 MonoType::Generic { name, args } if name == "Arc" && !args.is_empty() => {
+                    // 渲染只消费 walker 序列的首实参
+                    let children = ty.type_children();
                     out.push_str("Arc(");
                     stack.push(Task::Lit(")"));
-                    stack.push(Task::Node(&args[0]));
+                    stack.push(Task::Node(children[0]));
                 }
                 MonoType::Generic { name, args } if name == "Weak" && !args.is_empty() => {
+                    // 渲染只消费 walker 序列的首实参
+                    let children = ty.type_children();
                     out.push_str("Weak(");
                     stack.push(Task::Lit(")"));
-                    stack.push(Task::Node(&args[0]));
+                    stack.push(Task::Node(children[0]));
                 }
-                MonoType::Generic { name, args } => {
+                MonoType::Generic { name, .. } => {
                     out.push_str(name);
                     out.push('(');
                     stack.push(Task::Lit(")"));
-                    push_joined(&mut stack, ", ", args);
+                    push_joined(&mut stack, ", ", &ty.type_children());
                 }
-                MonoType::Ref { mutable, inner } => {
+                MonoType::Ref { mutable, .. } => {
                     out.push_str(if *mutable { "&mut " } else { "&" });
-                    stack.push(Task::Node(inner));
+                    // walker 序列 = [inner]
+                    let children = ty.type_children();
+                    stack.push(Task::Node(children[0]));
                 }
-                MonoType::AssocType {
-                    host_type,
-                    assoc_name,
-                    assoc_args,
-                } => {
+                MonoType::AssocType { assoc_name, .. } => {
+                    // walker 序列 = host_type 恒首、assoc_args 随后
+                    let children = ty.type_children();
+                    let (host_type, assoc_args) = children
+                        .split_first()
+                        .expect("AssocType 的 walker 序列恒以 host_type 开头");
                     // 书写顺序：host::name(args)；逆序压入 ⇒ 弹出即书写顺序
                     if !assoc_args.is_empty() {
                         stack.push(Task::Lit(")"));
@@ -879,37 +895,41 @@ impl MonoType {
                     stack.push(Task::Text(format!("::{assoc_name}")));
                     stack.push(Task::Node(host_type));
                 }
-                MonoType::Literal {
-                    name: _,
-                    base_type,
-                    value,
-                } => {
+                MonoType::Literal { value, .. } => {
+                    // walker 序列 = [base_type]
+                    let children = ty.type_children();
                     // 书写顺序：base::value；逆序压入 ⇒ 弹出即书写顺序
                     stack.push(Task::Text(format!("::{}", value)));
-                    stack.push(Task::Node(base_type));
+                    stack.push(Task::Node(children[0]));
                 }
                 MonoType::MetaType {
                     universe_level: _,
                     type_params: _,
                 } => {
                     // RFC-010: Type is always just "Type", no [] syntax
+                    // 渲染不消费任何类型子节点（type_params 不参与渲染）
                     out.push_str("Type");
                 }
-                MonoType::Refined { base, constraint } => {
+                MonoType::Refined { constraint, .. } => {
+                    // walker 序列 = [base]
+                    let children = ty.type_children();
                     stack.push(Task::Lit("}"));
                     stack.push(Task::Text(format!("{}", constraint)));
                     stack.push(Task::Lit(" {"));
-                    stack.push(Task::Node(base));
+                    stack.push(Task::Node(children[0]));
                 }
-                MonoType::DepFn {
-                    params,
-                    return_type,
-                } => {
+                MonoType::DepFn { params, .. } => {
                     out.push('(');
+                    // walker 序列 = 参数类型在前、return_type 恒最后
+                    let mut children = ty.type_children();
+                    let return_type = children
+                        .pop()
+                        .expect("DepFn 的 walker 序列恒以 return_type 收尾");
                     stack.push(Task::Node(return_type));
                     stack.push(Task::Lit(") -> "));
                     for (i, p) in params.iter().enumerate().rev() {
-                        stack.push(Task::Node(&p.ty));
+                        // children[i] 与 params[i].ty 对齐（walker 序列约定）
+                        stack.push(Task::Node(children[i]));
                         stack.push(Task::Text(format!("{}: ", p.name)));
                         if i > 0 {
                             stack.push(Task::Lit(", "));
@@ -953,7 +973,7 @@ impl MonoType {
 
         let mut stack: Vec<Frame<'_>> = vec![Frame {
             node: self,
-            children: type_subtree_children(self),
+            children: self.type_children(),
             next: 0,
             done: Vec::new(),
         }];
@@ -975,7 +995,7 @@ impl MonoType {
             if let Some(child) = child {
                 stack.push(Frame {
                     node: child,
-                    children: type_subtree_children(child),
+                    children: child.type_children(),
                     next: 0,
                     done: Vec::new(),
                 });
@@ -989,6 +1009,78 @@ impl MonoType {
             }
         }
         unreachable!("根节点必然在工作列表排空时重建")
+    }
+
+    /// `MonoType` 的**类型子节点枚举**——单一定义（issue #474 / WBS S9.2）。
+    ///
+    /// 按字段声明顺序枚举本变体直接持有的全部 `MonoType` 子节点。三个消费者共用
+    /// 这一份定义：
+    ///
+    /// - `type_name`（渲染）：消费该序列的全集或前缀（如 `Option` 只消费首实参、
+    ///   `MetaType` 不消费），标签 / 分隔符 / 常量文本帧留在渲染侧；
+    /// - `type_name_hash`（mono/instance.rs）：把该序列逆序压入哈希工作列表——
+    ///   `ConstValue` / `Name` / `DerivedHash` 三帧是哈希面特有，不经此枚举；
+    ///   `Fn` 在哈希面不消费任何子节点（只写 `"fn"` 标签）；
+    /// - `clone_deep`（栈安全深拷贝）：按序克隆后由 `rebuild_with_children` 重建。
+    ///
+    /// **本 match 禁止兜底臂**：新增 `MonoType` 变体时编译器在此指路——新变体的
+    /// 类型子节点面必须先在此登记，再由各消费者补臂（渲染与哈希的 match 同样穷尽）。
+    ///
+    /// 序列约定（位置即语义，消费者依赖）：
+    /// - `Fn` / `DepFn`：参数类型在前，`return_type` 恒最后；
+    /// - `AssocType`：`host_type` 恒首，`assoc_args` 随后；
+    /// - `Literal`：`base_type`；`Refined`：`base`；`Ref`：`inner`；
+    /// - `Generic` / `Union` / `Intersection` / `MetaType`：全部实参按序。
+    ///
+    /// `Struct` / `Enum` 返回空表：它们不是「类型逐层增长」的载体——`MonoType`
+    /// 载在 `StructType` / `EnumType` 的字段表里，不是本变体直接持有的子节点，
+    /// 其复合载荷走派生克隆（issue #447）。
+    pub fn type_children(&self) -> Vec<&MonoType> {
+        match self {
+            MonoType::Never
+            | MonoType::Void
+            | MonoType::Bool
+            | MonoType::Int(_)
+            | MonoType::Float(_)
+            | MonoType::Char
+            | MonoType::Struct(_)
+            | MonoType::Enum(_)
+            | MonoType::TypeVar(_)
+            | MonoType::TypeRef(_)
+            | MonoType::LibraryRef { .. }
+            | MonoType::ExternRef { .. } => Vec::new(),
+            MonoType::Fn {
+                params,
+                return_type,
+            } => {
+                let mut children: Vec<&MonoType> = params.iter().collect();
+                children.push(return_type);
+                children
+            }
+            MonoType::Generic { args, .. } => args.iter().collect(),
+            MonoType::Union(types) | MonoType::Intersection(types) => types.iter().collect(),
+            MonoType::Ref { inner, .. } => vec![inner],
+            MonoType::AssocType {
+                host_type,
+                assoc_args,
+                ..
+            } => {
+                let mut children: Vec<&MonoType> = vec![host_type];
+                children.extend(assoc_args.iter());
+                children
+            }
+            MonoType::Literal { base_type, .. } => vec![base_type],
+            MonoType::MetaType { type_params, .. } => type_params.iter().collect(),
+            MonoType::Refined { base, .. } => vec![base],
+            MonoType::DepFn {
+                params,
+                return_type,
+            } => {
+                let mut children: Vec<&MonoType> = params.iter().map(|p| &p.ty).collect();
+                children.push(return_type);
+                children
+            }
+        }
     }
 
     /// 如果是 TypeVar 变体，返回内部 TypeVar
@@ -1709,49 +1801,8 @@ impl fmt::Display for PolyType {
 
 // ==================== 栈安全深拷贝的辅助（WBS 3.10.1 / issue #447） ====================
 
-/// 取出 `MonoType` 的**类型子节点**（按变体声明顺序）。
-///
-/// 只有直接持有 `MonoType` 子树、且属于「类型逐层增长」载体的变体返回子节点；
-/// 其余变体（含携带字段/方法等复合载荷的 `Struct`/`Enum`）返回空表，
-/// 由 `rebuild_with_children` 走派生克隆（它们不是本路径的深度增长源）。
-fn type_subtree_children(ty: &MonoType) -> Vec<&MonoType> {
-    match ty {
-        MonoType::Generic { args, .. } => args.iter().collect(),
-        MonoType::Fn {
-            params,
-            return_type,
-        } => {
-            let mut v: Vec<&MonoType> = params.iter().collect();
-            v.push(return_type);
-            v
-        }
-        MonoType::Ref { inner, .. } => vec![inner],
-        MonoType::Union(types) | MonoType::Intersection(types) => types.iter().collect(),
-        MonoType::AssocType {
-            host_type,
-            assoc_args,
-            ..
-        } => {
-            let mut v: Vec<&MonoType> = vec![host_type];
-            v.extend(assoc_args.iter());
-            v
-        }
-        MonoType::Literal { base_type, .. } => vec![base_type],
-        MonoType::MetaType { type_params, .. } => type_params.iter().collect(),
-        MonoType::Refined { base, .. } => vec![base],
-        MonoType::DepFn {
-            params,
-            return_type,
-        } => {
-            let mut v: Vec<&MonoType> = params.iter().map(|p| &p.ty).collect();
-            v.push(return_type);
-            v
-        }
-        _ => Vec::new(),
-    }
-}
-
-/// 用按序克隆好的子节点重建节点（`children` 数量必须等于 `type_subtree_children`）。
+/// 用按序克隆好的子节点重建节点（`children` 数量必须等于
+/// [`MonoType::type_children`] 的枚举）。
 fn rebuild_with_children(
     node: &MonoType,
     children: Vec<MonoType>,
