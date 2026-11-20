@@ -175,7 +175,7 @@ python ../scripts/rfc/check_tracking.py        # RFC 状态一致性
 
 - **同一时刻只允许一个持有者**；实现者不进这棵树（它在主仓工作树写代码）。
 - 确需两人真并行量测不同 revision 时，才开 `<batch>-b` 第二棵树，并在批次记录里写明理由（代价 = 再一次全量构建）。
-- **`trial` 的命令形态**：`trial <batch> --patch <p> -- <command...>`（推荐；`--` 之后的 token 原样作为命令，命令可含 `-`/`--` 参数）与 `trial <batch> <command...> --patch <p>`（命令不含 `-` 开头参数时可用）等价。`--patch` 必须写在 `--` 之前。
+- **`trial` 的命令形态**：`trial <batch> --patch <p> -- <command...>`（推荐；`--` 之后的 token 原样作为命令，命令可含 `-`/`--` 参数）与 `trial <batch> <command...> --patch <p>`（命令不含 `-` 开头参数时可用）等价。`--patch` 必须写在 `--` 之前；命令不可为空；混用两种形态（`--` 前后都有命令）会被拒绝（exit 2）。
 - **`trial` 之后必须 `build` 再量测**：trial 的机械还原只覆盖源码文件，变异版测试已把批次树二进制重编——不重建则后续量测全部出自变异产物。
 - 探针（`.yx`）也放 `target/yx-scratch/<batch>/`（`target/` 被忽略，不进语料差分）；它是工作区产物，不是文档出处（见 AGENTS 元规则 ①）。
 

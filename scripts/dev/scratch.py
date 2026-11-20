@@ -23,6 +23,7 @@
   python scripts/dev/scratch.py release <batch> --by <member>
   python scripts/dev/scratch.py trial   <batch> --patch <p> -- <command...>   # 变异：apply→跑→restore 全自动（推荐；命令可含 -/-- 参数）
   python scripts/dev/scratch.py trial   <batch> <command...> --patch <p>      # 同上，命令排在 --patch 之前（命令不含 - 开头参数时可用）
+  注：命令不可为空；混用两种形态（`--` 前后都有命令）会被拒绝。
   python scripts/dev/scratch.py status  [--json] [--size]
   python scripts/dev/scratch.py rm      <batch> [--force]
   python scripts/dev/scratch.py gc      [--force]
@@ -226,6 +227,14 @@ def cmd_trial(args):
     唯一硬证据是故意把修复改坏看测试会不会红。但手工改文件、手工改回来，
     既可能忘、也可能改得不逐字节一致 —— 于是把它做成补丁 + 自动还原。
     """
+    # 命令非空必须在任何变异动作之前判定：若放在 apply 之后早退，树会残留
+    # 变异态（t7 F1；HOWTO/--help 都要求「命令不可为空」）。
+    cmd = list(args.command)
+    if not cmd:
+        die(
+            "命令不可为空：trial <batch> --patch <p> -- <命令...>"
+            "（或 trial <batch> <命令...> --patch <p>）"
+        )
     repo = repo_root()
     meta = load_meta(repo, args.batch)
     path = Path(meta["path"])
@@ -248,14 +257,6 @@ def cmd_trial(args):
     print(f"[trial] 已应用变异补丁：{', '.join(changed)}")
     for f in changed:
         print(f"[trial]   {f}: HEAD={head_blob[f][:12]}… → 变异后={mutated_blob[f][:12]}…")
-    cmd = list(args.command)
-    # `--` 分隔形态已在 main() 的 split_trial_argv() 预处理时收为 args.command；
-    # argparse 不会把 `--` 本身留给位置参数，故此处不再剥离前导 `--`。
-    if not cmd:
-        die(
-            "要给命令：trial <batch> --patch <p> -- <命令...>"
-            "（或 trial <batch> <命令...> --patch <p>）"
-        )
     print(f"[trial] 执行：{' '.join(cmd)}")
     # 还原必达（#516）：命令启动失败（如路径错 FileNotFoundError）等异常
     # 不得跳过 restore——否则批次树残留变异态，违反「trial 全自动
@@ -280,6 +281,9 @@ def cmd_trial(args):
         if after_status or not back_to_head:
             print("[trial] 警告：树没回到 HEAD 状态，请人工核对后再继续", file=sys.stderr)
             sys.exit(3)
+    # 防御分支：命令启动失败在 subprocess.run 处抛异常（restore 已由 finally
+    # 保证，异常如实上抛 ⇒ Python 进程 exit 1），当前实现下本分支不可达。
+    # 保留不改变退出码语义；若要把该路径收敛为 exit 2，须另作裁决。
     if rc is None:
         print("[trial] 命令未能启动（树已机械还原）；请核对命令本身", file=sys.stderr)
         sys.exit(2)
@@ -395,6 +399,7 @@ def main(argv=None):
             "命令形态（二选一）：\n"
             "  trial <batch> --patch <p> -- <command...>   # 推荐；命令可含 -/-- 参数\n"
             "  trial <batch> <command...> --patch <p>      # 命令不含 - 开头参数时可用\n"
+            "\n命令不可为空；混用两种形态（`--` 前后都有命令）会被拒绝（exit 2）。\n"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -408,6 +413,14 @@ def main(argv=None):
 
     args = p.parse_args(argv)
     if command_after_sep is not None:
+        # 混用两形态（`--` 前后都有命令）时不能静默丢弃 argparse 解析出的命令
+        # （t7 F4）：报错并要求二选一。
+        if args.command:
+            p.error(
+                "混用了两种命令形态：`--` 之前解析到命令 "
+                f"{args.command!r}，`--` 之后又给了命令 {command_after_sep!r}；"
+                "二选一（见 `trial --help`）"
+            )
         args.command = command_after_sep
     args.f(args)
 
