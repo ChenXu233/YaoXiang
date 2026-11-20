@@ -7165,6 +7165,7 @@ canonical_text(RecordModel) =
 > - **I8**：每片均有语料/IR 快照零漂移或逐条分类的证据。
 > - **残留**：#537 维持「用户裁决前不修」登记（D 类；6.9.4/6.9.5 不得依赖其修复）；#539 导入面与 #552 维持另案；#540/#541 已关闭；#542 已落地（见上一节）。
 > - **同日新增欠账 2.1.4**（post-mono 内层隔离红态）不属 6.9，阻塞 verify 升门禁。
+> - **2026-11-20 结清**：2.1.4 已落地（内层隔离判据按槽身份重写，非放宽），verify 升门禁的 2.1.4 前置解除；见本文 §P2 2.1.4 收口。
 >
 > 收口后 6.9 不再接受新工作；P7 消费量词派生视图与 defeq 接口时不另建平行账本（WBS 闸口约定不变）。
 
@@ -7229,3 +7230,49 @@ canonical_text(RecordModel) =
 > **四、硬判据与变异**：输出逐字节不变三方证实——45-case 渲染/哈希双 pin（**抓取纪律**：动第一行前抓基线；PinHasher FNV-1a 规避 DefaultHasher 跨 rustc 版不稳定；经 pub 入口 SpecializationKey::hash 驱动——type_name_hash 私有不可直接见；**pin 先在未重构代码上验证绿**证明期望值来自重构前实现）+ IR 快照零漂移 + 语料 402 行零漂移。过程证据：AssocType 臂初稿漏写 `"assoc_type".hash(state)` ⇒ pin 当场红 ⇒ 补实现不改判据。稀见变体对照入库（LibraryRef/ExternRef/MetaType 渲染与哈希分歧——type_params 只进哈希；Generic String 实参被渲染忽略但进哈希；Struct 复合载荷 fields 不进哈希/渲染）。t2 三变异 **trial 正典**：M1 walker 跳 Union/Intersection ⇒ 渲染 pin 红 + 哈希 pin 红（两遍历器接线证明）且 **IR 快照绿——盲区证实**（语料面无 Union 类型名渲染位，实现者如实登记、t2 独立证实，pin 补位）；M2 跳 Generic 实参 ⇒ 双 pin 红 + 快照红；M3 AssocType host 移尾 ⇒ 顺序 pin 红（位置约定由 pin 兜底的证明）。
 
 > **五、验证链**：t1 一轮全绿（14 门禁）→ 队长 diff review（walker 穷尽性 + 第三副本收敛追认）→ 推送 `1aaeb3c5` → t2 **PASS**（五组锚复测 + 三变异 trial 机械可逆 + 溶解核账 type_subtree_children 零残留 + 等价性 + 卫生；运维注记：scratch.py init/build/release 须从主树 cwd 调用，trial 子命令不经 shell）→ t3 **APPROVE**（1 low = 双 pin zip 静默截断隐患 → `d459b07f` 两处循环前补长度相等断言；2 info = 提交信息行号为父提交口径注记 / 动态声称归 t2 且 pin 抓取锚点静态自洽——父提交 0b1cee05 仅改 en 镜像 docs，src 与 a60a93cb 等价）→ 收口笔（本节）。批次树已 release + gc。
+## P2 2.1.4 收口（2026-11-20）：内层隔离判据按槽身份重写
+
+> **现象与登记**：post-mono `verify_loose` 在 `tests/yaoxiang/03-modules/native_fn_member_value.yx` 与 `tests/yaoxiang/03-modules/pureyx_export_fn_value.yx` 上各报 1 条 `InnerIsolation`——`main` 与 `std.json.parse` 的具名局部名交集 `["r"]`。2026-11-19 随 #542 接线轮登记为 2.1.4：接线前即红、非 #542 族。
+>
+> **一、先证后改：定性为判据假阳性**（两个生产入口都复现：单文件 `Compiler` 与多文件 `compile_project`，各 1 条；函数/指令面 fns=56 instrs=2291 与 fns=24 instrs=1492）。四条身份证据：
+>
+> 1. **槽号不同**：同一个 `r` 落在三个不同槽——`main` 的两份分别是 outer@2 与 outer@1，`std.json.parse` 的 `r` 在 inner@7。
+> 2. **两表互不为前缀**：逐槽 (name, ty, scope_depth) 比对为假。真泄漏的形态是同一张槽位表被复用（下述 M1/M2 变异实测：泄漏时同槽号同名恒为真）。
+> 3. **`std.json.parse` 的槽表是它自己的声明序**：`s`（参数）→ `cs` → `i` → `rv` → `e` → `r` → `end`，与 `src/std/json.yx` 的 `parse` 体逐条对应；低槽区没有任何 `main` 的名字。若父帧泄漏，`main` 的 `p`/`q`/`r`（或 `f`/`r`/`j`）会以原槽号出现在 `parse` 表里。
+> 4. **目标身份是模块级声明**：`MakeClosure{func: "std.json.parse", env: [], def: Some(DefId)}`；两文件的函数表 56 项里没有任何 `closure_*`，`main`(#0) 与 `std.json.parse`(#4) 是同层兄弟。`env: []` 不构成判据——真嵌套闭包也可以 env 为空（探针实测）。
+>
+> **根因**：`MakeClosure` 在本仓是**函数值的一等表示**（`lower/expr/access.rs` 的 `emit_module_export_value` 三条路径共用；另有 `lower/curry.rs` 的柯里层与 `lower/expr/closure.rs` 的真闭包）。旧判据把「函数值引用」当成「词法嵌套」反推父子关系，于是任何被作值引用的顶层具名函数都进了比较面——判据的关系推断前提本身失效。
+>
+> **二、修法**：`LocalSlot` 增 `origin: Option<FrameId>`（生成帧身份）。帧号的唯一发放点是 `lower/scope.rs` 的 `NestedBodyGuard::enter` / `enter_decl`（7 处嵌套函数体入口全部经它），`register_local` / `take_cur_locals` 就地盖戳（覆盖已有槽时重盖本帧）。不变量 7 从「MakeClosure 反推嵌套 + 具名局部名交集」改为**函数内不变量**：一张槽位表里出现的生成帧至多一种（`None` 不计）；模块初始化序列（帧 0）同判据。嵌套推断整体删除。
+>
+> **三、判据更强而非更弱**（本项验收核心）：
+>
+> | 判定面 | 旧判据（名字交集） | 新判据（帧身份） |
+> | --- | --- | --- |
+> | 名字重用（同一源码名、两个独立声明） | 红（假阳性） | 绿 |
+> | 内层同名复用旧槽号 | 红（假阳性） | 绿 |
+> | 内层表混入外层帧槽（真泄漏） | 红，但只在名字撞上时 | 红 |
+> | 无名 temp 槽泄漏 | 看不见（按名过滤） | 红 |
+> | 外层表被清空型泄漏 | 漏报（名交集的外侧为空） | 红 |
+> | 模块初始化序列混帧 | 不在检查面 | 红 |
+> | 是否依赖 `MakeClosure` 站点存在 | 是（无站点即跳过） | 否 |
+>
+> 判据未被放宽的证据（独立复核）：生产管线注入真泄漏后同轮全语料清点——旧判据 12 个语料文件红、新判据 61 个红，**旧集是新集的真子集**（缺失 0、新独占 49）；反向泄漏（`Drop` 不还原父帧表）同样 61 个。不变量本身未删、未降级、无白名单：唯一的「豁免」是 `origin: None`，而生产侧只有 `register_local` / `take_cur_locals` 两条产生路径，两者都盖戳。
+>
+> **四、负控与定向回归（入库 7 条 + 1 条 DCE 侧替补）**：
+>
+> - `test_inner_isolation_foreign_frame_slot_rejected`：双帧一表必红，且断言被测 IR 内**没有任何 `MakeClosure`**——证明判据已脱离嵌套推断。
+> - `test_inner_isolation_inherited_outer_slot_rejected`：内层表继承外层帧槽必红，且违规归属混入帧的那张表（不是外层）。
+> - `test_inner_isolation_same_local_name_across_frames_pass` / `test_inner_isolation_independent_functions_same_local_name_pass` / `test_inner_isolation_lifted_lambda_for_var_name_reuse_pass`：三类假阳性形态必绿；其中同名用例带「只改外层局部名」的对照夹具，钉住「结论不取决于名字」。
+> - `test_inner_isolation_nested_lambda_frames_isolated`：真闭包与外层各自一帧必绿，且断言夹具真的生成了 `closure_*`（防空转）。变异实测：把 `NestedBodyGuard::enter` 改成「保存但不清空」或「不保存」，本测试各以 exit 101 失败，机械还原后重建转绿。
+> - `test_inner_isolation_library_fn_as_value_post_mono_pass`：两语料本体（`include_str!`）直驱生产入口后 post-mono 必绿。
+> - DCE 侧替补：`test_orphan_shared_layer_without_site_is_dominance_red`（直构无 `MakeClosure` 站点的共享层 ⇒ 支配性红），承接同批退役的 #542 陈旧红侧断言。
+>
+> **五、红面 2→0**：三种独立探针口径一致——本项 232 个走通文件（fns=5826 instrs=104939）修复前 `InnerIsolation` 2 条、修复后 0 条且其它不变量 0 条；独立验证探针 257 个文件 2→0；另一路复核探针 250 个文件 2→0。数字差异来自各探针的编译成功集合不同，红面结论一致。
+>
+> **六、基线与 e2e**：语料差分 402/402 零 diff；IR 快照 232 条 zero-diff（`normalize` 不打印 `origin`）；`.42` 无格式变更（`LocalSlot` 无 serde，字节码只带 `local_names`），两目标语料的 `.42` 与 `dump` 输出两版逐字节相同；两语料 CLI `run` 两版一致（stdout 13 字节 `member hello\n`、stderr 空、exit 0）。门禁：`cargo fmt --check`、`clippy --all --all-features --all-targets -- -D warnings`、`testsuite run fast`（2359 条 0 失败）、五项 CI 文档与边界检查全 exit 0。
+>
+> **七、偏差登记（流程面，与本次红测试同一根因）**：#542 收口笔 `75c28a09` 同时带进两件东西——(a) 使 `test_post_mono_shared_layer_turns_verify_green_after_dce` 的两条前提失效（`build_output` 不再按泛型名删原件、恢复闸删除 ⇒ 原件 `f` 留在表里且 `__f_l0` 的 `MakeClosure` 站点仍在，`verify` 的 env 槽数反推成立 ⇒ 删除前不再红），(b) `src/driver/tests/dce_wiring.rs` 的 1 行 import 顺序漂移（`cargo fmt --check` 在 `ae47df55` 上本就红在这一行）。可判定事实：`75c28a09` 之后到 `ae47df55` 之间**没有任何一笔改动 `src/**/*.rs`**（区间内全是 docs / 自动翻译 / `chore(bench)[skip ci]` / 依赖清单），而 pre-commit 的 Rust 钩子按 `types: [rust]` 触发 ⇒ `fmt` 与 `fast` 再没在任何最终版上跑过。不可判定项：git 不记录钩子执行结果，无法从仓库判定当时是 `--no-verify`、`SKIP=<hook>` 还是钩子未生效。处置：`f95883fc` 退役两条陈旧断言（改成断言新形态：mono 保留原件 `f` 且 `f` 仍持有 `__f_l0` 的站点）并补直构红侧负控，`fmt` 漂移同笔机械修正；其余绿侧断言全部保留。**建议**（未落规则）：把「docs-only 提交之前的最后一个 Rust 提交」列为必须人工跑一次 `fmt` + `fast` 的检查点。
+>
+> **八、提交与归口**：`f95883fc`（测试自洽：退役 + 负控 + fmt 漂移）、`53d5291d`（判据按槽身份 + 7 条负控/回归）、本笔（09 勾选与本文收口）。`LocalSlot.origin` 属 `ir.rs` 结构变更，归口 WBS 7b.1b（独占 commit / C4），需在 7b.1b 落地时一并计入。
+>>>>>>> 4a5a5fde (:memo: docs(plan): 2.1.4 收口——09 勾选 + 09a 落地实录（判据按槽身份）)
