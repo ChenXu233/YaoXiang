@@ -344,7 +344,7 @@ mod fstring_tests;
 
 理由：
 
-1. **C 能以零新增依赖消除词法层全部约 500 行重复**，且完全在可控范围内。`scan_string` / `scan_char` / `push_fstring_escape` 三份转义解码合并为**唯一**的 `decode_escape(lexer, out) -> bool`，四个基数扫描器合并为**唯一**的 `scan_radix_number(lexer, base, digits_pred)`。这是纯机械重构，判据为 C5 的"AST 快照相同 + 诊断相同"。
+1. **C 能以零新增依赖消除词法层全部约 500 行重复**，且完全在可控范围内。`scan_string` / `scan_char` / `push_fstring_escape` 三份转义解码合并为**唯一**的 `decode_escape(lexer, &mut String, EscapeMode)`，四个基数扫描器合并为**唯一**的 `scan_radix_number(lexer, Radix, String)`。这是纯机械重构，判据为 C5 的"AST 快照相同 + 诊断相同"。
 2. **A（`logos`）的能力是真实的**——它能把转义解码与数字扫描各收敛为一份。**但它解决不了 f-string 嵌套编译**，而后者是词法层最重要的缺陷。同时引入一个新依赖会改变 `Literals` 的错误类型（`LexError` 的 `InvalidEscape` / `InvalidNumber` 变体需要重新映射），这会**直接违反 C5 的"诊断相同"判据**，除非额外写一层适配——那等于又引入了一次手工同步点。
 3. **B（`regex` 手写 DFA）不采纳**：它要求手写状态机，工作量与 A 相当但可控性远不如 A。既然在 A 与 B 之间选，逻辑上必须选 A；既然本文主张 C 优先，就没有选 B 的理由。
 
@@ -598,7 +598,7 @@ mod fstring_tests;
 
 | 文件 | 改动 |
 | --- | --- |
-| `src/frontend/core/lexer/literals.rs` | 四个基数扫描器合并为 `scan_radix_number(lexer, base, digit_pred)`；三处转义解码合并为唯一 `decode_escape(lexer, out)`；`scan_multi_line_string` 与 `scan_fstring_multi_line` 合并 |
+| `src/frontend/core/lexer/literals.rs` | 四个基数扫描器合并为 `scan_radix_number(lexer, Radix, String)`；三处转义解码合并为唯一 `decode_escape(lexer, &mut String, EscapeMode)`；`scan_multi_line_string` 与 `scan_fstring_multi_line` 合并 |
 | `src/frontend/core/parser/pratt/nud.rs:367` / `:398` | 移除运行时嵌套 `tokenize()`，改由词法期一次性产出 |
 | `src/frontend/core/parser/pratt/led.rs:30-88` / `nud.rs:27-76` | 两张手写表替换为生成的映射表 |
 | `src/ast/mod.rs:194-218` | `BinOp` 与 `const_data::BinOp` 改为同源生成 |

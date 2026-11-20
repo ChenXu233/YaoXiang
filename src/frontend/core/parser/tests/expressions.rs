@@ -157,7 +157,7 @@ fn test_fstring_segments_format_spec() {
 fn test_fstring_interpolation_tokenize_count_is_one() {
     // 05 §「f-string 嵌套编译必须显式处理」：N 个插值不得各自重入公共词法。
     // 解析一个含 3 个插值的 f-string 时，公共 tokenize 只应发生 1 次（外层源码），
-    // 插值表达式由一次性批量词法取回（tokenize_interpolations）。
+    // 插值表达式由一次性批量词法取回（lex_interpolations）。
     use crate::frontend::core::lexer::{
         interpolation_batch_call_count, reset_lexing_call_counts, tokenize_call_count,
     };

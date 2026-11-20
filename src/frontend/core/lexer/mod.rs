@@ -81,40 +81,42 @@ pub fn lex_interpolations(
         .collect()
 }
 
+// 测试计数器用 thread_local：libtest 每个 #[test] 跑在独立线程上，其它用例的
+// tokenize 调用不会窜进本测试的 reset 窗口（进程级 static 在 --test-threads>1
+// 时会间歇假红）。断言与 reset 语义不变。
 #[cfg(test)]
-static TOKENIZE_CALLS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
-
-#[cfg(test)]
-static INTERPOLATION_BATCH_CALLS: std::sync::atomic::AtomicUsize =
-    std::sync::atomic::AtomicUsize::new(0);
+std::thread_local! {
+    static TOKENIZE_CALLS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    static INTERPOLATION_BATCH_CALLS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
 
 #[cfg(test)]
 fn record_tokenize_call() {
-    TOKENIZE_CALLS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    TOKENIZE_CALLS.with(|calls| calls.set(calls.get() + 1));
 }
 
 #[cfg(test)]
 fn record_interpolation_batch_call() {
-    INTERPOLATION_BATCH_CALLS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    INTERPOLATION_BATCH_CALLS.with(|calls| calls.set(calls.get() + 1));
 }
 
-/// 测试用：公共 tokenize 入口被调用次数。用于证明 f-string 插值不再逐条重入词法。
+/// 测试用：公共词法入口被调用次数。用于证明 f-string 插值不再逐条重入词法。
 #[cfg(test)]
 pub(crate) fn tokenize_call_count() -> usize {
-    TOKENIZE_CALLS.load(std::sync::atomic::Ordering::Relaxed)
+    TOKENIZE_CALLS.with(std::cell::Cell::get)
 }
 
 /// 测试用：一次性插值批量词法（lex_interpolations）被调用次数。
 #[cfg(test)]
 pub(crate) fn interpolation_batch_call_count() -> usize {
-    INTERPOLATION_BATCH_CALLS.load(std::sync::atomic::Ordering::Relaxed)
+    INTERPOLATION_BATCH_CALLS.with(std::cell::Cell::get)
 }
 
-/// 测试用：清零两个词法调用计数，使同进程内的用例互不影响。
+/// 测试用：清零本线程的两个词法调用计数（thread_local，天然不影响其它用例）。
 #[cfg(test)]
 pub(crate) fn reset_lexing_call_counts() {
-    TOKENIZE_CALLS.store(0, std::sync::atomic::Ordering::Relaxed);
-    INTERPOLATION_BATCH_CALLS.store(0, std::sync::atomic::Ordering::Relaxed);
+    TOKENIZE_CALLS.with(|calls| calls.set(0));
+    INTERPOLATION_BATCH_CALLS.with(|calls| calls.set(0));
 }
 
 /// Log a token for debugging
