@@ -21,7 +21,7 @@ impl StdModule for TimeModule {
 
     fn exports(&self) -> Vec<NativeExport> {
         vec![
-            export!("now", "std.time.now", "() -> DateTime", native_now),
+            export!("now", "std.time.now", "() -> Int", native_now),
             export!(
                 "timestamp",
                 "std.time.timestamp",
@@ -50,7 +50,7 @@ impl StdModule for TimeModule {
             export!(
                 "parse_time",
                 "std.time.parse_time",
-                "(fmt: String, s: String) -> DateTime",
+                "(fmt: String, s: String) -> Int",
                 native_parse_time
             ),
             export!(
@@ -467,7 +467,7 @@ fn parse_by_format(
     Ok((year, month, day, hour, minute, second))
 }
 
-// DateTime Accessor Functions
+// Timestamp field accessor functions
 
 /// Get field from timestamp.
 fn get_datetime_field(
@@ -481,7 +481,7 @@ fn get_datetime_field(
     Ok(RuntimeValue::Int(fields[field_index]))
 }
 
-/// Native implementation: DateTime::year
+/// Native implementation: datetime_year
 fn native_datetime_year(
     args: &[RuntimeValue],
     _ctx: &mut NativeContext<'_>,
@@ -489,7 +489,7 @@ fn native_datetime_year(
     get_datetime_field(args, 0)
 }
 
-/// Native implementation: DateTime::month
+/// Native implementation: datetime_month
 fn native_datetime_month(
     args: &[RuntimeValue],
     _ctx: &mut NativeContext<'_>,
@@ -497,7 +497,7 @@ fn native_datetime_month(
     get_datetime_field(args, 1)
 }
 
-/// Native implementation: DateTime::day
+/// Native implementation: datetime_day
 fn native_datetime_day(
     args: &[RuntimeValue],
     _ctx: &mut NativeContext<'_>,
@@ -505,7 +505,7 @@ fn native_datetime_day(
     get_datetime_field(args, 2)
 }
 
-/// Native implementation: DateTime::hour
+/// Native implementation: datetime_hour
 fn native_datetime_hour(
     args: &[RuntimeValue],
     _ctx: &mut NativeContext<'_>,
@@ -513,7 +513,7 @@ fn native_datetime_hour(
     get_datetime_field(args, 3)
 }
 
-/// Native implementation: DateTime::minute
+/// Native implementation: datetime_minute
 fn native_datetime_minute(
     args: &[RuntimeValue],
     _ctx: &mut NativeContext<'_>,
@@ -521,7 +521,7 @@ fn native_datetime_minute(
     get_datetime_field(args, 4)
 }
 
-/// Native implementation: DateTime::second
+/// Native implementation: datetime_second
 fn native_datetime_second(
     args: &[RuntimeValue],
     _ctx: &mut NativeContext<'_>,
@@ -529,7 +529,7 @@ fn native_datetime_second(
     get_datetime_field(args, 5)
 }
 
-/// Native implementation: DateTime::weekday
+/// Native implementation: datetime_weekday
 fn native_datetime_weekday(
     args: &[RuntimeValue],
     _ctx: &mut NativeContext<'_>,
@@ -537,7 +537,7 @@ fn native_datetime_weekday(
     get_datetime_field(args, 6)
 }
 
-/// Native implementation: DateTime::to_string
+/// Native implementation: datetime_to_string
 fn native_datetime_to_string(
     args: &[RuntimeValue],
     _ctx: &mut NativeContext<'_>,

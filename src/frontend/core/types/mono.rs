@@ -1095,7 +1095,8 @@ impl MonoType {
     /// **「哪些名字是内置类型名」的唯一真相源**（WBS 6.1.2 / 03 §5.3）。
     /// 接受面 = 定稿的 15 个名字（`Never` / `Void` / `()` / `Bool` / `Int` /
     /// `Int8` / `Int16` / `Int32` / `Int64` / `Float` / `Float32` / `Float64` /
-    /// `Char` / `String` / `Bytes`）+ 临时兼容别名 `DateTime`。
+    /// `Char` / `String` / `Bytes`）；`DateTime` 的临时兼容别名已随 P10 S11
+    /// （issue #513）迁出，接受面不再含它。
     ///
     /// `()` 是 `Void` 的**类型写法**（标准库签名串里形如 `() -> Void`），与 `Void`
     /// 同臂；它不是另一个类型。
@@ -1110,10 +1111,13 @@ impl MonoType {
     /// 报未知类型（不静默放行）。把其中任何一个加回本表，`types/tests/mono.rs`
     /// 的负向用例立即变红。
     ///
-    /// `DateTime` **不属内置名**，只是 **std 层语义别名**：`src/std/interfaces/time.yx`
-    /// 与 `src/std/time.rs` 的签名串仍写 `DateTime`（`now` / `parse_time`），运行时
-    /// 它就是 `RuntimeValue::Int`（#338 连带修复）。把它迁出内置名表、改由 std 侧
-    /// 承载属 P10 S11（issue #513）——届时删除本臂。
+    /// `DateTime` **不属内置名**：它曾是 std 层的临时兼容别名（运行时就是
+    /// `RuntimeValue::Int`，#338 连带修复），已由 P10 S11（issue #513）迁出——
+    /// `std.time` 的 `now` / `parse_time` 签名串直接写 `Int`，本表不再接受
+    /// `DateTime`（裸 `DateTime` 注解落 `TypeRef`，由
+    /// `TypeEnvironment::resolves_type_name` 报未知类型）。把它加回本表，
+    /// `types/tests/mono.rs` 的负向用例与 `tools/type-tables` 的 T2.5 哨兵
+    /// 立即变红。
     pub fn from_builtin_name(name: &str) -> Option<MonoType> {
         match name {
             "Never" => Some(MonoType::Never),
@@ -1133,8 +1137,6 @@ impl MonoType {
                 name: "Bytes".into(),
                 args: vec![],
             }),
-            // 临时兼容别名：待 P10 S11（issue #513）迁出，届时删除本臂。
-            "DateTime" => Some(MonoType::Int(64)),
             _ => None,
         }
     }
@@ -1148,8 +1150,8 @@ impl MonoType {
     ///
     /// 返回 `None` 表示该类型没有规范名（容器泛型、Tuple、Ref、Fn、Struct、
     /// TypeVar 等）——调用方必须按**结构**回写（`Generic{..}` / `Tuple` / `Ref` /
-    /// `Fn`），或走既有的有损兜底。`DateTime` **永不在此出现**：它是 std 层
-    /// 单向别名（`from_builtin_name("DateTime")` → `Int(64)`），只入不出。
+    /// `Fn`），或走既有的有损兜底。`DateTime` **永不在此出现**：它不属内置名
+    /// （P10 S11 / issue #513 已迁出，解析表不接受它）。
     pub fn canonical_name(&self) -> Option<&'static str> {
         match self {
             MonoType::Never => Some("Never"),

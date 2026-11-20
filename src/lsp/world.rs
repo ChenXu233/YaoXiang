@@ -177,8 +177,9 @@ impl World {
         // YaoXiang 语言的内置类型名（WBS 6.1.2 定稿：15 个名字，此处只列可作
         // 定义/hover 目标的 14 个；`()` 是 `Void` 的类型写法、不是可声明的名字）。
         // 真相源 = `MonoType::from_builtin_name`（T2 门禁逐名比对两者）。
-        // 不含 `Uint` / `Int128`（不是内置名）；不含 `DateTime`——它只是
-        // std 层的临时兼容别名，迁出属 P10 S11（issue #513）。
+        // 不含 `Uint` / `Int128` / `DateTime`——都不是内置名（`DateTime` 由
+        // std.time 提供：`now` / `parse_time` 的返回类型就是 `Int`；P10 S11 /
+        // issue #513 已把临时兼容别名迁出，`from_builtin_name` 同样不接受它）。
         let builtin_types = [
             "Never", "Void", "Bool", "Int", "Int8", "Int16", "Int32", "Int64", "Float", "Float32",
             "Float64", "Char", "String", "Bytes",

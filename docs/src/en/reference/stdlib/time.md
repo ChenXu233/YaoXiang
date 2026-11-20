@@ -1,6 +1,6 @@
 ---
 title: 'std.time'
-description: 'Timestamps, formatting, and DateTime field access'
+description: 'Timestamps, formatting, and date-component access'
 ---
 
 # std.time
@@ -13,12 +13,13 @@ use std.time
 
 > **Implementation gaps have been fixed (#338 / #340, 2026-09-19)**.
 >
-> `DateTime` is an **alias for the timestamp** (i.e. `Int`, see
-> `src/frontend/core/types/mono.rs:621-627`) — at runtime it is already `RuntimeValue::Int`
-> (`src/std/time.rs:243`); previously it was just a name without a backing type, so the return value
-> of `now()` couldn't be passed into `format_time` and the accessors. The accessor export name has
-> also been changed from `DateTime::year` to **`datetime_year`** (`::` is a lexically reserved token
-> and cannot appear in field-access position).
+> The return type of `now` / `parse_time` is **`Int`** (a Unix timestamp in seconds).
+> `DateTime` is not a built-in type name — older versions carried the same meaning through a
+> temporary compatibility alias (at runtime it was already `Int`, fixed together with #338);
+> **P10 S11 (issue #513) has moved that alias out**: writing a bare `DateTime` annotation is
+> now reported as an unknown type, and timestamps are always written as `Int`. The accessor
+> export names are the flat form **`datetime_year`** and friends (`::` is a lexically reserved
+> token and cannot appear in field-access position).
 >
 > Now the return values of `now()` / `parse_time()` can be used directly in arithmetic, formatting,
 > and all accessors.
@@ -34,12 +35,12 @@ use std.time
 
 | Function             | Signature                              |
 | -------------------- | -------------------------------------- |
-| `now`                | `() -> DateTime`                       |
+| `now`                | `() -> Int`                            |
 | `timestamp`          | `() -> Int`                            |
 | `timestamp_ms`       | `() -> Int`                            |
 | `sleep`              | `(seconds: Float) -> Void`             |
 | `format_time`        | `(dt: Int, fmt: String) -> String`     |
-| `parse_time`         | `(fmt: String, s: String) -> DateTime` |
+| `parse_time`         | `(fmt: String, s: String) -> Int`      |
 | `datetime_year`      | `(dt: Int) -> Int`                     |
 | `datetime_month`     | `(dt: Int) -> Int`                     |
 | `datetime_day`       | `(dt: Int) -> Int`                     |
@@ -56,7 +57,7 @@ use std.time
 <!-- stdlib:sig:time.now start -->
 
 ```yaoxiang
-now: () -> DateTime
+now: () -> Int
 ```
 
 <!-- stdlib:sig:time.now end -->
@@ -64,9 +65,8 @@ now: () -> DateTime
 Returns the current time.
 
 Returns: an `Int` timestamp (**seconds**), i.e. the number of seconds since the Unix epoch (returns
-`RuntimeValue::Int` directly in `src/std/time.rs:238-244`). The signature writes it as `DateTime`,
-but `DateTime` is an alias for `Int` (`src/frontend/core/types/mono.rs:627`), so the return value
-**is** an `Int` — it can participate in arithmetic and comparisons directly, and can also be passed
+`RuntimeValue::Int` directly in `src/std/time.rs:238-244`). The return value **is** an `Int` — it
+can participate in arithmetic and comparisons directly, and can also be passed
 directly to [`format_time`](#format_time) and all `datetime_*` accessors.
 
 For millisecond precision, use [`timestamp_ms`](#timestamp_ms).
@@ -84,8 +84,7 @@ main: () -> Void = {
 ```
 
 > [`now`](#now) and [`timestamp`](#timestamp) return the same thing (both are Unix timestamps in
-> seconds); the only difference is readability: the former's return type is annotated as `DateTime`,
-> the latter as `Int`.
+> seconds, both of type `Int`); the two names exist only for readability at call sites.
 
 ### timestamp
 
@@ -176,9 +175,8 @@ Formats a timestamp according to `fmt`, supporting `strftime`-style placeholders
 - `dt` — Unix timestamp (**seconds**), must be `Int`
 - `fmt` — format string
 
-> `DateTime` is an alias for `Int`, so passing the return value of [`now`](#now) or
-> [`parse_time`](#parse_time) will **not** produce an `E1002` — both sides are `Int` and can be
-> passed in directly.
+> The return values of [`now`](#now) and [`parse_time`](#parse_time) are `Int`, so passing them in
+> will **not** produce an `E1002`.
 
 Supported placeholders:
 
@@ -221,7 +219,7 @@ main: () -> Void = {
 <!-- stdlib:sig:time.parse_time start -->
 
 ```yaoxiang
-parse_time: (fmt: String, s: String) -> DateTime
+parse_time: (fmt: String, s: String) -> Int
 ```
 
 <!-- stdlib:sig:time.parse_time end -->
@@ -232,9 +230,8 @@ Parses a time string according to `fmt` into a Unix timestamp (**seconds**).
   `src/std/time.rs:382`)
 - `s` — string to parse
 
-Returns: an `Int` timestamp (the signature writes it as `DateTime`, which is actually an `Int`
-alias; see [`now`](#now)), which can be used directly in arithmetic, with
-[`format_time`](#format_time), and with all `datetime_*` accessors.
+Returns: an `Int` timestamp (**seconds**; see [`now`](#now)), which can be used directly in
+arithmetic, with [`format_time`](#format_time), and with all `datetime_*` accessors.
 
 The directives recognized by `fmt` correspond one-to-one with those of
 [`format_time`](#format_time): `%Y` `%m` `%d` `%H` `%M` `%S`, as well as the combined forms `%F`
@@ -264,7 +261,7 @@ main: () -> Void = {
 }
 ```
 
-## DateTime field access
+## Date-component access
 
 `std.time` exports 8 date-component accessors (fixed in `#338`; export names are in flat form):
 
@@ -279,8 +276,8 @@ main: () -> Void = {
 | `datetime_weekday`   | `(dt: Int) -> Int`    | Weekday (0 = Sunday)   |
 | `datetime_to_string` | `(dt: Int) -> String` | ISO 8601-format string |
 
-`DateTime` is an **alias for the timestamp** (i.e. `Int`) — the return values of `now()` /
-`parse_time()` can be passed directly into these accessors, and can also be used directly in
+The return values of `now()` / `parse_time()` are `Int` timestamps — they can be passed directly
+into these accessors, and can also be used directly in
 [`format_time`](#format_time). Decomposition is done in **UTC** (`src/std/time.rs:123-178` is pure
 arithmetic, without any local time-zone offset):
 

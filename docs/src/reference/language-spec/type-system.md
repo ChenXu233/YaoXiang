@@ -108,11 +108,10 @@ TypeExpr    ::= PrimitiveType
 曾并存 22 个这样的小写/缩写拼写，已于 **WBS 6.1.2（2026-10-27 定稿）** 全部删除：
 写非规范拼写在类型位置一律报未知类型，不会被静默收成用户类型。
 
-> **`DateTime` 不是内置名**。它是 **std 层的语义别名**：`src/std/time.rs` 与
-> `src/std/interfaces/time.yx` 的 `now` / `parse_time` 签名串仍写 `DateTime`，
-> 运行时它就是 `Int`（#338 连带修复）。解析表里它只作为**临时兼容别名**保留，
-> 且本表不收录；把它迁出内置名表、改由 std 侧承载属 **P10 S11**
-> （issue [#513](https://github.com/ChenXu233/YaoXiang/issues/513)）。
+> **`DateTime` 不是内置名**。`std.time` 的 `now` / `parse_time` 返回的就是
+> `Int` 时间戳（#338 连带修复）；解析表里的**临时兼容别名**已由 **P10 S11**
+> （issue [#513](https://github.com/ChenXu233/YaoXiang/issues/513)）迁出——
+> std 侧签名串直接写 `Int`，裸写 `DateTime` 注解与其它未知类型名一样报错。
 
 > **没有无符号整数类型**。`Uint`（以及 `Int128`）不是可用类型名——`MonoType` 没有
 > 无符号变体，LSP 类型名清单与 `sizeof` 的名字表里曾各有一处残留，均已随

@@ -73,9 +73,9 @@
 > These are all 15 built-in type names (`()` is the type syntax for `Void`). For the authoritative
 > table and spelling rules, see [Language Specification §2.1](language-spec/type-system.md): **only
 > the capitalized spelling is valid**, and spellings such as `int` / `i64` / `str` / `bool` were
-> removed in WBS 6.1.2. `DateTime` is not a built-in name—it is a temporary compatibility alias in
-> the std layer (the `now` / `parse_time` signatures of `std.time`); its migration is covered in P10
-> S11 (issue #513).
+> removed in WBS 6.1.2. `DateTime` is not a built-in name—the `now` / `parse_time` functions of
+> `std.time` return `Int` timestamps (the temporary compatibility alias was moved out by P10
+> S11 / issue #513: a bare `DateTime` annotation is reported as an unknown type).
 
 ### Composite Types
 

@@ -21,7 +21,7 @@ documentation, split by module.
 | [`std.io`](./io)                 | 4       | Standard output, standard input, and formatting                           |
 | [`std.math`](./math)             | 18      | Integer, float, and trigonometric functions, including PI/E/TAU constants |
 | [`std.string`](./string)         | 21      | String search, split, formatting, and parsing                             |
-| [`std.time`](./time)             | 14      | Timestamps, formatting, and DateTime field access                         |
+| [`std.time`](./time)             | 14      | Timestamps, formatting, and date-component access                         |
 | [`std.result`](./result)         | 8       | Construction and unwrapping of Result and Error                           |
 | [`std.range`](./range)           | 10      | Range iteration, predicates, and lazy adapters                            |
 | [`std.assert`](./assert)         | 1       | Assertions                                                                |
@@ -243,7 +243,7 @@ documentation:
 | Location                                                      | Original issue                                                   | Current status                                                                     |
 | ------------------------------------------------------------- | ---------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
 | [`os.open`](os#open)                                          | Handle is one-shot; `open`→`write`→`close` does not compile      | Handle changed to pass by reference ✅                                             |
-| [`time.datetime_*`](time#datetime-field-access)               | 8 accessors not callable from source (export name contains `::`) | Changed to flat names like `datetime_year`, etc. ✅                                |
+| [`time.datetime_*`](time#date-component-access)               | 8 accessors not callable from source (export name contains `::`) | Changed to flat names like `datetime_year`, etc. ✅                                |
 | [`time.parse_time`](time#parse_time)                          | `fmt` parameter ignored; return value cannot be used further     | Parse step-by-step by fmt, returns `Int` ✅                                        |
 | [`math.clamp`](math#clamp)                                    | `min > max` panics the interpreter instead of returning an error | Returns `E6007` ✅                                                                 |
 | [`net.http_get`](net#http_get) / [`http_post`](net#http_post) | Was a placeholder implementation, did not send requests          | Changed to a real implementation (`ureq` sync blocking + rustls TLS, issue #56) ✅ |

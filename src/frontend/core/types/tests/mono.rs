@@ -671,16 +671,13 @@ fn test_canonical_name_uses_width_explicit_spellings() {
     assert_eq!(MonoType::Int(64).canonical_name(), Some("Int64"));
     assert_eq!(MonoType::Float(64).canonical_name(), Some("Float64"));
     assert_eq!(MonoType::Void.canonical_name(), Some("Void"));
-    // DateTime 是 std 层单向别名：只允许 from_builtin_name 接受，永不写出。
-    assert_eq!(
-        MonoType::from_builtin_name("DateTime"),
-        Some(MonoType::Int(64)),
-        "DateTime 仍是接受面内的临时别名"
-    );
+    // DateTime 不属内置名（P10 S11 / issue #513 已迁出）：接受面归零由
+    // test_from_builtin_name_rejects_datetime_after_s11_migration 守；
+    // 这里守「只入不出」的出向半边——Int(64) 的规范名恒为 Int64。
     assert_ne!(
         MonoType::Int(64).canonical_name(),
         Some("DateTime"),
-        "DateTime 不得作为回写名（只入不出）"
+        "DateTime 不得作为回写名（它不属内置名）"
     );
 }
 
@@ -738,23 +735,22 @@ fn test_mono_type_option_variant() {
     );
 }
 
-// ─── WBS 6.1.2 / SPEC §2.1：内置类型名表（15 名 + 临时兼容别名 DateTime）───
+// ─── WBS 6.1.2 / SPEC §2.1：内置类型名表（15 名；DateTime 已随 P10 S11 迁出）───
 
 #[test]
-fn test_from_builtin_name_keeps_datetime_as_compat_alias() {
-    // Arrange：DateTime 是 std 层语义别名（src/std/time.rs 的签名串仍在用），
-    // 迁出内置名表属 P10 S11（issue #513）
+fn test_from_builtin_name_rejects_datetime_after_s11_migration() {
+    // Arrange：DateTime 曾是 std 层临时兼容别名（#338 连带修复），已由
+    // P10 S11（issue #513）迁出——std.time 的签名串直接写 Int，解析表不再接受
     // Act
     let upper = MonoType::from_builtin_name("DateTime");
     let lower = MonoType::from_builtin_name("datetime");
 
-    // Assert：只保留大写形态，且归一为时间戳的运行时表示 Int(64)
+    // Assert：大写与小写都不得被解析表接受（加回即回退，T2.5 哨兵同判）
     assert_eq!(
-        upper,
-        Some(MonoType::Int(64)),
-        "DateTime 应归一为 Int(64)（#338 连带修复）"
+        upper, None,
+        "裸 DateTime 注解必须报未知类型（P10 S11 / issue #513 迁出后不得再静默收成 Int(64)）"
     );
-    assert_eq!(lower, None, "小写 datetime 已删除，不是兼容别名的形态");
+    assert_eq!(lower, None, "小写 datetime 已随 WBS 6.1.2 删除，仍不得接受");
 }
 
 // ===== 6.9.5-B.1a：StructType 表示收敛的契约判据（H1 + H10）=====

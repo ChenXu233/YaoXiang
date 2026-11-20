@@ -22,7 +22,8 @@ use syn::{Expr, ExprLit, ImplItem, Item, Lit, Pat};
 use crate::dispositions::{self, Disposition};
 use crate::{LSP_REL, MONO_REL, TYPECHECK_PROBE_REL};
 
-/// WBS 6.1.2（2026-10-27 定稿）删除的 22 个内置名「实现内拼写」。
+/// WBS 6.1.2（2026-10-27 定稿）删除的 22 个内置名「实现内拼写」，加上
+/// P10 S11.1（issue #513）迁出的 `DateTime` 临时兼容别名——共 23 条。
 ///
 /// 它们是 T2 的**常驻哨兵**：只要 `from_builtin_name` 再次接受其中任何一个，
 /// 本报告就在「T2.5 已删除拼写」一节报**未登记漂移**（无处置可登记——那是
@@ -30,6 +31,7 @@ use crate::{LSP_REL, MONO_REL, TYPECHECK_PROBE_REL};
 pub const REMOVED_SPELLINGS: &[&str] = &[
     "int", "int64", "i64", "datetime", "int32", "i32", "int16", "i16", "int8", "i8", "float",
     "float64", "f64", "float32", "f32", "bool", "char", "string", "str", "bytes", "void", "never",
+    "DateTime",
 ];
 
 /// `from_builtin_name` 的一个 match 臂
@@ -124,16 +126,14 @@ impl NameTableReport {
                 }
             ));
         }
-        out.push_str(
-            "  权威清单（WBS 6.1.2 / SPEC §2.1）：15 个内置名 + DateTime 临时兼容别名。\n",
-        );
+        out.push_str("  权威清单（WBS 6.1.2 / SPEC §2.1）：15 个内置名。\n");
         out.push_str("  15 名 = Never / Void / () / Bool / Int / Int8 / Int16 / Int32 / Int64 /\n");
         out.push_str("          Float / Float32 / Float64 / Char / String / Bytes（() 是 Void 的类型写法）。\n");
-        out.push_str("  DateTime 注记：不属内置名，只是 std 层语义别名——src/std/time.rs 与\n");
+        out.push_str("  DateTime 注记：不属内置名（P10 S11 / issue #513 已迁出临时别名，\n");
         out.push_str(
-            "  src/std/interfaces/time.yx 的签名串仍在用；迁出属 P10 S11（issue #513），\n",
+            "  解析表不接受它）；std.time 的 now / parse_time 返回类型就是 Int，\n",
         );
-        out.push_str("  故 LSP 清单（C）刻意不收录它，对应 T2.C2 差异已登记。\n");
+        out.push_str("  LSP 清单（C）与解析表逐名一致，无已登记差异。\n");
         out.push_str(&format!(
             "B `CONST_PARAM_TYPES`（:{}）：{} 项 —— {}\n",
             self.const_param_line,
@@ -209,14 +209,16 @@ impl NameTableReport {
         }
         out.push('\n');
 
-        out.push_str("T2.5 已删除拼写哨兵（WBS 6.1.2 定稿删除的 22 个实现内拼写）\n");
+        out.push_str(
+            "T2.5 已删除拼写哨兵（6.1.2 定稿删除的 22 个实现内拼写 + S11.1 迁出的 DateTime 别名）\n",
+        );
         out.push_str(&format!(
             "  检查 {} 条；被 from_builtin_name 重新接受 {} 条\n",
             REMOVED_SPELLINGS.len(),
             self.removed_accepted.len()
         ));
         if self.removed_accepted.is_empty() {
-            out.push_str("  结论：全绿——22 个拼写均不被解析表接受\n\n");
+            out.push_str("  结论：全绿——全部已删除拼写均不被解析表接受\n\n");
         } else {
             out.push_str(&format!(
                 "  结论：**报红**——{} 被重新接受。那是回退（不是待办）：删掉对应 match 臂；\n",
@@ -237,8 +239,8 @@ impl NameTableReport {
             out.push_str("全绿（三表逐名一致）\n\n");
         } else if self.unlisted() == 0 {
             out.push_str(&format!(
-                "非全绿：{} 条差异，全部已登记处置（WBS 6.4 后只剩 DateTime 待 P10 S11 迁出；\
-                 CONST_PARAM_TYPES 的 10 个旧拼写已随 6.4 删除，C1 清零）\n\n",
+                "非全绿：{} 条差异，全部已登记处置（历史登记：C1 的 10 条已随 6.4 兑现，\
+                 C2 的 DateTime 已随 S11.1 兑现）\n\n",
                 self.differences.len()
             ));
         } else {
@@ -498,10 +500,10 @@ mod tests {
 
     #[test]
     fn test_deprecated_acceptances_silent_on_canonical_only_table() {
-        // Arrange：只有 15 个规范名 + DateTime 临时别名
+        // Arrange：只有 15 个规范名（S11.1 后解析表就是这个接受面）
         let accepted: BTreeSet<String> = [
             "Never", "Void", "()", "Bool", "Int", "Int8", "Int16", "Int32", "Int64", "Float",
-            "Float32", "Float64", "Char", "String", "Bytes", "DateTime",
+            "Float32", "Float64", "Char", "String", "Bytes",
         ]
         .iter()
         .map(|name| (*name).to_string())
@@ -513,21 +515,47 @@ mod tests {
         // Assert：无回退
         assert!(
             flagged.is_empty(),
-            "规范名 + DateTime 不应触发哨兵，实际 {flagged:?}"
+            "规范名不应触发哨兵，实际 {flagged:?}"
         );
     }
 
-    // 口径自校验：22 个拼写一个不多一个不少，且都不在规范名集合内。
+    // S11.1（issue #513）迁出 DateTime 别名后，把它加回解析表必须被哨兵抓到——
+    // 与 6.1.2 的 22 个已删除拼写同一条判据。
     #[test]
-    fn test_removed_spellings_list_is_the_agreed_twenty_two() {
+    fn test_deprecated_acceptances_flags_datetime_reintroduced_by_s11() {
+        // Arrange：规范名 + 已迁出的 DateTime 别名
+        let mut accepted: BTreeSet<String> = [
+            "Never", "Void", "()", "Bool", "Int", "Int8", "Int16", "Int32", "Int64", "Float",
+            "Float32", "Float64", "Char", "String", "Bytes",
+        ]
+        .iter()
+        .map(|name| (*name).to_string())
+        .collect();
+        accepted.insert("DateTime".to_string());
+
+        // Act
+        let flagged = deprecated_acceptances(&accepted);
+
+        // Assert：只有被迁出的那个被点名
+        assert_eq!(
+            flagged,
+            vec!["DateTime".to_string()],
+            "把 DateTime 加回 from_builtin_name 必须被哨兵抓到（P10 S11 / issue #513 迁出）"
+        );
+    }
+
+    // 口径自校验：6.1.2 的 22 个拼写 + S11.1 迁出的 DateTime = 23 条，一个不多
+    // 一个不少，且都不在规范名集合内。
+    #[test]
+    fn test_removed_spellings_list_is_the_agreed_twenty_three() {
         assert_eq!(
             REMOVED_SPELLINGS.len(),
-            22,
-            "2026-10-27 定稿删除的拼写数是 22"
+            23,
+            "6.1.2 定稿删除 22 个拼写 + S11.1（issue #513）迁出 DateTime = 23"
         );
         let canonical = [
             "Never", "Void", "()", "Bool", "Int", "Int8", "Int16", "Int32", "Int64", "Float",
-            "Float32", "Float64", "Char", "String", "Bytes", "DateTime",
+            "Float32", "Float64", "Char", "String", "Bytes",
         ];
         for name in REMOVED_SPELLINGS {
             assert!(

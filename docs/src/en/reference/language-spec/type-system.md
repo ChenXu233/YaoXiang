@@ -120,12 +120,11 @@ previously contained 22 such lowercase or abbreviated spellings, all of which we
 6.1.2 (finalized 2026-10-27)**: using a noncanonical spelling in a type position always reports an
 unknown type and is never silently coerced to a user-defined type.
 
-> **`DateTime` is not a built-in name**. It is a **semantic alias in the std layer**: the `now` /
-> `parse_time` signature strings in `src/std/time.rs` and `src/std/interfaces/time.yx` still use
-> `DateTime`, but at runtime it is `Int` (fixed together with #338). The parser table retains it
-> only as a **temporary compatibility alias**, and this table does not include it; migrating it out
-> of the built-in-name table and letting the std layer carry it belong to **P10 S11** (issue
-> [#513](https://github.com/ChenXu233/YaoXiang/issues/513)).
+> **`DateTime` is not a built-in name**. The `now` / `parse_time` functions of `std.time` return
+> `Int` timestamps (fixed together with #338). The **temporary compatibility alias** in the parser
+> table was moved out by **P10 S11** (issue
+> [#513](https://github.com/ChenXu233/YaoXiang/issues/513)) — the std-side signature strings write
+> `Int` directly, and a bare `DateTime` annotation is reported like any other unknown type name.
 
 > **There are no unsigned integer types**. `Uint` (and `Int128`) are not usable type
 > names—`MonoType` has no unsigned variant. The LSP type-name list and the `sizeof` name table each
