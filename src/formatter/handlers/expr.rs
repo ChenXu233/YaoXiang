@@ -667,6 +667,11 @@ pub fn format_pattern(
                 .collect();
             items.join(" | ")
         }
+        // 范围模式（issue #405）：端点是归一化后的字面量（负端点已带负号，
+        // Int 的 to_string 直出 "-5"），双闭区间写法还原 `lo..hi`
+        Pattern::Range { lo, hi } => {
+            format!("{}..{}", format_literal(lo, ctx), format_literal(hi, ctx))
+        }
         Pattern::Guard { pattern, condition } => {
             format!(
                 "{} if {}",

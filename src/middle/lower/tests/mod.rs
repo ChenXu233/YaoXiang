@@ -6,4 +6,5 @@
 //! 文件 ↔ 被测源文件对应：
 //! - `query.rs` — `super::super::query`（#403 类型域落点归一的 L3 第四门）
 
+mod pattern_range;
 mod query;

@@ -1239,6 +1239,15 @@ pub enum Pattern {
         pattern: Option<Box<Pattern>>,
     },
     Or(Vec<Pattern>),
+    /// 范围模式（issue #405）：`lo..hi` 双闭区间判定（Int 域，[lo, hi] 含两端）。
+    /// 端点是字面量（负端点在 parser 归一化为负 Int；Float/Bool 等端点语法
+    /// 成立、由类型检查按「端点须 Int」拒绝）。与表达式位 Range 值（`Expr::BinOp`
+    /// `Range`，左闭右开的可迭代序列）是两个概念：模式位不构造 Range 值，
+    /// 只做分支判定——两处 `..` 端点语义分立由 SPEC syntax §2.8 声明。
+    Range {
+        lo: Literal,
+        hi: Literal,
+    },
     Guard {
         pattern: Box<Pattern>,
         condition: Expr,

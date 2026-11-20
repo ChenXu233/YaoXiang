@@ -45,11 +45,9 @@ arms must be consistent:
 ```yaoxiang
 score = 85
 
-// Note: the 0.8.2 pattern parser does not support range patterns—`80..89 => "B"` reports
-// "Expected FatArrow, found DotDot" (E0010). Use a guard expression (`n if condition`) for equivalent logic.
 grade = match score {
     n if n >= 90 => "A",
-    n if n >= 80 => "B",
+    80..89 => "B",     // Range pattern: 80 through 89 (both ends included) hits
     n if n >= 70 => "C",
     n if n >= 60 => "D",
     _ => "F",          // Wildcard: matches all remaining cases
@@ -57,10 +55,16 @@ grade = match score {
 print(grade)  // "B"
 ```
 
-> **Note**: The range pattern `80..89` is not yet available in 0.8.2; please use the guard
-> expression form shown above. Guard expressions (`pattern if condition`) are covered in detail in
-> [Pattern Matching Advanced](../pattern-matching/index.md). This chapter first focuses on basic
-> patterns.
+The range pattern `80..89` is a **closed interval**—both `80` and `89` hit (grade B covers the ten
+values 80-89). Bounds must be integer literals; negative bounds are written directly (such as
+`-5..-1`). A reversed range (such as `10..0`) is an empty range and reports unreachable at compile
+time. A `match` with range arms still needs the wildcard `_` as a fallback—a range cannot cover all
+integer values. Guard expressions (`pattern if condition`) are covered in detail in
+[Pattern Matching Advanced](../pattern-matching/index.md).
+
+> **Note**: the pattern-position `lo..hi` (closed-interval test) and the expression-position `a..b`
+> (`for` iteration, `in` membership checks, half-open) have different endpoint semantics: the
+> pattern position tests branches and does not construct a Range value.
 
 ## Basic Patterns
 
@@ -100,6 +104,25 @@ print(description)  // "成功，值是: 42"
 
 The `value` in `ok(value)` is an identifier pattern—it captures the actual value wrapped by `ok`,
 and you can use it in the expression after `=>`.
+
+### Range Patterns
+
+Match an integer interval with `lo..hi` (**both ends included**):
+
+```yaoxiang
+temp = 37
+
+state = match temp {
+    35..36 => "偏低",
+    36..38 => "正常",
+    _ => "异常",
+}
+print(state)  // "正常"
+```
+
+`36..38` covers both `36` and `38`. Bounds must be integer literals; negative bounds are written
+directly (such as `-5..-1`). A range pattern cannot exhaust the integers—it covers only the span
+inside the interval, so a `match` with range arms still needs the wildcard `_` as a fallback.
 
 ### Wildcard Pattern
 
@@ -182,16 +205,17 @@ This means that **placing the wildcard `_` last** is a good habit.
 
 ## Summary
 
-| Key Point          | Description                                                   |
-| ------------------ | ------------------------------------------------------------- |
-| Syntax             | `match value { pattern => expr, ... }`                        |
-| Expression         | `match` evaluates to a value; all branches have the same type |
-| Literal pattern    | Matches a specific value: `200 => "OK"`                       |
-| Identifier pattern | Captures a value into a variable: `ok(value) => ...`          |
-| Wildcard `_`       | Matches any value, used as a fallback                         |
-| Exhaustive         | Must cover all possibilities; the compiler checks             |
-| Multiple patterns  | `pattern1 \| pattern2 => expr`                                |
-| Order of execution | From top to bottom, the first matching branch wins            |
+| Key Point          | Description                                                       |
+| ------------------ | ----------------------------------------------------------------- |
+| Syntax             | `match value { pattern => expr, ... }`                            |
+| Expression         | `match` evaluates to a value; all branches have the same type     |
+| Literal pattern    | Matches a specific value: `200 => "OK"`                           |
+| Identifier pattern | Captures a value into a variable: `ok(value) => ...`              |
+| Range pattern      | Matches an integer interval (both ends included): `80..89 => "B"` |
+| Wildcard `_`       | Matches any value, used as a fallback                             |
+| Exhaustive         | Must cover all possibilities; the compiler checks                 |
+| Multiple patterns  | `pattern1 \| pattern2 => expr`                                    |
+| Order of execution | From top to bottom, the first matching branch wins                |
 
 > **Next**: This article covers the basics of `match`. For more advanced patterns (nested patterns,
 > guard expressions, struct destructuring, etc.), see

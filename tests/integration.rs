@@ -25,6 +25,8 @@ mod fstring;
 
 #[path = "integration/interpreter.rs"]
 mod interpreter;
+#[path = "integration/pattern_range.rs"]
+mod pattern_range;
 #[path = "integration/test_command.rs"]
 mod test_command;
 #[path = "integration/token_system.rs"]

@@ -4,6 +4,7 @@
 
 use crate::ast;
 use crate::ast::Expr;
+use crate::ast::Literal;
 use crate::frontend::core::sema::MonoType;
 use crate::middle::ir::ir::{ConstValue, Instruction, Operand};
 use crate::middle::lower::AstToIrGenerator;
@@ -435,6 +436,57 @@ impl AstToIrGenerator {
                 let j = instructions.len();
                 instructions.push(Instruction::JmpIfNot {
                     cond: Operand::Local(eq_reg),
+                    target: 0,
+                    span: self.cur_span,
+                });
+                fail.push(j);
+                Ok(())
+            }
+            ast::Pattern::Range { lo, hi } => {
+                // issue #405：范围模式——双闭区间判定链
+                // `Ge(reg, lo) && Le(reg, hi)`（端点语义见 SPEC syntax §2.8：
+                // 模式位 `lo..hi` 含两端；表达式位 Range 值仍为左闭右开，两处
+                // 分立）。端点已由 typecheck 限定 Int 字面量，此处防御性兜底
+                // #330 安全网同款（正常程序不可达）。
+                let (Literal::Int(lo_v), Literal::Int(hi_v)) = (lo, hi) else {
+                    return Err(unsupported("range pattern bound (non-int literal)"));
+                };
+                let lo_reg = self.next_temp_reg();
+                instructions.push(Instruction::Load {
+                    dst: Operand::Local(lo_reg),
+                    src: Operand::Const(ConstValue::Int(*lo_v)),
+                    span: self.cur_span,
+                });
+                let ge_reg = self.next_temp_reg();
+                instructions.push(Instruction::Ge {
+                    dst: Operand::Local(ge_reg),
+                    lhs: Operand::Local(reg),
+                    rhs: Operand::Local(lo_reg),
+                    span: self.cur_span,
+                });
+                let j = instructions.len();
+                instructions.push(Instruction::JmpIfNot {
+                    cond: Operand::Local(ge_reg),
+                    target: 0,
+                    span: self.cur_span,
+                });
+                fail.push(j);
+                let hi_reg = self.next_temp_reg();
+                instructions.push(Instruction::Load {
+                    dst: Operand::Local(hi_reg),
+                    src: Operand::Const(ConstValue::Int(*hi_v)),
+                    span: self.cur_span,
+                });
+                let le_reg = self.next_temp_reg();
+                instructions.push(Instruction::Le {
+                    dst: Operand::Local(le_reg),
+                    lhs: Operand::Local(reg),
+                    rhs: Operand::Local(hi_reg),
+                    span: self.cur_span,
+                });
+                let j = instructions.len();
+                instructions.push(Instruction::JmpIfNot {
+                    cond: Operand::Local(le_reg),
                     target: 0,
                     span: self.cur_span,
                 });

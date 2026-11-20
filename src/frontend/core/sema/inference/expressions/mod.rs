@@ -826,6 +826,7 @@ fn concrete_type_from_expr_arg(
 /// RFC-010b: 模式标签（诊断显示用，typecheck 侧本地版本）
 fn local_pattern_label(p: &crate::ast::Pattern) -> String {
     use crate::ast::Pattern;
+    use crate::frontend::core::lexer::tokens::Literal;
     match p {
         Pattern::Wildcard => "_".to_string(),
         Pattern::Identifier(n) => n.clone(),
@@ -834,6 +835,12 @@ fn local_pattern_label(p: &crate::ast::Pattern) -> String {
         Pattern::Struct { name, .. } => name.clone(),
         Pattern::Union { variant, .. } => variant.clone(),
         Pattern::Or(_) => "or".to_string(),
+        // issue #405：范围臂标签还原源码写法（Int 域负端点直出负号）
+        Pattern::Range {
+            lo: Literal::Int(lo),
+            hi: Literal::Int(hi),
+        } => format!("{}..{}", lo, hi),
+        Pattern::Range { .. } => "range".to_string(),
         Pattern::Guard { .. } => "guard".to_string(),
     }
 }

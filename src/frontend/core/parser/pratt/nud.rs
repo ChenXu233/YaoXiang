@@ -1083,6 +1083,55 @@ impl<'a> ParserState<'a> {
     /// [`Self::parse_pattern`] 的闸内本体（原实现逐字保留）。
     fn parse_pattern_nested(&mut self) -> Option<Pattern> {
         let probe = self.parse_expression(12)?;
+        // issue #405：范围模式 `lo..hi`——`..` 中缀绑定力 (6,7) 低于模式阈值 12，
+        // pratt 循环停在 DotDot、probe 持有下界端点表达式，此处收编为 Range 模式。
+        // 端点限定：字面量（负号前缀归一化为负值）；标识符端点在模式位是绑定，
+        // 无判定语义，显式拒绝（E0010 点名范围端点）。上界不走 pratt 探测——
+        // 负号上界的前缀操作数以 BP_UNARY+1 解析，`=>`（绑定力 11）会被吞成
+        // lambda 中缀报 E0012，故上界按 token 直读。
+        if self.at(&TokenKind::DotDot) {
+            let span = self.span();
+            let lo = match range_bound_from_expr(&probe) {
+                Some(lit) => lit,
+                None => {
+                    self.error(
+                        ErrorCodeDefinition::expected_token(
+                            "integer literal (range pattern lower bound)",
+                            &format!(
+                                "{:?}",
+                                self.current()
+                                    .map(|t| t.kind.clone())
+                                    .unwrap_or(TokenKind::Eof)
+                            ),
+                        )
+                        .at(span)
+                        .build(),
+                    );
+                    return None;
+                }
+            };
+            self.bump(); // consume '..'
+            let hi = match self.parse_range_bound() {
+                Some(lit) => lit,
+                None => {
+                    self.error(
+                        ErrorCodeDefinition::expected_token(
+                            "integer literal (range pattern upper bound)",
+                            &format!(
+                                "{:?}",
+                                self.current()
+                                    .map(|t| t.kind.clone())
+                                    .unwrap_or(TokenKind::Eof)
+                            ),
+                        )
+                        .at(self.span())
+                        .build(),
+                    );
+                    return None;
+                }
+            };
+            return Some(Pattern::Range { lo, hi });
+        }
         if self.at(&TokenKind::LParen) && matches!(&probe, Expr::Var(_, _)) {
             let called = match self.parse_call(probe.clone(), 0) {
                 Some(c) => c,
@@ -1118,6 +1167,61 @@ impl<'a> ParserState<'a> {
             }
         }
         Some(self.expr_to_pattern(&probe))
+    }
+
+    /// 范围模式上界端点：token 直读一个字面量（负号前缀归一化为负值）。
+    /// 不走 pratt 探测（见 [`Self::parse_pattern_nested`] 内注释——负上界
+    /// 会被 lambda 中缀吞掉）。返回 None = 当前 token 不是端点字面量，
+    /// 调用点发射 E0010。
+    fn parse_range_bound(&mut self) -> Option<Literal> {
+        match self.current().map(|t| &t.kind) {
+            Some(TokenKind::IntLiteral(n)) => {
+                let v = *n;
+                self.bump();
+                Some(Literal::Int(v))
+            }
+            Some(TokenKind::FloatLiteral(f)) => {
+                let v = *f;
+                self.bump();
+                Some(Literal::Float(v))
+            }
+            Some(TokenKind::BoolLiteral(b)) => {
+                let v = *b;
+                self.bump();
+                Some(Literal::Bool(v))
+            }
+            Some(TokenKind::CharLiteral(c)) => {
+                let v = *c;
+                self.bump();
+                Some(Literal::Char(v))
+            }
+            Some(TokenKind::StringLiteral(s)) => {
+                let v = s.clone();
+                self.bump();
+                Some(Literal::String(v))
+            }
+            Some(TokenKind::VoidLiteral) => {
+                self.bump();
+                Some(Literal::Void)
+            }
+            Some(TokenKind::Minus) => {
+                self.bump();
+                match self.current().map(|t| &t.kind) {
+                    Some(TokenKind::IntLiteral(n)) => {
+                        let v = (*n).checked_neg()?;
+                        self.bump();
+                        Some(Literal::Int(v))
+                    }
+                    Some(TokenKind::FloatLiteral(f)) => {
+                        let v = -*f;
+                        self.bump();
+                        Some(Literal::Float(v))
+                    }
+                    _ => None,
+                }
+            }
+            _ => None,
+        }
     }
 
     /// Convert an expression to a pattern for match arms
@@ -1329,6 +1433,28 @@ impl<'a> ParserState<'a> {
             }
             _ => None,
         }
+    }
+}
+
+/// 范围模式下界端点：probe 表达式 → 端点字面量。
+/// 接受字面量与「负号前缀 + 字面量」（归一化为负值）；其余形态（标识符/
+/// 调用/表达式）返回 None——模式位标识符是绑定，非常量端点无判定语义，
+/// 调用点发射 E0010。
+fn range_bound_from_expr(expr: &Expr) -> Option<Literal> {
+    match expr {
+        Expr::Lit(lit, _) => Some(lit.clone()),
+        Expr::UnOp {
+            op: UnOp::Neg,
+            expr,
+            ..
+        } => match expr.as_ref() {
+            // 字面量经词法器恒非负（i128 域），checked_neg 只在 i128::MIN
+            // 手工形态失败——该极端值无端点语义，返回 None 交调用点拒绝
+            Expr::Lit(Literal::Int(n), _) => Some(Literal::Int((*n).checked_neg()?)),
+            Expr::Lit(Literal::Float(f), _) => Some(Literal::Float(-*f)),
+            _ => None,
+        },
+        _ => None,
     }
 }
 

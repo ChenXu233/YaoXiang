@@ -3,7 +3,7 @@
 //! 方法体与文档注释逐字搬自原 `inference/expressions.rs`，语义未改；仅补跨模块可见性
 //! （`pub(super)`）与相对路径（`super::` 改指 crate 路径）。调用裁决族见 `super::call`。
 
-use crate::ast::{BinOp, UnOp};
+use crate::ast::{BinOp, Literal, UnOp};
 use crate::frontend::core::sema::judgement::decide;
 use crate::frontend::core::types::{MonoType, PolyType, TypeConstraintSolver};
 use crate::util::diagnostic::{ErrorCodeDefinition, Result};
@@ -752,6 +752,10 @@ impl<'a> ExpressionInferrer<'a> {
 
         let mut seen_variants: HashSet<String> = HashSet::new();
         let mut seen_literals: HashSet<String> = HashSet::new();
+        // issue #405：范围臂的精确重复检测（同端点 ⇒ E1031）。重叠/包含
+        // 分析（如 80..89 与 85）首版不做——E1031 的语义保持「精确重复」，
+        // 区间覆盖证明登记为后续扩展。
+        let mut seen_ranges: HashSet<(i128, i128)> = HashSet::new();
         let mut fallback_seen = false;
         let mut result_ty: Option<MonoType> = None;
 
@@ -797,6 +801,19 @@ impl<'a> ExpressionInferrer<'a> {
                                 .at(arm.span)
                                 .build());
                             }
+                        }
+                        // issue #405：同端点的重复范围臂不可达（E1031）。
+                        // 端点已由 check_pattern 限定 Int——此处折叠 i128 判重；
+                        // 非整数字面量端点走下方空臂（check_pattern 已先行报错）。
+                        Pattern::Range {
+                            lo: Literal::Int(lo),
+                            hi: Literal::Int(hi),
+                        } if !seen_ranges.insert((*lo, *hi)) => {
+                            return Err(ErrorCodeDefinition::unreachable_pattern(
+                                &local_pattern_label(alt),
+                            )
+                            .at(arm.span)
+                            .build());
                         }
                         _ => {}
                     }
@@ -1001,6 +1018,65 @@ impl<'a> ExpressionInferrer<'a> {
                         .at(span)
                         .build(),
                     ));
+                }
+                Ok(())
+            }
+            Pattern::Range { lo, hi } => {
+                // issue #405：范围模式——端点必须都是整数字面量（负端点已在
+                // parser 归一化为负 Int；Float/Bool 等端点语法成立、在此拒绝），
+                // 端点类型与被匹配值一致（同 Literal 模式的 decide 判据）。
+                // 端点是编译期字面量，倒序范围（lo > hi）在此判空：空范围
+                // 恒不命中，该臂不可达（E1031）。
+                let lo_ty = Self::literal_pattern_type(lo);
+                let hi_ty = Self::literal_pattern_type(hi);
+                if lo_ty != MonoType::Int(64) {
+                    return Err(ErrorCodeDefinition::type_mismatch(
+                        "Int (range pattern bound)",
+                        &lo_ty.to_string(),
+                    )
+                    .at(span)
+                    .build());
+                }
+                if hi_ty != MonoType::Int(64) {
+                    return Err(ErrorCodeDefinition::type_mismatch(
+                        "Int (range pattern bound)",
+                        &hi_ty.to_string(),
+                    )
+                    .at(span)
+                    .build());
+                }
+                let (Literal::Int(lo_v), Literal::Int(hi_v)) = (lo, hi) else {
+                    return Err(ErrorCodeDefinition::type_mismatch(
+                        "Int (range pattern bound)",
+                        "non-int literal",
+                    )
+                    .at(span)
+                    .build());
+                };
+                if let Err(failure) = decide(
+                    self.solver,
+                    &resolved,
+                    &MonoType::Int(64),
+                    Some(span),
+                    self.type_defs,
+                    self.dep_env,
+                ) {
+                    return Err(failure.or_site(
+                        ErrorCodeDefinition::type_mismatch(
+                            &resolved.to_string(),
+                            &MonoType::Int(64).to_string(),
+                        )
+                        .at(span)
+                        .build(),
+                    ));
+                }
+                if lo_v > hi_v {
+                    return Err(ErrorCodeDefinition::unreachable_pattern(&format!(
+                        "{}..{}",
+                        lo_v, hi_v
+                    ))
+                    .at(span)
+                    .build());
                 }
                 Ok(())
             }
