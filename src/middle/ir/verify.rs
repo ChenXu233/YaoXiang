@@ -37,10 +37,14 @@
 //!   IR-only 伪指令，translator 展开为 Move 串）。本模块的 def/use 提取是
 //!   **穷尽 match、刻意无通配臂**（与 ir.rs span() 同款强制哲学）：Phi 的
 //!   `dst` 计定义点、每个 `incoming` 输入计使用点（`def_operands` /
-//!   `use_operands`）。`verify_ssa` 的 Phi 一致性本批落两条可判定约束
-//!   （`dst` 必为 `Operand::Value`、`incoming` 按前驱 label 严格升序）；
-//!   「输入数 == 前驱数」与逐输入类型一致依赖值表与块级 CFG，登记
-//!   09a §P7 7b.1a 契约 §三 占位 3，由 7b.1b 替换。
+//!   `use_operands`）。`verify_ssa` 的 Phi 一致性分两批落：7b.1a 落
+//!   `dst` 必为 `Operand::Value`、`incoming` 按前驱 label 严格升序两条；
+//!   7b.1b 落三条残项——前驱数（`BasicBlock.successors` 反推的块级前驱集）、
+//!   前驱 label 集合、逐输入类型一致（`values` 值表提供类型；类型不可得按
+//!   文件头「现实语义记录」第 3 条显式不判定 / 显式报越界，不静默放行）。
+//!   **前置登记**：生产侧 `successors` 目前恒为空（全仓 15 处构造都是
+//!   `Vec::new()`）——7b.3 生产 Phi 之前必须先填块级 `successors`，否则任何
+//!   带 incoming 的 Phi 都会被本判据拒绝（09a §P7 7b.1b 契约 §三）。
 //! - 「内层隔离」的 ModuleIR 级可操作化（WBS 2.1.4 改为**按槽身份**）：lower 的
 //!   save/restore 契约（lower/mod.rs 的 `cur_locals` / `next_temp` / `cur_span` 字段）
 //!   失败形态是**同一张槽位表被两个函数体生成期共用**。身份维度 = `LocalSlot::origin`
@@ -61,6 +65,7 @@ use crate::ast::Quantity;
 
 use super::ir::{
     ConstValue, FrameId, FunctionBody, FunctionIR, Instruction, LocalSlot, ModuleIR, Operand,
+    ValueInfo,
 };
 
 /// 校验模式（07 §207）：非 SSA 现状用 Loose；SSA 形态（P7 批 b 后）用 Ssa。
@@ -81,8 +86,8 @@ pub enum InvariantKind {
     Dominance,
     /// 值定义唯一性（仅 Ssa）
     UniqueDefinition,
-    /// Phi 输入数 == 前驱数且类型一致（仅 Ssa；7b.1a 落 `dst` 与升序两条，
-    /// 前驱数/类型一致归 7b.1b，见 09a §P7 7b.1a 契约 §三 占位 3）
+    /// Phi 一致性（仅 Ssa）：7b.1a 落「dst 必为 Value / incoming label 升序」，
+    /// 7b.1b 落「前驱数 / 前驱集合 / 逐输入类型一致」（09a §P7 7b.1b 契约 §三）
     PhiConsistency,
     /// 跳转目标是合法指令下标
     JumpTarget,
@@ -209,6 +214,11 @@ pub fn verify_ssa(ir: &ModuleIR) -> Result<(), VerifyError> {
 // =====================
 
 /// 单一指令流上下文（函数体或模块 init 序列）。
+///
+/// 块级信息的用途仅限 Phi 一致性判据（7b.1b）：`block_labels` 把展平后的
+/// 指令下标映回所属基本块 label；`predecessors` 从 `BasicBlock.successors`
+/// 反推（块级，与指令级 CFG 是两套坐标，见文件头「现实语义记录」第 1 条）。
+/// `from_init` 无基本块结构，四者为空——Phi 出现在 init 时判据显式报违规。
 struct FnView<'a> {
     name: String,
     params_len: usize,
@@ -218,7 +228,27 @@ struct FnView<'a> {
     env_len: usize,
     return_type: Option<&'a MonoType>,
     locals: &'a [LocalSlot],
+    /// SSA 值表（仅 Code 体有效；本批生产恒空）
+    values: &'a [ValueInfo],
     instrs: Vec<&'a Instruction>,
+    /// 展平指令下标 → 所属基本块 label（`from_init` 为空）
+    block_labels: Vec<usize>,
+    /// 块级前驱：块 label → 前驱块 label 集合（`from_init` 为空）
+    predecessors: HashMap<usize, HashSet<usize>>,
+}
+
+/// 块级前驱表：对每条 `block → successors` 边，`predecessors[s] ∋ block.label`。
+///
+/// 只认 `BasicBlock.successors`（04 §三条构造约束的块级面）。当前生产侧
+/// 恒为空（lower 尚未填块图）——该事实登记在 09a §P7 7b.1b 契约 §三。
+fn block_predecessors(blocks: &[super::ir::BasicBlock]) -> HashMap<usize, HashSet<usize>> {
+    let mut predecessors: HashMap<usize, HashSet<usize>> = HashMap::new();
+    for block in blocks {
+        for &succ in &block.successors {
+            predecessors.entry(succ).or_default().insert(block.label);
+        }
+    }
+    predecessors
 }
 
 impl<'a> FnView<'a> {
@@ -227,14 +257,25 @@ impl<'a> FnView<'a> {
         env_len: usize,
     ) -> Self {
         match &func.body {
-            FunctionBody::Code { blocks, locals, .. } => Self {
+            FunctionBody::Code {
+                blocks,
+                locals,
+                values,
+                ..
+            } => Self {
                 name: func.name.clone(),
                 params_len: func.params.len(),
                 params: &func.params,
                 env_len,
                 return_type: Some(&func.return_type),
                 locals,
+                values,
                 instrs: blocks.iter().flat_map(|b| b.instructions.iter()).collect(),
+                block_labels: blocks
+                    .iter()
+                    .flat_map(|b| std::iter::repeat_n(b.label, b.instructions.len()))
+                    .collect(),
+                predecessors: block_predecessors(blocks),
             },
             FunctionBody::TypeDecl { .. } => Self {
                 name: func.name.clone(),
@@ -243,7 +284,10 @@ impl<'a> FnView<'a> {
                 env_len,
                 return_type: Some(&func.return_type),
                 locals: &[],
+                values: &[],
                 instrs: Vec::new(),
+                block_labels: Vec::new(),
+                predecessors: HashMap::new(),
             },
         }
     }
@@ -256,7 +300,10 @@ impl<'a> FnView<'a> {
             env_len: 0,
             return_type: None,
             locals: &ir.init_locals,
+            values: &[],
             instrs: ir.init.iter().collect(),
+            block_labels: Vec::new(),
+            predecessors: HashMap::new(),
         }
     }
 
@@ -876,19 +923,24 @@ fn check_unique_definition(
 }
 
 // =====================
-// 不变量 3：Phi 一致性（仅 Ssa；7b.1a 落两条构造侧约束）
+// 不变量 3：Phi 一致性（仅 Ssa；7b.1a 两条 + 7b.1b 三条残项）
 // =====================
 
-/// `Phi` 的两条可判定约束（04 §目标设计「`Phi` 作为新 `Instruction` 变体」）：
+/// `Phi` 的可判定约束（04 §目标设计「`Phi` 作为新 `Instruction` 变体」）。
 ///
+/// 7b.1a 已落：
 /// 1. `dst` 必为 `Operand::Value`——Phi 定义的是 SSA 值，不是存储槽；
 /// 2. `incoming` 按前驱 block label 严格升序——构造方保证、渲染与校验共用
 ///    同一规范形态（升序也是 `normalize` 的前驱排序规则）。
 ///
-/// 未落地的两条（09a §P7 7b.1a 契约 §三 占位 3，由 7b.1b 替换）：
-/// `incoming.len() == 该块前驱数` 与逐输入类型一致需要 `values` 值表与块级
-/// 前驱关系；当前 IR 的控制流是指令级（文件头「现实语义记录」第 1 条），
-/// 块 label 与前驱集合没有可判定载体。
+/// 7b.1b 追加（本函数）：
+/// 3. `incoming.len() == 该块前驱数`（前驱集从 `BasicBlock.successors` 反推，块级）；
+/// 4. `incoming` 的 label 集合 == 该块前驱集合（计数相等时才查，避免同一缺陷双报）；
+/// 5. 逐输入类型一致（`values` 值表提供类型；见 [`check_phi_incoming_types`]）。
+///
+/// 块级前驱与指令级 CFG 是两套坐标（文件头「现实语义记录」第 1 条）：`Phi`
+/// 的 incoming 键是块 label，故这里只认 `successors`。生产侧 `successors` 当前
+/// 恒空（09a §P7 7b.1b 契约 §三 已登记为 7b.3 前置）。
 fn check_phi_structure(
     view: &FnView<'_>,
     out: &mut Vec<Violation>,
@@ -914,6 +966,103 @@ fn check_phi_structure(
                 message: format!("Phi 的 incoming 未按前驱 label 严格升序：{labels:?}"),
             });
         }
+
+        // 无基本块结构（模块 init 指令流）：前驱集不可判定——显式报，不静默跳过。
+        let Some(&block_label) = view.block_labels.get(i) else {
+            out.push(Violation {
+                invariant: InvariantKind::PhiConsistency,
+                function: view.name.clone(),
+                instruction: Some(i),
+                message: "Phi 出现在无基本块结构的指令流（模块 init），前驱集不可判定".to_string(),
+            });
+            continue;
+        };
+        let predecessors = view.predecessors.get(&block_label);
+        let pred_count = predecessors.map_or(0, HashSet::len);
+        if labels.len() != pred_count {
+            let mut preds: Vec<usize> = predecessors
+                .map(|set| set.iter().copied().collect())
+                .unwrap_or_default();
+            preds.sort_unstable();
+            out.push(Violation {
+                invariant: InvariantKind::PhiConsistency,
+                function: view.name.clone(),
+                instruction: Some(i),
+                message: format!(
+                    "Phi 的 incoming 数 {} != 块 {block_label} 的前驱数 {pred_count}（前驱={preds:?}）",
+                    labels.len()
+                ),
+            });
+        } else {
+            let incoming_set: HashSet<usize> = labels.iter().copied().collect();
+            let pred_set: HashSet<usize> = predecessors.cloned().unwrap_or_default();
+            if incoming_set != pred_set {
+                let mut incoming_sorted = labels.clone();
+                incoming_sorted.sort_unstable();
+                let mut preds: Vec<usize> = pred_set.iter().copied().collect();
+                preds.sort_unstable();
+                out.push(Violation {
+                    invariant: InvariantKind::PhiConsistency,
+                    function: view.name.clone(),
+                    instruction: Some(i),
+                    message: format!(
+                        "Phi 的 incoming label 集合 {incoming_sorted:?} != 块 {block_label} 的前驱集合 {preds:?}"
+                    ),
+                });
+            }
+        }
+        check_phi_incoming_types(view, i, incoming, out);
+    }
+}
+
+/// `Phi` 的逐输入类型一致（7b.1b 第 5 条）：04 §三条构造约束之三
+/// 「所有 incoming 值的 MonoType 相同」。
+///
+/// 类型来源 = `FunctionIR::values`（`Operand::Value(v) => values[v].ty`）。类型
+/// 不可得的三种形态按文件头「现实语义记录」第 3 条处理，**显式登记、不静默放行**：
+/// - `values` 为空表（本批生产恒空）：值表未填充 ⇒ 类型判定依据不存在，不判定；
+/// - `values` 非空而 ValueId 越界：无值信息 ⇒ 报 `PhiConsistency`（ValueId 越界）；
+/// - 非 `Value` 操作数（Const/Local/Arg/Global）：无 values 类型源 ⇒ 不判定。
+fn check_phi_incoming_types(
+    view: &FnView<'_>,
+    at: usize,
+    incoming: &[(usize, Operand)],
+    out: &mut Vec<Violation>,
+) {
+    if view.values.is_empty() {
+        return;
+    }
+    let mut typed: Vec<(&usize, &MonoType)> = Vec::new();
+    for (label, operand) in incoming {
+        let Operand::Value(id) = operand else {
+            continue;
+        };
+        match view.values.get(id.0 as usize) {
+            Some(info) => typed.push((label, &info.ty)),
+            None => out.push(Violation {
+                invariant: InvariantKind::PhiConsistency,
+                function: view.name.clone(),
+                instruction: Some(at),
+                message: format!(
+                    "Phi incoming(label {label}) 的 ValueId({}) 越界——values 表长 {}，无值信息可判定类型",
+                    id.0,
+                    view.values.len()
+                ),
+            }),
+        }
+    }
+    let Some((first_label, first_ty)) = typed.first() else {
+        return;
+    };
+    if let Some((label, ty)) = typed.iter().find(|(_, ty)| !types_compatible(first_ty, ty)) {
+        out.push(Violation {
+            invariant: InvariantKind::PhiConsistency,
+            function: view.name.clone(),
+            instruction: Some(at),
+            message: format!(
+                "Phi incoming 类型不一致：label {label} 为 {ty:?}，与 label {first_label} 的 {first_ty:?} 不相容"
+            ),
+        });
     }
 }
 

@@ -437,6 +437,7 @@ impl Translator {
                 }],
                 entry: 0,
                 locals: locals.clone(),
+                values: Vec::new(),
             },
         };
 

@@ -75,6 +75,7 @@ fn code_fn(
             }],
             entry: 0,
             locals: Vec::new(),
+            values: Vec::new(),
         },
     }
 }
@@ -841,6 +842,7 @@ fn test_orphan_shared_layer_without_site_is_dominance_red() {
             // 具名槽才是支配性判定的面（temp 槽是帧语义的预初始化，永远不算未定义）：
             // 槽 1 是「env 槽」——真实共享层里它是捕获名，读它但没有指令定义它。
             locals: vec![LocalSlot::temp(MonoType::Int(64)), named_local("n")],
+            values: Vec::new(),
         },
     };
     let m = module_with(vec![orphan]);

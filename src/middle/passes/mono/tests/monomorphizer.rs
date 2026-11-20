@@ -55,6 +55,7 @@ fn make_identity_ir() -> FunctionIR {
             }],
             entry: 0,
             locals: vec![LocalSlot::temp(param_type.clone())],
+            values: Vec::new(),
         },
     }
 }
@@ -119,6 +120,7 @@ fn make_fn_ir(
             }],
             entry: 0,
             locals,
+            values: Vec::new(),
         },
     }
 }

@@ -1,11 +1,14 @@
-//! `Instruction` 结构判据 — 04-ssa.md §目标设计「`Phi` 作为新 `Instruction` 变体」
+//! `Instruction` / `FunctionBody` 结构判据 — 04-ssa.md §目标设计
 //!
-//! 覆盖 7b.1a 新增 `Instruction::Phi` 的两个穷尽 match 臂：
-//! `Instruction::span()` 与 `Instruction::for_each_operand_mut()`
-//! （09a §P7 7b.1a 契约 §二 第 1/2 行）。
+//! 7b.1a：`Instruction::Phi` 的 `span()` 与 `for_each_operand_mut()`
+//! 两个穷尽 match 臂（09a §P7 7b.1a 契约 §二 第 1/2 行）。
+//! 7b.1b：`FunctionBody::Code.values` 值表与 `ValueInfo`（09a §P7 7b.1b 契约 §二）。
 
-use crate::middle::ir::ir::{ConstValue, Instruction, Operand, ValueId};
+use crate::frontend::core::sema::MonoType;
+use crate::middle::ir::ir::{ConstValue, Instruction, Operand, ValueId, ValueInfo};
 use crate::util::span::{Position, Span};
+
+use super::ir_build::{func, ret_void, temp_slot};
 
 /// 固定形状的 Phi：dst 一个 SSA 值，incoming 两个来源（值 + 常量）。
 fn phi_with_span(span: Span) -> Instruction {
@@ -77,5 +80,84 @@ fn test_phi_for_each_operand_mut_writes_through() {
             Operand::Const(ConstValue::Int(9)),
         ],
         "Phi 的每个操作数位都必须被回调写穿"
+    );
+}
+
+/// `FunctionBody::Code.values` 的初值为空表（7b.1b 的生产形态：全仓构造点一律空表）。
+#[test]
+fn test_code_body_values_start_empty() {
+    // Arrange
+    let f = func(
+        "f",
+        vec![],
+        MonoType::Void,
+        vec![temp_slot(MonoType::Int(64))],
+        vec![ret_void()],
+    );
+
+    // Act
+    let values = f.values();
+
+    // Assert
+    assert!(
+        values.is_empty(),
+        "新建 Code 体的 values 必须是空表，实际 {} 项",
+        values.len()
+    );
+}
+
+/// `values_mut()` 的写入穿到 `values()`（同一张表，不是副本）。
+#[test]
+fn test_code_body_values_mut_writes_through() {
+    // Arrange
+    let mut f = func("f", vec![], MonoType::Void, vec![], vec![ret_void()]);
+    let info = ValueInfo {
+        ty: MonoType::Int(64),
+        debug_name: Some("x".to_string()),
+        defining_block: 3,
+    };
+
+    // Act
+    f.values_mut().push(info);
+
+    // Assert：`values()` 读回同一项，逐字段保真
+    let values = f.values();
+    assert_eq!(values.len(), 1, "values_mut 写入后 values() 必须恰好 1 项");
+    assert_eq!(
+        values[0].ty,
+        MonoType::Int(64),
+        "写入的 ValueInfo.ty 必须原样读回"
+    );
+    assert_eq!(
+        values[0].debug_name.as_deref(),
+        Some("x"),
+        "写入的 ValueInfo.debug_name 必须原样读回"
+    );
+    assert_eq!(
+        values[0].defining_block, 3,
+        "写入的 ValueInfo.defining_block 必须原样读回"
+    );
+}
+
+/// `ValueInfo` 构造逐字段保真（04 §292-303：ty / debug_name / defining_block）。
+#[test]
+fn test_value_info_construction_preserves_fields() {
+    // Arrange + Act
+    let info = ValueInfo {
+        ty: MonoType::Bool,
+        debug_name: None,
+        defining_block: 2,
+    };
+
+    // Assert
+    assert!(
+        matches!(info.ty, MonoType::Bool),
+        "ValueInfo.ty 必须保留构造时的类型，实际 {:?}",
+        info.ty
+    );
+    assert_eq!(info.debug_name, None, "debug_name=None 必须表示纯临时值");
+    assert_eq!(
+        info.defining_block, 2,
+        "defining_block 必须保留定义块 label"
     );
 }

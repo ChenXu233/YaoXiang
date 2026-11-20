@@ -40,6 +40,7 @@ fn unit_ir(function_names: &[&str]) -> ModuleIR {
                 blocks: Vec::new(),
                 entry: 0,
                 locals: Vec::new(),
+                values: Vec::new(),
             },
         })
         .collect();

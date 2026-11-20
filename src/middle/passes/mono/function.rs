@@ -209,6 +209,7 @@ impl FunctionMonomorphizer for super::Monomorphizer {
                 blocks: new_blocks,
                 entry: new_entry,
                 locals: new_locals,
+                values: Vec::new(),
             },
         }
     }

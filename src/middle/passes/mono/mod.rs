@@ -667,6 +667,7 @@ impl Monomorphizer {
                 blocks,
                 entry,
                 locals,
+                ..
             } = &func.body
             else {
                 continue;
@@ -1384,6 +1385,7 @@ impl Monomorphizer {
                 blocks,
                 entry: new_entry,
                 locals: new_locals,
+                values: Vec::new(),
             },
         }))
     }

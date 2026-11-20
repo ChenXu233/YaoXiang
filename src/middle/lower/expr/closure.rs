@@ -210,6 +210,7 @@ impl AstToIrGenerator {
                 }],
                 entry: 0,
                 locals: closure_body.locals.clone(),
+                values: Vec::new(),
             },
         };
 

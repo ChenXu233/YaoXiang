@@ -419,6 +419,7 @@ impl AstToIrGenerator {
                 }],
                 entry: 0,
                 locals: locals_types,
+                values: Vec::new(),
             },
         };
 

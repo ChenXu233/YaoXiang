@@ -15,14 +15,17 @@ use crate::frontend::core::sema::checker::TypeChecker;
 use crate::frontend::core::sema::probe::TypeLevelNamespace;
 use crate::frontend::core::sema::MonoType;
 use crate::frontend::module::registry::ModuleRegistry;
-use crate::middle::ir::ir::{ConstValue, FrameId, Instruction, LocalSlot, Operand, ValueId};
+use crate::middle::ir::ir::{
+    ConstValue, FrameId, Instruction, LocalSlot, ModuleIR, Operand, ValueInfo,
+};
 use crate::middle::ir::verify::{verify_loose, verify_ssa, InvariantKind, VerifyError};
 use crate::middle::lower::AstToIrGenerator;
 use crate::util::span::Span;
 
 use super::corpus::{corpus_files, reaches_ir_generation};
 use super::ir_build::{
-    func, int_const, module_with, move_instr, named_slot, named_slot_in_frame, ret_void, temp_slot,
+    block, func, func_with_blocks, int_const, jmp, module_with, move_instr, named_slot,
+    named_slot_in_frame, phi_instr, ret_void, ssa_value, temp_slot, value_info,
 };
 
 fn violations_of(
@@ -1040,31 +1043,37 @@ fn test_quantity_zero_on_named_param_slot_passes() {
 }
 
 // =====================
-// 不变量 3：Phi 一致性（仅 Ssa；7b.1a 落两条构造侧约束）
+// 不变量 3：Phi 一致性（仅 Ssa；7b.1a 两条 + 7b.1b 三条残项）
 // =====================
 
-/// 7b.1a 正例：dst 为 Value、incoming 按 label 严格升序的 Phi 在 verify_ssa 下合法。
-#[test]
-fn test_ssa_phi_well_formed_passes() {
-    // Arrange
-    let f = func(
+/// 二前驱 + 汇合块的最小模块：块 0 与块 1 的 `successors` 都指向块 label 3，
+/// 块 3 放给定 Phi ⇒ 该块前驱集 = {0, 1}（块级，非指令下标）。
+fn two_pred_phi_module(
+    phi: Instruction,
+    values: Vec<ValueInfo>,
+) -> ModuleIR {
+    let f = func_with_blocks(
         "f",
         vec![],
         MonoType::Void,
         vec![],
+        values,
         vec![
-            Instruction::Phi {
-                dst: Operand::Value(ValueId(0)),
-                incoming: vec![
-                    (0, Operand::Value(ValueId(1))),
-                    (1, Operand::Value(ValueId(2))),
-                ],
-                span: Span::dummy(),
-            },
-            ret_void(),
+            block(0, vec![jmp(2)], vec![3]),
+            block(1, vec![jmp(2)], vec![3]),
+            block(3, vec![phi, ret_void()], vec![]),
         ],
     );
-    let m = module_with(vec![f]);
+    module_with(vec![f])
+}
+
+/// 7b.1a + 7b.1b 正例：dst 为 Value、incoming 按 label 升序且与前驱集一致；
+/// `values` 空表（7b.1b 生产形态）⇒ 类型判定依据不存在，显式不判定。
+#[test]
+fn test_ssa_phi_with_matching_predecessors_passes() {
+    // Arrange
+    let phi = phi_instr(ssa_value(0), vec![(0, ssa_value(1)), (1, ssa_value(2))]);
+    let m = two_pred_phi_module(phi, Vec::new());
 
     // Act
     let r = verify_ssa(&m);
@@ -1072,7 +1081,32 @@ fn test_ssa_phi_well_formed_passes() {
     // Assert
     assert!(
         r.is_ok(),
-        "结构合法的 Phi 不应产生违规：{:?}",
+        "前驱集一致的 Phi（空 values）不应产生违规：{:?}",
+        r.err().map(|e| e.to_string())
+    );
+}
+
+/// 7b.1b 正例（带类型）：`values` 提供两个相容类型的输入 ⇒ 类型一致通过。
+#[test]
+fn test_ssa_phi_with_matching_types_passes() {
+    // Arrange：V0=dst, V1=Int(64), V2=Int(32)（同数值宽度族，相容）
+    let phi = phi_instr(ssa_value(0), vec![(0, ssa_value(1)), (1, ssa_value(2))]);
+    let m = two_pred_phi_module(
+        phi,
+        vec![
+            value_info(MonoType::Int(64), 3),
+            value_info(MonoType::Int(64), 0),
+            value_info(MonoType::Int(32), 1),
+        ],
+    );
+
+    // Act
+    let r = verify_ssa(&m);
+
+    // Assert
+    assert!(
+        r.is_ok(),
+        "逐输入类型相容的 Phi 不应产生违规：{:?}",
         r.err().map(|e| e.to_string())
     );
 }
@@ -1080,19 +1114,22 @@ fn test_ssa_phi_well_formed_passes() {
 /// 7b.1a 反例：Phi 的 dst 不是 Operand::Value，必报 1 项 PhiConsistency。
 #[test]
 fn test_ssa_phi_with_slot_dst_fails() {
-    // Arrange：dst 落存储槽 Local(0)，不是 SSA 值
-    let f = func(
+    // Arrange：dst 落存储槽 Local(0)，不是 SSA 值；前驱集与 incoming 对齐，
+    // 使本测试只命中 dst 判据（单缺陷可归因）。
+    let phi = phi_instr(
+        Operand::Local(0),
+        vec![(0, ssa_value(1)), (1, ssa_value(2))],
+    );
+    let f = func_with_blocks(
         "f",
         vec![],
         MonoType::Void,
         vec![temp_slot(MonoType::Int(64))],
+        Vec::new(),
         vec![
-            Instruction::Phi {
-                dst: Operand::Local(0),
-                incoming: vec![(0, Operand::Value(ValueId(1)))],
-                span: Span::dummy(),
-            },
-            ret_void(),
+            block(0, vec![jmp(2)], vec![3]),
+            block(1, vec![jmp(2)], vec![3]),
+            block(3, vec![phi, ret_void()], vec![]),
         ],
     );
     let m = module_with(vec![f]);
@@ -1109,28 +1146,13 @@ fn test_ssa_phi_with_slot_dst_fails() {
     );
 }
 
-/// 7b.1a 反例：incoming 的 label 未严格升序，必报 1 项 PhiConsistency。
+/// 7b.1a 反例：incoming 的 label 未严格升序，必报 1 项 PhiConsistency
+/// （label 集合仍等于前驱集 {0,1}，使本测试只命中升序判据）。
 #[test]
 fn test_ssa_phi_incoming_not_ascending_fails() {
-    // Arrange：label 顺序为 2、1（降序）
-    let f = func(
-        "f",
-        vec![],
-        MonoType::Void,
-        vec![],
-        vec![
-            Instruction::Phi {
-                dst: Operand::Value(ValueId(0)),
-                incoming: vec![
-                    (2, Operand::Value(ValueId(1))),
-                    (1, Operand::Value(ValueId(2))),
-                ],
-                span: Span::dummy(),
-            },
-            ret_void(),
-        ],
-    );
-    let m = module_with(vec![f]);
+    // Arrange：label 顺序为 1、0（降序但集合相同）
+    let phi = phi_instr(ssa_value(0), vec![(1, ssa_value(1)), (0, ssa_value(2))]);
+    let m = two_pred_phi_module(phi, Vec::new());
 
     // Act
     let r = verify_ssa(&m);
@@ -1141,5 +1163,105 @@ fn test_ssa_phi_incoming_not_ascending_fails() {
         violations_of(&r, InvariantKind::PhiConsistency),
         1,
         "未升序的 Phi incoming 应恰好报 1 项 PhiConsistency 违规：{detail}"
+    );
+}
+
+/// 7b.1b 反例（前驱数）：incoming 少一个前驱 ⇒ 必报 1 项 PhiConsistency。
+#[test]
+fn test_ssa_phi_predecessor_count_mismatch_fails() {
+    // Arrange：块 3 前驱集 {0,1}（2 个），incoming 只有 label 0（1 个）
+    let phi = phi_instr(ssa_value(0), vec![(0, ssa_value(1))]);
+    let m = two_pred_phi_module(phi, Vec::new());
+
+    // Act
+    let r = verify_ssa(&m);
+    let detail = r.as_ref().err().map(|e| e.to_string()).unwrap_or_default();
+
+    // Assert：计数不等只报计数（集合差异同一根因，不双报）
+    assert_eq!(
+        violations_of(&r, InvariantKind::PhiConsistency),
+        1,
+        "incoming 数与前驱数不等应恰好报 1 项 PhiConsistency：{detail}"
+    );
+    assert!(
+        detail.contains("前驱数"),
+        "归因消息应点名前驱数差异：{detail}"
+    );
+}
+
+/// 7b.1b 反例（前驱集合）：incoming 数与判决相同但 label 集合不同
+/// ⇒ 必报 1 项 PhiConsistency。
+#[test]
+fn test_ssa_phi_predecessor_set_mismatch_fails() {
+    // Arrange：块 3 前驱集 {0,1}，incoming label 集合 {0,2}（数量相同）
+    let phi = phi_instr(ssa_value(0), vec![(0, ssa_value(1)), (2, ssa_value(2))]);
+    let m = two_pred_phi_module(phi, Vec::new());
+
+    // Act
+    let r = verify_ssa(&m);
+    let detail = r.as_ref().err().map(|e| e.to_string()).unwrap_or_default();
+
+    // Assert
+    assert_eq!(
+        violations_of(&r, InvariantKind::PhiConsistency),
+        1,
+        "incoming label 集合与前驱集合不一致应恰好报 1 项 PhiConsistency：{detail}"
+    );
+    assert!(
+        detail.contains("前驱集合"),
+        "归因消息应点名前驱集合差异：{detail}"
+    );
+}
+
+/// 7b.1b 反例（类型一致）：两个 incoming 类型不相容 ⇒ 必报 1 项 PhiConsistency。
+#[test]
+fn test_ssa_phi_incoming_type_mismatch_fails() {
+    // Arrange：V1=Int(64)、V2=Bool（既有 types_compatible 判不相容）
+    let phi = phi_instr(ssa_value(0), vec![(0, ssa_value(1)), (1, ssa_value(2))]);
+    let m = two_pred_phi_module(
+        phi,
+        vec![
+            value_info(MonoType::Int(64), 3),
+            value_info(MonoType::Int(64), 0),
+            value_info(MonoType::Bool, 1),
+        ],
+    );
+
+    // Act
+    let r = verify_ssa(&m);
+    let detail = r.as_ref().err().map(|e| e.to_string()).unwrap_or_default();
+
+    // Assert
+    assert_eq!(
+        violations_of(&r, InvariantKind::PhiConsistency),
+        1,
+        "incoming 类型不一致应恰好报 1 项 PhiConsistency：{detail}"
+    );
+    assert!(
+        detail.contains("类型不一致"),
+        "归因消息应点名类型不一致：{detail}"
+    );
+}
+
+/// 7b.1b 反例（无块结构）：Phi 出现在模块 init 指令流（无基本块）⇒ 显式报违规。
+#[test]
+fn test_ssa_phi_in_init_without_blocks_is_reported() {
+    // Arrange：init 里放一条 Phi（模块 init 无 BasicBlock，前驱集不可判定）
+    let mut m = module_with(vec![]);
+    m.init = vec![phi_instr(ssa_value(0), vec![(0, ssa_value(1))])];
+
+    // Act
+    let r = verify_ssa(&m);
+    let detail = r.as_ref().err().map(|e| e.to_string()).unwrap_or_default();
+
+    // Assert
+    assert_eq!(
+        violations_of(&r, InvariantKind::PhiConsistency),
+        1,
+        "init 里的 Phi 应显式报 1 项「无基本块结构」：{detail}"
+    );
+    assert!(
+        detail.contains("无基本块结构"),
+        "归因消息应点名无基本块结构：{detail}"
     );
 }

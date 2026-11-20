@@ -81,6 +81,7 @@ fn unary_module(use_not: bool) -> ModuleIR {
                 LocalSlot::temp(MonoType::Bool),
                 LocalSlot::temp(MonoType::Bool),
             ],
+            values: Vec::new(),
         },
     });
     module

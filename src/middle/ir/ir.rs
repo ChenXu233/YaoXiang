@@ -882,6 +882,24 @@ pub struct BasicBlock {
     pub successors: Vec<usize>,
 }
 
+/// SSA 值信息（04-ssa.md §值标识方式）：与 `locals` 并存的**值表**。
+///
+/// `locals` 承载可寻址具名变量（可能多次定义），本表承载单定义 SSA 值
+/// （`Operand::Value`）——locals 的存在不违反 SSA，它就是 SSA 之外的存储部分
+/// （LLVM 的 alloca 模型）。
+///
+/// 本批（7b.1b）只建立结构与访问器：生产侧一律空表（`Operand::Value` 的生产
+/// 归 7b.2），故 `values` 不进入任何渲染 / 翻译路径（快照零漂移）。
+#[derive(Debug, Clone)]
+pub struct ValueInfo {
+    /// 值类型（收敛后的单一 `MonoType`）
+    pub ty: MonoType,
+    /// 调试名（来自被消除的具名槽位），`None` 表示纯临时值
+    pub debug_name: Option<String>,
+    /// 定义所在基本块的 label
+    pub defining_block: usize,
+}
+
 /// 函数体形态
 ///
 /// RFC-010 §328：`{}` 在 YaoXiang 中是依赖驱动计算单元。
@@ -894,6 +912,8 @@ pub enum FunctionBody {
         blocks: Vec<BasicBlock>,
         entry: usize,
         locals: Vec<LocalSlot>,
+        /// SSA 值表（与 `locals` 并存；7b.2 起由 `next_temp_reg` 生产 `Operand::Value`）
+        values: Vec<ValueInfo>,
     },
     /// 返回值是类型 → {} 是类型字面量
     ///
@@ -1063,6 +1083,22 @@ impl FunctionIR {
         match &self.body {
             FunctionBody::Code { locals, .. } => locals,
             FunctionBody::TypeDecl { .. } => &[],
+        }
+    }
+
+    /// 获取 SSA 值表（仅 Code 体有效）
+    pub fn values(&self) -> &[ValueInfo] {
+        match &self.body {
+            FunctionBody::Code { values, .. } => values,
+            FunctionBody::TypeDecl { .. } => &[],
+        }
+    }
+
+    /// 获取可变 SSA 值表（仅 Code 体有效）
+    pub fn values_mut(&mut self) -> &mut Vec<ValueInfo> {
+        match &mut self.body {
+            FunctionBody::Code { values, .. } => values,
+            FunctionBody::TypeDecl { .. } => panic!("values_mut called on TypeDecl"),
         }
     }
 
