@@ -381,7 +381,7 @@ Similar implicit state includes `pending_env_names` (written by handshake B at `
 | Complexity of `compile_pattern`                      | `ir_gen.rs:5390-5687`, **298 lines**, with four levels of self-recursion (`5473` / `5504` / `5619` / `5640`) and an external call site at `5270` | The dispatch complexity of pattern matching (union payload / tuple / struct / literal / nested) is **inherent to the algorithm**. SSA only turns the `JmpIfNot` produced by a guard into a `Phi`; it does not reduce the number of guards |
 | Complexity of `eval_const_expr`                      | `ir_gen.rs:2298-2488`, **191 lines** (`2297` has `#[allow(clippy::only_used_in_recursion)]`, confirming self-recursion)                          | The expression coverage of constant folding is unrelated to SSA                                                                                                                                                                           |
 | Span-keyed failure (**eliminated**)                  | Audit point: `release_plan` (`1942`), `overload_resolutions` (`7420` / `7493`)—after 4.5, `PlanId` keys + mandatory settlement                   | **SSA does not touch this layer at all** (the conclusion remains unchanged). It was solved independently by the obligation-ledger mechanism in [02](02-stage-contract.md); see mechanism two in “Disposition of the Span-Keyed Problem”   |
-| Number of `Instruction` variants                     | 76 (`ir.rs:47-533`)                                                                                                                              | SSA adds `Phi`, a **net change of +1**. The 76 variants correspond to 76 bytecode opcodes or are lowered to NOP; SSA will not reduce this number                                                                                          |
+| Number of `Instruction` variants                     | 75 (the `Instruction` enum in `ir.rs`; includes the `Phi` added by 7b.1a)                                                                        | SSA adds `Phi`, a **net change of +1** (landed). The variants correspond to bytecode opcodes or are lowered to NOP; SSA will not reduce this number. Under option A, `Phi` is an IR-only pseudo-instruction and adds no opcode            |
 | Definition-order dependence of `method_def_ordinals` | `ir_gen.rs:224` / `369` / `1692-1702`                                                                                                            | Similar to span keying but caused by a different factor; see mechanism three in “Additional Mechanisms for Span-Keyed Problems”                                                                                                           |
 
 ## Target Design
@@ -392,17 +392,20 @@ Similar implicit state includes `pending_env_names` (written by handshake B at `
 
 #### How the `Operand` Variants Change
 
-The current `ir.rs:12-20` has seven variants. **Measured construction sites across the repository**:
+The `Operand` enum in `ir.rs` has five variants. **Measured across the repository** (hit counts are
+summed per file with `git grep -c`, `src/` in full including tests; construction counts are
+value-position constructions):
 
-| Variant             | Production construction sites                                                                                                                                  | Disposition                                                                                       |
-| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| `Const(ConstValue)` | 8 files                                                                                                                                                        | **Retained**, unchanged                                                                           |
-| `Local(usize)`      | 7 files                                                                                                                                                        | **Retained, but its semantics are split** (see below)                                             |
-| `Arg(usize)`        | 4 files                                                                                                                                                        | **Retained** as the implicit definition at function entry (parameters are definitions in block 0) |
-| `Global(usize)`     | 5 files                                                                                                                                                        | **Retained**, unchanged                                                                           |
-| `Temp(usize)`       | **0 construction sites** (handled only at `codegen/operand.rs:39-45` and `:75`)                                                                                | **Deleted** (dead variant)                                                                        |
-| `Label(usize)`      | **0 construction sites**                                                                                                                                       | **Deleted** (dead variant)                                                                        |
-| `Register(u8)`      | **0 construction sites** (`ir.rs:19` says “Added for codegen”, but codegen uses `OperandResolver` in `codegen/operand.rs` and does not construct this variant) | **Deleted** (dead variant)                                                                        |
+| Variant             | Measured across the repository                                                                                                                                                  | Disposition                                                                                       |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `Const(ConstValue)` | 32 files / 143 hits                                                                                                                                                             | **Retained**, unchanged                                                                           |
+| `Value(ValueId)`    | 7 files / 26 hits; **0 production construction sites** (the production side belongs to 7b.2's `next_temp_reg`)                                                                  | **Retained** (introduced by 7b.1a)                                                                |
+| `Local(usize)`      | 29 files / 416 hits                                                                                                                                                             | **Retained, but its semantics are split** (see below)                                             |
+| `Arg(usize)`        | 8 files / 11 hits                                                                                                                                                               | **Retained** as the implicit definition at function entry (parameters are definitions in block 0) |
+| `Global(usize)`     | 16 files / 26 hits                                                                                                                                                              | **Retained**, unchanged                                                                           |
+| `Temp(usize)`       | **0 construction sites** (handled only by `OperandResolver::to_reg` and `is_register` in `codegen/operand.rs`, removed together with the variant)                               | **Deleted** (dead variant, 7b.1a)                                                                 |
+| `Label(usize)`      | **0 construction sites**                                                                                                                                                        | **Deleted** (dead variant, 7b.1a)                                                                 |
+| `Register(u8)`      | **0 construction sites** (the old variant declaration said “Added for codegen”, but codegen uses `OperandResolver` in `codegen/operand.rs` and does not construct this variant) | **Deleted** (dead variant, 7b.1a)                                                                 |
 
 `Local(usize)` is split into two variants because it currently **simultaneously serves two mutually
 exclusive semantics**—“the storage location of a named variable” (which may be written multiple
@@ -421,7 +424,10 @@ pub enum Operand {
 ```
 
 `ValueId` is a new `u32` type (`#[derive(Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]`),
-densely numbered within a function, **increasing monotonically and never rolled back**.
+densely numbered within a function, **increasing monotonically and never rolled back**. The split
+and `ValueId` have landed in 7b.1a (the `Operand` enum in `src/middle/ir/ir.rs`); in that batch the
+production construction sites of `Value` are 0—the production side (`next_temp_reg` returning
+`Operand::Value`) belongs to 7b.2.
 
 #### `Phi` as a New `Instruction` Variant
 
@@ -435,14 +441,25 @@ Phi {
 },
 ```
 
-Three construction constraints, all enforced by `verify_ssa` (see the first layer in
-[07](07-equivalence-oracle.md)):
+Three construction constraints (see the first layer in [07](07-equivalence-oracle.md)):
 
 1. `incoming.len() == the number of predecessors of this block`.
 2. The label set in `incoming` equals the set of labels of all blocks in `blocks` whose `successors`
    contain this block’s label.
 3. All `incoming` values have the same `MonoType` (**depends on the type representation from 03
    having converged**).
+
+Landing status of the `verify_ssa` criteria: constraints 1 and 2 need the value table and the
+block-level CFG, so they belong to **7b.1b**; the batch that landed (7b.1a) enforces the two
+construction-side ones—`dst` must be `Operand::Value`, and the labels in `incoming` must be strictly
+ascending (`check_phi_structure` in `src/middle/ir/verify.rs`, violation category
+`InvariantKind::PhiConsistency`); constraint 3 depends on the type representation from 03 converging
+and advances together with 7b.1b.
+
+7b.1a only introduces the variant: the production construction sites in lowering are 0, and the
+consuming arm in `translator.rs` is a placeholder with an invariant comment (it fails loudly instead
+of skipping silently or producing a wrong value). The real translation belongs to 7b.3 (option A:
+expand into a chain of `Move`s).
 
 **Disposition of the guard at `3632-3638`**: the current reclamation in `generate_block_ir` has an
 `if result_reg.is_none()` guard (the comment at `3626-3631` explains: the block occupies an
@@ -458,15 +475,16 @@ the code, rather than merely renaming it.**
 numbering, and **perform explicit renaming only**. The reasons are:
 
 - YaoXiang’s `&` / reference / ownership semantics make “which slots can be promoted to memory” a
-  **type-system problem**, not a CFG problem. It has been verified that `ir.rs:656`’s
-  `LocalSlot::ty: MonoType` carries complete type information, but determining “whether this
-  `MonoType` can be promoted to memory” requires the converged type representation from 03 and
-  coordination with refinement-type rules. **Performing mem2reg before 03 would be guessing.**
+  **type-system problem**, not a CFG problem. It has been verified that `LocalSlot::ty: MonoType` in
+  `ir.rs` carries complete type information, but determining “whether this `MonoType` can be
+  promoted to memory” requires the converged type representation from 03 and coordination with
+  refinement-type rules. **Performing mem2reg before 03 would be guessing.**
 - Explicit renaming only requires changing the return-value semantics of `next_temp_reg()` in one
-  place (`ir_gen.rs:884-891`) and deleting the three rollbacks. **It does not touch the control flow
-  of any lowering algorithm.**
+  place (`next_temp_reg` in `src/middle/lower/scope.rs`) and deleting the three rollbacks. **It does
+  not touch the control flow of any lowering algorithm.**
 
-The value-table shape adds `values: Vec<ValueInfo>` to `FunctionBody::Code`, where:
+The value-table shape (**pending 7b.1b**) adds `values: Vec<ValueInfo>` to `FunctionBody::Code`,
+where:
 
 ```rust
 pub struct ValueInfo {
@@ -483,15 +501,15 @@ does not violate SSA**—it is the “storage” portion outside SSA (LLVM’s a
 
 #### Change-Size Estimate
 
-| Item                                                   | Estimate               | Basis                                                                                                                               |
-| ------------------------------------------------------ | ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| Change `next_temp_reg`                                 | ~15 lines              | Single function at `ir_gen.rs:884-891`                                                                                              |
-| Delete three statement-level reclamations              | −15 lines              | `1954-1959` / `3632-3638` / `4737-4742`                                                                                             |
-| Consolidate six save/restore sites into RAII           | Net ±0 lines           | See “Per-Item Disposition Table”                                                                                                    |
-| Change `ir.rs` structures                              | +120–180 lines         | `ValueId` / `Phi` / `ValueInfo` / value table                                                                                       |
-| Add a `Phi` arm to `translator.rs`                     | +25–40 lines           | One of the existing 50 `translate_*` functions                                                                                      |
-| Add a `PHI` instruction or runtime fill in `executor/` | +60–120 lines          | Depends on the bytecode representation selected for `Phi`                                                                           |
-| Rename `Operand::Local` → `Value` at call sites        | Mechanical replacement | **Measured**: `Operand::Local(` occurs **323 times** in `ir_gen.rs`, with **355 occurrences across 6 files** in the full repository |
+| Item                                                 | Estimate                              | Basis                                                                                                                                                                                                                                                            |
+| ---------------------------------------------------- | ------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Change `next_temp_reg`                               | ~15 lines                             | Single function in `src/middle/lower/scope.rs`                                                                                                                                                                                                                   |
+| Delete three statement-level reclamations            | −15 lines                             | `1954-1959` / `3632-3638` / `4737-4742`                                                                                                                                                                                                                          |
+| Consolidate six save/restore sites into RAII         | Net ±0 lines                          | See “Per-Item Disposition Table”                                                                                                                                                                                                                                 |
+| Change `ir.rs` structures                            | +120–180 lines                        | `ValueId` / `Phi` / `ValueInfo` / value table; **7b.1a landed the first two** (measured `src/middle/ir/ir.rs` +37/−3 lines, `normalize.rs` +22/−5, `verify.rs` +63/−14); `ValueInfo` and the value table are pending 7b.1b                                       |
+| Add a `Phi` arm to `translator.rs`                   | +25–40 lines (pending 7b.3)           | One of the existing 50 `translate_*` functions                                                                                                                                                                                                                   |
+| `executor/`                                          | **No change**                         | Option A: `Phi` is an IR-only pseudo-instruction, expanded into a chain of `Move`s in `translator.rs`; it never reaches the bytecode (decision three)                                                                                                            |
+| Call sites where temporaries become `Operand::Value` | Mechanical replacement (pending 7b.2) | **Measured** (summed per file with `git grep -c`, `src/` in full including tests): `Operand::Local(` occurs 414 times across 28 files, of which 332 times across 14 files in `src/middle/lower/`; the single production point for temporaries is `next_temp_reg` |
 
 ### Per-Item Disposition Table
 
@@ -505,16 +523,18 @@ does not violate SSA**—it is the “storage” portion outside SSA (LLVM’s a
 | **4. Implicit ordering dependency**                         | **No**                                                                   | See the “`synth.rs` Boundary”                                                                                                                                                                                                                                                                                                                                                                             | A new explicit criterion is required                                     |
 | 298-line `compile_pattern`                                  | No                                                                       | See “What SSA Will Not Solve”                                                                                                                                                                                                                                                                                                                                                                             | —                                                                        |
 | 191-line `eval_const_expr`                                  | No                                                                       | See “What SSA Will Not Solve”                                                                                                                                                                                                                                                                                                                                                                             | —                                                                        |
-| 76 `Instruction` variants                                   | No (+1)                                                                  | Adding `Phi` → 77                                                                                                                                                                                                                                                                                                                                                                                         | —                                                                        |
+| 75 `Instruction` variants                                   | No (+1, landed)                                                          | `Phi` has been introduced by 7b.1a; under option A it is an IR-only pseudo-instruction and adds no opcode                                                                                                                                                                                                                                                                                                 | —                                                                        |
 
 ### Register Allocator: Custom Implementation or Existing Crate?
 
 **Verified facts (decisive)**:
 
-1. `Operand::Register(u8)` (`ir.rs:19`) has **0 construction sites across the repository**.
+1. `Operand::Register(u8)` has **0 construction sites across the repository**—the variant is no
+   longer part of the `Operand` enum in `ir.rs` (deleted by 7b.1a).
 2. The backend is not a register machine—`OperandResolver` in `src/middle/passes/codegen/operand.rs`
-   resolves `Operand::Local/Temp/Arg` to `u8`, with an upper limit of 255 (the `Temp` arm at `39-45`
-   reports E3014 on overflow).
+   resolves `Operand::Local` and `Operand::Arg` to `u8`, with an upper limit of 255 (exceeding it
+   reports E3014); resolving the slot of `Operand::Value` is pending 7b.2 and currently returns the
+   explicit diagnostic E3017.
 3. The output of `translator.rs` (`src/middle/passes/codegen/translator.rs`, 1,577 lines, 50
    `translate_*` functions, with function bodies distributed across `101-1558`) is
    `BytecodeInstruction::new(opcode, operands)`. Opcodes come from `src/backends/common/opcode.rs`
@@ -785,12 +805,12 @@ changes:
 
 | No. | File                                      | Location                                                     | Change                                                                                                                           |
 | --- | ----------------------------------------- | ------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | `src/middle/core/ir.rs`                   | `12-20`                                                      | Add/remove `Operand` variants                                                                                                    |
-| 2   | `src/middle/core/ir.rs`                   | End of `47-533`                                              | Add `Instruction::Phi`                                                                                                           |
-| 3   | `src/middle/core/ir.rs`                   | `636-642`                                                    | Add `values` to `FunctionBody::Code`                                                                                             |
-| 4   | `src/middle/core/ir.rs`                   | Near `660`                                                   | Add `ValueInfo`                                                                                                                  |
-| 5   | `src/middle/core/ir.rs`                   | `689-719`                                                    | Add `values()` / `values_mut()` accessors                                                                                        |
-| 6   | `src/middle/core/ir.rs`                   | `3`                                                          | **Do not change `pub use ast::Type`** (scope of [03](03-type-unification.md); recorded only)                                     |
+| 1   | `src/middle/ir/ir.rs`                     | `Operand` enum definition                                    | Add/remove `Operand` variants (**landed by 7b.1a**: drop `Temp` / `Label` / `Register`, add `Value(ValueId)`)                    |
+| 2   | `src/middle/ir/ir.rs`                     | End of the `Instruction` enum (`Phi` variant)                | Add `Instruction::Phi` (**landed by 7b.1a**)                                                                                     |
+| 3   | `src/middle/ir/ir.rs`                     | `FunctionBody::Code`                                         | Add `values` to `FunctionBody::Code`                                                                                             |
+| 4   | `src/middle/ir/ir.rs`                     | `ValueInfo`                                                  | Add `ValueInfo`                                                                                                                  |
+| 5   | `src/middle/ir/ir.rs`                     | `values()` / `values_mut()` accessors                        | Add `values()` / `values_mut()` accessors                                                                                        |
+| 6   | `src/middle/ir/ir.rs`                     | `pub use ast::Type`                                          | **Do not change `pub use ast::Type`** (scope of [03](03-type-unification.md); recorded only)                                     |
 | 7   | `src/middle/core/ir_gen.rs`               | `884-891` `next_temp_reg`                                    | Return `Operand::Value`; increase monotonically without rollback                                                                 |
 | 8   | `src/middle/core/ir_gen.rs`               | `1954-1959`                                                  | **Delete** the statement-level reclamation                                                                                       |
 | 9   | `src/middle/core/ir_gen.rs`               | `3632-3638`                                                  | **Delete** the statement-level reclamation (including the `result_reg.is_none()` guard)                                          |
@@ -856,17 +876,19 @@ Divide the work into four batches. **Every item within a batch is an independent
 independent criteria and an independent revert**. The “change items” in the table below refer to the
 numbers in the preceding “Compiler Change List.”
 
-| Batch       | Content                                                                                                                                                                    | Change items                 | Criteria                                                                                                                                                             | Rollback point                                                                                                                                              |
-| ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Batch a** | Break multiple definitions: delete the three statement-level reclamations → replace six save/restore sites with an RAII guard → unify accounting                           | 8-10 (first) → 11-16 → 17-18 | Deleting reclamation: **C4** (behavioral equivalence + first-layer dominance invariants). RAII and accounting unification are pure moves: **C1** zero-diff snapshots | One commit per item; roll back with `git revert`                                                                                                            |
-| **Batch b** | Switch to the SSA shape: change `ir.rs` structures + mechanically replace `Operand` (323 locations) → add the `Phi` arm to `translator.rs` → add the linear-scan allocator | 1-5, 7 → 31-32 → 37          | **C4**: behavioral equivalence + all-green `verify_ssa` + `.42` round-trip tests                                                                                     | The `ir.rs` changes **must occupy an exclusive commit** (the type changes affect compilation across the repository and cannot be rolled back incrementally) |
-| **Batch c** | Make implicit contracts explicit: `synth.rs` boundary + sentinel script → span consumption counting → make `method_def_ordinals` read-only                                 | 20-24, 29, 38 → 25 → 26      | **C4**: behavioral equivalence + the new script integrated into CI; consumption counting must trigger zero diagnostics (otherwise, a real mismatch exists)           | Independent commit                                                                                                                                          |
-| **Batch d** | Decompose `generate_call_expr_ir` + make the “fill in 0” fallback assertion-based                                                                                          | 27-28                        | Pure-move portion: **C1** zero-diff snapshots. Assertion-based portion: **C4** corpus differential + first-layer verifier                                            | Independent commit                                                                                                                                          |
+| Batch       | Content                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | Change items                 | Criteria                                                                                                                                                             | Rollback point                                                                                                                                              |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Batch a** | Break multiple definitions: delete the three statement-level reclamations → replace six save/restore sites with an RAII guard → unify accounting                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | 8-10 (first) → 11-16 → 17-18 | Deleting reclamation: **C4** (behavioral equivalence + first-layer dominance invariants). RAII and accounting unification are pure moves: **C1** zero-diff snapshots | One commit per item; roll back with `git revert`                                                                                                            |
+| **Batch b** | Switch to the SSA shape: change `ir.rs` structures + make temporaries produce `Operand::Value` (mechanical replacement) → add the `Phi` arm to `translator.rs` → add the linear-scan allocator. Inside the batch the WBS third-level tasks run strictly in series: 7b.1a (`Operand` variant convergence + `Instruction::Phi` introduction, **landed**) → 7b.1b (`FunctionIR` / `BasicBlock` / type-annotation fields) → 7b.2 (`next_temp_reg` producing `Operand::Value`) → 7b.3 (the `Phi` arm in `translator.rs`) → 7b.4 (linear-scan allocator + deleting the three statement-level reclamations, in the same batch as 7a.1) | 1-5, 7 → 31-32 → 37          | **C4**: behavioral equivalence + all-green `verify_ssa` + `.42` round-trip tests                                                                                     | The `ir.rs` changes **must occupy an exclusive commit** (the type changes affect compilation across the repository and cannot be rolled back incrementally) |
+| **Batch c** | Make implicit contracts explicit: `synth.rs` boundary + sentinel script → span consumption counting → make `method_def_ordinals` read-only                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | 20-24, 29, 38 → 25 → 26      | **C4**: behavioral equivalence + the new script integrated into CI; consumption counting must trigger zero diagnostics (otherwise, a real mismatch exists)           | Independent commit                                                                                                                                          |
+| **Batch d** | Decompose `generate_call_expr_ir` + make the “fill in 0” fallback assertion-based                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | 27-28                        | Pure-move portion: **C1** zero-diff snapshots. Assertion-based portion: **C4** corpus differential + first-layer verifier                                            | Independent commit                                                                                                                                          |
 
 **Three dependencies whose order within the batches cannot be exchanged**:
 
-1. Batch a’s “delete reclamation” must precede batch b’s `ir.rs` changes—first make `next_temp`
-   increase monotonically, so that `ValueId` has the semantic basis for “unique definition.”
+1. Deleting the three statement-level reclamations happens in 7b.4 (in the same batch as the
+   linear-scan allocator, together with 7a.1), so it **comes after batch b’s `ir.rs` changes**; the
+   “unique definition” semantics of `ValueId` only holds once 7b.2 (`next_temp_reg` producing
+   `Value`) and 7b.3 (the `Phi` arm) have landed.
 2. Batch b’s `Phi` arm must precede batch d’s decomposition—otherwise, the decomposition carries the
    old `arg_regs` ordering assumptions unchanged into the new file.
 3. Batch d must come last—it depends on the preceding batches having already reduced the semantics

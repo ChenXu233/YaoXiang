@@ -7279,7 +7279,7 @@ canonical_text(RecordModel) =
 
 ## P7 7b.1a 契约（`Operand` 变体收敛 + `Instruction::Phi` 引入，2026-11-19）
 
-> 计划见 [09](./09-execution-wbs.md) §P7 7b 表 7b.1a 行；设计依据 [04](./04-ssa.md) §目标设计（`Operand` 变体 / `Phi` / 值标识）与 §IR 结构变更的连锁影响。本段在动工前写下改动面、占位与回滚点；实测数字取冻结 revision `ed6f91b2`（`git grep -n`，行号以该 revision 为准）。代码按本段落地，收口轮在本文件追加实测与偏差。
+> 计划见 [09](./09-execution-wbs.md) §P7 7b 表 7b.1a 行；设计依据 [04](./04-ssa.md) §目标设计（`Operand` 变体 / `Phi` / 值标识）与 §IR 结构变更的连锁影响。本段在动工前写下改动面、占位与回滚点；实测数字取 7b.1a 契约笔之前的冻结 revision（RFC-010b 规范回写之后的那一笔 HEAD，`git grep -n`，行号以该 revision 为准）。代码按本段落地，收口轮在本文件追加实测与偏差。
 
 ### 一、全仓 `Operand` 构造点 / 匹配点实测
 
@@ -7357,7 +7357,7 @@ Phi {
 
 ### 四、快照与语料影响预判
 
-- **IR 快照**：零漂移。三个死变体全仓 0 构造点，不出现在任何现有 IR 文本；保留变体渲染文本逐字不变；`Value` / `Phi` 渲染只对新形态生效，语料无 Phi。基线份数 = 232（`src/middle/ir/tests/snapshots/**/*.snap` 实测 232 份；`test_ir_snapshots_stable` 于 `ed6f91b2` 实测绿）。
+- **IR 快照**：零漂移。三个死变体全仓 0 构造点，不出现在任何现有 IR 文本；保留变体渲染文本逐字不变；`Value` / `Phi` 渲染只对新形态生效，语料无 Phi。基线份数 = 232（`src/middle/ir/tests/snapshots/**/*.snap` 实测 232 份；`test_ir_snapshots_stable` 于上述冻结 revision 实测绿）。
 - **语料差分**：402/402 零 diff。本批不改 lowering、翻译与执行，语料产出逐字节不变。
 - **verify**：`verify_loose` 行为不变；`verify_ssa` 只对含 Phi 的 IR 新增结构检查（现有语料无 Phi）。
 - **槽位预算**：不变。`next_temp`、三处语句级回收、`take_body_locals` 均不在本批改动面（分别归 7b.2、7b.4 与 7a.1）。
@@ -7447,3 +7447,89 @@ Phi {
 7. **退出码实测更正（t7 F2）**：命令未启动（如命令不存在）时 `subprocess.run` 抛 `FileNotFoundError` 并如实上抛，进程 **exit 1**；restore 仍必达（`apply -R 成功`、blob 回 HEAD、CLEAN）。`if rc is None: sys.exit(2)` 是防御分支、当前实现下不可达，保留不改变退出码语义；若要收敛为 exit 2 属退出码语义变更，需另作裁决。t6 提交信息（被复审对象）**不改写历史**，事实更正以本记录与修复提交说明承载。
 8. **本地哈希（t7 F3）**：t6 记录里引用的**本地未推送 revision 哈希**已从 §一/§三 移除，改为「2.1.5 登记笔后的 t1 收口 HEAD（冻结 revision）」的不带哈希描述；§三 表内的完整前缀同步改为「上述冻结 revision」。`ed6f91b2`（7b.1a 契约段引用）属既有欠账，登记给 **t4 收口** 一并处理（推送后取号重引或改不带哈希的描述），本任务不改写。
 9. **混用形态（t7 F4）**：`main()` 检测「argparse 已解析出 command 且 `--` 之后也有命令」→ `p.error` 报「二选一」、exit 2，树未变异；HOWTO §三 与 `--help` 已写明「混用会被拒绝」。此前静默丢弃 argparse 命令的行为不再出现。
+
+## P7 7b.1a 收口（`Operand` 变体收敛 + `Instruction::Phi` 引入，2026-11-20）
+
+> 收口对象 = WBS 二级任务 7b 的首轮三级任务 7b.1a。代码由实现轮落库，验证轮在冻结 revision 的批次树上独立复算，复审轮给出 verdict=pass。本段按登记口径写实测数字与机械证据；**不写本地提交号**（哈希随 `pull --rebase` 改写），指向以「笔的性质 + 文件清单」定位。
+
+### 一、判据链（实测数字）
+
+冻结 revision = **2.1.5 登记笔之后的 t1 收口 HEAD**（含 2.1.5 的测试修复与登记两笔）。验证轮的全部量测在 `scripts/dev/scratch.py` 的批次树内完成（`init` → `use --rev` → `build` → 量测 → `release` → `gc`），主仓工作树全程干净；复审轮在同一 revision 上以 `git show <rev>:<file>` / `git grep <rev>` 复核，未读工作树。
+
+| 门禁 | 结果 |
+| --- | --- |
+| `cargo fmt --check` | exit 0 |
+| `cargo clippy --all --all-features --all-targets -- -D warnings` | exit 0 |
+| `cargo test --lib snapshot` | exit 0 = 6 passed / 0 failed / 1 ignored（IR 快照 **232 份零漂移**） |
+| `cargo test --lib verify` | exit 0 = 26 passed / 0 failed |
+| `cargo test --lib middle::ir::tests` | exit 0 = 59 passed / 0 failed / 1 ignored |
+| `cargo test --lib phi` | exit 0 = 33 passed |
+| `python scripts/dev/testsuite.py run fast` | exit 0 = 1 波 **2361 条**，跳过 0 波 |
+| `cargo run --example corpus_probe` + 语料差分门禁 | exit 0 = **402 / 402**，逐条差分空 |
+| `check-docs-truth` / `check-fanout` / `check-test-channel` / `check-docs-refs` | 全 exit 0（本批无既有红） |
+
+**零漂移的归因不是「基线整批重写」**：7b.1a 代码笔未触碰任何基线文件（`git diff --stat -- src/middle/ir/tests/snapshots tests/baselines` 为空；232 份快照与 37 份基线原样）。行为等价的静态理由与运行时证据互证——三个死变体在动工前的冻结 revision 上只有 11 处**模式匹配**、0 处值位置构造（逐处判读），删臂不改变任何既有 IR 的渲染与分析输出；新增的 `Value` / `Phi` 面语料不可达。
+
+**真双 / 三方二进制探针**（逐字节）：三个 revision 各自再生 232 份规范化 IR 文本，两组对比各 **232 / 232 相同**；CLI 探针 5 夹具 × check/run/dump × stdout/stderr/exit = **45 / 45 逐字节相同**；语料差分 JSONL 两份各 402 行、SHA-256 相同。登记差异：三个二进制的 SHA-256 互不相同（rustc 输出不可复现，同源不同字节），行为面零差。
+
+**机械可逆变异**（补丁 → 转红 → 机械还原 → 重测全绿）：实现轮 4 条、验证轮 5 条、复审轮 2 条、2.1.5 夹具 2 条。变异命中本批新增的直驱判据（`for_each_operand_mut` 的访问序与写穿、`verify_ssa` 的 `dst` 必为 `Operand::Value`），证明这些判据在承重。
+
+### 二、`Operand` 收敛与 `Instruction::Phi` 引入的机械证据
+
+1. **死变体零命中**：`git grep -n -E "Operand::(Temp|Label|Register)" <冻结 revision> -- src` 零命中（exit 1），变体声明行同样零命中；全仓剩余命中都在文档里。
+2. **`Phi` 生产构造点 0**：`Instruction::Phi` 的值位置构造共 5 处，全部在 `src/middle/ir/tests/`（`tests/ir.rs` 的 `phi_with_span` 夹具、`tests/snapshot.rs` 的渲染夹具、`tests/verify.rs` 的正例与两类反例）；`Operand::Value(` 的生产构造点 0。
+3. **穷尽 match 全覆盖**：全仓对 `Instruction` 的穷尽 match 恰 6 处，逐处有 `Phi` 臂——`src/middle/ir/ir.rs` 的 `Instruction::span()` 与 `Instruction::for_each_operand_mut()`、`src/middle/ir/normalize.rs` 的 `fmt_instruction`、`src/middle/ir/verify.rs` 的 `def_operands` 与 `use_operands`、`src/middle/passes/codegen/translator.rs` 的 `translate_instruction`。编译器佐证：闭合 enum 漏臂即 E0004，fmt / clippy 全绿。
+4. **新增直驱测试 7 条**（命名 `test_<what>_<scenario>`、AAA 三段、断言带自定义消息、枚举匹配用 `assert!(matches!(...))`）：`test_phi_span_returns_own_span`、`test_phi_for_each_operand_mut_visits_dst_and_incoming_in_order`、`test_phi_for_each_operand_mut_writes_through`、`test_normalize_renders_phi_incoming_sorted_by_predecessor`、`test_ssa_phi_well_formed_passes`、`test_ssa_phi_with_slot_dst_fails`、`test_ssa_phi_incoming_not_ascending_fails`。
+5. **形状符合 04**：04 §`Phi` 小节定义的 `Phi { dst: Operand, incoming: Vec<(usize, Operand)>, span: Span }` 与 `ValueId`（`u32` 新类型，derive 列表一致）逐字落地。
+
+### 三、`Phi` 占位与替换批次登记
+
+| 占位 | 位置 | 形态 | 替换批次 | 不变量与当前不可达理由 |
+| --- | --- | --- | --- | --- |
+| translator 的 `Phi` 臂 | `src/middle/passes/codegen/translator.rs` 的 `translate_instruction` | `unreachable!` + 不变量注释 | 7b.3 | 本批 `Phi` 生产构造点 0；lowering 产不出 `Phi`，到达即说明有生产点漏登记——响亮失败优于静默错值 |
+| `OperandResolver::to_reg` 的 `Value` 臂 | `src/middle/passes/codegen/operand.rs` | 显式诊断 E3017（消息点名 7b.2） | 7b.2 | 本批 `Value` 生产构造点 0；7b.2 起 `next_temp_reg` 产 `Value`，届时解析为 `u8` 槽位 |
+| `verify_ssa` 的 Phi 前驱数 / 逐输入类型一致 | `src/middle/ir/verify.rs` | 违规类别已建，判据未落 | 7b.1b | 需要值表与块级前驱关系；本批语料无 `Phi`，不掩盖任何现有违规 |
+
+本批已落的两条构造侧判据在 `src/middle/ir/verify.rs` 的 `check_phi_structure`：`dst` 必为 `Operand::Value`、`incoming` 的 label 严格升序（违规类别 `InvariantKind::PhiConsistency`）。**7b.3 落地前禁止出现 `Phi` 生产点**——否则 translator 的占位会以 panic 形式暴露。
+
+### 四、验证与复审结论
+
+- **验证轮（独立验证）：通过。** 13 条门禁全绿；真双 / 三方二进制探针逐字节零差；5 条机械可逆变异各自转红后还原。
+- **复审轮：verdict = pass。** 八类逐条成立：D0（权威源 = `src/middle/ir/ir.rs`；目录职责表 01-routing 的 `middle/ir/` = 「IR 定义与不变量」）、D1/D2（`ValueId` 与 `Phi` 依据 04 §值标识方式 / §`Phi` 变体，无同语义别名、无 import 别名弥合）、D3/D4（无新入口、落在既有职责类别）、红线（`todo!` / `unimplemented!` 在动工前后同 9 处逐行相同、`include!` 0、`pub(crate)` 183→183→183、`use super::*` 0 命中、测试数 20→21 且无 `#[ignore]`、未删测试未放宽判据）、inScope（代码笔的 10 个文件全在契约 §五 内）、契约一致性（11 + 6 + 3 三组清单逐处对应）、占位诚实性（见 §三）、等价性归因（见 §一）、提交规范（代码独占一笔、提交信息含 D0–D4 与 D59「无行为变更（表示重塑）」、契约笔先于代码笔、工作树干净、未 push）。
+- **跨框前置 2.1.5**：测试重定向复核通过——真实语料侧删除前已绿（同名测试改按 #542 终态断言），「删除前红、删除后绿」性质由新增合成夹具 `test_orphan_shared_layer_dominance_red_turns_green_after_dce` 承担（删除前唯一违规 = `Dominance` 且消息点名 `use-before-def` → 删除后绿）；未删测试、未 `#[ignore]`、未放宽断言；09 的三级计数与 09a 的 2.1.5 记录与实现一致。
+
+### 五、独立性与编排偏差（如实登记）
+
+**两种事实并存**：团队状态页显示 impl-1 / verify-1 / review-1 分属不同路由；但成员会话内无可观测模型标识，且批准前的团队简介称「本机唯一可用路由」——因此**不宣称已证实的异家族独立**。
+
+**本轮编排**：
+
+- 复审终审由 **docs-1** 承担（用户 2026-11-20 裁决 B 后改派：review-1 的 GLM 5 小时额度于当日 17:29:53 用尽）。偏差如实登记：docs-1 与实现者不同族、**与验证者同族、且与本收口轮为同一成员** ⇒ 复审、验证、收口三者互不独立。
+- review-1 在复审轮留下的实质证据：批次树内的四门测试复跑（snapshot 6/0/1、verify 26/0、ir::tests 59/0/1、phi 33/0）、18 个 CLI 探针、2 条机械可逆变异（各自转红后还原、树 CLEAN）。该证据与终审结论并列保留，不互相替代。
+- 0.4.2 的复审（t7 → t8 → t9）由 **verify-1** 承担（与验证者同族）：t7 给出 needs_revision 的四条 findings（F1 缺命令守卫前移、F2 命令未启动的退出码表述、F3 本地哈希引用、F4 混用形态未拒绝），t8 修复轮逐条收口，t9 复审轮 2 给出 **pass** 并附一条不阻塞的残余 F5。**0.4.2 的复审结论以 t9 为准。**
+- 验证轮的 verdict 绑定「2.1.5 登记笔之后的 t1 收口 HEAD」。当前 HEAD 与该冻结 revision 的差异只有 0.4.2 的两笔（`scripts/dev/scratch.py`、HOWTO、09/09a），**`src/` 与 `tests/` 无差异**（`git diff --stat <冻结 revision> HEAD -- src tests` 为空），故 7b.1a 的代码面判据在两侧同面。
+
+**补偿证据**（按 7a 先例）：冻结 revision 独立复核、机械可逆变异、真双 / 三方二进制探针、生成物差分逐行 review。
+
+### 六、生成物与推送门禁（本轮新发现）
+
+7b.1a 的代码笔改动了诊断发射点面，但**生成物未随代码再生**：新增 `src/middle/passes/codegen/operand.rs` 的 E3017 发射点（`Operand::Value` 显式诊断）、删除 `Temp` 臂带走的一处 E3014 发射点、`translator.rs` 行号平移带动的 E8xxx 发射点行号变化。跑 `python scripts/docs/gen-error-code-docs.py` 的差分 = 2 文件 3 行：`docs/src/reference/error-code/index.md` 的 `E3017`「✅ 3 处」→「✅ 4 处」、`E3014`「✅ 4 处」→「✅ 3 处」；`docs/src/reference/error-code/E8xxx.md` 的发射点行号 `translator.rs:1382` → `1391`。逐行 review 确认全部是 7b.1a 引入的机械平移，无内容改写。
+
+CI 的「Error-code docs up to date (generator idempotent)」步骤（`.github/workflows/ci.yml`）以「跑生成器 + `git diff --quiet` 非空即 exit 1」拦截，不补笔则推送后必红——该门禁的注释本身记着同类事故（2026-10-15 #452/#454：收敛提交未再跑生成器，页面停在旧计数上）。按 **AGENTS 团队编排约定第 6 条**（契约 inScope 必须覆盖「生成物」）把 `docs/src/reference/error-code/` 纳入本轮 inScope，补一笔「再生错误码文档」并入本批；**该笔未落库前不得推送**。
+
+### 七、复审备案（OBS-1–OBS-6）与已知残余
+
+- **OBS-1（low，04 欠账枚举补全）**：7b.1a 契约 §五只点名 04 的 `Operand::Register(u8)` 句；同段另一条（后端把 `Operand::Local/Temp/Arg` 解析为 `u8`、`39-45` 的 `Temp` 臂溢出即 E3014）在变体删除后同样成为历史事实陈述，en 镜像同段一并更正。
+- **OBS-2（info，`ValueId` 的判据面）**：`ValueId` 本批生产构造点 0，生产面只由 `Operand::Value(ValueId)` 承载；属分批引入表示，依据 04 §值标识方式 + 7b.2 计划成立，**在 7b.2 落地时复核该判据自动消解**。
+- **OBS-3（info，渲染测试的性质）**：`test_normalize_renders_phi_incoming_sorted_by_predecessor` 冻结渲染文本形态，按 coding-rules §7.1 属特征化而非性质检查；准入走「条款」门（07 §第二层「前驱排序」+ 09a 契约 §二），合规，但**不得当作对替代渲染器的门禁**。
+- **OBS-4（info，静默通道边界）**：`Phi` 的生产端本批不存在、消费端是响亮 `unreachable!`——生产者先于消费者出现时会 panic 而非静默通过；该性质依赖 7b.2 / 7b.3 的顺序，**7b.3 落地前禁止出现 `Phi` 生产点**。
+- **OBS-5（info，登记补齐）**：5 处测试夹具的 `Phi` 构造点已在 §二 逐处登记；09 的 7b.1a 行已标「已完成（2026-11-20）」，7b 组勾选框按「6 个三级任务未全完」保持未勾。
+- **OBS-6（info，跨笔归属）**：父 revision 的 fmt 欠账由一笔独立的 style 笔承担（只重排 `src/driver/tests/dce_wiring.rs` 的 1 行 import，零行为），已在 09a §P7 批 b 前置 2.1.5 §四.2 登记为「授权前置」，与 7b.1a 代码笔不混。
+- **F5（既有、low、不阻塞，来自 0.4.2 复审轮 2）**：`scratch.py trial` 对**空补丁 / 被 `.gitignore` 忽略的路径**的早退仍发生在 `git apply` 之后且不还原——树在早退后可能残留变异态。该边界在 0.4.2 之前已存在，本轮**不修**；建议另开 **0.4.3** 处理（把「空补丁 / 被忽略路径」的判定前移到 apply 之前）。
+
+### 八、偏差与既有项
+
+1. **04 的旧路径欠账（既有）**：04 的「编译器改动清单」仍有 7.0 搬移前的路径（如 `src/middle/core/ir_gen.rs` 系列），属 7b.2 / 7c / 7d 批次的既有欠账；本轮只就地更正本批触及的行（改动项 1–6），其余留各自批次落地时就地更正。
+2. **`Instruction` 变体数口径更正**：04 原写「76 个变体 → 新增 `Phi` → 77」；现树实测 `ir.rs` 的 `Instruction` 枚举为 **75 个**变体（`Phi` 已含在内），按现树更正（计数口径 = 枚举变体名计数）。
+3. **本地哈希引用清理（既有欠账，由 0.4.2 修复轮登记给本轮）**：7b.1a 契约段原先引用的冻结 revision 哈希已改为不带哈希的描述（「7b.1a 契约笔之前的冻结 revision」）。
+4. **本轮未改动 inScope 外文件**；未跑 `git push` / `fetch` / `pull`。

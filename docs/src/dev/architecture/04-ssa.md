@@ -223,7 +223,7 @@ if let Some(vars) = self.release_plan.get(&stmt.span) {
 | `compile_pattern` 复杂度 | `ir_gen.rs:5390-5687`，**298 行**，自递归 4 次（`5473` / `5504` / `5619` / `5640`），外部调用点 `5270` | 模式匹配（union 载荷 / 元组 / 结构体 / 字面量 / 嵌套）的分派复杂度是**算法固有**的。SSA 只把守卫产生的 `JmpIfNot` 变成 `Phi`，不减少守卫数量 |
 | `eval_const_expr` 复杂度 | `ir_gen.rs:2298-2488`，**191 行**（`2297` 有 `#[allow(clippy::only_used_in_recursion)]`，确认自递归） | 常量折叠的表达式覆盖度与 SSA 无关 |
 | span 键控失效（**已消除**） | 审计时点：`release_plan`（`1942`）、`overload_resolutions`（`7420` / `7493`）——4.5 后为 `PlanId` 键 + 结算必达 | **SSA 完全没有触及这一层**（结论不变）。已由[02](02-stage-contract.md) 的义务账本独立机制解决，见「span 键控问题的处置」机制二 |
-| `Instruction` 变体数 | 76 个（`ir.rs:47-533`） | SSA 增加 `Phi`，**净变化 +1**。76 变体对应 76 个字节码 opcode 或降级为 NOP，不会因 SSA 减少 |
+| `Instruction` 变体数 | 75 个（`ir.rs` 的 `Instruction` 枚举；含 7b.1a 引入的 `Phi`） | SSA 增加 `Phi`，**净变化 +1**（已落地）。变体对应字节码 opcode 或降级为 NOP，不会因 SSA 减少；`Phi` 按方案 A 是 IR-only 伪指令，不新增 opcode |
 | `method_def_ordinals` 定义序依赖 | `ir_gen.rs:224` / `369` / `1692-1702` | 与 span 键控同类但不同因，见「span 键控的额外机制」机制三 |
 
 ## 目标设计
@@ -234,17 +234,18 @@ if let Some(vars) = self.release_plan.get(&stmt.span) {
 
 #### `Operand` 变体如何改
 
-现状 `ir.rs:12-20` 共 7 个变体。**全仓构造点实测**：
+`ir.rs` 的 `Operand` 枚举共 5 个变体。**全仓实测**（命中数为 `git grep -c` 按文件求和，`src/` 全量含测试；构造点数为值位置构造）：
 
-| 变体 | 生产构造点 | 处置 |
+| 变体 | 全仓实测 | 处置 |
 | --- | --- | --- |
-| `Const(ConstValue)` | 8 个文件 | **保留**，不变 |
-| `Local(usize)` | 7 个文件 | **保留但拆分语义**（见下） |
-| `Arg(usize)` | 4 个文件 | **保留**，作为函数入口的隐式定义（参数即块 0 的定义） |
-| `Global(usize)` | 5 个文件 | **保留**，不变 |
-| `Temp(usize)` | **0 个构造点**（仅 `codegen/operand.rs:39-45` 与 `:75` 有处理臂） | **删除**（死变体） |
-| `Label(usize)` | **0 个构造点** | **删除**（死变体） |
-| `Register(u8)` | **0 个构造点**（`ir.rs:19` 注释称 "Added for codegen"，但 codegen 走的是 `codegen/operand.rs` 的 `OperandResolver`，不构造该变体） | **删除**（死变体） |
+| `Const(ConstValue)` | 32 个文件 / 143 处命中 | **保留**，不变 |
+| `Value(ValueId)` | 7 个文件 / 26 处命中；**生产构造点 0**（生产端归 7b.2 的 `next_temp_reg`） | **保留**（7b.1a 引入） |
+| `Local(usize)` | 29 个文件 / 416 处命中 | **保留但拆分语义**（见下） |
+| `Arg(usize)` | 8 个文件 / 11 处命中 | **保留**，作为函数入口的隐式定义（参数即块 0 的定义） |
+| `Global(usize)` | 16 个文件 / 26 处命中 | **保留**，不变 |
+| `Temp(usize)` | **0 个构造点**（处理臂只在 `codegen/operand.rs` 的 `OperandResolver::to_reg` 与 `is_register`，随变体一并删除） | **已删除**（死变体，7b.1a） |
+| `Label(usize)` | **0 个构造点** | **已删除**（死变体，7b.1a） |
+| `Register(u8)` | **0 个构造点**（原变体声明处注释称 "Added for codegen"，但 codegen 走的是 `codegen/operand.rs` 的 `OperandResolver`，不构造该变体） | **已删除**（死变体，7b.1a） |
 
 `Local(usize)` 拆分为两个变体，因为当前它**同时承担两种互斥语义**——「具名变量的存储位置」（可多次写）与「编译器临时寄存器」（应只写一次）：
 
@@ -260,7 +261,7 @@ pub enum Operand {
 }
 ```
 
-`ValueId` 为 `u32` 新类型（`#[derive(Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]`），函数内稠密编号，**单调递增、永不回滚**。
+`ValueId` 为 `u32` 新类型（`#[derive(Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]`），函数内稠密编号，**单调递增、永不回滚**。拆分与 `ValueId` 已由 7b.1a 落地（`src/middle/ir/ir.rs` 的 `Operand` 枚举）；本批 `Value` 的生产构造点为 0——生产端（`next_temp_reg` 改产 `Operand::Value`）归 7b.2。
 
 #### `Phi` 作为新 `Instruction` 变体
 
@@ -274,11 +275,15 @@ Phi {
 },
 ```
 
-三条构造约束（均由 `verify_ssa` 强制，见 [07](07-equivalence-oracle.md) 第一层）：
+三条构造约束（见 [07](07-equivalence-oracle.md) 第一层）：
 
 1. `incoming.len() == 该块前驱数`。
 2. `incoming` 的 label 集合 == `blocks` 中所有 `successors` 含本块 label 的那些块的 label 集合。
 3. 所有 `incoming` 值的 `MonoType` 相同（**依赖 03 的类型表示已收敛**）。
+
+`verify_ssa` 的落地状态：约束 1 与 2 需要值表与块级 CFG，**归 7b.1b**；本批（7b.1a）落的是构造侧两条——`dst` 必为 `Operand::Value`、`incoming` 的 label 严格升序（`src/middle/ir/verify.rs` 的 `check_phi_structure`，违规类别 `InvariantKind::PhiConsistency`）；约束 3 依赖 03 的类型表示收敛，与 7b.1b 同批推进。
+
+7b.1a 只引入变体：lowering 生产构造点为 0，`translator.rs` 的消费臂是带不变量注释的占位（响亮失败，不做静默跳过或静默错值），真翻译归 7b.3（方案 A：展开为 Move 串）。
 
 **处置 `3632-3638` 的守卫问题**：现状 `generate_block_ir` 的回收有 `if result_reg.is_none()` 守卫（`3626-3631` 注释：表达式操作数位的块，外层可能持有跨块存活的兄弟实参临时）。SSA 化后该守卫**不再需要**——因为临时值不再回滚，跨块存活的兄弟实参持有的是自己的 `ValueId`，不会被回滚波及。**这一条是 SSA 化能真正简化代码的地方，而不只是改名。**
 
@@ -286,10 +291,10 @@ Phi {
 
 **设计判断**：不做内存化（mem2reg），不做虚拟寄存器编号，**只做显式重命名**。理由：
 
-- YaoXiang 的 `&` / 引用 / 所有权语义使"哪些槽位可内存化"是一个**类型系统问题**，不是 CFG 问题。已核实 `ir.rs:656` `LocalSlot::ty: MonoType` 携带完整类型信息，但判定"该 `MonoType` 是否可被内存化"需要 03 收敛后的类型表示与精化类型规则的配合。**在 03 之前做 mem2reg 就是在猜。**
-- 显式重命名只需改 `next_temp_reg()` 一处（`ir_gen.rs:884-891`）的返回值语义 + 三处回滚的删除，**不触碰任何 lowering 算法的控制流**。
+- YaoXiang 的 `&` / 引用 / 所有权语义使"哪些槽位可内存化"是一个**类型系统问题**，不是 CFG 问题。已核实 `ir.rs` 的 `LocalSlot::ty: MonoType` 携带完整类型信息，但判定"该 `MonoType` 是否可被内存化"需要 03 收敛后的类型表示与精化类型规则的配合。**在 03 之前做 mem2reg 就是在猜。**
+- 显式重命名只需改 `next_temp_reg()` 一处（`src/middle/lower/scope.rs` 的 `next_temp_reg`）的返回值语义 + 三处回滚的删除，**不触碰任何 lowering 算法的控制流**。
 
-值表形态：`FunctionBody::Code` 增加 `values: Vec<ValueInfo>`，其中
+值表形态（**待 7b.1b 落地**）：`FunctionBody::Code` 增加 `values: Vec<ValueInfo>`，其中
 
 ```rust
 pub struct ValueInfo {
@@ -306,13 +311,13 @@ pub struct ValueInfo {
 
 | 项 | 估算 | 依据 |
 | --- | --- | --- |
-| `next_temp_reg` 改造 | ~15 行 | `ir_gen.rs:884-891` 单函数 |
+| `next_temp_reg` 改造 | ~15 行 | `src/middle/lower/scope.rs` 单函数 |
 | 删除三处语句级回收 | −15 行 | `1954-1959` / `3632-3638` / `4737-4742` |
 | 6 处 save/restore 收敛为 RAII | 净 ±0 行 | 见「逐项处置表」 |
-| `ir.rs` 结构变更 | +120 ~ 180 行 | `ValueId` / `Phi` / `ValueInfo` / 值表 |
-| `translator.rs` 加 `Phi` 臂 | +25 ~ 40 行 | 现有 50 个 `translate_*` 之一 |
-| `executor/` 加 `PHI` 指令或运行期填充 | +60 ~ 120 行 | 取决于 `Phi` 的字节码形态选型 |
-| 改名 `Operand::Local` → `Value` 的调用点 | 机械替换 | **已实测**：`ir_gen.rs` 内 `Operand::Local(` 出现 **323 处**，全仓 6 文件共 **355 处** |
+| `ir.rs` 结构变更 | +120 ~ 180 行 | `ValueId` / `Phi` / `ValueInfo` / 值表；**7b.1a 落地前两项**（实测 `src/middle/ir/ir.rs` +37/−3 行、`normalize.rs` +22/−5、`verify.rs` +63/−14）；`ValueInfo` 与值表待 7b.1b |
+| `translator.rs` 加 `Phi` 臂 | +25 ~ 40 行（待 7b.3） | 现有 50 个 `translate_*` 之一 |
+| `executor/` | **零改动** | 方案 A：`Phi` 是 IR-only 伪指令，在 `translator.rs` 展开为 Move 串，不进字节码（决策三） |
+| 临时值改产 `Operand::Value` 的调用点 | 机械替换（待 7b.2） | **已实测**（`git grep -c` 按文件求和，`src/` 全量含测试）：`Operand::Local(` 共 414 处 / 28 文件，其中 `src/middle/lower/` 332 处 / 14 文件；临时值的改产点是单点 `next_temp_reg` |
 
 ### 逐项处置表
 
@@ -326,14 +331,14 @@ pub struct ValueInfo {
 | **4. 隐式顺序依赖** | **否** | 见「`synth.rs` 边界」 | 需新增显式判据 |
 | `compile_pattern` 298 行 | 否 | 见「SSA 不会解决的」 | — |
 | `eval_const_expr` 191 行 | 否 | 见「SSA 不会解决的」 | — |
-| `Instruction` 76 变体 | 否（+1） | 新增 `Phi` → 77 | — |
+| `Instruction` 75 变体 | 否（+1，已落地） | `Phi` 已由 7b.1a 引入；方案 A 下它是 IR-only 伪指令，不新增 opcode | — |
 
 ### 寄存器分配器：自研还是用现成 crate
 
 **已核实事实（决定性）**：
 
-1. `Operand::Register(u8)`（`ir.rs:19`）**全仓 0 个构造点**。
-2. 后端不是寄存器机——`src/middle/passes/codegen/operand.rs` 的 `OperandResolver` 把 `Operand::Local/Temp/Arg` 解析为 `u8`，上限 255（`39-45` 的 `Temp` 臂溢出即 E3014）。
+1. `Operand::Register(u8)` **全仓 0 个构造点**——该变体已不在 `ir.rs` 的 `Operand` 枚举中（7b.1a 删除）。
+2. 后端不是寄存器机——`src/middle/passes/codegen/operand.rs` 的 `OperandResolver` 把 `Operand::Local` 与 `Operand::Arg` 解析为 `u8`，上限 255（超出即 E3014）；`Operand::Value` 的槽位解析待 7b.2 落地，当前返回显式诊断 E3017。
 3. `translator.rs`（`src/middle/passes/codegen/translator.rs`，1577 行，50 个 `translate_*`，函数体分布在 `101-1558`）的输出是 `BytecodeInstruction::new(opcode, operands)`，opcode 来自 `src/backends/common/opcode.rs`（83 个常量）。
 4. `src/backends/interpreter/executor/ops/` 是解释器的 opcode 分派族。
 
@@ -516,12 +521,12 @@ self.release_plan_total = type_result.release_plan.drops.len();
 
 | 序 | 文件 | 位置 | 改动 |
 | --- | --- | --- | --- |
-| 1 | `src/middle/core/ir.rs` | `12-20` | `Operand` 变体增删 |
-| 2 | `src/middle/core/ir.rs` | `47-533` 末 | 新增 `Instruction::Phi` |
-| 3 | `src/middle/core/ir.rs` | `636-642` | `FunctionBody::Code` 增 `values` |
-| 4 | `src/middle/core/ir.rs` | `660` 附近 | 新增 `ValueInfo` |
-| 5 | `src/middle/core/ir.rs` | `689-719` | 加 `values()` / `values_mut()` 访问器 |
-| 6 | `src/middle/core/ir.rs` | `3` | **`pub use ast::Type` 不动**（[03](03-type-unification.md) 范围，仅记录） |
+| 1 | `src/middle/ir/ir.rs` | `Operand` 枚举定义 | `Operand` 变体增删（**7b.1a 已落地**：删 `Temp` / `Label` / `Register`，增 `Value(ValueId)`） |
+| 2 | `src/middle/ir/ir.rs` | `Instruction` 枚举末尾（`Phi` 变体） | 新增 `Instruction::Phi`（**7b.1a 已落地**） |
+| 3 | `src/middle/ir/ir.rs` | `FunctionBody::Code` | 增 `values` |
+| 4 | `src/middle/ir/ir.rs` | `ValueInfo` | 新增 `ValueInfo` |
+| 5 | `src/middle/ir/ir.rs` | `values()` / `values_mut()` 访问器 | 加访问器 |
+| 6 | `src/middle/ir/ir.rs` | `pub use ast::Type` | **`pub use ast::Type` 不动**（[03](03-type-unification.md) 范围，仅记录） |
 | 7 | `src/middle/core/ir_gen.rs` | `884-891` `next_temp_reg` | 返回 `Operand::Value`，单调递增不回滚 |
 | 8 | `src/middle/core/ir_gen.rs` | `1954-1959` | **删除**语句级回收 |
 | 9 | `src/middle/core/ir_gen.rs` | `3632-3638` | **删除**语句级回收（含 `result_reg.is_none()` 守卫） |
@@ -576,13 +581,13 @@ self.release_plan_total = type_result.release_plan.drops.len();
 | 批 | 内容 | 改动项 | 判据 | 回滚点 |
 | --- | --- | --- | --- | --- |
 | **批 a** | 切断多次定义：删 3 处语句级回收 → 6 处 save/restore 换 RAII guard → 口径统一 | 8-10（先）→ 11-16 → 17-18 | 删除回收：**C4**（行为等价 + 第一层支配性不变量）。RAII 与口径统一属纯搬移：**C1** 快照 zero-diff | 逐项单 commit，`git revert` 即回滚 |
-| **批 b** | SSA 形态切换：`ir.rs` 结构变更 + `Operand` 机械替换（323 处）→ `translator.rs` 加 `Phi` 臂 → 线性扫描分配器 | 1-5、7 → 31-32 → 37 | **C4**：行为等价 + `verify_ssa` 全绿 + `.42` 往返测试 | `ir.rs` 变更**独占一个 commit**（类型变更波及全仓编译，不可增量回滚） |
+| **批 b** | SSA 形态切换：`ir.rs` 结构变更 + 临时值改产 `Operand::Value`（机械替换）→ `translator.rs` 加 `Phi` 臂 → 线性扫描分配器。批内按 WBS 三级任务串行：7b.1a（`Operand` 变体收敛 + `Instruction::Phi` 引入，**已落地**）→ 7b.1b（`FunctionIR` / `BasicBlock` / 类型标注字段）→ 7b.2（`next_temp_reg` 改产 `Operand::Value`）→ 7b.3（`translator.rs` 的 `Phi` 臂）→ 7b.4（线性扫描分配器 + 删三处语句级回收，与 7a.1 同批） | 1-5、7 → 31-32 → 37 | **C4**：行为等价 + `verify_ssa` 全绿 + `.42` 往返测试 | `ir.rs` 变更**独占一个 commit**（类型变更波及全仓编译，不可增量回滚） |
 | **批 c** | 隐式契约显式化：`synth.rs` 边界 + 哨兵脚本 → span 消费计数 → `method_def_ordinals` 只读化 | 20-24、29、38 → 25 → 26 | **C4**：行为等价 + 新脚本纳入 CI；消费计数在新诊断上零触发（否则说明真存在失配） | 独立 commit |
 | **批 d** | `generate_call_expr_ir` 拆分 + "补 0" 兜底断言化 | 27-28 | 纯搬移部分：**C1** 快照 zero-diff。断言化部分：**C4** 语料差分 + 第一层校验器 | 独立 commit |
 
 **批内顺序不可交换的三处依赖：**
 
-1. 批 a 的"删回收"必须先于批 b 的 `ir.rs` 变更——先让 `next_temp` 单调递增，`ValueId` 才有"唯一定义"的语义基础。
+1. 批 a 的"删回收"排在批 b 的 `ir.rs` 变更之后（删三处语句级回收随 7b.4 与线性扫描分配器同批落地，7a.1 一并执行）——先让 `next_temp` 单调递增，`ValueId` 才有"唯一定义"的语义基础（该语义在 7b.2 的 `next_temp_reg` 改产 `Value` 与 7b.3 的 `Phi` 臂落地后才成立）。
 2. 批 b 的 `Phi` 臂必须先于批 d 的拆分——否则拆分会把旧的 `arg_regs` 顺序假设原样搬进新文件。
 3. 批 d 必须最后——它依赖前两批已经把 `arg_regs` 语义收敛到"每个实参一个独立 `ValueId`"。
 
