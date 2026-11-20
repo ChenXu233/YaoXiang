@@ -7375,3 +7375,57 @@ Phi {
 - 本契约段单独一笔文档提交，先于代码提交。
 - 代码与测试为**独占一笔提交**：`git revert <code-sha>` 整笔回滚 `ir.rs` 形状变更。`Operand` 变体增删波及全仓编译，不可增量回滚（04 §回滚策略），因此不与任何无关改动混笔。
 - 回滚基线 = 本契约提交后的 HEAD；回滚后工作树干净，快照与语料零漂移（本批不产生基线变更）。
+
+## P0 0.4.2 修复轮（`scratch.py trial` 参数形态，2026-11-20）
+
+> 用户 2026-11-20 裁决「现在就修（插队）」：`trial` 的文档形态与 Python 3.12.5 的 argparse 实际行为不一致。跨框（P0 0.4）已获准并入 7b 团队执行；WBS 登记见 [09](./09-execution-wbs.md) §P0 0.4 表的 0.4.2 行（三级计数 252）。本项只改工具 CLI 契约与文档，**不动 trial 的安全语义**。
+
+### 一、复现（改动前，冻结 revision `ffd1985a`）
+
+批次树 `p7-7b1a-trialargs`（基线 `ffd1985a`），补丁 = 验证侧留下的 `patches/m1.patch`（改 `src/middle/ir/ir.rs` 的 `for_each_operand_mut` 的 Phi 臂）：
+
+| 形态 | 命令 | 实测 |
+| --- | --- | --- |
+| 文档形态 | `trial <batch> --patch <m1> -- git status --short` | exit 2；stderr `scratch.py: error: unrecognized arguments: -- git status --short`；树 `git status --porcelain` 为空（未进入 `cmd_trial`） |
+| 命令在前 | `trial <batch> git status --patch <m1>` | exit 0：`已应用变异补丁：src/middle/ir/ir.rs`、`HEAD=b6a27487616a… → 变异后=d445073067d1…`、`命令退出码 = 0`、`apply -R 成功`、`还原后=b6a27487616a… 与 HEAD 一致=是`、`还原后 git status：CLEAN` |
+| 命令在前 + 参数 | `trial <batch> cargo test --lib --patch <m1>` | exit 2；stderr `error: unrecognized arguments: --lib` |
+
+结论：文档写的是唯一能承载任意命令参数的形态，但它不可用；可用形态承载不了带参数的命令。
+
+### 二、修法（两种形态都接受）
+
+`scripts/dev/scratch.py`：
+
+1. 新增 `split_trial_argv()`：`argv[0] == "trial"` 且 `--` 出现在其后时，取**第一个** `--`，把其后 token 收为命令、从 argv 移除；随后才交给 argparse。这样 `--` 不再进入 argparse，其后的 `-`/`--` 参数也不再被误判为 scratch 选项。
+2. `main()` 把预处理结果写回 `args.command`；`--patch` 仍由 argparse 校验（必须写在 `--` 之前）。
+3. `cmd_trial` 删除 `if cmd and cmd[0] == "--"` 死分支（argparse 不会把 `--` 留给位置参数），缺命令提示改为两形态并列。
+4. `trial --help` 增加 `description` + 原始格式 `epilog`（两形态）与参数 help；文件头 docstring 用法同步。
+
+安全语义未改：干净树检查、`git apply` / `-R`、失败时 `git checkout --` 兜底、逐文件 `hash-object` 对 HEAD blob、还原后 `git status` 非空或 blob 不一致 ⇒ exit 3、命令未能启动 ⇒ exit 2。
+
+### 三、实测（修复后，同一批次树 `p7-7b1a-trialargs` @ `ffd1985a` + 同一 m1 补丁）
+
+| 形态 | 命令 | 实测 |
+| --- | --- | --- |
+| 文档形态 | `trial <batch> --patch <m1> -- git status --short` | exit 0；`执行：git status --short`（`--short` 已作为命令参数）；HEAD=b6a27487616a… → 变异后=d445073067d1…；`apply -R 成功`；`还原后=b6a27487616a… 与 HEAD 一致=是`；`还原后 git status：CLEAN` |
+| 命令在前 | `trial <batch> git status --patch <m1>` | exit 0；同样完成 apply→命令→restore 三段；`还原后 git status：CLEAN` |
+| 文档形态 + 非零退出 | `trial <batch> --patch <m1> -- python -c "import sys; sys.exit(7)"` | exit 0；`命令退出码 = 7`；`apply -R 成功`；`与 HEAD 一致=是`；`CLEAN`（命令失败不跳过 restore，工具自身退出码语义不变） |
+| 干净树守卫 | 先在树内建 `dirty_probe.txt`，再跑文档形态 | exit 2；`拒绝：树里已有未提交改动……` 并列出 `?? dirty_probe.txt`；删除探针后树 CLEAN |
+| 独立 blob 复核 | 三次 trial 后 `git -C <tree> hash-object src/middle/ir/ir.rs` 对比 `git -C <tree> rev-parse HEAD:src/middle/ir/ir.rs` | 均为 `b6a27487616a…`；树 HEAD = `ffd1985aa7e5…` |
+
+批次树按规程 `release --by impl-1` 后 `gc`。本次**不构建 CLI**：被测对象是 `scratch.py` 的 CLI 解析，trial 内命令用 `git status` / `python -c`，不涉及批次树二进制；`build` 步骤不在本项判据面。
+
+### 四、判据（实测）
+
+- `python -m py_compile scripts/dev/scratch.py` exit 0。
+- `python scripts/dev/scratch.py trial --help` exit 0，输出含两形态 epilog。
+- 两种真实补丁 trial 各一次 + 非零退出 + 干净树守卫均符合预期；还原后树 CLEAN、blob 回 HEAD。
+- `check-docs-truth.py` / `check-docs-refs.py` / `check-docs-orphan.py` exit 0。
+
+### 五、偏差与边界
+
+1. **表单边界**：命令含 `-`/`--` 开头参数时用 `--` 形态（推荐形态）；命令在前形态只适用于无 `-` 开头参数的命令。两种形态都写进 `--help` 与 HOWTO §三，不是隐式限制。
+2. **`--patch` 位置**：必须写在 `--` 之前；写在 `--` 之后按「命令段原样」处理，argparse 会提示缺 `--patch`。
+3. **范围**：只改 `scripts/dev/scratch.py`、HOWTO §三、09/09a 登记；未碰 `testsuite.py`、`scripts/ci/`、`src/`、`tests/`。
+4. **既有引用**：09a 历史记录里出现过的 `trial ... --patch <p> -- cargo test --lib ...` 形态在修复后重新成立，不改写历史记录。
+5. **WBS 组行**：0.4 组行按 0.2.4 先例保持「本二级不整行勾完成」（`- [ ]`）并加注记；0.4.1 与 0.4.2 的完成状态在各自行内。

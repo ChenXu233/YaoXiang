@@ -21,7 +21,8 @@
   python scripts/dev/scratch.py use     <batch> --rev <sha> --by <member> --task <id> [--steal]
   python scripts/dev/scratch.py build   <batch> [--quiet]
   python scripts/dev/scratch.py release <batch> --by <member>
-  python scripts/dev/scratch.py trial   <batch> --patch <p> -- <command...>   # 变异：apply→跑→restore 全自动
+  python scripts/dev/scratch.py trial   <batch> --patch <p> -- <command...>   # 变异：apply→跑→restore 全自动（推荐；命令可含 -/-- 参数）
+  python scripts/dev/scratch.py trial   <batch> <command...> --patch <p>      # 同上，命令排在 --patch 之前（命令不含 - 开头参数时可用）
   python scripts/dev/scratch.py status  [--json] [--size]
   python scripts/dev/scratch.py rm      <batch> [--force]
   python scripts/dev/scratch.py gc      [--force]
@@ -248,10 +249,13 @@ def cmd_trial(args):
     for f in changed:
         print(f"[trial]   {f}: HEAD={head_blob[f][:12]}… → 变异后={mutated_blob[f][:12]}…")
     cmd = list(args.command)
-    if cmd and cmd[0] == "--":
-        cmd = cmd[1:]
+    # `--` 分隔形态已在 main() 的 split_trial_argv() 预处理时收为 args.command；
+    # argparse 不会把 `--` 本身留给位置参数，故此处不再剥离前导 `--`。
     if not cmd:
-        die("要给命令：scratch.py trial <batch> --patch <p> -- <命令...>")
+        die(
+            "要给命令：trial <batch> --patch <p> -- <命令...>"
+            "（或 trial <batch> <命令...> --patch <p>）"
+        )
     print(f"[trial] 执行：{' '.join(cmd)}")
     # 还原必达（#516）：命令启动失败（如路径错 FileNotFoundError）等异常
     # 不得跳过 restore——否则批次树残留变异态，违反「trial 全自动
@@ -349,7 +353,32 @@ def cmd_gc(args):
     print(f"[scratch] gc 完成，共释放约 {round(total, 1)} MB")
 
 
+def split_trial_argv(argv):
+    """把 `trial ... -- <command...>` 的 `--` 之后 token 收为命令，并从 argv 移除。
+
+    返回 `(argv_for_argparse, command_after_sep 或 None)`。
+
+    为什么预处理：Python 3.12.5 的 argparse 在子命令 + `nargs="*"` 形态下不会把
+    `--` 之后的位置参数交给 `command`，而是报
+    `error: unrecognized arguments: -- <command...>`。`--` 是「命令段从这里开始」
+    的唯一分隔符；命令自身可含 `--` / `-` 开头参数，所以只取**第一个** `--`。
+
+    两种等价形态：
+      trial <batch> --patch <p> -- <command...>   # 推荐；命令可含 -/-- 参数
+      trial <batch> <command...> --patch <p>      # 命令不含 - 开头参数时可用
+    """
+    if not argv or argv[0] != "trial":
+        return argv, None
+    rest = argv[1:]
+    if "--" not in rest:
+        return argv, None
+    idx = rest.index("--")
+    return ["trial", *rest[:idx]], rest[idx + 1:]
+
+
 def main(argv=None):
+    argv = list(sys.argv[1:] if argv is None else argv)
+    argv, command_after_sep = split_trial_argv(argv)
     p = argparse.ArgumentParser(description="批次验证树的唯一入口（AGENTS.md 团队编排约定「验证证据」）")
     sub = p.add_subparsers(dest="cmd", required=True)
 
@@ -358,16 +387,28 @@ def main(argv=None):
     s.add_argument("--by", required=True); s.add_argument("--task", required=True); s.add_argument("--steal", action="store_true"); s.set_defaults(f=cmd_use)
     s = sub.add_parser("build", help="在树里构建 CLI 二进制"); s.add_argument("batch"); s.add_argument("--quiet", action="store_true"); s.set_defaults(f=cmd_build)
     s = sub.add_parser("release", help="解锁"); s.add_argument("batch"); s.add_argument("--by", required=True); s.add_argument("--force", action="store_true"); s.set_defaults(f=cmd_release)
-    s = sub.add_parser("trial", help="变异试验（apply→跑→restore 全自动）")
-    s.add_argument("batch")
-    s.add_argument("--patch", required=True)
-    s.add_argument("command", nargs="*")  # 用 -- 分隔；REMAINDER 会把 --patch 也吞掉
+    s = sub.add_parser(
+        "trial",
+        help="变异试验（apply→跑→restore 全自动）",
+        description="变异试验：git apply 变异补丁 → 跑命令 → 机械还原并校验逐文件 blob 回到 HEAD。",
+        epilog=(
+            "命令形态（二选一）：\n"
+            "  trial <batch> --patch <p> -- <command...>   # 推荐；命令可含 -/-- 参数\n"
+            "  trial <batch> <command...> --patch <p>      # 命令不含 - 开头参数时可用\n"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    s.add_argument("batch", help="批次树名")
+    s.add_argument("--patch", required=True, help="变异补丁路径（相对仓库根或绝对路径）")
+    s.add_argument("command", nargs="*", help="要跑的命令（两种形态见上）")
     s.set_defaults(f=cmd_trial)
     s = sub.add_parser("status", help="列出批次树"); s.add_argument("--json", action="store_true"); s.add_argument("--size", action="store_true"); s.set_defaults(f=cmd_status)
     s = sub.add_parser("rm", help="删除一个批次树"); s.add_argument("batch"); s.add_argument("--force", action="store_true"); s.set_defaults(f=cmd_rm)
     s = sub.add_parser("gc", help="回收所有未持有的批次树"); s.add_argument("--force", action="store_true"); s.set_defaults(f=cmd_gc)
 
     args = p.parse_args(argv)
+    if command_after_sep is not None:
+        args.command = command_after_sep
     args.f(args)
 
 
