@@ -7659,3 +7659,86 @@ pub enum FunctionBody {
 - inScope：`src/middle/`、`src/driver/tests/`、`src/frontend/tests/`、`tests/baselines/`、本文件；out of scope：`src/backends/`、`src/std/`、`tests/yaoxiang/`、09、04、`scripts/`。
 - D59：**无行为变更（表示重塑）**——values 本批恒空、无生产 Phi；不改变原先成功程序的对外表现。
 - 回滚点：本契约段单独一笔文档提交，先于代码；代码为独占一笔，`git revert` 整笔回滚（`FunctionBody::Code` 加字段波及全仓编译，不可增量回滚）。
+
+## P7 7b.1b 收口（`values` 值表 + `ValueInfo` + 访问器 + Phi 残项判据，2026-11-20）
+
+> 收口对象 = WBS 二级任务 7b 的第二个三级任务 7b.1b（`ir.rs` 结构变更 #3-5）。代码由实现轮落库（**契约笔先于代码笔**），验证轮在冻结 revision 的批次树上独立复算，复审轮给出 verdict=pass。本段按登记口径写实测数字与机械证据；**不写本地提交号**（哈希随 `pull --rebase` 改写），指向以「笔的性质 + 文件清单」定位。
+
+### 一、判据链（实测数字）
+
+冻结 revision = **7b.1b 代码独占笔终态**（= 7b.1a 收口后的基线 + 7b.1b 契约笔 + 7b.1b 代码笔）。验证轮的全部量测在 `scripts/dev/scratch.py` 的批次树内完成（`init` → `use --rev` → `build` → 量测 → `release` → `gc`），主仓工作树全程干净；复审轮在同一 revision 上以 `git show <rev>:<file>` / `git grep <rev>` 复核，未读工作树。
+
+| 门禁 | 结果 |
+| --- | --- |
+| `cargo fmt --check` | exit 0 |
+| `cargo clippy --all --all-features --all-targets -- -D warnings` | exit 0 |
+| `cargo test --lib snapshot` | exit 0 = 6 passed / 0 failed / 1 ignored（IR 快照 **232 份零漂移**） |
+| `cargo test --lib verify` | exit 0 = **35 passed**（7b.1a 基线 30） |
+| `cargo test --lib middle::ir::tests` | exit 0 = **72 passed / 0 failed / 1 ignored**（7b.1a 基线 64） |
+| `cargo test --lib phi` | exit 0 = **38 passed**（7b.1a 基线 33） |
+| `python scripts/dev/testsuite.py run fast` | exit 0 = 1 波 **2406 条**，跳过 0 波 |
+| `cargo run --example corpus_probe` + 语料差分门禁 | exit 0 = **402 / 402**，逐条差分空 |
+| `check-docs-truth` / `check-fanout` / `check-test-channel` / `check-docs-refs` / `check-docs-orphan` | 全 exit 0（docs-refs = **1244 个跟踪文本文件 / 12985 个路径状 token**） |
+| `python scripts/docs/gen-error-code-docs.py` + `git diff --quiet` | exit 0 且差分为空（生成器幂等） |
+
+**零漂移的归因不是「基线整批重写」**：7b.1b 的代码笔未触碰任何基线文件（`git show --name-only` 无 `src/middle/ir/tests/snapshots` 与 `tests/baselines` 条目）⇒ 232 份 IR 快照与语料差分基线（`tests/baselines/corpus-parity.jsonl`，402 行记录）原样。行为等价的结构理由与运行时证据互证——`values` 本批恒为空表、`normalize` 不打印 values（渲染路径未改）⇒ 快照与语料必然不变；生产侧 `Operand::Value(` / `Instruction::Phi` 的构造点为 0 ⇒ 新增的 Phi 判据对现有 IR 不产生任何输出。
+
+### 二、值表 / `ValueInfo` / 访问器与全仓构造点
+
+1. **结构形态**：`ValueInfo { ty: MonoType, debug_name: Option<String>, defining_block: usize }`（`src/middle/ir/ir.rs` 的 `ValueInfo` 定义）与 04 §值标识方式 **逐字一致**；`FunctionBody::Code` 增 `values: Vec<ValueInfo>`（同文件 `FunctionBody` 定义）；访问器 `values()`（只读、TypeDecl 返回空表，镜像 `locals()`）与 `values_mut()`（可变、TypeDecl `panic!`，镜像 `blocks_mut()`）落在 `impl FunctionIR`。
+2. **全仓构造点**：`git grep -n "FunctionBody::Code {" -- src tests` = **58** 处（结构体字面量构造与模式匹配两类）；生产侧 `values: Vec::new()` 恰好 **17 处**，与契约 §一 的 17 处清单逐处吻合；非空 `values` 只出现在两处测试夹具（`src/middle/ir/tests/ir_build.rs` 的 `func_with_blocks` 参数、`src/middle/ir/tests/verify.rs` 的合成模块）⇒ **本批值表恒空**。
+   口径注记：契约 §一 的动工前基线为 56；差额 = 本笔 +3（新模式 / 访问器）−1（`ir_build` 的 `func()` 改为委托 `func_with_blocks`）= 58。**收口一律用 58**。
+3. **一处无 `..` 的模式匹配已同步**：`src/middle/passes/mono/mod.rs` 的 `let FunctionBody::Code { blocks, entry, locals, .. } = &func.body else`（加字段即编译失败的那一处）；其余带 `..` 的模式匹配未动。
+4. **值表不进入渲染 / 翻译路径**：mono 特化克隆的两个构造点本批写空表 ⇒ 若 7b.2 开始填表，特化时必须补类型替换与 `defining_block` 映射（登记给 7b.2）；`normalize` 不打印 values ⇒ 值表有内容时必须扩展渲染并把快照再生纳入该批（同样登记给 7b.2）。
+5. **访问器是登记式接口**：本批 `values()` / `values_mut()` 的调用方只有测试，生产消费者随 7b.2 的 `next_temp_reg` 改产 `Operand::Value` 而来（见 §六 INFO-1）。
+
+### 三、Phi 残项三条判据与类型不可得策略
+
+7b.1a 已落两条（`dst` 必为 `Operand::Value`、`incoming` 的 label 严格升序）；本批在 `src/middle/ir/verify.rs` 追加三条（`check_phi_structure` 与 `check_phi_incoming_types`）：
+
+1. **前驱集来源（块级）**：`block_predecessors()` 按「`block → successors` 边 ⇒ `predecessors[succ] ∋ block.label`」反推；`FnView` 增「展平指令下标 → 所属块 label」映射与前驱表（块级坐标与指令级 CFG 是两套坐标）。
+2. **前驱数**：`incoming.len() != 前驱数` ⇒ 报 `PhiConsistency`（计数差异）。
+3. **前驱 label 集合**：计数相等但集合不等 ⇒ 报 `PhiConsistency`（集合差异）；集合相等已隐含计数相等，故计数不等时**只报计数**，避免同一缺陷双报。
+4. **逐输入类型一致**：`Operand::Value(v)` 且值表非空时取 `values[v].ty`，用既有 `types_compatible` 比对（未引入第三套类型兼容判断），不一致报 `PhiConsistency`。
+
+**类型不可得三策略（逐条落档，不静默放行）**：
+- 值表为空 ⇒ 类型判定依据不存在 ⇒ **不判定**（本批生产形态；7b.2 填表后自动收紧）；
+- 值表非空而 `ValueId` 越界 ⇒ **报 `PhiConsistency`**（越界，无值信息）；
+- 非 `Value` 操作数（`Const` / `Local` / `Arg` / `Global`）⇒ 无值表类型源 ⇒ **不判定**（文档化，不视为豁免）。
+
+另：Phi 出现在模块 init（无基本块结构）⇒ **显式报违规**（「无基本块结构，前驱集不可判定」），不静默跳过、也不叠报计数 / 集合。
+
+**正反例（合成夹具承担，单缺陷可归因）**：正例 2 条（空值表的前驱一致 / 带类型的相容类型）；反例 6 条（`dst` 落存储槽、label 未升序、前驱数不等、前驱集合不等、类型不一致、init 无块结构）。每条反例把其余判据对齐，断言消息分别点名「前驱数」「前驱集合」「类型不一致」「无基本块结构」。夹具 `two_pred_phi_module`（`src/middle/ir/tests/verify.rs`）给出真实块级前驱：块 0 / 1 的 `successors` 都指向块 label 3 ⇒ 块 3 的前驱集 = {0, 1}。
+
+**实测前提与 7b.3 前置**：全仓 `BasicBlock.successors`（`Vec<usize>`）的 **15 处生产构造全部是 `Vec::new()`**（`git grep -n "successors:" -- src` 逐处判读）⇒ 块级前驱恒空 ⇒ 本批的前驱数 / 前驱集合判据在**真实 IR 上无数据**，由合成夹具承担；**这不是判据缺失**。7b.3 生产 Phi 之前必须先填块级 `successors`，否则任何带 incoming 的 Phi 都会被 `verify_ssa` 拒 —— 登记为 **7b.3 前置**（三处一致登记：契约 §三、`src/middle/ir/verify.rs` 文件头「前置登记」、代码笔提交信息「实测前提登记」）。
+
+### 四、验证与复审结论
+
+- **验证轮（独立验证，批次树）：通过。** 本表各门禁全绿；结构审计逐处通过（普查 58、17 处构造点、值表恒空、`ValueInfo` 与 04 逐字一致、访问器镜像既有形态）；Phi 残项三条与访问器经 **5 条有效机械可逆变异**（补丁 → 转红 → 机械还原 → 重建 → 重测全绿）证明判据在承重。如实登记验证方自身的两处问题：生成器首跑因量测脚本的赋值行与注释粘连而 exit 1（删除后树复归 CLEAN，改用树内直接调用复测 exit 0 + CLEAN）；1 条变异因无效未计入承重证据。
+- **复审轮：verdict = pass。** 八类逐条成立：
+  - **D0–D4**：权威源 = `src/middle/ir/ir.rs`（01-routing 的 `middle/ir/` = 「IR 定义与不变量」）；`ValueInfo` 与既有概念**不重复**（仓库既有 `*Info` 全在 frontend/sema 域；最近邻 `LocalSlot` 的字段集不同）；访问器属 `middle/ir` 既有职责、不是新增入口；无 import 别名弥合。
+  - **红线**：`todo!()` / `unimplemented!()` 命中文件数 7 → 7（无新增）；`include!` 0 → 0；`pub(crate)` 183 → 183；改动目录 `use super::*` 0 命中；7b.1a 的 3 条 Phi 测试是**改名 + 加强**（`test_ssa_phi_well_formed_passes` → `test_ssa_phi_with_matching_predecessors_passes`，并补齐前驱集使反例单缺陷可归因），未删测试、未放宽判据。
+  - **inScope**：代码笔的 17 个 src 文件全在契约 §六 内，out-of-scope 目录一个未出现；`git diff --name-only origin/dev..HEAD` = 20 文件（17 src + 09a 契约段 + 2 个生成物），未混 7b.1a / 0.4.2 / 文档收口。
+  - **`LocalSlot::origin` 零回退**：`LocalSlot` 仍含 `pub origin: Option<FrameId>` 与 `FrameId`；mono 的 origin 投影 `origin: slot.origin`（`src/middle/passes/mono/function.rs`、`src/middle/passes/mono/mod.rs` 各一处）原样在位；`ir.rs` / `verify.rs` / `mono` 的 diff 内无任何 origin 相关删改（origin 侧 2.1.4 的按槽身份判据完整保留）。
+  - **测试规范**：命名 `test_<what>_<scenario>`、AAA 三段、断言带自定义消息、枚举匹配用 `assert!(matches!(...))`、无 `use super::*`、无 inline `mod tests {}`；夹具复用化且既有 `func()` 签名不变。
+  - **独立性**：状态页路由不同与成员会话内不可自证两事实并存 ⇒ **不宣称异家族独立**。偏差如实登记：复审由 **docs-1** 承担（review-1 的额度受限未产出结论，按用户 2026-11-20 裁决 B 先例改派），与实现者不同族、**与验证者同族、且与本收口轮为同一成员** ⇒ 复审、验证、收口三者互不独立。补偿证据 = 冻结 revision 上的对象级复核（17 构造点 / Phi 三残项 / `LocalSlot::origin` / 15 处 `successors` / 58 普查 / 两生成物行号平移 / 生成器幂等 / 提交信息行宽逐行量算 / 红绿 grep 差分）。
+
+### 五、生成物与 inScope 扩面（队长契约缺陷登记）
+
+7b.1b 的代码笔改动了诊断发射点所在文件的行号（mono +2 行、translator +1 行）⇒ 错误码文档的发射点行号随之平移。按 **AGENTS 团队编排约定第 6 条**（契约 `inScope` 必须覆盖「生成物」），`scripts/docs/gen-error-code-docs.py` 在合并后的树上重新再生，两处生成物随代码并入代码笔：
+
+- `docs/src/reference/error-code/E1xxx.md`：`src/middle/passes/mono/mod.rs` 的发射点行号平移（+2 行）；
+- `docs/src/reference/error-code/E8xxx.md`：`src/middle/passes/codegen/translator.rs` 的发射点行号平移（+1 行）。
+
+两文件的 diff **只有发射点行号的机械平移**，无内容改写；生成器幂等（跑生成器 exit 0 + `git diff --quiet` 为空）。
+
+**契约缺陷（队长侧）**：7b.1b 契约 §六 的 `inScope` 只列了 `src/middle/`、`src/driver/tests/`、`src/frontend/tests/`、`tests/baselines/` 与本文件，**漏声明 `docs/src/reference/error-code/` 前缀** ⇒ 该两文件的并入属**契约缺陷下的授权例外，不判实现越界**（复审轮同此结论）。**后续契约写法教训**：凡改动会连带触到机械必需面（生成物 / 直驱测试 / 快照与语料基线 / 全仓穷尽 `match` 的补臂点），必须在 `inScope` 里写成**可被路径匹配器解析的前缀**（如 `docs/src/reference/error-code/`）——散文限定会被 `changedPaths` 拒收。
+
+### 六、偏差与既有项
+
+1. **提交信息行宽（既有项，本批不修，如实登记）**：`docs/src/dev/commit-convention.md` 规定 subject 不超过 50 字符（表头 subject 行与「Subject（主题）」节），正文每行不超过 72 字符。实测：**7b.1b 代码笔** subject 76 字符、正文 4 行超 72（79 / 80 / 74 / 75）；**7b.1b 契约笔** subject 57 字符同样超 50。**处置：不 amend**——message-only 改写会改写未推送哈希，使验证轮与复审轮绑定的冻结 revision 失效；且复审判定格式偏离不是正确性 / 可读性缺陷。取舍依据：仓库近期同类超长存在，单独修这两笔而不修同类会制造不一致。**若用户要求 amend，另案处理**（改写后须重做验证轮与复审轮的冻结 revision 绑定）。
+2. **INFO-1 · `values()` / `values_mut()` 暂无生产消费者**：本批调用方只有测试；生产消费者随 7b.2（`next_temp_reg` 改产 `Operand::Value`）而来。属 04 改动清单第 5 项的登记式接口，不是新增入口；已由 3 条直驱测试覆盖。
+3. **INFO-2 · 测试段注释写法（既有项，本笔只登记不改测试）**：`src/middle/ir/tests/ir.rs` 的 `test_value_info_construction_preserves_fields` 用「// Arrange + Act」合并段注释，与 test-specification 的 AAA 三段写法有轻微出入（不影响判据承重）。登记为既有项，交后续批次顺带规范。
+4. **INFO-3 · 实测前提三处一致登记**：15 处 `successors` 全空已在契约 §三、`src/middle/ir/verify.rs` 文件头、代码笔提交信息三处一致登记；真实 IR 无前驱数据**不判为判据缺失**。
+5. **en 镜像未手改**：中英镜像的规则是「zh 是源，en 由翻译工作流同步」；本轮 `inScope` 不含 `docs/src/en/dev/architecture/04-ssa.md`，故只核对未改写——en 侧 04 的值表 / 访问器 / Phi 残项段仍是 7b.1b 落地前的表述，待翻译工作流按 zh 同步（**已知待同步项**）。
+6. **本轮未改动 inScope 外文件**；未跑 `git push` / `fetch` / `pull`。

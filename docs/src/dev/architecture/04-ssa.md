@@ -281,7 +281,11 @@ Phi {
 2. `incoming` 的 label 集合 == `blocks` 中所有 `successors` 含本块 label 的那些块的 label 集合。
 3. 所有 `incoming` 值的 `MonoType` 相同（**依赖 03 的类型表示已收敛**）。
 
-`verify_ssa` 的落地状态：约束 1 与 2 需要值表与块级 CFG，**归 7b.1b**；本批（7b.1a）落的是构造侧两条——`dst` 必为 `Operand::Value`、`incoming` 的 label 严格升序（`src/middle/ir/verify.rs` 的 `check_phi_structure`，违规类别 `InvariantKind::PhiConsistency`）；约束 3 依赖 03 的类型表示收敛，与 7b.1b 同批推进。
+`verify_ssa` 的落地状态（7b.1b 已补齐前三条）：约束 1 与 2 需要值表与块级 CFG，已于 **7b.1b** 落地为「块级前驱数」与「前驱 label 集合」两条判据——前驱集从 `BasicBlock.successors` 反推（`src/middle/ir/verify.rs` 的 `block_predecessors`），计数不等只报计数、集合不等才报集合（同一缺陷不双报）；约束 3 的逐输入类型一致同期落地，取值来自值表 `values[v].ty`，**复用既有的 `types_compatible`**（未引入第三套类型兼容判断；03 的类型表示收敛仍是「前置条件（硬性）·前置二」，届时 `ValueInfo::ty` 仍是 `MonoType`）。三条判据的违规类别均为 `InvariantKind::PhiConsistency`。
+
+**类型不可得的三种形态（显式登记，不静默放行）**：值表为空 ⇒ 判定依据不存在（7b.1b 的生产形态，7b.2 填表后自动收紧）；值表非空而 `ValueId` 越界 ⇒ 报违规；非 `Value` 操作数（`Const` / `Local` / `Arg` / `Global`）⇒ 无值表类型源，不判定。
+
+**实测前提（重要）**：全仓 `BasicBlock.successors` 的 15 处生产构造全部是 `Vec::new()`，没有生产填充点 ⇒ 块级前驱恒空 ⇒ 前驱数与前驱集合两条判据在真实 IR 上无数据，由合成夹具承担（这不是判据缺失）。**7b.3 生产 `Phi` 之前必须先填块级 `successors`**，否则任何带 incoming 的 `Phi` 都会被 `verify_ssa` 拒——登记为 7b.3 前置。
 
 7b.1a 只引入变体：lowering 生产构造点为 0，`translator.rs` 的消费臂是带不变量注释的占位（响亮失败，不做静默跳过或静默错值），真翻译归 7b.3（方案 A：展开为 Move 串）。
 
@@ -294,7 +298,7 @@ Phi {
 - YaoXiang 的 `&` / 引用 / 所有权语义使"哪些槽位可内存化"是一个**类型系统问题**，不是 CFG 问题。已核实 `ir.rs` 的 `LocalSlot::ty: MonoType` 携带完整类型信息，但判定"该 `MonoType` 是否可被内存化"需要 03 收敛后的类型表示与精化类型规则的配合。**在 03 之前做 mem2reg 就是在猜。**
 - 显式重命名只需改 `next_temp_reg()` 一处（`src/middle/lower/scope.rs` 的 `next_temp_reg`）的返回值语义 + 三处回滚的删除，**不触碰任何 lowering 算法的控制流**。
 
-值表形态（**待 7b.1b 落地**）：`FunctionBody::Code` 增加 `values: Vec<ValueInfo>`，其中
+值表形态（**7b.1b 已落地**）：`FunctionBody::Code` 增加 `values: Vec<ValueInfo>`，其中
 
 ```rust
 pub struct ValueInfo {
@@ -305,7 +309,11 @@ pub struct ValueInfo {
 }
 ```
 
+访问器与既有访问器同形（`src/middle/ir/ir.rs` 的 `impl FunctionIR`）：`values()` 只读、TypeDecl 上返回空表（镜像 `locals()`）；`values_mut()` 可变、TypeDecl 上 `panic!`（镜像 `blocks_mut()`）。**本批值表恒空**——全仓 17 处 `FunctionBody::Code` 生产构造一律 `values: Vec::new()`（非空值表只出现在测试夹具），`Operand::Value` 的生产仍归 7b.2。
+
 `values` 与 `locals` 并存：`locals` 承载可寻址具名变量（可能多次定义），`values` 承载单定义 SSA 值。**`locals` 的存在不违反 SSA**——它就是 SSA 之外的"存储"部分（LLVM 的 alloca 模型）。
+
+**与 `LocalSlot::origin` 的归口**：两者是**两个维度**，不得混用——`LocalSlot::origin`（origin 侧 2.1.4 落的**槽位身份**字段，记录该槽的生成帧 `FrameId`）回答"这个槽属于哪一帧"，`ValueInfo.defining_block` 回答"这个 SSA 值定义在哪个基本块"。值身份归 `ValueInfo`，槽身份归 `LocalSlot::origin`；7b.1b 只加值表，**不改 `LocalSlot::origin`**（实测零改动）。
 
 #### 改动量估算
 
@@ -314,7 +322,7 @@ pub struct ValueInfo {
 | `next_temp_reg` 改造 | ~15 行 | `src/middle/lower/scope.rs` 单函数 |
 | 删除三处语句级回收 | −15 行 | `1954-1959` / `3632-3638` / `4737-4742` |
 | 6 处 save/restore 收敛为 RAII | 净 ±0 行 | 见「逐项处置表」 |
-| `ir.rs` 结构变更 | +120 ~ 180 行 | `ValueId` / `Phi` / `ValueInfo` / 值表；**7b.1a 落地前两项**（实测 `src/middle/ir/ir.rs` +37/−3 行、`normalize.rs` +22/−5、`verify.rs` +63/−14）；`ValueInfo` 与值表待 7b.1b |
+| `ir.rs` 结构变更 | +120 ~ 180 行 | `ValueId` / `Phi` / `ValueInfo` / 值表；**7b.1a 落前两项、7b.1b 落后两项**（实测：`src/middle/ir/ir.rs` 7b.1a +37/−3、7b.1b +36/−0 ⇒ 累计 +73/−3；`normalize.rs` +22/−5；`verify.rs` 7b.1a +63/−14、7b.1b +162/−13 ⇒ 累计 +225/−27） |
 | `translator.rs` 加 `Phi` 臂 | +25 ~ 40 行（待 7b.3） | 现有 50 个 `translate_*` 之一 |
 | `executor/` | **零改动** | 方案 A：`Phi` 是 IR-only 伪指令，在 `translator.rs` 展开为 Move 串，不进字节码（决策三） |
 | 临时值改产 `Operand::Value` 的调用点 | 机械替换（待 7b.2） | **已实测**（`git grep -c` 按文件求和，`src/` 全量含测试）：`Operand::Local(` 共 415 处 / 28 文件，其中 `src/middle/lower/` 332 处 / 14 文件；临时值的改产点是单点 `next_temp_reg` |
@@ -474,9 +482,9 @@ self.release_plan_total = type_result.release_plan.drops.len();
 | 新增 `ValueId(u32)` 类型 | 文件头（`ValueId` 定义） | 新增（**7b.1a 已落地**） |
 | `Operand` 删 `Temp` / `Label` / `Register`，增 `Value(ValueId)` | `Operand` 枚举定义 | **变体增删**（**7b.1a 已落地**） |
 | `Instruction` 新增 `Phi` 变体 | `Instruction` 枚举末尾（`Phi` 变体） | **变体 +1**（**7b.1a 已落地**；枚举现为 75 个变体） |
-| `FunctionBody::Code` 增 `values: Vec<ValueInfo>` | `FunctionBody::Code` | 字段 +1（待 7b.1b） |
-| 新增 `ValueInfo` 结构 | `ValueInfo` | 新增（待 7b.1b） |
-| `all_instructions` / `blocks` / `blocks_mut` / `locals` | 同名访问器 | 需加 `values()` / `values_mut()` 访问器（待 7b.1b） |
+| `FunctionBody::Code` 增 `values: Vec<ValueInfo>` | `FunctionBody::Code` | 字段 +1（**7b.1b 已落地**） |
+| 新增 `ValueInfo` 结构 | `ValueInfo` | 新增（**7b.1b 已落地**） |
+| `all_instructions` / `blocks` / `blocks_mut` / `locals` | 同名访问器 | 需加 `values()` / `values_mut()` 访问器（**7b.1b 已落地**，与既有访问器同形） |
 
 文件头的 `pub use ...ast::Type` **本文不动**——它是 [03](03-type-unification.md) 的范围。但 `ValueInfo::ty` 必须用**收敛后**的单一类型。
 
@@ -523,9 +531,9 @@ self.release_plan_total = type_result.release_plan.drops.len();
 | --- | --- | --- | --- |
 | 1 | `src/middle/ir/ir.rs` | `Operand` 枚举定义 | `Operand` 变体增删（**7b.1a 已落地**：删 `Temp` / `Label` / `Register`，增 `Value(ValueId)`） |
 | 2 | `src/middle/ir/ir.rs` | `Instruction` 枚举末尾（`Phi` 变体） | 新增 `Instruction::Phi`（**7b.1a 已落地**） |
-| 3 | `src/middle/ir/ir.rs` | `FunctionBody::Code` | 增 `values` |
-| 4 | `src/middle/ir/ir.rs` | `ValueInfo` | 新增 `ValueInfo` |
-| 5 | `src/middle/ir/ir.rs` | `values()` / `values_mut()` 访问器 | 加访问器 |
+| 3 | `src/middle/ir/ir.rs` | `FunctionBody::Code` | 增 `values`（**7b.1b 已落地**） |
+| 4 | `src/middle/ir/ir.rs` | `ValueInfo` | 新增 `ValueInfo`（**7b.1b 已落地**） |
+| 5 | `src/middle/ir/ir.rs` | `values()` / `values_mut()` 访问器 | 加访问器（**7b.1b 已落地**） |
 | 6 | `src/middle/ir/ir.rs` | `pub use ast::Type` | **`pub use ast::Type` 不动**（[03](03-type-unification.md) 范围，仅记录） |
 | 7 | `src/middle/core/ir_gen.rs` | `884-891` `next_temp_reg` | 返回 `Operand::Value`，单调递增不回滚 |
 | 8 | `src/middle/core/ir_gen.rs` | `1954-1959` | **删除**语句级回收 |
@@ -581,7 +589,7 @@ self.release_plan_total = type_result.release_plan.drops.len();
 | 批 | 内容 | 改动项 | 判据 | 回滚点 |
 | --- | --- | --- | --- | --- |
 | **批 a** | 切断多次定义：删 3 处语句级回收 → 6 处 save/restore 换 RAII guard → 口径统一 | 8-10（先）→ 11-16 → 17-18 | 删除回收：**C4**（行为等价 + 第一层支配性不变量）。RAII 与口径统一属纯搬移：**C1** 快照 zero-diff | 逐项单 commit，`git revert` 即回滚 |
-| **批 b** | SSA 形态切换：`ir.rs` 结构变更 + 临时值改产 `Operand::Value`（机械替换）→ `translator.rs` 加 `Phi` 臂 → 线性扫描分配器。批内按 WBS 三级任务串行：7b.1a（`Operand` 变体收敛 + `Instruction::Phi` 引入，**已落地**）→ 7b.1b（`FunctionIR` / `BasicBlock` / 类型标注字段）→ 7b.2（`next_temp_reg` 改产 `Operand::Value`）→ 7b.3（`translator.rs` 的 `Phi` 臂）→ 7b.4（线性扫描分配器 + 删三处语句级回收，与 7a.1 同批） | 1-5、7 → 31-32 → 37 | **C4**：行为等价 + `verify_ssa` 全绿 + `.42` 往返测试 | `ir.rs` 变更**独占一个 commit**（类型变更波及全仓编译，不可增量回滚） |
+| **批 b** | SSA 形态切换：`ir.rs` 结构变更 + 临时值改产 `Operand::Value`（机械替换）→ `translator.rs` 加 `Phi` 臂 → 线性扫描分配器。批内按 WBS 三级任务串行：7b.1a（`Operand` 变体收敛 + `Instruction::Phi` 引入，**已落地**）→ 7b.1b（`FunctionIR` / `BasicBlock` / 类型标注字段，**已落地**）→ 7b.2（`next_temp_reg` 改产 `Operand::Value`）→ 7b.3（`translator.rs` 的 `Phi` 臂）→ 7b.4（线性扫描分配器 + 删三处语句级回收，与 7a.1 同批） | 1-5、7 → 31-32 → 37 | **C4**：行为等价 + `verify_ssa` 全绿 + `.42` 往返测试 | `ir.rs` 变更**独占一个 commit**（类型变更波及全仓编译，不可增量回滚） |
 | **批 c** | 隐式契约显式化：`synth.rs` 边界 + 哨兵脚本 → span 消费计数 → `method_def_ordinals` 只读化 | 20-24、29、38 → 25 → 26 | **C4**：行为等价 + 新脚本纳入 CI；消费计数在新诊断上零触发（否则说明真存在失配） | 独立 commit |
 | **批 d** | `generate_call_expr_ir` 拆分 + "补 0" 兜底断言化 | 27-28 | 纯搬移部分：**C1** 快照 zero-diff。断言化部分：**C4** 语料差分 + 第一层校验器 | 独立 commit |
 
