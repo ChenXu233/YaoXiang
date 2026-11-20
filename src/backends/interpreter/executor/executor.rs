@@ -1183,11 +1183,13 @@ impl Interpreter {
             // #500：操作数带 Void 时追加初始化顺序 hint。运行期 Void 的主来源是
             // LoadGlobal 读尚未写入的全局槽（exec_reg 的 unwrap_or(Void)），环内
             // 模块初始化顺序不可判定（编译期 W1007）时正落到这里。Void 的另一
-            // 历史来源——Eq/Neq 编译期放行的静态 Void 值与异型比较——已由
-            // #549（2026-11-20 用户裁决甲案）收口：infer_equality 非记录形态走
-            // 「两侧同型」纪律编译期拒绝，不再放行到本兜底臂；hint 按观测陈述
-            // 措辞（usually / if）不变，未初始化读仍是其覆盖场景。无 Void 操作数
-            // 时消息逐字不变。
+            // 历史来源——Eq/Neq 编译期放行的异型比较——其「异型与跨类型静态
+            // Void 值」面已由 #549（2026-11-20 用户裁决甲案）收口：infer_equality
+            // 非记录形态走「两侧同型」纪律编译期拒绝；**同型 Void 比较（如
+            // void == void，unify 专属臂放行）与 Any 槽位运行期异型值仍可达
+            // 本兜底臂**（本批 multifile 夹具 f(a:Any,b:Any) 传 (1,"a") 即实证）；
+            // hint 按观测陈述措辞（usually / if）不变，未初始化读仍是其覆盖场景。
+            // 无 Void 操作数时消息逐字不变。
             (op, l, r) => {
                 let stack = self.capture_stack();
                 let mut message =
