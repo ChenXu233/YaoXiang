@@ -764,8 +764,14 @@ impl StatementChecker {
         definition_span: crate::util::span::Span,
         export: &Export,
         module: &ModuleInfo,
+        type_rebinds: &HashMap<String, String>,
     ) {
         let ty = self.export_type(export);
+        // WBS 3.24.3 / issue #504：签名里引用定义单元类型的裸名义名（返回位
+        // `TypeRef("Temp")`），按本条 use 的类型导入登记改绑到本地名——注解侧
+        // 写的是本地名（`TempB`），不改绑则裸名与本地名在判等点字符串比对
+        // 判异，合法程序被误拒（E1012 + E1002）。
+        let ty = crate::frontend::core::types::substitute::rebind_nominal_refs(&ty, type_rebinds);
         // E1113（6.9.2-B / issue #539）：导入函数与本地面**同权**——q=0 事实
         // 随 Export 跨界携带（定义方 `PolyType::const_binders` 与签名收集期
         // 槽位表的已登记形态直读，判据单源，不从签名形态反推），在此按
@@ -892,6 +898,27 @@ impl StatementChecker {
             }
             // use path.{a, b} / use path.{a as x}（#245：仅内联别名）
             (Some(item_names), _) => {
+                // WBS 3.24.3 / #504 改绑表：本条 use 引入的**类型**导出
+                //（定义名 → 本地名）。同条 use 的其他导入项签名引用这些类型时
+                //（`make_b: () -> Temp` 的返回位），导入登记面把裸名改绑到
+                // 本地名，使注解侧与值侧同源。别名缺失时键值同名（恒等改名）。
+                let type_rebinds: HashMap<String, String> = item_names
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(i, item)| {
+                        let export = module.exports.get(&item.name)?;
+                        if !matches!(export.kind, ExportKind::Type) {
+                            return None;
+                        }
+                        let local = item_aliases
+                            .as_ref()
+                            .and_then(|aliases| aliases.get(i))
+                            .and_then(|alias| alias.as_ref())
+                            .map(|alias| alias.name.clone())
+                            .unwrap_or_else(|| item.name.clone());
+                        Some((item.name.clone(), local))
+                    })
+                    .collect();
                 for (i, item) in item_names.iter().enumerate() {
                     // 本地名：内联别名（#245）优先，名源位置随别名 token；
                     // 无别名时随项名 token——绑定与 use 行该项同源
@@ -925,7 +952,7 @@ impl StatementChecker {
                     }
                     // #321 W1003：登记导入本地名（内联别名优先）
                     self.note_body_import(local_name, path_span);
-                    self.import_binding(local_name, local_span, &export, &module);
+                    self.import_binding(local_name, local_span, &export, &module, &type_rebinds);
                 }
             }
         }

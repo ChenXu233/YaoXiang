@@ -189,6 +189,131 @@ pub fn substitute_ctor_heads(
     }
 }
 
+/// 名义类型引用的改写：把 `TypeRef(名)` 按 `rebinds`（定义名 → 本地名）改名。
+///
+/// 用途（WBS 3.24.3 / issue #504）：跨单元导入的函数签名携带**定义单元的裸
+/// 名义名**（`make_b: () -> Temp` 的返回位 `TypeRef("Temp")`），而导入方的
+/// 注解写的是本地名（`use b.{Temp as TempB}` 后的 `TempB`）。两处在判等点的
+/// 字符串比对（`solver.rs` TypeRef/TypeRef 臂）下判异，合法程序被误拒
+/// （E1012 + E1002）。导入方登记导入项时用本函数把签名里的裸名引用改绑到
+/// 本地名，注解侧与值侧回到同一来源。
+///
+/// 与 [`substitute_ctor_heads`] 的分工：那是构造器**应用头部**改名
+///（`Generic{name}` 的头部），不触碰 `TypeRef` 引用体；本函数恰好相反——
+/// 改写名义引用体、头部与记录名（`Generic{name}` / `Struct.name` / 构造器
+/// 名）一律不动。改写头部或记录名会改变诊断渲染与记录查表键，不是本函数
+/// 的语义。与 [`MonoType::substitute`] 的分工：那是类型**变量**替换（目标是
+/// 任意 `MonoType`，如换进求解器新变量），且不遍历 `Struct` 字段 / `DepFn` /
+/// `Refined` / `Literal`；本函数按名义引用语义结构递归全部变体。
+pub fn rebind_nominal_refs(
+    ty: &MonoType,
+    rebinds: &HashMap<String, String>,
+) -> MonoType {
+    if rebinds.is_empty() {
+        return ty.clone();
+    }
+    match ty {
+        MonoType::TypeRef(name) => {
+            MonoType::TypeRef(rebinds.get(name).cloned().unwrap_or_else(|| name.clone()))
+        }
+        MonoType::Fn {
+            params,
+            return_type,
+        } => MonoType::Fn {
+            params: params
+                .iter()
+                .map(|p| rebind_nominal_refs(p, rebinds))
+                .collect(),
+            return_type: Box::new(rebind_nominal_refs(return_type, rebinds)),
+        },
+        MonoType::Generic { name, args } => MonoType::Generic {
+            name: name.clone(),
+            args: args
+                .iter()
+                .map(|a| rebind_nominal_refs(a, rebinds))
+                .collect(),
+        },
+        MonoType::Struct(s) => MonoType::Struct(StructType {
+            fields: s
+                .fields
+                .iter()
+                .map(|field_info| StructFieldInfo {
+                    ty: rebind_nominal_refs(&field_info.ty, rebinds),
+                    ..field_info.clone()
+                })
+                .collect(),
+            ..s.clone()
+        }),
+        MonoType::Ref { mutable, inner } => MonoType::Ref {
+            mutable: *mutable,
+            inner: Box::new(rebind_nominal_refs(inner, rebinds)),
+        },
+        MonoType::Union(types) => MonoType::Union(
+            types
+                .iter()
+                .map(|t| rebind_nominal_refs(t, rebinds))
+                .collect(),
+        ),
+        MonoType::Intersection(types) => MonoType::Intersection(
+            types
+                .iter()
+                .map(|t| rebind_nominal_refs(t, rebinds))
+                .collect(),
+        ),
+        MonoType::MetaType {
+            universe_level,
+            type_params,
+        } => MonoType::MetaType {
+            universe_level: universe_level.clone(),
+            type_params: type_params
+                .iter()
+                .map(|t| rebind_nominal_refs(t, rebinds))
+                .collect(),
+        },
+        MonoType::AssocType {
+            host_type,
+            assoc_name,
+            assoc_args,
+        } => MonoType::AssocType {
+            host_type: Box::new(rebind_nominal_refs(host_type, rebinds)),
+            assoc_name: assoc_name.clone(),
+            assoc_args: assoc_args
+                .iter()
+                .map(|t| rebind_nominal_refs(t, rebinds))
+                .collect(),
+        },
+        MonoType::Literal {
+            name,
+            base_type,
+            value,
+        } => MonoType::Literal {
+            name: name.clone(),
+            base_type: Box::new(rebind_nominal_refs(base_type, rebinds)),
+            value: value.clone(),
+        },
+        MonoType::Refined { base, constraint } => MonoType::Refined {
+            base: Box::new(rebind_nominal_refs(base, rebinds)),
+            constraint: constraint.clone(),
+        },
+        MonoType::DepFn {
+            params,
+            return_type,
+        } => MonoType::DepFn {
+            params: params
+                .iter()
+                .map(|dep_param| crate::frontend::core::types::mono::DepParam {
+                    name: dep_param.name.clone(),
+                    ty: rebind_nominal_refs(&dep_param.ty, rebinds),
+                })
+                .collect(),
+            return_type: Box::new(rebind_nominal_refs(return_type, rebinds)),
+        },
+        // Enum 变体是名字串表、TypeVar 由求解器管理、原语与 FFI 形态无名义
+        // 引用位——原样克隆。
+        other => other.clone(),
+    }
+}
+
 /// 类型替换器
 #[derive(Debug, Clone, Default)]
 pub struct Substituter;

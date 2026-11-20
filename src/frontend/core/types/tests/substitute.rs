@@ -3,8 +3,10 @@
 //! Substitution: bind, insert, get, contains_var, merge, len, is_empty, bound_vars
 //! Substituter: substitute 经过所有容器类型 (Struct, Tuple, Dict, Set, Enum, Range, Arc, Weak, Union, Intersection, AssocType, Fn, Option, Result)
 
+use crate::frontend::core::types::mono::StructFieldInfo;
 use crate::frontend::core::types::substitute::contains_type_vars;
-use crate::frontend::core::types::{MonoType, Substituter, Substitution, TypeVar};
+use crate::frontend::core::types::substitute::rebind_nominal_refs;
+use crate::frontend::core::types::{MonoType, StructType, Substituter, Substitution, TypeVar};
 use std::collections::HashMap;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -128,5 +130,129 @@ fn test_substitute_generic_params_matching() {
     assert_eq!(
         result,
         MonoType::make_tuple(vec![MonoType::Int(32), MonoType::make_string()])
+    );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 名义引用改写（WBS 3.24.3 / #504 病史锚的承重判据，单元级）
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// `rebind_nominal_refs` 是导入面签名改绑的唯一实现：判据 = 改写只触
+// `TypeRef` 引用体；`Generic` 头部 / `Struct` 记录名不动——它们是构造器与
+// 记录的身份，改写会改变诊断渲染与记录查表键。端到端用例
+//（tests/integration/multifile.rs 的 #504 锚组）区分不了「改对了名字」与
+// 「把头部也改了」，故判据落在函数本身。
+
+#[test]
+fn test_rebind_nominal_refs_renames_fn_params_and_return() {
+    // Arrange — 导入函数签名（参数位 + 返回位）携带定义单元裸名
+    let mut rebinds = HashMap::new();
+    rebinds.insert("Temp".to_string(), "TempB".to_string());
+    let signature = MonoType::Fn {
+        params: vec![MonoType::Ref {
+            mutable: false,
+            inner: Box::new(MonoType::TypeRef("Temp".to_string())),
+        }],
+        return_type: Box::new(MonoType::TypeRef("Temp".to_string())),
+    };
+
+    // Act
+    let rebound = rebind_nominal_refs(&signature, &rebinds);
+
+    // Assert — 参数位的借用内层与返回位都改绑到本地名
+    let MonoType::Fn {
+        params,
+        return_type,
+    } = &rebound
+    else {
+        panic!("rebind must preserve Fn shape, got {rebound:?}");
+    };
+    assert!(
+        matches!(return_type.as_ref(), MonoType::TypeRef(n) if n == "TempB"),
+        "return-side nominal ref should be rebound to the local name"
+    );
+    let MonoType::Ref { inner, .. } = &params[0] else {
+        panic!("rebind must preserve Ref shape, got {rebound:?}");
+    };
+    assert!(
+        matches!(inner.as_ref(), MonoType::TypeRef(n) if n == "TempB"),
+        "borrow-inner nominal ref should be rebound to the local name"
+    );
+}
+
+#[test]
+fn test_rebind_nominal_refs_keeps_generic_head_and_struct_name() {
+    // Arrange — 头部/记录名是身份面（不随导入改名），实参位/字段位是引用面
+    let mut rebinds = HashMap::new();
+    rebinds.insert("Temp".to_string(), "TempB".to_string());
+    let holder = MonoType::Struct(StructType {
+        name: "Holder".to_string(),
+        fields: vec![StructFieldInfo {
+            name: "item".to_string(),
+            ty: MonoType::Generic {
+                name: "List".to_string(),
+                args: vec![MonoType::TypeRef("Temp".to_string())],
+            },
+            quantity: None,
+            is_mut: false,
+            has_default: false,
+        }],
+        methods: HashMap::new(),
+        interfaces: vec![],
+    });
+
+    // Act
+    let rebound = rebind_nominal_refs(&holder, &rebinds);
+
+    // Assert
+    let MonoType::Struct(s) = &rebound else {
+        panic!("rebind must preserve Struct shape, got {rebound:?}");
+    };
+    assert_eq!(
+        s.name, "Holder",
+        "record name is the record identity and must not be rebound"
+    );
+    let MonoType::Generic { name, args } = &s.fields[0].ty else {
+        panic!("rebind must preserve Generic shape, got {rebound:?}");
+    };
+    assert_eq!(
+        name, "List",
+        "generic head is the constructor identity and must not be rebound"
+    );
+    assert!(
+        matches!(args[0], MonoType::TypeRef(ref n) if n == "TempB"),
+        "generic args are nominal-ref positions and must be rebound"
+    );
+}
+
+#[test]
+fn test_rebind_nominal_refs_empty_map_is_identity() {
+    // Arrange — 无类型导入的 use（整体导入/native）不改绑
+    let ty = MonoType::TypeRef("Temp".to_string());
+
+    // Act
+    let rebound = rebind_nominal_refs(&ty, &HashMap::new());
+
+    // Assert
+    assert_eq!(
+        rebound, ty,
+        "empty rebind table must be a structural identity"
+    );
+}
+
+#[test]
+fn test_rebind_nominal_refs_unknown_names_pass_through() {
+    // Arrange — 表外的裸名（未导入的类型/类型参数名）不改写
+    let mut rebinds = HashMap::new();
+    rebinds.insert("Temp".to_string(), "TempB".to_string());
+    let ty = MonoType::TypeRef("A".to_string());
+
+    // Act
+    let rebound = rebind_nominal_refs(&ty, &rebinds);
+
+    // Assert
+    assert!(
+        matches!(&rebound, MonoType::TypeRef(n) if n == "A"),
+        "names outside the rebind table must pass through unchanged"
     );
 }

@@ -299,6 +299,158 @@ main = () => {
     run_project_ok(&[("lib.yx", lib), ("main.yx", main)], "main.yx");
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// WBS 3.24.3 / issue #504：导入类型的返回注解身份
+//
+// 病史锚（#504）：跨单元函数返回**别名引入**的导入类型时，返回注解与实得类型
+// 不可判等——E1012（返回位）+ E1002（赋值位）、exit 1。规范来源：RFC-029
+// §导入（use 是唯一跨单元名引入机制）；判据 = 导入项签名里引用的定义单元
+// 类型名，按 use 登记改绑到本地名后与注解同源。
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// #504 夹具的 b 单元：定义 Temp 并导出返回它的函数。
+const TEMP_LIB: &str = r#"
+Temp: Type = { v: Float }
+
+make_b: () -> Temp = () => {
+    Temp(2.0)
+}
+"#;
+
+#[test]
+fn test_multifile_use_type_alias_fn_return_annotation_matches_defining_type() {
+    // #504 主锚（E1002 赋值位）：main 经 `Temp as TempB` 别名引入后写
+    // `u: TempB = make_b()`。修复前签名返回位是定义单元裸名 `Temp`、注解是
+    // 本地名 `TempB`，裸名判等判异 ⇒ E1002、exit 1；修复后导入面把签名里的
+    // 裸名引用按 use 登记改绑到本地名，两侧同源 ⇒ 编译通过且值正确。
+    // Arrange
+    let main = r#"
+use std.assert
+use b.{Temp as TempB, make_b}
+
+u: TempB = make_b()
+
+main = () => {
+    assert.assert(u.v == 2.0, "u.v should be 2.0")
+}
+"#;
+
+    // Act / Assert
+    run_project_ok(&[("b.yx", TEMP_LIB), ("main.yx", main)], "main.yx");
+}
+
+#[test]
+fn test_multifile_use_type_alias_wrap_fn_return_annotation_matches_call_result() {
+    // #504 锚（E1012 返回位）：main 内包装函数的返回注解写别名 TempB、体返回
+    // make_b() 的实得值。修复前注解 TypeRef("TempB") 与调用产物签名携带的裸名
+    // TypeRef("Temp") 判异 ⇒ E1012（返回类型不匹配）、exit 1。
+    // Arrange
+    let main = r#"
+use std.assert
+use b.{Temp as TempB, make_b}
+
+wrap: () -> TempB = () => {
+    make_b()
+}
+
+u: TempB = wrap()
+
+main = () => {
+    assert.assert(u.v == 2.0, "u.v should be 2.0")
+}
+"#;
+
+    // Act / Assert
+    run_project_ok(&[("b.yx", TEMP_LIB), ("main.yx", main)], "main.yx");
+}
+
+#[test]
+fn test_multifile_use_type_plain_import_fn_return_annotation_unchanged() {
+    // 对照锚：非别名导入（本地名 = 定义名）的返回注解，改绑前（今日已绿）后
+    // 行为一致——恒等改名零行为变化，防止接线把已绿面弄红。
+    // Arrange
+    let main = r#"
+use std.assert
+use b.{Temp, make_b}
+
+u: Temp = make_b()
+
+main = () => {
+    assert.assert(u.v == 2.0, "u.v should be 2.0")
+}
+"#;
+
+    // Act / Assert
+    run_project_ok(&[("b.yx", TEMP_LIB), ("main.yx", main)], "main.yx");
+}
+
+#[test]
+fn test_multifile_use_type_alias_constructor_annotation_chain_unchanged() {
+    // 对照锚：别名构造器 + 别名注解链（修前已绿——注册面双名镜像路径），
+    // 改绑接线后零行为变化。
+    // Arrange
+    let lib = r#"
+Temp: Type = { v: Float }
+"#;
+    let main = r#"
+use std.assert
+use b.{Temp as TempB}
+
+x: TempB = TempB(2.0)
+y: TempB = x
+
+main = () => {
+    assert.assert(y.v == 2.0, "y.v should be 2.0")
+}
+"#;
+
+    // Act / Assert
+    run_project_ok(&[("b.yx", lib), ("main.yx", main)], "main.yx");
+}
+
+#[test]
+fn test_multifile_cross_unit_same_named_type_alias_imports_stay_distinct() {
+    // 守卫锚：b.Temp 与 c.Temp 同名异型。别名引入后 make_c 的返回值进 TempB
+    // 注解**必须仍被拒绝**——修前因裸名 `Temp` 与别名 `TempB` 判异而拒绝；
+    // 改绑后 make_c 的返回位落在本地名 `TempC`，与 `TempB` 仍判异。语义不变，
+    // 防止「按名判等」把跨单元同名类型误判同型（过宽回归）。
+    // Arrange
+    let b = r#"
+Temp: Type = { v: Float }
+
+make_b: () -> Temp = () => {
+    Temp(1.0)
+}
+"#;
+    let c = r#"
+Temp: Type = { w: Int }
+
+make_c: () -> Temp = () => {
+    Temp(2)
+}
+"#;
+    let main = r#"
+use b.{Temp as TempB, make_b}
+use c.{Temp as TempC, make_c}
+
+x: TempB = make_c()
+
+main = () => {
+    print(x.v)
+}
+"#;
+
+    // Act
+    let err = run_project(&[("b.yx", b), ("c.yx", c), ("main.yx", main)], "main.yx")
+        .expect_err("cross-unit same-named types must stay distinct: TempB != TempC");
+
+    // Assert
+    assert!(
+        err.contains("E1002"),
+        "assignment across distinct same-named types must be E1002, got:\n{err}"
+    );
+}
+
 #[test]
 fn test_multifile_cross_unit_method_overload_resolves_by_argument_type() {
     // WBS 4.9.7 / #464：跨单元（registry 解析）方法调用的同名重载按**实参类型**决议。
