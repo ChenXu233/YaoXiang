@@ -421,23 +421,23 @@ enum NameKind {
 
 **同义词表的处置（WBS 6.1.2 已落地，2026-10-27 用户定稿）**：
 
-`MonoType::from_builtin_name`（`src/frontend/core/types/mono.rs:839-886`）**保留，语义降级**。改造前它是"弥合 AST 层两种等价表示"的消歧器；`Type::Int(64)` 删除后 "Int" 只有一条表示路径，它退化为**唯一的名字→类型解析表**。
+`MonoType::from_builtin_name`（`src/frontend/core/types/mono.rs:1121-1143`）**保留，语义降级**。改造前它是"弥合 AST 层两种等价表示"的消歧器；`Type::Int(64)` 删除后 "Int" 只有一条表示路径，它退化为**唯一的名字→类型解析表**。
 
 保留它的理由（不能删）：
 
 - 它是标准库类型名与语言内置名的**唯一切点**（`src/std/*.rs` 的签名串、`CONST_PARAM_TYPES`、LSP 清单都以它为参照）。
 - `DateTime` 臂记录了一个真实修复（#338 连带问题：`now()` 的返回值传不进 `format_time`）——它是**语义别名**，与 `Int`/`int` 的大小写别名不是同一回事，故单独保留到 P10 S11（issue #513）。
 
-**处置结果**（定稿口径 = 15 个内置名 + `DateTime` 临时别名）：
+**处置结果**（定稿口径 = 15 个内置名；`DateTime` 临时别名已随 S11.1（issue #513）迁出——裸名报 E1003/E1002）：
 
 | 类别 | 改造前 | 处置 |
 | --- | --- | --- |
 | 15 个内置名 | 挤在 13 个臂里，与别名混写 | **一名一臂**：`Never` / `Void` / `()` / `Bool` / `Int` / `Int8` / `Int16` / `Int32` / `Int64` / `Float` / `Float32` / `Float64` / `Char` / `String` / `Bytes` |
 | 大小写与缩写别名（`int` / `int64` / `i64` / `int32` / `i32` / `int16` / `i16` / `int8` / `i8` / `float` / `float64` / `f64` / `float32` / `f32` / `bool` / `char` / `string` / `str` / `bytes` / `void` / `never` / `datetime`） | 保留 | **删除**（22 个拼写），**不设 lexer 别名表**——语料实测 0 处非规范名（见本节末的设计判断），不需要语法层兼容 |
 | `()` | 与 `Void` 同臂 | **保留**——`()` 是 `Void` 的类型写法（标准库签名串写 `() -> Void`），不是另一个类型 |
-| `DateTime` | `datetime` 与小写别名同臂 | **只留大写**的临时兼容别名，注明迁出属 P10 S11（issue #513） |
+| `DateTime` | `datetime` 与小写别名同臂 | 已迁出（S11.1，issue #513——别名臂删除，裸名报 E1003/E1002） |
 
-**净效果**：`from_builtin_name` = **15 个 match 臂 / 16 个写法 / 1 个别名**（`()` 与 `Void` 同臂；另有一个 `DateTime` 临时别名）。删除 22 个拼写后，非规范拼写在类型位置落成 `TypeRef`，由 `TypeEnvironment::resolves_type_name` 报未知类型——**不再静默放行**（此前 `add_builtin_types` 还在类型表里登记了 `int` / `float` / `bool` / `string` / `void` / `never` / `char` 七个小写拼写副本，等于第二份别名表，已同批删除）。
+**净效果**：`from_builtin_name` = **14 个 match 臂 / 15 个写法 / 无别名**（`()` 与 `Void` 同臂；`DateTime` 临时别名已随 S11.1（issue #513）迁出）。删除 22 个拼写后，非规范拼写在类型位置落成 `TypeRef`，由 `TypeEnvironment::resolves_type_name` 报未知类型——**不再静默放行**（此前 `add_builtin_types` 还在类型表里登记了 `int` / `float` / `bool` / `string` / `void` / `never` / `char` 七个小写拼写副本，等于第二份别名表，已同批删除）。
 
 这条接受面有**两道常驻门禁**：
 
@@ -559,7 +559,7 @@ declarations.rs:498-511 与 ast.rs:930 改为
 | # | 检查 | 输入 | 失败条件 | 治法 |
 | --- | --- | --- | --- | --- |
 | **T1 构造点分列** | 扫描 `src/frontend/core/parser/ast.rs` 的 `pub enum Type` 变体清单；在 `src/` 下按**三类分列**统计每个变体的构造点（① parser 前向 ② AST→AST 重建 ③ 反向桥重建；排除 `tests/` 与 `*/tests/*`）。重建位置（②③）由 `scan.rs` 的 `REBUILD_FUNCTIONS` 表驱动并与源码逐条对账 | 变体清单 + 三类命中表 + 勘察基线 | ① 某变体**前向零构造**且未登记；② 已登记变体出现前向构造点；③ 登记的通配臂兜底豁免点**未命中**；④ 存在**未登记的通配臂兜底点**（兜底豁免逐条登记，不得泛化到所有通配臂）；⑤ **勘察基线（T1.6）漂移**：某变体的 合计/前向/AST→AST/反向桥 与 `SCOUT_BASELINE` 不等（裁决 2A）；⑥ **重建位置登记表与源码不一致**：登记的重建函数在源码里找不到同名 `fn`（改名/删除未同步）；⑦ **口径与基线不同代**：现行 `REBUILD_FUNCTIONS` 与冻结口径快照 `SCOUT_BASELINE_CALIBER`（口径 revision）不等（6.6.3） | 删变体；或登记理由 / 删除失效登记（见 5.2 与 `REGISTERED_ZERO_FORWARD`）；基线漂移以可复现证据刷新 `SCOUT_BASELINE`（含构造点 file:line）；改口径须同批刷新口径快照与基线数字；登记表随源码同步 |
-| **T2 同义词表与全仓名字清单一致** | `types/mono.rs` 的 `from_builtin_name` match 表 + `typecheck/probe.rs` 的 `CONST_PARAM_TYPES`（WBS 6.6.9 从 `parser/ast.rs` 移回 L3）+ `src/lsp/world.rs:182` 的 LSP 内置类型名清单 | 三张表 | 某个类型名在一张表中存在而另一张不认（按各自语义的映射规则比对）；**WBS 6.1.2 起另有 T2.5「已删除拼写哨兵」：22 个已删拼写任一被加回即报红** | `type-tables --fix` 双向补齐 |
+| **T2 同义词表与全仓名字清单一致** | `types/mono.rs` 的 `from_builtin_name` match 表 + `sema/probe.rs` 的 `CONST_PARAM_TYPES`（WBS 6.6.9 从 `parser/ast.rs` 移回 L3）+ `src/lsp/world.rs:182` 的 LSP 内置类型名清单 | 三张表 | 某个类型名在一张表中存在而另一张不认（按各自语义的映射规则比对）；**WBS 6.1.2 起另有 T2.5「已删除拼写哨兵」：22 个已删拼写任一被加回即报红** | `type-tables --fix` 双向补齐 |
 | ~~**T3 内置类型名与 RFC-011 文档一致**~~ | 原定：`from_builtin_name` 的规范名集合 + `docs/src/rfc/accepted/011-generic-type-system.md` 的类型表 | — | **已按 2026-10-30 用户裁决删除（比对对象不存在）**：RFC-011 是泛型系统设计，正文没有以「内置类型名」为列的表格 | —（不适用；删除理由与覆盖面见下表后的说明） |
 | **T4 `Type → MonoType` 穷尽性** | `Type` 变体清单 vs `types/lower.rs` 的 match 臂 | 两张表 | 有变体无对应臂，或有臂无对应变体 | 补臂 / 删臂 |
 
@@ -572,7 +572,7 @@ declarations.rs:498-511 与 ast.rs:930 改为
 > **内置类型名的载体只有代码侧三份清单，已全部由 T2 逐名对账**：① `from_builtin_name`
 > （`src/frontend/core/types/mono.rs`；接受面 = 15 个规范名，无别名——`DateTime` 临时兼容别名已随 S11.1（issue #513）迁出，`--report` T2.1 实测「14 臂 / 15 个写法」，每臂首写法为规范名，
 > 6.1.2 删掉的 22 个实现内拼写与迁出的 `DateTime` 由 T2.5 哨兵守着，共 23 条）；② `CONST_PARAM_TYPES`
-> （`src/frontend/core/parser/ast.rs`；**① 的子集**语义，检查号 C1）；③ LSP 内置类型名清单
+> （`src/frontend/core/sema/probe.rs:57`——WBS 6.6.9 移至 L3；**① 的子集**语义，检查号 C1）；③ LSP 内置类型名清单
 > （`src/lsp/world.rs`；**① 规范名的超集**语义，检查号 C2 / C3）。文档侧不设同类清单：
 > 新增内置名的权威落点是 ①，T2 会把 ②③ 的缺口报成**未登记漂移**。
 
@@ -814,7 +814,7 @@ declarations.rs:498-511 与 ast.rs:930 改为
 - `src/frontend/core/parser/pratt/nud.rs:512` — 表达式位置被表示为空 body `Expr::Lambda`
 - `src/frontend/core/parser/pratt/led.rs:431` — `expr_to_params` 臂把参数列表捞回
 - `src/frontend/core/types/mono.rs:1123` — `from_builtin_name` 内置名解析表（15 名，无别名——`DateTime` 已随 S11.1（issue #513）迁出；WBS 6.1.2 定稿）
-- `src/frontend/core/types/mono.rs:960` — `From<ast::Type> for MonoType` 实现（13 个 match 臂中的 12 个在此）
+- `src/frontend/core/types/mono.rs:1216` — `From<ast::Type> for MonoType` 实现（13 个 match 臂）
 - `src/frontend/core/types/mono.rs:169` — `MonoType` 定义（约 22 变体）
 - `src/frontend/core/types/const_data.rs:240`、`:327` — `const_data::BinOp` / `const_data::UnOp`
 - `src/frontend/core/types/solver.rs:411` — `pub fn unify`
