@@ -78,7 +78,7 @@ description: '词法分析器（Lexer）与语法分析器（Parser）阶段产�
 - **模板**：`期望 {expected}，找到 {found}`
 - **消息**：解析器期望特定的令牌
 - **帮助**：检查语法并添加期望的令牌
-- **发射点**：`src/frontend/core/parser/parser_state.rs:273`、`src/frontend/core/parser/pratt/nud.rs:1098`、`src/frontend/core/parser/pratt/nud.rs:1118` 等 6 处
+- **发射点**：`src/frontend/core/parser/parser_state.rs:273`、`src/frontend/core/parser/pratt/nud.rs:1032`、`src/frontend/core/parser/pratt/nud.rs:1052` 等 6 处
 
 ### E0011：意外的令牌
 
@@ -128,7 +128,7 @@ description: '词法分析器（Lexer）与语法分析器（Parser）阶段产�
 - **模板**：`期望表达式：{context}`
 - **消息**：解析器期望一个表达式
 - **帮助**：在此位置提供一个有效的表达式
-- **发射点**：`src/frontend/core/parser/pratt/nud.rs:133`、`src/frontend/core/parser/pratt/nud.rs:173`、`src/frontend/core/parser/pratt/nud.rs:190` 等 4 处
+- **发射点**：`src/frontend/core/parser/pratt/nud.rs:134`、`src/frontend/core/parser/pratt/nud.rs:174`、`src/frontend/core/parser/pratt/nud.rs:191` 等 4 处
 
 ### E0018：关键字作名称
 

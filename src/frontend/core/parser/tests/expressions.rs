@@ -154,10 +154,11 @@ fn test_fstring_segments_format_spec() {
 }
 
 #[test]
-fn test_fstring_interpolation_tokenize_count_is_one() {
-    // 05 §「f-string 嵌套编译必须显式处理」：N 个插值不得各自重入公共词法。
-    // 解析一个含 3 个插值的 f-string 时，公共 tokenize 只应发生 1 次（外层源码），
-    // 插值表达式由一次性批量词法取回（lex_interpolations）。
+fn test_fstring_interpolation_does_not_reenter_public_lexer_entry() {
+    // entry-call 特征化（WBS 8.2.4）：只守「parser 不逐插值重入公共词法入口
+    // tokenize」这条入口边界，不宣称「完整词法分析只做 1 次」——批量入口内部
+    // 对每个插值仍各跑一次完整 Lexer，完整词法分析次数仍为 N+1。
+    // 05:107 的 N+1 可观测量的真正收敛（单遍覆盖全部插值段）由 WBS 8.2.4 承接。
     use crate::frontend::core::lexer::{
         interpolation_batch_call_count, reset_lexing_call_counts, tokenize_call_count,
     };
@@ -176,12 +177,12 @@ fn test_fstring_interpolation_tokenize_count_is_one() {
     assert_eq!(
         tokenize_call_count(),
         1,
-        "解析 f-string 不得重入公共 tokenize（改前为 1 + N = {} 次）",
+        "parser 不得重入公共词法入口（entry-call 特征化；改前为 1 + N = {} 次；完整词法仍 N+1，单遍目标见 WBS 8.2.4）",
         1 + interpolation_count
     );
     assert_eq!(
         interpolation_batch_call_count(),
         1,
-        "N={interpolation_count} 个插值必须只发生一次插值段词法"
+        "每个 f-string 只允许一次批量入口调用（entry-call 特征化；内部仍逐插值跑 Lexer，见 WBS 8.2.4）"
     );
 }

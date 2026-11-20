@@ -100,13 +100,16 @@ fn record_interpolation_batch_call() {
     INTERPOLATION_BATCH_CALLS.with(|calls| calls.set(calls.get() + 1));
 }
 
-/// 测试用：公共词法入口被调用次数。用于证明 f-string 插值不再逐条重入词法。
+/// 测试用：公共词法入口被调用次数（entry-call 特征化：检查 parser 不再逐插值
+/// 重入公共入口；完整词法分析次数仍为 N+1，单遍目标见 WBS 8.2.4）。
 #[cfg(test)]
 pub(crate) fn tokenize_call_count() -> usize {
     TOKENIZE_CALLS.with(std::cell::Cell::get)
 }
 
-/// 测试用：一次性插值批量词法（lex_interpolations）被调用次数。
+/// 测试用：一次性插值批量词法（lex_interpolations）被调用次数（entry-call
+/// 特征化：每个 f-string 只允许一次批量入口调用；内部仍逐插值跑 Lexer，
+/// 完整词法分析仍 N+1，见 WBS 8.2.4）。
 #[cfg(test)]
 pub(crate) fn interpolation_batch_call_count() -> usize {
     INTERPOLATION_BATCH_CALLS.with(std::cell::Cell::get)
