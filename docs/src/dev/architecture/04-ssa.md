@@ -238,9 +238,9 @@ if let Some(vars) = self.release_plan.get(&stmt.span) {
 
 | 变体 | 全仓实测 | 处置 |
 | --- | --- | --- |
-| `Const(ConstValue)` | 32 个文件 / 143 处命中 | **保留**，不变 |
+| `Const(ConstValue)` | 35 个文件 / 148 处命中 | **保留**，不变 |
 | `Value(ValueId)` | 7 个文件 / 26 处命中；**生产构造点 0**（生产端归 7b.2 的 `next_temp_reg`） | **保留**（7b.1a 引入） |
-| `Local(usize)` | 29 个文件 / 416 处命中 | **保留但拆分语义**（见下） |
+| `Local(usize)` | 29 个文件 / 417 处命中 | **保留但拆分语义**（见下） |
 | `Arg(usize)` | 8 个文件 / 11 处命中 | **保留**，作为函数入口的隐式定义（参数即块 0 的定义） |
 | `Global(usize)` | 16 个文件 / 26 处命中 | **保留**，不变 |
 | `Temp(usize)` | **0 个构造点**（处理臂只在 `codegen/operand.rs` 的 `OperandResolver::to_reg` 与 `is_register`，随变体一并删除） | **已删除**（死变体，7b.1a） |
@@ -317,7 +317,7 @@ pub struct ValueInfo {
 | `ir.rs` 结构变更 | +120 ~ 180 行 | `ValueId` / `Phi` / `ValueInfo` / 值表；**7b.1a 落地前两项**（实测 `src/middle/ir/ir.rs` +37/−3 行、`normalize.rs` +22/−5、`verify.rs` +63/−14）；`ValueInfo` 与值表待 7b.1b |
 | `translator.rs` 加 `Phi` 臂 | +25 ~ 40 行（待 7b.3） | 现有 50 个 `translate_*` 之一 |
 | `executor/` | **零改动** | 方案 A：`Phi` 是 IR-only 伪指令，在 `translator.rs` 展开为 Move 串，不进字节码（决策三） |
-| 临时值改产 `Operand::Value` 的调用点 | 机械替换（待 7b.2） | **已实测**（`git grep -c` 按文件求和，`src/` 全量含测试）：`Operand::Local(` 共 414 处 / 28 文件，其中 `src/middle/lower/` 332 处 / 14 文件；临时值的改产点是单点 `next_temp_reg` |
+| 临时值改产 `Operand::Value` 的调用点 | 机械替换（待 7b.2） | **已实测**（`git grep -c` 按文件求和，`src/` 全量含测试）：`Operand::Local(` 共 415 处 / 28 文件，其中 `src/middle/lower/` 332 处 / 14 文件；临时值的改产点是单点 `next_temp_reg` |
 
 ### 逐项处置表
 
@@ -467,18 +467,18 @@ self.release_plan_total = type_result.release_plan.drops.len();
 
 ### IR 结构变更的连锁影响
 
-#### `src/middle/core/ir.rs`（905 行）
+#### `src/middle/ir/ir.rs`
 
 | 改动 | 位置 | 性质 |
 | --- | --- | --- |
-| 新增 `ValueId(u32)` 类型 | 文件头 `10` 附近 | 新增 |
-| `Operand` 删 `Temp` / `Label` / `Register`，增 `Value(ValueId)` | `12-20` | **变体增删** |
-| `Instruction` 新增 `Phi` 变体 | `47-533` 末尾 | **变体 +1 → 77** |
-| `FunctionBody::Code` 增 `values: Vec<ValueInfo>` | `636-642` | 字段 +1 |
-| 新增 `ValueInfo` 结构 | `660` 附近 | 新增 |
-| `all_instructions` / `blocks` / `blocks_mut` / `locals` | `689-719` | 需加 `values()` / `values_mut()` 访问器 |
+| 新增 `ValueId(u32)` 类型 | 文件头（`ValueId` 定义） | 新增（**7b.1a 已落地**） |
+| `Operand` 删 `Temp` / `Label` / `Register`，增 `Value(ValueId)` | `Operand` 枚举定义 | **变体增删**（**7b.1a 已落地**） |
+| `Instruction` 新增 `Phi` 变体 | `Instruction` 枚举末尾（`Phi` 变体） | **变体 +1**（**7b.1a 已落地**；枚举现为 75 个变体） |
+| `FunctionBody::Code` 增 `values: Vec<ValueInfo>` | `FunctionBody::Code` | 字段 +1（待 7b.1b） |
+| 新增 `ValueInfo` 结构 | `ValueInfo` | 新增（待 7b.1b） |
+| `all_instructions` / `blocks` / `blocks_mut` / `locals` | 同名访问器 | 需加 `values()` / `values_mut()` 访问器（待 7b.1b） |
 
-`ir.rs:3` 的 `pub use ...ast::Type` **本文不动**——它是 [03](03-type-unification.md) 的范围。但 `ValueInfo::ty` 必须用**收敛后**的单一类型。
+文件头的 `pub use ...ast::Type` **本文不动**——它是 [03](03-type-unification.md) 的范围。但 `ValueInfo::ty` 必须用**收敛后**的单一类型。
 
 #### `src/middle/core/bytecode.rs`（2422 行）
 

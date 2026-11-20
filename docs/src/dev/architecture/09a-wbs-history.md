@@ -7380,7 +7380,7 @@ Phi {
 
 > 用户 2026-11-20 裁决「现在就修（插队）」：`trial` 的文档形态与 Python 3.12.5 的 argparse 实际行为不一致。跨框（P0 0.4）已获准并入 7b 团队执行；WBS 登记见 [09](./09-execution-wbs.md) §P0 0.4 表的 0.4.2 行（三级计数 252）。本项只改工具 CLI 契约与文档，**不动 trial 的安全语义**。
 
-### 一、复现（改动前：2.1.5 登记笔后的 t1 收口 HEAD，冻结 revision）
+### 一、复现（改动前：7b.1a 代码笔（rebase 后）的 t1 收口 HEAD，冻结 revision）
 
 批次树 `p7-7b1a-trialargs`（基线 = 上述冻结 revision），补丁 = 验证侧留下的 `patches/m1.patch`（改 `src/middle/ir/ir.rs` 的 `for_each_operand_mut` 的 Phi 臂）：
 
@@ -7445,34 +7445,35 @@ Phi {
 5. **WBS 组行**：0.4 组行按 0.2.4 先例保持「本二级不整行勾完成」（`- [ ]`）并加注记；0.4.1 与 0.4.2 的完成状态在各自行内。
 6. **缺命令形态（t7 F1）**：修前 `trial <b> --patch <m1> --`（本笔推荐的 `--` 形态、命令为空）先 `git apply` 再拒绝，树残留变异态（reviewer 实测 `hash-object` = 变异 blob ≠ HEAD）。缺陷本体在 0.4.2 之前已存在，本笔把推荐形态的可达面扩大到该早退路径。修复：校验前移到 `cmd_trial` 入口（`git apply` 之前）；现在两种缺命令形态都在变异前 exit 2，树 `git status --porcelain` 为空、blob = HEAD。HOWTO §三 与 `--help` 已注明「命令不可为空」。
 7. **退出码实测更正（t7 F2）**：命令未启动（如命令不存在）时 `subprocess.run` 抛 `FileNotFoundError` 并如实上抛，进程 **exit 1**；restore 仍必达（`apply -R 成功`、blob 回 HEAD、CLEAN）。`if rc is None: sys.exit(2)` 是防御分支、当前实现下不可达，保留不改变退出码语义；若要收敛为 exit 2 属退出码语义变更，需另作裁决。t6 提交信息（被复审对象）**不改写历史**，事实更正以本记录与修复提交说明承载。
-8. **本地哈希（t7 F3）**：t6 记录里引用的**本地未推送 revision 哈希**已从 §一/§三 移除，改为「2.1.5 登记笔后的 t1 收口 HEAD（冻结 revision）」的不带哈希描述；§三 表内的完整前缀同步改为「上述冻结 revision」。7b.1a 契约段引用的 7b.1a 登记笔哈希属既有欠账，已在 **t4 收口** 一并改为不带哈希的描述，本任务不改写。
+8. **本地哈希（t7 F3）**：t6 记录里引用的**本地未推送 revision 哈希**已从 §一/§三 移除，改为「7b.1a 代码笔（rebase 后）的 t1 收口 HEAD（冻结 revision）」的不带哈希描述；§三 表内的完整前缀同步改为「上述冻结 revision」。7b.1a 契约段引用的 7b.1a 登记笔哈希属既有欠账，已在 **t4 收口** 一并改为不带哈希的描述，本任务不改写。
 9. **混用形态（t7 F4）**：`main()` 检测「argparse 已解析出 command 且 `--` 之后也有命令」→ `p.error` 报「二选一」、exit 2，树未变异；HOWTO §三 与 `--help` 已写明「混用会被拒绝」。此前静默丢弃 argparse 命令的行为不再出现。
 
 ## P7 7b.1a 收口（`Operand` 变体收敛 + `Instruction::Phi` 引入，2026-11-20）
 
-> 收口对象 = WBS 二级任务 7b 的首轮三级任务 7b.1a。代码由实现轮落库，验证轮在冻结 revision 的批次树上独立复算，复审轮给出 verdict=pass。本段按登记口径写实测数字与机械证据；**不写本地提交号**（哈希随 `pull --rebase` 改写），指向以「笔的性质 + 文件清单」定位。
+> 收口对象 = WBS 二级任务 7b 的首轮三级任务 7b.1a。代码由实现轮落库，验证轮在冻结 revision 的批次树上独立复算，复审轮给出 verdict=pass。**本段在 rebase 集成后按新基线改写**：判据数字重绑到集成重验轮（§一、§四），rebase 前的验证与复审结论按历史语境保留，集成事实见 §九。**不写本地提交号**（哈希随 `pull --rebase` 改写），指向以「笔的性质 + 文件清单」定位。
 
 ### 一、判据链（实测数字）
 
-冻结 revision = **2.1.5 登记笔之后的 t1 收口 HEAD**（含 2.1.5 的测试修复与登记两笔）。验证轮的全部量测在 `scripts/dev/scratch.py` 的批次树内完成（`init` → `use --rev` → `build` → 量测 → `release` → `gc`），主仓工作树全程干净；复审轮在同一 revision 上以 `git show <rev>:<file>` / `git grep <rev>` 复核，未读工作树。
+冻结 revision = **7b.1a 集成 HEAD**（rebase 后 = `origin/dev` + 7b.1a 契约笔与代码笔 + 0.4.2 两笔 + 7b.1a 收口登记两笔 + 再生错误码文档笔；含 origin 侧 2.1.4 的源码改动）。验证与复审轮的全部量测在 `scripts/dev/scratch.py` 的批次树内完成（`init` → `use --rev` → `build` → 量测 → `release` → `gc`），主仓工作树全程干净；复审轮以 `git show <rev>:<file>` / `git grep <rev>` 复核，未读工作树。本表数字全部取自 **rebase 后集成重验轮**（rebase 前基线的对应数字与差异见 §九）。
 
 | 门禁 | 结果 |
 | --- | --- |
 | `cargo fmt --check` | exit 0 |
 | `cargo clippy --all --all-features --all-targets -- -D warnings` | exit 0 |
 | `cargo test --lib snapshot` | exit 0 = 6 passed / 0 failed / 1 ignored（IR 快照 **232 份零漂移**） |
-| `cargo test --lib verify` | exit 0 = 26 passed / 0 failed |
-| `cargo test --lib middle::ir::tests` | exit 0 = 59 passed / 0 failed / 1 ignored |
+| `cargo test --lib verify` | exit 0 = **30 passed / 0 failed / 0 ignored** |
+| `cargo test --lib middle::ir::tests` | exit 0 = **64 passed / 0 failed / 1 ignored** |
 | `cargo test --lib phi` | exit 0 = 33 passed |
-| `python scripts/dev/testsuite.py run fast` | exit 0 = 1 波 **2361 条**，跳过 0 波 |
+| `python scripts/dev/testsuite.py run fast` | exit 0 = 1 波 **2398 条**，跳过 0 波 |
 | `cargo run --example corpus_probe` + 语料差分门禁 | exit 0 = **402 / 402**，逐条差分空 |
-| `check-docs-truth` / `check-fanout` / `check-test-channel` / `check-docs-refs` | 全 exit 0（本批无既有红） |
+| `check-docs-truth` / `check-fanout` / `check-test-channel` / `check-docs-refs` / `check-docs-orphan` | 全 exit 0（docs-refs = **1244 个跟踪文本文件 / 12920 个路径状 token**） |
+| `python scripts/docs/gen-error-code-docs.py` + `git diff --quiet` | exit 0 且差分为空（生成器幂等） |
 
-**零漂移的归因不是「基线整批重写」**：7b.1a 代码笔未触碰任何基线文件（`git diff --stat -- src/middle/ir/tests/snapshots tests/baselines` 为空；232 份快照与 37 份基线原样）。行为等价的静态理由与运行时证据互证——三个死变体在动工前的冻结 revision 上只有 11 处**模式匹配**、0 处值位置构造（逐处判读），删臂不改变任何既有 IR 的渲染与分析输出；新增的 `Value` / `Phi` 面语料不可达。
+**零漂移的归因不是「基线整批重写」**：7b.1a 的代码笔未触碰任何基线文件（`git diff --stat origin/dev..HEAD -- src/middle/ir/tests/snapshots tests/baselines` 为空；IR 快照 **232 份**与语料差分基线（`tests/baselines/corpus-parity.jsonl`，402 行记录）相对 `origin/dev` 零 diff）。行为等价的静态理由与运行时证据互证——三个死变体在 7b.1a 动工前的冻结 revision 上只有 11 处**模式匹配**、0 处值位置构造（逐处判读），删臂不改变任何既有 IR 的渲染与分析输出；新增的 `Value` / `Phi` 面语料不可达。
 
-**真双 / 三方二进制探针**（逐字节）：三个 revision 各自再生 232 份规范化 IR 文本，两组对比各 **232 / 232 相同**；CLI 探针 5 夹具 × check/run/dump × stdout/stderr/exit = **45 / 45 逐字节相同**；语料差分 JSONL 两份各 402 行、SHA-256 相同。登记差异：三个二进制的 SHA-256 互不相同（rustc 输出不可复现，同源不同字节），行为面零差。
+**真双 / 三方二进制探针**（逐字节，rebase 前基线的独立验证轮证据）：三个 revision 各自再生 232 份规范化 IR 文本，两组对比各 **232 / 232 相同**；CLI 探针 5 夹具 × check/run/dump × stdout/stderr/exit = **45 / 45 逐字节相同**；语料差分 JSONL 两份各 402 行、SHA-256 相同。登记差异：三个二进制的 SHA-256 互不相同（rustc 输出不可复现，同源不同字节），行为面零差。rebase 后的等价证据 = 集成重验轮的快照与语料相对 `origin/dev` 零 diff（见 §一 表与 §四）。
 
-**机械可逆变异**（补丁 → 转红 → 机械还原 → 重测全绿）：实现轮 4 条、验证轮 5 条、复审轮 2 条、2.1.5 夹具 2 条。变异命中本批新增的直驱判据（`for_each_operand_mut` 的访问序与写穿、`verify_ssa` 的 `dst` 必为 `Operand::Value`），证明这些判据在承重。
+**机械可逆变异**（补丁 → 转红 → 机械还原 → build → 重测全绿）：rebase 前基线——实现轮 4 条、验证轮 5 条、复审轮 2 条；rebase 后集成重验轮 **3 条**（`for_each` 的 `Phi` 臂摘 incoming / 渲染删前驱升序 / `verify` 的 `dst` 判据短路），分别 62 passed / 2 failed、63 passed / 1 failed、63 passed / 1 failed 转红，还原并重建后一律 **64 passed / 0 failed / 1 ignored** 回绿。变异命中本批新增的直驱判据（`for_each_operand_mut` 的访问序与写穿、`verify_ssa` 的 `dst` 必为 `Operand::Value`、渲染的前驱升序），证明这些判据在承重。
 
 ### 二、`Operand` 收敛与 `Instruction::Phi` 引入的机械证据
 
@@ -7494,9 +7495,9 @@ Phi {
 
 ### 四、验证与复审结论
 
-- **验证轮（独立验证）：通过。** 13 条门禁全绿；真双 / 三方二进制探针逐字节零差；5 条机械可逆变异各自转红后还原。
-- **复审轮：verdict = pass。** 八类逐条成立：D0（权威源 = `src/middle/ir/ir.rs`；目录职责表 01-routing 的 `middle/ir/` = 「IR 定义与不变量」）、D1/D2（`ValueId` 与 `Phi` 依据 04 §值标识方式 / §`Phi` 变体，无同语义别名、无 import 别名弥合）、D3/D4（无新入口、落在既有职责类别）、红线（`todo!` / `unimplemented!` 在动工前后同 9 处逐行相同、`include!` 0、`pub(crate)` 183→183→183、`use super::*` 0 命中、测试数 20→21 且无 `#[ignore]`、未删测试未放宽判据）、inScope（代码笔的 10 个文件全在契约 §五 内）、契约一致性（11 + 6 + 3 三组清单逐处对应）、占位诚实性（见 §三）、等价性归因（见 §一）、提交规范（代码独占一笔、提交信息含 D0–D4 与 D59「无行为变更（表示重塑）」、契约笔先于代码笔、工作树干净、未 push）。
-- **跨框前置 2.1.5**：测试重定向复核通过——真实语料侧删除前已绿（同名测试改按 #542 终态断言），「删除前红、删除后绿」性质由新增合成夹具 `test_orphan_shared_layer_dominance_red_turns_green_after_dce` 承担（删除前唯一违规 = `Dominance` 且消息点名 `use-before-def` → 删除后绿）；未删测试、未 `#[ignore]`、未放宽断言；09 的三级计数与 09a 的 2.1.5 记录与实现一致。
+- **验证轮（独立验证）：通过。**（rebase 前基线）13 条门禁全绿；真双 / 三方二进制探针逐字节零差；5 条机械可逆变异各自转红后还原。**rebase 后集成重验：通过。** 新基线上 13 条门禁全绿（数字见 §一 表）；补丁级冲突合并审计（7b.1a 增量的 10 个文件中 9 个逐行一致，唯一差异是 `src/middle/ir/tests/verify.rs` 的 import 行两侧并存）；`src/` 侧相对 `origin/dev` 的差异只含 7b.1a 的增量，origin 2.1.4 的按槽身份判据（`LocalSlot::origin` / `FrameId` / `slot_frames()`）原样在位；3 条机械可逆变异各自转红后还原并重建回绿。
+- **复审轮：verdict = pass。** 八类逐条成立：D0（权威源 = `src/middle/ir/ir.rs`；目录职责表 01-routing 的 `middle/ir/` = 「IR 定义与不变量」）、D1/D2（`ValueId` 与 `Phi` 依据 04 §值标识方式 / §`Phi` 变体，无同语义别名、无 import 别名弥合）、D3/D4（无新入口、落在既有职责类别）、红线（`todo!` / `unimplemented!` 在动工前后同 9 处逐行相同、`include!` 0、`pub(crate)` 183→183→183、`use super::*` 0 命中、未删测试未放宽判据）、inScope（代码笔的 10 个文件全在契约 §五 内）、契约一致性（11 + 6 + 3 三组清单逐处对应）、占位诚实性（见 §三）、等价性归因（见 §一）、提交规范（代码独占一笔、提交信息含 D0–D4 与 D59「无行为变更（表示重塑）」、契约笔先于代码笔、工作树干净、未 push）。
+- **跨框前置（rebase 前历史轮次，本批不含其提交）**：DCE 测试重定向那一轮（rebase 前作为跨框前置执行：把同一 DCE 测试的红改到终态形态，红→绿性质交给合成夹具 `test_orphan_shared_layer_dominance_red_turns_green_after_dce` 承担）在 rebase 整合时**未重放**——origin 侧的 3.21.5 已承接同一修复（同一 DCE 测试红、同一终态判据），故本批不含该轮的两笔提交；rebase 前的复核结论（真实语料侧删除前已绿、未删测试、未 `#[ignore]`、未放宽断言）按历史语境保留。
 
 ### 五、独立性与编排偏差（如实登记）
 
@@ -7505,17 +7506,17 @@ Phi {
 **本轮编排**：
 
 - 复审终审由 **docs-1** 承担（用户 2026-11-20 裁决 B 后改派：review-1 的 GLM 5 小时额度于当日 17:29:53 用尽）。偏差如实登记：docs-1 与实现者不同族、**与验证者同族、且与本收口轮为同一成员** ⇒ 复审、验证、收口三者互不独立。
-- review-1 在复审轮留下的实质证据：批次树内的四门测试复跑（snapshot 6/0/1、verify 26/0、ir::tests 59/0/1、phi 33/0）、18 个 CLI 探针、2 条机械可逆变异（各自转红后还原、树 CLEAN）。该证据与终审结论并列保留，不互相替代。
+- review-1 在复审轮留下的实质证据：批次树内的四门测试复跑（snapshot / verify / ir::tests / phi 全绿，**rebase 前基线**）、18 个 CLI 探针、2 条机械可逆变异（各自转红后还原、树 CLEAN）。该证据与终审结论并列保留，不互相替代。
 - 0.4.2 的复审（t7 → t8 → t9）由 **verify-1** 承担（与验证者同族）：t7 给出 needs_revision 的四条 findings（F1 缺命令守卫前移、F2 命令未启动的退出码表述、F3 本地哈希引用、F4 混用形态未拒绝），t8 修复轮逐条收口，t9 复审轮 2 给出 **pass** 并附一条不阻塞的残余 F5。**0.4.2 的复审结论以 t9 为准。**
-- 验证轮的 verdict 绑定「2.1.5 登记笔之后的 t1 收口 HEAD」。当前 HEAD 与该冻结 revision 的差异只有 0.4.2 的两笔（`scripts/dev/scratch.py`、HOWTO、09/09a），**`src/` 与 `tests/` 无差异**（`git diff --stat <冻结 revision> HEAD -- src tests` 为空），故 7b.1a 的代码面判据在两侧同面。
+- 验证轮的 verdict 绑定 rebase 后的 **7b.1a 集成 HEAD**（§九）。集成重验以 `origin/dev` 为基线复核：快照与语料基线相对 `origin/dev` **零 diff**（`git diff --stat origin/dev..HEAD -- src/middle/ir/tests/snapshots tests/baselines` 为空）；`src/` 侧相对 `origin/dev` 的差异只含 7b.1a 的增量（`Local|Temp`→`Local`、`Phi` 臂、`check_phi_structure`），origin 2.1.4 的按槽身份判据原样在位。
 
 **补偿证据**（按 7a 先例）：冻结 revision 独立复核、机械可逆变异、真双 / 三方二进制探针、生成物差分逐行 review。
 
 ### 六、生成物与推送门禁（本轮新发现）
 
-7b.1a 的代码笔改动了诊断发射点面，但**生成物未随代码再生**：新增 `src/middle/passes/codegen/operand.rs` 的 E3017 发射点（`Operand::Value` 显式诊断）、删除 `Temp` 臂带走的一处 E3014 发射点、`translator.rs` 行号平移带动的 E8xxx 发射点行号变化。跑 `python scripts/docs/gen-error-code-docs.py` 的差分 = 2 文件 3 行：`docs/src/reference/error-code/index.md` 的 `E3017`「✅ 3 处」→「✅ 4 处」、`E3014`「✅ 4 处」→「✅ 3 处」；`docs/src/reference/error-code/E8xxx.md` 的发射点行号 `translator.rs:1382` → `1391`。逐行 review 确认全部是 7b.1a 引入的机械平移，无内容改写。
+7b.1a 的代码笔改动了诊断发射点面，但**生成物未随代码再生**：新增 `src/middle/passes/codegen/operand.rs` 的 E3017 发射点（`Operand::Value` 显式诊断）、删除 `Temp` 臂带走的一处 E3014 发射点、`translator.rs` 行号平移带动的 E8xxx 发射点行号变化。跑 `python scripts/docs/gen-error-code-docs.py` 的差分 = 2 文件 3 行：`docs/src/reference/error-code/index.md` 的 `E3017`「✅ 3 处」→「✅ 4 处」、`E3014`「✅ 4 处」→「✅ 3 处」；`docs/src/reference/error-code/E8xxx.md` 的发射点行号 `translator.rs:1382` → `1391`。逐行 review 确认全部是 7b.1a 引入的机械平移，无内容改写。rebase 整合后该生成物在**合并后的树上重新再生**（origin 侧已为 2.1.4 再生过一次，不能沿用 rebase 前的差分），再生结果与上表一致：`E3017` = 4 处、`E3014` = 3 处、E8xxx 发射点行号 `translator.rs:1391`；生成器幂等（`git diff --quiet` 为空）。
 
-CI 的「Error-code docs up to date (generator idempotent)」步骤（`.github/workflows/ci.yml`）以「跑生成器 + `git diff --quiet` 非空即 exit 1」拦截，不补笔则推送后必红——该门禁的注释本身记着同类事故（2026-10-15 #452/#454：收敛提交未再跑生成器，页面停在旧计数上）。按 **AGENTS 团队编排约定第 6 条**（契约 inScope 必须覆盖「生成物」）把 `docs/src/reference/error-code/` 纳入本轮 inScope，补一笔「再生错误码文档」并入本批；**该笔未落库前不得推送**。
+CI 的「Error-code docs up to date (generator idempotent)」步骤（`.github/workflows/ci.yml`）以「跑生成器 + `git diff --quiet` 非空即 exit 1」拦截，不补笔则推送后必红——该门禁的注释本身记着同类事故（2026-10-15 #452/#454：收敛提交未再跑生成器，页面停在旧计数上）。按 **AGENTS 团队编排约定第 6 条**（契约 inScope 必须覆盖「生成物」）把 `docs/src/reference/error-code/` 纳入该批 inScope，补一笔「再生错误码文档」并入本批；**该笔已随本批落库（合并后重新再生的一笔），推送前须确认它在待推分支上**。
 
 ### 七、复审备案（OBS-1–OBS-6）与已知残余
 
@@ -7524,12 +7525,23 @@ CI 的「Error-code docs up to date (generator idempotent)」步骤（`.github/w
 - **OBS-3（info，渲染测试的性质）**：`test_normalize_renders_phi_incoming_sorted_by_predecessor` 冻结渲染文本形态，按 coding-rules §7.1 属特征化而非性质检查；准入走「条款」门（07 §第二层「前驱排序」+ 09a 契约 §二），合规，但**不得当作对替代渲染器的门禁**。
 - **OBS-4（info，静默通道边界）**：`Phi` 的生产端本批不存在、消费端是响亮 `unreachable!`——生产者先于消费者出现时会 panic 而非静默通过；该性质依赖 7b.2 / 7b.3 的顺序，**7b.3 落地前禁止出现 `Phi` 生产点**。
 - **OBS-5（info，登记补齐）**：5 处测试夹具的 `Phi` 构造点已在 §二 逐处登记；09 的 7b.1a 行已标「已完成（2026-11-20）」，7b 组勾选框按「6 个三级任务未全完」保持未勾。
-- **OBS-6（info，跨笔归属）**：父 revision 的 fmt 欠账由一笔独立的 style 笔承担（只重排 `src/driver/tests/dce_wiring.rs` 的 1 行 import，零行为），已在 09a §P7 批 b 前置 2.1.5 §四.2 登记为「授权前置」，与 7b.1a 代码笔不混。
+- **OBS-6（info，跨笔归属）**：父 revision 的 fmt 欠账（`src/driver/tests/dce_wiring.rs` 的 1 行 import 排序，零行为）在 rebase 整合时**未重放**——origin 侧已有同改动（`git show origin/dev:…` 同形），故本批不再保留该笔。
 - **F5（既有、low、不阻塞，来自 0.4.2 复审轮 2）**：`scratch.py trial` 对**空补丁 / 被 `.gitignore` 忽略的路径**的早退仍发生在 `git apply` 之后且不还原——树在早退后可能残留变异态。该边界在 0.4.2 之前已存在，本轮**不修**；建议另开 **0.4.3** 处理（把「空补丁 / 被忽略路径」的判定前移到 apply 之前）。
 
 ### 八、偏差与既有项
 
-1. **04 的旧路径欠账（既有）**：04 的「编译器改动清单」仍有 7.0 搬移前的路径（如 `src/middle/core/ir_gen.rs` 系列），属 7b.2 / 7c / 7d 批次的既有欠账；本轮只就地更正本批触及的行（改动项 1–6），其余留各自批次落地时就地更正。
+1. **04 的旧路径欠账（既有）**：04 的「编译器改动清单」与「IR 结构变更的连锁影响」两节仍有 7.0 搬移前的路径（如 `src/middle/core/ir_gen.rs`、`src/middle/core/bytecode.rs` 系列），属 7b.2 / 7c / 7d 批次的既有欠账；本轮只就地更正本批触及的行（改动项 1–6 与连锁影响的 `ir.rs` 段），其余留各自批次落地时就地更正。
 2. **`Instruction` 变体数口径更正**：04 原写「76 个变体 → 新增 `Phi` → 77」；现树实测 `ir.rs` 的 `Instruction` 枚举为 **75 个**变体（`Phi` 已含在内），按现树更正（计数口径 = 枚举变体名计数）。
-3. **本地哈希引用清理（既有欠账，由 0.4.2 修复轮登记给本轮）**：7b.1a 契约段原先引用的冻结 revision 哈希已改为不带哈希的描述（「7b.1a 契约笔之前的冻结 revision」）。
-4. **本轮未改动 inScope 外文件**；未跑 `git push` / `fetch` / `pull`。
+3. **本地哈希引用清理（既有欠账，由 0.4.2 修复轮登记给本轮）**：7b.1a 契约段原先引用的冻结 revision 哈希已改为不带哈希的描述（「7b.1a 契约笔之前的冻结 revision」）；0.4.2 段两处「登记笔后的 t1 收口 HEAD」描述已改为「7b.1a 代码笔（rebase 后）的 t1 收口 HEAD」。
+4. **本轮（rebase 后收口改写）只改 09 / 09a / 04 三个文件**，未碰 `src/`、`tests/`、`scripts/`；未跑 `git push` / `fetch` / `pull`。
+5. **en 镜像（04）未手改**：中英镜像的规则是「zh 是源，en 由翻译工作流同步」；本轮 inScope 不含 `docs/src/en/dev/architecture/04-ssa.md`，故只核对未改写。zh 本轮更新的实测数字（`Operand` 变体表的命中数、`Operand::Local(` 的处数、连锁影响段的符号路径）在 en 侧仍为 rebase 前的值，待翻译工作流按 zh 同步——**en 侧在那之前不是 zh 的等价镜像，属已知待同步项**。
+
+### 九、rebase 整合（集成事实）
+
+本地 7b 分支已重放到 `origin/dev`（rebase 前的 `pull --rebase` 启动后中止，改为 reset 到 `origin/dev` + 逐笔 cherry-pick）。`origin/dev` 期间并发推进 **30 笔**（2.1.4 收口、3.21.5 的 DCE 测试重锚、错误码文档再生、批 a 收口等），与本批的交集如下：
+
+- **丢弃的三笔（与 origin 重复）**：父 revision 的 fmt 欠账笔（只重排 `src/driver/tests/dce_wiring.rs` 的 1 行 import）——origin 侧已有同改动；DCE 测试重定向那一轮的测试修复笔与其登记笔——origin 侧的 3.21.5 已承接同一 DCE 测试红与同一终态判据。故本批不再含这两类提交，相应叙述已从本节与 0.4.2 段改写。
+- **保留并重放的**：7b.1a 契约笔、7b.1a 代码笔、0.4.2 两笔（工具面）、7b.1a 收口登记两笔；错误码生成物笔在**合并后的树上重新再生**（origin 侧已为 2.1.4 再生过一次，不能沿用 rebase 前的差分）。
+- **0.4.2 的 WBS 编号**：origin 的三级计数为 251（含 3.21.5 / 3.20.36 / 2.1.4 的登记），本批的 0.4.2 使其变为 **252**（09 的计数表已含「+1 = 0.4.2」）。
+- **冲突合并要点（逐处核对，不只看编译通过）**：`src/middle/ir/ir.rs` 同时含 7b.1a 的 `Operand::Value(ValueId)`、`Instruction::Phi`、span / for_each 两臂与 origin 的 `FrameId`、`LocalSlot::origin`；`src/middle/ir/verify.rs` 同时含 7b.1a 的 `check_phi_structure`、`InvariantKind::PhiConsistency`、`Phi` 的 def/use 臂与 origin 的 `slot_frames()`；`src/middle/passes/mono/mod.rs` 相对 origin 只差两处 `Local|Temp`→`Local`，origin 的 `LocalSlot { … origin: slot.origin, … }` 原样保留。补丁级对比：7b.1a 增量的 10 个文件中 9 个逐行一致，唯一差异是 `src/middle/ir/tests/verify.rs` 的 import 行（保留 origin 新增的 `FrameId, LocalSlot`，并加入 `ValueId`）。
+- **本节与集成重验报告的差异说明**：集成重验报告把 `tests/baselines` 记为「1 个文件」；严格说该目录下另有义务账本门禁的夹具目录（不属于本批判据面），本节按「语料差分基线 = `tests/baselines/corpus-parity.jsonl`（402 行记录）1 个文件」表述。其余数字（verify 30 / ir::tests 64 / run fast 2398 / 语料 402·402 / 快照 232 份零漂移 / docs-refs 1244·12920 / 生成器幂等）与集成重验报告一致；rebase 前基线的对应数字（verify 26 / ir::tests 59 / run fast 2361 / docs-refs 1240·12703）已被本轮重验取代，只作历史语境保留在本节。
