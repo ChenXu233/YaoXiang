@@ -4560,7 +4560,7 @@ P1 的形状判据与 ir_gen 的包装层产出形态耦合——「不再匹配
 
 > **一、判据与修法**：issue 自带甲案 A（只改文案/hint；乙案 B「解释器识别未初始化全局槽」需动运行期状态与 IR 表达，另议不采）+ 队长精确化：hint 进 **message 参数**（E6007 的 message 是参数、help 是该码静态模板——改 help 会打到全部 E6007 场景），条件 = 比较兜底臂**任一操作数是 `RuntimeValue::Void`**。修法 = 消息尾追加观测陈述 + 条件归因文案（a Void operand usually means a top-level value was read before initialization — if this happened during module initialization, check the initialization order inside the import cycle — compile-time warning W1007 reports that cycle），无 Void 操作数时消息**逐字不变**。
 
-> **二、查证（实现者推翻任务书一个前提，如实登记）**：实现者七源独立复核同意队长主体推导，但**「静态 Void vs Int 编译期拒绝」不成立**——Eq/Neq 的编译期类型规则走 `infer_equality`（非 `infer_binary` 的比较臂），对非记录形态吞掉 unify 结果恒返 Ok(Bool)：实测 `1 == "a"`、`v = void; v == 1`、`f: () -> Void; f() == 1` 三形态编译期全绿、运行期才落 E6007；排序比较（Lt/Le/Gt/Ge）才有两侧同型纪律（B9）。⇒ 运行期比较的 Void 操作数并非「未初始化读」单一来源，还可能是编译期放行的 Void 值比较——hint 按 usually/if 措辞容纳（#500 场景逐字准确）。Eq/Neq 与纪律的不一致另案登记 [#549](https://github.com/ChenXu233/YaoXiang/issues/549)（本笔只报告不修）。队长复审发现实现初版注释仍写「编译期比较规则已拦掉静态 Void」（与自身实测矛盾——成因断言过强，#519 批次同类），提交前修正为与实测一致。
+> **二、查证（实现者推翻任务书一个前提，如实登记）**：实现者七源独立复核同意队长主体推导，但**「静态 Void vs Int 编译期拒绝」不成立**——Eq/Neq 的编译期类型规则走 `infer_equality`（非 `infer_binary` 的比较臂），对非记录形态吞掉 unify 结果恒返 Ok(Bool)：实测 `1 == "a"`、`v = void; v == 1`、`f: () -> Void; f() == 1` 三形态编译期全绿、运行期才落 E6007；排序比较（Lt/Le/Gt/Ge）才有两侧同型纪律（判据本体 = infer_binary 比较臂，mixed_comparison_err.yx 钉）。⇒ 运行期比较的 Void 操作数并非「未初始化读」单一来源，还可能是编译期放行的 Void 值比较——hint 按 usually/if 措辞容纳（#500 场景逐字准确）。Eq/Neq 与纪律的不一致另案登记 [#549](https://github.com/ChenXu233/YaoXiang/issues/549)（本笔只报告不修）。队长复审发现实现初版注释仍写「编译期比较规则已拦掉静态 Void」（与自身实测矛盾——成因断言过强，#519 批次同类），提交前修正为与实测一致。
 
 > **三、锚四层（先红后绿）**：集成主锚（三模块导入环 CLI run 端到端，hint 两段子串断言）修前红（E6007 文本与 issue 报告逐字一致、无 hint）、修后绿；集成反向锚（无 Void 场景无 hint）；单元锚（字节码直驱兜底臂——Void 左/右形态有 hint，(Int, String) 无 hint 消息 assert_eq 逐字钉死，修前红 2 锚）；编译期守卫（排序比较拒绝跨类型，钉真实纪律——把「编译期拦截」判据钉在它真正成立的排序比较上）。
 
@@ -4688,7 +4688,7 @@ P1 的形状判据与 ir_gen 的包装层产出形态耦合——「不再匹配
 
 > **一、查证结论（探针矩阵，证伪「可按 C 类顺修」的前提）**：issue 框架的「编译期放行」实测拆成两类后果——①容器异型 Eq 4 形态族（列表 vs 元组、元素类型异型的组合）编译通过且**运行成功打印 false**：#304 已裁定的运行期语义支撑这些程序属「原先成功」程序，编译拒绝将改变其可观察行为 ⇒ D59 **D 类**，不满足顺路修条件；②标量异型比较、静态 Void 值比较、异型 Dict 比较在运行期落 E6007（旧行为非成功），属可顺修面但不构成独立裁决点。顺带观测**同型** Dict==Dict 运行期也 E6007（Handle 无比较臂）——备案，不在本裁决点内。受影响面 grep 实测零依赖（语料 / 测试无此类夹具）。
 
-> **二、裁决包（按四件套呈报 issue #549 评论，等用户裁决）**：情况与探针证据 / 每选项优缺点（选项 A 编译拒绝、全量对齐 B9 排序比较的两侧同型静态纪律——推荐，代价 = 改变容器异型比较程序行为、需基线再生与人工 review；选项 B 保留运行期 false、走设计流程）/ 推荐 A / 不可逆点（行为变更面）。裁决后另行实施与收口。
+> **二、裁决包（按四件套呈报 issue #549 评论，等用户裁决）**：情况与探针证据 / 每选项优缺点（选项 A 编译拒绝、全量对齐排序比较的两侧同型静态纪律（判据本体 = infer_binary 比较臂，mixed_comparison_err.yx 钉）——推荐，代价 = 改变容器异型比较程序行为、需基线再生与人工 review；选项 B 保留运行期 false、走设计流程）/ 推荐 A / 不可逆点（行为变更面）。裁决后另行实施与收口。
 
 > **三、关联**：#500 实现轮（3.20.14）在比较兜底臂注释登记了 Eq/Neq 编译期吞 unify 结果的机理（与排序比较纪律不一致的根因位置）。本批次零代码改动（查证 + 呈报），无验证链。
 
@@ -7618,10 +7618,12 @@ pub enum FunctionBody {
 ```
 
 访问器镜像 `locals()`（只读、TypeDecl 返回 `&[]`）与 `blocks_mut()`（可变、TypeDecl panic）：
+
 - `FunctionIR::values(&self) -> &[ValueInfo]`；
 - `FunctionIR::values_mut(&mut self) -> &mut Vec<ValueInfo>`（TypeDecl 上 `panic!("values_mut called on TypeDecl")`）。
 
 两处**登记给后续批次**（本批空表使其行为等价，不改变任何可观察输出）：
+
 1. mono 特化克隆的两个构造点（`passes/mono/function.rs:208`、`passes/mono/mod.rs:1383`）本批写空表 ⇒ 若 7b.2 开始填表，特化时必须补类型替换与 `defining_block` 映射；登记给 7b.2。
 2. `normalize` 不打印 values 表（空表 ⇒ 快照零漂移）；值表有内容时必须扩展渲染并把快照再生纳入该批；登记给 7b.2。
 
@@ -7702,6 +7704,7 @@ pub enum FunctionBody {
 4. **逐输入类型一致**：`Operand::Value(v)` 且值表非空时取 `values[v].ty`，用既有 `types_compatible` 比对（未引入第三套类型兼容判断），不一致报 `PhiConsistency`。
 
 **类型不可得三策略（逐条落档，不静默放行）**：
+
 - 值表为空 ⇒ 类型判定依据不存在 ⇒ **不判定**（本批生产形态；7b.2 填表后自动收紧）；
 - 值表非空而 `ValueId` 越界 ⇒ **报 `PhiConsistency`**（越界，无值信息）；
 - 非 `Value` 操作数（`Const` / `Local` / `Arg` / `Global`）⇒ 无值表类型源 ⇒ **不判定**（文档化，不视为豁免）。
@@ -7792,3 +7795,15 @@ pub enum FunctionBody {
 **7b.1b 表面未变**（RangePattern 与 #571 均属 origin 侧改动）：`Instruction` 变体数仍 **75**；`FunctionBody::Code {` 普查仍 **58**；`values` 仍恒空（`Operand::Value(` 在 `src/`（排除测试）只出现在模式与显式诊断臂，`Instruction::Phi` 只出现在穷尽 match 臂与占位文本 ⇒ 生产构造 0）；`LocalSlot::origin` 与 `FrameId` 原样（`src/middle/ir/ir.rs`）。
 
 **本节不写本地提交号**：本地四笔以「契约笔 / 代码笔 / 收口笔 / 数字重绑笔」定位；上文哈希均为 origin 侧已推送提交。
+
+## P3 3.24.2 收口（#549 异型 Eq 编译期拒绝——用户甲案，2026-11-20）
+
+> **一、范围与终态**：issue [#549](https://github.com/ChenXu233/YaoXiang/issues/549)（Eq/Neq 非记录形态吞 unify 恒放行跨类型与静态 Void 值比较——与排序比较的两侧同型纪律不一致）。**用户 2026-11-20 裁决甲案**（全量对齐），D59 **D 类**行为变更经裁决覆盖。推送终态两笔：主修笔 `fbca156b`（fix(sema)，13 文件）+ 修复笔 `d5475ace`（fix(backends)，t3 medium 注释更正）。三级 +1 = 3.24.2（253→254，基线含并行会话同日 +0.4.2 与 +7b.1a 组）；二级不变（归 3.24 组）。issue [#549](https://github.com/ChenXu233/YaoXiang/issues/549) 关闭（证据评论含 M2 降级登记）。
+
+> **二、修法与放行面**：infer_equality 非记录臂由 `let _ = self.solver.unify(...)` 吞结果恒放行改为与 infer_binary 排序比较臂同款 **decide 入口**——unify 失败报 E1002（resolve 后两侧原始形态，与排序比较臂同族同文）。放行面按既有规则收窄（判定函数文档登记，各带实现出处）：**Any/Never** 走 unify 顶部/底部类型规则放行（std/test.yx 的 Any == Any 槽位实测保活）；**TypeVar** 一侧延后判定（泛型体内合法）；**借用操作数**按 RFC-009 比较读穿透剥层（std/list.yx 的 list[i] == item 形态）。记录类型接口判定臂（E1101 逐字段）与接口存在值路径零变化；运行期兜底臂成不可达防御保留（executor.rs 注释明说编译期应先拦——本笔兑现）。接口存在类型包装值相等边界（调研开放问题①）实测走记录臂 E1101 零变化，锚 1 组钉住。
+
+> **三、语料处置（escalation 四条件裁定）**：t1 前两轮 IR 快照门禁红 = 两份语料在甲案下的预期漂移，实现者上报真死锁（「修复」与「禁止再生基线」在实现者侧互斥）⇒ 队长裁定解除本批再生禁令附四条件。**因果核清**（批次树实跑 d295eb0b）：两文件本批前均通过 ⇒ 分支②（漂移由本批引起）。①range_equality.yx:31 断言的正是被废除行为 ⇒ 迁 06-compile-errors/types/cross_container_equality_err.yx（mixed_comparison_err.yx 先例格式，expect: compile-error E1002），其余同型断言保留。②builtin_container_ctor.yx 的 E1002 显形根因 = **既有索引推断缺陷**（Vec(Int)[..](i) 元素位推断为 Type——v[0]+1 在本批前的 d295eb0b 即复现，与甲案无关）⇒ **另立 [#575](https://github.com/ChenXu233/YaoXiang/issues/575)**（本批不修），语料最小改写整容器同型比较绕开（原意图运行期深比较等价保留，说明锚双形态入文件头）。③基线再生 diff 全文留档逐条归因 + 队长人工核 PASS：parity 402→403（+1 = 新拒绝记录；两改动文件记录回归 exit 0 空诊断与旧基线同形）、range_equality.snap -14 行（迁移块）、builtin_container_ctor.snap 26+/19−（断言替换 + locals 14→18），无闭包外漂移。
+
+> **四、验证链与两项裁定**：t1 三轮（前两轮快照门禁红待裁定 → 第三轮 14 门禁全绿）→ 主修笔推送 → t2 **FAIL**（**M2 判据缺口**——「摘 TypeVar 延后臂 ⇒ std 泛型槽位锚红」被实测否定：decide 的 unify 对 TypeVar 是 bind 成功路径（solver.rs:520-526），摘臂与保留观测等价，全 lib 1957 / 集成 424 / 语料 403 三面全绿）+ t3 **REJECT**（1 medium + 3 info）→ **M2 降级裁定（选验证者方案②）**：该臂当前放行面上无独立可观测保护面，其行为由 unify 的 bind 语义自身维持——不造 occurs-check 夹具配无观测差异面的红判据（3.20.33 M3 教训：无观测差异面如实登记而非构造）；验证轮按其余八项（全 PASS）收口，降级登记于 #549 关闭评论与本节。**修复笔 `d5475ace`**：t3 medium = **兜底臂注释可达性断言过强**（称异型与静态 Void 比较已收口「不再放行到本臂」，但 void==void 同型经 unify 专属臂放行仍可达、Any 槽位运行期异型值仍可达——本笔 multifile 夹具 f(a:Any,b:Any) 传 (1,"a") 即实证）——**3.20.14 收口时队长修正过同一注释位的同款过强措辞（09a:4563 在案），同位复发**，就地改回观测陈述（异型与跨类型静态 Void 面已收口、同型 Void 与 Any 槽位运行期异型仍可达），仅注释行为零变化——按 3.23.2 先例（仅注释、代码行为逐字节一致）免 t3r。t3 info 三条处置：①**B9 悬空编号替换**（09:230 与 09a 两处「对齐 B9」→「判据本体 = infer_binary 比较臂，mixed_comparison_err.yx 钉」可解析指针——S6 的 B9=Switch 有 06 定义不动）；②锚列举 4 为 6 子集无虚构（check.rs 实为六形态探针）登记；③裁决落库时序正常（本节即闭环承载）。
+
+> **五、移交登记**：①#575（索引推断缺陷）待排期——修复涉及 builtin ctor 类型合成路径（D6.2 邻域）；②锚 7 组与 multifile 新夹具入 integration；③异型 Eq 收窄后 `#500` Void 主锚保持（hint 措辞观测陈述不变）；④语料 403 条新基线为甲案契约的冻结证据。批次树已 release + gc。
