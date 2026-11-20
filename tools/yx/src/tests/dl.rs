@@ -1,8 +1,10 @@
 //! 解包与校验辅助测试（RFC-037：版本目录 = 发行包解压根目录）
 //!
 //! 另含 HTTP 面的环境代理探针：dl.rs 的 `http_agent` 与 src/std/net.rs 的
-//! `ureq_agent` 同链显式禁用环境代理（对位 ureq 2 未启用 proxy-from-env 的
-//! 不读默认，#489 迁移对账）。代理变量是进程级的，agent 每次请求都重新
+//! `ureq_agent` 同链跟随 ureq 3 默认读取环境代理变量（`Proxy::try_from_env` 读
+//! HTTP_PROXY/HTTPS_PROXY/ALL_PROXY/NO_PROXY 等标准变量集；用户 2026-11-20 裁决
+//! issue #571：0.x 不做 2.x 兼容，直接跟进上游默认——HTTP_PROXY 指向死代理时
+//! 请求改道假代理必败）。代理变量是进程级的，agent 每次请求都重新
 //! 构造——进程内 set_var 会污染同进程并行运行的其它测试，探针走「重新拉起
 //! 本测试可执行文件、只在子进程注入环境」的形态（先例：
 //! `src/package/source/tests/git.rs` 的 GIT_DIR 重拉形态）。
@@ -76,15 +78,16 @@ fn serve_once(response: &str) -> (String, std::thread::JoinHandle<()>) {
 }
 
 #[test]
-fn test_dl_http_agent_ignores_http_proxy_env_var() {
+fn test_dl_http_agent_uses_dead_http_proxy_env_var() {
     // Arrange：HTTP_PROXY 注入必失败的假代理地址（127.0.0.1:1 无监听）。
-    // 契约：dl.rs http_agent 显式禁用环境代理——若读了环境代理，原先直连成功的
-    // 下载/版本查询会改道假代理而必败（#489 迁移对账）。
+    // 契约：dl.rs http_agent 跟随 ureq 3 默认读取环境代理（用户 2026-11-20 裁决
+    // issue #571：0.x 不做 2.x 兼容）——目标为本地活端口直连本可成功，请求必败
+    // 只能来自改道死代理；直连成功 = 环境代理被禁用（兼容层回归），钉红。
     if std::env::var_os(PROXY_PROBE_ENV).is_none() {
         // Act：重新拉起自身，只在子进程注入假代理
         let output = relaunch_self_with_http_proxy(
             "http://127.0.0.1:1",
-            "tests::dl::test_dl_http_agent_ignores_http_proxy_env_var",
+            "tests::dl::test_dl_http_agent_uses_dead_http_proxy_env_var",
         );
 
         // Assert
@@ -92,16 +95,19 @@ fn test_dl_http_agent_ignores_http_proxy_env_var() {
         return;
     }
 
-    // 子进程形态：本地真目标已在监听，get_text 必须直连它成功
-    let (url, server) = serve_once("HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok");
+    // 子进程形态：本地真目标已在监听；环境代理指向死代理，get_text 必须改道失败
+    let (url, _server) = serve_once("HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok");
 
     // Act
-    let text = get_text(&url)
-        .expect("HTTP_PROXY 指向无监听地址时 dl.get_text 仍应直连本地目标（不读环境代理）");
+    let result = get_text(&url);
 
     // Assert
-    assert_eq!(text, "ok");
-    server.join().expect("server thread");
+    assert!(
+        result.is_err(),
+        "HTTP_PROXY 指向死代理时 dl.get_text 必须改道假代理而失败（跟随 ureq 3 默认读取\
+         环境代理，issue #571）；直连成功说明环境代理被禁用（兼容层回归），got {:?}",
+        result
+    );
 }
 
 #[test]
