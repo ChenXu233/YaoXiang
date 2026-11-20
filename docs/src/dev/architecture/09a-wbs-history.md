@@ -7666,20 +7666,20 @@ pub enum FunctionBody {
 
 ### 一、判据链（实测数字）
 
-冻结 revision = **rebase 后的 7b.1b 集成 HEAD**（= origin/dev 顶端 + 7b.1b 契约笔 + 代码笔 + 收口笔；origin 顶端含范围模式 RangePattern 笔与两笔自动翻译笔，见 §七）。验证轮的全部量测在 `scripts/dev/scratch.py` 的批次树内完成（`init` → `use --rev` → `build` → 量测 → `release` → `gc`），主仓工作树全程干净；复审轮在同一 revision 上以 `git show <rev>:<file>` / `git grep <rev>` 复核，未读工作树。**本表数字取自 rebase 后的合并树重验轮**（rebase 前一轮的数字见 §七，已被取代）。
+冻结 revision = **推送前的最终 base**（= origin/dev 顶端 + 本批四笔：契约笔 / 代码笔 / 收口笔 / 数字重绑笔；origin 顶端含范围模式 RangePattern、#571 std 代理、3.24.1 收口与三笔自动翻译，见 §七 与 §八）。验证轮的全部量测在 `scripts/dev/scratch.py` 的批次树内完成（`init` → `use --rev` → `build` → 量测 → `release` → `gc`），主仓工作树全程干净；复审轮在同一 revision 上以 `git show <rev>:<file>` / `git grep <rev>` 复核，未读工作树。**本表数字取自推送前最终 base 的复跑**（更早两轮的数字见 §七，已被取代）。
 
 | 门禁 | 结果 |
 | --- | --- |
 | `cargo fmt --check` | exit 0 |
 | `cargo clippy --all --all-features --all-targets -- -D warnings` | exit 0 |
-| `cargo test --lib snapshot` | exit 0 = 6 passed / 0 failed / 1 ignored（IR 快照 **232 份零漂移**；rebase 前后同） |
-| `cargo test --lib verify` | exit 0 = **35 passed / 0 failed / 0 ignored**（rebase 前后同） |
-| `cargo test --lib middle::ir::tests` | exit 0 = **72 passed / 0 failed / 1 ignored**（rebase 前后同） |
-| `cargo test --lib phi` | exit 0 = **38 passed**（rebase 前后同） |
-| `python scripts/dev/testsuite.py run fast` | exit 0 = 1 波 **2425 条**，跳过 0 波（rebase 前一轮 2406 ⇒ **+19** = origin 新增的 RangePattern 测试；该旧值已被取代） |
-| `cargo run --example corpus_probe` + 语料差分门禁 | exit 0 = **402 / 402**，逐条差分空（rebase 前后同） |
-| `check-docs-truth` / `check-fanout` / `check-test-channel` / `check-docs-refs` / `check-docs-orphan` | 全 exit 0（docs-refs = **1247 个跟踪文本文件 / 13041 个路径状 token**；rebase 前一轮 1244 / 12985 ⇒ +3 文件 / +56 token，该旧值已被取代） |
-| `python scripts/docs/gen-error-code-docs.py` + `git diff --quiet` | exit 0 且差分为空（生成器幂等） |
+| `cargo test --lib snapshot` | exit 0 = 6 passed / 0 failed / 1 ignored（IR 快照 **232 份零漂移**；**最终 base 复跑，同值**） |
+| `cargo test --lib verify` | exit 0 = **35 passed / 0 failed / 0 ignored**（**最终 base 复跑，同值**） |
+| `cargo test --lib middle::ir::tests` | exit 0 = **72 passed / 0 failed / 1 ignored**（**最终 base 复跑，同值**） |
+| `cargo test --lib phi` | exit 0 = **38 passed**（**最终 base 复跑，同值**） |
+| `python scripts/dev/testsuite.py run fast` | exit 0 = 1 波 **2426 条**，跳过 0 波（上一轮 2425 ⇒ **+1** = origin 的 #571 std 代理测试；该旧值已被取代） |
+| `cargo run --example corpus_probe` + 语料差分门禁 | exit 0 = **402 / 402**，逐条差分空（**最终 base 复跑，同值**） |
+| `check-docs-truth` / `check-fanout` / `check-test-channel` / `check-docs-refs` / `check-docs-orphan` | 全 exit 0（docs-refs = **1247 个跟踪文本文件 / 13088 个路径状 token**；上一轮 13041、上一轮之前的本地复跑 13055，均已被取代） |
+| `python scripts/docs/gen-error-code-docs.py` + `git diff --quiet` | exit 0 且差分为空（生成器幂等；**最终 base 复跑**） |
 
 **零漂移的归因不是「基线整批重写」**：7b.1b 的代码笔未触碰任何基线文件（`git show --name-only` 无 `src/middle/ir/tests/snapshots` 与 `tests/baselines` 条目）⇒ 232 份 IR 快照与语料差分基线（`tests/baselines/corpus-parity.jsonl`，402 行记录）原样。rebase 后相对**新的 origin 顶端**仍同面：`git diff --stat origin/dev..HEAD -- src/middle/ir/tests/snapshots tests/baselines` 为空。行为等价的结构理由与运行时证据互证——`values` 本批恒为空表、`normalize` 不打印 values（渲染路径未改）⇒ 快照与语料必然不变；生产侧 `Operand::Value(` / `Instruction::Phi` 的构造点为 0 ⇒ 新增的 Phi 判据对现有 IR 不产生任何输出。
 
@@ -7745,6 +7745,8 @@ pub enum FunctionBody {
 
 ### 七、收口后 rebase（合并树事实）
 
+（本节记录第一次 rebase；其后 origin 又推进 6 笔、本地四笔再 rebase 一次，**最终状态见 §八**。）
+
 7b.1b 收口笔落库之后，`origin/dev` 又推进 **3 笔**：两笔自动翻译笔（`13abb20d`、`7a10a805`）与一笔功能笔 `4d608df3`（范围模式 RangePattern，20 files +1041/−59）。本地三笔（契约笔 / 代码笔 / 收口笔）随即 rebase 到新的 origin 顶端 `7a10a805`（reflog 佐证：`pull --rebase origin dev` → checkout 新 origin 顶端 → 三次 pick）。**本节记录 rebase 后的合并树事实，§一 的判据数字已按合并树重绑。**
 
 **逐笔 patch-id 一致（diff 内容零变化）**——复核命令：`git show <笔> | git patch-id --stable`（输出第二列是提交 sha，rebase 后必变，**按哈希列比对**），并与 `git show --stat` / `--numstat` / `--name-only` 对账：
@@ -7770,3 +7772,23 @@ pub enum FunctionBody {
 **既有待收口项在 rebase 后依然成立**：生成物 inScope 声明欠账、提交信息行宽、普查数口径三条随代码内容逐字节不变而原样保留（已在 §五 / §六 登记，不重复展开）；普查数的**落地口径仍是 58**（合并树复核仍为 58）。
 
 **独立性**：该增量重验轮由验证者承担，与实现者同模型 ⇒ **不宣称异家族独立**；结论只对本轮合并树负责，补偿证据 = 逐笔 patch-id 与 diff 主体逐字节比对 + 交互审计逐项 + 合并树门禁复跑 + C4 双证 + 3 条机械可逆变异。
+
+### 八、最终同步（推送前）
+
+§七 记录的是第一次 rebase；此后 `origin/dev` **又推进 6 笔**，本地四笔再 rebase 一次，本节记录推送前的最终状态。
+
+**origin/dev 推进的 6 笔**：`327cf647`（#571：std `http_get` 跟随 ureq 3 默认拾取环境代理，删兼容禁用层；触及 `src/std/net.rs` 与 `tools/yx/src/dl.rs` 及其测试）、`1bcc509a` / `1f97d46c` / `a188b7b5`（三笔自动翻译）、`2c016861`（3.24.1 修复轮：t3 REJECT 处置——F1 夹带恢复 + F3 补锚 + F4 文法精度）、`d295eb0b`（3.24.1 收口：#405 范围模式落档，新组 3.24，只改 09 与 09a）。
+
+**本地四笔再 rebase**：契约笔 / 代码笔 / 收口笔 / 数字重绑笔 rebase 到新的 origin 顶端。四笔的 `--stat` 与 rebase 前一致：契约笔 1 file +100/−0、**代码笔 19 files +541/−71**、收口笔 3 files +103/−12、数字重绑笔 1 file +38/−10。
+
+**代码笔 patch-id 逐笔一致**——复核命令：`git show <笔> | git patch-id --stable`（输出第二列是提交 sha，rebase 后必变，**按哈希列比对**）：代码笔的 patch-id 在三次 rebase（初次落库 → 第一次 rebase → 本次 rebase）之间**逐笔一致**，diff 主体逐字节相等 ⇒ **本批代码内容自落库起零变化**，§二 / §三 的全部结构结论与判据在最终 base 上继续成立。
+
+**最终 base 的判据复跑**：见 §一 表（run fast **2426 条**、docs-refs **1247 文件 / 13088 token**；verify 35、middle::ir::tests 72（1 ignored）、phi 38、snapshot 6/0/1（232 份零漂移）、语料 402/402 差分空、生成器幂等——与上一轮同值）。
+
+**09 的三级计数 = 253**：新增的 1 个是 origin 侧 3.24.1 收口登记的三级任务（3.24.1），本批 7b.1b 不新增计数（其 0.4.2 已在 252 计入）。
+
+**C4 相对最终 base 复核**：`git diff --stat origin/dev..HEAD -- src/middle/ir/tests/snapshots tests/baselines` **为空** ⇒ 232 份快照与语料基线与最终 base 同面。
+
+**7b.1b 表面未变**（RangePattern 与 #571 均属 origin 侧改动）：`Instruction` 变体数仍 **75**；`FunctionBody::Code {` 普查仍 **58**；`values` 仍恒空（`Operand::Value(` 在 `src/`（排除测试）只出现在模式与显式诊断臂，`Instruction::Phi` 只出现在穷尽 match 臂与占位文本 ⇒ 生产构造 0）；`LocalSlot::origin` 与 `FrameId` 原样（`src/middle/ir/ir.rs`）。
+
+**本节不写本地提交号**：本地四笔以「契约笔 / 代码笔 / 收口笔 / 数字重绑笔」定位；上文哈希均为 origin 侧已推送提交。
