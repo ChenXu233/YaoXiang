@@ -7559,3 +7559,103 @@ CI 的「Error-code docs up to date (generator idempotent)」步骤（`.github/w
 > **四、t3 五条 findings 处置（如实登记）**：①**F1 medium 夹带恢复**——zh 教程 match 示例输出注释被实现笔夹带掉冒号（与三行上代码行矛盾：RFC-012 插值 `{}` 外冒号是字面量，输出含冒号），且 **en 镜像也被 bot 7a10a805 污染**（镜像同步了夹带态）——两文件一并恢复避免反向分叉；4 hunk 逐个核对无其它夹带；机器门禁漏网有据（check-docs-examples.py:18-19 明示只验 check 不比对注释）。②**F2 low 计数口径更正**（本节承载，提交不改写）：实现笔提交信息「parser/sema 拒绝锚 11 条」实为锚总数——拒绝锚 5 条（E0010 非字面量端点 / E1002 Float 端点 / E1031 倒序 / E1031 重复臂 / E1030 非兜底）+ accept 形态正锚 6 条。③**F3 low 补锚**：上界标识符 `80..n` 拒绝锚补齐（与下界 `n..20` 对称）；红态自查——摘掉 parse_range_bound 拒绝臂后新锚红（非字面量上界落入 lambda 吞噬报 E0012 形态）、同族下界锚保持绿，还原后 14/14 绿。④**F4 low EBNF 精度**：查证 syntax.md 中 Literal 无产生式定义（词法层整数/浮点均无符号形态）⇒ 产生式补显式可选负号 `RangePattern ::= ('-')? Literal '..' ('-')? Literal`（与文件既有可选组风格一致）；en syntax.md 未动（zh 是源，bot 镜像）。⑤**F5 low AAA 登记不修**：sema rfc011b.rs 新增 6 条无显式 AAA——同文件既有测试全部同形（紧凑风格），单独补造成风格分裂，登记为该文件既有风格债，未来该文件统一时一并处理。
 
 > **五、移交登记（非本批阻塞）**：①check-boundary（report-only）既有违规 1 处：opcode.rs 常量 84 vs 脚本基线 83（b5624a35/#562 未同步，非本批引入）；②切片 `array[Range]` 纸面能力（运行时 E6007）留后续裁决面；③模式位负数字面量模式 `-1 =>` 报 E0012（前缀负号 min_bp=9 低于 lambda 绑定力 11，led.rs:390——既有缺陷，`-i64::MIN` 同族，未夹带）；④RFC-010b 正文未改（用户裁决）；⑤发版 changelog 应为「范围模式新增」单列条目（新语言能力，收口时一并落档）。
+
+## P7 7b.1b 契约（`values` 表 + `ValueInfo` + 访问器 + Phi 残项判据，2026-11-20）
+
+> 计划见 [09](./09-execution-wbs.md) §P7 7b 表 7b.1b 行；设计依据 [04](./04-ssa.md) §目标设计（`ValueInfo` / 值表 / Phi 三条构造约束）与 §IR 结构变更的连锁影响 #3-5；前置 = [09a §P7 7b.1a 收口](#p7-7b1a-收口operand-变体收敛--instructionphi-引入2026-11-20)（占位 3 由本批替换）。基线 = `origin/dev` 顶端 `6d8cfe15`（7b.1a 已集成，工作树干净）；实测行号取该 revision。
+
+### 一、全仓 `FunctionBody::Code` 构造点 / 匹配点实测
+
+`git grep -n "FunctionBody::Code {" -- src tests` = 56 处。分类：**结构体字面量构造 17 处**（全部需补 `values`，均在本批 inScope 的 `src/middle/` 与 `src/driver/tests/`）、**无 `..` 的模式匹配 1 处**（加字段即编译失败，需补 `..`）、其余 38 处模式匹配都带 `..`（不受影响）。
+
+构造点 17 处（逐处补 `values: Vec::new()`）：
+
+| # | file:line | 上下文 |
+| 1 | `src/driver/tests/helpers.rs:39` | driver 测试夹具 |
+| 2 | `src/middle/ir/tests/ir_build.rs:56` | IR 测试共享构造器 `func()` |
+| 3 | `src/middle/lower/curry.rs:222` | 柯里层函数体 |
+| 4 | `src/middle/lower/curry.rs:333` | 柯里层函数体 |
+| 5 | `src/middle/lower/expr/closure.rs:205` | 闭包函数体 |
+| 6 | `src/middle/lower/globals.rs:414` | 全局初始化函数体 |
+| 7 | `src/middle/lower/stmt.rs:580` | 嵌套函数体 |
+| 8 | `src/middle/lower/stmt.rs:787` | 嵌套函数体 |
+| 9 | `src/middle/passes/codegen/tests/global_slot.rs:41` | codegen 测试 |
+| 10 | `src/middle/passes/codegen/tests/translator.rs:61` | codegen 测试 |
+| 11 | `src/middle/passes/codegen/translator.rs:432` | init 合成函数 |
+| 12 | `src/middle/passes/dce/tests/mod.rs:70` | DCE 测试 `code_fn` |
+| 13 | `src/middle/passes/dce/tests/mod.rs:827` | DCE 测试 `code_fn_with_locals` |
+| 14 | `src/middle/passes/mono/function.rs:208` | mono 特化克隆体 |
+| 15 | `src/middle/passes/mono/mod.rs:1383` | mono 特化克隆体 |
+| 16 | `src/middle/passes/mono/tests/monomorphizer.rs:40` | mono 测试夹具 |
+| 17 | `src/middle/passes/mono/tests/monomorphizer.rs:114` | mono 测试夹具 |
+
+无 `..` 的模式匹配（必须同步）：`src/middle/passes/mono/mod.rs:666` 的 `let FunctionBody::Code { blocks, entry, locals } = &func.body else` —— 补 `..`。
+
+带 `..` 的模式匹配（无需改，仅登记核对面）：`src/middle/ir/ir.rs:1038/1048/1056/1064/1072`、`src/middle/ir/normalize.rs:605`、`src/middle/ir/verify.rs:230`、`src/middle/passes/codegen/translator.rs:162/286`、`src/middle/passes/mono/function.rs:176/193/197`、`src/middle/passes/mono/mod.rs:394/529/557/636/771/793/829/1248/1305/1310/1662/1852`、`src/frontend/tests/curry_erasure.rs:94/136/161/190`、`src/middle/ir/tests/*`（`alias_fn_value`/`def_assign`/`local_slots`/`record_evidence_layout`/`release_plan_spans`/`snapshot`/`witness_quantity`）与 `tests/integration/multifile.rs:1162`（只读）。
+
+**`values` 生产形态**：本批全部空表（`Operand::Value` / `Instruction::Phi` 的生产仍归 7b.2 / 7b.3）。动工前 `git grep -n ValueInfo -- src tests` 仅 2 处文档注释（`verify.rs` 文件头引用 04 §262），代码零命中。
+
+### 二、结构形态
+
+```rust
+/// SSA 值信息（04 §值标识方式）：与 locals 并存的值表。
+#[derive(Debug, Clone)]
+pub struct ValueInfo {
+    pub ty: MonoType,
+    pub debug_name: Option<String>,   // 来自被消除的具名槽位；None = 纯临时值
+    pub defining_block: usize,        // 定义所在基本块的 label
+}
+
+pub enum FunctionBody {
+    Code {
+        blocks: Vec<BasicBlock>,
+        entry: usize,
+        locals: Vec<LocalSlot>,
+        values: Vec<ValueInfo>,       // 本批新增
+    },
+    // TypeDecl 不变
+}
+```
+
+访问器镜像 `locals()`（只读、TypeDecl 返回 `&[]`）与 `blocks_mut()`（可变、TypeDecl panic）：
+- `FunctionIR::values(&self) -> &[ValueInfo]`；
+- `FunctionIR::values_mut(&mut self) -> &mut Vec<ValueInfo>`（TypeDecl 上 `panic!("values_mut called on TypeDecl")`）。
+
+两处**登记给后续批次**（本批空表使其行为等价，不改变任何可观察输出）：
+1. mono 特化克隆的两个构造点（`passes/mono/function.rs:208`、`passes/mono/mod.rs:1383`）本批写空表 ⇒ 若 7b.2 开始填表，特化时必须补类型替换与 `defining_block` 映射；登记给 7b.2。
+2. `normalize` 不打印 values 表（空表 ⇒ 快照零漂移）；值表有内容时必须扩展渲染并把快照再生纳入该批；登记给 7b.2。
+
+`LocalSlot::origin` / `FrameId` / `slot_frames()`（origin 2.1.4）原样保留：`ir.rs:958/986/1007`、`verify.rs:1087`、mono 的 `origin: slot.origin` 投影逐处核对，不做修改。
+
+### 三、`verify_ssa` Phi 残项的判定依据
+
+7b.1a 已落两条（`dst` 必为 `Operand::Value`、`incoming` label 严格升序），本批在其后追加三条：
+
+1. **前驱集来源**：块级，从 `BasicBlock.successors` 反推——对每条 `block → successors` 边，`predecessors[s] ∋ block.label`；`FnView` 增「指令下标 → 所属块 label」映射与 `predecessors` 表。`ModuleIR.init` 无基本块结构：Phi 出现在 init 序列时**显式报违规**（「无基本块结构，前驱集不可判定」），不静默跳过。
+2. **前驱数**：`incoming.len() != predecessors[block].len()` ⇒ 报 `PhiConsistency`（计数差异）。
+3. **前驱 label 集合**：计数相等但 `incoming` label 集合 ≠ 前驱集合 ⇒ 报 `PhiConsistency`（集合差异）。集合相等已隐含计数相等，故计数不等时只报计数，避免同一缺陷双报。
+4. **逐输入类型一致**：`Operand::Value(v)` 且 `values` 非空时取 `values[v].ty`；可得类型之间用既有 `types_compatible`（文件头「现实语义记录」第 3 条）比对，不一致报 `PhiConsistency`。类型不可得的三种形态**显式登记、不静默放行**：
+   - `values.is_empty()`（本批生产恒为空）：类型判定依据不存在 ⇒ 不判定（与文件头「类型不可得」同口径；7b.2 填表后自动收紧）；
+   - `values` 非空而 `v` 越界：无值信息 ⇒ 报 `PhiConsistency`（ValueId 越界）；
+   - 非 `Value` 操作数（Const/Local/Arg/Global）：无 values 类型源 ⇒ 不判定（文档化，不视为豁免）。
+
+**实测前提（重要）**：全仓 15 处 `successors` 构造全部是 `Vec::new()`，没有生产填充点（`git grep -n "successors:" -- src` 逐处判读）⇒ 当前块级前驱恒空。于是本判据对**生产 Phi** 的约束是：7b.3 生产 Phi 之前必须先填块级 `successors`，否则任何带 incoming 的 Phi 都会被 `verify_ssa` 拒（这是判据的应有行为，不是批内缺陷；本批语料无 Phi，`verify_loose` 不受影响）。登记为 **7b.3 前置**。
+
+### 四、快照 / 语料影响预判
+
+- IR 快照：**零漂移**。`normalize` 不打印 values，`FunctionBody::Code` 渲染路径只受模式匹配影响；基线 232 份。
+- 语料差分：**402/402 零 diff**；`values` 空表不进入任何渲染 / 翻译路径。
+- verify 计数：现有 `cargo test --lib verify` = 30 passed、`middle::ir::tests` = 64 passed / 1 ignored、`phi` = 33 passed（7b.1a 收口实测数字）；本批新增测试会抬高计数，收口按实测记录。
+- 行为等价（C4）：本批对 `values` 只有访问器与 Phi 校验两处读取，生产 IR 无 Phi ⇒ 不改变降低 / 翻译 / 执行。
+
+### 五、测试面
+
+- `src/middle/ir/tests/ir.rs`：`test_code_body_values_start_empty`、`test_code_body_values_mut_writes_through`、`test_value_info_construction_preserves_fields`。
+- `src/middle/ir/tests/verify.rs`：更新 7b.1a 的三条 Phi 测试以带块级前驱（否则新判据会额外报计数 / 集合违规）；新增正例 `test_ssa_phi_with_matching_predecessors_passes`（空 values）与 `test_ssa_phi_with_matching_types_passes`（带类型），反例 `test_ssa_phi_predecessor_count_mismatch_fails` / `test_ssa_phi_predecessor_set_mismatch_fails` / `test_ssa_phi_incoming_type_mismatch_fails`，以及 init 无块结构 `test_ssa_phi_in_init_without_blocks_is_reported`。
+- 合成 IR 夹具：`ir_build.rs` 增 `block(label, instrs, successors)`、`func_with_blocks(...)`（含 values 参数）与 `value_info(...)`；既有 `func()` 保持签名不变（内部委托）。
+
+### 六、范围、D59 与回滚点
+
+- inScope：`src/middle/`、`src/driver/tests/`、`src/frontend/tests/`、`tests/baselines/`、本文件；out of scope：`src/backends/`、`src/std/`、`tests/yaoxiang/`、09、04、`scripts/`。
+- D59：**无行为变更（表示重塑）**——values 本批恒空、无生产 Phi；不改变原先成功程序的对外表现。
+- 回滚点：本契约段单独一笔文档提交，先于代码；代码为独占一笔，`git revert` 整笔回滚（`FunctionBody::Code` 加字段波及全仓编译，不可增量回滚）。
