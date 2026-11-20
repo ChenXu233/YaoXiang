@@ -152,3 +152,36 @@ fn test_fstring_segments_format_spec() {
     assert_eq!(segments.len(), 1, "仅一个插值段");
     assert_interpolation(&segments[0], Some(".2f"));
 }
+
+#[test]
+fn test_fstring_interpolation_tokenize_count_is_one() {
+    // 05 §「f-string 嵌套编译必须显式处理」：N 个插值不得各自重入公共词法。
+    // 解析一个含 3 个插值的 f-string 时，公共 tokenize 只应发生 1 次（外层源码），
+    // 插值表达式由一次性批量词法取回（tokenize_interpolations）。
+    use crate::frontend::core::lexer::{
+        interpolation_batch_call_count, reset_lexing_call_counts, tokenize_call_count,
+    };
+
+    // Arrange
+    let source = r#"f"{a} {b} {c}""#;
+    let interpolation_count = 3;
+    reset_lexing_call_counts();
+
+    // Act
+    let tokens = tokenize(source).unwrap();
+    let expr = parse_expression(&tokens);
+
+    // Assert
+    assert!(expr.is_ok(), "f-string 必须解析成功: {expr:?}");
+    assert_eq!(
+        tokenize_call_count(),
+        1,
+        "解析 f-string 不得重入公共 tokenize（改前为 1 + N = {} 次）",
+        1 + interpolation_count
+    );
+    assert_eq!(
+        interpolation_batch_call_count(),
+        1,
+        "N={interpolation_count} 个插值必须只发生一次插值段词法"
+    );
+}

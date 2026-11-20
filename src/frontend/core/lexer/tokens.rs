@@ -108,11 +108,9 @@ pub enum TokenKind {
     CharLiteral(char),
     StringLiteral(String),
     /// RFC-012: F-string template literal
-    /// Stores the raw content of f"..." / f"""...""" with interpolation
-    /// markers and brace escape sequences (`{{` / `}}`) preserved verbatim;
-    /// backslash escapes are already decoded. The parser splits segments and
-    /// resolves `{{` / `}}` (#402).
-    FStringLiteral(String),
+    /// raw 保留 f"..." / f"""...""" 的既有内容（转义已解码、花括号序列原样）；
+    /// segments 是词法期切好的段，parser 直接消费，不再自己扫 raw 切分（#402）。
+    FStringLiteral(FStringToken),
     VoidLiteral,
 
     // Operators
@@ -159,6 +157,29 @@ pub enum TokenKind {
     // Special
     Eof,
     Error(String),
+}
+/// RFC-012 f-string 词法产物。
+///
+/// raw 是既有 token 内容（转义已解码、花括号序列原样保留），Display 与既有消费者
+/// 逐字不变；segments 是词法期切好的段（唯一事实源），parser 不再自己切分 raw。
+#[derive(Debug, Clone, PartialEq)]
+pub struct FStringToken {
+    pub raw: String,
+    pub segments: Vec<FStringTokenSegment>,
+}
+
+/// f-string 的段：Text 与 Interpolation 交替，由词法期切分产生。
+#[derive(Debug, Clone, PartialEq)]
+pub enum FStringTokenSegment {
+    /// 文本段：{{ / }} 已解成单个花括号（#402 的既有切分口径）
+    Text(String),
+    /// 插值段：expr 是去掉格式说明符并 trim 后的表达式源文本；
+    /// raw 是插值原内容（含格式说明符），解析失败时回退成字面文本。
+    Interpolation {
+        expr: String,
+        format_spec: Option<String>,
+        raw: String,
+    },
 }
 
 /// Token

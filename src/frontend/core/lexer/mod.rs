@@ -17,6 +17,17 @@ pub use tokens::{LexError, Literal, Token, TokenKind};
 /// - RFC-010: Generic syntax (e.g., List(T), Vec(T: Clone))
 /// - RFC-011: Advanced type system features
 pub fn tokenize(source: &str) -> Result<Vec<Token>, crate::frontend::core::lexer::LexError> {
+    #[cfg(test)]
+    record_tokenize_call();
+
+    tokenize_with_logging(source)
+}
+
+/// 公共词法的带日志实现：f-string 插值的一次性批量词法复用它，保证插值 token
+/// 流与逐插值调用公共入口时逐 token 同形（含 tracing 日志）。
+fn tokenize_with_logging(
+    source: &str
+) -> Result<Vec<Token>, crate::frontend::core::lexer::LexError> {
     use crate::util::i18n::{t_cur, MSG};
 
     let source_len = source.len();
@@ -53,6 +64,59 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, crate::frontend::core::lexer
     }
 }
 
+/// 一次性词法全部 f-string 插值表达式（05 §「f-string 嵌套编译必须显式处理」）。
+///
+/// parser 在首次需要某个 f-string 节点时用一次调用取回它的全部插值 token 流，
+/// 结果顺序与 sources 一一对应（每项与 tokenize 同形：含 Eof，词法错误为 Err）。
+/// 单点实现：插值词法只发生在这里，parser 不再逐插值重入公共词法入口。
+pub fn lex_interpolations(
+    sources: &[&str]
+) -> Vec<Result<Vec<Token>, crate::frontend::core::lexer::LexError>> {
+    #[cfg(test)]
+    record_interpolation_batch_call();
+
+    sources
+        .iter()
+        .map(|source| tokenize_with_logging(source))
+        .collect()
+}
+
+#[cfg(test)]
+static TOKENIZE_CALLS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+#[cfg(test)]
+static INTERPOLATION_BATCH_CALLS: std::sync::atomic::AtomicUsize =
+    std::sync::atomic::AtomicUsize::new(0);
+
+#[cfg(test)]
+fn record_tokenize_call() {
+    TOKENIZE_CALLS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+}
+
+#[cfg(test)]
+fn record_interpolation_batch_call() {
+    INTERPOLATION_BATCH_CALLS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// 测试用：公共 tokenize 入口被调用次数。用于证明 f-string 插值不再逐条重入词法。
+#[cfg(test)]
+pub(crate) fn tokenize_call_count() -> usize {
+    TOKENIZE_CALLS.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+/// 测试用：一次性插值批量词法（lex_interpolations）被调用次数。
+#[cfg(test)]
+pub(crate) fn interpolation_batch_call_count() -> usize {
+    INTERPOLATION_BATCH_CALLS.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+/// 测试用：清零两个词法调用计数，使同进程内的用例互不影响。
+#[cfg(test)]
+pub(crate) fn reset_lexing_call_counts() {
+    TOKENIZE_CALLS.store(0, std::sync::atomic::Ordering::Relaxed);
+    INTERPOLATION_BATCH_CALLS.store(0, std::sync::atomic::Ordering::Relaxed);
+}
+
 /// Log a token for debugging
 fn log_token(token: &Token) {
     use crate::util::i18n::{t_cur, MSG};
@@ -76,7 +140,7 @@ fn log_token(token: &Token) {
         TokenKind::IntLiteral(n) => (MSG::LexTokenNumber, n.to_string()),
         TokenKind::FloatLiteral(f) => (MSG::LexTokenNumber, f.to_string()),
         TokenKind::StringLiteral(s) => (MSG::LexTokenString, s.clone()),
-        TokenKind::FStringLiteral(s) => (MSG::LexTokenString, format!("f\"{}\"", s)),
+        TokenKind::FStringLiteral(s) => (MSG::LexTokenString, format!("f\"{}\"", s.raw)),
         TokenKind::CharLiteral(c) => (MSG::LexTokenChar, c.to_string()),
         TokenKind::Plus
         | TokenKind::Minus

@@ -29,51 +29,35 @@ pub fn scan_number(
     first_char: char,
 ) -> Option<Token> {
     let mut value = String::new();
-
     value.push(first_char);
 
     // Detect base prefix
-
-    let base = if first_char == '0' {
-        if lexer.peek() == Some(&'x') || lexer.peek() == Some(&'X') {
-            lexer.advance();
-
-            value.push('x');
-
-            Some(16)
-        } else if lexer.peek() == Some(&'o') || lexer.peek() == Some(&'O') {
-            lexer.advance();
-
-            value.push('o');
-
-            Some(8)
-        } else if lexer.peek() == Some(&'b') || lexer.peek() == Some(&'B') {
-            lexer.advance();
-
-            value.push('b');
-
-            Some(2)
-        } else {
-            None
+    let radix = if first_char == '0' {
+        match lexer.peek() {
+            Some(&'x') | Some(&'X') => {
+                lexer.advance();
+                value.push('x');
+                Radix::Hex
+            }
+            Some(&'o') | Some(&'O') => {
+                lexer.advance();
+                value.push('o');
+                Radix::Octal
+            }
+            Some(&'b') | Some(&'B') => {
+                lexer.advance();
+                value.push('b');
+                Radix::Binary
+            }
+            _ => Radix::Decimal,
         }
     } else {
-        None
+        Radix::Decimal
     };
 
-    match base {
-        Some(16) => scan_hex_number(lexer, value),
-
-        Some(8) => scan_octal_number(lexer, value),
-
-        Some(2) => scan_binary_number(lexer, value),
-
-        None => scan_decimal_number(lexer, value),
-
-        _ => unreachable!("Invalid base value"),
-    }
+    scan_radix_number(lexer, radix, value)
 }
 
-/// Scan hexadecimal number
 /// §1.6.1 基数字面量收尾校验：字面量后不得紧跟字母 / 数字 / 下划线。
 ///
 /// 非法邻接（如 `0b102`、`0x1FG`、`123abc`）此前被静默拆成两个字面量——
@@ -107,133 +91,123 @@ fn reject_trailing_alnum(
     None
 }
 
-fn scan_hex_number(
-    lexer: &mut super::tokenizer::Lexer<'_>,
-    mut value: String,
-) -> Option<Token> {
-    let mut num_value: u128 = 0;
+/// 一个数制：数字字母表、进制基数与诊断文案的差异都收在这里；
+/// 扫描骨架只有一份（scan_radix_number）。
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Radix {
+    Decimal,
+    Hex,
+    Octal,
+    Binary,
+}
 
-    let mut has_digits = false;
-
-    let mut overflow = false;
-
-    while let Some(&c) = lexer.peek() {
-        if is_hex_digit(c) {
-            let digit = hex_digit_value(c);
-
-            if overflow {
-                // Already overflowed, just continue to consume input
-
-                value.push(c);
-
-                lexer.advance();
-            } else {
-                match num_value.checked_mul(16).and_then(|v| v.checked_add(digit)) {
-                    Some(new_val) => {
-                        num_value = new_val;
-
-                        value.push(c);
-
-                        lexer.advance();
-
-                        has_digits = true;
-                    }
-
-                    None => {
-                        overflow = true;
-
-                        value.push(c);
-
-                        lexer.advance();
-                    }
-                }
-            }
-        } else if c == '_' {
-            lexer.advance();
-        } else {
-            break;
+impl Radix {
+    /// 进制基数
+    fn base(self) -> u128 {
+        match self {
+            Radix::Decimal => 10,
+            Radix::Hex => 16,
+            Radix::Octal => 8,
+            Radix::Binary => 2,
         }
     }
 
-    if let Some(err) = reject_trailing_alnum(lexer, "hex", &value) {
-        return Some(err);
+    /// 该基数下一个字符的数值；None 表示不是该基数的数字
+    fn digit_value(
+        self,
+        c: char,
+    ) -> Option<u128> {
+        match self {
+            Radix::Decimal => {
+                if !is_digit(c) {
+                    return None;
+                }
+                Some(c as u128 - b'0' as u128)
+            }
+            Radix::Hex => {
+                if !is_hex_digit(c) {
+                    return None;
+                }
+                Some(hex_digit_value(c))
+            }
+            Radix::Octal => {
+                if !('0'..='7').contains(&c) {
+                    return None;
+                }
+                Some(c as u128 - b'0' as u128)
+            }
+            Radix::Binary => {
+                if c != '0' && c != '1' {
+                    return None;
+                }
+                Some(c as u128 - b'0' as u128)
+            }
+        }
     }
 
-    if !has_digits {
-        lexer.error = Some(crate::frontend::core::lexer::LexError::InvalidNumber(
-            "Expected hex digits".to_string(),
-            point(lexer),
-        ));
-
-        return Some(lexer.make_token(TokenKind::Error("Invalid hex number".to_string())));
+    /// 诊断文案里的进制名（小写）
+    fn name(self) -> &'static str {
+        match self {
+            Radix::Decimal => "decimal",
+            Radix::Hex => "hex",
+            Radix::Octal => "octal",
+            Radix::Binary => "binary",
+        }
     }
 
-    if overflow {
-        lexer.error = Some(crate::frontend::core::lexer::LexError::InvalidNumber(
-            value,
-            point(lexer),
-        ));
-
-        return Some(lexer.make_token(TokenKind::Error("Hex number too large".to_string())));
-    }
-
-    match num_value.try_into() {
-        Ok(n) => Some(Token {
-            kind: TokenKind::IntLiteral(n),
-
-            span: lexer.span(),
-
-            literal: Some(Literal::Int(n)),
-        }),
-
-        Err(_) => {
-            lexer.error = Some(crate::frontend::core::lexer::LexError::InvalidNumber(
-                value,
-                point(lexer),
-            ));
-
-            Some(lexer.make_token(TokenKind::Error("Hex number too large".to_string())))
+    /// 诊断文案里的进制名（首字母大写）
+    fn capitalized(self) -> &'static str {
+        match self {
+            Radix::Decimal => "Decimal",
+            Radix::Hex => "Hex",
+            Radix::Octal => "Octal",
+            Radix::Binary => "Binary",
         }
     }
 }
 
-/// Scan octal number
-fn scan_octal_number(
+/// 基数数字扫描的结果：字面量原文本（下划线不进 value）与累积值。
+///
+/// 溢出后仍继续消费输入以保持 token 流位置，由收尾函数决定怎么报错。
+struct RadixScan {
+    value: String,
+    num_value: u128,
+    has_digits: bool,
+    overflow: bool,
+}
+
+/// 唯一一份基数数字扫描骨架：消费本基数的数字，下划线只作分隔符跳过。
+///
+/// 累积从调用点之后的第一个字符开始（调用点已消费首字符或进制前缀），
+/// 因此十进制首字符只进 value、不进 num_value——与改造前的溢出判定逐位一致。
+fn scan_radix_digits(
     lexer: &mut super::tokenizer::Lexer<'_>,
-
+    radix: Radix,
     mut value: String,
-) -> Option<Token> {
+) -> RadixScan {
     let mut num_value: u128 = 0;
-
     let mut has_digits = false;
-
     let mut overflow = false;
 
     while let Some(&c) = lexer.peek() {
-        if ('0'..='7').contains(&c) {
-            let digit = c as u128 - b'0' as u128;
-
+        if let Some(digit) = radix.digit_value(c) {
             if overflow {
                 value.push(c);
-
                 lexer.advance();
             } else {
-                match num_value.checked_mul(8).and_then(|v| v.checked_add(digit)) {
+                match num_value
+                    .checked_mul(radix.base())
+                    .and_then(|v| v.checked_add(digit))
+                {
                     Some(new_val) => {
                         num_value = new_val;
-
                         value.push(c);
-
                         lexer.advance();
-
                         has_digits = true;
                     }
-
                     None => {
                         overflow = true;
-
                         value.push(c);
-
                         lexer.advance();
                     }
                 }
@@ -245,219 +219,115 @@ fn scan_octal_number(
         }
     }
 
-    if let Some(err) = reject_trailing_alnum(lexer, "octal", &value) {
+    RadixScan {
+        value,
+        num_value,
+        has_digits,
+        overflow,
+    }
+}
+
+/// 四基数扫描器的唯一实现：共用数字骨架，按数制收尾。
+fn scan_radix_number(
+    lexer: &mut super::tokenizer::Lexer<'_>,
+    radix: Radix,
+    value: String,
+) -> Option<Token> {
+    let scan = scan_radix_digits(lexer, radix, value);
+    if radix == Radix::Decimal {
+        scan_decimal_literal(lexer, scan)
+    } else {
+        scan_integer_literal(lexer, radix, scan)
+    }
+}
+
+/// 非十进制整数的收尾：邻接拒绝、无数字、溢出、i128 转换。
+fn scan_integer_literal(
+    lexer: &mut super::tokenizer::Lexer<'_>,
+    radix: Radix,
+    scan: RadixScan,
+) -> Option<Token> {
+    if let Some(err) = reject_trailing_alnum(lexer, radix.name(), &scan.value) {
         return Some(err);
     }
 
-    if !has_digits {
+    if !scan.has_digits {
         lexer.error = Some(crate::frontend::core::lexer::LexError::InvalidNumber(
-            "Expected octal digits".to_string(),
+            format!("Expected {} digits", radix.name()),
             point(lexer),
         ));
-
-        return Some(lexer.make_token(TokenKind::Error("Invalid octal number".to_string())));
+        return Some(
+            lexer.make_token(TokenKind::Error(format!("Invalid {} number", radix.name()))),
+        );
     }
 
-    if overflow {
+    if scan.overflow {
         lexer.error = Some(crate::frontend::core::lexer::LexError::InvalidNumber(
-            value,
+            scan.value,
             point(lexer),
         ));
-
-        return Some(lexer.make_token(TokenKind::Error("Octal number too large".to_string())));
+        return Some(lexer.make_token(TokenKind::Error(format!(
+            "{} number too large",
+            radix.capitalized()
+        ))));
     }
 
-    match num_value.try_into() {
+    match scan.num_value.try_into() {
         Ok(n) => Some(Token {
             kind: TokenKind::IntLiteral(n),
-
             span: lexer.span(),
-
             literal: Some(Literal::Int(n)),
         }),
-
         Err(_) => {
             lexer.error = Some(crate::frontend::core::lexer::LexError::InvalidNumber(
-                value,
+                scan.value,
                 point(lexer),
             ));
-
-            Some(lexer.make_token(TokenKind::Error("Octal number too large".to_string())))
+            Some(lexer.make_token(TokenKind::Error(format!(
+                "{} number too large",
+                radix.capitalized()
+            ))))
         }
     }
 }
 
-/// Scan binary number
-fn scan_binary_number(
+/// 十进制收尾：整数溢出、小数/指数尾部、邻接拒绝、数值解析。
+fn scan_decimal_literal(
     lexer: &mut super::tokenizer::Lexer<'_>,
-
-    mut value: String,
+    scan: RadixScan,
 ) -> Option<Token> {
-    let mut num_value: u128 = 0;
-
-    let mut has_digits = false;
-
-    let mut overflow = false;
-
-    while let Some(&c) = lexer.peek() {
-        if c == '0' || c == '1' {
-            let digit = c as u128 - b'0' as u128;
-
-            if overflow {
-                value.push(c);
-
-                lexer.advance();
-            } else {
-                match num_value.checked_mul(2).and_then(|v| v.checked_add(digit)) {
-                    Some(new_val) => {
-                        num_value = new_val;
-
-                        value.push(c);
-
-                        lexer.advance();
-
-                        has_digits = true;
-                    }
-
-                    None => {
-                        overflow = true;
-
-                        value.push(c);
-
-                        lexer.advance();
-                    }
-                }
-            }
-        } else if c == '_' {
-            lexer.advance();
-        } else {
-            break;
-        }
-    }
-
-    if let Some(err) = reject_trailing_alnum(lexer, "binary", &value) {
-        return Some(err);
-    }
-
-    if !has_digits {
+    if scan.overflow {
         lexer.error = Some(crate::frontend::core::lexer::LexError::InvalidNumber(
-            "Expected binary digits".to_string(),
+            scan.value,
             point(lexer),
         ));
-
-        return Some(lexer.make_token(TokenKind::Error("Invalid binary number".to_string())));
-    }
-
-    if overflow {
-        lexer.error = Some(crate::frontend::core::lexer::LexError::InvalidNumber(
-            value,
-            point(lexer),
-        ));
-
-        return Some(lexer.make_token(TokenKind::Error("Binary number too large".to_string())));
-    }
-
-    match num_value.try_into() {
-        Ok(n) => Some(Token {
-            kind: TokenKind::IntLiteral(n),
-
-            span: lexer.span(),
-
-            literal: Some(Literal::Int(n)),
-        }),
-
-        Err(_) => {
-            lexer.error = Some(crate::frontend::core::lexer::LexError::InvalidNumber(
-                value,
-                point(lexer),
-            ));
-
-            Some(lexer.make_token(TokenKind::Error("Binary number too large".to_string())))
-        }
-    }
-}
-
-/// Scan decimal number
-fn scan_decimal_number(
-    lexer: &mut super::tokenizer::Lexer<'_>,
-
-    mut value: String,
-) -> Option<Token> {
-    let mut num_value: u128 = 0;
-
-    let mut overflow = false;
-
-    while let Some(&c) = lexer.peek() {
-        if is_digit(c) {
-            let digit = c as u128 - b'0' as u128;
-
-            if overflow {
-                value.push(c);
-
-                lexer.advance();
-            } else {
-                match num_value.checked_mul(10).and_then(|v| v.checked_add(digit)) {
-                    Some(new_val) => {
-                        num_value = new_val;
-
-                        value.push(c);
-
-                        lexer.advance();
-                    }
-
-                    None => {
-                        overflow = true;
-
-                        value.push(c);
-
-                        lexer.advance();
-                    }
-                }
-            }
-        } else if c == '_' {
-            lexer.advance();
-        } else {
-            break;
-        }
-    }
-
-    if overflow {
-        lexer.error = Some(crate::frontend::core::lexer::LexError::InvalidNumber(
-            value,
-            point(lexer),
-        ));
-
         return Some(lexer.make_token(TokenKind::Error("Integer too large".to_string())));
     }
 
-    // Check for decimal point
+    let mut value = scan.value;
 
+    // Check for decimal point
     if lexer.peek() == Some(&'.') {
         let next = lexer.peek_next();
 
         // Only proceed if decimal point is followed by digit or underscore+digit
-
         if next.map(is_digit).unwrap_or(false) || next == Some('_') {
             value.push(lexer.advance().unwrap());
 
             while let Some(&c) = lexer.peek() {
                 if is_digit(c) {
                     value.push(c);
-
                     lexer.advance();
                 } else if c == '_' {
                     // Underscore can only be separator between digits
-
                     if lexer.peek_next().map(is_digit).unwrap_or(false) {
                         lexer.advance();
                     } else {
                         // Underscore followed by non-digit is an error
-
                         lexer.error = Some(crate::frontend::core::lexer::LexError::InvalidNumber(
                             "Invalid number format: underscore must be between digits".to_string(),
                             point(lexer),
                         ));
-
                         return Some(
                             lexer.make_token(TokenKind::Error("Invalid number".to_string())),
                         );
@@ -470,7 +340,6 @@ fn scan_decimal_number(
     }
 
     // Check for exponent part
-
     if lexer.peek() == Some(&'e') || lexer.peek() == Some(&'E') {
         value.push(lexer.advance().unwrap());
 
@@ -483,23 +352,18 @@ fn scan_decimal_number(
         while let Some(&c) = lexer.peek() {
             if is_digit(c) {
                 value.push(c);
-
                 lexer.advance();
-
                 has_digits = true;
             } else if c == '_' {
                 // Underscore must be followed by a digit
-
                 if lexer.peek_next().map(is_digit).unwrap_or(false) {
                     lexer.advance();
                 } else {
                     // Underscore followed by non-digit is an error
-
                     lexer.error = Some(crate::frontend::core::lexer::LexError::InvalidNumber(
                         "Invalid number format: underscore must be between digits".to_string(),
                         point(lexer),
                     ));
-
                     return Some(lexer.make_token(TokenKind::Error("Invalid number".to_string())));
                 }
             } else {
@@ -519,26 +383,20 @@ fn scan_decimal_number(
         return Some(err);
     }
 
-    let cleaned: String = value.chars().filter(|&c| c != '_').collect();
-
-    let num_str = &cleaned;
+    let num_str: String = value.chars().filter(|&c| c != '_').collect();
 
     if num_str.contains('.') || num_str.contains('e') || num_str.contains('E') {
         match num_str.parse::<f64>() {
             Ok(n) => Some(Token {
                 kind: TokenKind::FloatLiteral(n),
-
                 span: lexer.span(),
-
                 literal: Some(Literal::Float(n)),
             }),
-
             Err(_) => {
                 lexer.error = Some(crate::frontend::core::lexer::LexError::InvalidNumber(
                     value,
                     point(lexer),
                 ));
-
                 Some(lexer.make_token(TokenKind::Error("Invalid float".to_string())))
             }
         }
@@ -546,18 +404,14 @@ fn scan_decimal_number(
         match num_str.parse::<i128>() {
             Ok(n) => Some(Token {
                 kind: TokenKind::IntLiteral(n),
-
                 span: lexer.span(),
-
                 literal: Some(Literal::Int(n)),
             }),
-
             Err(_) => {
                 lexer.error = Some(crate::frontend::core::lexer::LexError::InvalidNumber(
                     value,
                     point(lexer),
                 ));
-
                 Some(lexer.make_token(TokenKind::Error("Invalid integer".to_string())))
             }
         }
@@ -718,7 +572,7 @@ pub fn scan_string(lexer: &mut super::tokenizer::Lexer<'_>) -> Option<Token> {
 
         let _ = lexer.advance(); // Skip third quote
 
-        return scan_multi_line_string(lexer);
+        return scan_triple_quoted(lexer, TripleQuoted::String);
     }
 
     let mut value = String::new();
@@ -746,137 +600,7 @@ pub fn scan_string(lexer: &mut super::tokenizer::Lexer<'_>) -> Option<Token> {
 
             '\\' => {
                 lexer.advance();
-
-                if let Some(escaped) = lexer.advance() {
-                    match escaped {
-                        'n' => value.push('\n'),
-
-                        't' => value.push('\t'),
-
-                        'r' => value.push('\r'),
-
-                        '\\' => value.push('\\'),
-
-                        '"' => value.push('"'),
-
-                        '\'' => value.push('\''),
-
-                        '0' => value.push('\0'),
-
-                        'x' => {
-                            // Hexadecimal escape \xFF
-
-                            let mut hex = String::new();
-
-                            for _ in 0..2 {
-                                if let Some(&hc) = lexer.peek() {
-                                    if is_hex_digit(hc) {
-                                        hex.push(hc);
-
-                                        lexer.advance();
-                                    } else {
-                                        break;
-                                    }
-                                }
-                            }
-
-                            if hex.len() == 2 {
-                                if let Ok(byte) = u8::from_str_radix(&hex, 16) {
-                                    value.push(byte as char);
-                                } else {
-                                    lexer.error = Some(
-                                        crate::frontend::core::lexer::LexError::InvalidEscape {
-                                            sequence: format!("\\x{}", hex),
-
-                                            span: point(lexer),
-                                        },
-                                    );
-                                }
-                            } else {
-                                lexer.error =
-                                    Some(crate::frontend::core::lexer::LexError::InvalidEscape {
-                                        sequence: format!("\\x{}", hex),
-
-                                        span: point(lexer),
-                                    });
-                            }
-                        }
-
-                        'u' => {
-                            // Unicode escape \u{1F600}
-
-                            if lexer.peek() == Some(&'{') {
-                                lexer.advance();
-
-                                let mut hex = String::new();
-
-                                while let Some(&hc) = lexer.peek() {
-                                    if is_hex_digit(hc) {
-                                        hex.push(hc);
-
-                                        lexer.advance();
-                                    } else {
-                                        break;
-                                    }
-                                }
-
-                                if lexer.peek() == Some(&'}') && !hex.is_empty() {
-                                    lexer.advance();
-
-                                    if let Ok(codepoint) = u32::from_str_radix(&hex, 16) {
-                                        if let Some(ch) = char::from_u32(codepoint) {
-                                            value.push(ch);
-                                        } else {
-                                            lexer.error = Some(crate::frontend::core::lexer::LexError::InvalidEscape {
-
-
-
-                                                sequence: format!("\\u{{{}}}", hex),
-
-                                                span: point(lexer),
-
-
-
-                                            });
-                                        }
-                                    } else {
-                                        lexer.error = Some(
-                                            crate::frontend::core::lexer::LexError::InvalidEscape {
-                                                sequence: format!("\\u{{{}}}", hex),
-
-                                                span: point(lexer),
-                                            },
-                                        );
-                                    }
-                                } else {
-                                    lexer.error = Some(
-                                        crate::frontend::core::lexer::LexError::InvalidEscape {
-                                            sequence: "\\u{".to_string(),
-
-                                            span: point(lexer),
-                                        },
-                                    );
-                                }
-                            } else {
-                                lexer.error =
-                                    Some(crate::frontend::core::lexer::LexError::InvalidEscape {
-                                        sequence: "\\u".to_string(),
-
-                                        span: point(lexer),
-                                    });
-                            }
-                        }
-
-                        c => {
-                            lexer.error =
-                                Some(crate::frontend::core::lexer::LexError::InvalidEscape {
-                                    sequence: c.to_string(),
-
-                                    span: point(lexer),
-                                });
-                        }
-                    }
-                }
+                decode_escape(lexer, &mut value, EscapeMode::Strict);
             }
 
             '\n' => {
@@ -918,42 +642,70 @@ pub fn scan_string(lexer: &mut super::tokenizer::Lexer<'_>) -> Option<Token> {
     })
 }
 
-/// Scan multi-line string
-fn scan_multi_line_string(lexer: &mut super::tokenizer::Lexer<'_>) -> Option<Token> {
-    let start_pos = lexer.position();
+/// 三引号串的两种形态：普通多行字符串与多行 f-string。
+/// 扫描骨架只有一份（scan_triple_quoted），差异只有转义口径、
+/// 成功 token 形态与未终结文案。
+#[derive(Clone, Copy)]
+enum TripleQuoted {
+    String,
+    FString,
+}
 
+impl TripleQuoted {
+    fn escape_mode(self) -> EscapeMode {
+        match self {
+            TripleQuoted::String => EscapeMode::Lenient,
+            TripleQuoted::FString => EscapeMode::Strict,
+        }
+    }
+
+    fn token(
+        self,
+        value: &str,
+    ) -> (TokenKind, Option<Literal>) {
+        match self {
+            TripleQuoted::String => (
+                TokenKind::StringLiteral(value.to_string()),
+                Some(Literal::String(value.to_string())),
+            ),
+            TripleQuoted::FString => (
+                TokenKind::FStringLiteral(make_fstring_token(value.to_string())),
+                None,
+            ),
+        }
+    }
+
+    fn unterminated_kind(self) -> &'static str {
+        match self {
+            TripleQuoted::String => "Unterminated multi-line string",
+            TripleQuoted::FString => "Unterminated multi-line f-string",
+        }
+    }
+}
+
+/// 普通多行串与多行 f-string 的唯一扫描骨架。开头的三引号已由调用方消费；
+/// 内容原样收集（换行属于内容），遇到未转义的三引号结束。
+fn scan_triple_quoted(
+    lexer: &mut super::tokenizer::Lexer<'_>,
+    kind: TripleQuoted,
+) -> Option<Token> {
+    let start_pos = lexer.position();
     let mut value = String::new();
 
-    // The opening """ has already been consumed by scan_string
-
-    // Now we just need to read the content and find the closing """
-
     while let Some(c) = lexer.advance() {
-        // Check for closing """
-
         if c == '"' {
-            // Check if we have two more quotes
-
             let actual_peek1 = lexer.peek_public().copied();
-
-            let mut temp_clone = lexer.chars_clone();
-
-            let actual_peek2 = temp_clone.nth(1);
+            let actual_peek2 = lexer.chars_clone().nth(1);
 
             if actual_peek1 == Some('"') && actual_peek2 == Some('"') {
-                // Found closing """
-
-                // Clear any previous error and consume the remaining two quotes
-
+                // Found closing triple quote: clear any previous error and consume it
                 lexer.error = None;
-
                 lexer.advance(); // consume second quote
-
                 lexer.advance(); // consume third quote
 
+                let (token_kind, literal) = kind.token(&value);
                 return Some(Token {
-                    kind: TokenKind::StringLiteral(value.clone()),
-
+                    kind: token_kind,
                     span: Span::new(
                         Position::with_offset(
                             lexer.start_line(),
@@ -962,40 +714,13 @@ fn scan_multi_line_string(lexer: &mut super::tokenizer::Lexer<'_>) -> Option<Tok
                         ),
                         lexer.position(),
                     ),
-
-                    literal: Some(Literal::String(value.clone())),
+                    literal,
                 });
-            } else {
-                // This is just a single quote inside the string
-
-                value.push(c);
             }
+            // This is just a single quote inside the string
+            value.push(c);
         } else if c == '\\' {
-            // Handle escape sequences
-
-            if let Some(escaped) = lexer.advance() {
-                match escaped {
-                    '\\' => value.push('\\'),
-
-                    '"' => value.push('"'),
-
-                    '\'' => value.push('\''),
-
-                    'n' => value.push('\n'),
-
-                    't' => value.push('\t'),
-
-                    'r' => value.push('\r'),
-
-                    _ => {
-                        // For unrecognized escape sequences, keep both the backslash and the character
-
-                        value.push('\\');
-
-                        value.push(escaped);
-                    }
-                }
-            }
+            decode_escape(lexer, &mut value, kind.escape_mode());
         } else {
             value.push(c);
         }
@@ -1003,17 +728,9 @@ fn scan_multi_line_string(lexer: &mut super::tokenizer::Lexer<'_>) -> Option<Tok
 
     lexer.error = Some(crate::frontend::core::lexer::LexError::UnterminatedString {
         position: format!("{}:{}", start_pos.line, start_pos.column),
-
         span: since(lexer, start_pos),
     });
-
-    Some(Token {
-        kind: TokenKind::Error("Unterminated multi-line string".to_string()),
-
-        span: lexer.span(),
-
-        literal: None,
-    })
+    Some(lexer.make_token(TokenKind::Error(kind.unterminated_kind().to_string())))
 }
 
 /// Scan character literal
@@ -1067,130 +784,7 @@ pub fn scan_char(lexer: &mut super::tokenizer::Lexer<'_>) -> Option<Token> {
 
             '\\' => {
                 lexer.advance();
-
-                if let Some(escaped) = lexer.advance() {
-                    match escaped {
-                        'n' => value.push('\n'),
-
-                        't' => value.push('\t'),
-
-                        'r' => value.push('\r'),
-
-                        '\\' => value.push('\\'),
-
-                        '\'' => value.push('\''),
-
-                        '"' => value.push('"'),
-
-                        '0' => value.push('\0'),
-
-                        'x' => {
-                            // Hexadecimal escape \x41
-
-                            let mut hex = String::new();
-
-                            for _ in 0..2 {
-                                if let Some(&hc) = lexer.peek() {
-                                    if is_hex_digit(hc) {
-                                        hex.push(hc);
-
-                                        lexer.advance();
-                                    } else {
-                                        break;
-                                    }
-                                }
-                            }
-
-                            if hex.len() == 2 {
-                                if let Ok(byte) = u8::from_str_radix(&hex, 16) {
-                                    value.push(byte as char);
-                                } else {
-                                    lexer.error = Some(
-                                        crate::frontend::core::lexer::LexError::InvalidEscape {
-                                            sequence: format!("\\x{}", hex),
-
-                                            span: point(lexer),
-                                        },
-                                    );
-                                }
-                            } else {
-                                lexer.error =
-                                    Some(crate::frontend::core::lexer::LexError::InvalidEscape {
-                                        sequence: format!("\\x{}", hex),
-
-                                        span: point(lexer),
-                                    });
-                            }
-                        }
-
-                        'u' => {
-                            // Unicode escape \u{1F600}
-
-                            if lexer.peek() == Some(&'{') {
-                                lexer.advance();
-
-                                let mut hex = String::new();
-
-                                while let Some(&hc) = lexer.peek() {
-                                    if is_hex_digit(hc) {
-                                        hex.push(hc);
-
-                                        lexer.advance();
-                                    } else {
-                                        break;
-                                    }
-                                }
-
-                                if lexer.peek() == Some(&'}') && !hex.is_empty() {
-                                    lexer.advance();
-
-                                    if let Ok(codepoint) = u32::from_str_radix(&hex, 16) {
-                                        if let Some(ch) = char::from_u32(codepoint) {
-                                            value.push(ch);
-                                        } else {
-                                            lexer.error = Some(crate::frontend::core::lexer::LexError::InvalidEscape {
-
-
-
-                                                sequence: format!("\\u{{{}}}", hex),
-
-                                                span: point(lexer),
-
-
-
-                                            });
-                                        }
-                                    } else {
-                                        lexer.error = Some(
-                                            crate::frontend::core::lexer::LexError::InvalidEscape {
-                                                sequence: format!("\\u{{{}}}", hex),
-
-                                                span: point(lexer),
-                                            },
-                                        );
-                                    }
-                                } else {
-                                    lexer.error = Some(
-                                        crate::frontend::core::lexer::LexError::InvalidEscape {
-                                            sequence: "\\u{".to_string(),
-
-                                            span: point(lexer),
-                                        },
-                                    );
-                                }
-                            } else {
-                                lexer.error =
-                                    Some(crate::frontend::core::lexer::LexError::InvalidEscape {
-                                        sequence: "\\u".to_string(),
-
-                                        span: point(lexer),
-                                    });
-                            }
-                        }
-
-                        c => value.push(c),
-                    }
-                }
+                decode_escape(lexer, &mut value, EscapeMode::Char);
             }
 
             '\n' => {
@@ -1267,15 +861,150 @@ pub fn hex_digit_value(c: char) -> u128 {
     }
 }
 
+/// RFC-012: 把插值内容切成表达式与格式说明符。
+///
+/// "pi:.2f" → ("pi", Some(".2f"))
+/// "x + y" → ("x + y", None)
+/// "name" → ("name", None)
+///
+/// 8.2.2 起口径只此一份（原在 parser），词法期为唯一使用者。
+fn split_format_spec(s: &str) -> (String, Option<String>) {
+    // Find the last ':' that is not inside balanced brackets/parens
+    let mut depth_paren = 0i32;
+    let mut depth_bracket = 0i32;
+    let mut last_colon_pos = None;
+
+    for (i, c) in s.char_indices() {
+        match c {
+            '(' => depth_paren += 1,
+            ')' => depth_paren -= 1,
+            '[' => depth_bracket += 1,
+            ']' => depth_bracket -= 1,
+            ':' if depth_paren == 0 && depth_bracket == 0 => {
+                last_colon_pos = Some(i);
+            }
+            _ => {}
+        }
+    }
+
+    if let Some(pos) = last_colon_pos {
+        let expr_part = s[..pos].to_string();
+        let spec_part = s[pos + 1..].to_string();
+        // Only treat as format spec if the part after : looks like a format spec
+        // (doesn't contain spaces or look like another expression)
+        if !spec_part.is_empty() && !spec_part.contains(' ') {
+            return (expr_part, Some(spec_part));
+        }
+    }
+
+    (s.to_string(), None)
+}
+
+/// RFC-012 / #402: 词法期切分 f-string 内容（唯一事实源）。
+///
+/// 输入是已解码转义、保留花括号序列的 raw 内容；输出 Text / Interpolation 段，
+/// 口径与 8.2.2 之前 parser 的切分逐字一致：
+/// - {{ → 文本 {，}} 与孤立 } → 文本 }；
+/// - 插值按花括号配对截取，顶层 ':' 后的非空无空格部分作为格式说明符；
+/// - 表达式 trim 后为空则不产段（parser 旧实现同样跳过）。
+fn split_fstring_segments(raw: &str) -> Vec<FStringTokenSegment> {
+    let mut segments = Vec::new();
+    let mut chars = raw.chars().peekable();
+    let mut text_buf = String::new();
+
+    while let Some(&c) = chars.peek() {
+        if c == '{' {
+            chars.next();
+
+            // Escaped {{ → literal {
+            if chars.peek() == Some(&'{') {
+                chars.next();
+                text_buf.push('{');
+                continue;
+            }
+
+            // Flush text buffer
+            if !text_buf.is_empty() {
+                segments.push(FStringTokenSegment::Text(std::mem::take(&mut text_buf)));
+            }
+
+            // Collect expression content (until matching })
+            let mut expr_buf = String::new();
+            let mut depth = 1;
+            while let Some(&inner) = chars.peek() {
+                if inner == '{' {
+                    depth += 1;
+                    expr_buf.push(inner);
+                    chars.next();
+                } else if inner == '}' {
+                    depth -= 1;
+                    if depth == 0 {
+                        chars.next();
+                        break;
+                    }
+                    expr_buf.push(inner);
+                    chars.next();
+                } else {
+                    expr_buf.push(inner);
+                    chars.next();
+                }
+            }
+
+            // Split on ':' for format spec (top level only, not inside nested exprs)
+            let (expr_str, format_spec) = split_format_spec(&expr_buf);
+            let expr = expr_str.trim().to_string();
+            if expr.is_empty() {
+                // Empty interpolation: f"{}" → 不产段（与旧 parser 一致）
+                continue;
+            }
+            segments.push(FStringTokenSegment::Interpolation {
+                expr,
+                format_spec,
+                raw: expr_buf,
+            });
+        } else if c == '}' {
+            chars.next();
+
+            // Escaped }} → literal }; a lone } is kept literal too
+            if chars.peek() == Some(&'}') {
+                chars.next();
+            }
+            text_buf.push('}');
+        } else {
+            text_buf.push(c);
+            chars.next();
+        }
+    }
+
+    // Flush remaining text
+    if !text_buf.is_empty() {
+        segments.push(FStringTokenSegment::Text(text_buf));
+    }
+
+    // If no segments found, return a single empty text
+    if segments.is_empty() {
+        segments.push(FStringTokenSegment::Text(String::new()));
+    }
+
+    segments
+}
+
+/// 构造 f-string token 载荷：raw 逐字保留（Display 与既有消费者不变），
+/// segments 是词法期切好的唯一事实源。
+fn make_fstring_token(raw: String) -> FStringToken {
+    let segments = split_fstring_segments(&raw);
+    FStringToken { raw, segments }
+}
+
 /// RFC-012: Scan f-string literal
 ///
 /// Called after consuming `f` and `"`. Scans the content of f"..." including
 /// interpolation expressions delimited by `{` and `}`.
 /// The raw content is stored as a single string with `{` and `}` markers preserved.
-/// The parser will later split it into segments.
+/// 段（Text / Interpolation）在词法期切好放进 token 载荷，parser 直接消费。
 ///
 /// Raw protocol (#402): brace sequences are preserved **verbatim** — `{{` and
-/// `}}` stay as two characters so the parser can distinguish escaped braces
+/// `}}` stay as two characters so the lexer can distinguish escaped braces
 /// from interpolation markers when splitting segments. Backslash escape
 /// sequences (\n, \t, \u{...}, ...) are processed here, same as regular strings.
 ///
@@ -1300,7 +1029,7 @@ pub fn scan_fstring(lexer: &mut super::tokenizer::Lexer<'_>) -> Option<Token> {
 
         let _ = lexer.advance(); // Skip third quote
 
-        return scan_fstring_multi_line(lexer);
+        return scan_triple_quoted(lexer, TripleQuoted::FString);
     }
 
     let mut value = String::new();
@@ -1313,7 +1042,7 @@ pub fn scan_fstring(lexer: &mut super::tokenizer::Lexer<'_>) -> Option<Token> {
                 lexer.advance();
 
                 return Some(Token {
-                    kind: TokenKind::FStringLiteral(value.clone()),
+                    kind: TokenKind::FStringLiteral(make_fstring_token(value.clone())),
 
                     span: Span::new(
                         Position::with_offset(
@@ -1362,10 +1091,7 @@ pub fn scan_fstring(lexer: &mut super::tokenizer::Lexer<'_>) -> Option<Token> {
 
             '\\' if brace_depth == 0 => {
                 lexer.advance();
-
-                if let Some(escaped) = lexer.advance() {
-                    push_fstring_escape(lexer, &mut value, escaped);
-                }
+                decode_escape(lexer, &mut value, EscapeMode::Strict);
             }
 
             '\n' if brace_depth == 0 => {
@@ -1419,203 +1145,141 @@ pub fn scan_fstring(lexer: &mut super::tokenizer::Lexer<'_>) -> Option<Token> {
     })
 }
 
-/// Process one backslash escape inside an f-string (#402, shared by
-/// single-line and multi-line f-string scanning).
-///
-/// `value` receives the decoded character; invalid sequences raise
-/// LexError::InvalidEscape on the lexer and leave `value` untouched.
-fn push_fstring_escape(
+/// 转义序列的解码口径。三处调用点的历史行为不同，差异只在未知转义
+/// 与零字节 / 十六进制 / Unicode 转义是否解码；解码骨架唯一（decode_escape）。
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum EscapeMode {
+    /// 单行字符串与 f-string：解码零字节、十六进制与 Unicode 转义，
+    /// 未知转义报 InvalidEscape。
+    Strict,
+    /// 字符字面量：解码零字节、十六进制与 Unicode 转义，未知转义原样取该字符。
+    Char,
+    /// 多行字符串：只解码 n / t / r / 反斜杠 / 双引号 / 单引号，
+    /// 其余序列（含 0 / x / u）原样保留反斜杠与字符，不报错。
+    Lenient,
+}
+
+/// 唯一的转义解码实现。调用点已消费反斜杠；本函数消费紧随其后的转义字符。
+fn decode_escape(
     lexer: &mut super::tokenizer::Lexer<'_>,
     value: &mut String,
-    escaped: char,
+    mode: EscapeMode,
 ) {
+    let Some(escaped) = lexer.advance() else {
+        return;
+    };
+
+    if mode == EscapeMode::Lenient {
+        match escaped {
+            'n' => value.push('\n'),
+            't' => value.push('\t'),
+            'r' => value.push('\r'),
+            '\\' => value.push('\\'),
+            '"' => value.push('"'),
+            '\'' => value.push('\''),
+            other => {
+                // 多行字符串：未识别的转义保留反斜杠与字符
+                value.push('\\');
+                value.push(other);
+            }
+        }
+        return;
+    }
+
     match escaped {
         'n' => value.push('\n'),
-
         't' => value.push('\t'),
-
         'r' => value.push('\r'),
-
         '\\' => value.push('\\'),
-
         '"' => value.push('"'),
-
         '\'' => value.push('\''),
-
         '0' => value.push('\0'),
-
-        'x' => {
-            let mut hex = String::new();
-
-            for _ in 0..2 {
-                if let Some(&hc) = lexer.peek() {
-                    if is_hex_digit(hc) {
-                        hex.push(hc);
-
-                        lexer.advance();
-                    } else {
-                        break;
-                    }
-                }
-            }
-
-            if hex.len() == 2 {
-                if let Ok(byte) = u8::from_str_radix(&hex, 16) {
-                    value.push(byte as char);
-                } else {
-                    lexer.error = Some(crate::frontend::core::lexer::LexError::InvalidEscape {
-                        sequence: format!("\\x{}", hex),
-
-                        span: point(lexer),
-                    });
-                }
-            } else {
-                lexer.error = Some(crate::frontend::core::lexer::LexError::InvalidEscape {
-                    sequence: format!("\\x{}", hex),
-
-                    span: point(lexer),
-                });
-            }
-        }
-
-        'u' => {
-            if lexer.peek() == Some(&'{') {
-                lexer.advance();
-
-                let mut hex = String::new();
-
-                while let Some(&hc) = lexer.peek() {
-                    if is_hex_digit(hc) {
-                        hex.push(hc);
-
-                        lexer.advance();
-                    } else {
-                        break;
-                    }
-                }
-
-                if lexer.peek() == Some(&'}') && !hex.is_empty() {
-                    lexer.advance();
-
-                    if let Ok(codepoint) = u32::from_str_radix(&hex, 16) {
-                        if let Some(ch) = char::from_u32(codepoint) {
-                            value.push(ch);
-                        } else {
-                            lexer.error =
-                                Some(crate::frontend::core::lexer::LexError::InvalidEscape {
-                                    sequence: format!("\\u{{{}}}", hex),
-
-                                    span: point(lexer),
-                                });
-                        }
-                    } else {
-                        lexer.error = Some(crate::frontend::core::lexer::LexError::InvalidEscape {
-                            sequence: format!("\\u{{{}}}", hex),
-
-                            span: point(lexer),
-                        });
-                    }
-                } else {
-                    lexer.error = Some(crate::frontend::core::lexer::LexError::InvalidEscape {
-                        sequence: "\\u{".to_string(),
-
-                        span: point(lexer),
-                    });
-                }
-            } else {
-                lexer.error = Some(crate::frontend::core::lexer::LexError::InvalidEscape {
-                    sequence: "\\u".to_string(),
-
-                    span: point(lexer),
-                });
-            }
-        }
-
-        c => {
+        'x' => decode_hex_byte(lexer, value),
+        'u' => decode_unicode(lexer, value),
+        other if mode == EscapeMode::Char => value.push(other),
+        other => {
             lexer.error = Some(crate::frontend::core::lexer::LexError::InvalidEscape {
-                sequence: c.to_string(),
-
+                sequence: other.to_string(),
                 span: point(lexer),
             });
         }
     }
 }
 
-/// RFC-012: Scan multi-line f-string literal (f"""...""")
-///
-/// Same raw protocol as `scan_fstring`: backslash escapes are processed,
-/// brace sequences are preserved verbatim for the parser. Newlines are
-/// content. Terminated by the first `"""` (an interpolation may not contain
-/// an unescaped `"""`, matching plain multi-line strings).
-fn scan_fstring_multi_line(lexer: &mut super::tokenizer::Lexer<'_>) -> Option<Token> {
-    let start_pos = lexer.position();
-
-    let mut value = String::new();
-
-    // The opening """ has already been consumed by scan_fstring
-
-    while let Some(c) = lexer.advance() {
-        // Check for closing """
-
-        if c == '"' {
-            let actual_peek1 = lexer.peek_public().copied();
-
-            let mut temp_clone = lexer.chars_clone();
-
-            let actual_peek2 = temp_clone.nth(1);
-
-            if actual_peek1 == Some('"') && actual_peek2 == Some('"') {
-                // Found closing """
-
-                // Clear any previous error and consume the remaining two quotes
-
-                lexer.error = None;
-
-                lexer.advance(); // consume second quote
-
-                lexer.advance(); // consume third quote
-
-                return Some(Token {
-                    kind: TokenKind::FStringLiteral(value.clone()),
-
-                    span: Span::new(
-                        Position::with_offset(
-                            lexer.start_line(),
-                            lexer.start_column(),
-                            lexer.start_offset(),
-                        ),
-                        lexer.position(),
-                    ),
-
-                    literal: None,
-                });
+/// 解码十六进制字节转义：两位十六进制数字。不足两位或非法报 InvalidEscape。
+fn decode_hex_byte(
+    lexer: &mut super::tokenizer::Lexer<'_>,
+    value: &mut String,
+) {
+    let mut hex = String::new();
+    for _ in 0..2 {
+        if let Some(&hc) = lexer.peek() {
+            if is_hex_digit(hc) {
+                hex.push(hc);
+                lexer.advance();
             } else {
-                // This is just a single quote inside the string
-
-                value.push(c);
+                break;
             }
-        } else if c == '\\' {
-            // Handle escape sequences
-
-            if let Some(escaped) = lexer.advance() {
-                push_fstring_escape(lexer, &mut value, escaped);
-            }
-        } else {
-            value.push(c);
         }
     }
 
-    lexer.error = Some(crate::frontend::core::lexer::LexError::UnterminatedString {
-        position: format!("{}:{}", start_pos.line, start_pos.column),
+    let byte = if hex.len() == 2 {
+        u8::from_str_radix(&hex, 16).ok()
+    } else {
+        None
+    };
+    match byte {
+        Some(byte) => value.push(byte as char),
+        None => {
+            lexer.error = Some(crate::frontend::core::lexer::LexError::InvalidEscape {
+                sequence: format!("\\x{hex}"),
+                span: point(lexer),
+            });
+        }
+    }
+}
 
-        span: since(lexer, start_pos),
-    });
+/// 解码 Unicode 转义：u{...} 码点。缺花括号、空码点或越界码点报 InvalidEscape。
+fn decode_unicode(
+    lexer: &mut super::tokenizer::Lexer<'_>,
+    value: &mut String,
+) {
+    if lexer.peek() != Some(&'{') {
+        lexer.error = Some(crate::frontend::core::lexer::LexError::InvalidEscape {
+            sequence: "\\u".to_string(),
+            span: point(lexer),
+        });
+        return;
+    }
+    lexer.advance();
 
-    Some(Token {
-        kind: TokenKind::Error("Unterminated multi-line f-string".to_string()),
+    let mut hex = String::new();
+    while let Some(&hc) = lexer.peek() {
+        if is_hex_digit(hc) {
+            hex.push(hc);
+            lexer.advance();
+        } else {
+            break;
+        }
+    }
 
-        span: lexer.span(),
+    if lexer.peek() != Some(&'}') || hex.is_empty() {
+        lexer.error = Some(crate::frontend::core::lexer::LexError::InvalidEscape {
+            sequence: "\\u{".to_string(),
+            span: point(lexer),
+        });
+        return;
+    }
+    lexer.advance();
 
-        literal: None,
-    })
+    let decoded = u32::from_str_radix(&hex, 16).ok().and_then(char::from_u32);
+    match decoded {
+        Some(ch) => value.push(ch),
+        None => {
+            lexer.error = Some(crate::frontend::core::lexer::LexError::InvalidEscape {
+                sequence: format!("\\u{{{hex}}}"),
+                span: point(lexer),
+            });
+        }
+    }
 }

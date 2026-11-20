@@ -566,45 +566,45 @@ mod fstring_tests;
 | `src/frontend/core/parser/pratt/precedence.rs` | `8-13`、`11` | 删除零引用的 6 个第一套常量 |
 | 同上 | `22` | `BP_RANGE` 改为具名 `..` 绑定力（`:40` 同步），否则删除 |
 | 同上 | `35-94` | 删除 `Precedence` 枚举 |
-| 同上 | `98-133` | 删除 `PrecedenceContext` 结构体 |
+| 同上 | `98-134` | 删除 `PrecedenceContext` 结构体 |
 | 同上 | `6-17`、`22-31` | 保留存活常量，与第二套合并为层内无冲突编号 |
 | `src/frontend/core/parser/pratt/led.rs` | `33` | `BP_ASSIGN` 改指到重排后的赋值层常量 |
 | 同上 | `40` | `(6,7)` → `BP_RANGE_L` / `BP_RANGE_R` |
 | 同上 | `75`、`77`、`79`、`83` | `BP_CALL` 改指到重排后的后缀层常量 |
 | 同上 | `81` | `BP_CAST` 改指到重排后的转换层常量 |
 | 同上 | `85` | `(11,1)` → `BP_LAMBDA_L` / `BP_LAMBDA_R` |
-| `src/frontend/core/parser/pratt/nud.rs` | `32`、`35`、`83`、`101`、`223`、`243` | `BP_UNARY` 改指到重排后的前缀层常量 |
-| 同上 | `38-69` | `BP_HIGHEST` 改指到重排后的最高层常量 |
-| 同上 | `1041` | `parse_expression(12)` → `parse_expression(BP_PATTERN_PROBE)`，并补注释说明该值来源 |
-| `src/frontend/core/parser/statements/declarations.rs` | `120-122` | 删除 `skip_old_function_syntax` |
-| 同上 | `725` | 删除其调用点（`is_old_function_syntax` 的删除见阶段 2） |
+| `src/frontend/core/parser/pratt/nud.rs` | `33`、`36`、`84`、`102`、`228`、`248` | `BP_UNARY` 改指到重排后的前缀层常量 |
+| 同上 | `39-70` | `BP_HIGHEST` 改指到重排后的最高层常量 |
+| 同上 | `1019` | `parse_expression(12)` → `parse_expression(BP_PATTERN_PROBE)`，并补注释说明该值来源 |
+| `src/frontend/core/parser/statements/declarations.rs` | `85-87` | 删除 `skip_old_function_syntax` |
+| 同上 | `695` | 删除其调用点（`is_old_function_syntax` 的删除见阶段 2） |
 | `src/frontend/core/parser/pratt/tests/precedence_inline.rs` | 全文 | 删除（唯一引用死代码的孤儿文件） |
 
-配套改名（BP 归并的连带面，约 89 处）：`parser/mod.rs:80`、`statements/control_flow.rs` 9 处、`statements/declarations.rs:18` / `321` / `601` / `743` / `818` / `850` / `966` / `994`、`statements/functions.rs:9` / `:110`、`statements/bindings.rs:168`、`statements/types.rs:15` / `:641` / `:654`、`pratt/led.rs:99` / `:229` / `:321` / `:327` / `:415`、`pratt/nud.rs:195` / `:263` / `:446` / `:516` / `:523`。
+配套改名（BP 归并的连带面，约 89 处）：`parser/mod.rs:113`、`statements/control_flow.rs` 8 处、`statements/declarations.rs:19` / `287` / `577` / `705` / `785` / `821` / `940` / `972`、`statements/functions.rs:9` / `:107`、`statements/bindings.rs:170`、`statements/types.rs:16` / `:782` / `:794`、`pratt/led.rs:99` / `:227` / `:315` / `:321` / `:409`、`pratt/nud.rs:200` / `:268` / `:418` / `:471` / `:478`。
 
 测试复活（阶段 1，可独立提交）：
 
 | 文件 | 行号 | 改动 |
 | --- | --- | --- |
-| `src/frontend/core/lexer/mod.rs` | `106` 之后 | 新增 `#[cfg(test)] mod tests;` |
-| `src/frontend/core/lexer/tests/mod.rs` | `15-25` | 新增 `mod lexer_mod;` 与 `mod symbols;` |
+| `src/frontend/core/lexer/mod.rs` | `167-168` | 新增 `#[cfg(test)] mod tests;` |
+| `src/frontend/core/lexer/tests/mod.rs` | `12-18` | 新增 `mod lexer_mod;` 与 `mod symbols;` |
 | 同上 | 全文 | 删除 7 个空壳的 `mod` 声明与 `pub use` 行 |
 | 同上 | 全文 | 删除 `pub use ... ::*;` 再导出块（`28-38`） |
 | `src/frontend/core/lexer/tests/` | 7 个空壳文件 | 删除文件 |
-| `src/frontend/core/parser/pratt/tests/mod.rs` | `4-6` | 新增接线自检断言 |
+| `src/frontend/core/parser/pratt/tests/mod.rs` | `4-7` | 新增接线自检断言 |
 | `src/frontend/core/parser/pratt/tests/precedence.rs` | `6-13` | 用真实结合性断言替换空转断言 |
 
 范式变更（阶段 2-4）：
 
 | 文件 | 改动 |
 | --- | --- |
-| `src/frontend/core/lexer/literals.rs` | 四个基数扫描器合并为 `scan_radix_number(lexer, base, digit_pred)`；三处转义解码合并为唯一 `decode_escape(lexer, out)`；`scan_multi_line_string:869` 与 `scan_fstring_multi_line:1497` 合并 |
-| `src/frontend/core/parser/pratt/nud.rs:441-446` | 移除运行时嵌套 `tokenize()`，改由词法期一次性产出 |
-| `src/frontend/core/parser/pratt/led.rs:30-88` / `nud.rs:26-75` | 两张手写表替换为生成的映射表 |
-| `src/frontend/core/parser/ast.rs:191-213` | `BinOp` 与 `const_data::BinOp` 改为同源生成 |
-| `src/frontend/core/types/const_data.rs:234` | 同上 |
-| `src/frontend/core/parser/statements/declarations.rs:136-642` | 拆为 8 个函数 + `ParserState::skip_balanced_parens()`（`96-105`/`147-156`/`191-200`/`224-233` 四处改为调用） |
-| `src/frontend/core/parser/parser_state.rs` | 新增 `skip_balanced_parens()`（`synchronize()` 在 `:170`，保持不变） |
+| `src/frontend/core/lexer/literals.rs` | 四个基数扫描器合并为 `scan_radix_number(lexer, base, digit_pred)`；三处转义解码合并为唯一 `decode_escape(lexer, out)`；`scan_multi_line_string` 与 `scan_fstring_multi_line` 合并 |
+| `src/frontend/core/parser/pratt/nud.rs:367` / `:398` | 移除运行时嵌套 `tokenize()`，改由词法期一次性产出 |
+| `src/frontend/core/parser/pratt/led.rs:30-88` / `nud.rs:27-76` | 两张手写表替换为生成的映射表 |
+| `src/ast/mod.rs:194-218` | `BinOp` 与 `const_data::BinOp` 改为同源生成 |
+| `src/frontend/core/types/const_data.rs:290` | 同上 |
+| `src/frontend/core/parser/statements/declarations.rs:101-620` | 拆为 8 个函数 + `ParserState::skip_balanced_parens()`（`61-70`/`112-120`/`156-164`/`186-194` 四处改为调用） |
+| `src/frontend/core/parser/parser_state.rs` | 新增 `skip_balanced_parens()`（`synchronize()` 在 `:330`，保持不变） |
 
 **本文零改动的文件**：`src/middle/core/ir_gen.rs`、`src/frontend/core/typecheck/**`、`src/backends/**`、`src/frontend/core/formatter/**` 的**主体**。它们只在"生成的访问器"替代 `matches!` 宏时才改动，且改动是机械替换。
 

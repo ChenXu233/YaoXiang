@@ -3,6 +3,7 @@
 //! This module implements prefix parsing for the Pratt parser with RFC-010/011 support.
 
 use crate::ast::*;
+use crate::frontend::core::lexer::lex_interpolations;
 use crate::frontend::core::lexer::tokens::*;
 use crate::frontend::core::parser::pratt::precedence::*;
 use crate::frontend::core::parser::ParserState;
@@ -358,152 +359,85 @@ impl<'a> ParserState<'a> {
 
     /// RFC-012: Parse f-string literal into FString AST node
     ///
-    /// The FStringLiteral token contains the raw content of f"...".
-    /// This method splits it into Text and Interpolation segments.
+    /// 词法期已把内容切成段（FStringToken.segments）。本方法只做两件事：
+    /// 1) 对本 f-string 的全部插值表达式做一次性批量词法（lex_interpolations）；
+    /// 2) 逐段建 AST，插值段用独立解析器实例解析其 token 流。
+    ///
+    /// parser 不再逐插值重入公共词法入口（05 §f-string 嵌套编译必须显式处理）。
     fn parse_fstring(&mut self) -> Option<Expr> {
         let span = self.span();
         let token = self.current().cloned()?;
-        if let TokenKind::FStringLiteral(raw) = token.kind {
+        if let TokenKind::FStringLiteral(fstring) = token.kind {
             self.bump();
-            let segments = self.parse_fstring_segments(&raw, span)?;
+            let segments = self.parse_fstring_segments(&fstring, span)?;
             Some(Expr::FString { segments, span })
         } else {
             None
         }
     }
 
-    /// Parse f-string raw content into segments
+    /// RFC-012: 把词法期切好的段转成 AST 段。
     ///
-    /// Splits "Hello {name}, pi is {pi:.2f}" into:
-    /// [Text("Hello "), Interpolation(name, None), Text(", pi is "), Interpolation(pi, Some(".2f"))]
-    ///
-    /// Brace escapes (#402, Python-consistent per RFC-012): the lexer keeps
-    /// brace sequences verbatim, so the text side resolves `{{` → `{` and
-    /// `}}` → `}` here; a lone `}` is kept literal. Escapes never apply
-    /// inside interpolation.
-    ///
-    /// 实例方法（原静态关联函数改法，issue #540）：内嵌表达式另起解析器
-    /// 实例，解析深度必须从外层继承——静态函数拿不到 `self` 的深度。
+    /// 插值表达式一次性词法，结果按出现顺序与插值段一一对应；空插值在词法期已剔除。
+    /// 解析失败时的既有回退语义逐字保留：回退成字面文本；深度闸拒绝额外传导
+    /// E0019（issue #540）。
     fn parse_fstring_segments(
         &mut self,
-        raw: &str,
+        fstring: &FStringToken,
         span: Span,
     ) -> Option<Vec<FStringSegment>> {
+        // 一次性满足本 f-string 全部插值的词法需求（N 个插值 1 次调用、单点实现）
+        let interpolation_sources: Vec<&str> = fstring
+            .segments
+            .iter()
+            .filter_map(|segment| match segment {
+                FStringTokenSegment::Text(_) => None,
+                FStringTokenSegment::Interpolation { expr, .. } => Some(expr.as_str()),
+            })
+            .collect();
+        let mut interpolation_tokens = lex_interpolations(&interpolation_sources).into_iter();
+
         let mut segments = Vec::new();
-        let mut chars = raw.chars().peekable();
-        let mut text_buf = String::new();
-
-        while let Some(&c) = chars.peek() {
-            if c == '{' {
-                chars.next();
-
-                // Escaped `{{` → literal `{`
-
-                if chars.peek() == Some(&'{') {
-                    chars.next();
-
-                    text_buf.push('{');
-
-                    continue;
+        for segment in &fstring.segments {
+            match segment {
+                FStringTokenSegment::Text(text) => {
+                    segments.push(FStringSegment::Text(text.clone()));
                 }
-
-                // Flush text buffer
-                if !text_buf.is_empty() {
-                    segments.push(FStringSegment::Text(text_buf.clone()));
-                    text_buf.clear();
-                }
-
-                // Collect expression content (until matching `}`)
-                let mut expr_buf = String::new();
-                let mut depth = 1;
-                while let Some(&inner) = chars.peek() {
-                    if inner == '{' {
-                        depth += 1;
-                        expr_buf.push(inner);
-                        chars.next();
-                    } else if inner == '}' {
-                        depth -= 1;
-                        if depth == 0 {
-                            chars.next();
-                            break;
-                        }
-                        expr_buf.push(inner);
-                        chars.next();
-                    } else {
-                        expr_buf.push(inner);
-                        chars.next();
-                    }
-                }
-
-                // Split on `:` for format spec (only at top level, not inside nested exprs)
-                let (expr_str, format_spec) = split_format_spec(&expr_buf);
-
-                // Parse the expression string using the lexer+parser
-                let expr_str_trimmed = expr_str.trim();
-                if expr_str_trimmed.is_empty() {
-                    // Empty interpolation: f"{}" → error, treat as empty text
-                    continue;
-                }
-
-                // Tokenize and parse the expression
-                let tokens_result = crate::frontend::core::lexer::tokenize(expr_str_trimmed);
-                match tokens_result {
-                    Ok(tokens) => {
-                        let mut parser =
-                            crate::frontend::core::parser::ParserState::new(&tokens, self.probe());
-                        // f-string 内嵌表达式深度继承外层（issue #540）：
-                        // 内外各数各的会让「1024 层外层 + 1024 层内嵌」
-                        // 双闸都拦不住，真实栈深已翻倍。
-                        parser.inherit_parse_depth_from(self);
-                        if let Some(expr) =
-                            parser.parse_expression(crate::frontend::core::parser::pratt::BP_LOWEST)
-                        {
-                            segments.push(FStringSegment::Interpolation {
-                                expr: Box::new(expr),
-                                format_spec,
-                            });
-                        } else {
-                            // 深度闸拒绝传导（issue #540 修复轮）：内层实例的
-                            // E0019 推进在它自己的 errors 里，实例本随回退丢弃
-                            // ——不传导则程序编译成功、运行输出字面插值源文本。
-                            // 其余解析失败的既有回退语义（字面文本）逐字保留，
-                            // 只有深度闸拒绝这一条路径传导。
-                            if parser.is_depth_rejected() {
-                                self.absorb_depth_rejection(parser.take_errors());
+                FStringTokenSegment::Interpolation {
+                    format_spec, raw, ..
+                } => {
+                    let literal_fallback = FStringSegment::Text(format!("{{{raw}}}"));
+                    match interpolation_tokens.next() {
+                        Some(Ok(tokens)) => {
+                            let mut parser = ParserState::new(&tokens, self.probe());
+                            // f-string 内嵌表达式深度继承外层（issue #540）：
+                            // 内外各数各的会让「1024 层外层 + 1024 层内嵌」
+                            // 双闸都拦不住，真实栈深已翻倍。
+                            parser.inherit_parse_depth_from(self);
+                            if let Some(expr) = parser
+                                .parse_expression(crate::frontend::core::parser::pratt::BP_LOWEST)
+                            {
+                                segments.push(FStringSegment::Interpolation {
+                                    expr: Box::new(expr),
+                                    format_spec: format_spec.clone(),
+                                });
+                            } else {
+                                // 深度闸拒绝传导（issue #540 修复轮）：内层实例的
+                                // E0019 推进在它自己的 errors 里，实例本随回退丢弃
+                                // ——不传导则程序编译成功、运行输出字面插值源文本。
+                                // 其余解析失败的既有回退语义（字面文本）逐字保留，
+                                // 只有深度闸拒绝这一条路径传导。
+                                if parser.is_depth_rejected() {
+                                    self.absorb_depth_rejection(parser.take_errors());
+                                }
+                                segments.push(literal_fallback);
                             }
-                            // Failed to parse expression, treat as text
-                            segments.push(FStringSegment::Text(format!("{{{}}}", expr_buf)));
                         }
-                    }
-                    Err(_) => {
-                        // Lex error, treat as text
-                        segments.push(FStringSegment::Text(format!("{{{}}}", expr_buf)));
+                        // 词法错误 / 数量不匹配：回退成字面文本（既有语义）
+                        _ => segments.push(literal_fallback),
                     }
                 }
-            } else if c == '}' {
-                chars.next();
-
-                // Escaped `}}` → literal `}`; a lone `}` is kept literal too
-
-                if chars.peek() == Some(&'}') {
-                    chars.next();
-                }
-
-                text_buf.push('}');
-            } else {
-                text_buf.push(c);
-                chars.next();
             }
-        }
-
-        // Flush remaining text
-        if !text_buf.is_empty() {
-            segments.push(FStringSegment::Text(text_buf));
-        }
-
-        // If no segments found, return a single empty text
-        if segments.is_empty() {
-            segments.push(FStringSegment::Text(String::new()));
         }
 
         let _ = span; // Used by caller for the FString node span
@@ -1456,41 +1390,4 @@ fn range_bound_from_expr(expr: &Expr) -> Option<Literal> {
         },
         _ => None,
     }
-}
-
-/// RFC-012: Split an f-string interpolation into expression and format spec
-///
-/// "pi:.2f" → ("pi", Some(".2f"))
-/// "x + y" → ("x + y", None)
-/// "name" → ("name", None)
-fn split_format_spec(s: &str) -> (String, Option<String>) {
-    // Find the last ':' that is not inside balanced brackets/parens
-    let mut depth_paren = 0i32;
-    let mut depth_bracket = 0i32;
-    let mut last_colon_pos = None;
-
-    for (i, c) in s.char_indices() {
-        match c {
-            '(' => depth_paren += 1,
-            ')' => depth_paren -= 1,
-            '[' => depth_bracket += 1,
-            ']' => depth_bracket -= 1,
-            ':' if depth_paren == 0 && depth_bracket == 0 => {
-                last_colon_pos = Some(i);
-            }
-            _ => {}
-        }
-    }
-
-    if let Some(pos) = last_colon_pos {
-        let expr_part = s[..pos].to_string();
-        let spec_part = s[pos + 1..].to_string();
-        // Only treat as format spec if the part after : looks like a format spec
-        // (doesn't contain spaces or look like another expression)
-        if !spec_part.is_empty() && !spec_part.contains(' ') {
-            return (expr_part, Some(spec_part));
-        }
-    }
-
-    (s.to_string(), None)
 }
