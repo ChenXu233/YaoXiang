@@ -1,0 +1,15 @@
+// 06-compile-errors/types/cross_container_equality_err.yx
+// 覆盖: issue #549 甲案（2026-11-20 用户裁决）——Eq/Neq 非记录形态走比较
+//       「两侧同型」纪律，跨容器相等（Tuple vs List）编译期拒绝
+// expect: compile-error E1002
+// 验证: `(1, 2) == [1, 2]` 必须编译期报 E1002。原为行为语料断言
+//       （01-syntax/operators/range_equality.yx 行 31「false 而非类型错误」，
+//       修前编译放行、运行期深比较打印 false），甲案落地后该行为被废除，
+//       按语料标准迁入编译期拒绝面。
+// 状态: ❌ 应编译失败
+
+main: () -> Void = {
+    x = (1, 2) == [1, 2]
+}
+
+main()

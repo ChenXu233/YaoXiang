@@ -1259,17 +1259,25 @@ fn test_multifile_import_cycle_void_comparison_runtime_hint_points_to_init_order
 /// #500 反向锚（集成面）：比较类型不匹配**无 Void 操作数**时，E6007 消息必须
 /// **不含** hint——hint 的触发面只有 Void 操作数。
 ///
-/// 现状链（实测，2026-11-13 HEAD）：跨类型**相等**比较（`1 == "a"`）编译期
-/// 放行（`infer_equality` 对非记录类型吞掉 unify 结果）、运行期落 E6007——
-/// 这是唯一能在端到端构造「无 Void 比较类型不匹配」的形态。本锚只钉运行期
-/// 消息形态（码 + 消息主体 + 无 hint），不断言编译期放行——若未来 Eq 也按
-/// 997 臂纪律编译期拒绝，本锚随该语义修正同步搬到编译期面。
+/// 夹具沿革：2026-11-13 建锚时跨类型**相等**比较（`1 == "a"`）编译期放行
+/// （`infer_equality` 对非记录类型吞掉 unify 结果）、运行期落 E6007，是当时
+/// 唯一能端到端构造「无 Void 比较类型不匹配」的形态；建锚注释即写明——若
+/// 未来 Eq 也按比较纪律编译期拒绝，本锚随该语义修正同步迁移。issue #549
+/// （2026-11-20 用户裁决甲案）收口了该差异：`1 == "a"` 现已编译期拒绝（编译
+/// 期面由 check.rs 的 #549 锚组钉住），本锚夹具换用仍合法触达运行期兜底臂的
+/// 形态——`Any` 槽位（unify 顶部类型规则放行）在运行期携带异型值。四条断言
+/// （E6007 出现 + 消息主体裸 type mismatch + 无 hint + 无 W1007）逐字不变。
 #[test]
 fn test_multifile_comparison_mismatch_without_void_message_has_no_hint() {
-    // Arrange：单文件 script（顶层语句即程序体，比较在模块初始化期求值）
+    // Arrange：单文件 script。`f(1, "a")` 经 Any 形参槽位把异型值带进函数体内的
+    // `a == b`（编译期 Any == Any 放行，运行期 Int vs String 落兜底臂）
     let dir = tempfile::tempdir().expect("create tempdir");
     let entry = dir.path().join("main.yx");
-    std::fs::write(&entry, "x = 1 == \"a\"\n").expect("write main.yx");
+    std::fs::write(
+        &entry,
+        "f: (a: Any, b: Any) -> Bool = (a, b) => {\n    return a == b\n}\nx = f(1, \"a\")\n",
+    )
+    .expect("write main.yx");
 
     // Act
     let output = std::process::Command::new(env!("CARGO_BIN_EXE_yaoxiang-rs"))

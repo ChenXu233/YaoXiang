@@ -1357,11 +1357,15 @@ impl<'a> ExpressionInferrer<'a> {
 
     /// RFC-011b: `==` / `!=` 的类型判定与派发记录。
     ///
-    /// 无用户记录类型参与时保持既有行为（unify 后 Bool，运行时定——Any、
-    /// 容器、异构比较全部不受影响）；至少一侧为记录类型时进接口判定：
-    /// 显式 `Equal(T, T)` 实例化优先（记 OperatorDispatch 供 ir_gen 派发
-    /// 方法调用），否则结构推导——全字段可比且不含 `&mut` 线性令牌则
-    /// 原生逐字段比较，失败报 E1101（指明拖后腿的字段）。
+    /// 非记录形态按比较「两侧同型」纪律判定（issue #549，2026-11-20 用户裁决
+    /// 甲案；与 `infer_binary` 排序比较臂同款 `decide` 入口）：两侧 unify 失败
+    /// 报 E1002，不再吞错误放行异型比较。放行面按既有规则收窄——`Any`/`Never`
+    /// 侧走 unify 顶部/底部类型规则放行（std/test.yx 的 `Any == Any` 槽位），
+    /// TypeVar 一侧延后判定（泛型体内合法），借用操作数按 RFC-009 读穿透剥层
+    /// （std/list.yx 的 `list[i] == item` 形态 (A, &A) 剥借用后同型）。至少一侧
+    /// 为记录类型时进接口判定：显式 `Equal(T, T)` 实例化优先（记 OperatorDispatch
+    /// 供 ir_gen 派发方法调用），否则结构推导——全字段可比且不含 `&mut` 线性
+    /// 令牌则原生逐字段比较，失败报 E1101（指明拖后腿的字段）。
     pub fn infer_equality(
         &mut self,
         op: &BinOp,
@@ -1416,7 +1420,33 @@ impl<'a> ExpressionInferrer<'a> {
         }
 
         if l_record.is_none() && r_record.is_none() {
-            let _ = self.solver.unify(left_ty, right_ty);
+            // 「两侧同型」纪律（issue #549，2026-11-20 用户裁决甲案）：与
+            // infer_binary 排序比较臂（Lt/Le/Gt/Ge）同款——两侧 unify 失败即报
+            // E1002，不再吞错误放行异型比较。此前 `let _ = unify(...)` 恒放行，
+            // `1 == "a"` / `1 == 2.5` / `[1] == ["x"]` 编译期全绿、运行期才落
+            // E6007（#500 查证实测）；容器异型族（`(1,2) == [1,2]` 等）运行
+            // 成功打印 false——D59 D 类（改变原先成功程序的可观察行为），经
+            // 用户裁决全量对齐。判定走 `decide`（与排序比较臂同一入口）：失败
+            // 且 ground 时仍给 RFC-027 判等一次机会；操作数取读视图（RFC-009
+            // 比较读穿透），诊断文面与排序比较臂同族同文（resolve 后的两侧
+            // 原始形态，E1002）。
+            if let Err(failure) = decide(
+                self.solver,
+                &l,
+                &r,
+                Some(span),
+                self.type_defs,
+                self.dep_env,
+            ) {
+                return Err(failure.or_site(
+                    ErrorCodeDefinition::type_mismatch(
+                        &format!("{}", self.solver.resolve_type(left_ty)),
+                        &format!("{}", self.solver.resolve_type(right_ty)),
+                    )
+                    .at(span)
+                    .build(),
+                ));
+            }
             return Ok(MonoType::Bool);
         }
 

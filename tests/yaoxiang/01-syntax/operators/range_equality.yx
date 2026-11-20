@@ -1,8 +1,13 @@
 // 01-syntax/operators/range_equality.yx
 // 覆盖: #304——vec 类容器（Tuple/List/Array）结构相等
 // 验证: Range（借 Tuple 载体）== 逐槽比较；Tuple/List 结构相等；
-//       嵌套容器递归比较；跨容器类型返回 false 而非类型错误
+//       嵌套容器递归比较
 // 状态: ✅ 可运行
+//
+// 跨容器形态（原行 31 `(1, 2) == [1, 2]`）已迁
+// 06-compile-errors/types/cross_container_equality_err.yx：issue #549
+// 甲案（2026-11-20 用户裁决）后异型 Eq 编译期拒绝（E1002），原断言
+// 「false 而非类型错误」描述的是被废除的行为。
 
 use std.assert
 
@@ -26,9 +31,6 @@ main: () -> Void = {
 
     // 嵌套递归
     assert.assert([(1, 2), (3, 4)] == [(1, 2), (3, 4)], "nested structural equality")
-
-    // 跨容器类型：false 而非类型错误
-    assert.assert(!((1, 2) == [1, 2]), "tuple vs list is false, not error")
 }
 
 main()

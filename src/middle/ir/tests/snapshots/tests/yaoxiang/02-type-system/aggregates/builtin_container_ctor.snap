@@ -7,7 +7,7 @@ module
     slot[4] dynamic : Int(64) @depth1
     slot[5] annotated : Int(64) @depth1
     slot[6] grown : Int(64) @depth1
-    locals_total=14
+    locals_total=18
     AllocArray %0 size=int(0), elem=int(1)
     Load %1 <- %0
     StringLength %2 <- %1
@@ -31,20 +31,20 @@ module
     Eq %2 <- %3, %1
     Load %7 <- string("Vec(Int)(1,2,3) len == 3")
     Call %4 <- string("std.assert.assert") [%2, %7] (def=d0)
-    Load %5 <- %6
+    Load %3 <- %6
+    AllocArray %1 size=int(3), elem=int(1)
+    Load %5 <- int(1)
     Load %7 <- int(0)
-    LoadIndex %3 <- %5[%7]
-    Load %1 <- int(1)
+    StoreIndex %1[%7] <- %5
+    Load %8 <- int(2)
+    Load %9 <- int(1)
+    StoreIndex %1[%9] <- %8
+    Load %10 <- int(3)
+    Load %11 <- int(2)
+    StoreIndex %1[%11] <- %10
     Eq %2 <- %3, %1
-    Load %8 <- string("elems[0] == 1")
-    Call %4 <- string("std.assert.assert") [%2, %8] (def=d0)
-    Load %5 <- %6
-    Load %7 <- int(2)
-    LoadIndex %3 <- %5[%7]
-    Load %1 <- int(3)
-    Eq %2 <- %3, %1
-    Load %8 <- string("elems[2] == 3")
-    Call %4 <- string("std.assert.assert") [%2, %8] (def=d0)
+    Load %12 <- string("element ctor positions (1,2,3)")
+    Call %4 <- string("std.assert.assert") [%2, %12] (def=d0)
     Load %2 <- int(8)
     AllocArray %4 size=int(0), elem=int(1)
     StoreField %4.0 <- %2 (type=None, name=Some("length"))
@@ -97,13 +97,20 @@ module
     Eq %8 <- %9, %10
     Load %12 <- string("grown len == 3")
     Call %7 <- string("std.assert.assert") [%8, %12] (def=d0)
-    Load %11 <- %5
-    Load %12 <- int(2)
-    LoadIndex %9 <- %11[%12]
-    Load %10 <- int(9)
+    Load %9 <- %5
+    AllocArray %10 size=int(3), elem=int(1)
+    Load %11 <- int(1)
+    Load %12 <- int(0)
+    StoreIndex %10[%12] <- %11
+    Load %13 <- int(2)
+    Load %14 <- int(1)
+    StoreIndex %10[%14] <- %13
+    Load %15 <- int(9)
+    Load %16 <- int(2)
+    StoreIndex %10[%16] <- %15
     Eq %8 <- %9, %10
-    Load %13 <- string("grown[2] == 9")
-    Call %7 <- string("std.assert.assert") [%8, %13] (def=d0)
+    Load %17 <- string("append lands at index 2")
+    Call %7 <- string("std.assert.assert") [%8, %17] (def=d0)
     Drop %1
     Drop %4
     Drop %3

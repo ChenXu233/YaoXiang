@@ -2029,8 +2029,9 @@ fn test_check_cross_unit_generic_call_result_binds_annotation() {
 /// 实测记录（2026-11-13 HEAD）：任务原文设想守卫「静态 Void vs Int 比较被编译
 /// 期拒绝」——该前提**不成立**：跨类型**相等**比较（`1 == "a"`、void 值 == Int）
 /// 经 `infer_equality` 对非记录类型吞掉 unify 结果而编译期放行、运行期落 E6007。
-/// 该差异属 #500 查证发现的同类问题，按任务边界只报告不顺路修；本守卫钉住
-/// 排序比较这一侧的既有纪律。
+/// 该差异当时按任务边界只报告不顺路修，已由 issue #549 收口（2026-11-20 用户
+/// 裁决甲案）：`infer_equality` 非记录形态走同一「两侧同型」纪律（见下方 #549
+/// 锚组）；本守卫钉住排序比较这一侧的既有纪律。
 #[test]
 fn test_check_cross_type_ordered_comparison_rejected() {
     // Arrange
@@ -2045,6 +2046,209 @@ fn test_check_cross_type_ordered_comparison_rejected() {
     assert!(
         error_count > 0,
         "跨类型排序比较（1 < \"x\"）必须编译期拒绝（infer_binary 比较臂纪律），实际 error_count = {error_count}"
+    );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// #549：Eq/Neq 非记录形态的「两侧同型」编译期守卫（2026-11-20 用户裁决甲案）
+// ─────────────────────────────────────────────────────────────────────────────
+
+// 先红后绿证据（实测）：2026-11-21 修前 HEAD 二进制探针——`1 == "a"` /
+// `1 != "a"` / `1 == 2.5` / `[1] == ["x"]` / `(1, 2) == (1, "x")` /
+// `(1, 2) == [1, 2]` 六形态 `yaoxiang-rs check` 全部 exit 0（吞 unify 恒放行，
+// 标量异型与静态 Void 运行期落 E6007、容器异型族运行成功打印 false）；
+// 修后同六形态全部报 E1002、exit 1。本组锚按 RFC-039 D59 先红后绿纪律钉住
+// 甲案落地面；诊断码与文面与排序比较臂同族同文（E1002，resolve 后两侧形态）。
+
+/// #549 主锚：跨类型**相等**标量比较（`1 == "a"`）编译期拒绝（E1002）。
+///
+/// 修前该形态编译放行、运行期才落 E6007（#500 查证实测）；甲案后与排序
+/// 比较臂同纪律，编译期报 E1002。
+#[test]
+fn test_check_cross_type_equality_scalar_rejected() {
+    // Arrange
+    let dir = temp_dir();
+    let file = create_yx_file(&dir, "eq_scalar_mismatch.yx", r#"x = 1 == "a""#);
+
+    // Act
+    let result = check_result(&file);
+
+    // Assert
+    let codes = error_codes(&result);
+    assert!(
+        codes.iter().any(|c| c == "E1002"),
+        "跨类型相等比较（1 == \"a\"）必须编译期报 E1002（infer_equality 两侧同型纪律，#549 甲案），实际 codes = {codes:?}"
+    );
+}
+
+/// #549 同臂锚：`!=` 与 `==` 走同一判定（infer_equality 同时承载两者），
+/// 跨类型**不等**标量比较同样编译期报 E1002。
+#[test]
+fn test_check_cross_type_inequality_scalar_rejected() {
+    // Arrange
+    let dir = temp_dir();
+    let file = create_yx_file(&dir, "neq_scalar_mismatch.yx", r#"x = 1 != "a""#);
+
+    // Act
+    let result = check_result(&file);
+
+    // Assert
+    let codes = error_codes(&result);
+    assert!(
+        codes.iter().any(|c| c == "E1002"),
+        "跨类型不等比较（1 != \"a\"）必须编译期报 E1002（与 Eq 同臂，#549 甲案），实际 codes = {codes:?}"
+    );
+}
+
+/// #549 混合数值锚：`1 == 2.5`（Int vs Float）编译期拒绝。
+///
+/// RFC-011b 的 Int~Float 混合 widening 只承诺**算术**（Add/Sub/Mul/Div），
+/// 比较无此承诺（infer_binary 比较臂注释同款判据）；unify 无 Int~Float 规则
+/// （solver.rs 仅同宽度同型相等），故 Eq 侧混合数值按异型拒绝。
+#[test]
+fn test_check_cross_type_equality_int_float_rejected() {
+    // Arrange
+    let dir = temp_dir();
+    let file = create_yx_file(&dir, "eq_int_float_mismatch.yx", r#"x = 1 == 2.5"#);
+
+    // Act
+    let result = check_result(&file);
+
+    // Assert
+    let codes = error_codes(&result);
+    assert!(
+        codes.iter().any(|c| c == "E1002"),
+        "混合数值相等比较（1 == 2.5）必须编译期报 E1002（widening 仅算术承诺，比较两侧同型），实际 codes = {codes:?}"
+    );
+}
+
+/// #549 容器元素锚：`Vec(Int) == Vec(String)` 形态（`[1] == ["x"]`）编译期拒绝。
+///
+/// 修前该族编译放行且**运行成功打印 false**（3.20.20 探针矩阵四形态族之一，
+/// #304 运行期语义）——甲案裁决点本体。
+#[test]
+fn test_check_cross_type_equality_container_element_rejected() {
+    // Arrange
+    let dir = temp_dir();
+    let file = create_yx_file(&dir, "eq_container_elem_mismatch.yx", r#"x = [1] == ["x"]"#);
+
+    // Act
+    let result = check_result(&file);
+
+    // Assert
+    let codes = error_codes(&result);
+    assert!(
+        codes.iter().any(|c| c == "E1002"),
+        "容器元素异型相等（[1] == [\\\"x\\\"]）必须编译期报 E1002（#549 甲案裁决点），实际 codes = {codes:?}"
+    );
+}
+
+/// #549 跨容器锚：`(1, 2) == [1, 2]`（Tuple vs List）编译期拒绝。
+///
+/// 该形态原是语料 `tests/yaoxiang/01-syntax/operators/range_equality.yx:31`
+/// 的行为断言（「false 而非类型错误」）；甲案落地后按语料标准迁入
+/// `tests/yaoxiang/06-compile-errors/types/cross_container_equality_err.yx`
+/// （expect: compile-error E1002），本锚钉住同一契约的 CLI 判定面。
+#[test]
+fn test_check_cross_type_equality_cross_container_rejected() {
+    // Arrange
+    let dir = temp_dir();
+    let file = create_yx_file(&dir, "eq_cross_container.yx", r#"x = (1, 2) == [1, 2]"#);
+
+    // Act
+    let result = check_result(&file);
+
+    // Assert
+    let codes = error_codes(&result);
+    assert!(
+        codes.iter().any(|c| c == "E1002"),
+        "跨容器相等比较（(1, 2) == [1, 2]）必须编译期报 E1002（#549 甲案），实际 codes = {codes:?}"
+    );
+}
+
+/// #549 对照锚：**同型**相等比较零变化——标量、容器、变量、`Any` 槽位四形态
+/// 编译零错误。`Any == Any` 是 std/test.yx 的 `assert_eq: (a: Any, b: Any)`
+/// 槽位（unify 顶部类型规则放行）；借用操作数按 RFC-009 读穿透剥层
+/// （std/list.yx 的 `list[i] == item` 形态 (A, &A)），同一性质在此锚内
+/// 由 `Any` 槽位形态共同守护。
+#[test]
+fn test_check_same_type_equality_stays_accepted() {
+    // Arrange
+    let dir = temp_dir();
+    let file = create_yx_file(
+        &dir,
+        "eq_same_type_ok.yx",
+        r#"
+eq_int = 1 == 1
+eq_str = "a" == "b"
+eq_list = [1, 2] == [1, 3]
+eq_any: (a: Any, b: Any) -> Bool = (a, b) => {
+    return a == b
+}
+eq_via_any = eq_any(1, 2)
+"#,
+    );
+
+    // Act
+    let result = check_result(&file);
+
+    // Assert
+    let codes = error_codes(&result);
+    assert!(
+        codes.is_empty(),
+        "同型相等比较（标量/容器/变量/Any 槽位）必须编译零错误（既有放行面零变化），实际 codes = {codes:?}"
+    );
+}
+
+/// #549 边界登记锚：接口存在类型包装值（`Animal` 值 == `Animal` 值）走**记录
+/// 臂**结构推导、与 #549 非记录臂无关——接口名经 type_defs 解析为 Struct，
+/// `as_user_record` 命中后按「全字段可比」推导；接口体字段全是方法签名
+/// （fn 不可比），故报 E1101 而非 E1002。同实现/跨实现形态同判（mono 不感知
+/// 存在包装，RFC-011a §表示：typecheck 层用户可见类型仍是接口名）。此锚钉住
+/// 边界：#549 只改非记录臂，记录形态（含接口名形态）既有判据零变化。
+#[test]
+fn test_check_interface_existential_equality_field_inference_rejected() {
+    // Arrange：接口 + 两实现 + 存在容器元素相等（同实现/跨实现各一处）
+    let dir = temp_dir();
+    let file = create_yx_file(
+        &dir,
+        "iface_existential_eq.yx",
+        r#"
+Animal: (Self: Type) -> Type = {
+    speak: (self: &Self) -> String,
+}
+Dog: Type = {
+    name: String,
+    Animal(Dog),
+}
+Dog.speak: (self: &Dog) -> String = { return "Woof" }
+Cat: Type = {
+    lives: Int,
+    Animal(Cat),
+}
+Cat.speak: (self: &Cat) -> String = { return "Meow" }
+main: () -> Void = {
+    animals: Vec(Animal) = [Dog("Rex"), Cat(9)]
+    cross = animals[0] == animals[1]
+    same_elem = animals[0] == animals[0]
+}
+main()
+"#,
+    );
+
+    // Act
+    let result = check_result(&file);
+
+    // Assert
+    let codes = error_codes(&result);
+    let e1101_count = codes.iter().filter(|c| *c == "E1101").count();
+    assert!(
+        e1101_count >= 2,
+        "接口存在类型包装值相等（Animal 值 == Animal 值）走记录臂结构推导报 E1101（字段全为方法签名不可比；同/跨实现同判），实际 codes = {codes:?}"
+    );
+    assert!(
+        !codes.iter().any(|c| c == "E1002"),
+        "接口名形态不得落入 #549 非记录臂（记录判据零变化），实际 codes = {codes:?}"
     );
 }
 

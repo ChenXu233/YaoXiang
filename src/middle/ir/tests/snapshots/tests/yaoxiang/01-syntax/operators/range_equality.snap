@@ -131,20 +131,6 @@ module
     Eq %4 <- %5, %6
     Load %23 <- string("nested structural equality")
     Call %2 <- string("std.assert.assert") [%4, %23] (def=d0)
-    Load %8 <- int(1)
-    Load %9 <- int(2)
-    NewTuple %6 <- [%8, %9]
-    AllocArray %7 size=int(2), elem=int(1)
-    Load %10 <- int(1)
-    Load %11 <- int(0)
-    StoreIndex %7[%11] <- %10
-    Load %12 <- int(2)
-    Load %13 <- int(1)
-    StoreIndex %7[%13] <- %12
-    Eq %5 <- %6, %7
-    Not %4 <- %5
-    Load %14 <- string("tuple vs list is false, not error")
-    Call %2 <- string("std.assert.assert") [%4, %14] (def=d0)
     Drop %3
     Drop %0
     Drop %1
