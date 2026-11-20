@@ -452,6 +452,112 @@ main = () => {
 }
 
 #[test]
+fn test_multifile_use_type_alias_separate_use_statements_fn_return_annotation_matches() {
+    // 3.24.3 t3 F4（先红后绿）：改绑表按条 use 构建时，函数与其返回类型分离
+    // 两条 use 引入（make_b 先、Temp as TempB 后），签名裸名不改绑 ⇒ E1002
+    // 假拒绝（探针实测）。修复后改绑表为本单元全部类型导入的合集（按来源
+    // 模块分域）⇒ 任一条 use 的导入点都取到全域，两侧同源。
+    // Arrange
+    let main = r#"
+use std.assert
+use b.{make_b}
+use b.{Temp as TempB}
+
+u: TempB = make_b()
+
+main = () => {
+    assert.assert(u.v == 2.0, "u.v should be 2.0")
+}
+"#;
+
+    // Act / Assert
+    run_project_ok(&[("b.yx", TEMP_LIB), ("main.yx", main)], "main.yx");
+}
+
+/// 3.24.3 t3 F3 夹具的 b 单元：接口、实现类型、未实现类型与两个构造函数。
+const WIDGET_LIB: &str = r#"
+Drawable: Type = { draw: () -> Void }
+
+Widget: Type = { name: String, Drawable }
+
+Stray: Type = { other: Int }
+
+make_widget: () -> Widget = () => {
+    Widget("w")
+}
+
+make_stray: () -> Stray = () => {
+    Stray(1)
+}
+"#;
+
+#[test]
+fn test_multifile_use_interface_alias_impl_assign_matches_defining_interface() {
+    // 3.24.3 t3 F3（先红后绿）：接口实现名是名义名位（语义与 TypeRef 引用体
+    // 同）——别名导入接口后，实现类型赋给接口类型变量的判定按本地名同源。
+    // 修复前类型载荷保留定义单元裸名 `Drawable`，注解是本地名 `D`，
+    // Struct-vs-TypeRef 判等臂（`s.interfaces.contains`）判异 ⇒ E1002（探针实测）。
+    // Arrange
+    let main = r#"
+use b.{Drawable as D, Widget, make_widget}
+
+w: D = make_widget()
+
+main = () => {
+    print("ok")
+}
+"#;
+
+    // Act / Assert
+    run_project_ok(&[("b.yx", WIDGET_LIB), ("main.yx", main)], "main.yx");
+}
+
+#[test]
+fn test_multifile_use_interface_plain_import_impl_assign_unchanged() {
+    // 对照锚：非别名导入接口（本地名 = 定义名）的赋值判定，改绑接线后
+    // 行为一致——恒等改名零行为变化，防止接线把已绿面弄红。
+    // Arrange
+    let main = r#"
+use b.{Drawable, Widget, make_widget}
+
+w: Drawable = make_widget()
+
+main = () => {
+    print("ok")
+}
+"#;
+
+    // Act / Assert
+    run_project_ok(&[("b.yx", WIDGET_LIB), ("main.yx", main)], "main.yx");
+}
+
+#[test]
+fn test_multifile_use_interface_alias_non_impl_type_still_rejected() {
+    // 守卫锚：改绑不放宽判等——导入但未实现接口的类型赋给接口位仍被拒。
+    // 修复面只在「实现名同源」，接口成员判定照旧。
+    // Arrange
+    let main = r#"
+use b.{Drawable as D, Stray, make_stray}
+
+s: D = make_stray()
+
+main = () => {
+    print("ok")
+}
+"#;
+
+    // Act
+    let err = run_project(&[("b.yx", WIDGET_LIB), ("main.yx", main)], "main.yx")
+        .expect_err("a type without the interface must stay rejected at an interface annotation");
+
+    // Assert
+    assert!(
+        err.contains("E1002"),
+        "assigning a non-implementing type to an interface annotation must be E1002, got:\n{err}"
+    );
+}
+
+#[test]
 fn test_multifile_cross_unit_method_overload_resolves_by_argument_type() {
     // WBS 4.9.7 / #464：跨单元（registry 解析）方法调用的同名重载按**实参类型**决议。
     // 判据（先红后绿）：修复前调用方 env 没有定义单元的候选表 ⇒ 决议段整段跳过、

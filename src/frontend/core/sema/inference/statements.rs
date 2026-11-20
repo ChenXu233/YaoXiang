@@ -246,6 +246,62 @@ pub struct StatementChecker {
     /// 导出不登记（回退现状：resolves_to 落 use 行）。TypeChecker 排空
     /// 引用事件时查本表重写 DefId，使跨文件跳转命中真实定义。
     import_def_locations: HashMap<crate::util::span::Span, (String, crate::util::span::Span)>,
+    /// 类型导入改绑表（3.24.3 t3 F4）：**本单元**全部 use 语句的类型导入，
+    /// 按**来源模块路径**分域（`path → (定义名 → 本地名)`）。签名里的裸名义名
+    /// 在任一条 use 的导入点都能改绑到本地名——不再受「函数与其返回类型分离
+    /// 两条 use 引入」的声明序限制。分域判据：跨单元同名类型（b.Temp / c.Temp
+    /// 各自别名）互不串扰，签名裸名只按其定义单元的域改绑。由 TypeChecker
+    /// 预收集注入（`set_import_type_rebinds`）；单条 use 的类型导入在本函数
+    /// 调用点覆盖（函数体级 use 不在单元预收集面内）。
+    import_type_rebinds: HashMap<String, HashMap<String, String>>,
+}
+
+/// 一条 use 的逐项本地名解析（3.24.3 t3 F5）：别名优先（名源位置随别名
+/// token），无别名随项名（名源位置随项名 token）。
+///
+/// 单一实现——此前该解析模式在 `process_use_stmt` 的改绑表构建与导入循环
+/// 各写一份；单元级预收集（TypeChecker 两条驱动）与本条 use 的条目改绑
+/// 也取本函数，别名解析全仓只此一处。
+pub(in crate::frontend::core::sema) fn use_item_locals(
+    items: &[crate::ast::SpannedIdent],
+    item_aliases: &Option<Vec<Option<crate::ast::SpannedIdent>>>,
+) -> Vec<(String, crate::util::span::Span)> {
+    items
+        .iter()
+        .enumerate()
+        .map(|(i, item)| {
+            item_aliases
+                .as_ref()
+                .and_then(|aliases| aliases.get(i))
+                .and_then(|alias| alias.as_ref())
+                .map(|alias| (alias.name.clone(), alias.span))
+                .unwrap_or_else(|| (item.name.clone(), item.span))
+        })
+        .collect()
+}
+
+/// 一条 use 的**类型导入**改绑对（3.24.3 t3 F4）：`(定义名, 本地名)`，只收
+/// `ExportKind::Type` 导出——改绑判据面是签名与类型载荷里的名义名位，函数/
+/// 常量项不在其上。
+///
+/// 消费者：单元级预收集（TypeChecker 的 `collect_import_type_rebinds`）与
+/// 单条 use 的域覆盖（`process_use_stmt`）。别名解析走 [`use_item_locals`]。
+pub(in crate::frontend::core::sema) fn type_rebind_pairs(
+    items: &[crate::ast::SpannedIdent],
+    locals: &[(String, crate::util::span::Span)],
+    module: &ModuleInfo,
+) -> Vec<(String, String)> {
+    items
+        .iter()
+        .enumerate()
+        .filter_map(|(i, item)| {
+            let export = module.exports.get(&item.name)?;
+            if !matches!(export.kind, ExportKind::Type) {
+                return None;
+            }
+            Some((item.name.clone(), locals[i].0.clone()))
+        })
+        .collect()
 }
 
 /// 语义导入事件：一条 use 语句（#433/D55）。
@@ -327,6 +383,7 @@ impl StatementChecker {
             vendor_root: None,
             semantic_imports: Vec::new(),
             import_def_locations: HashMap::new(),
+            import_type_rebinds: HashMap::new(),
         }
     }
 
@@ -336,6 +393,15 @@ impl StatementChecker {
         names: HashMap<String, String>,
     ) {
         self.import_watch.extend(names);
+    }
+
+    /// 类型导入改绑表注入（3.24.3 t3 F4）：TypeChecker 的单元级预收集产物
+    /// （按来源模块路径分域）随 body_checker 构造传入，见字段文档。
+    pub fn set_import_type_rebinds(
+        &mut self,
+        rebinds: HashMap<String, HashMap<String, String>>,
+    ) {
+        self.import_type_rebinds = rebinds;
     }
 
     /// #321 W1003：取走导入使用跟踪数据（函数体级导入记录 + 已使用名集合）
@@ -898,36 +964,29 @@ impl StatementChecker {
             }
             // use path.{a, b} / use path.{a as x}（#245：仅内联别名）
             (Some(item_names), _) => {
-                // WBS 3.24.3 / #504 改绑表：本条 use 引入的**类型**导出
-                //（定义名 → 本地名）。同条 use 的其他导入项签名引用这些类型时
-                //（`make_b: () -> Temp` 的返回位），导入登记面把裸名改绑到
-                // 本地名，使注解侧与值侧同源。别名缺失时键值同名（恒等改名）。
-                let type_rebinds: HashMap<String, String> = item_names
-                    .iter()
-                    .enumerate()
-                    .filter_map(|(i, item)| {
-                        let export = module.exports.get(&item.name)?;
-                        if !matches!(export.kind, ExportKind::Type) {
-                            return None;
-                        }
-                        let local = item_aliases
-                            .as_ref()
-                            .and_then(|aliases| aliases.get(i))
-                            .and_then(|alias| alias.as_ref())
-                            .map(|alias| alias.name.clone())
-                            .unwrap_or_else(|| item.name.clone());
-                        Some((item.name.clone(), local))
-                    })
-                    .collect();
+                // 逐项本地名一次收集（3.24.3 t3 F5）：导入循环与改绑对共用，
+                // 别名解析不再各写一份。
+                let locals = use_item_locals(item_names, item_aliases);
+                // WBS 3.24.3 / #504 改绑表：签名里引用定义单元类型的裸名义名
+                //（`make_b: () -> Temp` 的返回位）改绑到本地名，使注解侧与值侧
+                // 同源。3.24.3 t3 F4：表基座提升为**本单元全部类型导入**（按
+                // 来源模块分域，TypeChecker 预收集注入）——函数与其返回类型
+                // 分离两条 use 引入时（`use b.{make_b}` 先、`use b.{Temp as
+                // TempB}` 后）签名裸名同样改绑，不再受声明序限制。本条 use 的
+                // 类型导入在域上覆盖（函数体级 use 不在单元预收集面内；同条
+                // 引用是 #504 主形态）。
+                let mut type_rebinds: HashMap<String, String> = self
+                    .import_type_rebinds
+                    .get(path)
+                    .cloned()
+                    .unwrap_or_default();
+                for (definition, local) in type_rebind_pairs(item_names, &locals, &module) {
+                    type_rebinds.insert(definition, local);
+                }
                 for (i, item) in item_names.iter().enumerate() {
                     // 本地名：内联别名（#245）优先，名源位置随别名 token；
                     // 无别名时随项名 token——绑定与 use 行该项同源
-                    let (local_name, local_span) = item_aliases
-                        .as_ref()
-                        .and_then(|v| v.get(i))
-                        .and_then(|a| a.as_ref())
-                        .map(|a| (a.name.as_str(), a.span))
-                        .unwrap_or((item.name.as_str(), item.span));
+                    let (local_name, local_span) = (&locals[i].0, locals[i].1);
                     // E5003：导出未找到（此前静默跳过，用户只看到下游 unknown variable）
                     let Some(export) = module.exports.get(&item.name).cloned() else {
                         return Err(Box::new(

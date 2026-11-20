@@ -60,7 +60,7 @@ description: '语义分析阶段产生的错误，涵盖作用域、变量生命
 - **模板**：`重复定义：'{name}' 已在当前作用域中定义`
 - **消息**：变量在同一作用域中定义了多次
 - **帮助**：重命名或删除重复的定义
-- **发射点**：`src/frontend/core/sema/checker.rs:1654`、`src/frontend/core/sema/inference/statements.rs:2289`、`src/frontend/core/sema/inference/statements.rs:3137` 等 4 处
+- **发射点**：`src/frontend/core/sema/checker.rs:1718`、`src/frontend/core/sema/inference/statements.rs:2348`、`src/frontend/core/sema/inference/statements.rs:3196` 等 4 处
 
 ### E2003：所有权错误
 
@@ -81,7 +81,7 @@ description: '语义分析阶段产生的错误，涵盖作用域、变量生命
 - **模板**：`无法给不可变变量 '{name}' 赋值`
 - **消息**：试图修改不可变变量
 - **帮助**：使用 'mut' 声明可变变量
-- **发射点**：`src/frontend/core/sema/inference/statements.rs:3130`、`src/frontend/core/sema/inference/expressions/expr.rs:3272`
+- **发射点**：`src/frontend/core/sema/inference/statements.rs:3189`、`src/frontend/core/sema/inference/expressions/expr.rs:3272`
 
 ### E2011：使用未初始化变量
 
@@ -111,7 +111,7 @@ description: '语义分析阶段产生的错误，涵盖作用域、变量生命
 - **模板**：`Cannot shadow existing variable '{name}'`
 - **消息**：不能遮蔽已有变量
 - **帮助**：使用不同的变量名，或在不同的作用域中声明变量
-- **发射点**：`src/frontend/core/sema/inference/statements.rs:3144`、`src/frontend/core/sema/inference/statements.rs:3231`、`src/frontend/core/sema/inference/expressions/expr.rs:3282`
+- **发射点**：`src/frontend/core/sema/inference/statements.rs:3203`、`src/frontend/core/sema/inference/statements.rs:3290`、`src/frontend/core/sema/inference/expressions/expr.rs:3282`
 
 ### E2014：使用已移动的值
 
@@ -197,7 +197,7 @@ description: '语义分析阶段产生的错误，涵盖作用域、变量生命
 - **构造函数**：`ErrorCodeDefinition::refined_unproven(assigned, var, constraint)`
 - **模板**：`对 '{assigned}' 赋值后，'{var}' 的精化类型约束：{constraint} 在证明内核内无法静态证明`
 - **帮助**：RFC-027 要求所有精化约束在编译期得到证明——证不出即编译错误。请改写约束使其实参可静态取值（字面量或字面量可折叠的表达式），或提供返回 Type 的证明函数参与编译期执行。
-- **发射点**：`src/frontend/core/sema/checker.rs:239`、`src/frontend/core/sema/checker/refinement.rs:712`、`src/frontend/core/sema/checker/refinement.rs:843`
+- **发射点**：`src/frontend/core/sema/checker.rs:252`、`src/frontend/core/sema/checker/refinement.rs:712`、`src/frontend/core/sema/checker/refinement.rs:843`
 - **源码注释名**：精化约束无法证明（RFC-027 §4/§9：Unproven → 编译错误 + 未解命题，
 
 ### E2090：无效签名

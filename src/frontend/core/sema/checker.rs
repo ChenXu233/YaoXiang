@@ -111,6 +111,19 @@ pub struct TypeChecker {
     /// （单文件传自身；多文件传全集，过包含方向安全）。三个入口**不带
     /// 默认值**：漏接即编译错误，不存在默认空集的静默路径。
     type_level_namespace: super::probe::TypeLevelNamespace,
+    /// 类型导入改绑表（3.24.3 t3 F4）：**本单元**全部 use 语句的类型导入
+    ///（`ExportKind::Type`），按**来源模块路径**分域（`path → (定义名 → 本地名)`）。
+    ///
+    /// 判据面与消费方（#504 签名面 + F3 类型载荷面）：
+    /// ① `process_use_stmt`（经 body_checker 注入）——签名裸名改绑，域取被导
+    ///    入模块，任一条 use 的导入点都能改绑（分离两条 use 的声明序不再受限）；
+    /// ② `register_use_export`——类型载荷里的名义引用（字段 `TypeRef` 与接口
+    ///    实现名）按来源模块域改绑到本地名。
+    /// 分域判据：跨单元同名类型（b.Temp / c.Temp 各自别名）互不串扰——签名
+    /// 裸名只按其定义单元的域改绑，否则跨单元同名判等被误判同型（守卫锚
+    /// `cross_unit_same_named_type_alias_imports_stay_distinct`）。
+    /// 同定义名重复导入由 pass3 的 E5006/E5008 拦截，域内首登记为准（冲突安全）。
+    import_type_rebinds: HashMap<String, HashMap<String, String>>,
 }
 
 /// 调用点形参名表的**条目**（E1113 的槽位判据，6.9.2-B；issue #538）。
@@ -366,6 +379,7 @@ impl TypeChecker {
             early_value_bindings: HashMap::new(),
             declared_top_fns: HashMap::new(),
             type_level_namespace: super::probe::TypeLevelNamespace::default(),
+            import_type_rebinds: HashMap::new(),
         }
     }
 
@@ -617,6 +631,8 @@ impl TypeChecker {
         >,
     ) {
         self.type_level_namespace = namespace.clone();
+        // 3.24.3 t3 F4：改绑表先于语句遍历成形（含 pass2 的 use 注册臂）。
+        self.collect_import_type_rebinds(module);
         // H1：先补种本单元谓词表，使 pass1 的记录模型分类看到内联命题体
         //（`Pos(v)` → `v > 0`），而不是 `Call{Pos,[v]}`。
         for (name, def) in predicate_defs {
@@ -732,6 +748,43 @@ impl TypeChecker {
         self.flush_pending_body_bindings();
     }
 
+    /// 类型导入改绑表的单元级预收集（3.24.3 t3 F4）：扫**全部** use 语句的
+    /// 类型导入对，按来源模块路径分域。
+    ///
+    /// 两条驱动（`check_module_impl` 与 `collect_signatures`）的语句遍历开始
+    /// 前各调一次——改绑表先于任何导入注册/绑定成形，签名与类型载荷的裸名在
+    /// 任一条 use 的处理点都取到全域（`use b.{make_b}` 先、`use b.{Temp as
+    /// TempB}` 后同样改绑）。域内首登记为准；同定义名重复导入由 pass3 的
+    /// E5006/E5008 拦截（冲突安全）。
+    fn collect_import_type_rebinds(
+        &mut self,
+        module: &Module,
+    ) {
+        self.import_type_rebinds.clear();
+        for stmt in &module.items {
+            let crate::ast::StmtKind::Use {
+                path,
+                items: Some(items),
+                item_aliases,
+                ..
+            } = &stmt.kind
+            else {
+                continue;
+            };
+            // 与 pass2 的 use 臂同一解析源（`module_registry.get(path)`）：
+            // 预收集看不到的模块，注册面同样不注册，两面天然一致。
+            let Some(m) = self.env.module_registry.get(path).cloned() else {
+                continue;
+            };
+            let locals = inference::statements::use_item_locals(items, item_aliases);
+            let pairs = inference::statements::type_rebind_pairs(items, &locals, &m);
+            let domain = self.import_type_rebinds.entry(path.clone()).or_default();
+            for (definition, local) in pairs {
+                domain.entry(definition).or_insert(local);
+            }
+        }
+    }
+
     /// 构建并安装函数体检查器（check_module_impl 与 #397 导出面收割共用）。
     ///
     /// 除检查器本体的各张表注入外，同步三样东西：
@@ -767,6 +820,9 @@ impl TypeChecker {
         if let Some(vendor_root) = self.vendor_root.clone() {
             body_checker.set_vendor_root(vendor_root);
         }
+        // 3.24.3 t3 F4：单元级类型导入改绑表（按来源模块分域）随构造注入，
+        // 消费点 `process_use_stmt`（模块级与函数体级 use 同一入口）。
+        body_checker.set_import_type_rebinds(self.import_type_rebinds.clone());
         // 设置泛型类型定义模板表
         body_checker.set_generic_type_defs(self.env.generic_type_defs.clone());
         // 设置方法绑定表
@@ -980,6 +1036,10 @@ impl TypeChecker {
         module: &Module,
         collect_all: bool,
     ) -> TypeCheckResult {
+        // 3.24.3 t3 F4：改绑表先于任何遍成形（pass2 的 use 注册臂与 pass3 的
+        // 导入绑定都消费它——分离两条 use 的类型导入同样可达）。
+        self.collect_import_type_rebinds(module);
+
         // 第零遍：登记编译期谓词定义（#377-3）。
         // 必须先于 pass1/pass2（签名与类型定义的精化标注要能解析到谓词体），
         // 且独立成遍，使谓词的定义与使用不受声明序约束。
@@ -1481,6 +1541,10 @@ impl TypeChecker {
             body_checker.set_module_registry(self.env.module_registry.clone());
             // #396：模块别名集合——模块成员缺失报 E1043 而非 E1042
             body_checker.set_module_aliases(self.env.module_aliases.clone());
+            // 3.24.3 t3 F4：与 `init_body_checker` 同源注入单元级类型导入
+            // 改绑表——漏一处会让该入口下 `use` 退回「本条 use 覆盖」，
+            // 分离两条 use 的签名改绑静默失灵。
+            body_checker.set_import_type_rebinds(self.import_type_rebinds.clone());
             self.body_checker = Some(body_checker);
         }
         self.body_checker.as_mut().unwrap()
@@ -2114,10 +2178,17 @@ impl TypeChecker {
                                         &export.name,
                                         export,
                                         false,
+                                        path,
                                         stmt.span,
                                     );
                                 }
-                                self.register_use_export(module_alias, export, true, stmt.span);
+                                self.register_use_export(
+                                    module_alias,
+                                    export,
+                                    true,
+                                    path,
+                                    stmt.span,
+                                );
                             }
                         }
                         // use path as alias → 整个模块用别名注册
@@ -2143,10 +2214,13 @@ impl TypeChecker {
                                             &export.name,
                                             export,
                                             false,
+                                            path,
                                             stmt.span,
                                         );
                                     }
-                                    self.register_use_export(alias_name, export, true, stmt.span);
+                                    self.register_use_export(
+                                        alias_name, export, true, path, stmt.span,
+                                    );
                                 }
                             }
                         }
@@ -2180,11 +2254,11 @@ impl TypeChecker {
                                     None => self.record_import_name(&item.name, stmt.span),
                                 }
                                 match local_name {
-                                    Some(local) => {
-                                        self.register_use_export(local, export, true, stmt.span)
-                                    }
-                                    None => self
-                                        .register_use_export(&item.name, export, false, stmt.span),
+                                    Some(local) => self
+                                        .register_use_export(local, export, true, path, stmt.span),
+                                    None => self.register_use_export(
+                                        &item.name, export, false, path, stmt.span,
+                                    ),
                                 }
                             }
                         }
@@ -3154,11 +3228,14 @@ impl TypeChecker {
 
     /// 注册单个导出
     /// - `use_alias`: 是否使用别名模式，为 true 时注册名为 prefix，否则为 export.name
+    /// - `module_path`: 导出所属模块路径（use 语句首段路径）——3.24.3 t3 F3 的
+    ///   类型载荷改绑按它取本单元类型导入域（跨单元同名类型互不串扰）
     fn register_use_export(
         &mut self,
         prefix: &str,
         export: &crate::frontend::module::Export,
         use_alias: bool,
+        module_path: &str,
         span: crate::util::span::Span,
     ) {
         let register_name = if use_alias {
@@ -3206,7 +3283,13 @@ impl TypeChecker {
                 self.env.module_aliases.insert(register_name.clone());
                 self.env.add_var(register_name, PolyType::mono(module_ty));
                 for sub_export in &payload_type_exports {
-                    self.register_use_export(&sub_export.name, sub_export, false, span);
+                    self.register_use_export(
+                        &sub_export.name,
+                        sub_export,
+                        false,
+                        &sub_module_path,
+                        span,
+                    );
                 }
             }
             crate::frontend::module::ExportKind::Type => {
@@ -3232,6 +3315,18 @@ impl TypeChecker {
                         crate::frontend::core::sema::record_model::apply_quantities(ty, Some(model))
                     }
                     None => ty,
+                };
+                // 3.24.3 t3 F3：类型载荷里的名义名位（字段 `TypeRef` 与接口实现
+                // 名）按**来源模块**的类型导入域改绑到本地名——与签名面（#504，
+                // `import_binding`）同一语义。不改绑则 Struct-vs-TypeRef 判等臂
+                // （`s.interfaces.contains` 等）拿定义单元裸名与本地名判异，别名
+                // 导入的合法程序被误拒（E1002）。记录名/构造器名是身份面，
+                // `rebind_nominal_refs` 不触碰。
+                let ty = match self.import_type_rebinds.get(module_path) {
+                    Some(domain) if !domain.is_empty() => {
+                        crate::frontend::core::types::substitute::rebind_nominal_refs(&ty, domain)
+                    }
+                    _ => ty,
                 };
                 let poly = PolyType::mono(ty);
                 self.env.add_type(register_name.clone(), poly.clone());

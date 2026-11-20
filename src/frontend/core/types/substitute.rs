@@ -200,9 +200,11 @@ pub fn substitute_ctor_heads(
 ///
 /// 与 [`substitute_ctor_heads`] 的分工：那是构造器**应用头部**改名
 ///（`Generic{name}` 的头部），不触碰 `TypeRef` 引用体；本函数恰好相反——
-/// 改写名义引用体、头部与记录名（`Generic{name}` / `Struct.name` / 构造器
-/// 名）一律不动。改写头部或记录名会改变诊断渲染与记录查表键，不是本函数
-/// 的语义。与 [`MonoType::substitute`] 的分工：那是类型**变量**替换（目标是
+/// 改写名义引用体与接口实现名（`Struct.interfaces`：接口名是名义名位，
+/// 语义与 `TypeRef` 引用体同——别名导入接口后，实现判定按本地名同源）；
+/// 头部与记录名（`Generic{name}` / `Struct.name` / 构造器名）一律不动。
+/// 改写头部或记录名会改变诊断渲染与记录查表键，不是本函数的语义。
+/// 与 [`MonoType::substitute`] 的分工：那是类型**变量**替换（目标是
 /// 任意 `MonoType`，如换进求解器新变量），且不遍历 `Struct` 字段 / `DepFn` /
 /// `Refined` / `Literal`；本函数按名义引用语义结构递归全部变体。
 pub fn rebind_nominal_refs(
@@ -241,6 +243,15 @@ pub fn rebind_nominal_refs(
                     ty: rebind_nominal_refs(&field_info.ty, rebinds),
                     ..field_info.clone()
                 })
+                .collect(),
+            // 接口实现名是名义名位（语义与 TypeRef 引用体同）：别名导入接口
+            // 后，实现类型的接口名按本地名同源——不改绑则 Struct-vs-TypeRef
+            // 判等臂（solver `s.interfaces.contains`）拿定义单元裸名与本地名
+            // 判异，合法程序被误拒（E1002）。记录名（身份面）不动。
+            interfaces: s
+                .interfaces
+                .iter()
+                .map(|iface| rebinds.get(iface).cloned().unwrap_or_else(|| iface.clone()))
                 .collect(),
             ..s.clone()
         }),
@@ -308,9 +319,28 @@ pub fn rebind_nominal_refs(
                 .collect(),
             return_type: Box::new(rebind_nominal_refs(return_type, rebinds)),
         },
-        // Enum 变体是名字串表、TypeVar 由求解器管理、原语与 FFI 形态无名义
-        // 引用位——原样克隆。
-        other => other.clone(),
+        // 无名义引用位的十个变体——逐名显式穷尽、无兜底臂（3.24.3 t3 F1）：
+        // 新增变体时编译器在此指路，不再静默吞掉。Enum 是名字串表、TypeVar
+        // 由求解器管理、原语（Never/Void/Bool/Int/Float/Char）与 FFI 形态
+        //（LibraryRef/ExternRef）无名义引用位——原样克隆。
+        MonoType::Never | MonoType::Void | MonoType::Bool | MonoType::Char => ty.clone(),
+        MonoType::Int(width) => MonoType::Int(*width),
+        MonoType::Float(width) => MonoType::Float(*width),
+        MonoType::Enum(e) => MonoType::Enum(e.clone()),
+        MonoType::TypeVar(tv) => MonoType::TypeVar(*tv),
+        MonoType::LibraryRef { mechanism, lib } => MonoType::LibraryRef {
+            mechanism: mechanism.clone(),
+            lib: lib.clone(),
+        },
+        MonoType::ExternRef {
+            mechanism,
+            lib,
+            symbol,
+        } => MonoType::ExternRef {
+            mechanism: mechanism.clone(),
+            lib: lib.clone(),
+            symbol: symbol.clone(),
+        },
     }
 }
 
