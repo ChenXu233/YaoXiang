@@ -99,7 +99,7 @@ description = match r {
     ok(value) => "成功，值是: {value}",
     err(e) => "失败，原因: " + e,
 }
-print(description)  // "成功，值是 42"
+print(description)  // "成功，值是: 42"
 ```
 
 The `value` in `ok(value)` is an identifier pattern—it captures the actual value wrapped by `ok`,

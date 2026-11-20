@@ -165,3 +165,28 @@ fn test_match_range_pattern_non_literal_bound_rejected() {
         codes
     );
 }
+
+#[test]
+fn test_match_range_pattern_non_literal_upper_bound_rejected() {
+    // Arrange：上界标识符端点——下界形态 `n..20` 已有锚，此处补对称的上界
+    // 形态 `80..n`。判据门（条款）：SPEC syntax §2.8 `RangePattern` 端点为
+    // 字面量，issue #405 语义登记「标识符端点在模式位是绑定名，无判定语义，
+    // 语法层拒绝（E0010）」——上界端点由 parse_range_bound 直读，返回 None
+    // 的调用点发射 E0010（见 nud.rs「range pattern upper bound」发射点）。
+    let source = r#"
+        r = match x {
+            80..n => "bad",
+            _ => "other",
+        }
+    "#;
+
+    // Act
+    let codes = parse_error_codes(source);
+
+    // Assert：E0010 点名范围上界端点要求
+    assert!(
+        codes.iter().any(|c| c == "E0010"),
+        "non-literal upper bound should report E0010, got {:?}",
+        codes
+    );
+}

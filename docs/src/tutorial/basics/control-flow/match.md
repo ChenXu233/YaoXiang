@@ -96,7 +96,7 @@ description = match r {
     ok(value) => "成功，值是: {value}",
     err(e) => "失败，原因: " + e,
 }
-print(description)  // "成功，值是 42"
+print(description)  // "成功，值是: 42"
 ```
 
 `ok(value)` 中的 `value` 是一个标识符模式——它捕获了 `ok` 包裹的实际值，你可以在 `=>`

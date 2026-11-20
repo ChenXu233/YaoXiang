@@ -358,7 +358,7 @@ Pattern     ::= Literal
               | TuplePattern
               | EnumPattern
               | OrPattern
-RangePattern ::= Literal '..' Literal
+RangePattern ::= ('-')? Literal '..' ('-')? Literal   // 端点可带负号前缀，负值归一化——见下文「范围模式」注
 ```
 
 > **变体解构的变体集要求**（RFC-010b）：`EnumPattern`（`ok(v)`、`some(x)` 等
