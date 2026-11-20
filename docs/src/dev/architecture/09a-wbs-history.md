@@ -7230,6 +7230,7 @@ canonical_text(RecordModel) =
 > **四、硬判据与变异**：输出逐字节不变三方证实——45-case 渲染/哈希双 pin（**抓取纪律**：动第一行前抓基线；PinHasher FNV-1a 规避 DefaultHasher 跨 rustc 版不稳定；经 pub 入口 SpecializationKey::hash 驱动——type_name_hash 私有不可直接见；**pin 先在未重构代码上验证绿**证明期望值来自重构前实现）+ IR 快照零漂移 + 语料 402 行零漂移。过程证据：AssocType 臂初稿漏写 `"assoc_type".hash(state)` ⇒ pin 当场红 ⇒ 补实现不改判据。稀见变体对照入库（LibraryRef/ExternRef/MetaType 渲染与哈希分歧——type_params 只进哈希；Generic String 实参被渲染忽略但进哈希；Struct 复合载荷 fields 不进哈希/渲染）。t2 三变异 **trial 正典**：M1 walker 跳 Union/Intersection ⇒ 渲染 pin 红 + 哈希 pin 红（两遍历器接线证明）且 **IR 快照绿——盲区证实**（语料面无 Union 类型名渲染位，实现者如实登记、t2 独立证实，pin 补位）；M2 跳 Generic 实参 ⇒ 双 pin 红 + 快照红；M3 AssocType host 移尾 ⇒ 顺序 pin 红（位置约定由 pin 兜底的证明）。
 
 > **五、验证链**：t1 一轮全绿（14 门禁）→ 队长 diff review（walker 穷尽性 + 第三副本收敛追认）→ 推送 `1aaeb3c5` → t2 **PASS**（五组锚复测 + 三变异 trial 机械可逆 + 溶解核账 type_subtree_children 零残留 + 等价性 + 卫生；运维注记：scratch.py init/build/release 须从主树 cwd 调用，trial 子命令不经 shell）→ t3 **APPROVE**（1 low = 双 pin zip 静默截断隐患 → `d459b07f` 两处循环前补长度相等断言；2 info = 提交信息行号为父提交口径注记 / 动态声称归 t2 且 pin 抓取锚点静态自洽——父提交 0b1cee05 仅改 en 镜像 docs，src 与 a60a93cb 等价）→ 收口笔（本节）。批次树已 release + gc。
+>
 ## P2 2.1.4 收口（2026-11-20）：内层隔离判据按槽身份重写
 
 > **现象与登记**：post-mono `verify_loose` 在 `tests/yaoxiang/03-modules/native_fn_member_value.yx` 与 `tests/yaoxiang/03-modules/pureyx_export_fn_value.yx` 上各报 1 条 `InnerIsolation`——`main` 与 `std.json.parse` 的具名局部名交集 `["r"]`。2026-11-19 随 #542 接线轮登记为 2.1.4：接线前即红、非 #542 族。
@@ -7275,4 +7276,3 @@ canonical_text(RecordModel) =
 > **七、偏差登记（流程面，与本次红测试同一根因）**：#542 收口笔 `75c28a09` 同时带进两件东西——(a) 使 `test_post_mono_shared_layer_turns_verify_green_after_dce` 的两条前提失效（`build_output` 不再按泛型名删原件、恢复闸删除 ⇒ 原件 `f` 留在表里且 `__f_l0` 的 `MakeClosure` 站点仍在，`verify` 的 env 槽数反推成立 ⇒ 删除前不再红），(b) `src/driver/tests/dce_wiring.rs` 的 1 行 import 顺序漂移（`cargo fmt --check` 在 `ae47df55` 上本就红在这一行）。可判定事实：`75c28a09` 之后到 `ae47df55` 之间**没有任何一笔改动 `src/**/*.rs`**（区间内全是 docs / 自动翻译 / `chore(bench)[skip ci]` / 依赖清单），而 pre-commit 的 Rust 钩子按 `types: [rust]` 触发 ⇒ `fmt` 与 `fast` 再没在任何最终版上跑过。不可判定项：git 不记录钩子执行结果，无法从仓库判定当时是 `--no-verify`、`SKIP=<hook>` 还是钩子未生效。处置：`f95883fc` 退役两条陈旧断言（改成断言新形态：mono 保留原件 `f` 且 `f` 仍持有 `__f_l0` 的站点）并补直构红侧负控，`fmt` 漂移同笔机械修正；其余绿侧断言全部保留。**建议**（未落规则）：把「docs-only 提交之前的最后一个 Rust 提交」列为必须人工跑一次 `fmt` + `fast` 的检查点。
 >
 > **八、提交与归口**：`f95883fc`（测试自洽：退役 + 负控 + fmt 漂移）、`53d5291d`（判据按槽身份 + 7 条负控/回归）、本笔（09 勾选与本文收口）。`LocalSlot.origin` 属 `ir.rs` 结构变更，归口 WBS 7b.1b（独占 commit / C4），需在 7b.1b 落地时一并计入。
->>>>>>> 4a5a5fde (:memo: docs(plan): 2.1.4 收口——09 勾选 + 09a 落地实录（判据按槽身份）)
