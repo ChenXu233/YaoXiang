@@ -441,8 +441,8 @@ enum NameKind {
 
 这条接受面有**两道常驻门禁**：
 
-1. `src/frontend/core/types/tests/mono.rs` 的正/负向单元用例（15 名各自的期望 `MonoType`、22 个拼写必须 `None`、`DateTime` → `Int(64)`）；
-2. `tools/type-tables --report` 的 **T2.5「已删除拼写哨兵」**——22 个拼写里任何一个被加回解析表，报告立刻计为**未登记漂移**（无处置可登记：那是回退）。
+1. `src/frontend/core/types/tests/mono.rs` 的正/负向单元用例（15 名各自的期望 `MonoType`；负向用例已断言 `from_builtin_name("DateTime") == None`——`DateTime` 不再映射 `Int(64)`）；
+2. `tools/type-tables --report` 的 **T2.5「已删除拼写哨兵」**——23 条（6.1.2 定稿删除的 22 个拼写 + S11.1 迁出的 `DateTime`）里任何一个被加回解析表，报告立刻计为**未登记漂移**（无处置可登记：那是回退）。
 
 **两份 `name_used_as_type*` 的合并**：2.4 记录的两份重复实现必须合并为一份，否则 `NameKind` 提供的定种信息会被两份各自独立的字符串比较逻辑绕开。合并后的实现放在 `parser/ast.rs`（数据源在 `Type` 附近），`declarations.rs` 改为调用它；`is_predicate` 短路改为读 `NameKind::Predicate`，`Struct` / `NamedStruct` 的字段递归按 `ast.rs:894-905` 的版本（较新、修复更全）取。
 
@@ -570,8 +570,8 @@ declarations.rs:498-511 与 ast.rs:930 改为
 > `--report` / `--json` 的对应输出节**同批删除**，代码侧不留占位。
 >
 > **内置类型名的载体只有代码侧三份清单，已全部由 T2 逐名对账**：① `from_builtin_name`
-> （`src/frontend/core/types/mono.rs`；15 个规范名 + `DateTime` 临时兼容别名，每臂首写法为规范名，
-> 6.1.2 删掉的 22 个实现内拼写由 T2.5 哨兵守着）；② `CONST_PARAM_TYPES`
+> （`src/frontend/core/types/mono.rs`；接受面 = 15 个规范名，无别名——`DateTime` 临时兼容别名已随 S11.1（issue #513）迁出，`--report` T2.1 实测「14 臂 / 15 个写法」，每臂首写法为规范名，
+> 6.1.2 删掉的 22 个实现内拼写与迁出的 `DateTime` 由 T2.5 哨兵守着，共 23 条）；② `CONST_PARAM_TYPES`
 > （`src/frontend/core/parser/ast.rs`；**① 的子集**语义，检查号 C1）；③ LSP 内置类型名清单
 > （`src/lsp/world.rs`；**① 规范名的超集**语义，检查号 C2 / C3）。文档侧不设同类清单：
 > 新增内置名的权威落点是 ①，T2 会把 ②③ 的缺口报成**未登记漂移**。
@@ -657,7 +657,7 @@ declarations.rs:498-511 与 ast.rs:930 改为
 | 17 | `src/frontend/core/parser/pratt/led.rs` | `466` | 保留（是参数列表捞回点）——**「随 5.5 改为直接读 Lambda」未做**：6.5.1 的改动清单里本就没有这一项，处置随 6.8.2 的声明驱动检查模式一并决定 | 保留 |
 | 18 | `src/frontend/core/types/mono.rs` | `699-708`、`743-747`、`770-771`、`814` | 删 13 个 match 臂（13 个删除变体各 1 个）（**已完成：WBS 6.3.1，2026-10-29**） | 随 #1 |
 | 19 | `src/frontend/core/types/mono.rs` | `620-642` | 砍同义词（大小写别名、`i64` 类缩写、`"()"`） | 收敛 |
-| 20 | `src/frontend/core/types/mono.rs` | `627` | `DateTime` 别名保留 | 保留 |
+| 20 | `src/frontend/core/types/mono.rs` | `627` | `DateTime` 别名保留（**已完成：S11.1（issue #513）——别名迁出，裸名报 E1003/E1002**） | 保留 |
 | 21 | `src/frontend/core/types/lower.rs` | 新增 | 迁移 `From<Type> for MonoType`（现于 `mono.rs:692-830`）为唯一转换点 | 新增 |
 | 22 | `src/frontend/core/lexer/state.rs` | 关键字表 | 登记 `i64`/`int` 等为 `Int` 的等价写法 | 收敛 |
 | 23 | `src/middle/core/ir.rs` | 原 `3`（现 `7` 为私有 `use`） | 删 `pub use ... ast::Type`（**已完成：WBS 6.2.2，2026-10-28**） | 纯删除 |
@@ -700,7 +700,7 @@ declarations.rs:498-511 与 ast.rs:930 改为
 | 风险 | 判断 | 缓解 |
 | --- | --- | --- |
 | 源码里写 `i64` / `int` / `f64` 等类型标注 | 规范化到 `Int` 后 `from_builtin_name` 只认规范名 | **已实测**（5.3 末）：真实类型位 0 处非规范名 → 6.1.2 直接删除 22 个拼写，**未设 lexer 别名表**；语料诊断集不变 |
-| 源码里写 `DateTime` | 只留大写的临时兼容别名（`mono.rs:883`），不属内置名 | 迁出内置名表属 P10 S11（issue #513）；在那之前 `DateTime` 与 `Int` 同义，无行为变化 |
+| 源码里写 `DateTime` | 临时兼容别名已随 S11.1（issue #513）迁出内置名表（别名臂已删，解析表现 `mono.rs:1123` 起、15 名无别名），不属内置名 | 窗口已关闭：迁出前 `DateTime` 与 `Int` 同义、无行为变化；迁出后裸 `DateTime` 注解落 `TypeRef`，报 E1003/E1002（D 类语义变更，经用户裁决） |
 | `("()")` 出现在类型位置 | 它不是 `Name` 形态的产物，而是 `Void` 的类型写法（标准库签名串写 `() -> Void`） | **保留**：`()` 与 `Void` 同臂，属定稿的 15 名之一 |
 | `dump_bytecode` 输出变化 | `type_table` 元素类型从 `ir::Type` 改 `MonoType`，`{:?}` 格式不同 | **C3 判据允许**（07 规定 `dump_bytecode` 仅在 C1/C2 阶段比对）。但需在阶段 2 记录输出 diff 供人工 review |
 | 有损桥接修复后行为变化 | 见 6.2 | 语料差分 + 定向 `dump_bytecode` 对拍 |
@@ -813,7 +813,7 @@ declarations.rs:498-511 与 ast.rs:930 改为
 - `src/frontend/core/parser/statements/declarations.rs:441` — 硬编码 `"Terminates"` 与 `typecheck::operator_interfaces::spec()` 调用（6.4 已改走 `ParserState::kind_of` / 注入探针；两处字面引用均已消失，只余此处注释）
 - `src/frontend/core/parser/pratt/nud.rs:512` — 表达式位置被表示为空 body `Expr::Lambda`
 - `src/frontend/core/parser/pratt/led.rs:431` — `expr_to_params` 臂把参数列表捞回
-- `src/frontend/core/types/mono.rs:863` — `from_builtin_name` 内置名解析表（15 名 + `DateTime` 临时别名；WBS 6.1.2）
+- `src/frontend/core/types/mono.rs:1123` — `from_builtin_name` 内置名解析表（15 名，无别名——`DateTime` 已随 S11.1（issue #513）迁出；WBS 6.1.2 定稿）
 - `src/frontend/core/types/mono.rs:960` — `From<ast::Type> for MonoType` 实现（13 个 match 臂中的 12 个在此）
 - `src/frontend/core/types/mono.rs:169` — `MonoType` 定义（约 22 变体）
 - `src/frontend/core/types/const_data.rs:240`、`:327` — `const_data::BinOp` / `const_data::UnOp`

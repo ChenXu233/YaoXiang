@@ -231,7 +231,7 @@ main: () -> Void = {
 | 位置 | 原问题 | 现状 |
 | ---- | ------ | ---- |
 | [`os.open`](os#open) | 句柄一次性，`open`→`write`→`close` 无法编译 | 句柄改按引用传递 ✅ |
-| [`time.datetime_*`](time#datetime-字段访问) | 8 个访问器无从源码调用（导出名含 `::`）| 改扁平名 `datetime_year` 等 ✅ |
+| [`time.datetime_*`](time#日期分量访问) | 8 个访问器无从源码调用（导出名含 `::`）| 改扁平名 `datetime_year` 等 ✅ |
 | [`time.parse_time`](time#parse_time) | `fmt` 参数被忽略；返回值无法继续使用 | 按 fmt 步进解析，返回 `Int` ✅ |
 | [`math.clamp`](math#clamp) | `min > max` 会 panic 解释器而非返回错误 | 返回 `E6007` ✅ |
 | [`net.http_get`](net#http_get) / [`http_post`](net#http_post) | 曾是占位实现，不发请求 | 已改为真实实现（`ureq` 同步阻塞 + rustls TLS，issue #56）✅ |
