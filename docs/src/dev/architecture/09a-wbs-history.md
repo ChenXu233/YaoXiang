@@ -7820,6 +7820,18 @@ pub enum FunctionBody {
 
 > **五、移交登记**：①#575（索引推断缺陷）待排期——修复涉及 builtin ctor 类型合成路径（D6.2 邻域）；②P6 全量身份收敛（变体加字段形态）归 3.18 主线后续，届时 rebind_nominal_refs 判据面同批扩展（穷尽 match 已保证编译器指路）；③别名解析在 checker.rs:2236 与 dead_code.rs:169 仍有副本（超出本面，顺修候选）；④两条收集器冲突策略分歧留观察（同条 use 重复导入被 E5006/E5008 拦）；⑤#504 的 C 类定案随本节与 3.18.2 行更正落库。
 
+## P3 3.24.4 收口（#477 native 遮蔽用户优先——lower 对齐 check，2026-11-21）
+
+> **一、范围与终态**：issue [#477](https://github.com/ChenXu233/YaoXiang/issues/477) 自 3.8.1 迁入（**用户 2026-11-20 裁决乙案**：用户定义优先——推翻 2026-10-18 审计推荐的 native 优先方案；D59 行为变更批：被修旧行为 = 静默错配与静默失败）。推送终态两笔：主修笔 `2268543d`（fix(middle)，5 文件 +250/−1）+ 修复笔 `3061b65d`（t3 REJECT 五条处置，5 文件）。三级 +1 = 3.24.4（255→256）；二级不变（归 3.24 组）。issue [#477](https://github.com/ChenXu233/YaoXiang/issues/477) 关闭（证据评论）。
+
+> **二、根因链与 std 边界（逐行实读）**：check 面裸名解析用户优先（expr.rs:1984-2025——native 签名只进 native_signatures 不进 scope，scope 命中即用户定义胜出）vs lower 面 resolve_function_name 四臂（query.rs:851-875——①declared_type_names（D10 类型面）②use_aliases ③qualified_name_is(NativeName) ④short_to_qualified_map ⑤兜底裸名——用户函数名落④被改写成 std native 限定名）。divergence 精确触发条件 = 本单元同名 + 裸名调用 + 未显式 use 导入。**std 边界精确实现**：std 嵌入单元各自 IR 生成（declared_fn_names 按单元填充）——std 内部互调（限定名互调 + 同模块裸名互调）修前修后产物逐字节同名零变化（std.json roundtrip 10 连跑稳定）。常量面实测无同款分歧（值加载不经 resolve_function_name）——登记不修不立 issue。
+
+> **三、修法与锚**：declared_fn_names = declared_type_names 的对称扩展（D1 同形不同面）；resolve_function_name 加一臂返回裸名 → qualify_names/resolve_call_target 按本单元 rename 表限定成用户函数。锚：三形态先红后绿（**按实测锚定修正任务前提归因**——①兼容遮蔽（File,Int 实参运行期兼容）= 静默 native 错误值 exit 0 真读文件；①b 用户泛型 read = E6007 形态（WBS 3.8 审计文案逐字）；②(String) 形态 = E6007 非静默；修后三形态全部执行用户函数值正确——**值断言非只看退出码**：①形态修前修后都 exit 0）+ 对照锚（非遮蔽/std 内部互调/限定名显式访问被遮蔽 std 名/跨单元 A-B 各自解析互不劫持）+ 变异 M1 优先级回退精确区分遮蔽与非遮蔽面。E6007 发射面变化登记（遮蔽形态修后不再触发；码语义不动、生成物零变化）。
+
+> **四、t3 五条 findings 处置（修复笔 `3061b65d`）**：①**F1 high print/println 旁路面**——bare print 调用按纯名进零开销特例（call.rs:978-988）、两计算点直查 std 短名映射完全绕过新臂（用户自定义 print 修后仍静默错配——教程最常见自定义名，违反 #477 自身验收）→ 裁定走 t3 路径 (a) 本批修：特例入口闸一处覆盖两计算点（is_print_call 补 declared_fn_names 判定、单源与乙案臂同集合），命中落默认路径按乙案解析；先红后绿含**归因修正**（字面量实参形态修前已绿——get_expr_mono_type 落 `_ => None` 本就走默认路；真红态 = Var 实参形态）+ 对照零变化（非自定义 print 三条分发路逐字节同）+ 变异预演摘闸红。②F3 multifile 注释归因收窄（A 的定义一臂静态不可达——B 的 rename 表只含 B 自己的函数前缀不命中，劫持源只能由 native 或 #577 构成）。③F5 锚 .tmp 迁 tempfile::TempDir（RAII 防中断残留仓库根）。④**F2 arms.rs 指代更正——修复轮直写 09a（越权产出经队长追认留用）**：主修笔「arms.rs 两实例」指代不精确，实际三链路（ir_generation_embedded → generate_ir_with_context / merge_embedded_std_ir → compile_embedded_module / orchestrated 逐单元）共用 declared_fn_names 唯一填充点（module_ir.rs:48-65），结论不受影响；提交信息不回改以本节为准。⑤#577 边界核（改动集未修 tie-break、锚 f-string 规避随机面语义意图保持）。**附带发现 [#577](https://github.com/ChenXu233/YaoXiang/issues/577)**：short_to_qualified_map 同短名多来源无 tie-break——裸名解析随构建种子随机派发（20 连跑 8 绿 12 红，D59 静默错配类），修复方向建议 = tie-break 规则或冲突编译期诊断。
+
+> **五、验证链**：t1 两轮（第 1 轮跨单元语料夹具进 corpus_probe 发现集而基线无记录被门禁抓 → 按 tests/yaoxiang-multifile/README.md D48 职责分工撤夹具、跨单元锚迁 tempdir 语义单测层）→ 推送主修笔 → t2 **PASS**（三组锚 + M1 优先级回退变异精确区分遮蔽/非遮蔽 + 零漂移核账 + CLI 三形态值断言 + std roundtrip）→ t3 **REJECT**（5 条：1 high print 旁路 + 4 low）→ 修复笔 → t3r **APPROVE**（零 findings）→ 收口笔（本节）。批次树已 release + gc.
+
 ## P10 S11.1 收口（#513 DateTime 迁出内置类型名，2026-11-20）
 
 > **一、范围与终态**：issue [#513](https://github.com/ChenXu233/YaoXiang/issues/513)（S11.1 已登记方案一刀切；**用户 2026-11-20 裁决「按推荐」**）。D59 **D 类**行为变更经裁决覆盖（裸 DateTime 注解原先被 from_builtin_name 静默收成 Int(64) 零诊断）。推送终态两笔：主修笔 `1c6d5dd9`（fix(std)，17 文件）+ 修复笔 `0da1cb2f`（docs(docs)，t3 REJECT 处置）。**三级计数不变**（S11.1 已计入 2026-10-27 的 +1 登记）。issue [#513](https://github.com/ChenXu233/YaoXiang/issues/513) 关闭（证据评论）。
