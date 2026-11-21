@@ -974,12 +974,28 @@ impl AstToIrGenerator {
                 });
             } else {
                 // ========== print/println 零开销分发处理 ==========
-                // 检查是否是 print 或 println 调用
+                // 检查是否是 print 或 println 调用。入口闸一处覆盖本特例内
+                // print 名的两个计算点（Stringable 路与兜底路），判据单源 =
+                // `declared_fn_names`（与 `resolve_function_name` 的乙案臂同一
+                // 集合，query.rs）：**本单元已声明的函数名不走特例**——特例的
+                // print 名计算直接查 std 短名映射（short_to_qualified_map /
+                // format!("std.io.{}", name)），绕过 `resolve_function_name`
+                // 的用户定义优先臂；用户自定义 `print`/`println` 的 Var 实参
+                // 裸名调用会 check 绿（sema 按用户签名检查）而 run 派发
+                // std.io.print——exit 0 静默错配（issue #477 / WBS 3.24.4，
+                // 按实测锚定：字面量实参的类型在特例入口不可取
+                // （`get_expr_mono_type` 落 `_ => None`），本就落「无法获取
+                // 类型」默认路径、乙案已覆盖；真正红态是 Var 实参形态）。
+                // 命中闸时落下方 `else` 的默认处理路径，由
+                // `resolve_function_name` / `qualify_names` 按乙案解析到用户
+                // 函数；要访问被遮蔽的 std 名，写限定名 `std.io.print`。
+                // std 嵌入单元各自做 IR 生成（`declared_fn_names` 按单元填充），
+                // std 源内部无裸名 print 调用点，std 面语义零变化。
                 let is_print_call = if let Expr::Var(name, _) = func {
                     matches!(
                         name.as_str(),
                         "print" | "println" | "std.io.print" | "std.io.println"
-                    )
+                    ) && !self.declared_fn_names.contains(name)
                 } else {
                     false
                 };

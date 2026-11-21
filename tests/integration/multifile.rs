@@ -1575,8 +1575,11 @@ fn test_multifile_shadowed_std_short_name_resolves_per_unit() {
     // 调用——各单元的调用必须解析到**自己单元**的定义（互不劫持、native 不抢
     // 派发），与 check 面（sema 按作用域解析到用户函数）一致。
     // 修前形态：lower 面 resolve_function_name 只认「类型名优先」，函数名落到
-    // std 短名映射臂被改写成 std.os.read——B 的裸名调用被 A 的定义或 native
-    // 劫持（实参形态兼容时 native 静默执行给错误值，不兼容时运行期 E6007）。
+    // std 短名映射臂被改写成 std.os.read——B 的裸名调用被 native 劫持（实参
+    // 形态兼容时 native 静默执行给错误值，不兼容时运行期 E6007）。A 的定义
+    // 一臂静态不可达：B 的裸名 read 落 std.os.read，B 的 rename 表只含 B
+    // 自己的函数、前缀不命中原样保留——劫持源只能由 native 或 #577（同短名
+    // 多来源无 tie-break 的随机源）构成。
     // 对照：限定名调用（os.read 走 namespace 臂）不受影响，仍派发 native。
     let a = r#"
 read: (String) -> String = (s) => f"a-{s}"

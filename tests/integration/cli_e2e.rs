@@ -2126,3 +2126,119 @@ main()
         "iteration over a List(Int)-annotated value must yield the elements (count 2, sum 3) and the empty construction must report length 0; got: {stdout:?}"
     );
 }
+
+// run 命令 — 用户自定义 print/println 与零开销特例的分发优先级
+// 规范来源：issue #477（用户裁决乙案：用户定义优先，lower 面对齐 check 面）
+// + WBS 3.24.4（print 零开销特例入口闸：本单元已声明的函数名不走特例）。
+
+/// 修前形态（CLI 探针实测）：用户 `print(s: String)` 的 **Var 实参**裸名调用被
+/// print 零开销特例拦截，Stringable 路直接派发 `std.io.print`——stdout 原样
+/// "hi"、自定义前缀缺席，check 绿 exit 0（静默错配）。修后：用户函数执行。
+/// 归因修正（按实测锚定）：字面量实参 `print("hi")` 的类型在特例入口不可取
+/// （`get_expr_mono_type` 对字面量落 `_ => None`，query.rs），走「无法获取类型」
+/// 默认路径、#477 乙案已覆盖——真正红态是 Var 实参形态（local_var_types 命中
+/// → Some(String)），与 2268543d 锚定修正任务前提归因同款处理。
+#[test]
+fn test_e2e_user_defined_print_shadowed_bare_call_executes_user_function() {
+    // Arrange
+    let tmp = TempDir::new().unwrap();
+    let src = write_yx(
+        tmp.path(),
+        "user_print.yx",
+        r#"
+use std.io
+
+print: (String) -> () = (s) => { io.print(f"[user]{s}") }
+
+main = () => {
+    s = "hi"
+    print(s)
+}
+        "#,
+    );
+
+    // Act
+    let (code, stdout, _stderr) = run_yx(&["run", src.to_str().unwrap()], tmp.path());
+
+    // Assert
+    assert_eq!(code, 0, "user-defined print program should exit 0");
+    assert!(
+        stdout.contains("[user]hi"),
+        "bare print call with a local variable argument must execute the user-defined print (custom prefix), got: {stdout:?}"
+    );
+}
+
+/// println 同面抽一锚：用户 `println(s: String)` 的 Var 实参裸名调用修前被
+/// 特例 Stringable 路派发 `std.io.println`（原样输出），修后执行用户函数。
+#[test]
+fn test_e2e_user_defined_println_shadowed_bare_call_executes_user_function() {
+    // Arrange
+    let tmp = TempDir::new().unwrap();
+    let src = write_yx(
+        tmp.path(),
+        "user_println.yx",
+        r#"
+use std.io
+
+println: (String) -> () = (s) => { io.print(f"[user]{s}\n") }
+
+main = () => {
+    s = "yo"
+    println(s)
+}
+        "#,
+    );
+
+    // Act
+    let (code, stdout, _stderr) = run_yx(&["run", src.to_str().unwrap()], tmp.path());
+
+    // Assert
+    assert_eq!(code, 0, "user-defined println program should exit 0");
+    assert!(
+        stdout.contains("[user]yo"),
+        "bare println call with a local variable argument must execute the user-defined println (custom prefix), got: {stdout:?}"
+    );
+}
+
+/// 对照锚：**非遮蔽** print 的零开销特例修前修后零变化——Stringable 路
+/// （Var 实参 String → `std.io.print` 原样输出）与兜底路（Var 实参 List →
+/// `std.io.format_fallback` 类型信息）输出形态不变（修前 CLI 探针实测
+/// "hi" + "unknown([1, 2])"）。本锚在 F1 闸的变异预演中必须保持绿
+/// （闸只拦本单元已声明的名字）。
+#[test]
+fn test_e2e_std_print_stringable_and_fallback_paths_unaffected() {
+    // Arrange
+    let tmp = TempDir::new().unwrap();
+    let src = write_yx(
+        tmp.path(),
+        "std_print.yx",
+        r#"
+use std.io
+
+main = () => {
+    s = "hi"
+    print(s)
+    xs = [1, 2]
+    print(xs)
+}
+        "#,
+    );
+
+    // Act
+    let (code, stdout, _stderr) = run_yx(&["run", src.to_str().unwrap()], tmp.path());
+
+    // Assert
+    assert_eq!(code, 0, "std print program should exit 0");
+    assert!(
+        stdout.contains("hi"),
+        "Stringable path (String var) must keep printing the value, got: {stdout:?}"
+    );
+    assert!(
+        stdout.contains("unknown([1, 2])"),
+        "fallback path (List var) must keep printing the type fallback, got: {stdout:?}"
+    );
+    assert!(
+        !stdout.contains("[user]"),
+        "no user-defined print exists in this program, so no custom prefix may appear, got: {stdout:?}"
+    );
+}

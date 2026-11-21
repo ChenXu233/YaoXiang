@@ -479,67 +479,76 @@ main = () => {
 /// 只有值断言能区分两种行为。修后用户函数执行。
 #[test]
 fn test_shadowed_read_with_compatible_arity_returns_user_result() {
-    // Arrange：native_read 修前会真读该文件（fd 查表命中），静默返回文件内容
-    let path = std::path::Path::new("yx-477-anchor-silent.tmp");
-    std::fs::write(path, "").expect("seed anchor temp file for #477");
-    let source = r#"
+    // Arrange：native_read 修前会真读该文件（fd 查表命中），静默返回文件内容。
+    // 文件放 tempdir，绝对路径（正斜杠）嵌源码——固定名 CWD 文件有中断残留
+    // 面（WBS 3.24.4 F5 卫生）；tempdir RAII 清理在 panic 路径同样生效。
+    let dir = tempfile::tempdir().expect("create tempdir");
+    let anchor_path = dir
+        .path()
+        .join("anchor-silent.tmp")
+        .display()
+        .to_string()
+        .replace('\\', "/");
+    std::fs::write(&anchor_path, "").expect("seed anchor temp file for #477");
+    let source = format!(
+        r#"
 use std.os
 use std.io
 use std.assert
 
-read: (File, Int) -> String = (f, n) => { "user-read-called" }
+read: (File, Int) -> String = (f, n) => {{ "user-read-called" }}
 
-main = () => {
-    f = os.open("yx-477-anchor-silent.tmp", "r")
+main = () => {{
+    f = os.open("{anchor_path}", "r")
     s = read(f, 10)
     assert.assert(s == "user-read-called", "compatible-arity shadowed read must execute the user function, not native_read")
-}
-        "#;
+}}
+        "#,
+        anchor_path = anchor_path
+    );
 
     // Act
-    let source = crate::fixture::with_main_invoked(source);
-    let result = run(&source);
+    let source = crate::fixture::with_main_invoked(&source);
 
-    // Assert（先清理临时文件，再判定——避免提前 return 泄漏）
-    let removed = std::fs::remove_file(path);
-    assert!(
-        removed.is_ok(),
-        "anchor temp file must be removable (exists + no concurrent holder)"
-    );
-    result.unwrap_or_else(|e| panic!("Execution failed:\n{e:#}\n\nSource:\n{source}"));
+    // Assert（tempdir 随值销毁自动清理，无中断残留面）
+    run(&source).unwrap_or_else(|e| panic!("Execution failed:\n{e:#}\n\nSource:\n{source}"));
 }
 
 /// #477 对照①：限定名 native 调用（`os.read`）不受用户遮蔽机制影响——
 /// 用户**无**同名定义、走 namespace 臂，修前后都必须派发 native、读到文件内容。
 #[test]
 fn test_qualified_native_read_still_dispatches_to_native() {
-    // Arrange
-    let path = std::path::Path::new("yx-477-anchor-qualified.tmp");
-    std::fs::write(path, "hello").expect("seed qualified temp file for #477");
-    let source = r#"
+    // Arrange（tempdir 绝对路径嵌源码，正斜杠——固定名 CWD 文件的卫生问题
+    // 同 F5 注记，tempdir RAII 清理在 panic 路径同样生效）
+    let dir = tempfile::tempdir().expect("create tempdir");
+    let anchor_path = dir
+        .path()
+        .join("anchor-qualified.tmp")
+        .display()
+        .to_string()
+        .replace('\\', "/");
+    std::fs::write(&anchor_path, "hello").expect("seed qualified temp file for #477");
+    let source = format!(
+        r#"
 use std.os
 use std.io
 use std.assert
 
-main = () => {
-    f = os.open("yx-477-anchor-qualified.tmp", "r")
+main = () => {{
+    f = os.open("{anchor_path}", "r")
     s = os.read(f, 10)
     assert.assert(s == "hello", "qualified os.read must still dispatch to the native function")
     os.close(f)
-}
-        "#;
+}}
+        "#,
+        anchor_path = anchor_path
+    );
 
     // Act
-    let source = crate::fixture::with_main_invoked(source);
-    let result = run(&source);
+    let source = crate::fixture::with_main_invoked(&source);
 
-    // Assert（先清理临时文件，再判定）
-    let removed = std::fs::remove_file(path);
-    assert!(
-        removed.is_ok(),
-        "qualified temp file must be removable (exists + no concurrent holder)"
-    );
-    result.unwrap_or_else(|e| panic!("Execution failed:\n{e:#}\n\nSource:\n{source}"));
+    // Assert
+    run(&source).unwrap_or_else(|e| panic!("Execution failed:\n{e:#}\n\nSource:\n{source}"));
 }
 
 /// #477 对照②：std 嵌入单元内部互调零变化——std.json.parse 的 std 单元内部
@@ -571,4 +580,57 @@ main = () => {
     // Act & Assert
     let source = crate::fixture::with_main_invoked(source);
     run(&source).unwrap_or_else(|e| panic!("Execution failed:\n{e:#}\n\nSource:\n{source}"));
+}
+
+/// #477 / WBS 3.24.4 集成锚：用户自定义 print 的 **Var 实参**裸名调用必须执行
+/// 用户函数——print 零开销特例（`src/middle/lower/expr/call.rs`）对类型可取的
+/// 实参走 Stringable/兜底路，print 名计算直接查 std 短名映射，绕过
+/// `resolve_function_name` 的乙案臂（#477）。修前形态（CLI 探针实测）：用户
+/// 函数体不执行、`std.io.print` 原样输出，exit 0 静默错配——本锚用文件标记做
+/// oracle：修前标记文件从未写出，`os.open` 读失败运行期红；修后用户 print
+/// 写出标记、读回内容断言。归因修正（按实测锚定）：字面量实参 `print("hi")`
+/// 的类型在特例入口不可取（`get_expr_mono_type` 落 `_ => None`），走「无法
+/// 获取类型」默认路径、#477 乙案已覆盖——真正红态是 Var 实参形态。
+#[test]
+fn test_user_defined_print_var_arg_executes_user_function() {
+    // Arrange：tempdir 绝对路径嵌源码（正斜杠——Windows 下 std::fs 可解析，
+    // 且 .yx 字符串字面量无反斜杠转义面；固定名 CWD 文件有中断残留面，
+    // 与 3.24.4 F5 的卫生要求同源）
+    let dir = tempfile::tempdir().expect("create tempdir");
+    let marker_path = dir
+        .path()
+        .join("user-print-run.tmp")
+        .display()
+        .to_string()
+        .replace('\\', "/");
+    let source = format!(
+        r#"
+use std.os
+use std.io
+use std.assert
+
+print: (String) -> () = (s) => {{
+    f = os.open("{marker_path}", "w")
+    os.write(f, f"[user]{{s}}")
+    os.close(f)
+}}
+
+main = () => {{
+    s = "hi"
+    print(s)
+    r = os.open("{marker_path}", "r")
+    got = os.read(r, 64)
+    os.close(r)
+    assert.assert(got == "[user]hi", f"user print must execute and write the marker, got: {{got}}")
+}}
+        "#,
+        marker_path = marker_path
+    );
+
+    // Act
+    let source = crate::fixture::with_main_invoked(&source);
+    let result = run(&source);
+
+    // Assert
+    result.unwrap_or_else(|e| panic!("Execution failed:\n{e:#}\n\nSource:\n{source}"));
 }
