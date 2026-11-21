@@ -39,6 +39,7 @@ fn check_file(path: &PathBuf) -> Result<usize, anyhow::Error> {
     run_check_command_once(
         std::slice::from_ref(path),
         &[],
+        &[],   // allow — issue #499（不带 --allow 的既有口径）
         false, // json
         false, // use_colors
         true,  // no_progress — 抑制进度输出

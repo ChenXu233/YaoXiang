@@ -43,7 +43,7 @@ description: '程序运行期（VM / std 原生函数）产生的错误。'
 - **模板**：`数组索引越界：有效范围是 0..{max}，找到 {index}`
 - **消息**：数组索引在运行时越界
 - **帮助**：确保索引在数组范围内
-- **发射点**：`src/util/diagnostic/mod.rs:214`、`src/util/test_markers.rs:251`、`src/util/test_markers.rs:341`
+- **发射点**：`src/util/diagnostic/mod.rs:251`、`src/util/test_markers.rs:251`、`src/util/test_markers.rs:341`
 - **源码注释名**：数组索引越界（运行时）
 
 ### E6004：栈溢出
@@ -54,7 +54,7 @@ description: '程序运行期（VM / std 原生函数）产生的错误。'
 - **模板**：`栈溢出：递归深度超出限制 {limit}`
 - **消息**：递归深度超出栈限制
 - **帮助**：减少递归深度或使用迭代
-- **发射点**：`src/backends/mod.rs:169`、`src/backends/interpreter/executor/executor.rs:299`、`src/util/diagnostic/mod.rs:206`
+- **发射点**：`src/backends/mod.rs:169`、`src/backends/interpreter/executor/executor.rs:299`、`src/util/diagnostic/mod.rs:243`
 
 ### E6005：断言失败
 
@@ -64,7 +64,7 @@ description: '程序运行期（VM / std 原生函数）产生的错误。'
 - **模板**：`断言失败：{condition}`
 - **消息**：运行时断言失败
 - **帮助**：修复断言条件或提供有效输入
-- **发射点**：`src/backends/mod.rs:202`、`src/std/assert.rs:96`、`src/util/diagnostic/mod.rs:232`
+- **发射点**：`src/backends/mod.rs:202`、`src/std/assert.rs:96`、`src/util/diagnostic/mod.rs:269`
 
 ### E6006：函数未找到（运行时）
 
@@ -73,7 +73,7 @@ description: '程序运行期（VM / std 原生函数）产生的错误。'
 - **构造函数**：`ErrorCodeDefinition::runtime_function_not_found(func)`
 - **模板**：`函数未找到：'{func}'`
 - **帮助**：确保函数已定义且拼写正确
-- **发射点**：`src/util/diagnostic/mod.rs:191`
+- **发射点**：`src/util/diagnostic/mod.rs:228`
 
 ### E6007：运行时错误
 
@@ -82,7 +82,7 @@ description: '程序运行期（VM / std 原生函数）产生的错误。'
 - **构造函数**：`ErrorCodeDefinition::runtime_error(message)`
 - **模板**：`运行时错误：{message}`
 - **帮助**：查看错误消息了解详情
-- **发射点**：`src/util/diagnostic/mod.rs:202`、`src/util/diagnostic/mod.rs:203`、`src/util/diagnostic/mod.rs:234`
+- **发射点**：`src/util/diagnostic/mod.rs:239`、`src/util/diagnostic/mod.rs:240`、`src/util/diagnostic/mod.rs:271`
 - **源码注释名**：运行时错误（通用）
 
 ### E6008：键不存在
@@ -93,5 +93,5 @@ description: '程序运行期（VM / std 原生函数）产生的错误。'
 - **模板**：`键不存在：{key}`
 - **消息**：字典在运行时找不到该键
 - **帮助**：索引前先用 dict.has 检查键是否存在
-- **发射点**：`src/backends/mod.rs:149`、`src/util/diagnostic/mod.rs:230`
+- **发射点**：`src/backends/mod.rs:149`、`src/util/diagnostic/mod.rs:267`
 - **源码注释名**：键缺失（#299 §4）

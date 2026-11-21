@@ -399,6 +399,258 @@ fn test_e2e_check_deny_warnings_clean_file_exits_zero() {
     assert_eq!(code, 0, "无警告文件在 --deny-warnings 下应 exit 0");
 }
 
+// check 命令 — `--allow` W 码逐条抑制（issue #499，用户 2026-10-24 裁决 A / 2026-11-20 甲案）
+// 契约：`--allow <CODE>` 只抑制指定码——该码不输出、不计入 warning_count、
+// 不触发 `--deny-warnings` / `--deny-shadowing` 升级；其他码照常；未知码与
+// 非 W 族码 = 参数错误（clap exit 2）。抑制语义 = 对用户完全不可见，过滤闸
+// 单点在 `run_check_command_once`（先过滤后消费）。
+// 对照锚：`test_e2e_check_without_allow_prints_and_counts_all_warnings` 钉住
+// 不带 flag 的逐字基线；本文件上方既有 W1001/W1003/`--deny-warnings` 锚
+// 与下方补齐的 `--deny-shadowing` 锚共同守住零漂移。
+
+#[test]
+fn test_e2e_check_without_allow_prints_and_counts_all_warnings() {
+    // Arrange: 双码夹具（W1001 死函数 + W1003 未使用导入）
+    let tmp = TempDir::new().unwrap();
+    let src = write_yx(
+        tmp.path(),
+        "two_codes.yx",
+        "use std.io\ndead_fn = (x: Int) => x\nmain = () => { x = 1 }",
+    );
+
+    // Act: 不带 --allow（对照面——过滤闸必须对此形态零行为变化）
+    let (code, _stdout, stderr) = run_yx(&["check", src.to_str().unwrap()], tmp.path());
+
+    // Assert: 两码照常输出且都计入摘要
+    assert_eq!(code, 0, "存在警告不构成错误，check 应 exit 0");
+    assert!(
+        stderr.contains("warning [W1001]"),
+        "不带 --allow 时 W1001 应照常输出，实际: {stderr:?}"
+    );
+    assert!(
+        stderr.contains("warning [W1003]"),
+        "不带 --allow 时 W1003 应照常输出，实际: {stderr:?}"
+    );
+    assert!(
+        stderr.contains("Summary: 0 error(s), 2 warning(s)"),
+        "不带 --allow 时两码都计入 warning_count，实际: {stderr:?}"
+    );
+}
+
+#[test]
+fn test_e2e_check_allow_suppresses_named_code_only_and_count() {
+    // Arrange: 双码夹具（W1001 死函数 + W1003 未使用导入）
+    let tmp = TempDir::new().unwrap();
+    let src = write_yx(
+        tmp.path(),
+        "two_codes.yx",
+        "use std.io\ndead_fn = (x: Int) => x\nmain = () => { x = 1 }",
+    );
+
+    // Act: --allow W1001。参数序：变参 flag（num_args = 1..）置于位置参数
+    // 之后——空格形式在前会把位置参数吞进值表（--exclude 同款先例，见
+    // test_e2e_check_explicit_path_under_target_is_honored 的参数序注释）
+    let (code, _stdout, stderr) = run_yx(
+        &["check", src.to_str().unwrap(), "--allow", "W1001"],
+        tmp.path(),
+    );
+
+    // Assert: W1001 不输出、不计数；未被允许的 W1003 照常
+    assert_eq!(code, 0, "--allow 不改变其余警告的退出码语义");
+    assert!(
+        !stderr.contains("warning [W1001]"),
+        "被允许的码 W1001 应完全不输出，实际: {stderr:?}"
+    );
+    assert!(
+        stderr.contains("warning [W1003]"),
+        "未被允许的码 W1003 应照常输出，实际: {stderr:?}"
+    );
+    assert!(
+        stderr.contains("Summary: 0 error(s), 1 warning(s)"),
+        "被允许的码不计入 warning_count（摘要只剩 W1003 一条），实际: {stderr:?}"
+    );
+}
+
+#[test]
+fn test_e2e_check_allow_equals_form_works_before_path() {
+    // Arrange: 单码夹具（仅 W1001）。裁决验收例的调用形态
+    // `check --allow=W1007 <项目>`——等号形式单值不吞后续位置参数
+    // （空格形式在前会吞，见 --exclude 先例实测与本文件参数序注释）
+    let tmp = TempDir::new().unwrap();
+    let src = write_yx(
+        tmp.path(),
+        "only1001.yx",
+        "dead_fn = (x: Int) => x\nmain = () => { x = 1 }",
+    );
+
+    // Act
+    let (code, _stdout, stderr) = run_yx(
+        &["check", "--allow=W1001", src.to_str().unwrap()],
+        tmp.path(),
+    );
+
+    // Assert
+    assert_eq!(code, 0, "等号形式的 --allow 应正常抑制，实际: {stderr:?}");
+    assert!(
+        !stderr.contains("warning [W1001]"),
+        "等号形式 --allow=W1001 应使 W1001 不输出，实际: {stderr:?}"
+    );
+    assert!(
+        stderr.contains("Summary: 0 error(s), 0 warning(s)"),
+        "等号形式 --allow=W1001 应使 W1001 不计数，实际: {stderr:?}"
+    );
+}
+
+#[test]
+fn test_e2e_check_allow_with_deny_warnings_exits_zero_when_only_allowed_code() {
+    // Arrange: 单码夹具（仅 W1001）。裁决钉住的组合：
+    // `--deny-warnings --allow=W1007`——抑制语义 = 完全不可见 ⇒ 升级判定
+    // 看到的 warning_count 已不含被允许的码
+    let tmp = TempDir::new().unwrap();
+    let src = write_yx(
+        tmp.path(),
+        "only1001.yx",
+        "dead_fn = (x: Int) => x\nmain = () => { x = 1 }",
+    );
+
+    // Act
+    let (code, _stdout, stderr) = run_yx(
+        &[
+            "check",
+            "--deny-warnings",
+            src.to_str().unwrap(),
+            "--allow",
+            "W1001",
+        ],
+        tmp.path(),
+    );
+
+    // Assert
+    assert_eq!(
+        code, 0,
+        "--deny-warnings --allow W1001：被允许的码不触发升级，应 exit 0；stderr: {stderr:?}"
+    );
+    assert!(
+        stderr.contains("Summary: 0 error(s), 0 warning(s)"),
+        "计数在升级判定前已被过滤，摘要应为零警告，实际: {stderr:?}"
+    );
+}
+
+#[test]
+fn test_e2e_check_allow_with_deny_warnings_exits_one_for_unallowed_code() {
+    // Arrange: 双码夹具，只允许 W1001
+    let tmp = TempDir::new().unwrap();
+    let src = write_yx(
+        tmp.path(),
+        "two_codes.yx",
+        "use std.io\ndead_fn = (x: Int) => x\nmain = () => { x = 1 }",
+    );
+
+    // Act
+    let (code, _stdout, stderr) = run_yx(
+        &[
+            "check",
+            "--deny-warnings",
+            src.to_str().unwrap(),
+            "--allow",
+            "W1001",
+        ],
+        tmp.path(),
+    );
+
+    // Assert: 未被允许的 W1003 仍触发 --deny-warnings 升级
+    assert_eq!(
+        code, 1,
+        "未被允许的 W1003 仍应触发 --deny-warnings 升级；stderr: {stderr:?}"
+    );
+}
+
+#[test]
+fn test_e2e_check_allow_unknown_code_is_rejected() {
+    // Arrange
+    let tmp = TempDir::new().unwrap();
+    let src = write_yx(tmp.path(), "ok.yx", "main = () => { x = 1 }");
+
+    // Act: 未知码——静默忽略会让 typo 后的 flag 毫无效果，故设计为参数错误
+    let (code, _stdout, stderr) = run_yx(
+        &["check", src.to_str().unwrap(), "--allow", "W9999"],
+        tmp.path(),
+    );
+
+    // Assert: clap 参数错误 exit 2，消息点名未知码
+    assert_eq!(code, 2, "未知码必须是参数错误（clap exit 2）");
+    assert!(
+        stderr.contains("unknown diagnostic code 'W9999'"),
+        "错误消息应点名未知码，实际: {stderr:?}"
+    );
+}
+
+#[test]
+fn test_e2e_check_allow_error_family_code_is_rejected() {
+    // Arrange
+    let tmp = TempDir::new().unwrap();
+    let src = write_yx(tmp.path(), "ok.yx", "main = () => { x = 1 }");
+
+    // Act: 非 W 族码——--allow 是 W 码抑制机制，错误不可被 CLI 旗标静音
+    let (code, _stdout, stderr) = run_yx(
+        &["check", src.to_str().unwrap(), "--allow", "E1001"],
+        tmp.path(),
+    );
+
+    // Assert: clap 参数错误 exit 2，消息说明只接受 W 族
+    assert_eq!(code, 2, "E 族码必须是参数错误（clap exit 2）");
+    assert!(
+        stderr.contains("not a W-family warning code"),
+        "错误消息应说明 --allow 只接受 W 族码，实际: {stderr:?}"
+    );
+}
+
+#[test]
+fn test_e2e_check_deny_shadowing_upgrades_w1006_to_failure() {
+    // Arrange: 本地模块 foo.yx + vendor 中同名包目录 ⇒ W1006 遮蔽（RFC-014）。
+    // 本 flag 此前无 e2e 覆盖——随 #499 过滤闸入库补齐对照锚：过滤闸位于
+    // --deny-shadowing 判定之前，本锚钉住其既有行为零漂移
+    let tmp = TempDir::new().unwrap();
+    let proj = tmp.path().join("proj");
+    std::fs::create_dir_all(proj.join(".yaoxiang").join("vendor").join("foo-1.0.0"))
+        .expect("create vendor package dir");
+    std::fs::write(
+        proj.join("yaoxiang.toml"),
+        "[package]\nname = \"proj\"\nversion = \"0.1.0\"\n",
+    )
+    .expect("write manifest");
+    std::fs::write(proj.join("foo.yx"), "helper = () => 42\n").expect("write foo.yx");
+    let main_yx = proj.join("main.yx");
+    std::fs::write(
+        &main_yx,
+        "use foo\n\nmain = () => { print(foo.helper()) }\n",
+    )
+    .expect("write main.yx");
+
+    // Act: ① 不带 flag（W1006 是普通警告）② --deny-shadowing（升级为失败）
+    let (code_plain, _out_plain, stderr_plain) =
+        run_yx(&["check", main_yx.to_str().unwrap()], &proj);
+    let (code_deny, _out_deny, stderr_deny) = run_yx(
+        &["check", main_yx.to_str().unwrap(), "--deny-shadowing"],
+        &proj,
+    );
+
+    // Assert
+    assert_eq!(
+        code_plain, 0,
+        "W1006 是警告，不带 flag 不阻断退出码；stderr: {stderr_plain:?}"
+    );
+    assert!(
+        stderr_plain.contains("warning [W1006]"),
+        "遮蔽应先以 W1006 警告呈现，实际: {stderr_plain:?}"
+    );
+    assert_ne!(code_deny, 0, "--deny-shadowing 应以非零码退出");
+    assert!(
+        stderr_deny.contains("shadow vendored dependencies"),
+        "--deny-shadowing 失败消息应说明原因，实际: {stderr_deny:?}"
+    );
+}
+
 // init 命令 — 目录结构契约 + 退出码
 // 规范来源：RFC-014 包管理系统 — 项目初始化
 

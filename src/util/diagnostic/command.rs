@@ -28,6 +28,7 @@ use super::{ErrorCodeDefinition, ErrorInfo, I18nRegistry, JsonEmitter};
 pub fn run_check_command_once(
     paths: &[PathBuf],
     excludes: &[PathBuf],
+    allow: &[String],
     json: bool,
     use_colors: bool,
     no_progress: bool,
@@ -52,7 +53,13 @@ pub fn run_check_command_once(
     .with_context(|| "读取项目配置 yaoxiang.toml 失败")?
     .compile_config();
 
-    let result = check_files_with_diagnostics(&files, compile_config)?;
+    let mut result = check_files_with_diagnostics(&files, compile_config)?;
+    // --allow（issue #499，用户 2026-10-24 裁决 A）：唯一过滤闸，必须先于全部
+    // 消费面——文本渲染、JSON 输出、--deny-shadowing 升级判定、返回给 main 的
+    // 计数（main.rs 据此做 --deny-warnings 退出码判定）。被允许的码对用户
+    // 完全不可见：不输出、不计数、不触发任何升级。allow 为空时是零开销
+    // 无操作（不带 --allow 的行为逐字不变）。
+    result.suppress_codes(allow);
 
     if json {
         output_check_json(&result)?;

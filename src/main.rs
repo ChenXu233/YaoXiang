@@ -9,7 +9,8 @@ use yaoxiang::formatter::run_format_command;
 use yaoxiang::package;
 use yaoxiang::repl::Repl;
 use yaoxiang::util::diagnostic::{
-    render_explain_output, run_check_command_once, run_file_with_diagnostics, RunOutcome,
+    render_explain_output, run_check_command_once, run_file_with_diagnostics, ErrorCategory,
+    ErrorCodeDefinition, RunOutcome,
 };
 use yaoxiang::util::i18n::set_lang_from_string;
 use yaoxiang::util::logger::LogLevel;
@@ -127,6 +128,15 @@ enum Commands {
         /// Exclude file(s) or directory path(s) from check
         #[arg(long = "exclude", value_name = "PATH", num_args = 1..)]
         exclude: Vec<PathBuf>,
+
+        /// Suppress warnings by code (repeatable, e.g. --allow W1007 --allow W1003, #499)
+        #[arg(
+            long = "allow",
+            value_name = "CODE",
+            num_args = 1..,
+            value_parser = parse_allow_code
+        )]
+        allow: Vec<String>,
 
         /// Output diagnostics in JSON format
         #[arg(long)]
@@ -406,6 +416,28 @@ enum WorkspaceCommand {
     },
 }
 
+/// `--allow` 的码名校验（issue #499，用户 2026-10-24 裁决 A / 2026-11-20 甲案）。
+///
+/// - 未知码 = 报错：静默忽略会让 typo 后的 flag 毫无效果，用户以为抑制了实则没有；
+/// - 非 W 族码（`ErrorCategory != Warning`）= 报错：`--allow` 是 W 码逐条抑制
+///   机制，错误码不可被 CLI 旗标静音（错误契约底线——被静音的错误会让失败的
+///   check 伪装成通过）。
+///
+/// 权威源 = `ErrorCodeDefinition::find`（`codes/mod.rs` 的 ERROR_CODES 注册表）。
+fn parse_allow_code(code: &str) -> Result<String, String> {
+    match ErrorCodeDefinition::find(code) {
+        None => Err(format!(
+            "unknown diagnostic code '{code}' (--allow accepts W-family warning codes only; \
+             see `yaoxiang explain` for the code list)"
+        )),
+        Some(def) if def.category == ErrorCategory::Warning => Ok(code.to_string()),
+        Some(_) => Err(format!(
+            "'{code}' is not a W-family warning code (--allow suppresses warnings only; \
+             errors cannot be silenced)"
+        )),
+    }
+}
+
 /// 命令行信任决策（RFC-014b 5e）：`--trust` 标志 + 交互性检测
 fn build_trust_decision(flag: bool) -> yaoxiang::package::build::TrustDecision {
     use std::io::IsTerminal;
@@ -586,6 +618,7 @@ fn dispatch_command(command: Commands) -> Result<()> {
         Commands::Check {
             paths,
             exclude,
+            allow,
             json,
             color,
             no_progress,
@@ -601,6 +634,7 @@ fn dispatch_command(command: Commands) -> Result<()> {
             match run_check_command_once(
                 &paths,
                 &exclude,
+                &allow,
                 json,
                 use_colors,
                 no_progress,
