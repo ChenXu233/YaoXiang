@@ -410,3 +410,165 @@ main = () => {
         "#,
     );
 }
+
+// #477（WBS 3.8.1）：native 遮蔽用户同名函数——lower 面裸名解析对齐 check 面
+// （用户裁决乙案：用户模块的裸名调用先查用户定义、再查 std native）。
+//
+// divergence 的精确机制：check 面（sema）对 `Expr::Var` 按作用域解析
+// （`scope.get_var_info` 优先命中用户顶层函数，`env.add_var` 注册）；
+// lower 面的 `resolve_function_name`（middle/lower/query.rs）旧四臂只认
+// 「本单元类型名 → use 项别名 → native 名 → std 短名映射」，用户**函数**
+// 名落空到 std 短名映射臂被改写成 native 限定名（如 `read` → `std.os.read`）
+// ——同一调用点 check 绿、run 派发 native。修前实测两形态：
+// ① 实参运行期与 native 兼容时 native 静默执行给错误值（exit 0）；
+// ② 不兼容时运行期 E6007（exit 1，native 实参检查报错）。
+//
+// 值断言全部用程序内 assert 表达（跑通即算对）——锚③的修前形态也是
+// exit 0，只有值断言能区分「native 静默错误值」与「用户函数正确值」。
+
+/// #477 锚①：用户泛型名 `read` 遮蔽 native（issue #477 原形态，WBS 3.8 登记）。
+/// 修前 run 报 E6007（native_read 实参个数不符「read expects 2 arguments」）；
+/// 修后用户泛型恒等函数执行、值原样透传。
+#[test]
+fn test_shadowed_generic_read_resolves_to_user_function() {
+    // Arrange
+    let source = r#"
+use std.io
+use std.assert
+
+read: (T: Type) -> (x: T) -> T = (x) => { x }
+
+main = () => {
+    s = read("hi")
+    assert.assert(s == "hi", "shadowed generic read must execute the user function")
+}
+        "#;
+
+    // Act & Assert
+    let source = crate::fixture::with_main_invoked(source);
+    run(&source).unwrap_or_else(|e| panic!("Execution failed:\n{e:#}\n\nSource:\n{source}"));
+}
+
+/// #477 锚②：兼容遮蔽——用户 `read: (String) -> String` 与 native
+/// `read(file: &File, n: Int)` 元数不同但 check 面按用户签名全绿。
+/// 修前 run 报 E6007（native_read 实参形态不符）；修后用户函数执行、值正确。
+#[test]
+fn test_shadowed_string_read_returns_user_result() {
+    // Arrange
+    let source = r#"
+use std.string
+use std.io
+use std.assert
+
+read: (String) -> String = (s) => { f"{s}-from-user" }
+
+main = () => {
+    s = read("hi")
+    assert.assert(s == "hi-from-user", "shadowed string read must execute the user function")
+}
+        "#;
+
+    // Act & Assert
+    let source = crate::fixture::with_main_invoked(source);
+    run(&source).unwrap_or_else(|e| panic!("Execution failed:\n{e:#}\n\nSource:\n{source}"));
+}
+
+/// #477 锚③：**静默错误值形态**——用户 `read: (File, Int)` 与 native read
+/// 元数与实参运行期形态都兼容（File 运行期即 Int fd）：修前 native_read
+/// 拿用户 fd 真读文件、静默返回文件内容（空文件 → 空串），exit 0 但值错；
+/// 只有值断言能区分两种行为。修后用户函数执行。
+#[test]
+fn test_shadowed_read_with_compatible_arity_returns_user_result() {
+    // Arrange：native_read 修前会真读该文件（fd 查表命中），静默返回文件内容
+    let path = std::path::Path::new("yx-477-anchor-silent.tmp");
+    std::fs::write(path, "").expect("seed anchor temp file for #477");
+    let source = r#"
+use std.os
+use std.io
+use std.assert
+
+read: (File, Int) -> String = (f, n) => { "user-read-called" }
+
+main = () => {
+    f = os.open("yx-477-anchor-silent.tmp", "r")
+    s = read(f, 10)
+    assert.assert(s == "user-read-called", "compatible-arity shadowed read must execute the user function, not native_read")
+}
+        "#;
+
+    // Act
+    let source = crate::fixture::with_main_invoked(source);
+    let result = run(&source);
+
+    // Assert（先清理临时文件，再判定——避免提前 return 泄漏）
+    let removed = std::fs::remove_file(path);
+    assert!(
+        removed.is_ok(),
+        "anchor temp file must be removable (exists + no concurrent holder)"
+    );
+    result.unwrap_or_else(|e| panic!("Execution failed:\n{e:#}\n\nSource:\n{source}"));
+}
+
+/// #477 对照①：限定名 native 调用（`os.read`）不受用户遮蔽机制影响——
+/// 用户**无**同名定义、走 namespace 臂，修前后都必须派发 native、读到文件内容。
+#[test]
+fn test_qualified_native_read_still_dispatches_to_native() {
+    // Arrange
+    let path = std::path::Path::new("yx-477-anchor-qualified.tmp");
+    std::fs::write(path, "hello").expect("seed qualified temp file for #477");
+    let source = r#"
+use std.os
+use std.io
+use std.assert
+
+main = () => {
+    f = os.open("yx-477-anchor-qualified.tmp", "r")
+    s = os.read(f, 10)
+    assert.assert(s == "hello", "qualified os.read must still dispatch to the native function")
+    os.close(f)
+}
+        "#;
+
+    // Act
+    let source = crate::fixture::with_main_invoked(source);
+    let result = run(&source);
+
+    // Assert（先清理临时文件，再判定）
+    let removed = std::fs::remove_file(path);
+    assert!(
+        removed.is_ok(),
+        "qualified temp file must be removable (exists + no concurrent holder)"
+    );
+    result.unwrap_or_else(|e| panic!("Execution failed:\n{e:#}\n\nSource:\n{source}"));
+}
+
+/// #477 对照②：std 嵌入单元内部互调零变化——std.json.parse 的 std 单元内部
+/// 裸名互调（parse_value → parse_object/parse_array/parse_string/parse_number/
+/// parse_uchar，src/std/json.yx）走的也是 `declared_fn_names` 臂，命中的是
+/// std 自己的函数名；修后 roundtrip 必须照常（与修前逐字节同值）。
+#[test]
+fn test_std_internal_bare_calls_unaffected() {
+    // Arrange
+    let source = r#"
+use std.json
+use std.result
+use std.assert
+
+main = () => {
+    r = json.parse("\"hello\"")
+    match r {
+        ok(v) => {
+            s = json.stringify(v)
+            assert.assert(s == "\"hello\"", "std.json internal bare calls must roundtrip unchanged")
+        }
+        err(e) => {
+            assert.assert(false, f"std.json.parse unexpectedly failed: {e}")
+        }
+    }
+}
+        "#;
+
+    // Act & Assert
+    let source = crate::fixture::with_main_invoked(source);
+    run(&source).unwrap_or_else(|e| panic!("Execution failed:\n{e:#}\n\nSource:\n{source}"));
+}

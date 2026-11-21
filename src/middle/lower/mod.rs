@@ -95,6 +95,20 @@ pub struct AstToIrGenerator {
     /// 否则 `use std.math` 后用户写 `PI: Type = ..; PI(7)` 会被解析成
     /// `std.math.PI`（常量）——调用常量得到 void，静默错值（D10）。
     pub(super) declared_type_names: std::collections::HashSet<String>,
+    /// 本单元声明的**顶层函数绑定名**（issue #477 / WBS 3.8.1，用户裁决乙案）。
+    ///
+    /// 裸名调用解析的用户定义优先：用户在本单元定义了与 std native 短名同名
+    /// 的函数（如 `read`），check 面（sema）按作用域查到用户函数、检查全绿；
+    /// lower 面若只认「类型名优先」（`declared_type_names`），函数名落到
+    /// std 短名映射臂被改写成 native 限定名——check 与 run 对同一调用给出
+    /// 不同派发目标（修前实测：native 静默执行给错误值 exit 0，或运行期
+    /// E6007）。本集合与 `declared_type_names` 同点扫描填充，让裸名解析在
+    /// 类型臂之后先查本单元函数，再落 use_aliases / native / std 短名映射。
+    ///
+    /// std 嵌入单元（std.test / std.json 等）单独做 IR 生成、各用各的生成器
+    /// 实例——集合天然按单元作用域工作，std 模块内部互调命中的仍是 std 自己
+    /// 的函数名（与原兜底臂 + `qualify_names` 改写产物同名，零漂移）。
+    pub(super) declared_fn_names: std::collections::HashSet<String>,
     /// 类型级命名空间（谓词名可见面）：SPEC §7.1 的「谓词应用的实参位是值不是
     /// 类型」判据要用它——保守假值会让同形不遮蔽失效。
     ///
@@ -315,6 +329,7 @@ impl AstToIrGenerator {
             struct_definitions: HashMap::new(),
 
             declared_type_names: std::collections::HashSet::new(),
+            declared_fn_names: std::collections::HashSet::new(),
             type_level,
             type_bindings: HashMap::new(),
             nested_functions: Vec::new(),

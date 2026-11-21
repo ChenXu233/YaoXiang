@@ -39,6 +39,31 @@ impl AstToIrGenerator {
             }
         }
 
+        // 同点扫**本文件声明的顶层函数绑定名**（issue #477 / WBS 3.8.1，乙案）：
+        // 裸名调用解析要按单元区分「用户定义优先」。判定与
+        // `register_global_slots` / Assign 臂（stmt.rs）同源
+        // （`block_binding_is_function`——函数绑定进函数表、不占全局槽）。
+        // 嵌套函数不在此列：嵌套体调用解析走局部符号表（`lookup_local`），
+        // 裸名解析面只服务顶层名。
+        for stmt in &module.items {
+            if let ast::StmtKind::Assign {
+                target,
+                type_annotation,
+                value,
+                ..
+            } = &stmt.kind
+            {
+                if let ast::Expr::Var(name, _) = target.as_ref() {
+                    if ast::Expr::block_binding_is_function(
+                        type_annotation.as_ref(),
+                        value.as_deref(),
+                    ) {
+                        self.declared_fn_names.insert(name.clone());
+                    }
+                }
+            }
+        }
+
         // T3：先分配所有顶层值绑定的槽位，使前向引用在生成期可解析。
         self.register_global_slots(module);
 

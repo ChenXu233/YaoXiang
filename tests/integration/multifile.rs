@@ -1567,3 +1567,37 @@ fn test_multifile_comparison_mismatch_without_void_message_has_no_hint() {
         "无 Void 操作数的比较错误不得引用 W1007，实际:\n{stderr}"
     );
 }
+
+#[test]
+fn test_multifile_shadowed_std_short_name_resolves_per_unit() {
+    // #477（WBS 3.8.1，用户裁决乙案）：两个单元各自定义与 std native 短名同名
+    // 的函数 `read`（std.os.read，`read(file: &File, n: Int) -> String`）并裸名
+    // 调用——各单元的调用必须解析到**自己单元**的定义（互不劫持、native 不抢
+    // 派发），与 check 面（sema 按作用域解析到用户函数）一致。
+    // 修前形态：lower 面 resolve_function_name 只认「类型名优先」，函数名落到
+    // std 短名映射臂被改写成 std.os.read——B 的裸名调用被 A 的定义或 native
+    // 劫持（实参形态兼容时 native 静默执行给错误值，不兼容时运行期 E6007）。
+    // 对照：限定名调用（os.read 走 namespace 臂）不受影响，仍派发 native。
+    let a = r#"
+read: (String) -> String = (s) => f"a-{s}"
+
+call_read: (String) -> String = (s) => read(s)
+"#;
+    let b = r#"
+read: (String) -> String = (s) => f"b-{s}"
+
+call_read: (String) -> String = (s) => read(s)
+"#;
+    let main = r#"
+use std.assert
+use a.{read as a_read, call_read as a_call_read}
+use b.{call_read as b_call_read}
+
+main = () => {
+    assert.assert(a_read("x") == "a-x", "A's read must resolve to A's definition")
+    assert.assert(a_call_read("x") == "a-x", "A's internal bare call must resolve to A")
+    assert.assert(b_call_read("y") == "b-y", "B's bare call must not be hijacked by A or native")
+}
+"#;
+    run_project_ok(&[("a.yx", a), ("b.yx", b), ("main.yx", main)], "main.yx");
+}

@@ -857,8 +857,21 @@ impl AstToIrGenerator {
             // 否则 `use std.math` 后用户写 `PI: Type = { .. }; PI(7)` 会被解析成
             // `std.math.PI`（圆周率常量）——调用常量得到 void，静默错值（D10）。
             // 要访问被遮蔽的 std 名，写限定名 `math.PI` 即可。
+            //
+            // 同理（issue #477 / WBS 3.8.1，用户裁决乙案），用户**本模块**定义的
+            // **函数**也优先于 std native 短名：check 面（sema）按作用域解析到
+            // 用户函数、按用户签名检查通过；lower 若把同名裸名改写成 std native
+            // 限定名，同一调用点 check 绿、run 派发 native——修前实测两形态：
+            // 实参运行期兼容时 native 静默执行给错误值（exit 0），不兼容时
+            // 运行期 E6007（exit 1）。此处返回裸名，随后 `qualify_names` /
+            // `resolve_call_target`（module_ir.rs）按本单元 rename 表把它限定成
+            // 本模块函数——运行期命中用户函数，与 check 面一致。
+            // 要访问被遮蔽的 std 名，写限定名 `os.read` 即可。
+            // std 嵌入单元各自做 IR 生成（`declared_fn_names` 按单元填充），
+            // std 模块内部互调命中的是 std 自己的函数名，语义零变化。
             let locally_defined = self.declared_type_names.contains(name);
-            let resolved_name = if locally_defined {
+            let locally_defined_fn = self.declared_fn_names.contains(name);
+            let resolved_name = if locally_defined || locally_defined_fn {
                 name.clone()
             } else if let Some(qualified) = self.use_aliases.get(name) {
                 qualified.clone()
