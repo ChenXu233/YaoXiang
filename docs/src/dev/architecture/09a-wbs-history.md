@@ -7895,3 +7895,40 @@ pub enum FunctionBody {
 > **六、编排偏差与本轮补偿安排（如实登记）**：8.2.2 的独立复审未按常规形态完成——原定复审者触发 429 额度上限、无实质产出即失败；复审改派给验证代理后，该交付的验证与复审由同一代理完成，独立性弱于 8.2.1（后者由另一模型家族的代理独立复审）。其职责中的两处高风险独立挑战（插桩判 N+1、自建父 revision 基线）并入改派后的复审验收。补偿控制：冻结 revision 上独立复现全部判据、三组变异 trial、计数点插桩实验、父 revision 的改前二进制产出 span 基线。本记录把上述安排写成一次补偿，不作为常规形态。
 >
 > **七、边界与未动项**：`src/ast` 公共形状（`Expr::FString` / `FStringSegment`）零改动；未新增诊断码、locales 零改动；05 的设计结论未改（仅按现树重取「编译器改动清单」锚、校正两处函数签名文案）；`tests/baselines/` 与 `src/middle/ir/tests/snapshots/` 未动。8.2.2 的「N+1→1」未达成，不在任何文档中宣称已兑现。
+
+## P7 7b.2 契约（`next_temp_reg` 改产 `Operand::Value` + values 生产 + codegen 解析 + 快照再生，2026-11-21）
+
+> 计划见 [09](./09-execution-wbs.md) §P7 7b 表 7b.2 行；设计依据 [04](./04-ssa.md) §值标识方式与 §编译器改动清单第 7 项；前置 = [09a §P7 7b.1b 契约](#p7-7b1b-契约values-表--valueinfo--访问器--phi-残项判据2026-11-20)（`values` / `ValueInfo` / 访问器已落地、双处登记转本批）。基线 = `origin/dev` 顶端 `37e9aee6`（7b.1b 已集成，工作树干净）。**本批只改临时值的身份（`Operand::Local` → `Operand::Value`）；寄存器槽分配语义（`next_temp` / `temp_high_water` / `temp_floor` / 三处语句级回收）原样保留**（删回收归 7a.1+7b.4）——因此字节码槽号不变，C4 走最强形态（行为等价 + 快照差异仅表示面）。
+
+### 一、实测面（基线 revision）
+
+| 面 | 实测 |
+| --- | --- |
+| `next_temp_reg()` 调用点 | **140 处 / 14 文件**（全在 `src/middle/lower/`：call 30、loops 23、control 22、stmt 20、container 15、op 12、access 4、spawn 4、curry 2、lit 2、reference 2、globals 2、expr/mod 1、closure 1） |
+| `Operand::Local(` | `src/middle/lower/` **342 处 / 14 文件**（04 的旧实测 332 为 7b.1a 前数字；另有 ir/verify/tests 与 passes 的机制面不在本次机械替换面） |
+| `result_reg: usize` 参数链 | **35 个函数** + `Option<usize>` 结果位 **3 个**（`generate_block_ir` / `generate_for` / `generate_while` 形态） |
+| 结果位调用点 | `generate_expr_ir` **84**、`generate_block_ir` **12**、`generate_tail_stmt_ir` **6** |
+| `register_local(` | **13 处**：参数固定槽 4（curry 2 / closure 1 / globals 1 / stmt 2）不需新分配；**9 处经 `next_temp_reg` 分配具名槽**（container 1、control 1、op 1、spawn 1、loops 2、stmt 3）→ 改为新的「具名槽分配」入口 |
+| 基本块 label | lower 全部 **7 处** `BasicBlock` 构造 `label: 0`、`successors: Vec::new()`（单块函数体；多块/Phi 归 7b.3） |
+| `Operand::Value(` 现有生产点 | 0（只有 7b.1a 测试夹具与 verify 消费臂） |
+
+### 二、逐项定夺
+
+1. **调用点分三类，全部机械可判**：(a) 临时值位（`Operand::Local(temp)` / 结果位实参 / `Ret` 值）→ 直接持 `Operand`；(b) 具名变量槽（9 处 `next_temp_reg` + `register_local`）→ 新 `next_local_slot() -> usize`（旧 `next_temp_reg` 的槽语义，三处回收照旧可回滚它）；(c) 槽号专用消费（`take_cur_locals` / 预算 / `temp_floor`）不变。`generate_expr_ir` / `generate_block_ir` / `generate_tail_stmt_ir` 的结果位类型由 `usize` 改 `Operand`（具名槽调用点传 `Operand::Local(slot)`），**不引入隐式转换 trait**。
+2. **`ValueInfo.ty` 来源**（只取 lowering 已有信息，不新造类型判定器）：①`generate_expr_ir` 入口按 `expr_value_type(expr)` 落值类型——变量走 `type_result.local_var_types` / `lookup_var_type` 的真实 `MonoType`，构造器调用落 `TypeRef(名)`，普通函数调用从 `lookup_var_type` 的 `Fn { ret }` 取返回类型；②字面量在 `generate_lit_expr_ir` 落字面量类型；③比较/逻辑/一元结果在**函数体收尾的前向类型推导**（`take_body_values` 前）按指令语义传播：`Eq/Ne/Lt/Le/Gt/Ge/Not` → `Bool`、`StringLength` → `Int(64)`、`StringConcat` → `String`、`Load/Move` 取 `src` 类型、`Add/Sub/Mul/Div/Mod/And/Or/Xor/Shl/Shr/Sar` 取 `lhs` 类型、`Neg` 取操作数类型。④**不得静默 `Int(64)` 占位**：`LocalSlot.ty` 一律不读（lower 从不写它）；仍不可得的值落**显式未知 `MonoType::TypeRef("?")`**（与 verify「TypeRef = 信息不足」同口径），收口按语料登记未知占比，不把未知伪装成具体类型。
+3. **`defining_block`**：取生成期当前块 label（新增 `cur_block_label`，初始 0；本批全仓 lowering 单块，实测 label 恒 0）。多块与 Phi 归 7b.3；契约登记「字段已可承载、本批值恒 0」。
+4. **`debug_name`**：本批全部 `None`（具名变量仍是 `Local`，不迁到值表），与 04「纯临时值一律 None」一致。
+5. **计数器隔离**：新增独立 `next_value: u32`（`ValueId` 单调递增、本函数体内**永不回滚**）；三处语句级回收只回滚 `next_temp`（槽），不触碰 `next_value`。`NestedBodyGuard` 的 `SavedFrame` 增存/取 `next_value` / `cur_values` / `cur_value_slots`（每个函数体一套值表，与 `cur_locals` 同构）；这与「`ValueId` 函数内稠密」一致。`take_body_locals` 的 255 预算（`temp_high_water`）与 `take_body_values` 分离。
+6. **codegen 槽位解析（过渡）**：`FunctionBody::Code` 增 `value_slots: Vec<usize>`（与 `values` 同索引，index = ValueId；元素 = 既有 `next_temp` 槽号）。理由：值表不含槽号，而字节码必须落 `u8` 槽；槽号由 lowering 的槽分配器（含语句级回收）给出，必须随值记录才能在 codegen 还原**同一字节码**。备选「每值独占一槽」实测不可行——`src/std/tests/string_ops.yx` 354 槽、`tests/yaoxiang/01-syntax/control-flow/list_comp.yx` 323 槽（09a §P7 7a 实测）会越过 255，C4 红。`OperandResolver` 变为持有当前函数映射（`set_value_slots`），`to_reg(Value(v))`：`value_slots[v]` 存在 ⇒ `u8`（`>255` 报 E3014）；越界/无映射 ⇒ E3017 显式诊断。`Phi` 占位不动（7b.3）。
+7. **normalize**：`FunctionBody::Code` 渲染新增 `values_total=N` + 每值一行 `value v{k}: {ty:?} @block{b}`（`v{k}` 由 `FnCtx.values` 预置重命名：按 ValueId 升序分配，指令渲染沿用同一重命名）；**不渲染 `value_slots`**（分配细节，7b.4 会重算；语义面由 values 段承载）。232 份快照再生后 diff 只允许两类：`Operand::Local` 临时位变 `Operand::Value` 的 `%n`→`v k` 重命名、`values_total`/`value` 段新增；`locals_total` 与具名 `slot[i]` 段不变（temp 占位槽本来不打印）。收口逐份脚本核对 diff 类别 + 抽样人工 review。
+8. **mono 特化**：两处克隆（`passes/mono/function.rs` 与 `passes/mono/mod.rs`）对 values 逐条 `ty` 走既有 `substitute_single_type`、`debug_name` / `defining_block` 原样投影、`value_slots` 原样复制；空表时行为与基线一致。
+9. **dce / 其它 pass**：DCE 只做 `module.functions.retain`（整函数删除，实测），不动函数体内 `values` / `value_slots`；`Operand::Value` 不参与按名存活判定。新增断言测试「DCE 后 values/ValueId 仍可索引、未定义值不被静默使用」。
+10. **C4**：语料差分基线是**行为面**（402 行，`run` 的 stdout/stderr/exit/diagnostics），表示面变化不进入该基线 ⇒ 目标 402/402 零 diff；IR 快照属表示面，按第 7 条再生并复核；另加 CLI 探针（`check`/`run` 逐字节输出）覆盖典型语料。
+
+### 三、影响预判与回滚点
+
+- 快照：232 份全部再生（每个有临时值的函数都会出现 `values_total` 与 `value` 行、`%n`→`vk` 重命名）；无临时值的函数只剩 `values_total=0` 一行（若采纳渲染；实现以最小 diff 为准）。
+- 语料/运行：槽号分配与指令语义不变 ⇒ 行为等价；`verify_loose` 的现有判据不受影响（`Operand::Value` 在槽位判据里不是槽）；`verify_ssa` 因 values 非空自动收紧 Phi 类型检查（语料无 Phi）。
+- 生成物：`OperandResolver` 的 E3017 发射点面变化 → `scripts/docs/gen-error-code-docs.py` 再生 `docs/src/reference/error-code/` 并随代码同提交。
+- 回滚点：本契约段单独一笔文档提交，先于代码；代码 + 快照 + 生成物一笔（`FunctionBody::Code` 加字段波及全仓编译，不可增量回滚），整笔 `git revert` 可回基线。
+
