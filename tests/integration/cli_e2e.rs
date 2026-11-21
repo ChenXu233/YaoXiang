@@ -502,6 +502,83 @@ fn test_e2e_check_allow_equals_form_works_before_path() {
 }
 
 #[test]
+fn test_e2e_check_allow_repeatable_flag_suppresses_all_named_codes() {
+    // Arrange: 双码夹具（W1001 死函数 + W1003 未使用导入）。裁决原文「可重复」
+    // 分支（#499，2026-10-24 裁决 A：CLI 级 --allow=<CODE>（可重复））的行为
+    // 锚——help 文本示例形态（--allow W1007 --allow W1003）由此获得 e2e 钉
+    let tmp = TempDir::new().unwrap();
+    let src = write_yx(
+        tmp.path(),
+        "two_codes.yx",
+        "use std.io\ndead_fn = (x: Int) => x\nmain = () => { x = 1 }",
+    );
+
+    // Act: 两个 --allow 各带一码——可重复 flag 形态
+    let (code, _stdout, stderr) = run_yx(
+        &[
+            "check",
+            src.to_str().unwrap(),
+            "--allow",
+            "W1001",
+            "--allow",
+            "W1003",
+        ],
+        tmp.path(),
+    );
+
+    // Assert: 两码都被抑制——不输出、不计数
+    assert_eq!(code, 0, "可重复形态下两码全抑制，应 exit 0");
+    assert!(
+        !stderr.contains("warning [W1001]"),
+        "可重复形态下 W1001 应不输出，实际: {stderr:?}"
+    );
+    assert!(
+        !stderr.contains("warning [W1003]"),
+        "可重复形态下 W1003 应不输出，实际: {stderr:?}"
+    );
+    assert!(
+        stderr.contains("Summary: 0 error(s), 0 warning(s)"),
+        "可重复形态下两码都不计入 warning_count，实际: {stderr:?}"
+    );
+}
+
+#[test]
+fn test_e2e_check_allow_space_multi_value_suppresses_all_named_codes() {
+    // Arrange: 双码夹具（W1001 死函数 + W1003 未使用导入）。num_args = 1..
+    // 空格多值形态（--exclude 同款先例，#499 甲案）——单个 --allow 后跟
+    // 两个码值，两码都进抑制表
+    let tmp = TempDir::new().unwrap();
+    let src = write_yx(
+        tmp.path(),
+        "two_codes.yx",
+        "use std.io\ndead_fn = (x: Int) => x\nmain = () => { x = 1 }",
+    );
+
+    // Act: 单个 --allow 带两个空格分隔的码。参数序：变参 flag 置于位置参数
+    // 之后——空格形式在前会把位置参数吞进值表（见上方 --allow W1001 锚的
+    // 参数序注释）
+    let (code, _stdout, stderr) = run_yx(
+        &["check", src.to_str().unwrap(), "--allow", "W1001", "W1003"],
+        tmp.path(),
+    );
+
+    // Assert: 两码都被抑制——不输出、不计数
+    assert_eq!(code, 0, "空格多值形态下两码全抑制，应 exit 0");
+    assert!(
+        !stderr.contains("warning [W1001]"),
+        "空格多值形态下 W1001 应不输出，实际: {stderr:?}"
+    );
+    assert!(
+        !stderr.contains("warning [W1003]"),
+        "空格多值形态下 W1003 应不输出，实际: {stderr:?}"
+    );
+    assert!(
+        stderr.contains("Summary: 0 error(s), 0 warning(s)"),
+        "空格多值形态下两码都不计入 warning_count，实际: {stderr:?}"
+    );
+}
+
+#[test]
 fn test_e2e_check_allow_with_deny_warnings_exits_zero_when_only_allowed_code() {
     // Arrange: 单码夹具（仅 W1001）。裁决钉住的组合：
     // `--deny-warnings --allow=W1007`——抑制语义 = 完全不可见 ⇒ 升级判定
@@ -648,6 +725,61 @@ fn test_e2e_check_deny_shadowing_upgrades_w1006_to_failure() {
     assert!(
         stderr_deny.contains("shadow vendored dependencies"),
         "--deny-shadowing 失败消息应说明原因，实际: {stderr_deny:?}"
+    );
+}
+
+#[test]
+fn test_e2e_check_allow_with_deny_shadowing_exits_zero_when_only_allowed_code() {
+    // Arrange: 与上方 deny-shadowing 对照锚同一夹具——本地模块 foo.yx + vendor
+    // 同名包目录 ⇒ W1006 遮蔽（RFC-014）。#499 过滤闸（suppress_codes，先于
+    // --deny-shadowing 消费面）吞掉被允许的 W1006 后，遮蔽计数为 0，升级
+    // 判定不应触发——单点闸的交互面由此钉住
+    let tmp = TempDir::new().unwrap();
+    let proj = tmp.path().join("proj");
+    std::fs::create_dir_all(proj.join(".yaoxiang").join("vendor").join("foo-1.0.0"))
+        .expect("create vendor package dir");
+    std::fs::write(
+        proj.join("yaoxiang.toml"),
+        "[package]\nname = \"proj\"\nversion = \"0.1.0\"\n",
+    )
+    .expect("write manifest");
+    std::fs::write(proj.join("foo.yx"), "helper = () => 42\n").expect("write foo.yx");
+    let main_yx = proj.join("main.yx");
+    std::fs::write(
+        &main_yx,
+        "use foo\n\nmain = () => { print(foo.helper()) }\n",
+    )
+    .expect("write main.yx");
+
+    // Act: --deny-shadowing 与 --allow W1006 组合——被允许的码必须同样逃过
+    // 升级判定（抑制 = 对全部消费面不可见）
+    let (code, _stdout, stderr) = run_yx(
+        &[
+            "check",
+            "--deny-shadowing",
+            main_yx.to_str().unwrap(),
+            "--allow",
+            "W1006",
+        ],
+        &proj,
+    );
+
+    // Assert: W1006 被抑制后无遮蔽可升级，exit 0
+    assert_eq!(
+        code, 0,
+        "--allow W1006 抑制后 --deny-shadowing 无遮蔽可升级，应 exit 0；stderr: {stderr:?}"
+    );
+    assert!(
+        !stderr.contains("warning [W1006]"),
+        "被允许的码 W1006 应完全不输出，实际: {stderr:?}"
+    );
+    assert!(
+        !stderr.contains("shadow vendored dependencies"),
+        "W1006 被抑制后不应出现 --deny-shadowing 失败消息，实际: {stderr:?}"
+    );
+    assert!(
+        stderr.contains("Summary: 0 error(s), 0 warning(s)"),
+        "被允许的码不计入 warning_count（计数面同样先过滤），实际: {stderr:?}"
     );
 }
 
