@@ -7819,6 +7819,20 @@ pub enum FunctionBody {
 > **四、验证链**：t1 一轮全绿（14 门禁）→ 主修笔推送 → t2 **PASS**（四组锚 + M1 摘改绑回红 / M2 范围过度反向钉 + CLI 探针契约成立）→ t3 **REJECT**（8 条）→ 修复笔 → t3r **APPROVE**（1 info = 两条收集器冲突策略分歧（insert 后写胜 vs entry 首登记）——仅同条 use 内同一定义名重复导入时分歧，被 E5006/E5008 拦无观察面，留观察）→ 收口笔（本节）。批次树已 release + gc。
 
 > **五、移交登记**：①#575（索引推断缺陷）待排期——修复涉及 builtin ctor 类型合成路径（D6.2 邻域）；②P6 全量身份收敛（变体加字段形态）归 3.18 主线后续，届时 rebind_nominal_refs 判据面同批扩展（穷尽 match 已保证编译器指路）；③别名解析在 checker.rs:2236 与 dead_code.rs:169 仍有副本（超出本面，顺修候选）；④两条收集器冲突策略分歧留观察（同条 use 重复导入被 E5006/E5008 拦）；⑤#504 的 C 类定案随本节与 3.18.2 行更正落库。
+>
+## P3 3.24.6 收口（#563 fn[pos] 超界位置字面量编译期拒绝——甲案，2026-11-21）
+
+> **一、范围与终态**：issue [#563](https://github.com/ChenXu233/YaoXiang/issues/563)（fn[pos] 超 i64 位置字面量静默截断可落回合法域；用户 2026-11-20 裁决**甲案**：编译期拒绝，复用 E1064）。D59 **B/C 类**（静默给错答案 + parser 崩溃）经裁决覆盖。推送终态两笔：主修笔 `16530f96`（fix(parser)，11 文件 +590/−78）+ 修复笔 `22ae8473`（docs(sema)，t3 minor 措辞更正）。三级 +1 = 3.24.6（257→258）；二级不变（归 3.24 组）。issue [#563](https://github.com/ChenXu233/YaoXiang/issues/563) 关闭（证据评论含披露②更正与移交登记）。
+
+> **二、RFC-004 条款与语义边界**：docs/src/rfc/accepted/004-curry-multi-position-binding.md:314-319 伪代码——位置必须落在参数范围内（`pos >= func.params.len()` 即 InvalidBindingPosition）。位置是**结构性参数**（决定被绑函数的实参槽位）不是值：写 f[2^64+1] 而实际绑定位 1，作者意图与绑定事实静默错开——故位置字面量超 i64 表示域编译期拒绝，**运行时 Int = i64 的值字面量截断是另一条既有语义**（对照锚钉住不动：print(18446744073709551617) → 1 既有快照承载）。
+
+> **三、两截断点与 total=0 成因新发现**：①ast 提取器 extract_binding_positions（mod.rs:1845）签名改 `Result<Vec<i64>, String>`——超 i64 表示域返回 Err、载荷按书写形态 i128 精确渲染（checker/lower 提取时原 Expr 可见故精确）；②parser 提取器 parse_binding_positions（types.rs）i128 域精确取负 + 超域哨兵桥接（parse 期 checker 只见已产 Vec<i64>、超域信息不可恢复——AST 位置域 i64 以哨兵桥接交 checker E1064 判域；文面代价 = 类型体超域字面量显示哨兵值非原字面量，09a 登记两处文面代价）——**M9 类型体取负 panic（types.rs:942 "attempt to negate with overflow"，#560 同族）修后零 panic**。**total=0 成因新发现**：collect_function_signature 的 `filter_map(|p| p.ty)` 把 RFC-007 匿名形参丢弃——`(Int, Int) -> Int` 登记成 `params:[]`（插桩实测），total 恒 0 ⇒ E1064 既有判域对最常见匿名风格完全不生效（**issue 主复现全绿的机制**）——收口 = checker.rs 新增 binding_position_total：MonoType 参数虚减为 0 时以 declared_call_site_params（同一注解 AST 的 runtime_value_params，签名收集阶段登记）为元数事实源回退；仍 0（真零元/非 Fn）时 normalize 收口臂对非空位置报 E1064。E1064 发射点 1→3 处（提取器 Err 臂 / total=0 收口臂 / 范围判定臂），生成器随批再生。
+
+> **四、验证链**：t1 一轮全绿（14 门禁）→ 推送主修笔 → t2 **PASS**（三组锚 #563 七新锚 / #560 不回归 / 绑定 23 + M1 摘 Err 臂+收口臂 / M2 摘哨兵双变异 trial 机械可逆（合法位置对照两次变异保持绿——防误伤獠牙）+ CLI 五形态探针 + 零漂移核账 + 卫生）→ t3 **APPROVE**（5 条：2 minor + 3 info）→ 修复笔 `22ae8473` → 收口笔（本节）。批次树已 release + gc。
+
+> **五、t3 五条 findings 处置**：①**minor binding_position_total 文档 pass1 措辞**——「pass1 登记于此」与代码库 pass 词表不符（登记实际发生在 collect_function_signature，宿主循环即 pass2；pass1 收集类型定义）→ 修复笔 `22ae8473` 就地更正为「签名收集阶段登记于此——collect_function_signature，宿主循环即 pass2」（与同文件字段文档措辞一致）。②**minor 提交信息锚段措辞**（本节承载，提交不改写）：「跨模块具名 [0] 打印 42 不变」无库内新增测试（仓库内不存在该形态锚）；「运行时值字面量截断对照不动」由**既有锚**承载（int_overflow.snap / execution.rs:219/:246 / int_overflow.yx——事实成立非本批新增）——读者勿将「锚：」段误读为本批新增运行行为测试。③**info 5 构造清单（本节承载）**：M1 顶层匿名 2 参超界 2^64+1 / M2-M7 i64 域内超范围匿名与类型体同字面量与负超域 / M34 真零元 [0] / M9 类型体 [-i64::MIN 形态] panic / D2a 跨模块匿名极端（ownership panic）/ D2b 模块内极端截断+调用——五构造（披露②核证用）= M1、D2a、D2b、跨模块具名 [0] 正常调用、E1042 拦截形态。④info 收口档时序正常（本节即承载）。⑤info types.rs:921 行号差一格（实 :920，:942 精确）。**披露②收窄**：5 构造无一复现 issue 披露的「极端 positions 进 ir_gen 重排参数短缺错配」——机理 = typecheck 对绑定后方法签名做元数闸（method_type_after_binding）+ ir_gen 重排循环上界 positions.len()+args.len()（越界项永不命中 obj 臂），A==N−P 不变量结构性拦截 ⇒ issue 实际暴露面更正为 parser panic（已修）+ ownership panic（跨模块匿名，现转 E1064）+ 静默错位绑定（现 E1064）。
+
+> **六、移交登记**：①**filter_map 丢匿名形参本体**（跨模块导入函数 MonoType 同样经有损登记丢参——pkg 探针实测 params:[]，declared_call_site_params 不含导入名）——修前即 ownership panic 非成功程序，本次转 E1064；根治需修 filter_map 丢参本体（影响 MonoType 消费面/HM，漂移风险）——**待排期登记（#575 式移交）**。②文面代价两条在案（跨模块匿名与真零元 E1064 total 显示 0；类型体超域字面量显示哨兵值）。③裸 `m: (Int) -> Int[5]` 是返回类型 const 泛型实参非位置绑定（验证匿名面须用 Paren 记载语法——验证者注意项）。④#560 本体（顶层 [-i64::MIN] 形态）已有 E1064 锚不回归。
 
 ## P3 3.24.4 收口（#477 native 遮蔽用户优先——lower 对齐 check，2026-11-21）
 
