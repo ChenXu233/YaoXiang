@@ -3,51 +3,90 @@ module
     slot[0] s_list : Int(64) @depth1
     slot[1] s_dict : Int(64) @depth1
     locals_total=8
-    Load %0 <- int(42)
-    Call %1 <- string("std.convert.to_string") [%0] (def=d0)
-    Load %2 <- string("42")
-    Eq %3 <- %1, %2
-    Load %4 <- string("int to_string")
-    Call %5 <- string("std.assert.assert") [%3, %4] (def=d1)
-    Load %0 <- bool(true)
-    Call %1 <- string("std.convert.to_string") [%0] (def=d0)
-    Load %2 <- string("true")
-    Eq %3 <- %1, %2
-    Load %4 <- string("bool to_string")
-    Call %5 <- string("std.assert.assert") [%3, %4] (def=d1)
-    Load %0 <- bool(false)
-    Call %1 <- string("std.convert.to_string") [%0] (def=d0)
-    Load %2 <- string("false")
-    Eq %3 <- %1, %2
-    Load %4 <- string("bool false to_string")
-    Call %5 <- string("std.assert.assert") [%3, %4] (def=d1)
-    AllocArray %3 size=int(3), elem=int(1)
-    Load %1 <- int(1)
-    Load %2 <- int(0)
-    StoreIndex %3[%2] <- %1
-    Load %0 <- int(2)
-    Load %4 <- int(1)
-    StoreIndex %3[%4] <- %0
-    Load %6 <- int(3)
-    Load %7 <- int(2)
-    StoreIndex %3[%7] <- %6
-    Call %5 <- string("std.convert.to_string") [%3] (def=d0)
-    Load %4 <- %5
-    Call %2 <- string("std.string.len") [%4] (def=d2)
-    Load %0 <- int(0)
-    Gt %1 <- %2, %0
-    Load %6 <- string("list to_string non-empty")
-    Call %3 <- string("std.assert.assert") [%1, %6] (def=d1)
-    Drop %5
-    Call %3 <- string("std.convert.to_string") [%1] (def=d0)
-    Load %6 <- %3
-    Call %0 <- string("std.string.len") [%6] (def=d2)
-    Load %4 <- int(0)
-    Gt %2 <- %0, %4
-    Load %7 <- string("dict to_string non-empty")
-    Call %1 <- string("std.assert.assert") [%2, %7] (def=d1)
-    Drop %3
-    Drop %5
-    Ret %1
+    values_total=38
+    value v0: TypeRef("?") @block0
+    value v1: Bool @block0
+    value v2: TypeRef("?") @block0
+    value v3: Generic { name: "String", args: [] } @block0
+    value v4: Int(64) @block0
+    value v5: Generic { name: "String", args: [] } @block0
+    value v6: TypeRef("?") @block0
+    value v7: Bool @block0
+    value v8: TypeRef("?") @block0
+    value v9: Generic { name: "String", args: [] } @block0
+    value v10: Bool @block0
+    value v11: Generic { name: "String", args: [] } @block0
+    value v12: TypeRef("?") @block0
+    value v13: Bool @block0
+    value v14: TypeRef("?") @block0
+    value v15: Generic { name: "String", args: [] } @block0
+    value v16: Bool @block0
+    value v17: Generic { name: "String", args: [] } @block0
+    value v18: TypeRef("?") @block0
+    value v19: Int(64) @block0
+    value v20: Int(64) @block0
+    value v21: Int(64) @block0
+    value v22: Int(64) @block0
+    value v23: Int(64) @block0
+    value v24: Int(64) @block0
+    value v25: TypeRef("?") @block0
+    value v26: Bool @block0
+    value v27: TypeRef("?") @block0
+    value v28: Int(64) @block0
+    value v29: Generic { name: "String", args: [] } @block0
+    value v30: Generic { name: "String", args: [] } @block0
+    value v31: TypeRef("?") @block0
+    value v32: TypeRef("?") @block0
+    value v33: Bool @block0
+    value v34: TypeRef("?") @block0
+    value v35: Int(64) @block0
+    value v36: Generic { name: "String", args: [] } @block0
+    value v37: Generic { name: "String", args: [] } @block0
+    Load v4 <- int(42)
+    Call v2 <- string("std.convert.to_string") [v4] (def=d0)
+    Load v3 <- string("42")
+    Eq v1 <- v2, v3
+    Load v5 <- string("int to_string")
+    Call v0 <- string("std.assert.assert") [v1, v5] (def=d1)
+    Load v10 <- bool(true)
+    Call v8 <- string("std.convert.to_string") [v10] (def=d0)
+    Load v9 <- string("true")
+    Eq v7 <- v8, v9
+    Load v11 <- string("bool to_string")
+    Call v6 <- string("std.assert.assert") [v7, v11] (def=d1)
+    Load v16 <- bool(false)
+    Call v14 <- string("std.convert.to_string") [v16] (def=d0)
+    Load v15 <- string("false")
+    Eq v13 <- v14, v15
+    Load v17 <- string("bool false to_string")
+    Call v12 <- string("std.assert.assert") [v13, v17] (def=d1)
+    AllocArray v18 size=int(3), elem=int(1)
+    Load v19 <- int(1)
+    Load v20 <- int(0)
+    StoreIndex v18[v20] <- v19
+    Load v21 <- int(2)
+    Load v22 <- int(1)
+    StoreIndex v18[v22] <- v21
+    Load v23 <- int(3)
+    Load v24 <- int(2)
+    StoreIndex v18[v24] <- v23
+    Call %0 <- string("std.convert.to_string") [v18] (def=d0)
+    Load v29 <- %0
+    Call v27 <- string("std.string.len") [v29] (def=d2)
+    Load v28 <- int(0)
+    Gt v26 <- v27, v28
+    Load v30 <- string("list to_string non-empty")
+    Call v25 <- string("std.assert.assert") [v26, v30] (def=d1)
+    Drop %0
+    Call %1 <- string("std.convert.to_string") [v31] (def=d0)
+    Load v36 <- %1
+    Call v34 <- string("std.string.len") [v36] (def=d2)
+    Load v35 <- int(0)
+    Gt v33 <- v34, v35
+    Load v37 <- string("dict to_string non-empty")
+    Call v32 <- string("std.assert.assert") [v33, v37] (def=d1)
+    Drop %1
+    Drop %0
+    Ret v32
   init (locals=0)
     Call %0 <- string("main") [] (def=d3)

@@ -8,28 +8,44 @@ module
     slot[1] ref_p : Int(64) @depth1
     slot[2] w : Int(64) @depth1
     locals_total=7
-    Load %0 <- float(4607182418800017408)
-    Load %1 <- float(4611686018427387904)
-    Call %2 <- string("Point") [%0, %1] (def=d0)
-    Load %1 <- %2
-    Move %0 <- %1
-    Load %3 <- %2
-    Load %4 <- %0
-    Call %1 <- string("Window") [%3, %4] (def=d1)
-    Drop %2
-    Load %4 <- bool(true)
-    Load %5 <- string("view x accessed")
-    Call %3 <- string("std.assert.assert") [%4, %5] (def=d2)
-    Load %6 <- %1
-    LoadField %5 <- %6.1
-    LoadField %4 <- %5.0
-    Call %3 <- string("std.io.println") [%4] (def=d3)
-    Load %4 <- bool(true)
-    Load %5 <- string("all passed")
-    Call %3 <- string("std.assert.assert") [%4, %5] (def=d2)
-    Drop %2
+    values_total=15
+    value v0: Float(64) @block0
+    value v1: Float(64) @block0
+    value v2: Struct(StructType { name: "Point", fields: [("x", Float(64)), ("y", Float(64))], methods: {}, interfaces: [] }) @block0
+    value v3: Struct(StructType { name: "Point", fields: [("x", Float(64)), ("y", Float(64))], methods: {}, interfaces: [] }) @block0
+    value v4: Ref { mutable: false, inner: Struct(StructType { name: "Point", fields: [("x", Float(64)), ("y", Float(64))], methods: {}, interfaces: [] }) } @block0
+    value v5: TypeRef("?") @block0
+    value v6: Bool @block0
+    value v7: Generic { name: "String", args: [] } @block0
+    value v8: TypeRef("?") @block0
+    value v9: TypeRef("?") @block0
+    value v10: TypeRef("?") @block0
+    value v11: Struct(StructType { name: "Window", fields: [("target", TypeRef("Point")), ("view", Ref { mutable: false, inner: TypeRef("Point") })], methods: {}, interfaces: [] }) @block0
+    value v12: TypeRef("?") @block0
+    value v13: Bool @block0
+    value v14: Generic { name: "String", args: [] } @block0
+    Load v0 <- float(4607182418800017408)
+    Load v1 <- float(4611686018427387904)
+    Call %0 <- string("Point") [v0, v1] (def=d0)
+    Load v2 <- %0
+    Move %1 <- v2
+    Load v3 <- %0
+    Load v4 <- %1
+    Call %2 <- string("Window") [v3, v4] (def=d1)
+    Drop %0
+    Load v6 <- bool(true)
+    Load v7 <- string("view x accessed")
+    Call v5 <- string("std.assert.assert") [v6, v7] (def=d2)
+    Load v11 <- %2
+    LoadField v10 <- v11.1
+    LoadField v9 <- v10.0
+    Call v8 <- string("std.io.println") [v9] (def=d3)
+    Load v13 <- bool(true)
+    Load v14 <- string("all passed")
+    Call v12 <- string("std.assert.assert") [v13, v14] (def=d2)
     Drop %0
     Drop %1
-    Ret %3
+    Drop %2
+    Ret v12
   init (locals=0)
     Call %0 <- string("main") [] (def=d4)

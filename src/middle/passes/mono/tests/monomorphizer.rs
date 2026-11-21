@@ -19,7 +19,7 @@ use crate::frontend::core::types::mono::UniverseLevel;
 use crate::frontend::core::types::var::TypeVar;
 use crate::middle::ir::ir::{
     BasicBlock, ConstValue, FunctionBody, FunctionIR, Instruction, LocalSlot, ModuleIR, Operand,
-    TypeDeclBody, TypeDeclField,
+    TypeDeclBody, TypeDeclField, ValueInfo,
 };
 use crate::middle::passes::mono::instance::{GenericFunctionId, InstantiationRequest};
 use crate::middle::passes::mono::Monomorphizer;
@@ -56,6 +56,7 @@ fn make_identity_ir() -> FunctionIR {
             entry: 0,
             locals: vec![LocalSlot::temp(param_type.clone())],
             values: Vec::new(),
+            value_slots: Vec::new(),
         },
     }
 }
@@ -121,6 +122,7 @@ fn make_fn_ir(
             entry: 0,
             locals,
             values: Vec::new(),
+            value_slots: Vec::new(),
         },
     }
 }
@@ -404,6 +406,60 @@ fn test_specialize_identity_with_int() {
     assert!(func.generic_params.is_none(), "泛型标记应已清除");
     assert_eq!(func.blocks().len(), 1);
     assert_eq!(func.blocks()[0].instructions.len(), 2);
+}
+
+/// 7b.2：特化时值表 `ty` 随类型实参替换；定义块与槽映射原样投影。
+#[test]
+fn test_specialize_substitutes_value_types_and_keeps_slots() {
+    // Arrange：identity 的体带一个 TypeVar 类型的值 + 槽映射
+    let mut mono = Monomorphizer::new();
+    let mut generic = make_identity_ir();
+    if let FunctionBody::Code {
+        values,
+        value_slots,
+        ..
+    } = &mut generic.body
+    {
+        values.push(ValueInfo {
+            ty: MonoType::TypeVar(TypeVar::new(0)),
+            debug_name: None,
+            defining_block: 0,
+        });
+        value_slots.push(1);
+    }
+    mono.generic_functions
+        .insert("identity".to_string(), generic);
+    let req = InstantiationRequest::new(
+        GenericFunctionId::new("identity".to_string(), vec!["T".to_string()]),
+        vec![crate::frontend::core::types::mono::GenericArg::Type(
+            MonoType::Int(64),
+        )],
+        Span::default(),
+    );
+
+    // Act
+    let result = mono
+        .specialize_function(&req)
+        .expect("特化不应报错")
+        .expect("特化应成功");
+
+    // Assert
+    assert_eq!(result.values().len(), 1, "值表条目数必须原样保留");
+    assert_eq!(
+        result.values()[0].ty,
+        MonoType::Int(64),
+        "值表的 TypeVar 必须按类型实参替换"
+    );
+    assert_eq!(
+        result.values()[0].defining_block,
+        0,
+        "defining_block 原样投影（块未重编号）"
+    );
+    assert_eq!(
+        result.value_slots().to_vec(),
+        vec![1],
+        "值 → 槽映射原样复制（7b.2 过渡映射）"
+    );
 }
 
 #[test]

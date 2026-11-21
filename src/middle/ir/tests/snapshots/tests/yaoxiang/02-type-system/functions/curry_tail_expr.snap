@@ -2,54 +2,83 @@ module
   fn f(Int(64)) -> Fn { params: [Int(64)], return_type: Int(64) }
     slot[0] a : Int(64) @depth1
     locals_total=2
-    MakeClosure %0 <- __f_l0 env=[%1] (def=d0)
-    Ret %0
+    values_total=1
+    value v0: TypeRef("?") @block0
+    MakeClosure v0 <- __f_l0 env=[%0] (def=d0)
+    Ret v0
   fn g(Int(64)) -> Fn { params: [TypeRef("N")], return_type: Int(64) }
     generic_params: ["N"]
     slot[0] N : Int(64) @depth1
     locals_total=2
-    MakeClosure %0 <- __g_l0 env=[%1] (def=d1)
-    Ret %0
+    values_total=1
+    value v0: TypeRef("?") @block0
+    MakeClosure v0 <- __g_l0 env=[%0] (def=d1)
+    Ret v0
   fn main() -> Void
     slot[0] r1 : Int(64) @depth1
     slot[1] r2 : Int(64) @depth1
     locals_total=7
-    Load %0 <- int(5)
-    Load %1 <- int(10)
-    Call %2 <- string("f") [%1] (def=d2)
-    CallDyn %3 <- %2 [%0]
-    Load %1 <- %3
-    Load %4 <- int(15)
-    Eq %2 <- %1, %4
-    Load %5 <- string("f(10)(5) should be 15")
-    Call %0 <- string("std.assert.assert") [%2, %5] (def=d3)
-    Load %2 <- int(7)
-    Load %4 <- int(7)
-    Call %1 <- string("g") [%4] (def=d4)
-    CallDyn %0 <- %1 [%2]
-    Load %4 <- %0
-    Load %5 <- int(14)
-    Eq %1 <- %4, %5
-    Load %6 <- string("g(7)(7) should be 14")
-    Call %2 <- string("std.assert.assert") [%1, %6] (def=d3)
-    Drop %3
+    values_total=16
+    value v0: Int(64) @block0
+    value v1: Fn { params: [Int(64)], return_type: Int(64) } @block0
+    value v2: Int(64) @block0
+    value v3: TypeRef("?") @block0
+    value v4: Bool @block0
+    value v5: Int(64) @block0
+    value v6: Int(64) @block0
+    value v7: Generic { name: "String", args: [] } @block0
+    value v8: Int(64) @block0
+    value v9: Fn { params: [TypeRef("N")], return_type: Int(64) } @block0
+    value v10: Int(64) @block0
+    value v11: TypeRef("?") @block0
+    value v12: Bool @block0
+    value v13: Int(64) @block0
+    value v14: Int(64) @block0
+    value v15: Generic { name: "String", args: [] } @block0
+    Load v0 <- int(5)
+    Load v2 <- int(10)
+    Call v1 <- string("f") [v2] (def=d2)
+    CallDyn %0 <- v1 [v0]
+    Load v5 <- %0
+    Load v6 <- int(15)
+    Eq v4 <- v5, v6
+    Load v7 <- string("f(10)(5) should be 15")
+    Call v3 <- string("std.assert.assert") [v4, v7] (def=d3)
+    Load v8 <- int(7)
+    Load v10 <- int(7)
+    Call v9 <- string("g") [v10] (def=d4)
+    CallDyn %1 <- v9 [v8]
+    Load v13 <- %1
+    Load v14 <- int(14)
+    Eq v12 <- v13, v14
+    Load v15 <- string("g(7)(7) should be 14")
+    Call v11 <- string("std.assert.assert") [v12, v15] (def=d3)
     Drop %0
-    Ret %2
+    Drop %1
+    Ret v11
   fn __f_l0(Int(64)) -> Int(64)
     slot[0] a : Int(64) @depth1
     slot[1] b : Int(64) @depth1
     locals_total=5
-    Load %0 <- %1
-    Load %2 <- %3
-    Add %4 <- %0, %2
-    Ret %4
+    values_total=3
+    value v0: Int(64) @block0
+    value v1: Int(64) @block0
+    value v2: Int(64) @block0
+    Load v1 <- %0
+    Load v2 <- %1
+    Add v0 <- v1, v2
+    Ret v0
   fn __g_l0(TypeRef("N")) -> Int(64)
     slot[0] N : Int(64) @depth1
     slot[1] n : Int(64) @depth1
     locals_total=5
-    Load %0 <- %1
-    Load %2 <- int(2)
-    Mul %3 <- %0, %2
-    Ret %3
+    values_total=3
+    value v0: Int(64) @block0
+    value v1: Int(64) @block0
+    value v2: Int(64) @block0
+    Load v1 <- %0
+    Load v2 <- int(2)
+    Mul v0 <- v1, v2
+    Ret v0
   init (locals=0)
     Call %0 <- string("main") [] (def=d5)

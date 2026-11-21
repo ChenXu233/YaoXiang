@@ -9,88 +9,144 @@ module
     slot[6] r : Int(64) @depth1
     slot[7] tail : Int(64) @depth1
     locals_total=15
+    values_total=55
+    value v0: TypeRef("?") @block0
+    value v1: Bool @block0
+    value v2: TypeRef("?") @block0
+    value v3: Int(64) @block0
+    value v4: Generic { name: "String", args: [] } @block0
+    value v5: Generic { name: "String", args: [] } @block0
+    value v6: TypeRef("?") @block0
+    value v7: Bool @block0
+    value v8: TypeRef("?") @block0
+    value v9: Int(64) @block0
+    value v10: Generic { name: "String", args: [] } @block0
+    value v11: Generic { name: "String", args: [] } @block0
+    value v12: Generic { name: "String", args: [] } @block0
+    value v13: TypeRef("?") @block0
+    value v14: Bool @block0
+    value v15: TypeRef("?") @block0
+    value v16: Int(64) @block0
+    value v17: Generic { name: "String", args: [] } @block0
+    value v18: Generic { name: "String", args: [] } @block0
+    value v19: Generic { name: "String", args: [] } @block0
+    value v20: Generic { name: "String", args: [] } @block0
+    value v21: TypeRef("File") @block0
+    value v22: Generic { name: "String", args: [] } @block0
+    value v23: TypeRef("?") @block0
+    value v24: Bool @block0
+    value v25: Int(64) @block0
+    value v26: Int(64) @block0
+    value v27: Generic { name: "String", args: [] } @block0
+    value v28: TypeRef("?") @block0
+    value v29: TypeRef("File") @block0
+    value v30: Generic { name: "String", args: [] } @block0
+    value v31: Generic { name: "String", args: [] } @block0
+    value v32: TypeRef("?") @block0
+    value v33: TypeRef("File") @block0
+    value v34: Int(64) @block0
+    value v35: TypeRef("File") @block0
+    value v36: Int(64) @block0
+    value v37: TypeRef("?") @block0
+    value v38: Bool @block0
+    value v39: Generic { name: "String", args: [] } @block0
+    value v40: Generic { name: "String", args: [] } @block0
+    value v41: Generic { name: "String", args: [] } @block0
+    value v42: Generic { name: "String", args: [] } @block0
+    value v43: Generic { name: "String", args: [] } @block0
+    value v44: TypeRef("?") @block0
+    value v45: TypeRef("File") @block0
+    value v46: TypeRef("?") @block0
+    value v47: TypeRef("?") @block0
+    value v48: Generic { name: "String", args: [] } @block0
+    value v49: Generic { name: "String", args: [] } @block0
+    value v50: TypeRef("?") @block0
+    value v51: Bool @block0
+    value v52: TypeRef("?") @block0
+    value v53: Generic { name: "String", args: [] } @block0
+    value v54: Generic { name: "String", args: [] } @block0
     Call %0 <- string("std.os.getcwd") [] (def=d0)
-    Load %1 <- %0
-    Call %2 <- string("std.string.len") [%1] (def=d1)
-    Load %3 <- int(0)
-    Gt %4 <- %2, %3
-    Load %5 <- string("getcwd should be non-empty")
-    Call %6 <- string("std.assert.assert") [%4, %5] (def=d2)
+    Load v4 <- %0
+    Call v2 <- string("std.string.len") [v4] (def=d1)
+    Load v3 <- int(0)
+    Gt v1 <- v2, v3
+    Load v5 <- string("getcwd should be non-empty")
+    Call v0 <- string("std.assert.assert") [v1, v5] (def=d2)
     Drop %0
-    Call %6 <- string("std.os.args") [] (def=d3)
-    Load %5 <- %6
-    Call %3 <- string("std.string.len") [%5] (def=d1)
-    Load %1 <- int(0)
-    Gt %2 <- %3, %1
-    Load %7 <- string("args should contain at least the binary")
-    Call %4 <- string("std.assert.assert") [%2, %7] (def=d2)
-    Drop %6
-    Load %2 <- string("PATH")
-    Call %4 <- string("std.os.get_env") [%2] (def=d4)
-    Load %7 <- %4
-    Call %1 <- string("std.string.len") [%7] (def=d1)
-    Load %5 <- int(0)
-    Gt %3 <- %1, %5
-    Load %8 <- string("PATH env var should exist")
-    Call %2 <- string("std.assert.assert") [%3, %8] (def=d2)
-    Drop %4
-    Load %2 <- string("__yx_os_handle_tmp.txt")
-    Load %1 <- %2
-    Load %5 <- string("w")
-    Call %3 <- string("std.os.open") [%1, %5] (def=d5)
-    Drop %2
-    Load %5 <- %3
-    Load %7 <- string("hello world")
-    Call %1 <- string("std.os.write") [%5, %7] (def=d6)
-    Drop %3
-    Load %8 <- %1
-    Load %9 <- int(11)
-    Eq %7 <- %8, %9
-    Load %10 <- string("write returns byte count")
-    Call %5 <- string("std.assert.assert") [%7, %10] (def=d2)
-    Load %7 <- %3
-    Call %5 <- string("std.os.close") [%7] (def=d7)
-    Drop %3
-    Load %7 <- %2
-    Load %8 <- string("r")
-    Call %5 <- string("std.os.open") [%7, %8] (def=d5)
-    Drop %2
-    Load %8 <- %5
-    Load %9 <- int(6)
-    Call %7 <- string("std.os.seek") [%8, %9] (def=d8)
-    Drop %5
-    Load %8 <- %5
-    Load %9 <- int(5)
-    Call %7 <- string("std.os.read") [%8, %9] (def=d9)
-    Drop %5
-    Load %10 <- %7
-    Load %11 <- string("world")
-    Eq %9 <- %10, %11
-    Load %12 <- string("seek then read: got ")
-    Load %13 <- %7
-    Add %14 <- %12, %13
-    Call %8 <- string("std.assert.assert") [%9, %14] (def=d2)
-    Load %9 <- %5
-    Call %8 <- string("std.os.close") [%9] (def=d7)
-    Drop %5
-    Load %10 <- %2
-    Call %9 <- string("std.fs.remove") [%10] (def=d10)
-    Load %11 <- string("fs.remove handle tmp ok")
-    Call %8 <- string("std.assert.assert") [%9, %11] (def=d2)
-    Drop %2
-    Load %11 <- %2
-    Call %10 <- string("std.fs.exists") [%11] (def=d11)
-    Not %9 <- %10
-    Load %14 <- string("handle tmp gone after remove")
-    Call %8 <- string("std.assert.assert") [%9, %14] (def=d2)
-    Drop %6
-    Drop %0
-    Drop %2
+    Call %1 <- string("std.os.args") [] (def=d3)
+    Load v10 <- %1
+    Call v8 <- string("std.string.len") [v10] (def=d1)
+    Load v9 <- int(0)
+    Gt v7 <- v8, v9
+    Load v11 <- string("args should contain at least the binary")
+    Call v6 <- string("std.assert.assert") [v7, v11] (def=d2)
     Drop %1
-    Drop %4
-    Drop %5
-    Drop %7
+    Load v12 <- string("PATH")
+    Call %2 <- string("std.os.get_env") [v12] (def=d4)
+    Load v17 <- %2
+    Call v15 <- string("std.string.len") [v17] (def=d1)
+    Load v16 <- int(0)
+    Gt v14 <- v15, v16
+    Load v18 <- string("PATH env var should exist")
+    Call v13 <- string("std.assert.assert") [v14, v18] (def=d2)
+    Drop %2
+    Load %3 <- string("__yx_os_handle_tmp.txt")
+    Load v19 <- %3
+    Load v20 <- string("w")
+    Call %4 <- string("std.os.open") [v19, v20] (def=d5)
     Drop %3
-    Ret %8
+    Load v21 <- %4
+    Load v22 <- string("hello world")
+    Call %5 <- string("std.os.write") [v21, v22] (def=d6)
+    Drop %4
+    Load v25 <- %5
+    Load v26 <- int(11)
+    Eq v24 <- v25, v26
+    Load v27 <- string("write returns byte count")
+    Call v23 <- string("std.assert.assert") [v24, v27] (def=d2)
+    Load v29 <- %4
+    Call v28 <- string("std.os.close") [v29] (def=d7)
+    Drop %4
+    Load v30 <- %3
+    Load v31 <- string("r")
+    Call %6 <- string("std.os.open") [v30, v31] (def=d5)
+    Drop %3
+    Load v33 <- %6
+    Load v34 <- int(6)
+    Call v32 <- string("std.os.seek") [v33, v34] (def=d8)
+    Drop %6
+    Load v35 <- %6
+    Load v36 <- int(5)
+    Call %7 <- string("std.os.read") [v35, v36] (def=d9)
+    Drop %6
+    Load v39 <- %7
+    Load v40 <- string("world")
+    Eq v38 <- v39, v40
+    Load v42 <- string("seek then read: got ")
+    Load v43 <- %7
+    Add v41 <- v42, v43
+    Call v37 <- string("std.assert.assert") [v38, v41] (def=d2)
+    Load v45 <- %6
+    Call v44 <- string("std.os.close") [v45] (def=d7)
+    Drop %6
+    Load v48 <- %3
+    Call v47 <- string("std.fs.remove") [v48] (def=d10)
+    Load v49 <- string("fs.remove handle tmp ok")
+    Call v46 <- string("std.assert.assert") [v47, v49] (def=d2)
+    Drop %3
+    Load v53 <- %3
+    Call v52 <- string("std.fs.exists") [v53] (def=d11)
+    Not v51 <- v52
+    Load v54 <- string("handle tmp gone after remove")
+    Call v50 <- string("std.assert.assert") [v51, v54] (def=d2)
+    Drop %1
+    Drop %0
+    Drop %3
+    Drop %5
+    Drop %2
+    Drop %6
+    Drop %7
+    Drop %4
+    Ret v50
   init (locals=0)
     Call %0 <- string("main") [] (def=d12)

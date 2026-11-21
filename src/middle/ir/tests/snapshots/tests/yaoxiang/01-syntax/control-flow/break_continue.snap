@@ -12,177 +12,291 @@ module
     slot[33] j : Int(64) @depth1
     slot[40] k : Int(64) @depth2
     locals_total=51
+    values_total=113
+    value v0: Void @block0
+    value v1: Bool @block0
+    value v2: Int(64) @block0
+    value v3: Int(64) @block0
+    value v4: Int(64) @block0
+    value v5: Int(64) @block0
+    value v6: TypeRef("?") @block0
+    value v7: Bool @block0
+    value v8: Int(64) @block0
+    value v9: Int(64) @block0
+    value v10: TypeRef("?") @block0
+    value v11: TypeRef("?") @block0
+    value v12: Bool @block0
+    value v13: Int(64) @block0
+    value v14: Int(64) @block0
+    value v15: Generic { name: "String", args: [] } @block0
+    value v16: Void @block0
+    value v17: Bool @block0
+    value v18: Int(64) @block0
+    value v19: Int(64) @block0
+    value v20: Int(64) @block0
+    value v21: Int(64) @block0
+    value v22: Bool @block0
+    value v23: Int(64) @block0
+    value v24: Int(64) @block0
+    value v25: TypeRef("?") @block0
+    value v26: Int(64) @block0
+    value v27: Int(64) @block0
+    value v28: TypeRef("?") @block0
+    value v29: Bool @block0
+    value v30: Int(64) @block0
+    value v31: Int(64) @block0
+    value v32: Generic { name: "String", args: [] } @block0
+    value v33: TypeRef("?") @block0
+    value v34: Int(64) @block0
+    value v35: Int(64) @block0
+    value v36: Int(64) @block0
+    value v37: Int(64) @block0
+    value v38: Int(64) @block0
+    value v39: Int(64) @block0
+    value v40: Int(64) @block0
+    value v41: Int(64) @block0
+    value v42: Int(64) @block0
+    value v43: Int(64) @block0
+    value v44: TypeRef("?") @block0
+    value v45: TypeRef("?") @block0
+    value v46: TypeRef("?") @block0
+    value v47: Bool @block0
+    value v48: Int(64) @block0
+    value v49: Int(64) @block0
+    value v50: TypeRef("?") @block0
+    value v51: Int(64) @block0
+    value v52: Int(64) @block0
+    value v53: TypeRef("?") @block0
+    value v54: Bool @block0
+    value v55: Int(64) @block0
+    value v56: Int(64) @block0
+    value v57: Generic { name: "String", args: [] } @block0
+    value v58: TypeRef("?") @block0
+    value v59: Int(64) @block0
+    value v60: Int(64) @block0
+    value v61: Int(64) @block0
+    value v62: Int(64) @block0
+    value v63: Int(64) @block0
+    value v64: Int(64) @block0
+    value v65: Int(64) @block0
+    value v66: Int(64) @block0
+    value v67: Int(64) @block0
+    value v68: Int(64) @block0
+    value v69: TypeRef("?") @block0
+    value v70: TypeRef("?") @block0
+    value v71: TypeRef("?") @block0
+    value v72: Bool @block0
+    value v73: Int(64) @block0
+    value v74: Int(64) @block0
+    value v75: TypeRef("?") @block0
+    value v76: Int(64) @block0
+    value v77: Int(64) @block0
+    value v78: TypeRef("?") @block0
+    value v79: Bool @block0
+    value v80: Int(64) @block0
+    value v81: Int(64) @block0
+    value v82: Generic { name: "String", args: [] } @block0
+    value v83: Void @block0
+    value v84: Bool @block0
+    value v85: Int(64) @block0
+    value v86: Int(64) @block0
+    value v87: Int(64) @block0
+    value v88: Int(64) @block0
+    value v89: Void @block0
+    value v90: Bool @block0
+    value v91: Int(64) @block0
+    value v92: Int(64) @block0
+    value v93: Int(64) @block0
+    value v94: Int(64) @block0
+    value v95: Bool @block0
+    value v96: Int(64) @block0
+    value v97: Int(64) @block0
+    value v98: TypeRef("?") @block0
+    value v99: Int(64) @block0
+    value v100: Int(64) @block0
+    value v101: Int(64) @block0
+    value v102: Int(64) @block0
+    value v103: TypeRef("?") @block0
+    value v104: Bool @block0
+    value v105: Int(64) @block0
+    value v106: Int(64) @block0
+    value v107: Generic { name: "String", args: [] } @block0
+    value v108: TypeRef("?") @block0
+    value v109: Bool @block0
+    value v110: Int(64) @block0
+    value v111: Int(64) @block0
+    value v112: Generic { name: "String", args: [] } @block0
     Load %0 <- int(0)
-    Load %1 <- void
-    Load %2 <- %0
-    Load %3 <- int(10)
-    Lt %4 <- %2, %3
-    JmpIfNot %4 -> instr(18)
-    Load %5 <- %0
-    Load %6 <- int(1)
-    Add %0 <- %5, %6
-    Load %7 <- %0
-    Load %8 <- int(3)
-    Eq %9 <- %7, %8
-    JmpIfNot %9 -> instr(16)
+    Load v0 <- void
+    Load v2 <- %0
+    Load v3 <- int(10)
+    Lt v1 <- v2, v3
+    JmpIfNot v1 -> instr(18)
+    Load v4 <- %0
+    Load v5 <- int(1)
+    Add %0 <- v4, v5
+    Load v8 <- %0
+    Load v9 <- int(3)
+    Eq v7 <- v8, v9
+    JmpIfNot v7 -> instr(16)
     Jmp -> instr(18)
-    Move %10 <- %11
+    Move v6 <- v10
     Jmp -> instr(16)
-    Load %1 <- void
+    Load v0 <- void
     Jmp -> instr(2)
-    Load %2 <- %0
-    Load %3 <- int(3)
-    Eq %4 <- %2, %3
-    Load %5 <- string("while break stops at i == 3")
-    Call %1 <- string("std.assert.assert") [%4, %5] (def=d0)
+    Load v13 <- %0
+    Load v14 <- int(3)
+    Eq v12 <- v13, v14
+    Load v15 <- string("while break stops at i == 3")
+    Call v11 <- string("std.assert.assert") [v12, v15] (def=d0)
     Load %1 <- int(0)
-    Load %4 <- int(0)
-    Load %2 <- void
-    Load %5 <- %4
-    Load %6 <- int(5)
-    Lt %3 <- %5, %6
-    JmpIfNot %3 -> instr(42)
-    Load %10 <- %4
-    Load %9 <- int(1)
-    Add %4 <- %10, %9
-    Load %8 <- %4
-    Load %11 <- int(3)
-    Eq %7 <- %8, %11
-    JmpIfNot %7 -> instr(38)
-    Jmp -> instr(26)
-    Load %3 <- %1
-    Load %5 <- %4
-    Add %1 <- %3, %5
-    Jmp -> instr(26)
-    Load %5 <- %1
-    Load %6 <- int(12)
-    Eq %3 <- %5, %6
-    Load %10 <- string("while continue skips 3, sum 1+2+4+5 == 12")
-    Call %2 <- string("std.assert.assert") [%3, %10] (def=d0)
     Load %2 <- int(0)
-    AllocArray %3 size=int(5), elem=int(1)
-    Load %5 <- int(1)
-    Load %6 <- int(0)
-    StoreIndex %3[%6] <- %5
-    Load %10 <- int(2)
-    Load %9 <- int(1)
-    StoreIndex %3[%9] <- %10
-    Load %7 <- int(3)
-    Load %8 <- int(2)
-    StoreIndex %3[%8] <- %7
-    Load %11 <- int(4)
-    Load %12 <- int(3)
-    StoreIndex %3[%12] <- %11
-    Load %13 <- int(5)
-    Load %14 <- int(4)
-    StoreIndex %3[%14] <- %13
-    Call %15 <- string("std.list.iter") [%3] (def=d1)
-    Call %16 <- string("std.list.has_next") [%15] (def=d2)
-    JmpIfNot %16 -> instr(78)
-    Call %17 <- string("std.list.next") [%15] (def=d3)
-    Store %18 <- %17
-    Load %19 <- %18
-    Load %20 <- int(4)
-    Eq %21 <- %19, %20
-    JmpIfNot %21 -> instr(74)
+    Load v16 <- void
+    Load v18 <- %2
+    Load v19 <- int(5)
+    Lt v17 <- v18, v19
+    JmpIfNot v17 -> instr(42)
+    Load v20 <- %2
+    Load v21 <- int(1)
+    Add %2 <- v20, v21
+    Load v23 <- %2
+    Load v24 <- int(3)
+    Eq v22 <- v23, v24
+    JmpIfNot v22 -> instr(38)
+    Jmp -> instr(26)
+    Load v26 <- %1
+    Load v27 <- %2
+    Add %1 <- v26, v27
+    Jmp -> instr(26)
+    Load v30 <- %1
+    Load v31 <- int(12)
+    Eq v29 <- v30, v31
+    Load v32 <- string("while continue skips 3, sum 1+2+4+5 == 12")
+    Call v28 <- string("std.assert.assert") [v29, v32] (def=d0)
+    Load %3 <- int(0)
+    AllocArray v33 size=int(5), elem=int(1)
+    Load v34 <- int(1)
+    Load v35 <- int(0)
+    StoreIndex v33[v35] <- v34
+    Load v36 <- int(2)
+    Load v37 <- int(1)
+    StoreIndex v33[v37] <- v36
+    Load v38 <- int(3)
+    Load v39 <- int(2)
+    StoreIndex v33[v39] <- v38
+    Load v40 <- int(4)
+    Load v41 <- int(3)
+    StoreIndex v33[v41] <- v40
+    Load v42 <- int(5)
+    Load v43 <- int(4)
+    StoreIndex v33[v43] <- v42
+    Call v44 <- string("std.list.iter") [v33] (def=d1)
+    Call v45 <- string("std.list.has_next") [v44] (def=d2)
+    JmpIfNot v45 -> instr(78)
+    Call v46 <- string("std.list.next") [v44] (def=d3)
+    Store %4 <- v46
+    Load v48 <- %4
+    Load v49 <- int(4)
+    Eq v47 <- v48, v49
+    JmpIfNot v47 -> instr(74)
     Jmp -> instr(78)
-    Load %16 <- %2
-    Load %17 <- %18
-    Add %2 <- %16, %17
+    Load v51 <- %3
+    Load v52 <- %4
+    Add %3 <- v51, v52
     Jmp -> instr(65)
-    Load %21 <- %2
-    Load %19 <- int(6)
-    Eq %17 <- %21, %19
-    Load %20 <- string("for break at 4, total 1+2+3 == 6")
-    Call %16 <- string("std.assert.assert") [%17, %20] (def=d0)
-    Load %16 <- int(0)
-    AllocArray %17 size=int(5), elem=int(1)
-    Load %21 <- int(1)
-    Load %19 <- int(0)
-    StoreIndex %17[%19] <- %21
-    Load %20 <- int(2)
-    Load %22 <- int(1)
-    StoreIndex %17[%22] <- %20
-    Load %23 <- int(3)
-    Load %24 <- int(2)
-    StoreIndex %17[%24] <- %23
-    Load %25 <- int(4)
-    Load %26 <- int(3)
-    StoreIndex %17[%26] <- %25
-    Load %27 <- int(5)
-    Load %28 <- int(4)
-    StoreIndex %17[%28] <- %27
-    Call %29 <- string("std.list.iter") [%17] (def=d1)
-    Call %30 <- string("std.list.has_next") [%29] (def=d2)
-    JmpIfNot %30 -> instr(114)
-    Call %31 <- string("std.list.next") [%29] (def=d3)
-    Store %32 <- %31
-    Load %33 <- %32
-    Load %34 <- int(2)
-    Eq %35 <- %33, %34
-    JmpIfNot %35 -> instr(110)
+    Load v55 <- %3
+    Load v56 <- int(6)
+    Eq v54 <- v55, v56
+    Load v57 <- string("for break at 4, total 1+2+3 == 6")
+    Call v53 <- string("std.assert.assert") [v54, v57] (def=d0)
+    Load %5 <- int(0)
+    AllocArray v58 size=int(5), elem=int(1)
+    Load v59 <- int(1)
+    Load v60 <- int(0)
+    StoreIndex v58[v60] <- v59
+    Load v61 <- int(2)
+    Load v62 <- int(1)
+    StoreIndex v58[v62] <- v61
+    Load v63 <- int(3)
+    Load v64 <- int(2)
+    StoreIndex v58[v64] <- v63
+    Load v65 <- int(4)
+    Load v66 <- int(3)
+    StoreIndex v58[v66] <- v65
+    Load v67 <- int(5)
+    Load v68 <- int(4)
+    StoreIndex v58[v68] <- v67
+    Call v69 <- string("std.list.iter") [v58] (def=d1)
+    Call v70 <- string("std.list.has_next") [v69] (def=d2)
+    JmpIfNot v70 -> instr(114)
+    Call v71 <- string("std.list.next") [v69] (def=d3)
+    Store %6 <- v71
+    Load v73 <- %6
+    Load v74 <- int(2)
+    Eq v72 <- v73, v74
+    JmpIfNot v72 -> instr(110)
     Jmp -> instr(101)
-    Load %30 <- %16
-    Load %31 <- int(1)
-    Add %16 <- %30, %31
+    Load v76 <- %5
+    Load v77 <- int(1)
+    Add %5 <- v76, v77
     Jmp -> instr(101)
-    Load %35 <- %16
-    Load %33 <- int(4)
-    Eq %31 <- %35, %33
-    Load %34 <- string("for continue skips one element")
-    Call %30 <- string("std.assert.assert") [%31, %34] (def=d0)
-    Load %30 <- int(0)
-    Load %31 <- int(0)
-    Load %35 <- int(0)
-    Load %33 <- void
-    Load %36 <- %35
-    Load %37 <- int(3)
-    Lt %34 <- %36, %37
-    JmpIfNot %34 -> instr(153)
-    Load %38 <- %35
-    Load %39 <- int(1)
-    Add %35 <- %38, %39
-    Load %40 <- int(0)
-    Load %41 <- void
-    Load %42 <- %40
-    Load %43 <- int(10)
-    Lt %44 <- %42, %43
-    JmpIfNot %44 -> instr(148)
-    Load %45 <- %40
-    Load %46 <- int(1)
-    Add %40 <- %45, %46
-    Load %47 <- %40
-    Load %48 <- int(2)
-    Eq %49 <- %47, %48
-    JmpIfNot %49 -> instr(144)
+    Load v80 <- %5
+    Load v81 <- int(4)
+    Eq v79 <- v80, v81
+    Load v82 <- string("for continue skips one element")
+    Call v78 <- string("std.assert.assert") [v79, v82] (def=d0)
+    Load %7 <- int(0)
+    Load %8 <- int(0)
+    Load %9 <- int(0)
+    Load v83 <- void
+    Load v85 <- %9
+    Load v86 <- int(3)
+    Lt v84 <- v85, v86
+    JmpIfNot v84 -> instr(153)
+    Load v87 <- %9
+    Load v88 <- int(1)
+    Add %9 <- v87, v88
+    Load %10 <- int(0)
+    Load v89 <- void
+    Load v91 <- %10
+    Load v92 <- int(10)
+    Lt v90 <- v91, v92
+    JmpIfNot v90 -> instr(148)
+    Load v93 <- %10
+    Load v94 <- int(1)
+    Add %10 <- v93, v94
+    Load v96 <- %10
+    Load v97 <- int(2)
+    Eq v95 <- v96, v97
+    JmpIfNot v95 -> instr(144)
     Jmp -> instr(148)
-    Load %44 <- %31
-    Load %42 <- int(1)
-    Add %31 <- %44, %42
+    Load v99 <- %8
+    Load v100 <- int(1)
+    Add %8 <- v99, v100
     Jmp -> instr(132)
-    Load %43 <- %30
-    Load %45 <- int(1)
-    Add %30 <- %43, %45
-    Drop %40
+    Load v101 <- %7
+    Load v102 <- int(1)
+    Add %7 <- v101, v102
+    Drop %10
     Jmp -> instr(123)
-    Load %42 <- %30
-    Load %43 <- int(3)
-    Eq %44 <- %42, %43
-    Load %45 <- string("outer loop survives inner break")
-    Call %41 <- string("std.assert.assert") [%44, %45] (def=d0)
-    Load %42 <- %31
-    Load %43 <- int(3)
-    Eq %44 <- %42, %43
-    Load %45 <- string("inner break fires once per outer iteration")
-    Call %41 <- string("std.assert.assert") [%44, %45] (def=d0)
-    Drop %16
+    Load v105 <- %7
+    Load v106 <- int(3)
+    Eq v104 <- v105, v106
+    Load v107 <- string("outer loop survives inner break")
+    Call v103 <- string("std.assert.assert") [v104, v107] (def=d0)
+    Load v110 <- %8
+    Load v111 <- int(3)
+    Eq v109 <- v110, v111
+    Load v112 <- string("inner break fires once per outer iteration")
+    Call v108 <- string("std.assert.assert") [v109, v112] (def=d0)
+    Drop %5
     Drop %0
-    Drop %31
-    Drop %35
-    Drop %4
-    Drop %30
-    Drop %1
+    Drop %8
+    Drop %9
     Drop %2
-    Ret %41
+    Drop %7
+    Drop %1
+    Drop %3
+    Ret v108
   init (locals=0)
     Call %0 <- string("main") [] (def=d4)

@@ -4,31 +4,47 @@ module
     slot[1] r : Int(64) @depth1
     slot[8] i : Int(64) @depth2
     locals_total=15
+    values_total=15
+    value v0: Int(64) @block0
+    value v1: Int(64) @block0
+    value v2: Int(64) @block0
+    value v3: TypeRef("?") @block0
+    value v4: Generic { name: "Range", args: [Int(64)] } @block0
+    value v5: TypeRef("?") @block0
+    value v6: TypeRef("?") @block0
+    value v7: Int(64) @block0
+    value v8: Bool @block0
+    value v9: TypeRef("?") @block0
+    value v10: TypeRef("?") @block0
+    value v11: Void @block0
+    value v12: Int(64) @block0
+    value v13: Int(64) @block0
+    value v14: TypeRef("?") @block0
     Load %0 <- int(0)
-    Load %1 <- int(1)
-    Load %2 <- int(10)
-    Load %3 <- %0
-    NewRange %4 <- %1, %2, %3
-    Load %2 <- %4
-    Call %3 <- string("std.range.iter") [%2] (def=d0)
-    VariantTag %5 <- %3 : Result
-    Load %6 <- int(0)
-    Eq %7 <- %5, %6
-    JmpIfNot %7 -> instr(13)
-    VariantPayload %3 <- %3 : Result
+    Load v0 <- int(1)
+    Load v1 <- int(10)
+    Load v2 <- %0
+    NewRange %1 <- v0, v1, v2
+    Load v4 <- %1
+    Call v5 <- string("std.range.iter") [v4] (def=d0)
+    VariantTag v6 <- v5 : Result
+    Load v7 <- int(0)
+    Eq v8 <- v6, v7
+    JmpIfNot v8 -> instr(13)
+    VariantPayload v5 <- v5 : Result
     Jmp -> instr(14)
-    Call _ <- string("std.range.abort_invalid_step") [%2] (def=d1)
-    Call %8 <- string("std.range.has_next") [%3] (def=d2)
-    JmpIfNot %8 -> instr(23)
-    Call %9 <- string("std.range.next") [%3] (def=d3)
-    Store %10 <- %9
-    Load %11 <- %10
-    Load %12 <- %10
-    Call %13 <- string("int.to_string") [%12] (def=d4)
-    Call %14 <- string("std.io.print") [%13] (def=d5)
+    Call _ <- string("std.range.abort_invalid_step") [v4] (def=d1)
+    Call v9 <- string("std.range.has_next") [v5] (def=d2)
+    JmpIfNot v9 -> instr(23)
+    Call v10 <- string("std.range.next") [v5] (def=d3)
+    Store %2 <- v10
+    Load v12 <- %2
+    Load v13 <- %2
+    Call v14 <- string("int.to_string") [v13] (def=d4)
+    Call v11 <- string("std.io.print") [v14] (def=d5)
     Jmp -> instr(14)
     Drop %0
-    Drop %4
+    Drop %1
     Ret
   init (locals=0)
     Call %0 <- string("main") [] (def=d6)

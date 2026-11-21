@@ -4,46 +4,69 @@ module
   fn good_seq(Ref { mutable: true, inner: TypeRef("Point") }) -> Void
     slot[0] p : Int(64) @depth1
     locals_total=4
+    values_total=3
+    value v0: TypeRef("?") @block0
+    value v1: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
+    value v2: Int(64) @block0
     Load %0 <- arg%0
-    Load %1 <- %0
-    Load %2 <- int(10)
-    StoreField %1.0 <- %2 (type=None, name=Some("x"))
+    Load v1 <- %0
+    Load v2 <- int(10)
+    StoreField v1.0 <- v2 (type=None, name=Some("x"))
     Ret
   fn main() -> Void
     slot[0] p : Int(64) @depth1
     slot[1] i : Int(64) @depth1
     slot[2] v : Int(64) @depth1
     locals_total=9
-    Load %0 <- int(1)
-    Load %1 <- int(2)
-    Call %2 <- string("Point") [%0, %1] (def=d0)
-    Load %0 <- int(0)
-    Load %1 <- void
-    Load %3 <- %0
-    Load %4 <- int(5)
-    Lt %5 <- %3, %4
-    JmpIfNot %5 -> instr(16)
-    Load %6 <- %0
-    Load %7 <- int(1)
-    Add %0 <- %6, %7
-    Load %8 <- %2
-    Call %1 <- string("good_seq") [%8] (def=d1)
-    Drop %2
+    values_total=18
+    value v0: Int(64) @block0
+    value v1: Int(64) @block0
+    value v2: Void @block0
+    value v3: Bool @block0
+    value v4: Int(64) @block0
+    value v5: Int(64) @block0
+    value v6: Int(64) @block0
+    value v7: Int(64) @block0
+    value v8: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
+    value v9: TypeRef("?") @block0
+    value v10: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
+    value v11: Void @block0
+    value v12: Ref { mutable: false, inner: Int(64) } @block0
+    value v13: Ref { mutable: false, inner: Int(64) } @block0
+    value v14: Generic { name: "String", args: [] } @block0
+    value v15: TypeRef("?") @block0
+    value v16: Void @block0
+    value v17: Generic { name: "String", args: [] } @block0
+    Load v0 <- int(1)
+    Load v1 <- int(2)
+    Call %0 <- string("Point") [v0, v1] (def=d0)
+    Load %1 <- int(0)
+    Load v2 <- void
+    Load v4 <- %1
+    Load v5 <- int(5)
+    Lt v3 <- v4, v5
+    JmpIfNot v3 -> instr(16)
+    Load v6 <- %1
+    Load v7 <- int(1)
+    Add %1 <- v6, v7
+    Load v8 <- %0
+    Call v2 <- string("good_seq") [v8] (def=d1)
+    Drop %0
     Jmp -> instr(5)
-    Load %3 <- %2
-    LoadField %5 <- %3.1
-    Move %1 <- %5
-    Load %3 <- %1
-    Load %4 <- %1
-    Load %6 <- string("unknown")
-    Call %7 <- string("std.io.format_fallback") [%4, %6] (def=d2)
-    Call %5 <- string("std.io.print") [%7] (def=d3)
-    Drop %2
-    Load %3 <- string("loop_borrow_reuse_ok")
-    Call %5 <- string("std.io.print") [%3] (def=d3)
-    Drop %2
+    Load v10 <- %0
+    LoadField v9 <- v10.1
+    Move %2 <- v9
+    Load v12 <- %2
+    Load v13 <- %2
+    Load v14 <- string("unknown")
+    Call v15 <- string("std.io.format_fallback") [v13, v14] (def=d2)
+    Call v11 <- string("std.io.print") [v15] (def=d3)
+    Drop %0
+    Load v17 <- string("loop_borrow_reuse_ok")
+    Call v16 <- string("std.io.print") [v17] (def=d3)
     Drop %0
     Drop %1
-    Ret %5
+    Drop %2
+    Ret v16
   init (locals=0)
     Call %0 <- string("main") [] (def=d4)

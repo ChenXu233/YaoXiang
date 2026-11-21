@@ -2,71 +2,119 @@ module
   fn double(Int(64)) -> Int(64)
     slot[0] a : Int(64) @depth1
     locals_total=4
+    values_total=3
+    value v0: Int(64) @block0
+    value v1: Int(64) @block0
+    value v2: Int(64) @block0
     Load %0 <- arg%0
-    Load %1 <- %0
-    Load %2 <- int(2)
-    Mul %3 <- %1, %2
-    Ret %3
+    Load v1 <- %0
+    Load v2 <- int(2)
+    Mul v0 <- v1, v2
+    Ret v0
   fn apply(Fn { params: [Int(64)], return_type: Int(64) }, Int(64)) -> Int(64)
     slot[0] h : Int(64) @depth1
     slot[1] x : Int(64) @depth1
     locals_total=5
+    values_total=3
+    value v0: Int(64) @block0
+    value v1: Int(64) @block0
+    value v2: Fn { params: [Int(64)], return_type: Int(64) } @block0
     Load %0 <- arg%0
     Load %1 <- arg%1
-    Load %2 <- %1
-    Load %3 <- %0
-    CallDyn %4 <- %3 [%2]
-    Ret %4
+    Load v1 <- %1
+    Load v2 <- %0
+    CallDyn v0 <- v2 [v1]
+    Ret v0
   fn main() -> Void
     slot[0] h : Int(64) @depth1
     slot[1] f1 : Int(64) @depth1
     slot[2] f2 : Int(64) @depth1
     locals_total=14
+    values_total=39
+    value v0: TypeRef("?") @block0
+    value v1: Bool @block0
+    value v2: Int(64) @block0
+    value v3: Int(64) @block0
+    value v4: Int(64) @block0
+    value v5: Fn { params: [Int(64)], return_type: Int(64) } @block0
+    value v6: Generic { name: "String", args: [] } @block0
+    value v7: TypeRef("?") @block0
+    value v8: Bool @block0
+    value v9: Int(64) @block0
+    value v10: Int(64) @block0
+    value v11: Int(64) @block0
+    value v12: Generic { name: "String", args: [] } @block0
+    value v13: TypeRef("?") @block0
+    value v14: Bool @block0
+    value v15: Int(64) @block0
+    value v16: Int(64) @block0
+    value v17: Fn { params: [Int(64)], return_type: Int(64) } @block0
+    value v18: Int(64) @block0
+    value v19: Generic { name: "String", args: [] } @block0
+    value v20: TypeRef("?") @block0
+    value v21: Bool @block0
+    value v22: Int(64) @block0
+    value v23: Int(64) @block0
+    value v24: Int(64) @block0
+    value v25: Generic { name: "String", args: [] } @block0
+    value v26: TypeRef("?") @block0
+    value v27: Bool @block0
+    value v28: Int(64) @block0
+    value v29: Int(64) @block0
+    value v30: Int(64) @block0
+    value v31: Int(64) @block0
+    value v32: Int(64) @block0
+    value v33: Fn { params: [Int(64)], return_type: Int(64) } @block0
+    value v34: Int(64) @block0
+    value v35: Fn { params: [Int(64)], return_type: Int(64) } @block0
+    value v36: Generic { name: "String", args: [] } @block0
+    value v37: TypeRef("?") @block0
+    value v38: Generic { name: "String", args: [] } @block0
     MakeClosure %0 <- double env=[] (def=d0)
-    Load %1 <- int(5)
-    Load %2 <- %0
-    CallDyn %3 <- %2 [%1]
-    Load %4 <- int(10)
-    Eq %5 <- %3, %4
-    Load %6 <- string("alias call")
-    Call %7 <- string("std.assert.assert") [%5, %6] (def=d1)
-    Load %1 <- int(6)
-    Call %3 <- string("double") [%1] (def=d0)
-    Load %4 <- int(12)
-    Eq %5 <- %3, %4
-    Load %2 <- string("direct call after alias")
-    Call %7 <- string("std.assert.assert") [%5, %2] (def=d1)
+    Load v4 <- int(5)
+    Load v5 <- %0
+    CallDyn v2 <- v5 [v4]
+    Load v3 <- int(10)
+    Eq v1 <- v2, v3
+    Load v6 <- string("alias call")
+    Call v0 <- string("std.assert.assert") [v1, v6] (def=d1)
+    Load v11 <- int(6)
+    Call v9 <- string("double") [v11] (def=d0)
+    Load v10 <- int(12)
+    Eq v8 <- v9, v10
+    Load v12 <- string("direct call after alias")
+    Call v7 <- string("std.assert.assert") [v8, v12] (def=d1)
+    MakeClosure v17 <- double env=[] (def=d0)
+    Load v18 <- int(3)
+    Call v15 <- string("apply") [v17, v18] (def=d2)
+    Load v16 <- int(6)
+    Eq v14 <- v15, v16
+    Load v19 <- string("passed as argument")
+    Call v13 <- string("std.assert.assert") [v14, v19] (def=d1)
+    Load v24 <- int(7)
+    Call v22 <- string("double") [v24] (def=d0)
+    Load v23 <- int(14)
+    Eq v21 <- v22, v23
+    Load v25 <- string("direct call after passing")
+    Call v20 <- string("std.assert.assert") [v21, v25] (def=d1)
     MakeClosure %1 <- double env=[] (def=d0)
-    Load %2 <- int(3)
-    Call %3 <- string("apply") [%1, %2] (def=d2)
-    Load %4 <- int(6)
-    Eq %5 <- %3, %4
-    Load %6 <- string("passed as argument")
-    Call %7 <- string("std.assert.assert") [%5, %6] (def=d1)
-    Load %1 <- int(7)
-    Call %3 <- string("double") [%1] (def=d0)
-    Load %4 <- int(14)
-    Eq %5 <- %3, %4
-    Load %2 <- string("direct call after passing")
-    Call %7 <- string("std.assert.assert") [%5, %2] (def=d1)
-    MakeClosure %7 <- double env=[] (def=d0)
-    MakeClosure %5 <- double env=[] (def=d0)
-    Load %8 <- int(1)
-    Load %9 <- %7
-    CallDyn %6 <- %9 [%8]
-    Load %10 <- int(2)
-    Load %11 <- %5
-    CallDyn %12 <- %11 [%10]
-    Add %1 <- %6, %12
-    Load %2 <- int(6)
-    Eq %4 <- %1, %2
-    Load %13 <- string("two aliases reuse same function")
-    Call %3 <- string("std.assert.assert") [%4, %13] (def=d1)
-    Load %4 <- string("fn value reuse ok")
-    Call %3 <- string("std.io.println") [%4] (def=d3)
-    Drop %7
-    Drop %5
+    MakeClosure %2 <- double env=[] (def=d0)
+    Load v32 <- int(1)
+    Load v33 <- %1
+    CallDyn v30 <- v33 [v32]
+    Load v34 <- int(2)
+    Load v35 <- %2
+    CallDyn v31 <- v35 [v34]
+    Add v28 <- v30, v31
+    Load v29 <- int(6)
+    Eq v27 <- v28, v29
+    Load v36 <- string("two aliases reuse same function")
+    Call v26 <- string("std.assert.assert") [v27, v36] (def=d1)
+    Load v38 <- string("fn value reuse ok")
+    Call v37 <- string("std.io.println") [v38] (def=d3)
+    Drop %1
+    Drop %2
     Drop %0
-    Ret %3
+    Ret v37
   init (locals=0)
     Call %0 <- string("main") [] (def=d4)

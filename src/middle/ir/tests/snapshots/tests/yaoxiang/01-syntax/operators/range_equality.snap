@@ -4,136 +4,244 @@ module
     slot[1] r2 : Int(64) @depth1
     slot[2] r3 : Int(64) @depth1
     locals_total=24
-    Load %0 <- int(1)
-    Load %1 <- int(10)
-    Load %2 <- int(1)
-    NewRange %3 <- %0, %1, %2
-    Load %1 <- int(1)
-    Load %2 <- int(10)
-    Load %4 <- int(1)
-    NewRange %0 <- %1, %2, %4
-    Load %2 <- int(1)
-    Load %4 <- int(11)
-    Load %5 <- int(1)
-    NewRange %1 <- %2, %4, %5
-    Load %5 <- %3
-    Load %6 <- %0
-    Eq %4 <- %5, %6
-    Load %7 <- string("range structural equality")
-    Call %2 <- string("std.assert.assert") [%4, %7] (def=d0)
-    Load %5 <- %3
-    Load %6 <- %1
-    Ne %4 <- %5, %6
-    Load %7 <- string("range inequality on end")
-    Call %2 <- string("std.assert.assert") [%4, %7] (def=d0)
-    Load %5 <- %3
-    Load %7 <- int(1)
-    Load %8 <- int(10)
-    Load %9 <- int(2)
-    NewRange %6 <- %7, %8, %9
-    Ne %4 <- %5, %6
-    Load %10 <- string("range inequality on step")
-    Call %2 <- string("std.assert.assert") [%4, %10] (def=d0)
-    Load %7 <- int(1)
-    Load %8 <- string("a")
-    NewTuple %5 <- [%7, %8]
-    Load %9 <- int(1)
-    Load %10 <- string("a")
-    NewTuple %6 <- [%9, %10]
-    Eq %4 <- %5, %6
-    Load %11 <- string("tuple equality")
-    Call %2 <- string("std.assert.assert") [%4, %11] (def=d0)
-    Load %7 <- int(1)
-    Load %8 <- string("a")
-    NewTuple %5 <- [%7, %8]
-    Load %9 <- int(1)
-    Load %10 <- string("b")
-    NewTuple %6 <- [%9, %10]
-    Ne %4 <- %5, %6
-    Load %11 <- string("tuple inequality")
-    Call %2 <- string("std.assert.assert") [%4, %11] (def=d0)
-    AllocArray %5 size=int(2), elem=int(1)
-    Load %7 <- int(1)
-    Load %8 <- int(0)
-    StoreIndex %5[%8] <- %7
-    Load %9 <- int(2)
-    Load %10 <- int(1)
-    StoreIndex %5[%10] <- %9
-    AllocArray %6 size=int(2), elem=int(1)
-    Load %11 <- int(1)
-    Load %12 <- int(0)
-    StoreIndex %6[%12] <- %11
-    Load %13 <- int(2)
-    Load %14 <- int(1)
-    StoreIndex %6[%14] <- %13
-    Eq %4 <- %5, %6
-    Load %15 <- string("list equality")
-    Call %2 <- string("std.assert.assert") [%4, %15] (def=d0)
-    AllocArray %5 size=int(2), elem=int(1)
-    Load %7 <- int(1)
-    Load %8 <- int(0)
-    StoreIndex %5[%8] <- %7
-    Load %9 <- int(2)
-    Load %10 <- int(1)
-    StoreIndex %5[%10] <- %9
-    AllocArray %6 size=int(2), elem=int(1)
-    Load %11 <- int(1)
-    Load %12 <- int(0)
-    StoreIndex %6[%12] <- %11
-    Load %13 <- int(3)
-    Load %14 <- int(1)
-    StoreIndex %6[%14] <- %13
-    Ne %4 <- %5, %6
-    Load %15 <- string("list inequality")
-    Call %2 <- string("std.assert.assert") [%4, %15] (def=d0)
-    AllocArray %5 size=int(2), elem=int(1)
-    Load %7 <- int(1)
-    Load %8 <- int(0)
-    StoreIndex %5[%8] <- %7
-    Load %9 <- int(2)
-    Load %10 <- int(1)
-    StoreIndex %5[%10] <- %9
-    AllocArray %6 size=int(3), elem=int(1)
-    Load %11 <- int(1)
-    Load %12 <- int(0)
-    StoreIndex %6[%12] <- %11
-    Load %13 <- int(2)
-    Load %14 <- int(1)
-    StoreIndex %6[%14] <- %13
-    Load %15 <- int(3)
-    Load %16 <- int(2)
-    StoreIndex %6[%16] <- %15
-    Ne %4 <- %5, %6
-    Load %17 <- string("list length inequality")
-    Call %2 <- string("std.assert.assert") [%4, %17] (def=d0)
-    AllocArray %5 size=int(2), elem=int(1)
-    Load %8 <- int(1)
-    Load %9 <- int(2)
-    NewTuple %7 <- [%8, %9]
-    Load %10 <- int(0)
-    StoreIndex %5[%10] <- %7
-    Load %12 <- int(3)
-    Load %13 <- int(4)
-    NewTuple %11 <- [%12, %13]
-    Load %14 <- int(1)
-    StoreIndex %5[%14] <- %11
-    AllocArray %6 size=int(2), elem=int(1)
-    Load %16 <- int(1)
-    Load %17 <- int(2)
-    NewTuple %15 <- [%16, %17]
-    Load %18 <- int(0)
-    StoreIndex %6[%18] <- %15
-    Load %19 <- int(3)
-    Load %20 <- int(4)
-    NewTuple %21 <- [%19, %20]
-    Load %22 <- int(1)
-    StoreIndex %6[%22] <- %21
-    Eq %4 <- %5, %6
-    Load %23 <- string("nested structural equality")
-    Call %2 <- string("std.assert.assert") [%4, %23] (def=d0)
-    Drop %3
+    values_total=107
+    value v0: Int(64) @block0
+    value v1: Int(64) @block0
+    value v2: Int(64) @block0
+    value v3: Int(64) @block0
+    value v4: Int(64) @block0
+    value v5: Int(64) @block0
+    value v6: Int(64) @block0
+    value v7: Int(64) @block0
+    value v8: Int(64) @block0
+    value v9: TypeRef("?") @block0
+    value v10: Bool @block0
+    value v11: Generic { name: "Range", args: [Int(64)] } @block0
+    value v12: Generic { name: "Range", args: [Int(64)] } @block0
+    value v13: Generic { name: "String", args: [] } @block0
+    value v14: TypeRef("?") @block0
+    value v15: Bool @block0
+    value v16: Generic { name: "Range", args: [Int(64)] } @block0
+    value v17: Generic { name: "Range", args: [Int(64)] } @block0
+    value v18: Generic { name: "String", args: [] } @block0
+    value v19: TypeRef("?") @block0
+    value v20: Bool @block0
+    value v21: Generic { name: "Range", args: [Int(64)] } @block0
+    value v22: TypeRef("?") @block0
+    value v23: Int(64) @block0
+    value v24: Int(64) @block0
+    value v25: Int(64) @block0
+    value v26: Generic { name: "String", args: [] } @block0
+    value v27: TypeRef("?") @block0
+    value v28: Bool @block0
+    value v29: TypeRef("?") @block0
+    value v30: TypeRef("?") @block0
+    value v31: Int(64) @block0
+    value v32: Generic { name: "String", args: [] } @block0
+    value v33: Int(64) @block0
+    value v34: Generic { name: "String", args: [] } @block0
+    value v35: Generic { name: "String", args: [] } @block0
+    value v36: TypeRef("?") @block0
+    value v37: Bool @block0
+    value v38: TypeRef("?") @block0
+    value v39: TypeRef("?") @block0
+    value v40: Int(64) @block0
+    value v41: Generic { name: "String", args: [] } @block0
+    value v42: Int(64) @block0
+    value v43: Generic { name: "String", args: [] } @block0
+    value v44: Generic { name: "String", args: [] } @block0
+    value v45: TypeRef("?") @block0
+    value v46: Bool @block0
+    value v47: TypeRef("?") @block0
+    value v48: TypeRef("?") @block0
+    value v49: Int(64) @block0
+    value v50: Int(64) @block0
+    value v51: Int(64) @block0
+    value v52: Int(64) @block0
+    value v53: Int(64) @block0
+    value v54: Int(64) @block0
+    value v55: Int(64) @block0
+    value v56: Int(64) @block0
+    value v57: Generic { name: "String", args: [] } @block0
+    value v58: TypeRef("?") @block0
+    value v59: Bool @block0
+    value v60: TypeRef("?") @block0
+    value v61: TypeRef("?") @block0
+    value v62: Int(64) @block0
+    value v63: Int(64) @block0
+    value v64: Int(64) @block0
+    value v65: Int(64) @block0
+    value v66: Int(64) @block0
+    value v67: Int(64) @block0
+    value v68: Int(64) @block0
+    value v69: Int(64) @block0
+    value v70: Generic { name: "String", args: [] } @block0
+    value v71: TypeRef("?") @block0
+    value v72: Bool @block0
+    value v73: TypeRef("?") @block0
+    value v74: TypeRef("?") @block0
+    value v75: Int(64) @block0
+    value v76: Int(64) @block0
+    value v77: Int(64) @block0
+    value v78: Int(64) @block0
+    value v79: Int(64) @block0
+    value v80: Int(64) @block0
+    value v81: Int(64) @block0
+    value v82: Int(64) @block0
+    value v83: Int(64) @block0
+    value v84: Int(64) @block0
+    value v85: Generic { name: "String", args: [] } @block0
+    value v86: TypeRef("?") @block0
+    value v87: Bool @block0
+    value v88: TypeRef("?") @block0
+    value v89: TypeRef("?") @block0
+    value v90: TypeRef("?") @block0
+    value v91: Int(64) @block0
+    value v92: Int(64) @block0
+    value v93: Int(64) @block0
+    value v94: TypeRef("?") @block0
+    value v95: Int(64) @block0
+    value v96: Int(64) @block0
+    value v97: Int(64) @block0
+    value v98: TypeRef("?") @block0
+    value v99: Int(64) @block0
+    value v100: Int(64) @block0
+    value v101: Int(64) @block0
+    value v102: TypeRef("?") @block0
+    value v103: Int(64) @block0
+    value v104: Int(64) @block0
+    value v105: Int(64) @block0
+    value v106: Generic { name: "String", args: [] } @block0
+    Load v0 <- int(1)
+    Load v1 <- int(10)
+    Load v2 <- int(1)
+    NewRange %0 <- v0, v1, v2
+    Load v3 <- int(1)
+    Load v4 <- int(10)
+    Load v5 <- int(1)
+    NewRange %1 <- v3, v4, v5
+    Load v6 <- int(1)
+    Load v7 <- int(11)
+    Load v8 <- int(1)
+    NewRange %2 <- v6, v7, v8
+    Load v11 <- %0
+    Load v12 <- %1
+    Eq v10 <- v11, v12
+    Load v13 <- string("range structural equality")
+    Call v9 <- string("std.assert.assert") [v10, v13] (def=d0)
+    Load v16 <- %0
+    Load v17 <- %2
+    Ne v15 <- v16, v17
+    Load v18 <- string("range inequality on end")
+    Call v14 <- string("std.assert.assert") [v15, v18] (def=d0)
+    Load v21 <- %0
+    Load v23 <- int(1)
+    Load v24 <- int(10)
+    Load v25 <- int(2)
+    NewRange v22 <- v23, v24, v25
+    Ne v20 <- v21, v22
+    Load v26 <- string("range inequality on step")
+    Call v19 <- string("std.assert.assert") [v20, v26] (def=d0)
+    Load v31 <- int(1)
+    Load v32 <- string("a")
+    NewTuple v29 <- [v31, v32]
+    Load v33 <- int(1)
+    Load v34 <- string("a")
+    NewTuple v30 <- [v33, v34]
+    Eq v28 <- v29, v30
+    Load v35 <- string("tuple equality")
+    Call v27 <- string("std.assert.assert") [v28, v35] (def=d0)
+    Load v40 <- int(1)
+    Load v41 <- string("a")
+    NewTuple v38 <- [v40, v41]
+    Load v42 <- int(1)
+    Load v43 <- string("b")
+    NewTuple v39 <- [v42, v43]
+    Ne v37 <- v38, v39
+    Load v44 <- string("tuple inequality")
+    Call v36 <- string("std.assert.assert") [v37, v44] (def=d0)
+    AllocArray v47 size=int(2), elem=int(1)
+    Load v49 <- int(1)
+    Load v50 <- int(0)
+    StoreIndex v47[v50] <- v49
+    Load v51 <- int(2)
+    Load v52 <- int(1)
+    StoreIndex v47[v52] <- v51
+    AllocArray v48 size=int(2), elem=int(1)
+    Load v53 <- int(1)
+    Load v54 <- int(0)
+    StoreIndex v48[v54] <- v53
+    Load v55 <- int(2)
+    Load v56 <- int(1)
+    StoreIndex v48[v56] <- v55
+    Eq v46 <- v47, v48
+    Load v57 <- string("list equality")
+    Call v45 <- string("std.assert.assert") [v46, v57] (def=d0)
+    AllocArray v60 size=int(2), elem=int(1)
+    Load v62 <- int(1)
+    Load v63 <- int(0)
+    StoreIndex v60[v63] <- v62
+    Load v64 <- int(2)
+    Load v65 <- int(1)
+    StoreIndex v60[v65] <- v64
+    AllocArray v61 size=int(2), elem=int(1)
+    Load v66 <- int(1)
+    Load v67 <- int(0)
+    StoreIndex v61[v67] <- v66
+    Load v68 <- int(3)
+    Load v69 <- int(1)
+    StoreIndex v61[v69] <- v68
+    Ne v59 <- v60, v61
+    Load v70 <- string("list inequality")
+    Call v58 <- string("std.assert.assert") [v59, v70] (def=d0)
+    AllocArray v73 size=int(2), elem=int(1)
+    Load v75 <- int(1)
+    Load v76 <- int(0)
+    StoreIndex v73[v76] <- v75
+    Load v77 <- int(2)
+    Load v78 <- int(1)
+    StoreIndex v73[v78] <- v77
+    AllocArray v74 size=int(3), elem=int(1)
+    Load v79 <- int(1)
+    Load v80 <- int(0)
+    StoreIndex v74[v80] <- v79
+    Load v81 <- int(2)
+    Load v82 <- int(1)
+    StoreIndex v74[v82] <- v81
+    Load v83 <- int(3)
+    Load v84 <- int(2)
+    StoreIndex v74[v84] <- v83
+    Ne v72 <- v73, v74
+    Load v85 <- string("list length inequality")
+    Call v71 <- string("std.assert.assert") [v72, v85] (def=d0)
+    AllocArray v88 size=int(2), elem=int(1)
+    Load v91 <- int(1)
+    Load v92 <- int(2)
+    NewTuple v90 <- [v91, v92]
+    Load v93 <- int(0)
+    StoreIndex v88[v93] <- v90
+    Load v95 <- int(3)
+    Load v96 <- int(4)
+    NewTuple v94 <- [v95, v96]
+    Load v97 <- int(1)
+    StoreIndex v88[v97] <- v94
+    AllocArray v89 size=int(2), elem=int(1)
+    Load v99 <- int(1)
+    Load v100 <- int(2)
+    NewTuple v98 <- [v99, v100]
+    Load v101 <- int(0)
+    StoreIndex v89[v101] <- v98
+    Load v103 <- int(3)
+    Load v104 <- int(4)
+    NewTuple v102 <- [v103, v104]
+    Load v105 <- int(1)
+    StoreIndex v89[v105] <- v102
+    Eq v87 <- v88, v89
+    Load v106 <- string("nested structural equality")
+    Call v86 <- string("std.assert.assert") [v87, v106] (def=d0)
     Drop %0
     Drop %1
-    Ret %2
+    Drop %2
+    Ret v86
   init (locals=0)
     Call %0 <- string("main") [] (def=d1)

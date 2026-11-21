@@ -5,29 +5,52 @@ module
   global[3] declared_only : Int(64)
   fn main() -> Void
     locals_total=5
-    Load %0 <- @0
-    Load %1 <- int(1)
-    Eq %2 <- %0, %1
-    Load %3 <- string("新声明")
-    Call %4 <- string("std.assert.assert") [%2, %3] (def=d0)
-    Load %0 <- @1
-    Load %1 <- int(11)
-    Eq %2 <- %0, %1
-    Load %3 <- string("mut 重赋值累计")
-    Call %4 <- string("std.assert.assert") [%2, %3] (def=d0)
-    Load %0 <- @2
-    Load %1 <- int(10)
-    Eq %2 <- %0, %1
-    Load %3 <- string("跨作用域 mut 赋值")
-    Call %4 <- string("std.assert.assert") [%2, %3] (def=d0)
-    Load %0 <- @3
-    Load %1 <- int(7)
-    Eq %2 <- %0, %1
-    Load %3 <- string("纯注解声明后赋值")
-    Call %4 <- string("std.assert.assert") [%2, %3] (def=d0)
-    Load %2 <- string("assignment_semantics ok")
-    Call %4 <- string("std.io.println") [%2] (def=d1)
-    Ret %4
+    values_total=22
+    value v0: TypeRef("?") @block0
+    value v1: Bool @block0
+    value v2: Int(64) @block0
+    value v3: Int(64) @block0
+    value v4: Generic { name: "String", args: [] } @block0
+    value v5: TypeRef("?") @block0
+    value v6: Bool @block0
+    value v7: Int(64) @block0
+    value v8: Int(64) @block0
+    value v9: Generic { name: "String", args: [] } @block0
+    value v10: TypeRef("?") @block0
+    value v11: Bool @block0
+    value v12: Int(64) @block0
+    value v13: Int(64) @block0
+    value v14: Generic { name: "String", args: [] } @block0
+    value v15: TypeRef("?") @block0
+    value v16: Bool @block0
+    value v17: Int(64) @block0
+    value v18: Int(64) @block0
+    value v19: Generic { name: "String", args: [] } @block0
+    value v20: TypeRef("?") @block0
+    value v21: Generic { name: "String", args: [] } @block0
+    Load v2 <- @0
+    Load v3 <- int(1)
+    Eq v1 <- v2, v3
+    Load v4 <- string("新声明")
+    Call v0 <- string("std.assert.assert") [v1, v4] (def=d0)
+    Load v7 <- @1
+    Load v8 <- int(11)
+    Eq v6 <- v7, v8
+    Load v9 <- string("mut 重赋值累计")
+    Call v5 <- string("std.assert.assert") [v6, v9] (def=d0)
+    Load v12 <- @2
+    Load v13 <- int(10)
+    Eq v11 <- v12, v13
+    Load v14 <- string("跨作用域 mut 赋值")
+    Call v10 <- string("std.assert.assert") [v11, v14] (def=d0)
+    Load v17 <- @3
+    Load v18 <- int(7)
+    Eq v16 <- v17, v18
+    Load v19 <- string("纯注解声明后赋值")
+    Call v15 <- string("std.assert.assert") [v16, v19] (def=d0)
+    Load v21 <- string("assignment_semantics ok")
+    Call v20 <- string("std.io.println") [v21] (def=d1)
+    Ret v20
   init (locals=0)
     Load %0 <- int(1)
     Store @0 <- %0

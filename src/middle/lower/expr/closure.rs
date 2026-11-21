@@ -16,6 +16,8 @@ use crate::util::diagnostic::Diagnostic;
 struct LambdaBodyIR {
     instructions: Vec<Instruction>,
     locals: Vec<LocalSlot>,
+    values: Vec<crate::middle::ir::ir::ValueInfo>,
+    value_slots: Vec<usize>,
 }
 
 impl AstToIrGenerator {
@@ -64,7 +66,12 @@ impl AstToIrGenerator {
             frame.set_cur_span(stmt.span);
             if Some(i) == last_idx {
                 let result_reg = frame.next_temp_reg();
-                if frame.generate_tail_stmt_ir(stmt, result_reg, &mut instructions, constants)? {
+                if frame.generate_tail_stmt_ir(
+                    stmt,
+                    result_reg.clone(),
+                    &mut instructions,
+                    constants,
+                )? {
                     // 尾语句路径（RFC-039 D20 逐案核实项）：本条语句经
                     // `generate_tail_stmt_ir` 提前返回，**必须**在同款语句边界上
                     // 消费它的释放条目——漏这一处，尾语句的 Drop 就静默丢失
@@ -72,7 +79,7 @@ impl AstToIrGenerator {
                     // 取值已完成（值在 result_reg），故 Drop 排在 Ret 之前。
                     frame.emit_release_drops(stmt.plan_id, &mut instructions);
                     instructions.push(Instruction::Ret {
-                        value: Some(Operand::Local(result_reg)),
+                        value: Some(result_reg.clone()),
                         span: frame.cur_span,
                     });
                     frame.set_cur_span(stmt.span);
@@ -111,10 +118,21 @@ impl AstToIrGenerator {
 
         // 槽位表 + 寄存器预算（E3014）单点
         let locals_types: Vec<LocalSlot> = frame.take_body_locals()?;
+        let param_types: Vec<MonoType> = params
+            .iter()
+            .map(|p| {
+                p.ty.clone()
+                    .map(MonoType::from)
+                    .unwrap_or(MonoType::Int(64))
+            })
+            .collect();
+        let (values, value_slots) = frame.take_body_values(&instructions, &param_types);
 
         Ok(LambdaBodyIR {
             instructions,
             locals: locals_types,
+            values,
+            value_slots,
         })
     }
 
@@ -122,7 +140,7 @@ impl AstToIrGenerator {
         &mut self,
         params: &[ast::Param],
         body: &ast::Block,
-        result_reg: usize,
+        result_reg: Operand,
         instructions: &mut Vec<Instruction>,
         constants: &mut Vec<ConstValue>,
     ) -> Result<(), Diagnostic> {
@@ -210,7 +228,8 @@ impl AstToIrGenerator {
                 }],
                 entry: 0,
                 locals: closure_body.locals.clone(),
-                values: Vec::new(),
+                values: closure_body.values,
+                value_slots: closure_body.value_slots,
             },
         };
 
@@ -220,7 +239,7 @@ impl AstToIrGenerator {
         // 9. 创建 MakeClosure 指令
         // env 包含被捕获的外部变量的 Operand
         instructions.push(Instruction::MakeClosure {
-            dst: Operand::Local(result_reg),
+            dst: result_reg.clone(),
             func: closure_name,
             env: env_vars,
             def: None,

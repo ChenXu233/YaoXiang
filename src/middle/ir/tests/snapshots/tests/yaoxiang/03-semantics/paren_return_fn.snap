@@ -1,88 +1,149 @@
 module
   fn mk() -> Fn { params: [Int(64)], return_type: Int(64) }
     locals_total=1
-    MakeClosure %0 <- closure_0 env=[] (def=d0)
-    Ret %0
+    values_total=1
+    value v0: TypeRef("?") @block0
+    MakeClosure v0 <- closure_0 env=[] (def=d0)
+    Ret v0
   fn mk_block() -> Fn { params: [], return_type: Int(64) }
     locals_total=1
-    MakeClosure %0 <- closure_1 env=[] (def=d1)
-    Ret %0
+    values_total=1
+    value v0: TypeRef("?") @block0
+    MakeClosure v0 <- closure_1 env=[] (def=d1)
+    Ret v0
   fn curried(Int(64)) -> Fn { params: [Int(64)], return_type: Int(64) }
     slot[0] a : Int(64) @depth1
     locals_total=2
-    MakeClosure %0 <- __curried_l0 env=[%1] (def=d2)
-    Ret %0
+    values_total=1
+    value v0: TypeRef("?") @block0
+    MakeClosure v0 <- __curried_l0 env=[%0] (def=d2)
+    Ret v0
   fn apply(Fn { params: [], return_type: Int(64) }) -> Int(64)
     slot[0] h : Int(64) @depth1
     locals_total=3
+    values_total=2
+    value v0: Int(64) @block0
+    value v1: Fn { params: [Int(64)], return_type: Int(64) } @block0
     Load %0 <- arg%0
-    Load %1 <- %0
-    CallDyn %2 <- %1 []
-    Ret %2
+    Load v1 <- %0
+    CallDyn v0 <- v1 []
+    Ret v0
   fn main() -> Void
     slot[0] h : Int(64) @depth1
     locals_total=8
-    Load %0 <- int(5)
-    Call %1 <- string("mk") [] (def=d3)
-    CallDyn %2 <- %1 [%0]
-    Load %3 <- int(6)
-    Eq %4 <- %2, %3
-    Load %5 <- string("mk()(5) should be 6")
-    Call %6 <- string("std.assert.assert") [%4, %5] (def=d4)
-    Call %0 <- string("mk_block") [] (def=d5)
-    CallDyn %2 <- %0 []
-    Load %3 <- int(7)
-    Eq %4 <- %2, %3
-    Load %1 <- string("mk_block()() should be 7")
-    Call %6 <- string("std.assert.assert") [%4, %1] (def=d4)
-    Load %0 <- int(2)
-    Load %5 <- int(1)
-    Call %1 <- string("curried") [%5] (def=d6)
-    CallDyn %2 <- %1 [%0]
-    Load %3 <- int(3)
-    Eq %4 <- %2, %3
-    Load %7 <- string("curried(1)(2) should be 3")
-    Call %6 <- string("std.assert.assert") [%4, %7] (def=d4)
-    MakeClosure %0 <- closure_2 env=[] (def=d7)
-    Call %2 <- string("apply") [%0] (def=d8)
-    Load %3 <- int(42)
-    Eq %4 <- %2, %3
-    Load %1 <- string("apply should call the thunk")
-    Call %6 <- string("std.assert.assert") [%4, %1] (def=d4)
-    Call %6 <- string("mk") [] (def=d3)
-    Load %1 <- int(1)
-    Load %5 <- %6
-    CallDyn %3 <- %5 [%1]
-    Load %0 <- int(2)
-    Eq %2 <- %3, %0
-    Load %7 <- string("stored returned fn should work")
-    Call %4 <- string("std.assert.assert") [%2, %7] (def=d4)
-    Load %2 <- string("paren return fn ok")
-    Call %4 <- string("std.io.println") [%2] (def=d9)
-    Drop %6
-    Ret %4
+    values_total=36
+    value v0: TypeRef("?") @block0
+    value v1: Bool @block0
+    value v2: TypeRef("?") @block0
+    value v3: Int(64) @block0
+    value v4: Int(64) @block0
+    value v5: Fn { params: [Int(64)], return_type: Int(64) } @block0
+    value v6: Generic { name: "String", args: [] } @block0
+    value v7: TypeRef("?") @block0
+    value v8: Bool @block0
+    value v9: TypeRef("?") @block0
+    value v10: Int(64) @block0
+    value v11: Fn { params: [], return_type: Int(64) } @block0
+    value v12: Generic { name: "String", args: [] } @block0
+    value v13: TypeRef("?") @block0
+    value v14: Bool @block0
+    value v15: TypeRef("?") @block0
+    value v16: Int(64) @block0
+    value v17: Int(64) @block0
+    value v18: Fn { params: [Int(64)], return_type: Int(64) } @block0
+    value v19: Int(64) @block0
+    value v20: Generic { name: "String", args: [] } @block0
+    value v21: TypeRef("?") @block0
+    value v22: Bool @block0
+    value v23: Int(64) @block0
+    value v24: Int(64) @block0
+    value v25: TypeRef("?") @block0
+    value v26: Generic { name: "String", args: [] } @block0
+    value v27: TypeRef("?") @block0
+    value v28: Bool @block0
+    value v29: Int(64) @block0
+    value v30: Int(64) @block0
+    value v31: Int(64) @block0
+    value v32: Fn { params: [Int(64)], return_type: Int(64) } @block0
+    value v33: Generic { name: "String", args: [] } @block0
+    value v34: TypeRef("?") @block0
+    value v35: Generic { name: "String", args: [] } @block0
+    Load v4 <- int(5)
+    Call v5 <- string("mk") [] (def=d3)
+    CallDyn v2 <- v5 [v4]
+    Load v3 <- int(6)
+    Eq v1 <- v2, v3
+    Load v6 <- string("mk()(5) should be 6")
+    Call v0 <- string("std.assert.assert") [v1, v6] (def=d4)
+    Call v11 <- string("mk_block") [] (def=d5)
+    CallDyn v9 <- v11 []
+    Load v10 <- int(7)
+    Eq v8 <- v9, v10
+    Load v12 <- string("mk_block()() should be 7")
+    Call v7 <- string("std.assert.assert") [v8, v12] (def=d4)
+    Load v17 <- int(2)
+    Load v19 <- int(1)
+    Call v18 <- string("curried") [v19] (def=d6)
+    CallDyn v15 <- v18 [v17]
+    Load v16 <- int(3)
+    Eq v14 <- v15, v16
+    Load v20 <- string("curried(1)(2) should be 3")
+    Call v13 <- string("std.assert.assert") [v14, v20] (def=d4)
+    MakeClosure v25 <- closure_2 env=[] (def=d7)
+    Call v23 <- string("apply") [v25] (def=d8)
+    Load v24 <- int(42)
+    Eq v22 <- v23, v24
+    Load v26 <- string("apply should call the thunk")
+    Call v21 <- string("std.assert.assert") [v22, v26] (def=d4)
+    Call %0 <- string("mk") [] (def=d3)
+    Load v31 <- int(1)
+    Load v32 <- %0
+    CallDyn v29 <- v32 [v31]
+    Load v30 <- int(2)
+    Eq v28 <- v29, v30
+    Load v33 <- string("stored returned fn should work")
+    Call v27 <- string("std.assert.assert") [v28, v33] (def=d4)
+    Load v35 <- string("paren return fn ok")
+    Call v34 <- string("std.io.println") [v35] (def=d9)
+    Drop %0
+    Ret v34
   fn closure_0(Int(64)) -> Void
     slot[0] a : Int(64) @depth2
     locals_total=5
-    Load %0 <- %1
-    Load %2 <- int(1)
-    Add %3 <- %0, %2
-    Ret %3
+    values_total=4
+    value v0: TypeRef("?") @block0
+    value v1: Int(64) @block0
+    value v2: Int(64) @block0
+    value v3: Int(64) @block0
+    Load v2 <- %0
+    Load v3 <- int(1)
+    Add v1 <- v2, v3
+    Ret v1
   fn closure_1() -> Void
     locals_total=2
-    Load %0 <- int(7)
-    Ret %0
+    values_total=2
+    value v0: TypeRef("?") @block0
+    value v1: Int(64) @block0
+    Load v1 <- int(7)
+    Ret v1
   fn __curried_l0(Int(64)) -> Int(64)
     slot[0] a : Int(64) @depth1
     slot[1] b : Int(64) @depth1
     locals_total=5
-    Load %0 <- %1
-    Load %2 <- %3
-    Add %4 <- %0, %2
-    Ret %4
+    values_total=3
+    value v0: Int(64) @block0
+    value v1: Int(64) @block0
+    value v2: Int(64) @block0
+    Load v1 <- %0
+    Load v2 <- %1
+    Add v0 <- v1, v2
+    Ret v0
   fn closure_2() -> Void
     locals_total=8
-    Load %0 <- int(42)
-    Ret %0
+    values_total=2
+    value v0: TypeRef("?") @block0
+    value v1: Int(64) @block0
+    Load v1 <- int(42)
+    Ret v1
   init (locals=0)
     Call %0 <- string("main") [] (def=d10)

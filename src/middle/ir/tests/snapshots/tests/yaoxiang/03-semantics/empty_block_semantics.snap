@@ -7,25 +7,36 @@ module
   global[5] assign_last : Void
   fn noop() -> Void
     locals_total=0
+    values_total=0
     Ret
   fn get_five() -> Int(64)
     locals_total=1
-    Load %0 <- int(5)
-    Ret %0
+    values_total=1
+    value v0: Int(64) @block0
+    Load v0 <- int(5)
+    Ret v0
   fn via_lambda() -> Void
     locals_total=2
-    Load %0 <- int(7)
-    Ret %0
+    values_total=2
+    value v0: TypeRef("?") @block0
+    value v1: Int(64) @block0
+    Load v1 <- int(7)
+    Ret v1
     Ret
   fn run_noop() -> Void
     locals_total=1
-    Call %0 <- string("noop") [] (def=d0)
-    Ret %0
+    values_total=1
+    value v0: Void @block0
+    Call v0 <- string("noop") [] (def=d0)
+    Ret v0
   fn main() -> Void
     locals_total=2
-    Load %0 <- string("empty_block_semantics: ok")
-    Call %1 <- string("std.io.println") [%0] (def=d1)
-    Ret %1
+    values_total=2
+    value v0: TypeRef("?") @block0
+    value v1: Generic { name: "String", args: [] } @block0
+    Load v1 <- string("empty_block_semantics: ok")
+    Call v0 <- string("std.io.println") [v1] (def=d1)
+    Ret v0
   init (locals=15)
     islot[3] x : Int(64) @depth1
     islot[13] inner : Int(64) @depth1

@@ -5,144 +5,261 @@ module
     slot[2] l : Int(64) @depth1
     slot[3] i : Int(64) @depth1
     locals_total=11
-    Load %0 <- int(1)
-    Load %1 <- int(2)
-    Load %2 <- int(3)
-    AllocFixedArray %3 count=3
-    Load %4 <- int(0)
-    StoreIndex %3[%4] <- %0
-    Load %5 <- int(1)
-    StoreIndex %3[%5] <- %1
-    Load %6 <- int(2)
-    StoreIndex %3[%6] <- %2
-    Load %0 <- %3
-    Load %1 <- int(1)
-    Load %2 <- int(99)
-    StoreIndex %0[%1] <- %2
-    Load %5 <- %3
-    Load %6 <- int(0)
-    LoadIndex %2 <- %5[%6]
-    Load %4 <- int(1)
-    Eq %1 <- %2, %4
-    Load %7 <- string("Array write leaves other slots intact")
-    Call %0 <- string("std.assert.assert") [%1, %7] (def=d0)
-    Load %5 <- %3
-    Load %6 <- int(1)
-    LoadIndex %2 <- %5[%6]
-    Load %4 <- int(99)
-    Eq %1 <- %2, %4
-    Load %7 <- string("Array index write")
-    Call %0 <- string("std.assert.assert") [%1, %7] (def=d0)
-    Load %5 <- %3
-    Load %6 <- int(2)
-    LoadIndex %2 <- %5[%6]
-    Load %4 <- int(3)
-    Eq %1 <- %2, %4
-    Load %7 <- string("Array write preserves tail")
-    Call %0 <- string("std.assert.assert") [%1, %7] (def=d0)
-    Load %5 <- %3
-    StringLength %2 <- %5
-    Load %4 <- int(3)
-    Eq %1 <- %2, %4
-    Load %6 <- string("Array length")
-    Call %0 <- string("std.assert.assert") [%1, %6] (def=d0)
-    AllocArray %0 size=int(3), elem=int(1)
-    Load %1 <- int(10)
-    Load %2 <- int(0)
-    StoreIndex %0[%2] <- %1
-    Load %4 <- int(20)
-    Load %5 <- int(1)
-    StoreIndex %0[%5] <- %4
-    Load %6 <- int(30)
-    Load %7 <- int(2)
-    StoreIndex %0[%7] <- %6
-    Load %6 <- %0
-    StringLength %4 <- %6
-    Load %5 <- int(3)
-    Eq %2 <- %4, %5
-    Load %7 <- string("Vec length from literal")
-    Call %1 <- string("std.assert.assert") [%2, %7] (def=d0)
-    Load %1 <- %0
-    Load %2 <- int(0)
-    Load %4 <- int(11)
-    StoreIndex %1[%2] <- %4
-    Load %6 <- %0
-    Load %7 <- int(0)
-    LoadIndex %4 <- %6[%7]
-    Load %5 <- int(11)
-    Eq %2 <- %4, %5
-    Load %8 <- string("Vec index write")
-    Call %1 <- string("std.assert.assert") [%2, %8] (def=d0)
-    Load %1 <- %0
-    Load %4 <- %0
-    StringLength %2 <- %4
-    Load %5 <- int(40)
-    StoreIndex %1[%2] <- %5
-    Load %6 <- %0
-    StringLength %4 <- %6
-    Load %5 <- int(4)
-    Eq %2 <- %4, %5
-    Load %7 <- string("Vec append grows length")
-    Call %1 <- string("std.assert.assert") [%2, %7] (def=d0)
-    Load %6 <- %0
-    Load %7 <- int(3)
-    LoadIndex %4 <- %6[%7]
-    Load %5 <- int(40)
-    Eq %2 <- %4, %5
-    Load %8 <- string("Vec appended value readable")
-    Call %1 <- string("std.assert.assert") [%2, %8] (def=d0)
-    Load %1 <- %0
-    Load %4 <- %0
-    StringLength %2 <- %4
-    Load %5 <- int(50)
-    StoreIndex %1[%2] <- %5
-    Load %6 <- %0
-    StringLength %4 <- %6
-    Load %5 <- int(5)
-    Eq %2 <- %4, %5
-    Load %7 <- string("Vec second append")
-    Call %1 <- string("std.assert.assert") [%2, %7] (def=d0)
-    Load %6 <- %0
-    Load %7 <- int(4)
-    LoadIndex %4 <- %6[%7]
-    Load %5 <- int(50)
-    Eq %2 <- %4, %5
-    Load %8 <- string("Vec second appended value")
-    Call %1 <- string("std.assert.assert") [%2, %8] (def=d0)
-    AllocArray %1 size=int(2), elem=int(1)
-    Load %2 <- int(100)
-    Load %4 <- int(0)
-    StoreIndex %1[%4] <- %2
-    Load %5 <- int(200)
-    Load %6 <- int(1)
-    StoreIndex %1[%6] <- %5
-    Load %2 <- %1
-    Load %4 <- int(1)
-    Load %5 <- int(201)
-    StoreIndex %2[%4] <- %5
-    Load %7 <- %1
-    Load %8 <- int(1)
-    LoadIndex %5 <- %7[%8]
-    Load %6 <- int(201)
-    Eq %4 <- %5, %6
-    Load %9 <- string("List index write")
-    Call %2 <- string("std.assert.assert") [%4, %9] (def=d0)
-    Load %2 <- int(2)
-    Load %4 <- %1
-    Load %5 <- %2
-    Load %6 <- int(202)
-    StoreIndex %4[%5] <- %6
-    Load %8 <- %1
-    Load %9 <- int(2)
-    LoadIndex %6 <- %8[%9]
-    Load %7 <- int(202)
-    Eq %5 <- %6, %7
-    Load %10 <- string("List variable index write appends")
-    Call %4 <- string("std.assert.assert") [%5, %10] (def=d0)
+    values_total=116
+    value v0: Int(64) @block0
+    value v1: Int(64) @block0
+    value v2: Int(64) @block0
+    value v3: Int(64) @block0
+    value v4: Int(64) @block0
+    value v5: Int(64) @block0
+    value v6: Generic { name: "Array", args: [Int(64), Literal { name: "3", base_type: Int(64), value: Int(3) }] } @block0
+    value v7: Int(64) @block0
+    value v8: Int(64) @block0
+    value v9: TypeRef("?") @block0
+    value v10: Bool @block0
+    value v11: TypeRef("?") @block0
+    value v12: Int(64) @block0
+    value v13: Generic { name: "Array", args: [Int(64), Literal { name: "3", base_type: Int(64), value: Int(3) }] } @block0
+    value v14: Int(64) @block0
+    value v15: Generic { name: "String", args: [] } @block0
+    value v16: TypeRef("?") @block0
+    value v17: Bool @block0
+    value v18: TypeRef("?") @block0
+    value v19: Int(64) @block0
+    value v20: Generic { name: "Array", args: [Int(64), Literal { name: "3", base_type: Int(64), value: Int(3) }] } @block0
+    value v21: Int(64) @block0
+    value v22: Generic { name: "String", args: [] } @block0
+    value v23: TypeRef("?") @block0
+    value v24: Bool @block0
+    value v25: TypeRef("?") @block0
+    value v26: Int(64) @block0
+    value v27: Generic { name: "Array", args: [Int(64), Literal { name: "3", base_type: Int(64), value: Int(3) }] } @block0
+    value v28: Int(64) @block0
+    value v29: Generic { name: "String", args: [] } @block0
+    value v30: TypeRef("?") @block0
+    value v31: Bool @block0
+    value v32: Int(64) @block0
+    value v33: Int(64) @block0
+    value v34: Generic { name: "Array", args: [Int(64), Literal { name: "3", base_type: Int(64), value: Int(3) }] } @block0
+    value v35: Generic { name: "String", args: [] } @block0
+    value v36: Int(64) @block0
+    value v37: Int(64) @block0
+    value v38: Int(64) @block0
+    value v39: Int(64) @block0
+    value v40: Int(64) @block0
+    value v41: Int(64) @block0
+    value v42: TypeRef("?") @block0
+    value v43: Bool @block0
+    value v44: Int(64) @block0
+    value v45: Int(64) @block0
+    value v46: Generic { name: "Vec", args: [Int(64)] } @block0
+    value v47: Generic { name: "String", args: [] } @block0
+    value v48: Generic { name: "Vec", args: [Int(64)] } @block0
+    value v49: Int(64) @block0
+    value v50: Int(64) @block0
+    value v51: TypeRef("?") @block0
+    value v52: Bool @block0
+    value v53: TypeRef("?") @block0
+    value v54: Int(64) @block0
+    value v55: Generic { name: "Vec", args: [Int(64)] } @block0
+    value v56: Int(64) @block0
+    value v57: Generic { name: "String", args: [] } @block0
+    value v58: Generic { name: "Vec", args: [Int(64)] } @block0
+    value v59: Int(64) @block0
+    value v60: Generic { name: "Vec", args: [Int(64)] } @block0
+    value v61: Int(64) @block0
+    value v62: TypeRef("?") @block0
+    value v63: Bool @block0
+    value v64: Int(64) @block0
+    value v65: Int(64) @block0
+    value v66: Generic { name: "Vec", args: [Int(64)] } @block0
+    value v67: Generic { name: "String", args: [] } @block0
+    value v68: TypeRef("?") @block0
+    value v69: Bool @block0
+    value v70: TypeRef("?") @block0
+    value v71: Int(64) @block0
+    value v72: Generic { name: "Vec", args: [Int(64)] } @block0
+    value v73: Int(64) @block0
+    value v74: Generic { name: "String", args: [] } @block0
+    value v75: Generic { name: "Vec", args: [Int(64)] } @block0
+    value v76: Int(64) @block0
+    value v77: Generic { name: "Vec", args: [Int(64)] } @block0
+    value v78: Int(64) @block0
+    value v79: TypeRef("?") @block0
+    value v80: Bool @block0
+    value v81: Int(64) @block0
+    value v82: Int(64) @block0
+    value v83: Generic { name: "Vec", args: [Int(64)] } @block0
+    value v84: Generic { name: "String", args: [] } @block0
+    value v85: TypeRef("?") @block0
+    value v86: Bool @block0
+    value v87: TypeRef("?") @block0
+    value v88: Int(64) @block0
+    value v89: Generic { name: "Vec", args: [Int(64)] } @block0
+    value v90: Int(64) @block0
+    value v91: Generic { name: "String", args: [] } @block0
+    value v92: Int(64) @block0
+    value v93: Int(64) @block0
+    value v94: Int(64) @block0
+    value v95: Int(64) @block0
+    value v96: Generic { name: "Vec", args: [Int(64)] } @block0
+    value v97: Int(64) @block0
+    value v98: Int(64) @block0
+    value v99: TypeRef("?") @block0
+    value v100: Bool @block0
+    value v101: TypeRef("?") @block0
+    value v102: Int(64) @block0
+    value v103: Generic { name: "Vec", args: [Int(64)] } @block0
+    value v104: Int(64) @block0
+    value v105: Generic { name: "String", args: [] } @block0
+    value v106: Generic { name: "Vec", args: [Int(64)] } @block0
+    value v107: Int(64) @block0
+    value v108: Int(64) @block0
+    value v109: TypeRef("?") @block0
+    value v110: Bool @block0
+    value v111: TypeRef("?") @block0
+    value v112: Int(64) @block0
+    value v113: Generic { name: "Vec", args: [Int(64)] } @block0
+    value v114: Int(64) @block0
+    value v115: Generic { name: "String", args: [] } @block0
+    Load v0 <- int(1)
+    Load v1 <- int(2)
+    Load v2 <- int(3)
+    AllocFixedArray %0 count=3
+    Load v3 <- int(0)
+    StoreIndex %0[v3] <- v0
+    Load v4 <- int(1)
+    StoreIndex %0[v4] <- v1
+    Load v5 <- int(2)
+    StoreIndex %0[v5] <- v2
+    Load v6 <- %0
+    Load v7 <- int(1)
+    Load v8 <- int(99)
+    StoreIndex v6[v7] <- v8
+    Load v13 <- %0
+    Load v14 <- int(0)
+    LoadIndex v11 <- v13[v14]
+    Load v12 <- int(1)
+    Eq v10 <- v11, v12
+    Load v15 <- string("Array write leaves other slots intact")
+    Call v9 <- string("std.assert.assert") [v10, v15] (def=d0)
+    Load v20 <- %0
+    Load v21 <- int(1)
+    LoadIndex v18 <- v20[v21]
+    Load v19 <- int(99)
+    Eq v17 <- v18, v19
+    Load v22 <- string("Array index write")
+    Call v16 <- string("std.assert.assert") [v17, v22] (def=d0)
+    Load v27 <- %0
+    Load v28 <- int(2)
+    LoadIndex v25 <- v27[v28]
+    Load v26 <- int(3)
+    Eq v24 <- v25, v26
+    Load v29 <- string("Array write preserves tail")
+    Call v23 <- string("std.assert.assert") [v24, v29] (def=d0)
+    Load v34 <- %0
+    StringLength v32 <- v34
+    Load v33 <- int(3)
+    Eq v31 <- v32, v33
+    Load v35 <- string("Array length")
+    Call v30 <- string("std.assert.assert") [v31, v35] (def=d0)
+    AllocArray %1 size=int(3), elem=int(1)
+    Load v36 <- int(10)
+    Load v37 <- int(0)
+    StoreIndex %1[v37] <- v36
+    Load v38 <- int(20)
+    Load v39 <- int(1)
+    StoreIndex %1[v39] <- v38
+    Load v40 <- int(30)
+    Load v41 <- int(2)
+    StoreIndex %1[v41] <- v40
+    Load v46 <- %1
+    StringLength v44 <- v46
+    Load v45 <- int(3)
+    Eq v43 <- v44, v45
+    Load v47 <- string("Vec length from literal")
+    Call v42 <- string("std.assert.assert") [v43, v47] (def=d0)
+    Load v48 <- %1
+    Load v49 <- int(0)
+    Load v50 <- int(11)
+    StoreIndex v48[v49] <- v50
+    Load v55 <- %1
+    Load v56 <- int(0)
+    LoadIndex v53 <- v55[v56]
+    Load v54 <- int(11)
+    Eq v52 <- v53, v54
+    Load v57 <- string("Vec index write")
+    Call v51 <- string("std.assert.assert") [v52, v57] (def=d0)
+    Load v58 <- %1
+    Load v60 <- %1
+    StringLength v59 <- v60
+    Load v61 <- int(40)
+    StoreIndex v58[v59] <- v61
+    Load v66 <- %1
+    StringLength v64 <- v66
+    Load v65 <- int(4)
+    Eq v63 <- v64, v65
+    Load v67 <- string("Vec append grows length")
+    Call v62 <- string("std.assert.assert") [v63, v67] (def=d0)
+    Load v72 <- %1
+    Load v73 <- int(3)
+    LoadIndex v70 <- v72[v73]
+    Load v71 <- int(40)
+    Eq v69 <- v70, v71
+    Load v74 <- string("Vec appended value readable")
+    Call v68 <- string("std.assert.assert") [v69, v74] (def=d0)
+    Load v75 <- %1
+    Load v77 <- %1
+    StringLength v76 <- v77
+    Load v78 <- int(50)
+    StoreIndex v75[v76] <- v78
+    Load v83 <- %1
+    StringLength v81 <- v83
+    Load v82 <- int(5)
+    Eq v80 <- v81, v82
+    Load v84 <- string("Vec second append")
+    Call v79 <- string("std.assert.assert") [v80, v84] (def=d0)
+    Load v89 <- %1
+    Load v90 <- int(4)
+    LoadIndex v87 <- v89[v90]
+    Load v88 <- int(50)
+    Eq v86 <- v87, v88
+    Load v91 <- string("Vec second appended value")
+    Call v85 <- string("std.assert.assert") [v86, v91] (def=d0)
+    AllocArray %2 size=int(2), elem=int(1)
+    Load v92 <- int(100)
+    Load v93 <- int(0)
+    StoreIndex %2[v93] <- v92
+    Load v94 <- int(200)
+    Load v95 <- int(1)
+    StoreIndex %2[v95] <- v94
+    Load v96 <- %2
+    Load v97 <- int(1)
+    Load v98 <- int(201)
+    StoreIndex v96[v97] <- v98
+    Load v103 <- %2
+    Load v104 <- int(1)
+    LoadIndex v101 <- v103[v104]
+    Load v102 <- int(201)
+    Eq v100 <- v101, v102
+    Load v105 <- string("List index write")
+    Call v99 <- string("std.assert.assert") [v100, v105] (def=d0)
+    Load %3 <- int(2)
+    Load v106 <- %2
+    Load v107 <- %3
+    Load v108 <- int(202)
+    StoreIndex v106[v107] <- v108
+    Load v113 <- %2
+    Load v114 <- int(2)
+    LoadIndex v111 <- v113[v114]
+    Load v112 <- int(202)
+    Eq v110 <- v111, v112
+    Load v115 <- string("List variable index write appends")
+    Call v109 <- string("std.assert.assert") [v110, v115] (def=d0)
+    Drop %0
     Drop %3
     Drop %2
     Drop %1
-    Drop %0
-    Ret %4
+    Ret v109
   init (locals=0)
     Call %0 <- string("main") [] (def=d1)

@@ -55,7 +55,7 @@ impl AstToIrGenerator {
         &mut self,
         condition: &ast::Expr,
         body: &ast::Block,
-        result_reg: usize,
+        result_reg: Operand,
         instructions: &mut Vec<Instruction>,
         constants: &mut Vec<ConstValue>,
     ) -> Result<(), Diagnostic> {
@@ -76,7 +76,7 @@ impl AstToIrGenerator {
         // block_value_ty 给的是体尾表达式的类型（静态近似），它对「循环是否至少
         // 执行一次」无判定能力（需要数据流/可证性分析），故本层不擅自改动它。
         instructions.push(Instruction::Load {
-            dst: Operand::Local(result_reg),
+            dst: result_reg.clone(),
             src: Operand::Const(ConstValue::Void),
             span: self.cur_span,
         });
@@ -88,12 +88,12 @@ impl AstToIrGenerator {
 
         // Evaluate condition
         let cond_reg = self.next_temp_reg();
-        self.generate_expr_ir(condition, cond_reg, instructions, constants)?;
+        self.generate_expr_ir(condition, cond_reg.clone(), instructions, constants)?;
 
         // Jump to end if false
         let jump_end_idx = instructions.len();
         instructions.push(Instruction::JmpIfNot {
-            cond: Operand::Local(cond_reg),
+            cond: cond_reg.clone(),
             target: 0,
             span: self.cur_span,
         }); // Placeholder
@@ -133,7 +133,7 @@ impl AstToIrGenerator {
         #[allow(unused_variables)] var_mut: bool,
         iterable: &ast::Expr,
         body: &ast::Block,
-        result_reg: Option<usize>,
+        result_reg: Option<Operand>,
         for_span: Span,
         instructions: &mut Vec<Instruction>,
         constants: &mut Vec<ConstValue>,
@@ -181,7 +181,7 @@ impl AstToIrGenerator {
         &mut self,
         left: &ast::Expr,
         right: &ast::Expr,
-        result_reg: usize,
+        result_reg: Operand,
         _span: Span,
         instructions: &mut Vec<Instruction>,
         constants: &mut Vec<ConstValue>,
@@ -202,13 +202,13 @@ impl AstToIrGenerator {
         let start_reg = self.next_temp_reg();
         let end_reg = self.next_temp_reg();
         let step_reg = self.next_temp_reg();
-        self.generate_expr_ir(start_expr, start_reg, instructions, constants)?;
-        self.generate_expr_ir(end_expr, end_reg, instructions, constants)?;
+        self.generate_expr_ir(start_expr, start_reg.clone(), instructions, constants)?;
+        self.generate_expr_ir(end_expr, end_reg.clone(), instructions, constants)?;
         if let Some(step) = step_expr {
-            self.generate_expr_ir(step, step_reg, instructions, constants)?;
+            self.generate_expr_ir(step, step_reg.clone(), instructions, constants)?;
         } else {
             instructions.push(Instruction::Load {
-                dst: Operand::Local(step_reg),
+                dst: step_reg.clone(),
                 src: Operand::Const(ConstValue::Int(1)),
                 span: self.cur_span,
             });
@@ -220,10 +220,10 @@ impl AstToIrGenerator {
 
         // #302：正式运行时身份——不再借 Tuple 外壳
         instructions.push(Instruction::NewRange {
-            dst: Operand::Local(result_reg),
-            start: Operand::Local(start_reg),
-            end: Operand::Local(end_reg),
-            step: Operand::Local(step_reg),
+            dst: result_reg.clone(),
+            start: start_reg.clone(),
+            end: end_reg.clone(),
+            step: step_reg.clone(),
             span: self.cur_span,
         });
         Ok(())
@@ -237,7 +237,7 @@ impl AstToIrGenerator {
         &mut self,
         elem: &ast::Expr,
         container: &ast::Expr,
-        result_reg: usize,
+        result_reg: Operand,
         span: Span,
         instructions: &mut Vec<Instruction>,
         constants: &mut Vec<ConstValue>,
@@ -254,22 +254,22 @@ impl AstToIrGenerator {
         {
             let elem_reg = self.next_temp_reg();
             let container_reg = self.next_temp_reg();
-            self.generate_expr_ir(elem, elem_reg, instructions, constants)?;
-            self.generate_expr_ir(container, container_reg, instructions, constants)?;
+            self.generate_expr_ir(elem, elem_reg.clone(), instructions, constants)?;
+            self.generate_expr_ir(container, container_reg.clone(), instructions, constants)?;
             instructions.push(Instruction::Call {
-                dst: Some(Operand::Local(result_reg)),
+                dst: Some(result_reg.clone()),
                 func: Operand::Const(ConstValue::String("std.range.contains".to_string())),
-                args: vec![Operand::Local(container_reg), Operand::Local(elem_reg)],
+                args: vec![container_reg.clone(), elem_reg.clone()],
                 span,
                 def: None,
             });
             // #316：contains 已 Result(Bool, Error) 化——`x in r` 糖降级统一解包，
             // Err（动态 step=0）分支显式失败（Bool 谓词无可传播的 Result）
             self.emit_result_unwrap_or_abort(
-                result_reg,
-                result_reg,
+                result_reg.clone(),
+                result_reg.clone(),
                 "std.range.abort_invalid_step",
-                Operand::Local(container_reg),
+                container_reg.clone(),
                 span,
                 instructions,
             );
@@ -280,12 +280,12 @@ impl AstToIrGenerator {
         {
             let elem_reg = self.next_temp_reg();
             let container_reg = self.next_temp_reg();
-            self.generate_expr_ir(elem, elem_reg, instructions, constants)?;
-            self.generate_expr_ir(container, container_reg, instructions, constants)?;
+            self.generate_expr_ir(elem, elem_reg.clone(), instructions, constants)?;
+            self.generate_expr_ir(container, container_reg.clone(), instructions, constants)?;
             instructions.push(Instruction::Contains {
-                dst: Operand::Local(result_reg),
-                elem: Operand::Local(elem_reg),
-                container: Operand::Local(container_reg),
+                dst: result_reg.clone(),
+                elem: elem_reg.clone(),
+                container: container_reg.clone(),
                 span,
             });
         }
@@ -300,8 +300,8 @@ impl AstToIrGenerator {
     /// （失败点在用户消费处，消息明确，绝不静默续跑/死循环）。
     fn emit_result_unwrap_or_abort(
         &mut self,
-        result_reg: usize,
-        dst_reg: usize,
+        result_reg: Operand,
+        dst_reg: Operand,
         abort_fn: &str,
         abort_arg: Operand,
         span: Span,
@@ -309,35 +309,35 @@ impl AstToIrGenerator {
     ) {
         let tag_reg = self.next_temp_reg();
         instructions.push(Instruction::VariantTag {
-            dst: Operand::Local(tag_reg),
-            obj: Operand::Local(result_reg),
+            dst: tag_reg.clone(),
+            obj: result_reg.clone(),
             group: "Result".to_string(),
             span,
         });
         let ok_const = self.next_temp_reg();
         instructions.push(Instruction::Load {
-            dst: Operand::Local(ok_const),
+            dst: ok_const.clone(),
             src: Operand::Const(ConstValue::Int(0)),
             span: self.cur_span,
         });
         let eq_reg = self.next_temp_reg();
         instructions.push(Instruction::Eq {
-            dst: Operand::Local(eq_reg),
-            lhs: Operand::Local(tag_reg),
-            rhs: Operand::Local(ok_const),
+            dst: eq_reg.clone(),
+            lhs: tag_reg.clone(),
+            rhs: ok_const.clone(),
             span: self.cur_span,
         });
         // variant != 0（Err）→ 跳到显式失败
         let is_err_idx = instructions.len();
         instructions.push(Instruction::JmpIfNot {
-            cond: Operand::Local(eq_reg),
+            cond: eq_reg.clone(),
             target: 0,
             span: self.cur_span,
         });
         // Ok 路径：payload 原地解包为消费值
         instructions.push(Instruction::VariantPayload {
-            dst: Operand::Local(dst_reg),
-            obj: Operand::Local(result_reg),
+            dst: dst_reg.clone(),
+            obj: result_reg.clone(),
             group: "Result".to_string(),
             span,
         });
@@ -349,7 +349,7 @@ impl AstToIrGenerator {
         // Err 路径：abort native 必返 ExecutorError，后续指令不可达
         let err_target = instructions.len();
         instructions[is_err_idx] = Instruction::JmpIfNot {
-            cond: Operand::Local(eq_reg),
+            cond: eq_reg.clone(),
             target: err_target,
             span: self.cur_span,
         };
@@ -375,7 +375,7 @@ impl AstToIrGenerator {
         var_name: &str,
         iterable: &ast::Expr,
         body: &ast::Block,
-        result_reg: Option<usize>,
+        result_reg: Option<Operand>,
         for_span: Span,
         instructions: &mut Vec<Instruction>,
         constants: &mut Vec<ConstValue>,
@@ -385,9 +385,9 @@ impl AstToIrGenerator {
         // #409：零迭代兜底——先给值寄存器写 Void（等价于 block_value_ty 的
         // 「空块 ⇒ Void」分支），随后每轮由体尾表达式覆写。与 while 同款语义
         //（零迭代取 Void 的依据见 generate_while_expr_ir 的注释）。
-        if let Some(reg) = result_reg {
+        if let Some(reg) = result_reg.clone() {
             instructions.push(Instruction::Load {
-                dst: Operand::Local(reg),
+                dst: reg.clone(),
                 src: Operand::Const(ConstValue::Void),
                 span: self.cur_span,
             });
@@ -395,7 +395,7 @@ impl AstToIrGenerator {
 
         // 1. 计算可迭代对象
         let iterable_reg = self.next_temp_reg();
-        self.generate_expr_ir(iterable, iterable_reg, instructions, constants)?;
+        self.generate_expr_ir(iterable, iterable_reg.clone(), instructions, constants)?;
 
         // 1.5 #302：按静态类型派发协议函数名（Range → std.range.*，其余 → std.list.*）
         let is_range = self
@@ -422,9 +422,9 @@ impl AstToIrGenerator {
         // 2. 创建迭代器: iterator = iter(iterable)
         let iterator_reg = self.next_temp_reg();
         instructions.push(Instruction::Call {
-            dst: Some(Operand::Local(iterator_reg)),
+            dst: Some(iterator_reg.clone()),
             func: Operand::Const(ConstValue::String(iter_fn.clone())),
-            args: vec![Operand::Local(iterable_reg)],
+            args: vec![iterable_reg.clone()],
             span: for_span,
             def: None,
         });
@@ -432,17 +432,17 @@ impl AstToIrGenerator {
         // Err（动态 step=0）分支显式失败（for 循环无可传播的 Result，且绝不死循环）
         if is_range {
             self.emit_result_unwrap_or_abort(
-                iterator_reg,
-                iterator_reg,
+                iterator_reg.clone(),
+                iterator_reg.clone(),
                 "std.range.abort_invalid_step",
-                Operand::Local(iterable_reg),
+                iterable_reg.clone(),
                 for_span,
                 instructions,
             );
         }
 
-        // 3. 注册循环变量
-        let var_reg = self.next_temp_reg();
+        // 3. 注册循环变量（具名变量：Local 槽，不产生 SSA 值）
+        let var_reg = self.next_local_slot();
         self.register_local(var_name, var_reg);
 
         // 4. 循环开始
@@ -453,9 +453,9 @@ impl AstToIrGenerator {
         // 5. 检查是否有更多元素: has_more = has_next(iterator)
         let has_more_reg = self.next_temp_reg();
         instructions.push(Instruction::Call {
-            dst: Some(Operand::Local(has_more_reg)),
+            dst: Some(has_more_reg.clone()),
             func: Operand::Const(ConstValue::String(has_next_fn.to_string())),
-            args: vec![Operand::Local(iterator_reg)],
+            args: vec![iterator_reg.clone()],
             span: for_span,
             def: None,
         });
@@ -463,7 +463,7 @@ impl AstToIrGenerator {
         // 6. 如果没有更多元素，跳转到结束
         let jump_end_idx = instructions.len();
         instructions.push(Instruction::JmpIfNot {
-            cond: Operand::Local(has_more_reg),
+            cond: has_more_reg.clone(),
             target: 0,
             span: self.cur_span,
         });
@@ -471,15 +471,15 @@ impl AstToIrGenerator {
         // 7. 获取下一个元素: var = next(iterator)
         let element_reg = self.next_temp_reg();
         instructions.push(Instruction::Call {
-            dst: Some(Operand::Local(element_reg)),
+            dst: Some(element_reg.clone()),
             func: Operand::Const(ConstValue::String(next_fn.to_string())),
-            args: vec![Operand::Local(iterator_reg)],
+            args: vec![iterator_reg.clone()],
             span: for_span,
             def: None,
         });
         instructions.push(Instruction::Store {
             dst: Operand::Local(var_reg),
-            src: Operand::Local(element_reg),
+            src: element_reg.clone(),
             span: for_span,
         });
 
@@ -533,7 +533,7 @@ impl AstToIrGenerator {
         _var_mut: bool,
         iterable: &ast::Expr,
         body: &ast::Block,
-        result_reg: usize,
+        result_reg: Operand,
         span: Span,
         instructions: &mut Vec<Instruction>,
         constants: &mut Vec<ConstValue>,
@@ -562,7 +562,7 @@ impl AstToIrGenerator {
         // 3. 创建空列表寄存器，用于收集闭包
         let closures_list_reg = self.next_temp_reg();
         instructions.push(Instruction::AllocArray {
-            dst: Operand::Local(closures_list_reg),
+            dst: closures_list_reg.clone(),
             size: Operand::Const(ConstValue::Int(0)),
             elem_size: Operand::Const(ConstValue::Int(1)),
             span: self.cur_span,
@@ -570,22 +570,22 @@ impl AstToIrGenerator {
 
         // 4. 计算可迭代对象
         let iterable_reg = self.next_temp_reg();
-        self.generate_expr_ir(iterable, iterable_reg, instructions, constants)?;
+        self.generate_expr_ir(iterable, iterable_reg.clone(), instructions, constants)?;
 
         // 5. 创建迭代器: iterator = iter(iterable)
         let iterator_reg = self.next_temp_reg();
         instructions.push(Instruction::Call {
-            dst: Some(Operand::Local(iterator_reg)),
+            dst: Some(iterator_reg.clone()),
             func: Operand::Const(ConstValue::String(
                 self.resolver().resolve_namespace("list", &["iter"]),
             )),
-            args: vec![Operand::Local(iterable_reg)],
+            args: vec![iterable_reg.clone()],
             span,
             def: None,
         });
 
-        // 6. 注册循环变量
-        let var_reg = self.next_temp_reg();
+        // 6. 注册循环变量（具名变量：Local 槽，不产生 SSA 值）
+        let var_reg = self.next_local_slot();
         self.register_local(var_name, var_reg);
 
         // 7. 循环开始
@@ -594,9 +594,9 @@ impl AstToIrGenerator {
         // 8. has_next?
         let has_more_reg = self.next_temp_reg();
         instructions.push(Instruction::Call {
-            dst: Some(Operand::Local(has_more_reg)),
+            dst: Some(has_more_reg.clone()),
             func: Operand::Const(ConstValue::String("std.list.has_next".to_string())),
-            args: vec![Operand::Local(iterator_reg)],
+            args: vec![iterator_reg.clone()],
             span,
             def: None,
         });
@@ -604,7 +604,7 @@ impl AstToIrGenerator {
         // 9. 如果没有更多元素，跳转到结束
         let jump_end_idx = instructions.len();
         instructions.push(Instruction::JmpIfNot {
-            cond: Operand::Local(has_more_reg),
+            cond: has_more_reg.clone(),
             target: 0,
             span: self.cur_span,
         });
@@ -612,15 +612,15 @@ impl AstToIrGenerator {
         // 10. 获取下一个元素: var = next(iterator)
         let element_reg = self.next_temp_reg();
         instructions.push(Instruction::Call {
-            dst: Some(Operand::Local(element_reg)),
+            dst: Some(element_reg.clone()),
             func: Operand::Const(ConstValue::String("std.list.next".to_string())),
-            args: vec![Operand::Local(iterator_reg)],
+            args: vec![iterator_reg.clone()],
             span,
             def: None,
         });
         instructions.push(Instruction::Store {
             dst: Operand::Local(var_reg),
-            src: Operand::Local(element_reg),
+            src: element_reg.clone(),
             span,
         });
 
@@ -628,7 +628,7 @@ impl AstToIrGenerator {
         //     迭代变量作为参数传入，当前值通过 env 捕获
         let closure_reg = self.next_temp_reg();
         // 捕获迭代变量的当前值（element_reg 在 next() 返回后被设置）
-        self.pending_env_vars = vec![Operand::Local(element_reg)];
+        self.pending_env_vars = vec![element_reg.clone()];
         let lambda = ast::Expr::Lambda {
             params: vec![ast::Param {
                 name: var_name.to_string(),
@@ -640,16 +640,13 @@ impl AstToIrGenerator {
             body: Box::new(body.clone()),
             span,
         };
-        self.generate_expr_ir(&lambda, closure_reg, instructions, constants)?;
+        self.generate_expr_ir(&lambda, closure_reg.clone(), instructions, constants)?;
 
         // 12. 将闭包推入列表: push(closures, closure)
         instructions.push(Instruction::Call {
-            dst: Some(Operand::Local(closures_list_reg)),
+            dst: Some(closures_list_reg.clone()),
             func: Operand::Const(ConstValue::String("std.list.push".to_string())),
-            args: vec![
-                Operand::Local(closures_list_reg),
-                Operand::Local(closure_reg),
-            ],
+            args: vec![closures_list_reg.clone(), closure_reg.clone()],
             span,
             def: None,
         });
@@ -686,9 +683,9 @@ impl AstToIrGenerator {
         // 16. 生成 SpawnFromList 指令
         //     closures_list 参数是闭包列表寄存器（运行时动态收集）
         instructions.push(Instruction::SpawnFromList {
-            closures_list: Operand::Local(closures_list_reg),
+            closures_list: closures_list_reg.clone(),
             plan,
-            result: Operand::Local(result_reg),
+            result: result_reg.clone(),
             span: self.cur_span,
         });
 

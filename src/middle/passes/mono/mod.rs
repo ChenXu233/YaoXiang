@@ -380,6 +380,19 @@ impl Monomorphizer {
         format!("{base}({rendered})")
     }
 
+    /// 操作数的物理寄存器槽：`Local` 自身；`Value` 查 7b.2 的过渡映射
+    /// `FunctionBody::Code.value_slots`（mono 判据还原槽身份的唯一来源）。
+    fn operand_slot(
+        func: &FunctionIR,
+        op: &Operand,
+    ) -> Option<usize> {
+        match op {
+            Operand::Local(slot) => Some(*slot),
+            Operand::Value(id) => func.value_slots().get(id.0 as usize).copied(),
+            _ => None,
+        }
+    }
+
     /// 柯里包装体的**形状**判据：`[MakeClosure{dst, env}, Ret(dst)]`，且 `env`
     /// 恰是本帧槽位的前缀（`0..env.len()`，顺序不变）、`dst == env.len()`。
     ///
@@ -398,18 +411,22 @@ impl Monomorphizer {
             return None;
         }
         let [Instruction::MakeClosure {
-            dst: Operand::Local(dst),
+            dst,
             func: target,
             env,
             ..
         }, Instruction::Ret {
-            value: Some(Operand::Local(ret)),
-            ..
+            value: Some(ret), ..
         }] = blocks[0].instructions.as_slice()
         else {
             return None;
         };
-        if dst != ret || *dst != env.len() {
+        if dst != ret {
+            return None;
+        }
+        // 目标闭包槽位 == env 槽数（7b.2 前 dst 是临时 Local 槽，7b.2 起是
+        // Operand::Value——按 `value_slots` 还原物理槽，判据语义不变）。
+        if Self::operand_slot(func, dst) != Some(env.len()) {
             return None;
         }
         let contiguous = env
@@ -827,7 +844,13 @@ impl Monomorphizer {
         func: &mut FunctionIR,
         plan: &ConstErasePlan,
     ) {
-        let FunctionBody::Code { blocks, locals, .. } = &mut func.body else {
+        let FunctionBody::Code {
+            blocks,
+            locals,
+            value_slots,
+            ..
+        } = &mut func.body
+        else {
             return;
         };
         if blocks.is_empty() {
@@ -882,6 +905,20 @@ impl Monomorphizer {
                 span: Span::default(),
             });
             replace.insert(*slot, Operand::Local(temp));
+        }
+        // 7b.2：值 → 槽映射随槽位密排一起重映射（值槽是临时槽，必在保留集；
+        // 槽位删改后不同步会让 codegen 写错槽）。
+        let slot_remap: HashMap<usize, usize> = replace
+            .iter()
+            .filter_map(|(old, op)| match op {
+                Operand::Local(new) => Some((*old, *new)),
+                _ => None,
+            })
+            .collect();
+        for slot in value_slots.iter_mut() {
+            if let Some(new) = slot_remap.get(slot) {
+                *slot = *new;
+            }
         }
         // 形参位重排（Arg 是**实参下标**，不是帧槽位，故单独一张表；本轮擦除面
         // 的柯里体不用 Arg，留着是为了同一处不出现第二份位置语义）
@@ -1307,6 +1344,23 @@ impl Monomorphizer {
             _ => Vec::new(),
         };
 
+        // 7b.2：值表的类型随特化替换；定义块与槽映射原样投影（块未重编号）。
+        let new_values: Vec<crate::middle::ir::ir::ValueInfo> = match &generic.body {
+            FunctionBody::Code { values, .. } => values
+                .iter()
+                .map(|info| crate::middle::ir::ir::ValueInfo {
+                    ty: substitute_heads(&self.substitute_single_type(&info.ty, &type_map)),
+                    debug_name: info.debug_name.clone(),
+                    defining_block: info.defining_block,
+                })
+                .collect(),
+            _ => Vec::new(),
+        };
+        let new_value_slots: Vec<usize> = match &generic.body {
+            FunctionBody::Code { value_slots, .. } => value_slots.clone(),
+            _ => Vec::new(),
+        };
+
         let new_entry = match &generic.body {
             FunctionBody::Code { entry, .. } => *entry,
             _ => 0,
@@ -1385,7 +1439,8 @@ impl Monomorphizer {
                 blocks,
                 entry: new_entry,
                 locals: new_locals,
-                values: Vec::new(),
+                values: new_values,
+                value_slots: new_value_slots,
             },
         }))
     }

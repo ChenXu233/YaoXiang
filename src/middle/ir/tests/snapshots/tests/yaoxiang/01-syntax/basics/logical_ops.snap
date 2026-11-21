@@ -2,124 +2,201 @@ module
   fn main() -> Void
     slot[0] p : Int(64) @depth1
     locals_total=6
-    Load %0 <- bool(true)
-    JmpIfNot %0 -> instr(4)
-    Load %1 <- bool(true)
+    values_total=76
+    value v0: TypeRef("?") @block0
+    value v1: Bool @block0
+    value v2: Bool @block0
+    value v3: Generic { name: "String", args: [] } @block0
+    value v4: TypeRef("?") @block0
+    value v5: Bool @block0
+    value v6: Bool @block0
+    value v7: Bool @block0
+    value v8: Generic { name: "String", args: [] } @block0
+    value v9: TypeRef("?") @block0
+    value v10: Bool @block0
+    value v11: Bool @block0
+    value v12: Bool @block0
+    value v13: Generic { name: "String", args: [] } @block0
+    value v14: TypeRef("?") @block0
+    value v15: Bool @block0
+    value v16: Bool @block0
+    value v17: Bool @block0
+    value v18: Generic { name: "String", args: [] } @block0
+    value v19: TypeRef("?") @block0
+    value v20: Bool @block0
+    value v21: Bool @block0
+    value v22: Generic { name: "String", args: [] } @block0
+    value v23: TypeRef("?") @block0
+    value v24: Bool @block0
+    value v25: Bool @block0
+    value v26: Generic { name: "String", args: [] } @block0
+    value v27: TypeRef("?") @block0
+    value v28: Bool @block0
+    value v29: Bool @block0
+    value v30: Generic { name: "String", args: [] } @block0
+    value v31: TypeRef("?") @block0
+    value v32: Bool @block0
+    value v33: Bool @block0
+    value v34: Bool @block0
+    value v35: Generic { name: "String", args: [] } @block0
+    value v36: TypeRef("?") @block0
+    value v37: Bool @block0
+    value v38: Bool @block0
+    value v39: Int(64) @block0
+    value v40: Int(64) @block0
+    value v41: Generic { name: "String", args: [] } @block0
+    value v42: TypeRef("?") @block0
+    value v43: Bool @block0
+    value v44: Bool @block0
+    value v45: Bool @block0
+    value v46: Bool @block0
+    value v47: Generic { name: "String", args: [] } @block0
+    value v48: TypeRef("?") @block0
+    value v49: Bool @block0
+    value v50: Bool @block0
+    value v51: Bool @block0
+    value v52: Generic { name: "String", args: [] } @block0
+    value v53: TypeRef("?") @block0
+    value v54: Bool @block0
+    value v55: TypeRef("?") @block0
+    value v56: Generic { name: "String", args: [] } @block0
+    value v57: Generic { name: "String", args: [] } @block0
+    value v58: Bool @block0
+    value v59: Bool @block0
+    value v60: Generic { name: "String", args: [] } @block0
+    value v61: Generic { name: "String", args: [] } @block0
+    value v62: TypeRef("?") @block0
+    value v63: Bool @block0
+    value v64: TypeRef("?") @block0
+    value v65: Generic { name: "String", args: [] } @block0
+    value v66: Generic { name: "String", args: [] } @block0
+    value v67: Bool @block0
+    value v68: Bool @block0
+    value v69: Generic { name: "String", args: [] } @block0
+    value v70: Generic { name: "String", args: [] } @block0
+    value v71: TypeRef("?") @block0
+    value v72: Bool @block0
+    value v73: TypeRef("?") @block0
+    value v74: Generic { name: "String", args: [] } @block0
+    value v75: Generic { name: "String", args: [] } @block0
+    Load v2 <- bool(true)
+    JmpIfNot v2 -> instr(4)
+    Load v1 <- bool(true)
     Jmp -> instr(5)
-    Load %1 <- bool(false)
-    Load %2 <- string("and tt")
-    Call %3 <- string("std.assert.assert") [%1, %2] (def=d0)
-    Load %2 <- bool(true)
-    JmpIfNot %2 -> instr(11)
-    Load %0 <- bool(false)
+    Load v1 <- bool(false)
+    Load v3 <- string("and tt")
+    Call v0 <- string("std.assert.assert") [v1, v3] (def=d0)
+    Load v7 <- bool(true)
+    JmpIfNot v7 -> instr(11)
+    Load v6 <- bool(false)
     Jmp -> instr(12)
-    Load %0 <- bool(false)
-    Not %1 <- %0
-    Load %4 <- string("and tf")
-    Call %3 <- string("std.assert.assert") [%1, %4] (def=d0)
-    Load %2 <- bool(false)
-    JmpIfNot %2 -> instr(19)
-    Load %0 <- bool(true)
+    Load v6 <- bool(false)
+    Not v5 <- v6
+    Load v8 <- string("and tf")
+    Call v4 <- string("std.assert.assert") [v5, v8] (def=d0)
+    Load v12 <- bool(false)
+    JmpIfNot v12 -> instr(19)
+    Load v11 <- bool(true)
     Jmp -> instr(20)
-    Load %0 <- bool(false)
-    Not %1 <- %0
-    Load %4 <- string("and ft")
-    Call %3 <- string("std.assert.assert") [%1, %4] (def=d0)
-    Load %2 <- bool(false)
-    JmpIfNot %2 -> instr(27)
-    Load %0 <- bool(false)
+    Load v11 <- bool(false)
+    Not v10 <- v11
+    Load v13 <- string("and ft")
+    Call v9 <- string("std.assert.assert") [v10, v13] (def=d0)
+    Load v17 <- bool(false)
+    JmpIfNot v17 -> instr(27)
+    Load v16 <- bool(false)
     Jmp -> instr(28)
-    Load %0 <- bool(false)
-    Not %1 <- %0
-    Load %4 <- string("and ff")
-    Call %3 <- string("std.assert.assert") [%1, %4] (def=d0)
-    Load %0 <- bool(true)
-    JmpIf %0 -> instr(35)
-    Load %1 <- bool(true)
+    Load v16 <- bool(false)
+    Not v15 <- v16
+    Load v18 <- string("and ff")
+    Call v14 <- string("std.assert.assert") [v15, v18] (def=d0)
+    Load v21 <- bool(true)
+    JmpIf v21 -> instr(35)
+    Load v20 <- bool(true)
     Jmp -> instr(36)
-    Load %1 <- bool(true)
-    Load %2 <- string("or tt")
-    Call %3 <- string("std.assert.assert") [%1, %2] (def=d0)
-    Load %0 <- bool(true)
-    JmpIf %0 -> instr(42)
-    Load %1 <- bool(false)
+    Load v20 <- bool(true)
+    Load v22 <- string("or tt")
+    Call v19 <- string("std.assert.assert") [v20, v22] (def=d0)
+    Load v25 <- bool(true)
+    JmpIf v25 -> instr(42)
+    Load v24 <- bool(false)
     Jmp -> instr(43)
-    Load %1 <- bool(true)
-    Load %2 <- string("or tf")
-    Call %3 <- string("std.assert.assert") [%1, %2] (def=d0)
-    Load %0 <- bool(false)
-    JmpIf %0 -> instr(49)
-    Load %1 <- bool(true)
+    Load v24 <- bool(true)
+    Load v26 <- string("or tf")
+    Call v23 <- string("std.assert.assert") [v24, v26] (def=d0)
+    Load v29 <- bool(false)
+    JmpIf v29 -> instr(49)
+    Load v28 <- bool(true)
     Jmp -> instr(50)
-    Load %1 <- bool(true)
-    Load %2 <- string("or ft")
-    Call %3 <- string("std.assert.assert") [%1, %2] (def=d0)
-    Load %2 <- bool(false)
-    JmpIf %2 -> instr(56)
-    Load %0 <- bool(false)
+    Load v28 <- bool(true)
+    Load v30 <- string("or ft")
+    Call v27 <- string("std.assert.assert") [v28, v30] (def=d0)
+    Load v34 <- bool(false)
+    JmpIf v34 -> instr(56)
+    Load v33 <- bool(false)
     Jmp -> instr(57)
-    Load %0 <- bool(true)
-    Not %1 <- %0
-    Load %4 <- string("or ff")
-    Call %3 <- string("std.assert.assert") [%1, %4] (def=d0)
-    Load %2 <- int(3)
-    Load %4 <- int(4)
-    Eq %0 <- %2, %4
-    Not %1 <- %0
-    Load %5 <- string("!(3 == 4) ≡ true")
-    Call %3 <- string("std.assert.assert") [%1, %5] (def=d0)
-    Load %4 <- bool(true)
-    Not %0 <- %4
-    Load %2 <- bool(false)
-    Eq %1 <- %0, %2
-    Load %5 <- string("!true == false —— ! 紧绑定到操作数")
-    Call %3 <- string("std.assert.assert") [%1, %5] (def=d0)
-    Load %0 <- bool(true)
-    JmpIf %0 -> instr(80)
-    Load %2 <- bool(false)
-    JmpIfNot %2 -> instr(78)
-    Load %1 <- bool(false)
+    Load v33 <- bool(true)
+    Not v32 <- v33
+    Load v35 <- string("or ff")
+    Call v31 <- string("std.assert.assert") [v32, v35] (def=d0)
+    Load v39 <- int(3)
+    Load v40 <- int(4)
+    Eq v38 <- v39, v40
+    Not v37 <- v38
+    Load v41 <- string("!(3 == 4) ≡ true")
+    Call v36 <- string("std.assert.assert") [v37, v41] (def=d0)
+    Load v46 <- bool(true)
+    Not v44 <- v46
+    Load v45 <- bool(false)
+    Eq v43 <- v44, v45
+    Load v47 <- string("!true == false —— ! 紧绑定到操作数")
+    Call v42 <- string("std.assert.assert") [v43, v47] (def=d0)
+    Load v50 <- bool(true)
+    JmpIf v50 -> instr(80)
+    Load v51 <- bool(false)
+    JmpIfNot v51 -> instr(78)
+    Load v49 <- bool(false)
     Jmp -> instr(79)
-    Load %1 <- bool(false)
+    Load v49 <- bool(false)
     Jmp -> instr(81)
-    Load %1 <- bool(true)
-    Load %4 <- string("true or (false and false) ≡ true")
-    Call %3 <- string("std.assert.assert") [%1, %4] (def=d0)
-    Load %3 <- string("/tmp/yaoxiang_shortcircuit_and.yx")
-    Load %4 <- %3
-    Call %2 <- string("std.fs.exists") [%4] (def=d1)
-    Not %0 <- %2
-    Load %5 <- string("precondition: file absent")
-    Call %1 <- string("std.assert.assert") [%0, %5] (def=d0)
-    Drop %3
-    Load %0 <- bool(false)
-    JmpIfNot %0 -> instr(96)
-    Load %2 <- %3
-    Load %4 <- string("side effect")
-    Call %1 <- string("std.fs.write_file") [%2, %4] (def=d2)
+    Load v49 <- bool(true)
+    Load v52 <- string("true or (false and false) ≡ true")
+    Call v48 <- string("std.assert.assert") [v49, v52] (def=d0)
+    Load %0 <- string("/tmp/yaoxiang_shortcircuit_and.yx")
+    Load v56 <- %0
+    Call v55 <- string("std.fs.exists") [v56] (def=d1)
+    Not v54 <- v55
+    Load v57 <- string("precondition: file absent")
+    Call v53 <- string("std.assert.assert") [v54, v57] (def=d0)
+    Drop %0
+    Load v59 <- bool(false)
+    JmpIfNot v59 -> instr(96)
+    Load v60 <- %0
+    Load v61 <- string("side effect")
+    Call v58 <- string("std.fs.write_file") [v60, v61] (def=d2)
     Jmp -> instr(97)
-    Load %1 <- bool(false)
-    Drop %3
-    Load %4 <- %3
-    Call %2 <- string("std.fs.exists") [%4] (def=d1)
-    Not %0 <- %2
-    Load %5 <- string("and short-circuit skipped rhs")
-    Call %1 <- string("std.assert.assert") [%0, %5] (def=d0)
-    Drop %3
-    Load %0 <- bool(true)
-    JmpIf %0 -> instr(110)
-    Load %2 <- %3
-    Load %4 <- string("side effect")
-    Call %1 <- string("std.fs.write_file") [%2, %4] (def=d2)
+    Load v58 <- bool(false)
+    Drop %0
+    Load v65 <- %0
+    Call v64 <- string("std.fs.exists") [v65] (def=d1)
+    Not v63 <- v64
+    Load v66 <- string("and short-circuit skipped rhs")
+    Call v62 <- string("std.assert.assert") [v63, v66] (def=d0)
+    Drop %0
+    Load v68 <- bool(true)
+    JmpIf v68 -> instr(110)
+    Load v69 <- %0
+    Load v70 <- string("side effect")
+    Call v67 <- string("std.fs.write_file") [v69, v70] (def=d2)
     Jmp -> instr(111)
-    Load %1 <- bool(true)
-    Drop %3
-    Load %4 <- %3
-    Call %2 <- string("std.fs.exists") [%4] (def=d1)
-    Not %0 <- %2
-    Load %5 <- string("or short-circuit skipped rhs")
-    Call %1 <- string("std.assert.assert") [%0, %5] (def=d0)
-    Drop %3
-    Ret %1
+    Load v67 <- bool(true)
+    Drop %0
+    Load v74 <- %0
+    Call v73 <- string("std.fs.exists") [v74] (def=d1)
+    Not v72 <- v73
+    Load v75 <- string("or short-circuit skipped rhs")
+    Call v71 <- string("std.assert.assert") [v72, v75] (def=d0)
+    Drop %0
+    Ret v71
   init (locals=0)
     Call %0 <- string("main") [] (def=d3)

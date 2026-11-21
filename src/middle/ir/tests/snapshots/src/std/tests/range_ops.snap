@@ -12,275 +12,503 @@ module
     slot[14] chained : Int(64) @depth1
     slot[15] total : Int(64) @depth1
     locals_total=23
-    Load %0 <- int(1)
-    Load %1 <- int(6)
-    Load %2 <- int(1)
-    NewRange %3 <- %0, %1, %2
-    Load %0 <- int(0)
+    values_total=200
+    value v0: Int(64) @block0
+    value v1: Int(64) @block0
+    value v2: Int(64) @block0
+    value v3: Generic { name: "Range", args: [Int(64)] } @block0
+    value v4: TypeRef("?") @block0
+    value v5: TypeRef("?") @block0
+    value v6: Int(64) @block0
+    value v7: Bool @block0
+    value v8: TypeRef("?") @block0
+    value v9: TypeRef("?") @block0
+    value v10: Bool @block0
+    value v11: Int(64) @block0
+    value v12: Int(64) @block0
+    value v13: Int(64) @block0
+    value v14: Int(64) @block0
+    value v15: TypeRef("?") @block0
+    value v16: Bool @block0
+    value v17: Int(64) @block0
+    value v18: Int(64) @block0
+    value v19: Generic { name: "String", args: [] } @block0
+    value v20: TypeRef("?") @block0
+    value v21: Bool @block0
+    value v22: Int(64) @block0
+    value v23: Int(64) @block0
+    value v24: Generic { name: "String", args: [] } @block0
+    value v25: TypeRef("?") @block0
+    value v26: TypeRef("?") @block0
+    value v27: Int(64) @block0
+    value v28: Int(64) @block0
+    value v29: Int(64) @block0
+    value v30: TypeRef("?") @block0
+    value v31: TypeRef("?") @block0
+    value v32: Generic { name: "Iterator", args: [TypeRef("Any")] } @block0
+    value v33: Generic { name: "String", args: [] } @block0
+    value v34: TypeRef("?") @block0
+    value v35: TypeRef("?") @block0
+    value v36: Int(64) @block0
+    value v37: Int(64) @block0
+    value v38: Int(64) @block0
+    value v39: TypeRef("?") @block0
+    value v40: Bool @block0
+    value v41: TypeRef("?") @block0
+    value v42: Int(64) @block0
+    value v43: Generic { name: "Iterator", args: [TypeRef("Any")] } @block0
+    value v44: Generic { name: "String", args: [] } @block0
+    value v45: TypeRef("?") @block0
+    value v46: TypeRef("?") @block0
+    value v47: Int(64) @block0
+    value v48: Int(64) @block0
+    value v49: Int(64) @block0
+    value v50: Int(64) @block0
+    value v51: TypeRef("?") @block0
+    value v52: Bool @block0
+    value v53: TypeRef("?") @block0
+    value v54: Int(64) @block0
+    value v55: Generic { name: "Iterator", args: [TypeRef("Any")] } @block0
+    value v56: Generic { name: "String", args: [] } @block0
+    value v57: TypeRef("?") @block0
+    value v58: Bool @block0
+    value v59: TypeRef("?") @block0
+    value v60: Int(64) @block0
+    value v61: Generic { name: "Iterator", args: [TypeRef("Any")] } @block0
+    value v62: Generic { name: "String", args: [] } @block0
+    value v63: TypeRef("?") @block0
+    value v64: TypeRef("?") @block0
+    value v65: Generic { name: "Iterator", args: [TypeRef("Any")] } @block0
+    value v66: Generic { name: "String", args: [] } @block0
+    value v67: TypeRef("?") @block0
+    value v68: TypeRef("?") @block0
+    value v69: TypeRef("?") @block0
+    value v70: TypeRef("?") @block0
+    value v71: Int(64) @block0
+    value v72: Int(64) @block0
+    value v73: Int(64) @block0
+    value v74: Int(64) @block0
+    value v75: Generic { name: "String", args: [] } @block0
+    value v76: TypeRef("?") @block0
+    value v77: Bool @block0
+    value v78: TypeRef("?") @block0
+    value v79: TypeRef("?") @block0
+    value v80: TypeRef("?") @block0
+    value v81: Int(64) @block0
+    value v82: Int(64) @block0
+    value v83: Int(64) @block0
+    value v84: Int(64) @block0
+    value v85: Generic { name: "String", args: [] } @block0
+    value v86: TypeRef("?") @block0
+    value v87: TypeRef("?") @block0
+    value v88: TypeRef("?") @block0
+    value v89: TypeRef("?") @block0
+    value v90: Int(64) @block0
+    value v91: Int(64) @block0
+    value v92: Int(64) @block0
+    value v93: Int(64) @block0
+    value v94: Generic { name: "String", args: [] } @block0
+    value v95: TypeRef("?") @block0
+    value v96: Bool @block0
+    value v97: TypeRef("?") @block0
+    value v98: TypeRef("?") @block0
+    value v99: TypeRef("?") @block0
+    value v100: Int(64) @block0
+    value v101: Int(64) @block0
+    value v102: Int(64) @block0
+    value v103: Int(64) @block0
+    value v104: Generic { name: "String", args: [] } @block0
+    value v105: TypeRef("?") @block0
+    value v106: TypeRef("?") @block0
+    value v107: TypeRef("?") @block0
+    value v108: TypeRef("?") @block0
+    value v109: Int(64) @block0
+    value v110: Int(64) @block0
+    value v111: Int(64) @block0
+    value v112: Int(64) @block0
+    value v113: Int(64) @block0
+    value v114: Generic { name: "String", args: [] } @block0
+    value v115: TypeRef("?") @block0
+    value v116: Bool @block0
+    value v117: TypeRef("?") @block0
+    value v118: TypeRef("?") @block0
+    value v119: TypeRef("?") @block0
+    value v120: Int(64) @block0
+    value v121: Int(64) @block0
+    value v122: Int(64) @block0
+    value v123: Int(64) @block0
+    value v124: Int(64) @block0
+    value v125: Generic { name: "String", args: [] } @block0
+    value v126: TypeRef("?") @block0
+    value v127: TypeRef("?") @block0
+    value v128: TypeRef("?") @block0
+    value v129: Generic { name: "Range", args: [Int(64)] } @block0
+    value v130: TypeRef("?") @block0
+    value v131: TypeRef("?") @block0
+    value v132: Bool @block0
+    value v133: Int(64) @block0
+    value v134: Int(64) @block0
+    value v135: Generic { name: "Vec", args: [TypeRef("Any")] } @block0
+    value v136: Generic { name: "String", args: [] } @block0
+    value v137: TypeRef("?") @block0
+    value v138: Bool @block0
+    value v139: TypeRef("?") @block0
+    value v140: Int(64) @block0
+    value v141: Generic { name: "Vec", args: [TypeRef("Any")] } @block0
+    value v142: Int(64) @block0
+    value v143: Generic { name: "String", args: [] } @block0
+    value v144: TypeRef("?") @block0
+    value v145: Bool @block0
+    value v146: TypeRef("?") @block0
+    value v147: Int(64) @block0
+    value v148: Generic { name: "Vec", args: [TypeRef("Any")] } @block0
+    value v149: Int(64) @block0
+    value v150: Generic { name: "String", args: [] } @block0
+    value v151: TypeRef("?") @block0
+    value v152: TypeRef("?") @block0
+    value v153: TypeRef("?") @block0
+    value v154: Generic { name: "Range", args: [Int(64)] } @block0
+    value v155: TypeRef("?") @block0
+    value v156: TypeRef("?") @block0
+    value v157: Bool @block0
+    value v158: Int(64) @block0
+    value v159: Int(64) @block0
+    value v160: Generic { name: "Vec", args: [TypeRef("Any")] } @block0
+    value v161: Generic { name: "String", args: [] } @block0
+    value v162: TypeRef("?") @block0
+    value v163: Bool @block0
+    value v164: TypeRef("?") @block0
+    value v165: Int(64) @block0
+    value v166: Generic { name: "Vec", args: [TypeRef("Any")] } @block0
+    value v167: Int(64) @block0
+    value v168: Generic { name: "String", args: [] } @block0
+    value v169: TypeRef("?") @block0
+    value v170: TypeRef("?") @block0
+    value v171: TypeRef("?") @block0
+    value v172: TypeRef("?") @block0
+    value v173: Generic { name: "Range", args: [Int(64)] } @block0
+    value v174: TypeRef("?") @block0
+    value v175: TypeRef("?") @block0
+    value v176: TypeRef("?") @block0
+    value v177: Bool @block0
+    value v178: TypeRef("?") @block0
+    value v179: Int(64) @block0
+    value v180: Generic { name: "Vec", args: [TypeRef("Any")] } @block0
+    value v181: Int(64) @block0
+    value v182: Generic { name: "String", args: [] } @block0
+    value v183: TypeRef("?") @block0
+    value v184: Bool @block0
+    value v185: TypeRef("?") @block0
+    value v186: Int(64) @block0
+    value v187: Generic { name: "Vec", args: [TypeRef("Any")] } @block0
+    value v188: Int(64) @block0
+    value v189: Generic { name: "String", args: [] } @block0
+    value v190: TypeRef("?") @block0
+    value v191: TypeRef("?") @block0
+    value v192: Generic { name: "Range", args: [Int(64)] } @block0
+    value v193: Int(64) @block0
+    value v194: TypeRef("?") @block0
+    value v195: TypeRef("?") @block0
+    value v196: Bool @block0
+    value v197: TypeRef("Any") @block0
+    value v198: Int(64) @block0
+    value v199: Generic { name: "String", args: [] } @block0
+    Load v0 <- int(1)
+    Load v1 <- int(6)
+    Load v2 <- int(1)
+    NewRange %0 <- v0, v1, v2
     Load %1 <- int(0)
-    Load %2 <- %3
-    Call %4 <- string("std.range.iter") [%2] (def=d0)
-    VariantTag %5 <- %4 : Result
-    Load %6 <- int(0)
-    Eq %7 <- %5, %6
-    JmpIfNot %7 -> instr(14)
-    VariantPayload %4 <- %4 : Result
+    Load %2 <- int(0)
+    Load v3 <- %0
+    Call v4 <- string("std.range.iter") [v3] (def=d0)
+    VariantTag v5 <- v4 : Result
+    Load v6 <- int(0)
+    Eq v7 <- v5, v6
+    JmpIfNot v7 -> instr(14)
+    VariantPayload v4 <- v4 : Result
     Jmp -> instr(15)
-    Call _ <- string("std.range.abort_invalid_step") [%2] (def=d1)
-    Call %8 <- string("std.range.has_next") [%4] (def=d2)
-    JmpIfNot %8 -> instr(28)
-    Call %9 <- string("std.range.next") [%4] (def=d3)
-    Store %10 <- %9
-    Load %11 <- %1
-    Load %12 <- int(0)
-    Eq %13 <- %11, %12
-    JmpIfNot %13 -> instr(24)
-    Load %0 <- %10
-    Load %8 <- %1
-    Load %9 <- int(1)
-    Add %1 <- %8, %9
+    Call _ <- string("std.range.abort_invalid_step") [v3] (def=d1)
+    Call v8 <- string("std.range.has_next") [v4] (def=d2)
+    JmpIfNot v8 -> instr(28)
+    Call v9 <- string("std.range.next") [v4] (def=d3)
+    Store %3 <- v9
+    Load v11 <- %2
+    Load v12 <- int(0)
+    Eq v10 <- v11, v12
+    JmpIfNot v10 -> instr(24)
+    Load %1 <- %3
+    Load v13 <- %2
+    Load v14 <- int(1)
+    Add %2 <- v13, v14
     Jmp -> instr(15)
-    Load %13 <- %0
-    Load %11 <- int(1)
-    Eq %9 <- %13, %11
-    Load %12 <- string("first element is 1")
-    Call %8 <- string("std.assert.assert") [%9, %12] (def=d4)
-    Load %13 <- %1
-    Load %11 <- int(5)
-    Eq %9 <- %13, %11
-    Load %12 <- string("iterates 1..5")
-    Call %8 <- string("std.assert.assert") [%9, %12] (def=d4)
-    Load %11 <- int(1)
-    Load %12 <- int(3)
-    Load %14 <- int(1)
-    NewRange %13 <- %11, %12, %14
-    Call %9 <- string("std.range.iter") [%13] (def=d0)
-    Call %8 <- string("std.result.unwrap") [%9] (def=d5)
-    Load %11 <- %8
-    Call %13 <- string("std.range.has_next") [%11] (def=d2)
-    Load %12 <- string("fresh iterator has next")
-    Call %9 <- string("std.assert.assert") [%13, %12] (def=d4)
-    Load %12 <- int(1)
-    Load %14 <- int(3)
-    Load %15 <- int(1)
-    NewRange %11 <- %12, %14, %15
-    Call %13 <- string("std.range.iter") [%11] (def=d0)
-    Call %9 <- string("std.result.unwrap") [%13] (def=d5)
-    Load %15 <- %9
-    Call %12 <- string("std.range.next") [%15] (def=d3)
-    Load %14 <- int(1)
-    Eq %11 <- %12, %14
-    Load %16 <- string("next yields first element")
-    Call %13 <- string("std.assert.assert") [%11, %16] (def=d4)
+    Load v17 <- %1
+    Load v18 <- int(1)
+    Eq v16 <- v17, v18
+    Load v19 <- string("first element is 1")
+    Call v15 <- string("std.assert.assert") [v16, v19] (def=d4)
+    Load v22 <- %2
+    Load v23 <- int(5)
+    Eq v21 <- v22, v23
+    Load v24 <- string("iterates 1..5")
+    Call v20 <- string("std.assert.assert") [v21, v24] (def=d4)
+    Load v27 <- int(1)
+    Load v28 <- int(3)
+    Load v29 <- int(1)
+    NewRange v26 <- v27, v28, v29
+    Call v25 <- string("std.range.iter") [v26] (def=d0)
+    Call %4 <- string("std.result.unwrap") [v25] (def=d5)
+    Load v32 <- %4
+    Call v31 <- string("std.range.has_next") [v32] (def=d2)
+    Load v33 <- string("fresh iterator has next")
+    Call v30 <- string("std.assert.assert") [v31, v33] (def=d4)
+    Load v36 <- int(1)
+    Load v37 <- int(3)
+    Load v38 <- int(1)
+    NewRange v35 <- v36, v37, v38
+    Call v34 <- string("std.range.iter") [v35] (def=d0)
+    Call %5 <- string("std.result.unwrap") [v34] (def=d5)
+    Load v43 <- %5
+    Call v41 <- string("std.range.next") [v43] (def=d3)
+    Load v42 <- int(1)
+    Eq v40 <- v41, v42
+    Load v44 <- string("next yields first element")
+    Call v39 <- string("std.assert.assert") [v40, v44] (def=d4)
+    Drop %5
+    Load v47 <- int(3)
+    Load v48 <- int(0)
+    Load v50 <- int(1)
+    Neg v49 <- v50
+    NewRange v46 <- v47, v48, v49
+    Call v45 <- string("std.range.iter") [v46] (def=d0)
+    Call %6 <- string("std.result.unwrap") [v45] (def=d5)
+    Load v55 <- %6
+    Call v53 <- string("std.range.next") [v55] (def=d3)
+    Load v54 <- int(3)
+    Eq v52 <- v53, v54
+    Load v56 <- string("descending first is 3")
+    Call v51 <- string("std.assert.assert") [v52, v56] (def=d4)
+    Drop %6
+    Load v61 <- %6
+    Call v59 <- string("std.range.next") [v61] (def=d3)
+    Load v60 <- int(2)
+    Eq v58 <- v59, v60
+    Load v62 <- string("descending next is 2")
+    Call v57 <- string("std.assert.assert") [v58, v62] (def=d4)
+    Drop %6
+    Load v65 <- %6
+    Call v64 <- string("std.range.has_next") [v65] (def=d2)
+    Load v66 <- string("descending still has 1")
+    Call v63 <- string("std.assert.assert") [v64, v66] (def=d4)
+    Load v71 <- int(1)
+    Load v72 <- int(10)
+    Load v73 <- int(1)
+    NewRange v70 <- v71, v72, v73
+    Load v74 <- int(5)
+    Call v69 <- string("std.range.contains") [v70, v74] (def=d6)
+    Call v68 <- string("std.result.unwrap") [v69] (def=d5)
+    Load v75 <- string("5 in 1..10")
+    Call v67 <- string("std.assert.assert") [v68, v75] (def=d4)
+    Load v81 <- int(1)
+    Load v82 <- int(10)
+    Load v83 <- int(1)
+    NewRange v80 <- v81, v82, v83
+    Load v84 <- int(10)
+    Call v79 <- string("std.range.contains") [v80, v84] (def=d6)
+    Call v78 <- string("std.result.unwrap") [v79] (def=d5)
+    Not v77 <- v78
+    Load v85 <- string("end excluded")
+    Call v76 <- string("std.assert.assert") [v77, v85] (def=d4)
+    Load v90 <- int(0)
+    Load v91 <- int(10)
+    Load v92 <- int(2)
+    NewRange v89 <- v90, v91, v92
+    Load v93 <- int(4)
+    Call v88 <- string("std.range.contains") [v89, v93] (def=d6)
+    Call v87 <- string("std.result.unwrap") [v88] (def=d5)
+    Load v94 <- string("aligned element")
+    Call v86 <- string("std.assert.assert") [v87, v94] (def=d4)
+    Load v100 <- int(0)
+    Load v101 <- int(10)
+    Load v102 <- int(2)
+    NewRange v99 <- v100, v101, v102
+    Load v103 <- int(3)
+    Call v98 <- string("std.range.contains") [v99, v103] (def=d6)
+    Call v97 <- string("std.result.unwrap") [v98] (def=d5)
+    Not v96 <- v97
+    Load v104 <- string("unaligned element")
+    Call v95 <- string("std.assert.assert") [v96, v104] (def=d4)
+    Load v109 <- int(10)
+    Load v110 <- int(0)
+    Load v112 <- int(2)
+    Neg v111 <- v112
+    NewRange v108 <- v109, v110, v111
+    Load v113 <- int(6)
+    Call v107 <- string("std.range.contains") [v108, v113] (def=d6)
+    Call v106 <- string("std.result.unwrap") [v107] (def=d5)
+    Load v114 <- string("descending aligned")
+    Call v105 <- string("std.assert.assert") [v106, v114] (def=d4)
+    Load v120 <- int(10)
+    Load v121 <- int(0)
+    Load v123 <- int(2)
+    Neg v122 <- v123
+    NewRange v119 <- v120, v121, v122
+    Load v124 <- int(5)
+    Call v118 <- string("std.range.contains") [v119, v124] (def=d6)
+    Call v117 <- string("std.result.unwrap") [v118] (def=d5)
+    Not v116 <- v117
+    Load v125 <- string("descending unaligned")
+    Call v115 <- string("std.assert.assert") [v116, v125] (def=d4)
+    Load v129 <- %0
+    Call v128 <- string("std.range.iter") [v129] (def=d0)
+    Call v127 <- string("std.result.unwrap") [v128] (def=d5)
+    MakeClosure v130 <- closure_0 env=[] (def=d7)
+    Call v126 <- string("std.range.map") [v127, v130] (def=d8)
+    Call %7 <- string("std.range.collect") [v126] (def=d9)
+    Load v135 <- %7
+    StringLength v133 <- v135
+    Load v134 <- int(5)
+    Eq v132 <- v133, v134
+    Load v136 <- string("map+collect length")
+    Call v131 <- string("std.assert.assert") [v132, v136] (def=d4)
+    Load v141 <- %7
+    Load v142 <- int(0)
+    LoadIndex v139 <- v141[v142]
+    Load v140 <- int(2)
+    Eq v138 <- v139, v140
+    Load v143 <- string("map first = 2")
+    Call v137 <- string("std.assert.assert") [v138, v143] (def=d4)
+    Load v148 <- %7
+    Load v149 <- int(4)
+    LoadIndex v146 <- v148[v149]
+    Load v147 <- int(10)
+    Eq v145 <- v146, v147
+    Load v150 <- string("map last = 10")
+    Call v144 <- string("std.assert.assert") [v145, v150] (def=d4)
+    Load v154 <- %0
+    Call v153 <- string("std.range.iter") [v154] (def=d0)
+    Call v152 <- string("std.result.unwrap") [v153] (def=d5)
+    MakeClosure v155 <- closure_1 env=[] (def=d10)
+    Call v151 <- string("std.range.filter") [v152, v155] (def=d11)
+    Call %8 <- string("std.range.collect") [v151] (def=d9)
+    Load v160 <- %8
+    StringLength v158 <- v160
+    Load v159 <- int(2)
+    Eq v157 <- v158, v159
+    Load v161 <- string("filter keeps 4,5")
+    Call v156 <- string("std.assert.assert") [v157, v161] (def=d4)
+    Load v166 <- %8
+    Load v167 <- int(0)
+    LoadIndex v164 <- v166[v167]
+    Load v165 <- int(4)
+    Eq v163 <- v164, v165
+    Load v168 <- string("filter first = 4")
+    Call v162 <- string("std.assert.assert") [v163, v168] (def=d4)
+    Load v173 <- %0
+    Call v172 <- string("std.range.iter") [v173] (def=d0)
+    Call v171 <- string("std.result.unwrap") [v172] (def=d5)
+    MakeClosure v174 <- closure_2 env=[] (def=d12)
+    Call v170 <- string("std.range.filter") [v171, v174] (def=d11)
+    MakeClosure v175 <- closure_3 env=[] (def=d13)
+    Call v169 <- string("std.range.map") [v170, v175] (def=d8)
+    Call %9 <- string("std.range.collect") [v169] (def=d9)
+    Load v180 <- %9
+    Load v181 <- int(0)
+    LoadIndex v178 <- v180[v181]
+    Load v179 <- int(20)
+    Eq v177 <- v178, v179
+    Load v182 <- string("chain even*10 first")
+    Call v176 <- string("std.assert.assert") [v177, v182] (def=d4)
+    Load v187 <- %9
+    Load v188 <- int(1)
+    LoadIndex v185 <- v187[v188]
+    Load v186 <- int(40)
+    Eq v184 <- v185, v186
+    Load v189 <- string("chain even*10 second")
+    Call v183 <- string("std.assert.assert") [v184, v189] (def=d4)
+    Load v192 <- %0
+    Call v191 <- string("std.range.iter") [v192] (def=d0)
+    Call v190 <- string("std.result.unwrap") [v191] (def=d5)
+    Load v193 <- int(0)
+    MakeClosure v194 <- closure_4 env=[] (def=d14)
+    Call %10 <- string("std.range.reduce") [v190, v193, v194] (def=d15)
+    Load v197 <- %10
+    Load v198 <- int(15)
+    Eq v196 <- v197, v198
+    Load v199 <- string("reduce sum 1..5 = 15")
+    Call v195 <- string("std.assert.assert") [v196, v199] (def=d4)
+    Drop %8
     Drop %9
-    Load %14 <- int(3)
-    Load %15 <- int(0)
-    Load %17 <- int(1)
-    Neg %16 <- %17
-    NewRange %12 <- %14, %15, %16
-    Call %11 <- string("std.range.iter") [%12] (def=d0)
-    Call %13 <- string("std.result.unwrap") [%11] (def=d5)
-    Load %16 <- %13
-    Call %14 <- string("std.range.next") [%16] (def=d3)
-    Load %15 <- int(3)
-    Eq %12 <- %14, %15
-    Load %17 <- string("descending first is 3")
-    Call %11 <- string("std.assert.assert") [%12, %17] (def=d4)
-    Drop %13
-    Load %16 <- %13
-    Call %14 <- string("std.range.next") [%16] (def=d3)
-    Load %15 <- int(2)
-    Eq %12 <- %14, %15
-    Load %17 <- string("descending next is 2")
-    Call %11 <- string("std.assert.assert") [%12, %17] (def=d4)
-    Drop %13
-    Load %14 <- %13
-    Call %12 <- string("std.range.has_next") [%14] (def=d2)
-    Load %15 <- string("descending still has 1")
-    Call %11 <- string("std.assert.assert") [%12, %15] (def=d4)
-    Load %16 <- int(1)
-    Load %17 <- int(10)
-    Load %18 <- int(1)
-    NewRange %15 <- %16, %17, %18
-    Load %19 <- int(5)
-    Call %14 <- string("std.range.contains") [%15, %19] (def=d6)
-    Call %12 <- string("std.result.unwrap") [%14] (def=d5)
-    Load %20 <- string("5 in 1..10")
-    Call %11 <- string("std.assert.assert") [%12, %20] (def=d4)
-    Load %17 <- int(1)
-    Load %18 <- int(10)
-    Load %19 <- int(1)
-    NewRange %16 <- %17, %18, %19
-    Load %20 <- int(10)
-    Call %15 <- string("std.range.contains") [%16, %20] (def=d6)
-    Call %14 <- string("std.result.unwrap") [%15] (def=d5)
-    Not %12 <- %14
-    Load %21 <- string("end excluded")
-    Call %11 <- string("std.assert.assert") [%12, %21] (def=d4)
-    Load %16 <- int(0)
-    Load %17 <- int(10)
-    Load %18 <- int(2)
-    NewRange %15 <- %16, %17, %18
-    Load %19 <- int(4)
-    Call %14 <- string("std.range.contains") [%15, %19] (def=d6)
-    Call %12 <- string("std.result.unwrap") [%14] (def=d5)
-    Load %20 <- string("aligned element")
-    Call %11 <- string("std.assert.assert") [%12, %20] (def=d4)
-    Load %17 <- int(0)
-    Load %18 <- int(10)
-    Load %19 <- int(2)
-    NewRange %16 <- %17, %18, %19
-    Load %20 <- int(3)
-    Call %15 <- string("std.range.contains") [%16, %20] (def=d6)
-    Call %14 <- string("std.result.unwrap") [%15] (def=d5)
-    Not %12 <- %14
-    Load %21 <- string("unaligned element")
-    Call %11 <- string("std.assert.assert") [%12, %21] (def=d4)
-    Load %16 <- int(10)
-    Load %17 <- int(0)
-    Load %19 <- int(2)
-    Neg %18 <- %19
-    NewRange %15 <- %16, %17, %18
-    Load %20 <- int(6)
-    Call %14 <- string("std.range.contains") [%15, %20] (def=d6)
-    Call %12 <- string("std.result.unwrap") [%14] (def=d5)
-    Load %21 <- string("descending aligned")
-    Call %11 <- string("std.assert.assert") [%12, %21] (def=d4)
-    Load %17 <- int(10)
-    Load %18 <- int(0)
-    Load %20 <- int(2)
-    Neg %19 <- %20
-    NewRange %16 <- %17, %18, %19
-    Load %21 <- int(5)
-    Call %15 <- string("std.range.contains") [%16, %21] (def=d6)
-    Call %14 <- string("std.result.unwrap") [%15] (def=d5)
-    Not %12 <- %14
-    Load %22 <- string("descending unaligned")
-    Call %11 <- string("std.assert.assert") [%12, %22] (def=d4)
-    Load %16 <- %3
-    Call %15 <- string("std.range.iter") [%16] (def=d0)
-    Call %14 <- string("std.result.unwrap") [%15] (def=d5)
-    MakeClosure %17 <- closure_0 env=[] (def=d7)
-    Call %12 <- string("std.range.map") [%14, %17] (def=d8)
-    Call %11 <- string("std.range.collect") [%12] (def=d9)
-    Load %17 <- %11
-    StringLength %15 <- %17
-    Load %16 <- int(5)
-    Eq %14 <- %15, %16
-    Load %18 <- string("map+collect length")
-    Call %12 <- string("std.assert.assert") [%14, %18] (def=d4)
-    Load %17 <- %11
-    Load %18 <- int(0)
-    LoadIndex %15 <- %17[%18]
-    Load %16 <- int(2)
-    Eq %14 <- %15, %16
-    Load %19 <- string("map first = 2")
-    Call %12 <- string("std.assert.assert") [%14, %19] (def=d4)
-    Load %17 <- %11
-    Load %18 <- int(4)
-    LoadIndex %15 <- %17[%18]
-    Load %16 <- int(10)
-    Eq %14 <- %15, %16
-    Load %19 <- string("map last = 10")
-    Call %12 <- string("std.assert.assert") [%14, %19] (def=d4)
-    Load %17 <- %3
-    Call %16 <- string("std.range.iter") [%17] (def=d0)
-    Call %15 <- string("std.result.unwrap") [%16] (def=d5)
-    MakeClosure %18 <- closure_1 env=[] (def=d10)
-    Call %14 <- string("std.range.filter") [%15, %18] (def=d11)
-    Call %12 <- string("std.range.collect") [%14] (def=d9)
-    Load %18 <- %12
-    StringLength %16 <- %18
-    Load %17 <- int(2)
-    Eq %15 <- %16, %17
-    Load %19 <- string("filter keeps 4,5")
-    Call %14 <- string("std.assert.assert") [%15, %19] (def=d4)
-    Load %18 <- %12
-    Load %19 <- int(0)
-    LoadIndex %16 <- %18[%19]
-    Load %17 <- int(4)
-    Eq %15 <- %16, %17
-    Load %20 <- string("filter first = 4")
-    Call %14 <- string("std.assert.assert") [%15, %20] (def=d4)
-    Load %19 <- %3
-    Call %18 <- string("std.range.iter") [%19] (def=d0)
-    Call %17 <- string("std.result.unwrap") [%18] (def=d5)
-    MakeClosure %20 <- closure_2 env=[] (def=d12)
-    Call %16 <- string("std.range.filter") [%17, %20] (def=d11)
-    MakeClosure %21 <- closure_3 env=[] (def=d13)
-    Call %15 <- string("std.range.map") [%16, %21] (def=d8)
-    Call %14 <- string("std.range.collect") [%15] (def=d9)
-    Load %19 <- %14
-    Load %20 <- int(0)
-    LoadIndex %17 <- %19[%20]
-    Load %18 <- int(20)
-    Eq %16 <- %17, %18
-    Load %21 <- string("chain even*10 first")
-    Call %15 <- string("std.assert.assert") [%16, %21] (def=d4)
-    Load %19 <- %14
-    Load %20 <- int(1)
-    LoadIndex %17 <- %19[%20]
-    Load %18 <- int(40)
-    Eq %16 <- %17, %18
-    Load %21 <- string("chain even*10 second")
-    Call %15 <- string("std.assert.assert") [%16, %21] (def=d4)
-    Load %18 <- %3
-    Call %17 <- string("std.range.iter") [%18] (def=d0)
-    Call %16 <- string("std.result.unwrap") [%17] (def=d5)
-    Load %19 <- int(0)
-    MakeClosure %20 <- closure_4 env=[] (def=d14)
-    Call %15 <- string("std.range.reduce") [%16, %19, %20] (def=d15)
-    Load %18 <- %15
-    Load %19 <- int(15)
-    Eq %17 <- %18, %19
-    Load %20 <- string("reduce sum 1..5 = 15")
-    Call %16 <- string("std.assert.assert") [%17, %20] (def=d4)
-    Drop %12
-    Drop %14
+    Drop %2
+    Drop %7
     Drop %1
-    Drop %11
+    Drop %5
     Drop %0
-    Drop %9
-    Drop %3
-    Drop %15
-    Ret %16
+    Drop %10
+    Ret v195
   fn closure_0(Int(64)) -> Void
     slot[0] x : Int(64) @depth2
     locals_total=23
-    Load %0 <- %1
-    Load %2 <- int(2)
-    Mul %3 <- %0, %2
-    Ret %3
+    values_total=4
+    value v0: TypeRef("?") @block0
+    value v1: Int(64) @block0
+    value v2: Int(64) @block0
+    value v3: Int(64) @block0
+    Load v2 <- %0
+    Load v3 <- int(2)
+    Mul v1 <- v2, v3
+    Ret v1
   fn closure_1(Int(64)) -> Void
     slot[0] x : Int(64) @depth2
     locals_total=23
-    Load %0 <- %1
-    Load %2 <- int(3)
-    Gt %3 <- %0, %2
-    Ret %3
+    values_total=4
+    value v0: TypeRef("?") @block0
+    value v1: Bool @block0
+    value v2: Int(64) @block0
+    value v3: Int(64) @block0
+    Load v2 <- %0
+    Load v3 <- int(3)
+    Gt v1 <- v2, v3
+    Ret v1
   fn closure_2(Int(64)) -> Void
     slot[0] x : Int(64) @depth2
     locals_total=23
-    Load %0 <- %1
-    Load %2 <- int(2)
-    Mod %3 <- %0, %2
-    Load %4 <- int(0)
-    Eq %5 <- %3, %4
-    Ret %5
+    values_total=6
+    value v0: TypeRef("?") @block0
+    value v1: Bool @block0
+    value v2: Int(64) @block0
+    value v3: Int(64) @block0
+    value v4: Int(64) @block0
+    value v5: Int(64) @block0
+    Load v4 <- %0
+    Load v5 <- int(2)
+    Mod v2 <- v4, v5
+    Load v3 <- int(0)
+    Eq v1 <- v2, v3
+    Ret v1
   fn closure_3(Int(64)) -> Void
     slot[0] x : Int(64) @depth2
     locals_total=23
-    Load %0 <- %1
-    Load %2 <- int(10)
-    Mul %3 <- %0, %2
-    Ret %3
+    values_total=4
+    value v0: TypeRef("?") @block0
+    value v1: Int(64) @block0
+    value v2: Int(64) @block0
+    value v3: Int(64) @block0
+    Load v2 <- %0
+    Load v3 <- int(10)
+    Mul v1 <- v2, v3
+    Ret v1
   fn closure_4(Int(64), Int(64)) -> Void
     slot[0] acc : Int(64) @depth2
     slot[1] x : Int(64) @depth2
     locals_total=23
-    Load %0 <- %1
-    Load %2 <- %3
-    Add %4 <- %0, %2
-    Ret %4
+    values_total=4
+    value v0: TypeRef("?") @block0
+    value v1: TypeVar(TypeVar(125)) @block0
+    value v2: TypeVar(TypeVar(125)) @block0
+    value v3: Int(64) @block0
+    Load v2 <- %0
+    Load v3 <- %1
+    Add v1 <- v2, v3
+    Ret v1
   init (locals=0)
     Call %0 <- string("main") [] (def=d16)

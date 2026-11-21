@@ -5,30 +5,46 @@ module
     slot[2] double : Int(64) @depth2
     slot[5] triple : Int(64) @depth2
     locals_total=11
+    values_total=15
+    value v0: Int(64) @block0
+    value v1: Int(64) @block0
+    value v2: Int(64) @block0
+    value v3: Int(64) @block0
+    value v4: TypeRef("?") @block0
+    value v5: Int(64) @block0
+    value v6: Int(64) @block0
+    value v7: TypeRef("?") @block0
+    value v8: Bool @block0
+    value v9: Generic { name: "String", args: [] } @block0
+    value v10: TypeRef("?") @block0
+    value v11: Generic { name: "Tuple", args: [Int(64), Int(64)] } @block0
+    value v12: TypeRef("?") @block0
+    value v13: Bool @block0
+    value v14: Generic { name: "String", args: [] } @block0
     Load %0 <- int(100)
-    Load %1 <- %0
-    Load %2 <- int(2)
-    Mul %3 <- %1, %2
-    Load %4 <- %0
-    Load %5 <- int(3)
-    Mul %6 <- %4, %5
-    Spawn %7 <- [] plan(groups=[], deps=[], resources=[])
-    Load %8 <- %3
-    Load %9 <- %6
-    NewTuple %10 <- [%8, %9]
-    Move %7 <- %10
-    Drop %3
-    Drop %6
-    Load %5 <- bool(true)
-    Load %10 <- string("spawn result captured")
-    Call %4 <- string("std.assert.assert") [%5, %10] (def=d0)
-    Load %5 <- %7
-    Call %4 <- string("std.io.println") [%5] (def=d1)
-    Load %5 <- bool(true)
-    Load %10 <- string("all passed")
-    Call %4 <- string("std.assert.assert") [%5, %10] (def=d0)
+    Load v0 <- %0
+    Load v1 <- int(2)
+    Mul %1 <- v0, v1
+    Load v2 <- %0
+    Load v3 <- int(3)
+    Mul %2 <- v2, v3
+    Spawn %3 <- [] plan(groups=[], deps=[], resources=[])
+    Load v5 <- %1
+    Load v6 <- %2
+    NewTuple v4 <- [v5, v6]
+    Move %3 <- v4
+    Drop %1
+    Drop %2
+    Load v8 <- bool(true)
+    Load v9 <- string("spawn result captured")
+    Call v7 <- string("std.assert.assert") [v8, v9] (def=d0)
+    Load v11 <- %3
+    Call v10 <- string("std.io.println") [v11] (def=d1)
+    Load v13 <- bool(true)
+    Load v14 <- string("all passed")
+    Call v12 <- string("std.assert.assert") [v13, v14] (def=d0)
     Drop %0
-    Drop %7
-    Ret %4
+    Drop %3
+    Ret v12
   init (locals=0)
     Call %0 <- string("main") [] (def=d2)

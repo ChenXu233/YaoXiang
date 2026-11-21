@@ -1,17 +1,27 @@
 module
   fn f() -> Int(64)
     locals_total=2
-    Load %0 <- int(1)
-    Ret %0
+    values_total=2
+    value v0: TypeRef("?") @block0
+    value v1: Int(64) @block0
+    Load v1 <- int(1)
+    Ret v1
     Ret
   fn main() -> Void
     locals_total=6
-    Load %0 <- int(1)
-    Call %1 <- string("f") [%0] (def=d0)
-    Load %2 <- int(1)
-    Eq %3 <- %1, %2
-    Load %4 <- string("实现少写形参：缺席位由声明补名，元数按声明")
-    Call %5 <- string("std.assert.assert") [%3, %4] (def=d1)
-    Ret %5
+    values_total=6
+    value v0: TypeRef("?") @block0
+    value v1: Bool @block0
+    value v2: Int(64) @block0
+    value v3: Int(64) @block0
+    value v4: Int(64) @block0
+    value v5: Generic { name: "String", args: [] } @block0
+    Load v4 <- int(1)
+    Call v2 <- string("f") [v4] (def=d0)
+    Load v3 <- int(1)
+    Eq v1 <- v2, v3
+    Load v5 <- string("实现少写形参：缺席位由声明补名，元数按声明")
+    Call v0 <- string("std.assert.assert") [v1, v5] (def=d1)
+    Ret v0
   init (locals=0)
     Call %0 <- string("main") [] (def=d2)

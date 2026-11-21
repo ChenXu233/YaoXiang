@@ -7,11 +7,13 @@ module
     slot[0] r : Int(64) @depth1
     slot[1] tag : Int(64) @depth1
     locals_total=3
+    values_total=1
+    value v0: Generic { name: "String", args: [] } @block0
     Load %0 <- arg%0
     Load %1 <- arg%1
-    Load %2 <- %1
-    Ret %2
-    Ret %2
+    Load v0 <- %1
+    Ret v0
+    Ret v0
   fn main() -> Void
     slot[0] a : Int(64) @depth1
     slot[1] b : Int(64) @depth1
@@ -25,78 +27,118 @@ module
     slot[24] x : Int(64) @depth2
     slot[30] other : Int(64) @depth2
     locals_total=33
-    Load %0 <- int(21)
-    CreateVariant %1 <- Result::0 %0
-    Load %2 <- string("bad")
-    CreateVariant %0 <- Result::1 %2
+    values_total=39
+    value v0: Int(64) @block0
+    value v1: Generic { name: "String", args: [] } @block0
+    value v2: Generic { name: "Result", args: [Int(64), Generic { name: "String", args: [] }] } @block0
+    value v3: TypeRef("?") @block0
+    value v4: Int(64) @block0
+    value v5: Bool @block0
+    value v6: TypeRef("?") @block0
+    value v7: Int(64) @block0
+    value v8: Int(64) @block0
+    value v9: Int(64) @block0
+    value v10: TypeRef("?") @block0
+    value v11: Int(64) @block0
+    value v12: Bool @block0
+    value v13: TypeRef("?") @block0
+    value v14: Int(64) @block0
+    value v15: TypeRef("?") @block0
+    value v16: Int(64) @block0
+    value v17: Generic { name: "Result", args: [Int(64), Generic { name: "String", args: [] }] } @block0
+    value v18: TypeRef("?") @block0
+    value v19: Int(64) @block0
+    value v20: Bool @block0
+    value v21: TypeRef("?") @block0
+    value v22: Generic { name: "String", args: [] } @block0
+    value v23: TypeRef("?") @block0
+    value v24: Int(64) @block0
+    value v25: Bool @block0
+    value v26: TypeRef("?") @block0
+    value v27: Generic { name: "String", args: [] } @block0
+    value v28: TypeRef("?") @block0
+    value v29: Generic { name: "String", args: [] } @block0
+    value v30: Generic { name: "Result", args: [Int(64), Generic { name: "String", args: [] }] } @block0
+    value v31: TypeRef("?") @block0
+    value v32: Int(64) @block0
+    value v33: Bool @block0
+    value v34: TypeRef("?") @block0
+    value v35: Generic { name: "String", args: [] } @block0
+    value v36: Generic { name: "String", args: [] } @block0
+    value v37: TypeRef("?") @block0
+    value v38: Generic { name: "String", args: [] } @block0
+    Load v0 <- int(21)
+    CreateVariant %0 <- Result::0 v0
+    Load v1 <- string("bad")
+    CreateVariant %1 <- Result::1 v1
     Load %2 <- void
-    Load %3 <- %1
-    VariantTag %4 <- %3 : Result
-    Load %5 <- int(0)
-    Eq %6 <- %4, %5
-    JmpIfNot %6 -> instr(17)
-    VariantPayload %7 <- %3 : Result
-    Move %8 <- %7
-    Load %9 <- %8
-    Load %10 <- int(2)
-    Mul %11 <- %9, %10
-    Move %2 <- %11
+    Load v2 <- %0
+    VariantTag v3 <- v2 : Result
+    Load v4 <- int(0)
+    Eq v5 <- v3, v4
+    JmpIfNot v5 -> instr(17)
+    VariantPayload v6 <- v2 : Result
+    Move %3 <- v6
+    Load v8 <- %3
+    Load v9 <- int(2)
+    Mul v7 <- v8, v9
+    Move %2 <- v7
     Jmp -> instr(26)
-    VariantTag %12 <- %3 : Result
-    Load %13 <- int(1)
-    Eq %14 <- %12, %13
-    JmpIfNot %14 -> instr(26)
-    VariantPayload %15 <- %3 : Result
-    Move %16 <- %15
-    Load %17 <- int(0)
-    Move %2 <- %17
+    VariantTag v10 <- v2 : Result
+    Load v11 <- int(1)
+    Eq v12 <- v10, v11
+    JmpIfNot v12 -> instr(26)
+    VariantPayload v13 <- v2 : Result
+    Move %4 <- v13
+    Load v14 <- int(0)
+    Move %2 <- v14
     Jmp -> instr(26)
-    Load %13 <- %2
-    Call %12 <- string("std.io.println") [%13] (def=d0)
-    Load %12 <- void
-    Load %13 <- %0
-    VariantTag %15 <- %13 : Result
-    Load %17 <- int(0)
-    Eq %18 <- %15, %17
-    JmpIfNot %18 -> instr(39)
-    VariantPayload %19 <- %13 : Result
-    Move %14 <- %19
-    Load %20 <- string("number")
-    Move %12 <- %20
+    Load v16 <- %2
+    Call v15 <- string("std.io.println") [v16] (def=d0)
+    Load %5 <- void
+    Load v17 <- %1
+    VariantTag v18 <- v17 : Result
+    Load v19 <- int(0)
+    Eq v20 <- v18, v19
+    JmpIfNot v20 -> instr(39)
+    VariantPayload v21 <- v17 : Result
+    Move %6 <- v21
+    Load v22 <- string("number")
+    Move %5 <- v22
     Jmp -> instr(48)
-    VariantTag %21 <- %13 : Result
-    Load %22 <- int(1)
-    Eq %23 <- %21, %22
-    JmpIfNot %23 -> instr(48)
-    VariantPayload %24 <- %13 : Result
-    Move %25 <- %24
-    Load %26 <- %25
-    Move %12 <- %26
+    VariantTag v23 <- v17 : Result
+    Load v24 <- int(1)
+    Eq v25 <- v23, v24
+    JmpIfNot v25 -> instr(48)
+    VariantPayload v26 <- v17 : Result
+    Move %7 <- v26
+    Load v27 <- %7
+    Move %5 <- v27
     Jmp -> instr(48)
-    Load %22 <- %12
-    Call %21 <- string("std.io.println") [%22] (def=d0)
-    Load %21 <- void
-    Load %22 <- %1
-    VariantTag %24 <- %22 : Result
-    Load %26 <- int(0)
-    Eq %27 <- %24, %26
-    JmpIfNot %27 -> instr(61)
-    VariantPayload %28 <- %22 : Result
-    Move %23 <- %28
-    Load %29 <- string("is-ok")
-    Move %21 <- %29
+    Load v29 <- %5
+    Call v28 <- string("std.io.println") [v29] (def=d0)
+    Load %8 <- void
+    Load v30 <- %0
+    VariantTag v31 <- v30 : Result
+    Load v32 <- int(0)
+    Eq v33 <- v31, v32
+    JmpIfNot v33 -> instr(61)
+    VariantPayload v34 <- v30 : Result
+    Move %9 <- v34
+    Load v35 <- string("is-ok")
+    Move %8 <- v35
     Jmp -> instr(65)
-    Move %30 <- %22
-    Load %31 <- string("not-ok")
-    Move %21 <- %31
+    Move %10 <- v30
+    Load v36 <- string("not-ok")
+    Move %8 <- v36
     Jmp -> instr(65)
-    Load %32 <- %21
-    Call %31 <- string("std.io.println") [%32] (def=d0)
-    Drop %1
+    Load v38 <- %8
+    Call v37 <- string("std.io.println") [v38] (def=d0)
     Drop %0
-    Drop %12
-    Drop %21
+    Drop %1
+    Drop %5
+    Drop %8
     Drop %2
-    Ret %31
+    Ret v37
   init (locals=0)
     Call %0 <- string("main") [] (def=d1)

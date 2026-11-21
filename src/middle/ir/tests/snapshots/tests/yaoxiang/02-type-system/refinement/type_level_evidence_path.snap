@@ -11,11 +11,14 @@ module
     slot[0] b : Int(64) @depth1
     slot[1] h : Int(64) @depth1
     locals_total=4
+    values_total=2
+    value v0: TypeRef("?") @block0
+    value v1: TypeRef("Box") @block0
     Load %0 <- arg%0
     Load %1 <- arg%1
-    Load %2 <- %0
-    LoadField %3 <- %2.0
-    Ret %3
+    Load v1 <- %0
+    LoadField v0 <- v1.0
+    Ret v0
   init (locals=0)
     Load %0 <- int(3)
     Call %1 <- string("Box") [%0] (def=d0)

@@ -10,19 +10,29 @@ module
     slot[0] f : Int(64) @depth1
     slot[1] x : Int(64) @depth1
     locals_total=8
-    Load %0 <- %1
-    Load %2 <- %3
-    CallDyn %4 <- %2 [%0]
-    Load %5 <- %3
-    CallDyn %6 <- %5 [%4]
-    Ret %6
+    values_total=6
+    value v0: TypeRef("?") @block0
+    value v1: TypeRef("T") @block0
+    value v2: TypeRef("T") @block0
+    value v3: TypeRef("T") @block0
+    value v4: Fn { params: [TypeRef("T")], return_type: TypeRef("T") } @block0
+    value v5: Fn { params: [TypeRef("T")], return_type: TypeRef("T") } @block0
+    Load v3 <- %0
+    Load v4 <- %1
+    CallDyn v2 <- v4 [v3]
+    Load v5 <- %1
+    CallDyn v1 <- v5 [v2]
+    Ret v1
     Ret
   fn identity(TypeRef("T")) -> TypeRef("T")
     generic_params: ["T"]
     slot[0] x : Int(64) @depth1
     locals_total=3
-    Load %0 <- %1
-    Ret %0
+    values_total=2
+    value v0: TypeRef("?") @block0
+    value v1: TypeRef("T") @block0
+    Load v1 <- %0
+    Ret v1
     Ret
   fn main() -> Void
     slot[0] e : Int(64) @depth1
@@ -33,112 +43,199 @@ module
     slot[5] nums : Int(64) @depth1
     slot[6] moved : Int(64) @depth1
     locals_total=13
-    Load %0 <- int(1)
-    Load %1 <- string("one")
-    Call %2 <- string("Entry") [%0, %1] (def=d0)
-    Load %3 <- %2
-    LoadField %4 <- %3.0
-    Load %5 <- int(1)
-    Eq %1 <- %4, %5
-    Load %6 <- string("Entry(Int, String).key == 1")
-    Call %0 <- string("std.assert.assert") [%1, %6] (def=d1)
-    Load %3 <- %2
-    LoadField %4 <- %3.1
-    Load %5 <- string("one")
-    Eq %1 <- %4, %5
-    Load %6 <- string("Entry(Int, String).value == one")
-    Call %0 <- string("std.assert.assert") [%1, %6] (def=d1)
-    Load %1 <- string("flag")
-    Load %4 <- bool(true)
-    Call %0 <- string("Entry") [%1, %4] (def=d0)
-    Load %6 <- %0
-    LoadField %5 <- %6.0
-    Load %3 <- string("flag")
-    Eq %4 <- %5, %3
-    Load %7 <- string("Entry(String, Bool).key")
-    Call %1 <- string("std.assert.assert") [%4, %7] (def=d1)
-    Load %5 <- %0
-    LoadField %4 <- %5.1
-    Load %3 <- string("Entry(String, Bool).value == true")
-    Call %1 <- string("std.assert.assert") [%4, %3] (def=d1)
-    AllocArray %4 size=int(3), elem=int(1)
-    Load %5 <- int(1)
-    Load %3 <- int(0)
-    StoreIndex %4[%3] <- %5
-    Load %6 <- int(2)
-    Load %7 <- int(1)
-    StoreIndex %4[%7] <- %6
-    Load %8 <- int(3)
-    Load %9 <- int(2)
-    StoreIndex %4[%9] <- %8
-    Call %1 <- string("Box") [%4] (def=d2)
-    Load %5 <- %1
-    LoadField %4 <- %5.0
-    Load %8 <- %4
-    StringLength %6 <- %8
-    Load %7 <- int(3)
-    Eq %3 <- %6, %7
-    Load %9 <- string("Box(Vec(Int)).inner len == 3")
-    Call %5 <- string("std.assert.assert") [%3, %9] (def=d1)
-    Load %8 <- %4
-    Load %9 <- int(0)
-    LoadIndex %6 <- %8[%9]
-    Load %7 <- int(1)
-    Eq %3 <- %6, %7
-    Load %10 <- string("Box.inner first == 1")
-    Call %5 <- string("std.assert.assert") [%3, %10] (def=d1)
-    MakeClosure %3 <- closure_0 env=[] (def=d3)
-    Load %6 <- int(5)
-    Call %5 <- string("twice") [%3, %6] (def=d4)
-    Load %7 <- %5
-    Load %8 <- int(7)
-    Eq %6 <- %7, %8
-    Load %9 <- string("twice(x => x + 1, 5) == 7")
-    Call %3 <- string("std.assert.assert") [%6, %9] (def=d1)
-    AllocArray %3 size=int(2), elem=int(1)
-    Load %6 <- int(9)
-    Load %7 <- int(0)
-    StoreIndex %3[%7] <- %6
-    Load %8 <- int(8)
-    Load %9 <- int(1)
-    StoreIndex %3[%9] <- %8
-    Load %7 <- %3
-    Call %6 <- string("identity") [%7] (def=d5)
-    Load %11 <- %6
-    StringLength %9 <- %11
-    Load %10 <- int(2)
-    Eq %8 <- %9, %10
-    Load %12 <- string("identity([9, 8]) len == 2")
-    Call %7 <- string("std.assert.assert") [%8, %12] (def=d1)
-    Load %11 <- int(1)
-    Call %9 <- string("identity") [%11] (def=d5)
-    Load %10 <- int(1)
-    Eq %8 <- %9, %10
-    Load %12 <- string("identity Int")
-    Call %7 <- string("std.assert.assert") [%8, %12] (def=d1)
-    Load %11 <- string("s")
-    Call %9 <- string("identity") [%11] (def=d5)
-    Load %10 <- string("s")
-    Eq %8 <- %9, %10
-    Load %12 <- string("identity String")
-    Call %7 <- string("std.assert.assert") [%8, %12] (def=d1)
-    Load %9 <- bool(true)
-    Call %8 <- string("identity") [%9] (def=d5)
-    Load %10 <- string("identity Bool")
-    Call %7 <- string("std.assert.assert") [%8, %10] (def=d1)
-    Drop %1
+    values_total=81
+    value v0: Int(64) @block0
+    value v1: Generic { name: "String", args: [] } @block0
+    value v2: TypeRef("?") @block0
+    value v3: Bool @block0
+    value v4: TypeRef("?") @block0
+    value v5: Int(64) @block0
+    value v6: Generic { name: "Entry", args: [Int(64), Generic { name: "String", args: [] }] } @block0
+    value v7: Generic { name: "String", args: [] } @block0
+    value v8: TypeRef("?") @block0
+    value v9: Bool @block0
+    value v10: TypeRef("?") @block0
+    value v11: Generic { name: "String", args: [] } @block0
+    value v12: Generic { name: "Entry", args: [Int(64), Generic { name: "String", args: [] }] } @block0
+    value v13: Generic { name: "String", args: [] } @block0
+    value v14: Generic { name: "String", args: [] } @block0
+    value v15: Bool @block0
+    value v16: TypeRef("?") @block0
+    value v17: Bool @block0
+    value v18: TypeRef("?") @block0
+    value v19: Generic { name: "String", args: [] } @block0
+    value v20: Generic { name: "Entry", args: [Generic { name: "String", args: [] }, Bool] } @block0
+    value v21: Generic { name: "String", args: [] } @block0
+    value v22: TypeRef("?") @block0
+    value v23: TypeRef("?") @block0
+    value v24: Generic { name: "Entry", args: [Generic { name: "String", args: [] }, Bool] } @block0
+    value v25: Generic { name: "String", args: [] } @block0
+    value v26: TypeRef("?") @block0
+    value v27: Int(64) @block0
+    value v28: Int(64) @block0
+    value v29: Int(64) @block0
+    value v30: Int(64) @block0
+    value v31: Int(64) @block0
+    value v32: Int(64) @block0
+    value v33: Generic { name: "Box", args: [Generic { name: "Vec", args: [Int(64)] }] } @block0
+    value v34: TypeRef("?") @block0
+    value v35: Bool @block0
+    value v36: Int(64) @block0
+    value v37: Int(64) @block0
+    value v38: Generic { name: "Vec", args: [Int(64)] } @block0
+    value v39: Generic { name: "String", args: [] } @block0
+    value v40: TypeRef("?") @block0
+    value v41: Bool @block0
+    value v42: TypeRef("?") @block0
+    value v43: Int(64) @block0
+    value v44: Generic { name: "Vec", args: [Int(64)] } @block0
+    value v45: Int(64) @block0
+    value v46: Generic { name: "String", args: [] } @block0
+    value v47: TypeRef("?") @block0
+    value v48: Int(64) @block0
+    value v49: TypeRef("?") @block0
+    value v50: Bool @block0
+    value v51: Int(64) @block0
+    value v52: Int(64) @block0
+    value v53: Generic { name: "String", args: [] } @block0
+    value v54: Int(64) @block0
+    value v55: Int(64) @block0
+    value v56: Int(64) @block0
+    value v57: Int(64) @block0
+    value v58: Generic { name: "Vec", args: [Int(64)] } @block0
+    value v59: TypeRef("?") @block0
+    value v60: Bool @block0
+    value v61: Int(64) @block0
+    value v62: Int(64) @block0
+    value v63: Generic { name: "Vec", args: [Int(64)] } @block0
+    value v64: Generic { name: "String", args: [] } @block0
+    value v65: TypeRef("?") @block0
+    value v66: Bool @block0
+    value v67: TypeVar(TypeVar(41)) @block0
+    value v68: Int(64) @block0
+    value v69: Int(64) @block0
+    value v70: Generic { name: "String", args: [] } @block0
+    value v71: TypeRef("?") @block0
+    value v72: Bool @block0
+    value v73: TypeVar(TypeVar(41)) @block0
+    value v74: Generic { name: "String", args: [] } @block0
+    value v75: Generic { name: "String", args: [] } @block0
+    value v76: Generic { name: "String", args: [] } @block0
+    value v77: TypeRef("?") @block0
+    value v78: TypeVar(TypeVar(41)) @block0
+    value v79: Bool @block0
+    value v80: Generic { name: "String", args: [] } @block0
+    Load v0 <- int(1)
+    Load v1 <- string("one")
+    Call %0 <- string("Entry") [v0, v1] (def=d0)
+    Load v6 <- %0
+    LoadField v4 <- v6.0
+    Load v5 <- int(1)
+    Eq v3 <- v4, v5
+    Load v7 <- string("Entry(Int, String).key == 1")
+    Call v2 <- string("std.assert.assert") [v3, v7] (def=d1)
+    Load v12 <- %0
+    LoadField v10 <- v12.1
+    Load v11 <- string("one")
+    Eq v9 <- v10, v11
+    Load v13 <- string("Entry(Int, String).value == one")
+    Call v8 <- string("std.assert.assert") [v9, v13] (def=d1)
+    Load v14 <- string("flag")
+    Load v15 <- bool(true)
+    Call %1 <- string("Entry") [v14, v15] (def=d0)
+    Load v20 <- %1
+    LoadField v18 <- v20.0
+    Load v19 <- string("flag")
+    Eq v17 <- v18, v19
+    Load v21 <- string("Entry(String, Bool).key")
+    Call v16 <- string("std.assert.assert") [v17, v21] (def=d1)
+    Load v24 <- %1
+    LoadField v23 <- v24.1
+    Load v25 <- string("Entry(String, Bool).value == true")
+    Call v22 <- string("std.assert.assert") [v23, v25] (def=d1)
+    AllocArray v26 size=int(3), elem=int(1)
+    Load v27 <- int(1)
+    Load v28 <- int(0)
+    StoreIndex v26[v28] <- v27
+    Load v29 <- int(2)
+    Load v30 <- int(1)
+    StoreIndex v26[v30] <- v29
+    Load v31 <- int(3)
+    Load v32 <- int(2)
+    StoreIndex v26[v32] <- v31
+    Call %2 <- string("Box") [v26] (def=d2)
+    Load v33 <- %2
+    LoadField %3 <- v33.0
+    Load v38 <- %3
+    StringLength v36 <- v38
+    Load v37 <- int(3)
+    Eq v35 <- v36, v37
+    Load v39 <- string("Box(Vec(Int)).inner len == 3")
+    Call v34 <- string("std.assert.assert") [v35, v39] (def=d1)
+    Load v44 <- %3
+    Load v45 <- int(0)
+    LoadIndex v42 <- v44[v45]
+    Load v43 <- int(1)
+    Eq v41 <- v42, v43
+    Load v46 <- string("Box.inner first == 1")
+    Call v40 <- string("std.assert.assert") [v41, v46] (def=d1)
+    MakeClosure v47 <- closure_0 env=[] (def=d3)
+    Load v48 <- int(5)
+    Call %4 <- string("twice") [v47, v48] (def=d4)
+    Load v51 <- %4
+    Load v52 <- int(7)
+    Eq v50 <- v51, v52
+    Load v53 <- string("twice(x => x + 1, 5) == 7")
+    Call v49 <- string("std.assert.assert") [v50, v53] (def=d1)
+    AllocArray %5 size=int(2), elem=int(1)
+    Load v54 <- int(9)
+    Load v55 <- int(0)
+    StoreIndex %5[v55] <- v54
+    Load v56 <- int(8)
+    Load v57 <- int(1)
+    StoreIndex %5[v57] <- v56
+    Load v58 <- %5
+    Call %6 <- string("identity") [v58] (def=d5)
+    Load v63 <- %6
+    StringLength v61 <- v63
+    Load v62 <- int(2)
+    Eq v60 <- v61, v62
+    Load v64 <- string("identity([9, 8]) len == 2")
+    Call v59 <- string("std.assert.assert") [v60, v64] (def=d1)
+    Load v69 <- int(1)
+    Call v67 <- string("identity") [v69] (def=d5)
+    Load v68 <- int(1)
+    Eq v66 <- v67, v68
+    Load v70 <- string("identity Int")
+    Call v65 <- string("std.assert.assert") [v66, v70] (def=d1)
+    Load v75 <- string("s")
+    Call v73 <- string("identity") [v75] (def=d5)
+    Load v74 <- string("s")
+    Eq v72 <- v73, v74
+    Load v76 <- string("identity String")
+    Call v71 <- string("std.assert.assert") [v72, v76] (def=d1)
+    Load v79 <- bool(true)
+    Call v78 <- string("identity") [v79] (def=d5)
+    Load v80 <- string("identity Bool")
+    Call v77 <- string("std.assert.assert") [v78, v80] (def=d1)
     Drop %2
     Drop %0
-    Drop %4
+    Drop %1
+    Drop %3
     Drop %6
-    Drop %5
-    Ret %7
+    Drop %4
+    Ret v77
   fn closure_0(Int(64)) -> Void
     slot[0] x : Int(64) @depth2
     locals_total=11
-    Load %0 <- %1
-    Load %2 <- int(1)
-    Add %3 <- %0, %2
-    Ret %3
+    values_total=4
+    value v0: TypeRef("?") @block0
+    value v1: TypeRef("T") @block0
+    value v2: TypeRef("T") @block0
+    value v3: Int(64) @block0
+    Load v2 <- %0
+    Load v3 <- int(1)
+    Add v1 <- v2, v3
+    Ret v1
   init (locals=0)
     Call %0 <- string("main") [] (def=d6)

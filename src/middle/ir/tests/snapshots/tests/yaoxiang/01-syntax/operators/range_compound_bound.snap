@@ -4,68 +4,111 @@ module
     slot[1] count : Int(64) @depth1
     slot[12] i : Int(64) @depth2
     locals_total=25
+    values_total=42
+    value v0: TypeRef("?") @block0
+    value v1: Int(64) @block0
+    value v2: Int(64) @block0
+    value v3: Int(64) @block0
+    value v4: Int(64) @block0
+    value v5: Int(64) @block0
+    value v6: TypeRef("?") @block0
+    value v7: TypeRef("?") @block0
+    value v8: Int(64) @block0
+    value v9: Bool @block0
+    value v10: TypeRef("?") @block0
+    value v11: TypeRef("?") @block0
+    value v12: Int(64) @block0
+    value v13: Int(64) @block0
+    value v14: TypeRef("?") @block0
+    value v15: Bool @block0
+    value v16: Int(64) @block0
+    value v17: Int(64) @block0
+    value v18: Generic { name: "String", args: [] } @block0
+    value v19: TypeRef("?") @block0
+    value v20: TypeRef("?") @block0
+    value v21: Int(64) @block0
+    value v22: TypeRef("?") @block0
+    value v23: Int(64) @block0
+    value v24: Int(64) @block0
+    value v25: Int(64) @block0
+    value v26: TypeRef("?") @block0
+    value v27: Int(64) @block0
+    value v28: Bool @block0
+    value v29: Generic { name: "String", args: [] } @block0
+    value v30: TypeRef("?") @block0
+    value v31: Bool @block0
+    value v32: TypeRef("?") @block0
+    value v33: Int(64) @block0
+    value v34: TypeRef("?") @block0
+    value v35: Int(64) @block0
+    value v36: Int(64) @block0
+    value v37: Int(64) @block0
+    value v38: TypeRef("?") @block0
+    value v39: Int(64) @block0
+    value v40: Bool @block0
+    value v41: Generic { name: "String", args: [] } @block0
     Load %0 <- int(3)
     Load %1 <- int(0)
-    Load %2 <- int(0)
-    Load %3 <- %0
-    Load %4 <- int(2)
-    Add %5 <- %3, %4
-    Load %6 <- int(1)
-    NewRange %7 <- %2, %5, %6
-    Call %8 <- string("std.range.iter") [%7] (def=d0)
-    VariantTag %9 <- %8 : Result
-    Load %10 <- int(0)
-    Eq %11 <- %9, %10
-    JmpIfNot %11 -> instr(15)
-    VariantPayload %8 <- %8 : Result
+    Load v1 <- int(0)
+    Load v4 <- %0
+    Load v5 <- int(2)
+    Add v2 <- v4, v5
+    Load v3 <- int(1)
+    NewRange v0 <- v1, v2, v3
+    Call v6 <- string("std.range.iter") [v0] (def=d0)
+    VariantTag v7 <- v6 : Result
+    Load v8 <- int(0)
+    Eq v9 <- v7, v8
+    JmpIfNot v9 -> instr(15)
+    VariantPayload v6 <- v6 : Result
     Jmp -> instr(16)
-    Call _ <- string("std.range.abort_invalid_step") [%7] (def=d1)
-    Call %12 <- string("std.range.has_next") [%8] (def=d2)
-    JmpIfNot %12 -> instr(24)
-    Call %13 <- string("std.range.next") [%8] (def=d3)
-    Store %14 <- %13
-    Load %15 <- %1
-    Load %16 <- int(1)
-    Add %1 <- %15, %16
+    Call _ <- string("std.range.abort_invalid_step") [v0] (def=d1)
+    Call v10 <- string("std.range.has_next") [v6] (def=d2)
+    JmpIfNot v10 -> instr(24)
+    Call v11 <- string("std.range.next") [v6] (def=d3)
+    Store %2 <- v11
+    Load v12 <- %1
+    Load v13 <- int(1)
+    Add %1 <- v12, v13
     Jmp -> instr(16)
-    Load %15 <- %1
-    Load %16 <- int(5)
-    Eq %13 <- %15, %16
-    Load %17 <- string("0..(n+2) yields 5 iterations")
-    Call %12 <- string("std.assert.assert") [%13, %17] (def=d4)
-    Load %15 <- int(5)
-    Load %17 <- int(1)
-    Load %18 <- int(10)
-    Load %19 <- int(1)
-    NewRange %16 <- %17, %18, %19
-    Call %13 <- string("std.range.contains") [%16, %15] (def=d5)
-    VariantTag %20 <- %13 : Result
-    Load %21 <- int(0)
-    Eq %22 <- %20, %21
-    JmpIfNot %22 -> instr(41)
-    VariantPayload %13 <- %13 : Result
+    Load v16 <- %1
+    Load v17 <- int(5)
+    Eq v15 <- v16, v17
+    Load v18 <- string("0..(n+2) yields 5 iterations")
+    Call v14 <- string("std.assert.assert") [v15, v18] (def=d4)
+    Load v21 <- int(5)
+    Load v23 <- int(1)
+    Load v24 <- int(10)
+    Load v25 <- int(1)
+    NewRange v22 <- v23, v24, v25
+    Call v20 <- string("std.range.contains") [v22, v21] (def=d5)
+    VariantTag v26 <- v20 : Result
+    Load v27 <- int(0)
+    Eq v28 <- v26, v27
+    JmpIfNot v28 -> instr(41)
+    VariantPayload v20 <- v20 : Result
     Jmp -> instr(42)
-    Call _ <- string("std.range.abort_invalid_step") [%16] (def=d1)
-    Load %23 <- string("range stays whole as in-rhs")
-    Call %12 <- string("std.assert.assert") [%13, %23] (def=d4)
-    Load %16 <- int(11)
-    Load %18 <- int(1)
-    Load %19 <- int(10)
-    Load %20 <- int(1)
-    NewRange %17 <- %18, %19, %20
-    Call %15 <- string("std.range.contains") [%17, %16] (def=d5)
-    VariantTag %21 <- %15 : Result
-    Load %22 <- int(0)
-    Eq %23 <- %21, %22
-    JmpIfNot %23 -> instr(56)
-    VariantPayload %15 <- %15 : Result
+    Call _ <- string("std.range.abort_invalid_step") [v22] (def=d1)
+    Load v29 <- string("range stays whole as in-rhs")
+    Call v19 <- string("std.assert.assert") [v20, v29] (def=d4)
+    Load v33 <- int(11)
+    Load v35 <- int(1)
+    Load v36 <- int(10)
+    Load v37 <- int(1)
+    NewRange v34 <- v35, v36, v37
+    Call v32 <- string("std.range.contains") [v34, v33] (def=d5)
+    VariantTag v38 <- v32 : Result
+    Load v39 <- int(0)
+    Eq v40 <- v38, v39
+    JmpIfNot v40 -> instr(56)
+    VariantPayload v32 <- v32 : Result
     Jmp -> instr(57)
-    Call _ <- string("std.range.abort_invalid_step") [%17] (def=d1)
-    Not %13 <- %15
-    Load %24 <- string("range not in")
-    Call %12 <- string("std.assert.assert") [%13, %24] (def=d4)
+    Call _ <- string("std.range.abort_invalid_step") [v34] (def=d1)
+    Not v31 <- v32
+    Load v41 <- string("range not in")
+    Call v30 <- string("std.assert.assert") [v31, v41] (def=d4)
     Drop %1
     Drop %0
-    Ret %12
+    Ret v30
   init (locals=0)
     Call %0 <- string("main") [] (def=d6)

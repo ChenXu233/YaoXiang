@@ -6,63 +6,100 @@ module
     slot[4] n : Int(64) @depth1
     slot[5] tag : Int(64) @depth1
     locals_total=17
-    Load %0 <- int(21)
-    CreateVariant %1 <- Result::0 %0
-    Load %0 <- void
-    Load %2 <- %1
-    VariantTag %3 <- %2 : Result
-    Load %4 <- int(0)
-    Eq %5 <- %3, %4
-    JmpIfNot %5 -> instr(15)
-    VariantPayload %6 <- %2 : Result
-    Move %7 <- %6
-    Load %8 <- %7
-    Load %9 <- int(2)
-    Mul %10 <- %8, %9
-    Move %0 <- %10
+    values_total=36
+    value v0: Int(64) @block0
+    value v1: Generic { name: "Result", args: [Int(64), Generic { name: "String", args: [] }] } @block0
+    value v2: TypeRef("?") @block0
+    value v3: Int(64) @block0
+    value v4: Bool @block0
+    value v5: TypeRef("?") @block0
+    value v6: Int(64) @block0
+    value v7: Int(64) @block0
+    value v8: Int(64) @block0
+    value v9: TypeRef("?") @block0
+    value v10: Int(64) @block0
+    value v11: Bool @block0
+    value v12: TypeRef("?") @block0
+    value v13: Int(64) @block0
+    value v14: TypeRef("?") @block0
+    value v15: Bool @block0
+    value v16: Int(64) @block0
+    value v17: Int(64) @block0
+    value v18: Generic { name: "String", args: [] } @block0
+    value v19: Generic { name: "String", args: [] } @block0
+    value v20: Generic { name: "Result", args: [Int(64), TypeRef("Error")] } @block0
+    value v21: TypeRef("?") @block0
+    value v22: Int(64) @block0
+    value v23: Bool @block0
+    value v24: TypeRef("?") @block0
+    value v25: Generic { name: "String", args: [] } @block0
+    value v26: TypeRef("?") @block0
+    value v27: Int(64) @block0
+    value v28: Bool @block0
+    value v29: TypeRef("?") @block0
+    value v30: Generic { name: "String", args: [] } @block0
+    value v31: TypeRef("?") @block0
+    value v32: Bool @block0
+    value v33: Generic { name: "String", args: [] } @block0
+    value v34: Generic { name: "String", args: [] } @block0
+    value v35: Generic { name: "String", args: [] } @block0
+    Load v0 <- int(21)
+    CreateVariant %0 <- Result::0 v0
+    Load %1 <- void
+    Load v1 <- %0
+    VariantTag v2 <- v1 : Result
+    Load v3 <- int(0)
+    Eq v4 <- v2, v3
+    JmpIfNot v4 -> instr(15)
+    VariantPayload v5 <- v1 : Result
+    Move %2 <- v5
+    Load v7 <- %2
+    Load v8 <- int(2)
+    Mul v6 <- v7, v8
+    Move %1 <- v6
     Jmp -> instr(23)
-    VariantTag %11 <- %2 : Result
-    Load %12 <- int(1)
-    Eq %13 <- %11, %12
-    JmpIfNot %13 -> instr(23)
-    VariantPayload %14 <- %2 : Result
-    Load %15 <- int(0)
-    Move %0 <- %15
+    VariantTag v9 <- v1 : Result
+    Load v10 <- int(1)
+    Eq v11 <- v9, v10
+    JmpIfNot v11 -> instr(23)
+    VariantPayload v12 <- v1 : Result
+    Load v13 <- int(0)
+    Move %1 <- v13
     Jmp -> instr(23)
-    Load %5 <- %0
-    Load %6 <- int(42)
-    Eq %4 <- %5, %6
-    Load %10 <- string("grouped use type bare name + match")
-    Call %3 <- string("std.assert.assert") [%4, %10] (def=d0)
-    Load %4 <- string("nope")
-    Call %3 <- string("std.string.parse_int") [%4] (def=d1)
+    Load v16 <- %1
+    Load v17 <- int(42)
+    Eq v15 <- v16, v17
+    Load v18 <- string("grouped use type bare name + match")
+    Call v14 <- string("std.assert.assert") [v15, v18] (def=d0)
+    Load v19 <- string("nope")
+    Call %3 <- string("std.string.parse_int") [v19] (def=d1)
     Load %4 <- void
-    Load %5 <- %3
-    VariantTag %6 <- %5 : Result
-    Load %10 <- int(0)
-    Eq %8 <- %6, %10
-    JmpIfNot %8 -> instr(40)
-    VariantPayload %9 <- %5 : Result
-    Load %11 <- string("parsed")
-    Move %4 <- %11
+    Load v20 <- %3
+    VariantTag v21 <- v20 : Result
+    Load v22 <- int(0)
+    Eq v23 <- v21, v22
+    JmpIfNot v23 -> instr(40)
+    VariantPayload v24 <- v20 : Result
+    Load v25 <- string("parsed")
+    Move %4 <- v25
     Jmp -> instr(48)
-    VariantTag %12 <- %5 : Result
-    Load %13 <- int(1)
-    Eq %14 <- %12, %13
-    JmpIfNot %14 -> instr(48)
-    VariantPayload %15 <- %5 : Result
-    Load %16 <- string("failed")
-    Move %4 <- %16
+    VariantTag v26 <- v20 : Result
+    Load v27 <- int(1)
+    Eq v28 <- v26, v27
+    JmpIfNot v28 -> instr(48)
+    VariantPayload v29 <- v20 : Result
+    Load v30 <- string("failed")
+    Move %4 <- v30
     Jmp -> instr(48)
-    Load %10 <- %4
-    Load %8 <- string("failed")
-    Eq %6 <- %10, %8
-    Load %9 <- string("grouped use match native Result")
-    Call %5 <- string("std.assert.assert") [%6, %9] (def=d0)
-    Drop %1
+    Load v33 <- %4
+    Load v34 <- string("failed")
+    Eq v32 <- v33, v34
+    Load v35 <- string("grouped use match native Result")
+    Call v31 <- string("std.assert.assert") [v32, v35] (def=d0)
+    Drop %0
     Drop %3
     Drop %4
-    Drop %0
-    Ret %5
+    Drop %1
+    Ret v31
   init (locals=0)
     Call %0 <- string("main") [] (def=d2)

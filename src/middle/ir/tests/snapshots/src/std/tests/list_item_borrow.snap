@@ -3,58 +3,98 @@ module
     slot[0] xs : Int(64) @depth1
     slot[1] s : Int(64) @depth1
     locals_total=9
+    values_total=39
+    value v0: Generic { name: "String", args: [] } @block0
+    value v1: Int(64) @block0
+    value v2: Generic { name: "String", args: [] } @block0
+    value v3: Int(64) @block0
+    value v4: Generic { name: "String", args: [] } @block0
+    value v5: Int(64) @block0
+    value v6: TypeRef("?") @block0
+    value v7: TypeRef("?") @block0
+    value v8: Generic { name: "Vec", args: [Generic { name: "String", args: [] }] } @block0
+    value v9: Generic { name: "String", args: [] } @block0
+    value v10: Generic { name: "String", args: [] } @block0
+    value v11: TypeRef("?") @block0
+    value v12: Bool @block0
+    value v13: Generic { name: "String", args: [] } @block0
+    value v14: Generic { name: "String", args: [] } @block0
+    value v15: Generic { name: "String", args: [] } @block0
+    value v16: TypeRef("?") @block0
+    value v17: Bool @block0
+    value v18: TypeRef("?") @block0
+    value v19: Int(64) @block0
+    value v20: Generic { name: "Vec", args: [Generic { name: "String", args: [] }] } @block0
+    value v21: Generic { name: "String", args: [] } @block0
+    value v22: Generic { name: "String", args: [] } @block0
+    value v23: TypeRef("?") @block0
+    value v24: Bool @block0
+    value v25: Generic { name: "String", args: [] } @block0
+    value v26: Generic { name: "String", args: [] } @block0
+    value v27: Generic { name: "String", args: [] } @block0
+    value v28: TypeRef("?") @block0
+    value v29: TypeRef("?") @block0
+    value v30: Generic { name: "Vec", args: [Generic { name: "String", args: [] }] } @block0
+    value v31: Generic { name: "String", args: [] } @block0
+    value v32: Generic { name: "String", args: [] } @block0
+    value v33: TypeRef("?") @block0
+    value v34: Bool @block0
+    value v35: TypeRef("?") @block0
+    value v36: Int(64) @block0
+    value v37: Generic { name: "Vec", args: [Generic { name: "String", args: [] }] } @block0
+    value v38: Generic { name: "String", args: [] } @block0
     AllocArray %0 size=int(3), elem=int(1)
-    Load %1 <- string("a")
-    Load %2 <- int(0)
-    StoreIndex %0[%2] <- %1
-    Load %3 <- string("b")
-    Load %4 <- int(1)
-    StoreIndex %0[%4] <- %3
-    Load %5 <- string("c")
-    Load %6 <- int(2)
-    StoreIndex %0[%6] <- %5
+    Load v0 <- string("a")
+    Load v1 <- int(0)
+    StoreIndex %0[v1] <- v0
+    Load v2 <- string("b")
+    Load v3 <- int(1)
+    StoreIndex %0[v3] <- v2
+    Load v4 <- string("c")
+    Load v5 <- int(2)
+    StoreIndex %0[v5] <- v4
     Load %1 <- string("b")
-    Load %4 <- %0
-    Load %5 <- %1
-    Call %3 <- string("std.list.contains") [%4, %5] (def=d0)
-    Load %6 <- string("contains str item")
-    Call %2 <- string("std.assert.assert") [%3, %6] (def=d1)
+    Load v8 <- %0
+    Load v9 <- %1
+    Call v7 <- string("std.list.contains") [v8, v9] (def=d0)
+    Load v10 <- string("contains str item")
+    Call v6 <- string("std.assert.assert") [v7, v10] (def=d1)
     Drop %1
     Drop %0
-    Load %4 <- %1
-    Load %5 <- string("b")
-    Eq %3 <- %4, %5
-    Load %6 <- string("str item survives contains")
-    Call %2 <- string("std.assert.assert") [%3, %6] (def=d1)
-    Load %6 <- %0
-    Load %7 <- %1
-    Call %4 <- string("std.list.find_index") [%6, %7] (def=d2)
-    Load %5 <- int(1)
-    Eq %3 <- %4, %5
-    Load %8 <- string("find_index str item")
-    Call %2 <- string("std.assert.assert") [%3, %8] (def=d1)
+    Load v13 <- %1
+    Load v14 <- string("b")
+    Eq v12 <- v13, v14
+    Load v15 <- string("str item survives contains")
+    Call v11 <- string("std.assert.assert") [v12, v15] (def=d1)
+    Load v20 <- %0
+    Load v21 <- %1
+    Call v18 <- string("std.list.find_index") [v20, v21] (def=d2)
+    Load v19 <- int(1)
+    Eq v17 <- v18, v19
+    Load v22 <- string("find_index str item")
+    Call v16 <- string("std.assert.assert") [v17, v22] (def=d1)
     Drop %1
     Drop %0
-    Load %4 <- %1
-    Load %5 <- string("b")
-    Eq %3 <- %4, %5
-    Load %6 <- string("str item survives find_index")
-    Call %2 <- string("std.assert.assert") [%3, %6] (def=d1)
-    Load %4 <- %0
-    Load %5 <- %1
-    Call %3 <- string("std.list.contains") [%4, %5] (def=d0)
-    Load %6 <- string("xs reusable across calls")
-    Call %2 <- string("std.assert.assert") [%3, %6] (def=d1)
+    Load v25 <- %1
+    Load v26 <- string("b")
+    Eq v24 <- v25, v26
+    Load v27 <- string("str item survives find_index")
+    Call v23 <- string("std.assert.assert") [v24, v27] (def=d1)
+    Load v30 <- %0
+    Load v31 <- %1
+    Call v29 <- string("std.list.contains") [v30, v31] (def=d0)
+    Load v32 <- string("xs reusable across calls")
+    Call v28 <- string("std.assert.assert") [v29, v32] (def=d1)
     Drop %1
     Drop %0
-    Load %6 <- %0
-    Call %4 <- string("std.list.len") [%6] (def=d3)
-    Load %5 <- int(3)
-    Eq %3 <- %4, %5
-    Load %7 <- string("xs len intact")
-    Call %2 <- string("std.assert.assert") [%3, %7] (def=d1)
+    Load v37 <- %0
+    Call v35 <- string("std.list.len") [v37] (def=d3)
+    Load v36 <- int(3)
+    Eq v34 <- v35, v36
+    Load v38 <- string("xs len intact")
+    Call v33 <- string("std.assert.assert") [v34, v38] (def=d1)
     Drop %1
     Drop %0
-    Ret %2
+    Ret v33
   init (locals=0)
     Call %0 <- string("main") [] (def=d4)

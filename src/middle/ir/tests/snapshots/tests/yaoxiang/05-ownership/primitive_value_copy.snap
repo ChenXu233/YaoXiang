@@ -4,28 +4,45 @@ module
     slot[1] b : Int(64) @depth1
     slot[2] x : Int(64) @depth1
     locals_total=9
+    values_total=16
+    value v0: TypeRef("?") @block0
+    value v1: Bool @block0
+    value v2: Int(64) @block0
+    value v3: Int(64) @block0
+    value v4: Int(64) @block0
+    value v5: Int(64) @block0
+    value v6: Generic { name: "String", args: [] } @block0
+    value v7: TypeRef("?") @block0
+    value v8: Int(64) @block0
+    value v9: TypeRef("?") @block0
+    value v10: Int(64) @block0
+    value v11: TypeRef("?") @block0
+    value v12: Bool @block0
+    value v13: Int(64) @block0
+    value v14: Int(64) @block0
+    value v15: Generic { name: "String", args: [] } @block0
     Load %0 <- int(42)
     Load %1 <- %0
-    Load %2 <- %0
-    Load %3 <- %1
-    Add %4 <- %2, %3
-    Load %5 <- int(84)
-    Eq %6 <- %4, %5
-    Load %7 <- string("原语赋值复制，两者都可用")
-    Call %8 <- string("std.assert.assert") [%6, %7] (def=d0)
-    Load %8 <- int(7)
-    Load %4 <- %8
-    Call %6 <- string("std.io.println") [%4] (def=d1)
-    Load %4 <- %8
-    Call %6 <- string("std.io.println") [%4] (def=d1)
-    Load %5 <- %8
+    Load v4 <- %0
+    Load v5 <- %1
+    Add v2 <- v4, v5
+    Load v3 <- int(84)
+    Eq v1 <- v2, v3
+    Load v6 <- string("原语赋值复制，两者都可用")
+    Call v0 <- string("std.assert.assert") [v1, v6] (def=d0)
     Load %2 <- int(7)
-    Eq %4 <- %5, %2
-    Load %3 <- string("原语传参不 move 源")
-    Call %6 <- string("std.assert.assert") [%4, %3] (def=d0)
+    Load v8 <- %2
+    Call v7 <- string("std.io.println") [v8] (def=d1)
+    Load v10 <- %2
+    Call v9 <- string("std.io.println") [v10] (def=d1)
+    Load v13 <- %2
+    Load v14 <- int(7)
+    Eq v12 <- v13, v14
+    Load v15 <- string("原语传参不 move 源")
+    Call v11 <- string("std.assert.assert") [v12, v15] (def=d0)
     Drop %0
     Drop %1
-    Drop %8
-    Ret %6
+    Drop %2
+    Ret v11
   init (locals=0)
     Call %0 <- string("main") [] (def=d2)

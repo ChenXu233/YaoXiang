@@ -3,127 +3,216 @@ module
     slot[0] a : Int(64) @depth1
     slot[1] b : Int(64) @depth1
     locals_total=5
+    values_total=3
+    value v0: Int(64) @block0
+    value v1: Int(64) @block0
+    value v2: Int(64) @block0
     Load %0 <- arg%0
     Load %1 <- arg%1
-    Load %2 <- %0
-    Load %3 <- %1
-    Add %4 <- %2, %3
-    Ret %4
+    Load v1 <- %0
+    Load v2 <- %1
+    Add v0 <- v1, v2
+    Ret v0
   fn digits(Int(64), Int(64), Int(64)) -> Int(64)
     slot[0] x : Int(64) @depth1
     slot[1] y : Int(64) @depth1
     slot[2] z : Int(64) @depth1
     locals_total=12
+    values_total=9
+    value v0: Int(64) @block0
+    value v1: Int(64) @block0
+    value v2: Int(64) @block0
+    value v3: Int(64) @block0
+    value v4: Int(64) @block0
+    value v5: Int(64) @block0
+    value v6: Int(64) @block0
+    value v7: Int(64) @block0
+    value v8: Int(64) @block0
     Load %0 <- arg%0
     Load %1 <- arg%1
     Load %2 <- arg%2
-    Load %3 <- %0
-    Load %4 <- int(100)
-    Mul %5 <- %3, %4
-    Load %6 <- %1
-    Load %7 <- int(10)
-    Mul %8 <- %6, %7
-    Add %9 <- %5, %8
-    Load %10 <- %2
-    Add %11 <- %9, %10
-    Ret %11
+    Load v5 <- %0
+    Load v6 <- int(100)
+    Mul v3 <- v5, v6
+    Load v7 <- %1
+    Load v8 <- int(10)
+    Mul v4 <- v7, v8
+    Add v1 <- v3, v4
+    Load v2 <- %2
+    Add v0 <- v1, v2
+    Ret v0
   fn send(Generic { name: "String", args: [] }, Generic { name: "String", args: [] }, Generic { name: "String", args: [] }) -> Generic { name: "String", args: [] }
     slot[0] to : Int(64) @depth1
     slot[1] title : Int(64) @depth1
     slot[2] body : Int(64) @depth1
     locals_total=12
+    values_total=9
+    value v0: Generic { name: "String", args: [] } @block0
+    value v1: Generic { name: "String", args: [] } @block0
+    value v2: Generic { name: "String", args: [] } @block0
+    value v3: Generic { name: "String", args: [] } @block0
+    value v4: Generic { name: "String", args: [] } @block0
+    value v5: Generic { name: "String", args: [] } @block0
+    value v6: Generic { name: "String", args: [] } @block0
+    value v7: Generic { name: "String", args: [] } @block0
+    value v8: Generic { name: "String", args: [] } @block0
     Load %0 <- arg%0
     Load %1 <- arg%1
     Load %2 <- arg%2
-    Load %3 <- %0
-    Load %4 <- string("|")
-    Add %5 <- %3, %4
-    Load %6 <- %1
-    Add %7 <- %5, %6
-    Load %8 <- string("|")
-    Add %9 <- %7, %8
-    Load %10 <- %2
-    Add %11 <- %9, %10
-    Ret %11
+    Load v7 <- %0
+    Load v8 <- string("|")
+    Add v5 <- v7, v8
+    Load v6 <- %1
+    Add v3 <- v5, v6
+    Load v4 <- string("|")
+    Add v1 <- v3, v4
+    Load v2 <- %2
+    Add v0 <- v1, v2
+    Ret v0
   fn main() -> Void
     slot[0] v : Int(64) @depth1
     slot[1] pushed : Int(64) @depth1
     slot[2] msg : Int(64) @depth1
     locals_total=9
-    Load %0 <- int(3)
-    Load %1 <- int(5)
-    Call %2 <- string("add") [%0, %1] (def=d0)
-    Load %3 <- int(8)
-    Eq %4 <- %2, %3
-    Load %5 <- string("named: declaration order")
-    Call %6 <- string("std.assert.assert") [%4, %5] (def=d1)
-    Load %0 <- int(5)
-    Load %1 <- int(3)
-    Call %2 <- string("add") [%1, %0] (def=d0)
-    Load %3 <- int(8)
-    Eq %4 <- %2, %3
-    Load %5 <- string("named: reversed order")
-    Call %6 <- string("std.assert.assert") [%4, %5] (def=d1)
-    Load %0 <- int(3)
-    Load %1 <- int(5)
-    Call %2 <- string("add") [%0, %1] (def=d0)
-    Load %3 <- int(8)
-    Eq %4 <- %2, %3
-    Load %5 <- string("named: mixed positional first")
-    Call %6 <- string("std.assert.assert") [%4, %5] (def=d1)
-    Load %0 <- int(3)
-    Load %1 <- int(2)
-    Load %5 <- int(1)
-    Call %2 <- string("digits") [%5, %1, %0] (def=d2)
-    Load %3 <- int(123)
-    Eq %4 <- %2, %3
-    Load %7 <- string("named: three args reversed")
-    Call %6 <- string("std.assert.assert") [%4, %7] (def=d1)
-    Load %0 <- int(1)
-    Load %1 <- int(3)
-    Load %5 <- int(2)
-    Call %2 <- string("digits") [%0, %5, %1] (def=d2)
-    Load %3 <- int(123)
-    Eq %4 <- %2, %3
-    Load %7 <- string("named: one positional + two named")
-    Call %6 <- string("std.assert.assert") [%4, %7] (def=d1)
-    AllocArray %6 size=int(2), elem=int(1)
-    Load %4 <- int(1)
-    Load %2 <- int(0)
-    StoreIndex %6[%2] <- %4
-    Load %3 <- int(2)
-    Load %0 <- int(1)
-    StoreIndex %6[%0] <- %3
-    Load %2 <- int(9)
-    Load %3 <- %6
-    Call %4 <- string("std.list.push") [%3, %2] (def=d3)
-    Load %5 <- %4
-    Call %0 <- string("std.list.len") [%5] (def=d4)
-    Load %1 <- int(3)
-    Eq %3 <- %0, %1
-    Load %7 <- string("named: qualified list.push len")
-    Call %2 <- string("std.assert.assert") [%3, %7] (def=d1)
-    Drop %4
-    Load %5 <- %4
-    Load %7 <- int(2)
-    Call %0 <- string("std.list.get") [%5, %7] (def=d5)
-    Load %1 <- int(9)
-    Eq %3 <- %0, %1
-    Load %8 <- string("named: qualified list.push value")
-    Call %2 <- string("std.assert.assert") [%3, %8] (def=d1)
-    Drop %4
-    Load %3 <- string("明天下午 3 点开会")
-    Load %0 <- string("alice@example.com")
-    Load %1 <- string("会议通知")
-    Call %2 <- string("send") [%0, %1, %3] (def=d6)
-    Load %1 <- %2
-    Load %5 <- string("alice@example.com|会议通知|明天下午 3 点开会")
-    Eq %0 <- %1, %5
-    Load %7 <- string("named: readable call")
-    Call %3 <- string("std.assert.assert") [%0, %7] (def=d1)
+    values_total=64
+    value v0: TypeRef("?") @block0
+    value v1: Bool @block0
+    value v2: Int(64) @block0
+    value v3: Int(64) @block0
+    value v4: Int(64) @block0
+    value v5: Int(64) @block0
+    value v6: Generic { name: "String", args: [] } @block0
+    value v7: TypeRef("?") @block0
+    value v8: Bool @block0
+    value v9: Int(64) @block0
+    value v10: Int(64) @block0
+    value v11: Int(64) @block0
+    value v12: Int(64) @block0
+    value v13: Generic { name: "String", args: [] } @block0
+    value v14: TypeRef("?") @block0
+    value v15: Bool @block0
+    value v16: Int(64) @block0
+    value v17: Int(64) @block0
+    value v18: Int(64) @block0
+    value v19: Int(64) @block0
+    value v20: Generic { name: "String", args: [] } @block0
+    value v21: TypeRef("?") @block0
+    value v22: Bool @block0
+    value v23: Int(64) @block0
+    value v24: Int(64) @block0
+    value v25: Int(64) @block0
+    value v26: Int(64) @block0
+    value v27: Int(64) @block0
+    value v28: Generic { name: "String", args: [] } @block0
+    value v29: TypeRef("?") @block0
+    value v30: Bool @block0
+    value v31: Int(64) @block0
+    value v32: Int(64) @block0
+    value v33: Int(64) @block0
+    value v34: Int(64) @block0
+    value v35: Int(64) @block0
+    value v36: Generic { name: "String", args: [] } @block0
+    value v37: Int(64) @block0
+    value v38: Int(64) @block0
+    value v39: Int(64) @block0
+    value v40: Int(64) @block0
+    value v41: Int(64) @block0
+    value v42: Generic { name: "Vec", args: [Int(64)] } @block0
+    value v43: TypeRef("?") @block0
+    value v44: Bool @block0
+    value v45: TypeRef("?") @block0
+    value v46: Int(64) @block0
+    value v47: Generic { name: "Vec", args: [TypeVar(TypeVar(48))] } @block0
+    value v48: Generic { name: "String", args: [] } @block0
+    value v49: TypeRef("?") @block0
+    value v50: Bool @block0
+    value v51: TypeRef("?") @block0
+    value v52: Int(64) @block0
+    value v53: Generic { name: "Vec", args: [TypeVar(TypeVar(48))] } @block0
+    value v54: Int(64) @block0
+    value v55: Generic { name: "String", args: [] } @block0
+    value v56: Generic { name: "String", args: [] } @block0
+    value v57: Generic { name: "String", args: [] } @block0
+    value v58: Generic { name: "String", args: [] } @block0
+    value v59: TypeRef("?") @block0
+    value v60: Bool @block0
+    value v61: Generic { name: "String", args: [] } @block0
+    value v62: Generic { name: "String", args: [] } @block0
+    value v63: Generic { name: "String", args: [] } @block0
+    Load v4 <- int(3)
+    Load v5 <- int(5)
+    Call v2 <- string("add") [v4, v5] (def=d0)
+    Load v3 <- int(8)
+    Eq v1 <- v2, v3
+    Load v6 <- string("named: declaration order")
+    Call v0 <- string("std.assert.assert") [v1, v6] (def=d1)
+    Load v11 <- int(5)
+    Load v12 <- int(3)
+    Call v9 <- string("add") [v12, v11] (def=d0)
+    Load v10 <- int(8)
+    Eq v8 <- v9, v10
+    Load v13 <- string("named: reversed order")
+    Call v7 <- string("std.assert.assert") [v8, v13] (def=d1)
+    Load v18 <- int(3)
+    Load v19 <- int(5)
+    Call v16 <- string("add") [v18, v19] (def=d0)
+    Load v17 <- int(8)
+    Eq v15 <- v16, v17
+    Load v20 <- string("named: mixed positional first")
+    Call v14 <- string("std.assert.assert") [v15, v20] (def=d1)
+    Load v25 <- int(3)
+    Load v26 <- int(2)
+    Load v27 <- int(1)
+    Call v23 <- string("digits") [v27, v26, v25] (def=d2)
+    Load v24 <- int(123)
+    Eq v22 <- v23, v24
+    Load v28 <- string("named: three args reversed")
+    Call v21 <- string("std.assert.assert") [v22, v28] (def=d1)
+    Load v33 <- int(1)
+    Load v34 <- int(3)
+    Load v35 <- int(2)
+    Call v31 <- string("digits") [v33, v35, v34] (def=d2)
+    Load v32 <- int(123)
+    Eq v30 <- v31, v32
+    Load v36 <- string("named: one positional + two named")
+    Call v29 <- string("std.assert.assert") [v30, v36] (def=d1)
+    AllocArray %0 size=int(2), elem=int(1)
+    Load v37 <- int(1)
+    Load v38 <- int(0)
+    StoreIndex %0[v38] <- v37
+    Load v39 <- int(2)
+    Load v40 <- int(1)
+    StoreIndex %0[v40] <- v39
+    Load v41 <- int(9)
+    Load v42 <- %0
+    Call %1 <- string("std.list.push") [v42, v41] (def=d3)
+    Load v47 <- %1
+    Call v45 <- string("std.list.len") [v47] (def=d4)
+    Load v46 <- int(3)
+    Eq v44 <- v45, v46
+    Load v48 <- string("named: qualified list.push len")
+    Call v43 <- string("std.assert.assert") [v44, v48] (def=d1)
+    Drop %1
+    Load v53 <- %1
+    Load v54 <- int(2)
+    Call v51 <- string("std.list.get") [v53, v54] (def=d5)
+    Load v52 <- int(9)
+    Eq v50 <- v51, v52
+    Load v55 <- string("named: qualified list.push value")
+    Call v49 <- string("std.assert.assert") [v50, v55] (def=d1)
+    Drop %1
+    Load v56 <- string("明天下午 3 点开会")
+    Load v57 <- string("alice@example.com")
+    Load v58 <- string("会议通知")
+    Call %2 <- string("send") [v57, v58, v56] (def=d6)
+    Load v61 <- %2
+    Load v62 <- string("alice@example.com|会议通知|明天下午 3 点开会")
+    Eq v60 <- v61, v62
+    Load v63 <- string("named: readable call")
+    Call v59 <- string("std.assert.assert") [v60, v63] (def=d1)
     Drop %2
-    Drop %4
-    Drop %6
-    Ret %3
+    Drop %1
+    Drop %0
+    Ret v59
   init (locals=0)
     Call %0 <- string("main") [] (def=d7)

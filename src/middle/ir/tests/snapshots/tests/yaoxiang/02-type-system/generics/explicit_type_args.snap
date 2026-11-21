@@ -3,20 +3,26 @@ module
     generic_params: ["A"]
     slot[0] x : Int(64) @depth1
     locals_total=2
-    Load %0 <- %1
-    Ret %0
+    values_total=1
+    value v0: TypeRef("A") @block0
+    Load v0 <- %0
+    Ret v0
   fn pick_first(TypeRef("A"), TypeRef("B")) -> TypeRef("A")
     generic_params: ["A", "B"]
     slot[0] x : Int(64) @depth1
     slot[1] y : Int(64) @depth1
     locals_total=3
-    Load %0 <- %1
-    Ret %0
+    values_total=1
+    value v0: TypeRef("A") @block0
+    Load v0 <- %0
+    Ret v0
   fn add2(Int(64)) -> Fn { params: [Int(64)], return_type: Int(64) }
     slot[0] a : Int(64) @depth1
     locals_total=2
-    MakeClosure %0 <- __add2_l0 env=[%1] (def=d0)
-    Ret %0
+    values_total=1
+    value v0: TypeRef("?") @block0
+    MakeClosure v0 <- __add2_l0 env=[%0] (def=d0)
+    Ret v0
   fn main() -> Void
     slot[0] inferred : Int(64) @depth1
     slot[1] explicit : Int(64) @depth1
@@ -28,106 +34,182 @@ module
     slot[7] pushed : Int(64) @depth1
     slot[8] s2 : Int(64) @depth1
     locals_total=14
-    Load %0 <- int(5)
-    Call %1 <- string("mk") [%0] (def=d1)
-    Load %2 <- %1
-    Load %3 <- int(5)
-    Eq %4 <- %2, %3
-    Load %5 <- string("mk(5) inferred == 5")
-    Call %0 <- string("std.assert.assert") [%4, %5] (def=d2)
-    Load %4 <- int(5)
-    Call %0 <- string("mk(int64)") [%4] (def=_)
-    Load %3 <- %0
-    Load %5 <- int(5)
-    Eq %2 <- %3, %5
-    Load %6 <- string("mk(Int)(5) == 5")
-    Call %4 <- string("std.assert.assert") [%2, %6] (def=d2)
-    Load %3 <- %0
-    Load %5 <- %1
-    Eq %2 <- %3, %5
-    Load %6 <- string("explicit == inferred")
-    Call %4 <- string("std.assert.assert") [%2, %6] (def=d2)
-    Load %2 <- string("hi")
-    Call %4 <- string("mk(string)") [%2] (def=_)
-    Load %5 <- %4
-    Load %6 <- string("hi")
-    Eq %3 <- %5, %6
-    Load %7 <- string("mk(String)(hi) == hi")
-    Call %2 <- string("std.assert.assert") [%3, %7] (def=d2)
-    Load %3 <- int(7)
-    Load %5 <- string("ignored")
-    Call %2 <- string("pick_first(int64, string)") [%3, %5] (def=_)
-    Load %6 <- %2
-    Load %7 <- int(7)
-    Eq %5 <- %6, %7
-    Load %8 <- string("pick_first(Int,String)(7,...) == 7")
-    Call %3 <- string("std.assert.assert") [%5, %8] (def=d2)
-    Load %5 <- int(5)
-    Load %7 <- int(10)
-    Call %6 <- string("add2") [%7] (def=d3)
-    CallDyn %3 <- %6 [%5]
-    Load %7 <- %3
-    Load %8 <- int(15)
-    Eq %6 <- %7, %8
-    Load %9 <- string("add2(10)(5) == 15 (partial application)")
-    Call %5 <- string("std.assert.assert") [%6, %9] (def=d2)
-    Load %6 <- int(10)
-    Call %5 <- string("add2") [%6] (def=d3)
-    Load %10 <- int(1)
-    Load %11 <- %5
-    CallDyn %8 <- %11 [%10]
-    Load %9 <- int(11)
-    Eq %7 <- %8, %9
-    Load %12 <- string("add10(1) == 11")
-    Call %6 <- string("std.assert.assert") [%7, %12] (def=d2)
-    Load %10 <- int(7)
-    Load %11 <- %5
-    CallDyn %8 <- %11 [%10]
-    Load %9 <- int(17)
-    Eq %7 <- %8, %9
-    Load %12 <- string("add10(7) == 17")
-    Call %6 <- string("std.assert.assert") [%7, %12] (def=d2)
+    values_total=71
+    value v0: Int(64) @block0
+    value v1: TypeRef("?") @block0
+    value v2: Bool @block0
+    value v3: Int(64) @block0
+    value v4: Int(64) @block0
+    value v5: Generic { name: "String", args: [] } @block0
+    value v6: Int(64) @block0
+    value v7: TypeRef("?") @block0
+    value v8: Bool @block0
+    value v9: Int(64) @block0
+    value v10: Int(64) @block0
+    value v11: Generic { name: "String", args: [] } @block0
+    value v12: TypeRef("?") @block0
+    value v13: Bool @block0
+    value v14: Int(64) @block0
+    value v15: Int(64) @block0
+    value v16: Generic { name: "String", args: [] } @block0
+    value v17: Generic { name: "String", args: [] } @block0
+    value v18: TypeRef("?") @block0
+    value v19: Bool @block0
+    value v20: Generic { name: "String", args: [] } @block0
+    value v21: Generic { name: "String", args: [] } @block0
+    value v22: Generic { name: "String", args: [] } @block0
+    value v23: Int(64) @block0
+    value v24: Generic { name: "String", args: [] } @block0
+    value v25: TypeRef("?") @block0
+    value v26: Bool @block0
+    value v27: Int(64) @block0
+    value v28: Int(64) @block0
+    value v29: Generic { name: "String", args: [] } @block0
+    value v30: Int(64) @block0
+    value v31: Fn { params: [Int(64)], return_type: Int(64) } @block0
+    value v32: Int(64) @block0
+    value v33: TypeRef("?") @block0
+    value v34: Bool @block0
+    value v35: Int(64) @block0
+    value v36: Int(64) @block0
+    value v37: Generic { name: "String", args: [] } @block0
+    value v38: Int(64) @block0
+    value v39: TypeRef("?") @block0
+    value v40: Bool @block0
+    value v41: Int(64) @block0
+    value v42: Int(64) @block0
+    value v43: Int(64) @block0
+    value v44: Fn { params: [Int(64)], return_type: Int(64) } @block0
+    value v45: Generic { name: "String", args: [] } @block0
+    value v46: TypeRef("?") @block0
+    value v47: Bool @block0
+    value v48: Int(64) @block0
+    value v49: Int(64) @block0
+    value v50: Int(64) @block0
+    value v51: Fn { params: [Int(64)], return_type: Int(64) } @block0
+    value v52: Generic { name: "String", args: [] } @block0
+    value v53: Int(64) @block0
+    value v54: Int(64) @block0
+    value v55: Int(64) @block0
+    value v56: Int(64) @block0
+    value v57: Int(64) @block0
+    value v58: Generic { name: "Vec", args: [Int(64)] } @block0
+    value v59: TypeRef("?") @block0
+    value v60: Bool @block0
+    value v61: TypeRef("?") @block0
+    value v62: Int(64) @block0
+    value v63: Generic { name: "Vec", args: [TypeVar(TypeVar(60))] } @block0
+    value v64: Generic { name: "String", args: [] } @block0
+    value v65: Generic { name: "String", args: [] } @block0
+    value v66: TypeRef("?") @block0
+    value v67: Bool @block0
+    value v68: Generic { name: "String", args: [] } @block0
+    value v69: Generic { name: "String", args: [] } @block0
+    value v70: Generic { name: "String", args: [] } @block0
+    Load v0 <- int(5)
+    Call %0 <- string("mk") [v0] (def=d1)
+    Load v3 <- %0
+    Load v4 <- int(5)
+    Eq v2 <- v3, v4
+    Load v5 <- string("mk(5) inferred == 5")
+    Call v1 <- string("std.assert.assert") [v2, v5] (def=d2)
+    Load v6 <- int(5)
+    Call %1 <- string("mk(int64)") [v6] (def=_)
+    Load v9 <- %1
+    Load v10 <- int(5)
+    Eq v8 <- v9, v10
+    Load v11 <- string("mk(Int)(5) == 5")
+    Call v7 <- string("std.assert.assert") [v8, v11] (def=d2)
+    Load v14 <- %1
+    Load v15 <- %0
+    Eq v13 <- v14, v15
+    Load v16 <- string("explicit == inferred")
+    Call v12 <- string("std.assert.assert") [v13, v16] (def=d2)
+    Load v17 <- string("hi")
+    Call %2 <- string("mk(string)") [v17] (def=_)
+    Load v20 <- %2
+    Load v21 <- string("hi")
+    Eq v19 <- v20, v21
+    Load v22 <- string("mk(String)(hi) == hi")
+    Call v18 <- string("std.assert.assert") [v19, v22] (def=d2)
+    Load v23 <- int(7)
+    Load v24 <- string("ignored")
+    Call %3 <- string("pick_first(int64, string)") [v23, v24] (def=_)
+    Load v27 <- %3
+    Load v28 <- int(7)
+    Eq v26 <- v27, v28
+    Load v29 <- string("pick_first(Int,String)(7,...) == 7")
+    Call v25 <- string("std.assert.assert") [v26, v29] (def=d2)
+    Load v30 <- int(5)
+    Load v32 <- int(10)
+    Call v31 <- string("add2") [v32] (def=d3)
+    CallDyn %4 <- v31 [v30]
+    Load v35 <- %4
+    Load v36 <- int(15)
+    Eq v34 <- v35, v36
+    Load v37 <- string("add2(10)(5) == 15 (partial application)")
+    Call v33 <- string("std.assert.assert") [v34, v37] (def=d2)
+    Load v38 <- int(10)
+    Call %5 <- string("add2") [v38] (def=d3)
+    Load v43 <- int(1)
+    Load v44 <- %5
+    CallDyn v41 <- v44 [v43]
+    Load v42 <- int(11)
+    Eq v40 <- v41, v42
+    Load v45 <- string("add10(1) == 11")
+    Call v39 <- string("std.assert.assert") [v40, v45] (def=d2)
+    Load v50 <- int(7)
+    Load v51 <- %5
+    CallDyn v48 <- v51 [v50]
+    Load v49 <- int(17)
+    Eq v47 <- v48, v49
+    Load v52 <- string("add10(7) == 17")
+    Call v46 <- string("std.assert.assert") [v47, v52] (def=d2)
     AllocArray %6 size=int(2), elem=int(1)
-    Load %7 <- int(1)
-    Load %8 <- int(0)
-    StoreIndex %6[%8] <- %7
-    Load %9 <- int(2)
-    Load %10 <- int(1)
-    StoreIndex %6[%10] <- %9
-    Load %8 <- int(9)
-    Load %9 <- %6
-    Call %7 <- string("std.list.push") [%9, %8] (def=d4)
-    Load %12 <- %7
-    Call %10 <- string("std.list.len") [%12] (def=d5)
-    Load %11 <- int(3)
-    Eq %9 <- %10, %11
-    Load %13 <- string("std.list.* survives monomorphization")
-    Call %8 <- string("std.assert.assert") [%9, %13] (def=d2)
+    Load v53 <- int(1)
+    Load v54 <- int(0)
+    StoreIndex %6[v54] <- v53
+    Load v55 <- int(2)
+    Load v56 <- int(1)
+    StoreIndex %6[v56] <- v55
+    Load v57 <- int(9)
+    Load v58 <- %6
+    Call %7 <- string("std.list.push") [v58, v57] (def=d4)
+    Load v63 <- %7
+    Call v61 <- string("std.list.len") [v63] (def=d5)
+    Load v62 <- int(3)
+    Eq v60 <- v61, v62
+    Load v64 <- string("std.list.* survives monomorphization")
+    Call v59 <- string("std.assert.assert") [v60, v64] (def=d2)
     Drop %7
-    Load %9 <- string("x")
-    Call %8 <- string("mk(string)") [%9] (def=_)
-    Load %11 <- %8
-    Load %12 <- string("x")
-    Eq %10 <- %11, %12
-    Load %13 <- string("explicit type arg still works alongside std.list")
-    Call %9 <- string("std.assert.assert") [%10, %13] (def=d2)
+    Load v65 <- string("x")
+    Call %8 <- string("mk(string)") [v65] (def=_)
+    Load v68 <- %8
+    Load v69 <- string("x")
+    Eq v67 <- v68, v69
+    Load v70 <- string("explicit type arg still works alongside std.list")
+    Call v66 <- string("std.assert.assert") [v67, v70] (def=d2)
     Drop %5
-    Drop %0
     Drop %1
-    Drop %2
-    Drop %7
+    Drop %0
     Drop %3
+    Drop %7
     Drop %4
+    Drop %2
     Drop %8
     Drop %6
-    Ret %9
+    Ret v66
   fn __add2_l0(Int(64)) -> Int(64)
     slot[0] a : Int(64) @depth1
     slot[1] b : Int(64) @depth1
     locals_total=5
-    Load %0 <- %1
-    Load %2 <- %3
-    Add %4 <- %0, %2
-    Ret %4
+    values_total=3
+    value v0: Int(64) @block0
+    value v1: Int(64) @block0
+    value v2: Int(64) @block0
+    Load v1 <- %0
+    Load v2 <- %1
+    Add v0 <- v1, v2
+    Ret v0
   init (locals=0)
     Call %0 <- string("main") [] (def=d6)

@@ -4,32 +4,45 @@ module
   fn identity(TypeRef("IsPositive")) -> Int(64)
     slot[0] b : Int(64) @depth1
     locals_total=2
+    values_total=1
+    value v0: Int(64) @block0
     Load %0 <- arg%0
-    Load %1 <- %0
-    Ret %1
+    Load v0 <- %0
+    Ret v0
   fn succ(TypeRef("IsPositive")) -> Int(64)
     slot[0] b : Int(64) @depth1
     locals_total=4
+    values_total=3
+    value v0: Int(64) @block0
+    value v1: Int(64) @block0
+    value v2: Int(64) @block0
     Load %0 <- arg%0
-    Load %1 <- %0
-    Load %2 <- int(1)
-    Add %3 <- %1, %2
-    Ret %3
+    Load v1 <- %0
+    Load v2 <- int(1)
+    Add v0 <- v1, v2
+    Ret v0
   fn plain(Int(64)) -> Int(64)
     slot[0] x : Int(64) @depth1
     locals_total=4
+    values_total=3
+    value v0: Int(64) @block0
+    value v1: Int(64) @block0
+    value v2: Int(64) @block0
     Load %0 <- arg%0
-    Load %1 <- %0
-    Load %2 <- int(2)
-    Mul %3 <- %1, %2
-    Ret %3
+    Load v1 <- %0
+    Load v2 <- int(2)
+    Mul v0 <- v1, v2
+    Ret v0
   fn doubled(TypeRef("IsPositive")) -> Int(64)
     slot[0] b : Int(64) @depth1
     locals_total=3
+    values_total=2
+    value v0: Int(64) @block0
+    value v1: Int(64) @block0
     Load %0 <- arg%0
-    Load %1 <- %0
-    Call %2 <- string("plain") [%1] (def=d0)
-    Ret %2
+    Load v1 <- %0
+    Call v0 <- string("plain") [v1] (def=d0)
+    Ret v0
   init (locals=0)
     Load %0 <- int(7)
     Call %1 <- string("identity") [%0] (def=d1)

@@ -3,51 +3,83 @@ module
     slot[0] items : Int(64) @depth1
     slot[5] item : Int(64) @depth2
     locals_total=12
+    values_total=29
+    value v0: Int(64) @block0
+    value v1: Int(64) @block0
+    value v2: Int(64) @block0
+    value v3: Int(64) @block0
+    value v4: Int(64) @block0
+    value v5: Int(64) @block0
+    value v6: Int(64) @block0
+    value v7: Int(64) @block0
+    value v8: Int(64) @block0
+    value v9: Int(64) @block0
+    value v10: TypeRef("?") @block0
+    value v11: TypeRef("?") @block0
+    value v12: Generic { name: "Vec", args: [Int(64)] } @block0
+    value v13: TypeRef("?") @block0
+    value v14: TypeRef("?") @block0
+    value v15: TypeRef("?") @block0
+    value v16: TypeRef("?") @block0
+    value v17: TypeRef("?") @block0
+    value v18: Bool @block0
+    value v19: TypeRef("?") @block0
+    value v20: Int(64) @block0
+    value v21: Generic { name: "Vec", args: [Int(64)] } @block0
+    value v22: Int(64) @block0
+    value v23: TypeRef("?") @block0
+    value v24: Bool @block0
+    value v25: TypeRef("?") @block0
+    value v26: Int(64) @block0
+    value v27: Generic { name: "Vec", args: [Int(64)] } @block0
+    value v28: Int(64) @block0
     AllocArray %0 size=int(5), elem=int(1)
-    Load %1 <- int(1)
-    Load %2 <- int(0)
-    StoreIndex %0[%2] <- %1
-    Load %3 <- int(2)
-    Load %4 <- int(1)
-    StoreIndex %0[%4] <- %3
-    Load %5 <- int(3)
-    Load %6 <- int(2)
-    StoreIndex %0[%6] <- %5
-    Load %7 <- int(4)
-    Load %8 <- int(3)
-    StoreIndex %0[%8] <- %7
-    Load %9 <- int(5)
-    Load %10 <- int(4)
-    StoreIndex %0[%10] <- %9
-    AllocArray %2 size=int(0), elem=int(1)
-    Load %3 <- %0
-    Call %4 <- string("std.list.iter") [%3] (def=d0)
-    Call %6 <- string("std.list.has_next") [%4] (def=d1)
-    JmpIfNot %6 -> instr(26)
-    Call %7 <- string("std.list.next") [%4] (def=d2)
-    Store %5 <- %7
-    MakeClosure %8 <- closure_0 env=[%7] (def=d3)
-    Call %2 <- string("std.list.push") [%2, %8] (def=d4)
+    Load v0 <- int(1)
+    Load v1 <- int(0)
+    StoreIndex %0[v1] <- v0
+    Load v2 <- int(2)
+    Load v3 <- int(1)
+    StoreIndex %0[v3] <- v2
+    Load v4 <- int(3)
+    Load v5 <- int(2)
+    StoreIndex %0[v5] <- v4
+    Load v6 <- int(4)
+    Load v7 <- int(3)
+    StoreIndex %0[v7] <- v6
+    Load v8 <- int(5)
+    Load v9 <- int(4)
+    StoreIndex %0[v9] <- v8
+    AllocArray v11 size=int(0), elem=int(1)
+    Load v12 <- %0
+    Call v13 <- string("std.list.iter") [v12] (def=d0)
+    Call v14 <- string("std.list.has_next") [v13] (def=d1)
+    JmpIfNot v14 -> instr(26)
+    Call v15 <- string("std.list.next") [v13] (def=d2)
+    Store %1 <- v15
+    MakeClosure v16 <- closure_0 env=[v15] (def=d3)
+    Call v11 <- string("std.list.push") [v11, v16] (def=d4)
     Jmp -> instr(19)
-    SpawnFromList %1 <- %2 plan(groups=[[0]], deps=[[]], resources=[[]])
-    Load %10 <- %0
-    Load %11 <- int(0)
-    LoadIndex %8 <- %10[%11]
-    Load %9 <- int(1)
-    Eq %7 <- %8, %9
-    Call %6 <- string("std.assert.assert") [%7] (def=d5)
-    Load %10 <- %0
-    Load %11 <- int(4)
-    LoadIndex %8 <- %10[%11]
-    Load %9 <- int(5)
-    Eq %7 <- %8, %9
-    Call %6 <- string("std.assert.assert") [%7] (def=d5)
+    SpawnFromList v10 <- v11 plan(groups=[[0]], deps=[[]], resources=[[]])
+    Load v21 <- %0
+    Load v22 <- int(0)
+    LoadIndex v19 <- v21[v22]
+    Load v20 <- int(1)
+    Eq v18 <- v19, v20
+    Call v17 <- string("std.assert.assert") [v18] (def=d5)
+    Load v27 <- %0
+    Load v28 <- int(4)
+    LoadIndex v25 <- v27[v28]
+    Load v26 <- int(5)
+    Eq v24 <- v25, v26
+    Call v23 <- string("std.assert.assert") [v24] (def=d5)
     Drop %0
-    Ret %6
+    Ret v23
   fn closure_0(Int(64)) -> Void
     slot[0] item : Int(64) @depth3
     locals_total=11
-    Load %0 <- %1
-    Ret %0
+    values_total=1
+    value v0: TypeVar(TypeVar(44)) @block0
+    Load v0 <- %0
+    Ret v0
   init (locals=0)
     Call %0 <- string("main") [] (def=d6)

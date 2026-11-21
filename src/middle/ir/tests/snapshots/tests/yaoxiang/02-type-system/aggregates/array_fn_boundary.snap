@@ -2,31 +2,48 @@ module
   fn head_of(Generic { name: "Array", args: [Int(64), Literal { name: "3", base_type: Int(64), value: Int(3) }] }) -> Int(64)
     slot[0] a : Int(64) @depth1
     locals_total=4
+    values_total=3
+    value v0: TypeRef("?") @block0
+    value v1: Generic { name: "Array", args: [Int(64), Literal { name: "3", base_type: Int(64), value: Int(3) }] } @block0
+    value v2: Int(64) @block0
     Load %0 <- arg%0
-    Load %1 <- %0
-    Load %2 <- int(0)
-    LoadIndex %3 <- %1[%2]
-    Ret %3
-    Ret %3
+    Load v1 <- %0
+    Load v2 <- int(0)
+    LoadIndex v0 <- v1[v2]
+    Ret v0
+    Ret v0
   fn main() -> Void
     slot[0] b : Int(64) @depth1
     locals_total=7
-    Load %0 <- int(10)
-    Load %1 <- int(20)
-    Load %2 <- int(30)
-    AllocFixedArray %3 count=3
-    Load %4 <- int(0)
-    StoreIndex %3[%4] <- %0
-    Load %5 <- int(1)
-    StoreIndex %3[%5] <- %1
-    Load %6 <- int(2)
-    StoreIndex %3[%6] <- %2
-    Load %5 <- %3
-    Call %2 <- string("head_of") [%5] (def=d0)
-    Load %4 <- int(10)
-    Eq %1 <- %2, %4
-    Load %6 <- string("Array(Int,3) passed to Array(Int,3) param")
-    Call %0 <- string("std.assert.assert") [%1, %6] (def=d1)
-    Ret %0
+    values_total=12
+    value v0: Int(64) @block0
+    value v1: Int(64) @block0
+    value v2: Int(64) @block0
+    value v3: Int(64) @block0
+    value v4: Int(64) @block0
+    value v5: Int(64) @block0
+    value v6: TypeRef("?") @block0
+    value v7: Bool @block0
+    value v8: Int(64) @block0
+    value v9: Int(64) @block0
+    value v10: Generic { name: "Array", args: [Int(64), Literal { name: "3", base_type: Int(64), value: Int(3) }] } @block0
+    value v11: Generic { name: "String", args: [] } @block0
+    Load v0 <- int(10)
+    Load v1 <- int(20)
+    Load v2 <- int(30)
+    AllocFixedArray %0 count=3
+    Load v3 <- int(0)
+    StoreIndex %0[v3] <- v0
+    Load v4 <- int(1)
+    StoreIndex %0[v4] <- v1
+    Load v5 <- int(2)
+    StoreIndex %0[v5] <- v2
+    Load v10 <- %0
+    Call v8 <- string("head_of") [v10] (def=d0)
+    Load v9 <- int(10)
+    Eq v7 <- v8, v9
+    Load v11 <- string("Array(Int,3) passed to Array(Int,3) param")
+    Call v6 <- string("std.assert.assert") [v7, v11] (def=d1)
+    Ret v6
   init (locals=0)
     Call %0 <- string("main") [] (def=d2)

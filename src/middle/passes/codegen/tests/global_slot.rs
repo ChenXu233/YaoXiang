@@ -70,6 +70,7 @@ fn store_then_load_module() -> ModuleIR {
                 LocalSlot::temp(MonoType::Int(64)),
             ],
             values: Vec::new(),
+            value_slots: Vec::new(),
         },
     });
     module

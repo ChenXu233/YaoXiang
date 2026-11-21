@@ -5,25 +5,36 @@ module
     slot[2] result : Int(64) @depth1
     slot[3] a : Int(64) @depth2
     locals_total=7
+    values_total=10
+    value v0: Int(64) @block0
+    value v1: Generic { name: "Arc", args: [Int(64)] } @block0
+    value v2: TypeRef("?") @block0
+    value v3: Bool @block0
+    value v4: Generic { name: "String", args: [] } @block0
+    value v5: TypeRef("?") @block0
+    value v6: Generic { name: "Arc", args: [Int(64)] } @block0
+    value v7: TypeRef("?") @block0
+    value v8: Bool @block0
+    value v9: Generic { name: "String", args: [] } @block0
     Load %0 <- int(100)
-    Load %1 <- %0
-    RcNew %2 <- %1
-    Load %3 <- %2
-    Spawn %1 <- [] plan(groups=[], deps=[], resources=[])
-    Load %4 <- %3
-    Move %1 <- %4
-    Drop %3
-    Load %5 <- bool(true)
-    Load %6 <- string("spawn with ref completed")
-    Call %4 <- string("std.assert.assert") [%5, %6] (def=d0)
-    Load %5 <- %1
-    Call %4 <- string("std.io.println") [%5] (def=d1)
-    Load %5 <- bool(true)
-    Load %6 <- string("all passed")
-    Call %4 <- string("std.assert.assert") [%5, %6] (def=d0)
-    Drop %0
-    Drop %1
+    Load v0 <- %0
+    RcNew %1 <- v0
+    Load %2 <- %1
+    Spawn %3 <- [] plan(groups=[], deps=[], resources=[])
+    Load v1 <- %2
+    Move %3 <- v1
     Drop %2
-    Ret %4
+    Load v3 <- bool(true)
+    Load v4 <- string("spawn with ref completed")
+    Call v2 <- string("std.assert.assert") [v3, v4] (def=d0)
+    Load v6 <- %3
+    Call v5 <- string("std.io.println") [v6] (def=d1)
+    Load v8 <- bool(true)
+    Load v9 <- string("all passed")
+    Call v7 <- string("std.assert.assert") [v8, v9] (def=d0)
+    Drop %0
+    Drop %3
+    Drop %1
+    Ret v7
   init (locals=0)
     Call %0 <- string("main") [] (def=d2)

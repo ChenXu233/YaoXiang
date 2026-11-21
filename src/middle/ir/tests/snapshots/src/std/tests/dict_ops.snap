@@ -8,146 +8,255 @@ module
     slot[5] m : Int(64) @depth1
     slot[6] deleted : Int(64) @depth1
     locals_total=16
+    values_total=108
+    value v0: Generic { name: "Dict", args: [TypeVar(TypeVar(55)), TypeVar(TypeVar(56))] } @block0
+    value v1: Generic { name: "String", args: [] } @block0
+    value v2: Int(64) @block0
+    value v3: Generic { name: "Dict", args: [TypeVar(TypeVar(57)), TypeVar(TypeVar(58))] } @block0
+    value v4: Generic { name: "String", args: [] } @block0
+    value v5: Int(64) @block0
+    value v6: TypeRef("?") @block0
+    value v7: Bool @block0
+    value v8: TypeRef("?") @block0
+    value v9: Int(64) @block0
+    value v10: Generic { name: "Dict", args: [TypeVar(TypeVar(59)), TypeVar(TypeVar(60))] } @block0
+    value v11: Generic { name: "String", args: [] } @block0
+    value v12: Generic { name: "String", args: [] } @block0
+    value v13: TypeRef("?") @block0
+    value v14: Bool @block0
+    value v15: TypeRef("?") @block0
+    value v16: Int(64) @block0
+    value v17: Generic { name: "Dict", args: [TypeVar(TypeVar(59)), TypeVar(TypeVar(60))] } @block0
+    value v18: Generic { name: "String", args: [] } @block0
+    value v19: Generic { name: "String", args: [] } @block0
+    value v20: TypeRef("?") @block0
+    value v21: TypeRef("?") @block0
+    value v22: Generic { name: "Dict", args: [TypeVar(TypeVar(59)), TypeVar(TypeVar(60))] } @block0
+    value v23: Generic { name: "String", args: [] } @block0
+    value v24: Generic { name: "String", args: [] } @block0
+    value v25: TypeRef("?") @block0
+    value v26: Bool @block0
+    value v27: TypeRef("?") @block0
+    value v28: Generic { name: "Dict", args: [TypeVar(TypeVar(59)), TypeVar(TypeVar(60))] } @block0
+    value v29: Generic { name: "String", args: [] } @block0
+    value v30: Generic { name: "String", args: [] } @block0
+    value v31: TypeRef("?") @block0
+    value v32: Bool @block0
+    value v33: TypeRef("?") @block0
+    value v34: Int(64) @block0
+    value v35: Generic { name: "Dict", args: [TypeVar(TypeVar(59)), TypeVar(TypeVar(60))] } @block0
+    value v36: Generic { name: "String", args: [] } @block0
+    value v37: TypeRef("?") @block0
+    value v38: Bool @block0
+    value v39: TypeRef("?") @block0
+    value v40: Int(64) @block0
+    value v41: Generic { name: "Dict", args: [TypeVar(TypeVar(59)), TypeVar(TypeVar(60))] } @block0
+    value v42: Generic { name: "String", args: [] } @block0
+    value v43: TypeRef("?") @block0
+    value v44: Bool @block0
+    value v45: TypeRef("?") @block0
+    value v46: Generic { name: "Dict", args: [TypeVar(TypeVar(59)), TypeVar(TypeVar(60))] } @block0
+    value v47: Generic { name: "String", args: [] } @block0
+    value v48: Generic { name: "Dict", args: [TypeVar(TypeVar(59)), TypeVar(TypeVar(60))] } @block0
+    value v49: Generic { name: "Dict", args: [TypeVar(TypeVar(59)), TypeVar(TypeVar(60))] } @block0
+    value v50: TypeRef("?") @block0
+    value v51: Bool @block0
+    value v52: TypeRef("?") @block0
+    value v53: Int(64) @block0
+    value v54: Generic { name: "Dict", args: [TypeVar(TypeVar(59)), TypeVar(TypeVar(60))] } @block0
+    value v55: Generic { name: "String", args: [] } @block0
+    value v56: TypeRef("?") @block0
+    value v57: TypeRef("?") @block0
+    value v58: Generic { name: "String", args: [] } @block0
+    value v59: Int(64) @block0
+    value v60: TypeRef("?") @block0
+    value v61: TypeRef("?") @block0
+    value v62: Generic { name: "String", args: [] } @block0
+    value v63: Int(64) @block0
+    value v64: TypeRef("?") @block0
+    value v65: Bool @block0
+    value v66: TypeRef("?") @block0
+    value v67: Int(64) @block0
+    value v68: Generic { name: "Dict", args: [TypeVar(TypeVar(91)), TypeVar(TypeVar(92))] } @block0
+    value v69: Generic { name: "String", args: [] } @block0
+    value v70: Generic { name: "String", args: [] } @block0
+    value v71: TypeRef("?") @block0
+    value v72: Bool @block0
+    value v73: TypeRef("?") @block0
+    value v74: Int(64) @block0
+    value v75: Generic { name: "Dict", args: [TypeVar(TypeVar(91)), TypeVar(TypeVar(92))] } @block0
+    value v76: Generic { name: "String", args: [] } @block0
+    value v77: Generic { name: "String", args: [] } @block0
+    value v78: TypeRef("?") @block0
+    value v79: Bool @block0
+    value v80: TypeRef("?") @block0
+    value v81: Generic { name: "Dict", args: [TypeVar(TypeVar(59)), TypeVar(TypeVar(60))] } @block0
+    value v82: Generic { name: "String", args: [] } @block0
+    value v83: Generic { name: "String", args: [] } @block0
+    value v84: TypeRef("?") @block0
+    value v85: Generic { name: "Dict", args: [TypeVar(TypeVar(59)), TypeVar(TypeVar(60))] } @block0
+    value v86: Generic { name: "String", args: [] } @block0
+    value v87: TypeRef("?") @block0
+    value v88: Bool @block0
+    value v89: TypeRef("?") @block0
+    value v90: Int(64) @block0
+    value v91: Generic { name: "Dict", args: [TypeVar(TypeVar(59)), TypeVar(TypeVar(60))] } @block0
+    value v92: Generic { name: "String", args: [] } @block0
+    value v93: Generic { name: "String", args: [] } @block0
+    value v94: TypeRef("?") @block0
+    value v95: Bool @block0
+    value v96: TypeRef("?") @block0
+    value v97: Int(64) @block0
+    value v98: Generic { name: "Dict", args: [TypeVar(TypeVar(59)), TypeVar(TypeVar(60))] } @block0
+    value v99: Generic { name: "String", args: [] } @block0
+    value v100: Generic { name: "Dict", args: [TypeVar(TypeVar(59)), TypeVar(TypeVar(60))] } @block0
+    value v101: Generic { name: "String", args: [] } @block0
+    value v102: TypeRef("?") @block0
+    value v103: Bool @block0
+    value v104: TypeRef("?") @block0
+    value v105: Generic { name: "Dict", args: [TypeVar(TypeVar(105)), TypeVar(TypeVar(106))] } @block0
+    value v106: Generic { name: "String", args: [] } @block0
+    value v107: Generic { name: "String", args: [] } @block0
     Call %0 <- string("std.dict.new") [] (def=d0)
-    Load %1 <- %0
-    Load %2 <- string("a")
-    Load %3 <- int(1)
-    Call %4 <- string("std.dict.set") [%1, %2, %3] (def=d1)
+    Load v0 <- %0
+    Load v1 <- string("a")
+    Load v2 <- int(1)
+    Call %1 <- string("std.dict.set") [v0, v1, v2] (def=d1)
     Drop %0
-    Load %2 <- %4
-    Load %3 <- string("b")
-    Load %5 <- int(2)
-    Call %1 <- string("std.dict.set") [%2, %3, %5] (def=d1)
-    Drop %4
-    Load %6 <- %1
-    Load %7 <- string("a")
-    Call %5 <- string("std.dict.get") [%6, %7] (def=d2)
-    Load %8 <- int(1)
-    Eq %3 <- %5, %8
-    Load %9 <- string("get a == 1")
-    Call %2 <- string("std.assert.assert") [%3, %9] (def=d3)
+    Load v3 <- %1
+    Load v4 <- string("b")
+    Load v5 <- int(2)
+    Call %2 <- string("std.dict.set") [v3, v4, v5] (def=d1)
     Drop %1
-    Load %6 <- %1
-    Load %7 <- string("b")
-    Call %5 <- string("std.dict.get") [%6, %7] (def=d2)
-    Load %8 <- int(2)
-    Eq %3 <- %5, %8
-    Load %9 <- string("get b == 2")
-    Call %2 <- string("std.assert.assert") [%3, %9] (def=d3)
-    Drop %1
-    Load %5 <- %1
-    Load %8 <- string("a")
-    Call %3 <- string("std.dict.has") [%5, %8] (def=d4)
-    Load %6 <- string("has a")
-    Call %2 <- string("std.assert.assert") [%3, %6] (def=d3)
-    Drop %1
-    Load %8 <- %1
-    Load %6 <- string("zzz")
-    Call %5 <- string("std.dict.has") [%8, %6] (def=d4)
-    Not %3 <- %5
-    Load %7 <- string("not has zzz")
-    Call %2 <- string("std.assert.assert") [%3, %7] (def=d3)
-    Drop %1
-    Load %6 <- %1
-    Call %5 <- string("std.dict.len") [%6] (def=d5)
-    Load %8 <- int(2)
-    Eq %3 <- %5, %8
-    Load %7 <- string("len == 2")
-    Call %2 <- string("std.assert.assert") [%3, %7] (def=d3)
-    Drop %1
-    Load %6 <- %1
-    Call %5 <- string("std.dict.len") [%6] (def=d5)
-    Load %8 <- int(2)
-    Eq %3 <- %5, %8
-    Load %7 <- string("len reusable")
-    Call %2 <- string("std.assert.assert") [%3, %7] (def=d3)
-    Drop %1
-    Load %8 <- %1
-    Call %5 <- string("std.dict.is_empty") [%8] (def=d6)
-    Not %3 <- %5
-    Load %6 <- string("not empty")
-    Call %2 <- string("std.assert.assert") [%3, %6] (def=d3)
-    Drop %1
-    Load %3 <- %1
-    Call %2 <- string("std.dict.keys") [%3] (def=d7)
-    Drop %1
-    Load %5 <- %1
-    Call %3 <- string("std.dict.values") [%5] (def=d8)
-    Drop %1
-    Load %9 <- %1
-    Call %6 <- string("std.dict.len") [%9] (def=d5)
-    Load %7 <- int(2)
-    Eq %8 <- %6, %7
-    Load %10 <- string("dict reusable after keys/values")
-    Call %5 <- string("std.assert.assert") [%8, %10] (def=d3)
-    Drop %1
-    Call %6 <- string("std.dict.new") [] (def=d0)
-    Load %7 <- string("x")
-    Load %9 <- int(10)
-    Call %8 <- string("std.dict.set") [%6, %7, %9] (def=d1)
-    Call %11 <- string("std.dict.new") [] (def=d0)
-    Load %12 <- string("y")
-    Load %13 <- int(20)
-    Call %10 <- string("std.dict.set") [%11, %12, %13] (def=d1)
-    Call %5 <- string("std.dict.merge") [%8, %10] (def=d9)
-    Load %10 <- %5
-    Load %11 <- string("x")
-    Call %7 <- string("std.dict.get") [%10, %11] (def=d2)
-    Load %9 <- int(10)
-    Eq %6 <- %7, %9
-    Load %12 <- string("merge x == 10")
-    Call %8 <- string("std.assert.assert") [%6, %12] (def=d3)
-    Drop %5
-    Load %10 <- %5
-    Load %11 <- string("y")
-    Call %7 <- string("std.dict.get") [%10, %11] (def=d2)
-    Load %9 <- int(20)
-    Eq %6 <- %7, %9
-    Load %12 <- string("merge y == 20")
-    Call %8 <- string("std.assert.assert") [%6, %12] (def=d3)
-    Drop %5
-    Load %9 <- %1
-    Load %10 <- string("nope")
-    Call %7 <- string("std.dict.has") [%9, %10] (def=d4)
-    Not %6 <- %7
-    Load %11 <- string("not has nope")
-    Call %8 <- string("std.assert.assert") [%6, %11] (def=d3)
-    Drop %1
-    Load %6 <- %1
-    Load %7 <- string("a")
-    Call %8 <- string("std.dict.has") [%6, %7] (def=d4)
-    JmpIfNot %8 -> instr(117)
-    Load %13 <- %1
-    Load %14 <- string("a")
-    Call %11 <- string("std.dict.get") [%13, %14] (def=d2)
-    Load %12 <- int(1)
-    Eq %10 <- %11, %12
-    Load %15 <- string("guarded get a == 1")
-    Call %9 <- string("std.assert.assert") [%10, %15] (def=d3)
-    Drop %1
-    Drop %1
-    Load %10 <- %1
-    Call %7 <- string("std.dict.len") [%10] (def=d5)
-    Load %9 <- int(2)
-    Eq %6 <- %7, %9
-    Load %11 <- string("dict intact after missing-get check")
-    Call %8 <- string("std.assert.assert") [%6, %11] (def=d3)
-    Drop %1
-    Load %6 <- %1
-    Load %7 <- string("a")
-    Call %8 <- string("std.dict.delete") [%6, %7] (def=d10)
-    Load %10 <- %8
-    Load %11 <- string("a")
-    Call %9 <- string("std.dict.has") [%10, %11] (def=d4)
-    Not %7 <- %9
-    Load %12 <- string("deleted has no a")
-    Call %6 <- string("std.assert.assert") [%7, %12] (def=d3)
-    Drop %0
-    Drop %4
-    Drop %8
+    Load v10 <- %2
+    Load v11 <- string("a")
+    Call v8 <- string("std.dict.get") [v10, v11] (def=d2)
+    Load v9 <- int(1)
+    Eq v7 <- v8, v9
+    Load v12 <- string("get a == 1")
+    Call v6 <- string("std.assert.assert") [v7, v12] (def=d3)
     Drop %2
+    Load v17 <- %2
+    Load v18 <- string("b")
+    Call v15 <- string("std.dict.get") [v17, v18] (def=d2)
+    Load v16 <- int(2)
+    Eq v14 <- v15, v16
+    Load v19 <- string("get b == 2")
+    Call v13 <- string("std.assert.assert") [v14, v19] (def=d3)
+    Drop %2
+    Load v22 <- %2
+    Load v23 <- string("a")
+    Call v21 <- string("std.dict.has") [v22, v23] (def=d4)
+    Load v24 <- string("has a")
+    Call v20 <- string("std.assert.assert") [v21, v24] (def=d3)
+    Drop %2
+    Load v28 <- %2
+    Load v29 <- string("zzz")
+    Call v27 <- string("std.dict.has") [v28, v29] (def=d4)
+    Not v26 <- v27
+    Load v30 <- string("not has zzz")
+    Call v25 <- string("std.assert.assert") [v26, v30] (def=d3)
+    Drop %2
+    Load v35 <- %2
+    Call v33 <- string("std.dict.len") [v35] (def=d5)
+    Load v34 <- int(2)
+    Eq v32 <- v33, v34
+    Load v36 <- string("len == 2")
+    Call v31 <- string("std.assert.assert") [v32, v36] (def=d3)
+    Drop %2
+    Load v41 <- %2
+    Call v39 <- string("std.dict.len") [v41] (def=d5)
+    Load v40 <- int(2)
+    Eq v38 <- v39, v40
+    Load v42 <- string("len reusable")
+    Call v37 <- string("std.assert.assert") [v38, v42] (def=d3)
+    Drop %2
+    Load v46 <- %2
+    Call v45 <- string("std.dict.is_empty") [v46] (def=d6)
+    Not v44 <- v45
+    Load v47 <- string("not empty")
+    Call v43 <- string("std.assert.assert") [v44, v47] (def=d3)
+    Drop %2
+    Load v48 <- %2
+    Call %3 <- string("std.dict.keys") [v48] (def=d7)
+    Drop %2
+    Load v49 <- %2
+    Call %4 <- string("std.dict.values") [v49] (def=d8)
+    Drop %2
+    Load v54 <- %2
+    Call v52 <- string("std.dict.len") [v54] (def=d5)
+    Load v53 <- int(2)
+    Eq v51 <- v52, v53
+    Load v55 <- string("dict reusable after keys/values")
+    Call v50 <- string("std.assert.assert") [v51, v55] (def=d3)
+    Drop %2
+    Call v57 <- string("std.dict.new") [] (def=d0)
+    Load v58 <- string("x")
+    Load v59 <- int(10)
+    Call v56 <- string("std.dict.set") [v57, v58, v59] (def=d1)
+    Call v61 <- string("std.dict.new") [] (def=d0)
+    Load v62 <- string("y")
+    Load v63 <- int(20)
+    Call v60 <- string("std.dict.set") [v61, v62, v63] (def=d1)
+    Call %5 <- string("std.dict.merge") [v56, v60] (def=d9)
+    Load v68 <- %5
+    Load v69 <- string("x")
+    Call v66 <- string("std.dict.get") [v68, v69] (def=d2)
+    Load v67 <- int(10)
+    Eq v65 <- v66, v67
+    Load v70 <- string("merge x == 10")
+    Call v64 <- string("std.assert.assert") [v65, v70] (def=d3)
     Drop %5
+    Load v75 <- %5
+    Load v76 <- string("y")
+    Call v73 <- string("std.dict.get") [v75, v76] (def=d2)
+    Load v74 <- int(20)
+    Eq v72 <- v73, v74
+    Load v77 <- string("merge y == 20")
+    Call v71 <- string("std.assert.assert") [v72, v77] (def=d3)
+    Drop %5
+    Load v81 <- %2
+    Load v82 <- string("nope")
+    Call v80 <- string("std.dict.has") [v81, v82] (def=d4)
+    Not v79 <- v80
+    Load v83 <- string("not has nope")
+    Call v78 <- string("std.assert.assert") [v79, v83] (def=d3)
+    Drop %2
+    Load v85 <- %2
+    Load v86 <- string("a")
+    Call v84 <- string("std.dict.has") [v85, v86] (def=d4)
+    JmpIfNot v84 -> instr(117)
+    Load v91 <- %2
+    Load v92 <- string("a")
+    Call v89 <- string("std.dict.get") [v91, v92] (def=d2)
+    Load v90 <- int(1)
+    Eq v88 <- v89, v90
+    Load v93 <- string("guarded get a == 1")
+    Call v87 <- string("std.assert.assert") [v88, v93] (def=d3)
+    Drop %2
+    Drop %2
+    Load v98 <- %2
+    Call v96 <- string("std.dict.len") [v98] (def=d5)
+    Load v97 <- int(2)
+    Eq v95 <- v96, v97
+    Load v99 <- string("dict intact after missing-get check")
+    Call v94 <- string("std.assert.assert") [v95, v99] (def=d3)
+    Drop %2
+    Load v100 <- %2
+    Load v101 <- string("a")
+    Call %6 <- string("std.dict.delete") [v100, v101] (def=d10)
+    Load v105 <- %6
+    Load v106 <- string("a")
+    Call v104 <- string("std.dict.has") [v105, v106] (def=d4)
+    Not v103 <- v104
+    Load v107 <- string("deleted has no a")
+    Call v102 <- string("std.assert.assert") [v103, v107] (def=d3)
+    Drop %0
+    Drop %1
+    Drop %6
     Drop %3
-    Ret %6
+    Drop %5
+    Drop %4
+    Ret v102
   init (locals=0)
     Call %0 <- string("main") [] (def=d11)

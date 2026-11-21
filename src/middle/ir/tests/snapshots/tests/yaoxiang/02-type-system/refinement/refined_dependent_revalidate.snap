@@ -5,41 +5,55 @@ module
   fn keep_valid() -> Int(64)
     slot[0] s : Int(64) @depth1
     locals_total=2
-    Load %0 <- int(3)
-    Store @0 <- %0
+    values_total=3
+    value v0: Int(64) @block0
+    value v1: Int(64) @block0
+    value v2: Int(64) @block0
+    Load v0 <- int(3)
+    Store @0 <- v0
     Load %0 <- int(6)
-    Load %1 <- int(3)
-    Store @0 <- %1
-    Load %1 <- %0
+    Load v1 <- int(3)
+    Store @0 <- v1
+    Load v2 <- %0
     Drop %0
-    Ret %1
+    Ret v2
   fn pruned_branch() -> Int(64)
     slot[0] s : Int(64) @depth1
     locals_total=5
-    Load %0 <- int(3)
-    Store @0 <- %0
+    values_total=7
+    value v0: Int(64) @block0
+    value v1: Bool @block0
+    value v2: Int(64) @block0
+    value v3: Int(64) @block0
+    value v4: Int(64) @block0
+    value v5: Int(64) @block0
+    value v6: Int(64) @block0
+    Load v0 <- int(3)
+    Store @0 <- v0
     Load %0 <- int(6)
-    Load %1 <- @0
-    Load %2 <- int(2)
-    Gt %3 <- %1, %2
-    JmpIfNot %3 -> instr(10)
-    Load %4 <- int(3)
-    Store @0 <- %4
+    Load v2 <- @0
+    Load v3 <- int(2)
+    Gt v1 <- v2, v3
+    JmpIfNot v1 -> instr(10)
+    Load v4 <- int(3)
+    Store @0 <- v4
     Jmp -> instr(12)
-    Load %3 <- int(4)
-    Store @0 <- %3
-    Load %3 <- %0
+    Load v5 <- int(4)
+    Store @0 <- v5
+    Load v6 <- %0
     Drop %0
-    Ret %3
+    Ret v6
   fn other(Int(64)) -> Int(64)
     slot[0] n : Int(64) @depth1
     slot[1] s : Int(64) @depth1
     locals_total=3
+    values_total=1
+    value v0: Int(64) @block0
     Load %0 <- arg%0
     Load %1 <- int(6)
-    Load %2 <- %1
+    Load v0 <- %1
     Drop %1
-    Ret %2
+    Ret v0
   init (locals=0)
     Load %0 <- int(3)
     Store @0 <- %0

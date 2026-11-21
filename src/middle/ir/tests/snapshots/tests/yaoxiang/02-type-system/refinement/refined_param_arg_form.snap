@@ -4,17 +4,23 @@ module
   fn identity(Generic { name: "IsPositive", args: [TypeRef("b")] }) -> Int(64)
     slot[0] b : Int(64) @depth1
     locals_total=2
+    values_total=1
+    value v0: Int(64) @block0
     Load %0 <- arg%0
-    Load %1 <- %0
-    Ret %1
+    Load v0 <- %0
+    Ret v0
   fn succ(Generic { name: "IsPositive", args: [TypeRef("b")] }) -> Int(64)
     slot[0] b : Int(64) @depth1
     locals_total=4
+    values_total=3
+    value v0: Int(64) @block0
+    value v1: Int(64) @block0
+    value v2: Int(64) @block0
     Load %0 <- arg%0
-    Load %1 <- %0
-    Load %2 <- int(1)
-    Add %3 <- %1, %2
-    Ret %3
+    Load v1 <- %0
+    Load v2 <- int(1)
+    Add v0 <- v1, v2
+    Ret v0
   init (locals=0)
     Load %0 <- int(7)
     Call %1 <- string("identity") [%0] (def=d0)

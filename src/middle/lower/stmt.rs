@@ -360,10 +360,10 @@ impl AstToIrGenerator {
                             let mut instrs = Vec::new();
                             if let Some(v) = value.as_ref() {
                                 let reg = self.next_temp_reg();
-                                self.generate_expr_ir(v, reg, &mut instrs, constants)?;
+                                self.generate_expr_ir(v, reg.clone(), &mut instrs, constants)?;
                                 instrs.push(Instruction::Store {
                                     dst: Operand::Global(slot),
-                                    src: Operand::Local(reg),
+                                    src: reg.clone(),
                                     span: Self::get_expr_span(v),
                                 });
                             }
@@ -537,7 +537,12 @@ impl AstToIrGenerator {
             frame.set_cur_span(stmt.span);
             if Some(i) == last_idx {
                 let result_reg = frame.next_temp_reg();
-                if frame.generate_tail_stmt_ir(stmt, result_reg, &mut instructions, constants)? {
+                if frame.generate_tail_stmt_ir(
+                    stmt,
+                    result_reg.clone(),
+                    &mut instructions,
+                    constants,
+                )? {
                     // 尾语句路径（RFC-039 D20 逐案核实项）：本条语句经
                     // `generate_tail_stmt_ir` 提前返回，**必须**在同款语句边界上
                     // 消费它的释放条目——漏这一处，尾语句的 Drop 就静默丢失
@@ -545,7 +550,7 @@ impl AstToIrGenerator {
                     // 取值已完成（值在 result_reg），故 Drop 排在 Ret 之前。
                     frame.emit_release_drops(stmt.plan_id, &mut instructions);
                     instructions.push(Instruction::Ret {
-                        value: Some(Operand::Local(result_reg)),
+                        value: Some(result_reg.clone()),
                         span: frame.cur_span,
                     });
                     frame.set_cur_span(stmt.span);
@@ -575,6 +580,7 @@ impl AstToIrGenerator {
         // 行为等价论证：Frame 预分配槽位初值同为 Void，set_slot 容错路径不再
         // 触发但结果相同；调试信息 local_names 只取具名槽，不受空槽扩展影响。
         let locals_types: Vec<LocalSlot> = frame.take_body_locals()?;
+        let (values, value_slots) = frame.take_body_values(&instructions, &param_types);
 
         // 构建函数 IR
         let func_ir = FunctionIR {
@@ -591,7 +597,8 @@ impl AstToIrGenerator {
                 }],
                 entry: 0,
                 locals: locals_types,
-                values: Vec::new(),
+                values,
+                value_slots,
             },
         };
 
@@ -714,7 +721,12 @@ impl AstToIrGenerator {
             frame.set_cur_span(stmt.span);
             if Some(i) == last_idx {
                 let result_reg = frame.next_temp_reg();
-                if frame.generate_tail_stmt_ir(stmt, result_reg, &mut instructions, constants)? {
+                if frame.generate_tail_stmt_ir(
+                    stmt,
+                    result_reg.clone(),
+                    &mut instructions,
+                    constants,
+                )? {
                     // 尾语句路径（RFC-039 D20 逐案核实项）：本条语句经
                     // `generate_tail_stmt_ir` 提前返回，**必须**在同款语句边界上
                     // 消费它的释放条目——漏这一处，尾语句的 Drop 就静默丢失
@@ -722,7 +734,7 @@ impl AstToIrGenerator {
                     // 取值已完成（值在 result_reg），故 Drop 排在 Ret 之前。
                     frame.emit_release_drops(stmt.plan_id, &mut instructions);
                     instructions.push(Instruction::Ret {
-                        value: Some(Operand::Local(result_reg)),
+                        value: Some(result_reg.clone()),
                         span: frame.cur_span,
                     });
                     frame.set_cur_span(stmt.span);
@@ -776,6 +788,8 @@ impl AstToIrGenerator {
         // 槽位表 + 寄存器预算（E3014）单点：函数体形态共用 take_body_locals，
         // 越界在这里带 span 报错（#271 静默/崩溃同类：宁可报错不崩）。
         let locals_types: Vec<LocalSlot> = frame.take_body_locals()?;
+        let param_types = frame.impl_param_types(params, type_annotation);
+        let (values, value_slots) = frame.take_body_values(&instructions, &param_types);
 
         // 还原闭包定型上下文（避免串到下一个函数）——非寄存器状态，仍手工配对
         frame.closure_decl_params = saved_closure_decl;
@@ -788,7 +802,7 @@ impl AstToIrGenerator {
             // （parser 不再往实现头填声明类型，声明是 IR 唯一的类型来源；D54 F1 /
             // WBS 6.8.3）。拿不到声明类型时按 WBS 2.1.2 的惯例填 Int(64) 占位——
             // filter_map 丢弃会让 params 长度与帧布局错位（verify 实测）。
-            params: frame.impl_param_types(params, type_annotation),
+            params: param_types,
             return_type,
             generic_params,
             body: FunctionBody::Code {
@@ -799,7 +813,8 @@ impl AstToIrGenerator {
                 }],
                 entry: 0,
                 locals: locals_types,
-                values: Vec::new(),
+                values,
+                value_slots,
             },
         };
 
@@ -884,18 +899,18 @@ impl AstToIrGenerator {
                             .build()
                         })?;
                     let obj_reg = self.next_temp_reg();
-                    self.generate_expr_ir(obj_expr, obj_reg, instructions, constants)?;
+                    self.generate_expr_ir(obj_expr, obj_reg.clone(), instructions, constants)?;
                     let val_reg = self.next_temp_reg();
                     let value_expr = value.as_ref().ok_or_else(|| {
                         ErrorCodeDefinition::ir_internal_error("字段赋值缺少右侧值")
                             .at(*span)
                             .build()
                     })?;
-                    self.generate_expr_ir(value_expr, val_reg, instructions, constants)?;
+                    self.generate_expr_ir(value_expr, val_reg.clone(), instructions, constants)?;
                     instructions.push(Instruction::StoreField {
-                        dst: Operand::Local(obj_reg),
+                        dst: obj_reg.clone(),
                         field: field_index,
-                        src: Operand::Local(val_reg),
+                        src: val_reg.clone(),
                         type_name: None,
                         field_name: Some(field.clone()),
                         span: *span,
@@ -918,15 +933,15 @@ impl AstToIrGenerator {
                             .build()
                     })?;
                     let base_reg = self.next_temp_reg();
-                    self.generate_expr_ir(base_expr, base_reg, instructions, constants)?;
+                    self.generate_expr_ir(base_expr, base_reg.clone(), instructions, constants)?;
                     let index_reg = self.next_temp_reg();
-                    self.generate_expr_ir(index_expr, index_reg, instructions, constants)?;
+                    self.generate_expr_ir(index_expr, index_reg.clone(), instructions, constants)?;
                     let val_reg = self.next_temp_reg();
-                    self.generate_expr_ir(value_expr, val_reg, instructions, constants)?;
+                    self.generate_expr_ir(value_expr, val_reg.clone(), instructions, constants)?;
                     instructions.push(Instruction::StoreIndex {
-                        dst: Operand::Local(base_reg),
-                        index: Operand::Local(index_reg),
-                        src: Operand::Local(val_reg),
+                        dst: base_reg.clone(),
+                        index: index_reg.clone(),
+                        src: val_reg.clone(),
                         span: *span,
                     });
                     return Ok(());
@@ -1064,10 +1079,10 @@ impl AstToIrGenerator {
                     if let Some(slot) = self.lookup_global(&name) {
                         if let Some(expr) = initializer {
                             let reg = self.next_temp_reg();
-                            self.generate_expr_ir(expr, reg, instructions, constants)?;
+                            self.generate_expr_ir(expr, reg.clone(), instructions, constants)?;
                             instructions.push(Instruction::Store {
                                 dst: Operand::Global(slot),
-                                src: Operand::Local(reg),
+                                src: reg.clone(),
                                 span: Self::get_expr_span(expr),
                             });
                         }
@@ -1077,7 +1092,7 @@ impl AstToIrGenerator {
                 let var_idx = if let Some(existing_idx) = self.lookup_local(&name) {
                     existing_idx
                 } else {
-                    let idx = self.next_temp_reg();
+                    let idx = self.next_local_slot();
                     self.register_local(&name, idx);
                     idx
                 };
@@ -1093,7 +1108,7 @@ impl AstToIrGenerator {
                             let mut elem_regs = Vec::with_capacity(elems.len());
                             for elem in elems {
                                 let reg = self.next_temp_reg();
-                                self.generate_expr_ir(elem, reg, instructions, constants)?;
+                                self.generate_expr_ir(elem, reg.clone(), instructions, constants)?;
                                 elem_regs.push(reg);
                             }
                             instructions.push(Instruction::AllocFixedArray {
@@ -1104,14 +1119,14 @@ impl AstToIrGenerator {
                             for (i, reg) in elem_regs.iter().enumerate() {
                                 let idx_reg = self.next_temp_reg();
                                 instructions.push(Instruction::Load {
-                                    dst: Operand::Local(idx_reg),
+                                    dst: idx_reg.clone(),
                                     src: Operand::Const(ConstValue::Int(i as i128)),
                                     span: self.cur_span,
                                 });
                                 instructions.push(Instruction::StoreIndex {
                                     dst: Operand::Local(var_idx),
-                                    index: Operand::Local(idx_reg),
-                                    src: Operand::Local(*reg),
+                                    index: idx_reg.clone(),
+                                    src: reg.clone(),
                                     span: *lit_span,
                                 });
                             }
@@ -1119,7 +1134,7 @@ impl AstToIrGenerator {
                         }
                     }
                     // 统一走 generate_expr_ir — 把 RHS 值直接放入 var_idx 槽
-                    self.generate_expr_ir(expr, var_idx, instructions, constants)?;
+                    self.generate_expr_ir(expr, Operand::Local(var_idx), instructions, constants)?;
                 } else {
                     instructions.push(Instruction::Load {
                         dst: Operand::Local(var_idx),
@@ -1168,33 +1183,38 @@ impl AstToIrGenerator {
                 // 否则通过 LoadIndex 索引
                 if let ast::Expr::Tuple(elems, _) = rhs.as_ref() {
                     for (i, name) in names.iter().enumerate() {
-                        let var_idx = self.next_temp_reg();
+                        let var_idx = self.next_local_slot();
                         self.register_local(&name.name, var_idx);
 
                         if let Some(elem) = elems.get(i) {
-                            self.generate_expr_ir(elem, var_idx, instructions, constants)?;
+                            self.generate_expr_ir(
+                                elem,
+                                Operand::Local(var_idx),
+                                instructions,
+                                constants,
+                            )?;
                         }
                     }
                 } else {
                     // 非字面量元组：生成 RHS，然后通过 LoadIndex 提取
                     let rhs_reg = self.next_temp_reg();
-                    self.generate_expr_ir(rhs, rhs_reg, instructions, constants)?;
+                    self.generate_expr_ir(rhs, rhs_reg.clone(), instructions, constants)?;
 
                     for (i, name) in names.iter().enumerate() {
-                        let var_idx = self.next_temp_reg();
+                        let var_idx = self.next_local_slot();
                         self.register_local(&name.name, var_idx);
 
                         let index_reg = self.next_temp_reg();
                         instructions.push(Instruction::Load {
-                            dst: Operand::Local(index_reg),
+                            dst: index_reg.clone(),
                             src: Operand::Const(ConstValue::Int(i as i128)),
                             span: self.cur_span,
                         });
 
                         instructions.push(Instruction::LoadIndex {
                             dst: Operand::Local(var_idx),
-                            src: Operand::Local(rhs_reg),
-                            index: Operand::Local(index_reg),
+                            src: rhs_reg.clone(),
+                            index: index_reg.clone(),
                             span: *span,
                         });
                     }
@@ -1203,9 +1223,9 @@ impl AstToIrGenerator {
             ast::StmtKind::Return(expr) => match expr {
                 Some(e) => {
                     let result_reg = self.next_temp_reg();
-                    self.generate_expr_ir(e, result_reg, instructions, constants)?;
+                    self.generate_expr_ir(e, result_reg.clone(), instructions, constants)?;
                     instructions.push(Instruction::Ret {
-                        value: Some(Operand::Local(result_reg)),
+                        value: Some(result_reg.clone()),
                         span: self.cur_span,
                     });
                 }
@@ -1248,12 +1268,12 @@ impl AstToIrGenerator {
 
         // 1. 评估条件
         let condition_reg = self.next_temp_reg();
-        self.generate_expr_ir(condition, condition_reg, instructions, constants)?;
+        self.generate_expr_ir(condition, condition_reg.clone(), instructions, constants)?;
 
         // 2. 跳转到下一个分支的占位符 (JmpIfNot to next_branch)
         let jump_to_next_branch_idx = instructions.len();
         instructions.push(Instruction::JmpIfNot {
-            cond: Operand::Local(condition_reg),
+            cond: condition_reg.clone(),
             target: 0,
             span: self.cur_span,
         }); // 占位符
@@ -1290,7 +1310,7 @@ impl AstToIrGenerator {
             let else_if_condition_reg = self.next_temp_reg();
             self.generate_expr_ir(
                 else_if_condition,
-                else_if_condition_reg,
+                else_if_condition_reg.clone(),
                 instructions,
                 constants,
             )?;
@@ -1298,7 +1318,7 @@ impl AstToIrGenerator {
             // 跳转到下一个分支 (JmpIfNot)
             let jump_to_next_else_if_idx = instructions.len();
             instructions.push(Instruction::JmpIfNot {
-                cond: Operand::Local(else_if_condition_reg),
+                cond: else_if_condition_reg.clone(),
                 target: 0,
                 span: self.cur_span,
             });
@@ -1367,7 +1387,7 @@ impl AstToIrGenerator {
     pub(in crate::middle) fn generate_tail_stmt_ir(
         &mut self,
         stmt: &ast::Stmt,
-        result_reg: usize,
+        result_reg: Operand,
         instructions: &mut Vec<Instruction>,
         constants: &mut Vec<ConstValue>,
     ) -> Result<bool, Diagnostic> {
@@ -1403,7 +1423,7 @@ impl AstToIrGenerator {
     pub(in crate::middle) fn generate_block_ir(
         &mut self,
         block: &ast::Block,
-        result_reg: Option<usize>,
+        result_reg: Option<Operand>,
         instructions: &mut Vec<Instruction>,
         constants: &mut Vec<ConstValue>,
     ) -> Result<(), Diagnostic> {
@@ -1416,7 +1436,7 @@ impl AstToIrGenerator {
             // 语句边界设定当前 span，供本条语句的所有指令构造就地捕获
             self.set_cur_span(stmt.span);
             // 块作为表达式 + 最后一条语句贡献块值 → 值写入 result_reg
-            if let (Some(reg), true) = (result_reg, is_last) {
+            if let (Some(reg), true) = (result_reg.clone(), is_last) {
                 if self.generate_tail_stmt_ir(stmt, reg, instructions, constants)? {
                     // 尾语句路径同款消费（块值已进 reg，Drop 排在块出口之前）
                     self.emit_release_drops(stmt.plan_id, instructions);

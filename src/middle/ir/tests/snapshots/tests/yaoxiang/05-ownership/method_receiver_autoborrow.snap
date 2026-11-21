@@ -3,27 +3,45 @@ module
     type_decl [x: Int(64) ; y: Int(64)]
   fn Point.sum(Ref { mutable: false, inner: TypeRef("Point") }) -> Int(64)
     locals_total=6
-    Load %0 <- %1
-    LoadField %2 <- %0.0
-    Load %3 <- %1
-    LoadField %4 <- %3.1
-    Add %5 <- %2, %4
-    Ret %5
-    Ret %5
+    values_total=5
+    value v0: TypeRef("?") @block0
+    value v1: TypeRef("?") @block0
+    value v2: TypeRef("?") @block0
+    value v3: Ref { mutable: true, inner: TypeRef("Point") } @block0
+    value v4: Ref { mutable: true, inner: TypeRef("Point") } @block0
+    Load v3 <- %0
+    LoadField v1 <- v3.0
+    Load v4 <- %0
+    LoadField v2 <- v4.1
+    Add v0 <- v1, v2
+    Ret v0
+    Ret v0
   fn Point.shift(Ref { mutable: true, inner: TypeRef("Point") }, Int(64), Int(64)) -> Void
     locals_total=14
-    Load %0 <- %1
-    Load %2 <- %1
-    LoadField %3 <- %2.0
-    Load %4 <- %5
-    Add %6 <- %3, %4
-    StoreField %0.0 <- %6 (type=None, name=Some("x"))
-    Load %7 <- %1
-    Load %8 <- %1
-    LoadField %9 <- %8.1
-    Load %10 <- %11
-    Add %12 <- %9, %10
-    StoreField %7.1 <- %12 (type=None, name=Some("y"))
+    values_total=11
+    value v0: Ref { mutable: true, inner: TypeRef("Point") } @block0
+    value v1: TypeRef("?") @block0
+    value v2: TypeRef("?") @block0
+    value v3: Int(64) @block0
+    value v4: Ref { mutable: true, inner: TypeRef("Point") } @block0
+    value v5: TypeRef("?") @block0
+    value v6: Ref { mutable: true, inner: TypeRef("Point") } @block0
+    value v7: TypeRef("?") @block0
+    value v8: TypeRef("?") @block0
+    value v9: Int(64) @block0
+    value v10: Ref { mutable: true, inner: TypeRef("Point") } @block0
+    Load v0 <- %0
+    Load v4 <- %0
+    LoadField v2 <- v4.0
+    Load v3 <- %1
+    Add v1 <- v2, v3
+    StoreField v0.0 <- v1 (type=None, name=Some("x"))
+    Load v6 <- %0
+    Load v10 <- %0
+    LoadField v8 <- v10.1
+    Load v9 <- %2
+    Add v7 <- v8, v9
+    StoreField v6.1 <- v7 (type=None, name=Some("y"))
     Ret
   fn main() -> Void
     slot[0] p : Int(64) @depth1
@@ -33,92 +51,154 @@ module
     slot[4] v : Int(64) @depth1
     slot[5] s3 : Int(64) @depth1
     locals_total=11
-    Load %0 <- int(1)
-    Load %1 <- int(2)
-    Call %2 <- string("Point") [%0, %1] (def=d0)
-    Load %1 <- %2
-    Load %3 <- int(10)
-    Load %4 <- int(20)
-    Call %0 <- string("Point.shift") [%1, %3, %4] (def=d1)
-    Drop %2
-    Load %5 <- %2
-    LoadField %4 <- %5.0
-    Load %6 <- int(11)
-    Eq %3 <- %4, %6
-    JmpIfNot %3 -> instr(18)
-    Load %7 <- %2
-    LoadField %8 <- %7.1
-    Load %9 <- int(22)
-    Eq %1 <- %8, %9
+    values_total=61
+    value v0: Int(64) @block0
+    value v1: Int(64) @block0
+    value v2: TypeRef("?") @block0
+    value v3: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
+    value v4: Int(64) @block0
+    value v5: Int(64) @block0
+    value v6: TypeRef("?") @block0
+    value v7: Bool @block0
+    value v8: Bool @block0
+    value v9: TypeRef("?") @block0
+    value v10: Int(64) @block0
+    value v11: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
+    value v12: TypeRef("?") @block0
+    value v13: Int(64) @block0
+    value v14: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
+    value v15: Generic { name: "String", args: [] } @block0
+    value v16: TypeRef("?") @block0
+    value v17: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
+    value v18: Int(64) @block0
+    value v19: Int(64) @block0
+    value v20: TypeRef("?") @block0
+    value v21: Bool @block0
+    value v22: Bool @block0
+    value v23: TypeRef("?") @block0
+    value v24: Int(64) @block0
+    value v25: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
+    value v26: TypeRef("?") @block0
+    value v27: Int(64) @block0
+    value v28: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
+    value v29: Generic { name: "String", args: [] } @block0
+    value v30: Int(64) @block0
+    value v31: Int(64) @block0
+    value v32: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
+    value v33: TypeRef("?") @block0
+    value v34: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
+    value v35: Int(64) @block0
+    value v36: Int(64) @block0
+    value v37: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
+    value v38: TypeRef("?") @block0
+    value v39: Bool @block0
+    value v40: Int(64) @block0
+    value v41: Int(64) @block0
+    value v42: Generic { name: "String", args: [] } @block0
+    value v43: TypeRef("?") @block0
+    value v44: Bool @block0
+    value v45: Int(64) @block0
+    value v46: Int(64) @block0
+    value v47: Generic { name: "String", args: [] } @block0
+    value v48: TypeRef("?") @block0
+    value v49: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
+    value v50: TypeRef("?") @block0
+    value v51: Bool @block0
+    value v52: Ref { mutable: false, inner: Int(64) } @block0
+    value v53: Int(64) @block0
+    value v54: Generic { name: "String", args: [] } @block0
+    value v55: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
+    value v56: TypeRef("?") @block0
+    value v57: Bool @block0
+    value v58: Int(64) @block0
+    value v59: Int(64) @block0
+    value v60: Generic { name: "String", args: [] } @block0
+    Load v0 <- int(1)
+    Load v1 <- int(2)
+    Call %0 <- string("Point") [v0, v1] (def=d0)
+    Load v3 <- %0
+    Load v4 <- int(10)
+    Load v5 <- int(20)
+    Call v2 <- string("Point.shift") [v3, v4, v5] (def=d1)
+    Drop %0
+    Load v11 <- %0
+    LoadField v9 <- v11.0
+    Load v10 <- int(11)
+    Eq v8 <- v9, v10
+    JmpIfNot v8 -> instr(18)
+    Load v14 <- %0
+    LoadField v12 <- v14.1
+    Load v13 <- int(22)
+    Eq v7 <- v12, v13
     Jmp -> instr(19)
-    Load %1 <- bool(false)
-    Load %10 <- string("&mut 接收者写回源对象")
-    Call %0 <- string("std.assert.assert") [%1, %10] (def=d2)
-    Load %1 <- %2
-    Load %3 <- int(1)
-    Load %4 <- int(1)
-    Call %0 <- string("Point.shift") [%1, %3, %4] (def=d1)
-    Drop %2
-    Load %5 <- %2
-    LoadField %4 <- %5.0
-    Load %6 <- int(12)
-    Eq %3 <- %4, %6
-    JmpIfNot %3 -> instr(36)
-    Load %7 <- %2
-    LoadField %8 <- %7.1
-    Load %9 <- int(23)
-    Eq %1 <- %8, %9
+    Load v7 <- bool(false)
+    Load v15 <- string("&mut 接收者写回源对象")
+    Call v6 <- string("std.assert.assert") [v7, v15] (def=d2)
+    Load v17 <- %0
+    Load v18 <- int(1)
+    Load v19 <- int(1)
+    Call v16 <- string("Point.shift") [v17, v18, v19] (def=d1)
+    Drop %0
+    Load v25 <- %0
+    LoadField v23 <- v25.0
+    Load v24 <- int(12)
+    Eq v22 <- v23, v24
+    JmpIfNot v22 -> instr(36)
+    Load v28 <- %0
+    LoadField v26 <- v28.1
+    Load v27 <- int(23)
+    Eq v21 <- v26, v27
     Jmp -> instr(37)
-    Load %1 <- bool(false)
-    Load %10 <- string("连续 &mut 接收者顺序复用")
-    Call %0 <- string("std.assert.assert") [%1, %10] (def=d2)
-    Load %1 <- int(3)
-    Load %3 <- int(4)
-    Call %0 <- string("Point") [%1, %3] (def=d0)
-    Load %3 <- %0
-    Call %1 <- string("Point.sum") [%3] (def=d3)
-    Drop %0
-    Load %4 <- %0
-    Load %6 <- int(1)
-    Load %5 <- int(1)
-    Call %3 <- string("Point.shift") [%4, %6, %5] (def=d1)
-    Drop %0
-    Load %4 <- %0
-    Call %3 <- string("Point.sum") [%4] (def=d3)
-    Drop %0
-    Load %5 <- %1
-    Load %8 <- int(7)
-    Eq %6 <- %5, %8
-    Load %9 <- string("变更前读 == 7")
-    Call %4 <- string("std.assert.assert") [%6, %9] (def=d2)
-    Load %5 <- %3
-    Load %8 <- int(9)
-    Eq %6 <- %5, %8
-    Load %9 <- string("变更后读 == 9")
-    Call %4 <- string("std.assert.assert") [%6, %9] (def=d2)
-    Load %5 <- %0
-    LoadField %6 <- %5.1
-    Move %4 <- %6
-    Load %8 <- %4
-    Load %9 <- int(5)
-    Eq %5 <- %8, %9
-    Load %7 <- string("var 绑定读令牌活跃")
-    Call %6 <- string("std.assert.assert") [%5, %7] (def=d2)
-    Load %5 <- %0
-    Call %6 <- string("Point.sum") [%5] (def=d3)
-    Drop %0
-    Load %9 <- %6
-    Load %7 <- int(9)
-    Eq %8 <- %9, %7
-    Load %10 <- string("读接收者与活跃 var 绑定借用共存")
-    Call %5 <- string("std.assert.assert") [%8, %10] (def=d2)
-    Drop %2
+    Load v21 <- bool(false)
+    Load v29 <- string("连续 &mut 接收者顺序复用")
+    Call v20 <- string("std.assert.assert") [v21, v29] (def=d2)
+    Load v30 <- int(3)
+    Load v31 <- int(4)
+    Call %1 <- string("Point") [v30, v31] (def=d0)
+    Load v32 <- %1
+    Call %2 <- string("Point.sum") [v32] (def=d3)
+    Drop %1
+    Load v34 <- %1
+    Load v35 <- int(1)
+    Load v36 <- int(1)
+    Call v33 <- string("Point.shift") [v34, v35, v36] (def=d1)
+    Drop %1
+    Load v37 <- %1
+    Call %3 <- string("Point.sum") [v37] (def=d3)
+    Drop %1
+    Load v40 <- %2
+    Load v41 <- int(7)
+    Eq v39 <- v40, v41
+    Load v42 <- string("变更前读 == 7")
+    Call v38 <- string("std.assert.assert") [v39, v42] (def=d2)
+    Load v45 <- %3
+    Load v46 <- int(9)
+    Eq v44 <- v45, v46
+    Load v47 <- string("变更后读 == 9")
+    Call v43 <- string("std.assert.assert") [v44, v47] (def=d2)
+    Load v49 <- %1
+    LoadField v48 <- v49.1
+    Move %4 <- v48
+    Load v52 <- %4
+    Load v53 <- int(5)
+    Eq v51 <- v52, v53
+    Load v54 <- string("var 绑定读令牌活跃")
+    Call v50 <- string("std.assert.assert") [v51, v54] (def=d2)
+    Load v55 <- %1
+    Call %5 <- string("Point.sum") [v55] (def=d3)
+    Drop %1
+    Load v58 <- %5
+    Load v59 <- int(9)
+    Eq v57 <- v58, v59
+    Load v60 <- string("读接收者与活跃 var 绑定借用共存")
+    Call v56 <- string("std.assert.assert") [v57, v60] (def=d2)
     Drop %0
     Drop %1
+    Drop %2
     Drop %3
-    Drop %6
+    Drop %5
     Drop %4
-    Ret %5
+    Ret v56
   init (locals=3)
     islot[0] self : Int(64) @depth1
     islot[1] dx : Int(64) @depth1

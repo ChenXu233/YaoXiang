@@ -3,98 +3,150 @@ module
     type_decl [just: Fn { params: [Int(64)], return_type: TypeRef("Maybe") } ; nothing: Fn { params: [], return_type: TypeRef("Maybe") }]
   fn Maybe.is_failure(Ref { mutable: false, inner: TypeRef("Maybe") }) -> Bool
     locals_total=12
-    Load %0 <- void
-    Load %1 <- %2
-    VariantTag %3 <- %1 : Maybe
-    Load %4 <- int(1)
-    Eq %5 <- %3, %4
-    JmpIfNot %5 -> instr(9)
-    Load %6 <- bool(true)
-    Move %0 <- %6
+    values_total=11
+    value v0: Void @block0
+    value v1: Ref { mutable: false, inner: TypeRef("Maybe") } @block0
+    value v2: TypeRef("?") @block0
+    value v3: Int(64) @block0
+    value v4: Bool @block0
+    value v5: Bool @block0
+    value v6: TypeRef("?") @block0
+    value v7: Int(64) @block0
+    value v8: Bool @block0
+    value v9: TypeRef("?") @block0
+    value v10: Bool @block0
+    Load v0 <- void
+    Load v1 <- %0
+    VariantTag v2 <- v1 : Maybe
+    Load v3 <- int(1)
+    Eq v4 <- v2, v3
+    JmpIfNot v4 -> instr(9)
+    Load v5 <- bool(true)
+    Move v0 <- v5
     Jmp -> instr(17)
-    VariantTag %7 <- %1 : Maybe
-    Load %8 <- int(0)
-    Eq %9 <- %7, %8
-    JmpIfNot %9 -> instr(17)
-    VariantPayload %10 <- %1 : Maybe
-    Load %11 <- bool(false)
-    Move %0 <- %11
+    VariantTag v6 <- v1 : Maybe
+    Load v7 <- int(0)
+    Eq v8 <- v6, v7
+    JmpIfNot v8 -> instr(17)
+    VariantPayload v9 <- v1 : Maybe
+    Load v10 <- bool(false)
+    Move v0 <- v10
     Jmp -> instr(17)
-    Ret %0
+    Ret v0
   fn Maybe.success(Ref { mutable: false, inner: TypeRef("Maybe") }) -> Int(64)
     slot[3] v : Int(64) @depth2
     locals_total=14
-    Load %0 <- void
-    Load %1 <- %2
-    VariantTag %3 <- %1 : Maybe
-    Load %4 <- int(0)
-    Eq %5 <- %3, %4
-    JmpIfNot %5 -> instr(11)
-    VariantPayload %6 <- %1 : Maybe
-    Move %7 <- %6
-    Load %8 <- %7
-    Move %0 <- %8
+    values_total=12
+    value v0: Void @block0
+    value v1: Ref { mutable: false, inner: TypeRef("Maybe") } @block0
+    value v2: TypeRef("?") @block0
+    value v3: Int(64) @block0
+    value v4: Bool @block0
+    value v5: TypeRef("?") @block0
+    value v6: Int(64) @block0
+    value v7: TypeRef("?") @block0
+    value v8: Int(64) @block0
+    value v9: Bool @block0
+    value v10: TypeRef("?") @block0
+    value v11: Bool @block0
+    Load v0 <- void
+    Load v1 <- %0
+    VariantTag v2 <- v1 : Maybe
+    Load v3 <- int(0)
+    Eq v4 <- v2, v3
+    JmpIfNot v4 -> instr(11)
+    VariantPayload v5 <- v1 : Maybe
+    Move %1 <- v5
+    Load v6 <- %1
+    Move v0 <- v6
     Jmp -> instr(19)
-    VariantTag %9 <- %1 : Maybe
-    Load %10 <- int(1)
-    Eq %11 <- %9, %10
-    JmpIfNot %11 -> instr(19)
-    Load %12 <- bool(false)
-    Call %13 <- string("std.assert.assert") [%12] (def=d0)
-    Move %0 <- %13
+    VariantTag v7 <- v1 : Maybe
+    Load v8 <- int(1)
+    Eq v9 <- v7, v8
+    JmpIfNot v9 -> instr(19)
+    Load v11 <- bool(false)
+    Call v10 <- string("std.assert.assert") [v11] (def=d0)
+    Move v0 <- v10
     Jmp -> instr(19)
-    Ret %0
+    Ret v0
   fn Maybe.residual(Ref { mutable: false, inner: TypeRef("Maybe") }) -> Generic { name: "String", args: [] }
     locals_total=13
-    Load %0 <- void
-    Load %1 <- %2
-    VariantTag %3 <- %1 : Maybe
-    Load %4 <- int(1)
-    Eq %5 <- %3, %4
-    JmpIfNot %5 -> instr(9)
-    Load %6 <- string("empty")
-    Move %0 <- %6
+    values_total=12
+    value v0: Void @block0
+    value v1: Ref { mutable: false, inner: TypeRef("Maybe") } @block0
+    value v2: TypeRef("?") @block0
+    value v3: Int(64) @block0
+    value v4: Bool @block0
+    value v5: Generic { name: "String", args: [] } @block0
+    value v6: TypeRef("?") @block0
+    value v7: Int(64) @block0
+    value v8: Bool @block0
+    value v9: TypeRef("?") @block0
+    value v10: TypeRef("?") @block0
+    value v11: Bool @block0
+    Load v0 <- void
+    Load v1 <- %0
+    VariantTag v2 <- v1 : Maybe
+    Load v3 <- int(1)
+    Eq v4 <- v2, v3
+    JmpIfNot v4 -> instr(9)
+    Load v5 <- string("empty")
+    Move v0 <- v5
     Jmp -> instr(18)
-    VariantTag %7 <- %1 : Maybe
-    Load %8 <- int(0)
-    Eq %9 <- %7, %8
-    JmpIfNot %9 -> instr(18)
-    VariantPayload %10 <- %1 : Maybe
-    Load %11 <- bool(false)
-    Call %12 <- string("std.assert.assert") [%11] (def=d0)
-    Move %0 <- %12
+    VariantTag v6 <- v1 : Maybe
+    Load v7 <- int(0)
+    Eq v8 <- v6, v7
+    JmpIfNot v8 -> instr(18)
+    VariantPayload v9 <- v1 : Maybe
+    Load v11 <- bool(false)
+    Call v10 <- string("std.assert.assert") [v11] (def=d0)
+    Move v0 <- v10
     Jmp -> instr(18)
-    Ret %0
+    Ret v0
   fn Maybe.from_error(Generic { name: "String", args: [] }) -> TypeRef("Maybe")
     locals_total=5
-    Load %0 <- void
-    Load %1 <- %2
-    Load %3 <- void
-    CreateVariant %4 <- Maybe::1 %3
-    Move %0 <- %4
+    values_total=4
+    value v0: Void @block0
+    value v1: Generic { name: "String", args: [] } @block0
+    value v2: TypeRef("?") @block0
+    value v3: Void @block0
+    Load v0 <- void
+    Load v1 <- %0
+    Load v3 <- void
+    CreateVariant v2 <- Maybe::1 v3
+    Move v0 <- v2
     Jmp -> instr(6)
-    Ret %0
+    Ret v0
   fn bump(Ref { mutable: false, inner: TypeRef("Maybe") }) -> TypeRef("Maybe")
     slot[0] m : Int(64) @depth1
     slot[1] v : Int(64) @depth1
     locals_total=6
+    values_total=8
+    value v0: TypeRef("?") @block0
+    value v1: TypeRef("?") @block0
+    value v2: TypeRef("?") @block0
+    value v3: TypeRef("?") @block0
+    value v4: TypeRef("?") @block0
+    value v5: Int(64) @block0
+    value v6: Int(64) @block0
+    value v7: Int(64) @block0
     Load %0 <- arg%0
     Load %1 <- %0
-    Call %2 <- string("Maybe.is_failure") [%1] (def=d1)
-    JmpIf %2 -> instr(7)
-    Call %3 <- string("Maybe.success") [%1] (def=d2)
-    Load %1 <- %3
+    Call v0 <- string("Maybe.is_failure") [%1] (def=d1)
+    JmpIf v0 -> instr(7)
+    Call v1 <- string("Maybe.success") [%1] (def=d2)
+    Load %1 <- v1
     Jmp -> instr(10)
-    Call %4 <- string("Maybe.residual") [%1] (def=d3)
-    Call %5 <- string("Maybe.from_error") [%4] (def=d4)
-    Ret %5
-    Load %4 <- %1
-    Load %5 <- int(1)
-    Add %3 <- %4, %5
-    CreateVariant %2 <- Maybe::0 %3
-    Ret %2
+    Call v2 <- string("Maybe.residual") [%1] (def=d3)
+    Call v3 <- string("Maybe.from_error") [v2] (def=d4)
+    Ret v3
+    Load v6 <- %1
+    Load v7 <- int(1)
+    Add v5 <- v6, v7
+    CreateVariant v4 <- Maybe::0 v5
+    Ret v4
     Drop %1
-    Ret %2
+    Ret v4
   fn main() -> Void
     slot[0] some_case : Int(64) @depth1
     slot[1] none_case : Int(64) @depth1
@@ -102,68 +154,107 @@ module
     slot[5] v : Int(64) @depth2
     slot[6] propagated : Int(64) @depth1
     locals_total=22
-    Load %0 <- int(4)
-    CreateVariant %1 <- Maybe::0 %0
-    Load %2 <- void
-    CreateVariant %0 <- Maybe::1 %2
-    Load %3 <- %1
-    Move %4 <- %3
-    Call %2 <- string("bump") [%4] (def=d5)
-    Drop %1
-    Load %4 <- void
-    Load %3 <- %2
-    VariantTag %5 <- %3 : Maybe
-    Load %6 <- int(0)
-    Eq %7 <- %5, %6
-    JmpIfNot %7 -> instr(23)
-    VariantPayload %8 <- %3 : Maybe
-    Move %9 <- %8
-    Load %10 <- %9
-    Load %11 <- int(5)
-    Eq %12 <- %10, %11
-    Load %13 <- string("? keeps payload")
-    Call %14 <- string("std.assert.assert") [%12, %13] (def=d0)
-    Move %4 <- %14
-    Jmp -> instr(32)
-    VariantTag %15 <- %3 : Maybe
-    Load %16 <- int(1)
-    Eq %17 <- %15, %16
-    JmpIfNot %17 -> instr(32)
-    Load %18 <- bool(false)
-    Load %19 <- string("? must not lose the payload")
-    Call %20 <- string("std.assert.assert") [%18, %19] (def=d0)
-    Move %4 <- %20
-    Jmp -> instr(32)
-    Load %7 <- %0
-    Move %6 <- %7
-    Call %5 <- string("bump") [%6] (def=d5)
+    values_total=38
+    value v0: Int(64) @block0
+    value v1: Void @block0
+    value v2: Generic { name: "Maybe", args: [] } @block0
+    value v3: Generic { name: "Maybe", args: [] } @block0
+    value v4: Void @block0
+    value v5: TypeRef("Maybe") @block0
+    value v6: TypeRef("?") @block0
+    value v7: Int(64) @block0
+    value v8: Bool @block0
+    value v9: TypeRef("?") @block0
+    value v10: TypeRef("?") @block0
+    value v11: Bool @block0
+    value v12: Int(64) @block0
+    value v13: Int(64) @block0
+    value v14: Generic { name: "String", args: [] } @block0
+    value v15: TypeRef("?") @block0
+    value v16: Int(64) @block0
+    value v17: Bool @block0
+    value v18: TypeRef("?") @block0
+    value v19: Bool @block0
+    value v20: Generic { name: "String", args: [] } @block0
+    value v21: Generic { name: "Maybe", args: [] } @block0
+    value v22: Generic { name: "Maybe", args: [] } @block0
+    value v23: Void @block0
+    value v24: TypeRef("Maybe") @block0
+    value v25: TypeRef("?") @block0
+    value v26: Int(64) @block0
+    value v27: Bool @block0
+    value v28: TypeRef("?") @block0
+    value v29: TypeRef("?") @block0
+    value v30: Bool @block0
+    value v31: Generic { name: "String", args: [] } @block0
+    value v32: TypeRef("?") @block0
+    value v33: Int(64) @block0
+    value v34: Bool @block0
+    value v35: TypeRef("?") @block0
+    value v36: Bool @block0
+    value v37: Generic { name: "String", args: [] } @block0
+    Load v0 <- int(4)
+    CreateVariant %0 <- Maybe::0 v0
+    Load v1 <- void
+    CreateVariant %1 <- Maybe::1 v1
+    Load v3 <- %0
+    Move v2 <- v3
+    Call %2 <- string("bump") [v2] (def=d5)
     Drop %0
-    Load %6 <- void
-    Load %7 <- %5
-    VariantTag %8 <- %7 : Maybe
-    Load %14 <- int(0)
-    Eq %12 <- %8, %14
-    JmpIfNot %12 -> instr(48)
-    VariantPayload %10 <- %7 : Maybe
-    Load %13 <- bool(false)
-    Load %15 <- string("? must not fabricate a value")
-    Call %11 <- string("std.assert.assert") [%13, %15] (def=d0)
-    Move %6 <- %11
+    Load v4 <- void
+    Load v5 <- %2
+    VariantTag v6 <- v5 : Maybe
+    Load v7 <- int(0)
+    Eq v8 <- v6, v7
+    JmpIfNot v8 -> instr(23)
+    VariantPayload v9 <- v5 : Maybe
+    Move %3 <- v9
+    Load v12 <- %3
+    Load v13 <- int(5)
+    Eq v11 <- v12, v13
+    Load v14 <- string("? keeps payload")
+    Call v10 <- string("std.assert.assert") [v11, v14] (def=d0)
+    Move v4 <- v10
+    Jmp -> instr(32)
+    VariantTag v15 <- v5 : Maybe
+    Load v16 <- int(1)
+    Eq v17 <- v15, v16
+    JmpIfNot v17 -> instr(32)
+    Load v19 <- bool(false)
+    Load v20 <- string("? must not lose the payload")
+    Call v18 <- string("std.assert.assert") [v19, v20] (def=d0)
+    Move v4 <- v18
+    Jmp -> instr(32)
+    Load v22 <- %1
+    Move v21 <- v22
+    Call %4 <- string("bump") [v21] (def=d5)
+    Drop %1
+    Load v23 <- void
+    Load v24 <- %4
+    VariantTag v25 <- v24 : Maybe
+    Load v26 <- int(0)
+    Eq v27 <- v25, v26
+    JmpIfNot v27 -> instr(48)
+    VariantPayload v28 <- v24 : Maybe
+    Load v30 <- bool(false)
+    Load v31 <- string("? must not fabricate a value")
+    Call v29 <- string("std.assert.assert") [v30, v31] (def=d0)
+    Move v23 <- v29
     Jmp -> instr(57)
-    VariantTag %16 <- %7 : Maybe
-    Load %17 <- int(1)
-    Eq %20 <- %16, %17
-    JmpIfNot %20 -> instr(57)
-    Load %19 <- bool(true)
-    Load %21 <- string("? propagates nothing")
-    Call %18 <- string("std.assert.assert") [%19, %21] (def=d0)
-    Move %6 <- %18
+    VariantTag v32 <- v24 : Maybe
+    Load v33 <- int(1)
+    Eq v34 <- v32, v33
+    JmpIfNot v34 -> instr(57)
+    Load v36 <- bool(true)
+    Load v37 <- string("? propagates nothing")
+    Call v35 <- string("std.assert.assert") [v36, v37] (def=d0)
+    Move v23 <- v35
     Jmp -> instr(57)
     Drop %2
-    Drop %0
-    Drop %5
     Drop %1
-    Ret %6
+    Drop %4
+    Drop %0
+    Ret v23
   init (locals=1)
     islot[0] e : Int(64) @depth1
     Call %0 <- string("main") [] (def=d6)

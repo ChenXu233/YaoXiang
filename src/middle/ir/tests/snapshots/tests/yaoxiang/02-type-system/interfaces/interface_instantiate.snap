@@ -6,41 +6,65 @@ module
     type_decl [name: Generic { name: "String", args: [] }]
   fn Dog.speak(Ref { mutable: false, inner: TypeRef("Dog") }) -> Generic { name: "String", args: [] }
     locals_total=2
-    Load %0 <- string("Woof")
-    Ret %0
-    Ret %0
+    values_total=1
+    value v0: Generic { name: "String", args: [] } @block0
+    Load v0 <- string("Woof")
+    Ret v0
+    Ret v0
   fn Dog.age(Ref { mutable: false, inner: TypeRef("Dog") }) -> Int(64)
     locals_total=2
-    Load %0 <- int(3)
-    Ret %0
-    Ret %0
+    values_total=1
+    value v0: Int(64) @block0
+    Load v0 <- int(3)
+    Ret v0
+    Ret v0
   fn main() -> Void
     slot[0] d : Int(64) @depth1
     locals_total=7
-    Load %0 <- string("Rex")
-    Call %1 <- string("Dog") [%0] (def=d0)
-    Load %2 <- %1
-    Call %3 <- string("Dog.speak") [%2] (def=d1)
-    Load %4 <- string("Woof")
-    Eq %5 <- %3, %4
-    Load %6 <- string("Animal.speak dispatch returns Woof")
-    Call %0 <- string("std.assert.assert") [%5, %6] (def=d2)
-    Drop %1
-    Load %2 <- %1
-    Call %3 <- string("Dog.age") [%2] (def=d3)
-    Load %4 <- int(3)
-    Eq %5 <- %3, %4
-    Load %6 <- string("Animal.age dispatch returns 3")
-    Call %0 <- string("std.assert.assert") [%5, %6] (def=d2)
-    Drop %1
-    Load %2 <- %1
-    LoadField %3 <- %2.0
-    Load %4 <- string("Rex")
-    Eq %5 <- %3, %4
-    Load %6 <- string("own field still accessible")
-    Call %0 <- string("std.assert.assert") [%5, %6] (def=d2)
-    Drop %1
-    Ret %0
+    values_total=19
+    value v0: Generic { name: "String", args: [] } @block0
+    value v1: TypeRef("?") @block0
+    value v2: Bool @block0
+    value v3: TypeRef("?") @block0
+    value v4: Generic { name: "String", args: [] } @block0
+    value v5: Struct(StructType { name: "Dog", fields: [("name", Generic { name: "String", args: [] })], methods: {}, interfaces: ["Animal"] }) @block0
+    value v6: Generic { name: "String", args: [] } @block0
+    value v7: TypeRef("?") @block0
+    value v8: Bool @block0
+    value v9: TypeRef("?") @block0
+    value v10: Int(64) @block0
+    value v11: Struct(StructType { name: "Dog", fields: [("name", Generic { name: "String", args: [] })], methods: {}, interfaces: ["Animal"] }) @block0
+    value v12: Generic { name: "String", args: [] } @block0
+    value v13: TypeRef("?") @block0
+    value v14: Bool @block0
+    value v15: TypeRef("?") @block0
+    value v16: Generic { name: "String", args: [] } @block0
+    value v17: Struct(StructType { name: "Dog", fields: [("name", Generic { name: "String", args: [] })], methods: {}, interfaces: ["Animal"] }) @block0
+    value v18: Generic { name: "String", args: [] } @block0
+    Load v0 <- string("Rex")
+    Call %0 <- string("Dog") [v0] (def=d0)
+    Load v5 <- %0
+    Call v3 <- string("Dog.speak") [v5] (def=d1)
+    Load v4 <- string("Woof")
+    Eq v2 <- v3, v4
+    Load v6 <- string("Animal.speak dispatch returns Woof")
+    Call v1 <- string("std.assert.assert") [v2, v6] (def=d2)
+    Drop %0
+    Load v11 <- %0
+    Call v9 <- string("Dog.age") [v11] (def=d3)
+    Load v10 <- int(3)
+    Eq v8 <- v9, v10
+    Load v12 <- string("Animal.age dispatch returns 3")
+    Call v7 <- string("std.assert.assert") [v8, v12] (def=d2)
+    Drop %0
+    Load v17 <- %0
+    LoadField v15 <- v17.0
+    Load v16 <- string("Rex")
+    Eq v14 <- v15, v16
+    Load v18 <- string("own field still accessible")
+    Call v13 <- string("std.assert.assert") [v14, v18] (def=d2)
+    Drop %0
+    Ret v13
   init (locals=1)
     islot[0] self : Int(64) @depth1
     Call %0 <- string("main") [] (def=d4)

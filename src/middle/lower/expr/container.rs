@@ -14,7 +14,7 @@ impl AstToIrGenerator {
     pub(super) fn generate_tuple_expr_ir(
         &mut self,
         items: &Vec<Expr>,
-        result_reg: usize,
+        result_reg: Operand,
         instructions: &mut Vec<Instruction>,
         constants: &mut Vec<ConstValue>,
     ) -> Result<(), Diagnostic> {
@@ -22,11 +22,11 @@ impl AstToIrGenerator {
         let mut item_regs = Vec::with_capacity(items.len());
         for item_expr in items {
             let item_reg = self.next_temp_reg();
-            self.generate_expr_ir(item_expr, item_reg, instructions, constants)?;
-            item_regs.push(Operand::Local(item_reg));
+            self.generate_expr_ir(item_expr, item_reg.clone(), instructions, constants)?;
+            item_regs.push(item_reg.clone());
         }
         instructions.push(Instruction::NewTuple {
-            dst: Operand::Local(result_reg),
+            dst: result_reg.clone(),
             items: item_regs,
             span: self.cur_span,
         });
@@ -38,15 +38,15 @@ impl AstToIrGenerator {
         expr: &Expr,
         index: &Expr,
         span: &Span,
-        result_reg: usize,
+        result_reg: Operand,
         instructions: &mut Vec<Instruction>,
         constants: &mut Vec<ConstValue>,
     ) -> Result<(), Diagnostic> {
         let src_reg = self.next_temp_reg();
-        self.generate_expr_ir(expr, src_reg, instructions, constants)?;
+        self.generate_expr_ir(expr, src_reg.clone(), instructions, constants)?;
 
         let index_reg = self.next_temp_reg();
-        self.generate_expr_ir(index, index_reg, instructions, constants)?;
+        self.generate_expr_ir(index, index_reg.clone(), instructions, constants)?;
 
         // RFC-011b：实现 Index 接口的用户容器——原生 LoadIndex 替换为
         // `Call "Type.index"`（接收者居首，与 method_bindings 形态一致）
@@ -63,9 +63,9 @@ impl AstToIrGenerator {
             // → `b.Temp.index`），否则同名类型的算子实现互相落错单元（静默错值）。
             let dispatch_name = self.method_dispatch_name(expr, &func_name);
             instructions.push(Instruction::Call {
-                dst: Some(Operand::Local(result_reg)),
+                dst: Some(result_reg.clone()),
                 func: Operand::Const(ConstValue::String(dispatch_name)),
-                args: vec![Operand::Local(src_reg), Operand::Local(index_reg)],
+                args: vec![src_reg.clone(), index_reg.clone()],
                 span: *span,
                 def: None,
             });
@@ -84,18 +84,18 @@ impl AstToIrGenerator {
         });
         if base_is_string {
             instructions.push(Instruction::StringGetChar {
-                dst: Operand::Local(result_reg),
-                src: Operand::Local(src_reg),
-                index: Operand::Local(index_reg),
+                dst: result_reg.clone(),
+                src: src_reg.clone(),
+                index: index_reg.clone(),
                 span: *span,
             });
             return Ok(());
         }
 
         instructions.push(Instruction::LoadIndex {
-            dst: Operand::Local(result_reg),
-            src: Operand::Local(src_reg),
-            index: Operand::Local(index_reg),
+            dst: result_reg.clone(),
+            src: src_reg.clone(),
+            index: index_reg.clone(),
             span: *span,
         });
         Ok(())
@@ -104,7 +104,7 @@ impl AstToIrGenerator {
     pub(super) fn generate_dict_expr_ir(
         &mut self,
         pairs: &Vec<(Expr, Expr)>,
-        result_reg: usize,
+        result_reg: Operand,
         instructions: &mut Vec<Instruction>,
         constants: &mut Vec<ConstValue>,
     ) -> Result<(), Diagnostic> {
@@ -113,14 +113,14 @@ impl AstToIrGenerator {
         let mut values = Vec::new();
         for (key_expr, val_expr) in pairs {
             let key_reg = self.next_temp_reg();
-            self.generate_expr_ir(key_expr, key_reg, instructions, constants)?;
-            keys.push(Operand::Local(key_reg));
+            self.generate_expr_ir(key_expr, key_reg.clone(), instructions, constants)?;
+            keys.push(key_reg.clone());
             let val_reg = self.next_temp_reg();
-            self.generate_expr_ir(val_expr, val_reg, instructions, constants)?;
-            values.push(Operand::Local(val_reg));
+            self.generate_expr_ir(val_expr, val_reg.clone(), instructions, constants)?;
+            values.push(val_reg.clone());
         }
         instructions.push(Instruction::NewDict {
-            dst: Operand::Local(result_reg),
+            dst: result_reg.clone(),
             keys,
             values,
             span: self.cur_span,
@@ -132,13 +132,13 @@ impl AstToIrGenerator {
         &mut self,
         elements: &[Expr],
         span: &Span,
-        result_reg: usize,
+        result_reg: Operand,
         instructions: &mut Vec<Instruction>,
         constants: &mut Vec<ConstValue>,
     ) -> Result<(), Diagnostic> {
         // 列表字面量：先创建空列表，再按索引写入元素
         instructions.push(Instruction::AllocArray {
-            dst: Operand::Local(result_reg),
+            dst: result_reg.clone(),
             size: Operand::Const(ConstValue::Int(elements.len() as i128)),
             elem_size: Operand::Const(ConstValue::Int(1)),
             span: self.cur_span,
@@ -146,19 +146,19 @@ impl AstToIrGenerator {
 
         for (idx, element) in elements.iter().enumerate() {
             let element_reg = self.next_temp_reg();
-            self.generate_expr_ir(element, element_reg, instructions, constants)?;
+            self.generate_expr_ir(element, element_reg.clone(), instructions, constants)?;
 
             let index_reg = self.next_temp_reg();
             instructions.push(Instruction::Load {
-                dst: Operand::Local(index_reg),
+                dst: index_reg.clone(),
                 src: Operand::Const(ConstValue::Int(idx as i128)),
                 span: self.cur_span,
             });
 
             instructions.push(Instruction::StoreIndex {
-                dst: Operand::Local(result_reg),
-                index: Operand::Local(index_reg),
-                src: Operand::Local(element_reg),
+                dst: result_reg.clone(),
+                index: index_reg.clone(),
+                src: element_reg.clone(),
                 span: *span,
             });
         }
@@ -179,7 +179,7 @@ impl AstToIrGenerator {
         args: &[Expr],
         named_args: &[(String, Expr)],
         span: &Span,
-        result_reg: usize,
+        result_reg: Operand,
         instructions: &mut Vec<Instruction>,
         constants: &mut Vec<ConstValue>,
     ) -> Result<(), Diagnostic> {
@@ -195,17 +195,17 @@ impl AstToIrGenerator {
             // 改用已测试的「长度写入」路径（`v.length = n` 同一条
             // SetField → resize(n, Void)），语义一致且无需扯动字节码格式。
             let len_reg = self.next_temp_reg();
-            self.generate_expr_ir(len_expr, len_reg, instructions, constants)?;
+            self.generate_expr_ir(len_expr, len_reg.clone(), instructions, constants)?;
             instructions.push(Instruction::AllocArray {
-                dst: Operand::Local(result_reg),
+                dst: result_reg.clone(),
                 size: Operand::Const(ConstValue::Int(0)),
                 elem_size: Operand::Const(ConstValue::Int(1)),
                 span: *span,
             });
             instructions.push(Instruction::StoreField {
-                dst: Operand::Local(result_reg),
+                dst: result_reg.clone(),
                 field: 0,
-                src: Operand::Local(len_reg),
+                src: len_reg.clone(),
                 type_name: None,
                 field_name: Some("length".to_string()),
                 span: *span,
@@ -223,7 +223,7 @@ impl AstToIrGenerator {
         element: &Expr,
         generators: &[ast::ListCompGenerator],
         span: &Span,
-        result_reg: usize,
+        result_reg: Operand,
         instructions: &mut Vec<Instruction>,
         constants: &mut Vec<ConstValue>,
     ) -> Result<(), Diagnostic> {
@@ -236,7 +236,7 @@ impl AstToIrGenerator {
 
         // 1. 创建空结果列表
         instructions.push(Instruction::AllocArray {
-            dst: Operand::Local(result_reg),
+            dst: result_reg.clone(),
             size: Operand::Const(ConstValue::Int(0)),
             elem_size: Operand::Const(ConstValue::Int(1)),
             span: self.cur_span,
@@ -263,7 +263,7 @@ impl AstToIrGenerator {
         generators: &[ast::ListCompGenerator],
         idx: usize,
         span: &Span,
-        result_reg: usize,
+        result_reg: Operand,
         instructions: &mut Vec<Instruction>,
         constants: &mut Vec<ConstValue>,
     ) -> Result<(), Diagnostic> {
@@ -271,22 +271,22 @@ impl AstToIrGenerator {
 
         // 计算可迭代对象
         let iterable_reg = self.next_temp_reg();
-        self.generate_expr_ir(&gen.iterable, iterable_reg, instructions, constants)?;
+        self.generate_expr_ir(&gen.iterable, iterable_reg.clone(), instructions, constants)?;
 
         // 创建迭代器
         let iterator_reg = self.next_temp_reg();
         instructions.push(Instruction::Call {
-            dst: Some(Operand::Local(iterator_reg)),
+            dst: Some(iterator_reg.clone()),
             func: Operand::Const(ConstValue::String(
                 self.resolver().resolve_namespace("list", &["iter"]),
             )),
-            args: vec![Operand::Local(iterable_reg)],
+            args: vec![iterable_reg.clone()],
             span: *span,
             def: None,
         });
 
-        // 注册循环变量
-        let var_reg = self.next_temp_reg();
+        // 注册循环变量（具名变量：Local 槽，不产生 SSA 值）
+        let var_reg = self.next_local_slot();
         self.register_local(&gen.var, var_reg);
 
         // 循环开始
@@ -295,16 +295,16 @@ impl AstToIrGenerator {
         // has_next?
         let has_next_reg = self.next_temp_reg();
         instructions.push(Instruction::Call {
-            dst: Some(Operand::Local(has_next_reg)),
+            dst: Some(has_next_reg.clone()),
             func: Operand::Const(ConstValue::String("std.list.has_next".to_string())),
-            args: vec![Operand::Local(iterator_reg)],
+            args: vec![iterator_reg.clone()],
             span: *span,
             def: None,
         });
 
         let jump_end_idx = instructions.len();
         instructions.push(Instruction::JmpIfNot {
-            cond: Operand::Local(has_next_reg),
+            cond: has_next_reg.clone(),
             target: 0, // 占位符
             span: self.cur_span,
         });
@@ -312,9 +312,9 @@ impl AstToIrGenerator {
         // next element
         let element_reg = self.next_temp_reg();
         instructions.push(Instruction::Call {
-            dst: Some(Operand::Local(element_reg)),
+            dst: Some(element_reg.clone()),
             func: Operand::Const(ConstValue::String("std.list.next".to_string())),
-            args: vec![Operand::Local(iterator_reg)],
+            args: vec![iterator_reg.clone()],
             span: *span,
             def: None,
         });
@@ -322,7 +322,7 @@ impl AstToIrGenerator {
         // 存储到循环变量
         instructions.push(Instruction::Store {
             dst: Operand::Local(var_reg),
-            src: Operand::Local(element_reg),
+            src: element_reg.clone(),
             span: *span,
         });
 
@@ -330,11 +330,11 @@ impl AstToIrGenerator {
         let mut cond_jump_idx = None;
         if let Some(cond_expr) = &gen.condition {
             let cond_reg = self.next_temp_reg();
-            self.generate_expr_ir(cond_expr, cond_reg, instructions, constants)?;
+            self.generate_expr_ir(cond_expr, cond_reg.clone(), instructions, constants)?;
 
             let j = instructions.len();
             instructions.push(Instruction::JmpIfNot {
-                cond: Operand::Local(cond_reg),
+                cond: cond_reg.clone(),
                 target: 0, // 占位符
                 span: self.cur_span,
             });
@@ -354,12 +354,12 @@ impl AstToIrGenerator {
             )?;
         } else {
             let comp_reg = self.next_temp_reg();
-            self.generate_expr_ir(element, comp_reg, instructions, constants)?;
+            self.generate_expr_ir(element, comp_reg.clone(), instructions, constants)?;
 
             instructions.push(Instruction::Call {
-                dst: Some(Operand::Local(result_reg)),
+                dst: Some(result_reg.clone()),
                 func: Operand::Const(ConstValue::String("std.list.push".to_string())),
-                args: vec![Operand::Local(result_reg), Operand::Local(comp_reg)],
+                args: vec![result_reg.clone(), comp_reg.clone()],
                 span: *span,
                 def: None,
             });

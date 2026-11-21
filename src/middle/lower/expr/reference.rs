@@ -12,7 +12,7 @@ impl AstToIrGenerator {
     pub(super) fn generate_unsafe_expr_ir(
         &mut self,
         body: &ast::Block,
-        result_reg: usize,
+        result_reg: Operand,
         instructions: &mut Vec<Instruction>,
         constants: &mut Vec<ConstValue>,
     ) -> Result<(), Diagnostic> {
@@ -35,13 +35,13 @@ impl AstToIrGenerator {
     pub(super) fn generate_ref_expr_ir(
         &mut self,
         expr: &Expr,
-        result_reg: usize,
+        result_reg: Operand,
         instructions: &mut Vec<Instruction>,
         constants: &mut Vec<ConstValue>,
     ) -> Result<(), Diagnostic> {
         // 生成内部表达式的 IR
         let src_reg = self.next_temp_reg();
-        self.generate_expr_ir(expr, src_reg, instructions, constants)?;
+        self.generate_expr_ir(expr, src_reg.clone(), instructions, constants)?;
 
         // 逃逸分析：跨 spawn 使用 → Arc，否则 → Rc
         let var_name = match expr {
@@ -56,14 +56,14 @@ impl AstToIrGenerator {
 
         if use_arc {
             instructions.push(Instruction::ArcNew {
-                dst: Operand::Local(result_reg),
-                src: Operand::Local(src_reg),
+                dst: result_reg.clone(),
+                src: src_reg.clone(),
                 span: self.cur_span,
             });
         } else {
             instructions.push(Instruction::RcNew {
-                dst: Operand::Local(result_reg),
-                src: Operand::Local(src_reg),
+                dst: result_reg.clone(),
+                src: src_reg.clone(),
                 span: self.cur_span,
             });
         }
@@ -73,21 +73,21 @@ impl AstToIrGenerator {
     pub(super) fn generate_borrow_expr_ir(
         &mut self,
         expr: &Expr,
-        result_reg: usize,
+        result_reg: Operand,
         instructions: &mut Vec<Instruction>,
         constants: &mut Vec<ConstValue>,
     ) -> Result<(), Diagnostic> {
         // 1. 生成内部表达式的 IR
         let inner_reg = self.next_temp_reg();
-        self.generate_expr_ir(expr, inner_reg, instructions, constants)?;
+        self.generate_expr_ir(expr, inner_reg.clone(), instructions, constants)?;
 
         // 借用令牌（& / &mut）是编译期品牌，运行时零大小：
         // Struct 值是堆句柄，传参/赋值复制的是句柄，共享同一对象——
         // 因此字段写（StoreField）经令牌自然写回底层，无需额外指令（#266）。
         // 所有权与借用合法性已在 typecheck 层验证（RFC-009a）。
         instructions.push(Instruction::Move {
-            dst: Operand::Local(result_reg),
-            src: Operand::Local(inner_reg),
+            dst: result_reg.clone(),
+            src: inner_reg.clone(),
             span: self.cur_span,
         });
         Ok(())

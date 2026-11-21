@@ -5,45 +5,68 @@ module
   fn apply_int(Fn { params: [Int(64)], return_type: Int(64) }) -> Int(64)
     slot[0] f : Int(64) @depth1
     locals_total=4
+    values_total=3
+    value v0: TypeRef("T") @block0
+    value v1: Int(64) @block0
+    value v2: Fn { params: [TypeRef("T")], return_type: TypeRef("T") } @block0
     Load %0 <- arg%0
-    Load %1 <- int(1)
-    Load %2 <- %0
-    CallDyn %3 <- %2 [%1]
-    Ret %3
-    Ret %3
+    Load v1 <- int(1)
+    Load v2 <- %0
+    CallDyn v0 <- v2 [v1]
+    Ret v0
+    Ret v0
   fn pick(TypeRef("T"), Fn { params: [TypeRef("T")], return_type: TypeRef("T") }) -> TypeRef("T")
     generic_params: ["T"]
     slot[0] v : Int(64) @depth1
     slot[1] f : Int(64) @depth1
     locals_total=5
-    Load %0 <- %1
-    Load %2 <- %3
-    CallDyn %4 <- %2 [%0]
-    Ret %4
-    Ret %4
+    values_total=3
+    value v0: TypeRef("T") @block0
+    value v1: TypeRef("T") @block0
+    value v2: Fn { params: [TypeRef("T")], return_type: TypeRef("T") } @block0
+    Load v1 <- %0
+    Load v2 <- %1
+    CallDyn v0 <- v2 [v1]
+    Ret v0
+    Ret v0
   fn double(Int(64)) -> Int(64)
     slot[0] x : Int(64) @depth1
     locals_total=5
+    values_total=4
+    value v0: TypeRef("?") @block0
+    value v1: Int(64) @block0
+    value v2: Int(64) @block0
+    value v3: Int(64) @block0
     Load %0 <- arg%0
-    Load %1 <- %0
-    Load %2 <- int(2)
-    Mul %3 <- %1, %2
-    Ret %3
+    Load v2 <- %0
+    Load v3 <- int(2)
+    Mul v1 <- v2, v3
+    Ret v1
     Ret
   fn closure_0(Int(64)) -> Void
     slot[0] x : Int(64) @depth1
     locals_total=5
-    Load %0 <- %1
-    Load %2 <- int(1)
-    Add %3 <- %0, %2
-    Ret %3
+    values_total=4
+    value v0: TypeRef("?") @block0
+    value v1: Int(64) @block0
+    value v2: Int(64) @block0
+    value v3: Int(64) @block0
+    Load v2 <- %0
+    Load v3 <- int(1)
+    Add v1 <- v2, v3
+    Ret v1
   fn closure_1(Int(64)) -> Void
     slot[0] x : Int(64) @depth1
     locals_total=11
-    Load %0 <- %1
-    Load %2 <- int(2)
-    Mul %3 <- %0, %2
-    Ret %3
+    values_total=4
+    value v0: TypeRef("?") @block0
+    value v1: Int(64) @block0
+    value v2: Int(64) @block0
+    value v3: Int(64) @block0
+    Load v2 <- %0
+    Load v3 <- int(2)
+    Mul v1 <- v2, v3
+    Ret v1
   init (locals=0)
     MakeClosure %0 <- closure_0 env=[] (def=d0)
     Call %1 <- string("apply_int") [%0] (def=d1)

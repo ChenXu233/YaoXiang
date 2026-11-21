@@ -380,6 +380,42 @@ impl AstToIrGenerator {
     // 原因：根据设计文档，不再需要复杂的类型名提取逻辑
     // 方法调用现在直接生成简单函数名（方法名）
 
+    /// 表达式结果的 `MonoType`（7b.2 值表类型来源，09a §P7 7b.2 契约 §二 第 2 条）。
+    ///
+    /// **只取已有可信来源，不新造推断**：变量取类型检查结果 / 绑定表的真实类型；
+    /// 构造器调用取类型名；普通函数调用取绑定函数类型的返回类型；其余返回
+    /// `None`（调用方落显式未知 `TypeRef("?")`，不静默猜类型）。
+    pub(in crate::middle) fn expr_value_type(
+        &self,
+        expr: &ast::Expr,
+    ) -> Option<MonoType> {
+        match expr {
+            ast::Expr::Var(name, _) => {
+                if let Some(mono_type) = self
+                    .type_result
+                    .as_ref()
+                    .and_then(|tr| tr.local_var_types.get(name))
+                {
+                    return Some(mono_type.clone());
+                }
+                self.lookup_var_type(name).map(|poly| poly.body.clone())
+            }
+            ast::Expr::Call { func, .. } => {
+                let ast::Expr::Var(name, _) = func.as_ref() else {
+                    return None;
+                };
+                if self.struct_definitions.contains_key(name) {
+                    return Some(MonoType::TypeRef(name.clone()));
+                }
+                match self.lookup_var_type(name).map(|poly| &poly.body) {
+                    Some(MonoType::Fn { return_type, .. }) => Some((**return_type).clone()),
+                    _ => None,
+                }
+            }
+            _ => None,
+        }
+    }
+
     /// 解析字段索引（6.9.5-B.1b / H2：返回**运行期数据索引**）
     ///
     /// 从类型信息和结构体定义中动态查找字段在结构体中的位置。记录字段命中后

@@ -21,7 +21,7 @@ impl AstToIrGenerator {
         then_branch: &ast::Block,
         else_if_branches: &[(Box<ast::Expr>, Box<ast::Block>)],
         else_branch: Option<&ast::Block>,
-        result_reg: usize,
+        result_reg: Operand,
         instructions: &mut Vec<Instruction>,
         constants: &mut Vec<ConstValue>,
     ) -> Result<(), Diagnostic> {
@@ -32,29 +32,34 @@ impl AstToIrGenerator {
         // 此时分支的值不写入 result_reg（改写 scratch），最后统一写 Void；
         // 否则 `x = if true { 19 }` 会拿到 19，与 typecheck 判定的 `x : Void` 矛盾（#346）。
         let value_reg = if else_branch.is_some() {
-            result_reg
+            result_reg.clone()
         } else {
             self.next_temp_reg()
         };
 
         // 1. 评估条件
         let condition_reg = self.next_temp_reg();
-        self.generate_expr_ir(condition, condition_reg, instructions, constants)?;
+        self.generate_expr_ir(condition, condition_reg.clone(), instructions, constants)?;
 
         // 2. 跳转到下一个分支的占位符 (JmpIfNot to next)
         let jump_to_next_idx = instructions.len();
         instructions.push(Instruction::JmpIfNot {
-            cond: Operand::Local(condition_reg),
+            cond: condition_reg.clone(),
             target: 0,
             span: self.cur_span,
         }); // 占位符
 
         // 3. then 分支
         let then_result_reg = self.next_temp_reg();
-        self.generate_block_ir(then_branch, Some(then_result_reg), instructions, constants)?;
+        self.generate_block_ir(
+            then_branch,
+            Some(then_result_reg.clone()),
+            instructions,
+            constants,
+        )?;
         instructions.push(Instruction::Move {
-            dst: Operand::Local(value_reg),
-            src: Operand::Local(then_result_reg),
+            dst: value_reg.clone(),
+            src: then_result_reg.clone(),
             span: self.cur_span,
         });
 
@@ -81,20 +86,30 @@ impl AstToIrGenerator {
         // 6. else if 分支
         for (else_if_condition, else_if_body) in else_if_branches.iter() {
             let else_if_cond_reg = self.next_temp_reg();
-            self.generate_expr_ir(else_if_condition, else_if_cond_reg, instructions, constants)?;
+            self.generate_expr_ir(
+                else_if_condition,
+                else_if_cond_reg.clone(),
+                instructions,
+                constants,
+            )?;
 
             let jump_idx = instructions.len();
             instructions.push(Instruction::JmpIfNot {
-                cond: Operand::Local(else_if_cond_reg),
+                cond: else_if_cond_reg.clone(),
                 target: 0,
                 span: self.cur_span,
             });
 
             let else_if_res = self.next_temp_reg();
-            self.generate_block_ir(else_if_body, Some(else_if_res), instructions, constants)?;
+            self.generate_block_ir(
+                else_if_body,
+                Some(else_if_res.clone()),
+                instructions,
+                constants,
+            )?;
             instructions.push(Instruction::Move {
-                dst: Operand::Local(value_reg),
-                src: Operand::Local(else_if_res),
+                dst: value_reg.clone(),
+                src: else_if_res.clone(),
                 span: self.cur_span,
             });
 
@@ -118,10 +133,10 @@ impl AstToIrGenerator {
         // 7. Else 分支
         if let Some(else_body) = else_branch {
             let else_res = self.next_temp_reg();
-            self.generate_block_ir(else_body, Some(else_res), instructions, constants)?;
+            self.generate_block_ir(else_body, Some(else_res.clone()), instructions, constants)?;
             instructions.push(Instruction::Move {
-                dst: Operand::Local(value_reg),
-                src: Operand::Local(else_res),
+                dst: value_reg.clone(),
+                src: else_res.clone(),
                 span: self.cur_span,
             });
         }
@@ -141,7 +156,7 @@ impl AstToIrGenerator {
         // 9. 无 else：值为 Void（RFC-010a 规则③）
         if else_branch.is_none() {
             instructions.push(Instruction::Load {
-                dst: Operand::Local(result_reg),
+                dst: result_reg.clone(),
                 src: Operand::Const(ConstValue::Void),
                 span: self.cur_span,
             });
@@ -154,15 +169,15 @@ impl AstToIrGenerator {
     pub(super) fn generate_return_expr_ir(
         &mut self,
         expr: &Option<Box<Expr>>,
-        result_reg: usize,
+        result_reg: Operand,
         instructions: &mut Vec<Instruction>,
         constants: &mut Vec<ConstValue>,
     ) -> Result<(), Diagnostic> {
         // 生成返回指令
         if let Some(e) = expr {
-            self.generate_expr_ir(e, result_reg, instructions, constants)?;
+            self.generate_expr_ir(e, result_reg.clone(), instructions, constants)?;
             instructions.push(Instruction::Ret {
-                value: Some(Operand::Local(result_reg)),
+                value: Some(result_reg.clone()),
                 span: self.cur_span,
             });
         } else {
@@ -233,7 +248,7 @@ impl AstToIrGenerator {
         match_expr: &Expr,
         arms: &Vec<ast::MatchArm>,
         match_span: crate::util::span::Span,
-        result_reg: usize,
+        result_reg: Operand,
         instructions: &mut Vec<Instruction>,
         constants: &mut Vec<ConstValue>,
     ) -> Result<(), Diagnostic> {
@@ -252,14 +267,14 @@ impl AstToIrGenerator {
         // （Load 而非 Move：translate_move 的 src 走寄存器解析，Const 会触发
         // E3017；translate_load 的 Const 臂走 LOAD_CONST 常量表）
         instructions.push(Instruction::Load {
-            dst: Operand::Local(result_reg),
+            dst: result_reg.clone(),
             src: Operand::Const(ConstValue::Void),
             span: match_span,
         });
         //
         // 1. 评估 scrutinee（类型信息驱动嵌套模式的载荷/字段/元组类型解析）
         let scrutinee_reg = self.next_temp_reg();
-        self.generate_expr_ir(match_expr, scrutinee_reg, instructions, constants)?;
+        self.generate_expr_ir(match_expr, scrutinee_reg.clone(), instructions, constants)?;
         // #389：scrutinee 类型优先回查 checker 落的 span 表（推断权威），
         // miss（无 type_result 的路径）回退 AST 猜测器。猜测器对调用/内联
         // 构造/字段访问形态返回 None，Union 模式会被 #330 安全网误拦。
@@ -286,14 +301,14 @@ impl AstToIrGenerator {
             let bind_names = Self::collect_binding_names(pat);
             let mut pre: HashMap<String, usize> = HashMap::new();
             for bn in &bind_names {
-                pre.insert(bn.clone(), self.next_temp_reg());
+                pre.insert(bn.clone(), self.next_local_slot());
             }
             let needs_scope = !bind_names.is_empty();
             if needs_scope {
                 self.enter_scope();
             }
             self.compile_pattern(
-                scrutinee_reg,
+                scrutinee_reg.clone(),
                 pat,
                 scrutinee_ty.as_ref(),
                 &pre,
@@ -309,10 +324,10 @@ impl AstToIrGenerator {
             // 守卫：绑定已注册（对守卫可见），失败同样落到下一臂
             if let Some(cond) = guard {
                 let g_reg = self.next_temp_reg();
-                self.generate_expr_ir(cond, g_reg, instructions, constants)?;
+                self.generate_expr_ir(cond, g_reg.clone(), instructions, constants)?;
                 let j = instructions.len();
                 instructions.push(Instruction::JmpIfNot {
-                    cond: Operand::Local(g_reg),
+                    cond: g_reg.clone(),
                     target: 0,
                     span: self.cur_span,
                 });
@@ -321,10 +336,15 @@ impl AstToIrGenerator {
 
             // 生成 arm body，结果放入 result_reg
             let arm_result_reg = self.next_temp_reg();
-            self.generate_block_ir(&arm.body, Some(arm_result_reg), instructions, constants)?;
+            self.generate_block_ir(
+                &arm.body,
+                Some(arm_result_reg.clone()),
+                instructions,
+                constants,
+            )?;
             instructions.push(Instruction::Move {
-                dst: Operand::Local(result_reg),
-                src: Operand::Local(arm_result_reg),
+                dst: result_reg.clone(),
+                src: arm_result_reg.clone(),
                 span: self.cur_span,
             });
 
@@ -379,7 +399,7 @@ impl AstToIrGenerator {
     #[allow(clippy::too_many_arguments)]
     fn compile_pattern(
         &mut self,
-        reg: usize,
+        reg: Operand,
         pattern: &ast::Pattern,
         ty: Option<&MonoType>,
         pre: &HashMap<String, usize>,
@@ -401,12 +421,18 @@ impl AstToIrGenerator {
                     // 或模式共享寄存器：把值拷进臂级预分配槽（仅命中路径执行）
                     instructions.push(Instruction::Move {
                         dst: Operand::Local(*r),
-                        src: Operand::Local(reg),
+                        src: reg.clone(),
                         span: self.cur_span,
                     });
                     binds.push((bn.clone(), *r));
                 } else {
-                    binds.push((bn.clone(), reg));
+                    // 绑定复用该值已占用的寄存器槽（只登记名字，不加指令）。
+                    let slot = self.slot_for_operand(&reg).ok_or_else(|| {
+                        ErrorCodeDefinition::ir_internal_error("模式绑定的值没有可复用的寄存器槽")
+                            .at(self.cur_span)
+                            .build()
+                    })?;
+                    binds.push((bn.clone(), slot));
                 }
                 Ok(())
             }
@@ -422,20 +448,20 @@ impl AstToIrGenerator {
                 constants.push(const_val.clone());
                 let cmp_reg = self.next_temp_reg();
                 instructions.push(Instruction::Load {
-                    dst: Operand::Local(cmp_reg),
+                    dst: cmp_reg.clone(),
                     src: Operand::Const(const_val),
                     span: self.cur_span,
                 });
                 let eq_reg = self.next_temp_reg();
                 instructions.push(Instruction::Eq {
-                    dst: Operand::Local(eq_reg),
-                    lhs: Operand::Local(reg),
-                    rhs: Operand::Local(cmp_reg),
+                    dst: eq_reg.clone(),
+                    lhs: reg.clone(),
+                    rhs: cmp_reg.clone(),
                     span: self.cur_span,
                 });
                 let j = instructions.len();
                 instructions.push(Instruction::JmpIfNot {
-                    cond: Operand::Local(eq_reg),
+                    cond: eq_reg.clone(),
                     target: 0,
                     span: self.cur_span,
                 });
@@ -453,40 +479,40 @@ impl AstToIrGenerator {
                 };
                 let lo_reg = self.next_temp_reg();
                 instructions.push(Instruction::Load {
-                    dst: Operand::Local(lo_reg),
+                    dst: lo_reg.clone(),
                     src: Operand::Const(ConstValue::Int(*lo_v)),
                     span: self.cur_span,
                 });
                 let ge_reg = self.next_temp_reg();
                 instructions.push(Instruction::Ge {
-                    dst: Operand::Local(ge_reg),
-                    lhs: Operand::Local(reg),
-                    rhs: Operand::Local(lo_reg),
+                    dst: ge_reg.clone(),
+                    lhs: reg.clone(),
+                    rhs: lo_reg.clone(),
                     span: self.cur_span,
                 });
                 let j = instructions.len();
                 instructions.push(Instruction::JmpIfNot {
-                    cond: Operand::Local(ge_reg),
+                    cond: ge_reg.clone(),
                     target: 0,
                     span: self.cur_span,
                 });
                 fail.push(j);
                 let hi_reg = self.next_temp_reg();
                 instructions.push(Instruction::Load {
-                    dst: Operand::Local(hi_reg),
+                    dst: hi_reg.clone(),
                     src: Operand::Const(ConstValue::Int(*hi_v)),
                     span: self.cur_span,
                 });
                 let le_reg = self.next_temp_reg();
                 instructions.push(Instruction::Le {
-                    dst: Operand::Local(le_reg),
-                    lhs: Operand::Local(reg),
-                    rhs: Operand::Local(hi_reg),
+                    dst: le_reg.clone(),
+                    lhs: reg.clone(),
+                    rhs: hi_reg.clone(),
                     span: self.cur_span,
                 });
                 let j = instructions.len();
                 instructions.push(Instruction::JmpIfNot {
-                    cond: Operand::Local(le_reg),
+                    cond: le_reg.clone(),
                     target: 0,
                     span: self.cur_span,
                 });
@@ -506,8 +532,8 @@ impl AstToIrGenerator {
                 for (i, p) in ps.iter().enumerate() {
                     let elem_reg = self.next_temp_reg();
                     instructions.push(Instruction::LoadField {
-                        dst: Operand::Local(elem_reg),
-                        src: Operand::Local(reg),
+                        dst: elem_reg.clone(),
+                        src: reg.clone(),
                         field: i,
                         span: self.cur_span,
                     });
@@ -537,8 +563,8 @@ impl AstToIrGenerator {
                     let field_ty = MonoType::from(decl_fields[pos].ty.clone());
                     let elem_reg = self.next_temp_reg();
                     instructions.push(Instruction::LoadField {
-                        dst: Operand::Local(elem_reg),
-                        src: Operand::Local(reg),
+                        dst: elem_reg.clone(),
+                        src: reg.clone(),
                         field: pos,
                         span: self.cur_span,
                     });
@@ -595,27 +621,27 @@ impl AstToIrGenerator {
                 // tag 比较（VariantTag 取声明序 tag）
                 let tag_reg = self.next_temp_reg();
                 instructions.push(Instruction::VariantTag {
-                    dst: Operand::Local(tag_reg),
-                    obj: Operand::Local(reg),
+                    dst: tag_reg.clone(),
+                    obj: reg.clone(),
                     group: sum_name.clone(),
                     span: self.cur_span,
                 });
                 let idx_reg = self.next_temp_reg();
                 instructions.push(Instruction::Load {
-                    dst: Operand::Local(idx_reg),
+                    dst: idx_reg.clone(),
                     src: Operand::Const(ConstValue::Int(variant_index as i128)),
                     span: self.cur_span,
                 });
                 let eq_reg = self.next_temp_reg();
                 instructions.push(Instruction::Eq {
-                    dst: Operand::Local(eq_reg),
-                    lhs: Operand::Local(tag_reg),
-                    rhs: Operand::Local(idx_reg),
+                    dst: eq_reg.clone(),
+                    lhs: tag_reg.clone(),
+                    rhs: idx_reg.clone(),
                     span: self.cur_span,
                 });
                 let j = instructions.len();
                 instructions.push(Instruction::JmpIfNot {
-                    cond: Operand::Local(eq_reg),
+                    cond: eq_reg.clone(),
                     target: 0,
                     span: self.cur_span,
                 });
@@ -634,8 +660,8 @@ impl AstToIrGenerator {
                         }
                         let payload_reg = self.next_temp_reg();
                         instructions.push(Instruction::VariantPayload {
-                            dst: Operand::Local(payload_reg),
-                            obj: Operand::Local(reg),
+                            dst: payload_reg.clone(),
+                            obj: reg.clone(),
                             group: sum_name.clone(),
                             span: self.cur_span,
                         });
@@ -679,7 +705,7 @@ impl AstToIrGenerator {
                 for (i, alt) in alts.iter().enumerate() {
                     let mut alt_fail: Vec<usize> = Vec::new();
                     self.compile_pattern(
-                        reg,
+                        reg.clone(),
                         alt,
                         ty,
                         pre,
@@ -735,7 +761,7 @@ impl AstToIrGenerator {
         iterable: &Expr,
         body: &ast::Block,
         for_span: &Span,
-        result_reg: usize,
+        result_reg: Operand,
         instructions: &mut Vec<Instruction>,
         constants: &mut Vec<ConstValue>,
     ) -> Result<(), Diagnostic> {

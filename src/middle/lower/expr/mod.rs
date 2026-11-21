@@ -21,6 +21,7 @@ mod tests;
 use super::AstToIrGenerator;
 use crate::ast;
 use crate::ast::Expr;
+use crate::frontend::core::sema::MonoType;
 use crate::middle::ir::ir::{ConstValue, Instruction, Operand};
 use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};
 
@@ -184,7 +185,7 @@ impl AstToIrGenerator {
     pub(in crate::middle) fn generate_expr_ir(
         &mut self,
         expr: &ast::Expr,
-        result_reg: usize,
+        result_reg: Operand,
         instructions: &mut Vec<Instruction>,
         constants: &mut Vec<ConstValue>,
     ) -> Result<(), Diagnostic> {
@@ -210,15 +211,21 @@ impl AstToIrGenerator {
                     .build()
                 })? as u32;
             let payload_reg = self.next_temp_reg();
-            self.generate_expr_ir_inner(expr, payload_reg, instructions, constants)?;
+            self.generate_expr_ir_inner(expr, payload_reg.clone(), instructions, constants)?;
+            // 包装点的结果类型 = 接口类型（值表用；不取具体实参类型）。
+            self.note_value_type(&result_reg, MonoType::TypeRef(iface.clone()));
             instructions.push(Instruction::CreateVariant {
-                dst: Operand::Local(result_reg),
+                dst: result_reg.clone(),
                 group,
                 variant,
-                payload: Operand::Local(payload_reg),
+                payload: payload_reg.clone(),
                 span: Self::expr_span(expr),
             });
             return Ok(());
+        }
+        // 表达式结果的类型（7b.2 值表来源；只取已有可信来源，未知留显式 `?`）。
+        if let Some(ty) = self.expr_value_type(expr) {
+            self.note_value_type(&result_reg, ty);
         }
         self.generate_expr_ir_inner(expr, result_reg, instructions, constants)
     }
@@ -226,7 +233,7 @@ impl AstToIrGenerator {
     fn generate_expr_ir_inner(
         &mut self,
         expr: &ast::Expr,
-        result_reg: usize,
+        result_reg: Operand,
         instructions: &mut Vec<Instruction>,
         constants: &mut Vec<ConstValue>,
     ) -> Result<(), Diagnostic> {

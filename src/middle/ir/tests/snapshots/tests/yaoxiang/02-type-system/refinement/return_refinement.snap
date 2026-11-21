@@ -4,60 +4,101 @@ module
   fn succ(Generic { name: "IsPositive", args: [TypeRef("b")] }) -> Generic { name: "IsPositive", args: [TypeRef("r")] }
     slot[0] b : Int(64) @depth1
     locals_total=4
+    values_total=3
+    value v0: Int(64) @block0
+    value v1: Int(64) @block0
+    value v2: Int(64) @block0
     Load %0 <- arg%0
-    Load %1 <- %0
-    Load %2 <- int(1)
-    Add %3 <- %1, %2
-    Ret %3
+    Load v1 <- %0
+    Load v2 <- int(1)
+    Add v0 <- v1, v2
+    Ret v0
   fn double(Generic { name: "IsPositive", args: [TypeRef("b")] }) -> Generic { name: "IsPositive", args: [TypeRef("b")] }
     slot[0] b : Int(64) @depth1
     locals_total=4
+    values_total=3
+    value v0: Int(64) @block0
+    value v1: Int(64) @block0
+    value v2: Int(64) @block0
     Load %0 <- arg%0
-    Load %1 <- %0
-    Load %2 <- int(2)
-    Mul %3 <- %1, %2
-    Ret %3
+    Load v1 <- %0
+    Load v2 <- int(2)
+    Mul v0 <- v1, v2
+    Ret v0
   fn pick(Generic { name: "IsPositive", args: [TypeRef("b")] }) -> Generic { name: "IsPositive", args: [TypeRef("r")] }
     slot[0] b : Int(64) @depth1
     locals_total=5
+    values_total=7
+    value v0: Bool @block0
+    value v1: Int(64) @block0
+    value v2: Int(64) @block0
+    value v3: Int(64) @block0
+    value v4: Int(64) @block0
+    value v5: Int(64) @block0
+    value v6: Int(64) @block0
     Load %0 <- arg%0
-    Load %1 <- %0
-    Load %2 <- int(100)
-    Gt %3 <- %1, %2
-    JmpIfNot %3 -> instr(7)
-    Load %4 <- %0
-    Ret %4
-    Load %1 <- %0
-    Load %2 <- int(1)
-    Add %3 <- %1, %2
-    Ret %3
-    Ret %3
+    Load v1 <- %0
+    Load v2 <- int(100)
+    Gt v0 <- v1, v2
+    JmpIfNot v0 -> instr(7)
+    Load v3 <- %0
+    Ret v3
+    Load v5 <- %0
+    Load v6 <- int(1)
+    Add v4 <- v5, v6
+    Ret v4
+    Ret v4
   fn main() -> Void
     locals_total=6
-    Load %0 <- int(4)
-    Call %1 <- string("succ") [%0] (def=d0)
-    Load %2 <- int(5)
-    Eq %3 <- %1, %2
-    Load %4 <- string("succ(4) == 5")
-    Call %5 <- string("std.assert.assert") [%3, %4] (def=d1)
-    Load %0 <- int(3)
-    Call %1 <- string("double") [%0] (def=d2)
-    Load %2 <- int(6)
-    Eq %3 <- %1, %2
-    Load %4 <- string("double(3) == 6")
-    Call %5 <- string("std.assert.assert") [%3, %4] (def=d1)
-    Load %0 <- int(200)
-    Call %1 <- string("pick") [%0] (def=d3)
-    Load %2 <- int(200)
-    Eq %3 <- %1, %2
-    Load %4 <- string("pick(200) 走首条出口，返回 b")
-    Call %5 <- string("std.assert.assert") [%3, %4] (def=d1)
-    Load %0 <- int(5)
-    Call %1 <- string("pick") [%0] (def=d3)
-    Load %2 <- int(6)
-    Eq %3 <- %1, %2
-    Load %4 <- string("pick(5) 走次条出口，返回 b + 1")
-    Call %5 <- string("std.assert.assert") [%3, %4] (def=d1)
-    Ret %5
+    values_total=24
+    value v0: TypeRef("?") @block0
+    value v1: Bool @block0
+    value v2: Refined { base: Int(64), constraint: BinOp { op: Gt, left: NamedVar("r"), right: Lit(Int(0)) } } @block0
+    value v3: Int(64) @block0
+    value v4: Int(64) @block0
+    value v5: Generic { name: "String", args: [] } @block0
+    value v6: TypeRef("?") @block0
+    value v7: Bool @block0
+    value v8: Refined { base: Int(64), constraint: BinOp { op: Gt, left: NamedVar("b"), right: Lit(Int(0)) } } @block0
+    value v9: Int(64) @block0
+    value v10: Int(64) @block0
+    value v11: Generic { name: "String", args: [] } @block0
+    value v12: TypeRef("?") @block0
+    value v13: Bool @block0
+    value v14: Refined { base: Int(64), constraint: BinOp { op: Gt, left: NamedVar("r"), right: Lit(Int(0)) } } @block0
+    value v15: Int(64) @block0
+    value v16: Int(64) @block0
+    value v17: Generic { name: "String", args: [] } @block0
+    value v18: TypeRef("?") @block0
+    value v19: Bool @block0
+    value v20: Refined { base: Int(64), constraint: BinOp { op: Gt, left: NamedVar("r"), right: Lit(Int(0)) } } @block0
+    value v21: Int(64) @block0
+    value v22: Int(64) @block0
+    value v23: Generic { name: "String", args: [] } @block0
+    Load v4 <- int(4)
+    Call v2 <- string("succ") [v4] (def=d0)
+    Load v3 <- int(5)
+    Eq v1 <- v2, v3
+    Load v5 <- string("succ(4) == 5")
+    Call v0 <- string("std.assert.assert") [v1, v5] (def=d1)
+    Load v10 <- int(3)
+    Call v8 <- string("double") [v10] (def=d2)
+    Load v9 <- int(6)
+    Eq v7 <- v8, v9
+    Load v11 <- string("double(3) == 6")
+    Call v6 <- string("std.assert.assert") [v7, v11] (def=d1)
+    Load v16 <- int(200)
+    Call v14 <- string("pick") [v16] (def=d3)
+    Load v15 <- int(200)
+    Eq v13 <- v14, v15
+    Load v17 <- string("pick(200) 走首条出口，返回 b")
+    Call v12 <- string("std.assert.assert") [v13, v17] (def=d1)
+    Load v22 <- int(5)
+    Call v20 <- string("pick") [v22] (def=d3)
+    Load v21 <- int(6)
+    Eq v19 <- v20, v21
+    Load v23 <- string("pick(5) 走次条出口，返回 b + 1")
+    Call v18 <- string("std.assert.assert") [v19, v23] (def=d1)
+    Ret v18
   init (locals=0)
     Call %0 <- string("main") [] (def=d4)

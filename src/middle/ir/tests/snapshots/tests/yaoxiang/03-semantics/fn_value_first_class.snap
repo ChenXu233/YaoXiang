@@ -2,74 +2,128 @@ module
   fn double(Int(64)) -> Int(64)
     slot[0] a : Int(64) @depth1
     locals_total=4
+    values_total=3
+    value v0: Int(64) @block0
+    value v1: Int(64) @block0
+    value v2: Int(64) @block0
     Load %0 <- arg%0
-    Load %1 <- %0
-    Load %2 <- int(2)
-    Mul %3 <- %1, %2
-    Ret %3
+    Load v1 <- %0
+    Load v2 <- int(2)
+    Mul v0 <- v1, v2
+    Ret v0
   fn identity(TypeRef("T")) -> TypeRef("T")
     generic_params: ["T"]
     slot[0] x : Int(64) @depth1
     locals_total=3
-    Load %0 <- %1
-    Ret %0
+    values_total=2
+    value v0: TypeRef("?") @block0
+    value v1: Int(64) @block0
+    Load v1 <- %0
+    Ret v1
     Ret
   fn apply_twice(Fn { params: [Int(64)], return_type: Int(64) }, Int(64)) -> Int(64)
     slot[0] h : Int(64) @depth1
     slot[1] x : Int(64) @depth1
     locals_total=7
+    values_total=5
+    value v0: Int(64) @block0
+    value v1: Int(64) @block0
+    value v2: Int(64) @block0
+    value v3: Fn { params: [Int(64)], return_type: Int(64) } @block0
+    value v4: Fn { params: [Int(64)], return_type: Int(64) } @block0
     Load %0 <- arg%0
     Load %1 <- arg%1
-    Load %2 <- %1
-    Load %3 <- %0
-    CallDyn %4 <- %3 [%2]
-    Load %5 <- %0
-    CallDyn %6 <- %5 [%4]
-    Ret %6
+    Load v2 <- %1
+    Load v3 <- %0
+    CallDyn v1 <- v3 [v2]
+    Load v4 <- %0
+    CallDyn v0 <- v4 [v1]
+    Ret v0
   fn main() -> Void
     locals_total=7
-    Load %0 <- int(5)
-    Call %1 <- string("double") [%0] (def=d0)
-    Load %2 <- int(10)
-    Eq %3 <- %1, %2
-    Load %4 <- string("double(5) should be 10")
-    Call %5 <- string("std.assert.assert") [%3, %4] (def=d1)
-    Load %0 <- int(7)
-    Call %1 <- string("identity") [%0] (def=d2)
-    Load %2 <- int(7)
-    Eq %3 <- %1, %2
-    Load %4 <- string("generic identity should work")
-    Call %5 <- string("std.assert.assert") [%3, %4] (def=d1)
-    Load %4 <- int(3)
-    Call %0 <- string("identity") [%4] (def=d2)
-    Call %1 <- string("double") [%0] (def=d0)
-    Load %2 <- int(6)
-    Eq %3 <- %1, %2
-    Load %6 <- string("generic + plain in one file")
-    Call %5 <- string("std.assert.assert") [%3, %6] (def=d1)
-    MakeClosure %0 <- double env=[] (def=d0)
-    Load %4 <- int(3)
-    Call %1 <- string("apply_twice") [%0, %4] (def=d3)
-    Load %2 <- int(12)
-    Eq %3 <- %1, %2
-    Load %6 <- string("passing fn name as arg should work")
-    Call %5 <- string("std.assert.assert") [%3, %6] (def=d1)
-    MakeClosure %0 <- closure_0 env=[] (def=d4)
-    Load %4 <- int(5)
-    Call %1 <- string("apply_twice") [%0, %4] (def=d3)
-    Load %2 <- int(7)
-    Eq %3 <- %1, %2
-    Load %6 <- string("inline lambda arg")
-    Call %5 <- string("std.assert.assert") [%3, %6] (def=d1)
-    Load %3 <- string("fn value first class ok")
-    Call %5 <- string("std.io.println") [%3] (def=d5)
-    Ret %5
+    values_total=35
+    value v0: TypeRef("?") @block0
+    value v1: Bool @block0
+    value v2: Int(64) @block0
+    value v3: Int(64) @block0
+    value v4: Int(64) @block0
+    value v5: Generic { name: "String", args: [] } @block0
+    value v6: TypeRef("?") @block0
+    value v7: Bool @block0
+    value v8: TypeVar(TypeVar(44)) @block0
+    value v9: Int(64) @block0
+    value v10: Int(64) @block0
+    value v11: Generic { name: "String", args: [] } @block0
+    value v12: TypeRef("?") @block0
+    value v13: Bool @block0
+    value v14: Int(64) @block0
+    value v15: Int(64) @block0
+    value v16: TypeVar(TypeVar(44)) @block0
+    value v17: Int(64) @block0
+    value v18: Generic { name: "String", args: [] } @block0
+    value v19: TypeRef("?") @block0
+    value v20: Bool @block0
+    value v21: Int(64) @block0
+    value v22: Int(64) @block0
+    value v23: Fn { params: [Int(64)], return_type: Int(64) } @block0
+    value v24: Int(64) @block0
+    value v25: Generic { name: "String", args: [] } @block0
+    value v26: TypeRef("?") @block0
+    value v27: Bool @block0
+    value v28: Int(64) @block0
+    value v29: Int(64) @block0
+    value v30: TypeRef("?") @block0
+    value v31: Int(64) @block0
+    value v32: Generic { name: "String", args: [] } @block0
+    value v33: TypeRef("?") @block0
+    value v34: Generic { name: "String", args: [] } @block0
+    Load v4 <- int(5)
+    Call v2 <- string("double") [v4] (def=d0)
+    Load v3 <- int(10)
+    Eq v1 <- v2, v3
+    Load v5 <- string("double(5) should be 10")
+    Call v0 <- string("std.assert.assert") [v1, v5] (def=d1)
+    Load v10 <- int(7)
+    Call v8 <- string("identity") [v10] (def=d2)
+    Load v9 <- int(7)
+    Eq v7 <- v8, v9
+    Load v11 <- string("generic identity should work")
+    Call v6 <- string("std.assert.assert") [v7, v11] (def=d1)
+    Load v17 <- int(3)
+    Call v16 <- string("identity") [v17] (def=d2)
+    Call v14 <- string("double") [v16] (def=d0)
+    Load v15 <- int(6)
+    Eq v13 <- v14, v15
+    Load v18 <- string("generic + plain in one file")
+    Call v12 <- string("std.assert.assert") [v13, v18] (def=d1)
+    MakeClosure v23 <- double env=[] (def=d0)
+    Load v24 <- int(3)
+    Call v21 <- string("apply_twice") [v23, v24] (def=d3)
+    Load v22 <- int(12)
+    Eq v20 <- v21, v22
+    Load v25 <- string("passing fn name as arg should work")
+    Call v19 <- string("std.assert.assert") [v20, v25] (def=d1)
+    MakeClosure v30 <- closure_0 env=[] (def=d4)
+    Load v31 <- int(5)
+    Call v28 <- string("apply_twice") [v30, v31] (def=d3)
+    Load v29 <- int(7)
+    Eq v27 <- v28, v29
+    Load v32 <- string("inline lambda arg")
+    Call v26 <- string("std.assert.assert") [v27, v32] (def=d1)
+    Load v34 <- string("fn value first class ok")
+    Call v33 <- string("std.io.println") [v34] (def=d5)
+    Ret v33
   fn closure_0(Int(64)) -> Void
     slot[0] x : Int(64) @depth2
     locals_total=7
-    Load %0 <- %1
-    Load %2 <- int(1)
-    Add %3 <- %0, %2
-    Ret %3
+    values_total=4
+    value v0: TypeRef("?") @block0
+    value v1: Int(64) @block0
+    value v2: Int(64) @block0
+    value v3: Int(64) @block0
+    Load v2 <- %0
+    Load v3 <- int(1)
+    Add v1 <- v2, v3
+    Ret v1
   init (locals=0)
     Call %0 <- string("main") [] (def=d6)

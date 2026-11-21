@@ -914,6 +914,13 @@ pub enum FunctionBody {
         locals: Vec<LocalSlot>,
         /// SSA 值表（与 `locals` 并存；7b.2 起由 `next_temp_reg` 生产 `Operand::Value`）
         values: Vec<ValueInfo>,
+        /// 值 → 寄存器槽的**过渡映射**（7b.2 引入；与 `values` 同索引，index = `ValueId`）。
+        ///
+        /// 槽号由 lowering 既有的临时槽分配器（`next_temp` / `temp_high_water` /
+        /// 三处语句级回收）给出——7b.2 不改分配语义，故这里原样记录，使 codegen 能还原
+        /// 与改动前相同的字节码槽号（C4 行为等价）。7b.4 的线性扫描分配器接管后
+        /// 重算本表（09a §P7 7b.2 契约 §二 第 6 条）。
+        value_slots: Vec<usize>,
     },
     /// 返回值是类型 → {} 是类型字面量
     ///
@@ -1102,6 +1109,14 @@ impl FunctionIR {
         }
     }
 
+    /// 获取值 → 寄存器槽的过渡映射（仅 Code 体有效；index = ValueId）
+    pub fn value_slots(&self) -> &[usize] {
+        match &self.body {
+            FunctionBody::Code { value_slots, .. } => value_slots,
+            FunctionBody::TypeDecl { .. } => &[],
+        }
+    }
+
     /// 获取入口基本块索引（仅 Code 体有效）
     pub fn entry(&self) -> usize {
         match &self.body {
@@ -1142,6 +1157,31 @@ pub enum ConstValue {
     /// `CallDyn` 按名分发。FFI 元数据（mechanism/lib/symbol）不在这里复制第二份：
     /// 直接调用仍由 codegen 的元数据缓存解析（`CallNative` 同一来源）。
     NativeFn(String),
+}
+
+impl ConstValue {
+    /// 常量的单态类型（无稳定 `MonoType` 对应时 `None`）。
+    ///
+    /// 单一来源：lower 的值表类型推导与 verify 的类型一致判据共用本方法
+    /// （09a §P7 7b.2 契约 §二 第 2 条）。
+    pub fn mono_type(&self) -> Option<MonoType> {
+        match self {
+            Self::Void => Some(MonoType::Void),
+            Self::Bool(_) => Some(MonoType::Bool),
+            Self::Int(_) => Some(MonoType::Int(64)),
+            Self::Float(_) => Some(MonoType::Float(64)),
+            Self::Char(_) => Some(MonoType::Char),
+            Self::String(_) => Some(MonoType::Generic {
+                name: "String".to_string(),
+                args: Vec::new(),
+            }),
+            // Bytes / 原生函数值 / FFI 引用无稳定 MonoType 对应（信息不足）。
+            Self::Bytes(_)
+            | Self::LibraryRef { .. }
+            | Self::ExternRef { .. }
+            | Self::NativeFn(_) => None,
+        }
+    }
 }
 
 impl PartialEq for ConstValue {

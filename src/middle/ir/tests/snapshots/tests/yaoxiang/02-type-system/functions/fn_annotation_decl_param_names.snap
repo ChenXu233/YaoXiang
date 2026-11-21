@@ -3,31 +3,53 @@ module
     slot[0] x : Int(64) @depth1
     slot[1] y : Int(64) @depth1
     locals_total=8
+    values_total=6
+    value v0: TypeRef("?") @block0
+    value v1: Int(64) @block0
+    value v2: Int(64) @block0
+    value v3: Int(64) @block0
+    value v4: Int(64) @block0
+    value v5: Int(64) @block0
     Load %0 <- arg%0
     Load %1 <- arg%1
-    Load %2 <- %0
-    Load %3 <- int(10)
-    Mul %4 <- %2, %3
-    Load %5 <- %1
-    Add %6 <- %4, %5
-    Ret %6
+    Load v4 <- %0
+    Load v5 <- int(10)
+    Mul v2 <- v4, v5
+    Load v3 <- %1
+    Add v1 <- v2, v3
+    Ret v1
     Ret
   fn main() -> Void
     locals_total=7
-    Load %0 <- int(2)
-    Load %1 <- int(1)
-    Call %2 <- string("f") [%0, %1] (def=d0)
-    Load %3 <- int(21)
-    Eq %4 <- %2, %3
-    Load %5 <- string("named args bind by declared name")
-    Call %6 <- string("std.assert.assert") [%4, %5] (def=d1)
-    Load %0 <- int(2)
-    Load %1 <- int(1)
-    Call %2 <- string("f") [%0, %1] (def=d0)
-    Load %3 <- int(21)
-    Eq %4 <- %2, %3
-    Load %5 <- string("positional form is equivalent")
-    Call %6 <- string("std.assert.assert") [%4, %5] (def=d1)
-    Ret %6
+    values_total=14
+    value v0: TypeRef("?") @block0
+    value v1: Bool @block0
+    value v2: Int(64) @block0
+    value v3: Int(64) @block0
+    value v4: Int(64) @block0
+    value v5: Int(64) @block0
+    value v6: Generic { name: "String", args: [] } @block0
+    value v7: TypeRef("?") @block0
+    value v8: Bool @block0
+    value v9: Int(64) @block0
+    value v10: Int(64) @block0
+    value v11: Int(64) @block0
+    value v12: Int(64) @block0
+    value v13: Generic { name: "String", args: [] } @block0
+    Load v4 <- int(2)
+    Load v5 <- int(1)
+    Call v2 <- string("f") [v4, v5] (def=d0)
+    Load v3 <- int(21)
+    Eq v1 <- v2, v3
+    Load v6 <- string("named args bind by declared name")
+    Call v0 <- string("std.assert.assert") [v1, v6] (def=d1)
+    Load v11 <- int(2)
+    Load v12 <- int(1)
+    Call v9 <- string("f") [v11, v12] (def=d0)
+    Load v10 <- int(21)
+    Eq v8 <- v9, v10
+    Load v13 <- string("positional form is equivalent")
+    Call v7 <- string("std.assert.assert") [v8, v13] (def=d1)
+    Ret v7
   init (locals=0)
     Call %0 <- string("main") [] (def=d2)

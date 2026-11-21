@@ -28,7 +28,7 @@ impl AstToIrGenerator {
     fn emit_module_export_value(
         &mut self,
         qualified: &str,
-        result_reg: usize,
+        result_reg: Operand,
         span: Span,
         instructions: &mut Vec<Instruction>,
     ) -> bool {
@@ -37,7 +37,7 @@ impl AstToIrGenerator {
             .qualified_name_is(qualified, QualifiedNameConcern::FunctionCodeExport)
         {
             instructions.push(Instruction::MakeClosure {
-                dst: Operand::Local(result_reg),
+                dst: result_reg.clone(),
                 func: qualified.to_string(),
                 env: vec![],
                 def: None,
@@ -47,7 +47,7 @@ impl AstToIrGenerator {
         }
         if self.registry.is_native_fn_export(qualified) {
             instructions.push(Instruction::Load {
-                dst: Operand::Local(result_reg),
+                dst: result_reg.clone(),
                 src: Operand::Const(ConstValue::NativeFn(qualified.to_string())),
                 span,
             });
@@ -58,7 +58,7 @@ impl AstToIrGenerator {
             .qualified_name_is(qualified, QualifiedNameConcern::NativeName)
         {
             instructions.push(Instruction::Call {
-                dst: Some(Operand::Local(result_reg)),
+                dst: Some(result_reg.clone()),
                 func: Operand::Const(ConstValue::String(qualified.to_string())),
                 args: vec![],
                 span,
@@ -73,27 +73,27 @@ impl AstToIrGenerator {
         &mut self,
         var_name: &str,
         var_span: &Span,
-        result_reg: usize,
+        result_reg: Operand,
         instructions: &mut Vec<Instruction>,
     ) -> Result<(), Diagnostic> {
         // #254：闭包体内——先查捕获表（外层变量经 env 捕获，LoadUpvalue 读）
         if let Some(&env_idx) = self.closure_captures.get(var_name) {
             instructions.push(Instruction::LoadUpvalue {
-                dst: Operand::Local(result_reg),
+                dst: result_reg.clone(),
                 upvalue_idx: env_idx,
                 span: self.cur_span,
             });
         } else if let Some(local_idx) = self.lookup_local(var_name) {
             // 局部变量：直接加载
             instructions.push(Instruction::Load {
-                dst: Operand::Local(result_reg),
+                dst: result_reg.clone(),
                 src: Operand::Local(local_idx),
                 span: self.cur_span,
             });
         } else if let Some(global_idx) = self.lookup_global(var_name) {
             // 全局变量（T2）：直接从全局槽位加载，不再调用访问器函数
             instructions.push(Instruction::Load {
-                dst: Operand::Local(result_reg),
+                dst: result_reg.clone(),
                 src: Operand::Global(global_idx),
                 span: *var_span,
             });
@@ -102,7 +102,7 @@ impl AstToIrGenerator {
             // 别名 → 限定名 → 槽位这两表联查归 `use_alias_value_slot`——调用形态
             // 判据（`is_static_fn_name`）读同一实现，两条路径不会各猜一个答案。
             instructions.push(Instruction::Load {
-                dst: Operand::Local(result_reg),
+                dst: result_reg.clone(),
                 src: Operand::Global(slot),
                 span: *var_span,
             });
@@ -110,9 +110,9 @@ impl AstToIrGenerator {
             // 三条实现来源的判据与发射点只有一份（emit_module_export_value）：
             // 代码 → MakeClosure、原生函数 → 原生函数值、native 常量 → 零参调用。
             // 别名未命中上述三类时按既有零参调用兜底（与修复前同形态）。
-            if !self.emit_module_export_value(&alias, result_reg, *var_span, instructions) {
+            if !self.emit_module_export_value(&alias, result_reg.clone(), *var_span, instructions) {
                 instructions.push(Instruction::Call {
-                    dst: Some(Operand::Local(result_reg)),
+                    dst: Some(result_reg.clone()),
                     func: Operand::Const(ConstValue::String(alias)),
                     args: vec![],
                     span: *var_span,
@@ -126,7 +126,7 @@ impl AstToIrGenerator {
             // 内置类型名作为类型实参（如 SafeArray(Int, 3)）：类型宇宙的值，
             // 运行时无表示，加载 Void 占位（类型参数在编译期已被消费）
             instructions.push(Instruction::Load {
-                dst: Operand::Local(result_reg),
+                dst: result_reg.clone(),
                 src: Operand::Const(ConstValue::Void),
                 span: self.cur_span,
             });
@@ -138,7 +138,7 @@ impl AstToIrGenerator {
             // 此前落到下方兜底 → E3006（"变量无法解析"），使函数名不能
             // 作一等值使用：`io.println(f)` / `g(f)` / `x = f` 全部失败。
             instructions.push(Instruction::MakeClosure {
-                dst: Operand::Local(result_reg),
+                dst: result_reg.clone(),
                 func: var_name.to_string(),
                 env: vec![],
                 def: None,
@@ -159,7 +159,7 @@ impl AstToIrGenerator {
         expr: &Expr,
         field: &str,
         span: &Span,
-        result_reg: usize,
+        result_reg: Operand,
         instructions: &mut Vec<Instruction>,
         constants: &mut Vec<ConstValue>,
     ) -> Result<(), Diagnostic> {
@@ -177,7 +177,7 @@ impl AstToIrGenerator {
         if let Some(qualified) = self.resolve_namespace_data_access(expr, field) {
             if let Some(&slot) = self.global_slot_layout.get(&qualified) {
                 instructions.push(Instruction::Load {
-                    dst: Operand::Local(result_reg),
+                    dst: result_reg.clone(),
                     src: Operand::Global(slot),
                     span: *span,
                 });
@@ -185,7 +185,7 @@ impl AstToIrGenerator {
             }
             // ②③ 同一判据（emit_module_export_value）：native 常量 → 零参调用；
             // 纯 yx 实现的 std 导出 → MakeClosure；原生函数 → 原生函数值（#492）。
-            if self.emit_module_export_value(&qualified, result_reg, *span, instructions) {
+            if self.emit_module_export_value(&qualified, result_reg.clone(), *span, instructions) {
                 return Ok(());
             }
             // ③ 可调用 def（命名空间臂）：项目符号表 Function/Method def →
@@ -196,7 +196,7 @@ impl AstToIrGenerator {
                 .qualified_name_is(&qualified, QualifiedNameConcern::FunctionOrMethodDef)
             {
                 instructions.push(Instruction::MakeClosure {
-                    dst: Operand::Local(result_reg),
+                    dst: result_reg.clone(),
                     func: qualified,
                     env: vec![],
                     def: None,
@@ -226,9 +226,14 @@ impl AstToIrGenerator {
                 // 别名同一判据（emit_module_export_value）——代码 → MakeClosure、
                 // 原生函数 → 原生函数值（#492）、native 常量 → 零参调用。此前一律
                 // 生成零参调用：原生函数作值时 stdout 空、exit 0、零诊断。
-                if !self.emit_module_export_value(&full_path, result_reg, *span, instructions) {
+                if !self.emit_module_export_value(
+                    &full_path,
+                    result_reg.clone(),
+                    *span,
+                    instructions,
+                ) {
                     instructions.push(Instruction::Call {
-                        dst: Some(Operand::Local(result_reg)),
+                        dst: Some(result_reg.clone()),
                         func: Operand::Const(ConstValue::String(full_path)),
                         args: vec![],
                         span: *span,
@@ -258,16 +263,16 @@ impl AstToIrGenerator {
                 // 复用 StringLength 指令（已泛化为通用长度读取），
                 // 与 Range 具名字字段同模式：类型层认字段、IR 层脱糖成原语。
                 let obj_reg = self.next_temp_reg();
-                self.generate_expr_ir(expr, obj_reg, instructions, constants)?;
+                self.generate_expr_ir(expr, obj_reg.clone(), instructions, constants)?;
                 instructions.push(Instruction::StringLength {
-                    dst: Operand::Local(result_reg),
-                    src: Operand::Local(obj_reg),
+                    dst: result_reg.clone(),
+                    src: obj_reg.clone(),
                     span: *span,
                 });
             } else {
                 // 普通字段访问
                 let obj_reg = self.next_temp_reg();
-                self.generate_expr_ir(expr, obj_reg, instructions, constants)?;
+                self.generate_expr_ir(expr, obj_reg.clone(), instructions, constants)?;
                 let field_index = self.resolve_field_index(expr, field).ok_or_else(|| {
                     ErrorCodeDefinition::ir_internal_error(&format!(
                         "无法解析字段索引: '{}'",
@@ -277,8 +282,8 @@ impl AstToIrGenerator {
                     .build()
                 })?;
                 instructions.push(Instruction::LoadField {
-                    dst: Operand::Local(result_reg),
-                    src: Operand::Local(obj_reg),
+                    dst: result_reg.clone(),
+                    src: obj_reg.clone(),
                     field: field_index,
                     span: *span,
                 });
@@ -295,10 +300,10 @@ impl AstToIrGenerator {
             // 空容器上直接报「field index 0 out of range」。
             if self.is_container_length_field(expr, field) {
                 let obj_reg = self.next_temp_reg();
-                self.generate_expr_ir(expr, obj_reg, instructions, constants)?;
+                self.generate_expr_ir(expr, obj_reg.clone(), instructions, constants)?;
                 instructions.push(Instruction::StringLength {
-                    dst: Operand::Local(result_reg),
-                    src: Operand::Local(obj_reg),
+                    dst: result_reg.clone(),
+                    src: obj_reg.clone(),
                     span: *span,
                 });
                 return Ok(());
@@ -311,7 +316,7 @@ impl AstToIrGenerator {
             {
                 // 命名空间常量访问：生成零参数函数调用
                 instructions.push(Instruction::Call {
-                    dst: Some(Operand::Local(result_reg)),
+                    dst: Some(result_reg.clone()),
                     func: Operand::Const(ConstValue::String(full_path)),
                     args: vec![],
                     span: *span,
@@ -320,7 +325,7 @@ impl AstToIrGenerator {
             } else {
                 // 普通字段访问
                 let obj_reg = self.next_temp_reg();
-                self.generate_expr_ir(expr, obj_reg, instructions, constants)?;
+                self.generate_expr_ir(expr, obj_reg.clone(), instructions, constants)?;
                 let field_index = self.resolve_field_index(expr, field).ok_or_else(|| {
                     ErrorCodeDefinition::ir_internal_error(&format!(
                         "无法解析字段索引: '{}'",
@@ -330,8 +335,8 @@ impl AstToIrGenerator {
                     .build()
                 })?;
                 instructions.push(Instruction::LoadField {
-                    dst: Operand::Local(result_reg),
-                    src: Operand::Local(obj_reg),
+                    dst: result_reg.clone(),
+                    src: obj_reg.clone(),
                     field: field_index,
                     span: *span,
                 });

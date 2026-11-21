@@ -16,7 +16,7 @@ impl AstToIrGenerator {
         &mut self,
         op: &ast::UnOp,
         expr: &Expr,
-        result_reg: usize,
+        result_reg: Operand,
         instructions: &mut Vec<Instruction>,
         constants: &mut Vec<ConstValue>,
     ) -> Result<(), Diagnostic> {
@@ -26,22 +26,22 @@ impl AstToIrGenerator {
                 // 解引用：*ptr
                 // 生成指针表达式的 IR
                 let src_reg = self.next_temp_reg();
-                self.generate_expr_ir(expr, src_reg, instructions, constants)?;
+                self.generate_expr_ir(expr, src_reg.clone(), instructions, constants)?;
 
                 // 生成 PtrDeref 指令
                 instructions.push(Instruction::PtrDeref {
-                    dst: Operand::Local(result_reg),
-                    src: Operand::Local(src_reg),
+                    dst: result_reg.clone(),
+                    src: src_reg.clone(),
                     span: self.cur_span,
                 });
             }
             ast::UnOp::Neg => {
                 // 负号：-x
                 let src_reg = self.next_temp_reg();
-                self.generate_expr_ir(expr, src_reg, instructions, constants)?;
+                self.generate_expr_ir(expr, src_reg.clone(), instructions, constants)?;
                 instructions.push(Instruction::Neg {
-                    dst: Operand::Local(result_reg),
-                    src: Operand::Local(src_reg),
+                    dst: result_reg.clone(),
+                    src: src_reg.clone(),
                     span: self.cur_span,
                 });
             }
@@ -52,10 +52,10 @@ impl AstToIrGenerator {
             ast::UnOp::Not => {
                 // 逻辑非：!x
                 let src_reg = self.next_temp_reg();
-                self.generate_expr_ir(expr, src_reg, instructions, constants)?;
+                self.generate_expr_ir(expr, src_reg.clone(), instructions, constants)?;
                 instructions.push(Instruction::Not {
-                    dst: Operand::Local(result_reg),
-                    src: Operand::Local(src_reg),
+                    dst: result_reg.clone(),
+                    src: src_reg.clone(),
                     span: self.cur_span,
                 });
             }
@@ -67,7 +67,7 @@ impl AstToIrGenerator {
         &mut self,
         expr: &Expr,
         span: &Span,
-        result_reg: usize,
+        result_reg: Operand,
         instructions: &mut Vec<Instruction>,
         constants: &mut Vec<ConstValue>,
     ) -> Result<(), Diagnostic> {
@@ -83,7 +83,7 @@ impl AstToIrGenerator {
         // 特化说明：方法调用不产生单态化请求，`std.` 前缀函数按 mono
         // 保留规则以未特化原版存活（解释器类型擦除执行），与显式方法
         // 调用同一执行模型。
-        self.generate_expr_ir(expr, result_reg, instructions, constants)?;
+        self.generate_expr_ir(expr, result_reg.clone(), instructions, constants)?;
         let span = *span;
 
         // 接收者类型名 → 四个方法的目标名。
@@ -134,29 +134,37 @@ impl AstToIrGenerator {
                 .at(span)
                 .build());
         };
-        let call_method = |name: &str, dst: usize, arg: usize| Instruction::Call {
-            dst: Some(Operand::Local(dst)),
+        let call_method = |name: &str, dst: Operand, arg: Operand| Instruction::Call {
+            dst: Some(dst),
             func: Operand::Const(ConstValue::String(name.to_string())),
-            args: vec![Operand::Local(arg)],
+            args: vec![arg],
             span,
             def: None,
         };
 
         // is_failure(t) 为真 → 失败路径
         let f_reg = self.next_temp_reg();
-        instructions.push(call_method(&is_failure_name, f_reg, result_reg));
+        instructions.push(call_method(
+            &is_failure_name,
+            f_reg.clone(),
+            result_reg.clone(),
+        ));
         let fail_jmp_idx = instructions.len();
         instructions.push(Instruction::JmpIf {
-            cond: Operand::Local(f_reg),
+            cond: f_reg.clone(),
             target: 0,
             span: self.cur_span,
         });
         // 成功路径：表达式值为 success(t)
         let s_reg = self.next_temp_reg();
-        instructions.push(call_method(&success_name, s_reg, result_reg));
+        instructions.push(call_method(
+            &success_name,
+            s_reg.clone(),
+            result_reg.clone(),
+        ));
         instructions.push(Instruction::Load {
-            dst: Operand::Local(result_reg),
-            src: Operand::Local(s_reg),
+            dst: result_reg.clone(),
+            src: s_reg.clone(),
             span: self.cur_span,
         });
         let end_jmp_idx = instructions.len();
@@ -167,16 +175,16 @@ impl AstToIrGenerator {
         // 失败路径：Ret from_error(residual(t))
         let fail_target = instructions.len();
         instructions[fail_jmp_idx] = Instruction::JmpIf {
-            cond: Operand::Local(f_reg),
+            cond: f_reg.clone(),
             target: fail_target,
             span: self.cur_span,
         };
         let e_reg = self.next_temp_reg();
-        instructions.push(call_method(&residual_name, e_reg, result_reg));
+        instructions.push(call_method(&residual_name, e_reg.clone(), result_reg));
         let err_reg = self.next_temp_reg();
-        instructions.push(call_method(&from_error_name, err_reg, e_reg));
+        instructions.push(call_method(&from_error_name, err_reg.clone(), e_reg));
         instructions.push(Instruction::Ret {
-            value: Some(Operand::Local(err_reg)),
+            value: Some(err_reg.clone()),
             span: self.cur_span,
         });
         let end_target = instructions.len();
@@ -194,7 +202,7 @@ impl AstToIrGenerator {
         left: &Expr,
         right: &Expr,
         span: &Span,
-        result_reg: usize,
+        result_reg: Operand,
         instructions: &mut Vec<Instruction>,
         constants: &mut Vec<ConstValue>,
     ) -> Result<(), Diagnostic> {
@@ -206,12 +214,12 @@ impl AstToIrGenerator {
                     let local_idx = if let Some(idx) = self.lookup_local(var_name) {
                         idx
                     } else {
-                        let idx = self.next_temp_reg();
+                        let idx = self.next_local_slot();
                         self.register_local(var_name, idx);
                         idx
                     };
                     let val_reg = self.next_temp_reg();
-                    self.generate_expr_ir(right, val_reg, instructions, constants)?;
+                    self.generate_expr_ir(right, val_reg.clone(), instructions, constants)?;
 
                     // 更新变量的类型信息
                     // 优先使用 typecheck 结果推导类型名，AST 推断仅作为兜底
@@ -227,11 +235,11 @@ impl AstToIrGenerator {
                     // 统一走 Store — 消除 Var→Var 走 Move 的特殊情况
                     instructions.push(Instruction::Store {
                         dst: Operand::Local(local_idx),
-                        src: Operand::Local(val_reg),
+                        src: val_reg.clone(),
                         span: *span,
                     });
                     instructions.push(Instruction::Load {
-                        dst: Operand::Local(result_reg),
+                        dst: result_reg.clone(),
                         src: Operand::Local(local_idx),
                         span: self.cur_span,
                     });
@@ -255,23 +263,23 @@ impl AstToIrGenerator {
                 // SPEC §2.2 / RFC-010 权威语义：and/or 短路求值
                 // a and b ≡ if a { b } else { false }；a or b ≡ if a { true } else { b }
                 let lhs_reg = self.next_temp_reg();
-                self.generate_expr_ir(left, lhs_reg, instructions, constants)?;
+                self.generate_expr_ir(left, lhs_reg.clone(), instructions, constants)?;
                 let is_and = matches!(op, ast::BinOp::And);
                 let short_idx = instructions.len();
                 if is_and {
                     instructions.push(Instruction::JmpIfNot {
-                        cond: Operand::Local(lhs_reg),
+                        cond: lhs_reg.clone(),
                         target: 0,
                         span: self.cur_span,
                     });
                 } else {
                     instructions.push(Instruction::JmpIf {
-                        cond: Operand::Local(lhs_reg),
+                        cond: lhs_reg.clone(),
                         target: 0,
                         span: self.cur_span,
                     });
                 }
-                self.generate_expr_ir(right, result_reg, instructions, constants)?;
+                self.generate_expr_ir(right, result_reg.clone(), instructions, constants)?;
                 let end_idx = instructions.len();
                 instructions.push(Instruction::Jmp {
                     target: 0,
@@ -296,7 +304,7 @@ impl AstToIrGenerator {
                     *t = sc_target;
                 }
                 instructions.push(Instruction::Load {
-                    dst: Operand::Local(result_reg),
+                    dst: result_reg.clone(),
                     src: Operand::Const(if is_and {
                         ConstValue::Bool(false)
                     } else {
@@ -317,8 +325,8 @@ impl AstToIrGenerator {
             _ => {
                 let left_reg = self.next_temp_reg();
                 let right_reg = self.next_temp_reg();
-                self.generate_expr_ir(left, left_reg, instructions, constants)?;
-                self.generate_expr_ir(right, right_reg, instructions, constants)?;
+                self.generate_expr_ir(left, left_reg.clone(), instructions, constants)?;
+                self.generate_expr_ir(right, right_reg.clone(), instructions, constants)?;
 
                 // RFC-011b: 显式接口派发——`==`/`!=` 命中 Equal 实例化时
                 // 生成方法调用（接收者居首），`!=` 对结果取反
@@ -337,16 +345,16 @@ impl AstToIrGenerator {
                     // 是导入类型时按定义单元限定派发名，本地类型行为不变。
                     let dispatch_name = self.method_dispatch_name(left, &func_name);
                     instructions.push(Instruction::Call {
-                        dst: Some(Operand::Local(result_reg)),
+                        dst: Some(result_reg.clone()),
                         func: Operand::Const(ConstValue::String(dispatch_name)),
-                        args: vec![Operand::Local(left_reg), Operand::Local(right_reg)],
+                        args: vec![left_reg.clone(), right_reg.clone()],
                         span: self.cur_span,
                         def: None,
                     });
                     if negate {
                         instructions.push(Instruction::Not {
-                            dst: Operand::Local(result_reg),
-                            src: Operand::Local(result_reg),
+                            dst: result_reg.clone(),
+                            src: result_reg.clone(),
                             span: self.cur_span,
                         });
                     }
@@ -355,100 +363,100 @@ impl AstToIrGenerator {
 
                 match op {
                     ast::BinOp::Add => Instruction::Add {
-                        dst: Operand::Local(result_reg),
-                        lhs: Operand::Local(left_reg),
-                        rhs: Operand::Local(right_reg),
+                        dst: result_reg.clone(),
+                        lhs: left_reg.clone(),
+                        rhs: right_reg.clone(),
                         span: self.cur_span,
                     },
                     ast::BinOp::Sub => Instruction::Sub {
-                        dst: Operand::Local(result_reg),
-                        lhs: Operand::Local(left_reg),
-                        rhs: Operand::Local(right_reg),
+                        dst: result_reg.clone(),
+                        lhs: left_reg.clone(),
+                        rhs: right_reg.clone(),
                         span: self.cur_span,
                     },
                     ast::BinOp::Mul => Instruction::Mul {
-                        dst: Operand::Local(result_reg),
-                        lhs: Operand::Local(left_reg),
-                        rhs: Operand::Local(right_reg),
+                        dst: result_reg.clone(),
+                        lhs: left_reg.clone(),
+                        rhs: right_reg.clone(),
                         span: self.cur_span,
                     },
                     ast::BinOp::Div => Instruction::Div {
-                        dst: Operand::Local(result_reg),
-                        lhs: Operand::Local(left_reg),
-                        rhs: Operand::Local(right_reg),
+                        dst: result_reg.clone(),
+                        lhs: left_reg.clone(),
+                        rhs: right_reg.clone(),
                         span: *span,
                     },
                     ast::BinOp::Mod => Instruction::Mod {
-                        dst: Operand::Local(result_reg),
-                        lhs: Operand::Local(left_reg),
-                        rhs: Operand::Local(right_reg),
+                        dst: result_reg.clone(),
+                        lhs: left_reg.clone(),
+                        rhs: right_reg.clone(),
                         span: *span,
                     },
                     // #285: 位运算/移位（SPEC §2.2 级 7/8）
                     ast::BinOp::BitAnd => Instruction::And {
-                        dst: Operand::Local(result_reg),
-                        lhs: Operand::Local(left_reg),
-                        rhs: Operand::Local(right_reg),
+                        dst: result_reg.clone(),
+                        lhs: left_reg.clone(),
+                        rhs: right_reg.clone(),
                         span: self.cur_span,
                     },
                     ast::BinOp::BitOr => Instruction::Or {
-                        dst: Operand::Local(result_reg),
-                        lhs: Operand::Local(left_reg),
-                        rhs: Operand::Local(right_reg),
+                        dst: result_reg.clone(),
+                        lhs: left_reg.clone(),
+                        rhs: right_reg.clone(),
                         span: self.cur_span,
                     },
                     ast::BinOp::BitXor => Instruction::Xor {
-                        dst: Operand::Local(result_reg),
-                        lhs: Operand::Local(left_reg),
-                        rhs: Operand::Local(right_reg),
+                        dst: result_reg.clone(),
+                        lhs: left_reg.clone(),
+                        rhs: right_reg.clone(),
                         span: self.cur_span,
                     },
                     ast::BinOp::Shl => Instruction::Shl {
-                        dst: Operand::Local(result_reg),
-                        lhs: Operand::Local(left_reg),
-                        rhs: Operand::Local(right_reg),
+                        dst: result_reg.clone(),
+                        lhs: left_reg.clone(),
+                        rhs: right_reg.clone(),
                         span: self.cur_span,
                     },
                     ast::BinOp::Shr => Instruction::Shr {
-                        dst: Operand::Local(result_reg),
-                        lhs: Operand::Local(left_reg),
-                        rhs: Operand::Local(right_reg),
+                        dst: result_reg.clone(),
+                        lhs: left_reg.clone(),
+                        rhs: right_reg.clone(),
                         span: self.cur_span,
                     },
                     ast::BinOp::Eq => Instruction::Eq {
-                        dst: Operand::Local(result_reg),
-                        lhs: Operand::Local(left_reg),
-                        rhs: Operand::Local(right_reg),
+                        dst: result_reg.clone(),
+                        lhs: left_reg.clone(),
+                        rhs: right_reg.clone(),
                         span: self.cur_span,
                     },
                     ast::BinOp::Neq => Instruction::Ne {
-                        dst: Operand::Local(result_reg),
-                        lhs: Operand::Local(left_reg),
-                        rhs: Operand::Local(right_reg),
+                        dst: result_reg.clone(),
+                        lhs: left_reg.clone(),
+                        rhs: right_reg.clone(),
                         span: self.cur_span,
                     },
                     ast::BinOp::Lt => Instruction::Lt {
-                        dst: Operand::Local(result_reg),
-                        lhs: Operand::Local(left_reg),
-                        rhs: Operand::Local(right_reg),
+                        dst: result_reg.clone(),
+                        lhs: left_reg.clone(),
+                        rhs: right_reg.clone(),
                         span: self.cur_span,
                     },
                     ast::BinOp::Le => Instruction::Le {
-                        dst: Operand::Local(result_reg),
-                        lhs: Operand::Local(left_reg),
-                        rhs: Operand::Local(right_reg),
+                        dst: result_reg.clone(),
+                        lhs: left_reg.clone(),
+                        rhs: right_reg.clone(),
                         span: self.cur_span,
                     },
                     ast::BinOp::Gt => Instruction::Gt {
-                        dst: Operand::Local(result_reg),
-                        lhs: Operand::Local(left_reg),
-                        rhs: Operand::Local(right_reg),
+                        dst: result_reg.clone(),
+                        lhs: left_reg.clone(),
+                        rhs: right_reg.clone(),
                         span: self.cur_span,
                     },
                     ast::BinOp::Ge => Instruction::Ge {
-                        dst: Operand::Local(result_reg),
-                        lhs: Operand::Local(left_reg),
-                        rhs: Operand::Local(right_reg),
+                        dst: result_reg.clone(),
+                        lhs: left_reg.clone(),
+                        rhs: right_reg.clone(),
                         span: self.cur_span,
                     },
                     // Assign 在上方分支处理；And/Or 走短路求值；Range 仅限 for/切片上下文。

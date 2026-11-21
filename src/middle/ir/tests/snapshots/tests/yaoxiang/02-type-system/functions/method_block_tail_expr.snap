@@ -3,27 +3,39 @@ module
     type_decl [x: Float(64) ; y: Float(64)]
   fn Point.get_x(Ref { mutable: false, inner: TypeRef("Point") }) -> Float(64)
     locals_total=3
-    Load %0 <- %1
-    LoadField %2 <- %0.0
-    Ret %2
+    values_total=2
+    value v0: TypeRef("?") @block0
+    value v1: Ref { mutable: false, inner: TypeRef("Point") } @block0
+    Load v1 <- %0
+    LoadField v0 <- v1.0
+    Ret v0
   fn main() -> Void
     slot[0] p : Int(64) @depth1
     slot[1] r : Int(64) @depth1
     locals_total=7
-    Load %0 <- float(4613937818241073152)
-    Load %1 <- float(4616189618054758400)
-    Call %2 <- string("Point") [%0, %1] (def=d0)
-    Load %1 <- %2
-    Call %0 <- string("Point.get_x") [%1] (def=d1)
-    Drop %2
-    Load %3 <- %0
-    Load %4 <- float(4613937818241073152)
-    Eq %5 <- %3, %4
-    Load %6 <- string("get_x should be 3.0")
-    Call %1 <- string("std.assert.assert") [%5, %6] (def=d2)
-    Drop %2
+    values_total=8
+    value v0: Float(64) @block0
+    value v1: Float(64) @block0
+    value v2: Struct(StructType { name: "Point", fields: [("x", Float(64)), ("y", Float(64))], methods: {}, interfaces: [] }) @block0
+    value v3: TypeRef("?") @block0
+    value v4: Bool @block0
+    value v5: Float(64) @block0
+    value v6: Float(64) @block0
+    value v7: Generic { name: "String", args: [] } @block0
+    Load v0 <- float(4613937818241073152)
+    Load v1 <- float(4616189618054758400)
+    Call %0 <- string("Point") [v0, v1] (def=d0)
+    Load v2 <- %0
+    Call %1 <- string("Point.get_x") [v2] (def=d1)
     Drop %0
-    Ret %1
+    Load v5 <- %1
+    Load v6 <- float(4613937818241073152)
+    Eq v4 <- v5, v6
+    Load v7 <- string("get_x should be 3.0")
+    Call v3 <- string("std.assert.assert") [v4, v7] (def=d2)
+    Drop %0
+    Drop %1
+    Ret v3
   init (locals=1)
     islot[0] self : Int(64) @depth1
     Call %0 <- string("main") [] (def=d3)

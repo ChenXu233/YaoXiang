@@ -3,94 +3,147 @@ module
     slot[0] s : Int(64) @depth1
     slot[1] n : Int(64) @depth1
     locals_total=7
+    values_total=9
+    value v0: Ref { mutable: false, inner: Generic { name: "String", args: [] } } @block0
+    value v1: TypeRef("?") @block0
+    value v2: TypeRef("?") @block0
+    value v3: TypeRef("?") @block0
+    value v4: TypeRef("?") @block0
+    value v5: TypeRef("?") @block0
+    value v6: Int(64) @block0
+    value v7: Int(64) @block0
+    value v8: Int(64) @block0
     Load %0 <- arg%0
-    Load %1 <- %0
-    Call %2 <- string("std.string.parse_int") [%1] (def=d0)
-    Call %3 <- string("std.result.Result.is_failure") [%2] (def=_)
-    JmpIf %3 -> instr(8)
-    Call %4 <- string("std.result.Result.success") [%2] (def=_)
-    Load %2 <- %4
+    Load v0 <- %0
+    Call %1 <- string("std.string.parse_int") [v0] (def=d0)
+    Call v1 <- string("std.result.Result.is_failure") [%1] (def=_)
+    JmpIf v1 -> instr(8)
+    Call v2 <- string("std.result.Result.success") [%1] (def=_)
+    Load %1 <- v2
     Jmp -> instr(11)
-    Call %5 <- string("std.result.Result.residual") [%2] (def=_)
-    Call %6 <- string("std.result.Result.from_error") [%5] (def=_)
-    Ret %6
-    Load %4 <- %2
-    Load %5 <- int(2)
-    Mul %3 <- %4, %5
-    CreateVariant %1 <- Result::0 %3
-    Ret %1
-    Drop %2
-    Ret %1
+    Call v3 <- string("std.result.Result.residual") [%1] (def=_)
+    Call v4 <- string("std.result.Result.from_error") [v3] (def=_)
+    Ret v4
+    Load v7 <- %1
+    Load v8 <- int(2)
+    Mul v6 <- v7, v8
+    CreateVariant v5 <- Result::0 v6
+    Ret v5
+    Drop %1
+    Ret v5
   fn parse_chain(Ref { mutable: false, inner: Generic { name: "String", args: [] } }) -> Generic { name: "Result", args: [Int(64), TypeRef("Error")] }
     slot[0] s : Int(64) @depth1
     slot[1] d : Int(64) @depth1
     locals_total=7
+    values_total=9
+    value v0: Ref { mutable: false, inner: Generic { name: "String", args: [] } } @block0
+    value v1: TypeRef("?") @block0
+    value v2: TypeRef("?") @block0
+    value v3: TypeRef("?") @block0
+    value v4: TypeRef("?") @block0
+    value v5: TypeRef("?") @block0
+    value v6: Int(64) @block0
+    value v7: Int(64) @block0
+    value v8: Int(64) @block0
     Load %0 <- arg%0
-    Load %1 <- %0
-    Call %2 <- string("parse_double") [%1] (def=d1)
-    Call %3 <- string("std.result.Result.is_failure") [%2] (def=_)
-    JmpIf %3 -> instr(8)
-    Call %4 <- string("std.result.Result.success") [%2] (def=_)
-    Load %2 <- %4
+    Load v0 <- %0
+    Call %1 <- string("parse_double") [v0] (def=d1)
+    Call v1 <- string("std.result.Result.is_failure") [%1] (def=_)
+    JmpIf v1 -> instr(8)
+    Call v2 <- string("std.result.Result.success") [%1] (def=_)
+    Load %1 <- v2
     Jmp -> instr(11)
-    Call %5 <- string("std.result.Result.residual") [%2] (def=_)
-    Call %6 <- string("std.result.Result.from_error") [%5] (def=_)
-    Ret %6
-    Load %4 <- %2
-    Load %5 <- int(1)
-    Add %3 <- %4, %5
-    CreateVariant %1 <- Result::0 %3
-    Ret %1
-    Drop %2
-    Ret %1
+    Call v3 <- string("std.result.Result.residual") [%1] (def=_)
+    Call v4 <- string("std.result.Result.from_error") [v3] (def=_)
+    Ret v4
+    Load v7 <- %1
+    Load v8 <- int(1)
+    Add v6 <- v7, v8
+    CreateVariant v5 <- Result::0 v6
+    Ret v5
+    Drop %1
+    Ret v5
   fn main() -> Void
     slot[0] ok : Int(64) @depth1
     slot[1] err : Int(64) @depth1
     slot[2] e : Int(64) @depth1
     locals_total=11
-    Load %0 <- string("21")
-    Call %1 <- string("parse_chain") [%0] (def=d2)
-    Load %2 <- %1
-    Call %3 <- string("std.result.is_ok") [%2] (def=d3)
-    Load %4 <- string("chain ok: is_ok")
-    Call %0 <- string("std.assert.assert") [%3, %4] (def=d4)
-    Drop %1
-    Load %5 <- %1
-    Call %2 <- string("std.result.unwrap") [%5] (def=d5)
-    Load %4 <- int(43)
-    Eq %3 <- %2, %4
-    Load %6 <- string("chain ok: unwrap == 43")
-    Call %0 <- string("std.assert.assert") [%3, %6] (def=d4)
-    Drop %1
-    Load %3 <- string("nope")
-    Call %0 <- string("parse_chain") [%3] (def=d2)
-    Load %4 <- %0
-    Call %2 <- string("std.result.is_err") [%4] (def=d6)
-    Load %5 <- string("chain err: is_err")
-    Call %3 <- string("std.assert.assert") [%2, %5] (def=d4)
+    values_total=32
+    value v0: Generic { name: "String", args: [] } @block0
+    value v1: TypeRef("?") @block0
+    value v2: TypeRef("?") @block0
+    value v3: Generic { name: "Result", args: [Int(64), TypeRef("Error")] } @block0
+    value v4: Generic { name: "String", args: [] } @block0
+    value v5: TypeRef("?") @block0
+    value v6: Bool @block0
+    value v7: TypeRef("?") @block0
+    value v8: Int(64) @block0
+    value v9: Generic { name: "Result", args: [Int(64), TypeRef("Error")] } @block0
+    value v10: Generic { name: "String", args: [] } @block0
+    value v11: Generic { name: "String", args: [] } @block0
+    value v12: TypeRef("?") @block0
+    value v13: TypeRef("?") @block0
+    value v14: Generic { name: "Result", args: [Int(64), TypeRef("Error")] } @block0
+    value v15: Generic { name: "String", args: [] } @block0
+    value v16: TypeRef("?") @block0
+    value v17: Bool @block0
+    value v18: TypeRef("?") @block0
+    value v19: Int(64) @block0
+    value v20: Generic { name: "Result", args: [Int(64), TypeRef("Error")] } @block0
+    value v21: Int(64) @block0
+    value v22: Int(64) @block0
+    value v23: Int(64) @block0
+    value v24: Generic { name: "String", args: [] } @block0
+    value v25: Generic { name: "String", args: [] } @block0
+    value v26: TypeRef("?") @block0
+    value v27: TypeRef("?") @block0
+    value v28: Generic { name: "Result", args: [Int(64), Generic { name: "String", args: [] }] } @block0
+    value v29: Generic { name: "String", args: [] } @block0
+    value v30: Void @block0
+    value v31: Generic { name: "String", args: [] } @block0
+    Load v0 <- string("21")
+    Call %0 <- string("parse_chain") [v0] (def=d2)
+    Load v3 <- %0
+    Call v2 <- string("std.result.is_ok") [v3] (def=d3)
+    Load v4 <- string("chain ok: is_ok")
+    Call v1 <- string("std.assert.assert") [v2, v4] (def=d4)
     Drop %0
-    Load %6 <- %0
-    Load %7 <- int(1)
-    Neg %8 <- %7
-    Call %4 <- string("std.result.unwrap_or") [%6, %8] (def=d7)
-    Load %9 <- int(1)
-    Neg %5 <- %9
-    Eq %2 <- %4, %5
-    Load %10 <- string("chain err: unwrap_or default")
-    Call %3 <- string("std.assert.assert") [%2, %10] (def=d4)
+    Load v9 <- %0
+    Call v7 <- string("std.result.unwrap") [v9] (def=d5)
+    Load v8 <- int(43)
+    Eq v6 <- v7, v8
+    Load v10 <- string("chain ok: unwrap == 43")
+    Call v5 <- string("std.assert.assert") [v6, v10] (def=d4)
     Drop %0
-    Load %2 <- string("boom")
-    CreateVariant %3 <- Result::1 %2
-    Load %5 <- %3
-    Call %4 <- string("std.result.is_err") [%5] (def=d6)
-    Load %6 <- string("result.err is_err")
-    Call %2 <- string("std.assert.assert") [%4, %6] (def=d4)
-    Drop %3
-    Load %4 <- string("question_propagation_ok")
-    Call %2 <- string("std.io.print") [%4] (def=d8)
-    Drop %3
-    Drop %0
+    Load v11 <- string("nope")
+    Call %1 <- string("parse_chain") [v11] (def=d2)
+    Load v14 <- %1
+    Call v13 <- string("std.result.is_err") [v14] (def=d6)
+    Load v15 <- string("chain err: is_err")
+    Call v12 <- string("std.assert.assert") [v13, v15] (def=d4)
     Drop %1
-    Ret %2
+    Load v20 <- %1
+    Load v22 <- int(1)
+    Neg v21 <- v22
+    Call v18 <- string("std.result.unwrap_or") [v20, v21] (def=d7)
+    Load v23 <- int(1)
+    Neg v19 <- v23
+    Eq v17 <- v18, v19
+    Load v24 <- string("chain err: unwrap_or default")
+    Call v16 <- string("std.assert.assert") [v17, v24] (def=d4)
+    Drop %1
+    Load v25 <- string("boom")
+    CreateVariant %2 <- Result::1 v25
+    Load v28 <- %2
+    Call v27 <- string("std.result.is_err") [v28] (def=d6)
+    Load v29 <- string("result.err is_err")
+    Call v26 <- string("std.assert.assert") [v27, v29] (def=d4)
+    Drop %2
+    Load v31 <- string("question_propagation_ok")
+    Call v30 <- string("std.io.print") [v31] (def=d8)
+    Drop %2
+    Drop %1
+    Drop %0
+    Ret v30
   init (locals=0)
     Call %0 <- string("main") [] (def=d9)

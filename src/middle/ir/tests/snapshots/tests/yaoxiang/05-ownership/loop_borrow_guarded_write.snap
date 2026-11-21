@@ -4,13 +4,20 @@ module
   fn bump(Ref { mutable: true, inner: TypeRef("Point") }) -> Void
     slot[0] pt : Int(64) @depth1
     locals_total=7
+    values_total=6
+    value v0: TypeRef("?") @block0
+    value v1: Ref { mutable: true, inner: TypeRef("Point") } @block0
+    value v2: TypeRef("?") @block0
+    value v3: TypeRef("?") @block0
+    value v4: Int(64) @block0
+    value v5: Ref { mutable: true, inner: TypeRef("Point") } @block0
     Load %0 <- arg%0
-    Load %1 <- %0
-    Load %2 <- %0
-    LoadField %3 <- %2.0
-    Load %4 <- int(1)
-    Add %5 <- %3, %4
-    StoreField %1.0 <- %5 (type=None, name=Some("x"))
+    Load v1 <- %0
+    Load v5 <- %0
+    LoadField v3 <- v5.0
+    Load v4 <- int(1)
+    Add v2 <- v3, v4
+    StoreField v1.0 <- v2 (type=None, name=Some("x"))
     Ret
   fn main() -> Void
     slot[0] p : Int(64) @depth1
@@ -19,58 +26,93 @@ module
     slot[3] reads : Int(64) @depth1
     slot[8] x : Int(64) @depth2
     locals_total=25
-    Load %0 <- int(1)
-    Load %1 <- int(2)
-    Call %2 <- string("Point") [%0, %1] (def=d0)
-    Load %1 <- %2
-    Move %0 <- %1
-    Load %1 <- int(0)
+    values_total=34
+    value v0: Int(64) @block0
+    value v1: Int(64) @block0
+    value v2: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
+    value v3: Void @block0
+    value v4: Bool @block0
+    value v5: Int(64) @block0
+    value v6: Int(64) @block0
+    value v7: Ref { mutable: false, inner: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) } @block0
+    value v8: TypeRef("?") @block0
+    value v9: Bool @block0
+    value v10: Int(64) @block0
+    value v11: Int(64) @block0
+    value v12: Generic { name: "String", args: [] } @block0
+    value v13: Int(64) @block0
+    value v14: Int(64) @block0
+    value v15: Int(64) @block0
+    value v16: Int(64) @block0
+    value v17: Void @block0
+    value v18: Bool @block0
+    value v19: Int(64) @block0
+    value v20: Int(64) @block0
+    value v21: Void @block0
+    value v22: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
+    value v23: TypeRef("?") @block0
+    value v24: Bool @block0
+    value v25: Int(64) @block0
+    value v26: Int(64) @block0
+    value v27: Generic { name: "String", args: [] } @block0
+    value v28: TypeRef("?") @block0
+    value v29: Bool @block0
+    value v30: TypeRef("?") @block0
+    value v31: Int(64) @block0
+    value v32: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
+    value v33: Generic { name: "String", args: [] } @block0
+    Load v0 <- int(1)
+    Load v1 <- int(2)
+    Call %0 <- string("Point") [v0, v1] (def=d0)
+    Load v2 <- %0
+    Move %1 <- v2
+    Load %2 <- int(0)
     Load %3 <- int(0)
-    Load %4 <- void
-    Load %5 <- %1
-    Load %6 <- int(3)
-    Lt %7 <- %5, %6
-    JmpIfNot %7 -> instr(37)
-    Load %8 <- %0
-    LoadField %9 <- %8.0
-    Load %10 <- %9
-    Load %11 <- int(1)
-    Eq %12 <- %10, %11
-    Load %13 <- string("borrowed read sees pre-write value (write is guarded to i == 3)")
-    Call %14 <- string("std.assert.assert") [%12, %13] (def=d1)
-    Load %15 <- %3
-    Load %16 <- int(1)
-    Add %3 <- %15, %16
-    Load %17 <- %1
-    Load %18 <- int(1)
-    Add %1 <- %17, %18
-    Load %19 <- %1
-    Load %20 <- int(3)
-    Eq %21 <- %19, %20
-    JmpIfNot %21 -> instr(34)
-    Load %22 <- %2
-    Call %23 <- string("bump") [%22] (def=d2)
-    Drop %2
-    Move %24 <- %23
-    Jmp -> instr(34)
-    Load %4 <- void
-    Drop %9
-    Jmp -> instr(8)
-    Load %12 <- %3
-    Load %10 <- int(3)
-    Eq %14 <- %12, %10
-    Load %11 <- string("loop ran 3 times")
-    Call %8 <- string("std.assert.assert") [%14, %11] (def=d1)
-    Load %11 <- %2
-    LoadField %12 <- %11.0
-    Load %10 <- int(2)
-    Eq %14 <- %12, %10
-    Load %13 <- string("guarded write fired exactly once")
-    Call %8 <- string("std.assert.assert") [%14, %13] (def=d1)
-    Drop %2
-    Drop %1
-    Drop %3
+    Load v3 <- void
+    Load v5 <- %2
+    Load v6 <- int(3)
+    Lt v4 <- v5, v6
+    JmpIfNot v4 -> instr(37)
+    Load v7 <- %1
+    LoadField %4 <- v7.0
+    Load v10 <- %4
+    Load v11 <- int(1)
+    Eq v9 <- v10, v11
+    Load v12 <- string("borrowed read sees pre-write value (write is guarded to i == 3)")
+    Call v8 <- string("std.assert.assert") [v9, v12] (def=d1)
+    Load v13 <- %3
+    Load v14 <- int(1)
+    Add %3 <- v13, v14
+    Load v15 <- %2
+    Load v16 <- int(1)
+    Add %2 <- v15, v16
+    Load v19 <- %2
+    Load v20 <- int(3)
+    Eq v18 <- v19, v20
+    JmpIfNot v18 -> instr(34)
+    Load v22 <- %0
+    Call v21 <- string("bump") [v22] (def=d2)
     Drop %0
-    Ret %8
+    Move v17 <- v21
+    Jmp -> instr(34)
+    Load v3 <- void
+    Drop %4
+    Jmp -> instr(8)
+    Load v25 <- %3
+    Load v26 <- int(3)
+    Eq v24 <- v25, v26
+    Load v27 <- string("loop ran 3 times")
+    Call v23 <- string("std.assert.assert") [v24, v27] (def=d1)
+    Load v32 <- %0
+    LoadField v30 <- v32.0
+    Load v31 <- int(2)
+    Eq v29 <- v30, v31
+    Load v33 <- string("guarded write fired exactly once")
+    Call v28 <- string("std.assert.assert") [v29, v33] (def=d1)
+    Drop %0
+    Drop %2
+    Drop %3
+    Drop %1
+    Ret v28
   init (locals=0)
     Call %0 <- string("main") [] (def=d3)

@@ -5,53 +5,81 @@ module
     slot[0] a : Int(64) @depth1
     slot[1] b : Int(64) @depth1
     locals_total=7
+    values_total=5
+    value v0: TypeRef("?") @block0
+    value v1: TypeRef("?") @block0
+    value v2: TypeRef("?") @block0
+    value v3: Ref { mutable: false, inner: TypeRef("Node") } @block0
+    value v4: Ref { mutable: false, inner: TypeRef("Node") } @block0
     Load %0 <- arg%0
     Load %1 <- arg%1
-    Load %2 <- %0
-    LoadField %3 <- %2.0
-    Load %4 <- %1
-    LoadField %5 <- %4.0
-    Add %6 <- %3, %5
-    Ret %6
-    Ret %6
+    Load v3 <- %0
+    LoadField v1 <- v3.0
+    Load v4 <- %1
+    LoadField v2 <- v4.0
+    Add v0 <- v1, v2
+    Ret v0
+    Ret v0
   fn main() -> Void
     slot[0] n1 : Int(64) @depth1
     slot[1] n2 : Int(64) @depth1
     slot[2] n3 : Int(64) @depth1
     slot[3] total : Int(64) @depth1
     locals_total=9
-    Load %0 <- int(10)
-    Load %1 <- int(0)
-    Call %2 <- string("Node") [%0, %1] (def=d0)
-    Load %1 <- int(20)
-    Load %3 <- int(0)
-    Call %0 <- string("Node") [%1, %3] (def=d0)
-    Load %3 <- int(30)
-    Load %4 <- int(0)
-    Call %1 <- string("Node") [%3, %4] (def=d0)
-    Load %4 <- %2
-    Load %5 <- %0
-    Call %3 <- string("sum_nodes") [%4, %5] (def=d1)
-    Drop %2
-    Drop %0
-    Load %4 <- %3
-    Load %6 <- %1
-    LoadField %5 <- %6.0
-    Add %3 <- %4, %5
-    Load %6 <- %3
-    Load %7 <- int(60)
-    Eq %5 <- %6, %7
-    Load %8 <- string("total should be 60")
-    Call %4 <- string("std.assert.assert") [%5, %8] (def=d2)
-    Load %5 <- %3
-    Call %4 <- string("std.io.println") [%5] (def=d3)
-    Load %5 <- bool(true)
-    Load %6 <- string("all passed")
-    Call %4 <- string("std.assert.assert") [%5, %6] (def=d2)
-    Drop %2
+    values_total=21
+    value v0: Int(64) @block0
+    value v1: Int(64) @block0
+    value v2: Int(64) @block0
+    value v3: Int(64) @block0
+    value v4: Int(64) @block0
+    value v5: Int(64) @block0
+    value v6: Struct(StructType { name: "Node", fields: [("value", Int(64)), ("next", Int(64))], methods: {}, interfaces: [] }) @block0
+    value v7: Struct(StructType { name: "Node", fields: [("value", Int(64)), ("next", Int(64))], methods: {}, interfaces: [] }) @block0
+    value v8: Int(64) @block0
+    value v9: TypeRef("?") @block0
+    value v10: Struct(StructType { name: "Node", fields: [("value", Int(64)), ("next", Int(64))], methods: {}, interfaces: [] }) @block0
+    value v11: TypeRef("?") @block0
+    value v12: Bool @block0
+    value v13: Int(64) @block0
+    value v14: Int(64) @block0
+    value v15: Generic { name: "String", args: [] } @block0
+    value v16: TypeRef("?") @block0
+    value v17: Int(64) @block0
+    value v18: TypeRef("?") @block0
+    value v19: Bool @block0
+    value v20: Generic { name: "String", args: [] } @block0
+    Load v0 <- int(10)
+    Load v1 <- int(0)
+    Call %0 <- string("Node") [v0, v1] (def=d0)
+    Load v2 <- int(20)
+    Load v3 <- int(0)
+    Call %1 <- string("Node") [v2, v3] (def=d0)
+    Load v4 <- int(30)
+    Load v5 <- int(0)
+    Call %2 <- string("Node") [v4, v5] (def=d0)
+    Load v6 <- %0
+    Load v7 <- %1
+    Call %3 <- string("sum_nodes") [v6, v7] (def=d1)
     Drop %0
     Drop %1
+    Load v8 <- %3
+    Load v10 <- %2
+    LoadField v9 <- v10.0
+    Add %3 <- v8, v9
+    Load v13 <- %3
+    Load v14 <- int(60)
+    Eq v12 <- v13, v14
+    Load v15 <- string("total should be 60")
+    Call v11 <- string("std.assert.assert") [v12, v15] (def=d2)
+    Load v17 <- %3
+    Call v16 <- string("std.io.println") [v17] (def=d3)
+    Load v19 <- bool(true)
+    Load v20 <- string("all passed")
+    Call v18 <- string("std.assert.assert") [v19, v20] (def=d2)
+    Drop %0
+    Drop %1
+    Drop %2
     Drop %3
-    Ret %4
+    Ret v18
   init (locals=0)
     Call %0 <- string("main") [] (def=d4)

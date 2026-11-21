@@ -18,7 +18,7 @@ impl AstToIrGenerator {
         iterable: &Expr,
         body: &ast::Block,
         span: &Span,
-        result_reg: usize,
+        result_reg: Operand,
         instructions: &mut Vec<Instruction>,
         constants: &mut Vec<ConstValue>,
     ) -> Result<(), Diagnostic> {
@@ -40,7 +40,7 @@ impl AstToIrGenerator {
         body: &ast::Block,
         span: &Span,
         _expr: &Expr,
-        result_reg: usize,
+        result_reg: Operand,
         instructions: &mut Vec<Instruction>,
         constants: &mut Vec<ConstValue>,
     ) -> Result<(), Diagnostic> {
@@ -75,7 +75,7 @@ impl AstToIrGenerator {
             // 如果是赋值，注册目标变量到 spawn 作用域
             if let Some(target) = &task.target {
                 if self.lookup_local(target).is_none() {
-                    let reg = self.next_temp_reg();
+                    let reg = self.next_local_slot();
                     self.register_local(target, reg);
                 }
             }
@@ -107,10 +107,10 @@ impl AstToIrGenerator {
                 }),
                 span: *span,
             };
-            self.generate_expr_ir(&lambda, closure_reg, instructions, constants)?;
+            self.generate_expr_ir(&lambda, closure_reg.clone(), instructions, constants)?;
             self.pending_env_vars.clear();
             self.pending_env_names.clear();
-            closure_regs.push(Operand::Local(closure_reg));
+            closure_regs.push(closure_reg.clone());
         }
 
         // 4. 生成 spawn 块剩余语句（非直接子表达式，如 var 声明等）
@@ -130,7 +130,7 @@ impl AstToIrGenerator {
         instructions.push(Instruction::Spawn {
             closures: closure_regs,
             plan: analysis.plan,
-            result: Operand::Local(result_reg),
+            result: result_reg.clone(),
             span: self.cur_span,
         });
 
@@ -145,10 +145,10 @@ impl AstToIrGenerator {
             if let ast::StmtKind::Expr(ref expr_stmt) = stmt.kind {
                 if let ast::Expr::Return(Some(ret_expr), _) = expr_stmt.as_ref() {
                     let ret_reg = self.next_temp_reg();
-                    self.generate_expr_ir(ret_expr, ret_reg, instructions, constants)?;
+                    self.generate_expr_ir(ret_expr, ret_reg.clone(), instructions, constants)?;
                     instructions.push(Instruction::Move {
-                        dst: Operand::Local(result_reg),
-                        src: Operand::Local(ret_reg),
+                        dst: result_reg.clone(),
+                        src: ret_reg.clone(),
                         span: self.cur_span,
                     });
                     has_value = true;
@@ -162,10 +162,10 @@ impl AstToIrGenerator {
                 if crate::frontend::core::spawn::analysis::is_spawn_tail_expr(body, last_idx) {
                     if let ast::StmtKind::Expr(ref expr) = body.stmts[last_idx].kind {
                         let tail_reg = self.next_temp_reg();
-                        self.generate_expr_ir(expr, tail_reg, instructions, constants)?;
+                        self.generate_expr_ir(expr, tail_reg.clone(), instructions, constants)?;
                         instructions.push(Instruction::Move {
-                            dst: Operand::Local(result_reg),
-                            src: Operand::Local(tail_reg),
+                            dst: result_reg.clone(),
+                            src: tail_reg.clone(),
                             span: self.cur_span,
                         });
                     }

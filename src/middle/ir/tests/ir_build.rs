@@ -90,6 +90,7 @@ pub fn func_with_blocks(
             entry: 0,
             locals,
             values,
+            value_slots: Vec::new(),
         },
     }
 }

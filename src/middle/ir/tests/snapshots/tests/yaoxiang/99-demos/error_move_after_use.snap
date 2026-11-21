@@ -3,18 +3,27 @@ module
     slot[0] x : Int(64) @depth1
     slot[1] y : Int(64) @depth1
     locals_total=5
+    values_total=8
+    value v0: TypeRef("?") @block0
+    value v1: Bool @block0
+    value v2: Generic { name: "String", args: [] } @block0
+    value v3: TypeRef("?") @block0
+    value v4: Int(64) @block0
+    value v5: TypeRef("?") @block0
+    value v6: Bool @block0
+    value v7: Generic { name: "String", args: [] } @block0
     Load %0 <- int(42)
     Load %1 <- %0
-    Load %2 <- bool(true)
-    Load %3 <- string("value moved from x to y")
-    Call %4 <- string("std.assert.assert") [%2, %3] (def=d0)
-    Load %2 <- %1
-    Call %4 <- string("std.io.println") [%2] (def=d1)
-    Load %2 <- bool(true)
-    Load %3 <- string("all passed")
-    Call %4 <- string("std.assert.assert") [%2, %3] (def=d0)
+    Load v1 <- bool(true)
+    Load v2 <- string("value moved from x to y")
+    Call v0 <- string("std.assert.assert") [v1, v2] (def=d0)
+    Load v4 <- %1
+    Call v3 <- string("std.io.println") [v4] (def=d1)
+    Load v6 <- bool(true)
+    Load v7 <- string("all passed")
+    Call v5 <- string("std.assert.assert") [v6, v7] (def=d0)
     Drop %0
     Drop %1
-    Ret %4
+    Ret v5
   init (locals=0)
     Call %0 <- string("main") [] (def=d2)

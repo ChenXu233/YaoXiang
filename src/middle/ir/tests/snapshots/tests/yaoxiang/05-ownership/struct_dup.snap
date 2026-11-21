@@ -10,23 +10,31 @@ module
   fn sum_of(TypeRef("Point")) -> Int(64)
     slot[0] p : Int(64) @depth1
     locals_total=6
+    values_total=5
+    value v0: TypeRef("?") @block0
+    value v1: TypeRef("?") @block0
+    value v2: TypeRef("?") @block0
+    value v3: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
+    value v4: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
     Load %0 <- arg%0
-    Load %1 <- %0
-    LoadField %2 <- %1.0
-    Load %3 <- %0
-    LoadField %4 <- %3.1
-    Add %5 <- %2, %4
-    Ret %5
+    Load v3 <- %0
+    LoadField v1 <- v3.0
+    Load v4 <- %0
+    LoadField v2 <- v4.1
+    Add v0 <- v1, v2
+    Ret v0
   fn passthrough(TypeRef("Point")) -> TypeRef("Point")
     slot[0] p : Int(64) @depth1
     slot[1] q : Int(64) @depth1
     locals_total=3
+    values_total=1
+    value v0: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
     Load %0 <- arg%0
     Load %1 <- %0
-    Load %2 <- %1
-    Ret %2
+    Load v0 <- %1
+    Ret v0
     Drop %1
-    Ret %2
+    Ret v0
   fn main() -> Void
     slot[0] p : Int(64) @depth1
     slot[1] q : Int(64) @depth1
@@ -43,144 +51,254 @@ module
     slot[12] t : Int(64) @depth1
     slot[13] t2 : Int(64) @depth1
     locals_total=20
-    Load %0 <- int(1)
-    Load %1 <- int(2)
-    Call %2 <- string("Point") [%0, %1] (def=d0)
-    Load %0 <- %2
-    Load %3 <- %2
-    LoadField %4 <- %3.0
-    Load %5 <- int(1)
-    Eq %6 <- %4, %5
-    Load %7 <- string("struct assign is Dup: source still readable")
-    Call %1 <- string("std.assert.assert") [%6, %7] (def=d1)
-    Load %3 <- %0
-    LoadField %4 <- %3.1
-    Load %5 <- int(2)
-    Eq %6 <- %4, %5
-    Load %7 <- string("copied struct holds the value")
-    Call %1 <- string("std.assert.assert") [%6, %7] (def=d1)
-    Load %6 <- %2
-    Call %1 <- string("sum_of") [%6] (def=d2)
-    Load %5 <- %1
-    Load %3 <- int(3)
-    Eq %4 <- %5, %3
-    Load %7 <- string("by-value param received the struct")
-    Call %6 <- string("std.assert.assert") [%4, %7] (def=d1)
-    Load %7 <- %2
-    LoadField %5 <- %7.1
-    Load %3 <- int(2)
-    Eq %4 <- %5, %3
-    Load %8 <- string("source alive after by-value param")
-    Call %6 <- string("std.assert.assert") [%4, %8] (def=d1)
-    Load %4 <- %2
-    Call %6 <- string("passthrough") [%4] (def=d3)
-    Load %8 <- %6
-    LoadField %3 <- %8.0
-    Load %7 <- int(1)
-    Eq %5 <- %3, %7
-    Load %9 <- string("returned struct holds the value")
-    Call %4 <- string("std.assert.assert") [%5, %9] (def=d1)
-    Load %8 <- %2
-    LoadField %3 <- %8.0
-    Load %7 <- int(1)
-    Eq %5 <- %3, %7
-    Load %9 <- string("source alive after passing and returning")
-    Call %4 <- string("std.assert.assert") [%5, %9] (def=d1)
-    Load %5 <- int(1)
-    Load %3 <- int(2)
-    Call %4 <- string("Point") [%5, %3] (def=d0)
-    Load %3 <- int(3)
-    Load %7 <- int(4)
-    Call %5 <- string("Point") [%3, %7] (def=d0)
-    Load %7 <- %4
-    Load %8 <- %5
-    Call %3 <- string("Segment") [%7, %8] (def=d4)
-    Load %7 <- %3
-    Load %10 <- %7
-    LoadField %11 <- %10.0
-    LoadField %12 <- %11.0
-    Load %13 <- int(1)
-    Eq %9 <- %12, %13
-    Load %14 <- string("nested struct field copied")
-    Call %8 <- string("std.assert.assert") [%9, %14] (def=d1)
-    Load %10 <- %3
-    LoadField %11 <- %10.1
-    LoadField %12 <- %11.1
-    Load %13 <- int(4)
-    Eq %9 <- %12, %13
-    Load %14 <- string("nested struct source alive")
-    Call %8 <- string("std.assert.assert") [%9, %14] (def=d1)
-    Load %11 <- %4
-    LoadField %12 <- %11.1
-    Load %13 <- int(2)
-    Eq %9 <- %12, %13
-    Load %10 <- string("nested struct argument not consumed")
-    Call %8 <- string("std.assert.assert") [%9, %10] (def=d1)
-    Load %9 <- string("hi")
-    Load %12 <- int(7)
-    Call %8 <- string("Named") [%9, %12] (def=d5)
+    values_total=109
+    value v0: Int(64) @block0
+    value v1: Int(64) @block0
+    value v2: TypeRef("?") @block0
+    value v3: Bool @block0
+    value v4: TypeRef("?") @block0
+    value v5: Int(64) @block0
+    value v6: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
+    value v7: Generic { name: "String", args: [] } @block0
+    value v8: TypeRef("?") @block0
+    value v9: Bool @block0
+    value v10: TypeRef("?") @block0
+    value v11: Int(64) @block0
+    value v12: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
+    value v13: Generic { name: "String", args: [] } @block0
+    value v14: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
+    value v15: TypeRef("?") @block0
+    value v16: Bool @block0
+    value v17: Int(64) @block0
+    value v18: Int(64) @block0
+    value v19: Generic { name: "String", args: [] } @block0
+    value v20: TypeRef("?") @block0
+    value v21: Bool @block0
+    value v22: TypeRef("?") @block0
+    value v23: Int(64) @block0
+    value v24: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
+    value v25: Generic { name: "String", args: [] } @block0
+    value v26: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
+    value v27: TypeRef("?") @block0
+    value v28: Bool @block0
+    value v29: TypeRef("?") @block0
+    value v30: Int(64) @block0
+    value v31: TypeRef("Point") @block0
+    value v32: Generic { name: "String", args: [] } @block0
+    value v33: TypeRef("?") @block0
+    value v34: Bool @block0
+    value v35: TypeRef("?") @block0
+    value v36: Int(64) @block0
+    value v37: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
+    value v38: Generic { name: "String", args: [] } @block0
+    value v39: Int(64) @block0
+    value v40: Int(64) @block0
+    value v41: Int(64) @block0
+    value v42: Int(64) @block0
+    value v43: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
+    value v44: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
+    value v45: TypeRef("?") @block0
+    value v46: Bool @block0
+    value v47: TypeRef("?") @block0
+    value v48: Int(64) @block0
+    value v49: TypeRef("?") @block0
+    value v50: Struct(StructType { name: "Segment", fields: [("from", TypeRef("Point")), ("to", TypeRef("Point"))], methods: {}, interfaces: [] }) @block0
+    value v51: Generic { name: "String", args: [] } @block0
+    value v52: TypeRef("?") @block0
+    value v53: Bool @block0
+    value v54: TypeRef("?") @block0
+    value v55: Int(64) @block0
+    value v56: TypeRef("?") @block0
+    value v57: Struct(StructType { name: "Segment", fields: [("from", TypeRef("Point")), ("to", TypeRef("Point"))], methods: {}, interfaces: [] }) @block0
+    value v58: Generic { name: "String", args: [] } @block0
+    value v59: TypeRef("?") @block0
+    value v60: Bool @block0
+    value v61: TypeRef("?") @block0
+    value v62: Int(64) @block0
+    value v63: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
+    value v64: Generic { name: "String", args: [] } @block0
+    value v65: Generic { name: "String", args: [] } @block0
+    value v66: Int(64) @block0
+    value v67: TypeRef("?") @block0
+    value v68: Bool @block0
+    value v69: TypeRef("?") @block0
+    value v70: Generic { name: "String", args: [] } @block0
+    value v71: Struct(StructType { name: "Named", fields: [("name", Generic { name: "String", args: [] }), ("id", Int(64))], methods: {}, interfaces: [] }) @block0
+    value v72: Generic { name: "String", args: [] } @block0
+    value v73: TypeRef("?") @block0
+    value v74: Bool @block0
+    value v75: TypeRef("?") @block0
+    value v76: Int(64) @block0
+    value v77: Struct(StructType { name: "Named", fields: [("name", Generic { name: "String", args: [] }), ("id", Int(64))], methods: {}, interfaces: [] }) @block0
+    value v78: Generic { name: "String", args: [] } @block0
+    value v79: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
+    value v80: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
+    value v81: TypeRef("?") @block0
+    value v82: Bool @block0
+    value v83: TypeRef("?") @block0
+    value v84: Int(64) @block0
+    value v85: TypeRef("?") @block0
+    value v86: Struct(StructType { name: "Window", fields: [("view", Ref { mutable: false, inner: TypeRef("Point") })], methods: {}, interfaces: [] }) @block0
+    value v87: Generic { name: "String", args: [] } @block0
+    value v88: TypeRef("?") @block0
+    value v89: Bool @block0
+    value v90: TypeRef("?") @block0
+    value v91: Int(64) @block0
+    value v92: TypeRef("?") @block0
+    value v93: Struct(StructType { name: "Window", fields: [("view", Ref { mutable: false, inner: TypeRef("Point") })], methods: {}, interfaces: [] }) @block0
+    value v94: Generic { name: "String", args: [] } @block0
+    value v95: Int(64) @block0
+    value v96: Int(64) @block0
+    value v97: TypeRef("?") @block0
+    value v98: Bool @block0
+    value v99: TypeRef("?") @block0
+    value v100: Int(64) @block0
+    value v101: Generic { name: "Tuple", args: [Int(64), Int(64)] } @block0
+    value v102: Generic { name: "String", args: [] } @block0
+    value v103: TypeRef("?") @block0
+    value v104: Bool @block0
+    value v105: TypeRef("?") @block0
+    value v106: Int(64) @block0
+    value v107: Generic { name: "Tuple", args: [Int(64), Int(64)] } @block0
+    value v108: Generic { name: "String", args: [] } @block0
+    Load v0 <- int(1)
+    Load v1 <- int(2)
+    Call %0 <- string("Point") [v0, v1] (def=d0)
+    Load %1 <- %0
+    Load v6 <- %0
+    LoadField v4 <- v6.0
+    Load v5 <- int(1)
+    Eq v3 <- v4, v5
+    Load v7 <- string("struct assign is Dup: source still readable")
+    Call v2 <- string("std.assert.assert") [v3, v7] (def=d1)
+    Load v12 <- %1
+    LoadField v10 <- v12.1
+    Load v11 <- int(2)
+    Eq v9 <- v10, v11
+    Load v13 <- string("copied struct holds the value")
+    Call v8 <- string("std.assert.assert") [v9, v13] (def=d1)
+    Load v14 <- %0
+    Call %2 <- string("sum_of") [v14] (def=d2)
+    Load v17 <- %2
+    Load v18 <- int(3)
+    Eq v16 <- v17, v18
+    Load v19 <- string("by-value param received the struct")
+    Call v15 <- string("std.assert.assert") [v16, v19] (def=d1)
+    Load v24 <- %0
+    LoadField v22 <- v24.1
+    Load v23 <- int(2)
+    Eq v21 <- v22, v23
+    Load v25 <- string("source alive after by-value param")
+    Call v20 <- string("std.assert.assert") [v21, v25] (def=d1)
+    Load v26 <- %0
+    Call %3 <- string("passthrough") [v26] (def=d3)
+    Load v31 <- %3
+    LoadField v29 <- v31.0
+    Load v30 <- int(1)
+    Eq v28 <- v29, v30
+    Load v32 <- string("returned struct holds the value")
+    Call v27 <- string("std.assert.assert") [v28, v32] (def=d1)
+    Load v37 <- %0
+    LoadField v35 <- v37.0
+    Load v36 <- int(1)
+    Eq v34 <- v35, v36
+    Load v38 <- string("source alive after passing and returning")
+    Call v33 <- string("std.assert.assert") [v34, v38] (def=d1)
+    Load v39 <- int(1)
+    Load v40 <- int(2)
+    Call %4 <- string("Point") [v39, v40] (def=d0)
+    Load v41 <- int(3)
+    Load v42 <- int(4)
+    Call %5 <- string("Point") [v41, v42] (def=d0)
+    Load v43 <- %4
+    Load v44 <- %5
+    Call %6 <- string("Segment") [v43, v44] (def=d4)
+    Load %7 <- %6
+    Load v50 <- %7
+    LoadField v49 <- v50.0
+    LoadField v47 <- v49.0
+    Load v48 <- int(1)
+    Eq v46 <- v47, v48
+    Load v51 <- string("nested struct field copied")
+    Call v45 <- string("std.assert.assert") [v46, v51] (def=d1)
+    Load v57 <- %6
+    LoadField v56 <- v57.1
+    LoadField v54 <- v56.1
+    Load v55 <- int(4)
+    Eq v53 <- v54, v55
+    Load v58 <- string("nested struct source alive")
+    Call v52 <- string("std.assert.assert") [v53, v58] (def=d1)
+    Load v63 <- %4
+    LoadField v61 <- v63.1
+    Load v62 <- int(2)
+    Eq v60 <- v61, v62
+    Load v64 <- string("nested struct argument not consumed")
+    Call v59 <- string("std.assert.assert") [v60, v64] (def=d1)
+    Load v65 <- string("hi")
+    Load v66 <- int(7)
+    Call %8 <- string("Named") [v65, v66] (def=d5)
     Load %9 <- %8
-    Load %14 <- %9
-    LoadField %11 <- %14.0
-    Load %10 <- string("hi")
-    Eq %13 <- %11, %10
-    Load %15 <- string("String field struct copied")
-    Call %12 <- string("std.assert.assert") [%13, %15] (def=d1)
-    Load %14 <- %8
-    LoadField %11 <- %14.1
-    Load %10 <- int(7)
-    Eq %13 <- %11, %10
-    Load %15 <- string("String field source alive")
-    Call %12 <- string("std.assert.assert") [%13, %15] (def=d1)
-    Load %11 <- %2
-    Move %13 <- %11
-    Call %12 <- string("Window") [%13] (def=d6)
-    Drop %2
+    Load v71 <- %9
+    LoadField v69 <- v71.0
+    Load v70 <- string("hi")
+    Eq v68 <- v69, v70
+    Load v72 <- string("String field struct copied")
+    Call v67 <- string("std.assert.assert") [v68, v72] (def=d1)
+    Load v77 <- %8
+    LoadField v75 <- v77.1
+    Load v76 <- int(7)
+    Eq v74 <- v75, v76
+    Load v78 <- string("String field source alive")
+    Call v73 <- string("std.assert.assert") [v74, v78] (def=d1)
+    Load v80 <- %0
+    Move v79 <- v80
+    Call %10 <- string("Window") [v79] (def=d6)
+    Drop %0
+    Load %11 <- %10
+    Load v86 <- %11
+    LoadField v85 <- v86.0
+    LoadField v83 <- v85.0
+    Load v84 <- int(1)
+    Eq v82 <- v83, v84
+    Load v87 <- string("token field struct copied")
+    Call v81 <- string("std.assert.assert") [v82, v87] (def=d1)
+    Load v93 <- %10
+    LoadField v92 <- v93.0
+    LoadField v90 <- v92.1
+    Load v91 <- int(2)
+    Eq v89 <- v90, v91
+    Load v94 <- string("token field source alive")
+    Call v88 <- string("std.assert.assert") [v89, v94] (def=d1)
+    Load v95 <- int(1)
+    Load v96 <- int(2)
+    NewTuple %12 <- [v95, v96]
     Load %13 <- %12
-    Load %16 <- %13
-    LoadField %17 <- %16.0
-    LoadField %14 <- %17.0
-    Load %15 <- int(1)
-    Eq %10 <- %14, %15
-    Load %18 <- string("token field struct copied")
-    Call %11 <- string("std.assert.assert") [%10, %18] (def=d1)
-    Load %16 <- %12
-    LoadField %17 <- %16.0
-    LoadField %14 <- %17.1
-    Load %15 <- int(2)
-    Eq %10 <- %14, %15
-    Load %18 <- string("token field source alive")
-    Call %11 <- string("std.assert.assert") [%10, %18] (def=d1)
-    Load %10 <- int(1)
-    Load %14 <- int(2)
-    NewTuple %11 <- [%10, %14]
-    Load %10 <- %11
-    Load %18 <- %10
-    LoadField %17 <- %18.0
-    Load %16 <- int(1)
-    Eq %15 <- %17, %16
-    Load %19 <- string("tuple of copyables copied")
-    Call %14 <- string("std.assert.assert") [%15, %19] (def=d1)
-    Load %18 <- %11
-    LoadField %17 <- %18.1
-    Load %16 <- int(2)
-    Eq %15 <- %17, %16
-    Load %19 <- string("tuple source alive")
-    Call %14 <- string("std.assert.assert") [%15, %19] (def=d1)
+    Load v101 <- %13
+    LoadField v99 <- v101.0
+    Load v100 <- int(1)
+    Eq v98 <- v99, v100
+    Load v102 <- string("tuple of copyables copied")
+    Call v97 <- string("std.assert.assert") [v98, v102] (def=d1)
+    Load v107 <- %12
+    LoadField v105 <- v107.1
+    Load v106 <- int(2)
+    Eq v104 <- v105, v106
+    Load v108 <- string("tuple source alive")
+    Call v103 <- string("std.assert.assert") [v104, v108] (def=d1)
     Drop %4
     Drop %5
     Drop %8
     Drop %9
-    Drop %2
     Drop %0
-    Drop %6
     Drop %1
     Drop %3
+    Drop %2
+    Drop %6
     Drop %7
-    Drop %11
-    Drop %10
     Drop %12
     Drop %13
-    Ret %14
+    Drop %10
+    Drop %11
+    Ret v103
   init (locals=0)
     Call %0 <- string("main") [] (def=d7)

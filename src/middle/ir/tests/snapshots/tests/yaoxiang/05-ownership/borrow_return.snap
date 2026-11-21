@@ -3,66 +3,112 @@ module
     type_decl [x: Float(64) ; y: Float(64)]
   fn Point.get_x(Ref { mutable: false, inner: TypeRef("Point") }) -> Generic { name: "Tuple", args: [Ref { mutable: false, inner: Float(64) }, Ref { mutable: false, inner: TypeRef("Point") }] }
     locals_total=6
-    Load %0 <- %1
-    LoadField %2 <- %0.0
-    Move %3 <- %2
-    Load %4 <- %1
-    NewTuple %5 <- [%3, %4]
-    Ret %5
-    Ret %5
+    values_total=5
+    value v0: TypeRef("?") @block0
+    value v1: TypeRef("?") @block0
+    value v2: TypeRef("?") @block0
+    value v3: Ref { mutable: true, inner: TypeRef("Point") } @block0
+    value v4: Ref { mutable: true, inner: TypeRef("Point") } @block0
+    Load v3 <- %0
+    LoadField v2 <- v3.0
+    Move v1 <- v2
+    Load v4 <- %0
+    NewTuple v0 <- [v1, v4]
+    Ret v0
+    Ret v0
   fn Point.shift(Ref { mutable: true, inner: TypeRef("Point") }, Float(64), Float(64)) -> Void
     locals_total=14
-    Load %0 <- %1
-    Load %2 <- %1
-    LoadField %3 <- %2.0
-    Load %4 <- %5
-    Add %6 <- %3, %4
-    StoreField %0.0 <- %6 (type=None, name=Some("x"))
-    Load %7 <- %1
-    Load %8 <- %1
-    LoadField %9 <- %8.1
-    Load %10 <- %11
-    Add %12 <- %9, %10
-    StoreField %7.1 <- %12 (type=None, name=Some("y"))
+    values_total=11
+    value v0: Ref { mutable: true, inner: TypeRef("Point") } @block0
+    value v1: TypeRef("?") @block0
+    value v2: TypeRef("?") @block0
+    value v3: Float(64) @block0
+    value v4: Ref { mutable: true, inner: TypeRef("Point") } @block0
+    value v5: TypeRef("?") @block0
+    value v6: Ref { mutable: true, inner: TypeRef("Point") } @block0
+    value v7: TypeRef("?") @block0
+    value v8: TypeRef("?") @block0
+    value v9: Float(64) @block0
+    value v10: Ref { mutable: true, inner: TypeRef("Point") } @block0
+    Load v0 <- %0
+    Load v4 <- %0
+    LoadField v2 <- v4.0
+    Load v3 <- %1
+    Add v1 <- v2, v3
+    StoreField v0.0 <- v1 (type=None, name=Some("x"))
+    Load v6 <- %0
+    Load v10 <- %0
+    LoadField v8 <- v10.1
+    Load v9 <- %2
+    Add v7 <- v8, v9
+    StoreField v6.1 <- v7 (type=None, name=Some("y"))
     Ret
   fn main() -> Void
     slot[0] p : Int(64) @depth1
     slot[3] px_ref : Int(64) @depth1
     slot[5] p : Int(64) @depth1
     locals_total=12
-    Load %0 <- float(4607182418800017408)
-    Load %1 <- float(4611686018427387904)
-    Call %2 <- string("Point") [%0, %1] (def=d0)
-    Load %1 <- %2
-    Call %0 <- string("Point.get_x") [%1] (def=d1)
-    Load %3 <- int(0)
-    LoadIndex %4 <- %0[%3]
-    Load %5 <- int(1)
-    LoadIndex %6 <- %0[%5]
-    Load %7 <- %4
-    Load %8 <- float(4607182418800017408)
-    Eq %9 <- %7, %8
-    Load %10 <- string("子令牌活跃")
-    Call %5 <- string("std.assert.assert") [%9, %10] (def=d2)
-    Load %10 <- %6
-    LoadField %7 <- %10.1
-    Load %8 <- float(4611686018427387904)
-    Eq %9 <- %7, %8
-    Load %11 <- string("父令牌返回后活跃")
-    Call %5 <- string("std.assert.assert") [%9, %11] (def=d2)
-    Load %9 <- %6
-    Load %7 <- float(4602678819172646912)
-    Load %8 <- float(4602678819172646912)
-    Call %5 <- string("Point.shift") [%9, %7, %8] (def=d3)
-    Drop %6
-    Load %10 <- %6
-    LoadField %7 <- %10.0
-    Load %8 <- float(4609434218613702656)
-    Eq %9 <- %7, %8
-    Load %11 <- string("&mut 复用写回")
-    Call %5 <- string("std.assert.assert") [%9, %11] (def=d2)
-    Drop %6
-    Ret %5
+    values_total=27
+    value v0: Float(64) @block0
+    value v1: Float(64) @block0
+    value v2: TypeRef("?") @block0
+    value v3: Ref { mutable: false, inner: TypeRef("Point") } @block0
+    value v4: Int(64) @block0
+    value v5: Int(64) @block0
+    value v6: TypeRef("?") @block0
+    value v7: Bool @block0
+    value v8: Ref { mutable: false, inner: Float(64) } @block0
+    value v9: Float(64) @block0
+    value v10: Generic { name: "String", args: [] } @block0
+    value v11: TypeRef("?") @block0
+    value v12: Bool @block0
+    value v13: TypeRef("?") @block0
+    value v14: Float(64) @block0
+    value v15: Ref { mutable: false, inner: TypeRef("Point") } @block0
+    value v16: Generic { name: "String", args: [] } @block0
+    value v17: TypeRef("?") @block0
+    value v18: Ref { mutable: false, inner: TypeRef("Point") } @block0
+    value v19: Float(64) @block0
+    value v20: Float(64) @block0
+    value v21: TypeRef("?") @block0
+    value v22: Bool @block0
+    value v23: TypeRef("?") @block0
+    value v24: Float(64) @block0
+    value v25: Ref { mutable: false, inner: TypeRef("Point") } @block0
+    value v26: Generic { name: "String", args: [] } @block0
+    Load v0 <- float(4607182418800017408)
+    Load v1 <- float(4611686018427387904)
+    Call %0 <- string("Point") [v0, v1] (def=d0)
+    Load v3 <- %0
+    Call v2 <- string("Point.get_x") [v3] (def=d1)
+    Load v4 <- int(0)
+    LoadIndex %1 <- v2[v4]
+    Load v5 <- int(1)
+    LoadIndex %2 <- v2[v5]
+    Load v8 <- %1
+    Load v9 <- float(4607182418800017408)
+    Eq v7 <- v8, v9
+    Load v10 <- string("子令牌活跃")
+    Call v6 <- string("std.assert.assert") [v7, v10] (def=d2)
+    Load v15 <- %2
+    LoadField v13 <- v15.1
+    Load v14 <- float(4611686018427387904)
+    Eq v12 <- v13, v14
+    Load v16 <- string("父令牌返回后活跃")
+    Call v11 <- string("std.assert.assert") [v12, v16] (def=d2)
+    Load v18 <- %2
+    Load v19 <- float(4602678819172646912)
+    Load v20 <- float(4602678819172646912)
+    Call v17 <- string("Point.shift") [v18, v19, v20] (def=d3)
+    Drop %2
+    Load v25 <- %2
+    LoadField v23 <- v25.0
+    Load v24 <- float(4609434218613702656)
+    Eq v22 <- v23, v24
+    Load v26 <- string("&mut 复用写回")
+    Call v21 <- string("std.assert.assert") [v22, v26] (def=d2)
+    Drop %2
+    Ret v21
   init (locals=3)
     islot[0] self : Int(64) @depth1
     islot[1] dx : Int(64) @depth1

@@ -2,19 +2,31 @@ module
   fn main() -> Void
     slot[0] tid : Int(64) @depth1
     locals_total=7
-    Load %0 <- int(0)
-    Call %1 <- string("std.concurrent.sleep") [%0] (def=d0)
-    Load %0 <- int(1)
-    Call %1 <- string("std.concurrent.sleep") [%0] (def=d0)
-    Call %1 <- string("std.concurrent.yield_now") [] (def=d1)
-    Call %1 <- string("std.concurrent.thread_id") [] (def=d2)
-    Load %2 <- %1
-    Call %3 <- string("std.string.len") [%2] (def=d3)
-    Load %4 <- int(0)
-    Gt %5 <- %3, %4
-    Load %6 <- string("thread_id should be non-empty")
-    Call %0 <- string("std.assert.assert") [%5, %6] (def=d4)
-    Drop %1
-    Ret %0
+    values_total=11
+    value v0: TypeRef("?") @block0
+    value v1: Int(64) @block0
+    value v2: TypeRef("?") @block0
+    value v3: Int(64) @block0
+    value v4: TypeRef("?") @block0
+    value v5: TypeRef("?") @block0
+    value v6: Bool @block0
+    value v7: TypeRef("?") @block0
+    value v8: Int(64) @block0
+    value v9: Generic { name: "String", args: [] } @block0
+    value v10: Generic { name: "String", args: [] } @block0
+    Load v1 <- int(0)
+    Call v0 <- string("std.concurrent.sleep") [v1] (def=d0)
+    Load v3 <- int(1)
+    Call v2 <- string("std.concurrent.sleep") [v3] (def=d0)
+    Call v4 <- string("std.concurrent.yield_now") [] (def=d1)
+    Call %0 <- string("std.concurrent.thread_id") [] (def=d2)
+    Load v9 <- %0
+    Call v7 <- string("std.string.len") [v9] (def=d3)
+    Load v8 <- int(0)
+    Gt v6 <- v7, v8
+    Load v10 <- string("thread_id should be non-empty")
+    Call v5 <- string("std.assert.assert") [v6, v10] (def=d4)
+    Drop %0
+    Ret v5
   init (locals=0)
     Call %0 <- string("main") [] (def=d5)

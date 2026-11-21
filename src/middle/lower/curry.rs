@@ -185,7 +185,7 @@ impl AstToIrGenerator {
         self.temp_high_water = env_count + param_count;
         let closure_dst = self.next_temp_reg();
         instructions.push(Instruction::MakeClosure {
-            dst: Operand::Local(closure_dst),
+            dst: closure_dst.clone(),
             func: next_func_name.to_string(),
             env: full_env,
             def: None,
@@ -194,7 +194,7 @@ impl AstToIrGenerator {
 
         // Ret(closure)
         instructions.push(Instruction::Ret {
-            value: Some(Operand::Local(closure_dst)),
+            value: Some(closure_dst.clone()),
             span: self.cur_span,
         });
 
@@ -212,6 +212,7 @@ impl AstToIrGenerator {
         let return_type: MonoType = layer.return_type.clone().into();
         // 槽位表 + 寄存器预算（E3014）单点
         let locals_types: Vec<LocalSlot> = self.take_body_locals()?;
+        let (values, value_slots) = self.take_body_values(&instructions, &param_types);
 
         Ok(FunctionIR {
             def: None, // 由 generate_module_ir 尾部 assign_defs 填充
@@ -227,7 +228,8 @@ impl AstToIrGenerator {
                 }],
                 entry: 0,
                 locals: locals_types,
-                values: Vec::new(),
+                values,
+                value_slots,
             },
         })
     }
@@ -284,7 +286,12 @@ impl AstToIrGenerator {
             frame.set_cur_span(stmt.span);
             if Some(i) == last_idx {
                 let result_reg = frame.next_temp_reg();
-                if frame.generate_tail_stmt_ir(stmt, result_reg, &mut instructions, constants)? {
+                if frame.generate_tail_stmt_ir(
+                    stmt,
+                    result_reg.clone(),
+                    &mut instructions,
+                    constants,
+                )? {
                     // 尾语句路径（RFC-039 D20 逐案核实项）：本条语句经
                     // `generate_tail_stmt_ir` 提前返回，**必须**在同款语句边界上
                     // 消费它的释放条目——漏这一处，尾语句的 Drop 就静默丢失
@@ -292,7 +299,7 @@ impl AstToIrGenerator {
                     // 取值已完成（值在 result_reg），故 Drop 排在 Ret 之前。
                     frame.emit_release_drops(stmt.plan_id, &mut instructions);
                     instructions.push(Instruction::Ret {
-                        value: Some(Operand::Local(result_reg)),
+                        value: Some(result_reg.clone()),
                         span: frame.cur_span,
                     });
                     frame.set_cur_span(stmt.span);
@@ -324,6 +331,7 @@ impl AstToIrGenerator {
             .collect();
         // 槽位表 + 寄存器预算（E3014）单点
         let locals_types: Vec<LocalSlot> = frame.take_body_locals()?;
+        let (values, value_slots) = frame.take_body_values(&instructions, &param_types);
 
         Ok(FunctionIR {
             def: None, // 由 generate_module_ir 尾部 assign_defs 填充
@@ -339,7 +347,8 @@ impl AstToIrGenerator {
                 }],
                 entry: 0,
                 locals: locals_types,
-                values: Vec::new(),
+                values,
+                value_slots,
             },
         })
     }
@@ -405,6 +414,10 @@ impl AstToIrGenerator {
             frame.next_temp = 0;
             frame.temp_high_water = 0;
             frame.temp_floor = 0;
+            // 每层是独立 FunctionIR：值表与 ValueId 也按层重置（7b.2）。
+            frame.next_value = 0;
+            frame.cur_values.clear();
+            frame.cur_value_slots.clear();
 
             let func = if is_innermost {
                 frame.generate_curry_innermost_func(

@@ -2,20 +2,29 @@ module
   fn g(Int(64)) -> Int(64)
     slot[0] N : Int(64) @depth1
     locals_total=2
+    values_total=1
+    value v0: Int(64) @block0
     Load %0 <- arg%0
-    Load %1 <- int(42)
-    Ret %1
+    Load v0 <- int(42)
+    Ret v0
   fn main() -> Void
     slot[0] a : Int(64) @depth1
     locals_total=6
-    Load %0 <- int(99)
-    Call %1 <- string("g") [%0] (def=d0)
-    Load %2 <- %1
-    Load %3 <- int(42)
-    Eq %4 <- %2, %3
-    Load %5 <- string("g(99) should return 42")
-    Call %0 <- string("std.assert.assert") [%4, %5] (def=d1)
-    Drop %1
-    Ret %0
+    values_total=6
+    value v0: Int(64) @block0
+    value v1: TypeRef("?") @block0
+    value v2: Bool @block0
+    value v3: Int(64) @block0
+    value v4: Int(64) @block0
+    value v5: Generic { name: "String", args: [] } @block0
+    Load v0 <- int(99)
+    Call %0 <- string("g") [v0] (def=d0)
+    Load v3 <- %0
+    Load v4 <- int(42)
+    Eq v2 <- v3, v4
+    Load v5 <- string("g(99) should return 42")
+    Call v1 <- string("std.assert.assert") [v2, v5] (def=d1)
+    Drop %0
+    Ret v1
   init (locals=0)
     Call %0 <- string("main") [] (def=d2)

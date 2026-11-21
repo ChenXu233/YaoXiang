@@ -3,35 +3,57 @@ module
     type_decl [x: Int(64) ; y: Int(64)]
   fn Point.shift(Ref { mutable: true, inner: TypeRef("Point") }, Int(64), Int(64)) -> Void
     locals_total=14
-    Load %0 <- %1
-    Load %2 <- %1
-    LoadField %3 <- %2.0
-    Load %4 <- %5
-    Add %6 <- %3, %4
-    StoreField %0.0 <- %6 (type=None, name=Some("x"))
-    Load %7 <- %1
-    Load %8 <- %1
-    LoadField %9 <- %8.1
-    Load %10 <- %11
-    Add %12 <- %9, %10
-    StoreField %7.1 <- %12 (type=None, name=Some("y"))
+    values_total=11
+    value v0: Ref { mutable: true, inner: TypeRef("Point") } @block0
+    value v1: TypeRef("?") @block0
+    value v2: TypeRef("?") @block0
+    value v3: Int(64) @block0
+    value v4: Ref { mutable: true, inner: TypeRef("Point") } @block0
+    value v5: TypeRef("?") @block0
+    value v6: Ref { mutable: true, inner: TypeRef("Point") } @block0
+    value v7: TypeRef("?") @block0
+    value v8: TypeRef("?") @block0
+    value v9: Int(64) @block0
+    value v10: Ref { mutable: true, inner: TypeRef("Point") } @block0
+    Load v0 <- %0
+    Load v4 <- %0
+    LoadField v2 <- v4.0
+    Load v3 <- %1
+    Add v1 <- v2, v3
+    StoreField v0.0 <- v1 (type=None, name=Some("x"))
+    Load v6 <- %0
+    Load v10 <- %0
+    LoadField v8 <- v10.1
+    Load v9 <- %2
+    Add v7 <- v8, v9
+    StoreField v6.1 <- v7 (type=None, name=Some("y"))
     Ret
   fn main() -> Void
     slot[0] p : Int(64) @depth1
     locals_total=5
-    Load %0 <- int(1)
-    Load %1 <- int(2)
-    Call %2 <- string("Point") [%0, %1] (def=d0)
-    Load %1 <- %2
-    Load %3 <- int(3)
-    Load %4 <- int(4)
-    Call %0 <- string("Point.shift") [%1, %3, %4] (def=d1)
-    Drop %2
-    Load %1 <- bool(true)
-    Load %3 <- string("shift completed — &mut T mutation works")
-    Call %0 <- string("std.assert.assert") [%1, %3] (def=d2)
-    Drop %2
-    Ret %0
+    values_total=9
+    value v0: Int(64) @block0
+    value v1: Int(64) @block0
+    value v2: TypeRef("?") @block0
+    value v3: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
+    value v4: Int(64) @block0
+    value v5: Int(64) @block0
+    value v6: TypeRef("?") @block0
+    value v7: Bool @block0
+    value v8: Generic { name: "String", args: [] } @block0
+    Load v0 <- int(1)
+    Load v1 <- int(2)
+    Call %0 <- string("Point") [v0, v1] (def=d0)
+    Load v3 <- %0
+    Load v4 <- int(3)
+    Load v5 <- int(4)
+    Call v2 <- string("Point.shift") [v3, v4, v5] (def=d1)
+    Drop %0
+    Load v7 <- bool(true)
+    Load v8 <- string("shift completed — &mut T mutation works")
+    Call v6 <- string("std.assert.assert") [v7, v8] (def=d2)
+    Drop %0
+    Ret v6
   init (locals=3)
     islot[0] self : Int(64) @depth1
     islot[1] dx : Int(64) @depth1

@@ -6,96 +6,138 @@ module
     slot[3] r4 : Int(64) @depth1
     slot[5] r5 : Int(64) @depth1
     locals_total=14
+    values_total=41
+    value v0: Int(64) @block0
+    value v1: Int(64) @block0
+    value v2: Bool @block0
+    value v3: Generic { name: "String", args: [] } @block0
+    value v4: Int(64) @block0
+    value v5: Bool @block0
+    value v6: Generic { name: "String", args: [] } @block0
+    value v7: Generic { name: "String", args: [] } @block0
+    value v8: Int(64) @block0
+    value v9: Int(64) @block0
+    value v10: Bool @block0
+    value v11: Generic { name: "String", args: [] } @block0
+    value v12: Int(64) @block0
+    value v13: Bool @block0
+    value v14: Generic { name: "String", args: [] } @block0
+    value v15: Generic { name: "String", args: [] } @block0
+    value v16: Int(64) @block0
+    value v17: Int(64) @block0
+    value v18: Bool @block0
+    value v19: Generic { name: "String", args: [] } @block0
+    value v20: Int(64) @block0
+    value v21: Bool @block0
+    value v22: Generic { name: "String", args: [] } @block0
+    value v23: Generic { name: "String", args: [] } @block0
+    value v24: Int(64) @block0
+    value v25: Int(64) @block0
+    value v26: Bool @block0
+    value v27: Int(64) @block0
+    value v28: Int(64) @block0
+    value v29: Bool @block0
+    value v30: Int(64) @block0
+    value v31: Int(64) @block0
+    value v32: TypeRef("?") @block0
+    value v33: Generic { name: "String", args: [] } @block0
+    value v34: Generic { name: "String", args: [] } @block0
+    value v35: Bool @block0
+    value v36: Generic { name: "String", args: [] } @block0
+    value v37: Generic { name: "String", args: [] } @block0
+    value v38: Bool @block0
+    value v39: Generic { name: "String", args: [] } @block0
+    value v40: Generic { name: "String", args: [] } @block0
     Load %0 <- void
-    Load %1 <- int(1)
-    Load %2 <- int(1)
-    Eq %3 <- %1, %2
-    JmpIfNot %3 -> instr(8)
-    Load %4 <- string("one")
-    Move %0 <- %4
+    Load v0 <- int(1)
+    Load v1 <- int(1)
+    Eq v2 <- v0, v1
+    JmpIfNot v2 -> instr(8)
+    Load v3 <- string("one")
+    Move %0 <- v3
     Jmp -> instr(17)
-    Load %5 <- int(2)
-    Eq %6 <- %1, %5
-    JmpIfNot %6 -> instr(14)
-    Load %7 <- string("two")
-    Move %0 <- %7
+    Load v4 <- int(2)
+    Eq v5 <- v0, v4
+    JmpIfNot v5 -> instr(14)
+    Load v6 <- string("two")
+    Move %0 <- v6
     Jmp -> instr(17)
-    Load %8 <- string("other")
-    Move %0 <- %8
+    Load v7 <- string("other")
+    Move %0 <- v7
     Jmp -> instr(17)
     Load %1 <- void
-    Load %2 <- int(2)
-    Load %3 <- int(1)
-    Eq %4 <- %2, %3
-    JmpIfNot %4 -> instr(25)
-    Load %5 <- string("one")
-    Move %1 <- %5
+    Load v8 <- int(2)
+    Load v9 <- int(1)
+    Eq v10 <- v8, v9
+    JmpIfNot v10 -> instr(25)
+    Load v11 <- string("one")
+    Move %1 <- v11
     Jmp -> instr(34)
-    Load %6 <- int(2)
-    Eq %7 <- %2, %6
-    JmpIfNot %7 -> instr(31)
-    Load %8 <- string("two")
-    Move %1 <- %8
+    Load v12 <- int(2)
+    Eq v13 <- v8, v12
+    JmpIfNot v13 -> instr(31)
+    Load v14 <- string("two")
+    Move %1 <- v14
     Jmp -> instr(34)
-    Load %9 <- string("other")
-    Move %1 <- %9
+    Load v15 <- string("other")
+    Move %1 <- v15
     Jmp -> instr(34)
     Load %2 <- void
-    Load %3 <- int(99)
-    Load %4 <- int(1)
-    Eq %5 <- %3, %4
-    JmpIfNot %5 -> instr(42)
-    Load %6 <- string("one")
-    Move %2 <- %6
+    Load v16 <- int(99)
+    Load v17 <- int(1)
+    Eq v18 <- v16, v17
+    JmpIfNot v18 -> instr(42)
+    Load v19 <- string("one")
+    Move %2 <- v19
     Jmp -> instr(51)
-    Load %7 <- int(2)
-    Eq %8 <- %3, %7
-    JmpIfNot %8 -> instr(48)
-    Load %9 <- string("two")
-    Move %2 <- %9
+    Load v20 <- int(2)
+    Eq v21 <- v16, v20
+    JmpIfNot v21 -> instr(48)
+    Load v22 <- string("two")
+    Move %2 <- v22
     Jmp -> instr(51)
-    Load %10 <- string("other")
-    Move %2 <- %10
+    Load v23 <- string("other")
+    Move %2 <- v23
     Jmp -> instr(51)
     Load %3 <- void
-    Load %4 <- int(42)
-    Load %5 <- int(10)
-    Eq %6 <- %4, %5
-    JmpIfNot %6 -> instr(59)
-    Load %7 <- int(100)
-    Move %3 <- %7
+    Load v24 <- int(42)
+    Load v25 <- int(10)
+    Eq v26 <- v24, v25
+    JmpIfNot v26 -> instr(59)
+    Load v27 <- int(100)
+    Move %3 <- v27
     Jmp -> instr(68)
-    Load %8 <- int(42)
-    Eq %9 <- %4, %8
-    JmpIfNot %9 -> instr(65)
-    Load %10 <- int(420)
-    Move %3 <- %10
+    Load v28 <- int(42)
+    Eq v29 <- v24, v28
+    JmpIfNot v29 -> instr(65)
+    Load v30 <- int(420)
+    Move %3 <- v30
     Jmp -> instr(68)
-    Load %11 <- int(0)
-    Move %3 <- %11
+    Load v31 <- int(0)
+    Move %3 <- v31
     Jmp -> instr(68)
-    Load %5 <- void
-    Load %6 <- string("hello")
-    Load %7 <- string("world")
-    Eq %8 <- %6, %7
-    JmpIfNot %8 -> instr(76)
-    Load %9 <- string("a")
-    Move %5 <- %9
+    Load %4 <- void
+    Load v33 <- string("hello")
+    Load v34 <- string("world")
+    Eq v35 <- v33, v34
+    JmpIfNot v35 -> instr(76)
+    Load v36 <- string("a")
+    Move %4 <- v36
     Jmp -> instr(85)
-    Load %10 <- string("hello")
-    Eq %11 <- %6, %10
-    JmpIfNot %11 -> instr(82)
-    Load %12 <- string("b")
-    Move %5 <- %12
+    Load v37 <- string("hello")
+    Eq v38 <- v33, v37
+    JmpIfNot v38 -> instr(82)
+    Load v39 <- string("b")
+    Move %4 <- v39
     Jmp -> instr(85)
-    Load %13 <- string("c")
-    Move %5 <- %13
+    Load v40 <- string("c")
+    Move %4 <- v40
     Jmp -> instr(85)
     Drop %0
     Drop %1
     Drop %2
     Drop %3
-    Drop %5
+    Drop %4
     Ret
   init (locals=0)
     Call %0 <- string("main") [] (def=d0)

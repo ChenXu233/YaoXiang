@@ -10,7 +10,7 @@ use crate::frontend::core::sema::MonoType;
 use crate::frontend::module::symbol::DefId;
 use crate::middle::ir::ir::{
     BasicBlock, ConstValue, FunctionBody, FunctionIR, Instruction, LocalSlot, ModuleIR, Operand,
-    TypeDeclBody,
+    TypeDeclBody, ValueId, ValueInfo,
 };
 use crate::middle::ir::normalize::normalize_module;
 use crate::middle::ir::verify::verify_loose;
@@ -76,6 +76,7 @@ fn code_fn(
             entry: 0,
             locals: Vec::new(),
             values: Vec::new(),
+            value_slots: Vec::new(),
         },
     }
 }
@@ -843,6 +844,7 @@ fn test_orphan_shared_layer_without_site_is_dominance_red() {
             // 槽 1 是「env 槽」——真实共享层里它是捕获名，读它但没有指令定义它。
             locals: vec![LocalSlot::temp(MonoType::Int(64)), named_local("n")],
             values: Vec::new(),
+            value_slots: Vec::new(),
         },
     };
     let m = module_with(vec![orphan]);
@@ -863,5 +865,71 @@ fn test_orphan_shared_layer_without_site_is_dominance_red() {
     assert!(
         detail.contains("use-before-def"),
         "红必须落在支配性不变量上（env 反推失效的形态）；实际：{detail}"
+    );
+}
+
+/// 7b.2：DCE 只删函数——存活函数的 values / value_slots 原样保留且仍可索引。
+#[test]
+fn test_dce_preserves_values_and_value_slots_of_live_functions() {
+    // Arrange：main 调用 live；dead 不可达。live 带一个值 + 槽映射。
+    let mut live = code_fn(
+        "live",
+        vec![Instruction::Ret {
+            value: Some(Operand::Value(ValueId(0))),
+            span: span(),
+        }],
+    );
+    if let FunctionBody::Code {
+        values,
+        value_slots,
+        ..
+    } = &mut live.body
+    {
+        values.push(ValueInfo {
+            ty: MonoType::Int(64),
+            debug_name: None,
+            defining_block: 0,
+        });
+        value_slots.push(1);
+    }
+    let entry = code_fn("main", vec![call_name("live", None), ret_void()]);
+    let dead = code_fn("dead", vec![ret_void()]);
+    let mut module = module_with(vec![entry, live, dead]);
+
+    // Act
+    let report = eliminate(&mut module).expect("无索引目标/无重复名，DCE 应成功");
+
+    // Assert：dead 被删，live 的值表与槽映射完好、ValueId 仍可索引
+    assert_eq!(
+        names(&module),
+        vec!["main".to_string(), "live".to_string()],
+        "只允许删除不可达的 dead"
+    );
+    assert_eq!(report.deleted, vec!["dead".to_string()]);
+    let live = module
+        .functions
+        .iter()
+        .find(|f| f.name == "live")
+        .expect("live 必须存活");
+    assert_eq!(live.values().len(), 1, "存活函数的值表不能被 DCE 破坏");
+    assert_eq!(
+        live.values()[0].ty,
+        MonoType::Int(64),
+        "值的类型必须原样保留"
+    );
+    assert_eq!(
+        live.value_slots().to_vec(),
+        vec![1],
+        "值 → 槽映射必须原样保留"
+    );
+    assert!(
+        live.blocks()[0].instructions.iter().any(|i| matches!(
+            i,
+            Instruction::Ret {
+                value: Some(Operand::Value(ValueId(0))),
+                ..
+            }
+        )),
+        "指令里的 ValueId 必须仍在值表范围内"
     );
 }

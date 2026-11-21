@@ -1,50 +1,95 @@
 module
   fn main() -> Void
     locals_total=7
-    Load %0 <- bool(true)
-    Not %1 <- %0
-    Load %2 <- bool(false)
-    Eq %3 <- %1, %2
-    Load %4 <- string("!true == false")
-    Call %5 <- string("std.assert.assert") [%3, %4] (def=d0)
-    Load %0 <- bool(false)
-    Not %1 <- %0
-    Load %2 <- bool(true)
-    Eq %3 <- %1, %2
-    Load %4 <- string("!false == true")
-    Call %5 <- string("std.assert.assert") [%3, %4] (def=d0)
-    Load %4 <- bool(true)
-    Not %0 <- %4
-    Not %1 <- %0
-    Load %2 <- bool(true)
-    Eq %3 <- %1, %2
-    Load %6 <- string("!!true == true")
-    Call %5 <- string("std.assert.assert") [%3, %6] (def=d0)
-    Load %4 <- bool(false)
-    Not %0 <- %4
-    Not %1 <- %0
-    Load %2 <- bool(false)
-    Eq %3 <- %1, %2
-    Load %6 <- string("!!false == false")
-    Call %5 <- string("std.assert.assert") [%3, %6] (def=d0)
-    Load %0 <- bool(true)
-    Not %1 <- %0
-    Load %2 <- bool(false)
-    Eq %3 <- %1, %2
-    Load %4 <- string("(!true) == false")
-    Call %5 <- string("std.assert.assert") [%3, %4] (def=d0)
-    Load %2 <- bool(true)
-    Load %0 <- bool(false)
-    Eq %1 <- %2, %0
-    Not %3 <- %1
-    Load %4 <- string("!(true == false) ≡ true")
-    Call %5 <- string("std.assert.assert") [%3, %4] (def=d0)
-    Load %2 <- int(1)
-    Load %0 <- int(2)
-    Eq %1 <- %2, %0
-    Not %3 <- %1
-    Load %4 <- string("!(1 == 2) ≡ true（显式括号取反比较结果）")
-    Call %5 <- string("std.assert.assert") [%3, %4] (def=d0)
-    Ret %5
+    values_total=44
+    value v0: TypeRef("?") @block0
+    value v1: Bool @block0
+    value v2: Bool @block0
+    value v3: Bool @block0
+    value v4: Bool @block0
+    value v5: Generic { name: "String", args: [] } @block0
+    value v6: TypeRef("?") @block0
+    value v7: Bool @block0
+    value v8: Bool @block0
+    value v9: Bool @block0
+    value v10: Bool @block0
+    value v11: Generic { name: "String", args: [] } @block0
+    value v12: TypeRef("?") @block0
+    value v13: Bool @block0
+    value v14: Bool @block0
+    value v15: Bool @block0
+    value v16: Bool @block0
+    value v17: Bool @block0
+    value v18: Generic { name: "String", args: [] } @block0
+    value v19: TypeRef("?") @block0
+    value v20: Bool @block0
+    value v21: Bool @block0
+    value v22: Bool @block0
+    value v23: Bool @block0
+    value v24: Bool @block0
+    value v25: Generic { name: "String", args: [] } @block0
+    value v26: TypeRef("?") @block0
+    value v27: Bool @block0
+    value v28: Bool @block0
+    value v29: Bool @block0
+    value v30: Bool @block0
+    value v31: Generic { name: "String", args: [] } @block0
+    value v32: TypeRef("?") @block0
+    value v33: Bool @block0
+    value v34: Bool @block0
+    value v35: Bool @block0
+    value v36: Bool @block0
+    value v37: Generic { name: "String", args: [] } @block0
+    value v38: TypeRef("?") @block0
+    value v39: Bool @block0
+    value v40: Bool @block0
+    value v41: Int(64) @block0
+    value v42: Int(64) @block0
+    value v43: Generic { name: "String", args: [] } @block0
+    Load v4 <- bool(true)
+    Not v2 <- v4
+    Load v3 <- bool(false)
+    Eq v1 <- v2, v3
+    Load v5 <- string("!true == false")
+    Call v0 <- string("std.assert.assert") [v1, v5] (def=d0)
+    Load v10 <- bool(false)
+    Not v8 <- v10
+    Load v9 <- bool(true)
+    Eq v7 <- v8, v9
+    Load v11 <- string("!false == true")
+    Call v6 <- string("std.assert.assert") [v7, v11] (def=d0)
+    Load v17 <- bool(true)
+    Not v16 <- v17
+    Not v14 <- v16
+    Load v15 <- bool(true)
+    Eq v13 <- v14, v15
+    Load v18 <- string("!!true == true")
+    Call v12 <- string("std.assert.assert") [v13, v18] (def=d0)
+    Load v24 <- bool(false)
+    Not v23 <- v24
+    Not v21 <- v23
+    Load v22 <- bool(false)
+    Eq v20 <- v21, v22
+    Load v25 <- string("!!false == false")
+    Call v19 <- string("std.assert.assert") [v20, v25] (def=d0)
+    Load v30 <- bool(true)
+    Not v28 <- v30
+    Load v29 <- bool(false)
+    Eq v27 <- v28, v29
+    Load v31 <- string("(!true) == false")
+    Call v26 <- string("std.assert.assert") [v27, v31] (def=d0)
+    Load v35 <- bool(true)
+    Load v36 <- bool(false)
+    Eq v34 <- v35, v36
+    Not v33 <- v34
+    Load v37 <- string("!(true == false) ≡ true")
+    Call v32 <- string("std.assert.assert") [v33, v37] (def=d0)
+    Load v41 <- int(1)
+    Load v42 <- int(2)
+    Eq v40 <- v41, v42
+    Not v39 <- v40
+    Load v43 <- string("!(1 == 2) ≡ true（显式括号取反比较结果）")
+    Call v38 <- string("std.assert.assert") [v39, v43] (def=d0)
+    Ret v38
   init (locals=0)
     Call %0 <- string("main") [] (def=d1)

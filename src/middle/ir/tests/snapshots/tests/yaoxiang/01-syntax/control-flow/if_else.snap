@@ -7,76 +7,114 @@ module
     slot[4] x : Int(64) @depth1
     slot[5] size : Int(64) @depth1
     locals_total=12
+    values_total=37
+    value v0: Bool @block0
+    value v1: TypeRef("?") @block0
+    value v2: Bool @block0
+    value v3: Generic { name: "String", args: [] } @block0
+    value v4: Generic { name: "String", args: [] } @block0
+    value v5: Generic { name: "String", args: [] } @block0
+    value v6: Bool @block0
+    value v7: TypeRef("?") @block0
+    value v8: Bool @block0
+    value v9: Generic { name: "String", args: [] } @block0
+    value v10: Generic { name: "String", args: [] } @block0
+    value v11: Generic { name: "String", args: [] } @block0
+    value v12: Bool @block0
+    value v13: Int(64) @block0
+    value v14: Int(64) @block0
+    value v15: Bool @block0
+    value v16: Int(64) @block0
+    value v17: Int(64) @block0
+    value v18: Bool @block0
+    value v19: Int(64) @block0
+    value v20: Int(64) @block0
+    value v21: TypeRef("?") @block0
+    value v22: Bool @block0
+    value v23: Generic { name: "String", args: [] } @block0
+    value v24: Generic { name: "String", args: [] } @block0
+    value v25: Generic { name: "String", args: [] } @block0
+    value v26: Bool @block0
+    value v27: Int(64) @block0
+    value v28: Int(64) @block0
+    value v29: Bool @block0
+    value v30: Int(64) @block0
+    value v31: Int(64) @block0
+    value v32: TypeRef("?") @block0
+    value v33: Bool @block0
+    value v34: Generic { name: "String", args: [] } @block0
+    value v35: Generic { name: "String", args: [] } @block0
+    value v36: Generic { name: "String", args: [] } @block0
     Load %0 <- string("")
-    Load %1 <- bool(true)
-    JmpIfNot %1 -> instr(4)
+    Load v0 <- bool(true)
+    JmpIfNot v0 -> instr(4)
     Load %0 <- string("true_branch")
-    Load %2 <- %0
-    Load %3 <- string("true_branch")
-    Eq %4 <- %2, %3
-    Load %5 <- string("if true branch")
-    Call %1 <- string("std.assert.assert") [%4, %5] (def=d0)
+    Load v3 <- %0
+    Load v4 <- string("true_branch")
+    Eq v2 <- v3, v4
+    Load v5 <- string("if true branch")
+    Call v1 <- string("std.assert.assert") [v2, v5] (def=d0)
     Load %1 <- string("")
-    Load %4 <- bool(false)
-    JmpIfNot %4 -> instr(14)
+    Load v6 <- bool(false)
+    JmpIfNot v6 -> instr(14)
     Load %1 <- string("should_not_print")
     Jmp -> instr(15)
     Load %1 <- string("false_branch")
-    Load %3 <- %1
-    Load %5 <- string("false_branch")
-    Eq %2 <- %3, %5
-    Load %6 <- string("if-else branch")
-    Call %4 <- string("std.assert.assert") [%2, %6] (def=d0)
-    Load %4 <- int(85)
-    Load %2 <- string("")
-    Load %5 <- %4
-    Load %6 <- int(90)
-    Ge %3 <- %5, %6
-    JmpIfNot %3 -> instr(28)
-    Load %2 <- string("A")
+    Load v9 <- %1
+    Load v10 <- string("false_branch")
+    Eq v8 <- v9, v10
+    Load v11 <- string("if-else branch")
+    Call v7 <- string("std.assert.assert") [v8, v11] (def=d0)
+    Load %2 <- int(85)
+    Load %3 <- string("")
+    Load v13 <- %2
+    Load v14 <- int(90)
+    Ge v12 <- v13, v14
+    JmpIfNot v12 -> instr(28)
+    Load %3 <- string("A")
     Jmp -> instr(41)
-    Load %5 <- %4
-    Load %6 <- int(80)
-    Ge %3 <- %5, %6
-    JmpIfNot %3 -> instr(34)
-    Load %2 <- string("B")
+    Load v16 <- %2
+    Load v17 <- int(80)
+    Ge v15 <- v16, v17
+    JmpIfNot v15 -> instr(34)
+    Load %3 <- string("B")
     Jmp -> instr(41)
-    Load %5 <- %4
-    Load %6 <- int(70)
-    Ge %3 <- %5, %6
-    JmpIfNot %3 -> instr(40)
-    Load %2 <- string("C")
+    Load v19 <- %2
+    Load v20 <- int(70)
+    Ge v18 <- v19, v20
+    JmpIfNot v18 -> instr(40)
+    Load %3 <- string("C")
     Jmp -> instr(41)
-    Load %2 <- string("D")
-    Load %6 <- %2
-    Load %7 <- string("B")
-    Eq %5 <- %6, %7
-    Load %8 <- string("grade B for score 85")
-    Call %3 <- string("std.assert.assert") [%5, %8] (def=d0)
-    Load %3 <- int(42)
+    Load %3 <- string("D")
+    Load v23 <- %3
+    Load v24 <- string("B")
+    Eq v22 <- v23, v24
+    Load v25 <- string("grade B for score 85")
+    Call v21 <- string("std.assert.assert") [v22, v25] (def=d0)
+    Load %4 <- int(42)
     Load %5 <- string("")
-    Load %7 <- %3
-    Load %8 <- int(0)
-    Gt %6 <- %7, %8
-    JmpIfNot %6 -> instr(59)
-    Load %9 <- %3
-    Load %10 <- int(100)
-    Gt %11 <- %9, %10
-    JmpIfNot %11 -> instr(58)
+    Load v27 <- %4
+    Load v28 <- int(0)
+    Gt v26 <- v27, v28
+    JmpIfNot v26 -> instr(59)
+    Load v30 <- %4
+    Load v31 <- int(100)
+    Gt v29 <- v30, v31
+    JmpIfNot v29 -> instr(58)
     Load %5 <- string("large")
     Jmp -> instr(59)
     Load %5 <- string("small")
-    Load %8 <- %5
-    Load %11 <- string("small")
-    Eq %7 <- %8, %11
-    Load %9 <- string("nested if small")
-    Call %6 <- string("std.assert.assert") [%7, %9] (def=d0)
-    Drop %2
+    Load v34 <- %5
+    Load v35 <- string("small")
+    Eq v33 <- v34, v35
+    Load v36 <- string("nested if small")
+    Call v32 <- string("std.assert.assert") [v33, v36] (def=d0)
+    Drop %3
     Drop %0
     Drop %1
-    Drop %4
+    Drop %2
     Drop %5
-    Drop %3
-    Ret %6
+    Drop %4
+    Ret v32
   init (locals=0)
     Call %0 <- string("main") [] (def=d1)

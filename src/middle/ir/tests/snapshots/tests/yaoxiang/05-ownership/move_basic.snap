@@ -5,15 +5,21 @@ module
     slot[0] p : Int(64) @depth1
     slot[1] p2 : Int(64) @depth1
     locals_total=5
-    Load %0 <- int(1)
-    Load %1 <- int(2)
-    Call %2 <- string("Point") [%0, %1] (def=d0)
-    Load %0 <- %2
-    Load %3 <- bool(true)
-    Load %4 <- string("move completed — p2 should own the value")
-    Call %1 <- string("std.assert.assert") [%3, %4] (def=d1)
-    Drop %2
+    values_total=5
+    value v0: Int(64) @block0
+    value v1: Int(64) @block0
+    value v2: TypeRef("?") @block0
+    value v3: Bool @block0
+    value v4: Generic { name: "String", args: [] } @block0
+    Load v0 <- int(1)
+    Load v1 <- int(2)
+    Call %0 <- string("Point") [v0, v1] (def=d0)
+    Load %1 <- %0
+    Load v3 <- bool(true)
+    Load v4 <- string("move completed — p2 should own the value")
+    Call v2 <- string("std.assert.assert") [v3, v4] (def=d1)
     Drop %0
-    Ret %1
+    Drop %1
+    Ret v2
   init (locals=0)
     Call %0 <- string("main") [] (def=d2)

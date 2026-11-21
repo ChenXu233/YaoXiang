@@ -7,12 +7,18 @@
 use super::{AstToIrGenerator, LoopTargets, SymbolEntry};
 use crate::ast;
 use crate::frontend::core::sema::MonoType;
-use crate::middle::ir::ir::{FrameId, LocalSlot};
+use crate::middle::ir::ir::{FrameId, Instruction, LocalSlot, Operand, ValueId, ValueInfo};
 use crate::tlog;
 use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};
 use crate::util::i18n::MSG;
 use crate::util::span::Span;
 use std::collections::HashMap;
+
+/// 值表里「类型不可得」的**显式哨兵**（09a §P7 7b.2 契约 §二 第 2 条）。
+///
+/// `MonoType::TypeRef` 是 verify 既有「信息不足」口径（与具体类型占位不同），
+/// 快照会原样渲染成 `TypeRef("?")`——不允许用 `Int(64)` 之类静默占位。
+pub(super) const UNKNOWN_VALUE_TYPE: &str = "?";
 
 /// 寄存器索引是 u8（middle/passes/codegen/operand.rs 的 OperandResolver 上限）：
 /// 一个函数体的局部槽 + 临时槽总数不得超过它。
@@ -160,14 +166,93 @@ impl AstToIrGenerator {
             .and_then(|qualified| self.global_slot_layout.get(qualified).copied())
     }
 
-    /// 获取下一个临时寄存器编号
-    pub(in crate::middle) fn next_temp_reg(&mut self) -> usize {
+    /// 分配一个寄存器槽（旧的 `next_temp` 语义：含真高水位与三处语句级回收）。
+    ///
+    /// 7b.2 起它只服务「具名变量槽」与值表旁边的槽记录；临时值的身份走
+    /// [`Self::next_temp_reg`] 的 `ValueId`，但**槽分配语义不变**（C4 行为等价）。
+    fn alloc_register_slot(&mut self) -> usize {
         let reg = self.next_temp;
         self.next_temp += 1;
         // #393：真高水位——语句级回收会回滚 next_temp，槽位总数以历史
         // 最高占用为准（少一都会让尾部语句的临时落进未分配槽位）。
         self.temp_high_water = self.temp_high_water.max(reg + 1);
         reg
+    }
+
+    /// 分配一个**具名变量**的寄存器槽（`Operand::Local` 的槽号）。
+    ///
+    /// 与临时值的区别只是身份：本入口不产生 `ValueId`、不写值表。
+    pub(in crate::middle) fn next_local_slot(&mut self) -> usize {
+        self.alloc_register_slot()
+    }
+
+    /// 分配一个临时值：返回 `Operand::Value`，并在当前函数体的值表里登记一条
+    /// `ValueInfo`（`ty` 先落显式未知，随后由 [`Self::note_value_type`] 或函数体
+    /// 收尾的 [`infer_value_types`] 填真实类型）。
+    ///
+    /// `value_mode == false`（模块 init / 顶层语句，没有值表）时退化为旧的
+    /// `Operand::Local` 槽分配——init 序列与其 codegen 路径零变化。
+    pub(in crate::middle) fn next_temp_reg(&mut self) -> Operand {
+        if !self.value_mode {
+            return Operand::Local(self.alloc_register_slot());
+        }
+        let value = self.next_value;
+        self.next_value += 1;
+        let slot = self.alloc_register_slot();
+        self.cur_values.push(ValueInfo {
+            ty: MonoType::TypeRef(UNKNOWN_VALUE_TYPE.to_string()),
+            debug_name: None,
+            defining_block: self.cur_block_label,
+        });
+        self.cur_value_slots.push(slot);
+        Operand::Value(ValueId(value))
+    }
+
+    /// 取操作数对应的寄存器槽号（`Local` 直接给；`Value` 查过渡映射）。
+    ///
+    /// 具名绑定复用「值已占用的槽」时用它：只把该槽登记成具名变量，
+    /// **不新增指令、不改字节码**（与 7b.2 前把临时槽直接 `register_local`
+    /// 的行为一致）。
+    pub(in crate::middle) fn slot_for_operand(
+        &self,
+        op: &Operand,
+    ) -> Option<usize> {
+        match op {
+            Operand::Local(slot) => Some(*slot),
+            Operand::Value(id) => self.cur_value_slots.get(id.0 as usize).copied(),
+            _ => None,
+        }
+    }
+
+    /// 给值表里的一条值补真实类型（只填仍为显式未知的项，先到先得）。
+    pub(in crate::middle) fn note_value_type(
+        &mut self,
+        dst: &Operand,
+        ty: MonoType,
+    ) {
+        let Operand::Value(id) = dst else {
+            return;
+        };
+        let Some(info) = self.cur_values.get_mut(id.0 as usize) else {
+            return;
+        };
+        if is_unknown_value_type(&info.ty) {
+            info.ty = ty;
+        }
+    }
+
+    /// 取走当前函数体的值表与「值 → 槽」映射，并在取走前做一次**前向类型推导**
+    /// （09a §P7 7b.2 契约 §二 第 2 条）：只补确定类型的指令形态，其余保持显式
+    /// 未知 `TypeRef("?")`。
+    pub(in crate::middle) fn take_body_values(
+        &mut self,
+        instructions: &[Instruction],
+        params: &[MonoType],
+    ) -> (Vec<ValueInfo>, Vec<usize>) {
+        let mut values = std::mem::take(&mut self.cur_values);
+        infer_value_types(&mut values, instructions, params);
+        let slots = std::mem::take(&mut self.cur_value_slots);
+        (values, slots)
     }
 
     /// 记下局部变量**写出**的类型名（注解原文或构造器名）。
@@ -294,16 +379,118 @@ impl AstToIrGenerator {
     }
 }
 
+fn is_unknown_value_type(ty: &MonoType) -> bool {
+    matches!(ty, MonoType::TypeRef(name) if name == UNKNOWN_VALUE_TYPE)
+}
+
+fn string_type() -> MonoType {
+    MonoType::Generic {
+        name: "String".to_string(),
+        args: Vec::new(),
+    }
+}
+
+/// 操作数的可信类型：常量 / 参数 / 已定型的值；`Local`（lower 不写
+/// `LocalSlot.ty`）与 `Global`（无注解占位）一律不可信，返回 `None`。
+fn operand_value_type(
+    op: &Operand,
+    values: &[ValueInfo],
+    params: &[MonoType],
+) -> Option<MonoType> {
+    match op {
+        Operand::Const(c) => c.mono_type(),
+        Operand::Arg(i) => params.get(*i).cloned(),
+        Operand::Value(id) => values
+            .get(id.0 as usize)
+            .filter(|v| !is_unknown_value_type(&v.ty))
+            .map(|v| v.ty.clone()),
+        _ => None,
+    }
+}
+
+/// 函数体收尾的**前向类型推导**：只补确定类型的指令形态，其余保持显式未知。
+///
+/// 规则集（契约 §二 第 2 条）：`Move`/`Load` 取 `src`、算术取 `lhs`、`Neg` 取
+/// `src`；比较/逻辑 → `Bool`；字符串长度 → `Int(64)`；字符串拼接/取字符/
+/// 数值转字符串 → `String`。调用、字段、索引等跨过程或依赖声明面的形态不猜，
+/// 留在显式未知（`TypeRef("?")`）。
+fn infer_value_types(
+    values: &mut [ValueInfo],
+    instructions: &[Instruction],
+    params: &[MonoType],
+) {
+    for instr in instructions {
+        let Some((dst, ty)) = infer_instruction_value_type(instr, values, params) else {
+            continue;
+        };
+        let Operand::Value(id) = dst else {
+            continue;
+        };
+        let Some(info) = values.get_mut(id.0 as usize) else {
+            continue;
+        };
+        if is_unknown_value_type(&info.ty) {
+            info.ty = ty;
+        }
+    }
+}
+
+fn infer_instruction_value_type<'a>(
+    instr: &'a Instruction,
+    values: &[ValueInfo],
+    params: &[MonoType],
+) -> Option<(&'a Operand, MonoType)> {
+    match instr {
+        Instruction::Move { dst, src, .. } | Instruction::Load { dst, src, .. } => {
+            operand_value_type(src, values, params).map(|ty| (dst, ty))
+        }
+        Instruction::Add { dst, lhs, .. }
+        | Instruction::Sub { dst, lhs, .. }
+        | Instruction::Mul { dst, lhs, .. }
+        | Instruction::Div { dst, lhs, .. }
+        | Instruction::Mod { dst, lhs, .. }
+        | Instruction::And { dst, lhs, .. }
+        | Instruction::Or { dst, lhs, .. }
+        | Instruction::Xor { dst, lhs, .. }
+        | Instruction::Shl { dst, lhs, .. }
+        | Instruction::Shr { dst, lhs, .. }
+        | Instruction::Sar { dst, lhs, .. } => {
+            operand_value_type(lhs, values, params).map(|ty| (dst, ty))
+        }
+        Instruction::Neg { dst, src, .. } => {
+            operand_value_type(src, values, params).map(|ty| (dst, ty))
+        }
+        Instruction::Not { dst, .. }
+        | Instruction::Eq { dst, .. }
+        | Instruction::Ne { dst, .. }
+        | Instruction::Lt { dst, .. }
+        | Instruction::Le { dst, .. }
+        | Instruction::Gt { dst, .. }
+        | Instruction::Ge { dst, .. } => Some((dst, MonoType::Bool)),
+        Instruction::StringLength { dst, .. } => Some((dst, MonoType::Int(64))),
+        Instruction::StringConcat { dst, .. }
+        | Instruction::StringGetChar { dst, .. }
+        | Instruction::StringFromInt { dst, .. }
+        | Instruction::StringFromFloat { dst, .. } => Some((dst, string_type())),
+        _ => None,
+    }
+}
+
 /// 被 [`NestedBodyGuard`] 摘下来的父帧。
 ///
-/// `counters` 为 `None` 表示这次帧边界**不回滚**三项计数（声明面口径，见
-/// [`NestedBodyGuard::enter_decl`]）；表与当前 span 一律回滚。
+/// `counters` 为 `None` 表示这次帧边界**不回滚**三项槽计数（声明面口径，见
+/// [`NestedBodyGuard::enter_decl`]）；槽位表、值表、当前 span 与 `value_mode`
+/// 一律回滚（值表/`next_value` 是**每个函数体独立**的，与槽计数的帧口径不同）。
 struct SavedFrame {
     counters: Option<(usize, usize, usize)>,
     cur_span: Span,
     cur_locals: Vec<LocalSlot>,
     cur_frame: FrameId,
     loop_stack: Vec<LoopTargets>,
+    next_value: u32,
+    cur_values: Vec<ValueInfo>,
+    cur_value_slots: Vec<usize>,
+    value_mode: bool,
 }
 
 /// 嵌套函数体的寄存器帧 guard（WBS 7a.2）。
@@ -336,8 +523,14 @@ impl<'a> NestedBodyGuard<'a> {
             cur_locals: std::mem::take(&mut gen.cur_locals),
             cur_frame: gen.cur_frame,
             loop_stack: std::mem::take(&mut gen.loop_stack),
+            next_value: gen.next_value,
+            cur_values: std::mem::take(&mut gen.cur_values),
+            cur_value_slots: std::mem::take(&mut gen.cur_value_slots),
+            value_mode: gen.value_mode,
         };
         gen.cur_frame = gen.alloc_frame();
+        gen.next_value = 0;
+        gen.value_mode = true;
         Self { gen, saved }
     }
 
@@ -353,8 +546,14 @@ impl<'a> NestedBodyGuard<'a> {
             cur_locals: std::mem::take(&mut gen.cur_locals),
             cur_frame: gen.cur_frame,
             loop_stack: std::mem::take(&mut gen.loop_stack),
+            next_value: gen.next_value,
+            cur_values: std::mem::take(&mut gen.cur_values),
+            cur_value_slots: std::mem::take(&mut gen.cur_value_slots),
+            value_mode: gen.value_mode,
         };
         gen.cur_frame = gen.alloc_frame();
+        gen.next_value = 0;
+        gen.value_mode = true;
         Self { gen, saved }
     }
 }
@@ -379,6 +578,10 @@ impl Drop for NestedBodyGuard<'_> {
         self.gen.cur_frame = self.saved.cur_frame;
         self.gen.loop_stack = std::mem::take(&mut self.saved.loop_stack);
         self.gen.cur_span = self.saved.cur_span;
+        self.gen.next_value = self.saved.next_value;
+        self.gen.cur_values = std::mem::take(&mut self.saved.cur_values);
+        self.gen.cur_value_slots = std::mem::take(&mut self.saved.cur_value_slots);
+        self.gen.value_mode = self.saved.value_mode;
         if let Some((next_temp, temp_high_water, temp_floor)) = self.saved.counters {
             self.gen.next_temp = next_temp;
             self.gen.temp_high_water = temp_high_water;

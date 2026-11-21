@@ -4,34 +4,52 @@ module
     slot[1] sum : Int(64) @depth1
     slot[4] n : Int(64) @depth2
     locals_total=10
+    values_total=17
+    value v0: Int(64) @block0
+    value v1: Int(64) @block0
+    value v2: Int(64) @block0
+    value v3: Int(64) @block0
+    value v4: Int(64) @block0
+    value v5: Int(64) @block0
+    value v6: Generic { name: "Vec", args: [Int(64)] } @block0
+    value v7: TypeRef("?") @block0
+    value v8: TypeRef("?") @block0
+    value v9: TypeRef("?") @block0
+    value v10: Int(64) @block0
+    value v11: Int(64) @block0
+    value v12: TypeRef("?") @block0
+    value v13: Bool @block0
+    value v14: Int(64) @block0
+    value v15: Int(64) @block0
+    value v16: Generic { name: "String", args: [] } @block0
     AllocArray %0 size=int(3), elem=int(1)
-    Load %1 <- int(10)
-    Load %2 <- int(0)
-    StoreIndex %0[%2] <- %1
-    Load %3 <- int(20)
-    Load %4 <- int(1)
-    StoreIndex %0[%4] <- %3
-    Load %5 <- int(30)
-    Load %6 <- int(2)
-    StoreIndex %0[%6] <- %5
+    Load v0 <- int(10)
+    Load v1 <- int(0)
+    StoreIndex %0[v1] <- v0
+    Load v2 <- int(20)
+    Load v3 <- int(1)
+    StoreIndex %0[v3] <- v2
+    Load v4 <- int(30)
+    Load v5 <- int(2)
+    StoreIndex %0[v5] <- v4
     Load %1 <- int(0)
-    Load %2 <- %0
-    Call %3 <- string("std.list.iter") [%2] (def=d0)
-    Call %5 <- string("std.list.has_next") [%3] (def=d1)
-    JmpIfNot %5 -> instr(21)
-    Call %6 <- string("std.list.next") [%3] (def=d2)
-    Store %4 <- %6
-    Load %7 <- %1
-    Load %8 <- %4
-    Add %1 <- %7, %8
+    Load v6 <- %0
+    Call v7 <- string("std.list.iter") [v6] (def=d0)
+    Call v8 <- string("std.list.has_next") [v7] (def=d1)
+    JmpIfNot v8 -> instr(21)
+    Call v9 <- string("std.list.next") [v7] (def=d2)
+    Store %2 <- v9
+    Load v10 <- %1
+    Load v11 <- %2
+    Add %1 <- v10, v11
     Jmp -> instr(13)
-    Load %7 <- %1
-    Load %8 <- int(60)
-    Eq %6 <- %7, %8
-    Load %9 <- string("for sum 10+20+30 == 60")
-    Call %5 <- string("std.assert.assert") [%6, %9] (def=d3)
+    Load v14 <- %1
+    Load v15 <- int(60)
+    Eq v13 <- v14, v15
+    Load v16 <- string("for sum 10+20+30 == 60")
+    Call v12 <- string("std.assert.assert") [v13, v16] (def=d3)
     Drop %0
     Drop %1
-    Ret %5
+    Ret v12
   init (locals=0)
     Call %0 <- string("main") [] (def=d4)

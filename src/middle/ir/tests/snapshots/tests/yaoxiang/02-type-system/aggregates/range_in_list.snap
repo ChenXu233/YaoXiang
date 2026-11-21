@@ -11,121 +11,197 @@ module
     slot[23] pairs : Int(64) @depth1
     slot[27] p : Int(64) @depth2
     locals_total=37
+    values_total=75
+    value v0: TypeRef("?") @block0
+    value v1: Int(64) @block0
+    value v2: Int(64) @block0
+    value v3: Int(64) @block0
+    value v4: Int(64) @block0
+    value v5: TypeRef("?") @block0
+    value v6: Int(64) @block0
+    value v7: Int(64) @block0
+    value v8: Int(64) @block0
+    value v9: Int(64) @block0
+    value v10: Generic { name: "Vec", args: [Generic { name: "Range", args: [Int(64)] }] } @block0
+    value v11: TypeRef("?") @block0
+    value v12: TypeRef("?") @block0
+    value v13: TypeRef("?") @block0
+    value v14: Generic { name: "Range", args: [Int(64)] } @block0
+    value v15: TypeRef("?") @block0
+    value v16: TypeRef("?") @block0
+    value v17: Int(64) @block0
+    value v18: Bool @block0
+    value v19: TypeRef("?") @block0
+    value v20: TypeRef("?") @block0
+    value v21: Int(64) @block0
+    value v22: Int(64) @block0
+    value v23: TypeRef("?") @block0
+    value v24: Bool @block0
+    value v25: Int(64) @block0
+    value v26: Int(64) @block0
+    value v27: Generic { name: "String", args: [] } @block0
+    value v28: TypeRef("?") @block0
+    value v29: Int(64) @block0
+    value v30: Int(64) @block0
+    value v31: Int(64) @block0
+    value v32: Int(64) @block0
+    value v33: Int(64) @block0
+    value v34: TypeRef("?") @block0
+    value v35: Int(64) @block0
+    value v36: Int(64) @block0
+    value v37: Int(64) @block0
+    value v38: Int(64) @block0
+    value v39: Int(64) @block0
+    value v40: Generic { name: "Vec", args: [Generic { name: "Vec", args: [Int(64)] }] } @block0
+    value v41: TypeRef("?") @block0
+    value v42: TypeRef("?") @block0
+    value v43: TypeRef("?") @block0
+    value v44: Generic { name: "Vec", args: [Int(64)] } @block0
+    value v45: TypeRef("?") @block0
+    value v46: TypeRef("?") @block0
+    value v47: TypeRef("?") @block0
+    value v48: Int(64) @block0
+    value v49: Int(64) @block0
+    value v50: TypeRef("?") @block0
+    value v51: Bool @block0
+    value v52: Int(64) @block0
+    value v53: Int(64) @block0
+    value v54: Generic { name: "String", args: [] } @block0
+    value v55: TypeRef("?") @block0
+    value v56: Int(64) @block0
+    value v57: Generic { name: "String", args: [] } @block0
+    value v58: Int(64) @block0
+    value v59: TypeRef("?") @block0
+    value v60: Int(64) @block0
+    value v61: Generic { name: "String", args: [] } @block0
+    value v62: Int(64) @block0
+    value v63: TypeRef("?") @block0
+    value v64: Generic { name: "Vec", args: [Generic { name: "Tuple", args: [Int(64), Generic { name: "String", args: [] }] }] } @block0
+    value v65: TypeRef("?") @block0
+    value v66: TypeRef("?") @block0
+    value v67: TypeRef("?") @block0
+    value v68: TypeRef("?") @block0
+    value v69: Bool @block0
+    value v70: TypeRef("?") @block0
+    value v71: Int(64) @block0
+    value v72: Generic { name: "Tuple", args: [Int(64), Generic { name: "String", args: [] }] } @block0
+    value v73: Int(64) @block0
+    value v74: Generic { name: "String", args: [] } @block0
     AllocArray %0 size=int(2), elem=int(1)
+    Load v1 <- int(0)
+    Load v2 <- int(3)
+    Load v3 <- int(1)
+    NewRange v0 <- v1, v2, v3
+    Load v4 <- int(0)
+    StoreIndex %0[v4] <- v0
+    Load v6 <- int(10)
+    Load v7 <- int(13)
+    Load v8 <- int(1)
+    NewRange v5 <- v6, v7, v8
+    Load v9 <- int(1)
+    StoreIndex %0[v9] <- v5
     Load %1 <- int(0)
-    Load %2 <- int(3)
-    Load %3 <- int(1)
-    NewRange %4 <- %1, %2, %3
-    Load %5 <- int(0)
-    StoreIndex %0[%5] <- %4
-    Load %6 <- int(10)
-    Load %7 <- int(13)
-    Load %8 <- int(1)
-    NewRange %9 <- %6, %7, %8
-    Load %10 <- int(1)
-    StoreIndex %0[%10] <- %9
-    Load %4 <- int(0)
-    Load %1 <- %0
-    Call %2 <- string("std.list.iter") [%1] (def=d0)
-    Call %5 <- string("std.list.has_next") [%2] (def=d1)
-    JmpIfNot %5 -> instr(38)
-    Call %9 <- string("std.list.next") [%2] (def=d2)
-    Store %3 <- %9
-    Load %6 <- %3
-    Call %7 <- string("std.range.iter") [%6] (def=d3)
-    VariantTag %8 <- %7 : Result
-    Load %10 <- int(0)
-    Eq %11 <- %8, %10
-    JmpIfNot %11 -> instr(28)
-    VariantPayload %7 <- %7 : Result
+    Load v10 <- %0
+    Call v11 <- string("std.list.iter") [v10] (def=d0)
+    Call v12 <- string("std.list.has_next") [v11] (def=d1)
+    JmpIfNot v12 -> instr(38)
+    Call v13 <- string("std.list.next") [v11] (def=d2)
+    Store %2 <- v13
+    Load v14 <- %2
+    Call v15 <- string("std.range.iter") [v14] (def=d3)
+    VariantTag v16 <- v15 : Result
+    Load v17 <- int(0)
+    Eq v18 <- v16, v17
+    JmpIfNot v18 -> instr(28)
+    VariantPayload v15 <- v15 : Result
     Jmp -> instr(29)
-    Call _ <- string("std.range.abort_invalid_step") [%6] (def=d4)
-    Call %12 <- string("std.range.has_next") [%7] (def=d5)
-    JmpIfNot %12 -> instr(37)
-    Call %13 <- string("std.range.next") [%7] (def=d6)
-    Store %14 <- %13
-    Load %15 <- %4
-    Load %16 <- int(1)
-    Add %4 <- %15, %16
+    Call _ <- string("std.range.abort_invalid_step") [v14] (def=d4)
+    Call v19 <- string("std.range.has_next") [v15] (def=d5)
+    JmpIfNot v19 -> instr(37)
+    Call v20 <- string("std.range.next") [v15] (def=d6)
+    Store %3 <- v20
+    Load v21 <- %1
+    Load v22 <- int(1)
+    Add %1 <- v21, v22
     Jmp -> instr(29)
     Jmp -> instr(16)
-    Load %15 <- %4
-    Load %16 <- int(6)
-    Eq %13 <- %15, %16
-    Load %17 <- string("nested range iteration")
-    Call %12 <- string("std.assert.assert") [%13, %17] (def=d7)
-    AllocArray %12 size=int(2), elem=int(1)
-    AllocArray %13 size=int(2), elem=int(1)
-    Load %15 <- int(1)
-    Load %16 <- int(0)
-    StoreIndex %13[%16] <- %15
-    Load %17 <- int(2)
-    Load %18 <- int(1)
-    StoreIndex %13[%18] <- %17
-    Load %19 <- int(0)
-    StoreIndex %12[%19] <- %13
-    AllocArray %20 size=int(2), elem=int(1)
-    Load %21 <- int(3)
-    Load %22 <- int(0)
-    StoreIndex %20[%22] <- %21
-    Load %23 <- int(4)
-    Load %24 <- int(1)
-    StoreIndex %20[%24] <- %23
-    Load %25 <- int(1)
-    StoreIndex %12[%25] <- %20
-    Load %13 <- int(0)
-    Load %15 <- %12
-    Call %16 <- string("std.list.iter") [%15] (def=d0)
-    Call %18 <- string("std.list.has_next") [%16] (def=d1)
-    JmpIfNot %18 -> instr(80)
-    Call %19 <- string("std.list.next") [%16] (def=d2)
-    Store %17 <- %19
-    Load %20 <- %17
-    Call %21 <- string("std.list.iter") [%20] (def=d0)
-    Call %23 <- string("std.list.has_next") [%21] (def=d1)
-    JmpIfNot %23 -> instr(79)
-    Call %24 <- string("std.list.next") [%21] (def=d2)
-    Store %22 <- %24
-    Load %25 <- %13
-    Load %26 <- %22
-    Add %13 <- %25, %26
+    Load v25 <- %1
+    Load v26 <- int(6)
+    Eq v24 <- v25, v26
+    Load v27 <- string("nested range iteration")
+    Call v23 <- string("std.assert.assert") [v24, v27] (def=d7)
+    AllocArray %4 size=int(2), elem=int(1)
+    AllocArray v28 size=int(2), elem=int(1)
+    Load v29 <- int(1)
+    Load v30 <- int(0)
+    StoreIndex v28[v30] <- v29
+    Load v31 <- int(2)
+    Load v32 <- int(1)
+    StoreIndex v28[v32] <- v31
+    Load v33 <- int(0)
+    StoreIndex %4[v33] <- v28
+    AllocArray v34 size=int(2), elem=int(1)
+    Load v35 <- int(3)
+    Load v36 <- int(0)
+    StoreIndex v34[v36] <- v35
+    Load v37 <- int(4)
+    Load v38 <- int(1)
+    StoreIndex v34[v38] <- v37
+    Load v39 <- int(1)
+    StoreIndex %4[v39] <- v34
+    Load %5 <- int(0)
+    Load v40 <- %4
+    Call v41 <- string("std.list.iter") [v40] (def=d0)
+    Call v42 <- string("std.list.has_next") [v41] (def=d1)
+    JmpIfNot v42 -> instr(80)
+    Call v43 <- string("std.list.next") [v41] (def=d2)
+    Store %6 <- v43
+    Load v44 <- %6
+    Call v45 <- string("std.list.iter") [v44] (def=d0)
+    Call v46 <- string("std.list.has_next") [v45] (def=d1)
+    JmpIfNot v46 -> instr(79)
+    Call v47 <- string("std.list.next") [v45] (def=d2)
+    Store %7 <- v47
+    Load v48 <- %5
+    Load v49 <- %7
+    Add %5 <- v48, v49
     Jmp -> instr(71)
     Jmp -> instr(65)
-    Load %25 <- %13
-    Load %26 <- int(10)
-    Eq %24 <- %25, %26
-    Load %27 <- string("nested list iteration")
-    Call %23 <- string("std.assert.assert") [%24, %27] (def=d7)
-    AllocArray %23 size=int(2), elem=int(1)
-    Load %25 <- int(1)
-    Load %26 <- string("a")
-    NewTuple %24 <- [%25, %26]
-    Load %27 <- int(0)
-    StoreIndex %23[%27] <- %24
-    Load %28 <- int(2)
-    Load %29 <- string("b")
-    NewTuple %30 <- [%28, %29]
-    Load %31 <- int(1)
-    StoreIndex %23[%31] <- %30
-    Load %25 <- %23
-    Call %26 <- string("std.list.iter") [%25] (def=d0)
-    Call %30 <- string("std.list.has_next") [%26] (def=d1)
-    JmpIfNot %30 -> instr(110)
-    Call %28 <- string("std.list.next") [%26] (def=d2)
-    Store %27 <- %28
-    Load %32 <- %27
-    Load %33 <- int(0)
-    LoadIndex %34 <- %32[%33]
-    Load %35 <- int(0)
-    Gt %31 <- %34, %35
-    Load %36 <- string("tuple element index via loop var")
-    Call %29 <- string("std.assert.assert") [%31, %36] (def=d7)
+    Load v52 <- %5
+    Load v53 <- int(10)
+    Eq v51 <- v52, v53
+    Load v54 <- string("nested list iteration")
+    Call v50 <- string("std.assert.assert") [v51, v54] (def=d7)
+    AllocArray %8 size=int(2), elem=int(1)
+    Load v56 <- int(1)
+    Load v57 <- string("a")
+    NewTuple v55 <- [v56, v57]
+    Load v58 <- int(0)
+    StoreIndex %8[v58] <- v55
+    Load v60 <- int(2)
+    Load v61 <- string("b")
+    NewTuple v59 <- [v60, v61]
+    Load v62 <- int(1)
+    StoreIndex %8[v62] <- v59
+    Load v64 <- %8
+    Call v65 <- string("std.list.iter") [v64] (def=d0)
+    Call v66 <- string("std.list.has_next") [v65] (def=d1)
+    JmpIfNot v66 -> instr(110)
+    Call v67 <- string("std.list.next") [v65] (def=d2)
+    Store %9 <- v67
+    Load v72 <- %9
+    Load v73 <- int(0)
+    LoadIndex v70 <- v72[v73]
+    Load v71 <- int(0)
+    Gt v69 <- v70, v71
+    Load v74 <- string("tuple element index via loop var")
+    Call v68 <- string("std.assert.assert") [v69, v74] (def=d7)
     Jmp -> instr(98)
-    Drop %12
-    Drop %23
-    Drop %0
-    Drop %13
     Drop %4
+    Drop %8
+    Drop %0
+    Drop %5
+    Drop %1
     Ret
   init (locals=0)
     Call %0 <- string("main") [] (def=d8)

@@ -1,63 +1,121 @@
 module
   fn main() -> Void
     locals_total=6
-    Load %0 <- float(4607182418800017408)
-    Load %1 <- float(4607182418800017408)
-    Eq %2 <- %0, %1
-    Load %3 <- string("1.0 == 1.0 should be true")
-    Call %4 <- string("std.assert.assert") [%2, %3] (def=d0)
-    Load %0 <- float(4607182418800017408)
-    Load %1 <- float(4611686018427387904)
-    Ne %2 <- %0, %1
-    Load %3 <- string("1.0 != 2.0 should be true")
-    Call %4 <- string("std.assert.assert") [%2, %3] (def=d0)
-    Load %0 <- float(4607182418800017408)
-    Load %1 <- float(4611686018427387904)
-    Lt %2 <- %0, %1
-    Load %3 <- string("1.0 < 2.0 should be true")
-    Call %4 <- string("std.assert.assert") [%2, %3] (def=d0)
-    Load %0 <- float(4607182418800017408)
-    Load %1 <- float(4607182418800017408)
-    Le %2 <- %0, %1
-    Load %3 <- string("1.0 <= 1.0 should be true")
-    Call %4 <- string("std.assert.assert") [%2, %3] (def=d0)
-    Load %0 <- float(4611686018427387904)
-    Load %1 <- float(4607182418800017408)
-    Gt %2 <- %0, %1
-    Load %3 <- string("2.0 > 1.0 should be true")
-    Call %4 <- string("std.assert.assert") [%2, %3] (def=d0)
-    Load %0 <- float(4607182418800017408)
-    Load %1 <- float(4607182418800017408)
-    Ge %2 <- %0, %1
-    Load %3 <- string("1.0 >= 1.0 should be true")
-    Call %4 <- string("std.assert.assert") [%2, %3] (def=d0)
-    Load %0 <- float(0)
-    Load %1 <- float(0)
-    Eq %2 <- %0, %1
-    Load %3 <- string("0.0 == 0.0 should be true")
-    Call %4 <- string("std.assert.assert") [%2, %3] (def=d0)
-    Load %3 <- float(4607182418800017408)
-    Neg %0 <- %3
-    Load %1 <- float(0)
-    Lt %2 <- %0, %1
-    Load %5 <- string("-1.0 < 0.0 should be true")
-    Call %4 <- string("std.assert.assert") [%2, %5] (def=d0)
-    Load %3 <- float(4607182418800017408)
-    Neg %0 <- %3
-    Load %1 <- float(4607182418800017408)
-    Ne %2 <- %0, %1
-    Load %5 <- string("-1.0 != 1.0 should be true")
-    Call %4 <- string("std.assert.assert") [%2, %5] (def=d0)
-    Load %0 <- float(4614253070214989087)
-    Load %1 <- float(4613937818241073152)
-    Gt %2 <- %0, %1
-    Load %3 <- string("3.14 > 3.0 should be true")
-    Call %4 <- string("std.assert.assert") [%2, %3] (def=d0)
-    Load %0 <- float(4613937818241073152)
-    Load %1 <- float(4614253070214989087)
-    Lt %2 <- %0, %1
-    Load %3 <- string("3.0 < 3.14 should be true")
-    Call %4 <- string("std.assert.assert") [%2, %3] (def=d0)
-    Ret %4
+    values_total=57
+    value v0: TypeRef("?") @block0
+    value v1: Bool @block0
+    value v2: Float(64) @block0
+    value v3: Float(64) @block0
+    value v4: Generic { name: "String", args: [] } @block0
+    value v5: TypeRef("?") @block0
+    value v6: Bool @block0
+    value v7: Float(64) @block0
+    value v8: Float(64) @block0
+    value v9: Generic { name: "String", args: [] } @block0
+    value v10: TypeRef("?") @block0
+    value v11: Bool @block0
+    value v12: Float(64) @block0
+    value v13: Float(64) @block0
+    value v14: Generic { name: "String", args: [] } @block0
+    value v15: TypeRef("?") @block0
+    value v16: Bool @block0
+    value v17: Float(64) @block0
+    value v18: Float(64) @block0
+    value v19: Generic { name: "String", args: [] } @block0
+    value v20: TypeRef("?") @block0
+    value v21: Bool @block0
+    value v22: Float(64) @block0
+    value v23: Float(64) @block0
+    value v24: Generic { name: "String", args: [] } @block0
+    value v25: TypeRef("?") @block0
+    value v26: Bool @block0
+    value v27: Float(64) @block0
+    value v28: Float(64) @block0
+    value v29: Generic { name: "String", args: [] } @block0
+    value v30: TypeRef("?") @block0
+    value v31: Bool @block0
+    value v32: Float(64) @block0
+    value v33: Float(64) @block0
+    value v34: Generic { name: "String", args: [] } @block0
+    value v35: TypeRef("?") @block0
+    value v36: Bool @block0
+    value v37: Float(64) @block0
+    value v38: Float(64) @block0
+    value v39: Float(64) @block0
+    value v40: Generic { name: "String", args: [] } @block0
+    value v41: TypeRef("?") @block0
+    value v42: Bool @block0
+    value v43: Float(64) @block0
+    value v44: Float(64) @block0
+    value v45: Float(64) @block0
+    value v46: Generic { name: "String", args: [] } @block0
+    value v47: TypeRef("?") @block0
+    value v48: Bool @block0
+    value v49: Float(64) @block0
+    value v50: Float(64) @block0
+    value v51: Generic { name: "String", args: [] } @block0
+    value v52: TypeRef("?") @block0
+    value v53: Bool @block0
+    value v54: Float(64) @block0
+    value v55: Float(64) @block0
+    value v56: Generic { name: "String", args: [] } @block0
+    Load v2 <- float(4607182418800017408)
+    Load v3 <- float(4607182418800017408)
+    Eq v1 <- v2, v3
+    Load v4 <- string("1.0 == 1.0 should be true")
+    Call v0 <- string("std.assert.assert") [v1, v4] (def=d0)
+    Load v7 <- float(4607182418800017408)
+    Load v8 <- float(4611686018427387904)
+    Ne v6 <- v7, v8
+    Load v9 <- string("1.0 != 2.0 should be true")
+    Call v5 <- string("std.assert.assert") [v6, v9] (def=d0)
+    Load v12 <- float(4607182418800017408)
+    Load v13 <- float(4611686018427387904)
+    Lt v11 <- v12, v13
+    Load v14 <- string("1.0 < 2.0 should be true")
+    Call v10 <- string("std.assert.assert") [v11, v14] (def=d0)
+    Load v17 <- float(4607182418800017408)
+    Load v18 <- float(4607182418800017408)
+    Le v16 <- v17, v18
+    Load v19 <- string("1.0 <= 1.0 should be true")
+    Call v15 <- string("std.assert.assert") [v16, v19] (def=d0)
+    Load v22 <- float(4611686018427387904)
+    Load v23 <- float(4607182418800017408)
+    Gt v21 <- v22, v23
+    Load v24 <- string("2.0 > 1.0 should be true")
+    Call v20 <- string("std.assert.assert") [v21, v24] (def=d0)
+    Load v27 <- float(4607182418800017408)
+    Load v28 <- float(4607182418800017408)
+    Ge v26 <- v27, v28
+    Load v29 <- string("1.0 >= 1.0 should be true")
+    Call v25 <- string("std.assert.assert") [v26, v29] (def=d0)
+    Load v32 <- float(0)
+    Load v33 <- float(0)
+    Eq v31 <- v32, v33
+    Load v34 <- string("0.0 == 0.0 should be true")
+    Call v30 <- string("std.assert.assert") [v31, v34] (def=d0)
+    Load v39 <- float(4607182418800017408)
+    Neg v37 <- v39
+    Load v38 <- float(0)
+    Lt v36 <- v37, v38
+    Load v40 <- string("-1.0 < 0.0 should be true")
+    Call v35 <- string("std.assert.assert") [v36, v40] (def=d0)
+    Load v45 <- float(4607182418800017408)
+    Neg v43 <- v45
+    Load v44 <- float(4607182418800017408)
+    Ne v42 <- v43, v44
+    Load v46 <- string("-1.0 != 1.0 should be true")
+    Call v41 <- string("std.assert.assert") [v42, v46] (def=d0)
+    Load v49 <- float(4614253070214989087)
+    Load v50 <- float(4613937818241073152)
+    Gt v48 <- v49, v50
+    Load v51 <- string("3.14 > 3.0 should be true")
+    Call v47 <- string("std.assert.assert") [v48, v51] (def=d0)
+    Load v54 <- float(4613937818241073152)
+    Load v55 <- float(4614253070214989087)
+    Lt v53 <- v54, v55
+    Load v56 <- string("3.0 < 3.14 should be true")
+    Call v52 <- string("std.assert.assert") [v53, v56] (def=d0)
+    Ret v52
   init (locals=0)
     Call %0 <- string("main") [] (def=d1)

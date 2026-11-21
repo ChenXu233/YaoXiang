@@ -1093,19 +1093,7 @@ fn types_compatible(
 }
 
 fn const_type(c: &ConstValue) -> Option<MonoType> {
-    match c {
-        ConstValue::Void => Some(MonoType::Void),
-        ConstValue::Bool(_) => Some(MonoType::Bool),
-        ConstValue::Int(_) => Some(MonoType::Int(64)),
-        ConstValue::Float(_) => Some(MonoType::Float(64)),
-        ConstValue::Char(_) => Some(MonoType::Char),
-        ConstValue::String(_) => Some(MonoType::Generic {
-            name: "String".to_string(),
-            args: Vec::new(),
-        }),
-        // Bytes / FFI 引用无稳定 MonoType 对应（信息不足）
-        _ => None,
-    }
+    c.mono_type()
 }
 
 /// 可信类型源（2026-10-06 语料实测登记，文件头「现实语义记录」）：

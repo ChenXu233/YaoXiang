@@ -255,6 +255,23 @@ pub struct AstToIrGenerator {
     pub(super) cur_frame: FrameId,
     /// 已发放的帧数（帧号唯一性来源，只增不减）。
     pub(super) next_frame: u32,
+    /// 当前函数体已发放的 SSA 值数（`ValueId` 的**唯一来源**，7b.2）。
+    ///
+    /// 每个函数体独立从 0 起算（`values` 表索引 = ValueId，必须稠密）；
+    /// `NestedBodyGuard` 保存/还原它，三处语句级回收**不触碰**它
+    /// （09a §P7 7b.2 契约 §二 第 5 条）。
+    pub(super) next_value: u32,
+    /// 当前函数体的值表（`ValueId` 顺序；`take_body_values` 取走）。
+    pub(super) cur_values: Vec<crate::middle::ir::ir::ValueInfo>,
+    /// 当前函数体的「值 → 寄存器槽」过渡映射（与 `cur_values` 同索引）。
+    pub(super) cur_value_slots: Vec<usize>,
+    /// 当前基本块 label（7b.2 单块恒 0；多块随 7b.3 引入）。
+    pub(super) cur_block_label: usize,
+    /// 是否处于「有值表的函数体」生成期：`NestedBodyGuard` 里为 true，
+    /// 模块 init / 顶层语句（`ModuleIR.init`，没有值表）为 false。
+    /// false 时 `next_temp_reg` 退化为旧的 `Local` 槽分配，保证 init 序列
+    /// 与其 codegen 路径零变化（09a §P7 7b.2 契约 §二 第 1 条）。
+    pub(super) value_mode: bool,
 }
 
 /// 绑定信息（用于 IR 生成阶段的方法调用转发）
@@ -406,6 +423,12 @@ impl AstToIrGenerator {
             // 帧 0 = 模块级初始化序列；嵌套函数体在 NestedBodyGuard 里领新帧号。
             cur_frame: FrameId(0),
             next_frame: 0,
+            next_value: 0,
+            cur_values: Vec::new(),
+            cur_value_slots: Vec::new(),
+            cur_block_label: 0,
+            // 模块 init / 顶层语句没有值表：默认返回 Local 槽（与改动前一致）。
+            value_mode: false,
         }
     }
 

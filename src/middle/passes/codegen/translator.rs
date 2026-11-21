@@ -213,6 +213,9 @@ impl Translator {
         let mut debug_map = HashMap::new();
         let mut pending_jumps: Vec<(usize, usize, u8)> = Vec::new();
 
+        // 模块 init 没有值表：清空值映射（其临时操作数仍是 Local）。
+        self.operand_resolver.clear_value_slots();
+
         // 只保留具名槽位；临时寄存器不进调试信息（与 translate_function 同款）
         let local_names: HashMap<usize, String> = locals
             .iter()
@@ -233,6 +236,8 @@ impl Translator {
             if let Some((target, opcode)) = Self::get_jump_target(instr) {
                 pending_jumps.push((bytecode_idx, target, opcode));
             }
+            // E3017 的发射点必须带 span（#324）：逐指令把位置交给解析器。
+            self.operand_resolver.set_span(instr.span());
             let bc = self.translate_instruction(instr)?;
             instructions.push(bc);
         }
@@ -301,6 +306,9 @@ impl Translator {
             }
         };
 
+        // 7b.2：本函数的值 → 槽映射（index = ValueId；7b.4 分配器接管后重算）。
+        self.operand_resolver.set_value_slots(func.value_slots());
+
         for block in blocks_ref {
             for instr in &block.instructions {
                 ir_to_bytecode_map.insert(global_ir_index, instructions.len());
@@ -324,6 +332,8 @@ impl Translator {
 
                 global_ir_index += 1;
 
+                // E3017 的发射点必须带 span（#324）：逐指令把位置交给解析器。
+                self.operand_resolver.set_span(instr.span());
                 let bytecode_instr = self.translate_instruction(instr)?;
                 instructions.push(bytecode_instr);
             }
@@ -438,6 +448,7 @@ impl Translator {
                 entry: 0,
                 locals: locals.clone(),
                 values: Vec::new(),
+                value_slots: Vec::new(),
             },
         };
 

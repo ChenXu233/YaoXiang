@@ -15,7 +15,7 @@ impl AstToIrGenerator {
     pub(super) fn generate_lit_expr_ir(
         &mut self,
         literal: &Literal,
-        result_reg: usize,
+        result_reg: Operand,
         instructions: &mut Vec<Instruction>,
         constants: &mut Vec<ConstValue>,
     ) -> Result<(), Diagnostic> {
@@ -28,10 +28,14 @@ impl AstToIrGenerator {
             Literal::Char(c) => ConstValue::Char(*c),
             Literal::Void => ConstValue::Void,
         };
+        // 字面量类型是可信来源：直接落值表（7b.2 契约 §二 第 2 条）。
+        if let Some(ty) = const_val.mono_type() {
+            self.note_value_type(&result_reg, ty);
+        }
         // 添加到常量池
         constants.push(const_val.clone());
         instructions.push(Instruction::Load {
-            dst: Operand::Local(result_reg),
+            dst: result_reg.clone(),
             src: Operand::Const(const_val),
             span: self.cur_span,
         });
@@ -43,7 +47,7 @@ impl AstToIrGenerator {
         segments: &Vec<ast::FStringSegment>,
         span: &Span,
         expr: &Expr,
-        result_reg: usize,
+        result_reg: Operand,
         instructions: &mut Vec<Instruction>,
         constants: &mut Vec<ConstValue>,
     ) -> Result<(), Diagnostic> {
@@ -51,7 +55,7 @@ impl AstToIrGenerator {
         if let Some(const_val) = self.eval_const_expr(expr) {
             constants.push(const_val.clone());
             instructions.push(Instruction::Load {
-                dst: Operand::Local(result_reg),
+                dst: result_reg.clone(),
                 src: Operand::Const(const_val),
                 span: self.cur_span,
             });
@@ -92,8 +96,8 @@ impl AstToIrGenerator {
 
                     // Generate IR for the interpolation expression
                     let arg_reg = self.next_temp_reg();
-                    self.generate_expr_ir(interp_expr, arg_reg, instructions, constants)?;
-                    arg_regs.push(Operand::Local(arg_reg));
+                    self.generate_expr_ir(interp_expr, arg_reg.clone(), instructions, constants)?;
+                    arg_regs.push(arg_reg.clone());
                 }
             }
         }
@@ -103,18 +107,18 @@ impl AstToIrGenerator {
         let fmt_const = ConstValue::String(format_str);
         constants.push(fmt_const.clone());
         instructions.push(Instruction::Load {
-            dst: Operand::Local(fmt_reg),
+            dst: fmt_reg.clone(),
             src: Operand::Const(fmt_const),
             span: self.cur_span,
         });
 
         // Build args: [format_str, arg0, arg1, ...]
-        let mut call_args = vec![Operand::Local(fmt_reg)];
+        let mut call_args = vec![fmt_reg.clone()];
         call_args.extend(arg_regs);
 
         // Generate Call to std.string.format
         instructions.push(Instruction::Call {
-            dst: Some(Operand::Local(result_reg)),
+            dst: Some(result_reg.clone()),
             func: Operand::Const(ConstValue::String("std.string.format".to_string())),
             args: call_args,
             span: *span,

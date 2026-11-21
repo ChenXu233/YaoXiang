@@ -66,9 +66,9 @@ impl AstToIrGenerator {
         &mut self,
         iface: &str,
         method: &str,
-        obj_reg: usize,
+        obj_reg: Operand,
         method_args: &[Operand],
-        result_reg: usize,
+        result_reg: Operand,
         span: Span,
         instructions: &mut Vec<Instruction>,
         _constants: &mut Vec<ConstValue>,
@@ -90,8 +90,8 @@ impl AstToIrGenerator {
 
         let tag_reg = self.next_temp_reg();
         instructions.push(Instruction::VariantTag {
-            dst: Operand::Local(tag_reg),
-            obj: Operand::Local(obj_reg),
+            dst: tag_reg.clone(),
+            obj: obj_reg.clone(),
             group: group.clone(),
             span,
         });
@@ -101,20 +101,20 @@ impl AstToIrGenerator {
             // tag == i ?
             let const_reg = self.next_temp_reg();
             instructions.push(Instruction::Load {
-                dst: Operand::Local(const_reg),
+                dst: const_reg.clone(),
                 src: Operand::Const(ConstValue::Int(i as i128)),
                 span: self.cur_span,
             });
             let eq_reg = self.next_temp_reg();
             instructions.push(Instruction::Eq {
-                dst: Operand::Local(eq_reg),
-                lhs: Operand::Local(tag_reg),
-                rhs: Operand::Local(const_reg),
+                dst: eq_reg.clone(),
+                lhs: tag_reg.clone(),
+                rhs: const_reg.clone(),
                 span: self.cur_span,
             });
             let next_idx = instructions.len();
             instructions.push(Instruction::JmpIfNot {
-                cond: Operand::Local(eq_reg),
+                cond: eq_reg.clone(),
                 target: 0,
                 span: self.cur_span,
             });
@@ -122,8 +122,8 @@ impl AstToIrGenerator {
             // 解包负载
             let payload_reg = self.next_temp_reg();
             instructions.push(Instruction::VariantPayload {
-                dst: Operand::Local(payload_reg),
-                obj: Operand::Local(obj_reg),
+                dst: payload_reg.clone(),
+                obj: obj_reg.clone(),
                 group: group.clone(),
                 span,
             });
@@ -145,7 +145,7 @@ impl AstToIrGenerator {
                     let mut extra = method_args.iter().cloned();
                     for pos in 0..total {
                         if positions.contains(&(pos as i64)) {
-                            final_args.push(Operand::Local(payload_reg));
+                            final_args.push(payload_reg.clone());
                         } else if let Some(a) = extra.next() {
                             final_args.push(a);
                         }
@@ -157,7 +157,7 @@ impl AstToIrGenerator {
                         .cloned()
                         .unwrap_or_else(|| b.function.clone());
                     instructions.push(Instruction::Call {
-                        dst: Some(Operand::Local(result_reg)),
+                        dst: Some(result_reg.clone()),
                         func: Operand::Const(ConstValue::String(func_name.to_string())),
                         args: final_args,
                         span,
@@ -165,10 +165,10 @@ impl AstToIrGenerator {
                     });
                 }
                 None => {
-                    let mut final_args = vec![Operand::Local(payload_reg)];
+                    let mut final_args = vec![payload_reg.clone()];
                     final_args.extend(method_args.iter().cloned());
                     instructions.push(Instruction::Call {
-                        dst: Some(Operand::Local(result_reg)),
+                        dst: Some(result_reg.clone()),
                         func: Operand::Const(ConstValue::String(format!(
                             "{}.{}",
                             impl_type, method
@@ -212,13 +212,13 @@ impl AstToIrGenerator {
         // 也不改动任何命中分支的指令与顺序。
         let false_reg = self.next_temp_reg();
         instructions.push(Instruction::Load {
-            dst: Operand::Local(false_reg),
+            dst: false_reg.clone(),
             src: Operand::Const(ConstValue::Bool(false)),
             span,
         });
         let msg_reg = self.next_temp_reg();
         instructions.push(Instruction::Load {
-            dst: Operand::Local(msg_reg),
+            dst: msg_reg.clone(),
             src: Operand::Const(ConstValue::String(format!(
                 "interface dispatch: unknown variant tag for {}::{}",
                 iface, method
@@ -226,9 +226,9 @@ impl AstToIrGenerator {
             span,
         });
         instructions.push(Instruction::Call {
-            dst: Some(Operand::Local(result_reg)),
+            dst: Some(result_reg.clone()),
             func: Operand::Const(ConstValue::String("std.assert.assert".to_string())),
-            args: vec![Operand::Local(false_reg), Operand::Local(msg_reg)],
+            args: vec![false_reg.clone(), msg_reg.clone()],
             span,
             def: None,
         });
@@ -259,7 +259,7 @@ impl AstToIrGenerator {
         named_args: &[(String, Expr)],
         span: &Span,
         call_plan_id: PlanId,
-        result_reg: usize,
+        result_reg: Operand,
         instructions: &mut Vec<Instruction>,
         constants: &mut Vec<ConstValue>,
     ) -> Result<(), Diagnostic> {
@@ -272,31 +272,31 @@ impl AstToIrGenerator {
             let payload_reg = self.next_temp_reg();
             if payload_count == 0 {
                 instructions.push(Instruction::Load {
-                    dst: Operand::Local(payload_reg),
+                    dst: payload_reg.clone(),
                     src: Operand::Const(ConstValue::Void),
                     span: *span,
                 });
             } else if payload_count == 1 {
-                self.generate_expr_ir(&args[0], payload_reg, instructions, constants)?;
+                self.generate_expr_ir(&args[0], payload_reg.clone(), instructions, constants)?;
             } else {
                 // 多载荷打包 Tuple（与 match 变体模式的多参解包对称）
                 let mut elem_regs = Vec::with_capacity(payload_count);
                 for a in args {
                     let r = self.next_temp_reg();
-                    self.generate_expr_ir(a, r, instructions, constants)?;
-                    elem_regs.push(Operand::Local(r));
+                    self.generate_expr_ir(a, r.clone(), instructions, constants)?;
+                    elem_regs.push(r.clone());
                 }
                 instructions.push(Instruction::NewTuple {
-                    dst: Operand::Local(payload_reg),
+                    dst: payload_reg.clone(),
                     items: elem_regs,
                     span: *span,
                 });
             }
             instructions.push(Instruction::CreateVariant {
-                dst: Operand::Local(result_reg),
+                dst: result_reg.clone(),
                 group: type_name,
                 variant: variant_index as u32,
-                payload: Operand::Local(payload_reg),
+                payload: payload_reg.clone(),
                 span: *span,
             });
             return Ok(());
@@ -340,8 +340,8 @@ impl AstToIrGenerator {
                 let mut arg_regs = Vec::new();
                 for arg in args.iter() {
                     let arg_reg = self.next_temp_reg();
-                    self.generate_expr_ir(arg, arg_reg, instructions, constants)?;
-                    arg_regs.push(Operand::Local(arg_reg));
+                    self.generate_expr_ir(arg, arg_reg.clone(), instructions, constants)?;
+                    arg_regs.push(arg_reg.clone());
                 }
                 let method_function_name = self.resolve_field_path(expr, field);
 
@@ -360,13 +360,13 @@ impl AstToIrGenerator {
                     {
                         let func_reg = self.next_temp_reg();
                         instructions.push(Instruction::Load {
-                            dst: Operand::Local(func_reg),
+                            dst: func_reg.clone(),
                             src: Operand::Global(slot),
                             span: *span,
                         });
                         instructions.push(Instruction::CallDyn {
-                            dst: Some(Operand::Local(result_reg)),
-                            func: Operand::Local(func_reg),
+                            dst: Some(result_reg.clone()),
+                            func: func_reg.clone(),
                             args: arg_regs,
                             span: *span,
                         });
@@ -404,8 +404,13 @@ impl AstToIrGenerator {
                             } else {
                                 let arg_expr = &named_args[arg_pos - arg_regs.len()].1;
                                 let arg_reg = self.next_temp_reg();
-                                self.generate_expr_ir(arg_expr, arg_reg, instructions, constants)?;
-                                Operand::Local(arg_reg)
+                                self.generate_expr_ir(
+                                    arg_expr,
+                                    arg_reg.clone(),
+                                    instructions,
+                                    constants,
+                                )?;
+                                arg_reg.clone()
                             };
                             slots[*pos] = Some(reg);
                         }
@@ -413,7 +418,7 @@ impl AstToIrGenerator {
                     }
                 }
                 instructions.push(Instruction::Call {
-                    dst: Some(Operand::Local(result_reg)),
+                    dst: Some(result_reg.clone()),
                     func: Operand::Const(ConstValue::String(method_function_name.to_string())),
                     args: arg_regs,
                     span: *span,
@@ -451,7 +456,7 @@ impl AstToIrGenerator {
 
                     // 首先生成对象表达式 IR
                     let obj_reg = self.next_temp_reg();
-                    self.generate_expr_ir(expr, obj_reg, instructions, constants)?;
+                    self.generate_expr_ir(expr, obj_reg.clone(), instructions, constants)?;
 
                     // 生成所有方法参数 IR。
                     // #452：命名实参先按绑定函数的**值形参名**入槽（位置实参占前导
@@ -499,16 +504,21 @@ impl AstToIrGenerator {
                                     &named_args[arg_pos - args.len()].1
                                 };
                                 let arg_reg = self.next_temp_reg();
-                                self.generate_expr_ir(arg_expr, arg_reg, instructions, constants)?;
-                                method_arg_regs.push(Operand::Local(arg_reg));
+                                self.generate_expr_ir(
+                                    arg_expr,
+                                    arg_reg.clone(),
+                                    instructions,
+                                    constants,
+                                )?;
+                                method_arg_regs.push(arg_reg.clone());
                             }
                         }
                     }
                     if method_arg_regs.is_empty() {
                         for arg in args.iter() {
                             let arg_reg = self.next_temp_reg();
-                            self.generate_expr_ir(arg, arg_reg, instructions, constants)?;
-                            method_arg_regs.push(Operand::Local(arg_reg));
+                            self.generate_expr_ir(arg, arg_reg.clone(), instructions, constants)?;
+                            method_arg_regs.push(arg_reg.clone());
                         }
                     }
 
@@ -526,7 +536,7 @@ impl AstToIrGenerator {
 
                     for pos in 0..total_params {
                         if positions.contains(&(pos as i64)) {
-                            final_args.push(Operand::Local(obj_reg));
+                            final_args.push(obj_reg.clone());
                         } else if let Some(arg_reg) = method_arg_iter.next() {
                             final_args.push(arg_reg);
                         }
@@ -546,7 +556,7 @@ impl AstToIrGenerator {
                     let dispatch_name = self.method_dispatch_name(expr, &func_name);
 
                     instructions.push(Instruction::Call {
-                        dst: Some(Operand::Local(result_reg)),
+                        dst: Some(result_reg.clone()),
                         func: Operand::Const(ConstValue::String(dispatch_name)),
                         args: final_args,
                         span: *span,
@@ -590,8 +600,8 @@ impl AstToIrGenerator {
                             *span,
                         )?;
                         let obj_reg = self.next_temp_reg();
-                        self.generate_expr_ir(expr, obj_reg, instructions, constants)?;
-                        let mut call_args = vec![Operand::Local(obj_reg)];
+                        self.generate_expr_ir(expr, obj_reg.clone(), instructions, constants)?;
+                        let mut call_args = vec![obj_reg.clone()];
                         for arg_pos in Self::slot_order_arg_indices(&positions) {
                             let arg_expr = if arg_pos < args.len() {
                                 &args[arg_pos]
@@ -599,14 +609,14 @@ impl AstToIrGenerator {
                                 &named_args[arg_pos - args.len()].1
                             };
                             let r = self.next_temp_reg();
-                            self.generate_expr_ir(arg_expr, r, instructions, constants)?;
-                            call_args.push(Operand::Local(r));
+                            self.generate_expr_ir(arg_expr, r.clone(), instructions, constants)?;
+                            call_args.push(r.clone());
                         }
                         // WBS 4.9.8 / #465：决议给的是**定义侧裸名**（`Temp.tag`）；
                         // 接收者是导入类型时把类型前缀换成它的定义单元限定名。
                         let dispatch_name = self.method_dispatch_name(expr, &mangled);
                         instructions.push(Instruction::Call {
-                            dst: Some(Operand::Local(result_reg)),
+                            dst: Some(result_reg.clone()),
                             func: Operand::Const(ConstValue::String(dispatch_name)),
                             args: call_args,
                             span: *span,
@@ -619,14 +629,14 @@ impl AstToIrGenerator {
 
                     // 生成对象表达式 IR（作为第一个参数）
                     let obj_reg = self.next_temp_reg();
-                    self.generate_expr_ir(expr, obj_reg, instructions, constants)?;
-                    arg_regs.push(Operand::Local(obj_reg));
+                    self.generate_expr_ir(expr, obj_reg.clone(), instructions, constants)?;
+                    arg_regs.push(obj_reg.clone());
 
                     // 生成方法参数 IR
                     for arg in args.iter() {
                         let arg_reg = self.next_temp_reg();
-                        self.generate_expr_ir(arg, arg_reg, instructions, constants)?;
-                        arg_regs.push(Operand::Local(arg_reg));
+                        self.generate_expr_ir(arg, arg_reg.clone(), instructions, constants)?;
+                        arg_regs.push(arg_reg.clone());
                     }
 
                     // RFC-011a §6.4: 存在类型接收者 → 编译期变体分发。
@@ -667,7 +677,7 @@ impl AstToIrGenerator {
                         let final_args: Vec<Operand> = arg_regs.clone();
 
                         instructions.push(Instruction::Call {
-                            dst: Some(Operand::Local(result_reg)),
+                            dst: Some(result_reg.clone()),
                             func: Operand::Const(ConstValue::String(qualified_name)),
                             args: final_args,
                             span: *span,
@@ -693,8 +703,8 @@ impl AstToIrGenerator {
                     }) {
                         // 编译期无法确定具体类型 → CallVirt（vtable 调用）
                         instructions.push(Instruction::CallVirt {
-                            dst: Some(Operand::Local(result_reg)),
-                            obj: Operand::Local(obj_reg),
+                            dst: Some(result_reg.clone()),
+                            obj: obj_reg.clone(),
                             method_name: field.to_string(),
                             args: arg_regs,
                             span: *span,
@@ -759,7 +769,7 @@ impl AstToIrGenerator {
                         // WBS 4.9.8 / #465：普通方法调用同样按接收者的定义单元限定
                         let dispatch_name = self.method_dispatch_name(expr, &func_name);
                         instructions.push(Instruction::Call {
-                            dst: Some(Operand::Local(result_reg)),
+                            dst: Some(result_reg.clone()),
                             func: Operand::Const(ConstValue::String(dispatch_name)),
                             args: final_args,
                             span: *span,
@@ -773,8 +783,8 @@ impl AstToIrGenerator {
             let mut arg_regs = Vec::new();
             for arg in args.iter() {
                 let arg_reg = self.next_temp_reg();
-                self.generate_expr_ir(arg, arg_reg, instructions, constants)?;
-                arg_regs.push(Operand::Local(arg_reg));
+                self.generate_expr_ir(arg, arg_reg.clone(), instructions, constants)?;
+                arg_regs.push(arg_reg.clone());
             }
 
             // RFC-010: 处理命名参数构造 `Point(x=1, y=2)`
@@ -785,8 +795,13 @@ impl AstToIrGenerator {
                         let mut named_regs: Vec<(String, Operand)> = Vec::new();
                         for (arg_name, arg_expr) in named_args.iter() {
                             let arg_reg = self.next_temp_reg();
-                            self.generate_expr_ir(arg_expr, arg_reg, instructions, constants)?;
-                            named_regs.push((arg_name.clone(), Operand::Local(arg_reg)));
+                            self.generate_expr_ir(
+                                arg_expr,
+                                arg_reg.clone(),
+                                instructions,
+                                constants,
+                            )?;
+                            named_regs.push((arg_name.clone(), arg_reg.clone()));
                         }
 
                         // 按**数据字段**顺序重排参数（witness 字段不占构造槽位）
@@ -817,18 +832,18 @@ impl AstToIrGenerator {
                                 if let Some(default_expr) = &data_fields[i].1.default {
                                     self.generate_expr_ir(
                                         default_expr,
-                                        default_reg,
+                                        default_reg.clone(),
                                         instructions,
                                         constants,
                                     )?;
                                 } else {
                                     instructions.push(Instruction::Load {
-                                        dst: Operand::Local(default_reg),
+                                        dst: default_reg.clone(),
                                         src: Operand::Const(ConstValue::Int(0)),
                                         span: self.cur_span,
                                     });
                                 }
-                                *slot = Some(Operand::Local(default_reg));
+                                *slot = Some(default_reg.clone());
                             }
                         }
 
@@ -860,19 +875,19 @@ impl AstToIrGenerator {
                                 // 有默认值：生成默认值表达式 IR
                                 self.generate_expr_ir(
                                     default_expr,
-                                    default_reg,
+                                    default_reg.clone(),
                                     instructions,
                                     constants,
                                 )?;
                             } else {
                                 // 无默认值：用零值填充（语义检查阶段应已报错）
                                 instructions.push(Instruction::Load {
-                                    dst: Operand::Local(default_reg),
+                                    dst: default_reg.clone(),
                                     src: Operand::Const(ConstValue::Int(0)),
                                     span: self.cur_span,
                                 });
                             }
-                            arg_regs.push(Operand::Local(default_reg));
+                            arg_regs.push(default_reg.clone());
                         }
                     }
                 }
@@ -936,8 +951,13 @@ impl AstToIrGenerator {
                         } else {
                             let arg_expr = &named_args[arg_pos - arg_regs.len()].1;
                             let arg_reg = self.next_temp_reg();
-                            self.generate_expr_ir(arg_expr, arg_reg, instructions, constants)?;
-                            Operand::Local(arg_reg)
+                            self.generate_expr_ir(
+                                arg_expr,
+                                arg_reg.clone(),
+                                instructions,
+                                constants,
+                            )?;
+                            arg_reg.clone()
                         };
                         slots[*pos] = Some(reg);
                     }
@@ -949,11 +969,11 @@ impl AstToIrGenerator {
                             s.unwrap_or_else(|| {
                                 let r = self.next_temp_reg();
                                 instructions.push(Instruction::Load {
-                                    dst: Operand::Local(r),
+                                    dst: r.clone(),
                                     src: Operand::Const(ConstValue::Int(0)),
                                     span: self.cur_span,
                                 });
-                                Operand::Local(r)
+                                r.clone()
                             })
                         })
                         .collect();
@@ -964,11 +984,11 @@ impl AstToIrGenerator {
             if !self.is_static_fn_name(func) {
                 // 闭包调用：先加载函数值，然后使用 CallDyn
                 let func_reg = self.next_temp_reg();
-                self.generate_expr_ir(func, func_reg, instructions, constants)?;
+                self.generate_expr_ir(func, func_reg.clone(), instructions, constants)?;
 
                 instructions.push(Instruction::CallDyn {
-                    dst: Some(Operand::Local(result_reg)),
-                    func: Operand::Local(func_reg),
+                    dst: Some(result_reg.clone()),
+                    func: func_reg.clone(),
                     args: arg_regs,
                     span: *span,
                 });
@@ -1021,13 +1041,18 @@ impl AstToIrGenerator {
 
                             // 先计算参数值
                             let arg_reg = self.next_temp_reg();
-                            self.generate_expr_ir(arg_expr, arg_reg, instructions, constants)?;
-                            arg_regs_for_method.push(Operand::Local(arg_reg));
+                            self.generate_expr_ir(
+                                arg_expr,
+                                arg_reg.clone(),
+                                instructions,
+                                constants,
+                            )?;
+                            arg_regs_for_method.push(arg_reg.clone());
 
                             // 调用 to_string 方法
                             let to_string_reg = self.next_temp_reg();
                             instructions.push(Instruction::Call {
-                                dst: Some(Operand::Local(to_string_reg)),
+                                dst: Some(to_string_reg.clone()),
                                 func: Operand::Const(ConstValue::String(func_name)),
                                 args: arg_regs_for_method,
                                 span: *span,
@@ -1053,9 +1078,9 @@ impl AstToIrGenerator {
                             };
 
                             instructions.push(Instruction::Call {
-                                dst: Some(Operand::Local(result_reg)),
+                                dst: Some(result_reg.clone()),
                                 func: Operand::Const(ConstValue::String(print_func_name)),
-                                args: vec![Operand::Local(to_string_reg)],
+                                args: vec![to_string_reg.clone()],
                                 span: *span,
                                 def: None,
                             });
@@ -1066,24 +1091,29 @@ impl AstToIrGenerator {
 
                             // 先计算参数值
                             let arg_reg = self.next_temp_reg();
-                            self.generate_expr_ir(arg_expr, arg_reg, instructions, constants)?;
+                            self.generate_expr_ir(
+                                arg_expr,
+                                arg_reg.clone(),
+                                instructions,
+                                constants,
+                            )?;
 
                             // 调用 format_fallback 获取类型信息字符串
                             // 类型名常量先 Load 进寄存器——Call 参数必须寄存器态
                             // （Const 直传会被 codegen to_reg 拒收，老 bug，tuple 同款）
                             let type_name_reg = self.next_temp_reg();
                             instructions.push(Instruction::Load {
-                                dst: Operand::Local(type_name_reg),
+                                dst: type_name_reg.clone(),
                                 src: Operand::Const(ConstValue::String(type_name.clone())),
                                 span: self.cur_span,
                             });
                             let fallback_reg = self.next_temp_reg();
                             instructions.push(Instruction::Call {
-                                dst: Some(Operand::Local(fallback_reg)),
+                                dst: Some(fallback_reg.clone()),
                                 func: Operand::Const(ConstValue::String(
                                     "std.io.format_fallback".to_string(),
                                 )),
-                                args: vec![Operand::Local(arg_reg), Operand::Local(type_name_reg)],
+                                args: vec![arg_reg.clone(), type_name_reg.clone()],
                                 span: *span,
                                 def: None,
                             });
@@ -1106,9 +1136,9 @@ impl AstToIrGenerator {
                             };
 
                             instructions.push(Instruction::Call {
-                                dst: Some(Operand::Local(result_reg)),
+                                dst: Some(result_reg.clone()),
                                 func: Operand::Const(ConstValue::String(print_func_name)),
-                                args: vec![Operand::Local(fallback_reg)],
+                                args: vec![fallback_reg.clone()],
                                 span: *span,
                                 def: None,
                             });
@@ -1117,7 +1147,7 @@ impl AstToIrGenerator {
                         // 无法获取类型，使用默认处理
                         let func_operand = self.resolve_function_name(func)?;
                         instructions.push(Instruction::Call {
-                            dst: Some(Operand::Local(result_reg)),
+                            dst: Some(result_reg.clone()),
                             func: func_operand,
                             args: arg_regs,
                             span: *span,
@@ -1131,7 +1161,7 @@ impl AstToIrGenerator {
 
                     let func_operand = self.resolve_function_name(func)?;
                     instructions.push(Instruction::Call {
-                        dst: Some(Operand::Local(result_reg)),
+                        dst: Some(result_reg.clone()),
                         func: func_operand,
                         args: final_args,
                         span: *span,

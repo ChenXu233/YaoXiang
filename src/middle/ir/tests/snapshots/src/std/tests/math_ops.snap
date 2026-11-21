@@ -1,155 +1,296 @@
 module
   fn main() -> Void
     locals_total=9
-    Load %0 <- int(5)
-    Neg %1 <- %0
-    Call %2 <- string("std.math.abs") [%1] (def=d0)
-    Load %3 <- int(5)
-    Eq %4 <- %2, %3
-    Load %5 <- string("abs(-5) == 5")
-    Call %6 <- string("std.assert.assert") [%4, %5] (def=d1)
-    Load %1 <- int(3)
-    Load %0 <- int(7)
-    Call %2 <- string("std.math.max") [%1, %0] (def=d2)
-    Load %3 <- int(7)
-    Eq %4 <- %2, %3
-    Load %5 <- string("max(3,7) == 7")
-    Call %6 <- string("std.assert.assert") [%4, %5] (def=d1)
-    Load %1 <- int(3)
-    Load %0 <- int(7)
-    Call %2 <- string("std.math.min") [%1, %0] (def=d3)
-    Load %3 <- int(3)
-    Eq %4 <- %2, %3
-    Load %5 <- string("min(3,7) == 3")
-    Call %6 <- string("std.assert.assert") [%4, %5] (def=d1)
-    Load %1 <- int(15)
-    Load %0 <- int(1)
-    Load %5 <- int(10)
-    Call %2 <- string("std.math.clamp") [%1, %0, %5] (def=d4)
-    Load %3 <- int(10)
-    Eq %4 <- %2, %3
-    Load %7 <- string("clamp high == 10")
-    Call %6 <- string("std.assert.assert") [%4, %7] (def=d1)
-    Load %0 <- int(5)
-    Neg %1 <- %0
-    Load %5 <- int(1)
-    Load %7 <- int(10)
-    Call %2 <- string("std.math.clamp") [%1, %5, %7] (def=d4)
-    Load %3 <- int(1)
-    Eq %4 <- %2, %3
-    Load %8 <- string("clamp low == 1")
-    Call %6 <- string("std.assert.assert") [%4, %8] (def=d1)
-    Load %1 <- int(5)
-    Load %0 <- int(1)
-    Load %5 <- int(10)
-    Call %2 <- string("std.math.clamp") [%1, %0, %5] (def=d4)
-    Load %3 <- int(5)
-    Eq %4 <- %2, %3
-    Load %7 <- string("clamp mid == 5")
-    Call %6 <- string("std.assert.assert") [%4, %7] (def=d1)
-    Load %0 <- float(4612811918334230528)
-    Neg %1 <- %0
-    Call %2 <- string("std.math.fabs") [%1] (def=d5)
-    Load %3 <- float(4612811918334230528)
-    Eq %4 <- %2, %3
-    Load %5 <- string("fabs(-2.5) == 2.5")
-    Call %6 <- string("std.assert.assert") [%4, %5] (def=d1)
-    Load %1 <- float(4616189618054758400)
-    Call %2 <- string("std.math.sqrt") [%1] (def=d6)
-    Load %3 <- float(4611686018427387904)
-    Eq %4 <- %2, %3
-    Load %0 <- string("sqrt(4) == 2")
-    Call %6 <- string("std.assert.assert") [%4, %0] (def=d1)
-    Load %1 <- float(4615514078110652826)
-    Call %2 <- string("std.math.floor") [%1] (def=d7)
-    Load %3 <- float(4613937818241073152)
-    Eq %4 <- %2, %3
-    Load %0 <- string("floor(3.7) == 3")
-    Call %6 <- string("std.assert.assert") [%4, %0] (def=d1)
-    Load %1 <- float(4614388178203810202)
-    Call %2 <- string("std.math.ceil") [%1] (def=d8)
-    Load %3 <- float(4616189618054758400)
-    Eq %4 <- %2, %3
-    Load %0 <- string("ceil(3.2) == 4")
-    Call %6 <- string("std.assert.assert") [%4, %0] (def=d1)
-    Load %1 <- float(4615063718147915776)
-    Call %2 <- string("std.math.round") [%1] (def=d9)
-    Load %3 <- float(4616189618054758400)
-    Eq %4 <- %2, %3
-    Load %0 <- string("round(3.5) == 4")
-    Call %6 <- string("std.assert.assert") [%4, %0] (def=d1)
-    Load %1 <- float(4611686018427387904)
-    Load %0 <- float(4621819117588971520)
-    Call %2 <- string("std.math.pow") [%1, %0] (def=d10)
-    Load %3 <- float(4652218415073722368)
-    Eq %4 <- %2, %3
-    Load %5 <- string("pow(2,10) == 1024")
-    Call %6 <- string("std.assert.assert") [%4, %5] (def=d1)
-    Load %1 <- float(4609434218613702656)
-    Load %0 <- float(4612811918334230528)
-    Call %2 <- string("std.math.fmax") [%1, %0] (def=d11)
-    Load %3 <- float(4612811918334230528)
-    Eq %4 <- %2, %3
-    Load %5 <- string("fmax == 2.5")
-    Call %6 <- string("std.assert.assert") [%4, %5] (def=d1)
-    Load %1 <- float(4609434218613702656)
-    Load %0 <- float(4612811918334230528)
-    Call %2 <- string("std.math.fmin") [%1, %0] (def=d12)
-    Load %3 <- float(4609434218613702656)
-    Eq %4 <- %2, %3
-    Load %5 <- string("fmin == 1.5")
-    Call %6 <- string("std.assert.assert") [%4, %5] (def=d1)
-    Load %1 <- float(0)
-    Call %2 <- string("std.math.sin") [%1] (def=d13)
-    Load %3 <- float(0)
-    Eq %4 <- %2, %3
-    Load %0 <- string("sin(0) == 0")
-    Call %6 <- string("std.assert.assert") [%4, %0] (def=d1)
-    Load %1 <- float(0)
-    Call %2 <- string("std.math.cos") [%1] (def=d14)
-    Load %3 <- float(4607182418800017408)
-    Eq %4 <- %2, %3
-    Load %0 <- string("cos(0) == 1")
-    Call %6 <- string("std.assert.assert") [%4, %0] (def=d1)
-    Load %1 <- float(0)
-    Call %2 <- string("std.math.tan") [%1] (def=d15)
-    Load %3 <- float(0)
-    Eq %4 <- %2, %3
-    Load %0 <- string("tan(0) == 0")
-    Call %6 <- string("std.assert.assert") [%4, %0] (def=d1)
-    Call %3 <- string("std.math.PI") [] (def=d16)
-    Load %1 <- float(4614253070214989087)
-    Gt %2 <- %3, %1
-    JmpIfNot %2 -> instr(124)
-    Call %0 <- string("std.math.PI") [] (def=d16)
-    Load %5 <- float(4614275588213125939)
-    Lt %4 <- %0, %5
+    values_total=140
+    value v0: TypeRef("?") @block0
+    value v1: Bool @block0
+    value v2: TypeRef("?") @block0
+    value v3: Int(64) @block0
+    value v4: Int(64) @block0
+    value v5: Int(64) @block0
+    value v6: Generic { name: "String", args: [] } @block0
+    value v7: TypeRef("?") @block0
+    value v8: Bool @block0
+    value v9: TypeRef("?") @block0
+    value v10: Int(64) @block0
+    value v11: Int(64) @block0
+    value v12: Int(64) @block0
+    value v13: Generic { name: "String", args: [] } @block0
+    value v14: TypeRef("?") @block0
+    value v15: Bool @block0
+    value v16: TypeRef("?") @block0
+    value v17: Int(64) @block0
+    value v18: Int(64) @block0
+    value v19: Int(64) @block0
+    value v20: Generic { name: "String", args: [] } @block0
+    value v21: TypeRef("?") @block0
+    value v22: Bool @block0
+    value v23: TypeRef("?") @block0
+    value v24: Int(64) @block0
+    value v25: Int(64) @block0
+    value v26: Int(64) @block0
+    value v27: Int(64) @block0
+    value v28: Generic { name: "String", args: [] } @block0
+    value v29: TypeRef("?") @block0
+    value v30: Bool @block0
+    value v31: TypeRef("?") @block0
+    value v32: Int(64) @block0
+    value v33: Int(64) @block0
+    value v34: Int(64) @block0
+    value v35: Int(64) @block0
+    value v36: Int(64) @block0
+    value v37: Generic { name: "String", args: [] } @block0
+    value v38: TypeRef("?") @block0
+    value v39: Bool @block0
+    value v40: TypeRef("?") @block0
+    value v41: Int(64) @block0
+    value v42: Int(64) @block0
+    value v43: Int(64) @block0
+    value v44: Int(64) @block0
+    value v45: Generic { name: "String", args: [] } @block0
+    value v46: TypeRef("?") @block0
+    value v47: Bool @block0
+    value v48: TypeRef("?") @block0
+    value v49: Float(64) @block0
+    value v50: Float(64) @block0
+    value v51: Float(64) @block0
+    value v52: Generic { name: "String", args: [] } @block0
+    value v53: TypeRef("?") @block0
+    value v54: Bool @block0
+    value v55: TypeRef("?") @block0
+    value v56: Float(64) @block0
+    value v57: Float(64) @block0
+    value v58: Generic { name: "String", args: [] } @block0
+    value v59: TypeRef("?") @block0
+    value v60: Bool @block0
+    value v61: TypeRef("?") @block0
+    value v62: Float(64) @block0
+    value v63: Float(64) @block0
+    value v64: Generic { name: "String", args: [] } @block0
+    value v65: TypeRef("?") @block0
+    value v66: Bool @block0
+    value v67: TypeRef("?") @block0
+    value v68: Float(64) @block0
+    value v69: Float(64) @block0
+    value v70: Generic { name: "String", args: [] } @block0
+    value v71: TypeRef("?") @block0
+    value v72: Bool @block0
+    value v73: TypeRef("?") @block0
+    value v74: Float(64) @block0
+    value v75: Float(64) @block0
+    value v76: Generic { name: "String", args: [] } @block0
+    value v77: TypeRef("?") @block0
+    value v78: Bool @block0
+    value v79: TypeRef("?") @block0
+    value v80: Float(64) @block0
+    value v81: Float(64) @block0
+    value v82: Float(64) @block0
+    value v83: Generic { name: "String", args: [] } @block0
+    value v84: TypeRef("?") @block0
+    value v85: Bool @block0
+    value v86: TypeRef("?") @block0
+    value v87: Float(64) @block0
+    value v88: Float(64) @block0
+    value v89: Float(64) @block0
+    value v90: Generic { name: "String", args: [] } @block0
+    value v91: TypeRef("?") @block0
+    value v92: Bool @block0
+    value v93: TypeRef("?") @block0
+    value v94: Float(64) @block0
+    value v95: Float(64) @block0
+    value v96: Float(64) @block0
+    value v97: Generic { name: "String", args: [] } @block0
+    value v98: TypeRef("?") @block0
+    value v99: Bool @block0
+    value v100: TypeRef("?") @block0
+    value v101: Float(64) @block0
+    value v102: Float(64) @block0
+    value v103: Generic { name: "String", args: [] } @block0
+    value v104: TypeRef("?") @block0
+    value v105: Bool @block0
+    value v106: TypeRef("?") @block0
+    value v107: Float(64) @block0
+    value v108: Float(64) @block0
+    value v109: Generic { name: "String", args: [] } @block0
+    value v110: TypeRef("?") @block0
+    value v111: Bool @block0
+    value v112: TypeRef("?") @block0
+    value v113: Float(64) @block0
+    value v114: Float(64) @block0
+    value v115: Generic { name: "String", args: [] } @block0
+    value v116: TypeRef("?") @block0
+    value v117: Bool @block0
+    value v118: Bool @block0
+    value v119: Float(64) @block0
+    value v120: Float(64) @block0
+    value v121: Float(64) @block0
+    value v122: Float(64) @block0
+    value v123: Generic { name: "String", args: [] } @block0
+    value v124: TypeRef("?") @block0
+    value v125: Bool @block0
+    value v126: Bool @block0
+    value v127: Float(64) @block0
+    value v128: Float(64) @block0
+    value v129: Float(64) @block0
+    value v130: Float(64) @block0
+    value v131: Generic { name: "String", args: [] } @block0
+    value v132: TypeRef("?") @block0
+    value v133: Bool @block0
+    value v134: Bool @block0
+    value v135: Float(64) @block0
+    value v136: Float(64) @block0
+    value v137: Float(64) @block0
+    value v138: Float(64) @block0
+    value v139: Generic { name: "String", args: [] } @block0
+    Load v5 <- int(5)
+    Neg v4 <- v5
+    Call v2 <- string("std.math.abs") [v4] (def=d0)
+    Load v3 <- int(5)
+    Eq v1 <- v2, v3
+    Load v6 <- string("abs(-5) == 5")
+    Call v0 <- string("std.assert.assert") [v1, v6] (def=d1)
+    Load v11 <- int(3)
+    Load v12 <- int(7)
+    Call v9 <- string("std.math.max") [v11, v12] (def=d2)
+    Load v10 <- int(7)
+    Eq v8 <- v9, v10
+    Load v13 <- string("max(3,7) == 7")
+    Call v7 <- string("std.assert.assert") [v8, v13] (def=d1)
+    Load v18 <- int(3)
+    Load v19 <- int(7)
+    Call v16 <- string("std.math.min") [v18, v19] (def=d3)
+    Load v17 <- int(3)
+    Eq v15 <- v16, v17
+    Load v20 <- string("min(3,7) == 3")
+    Call v14 <- string("std.assert.assert") [v15, v20] (def=d1)
+    Load v25 <- int(15)
+    Load v26 <- int(1)
+    Load v27 <- int(10)
+    Call v23 <- string("std.math.clamp") [v25, v26, v27] (def=d4)
+    Load v24 <- int(10)
+    Eq v22 <- v23, v24
+    Load v28 <- string("clamp high == 10")
+    Call v21 <- string("std.assert.assert") [v22, v28] (def=d1)
+    Load v34 <- int(5)
+    Neg v33 <- v34
+    Load v35 <- int(1)
+    Load v36 <- int(10)
+    Call v31 <- string("std.math.clamp") [v33, v35, v36] (def=d4)
+    Load v32 <- int(1)
+    Eq v30 <- v31, v32
+    Load v37 <- string("clamp low == 1")
+    Call v29 <- string("std.assert.assert") [v30, v37] (def=d1)
+    Load v42 <- int(5)
+    Load v43 <- int(1)
+    Load v44 <- int(10)
+    Call v40 <- string("std.math.clamp") [v42, v43, v44] (def=d4)
+    Load v41 <- int(5)
+    Eq v39 <- v40, v41
+    Load v45 <- string("clamp mid == 5")
+    Call v38 <- string("std.assert.assert") [v39, v45] (def=d1)
+    Load v51 <- float(4612811918334230528)
+    Neg v50 <- v51
+    Call v48 <- string("std.math.fabs") [v50] (def=d5)
+    Load v49 <- float(4612811918334230528)
+    Eq v47 <- v48, v49
+    Load v52 <- string("fabs(-2.5) == 2.5")
+    Call v46 <- string("std.assert.assert") [v47, v52] (def=d1)
+    Load v57 <- float(4616189618054758400)
+    Call v55 <- string("std.math.sqrt") [v57] (def=d6)
+    Load v56 <- float(4611686018427387904)
+    Eq v54 <- v55, v56
+    Load v58 <- string("sqrt(4) == 2")
+    Call v53 <- string("std.assert.assert") [v54, v58] (def=d1)
+    Load v63 <- float(4615514078110652826)
+    Call v61 <- string("std.math.floor") [v63] (def=d7)
+    Load v62 <- float(4613937818241073152)
+    Eq v60 <- v61, v62
+    Load v64 <- string("floor(3.7) == 3")
+    Call v59 <- string("std.assert.assert") [v60, v64] (def=d1)
+    Load v69 <- float(4614388178203810202)
+    Call v67 <- string("std.math.ceil") [v69] (def=d8)
+    Load v68 <- float(4616189618054758400)
+    Eq v66 <- v67, v68
+    Load v70 <- string("ceil(3.2) == 4")
+    Call v65 <- string("std.assert.assert") [v66, v70] (def=d1)
+    Load v75 <- float(4615063718147915776)
+    Call v73 <- string("std.math.round") [v75] (def=d9)
+    Load v74 <- float(4616189618054758400)
+    Eq v72 <- v73, v74
+    Load v76 <- string("round(3.5) == 4")
+    Call v71 <- string("std.assert.assert") [v72, v76] (def=d1)
+    Load v81 <- float(4611686018427387904)
+    Load v82 <- float(4621819117588971520)
+    Call v79 <- string("std.math.pow") [v81, v82] (def=d10)
+    Load v80 <- float(4652218415073722368)
+    Eq v78 <- v79, v80
+    Load v83 <- string("pow(2,10) == 1024")
+    Call v77 <- string("std.assert.assert") [v78, v83] (def=d1)
+    Load v88 <- float(4609434218613702656)
+    Load v89 <- float(4612811918334230528)
+    Call v86 <- string("std.math.fmax") [v88, v89] (def=d11)
+    Load v87 <- float(4612811918334230528)
+    Eq v85 <- v86, v87
+    Load v90 <- string("fmax == 2.5")
+    Call v84 <- string("std.assert.assert") [v85, v90] (def=d1)
+    Load v95 <- float(4609434218613702656)
+    Load v96 <- float(4612811918334230528)
+    Call v93 <- string("std.math.fmin") [v95, v96] (def=d12)
+    Load v94 <- float(4609434218613702656)
+    Eq v92 <- v93, v94
+    Load v97 <- string("fmin == 1.5")
+    Call v91 <- string("std.assert.assert") [v92, v97] (def=d1)
+    Load v102 <- float(0)
+    Call v100 <- string("std.math.sin") [v102] (def=d13)
+    Load v101 <- float(0)
+    Eq v99 <- v100, v101
+    Load v103 <- string("sin(0) == 0")
+    Call v98 <- string("std.assert.assert") [v99, v103] (def=d1)
+    Load v108 <- float(0)
+    Call v106 <- string("std.math.cos") [v108] (def=d14)
+    Load v107 <- float(4607182418800017408)
+    Eq v105 <- v106, v107
+    Load v109 <- string("cos(0) == 1")
+    Call v104 <- string("std.assert.assert") [v105, v109] (def=d1)
+    Load v114 <- float(0)
+    Call v112 <- string("std.math.tan") [v114] (def=d15)
+    Load v113 <- float(0)
+    Eq v111 <- v112, v113
+    Load v115 <- string("tan(0) == 0")
+    Call v110 <- string("std.assert.assert") [v111, v115] (def=d1)
+    Call v119 <- string("std.math.PI") [] (def=d16)
+    Load v120 <- float(4614253070214989087)
+    Gt v118 <- v119, v120
+    JmpIfNot v118 -> instr(124)
+    Call v121 <- string("std.math.PI") [] (def=d16)
+    Load v122 <- float(4614275588213125939)
+    Lt v117 <- v121, v122
     Jmp -> instr(125)
-    Load %4 <- bool(false)
-    Load %7 <- string("PI in range")
-    Call %6 <- string("std.assert.assert") [%4, %7] (def=d1)
-    Call %3 <- string("std.math.E") [] (def=d17)
-    Load %1 <- float(4613284796295104430)
-    Gt %2 <- %3, %1
-    JmpIfNot %2 -> instr(135)
-    Call %0 <- string("std.math.E") [] (def=d17)
-    Load %5 <- float(4613307314293241283)
-    Lt %4 <- %0, %5
+    Load v117 <- bool(false)
+    Load v123 <- string("PI in range")
+    Call v116 <- string("std.assert.assert") [v117, v123] (def=d1)
+    Call v127 <- string("std.math.E") [] (def=d17)
+    Load v128 <- float(4613284796295104430)
+    Gt v126 <- v127, v128
+    JmpIfNot v126 -> instr(135)
+    Call v129 <- string("std.math.E") [] (def=d17)
+    Load v130 <- float(4613307314293241283)
+    Lt v125 <- v129, v130
     Jmp -> instr(136)
-    Load %4 <- bool(false)
-    Load %7 <- string("E in range")
-    Call %6 <- string("std.assert.assert") [%4, %7] (def=d1)
-    Call %3 <- string("std.math.TAU") [] (def=d18)
-    Load %1 <- float(4618756669842359583)
-    Gt %2 <- %3, %1
-    JmpIfNot %2 -> instr(146)
-    Call %0 <- string("std.math.TAU") [] (def=d18)
-    Load %5 <- float(4618767928841428009)
-    Lt %4 <- %0, %5
+    Load v125 <- bool(false)
+    Load v131 <- string("E in range")
+    Call v124 <- string("std.assert.assert") [v125, v131] (def=d1)
+    Call v135 <- string("std.math.TAU") [] (def=d18)
+    Load v136 <- float(4618756669842359583)
+    Gt v134 <- v135, v136
+    JmpIfNot v134 -> instr(146)
+    Call v137 <- string("std.math.TAU") [] (def=d18)
+    Load v138 <- float(4618767928841428009)
+    Lt v133 <- v137, v138
     Jmp -> instr(147)
-    Load %4 <- bool(false)
-    Load %7 <- string("TAU in range")
-    Call %6 <- string("std.assert.assert") [%4, %7] (def=d1)
-    Ret %6
+    Load v133 <- bool(false)
+    Load v139 <- string("TAU in range")
+    Call v132 <- string("std.assert.assert") [v133, v139] (def=d1)
+    Ret v132
   init (locals=0)
     Call %0 <- string("main") [] (def=d19)

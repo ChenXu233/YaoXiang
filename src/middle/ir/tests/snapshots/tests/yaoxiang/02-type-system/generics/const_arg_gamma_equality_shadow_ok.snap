@@ -3,164 +3,254 @@ module
     generic_params: ["N"]
     slot[0] N : Int(64) @depth1
     locals_total=2
-    MakeClosure %0 <- __f_l0 env=[%1] (def=d0)
-    Ret %0
+    values_total=1
+    value v0: TypeRef("?") @block0
+    MakeClosure v0 <- __f_l0 env=[%0] (def=d0)
+    Ret v0
   fn restored(Int(64)) -> Int(64)
     slot[0] y : Int(64) @depth1
     slot[6] r : Int(64) @depth3
     slot[9] y : Int(64) @depth4
     locals_total=23
+    values_total=20
+    value v0: Int(64) @block0
+    value v1: Bool @block0
+    value v2: Int(64) @block0
+    value v3: Int(64) @block0
+    value v4: TypeRef("?") @block0
+    value v5: TypeRef("?") @block0
+    value v6: Int(64) @block0
+    value v7: TypeRef("?") @block0
+    value v8: Int(64) @block0
+    value v9: Bool @block0
+    value v10: TypeRef("?") @block0
+    value v11: Int(64) @block0
+    value v12: TypeRef("?") @block0
+    value v13: Int(64) @block0
+    value v14: Bool @block0
+    value v15: Int(64) @block0
+    value v16: Int(64) @block0
+    value v17: Fn { params: [TypeRef("N")], return_type: Int(64) } @block0
+    value v18: Int(64) @block0
+    value v19: Int(64) @block0
     Load %0 <- arg%0
-    Load %1 <- %0
-    Load %2 <- int(42)
-    Eq %3 <- %1, %2
-    JmpIfNot %3 -> instr(31)
-    Load %4 <- void
-    Load %5 <- int(7)
-    CreateVariant %6 <- Option::0 %5
-    VariantTag %7 <- %6 : Option
-    Load %8 <- int(0)
-    Eq %9 <- %7, %8
-    JmpIfNot %9 -> instr(17)
-    VariantPayload %10 <- %6 : Option
-    Move %11 <- %10
-    Load %12 <- %11
-    Move %4 <- %12
+    Load v2 <- %0
+    Load v3 <- int(42)
+    Eq v1 <- v2, v3
+    JmpIfNot v1 -> instr(31)
+    Load %1 <- void
+    Load v6 <- int(7)
+    CreateVariant v5 <- Option::0 v6
+    VariantTag v7 <- v5 : Option
+    Load v8 <- int(0)
+    Eq v9 <- v7, v8
+    JmpIfNot v9 -> instr(17)
+    VariantPayload v10 <- v5 : Option
+    Move %2 <- v10
+    Load v11 <- %2
+    Move %1 <- v11
     Jmp -> instr(24)
-    VariantTag %13 <- %6 : Option
-    Load %14 <- int(1)
-    Eq %15 <- %13, %14
-    JmpIfNot %15 -> instr(24)
-    Load %16 <- int(0)
-    Move %4 <- %16
+    VariantTag v12 <- v5 : Option
+    Load v13 <- int(1)
+    Eq v14 <- v12, v13
+    JmpIfNot v14 -> instr(24)
+    Load v15 <- int(0)
+    Move %1 <- v15
     Jmp -> instr(24)
-    Load %17 <- int(42)
-    Load %18 <- %0
-    Call %19 <- string("f") [%18] (def=d1)
-    CallDyn %20 <- %19 [%17]
-    Drop %4
-    Move %21 <- %20
+    Load v16 <- int(42)
+    Load v18 <- %0
+    Call v17 <- string("f") [v18] (def=d1)
+    CallDyn v4 <- v17 [v16]
+    Drop %1
+    Move v0 <- v4
     Jmp -> instr(33)
-    Load %22 <- int(0)
-    Move %21 <- %22
-    Ret %21
+    Load v19 <- int(0)
+    Move v0 <- v19
+    Ret v0
   fn own_fact() -> Int(64)
     slot[0] r : Int(64) @depth1
     slot[3] y : Int(64) @depth2
     locals_total=21
+    values_total=20
+    value v0: TypeRef("?") @block0
+    value v1: Int(64) @block0
+    value v2: TypeRef("?") @block0
+    value v3: Int(64) @block0
+    value v4: Bool @block0
+    value v5: TypeRef("?") @block0
+    value v6: TypeRef("?") @block0
+    value v7: TypeRef("?") @block0
+    value v8: Bool @block0
+    value v9: Int(64) @block0
+    value v10: Int(64) @block0
+    value v11: Generic { name: "String", args: [] } @block0
+    value v12: Int(64) @block0
+    value v13: Fn { params: [TypeRef("N")], return_type: Int(64) } @block0
+    value v14: Int(64) @block0
+    value v15: TypeRef("?") @block0
+    value v16: Int(64) @block0
+    value v17: Bool @block0
+    value v18: Int(64) @block0
+    value v19: Int(64) @block0
     Load %0 <- void
-    Load %1 <- int(7)
-    CreateVariant %2 <- Option::0 %1
-    VariantTag %3 <- %2 : Option
-    Load %4 <- int(0)
-    Eq %5 <- %3, %4
-    JmpIfNot %5 -> instr(20)
-    VariantPayload %6 <- %2 : Option
-    Move %7 <- %6
-    Load %8 <- %7
-    Load %9 <- int(7)
-    Eq %10 <- %8, %9
-    Load %11 <- string("臂内自产事实")
-    Call %12 <- string("std.assert.assert") [%10, %11] (def=d2)
-    Load %13 <- int(7)
-    Load %14 <- %7
-    Call %15 <- string("f") [%14] (def=d1)
-    CallDyn %16 <- %15 [%13]
-    Move %0 <- %16
+    Load v1 <- int(7)
+    CreateVariant v0 <- Option::0 v1
+    VariantTag v2 <- v0 : Option
+    Load v3 <- int(0)
+    Eq v4 <- v2, v3
+    JmpIfNot v4 -> instr(20)
+    VariantPayload v5 <- v0 : Option
+    Move %1 <- v5
+    Load v9 <- %1
+    Load v10 <- int(7)
+    Eq v8 <- v9, v10
+    Load v11 <- string("臂内自产事实")
+    Call v7 <- string("std.assert.assert") [v8, v11] (def=d2)
+    Load v12 <- int(7)
+    Load v14 <- %1
+    Call v13 <- string("f") [v14] (def=d1)
+    CallDyn v6 <- v13 [v12]
+    Move %0 <- v6
     Jmp -> instr(27)
-    VariantTag %17 <- %2 : Option
-    Load %18 <- int(1)
-    Eq %19 <- %17, %18
-    JmpIfNot %19 -> instr(27)
-    Load %20 <- int(0)
-    Move %0 <- %20
+    VariantTag v15 <- v0 : Option
+    Load v16 <- int(1)
+    Eq v17 <- v15, v16
+    JmpIfNot v17 -> instr(27)
+    Load v18 <- int(0)
+    Move %0 <- v18
     Jmp -> instr(27)
-    Load %3 <- %0
+    Load v19 <- %0
     Drop %0
-    Ret %3
+    Ret v19
   fn other_name(Int(64), Int(64)) -> Int(64)
     slot[0] y : Int(64) @depth1
     slot[1] z : Int(64) @depth1
     slot[10] r : Int(64) @depth3
     slot[13] y : Int(64) @depth4
     locals_total=27
+    values_total=23
+    value v0: Int(64) @block0
+    value v1: Bool @block0
+    value v2: Bool @block0
+    value v3: Int(64) @block0
+    value v4: Int(64) @block0
+    value v5: Int(64) @block0
+    value v6: Int(64) @block0
+    value v7: TypeRef("?") @block0
+    value v8: TypeRef("?") @block0
+    value v9: Int(64) @block0
+    value v10: TypeRef("?") @block0
+    value v11: Int(64) @block0
+    value v12: Bool @block0
+    value v13: TypeRef("?") @block0
+    value v14: Int(64) @block0
+    value v15: TypeRef("?") @block0
+    value v16: Int(64) @block0
+    value v17: Bool @block0
+    value v18: Int(64) @block0
+    value v19: Int(64) @block0
+    value v20: Fn { params: [TypeRef("N")], return_type: Int(64) } @block0
+    value v21: Int(64) @block0
+    value v22: Int(64) @block0
     Load %0 <- arg%0
     Load %1 <- arg%1
-    Load %2 <- %0
-    Load %3 <- int(42)
-    Eq %4 <- %2, %3
-    JmpIfNot %4 -> instr(10)
-    Load %5 <- %1
-    Load %6 <- int(7)
-    Eq %7 <- %5, %6
+    Load v3 <- %0
+    Load v4 <- int(42)
+    Eq v2 <- v3, v4
+    JmpIfNot v2 -> instr(10)
+    Load v5 <- %1
+    Load v6 <- int(7)
+    Eq v1 <- v5, v6
     Jmp -> instr(11)
-    Load %7 <- bool(false)
-    JmpIfNot %7 -> instr(38)
-    Load %8 <- void
-    Load %9 <- int(0)
-    CreateVariant %10 <- Option::0 %9
-    VariantTag %11 <- %10 : Option
-    Load %12 <- int(0)
-    Eq %13 <- %11, %12
-    JmpIfNot %13 -> instr(24)
-    VariantPayload %14 <- %10 : Option
-    Move %15 <- %14
-    Load %16 <- %15
-    Move %8 <- %16
+    Load v1 <- bool(false)
+    JmpIfNot v1 -> instr(38)
+    Load %2 <- void
+    Load v9 <- int(0)
+    CreateVariant v8 <- Option::0 v9
+    VariantTag v10 <- v8 : Option
+    Load v11 <- int(0)
+    Eq v12 <- v10, v11
+    JmpIfNot v12 -> instr(24)
+    VariantPayload v13 <- v8 : Option
+    Move %3 <- v13
+    Load v14 <- %3
+    Move %2 <- v14
     Jmp -> instr(31)
-    VariantTag %17 <- %10 : Option
-    Load %18 <- int(1)
-    Eq %19 <- %17, %18
-    JmpIfNot %19 -> instr(31)
-    Load %20 <- int(0)
-    Move %8 <- %20
+    VariantTag v15 <- v8 : Option
+    Load v16 <- int(1)
+    Eq v17 <- v15, v16
+    JmpIfNot v17 -> instr(31)
+    Load v18 <- int(0)
+    Move %2 <- v18
     Jmp -> instr(31)
-    Load %21 <- int(7)
-    Load %22 <- %1
-    Call %23 <- string("f") [%22] (def=d1)
-    CallDyn %24 <- %23 [%21]
-    Drop %8
-    Move %25 <- %24
+    Load v19 <- int(7)
+    Load v21 <- %1
+    Call v20 <- string("f") [v21] (def=d1)
+    CallDyn v7 <- v20 [v19]
+    Drop %2
+    Move v0 <- v7
     Jmp -> instr(40)
-    Load %26 <- int(0)
-    Move %25 <- %26
-    Ret %25
+    Load v22 <- int(0)
+    Move v0 <- v22
+    Ret v0
   fn main() -> Void
     slot[0] a : Int(64) @depth1
     slot[1] b : Int(64) @depth1
     slot[2] c : Int(64) @depth1
     locals_total=8
-    Load %0 <- int(42)
-    Call %1 <- string("restored") [%0] (def=d3)
-    Load %2 <- %1
-    Load %3 <- int(42)
-    Eq %4 <- %2, %3
-    Load %5 <- string("遮蔽臂之后外层事实仍成立")
-    Call %0 <- string("std.assert.assert") [%4, %5] (def=d2)
-    Call %0 <- string("own_fact") [] (def=d4)
-    Load %3 <- %0
-    Load %5 <- int(7)
-    Eq %2 <- %3, %5
-    Load %6 <- string("臂内自产等式事实可用")
-    Call %4 <- string("std.assert.assert") [%2, %6] (def=d2)
-    Load %2 <- int(42)
-    Load %3 <- int(7)
-    Call %4 <- string("other_name") [%2, %3] (def=d5)
-    Load %5 <- %4
-    Load %6 <- int(7)
-    Eq %3 <- %5, %6
-    Load %7 <- string("未被遮蔽的名字不受影响")
-    Call %2 <- string("std.assert.assert") [%3, %7] (def=d2)
-    Drop %1
+    values_total=18
+    value v0: Int(64) @block0
+    value v1: TypeRef("?") @block0
+    value v2: Bool @block0
+    value v3: Int(64) @block0
+    value v4: Int(64) @block0
+    value v5: Generic { name: "String", args: [] } @block0
+    value v6: TypeRef("?") @block0
+    value v7: Bool @block0
+    value v8: Int(64) @block0
+    value v9: Int(64) @block0
+    value v10: Generic { name: "String", args: [] } @block0
+    value v11: Int(64) @block0
+    value v12: Int(64) @block0
+    value v13: TypeRef("?") @block0
+    value v14: Bool @block0
+    value v15: Int(64) @block0
+    value v16: Int(64) @block0
+    value v17: Generic { name: "String", args: [] } @block0
+    Load v0 <- int(42)
+    Call %0 <- string("restored") [v0] (def=d3)
+    Load v3 <- %0
+    Load v4 <- int(42)
+    Eq v2 <- v3, v4
+    Load v5 <- string("遮蔽臂之后外层事实仍成立")
+    Call v1 <- string("std.assert.assert") [v2, v5] (def=d2)
+    Call %1 <- string("own_fact") [] (def=d4)
+    Load v8 <- %1
+    Load v9 <- int(7)
+    Eq v7 <- v8, v9
+    Load v10 <- string("臂内自产等式事实可用")
+    Call v6 <- string("std.assert.assert") [v7, v10] (def=d2)
+    Load v11 <- int(42)
+    Load v12 <- int(7)
+    Call %2 <- string("other_name") [v11, v12] (def=d5)
+    Load v15 <- %2
+    Load v16 <- int(7)
+    Eq v14 <- v15, v16
+    Load v17 <- string("未被遮蔽的名字不受影响")
+    Call v13 <- string("std.assert.assert") [v14, v17] (def=d2)
     Drop %0
-    Drop %4
-    Ret %2
+    Drop %1
+    Drop %2
+    Ret v13
   fn __f_l0(TypeRef("N")) -> Int(64)
     slot[0] N : Int(64) @depth1
     slot[1] n : Int(64) @depth1
     locals_total=4
-    Load %0 <- %1
-    Ret %0
+    values_total=2
+    value v0: TypeRef("?") @block0
+    value v1: Int(64) @block0
+    Load v1 <- %0
+    Ret v1
     Ret
   init (locals=0)
     Call %0 <- string("main") [] (def=d6)

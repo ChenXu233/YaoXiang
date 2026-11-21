@@ -1,38 +1,68 @@
 module
   fn main() -> Void
     locals_total=8
-    Load %0 <- int(1)
-    Load %1 <- int(1)
-    Add %2 <- %0, %1
-    Load %3 <- int(2)
-    Eq %4 <- %2, %3
-    Load %5 <- string("basic equality")
-    Call %6 <- string("std.assert.assert") [%4, %5] (def=d0)
-    Load %2 <- string("abc")
-    Load %3 <- string("abc")
-    Eq %4 <- %2, %3
-    Load %0 <- string("string equality")
-    Call %6 <- string("std.assert.assert") [%4, %0] (def=d0)
-    Load %3 <- int(5)
-    Load %0 <- int(3)
-    Gt %2 <- %3, %0
-    JmpIfNot %2 -> instr(20)
-    Load %1 <- int(3)
-    Load %5 <- int(5)
-    Lt %4 <- %1, %5
+    values_total=29
+    value v0: TypeRef("?") @block0
+    value v1: Bool @block0
+    value v2: Int(64) @block0
+    value v3: Int(64) @block0
+    value v4: Int(64) @block0
+    value v5: Int(64) @block0
+    value v6: Generic { name: "String", args: [] } @block0
+    value v7: TypeRef("?") @block0
+    value v8: Bool @block0
+    value v9: Generic { name: "String", args: [] } @block0
+    value v10: Generic { name: "String", args: [] } @block0
+    value v11: Generic { name: "String", args: [] } @block0
+    value v12: TypeRef("?") @block0
+    value v13: Bool @block0
+    value v14: Bool @block0
+    value v15: Int(64) @block0
+    value v16: Int(64) @block0
+    value v17: Int(64) @block0
+    value v18: Int(64) @block0
+    value v19: Generic { name: "String", args: [] } @block0
+    value v20: TypeRef("?") @block0
+    value v21: Bool @block0
+    value v22: Bool @block0
+    value v23: Generic { name: "String", args: [] } @block0
+    value v24: TypeRef("?") @block0
+    value v25: Bool @block0
+    value v26: Int(64) @block0
+    value v27: Int(64) @block0
+    value v28: Generic { name: "String", args: [] } @block0
+    Load v4 <- int(1)
+    Load v5 <- int(1)
+    Add v2 <- v4, v5
+    Load v3 <- int(2)
+    Eq v1 <- v2, v3
+    Load v6 <- string("basic equality")
+    Call v0 <- string("std.assert.assert") [v1, v6] (def=d0)
+    Load v9 <- string("abc")
+    Load v10 <- string("abc")
+    Eq v8 <- v9, v10
+    Load v11 <- string("string equality")
+    Call v7 <- string("std.assert.assert") [v8, v11] (def=d0)
+    Load v15 <- int(5)
+    Load v16 <- int(3)
+    Gt v14 <- v15, v16
+    JmpIfNot v14 -> instr(20)
+    Load v17 <- int(3)
+    Load v18 <- int(5)
+    Lt v13 <- v17, v18
     Jmp -> instr(21)
-    Load %4 <- bool(false)
-    Load %7 <- string("logical and")
-    Call %6 <- string("std.assert.assert") [%4, %7] (def=d0)
-    Load %2 <- bool(false)
-    Not %4 <- %2
-    Load %3 <- string("logical not")
-    Call %6 <- string("std.assert.assert") [%4, %3] (def=d0)
-    Load %2 <- int(42)
-    Load %3 <- int(42)
-    Eq %4 <- %2, %3
-    Load %0 <- string("int equality")
-    Call %6 <- string("std.assert.assert") [%4, %0] (def=d0)
-    Ret %6
+    Load v13 <- bool(false)
+    Load v19 <- string("logical and")
+    Call v12 <- string("std.assert.assert") [v13, v19] (def=d0)
+    Load v22 <- bool(false)
+    Not v21 <- v22
+    Load v23 <- string("logical not")
+    Call v20 <- string("std.assert.assert") [v21, v23] (def=d0)
+    Load v26 <- int(42)
+    Load v27 <- int(42)
+    Eq v25 <- v26, v27
+    Load v28 <- string("int equality")
+    Call v24 <- string("std.assert.assert") [v25, v28] (def=d0)
+    Ret v24
   init (locals=0)
     Call %0 <- string("main") [] (def=d1)

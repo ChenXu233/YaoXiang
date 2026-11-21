@@ -8,31 +8,50 @@ module
     slot[1] ref_buf : Int(64) @depth1
     slot[2] v : Int(64) @depth1
     locals_total=10
-    Load %0 <- int(42)
-    Call %1 <- string("Buffer") [%0] (def=d0)
-    Load %2 <- %1
-    Move %0 <- %2
-    Load %3 <- %1
-    Load %4 <- %0
-    Call %2 <- string("BufferView") [%3, %4] (def=d1)
-    Drop %1
-    Load %5 <- %2
-    LoadField %6 <- %5.1
-    LoadField %7 <- %6.0
-    Load %8 <- int(42)
-    Eq %4 <- %7, %8
-    Load %9 <- string("view value should be 42")
-    Call %3 <- string("std.assert.assert") [%4, %9] (def=d2)
-    Load %8 <- %2
-    LoadField %7 <- %8.1
-    LoadField %4 <- %7.0
-    Call %3 <- string("std.io.println") [%4] (def=d3)
-    Load %4 <- bool(true)
-    Load %7 <- string("all passed")
-    Call %3 <- string("std.assert.assert") [%4, %7] (def=d2)
-    Drop %1
+    values_total=18
+    value v0: Int(64) @block0
+    value v1: Struct(StructType { name: "Buffer", fields: [("value", Int(64))], methods: {}, interfaces: [] }) @block0
+    value v2: Struct(StructType { name: "Buffer", fields: [("value", Int(64))], methods: {}, interfaces: [] }) @block0
+    value v3: Ref { mutable: false, inner: Struct(StructType { name: "Buffer", fields: [("value", Int(64))], methods: {}, interfaces: [] }) } @block0
+    value v4: TypeRef("?") @block0
+    value v5: Bool @block0
+    value v6: TypeRef("?") @block0
+    value v7: Int(64) @block0
+    value v8: TypeRef("?") @block0
+    value v9: Struct(StructType { name: "BufferView", fields: [("owner", TypeRef("Buffer")), ("view", Ref { mutable: false, inner: TypeRef("Buffer") })], methods: {}, interfaces: [] }) @block0
+    value v10: Generic { name: "String", args: [] } @block0
+    value v11: TypeRef("?") @block0
+    value v12: TypeRef("?") @block0
+    value v13: TypeRef("?") @block0
+    value v14: Struct(StructType { name: "BufferView", fields: [("owner", TypeRef("Buffer")), ("view", Ref { mutable: false, inner: TypeRef("Buffer") })], methods: {}, interfaces: [] }) @block0
+    value v15: TypeRef("?") @block0
+    value v16: Bool @block0
+    value v17: Generic { name: "String", args: [] } @block0
+    Load v0 <- int(42)
+    Call %0 <- string("Buffer") [v0] (def=d0)
+    Load v1 <- %0
+    Move %1 <- v1
+    Load v2 <- %0
+    Load v3 <- %1
+    Call %2 <- string("BufferView") [v2, v3] (def=d1)
     Drop %0
+    Load v9 <- %2
+    LoadField v8 <- v9.1
+    LoadField v6 <- v8.0
+    Load v7 <- int(42)
+    Eq v5 <- v6, v7
+    Load v10 <- string("view value should be 42")
+    Call v4 <- string("std.assert.assert") [v5, v10] (def=d2)
+    Load v14 <- %2
+    LoadField v13 <- v14.1
+    LoadField v12 <- v13.0
+    Call v11 <- string("std.io.println") [v12] (def=d3)
+    Load v16 <- bool(true)
+    Load v17 <- string("all passed")
+    Call v15 <- string("std.assert.assert") [v16, v17] (def=d2)
+    Drop %0
+    Drop %1
     Drop %2
-    Ret %3
+    Ret v15
   init (locals=0)
     Call %0 <- string("main") [] (def=d4)

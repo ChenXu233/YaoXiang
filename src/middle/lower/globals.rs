@@ -264,23 +264,23 @@ impl AstToIrGenerator {
             // 折不出就走完整表达式生成（块值、调用、变量引用等）。
             if let Some(const_val) = self.eval_const_expr(init) {
                 init_instrs.push(Instruction::Load {
-                    dst: Operand::Local(result_reg),
+                    dst: result_reg.clone(),
                     src: Operand::Const(const_val),
                     span: Self::get_expr_span(init),
                 });
             } else {
-                self.generate_expr_ir(init, result_reg, &mut init_instrs, constants)?;
+                self.generate_expr_ir(init, result_reg.clone(), &mut init_instrs, constants)?;
             }
         } else {
             init_instrs.push(Instruction::Load {
-                dst: Operand::Local(result_reg),
+                dst: result_reg.clone(),
                 src: Operand::Const(ConstValue::Int(0)),
                 span: Span::default(),
             });
         }
         init_instrs.push(Instruction::Store {
             dst: Operand::Global(slot_idx),
-            src: Operand::Local(result_reg),
+            src: result_reg.clone(),
             span: initializer.map(Self::get_expr_span).unwrap_or_default(),
         });
         // T3：入待定队列（不直接追加到 module_init）——尾部按依赖拓扑排序后写入。
@@ -386,9 +386,9 @@ impl AstToIrGenerator {
 
         // 生成表达式体的 IR，并返回结果
         let result_reg = frame.next_temp_reg();
-        frame.generate_expr_ir(body, result_reg, &mut instructions, constants)?;
+        frame.generate_expr_ir(body, result_reg.clone(), &mut instructions, constants)?;
         instructions.push(Instruction::Ret {
-            value: Some(Operand::Local(result_reg)),
+            value: Some(result_reg.clone()),
             span: frame.cur_span,
         });
 
@@ -397,6 +397,12 @@ impl AstToIrGenerator {
 
         // 槽位表 + 寄存器预算（E3014）单点
         let locals_types: Vec<LocalSlot> = frame.take_body_locals()?;
+        let param_types: Vec<MonoType> = params
+            .iter()
+            .filter_map(|p| p.ty.clone())
+            .map(|t| t.into())
+            .collect();
+        let (values, value_slots) = frame.take_body_values(&instructions, &param_types);
 
         // 解析返回类型
         let ret_type: MonoType = return_type.clone().into();
@@ -404,11 +410,7 @@ impl AstToIrGenerator {
         let func_ir = FunctionIR {
             def: None, // 由 generate_module_ir 尾部 assign_defs 填充
             name: name.to_string(),
-            params: params
-                .iter()
-                .filter_map(|p| p.ty.clone())
-                .map(|t| t.into())
-                .collect(),
+            params: param_types,
             return_type: ret_type,
             generic_params: None,
             body: FunctionBody::Code {
@@ -419,7 +421,8 @@ impl AstToIrGenerator {
                 }],
                 entry: 0,
                 locals: locals_types,
-                values: Vec::new(),
+                values,
+                value_slots,
             },
         };
 

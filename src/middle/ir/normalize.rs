@@ -602,7 +602,12 @@ pub fn normalize_module(ir: &ModuleIR) -> String {
                     .collect();
                 writeln!(out, "    type_decl [{}]", fields.join(" ; ")).unwrap();
             }
-            FunctionBody::Code { blocks, locals, .. } => {
+            FunctionBody::Code {
+                blocks,
+                locals,
+                values,
+                ..
+            } => {
                 // 具名槽表（源码变量身份；temp 占位槽无信息不打印）
                 for (i, s) in locals.iter().enumerate() {
                     if let Some(name) = &s.name {
@@ -620,6 +625,26 @@ pub fn normalize_module(ir: &ModuleIR) -> String {
                     args: Renamer::new(),
                     values: Renamer::new(),
                 };
+                // 7b.2：SSA 值表段（按 ValueId 升序；重命名预置为 `v0..vN`，
+                // 使指令里的 `Operand::Value` 渲染与本节一致）。
+                writeln!(out, "    values_total={}", values.len()).unwrap();
+                for (i, info) in values.iter().enumerate() {
+                    let name = fctx.values.rename(i);
+                    match &info.debug_name {
+                        Some(debug) => writeln!(
+                            out,
+                            "    value v{name}: {:?} @block{} debug={debug}",
+                            info.ty, info.defining_block
+                        )
+                        .unwrap(),
+                        None => writeln!(
+                            out,
+                            "    value v{name}: {:?} @block{}",
+                            info.ty, info.defining_block
+                        )
+                        .unwrap(),
+                    }
+                }
                 for block in blocks {
                     // successors 恒空（现状）；排序规则预留（07 前驱排序）
                     let mut succ = block.successors.clone();

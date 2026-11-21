@@ -10,50 +10,76 @@ module
     slot[1] z : Int(64) @depth1
     slot[2] o : Int(64) @depth1
     locals_total=5
+    values_total=5
+    value v0: Generic { name: "Vec", args: [TypeRef("A")] } @block0
+    value v1: Int(64) @block0
+    value v2: Generic { name: "E", args: [TypeRef("A")] } @block0
+    value v3: Int(64) @block0
+    value v4: Generic { name: "E", args: [TypeRef("A")] } @block0
     Load %0 <- arg%0
     AllocArray %1 size=int(0), elem=int(1)
-    Load %2 <- %1
-    Load %3 <- int(0)
-    Call %4 <- string("E") [%2, %3] (def=d0)
-    Load %2 <- %4
-    Load %3 <- int(1)
-    StoreField %2.1 <- %3 (type=None, name=Some("n"))
-    Drop %4
-    Load %2 <- %4
-    Ret %2
-    Ret %2
+    Load v0 <- %1
+    Load v1 <- int(0)
+    Call %2 <- string("E") [v0, v1] (def=d0)
+    Load v2 <- %2
+    Load v3 <- int(1)
+    StoreField v2.1 <- v3 (type=None, name=Some("n"))
+    Drop %2
+    Load v4 <- %2
+    Ret v4
+    Ret v4
   fn e_n(Ref { mutable: false, inner: Generic { name: "E", args: [TypeRef("A")] } }) -> Int(64)
     generic_params: ["A"]
     slot[0] e : Int(64) @depth1
     locals_total=3
-    Load %0 <- %1
-    LoadField %2 <- %0.1
-    Ret %2
-    Ret %2
+    values_total=2
+    value v0: TypeRef("?") @block0
+    value v1: Generic { name: "E", args: [Int(64)] } @block0
+    Load v1 <- %0
+    LoadField v0 <- v1.1
+    Ret v0
+    Ret v0
   fn main() -> Void
     slot[0] p : Int(64) @depth1
     slot[1] e : Int(64) @depth1
     locals_total=9
-    Load %0 <- int(7)
-    Call %1 <- string("PI") [%0] (def=d1)
-    Load %2 <- %1
-    LoadField %3 <- %2.0
-    Load %4 <- int(7)
-    Eq %5 <- %3, %4
-    Load %6 <- string("user type wins over std constant of same name")
-    Call %0 <- string("std.assert.assert") [%5, %6] (def=d2)
-    Load %5 <- void
-    Load %3 <- int(5)
-    Call %0 <- string("mk_e") [%5, %3] (def=d3)
-    Load %7 <- %0
-    Move %6 <- %7
-    Call %4 <- string("e_n") [%6] (def=d4)
-    Load %2 <- int(1)
-    Eq %3 <- %4, %2
-    Load %8 <- string("user generic type wins over std constant")
-    Call %5 <- string("std.assert.assert") [%3, %8] (def=d2)
-    Drop %0
+    values_total=16
+    value v0: Int(64) @block0
+    value v1: TypeRef("?") @block0
+    value v2: Bool @block0
+    value v3: TypeRef("?") @block0
+    value v4: Int(64) @block0
+    value v5: TypeRef("PI") @block0
+    value v6: Generic { name: "String", args: [] } @block0
+    value v7: Void @block0
+    value v8: Int(64) @block0
+    value v9: TypeRef("?") @block0
+    value v10: Bool @block0
+    value v11: Int(64) @block0
+    value v12: Int(64) @block0
+    value v13: Generic { name: "E", args: [Int(64)] } @block0
+    value v14: Generic { name: "E", args: [Int(64)] } @block0
+    value v15: Generic { name: "String", args: [] } @block0
+    Load v0 <- int(7)
+    Call %0 <- string("PI") [v0] (def=d1)
+    Load v5 <- %0
+    LoadField v3 <- v5.0
+    Load v4 <- int(7)
+    Eq v2 <- v3, v4
+    Load v6 <- string("user type wins over std constant of same name")
+    Call v1 <- string("std.assert.assert") [v2, v6] (def=d2)
+    Load v7 <- void
+    Load v8 <- int(5)
+    Call %1 <- string("mk_e") [v7, v8] (def=d3)
+    Load v14 <- %1
+    Move v13 <- v14
+    Call v11 <- string("e_n") [v13] (def=d4)
+    Load v12 <- int(1)
+    Eq v10 <- v11, v12
+    Load v15 <- string("user generic type wins over std constant")
+    Call v9 <- string("std.assert.assert") [v10, v15] (def=d2)
     Drop %1
-    Ret %5
+    Drop %0
+    Ret v9
   init (locals=0)
     Call %0 <- string("main") [] (def=d5)

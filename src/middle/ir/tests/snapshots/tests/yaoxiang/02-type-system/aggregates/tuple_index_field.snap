@@ -2,27 +2,36 @@ module
   fn first_of(Generic { name: "Tuple", args: [Int(64), Int(64)] }) -> Int(64)
     slot[0] t : Int(64) @depth1
     locals_total=3
+    values_total=2
+    value v0: TypeRef("?") @block0
+    value v1: Generic { name: "Tuple", args: [Int(64), Int(64)] } @block0
     Load %0 <- arg%0
-    Load %1 <- %0
-    LoadField %2 <- %1.0
-    Ret %2
-    Ret %2
+    Load v1 <- %0
+    LoadField v0 <- v1.0
+    Ret v0
+    Ret v0
   fn second_of(Generic { name: "Tuple", args: [Int(64), Int(64)] }) -> Int(64)
     slot[0] t : Int(64) @depth1
     locals_total=3
+    values_total=2
+    value v0: TypeRef("?") @block0
+    value v1: Generic { name: "Tuple", args: [Int(64), Int(64)] } @block0
     Load %0 <- arg%0
-    Load %1 <- %0
-    LoadField %2 <- %1.1
-    Ret %2
-    Ret %2
+    Load v1 <- %0
+    LoadField v0 <- v1.1
+    Ret v0
+    Ret v0
   fn second_by_ref(Ref { mutable: false, inner: Generic { name: "Tuple", args: [Int(64), Generic { name: "String", args: [] }] } }) -> Generic { name: "String", args: [] }
     slot[0] t : Int(64) @depth1
     locals_total=3
+    values_total=2
+    value v0: TypeRef("?") @block0
+    value v1: Generic { name: "Tuple", args: [Int(64), Int(64)] } @block0
     Load %0 <- arg%0
-    Load %1 <- %0
-    LoadField %2 <- %1.1
-    Ret %2
-    Ret %2
+    Load v1 <- %0
+    LoadField v0 <- v1.1
+    Ret v0
+    Ret v0
   fn main() -> Void
     slot[0] t : Int(64) @depth1
     slot[1] t1 : Int(64) @depth1
@@ -30,76 +39,136 @@ module
     slot[3] s : Int(64) @depth1
     slot[4] half : Int(64) @depth1
     locals_total=12
-    Load %0 <- int(10)
-    Load %1 <- int(20)
-    NewTuple %2 <- [%0, %1]
-    Load %3 <- %2
-    LoadField %4 <- %3.0
-    Load %5 <- int(10)
-    Eq %1 <- %4, %5
-    Load %6 <- string("t.0 reads first slot")
-    Call %0 <- string("std.assert.assert") [%1, %6] (def=d0)
-    Load %3 <- %2
-    LoadField %4 <- %3.1
-    Load %5 <- int(20)
-    Eq %1 <- %4, %5
-    Load %6 <- string("t.1 reads second slot")
-    Call %0 <- string("std.assert.assert") [%1, %6] (def=d0)
-    Load %1 <- int(10)
-    Load %4 <- int(20)
-    NewTuple %0 <- [%1, %4]
-    Load %6 <- %0
-    Call %5 <- string("first_of") [%6] (def=d1)
-    Load %3 <- int(10)
-    Eq %4 <- %5, %3
-    Load %7 <- string("tuple index through function param")
-    Call %1 <- string("std.assert.assert") [%4, %7] (def=d0)
-    Load %4 <- int(10)
-    Load %5 <- int(20)
-    NewTuple %1 <- [%4, %5]
-    Load %7 <- %1
-    Call %3 <- string("second_of") [%7] (def=d2)
-    Load %6 <- int(20)
-    Eq %5 <- %3, %6
-    Load %8 <- string("second slot through function param")
-    Call %4 <- string("std.assert.assert") [%5, %8] (def=d0)
-    Load %7 <- %2
-    LoadField %3 <- %7.1
-    Load %6 <- int(30)
-    Lt %5 <- %3, %6
-    Load %8 <- string("operator directly after tuple index")
-    Call %4 <- string("std.assert.assert") [%5, %8] (def=d0)
-    Load %9 <- %2
-    LoadField %7 <- %9.0
-    Load %10 <- %2
-    LoadField %8 <- %10.1
-    Add %3 <- %7, %8
-    Load %6 <- int(30)
-    Eq %5 <- %3, %6
-    Load %11 <- string("tuple indices in arithmetic")
-    Call %4 <- string("std.assert.assert") [%5, %11] (def=d0)
-    Load %5 <- int(1)
-    Load %3 <- string("two")
-    NewTuple %4 <- [%5, %3]
-    Load %9 <- %4
-    Move %8 <- %9
-    Call %6 <- string("second_by_ref") [%8] (def=d3)
-    Load %7 <- string("two")
-    Eq %3 <- %6, %7
-    Load %10 <- string("tuple index on ref receiver")
-    Call %5 <- string("std.assert.assert") [%3, %10] (def=d0)
+    values_total=59
+    value v0: Int(64) @block0
+    value v1: Int(64) @block0
+    value v2: TypeRef("?") @block0
+    value v3: Bool @block0
+    value v4: TypeRef("?") @block0
+    value v5: Int(64) @block0
+    value v6: Generic { name: "Tuple", args: [Int(64), Int(64)] } @block0
+    value v7: Generic { name: "String", args: [] } @block0
+    value v8: TypeRef("?") @block0
+    value v9: Bool @block0
+    value v10: TypeRef("?") @block0
+    value v11: Int(64) @block0
+    value v12: Generic { name: "Tuple", args: [Int(64), Int(64)] } @block0
+    value v13: Generic { name: "String", args: [] } @block0
+    value v14: Int(64) @block0
+    value v15: Int(64) @block0
+    value v16: TypeRef("?") @block0
+    value v17: Bool @block0
+    value v18: Int(64) @block0
+    value v19: Int(64) @block0
+    value v20: Generic { name: "Tuple", args: [Int(64), Int(64)] } @block0
+    value v21: Generic { name: "String", args: [] } @block0
+    value v22: Int(64) @block0
+    value v23: Int(64) @block0
+    value v24: TypeRef("?") @block0
+    value v25: Bool @block0
+    value v26: Int(64) @block0
+    value v27: Int(64) @block0
+    value v28: Generic { name: "Tuple", args: [Int(64), Int(64)] } @block0
+    value v29: Generic { name: "String", args: [] } @block0
+    value v30: TypeRef("?") @block0
+    value v31: Bool @block0
+    value v32: TypeRef("?") @block0
+    value v33: Int(64) @block0
+    value v34: Generic { name: "Tuple", args: [Int(64), Int(64)] } @block0
+    value v35: Generic { name: "String", args: [] } @block0
+    value v36: TypeRef("?") @block0
+    value v37: Bool @block0
+    value v38: TypeRef("?") @block0
+    value v39: Int(64) @block0
+    value v40: TypeRef("?") @block0
+    value v41: TypeRef("?") @block0
+    value v42: Generic { name: "Tuple", args: [Int(64), Int(64)] } @block0
+    value v43: Generic { name: "Tuple", args: [Int(64), Int(64)] } @block0
+    value v44: Generic { name: "String", args: [] } @block0
+    value v45: Int(64) @block0
+    value v46: Generic { name: "String", args: [] } @block0
+    value v47: TypeRef("?") @block0
+    value v48: Bool @block0
+    value v49: Generic { name: "String", args: [] } @block0
+    value v50: Generic { name: "String", args: [] } @block0
+    value v51: Generic { name: "Tuple", args: [Int(64), Generic { name: "String", args: [] }] } @block0
+    value v52: Generic { name: "Tuple", args: [Int(64), Generic { name: "String", args: [] }] } @block0
+    value v53: Generic { name: "String", args: [] } @block0
+    value v54: TypeRef("?") @block0
+    value v55: Bool @block0
+    value v56: Float(64) @block0
+    value v57: Float(64) @block0
+    value v58: Generic { name: "String", args: [] } @block0
+    Load v0 <- int(10)
+    Load v1 <- int(20)
+    NewTuple %0 <- [v0, v1]
+    Load v6 <- %0
+    LoadField v4 <- v6.0
+    Load v5 <- int(10)
+    Eq v3 <- v4, v5
+    Load v7 <- string("t.0 reads first slot")
+    Call v2 <- string("std.assert.assert") [v3, v7] (def=d0)
+    Load v12 <- %0
+    LoadField v10 <- v12.1
+    Load v11 <- int(20)
+    Eq v9 <- v10, v11
+    Load v13 <- string("t.1 reads second slot")
+    Call v8 <- string("std.assert.assert") [v9, v13] (def=d0)
+    Load v14 <- int(10)
+    Load v15 <- int(20)
+    NewTuple %1 <- [v14, v15]
+    Load v20 <- %1
+    Call v18 <- string("first_of") [v20] (def=d1)
+    Load v19 <- int(10)
+    Eq v17 <- v18, v19
+    Load v21 <- string("tuple index through function param")
+    Call v16 <- string("std.assert.assert") [v17, v21] (def=d0)
+    Load v22 <- int(10)
+    Load v23 <- int(20)
+    NewTuple %2 <- [v22, v23]
+    Load v28 <- %2
+    Call v26 <- string("second_of") [v28] (def=d2)
+    Load v27 <- int(20)
+    Eq v25 <- v26, v27
+    Load v29 <- string("second slot through function param")
+    Call v24 <- string("std.assert.assert") [v25, v29] (def=d0)
+    Load v34 <- %0
+    LoadField v32 <- v34.1
+    Load v33 <- int(30)
+    Lt v31 <- v32, v33
+    Load v35 <- string("operator directly after tuple index")
+    Call v30 <- string("std.assert.assert") [v31, v35] (def=d0)
+    Load v42 <- %0
+    LoadField v40 <- v42.0
+    Load v43 <- %0
+    LoadField v41 <- v43.1
+    Add v38 <- v40, v41
+    Load v39 <- int(30)
+    Eq v37 <- v38, v39
+    Load v44 <- string("tuple indices in arithmetic")
+    Call v36 <- string("std.assert.assert") [v37, v44] (def=d0)
+    Load v45 <- int(1)
+    Load v46 <- string("two")
+    NewTuple %3 <- [v45, v46]
+    Load v52 <- %3
+    Move v51 <- v52
+    Call v49 <- string("second_by_ref") [v51] (def=d3)
+    Load v50 <- string("two")
+    Eq v48 <- v49, v50
+    Load v53 <- string("tuple index on ref receiver")
+    Call v47 <- string("std.assert.assert") [v48, v53] (def=d0)
+    Drop %3
+    Load %4 <- float(4602678819172646912)
+    Load v56 <- %4
+    Load v57 <- float(4602678819172646912)
+    Eq v55 <- v56, v57
+    Load v58 <- string("leading-dot float still works")
+    Call v54 <- string("std.assert.assert") [v55, v58] (def=d0)
     Drop %4
-    Load %5 <- float(4602678819172646912)
-    Load %7 <- %5
-    Load %8 <- float(4602678819172646912)
-    Eq %6 <- %7, %8
-    Load %9 <- string("leading-dot float still works")
-    Call %3 <- string("std.assert.assert") [%6, %9] (def=d0)
-    Drop %5
-    Drop %4
-    Drop %2
+    Drop %3
     Drop %0
     Drop %1
-    Ret %3
+    Drop %2
+    Ret v54
   init (locals=0)
     Call %0 <- string("main") [] (def=d4)
