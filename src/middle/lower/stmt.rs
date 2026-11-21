@@ -243,11 +243,17 @@ impl AstToIrGenerator {
                 if let Some(type_name) = type_name {
                     // RFC-004 外部重绑定：`Type.method = fn` / `Type.method = fn[pos]`
                     // 只登记 type_bindings（方法调用时参数重排），不生成新函数 IR。
+                    // #563：提取器对超 i64 位置字面量返回 Err（checker 已报
+                    // E1064、管线在 check 出错后中止，本臂实际不可达）——保底
+                    // 不登记，防止错误位置进 IR。
                     let rebind = match value.as_deref() {
                         Some(Expr::Var(fn_name, _)) => Some((fn_name.clone(), vec![0i64])),
                         Some(Expr::Index { expr, index, .. }) => match expr.as_ref() {
                             Expr::Var(fn_name, _) => {
-                                Some((fn_name.clone(), ast::Expr::extract_binding_positions(index)))
+                                match ast::Expr::extract_binding_positions(index) {
+                                    Ok(positions) => Some((fn_name.clone(), positions)),
+                                    Err(_) => None,
+                                }
                             }
                             _ => None,
                         },

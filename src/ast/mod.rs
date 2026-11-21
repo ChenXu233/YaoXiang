@@ -1831,44 +1831,88 @@ impl Expr {
 
     /// RFC-004: 从绑定语句 `Type.method = fn[pos]` 的 index 部分提取位置列表。
     /// 支持单个整数与整数元组；负索引（`-1` 从末尾计数）原样保留，
-    /// 由调用方按被绑函数元数归一化；超出 i64 表示域的极端值同样按负位/超界
-    /// 交下游归一化校验（E1064 判域）。无法识别时回退 `[0]`（与既有行为一致）。
-    pub fn extract_binding_positions(index: &Expr) -> Vec<i64> {
-        fn one(e: &Expr) -> Option<i64> {
+    /// 由调用方按被绑函数元数归一化并校验有效性（E1064 判域）。
+    /// 无法识别时回退 `[0]`（与既有行为一致）。
+    ///
+    /// # 超出 i64 表示域（#563 甲案：编译期拒绝，不静默截断）
+    ///
+    /// 位置是**结构性参数**（决定被绑函数的实参槽位），不是值：写 `f[2^64+1]`
+    /// 而实际绑定位 1，作者意图与绑定事实静默错开。故位置字面量落在 i64 表示
+    /// 域之外时返回 `Err`，载荷是按用户书写形态渲染的位置列表（超域字面量以
+    /// i128 精确值原样保留），供调用方填入 E1064 的 `{positions}` 参数——调用方
+    /// 负责连同参数范围判定（RFC-004 `pos < params.len()`）一并拒绝。运行时
+    /// `Int = i64` 的**值**字面量截断是另一条既有语义（值字面量），不在本判域。
+    pub fn extract_binding_positions(index: &Expr) -> Result<Vec<i64>, String> {
+        /// 单项提取结果：域内位置 / 超域字面量的原样渲染 / 形态不可识别。
+        enum Item {
+            InDomain(i64),
+            Oversize(String),
+            Unrecognized,
+        }
+        fn one(e: &Expr) -> Item {
             match e {
-                Expr::Lit(Literal::Int(n), _) => Some(*n as i64),
+                Expr::Lit(Literal::Int(n), _) => match i64::try_from(*n) {
+                    Ok(v) => Item::InDomain(v),
+                    Err(_) => Item::Oversize(n.to_string()),
+                },
                 Expr::UnOp {
                     op: UnOp::Neg,
                     expr,
                     ..
                 } => match expr.as_ref() {
-                    // [-N]：i128 域精确取负后一次转 i64（截断）——与 Lit 臂
-                    // `[N] -> N as i64` 同一截断口径（运行时 Int 即 i64，超 i64
-                    // 字面量全仓口径是截断）。字面量经词法器 parse::<i128> 恒
+                    // [-N]：i128 域精确取负。字面量经词法器 parse::<i128> 恒
                     // 非负，checked_neg 的 None 分支只对手工构造的
                     // Neg(Lit(i128::MIN)) 可达；溢出哨兵取 i64::MIN 的 i128
-                    // 表示，转回 i64 恒等于 i64::MIN（无截断歧义），必落
-                    // normalize_binding_positions 的「归一化后仍负」E1064
-                    // 判域（#560：修前 `-(i64::MIN)` 在此处 panic，debug 构建
-                    // exit 101，与 #559/#507/#468 的 checked_neg 同族）。
+                    // 表示，转 i64 无截断歧义（#560：修前 `-(i64::MIN)` 在此处
+                    // panic，debug 构建 exit 101，与 #559/#507/#468 的
+                    // checked_neg 同族）。`[-2^63]` 精确得 i64::MIN（域内，
+                    // Ok 交下游 normalize 判「归一化后仍负」E1064）；再往下
+                    // 超出 i64 表示域才 Oversize（#563 甲案拒绝）。
                     Expr::Lit(Literal::Int(n), _) => {
-                        Some((*n).checked_neg().unwrap_or(i64::MIN as i128) as i64)
+                        let neg = (*n).checked_neg().unwrap_or(i64::MIN as i128);
+                        match i64::try_from(neg) {
+                            Ok(v) => Item::InDomain(v),
+                            Err(_) => Item::Oversize(format!("-{n}")),
+                        }
                     }
-                    _ => None,
+                    _ => Item::Unrecognized,
                 },
-                _ => None,
+                _ => Item::Unrecognized,
             }
         }
         match index {
             Expr::Tuple(items, _) => {
-                let parsed: Vec<i64> = items.iter().filter_map(one).collect();
+                let mut parsed = Vec::new();
+                let mut rendered = Vec::new();
+                let mut oversize = false;
+                for item in items {
+                    match one(item) {
+                        Item::InDomain(v) => {
+                            parsed.push(v);
+                            rendered.push(v.to_string());
+                        }
+                        Item::Oversize(text) => {
+                            oversize = true;
+                            rendered.push(text);
+                        }
+                        Item::Unrecognized => {}
+                    }
+                }
+                if oversize {
+                    // 任一项超域即整条拒绝；渲染只含可识别项，超域字面量原样。
+                    return Err(format!("[{}]", rendered.join(", ")));
+                }
                 if parsed.is_empty() {
-                    vec![0]
+                    Ok(vec![0])
                 } else {
-                    parsed
+                    Ok(parsed)
                 }
             }
-            other => one(other).map(|p| vec![p]).unwrap_or_else(|| vec![0]),
+            other => match one(other) {
+                Item::InDomain(v) => Ok(vec![v]),
+                Item::Oversize(text) => Err(format!("[{text}]")),
+                Item::Unrecognized => Ok(vec![0]),
+            },
         }
     }
 }

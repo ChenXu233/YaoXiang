@@ -754,6 +754,114 @@ fn test_anon_binding_with_fn_annotation_keeps_extracted_signature() {
     );
 }
 
+// ---- RFC-004 外部绑定位置的字面量域（issue #563 甲案 + #560 同族 panic）----
+//
+// parse_binding_positions 的字面量载荷是 i128：域内精确落位（合法位置逐字
+// 零变化）；超 i64 表示域以哨兵桥接交 checker E1064 判域（AST 位置域是 i64，
+// 原文无法承载）；取负在 i128 域做，`[-i64::MIN 形态]` 修前在此裸 `-i64::MIN`
+// 溢出 panic（#560 同族遗留），修后精确取负为 i64::MIN。
+
+/// 从模块首语句取记录类型体里名为 `name` 的 External 绑定位置。
+fn external_binding_positions(
+    source: &str,
+    name: &str,
+) -> Vec<i64> {
+    let tokens = tokenize(source).expect("tokenize 源码失败");
+    let result = parse(&tokens);
+    assert!(
+        !result.has_errors,
+        "源码应解析成功，实际错误: {:?}",
+        result.errors
+    );
+    let Some(StmtKind::TypeDefinition {
+        definition: Type::Struct { body },
+        ..
+    }) = result.module.items.first().map(|s| &s.kind)
+    else {
+        panic!("应解析为记录类型定义，实际: {:?}", result.module.items);
+    };
+    let Some(TypeBodyItem::Binding(binding)) = body
+        .iter()
+        .find(|it| matches!(it, TypeBodyItem::Binding(b) if b.name == name))
+    else {
+        panic!("类型体里应有名为 {name} 的绑定，实际: {body:?}");
+    };
+    let BindingKind::External { positions, .. } = &binding.kind else {
+        panic!("绑定种类应是 External，实际: {:?}", binding.kind);
+    };
+    positions.clone()
+}
+
+#[test]
+fn test_binding_position_literal_overflow_sentinels_to_i64_max() {
+    // Arrange — `m = f[18446744073709551617]`（2^64+1）：修前 `as i64` 静默截断为 1。
+    let source = "T: Type = { m = f[18446744073709551617] }";
+
+    // Act
+    let positions = external_binding_positions(source, "m");
+
+    // Assert
+    assert_eq!(
+        positions,
+        vec![i64::MAX],
+        "2^64+1 位置字面量应以 i64::MAX 哨兵出 parse（交 checker E1064 判域），\
+         不得静默截断为 1"
+    );
+}
+
+#[test]
+fn test_binding_position_literal_neg_i64_min_form_takes_exact_negative_not_panic() {
+    // Arrange — `m = f[-9223372036854775808]`（-i64::MIN 形态）：修前在
+    // parse_binding_positions 裸取负溢出 panic（探针实测 types.rs:942，
+    // "attempt to negate with overflow"）。
+    let source = "T: Type = { m = f[-9223372036854775808] }";
+
+    // Act
+    let positions = external_binding_positions(source, "m");
+
+    // Assert
+    assert_eq!(
+        positions,
+        vec![i64::MIN],
+        "-i64::MIN 形态应 i128 域精确取负为 i64::MIN（负位极端，交 checker \
+         E1064 判域）而非 panic（#560 同族遗留）"
+    );
+}
+
+#[test]
+fn test_binding_position_literal_negative_overflow_sentinels_to_i64_min() {
+    // Arrange — `m = f[-18446744073709551615]`（-(2^64-1)）：修前 `as i64`
+    // 截断低 64 位得 1。
+    let source = "T: Type = { m = f[-18446744073709551615] }";
+
+    // Act
+    let positions = external_binding_positions(source, "m");
+
+    // Assert
+    assert_eq!(
+        positions,
+        vec![i64::MIN],
+        "-(2^64-1) 位置字面量应以 i64::MIN 哨兵出 parse（归一化后仍负，交 \
+         checker E1064 判域），不得静默截断为 1"
+    );
+}
+
+#[test]
+fn test_binding_position_literal_in_domain_values_pass_through_exactly() {
+    // Arrange — 域内合法位置：正位 / 负位 / 元组（对照锚，逐字零变化）。
+    let source = "T: Type = { a = f[0], b = f[-1], c = f[0, -1] }";
+
+    // Act
+    let a = external_binding_positions(source, "a");
+    let b = external_binding_positions(source, "b");
+    let c = external_binding_positions(source, "c");
+
+    // Assert
+    assert_eq!(a, vec![0], "[0] 应原样保留");
+    assert_eq!(b, vec![-1], "[-1] 应原样保留（RFC-004 附录 A 负位）");
+    assert_eq!(c, vec![0, -1], "[0, -1] 应逐位保留");
+}
+
 /// AST 里是否还有「`return_type = Name("()")`」的匿名函数绑定。
 ///
 /// 旧代码在非 Fn 注解时伪造这个返回类型（6.3 的 `Type::Void` 兜底改写而来）：

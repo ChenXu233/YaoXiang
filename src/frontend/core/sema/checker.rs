@@ -2290,9 +2290,10 @@ impl TypeChecker {
                 ) {
                     return;
                 }
-                // 从 value 提取 func_name 和 positions
-                let (func_name, positions) = match val.as_ref() {
-                    Expr::Var(fn_name, _) => (fn_name.clone(), vec![0]),
+                // 从 value 提取 func_name 和位置提取结果（#563 甲案：提取器对
+                // 超 i64 表示域的位置字面量返回 Err，渲染串供 E1064 文面）
+                let (func_name, extracted) = match val.as_ref() {
+                    Expr::Var(fn_name, _) => (fn_name.clone(), Ok(vec![0])),
                     Expr::Index {
                         expr: inner, index, ..
                     } => {
@@ -2301,22 +2302,27 @@ impl TypeChecker {
                         } else {
                             return;
                         };
-                        let positions = Self::extract_positions(index);
-                        (fn_name, positions)
+                        (fn_name, crate::ast::Expr::extract_binding_positions(index))
                     }
                     _ => return,
                 };
-                let found = self.env.get_var(&func_name).map(|poly| {
-                    let total = match &poly.body {
-                        MonoType::Fn { params, .. } => params.len(),
-                        _ => 0,
-                    };
-                    (total, poly.body.clone())
-                });
-                if let Some((total, fn_ty)) = found {
+                let found = self.env.get_var(&func_name).map(|poly| poly.body.clone());
+                if let Some(fn_ty) = found {
                     // #321 W1003：绑定为方法的导入函数视为已使用（pass2 解析，
                     // 不经 body_checker 的 Var 推断臂）
                     self.note_import_use(&func_name);
+                    let total = self.binding_position_total(&func_name, &fn_ty);
+                    let positions = match extracted {
+                        Ok(positions) => positions,
+                        Err(rendered) => {
+                            self.add_error(
+                                ErrorCodeDefinition::invalid_binding_position(&rendered, total)
+                                    .at(*span)
+                                    .build(),
+                            );
+                            return;
+                        }
+                    };
                     if let Some(positions) =
                         self.normalize_binding_positions(&positions, total, *span)
                     {
@@ -2398,7 +2404,11 @@ impl TypeChecker {
     }
 
     /// RFC-004: 归一化绑定位置（负索引从末尾计数，[-1] = 最后一个参数）并校验有效性。
-    /// total 为被绑函数参数个数；未知（0）时跳过归一化与校验。无效位置报 E1064。
+    /// total 为被绑函数参数个数。无效位置报 E1064。
+    ///
+    /// #563 甲案：total=0 校验窗口收口——total 为 0（真零元函数 / 非 Fn 值 /
+    /// 元数未知）时，RFC-004 条款 `pos < func.params.len()` 下任何显式位置都不
+    /// 可能合法，报 E1064 而非原先的静默放行（原先可进 ir_gen 重排）。
     fn normalize_binding_positions(
         &mut self,
         positions: &[i64],
@@ -2406,7 +2416,15 @@ impl TypeChecker {
         span: crate::util::span::Span,
     ) -> Option<Vec<i64>> {
         if total == 0 {
-            return Some(positions.to_vec());
+            if positions.is_empty() {
+                return Some(Vec::new());
+            }
+            self.add_error(
+                ErrorCodeDefinition::invalid_binding_position(&format!("{:?}", positions), total)
+                    .at(span)
+                    .build(),
+            );
+            return None;
         }
         let total_i = total as i64;
         let normalized: Vec<i64> = positions
@@ -3080,20 +3098,13 @@ impl TypeChecker {
         positions: &[i64],
         span: crate::util::span::Span,
     ) {
-        let found = self.env.get_var(func_name).map(|poly| {
-            (
-                match &poly.body {
-                    MonoType::Fn { params, .. } => params.len(),
-                    _ => 0,
-                },
-                poly.body.clone(),
-            )
-        });
-        let Some((total, fn_ty)) = found else {
+        let found = self.env.get_var(func_name).map(|poly| poly.body.clone());
+        let Some(fn_ty) = found else {
             return;
         };
         // #321 W1003：类型体外部绑定解析的导入函数视为已使用（pass2 解析）
         self.note_import_use(func_name);
+        let total = self.binding_position_total(func_name, &fn_ty);
         if let Some(positions) = self.normalize_binding_positions(positions, total, span) {
             let method_ty = Self::method_type_after_binding(&fn_ty, &positions);
             self.env
@@ -3109,9 +3120,30 @@ impl TypeChecker {
         }
     }
 
-    /// 从 Index 表达式的 index 部分提取位置列表
-    fn extract_positions(index: &crate::ast::Expr) -> Vec<i64> {
-        crate::ast::Expr::extract_binding_positions(index)
+    /// RFC-004 绑定位置范围判定的元数基数（#563 甲案：total=0 窗口的事实源修正）。
+    ///
+    /// 被绑函数的 MonoType 参数个数在 RFC-007 无标注形参（`ty: None`，如
+    /// `(Int, Int) -> Int` 的匿名风格）下会被签名登记期的 `filter_map(|p| p.ty)`
+    /// 丢弃而虚减为 0——该 0 不是真零元，此时以 `declared_call_site_params`
+    /// 的声明序值形参名表（**同一注解 AST** 的 `runtime_value_params`，pass1
+    /// 登记于此）为元数事实源。仍取到 0 = 真零元 / 非 Fn 值 / 元数未知，交
+    /// `normalize_binding_positions` 的窗口收口臂判 E1064。
+    fn binding_position_total(
+        &self,
+        func_name: &str,
+        mono_body: &MonoType,
+    ) -> usize {
+        let mono_total = match mono_body {
+            MonoType::Fn { params, .. } => params.len(),
+            _ => 0,
+        };
+        if mono_total > 0 {
+            return mono_total;
+        }
+        self.declared_call_site_params
+            .get(func_name)
+            .map(|slots| slots.names.len())
+            .unwrap_or(0)
     }
 
     /// E1113（6.9.2-B / issue #553 形态③）：外部绑定方法的**槽位事实**登记。

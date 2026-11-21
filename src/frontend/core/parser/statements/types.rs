@@ -938,8 +938,31 @@ pub(crate) fn parse_binding_positions(state: &mut ParserState<'_>) -> Result<Vec
 
         match state.current().map(|t| &t.kind) {
             Some(TokenKind::IntLiteral(n)) => {
-                let value = *n as i64;
-                positions.push(if is_negative { -value } else { value });
+                // RFC-004 位置绑定。字面量载荷是 i128（词法 parse::<i128> 恒非负）：
+                // - i64 域内：精确落位——合法位置逐字零变化（#563 语义边界）；
+                // - 取负在 i128 域做（checked_neg 恒成功），#560 同族 panic
+                //   （`[-i64::MIN 形态]` 修前在此裸 `-i64::MIN` 溢出，debug 构建
+                //   exit 101）随之消除；`[-2^63]` 精确得 i64::MIN，与 ast 侧
+                //   extract_binding_positions 的取负口径一致；
+                // - 超出 i64 表示域：AST 位置域是 i64，原文无法承载——以哨兵
+                //   桥接交 checker 的 E1064 判域（#563 甲案：正溢出取 i64::MAX
+                //   必越参数上界、负溢出取 i64::MIN 归一化后仍负，两条都必落
+                //   normalize_binding_positions 的 E1064）。哨兵文面显示的是
+                //   哨兵值而非原字面量，裁决心智与 ast 侧「超域拒绝」一致。
+                let magnitude = *n;
+                let signed: i128 = if is_negative {
+                    magnitude.checked_neg().unwrap_or(i64::MIN as i128)
+                } else {
+                    magnitude
+                };
+                let value = if signed > i64::MAX as i128 {
+                    i64::MAX
+                } else if signed < i64::MIN as i128 {
+                    i64::MIN
+                } else {
+                    signed as i64
+                };
+                positions.push(value);
                 state.bump();
                 state.skip(&TokenKind::Comma);
             }

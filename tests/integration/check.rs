@@ -3121,6 +3121,217 @@ T.m = f[-1]
     assert_eq!(result.unwrap(), 0, "[-1] 负位绑定不应产生错误");
 }
 
+// ---- RFC-004 外部重绑定：fn[pos] 超 i64 位置字面量与 total=0 窗口（issue #563 甲案）----
+//
+// 用户 2026-11-20 裁决：超 i64 或超参数范围的位置字面量编译期拒绝（E1064），
+// total=0 校验窗口一并收口。位置是结构性参数（决定实参槽位），截断是值字面量
+// 的另一条既有语义——不在本判域。
+
+#[test]
+fn test_check_binding_out_of_i64_position_reports_e1064_not_truncate() {
+    // Arrange — 顶层 `T.m = dist[18446744073709551617]`（2^64+1）+ 匿名风格
+    // 参数（`(Int, Int)`）：修前提取器 `as i64` 截断为 [1]、normalize 遇
+    // total=0 窗口放行，check 全绿绑定成功（issue #563 披露①实测）；修后
+    // 提取器 Err → E1064。
+    let dir = temp_dir();
+    let file = create_yx_file(
+        &dir,
+        "binding_out_of_i64.yx",
+        r#"dist: (Int, Int) -> Int = (x, y) => x + y
+T: Type = { v: Int }
+T.m = dist[18446744073709551617]
+"#,
+    );
+
+    // Act
+    let result = check_result(&file);
+
+    // Assert
+    let codes = error_codes(&result);
+    assert!(
+        codes.contains(&"E1064".to_string()),
+        "2^64+1 位置字面量应报 E1064 而非静默截断绑定（#563 甲案）: {codes:?}"
+    );
+}
+
+#[test]
+fn test_check_binding_type_body_out_of_i64_position_reports_e1064() {
+    // Arrange — 类型体 `m = dist[18446744073709551617]`：parser 提取器
+    // （截断点②）修前 `as i64` 截断为 [1]、check 全绿；修后哨兵 i64::MAX
+    // 落 normalize 判域报 E1064。
+    let dir = temp_dir();
+    let file = create_yx_file(
+        &dir,
+        "binding_type_body_overflow.yx",
+        r#"dist: (Int, Int) -> Int = (x, y) => x + y
+T: Type = {
+    v: Int,
+    m = dist[18446744073709551617],
+}
+"#,
+    );
+
+    // Act
+    let result = check_result(&file);
+
+    // Assert
+    let codes = error_codes(&result);
+    assert!(
+        codes.contains(&"E1064".to_string()),
+        "类型体 2^64+1 位置字面量应报 E1064 而非静默截断绑定（#563 甲案）: {codes:?}"
+    );
+}
+
+#[test]
+fn test_check_binding_negative_overflow_position_reports_e1064() {
+    // Arrange — `T.m = dist[-18446744073709551615]`（-(2^64-1)）：修前取负臂
+    // `as i64` 截断低 64 位得 [1]、check 全绿；修后提取器 Err → E1064。
+    let dir = temp_dir();
+    let file = create_yx_file(
+        &dir,
+        "binding_neg_overflow.yx",
+        r#"dist: (Int, Int) -> Int = (x, y) => x + y
+T: Type = { v: Int }
+T.m = dist[-18446744073709551615]
+"#,
+    );
+
+    // Act
+    let result = check_result(&file);
+
+    // Assert
+    let codes = error_codes(&result);
+    assert!(
+        codes.contains(&"E1064".to_string()),
+        "-(2^64-1) 位置字面量应报 E1064 而非静默截断绑定（#563 甲案）: {codes:?}"
+    );
+}
+
+#[test]
+fn test_check_binding_parser_neg_i64_min_form_reports_e1064_not_panic() {
+    // Arrange — 类型体 `m = dist[-9223372036854775808]`（-i64::MIN 形态）：
+    // parse_binding_positions 修前裸 `-i64::MIN` 溢出 panic（探针实测
+    // types.rs:942 "attempt to negate with overflow"，#560 同族遗留）。
+    // 用 CLI 子进程跑：panic 会把进程带走，诊断必须来自正常管线。
+    let dir = temp_dir();
+    let file = create_yx_file(
+        &dir,
+        "binding_parser_neg_i64min.yx",
+        r#"dist: (Int, Int) -> Int = (x, y) => x + y
+T: Type = {
+    v: Int,
+    m = dist[-9223372036854775808],
+}
+"#,
+    );
+
+    // Act
+    let output = Command::new(env!("CARGO_BIN_EXE_yaoxiang-rs"))
+        .arg("check")
+        .arg(&file)
+        .current_dir(&dir)
+        .output()
+        .expect("failed to run yaoxiang-rs check");
+    let text = format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    // Assert
+    assert!(
+        !text.contains("panicked"),
+        "-i64::MIN 形态绑定不得 panic（#560 同族遗留，#563 顺路修）: {text}"
+    );
+    assert!(
+        text.contains("E1064"),
+        "-i64::MIN 形态绑定应报 E1064（负位极端交 normalize 判域）而非 panic: {text}"
+    );
+}
+
+#[test]
+fn test_check_binding_out_of_range_position_on_unannotated_params_reports_e1064() {
+    // Arrange — total=0 窗口绕过构造：匿名风格参数 `(Int, Int)` 的签名登记
+    // 丢参（`filter_map(|p| p.ty)`），MonoType 参数虚减为 0，normalize 修前
+    // 静默放行 `dist[5]`（CLI 实测 check 全绿）；修后以声明序值形参名表为
+    // 元数事实源（2），[5] 越界报 E1064。
+    let dir = temp_dir();
+    let file = create_yx_file(
+        &dir,
+        "binding_window_bypass.yx",
+        r#"dist: (Int, Int) -> Int = (x, y) => x + y
+T: Type = { v: Int }
+T.m = dist[5]
+"#,
+    );
+
+    // Act
+    let result = check_result(&file);
+
+    // Assert
+    let codes = error_codes(&result);
+    assert!(
+        codes.contains(&"E1064".to_string()),
+        "匿名风格参数下 dist[5] 应报 E1064（RFC-004 pos < params.len()，#563 \
+         窗口收口）而非静默绑定: {codes:?}"
+    );
+}
+
+#[test]
+fn test_check_binding_zero_arity_position_reports_e1064() {
+    // Arrange — 真零元函数 + 显式位置 [0]：RFC-004 条款下 `0 >= 0` 恒无效，
+    // 修前 total=0 窗口静默放行（CLI 实测 check 全绿）；修后 E1064。
+    let dir = temp_dir();
+    let file = create_yx_file(
+        &dir,
+        "binding_zero_arity.yx",
+        r#"fn0: () -> Int = { return 7 }
+T: Type = { v: Int }
+T.m = fn0[0]
+"#,
+    );
+
+    // Act
+    let result = check_result(&file);
+
+    // Assert
+    let codes = error_codes(&result);
+    assert!(
+        codes.contains(&"E1064".to_string()),
+        "零元函数的显式位置 [0] 应报 E1064（pos >= params.len()，#563 窗口收口）\
+         而非静默绑定: {codes:?}"
+    );
+}
+
+#[test]
+fn test_check_binding_legal_positions_on_unannotated_params_still_compile() {
+    // Arrange — 对照锚（合法位置逐字零变化）：匿名风格参数 `(Int, Int)` 的
+    // [0] / [1] / [-1] 绑定——修前经 total=0 窗口放行，修后以真元数 2 校验
+    // 仍放行；窗口收口不得误伤合法位置程序（#563 语义边界硬判据）。
+    let dir = temp_dir();
+    let file = create_yx_file(
+        &dir,
+        "binding_legal_unannotated.yx",
+        r#"dist: (Int, Int) -> Int = (x, y) => x + y
+T: Type = { v: Int }
+T.m0 = dist[0]
+T.m1 = dist[1]
+T.mm1 = dist[-1]
+"#,
+    );
+
+    // Act
+    let result = check_result(&file);
+
+    // Assert
+    let codes = error_codes(&result);
+    assert!(
+        codes.is_empty(),
+        "匿名风格参数的合法位置 [0]/[1]/[-1] 绑定应零诊断通过（对照锚），\
+         实际: {codes:?}"
+    );
+}
+
 // ==================== 深表达式资源闸锚（issue #540 / WBS 3.20.30） ====================
 //
 // 规范来源：RFC-013 错误码规范 E0019/E3014 + D59 C 类崩溃面直修授权
