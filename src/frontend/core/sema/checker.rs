@@ -3125,8 +3125,9 @@ impl TypeChecker {
     /// 被绑函数的 MonoType 参数个数在 RFC-007 无标注形参（`ty: None`，如
     /// `(Int, Int) -> Int` 的匿名风格）下会被签名登记期的 `filter_map(|p| p.ty)`
     /// 丢弃而虚减为 0——该 0 不是真零元，此时以 `declared_call_site_params`
-    /// 的声明序值形参名表（**同一注解 AST** 的 `runtime_value_params`，pass1
-    /// 登记于此）为元数事实源。仍取到 0 = 真零元 / 非 Fn 值 / 元数未知，交
+    /// 的声明序值形参名表（**同一注解 AST** 的 `runtime_value_params`，签名
+    /// 收集阶段登记于此——collect_function_signature，宿主循环即 pass2）为
+    /// 元数事实源。仍取到 0 = 真零元 / 非 Fn 值 / 元数未知，交
     /// `normalize_binding_positions` 的窗口收口臂判 E1064。
     fn binding_position_total(
         &self,
