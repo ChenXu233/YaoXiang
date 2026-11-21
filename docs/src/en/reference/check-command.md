@@ -1,6 +1,6 @@
 # yx check
 
-Performs static checks (type checking, ownership checking) on YaoXiang source code, without
+Performs static checks on YaoXiang source code (type checking and ownership checking) without
 generating any code.
 
 ## Usage
@@ -11,43 +11,45 @@ yx check [OPTIONS] [PATH]...
 
 ## Arguments
 
-| Argument | Description                                                                          |
-| -------- | ------------------------------------------------------------------------------------ |
-| `PATH`   | One or more file or directory paths. When not specified, checks the current project. |
+| Argument | Description                                                                     |
+| -------- | ------------------------------------------------------------------------------- |
+| `PATH`   | One or more file or directory paths. Checks the current project if unspecified. |
 
 ## Options
 
-| Option             | Description                                                             | Default |
-| ------------------ | ----------------------------------------------------------------------- | ------- |
-| `--json`           | Output diagnostics in JSON format                                       | No      |
-| `--color <MODE>`   | Color output mode: `auto`, `always`, `never`                            | `auto`  |
-| `--exclude <PATH>` | Exclude specified path (can be used multiple times)                     | None    |
-| `--no-progress`    | Suppress progress and summary messages                                  | No      |
-| `--deny-warnings`  | Treat warnings as errors: exit with a non-zero code when warnings exist | No      |
+| Option             | Description                                                                                                                                                                        | Default |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
+| `--json`           | Output diagnostics in JSON format                                                                                                                                                  | No      |
+| `--color <MODE>`   | Color output mode: `auto`, `always`, `never`                                                                                                                                       | `auto`  |
+| `--exclude <PATH>` | Exclude the specified path (may be used multiple times)                                                                                                                            | None    |
+| `--no-progress`    | Suppress progress and summary messages                                                                                                                                             | No      |
+| `--allow <CODE>`   | Suppress the specified warning code: it is neither output nor included in the warning count (repeatable; unknown codes and codes outside the W family result in an argument error) | None    |
+| `--deny-warnings`  | Treat warnings as errors: exit with a non-zero code if warnings exist                                                                                                              | No      |
+| `--deny-shadowing` | Exit with a non-zero code when a local module shadows a vendor dependency package (W1006)                                                                                          | No      |
 
 ## Exit Codes
 
-| Exit Code | Description                                                        |
-| --------- | ------------------------------------------------------------------ |
-| `0`       | No errors                                                          |
-| `1`       | Check found errors; or warnings exist when using `--deny-warnings` |
-| `2`       | No `.yx` files found                                               |
+| Exit Code | Description                                                                 |
+| --------- | --------------------------------------------------------------------------- |
+| `0`       | No errors                                                                   |
+| `1`       | Errors were found during checking; or warnings exist with `--deny-warnings` |
+| `2`       | No `.yx` files were found                                                   |
 
 ## Cross-File Analysis
 
-`yx check` supports cross-file type checking. When checking multiple files:
+`yx check` supports cross-file type checking. When checking multiple files, it:
 
-1. Parse all `.yx` files in parallel
-2. Build the module dependency graph
-3. Detect circular dependencies (report as errors)
-4. Check in topological sort order
-5. Use a shared type environment to correctly detect cross-file references
+1. Parses all `.yx` files in parallel
+2. Builds the module dependency graph
+3. Detects circular dependencies (reports an error)
+4. Checks in topological order
+5. Uses a shared type environment to correctly detect cross-file references
 
 ```bash
-# Check the entire project (auto-detect cross-file references)
+# Check the entire project (automatically detects cross-file references)
 yx check src/
 
-# Check specific files
+# Check specified files
 yx check src/main.yx src/lib.yx
 ```
 
@@ -81,7 +83,7 @@ When using `--json`, the output format is:
 # Check the current project
 yx check
 
-# Check specific files
+# Check specified files
 yx check src/main.yx
 
 # Check a directory and output JSON
@@ -93,7 +95,13 @@ yx check --color never --no-progress
 # CI strict mode (warnings also cause failure)
 yx check --deny-warnings
 
-# Exclude the tests directory
+# Suppress the specified warning code (it is neither output nor counted)
+yx check src/ --allow W1007
+
+# Fail when a local module shadows a vendor dependency package
+yx check src/ --deny-shadowing
+
+# Exclude the test directory
 yx check src/ --exclude tests/
 ```
 
