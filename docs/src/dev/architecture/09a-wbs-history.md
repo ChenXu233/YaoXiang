@@ -8063,3 +8063,13 @@ pub enum FunctionBody {
 5. **7b.3 前置不变**：生产 `Phi` 前必须先填 `BasicBlock.successors`（7b.1b 契约登记）；本批单块 label 恒 0，`defining_block` 已可承载多块。**7b.3 落地前禁止出现 `Phi` 生产点**（translator 占位会以 panic 形式暴露）。
 6. **7b.4 接管**：`value_slots` 是过渡映射——线性扫描分配器落地后重算该表，同批删除三处语句级回收（7a.1）；本批未改回收语义。
 7. **本轮（收口笔）只改 `09` / `09a` / `04` 三个文件**，未碰 `src/`、`tests/`、`scripts/`；未跑 `git push` / `fetch` / `pull`；09 顶部三级计数保持不动（7b.2 是既有三级任务，不新增）。
+
+### 十一、收口后 rebase（最终 base）
+
+收口笔之后、推送之前，`origin/dev` 又推进 7 笔（顶端 `b6d29ca8`）：WBS 8.2 词法收敛与 f-string 插值词法期切段收口（8.2.1/8.2.2 交付、8.2.3/8.2.4 登记，三级计数 258→**260**）、`fb5ebbf5` VitePress 构建与死链预检的两类写法修复、`a1b71f9d` 错误码文档再生（`checker.rs` 行号 +1 漂移）、3 笔 auto-translate。本地 7b.2 五笔已 rebase 到新顶端：唯一冲突在 09a 尾部（origin 的 8.2 收口段 vs 本批 7b.2 契约段），两段都保留；09/09a 的 3.24.2 死链写法在 origin `fb5ebbf5` 已同修，本批基线笔保留更明确的「`Vec(Int)[..]` 的 `(i)` 下标形态」措辞，`check-docs-orphan` 仍为 0。
+
+**代码内容零变化**：rebase 后代码笔的 `src` 面 patch-id 与 rebase 前逐字节一致，221 份快照面的 patch-id 也一致；差异只在生成物——rebase 前代码笔的生成物 diff 为 5 文件 12+/12−，合并 origin 已再生的两文件后为 3 文件 4+/4−；合并树上生成器重跑零 diff（幂等）。
+
+**最终 base 复跑**（队长集成检查，非独立验证）：fmt 0；snapshot 6/0/1（232 份零漂移）；verify 35；`middle::ir::tests` 74/1；phi 39；`testsuite run fast` **2503 条** exit 0；语料 **403/403** 差分空；docs 五脚本 0（docs-refs 1248 文件 / **13321** token）；生成器幂等。
+**口径更正**：§十.7 的「09 顶部三级计数保持不动」是收口时点（258）的事实；最终 base 为 **260**（origin 的 8.2.3/8.2.4 登记），7b.2 仍不新增计数。
+**独立性边界**：t20/t21 的独立验证/复审绑定 rebase 前的代码笔；本节的最终 base 复跑是队长在合并树上的集成检查，不替代独立验证。`src`/快照 patch-id 逐字节一致是「代码内容未变」的机械证据；若需要最终 base 的独立重验，另开任务。
