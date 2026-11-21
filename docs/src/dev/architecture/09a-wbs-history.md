@@ -7932,3 +7932,53 @@ pub enum FunctionBody {
 - 生成物：`OperandResolver` 的 E3017 发射点面变化 → `scripts/docs/gen-error-code-docs.py` 再生 `docs/src/reference/error-code/` 并随代码同提交。
 - 回滚点：本契约段单独一笔文档提交，先于代码；代码 + 快照 + 生成物一笔（`FunctionBody::Code` 加字段波及全仓编译，不可增量回滚），整笔 `git revert` 可回基线。
 
+## P7 7b.2 实现记录（`next_temp_reg` 改产 `Operand::Value` + values 生产 + 快照再生，2026-11-21）
+
+### 一、终态与提交
+
+- 基线 = `origin/dev` 顶端 `37e9aee6`（7b.1b 已集成）。三笔：契约笔（09a §P7 7b.2 契约，先于代码）→ 基线死链修复笔（09-execution-wbs.md:259 / 09a:7805 里 3.24.2 记录的 `Vec(Int)[..]` 与 `(i)` 相邻写法被 markdown 解析器误判为链接；与 7b.2 无关的预存红，队长授权并入本批）→ 代码笔（259 文件 = 源码 + 232 份快照再生 + 5 份错误码生成物）。
+- 代码笔为**表示重塑**，D59 分类「无行为变更」：`check`/`run` 的对外表现不变，证据见 §三（语料 403/403 行为记录零 diff）。
+
+### 二、逐项落地（对应契约 §二 的 10 条定夺）
+
+1. **调用点**：`next_temp_reg()` 返回 `Operand::Value(ValueId)`；全仓 **140** 个调用点与 **35** 个 `result_reg` 参数（+ 3 个 `Option<usize>` 结果位、`obj_reg`/`dst_reg`/`compile_pattern` 的 `reg`）机械替换为 `Operand`；**342** 处 `Operand::Local(` 临时位改持 `Operand`；**9** 处「分配后 `register_local`」改用 `next_local_slot()`，或复用值已占用的槽（`slot_for_operand`，不新增指令）。
+2. **`ValueInfo.ty` 来源**：字面量（`ConstValue::mono_type`，与 verify 共用单一映射）、`generate_expr_ir` 入口的变量类型（`type_result.local_var_types` / `lookup_var_type`）、普通函数返回类型（绑定函数类型的 `Fn { ret }`）、以及函数体收尾的前向推导（`Eq/Ne/Lt/Le/Gt/Ge/Not`→`Bool`、`StringLength`→`Int(64)`、字符串族→`String`、`Load/Move/Neg` 取源、算术取 `lhs`）。不可得落**显式未知 `TypeRef("?")`**，不读 `LocalSlot.ty`、不用 `Int(64)` 占位。232 份快照的值分布实测：**9425** 条值，其中真实类型 **7080**（`Int(64)` 2982 / `String` 1744 / `Bool` 1135 / `Float(64)` 210 / 容器与记录型若干），**未知 2345（24.9%，显式 `?`）**——未知集中在调用/字段/索引/容器构造等需要跨过程或声明面信息的形态，登记给后续轮次按需收紧。
+3. **`defining_block`**：生成期 `cur_block_label` 初始 0；lower 全部单块函数体（`BasicBlock` 构造 7 处 label 恒 0）⇒ 本批值定义块恒 0。
+4. **`debug_name`**：全部 `None`（具名变量仍是 `Local`，不迁入值表）。
+5. **计数器隔离**：新增 `next_value`（每函数体从 0 起、单调递增）；`NestedBodyGuard` 保存/还原 `next_value`/`cur_values`/`cur_value_slots`/`value_mode`；三处语句级回收只回滚 `next_temp`，不触碰 `next_value`。**模块 init / 顶层语句没有值表**：`value_mode=false` 时 `next_temp_reg` 退化为旧的 `Local` 槽分配，init 序列与其 codegen 路径逐字节不变（快照中 init 段与基线一致即证据）。柯里层循环里每层重置 `next_value` 与值表（每层一个 `FunctionIR`）；这是实现期实测缺陷：不重置会让第二层起的 `ValueId` 从 1 起而值表已清空，代码生成取不到槽。
+6. **codegen 槽位解析（过渡）**：`FunctionBody::Code.value_slots: Vec<usize>`（index=ValueId）记录 lowering 既有临时槽分配；`OperandResolver` 增加 `Value → u8`（槽号 >255 报 E3014、无映射/越界报 E3017，且 E3017 按 #324 带指令 span——translator 逐指令 `set_span`）；`Phi` 占位保持 7b.1a 原样（7b.3）。
+7. **normalize**：每个函数体渲染 `values_total=N` 与 `value v{k}: <ty> @block{b}`（`v` 编号按 ValueId 升序预置）；**不渲染 `value_slots`**（是分配细节，7b.4 会重算）。232 份快照再生，**221** 份实际变化、**491** 个 values 段；11 份未变 = 仅 `type_decl`/init 的快照。
+8. **mono 特化**：两处克隆（`passes/mono/function.rs`、`passes/mono/mod.rs`）对 `values[].ty` 走既有类型替换（TypeVar + 头替换）、`debug_name`/`defining_block` 原样、`value_slots` 复制；**常量擦除**路径的槽位密排同步重映射 `value_slots`（不重映射会让 codegen 写错槽）；柯里层形状判据从「`dst` 是 `Operand::Local`」改为「按 `value_slots` 还原物理槽 == env 槽数」，语义与原判据一致。
+9. **dce**：仍只做整函数 `retain`；新增直驱测试断言存活函数的 `values`/`value_slots` 原样保留、`ValueId` 仍在值表范围内。
+10. **C4**：语料差分基线（行为面）在本批基线上为 **403 行**（含 3.24.2 新增的拒绝记录），`check-corpus-parity` **403/403 逐条差分空**；`cargo test --lib` **1975 passed**、`cargo test --test integration` **458 passed**；另有两份大函数语料（`string_ops.yx` 354 槽、`list_comp.yx` 323 槽风险面）的 CLI `run` 实测 exit 0。
+
+### 三、快照再生的机械核对（人工 review 的替代判据）
+
+232 份全量再生后运行核对脚本：对 221 份变化文件，**删除 `values_total` / `value` 行、把 `%n`/`arg%n`/`@n`/`v n` 全部归一化为 `OP`** 后，新旧文件的指令文本逐字节相同；`locals_total` 全部不变。⇒ diff 仅含「临时槽操作数 → SSA 值重命名」与「values 段新增」两类机械变化，无语义漂移。抽样人工核看 `literals.snap` / `string_ops.snap` 亦符合（`%n` 改为 `v n`、新增 `values_total` 与 `value` 行）。
+
+### 四、判据与门禁（全绿实测）
+
+| 门禁 | 结果 |
+| --- | --- |
+| `cargo fmt --check` | exit 0 |
+| `cargo clippy --all --all-features --all-targets -- -D warnings` | exit 0 |
+| `cargo test --lib snapshot` | 6 passed / 0 failed / 1 ignored（232 份再生后与当前 IR 零 diff） |
+| `cargo test --lib verify` | 35 passed |
+| `cargo test --lib middle::ir::tests` | 74 passed / 1 ignored（+2 = 值表生产/normalize 渲染） |
+| `cargo test --lib phi` | 39 passed |
+| `cargo test --lib`（全量） | **1981 passed / 0 failed / 3 ignored** |
+| `cargo test --test integration` | **458 passed / 0 failed** |
+| `python scripts/dev/testsuite.py run fast` | exit 0：1 波 **2494 条**，跳过 0 |
+| `corpus_probe` + `check-corpus-parity` | 403 行；**403/403** 逐条差分空 |
+| docs 四脚本（truth / refs / orphan / fanout / test-channel） | 全 exit 0（refs = 1247 文件 / 13240 token） |
+| `gen-error-code-docs.py` + 二次运行 | exit 0 且二次运行零额外 diff（幂等；再生含 E3017/E1106 发射点与基线 checker 行号漂移） |
+
+新增直驱测试：`test_values_production_type_block_and_index`、`test_normalize_renders_values_table_both_shapes`（`middle/ir/tests/values.rs`）、`test_value_resolves_through_value_slots`、`test_value_without_mapping_or_over_budget_is_rejected`（codegen/operand）、`test_specialize_substitutes_value_types_and_keeps_slots`（mono）、`test_dce_preserves_values_and_value_slots_of_live_functions`（dce）。
+
+### 五、登记与遗留
+
+1. **7b.3 前置不变**：生产 `Phi` 前必须先填 `BasicBlock.successors`（7b.1b 契约已登记）；本批单块 label 恒 0，`defining_block` 已可承载多块。
+2. **7b.4 接管**：`value_slots` 是过渡映射——线性扫描分配器落地后重算该表（并可考虑是否保留字段），同批删除三处语句级回收（7a.1）；本批未改回收语义。
+3. **`ValueInfo.ty` 的已知未知面**：2345/9425（24.9%）为显式 `TypeRef("?")`，集中在调用/字段/索引/容器构造；后续若要提高精度需类型检查结果暴露表达式级 MonoType（跨 `src/frontend`，不在本批 inScope），按需另立任务。
+4. **归口**：`value_slots` 的分配语义属 `src/middle/lower/scope.rs`（生成端）；codegen 只消费。normalize 不渲染它，故快照不钉分配细节，分配一致性由 C4 行为面兜底。
+
