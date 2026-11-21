@@ -7982,3 +7982,84 @@ pub enum FunctionBody {
 3. **`ValueInfo.ty` 的已知未知面**：2345/9425（24.9%）为显式 `TypeRef("?")`，集中在调用/字段/索引/容器构造；后续若要提高精度需类型检查结果暴露表达式级 MonoType（跨 `src/frontend`，不在本批 inScope），按需另立任务。
 4. **归口**：`value_slots` 的分配语义属 `src/middle/lower/scope.rs`（生成端）；codegen 只消费。normalize 不渲染它，故快照不钉分配细节，分配一致性由 C4 行为面兜底。
 
+## P7 7b.2 收口（`next_temp_reg` 改产 `Operand::Value` + values 生产 + codegen 槽解析 + 快照再生，2026-11-22）
+
+> 收口对象 = WBS 二级任务 7b 的第三个三级任务 7b.2。代码由实现轮落库（契约笔先于代码笔），验证轮在冻结 revision 的批次树上独立复算（结论：通过），复审轮给出 **verdict = pass**。本段按登记口径写实测数字与机械证据；**不写本地提交号**（哈希随 `pull --rebase` 改写），指向以「笔的性质 + 文件清单」定位。
+
+### 一、判据链（实测数字）
+
+冻结 revision = **7b.2 代码独占笔终态**（= origin/dev 顶端 + 7b.2 契约笔 / 基线死链修复笔 / 代码笔 / 实现记录笔，工作树干净）。验证轮的全部量测在 `scripts/dev/scratch.py` 的批次树内完成（`init` → `use --rev` → `build` → 量测 → `release` → `gc`，收口「没有批次树」），主仓工作树全程干净；复审轮在**代码独占笔终态**上以 `git show <rev>:<file>` / `git grep <rev>` 复核，不读正在动的工作树；收口轮复跑的门禁落在本仓树上——其 `src/` 与代码独占笔终态**逐字节一致**（`git diff --stat <代码独占笔> HEAD -- src/` 为空），工作树里的三笔增量均为纯文档笔。
+
+| 门禁 | 结果 |
+| --- | --- |
+| `cargo fmt --check` | exit 0 |
+| `cargo clippy --all --all-features --all-targets -- -D warnings` | exit 0 |
+| `cargo test --lib snapshot` | 6 passed / 0 failed / 1 ignored（232 份再生后与当前 IR 零 diff） |
+| `cargo test --lib verify` | 35 passed / 0 failed |
+| `cargo test --lib middle::ir::tests` | 74 passed / 1 ignored（+2 = 值表生产 / normalize 渲染两条直驱测试） |
+| `cargo test --lib phi` | 39 passed |
+| `cargo test --lib`（全量） | **1981 passed / 0 failed / 3 ignored**（复审轮独立复跑同值；与六条新直驱测试之和自洽） |
+| `cargo test --test integration` | 458 passed / 0 failed |
+| `python scripts/dev/testsuite.py run fast` | exit 0：1 波 **2494 条**，跳过 0 |
+| `corpus_probe` + `check-corpus-parity` | **403 行；403/403 逐条差分空**（复审轮重跑探针 exit 0、逐字节对账同值；语料基线在代码笔内**零改动**） |
+| docs 五脚本（truth / refs / orphan / fanout / test-channel） | 全 exit 0（refs = 1248 文件 / 13254 token；7b.2 契约段落库后的更新值） |
+| `gen-error-code-docs.py` + `git diff --quiet` | exit 0 且差分为空（生成器幂等，收口轮复跑实证） |
+
+### 二、`next_temp_reg` 单调性与 7a.1 边界
+
+- **身份与槽分离**：`next_temp_reg() -> Operand`（`src/middle/lower/scope.rs`）产 `Operand::Value(ValueId)`；旧槽语义原样收进 `alloc_register_slot`（`next_temp` 步进 + `temp_high_water` 真高水位维护逐字保留）。`next_local_slot() -> usize` 是具名变量槽入口（不产 `ValueId`、不写值表）。
+- **单调不回滚**：`next_value: u32` 每函数体从 0 起算、单调递增；全部写点 = 分配点自增（scope.rs 的 `next_temp_reg`）、`NestedBodyGuard` 两个构造函数置 0、`Drop` 还原父帧值、柯里层循环逐层重置（每层一个 `FunctionIR`）。**三处语句级回收（`stmt.rs` 的 `generate_function_ir` / `generate_block_ir`、`expr/closure.rs` 的 `generate_lambda_body_ir`）与基线逐字同形、只回滚 `next_temp`，不触碰 `next_value`**（删回收归 7a.1 + 7b.4）。复审轮逐处对照基线确认同形同位仅行号平移。
+- **模块 init 退化路径**：`value_mode=false`（模块 init / 顶层语句，`ModuleIR.init` 没有值表）时 `next_temp_reg` 退化为旧的 `Local` 槽分配——init 序列与其 codegen 路径零变化（快照 init 段与基线一致即证据）。
+- **柯里层逐层重置（实现期实测缺陷修复）**：不重置会让第二层起的 `ValueId` 从 1 起而值表已清空，代码生成取不到槽；修复被 403 条语料中的柯里族（`curry_tail_expr` / `curry_value_fix` / `fn_const_generic`）行为面锚住——若回归，codegen 走 E3017 响亮失败而非静默错槽。
+- **直驱证据**：111 份多值表函数快照全部「首条 value 为 `v0`」重启、零违例（复审轮全量文本探针）；`Operand::Value` 的生产入口唯一 = `next_temp_reg`。
+
+### 三、values 生产（ty / defining_block / debug_name / 索引）
+
+- **ty 来源**（只取 lowering 已有信息）：字面量经 `ConstValue::mono_type()`（与 verify 的 `const_type` 收敛为单一映射——verify 侧收编为委托，属既有「同一行为两处 → 提到共享层」的正向收敛）；`generate_expr_ir` 入口 `expr_value_type`（变量走 `type_result.local_var_types` / `lookup_var_type`，构造器落 `TypeRef(名)`，普通函数取 `Fn { ret }`）；函数体收尾 `take_body_values` 前按指令语义前向推导（比较/逻辑 → `Bool`、`StringLength` → `Int(64)`、字符串族 → `String`、`Load/Move/Neg` 取源、算术取 `lhs`）。不可得落**显式未知 `TypeRef("?")`**（`UNKNOWN_VALUE_TYPE` 单点哨兵），不读 `LocalSlot.ty`、无 `Int(64)` 静默占位。
+- **实测分布**（232 份快照全量审计，复审轮独立复算）：**9425** 条值 = 真实类型 **7080** + 未知 **2345（24.9%）**；`debug_name` 全 `None`；`defining_block` 全 0（与 lower 单块 label 恒 0 前提一致）；`value_slots` 与 `values` 同索引同长；指令里的 `ValueId` 全部落在值表范围内。未知集中在调用/字段/索引/容器构造等需跨过程或声明面信息的形态（登记见 §十）。
+- **`ValueId` 稠密性**：值表索引 = ValueId、每函数体独立从 0；`value_slots`（index=ValueId）与值同生共死，由 `take_body_values` 与槽表一起取走。
+
+### 四、codegen：Value→u8 槽映射与 255 预算
+
+- `OperandResolver` 持当前函数映射（`set_value_slots` / `clear_value_slots`——translator 进函数体时设置、模块 init 序列清空）与当前指令 span（逐指令 `set_span`，#324 的 E3017 带 span 要求）。`to_reg(Value(v))`：查 `value_slots[v]` → `u8`（`>255` 报 E3014 寄存器溢出；无映射 / 越界报 E3017 且带指令 span）；`is_register` 收敛为 `Local | Arg | Value`。
+- **非猜测实现**：槽号全部来自 lowering 既有分配器（含语句级回收语义原样），codegen 只消费不分配——线性扫描分配器归 7b.4。`Phi` 占位保持 7b.1a 原样（生产构造点 0 + translator 臂 `unreachable!` 响亮失败）。
+- 两条直驱测试（`test_value_resolves_through_value_slots` / `test_value_without_mapping_or_over_budget_is_rejected`）与验证轮 W1 变异（槽映射偏移）证明该映射判据在承重。
+
+### 五、normalize 渲染与 232 份快照再生 review
+
+- 渲染：每函数体新增 `values_total=N` + 每值一行 `value v{k}: {ty:?} @block{b}`（`debug_name` 有值才追加 `debug=`；`v` 编号按 ValueId 升序预置，指令渲染共用同一重命名）；**不渲染 `value_slots`**（分配细节，7b.4 重算）。232 份快照再生，**221 份实际变化 / 491 个 values 段**；11 份未变 = 仅 `type_decl` / init 的快照。
+- **机械核对**（实现轮核对脚本 + 复审轮独立探针互证）：删除 values 段并把 `%n`/`arg%n`/`@n`/`v n` 归一化后，**221/221 份指令文本与基线逐字节相同**、`locals_total` 不变、errors 0 ⇒ diff 只含「临时槽操作数 → SSA 值重命名」与「values 段新增」两类机械变化。复审轮的全量骨架掩码探针（232/232 骨架与基线逐字节相等）加**牙齿自检**（注入语义变化必被抓出、纯重命名不误报）独立复证；人工目检 10 份（hello / literals / float_comparison / fstrings / break_continue / for / string_ops / curry_value_fix / fn_const_generic / error_codes）只含该两类变化。
+
+### 六、mono 类型替换与块映射 / dce 一致性
+
+- **mono 特化**：两处克隆（`passes/mono/function.rs`、`passes/mono/mod.rs`）对 `values[].ty` 走既有类型替换（TypeVar 替换 + 头替换），`debug_name` / `defining_block` 原样投影（块未重编号），`value_slots` 原样复制；**常量擦除路径的槽位密排同步重映射 `value_slots`**（值槽必在保留集——不重映射会让 codegen 写错槽）；柯里层形状判据从「`dst` 是 `Operand::Local`」改为「按 `value_slots` 还原物理槽 == env 槽数」，与基线判据语义等价。直驱测试 `test_specialize_substitutes_value_types_and_keeps_slots` 复审轮复跑绿。
+- **dce 一致性**：DCE 仍只做整函数 `retain`，不动存活函数的 `values` / `value_slots`；直驱测试 `test_dce_preserves_values_and_value_slots_of_live_functions` 断言「存活函数的值表与槽映射原样保留、指令里的 ValueId 仍在值表范围内」。
+
+### 七、C4 行为等价证据
+
+- **语料差分**（C4 最强形态的运行面）：代码笔未触碰 `tests/baselines/`（基线 revision 与代码笔之间对 `tests/baselines` 的 diff 为空）——行为面基线零改动本身就是等价的第一证据；`corpus_probe` 重跑 403 行 + `check-corpus-parity` **403/403 逐条差分空**（实现 / 验证 / 复审三轮同值；403 = 3.24.2 收口后的基线行数，契约行文里的 402 为陈旧数字，按实测 403 报告）。覆盖面正反两面齐：behavior 235 / compile-error 153 / runtime-error 15（168 条非零退出记录被基线逐条钉住）。
+- **大函数风险面**：`string_ops.yx`（354 槽）与 `list_comp.yx`（323 槽）两条越预算语料的 `run` 实测 exit 0——`value_slots` 过渡映射保住字节码槽号是 255 预算内零行为漂移的原因，备选「每值独占一槽」会撞 E3014（契约 §二 第 6 条实测）。
+- **表示面（IR 快照）**：232 份再生、diff 只含两类机械变化（见 §五）。
+
+### 八、验证与复审结论、独立性
+
+- **验证轮（review-1）：通过。** 批次树 p7-t20-rev 上 13 条门禁全绿（数字与 §一 一致）；C4 真双二进制探针：6 夹具 × run/check/dump 在冻结 revision 与基线二进制上对比，剥 PowerShell 包装后 run/check 逐字节全等，dump 唯一真实差异 = `Mov`/`StoreLocal` 同语义标签（解释器两臂逐字相同，防御臂不再命中所致）；3 条机械可逆变异（W1 槽映射偏移 / W2 值类型占位 / W3 渲染数值）各自使直驱测试 FAILED(101)、机械还原 blob 回 HEAD、树 CLEAN、每条后 build 回绿。验证轮如实登记两条环境性红（首跑 fast 干扰、corpus UTF-16 BOM 编码事故），均已归因探针侧并重跑采信。
+- **复审轮（review-2）：verdict = pass。** 12 类逐条成立：D0–D4（权威源 = `src/middle/ir/ir.rs` 值身份 + `src/middle/lower/scope.rs` 分配语义；`ValueInfo` 与 `LocalSlot` 两维度不混用；35 个 `result_reg: Operand` 签名；无隐式转换 trait、无 import 别名、无新入口）、红线（`todo!` 两处在基线已存在非本批新增；`#[test]` src/ 1978→1984 仅 +6 零删除；`pub(crate)` 基线/冻结均 2 处零新增；`include!` 零）、inScope（33 个非快照 src 文件全在触碰面内）、契约 10 条逐项落地、`next_temp_reg` 单调与 7a.1 边界（§二）、values 生产（§三）、codegen（§四）、mono/dce（§六）、快照（§五）、C4（§七）、生成物（§九）、提交与测试规范（六条新测试命名 / AAA / 断言消息 / `matches!` / 无 `use super::*` 全合规）。
+- **独立性（如实登记，不宣称异家族独立验证）**：实现者 DeepSeek、验证者 review-1（GLM）、复审者 review-2（GLM）——复审与实现者不同族成立；**复审与验证同族为当前可达性偏差**（MiniMax 路由对长任务连续 transport 失败，复审从 docs-1 改派 review-2，队长合同修订在案），已按合同修订如实登记。补偿证据：两轮的全部结论都出自冻结 revision 的独立复算（对象级 `git show` 取证、全量快照骨架探针 + 牙齿自检、语料差分重跑、门禁复跑、生成器幂等实测），非交叉引用对方报告。
+- **非阻塞登记三条（复审轮）**：①代码笔提交消息的 lib 计数写 1975，与实现记录 / 复审轮实测的 1981 差 6（= 恰好六条新直驱测试，写消息时点的旧计数）——登记性偏差，不阻塞；②实现轮报文「E3017 3→4 处」与实物不符——`index.md` 基线/冻结均为 4 处（占位诊断换无映射诊断同数），纯报告措辞；③未知类型面 2345/9425（24.9%）登记给后续轮次按需收紧（见 §十）。
+
+### 九、生成物与 inScope 扩面（队长追认）
+
+代码笔含 5 份生成物：`docs/src/reference/error-code/` 4 份（E1xxx / E5xxx / E8xxx / index）+ **`docs/src/reference/warning-code/warning-codes.md`**。逐行 review 确认：error-code 4 份只含发射点行号平移（`sema/checker.rs` 基线 +1 行漂移属并行会话遗留、本笔自身源码增长的行号平移）与计数更新——`E3014` 3→4 处 = `operand.rs` 新增的 Value 槽 >255 预算臂（契约 §二 第 6 条明文）；`E3005` 19→20 处 = `lower/expr/control.rs` 模式绑定处新增的「绑定值没有可复用的寄存器槽」防御臂（`usize`→`Operand` 签名变更的响亮伴随，`slot_for_operand` 解析不了显式报 E3005 而非静默猜槽）；warning-code 1 份只含 `checker.rs` 基线行号平移。**生成器幂等**（收口轮重跑 exit 0 + `git diff --quiet` 为空）。
+
+**契约缺陷（队长侧）登记**：7b.2 契约的 inScope 声明了 `docs/src/reference/error-code/`，**漏声明 `docs/src/reference/warning-code/` 前缀**——生成器对 warning-codes.md 的顺带再生（基线 checker 行号漂移，非本批语义）属机械必需面，队长已追认随代码笔入库、不判实现越界、不拆分。与 7b.1b 收口的 error-code 前缀漏声明同性质：**后续契约写法教训同前——机械必需面必须写成可被路径匹配器解析的前缀**。
+
+### 十、偏差与既有项
+
+1. **语料基线行数口径**：契约 §二 第 10 条写的 402/402 为登记时点的陈旧数字；实测与验收一律按 **403/403**（3.24.2 收口后的基线行数），三轮实测同值。
+2. **基线死链修复笔**：`09`/`09a` 里 3.24.2 记录的 `Vec(Int)[..]` 与 `(i)` 相邻写法被 markdown 链接解析器误判为死链（预存红，与 7b.2 无关），队长授权并入本批、独立成笔；修法 = `]` 与 `(` 之间断开（实测反引号不能阻断该正则），只改两行。
+3. **04 就地更正**（本收口笔承载）：改动清单第 7 项（`next_temp_reg`）与第 32 项（`Operand::Value` 解析臂）标「7b.2 已落地」；§值标识方式补生产形态（计数器隔离 / 模块 init 退化 / 柯里层逐层重置）、类型来源与显式未知策略、`value_slots` 过渡映射与 255 预算；§normalize/快照再生按现树更正；改动量估算补实测。en 镜像不手改（zh 是源，en 由翻译工作流同步，已知待同步项）。
+4. **04 的旧路径欠账（既有，本批不修）**：04 的「编译器改动清单」与「IR 结构变更的连锁影响」仍有 7.0 搬移前的路径（`src/middle/core/ir_gen.rs`、`src/middle/core/bytecode.rs` 系列），按 7b.1a 收口的既定分工留各自批次落地时就地更正；本收口只更正第 7 / 32 项与本批触及的段落。
+5. **7b.3 前置不变**：生产 `Phi` 前必须先填 `BasicBlock.successors`（7b.1b 契约登记）；本批单块 label 恒 0，`defining_block` 已可承载多块。**7b.3 落地前禁止出现 `Phi` 生产点**（translator 占位会以 panic 形式暴露）。
+6. **7b.4 接管**：`value_slots` 是过渡映射——线性扫描分配器落地后重算该表，同批删除三处语句级回收（7a.1）；本批未改回收语义。
+7. **本轮（收口笔）只改 `09` / `09a` / `04` 三个文件**，未碰 `src/`、`tests/`、`scripts/`；未跑 `git push` / `fetch` / `pull`；09 顶部三级计数保持不动（7b.2 是既有三级任务，不新增）。
