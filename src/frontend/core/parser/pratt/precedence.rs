@@ -30,105 +30,13 @@ pub const BP_SHIFT: u8 = 6;
 pub const BP_ADD: u8 = 7;
 pub const BP_MUL: u8 = 8;
 
-/// Precedence rules for the Pratt parser
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum Precedence {
-    /// Lowest precedence
-    Lowest,
-    /// Assignment (=)
-    Assignment,
-    /// Logical OR (or)
-    LogicalOr,
-    /// Logical AND (and)
-    LogicalAnd,
-    /// Equality (==, !=)
-    Equality,
-    /// Comparison (<, <=, >, >=)
-    Comparison,
-    /// Term (+, -)
-    Term,
-    /// Factor (*, /, %)
-    Factor,
-    /// Unary operators (!, -, +)
-    Unary,
-    /// Function calls, field access, indexing
-    Call,
-    /// Highest precedence
-    Highest,
-}
-impl Precedence {
-    /// Convert precedence to binding power
-    pub fn to_bp(self) -> u8 {
-        match self {
-            Precedence::Lowest => BP_LOWEST,
-            Precedence::Assignment => BP_ASSIGN,
-            Precedence::LogicalOr => BP_LOGICAL_OR,
-            Precedence::LogicalAnd => BP_LOGICAL_AND,
-            Precedence::Equality => BP_EQUALITY,
-            Precedence::Comparison => BP_COMPARISON,
-            Precedence::Term => BP_TERM,
-            Precedence::Factor => BP_FACTOR,
-            Precedence::Unary => BP_UNARY,
-            Precedence::Call => BP_CALL,
-            Precedence::Highest => BP_HIGHEST,
-        }
-    }
+/// `..` 的左绑定力（#300 F/I 项：左 6 低于加法 7；右操作数按加法级解析，
+/// 故 `0..n+2` = `0..(n+2)`、`a..b..c` = `(a..b)..c`）。
+pub const BP_RANGE_L: u8 = 6;
 
-    /// Convert binding power to precedence
-    pub fn from_bp(bp: u8) -> Option<Self> {
-        match bp {
-            BP_LOWEST => Some(Precedence::Lowest),
-            BP_ASSIGN => Some(Precedence::Assignment),
-            BP_LOGICAL_OR => Some(Precedence::LogicalOr),
-            BP_LOGICAL_AND => Some(Precedence::LogicalAnd),
-            BP_EQUALITY => Some(Precedence::Equality),
-            BP_COMPARISON => Some(Precedence::Comparison),
-            BP_TERM => Some(Precedence::Term),
-            BP_FACTOR => Some(Precedence::Factor),
-            BP_UNARY => Some(Precedence::Unary),
-            BP_CALL => Some(Precedence::Call),
-            BP_HIGHEST => Some(Precedence::Highest),
-            _ => None,
-        }
-    }
-}
+/// `..` 的右绑定力（与 `BP_RANGE` 同值：右操作数按加法级解析，吞加法不吞同级 `..`）。
+pub const BP_RANGE_R: u8 = BP_RANGE;
 
-/// Precedence parsing context for the Pratt parser
-#[derive(Debug, Clone)]
-pub struct PrecedenceContext {
-    /// Current minimum binding power
-    pub min_bp: u8,
-    /// Current precedence level
-    pub precedence: Precedence,
-}
-
-impl PrecedenceContext {
-    /// Create a new precedence context
-    pub fn new(min_bp: u8) -> Self {
-        Self {
-            min_bp,
-            precedence: Precedence::from_bp(min_bp).unwrap_or(Precedence::Lowest),
-        }
-    }
-
-    /// Check if the current precedence is higher than the minimum
-    pub fn can_parse(&self) -> bool {
-        self.precedence.to_bp() >= self.min_bp
-    }
-
-    /// Increase the minimum binding power
-    pub fn increase_bp(
-        &self,
-        bp: u8,
-    ) -> Self {
-        Self::new(bp)
-    }
-
-    /// Decrease the minimum binding power
-    pub fn decrease_bp(
-        &self,
-        bp: u8,
-    ) -> Self {
-        Self::new(self.min_bp.saturating_sub(bp))
-    }
-}
+/// 模式位探测表达式的阈值（issue #405）：高于任何中缀绑定力，使 `lo..hi`
+/// 范围模式能被整体探测后再按模式解释，而不是先被 `..` 拆走。
+pub const BP_PATTERN_PROBE: u8 = 12;

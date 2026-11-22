@@ -853,7 +853,7 @@ impl<'a> ParserState<'a> {
             // Lambda binding power is 11, so we use 12 to stop before =>
             //
             // RFC-010b: 变体模式 `ok(v)` 的调用结合力（BP_CALL=9）低于 12，
-            // parse_expression(12) 会把 `ok` 停成裸 Var、`(` 成意外 token——
+            // parse_expression(BP_PATTERN_PROBE) 会把 `ok` 停成裸 Var、`(` 成意外 token——
             // 特判 Var 后跟 LParen 的形态，手动走 parse_call 重组调用
             //（expr_to_pattern 随后把它转成 Union 变体模式）。
             let pattern = {
@@ -994,7 +994,7 @@ impl<'a> ParserState<'a> {
         }
     }
 
-    /// 解析单个模式（RFC-010b）：parse_expression(12) 探测 + 三分支——
+    /// 解析单个模式（RFC-010b）：parse_expression(BP_PATTERN_PROBE) 探测 + 三分支——
     /// Var+LParen 变体调用重组（`ok(v)` 停成裸 Var 的特判）、Var+LBrace
     /// 结构体模式（`Point { x, y: b }`，字段为简写绑定或 `名: 子模式`）、
     /// 其余经 expr_to_pattern 转换
@@ -1016,8 +1016,8 @@ impl<'a> ParserState<'a> {
 
     /// [`Self::parse_pattern`] 的闸内本体（原实现逐字保留）。
     fn parse_pattern_nested(&mut self) -> Option<Pattern> {
-        let probe = self.parse_expression(12)?;
-        // issue #405：范围模式 `lo..hi`——`..` 中缀绑定力 (6,7) 低于模式阈值 12，
+        let probe = self.parse_expression(BP_PATTERN_PROBE)?;
+        // issue #405：范围模式 `lo..hi`——`..` 中缀绑定力（BP_RANGE_L/BP_RANGE_R）低于模式阈值 BP_PATTERN_PROBE，
         // pratt 循环停在 DotDot、probe 持有下界端点表达式，此处收编为 Range 模式。
         // 端点限定：字面量（负号前缀归一化为负值）；标识符端点在模式位是绑定，
         // 无判定语义，显式拒绝（E0010 点名范围端点）。上界不走 pratt 探测——
