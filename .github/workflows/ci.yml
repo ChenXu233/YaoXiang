@@ -65,7 +65,10 @@ jobs:
       # 单元测试——否则「门禁程序自己算得对不对」没有任何自动判据（2026-11-01 实例：
       # 一次清空登记表让 3 条夹具变红，撑了 11 笔提交、6 个成员回合无人发现）。
       - name: Type-table gate self-tests (excluded from workspace)
-        run: cargo test --manifest-path tools/type-tables/Cargo.toml
+        # 根 .cargo/config.toml 的 cfg(unix) runner 是仓库根相对路径（scripts/dev/z3_runner.py），
+        # 而子包测试的 cwd 是包目录 ⇒ 找不到脚本。类型表门禁不链接 libz3，不需要该 runner，
+        # 这里显式覆盖成 env（原样执行测试二进制）。
+        run: cargo test --manifest-path tools/type-tables/Cargo.toml --config 'target."cfg(unix)".runner="env"'
 
   scripts:
     name: Scripts (typecheck + tests)
