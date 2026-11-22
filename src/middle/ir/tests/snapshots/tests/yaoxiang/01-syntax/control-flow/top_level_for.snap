@@ -24,8 +24,8 @@ module
     Add %14 <- %12, %13
     Store @0 <- %14
     Jmp -> instr(13)
-    Load %14 <- @0
-    Load %12 <- int(60)
-    Eq %10 <- %14, %12
-    Load %13 <- string("顶层 for 累加 10+20+30 == 60")
-    Call %9 <- string("std.assert.assert") [%10, %13] (def=d3)
+    Load %15 <- @0
+    Load %16 <- int(60)
+    Eq %17 <- %15, %16
+    Load %18 <- string("顶层 for 累加 10+20+30 == 60")
+    Call %19 <- string("std.assert.assert") [%17, %18] (def=d3)

@@ -1,7 +1,7 @@
 //! 作用域与寄存器帧（`AstToIrGenerator` 的作用域/槽位族）
 //!
 //! 符号表栈、局部槽位分配（`cur_locals` / `next_temp` / `temp_high_water` /
-//! `temp_floor`）、全局槽位查询，以及 `note_*` written-type/量词事实的写入与读回。
+//! 具名高水位）、全局槽位查询，以及 `note_*` written-type/量词事实的写入与读回。
 //! 方法体逐字搬自原 `middle/ir/ir_gen.rs`（WBS 7.0.1），语义未改。
 
 use super::{AstToIrGenerator, LoopTargets, SymbolEntry};
@@ -174,7 +174,7 @@ impl AstToIrGenerator {
     fn alloc_register_slot(&mut self) -> usize {
         let reg = self.next_temp;
         self.next_temp += 1;
-        // #393：真高水位——语句级回收会回滚 next_temp，槽位总数以历史
+        // 具名高水位只增不减（7b.4：值槽由分配器另算，不经过这里）
         // 最高占用为准（少一都会让尾部语句的临时落进未分配槽位）。
         self.temp_high_water = self.temp_high_water.max(reg + 1);
         reg
@@ -531,11 +531,11 @@ fn infer_instruction_value_type<'a>(
 
 /// 被 [`NestedBodyGuard`] 摘下来的父帧。
 ///
-/// `counters` 为 `None` 表示这次帧边界**不回滚**三项槽计数（声明面口径，见
+/// `counters` 为 `None` 表示这次帧边界**不回滚**两项槽计数（声明面口径，见
 /// [`NestedBodyGuard::enter_decl`]）；槽位表、值表、当前 span 与 `value_mode`
 /// 一律回滚（值表/`next_value` 是**每个函数体独立**的，与槽计数的帧口径不同）。
 struct SavedFrame {
-    counters: Option<(usize, usize, usize)>,
+    counters: Option<(usize, usize)>,
     cur_span: Span,
     cur_locals: Vec<LocalSlot>,
     cur_frame: FrameId,
@@ -564,14 +564,14 @@ pub(super) struct NestedBodyGuard<'a> {
 }
 
 impl<'a> NestedBodyGuard<'a> {
-    /// **本体帧入口**：摘走父帧（槽位表 / 循环栈 / 当前 span / 三项计数）。
+    /// **本体帧入口**：摘走父帧（槽位表 / 循环栈 / 当前 span / 两项计数）。
     ///
     /// 父确实是一个帧（函数体 / 方法体 / lambda / 匿名绑定 / curry 层）时用它：
     /// 调用点随后按本体的口径把计数装到基态（见各调用点的注释），`Drop` 时父帧
-    /// 原样放回——`next_temp` / `temp_high_water` / `temp_floor` 不再串到父体。
+    /// 原样放回——`next_temp` / `temp_high_water` 不再串到父体。
     pub(super) fn enter(gen: &'a mut AstToIrGenerator) -> Self {
         let saved = SavedFrame {
-            counters: Some((gen.next_temp, gen.temp_high_water, gen.temp_floor)),
+            counters: Some((gen.next_temp, gen.temp_high_water)),
             cur_span: gen.cur_span,
             cur_locals: std::mem::take(&mut gen.cur_locals),
             cur_frame: gen.cur_frame,
@@ -587,7 +587,7 @@ impl<'a> NestedBodyGuard<'a> {
         Self { gen, saved }
     }
 
-    /// **声明面入口**：帧边界只覆盖槽位表 / 循环栈 / 当前 span，**三项计数不回滚**。
+    /// **声明面入口**：帧边界只覆盖槽位表 / 循环栈 / 当前 span，**两项计数不回滚**。
     ///
     /// 模块级声明（顶层函数、类型定义里的方法）用它：模块初始化序列不是函数体帧，
     /// 它的寄存器计数沿用既有口径——接着用子体的终值（WBS 7a.2 保持 C1 zero-diff；
@@ -635,10 +635,9 @@ impl Drop for NestedBodyGuard<'_> {
         self.gen.cur_values = std::mem::take(&mut self.saved.cur_values);
         self.gen.cur_pins = std::mem::take(&mut self.saved.cur_pins);
         self.gen.value_mode = self.saved.value_mode;
-        if let Some((next_temp, temp_high_water, temp_floor)) = self.saved.counters {
+        if let Some((next_temp, temp_high_water)) = self.saved.counters {
             self.gen.next_temp = next_temp;
             self.gen.temp_high_water = temp_high_water;
-            self.gen.temp_floor = temp_floor;
         }
     }
 }

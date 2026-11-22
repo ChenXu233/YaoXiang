@@ -94,13 +94,6 @@ impl AstToIrGenerator {
             frame.generate_local_stmt_ir(stmt, &mut instructions, constants)?;
             // NLL Release: 语句边界消费释放计划（RFC-039 D20）
             frame.emit_release_drops(stmt.plan_id, &mut instructions);
-            // #393：语句级临时寄存器回收（同 generate_block_ir）
-            let named_watermark = frame
-                .cur_locals
-                .iter()
-                .rposition(|slot| slot.name.is_some())
-                .map_or(0, |i| i + 1);
-            frame.next_temp = named_watermark.max(frame.temp_floor);
             frame.set_cur_span(stmt.span);
         }
 

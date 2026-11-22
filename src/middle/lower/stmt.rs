@@ -518,9 +518,8 @@ impl AstToIrGenerator {
         // 不改编号（C1 zero-diff）。#368：模块级已登记的具名槽位随 Drop 原样放回。
         let mut frame = NestedBodyGuard::enter_decl(self);
         frame.next_temp = local_var_start;
-        // #393：本函数是独立寄存器空间——高水位与循环态地板随之清零
+        // 本函数是独立寄存器空间——具名高水位随之清零
         frame.temp_high_water = local_var_start;
-        frame.temp_floor = 0;
 
         // 生成指令序列
         let mut instructions = Vec::new();
@@ -655,9 +654,8 @@ impl AstToIrGenerator {
         let local_var_start = params.len().max(used_max);
         let mut frame = NestedBodyGuard::enter_decl(self);
         frame.next_temp = local_var_start;
-        // #393：本函数是独立寄存器空间——高水位与循环态地板随之清零
+        // 本函数是独立寄存器空间——具名高水位随之清零
         frame.temp_high_water = local_var_start;
-        frame.temp_floor = 0;
 
         // 生成函数体指令
         let mut instructions = Vec::new();
@@ -745,14 +743,6 @@ impl AstToIrGenerator {
             frame.generate_local_stmt_ir(stmt, &mut instructions, constants)?;
             // NLL Release: 在语句边界消费释放计划并插入 Drop 指令
             frame.emit_release_drops(stmt.plan_id, &mut instructions);
-            // #393：语句级临时寄存器回收（同 generate_block_ir——临时不跨
-            // 语句存活，回滚到具名水位与循环态地板的较大者）
-            let named_watermark = frame
-                .cur_locals
-                .iter()
-                .rposition(|slot| slot.name.is_some())
-                .map_or(0, |i| i + 1);
-            frame.next_temp = named_watermark.max(frame.temp_floor);
             tlog!(
                 debug,
                 MSG::IrGenAfterProcessStmt,
@@ -1441,20 +1431,6 @@ impl AstToIrGenerator {
             // 嵌套块（if/for/while/块表达式的体）的语句也各有自己的条目，
             // 作用域退出的 Drop 就归属在块的最后一条语句上
             self.emit_release_drops(stmt.plan_id, instructions);
-            // #393：语句级临时寄存器回收——临时不跨语句存活，语句生成完
-            // 回滚到「具名局部水位 ⋈ 循环态地板」。具名水位取 cur_locals
-            // 最后一个具名槽（参数与全部具名绑定，含已退出作用域者，保守
-            // 不复用）；temp_floor 保住 for 迭代器等循环态临时。仅语句语境
-            // 块回收：result_reg=Some 的块处于表达式操作数位，外层可能持有
-            // 跨块存活的兄弟实参临时，回滚会踩坏它们。
-            if result_reg.is_none() {
-                let named_watermark = self
-                    .cur_locals
-                    .iter()
-                    .rposition(|slot| slot.name.is_some())
-                    .map_or(0, |i| i + 1);
-                self.next_temp = named_watermark.max(self.temp_floor);
-            }
             self.set_cur_span(stmt.span);
         }
 

@@ -265,7 +265,6 @@ impl AstToIrGenerator {
         // next_temp 起始 = 参数总数
         frame.next_temp = env_count + layer.params.len();
         frame.temp_high_water = env_count + layer.params.len();
-        frame.temp_floor = 0;
 
         let return_type: MonoType = layer.return_type.clone().into();
 
@@ -401,7 +400,6 @@ impl AstToIrGenerator {
             // 重置本层的临时寄存器（每层独立计数）
             frame.next_temp = 0;
             frame.temp_high_water = 0;
-            frame.temp_floor = 0;
             // 每层是独立 FunctionIR：值表与 ValueId 也按层重置（7b.2）。
             frame.next_value = 0;
             frame.cur_values.clear();

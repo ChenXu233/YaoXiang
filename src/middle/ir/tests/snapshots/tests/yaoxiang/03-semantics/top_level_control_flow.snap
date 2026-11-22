@@ -48,18 +48,18 @@ module
     Add %30 <- %28, %29
     Store @1 <- %30
     Jmp -> instr(35)
-    Load %30 <- @1
-    Load %28 <- int(10)
-    Eq %26 <- %30, %28
-    Load %29 <- string("顶层 for 遍历完整")
-    Call %25 <- string("std.assert.assert") [%26, %29] (def=d0)
-    Load %31 <- @2
-    JmpIfNot %31 -> instr(54)
-    Load %32 <- string("顶层 if 分支")
-    Call %33 <- string("std.io.println") [%32] (def=d4)
+    Load %31 <- @1
+    Load %32 <- int(10)
+    Eq %33 <- %31, %32
+    Load %34 <- string("顶层 for 遍历完整")
+    Call %35 <- string("std.assert.assert") [%33, %34] (def=d0)
+    Load %36 <- @2
+    JmpIfNot %36 -> instr(54)
+    Load %37 <- string("顶层 if 分支")
+    Call %38 <- string("std.io.println") [%37] (def=d4)
     Jmp -> instr(57)
-    Load %26 <- bool(false)
-    Load %30 <- string("不应走 else")
-    Call %25 <- string("std.assert.assert") [%26, %30] (def=d0)
-    Load %26 <- string("top_level_control_flow ok")
-    Call %25 <- string("std.io.println") [%26] (def=d4)
+    Load %39 <- bool(false)
+    Load %40 <- string("不应走 else")
+    Call %41 <- string("std.assert.assert") [%39, %40] (def=d0)
+    Load %42 <- string("top_level_control_flow ok")
+    Call %43 <- string("std.io.println") [%42] (def=d4)

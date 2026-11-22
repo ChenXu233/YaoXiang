@@ -378,9 +378,8 @@ impl AstToIrGenerator {
         // 记录局部变量起始位置
         let local_var_start = params.len();
         frame.next_temp = local_var_start;
-        // #393：独立寄存器空间——高水位与循环态地板随之清零
+        // 独立寄存器空间——具名高水位随之清零
         frame.temp_high_water = local_var_start;
-        frame.temp_floor = 0;
 
         // 生成表达式体的 IR，并返回结果
         let result_reg = frame.next_temp_reg();

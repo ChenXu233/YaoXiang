@@ -66,12 +66,9 @@ pub struct AstToIrGenerator {
     pub(super) closure_decl_params: Vec<(String, MonoType)>,
     /// 下一个临时寄存器编号
     pub(super) next_temp: usize,
-    /// 本函数临时寄存器高水位（#393：语句级回收会回滚 next_temp，
-    /// total_locals 必须取真高水位，否则最后一条语句的临时槽位被裁掉）
+    /// 本函数**具名**槽高水位（形参 / env / 具名绑定；7b.4 起临时值不再占槽，
+    /// 它是分配器的具名基址 named_base）
     pub(super) temp_high_water: usize,
-    /// 循环态临时地板（#393：for 的 iterator/iterable 等临时跨语句存活，
-    /// 语句级回收回滚不得低于此值；enter/exit_loop_targets 维护）
-    pub(super) temp_floor: usize,
     /// 局部变量类型追踪（用于错误消息中显示实际类型）
     pub(super) local_var_types: HashMap<String, String>,
     /// 顶层绑定**写出**的类型名（Script 形态的 `t = Temp(1.0)` 是全局槽位，
@@ -310,8 +307,6 @@ pub(super) struct LoopTargets {
     pub(super) continue_target: usize,
     /// break 占位 Jmp 的指令下标，循环出口确定后回填
     pub(super) break_fixups: Vec<usize>,
-    /// 进入循环时的 temp_floor（#393：出口恢复外层地板）
-    pub(super) saved_temp_floor: usize,
 }
 
 impl AstToIrGenerator {
@@ -339,7 +334,6 @@ impl AstToIrGenerator {
             closure_decl_params: Vec::new(),
             next_temp: 0,
             temp_high_water: 0,
-            temp_floor: 0,
             local_var_types: HashMap::new(),
             global_written_types: HashMap::new(),
             ffi_libs: Vec::new(),

@@ -16,16 +16,9 @@ impl AstToIrGenerator {
         &mut self,
         loop_start_idx: usize,
     ) {
-        // #393：循环态临时地板 = 进入时的 next_temp——for 的 iterator/iterable
-        // 等临时在进入前分配、体内每轮读取，语句级回收不得回滚到它们之下。
-        // while 的 cond 在进入后分配、读点都在体内语句之前，地板盖不住它
-        // 也无害（每轮循环开头重写）。
-        let saved_temp_floor = self.temp_floor;
-        self.temp_floor = self.next_temp;
         self.loop_stack.push(LoopTargets {
             continue_target: loop_start_idx,
             break_fixups: Vec::new(),
-            saved_temp_floor,
         });
     }
 
@@ -36,8 +29,6 @@ impl AstToIrGenerator {
         instructions: &mut [Instruction],
     ) {
         if let Some(targets) = self.loop_stack.pop() {
-            // #393：恢复外层地板（嵌套循环各保各的）
-            self.temp_floor = targets.saved_temp_floor;
             for fixup in targets.break_fixups {
                 if let Instruction::Jmp {
                     ref mut target,
