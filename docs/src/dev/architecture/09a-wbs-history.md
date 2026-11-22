@@ -8369,3 +8369,127 @@ out of scope：`src/backends/`、`src/std/`、`tests/yaoxiang/`、`09`、`04`、
 4. **`slot_for_operand` 语义来源收窄**：改动后「具名绑定复用值槽」只能经 pin 一处表达；后续新代码不得再写第二处复用（登记为写下来源）。
 5. **7a 的峰值数字跨批次**：51→211 是 7a baseline（402 条语料、7b.2 之前）的实测；本批语料已 403 条且 values 已生产，故可行性论证用的是「`named_base + 值总数`」这一逐文件必然上界，实现轮必须复测该上界而不是引用旧峰值。
 
+### P7 7b.4 实现记录（线性扫描分配器 + 删三处回收）
+
+#### 一、提交序列与 revision 关系
+
+| 顺序 | commit | 内容 |
+| --- | --- | --- |
+| 1 | `ddc9a9c8` | 契约登记用户裁决 ②（E3014 触发面按 D59 C 类直修）+ 四条件 + §三/§四/§五 就地更新（仅 09a） |
+| 2 | `503c129b` | 分配器 + `finalize_code_body` 单点 + 232 快照再生 + #540 锚改写/1100 变体 + 5 探针重写 |
+| 3 | `d48232eb` | 纯删除：三处语句级回收 + `result_reg.is_none()` 守卫 + `temp_floor`/`saved_temp_floor` 全链 |
+| 4 | 本节 | 实现记录（实测数字、go/no-go、探针、D59 C 类、偏差） |
+
+revision 关系：笔 2 与笔 3 是 LIFO 耦合——笔 3 之后回滚笔 2 会让临时值没有槽
+（codegen 走 E3017），要回到笔 2 之前必须先回滚笔 3。笔 1 只动 09a，可与任一笔
+独立回滚。本批**未**修改 09/04/backends/std/scripts/tests/yaoxiang，也未 push。
+
+#### 二、落地形态（与契约 A–H 的对应）
+
+- **分配器**：`src/middle/lower/regalloc.rs`，接口 `Allocation` / `Budget` /
+  `allocate_value_slots(blocks, values, named_base, pinned, limit)`。活跃区间用
+  7b.3 的 `BasicBlock.successors` 做后向数据流（`live_in = gen ∪ (live_out − kill)`，
+  `gen` 只收向上暴露的使用——否则单块函数体里每个值都被拉到块首、复用失效）；
+  `Phi` 的 `dst` 定义点取汇合块首，`incoming` 的 `(前驱, v)` 记成前驱块的
+  `live_out`（等价于 translator 在前驱出口展开的 Move 组）；闭区间、回边兜底
+  计数；pinned 值固定落具名槽、自由池从 `pool_base = max(named_base, max_pin+1)`
+  起，`frame_slots = max(named_base, next_slot)`，超 `limit` 返回 `Budget`。
+- **收尾单点**：`scope.rs` 的 `finalize_code_body` 返回 `FinalizedCodeBody`
+  （`locals` / `values` / `value_slots` / `blocks`）——值类型 → `partition_blocks`
+  → 分配 → E3014（`register_overflow(required, limit).at(cur_span)`）→
+  `take_cur_locals(frame_slots)`。6 处 `FunctionBody::Code` 构造点全部改走它。
+- **具名基址**：`named_base = max(temp_high_water, next_temp)`。具名槽仍单调
+  （`alloc_register_slot` 只服务形参 / env / 具名绑定）；`value_mode=true` 的
+  `next_temp_reg` 不再占槽。`temp_high_water` 自此是**具名**高水位。
+- **值钉子**：`slot_for_operand` 收窄为 `Local`；新增 `pin_value_to_local_slot`
+  （值 → 具名槽），`lower/expr/control.rs` 的 `bind_pattern` Identifier 臂改走
+  pin，不新增指令。
+- **def/use 提层**：`Instruction::def_operands()` / `use_operands()` 落到
+  `ir/ir.rs`（穷尽 match 原样搬），`ir/verify.rs` 委托；槽位语义哲学注释随行。
+
+#### 三、实现中发现并修掉的一处既有隐患
+
+闭包体（`generate_lambda_body_ir`）此前只装 `next_temp = local_var_start`，
+**没有**同步 `temp_high_water`——6 个函数体形态里唯一漏配对的一处。7b.2 前它无害
+（槽数按临时高水位算，父帧高水位已覆盖）；分配器落地后具名基址可能落进
+env / 形参槽区间，实测 `src/std/tests/list_ops.yx` 的 `reduce sum == 10` 断言翻红
+（值槽与 env 槽重叠）。补齐配对（`frame.temp_high_water = local_var_start`）后语料
+差分回到 403/403。这一处属「分配器落地才显形」的既有缺陷，按 D59 C 类顺路修。
+
+#### 四、基线（实测）
+
+- **IR 快照**：笔 2 再生 232 份——37 份逐字节相同、195 份只含「Local 槽编号 +
+  表长」漂移、**结构差异 0**。笔 3 相对笔 2：230 份逐字节相同、2 份
+  （`top_level_for` / `top_level_control_flow`）只含 Local 槽编号漂移——模块
+  init 序列也走同一处语句级回收，删掉后 init 的临时槽变单调，**结构差异 0**。
+  机械核对脚本对全量 232 份执行，口径（两类允许变化）：抹掉
+  `locals_total=<n>`、`init (locals=<n>)` 的 n、`slot[<n>]` / `islot[<n>]` 的下标、
+  `%<n>` 重命名标签，其余逐字节比对。抽样人工 review 10 份：
+  `top_level_init_expression`、`empty_block_semantics`、`string_ops`、
+  `list_comp`、`match_call_scrutinee`、`assignment_semantics`、`typed_vars`、
+  `native_arity_range`、`top_level_binding`、`top_level_control_flow`。
+- **语料差分**：笔 2 与笔 3 各测一次，均 403/403、差分空（行为等价）。
+- **测试面**：snapshot 6 passed / 1 ignored（232 份零漂移）、verify 35、
+  `middle::ir::tests` 82 / 1、phi 47、`testsuite.py run fast` 2527 条 exit 0。
+- **生成物**：`gen-error-code-docs.py` 幂等；E0xxx/E1xxx 只随注释行号平移
+  （parser_state 与 stmt 的注释改动，一处一行）。
+
+#### 五、go/no-go（裁决 ② 条件①）
+
+| 语料 | 不回收时的单调槽数（7a 实测） | 7b.4 分配后最大帧槽 | 值总数 |
+| --- | --- | --- | --- |
+| `src/std/tests/string_ops.yx` | 354 | **15** | 344 |
+| `tests/yaoxiang/01-syntax/control-flow/list_comp.yx` | 323 | **24** | 304 |
+
+直驱测试：`middle::lower::tests::budget::test_corpus_over_budget_forms_fit_after_allocation`
+（`locals.len() ≤ 255` + 复用实证 `具名 + 值 > 帧槽`）。数字取自两份快照的
+`locals_total` / `values_total`（快照即分配结果的落盘面）。
+
+深链夹具（`id(1 + … + 1)` 在 `main` 内）：**300 / 600 / 1100 项**均 `check` +
+`build` + `run` exit 0，stdout 分别 `301` / `601` / `1101`，无栈溢出、无 E3014
+（1100 为裁决 ② 条件②的变体，已落成 `cli_e2e` 集成锚）。
+
+#### 六、7a 的 5 个 >255 探针按新语义重写（裁决 ② 条件③）
+
+| 形态 | 成功面：300 项扁平链（值总数 >255、活跃值常数级） | 拒绝面：300 个具名绑定（具名基址 >255） |
+| --- | --- | --- |
+| 函数体 | 零诊断 | 恰 1 条 E3014，带 span |
+| 方法体 | 零诊断 | 恰 1 条 E3014，带 span |
+| lambda 体 | 零诊断 | 恰 1 条 E3014，带 span |
+| curry 最内层 | 零诊断 | 恰 1 条 E3014，带 span |
+| 匿名绑定体（类型体内联匿名函数） | 零诊断 | 恰 1 条 E3014，带 span |
+
+落点：`tests/integration/check.rs` 的
+`test_slot_budget_deep_chain_succeeds_in_five_body_forms` 与
+`test_slot_budget_named_base_overflow_reports_e3014_with_span_in_five_body_forms`。
+7a 的原始 5 个探针是批次树里的临时形态，没有入库载体；本表把它们重写成
+「成功面 + 拒绝面」的常驻判据（契约 §四的预算判据即此两半）。
+
+#### 七、D59 分类与四条件对账
+
+D59 分类 = **C 类假拒绝直修**：旧行为把可编译且可运行的深表达式判成 E3014
+寄存器溢出（非成功面），修后按「分配后帧槽」判。条件：先红后绿（7a 的
+delete-recycle 变异实测 354/323 槽越界 ⇒ 本批分配器落地后才绿）、语料 403/403、
+原先成功程序零变化（笔 3 的 fast 全绿 + 语料差分空）。
+
+四条件对账：①300/600/1100 三项 `check`+`build`+`run` 实测不崩（§五）；②#540 锚
+改写不删 + 1100 变体（`test_run_deep_binop_argument_300_terms_compiles_and_runs` /
+`…_1100_terms_…`）；③5 个探针重写登记（§六）；④本节 + 契约 H.1 登记裁决与分类。
+
+#### 八、偏差登记（契约 → 实现）
+
+1. **分配器入参**：契约 A 写 `allocate_value_slots(blocks, values, named_base, pinned)`，
+   实现多一个 `limit`——`Budget` 需要 limit 来源，且预算判据要单点持有上限
+   （`MAX_REGISTERS` 仍只在 `scope.rs` 定义）。
+2. **快照漂移类别**：契约 F 只列了 `locals_total` 与 `slot[i]` 下标两类行；实测
+   还有第三类**表象**：`%<n>` 重命名标签与 `init (locals=<n>)`。原因同一——快照
+   格式按首次出现给 Local 编 `%n`、且具名槽号是裸数字，Local 槽号一改，标签跟着
+   改。机械核对因此按「Local 槽身份 + 表长」抹平后比对（结构差异 0），并抽样
+   人工确认；`values` 段、指令结构、`slot[i] x : ty` 的具名槽名一律未变。
+3. **`take_body_locals` 删除**：契约 E 说「唯一取表点」仍是它；实际 6 个构造点改走
+   `finalize_code_body` 后它已无调用者，故删除，唯一取表点变为 `finalize_code_body`，
+   E3014 的发射点同址迁入（码号 / 文案 / span 面不变）。
+4. **init 路径**：`value_mode=false`（模块 init / 顶层语句）不走分配器、预算闸也
+   不覆盖它（`init_locals` 仍取 `cur_locals`）——这条与契约 A「init 零变化」一致；
+   但笔 3 删掉语句级回收后 init 的临时槽变单调（§四的 2 份快照），属同一删除的
+   副作用，已登记。
