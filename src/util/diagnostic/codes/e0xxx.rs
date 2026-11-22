@@ -33,6 +33,7 @@ define_codes!(E0XXX, {
     // 表达式嵌套：一元链/调用嵌套/括号/块/列表等；类型标注嵌套：Ptr/Ref/
     // 泛型构造/struct/Fn 链与柯里组，1MB 参照线程实测崩溃起点 386..958
     // 层；模式嵌套，实测崩溃起点 980 层）。扁平二元链在 parser 是迭代、
-    // 不经本闸，由 IR 层既有 E3014 寄存器上限拒绝。
+    // 不经本闸；7b.4 起 IR 层也不再以 E3014 拒绝它（槽按活跃区间复用，
+    // 扁平链活跃值为常数级；E3014 只表示分配后帧槽 >255）。
     ("E0019", Parser, false, expression_too_deep(limit: usize) => .param("limit", limit.to_string())),
 });

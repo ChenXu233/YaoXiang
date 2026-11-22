@@ -2,11 +2,11 @@ module
   fn main() -> Void
     slot[0] total : Int(64) @depth1
     slot[1] i : Int(64) @depth1
-    slot[18] x : Int(64) @depth3
-    slot[19] found : Int(64) @depth1
-    slot[20] n : Int(64) @depth1
-    slot[34] label : Int(64) @depth4
-    locals_total=40
+    slot[2] x : Int(64) @depth3
+    slot[3] found : Int(64) @depth1
+    slot[4] n : Int(64) @depth1
+    slot[5] label : Int(64) @depth4
+    locals_total=11
     values_total=55
     value v0: Void @block0
     value v1: Bool @block0

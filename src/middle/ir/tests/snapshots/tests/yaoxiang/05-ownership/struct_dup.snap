@@ -9,7 +9,7 @@ module
     type_decl [view: Ref { mutable: false, inner: TypeRef("Point") }]
   fn sum_of(TypeRef("Point")) -> Int(64)
     slot[0] p : Int(64) @depth1
-    locals_total=6
+    locals_total=4
     values_total=5
     value v0: TypeRef("?") @block0
     value v1: TypeRef("?") @block0
@@ -50,7 +50,7 @@ module
     slot[11] w2 : Int(64) @depth1
     slot[12] t : Int(64) @depth1
     slot[13] t2 : Int(64) @depth1
-    locals_total=20
+    locals_total=17
     values_total=109
     value v0: Int(64) @block0
     value v1: Int(64) @block0

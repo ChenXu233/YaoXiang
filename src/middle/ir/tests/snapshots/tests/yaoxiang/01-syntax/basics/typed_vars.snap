@@ -6,7 +6,7 @@ module
   fn main() -> Void
     slot[0] a : Int(64) @depth1
     slot[1] counter : Int(64) @depth1
-    locals_total=7
+    locals_total=5
     values_total=28
     value v0: TypeRef("?") @block0
     value v1: Bool @block0
@@ -79,4 +79,4 @@ module
     Store @2 <- %2
     Load %3 <- float(4614253070214989087)
     Store @3 <- %3
-    Call %4 <- string("main") [] (def=d1)
+    Call %2 <- string("main") [] (def=d1)

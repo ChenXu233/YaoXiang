@@ -2,7 +2,7 @@ module
   fn bump(Ref { mutable: false, inner: Generic { name: "Option", args: [Int(64)] } }) -> Generic { name: "Option", args: [Int(64)] }
     slot[0] o : Int(64) @depth1
     slot[1] v : Int(64) @depth1
-    locals_total=6
+    locals_total=5
     values_total=8
     value v0: TypeRef("?") @block0
     value v1: TypeRef("?") @block0
@@ -33,9 +33,9 @@ module
     slot[0] some_case : Int(64) @depth1
     slot[1] none_case : Int(64) @depth1
     slot[2] bumped : Int(64) @depth1
-    slot[5] v : Int(64) @depth2
-    slot[6] propagated : Int(64) @depth1
-    locals_total=22
+    slot[3] v : Int(64) @depth2
+    slot[4] propagated : Int(64) @depth1
+    locals_total=10
     values_total=38
     value v0: Int(64) @block0
     value v1: Void @block0

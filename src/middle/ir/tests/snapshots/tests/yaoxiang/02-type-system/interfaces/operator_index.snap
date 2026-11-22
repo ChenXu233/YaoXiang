@@ -2,7 +2,7 @@ module
   fn Grid() -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
     type_decl [cells: Generic { name: "Vec", args: [Float(64)] }]
   fn Grid.index(Ref { mutable: false, inner: TypeRef("Grid") }, Ref { mutable: false, inner: Int(64) }) -> Float(64)
-    locals_total=6
+    locals_total=5
     values_total=4
     value v0: TypeRef("?") @block0
     value v1: TypeRef("?") @block0
@@ -16,7 +16,7 @@ module
     Ret v0
   fn main() -> Void
     slot[0] g : Int(64) @depth1
-    locals_total=8
+    locals_total=4
     values_total=14
     value v0: TypeRef("?") @block0
     value v1: Float(64) @block0

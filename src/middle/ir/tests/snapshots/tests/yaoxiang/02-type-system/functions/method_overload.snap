@@ -21,7 +21,7 @@ module
     slot[0] t : Int(64) @depth1
     slot[1] a : Int(64) @depth1
     slot[2] b : Int(64) @depth1
-    locals_total=8
+    locals_total=6
     values_total=13
     value v0: Float(64) @block0
     value v1: Struct(StructType { name: "Temp", fields: [("value", Float(64))], methods: {}, interfaces: [] }) @block0

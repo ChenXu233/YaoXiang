@@ -233,9 +233,9 @@ fn test_parse_block_chain_1000_below_gate_parses_clean() {
 #[test]
 fn test_parse_flat_binop_chain_bypasses_depth_gate() {
     // Arrange：3000 项扁平二元链——左结合中缀在 parser 是**迭代**（栈深
-    // 有界），不经解析闸；它的资源防线是 IR 层既有 E3014 寄存器上限
-    // （登记边界：解析闸不覆盖 parser 扁平形态）。本测试钉住这个设计
-    // 决策：解析闸不得误伤迭代形态。
+    // 有界），不经解析闸（登记边界：解析闸不覆盖 parser 扁平形态）。
+    // 7b.4 起 IR 层也不再以 E3014 拒绝它：槽按活跃区间复用，扁平链的
+    // 活跃值是常数级。本测试只钉住「解析闸不得误伤迭代形态」。
     let expr = "1 + ".repeat(3000) + "1";
     let source = format!("main = () => {{\n    y = {expr}\n}}\n");
 

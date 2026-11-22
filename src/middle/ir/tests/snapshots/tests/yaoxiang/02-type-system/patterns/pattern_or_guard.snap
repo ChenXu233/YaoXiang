@@ -8,11 +8,11 @@ module
     slot[5] label : Int(64) @depth1
     slot[6] b : Int(64) @depth1
     slot[7] size : Int(64) @depth1
-    slot[9] n : Int(64) @depth2
-    slot[10] c : Int(64) @depth1
-    slot[11] size2 : Int(64) @depth1
-    slot[13] n : Int(64) @depth2
-    locals_total=19
+    slot[8] n : Int(64) @depth2
+    slot[9] c : Int(64) @depth1
+    slot[10] size2 : Int(64) @depth1
+    slot[11] n : Int(64) @depth2
+    locals_total=16
     values_total=61
     value v0: Int(64) @block0
     value v1: Int(64) @block0

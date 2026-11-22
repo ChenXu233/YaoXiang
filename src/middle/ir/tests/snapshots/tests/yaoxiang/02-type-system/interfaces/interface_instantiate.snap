@@ -20,7 +20,7 @@ module
     Ret v0
   fn main() -> Void
     slot[0] d : Int(64) @depth1
-    locals_total=7
+    locals_total=4
     values_total=19
     value v0: Generic { name: "String", args: [] } @block0
     value v1: TypeRef("?") @block0

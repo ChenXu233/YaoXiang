@@ -23,7 +23,7 @@ module
   fn double_identity(TypeRef("T")) -> TypeRef("T")
     generic_params: ["T"]
     slot[0] x : Int(64) @depth1
-    locals_total=4
+    locals_total=3
     values_total=3
     value v0: TypeRef("?") @block0
     value v1: TypeVar(TypeVar(40)) @block0
@@ -37,7 +37,7 @@ module
     slot[1] s : Int(64) @depth1
     slot[2] r : Int(64) @depth1
     slot[3] y : Int(64) @depth1
-    locals_total=9
+    locals_total=7
     values_total=25
     value v0: Int(64) @block0
     value v1: Generic { name: "String", args: [] } @block0

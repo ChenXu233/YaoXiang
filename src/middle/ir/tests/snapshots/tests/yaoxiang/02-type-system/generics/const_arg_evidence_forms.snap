@@ -23,7 +23,7 @@ module
     slot[3] b : Int(64) @depth1
     slot[4] c : Int(64) @depth1
     slot[5] d : Int(64) @depth1
-    locals_total=11
+    locals_total=10
     values_total=35
     value v0: Int(64) @block0
     value v1: Fn { params: [TypeRef("N")], return_type: Int(64) } @block0

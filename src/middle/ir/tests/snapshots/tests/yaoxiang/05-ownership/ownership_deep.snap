@@ -2,7 +2,7 @@ module
   fn Point() -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
     type_decl [x: Int(64) ; y: Int(64)]
   fn Point.sum(Ref { mutable: false, inner: TypeRef("Point") }) -> Int(64)
-    locals_total=6
+    locals_total=4
     values_total=5
     value v0: TypeRef("?") @block0
     value v1: TypeRef("?") @block0
@@ -17,7 +17,7 @@ module
     Ret v0
     Ret v0
   fn Point.shift(Ref { mutable: true, inner: TypeRef("Point") }, Int(64), Int(64)) -> Void
-    locals_total=14
+    locals_total=7
     values_total=11
     value v0: Ref { mutable: true, inner: TypeRef("Point") } @block0
     value v1: TypeRef("?") @block0
@@ -58,7 +58,7 @@ module
     slot[9] r : Int(64) @depth1
     slot[10] t : Int(64) @depth1
     slot[11] w : Int(64) @depth1
-    locals_total=20
+    locals_total=16
     values_total=83
     value v0: Int(64) @block0
     value v1: Int(64) @block0

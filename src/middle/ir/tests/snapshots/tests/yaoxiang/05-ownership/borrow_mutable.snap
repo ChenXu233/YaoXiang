@@ -2,7 +2,7 @@ module
   fn Point() -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
     type_decl [x: Int(64) ; y: Int(64)]
   fn Point.shift(Ref { mutable: true, inner: TypeRef("Point") }, Int(64), Int(64)) -> Void
-    locals_total=14
+    locals_total=7
     values_total=11
     value v0: Ref { mutable: true, inner: TypeRef("Point") } @block0
     value v1: TypeRef("?") @block0

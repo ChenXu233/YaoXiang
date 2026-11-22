@@ -30,7 +30,7 @@ module
     Ret v0
   fn main() -> Void
     slot[0] h : Int(64) @depth1
-    locals_total=8
+    locals_total=4
     values_total=36
     value v0: TypeRef("?") @block0
     value v1: Bool @block0
@@ -109,7 +109,7 @@ module
     Ret v34
   fn closure_0(Int(64)) -> Void
     slot[0] a : Int(64) @depth2
-    locals_total=5
+    locals_total=4
     values_total=4
     value v0: TypeRef("?") @block0
     value v1: Int(64) @block0
@@ -139,7 +139,7 @@ module
     Add v0 <- v1, v2
     Ret v0
   fn closure_2() -> Void
-    locals_total=8
+    locals_total=2
     values_total=2
     value v0: TypeRef("?") @block0
     value v1: Int(64) @block0

@@ -15,7 +15,7 @@ module
     generic_params: ["T"]
     type_decl [data: Generic { name: "Vec", args: [TypeRef("T")] } ; length: Int(64)]
   fn MyList.push(Ref { mutable: true, inner: Generic { name: "MyList", args: [TypeRef("T")] } }, TypeRef("T")) -> Fn { params: [Ref { mutable: true, inner: Generic { name: "MyList", args: [TypeRef("T")] } }, TypeRef("T")], return_type: Void }
-    locals_total=13
+    locals_total=6
     values_total=11
     value v0: TypeRef("?") @block0
     value v1: Ref { mutable: true, inner: Generic { name: "MyList", args: [TypeRef("T")] } } @block0
@@ -42,7 +42,7 @@ module
     StoreField v6.1 <- v7 (type=None, name=Some("length"))
     Ret
   fn MyList.get(Ref { mutable: false, inner: Generic { name: "MyList", args: [TypeRef("T")] } }, Int(64)) -> Fn { params: [Ref { mutable: false, inner: Generic { name: "MyList", args: [TypeRef("T")] } }, Int(64)], return_type: TypeRef("T") }
-    locals_total=6
+    locals_total=5
     values_total=4
     value v0: TypeRef("?") @block0
     value v1: TypeRef("?") @block0
@@ -70,7 +70,7 @@ module
     Ret v1
   fn build_list() -> Int(64)
     slot[0] l : Int(64) @depth1
-    locals_total=8
+    locals_total=4
     values_total=38
     value v0: TypeRef("?") @block0
     value v1: Int(64) @block0
@@ -154,7 +154,7 @@ module
     Drop %0
     Ret v36
   fn main() -> Void
-    locals_total=5
+    locals_total=3
     values_total=10
     value v0: TypeRef("?") @block0
     value v1: Bool @block0

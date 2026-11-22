@@ -10,7 +10,7 @@ module
     slot[5] r3 : Int(64) @depth1
     slot[6] q : Int(64) @depth1
     slot[7] spawned : Int(64) @depth1
-    locals_total=18
+    locals_total=12
     values_total=64
     value v0: Int(64) @block0
     value v1: Int(64) @block0

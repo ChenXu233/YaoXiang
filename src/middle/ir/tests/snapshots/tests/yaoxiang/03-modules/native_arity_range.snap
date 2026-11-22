@@ -5,7 +5,7 @@ module
   global[3] none_opt : Int(64)
   fn pick(Bool) -> Generic { name: "Option", args: [Int(64)] }
     slot[0] empty : Int(64) @depth1
-    locals_total=4
+    locals_total=3
     values_total=5
     value v0: Bool @block0
     value v1: TypeRef("?") @block0
@@ -22,8 +22,8 @@ module
     CreateVariant v3 <- Option::0 v4
     Ret v3
     Ret v3
-  init (locals=29)
-    islot[28] v : Int(64) @depth1
+  init (locals=27)
+    islot[26] v : Int(64) @depth1
     Load %0 <- string("a")
     Load %1 <- string("b")
     Call %2 <- string("std.string.concat") [%0, %1] (def=d0)

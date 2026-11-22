@@ -2,15 +2,15 @@ module
   fn main() -> Void
     slot[0] ranges : Int(64) @depth1
     slot[1] total : Int(64) @depth1
-    slot[4] rg : Int(64) @depth2
-    slot[12] i : Int(64) @depth4
-    slot[13] lists : Int(64) @depth1
-    slot[14] sum : Int(64) @depth1
-    slot[17] inner : Int(64) @depth2
-    slot[22] x : Int(64) @depth4
-    slot[23] pairs : Int(64) @depth1
-    slot[27] p : Int(64) @depth2
-    locals_total=37
+    slot[2] rg : Int(64) @depth2
+    slot[3] i : Int(64) @depth4
+    slot[4] lists : Int(64) @depth1
+    slot[5] sum : Int(64) @depth1
+    slot[6] inner : Int(64) @depth2
+    slot[7] x : Int(64) @depth4
+    slot[8] pairs : Int(64) @depth1
+    slot[9] p : Int(64) @depth2
+    locals_total=16
     values_total=75
     value v0: TypeRef("?") @block0
     value v1: Int(64) @block0

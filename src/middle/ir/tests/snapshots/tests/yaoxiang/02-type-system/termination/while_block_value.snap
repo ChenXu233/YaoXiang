@@ -4,7 +4,7 @@ module
     slot[1] last : Int(64) @depth1
     slot[2] j : Int(64) @depth1
     slot[3] total : Int(64) @depth1
-    locals_total=11
+    locals_total=7
     values_total=32
     value v0: Bool @block0
     value v1: Int(64) @block0

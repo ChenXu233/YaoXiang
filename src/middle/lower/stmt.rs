@@ -9,8 +9,7 @@ use crate::ast;
 use crate::frontend::core::sema::MonoType;
 use crate::frontend::module::symbol::SymbolTable;
 use crate::middle::ir::ir::{
-    ConstValue, FunctionBody, FunctionIR, Instruction, LocalSlot, Operand, TypeDeclBody,
-    TypeDeclField,
+    ConstValue, FunctionBody, FunctionIR, Instruction, Operand, TypeDeclBody, TypeDeclField,
 };
 use crate::tlog;
 use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};
@@ -579,8 +578,8 @@ impl AstToIrGenerator {
         // 与 generate_function_ir / generate_lambda_body_ir 对齐：以高水位为准。
         // 行为等价论证：Frame 预分配槽位初值同为 Void，set_slot 容错路径不再
         // 触发但结果相同；调试信息 local_names 只取具名槽，不受空槽扩展影响。
-        let locals_types: Vec<LocalSlot> = frame.take_body_locals()?;
-        let (values, value_slots) = frame.take_body_values(&instructions, &param_types);
+        // 收尾单点：值类型 → 块切分 → 槽分配 → 预算闸 → 取表（7b.4）
+        let body = frame.finalize_code_body(instructions, &param_types)?;
 
         // 构建函数 IR
         let func_ir = FunctionIR {
@@ -590,11 +589,11 @@ impl AstToIrGenerator {
             return_type,
             generic_params: None,
             body: FunctionBody::Code {
-                blocks: crate::middle::ir::ir::partition_blocks(instructions),
+                blocks: body.blocks,
                 entry: 0,
-                locals: locals_types,
-                values,
-                value_slots,
+                locals: body.locals,
+                values: body.values,
+                value_slots: body.value_slots,
             },
         };
 
@@ -781,11 +780,11 @@ impl AstToIrGenerator {
             &frame.symbols.len().to_string()
         );
 
-        // 槽位表 + 寄存器预算（E3014）单点：函数体形态共用 take_body_locals，
-        // 越界在这里带 span 报错（#271 静默/崩溃同类：宁可报错不崩）。
-        let locals_types: Vec<LocalSlot> = frame.take_body_locals()?;
+        // 收尾单点：值类型 → 块切分 → 槽分配 → 预算闸（E3014，带 span）→ 取表。
+        // 函数体形态共用 finalize_code_body（7b.4）；形参类型须先算出来（它就是
+        // 值类型推导的形参签名来源）。
         let param_types = frame.impl_param_types(params, type_annotation);
-        let (values, value_slots) = frame.take_body_values(&instructions, &param_types);
+        let body = frame.finalize_code_body(instructions, &param_types)?;
 
         // 还原闭包定型上下文（避免串到下一个函数）——非寄存器状态，仍手工配对
         frame.closure_decl_params = saved_closure_decl;
@@ -802,11 +801,11 @@ impl AstToIrGenerator {
             return_type,
             generic_params,
             body: FunctionBody::Code {
-                blocks: crate::middle::ir::ir::partition_blocks(instructions),
+                blocks: body.blocks,
                 entry: 0,
-                locals: locals_types,
-                values,
-                value_slots,
+                locals: body.locals,
+                values: body.values,
+                value_slots: body.value_slots,
             },
         };
 

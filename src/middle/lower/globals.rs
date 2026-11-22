@@ -10,9 +10,7 @@ use super::PendingInit;
 use crate::ast;
 use crate::frontend::core::sema::MonoType;
 use crate::frontend::module::symbol::SymbolTable;
-use crate::middle::ir::ir::{
-    ConstValue, FunctionBody, FunctionIR, Instruction, LocalSlot, Operand,
-};
+use crate::middle::ir::ir::{ConstValue, FunctionBody, FunctionIR, Instruction, Operand};
 use crate::middle::lower::expr::collect_free_vars_expr;
 use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};
 use crate::util::span::Span;
@@ -395,14 +393,13 @@ impl AstToIrGenerator {
         // 退出作用域
         frame.exit_scope();
 
-        // 槽位表 + 寄存器预算（E3014）单点
-        let locals_types: Vec<LocalSlot> = frame.take_body_locals()?;
+        // 收尾单点：值类型 → 块切分 → 槽分配 → 预算闸（E3014，带 span）→ 取表
         let param_types: Vec<MonoType> = params
             .iter()
             .filter_map(|p| p.ty.clone())
             .map(|t| t.into())
             .collect();
-        let (values, value_slots) = frame.take_body_values(&instructions, &param_types);
+        let body = frame.finalize_code_body(instructions, &param_types)?;
 
         // 解析返回类型
         let ret_type: MonoType = return_type.clone().into();
@@ -414,11 +411,11 @@ impl AstToIrGenerator {
             return_type: ret_type,
             generic_params: None,
             body: FunctionBody::Code {
-                blocks: crate::middle::ir::ir::partition_blocks(instructions),
+                blocks: body.blocks,
                 entry: 0,
-                locals: locals_types,
-                values,
-                value_slots,
+                locals: body.locals,
+                values: body.values,
+                value_slots: body.value_slots,
             },
         };
 

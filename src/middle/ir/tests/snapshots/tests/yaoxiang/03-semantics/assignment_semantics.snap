@@ -4,7 +4,7 @@ module
   global[2] outer : Int(64)
   global[3] declared_only : Int(64)
   fn main() -> Void
-    locals_total=5
+    locals_total=3
     values_total=22
     value v0: TypeRef("?") @block0
     value v1: Bool @block0
@@ -72,4 +72,4 @@ module
     Load %11 <- int(2)
     Mul %12 <- %10, %11
     Store @2 <- %12
-    Call %6 <- string("main") [] (def=d2)
+    Call %0 <- string("main") [] (def=d2)

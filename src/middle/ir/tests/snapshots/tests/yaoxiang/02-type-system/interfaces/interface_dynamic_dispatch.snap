@@ -21,7 +21,7 @@ module
     Ret v0
     Ret v0
   fn Dog.age_up(Ref { mutable: false, inner: TypeRef("Dog") }, Int(64)) -> Int(64)
-    locals_total=6
+    locals_total=5
     values_total=4
     value v0: TypeRef("?") @block0
     value v1: TypeRef("?") @block0
@@ -43,7 +43,7 @@ module
     Ret v0
     Ret v0
   fn Cat.age(Ref { mutable: false, inner: TypeRef("Cat") }) -> Int(64)
-    locals_total=5
+    locals_total=4
     values_total=4
     value v0: TypeRef("?") @block0
     value v1: TypeRef("?") @block0
@@ -56,7 +56,7 @@ module
     Ret v0
     Ret v0
   fn Cat.age_up(Ref { mutable: false, inner: TypeRef("Cat") }, Int(64)) -> Int(64)
-    locals_total=8
+    locals_total=5
     values_total=6
     value v0: TypeRef("?") @block0
     value v1: TypeRef("?") @block0
@@ -74,7 +74,7 @@ module
     Ret v0
   fn describe(TypeRef("Animal")) -> Generic { name: "String", args: [] }
     slot[0] a : Int(64) @depth1
-    locals_total=12
+    locals_total=6
     values_total=11
     value v0: TypeRef("?") @block0
     value v1: TypeRef("Animal") @block0
@@ -114,7 +114,7 @@ module
     slot[3] a1 : Int(64) @depth1
     slot[4] d : Int(64) @depth1
     slot[5] animals2 : Int(64) @depth1
-    locals_total=23
+    locals_total=11
     values_total=116
     value v0: TypeRef("Animal") @block0
     value v1: TypeRef("?") @block0

@@ -2,7 +2,7 @@ module
   fn Point() -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
     type_decl [x: Float(64) ; y: Float(64)]
   fn Point.get_x(Ref { mutable: false, inner: TypeRef("Point") }) -> Generic { name: "Tuple", args: [Ref { mutable: false, inner: Float(64) }, Ref { mutable: false, inner: TypeRef("Point") }] }
-    locals_total=6
+    locals_total=4
     values_total=5
     value v0: TypeRef("?") @block0
     value v1: TypeRef("?") @block0
@@ -17,7 +17,7 @@ module
     Ret v0
     Ret v0
   fn Point.shift(Ref { mutable: true, inner: TypeRef("Point") }, Float(64), Float(64)) -> Void
-    locals_total=14
+    locals_total=7
     values_total=11
     value v0: Ref { mutable: true, inner: TypeRef("Point") } @block0
     value v1: TypeRef("?") @block0
@@ -45,9 +45,9 @@ module
     Ret
   fn main() -> Void
     slot[0] p : Int(64) @depth1
-    slot[3] px_ref : Int(64) @depth1
-    slot[5] p : Int(64) @depth1
-    locals_total=12
+    slot[1] px_ref : Int(64) @depth1
+    slot[2] p : Int(64) @depth1
+    locals_total=7
     values_total=27
     value v0: Float(64) @block0
     value v1: Float(64) @block0

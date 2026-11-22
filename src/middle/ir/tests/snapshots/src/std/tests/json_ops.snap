@@ -7,7 +7,7 @@ module
     slot[4] rnull : Int(64) @depth1
     slot[5] rstr : Int(64) @depth1
     slot[6] rtrail : Int(64) @depth1
-    locals_total=11
+    locals_total=10
     values_total=35
     value v0: Generic { name: "String", args: [] } @block0
     value v1: TypeRef("?") @block0
@@ -106,7 +106,7 @@ module
     slot[2] esc_src : Int(64) @depth1
     slot[3] resc : Int(64) @depth1
     slot[4] s : Int(64) @depth1
-    locals_total=10
+    locals_total=8
     values_total=44
     value v0: TypeRef("?") @block0
     value v1: Int(64) @block0
@@ -262,13 +262,13 @@ module
     slot[14] runi : Int(64) @depth1
     slot[15] jv : Int(64) @depth1
     slot[16] decoded : Int(64) @depth1
-    slot[18] s : Int(64) @depth2
-    slot[19] c0 : Int(64) @depth1
-    slot[20] c1 : Int(64) @depth1
-    slot[21] c2 : Int(64) @depth1
-    slot[22] lonely_src : Int(64) @depth1
-    slot[23] rlonely : Int(64) @depth1
-    locals_total=28
+    slot[17] s : Int(64) @depth2
+    slot[18] c0 : Int(64) @depth1
+    slot[19] c1 : Int(64) @depth1
+    slot[20] c2 : Int(64) @depth1
+    slot[21] lonely_src : Int(64) @depth1
+    slot[22] rlonely : Int(64) @depth1
+    locals_total=27
     values_total=125
     value v0: TypeRef("?") @block0
     value v1: Int(64) @block0
@@ -658,7 +658,7 @@ module
     slot[1] e : Int(64) @depth1
     slot[2] m : Int(64) @depth1
     slot[3] runterm : Int(64) @depth1
-    locals_total=8
+    locals_total=7
     values_total=22
     value v0: Generic { name: "String", args: [] } @block0
     value v1: TypeRef("?") @block0
@@ -725,7 +725,7 @@ module
     slot[3] twice : Int(64) @depth1
     slot[4] p : Int(64) @depth1
     slot[5] rp : Int(64) @depth1
-    locals_total=10
+    locals_total=9
     values_total=31
     value v0: Generic { name: "String", args: [] } @block0
     value v1: TypeRef("?") @block0

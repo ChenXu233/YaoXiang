@@ -2,12 +2,12 @@ module
   fn main() -> Void
     slot[0] f : Int(64) @depth1
     slot[1] w : Int(64) @depth1
-    slot[3] x : Int(64) @depth2
-    slot[4] n : Int(64) @depth1
-    slot[5] v : Int(64) @depth1
-    slot[7] x : Int(64) @depth2
-    slot[8] tag : Int(64) @depth1
-    locals_total=20
+    slot[2] x : Int(64) @depth2
+    slot[3] n : Int(64) @depth1
+    slot[4] v : Int(64) @depth1
+    slot[5] x : Int(64) @depth2
+    slot[6] tag : Int(64) @depth1
+    locals_total=11
     values_total=52
     value v0: Generic { name: "String", args: [] } @block0
     value v1: Generic { name: "Result", args: [Float(64), TypeRef("Error")] } @block0

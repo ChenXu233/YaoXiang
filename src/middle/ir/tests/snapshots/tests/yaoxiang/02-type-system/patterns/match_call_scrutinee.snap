@@ -8,7 +8,7 @@ module
   global[6] f : Int(64)
   fn pick(Bool) -> Generic { name: "Option", args: [Int(64)] }
     slot[0] empty : Int(64) @depth1
-    locals_total=4
+    locals_total=3
     values_total=5
     value v0: Bool @block0
     value v1: TypeRef("?") @block0
@@ -27,7 +27,7 @@ module
     Ret v3
   fn mk(Bool) -> Generic { name: "Result", args: [Int(64), Generic { name: "String", args: [] }] }
     slot[0] ok : Int(64) @depth1
-    locals_total=4
+    locals_total=3
     values_total=5
     value v0: Bool @block0
     value v1: TypeRef("?") @block0
@@ -46,13 +46,13 @@ module
     Ret v3
   fn Holder() -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
     type_decl [opt: Generic { name: "Option", args: [Int(64)] }]
-  init (locals=105)
-    islot[6] x : Int(64) @depth1
-    islot[24] x : Int(64) @depth1
-    islot[46] x : Int(64) @depth1
-    islot[60] x : Int(64) @depth1
-    islot[80] x : Int(64) @depth1
-    islot[104] x : Int(64) @depth1
+  init (locals=103)
+    islot[4] x : Int(64) @depth1
+    islot[22] x : Int(64) @depth1
+    islot[44] x : Int(64) @depth1
+    islot[58] x : Int(64) @depth1
+    islot[78] x : Int(64) @depth1
+    islot[102] x : Int(64) @depth1
     Load %0 <- void
     Load %1 <- bool(false)
     Call %2 <- string("pick") [%1] (def=d0)

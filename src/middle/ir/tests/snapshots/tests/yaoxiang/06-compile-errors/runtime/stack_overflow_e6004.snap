@@ -1,7 +1,7 @@
 module
   fn f(Int(64)) -> Generic { name: "Terminates", args: [TypeRef("n")] }
     slot[0] n : Int(64) @depth1
-    locals_total=7
+    locals_total=4
     values_total=10
     value v0: Bool @block0
     value v1: Int(64) @block0
@@ -29,7 +29,7 @@ module
     Ret v4
     Ret v4
   fn main() -> Void
-    locals_total=6
+    locals_total=3
     values_total=6
     value v0: TypeRef("?") @block0
     value v1: Bool @block0

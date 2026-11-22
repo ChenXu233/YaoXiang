@@ -5,7 +5,7 @@ module
     type_decl [inner: Ref { mutable: false, inner: TypeRef("Point") }]
   fn get_x(Ref { mutable: false, inner: TypeRef("PointView") }) -> Float(64)
     slot[0] view : Int(64) @depth1
-    locals_total=4
+    locals_total=3
     values_total=3
     value v0: TypeRef("?") @block0
     value v1: TypeRef("?") @block0

@@ -12,9 +12,9 @@ use crate::middle::lower::scope::NestedBodyGuard;
 use crate::middle::lower::AstToIrGenerator;
 use crate::util::diagnostic::Diagnostic;
 
-/// Lambda 函数体 IR 结果
+/// Lambda 函数体 IR 结果（7b.4 起块由收尾单点切好，不再回传展平指令）
 struct LambdaBodyIR {
-    instructions: Vec<Instruction>,
+    blocks: Vec<crate::middle::ir::ir::BasicBlock>,
     locals: Vec<LocalSlot>,
     values: Vec<crate::middle::ir::ir::ValueInfo>,
     value_slots: Vec<usize>,
@@ -55,6 +55,10 @@ impl AstToIrGenerator {
         // 重置 next_temp，不动高水位与循环态地板（既有行为的 C1 约束）。
         let local_var_start = env_count + params.len();
         frame.next_temp = local_var_start;
+        // 7b.4：具名基址（分配器的值槽起点）= 本帧的具名高水位。前 5 个函数体
+        // 形态早就成对初始化这两项，闭包体此前只装 next_temp——值槽会落进
+        // env / 形参槽区间（实测：list_ops 的 reduce 断言在分配器落地后翻红）。
+        frame.temp_high_water = local_var_start;
 
         // 处理函数体语句（RFC-010a 规则①：尾表达式给出 lambda 的值）。
         // 此前无条件逐语句生成、末尾补 `Ret(None)`，导致块体内的
@@ -116,8 +120,7 @@ impl AstToIrGenerator {
         // 退出作用域
         frame.exit_scope();
 
-        // 槽位表 + 寄存器预算（E3014）单点
-        let locals_types: Vec<LocalSlot> = frame.take_body_locals()?;
+        // 收尾单点：值类型 → 块切分 → 槽分配 → 预算闸（E3014，带 span）→ 取表
         let param_types: Vec<MonoType> = params
             .iter()
             .map(|p| {
@@ -126,13 +129,13 @@ impl AstToIrGenerator {
                     .unwrap_or(MonoType::Int(64))
             })
             .collect();
-        let (values, value_slots) = frame.take_body_values(&instructions, &param_types);
+        let body = frame.finalize_code_body(instructions, &param_types)?;
 
         Ok(LambdaBodyIR {
-            instructions,
-            locals: locals_types,
-            values,
-            value_slots,
+            blocks: body.blocks,
+            locals: body.locals,
+            values: body.values,
+            value_slots: body.value_slots,
         })
     }
 
@@ -221,7 +224,7 @@ impl AstToIrGenerator {
             return_type,
             generic_params: None,
             body: FunctionBody::Code {
-                blocks: crate::middle::ir::ir::partition_blocks(closure_body.instructions),
+                blocks: closure_body.blocks,
                 entry: 0,
                 locals: closure_body.locals.clone(),
                 values: closure_body.values,

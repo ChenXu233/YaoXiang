@@ -22,6 +22,7 @@ mod globals;
 mod loops;
 mod module_ir;
 mod query;
+mod regalloc;
 mod scope;
 mod stmt;
 
@@ -263,8 +264,9 @@ pub struct AstToIrGenerator {
     pub(super) next_value: u32,
     /// 当前函数体的值表（`ValueId` 顺序；`take_body_values` 取走）。
     pub(super) cur_values: Vec<crate::middle::ir::ir::ValueInfo>,
-    /// 当前函数体的「值 → 寄存器槽」过渡映射（与 `cur_values` 同索引）。
-    pub(super) cur_value_slots: Vec<usize>,
+    /// 当前函数体的值钉子（7b.4）：`(值, 具名槽)`——模式绑定复用值槽时登记，
+    /// 由分配器把该值固定落在该具名槽上（09a §P7 7b.4 契约 §二 C）。
+    pub(super) cur_pins: Vec<(crate::middle::ir::ir::ValueId, usize)>,
     /// 当前基本块 label（7b.2 单块恒 0；多块随 7b.3 引入）。
     pub(super) cur_block_label: usize,
     /// 是否处于「有值表的函数体」生成期：`NestedBodyGuard` 里为 true，
@@ -425,7 +427,7 @@ impl AstToIrGenerator {
             next_frame: 0,
             next_value: 0,
             cur_values: Vec::new(),
-            cur_value_slots: Vec::new(),
+            cur_pins: Vec::new(),
             cur_block_label: 0,
             // 模块 init / 顶层语句没有值表：默认返回 Local 槽（与改动前一致）。
             value_mode: false,

@@ -33,7 +33,7 @@ module
     slot[6] v : Int(64) @depth1
     slot[7] pushed : Int(64) @depth1
     slot[8] s2 : Int(64) @depth1
-    locals_total=14
+    locals_total=12
     values_total=71
     value v0: Int(64) @block0
     value v1: TypeRef("?") @block0

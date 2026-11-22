@@ -1,6 +1,6 @@
 module
   fn main() -> Void
-    locals_total=5
+    locals_total=3
     values_total=20
     value v0: TypeRef("?") @block0
     value v1: Bool @block0

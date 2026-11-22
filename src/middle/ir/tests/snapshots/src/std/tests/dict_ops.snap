@@ -7,7 +7,7 @@ module
     slot[4] vs : Int(64) @depth1
     slot[5] m : Int(64) @depth1
     slot[6] deleted : Int(64) @depth1
-    locals_total=16
+    locals_total=12
     values_total=108
     value v0: Generic { name: "Dict", args: [TypeVar(TypeVar(55)), TypeVar(TypeVar(56))] } @block0
     value v1: Generic { name: "String", args: [] } @block0

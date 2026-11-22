@@ -17,7 +17,7 @@ module
     slot[0] x : Int(64) @depth1
     slot[1] y : Int(64) @depth1
     slot[2] z : Int(64) @depth1
-    locals_total=12
+    locals_total=7
     values_total=9
     value v0: Int(64) @block0
     value v1: Int(64) @block0
@@ -45,7 +45,7 @@ module
     slot[0] to : Int(64) @depth1
     slot[1] title : Int(64) @depth1
     slot[2] body : Int(64) @depth1
-    locals_total=12
+    locals_total=6
     values_total=9
     value v0: Generic { name: "String", args: [] } @block0
     value v1: Generic { name: "String", args: [] } @block0
@@ -73,7 +73,7 @@ module
     slot[0] v : Int(64) @depth1
     slot[1] pushed : Int(64) @depth1
     slot[2] msg : Int(64) @depth1
-    locals_total=9
+    locals_total=7
     values_total=64
     value v0: TypeRef("?") @block0
     value v1: Bool @block0

@@ -2,7 +2,7 @@ module
   fn main() -> Void
     slot[0] s_list : Int(64) @depth1
     slot[1] s_dict : Int(64) @depth1
-    locals_total=8
+    locals_total=6
     values_total=38
     value v0: TypeRef("?") @block0
     value v1: Bool @block0

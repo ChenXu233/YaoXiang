@@ -1,6 +1,6 @@
 module
   fn main() -> Void
-    locals_total=7
+    locals_total=3
     values_total=27
     value v0: TypeRef("?") @block0
     value v1: Bool @block0
@@ -59,7 +59,7 @@ module
     Ret v20
   fn double(Int(64)) -> Void
     slot[0] x : Int(64) @depth2
-    locals_total=5
+    locals_total=4
     values_total=4
     value v0: TypeRef("?") @block0
     value v1: TypeVar(TypeVar(46)) @block0
@@ -74,7 +74,7 @@ module
   fn add(Int(64), Int(64)) -> Void
     slot[0] a : Int(64) @depth2
     slot[1] b : Int(64) @depth2
-    locals_total=6
+    locals_total=5
     values_total=4
     value v0: TypeRef("?") @block0
     value v1: TypeVar(TypeVar(62)) @block0
@@ -90,7 +90,7 @@ module
   fn max(Int(64), Int(64)) -> Void
     slot[0] a : Int(64) @depth2
     slot[1] b : Int(64) @depth2
-    locals_total=8
+    locals_total=5
     values_total=6
     value v0: TypeVar(TypeVar(62)) @block0
     value v1: Bool @block0

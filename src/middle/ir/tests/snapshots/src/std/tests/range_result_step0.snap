@@ -3,7 +3,7 @@ module
     slot[0] n : Int(64) @depth1
     slot[1] r : Int(64) @depth1
     slot[2] it : Int(64) @depth1
-    locals_total=8
+    locals_total=6
     values_total=11
     value v0: Int(64) @block0
     value v1: Int(64) @block0
@@ -42,7 +42,7 @@ module
     slot[0] n : Int(64) @depth1
     slot[1] x : Int(64) @depth1
     slot[2] r : Int(64) @depth1
-    locals_total=11
+    locals_total=6
     values_total=11
     value v0: Int(64) @block0
     value v1: Int(64) @block0
@@ -83,7 +83,7 @@ module
     slot[3] d : Int(64) @depth1
     slot[4] e : Int(64) @depth1
     slot[5] it : Int(64) @depth1
-    locals_total=12
+    locals_total=10
     values_total=46
     value v0: Int(64) @block0
     value v1: TypeRef("?") @block0

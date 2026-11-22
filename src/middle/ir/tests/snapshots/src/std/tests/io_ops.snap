@@ -1,7 +1,7 @@
 module
   fn main() -> Void
     slot[0] s : Int(64) @depth1
-    locals_total=6
+    locals_total=4
     values_total=9
     value v0: Int(64) @block0
     value v1: Generic { name: "String", args: [] } @block0

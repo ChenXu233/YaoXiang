@@ -426,8 +426,14 @@ impl AstToIrGenerator {
                     });
                     binds.push((bn.clone(), *r));
                 } else {
-                    // 绑定复用该值已占用的寄存器槽（只登记名字，不加指令）。
-                    let slot = self.slot_for_operand(&reg).ok_or_else(|| {
+                    // 绑定复用该值的槽（只登记名字，不加指令）：`Local` 直接复用；
+                    // `Value` 的槽由 7b.4 分配器**晚分配**，故按「值钉子」把该值
+                    // 固定在从具名计数器领到的槽上（09a §P7 7b.4 契约 §二 C）。
+                    let slot = match self.slot_for_operand(&reg) {
+                        Some(slot) => Some(slot),
+                        None => self.pin_value_to_local_slot(&reg),
+                    }
+                    .ok_or_else(|| {
                         ErrorCodeDefinition::ir_internal_error("模式绑定的值没有可复用的寄存器槽")
                             .at(self.cur_span)
                             .build()

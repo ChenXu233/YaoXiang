@@ -2,7 +2,7 @@ module
   fn Maybe() -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
     type_decl [just: Fn { params: [Int(64)], return_type: TypeRef("Maybe") } ; nothing: Fn { params: [], return_type: TypeRef("Maybe") }]
   fn Maybe.is_failure(Ref { mutable: false, inner: TypeRef("Maybe") }) -> Bool
-    locals_total=12
+    locals_total=6
     values_total=11
     value v0: Void @block0
     value v1: Ref { mutable: false, inner: TypeRef("Maybe") } @block0
@@ -34,8 +34,8 @@ module
     Jmp -> instr(17)
     Ret v0
   fn Maybe.success(Ref { mutable: false, inner: TypeRef("Maybe") }) -> Int(64)
-    slot[3] v : Int(64) @depth2
-    locals_total=14
+    slot[1] v : Int(64) @depth2
+    locals_total=7
     values_total=12
     value v0: Void @block0
     value v1: Ref { mutable: false, inner: TypeRef("Maybe") } @block0
@@ -70,7 +70,7 @@ module
     Jmp -> instr(19)
     Ret v0
   fn Maybe.residual(Ref { mutable: false, inner: TypeRef("Maybe") }) -> Generic { name: "String", args: [] }
-    locals_total=13
+    locals_total=6
     values_total=12
     value v0: Void @block0
     value v1: Ref { mutable: false, inner: TypeRef("Maybe") } @block0
@@ -104,7 +104,7 @@ module
     Jmp -> instr(18)
     Ret v0
   fn Maybe.from_error(Generic { name: "String", args: [] }) -> TypeRef("Maybe")
-    locals_total=5
+    locals_total=4
     values_total=4
     value v0: Void @block0
     value v1: Generic { name: "String", args: [] } @block0
@@ -120,7 +120,7 @@ module
   fn bump(Ref { mutable: false, inner: TypeRef("Maybe") }) -> TypeRef("Maybe")
     slot[0] m : Int(64) @depth1
     slot[1] v : Int(64) @depth1
-    locals_total=6
+    locals_total=5
     values_total=8
     value v0: TypeRef("?") @block0
     value v1: TypeRef("?") @block0
@@ -151,9 +151,9 @@ module
     slot[0] some_case : Int(64) @depth1
     slot[1] none_case : Int(64) @depth1
     slot[2] bumped : Int(64) @depth1
-    slot[5] v : Int(64) @depth2
-    slot[6] propagated : Int(64) @depth1
-    locals_total=22
+    slot[3] v : Int(64) @depth2
+    slot[4] propagated : Int(64) @depth1
+    locals_total=10
     values_total=38
     value v0: Int(64) @block0
     value v1: Void @block0

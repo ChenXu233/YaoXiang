@@ -2,24 +2,24 @@ module
   fn main() -> Void
     slot[0] items : Int(64) @depth1
     slot[1] squares : Int(64) @depth1
-    slot[4] x : Int(64) @depth1
-    slot[5] words : Int(64) @depth1
-    slot[6] shouts : Int(64) @depth1
-    slot[9] s : Int(64) @depth1
-    slot[10] tens : Int(64) @depth1
-    slot[13] x : Int(64) @depth1
-    slot[14] evens : Int(64) @depth1
+    slot[2] x : Int(64) @depth1
+    slot[3] words : Int(64) @depth1
+    slot[4] shouts : Int(64) @depth1
+    slot[5] s : Int(64) @depth1
+    slot[6] tens : Int(64) @depth1
+    slot[7] x : Int(64) @depth1
+    slot[8] evens : Int(64) @depth1
+    slot[9] x : Int(64) @depth1
+    slot[10] pairs : Int(64) @depth1
+    slot[11] x : Int(64) @depth1
+    slot[12] y : Int(64) @depth1
+    slot[13] filtered : Int(64) @depth1
+    slot[14] x : Int(64) @depth1
+    slot[15] y : Int(64) @depth1
+    slot[16] flat : Int(64) @depth1
     slot[17] x : Int(64) @depth1
-    slot[18] pairs : Int(64) @depth1
-    slot[25] x : Int(64) @depth1
-    slot[34] y : Int(64) @depth1
-    slot[35] filtered : Int(64) @depth1
-    slot[44] x : Int(64) @depth1
-    slot[56] y : Int(64) @depth1
-    slot[57] flat : Int(64) @depth1
-    slot[72] x : Int(64) @depth1
-    slot[77] y : Int(64) @depth1
-    locals_total=85
+    slot[18] y : Int(64) @depth1
+    locals_total=24
     values_total=304
     value v0: Int(64) @block0
     value v1: Int(64) @block0

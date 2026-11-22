@@ -4,7 +4,7 @@ module
   fn countdown(Int(64), Generic { name: "NonNegative", args: [TypeRef("b")] }) -> Generic { name: "Terminates", args: [TypeRef("b")] }
     slot[0] n : Int(64) @depth1
     slot[1] b : Int(64) @depth1
-    locals_total=7
+    locals_total=6
     values_total=9
     value v0: Bool @block0
     value v1: Int(64) @block0
@@ -31,7 +31,7 @@ module
     Ret v4
     Ret v4
   fn main() -> Void
-    locals_total=7
+    locals_total=3
     values_total=7
     value v0: TypeRef("?") @block0
     value v1: Bool @block0

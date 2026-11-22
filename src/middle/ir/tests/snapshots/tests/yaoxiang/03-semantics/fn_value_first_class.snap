@@ -24,7 +24,7 @@ module
   fn apply_twice(Fn { params: [Int(64)], return_type: Int(64) }, Int(64)) -> Int(64)
     slot[0] h : Int(64) @depth1
     slot[1] x : Int(64) @depth1
-    locals_total=7
+    locals_total=5
     values_total=5
     value v0: Int(64) @block0
     value v1: Int(64) @block0
@@ -40,7 +40,7 @@ module
     CallDyn v0 <- v4 [v1]
     Ret v0
   fn main() -> Void
-    locals_total=7
+    locals_total=3
     values_total=35
     value v0: TypeRef("?") @block0
     value v1: Bool @block0
@@ -115,7 +115,7 @@ module
     Ret v33
   fn closure_0(Int(64)) -> Void
     slot[0] x : Int(64) @depth2
-    locals_total=7
+    locals_total=4
     values_total=4
     value v0: TypeRef("?") @block0
     value v1: Int(64) @block0

@@ -2,7 +2,7 @@ module
   fn push_grows_len() -> Generic { name: "Result", args: [Void, Generic { name: "String", args: [] }] }
     slot[0] xs : Int(64) @depth1
     slot[1] extended : Int(64) @depth1
-    locals_total=6
+    locals_total=5
     values_total=8
     value v0: Int(64) @block0
     value v1: Int(64) @block0
@@ -30,7 +30,7 @@ module
   fn pop_shrinks_len() -> Generic { name: "Result", args: [Void, Generic { name: "String", args: [] }] }
     slot[0] xs : Int(64) @depth1
     slot[1] shorter : Int(64) @depth1
-    locals_total=7
+    locals_total=5
     values_total=14
     value v0: Int(64) @block0
     value v1: Int(64) @block0
@@ -90,7 +90,7 @@ module
     Drop %1
     Ret v2
   fn main() -> Void
-    locals_total=14
+    locals_total=4
     values_total=14
     value v0: TypeRef("?") @block0
     value v1: TypeRef("?") @block0
@@ -125,21 +125,21 @@ module
     Call v0 <- string("std.test.suite") [v1] (def=d9)
     Ret v0
   fn closure_0() -> Void
-    locals_total=5
+    locals_total=2
     values_total=2
     value v0: TypeRef("?") @block0
     value v1: Generic { name: "Result", args: [Void, Generic { name: "String", args: [] }] } @block0
     Call v1 <- string("push_grows_len") [] (def=d10)
     Ret v1
   fn closure_1() -> Void
-    locals_total=9
+    locals_total=2
     values_total=2
     value v0: TypeRef("?") @block0
     value v1: Generic { name: "Result", args: [Void, Generic { name: "String", args: [] }] } @block0
     Call v1 <- string("pop_shrinks_len") [] (def=d11)
     Ret v1
   fn closure_2() -> Void
-    locals_total=13
+    locals_total=2
     values_total=2
     value v0: TypeRef("?") @block0
     value v1: Generic { name: "Result", args: [Void, Generic { name: "String", args: [] }] } @block0

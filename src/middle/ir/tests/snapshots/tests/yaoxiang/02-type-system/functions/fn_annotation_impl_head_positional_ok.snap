@@ -2,7 +2,7 @@ module
   fn f(Int(64), Int(64)) -> Int(64)
     slot[0] b : Int(64) @depth1
     slot[1] a : Int(64) @depth1
-    locals_total=4
+    locals_total=3
     values_total=2
     value v0: TypeRef("?") @block0
     value v1: Int(64) @block0
@@ -12,7 +12,7 @@ module
     Ret v1
     Ret
   fn main() -> Void
-    locals_total=7
+    locals_total=3
     values_total=7
     value v0: TypeRef("?") @block0
     value v1: Bool @block0

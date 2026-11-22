@@ -31,7 +31,7 @@ module
     Ret v0
   fn double(Int(64)) -> Int(64)
     slot[0] x : Int(64) @depth1
-    locals_total=5
+    locals_total=4
     values_total=4
     value v0: TypeRef("?") @block0
     value v1: Int(64) @block0
@@ -45,7 +45,7 @@ module
     Ret
   fn closure_0(Int(64)) -> Void
     slot[0] x : Int(64) @depth1
-    locals_total=5
+    locals_total=4
     values_total=4
     value v0: TypeRef("?") @block0
     value v1: Int(64) @block0
@@ -57,7 +57,7 @@ module
     Ret v1
   fn closure_1(Int(64)) -> Void
     slot[0] x : Int(64) @depth1
-    locals_total=11
+    locals_total=4
     values_total=4
     value v0: TypeRef("?") @block0
     value v1: Int(64) @block0

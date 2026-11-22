@@ -7,9 +7,7 @@ use super::scope::NestedBodyGuard;
 use super::AstToIrGenerator;
 use crate::ast;
 use crate::frontend::core::sema::{is_constraint_name, MonoType};
-use crate::middle::ir::ir::{
-    ConstValue, FunctionBody, FunctionIR, Instruction, LocalSlot, Operand,
-};
+use crate::middle::ir::ir::{ConstValue, FunctionBody, FunctionIR, Instruction, Operand};
 use crate::util::diagnostic::Diagnostic;
 
 /// 一层 curry 签名
@@ -210,9 +208,8 @@ impl AstToIrGenerator {
             })
             .collect();
         let return_type: MonoType = layer.return_type.clone().into();
-        // 槽位表 + 寄存器预算（E3014）单点
-        let locals_types: Vec<LocalSlot> = self.take_body_locals()?;
-        let (values, value_slots) = self.take_body_values(&instructions, &param_types);
+        // 收尾单点：值类型 → 块切分 → 槽分配 → 预算闸（E3014，带 span）→ 取表
+        let body = self.finalize_code_body(instructions, &param_types)?;
 
         Ok(FunctionIR {
             def: None, // 由 generate_module_ir 尾部 assign_defs 填充
@@ -221,11 +218,11 @@ impl AstToIrGenerator {
             return_type,
             generic_params,
             body: FunctionBody::Code {
-                blocks: crate::middle::ir::ir::partition_blocks(instructions),
+                blocks: body.blocks,
                 entry: 0,
-                locals: locals_types,
-                values,
-                value_slots,
+                locals: body.locals,
+                values: body.values,
+                value_slots: body.value_slots,
             },
         })
     }
@@ -325,9 +322,8 @@ impl AstToIrGenerator {
                     .unwrap_or(MonoType::Int(64))
             })
             .collect();
-        // 槽位表 + 寄存器预算（E3014）单点
-        let locals_types: Vec<LocalSlot> = frame.take_body_locals()?;
-        let (values, value_slots) = frame.take_body_values(&instructions, &param_types);
+        // 收尾单点：值类型 → 块切分 → 槽分配 → 预算闸（E3014，带 span）→ 取表
+        let body = frame.finalize_code_body(instructions, &param_types)?;
 
         Ok(FunctionIR {
             def: None, // 由 generate_module_ir 尾部 assign_defs 填充
@@ -336,11 +332,11 @@ impl AstToIrGenerator {
             return_type,
             generic_params,
             body: FunctionBody::Code {
-                blocks: crate::middle::ir::ir::partition_blocks(instructions),
+                blocks: body.blocks,
                 entry: 0,
-                locals: locals_types,
-                values,
-                value_slots,
+                locals: body.locals,
+                values: body.values,
+                value_slots: body.value_slots,
             },
         })
     }
@@ -409,7 +405,7 @@ impl AstToIrGenerator {
             // 每层是独立 FunctionIR：值表与 ValueId 也按层重置（7b.2）。
             frame.next_value = 0;
             frame.cur_values.clear();
-            frame.cur_value_slots.clear();
+            frame.cur_pins.clear();
 
             let func = if is_innermost {
                 frame.generate_curry_innermost_func(

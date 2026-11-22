@@ -3,7 +3,7 @@ module
     type_decl [value: Int(64) ; left: Int(64) ; right: Int(64)]
   fn sum_tree(Ref { mutable: false, inner: TypeRef("Tree") }) -> Int(64)
     slot[0] t : Int(64) @depth1
-    locals_total=9
+    locals_total=4
     values_total=8
     value v0: TypeRef("?") @block0
     value v1: TypeRef("?") @block0
@@ -27,7 +27,7 @@ module
   fn main() -> Void
     slot[0] root : Int(64) @depth1
     slot[1] total : Int(64) @depth1
-    locals_total=7
+    locals_total=5
     values_total=14
     value v0: Int(64) @block0
     value v1: Int(64) @block0

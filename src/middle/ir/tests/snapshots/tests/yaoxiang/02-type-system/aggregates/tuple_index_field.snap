@@ -38,7 +38,7 @@ module
     slot[2] t2 : Int(64) @depth1
     slot[3] s : Int(64) @depth1
     slot[4] half : Int(64) @depth1
-    locals_total=12
+    locals_total=8
     values_total=59
     value v0: Int(64) @block0
     value v1: Int(64) @block0

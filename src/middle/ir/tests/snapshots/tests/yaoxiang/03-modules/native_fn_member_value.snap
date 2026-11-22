@@ -3,7 +3,7 @@ module
     slot[0] p : Int(64) @depth1
     slot[1] q : Int(64) @depth1
     slot[2] r : Int(64) @depth1
-    locals_total=7
+    locals_total=6
     values_total=9
     value v0: Void @block0
     value v1: Generic { name: "String", args: [] } @block0

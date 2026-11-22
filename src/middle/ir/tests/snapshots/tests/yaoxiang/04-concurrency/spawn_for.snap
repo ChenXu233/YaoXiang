@@ -1,8 +1,8 @@
 module
   fn main() -> Void
     slot[0] items : Int(64) @depth1
-    slot[5] item : Int(64) @depth2
-    locals_total=12
+    slot[1] item : Int(64) @depth2
+    locals_total=6
     values_total=29
     value v0: Int(64) @block0
     value v1: Int(64) @block0
@@ -76,7 +76,7 @@ module
     Ret v23
   fn closure_0(Int(64)) -> Void
     slot[0] item : Int(64) @depth3
-    locals_total=11
+    locals_total=2
     values_total=1
     value v0: TypeVar(TypeVar(44)) @block0
     Load v0 <- %0

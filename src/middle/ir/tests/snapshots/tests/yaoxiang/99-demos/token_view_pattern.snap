@@ -7,7 +7,7 @@ module
     slot[0] buf : Int(64) @depth1
     slot[1] ref_buf : Int(64) @depth1
     slot[2] v : Int(64) @depth1
-    locals_total=10
+    locals_total=6
     values_total=18
     value v0: Int(64) @block0
     value v1: Struct(StructType { name: "Buffer", fields: [("value", Int(64))], methods: {}, interfaces: [] }) @block0

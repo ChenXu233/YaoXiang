@@ -3,7 +3,7 @@ module
     type_decl [x: Int(64) ; y: Int(64)]
   fn read_x(Ref { mutable: false, inner: TypeRef("Point") }) -> Int(64)
     slot[0] p : Int(64) @depth1
-    locals_total=4
+    locals_total=3
     values_total=3
     value v0: TypeRef("?") @block0
     value v1: TypeRef("?") @block0
@@ -16,7 +16,7 @@ module
   fn copy_use(Ref { mutable: false, inner: TypeRef("Point") }) -> Int(64)
     slot[0] p : Int(64) @depth1
     slot[1] q : Int(64) @depth1
-    locals_total=7
+    locals_total=5
     values_total=5
     value v0: TypeRef("?") @block0
     value v1: TypeRef("?") @block0
@@ -41,7 +41,7 @@ module
     slot[4] v : Int(64) @depth1
     slot[5] w : Int(64) @depth1
     slot[6] r : Int(64) @depth1
-    locals_total=12
+    locals_total=10
     values_total=36
     value v0: Int(64) @block0
     value v1: Int(64) @block0

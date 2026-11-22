@@ -30,8 +30,8 @@ module
   fn guarded(Int(64), Int(64)) -> Int(64)
     slot[0] x : Int(64) @depth1
     slot[1] y : Int(64) @depth1
-    slot[5] z : Int(64) @depth3
-    locals_total=8
+    slot[2] z : Int(64) @depth3
+    locals_total=6
     values_total=8
     value v0: Bool @block0
     value v1: Int(64) @block0

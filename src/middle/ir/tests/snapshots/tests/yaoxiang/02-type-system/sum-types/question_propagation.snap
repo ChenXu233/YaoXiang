@@ -2,7 +2,7 @@ module
   fn parse_double(Ref { mutable: false, inner: Generic { name: "String", args: [] } }) -> Generic { name: "Result", args: [Int(64), TypeRef("Error")] }
     slot[0] s : Int(64) @depth1
     slot[1] n : Int(64) @depth1
-    locals_total=7
+    locals_total=5
     values_total=9
     value v0: Ref { mutable: false, inner: Generic { name: "String", args: [] } } @block0
     value v1: TypeRef("?") @block0
@@ -34,7 +34,7 @@ module
   fn parse_chain(Ref { mutable: false, inner: Generic { name: "String", args: [] } }) -> Generic { name: "Result", args: [Int(64), TypeRef("Error")] }
     slot[0] s : Int(64) @depth1
     slot[1] d : Int(64) @depth1
-    locals_total=7
+    locals_total=5
     values_total=9
     value v0: Ref { mutable: false, inner: Generic { name: "String", args: [] } } @block0
     value v1: TypeRef("?") @block0
@@ -67,7 +67,7 @@ module
     slot[0] ok : Int(64) @depth1
     slot[1] err : Int(64) @depth1
     slot[2] e : Int(64) @depth1
-    locals_total=11
+    locals_total=6
     values_total=32
     value v0: Generic { name: "String", args: [] } @block0
     value v1: TypeRef("?") @block0

@@ -2,15 +2,15 @@ module
   fn main() -> Void
     slot[0] r : Int(64) @depth1
     slot[1] count : Int(64) @depth1
-    slot[7] i : Int(64) @depth2
-    slot[8] count2 : Int(64) @depth1
-    slot[17] i : Int(64) @depth2
-    slot[18] count3 : Int(64) @depth1
-    slot[28] i : Int(64) @depth2
-    slot[29] k : Int(64) @depth1
-    slot[30] count4 : Int(64) @depth1
-    slot[39] i : Int(64) @depth2
-    locals_total=51
+    slot[2] i : Int(64) @depth2
+    slot[3] count2 : Int(64) @depth1
+    slot[4] i : Int(64) @depth2
+    slot[5] count3 : Int(64) @depth1
+    slot[6] i : Int(64) @depth2
+    slot[7] k : Int(64) @depth1
+    slot[8] count4 : Int(64) @depth1
+    slot[9] i : Int(64) @depth2
+    locals_total=15
     values_total=120
     value v0: Int(64) @block0
     value v1: Int(64) @block0

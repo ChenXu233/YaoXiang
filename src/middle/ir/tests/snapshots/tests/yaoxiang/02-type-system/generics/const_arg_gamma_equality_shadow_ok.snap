@@ -9,9 +9,9 @@ module
     Ret v0
   fn restored(Int(64)) -> Int(64)
     slot[0] y : Int(64) @depth1
-    slot[6] r : Int(64) @depth3
-    slot[9] y : Int(64) @depth4
-    locals_total=23
+    slot[1] r : Int(64) @depth3
+    slot[2] y : Int(64) @depth4
+    locals_total=7
     values_total=20
     value v0: Int(64) @block0
     value v1: Bool @block0
@@ -69,8 +69,8 @@ module
     Ret v0
   fn own_fact() -> Int(64)
     slot[0] r : Int(64) @depth1
-    slot[3] y : Int(64) @depth2
-    locals_total=21
+    slot[1] y : Int(64) @depth2
+    locals_total=6
     values_total=20
     value v0: TypeRef("?") @block0
     value v1: Int(64) @block0
@@ -125,9 +125,9 @@ module
   fn other_name(Int(64), Int(64)) -> Int(64)
     slot[0] y : Int(64) @depth1
     slot[1] z : Int(64) @depth1
-    slot[10] r : Int(64) @depth3
-    slot[13] y : Int(64) @depth4
-    locals_total=27
+    slot[2] r : Int(64) @depth3
+    slot[3] y : Int(64) @depth4
+    locals_total=8
     values_total=23
     value v0: Int(64) @block0
     value v1: Bool @block0
@@ -197,7 +197,7 @@ module
     slot[0] a : Int(64) @depth1
     slot[1] b : Int(64) @depth1
     slot[2] c : Int(64) @depth1
-    locals_total=8
+    locals_total=6
     values_total=18
     value v0: Int(64) @block0
     value v1: TypeRef("?") @block0

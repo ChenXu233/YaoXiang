@@ -5,7 +5,7 @@ module
     slot[2] flag : Int(64) @depth1
     slot[3] pi : Int(64) @depth1
     slot[4] counter : Int(64) @depth1
-    locals_total=10
+    locals_total=8
     values_total=23
     value v0: TypeRef("?") @block0
     value v1: Bool @block0

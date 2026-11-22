@@ -1,12 +1,12 @@
 module
   fn main() -> Void
-    slot[1] t1 : Int(64) @depth2
-    slot[2] t2 : Int(64) @depth2
-    slot[3] t3 : Int(64) @depth2
-    slot[8] name : Int(64) @depth1
-    slot[10] age : Int(64) @depth1
-    slot[12] city : Int(64) @depth1
-    locals_total=16
+    slot[0] t1 : Int(64) @depth2
+    slot[1] t2 : Int(64) @depth2
+    slot[2] t3 : Int(64) @depth2
+    slot[3] name : Int(64) @depth1
+    slot[4] age : Int(64) @depth1
+    slot[5] city : Int(64) @depth1
+    locals_total=11
     values_total=26
     value v0: TypeRef("?") @block0
     value v1: TypeRef("?") @block0

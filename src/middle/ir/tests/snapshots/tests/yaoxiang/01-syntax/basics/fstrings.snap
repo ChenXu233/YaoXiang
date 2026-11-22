@@ -18,7 +18,7 @@ module
     slot[15] big : Int(64) @depth1
     slot[16] pct : Int(64) @depth1
     slot[17] s : Int(64) @depth1
-    locals_total=25
+    locals_total=21
     values_total=121
     value v0: Generic { name: "String", args: [] } @block0
     value v1: Generic { name: "String", args: [] } @block0

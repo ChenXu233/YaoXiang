@@ -4,7 +4,7 @@ module
   fn mk(Int(64), Int(64)) -> Int(64)
     slot[0] x : Int(64) @depth1
     slot[1] y : Int(64) @depth1
-    locals_total=6
+    locals_total=5
     values_total=4
     value v0: TypeRef("?") @block0
     value v1: TypeVar(TypeVar(48)) @block0
@@ -24,7 +24,7 @@ module
     slot[3] d : Int(64) @depth1
     slot[4] p : Int(64) @depth1
     slot[5] v : Int(64) @depth1
-    locals_total=12
+    locals_total=9
     values_total=45
     value v0: Int(64) @block0
     value v1: Int(64) @block0

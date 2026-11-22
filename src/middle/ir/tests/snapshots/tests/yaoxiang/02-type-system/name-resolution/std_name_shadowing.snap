@@ -42,7 +42,7 @@ module
   fn main() -> Void
     slot[0] p : Int(64) @depth1
     slot[1] e : Int(64) @depth1
-    locals_total=9
+    locals_total=5
     values_total=16
     value v0: Int(64) @block0
     value v1: TypeRef("?") @block0

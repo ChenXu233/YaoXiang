@@ -3,7 +3,7 @@ module
     type_decl [x: Int(64) ; y: Int(64)]
   fn good_seq(Ref { mutable: true, inner: TypeRef("Point") }) -> Void
     slot[0] p : Int(64) @depth1
-    locals_total=4
+    locals_total=3
     values_total=3
     value v0: TypeRef("?") @block0
     value v1: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
@@ -17,7 +17,7 @@ module
     slot[0] p : Int(64) @depth1
     slot[1] i : Int(64) @depth1
     slot[2] v : Int(64) @depth1
-    locals_total=9
+    locals_total=6
     values_total=18
     value v0: Int(64) @block0
     value v1: Int(64) @block0

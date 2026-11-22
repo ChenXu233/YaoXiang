@@ -3,7 +3,7 @@ module
     slot[0] i : Int(64) @depth1
     slot[1] sum : Int(64) @depth1
     slot[2] n : Int(64) @depth1
-    locals_total=11
+    locals_total=6
     values_total=24
     value v0: Void @block0
     value v1: Bool @block0

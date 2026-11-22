@@ -3,7 +3,7 @@ module
     slot[0] result : Int(64) @depth1
     slot[1] x : Int(64) @depth2
     slot[2] y : Int(64) @depth2
-    locals_total=7
+    locals_total=6
     values_total=7
     value v0: Int(64) @block0
     value v1: Int(64) @block0

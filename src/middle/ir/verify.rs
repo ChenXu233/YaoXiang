@@ -443,7 +443,7 @@ fn check_slot_bounds(
     out: &mut Vec<Violation>,
 ) {
     for (i, instr) in view.instrs.iter().enumerate() {
-        for op in def_operands(instr).into_iter().chain(use_operands(instr)) {
+        for op in instr.def_operands().into_iter().chain(instr.use_operands()) {
             let (kind, idx, bound) = match op {
                 Operand::Local(n) => ("local", *n, view.locals.len()),
                 Operand::Arg(n) => ("arg", *n, view.params_len),
@@ -634,191 +634,6 @@ fn must_defined(
 // def / use 提取（穷尽 match，无通配臂——新增变体必须显式处理）
 // =====================
 
-/// 槽位语义判定哲学：def = 槽位本身被赋予新值（之后读该槽得到新值）；
-/// use = 槽位当前值被读取。StoreField / StoreIndex / PtrStore 的 dst 是
-/// 容器/指针（读），写入的是其内部字段而非槽位本身。
-fn def_operands(instr: &Instruction) -> Vec<&Operand> {
-    match instr {
-        Instruction::Move { dst, .. }
-        | Instruction::Load { dst, .. }
-        | Instruction::Store { dst, .. }
-        | Instruction::Pop { dst, .. }
-        | Instruction::Neg { dst, .. }
-        | Instruction::Not { dst, .. }
-        | Instruction::Alloc { dst, .. }
-        | Instruction::AllocArray { dst, .. }
-        | Instruction::AllocFixedArray { dst, .. }
-        | Instruction::LoadField { dst, .. }
-        | Instruction::LoadIndex { dst, .. }
-        | Instruction::Contains { dst, .. }
-        | Instruction::HeapAlloc { dst, .. }
-        | Instruction::CreateStruct { dst, .. }
-        | Instruction::NewDict { dst, .. }
-        | Instruction::NewTuple { dst, .. }
-        | Instruction::NewRange { dst, .. }
-        | Instruction::CreateVariant { dst, .. }
-        | Instruction::VariantTag { dst, .. }
-        | Instruction::VariantPayload { dst, .. }
-        | Instruction::MakeClosure { dst, .. }
-        | Instruction::ArcNew { dst, .. }
-        | Instruction::RcNew { dst, .. }
-        | Instruction::ArcClone { dst, .. }
-        | Instruction::PtrFromRef { dst, .. }
-        | Instruction::PtrDeref { dst, .. }
-        | Instruction::PtrLoad { dst, .. }
-        | Instruction::StringLength { dst, .. }
-        | Instruction::StringConcat { dst, .. }
-        | Instruction::StringGetChar { dst, .. }
-        | Instruction::StringFromInt { dst, .. }
-        | Instruction::StringFromFloat { dst, .. }
-        | Instruction::LoadUpvalue { dst, .. } => vec![dst],
-        Instruction::Add { dst, .. }
-        | Instruction::Sub { dst, .. }
-        | Instruction::Mul { dst, .. }
-        | Instruction::Div { dst, .. }
-        | Instruction::Mod { dst, .. }
-        | Instruction::And { dst, .. }
-        | Instruction::Or { dst, .. }
-        | Instruction::Xor { dst, .. }
-        | Instruction::Shl { dst, .. }
-        | Instruction::Shr { dst, .. }
-        | Instruction::Sar { dst, .. }
-        | Instruction::Eq { dst, .. }
-        | Instruction::Ne { dst, .. }
-        | Instruction::Lt { dst, .. }
-        | Instruction::Le { dst, .. }
-        | Instruction::Gt { dst, .. }
-        | Instruction::Ge { dst, .. } => vec![dst],
-        Instruction::Call { dst, .. }
-        | Instruction::CallVirt { dst, .. }
-        | Instruction::CallDyn { dst, .. } => dst.iter().collect(),
-        Instruction::Spawn { result, .. } | Instruction::SpawnFromList { result, .. } => {
-            vec![result]
-        }
-        Instruction::Push { .. }
-        | Instruction::Dup { .. }
-        | Instruction::Swap { .. }
-        | Instruction::Jmp { .. }
-        | Instruction::JmpIf { .. }
-        | Instruction::JmpIfNot { .. }
-        | Instruction::TailCall { .. }
-        | Instruction::Ret { .. }
-        | Instruction::Free { .. }
-        | Instruction::StoreField { .. }
-        | Instruction::StoreIndex { .. }
-        | Instruction::Yield { .. }
-        | Instruction::Drop { .. }
-        | Instruction::ArcDrop { .. }
-        | Instruction::UnsafeBlockStart { .. }
-        | Instruction::UnsafeBlockEnd { .. }
-        | Instruction::PtrStore { .. }
-        | Instruction::StoreUpvalue { .. }
-        | Instruction::CloseUpvalue { .. } => Vec::new(),
-        // Phi 的 dst 是 SSA 值的定义点（07 第一层「值定义唯一性」的 def 面）
-        Instruction::Phi { dst, .. } => vec![dst],
-    }
-}
-
-fn use_operands(instr: &Instruction) -> Vec<&Operand> {
-    match instr {
-        Instruction::Move { src, .. }
-        | Instruction::Load { src, .. }
-        | Instruction::Store { src, .. }
-        | Instruction::Push { src, .. }
-        | Instruction::Neg { src, .. }
-        | Instruction::Not { src, .. }
-        | Instruction::Free { src, .. }
-        | Instruction::Drop { src, .. }
-        | Instruction::ArcDrop { src, .. }
-        | Instruction::PtrLoad { src, .. }
-        | Instruction::StringLength { src, .. }
-        | Instruction::StringFromInt { src, .. }
-        | Instruction::StringFromFloat { src, .. }
-        | Instruction::StoreUpvalue { src, .. }
-        | Instruction::CloseUpvalue { src, .. } => vec![src],
-        Instruction::Add { lhs, rhs, .. }
-        | Instruction::Sub { lhs, rhs, .. }
-        | Instruction::Mul { lhs, rhs, .. }
-        | Instruction::Div { lhs, rhs, .. }
-        | Instruction::Mod { lhs, rhs, .. }
-        | Instruction::And { lhs, rhs, .. }
-        | Instruction::Or { lhs, rhs, .. }
-        | Instruction::Xor { lhs, rhs, .. }
-        | Instruction::Shl { lhs, rhs, .. }
-        | Instruction::Shr { lhs, rhs, .. }
-        | Instruction::Sar { lhs, rhs, .. }
-        | Instruction::Eq { lhs, rhs, .. }
-        | Instruction::Ne { lhs, rhs, .. }
-        | Instruction::Lt { lhs, rhs, .. }
-        | Instruction::Le { lhs, rhs, .. }
-        | Instruction::Gt { lhs, rhs, .. }
-        | Instruction::Ge { lhs, rhs, .. }
-        | Instruction::StringConcat { lhs, rhs, .. } => vec![lhs, rhs],
-        Instruction::Pop { .. }
-        | Instruction::Dup { .. }
-        | Instruction::Swap { .. }
-        | Instruction::Jmp { .. }
-        | Instruction::Yield { .. }
-        | Instruction::UnsafeBlockStart { .. }
-        | Instruction::UnsafeBlockEnd { .. }
-        | Instruction::LoadUpvalue { .. } => Vec::new(),
-        Instruction::JmpIf { cond, .. } | Instruction::JmpIfNot { cond, .. } => vec![cond],
-        Instruction::Call { func, args, .. } | Instruction::CallDyn { func, args, .. } => {
-            let mut v = vec![func];
-            v.extend(args);
-            v
-        }
-        Instruction::CallVirt { obj, args, .. } => {
-            let mut v = vec![obj];
-            v.extend(args);
-            v
-        }
-        Instruction::TailCall { func, args, .. } => {
-            let mut v = vec![func];
-            v.extend(args);
-            v
-        }
-        Instruction::Ret { value, .. } => value.iter().collect(),
-        Instruction::Alloc { size, .. } => vec![size],
-        Instruction::AllocArray {
-            size, elem_size, ..
-        } => vec![size, elem_size],
-        Instruction::AllocFixedArray { .. } => Vec::new(),
-        Instruction::LoadField { src, .. } => vec![src],
-        // StoreField/StoreIndex：dst 是容器（读），写入其内部而非槽位本身
-        Instruction::StoreField { dst, src, .. } => vec![dst, src],
-        Instruction::LoadIndex { src, index, .. } => vec![src, index],
-        Instruction::StoreIndex {
-            dst, index, src, ..
-        } => vec![dst, index, src],
-        Instruction::Contains {
-            elem, container, ..
-        } => vec![elem, container],
-        Instruction::Spawn { closures, .. } => closures.iter().collect(),
-        Instruction::SpawnFromList { closures_list, .. } => vec![closures_list],
-        Instruction::HeapAlloc { .. } => Vec::new(),
-        Instruction::CreateStruct { fields, .. } => fields.iter().collect(),
-        Instruction::NewDict { keys, values, .. } => keys.iter().chain(values.iter()).collect(),
-        Instruction::NewTuple { items, .. } => items.iter().collect(),
-        Instruction::NewRange {
-            start, end, step, ..
-        } => vec![start, end, step],
-        Instruction::CreateVariant { payload, .. } => vec![payload],
-        Instruction::VariantTag { obj, .. } | Instruction::VariantPayload { obj, .. } => vec![obj],
-        Instruction::MakeClosure { env, .. } => env.iter().collect(),
-        Instruction::ArcNew { src, .. }
-        | Instruction::RcNew { src, .. }
-        | Instruction::ArcClone { src, .. } => {
-            vec![src]
-        }
-        Instruction::PtrFromRef { src, .. } | Instruction::PtrDeref { src, .. } => vec![src],
-        Instruction::PtrStore { dst, src, .. } => vec![dst, src],
-        Instruction::StringGetChar { src, index, .. } => vec![src, index],
-        // Phi 的每个 incoming 输入都是使用点（来自前驱的值）
-        Instruction::Phi { incoming, .. } => incoming.iter().map(|(_, op)| op).collect(),
-    }
-}
-
 /// 槽位定义/使用点收集：defs（槽→定义点列表）、defs_at（指令→定义槽列表）、
 /// uses（槽, 指令）、entry_defined（env 槽与参数槽，运行时铺入帧前段）。
 #[allow(clippy::type_complexity)]
@@ -834,13 +649,13 @@ fn collect_defs_uses(
     let mut defs_at: Vec<Vec<usize>> = vec![Vec::new(); view.instrs.len()];
     let mut uses: Vec<(usize, usize)> = Vec::new();
     for (i, instr) in view.instrs.iter().enumerate() {
-        for op in def_operands(instr) {
+        for op in instr.def_operands() {
             if let Operand::Local(n) = op {
                 defs.entry(*n).or_default().push(i);
                 defs_at[i].push(*n);
             }
         }
-        for op in use_operands(instr) {
+        for op in instr.use_operands() {
             if let Operand::Local(n) = op {
                 uses.push((*n, i));
             }

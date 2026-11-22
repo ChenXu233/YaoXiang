@@ -2304,35 +2304,40 @@ fn test_e2e_check_explicit_path_under_target_is_honored() {
 /// Windows 栈溢出的原生进程退出码（STATUS_STACK_OVERFLOW）
 const STATUS_STACK_OVERFLOW: i32 = -1_073_741_571;
 
-#[test]
-fn test_check_deep_binop_argument_reports_e3014_not_stack_overflow() {
-    // Arrange：issue #540 主夹具——300 项二元链作普通函数实参。
-    // 修前：进程栈溢出（0xC00000FD 零诊断）。修后：解析闸（1024）不触发
-    // （扁平二元链在 parser 是迭代），由 IR 层既有 E3014 寄存器上限给出
-    // 正式诊断——该形态的真实根因。
+/// 深表达式夹具（issue #540 主锚 + 裁决 ② 的 1100 项变体）：300 项二元链作
+/// 普通函数实参，必须**编译并运行成功**。
+///
+/// 7b.4 起 E3014 只表示「分配后帧槽 >255」（具名基址 + 同时活跃值）：扁平左
+/// 结合链每层只活一个左值 ⇒ 活跃值是常数级 ⇒ 帧槽远小于上限。修前的崩溃形态
+/// （0xC00000FD）与「被 E3014 假拒绝」的中间态都不得再现（D59 C 类假拒绝直修，
+/// 用户 2026-11-22 裁决 ②）。
+fn assert_deep_binop_chain_runs(
+    terms: usize,
+    expected_stdout: &str,
+) {
     let dir = TempDir::new().expect("temp dir");
-    let expr = "1 + ".repeat(300) + "1";
-    let file = dir.path().join("deep300.yx");
+    let expr = "1 + ".repeat(terms) + "1";
+    let file = dir.path().join(format!("deep{terms}.yx"));
     std::fs::write(
         &file,
         format!(
-            "id: (Int) -> Int = (x) => x\nmain = () => {{\n    y = id({expr})\n    print(y)\n}}\n"
+            "id: (Int) -> Int = (x) => x\nmain = () => {{\n    y = id({expr})\n    print(y)\n}}\nmain()\n"
         ),
     )
     .expect("write fixture");
 
     // Act
     let output = Command::new(yx_bin())
-        .arg("check")
+        .arg("run")
         .arg(&file)
         .output()
-        .expect("run yaoxiang-rs check");
+        .expect("run yaoxiang-rs");
 
-    // Assert：退出码必须是正常诊断失败（1），绝非栈溢出崩溃码
+    // Assert
     assert_eq!(
         output.status.code(),
-        Some(1),
-        "深表达式实参必须以正式诊断退出，不得再现 0xC00000FD"
+        Some(0),
+        "{terms} 项扁平链必须编译并运行成功，不得再现 0xC00000FD 或被资源闸拒绝"
     );
     assert_ne!(
         output.status.code(),
@@ -2341,14 +2346,27 @@ fn test_check_deep_binop_argument_reports_e3014_not_stack_overflow() {
     );
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
-        stderr.contains("E3014"),
-        "必须给出 E3014 正式诊断: {stderr}"
+        !stderr.contains("E3014"),
+        "帧槽装得下的形态不得再被 E3014 拒绝: {stderr}"
     );
+    let stdout = String::from_utf8_lossy(&output.stdout);
     assert_eq!(
-        stderr.matches("E3014").count(),
-        1,
-        "恰 1 条正式诊断: {stderr}"
+        stdout.trim(),
+        expected_stdout,
+        "运行时结果必须是逐项相加的正确值: {stdout}"
     );
+}
+
+#[test]
+fn test_run_deep_binop_argument_300_terms_compiles_and_runs() {
+    assert_deep_binop_chain_runs(300, "301");
+}
+
+#[test]
+fn test_run_deep_binop_argument_1100_terms_compiles_and_runs() {
+    // 裁决 ② 条件②：1100 项变体——解析闸不触发（扁平链是迭代），分配器把
+    // 活跃值压到常数级，故编译 + 运行成功且非栈溢出。
+    assert_deep_binop_chain_runs(1100, "1101");
 }
 
 #[test]

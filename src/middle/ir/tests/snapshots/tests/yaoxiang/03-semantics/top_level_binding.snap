@@ -5,7 +5,7 @@ module
   global[3] plain : Int(64)
   fn inc(Int(64)) -> Int(64)
     slot[0] x : Int(64) @depth1
-    locals_total=5
+    locals_total=4
     values_total=4
     value v0: TypeRef("?") @block0
     value v1: TypeVar(TypeVar(48)) @block0
@@ -18,7 +18,7 @@ module
     Ret v1
     Ret
   fn main() -> Void
-    locals_total=5
+    locals_total=3
     values_total=22
     value v0: TypeRef("?") @block0
     value v1: Bool @block0
@@ -80,4 +80,4 @@ module
     Store @2 <- %4
     Load %2 <- int(3)
     Store @3 <- %2
-    Call %1 <- string("main") [] (def=d3)
+    Call %0 <- string("main") [] (def=d3)

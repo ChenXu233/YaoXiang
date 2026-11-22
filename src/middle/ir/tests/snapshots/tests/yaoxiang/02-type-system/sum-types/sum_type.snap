@@ -9,7 +9,7 @@ module
     slot[1] a : Int(64) @depth1
     slot[2] b : Int(64) @depth1
     slot[3] e : Int(64) @depth1
-    locals_total=12
+    locals_total=7
     values_total=22
     value v0: Void @block0
     value v1: Int(64) @block0

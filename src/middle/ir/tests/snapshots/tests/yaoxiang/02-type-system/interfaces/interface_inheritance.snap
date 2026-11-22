@@ -15,7 +15,7 @@ module
     Ret v0
     Ret v0
   fn Dog.fetch(Ref { mutable: false, inner: TypeRef("Dog") }) -> Generic { name: "String", args: [] }
-    locals_total=5
+    locals_total=4
     values_total=4
     value v0: TypeRef("?") @block0
     value v1: TypeRef("?") @block0
@@ -29,7 +29,7 @@ module
     Ret v0
   fn main() -> Void
     slot[0] d : Int(64) @depth1
-    locals_total=7
+    locals_total=4
     values_total=13
     value v0: Generic { name: "String", args: [] } @block0
     value v1: TypeRef("?") @block0

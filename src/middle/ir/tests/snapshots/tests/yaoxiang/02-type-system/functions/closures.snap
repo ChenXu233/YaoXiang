@@ -8,7 +8,7 @@ module
     slot[5] total : Int(64) @depth1
     slot[6] items4 : Int(64) @depth1
     slot[7] result : Int(64) @depth1
-    locals_total=17
+    locals_total=11
     values_total=65
     value v0: Int(64) @block0
     value v1: Int(64) @block0
@@ -183,7 +183,7 @@ module
     Ret v62
   fn closure_0(Int(64)) -> Void
     slot[0] x : Int(64) @depth2
-    locals_total=11
+    locals_total=4
     values_total=4
     value v0: TypeRef("?") @block0
     value v1: TypeVar(TypeVar(44)) @block0
@@ -195,7 +195,7 @@ module
     Ret v1
   fn closure_1(Int(64)) -> Void
     slot[0] x : Int(64) @depth2
-    locals_total=13
+    locals_total=4
     values_total=6
     value v0: TypeRef("?") @block0
     value v1: Bool @block0
@@ -212,7 +212,7 @@ module
   fn closure_2(Int(64), Int(64)) -> Void
     slot[0] acc : Int(64) @depth2
     slot[1] x : Int(64) @depth2
-    locals_total=15
+    locals_total=5
     values_total=4
     value v0: TypeRef("?") @block0
     value v1: TypeVar(TypeVar(56)) @block0
@@ -224,7 +224,7 @@ module
     Ret v1
   fn closure_3(Int(64)) -> Void
     slot[0] x : Int(64) @depth2
-    locals_total=17
+    locals_total=4
     values_total=4
     value v0: TypeRef("?") @block0
     value v1: Bool @block0
@@ -236,7 +236,7 @@ module
     Ret v1
   fn closure_4(Int(64)) -> Void
     slot[0] x : Int(64) @depth2
-    locals_total=17
+    locals_total=4
     values_total=4
     value v0: TypeRef("?") @block0
     value v1: TypeVar(TypeVar(44)) @block0

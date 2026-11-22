@@ -27,7 +27,7 @@ module
     Ret v0
   fn pick(Generic { name: "IsPositive", args: [TypeRef("b")] }) -> Generic { name: "IsPositive", args: [TypeRef("r")] }
     slot[0] b : Int(64) @depth1
-    locals_total=5
+    locals_total=4
     values_total=7
     value v0: Bool @block0
     value v1: Int(64) @block0
@@ -49,7 +49,7 @@ module
     Ret v4
     Ret v4
   fn main() -> Void
-    locals_total=6
+    locals_total=3
     values_total=24
     value v0: TypeRef("?") @block0
     value v1: Bool @block0

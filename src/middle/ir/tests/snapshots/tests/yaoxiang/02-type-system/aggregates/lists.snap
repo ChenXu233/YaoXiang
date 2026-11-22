@@ -2,7 +2,7 @@ module
   fn main() -> Void
     slot[0] items : Int(64) @depth1
     slot[1] first : Int(64) @depth1
-    locals_total=7
+    locals_total=5
     values_total=13
     value v0: Int(64) @block0
     value v1: Int(64) @block0

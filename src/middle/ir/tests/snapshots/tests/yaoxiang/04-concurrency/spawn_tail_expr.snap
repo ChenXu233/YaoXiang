@@ -26,7 +26,7 @@ module
     Add v0 <- v1, v2
     Ret v0
   fn main() -> Void
-    locals_total=5
+    locals_total=3
     values_total=23
     value v0: TypeRef("?") @block0
     value v1: Bool @block0
@@ -75,12 +75,12 @@ module
     Load v22 <- string("spawn tail expr ok")
     Call v21 <- string("std.io.println") [v22] (def=d1)
     Ret v21
-  init (locals=30)
-    islot[9] a : Int(64) @depth1
-    islot[11] b : Int(64) @depth1
-    islot[13] c : Int(64) @depth1
-    islot[19] inner : Int(64) @depth1
-    islot[29] x : Int(64) @depth1
+  init (locals=27)
+    islot[6] a : Int(64) @depth1
+    islot[8] b : Int(64) @depth1
+    islot[10] c : Int(64) @depth1
+    islot[16] inner : Int(64) @depth1
+    islot[26] x : Int(64) @depth1
     Load %0 <- int(42)
     Spawn %1 <- [] plan(groups=[], deps=[], resources=[])
     Load %2 <- int(42)

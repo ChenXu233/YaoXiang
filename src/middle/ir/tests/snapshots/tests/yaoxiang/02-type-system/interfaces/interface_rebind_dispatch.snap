@@ -16,7 +16,7 @@ module
   fn main() -> Void
     slot[0] zoo : Int(64) @depth1
     slot[1] s : Int(64) @depth1
-    locals_total=11
+    locals_total=6
     values_total=18
     value v0: TypeRef("Animal") @block0
     value v1: TypeRef("?") @block0

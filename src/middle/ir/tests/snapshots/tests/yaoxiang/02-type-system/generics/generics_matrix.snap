@@ -9,7 +9,7 @@ module
     generic_params: ["T"]
     slot[0] f : Int(64) @depth1
     slot[1] x : Int(64) @depth1
-    locals_total=8
+    locals_total=5
     values_total=6
     value v0: TypeRef("?") @block0
     value v1: TypeRef("T") @block0
@@ -42,7 +42,7 @@ module
     slot[4] r : Int(64) @depth1
     slot[5] nums : Int(64) @depth1
     slot[6] moved : Int(64) @depth1
-    locals_total=13
+    locals_total=10
     values_total=81
     value v0: Int(64) @block0
     value v1: Generic { name: "String", args: [] } @block0
@@ -227,7 +227,7 @@ module
     Ret v77
   fn closure_0(Int(64)) -> Void
     slot[0] x : Int(64) @depth2
-    locals_total=11
+    locals_total=4
     values_total=4
     value v0: TypeRef("?") @block0
     value v1: TypeRef("T") @block0

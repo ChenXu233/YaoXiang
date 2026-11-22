@@ -9,7 +9,7 @@ module
     Ret v0
   fn guarded(Int(64)) -> Int(64)
     slot[0] y : Int(64) @depth1
-    locals_total=10
+    locals_total=4
     values_total=9
     value v0: Int(64) @block0
     value v1: Bool @block0
@@ -36,7 +36,7 @@ module
     Ret v0
   fn reversed(Int(64)) -> Int(64)
     slot[0] y : Int(64) @depth1
-    locals_total=10
+    locals_total=4
     values_total=9
     value v0: Int(64) @block0
     value v1: Bool @block0
@@ -64,7 +64,7 @@ module
   fn conjunction(Int(64), Int(64)) -> Int(64)
     slot[0] y : Int(64) @depth1
     slot[1] z : Int(64) @depth1
-    locals_total=14
+    locals_total=5
     values_total=12
     value v0: Int(64) @block0
     value v1: Bool @block0
@@ -101,7 +101,7 @@ module
     Ret v0
   fn asserted(Int(64)) -> Int(64)
     slot[0] y : Int(64) @depth1
-    locals_total=6
+    locals_total=4
     values_total=9
     value v0: TypeRef("?") @block0
     value v1: Bool @block0
@@ -130,7 +130,7 @@ module
     slot[3] reversed_value : Int(64) @depth1
     slot[4] conjunction_value : Int(64) @depth1
     slot[5] asserted_value : Int(64) @depth1
-    locals_total=11
+    locals_total=9
     values_total=34
     value v0: Int(64) @block0
     value v1: Fn { params: [TypeRef("N")], return_type: Int(64) } @block0

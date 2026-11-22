@@ -10,7 +10,7 @@ module
     slot[7] i : Int(64) @depth1
     slot[8] ok_c : Int(64) @depth1
     slot[9] ok_e : Int(64) @depth1
-    locals_total=18
+    locals_total=15
     values_total=344
     value v0: TypeRef("?") @block0
     value v1: Bool @block0

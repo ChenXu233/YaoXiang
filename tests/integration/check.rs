@@ -3996,3 +3996,140 @@ main()
         "#403 control: user-List shadowed `Vec(List(Int))(...)` direct construction must stay accepted (the L3 view normalization in type_arg_of_expr_ir is view-only and must not reject); got {codes:?}"
     );
 }
+
+// ==================== 7b.4 槽预算判据（裁决 ②）：5 形态 × 成功面 / 拒绝面 ====================
+//
+// 规范来源：09a §P7 7b.4 契约 §四（预算判据按用户裁决 ② 改写）+ RFC-013 E3014。
+// 7a 的 5 个 >255 探针（函数 / 方法 / lambda / 匿名绑定 / curry 最内层）在
+// 7b.4 后按新语义拆成两面：
+// - 成功面：300 项扁平链——**值总数 >255，但活跃值是常数级** ⇒ 帧槽 ≤255 ⇒
+//   零诊断（7a 的「由 E3014 拒绝」在这面不再成立，D59 C 类假拒绝直修）；
+// - 拒绝面：300 个具名常驻绑定——**具名基址 >255，真装不下** ⇒ 恰 1 条 E3014
+//   且带函数体 span（闸仍有牙）。
+
+/// `count` 个具名常驻绑定（每条都在语句边界之后，具名槽不复用）。
+fn named_bindings(
+    count: usize,
+    indent: &str,
+) -> String {
+    (0..count)
+        .map(|i| format!("{indent}v{i} = {i}\n"))
+        .collect()
+}
+
+/// 5 个函数体形态的成功面源码：`chain` 放在该形态的**值模式函数体**里。
+fn slot_budget_success_forms(chain: &str) -> Vec<(&'static str, String)> {
+    vec![
+        (
+            "函数体",
+            format!("id: (Int) -> Int = (x) => x\nmain = () => {{\n    y = id({chain})\n}}\n"),
+        ),
+        (
+            "方法体",
+            format!(
+                "T: Type = {{ x: Int }}\nT.m: (self: &T) -> Int = {{\n    y = {chain}\n    y\n}}\n"
+            ),
+        ),
+        (
+            "lambda 体",
+            format!("main = () => {{\n    g = (x: Int) => {chain}\n}}\n"),
+        ),
+        (
+            "curry 最内层",
+            format!("f: (a: Int) -> (b: Int) -> Int = (a) => (b) => {chain}\n"),
+        ),
+        (
+            "匿名绑定体",
+            format!(
+                "P: Type = {{\n    x: Int,\n    cb: ((a: Int) -> Int)[0] = a => {chain},\n}}\n"
+            ),
+        ),
+    ]
+}
+
+/// 5 个函数体形态的拒绝面源码：300 个具名常驻绑定把具名基址推过 255。
+fn slot_budget_reject_forms() -> Vec<(&'static str, String)> {
+    vec![
+        (
+            "函数体",
+            format!("main = () => {{\n{}}}\n", named_bindings(300, "    ")),
+        ),
+        (
+            "方法体",
+            format!(
+                "T: Type = {{ x: Int }}\nT.m: (self: &T) -> Void = {{\n{}}}\n",
+                named_bindings(300, "    ")
+            ),
+        ),
+        (
+            "lambda 体",
+            format!(
+                "main = () => {{\n    g = () => {{\n{}    }}\n}}\n",
+                named_bindings(300, "        ")
+            ),
+        ),
+        (
+            "curry 最内层",
+            format!(
+                "f: (a: Int) -> (b: Int) -> Void = (a) => (b) => {{\n{}}}\n",
+                named_bindings(300, "    ")
+            ),
+        ),
+        (
+            "匿名绑定体",
+            format!(
+                "P: Type = {{\n    x: Int,\n    cb: ((a: Int) -> Void)[0] = a => {{\n{}    }},\n}}\n",
+                named_bindings(300, "        ")
+            ),
+        ),
+    ]
+}
+
+/// 成功面：5 形态的扁平深链一律零诊断（帧槽按活跃区间复用后装得下）。
+#[test]
+fn test_slot_budget_deep_chain_succeeds_in_five_body_forms() {
+    // Arrange
+    let chain = "1 + ".repeat(300) + "1";
+    let forms = slot_budget_success_forms(&chain);
+
+    // Act & Assert
+    for (form, source) in forms {
+        let dir = temp_dir();
+        let file = create_yx_file(&dir, "success_form.yx", &source);
+        let result = check_result(&file);
+        let codes = error_codes(&result);
+        assert!(
+            codes.is_empty(),
+            "{form}: 300 项链的活跃值是常数级、帧槽装得下，必须零诊断，实际: {codes:?}"
+        );
+    }
+}
+
+/// 拒绝面：5 形态的 300 个具名绑定一律报恰 1 条 E3014，且带函数体 span。
+#[test]
+fn test_slot_budget_named_base_overflow_reports_e3014_with_span_in_five_body_forms() {
+    // Arrange
+    let forms = slot_budget_reject_forms();
+
+    // Act & Assert
+    for (form, source) in forms {
+        let dir = temp_dir();
+        let file = create_yx_file(&dir, "reject_form.yx", &source);
+        let result = check_result(&file);
+        let overflows: Vec<_> = result
+            .diagnostics
+            .iter()
+            .filter(|entry| entry.diagnostic.code == "E3014")
+            .collect();
+        assert_eq!(
+            overflows.len(),
+            1,
+            "{form}: 具名基址 300 > 255 必须恰报 1 条 E3014，实际 {} 条",
+            overflows.len()
+        );
+        assert!(
+            overflows[0].diagnostic.span.is_some(),
+            "{form}: E3014 必须带函数体 span（#271/#324 的发射点要求）"
+        );
+    }
+}

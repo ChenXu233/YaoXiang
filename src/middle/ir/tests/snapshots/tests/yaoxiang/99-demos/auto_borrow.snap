@@ -4,7 +4,7 @@ module
   fn distance(Ref { mutable: false, inner: TypeRef("Point") }, Ref { mutable: false, inner: TypeRef("Point") }) -> Float(64)
     slot[0] a : Int(64) @depth1
     slot[1] b : Int(64) @depth1
-    locals_total=7
+    locals_total=5
     values_total=5
     value v0: TypeRef("?") @block0
     value v1: TypeRef("?") @block0

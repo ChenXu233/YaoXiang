@@ -7,7 +7,7 @@ module
     slot[0] item : Int(64) @depth1
     slot[1] z : Int(64) @depth1
     slot[2] b : Int(64) @depth1
-    locals_total=7
+    locals_total=6
     values_total=9
     value v0: Generic { name: "Box", args: [Int(64)] } @block0
     value v1: Int(64) @block0
@@ -62,7 +62,7 @@ module
     slot[0] z : Int(64) @depth1
     slot[1] xs : Int(64) @depth1
     slot[2] out : Int(64) @depth1
-    locals_total=9
+    locals_total=6
     values_total=24
     value v0: Void @block0
     value v1: Int(64) @block0
@@ -126,7 +126,7 @@ module
     Ret v18
   fn closure_0(Int(64)) -> Void
     slot[0] x : Int(64) @depth2
-    locals_total=8
+    locals_total=4
     values_total=4
     value v0: TypeRef("?") @block0
     value v1: Int(64) @block0

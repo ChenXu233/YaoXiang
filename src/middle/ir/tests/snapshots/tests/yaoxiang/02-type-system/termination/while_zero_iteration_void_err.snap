@@ -2,7 +2,7 @@ module
   fn main() -> Void
     slot[0] i : Int(64) @depth1
     slot[1] last : Int(64) @depth1
-    locals_total=7
+    locals_total=5
     values_total=10
     value v0: Bool @block0
     value v1: Int(64) @block0

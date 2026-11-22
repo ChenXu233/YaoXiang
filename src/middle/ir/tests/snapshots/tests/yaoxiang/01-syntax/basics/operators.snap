@@ -10,7 +10,7 @@ module
     slot[7] eq : Int(64) @depth1
     slot[8] ne : Int(64) @depth1
     slot[9] result : Int(64) @depth1
-    locals_total=16
+    locals_total=13
     values_total=66
     value v0: Int(64) @block0
     value v1: Int(64) @block0

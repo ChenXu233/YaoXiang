@@ -166,10 +166,11 @@ impl AstToIrGenerator {
             .and_then(|qualified| self.global_slot_layout.get(qualified).copied())
     }
 
-    /// 分配一个寄存器槽（旧的 `next_temp` 语义：含真高水位与三处语句级回收）。
+    /// 分配一个**具名**寄存器槽（形参 / env / 具名绑定）：`next_temp` 单调递增。
     ///
-    /// 7b.2 起它只服务「具名变量槽」与值表旁边的槽记录；临时值的身份走
-    /// [`Self::next_temp_reg`] 的 `ValueId`，但**槽分配语义不变**（C4 行为等价）。
+    /// 7b.4 起临时值不再经过这里——值槽由 [`super::regalloc`] 的线性扫描分配器
+    /// 按活跃区间复用，故 `temp_high_water`（真高水位）自此是**具名**高水位，
+    /// 也是分配器的具名基址 `named_base`。
     fn alloc_register_slot(&mut self) -> usize {
         let reg = self.next_temp;
         self.next_temp += 1;
@@ -198,30 +199,43 @@ impl AstToIrGenerator {
         }
         let value = self.next_value;
         self.next_value += 1;
-        let slot = self.alloc_register_slot();
         self.cur_values.push(ValueInfo {
             ty: MonoType::TypeRef(UNKNOWN_VALUE_TYPE.to_string()),
             debug_name: None,
             defining_block: self.cur_block_label,
         });
-        self.cur_value_slots.push(slot);
         Operand::Value(ValueId(value))
     }
 
-    /// 取操作数对应的寄存器槽号（`Local` 直接给；`Value` 查过渡映射）。
+    /// 取 `Operand::Local` 的槽号。
     ///
-    /// 具名绑定复用「值已占用的槽」时用它：只把该槽登记成具名变量，
-    /// **不新增指令、不改字节码**（与 7b.2 前把临时槽直接 `register_local`
-    /// 的行为一致）。
+    /// 7b.4 起值槽由分配器**晚分配**，`Value` 不再有「已占用的槽」可复用；
+    /// 具名绑定复用值槽的路径改走 [`Self::pin_value_to_local_slot`]（值钉子）。
     pub(in crate::middle) fn slot_for_operand(
         &self,
         op: &Operand,
     ) -> Option<usize> {
         match op {
             Operand::Local(slot) => Some(*slot),
-            Operand::Value(id) => self.cur_value_slots.get(id.0 as usize).copied(),
             _ => None,
         }
+    }
+
+    /// 把具名绑定钉在某个 SSA 值的槽上（`slot_for_operand` 耦合的正向替代）。
+    ///
+    /// 模式绑定 `s` 复用「值已占用的槽」：分配器把该值固定落具名槽 `S`，
+    /// 于是 `Local(S)` 与 `Value(v)` 指向同一帧槽——**不新增指令、不改赋值形态**
+    /// （09a §P7 7b.4 契约 §二 C）。`S` 由具名计数器发放，恒小于具名基址。
+    pub(in crate::middle) fn pin_value_to_local_slot(
+        &mut self,
+        op: &Operand,
+    ) -> Option<usize> {
+        let Operand::Value(id) = op else {
+            return None;
+        };
+        let slot = self.alloc_register_slot();
+        self.cur_pins.push((*id, slot));
+        Some(slot)
     }
 
     /// 给值表里的一条值补真实类型（只填仍为显式未知的项，先到先得）。
@@ -248,11 +262,10 @@ impl AstToIrGenerator {
         &mut self,
         instructions: &[Instruction],
         params: &[MonoType],
-    ) -> (Vec<ValueInfo>, Vec<usize>) {
+    ) -> Vec<ValueInfo> {
         let mut values = std::mem::take(&mut self.cur_values);
         infer_value_types(&mut values, instructions, params);
-        let slots = std::mem::take(&mut self.cur_value_slots);
-        (values, slots)
+        values
     }
 
     /// 记下局部变量**写出**的类型名（注解原文或构造器名）。
@@ -358,24 +371,64 @@ impl AstToIrGenerator {
     }
 }
 
+/// `finalize_code_body` 的四件产物：具名槽表、值表、值 → 槽映射、块图。
+///
+/// 名字化是为了让「收尾单点」的返回面自解释（`locals` 是帧槽表、`value_slots`
+/// 是分配器给的映射，两者长度口径不同）。
+pub(in crate::middle) struct FinalizedCodeBody {
+    pub locals: Vec<LocalSlot>,
+    pub values: Vec<ValueInfo>,
+    pub value_slots: Vec<usize>,
+    pub blocks: Vec<crate::middle::ir::ir::BasicBlock>,
+}
+
 impl AstToIrGenerator {
-    /// 取本函数体的槽位表，并检查寄存器预算（E3014）——**唯一取表点**。
+    /// 函数体收尾的**唯一入口**：值类型 → 块切分 → 槽分配 → 预算闸 → 取表。
     ///
-    /// 所有函数体形态（函数 / 方法 / lambda / 匿名绑定 / curry 层）都从这里取表，
-    /// 因此预算闸覆盖全部形态、槽位数口径只有一份：本次生成期间的真高水位
-    /// （`temp_high_water`）。越界必须在 IR 层带 span 报错——留到下游
-    /// `OperandResolver` 就只剩无 span 的构造点（debug 直接 panic，见 #271/#324）。
-    pub(in crate::middle) fn take_body_locals(&mut self) -> Result<Vec<LocalSlot>, Diagnostic> {
-        let total_locals = self.temp_high_water;
-        if total_locals > MAX_REGISTERS {
-            return Err(ErrorCodeDefinition::register_overflow(
-                &total_locals.to_string(),
-                &MAX_REGISTERS.to_string(),
+    /// 6 处 `FunctionBody::Code` 构造点（函数 / 方法 / lambda / 匿名绑定 / curry
+    /// 中间层 / curry 最内层）全部走这里——块切分、槽位分配、locals 取表三件事
+    /// 不再在调用点各写一份（禁令三 A；09a §P7 7b.4 契约 §二 A/E）。
+    ///
+    /// - 值槽由 [`super::regalloc::allocate_value_slots`] 按活跃区间复用，
+    ///   `frame_slots = named_base + max_live`；
+    /// - 预算闸仍在这里报 E3014（`register_overflow` + `.at(cur_span)`）——
+    ///   越界必须在 IR 层带 span，留到下游 `OperandResolver` 就只剩无 span 的
+    ///   构造点（#271/#324）；
+    /// - `value_mode=false`（模块 init / 顶层语句）不走本函数：没有值表也没有
+    ///   块图，`take_cur_locals` 的旧口径继续服务 `ModuleIR.init_locals`。
+    pub(in crate::middle) fn finalize_code_body(
+        &mut self,
+        instructions: Vec<Instruction>,
+        params: &[MonoType],
+    ) -> Result<FinalizedCodeBody, Diagnostic> {
+        let span = self.cur_span;
+        let values = self.take_body_values(&instructions, params);
+        let blocks = crate::middle::ir::ir::partition_blocks(instructions);
+        // 具名基址 = 本帧具名槽的上界：高水位与当前计数器取大（语句级回收
+        // 可能把 next_temp 回滚到高水位之下，而任何具名分配都抬高两者之一）。
+        let named_base = self.temp_high_water.max(self.next_temp);
+        let pinned = std::mem::take(&mut self.cur_pins);
+        let allocation = super::regalloc::allocate_value_slots(
+            &blocks,
+            &values,
+            named_base,
+            &pinned,
+            MAX_REGISTERS,
+        )
+        .map_err(|budget| {
+            ErrorCodeDefinition::register_overflow(
+                &budget.required.to_string(),
+                &budget.limit.to_string(),
             )
-            .at(self.cur_span)
-            .build());
-        }
-        Ok(self.take_cur_locals(total_locals))
+            .at(span)
+            .build()
+        })?;
+        Ok(FinalizedCodeBody {
+            locals: self.take_cur_locals(allocation.frame_slots),
+            values,
+            value_slots: allocation.value_slots,
+            blocks,
+        })
     }
 }
 
@@ -489,7 +542,7 @@ struct SavedFrame {
     loop_stack: Vec<LoopTargets>,
     next_value: u32,
     cur_values: Vec<ValueInfo>,
-    cur_value_slots: Vec<usize>,
+    cur_pins: Vec<(ValueId, usize)>,
     value_mode: bool,
 }
 
@@ -525,7 +578,7 @@ impl<'a> NestedBodyGuard<'a> {
             loop_stack: std::mem::take(&mut gen.loop_stack),
             next_value: gen.next_value,
             cur_values: std::mem::take(&mut gen.cur_values),
-            cur_value_slots: std::mem::take(&mut gen.cur_value_slots),
+            cur_pins: std::mem::take(&mut gen.cur_pins),
             value_mode: gen.value_mode,
         };
         gen.cur_frame = gen.alloc_frame();
@@ -548,7 +601,7 @@ impl<'a> NestedBodyGuard<'a> {
             loop_stack: std::mem::take(&mut gen.loop_stack),
             next_value: gen.next_value,
             cur_values: std::mem::take(&mut gen.cur_values),
-            cur_value_slots: std::mem::take(&mut gen.cur_value_slots),
+            cur_pins: std::mem::take(&mut gen.cur_pins),
             value_mode: gen.value_mode,
         };
         gen.cur_frame = gen.alloc_frame();
@@ -580,7 +633,7 @@ impl Drop for NestedBodyGuard<'_> {
         self.gen.cur_span = self.saved.cur_span;
         self.gen.next_value = self.saved.next_value;
         self.gen.cur_values = std::mem::take(&mut self.saved.cur_values);
-        self.gen.cur_value_slots = std::mem::take(&mut self.saved.cur_value_slots);
+        self.gen.cur_pins = std::mem::take(&mut self.saved.cur_pins);
         self.gen.value_mode = self.saved.value_mode;
         if let Some((next_temp, temp_high_water, temp_floor)) = self.saved.counters {
             self.gen.next_temp = next_temp;

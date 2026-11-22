@@ -7,7 +7,7 @@ module
     slot[4] dynamic : Int(64) @depth1
     slot[5] annotated : Int(64) @depth1
     slot[6] grown : Int(64) @depth1
-    locals_total=18
+    locals_total=11
     values_total=80
     value v0: TypeRef("?") @block0
     value v1: Bool @block0
