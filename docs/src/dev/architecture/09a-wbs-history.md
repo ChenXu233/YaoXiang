@@ -8073,3 +8073,46 @@ pub enum FunctionBody {
 **最终 base 复跑**（队长集成检查，非独立验证）：fmt 0；snapshot 6/0/1（232 份零漂移）；verify 35；`middle::ir::tests` 74/1；phi 39；`testsuite run fast` **2503 条** exit 0；语料 **403/403** 差分空；docs 五脚本 0（docs-refs 1248 文件 / **13321** token）；生成器幂等。
 **口径更正**：§十.7 的「09 顶部三级计数保持不动」是收口时点（258）的事实；最终 base 为 **260**（origin 的 8.2.3/8.2.4 登记），7b.2 仍不新增计数。
 **独立性边界**：t20/t21 的独立验证/复审绑定 rebase 前的代码笔；本节的最终 base 复跑是队长在合并树上的集成检查，不替代独立验证。`src`/快照 patch-id 逐字节一致是「代码内容未变」的机械证据；若需要最终 base 的独立重验，另开任务。
+
+## P7 7b.3 契约（`BasicBlock.successors` 填充 + translator `Phi` 臂（方案 A），2026-11-22）
+
+> 计划见 [09](./09-execution-wbs.md) §P7 7b 表 7b.3 行（判据 C4 + `.42` 往返测试）；设计依据 [04](./04-ssa.md) §「`Phi` 的字节码形态」方案 A（IR-only 伪指令，translator 展开为 Move 串，不新增 opcode、`.42` 零变更）、§目标设计「`Phi` 作为新 `Instruction` 变体」、§值标识方式（`value_slots` 过渡映射）；前置 = [09a §P7 7b.1b 契约](#p7-7b1b-契约values-表--valueinfo--访问器--phi-残项判据2026-11-20) §三（「生产 `Phi` 之前必须先填块级 `successors`」）与 [09a §P7 7b.2 收口](#p7-7b2-收口next_temp_reg-改产-operandvalue--values-生产--codegen-槽解析--快照再生2026-11-22)（`Operand::Value` 生产 + `value_slots` 槽映射）。基线 = `origin/dev` 顶端 `d276e652`（7b.2 已集成，工作树干净）；行号取该 revision。
+>
+> 本段在动工前写下改动面、逐项定夺、影响预判与回滚点；代码按本段落地，收口轮在本文件追加实测与偏差。
+
+### 一、实测面（基线 `d276e652`）
+
+| 面 | 实测 |
+| --- | --- |
+| `BasicBlock` 字面量构造点 | **14 处**：`git grep -n "BasicBlock {" -- src` 共 16 行 = 结构体定义 1 + 构造 14 + 共享测试助手 `block()` 的返回类型行 1。14 处 = **生产 7**（`lower/curry.rs` 2、`lower/stmt.rs` 2、`lower/globals.rs` 1、`lower/expr/closure.rs` 1、`passes/codegen/translator.rs` 合成的构造函数体 1）+ **测试夹具 6**（`passes/mono/tests` 2、`passes/dce/tests` 2、`passes/codegen/tests` 2）+ **共享助手 1**（`ir/tests/ir_build.rs` 的 `block()` 把 `successors` 作为参数） |
+| `successors: Vec::new()` 写点 | **13 处**（上述 14 处构造中除 `ir_build::block` 外的 13 处一律空表）。7b.1b 登记的「15 处」把结构体定义行与 `block()` 的返回类型行一并计入；本批按 **构造点 14 / 空表写点 13** 报告 |
+| 块级 CFG 现状 | 生产侧**全仓单块**：7 处生产构造 `label: 0` + 空 `successors`，无填充点 ⇒ 块级前驱恒空（7b.1b 契约 §三 实测前提） |
+| 跳转目标坐标 | `Jmp` / `JmpIf` / `JmpIfNot` 的 `target` 是**函数内展平后的绝对指令下标**（`lower/module_ir.rs` 的 `rebase_jump_targets` 明文 + `translator.rs` 的 `global_ir_index` 回填），不是块 label；`BasicBlock.label` 当前不参与控制流（`ir/verify.rs` 文件头「现实语义记录」第 1 条） |
+| `Instruction::Phi` 生产点 | **0**（`git grep -n "Instruction::Phi" -- src` 的非测试命中只有 `ir.rs` 的定义与 span / def-use 臂、`normalize.rs` 渲染、`verify.rs` 判据、`translator.rs` 的 `unreachable!` 占位） |
+| `Operand::Value` 生产入口 | 唯一 = `lower/scope.rs` 的 `next_temp_reg()`（7b.2 落地）；槽映射 = `FunctionIR::value_slots()`（`ir.rs`，index = `ValueId`） |
+| `translator` 的 `Phi` 臂 | `passes/codegen/translator.rs` 的 `translate_instruction` 末臂：`unreachable!("…真翻译归 7b.3…")` |
+| `normalize` 的 `successors` 渲染 | `ir/normalize.rs` 的 `FunctionBody::Code` 分支：`succ` 非空才写一行 `block[<label>] succ=[…]`；现状恒空 ⇒ 快照里不出现 |
+| `ValueInfo.defining_block` | 由 lowering 生成期记录（7b.2 的 `cur_block_label`，单块 ⇒ 恒 0） |
+
+### 二、逐项定夺
+
+1. **`successors` 的语义：块级 CFG，边只连不同块（含真自环）；来源是跳转与布局落空。** 「`BasicBlock` 是基本块」在现实 IR 里不成立——块内允许绝对下标的跳转。本批把块做成真基本块：在 `lower` 构造函数体时按 **leader** 切分（函数入口、每条跳转的目标、跳转/返回之后的下一条指令），并把切分与 CFG 推导收敛到**单一构造入口** `src/middle/ir/ir.rs` 的 `partition_blocks(instructions) -> Vec<BasicBlock>`（禁令三：14 处构造点不得各写一份规则）。块级出边按块尾终结指令推导：`Jmp` → 目标指令所属块；`JmpIf` / `JmpIfNot` → 目标块 + 布局上的下一块；`Ret` / `TailCall` → 无；其余块尾（布局落空）→ 下一块。跳转目标落在本块之外才成边；块内跳转在切分后不存在（目标必为 leader ⇒ 它必是新块首），唯一例外是「单条 `Jmp` 自指」形成的**真自环**。块 label 按布局序稠密发放（0..N-1），`entry` 仍为 0；**跳转目标坐标不变**（仍是展平绝对指令下标）⇒ `translator` 的 `global_ir_index` 回填路径、`verify` 的指令级 CFG、`.42` 字节码**全部不变**。
+2. **`Phi` 的 translator 展开（方案 A）**：`Phi` 是 IR-only 伪指令，**不新增 opcode**、`.42` 格式与 `VERSION` 零变更、`executor/` 零改动。落形态：`Phi` 的 Move 串按**前驱选择 incoming**——每个前驱一条「组」（组 = 本块全部 `Phi` 在该前驱上的 `Move { dst: vreg, src: incoming[i] }`），组落在**汇合块入口**；组间用既有 `JMP` 跳过，入边跳转按「前驱 → 组起点」重定向（临界边无需新块、无需新码）。组序由落空前驱（布局上紧邻且块尾非 `Jmp` / `Ret` / `TailCall` 的前驱）领首，其余按前驱 label 升序——这样落空路径自然进入它自己的组。单前驱时组内只有 Move、无 `JMP`。`Phi` 指令本身不产出字节码（与「`executor` 永远看不到 `Phi`」同性质），`dump_bytecode` 里看不到 `Phi`（04 §关键决策与理由 决策三 已登记该代价）。
+3. **`Operand::Value` / `value_slots` 在 `Phi` 臂的解析**：Move 串逐条复用既有 `Translator::translate_move`（`dst` 为 `Operand::Value` ⇒ `MOV dst_slot, src_slot`），槽号由 `OperandResolver::to_reg` 经 `value_slots[v]` 解析（7b.2 落地；`>255` 报 E3014、无映射 / 越界报 E3017 且带指令 span）。**不新造第二条 Value → 槽 解析路径**（禁令三）。`Phi` 的 `dst` 非 `Operand::Value`、`incoming` 缺落空前驱、组内出现并行拷贝环（`dst` 槽在组内被后序 Move 当 `src` 读，需要临时槽）等形态一律**响亮失败**（`E8001` 内部错误诊断），不静默 NOP、不静默错值；这些形态的判据归 `verify_ssa`，translator 只做「不产出错代码」的自保。
+4. **`.42` 往返测试形态**：合成 IR（**不经 lowering**）构造含单 / 多前驱 `Phi` 的多块函数 → `CodegenContext::generate()` → `BytecodeFile::write_to` → `BytecodeFile::read_from` → `BytecodeModule::from`，断言：①解码前后字节码一致；②`Phi` 不进字节码（无新 opcode、`MOV` 串按前驱分组）；③解释器 `execute_module` 的全局槽位结果等于直接翻译（未序列化）路径，且等于按被选前驱的期望值。测试不依赖 lowering 生产 `Phi`（生产点仍为 0）。
+5. **C4 判据**：既有程序（无 `Phi` 生产）零行为变化 = 语料差分 **403/403** 逐条空、IR 快照 **232 份零漂移**、`verify` / `middle::ir::tests` / `phi` / fast 全绿。快照零漂移的结构理由：块切分不改变指令的展平顺序与内容（`normalize` 逐块按序渲染指令，块本身不产生行），且 `normalize` 的 `successors` 渲染分支**删除**（「`successors` 不进入快照」是本批前提：CFG 形状属分配 / 布局细节，7b.4 的线性扫描分配器还可能重塑它）。字节码零变化的机械理由：`translator` 按块的布局序展平，`global_ir_index` 与跳转回填表不变，块切分对 `Phi` 生产为 0 的程序不产生任何新指令。
+6. **快照 / 语料影响与回滚点**：IR 快照零漂移（不重生成基线）；语料差分基线零改动；错误码文档只需在生成器口径下确认幂等（本批不新增诊断码，`E8001` 已注册）。回滚点：本契约段单独一笔文档提交（先于代码）；代码 + 测试为一笔独占提交，`git revert` 整笔回滚；`partition_blocks` 与 `Phi` 展开各自可独立回退（前者只影响 `successors` / 块切分，后者只影响 `Phi` 消费）。
+
+### 三、测试面（合成 IR 承担 `Phi` 生产，直驱测试钉住两侧）
+
+- `src/middle/ir/tests/blocks.rs`（新）：`partition_blocks` 的切分与 CFG 推导（直线体单块空表 / `Jmp` / 条件跳转双边 + 落空 / `Ret` / 自环 / 真 lowering 产物的块级前驱非空）。
+- `src/middle/passes/codegen/tests/phi.rs`（新）：单前驱 / 多前驱 `Phi` 的 Move 串形态（`dst` / `src` 槽）、前驱选择（运行时取被选前驱的值）、`.42` 往返一致、解释执行 == 直接翻译、并行拷贝环响亮失败。
+- `src/middle/ir/tests/verify.rs`：补一条「块级前驱来自真实 lowering 产物」的直驱断言（`verify_ssa` 的块级前驱判据自此有真实数据）。
+- `passes/mono` / `passes/dce`：各补一条「`successors` 在特化克隆 / DCE 后原样保留」的直驱断言。
+- 既有测试不做放宽；新增测试按 [test-specification](../test-specification.md)（命名 `test_<what>_<scenario>`、三段式、断言带消息、`matches!`、无 `use super::*`、无 inline `mod tests`）。
+
+### 四、范围、D59 与风险登记
+
+- inScope：`src/middle/`、`src/driver/tests/`、`src/frontend/tests/`、`tests/baselines/`、`docs/src/reference/error-code/`、本文件；out of scope：`src/backends/`、`src/std/`、`tests/yaoxiang/`、`09`、`04`、`scripts/`。
+- D59：**无行为变更（表示重塑 + 消费端接线）**——`Phi` 生产仍为 0，块切分不改变指令序 / 字节码 / 执行结果，故不改变「原先成功」程序的对外表现。
+- 风险与登记（本批不做，收口按实测登记）：①`ValueInfo.defining_block` 仍是生成期块号（7b.2 的 `cur_block_label`，恒 0）；块切分后它与真实定义块不一致。本批不改：改则 232 份快照的 `values` 段 `@block` 漂移，与本批「快照零漂移」判据冲突；修正须与快照再生同批（登记给 `Phi` 生产批次 / 7b.4）。②`04` 的落地标记（改动清单第 31 项、§实测前提「15 处空表」、`§值标识方式` 的「多块随 7b.3」）与 `07`「前驱排序」规范化项在 `successors` 不再渲染后的口径，均属 out-of-scope 文档，由收口笔就地更正。③`Phi` 生产（lowering 产 `Phi`）仍不在本批：`successors` 与消费端先就位，生产端留给后续批次。
