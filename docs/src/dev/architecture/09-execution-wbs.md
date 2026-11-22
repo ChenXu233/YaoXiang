@@ -503,7 +503,7 @@ P10 其余清理与状态修正             06 §S2/S3/S4/S5/S6
 > **7.0 设计依据与边界**：目标布局来自 [01-routing](01-routing.md) 的目录树与迁移表——`middle/ir/ir_gen.rs` → `middle/lower/`、`sema/inference/expressions.rs` → `sema/infer/`（调用裁决族 `call/`）。本批**只做纯搬移**，验收判据为「除路径外零语义 diff」（逐文件人工 review）+ C1 快照 zero-diff。它与 [RFC-039](../../rfc/accepted/039-compiler-architecture.md) 替代方案 A「只拆文件、不动范式」的否决不冲突：被否决的是以搬移**替代**范式工作，本批是范式工作的**前置**——7c.1 的 `lower/synth.rs` 依赖 `lower/` 目录就位，7d.1 的 `generate_call_expr_ir` 方法级拆分在搬移后的小文件上进行。expressions 侧按用户裁决走甲案（只拆调用裁决族，`statements.rs` 原地不动）；`inference/ → infer/` 整体改名与 statements 归并属全量迁移，不在本批，留 P7 后另立设计轮。`synth.rs` 是新边界不是搬移，归 7c.1。勘察基线（2026-11-12）：`ir_gen.rs` 9804 行、148 个方法，主体为单个 `impl AstToIrGenerator` 块（约 9250 行）；`expressions.rs` 6825 行、93 个方法，主体为单个 `impl ExpressionInferrer` 块（约 6280 行）；最大方法 `infer_call_expr` 1671 行、`generate_call_expr_ir` 866 行（后者为 7d.1 对象）。
 
 - [x] **7a 切断多次定义**（7a.2 / 7a.3 落地；7a.1 拆出，移至批 b，与 7b.4 同批；2026-11-18 收口，实录见 [09a](./09a-wbs-history.md) §P7 7a）
-- [ ] **7b SSA 形态切换**（6 个三级任务；7b.1 已按 DoD 6 拆为 1a/1b；**7b.1a / 7b.1b 已完成（2026-11-20）、7b.2 已完成（2026-11-22），本二级不整行勾完成**）
+- [ ] **7b SSA 形态切换**（6 个三级任务；7b.1 已按 DoD 6 拆为 1a/1b；**7b.1a / 7b.1b 已完成（2026-11-20）、7b.2 / 7b.3 已完成（2026-11-22），本二级不整行勾完成**）
 
 > **A/I4 的保留条件（2026-11-13 重写）**：6.9.2-C2c 的「保守保留原件」是 I4 未完成前的临时形态——原件仍带 q=0 槽，克隆体把体内读物化成常量。该规避已随 #542 落地移除（2026-11-19）：mono 不再按泛型名删原件、恢复闸删除，删除职责归 post-mono DCE；仍保留的「原件不擦」是 C3 T-b 到界退回的长期语义，不属于规避。**C3 完成后的重评估（2026-11-16）**：C3 的 T-b 到界退回使「第 9 次开火」的调用点留在原件上 ⇒ 原件被放回、共享层仍有引用者，故 #542 的面收窄到**非递归全覆盖形态**（`fn_const_generic` 族）；处置已按裁决 B 于 2026-11-19 落地（post-mono DCE 接线，连同本条规避一起移除），见 09a §P6 6.9.2 #542 落地轮。
 
@@ -526,7 +526,7 @@ P10 其余清理与状态修正             06 §S2/S3/S4/S5/S6
 | 7b SSA 形态切换 | 7b.1a `ir.rs` 结构变更 #1-2（`Operand` 变体收敛 + `Instruction::Phi` 引入） | 7a.3 + **P6 完成** | C4；独占 commit；**已完成（2026-11-20，实录见 [09a](./09a-wbs-history.md) §P7 7b.1a 收口）** |
 | | 7b.1b `ir.rs` 结构变更 #3-5（`FunctionIR` / `BasicBlock` / 类型标注字段） | 7b.1a | C4；独占 commit；**已完成（2026-11-20，实录见 [09a](./09a-wbs-history.md) §P7 7b.1b 收口）** |
 | | 7b.2 `next_temp_reg` 改 `Operand::Value` | 7b.1 | 同上；**已完成（2026-11-22，实录见 [09a](./09a-wbs-history.md) §P7 7b.2 收口）** |
-| | 7b.3 `translator.rs` 加 `Phi` 臂 | 7b.1 | C4 + `.42` 往返测试 |
+| | 7b.3 `translator.rs` 加 `Phi` 臂 | 7b.1 | C4 + `.42` 往返测试；**已完成（2026-11-22，实录见 [09a](./09a-wbs-history.md) §P7 7b.3 收口）** |
 | | 7b.4 线性扫描分配器（u8/255 槽模型内） | 7b.3 + **7a.1**（拆出的删回滚同批） | 同上（+500~1000 行） |
 | 7c 隐式契约显式化 | 7c.1 `synth.rs` 边界 + 边界检查脚本 | 7b.4 | C4 + 新脚本入 CI |
 | | 7c.2 span 消费计数 | 7c.1 | 消费计数**零触发** |

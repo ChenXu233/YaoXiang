@@ -285,9 +285,9 @@ Phi {
 
 **类型不可得的三种形态（显式登记，不静默放行）**：值表为空 ⇒ 判定依据不存在（模块 init / 顶层语句的恒常形态，`value_mode=false` 路径）；值表非空而 `ValueId` 越界 ⇒ 报违规；非 `Value` 操作数（`Const` / `Local` / `Arg` / `Global`）⇒ 无值表类型源，不判定。
 
-**实测前提（重要）**：全仓 `BasicBlock.successors` 的 15 处生产构造全部是 `Vec::new()`，没有生产填充点 ⇒ 块级前驱恒空 ⇒ 前驱数与前驱集合两条判据在真实 IR 上无数据，由合成夹具承担（这不是判据缺失）。**7b.3 生产 `Phi` 之前必须先填块级 `successors`**，否则任何带 incoming 的 `Phi` 都会被 `verify_ssa` 拒——登记为 7b.3 前置。
+**实测前提（已于 7b.3 兑现）**：7b.3 之前全仓 `BasicBlock.successors` 的生产构造全部是 `Vec::new()`（块级前驱恒空，前驱数与前驱集合两条判据当时由合成夹具承担）。**7b.3 起块级 `successors` 由 `src/middle/ir/ir.rs` 的 `partition_blocks` 在每条生产构造点真实填充**（`lower` 6 处 + codegen 合成构造函数体 1 处全部走该唯一入口；`lower` 产物的循环 / 分支块有多块、双出边与回边），故前驱数与前驱集合两条判据在真实 IR 上有数据——真 lowering 产物上的直驱测试钉住该登记-消费闭环。`Phi` 的生产构造点仍为 0（生产端归后续批次），落地时直接受本判据约束。
 
-7b.1a 只引入变体：lowering 生产构造点为 0，`translator.rs` 的消费臂是带不变量注释的占位（响亮失败，不做静默跳过或静默错值），真翻译归 7b.3（方案 A：展开为 Move 串）。
+7b.1a 只引入变体：lowering 生产构造点为 0（至今仍为 0，生产端归后续批次）。`translator.rs` 的消费面已于 **7b.3 落地**：方案 A 在块入口按前驱展开为 `Move` 串（组落在汇合块入口、组间既有 `JMP` 跳过、入边跳转按前驱重定向到组起点），`translate_instruction` 的 `Phi` 臂是不可达 E8001 防御臂（`executor` 永远看不到 `Phi`）。
 
 **处置 `3632-3638` 的守卫问题**：现状 `generate_block_ir` 的回收有 `if result_reg.is_none()` 守卫（`3626-3631` 注释：表达式操作数位的块，外层可能持有跨块存活的兄弟实参临时）。SSA 化后该守卫**不再需要**——因为临时值不再回滚，跨块存活的兄弟实参持有的是自己的 `ValueId`，不会被回滚波及。**这一条是 SSA 化能真正简化代码的地方，而不只是改名。**
 
@@ -315,7 +315,7 @@ pub struct ValueInfo {
 
 - **计数器隔离**：`ValueId` 由独立计数器 `next_value: u32` 发放，每函数体从 0 起算、单调递增、永不回滚；`NestedBodyGuard` 保存/还原它与值表（每个函数体一套）；三处语句级回收只回滚 `next_temp`（槽），不触碰 `next_value`；柯里层循环逐层重置（每层一个 `FunctionIR`）。模块 init / 顶层语句没有值表——`value_mode=false` 时 `next_temp_reg` 退化为旧的 `Local` 槽分配，init 序列零变化。
 - **ty 来源**（只取 lowering 已有信息，不新造类型判定器）：字面量经 `ConstValue::mono_type()`（与 verify 的常量类型映射收敛为单一来源）；变量/调用经 `generate_expr_ir` 入口查类型检查结果与绑定函数返回类型；比较/逻辑/字符串族/前向传播在函数体收尾按指令语义补齐。不可得落**显式未知 `MonoType::TypeRef("?")`**（不静默 `Int(64)` 占位，`LocalSlot.ty` 一律不读）。232 份快照实测：9425 条值中真实类型 7080、显式未知 2345（24.9%），未知集中在调用/字段/索引/容器构造形态。
-- **defining_block**：取生成期当前块 label；本批全仓 lowering 单块（label 恒 0），多块随 7b.3。
+- **defining_block**：取生成期当前块 label；**7b.3 起块切分已落地**（真 lowering 的 while 体为多块），但本字段的取值仍是生成期 `cur_block_label`（当前恒 0）——与真实定义块暂不一致；更正须与 232 份快照 `values` 段再生同批，登记给 `Phi` 生产批次 / 7b.4。
 - **debug_name**：全 `None`（具名变量仍是 `Local`，不迁值表）。
 - **索引**：`value_slots: Vec<usize>`（index = ValueId）与 `values` 同索引，记录 lowering 既有临时槽分配——值表不含槽号而字节码必须落 `u8` 槽，过渡映射使 codegen 还原同一字节码；线性扫描分配器（7b.4）落地后重算本表。
 
@@ -567,7 +567,7 @@ self.release_plan_total = type_result.release_plan.drops.len();
 | 28 | `src/middle/core/ir_gen.rs` | `7838-7846` | "补 0" 兜底改为返回诊断 |
 | 29 | `src/middle/lower/synth.rs` | **新建** | 合成 AST 边界 |
 | 30 | `src/middle/ir/verify.rs` | **新建**（[07](07-equivalence-oracle.md) 第一层） | `verify_loose` / `verify_ssa` |
-| 31 | `src/middle/passes/codegen/translator.rs` | dispatch match | 加 `Instruction::Phi` 臂（方案 A：展开为 Move 串） |
+| 31 | `src/middle/passes/codegen/translator.rs` | dispatch match | `Instruction::Phi` 的翻译（**7b.3 已落地**：方案 A 展开在**块入口**——`plan_phi_edges` / `emit_phi_prologue` 按前驱发 `Move` 组、组间既有 `JMP` 跳过、入边跳转按 `(前驱, 汇合块首指令)` 重定向到组起点；`translate_instruction` 的 `Phi` 臂收敛为不可达 E8001 防御臂——单条返回位放不下按前驱分布的多条 Move，到达即响亮失败） |
 | 32 | `src/middle/passes/codegen/operand.rs` | `36-45` / `72-77` | `Operand::Value` 解析臂；删 `Temp` 臂（`39-45`）（**7b.2 已落地**：`to_reg(Value(v))` 查 `FunctionBody::Code.value_slots[v]` → `u8`（`>255` 报 E3014；无映射报 E3017 且带指令 span）；删 `Temp` 臂由 7b.1a 先行落地） |
 | 33 | `src/middle/core/bytecode.rs` | `127-554` | **方案 A 下不变**（`Phi` 不进字节码） |
 | 34 | `src/middle/core/bytecode.rs` | `558` / `649` / `943-2350` | **方案 A 下不变** |
@@ -597,7 +597,7 @@ self.release_plan_total = type_result.release_plan.drops.len();
 | 批 | 内容 | 改动项 | 判据 | 回滚点 |
 | --- | --- | --- | --- | --- |
 | **批 a** | 切断多次定义：删 3 处语句级回收 → 6 处 save/restore 换 RAII guard → 口径统一 | 8-10（先）→ 11-16 → 17-18 | 删除回收：**C4**（行为等价 + 第一层支配性不变量）。RAII 与口径统一属纯搬移：**C1** 快照 zero-diff | 逐项单 commit，`git revert` 即回滚 |
-| **批 b** | SSA 形态切换：`ir.rs` 结构变更 + 临时值改产 `Operand::Value`（机械替换）→ `translator.rs` 加 `Phi` 臂 → 线性扫描分配器。批内按 WBS 三级任务串行：7b.1a（`Operand` 变体收敛 + `Instruction::Phi` 引入，**已落地**）→ 7b.1b（`FunctionIR` / `BasicBlock` / 类型标注字段，**已落地**）→ 7b.2（`next_temp_reg` 改产 `Operand::Value`，**已落地**）→ 7b.3（`translator.rs` 的 `Phi` 臂）→ 7b.4（线性扫描分配器 + 删三处语句级回收，与 7a.1 同批） | 1-5、7 → 31-32 → 37 | **C4**：行为等价 + `verify_ssa` 全绿 + `.42` 往返测试 | `ir.rs` 变更**独占一个 commit**（类型变更波及全仓编译，不可增量回滚） |
+| **批 b** | SSA 形态切换：`ir.rs` 结构变更 + 临时值改产 `Operand::Value`（机械替换）→ `translator.rs` 的 `Phi` 臂（方案 A）→ 线性扫描分配器。批内按 WBS 三级任务串行：7b.1a（`Operand` 变体收敛 + `Instruction::Phi` 引入，**已落地**）→ 7b.1b（`FunctionIR` / `BasicBlock` / 类型标注字段，**已落地**）→ 7b.2（`next_temp_reg` 改产 `Operand::Value`，**已落地**）→ 7b.3（`translator.rs` 的 `Phi` 臂 + `BasicBlock.successors` 填充，**已落地**）→ 7b.4（线性扫描分配器 + 删三处语句级回收，与 7a.1 同批） | 1-5、7 → 31-32 → 37 | **C4**：行为等价 + `verify_ssa` 全绿 + `.42` 往返测试 | `ir.rs` 变更**独占一个 commit**（类型变更波及全仓编译，不可增量回滚） |
 | **批 c** | 隐式契约显式化：`synth.rs` 边界 + 哨兵脚本 → span 消费计数 → `method_def_ordinals` 只读化 | 20-24、29、38 → 25 → 26 | **C4**：行为等价 + 新脚本纳入 CI；消费计数在新诊断上零触发（否则说明真存在失配） | 独立 commit |
 | **批 d** | `generate_call_expr_ir` 拆分 + "补 0" 兜底断言化 | 27-28 | 纯搬移部分：**C1** 快照 zero-diff。断言化部分：**C4** 语料差分 + 第一层校验器 | 独立 commit |
 
