@@ -8190,7 +8190,7 @@ pub enum FunctionBody {
 ### 二、`successors` 真实 CFG 与 pass 保留
 
 - **单一构造入口**：`src/middle/ir/ir.rs` 的 `partition_blocks` 按 leader（入口 / 每条跳转目标 / 跳转后下一条）切块，块 label 按布局序稠密发放；出边按块尾终结指令与布局落空推导（`Jmp` 单边、`JmpIf` / `JmpIfNot` 双边、`Ret` / `TailCall` 无边、其余落空边），升序去重，越界目标不加边（那是 `verify` 的「jump 目标存在」判据职责）。**跳转目标坐标不变**（仍是函数内展平绝对指令下标），故 `translator` 的回填表、`verify` 的指令级 CFG 与 `.42` 字节码零影响。
-- **构造点实测**（复审轮独立计数）：生产侧 `BasicBlock` 字面量构造只剩 `partition_blocks` 内 2 处（空体单空块 + 切块）；`lower` 的 6 处（curry 2 / stmt 2 / globals 1 / closure 1）与 codegen 合成构造函数体 1 处全部改走该入口。`git grep -n "successors: Vec::new()" -- src` 的 15 行残留按契约 §二 第 2 条口径逐类核实：ownership 图同名字段 1（非 `BasicBlock`）+ `partition_blocks` 内 2（空体与切块的初始空表）+ 测试夹具 12（直线体 / 终结块，空表即真值；多块夹具显式声明真实块图）。
+- **构造点实测**（复审轮独立计数）：生产侧 `BasicBlock` 字面量构造只剩 `partition_blocks` 内 2 处（空体单空块 + 切块）；`lower` 的 6 处（curry 2 / stmt 2 / globals 1 / closure 1）与 codegen 合成构造函数体 1 处全部改走该入口。`git grep -n "successors: Vec::new()" -- src` 的 15 行残留按契约 §一 实测面与 §二 第 1 条口径逐类核实：ownership 图同名字段 1（非 `BasicBlock`）+ `partition_blocks` 内 2（空体与切块的初始空表）+ 测试夹具 12（直线体 / 终结块，空表即真值；多块夹具显式声明真实块图）。
 - **登记-消费闭环**：`verify_ssa` 的块级前驱只认 `BasicBlock.successors` 反推；`blocks.rs` 的直驱测试在真 lowering 的 while 体上断言多块 / 双出边 / 回边 / 指令守恒 / 前驱非空，并注入空 incoming 的 `Phi` 证明前驱判据按真实 successors 报「前驱数」差异（若 successors 退回空表，该断言以「前驱=[]」失败）。mono（特化克隆）与 dce（整函数删除）的保留断言直驱：存活函数的块与出边原样投影、不重建。
 - **快照零漂移的结构理由**：`normalize` 不渲染 `successors`（CFG 属分配 / 布局细节），块切分不产生快照行 ⇒ 232 份零漂移（验证 + 复审 + 终态补偿三轮同值）。
 
@@ -8215,7 +8215,7 @@ pub enum FunctionBody {
 
 ### 六、偏差与登记
 
-1. **落位裁决**：契约 §三 验收第 3 条「`translator` 的 `Phi` 臂替换为展开」是简写；实现把展开放在块入口、`translate_instruction` 的臂收敛为不可达 E8001 防御臂，理由（单条返回位 vs 按前驱分布的多条 Move）与偏差登记在实现记录 §二 第 4 条，**队长裁决接受该落位**（规范性落形态以契约 §二 第 2 条为准），复审按此判据执行。
+1. **落位裁决**：实现把展开放在块入口、`translate_instruction` 的臂收敛为不可达 E8001 防御臂，理由（单条返回位 vs 按前驱分布的多条 Move）与偏差登记在实现记录 §二 第 4 条；**队长裁决接受该落位**（实现轮的「`Phi` 臂替换为展开」验收措辞是简写，规范性落形态以本文件 §二 第 2 条为准），复审按此判据执行。
 2. **注释修复笔与终态关系**（契约必写项）：验证轮量测绑定代码独占笔终态；其后两笔**仅注释**（F1 + values 过期注，`git diff` 可证不改可执行内容），复审绑定含这两笔的终态；**验证轮数字不是终态复跑**——终态另有补偿性复跑（§一 右列），逐项同值。
 3. **`defining_block` 仍恒 0**：块切分后与真实定义块不一致；修正须与 232 份快照 `values` 段再生同批，登记给 `Phi` 生产批次 / 7b.4。
 4. **断言落位微调**：契约 §三 原写「`src/middle/ir/tests/verify.rs` 补块级前驱直驱断言」，实现落在 `blocks.rs`（需 lowering 真实产物与 `partition_blocks` 语境，同文件更内聚）；内容与判据不变。
