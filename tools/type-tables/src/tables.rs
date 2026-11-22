@@ -130,9 +130,7 @@ impl NameTableReport {
         out.push_str("  15 名 = Never / Void / () / Bool / Int / Int8 / Int16 / Int32 / Int64 /\n");
         out.push_str("          Float / Float32 / Float64 / Char / String / Bytes（() 是 Void 的类型写法）。\n");
         out.push_str("  DateTime 注记：不属内置名（P10 S11 / issue #513 已迁出临时别名，\n");
-        out.push_str(
-            "  解析表不接受它）；std.time 的 now / parse_time 返回类型就是 Int，\n",
-        );
+        out.push_str("  解析表不接受它）；std.time 的 now / parse_time 返回类型就是 Int，\n");
         out.push_str("  LSP 清单（C）与解析表逐名一致，无已登记差异。\n");
         out.push_str(&format!(
             "B `CONST_PARAM_TYPES`（:{}）：{} 项 —— {}\n",
@@ -513,10 +511,7 @@ mod tests {
         let flagged = deprecated_acceptances(&accepted);
 
         // Assert：无回退
-        assert!(
-            flagged.is_empty(),
-            "规范名不应触发哨兵，实际 {flagged:?}"
-        );
+        assert!(flagged.is_empty(), "规范名不应触发哨兵，实际 {flagged:?}");
     }
 
     // S11.1（issue #513）迁出 DateTime 别名后，把它加回解析表必须被哨兵抓到——
