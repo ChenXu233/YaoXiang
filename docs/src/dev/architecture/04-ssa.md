@@ -30,17 +30,17 @@
 | 三地址形态 | 76 个变体，54 个带 `dst: Operand`、3 个带 `dst: Option<Operand>` | `src/middle/ir/ir.rs` 的 `Instruction` |
 | 每指令 span | 每个变体带 `span: Span` 字段 | 同上 |
 | 值类型可标注 | `LocalSlot::ty: MonoType` | `src/middle/ir/ir.rs` 的 `LocalSlot` |
-| 槽位计数上界检查 | 取表与 E3014 预算闸单点（`MAX_REGISTERS = 255`） | `src/middle/lower/scope.rs` 的 `take_body_locals` |
+| 槽位计数上界检查 | 取表与 E3014 预算闸单点（`MAX_REGISTERS = 255`） | `src/middle/lower/scope.rs` 的 `finalize_code_body`（7b.4 起） |
 
 **若不具备这些前提，本文的成本估计会完全不同。**
 
 **决定性的两点：**
 
-**其一，SSA 化不是新增能力，是删除一个能力依赖。** 现状下临时槽位**被主动设计为多次定义**——`src/middle/lower/stmt.rs` 的 `generate_function_ir` 与 `generate_block_ir`、`src/middle/lower/expr/closure.rs` 的 `generate_lambda_body_ir` 三处显式回滚 `next_temp`。SSA 化的第一件事是**删掉这三处回滚**，让 `next_temp` 单调递增。删掉之后，**每个临时槽位天然只有一个定义点**——唯一定义从"需要检查的规则"变成"构造方式的数学后果"。批 a 只收敛了保存/恢复面（见「缺陷类 1」），删回滚本身随批 b 的分配器一起做。
+**其一，SSA 化不是新增能力，是删除一个能力依赖。** 现状下临时槽位**被主动设计为多次定义**——`src/middle/lower/stmt.rs` 的 `generate_function_ir` 与 `generate_block_ir`、`src/middle/lower/expr/closure.rs` 的 `generate_lambda_body_ir` 三处显式回滚 `next_temp`。SSA 化的第一件事是**删掉这三处回滚**，让 `next_temp` 单调递增。删掉之后，**每个临时槽位天然只有一个定义点**——唯一定义从"需要检查的规则"变成"构造方式的数学后果"。批 a 只收敛了保存/恢复面（见「缺陷类 1」）；三处回滚已随批 b 的 7b.4（分配器接管槽位复用）删除（2026-11-22）。
 
-**其二，槽位计数上界是硬检查，删回滚会让槽位数失控（实测）。** `src/middle/lower/scope.rs` 的 `take_body_locals` 按 `temp_high_water` 取表并在超过 255 时报 E3014。实测删掉三处回收后跑全语料：2 条语料越过上限触发 E3014——`src/std/tests/string_ops.yx` 354 槽、`tests/yaoxiang/01-syntax/control-flow/list_comp.yx` 323 槽；其余语料的槽位峰值由 51 升到 211。`temp_high_water` 记录历史最高占用，本身不随回滚变化；但回滚消失后分配器不再复用槽位，峰值因此上抬。
+**其二，槽位计数上界是硬检查，删回滚一度让槽位数失控（7b.4 已解决）。** `src/middle/lower/scope.rs` 的预算闸在超过 255 时报 E3014。实测删掉三处回收后跑全语料：2 条语料越过上限触发 E3014——`src/std/tests/string_ops.yx` 354 槽、`tests/yaoxiang/01-syntax/control-flow/list_comp.yx` 323 槽；其余语料的槽位峰值由 51 升到 211。**7b.4 落地后**：线性扫描分配器按活跃区间复用槽位，两条语料实测帧槽 **15 / 24**（值 344 / 304），其余语料 403/403 行为等价；E3014 自此只表示「分配后帧槽 >255」。
 
-**这两点合起来的含义**：lower 已经在维护 SSA 所需的全部记账信息，只是把这些信息**回收掉**了；删回滚要等分配器（7b.4）承担槽位复用。SSA 化的工作量主要在 `generate_call_expr_ir` 的拆分与跨层契约的显式化，不在 IR 表达能力的建设。
+**这两点合起来的含义**：lower 已经在维护 SSA 所需的全部记账信息，只是把这些信息**回收掉**了；7b.4 让分配器承担槽位复用并删掉回收。SSA 化的工作量主要在 `generate_call_expr_ir` 的拆分与跨层契约的显式化，不在 IR 表达能力的建设。
 
 ### 前置依赖：类型表示单一化
 
@@ -81,7 +81,7 @@ SSA 化要新增 `Phi` 变体，要给每个 SSA 值记录类型（供 07 校验
 
 在这个形态下，「唯一定义」不是一条可以增量施加的规则，而是**与寄存器分配策略直接冲突的**。所以 SSA 化不是给现有代码加个检查，是**换掉那个依赖多次定义的分配策略**。好消息是这个策略的替换成本很低——见上节「可行性前提」。
 
-### 缺陷类 1：多次定义与手工 save/restore（批 a 已收敛 restore 面）
+### 缺陷类 1：多次定义与手工 save/restore（7b.4 已删除三处回收）
 
 **已核实事实。** 进入嵌套函数体需要保存/恢复的入口一共 7 个。批 a（7a.2）把它们收敛成一个 RAII guard：`src/middle/lower/scope.rs` 的 `NestedBodyGuard<'a>`（`Deref`/`DerefMut` 到生成器，`Drop` 无条件恢复，`#[must_use]`）。
 
@@ -96,24 +96,14 @@ SSA 化要新增 `Phi` 变体，要给每个 SSA 值记录类型（供 07 校验
 | `generate_curry_function_ir` | `src/middle/lower/curry.rs` | `NestedBodyGuard::enter` | 同上 |
 
 - 摘帧只发生在两个构造函数（`enter` / `enter_decl`），放回只发生在 `Drop`；guard 在生命周期内独占 `&mut` 生成器，作用域里没有第二份 `&mut` 可用，`?`/早退一律经 `Drop` 恢复。
-- 涉及的字段：`next_temp` / `temp_high_water` / `temp_floor` / `cur_locals` / `cur_span` / `loop_stack`，由 `src/middle/lower/scope.rs` 的 `SavedFrame` 承载；`next_temp_reg` 继续维护 `temp_high_water` 真高水位（语句级回收会回滚 `next_temp`，槽位总数以历史最高占用为准）。
+- 涉及的字段：`next_temp` / `temp_high_water` / `cur_locals` / `cur_span` / `loop_stack`，由 `src/middle/lower/scope.rs` 的 `SavedFrame` 承载；7b.4 起 `next_temp_reg` 只维护具名高水位（临时值的槽归线性扫描分配器；`temp_floor` 已随三处回收删除）。
 - `enter_decl` 不回滚三项计数：函数体/方法体回到模块初始化流后，后续定义接着子体的终值编号。这是 C1 快照零漂移的约束，也是「声明面只回滚表」的口径。
 
-**口径统一与预算单点（7a.3 已落地）**：`src/middle/lower/scope.rs` 的 `take_body_locals` 是唯一的取表 + 预算点——按 `temp_high_water` 截取，越界带函数体 span 报 E3014，`MAX_REGISTERS = 255` 全仓一处定义。六个函数体形态（函数 / 方法 / lambda / 匿名绑定 / curry 中间层 / curry 最内层）都经它取表，不存在第二套「函数体该有多少槽」的口径。
+**口径统一与预算单点（7b.4 起）**：`src/middle/lower/scope.rs` 的 `finalize_code_body` 是唯一的取表 + 预算点——按 `frame_slots = named_base + max_live` 取表，越界带函数体 span 报 E3014，`MAX_REGISTERS = 255` 全仓一处定义。六个函数体形态（函数 / 方法 / lambda / 匿名绑定 / curry 中间层 / curry 最内层）都经它收尾，不存在第二套「函数体该有多少槽」的口径。
 
-**三处重复的语句级寄存器回收仍在（7a.1 拆出批 a，移至批 b，与 7b.4 同批）**：
+**三处语句级回收已删除（7a.1 随 7b.4 落地，2026-11-22）**：回收原在 `generate_function_ir` / `generate_block_ir`（带 `result_reg.is_none()` 守卫）/ `generate_lambda_body_ir` 三处手抄；分配器接管槽位复用后，回收退化为恒等操作，故连守卫、`temp_floor` / `saved_temp_floor` 与 `loops.rs` 的入/出循环簿记一并删除。模块 init / 顶层语句仍走 `value_mode=false` 的旧单调槽路径（不跑分配器），其槽号/表长随函数体命名槽数平移（实测 3 份快照；行为等价由 403/403 覆盖）。
 
-| 位置 | 所在函数 | 守卫 |
-| --- | --- | --- |
-| `src/middle/lower/stmt.rs` | `generate_function_ir` | 无 |
-| `src/middle/lower/stmt.rs` | `generate_block_ir` | `if result_reg.is_none()` |
-| `src/middle/lower/expr/closure.rs` | `generate_lambda_body_ir` | 无 |
-
-`generate_block_ir` 的守卫有明确理由（表达式操作数位的块，外层可能持有跨块存活的兄弟实参临时）。另两处没有等价守卫。**同一段判据在三处手抄，其中一处有守卫两处没有**——这类差异正是 SSA 要消灭的对象。
-
-**为什么拆出**：删回滚会让槽位数失控（见「可行性前提」其二与「已知局限与风险」），需先由线性扫描分配器（7b.4）承担槽位复用。
-
-**后果（今日形态）**：guard 独占 `&mut`，恢复只有 `Drop` 一处实现，漏一次 restore 没有可写的落点；剩下的是「一个槽位多次定义」本身——分配器依赖它，I 层不变量因此无法断言唯一定义，直到批 b 删除回收。
+**后果（今日形态）**：guard 独占 `&mut`，恢复只有 `Drop` 一处实现，漏一次 restore 没有可写的落点；「一个槽位多次定义」的临时槽依赖已随回收删除而消失——值槽由线性扫描分配器按活跃区间复用，`verify_ssa` 的值唯一定义判据自此有构造侧基础。
 
 ### 缺陷类 2：`generate_call_expr_ir` 的 `arg_regs` 语义重排
 
@@ -315,9 +305,9 @@ pub struct ValueInfo {
 
 - **计数器隔离**：`ValueId` 由独立计数器 `next_value: u32` 发放，每函数体从 0 起算、单调递增、永不回滚；`NestedBodyGuard` 保存/还原它与值表（每个函数体一套）；三处语句级回收只回滚 `next_temp`（槽），不触碰 `next_value`；柯里层循环逐层重置（每层一个 `FunctionIR`）。模块 init / 顶层语句没有值表——`value_mode=false` 时 `next_temp_reg` 退化为旧的 `Local` 槽分配，init 序列零变化。
 - **ty 来源**（只取 lowering 已有信息，不新造类型判定器）：字面量经 `ConstValue::mono_type()`（与 verify 的常量类型映射收敛为单一来源）；变量/调用经 `generate_expr_ir` 入口查类型检查结果与绑定函数返回类型；比较/逻辑/字符串族/前向传播在函数体收尾按指令语义补齐。不可得落**显式未知 `MonoType::TypeRef("?")`**（不静默 `Int(64)` 占位，`LocalSlot.ty` 一律不读）。232 份快照实测：9425 条值中真实类型 7080、显式未知 2345（24.9%），未知集中在调用/字段/索引/容器构造形态。
-- **defining_block**：取生成期当前块 label；**7b.3 起块切分已落地**（真 lowering 的 while 体为多块），但本字段的取值仍是生成期 `cur_block_label`（当前恒 0）——与真实定义块暂不一致；更正须与 232 份快照 `values` 段再生同批，登记给 `Phi` 生产批次 / 7b.4。
+- **defining_block**：取生成期当前块 label；**7b.3 起块切分已落地**（真 lowering 的 while 体为多块），但本字段的取值仍是生成期 `cur_block_label`（当前恒 0）——与真实定义块暂不一致；7b.4 再生 232 份快照时未改本字段（`values` 段 `@block` 未漂移），更正须与 `values` 段再生同批，**明确移交 `Phi` 生产批次**。
 - **debug_name**：全 `None`（具名变量仍是 `Local`，不迁值表）。
-- **索引**：`value_slots: Vec<usize>`（index = ValueId）与 `values` 同索引，记录 lowering 既有临时槽分配——值表不含槽号而字节码必须落 `u8` 槽，过渡映射使 codegen 还原同一字节码；线性扫描分配器（7b.4）落地后重算本表。
+- **索引**：`value_slots: Vec<usize>`（index = ValueId）与 `values` 同索引，记录值 → 帧槽映射；7b.4 起由 `src/middle/lower/regalloc.rs` 的线性扫描分配器按活跃区间重算（`frame_slots = named_base + max_live`），codegen 的 `OperandResolver` 只消费不分配。
 
 `values` 与 `locals` 并存：`locals` 承载可寻址具名变量（可能多次定义），`values` 承载单定义 SSA 值。**`locals` 的存在不违反 SSA**——它就是 SSA 之外的"存储"部分（LLVM 的 alloca 模型）。
 
@@ -339,9 +329,9 @@ pub struct ValueInfo {
 
 | 缺陷类 | SSA 是否消除 | 处置方式 | 判据 |
 | --- | --- | --- | --- |
-| **1. 多次定义与手工 save/restore** | **部分（restore 面已收敛；唯一定义待 SSA）** | 7 个嵌套函数体入口已收成 `src/middle/lower/scope.rs` 的 `NestedBodyGuard<'a>`（`Drop` 恢复 `cur_locals` / `loop_stack` / `cur_span` 与三项计数），"忘记恢复"变成编译错误；三处语句级回收保留到批 b（7a.1 与 7b.4 同批），`next_temp` 仍可回滚 | 07 第一层「内层隔离」不变量 + `verify_loose`/`verify_ssa` |
-| **1b. 口径不一致** | **是（已落地）** | 统一为 `src/middle/lower/scope.rs` 的 `take_body_locals`：按 `temp_high_water` 截取，E3014 预算检查与取表同点、带函数体 span，六个函数体形态全覆盖；`MAX_REGISTERS` 全仓一处定义 | 语料差分 + 快照 zero-diff（已实证） |
-| **1c. 三处语句级回收判据** | **是（待批 b）** | 三处回收仍在，删除随批 b 与 7b.4 同批执行（先有分配器承担槽位复用）；`generate_block_ir` 的 `result_reg.is_none()` 守卫同删 | C4：行为等价 + 不变量 |
+| **1. 多次定义与手工 save/restore** | **是（7b.4 已解决）** | 7 个嵌套函数体入口收成 `src/middle/lower/scope.rs` 的 `NestedBodyGuard<'a>`（`Drop` 恢复 `cur_locals` / `loop_stack` / `cur_span` 与计数），"忘记恢复"变成编译错误；三处语句级回收已随 7b.4 删除（分配器按活跃区间复用槽位），临时值不再占 `next_temp` | 07 第一层「内层隔离」不变量 + `verify_loose`/`verify_ssa` |
+| **1b. 口径不一致** | **是（已落地）** | 统一为 `src/middle/lower/scope.rs` 的 `finalize_code_body`：按 `frame_slots` 取表，E3014 预算检查与取表同点、带函数体 span，六个函数体形态全覆盖；`MAX_REGISTERS` 全仓一处定义 | 语料差分 + 快照零漂移 |
+| **1c. 三处语句级回收判据** | **是（7b.4 已落地）** | 三处回收 + `generate_block_ir` 的 `result_reg.is_none()` 守卫 + `temp_floor` 簿记已删；槽位复用归 `src/middle/lower/regalloc.rs` 的线性扫描分配器（`frame_slots = named_base + max_live`） | C4：行为等价（403/403）+ 不变量 |
 | **2. `arg_regs` 语义重排** | **部分** | SSA 让"用错寄存器"变成"用错值 ID"且可被支配性检查抓住，但**重排逻辑本身仍在**。真正的消除靠函数拆分——6 个分支各自 `push`，`arg_regs` 所有权留在函数顶部 | 第一层支配性不变量（快照对此免疫） |
 | **3. span 键控失效** | **否** | SSA 完全不触及。见「span 键控的额外机制」 | 07 的 `test_release_plan_spans_consumed` |
 | **4. 隐式顺序依赖** | **否** | 见「`synth.rs` 边界」 | 需新增显式判据 |
@@ -354,7 +344,7 @@ pub struct ValueInfo {
 **已核实事实（决定性）**：
 
 1. `Operand::Register(u8)` **全仓 0 个构造点**——该变体已不在 `ir.rs` 的 `Operand` 枚举中（7b.1a 删除）。
-2. 后端不是寄存器机——`src/middle/passes/codegen/operand.rs` 的 `OperandResolver` 把 `Operand::Local` 与 `Operand::Arg` 解析为 `u8`，上限 255（超出即 E3014）；`Operand::Value` 由 7b.2 的过渡映射 `value_slots` 解析为既有临时槽（`>255` 报 E3014、无映射报 E3017 且带指令 span），线性扫描分配器（7b.4）接管后重算该映射。
+2. 后端不是寄存器机——`src/middle/passes/codegen/operand.rs` 的 `OperandResolver` 把 `Operand::Local` 与 `Operand::Arg` 解析为 `u8`，上限 255（超出即 E3014）；`Operand::Value` 由 7b.4 的分配器输出 `value_slots` 解析为帧槽（`>255` 报 E3014、无映射报 E3017 且带指令 span）。
 3. `translator.rs`（`src/middle/passes/codegen/translator.rs`，1577 行，50 个 `translate_*`，函数体分布在 `101-1558`）的输出是 `BytecodeInstruction::new(opcode, operands)`，opcode 来自 `src/backends/common/opcode.rs`（83 个常量）。
 4. `src/backends/interpreter/executor/ops/` 是解释器的 opcode 分派族。
 
@@ -366,9 +356,9 @@ pub struct ValueInfo {
 | --- | --- |
 | `regalloc` / `regalloc2`（rustc 血统） | **不采用。** 两者都以 rustc 的 `Function` trait + MIR 的 `Place`/`Operand` 抽象为输入。为 YaoXiang IR 写适配层需实现完整 trait（CFG、liveness、spill slot、scratch），**500+ 行适配代码**换零收益——因为没有真实寄存器文件可着色。且 rustc 自身在此处也只做线性扫描（`enable-llvm` 关闭时） |
 | `graph-alloc` 系列 | **不采用。** 同上，且 API 更不稳定 |
-| **自研线性扫描（Chaitin-Briggs 简化）** | **采用。** YaoXiang 实际需要的是：按 `values` 顺序把每个 `ValueId` 映射到一个不冲突的 `u8` 栈槽（`OperandResolver` 已有 `u8` 契约与 E3014 上限）。这本质是**活跃区间不重叠的最大团着色**，在无寄存器文件约束下退化为"按定义序首次可用槽位分配" |
+| **自研线性扫描（Chaitin-Briggs 简化）** | **采用（7b.4 已落地）。** YaoXiang 实际需要的是：按活跃区间把每个 `ValueId` 映射到一个不冲突的 `u8` 栈槽（`OperandResolver` 已有 `u8` 契约与 E3014 上限）。实现 `src/middle/lower/regalloc.rs`：块级 `successors` 后向数据流、闭区间、Phi 前驱出口、pinned 固定槽；`frame_slots = named_base + max_live`，越界返回 `Budget` 由 `finalize_code_body` 报 E3014（带声明 span） |
 
-**设计判断**：自研，目标 500-1000 行（含 `values → Reg` 映射、活跃区间计算、与 `OperandResolver` 的接口）。**同时必须承认：如果 `u8`/255 的槽位上限在真实负载下不够，自研分配器要处理溢出，而现有代码已在 `1992-2000` 把它当错误处理。** 这意味着本文**不解决**"大函数寄存器不够"的问题——**那是 `compile_pattern` 递归深度的下游后果，属另一个议题。**
+**落地实测（7b.4）**：两条原越界语料（354 / 323 单调槽）分配后帧槽 **15 / 24**（值 344 / 304），其余语料 403/403 行为等价；E3014 自此只表示「分配后帧槽 >255」。回边兜底的计数器当前未外露（`wrap_count` 计算后丢弃），`Phi` 生产批须先暴露/复测（与 `defining_block` 同列前置）。**溢出处理**：`u8`/255 仍由预算闸当错误处理——本文不解决「大函数寄存器不够」（那是 `compile_pattern` 递归深度的下游后果）。
 
 `Cargo.toml:37-39` 的 dev-dependencies 仅 `criterion` / `proptest`；`[dependencies]` 中无 regalloc / petgraph / graphlib——引入任一 crate 都是新增依赖面。
 
@@ -573,7 +563,7 @@ self.release_plan_total = type_result.release_plan.drops.len();
 | 34 | `src/middle/core/bytecode.rs` | `558` / `649` / `943-2350` | **方案 A 下不变** |
 | 35 | `src/middle/core/bytecode.rs` | `2312` | `upvalue_count: 0` 修正 |
 | 36 | `src/backends/interpreter/executor/**` | — | **方案 A 下零改动** |
-| 37 | `src/middle/passes/regalloc.rs` | **新建** | 线性扫描分配器 |
+| 37 | `src/middle/lower/regalloc.rs` | **新建** | 线性扫描分配器（**7b.4 已落地**：271 行；`allocate_value_slots(blocks, values, named_base, pinned, limit)`，返回 `value_slots` 与 `frame_slots = named_base + max_live`；越界返回 `Budget` 由 `finalize_code_body` 报 E3014） |
 | 38 | `scripts/ci/check-synth-boundary.py` | **新建** | `synth.rs` 边界哨兵检查 |
 
 ### 向后兼容性：`.42` 格式的版本号
@@ -597,7 +587,7 @@ self.release_plan_total = type_result.release_plan.drops.len();
 | 批 | 内容 | 改动项 | 判据 | 回滚点 |
 | --- | --- | --- | --- | --- |
 | **批 a** | 切断多次定义：删 3 处语句级回收 → 6 处 save/restore 换 RAII guard → 口径统一 | 8-10（先）→ 11-16 → 17-18 | 删除回收：**C4**（行为等价 + 第一层支配性不变量）。RAII 与口径统一属纯搬移：**C1** 快照 zero-diff | 逐项单 commit，`git revert` 即回滚 |
-| **批 b** | SSA 形态切换：`ir.rs` 结构变更 + 临时值改产 `Operand::Value`（机械替换）→ `translator.rs` 的 `Phi` 臂（方案 A）→ 线性扫描分配器。批内按 WBS 三级任务串行：7b.1a（`Operand` 变体收敛 + `Instruction::Phi` 引入，**已落地**）→ 7b.1b（`FunctionIR` / `BasicBlock` / 类型标注字段，**已落地**）→ 7b.2（`next_temp_reg` 改产 `Operand::Value`，**已落地**）→ 7b.3（`translator.rs` 的 `Phi` 臂 + `BasicBlock.successors` 填充，**已落地**）→ 7b.4（线性扫描分配器 + 删三处语句级回收，与 7a.1 同批） | 1-5、7 → 31-32 → 37 | **C4**：行为等价 + `verify_ssa` 全绿 + `.42` 往返测试 | `ir.rs` 变更**独占一个 commit**（类型变更波及全仓编译，不可增量回滚） |
+| **批 b** | SSA 形态切换：`ir.rs` 结构变更 + 临时值改产 `Operand::Value`（机械替换）→ `translator.rs` 的 `Phi` 臂（方案 A）→ 线性扫描分配器。批内按 WBS 三级任务串行：7b.1a（`Operand` 变体收敛 + `Instruction::Phi` 引入，**已落地**）→ 7b.1b（`FunctionIR` / `BasicBlock` / 类型标注字段，**已落地**）→ 7b.2（`next_temp_reg` 改产 `Operand::Value`，**已落地**）→ 7b.3（`translator.rs` 的 `Phi` 臂 + `BasicBlock.successors` 填充，**已落地**）→ 7b.4（线性扫描分配器 + 删三处语句级回收，与 7a.1 同批，**已落地**） | 1-5、7 → 31-32 → 37 | **C4**：行为等价 + `verify_ssa` 全绿 + `.42` 往返测试 | `ir.rs` 变更**独占一个 commit**（类型变更波及全仓编译，不可增量回滚） |
 | **批 c** | 隐式契约显式化：`synth.rs` 边界 + 哨兵脚本 → span 消费计数 → `method_def_ordinals` 只读化 | 20-24、29、38 → 25 → 26 | **C4**：行为等价 + 新脚本纳入 CI；消费计数在新诊断上零触发（否则说明真存在失配） | 独立 commit |
 | **批 d** | `generate_call_expr_ir` 拆分 + "补 0" 兜底断言化 | 27-28 | 纯搬移部分：**C1** 快照 zero-diff。断言化部分：**C4** 语料差分 + 第一层校验器 | 独立 commit |
 
@@ -638,7 +628,7 @@ self.release_plan_total = type_result.release_plan.drops.len();
 | `method_def_ordinals` 只读化 | +20 |
 | `synth.rs` 新文件 | +80 ~ 120 |
 | `verify.rs` 新文件 | +400 ~ 600（07 第一层，虽在本文范围但独立计） |
-| `regalloc.rs` 新文件 | **+500 ~ 1000** |
+| `regalloc.rs` 新文件 | **+500 ~ 1000**（实测 271 行，7b.4） |
 | **合计** | **`ir_gen.rs` 约 8448 → 8600 ~ 8800；含新文件则净增 900 ~ 1600 行** |
 
 **早期"8448 → 5000~6000"的预期方向是错的**，实测推演的结果相反。需要说明为什么：
@@ -682,8 +672,8 @@ self.release_plan_total = type_result.release_plan.drops.len();
 
 - **代码量净增 900–1600 行**（新增 `verify.rs` / `regalloc.rs`）。**这不是风险点**——2026-10-03 决策已取消行数 / 体积门禁，规模问题由职责分离解决（见 [08](08-maintenance-mechanism.md) 禁令二）。增量的正当性在于：它换掉了 6 处手工 save/restore 与 `arg_regs` 语义重排这两类"错位不报错只错值"的手工纪律。
 - **`verify.rs` 的"唯一定义"检查在非 SSA 形态下无意义**（`Operand::Local` 允许多次定义）——07 已记录该局限，`verify_loose` 是它在本批之前的降级模式。
-- **删除语句级回收会改变临时槽位分配模式**（批 b 执行，7a.1 与 7b.4 同批）。即使 `temp_high_water` 保证不溢出，**分配结果会变**——这正是 C4 阶段"行为等价"判据必须真正跑全语料的原因，而不是抽查。
-- **`u8` / 255 的槽位上限在删除回滚后不够用（已核实）**：实测删掉三处回收后跑全语料，2 条语料越过 255 触发 E3014——`src/std/tests/string_ops.yx` 354 槽、`tests/yaoxiang/01-syntax/control-flow/list_comp.yx` 323 槽；其余语料的槽位峰值由 51 升到 211。`src/middle/lower/scope.rs` 的 `take_body_locals` 会捕获越界，但捕获即编译失败。所以删回滚排在分配器（7b.4）之后：先让分配器承担槽位复用，再删回滚。
+- **删除语句级回收改变了临时槽位分配模式**（7b.4 已执行，7a.1 同批）：删回收后槽位由线性扫描分配器按活跃区间复用，**分配结果会变**——这正是 C4 必须真正跑全语料的原因；实测 403/403 差分空。
+- **`u8` / 255 的槽位上限**：删回收后的两条越界语料（`string_ops.yx` 354 单调槽、`list_comp.yx` 323 单调槽）由分配器压回帧槽 **15 / 24**；预算闸只在分配后真装不下时报 E3014（带函数体声明 span），不再以「累计临时数」误拒。
 - **优点须一并记录**：把"不能测的错误"变成"能测的不变量"；不改后端（`executor/` 与 `.42` 零改动）；不动 `Instruction` 的语义（76 → 77 变体全部保留，50 个 `translate_*` 全部保留）；可增量（每项独立可 revert）。
 
 > **本节原列的开放问题已全部裁决。** 逐条决定见 [RFC-039 决议登记](../../rfc/accepted/039-compiler-architecture.md)（D1–D50）。**本文不留任何待定项。**
@@ -714,10 +704,11 @@ self.release_plan_total = type_result.release_plan.drops.len();
 **缺陷类 1（多次定义与 save/restore）**
 
 - `src/middle/lower/scope.rs` 的 `NestedBodyGuard` — 7 个嵌套函数体入口的保存/恢复（`Deref`/`DerefMut` + `Drop`）
-- `src/middle/lower/scope.rs` 的 `take_body_locals` — 唯一取表 + E3014 预算点（`MAX_REGISTERS = 255`）
-- `src/middle/lower/scope.rs` 的 `take_cur_locals` — 只在 `take_body_locals` 内部调用
-- `src/middle/lower/scope.rs` 的 `next_temp_reg` — 维护 `temp_high_water` 真高水位
-- `src/middle/lower/stmt.rs` 的 `generate_function_ir` / `generate_block_ir` 与 `src/middle/lower/expr/closure.rs` 的 `generate_lambda_body_ir` — 三处语句级寄存器回收
+- `src/middle/lower/scope.rs` 的 `finalize_code_body` — 唯一取表 + E3014 预算点（`MAX_REGISTERS = 255`），块切分 / 槽分配 / 取表三合一
+- `src/middle/lower/scope.rs` 的 `take_cur_locals` — 只在 `finalize_code_body` 内部调用
+- `src/middle/lower/scope.rs` 的 `next_temp_reg` — 维护具名高水位（临时值的槽归 `regalloc.rs`）
+- `src/middle/lower/regalloc.rs` — 线性扫描分配器（`value_slots` 与 `frame_slots` 的唯一生产点）
+- `src/middle/lower/stmt.rs` 的 `generate_function_ir` / `generate_block_ir` 与 `src/middle/lower/expr/closure.rs` 的 `generate_lambda_body_ir` — 语句级回收已删（7b.4），改由分配器复用槽位
 - `src/middle/lower/stmt.rs` 的 `rebase_jump_targets` — 07「jump 目标存在」不变量所指
 
 **缺陷类 2（arg_regs）**

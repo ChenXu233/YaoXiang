@@ -8294,7 +8294,7 @@ fn finalize_code_body(&mut self, instructions: Vec<Instruction>, params: &[MonoT
 - **def/use 分类提层**：把 `ir/verify.rs` 的 `def_operands` / `use_operands` 提升为 `ir.rs` 的 `Instruction::def_operands()` / `Instruction::use_operands()`，`verify` 侧改为委托（禁令三：同一分类只能一份）。区间计算与不变量判据自此同源。
 - **Phi 处理**：`dst` 的定义点在汇合块入口；每个 `(P, v)` 是**前驱 P 出口的使用**——`v ∈ live_out(P)`，`dst ∈ live_in(汇合块)`。这与 7b.3 的 translator 语义一致（Move 组在块入口定义 `dst`、组的 `src` 在前驱出口之后活着），两侧不各立一套。
 - **区间端点**：块级后向数据流（`live_in` / `live_out`，用 `successors`）⇒ 每值 `start` = 定义指令的展平下标（Phi dst 取块首指令下标），`end` = max（使用点下标、`live_out` 块的末指令下标）。**闭区间**（定义点与最后使用点都占槽）。
-- **回边兜底**：若某值的使用点展平下标早于 `start`（循环携带），把 `end` 提到函数末尾并计入计数器；lowering 现状不产这类值，但分配器不得假设「不产」——收口按实测登记（若计数为 0，登记为「lowering 不产」而非「分配器不支持」）。
+- **回边兜底**：若某值的使用点展平下标早于 `start`（循环携带），把 `end` 提到函数末尾并计入计数器；lowering 现状不产这类值，但分配器不得假设「不产」。**收口实测更正**：`wrap_count` 当前计算后未外露（`regalloc.rs` 的 `let _ = wrap_count`），无实测登记；lowering 现状不产（`Phi` 生产 0），`Phi` 生产批须先暴露 / 复测再启用（与 `defining_block` 同列前置）。
 - **扫描**：按 `start` 升序；活跃集按 `end` 排序；`end < start` 即释放（闭区间，判据 `end < start`）；槽 = `named_base + 首个空闲索引`。`pinned` 值先占固定槽、其槽不进自由池、其他值与它的区间不得重叠。
 - **预算**：`frame_slots = named_base + max_live ≤ 255`。可行性论证（**判据，不是猜测**）：对任一函数体恒有 `named_base + max_live ≤ named_base + 值总数`，故 `named_base + 值总数 ≤ 255` 的文件**无论复用效果如何都必然安全**；7a 的删回收实测显示当时 402 条语料里只有 2 条越 255（其余峰值 211）⇒ 排除这 2 条后全部必然安全，而 2 条（354 / 323 单调数）的 `max_live` 才是真问题：**这是实现轮的 go/no-go 实测项**（探针：在 `finalize_code_body` 打印 `named_base` / `max_live` / 值总数），本契约不预判该数。压不到 ≤255 ⇒ 停下来报裁决（备选 spill / 分帧 / 语料结构改写，三者都超出 7b.4）。
 
@@ -8306,17 +8306,17 @@ fn finalize_code_body(&mut self, instructions: Vec<Instruction>, params: &[MonoT
 
 **D. 三处回收的删除顺序——先让分配器接管槽位（笔 2），回收随即恒等，再纯删（笔 3）。**
 
-恒等性论证（笔 2 落地后）：`next_temp` 只被具名分配 bump（临时值不再调用 `alloc_register_slot`），故语句边界上 `named_watermark == next_temp`；`temp_floor` 由 `loops.rs` 在进循环时置为当时的 `next_temp` 且只可能被 `max` 抬高 ⇒ `max(named_watermark, temp_floor) == next_temp`，回收是**恒等操作**。于是笔 3 是**纯删除、零字节码变化**（可用「快照零漂移 + 两版二进制 `.42` 逐字节相同」双证）。笔 3 同时删：三处回收表达式、`generate_block_ir` 的 `result_reg.is_none()` 守卫、`temp_floor` / `saved_temp_floor` 与 `loops.rs` 的入/出循环地板簿记（删完即无读者的字段不留）。`next_temp_reg` 的 `value_mode=false` 退化路径**不动**（模块 init / 顶层语句无值表、无块图，不进分配器）。
+恒等性论证（笔 2 落地后）：`next_temp` 只被具名分配 bump（临时值不再调用 `alloc_register_slot`），故语句边界上 `named_watermark == next_temp`；`temp_floor` 由 `loops.rs` 在进循环时置为当时的 `next_temp` 且只可能被 `max` 抬高 ⇒ `max(named_watermark, temp_floor) == next_temp`，回收是**恒等操作**。**收口实测更正**：笔 3 只对函数体是恒等删除——模块 init / 顶层语句（`value_mode=false`）也走同一处语句级回收，删除后 init 的临时槽变单调，3 份快照的 `init (locals=)` / `islot[i]` 编号漂移（`match_call_scrutinee` 在笔 2 即 105→103；`top_level_for` / `top_level_control_flow` 为笔 3 的 islot 编号漂移）；行为等价由语料 403/403 与快照结构零差异证明，`.42` 槽号随之为变（格式不变）。笔 3 同时删：三处回收表达式、`generate_block_ir` 的 `result_reg.is_none()` 守卫、`temp_floor` / `saved_temp_floor` 与 `loops.rs` 的入/出循环地板簿记（删完即无读者的字段不留）。`next_temp_reg` 的 `value_mode=false` 退化路径**不动**（模块 init / 顶层语句无值表、无块图，不进分配器）。
 
 **E. `take_body_locals` / `temp_high_water` 口径。**
 
 - `locals` 表长 = `frame_slots = named_base + max_live`，由 `finalize_code_body` 决定；`take_cur_locals(total)` 仍按 total 补本帧空槽（形态不变）。
 - 具名 `Local` 槽仍由 `next_local_slot` 单调发放；`temp_high_water` 退化为**具名高水位**（只由具名分配 bump），即 `named_base` 的读数。实现轮「把字段改名为 `named_high_water`」与「保留原名、只改注释」二选一，但**不得出现两个读源**。
-- E3014 的时机：**分配之后、`FunctionIR` 构造之前**（与今日同处「函数体收尾」），span 仍是 `cur_span`（与今日同源）。`value_mode=false`（init / 顶层语句）继续用旧的单调计数、不跑分配器 ⇒ init 段与 `local_count` 零变化。
+- E3014 的时机：**分配之后、`FunctionIR` 构造之前**（与今日同处「函数体收尾」），span 仍是 `cur_span`（与今日同源）。`value_mode=false`（init / 顶层语句）继续用旧的单调计数、不跑分配器；但 `enter_decl` 不回滚计数、且笔 3 删除 init 路径的语句级回收，init 的槽号 / 表长会随函数体命名槽数变化而平移（实测 3 份快照，见 D 的收口更正），行为等价由 403/403 覆盖。
 
 **F. 基线影响预判（给判据，不猜）。**
 
-- **IR 快照：232 份预计漂移，且只允许两类行**——①`locals_total`（表长由 `temp_high_water` 变为 `named_base + max_live`）；②`slot[i] <name>` 的 `i`（具名槽从「与临时槽交错编号」变为「自 `local_var_start` 起连续」）。`slot` 的**名字集合与出现顺序不变**；指令文本（`%n` 按首现重命名、`v k` 按 `ValueId`）、`values_total` / `value … @block` 段、`Phi` 行**不变**。核对判据：脚本对 232 份「删 `locals_total` 行 + 掩码 `slot[i]` 的 `i`」后与基线逐字节相同 + 抽样人工 review 10 份。**出现第三类变化 = 槽语义被改坏，停下来报裁决。**
+- **IR 快照：232 份预计漂移，且只允许两类行**——①`locals_total`（表长由 `temp_high_water` 变为 `named_base + max_live`）；②`slot[i] <name>` 的 `i`（具名槽从「与临时槽交错编号」变为「自 `local_var_start` 起连续」）。`slot` 的**名字集合与出现顺序不变**；指令文本（`%n` 按首现重命名、`v k` 按 `ValueId`）、`values_total` / `value … @block` 段、`Phi` 行**不变**。核对判据：脚本对 232 份「删 `locals_total` 行 + 掩码 `slot[i]` 的 `i`」后与基线逐字节相同 + 抽样人工 review 10 份。**出现第三类变化 = 槽语义被改坏，停下来报裁决。** 收口实测：35 份逐字节相同 / 197 份全部落在允许类（`locals_total` 194、`slot` 或 `islot` 下标 42、init locals 3、仅 `%` 重编号 7），不可归因残差 0；具名槽序列逐份一致（`%n` 与 `init (locals=)` 属同一原因的第三类表象，见实现记录 §八.2）。
 - **语料：目标 403/403 行为等价**（差分基线是行为面：stdout / stderr / exit / diagnostics）。风险面只有 2 条越界语料可能新报 E3014（见 B 的 go/no-go）。
 - **`.42`：格式零变更**（`VERSION` 仍 4、opcode 词表零变化、无新字段）；字节码内容随槽号重排而变，但 `.42` 是构建产物、不入库。
 - **`executor/`：零改动**（槽号语义不变：仍是帧内 `0..local_count-1` 的下标）。
@@ -8329,7 +8329,7 @@ fn finalize_code_body(&mut self, instructions: Vec<Instruction>, params: &[MonoT
 | --- | --- | --- |
 | 笔 1（本次） | 本契约段（docs only） | 与代码无耦合 |
 | 笔 2 | `regalloc.rs` + `finalize_code_body` 单点接线 + pin + def/use 提层 + **232 份快照再生**（基线随代码同笔，仓库硬规则） | 笔 3 未落地时可独立 revert（回到今日 `value_slots` = lowering 槽号） |
-| 笔 3 | 删三处回收 + `result_reg` 守卫 + `temp_floor` 簿记（纯删除、零漂移） | 总是可独立 revert（恢复回收，行为回到今日） |
+| 笔 3 | 删三处回收 + `result_reg` 守卫 + `temp_floor` 簿记（纯删除；函数体零漂移，init 编号漂移见 §二 D 收口更正） | 总是可独立 revert（恢复回收，行为回到今日） |
 | 笔 4（可选，收口轮） | 09 勾选 / 09a 实录 / 04 就地更正（§寄存器分配器与改动清单 37 的落位按本契约 A 更正） | 文档笔 |
 
 **组合回滚约束（登记）**：笔 2 与笔 3 不是任意顺序可逆——笔 3 已落地时单独 revert 笔 2 会让临时值没有槽（`value_slots` 缺失 ⇒ codegen 报 E3017）。必须 LIFO：先 revert 笔 3，再 revert 笔 2。
@@ -8339,7 +8339,7 @@ fn finalize_code_body(&mut self, instructions: Vec<Instruction>, params: &[MonoT
 主线是 **C4「无行为变更（表示重塑）」**：既有成功程序输出不变、`.42` 版本不升、executor 不动。但有**两个面不能归入 C4**：
 
 1. **E3014 触发面变化——用户裁决（2026-11-22）＝ ②「接受行为变更、改写锚而不退役」**：255 槽从「总临时数」改为「具名基址 + 同时活跃数」后，扁平深表达式的 `max_live` 是常数级（左结合链每层只活一个左值）⇒ `tests/integration/cli_e2e.rs` 的 #540 夹具（300 项二元链实参）不再触发 E3014，程序从「被拒」变「通过」；E3014 自此**只表示「分配后帧槽 >255」**。D59 分类＝**C 类假拒绝直修**（旧行为非成功：把可编译且可运行的深表达式误判为寄存器溢出），条件与附加约束：先红后绿、语料 `403/403` 行为等价、不改变原先成功程序的对外表现。**四条件**：①300 / 600 / 1100 项夹具在分配器落地后补 `build` + `run` 实测，任一崩溃即停回报；②#540 锚加 1100 项变体（锚改写、不删除）；③7a 的 5 个 >255 探针判据按新语义重写并登记（帧槽 ≤255 的形态必须成功，真装不下才 E3014 且带 span）；④本节与实现记录登记 D59 C 类与裁决。
-2. **2 条越界语料的可行性（go/no-go，不是设计自由度）**：见 B。压不到 ≤255 即停下来报裁决。
+2. **2 条越界语料的可行性（go/no-go，不是设计自由度）**：见 B。压不到 ≤255 即停下来报裁决。**收口实测通过**：`string_ops.yx` 帧槽 15（值 344）、`list_comp.yx` 24（值 304），直驱测试 `middle::lower::tests::budget` 断言 ≤255 + 复用实证。
 
 删除三处回收本身是 7a 裁决 C 的既定动作（用户已裁决「与 7b.4 同批」），本契约不重复裁决。
 
@@ -8489,7 +8489,74 @@ delete-recycle 变异实测 354/323 槽越界 ⇒ 本批分配器落地后才绿
 3. **`take_body_locals` 删除**：契约 E 说「唯一取表点」仍是它；实际 6 个构造点改走
    `finalize_code_body` 后它已无调用者，故删除，唯一取表点变为 `finalize_code_body`，
    E3014 的发射点同址迁入（码号 / 文案 / span 面不变）。
-4. **init 路径**：`value_mode=false`（模块 init / 顶层语句）不走分配器、预算闸也
-   不覆盖它（`init_locals` 仍取 `cur_locals`）——这条与契约 A「init 零变化」一致；
-   但笔 3 删掉语句级回收后 init 的临时槽变单调（§四的 2 份快照），属同一删除的
-   副作用，已登记。
+4. **init 路径与契约口径更正**：`value_mode=false`（模块 init / 顶层语句）不走分配器、
+   预算闸也不覆盖它（`init_locals` 仍取 `cur_locals`）；但**契约 §二 E 的「init 零
+   变化」不成立**——`enter_decl` 不回滚计数且笔 3 删除 init 路径的语句级回收，init
+   的槽号 / 表长随函数体命名槽数变化而平移（实测 3 份快照：`match_call_scrutinee` 在
+   笔 2 即 105→103，`top_level_for` / `top_level_control_flow` 为笔 3 的 islot 编号
+   漂移）。行为等价由语料 403/403 覆盖，契约 D/E/G 已按实测口径就地更正。
+
+## P7 7b.4 收口（线性扫描分配器 + 删三处语句级回收，2026-11-22）
+
+> 收口对象 = WBS 二级任务 7b 的第五个（最后一个）三级任务 7b.4；代码由实现轮落库（契约笔先于代码笔，五笔：契约 → 裁决登记 → 分配器/快照/锚 → 纯删除 → 实现记录）。验证与复审由队长按用户 2026-11-22 裁决 D 直接执行（外部验证路由不可用：GLM 429 至 11-25、MiniMax 连续 TRANSPORT），复审 verdict = pass。本段按登记口径写实测数字与机械证据；**不写本地提交号**（哈希随 `pull --rebase` 改写）。
+
+### 一、判据链（实测）
+
+| 门禁 | 结果 |
+| --- | --- |
+| `cargo fmt --check` / `cargo clippy --all --all-features --all-targets -- -D warnings` | 0 / 0 |
+| `cargo test --lib snapshot` | 6 passed / 0 failed / 1 ignored（232 份再生后自洽） |
+| `cargo test --lib verify` | 35 passed |
+| `cargo test --lib middle::ir::tests` | 82 passed / 1 ignored |
+| `cargo test --lib phi` | 47 passed |
+| `cargo test --lib middle::lower::tests` | 10 passed（budget go/no-go + regalloc 5 条） |
+| `python scripts/dev/testsuite.py run fast` | 2527 条、跳过 0、exit 0 |
+| corpus_probe + check-corpus-parity | 403 行；403/403 逐条差分空 |
+| docs truth / refs / orphan / fanout / test-channel | 全 exit 0（refs 1253 文件 / 13502 token，收口轮实测） |
+| `gen-error-code-docs.py` + `git diff --quiet` | exit 0、差分为空（幂等） |
+
+冻结 revision = 7b.4 代码笔终态（含契约、裁决登记、删除与实现记录笔）；全部量测在 `scripts/dev/scratch.py` 批次树完成（init → use → build → 量测 → release → gc，收口「没有批次树」），主仓工作树未量测。
+
+### 二、快照归因（独立复核）
+
+232 份对基线（7b.3 收口顶端）：
+
+- 35 份逐字节相同；197 份变化全部落在允许类：`locals_total` 194、`slot[]` / `islot[]` 下标 42、`init (locals=)` 3、仅 `%N` 重编号 7；
+- 不可归因残差 **0**；`slot[]` 的具名槽名/类型/顺序逐份一致；`values_total` / `value … @block` / 指令结构未变。
+
+契约 F 原只列两类；`%N` 与 init 表长是同一原因的第三类表象（快照按首现给 Local 编 `%N`）。**契约 §二 E 的「init 零变化」被实测证伪**：`enter_decl` 不回滚计数，且笔 3 删除 init 路径的语句级回收，init 槽号/表长随函数体命名槽数平移（`match_call_scrutinee` 在笔 2 即 105→103；`top_level_for` / `top_level_control_flow` 为笔 3 的 islot 编号漂移）。契约 §二 D/E/G 已按实测口径就地更正；行为等价由 403/403 与结构零差异证明。
+
+### 三、go/no-go 与深链、探针
+
+- **go/no-go 通过**：`src/std/tests/string_ops.yx` 354 单调槽 → 帧槽 **15**（值 344）；`list_comp.yx` 323 → **24**（值 304）。直驱测试 `middle::lower::tests::budget` 断言 `locals.len() ≤255` + 复用实证。
+- **深链**：300 / 600 / 1100 项 `check` + `build` + `run` exit 0，stdout 301 / 601 / 1101，无 E3014、无栈溢出。
+- **#540**：旧锚改写（不删）为 `run` 断言（exit 0、正确 stdout、无 E3014）+ 1100 变体（`cli_e2e` 两条）。
+- **5 探针**：成功面 5 形态（函数 / 方法 / lambda / curry 最内层 / 匿名绑定）300 项链零诊断；拒绝面同 5 形态 300 具名绑定各恰 1 条 E3014 且带函数体 span（`tests/integration/check.rs` 两条）。
+
+### 四、分配器、删回收与既有缺陷
+
+- `src/middle/lower/regalloc.rs`（271 行）：块级活跃性（`successors`）+ 闭区间 + Phi 前驱出口 + pinned 固定 + `frame_slots = named_base + max_live`；`finalize_code_body` 单点接线 6 处函数体；`value_mode=true` 的临时值不再占 `next_temp`；`def_operands` / `use_operands` 提层到 `Instruction`、verify 委托。
+- 笔 3 删三处语句级回收 + `result_reg.is_none()` 守卫 + `temp_floor` / `saved_temp_floor` 全链；函数体侧零漂移，init 侧见 §二。
+- 顺路修既有缺陷：闭包体只装 `next_temp` 未装 `temp_high_water`（6 形态唯一漏配对），分配器落地后 `list_ops` 的 reduce 断言翻红，补齐后回绿（D59 C 类）。
+- `wrap_count` 计算后未外露（`let _ = wrap_count`）：契约 §二 B 的「回边兜底计数实测登记」未兑现；lowering 现状不产（Phi 生产 0），**Phi 生产批须先暴露/复测再启用**（与 `defining_block` 同列前置）。
+
+### 五、D59 与 E3014 口径
+
+用户裁决 ②：E3014 只表示「分配后帧槽 >255」；D59 C 类假拒绝直修（旧行为把可编译且可运行的深表达式误判为溢出）。`.42` 格式/VERSION、opcode 词表、`executor/` 零改动（`git diff` 对基线为空）；E3014 词条注释按帧槽语义更新，错误码生成物只随注释行号平移。接受集变化（原先被拒的扁平深表达式现在通过）经用户裁决。
+
+### 六、偏差与残余
+
+1. 分配器接口多 `limit` 入参（Budget 上限来源）。
+2. 快照第三类表象 `%N` / init 表长（同因，见 §二）。
+3. `take_body_locals` 无调用者后删除，唯一取表点变 `finalize_code_body`。
+4. 笔 3 的 init 编号漂移（见 §二）。
+5. 残余：`ValueInfo.defining_block` 仍恒 0（与真实定义块不一致，须与 values 段再生同批修正；登记给 Phi 生产批次）；`wrap_count` 未外露（同上）；en 镜像由翻译工作流跟进（已知待同步）。
+6. `07` 的「前驱排序」口径本笔已更正（`successors` 不进入渲染，仅 Phi incoming 消费）。
+
+### 七、独立性与复审
+
+实现者 DeepSeek；验证、复审、收口均由队长执行——用户 2026-11-22 裁决 D（GLM 429 至 11-25、MiniMax 连续 TRANSPORT，外部路由不可用）。**同族（DeepSeek）偏差如实登记，不宣称异族独立**；补偿证据：全部量测第一手在批次树、自写快照归一化脚本（残差 0）、机械 diff（零改动面/无删除测试）、生成器幂等、门禁全绿。复审 verdict = pass；两项收口必改（init 口径与 wrap 计数）已在本笔落实。
+
+### 八、WBS 计数核对（INFO，既有笔误）
+
+7b 组行原写「6 个三级任务」，但表内只有 5 个任务行（7b.1a / 1b / 2 / 3 / 4）；在 7b.1a 契约时的 09 版本同样只有 5 行，全仓与历史 grep 无 `7b.5`。判定为历史计数笔误（7a.1 随批 b 执行被误计入 7b 组），已就地改为 5；**顶部三级计数 260 不变**（本批未新增/删除三级任务）。
