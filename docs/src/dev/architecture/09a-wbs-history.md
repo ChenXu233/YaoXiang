@@ -8338,7 +8338,7 @@ fn finalize_code_body(&mut self, instructions: Vec<Instruction>, params: &[MonoT
 
 主线是 **C4「无行为变更（表示重塑）」**：既有成功程序输出不变、`.42` 版本不升、executor 不动。但有**两个面不能归入 C4**：
 
-1. **E3014 触发面变化（D/E 类，需用户裁决）**：255 槽从「总临时数」改为「具名基址 + 同时活跃数」后，扁平深表达式的 `max_live` 是常数级（左结合链每层只活一个左值）⇒ `tests/integration/cli_e2e.rs` 的 #540 夹具（300 项二元链实参）**不再触发 E3014**，程序从「被拒」变「通过」——这是接受集的可观察变化；而 E3014 曾兼作该崩溃的护栏，**崩溃是否复现未核实**（`yx check` 路径上崩溃的真实位置未定位，不能凭测试注释断言）。裁决选项：①在 7b.4 内保留第二条预算（值总数 / 表达式规模）并沿用 E3014（阈值不能取 255——两条语料的总值数就是 354/323，取多少需裁决）；②接受行为变更并退役/改写该集成测试（须先在批次树实测「300 项」与更大 N 不再崩溃）；③把护栏移到 parser（递归深度 / 项数），另案。
+1. **E3014 触发面变化——用户裁决（2026-11-22）＝ ②「接受行为变更、改写锚而不退役」**：255 槽从「总临时数」改为「具名基址 + 同时活跃数」后，扁平深表达式的 `max_live` 是常数级（左结合链每层只活一个左值）⇒ `tests/integration/cli_e2e.rs` 的 #540 夹具（300 项二元链实参）不再触发 E3014，程序从「被拒」变「通过」；E3014 自此**只表示「分配后帧槽 >255」**。D59 分类＝**C 类假拒绝直修**（旧行为非成功：把可编译且可运行的深表达式误判为寄存器溢出），条件与附加约束：先红后绿、语料 `403/403` 行为等价、不改变原先成功程序的对外表现。**四条件**：①300 / 600 / 1100 项夹具在分配器落地后补 `build` + `run` 实测，任一崩溃即停回报；②#540 锚加 1100 项变体（锚改写、不删除）；③7a 的 5 个 >255 探针判据按新语义重写并登记（帧槽 ≤255 的形态必须成功，真装不下才 E3014 且带 span）；④本节与实现记录登记 D59 C 类与裁决。
 2. **2 条越界语料的可行性（go/no-go，不是设计自由度）**：见 B。压不到 ≤255 即停下来报裁决。
 
 删除三处回收本身是 7a 裁决 C 的既定动作（用户已裁决「与 7b.4 同批」），本契约不重复裁决。
@@ -8347,6 +8347,8 @@ fn finalize_code_body(&mut self, instructions: Vec<Instruction>, params: &[MonoT
 
 `src/middle/lower/`（`regalloc.rs` 新 + `scope.rs` / `stmt.rs` / `expr/closure.rs` / `expr/control.rs` / `loops.rs` / `curry.rs` / `globals.rs`）、`src/middle/ir/ir.rs`（def/use 提层）、`src/middle/ir/verify.rs`（改为委托）、`src/middle/ir/tests/snapshots/`（再生）、`src/middle/ir/tests/`（新判据）、`src/middle/passes/codegen/`（预计零改动，若接口微调则在此）、`src/driver/tests/`、`src/frontend/tests/`、`tests/integration/`（#540 夹具按裁决处置）、`docs/src/reference/error-code/`（仅在生成口径变化时；预计零改动）、本文件。
 
+实现轮的机械面（按裁决 ② 与 inScope 可路径匹配的前缀）：`src/middle/lower/`（含新 `regalloc.rs`）、`src/middle/ir/ir.rs`、`src/middle/ir/verify.rs`、`src/middle/ir/tests/` 与 `src/middle/ir/tests/snapshots/`、`src/middle/passes/codegen/`、`src/frontend/core/parser/parser_state.rs` 与 `src/frontend/core/parser/tests/parser_state.rs`（解析闸注释里「深表达式由 E3014 拒绝」的旧口径）、`src/util/diagnostic/codes/`（`e0xxx.rs` 的同款注释；`e3xxx.rs` 的 E3014 词条注释）、`tests/integration/`（#540 锚与 5 探针）、`src/driver/tests/`、`src/frontend/tests/`、`docs/src/reference/error-code/`（生成物）、本文件。
+
 out of scope：`src/backends/`、`src/std/`、`tests/yaoxiang/`、`09`、`04`、`scripts/`；`Phi` 生产（lowering 产 `Phi`）；03 类型表示收敛；spill / 分帧 / 语料结构改写（后三者只在 go/no-go 失败时作为裁决备选出现）。
 
 ### 四、判据链（实现轮门禁）
@@ -8354,14 +8356,14 @@ out of scope：`src/backends/`、`src/std/`、`tests/yaoxiang/`、`09`、`04`、
 - **C4**：语料 `403/403` 逐条差分空；`testsuite run fast` 全绿。
 - **快照**：232 份按 F 再生；「两类行」机械核对（脚本）+ 抽样人工 review 10 份；`cargo test --lib snapshot` 绿。
 - **verify**：`cargo test --lib verify`、`--lib middle::ir::tests` 绿（含全语料 `verify_loose`）。
-- **预算**：5 个 >255 探针（7a 收口 §五的 303 / 900 / 303 / 901 / 303 形态）仍报 E3014 且带 span——H.1 裁决「保留第二条预算」则原样绿；裁决「接受变更」则按裁决改写该判据并登记，不得静默删。
+- **预算（按裁决 ② 改写）**：E3014 只表示「分配后帧槽 >255」——帧槽 ≤255 的形态（含 7a 探针里那些「单调槽数越 255 但 `max_live` 装得下」的形态）**必须成功**；真正装不下的形态（具名槽 >255、或同时活跃值 >255）**必须 E3014 且带 span**。5 个探针按此重写为「成功面 + 拒绝面」两半并实测登记，不得静默删。
 - **复用实证（新增直驱测试）**：①同一函数内两段互不重叠的临时值必须共享同一槽（`value_slots[a] == value_slots[b]` 且 `frame_slots < 值总数`）；②pin 值固定落其具名槽；③两条越界语料打印 `frame_slots ≤ 255`。
 - **门禁**：fmt / clippy / `--lib snapshot` / `--lib verify` / `middle::ir::tests` / `phi` / `run fast` / `corpus_probe` + `check-corpus-parity` / docs 四脚本 / 生成器幂等。
 - **变异（批次树、机械还原）**：M1 关掉复用（每值独占槽）⇒ 两条语料 E3014 复现（证明复用承重）；M2 只删一处回收 ⇒ 行为面应无变化（证明三处等价的独立性）。
 
 ### 五、风险登记与待裁决
 
-1. **待裁决 1（H.1）**：E3014 触发面变化与 #540 护栏（选项①②③见 H）。
+1. **已裁决（2026-11-22，H.1 = ②）**：E3014 触发面变化按 C 类假拒绝直修，附四条件（见 H.1）；剩余执行风险只有「四条件」里未完成的实测项（300 / 600 / 1100 项不崩、1100 变体落地、5 探针重写）。
 2. **go/no-go**：两条越界语料的 `max_live`（B）；失败即停。
 3. **快照第三类漂移**：若出现，说明槽语义被改坏，停下来报裁决（F）。
 4. **`slot_for_operand` 语义来源收窄**：改动后「具名绑定复用值槽」只能经 pin 一处表达；后续新代码不得再写第二处复用（登记为写下来源）。
