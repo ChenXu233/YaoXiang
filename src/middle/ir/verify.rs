@@ -945,8 +945,9 @@ fn check_unique_definition(
 /// 5. 逐输入类型一致（`values` 值表提供类型；见 [`check_phi_incoming_types`]）。
 ///
 /// 块级前驱与指令级 CFG 是两套坐标（文件头「现实语义记录」第 1 条）：`Phi`
-/// 的 incoming 键是块 label，故这里只认 `successors`。生产侧 `successors` 当前
-/// 恒空（09a §P7 7b.1b 契约 §三 已登记为 7b.3 前置）。
+/// 的 incoming 键是块 label，故这里只认 `BasicBlock.successors`。生产侧自
+/// 7b.3 起由 `ir::ir::partition_blocks` 按块尾终结指令与布局真实填充，
+/// 因此前驱数与前驱集合两条判据在真实 IR 上有数据。
 fn check_phi_structure(
     view: &FnView<'_>,
     out: &mut Vec<Violation>,
