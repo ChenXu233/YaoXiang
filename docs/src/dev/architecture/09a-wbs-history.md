@@ -8235,3 +8235,135 @@ pub enum FunctionBody {
 > **四、门禁**：`cargo fmt --all`、`cargo clippy --all --all-features --all-targets -- -D warnings` 均为 0；`testsuite run fast` 2515 条、0 跳过、exit 0；语料差分 403/403 零漂移；IR 快照零漂移（本批不动 IR 形状，删的是零生产引用的死类型与等价改名）。
 >
 > **五、边界与未动项**：未动任何 `BP_*` 的数值（`BP_UNARY` 与 `BP_CAST` 同为 8 的既有并列保留）；未删其它未被引用的 `pub` 常量（归 P10 S5）；05 的设计结论未改，只在阶段 0 清单前加了执行状态注记；`Precedence` 的零构造状态由 05 的 C6 清单记录，本批执行后该清单的行号锚成为历史值。
+
+## P7 7b.4 契约（线性扫描分配器 + 7a.1 删三处语句级回收，2026-11-22）
+
+> 计划见 [09](./09-execution-wbs.md) §P7 7b 表 7b.4 行与 7a 表的 7a.1 行（已拆出、与 7b.4 同批）；设计依据 [04](./04-ssa.md) §寄存器分配器（自研线性扫描、u8/255 槽模型）、§缺陷类 1 与 §逐项处置表 1c（三处语句级回收）、§可行性前提（其二已被 7a 实测证伪）、§编译器改动清单第 37 项、§批 b 顺序；前置 = [09a §P7 7b.2 收口](#p7-7b2-收口next_temp_reg-改产-operandvalue--values-生产--codegen-槽解析--快照再生2026-11-22)（`value_slots` 过渡映射与「7b.4 重算该表」的登记）、[09a §P7 7b.3 收口](#p7-7b3-收口basicblocksuccessors-填充--translator-phi-臂方案-a--42-往返2026-11-22)（`successors` 真实块级 CFG——区间计算的数据源）、[09a §P7 7a 收口](#p7-7a-切断多次定义收口2026-11-18) §二（删回收的前提证伪实测与用户裁决 C）。基线 = `origin/dev` 顶端 `991b773f`（7b.3 已收口，工作树干净）。**本段只做设计与审计定夺；队长与用户放行前不进入实现。**
+
+### 一、实测面（基线 `991b773f`，读代码与既有实测记录，不转述 04）
+
+| 面 | 实测 |
+| --- | --- |
+| 三处语句级回收 | `lower/stmt.rs` 的 `generate_function_ir` 语句循环、`generate_block_ir` 语句循环（带 `result_reg.is_none()` 守卫）、`lower/expr/closure.rs` 的 `generate_lambda_body_ir` 语句循环：语句边界执行 `next_temp = named_watermark.max(temp_floor)`；`named_watermark` = `cur_locals` 最后一个具名槽下标 + 1；`temp_floor` 由 `lower/loops.rs` 进入循环时置为当时的 `next_temp`、出循环恢复 `saved_temp_floor` |
+| 槽位分配入口 | `lower/scope.rs`：`alloc_register_slot` 是**唯一 bump 点**（`next_temp += 1` + `temp_high_water` 真高水位）；调用者只有 `next_local_slot`（具名槽）与 `next_temp_reg`（临时值 / `value_mode=false` 退化）。`next_temp_reg` 在 `value_mode=true` 时发放 `ValueId` 并把槽号记进 `cur_value_slots`；`value_mode=false`（模块 init / 顶层语句）退化为 `Operand::Local(alloc_register_slot())` |
+| `slot_for_operand` 调用面 | **1 个生产调用点**：`lower/expr/control.rs` 的 `bind_pattern` 的 `ast::Pattern::Identifier` 臂——「绑定复用该值已占用的寄存器槽（只登记名字，不加指令）」；同函数 `pre`（或模式）分支走 `Move` 到臂级预分配槽，不经它。`Local` → 自身槽号；`Value` → `cur_value_slots` |
+| `take_body_locals` | **唯一取表 + 预算点**：`temp_high_water > MAX_REGISTERS(255)` ⇒ `register_overflow` 带 `.at(cur_span)` 报 E3014；`MAX_REGISTERS` 全仓 1 处。E3014 词条自述两个触发点（本闸 + codegen 的 `OperandResolver` 单操作数解析），`span_exempt=true` |
+| 6 处 `FunctionBody::Code` 构造点 | `curry.rs` 2 / `expr/closure.rs` 1 / `globals.rs` 1 / `stmt.rs` 2；**顺序统一**：`take_body_locals()` → `take_body_values(&instructions, &param_types)` → `partition_blocks(instructions)` → 构造字段。即 `instructions` 与 `values` 在取表之后即可得，`blocks` 在构造点当步可得 |
+| `def_operands` / `use_operands` | 现为 `ir/verify.rs` 的**私有**函数（`Instruction` 只暴露 `for_each_operand_mut`）；区间计算需要同一份 def/use 分类 |
+| 删回收的既有实测（7a 收口 §二 / 变异 M2，冻结 revision 的批次树） | 2 条语料槽数越界转 E3014（`src/std/tests/string_ops.yx` 354 槽、`tests/yaoxiang/01-syntax/control-flow/list_comp.yx` 323 槽，上限 255）；当时的 402 条语料峰值 51→211；`verify_loose` 转红 2 文件 8 处 use-before-def；IR 快照漂移 208/232 |
+| 深表达式夹具（issue #540） | `tests/integration/cli_e2e.rs` 的 `test_check_deep_binop_argument_reports_e3014_not_stack_overflow`：300 项扁平二元链作普通函数实参，`yx check` 当前以 E3014 退出 1（300 项在同一表达式内、无语句边界 ⇒ 回收不生效 ⇒ 槽数 ≈303）。该测试同时断言「退出码 1、非栈溢出、恰 1 条 E3014」 |
+| 模块方向 | `middle/passes/mod.rs` 已 `pub use crate::middle::lower::{generate_ir, …, AstToIrGenerator}`（passes → lower 方向存在）；`scripts/ci/check-boundary.py` 只查 L2/L3/L4 跨层，`middle/lower` 与 `middle/passes` 同属 `middle/` 前缀 ⇒ **机器查不出**二者成环 |
+| `FunctionIR` 是否带 span | 不带（字段只有 name / def / params / return_type / generic_params / body）⇒ 任何 post-lowering pass 拿不到函数体声明处的 span |
+
+### 二、逐项定夺
+
+**A. 分配器落位与接口——`src/middle/lower/regalloc.rs`（lower 子模块），不是 04 改动清单 37 的 `middle/passes/regalloc.rs`。**
+
+理由（只按正确性与可读性）：①**预算闸必须带 span**——E3014 的 IR 层唯一发射点在 `take_body_locals`（`cur_span` 指向函数体声明处）；`FunctionIR` 不带 span，做成 post-lowering pass 就拿不到声明 span，会把 7a 刚修好的「E3014 带 `--> file:line:col`」退回无 span 形态（从首条指令取 span 只能拿到首条语句的位置，不是声明处）。②**依赖方向**——`passes` 已再导出 `lower`，让 `lower` 反过来 `use passes::regalloc` 会形成 lower ↔ passes 环，而 `check-boundary.py` 的层表只到 `middle/` 前缀、查不出这个环，故由设计禁止。③**禁令三 B（新增入口）**——做成 pass 要在 driver 的阶段序里新增一格并接线；`value_slots` 的生成点本来就在 lower 内（7b.2 收口 §二），继续在 lower 内完成不新增管线入口。
+
+接口（实现轮不再改形）：
+
+```text
+// src/middle/lower/regalloc.rs
+pub(in crate::middle) struct Allocation {
+    value_slots: Vec<usize>,   // index = ValueId，与 values 同长
+    frame_slots: usize,        // named_base + max_live，即 locals 表长度
+}
+pub(in crate::middle) struct Budget { required: usize, limit: usize }
+pub(in crate::middle) fn allocate_value_slots(
+    blocks: &[BasicBlock],     // 7b.3 起 successors 真实
+    values: &[ValueInfo],
+    named_base: usize,         // 具名槽区间 [0, named_base)
+    pinned: &[(ValueId, usize)],
+) -> Result<Allocation, Budget>
+```
+
+分配器**不接触 `Diagnostic`/`Span`**：失败返回 `Budget`，由 `scope.rs` 用既有 E3014（`register_overflow(required, limit).at(cur_span)`）发射——码号、文案、span 面全部不变，不新增码。
+
+**唯一入口**：6 处构造点不再各自做「取表 → 取值表 → 切块」，统一走 `scope.rs` 的新方法
+
+```text
+fn finalize_code_body(&mut self, instructions: Vec<Instruction>, params: &[MonoType])
+    -> Result<(Vec<LocalSlot>, Vec<ValueInfo>, Vec<usize>, Vec<BasicBlock>), Diagnostic>
+```
+
+内部顺序固定：`take_body_values`（补 `ValueInfo.ty`）→ `partition_blocks` → `allocate_value_slots`（含 pin 占位）→ 预算闸（E3014）→ `take_cur_locals(frame_slots)`。块切分、槽位分配、取表**三合一单点**（禁令三 A）。`FunctionBody::TypeDecl` 与模块 init 不进本函数。
+
+**B. 活跃区间与线性扫描。**
+
+- **def/use 分类提层**：把 `ir/verify.rs` 的 `def_operands` / `use_operands` 提升为 `ir.rs` 的 `Instruction::def_operands()` / `Instruction::use_operands()`，`verify` 侧改为委托（禁令三：同一分类只能一份）。区间计算与不变量判据自此同源。
+- **Phi 处理**：`dst` 的定义点在汇合块入口；每个 `(P, v)` 是**前驱 P 出口的使用**——`v ∈ live_out(P)`，`dst ∈ live_in(汇合块)`。这与 7b.3 的 translator 语义一致（Move 组在块入口定义 `dst`、组的 `src` 在前驱出口之后活着），两侧不各立一套。
+- **区间端点**：块级后向数据流（`live_in` / `live_out`，用 `successors`）⇒ 每值 `start` = 定义指令的展平下标（Phi dst 取块首指令下标），`end` = max（使用点下标、`live_out` 块的末指令下标）。**闭区间**（定义点与最后使用点都占槽）。
+- **回边兜底**：若某值的使用点展平下标早于 `start`（循环携带），把 `end` 提到函数末尾并计入计数器；lowering 现状不产这类值，但分配器不得假设「不产」——收口按实测登记（若计数为 0，登记为「lowering 不产」而非「分配器不支持」）。
+- **扫描**：按 `start` 升序；活跃集按 `end` 排序；`end < start` 即释放（闭区间，判据 `end < start`）；槽 = `named_base + 首个空闲索引`。`pinned` 值先占固定槽、其槽不进自由池、其他值与它的区间不得重叠。
+- **预算**：`frame_slots = named_base + max_live ≤ 255`。可行性论证（**判据，不是猜测**）：对任一函数体恒有 `named_base + max_live ≤ named_base + 值总数`，故 `named_base + 值总数 ≤ 255` 的文件**无论复用效果如何都必然安全**；7a 的删回收实测显示当时 402 条语料里只有 2 条越 255（其余峰值 211）⇒ 排除这 2 条后全部必然安全，而 2 条（354 / 323 单调数）的 `max_live` 才是真问题：**这是实现轮的 go/no-go 实测项**（探针：在 `finalize_code_body` 打印 `named_base` / `max_live` / 值总数），本契约不预判该数。压不到 ≤255 ⇒ 停下来报裁决（备选 spill / 分帧 / 语料结构改写，三者都超出 7b.4）。
+
+**C. `slot_for_operand` 耦合的处置——改成「值钉子（pin）」，不加指令。**
+
+现状只有 1 个生产调用点（`bind_pattern` 的 Identifier 臂）：它让具名绑定 `s` 复用「值已占用的槽」，从而**不加 `Move`**。晚分配后值槽在 lowering 结束时才存在，故把机制改为：`slot_for_operand` 只解析 `Local`；新增 `pin_value_to_local_slot(&mut self, value: ValueId) -> usize`——从具名计数器发放一个**具名槽** `S`、登记 `pins.push((value, S))`、返回 `S`，调用点照旧 `binds.push((name, S))` + `register_local`。分配器把该值固定在 `S`（`S < named_base`）。**不新增指令、不改变赋值形态**，字节码只在全局重编号下变化。
+
+未选「具名变量独立槽 + 补一条 Move」：它会让命中臂多一条 Store（同一程序指令数变化、字节码面扩大），行为虽等价但可读性与既有「赋值不复制」的形态不一致。
+
+**D. 三处回收的删除顺序——先让分配器接管槽位（笔 2），回收随即恒等，再纯删（笔 3）。**
+
+恒等性论证（笔 2 落地后）：`next_temp` 只被具名分配 bump（临时值不再调用 `alloc_register_slot`），故语句边界上 `named_watermark == next_temp`；`temp_floor` 由 `loops.rs` 在进循环时置为当时的 `next_temp` 且只可能被 `max` 抬高 ⇒ `max(named_watermark, temp_floor) == next_temp`，回收是**恒等操作**。于是笔 3 是**纯删除、零字节码变化**（可用「快照零漂移 + 两版二进制 `.42` 逐字节相同」双证）。笔 3 同时删：三处回收表达式、`generate_block_ir` 的 `result_reg.is_none()` 守卫、`temp_floor` / `saved_temp_floor` 与 `loops.rs` 的入/出循环地板簿记（删完即无读者的字段不留）。`next_temp_reg` 的 `value_mode=false` 退化路径**不动**（模块 init / 顶层语句无值表、无块图，不进分配器）。
+
+**E. `take_body_locals` / `temp_high_water` 口径。**
+
+- `locals` 表长 = `frame_slots = named_base + max_live`，由 `finalize_code_body` 决定；`take_cur_locals(total)` 仍按 total 补本帧空槽（形态不变）。
+- 具名 `Local` 槽仍由 `next_local_slot` 单调发放；`temp_high_water` 退化为**具名高水位**（只由具名分配 bump），即 `named_base` 的读数。实现轮「把字段改名为 `named_high_water`」与「保留原名、只改注释」二选一，但**不得出现两个读源**。
+- E3014 的时机：**分配之后、`FunctionIR` 构造之前**（与今日同处「函数体收尾」），span 仍是 `cur_span`（与今日同源）。`value_mode=false`（init / 顶层语句）继续用旧的单调计数、不跑分配器 ⇒ init 段与 `local_count` 零变化。
+
+**F. 基线影响预判（给判据，不猜）。**
+
+- **IR 快照：232 份预计漂移，且只允许两类行**——①`locals_total`（表长由 `temp_high_water` 变为 `named_base + max_live`）；②`slot[i] <name>` 的 `i`（具名槽从「与临时槽交错编号」变为「自 `local_var_start` 起连续」）。`slot` 的**名字集合与出现顺序不变**；指令文本（`%n` 按首现重命名、`v k` 按 `ValueId`）、`values_total` / `value … @block` 段、`Phi` 行**不变**。核对判据：脚本对 232 份「删 `locals_total` 行 + 掩码 `slot[i]` 的 `i`」后与基线逐字节相同 + 抽样人工 review 10 份。**出现第三类变化 = 槽语义被改坏，停下来报裁决。**
+- **语料：目标 403/403 行为等价**（差分基线是行为面：stdout / stderr / exit / diagnostics）。风险面只有 2 条越界语料可能新报 E3014（见 B 的 go/no-go）。
+- **`.42`：格式零变更**（`VERSION` 仍 4、opcode 词表零变化、无新字段）；字节码内容随槽号重排而变，但 `.42` 是构建产物、不入库。
+- **`executor/`：零改动**（槽号语义不变：仍是帧内 `0..local_count-1` 的下标）。
+- **`dump_bytecode`：输出随槽号变化**；核对结果：`tests/baselines/` 只有行为面基线 `corpus-parity.jsonl`，无 dump 基线 ⇒ 无入库影响。
+- **`verify` / `verify_loose`：零变化**（判据不读 `value_slots`；块级/指令级 CFG 与值唯一定义判据不受槽号影响）。
+
+**G. 提交粒度与回滚点。**
+
+| 笔 | 内容 | 可独立 revert 的条件 |
+| --- | --- | --- |
+| 笔 1（本次） | 本契约段（docs only） | 与代码无耦合 |
+| 笔 2 | `regalloc.rs` + `finalize_code_body` 单点接线 + pin + def/use 提层 + **232 份快照再生**（基线随代码同笔，仓库硬规则） | 笔 3 未落地时可独立 revert（回到今日 `value_slots` = lowering 槽号） |
+| 笔 3 | 删三处回收 + `result_reg` 守卫 + `temp_floor` 簿记（纯删除、零漂移） | 总是可独立 revert（恢复回收，行为回到今日） |
+| 笔 4（可选，收口轮） | 09 勾选 / 09a 实录 / 04 就地更正（§寄存器分配器与改动清单 37 的落位按本契约 A 更正） | 文档笔 |
+
+**组合回滚约束（登记）**：笔 2 与笔 3 不是任意顺序可逆——笔 3 已落地时单独 revert 笔 2 会让临时值没有槽（`value_slots` 缺失 ⇒ codegen 报 E3017）。必须 LIFO：先 revert 笔 3，再 revert 笔 2。
+
+**H. D59 分类与需裁决点。**
+
+主线是 **C4「无行为变更（表示重塑）」**：既有成功程序输出不变、`.42` 版本不升、executor 不动。但有**两个面不能归入 C4**：
+
+1. **E3014 触发面变化（D/E 类，需用户裁决）**：255 槽从「总临时数」改为「具名基址 + 同时活跃数」后，扁平深表达式的 `max_live` 是常数级（左结合链每层只活一个左值）⇒ `tests/integration/cli_e2e.rs` 的 #540 夹具（300 项二元链实参）**不再触发 E3014**，程序从「被拒」变「通过」——这是接受集的可观察变化；而 E3014 曾兼作该崩溃的护栏，**崩溃是否复现未核实**（`yx check` 路径上崩溃的真实位置未定位，不能凭测试注释断言）。裁决选项：①在 7b.4 内保留第二条预算（值总数 / 表达式规模）并沿用 E3014（阈值不能取 255——两条语料的总值数就是 354/323，取多少需裁决）；②接受行为变更并退役/改写该集成测试（须先在批次树实测「300 项」与更大 N 不再崩溃）；③把护栏移到 parser（递归深度 / 项数），另案。
+2. **2 条越界语料的可行性（go/no-go，不是设计自由度）**：见 B。压不到 ≤255 即停下来报裁决。
+
+删除三处回收本身是 7a 裁决 C 的既定动作（用户已裁决「与 7b.4 同批」），本契约不重复裁决。
+
+### 三、inScope（实现轮）
+
+`src/middle/lower/`（`regalloc.rs` 新 + `scope.rs` / `stmt.rs` / `expr/closure.rs` / `expr/control.rs` / `loops.rs` / `curry.rs` / `globals.rs`）、`src/middle/ir/ir.rs`（def/use 提层）、`src/middle/ir/verify.rs`（改为委托）、`src/middle/ir/tests/snapshots/`（再生）、`src/middle/ir/tests/`（新判据）、`src/middle/passes/codegen/`（预计零改动，若接口微调则在此）、`src/driver/tests/`、`src/frontend/tests/`、`tests/integration/`（#540 夹具按裁决处置）、`docs/src/reference/error-code/`（仅在生成口径变化时；预计零改动）、本文件。
+
+out of scope：`src/backends/`、`src/std/`、`tests/yaoxiang/`、`09`、`04`、`scripts/`；`Phi` 生产（lowering 产 `Phi`）；03 类型表示收敛；spill / 分帧 / 语料结构改写（后三者只在 go/no-go 失败时作为裁决备选出现）。
+
+### 四、判据链（实现轮门禁）
+
+- **C4**：语料 `403/403` 逐条差分空；`testsuite run fast` 全绿。
+- **快照**：232 份按 F 再生；「两类行」机械核对（脚本）+ 抽样人工 review 10 份；`cargo test --lib snapshot` 绿。
+- **verify**：`cargo test --lib verify`、`--lib middle::ir::tests` 绿（含全语料 `verify_loose`）。
+- **预算**：5 个 >255 探针（7a 收口 §五的 303 / 900 / 303 / 901 / 303 形态）仍报 E3014 且带 span——H.1 裁决「保留第二条预算」则原样绿；裁决「接受变更」则按裁决改写该判据并登记，不得静默删。
+- **复用实证（新增直驱测试）**：①同一函数内两段互不重叠的临时值必须共享同一槽（`value_slots[a] == value_slots[b]` 且 `frame_slots < 值总数`）；②pin 值固定落其具名槽；③两条越界语料打印 `frame_slots ≤ 255`。
+- **门禁**：fmt / clippy / `--lib snapshot` / `--lib verify` / `middle::ir::tests` / `phi` / `run fast` / `corpus_probe` + `check-corpus-parity` / docs 四脚本 / 生成器幂等。
+- **变异（批次树、机械还原）**：M1 关掉复用（每值独占槽）⇒ 两条语料 E3014 复现（证明复用承重）；M2 只删一处回收 ⇒ 行为面应无变化（证明三处等价的独立性）。
+
+### 五、风险登记与待裁决
+
+1. **待裁决 1（H.1）**：E3014 触发面变化与 #540 护栏（选项①②③见 H）。
+2. **go/no-go**：两条越界语料的 `max_live`（B）；失败即停。
+3. **快照第三类漂移**：若出现，说明槽语义被改坏，停下来报裁决（F）。
+4. **`slot_for_operand` 语义来源收窄**：改动后「具名绑定复用值槽」只能经 pin 一处表达；后续新代码不得再写第二处复用（登记为写下来源）。
+5. **7a 的峰值数字跨批次**：51→211 是 7a baseline（402 条语料、7b.2 之前）的实测；本批语料已 403 条且 values 已生产，故可行性论证用的是「`named_base + 值总数`」这一逐文件必然上界，实现轮必须复测该上界而不是引用旧峰值。
+
