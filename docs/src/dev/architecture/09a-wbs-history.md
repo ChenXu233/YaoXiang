@@ -8560,3 +8560,7 @@ delete-recycle 变异实测 354/323 槽越界 ⇒ 本批分配器落地后才绿
 ### 八、WBS 计数核对（INFO，既有笔误）
 
 7b 组行原写「6 个三级任务」，但表内只有 5 个任务行（7b.1a / 1b / 2 / 3 / 4）；在 7b.1a 契约时的 09 版本同样只有 5 行，全仓与历史 grep 无 `7b.5`。判定为历史计数笔误（7a.1 随批 b 执行被误计入 7b 组），已就地改为 5；**顶部三级计数 260 不变**（本批未新增/删除三级任务）。
+
+### 九、推送前 rebase 终态
+
+收口笔之后、推送之前，`origin/dev` 又推进 10 笔（顶端 `7cf822b6`：P8 8.0 死阶梯清理 C6 收口、三笔 CI 修复、`url` 依赖升级、auto-translate 等）。本地 7b.4 六笔 rebase 到新顶端；唯一冲突在 09a 尾部（origin 的 8.0 收口段 vs 本批 7b.4 契约段），两段都保留（8.0 收口在前）。**终态复跑（合并树）**：fmt / clippy 0；`testsuite run fast` **2524 条** exit 0（验证轮 2527 − origin 8.0 随死对象删除的 3 条 `precedence` 测试）；语料 403/403 差分空；docs 五脚本 exit 0（refs 1253 文件 / 13514 token）；生成器幂等 diff 空。**本批的 `src/middle/lower` / `src/middle/ir` / 快照与测试面相对验证 revision 逐字节一致**（`git diff` 为空，origin 只动 `src/frontend/core/parser/pratt/*` 与 `src/std/tests/stdlib_docs.rs`），故验证结论对合并树高保真；数字差异只来自 origin 侧测试删除。
