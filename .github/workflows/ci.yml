@@ -241,14 +241,18 @@ jobs:
       # 于是 pre-commit 在这一面比 CI 严——口径不在默认路径上就等于不存在。
       # 该步与三处文档 / pre-commit 两段由 scripts/ci/check-test-channel.py 机械对账
       # （CI 是本门禁的第五处声明；漏目标即 exit 1）。
+      #
+      # 先产出普通可执行文件：`cargo test --lib --bins` 只构建测试壳，不落
+      # target/debug/yaoxiang-rs，而 stdlib 文档门禁要启动解释器跑示例（与 MSRV
+      # 任务里同一处理）。缓存键含 Cargo.lock，依赖一变即冷启动，此步缺失必红。
+      - name: Build CLI
+        run: cargo build --all-features --bin yaoxiang-rs
+
       - name: Run tests
         run: cargo test --all-features --lib --bins --test integration --test formatter_integration --test yx_runner --test yx_multifile_runner
 
       - name: Doc tests
         run: cargo test --doc --all-features
-
-      - name: Build CLI
-        run: cargo build --all-features --bin yaoxiang-rs
 
       # P2 引入（09-execution-wbs 9.5）：规范化 IR 快照零漂移（C1 zero-diff）。
       - name: IR snapshot drift
