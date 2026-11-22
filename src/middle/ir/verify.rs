@@ -233,7 +233,7 @@ struct FnView<'a> {
     env_len: usize,
     return_type: Option<&'a MonoType>,
     locals: &'a [LocalSlot],
-    /// SSA 值表（仅 Code 体有效；本批生产恒空）
+    /// SSA 值表（仅 Code 体有效；7b.2 起生产侧真实填充）
     values: &'a [ValueInfo],
     instrs: Vec<&'a Instruction>,
     /// 展平指令下标 → 所属基本块 label（`from_init` 为空）
@@ -1027,7 +1027,7 @@ fn check_phi_structure(
 ///
 /// 类型来源 = `FunctionIR::values`（`Operand::Value(v) => values[v].ty`）。类型
 /// 不可得的三种形态按文件头「现实语义记录」第 3 条处理，**显式登记、不静默放行**：
-/// - `values` 为空表（本批生产恒空）：值表未填充 ⇒ 类型判定依据不存在，不判定；
+/// - `values` 为空表（空体 / 合成体等无值表函数）：值表未填充 ⇒ 类型判定依据不存在，不判定；
 /// - `values` 非空而 ValueId 越界：无值信息 ⇒ 报 `PhiConsistency`（ValueId 越界）；
 /// - 非 `Value` 操作数（Const/Local/Arg/Global）：无 values 类型源 ⇒ 不判定。
 fn check_phi_incoming_types(
