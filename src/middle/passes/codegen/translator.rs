@@ -29,6 +29,59 @@ struct FfiFuncMeta {
     symbol: String,
 }
 
+/// 一条待回填的跳转（`translate_function` 与 `translate_init_sequence` 共用）。
+///
+/// 跳转目标在发射时还不知道（前向跳转），故先记占位、等全部指令落位后按
+/// `ir_to_bytecode_map` 回填相对偏移。
+struct PendingJump {
+    /// 该跳转指令自身的字节码下标
+    bytecode_idx: usize,
+    /// 目标 IR 指令的展平下标（`ir_to_bytecode_map` 的键）
+    target_ir_idx: usize,
+    /// `opcode::JMP` / `opcode::JMP_IF` / `opcode::JMP_IF_NOT`
+    opcode: u8,
+    /// 跳转所在块 label；模块 init 序列没有基本块结构，为 `None`。
+    ///
+    /// 只有带源块的跳转才可能被重定向到「该前驱的 `Phi` 组起点」（方案 A，
+    /// 见 [`Translator::backfill_jumps_impl`] 的 `edge_entry`）。
+    source_block: Option<usize>,
+}
+
+/// 汇合块入口的 `Phi` 展开计划（方案 A）：一个前驱一组 `Move` 串。
+#[derive(Debug, Default)]
+struct PhiPlan {
+    /// 块 label → 组序（落空前驱领首，其余按前驱 label 升序）
+    groups: HashMap<usize, Vec<PhiGroup>>,
+    /// 块 label → 该块首条指令的展平 IR 下标（入边跳转的识别键）
+    first_ir_index: HashMap<usize, usize>,
+    /// 块 label → 块内第一条非 `Phi` 指令的展平 IR 下标（组间 `JMP` 的目标）
+    body_ir_index: HashMap<usize, usize>,
+}
+
+/// 一个前驱对应的 `Move` 串：`Phi` 的 `incoming` 按该前驱选出 `src`。
+#[derive(Debug)]
+struct PhiGroup {
+    /// 该组对应的前驱块 label（落空前驱或跳转前驱）
+    predecessor: usize,
+    /// `(dst, src, span)`，按本块 `Phi` 的指令序
+    moves: Vec<(Operand, Operand, Span)>,
+}
+
+/// 块首连续 `Phi` 的借用视图（[`Translator::plan_phi_edges`] 的中间形态）。
+struct BlockPhi<'a> {
+    dst: &'a Operand,
+    incoming: &'a [(usize, Operand)],
+    span: Span,
+}
+
+/// `Phi` 形态违规（IR 不变量被破坏）：`E8001` 内部错误的单点构造。
+///
+/// 这些形态的**判据**归 `verify_ssa`（`PhiConsistency`）；translator 只保证自己
+/// **不产出错代码**，故以内部错误响亮失败——不静默 NOP、不静默错值。
+fn phi_layout_violation(message: impl std::fmt::Display) -> Diagnostic {
+    ErrorCodeDefinition::internal_error(&message.to_string()).build()
+}
+
 /// IR 到字节码翻译器
 ///
 /// 职责：
@@ -211,7 +264,7 @@ impl Translator {
     ) -> Result<crate::middle::bytecode::file::FunctionCode, Diagnostic> {
         let mut instructions = Vec::new();
         let mut debug_map = HashMap::new();
-        let mut pending_jumps: Vec<(usize, usize, u8)> = Vec::new();
+        let mut pending_jumps: Vec<PendingJump> = Vec::new();
 
         // 模块 init 没有值表：清空值映射（其临时操作数仍是 Local）。
         self.operand_resolver.clear_value_slots();
@@ -234,7 +287,13 @@ impl Translator {
                 }
             }
             if let Some((target, opcode)) = Self::get_jump_target(instr) {
-                pending_jumps.push((bytecode_idx, target, opcode));
+                pending_jumps.push(PendingJump {
+                    bytecode_idx,
+                    target_ir_idx: target,
+                    opcode,
+                    // 模块 init 序列没有基本块结构，不存在 Phi 组展开。
+                    source_block: None,
+                });
             }
             // E3017 的发射点必须带 span（#324）：逐指令把位置交给解析器。
             self.operand_resolver.set_span(instr.span());
@@ -259,7 +318,12 @@ impl Translator {
             vec![],
         ));
 
-        Self::backfill_jumps_impl(&mut instructions, &ir_to_bytecode_map, &pending_jumps);
+        Self::backfill_jumps_impl(
+            &mut instructions,
+            &ir_to_bytecode_map,
+            &pending_jumps,
+            &HashMap::new(),
+        );
 
         Ok(crate::middle::bytecode::file::FunctionCode {
             name: MODULE_INIT_FUNCTION.to_string(),
@@ -284,7 +348,7 @@ impl Translator {
         let mut instructions = Vec::new();
         let mut debug_map = HashMap::new();
         let mut ir_to_bytecode_map = HashMap::new();
-        let mut pending_jumps: Vec<(usize, usize, u8)> = Vec::new(); // (bytecode_idx, target_ir_idx, opcode)
+        let mut pending_jumps: Vec<PendingJump> = Vec::new();
         let mut global_ir_index = 0;
 
         let (blocks_ref, locals_len, local_names) = match &func.body {
@@ -309,9 +373,39 @@ impl Translator {
         // 7b.2：本函数的值 → 槽映射（index = ValueId；7b.4 分配器接管后重算）。
         self.operand_resolver.set_value_slots(func.value_slots());
 
+        // 7b.3 方案 A：`Phi` 是 IR-only 伪指令，按前驱展开成块入口的 Move 组；
+        // 入边跳转由 `edge_entry` 重定向到各自前驱的组起点（见 `backfill_jumps_impl`）。
+        let phi_plan = Self::plan_phi_edges(&blocks_ref)?;
+        let mut edge_entry: HashMap<(usize, usize), usize> = HashMap::new();
+
         for block in blocks_ref {
+            if let Some(groups) = phi_plan.groups.get(&block.label) {
+                if let (Some(&first_ir_index), Some(&body_ir_index)) = (
+                    phi_plan.first_ir_index.get(&block.label),
+                    phi_plan.body_ir_index.get(&block.label),
+                ) {
+                    let edges = self.emit_phi_prologue(
+                        block.label,
+                        groups,
+                        body_ir_index,
+                        &mut instructions,
+                        &mut pending_jumps,
+                    )?;
+                    for (predecessor, entry) in edges {
+                        edge_entry.insert((predecessor, first_ir_index), entry);
+                    }
+                }
+            }
             for instr in &block.instructions {
                 ir_to_bytecode_map.insert(global_ir_index, instructions.len());
+
+                // 方案 A：`Phi` 不产出字节码——Move 串已在块入口按前驱展开。
+                // 这也使「入边跳转指向汇合块首条指令」自然解析到块体起点。
+                if let Instruction::Phi { .. } = instr {
+                    global_ir_index += 1;
+                    continue;
+                }
+
                 let current_bytecode_idx = instructions.len();
 
                 if self.generate_debug_info {
@@ -327,7 +421,12 @@ impl Translator {
 
                 // 检查是否是跳转指令，记录待回填信息
                 if let Some((target, opcode)) = Self::get_jump_target(instr) {
-                    pending_jumps.push((current_bytecode_idx, target, opcode));
+                    pending_jumps.push(PendingJump {
+                        bytecode_idx: current_bytecode_idx,
+                        target_ir_idx: target,
+                        opcode,
+                        source_block: Some(block.label),
+                    });
                 }
 
                 global_ir_index += 1;
@@ -342,7 +441,12 @@ impl Translator {
         ir_to_bytecode_map.insert(global_ir_index, instructions.len());
 
         // 回填跳转偏移
-        Self::backfill_jumps_impl(&mut instructions, &ir_to_bytecode_map, &pending_jumps);
+        Self::backfill_jumps_impl(
+            &mut instructions,
+            &ir_to_bytecode_map,
+            &pending_jumps,
+            &edge_entry,
+        );
 
         Ok(crate::middle::bytecode::file::FunctionCode {
             name: func.name.clone(),
@@ -353,6 +457,201 @@ impl Translator {
             local_names,
             debug_map,
         })
+    }
+
+    /// 方案 A 的展开计划：汇合块入口的 `Phi` 按**前驱**分组为 Move 串
+    /// （04-ssa.md §「`Phi` 的字节码形态」方案 A：IR-only 伪指令，不新增 opcode）。
+    ///
+    /// 组序：**落空前驱**领首——它是布局上紧邻本块、且块尾不是
+    /// `Jmp` / `Ret` / `TailCall` 的前驱；落空路径直接流进本块入口，必须命中第一组。
+    /// 其余前驱按 label 升序，靠「入边跳转重定向到自己的组起点」选择。
+    ///
+    /// 形态自保（这些形态的判据归 `verify_ssa`，本函数只保证**不产出错代码**）：
+    /// `Phi` 必须是块首连续指令、`dst` 必须是 `Operand::Value`、入口块不得有
+    /// `Phi`、同块多个 `Phi` 的 incoming 前驱集必须一致、落空前驱必须在 incoming 里。
+    /// 违者返回 E8001 内部错误——不静默跳过、不静默错值。
+    fn plan_phi_edges(blocks: &[&BasicBlock]) -> Result<PhiPlan, Diagnostic> {
+        let mut plan = PhiPlan::default();
+        let mut flat_index = 0usize;
+        for block in blocks {
+            plan.first_ir_index.insert(block.label, flat_index);
+            // 块首连续 Phi 的条数：块体起点 = 首条非 Phi 指令
+            let leading_phis = block
+                .instructions
+                .iter()
+                .take_while(|instr| matches!(instr, Instruction::Phi { .. }))
+                .count();
+            plan.body_ir_index
+                .insert(block.label, flat_index + leading_phis);
+            flat_index += block.instructions.len();
+        }
+
+        for (block_index, block) in blocks.iter().enumerate() {
+            let mut phis: Vec<BlockPhi<'_>> = Vec::new();
+            let mut seen_non_phi = false;
+            for instr in &block.instructions {
+                if let Instruction::Phi {
+                    dst,
+                    incoming,
+                    span,
+                } = instr
+                {
+                    if seen_non_phi {
+                        return Err(phi_layout_violation(format!(
+                            "Instruction::Phi 必须是块 {} 的块首指令（方案 A 只在块入口展开）",
+                            block.label
+                        )));
+                    }
+                    if !matches!(dst, Operand::Value(_)) {
+                        return Err(phi_layout_violation(format!(
+                            "块 {} 的 Phi 的 dst 不是 Operand::Value，无法解析为目标槽",
+                            block.label
+                        )));
+                    }
+                    phis.push(BlockPhi {
+                        dst,
+                        incoming: incoming.as_slice(),
+                        span: *span,
+                    });
+                } else {
+                    seen_non_phi = true;
+                }
+            }
+            if phis.is_empty() {
+                continue;
+            }
+            if block_index == 0 {
+                return Err(phi_layout_violation(
+                    "入口块不得有 Instruction::Phi（无前驱可选出 Move 源）",
+                ));
+            }
+
+            // 各 Phi 的 incoming 前驱集必须一致，否则无法共享同一组序。
+            let mut pred_labels: Vec<usize> =
+                phis[0].incoming.iter().map(|(label, _)| *label).collect();
+            pred_labels.sort_unstable();
+            if pred_labels.windows(2).any(|pair| pair[0] == pair[1]) {
+                return Err(phi_layout_violation(format!(
+                    "块 {} 的 Phi 的 incoming 出现重复前驱 label：{pred_labels:?}",
+                    block.label
+                )));
+            }
+            for phi in phis.iter().skip(1) {
+                let mut labels: Vec<usize> = phi.incoming.iter().map(|(label, _)| *label).collect();
+                labels.sort_unstable();
+                if labels != pred_labels {
+                    return Err(phi_layout_violation(format!(
+                        "块 {} 的同块多个 Phi 的 incoming 前驱集不一致：{pred_labels:?} vs {labels:?}",
+                        block.label
+                    )));
+                }
+            }
+
+            // 落空前驱：布局上紧邻本块、且块尾不是无条件跳转 / 返回。
+            let fallthrough_predecessor = match blocks[block_index - 1].instructions.last() {
+                Some(
+                    Instruction::Jmp { .. }
+                    | Instruction::Ret { .. }
+                    | Instruction::TailCall { .. },
+                ) => None,
+                _ => Some(blocks[block_index - 1].label),
+            };
+            let mut order: Vec<usize> = Vec::with_capacity(pred_labels.len());
+            if let Some(predecessor) = fallthrough_predecessor {
+                if !pred_labels.contains(&predecessor) {
+                    return Err(phi_layout_violation(format!(
+                        "块 {} 的落空前驱 {predecessor} 不在 Phi 的 incoming 里（前驱集 {pred_labels:?}）",
+                        block.label
+                    )));
+                }
+                order.push(predecessor);
+            }
+            for label in &pred_labels {
+                if !order.contains(label) {
+                    order.push(*label);
+                }
+            }
+
+            let mut groups: Vec<PhiGroup> = Vec::with_capacity(order.len());
+            for predecessor in order {
+                let mut moves: Vec<(Operand, Operand, Span)> = Vec::with_capacity(phis.len());
+                for phi in &phis {
+                    let source = phi
+                        .incoming
+                        .iter()
+                        .find(|(label, _)| *label == predecessor)
+                        .map(|(_, src)| src);
+                    let Some(source) = source else {
+                        return Err(phi_layout_violation(format!(
+                            "块 {} 的 Phi 缺少前驱 {predecessor} 的 incoming 源",
+                            block.label
+                        )));
+                    };
+                    moves.push(((*phi.dst).clone(), source.clone(), phi.span));
+                }
+                groups.push(PhiGroup { predecessor, moves });
+            }
+            plan.groups.insert(block.label, groups);
+        }
+
+        Ok(plan)
+    }
+
+    /// 方案 A：把当前块的 `Phi` 组落到块入口，返回「(前驱 label, 组起点字节码下标)」。
+    ///
+    /// 组间用既有 `JMP` 跳过（`pending_jumps` 回填到块体起点），故临界边无需新块、
+    /// 无需新 opcode；单前驱时组内只有 Move、没有 `JMP`。
+    fn emit_phi_prologue(
+        &mut self,
+        block_label: usize,
+        groups: &[PhiGroup],
+        body_ir_index: usize,
+        instructions: &mut Vec<BytecodeInstruction>,
+        pending_jumps: &mut Vec<PendingJump>,
+    ) -> Result<Vec<(usize, usize)>, Diagnostic> {
+        let mut edges: Vec<(usize, usize)> = Vec::with_capacity(groups.len());
+        for (group_index, group) in groups.iter().enumerate() {
+            edges.push((group.predecessor, instructions.len()));
+
+            // 并行语义自保：一组内的 Move 同时发生。顺序执行前先证明不会互相
+            // 覆盖（后序 Move 读到的槽不能被前序 Move 写过）；真出现拷贝环时
+            // 需要临时槽，而临时槽归 7b.4 的分配器——本批响亮失败，不静默错值。
+            let mut slots: Vec<(u8, u8)> = Vec::with_capacity(group.moves.len());
+            for (dst, src, span) in &group.moves {
+                self.operand_resolver.set_span(*span);
+                slots.push((
+                    self.operand_resolver.to_reg(dst)?,
+                    self.operand_resolver.to_reg(src)?,
+                ));
+            }
+            for (index, (dst_slot, _)) in slots.iter().enumerate() {
+                if slots[index + 1..]
+                    .iter()
+                    .any(|(_, src_slot)| src_slot == dst_slot)
+                {
+                    return Err(phi_layout_violation(format!(
+                        "块 {block_label} 的 Phi 组（前驱 {}）存在并行拷贝环：槽 {dst_slot} 先被写、随后被读，需要临时槽（登记见 09a §P7 7b.3 契约）",
+                        group.predecessor
+                    )));
+                }
+            }
+
+            for (dst, src, span) in &group.moves {
+                self.operand_resolver.set_span(*span);
+                let instruction = self.translate_move(dst, src)?;
+                instructions.push(instruction);
+            }
+            if group_index + 1 < groups.len() {
+                pending_jumps.push(PendingJump {
+                    bytecode_idx: instructions.len(),
+                    target_ir_idx: body_ir_index,
+                    opcode: opcode::JMP,
+                    source_block: Some(block_label),
+                });
+                instructions.push(BytecodeInstruction::new(opcode::JMP, vec![0, 0, 0, 0]));
+            }
+        }
+        Ok(edges)
     }
 
     /// 从类型定义机械合成构造函数
@@ -440,11 +739,9 @@ impl Translator {
             return_type: type_func.return_type.clone(),
             generic_params: None,
             body: FunctionBody::Code {
-                blocks: vec![BasicBlock {
-                    label: 0,
-                    instructions: ir_instructions.clone(),
-                    successors: Vec::new(),
-                }],
+                // 合成构造函数体没有跳转：`partition_blocks` 给出单块 + 空出边，
+                // 与手工构造等价（块构造走唯一入口，见 `ir::ir::partition_blocks`）。
+                blocks: crate::middle::ir::ir::partition_blocks(ir_instructions.clone()),
                 entry: 0,
                 locals: locals.clone(),
                 values: Vec::new(),
@@ -471,35 +768,45 @@ impl Translator {
     }
 
     /// 回填跳转偏移（实际实现）
+    ///
+    /// `edge_entry` 是方案 A 的「前驱 → `Phi` 组起点」表（键 = (前驱块 label,
+    /// 汇合块首条指令的展平下标)）：入边跳转优先按它重定向到该前驱的组，其余
+    /// 跳转按 `ir_to_bytecode_map` 解析。模块 init 序列没有块结构，表为空。
     fn backfill_jumps_impl(
         instructions: &mut [BytecodeInstruction],
         ir_to_bytecode_map: &HashMap<usize, usize>,
-        pending_jumps: &[(usize, usize, u8)],
+        pending_jumps: &[PendingJump],
+        edge_entry: &HashMap<(usize, usize), usize>,
     ) {
-        for (bytecode_idx, target_ir_idx, opcode) in pending_jumps {
-            if let Some(&target_bytecode_idx) = ir_to_bytecode_map.get(target_ir_idx) {
-                // 计算相对偏移: target - current
-                let offset = (target_bytecode_idx as i32) - (*bytecode_idx as i32);
-                let bytes = offset.to_le_bytes();
+        for pending in pending_jumps {
+            let target_bytecode_idx = pending
+                .source_block
+                .and_then(|source| edge_entry.get(&(source, pending.target_ir_idx)).copied())
+                .or_else(|| ir_to_bytecode_map.get(&pending.target_ir_idx).copied());
+            let Some(target_bytecode_idx) = target_bytecode_idx else {
+                continue;
+            };
+            // 计算相对偏移: target - current
+            let offset = (target_bytecode_idx as i32) - (pending.bytecode_idx as i32);
+            let bytes = offset.to_le_bytes();
 
-                let instr = &mut instructions[*bytecode_idx];
-                match *opcode {
-                    opcode::JMP => {
-                        // Jmp 操作数: [offset: i32]
-                        instr.operands[0] = bytes[0];
-                        instr.operands[1] = bytes[1];
-                        instr.operands[2] = bytes[2];
-                        instr.operands[3] = bytes[3];
-                    }
-                    opcode::JMP_IF | opcode::JMP_IF_NOT => {
-                        // JmpIf/JmpIfNot 操作数: [cond_reg: u8, offset: i32]
-                        instr.operands[1] = bytes[0];
-                        instr.operands[2] = bytes[1];
-                        instr.operands[3] = bytes[2];
-                        instr.operands[4] = bytes[3];
-                    }
-                    _ => {}
+            let instr = &mut instructions[pending.bytecode_idx];
+            match pending.opcode {
+                opcode::JMP => {
+                    // Jmp 操作数: [offset: i32]
+                    instr.operands[0] = bytes[0];
+                    instr.operands[1] = bytes[1];
+                    instr.operands[2] = bytes[2];
+                    instr.operands[3] = bytes[3];
                 }
+                opcode::JMP_IF | opcode::JMP_IF_NOT => {
+                    // JmpIf/JmpIfNot 操作数: [cond_reg: u8, offset: i32]
+                    instr.operands[1] = bytes[0];
+                    instr.operands[2] = bytes[1];
+                    instr.operands[3] = bytes[2];
+                    instr.operands[4] = bytes[3];
+                }
+                _ => {}
             }
         }
     }
@@ -705,14 +1012,15 @@ impl Translator {
                 result,
             } => self.translate_spawn_from_list(closures_list, plan, result),
 
-            // 占位（09a §P7 7b.1a 契约 §三 占位 1，7b.3 换真翻译）：
-            // Phi 是 IR-only 伪指令，方案 A 在 7b.3 展开为本块入口的 Move 串。
-            // 本批 lowering 不生产 Phi（生产构造点 0）——若执行到此，说明有生产
-            // 点漏登记；响亮失败，不做 NOP 静默跳过、也不静默错值。
-            Phi { .. } => unreachable!(
-                "Instruction::Phi 于 7b.1a 引入但生产构造点 0；真翻译归 7b.3\
-                 （09a §P7 7b.1a 契约 §三 占位 1）"
-            ),
+            // 方案 A（04 §「`Phi` 的字节码形态」）：`Phi` 是 IR-only 伪指令，
+            // 其 Move 串由 `translate_function` 在**汇合块入口**按前驱展开
+            // （`plan_phi_edges` / `emit_phi_prologue`，入边跳转重定向到组起点）。
+            // 单条 IR 指令的返回位容不下「按前驱分布的多条 Move」，故本臂不可达：
+            // 走到这里说明块首 Phi 的收集漏了（内部缺陷）——响亮失败，
+            // 不静默 NOP、也不静默错值（与「executor 永远看不到 Phi」同性质）。
+            Phi { .. } => Err(phi_layout_violation(
+                "Instruction::Phi 未在块入口展开（translate_function 的 Phi 收集漏块）",
+            )),
         }
     }
 

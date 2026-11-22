@@ -8,7 +8,7 @@
 //! | 剥离 Span | 不打印 span 字段 |
 //! | 临时值重命名 | Local/Arg(n) 按函数内首次出现顺序重写为 %0 %1 ...；SSA 值按函数内首次出现顺序重写为 v0 v1 ...（保留定义-使用拓扑顺序） |
 //! | 全局槽位相对化 | Global(n) 按模块内首次出现顺序重写为 @0 @1 ... |
-//! | 前驱排序 | successors 打印前按序排列（现状恒为空，规则预留）；Phi 的 incoming 打印前按前驱 label 升序 |
+//! | 前驱排序 | `successors` **不进入快照**（块级 CFG 属分配 / 布局细节，判据由 `verify_ssa` 的块级前驱承担）；`Phi` 的 incoming 打印前按前驱 label 升序 |
 //! | 结构体字段排序 | **不排序**——构造顺序是语义（07 原文） |
 //!
 //! 07 已知局限（原文照搬）：规范化会抹掉「第 N 个实参用了哪个寄存器」——
@@ -646,12 +646,9 @@ pub fn normalize_module(ir: &ModuleIR) -> String {
                     }
                 }
                 for block in blocks {
-                    // successors 恒空（现状）；排序规则预留（07 前驱排序）
-                    let mut succ = block.successors.clone();
-                    succ.sort_unstable();
-                    if !succ.is_empty() {
-                        writeln!(out, "    block[{}] succ={succ:?}", block.label).unwrap();
-                    }
+                    // `successors` 不进入快照：块级 CFG 属分配 / 布局细节
+                    // （7b.4 的线性扫描分配器还可能重塑它），判据由 `verify_ssa`
+                    // 的块级前驱承担（09a §P7 7b.3 契约 §二 第 5 条）。
                     for instr in &block.instructions {
                         writeln!(out, "    {}", fmt_instruction(instr, &mut fctx, &mut mctx))
                             .unwrap();

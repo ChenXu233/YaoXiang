@@ -11,10 +11,14 @@
 //! 现实语义记录（实现以现实 IR 语义为准，与 07 文本的描述性差异如实登记）：
 //! - 07 按「label 键控块图」描述 jump 目标不变量；现实 IR 中
 //!   Jmp / JmpIf / JmpIfNot 的 target 是**函数内展平后的绝对指令下标**
-//!   （lower/module_ir.rs 的 rebase_jump_targets 明文 + translator.rs:301 global_ir_index
-//!   回填），BasicBlock.label 与 successors 不参与控制流（successors 构造恒为空）。
-//!   因此 CFG 以**指令级**构建：Jmp → {target}；JmpIf/JmpIfNot → {target, i+1}；
-//!   Ret/TailCall → ∅；其余 → {i+1}。jump 目标有效性 = target < 指令总数。
+//!   （lower/module_ir.rs 的 rebase_jump_targets 明文 + translator.rs 的
+//!   global_ir_index 回填）。块级坐标另有一套：7b.3 起 `BasicBlock.successors`
+//!   由 `ir::ir::partition_blocks` 按跳转与布局落空真实填充（块 label 是边的端点，
+//!   与跳转目标的指令下标不是同一坐标）。故本模块有两套 CFG：
+//!   指令级（支配性 / 类型一致 / jump 目标存在）与块级（只管 `Phi` 一致性，
+//!   见 `block_predecessors`）。指令级 CFG：Jmp → {target}；JmpIf/JmpIfNot →
+//!   {target, i+1}；Ret/TailCall → ∅；其余 → {i+1}。jump 目标有效性 =
+//!   target < 指令总数。
 //! - 不可达指令（entry 出发不可达）不参与支配性与类型一致判定——死代码检测
 //!   不在 07 的 7 项不变量清单内；jump 目标有效性是纯结构性质，仍全量检查。
 //! - 「类型一致」的相容判定受三套平行类型表示（P5 收敛前）与 IR 槽位类型
@@ -42,9 +46,10 @@
 //!   7b.1b 落三条残项——前驱数（`BasicBlock.successors` 反推的块级前驱集）、
 //!   前驱 label 集合、逐输入类型一致（`values` 值表提供类型；类型不可得按
 //!   文件头「现实语义记录」第 3 条显式不判定 / 显式报越界，不静默放行）。
-//!   **前置登记**：生产侧 `successors` 目前恒为空（全仓 15 处构造都是
-//!   `Vec::new()`）——7b.3 生产 Phi 之前必须先填块级 `successors`，否则任何
-//!   带 incoming 的 Phi 都会被本判据拒绝（09a §P7 7b.1b 契约 §三）。
+//!   **前置已落地**：块级 `successors` 自 7b.3 起由 `ir::ir::partition_blocks`
+//!   在每条生产构造点真实填充（`lower` 的块按跳转与布局落空切分），故前驱数 /
+//!   前驱 label 集合两条判据在真实 IR 上有数据；`Phi` 的生产（lowering 产 Phi）
+//!   仍为 0，届时**直接**受本判据约束（09a §P7 7b.3 契约 §二 第 1 条）。
 //! - 「内层隔离」的 ModuleIR 级可操作化（WBS 2.1.4 改为**按槽身份**）：lower 的
 //!   save/restore 契约（lower/mod.rs 的 `cur_locals` / `next_temp` / `cur_span` 字段）
 //!   失败形态是**同一张槽位表被两个函数体生成期共用**。身份维度 = `LocalSlot::origin`
@@ -239,8 +244,9 @@ struct FnView<'a> {
 
 /// 块级前驱表：对每条 `block → successors` 边，`predecessors[s] ∋ block.label`。
 ///
-/// 只认 `BasicBlock.successors`（04 §三条构造约束的块级面）。当前生产侧
-/// 恒为空（lower 尚未填块图）——该事实登记在 09a §P7 7b.1b 契约 §三。
+/// 只认 `BasicBlock.successors`（04 §三条构造约束的块级面）。7b.3 起该表由
+/// `ir::ir::partition_blocks` 真实填充（真 `lower` 产物的循环 / 分支块都有出边，
+/// 故本判据在真实 IR 上有数据）；合成夹具自带块图。
 fn block_predecessors(blocks: &[super::ir::BasicBlock]) -> HashMap<usize, HashSet<usize>> {
     let mut predecessors: HashMap<usize, HashSet<usize>> = HashMap::new();
     for block in blocks {

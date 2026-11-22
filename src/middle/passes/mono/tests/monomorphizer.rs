@@ -462,6 +462,64 @@ fn test_specialize_substitutes_value_types_and_keeps_slots() {
     );
 }
 
+/// 7b.3：特化克隆函数体时块与块级出边原样投影——块未重编号，`successors`
+/// 不必重建（块级 CFG 在 lowering 已定，特化不改控制流）。
+#[test]
+fn test_specialize_preserves_block_successors() {
+    // Arrange：identity 的体改成两块（块 0 跳转进块 1），块 0 有块级出边
+    let mut mono = Monomorphizer::new();
+    let mut generic = make_identity_ir();
+    if let FunctionBody::Code { blocks, .. } = &mut generic.body {
+        blocks[0].instructions = vec![
+            Instruction::Load {
+                dst: Operand::Local(0),
+                src: Operand::Arg(0),
+                span: Span::dummy(),
+            },
+            Instruction::Jmp {
+                target: 2,
+                span: Span::dummy(),
+            },
+        ];
+        blocks[0].successors = vec![1];
+        blocks.push(BasicBlock {
+            label: 1,
+            instructions: vec![Instruction::Ret {
+                value: Some(Operand::Local(0)),
+                span: Span::dummy(),
+            }],
+            successors: Vec::new(),
+        });
+    }
+    mono.generic_functions
+        .insert("identity".to_string(), generic);
+    let req = InstantiationRequest::new(
+        GenericFunctionId::new("identity".to_string(), vec!["T".to_string()]),
+        vec![crate::frontend::core::types::mono::GenericArg::Type(
+            MonoType::Int(64),
+        )],
+        Span::default(),
+    );
+
+    // Act
+    let result = mono
+        .specialize_function(&req)
+        .expect("特化不应报错")
+        .expect("特化应成功");
+
+    // Assert
+    assert_eq!(result.blocks().len(), 2, "特化必须原样保留块数");
+    assert_eq!(
+        result.blocks()[0].successors,
+        vec![1],
+        "块 0 的块级出边必须原样投影（块未重编号）"
+    );
+    assert!(
+        result.blocks()[1].successors.is_empty(),
+        "块 1 的块级出边必须原样投影（空）"
+    );
+}
+
 #[test]
 fn test_specialize_missing_generic_function_returns_none() {
     // Arrange

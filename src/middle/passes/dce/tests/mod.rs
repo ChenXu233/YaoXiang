@@ -229,6 +229,59 @@ fn test_n6_unreferenced_function_is_deleted() {
     assert_references_closed(&before, &module);
 }
 
+/// 7b.3：DCE 只做整函数删除，存活函数体内的块与块级出边原样保留——
+/// 块级 CFG 不参与按名存活判定，也不得被 DCE 重建。
+#[test]
+fn test_dce_preserves_block_successors_of_live_functions() {
+    // Arrange — main 体两块（块 0 条件跳转 + 落空连块 1），另加一个无引用死函数
+    let mut main = code_fn(
+        "main",
+        vec![
+            Instruction::Load {
+                dst: Operand::Local(0),
+                src: Operand::Const(ConstValue::Bool(true)),
+                span: span(),
+            },
+            Instruction::JmpIf {
+                cond: Operand::Local(0),
+                target: 2,
+                span: span(),
+            },
+        ],
+    );
+    if let FunctionBody::Code { blocks, .. } = &mut main.body {
+        blocks[0].successors = vec![1];
+        blocks.push(BasicBlock {
+            label: 1,
+            instructions: vec![ret_void()],
+            successors: Vec::new(),
+        });
+    }
+    let before = main.blocks().to_vec();
+    let mut module = module_with(vec![main, code_fn("dead", vec![ret_void()])]);
+
+    // Act
+    eliminate(&mut module).expect("DCE 应成功");
+
+    // Assert
+    assert_eq!(names(&module), vec!["main".to_string()], "死函数必须被删");
+    let live = &module.functions[0];
+    assert_eq!(
+        live.blocks().len(),
+        before.len(),
+        "存活函数的块数必须原样保留"
+    );
+    assert_eq!(
+        live.blocks()[0].successors,
+        before[0].successors,
+        "块 0 的块级出边必须原样保留"
+    );
+    assert!(
+        live.blocks()[1].successors.is_empty(),
+        "块 1 的块级出边必须原样保留（空）"
+    );
+}
+
 /// N6 迁移形态：只被另一个死函数引用的函数也属死代码（传递闭包）。
 #[test]
 fn test_n6_transitively_dead_chain_is_deleted() {

@@ -15,7 +15,7 @@ description: '编译器内部错误，通常表示编译器自身的缺陷。遇
 
 | 码号 | 中文名 | 类别 | span 豁免 | 模板 | 发射点 |
 | --- | --- | --- | --- | --- | --- |
-| `E8001` | 内部编译器错误 | `Internal` | 是 | `内部编译器错误：{message}` | ✅ 15 处 |
+| `E8001` | 内部编译器错误 | `Internal` | 是 | `内部编译器错误：{message}` | ✅ 16 处 |
 | `E8002` | 意外 Panic | `Internal` | 否 | `意外编译器 panic：{reason}` | ⚠ 暂未发射 |
 | `E8003` | 编译器阶段错误 | `Internal` | 否 | `编译器阶段错误：{phase} - {message}` | ⚠ 暂未发射 |
 
@@ -29,7 +29,7 @@ description: '编译器内部错误，通常表示编译器自身的缺陷。遇
 - **模板**：`内部编译器错误：{message}`
 - **消息**：编译器发生内部错误
 - **帮助**：请在 https://github.com/ChenXu233/YaoXiang/issues/new 报告此错误
-- **发射点**：`src/driver/helpers.rs:69`、`src/middle/passes/codegen/translator.rs:302`、`src/middle/passes/codegen/translator.rs:1403` 等 15 处
+- **发射点**：`src/driver/helpers.rs:69`、`src/middle/passes/codegen/translator.rs:82`、`src/middle/passes/codegen/translator.rs:366` 等 16 处
 
 ### E8002：意外 Panic
 

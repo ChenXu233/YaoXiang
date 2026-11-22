@@ -874,12 +874,122 @@ impl Instruction {
     }
 }
 
-/// Basic block
+/// 基本块：一段连续指令 + 块级 CFG 出边。
+///
+/// 生产构造点一律走 [`partition_blocks`]（lower / codegen 的唯一块构造入口）：
+/// `label` 按布局序稠密发放（0..N-1），`successors` 是按块尾终结指令与布局推导
+/// 的**块级后继**。两套坐标并存：块级 CFG 用块 `label` 作边端点，而
+/// `Jmp` / `JmpIf` / `JmpIfNot` 的 `target` 仍是函数内展平的**绝对指令下标**
+/// （[`partition_blocks`] 是两者之间唯一的映射点）。
 #[derive(Debug, Clone)]
 pub struct BasicBlock {
     pub label: usize,
     pub instructions: Vec<Instruction>,
+    /// 块级后继：块 `label` 集，升序去重（`verify_ssa` 的块级前驱由它反推）。
     pub successors: Vec<usize>,
+}
+
+/// 把展平的指令序列切成真实基本块，并填好块级 CFG。
+///
+/// 这是 `lower` / `codegen` 的**唯一**块构造入口（禁令三：切分与出边规则不得在
+/// 调用点各写一份）。设计依据：04-ssa.md §目标设计「`Phi` 作为新 `Instruction`
+/// 变体」三条构造约束之二——`Phi` 的 incoming 键是块 `label`，前驱集从
+/// [`BasicBlock::successors`] 反推，故块必须是真基本块且 CFG 必须真实。
+///
+/// 切分点（leader）：
+/// 1. 函数入口（下标 0）；
+/// 2. 每条 `Jmp` / `JmpIf` / `JmpIfNot` 的目标下标（越界目标跳过——那是
+///    `verify` 的「jump 目标存在」判据该报的违规，不是本函数的职责）；
+/// 3. 每条跳转 / `Ret` / `TailCall` 之后的下一条指令。
+///
+/// 块级出边只看块尾终结指令与指令布局（块之间按 `blocks` 顺序相邻，故「下一条
+/// 指令所属块」= 布局上的下一块）：
+/// - `Jmp` → 目标指令所属块；
+/// - `JmpIf` / `JmpIfNot` → 目标指令所属块 + 布局上的下一块（落空边）；
+/// - `Ret` / `TailCall` → 无出边；
+/// - 其余块尾（布局落空）→ 布局上的下一块；末块的落空不产生边。
+///
+/// 边连的是块 `label`，所以「块内跳转」在切分后不存在（跳转目标必是 leader ⇒
+/// 必是新块首）；自环只来自「跳转目标正是本块块首」的真循环。跳转目标的
+/// **坐标不变**（仍是展平绝对指令下标），因此 `translator` 的
+/// `global_ir_index` 回填表、`verify` 的指令级 CFG 与 `.42` 字节码都不受影响
+/// （09a §P7 7b.3 契约 §二 第 1 条）。
+pub fn partition_blocks(instructions: Vec<Instruction>) -> Vec<BasicBlock> {
+    let total = instructions.len();
+    if total == 0 {
+        // 空体保持「一块、label 0、无出边」的形态（既有渲染与翻译路径对空体的
+        // 处理都基于这个形态）。
+        return vec![BasicBlock {
+            label: 0,
+            instructions: Vec::new(),
+            successors: Vec::new(),
+        }];
+    }
+
+    // 1. 标记 leader
+    let mut is_leader = vec![false; total];
+    is_leader[0] = true;
+    for (i, instr) in instructions.iter().enumerate() {
+        let (target, ends_block) = match instr {
+            Instruction::Jmp { target, .. } => (Some(*target), true),
+            Instruction::JmpIf { target, .. } | Instruction::JmpIfNot { target, .. } => {
+                (Some(*target), true)
+            }
+            Instruction::Ret { .. } | Instruction::TailCall { .. } => (None, true),
+            _ => (None, false),
+        };
+        if let Some(target) = target {
+            if target < total {
+                is_leader[target] = true;
+            }
+        }
+        if ends_block && i + 1 < total {
+            is_leader[i + 1] = true;
+        }
+    }
+
+    // 2. 切分；同时记下「展平指令下标 → 块 label」的唯一映射
+    let mut blocks: Vec<BasicBlock> = Vec::new();
+    let mut label_of_index = vec![0usize; total];
+    let mut current_block = 0usize;
+    for (i, instr) in instructions.into_iter().enumerate() {
+        if is_leader[i] {
+            blocks.push(BasicBlock {
+                label: blocks.len(),
+                instructions: Vec::new(),
+                successors: Vec::new(),
+            });
+            current_block = blocks.len() - 1;
+        }
+        label_of_index[i] = blocks[current_block].label;
+        blocks[current_block].instructions.push(instr);
+    }
+
+    // 3. 块级出边
+    let block_count = blocks.len();
+    for index in 0..block_count {
+        let fallthrough = blocks.get(index + 1).map(|next| next.label);
+        let mut successors: Vec<usize> = Vec::new();
+        match blocks[index].instructions.last() {
+            Some(Instruction::Jmp { target, .. }) => {
+                if let Some(block) = label_of_index.get(*target) {
+                    successors.push(*block);
+                }
+            }
+            Some(Instruction::JmpIf { target, .. } | Instruction::JmpIfNot { target, .. }) => {
+                if let Some(block) = label_of_index.get(*target) {
+                    successors.push(*block);
+                }
+                successors.extend(fallthrough);
+            }
+            Some(Instruction::Ret { .. } | Instruction::TailCall { .. }) => {}
+            _ => successors.extend(fallthrough),
+        }
+        successors.sort_unstable();
+        successors.dedup();
+        blocks[index].successors = successors;
+    }
+    blocks
 }
 
 /// SSA 值信息（04-ssa.md §值标识方式）：与 `locals` 并存的**值表**。

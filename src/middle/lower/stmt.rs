@@ -9,8 +9,8 @@ use crate::ast;
 use crate::frontend::core::sema::MonoType;
 use crate::frontend::module::symbol::SymbolTable;
 use crate::middle::ir::ir::{
-    BasicBlock, ConstValue, FunctionBody, FunctionIR, Instruction, LocalSlot, Operand,
-    TypeDeclBody, TypeDeclField,
+    ConstValue, FunctionBody, FunctionIR, Instruction, LocalSlot, Operand, TypeDeclBody,
+    TypeDeclField,
 };
 use crate::tlog;
 use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};
@@ -590,11 +590,7 @@ impl AstToIrGenerator {
             return_type,
             generic_params: None,
             body: FunctionBody::Code {
-                blocks: vec![BasicBlock {
-                    label: 0,
-                    instructions,
-                    successors: Vec::new(),
-                }],
+                blocks: crate::middle::ir::ir::partition_blocks(instructions),
                 entry: 0,
                 locals: locals_types,
                 values,
@@ -806,11 +802,7 @@ impl AstToIrGenerator {
             return_type,
             generic_params,
             body: FunctionBody::Code {
-                blocks: vec![BasicBlock {
-                    label: 0,
-                    instructions,
-                    successors: Vec::new(),
-                }],
+                blocks: crate::middle::ir::ir::partition_blocks(instructions),
                 entry: 0,
                 locals: locals_types,
                 values,

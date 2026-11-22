@@ -8,7 +8,7 @@ use super::AstToIrGenerator;
 use crate::ast;
 use crate::frontend::core::sema::{is_constraint_name, MonoType};
 use crate::middle::ir::ir::{
-    BasicBlock, ConstValue, FunctionBody, FunctionIR, Instruction, LocalSlot, Operand,
+    ConstValue, FunctionBody, FunctionIR, Instruction, LocalSlot, Operand,
 };
 use crate::util::diagnostic::Diagnostic;
 
@@ -221,11 +221,7 @@ impl AstToIrGenerator {
             return_type,
             generic_params,
             body: FunctionBody::Code {
-                blocks: vec![BasicBlock {
-                    label: 0,
-                    instructions,
-                    successors: Vec::new(),
-                }],
+                blocks: crate::middle::ir::ir::partition_blocks(instructions),
                 entry: 0,
                 locals: locals_types,
                 values,
@@ -340,11 +336,7 @@ impl AstToIrGenerator {
             return_type,
             generic_params,
             body: FunctionBody::Code {
-                blocks: vec![BasicBlock {
-                    label: 0,
-                    instructions,
-                    successors: Vec::new(),
-                }],
+                blocks: crate::middle::ir::ir::partition_blocks(instructions),
                 entry: 0,
                 locals: locals_types,
                 values,

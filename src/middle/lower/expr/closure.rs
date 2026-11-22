@@ -6,7 +6,7 @@
 use crate::ast;
 use crate::frontend::core::sema::MonoType;
 use crate::middle::ir::ir::{
-    BasicBlock, ConstValue, FunctionBody, FunctionIR, Instruction, LocalSlot, Operand,
+    ConstValue, FunctionBody, FunctionIR, Instruction, LocalSlot, Operand,
 };
 use crate::middle::lower::scope::NestedBodyGuard;
 use crate::middle::lower::AstToIrGenerator;
@@ -221,11 +221,7 @@ impl AstToIrGenerator {
             return_type,
             generic_params: None,
             body: FunctionBody::Code {
-                blocks: vec![BasicBlock {
-                    label: 0,
-                    instructions: closure_body.instructions,
-                    successors: Vec::new(),
-                }],
+                blocks: crate::middle::ir::ir::partition_blocks(closure_body.instructions),
                 entry: 0,
                 locals: closure_body.locals.clone(),
                 values: closure_body.values,
