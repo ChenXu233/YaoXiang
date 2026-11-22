@@ -8223,3 +8223,15 @@ pub enum FunctionBody {
 6. **`07` 口径**：「前驱排序」规范化项自此只有 `Phi` incoming 一条消费面；`07` 属 out-of-scope 文档，由本收口笔之后就地更正（7b.3 实现记录已登记）。
 7. **本轮（收口笔）只改 `09` / `09a` / `04` 三个文件**，未碰 `src/`、`tests/`、`scripts/`；未跑 `git push` / `fetch` / `pull`；`09` 顶部三级计数保持 origin 当前值（7b.3 是既有三级任务，不新增）。
 8. **验证轮过程项（非缺陷，如实登记）**：批次树 `use` 的 SHA 必须完整——截短 SHA 的 `git checkout` 会失败（「unable to read tree」），验证轮首次尝试即被拒、改完整 SHA 后成功；`run fast` 与 `corpus_probe` 不可并发（共享树 bin 的 cargo 文件锁），须排空后单跑。
+
+## P8 8.0 死阶梯清理（C6）收口（2026-11-22）
+
+> **一、范围与终态**：8.0.1 删除 `Precedence` 枚举与 `PrecedenceContext`（连同两个 impl），`precedence.rs` 134→43 行，全部 `BP_*` 常量保留；8.0.2 把 `..` 的裸绑定力 `(6,7)` 与模式位探测阈值 `12` 具名化为 `BP_RANGE_L` / `BP_RANGE_R` / `BP_PATTERN_PROBE`。整批是 C6（纯删除/纯改名），行为零变化。
+>
+> **二、8.0.1 判据与与 C1 的偏差**：`Precedence::` 与 `PrecedenceContext` 全仓 `git grep` 零命中（唯一引用是自身定义与被测测试）；`precedence_inline.rs` 中 3 条只测死对象的用例随对象一并删除，`test_bp_ordering` 保留、改名 `test_bp_ordering_ascends_from_lowest_to_highest` 并补齐断言消息——活常量（`BP_LOWEST` < `BP_ASSIGN` < … < `BP_HIGHEST`）的相对顺序仍被钉住。**与冲突登记 C1 的字面关系**：C1 原写「该测试文件在 8.6 随 Pratt 删除」，实际处置是 8.0.1 删除被测对象后文件继续存在（只留活常量断言），8.6 只删 Pratt 本体——按事实登记，不按 C1 字面等到 8.6。
+>
+> **三、8.0.2 判据与陈旧项**：`led.rs` 的 `Some(TokenKind::DotDot) => Some((6, 7, …))` 改为 `(BP_RANGE_L, BP_RANGE_R)`，其中 `BP_RANGE_R = BP_RANGE`（不复制字面量 7，单一来源）；`nud.rs` 三处 `parse_expression(12)`（1 处代码 + 2 处注释）改为 `BP_PATTERN_PROBE`，并在常量处写明「高于任何中缀绑定力，使 `lo..hi` 范围模式可被整体探测」。WBS 原文列的 `(11,1)` 在当前树已不存在（lambda 中缀不在该处决策），登记为陈旧项，不为它造常量。
+>
+> **四、门禁**：`cargo fmt --all`、`cargo clippy --all --all-features --all-targets -- -D warnings` 均为 0；`testsuite run fast` 2515 条、0 跳过、exit 0；语料差分 403/403 零漂移；IR 快照零漂移（本批不动 IR 形状，删的是零生产引用的死类型与等价改名）。
+>
+> **五、边界与未动项**：未动任何 `BP_*` 的数值（`BP_UNARY` 与 `BP_CAST` 同为 8 的既有并列保留）；未删其它未被引用的 `pub` 常量（归 P10 S5）；05 的设计结论未改，只在阶段 0 清单前加了执行状态注记；`Precedence` 的零构造状态由 05 的 C6 清单记录，本批执行后该清单的行号锚成为历史值。
