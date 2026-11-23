@@ -4,8 +4,9 @@
 //! RFC-039 D22 的显式环境边界。完整管线用例同时观察 MakeClosure.env 与消费端；
 //! 直接 lowering 探针只测收集器，不改变 SPEC 对普通 lambda 隐式捕获的禁止。
 //! 闭包由父函数 MakeClosure 关系、形参数和捕获槽定位，不依赖内部命名。
-//! B 类先红后绿只声明真实红过的嵌套、错误恢复与 spawn-for 槽位用例；
-//! 普通 lambda、列表收集和既有 spawn 形态是回归覆盖，不冒充修复证据。
+//! B 类先红后绿只声明真实红过的嵌套、错误恢复、spawn-for 槽位与双运行时
+//! item/capture 用例；普通 lambda、列表收集和既有 spawn 形态是回归覆盖。
+//! 行为测试显式调用 main()，并在任务内断言 item/外层捕获，不跑空初始化。
 
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::{parse, parse_expression};
@@ -132,6 +133,25 @@ fn assert_curry_channel(
     );
 }
 
+fn run_source_with_mode(
+    source: &str,
+    mode: crate::backends::runtime::RuntimeMode,
+) -> Result<(), String> {
+    let mut compiler = crate::frontend::Compiler::new();
+    let module = compiler
+        .compile_with_source("spawn-for-test", source)
+        .map_err(|error| format!("编译失败：{error:?}"))?;
+    let mut context = crate::middle::passes::codegen::CodegenContext::new(module);
+    let bytecode = context
+        .generate()
+        .map_err(|error| format!("代码生成失败：{error:?}"))?;
+    let module = crate::middle::bytecode::BytecodeModule::from(bytecode);
+    let mut interpreter = crate::backends::interpreter::Interpreter::new();
+    interpreter.set_runtime_config(crate::backends::runtime::RuntimeConfig { mode, workers: 1 });
+    crate::backends::Executor::execute_module(&mut interpreter, &module)
+        .map_err(|error| format!("{mode:?} 执行失败：{error:?}"))
+}
+
 fn empty_generator() -> AstToIrGenerator {
     AstToIrGenerator::new_with_type_result(
         &TypeCheckResult::default(),
@@ -183,7 +203,20 @@ fn test_spawn_task_uses_synthesized_environment() {
 #[test]
 fn test_spawn_for_body_uses_synthesized_environment() {
     // Arrange
-    let source = "main = () => { n = 10; items = [1, 2]; spawn for item in items { item + n } }";
+    let source = r#"use std.assert
+main: () -> Void = {
+    n = 100
+    items = [1, 2]
+    spawn for item in items {
+        if item == 1 {
+            assert.assert(item * 1000 + n == 1100, "first item and capture")
+        } else {
+            assert.assert(item * 1000 + n == 2100, "second item and capture")
+        }
+    }
+}
+main()
+"#;
     let ir = compile_ir(source);
 
     // Act
@@ -211,10 +244,9 @@ fn test_spawn_for_body_uses_synthesized_environment() {
             _ => None,
         })
         .collect();
-    assert_eq!(
-        upvalue_indices,
-        vec![1],
-        "匿名迭代 env 必须占 0 号槽，外层捕获 n 必须位于其后的 1 号槽"
+    assert!(
+        !upvalue_indices.is_empty() && upvalue_indices.iter().all(|index| *index == 1),
+        "匿名迭代 env 必须占 0 号槽，所有外层 n 读取都必须位于其后的 1 号槽：{upvalue_indices:?}"
     );
     let item_slot = closure
         .locals()
@@ -225,11 +257,47 @@ fn test_spawn_for_body_uses_synthesized_environment() {
         item_slot, 2,
         "item 形参必须位于两个 env 槽之后，而非与命名捕获重叠"
     );
-    let execution = crate::run(source);
-    assert!(
-        execution.is_ok(),
-        "spawn-for + 外层捕获必须执行成功，不得再把 n 读成 Void：{execution:?}"
-    );
+    for mode in [
+        crate::backends::runtime::RuntimeMode::Embedded,
+        crate::backends::runtime::RuntimeMode::Standard,
+    ] {
+        let execution = run_source_with_mode(source, mode);
+        assert!(
+            execution.is_ok(),
+            "{mode:?} 的 item 与外层 n 必须参与断言，不得读成 Void：{execution:?}"
+        );
+    }
+}
+
+#[test]
+fn test_spawn_for_without_capture_preserves_item_values() {
+    // Arrange — 无外层捕获；断言在任务内执行并实际观察 item。
+    let source = r#"use std.assert
+main: () -> Void = {
+    items = [1, 2]
+    spawn for item in items {
+        assert.assert(item == 1 or item == 2, "item must preserve its value")
+    }
+}
+main()
+"#;
+
+    // Act
+    let outcomes: Vec<_> = [
+        crate::backends::runtime::RuntimeMode::Embedded,
+        crate::backends::runtime::RuntimeMode::Standard,
+    ]
+    .into_iter()
+    .map(|mode| (mode, run_source_with_mode(source, mode)))
+    .collect();
+
+    // Assert — 该用例在 74febd1f 的 unknown(void) 回归上必须红。
+    for (mode, outcome) in outcomes {
+        assert!(
+            outcome.is_ok(),
+            "{mode:?} 的无捕获 spawn-for 不得回归为 unknown(void)：{outcome:?}"
+        );
+    }
 }
 
 #[test]

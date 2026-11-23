@@ -13,6 +13,19 @@ use crate::backends::ExecutorError;
 use crate::middle::bytecode::{BytecodeInstr, ConstValue, Reg};
 
 impl Interpreter {
+    /// spawn-for 的匿名迭代值固定在 env[0]；两运行时都只把它追加为 item 实参。
+    fn spawn_for_iteration_arg(
+        &self,
+        function: &crate::backends::common::value::FunctionValue,
+    ) -> Result<RuntimeValue, ExecutorError> {
+        function.env.first().cloned().ok_or_else(|| {
+            ExecutorError::type_error(
+                "spawn_for closure is missing its iteration value".to_string(),
+                self.capture_stack(),
+            )
+        })
+    }
+
     /// 执行「调用与并发」族指令。
     ///
     /// 由 `execute_instr` 分派调用；`#[inline]` 保证不引入额外调用开销。
@@ -370,8 +383,8 @@ impl Interpreter {
 
                 if matches!(runtime, crate::backends::runtime::RuntimeMode::Embedded) {
                     // 同 Spawn：一条指令发起 N 个调用 → 首次压帧 + 其余排队续跑。
-                    // 结果丢弃（旧实现同样丢弃 `_result`）；不注入上值
-                    // （与 call_function_by_id 一致）。
+                    // 结果丢弃（旧实现同样丢弃 `_result`）。env 同时作 args 前缀
+                    // 与 upvalues；匿名 env[0] 另作 item 实参，与 Standard 同构。
                     let mut calls = Vec::with_capacity(closures.len());
                     for closure_val in closures.iter() {
                         let RuntimeValue::Function(func_value) = closure_val else {
@@ -381,8 +394,12 @@ impl Interpreter {
                                 stack,
                             ));
                         };
-                        calls.push(PendingCall::function(
+                        let item = self.spawn_for_iteration_arg(func_value)?;
+                        let mut args = func_value.env.clone();
+                        args.push(item);
+                        calls.push(PendingCall::closure(
                             func_value.func_id,
+                            args,
                             func_value.env.clone(),
                             None,
                         ));
@@ -405,8 +422,11 @@ impl Interpreter {
                             ));
                         };
 
-                        let call_args: Vec<RuntimeValue> = func_value.env.clone();
-                        let mut deps = self.deps_from_args(&call_args);
+                        let item = self.spawn_for_iteration_arg(func_value)?;
+                        // Dyn 执行端再加 env 前缀与 upvalues；这里只传匿名 item 实参。
+                        let call_args: Vec<RuntimeValue> = vec![item];
+                        // 保留原有依赖推导面：命名捕获中的任务仍须参与调度依赖。
+                        let mut deps = self.deps_from_args(&func_value.env);
 
                         if let Some(task_dep_indices) = task_deps.get(i) {
                             for &dep_idx in task_dep_indices {

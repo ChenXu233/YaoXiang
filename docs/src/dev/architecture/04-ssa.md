@@ -387,8 +387,10 @@ pub(super) fn synth_closure(
 - 嵌套闭包经 `capture_operand` 先读取外层 upvalue，再把值交给内层环境；不会把外层同名局部槽误当捕获值。
 - `NestedBodyGuard` 记录进入时的符号表深度，退出（含 `?` 提前返回）截断到该深度，捕获绑定不会残留到后续无关 lowering。
 - sema 的表达式体函数检查用 `body_stmts + expression_body + span` 参数化既有输入，直接调用 `check_expr` 并复用尾校验，不再合成 Block/Stmt/Expr；没有 sema→middle/lower 反向依赖或额外架构例外。
+- SpawnFromList 在 Embedded 与 Standard 共用 `env + [匿名 item]` 的 args 布局，并以同一份 env 注入 upvalues。匿名迭代值固定为 env[0]，命名捕获从匿名前缀后读取，形参从全部 env 之后起算。
+- 双运行时行为测试显式调用 main()，在 spawn-for 任务内分别断言无捕获 item 值与 item+外层捕获；无捕获形态同时覆盖 74febd1f 引入的回归恢复。IR 断言与真实执行分别记录，403 条既有语料零漂移不冒充该形态的行为覆盖。
 
-**判据**：`scripts/ci/check-synth-boundary.py` 扫描 01-routing 对应的 sema、proof、middle、backends 与 std 生产面，唯一例外是 `middle/lower/synth.rs`。脚本以 token 上下文区分构造与 match / if let / let-else / matches! / 查询 / 注释 / 字符串 / 测试代码，并识别 glob import、模块别名、直接类型别名与 AST 唯一具名构造器 `Expr::call`；`--selftest` 同时证明真构造会红、非构造读取不误报。仓库扫描与自检均接入 CI 的 WBS 9.8 门禁。
+**判据**：`scripts/ci/check-synth-boundary.py` 扫描 01-routing 对应的 sema、proof、middle、backends 与 std 生产面，唯一例外是 `middle/lower/synth.rs`。脚本以 token 上下文区分构造与 match / if let / let-else / matches! / 查询 / 注释 / 字符串 / 测试代码，并识别 glob import、模块别名、直接/裸名/链式类型别名与 AST 唯一具名构造器 `Expr::call`；无逗号 block 与 if/else 控制流臂体均按完整臂体复位。`--selftest` 同时证明真构造会红、非构造读取不误报。仓库扫描与自检均接入 CI 的 WBS 9.8 门禁。
 
 D1/D2：`SynthEnv` 与 `BindingLocation` 都是本批新增的内部类型，不是既有类型复用。前者把生产端 env 操作数、命名项与槽位推导集中为一个显式参数；后者把原 `SymbolEntry.local_idx` 提升为可判别的 Local/Upvalue 位置。替代方案是继续传三份共享字段（无法阻止嵌套覆盖与错误残留），或只传 `Vec<Operand>`（无法表达匿名前缀与命名捕获的对应关系）；两者均因正确性理由否决。新概念不与既有 AST/消费台账同义，也不需要 import 别名或转换表。
 

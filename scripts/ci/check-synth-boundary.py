@@ -236,8 +236,12 @@ def pattern_mask(tokens: list[Token], pairs: dict[int, int]) -> list[bool]:
             while cursor < closing:
                 if cursor in pairs and tokens[cursor].text in ("(", "[", "{"):
                     cursor = pairs[cursor] + 1
-                    if in_arm_body and tokens[cursor - 1].text == "}":
-                        # block 臂体结束后，下一臂从臂体之后开始；没有逗号也一样。
+                    if (
+                        in_arm_body
+                        and tokens[cursor - 1].text == "}"
+                        and (cursor >= len(tokens) or tokens[cursor].text != "else")
+                    ):
+                        # if/else 的 then 块不是整个臂体；只在 else 不再延续时复位。
                         arm_start = cursor
                         in_arm_body = False
                     continue
@@ -270,12 +274,31 @@ def ast_names(code: str) -> tuple[dict[str, str], bool, set[str]]:
             if imported:
                 canonical, alias = imported.groups()
                 names[alias or canonical] = canonical
+    alias_targets: dict[str, str] = {}
     for match in re.finditer(
-        r"\btype\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?:crate::)?ast::(Expr|Stmt|Type)\s*;",
+        r"\btype\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*([A-Za-z_][A-Za-z0-9_]*(?:::[A-Za-z_][A-Za-z0-9_]*)*)\s*;",
         code,
     ):
-        alias, canonical = match.groups()
-        names[alias] = canonical
+        alias, target = match.groups()
+        alias_targets[alias] = target
+
+    # 直接、裸名与链式别名按固定点展开；非 AST 的同名类型不会被收录。
+    while True:
+        changed = False
+        for alias, target in alias_targets.items():
+            canonical = None
+            qualified = re.fullmatch(r"(?:crate::)?ast::(Expr|Stmt|Type)", target)
+            if qualified:
+                canonical = qualified.group(1)
+            elif target in CANONICAL and (target in names or glob_imported):
+                canonical = target
+            elif target in names:
+                canonical = names[target]
+            if canonical is not None and names.get(alias) != canonical:
+                names[alias] = canonical
+                changed = True
+        if not changed:
+            break
     modules = set(
         re.findall(r"\buse\s+(?:crate::)?ast\s+as\s+([A-Za-z_][A-Za-z0-9_]*)\s*;", code)
     )
@@ -418,12 +441,31 @@ fn blocked(expr: &Expr) {
     alias_negative = r'''
 use crate::ast as a;
 type E = ast::Expr;
-fn alias_patterns(expr: &Expr) {
+fn alias_patterns(expr: &Expr, condition: bool) {
     if let E::Var(_, _) = expr {}
     assert!(matches!(expr, a::Expr::Var(_, _)));
     let query = a::Expr::extract_binding_positions(expr);
+    match expr {
+        Expr::Var(_, _) => if condition {} else {
+            let nested_query = a::Expr::extract_binding_positions(expr);
+        }
+        Expr::Call { .. } => {}
+    }
 }
 '''
+    if_else_arm = r'''
+use crate::ast::Expr;
+fn control_arm(expr: &Expr, condition: bool) {
+    match expr {
+        Expr::Var(_, _) => if condition {} else {
+            let hidden = ast::Expr::Var("hidden".into(), span);
+        }
+        Expr::Call { .. } => {}
+    }
+}
+'''
+    bare_type_alias = 'use crate::ast::Expr;\ntype E = Expr;\nfn f() { let made = E::Var("x".into(), span); }'
+    chained_type_alias = 'use crate::ast::Expr;\ntype First = Expr;\ntype E = First;\nfn f() { let made = E::Var("x".into(), span); }'
     with tempfile.TemporaryDirectory(prefix="check-synth-boundary-") as temporary:
         root = Path(temporary)
         fixtures = {
@@ -445,6 +487,9 @@ fn alias_patterns(expr: &Expr) {
             "src/middle/lower/named_constructor.rs": named_constructor,
             "src/middle/lower/qualified_constructor.rs": qualified_constructor,
             "src/frontend/core/sema/alias_patterns.rs": alias_negative,
+            "src/middle/lower/if_else_arm.rs": if_else_arm,
+            "src/middle/lower/bare_type_alias.rs": bare_type_alias,
+            "src/middle/lower/chained_type_alias.rs": chained_type_alias,
         }
         for relative, source in fixtures.items():
             path = root / relative
@@ -463,6 +508,9 @@ fn alias_patterns(expr: &Expr) {
         "src/middle/lower/type_alias.rs",
         "src/middle/lower/named_constructor.rs",
         "src/middle/lower/qualified_constructor.rs",
+        "src/middle/lower/if_else_arm.rs",
+        "src/middle/lower/bare_type_alias.rs",
+        "src/middle/lower/chained_type_alias.rs",
     }
     forbidden = [
         item for item in violations if item.split(":", 1)[0] in expected_files
