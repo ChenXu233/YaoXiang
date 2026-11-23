@@ -2,6 +2,7 @@
 //!
 //! Tests for ast.rs, parser_state.rs, and expression/integration parsing.
 
+mod associativity;
 mod ast;
 mod error_recovery;
 mod expressions;
