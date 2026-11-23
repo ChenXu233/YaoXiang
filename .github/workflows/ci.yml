@@ -210,6 +210,25 @@ jobs:
       - name: Self-test the gate (negative must be red, positive must be green)
         run: python3 scripts/ci/check-obligations.py --selftest
 
+  # P7 引入（09-execution-wbs 9.8）：L3/L4 的 AST 合成只允许 lower/synth.rs。
+  # 仓库扫描与正负自检分开执行，防止探测器因误判形态而空转。
+  synth-boundary:
+    name: Synth AST Boundary (WBS 9.8)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+
+      - name: Check L3/L4 AST synthesis boundary
+        run: python3 scripts/ci/check-synth-boundary.py
+
+      - name: Self-test construction vs pattern detection
+        run: python3 scripts/ci/check-synth-boundary.py --selftest
+
   test:
     name: Test
     runs-on: ubuntu-latest

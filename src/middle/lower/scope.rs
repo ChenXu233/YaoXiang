@@ -4,7 +4,7 @@
 //! 具名高水位）、全局槽位查询，以及 `note_*` written-type/量词事实的写入与读回。
 //! 方法体逐字搬自原 `middle/ir/ir_gen.rs`（WBS 7.0.1），语义未改。
 
-use super::{AstToIrGenerator, LoopTargets, SymbolEntry};
+use super::{AstToIrGenerator, BindingLocation, LoopTargets, SymbolEntry};
 use crate::ast;
 use crate::frontend::core::sema::MonoType;
 use crate::middle::ir::ir::{FrameId, Instruction, LocalSlot, Operand, ValueId, ValueInfo};
@@ -58,7 +58,7 @@ impl AstToIrGenerator {
             scope.insert(
                 name.to_string(),
                 SymbolEntry {
-                    local_idx,
+                    location: BindingLocation::Local(local_idx),
                     written_type: None,
                 },
             );
@@ -108,24 +108,65 @@ impl AstToIrGenerator {
         slots
     }
 
-    /// 查找局部变量
+    /// 注册当前闭包的一个命名 upvalue；它不占用普通局部槽。
+    pub(super) fn register_upvalue(
+        &mut self,
+        name: &str,
+        upvalue_idx: usize,
+    ) {
+        if let Some(scope) = self.symbols.last_mut() {
+            scope.insert(
+                name.to_string(),
+                SymbolEntry {
+                    location: BindingLocation::Upvalue(upvalue_idx),
+                    written_type: None,
+                },
+            );
+        }
+    }
+
+    /// 查找词法上最近的名字绑定；局部变量与 upvalue 共用同一遮蔽规则。
+    pub(super) fn lookup_binding(
+        &self,
+        name: &str,
+    ) -> Option<BindingLocation> {
+        self.symbols
+            .iter()
+            .rev()
+            .find_map(|scope| scope.get(name).map(|entry| entry.location))
+    }
+
+    /// 查找局部变量。最近绑定是 upvalue 时不得穿透到外层同名局部槽。
     pub(in crate::middle) fn lookup_local(
         &self,
         name: &str,
     ) -> Option<usize> {
-        for scope in self.symbols.iter().rev() {
-            if let Some(entry) = scope.get(name) {
+        match self.lookup_binding(name) {
+            Some(BindingLocation::Local(local_idx)) => {
                 tlog!(
                     debug,
                     MSG::IrGenLookupLocal,
                     &name.to_string(),
-                    &entry.local_idx.to_string()
+                    &local_idx.to_string()
                 );
-                return Some(entry.local_idx);
+                Some(local_idx)
+            }
+            _ => {
+                tlog!(debug, MSG::IrGenLookupLocalNotFound, &name.to_string());
+                None
             }
         }
-        tlog!(debug, MSG::IrGenLookupLocalNotFound, &name.to_string());
-        None
+    }
+
+    /// 查找当前词法链上的命名 upvalue。
+    pub(super) fn lookup_upvalue(
+        &self,
+        name: &str,
+    ) -> Option<usize> {
+        match self.lookup_binding(name) {
+            Some(BindingLocation::Upvalue(upvalue_idx)) => Some(upvalue_idx),
+            _ => None,
+        }
     }
 
     /// 查找全局变量，返回**绝对槽位号**（`Operand::Global(idx)` 的值）。
@@ -536,6 +577,7 @@ fn infer_instruction_value_type<'a>(
 /// 一律回滚（值表/`next_value` 是**每个函数体独立**的，与槽计数的帧口径不同）。
 struct SavedFrame {
     counters: Option<(usize, usize)>,
+    symbols_len: usize,
     cur_span: Span,
     cur_locals: Vec<LocalSlot>,
     cur_frame: FrameId,
@@ -572,6 +614,7 @@ impl<'a> NestedBodyGuard<'a> {
     pub(super) fn enter(gen: &'a mut AstToIrGenerator) -> Self {
         let saved = SavedFrame {
             counters: Some((gen.next_temp, gen.temp_high_water)),
+            symbols_len: gen.symbols.len(),
             cur_span: gen.cur_span,
             cur_locals: std::mem::take(&mut gen.cur_locals),
             cur_frame: gen.cur_frame,
@@ -595,6 +638,7 @@ impl<'a> NestedBodyGuard<'a> {
     pub(super) fn enter_decl(gen: &'a mut AstToIrGenerator) -> Self {
         let saved = SavedFrame {
             counters: None,
+            symbols_len: gen.symbols.len(),
             cur_span: gen.cur_span,
             cur_locals: std::mem::take(&mut gen.cur_locals),
             cur_frame: gen.cur_frame,
@@ -627,6 +671,7 @@ impl std::ops::DerefMut for NestedBodyGuard<'_> {
 
 impl Drop for NestedBodyGuard<'_> {
     fn drop(&mut self) {
+        self.gen.symbols.truncate(self.saved.symbols_len);
         self.gen.cur_locals = std::mem::take(&mut self.saved.cur_locals);
         self.gen.cur_frame = self.saved.cur_frame;
         self.gen.loop_stack = std::mem::take(&mut self.saved.loop_stack);

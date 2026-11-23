@@ -3,6 +3,7 @@
 //! while/for/range/in/spawn-for 与迭代器协议循环，含 break/continue 跳转目标上下文。
 //! 方法体逐字搬自原 `middle/ir/ir_gen.rs`（WBS 7.0.2），语义未改。
 
+use super::synth::{synth_closure, SynthEnv};
 use super::AstToIrGenerator;
 use super::LoopTargets;
 use crate::ast;
@@ -618,20 +619,20 @@ impl AstToIrGenerator {
         // 11. 在循环体内创建闭包：(item) => { body }
         //     迭代变量作为参数传入，当前值通过 env 捕获
         let closure_reg = self.next_temp_reg();
-        // 捕获迭代变量的当前值（element_reg 在 next() 返回后被设置）
-        self.pending_env_vars = vec![element_reg.clone()];
-        let lambda = ast::Expr::Lambda {
-            params: vec![ast::Param {
+        // 捕获迭代变量的当前值（element_reg 在 next() 返回后被设置）。
+        let env = SynthEnv::new(vec![element_reg.clone()], Vec::new());
+        let lambda = synth_closure(
+            vec![ast::Param {
                 name: var_name.to_string(),
                 ty: None,
                 is_mut: false,
                 quantity: None,
                 span,
             }],
-            body: Box::new(body.clone()),
+            body.clone(),
             span,
-        };
-        self.generate_expr_ir(&lambda, closure_reg.clone(), instructions, constants)?;
+        );
+        self.generate_expr_ir_with_env(&lambda, env, closure_reg.clone(), instructions, constants)?;
 
         // 12. 将闭包推入列表: push(closures, closure)
         instructions.push(Instruction::Call {

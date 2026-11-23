@@ -4,3 +4,4 @@
 //! - `access.rs` — 变量/字段访问与「模块导出作值」的三路发射臂（#494 面板）
 
 mod access;
+mod closure;

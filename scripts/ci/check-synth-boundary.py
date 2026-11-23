@@ -1,0 +1,436 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""check-synth-boundary.py — RFC-039 D22 / WBS 9.8 AST 合成边界门禁。
+
+扫描 01-routing 对应的 L3/L4 生产面：sema（现 frontend/core/sema 与
+frontend/core/types）、proof、middle、backends 与 std。唯一允许合成
+ast::Expr / ast::Stmt / ast::Type 的文件是 src/middle/lower/synth.rs。
+
+判据只接受表达式位置的构造，不把 match / let / matches! 的模式、关联查询、
+注释、字符串、tests/ 路径或 #[cfg(test)] / #[test] 项误报为构造。--selftest
+在同一进程内构造临时正反倒例，证明真构造会失败、非构造读取保持干净。
+"""
+
+from __future__ import annotations
+
+import argparse
+import io
+import re
+import sys
+import tempfile
+from dataclasses import dataclass
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[2]
+SCAN_DIRS = (
+    "src/frontend/core/sema",
+    "src/frontend/core/types",
+    "src/sema",
+    "src/proof",
+    "src/middle",
+    "src/backends",
+    "src/std",
+)
+SYNTH_FILE = "src/middle/lower/synth.rs"
+CANONICAL = {"Expr", "Stmt", "Type"}
+
+
+@dataclass(frozen=True)
+class Token:
+    text: str
+    start: int
+    end: int
+
+
+def sanitize(source: str) -> str:
+    """空白化注释与字面量，保留长度、换行和 Rust 代码分隔符。"""
+    chars = list(source)
+    result = list(source)
+    i = 0
+    block_depth = 0
+    while i < len(chars):
+        if block_depth:
+            if source.startswith("/*", i):
+                result[i] = result[i + 1] = " "
+                block_depth += 1
+                i += 2
+            elif source.startswith("*/", i):
+                result[i] = result[i + 1] = " "
+                block_depth -= 1
+                i += 2
+            else:
+                if chars[i] != "\n":
+                    result[i] = " "
+                i += 1
+            continue
+        if source.startswith("//", i):
+            while i < len(chars) and chars[i] != "\n":
+                result[i] = " "
+                i += 1
+            continue
+        if source.startswith("/*", i):
+            result[i] = result[i + 1] = " "
+            block_depth = 1
+            i += 2
+            continue
+
+        raw = re.match(r"(?:b?r)(#+)\"", source[i:])
+        if raw:
+            prefix_len = len(raw.group(0))
+            hashes = raw.group(1)
+            terminator = '\"' + hashes
+            end = source.find(terminator, i + prefix_len)
+            end = len(chars) if end < 0 else end + len(terminator)
+            for j in range(i, end):
+                if chars[j] != "\n":
+                    result[j] = " "
+            i = end
+            continue
+        if source.startswith('r"', i) or source.startswith('br"', i):
+            prefix_len = 2 if source.startswith('r"', i) else 3
+            end = source.find('"', i + prefix_len)
+            end = len(chars) if end < 0 else end + 1
+            for j in range(i, end):
+                if chars[j] != "\n":
+                    result[j] = " "
+            i = end
+            continue
+        if chars[i] == '"' or (
+            chars[i] in "bc" and i + 1 < len(chars) and chars[i + 1] == '"'
+        ):
+            start = i + (1 if chars[i] in "bc" else 0)
+            j = start + 1
+            while j < len(chars):
+                if chars[j] == "\\":
+                    j += 2
+                    continue
+                if chars[j] == '"':
+                    j += 1
+                    break
+                j += 1
+            for k in range(i, min(j, len(chars))):
+                if chars[k] != "\n":
+                    result[k] = " "
+            i = j
+            continue
+        if chars[i] == "'":
+            lifetime = re.match(r"'[A-Za-z_][A-Za-z0-9_]*", source[i:])
+            if lifetime and i + len(lifetime.group(0)) < len(chars) and chars[i + len(lifetime.group(0))] != "'":
+                i += len(lifetime.group(0))
+                continue
+            j = i + 1
+            while j < len(chars):
+                if chars[j] == "\\":
+                    j += 2
+                    continue
+                if chars[j] == "'" or chars[j] == "\n":
+                    j += 1
+                    break
+                j += 1
+            for k in range(i, min(j, len(chars))):
+                if chars[k] != "\n":
+                    result[k] = " "
+            i = j
+            continue
+        i += 1
+    return "".join(result)
+
+
+def tokenize(code: str) -> list[Token]:
+    return [
+        Token(match.group(0), match.start(), match.end())
+        for match in re.finditer(r"[A-Za-z_][A-Za-z0-9_]*|\d+|::|=>|[^\s]", code)
+    ]
+
+
+def delimiter_pairs(tokens: list[Token]) -> dict[int, int]:
+    pairs: dict[int, int] = {}
+    stack: list[tuple[str, int]] = []
+    closing = {")": "(", "]": "[", "}": "{", ">": "<"}
+    for index, token in enumerate(tokens):
+        if token.text in ("(", "[", "{"):
+            stack.append((token.text, index))
+        elif token.text in (")", "]", "}"):
+            if not stack or stack[-1][0] != closing[token.text]:
+                continue
+            _, opening = stack.pop()
+            pairs[opening] = index
+            pairs[index] = opening
+    return pairs
+
+
+def test_item_ranges(code: str, tokens: list[Token]) -> list[tuple[int, int]]:
+    pairs = delimiter_pairs(tokens)
+    ranges: list[tuple[int, int]] = []
+    attribute = re.compile(
+        r"#\s*\[\s*(?:cfg\s*\(\s*test\s*\)|test)\s*\]"
+    )
+    for match in attribute.finditer(code):
+        later = [index for index, token in enumerate(tokens) if token.start >= match.end()]
+        opening = next((index for index in later if tokens[index].text == "{"), None)
+        if opening is None or opening not in pairs:
+            continue
+        semicolon = next((index for index in later if tokens[index].text == ";"), None)
+        if semicolon is not None and semicolon < opening:
+            continue
+        closing = pairs[opening]
+        ranges.append((match.start(), tokens[closing].end))
+    return ranges
+
+
+def pattern_mask(tokens: list[Token], pairs: dict[int, int]) -> list[bool]:
+    """标记 Rust 模式 token；表达式位置的同形构造不在掩码内。"""
+    mask = [False] * len(tokens)
+
+    def mark(start: int, end: int) -> None:
+        for index in range(max(0, start), min(len(tokens), end)):
+            mask[index] = True
+
+    for index, token in enumerate(tokens):
+        if token.text == "let":
+            cursor = index + 1
+            while cursor < len(tokens):
+                if cursor in pairs and tokens[cursor].text in ("(", "[", "{"):
+                    cursor = pairs[cursor] + 1
+                    continue
+                if tokens[cursor].text in ("=", ";"):
+                    break
+                cursor += 1
+            if cursor < len(tokens) and tokens[cursor].text == "=":
+                mark(index + 1, cursor)
+        elif token.text == "matches" and index + 2 < len(tokens):
+            if tokens[index + 1].text != "!" or tokens[index + 2].text != "(":
+                continue
+            opening = index + 2
+            if opening not in pairs:
+                continue
+            closing = pairs[opening]
+            cursor = opening + 1
+            while cursor < closing:
+                if cursor in pairs and tokens[cursor].text in ("(", "[", "{"):
+                    cursor = pairs[cursor] + 1
+                    continue
+                if tokens[cursor].text == ",":
+                    mark(cursor + 1, closing)
+                    break
+                cursor += 1
+        elif token.text == "match":
+            cursor = index + 1
+            opening = None
+            while cursor < len(tokens):
+                if cursor in pairs and tokens[cursor].text in ("(", "["):
+                    cursor = pairs[cursor] + 1
+                    continue
+                if tokens[cursor].text == "{":
+                    opening = cursor
+                    break
+                if tokens[cursor].text == ";":
+                    break
+                cursor += 1
+            if opening is None or opening not in pairs:
+                continue
+            closing = pairs[opening]
+            arm_start = opening + 1
+            cursor = arm_start
+            while cursor < closing:
+                if cursor in pairs and tokens[cursor].text in ("(", "[", "{"):
+                    cursor = pairs[cursor] + 1
+                    continue
+                if tokens[cursor].text == "=>":
+                    mark(arm_start, cursor)
+                elif tokens[cursor].text == ",":
+                    arm_start = cursor + 1
+                cursor += 1
+    return mask
+
+
+def ast_names(code: str) -> dict[str, str]:
+    """返回本文件可指到 AST 的裸名/别名；限定路径另行识别。"""
+    names: dict[str, str] = {}
+    for match in re.finditer(
+        r"\buse\s+(?:crate::)?ast::(.*?);", code, flags=re.DOTALL
+    ):
+        tail = match.group(1).strip()
+        items = tail[1:-1] if tail.startswith("{") and tail.endswith("}") else tail
+        for item in items.split(","):
+            item = item.strip()
+            imported = re.fullmatch(
+                r"(Expr|Stmt|Type)(?:\s+as\s+([A-Za-z_][A-Za-z0-9_]*))?", item
+            )
+            if imported:
+                canonical, alias = imported.groups()
+                names[alias or canonical] = canonical
+    return names
+
+
+def find_constructions(path: Path, source: str) -> list[tuple[int, str]]:
+    code = sanitize(source)
+    tokens = tokenize(code)
+    pairs = delimiter_pairs(tokens)
+    patterns = pattern_mask(tokens, pairs)
+    tests = test_item_ranges(code, tokens)
+    names = ast_names(code)
+    findings: list[tuple[int, str]] = []
+
+    for index, token in enumerate(tokens):
+        qualified = False
+        canonical = names.get(token.text)
+        if token.text in CANONICAL:
+            canonical = token.text
+            qualified = index >= 2 and tokens[index - 1].text == "::" and tokens[index - 2].text == "ast"
+        if canonical is None:
+            continue
+        if not qualified and token.text not in names and token.text in CANONICAL:
+            continue
+        if any(start <= token.start < end for start, end in tests):
+            continue
+        if patterns[index]:
+            continue
+
+        if canonical == "Stmt":
+            if index + 1 < len(tokens) and tokens[index + 1].text == "{":
+                line = source.count("\n", 0, token.start) + 1
+                findings.append((line, f"{token.text} {{ … }} 结构构造"))
+            continue
+
+        if index + 3 >= len(tokens):
+            continue
+        if tokens[index + 1].text != "::":
+            continue
+        variant = tokens[index + 2].text
+        following = tokens[index + 3].text
+        if not variant[:1].isupper() or following not in ("(", "{"):
+            continue
+        if patterns[index + 2]:
+            continue
+        line = source.count("\n", 0, token.start) + 1
+        findings.append((line, f"{token.text}::{variant} 表达式构造"))
+    return findings
+
+
+def is_test_path(relative: str) -> bool:
+    return "tests" in Path(relative).parts
+
+
+def scan(root: Path) -> tuple[int, list[str]]:
+    files: dict[str, Path] = {}
+    for directory in SCAN_DIRS:
+        base = root / directory
+        if not base.exists():
+            continue
+        for path in base.rglob("*.rs"):
+            relative = path.relative_to(root).as_posix()
+            files[relative] = path
+
+    violations: list[str] = []
+    for relative, path in sorted(files.items()):
+        if relative == SYNTH_FILE or is_test_path(relative):
+            continue
+        source = io.open(path, "r", encoding="utf-8").read()
+        for line, description in find_constructions(path, source):
+            violations.append(f"{relative}:{line}: {description}（只允许 {SYNTH_FILE}）")
+    return len(files), violations
+
+
+def selftest() -> int:
+    negative = r'''
+use crate::ast::{Expr, Stmt, Type};
+fn queries(expr: &Expr, stmt: &Stmt, ty: &Type) {
+    match expr {
+        Expr::Var(_, _) => {}
+        Expr::Call { .. } => {}
+        _ => {}
+    }
+    if let Expr::Lambda { .. } = expr {}
+    while let Type::Fn { .. } = ty {}
+    let Expr::Var(_, _) = expr else { return; };
+    let Stmt { .. } = stmt;
+    assert!(matches!(expr, Expr::Var(_, _)));
+    assert!(matches!(ty, Type::Fn { .. }));
+    let query = Expr::extract_binding_positions(expr);
+    let types = stmt.type_annotation.as_ref().map(crate::ast::Type::fn_params_flat);
+    // ast::Expr::Var("comment".into(), span)
+    let text = "ast::Expr::Var(\"string\".into(), span)";
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    fn fixture() -> Expr { Expr::Var("test".into(), Span::dummy()) }
+}
+'''
+    positive = r'''
+use crate::ast::{Expr, Stmt, Type as AstType};
+fn constructs() {
+    let expr = ast::Expr::Var("x".into(), Span::dummy());
+    let other = Expr::Lambda { params: vec![], body: body, span };
+    let statement = crate::ast::Stmt { kind, span, plan_id };
+    let ty = AstType::Name { name, span };
+}
+'''
+    with tempfile.TemporaryDirectory(prefix="check-synth-boundary-") as temporary:
+        root = Path(temporary)
+        fixtures = {
+            "src/frontend/core/sema/patterns.rs": negative,
+            "src/frontend/core/types/patterns.rs": negative,
+            "src/middle/lower/query.rs": negative,
+            "src/backends/query.rs": negative,
+            "src/std/query.rs": negative,
+            "src/middle/lower/synth.rs": positive,
+            "src/middle/lower/tests/fixture.rs": positive,
+            "src/middle/lower/illegal.rs": positive,
+            "src/frontend/core/sema/illegal.rs": positive,
+            "src/backends/illegal.rs": positive,
+            "src/std/illegal.rs": positive,
+        }
+        for relative, source in fixtures.items():
+            path = root / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(source, encoding="utf-8")
+        _, violations = scan(root)
+
+    forbidden = [item for item in violations if "/illegal.rs:" in item]
+    unexpected = [item for item in violations if "/illegal.rs:" not in item]
+    expected_files = {
+        "src/middle/lower/illegal.rs",
+        "src/frontend/core/sema/illegal.rs",
+        "src/backends/illegal.rs",
+        "src/std/illegal.rs",
+    }
+    observed_files = {item.split(":", 1)[0] for item in forbidden}
+    failures: list[str] = []
+    if observed_files != expected_files:
+        failures.append(f"真构造未全部判红：observed={sorted(observed_files)}")
+    if unexpected:
+        failures.append(f"非构造/允许面误报：{unexpected}")
+    if failures:
+        for failure in failures:
+            print(f"SELFTEST FAIL: {failure}", file=sys.stderr)
+        return 1
+    print("check-synth-boundary selftest: PASS")
+    print(f"  真构造判红：{len(forbidden)} 处，覆盖 middle/sema/backends/std")
+    print("  非构造零误报：match/if-let/while-let/let-else/matches!/查询/注释/字符串/cfg(test)/tests 路径")
+    print(f"  唯一允许文件：{SYNTH_FILE}")
+    return 0
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--selftest", action="store_true", help="运行正反向门禁自检")
+    args = parser.parse_args()
+    if args.selftest:
+        return selftest()
+
+    count, violations = scan(ROOT)
+    print(f"check-synth-boundary: 扫描 {count} 个 L3/L4 Rust 文件")
+    print(f"唯一 AST 合成例外：{SYNTH_FILE}")
+    if violations:
+        print("AST 合成越界：", file=sys.stderr)
+        for violation in violations:
+            print(f"  {violation}", file=sys.stderr)
+        return 1
+    print("check-synth-boundary: PASS（生产 AST 合成全部位于 synth.rs）")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

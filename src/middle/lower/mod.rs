@@ -9,7 +9,8 @@
 //! - `stmt.rs` / `loops.rs`：语句与循环族（7.0.2）；
 //! - `globals.rs` / `module_ir.rs` / `const_eval.rs`：全局定义、模块装配与常量求值族（7.0.2）；
 //! - `curry.rs`：柯里化族（7.0.3）；
-//! - `expr/`：表达式 lowering（入口/总派发 + 按方法簇分的子模块，7.0.3）。
+//! - `expr/`：表达式 lowering（入口/总派发 + 按方法簇分的子模块，7.0.3）；
+//! - `synth.rs`：L3/L4 唯一 AST 合成边界与显式闭包环境（7c.1）。
 //!
 //! 结构体字段与方法的可见性（`pub(super)` / `pub(in crate::lower)` /
 //! `pub(in crate::middle)`）是跨文件拆分的机械需要：这些字段与方法原先私有于单个
@@ -25,6 +26,7 @@ mod query;
 mod regalloc;
 mod scope;
 mod stmt;
+mod synth;
 
 #[cfg(test)]
 mod tests;
@@ -33,15 +35,22 @@ use crate::frontend::core::sema::layers::ownership::ReleasePlan;
 use crate::frontend::core::sema::types::OverloadResolutions;
 use crate::frontend::core::sema::{MonoType, TypeCheckResult};
 use crate::frontend::module::registry::ModuleRegistry;
-use crate::middle::ir::ir::{ConstValue, FrameId, FunctionIR, Instruction, LocalSlot, Operand};
+use crate::middle::ir::ir::{ConstValue, FrameId, FunctionIR, Instruction, LocalSlot};
 use crate::util::diagnostic::Diagnostic;
 use crate::util::span::Span;
 use std::collections::HashMap;
 
+/// 词法绑定的运行时位置。
+#[derive(Debug, Clone, Copy)]
+pub(super) enum BindingLocation {
+    Local(usize),
+    Upvalue(usize),
+}
+
 /// 符号表条目
 #[derive(Debug, Clone)]
 pub(super) struct SymbolEntry {
-    local_idx: usize,
+    location: BindingLocation,
     /// 该变量绑定时**写出**的类型名（`x: TempB = ..` 的注解原文，或构造器调用
     /// `TempB(..)` / `ns.Temp(..)` 写出的名字）。WBS 4.9.8 / issue #465：
     /// `MonoType` 对导入类型只留**定义侧裸名**，两单元的同名类型分不出来；
@@ -178,14 +187,6 @@ pub struct AstToIrGenerator {
     /// [`ReleasePlan::consume`] 取条目（取即记账），故计划本体同时携带
     /// 「产出」与「已消费」两侧事实：结算（义务账本 W1090）读的是同一份账。
     pub(super) release_plan: ReleasePlan,
-    /// 待捕获的环境变量（由 spawn for 等设置，供下一个 Expr::Lambda 使用）
-    /// 在生成闭包函数体时，这些变量的当前寄存器值会被捕获到闭包环境中。
-    pub(super) pending_env_vars: Vec<Operand>,
-    /// #254：待捕获变量名（与 pending_env_vars 一一对应，供闭包体 Var 解析）
-    pub(super) pending_env_names: Vec<String>,
-    /// #254：当前闭包体的捕获表（变量名 → env 槽位索引）。
-    /// 生成闭包体期间设置，闭包体内 Var 命中则生成 LoadUpvalue。
-    pub(super) closure_captures: HashMap<String, usize>,
     /// RFC-029 #243：用户模块命名空间变量（别名 → 模块限定键）。
     /// 由 `use lib` / `use lib as l` 等整体导入填充，使 `lib.helper()` 在 IR 生成
     /// 阶段被识别为命名空间调用并解析为限定名 `lib.helper`（与 `qualify_module_ir`
@@ -358,9 +359,6 @@ impl AstToIrGenerator {
             constraint_var_concrete_types: HashMap::new(),
             anon_function_irs: Vec::new(),
             release_plan: type_result.release_plan.clone(),
-            pending_env_vars: Vec::new(),
-            pending_env_names: Vec::new(),
-            closure_captures: HashMap::new(),
             user_namespaces: HashMap::new(),
             use_aliases: HashMap::new(),
             registry,

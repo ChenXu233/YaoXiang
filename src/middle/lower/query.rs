@@ -91,7 +91,7 @@ impl AstToIrGenerator {
         field: &str,
     ) -> Option<String> {
         let (head, fields) = flatten_namespace(expr)?;
-        if self.closure_captures.contains_key(head) || self.lookup_local(head).is_some() {
+        if self.lookup_upvalue(head).is_some() || self.lookup_local(head).is_some() {
             return None;
         }
         if !self.resolver().is_namespace(head) {

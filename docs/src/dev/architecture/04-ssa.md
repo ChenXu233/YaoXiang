@@ -175,36 +175,11 @@ if let Some(vars) = self.release_plan.get(&stmt.span) {
 
 > **`method_def_ordinals` 不是 span 键控。** 它是 `HashMap<String, usize>`（`ir_gen.rs:224`），在 `:369` 初始化，唯一写入点 `:1692-1702`（按 `base_name` 的定义序分配 `#N` 后缀）。它的风险是**另一种**：定义序依赖——`#N` 后缀由 AST 定义顺序决定，若生成顺序与 typecheck 注册序不一致，同一函数名会解析到不同目标。这一条不是 span 失配，但同样"错了不报错"，处置见「span 键控的额外机制」的机制三。
 
-### 缺陷类 4：spawn/lambda 隐式握手
+### 缺陷类 4：spawn/lambda 隐式握手（已消除，7c.1）
 
-**已核实事实。** `ir_gen.rs` 有**两处**自己构造 `ast::Expr::Lambda` 并回调 `generate_expr_ir`，靠一组可变字段握手：
+**已消除。** spawn 与 spawn-for 曾要求调用方先写 `pending_env_vars` / `pending_env_names`，再由合成 Lambda 消费；闭包体另靠 `closure_captures` 判定变量是否读取 upvalue。三份字段把正确性押在调用顺序与手工清理上：嵌套合成闭包会把外层同名局部槽误作捕获值，闭包体生成提前返回也会把捕获状态泄漏给后续无关 lowering。
 
-**握手 A —— `generate_spawn_for_ir`（入口 `4143`）：**
-
-```
-4245    self.pending_env_vars = vec![Operand::Local(element_reg)];
-4246    let lambda = ast::Expr::Lambda { params: ..., body: ..., span };
-4256    self.generate_expr_ir(&lambda, closure_reg, instructions, constants)?;
-```
-
-`generate_expr_ir` → `generate_lambda_expr_ir`（入口 `6543`）→ `6571-6572` `std::mem::take(&mut self.pending_env_vars)` 消费。
-
-**握手 B —— `generate_spawn_expr_ir`（入口 `6641`）：**
-
-```
-6698    self.pending_env_vars = env_ops;
-6699    self.pending_env_names = env_names;
-6701    let lambda = ast::Expr::Lambda { params: Vec::new(), body: Box::new(ast::Block { stmts: vec![ast::Stmt { ... }] }), span };
-6712    self.generate_expr_ir(&lambda, closure_reg, instructions, constants)?;
-6713    self.pending_env_vars.clear();
-6714    self.pending_env_names.clear();
-```
-
-**握手 C —— `closure_captures`**：写于 `6589-6593`，**在同一个函数里** `6598` 调用 `generate_lambda_body_ir`（入口 `4678`），`6600` 清除。读点有两处：`:6284`（闭包体内 `LoadUpvalue`）与 **`:458`**（`flatten_namespace` 路径上的 `closure_captures.contains_key(head)`）。
-
-`:458` 这个读点最危险：它在**命名空间解析**路径上，意味着一个 `HashMap<String, usize>` 的存活状态会改变变量名解析结果。`6589` 写、`6600` 清之间隔着一次完整的闭包体生成（`6598`）；若 `generate_lambda_body_ir` 内部任何一条路径提前返回而不清表（它在 `?` 运算符传播错误时有多个返回点），**`closure_captures` 就会残留到后续无关代码的 `:458`**。
-
-同类隐式状态还有 `pending_env_names`（B 握手写于 `6699`，`6714` 清）。
+7c.1 将合成 AST 收敛到 `middle/lower/synth.rs`，以显式 `SynthEnv` 取代三份共享字段，并把命名捕获注册为词法 upvalue。嵌套帧退出时按符号表深度恢复，错误路径不再残留捕获状态。落地结构见「`synth.rs` 边界」。
 
 ### SSA 不会解决的（诚实列出）
 
@@ -387,43 +362,32 @@ generate_call_expr_ir (746 行)
 
 ### `synth.rs` 边界：把隐式回调变成显式的合成 AST 边界
 
-**已核实事实**：`ir_gen.rs` 中构造 `ast::Expr` 的位置**恰为 2 处**——`:4246` 与 `:6701`（另有 `:6704` 构造 `ast::Stmt`、`:510` / `:1266` / `:1399` 构造 `ast::Type`）。
+**落地形态**：`src/middle/lower/synth.rs` 是 L3/L4 生产代码唯一允许构造 `ast::Expr` / `ast::Stmt` / `ast::Type` 的模块。模式匹配、只读查询与测试夹具不属于合成。当前生产合成点是 spawn 的 Lambda/Stmt 与 spawn-for 的 Lambda，全部经该模块。
 
-**提案**：新建 `src/middle/lower/synth.rs`，作为**全仓唯一**允许在 L3 层构造 `ast::Expr` / `ast::Stmt` / `ast::Type` 的模块。理由不是"整洁"，而是：
-
-> 构造 AST 意味着**重新进入前端 lowering 入口**。而 `generate_expr_ir` 期望的 `pending_env_vars` / `closure_captures` 状态是**调用方负责准备的前置条件**，而这个前置条件目前没有任何类型或签名表达——它靠"谁调用我"这个运行时事实成立。
-
-改成显式签名：
+AST 节点不携带 lowering 环境，因此 `SynthEnv` 不作为 AST 字段，也不由 AST 助手假装消费。它包含运行时 env 操作数与命名捕获名，由调用方随合成节点显式交给 `generate_expr_ir_with_env`：
 
 ```rust
-// src/middle/lower/synth.rs
 pub struct SynthEnv {
     pub env_vars: Vec<Operand>,
     pub env_names: Vec<String>,
-    pub captures: HashMap<String, usize>,
 }
 
-/// 合成一个捕获 env 的闭包 AST；捕获集由参数显式给出，
-/// 不依赖调用方对 self.pending_env_* 的事先写入
 pub fn synth_closure(
     params: Vec<ast::Param>,
     body: ast::Block,
-    env: SynthEnv,
     span: Span,
 ) -> ast::Expr
 ```
 
-具体改动：
+环境流如下：
 
-| 位置 | 现状 | 改为 |
-| --- | --- | --- |
-| `ir_gen.rs:4245-4256` | 写 `pending_env_vars` → 造 Lambda → 回调 | 调 `synth::synth_closure(...)` 得 AST，显式传 `SynthEnv`；`generate_lambda_expr_ir`（`6543`）增加一个携带 `SynthEnv` 的内部入口，**不再读 `self.pending_env_vars`** |
-| `ir_gen.rs:6698-6714` | 写 → 造 → 回调 → 清 | 同上；`6713-6714` 的 `clear()` 消失（无共享状态可清） |
-| `ir_gen.rs:6571-6572` | `mem::take(&mut self.pending_env_vars)` | 改为从入参读取 |
-| `ir_gen.rs:6589-6593` / `6600` | 写 / 清 `closure_captures` | 同上；`closure_captures` 降为**闭包体生成期间的局部变量**，`6600` 的 `clear()` 消失 |
-| `ir_gen.rs:458` | `self.closure_captures.contains_key(head)` 在命名空间解析路径上读共享字段 | **这是最危险的一处**：改为显式参数，否则 `generate_lambda_body_ir` 的任一 `?` 提前返回都会让捕获表泄漏到无关代码 |
+- spawn 与 spawn-for 构造 `SynthEnv`，随合成 Lambda 显式传入 lowering；不再预写 `pending_env_vars` / `pending_env_names`。
+- 普通 lambda 从既有自由变量收集器补全环境。列表推导、嵌套 Lambda 与嵌套 spawn 在同一收集器内遍历，生成器变量和嵌套形参按词法作用域排除。
+- 闭包体把 `SynthEnv` 注册为既有符号表中的 `BindingLocation::Upvalue`。变量读取与命名空间遮蔽查询共用这条词法绑定，不再读取 `closure_captures`。
+- 嵌套闭包经 `capture_operand` 先读取外层 upvalue，再把值交给内层环境；不会把外层同名局部槽误当捕获值。
+- `NestedBodyGuard` 记录进入时的符号表深度，退出（含 `?` 提前返回）截断到该深度，捕获绑定不会残留到后续无关 lowering。
 
-**判据**：新增哨兵测试 `test_no_ast_construction_outside_synth`，扫 `src/middle/**` 除 `synth.rs` 外不得出现 `ast::Expr::` / `ast::Stmt {` 构造语法。形态同 RFC-039 的 `check-module-boundary.py`。
+**判据**：`scripts/ci/check-synth-boundary.py` 扫描 01-routing 对应的 sema、proof、middle、backends 与 std 生产面，唯一例外是 `middle/lower/synth.rs`。脚本以 token 上下文区分构造与 match / if let / let-else / matches! / 查询 / 注释 / 字符串 / 测试代码；`--selftest` 同时证明真构造会红、非构造读取不误报。仓库扫描与自检均接入 CI 的 WBS 9.8 门禁。
 
 ### span 键控问题的处置（SSA 解决不了的部分）
 

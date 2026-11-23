@@ -9,7 +9,8 @@ use crate::middle::ir::ir::{
     ConstValue, FunctionBody, FunctionIR, Instruction, LocalSlot, Operand,
 };
 use crate::middle::lower::scope::NestedBodyGuard;
-use crate::middle::lower::AstToIrGenerator;
+use crate::middle::lower::synth::SynthEnv;
+use crate::middle::lower::{AstToIrGenerator, BindingLocation};
 use crate::util::diagnostic::Diagnostic;
 
 /// Lambda 函数体 IR 结果（7b.4 起块由收尾单点切好，不再回传展平指令）
@@ -29,22 +30,26 @@ impl AstToIrGenerator {
         params: &[ast::Param],
         body: &ast::Block,
         constants: &mut Vec<ConstValue>,
-        env_count: usize,
+        env: &SynthEnv,
     ) -> Result<LambdaBodyIR, Diagnostic> {
+        let env_count = env.env_names.len();
         // WBS 7a.2：lambda 体是独立指令流——父帧（槽位表 / 循环栈 / 当前 span /
         // 三项计数）整体摘进 guard，Drop 时原样返回。
         let mut frame = NestedBodyGuard::enter(self);
 
         let mut instructions = Vec::new();
 
-        // 进入闭包函数体作用域
+        // 进入闭包函数体作用域，并把显式环境注册为词法 upvalue。
         frame.enter_scope();
+        for (upvalue_idx, name) in env.env_names.iter().enumerate() {
+            frame.register_upvalue(name, upvalue_idx);
+        }
 
         // 注册参数槽位。
         // env_count：闭包 env 在帧参数中占前段（运行时 `final_args = env + args`
         // 且 `Frame::with_args` 已把它们铺进 slots[0..]）。因此本层参数直接位于
         // `env_count + i`，**无需** LoadArg——那会与已铺好的槽位错位。
-        // 捕获变量同理：`closure_captures` 让 Var 解析走 LoadUpvalue。
+        // 捕获变量经词法 upvalue 绑定走 LoadUpvalue。
         for (i, param) in params.iter().enumerate() {
             frame.register_local(&param.name, env_count + i);
         }
@@ -132,10 +137,31 @@ impl AstToIrGenerator {
         })
     }
 
+    /// 把词法绑定物化为下一次闭包创建的 env 操作数。
+    pub(super) fn capture_operand(
+        &mut self,
+        name: &str,
+        instructions: &mut Vec<Instruction>,
+    ) -> Option<Operand> {
+        match self.lookup_binding(name)? {
+            BindingLocation::Local(local_idx) => Some(Operand::Local(local_idx)),
+            BindingLocation::Upvalue(upvalue_idx) => {
+                let dst = self.next_temp_reg();
+                instructions.push(Instruction::LoadUpvalue {
+                    dst: dst.clone(),
+                    upvalue_idx,
+                    span: self.cur_span,
+                });
+                Some(dst)
+            }
+        }
+    }
+
     pub(super) fn generate_lambda_expr_ir(
         &mut self,
         params: &[ast::Param],
         body: &ast::Block,
+        mut env: SynthEnv,
         result_reg: Operand,
         instructions: &mut Vec<Instruction>,
         constants: &mut Vec<ConstValue>,
@@ -154,15 +180,9 @@ impl AstToIrGenerator {
         // 3. 为闭包参数分配寄存器索引
         let _param_regs: Vec<usize> = (0..params.len()).collect();
 
-        // RFC-009a / #254：闭包需捕获自由变量。
-        // `pending_env_vars` 只由 spawn/for 路径填充；普通 lambda（如
-        // `adder: (n: Int) -> ((x: Int) -> Int) = (x) => x + n` 里的内层）
-        // 从未填充，导致 `MakeClosure` 的 env 为空，`n` 在闭包体内取不到
-        // （实测 `adder(10)(5)` 得 10 而非 15）。
-        // 此处按“body 中引用但非自身参数”收集自由变量，用外层寄存器作为 env。
-        let mut env_vars = std::mem::take(&mut self.pending_env_vars);
-        let mut env_names = std::mem::take(&mut self.pending_env_names);
-        if env_names.is_empty() {
+        // 合成调用显式给环境；普通 lambda 从既有自由变量收集器补全环境。
+        // 外层 upvalue 经 capture_operand 先物化，嵌套闭包不再误读同名局部槽。
+        if env.env_names.is_empty() {
             let bound: std::collections::HashSet<&str> =
                 params.iter().map(|p| p.name.as_str()).collect();
             let mut free = Vec::new();
@@ -171,25 +191,16 @@ impl AstToIrGenerator {
                 super::collect_free_vars_stmt(stmt, &bound, &mut seen, &mut free);
             }
             for name in free {
-                if let Some(idx) = self.lookup_local(&name) {
-                    env_vars.push(Operand::Local(idx));
-                    env_names.push(name);
+                if let Some(operand) = self.capture_operand(&name, instructions) {
+                    env.env_vars.push(operand);
+                    env.env_names.push(name);
                 }
             }
         }
-        // #254：捕获表（变量名 → env 槽位），供闭包体内 Var 解析 → LoadUpvalue
-        self.closure_captures = env_names
-            .iter()
-            .enumerate()
-            .map(|(i, n)| (n.clone(), i))
-            .collect();
 
         // 5. 生成闭包函数体 IR
         // 类似于 generate_function_ir 的逻辑，但针对 Lambda
-        let closure_body =
-            self.generate_lambda_body_ir(params, body, constants, env_names.len())?;
-        // #254：闭包体生成完毕，清除捕获表
-        self.closure_captures.clear();
+        let closure_body = self.generate_lambda_body_ir(params, body, constants, &env)?;
 
         // 6. 创建闭包函数 IR
         // WBS 2.1.2 实测缺陷修复：无注解参数此前被 filter_map 丢弃，
@@ -233,7 +244,7 @@ impl AstToIrGenerator {
         instructions.push(Instruction::MakeClosure {
             dst: result_reg.clone(),
             func: closure_name,
-            env: env_vars,
+            env: env.env_vars,
             def: None,
             span: self.cur_span,
         });
