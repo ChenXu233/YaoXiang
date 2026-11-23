@@ -8564,3 +8564,79 @@ delete-recycle 变异实测 354/323 槽越界 ⇒ 本批分配器落地后才绿
 ### 九、推送前 rebase 终态
 
 收口笔之后、推送之前，`origin/dev` 又推进 10 笔（顶端 `7cf822b6`：P8 8.0 死阶梯清理 C6 收口、三笔 CI 修复、`url` 依赖升级、auto-translate 等）。本地 7b.4 六笔 rebase 到新顶端；唯一冲突在 09a 尾部（origin 的 8.0 收口段 vs 本批 7b.4 契约段），两段都保留（8.0 收口在前）。**终态复跑（合并树）**：fmt / clippy 0；`testsuite run fast` **2524 条** exit 0（验证轮 2527 − origin 8.0 随死对象删除的 3 条 `precedence` 测试）；语料 403/403 差分空；docs 五脚本 exit 0（refs 1253 文件 / 13514 token）；生成器幂等 diff 空。**本批的 `src/middle/lower` / `src/middle/ir` / 快照与测试面相对验证 revision 逐字节一致**（`git diff` 为空，origin 只动 `src/frontend/core/parser/pratt/*` 与 `src/std/tests/stdlib_docs.rs`），故验证结论对合并树高保真；数字差异只来自 origin 侧测试删除。
+
+## P8 8.8 测试补全（8.8.1 结合性 / 优先级用例 + 8.8.2 四类字面量错误路径）收口（2026-11-23）
+
+> **一、范围与终态**：8.8 的三个三级任务中，8.8.1 与 8.8.2 已完成；8.8.3（`parser/tests/` 的接线自检断言）按排期留待 8.6 删 Pratt 后由同一团队追加，故 WBS 的 8.8 组行不勾选。改动面 6 个文件：新增 `src/frontend/core/parser/tests/associativity.rs`、`src/frontend/core/parser/tests/mod.rs`（+1 行 mod 声明）、`src/frontend/core/lexer/tests/literals.rs`（补测段），以及三份文档 `05` / `09` / `09a`（本节）。**生产代码零改动**：`src/frontend/core/parser/` 与 `src/frontend/core/lexer/` 的生产文件均未修改（`git status` 只列测试与文档）。
+>
+> **二、8.8.1 判据口径**：用例只经公共入口 `parser::parse_with_probe` 断言**语言级 AST 形状**，文件内 `pratt::` 零命中（`git grep -n 'pratt::'` 复核 exit 1），故 8.4 双解析器差分与 8.6 删 Pratt 之后原样存活——守的是 C5 等价面「合法程序的 AST 形状不变」。覆盖矩阵：
+>
+> | 性质 | 用例 | 断言的形状 |
+> | --- | --- | --- |
+> | SPEC §2.2 级 5「左到右」 | `test_sub_is_left_associative` | `a - b - c` → `Sub(Sub(a,b),c)` |
+> | SPEC §2.2 级 4「左到右」 | `test_div_is_left_associative` | `a / b / c` → `Div(Div(a,b),c)` |
+> | SPEC §2.2 级 4 高于级 5 | `test_mul_binds_tighter_than_add` | `a + b * c` → `Add(a, Mul(b,c))` |
+> | SPEC §2.2 级 9 低于级 5 | `test_comparison_binds_looser_than_addition_on_both_operands` | `a + b < c + d` → `Lt(Add(a,b), Add(c,d))` |
+> | SPEC §2.2 级 7 高于级 8 | `test_shift_binds_tighter_than_bitwise_ops_on_both_operands` | `a & b << c` → `BitAnd(a, Shl(b,c))`；`a << b & c` → `BitAnd(Shl(a,b), c)` |
+> | SPEC §2.2 级 8 同级「左到右」 | `test_bitwise_level_is_left_associative_across_operators` | `a \| b ^ c` → `BitXor(BitOr(a,b), c)` |
+> | SPEC §2.2 Range 注 / §2.12 | `test_range_upper_bound_swallows_addition` | `0..n + 2` → `Range(0, Add(n,2))` |
+> | SPEC §2.2 Range 注（step 形态） | `test_range_chain_is_left_associative` | `a..b..c` → `Range(Range(a,b), c)` |
+> | SPEC §2.10（体为完整 Expr） | `test_lambda_body_is_right_greedy` | `(x) => x + 1` → `Lambda{x, return Add(x,1)}` |
+> | SPEC §2.2 级 12「右到左」 | `test_assignment_is_right_associative` | `a = b = c` → `Assign(a, Assign(b,c))` |
+> | SPEC §2.2 级 1 高于级 2 / §2.6 | `test_cast_target_stops_at_call_suffix_boundary` | `f(x) as Int` → `Cast(Call(f,[x]), Int)` |
+> | SPEC §2.11 / §2.2 级 1 | `test_try_postfix_binds_tighter_than_addition` | `f(x)? + 1` → `Add(Try(Call(f,[x])), 1)` |
+> | SPEC §2.2 级 1 / §2.3–§2.5 | `test_call_chain_postfix_binds_tighter_than_addition` | `a.b(c)[0] + 1` → `Add(Index(Call(Field(a,b),[c]),0), 1)` |
+> | SPEC §2.8 `MatchArm ::= Pattern ('\|' Pattern)*` | `test_pattern_or_chain_collects_all_alternatives` | `1 \| 2 \| 3` 臂 → `Or([1,2,3])` |
+> | SPEC §2.1 括号分组（区分力对照） | `test_grouped_sub_expression_overrides_left_associativity` | `a - (b - c)` → `Sub(a, Sub(b,c))` |
+>
+> **三、「层内绑定力严格递增、无重复」不设门禁**：05 阶段 3 原列该断言。按 coding-rules 7.1，换一个把同层数值重排的正确实现它就会红——它冻的是实现选择，只能作特征化。本批不设该断言，层级关系由上表逐条守；05 的阶段 3 文本已就地改为「语言级 AST 形状」口径，并写明这一条不作门禁。
+>
+> **四、与 WBS 原文「先红后绿」的偏差**：本批零生产改动，用例先于 LALRPOP 文法落地，**没有红态可走**；要造红只能改 `pratt/` 生产代码，而它不在本批 inScope，且 8.8 的职责正是把等价锚提前钉在公共入口上。等价锚的实际效力由 8.4 双解析器差分兑现（两套 parser 对同一语料逐位比 AST），8.6 删 Pratt 时由上表给出可判定的回归面。**区分力证据**：`test_sub_is_left_associative` 与 `test_grouped_sub_expression_overrides_left_associativity` 在同一断言面上给出相反分组，说明断言不是恒真；其余各条的替代分组都落在断言的另一侧（如 `a + b * c` 若右收即得 `Mul(Add(a,b), c)`）。
+>
+> **五、8.8.2 四类对照表**（旧四类 = 05 阶段 4 按改造前树登记；8.2.1 重写后函数名与形态已变，路径按**现树**重新定位）：
+>
+> | 旧四类 | 现树路径 | 状态 | 依据 / 用例 | 门 |
+> | --- | --- | --- | --- | --- |
+> | 四基数溢出 | `lexer/literals.rs`：`scan_radix_digits` 的溢出分支 + `scan_integer_literal` / `scan_decimal_literal` 收尾 | **已被 8.2 覆盖**，不重复造 | `test_radix_literals_overflow_rejected_with_literal_text`（8.2.1 新增；5 例：hex 33 位、hex 2^127 边界、octal、binary、decimal，断言 E0002 的 literal 参数是完整字面量） | 条款 §1.6.1 |
+> | 乘法溢出后继续消费分支 | `scan_radix_digits` 的 `if overflow { value.push(c); lexer.advance(); }`（溢出后仍推进流位置，token 流不裂） | **新增** | `test_radix_overflow_consumes_all_digits_before_next_token`：`Lexer::next_token` 直驱——错误 token 之后流直接结束，遗留数字未另起 token。8.2.1 的溢出用例只断言 payload 文本，未观察流位置 | 条款 §1.6.1 |
+> | `scan_leading_dot` 整体 | `lexer/literals.rs::scan_leading_dot`（数字 / 下划线 / 指数 / 后缀拒绝 / f64 收尾） | **原有 1 条弱断言，新增 5 条** | 原有 `test_leading_dot_invalid_trailing_letter_is_error` 只覆盖「后缀字母」；新增 `.5`（主路径值）、`.5e3`（指数）、`.5_5`（分隔符接受）、`.5_`（分隔符后非数字）、`.5e`（指数缺数字） | 证明（C5 行为保持）/ 病史（1775f378）；`.5_` 一条为特征化（D5） |
+> | `\x` / `\u` 非法转义 | `lexer/literals.rs::decode_escape` / `decode_hex_byte` / `decode_unicode` | **新增 3 条字符串 + 1 条字符** | `test_string_hex_escape_requires_two_digits`（`\x1` / `\x` / `\xZZ`）、`test_string_unicode_escape_requires_braced_codepoint`（`\u41` / `\u{}` / `\u{110000}`）、`test_string_unknown_escape_rejected`（`\q`）、`test_char_hex_escape_decodes_two_digits_and_rejects_one`（`'\x41'` → `'A'`，`'\x1'` 必须拒绝） | 证明（`\u{110000}` 按 Unicode 标量语义）；条款仅覆盖 `\q` 一条 |
+>
+> 错误类判据只断言词法错误**变体**（E0002 `InvalidNumber` / E0012 `InvalidEscape`），不断言消息措辞与 span 数值——后者是实现形状（coding-rules 7.1）。
+>
+> 门依据更正（复审 R1 / R4）：上表前两行属**条款门**（SPEC §1.6.1 有该形态）；后两行的 `.5` 前导点族与 `\x` / `\u` 转义**不在** SPEC §1.6.2 / §1.6.3 的文法内（§1.6.2 的 Float 要求整数部分；§1.6.3 的 Escape 产生式只含 `[nrt'"\\]` 与 `UnicodeEscape`），故改记**证明门**（C5 行为保持：同一输入的 token 流 / 诊断不变）与**病史门**（提交 1775f378：`t.0` 被读成 `t + 0.0`）。补 SPEC 正文属语言设计流程，本批不做、也不静默补。
+>
+> 计数（复审 R5）：四类共新增 **10** 条 = 溢出后继续消费 1 + 前导点 5 + 非法转义 3（字符串）+ 字符 `\x` 1；其中 `.5_` 一条为**特征化**（缺陷 D5），总数仍 10。
+>
+> **六、缺陷登记（本批发现，均不在本批修复）**：
+>
+> | # | 现象（实测） | 与规范的偏差 | 根因（读码定位） |
+> | --- | --- | --- | --- |
+> | D1 | `x as Int * y` → `Cast { target_type: ConstExpr(BinOp { Mul, Var("Int"), Var("y") }) }`；`x as Int + y`、`a as Int < b`、`f(x) as Int + 1` 同形，**零诊断** | SPEC syntax §2.2 级 2（`as` 高于 `*` / `<`）与 §2.6 `TypeCast ::= Expr 'as' TypeExpr`：目标类型必须是类型，不得吞掉其后的值级中缀 | 类型位的标识符种子会开启中缀续接（`statements/types.rs` 的 `type_position_expr_continues` / `parse_type_position_const_expr`）；该形态在 #543（提交 `b352b360`）之前即已存在，#543 只是抽成函数并让字面量种子复用 |
+> | D2 | `x * y as Int` → `Cast(Mul(x,y), Int)` | 同上级 2 > 级 4：应为 `x * (y as Int)` | `BP_CAST == BP_MUL`（05 §数值碰撞 已登记该碰撞，当时判为「偶然正确、不炸」；实测它在 `as` 上给出可见差异） |
+> | D3 | `a == b < c` → `Eq(a, Lt(b,c))`（`a != b > c` 同形）；反方向 `a < b == c` → `Eq(Lt(a,b), c)` 与规范一致 | SPEC §2.2 级 9 把 `==` `!=` `<` `>` `<=` `>=` 列为同一级、结合性「左到右」，故应为 `Lt(Eq(a,b), c)` | 同上：`BP_EQ` 与 `BP_CMP` 分列两层 |
+> | D4 | `'\x1'` → `InvalidToken { message: "Empty character literal" }` | 拒绝本身正确，但丢了错误归因：目标是「不再被 Empty character literal 覆盖，仍以 `InvalidEscape`（E0012）报出」；把 InvalidEscape 改指 E0001 属 E 类契约变更，另立裁决，不在本批 | `decode_hex_byte` 已发 `InvalidEscape`，随后 `scan_char` 的「空字符字面量」把 `lexer.error` 覆盖 |
+> | D5 | `.5_` → `Err(InvalidNumber)`，而整数路径 `1_` / `0x1_` / `1__0` / `0x1__F` 全部接受（实测） | 同一分隔符在两条路径上口径不一致：前导点路径要求分隔符两侧都有数字，整数路径不要求；SPEC §1.6.1 的 `[0-9][0-9_]*` 允许尾随 `_`，故整数路径的行为本身也在规范灰区 | `scan_radix_digits` 对 `_` 无条件跳过（四基数共用一条骨架）；`scan_leading_dot` 自带「下划线后必须是数字」检查 |
+>
+> D5 处置：`.5_` 断言降为**特征化**（用例保留、注释写明守的是现行为），不设门禁；修复方向是两条路径同判，届时同步改写该用例。观测方法：在 `lexer/tests/literals.rs` 临时加一条打印 `tokenize(<字面量>).map(|t| t[0].kind)` 的用例、跑完即删（未入库）。
+>
+> **CLI 实测（2026-11-23；探针未入库，复现方法与命令如下）**：三个探针各存一个 `.yx` 文件——(a) 三行 `x = 2` / `y = 3` / `z = x as Int * y`；(b) 前两行同上、末行 `z = x * y as Int`；(c) 一行 `z = (1 == 2 < 3)`；再 `cargo build --bin yaoxiang-rs`，逐个跑 `target/debug/yaoxiang-rs.exe check <file>`。结果：(a)(b) 都报 **1 error `E3005 IR generation error: unhandled expression in IR generation: Discriminant(14)` + 3 warning `W1004`（unused variable）**（`Expr::Cast` 在 ir_gen 无实现——SPEC syntax §2.6 ⑤ 已登记该缺口），**类型检查通过**；`z = (1 == 2 < 3)` 报 `E1002 Expected type 'int64', found type 'bool'`。即：三种形态今天都**不是**成功程序，D1–D3 不改变任何「原先成功」程序的对外表现，它们的实际消费者是 8.4 的 AST 逐位差分。按 D59 分流倾向 A/B/C 面（原先非成功），但仍须先裁「文法按 SPEC 还是按现行为」——这条决定 8.4 的比对基线。
+>
+> D1–D3 的 AST 形状观测方法：在 `parser/tests/` 下临时加一条打印 `parse_with_probe(&tokenize(<expr>), &NullProbe)` 结果的用例、跑完即删（未入库）；CLI 侧只能看到上述错误码，没有 AST dump 入口。
+>
+> **对 8.3 / 8.4 的直接输入**：D1–D3 都落在「差分按哪一侧对齐」上——LALRPOP 文法若按 SPEC 实现，`as` 与相等 / 比较的混合表达式必报不等价；先裁决「文法复刻现行为（C5 等价优先）」还是「先修缺陷再建文法」。D1 的吞并面最大（其后整条表达式都进类型位），建议在 8.3 开工前裁决。相关测试**不冻结错误形状**：`as` 与 `*` 的两种现行为只在 `associativity.rs` 文件头作事实登记，不写成用例。
+>
+> **七、census 欠账（实测；生成物未动）**：`docs/src/dev/test-gate-census.tsv` 最后一次入库是提交 `b73823b0`（2026-11-07），此后未再生。本轮 `python scripts/dev/test-gate-census.py --check` 得 exit 1（「TSV 与当前树不一致」）；把 `--stdout` 的输出与入库 TSV 按 (`测试名`, `入库文件路径`) 键逐行比对：入库 **2055** 行、当前树 **2638** 行，**当前树有、表内无 = 631 条**，其中**本轮新增 25 条**（`parser/tests/associativity.rs` 15 + `lexer/tests/literals.rs` 10）、**存量欠账 606 条**；**表内有、树中无 = 48 条**（陈旧行：8.0 删除 `Precedence` 死对象的用例、已删除的 sema / type-eval 用例等）。两份生成物（`test-gate-census.tsv` / `.md`）本批零改动；**再生承接：8.3 批次入批前置调查**（不新增任务号，避免出现没有承接人的散文化归属）。
+>
+> **八、门禁（本机实测，2026-11-23）**：`cargo fmt` 0；`cargo clippy --all --all-features --all-targets -- -D warnings` 0；`python scripts/dev/testsuite.py run fast` exit 0（**2549 条、跳过 0 条**）；`python scripts/ci/check-test-channel.py` exit 0；`cargo test --lib` **改前 2008 通过 / 0 失败 / 3 ignored → 改后 2033 通过 / 0 失败 / 3 ignored**（+25，等于新增用例数）。
+>
+> **九、边界与未动项**：未删任何既有用例（`tests/literals.rs` 的 diff 只有 import 行改写与新增段）；未新增 `#[ignore]` / `todo!` / `unimplemented!`；`parser/tests/mod.rs` 只加一行 `mod associativity;`；`docs/src/en/` 由 auto-translate 同步，`tests/`、`src/middle/`、`src/std/`、`Cargo.toml` 未动；`05` 只改阶段 3 一段（阶段 5 的 `pratt/tests/mod.rs` 口径留给 8.8.3 随 8.6 一并处理）。
+> **十、编排与偏差登记（队长补记，2026-11-23）**：
+>
+> - **团队与范围**：`yx-88-tests`，范围 = WBS 8.8 首轮（8.8.1 / 8.8.2）；8.8.3 待 8.6 删 `pratt/tests/` 后由同一团队追加，不重建队。
+> - **成员路由切换（偏差）**：初配的验证 / 复审成员走异族路由，在 t2 上连续 4 次 `TRANSPORT`（含任务收窄之后），移除后换到与实现者同一模型（verifier2 / reviewer2），此后 t2 / t4 / t7 一次通过。**代价**：验证 / 复审不再异族，`AGENTS.md` 第 5 条的异族要求以「独立会话 + 独立冻结树复现 + 变异探针」补偿，在此如实登记。
+> - **拆棒**：t2 收窄为静态对账（9 条 acceptance 对账、新增用例点名跑、census 复核），变异 trial 与语料 / IR 漂移移入 t4，降低单轮负载；判据强度不变。
+> - **池派工事故（已纠正）**：`remove_member` 把 t2 / t4 退回共享池后，调度把 **t2 派给了实现者**（自验）；队长同回合改派新验证成员，实现者未产出任何验证结论，证据链未被污染。
+> - **复审回环**：t3 判 `needs_revision`（R1–R9：门依据与文档精确性）→ 自动生成修复任务 t6，但其契约的 `inScope` 继承自 t1、混入非路径项并漏掉 `09`；队长按 AGENTS 编排约定第 6 条（`inScope` 必须是可被路径匹配器解析的前缀且覆盖机械必需面）修订契约（`revision_count = 1`）→ t6 修复 4 文件 +73/−43 → t7 复审 **pass**。
+> - **冻结对象与用途**：评审期用三个本地冻结树对象（`git commit-tree` 生成、未推送）分别作为 t2/t4 量测对象（t1 交付树）、t3 审核对象（t1 + 措辞精确化）、t7 审核与推送对象（t1 + 措辞精确化 + R1–R9 修复）；推送树与末者内容一致。
+> - **未动项**：`test-gate-census.tsv` / `.md` 未再生（欠账与承接见七）；`docs/src/en/` 由 auto-translate bot 同步；`docs/src/reference/`（SPEC）零改动。
