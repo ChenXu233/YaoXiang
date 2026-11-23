@@ -421,6 +421,8 @@ def scan(root: Path) -> tuple[int, list[str]]:
 
 
 def selftest() -> int:
+    # 非块 else 不为 rustc 接受；相应 fixture 仅防御不可编译 token 文本中的掩码回归，
+    # 不构成合法 Rust 语言覆盖；合法 Rust 覆盖由 block 与 if/else block fixture 承担。
     negative = r'''
 use crate::ast::{Expr, Stmt, Type};
 fn queries(expr: &Expr, stmt: &Stmt, ty: &Type) {
