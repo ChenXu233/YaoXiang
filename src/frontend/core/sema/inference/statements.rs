@@ -8,7 +8,7 @@
 use crate::frontend::core::sema::judgement::decide;
 use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};
 
-use crate::ast::{classify_generic_params, Block, Expr, Param, PlanId, Stmt};
+use crate::ast::{classify_generic_params, Block, Expr, Param, Stmt};
 use crate::frontend::core::sema::scope::VarInfo;
 use crate::frontend::core::types::{MonoType, PolyType, TraitTable, TypeConstraintSolver};
 use crate::frontend::module::registry::ModuleRegistry;
@@ -1234,7 +1234,9 @@ impl StatementChecker {
         self.check_fn_def_with_subst(
             name,
             params,
-            body,
+            &body.stmts,
+            None,
+            body.span,
             &std::collections::HashMap::new(),
             None,
             &std::collections::HashMap::new(),
@@ -1256,7 +1258,9 @@ impl StatementChecker {
         &mut self,
         name: &str,
         params: &[Param],
-        body: &Block,
+        body_stmts: &[Stmt],
+        expression_body: Option<&Expr>,
+        body_span: crate::util::span::Span,
         const_subst: &std::collections::HashMap<String, MonoType>,
         declared_value_params: Option<&[Param]>,
         type_param_vars: &std::collections::HashMap<String, MonoType>,
@@ -1265,7 +1269,9 @@ impl StatementChecker {
         self.check_fn_body(
             name,
             params,
-            body,
+            body_stmts,
+            expression_body,
+            body_span,
             const_subst,
             expected_ret,
             declared_value_params,
@@ -1283,6 +1289,16 @@ impl StatementChecker {
     // 形参已含 self 共 8 个：函数体检查需同时拿到声明返回类型（RFC-010a 规则①）
     // 与值级形参签名（#泛型柯里化下传），两者来源不同不宜合并。与仓库既有
     // lower/stmt.rs 的 `generate_function_ir` / formatter/handlers/stmt.rs 的同类签名一致。
+    /// 直接检查表达式形态的函数体，并与语句形态共用尾类型记录。
+    fn check_expression_body(
+        &mut self,
+        expression: &Expr,
+    ) -> Result<(), Box<Diagnostic>> {
+        let ty = self.check_expr(expression)?;
+        self.last_expr_stmt_ty = Some(ty);
+        Ok(())
+    }
+
     #[allow(clippy::too_many_arguments)]
     /// 实现头标注与声明同位的值级类型是否**指同一个类型**（D54 修复轮 F2）。
     ///
@@ -1364,7 +1380,9 @@ impl StatementChecker {
         &mut self,
         name: &str,
         params: &[Param],
-        body: &Block,
+        body_stmts: &[Stmt],
+        expression_body: Option<&Expr>,
+        body_span: crate::util::span::Span,
         const_subst: &std::collections::HashMap<String, MonoType>,
         expected_ret: Option<MonoType>,
         declared_value_params: Option<&[Param]>,
@@ -1574,7 +1592,9 @@ impl StatementChecker {
             // 收集模式：收集所有错误，不短路
             let mut first_err = None;
             self.clear_tail_ty();
-            for stmt in &body.stmts {
+            let expression_result =
+                expression_body.map(|expression| self.check_expression_body(expression));
+            for stmt in body_stmts {
                 if let Err(e) = self.check_stmt(stmt) {
                     if first_err.is_none() {
                         first_err = Some(e.clone());
@@ -1582,7 +1602,18 @@ impl StatementChecker {
                     self.collect_error(*e);
                 }
             }
-            if let Err(e) = self.check_body_tail_type(body, expected_ret.as_ref()) {
+            if let Some(Err(e)) = expression_result {
+                if first_err.is_none() {
+                    first_err = Some(e.clone());
+                }
+                self.collect_error(*e);
+            }
+            if let Err(e) = self.check_body_tail_type(
+                body_stmts,
+                expression_body,
+                body_span,
+                expected_ret.as_ref(),
+            ) {
                 if first_err.is_none() {
                     first_err = Some(e.clone());
                 }
@@ -1616,14 +1647,24 @@ impl StatementChecker {
             // 短路模式：遇到第一个错误立即返回
             let mut err = None;
             self.clear_tail_ty();
-            for stmt in &body.stmts {
+            let expression_result =
+                expression_body.map(|expression| self.check_expression_body(expression));
+            for stmt in body_stmts {
                 if let Err(e) = self.check_stmt(stmt) {
                     err = Some(e);
                     break;
                 }
             }
+            if let Some(Err(e)) = expression_result {
+                err = Some(e);
+            }
             if err.is_none() {
-                if let Err(e) = self.check_body_tail_type(body, expected_ret.as_ref()) {
+                if let Err(e) = self.check_body_tail_type(
+                    body_stmts,
+                    expression_body,
+                    body_span,
+                    expected_ret.as_ref(),
+                ) {
                     err = Some(e);
                 }
             }
@@ -1680,12 +1721,16 @@ impl StatementChecker {
     ///
     /// 循环体也是 `{}` 块，故 `while` / `for` 的值同此规则（spec §2.9「所有 `{}`
     /// 块的值由尾表达式给出，无例外」）。
-    fn block_value_ty(
+    fn body_value_ty(
         &self,
-        body: &Block,
+        body_stmts: &[Stmt],
+        expression_body: Option<&Expr>,
     ) -> Option<MonoType> {
         use crate::ast::StmtKind;
-        let Some(last) = body.stmts.last() else {
+        if expression_body.is_some() {
+            return self.last_expr_stmt_ty.clone();
+        }
+        let Some(last) = body_stmts.last() else {
             return Some(MonoType::Void);
         };
         match &last.kind {
@@ -1696,9 +1741,19 @@ impl StatementChecker {
         }
     }
 
+    /// 块形态适配入口；循环与尾校验共用 body_value_ty 的同一实现。
+    fn block_value_ty(
+        &self,
+        body: &Block,
+    ) -> Option<MonoType> {
+        self.body_value_ty(&body.stmts, None)
+    }
+
     fn check_body_tail_type(
         &mut self,
-        body: &Block,
+        body_stmts: &[Stmt],
+        expression_body: Option<&Expr>,
+        body_span: crate::util::span::Span,
         expected_ret: Option<&MonoType>,
     ) -> Result<(), Box<Diagnostic>> {
         let Some(expected) = expected_ret else {
@@ -1719,7 +1774,7 @@ impl StatementChecker {
         // 不重走 `check_expr`（那会重复声明体内局部变量，E2002），
         // 也不事后重建（旧 `peek_expr_type` 只识字面量/变量，其余返回 None 便
         // 静默跳过，#354——`if` / `match` / 调用等全部逃逸）。
-        let tail_ty: MonoType = match self.block_value_ty(body) {
+        let tail_ty: MonoType = match self.body_value_ty(body_stmts, expression_body) {
             Some(t) => t,
             // 未经 walk（被短路跳过）：无可校验的类型
             None => return Ok(()),
@@ -1743,7 +1798,7 @@ impl StatementChecker {
             // 无尾表达式（空块 / 末位语句）时无表达式 span 可指，退到函数名。
             let at = self
                 .tail_annotation_span
-                .unwrap_or_else(|| body.stmts.last().map_or(body.span, |s| s.span));
+                .unwrap_or_else(|| body_stmts.last().map_or(body_span, |s| s.span));
             return Err(Box::new(
                 ErrorCodeDefinition::return_type_mismatch(
                     &format!("{expected}"),
@@ -2004,27 +2059,12 @@ impl StatementChecker {
                         })
                         .cloned()
                         .collect();
-                    let synthetic_body = Block {
-                        stmts: vec![Stmt {
-                            kind: crate::ast::StmtKind::Expr(Box::new(
-                                value.as_deref().cloned().unwrap_or({
-                                    crate::ast::Expr::Lit(
-                                        crate::frontend::core::lexer::tokens::Literal::Void,
-                                        stmt.span,
-                                    )
-                                }),
-                            )),
-                            span: stmt.span,
-                            plan_id: PlanId::UNPLANNED,
-                        }],
-                        span: stmt.span,
-                    };
                     return self.check_fn_stmt(
                         &name,
                         type_annotation.as_ref(),
                         &value_params,
                         &[],
-                        synthetic_body,
+                        value.as_deref(),
                         *stmt_span,
                         def_span,
                     );
@@ -2078,16 +2118,12 @@ impl StatementChecker {
                         );
                     }
                 };
-                let body_block = Block {
-                    stmts: body_stmts.clone(),
-                    span: stmt.span,
-                };
                 let result = self.check_fn_stmt(
                     &name,
                     type_annotation.as_ref(),
                     &params,
                     &body_stmts,
-                    body_block,
+                    None,
                     *stmt_span,
                     def_span,
                 );
@@ -2297,8 +2333,8 @@ impl StatementChecker {
         name: &str,
         type_annotation: Option<&crate::ast::Type>,
         params: &[Param],
-        _stmts: &[Stmt],
-        body: Block,
+        body_stmts: &[Stmt],
+        expression_body: Option<&Expr>,
         _span: crate::util::span::Span,
         name_span: crate::util::span::Span,
     ) -> Result<(), Box<Diagnostic>> {
@@ -2555,8 +2591,8 @@ impl StatementChecker {
                 // value_sig 必须取外层整体，不得被下方 while 剥层吸收（剥层把
                 // expected_return_type 剥到最内层标量，与体的 return 载荷
                 //（内层 Fn）错配成 E1012，#501 形态 A 同一轴）。
-                let wrapped_closure = body.stmts.len() == 1
-                    && match &body.stmts[0].kind {
+                let wrapped_closure = body_stmts.len() == 1
+                    && match &body_stmts[0].kind {
                         crate::ast::StmtKind::Expr(e) => match e.as_ref() {
                             crate::ast::Expr::Lambda { .. } => true,
                             // 作者手写 return 的载荷 lambda（issue #546）
@@ -2763,7 +2799,9 @@ impl StatementChecker {
         let out = self.check_fn_def_with_subst(
             name,
             &params,
-            &body,
+            body_stmts,
+            expression_body,
+            _span,
             &const_subst,
             declared_value_params.as_deref(),
             &type_param_vars,

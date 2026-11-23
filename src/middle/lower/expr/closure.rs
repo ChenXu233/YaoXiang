@@ -32,7 +32,8 @@ impl AstToIrGenerator {
         constants: &mut Vec<ConstValue>,
         env: &SynthEnv,
     ) -> Result<LambdaBodyIR, Diagnostic> {
-        let env_count = env.env_names.len();
+        let env_count = env.slot_count();
+        let named_env_base = env.named_slot_base();
         // WBS 7a.2：lambda 体是独立指令流——父帧（槽位表 / 循环栈 / 当前 span /
         // 三项计数）整体摘进 guard，Drop 时原样返回。
         let mut frame = NestedBodyGuard::enter(self);
@@ -41,8 +42,8 @@ impl AstToIrGenerator {
 
         // 进入闭包函数体作用域，并把显式环境注册为词法 upvalue。
         frame.enter_scope();
-        for (upvalue_idx, name) in env.env_names.iter().enumerate() {
-            frame.register_upvalue(name, upvalue_idx);
+        for (index, name) in env.env_names.iter().enumerate() {
+            frame.register_upvalue(name, named_env_base + index);
         }
 
         // 注册参数槽位。

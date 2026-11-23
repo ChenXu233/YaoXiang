@@ -26,6 +26,19 @@ impl SynthEnv {
             env_names,
         }
     }
+
+    /// 运行时 env 的总槽数，包含匿名前缀；形参基址必须从这里起算。
+    pub(super) fn slot_count(&self) -> usize {
+        self.env_vars.len()
+    }
+
+    /// 命名捕获的起始槽；匿名前缀只允许出现在命名捕获之前。
+    pub(super) fn named_slot_base(&self) -> usize {
+        self.env_vars
+            .len()
+            .checked_sub(self.env_names.len())
+            .expect("SynthEnv 的命名捕获数不得超过 env 槽总数")
+    }
 }
 
 /// 合成一个闭包 AST；环境由调用方随该节点显式传给 lowering。

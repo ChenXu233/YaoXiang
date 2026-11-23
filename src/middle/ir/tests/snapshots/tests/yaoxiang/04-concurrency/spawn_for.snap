@@ -75,8 +75,8 @@ module
     Drop %0
     Ret v23
   fn closure_0(Int(64)) -> Void
-    slot[0] item : Int(64) @depth3
-    locals_total=2
+    slot[1] item : Int(64) @depth3
+    locals_total=3
     values_total=1
     value v0: TypeVar(TypeVar(44)) @block0
     Load v0 <- %0

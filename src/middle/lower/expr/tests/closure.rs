@@ -1,9 +1,11 @@
 //! 闭包环境直驱测试 — RFC-009a 自由变量捕获、RFC-024 spawn 与 RFC-039 D22
 //!
-//! 准入（证明门）：生产端必须把词法环境交给闭包，消费端必须经同一环境解析
-//! 自由变量；这是与寄存器编号、闭包命名等实现选择无关的正确性性质。测试从源码
-//! 走完 lex → parse → typecheck → lower，并同时观察生产端 MakeClosure.env 与
-//! 消费端 LoadUpvalue / 柯里具名 env 槽，最低成本地覆盖这条生产—消费链。
+//! 准入（条款门 + 证明门）：RFC-009a 的柯里 env、RFC-024 的 spawn Move 捕获与
+//! RFC-039 D22 的显式环境边界。完整管线用例同时观察 MakeClosure.env 与消费端；
+//! 直接 lowering 探针只测收集器，不改变 SPEC 对普通 lambda 隐式捕获的禁止。
+//! 闭包由父函数 MakeClosure 关系、形参数和捕获槽定位，不依赖内部命名。
+//! B 类先红后绿只声明真实红过的嵌套、错误恢复与 spawn-for 槽位用例；
+//! 普通 lambda、列表收集和既有 spawn 形态是回归覆盖，不冒充修复证据。
 
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::{parse, parse_expression};
@@ -11,7 +13,7 @@ use crate::frontend::core::sema::checker::TypeChecker;
 use crate::frontend::core::sema::probe::TypeLevelNamespace;
 use crate::frontend::core::sema::TypeCheckResult;
 use crate::frontend::module::registry::ModuleRegistry;
-use crate::middle::ir::ir::{Instruction, ModuleIR, Operand};
+use crate::middle::ir::ir::{FunctionIR, Instruction, ModuleIR, Operand};
 use crate::middle::lower::AstToIrGenerator;
 use crate::util::diagnostic::Severity;
 
@@ -89,33 +91,36 @@ fn assert_closure_channel(
 fn assert_curry_channel(
     ir: &ModuleIR,
     outer: &str,
-    inner: &str,
     captured: &str,
+    expected_params: usize,
 ) {
     let outer_function = ir
         .functions
         .iter()
         .find(|function| function.name == outer)
         .unwrap_or_else(|| panic!("必须生成外层函数 {outer}：{ir:?}"));
-    assert!(
-        outer_function
-            .all_instructions()
-            .any(|instruction| matches!(
-                instruction,
-                Instruction::MakeClosure { func, env, .. } if func == inner && env.len() == 1
-            )),
-        "{outer} 必须以一项 env 构造 {inner}，完整 IR={ir:?}"
-    );
+    let inner_name = outer_function
+        .all_instructions()
+        .find_map(|instruction| match instruction {
+            Instruction::MakeClosure { func, env, .. } if env.len() == 1 => Some(func.clone()),
+            _ => None,
+        })
+        .unwrap_or_else(|| panic!("{outer} 必须生成一项 env 的内层闭包：{ir:?}"));
     let inner_function = ir
         .functions
         .iter()
-        .find(|function| function.name == inner)
-        .unwrap_or_else(|| panic!("必须生成内层函数 {inner}：{ir:?}"));
+        .find(|function| function.name == inner_name)
+        .unwrap_or_else(|| panic!("{outer} 的内层闭包 {inner_name} 必须在模块函数表：{ir:?}"));
+    assert_eq!(
+        inner_function.params.len(),
+        expected_params,
+        "{outer} 的内层闭包形参数必须符合声明结构"
+    );
     let captured_slot = inner_function
         .locals()
         .iter()
         .position(|local| local.name.as_deref() == Some(captured))
-        .unwrap_or_else(|| panic!("{inner} 必须保留捕获槽 {captured}：{ir:?}"));
+        .unwrap_or_else(|| panic!("内层闭包必须保留捕获槽 {captured}：{ir:?}"));
     assert!(
         inner_function
             .all_instructions()
@@ -123,7 +128,7 @@ fn assert_curry_channel(
                 instruction,
                 Instruction::Load { src: Operand::Local(index), .. } if *index == captured_slot
             )),
-        "{inner} 必须从具名 env 槽 {captured_slot} 读取 {captured}，完整 IR={ir:?}"
+        "内层闭包必须从具名 env 槽 {captured_slot} 读取 {captured}，完整 IR={ir:?}"
     );
 }
 
@@ -151,7 +156,7 @@ fn test_lambda_free_variable_uses_explicit_environment() {
     );
 
     // Act
-    assert_curry_channel(&ir, "add", "__add_l0", "n");
+    assert_curry_channel(&ir, "add", "n", 1);
 
     // Assert
     assert!(
@@ -178,8 +183,8 @@ fn test_spawn_task_uses_synthesized_environment() {
 #[test]
 fn test_spawn_for_body_uses_synthesized_environment() {
     // Arrange
-    let ir =
-        compile_ir("main = () => { n = 10; items = [1, 2]; spawn for item in items { item + n } }");
+    let source = "main = () => { n = 10; items = [1, 2]; spawn for item in items { item + n } }";
+    let ir = compile_ir(source);
 
     // Act
     assert_closure_channel(&ir, 2);
@@ -188,6 +193,42 @@ fn test_spawn_for_body_uses_synthesized_environment() {
     assert!(
         closure_env_lengths(&ir).contains(&2),
         "spawn-for 必须显式携带迭代值及外层捕获环境"
+    );
+    let closure = ir
+        .functions
+        .iter()
+        .find(|function| {
+            function.params.len() == 1
+                && function
+                    .all_instructions()
+                    .any(|instruction| matches!(instruction, Instruction::LoadUpvalue { .. }))
+        })
+        .unwrap_or_else(|| panic!("必须按单形参与 upvalue 读取定位 spawn-for 闭包：{ir:?}"));
+    let upvalue_indices: Vec<usize> = closure
+        .all_instructions()
+        .filter_map(|instruction| match instruction {
+            Instruction::LoadUpvalue { upvalue_idx, .. } => Some(*upvalue_idx),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        upvalue_indices,
+        vec![1],
+        "匿名迭代 env 必须占 0 号槽，外层捕获 n 必须位于其后的 1 号槽"
+    );
+    let item_slot = closure
+        .locals()
+        .iter()
+        .position(|local| local.name.as_deref() == Some("item"))
+        .unwrap_or_else(|| panic!("spawn-for 闭包必须保留 item 形参槽：{ir:?}"));
+    assert_eq!(
+        item_slot, 2,
+        "item 形参必须位于两个 env 槽之后，而非与命名捕获重叠"
+    );
+    let execution = crate::run(source);
+    assert!(
+        execution.is_ok(),
+        "spawn-for + 外层捕获必须执行成功，不得再把 n 读成 Void：{execution:?}"
     );
 }
 
@@ -199,13 +240,79 @@ fn test_list_comprehension_inside_lambda_reads_captured_variables() {
     );
 
     // Act
-    assert_curry_channel(&ir, "make", "__make_l0", "n");
+    assert_curry_channel(&ir, "make", "n", 0);
 
     // Assert
     assert!(
         closure_env_lengths(&ir).contains(&1),
         "列表推导闭包必须在创建点固化外层 n"
     );
+}
+
+fn lower_lambda_with_local(
+    source: &str,
+    captured: &str,
+) -> (Vec<Instruction>, FunctionIR) {
+    let mut generator = empty_generator();
+    let local = generator.next_local_slot();
+    generator.register_local(captured, local);
+    let expression = parse_expr(source);
+    let mut instructions = Vec::new();
+    let mut constants = Vec::new();
+    let result = generator.next_temp_reg();
+    generator
+        .generate_expr_ir(&expression, result, &mut instructions, &mut constants)
+        .unwrap_or_else(|error| panic!("表达式必须经生产 lowering：{error:?}；{source}"));
+    let closure = generator
+        .nested_functions
+        .last()
+        .unwrap_or_else(|| panic!("lambda 必须产生闭包函数：{source}"))
+        .clone();
+    (instructions, closure)
+}
+
+#[test]
+fn test_lambda_free_variable_collector_uses_local_binding() {
+    // Arrange — 内部 lowering 探针，不改变语言规范的隐式捕获禁令。
+    let (instructions, closure) = lower_lambda_with_local("(x) => x + n", "n");
+
+    // Act
+    let envs: Vec<usize> = instructions
+        .iter()
+        .filter_map(|instruction| match instruction {
+            Instruction::MakeClosure { env, .. } => Some(env.len()),
+            _ => None,
+        })
+        .collect();
+    let uses_upvalue = closure
+        .all_instructions()
+        .any(|instruction| matches!(instruction, Instruction::LoadUpvalue { .. }));
+
+    // Assert — 条款门：RFC-009a 的闭包 env 与消费者必须同链。
+    assert_eq!(envs, vec![1], "普通 lambda 必须收集局部 n 作为 env");
+    assert!(uses_upvalue, "普通 lambda 必须从 env 读取 n：{closure:?}");
+}
+
+#[test]
+fn test_list_comprehension_free_variable_collector_captures_outer_value() {
+    // Arrange — 直接驱动 generate_lambda_expr_ir 的自由变量分支。
+    let (instructions, closure) = lower_lambda_with_local("() => [x + n for x in [1, 2]]", "n");
+
+    // Act
+    let envs: Vec<usize> = instructions
+        .iter()
+        .filter_map(|instruction| match instruction {
+            Instruction::MakeClosure { env, .. } => Some(env.len()),
+            _ => None,
+        })
+        .collect();
+    let uses_upvalue = closure
+        .all_instructions()
+        .any(|instruction| matches!(instruction, Instruction::LoadUpvalue { .. }));
+
+    // Assert — 条款门：ListComp 的自由变量必须进入同一 env 链。
+    assert_eq!(envs, vec![1], "列表推导必须把 n 纳入 lambda env");
+    assert!(uses_upvalue, "列表推导元素必须从 env 读取 n：{closure:?}");
 }
 
 #[test]

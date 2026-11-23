@@ -367,12 +367,12 @@ generate_call_expr_ir (746 行)
 AST 节点不携带 lowering 环境，因此 `SynthEnv` 不作为 AST 字段，也不由 AST 助手假装消费。它包含运行时 env 操作数与命名捕获名，由调用方随合成节点显式交给 `generate_expr_ir_with_env`：
 
 ```rust
-pub struct SynthEnv {
-    pub env_vars: Vec<Operand>,
-    pub env_names: Vec<String>,
+pub(super) struct SynthEnv {
+    pub(super) env_vars: Vec<Operand>,
+    pub(super) env_names: Vec<String>,
 }
 
-pub fn synth_closure(
+pub(super) fn synth_closure(
     params: Vec<ast::Param>,
     body: ast::Block,
     span: Span,
@@ -381,13 +381,16 @@ pub fn synth_closure(
 
 环境流如下：
 
-- spawn 与 spawn-for 构造 `SynthEnv`，随合成 Lambda 显式传入 lowering；不再预写 `pending_env_vars` / `pending_env_names`。
+- spawn 与 spawn-for 构造 `SynthEnv`，随合成 Lambda 显式传入 lowering；不再预写 `pending_env_vars` / `pending_env_names`。env 总槽数由 `env_vars.len()` 得出，命名 upvalue 从匿名前缀长度起偏移；spawn-for 的匿名迭代值、外层捕获与形参因此各居其位。
 - 普通 lambda 从既有自由变量收集器补全环境。列表推导、嵌套 Lambda 与嵌套 spawn 在同一收集器内遍历，生成器变量和嵌套形参按词法作用域排除。
 - 闭包体把 `SynthEnv` 注册为既有符号表中的 `BindingLocation::Upvalue`。变量读取与命名空间遮蔽查询共用这条词法绑定，不再读取 `closure_captures`。
 - 嵌套闭包经 `capture_operand` 先读取外层 upvalue，再把值交给内层环境；不会把外层同名局部槽误当捕获值。
 - `NestedBodyGuard` 记录进入时的符号表深度，退出（含 `?` 提前返回）截断到该深度，捕获绑定不会残留到后续无关 lowering。
+- sema 的表达式体函数检查用 `body_stmts + expression_body + span` 参数化既有输入，直接调用 `check_expr` 并复用尾校验，不再合成 Block/Stmt/Expr；没有 sema→middle/lower 反向依赖或额外架构例外。
 
-**判据**：`scripts/ci/check-synth-boundary.py` 扫描 01-routing 对应的 sema、proof、middle、backends 与 std 生产面，唯一例外是 `middle/lower/synth.rs`。脚本以 token 上下文区分构造与 match / if let / let-else / matches! / 查询 / 注释 / 字符串 / 测试代码；`--selftest` 同时证明真构造会红、非构造读取不误报。仓库扫描与自检均接入 CI 的 WBS 9.8 门禁。
+**判据**：`scripts/ci/check-synth-boundary.py` 扫描 01-routing 对应的 sema、proof、middle、backends 与 std 生产面，唯一例外是 `middle/lower/synth.rs`。脚本以 token 上下文区分构造与 match / if let / let-else / matches! / 查询 / 注释 / 字符串 / 测试代码，并识别 glob import、模块别名、直接类型别名与 AST 唯一具名构造器 `Expr::call`；`--selftest` 同时证明真构造会红、非构造读取不误报。仓库扫描与自检均接入 CI 的 WBS 9.8 门禁。
+
+D1/D2：`SynthEnv` 与 `BindingLocation` 都是本批新增的内部类型，不是既有类型复用。前者把生产端 env 操作数、命名项与槽位推导集中为一个显式参数；后者把原 `SymbolEntry.local_idx` 提升为可判别的 Local/Upvalue 位置。替代方案是继续传三份共享字段（无法阻止嵌套覆盖与错误残留），或只传 `Vec<Operand>`（无法表达匿名前缀与命名捕获的对应关系）；两者均因正确性理由否决。新概念不与既有 AST/消费台账同义，也不需要 import 别名或转换表。
 
 ### span 键控问题的处置（SSA 解决不了的部分）
 
@@ -510,11 +513,11 @@ self.release_plan_total = type_result.release_plan.drops.len();
 | 17 | `src/middle/core/ir_gen.rs` | `1987-2000` | E3014 检查提取为 `check_register_budget()`，供 `1798`/`2001` 口径统一后共用 |
 | 18 | `src/middle/core/ir_gen.rs` | `1798` | `take_cur_locals(param_types.len())` → `take_cur_locals(self.temp_high_water)`，消除口径不一致 |
 | 19 | `src/middle/core/ir_gen.rs` | `248-249` | 注释契约删除（由类型系统强制），替换为指向 `verify` 的说明 |
-| 20 | `src/middle/core/ir_gen.rs` | `4245-4256` | 改调 `synth::synth_closure` |
-| 21 | `src/middle/core/ir_gen.rs` | `6698-6714` | 改调 `synth::synth_closure`，删 `6713-6714` |
-| 22 | `src/middle/core/ir_gen.rs` | `6571-6572` | 改从入参读 `SynthEnv`，不再 `mem::take` 共享字段 |
-| 23 | `src/middle/core/ir_gen.rs` | `6589-6593` / `6600` | `closure_captures` 降为局部，删 `clear()` |
-| 24 | `src/middle/core/ir_gen.rs` | `458` | `closure_captures.contains_key` 改显式参数（**最高优先级的隐式依赖**） |
+| 20 | `src/middle/lower/loops.rs` | `generate_spawn_for_ir` | 改调 `synth::synth_closure`（**7c.1 已落地**） |
+| 21 | `src/middle/lower/expr/spawn.rs` | `generate_spawn_expr_ir` | 改调 `synth::synth_closure`，删除共享 pending 字段的写清（**7c.1 已落地**） |
+| 22 | `src/middle/lower/expr/closure.rs` | `generate_lambda_expr_ir` | 改从入参读 `SynthEnv`，不再 `mem::take` 共享字段（**7c.1 已落地**） |
+| 23 | `src/middle/lower/{mod,scope}.rs` | 符号表与 `NestedBodyGuard` | 删除 `closure_captures` 字段，改 `BindingLocation::Upvalue` 词法绑定与按深度恢复（**7c.1 已落地**） |
+| 24 | `src/middle/lower/expr/{access,closure}.rs` + `query.rs` | 变量与命名空间查询 | `closure_captures.contains_key` 改查词法 upvalue，捕获物化统一走 `capture_operand`（**7c.1 已落地**） |
 | 25 | `src/middle/core/ir_gen.rs` | `341` + `1942` | 加 span 键控的消费计数 |
 | 26 | `src/middle/core/ir_gen.rs` | `224` / `369` / `1692-1702` | `method_def_ordinals` 改为只读 |
 | 27 | `src/middle/core/ir_gen.rs` | `7269-8014` | **最后做**：拆为顶部 `CallArgs` + 6 个 `emit_*` |

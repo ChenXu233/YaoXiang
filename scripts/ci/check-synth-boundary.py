@@ -232,21 +232,29 @@ def pattern_mask(tokens: list[Token], pairs: dict[int, int]) -> list[bool]:
             closing = pairs[opening]
             arm_start = opening + 1
             cursor = arm_start
+            in_arm_body = False
             while cursor < closing:
                 if cursor in pairs and tokens[cursor].text in ("(", "[", "{"):
                     cursor = pairs[cursor] + 1
+                    if in_arm_body and tokens[cursor - 1].text == "}":
+                        # block 臂体结束后，下一臂从臂体之后开始；没有逗号也一样。
+                        arm_start = cursor
+                        in_arm_body = False
                     continue
                 if tokens[cursor].text == "=>":
                     mark(arm_start, cursor)
+                    in_arm_body = True
                 elif tokens[cursor].text == ",":
                     arm_start = cursor + 1
+                    in_arm_body = False
                 cursor += 1
     return mask
 
 
-def ast_names(code: str) -> dict[str, str]:
-    """返回本文件可指到 AST 的裸名/别名；限定路径另行识别。"""
+def ast_names(code: str) -> tuple[dict[str, str], bool, set[str]]:
+    """返回 AST 裸名/直接类型别名、glob 状态与模块别名。"""
     names: dict[str, str] = {}
+    glob_imported = False
     for match in re.finditer(
         r"\buse\s+(?:crate::)?ast::(.*?);", code, flags=re.DOTALL
     ):
@@ -254,13 +262,24 @@ def ast_names(code: str) -> dict[str, str]:
         items = tail[1:-1] if tail.startswith("{") and tail.endswith("}") else tail
         for item in items.split(","):
             item = item.strip()
+            if item == "*":
+                glob_imported = True
             imported = re.fullmatch(
                 r"(Expr|Stmt|Type)(?:\s+as\s+([A-Za-z_][A-Za-z0-9_]*))?", item
             )
             if imported:
                 canonical, alias = imported.groups()
                 names[alias or canonical] = canonical
-    return names
+    for match in re.finditer(
+        r"\btype\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?:crate::)?ast::(Expr|Stmt|Type)\s*;",
+        code,
+    ):
+        alias, canonical = match.groups()
+        names[alias] = canonical
+    modules = set(
+        re.findall(r"\buse\s+(?:crate::)?ast\s+as\s+([A-Za-z_][A-Za-z0-9_]*)\s*;", code)
+    )
+    return names, glob_imported, modules
 
 
 def find_constructions(path: Path, source: str) -> list[tuple[int, str]]:
@@ -269,7 +288,7 @@ def find_constructions(path: Path, source: str) -> list[tuple[int, str]]:
     pairs = delimiter_pairs(tokens)
     patterns = pattern_mask(tokens, pairs)
     tests = test_item_ranges(code, tokens)
-    names = ast_names(code)
+    names, glob_imported, module_aliases = ast_names(code)
     findings: list[tuple[int, str]] = []
 
     for index, token in enumerate(tokens):
@@ -277,10 +296,21 @@ def find_constructions(path: Path, source: str) -> list[tuple[int, str]]:
         canonical = names.get(token.text)
         if token.text in CANONICAL:
             canonical = token.text
-            qualified = index >= 2 and tokens[index - 1].text == "::" and tokens[index - 2].text == "ast"
+            qualified = (
+                index >= 2
+                and tokens[index - 1].text == "::"
+                and (
+                    tokens[index - 2].text == "ast"
+                    or tokens[index - 2].text in module_aliases
+                )
+            )
         if canonical is None:
             continue
-        if not qualified and token.text not in names and token.text in CANONICAL:
+        if (
+            not qualified
+            and token.text not in names
+            and not (glob_imported and token.text in CANONICAL)
+        ):
             continue
         if any(start <= token.start < end for start, end in tests):
             continue
@@ -299,7 +329,7 @@ def find_constructions(path: Path, source: str) -> list[tuple[int, str]]:
             continue
         variant = tokens[index + 2].text
         following = tokens[index + 3].text
-        if not variant[:1].isupper() or following not in ("(", "{"):
+        if (not variant[:1].isupper() and variant != "call") or following not in ("(", "{"):
             continue
         if patterns[index + 2]:
             continue
@@ -367,6 +397,33 @@ fn constructs() {
     let ty = AstType::Name { name, span };
 }
 '''
+    block_arm = r'''
+use crate::ast::{Expr, Stmt};
+fn blocked(expr: &Expr) {
+    match expr {
+        Expr::Var(_, _) => {}
+        Expr::Lit(_, _) => {
+            let stmt = crate::ast::Stmt { kind, span, plan_id };
+            let hidden = ast::Expr::Var("hidden".into(), Span::dummy());
+        }
+        Expr::Call { .. } => {}
+    }
+}
+'''
+    glob_import = 'use crate::ast::*;\nfn f() { let made = Expr::Var("x".into(), span); }'
+    module_alias = 'use crate::ast as a;\nfn f() { let made = a::Expr::Var("x".into(), span); }'
+    type_alias = 'type E = ast::Expr;\nfn f() { let made = E::Var("x".into(), span); }'
+    named_constructor = 'use crate::ast::Expr;\nfn f() { let made = Expr::call(func, args, named, span, plan); }'
+    qualified_constructor = 'fn f() { let made = ast::Expr::call(func, args, named, span, plan); }'
+    alias_negative = r'''
+use crate::ast as a;
+type E = ast::Expr;
+fn alias_patterns(expr: &Expr) {
+    if let E::Var(_, _) = expr {}
+    assert!(matches!(expr, a::Expr::Var(_, _)));
+    let query = a::Expr::extract_binding_positions(expr);
+}
+'''
     with tempfile.TemporaryDirectory(prefix="check-synth-boundary-") as temporary:
         root = Path(temporary)
         fixtures = {
@@ -381,6 +438,13 @@ fn constructs() {
             "src/frontend/core/sema/illegal.rs": positive,
             "src/backends/illegal.rs": positive,
             "src/std/illegal.rs": positive,
+            "src/middle/lower/block_arm.rs": block_arm,
+            "src/middle/lower/glob_import.rs": glob_import,
+            "src/middle/lower/module_alias.rs": module_alias,
+            "src/middle/lower/type_alias.rs": type_alias,
+            "src/middle/lower/named_constructor.rs": named_constructor,
+            "src/middle/lower/qualified_constructor.rs": qualified_constructor,
+            "src/frontend/core/sema/alias_patterns.rs": alias_negative,
         }
         for relative, source in fixtures.items():
             path = root / relative
@@ -388,14 +452,24 @@ fn constructs() {
             path.write_text(source, encoding="utf-8")
         _, violations = scan(root)
 
-    forbidden = [item for item in violations if "/illegal.rs:" in item]
-    unexpected = [item for item in violations if "/illegal.rs:" not in item]
     expected_files = {
         "src/middle/lower/illegal.rs",
         "src/frontend/core/sema/illegal.rs",
         "src/backends/illegal.rs",
         "src/std/illegal.rs",
+        "src/middle/lower/block_arm.rs",
+        "src/middle/lower/glob_import.rs",
+        "src/middle/lower/module_alias.rs",
+        "src/middle/lower/type_alias.rs",
+        "src/middle/lower/named_constructor.rs",
+        "src/middle/lower/qualified_constructor.rs",
     }
+    forbidden = [
+        item for item in violations if item.split(":", 1)[0] in expected_files
+    ]
+    unexpected = [
+        item for item in violations if item.split(":", 1)[0] not in expected_files
+    ]
     observed_files = {item.split(":", 1)[0] for item in forbidden}
     failures: list[str] = []
     if observed_files != expected_files:
