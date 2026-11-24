@@ -233,31 +233,9 @@ def pattern_mask(tokens: list[Token], pairs: dict[int, int]) -> list[bool]:
             arm_start = opening + 1
             cursor = arm_start
             in_arm_body = False
-            non_block_else = False
-            else_can_end = False
-            else_continues = {
-                "::", ".", "?", "!", "=", "+", "-", "*", "/", "%",
-                "&", "|", "^", "<", ">", "as", "match", "if", "loop",
-                "while", "for", "return", "break", "continue", "unsafe",
-                "async", "move",
-            }
             while cursor < closing:
-                current = tokens[cursor].text
-                if (
-                    non_block_else
-                    and else_can_end
-                    and current not in else_continues
-                    and current not in ("(", "[", "{", ",", "=>")
-                ):
-                    # 非块 else 已完整结束；当前 token 属于下一臂而非旧臂表达式。
-                    arm_start = cursor
-                    in_arm_body = False
-                    non_block_else = False
-                    else_can_end = False
-                if cursor in pairs and current in ("(", "[", "{"):
+                if cursor in pairs and tokens[cursor].text in ("(", "[", "{"):
                     cursor = pairs[cursor] + 1
-                    if non_block_else:
-                        else_can_end = True
                     if (
                         in_arm_body
                         and tokens[cursor - 1].text == "}"
@@ -266,26 +244,13 @@ def pattern_mask(tokens: list[Token], pairs: dict[int, int]) -> list[bool]:
                         # if/else 的 then 块不是整个臂体；只在 else 不再延续时复位。
                         arm_start = cursor
                         in_arm_body = False
-                        non_block_else = False
-                        else_can_end = False
                     continue
-                if current == "else" and in_arm_body:
-                    non_block_else = (
-                        cursor + 1 < closing and tokens[cursor + 1].text not in ("{", "if")
-                    )
-                    else_can_end = False
-                elif current == "=>":
+                if tokens[cursor].text == "=>":
                     mark(arm_start, cursor)
                     in_arm_body = True
-                    non_block_else = False
-                    else_can_end = False
-                elif current == ",":
+                elif tokens[cursor].text == ",":
                     arm_start = cursor + 1
                     in_arm_body = False
-                    non_block_else = False
-                    else_can_end = False
-                elif non_block_else:
-                    else_can_end = current not in else_continues
                 cursor += 1
     return mask
 
@@ -421,8 +386,6 @@ def scan(root: Path) -> tuple[int, list[str]]:
 
 
 def selftest() -> int:
-    # 非块 else 不为 rustc 接受；相应 fixture 仅防御不可编译 token 文本中的掩码回归，
-    # 不构成合法 Rust 语言覆盖；合法 Rust 覆盖由 block 与 if/else block fixture 承担。
     negative = r'''
 use crate::ast::{Expr, Stmt, Type};
 fn queries(expr: &Expr, stmt: &Stmt, ty: &Type) {
@@ -501,34 +464,6 @@ fn control_arm(expr: &Expr, condition: bool) {
     }
 }
 '''
-    non_block_else_wildcard = r'''
-use crate::ast::Expr;
-fn wildcard_successor(expr: &Expr, condition: bool) {
-    match expr {
-        Expr::Var(_, _) => if condition {} else ast::Expr::Var("hidden".into(), span)
-        _ => {}
-    }
-}
-'''
-    non_block_else_call_pattern = r'''
-use crate::ast::Expr;
-fn call_pattern_successor(expr: &Expr, condition: bool) {
-    match expr {
-        Expr::Var(_, _) => if condition {} else ast::Expr::Var("hidden".into(), span)
-        Expr::Call { .. } => {}
-    }
-}
-'''
-    non_block_else_adjacent = r'''
-use crate::ast::Expr;
-fn adjacent_successors(expr: &Expr, condition: bool) {
-    match expr {
-        Expr::Var(_, _) => if condition {} else ast::Expr::Var("first".into(), span)
-        Expr::Call { .. } => if condition {} else ast::Expr::Var("second".into(), span)
-        _ => {}
-    }
-}
-'''
     bare_type_alias = 'use crate::ast::Expr;\ntype E = Expr;\nfn f() { let made = E::Var("x".into(), span); }'
     chained_type_alias = 'use crate::ast::Expr;\ntype First = Expr;\ntype E = First;\nfn f() { let made = E::Var("x".into(), span); }'
     with tempfile.TemporaryDirectory(prefix="check-synth-boundary-") as temporary:
@@ -553,9 +488,6 @@ fn adjacent_successors(expr: &Expr, condition: bool) {
             "src/middle/lower/qualified_constructor.rs": qualified_constructor,
             "src/frontend/core/sema/alias_patterns.rs": alias_negative,
             "src/middle/lower/if_else_arm.rs": if_else_arm,
-            "src/middle/lower/non_block_else_wildcard.rs": non_block_else_wildcard,
-            "src/middle/lower/non_block_else_call_pattern.rs": non_block_else_call_pattern,
-            "src/middle/lower/non_block_else_adjacent.rs": non_block_else_adjacent,
             "src/middle/lower/bare_type_alias.rs": bare_type_alias,
             "src/middle/lower/chained_type_alias.rs": chained_type_alias,
         }
@@ -577,9 +509,6 @@ fn adjacent_successors(expr: &Expr, condition: bool) {
         "src/middle/lower/named_constructor.rs",
         "src/middle/lower/qualified_constructor.rs",
         "src/middle/lower/if_else_arm.rs",
-        "src/middle/lower/non_block_else_wildcard.rs",
-        "src/middle/lower/non_block_else_call_pattern.rs",
-        "src/middle/lower/non_block_else_adjacent.rs",
         "src/middle/lower/bare_type_alias.rs",
         "src/middle/lower/chained_type_alias.rs",
     }
@@ -595,22 +524,6 @@ fn adjacent_successors(expr: &Expr, condition: bool) {
         failures.append(f"真构造未全部判红：observed={sorted(observed_files)}")
     if unexpected:
         failures.append(f"非构造/允许面误报：{unexpected}")
-    expected_arm_lines = {
-        "src/middle/lower/non_block_else_wildcard.rs": [5],
-        "src/middle/lower/non_block_else_call_pattern.rs": [5],
-        "src/middle/lower/non_block_else_adjacent.rs": [5, 6],
-    }
-    for relative, expected_lines in expected_arm_lines.items():
-        observed_lines = [
-            int(item.split(":", 2)[1])
-            for item in violations
-            if item.split(":", 1)[0] == relative
-        ]
-        if observed_lines != expected_lines:
-            failures.append(
-                f"非块 else 臂体边界错误：{relative} "
-                f"expected={expected_lines}, observed={observed_lines}"
-            )
     if failures:
         for failure in failures:
             print(f"SELFTEST FAIL: {failure}", file=sys.stderr)
