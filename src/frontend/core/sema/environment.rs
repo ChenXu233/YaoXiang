@@ -285,8 +285,8 @@ impl TypeEnvironment {
         &mut self,
         key: &str,
         ty: MonoType,
-    ) {
-        self.add_method_overload_with_params(key, ty, Vec::new());
+    ) -> Option<String> {
+        self.add_method_overload_with_params(key, ty, Vec::new())
     }
 
     /// RFC-011a §3 / #452：登记方法重载候选**并携带其声明期形参名**。
@@ -299,7 +299,7 @@ impl TypeEnvironment {
         key: &str,
         ty: MonoType,
         param_names: Vec<String>,
-    ) {
+    ) -> Option<String> {
         // 形参名必须与候选签名逐一对应；对不齐视为「这个名字的来源不可信」。
         let param_names = match &ty {
             MonoType::Fn { params, .. } if params.len() == param_names.len() => param_names,
@@ -311,10 +311,10 @@ impl TypeEnvironment {
             .get(key)
             .is_some_and(|list| list.contains(&ty))
         {
-            return;
+            return None;
         }
         // RFC-011a §3：重载候选的 IR 混编名（注册序，0=裸名）——
-        // 定义侧 ir_gen 按同一 AST 序混编，调用点决议后按名派发
+        // 定义名与调用名同源（7c.3：定义侧按声明 PlanId 只读取名，调用点按决议名派发）
         let ordinal = self.method_overloads.get(key).map_or(0, Vec::len);
         let ir_name = if ordinal == 0 {
             key.to_string()
@@ -326,10 +326,13 @@ impl TypeEnvironment {
             key,
             MethodOverloadCandidates {
                 candidates: vec![ty],
-                ir_names: vec![ir_name],
+                ir_names: vec![ir_name.clone()],
                 param_names: vec![param_names],
             },
         );
+        // 7c.3：把同一处算出的混编名交还调用方登记「定义身份 → 混编名」
+        // （typecheck 产出的唯一权威映射），IR 生成只读消费、不再按定义序二次推导。
+        Some(ir_name)
     }
 
     /// 定义侧候选表的**快照**（键升序）：跨单元方法调用的决议输入

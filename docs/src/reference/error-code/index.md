@@ -154,7 +154,7 @@ YaoXiang 的每个诊断都带一个稳定码号（如 `E1001`），便于检索
 | `E2030` | 精化类型约束违反 | `Semantic` | 否 | `对 '{assigned}' 赋值后，'{var}' 不再满足精化类型约束：{constraint}（反例：{counterexample}）` | ✅ 1 处 |
 | `E2031` | 精化约束无法证明 | `Semantic` | 否 | `对 '{assigned}' 赋值后，'{var}' 的精化类型约束：{constraint} 在证明内核内无法静态证明` | ✅ 3 处 |
 | `E3004` | 不支持的迭代器 | `Codegen` | 否 | `不支持的迭代器类型：{iter_type}` | ✅ 2 处 |
-| `E3005` | IR 生成错误 | `Codegen` | 否 | `IR 生成错误：{message}` | ✅ 20 处 |
+| `E3005` | IR 生成错误 | `Codegen` | 否 | `IR 生成错误：{message}` | ✅ 21 处 |
 | `E3006` | 未解析变量 | `Codegen` | 否 | `IR 生成内部错误：变量 '{name}' 未能解析` | ✅ 1 处 |
 | `E3007` | 顶层绑定初始化必须为常量 | `Codegen` | 否 | `顶层绑定 '{name}' 的初始化必须是编译期常量表达式` | ⚠ 暂未发射 |
 | `E3008` | 不支持的 match 模式 | `Codegen` | 否 | `match 模式 '{pattern}' 尚未实现：当前仅支持字面量与通配符（_）模式` | ✅ 3 处 |

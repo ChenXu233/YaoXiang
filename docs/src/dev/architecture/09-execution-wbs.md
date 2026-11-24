@@ -540,7 +540,7 @@ P10 其余清理与状态修正 06 §S2/S3/S4/S5/S6
 | | 7b.4 线性扫描分配器（u8/255 槽模型内） | 7b.3 + **7a.1**（拆出的删回滚同批） | 同上（+500~1000 行）；**已完成（2026-11-22 7b.4 收口）** |
 | 7c 隐式契约显式化 | 7c.1 `synth.rs` 边界（边界检查脚本经用户 2026-11-24 取消）+ 显式 `SynthEnv` / `BindingLocation` + spawn-for 双运行时 env / args / upvalue 修复；D59 **B 类**（嵌套闭包捕获错配、错误后捕获状态残留、spawn-for 匿名前缀槽位错配与双运行时 item/capture 错值；仅实际红态用例作修复证据，其余为回归覆盖） | 7b.4 | C4（不含门禁脚本） |
 | | 7c.2 span 消费计数 | 7c.1 | 消费计数**零触发** |
-| | 7c.3 `method_def_ordinals` 只读化 | 7c.1 | 归属存疑（C7） |
+| | 7c.3 `method_def_ordinals` 只读化（定义名改由 typecheck 按声明身份产出，lowering 只读；D21 归 04） | 7c.1 | C4（已实现，待独立验证/复审后收口） |
 | 7d 最后做 | 7d.1 `generate_call_expr_ir` 拆为 `CallArgs` + 6 个 `emit_*` | 7c.x | C1 快照 zero-diff |
 | | 7d.2 「补 0」兜底改返回诊断 | 7d.1 | C4 |
 | 7e `.42` 数据丢失修复 | 7e.1 `upvalue_count: 0` 修正（`bytecode.rs:2312`）+ `VERSION` 4→5（D17）+ 已分配未使用 opcode 回收（D32/D34 随升版） | 7d.x | C4 + `.42` 往返测试；独占 commit |

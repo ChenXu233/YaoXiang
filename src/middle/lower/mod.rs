@@ -37,6 +37,7 @@ use crate::frontend::core::sema::{MonoType, TypeCheckResult};
 use crate::frontend::module::registry::ModuleRegistry;
 use crate::middle::ir::ir::{ConstValue, FrameId, FunctionIR, Instruction, LocalSlot};
 use crate::util::diagnostic::Diagnostic;
+use crate::util::plan_id::PlanId;
 use crate::util::span::Span;
 use std::collections::HashMap;
 
@@ -219,8 +220,11 @@ pub struct AstToIrGenerator {
     /// RFC-039 D20 / WBS 4.5.2）。消费经 `OverloadResolutions::get`（命中即
     /// 记账），故本字段携带决议表本体（含消费台账），结算读的是同一份账。
     pub(super) overload_resolutions: OverloadResolutions,
-    /// 方法定义序（key → 已生成定义数）：混编名的定义侧计数
-    pub(super) method_def_ordinals: HashMap<String, usize>,
+    /// 方法定义身份（声明语句 PlanId）→ 混编 IR 名（RFC-011a §3 / WBS 7c.3）。
+    ///
+    /// typecheck 在登记重载候选的同一处产出（唯一权威来源）；本生成器**只读**
+    /// 消费——按定义遍历序二次推导的可变计数器已删。
+    pub(super) method_def_ir_names: HashMap<PlanId, String>,
 
     /// RFC-010: 和类型变体名表（类型名 → 变体名列表，声明序）。
     /// 变体构造调用（形态检测命中）据此取变体序号。
@@ -380,7 +384,7 @@ impl AstToIrGenerator {
                 .map(|(span, name)| (*span, name.clone()))
                 .collect(),
             overload_resolutions: type_result.overload_resolutions.clone(),
-            method_def_ordinals: HashMap::new(),
+            method_def_ir_names: type_result.method_def_ir_names.clone(),
             sum_type_variants: type_result
                 .sum_types
                 .iter()

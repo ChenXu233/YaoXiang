@@ -97,7 +97,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **模板**：`期望类型 '{expected}'，实际类型 '{found}'`
 - **消息**：期望类型与实际类型不匹配
 - **帮助**：使用正确的类型或添加类型转换
-- **发射点**：`src/frontend/core/sema/checker.rs:240`、`src/frontend/core/sema/inference/bounds.rs:316`、`src/frontend/core/sema/inference/bounds.rs:324` 等 75 处
+- **发射点**：`src/frontend/core/sema/checker.rs:249`、`src/frontend/core/sema/inference/bounds.rs:316`、`src/frontend/core/sema/inference/bounds.rs:324` 等 75 处
 
 ### E1003：未知类型
 
@@ -107,7 +107,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **模板**：`未知类型：'{type}'`
 - **消息**：引用的类型不存在
 - **帮助**：检查类型名是否拼写正确
-- **发射点**：`src/frontend/core/sema/checker/annotations.rs:370`、`src/frontend/core/sema/environment.rs:655`、`src/util/test_markers.rs:241`
+- **发射点**：`src/frontend/core/sema/checker/annotations.rs:370`、`src/frontend/core/sema/environment.rs:658`、`src/util/test_markers.rs:241`
 
 ### E1010：参数数量不匹配
 
@@ -117,7 +117,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **模板**：`函数 '{func}' 期望 {expected} 个参数，找到 {found} 个`
 - **消息**：函数调用参数与定义不匹配
 - **帮助**：检查函数调用参数数量
-- **发射点**：`src/frontend/core/sema/environment.rs:580`、`src/frontend/core/sema/inference/arg_binding.rs:125`、`src/frontend/core/sema/inference/expressions/expr.rs:1095` 等 19 处
+- **发射点**：`src/frontend/core/sema/environment.rs:583`、`src/frontend/core/sema/inference/arg_binding.rs:125`、`src/frontend/core/sema/inference/expressions/expr.rs:1095` 等 19 处
 
 ### E1011：实现形参标注与声明不符
 
@@ -276,7 +276,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **模板**：`在结构体 '{struct}' 中找不到字段 '{field}'`
 - **消息**：访问了不存在的结构体字段
 - **帮助**：检查结构体的可用字段；若为谓词体的证据字段路径，请核对记录定义中的 evidence 字段名
-- **发射点**：`src/backends/mod.rs:158`、`src/frontend/core/sema/checker.rs:4487`、`src/frontend/core/sema/inference/expressions/expr.rs:1153` 等 10 处
+- **发射点**：`src/backends/mod.rs:158`、`src/frontend/core/sema/checker.rs:4506`、`src/frontend/core/sema/inference/expressions/expr.rs:1153` 等 10 处
 
 ### E1043：模块成员未找到
 
@@ -383,7 +383,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **模板**：`const 泛型约束失败: \`{constraint}\` 不成立`
 - **消息**：const 泛型参数的值约束不满足
 - **帮助**：修改 const 参数值使其满足约束
-- **发射点**：`src/frontend/core/sema/environment.rs:625`
+- **发射点**：`src/frontend/core/sema/environment.rs:628`
 
 ### E1064：绑定位置索引无效
 
@@ -392,7 +392,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **构造函数**：`ErrorCodeDefinition::invalid_binding_position(positions, total)`
 - **模板**：`绑定位置索引无效：{positions}（函数共 {total} 个参数）`
 - **帮助**：绑定位置必须落在被绑函数的参数范围内（越界或归一化后仍为负）。请检查方法绑定的位置编号。
-- **发射点**：`src/frontend/core/sema/checker.rs:2319`、`src/frontend/core/sema/checker.rs:2423`、`src/frontend/core/sema/checker.rs:2436`
+- **发射点**：`src/frontend/core/sema/checker.rs:2336`、`src/frontend/core/sema/checker.rs:2440`、`src/frontend/core/sema/checker.rs:2453`
 - **源码注释名**：绑定位置索引无效（RFC-004）
 
 ### E1065：对非函数值调用
@@ -465,7 +465,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **模板**：`泛型元类型自引用不允许：'{decl}'`
 - **消息**：泛型元类型自引用是不允许的
 - **帮助**：类型构造器如 'Type[T]' 不能引用 Type 自身
-- **发射点**：`src/frontend/core/sema/checker.rs:3640`
+- **发射点**：`src/frontend/core/sema/checker.rs:3659`
 - **源码注释名**：泛型元类型自指错误
 
 ### E1092：精化类型实参形态非法
@@ -476,7 +476,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **模板**：`'{name}' 要求编译期常量实参，但所给实参无法转换`
 - **消息**：精化类型实参无法转换为编译期常量表达式
 - **帮助**：谓词/证明函数实参必须是字面量、变量或单参数类型应用，否则精化约束无法生成；若在类型位或谓词体：证据字段路径必须整条为该谓词唯一形参的 evidence 字段，基名须与应用实参名一致
-- **发射点**：`src/frontend/core/sema/checker.rs:4353`、`src/frontend/core/sema/checker.rs:4401`、`src/frontend/core/sema/checker.rs:4429` 等 10 处
+- **发射点**：`src/frontend/core/sema/checker.rs:4372`、`src/frontend/core/sema/checker.rs:4420`、`src/frontend/core/sema/checker.rs:4448` 等 10 处
 - **源码注释名**：精化类型实参形态非法（RFC-027，#263）
 
 ### E1093：精化实参个数不匹配
@@ -487,7 +487,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **模板**：`'{name}' 期望 {expected} 个实参，实际 {found} 个`
 - **消息**：谓词/证明函数实参个数不匹配
 - **帮助**：实参个数必须与谓词声明一致，否则精化约束无法生成
-- **发射点**：`src/frontend/core/sema/checker.rs:4336`、`src/frontend/core/sema/checker.rs:4426`
+- **发射点**：`src/frontend/core/sema/checker.rs:4355`、`src/frontend/core/sema/checker.rs:4445`
 - **源码注释名**：精化类型参数数量不匹配
 
 ### E1094：未使用的编译期值参数
@@ -498,7 +498,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **模板**：`'{param}' 声明为 '{type}' 的编译期值参数，但未在类型体中被引用`
 - **消息**：编译期值参数未在类型体中被引用
 - **帮助**：请在类型位置（字段类型、内层 Fn 参数类型、Assert/Array 类型实参）引用该参数，或从声明中移除
-- **发射点**：`src/frontend/core/sema/checker.rs:3876`
+- **发射点**：`src/frontend/core/sema/checker.rs:3895`
 - **源码注释名**：编译期值参数未在类型体引用（#297/F）
 
 ### E1095：未知接口
@@ -509,7 +509,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **模板**：`未知接口：'{name}'（类型体引用的名字不是已注册的类型构造器）`
 - **消息**：未知接口
 - **帮助**：检查名字拼写，或先以 `Iface: (Self: Type) -> Type = &#123;&#123; ... &#125;&#125;` 声明接口
-- **发射点**：`src/frontend/core/sema/checker.rs:2863`
+- **发射点**：`src/frontend/core/sema/checker.rs:2880`
 - **源码注释名**：未知接口（RFC-011a）
 
 ### E1096：接口参数数量不匹配
@@ -520,7 +520,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **模板**：`接口 '{name}' 期望 {expected} 个类型参数，找到 {found} 个`
 - **消息**：接口参数数量不匹配
 - **帮助**：按接口声明的类型参数个数提供实参
-- **发射点**：`src/frontend/core/sema/checker.rs:2824`、`src/frontend/core/sema/checker.rs:2840`、`src/frontend/core/sema/checker.rs:2871`
+- **发射点**：`src/frontend/core/sema/checker.rs:2841`、`src/frontend/core/sema/checker.rs:2857`、`src/frontend/core/sema/checker.rs:2888`
 - **源码注释名**：接口实例化类型实参个数不匹配（RFC-011a）
 
 ### E1097：接口成员命名冲突
@@ -531,7 +531,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **模板**：`类型 '{type}' 的成员 '{member}' 与接口成员冲突（字段与方法共享命名空间，§1.2）`
 - **消息**：接口成员命名冲突
 - **帮助**：重命名字段或接口成员
-- **发射点**：`src/frontend/core/sema/checker.rs:2986`
+- **发射点**：`src/frontend/core/sema/checker.rs:3003`
 - **源码注释名**：接口成员与类型已有字段共享命名空间（RFC-011a §1.2）
 
 ### E1098：接口方法未实现
@@ -542,7 +542,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **模板**：`类型 '{type}' 未实现接口 '{interface}' 的方法 '{method}'`
 - **消息**：接口方法未实现
 - **帮助**：以 `Type.method: 签名 = ...` 声明该方法，或在类型体内提供绑定
-- **发射点**：`src/frontend/core/sema/checker.rs:3007`
+- **发射点**：`src/frontend/core/sema/checker.rs:3024`
 - **源码注释名**：接口方法未实现（RFC-011a 完整性检查）
 
 ### E1099：接口方法签名不匹配
@@ -553,7 +553,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **模板**：`类型 '{type}' 的方法 '{method}' 与接口签名不符：期望 {expected}，实际 {found}`
 - **消息**：接口方法签名不匹配
 - **帮助**：让实现签名与接口成员签名完全一致（§3 禁止覆盖，允许重载）
-- **发射点**：`src/frontend/core/sema/checker.rs:2895`、`src/frontend/core/sema/checker.rs:3033`
+- **发射点**：`src/frontend/core/sema/checker.rs:2912`、`src/frontend/core/sema/checker.rs:3050`
 - **源码注释名**：接口方法签名不匹配（RFC-011a）
 
 ### E1100：接口方法重复实现
@@ -564,7 +564,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **模板**：`类型 '{type}' 的方法 '{method}' 被重复实现（同签名覆盖被禁止，§3）`
 - **消息**：接口方法重复实现
 - **帮助**：删除重复实现，保留一份
-- **发射点**：`src/frontend/core/sema/checker.rs:2091`
+- **发射点**：`src/frontend/core/sema/checker.rs:2102`
 - **源码注释名**：同签名接口方法重复实现（RFC-011a §3 覆盖禁止）
 
 ### E1101：类型未实现接口
@@ -608,7 +608,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **模板**：`类型 '{type}' 不由本模块定义，不能在本模块为其实现接口 '{interface}'`
 - **消息**：运算符接口实现必须写在类型的定义模块里
 - **帮助**：孤儿规则：实现跟随类型的定义模块。只能为本模块定义的类型写接口实例化（如 `Add(Point, Point, Point)`）；内建类型（Int/List 等）的运算符接口由核心提供，不可补充
-- **发射点**：`src/frontend/core/sema/checker.rs:2962`
+- **发射点**：`src/frontend/core/sema/checker.rs:2979`
 - **源码注释名**：接口实现写在了非定义模块（RFC-011b 孤儿规则：实现跟随类型的
 
 ### E1105：变体构造器不可作为字段访问
@@ -725,5 +725,5 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **构造函数**：`ErrorCodeDefinition::witness_record_immutable(type_)`
 - **模板**：`记录 '{type}' 含 witness 字段，其全部字段在构造后必须保持不变`
 - **帮助**：witness-bearing 记录不能声明 `mut` 字段、不能字段赋值、不能 `&mut` 借用，也不能调用需要写借用的方法；需要可变的数据请拆到不含 witness 的记录。
-- **发射点**：`src/frontend/core/sema/checker.rs:3665`、`src/frontend/core/sema/inference/statements.rs:1973`、`src/frontend/core/sema/inference/expressions/expr.rs:2864` 等 4 处
+- **发射点**：`src/frontend/core/sema/checker.rs:3684`、`src/frontend/core/sema/inference/statements.rs:1973`、`src/frontend/core/sema/inference/expressions/expr.rs:2864` 等 4 处
 - **源码注释名**：witness-bearing 记录不可变（6.9.5-B.1c / 5A 整体不可变；RFC-039 D62 /

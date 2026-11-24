@@ -32,6 +32,7 @@ use super::{add_builtin_types, add_native_function_types, add_std_traits};
 use crate::frontend::core::spawn;
 use crate::util::diagnostic::DiagnosticBuilder;
 use crate::util::diagnostic::ErrorCodeDefinition;
+use crate::util::plan_id::PlanId;
 
 /// 类型检查器
 ///
@@ -87,6 +88,14 @@ pub struct TypeChecker {
     /// RFC-011a §3: 已声明方法签名 (类型名, 方法名) -> 签名。
     /// 同签名重复声明 = 覆盖 → E1100；不同签名 = 重载 → 放行。
     declared_methods: HashMap<(String, String), MonoType>,
+    /// 7c.3：方法声明身份（声明语句 PlanId）→ 混编 IR 名。
+    ///
+    /// typecheck 的**唯一权威定义名映射**：与重载候选的 IR 名在同一次登记
+    ///（`add_method_overload_with_params`）算出，随 `TypeCheckResult` 交给
+    /// IR 生成只读消费。键取声明语句的 PlanId（AST 结构身份，D20 同款）——
+    /// `DefId` 在 lowering 尾部 `assign_defs` 才分配，typecheck 侧不存在；
+    /// 按定义遍历序二次推导（旧 `method_def_ordinals` 计数器）已删。
+    method_def_ir_names: HashMap<PlanId, String>,
     /// #321 W1003: 导入的本地名 → use 语句位置（pass2 use elaboration 登记，
     /// 供模块尾统一判定未使用导入；重复登记由发射处去重）。
     imported_names: Vec<(String, crate::util::span::Span)>,
@@ -373,6 +382,7 @@ impl TypeChecker {
             type_definition_bodies: HashMap::new(),
             pending_interface_instantiations: Vec::new(),
             declared_methods: HashMap::new(),
+            method_def_ir_names: HashMap::new(),
             imported_names: Vec::new(),
             import_watch: HashMap::new(),
             import_used: HashSet::new(),
@@ -1474,6 +1484,7 @@ impl TypeChecker {
                 .map(|(name, d)| (name.clone(), d.type_param_names.clone()))
                 .collect(),
             module_namespaces: std::mem::take(&mut self.module_namespaces),
+            method_def_ir_names: std::mem::take(&mut self.method_def_ir_names),
             record_models: self.env.record_models.clone(),
             warnings,
         }
@@ -2104,8 +2115,14 @@ impl TypeChecker {
                         let okey = format!("{}.{}", tn, name);
                         let param_names: Vec<String> =
                             signature.iter().map(|p| p.name.clone()).collect();
-                        self.env
-                            .add_method_overload_with_params(&okey, fn_ty.clone(), param_names);
+                        if let Some(ir_name) = self.env.add_method_overload_with_params(
+                            &okey,
+                            fn_ty.clone(),
+                            param_names,
+                        ) {
+                            // 7c.3：定义身份（声明语句 PlanId）→ 混编名，唯一权威来源。
+                            self.method_def_ir_names.insert(stmt.plan_id, ir_name);
+                        }
                     }
                 } else {
                     // 如果函数有 const 泛型参数，存进 PolyType.const_binders
@@ -3115,7 +3132,9 @@ impl TypeChecker {
             // #452：外部绑定的形参名在 typecheck 侧拿不到（被绑函数只留签名、
             // 不留名字），留空 = 调用点不按名匹配（不冒充「名字已核对」）。
             let okey = format!("{}.{}", type_name, method_name);
-            self.env
+            // 外部绑定不生成方法体 IR，没有定义身份可登记——只维护调用侧候选表。
+            let _ = self
+                .env
                 .add_method_overload_with_params(&okey, method_ty, Vec::new());
         }
     }

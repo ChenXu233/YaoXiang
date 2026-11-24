@@ -119,10 +119,11 @@ fn test_method_overload_triple_stays_aligned_across_registration_and_injection()
         params: vec![MonoType::make_string()],
         return_type: Box::new(MonoType::Float(64)),
     };
-    source.add_method_overload_with_params("Temp.to", first.clone(), vec!["x".to_string()]);
-    source.add_method_overload_with_params("Temp.to", second.clone(), vec!["s".to_string()]);
+    let _ = source.add_method_overload_with_params("Temp.to", first.clone(), vec!["x".to_string()]);
+    let _ =
+        source.add_method_overload_with_params("Temp.to", second.clone(), vec!["s".to_string()]);
     // 同签名重复登记不占新声明序（既有去重口径不得因改写而变）
-    source.add_method_overload_with_params("Temp.to", first.clone(), vec!["x".to_string()]);
+    let _ = source.add_method_overload_with_params("Temp.to", first.clone(), vec!["x".to_string()]);
 
     // Act：快照（跨单元通路的出口）→ 注入另一个环境（通路的入口）
     let snapshot = source.method_overload_snapshot();

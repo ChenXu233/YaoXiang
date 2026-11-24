@@ -291,6 +291,8 @@ impl AstToIrGenerator {
                         &params,
                         &body,
                         constants,
+                        stmt.plan_id,
+                        stmt.span,
                     )
                 } else if !params.is_empty() || !body.is_empty() || is_fn_binding {
                     // Fn: 普通函数（含**空块体**的注解形态 `f: () -> Void = { }`——
@@ -427,23 +429,25 @@ impl AstToIrGenerator {
         params: &[ast::Param],
         body: &[ast::Stmt],
         constants: &mut Vec<ConstValue>,
+        decl_plan_id: PlanId,
+        decl_span: Span,
     ) -> Result<Option<FunctionIR>, Diagnostic> {
-        // 命名空间机制：方法函数名 = Type.method
-        // 例如：Point.get_x 生成函数名 "Point.get_x"
-        // 调用时：p.get_x() -> Point.get_x(p)
+        // 命名空间机制：方法函数名 = Type.method（同名重载为 #N 混编名）
         let base_name = format!("{}.{}", type_name, method_name);
-        // RFC-011a §3：同名重载的定义序混编（首定义裸名，后续 #序）——
-        // 与 typecheck 注册序（AST 序）对齐，调用点决议按名派发
-        let ordinal = self
-            .method_def_ordinals
-            .entry(base_name.clone())
-            .or_insert(0);
-        let counted = *ordinal;
-        *ordinal += 1;
-        let func_name = if counted == 0 {
-            base_name
-        } else {
-            format!("{base_name}#{counted}")
+        // 7c.3：定义名只从 typecheck 的权威映射按**声明身份**读取——不再按
+        // 定义遍历序二次推导（旧 `method_def_ordinals` 可变计数器已删）。
+        // 未命中 = typecheck 与 lowering 的登记面不一致：响亮失败，不回退裸名
+        //（回退会把「定义名与调用名不同源」伪装成可运行程序）。
+        let func_name = match self.method_def_ir_names.get(&decl_plan_id) {
+            Some(name) => name.clone(),
+            None => {
+                return Err(ErrorCodeDefinition::ir_internal_error(&format!(
+                    "method {base_name} missing typecheck IR name (declaration PlanId {})",
+                    decl_plan_id.ordinal()
+                ))
+                .at(decl_span)
+                .build());
+            }
         };
 
         // #466：重载候选的形参名按**混编名**精确登记——叶子名键（Assign 臂

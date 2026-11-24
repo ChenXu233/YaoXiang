@@ -77,6 +77,15 @@ pub struct TypeCheckResult {
     /// B.2 起生产路径产出 witness 字段，IR 的 `TypeDeclField.quantity` 与构造
     /// 参数/默认值填充都从这张表读量词；消费端不得自行重算分类。
     pub record_models: HashMap<String, super::record_model::RecordModel>,
+    /// 方法定义的混编 IR 名（RFC-011a §3 / WBS 7c.3）。
+    ///
+    /// 键 = 方法声明语句的 [`PlanId`]（AST 结构身份；`DefId` 在 lowering 尾部
+    /// `assign_defs` 才分配，typecheck 侧不存在）。typecheck 在登记重载候选的
+    /// 同一处产出裸名或 `#N` 混编名（与 `overload_resolutions` 的候选名同源），
+    /// IR 生成按声明身份只读取名，不再按定义遍历顺序二次推导。
+    ///
+    /// 消费缺失即 `E3005`（`lower/stmt.rs` 的 `generate_method_ir`），无静默回退。
+    pub method_def_ir_names: HashMap<PlanId, String>,
 }
 
 /// 方法级重载决议表（RFC-011a §3 / RFC-039 D20 / WBS 4.5.2）。

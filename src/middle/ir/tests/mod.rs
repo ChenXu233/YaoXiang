@@ -13,6 +13,7 @@ pub mod generic_params;
 pub mod ir;
 pub mod ir_build;
 pub mod local_slots;
+pub mod method_def_names;
 pub mod namespace_scope;
 pub mod native_fn_value;
 pub mod overload_resolutions;

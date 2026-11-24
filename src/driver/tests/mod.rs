@@ -8,6 +8,7 @@ mod helpers;
 mod import_cycle;
 mod lsp_semantic_db;
 mod manifest_error;
+mod method_def_names;
 mod method_dispatch;
 mod method_unused;
 mod mono_cross_unit;

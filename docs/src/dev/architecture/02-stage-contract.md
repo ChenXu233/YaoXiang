@@ -225,12 +225,12 @@ RFC-027 的三个单测（`src/frontend/core/sema/tests/rfc027_phase25_proof_fn.
 
 ### 义务字段：14 个「产出即契约」的字段，零机制保证
 
-`src/frontend/core/sema/types.rs:16-80` 的 `TypeCheckResult` 中，有 **14 个字段**的文档注释明确写着「由 X 阶段产出 → Y 阶段消费」，即它们本质上是**跨阶段义务**：
+`src/frontend/core/sema/types.rs:16-89` 的 `TypeCheckResult` 中，有 **14 个字段**的文档注释明确写着「由 X 阶段产出 → Y 阶段消费」，即它们本质上是**跨阶段义务**：
 
 | 字段 | 定义行 | 产出方 → 消费方 |
 | --- | --- | --- |
 
-> **取行约定**：定义行 = `types.rs` 里该字段的**声明行**（`pub` / `pub(super)` 那一行），不是 doc 注释首行——同一字段的注释块可能多行，声明行才是唯一可锚定的位置。本表上方那句里的**结构体范围**（`src/frontend/core/sema/types.rs:16-80`）随结构体行号浮动，由门禁 **F5** 机械对账（写错即红）；定义行列由 **F4** 对账。
+> **取行约定**：定义行 = `types.rs` 里该字段的**声明行**（`pub` / `pub(super)` 那一行），不是 doc 注释首行——同一字段的注释块可能多行，声明行才是唯一可锚定的位置。本表上方那句里的**结构体范围**（`src/frontend/core/sema/types.rs:16-89`）随结构体行号浮动，由门禁 **F5** 机械对账（写错即红）；定义行列由 **F4** 对账。
 | `proof_calls` | `36` | typecheck → **proof_execution** |
 | `release_plan` | `38` | ownership → IR 生成（**`PlanId` 键控**：`ir_gen.rs:360` 读（`type_result.release_plan.clone()`）、`:3103` 用（`ReleasePlan::consume`）；结算完成标记 `:1095`） |
 | `escaped_refs` | `40` | ownership → IR 生成 |
@@ -263,7 +263,7 @@ RFC-027 的三个单测（`src/frontend/core/sema/tests/rfc027_phase25_proof_fn.
 
 ### 非义务字段登记：`TypeCheckResult` 里的通道 / 在相位 / 树内事实字段
 
-**`NON_OBLIGATION_FIELDS`（8 条）**：`TypeCheckResult` 里不属跨阶段义务的字段逐一登记（字段名 + 理由），与上面「§义务字段」表**互补**：
+**`NON_OBLIGATION_FIELDS`（9 条）**：`TypeCheckResult` 里不属跨阶段义务的字段逐一登记（字段名 + 理由），与上面「§义务字段」表**互补**：
 
 | 字段 | 为什么不是跨阶段义务（要点） |
 | --- | --- |
@@ -275,6 +275,7 @@ RFC-027 的三个单测（`src/frontend/core/sema/tests/rfc027_phase25_proof_fn.
 | `trait_table` | 跨阶段读取 ir_gen.rs:4336/:6867，文档注释未声明契约 |
 | `warnings` | 警告诊断通道（与 `diagnostics` 同类） |
 | `interface_impl_registry` | 树内事实（3.4.9 用户裁决甲；在相位消费点见「§义务字段」的改判记录） |
+| `method_def_ir_names` | 跨阶段映射（typecheck 按方法声明语句 `PlanId` 产出混编名 → IR 生成只读取名，WBS 7c.3）；未命中即 E3005 响亮失败、无静默面；消费粒度是逐声明而非按单元非空，义务台账「单元产出即须交付」口径不适用 |
 
 **为什么不是「接线消费端」**：给这些字段造下游只会凭空引入假义务，把「按设计不需要跨阶段消费」伪装成契约缺陷；正确的闭合机制是**反向 containment**——`TypeCheckResult` 字段集 = 义务清单 ∪ 非义务登记（由 `scripts/ci/check-obligations.py` 判据 1 硬判：加字段忘登记、删字段忘同步、非义务登记缺理由、两表重叠都当场红）。
 
@@ -498,7 +499,7 @@ impl Obligations {
 > **一、落地物（file:line）**
 >
 > - 账本 `src/driver/obligations.rs`：13 条义务清单 `INVENTORY`（:201，字段名/消费者阶段/红名单）、
->   **非义务字段登记 `NON_OBLIGATION_FIELDS`（:150，8 条含理由）**、交付标记台账 `DeliveryLedger`、
+>   **非义务字段登记 `NON_OBLIGATION_FIELDS`（:175，9 条含理由）**、交付标记台账 `DeliveryLedger`、
 >   纯结算 `settle_obligations`（:577）、外发 `emit_obligation_diagnostics`（:654）、
 >   非消费方门控 `consumer_visible_unit`（:538）、跳过判据 `consumer_stage_skipped`（:549）、
 >   IrGeneration 交付集 `IR_GENERATION_DELIVERED`（:285）、W1090 码串常量 `OBLIGATION_UNDRAINED_CODE`。
@@ -1275,7 +1276,7 @@ pub enum Aggregation {
 - `src/frontend/core/sema/layers/README.md` — 层序调用表与 `equivalence` 的真实身份（无 short-circuit）
 - `src/frontend/core/sema/layers/predicate.rs:31-32` — SMT 初始化硬失败的明文理由
 - `src/frontend/core/sema/proof/smt/backend.rs:60` — 「调用方应保守降级」的契约声明（与 `predicate.rs` 矛盾）
-- `src/frontend/core/sema/types.rs:16-80` — 14 个下游必须消费的义务字段（3.4.4/3.4.5/3.4.9 清账后）
+- `src/frontend/core/sema/types.rs:16-89` — 14 个下游必须消费的义务字段（3.4.4/3.4.5/3.4.9 清账后）
 - `src/frontend/core/sema/tests/rfc027_refined_transparency.rs:13-15` — 单测自认「停在 pipeline 之前」
 - `tests/yaoxiang/06-compile-errors/refinement/refined_annotation_literal_violates_err.yx:12-13` — 语料自认「由 pipeline.rs 在 check_module 之后执行」
 - `wasm/src/lib.rs` 的 `compile_playground`（`run_code` 经它编译）— playground 的第四个编译调用方（单文件路径，故执行 proof_execution）

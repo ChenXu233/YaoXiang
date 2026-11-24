@@ -106,7 +106,7 @@ pub const OBLIGATION_UNDRAINED_CODE: &str = "W1090";
 
 /// 义务字段——`TypeCheckResult` 中「产出即契约」的字段（条数见 [`Obligation::ALL`]）
 /// （02-stage-contract §义务字段表；定义见
-/// `src/frontend/core/sema/types.rs:16-77`）。
+/// `src/frontend/core/sema/types.rs:16-89`）。
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum Obligation {
     /// `proof_calls`：typecheck → 证明执行
@@ -200,6 +200,10 @@ pub const NON_OBLIGATION_FIELDS: &[NonObligationField] = &[
     NonObligationField {
         field: "warnings",
         reason: "警告诊断通道：与 diagnostics 同类，由 driver 臂按形态门控外发",
+    },
+    NonObligationField {
+        field: "method_def_ir_names",
+        reason: "跨阶段映射：typecheck 在登记重载候选的同一处按声明语句 PlanId 产出混编名 → IR 生成构造期克隆、generate_method_ir 按声明身份只读取名；未命中即 E3005 响亮失败，无静默面；消费粒度是逐声明而非按单元非空，义务台账的「单元产出即须交付」口径不适用，故按非义务登记闭合字段普查",
     },
     NonObligationField {
         field: "interface_impl_registry",
