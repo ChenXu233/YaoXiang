@@ -8654,3 +8654,331 @@ delete-recycle 变异实测 354/323 槽越界 ⇒ 本批分配器落地后才绿
 > **五、P8 前序三条技术选择（2026-11-23「按推荐开」时生效，此处补登）**：① LALRPOP 采用 **build-time 生成、生成物不入库**（文法单一源，杜绝文法与生成物不同步的静默错解析；代价 = 构建变慢与 `build.rs` 失败面扩大）；② C5 比对口径 **扩 `corpus_probe` 记录 `code + line + col` 并同批再生基线**（把 05 / 07 的「code+span 逐条相同」做实；现探针只比 code+file+line）；③ f-string 在 8.3 只做**等价迁移**、入口形态冻结，8.2.4 的「单遍词法 vs 逐插值隔离」语义裁决后置（D 类，另行裁决）。
 >
 > **六、判据不变**：C5 无放宽、不存在 C5′；8.4 / 8.5 的等价性证明面仍是语料 + `src/std/tests` 的 AST 与诊断逐条比对；D1–D3 的 SPEC 形状由 8.3.4 的红证 / 绿态承担，不混入 8.5 的行为等价断言。
+
+## P8 8.3 入批前置：census 再生与 D1–D3 语料 AST 普查（2026-11-24）
+
+### 一、范围与结论
+
+本批只再生测试普查表并补文档账目；生产代码、语料与 `tests/baselines/` 零改动。临时 AST 探针在运行后删除，接线还原。
+
+- `python scripts/dev/test-gate-census.py` 再生 exit 0；随后 `--check` exit 0，当前表为 **2646 条 / 328 文件**。
+- AST 普查覆盖 `tests/yaoxiang` **355** 与 `src/std/tests` **23**，合计 **378/378**；`Expr::Cast` **0**，D1 / D2 / D3 均 **0 命中**。因此没有需要列出的命中 `文件:行`，也不需要改语料或诊断基线。
+- 这兑现 8.4 入批的「三形态在语料面零暴露」前提；它不是后续 LALRPOP 施工的 go/no-go 探针结论。
+
+### 二、census 新数字
+
+按门：**条款 997 · 病史 539 · 证明 568 · 待判 536 · 均不通过 6 = 2646**。按处置：**留 1107 · 待核 1259 · 待判 222 · 退役候选 58 = 2646**。留的构成 = 证明 568（spec-shaped 516 + 现状锚 52）+ 病史 539。
+
+扫描面：`src/` 2044 · `tests/integration` 461 · `tests/formatter_integration.rs` 52 · 两个 runner 2 / 1 · `tools/` 77 · `benches/` 9；共 328 文件，其中 160 文件的头部有可核节号。上述数字与 `test-gate-census.md` 当前分布表同批更新。
+
+键对账：旧表 2055 → 当前 2646，净增 591；当前树有、旧表无 = **639**（8.8 本轮新增 25 + 存量 606 + t2 `grammar_probe` 新增 8），旧表有、当前树无 = **48**。另有 46 个同键条目的断言摘要 / 门 / 处置随当前源码重算；它们不属于新增或删除键。
+
+### 三、本轮新增 25 条逐键入表
+
+以下 15 条位于 `src/frontend/core/parser/tests/associativity.rs`：
+
+| # | 测试名 |
+| --- | --- |
+| 1 | `test_sub_is_left_associative` |
+| 2 | `test_div_is_left_associative` |
+| 3 | `test_mul_binds_tighter_than_add` |
+| 4 | `test_comparison_binds_looser_than_addition_on_both_operands` |
+| 5 | `test_shift_binds_tighter_than_bitwise_ops_on_both_operands` |
+| 6 | `test_bitwise_level_is_left_associative_across_operators` |
+| 7 | `test_range_upper_bound_swallows_addition` |
+| 8 | `test_range_chain_is_left_associative` |
+| 9 | `test_lambda_body_is_right_greedy` |
+| 10 | `test_assignment_is_right_associative` |
+| 11 | `test_cast_target_stops_at_call_suffix_boundary` |
+| 12 | `test_try_postfix_binds_tighter_than_addition` |
+| 13 | `test_call_chain_postfix_binds_tighter_than_addition` |
+| 14 | `test_pattern_or_chain_collects_all_alternatives` |
+| 15 | `test_grouped_sub_expression_overrides_left_associativity` |
+
+以下 10 条位于 `src/frontend/core/lexer/tests/literals.rs`：
+
+| # | 测试名 |
+| --- | --- |
+| 16 | `test_radix_overflow_consumes_all_digits_before_next_token` |
+| 17 | `test_leading_dot_float_literal_value` |
+| 18 | `test_leading_dot_exponent_decoded` |
+| 19 | `test_leading_dot_underscore_between_digits_accepted` |
+| 20 | `test_leading_dot_underscore_before_nondigit_rejected` |
+| 21 | `test_leading_dot_exponent_without_digits_rejected` |
+| 22 | `test_string_hex_escape_requires_two_digits` |
+| 23 | `test_string_unicode_escape_requires_braced_codepoint` |
+| 24 | `test_string_unknown_escape_rejected` |
+| 25 | `test_char_hex_escape_decodes_two_digits_and_rejects_one` |
+
+### 四、存量 606 条入表对账
+
+606 = 631 − 25，分布在下表 86 个既有测试文件；每个测试名与路径的逐键判定已经写入 TSV，不用合计数替代逐键入表。
+
+| 区域 | 条数 |
+| --- | --- |
+| `src/ast/` | 24 |
+| `src/frontend/core/sema/` | 181 |
+| `src/frontend/core/parser/`（不含本轮 15） | 40 |
+| `src/frontend/core/lexer/`（本文件既有 8） | 8 |
+| `src/frontend/` 其他 | 78 |
+| `src/middle/` | 119 |
+| `src/` 其他 | 27 |
+| `tests/` | 126 |
+| `tools/` | 3 |
+| **合计** | **606** |
+
+### 五、旧表有、树中无的 48 条逐条去向
+
+键按 `(测试名, 入库文件路径)` 比对。48 条中没有「同一测试名迁到另一文件」的纯移位；逐条结果如下。
+
+#### 5.1 `src/frontend/core/parser/pratt/tests/precedence_inline.rs`（4 条）
+
+提交 `f3c9794f` 删除 `Precedence` / `PrecedenceContext` 死对象；前三条只测这些对象，第四条保留并改名。
+
+| # | 旧测试名 | 处置 | 去向 |
+| --- | --- | --- | --- |
+| 1 | `test_precedence_conversion_all` | 已删除 | 被测 `Precedence` 已删除，无后继 |
+| 2 | `test_bp_to_precedence_all` | 已删除 | 被测 `Precedence` 已删除，无后继 |
+| 3 | `test_precedence_context_all` | 已删除 | 被测 `PrecedenceContext` 已删除，无后继 |
+| 4 | `test_bp_ordering` | 改名 | 同文件 `test_bp_ordering_ascends_from_lowest_to_highest` |
+
+#### 5.2 `src/frontend/core/sema/inference/tests/assignment.rs`（6 条）
+
+提交 `0cf96524` 删除生产死链 `inference/assignment.rs` 与其直驱测试文件；新判定点的覆盖在 `src/frontend/core/sema/inference/tests/judgement.rs` 与 `src/frontend/tests/equivalence_judgement.rs`，不是六条旧测试的一对一改名。
+
+| # | 旧测试名 | 处置 | 去向 |
+| --- | --- | --- | --- |
+| 5 | `test_assignment_same_type` | 已删除 | 随 `AssignmentChecker` 死链删除，无同名后继 |
+| 6 | `test_assignment_int_to_float_widening` | 已删除 | 同上 |
+| 7 | `test_assignment_constraint_concrete` | 已删除 | 同上 |
+| 8 | `test_assignment_fn_type_compatibility` | 已删除 | 同上 |
+| 9 | `test_assignment_new_checker_has_no_constraint_info` | 已删除 | 同上 |
+| 10 | `test_assignment_constraint_info_reset_on_non_constraint` | 已删除 | 同上 |
+
+#### 5.3 判等、诊断与 const 参数（各 1 条，合计 3 条）
+
+| # | 旧测试名 / 文件 | 处置 | 去向 |
+| --- | --- | --- | --- |
+| 11 | `test_structurally_equal_int` / `src/frontend/core/sema/layers/tests/equivalence.rs` | 改名并改写 | `6b958851`：同文件 `test_defeq_syntactic_identity_is_proved` |
+| 12 | `test_into_result_unclassified_unproven_still_reports_ice` / `src/frontend/core/sema/proof/tests/verdict.rs` | 改名并改写 | `fec4d88b` 先改为 E2031 口径，`fb35d0a7` 定名为同文件 `test_into_result_general_unproven_uses_e4023` |
+| 13 | `test_used_as_const_in_annotation_scans_own_group_param_annotation` / `src/frontend/core/sema/tests/const_param.rs` | 改名并改写 | `5d554c5f`：同文件 `test_param_quantities_scan_own_group_param_annotation` |
+
+#### 5.4 `src/frontend/core/types/eval/tests/normalizer.rs`（9 条）
+
+提交 `6b958851` 删除无人调用的 `normalizer.rs` / `reducer.rs` 两个归约模块及其直驱测试文件；这些旧测试没有逐条同名后继。新的判等覆盖由 `src/frontend/core/sema/layers/tests/equivalence.rs` 的 `defeq` / `normalize_type` 用例承担。
+
+| # | 旧测试名 | 处置 | 去向 |
+| --- | --- | --- | --- |
+| 14 | `test_reduction_config_default` | 已删除 | 随归约模块删除，无同名后继 |
+| 15 | `test_reduction_config_custom` | 已删除 | 同上 |
+| 16 | `test_normalizer_normalize_primitives` | 已删除 | 同上 |
+| 17 | `test_normalizer_context` | 已删除 | 同上 |
+| 18 | `test_normalization_context_apply_no_change` | 已删除 | 同上 |
+| 19 | `test_normalization_context_substitute_var` | 已删除 | 同上 |
+| 20 | `test_normalization_context_add_substitutions` | 已删除 | 同上 |
+| 21 | `test_normalization_context_cache_mut` | 已删除 | 同上 |
+| 22 | `test_normalization_context_cache_ref` | 已删除 | 同上 |
+
+#### 5.5 `src/frontend/core/types/eval/tests/reducer.rs`（20 条）
+
+删除提交与替代覆盖同 5.4。
+
+| # | 旧测试名 | 处置 | 去向 |
+| --- | --- | --- | --- |
+| 23 | `test_type_computer_new_and_with_config` | 已删除 | 随归约模块删除，无同名后继 |
+| 24 | `test_type_computer_compute_type_ref` | 已删除 | 同上 |
+| 25 | `test_reducer_stuck_on_primitives` | 已删除 | 同上 |
+| 26 | `test_reducer_delta_reduces_alias` | 已删除 | 同上 |
+| 27 | `test_reducer_unknown_alias_stays_stuck` | 已删除 | 同上 |
+| 28 | `test_reducer_with_config` | 已删除 | 同上 |
+| 29 | `test_reducer_register_alias` | 已删除 | 同上 |
+| 30 | `test_reducer_register_aliases` | 已删除 | 同上 |
+| 31 | `test_reducer_step_count` | 已删除 | 同上 |
+| 32 | `test_reducer_reduce_type_ref_with_alias_chain` | 已删除 | 同上 |
+| 33 | `test_reducer_reduce_type_ref_self_referential` | 已删除 | 同上 |
+| 34 | `test_unifier_new_and_reset` | 已删除 | 同上 |
+| 35 | `test_unifier_same_types` | 已删除 | 同上 |
+| 36 | `test_unifier_with_config` | 已删除 | 同上 |
+| 37 | `test_unifier_unify_composite_types` | 已删除 | 同上 |
+| 38 | `test_unifier_unify_different_concrete` | 已删除 | 同上 |
+| 39 | `test_unifier_unify_var_with_list` | 已删除 | 同上 |
+| 40 | `test_unifier_reset_clears_substitution` | 已删除 | 同上 |
+| 41 | `test_unifier_unify_void_with_void` | 已删除 | 同上 |
+| 42 | `test_compute_config` | 已删除 | 同上 |
+
+#### 5.6 其余改名（6 条）
+
+| # | 旧测试名 / 文件 | 处置 | 去向 |
+| --- | --- | --- | --- |
+| 43 | `test_from_builtin_name_keeps_datetime_as_compat_alias` / `src/frontend/core/types/tests/mono.rs` | 改名并改写 | `1c6d5dd9`：同文件 `test_from_builtin_name_rejects_datetime_after_s11_migration` |
+| 44 | `test_inner_local_name_leaking_to_outer_fails` / `src/middle/ir/tests/verify.rs` | 改名并改写 | `a0da0af5`：同文件 `test_inner_isolation_inherited_outer_slot_rejected` |
+| 45 | `test_disjoint_inner_locals_pass` / 同文件 | 改名并改写 | `a0da0af5`：同文件 `test_inner_isolation_same_local_name_across_frames_pass` |
+| 46 | `test_restore_gate_keeps_generic_referenced_only_by_make_closure` / `src/middle/passes/mono/tests/monomorphizer.rs` | 改名并改写 | `75c28a09`：同文件 `test_dce_keeps_generic_referenced_only_by_make_closure` |
+| 47 | `test_restore_gate_keeps_generic_referenced_only_by_tail_call` / 同文件 | 改名并改写 | `19261d26`：同文件 `test_tail_call_site_is_rewritten_to_specialized_name` |
+| 48 | `test_removed_spellings_list_is_the_agreed_twenty_two` / `tools/type-tables/src/tables.rs` | 改名并改写 | `1c6d5dd9`：同文件 `test_removed_spellings_list_is_the_agreed_twenty_three` |
+
+合计复核：4 + 6 + 3 + 9 + 20 + 6 = **48**；已删除 38、改名或语义后继替换 10、纯移位 0。
+
+### 六、D1–D3 的 AST 普查方法与结果
+
+**方法**：递归收集 `tests/yaoxiang/**/*.yx` 355 与 `src/std/tests/*.yx` 23；用 `tokenize` 与生产同款 `SemanticProbe` 调 `parse_with_probe`，再穷举遍历 `Module` / `StmtKind` / `Expr` / `Type` 的子节点，包含 `Type::ConstExpr`、lambda 参数标注、类型体默认值、模式 guard 与 f-string 插值。判定只读 AST，不用正则或字符串匹配语料源码。
+
+负向语料不跳过：`binary_literal_trailing_digit_err.yx`、`decimal_literal_trailing_alpha_err.yx`、`hex_literal_trailing_alpha_err.yx` 三个词法失败文件改由 `Lexer` 取完整恢复 token 流并补 EOF 后解析；另有 10 个 `06-compile-errors` 文件产生语法诊断，仍遍历其部分 AST。最终 378 个文件都进入遍历，无文件因预期错误被排除。
+
+| 形态 | AST 判定 | 命中 |
+| --- | --- | --- |
+| D1 | `Expr::Cast.target_type` 子树含 `Expr::BinOp`（含 `Type::ConstExpr` 内的二元表达式），记录完整 `Type` | **0** |
+| D2 | `Cast.expr = BinOp::Mul`，或 `BinOp::Mul` 的任一直接操作数为 `Cast` | **0** |
+| D3 | `BinOp::Eq/Neq` 的任一直接操作数为 `Lt/Le/Gt/Ge` | **0** |
+
+遍历计数：表达式节点 **18753**、类型节点 **3618**、二元节点 **1419**、`Cast` **0**、`Mul` **70**、`Eq/Neq` **848**、f-string 插值 **15**、模式 guard **3**。`as` 强制转换的实测暴露面因此为 0 处。
+
+**合成正控**：`x as Int * y` 触发 D1=1；`x * y as Int` 与 `x * (y as Int)` 分别触发 `Cast.expr = Mul` 与 `Mul.right = Cast`；`a == b < c` 触发 `Eq.right = Lt`。全语料普查加三条正控共 **4 passed / 0 failed**，证明零命中不是检测器空转。临时探针与接线已在验证后删除。
+
+### 七、执行记录
+
+- `python scripts/dev/test-gate-census.py` → exit 0（2646 条 / 328 文件）。
+- `CARGO_BUILD_JOBS=2 RUST_TEST_THREADS=1 cargo test --lib ast_exposure -- --nocapture --test-threads=1` → exit 0（4 passed；临时探针已删）。
+- `python scripts/dev/test-gate-census.py --check` → exit 0（TSV 最新，2646 条）。
+- `python scripts/ci/check-docs-truth.py` / `python scripts/ci/check-docs-refs.py` → 均 exit 0。
+- 三份变更 Markdown 的定向 markdownlint → exit 0。全站 `pnpm lint:md` 另报 4 处 MD056，全部位于未改且出 scope 的 `docs/src/en/`；本批不越界修英文镜像。
+
+## P8 8.3 go/no-go 探针：三项高危构造（2026-11-24）
+
+### 一、结论与边界
+
+**探针结论 = go（最小可行性通过），建议用户选择「继续全量文法」。** 这里的 go 只表示三项高危构造都有可运行的 LR(1) 表达与对照证据，不表示全量文法、全量诊断或 8.4 差分已经完成。继续或回落仍由用户裁决。
+
+最终 `cargo test --lib grammar_probe` 为 **8 passed / 0 failed**。生产 `parse()` 未接线：`git diff --exit-code HEAD -- src/frontend/core/parser/mod.rs src/frontend/core/parser/pratt src/frontend/core/parser/statements src/frontend/core/parser/parser_state.rs src/frontend/core/lexer` 为 0；`git grep -n "pub fn parse" -- src/frontend/core/parser/mod.rs` 仍指向原入口。
+
+### 二、build-time 接入
+
+- `Cargo.toml`：`lalrpop = "=0.23.2"` 仅进 `[build-dependencies]`；`lalrpop-util = "=0.23.2"` 仅进 `[dev-dependencies]`，生产 crate 运行时依赖不变。`Cargo.lock` 锁定两者均为 **0.23.2**。
+- `build.rs::process_grammar_probe` 是独立分支：无 `src/frontend/core/parser/grammar/` 时早退；有输入时调用 `lalrpop::process_root()` 并声明目录级 `rerun-if-changed`。该分支只追加生成步骤，不跳过既有错误码、类型表与 Z3 门禁。
+- `src/frontend/core/parser/tests/grammar_probe.rs` 经 `lalrpop_mod!` 引入生成 parser。生成物只在 OUT_DIR，源码树没有生成文件；生产 `parser/mod.rs` 未改。
+
+### 三、A：RFC-038 换行终止
+
+探针适配器只读现有 token span：跨行且不是点号续行时合成 `newline`；跨行点号标为 `newline_dot`；跨行左括号标为 `newline_lparen`。生产 lexer 未改。核心产生式为：
+
+```lalrpop
+StmtList = {
+    #[precedence(level="1")] Stmt,
+    #[precedence(level="2")] #[assoc(side="left")]
+    StmtList StmtSeparator Stmt,
+};
+StmtSeparator = { ";", "newline" };
+
+PostfixSuffix = {
+    "(" Args ")",
+    "." "ident",
+    "newline_dot" "ident",
+};
+
+Stmt = {
+    AssignmentTarget "=" Expr,
+    Expr,
+    "newline_lparen" "ident" ")",
+    !,
+};
+```
+
+| 用例 | token / span 依据 | 新文法结果 | 现树对照 |
+| --- | --- | --- | --- |
+| `a\n.b` | 第二行 `.` 标为 `newline_dot`；字段 token `b` 为 2:2–2:3 | 一条 `FieldAccess(a,b)`，span 精确为 2:2–2:3 | AST Debug 与 span 逐项相同 |
+| `a\n(b)` | 第二行 `(` 标为 `newline_lparen`，不能进入调用后缀 | 两条语句：`a` 与分组 `b` | 两条 AST 与 span 逐项相同 |
+| `a(b)`（对照） | 同行 `(` 保留为调用后缀 | 一条 `Call(a,[b])` | 现树同为一条调用语句 |
+
+### 四、B：显式错误产生式与诊断 code+span
+
+文法把 `!` 放在语句级恢复点，动作直接收集 LALRPOP 的 `ErrorRecovery { error, dropped_tokens }` 并构造 `StmtKind::Error`。原始 `ParseError` 的 token span 映射到既有 `ErrorCodeDefinition`，不是从恢复占位节点猜位置。
+
+```lalrpop
+Stmt = {
+    AssignmentTarget "=" Expr,
+    Expr,
+    "newline_lparen" "ident" ")",
+    ! => {
+        errors.push(<>);
+        StmtKind::Error(Span::dummy())
+    },
+};
+```
+
+最小反例：`main = { a = 1 + ; b = 2 }`。
+
+| 诊断 | 现树 `synchronize()` | LALRPOP `!` | 差异 |
+| --- | --- | --- | --- |
+| code | E0012 | E0012 | 0 |
+| file | `grammar_probe.yx`（两侧固定同一输入标签） | 同左 | 0 |
+| start line:col | 1:18 | 1:18 | 0 |
+| end line:col | 1:19 | 1:19 | 0 |
+| 后续语句 | 保留 `b = 2` | 保留 `b = 2` | 0 |
+
+诊断总数两侧均 1，差异条数为 **0**。
+
+### 五、C：模式与 f-string 上下文
+
+统一 `Expr` 的层级为：原子 1、后缀 2、加法 3、lambda 4。后缀比加法紧，lambda 在最外层向右吞入完整 `x + 1`。`ParenExpr` 不再与一般分组共用 LR(2) 形状：`(` 在表达式中进入 lambda，`newline_lparen` 在语句层进入 RFC-038 独立分组。
+
+```lalrpop
+pub Expr = {
+    #[precedence(level="1")] Atom,
+    #[precedence(level="2")] #[assoc(side="left")] Expr PostfixSuffix,
+    #[precedence(level="3")] #[assoc(side="left")] Expr "+" Expr,
+    #[precedence(level="4")]
+    "(" "ident" ")" "=>" Expr,
+};
+
+pub MatchArm = Pattern Guard? "=>" Expr;
+Guard = "if" Expr;
+
+pub Pattern = {
+    PatternAtom ("|" PatternAtom)+,
+    PatternAtom,
+};
+PatternAtom = {
+    "int",
+    "ident",
+    "ident" "(" Pattern ")",
+};
+
+FStringPart = {
+    "text",
+    "interpolation_begin" Expr "interpolation_end",
+};
+```
+
+对照结果：
+
+- `(x) => x + 1` 产 `Lambda(x, Return(Add(x,1)))`，没有 `no_fat_arrow` 或 `parse_expression(12)`；
+- `ok(v) => 1` 产 `Union(ok, Identifier(v))`，由模式产生式直接构造，不走「Var+LParen 重组」；
+- `1 | 2 => 0` 产 `Or([Literal(1), Literal(2)])`，由模式侧的 `|` 链直接构造；
+- `f"lambda {(x) => x + 1}"` 的插值内部产完整 lambda。适配器复用既有 `lex_interpolations` 批量入口，插值起止由 `interpolation_begin/end` 静态限定，f-string 入口形态未改。
+
+### 六、失败面（不得外推）
+
+1. **A 的覆盖边界**：只证明两条 RFC-038 分支与同行调用对照。通用括号 / 方括号、全部 chainable 尾形态和完整语句族尚未覆盖；跨行标记来自探针适配器，完整施工必须把它纳入唯一 token 适配层，不能在多个 parser 入口各写一份。
+2. **B 的覆盖边界**：只证明 `;` 同步点的一条恢复用例。`synchronize()` 的 `Identifier + ':' / '=' / '(' / '{'` 启发式、`RBrace` 留边、深层块与连续多错误尚未证明。LALRPOP 原生错误文案与现树不同；本探针只保证映射后的 code+span 相同，不证明所有输入都能如此映射。
+3. **C 的覆盖边界**：只证明指定 lambda、变体、或模式与 f-string 插值。一般括号表达式、struct / range / 嵌套或模式、format_spec 与插值内绝对 span 尚未覆盖。
+4. **构建成本与生成物**：每次文法变化都在 build-time 重新生成大 parser；本探针未做全量构建耗时基线。生成物不入库，不能把它当作第二个文法来源。
+
+### 七、继续 / 回落建议
+
+推荐继续全量文法，因为 A/B/C 都有最小反例证明，且 B 的 code+span 差异为零。推荐项的代价是：必须把探针适配器收敛为单一实现，并把 B 的同步点矩阵与 C 的完整模式族补齐；若 8.3.3 或 8.4 连续两个迭代仍有不等价项，仍按 05:642 回落到「保留 Pratt + 单套声明式优先级表 + 两套 BinOp 同源生成」。本探针不触发回落，也不放宽 C5。
+
+### 八、执行记录
+
+- `cargo test --lib grammar_probe` → exit 0（**8 passed / 0 failed**）。
+- `cargo fmt` → exit 0。
+- clippy 首轮发现 56 条同源 `ptr_arg`，全部位于 LALRPOP 生成的固定 `&mut Vec<ErrorRecovery>` 签名；在 `lalrpop_mod!` 上定向 `#[allow(clippy::ptr_arg)]` 并附 `// reason:`。
+- `cargo clippy --all --all-features --all-targets -- -D warnings` → exit 0。
+- `python scripts/dev/testsuite.py run fast` → exit 0（**2557 条，0 失败，0 波跳过**）。
+- **2026-11-24 跟进**：8 条 `grammar_probe` 已全部再生入 census，当前表为 **2646 条 / 328 文件**；`python scripts/dev/test-gate-census.py --check` exit 0。
+
+### 九、编排与偏差登记（队长补记，2026-11-24）
+
+- **成员路由**：首轮三个成员的路由由部署侧分配；初期复审成员的异族路由在 t4 首轮连续 `TRANSPORT` 失败后被移除，改由队长新增复审成员（与实现者同路由）并把 t4 改派过去，此后一次通过。异族属性以「独立会话 + 独立冻结对象 + 独立复现 + 负变异」补偿；具体路由属部署配置，不入库。
+- **独立性事故（两次，已纠正）**：`remove_member` 把验证 / 复审任务退回共享池后，调度两次把复审任务派给实现者（8.8 队的 t2、本队的 t4）；队长均在同回合改派，实现者未产出任何 verdict。**规程**：退回共享池的验证 / 复审任务必须由队长显式 reassign，不得依赖调度。
+- **t5 的由来**：t2 新增 8 条 `cfg(test)` 用例使 census 落后；t2 的 `inScope` 未含 census 生成物（如实登记），由新增 t5 闭合（2646 条 / 328 文件）。
+- **非阻塞遗留**：构建耗时未做基线（8.3.1 首棒补）；`test-gate-census.md` 与本节的 `t2` 代号已改为语义名「8.3 go/no-go 探针」；本节 §5.6 两处路径补 `src/` 前缀（队长按复审观察就地更正）。
