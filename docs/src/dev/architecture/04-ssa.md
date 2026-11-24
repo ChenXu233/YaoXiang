@@ -520,7 +520,7 @@ self.release_plan_total = type_result.release_plan.drops.len();
 | 22 | `src/middle/lower/expr/closure.rs` | `generate_lambda_expr_ir` | 改从入参读 `SynthEnv`，不再 `mem::take` 共享字段（**7c.1 已落地**） |
 | 23 | `src/middle/lower/{mod,scope}.rs` | 符号表与 `NestedBodyGuard` | 删除 `closure_captures` 字段，改 `BindingLocation::Upvalue` 词法绑定与按深度恢复（**7c.1 已落地**） |
 | 24 | `src/middle/lower/expr/{access,closure}.rs` + `query.rs` | 变量与命名空间查询 | `closure_captures.contains_key` 改查词法 upvalue，捕获物化统一走 `capture_operand`（**7c.1 已落地**） |
-| 25 | `src/middle/core/ir_gen.rs` | `341` + `1942` | 加 span 键控的消费计数 |
+| 25 | `src/middle/core/ir_gen.rs`（审计时点路径） | `341` + `1942` | ~~加 span 键控的消费计数~~ → 由 4.5 的 `PlanId` 消费台账覆盖（读与记账同一次、结算 W1090）；7c.2 核验零触发，无代码改动 |
 | 26 | `src/middle/lower/{mod,stmt}.rs`、语义侧 `sema/{checker,types}.rs` | `generate_method_ir` 的定义名 + `TypeCheckResult` 权威映射 | `method_def_ordinals` 只读化（**7c.3 已落地**：typecheck 按声明 `PlanId` 产出混编名，lowering 只读） |
 | 27 | `src/middle/core/ir_gen.rs` | `7269-8014` | **最后做**：拆为顶部 `CallArgs` + 6 个 `emit_*` |
 | 28 | `src/middle/core/ir_gen.rs` | `7838-7846` | "补 0" 兜底改为返回诊断 |
@@ -557,7 +557,7 @@ self.release_plan_total = type_result.release_plan.drops.len();
 | --- | --- | --- | --- | --- |
 | **批 a** | 切断多次定义：删 3 处语句级回收 → 6 处 save/restore 换 RAII guard → 口径统一 | 8-10（先）→ 11-16 → 17-18 | 删除回收：**C4**（行为等价 + 第一层支配性不变量）。RAII 与口径统一属纯搬移：**C1** 快照 zero-diff | 逐项单 commit，`git revert` 即回滚 |
 | **批 b** | SSA 形态切换：`ir.rs` 结构变更 + 临时值改产 `Operand::Value`（机械替换）→ `translator.rs` 的 `Phi` 臂（方案 A）→ 线性扫描分配器。批内按 WBS 三级任务串行：7b.1a（`Operand` 变体收敛 + `Instruction::Phi` 引入，**已落地**）→ 7b.1b（`FunctionIR` / `BasicBlock` / 类型标注字段，**已落地**）→ 7b.2（`next_temp_reg` 改产 `Operand::Value`，**已落地**）→ 7b.3（`translator.rs` 的 `Phi` 臂 + `BasicBlock.successors` 填充，**已落地**）→ 7b.4（线性扫描分配器 + 删三处语句级回收，与 7a.1 同批，**已落地**） | 1-5、7 → 31-32 → 37 | **C4**：行为等价 + `verify_ssa` 全绿 + `.42` 往返测试 | `ir.rs` 变更**独占一个 commit**（类型变更波及全仓编译，不可增量回滚） |
-| **批 c** | 隐式契约显式化：`synth.rs` 边界 → span 消费计数 → `method_def_ordinals` 只读化（哨兵脚本经用户 2026-11-24 裁决丁取消） | 20-24、29 → 25 → 26 | **C4**：行为等价；消费计数在新诊断上零触发（否则说明真存在失配） | 独立 commit |
+| **批 c** | 隐式契约显式化：`synth.rs` 边界 → 既有消费台账核验（无代码改动）→ `method_def_ordinals` 只读化（哨兵脚本经用户 2026-11-24 裁决丁取消） | 20-24、29 → 25 → 26 | **C4**：行为等价；消费计数在新诊断上零触发（否则说明真存在失配） | 独立 commit |
 | **批 d** | `generate_call_expr_ir` 拆分 + "补 0" 兜底断言化 | 27-28 | 纯搬移部分：**C1** 快照 zero-diff。断言化部分：**C4** 语料差分 + 第一层校验器 | 独立 commit |
 
 **批内顺序不可交换的三处依赖：**
