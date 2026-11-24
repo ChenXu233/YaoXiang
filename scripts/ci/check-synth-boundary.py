@@ -286,6 +286,31 @@ def use_items(tail: str) -> list[str]:
     return [item for part in parts for item in use_items(part) if item.strip()]
 
 
+def resolve_ast_target(
+    target: str,
+    names: dict[str, str],
+    glob_imported: bool,
+    modules: set[str],
+) -> str | None:
+    """把类型别名右侧解析到 AST 节点名；非 AST 目标返回 None。"""
+    target = "".join(target.split())
+    while target.startswith("(") and target.endswith(")"):
+        target = target[1:-1]
+    qualified = re.fullmatch(
+        r"(?:(?:crate|self)::|(?:super::)+)?ast::(Expr|Stmt|Type)", target
+    )
+    if qualified:
+        return qualified.group(1)
+    aliased = re.fullmatch(r"([A-Za-z_][A-Za-z0-9_]*)::(Expr|Stmt|Type)", target)
+    if aliased and aliased.group(1) in modules:
+        return aliased.group(2)
+    if target in CANONICAL and (target in names or glob_imported):
+        return target
+    if target in names:
+        return names[target]
+    return None
+
+
 def ast_names(code: str) -> tuple[dict[str, str], bool, set[str]]:
     """返回合法 Rust use 导入形成的 AST 名称、glob 状态与模块别名。"""
     names: dict[str, str] = {}
@@ -345,17 +370,7 @@ def ast_names(code: str) -> tuple[dict[str, str], bool, set[str]]:
     while True:
         changed = False
         for alias, target in alias_targets.items():
-            canonical = None
-            qualified = re.fullmatch(r"(?:(?:crate|self)::|(?:super::)+)?ast::(Expr|Stmt|Type)", target)
-            aliased = re.fullmatch(r"([A-Za-z_][A-Za-z0-9_]*)::(Expr|Stmt|Type)", target)
-            if qualified:
-                canonical = qualified.group(1)
-            elif aliased and aliased.group(1) in modules:
-                canonical = aliased.group(2)
-            elif target in CANONICAL and (target in names or glob_imported):
-                canonical = target
-            elif target in names:
-                canonical = names[target]
+            canonical = resolve_ast_target(target, names, glob_imported, modules)
             if canonical is not None and names.get(alias) != canonical:
                 names[alias] = canonical
                 changed = True
@@ -369,7 +384,7 @@ def find_ast_reexports(source: str) -> list[tuple[int, str]]:
     code = sanitize(source)
     tokens = tokenize(code)
     tests = test_item_ranges(code, tokens)
-    _, _, modules = ast_names(code)
+    names, glob_imported, modules = ast_names(code)
     findings: list[tuple[int, str]] = []
     for match in re.finditer(
         r"\bpub(?:\s*\([^)]*\))?\s+use\s+([^;]+);", code, flags=re.DOTALL
@@ -403,6 +418,19 @@ def find_ast_reexports(source: str) -> list[tuple[int, str]]:
         if relevant and (is_ast_root(root) or root in modules):
             line = source.count("\n", 0, match.start()) + 1
             findings.append((line, "pub use AST 节点重导出会破坏单文件闭包"))
+    for match in re.finditer(
+        r"\bpub(?:\s*\([^)]*\))?\s+type\s+[A-Za-z_][A-Za-z0-9_]*[^;=]*=\s*([^;]+);",
+        code,
+        flags=re.DOTALL,
+    ):
+        if any(start <= match.start() < end for start, end in tests):
+            continue
+        if (
+            resolve_ast_target(match.group(1), names, glob_imported, modules)
+            is not None
+        ):
+            line = source.count("\n", 0, match.start()) + 1
+            findings.append((line, "pub type 重导出 AST 节点会破坏单文件闭包"))
     return findings
 
 
@@ -609,6 +637,22 @@ fn f(expr: &a::Expr) {
     let query = a::Expr::extract_binding_positions(expr);
 }
 '''
+    reexport_type_positive = '''use crate::ast as a;
+pub type PublicExpr = crate::ast::Expr;
+pub type PublicStmt = crate::ast::Stmt;
+pub(crate) type PublicType = a::Type;
+fn queries(expr: &PublicExpr) {}
+'''
+    reexport_type_negative = '''pub type Plain = i64;
+pub type ResultAlias<T> = core::result::Result<T, i64>;
+type PrivateAst = crate::ast::Expr;
+pub type OtherExpr = other::Expr;
+fn queries(value: &Plain) {}
+#[cfg(test)]
+mod tests {
+    pub type TestAst = crate::ast::Expr;
+}
+'''
     transitive_lines = ["use crate::ast as a0;"]
     for index in range(1, 17):
         if index % 2:
@@ -764,6 +808,8 @@ fn f() {
             "src/middle/lower/self_module_alias.rs": self_module_alias,
             "src/middle/lower/bare_type_alias.rs": bare_type_alias,
             "src/middle/lower/chained_type_alias.rs": chained_type_alias,
+            "src/middle/lower/reexport_type_alias.rs": reexport_type_positive,
+            "src/middle/lower/reexport_type_negative.rs": reexport_type_negative,
         }
         fixtures.update(
             {
@@ -796,6 +842,7 @@ fn f() {
         "src/middle/lower/self_module_alias.rs",
         "src/middle/lower/bare_type_alias.rs",
         "src/middle/lower/chained_type_alias.rs",
+        "src/middle/lower/reexport_type_alias.rs",
     }
     expected_files.update(
         f"src/middle/lower/{name}.rs" for name in alias_import_matrix
@@ -823,14 +870,25 @@ fn f() {
             "pub(crate) use crate::ast::Type;",
             "pub use crate::ast;",
             "pub use other;",
+            "pub type PublicAstExpr = crate::ast::Expr;",
+            "pub type PublicAstStmt = crate::ast::Stmt;",
+            "pub type PublicAstType = crate::ast::Type;",
+            "pub(crate) type CrateAstType = crate::ast::Type;",
+            "pub type AliasedViaModule = a::Expr;",
+            "pub type PlainAlias = i64;",
+            "pub type OtherModuleAlias = other::Expr;",
+            "pub type ParenAlias = (crate::ast::Expr);",
+            "pub type SpacedAlias = crate :: ast :: Stmt;",
+            "type ChainedAst = crate::ast::Expr;",
+            "pub type ChainedReexport = ChainedAst;",
         ]
     )
     observed_reexports = [
         line for line, _ in find_ast_reexports(reexport_control)
     ]
-    if observed_reexports != [1, 2, 3, 6, 7, 8]:
+    if observed_reexports != [1, 2, 3, 6, 7, 8, 10, 11, 12, 13, 14, 17, 18, 20]:
         failures.append(
-            f"AST 重导出封闭规则错误：expected=[1, 2, 3, 6, 7, 8], "
+            f"AST 重导出封闭规则错误：expected=[1, 2, 3, 6, 7, 8, 10, 11, 12, 13, 14, 17, 18, 20], "
             f"observed={observed_reexports}"
         )
     expected_alias_lines = {
@@ -855,6 +913,18 @@ fn f() {
         if observed_lines != expected_lines:
             failures.append(
                 f"合法别名构造判据错误：{relative} "
+                f"expected={expected_lines}, observed={observed_lines}"
+            )
+    expected_reexport_lines = {"src/middle/lower/reexport_type_alias.rs": [2, 3, 4]}
+    for relative, expected_lines in expected_reexport_lines.items():
+        observed_lines = [
+            int(item.split(":", 2)[1])
+            for item in violations
+            if item.split(":", 1)[0] == relative and "pub type 重导出" in item
+        ]
+        if observed_lines != expected_lines:
+            failures.append(
+                f"pub type 重导出判据错误：{relative} "
                 f"expected={expected_lines}, observed={observed_lines}"
             )
     if failures:
