@@ -17,6 +17,28 @@ VM 的同类系统上运行它，既能算对结果，也能在出错时指出�
 的编号。[RFC-039](../../rfc/accepted/039-compiler-architecture.md)
 将后端选型与编译器重构分开：原型不需要等整个重构结束，正式代码生成也不能接管 P7 的 SSA 改造。
 
+## 看板
+
+勾选表示该条的交付物已入库可查；未勾选表示未开工或未达到放行条件。状态只记仓库内可解析的事实：实现提交短号、测试名与文件路径。各批次的判据正文见下文，本节不重复正文。
+
+### 施工顺序
+
+- [x] **批次 1 固定构建环境并隔离 LLVM 依赖**（`5828eb46`、`5b14f1ff`）——可选 Cargo feature `llvm` 与 Inkwell 0.11.0、LLVM 18.1 的固定组合入库；CI 组合动作 `.github/actions/setup-llvm/action.yml` 安装 `llvm-18-dev` 并设置 `LLVM_SYS_181_PREFIX` 与 `LLVM_SYS_181_STRICT_VERSIONING`；`check-no-llvm` 作业验证默认通道不依赖 LLVM、原生请求不回退字节码；批次构建工具 `scripts/dev/scratch.py` 的 `build` 支持 `--features llvm`。缺链接器有独立用例（`test_native_missing_linker_preserves_output`）；LLVM 主版本不匹配由 `LLVM_SYS_181_STRICT_VERSIONING` 在构建期拒绝。
+- [x] **批次 2 交付第一个真实源程序**（`5828eb46`）——AOT-0/AOT-1 原型入库（`src/backends/llvm/`）：`yx build --emit exe` 走原生路径，`--emit bytecode` 走字节码路径，裸 `build` 仍默认生成 `.42`。判据在 `tests/integration/native_aot.rs`。原型限单文件直线标量子集，发布验收未完成。
+- [ ] **批次 3 接正式共享 IR，扩到控制流与多文件**——未开始；原型对控制流明确拒绝（`test_native_unsupported_control_flow_preserves_output`）。
+- [ ] **批次 4 链接原生运行时，再接 FFI 与并作**——未开始；原生运行时只有最小 C ABI（`src/backends/llvm/runtime.c`），没有 FFI 与并作。
+
+### 平台验收
+
+- [ ] **Linux ELF（`x86_64-unknown-linux-gnu`）**——原型能产出 ELF（`src/backends/llvm/mod.rs` 的 `TARGET_TRIPLE`）；正式支持未发布，发布门槛按 RFC-018 逐项对账未完成。
+- [ ] **Windows x64 MSVC COFF（`x86_64-pc-windows-msvc`）**——未开始；可选 feature 目前只覆盖 Linux x86-64。
+- [ ] **macOS Mach-O（`x86_64-apple-darwin` 与 `aarch64-apple-darwin`）**——未开始。
+
+### 前置
+
+- [ ] **7b SSA 同步**——IR 已按 7b.1a 收敛：`src/middle/ir/ir.rs` 的 `Operand` 只余 Const、Value、Local、Arg、Global 五个变体；`src/backends/llvm/analysis.rs` 与 `src/backends/llvm/codegen.rs` 仍引用已移除的 `Operand::Temp`。批次 3 的前置未满足（静态认定，未实测编译）。
+- [x] **Linux + LLVM 18.1 验证通道**（`5828eb46`、`5b14f1ff`）——与批次 1 同批入库：CI 固定 LLVM 18.1 工具链、无 LLVM 通道隔离、批次树构建的 `--features llvm` 开关。
+
 ## 接在哪里
 
 下表是开工时要复核的事实。源码链接固定在同一
