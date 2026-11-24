@@ -307,7 +307,7 @@ fn type_head_name(ty: &MonoType) -> Option<&str> {
 ///
 /// 骨架记录的字段是接口成员（方法签名），**不是构造参数**。旧表示用空的默认值
 /// 向量表达「required=0」；单列无法表达长度不匹配，故逐字段写 `has_default`
-/// 保持旧 arity 行为（零行为；同命名空间口径，见 09a §P6 6.9.5-B.1a 的报告 §R8）。
+/// 保持旧 arity 行为（零行为；同命名空间口径，见提交信息的报告）。
 fn empty_struct(
     name: &str,
     fields: Vec<(String, MonoType)>,

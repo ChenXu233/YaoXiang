@@ -258,19 +258,19 @@ pub struct AstToIrGenerator {
     ///
     /// 每个函数体独立从 0 起算（`values` 表索引 = ValueId，必须稠密）；
     /// `NestedBodyGuard` 保存/还原它，三处语句级回收**不触碰**它
-    /// （09a §P7 7b.2 契约 §二 第 5 条）。
+    /// （提交信息）。
     pub(super) next_value: u32,
     /// 当前函数体的值表（`ValueId` 顺序；`take_body_values` 取走）。
     pub(super) cur_values: Vec<crate::middle::ir::ir::ValueInfo>,
     /// 当前函数体的值钉子（7b.4）：`(值, 具名槽)`——模式绑定复用值槽时登记，
-    /// 由分配器把该值固定落在该具名槽上（09a §P7 7b.4 契约 §二 C）。
+    /// 由分配器把该值固定落在该具名槽上（提交信息）。
     pub(super) cur_pins: Vec<(crate::middle::ir::ir::ValueId, usize)>,
     /// 当前基本块 label（7b.2 单块恒 0；多块随 7b.3 引入）。
     pub(super) cur_block_label: usize,
     /// 是否处于「有值表的函数体」生成期：`NestedBodyGuard` 里为 true，
     /// 模块 init / 顶层语句（`ModuleIR.init`，没有值表）为 false。
     /// false 时 `next_temp_reg` 退化为旧的 `Local` 槽分配，保证 init 序列
-    /// 与其 codegen 路径零变化（09a §P7 7b.2 契约 §二 第 1 条）。
+    /// 与其 codegen 路径零变化（提交信息）。
     pub(super) value_mode: bool,
 }
 

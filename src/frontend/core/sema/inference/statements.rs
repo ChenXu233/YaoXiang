@@ -2482,7 +2482,7 @@ impl StatementChecker {
         // 故「`(x, y) => 1` 不报 E1112」不等于绑定成功：该格函数体不引用形参，仅因不暴露才
         // 静默通过；`add3` 三层同型也只是 unify 成立。E1112 维持拍平口径的理由是
         // 「元数 = 调用要按序给几个值」，与绑定是否接通无关。
-        // 登记见 `docs/src/dev/architecture/09a-wbs-history.md` §P6 6.8.3 收口实录
+        // 登记见任务 6.8.3 的提交信息
         // §八「残留」第 1 条。
         //
         // 多出的位没有值可绑：旧行为静默接受，实测 `f: () -> Int = (a: Int) => a`
@@ -2744,7 +2744,7 @@ impl StatementChecker {
         //
         // 只取前 N 位（N = 实现头形参数）：下方 #295 补参追加的位不走这里。个数不等时
         // 多出的实现形参没有声明位（例如柯里声明配多形参实现头——那是既有缺口，
-        // 见 09a §P6 6.8.3 的登记：绑定路径未接通，本批不扩面）。
+        // 见提交信息的登记：绑定路径未接通，本批不扩面）。
         let declared_value_params: Option<Vec<Param>> = type_annotation.map(|ann| {
             let cls = crate::ast::ParamClassifier {
                 is_const_param_type: &|n| {

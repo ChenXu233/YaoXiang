@@ -380,7 +380,7 @@ impl AstToIrGenerator {
     // 原因：根据设计文档，不再需要复杂的类型名提取逻辑
     // 方法调用现在直接生成简单函数名（方法名）
 
-    /// 表达式结果的 `MonoType`（7b.2 值表类型来源，09a §P7 7b.2 契约 §二 第 2 条）。
+    /// 表达式结果的 `MonoType`（7b.2 值表类型来源，提交信息）。
     ///
     /// **只取已有可信来源，不新造推断**：变量取类型检查结果 / 绑定表的真实类型；
     /// 构造器调用取类型名；普通函数调用取绑定函数类型的返回类型；其余返回
@@ -791,7 +791,7 @@ impl AstToIrGenerator {
     /// 剥掉透明包装（`Paren` / `NamedParen`）后再判——与 `From<ast::Type> for MonoType`
     /// 的透明口径一致（RFC-004 / RFC-027 §3）。SPEC `type-system.md:443`：函数类型字段
     /// 不生成构造参数；当前 `translator::synthesize_constructor` 仍把两类都算进构造参数
-    /// （已知不一致，登记见 09a §P6 6.6.12，本轮不改行为）。
+    /// （已知不一致，登记见提交信息，本轮不改行为）。
     pub(in crate::middle) fn field_is_method(ty: &ast::Type) -> bool {
         let mut t = ty;
         loop {

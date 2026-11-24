@@ -630,7 +630,7 @@ impl Translator {
                     .any(|(_, src_slot)| src_slot == dst_slot)
                 {
                     return Err(phi_layout_violation(format!(
-                        "块 {block_label} 的 Phi 组（前驱 {}）存在并行拷贝环：槽 {dst_slot} 先被写、随后被读，需要临时槽（登记见 09a §P7 7b.3 契约）",
+                        "块 {block_label} 的 Phi 组（前驱 {}）存在并行拷贝环：槽 {dst_slot} 先被写、随后被读，需要临时槽（见任务 7b.3 的提交信息）",
                         group.predecessor
                     )));
                 }
@@ -660,7 +660,7 @@ impl Translator {
     /// 数据源自 6.6.12 起是 IR 原生的 [`TypeDeclBody`]（收窄载体），不再读语法层 AST。
     ///
     /// **本轮不改行为**：仍按历史行为把**全部**字段（含函数类型字段/方法）算进构造
-    /// 参数。SPEC `type-system.md:443` 要求方法不进构造参数，该不一致登记在 09a
+    /// 参数。SPEC `type-system.md:443` 要求方法不进构造参数，该不一致登记在 提交信息
     /// §P6 6.6.12（载体上的 `is_method` 已能表达区分，留给后续轮次接线）。
     fn synthesize_constructor(
         &mut self,

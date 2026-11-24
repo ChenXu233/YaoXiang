@@ -528,7 +528,7 @@ pub fn contains_type_vars(ty: &MonoType) -> bool {
         } => contains_type_vars(host_type) || assoc_args.iter().any(contains_type_vars),
         // 借用类型 `&T` / `&mut T`：与 `TypeConstraintSolver::contains_var` 同族，
         // 内层必须穿透——缺本臂时「含类型变量」对借用位恒为假，occurs check
-        // 一类的判据在借用位整段失灵（同一缺陷的两份实现，见 09a §P6 6.8.3）。
+        // 一类的判据在借用位整段失灵（同一缺陷的两份实现，见提交信息）。
         MonoType::Ref { inner, .. } => contains_type_vars(inner),
         _ => false,
     }

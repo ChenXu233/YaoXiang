@@ -1,7 +1,7 @@
 //! 6.9.5-B.2：声明期分类 → IR 量词传播与数据布局的直读判据。
 //!
 //! 规范锚：RFC-027 §14.1（space→position→category）、§14.6（擦除与数据索引）、
-//! SPEC §8.3.2 / §8.3.6；09a §P6 6.9.5-B.2 契约 T27 / T28。
+//! SPEC §8.3.2 / §8.3.6；提交信息。
 //!
 //! 为什么走真实管线：手搓 TypeDeclBody 只能证明字段存在，证明不了
 //! 「RecordModel → TypeCheckResult.record_models → TypeDeclBody」这条映射；

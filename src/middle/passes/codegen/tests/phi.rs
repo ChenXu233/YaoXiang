@@ -1,5 +1,5 @@
 //! translator `Phi` 臂（方案 A）判据 — 基于 04-ssa.md §「`Phi` 的字节码形态」
-//! 方案 A 与 09a §P7 7b.3 契约 §二 第 2–4 条
+//! 方案 A
 //!
 //! 方案 A：`Phi` 是 IR-only 伪指令，translator 按**前驱**把它展开为汇合块入口的
 //! `Move { dst: vreg, src: incoming[i] }` 串；不新增 opcode、`.42` 格式零变更、
@@ -374,7 +374,7 @@ fn mov_pairs(module: &BytecodeModule) -> Vec<(u16, u16)> {
 // ── 单前驱：Move 串落在块入口、组内无跳转 ──────────────
 
 /// 单前驱 `Phi` 展开为一条 `Mov`（v1 槽 2 ← v0 槽 1），且不引入跳转——
-/// 组内只有 Move 是全批最简形态（09a §P7 7b.3 契约 §二 第 2 条）。
+/// 组内只有 Move 是全批最简形态（提交信息）。
 #[test]
 fn test_phi_single_predecessor_expands_to_move_without_jump() {
     // Arrange

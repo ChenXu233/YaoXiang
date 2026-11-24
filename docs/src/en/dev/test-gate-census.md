@@ -8,14 +8,14 @@ description:
 # Test Three-Gate Census (Prerequisite for the 0.6 Major Cleanup)
 
 Prerequisite material for WBS 0.6 “Major Cleanup”: mechanically classify every `#[test]` in the
-repository according to [Part Seven of coding-rules](./coding-rules.md)’s **three gates (clause /
-incident history / proof)**, producing a rerunnable item-by-item decision table. The clause-gate
-sampling audit (40 items) once measured the proportion of tests that “cite a clause but cannot
-support their assertions” and thereby **tightened the criteria**; that audit was repealed and
-deleted in 0.6-19. **This page and the generator itself only read tests and do not modify them**;
-test retirement is executed in batches (one commit per batch, with the whole batch amenable to
-`git revert`), and the execution results are recorded in the retirement subsections below and in
-`09a`.
+repository according to the **three gates (clause / incident history / proof)** in
+[Part Seven of coding-rules](./coding-rules.md), producing a rerunnable, per-test decision table. A
+sampling audit of the clause gate (40 entries) once measured the proportion of tests that “cite a
+clause but whose assertions are unsupported by it” and thereby **tightened the criteria**. That
+audit was abolished and removed in 0.6-19. **This page and the generator itself are read-only and do
+not modify tests**; test retirement is performed in batches (one commit per batch, revertible as a
+whole with `git revert`), and the outcomes are recorded in the batch retirement subsections below
+and in the commit message.
 
 Generated artifacts:
 
@@ -226,12 +226,12 @@ module.
   `src/frontend/core/parser/tests/expressions.rs`.
 - **7 kept**: `test_prefix_info_match`, `test_prefix_info_unsafe`, `test_prefix_info_spawn`,
   `test_prefix_info_at`, `test_prefix_info_break_removed`, `test_prefix_info_continue_removed`,
-  `test_prefix_info_eof`—see the item-by-item reasons in the “Six, Second Test Retirement Batch”
-  decision table in `09a-wbs-history.md`. The reasons fall into two categories: **the proof gate
-  applies** (the first three, together with `test_prefix_info_at` / `test_prefix_info_eof`, are the
-  sole unit-level inspection points for their corresponding facts, and no second unit test in the
-  repository observes them), and **the incident-history gate applies** (`break_removed` /
-  `continue_removed` explicitly cite #314).
+  `test_prefix_info_eof`—see the decision table in “VI. Second Test Retirement Batch” in
+  the commit message for the per-test reasons. There are two categories of reason for keeping
+  them: **the Proof gate applies** (the first three, together with `test_prefix_info_at` and
+  `test_prefix_info_eof`, are the sole unit-level inspection points for their corresponding facts,
+  and the repository contains no second unit test that observes them), and **the History gate
+  applies** (`break_removed` / `continue_removed` identify #314).
 - **Rollback**: the entire batch is one commit (this page and `test-gate-census.tsv` are in the same
   commit); `git revert <sha>` reverts the whole batch.
 
@@ -276,10 +276,10 @@ the old implementation found the wrong boundaries for **11**:
 
 ### Bucket Differences Before and After the Fix: 2
 
-For the other 9, **8 affected only the “assertion summary” column** (the bucket did not change),
-while **1 did not even change its summary** (`test_fstring_close_brace_escape_preserved_raw`: the
-old implementation omitted the closing `}` line, which contained no assertion keyword). The
-item-by-item effects of the 8 summary changes are listed in this section of `09a-wbs-history.md`.
+For the other 9 tests, **8 affected only the “Assertion Summary” column** (the bucket did not
+change), and **1 did not even change the summary** (`test_fstring_close_brace_escape_preserved_raw`:
+the old implementation omitted the closing `}` line, which contained no assertion token). The eight
+summary changes are listed individually in the commit message.
 
 | Test name                   | File                                          | Old bucket                          | New bucket                                  | Basis                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | --------------------------- | --------------------------------------------- | ----------------------------------- | ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -467,17 +467,19 @@ cannot be identified or understood, the test is kept**.
   `test_run_bytecode_file_version_mismatch` ·
   `test_run_file_with_yxbc_magic_uses_bytecode_load_path` · `test_weak_upgrade_some` ·
   `test_weak_upgrade_none` · `test_step_on_empty_stack_returns_ok` ·
-  `test_step_out_returns_to_caller` · `test_run_to_completion`—after reading each source, they are
-  each the **sole unit-level observation point** for some property (the load magic-number/version
-  branches are distinct, the YXBC routing layer, the Some/None sides of Weak, stepping with no
-  frames, step_out popping the stack, and the stack being empty after run-to-completion). No unit
-  test that could replace them could be identified ⇒ they are kept under the hard requirement. See
-  Section Eleven of `docs/src/dev/architecture/09a-wbs-history.md` for the item-by-item basis (the
-  decision table is kept there and is not included in this page).
-- **Numbers**: repository-wide `#[test]` 3409 → 3408; 1 deletion = `-#[test]` 1 line and `+#[test]`
-  0 lines in `git diff`; the dominant test, `test_capture_stack_during_execution`, passed when run
-  by itself. Census: Retirement candidate 99 → 98 · Pending judgment 925 → 924 · Clause 1713 ·
-  Incident history 313 · Proof 447 · Neither passes 11 · Pending verification 2121 · Keep 775.
+  `test_step_out_returns_to_caller` · `test_run_to_completion`—after reading their source
+  individually, each is the **sole unit-level observation point** for some property (the load
+  magic-number and version branches are distinct, the YXBC routing layer, both sides of Weak's
+  Some/None behavior, stepping with no frame, `step_out` popping the stack, and running to
+  completion leaving the stack empty). No unit test that could replace them could be identified ⇒
+  they are kept under the hard requirement. See Section Eleven of
+  the commit message for the per-test evidence (the decision table is
+  recorded there and is not included on this page).
+- **Numbers**: repository-wide `#[test]` 3409 → 3408; the 1 deletion is `-#[test]` 1 line and
+  `+#[test]` 0 line as counted by `git diff`; the dominant test
+  `test_capture_stack_during_execution` passes when run on its own. Census: Retirement Candidate 99
+  → 98 · Pending Decision 925 → 924 · Clause 1713 · History 313 · Proof 447 · Fail All 11 · Pending
+  Verification 2121 · Keep 775.
 - **Rollback**: the entire batch is one commit (this page and `test-gate-census.tsv` are in the same
   commit); `git revert <sha>` reverts the whole batch.
 

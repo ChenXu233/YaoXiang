@@ -8,7 +8,7 @@ check-docs-refs.py —— 「文档引用的路径必须任何人都能解析」
   只能是「仓库内路径 / revision / run id / issue 号」。但「仓库内路径」这
   四个字当时没有区分「**入库**路径（git 跟踪）」与「**工作区内、被
   .gitignore 排除**的路径」——被忽略的批次树目录字面在仓库内，clone 之后
-  却根本不存在。于是 09 / 09a / CHANGELOG / 分支维护指南里积累了 24 处
+  却根本不存在。于是 09 / CHANGELOG / 分支维护指南里积累了 24 处
   只有本机才有的「证据出处」，外部贡献者一条数字都复核不了；其中一处
   （t7 收口轮）把旧路径改指向另一个本地路径，等于把违规下移一层而不是消除。
 
@@ -305,7 +305,7 @@ def selftest():
         ('反例：通配形态', 'target/yx-scratch/yx49/*.patch', True),
         ('正例：占位符形态（规则陈述）', 'target/yx-scratch/<batch>/tree', False),
         ('正例：裸目录名', 'target/', False),
-        ('正例：入库路径', 'docs/src/dev/architecture/09a-wbs-history.md', False),
+        ('正例：入库路径', 'docs/src/dev/architecture/09-execution-wbs.md', False),
         ('正例：URL', 'https://github.com/ChenXu233/YaoXiang/issues/475', False),
         ('正例：用户主目录路径', '~/.yaoxiang/settings.toml', False),
         ('反例：跨分批边界仍判红', 'target/yx-scratch/batch-%d/evidence.md' % 149, True),

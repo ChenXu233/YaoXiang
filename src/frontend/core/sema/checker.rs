@@ -3239,7 +3239,7 @@ impl TypeChecker {
             let field_ty = self.export_register_type(export);
             // 命名空间成员不是构造参数：旧表示用**空**默认值向量表达（required=0，
             // 任意实参数被接受）。单列无法表达长度不匹配，故逐字段写 `has_default`
-            // 以保持旧 arity 行为（零行为；见 09a §P6 6.9.5-B.1a 的报告 §R8）。
+            // 以保持旧 arity 行为（零行为；见提交信息的报告）。
             fields.push(crate::frontend::core::types::mono::StructFieldInfo {
                 name: export.name.clone(),
                 ty: field_ty,

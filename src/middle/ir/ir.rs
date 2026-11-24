@@ -3,7 +3,7 @@
 // 6.6.12：**IR 层不再持有语法层类型**。此前的最后一处载体 `FunctionBody::TypeDecl`
 // 改携 IR 原生的收窄形状 [`TypeDeclBody`]（字段表 + 字节码类型表项），语法层 `ast::Type`
 // 在 IR 里彻底消失（6.2 的四处载体、6.6.11 的两个零生产者指令变体之后的历史见
-// 09a §P6 6.2 / 6.6.11 / 6.6.12）。
+// 提交信息）。
 //
 // 本文件唯一的 AST 侧 import 是 [`Quantity`]（RFC-039 D62 / issue #533）：量词是**绑定
 // 事实**的值域（`Option<Quantity>` 与 `ast::Param::quantity` 是同一个事实），不是语法
@@ -18,7 +18,7 @@ use crate::util::span::Span;
 /// SSA 值标识：函数内稠密编号，单调递增、永不回滚（04-ssa.md §值标识方式）。
 ///
 /// 本批（7b.1a）只建立表示：生产构造点 0、无求值/分配语义；7b.2 起
-/// `next_temp_reg` 改产出 `Operand::Value`（09a §P7 7b.1a 契约 §三 占位 2）。
+/// `next_temp_reg` 改产出 `Operand::Value`（提交信息）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct ValueId(pub u32);
 
@@ -550,7 +550,7 @@ pub enum Instruction {
     ///   `verify_ssa` 检查、`normalize` 渲染前再排序）。
     ///
     /// 本批（7b.1a）只引入变体：lowering 生产构造点 0，translator 的消费臂是
-    /// 带不变量注释的占位，真翻译归 7b.3（09a §P7 7b.1a 契约 §二/§三）。
+    /// 带不变量注释的占位，真翻译归 7b.3（提交信息）。
     Phi {
         dst: Operand,
         incoming: Vec<(usize, Operand)>,
@@ -1102,7 +1102,7 @@ pub struct BasicBlock {
 /// 必是新块首）；自环只来自「跳转目标正是本块块首」的真循环。跳转目标的
 /// **坐标不变**（仍是展平绝对指令下标），因此 `translator` 的
 /// `global_ir_index` 回填表、`verify` 的指令级 CFG 与 `.42` 字节码都不受影响
-/// （09a §P7 7b.3 契约 §二 第 1 条）。
+/// （提交信息）。
 pub fn partition_blocks(instructions: Vec<Instruction>) -> Vec<BasicBlock> {
     let total = instructions.len();
     if total == 0 {
@@ -1218,7 +1218,7 @@ pub enum FunctionBody {
         /// 槽号由 lowering 既有的临时槽分配器（`next_temp` / `temp_high_water` /
         /// 三处语句级回收）给出——7b.2 不改分配语义，故这里原样记录，使 codegen 能还原
         /// 与改动前相同的字节码槽号（C4 行为等价）。7b.4 的线性扫描分配器接管后
-        /// 重算本表（09a §P7 7b.2 契约 §二 第 6 条）。
+        /// 重算本表（提交信息）。
         value_slots: Vec<usize>,
     },
     /// 返回值是类型 → {} 是类型字面量
@@ -1267,7 +1267,7 @@ pub struct TypeDeclField {
     ///
     /// SPEC `type-system.md:443`：函数类型字段不生成构造参数。载体必须能表达这个
     /// 区分；但 `translator::synthesize_constructor` 目前仍按历史行为把两类字段都算
-    /// 进构造参数（已知不一致，登记见 09a §P6 6.6.12——本轮不改行为）。
+    /// 进构造参数（已知不一致，登记见提交信息——本轮不改行为）。
     pub is_method: bool,
 }
 
@@ -1462,7 +1462,7 @@ impl ConstValue {
     /// 常量的单态类型（无稳定 `MonoType` 对应时 `None`）。
     ///
     /// 单一来源：lower 的值表类型推导与 verify 的类型一致判据共用本方法
-    /// （09a §P7 7b.2 契约 §二 第 2 条）。
+    /// （提交信息）。
     pub fn mono_type(&self) -> Option<MonoType> {
         match self {
             Self::Void => Some(MonoType::Void),

@@ -1556,7 +1556,7 @@ impl Monomorphizer {
         // 载体是 IR 原生收窄形状（6.6.12）：字段类型与类型表项都是 `MonoType`，
         // 直接用**已有的** `MonoType::substitute`——不引入任何新的替换实现。
         // 已知窄缺口：字段类型是「内联匿名结构体/枚举」时 `substitute` 不深入
-        // （`other => clone`），登记见 09a §P6 6.6.12（语料 0 例）。
+        // （`other => clone`），登记见提交信息（语料 0 例）。
         let new_body = match &generic.body {
             FunctionBody::TypeDecl { body } => crate::middle::ir::ir::TypeDeclBody {
                 fields: body

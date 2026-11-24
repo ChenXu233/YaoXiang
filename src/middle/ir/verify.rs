@@ -49,7 +49,7 @@
 //!   **前置已落地**：块级 `successors` 自 7b.3 起由 `ir::ir::partition_blocks`
 //!   在每条生产构造点真实填充（`lower` 的块按跳转与布局落空切分），故前驱数 /
 //!   前驱 label 集合两条判据在真实 IR 上有数据；`Phi` 的生产（lowering 产 Phi）
-//!   仍为 0，届时**直接**受本判据约束（09a §P7 7b.3 契约 §二 第 1 条）。
+//!   仍为 0，届时**直接**受本判据约束（提交信息）。
 //! - 「内层隔离」的 ModuleIR 级可操作化（WBS 2.1.4 改为**按槽身份**）：lower 的
 //!   save/restore 契约（lower/mod.rs 的 `cur_locals` / `next_temp` / `cur_span` 字段）
 //!   失败形态是**同一张槽位表被两个函数体生成期共用**。身份维度 = `LocalSlot::origin`
@@ -92,7 +92,7 @@ pub enum InvariantKind {
     /// 值定义唯一性（仅 Ssa）
     UniqueDefinition,
     /// Phi 一致性（仅 Ssa）：7b.1a 落「dst 必为 Value / incoming label 升序」，
-    /// 7b.1b 落「前驱数 / 前驱集合 / 逐输入类型一致」（09a §P7 7b.1b 契约 §三）
+    /// 7b.1b 落「前驱数 / 前驱集合 / 逐输入类型一致」（提交信息）
     PhiConsistency,
     /// 跳转目标是合法指令下标
     JumpTarget,
@@ -1068,7 +1068,7 @@ fn slot_frames(locals: &[LocalSlot]) -> BTreeMap<FrameId, Vec<usize>> {
 /// 旧判据在这两种形态会红，但那份红只来自名字巧合（对合法程序同样误报），因此这是
 /// 理论边界、不是相对旧判据的回归；两种泄漏方向用真实管线变异注入时都被本判据抓住
 /// （全语料 61 个文件转红）。判别力证据见
-/// `docs/src/dev/architecture/09a-wbs-history.md` §P2 2.1.4。
+/// 任务 2.1.4 的提交信息。
 ///
 /// **`FrameId` 的作用域**：帧号**每个生成器（每编译单元）内唯一，不是全局唯一**——
 /// `driver` 的每个单元各建一个 `AstToIrGenerator`，单元之间帧号会重复（同一个单元里

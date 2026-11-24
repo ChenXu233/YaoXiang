@@ -14,7 +14,7 @@ use crate::util::i18n::MSG;
 use crate::util::span::Span;
 use std::collections::HashMap;
 
-/// 值表里「类型不可得」的**显式哨兵**（09a §P7 7b.2 契约 §二 第 2 条）。
+/// 值表里「类型不可得」的**显式哨兵**（提交信息）。
 ///
 /// `MonoType::TypeRef` 是 verify 既有「信息不足」口径（与具体类型占位不同），
 /// 快照会原样渲染成 `TypeRef("?")`——不允许用 `Int(64)` 之类静默占位。
@@ -266,7 +266,7 @@ impl AstToIrGenerator {
     ///
     /// 模式绑定 `s` 复用「值已占用的槽」：分配器把该值固定落具名槽 `S`，
     /// 于是 `Local(S)` 与 `Value(v)` 指向同一帧槽——**不新增指令、不改赋值形态**
-    /// （09a §P7 7b.4 契约 §二 C）。`S` 由具名计数器发放，恒小于具名基址。
+    /// （提交信息）。`S` 由具名计数器发放，恒小于具名基址。
     pub(in crate::middle) fn pin_value_to_local_slot(
         &mut self,
         op: &Operand,
@@ -297,7 +297,7 @@ impl AstToIrGenerator {
     }
 
     /// 取走当前函数体的值表与「值 → 槽」映射，并在取走前做一次**前向类型推导**
-    /// （09a §P7 7b.2 契约 §二 第 2 条）：只补确定类型的指令形态，其余保持显式
+    /// （提交信息）：只补确定类型的指令形态，其余保持显式
     /// 未知 `TypeRef("?")`。
     pub(in crate::middle) fn take_body_values(
         &mut self,
@@ -428,7 +428,7 @@ impl AstToIrGenerator {
     ///
     /// 6 处 `FunctionBody::Code` 构造点（函数 / 方法 / lambda / 匿名绑定 / curry
     /// 中间层 / curry 最内层）全部走这里——块切分、槽位分配、locals 取表三件事
-    /// 不再在调用点各写一份（禁令三 A；09a §P7 7b.4 契约 §二 A/E）。
+    /// 不再在调用点各写一份（禁令三 A；提交信息）。
     ///
     /// - 值槽由 [`super::regalloc::allocate_value_slots`] 按活跃区间复用，
     ///   `frame_slots = named_base + max_live`；

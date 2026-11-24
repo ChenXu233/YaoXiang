@@ -134,8 +134,7 @@ or comments do not match reality, directly change the text to state the facts an
 wording. Do not retain the old text and append “revision notes” or “originally…, now…” comparisons;
 readers should not have to encounter the incorrect version before the correct one. Evidence of the
 **correction process** (red→green, before/after diff, adjudication number) belongs in the commit
-message or the WBS historical record (`09a`), not in the body of the corrected text. The historical
-record (`09a`) and work orders/change lists (such as `02` §Change List) are exempt from this
+message, not in the body of the corrected text. Work orders/change lists (such as `02` §Change List) are exempt from this
 restriction.
 
 ## Part Five: Exemption Mechanism
@@ -227,7 +226,7 @@ characterization”—all three merely prolong something whose rationale cannot 
   when needed. Precisely because it can be recovered, “delete first and retrieve it later if
   necessary” is preferable to “keep everything unconditionally”;
 - Delete in batches, with one commit per batch and the ability to revert the batch as a whole;
-- For each batch, record in [09a](architecture/09a-wbs-history.md) what was deleted, which gate was
+- For each batch, record in the commit message what was deleted, which gate was
   used to judge it, and whether alternative coverage exists.
 
 ### 7.4 Cost Discipline

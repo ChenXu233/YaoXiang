@@ -1299,7 +1299,7 @@ impl From<ast::Type> for MonoType {
             // 该注解类型的 arity 判定从不被查询（构造调用的签名取自**定义**侧），
             // 起作用的是按字段的可变性。收敛成单列后按字段写真实标记；该语法
             // 不产生默认值本身，故每个字段的默认值标记与旧空向量在可达面等价
-            //（证据见 09a §P6 6.9.5-B.1a 的报告 §R8）。
+            //（证据见提交信息的报告）。
             ast::Type::NamedStruct { name, fields, .. } => MonoType::Struct(StructType {
                 name,
                 fields: fields

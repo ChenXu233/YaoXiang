@@ -2,7 +2,7 @@
 //!
 //! 规范来源：pratt/precedence.rs 的绑定力常量。
 //! 历史：本文件由 P1 复活；原先还覆盖 P8 删除的死阶梯 `Precedence` /
-//! `PrecedenceContext`，8.0.1 随死代码一并删除（见 09a §P8 8.0），
+//! `PrecedenceContext`，8.0.1 随死代码一并删除（见提交信息），
 //! 现只保留活常量的相对顺序断言。
 
 use crate::frontend::core::parser::pratt::precedence::{

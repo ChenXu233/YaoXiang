@@ -1,14 +1,14 @@
 //! 线性扫描寄存器分配器（7b.4）：把 SSA 值（`ValueId`）映射到 u8 帧槽。
 //!
 //! 设计依据：04-ssa.md §寄存器分配器（自研线性扫描、无寄存器文件 ⇒ 退化为
-//! 「按活跃区间首次可用槽位分配」）与 09a §P7 7b.4 契约 §二 A/B。槽空间分两段：
+//! 「按活跃区间首次可用槽位分配」）。槽空间分两段：
 //!
 //! - `[0, named_base)`：**具名槽**（形参 / env / 具名绑定），由 lowering 单调发放；
 //! - `[pool_base, frame_slots)`：**SSA 值槽**，由本模块按活跃区间复用。
 //!
 //! 活跃区间用 7b.3 的块级 CFG（`BasicBlock.successors`）做后向数据流；`Phi` 的
 //! `dst` 定义在汇合块入口、`incoming` 的每个 `(P, v)` 是**前驱 P 出口的使用**——
-//! 与 translator 的块入口 Move 组同源（09a §P7 7b.4 契约 §二 B）。
+//! 与 translator 的块入口 Move 组同源（提交信息）。
 //!
 //! 本模块**不持有 span / Diagnostic**：预算超限返回 [`Budget`]，由调用方
 //! （`lower/scope.rs` 的 `finalize_code_body`）用既有 E3014 发射（码号、文案、
@@ -44,7 +44,7 @@ struct Interval {
 /// 把每个 SSA 值分配到帧槽：`frame_slots = named_base + max_live`。
 ///
 /// `pinned` 是「这个值必须落在该具名槽」（`slot_for_operand` 耦合改成的钉子，
-/// 见 09a §P7 7b.4 契约 §二 C）：pinned 值固定落其具名槽，其余值只用
+/// 见提交信息）：pinned 值固定落其具名槽，其余值只用
 /// `pool_base` 以上的自由槽，两段不交叉。
 ///
 /// 返回 `Err(Budget)` 当 `frame_slots > limit`；调用方转 E3014。

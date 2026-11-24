@@ -1,4 +1,4 @@
-//! 7b.4 go/no-go 直驱判据 — 基于 09a §P7 7b.4 契约 §二 B 与用户裁决 ②
+//! 7b.4 go/no-go 直驱判据 — 基于任务 7b.4 的提交信息与用户裁决 ②
 //!
 //! 两条越界语料（`src/std/tests/string_ops.yx` 的 354 槽、`tests/yaoxiang/
 //! 01-syntax/control-flow/list_comp.yx` 的 323 槽，都是**不回收时的单调槽数**）

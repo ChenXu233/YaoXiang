@@ -648,7 +648,7 @@ pub fn normalize_module(ir: &ModuleIR) -> String {
                 for block in blocks {
                     // `successors` 不进入快照：块级 CFG 属分配 / 布局细节
                     // （7b.4 的线性扫描分配器还可能重塑它），判据由 `verify_ssa`
-                    // 的块级前驱承担（09a §P7 7b.3 契约 §二 第 5 条）。
+                    // 的块级前驱承担（提交信息）。
                     for instr in &block.instructions {
                         writeln!(out, "    {}", fmt_instruction(instr, &mut fctx, &mut mctx))
                             .unwrap();

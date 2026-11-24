@@ -9,7 +9,7 @@ WBS 0.6「大清理」的前置材料：把全仓 `#[test]` 按 [coding-rules �
 **三扇门（条款 / 病史 / 证明）** 机械分类，产出一份可重跑的逐条判定表；条款门的抽样审计
 （40 条）曾量出「引了条款但撑不住断言」的比例并据此**收紧判据**，该审计已于 0.6-19 废止并删除。
 **本页与生成器本身只读不改测试**；测试的退役按批次执行（每批一个提交、可整体 `git revert`），
-执行结果登记在下方各批次退役小节与 `09a`。
+执行结果登记在下方各批次退役小节与提交信息。
 
 生成物：
 
@@ -170,7 +170,7 @@ WBS 0.6「大清理」的前置材料：把全仓 `#[test]` 按 [coding-rules �
   `test_grouped_expr` / `test_tuple` / `test_list_literal` / `test_list_empty` / `test_ref_expr`。
 - **保留 7 条**：`test_prefix_info_match`、`test_prefix_info_unsafe`、`test_prefix_info_spawn`、
   `test_prefix_info_at`、`test_prefix_info_break_removed`、`test_prefix_info_continue_removed`、
-  `test_prefix_info_eof`——逐条理由见 `09a-wbs-history.md` 的「六、第二批测试退役」判定表。
+  `test_prefix_info_eof`——逐条理由见提交信息（任务 0.6，第二批测试退役）。
   保留的理由分两类：**证明门成立**（前三条与 `test_prefix_info_at` / `test_prefix_info_eof` 是对应事实在
   **单元层**的唯一走查点，仓库内没有第二条单元测试观察它）、**病史门成立**
   （`break_removed` / `continue_removed` 点名 #314）。
@@ -211,7 +211,7 @@ WBS 0.6「大清理」的前置材料：把全仓 `#[test]` 按 [coding-rules �
 
 其余 9 条里 **8 条只影响「断言摘要」那一列**（分箱未变），**1 条连摘要都没变**
 （`test_fstring_close_brace_escape_preserved_raw`：旧实现少取了收尾的 `}` 行，那行不含断言词）。
-8 条摘要变化逐条见 `09a-wbs-history.md` 的本节。
+8 条摘要变化逐条见提交信息。
 
 | 测试名 | 文件 | 旧箱 | 新箱 | 依据 |
 | --- | --- | --- | --- | --- |
@@ -363,7 +363,7 @@ test-specification 规则 6.1 要求写成 `assert!(matches!(...))`，但它确�
   `test_step_out_returns_to_caller` · `test_run_to_completion`——逐条读原文后，它们各自都是
   某条性质的**唯一单元观察点**（load 的魔数/版本两条分支互不相同、YXBC 路由层、Weak 的 Some/None
   两侧、无帧 step、step_out 弹栈、run 到结束栈空），指认不出能替代它们的单元测试 ⇒ 按硬要求留。
-  逐条依据见 `docs/src/dev/architecture/09a-wbs-history.md` 的第十一节（判定表放实录，不进本页）。
+  逐条依据见提交信息（判定表不进本页）。
 - **数字**：全仓 `#[test]` 3409 → 3408；判删 1 = `git diff` 计 `-#[test]` 1 行、`+#[test]` 0 行；
   支配者 `test_capture_stack_during_execution` 单独跑通过。普查：退役候选 99 → 98 · 待判 925 → 924 ·
   条款 1713 · 病史 313 · 证明 447 · 均不通过 11 · 待核 2121 · 留 775。

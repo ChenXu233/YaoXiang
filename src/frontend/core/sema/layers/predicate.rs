@@ -65,7 +65,7 @@ pub fn check_predicate(
 ///
 /// `Full` = 现有四级（direct eval → 精确 Γ → SMT 蕴含/求解 → 证明函数）。
 /// `NoSmt` = 只走 direct eval / 精确 Γ / 证明函数：SMT 只作加速提示、**不作
-/// 证明来源**。依赖记录 Σ 的构造点义务用这一档（09a 契约 §四 的 D3 待裁形态；
+/// 证明来源**。依赖记录 Σ 的构造点义务用这一档（D3 待裁形态；
 /// 裁决前不得把 SMT 的 Unsat 当成构造义务的证明）。
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum PredicateMode {
@@ -87,7 +87,7 @@ pub fn check_predicate_with_mode(
         _ => return Ok(()),
     };
 
-    // RFC-027 §14.5 / 09a §P6 6.9.5-B.3 §五：evidence 字段路径是**准入前提**，不是值求值。
+    // RFC-027 §14.5 / 提交信息：evidence 字段路径是**准入前提**，不是值求值。
     // 唯一判定点；判据只看「R→记录模型 + f 是 evidence 字段」（应用面负责基名一致性）。
     if crate::frontend::core::sema::record_model::witness_premise_admitted(
         &ctx.env.record_models,

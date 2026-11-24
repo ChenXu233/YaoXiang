@@ -28,7 +28,7 @@
 //! IR 原生收窄载体 `TypeDeclBody`）后，`REBUILD_FUNCTIONS` 里的最后两条
 //! （`substitute_type_in_ast` 与反向桥 `mono_to_ast_type`）连同 6.5 的
 //! `without_fn_param_names` 全部删除——**登记表与口径快照现均为空**（`&[]`），
-//! 基线里所有 AST→AST 与反向桥列归零（逐变体数字见 09a §P6 6.6.12 的门禁红态与刷新表）。
+//! 基线里所有 AST→AST 与反向桥列归零（逐变体数字见 任务 6.6.12 的提交信息的门禁红态与刷新表）。
 //!
 //! **6.6.11 刷新（2026-11-01）**：删掉 `Instruction::Cast` / `Instruction::TypeTest` 两个
 //! **零生产者**死变体后，`mono/function.rs::substitute_type_ast` 失去唯一调用者并随之删除——
@@ -46,7 +46,7 @@
 //! （提交号在推送后才可取，见 commit-convention.md「提交粒度」）。
 //!
 //! 上一次冻结（6.3，删除 03 §5.2 的 13 个死变体后）见 git 历史；6.0 原始勘察冻结于
-//! `bfe2f6ba366ff0c45f517a4bec8d7e87b0a59696`（见 09a §P6 6.0）。
+//! `bfe2f6ba366ff0c45f517a4bec8d7e87b0a59696`（见 任务 6.0 的提交信息）。
 //!
 //! **数字必须同时钉住两样东西（6.6.3 复审 F1/F2 的修复）**：
 //! 1. **源码树**（[`SCOUT_BASELINE_REV`]）——同一份源码才谈得上同样的点数；
@@ -83,11 +83,11 @@ pub struct BaselineRow {
 /// - 6.6.7：删 `types.rs::extract_fn_type_info` 的 1 个**前向**点（伪造 `Type::Name{"()"}`
 ///   改报诊断）⇒ 该树上 `Name` 前向 3 / 合计 6（多出被删的那一点）；
 /// - 6.6.11：删 `mono/function.rs::substitute_type_ast` 的 **10 个 AST→AST** 点 ⇒ 在该树上
-///   10 个变体的 AST→AST 与合计**各多 1**（实测漂移清单见 6.6.11 的提交信息与 09a）；
+///   10 个变体的 AST→AST 与合计**各多 1**（实测漂移清单见 6.6.11 的提交信息与；
 /// - 6.6.12：删 `ast.rs::without_fn_param_names`（11 变体各 −1）+ `substitute_type_in_ast`
 ///   （8 变体各 −1）+ 反向桥 `mono_to_ast_type`（`Name` 反向桥 3→0、`Fn`/`Generic`/`Ref`
 ///   各 1→0）⇒ 在该树上上述各行按清单**各多 1**（`Name` 合计 5 / 反向桥 3，`Fn`/`Generic`/
-///   `Ref` 合计各多 2），逐行数字见 09a §P6 6.6.12。
+///   `Ref` 合计各多 2），逐行数字见 任务 6.6.12 的提交信息。
 pub const SCOUT_BASELINE_REV: &str = "343ed13b0777c5c21420a6dbcda9e80cf1c017fb";
 
 /// 口径 revision：上表的数字**按哪一代 `scan.rs` 分类登记表**量出来的。

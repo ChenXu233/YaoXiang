@@ -681,7 +681,7 @@ impl Obligations {
 > | t3 F1 / t4 R2 | 红名单 evidence 是纯文本指针，替代消费者被摘除时会静默陈旧 | **已落地**：门禁 F1 锚点校验（文件可定位 + 行号在册 + 符号锚，`scripts/ci/check-obligations.py:251`）；反例夹具 `tests/baselines/obligations-gate/stale-anchor/` |
 > | t3 F2 / t4 R3 | 门禁判据 1 缺反向 containment，新增字段忘登记时静默 PASS | **已落地**：F2 差值显式输出（`:577`）+ F4 定义行对账（`:455`）+ F5 范围对账；反例夹具 `unregistered-field/` |
 > | t4 R4 | W-only 与升 E 的口径未登记 | **已落地**：本注记第三 / 七段 + RFC-013「发射通道」+ 六语言 `locales/*.json` 的 W1090 help 与 error_output 样例 |
-> | t7 F5 | 死代码分析对重载方法引用计数失真（合法重载仍被误报 `W1005`） | **已转 issue `#450`**，归属 WBS **4.9 引用池正确实现**（`docs/src/dev/architecture/09-execution-wbs.md:237` 登记）——非本二级任务 |
+> | t7 F5 | 死代码分析对重载方法引用计数失真（合法重载仍被误报 `W1005`） | **已转 issue `#450`**，归属 WBS **4.9 引用池正确实现**（登记见 `docs/src/dev/architecture/09-execution-wbs.md` 的 4.9 行）——非本二级任务 |
 > | t11 F7 | 门禁 `--root` 模式下 F1 不覆盖模块头散文注释里的锚点承诺 | **已知边界**（见 8.4） |
 > | t11 F8 | 验证方工具侧自记：变异驱动曾误写主仓（即时 `git restore` 清除、受影响轮次输出作废重跑） | **信息项**（非交付物缺陷） |
 > | t11 F9 | 主仓中间态（未暂存文件使本文表头与 `INVENTORY` 不同步）触发门禁红 | **信息项 / 已消解**：冻结提交自洽 PASS；「中间态直接提交会红门禁」正是 F2/F4 的设计意图 |
