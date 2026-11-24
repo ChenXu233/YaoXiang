@@ -390,7 +390,7 @@ pub(super) fn synth_closure(
 - SpawnFromList 在 Embedded 与 Standard 共用 `env + [匿名 item]` 的 args 布局，并以同一份 env 注入 upvalues。匿名迭代值固定为 env[0]，命名捕获从匿名前缀后读取，形参从全部 env 之后起算。
 - 双运行时行为测试显式调用 main()，在 spawn-for 任务内分别断言无捕获 item 值与 item+外层捕获；无捕获形态同时覆盖 74febd1f 引入的回归恢复。IR 断言与真实执行分别记录，403 条既有语料零漂移不冒充该形态的行为覆盖。
 
-**判据**：`scripts/ci/check-synth-boundary.py` 扫描 01-routing 对应的 sema、proof、middle、backends 与 std 生产面，唯一例外是 `middle/lower/synth.rs`。脚本以 token 上下文区分构造与 match / if let / let-else / matches! / 查询 / 注释 / 字符串 / 测试代码，并识别 glob import、模块别名、直接/裸名/链式类型别名与 AST 唯一具名构造器 `Expr::call`；类型别名目标接受模块别名限定的 `Expr` / `Stmt` / `Type`，use 路径支持 `use a::Expr` 与 `use a::Expr as E`，`use crate::ast::{self as a}` 也注册模块别名，链式目标仍由同一固定点展开；无逗号 block 臂体在块结束后复位，if/else block 臂体在 else 块结束后才复位。门禁只承诺合法 Rust，不可编译 token 文本（包括非块 else）不在保证范围。`--selftest` 同时证明真构造会红、非构造读取不误报。仓库扫描与自检均接入 CI 的 WBS 9.8 门禁。
+**判据**：`scripts/ci/check-synth-boundary.py` 扫描 01-routing 对应的 sema、proof、middle、backends 与 std 生产面，唯一例外是 `middle/lower/synth.rs`。脚本以 token 上下文区分构造与 match / if let / let-else / matches! / 查询 / 注释 / 字符串 / 测试代码，并识别 glob import、模块别名、直接/裸名/链式类型别名与 AST 唯一具名构造器 `Expr::call`；合法 use 矩阵覆盖 crate::/相对路径与 pub use 下的单名导入、as 重命名、glob、任意位置的 `{self as a}`、混合/嵌套大括号组与尾随逗号；模块别名根路径支持 `use a::Expr` 与 `use a::Expr as E`，`use a as b` 及更长重命名链由同一固定点注册，类型别名目标接受模块别名限定的 `Expr` / `Stmt` / `Type`；无逗号 block 臂体在块结束后复位，if/else block 臂体在 else 块结束后才复位。门禁只承诺合法 Rust，不可编译 token 文本（包括非块 else）不在保证范围。`--selftest` 同时证明真构造会红、非构造读取不误报。仓库扫描与自检均接入 CI 的 WBS 9.8 门禁。
 
 D1/D2：`SynthEnv` 与 `BindingLocation` 都是本批新增的内部类型，不是既有类型复用。前者把生产端 env 操作数、命名项与槽位推导集中为一个显式参数；后者把原 `SymbolEntry.local_idx` 提升为可判别的 Local/Upvalue 位置。替代方案是继续传三份共享字段（无法阻止嵌套覆盖与错误残留），或只传 `Vec<Operand>`（无法表达匿名前缀与命名捕获的对应关系）；两者均因正确性理由否决。新概念不与既有 AST/消费台账同义，也不需要 import 别名或转换表。
 
