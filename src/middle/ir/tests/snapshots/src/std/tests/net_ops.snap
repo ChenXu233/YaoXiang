@@ -5,43 +5,69 @@ module
     slot[2] orig : Int(64) @depth1
     slot[3] rt : Int(64) @depth1
     slot[4] dec : Int(64) @depth1
-    locals_total=10
-    Load %0 <- string("a b")
-    Call %1 <- string("std.net.url_encode") [%0] (def=d0)
-    Load %2 <- %1
-    Load %3 <- string("a%20b")
-    Eq %4 <- %2, %3
-    Load %5 <- string("url_encode: space to %20")
-    Call %0 <- string("std.assert.assert") [%4, %5] (def=d1)
-    Load %4 <- string("a&b=c?d")
-    Call %0 <- string("std.net.url_encode") [%4] (def=d0)
-    Load %3 <- %0
-    Load %5 <- string("a%26b%3Dc%3Fd")
-    Eq %2 <- %3, %5
-    Load %6 <- string("url_encode: reserved chars escaped")
-    Call %4 <- string("std.assert.assert") [%2, %6] (def=d1)
-    Load %4 <- string("hello world & friends")
-    Load %5 <- %4
-    Call %3 <- string("std.net.url_encode") [%5] (def=d0)
-    Call %2 <- string("std.net.url_decode") [%3] (def=d2)
-    Drop %4
-    Load %6 <- %2
-    Load %7 <- %4
-    Eq %5 <- %6, %7
-    Load %8 <- string("url encode/decode roundtrip")
-    Call %3 <- string("std.assert.assert") [%5, %8] (def=d1)
-    Load %5 <- string("a%20b")
-    Call %3 <- string("std.net.url_decode") [%5] (def=d2)
-    Load %7 <- %3
-    Load %8 <- string("a b")
-    Eq %6 <- %7, %8
-    Load %9 <- string("url_decode: %20 to space")
-    Call %5 <- string("std.assert.assert") [%6, %9] (def=d1)
-    Drop %3
-    Drop %1
-    Drop %0
-    Drop %4
+    locals_total=8
+    values_total=25
+    value v0: Generic { name: "String", args: [] } @block0
+    value v1: TypeRef("?") @block0
+    value v2: Bool @block0
+    value v3: Generic { name: "String", args: [] } @block0
+    value v4: Generic { name: "String", args: [] } @block0
+    value v5: Generic { name: "String", args: [] } @block0
+    value v6: Generic { name: "String", args: [] } @block0
+    value v7: TypeRef("?") @block0
+    value v8: Bool @block0
+    value v9: Generic { name: "String", args: [] } @block0
+    value v10: Generic { name: "String", args: [] } @block0
+    value v11: Generic { name: "String", args: [] } @block0
+    value v12: TypeRef("?") @block0
+    value v13: Generic { name: "String", args: [] } @block0
+    value v14: TypeRef("?") @block0
+    value v15: Bool @block0
+    value v16: Generic { name: "String", args: [] } @block0
+    value v17: Generic { name: "String", args: [] } @block0
+    value v18: Generic { name: "String", args: [] } @block0
+    value v19: Generic { name: "String", args: [] } @block0
+    value v20: TypeRef("?") @block0
+    value v21: Bool @block0
+    value v22: Generic { name: "String", args: [] } @block0
+    value v23: Generic { name: "String", args: [] } @block0
+    value v24: Generic { name: "String", args: [] } @block0
+    Load v0 <- string("a b")
+    Call %0 <- string("std.net.url_encode") [v0] (def=d0)
+    Load v3 <- %0
+    Load v4 <- string("a%20b")
+    Eq v2 <- v3, v4
+    Load v5 <- string("url_encode: space to %20")
+    Call v1 <- string("std.assert.assert") [v2, v5] (def=d1)
+    Load v6 <- string("a&b=c?d")
+    Call %1 <- string("std.net.url_encode") [v6] (def=d0)
+    Load v9 <- %1
+    Load v10 <- string("a%26b%3Dc%3Fd")
+    Eq v8 <- v9, v10
+    Load v11 <- string("url_encode: reserved chars escaped")
+    Call v7 <- string("std.assert.assert") [v8, v11] (def=d1)
+    Load %2 <- string("hello world & friends")
+    Load v13 <- %2
+    Call v12 <- string("std.net.url_encode") [v13] (def=d0)
+    Call %3 <- string("std.net.url_decode") [v12] (def=d2)
     Drop %2
-    Ret %5
+    Load v16 <- %3
+    Load v17 <- %2
+    Eq v15 <- v16, v17
+    Load v18 <- string("url encode/decode roundtrip")
+    Call v14 <- string("std.assert.assert") [v15, v18] (def=d1)
+    Load v19 <- string("a%20b")
+    Call %4 <- string("std.net.url_decode") [v19] (def=d2)
+    Load v22 <- %4
+    Load v23 <- string("a b")
+    Eq v21 <- v22, v23
+    Load v24 <- string("url_decode: %20 to space")
+    Call v20 <- string("std.assert.assert") [v21, v24] (def=d1)
+    Drop %4
+    Drop %0
+    Drop %1
+    Drop %2
+    Drop %3
+    Ret v20
   init (locals=0)
     Call %0 <- string("main") [] (def=d3)

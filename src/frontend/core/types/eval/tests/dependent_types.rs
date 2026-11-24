@@ -5,14 +5,14 @@
 //! RFC-011 §4.3: Assert 定义为 IsTrue(cond)
 //! spec 2026-07-12-assert-refinement-unification-design.md §1.3: IsTrue 桥
 
-use crate::frontend::core::types::MonoType;
 use crate::frontend::core::types::eval::dependent_types::{
-    AssociatedType, AssociatedTypeDef, DependentTypeEnv, RecursiveArm, RecursivePattern,
-    TypeFamily, check_structural_termination, parse_nat_from_type, nat_to_type,
+    check_structural_termination, nat_to_type, parse_nat_from_type, AssociatedType,
+    AssociatedTypeDef, DependentTypeEnv, RecursiveArm, RecursivePattern, SortSpace, TypeFamily,
 };
 use crate::frontend::core::types::eval::type_families::Nat;
-use std::collections::HashMap;
+use crate::frontend::core::types::MonoType;
 use crate::std::StdModule;
+use std::collections::HashMap;
 
 /// Helper: test_istrue_type_family_instantiate 的完整夹具与断言（逐条断言见函数体）。
 /// Assert: `IsTrue(true)` 可实例化并归约为 Void（spec §1.3）。
@@ -91,6 +91,7 @@ fn test_type_family() {
         vec!["T".to_string()],
         vec![],
         AssociatedTypeDef::Direct(MonoType::make_string()),
+        SortSpace::Data,
     );
     assert_eq!(family.name, "AsString");
     assert_eq!(family.type_params().len(), 1);
@@ -108,6 +109,7 @@ fn test_type_family_associated_types() {
         vec!["T".to_string()],
         vec![at],
         AssociatedTypeDef::Direct(MonoType::Void),
+        SortSpace::Data,
     );
     assert!(family.get_associated_type("Item").is_some());
     assert!(family.get_associated_type("X").is_none());
@@ -125,6 +127,7 @@ fn test_dependent_type_env() {
         vec![],
         vec![],
         AssociatedTypeDef::Direct(MonoType::Void),
+        SortSpace::Data,
     );
     env.register_type_family(family);
     assert!(env.get_type_family("F").is_some());
@@ -161,6 +164,7 @@ fn test_type_family_instantiate_no_args() {
         vec![],
         vec![],
         AssociatedTypeDef::Direct(MonoType::Void),
+        SortSpace::Data,
     );
     let result = family.instantiate(&[]);
     assert!(result.is_some());
@@ -175,6 +179,7 @@ fn test_type_family_instantiate_wrong_arg_count() {
         vec!["T".to_string()],
         vec![],
         AssociatedTypeDef::TypeParam("T".to_string()),
+        SortSpace::Data,
     );
     // Wrong number of args
     let result = family.instantiate(&[]);
@@ -188,6 +193,7 @@ fn test_type_family_get_associated_type_none() {
         vec![],
         vec![],
         AssociatedTypeDef::Direct(MonoType::Void),
+        SortSpace::Data,
     );
     assert!(family.get_associated_type("Nonexistent").is_none());
 }
@@ -199,6 +205,7 @@ fn test_type_family_instantiate_associated_type_not_found() {
         vec![],
         vec![],
         AssociatedTypeDef::Direct(MonoType::Void),
+        SortSpace::Data,
     );
     assert!(family
         .instantiate_associated_type("Nonexistent", &[])
@@ -215,12 +222,14 @@ fn test_dependent_type_env_register_multiple() {
         vec![],
         vec![],
         AssociatedTypeDef::Direct(MonoType::Int(32)),
+        SortSpace::Data,
     );
     let f2 = TypeFamily::new(
         "F2".to_string(),
         vec![],
         vec![],
         AssociatedTypeDef::Direct(MonoType::make_string()),
+        SortSpace::Data,
     );
     env.register_type_family(f1);
     env.register_type_family(f2);
@@ -237,12 +246,14 @@ fn test_dependent_type_env_overwrite() {
         vec![],
         vec![],
         AssociatedTypeDef::Direct(MonoType::Int(32)),
+        SortSpace::Data,
     );
     let f2 = TypeFamily::new(
         "F".to_string(),
         vec![],
         vec![],
         AssociatedTypeDef::Direct(MonoType::make_string()),
+        SortSpace::Data,
     );
     env.register_type_family(f1);
     env.register_type_family(f2);

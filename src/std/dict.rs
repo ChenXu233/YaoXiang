@@ -2,7 +2,7 @@
 //!
 //! This module provides dictionary manipulation functions for YaoXiang programs.
 
-use crate::backends::common::{RuntimeValue, HeapValue};
+use crate::backends::common::{HeapValue, RuntimeValue};
 use crate::backends::ExecutorError;
 use crate::std::{expect_dict, NativeContext, NativeExport, StdModule};
 

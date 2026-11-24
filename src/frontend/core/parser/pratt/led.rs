@@ -2,11 +2,11 @@
 //!
 //! This module implements infix parsing for the Pratt parser with RFC-010/011 support.
 
-use crate::frontend::core::lexer::tokens::*;
 use crate::ast::*;
-use crate::frontend::core::parser::{ParserState};
-use crate::util::diagnostic::ErrorCodeDefinition;
+use crate::frontend::core::lexer::tokens::*;
 use crate::frontend::core::parser::pratt::precedence::*;
+use crate::frontend::core::parser::ParserState;
+use crate::util::diagnostic::ErrorCodeDefinition;
 
 impl<'a> ParserState<'a> {
     /// Parse infix expression with given left binding power
@@ -32,12 +32,12 @@ impl<'a> ParserState<'a> {
             // Assignment
             Some(TokenKind::Eq) => Some((BP_ASSIGN, BP_ASSIGN + 1, Self::parse_assign)),
             // Range
-            // #300 F/I 项：`..` 绑定力 (6, 7)——左 6 低于加法（7），右 7 吞加法不吞同级 `..`。
+            // #300 F/I 项：`..` 绑定力 (BP_RANGE_L, BP_RANGE_R)——左 6 低于加法（7），右 7 吞加法不吞同级 `..`。
             // `0..n+2` → 0..(n+2)（上界是算术表达式）；
             // `a..b..c` → (a..b)..c（step 形态，左结合）；
             // `x in 1..10` → x in (1..10)（区间整体作为 in 右操作数）；
             // `a == b..c` → a == (b..c)（直觉语义，`..` 高于比较级）。
-            Some(TokenKind::DotDot) => Some((6, 7, Self::parse_binary)),
+            Some(TokenKind::DotDot) => Some((BP_RANGE_L, BP_RANGE_R, Self::parse_binary)),
             // Logical OR
             Some(TokenKind::Or) => Some((BP_OR, BP_OR + 1, Self::parse_binary)),
             // Logical AND

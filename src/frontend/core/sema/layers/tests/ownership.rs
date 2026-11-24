@@ -12,12 +12,12 @@
 //! - spawn 循环检测:  docs/superpowers/specs/2026-06-15-lifetime-migration-design.md §新增 2
 
 use crate::frontend::core::sema::layers::ownership::{
-    BrandId, BrandTree, ControlFlowGraph, EdgeKind, FastPathResult, ReleasePlan,
-    emit_move_predicate, emit_drop_predicate, emit_double_drop_predicate, emit_mut_predicate,
-    fast_path_check, smt_cut,
+    emit_double_drop_predicate, emit_drop_predicate, emit_move_predicate, emit_mut_predicate,
+    fast_path_check, smt_cut, BrandId, BrandTree, ControlFlowGraph, EdgeKind, FastPathResult,
+    ReleasePlan,
 };
-use crate::frontend::core::types::const_data::{BinOp as CEBinOp, ConstExpr as CE, ConstValue};
 use crate::frontend::core::sema::proof::verdict::{DisproofKind, ProofFailure, ProofResult};
+use crate::frontend::core::types::const_data::{BinOp as CEBinOp, ConstExpr as CE, ConstValue};
 use crate::util::span::Span;
 
 // ── BrandId 前缀匹配 ──────────────────────────────────

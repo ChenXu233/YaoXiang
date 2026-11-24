@@ -133,13 +133,13 @@ impl LinearMeasure {
 // 1. 识别直接递归调用
 // 2. 检查调用参数是否严格递减（`f(n-1)` where `n-1 < n`）
 
-use crate::ast::{self, Expr, Stmt, StmtKind, BinOp, Type};
+use super::super::proof::smt::ast::{SMTCommand, SMTExpr, SMTResult, SMTSort};
+use super::super::proof::smt::backend::Solver;
+use crate::ast::{self, BinOp, Expr, Stmt, StmtKind, Type};
 use crate::frontend::core::sema::environment::TypeEnvironment;
 use crate::frontend::core::sema::proof::verdict::{
     BudgetReport, DisproofKind, DisproofModel, ProofFailure, ProofResult, UnprovenReason,
 };
-use super::super::proof::smt::ast::{SMTExpr, SMTCommand, SMTSort, SMTResult};
-use super::super::proof::smt::backend::Solver;
 
 /// 显式测度在递归回边上产生的**义务原料**（RFC-027a §义务生成）。
 ///
@@ -514,12 +514,17 @@ impl<'a> TerminationChecker<'a> {
                             &goal,
                             &std::collections::HashMap::new(),
                         );
-                    let commands =
+                    // 不可翻译（F10）：无法判断（与 Unknown 同向），不送空表给求解器
+                    let Some(commands) =
                         crate::frontend::core::sema::proof::smt::translate::translate_constraint(
                             &goal,
                             &assumptions,
                             &var_sorts,
-                        );
+                        )
+                    else {
+                        out.insert(fn_name.clone(), MeasureVerdict::NotProved);
+                        continue;
+                    };
                     match solver.solve(&commands, 100) {
                         SMTResult::Unsat => MeasureVerdict::Proved,
                         // 良基性 Sat = 「下界推不出」，而**不是**义务为假：
@@ -583,12 +588,16 @@ impl<'a> TerminationChecker<'a> {
                     .cloned()
                     .unwrap_or_default();
                 assumptions.extend(ob.guards.iter().cloned());
-                let commands =
+                // 不可翻译（F10）：判不了 ≠ 义务为假（与 Unknown 同向）
+                let Some(commands) =
                     crate::frontend::core::sema::proof::smt::translate::translate_constraint(
                         &decreasing,
                         &assumptions,
                         &var_sorts,
-                    );
+                    )
+                else {
+                    return MeasureVerdict::NotProved;
+                };
                 match solver.solve(&commands, 100) {
                     SMTResult::Unsat => MeasureVerdict::Proved,
                     // 判伪：存在使递减不成立的取值（b 取 0）。反例进 E4022。
@@ -2205,6 +2214,11 @@ impl<'a> TerminationChecker<'a> {
                 steps_used: 0,
                 steps_limit: 0,
             },
+
+            // 该判定点无结构化命题：循环终止性不是项也不是类型等式，原因自带 span，
+            // 显式 None，不伪造命题
+            subject: None,
+            span: Some(span),
         }));
     }
 }
@@ -2279,6 +2293,7 @@ fn const_expr_refs(
                 || const_expr_refs(else_branch, name)
         }
         CE::Range { start, end } => const_expr_refs(start, name) || const_expr_refs(end, name),
+        CE::FieldPath { base, .. } => const_expr_refs(base, name),
         _ => false,
     }
 }
@@ -2350,6 +2365,11 @@ pub(crate) fn substitute_const_expr(
         CE::Range { start, end } => CE::Range {
             start: Box::new(sub(start)),
             end: Box::new(sub(end)),
+        },
+        // 证据字段路径：基座可能引用形参（`b.w` 的 `b`），必须递归代入；`field` 是字段名不可替换
+        CE::FieldPath { base, field } => CE::FieldPath {
+            base: Box::new(sub(base)),
+            field: field.clone(),
         },
         // Lit / Var(ConstVar)：不引用程序变量，原样
         other => other.clone(),

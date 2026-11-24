@@ -1,71 +1,130 @@
 module
   fn main() -> Void
     slot[0] s : Int(64) @depth1
-    locals_total=10
+    locals_total=5
+    values_total=58
+    value v0: TypeRef("?") @block0
+    value v1: Bool @block0
+    value v2: TypeRef("?") @block0
+    value v3: Int(64) @block0
+    value v4: Generic { name: "String", args: [] } @block0
+    value v5: Generic { name: "String", args: [] } @block0
+    value v6: TypeRef("?") @block0
+    value v7: Bool @block0
+    value v8: Generic { name: "String", args: [] } @block0
+    value v9: Generic { name: "String", args: [] } @block0
+    value v10: Generic { name: "String", args: [] } @block0
+    value v11: Int(64) @block0
+    value v12: Generic { name: "String", args: [] } @block0
+    value v13: TypeRef("?") @block0
+    value v14: Bool @block0
+    value v15: Generic { name: "String", args: [] } @block0
+    value v16: Generic { name: "String", args: [] } @block0
+    value v17: Generic { name: "String", args: [] } @block0
+    value v18: Int(64) @block0
+    value v19: Generic { name: "String", args: [] } @block0
+    value v20: TypeRef("?") @block0
+    value v21: Bool @block0
+    value v22: Generic { name: "String", args: [] } @block0
+    value v23: Generic { name: "String", args: [] } @block0
+    value v24: Generic { name: "String", args: [] } @block0
+    value v25: Int(64) @block0
+    value v26: Generic { name: "String", args: [] } @block0
+    value v27: TypeRef("?") @block0
+    value v28: Bool @block0
+    value v29: TypeRef("?") @block0
+    value v30: Int(64) @block0
+    value v31: Generic { name: "String", args: [] } @block0
+    value v32: Generic { name: "String", args: [] } @block0
+    value v33: Generic { name: "String", args: [] } @block0
+    value v34: TypeRef("?") @block0
+    value v35: Bool @block0
+    value v36: Generic { name: "String", args: [] } @block0
+    value v37: Generic { name: "String", args: [] } @block0
+    value v38: Generic { name: "String", args: [] } @block0
+    value v39: TypeRef("?") @block0
+    value v40: Generic { name: "String", args: [] } @block0
+    value v41: Generic { name: "String", args: [] } @block0
+    value v42: Generic { name: "String", args: [] } @block0
+    value v43: TypeRef("?") @block0
+    value v44: Bool @block0
+    value v45: TypeRef("?") @block0
+    value v46: Generic { name: "String", args: [] } @block0
+    value v47: Generic { name: "String", args: [] } @block0
+    value v48: Int(64) @block0
+    value v49: Int(64) @block0
+    value v50: Generic { name: "String", args: [] } @block0
+    value v51: TypeRef("?") @block0
+    value v52: Bool @block0
+    value v53: TypeRef("?") @block0
+    value v54: Int(64) @block0
+    value v55: Generic { name: "String", args: [] } @block0
+    value v56: Int(64) @block0
+    value v57: Generic { name: "String", args: [] } @block0
     Load %0 <- string("héllo")
-    Load %1 <- %0
-    Call %2 <- string("std.string.len") [%1] (def=d0)
-    Load %3 <- int(5)
-    Eq %4 <- %2, %3
-    Load %5 <- string("len counts code points, not bytes")
-    Call %6 <- string("std.assert.assert") [%4, %5] (def=d1)
+    Load v4 <- %0
+    Call v2 <- string("std.string.len") [v4] (def=d0)
+    Load v3 <- int(5)
+    Eq v1 <- v2, v3
+    Load v5 <- string("len counts code points, not bytes")
+    Call v0 <- string("std.assert.assert") [v1, v5] (def=d1)
     Drop %0
-    Load %1 <- %0
-    Load %5 <- int(0)
-    StringGetChar %2 <- %1[%5]
-    Load %3 <- string("h")
-    Eq %4 <- %2, %3
-    Load %7 <- string("s[0] first char")
-    Call %6 <- string("std.assert.assert") [%4, %7] (def=d1)
-    Load %1 <- %0
-    Load %5 <- int(1)
-    StringGetChar %2 <- %1[%5]
-    Load %3 <- string("é")
-    Eq %4 <- %2, %3
-    Load %7 <- string("s[1] lands on scalar after multibyte lead byte")
-    Call %6 <- string("std.assert.assert") [%4, %7] (def=d1)
-    Load %1 <- %0
-    Load %5 <- int(4)
-    StringGetChar %2 <- %1[%5]
-    Load %3 <- string("o")
-    Eq %4 <- %2, %3
-    Load %7 <- string("s[4] last char")
-    Call %6 <- string("std.assert.assert") [%4, %7] (def=d1)
-    Load %1 <- %0
-    Load %5 <- string("é")
-    Call %2 <- string("std.string.index_of") [%1, %5] (def=d2)
-    Load %3 <- int(1)
-    Eq %4 <- %2, %3
-    Load %7 <- string("index_of scalar index")
-    Call %6 <- string("std.assert.assert") [%4, %7] (def=d1)
+    Load v10 <- %0
+    Load v11 <- int(0)
+    StringGetChar v8 <- v10[v11]
+    Load v9 <- string("h")
+    Eq v7 <- v8, v9
+    Load v12 <- string("s[0] first char")
+    Call v6 <- string("std.assert.assert") [v7, v12] (def=d1)
+    Load v17 <- %0
+    Load v18 <- int(1)
+    StringGetChar v15 <- v17[v18]
+    Load v16 <- string("é")
+    Eq v14 <- v15, v16
+    Load v19 <- string("s[1] lands on scalar after multibyte lead byte")
+    Call v13 <- string("std.assert.assert") [v14, v19] (def=d1)
+    Load v24 <- %0
+    Load v25 <- int(4)
+    StringGetChar v22 <- v24[v25]
+    Load v23 <- string("o")
+    Eq v21 <- v22, v23
+    Load v26 <- string("s[4] last char")
+    Call v20 <- string("std.assert.assert") [v21, v26] (def=d1)
+    Load v31 <- %0
+    Load v32 <- string("é")
+    Call v29 <- string("std.string.index_of") [v31, v32] (def=d2)
+    Load v30 <- int(1)
+    Eq v28 <- v29, v30
+    Load v33 <- string("index_of scalar index")
+    Call v27 <- string("std.assert.assert") [v28, v33] (def=d1)
     Drop %0
-    Load %1 <- %0
-    Load %7 <- %0
-    Load %8 <- string("é")
-    Call %5 <- string("std.string.index_of") [%7, %8] (def=d2)
-    StringGetChar %2 <- %1[%5]
-    Load %3 <- string("é")
-    Eq %4 <- %2, %3
-    Load %9 <- string("index_of feeds s[i]")
-    Call %6 <- string("std.assert.assert") [%4, %9] (def=d1)
+    Load v38 <- %0
+    Load v40 <- %0
+    Load v41 <- string("é")
+    Call v39 <- string("std.string.index_of") [v40, v41] (def=d2)
+    StringGetChar v36 <- v38[v39]
+    Load v37 <- string("é")
+    Eq v35 <- v36, v37
+    Load v42 <- string("index_of feeds s[i]")
+    Call v34 <- string("std.assert.assert") [v35, v42] (def=d1)
     Drop %0
-    Load %1 <- %0
-    Load %5 <- int(1)
-    Load %7 <- int(3)
-    Call %2 <- string("std.string.substring") [%1, %5, %7] (def=d3)
-    Load %3 <- string("él")
-    Eq %4 <- %2, %3
-    Load %8 <- string("index_of feeds substring")
-    Call %6 <- string("std.assert.assert") [%4, %8] (def=d1)
+    Load v47 <- %0
+    Load v48 <- int(1)
+    Load v49 <- int(3)
+    Call v45 <- string("std.string.substring") [v47, v48, v49] (def=d3)
+    Load v46 <- string("él")
+    Eq v44 <- v45, v46
+    Load v50 <- string("index_of feeds substring")
+    Call v43 <- string("std.assert.assert") [v44, v50] (def=d1)
     Drop %0
-    Load %1 <- %0
-    Load %5 <- int(1)
-    Call %2 <- string("std.string.char_code") [%1, %5] (def=d4)
-    Load %3 <- int(233)
-    Eq %4 <- %2, %3
-    Load %7 <- string("char_code same index unit")
-    Call %6 <- string("std.assert.assert") [%4, %7] (def=d1)
+    Load v55 <- %0
+    Load v56 <- int(1)
+    Call v53 <- string("std.string.char_code") [v55, v56] (def=d4)
+    Load v54 <- int(233)
+    Eq v52 <- v53, v54
+    Load v57 <- string("char_code same index unit")
+    Call v51 <- string("std.assert.assert") [v52, v57] (def=d1)
     Drop %0
-    Ret %6
+    Ret v51
   init (locals=0)
     Call %0 <- string("main") [] (def=d5)

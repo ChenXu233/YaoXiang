@@ -8,17 +8,17 @@
 //!   3. Z3 SMT 求解（Phase 2B）
 //!   4. **证明函数调用（Phase 2.5）** ← 本文件覆盖
 
-use crate::frontend::core::sema::test_util::{binop};
+use crate::frontend::core::sema::test_util::binop;
 use std::collections::HashMap;
 
-use crate::frontend::core::types::const_data::{BinOp, ConstExpr, ConstValue};
-use crate::frontend::core::types::mono::MonoType;
 use crate::frontend::core::sema::layers::predicate::check_predicate;
 use crate::frontend::core::sema::proof::context::ProofContext;
 use crate::frontend::core::sema::proof::verdict::{
     ProofFailure, ProofFunctionCall, ProofResultExt, UnprovenReason,
 };
 use crate::frontend::core::sema::TypeEnvironment;
+use crate::frontend::core::types::const_data::{BinOp, ConstExpr, ConstValue};
+use crate::frontend::core::types::mono::MonoType;
 
 /// `Sorted(42)` 调用的精化布尔类型——Phase 1/2 无法处理，期望 Unproven + proof_calls。
 fn sorted_call_refined() -> MonoType {
@@ -124,14 +124,16 @@ fn test_call_with_named_var_args() {
     );
 }
 
-// --- Section 2: execute_single_proof_fn 单元测试 ---
+// --- Section 2: 证明执行管线单元测试 ---
 // 规范来源: RFC-027 §4.2 Phase 2.5 — 证明函数执行管线
+// （3.20.22/#537 起执行器带嵌套义务工作台，单元面走管线入口 execute_proof_calls
+// 断言「无错误诊断 = 证明通过」，与生产消费面同一契约）
 
-use crate::frontend::proof_execution::execute_single_proof_fn;
 use crate::ast::{
     BinOp as AstBinOp, Block, Expr, Literal, Module, Param, PlanId, Stmt, StmtKind, Type as AstType,
 };
 use crate::frontend::core::sema::TypeCheckResult;
+use crate::frontend::proof_execution::execute_proof_calls;
 use crate::util::span::Span;
 
 /// 内建类型在 AST 里的唯一写法：Name（WBS 6.3 删除了 Int/Float/… 专用变体）。
@@ -224,11 +226,14 @@ fn test_execute_proof_fn_returns_true_for_valid_input() {
     };
 
     // Act
-    let result = execute_single_proof_fn(&call, &ast, &type_result);
+    let errors = execute_proof_calls(std::slice::from_ref(&call), &ast, &type_result);
 
-    // Assert: IsPositive(5) = 5>0 应返回 true
-    assert!(result.is_ok(), "IsPositive(5) 应成功执行: {:?}", result);
-    assert!(result.unwrap(), "IsPositive(5) = 5>0 应返回 true");
+    // Assert: IsPositive(5) = 5>0 应证明通过（无错误诊断）
+    assert!(
+        errors.is_empty(),
+        "IsPositive(5) = 5>0 应证明通过，实际诊断: {:?}",
+        errors.iter().map(|d| d.message.clone()).collect::<Vec<_>>()
+    );
 }
 
 // --- Section 3: E2E Compiler 全流程 ---

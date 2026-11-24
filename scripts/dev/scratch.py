@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""批次验证树（scratch tree）的唯一入口 —— AGENTS.md 团队编排约定第 9 条。
+"""批次验证树（scratch tree）的唯一入口 —— AGENTS.md 团队编排约定「验证证据」。
 
 为什么需要它
 ------------
@@ -21,7 +21,9 @@
   python scripts/dev/scratch.py use     <batch> --rev <sha> --by <member> --task <id> [--steal]
   python scripts/dev/scratch.py build   <batch> [--quiet]
   python scripts/dev/scratch.py release <batch> --by <member>
-  python scripts/dev/scratch.py trial   <batch> --patch <p> -- <command...>   # 变异：apply→跑→restore 全自动
+  python scripts/dev/scratch.py trial   <batch> --patch <p> -- <command...>   # 变异：apply→跑→restore 全自动（推荐；命令可含 -/-- 参数）
+  python scripts/dev/scratch.py trial   <batch> <command...> --patch <p>      # 同上，命令排在 --patch 之前（命令不含 - 开头参数时可用）
+  注：命令不可为空；混用两种形态（`--` 前后都有命令）会被拒绝。
   python scripts/dev/scratch.py status  [--json] [--size]
   python scripts/dev/scratch.py rm      <batch> [--force]
   python scripts/dev/scratch.py gc      [--force]
@@ -221,10 +223,18 @@ def cmd_release(args):
 def cmd_trial(args):
     """变异试验：git apply 变异补丁 → 跑命令 → git apply -R 还原 → 校验逐文件 blob 回到 HEAD。
 
-    为什么必须机械可逆（AGENTS.md 第 10 条②）：验证者要证明「判据能失败」，
+    为什么必须机械可逆（AGENTS.md 团队编排约定「验证证据」）：验证者要证明「判据能失败」，
     唯一硬证据是故意把修复改坏看测试会不会红。但手工改文件、手工改回来，
     既可能忘、也可能改得不逐字节一致 —— 于是把它做成补丁 + 自动还原。
     """
+    # 命令非空必须在任何变异动作之前判定：若放在 apply 之后早退，树会残留
+    # 变异态（t7 F1；HOWTO/--help 都要求「命令不可为空」）。
+    cmd = list(args.command)
+    if not cmd:
+        die(
+            "命令不可为空：trial <batch> --patch <p> -- <命令...>"
+            "（或 trial <batch> <命令...> --patch <p>）"
+        )
     repo = repo_root()
     meta = load_meta(repo, args.batch)
     path = Path(meta["path"])
@@ -247,11 +257,6 @@ def cmd_trial(args):
     print(f"[trial] 已应用变异补丁：{', '.join(changed)}")
     for f in changed:
         print(f"[trial]   {f}: HEAD={head_blob[f][:12]}… → 变异后={mutated_blob[f][:12]}…")
-    cmd = list(args.command)
-    if cmd and cmd[0] == "--":
-        cmd = cmd[1:]
-    if not cmd:
-        die("要给命令：scratch.py trial <batch> --patch <p> -- <命令...>")
     print(f"[trial] 执行：{' '.join(cmd)}")
     # 还原必达（#516）：命令启动失败（如路径错 FileNotFoundError）等异常
     # 不得跳过 restore——否则批次树残留变异态，违反「trial 全自动
@@ -276,6 +281,9 @@ def cmd_trial(args):
         if after_status or not back_to_head:
             print("[trial] 警告：树没回到 HEAD 状态，请人工核对后再继续", file=sys.stderr)
             sys.exit(3)
+    # 防御分支：命令启动失败在 subprocess.run 处抛异常（restore 已由 finally
+    # 保证，异常如实上抛 ⇒ Python 进程 exit 1），当前实现下本分支不可达。
+    # 保留不改变退出码语义；若要把该路径收敛为 exit 2，须另作裁决。
     if rc is None:
         print("[trial] 命令未能启动（树已机械还原）；请核对命令本身", file=sys.stderr)
         sys.exit(2)
@@ -349,8 +357,33 @@ def cmd_gc(args):
     print(f"[scratch] gc 完成，共释放约 {round(total, 1)} MB")
 
 
+def split_trial_argv(argv):
+    """把 `trial ... -- <command...>` 的 `--` 之后 token 收为命令，并从 argv 移除。
+
+    返回 `(argv_for_argparse, command_after_sep 或 None)`。
+
+    为什么预处理：Python 3.12.5 的 argparse 在子命令 + `nargs="*"` 形态下不会把
+    `--` 之后的位置参数交给 `command`，而是报
+    `error: unrecognized arguments: -- <command...>`。`--` 是「命令段从这里开始」
+    的唯一分隔符；命令自身可含 `--` / `-` 开头参数，所以只取**第一个** `--`。
+
+    两种等价形态：
+      trial <batch> --patch <p> -- <command...>   # 推荐；命令可含 -/-- 参数
+      trial <batch> <command...> --patch <p>      # 命令不含 - 开头参数时可用
+    """
+    if not argv or argv[0] != "trial":
+        return argv, None
+    rest = argv[1:]
+    if "--" not in rest:
+        return argv, None
+    idx = rest.index("--")
+    return ["trial", *rest[:idx]], rest[idx + 1:]
+
+
 def main(argv=None):
-    p = argparse.ArgumentParser(description="批次验证树的唯一入口（AGENTS.md 第 9 条）")
+    argv = list(sys.argv[1:] if argv is None else argv)
+    argv, command_after_sep = split_trial_argv(argv)
+    p = argparse.ArgumentParser(description="批次验证树的唯一入口（AGENTS.md 团队编排约定「验证证据」）")
     sub = p.add_subparsers(dest="cmd", required=True)
 
     s = sub.add_parser("init", help="建批次树"); s.add_argument("batch"); s.add_argument("--rev"); s.set_defaults(f=cmd_init)
@@ -358,16 +391,37 @@ def main(argv=None):
     s.add_argument("--by", required=True); s.add_argument("--task", required=True); s.add_argument("--steal", action="store_true"); s.set_defaults(f=cmd_use)
     s = sub.add_parser("build", help="在树里构建 CLI 二进制"); s.add_argument("batch"); s.add_argument("--quiet", action="store_true"); s.set_defaults(f=cmd_build)
     s = sub.add_parser("release", help="解锁"); s.add_argument("batch"); s.add_argument("--by", required=True); s.add_argument("--force", action="store_true"); s.set_defaults(f=cmd_release)
-    s = sub.add_parser("trial", help="变异试验（apply→跑→restore 全自动）")
-    s.add_argument("batch")
-    s.add_argument("--patch", required=True)
-    s.add_argument("command", nargs="*")  # 用 -- 分隔；REMAINDER 会把 --patch 也吞掉
+    s = sub.add_parser(
+        "trial",
+        help="变异试验（apply→跑→restore 全自动）",
+        description="变异试验：git apply 变异补丁 → 跑命令 → 机械还原并校验逐文件 blob 回到 HEAD。",
+        epilog=(
+            "命令形态（二选一）：\n"
+            "  trial <batch> --patch <p> -- <command...>   # 推荐；命令可含 -/-- 参数\n"
+            "  trial <batch> <command...> --patch <p>      # 命令不含 - 开头参数时可用\n"
+            "\n命令不可为空；混用两种形态（`--` 前后都有命令）会被拒绝（exit 2）。\n"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    s.add_argument("batch", help="批次树名")
+    s.add_argument("--patch", required=True, help="变异补丁路径（相对仓库根或绝对路径）")
+    s.add_argument("command", nargs="*", help="要跑的命令（两种形态见上）")
     s.set_defaults(f=cmd_trial)
     s = sub.add_parser("status", help="列出批次树"); s.add_argument("--json", action="store_true"); s.add_argument("--size", action="store_true"); s.set_defaults(f=cmd_status)
     s = sub.add_parser("rm", help="删除一个批次树"); s.add_argument("batch"); s.add_argument("--force", action="store_true"); s.set_defaults(f=cmd_rm)
     s = sub.add_parser("gc", help="回收所有未持有的批次树"); s.add_argument("--force", action="store_true"); s.set_defaults(f=cmd_gc)
 
     args = p.parse_args(argv)
+    if command_after_sep is not None:
+        # 混用两形态（`--` 前后都有命令）时不能静默丢弃 argparse 解析出的命令
+        # （t7 F4）：报错并要求二选一。
+        if args.command:
+            p.error(
+                "混用了两种命令形态：`--` 之前解析到命令 "
+                f"{args.command!r}，`--` 之后又给了命令 {command_after_sep!r}；"
+                "二选一（见 `trial --help`）"
+            )
+        args.command = command_after_sep
     args.f(args)
 
 

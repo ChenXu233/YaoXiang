@@ -25,6 +25,8 @@ mod fstring;
 
 #[path = "integration/interpreter.rs"]
 mod interpreter;
+#[path = "integration/pattern_range.rs"]
+mod pattern_range;
 #[path = "integration/test_command.rs"]
 mod test_command;
 #[path = "integration/token_system.rs"]
@@ -50,6 +52,10 @@ mod cli;
 #[path = "integration/cli_e2e.rs"]
 mod cli_e2e;
 
+/// LSP 分析面深表达式锚（issue #540：didOpen 深表达式修前进程栈溢出）
+#[path = "integration/lsp_analysis.rs"]
+mod lsp_analysis;
+
 /// #471（WBS 3.21.3）：yaoxiang.toml `[mono]` 节贯通到单态化深度闸（端到端）
 #[path = "integration/mono_config.rs"]
 mod mono_config;
@@ -61,3 +67,8 @@ mod config_error;
 /// RFC-039 WBS 3.6.1：局部函数类型值按名调用走间接调用（先红后绿）
 #[path = "integration/fn_value_call.rs"]
 mod fn_value_call;
+
+/// issue #509（WBS 3.21.5）：诊断文案与 locales 同源——E4018/E1002 迁移面的
+/// 渲染级锚（CLI 子进程级，YAOXIANG_LANG 钉语言）
+#[path = "integration/diagnostic_i18n.rs"]
+mod diagnostic_i18n;

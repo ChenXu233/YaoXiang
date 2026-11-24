@@ -49,7 +49,7 @@ use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parse;
 use crate::frontend::core::sema::checker::TypeChecker;
 use crate::frontend::module::registry::ModuleRegistry;
-use crate::middle::ir::ir_gen::AstToIrGenerator;
+use crate::middle::lower::AstToIrGenerator;
 use crate::util::plan_id::PlanId;
 
 /// 修前实测的证据面（有释放义务且走通全链的语料文件数，见模块头「红态证据」：

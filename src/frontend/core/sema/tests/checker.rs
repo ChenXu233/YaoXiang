@@ -5,11 +5,11 @@
 //! RFC-010: 统一类型语法
 //! RFC-011: 泛型系统设计
 
-use crate::frontend::core::sema::probe::TypeLevelNamespace;
+use crate::ast::{Expr, Module, PlanId, Stmt, Type as AstType};
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parse;
 use crate::frontend::core::sema::checker::TypeChecker;
-use crate::ast::{Module, PlanId, Stmt, Expr, Type as AstType};
+use crate::frontend::core::sema::probe::TypeLevelNamespace;
 use crate::util::diagnostic::Severity;
 use crate::util::span::Span;
 
@@ -425,6 +425,7 @@ fn collect_signatures_declared_names(
     checker.collect_signatures(
         &parse_result.module,
         &TypeLevelNamespace::scan_one(&parse_result.module),
+        &std::collections::HashMap::new(),
     );
     checker.generic_fn_type_params_snapshot()
 }

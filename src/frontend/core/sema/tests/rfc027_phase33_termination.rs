@@ -7,7 +7,9 @@
 //! - 策略 2 框架占位
 //! - 终止检查器基础功能
 
-use crate::frontend::core::sema::layers::termination::{Direction, LinearMeasure, TerminationChecker};
+use crate::frontend::core::sema::layers::termination::{
+    Direction, LinearMeasure, TerminationChecker,
+};
 
 // RFC-027 §7.5: 策略 4 乘法缩放度量
 

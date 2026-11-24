@@ -14,8 +14,8 @@
 use std::collections::HashMap;
 
 use crate::ast::Expr;
-use crate::frontend::core::types::{MonoType, PolyType, TypeConstraintSolver};
 use crate::frontend::core::sema::environment::GenericTypeDef;
+use crate::frontend::core::types::{MonoType, PolyType, TypeConstraintSolver};
 use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};
 
 use super::scope::ScopeManager;
@@ -157,7 +157,7 @@ fn walk(
 pub fn collect_existential_coercions(
     solver: &TypeConstraintSolver,
     scope: &ScopeManager,
-    type_defs: &HashMap<String, MonoType>,
+    type_defs: &HashMap<String, PolyType>,
     generic_type_defs: &HashMap<String, GenericTypeDef>,
     expr: &Expr,
     expected: &MonoType,

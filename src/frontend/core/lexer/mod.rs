@@ -8,8 +8,8 @@ pub mod tokenizer;
 pub mod tokens;
 
 // Re-export types
-pub use tokens::{Token, TokenKind, Literal, LexError};
 pub use tokenizer::Lexer;
+pub use tokens::{LexError, Literal, Token, TokenKind};
 
 /// Tokenize source code with RFC support
 /// Supports:
@@ -17,6 +17,17 @@ pub use tokenizer::Lexer;
 /// - RFC-010: Generic syntax (e.g., List(T), Vec(T: Clone))
 /// - RFC-011: Advanced type system features
 pub fn tokenize(source: &str) -> Result<Vec<Token>, crate::frontend::core::lexer::LexError> {
+    #[cfg(test)]
+    record_tokenize_call();
+
+    tokenize_with_logging(source)
+}
+
+/// 公共词法的带日志实现：f-string 插值的一次性批量词法复用它，保证插值 token
+/// 流与逐插值调用公共入口时逐 token 同形（含 tracing 日志）。
+fn tokenize_with_logging(
+    source: &str
+) -> Result<Vec<Token>, crate::frontend::core::lexer::LexError> {
     use crate::util::i18n::{t_cur, MSG};
 
     let source_len = source.len();
@@ -53,6 +64,64 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, crate::frontend::core::lexer
     }
 }
 
+/// 一次性词法全部 f-string 插值表达式（05 §「f-string 嵌套编译必须显式处理」）。
+///
+/// parser 在首次需要某个 f-string 节点时用一次调用取回它的全部插值 token 流，
+/// 结果顺序与 sources 一一对应（每项与 tokenize 同形：含 Eof，词法错误为 Err）。
+/// 单点实现：插值词法只发生在这里，parser 不再逐插值重入公共词法入口。
+pub fn lex_interpolations(
+    sources: &[&str]
+) -> Vec<Result<Vec<Token>, crate::frontend::core::lexer::LexError>> {
+    #[cfg(test)]
+    record_interpolation_batch_call();
+
+    sources
+        .iter()
+        .map(|source| tokenize_with_logging(source))
+        .collect()
+}
+
+// 测试计数器用 thread_local：libtest 每个 #[test] 跑在独立线程上，其它用例的
+// tokenize 调用不会窜进本测试的 reset 窗口（进程级 static 在 --test-threads>1
+// 时会间歇假红）。断言与 reset 语义不变。
+#[cfg(test)]
+std::thread_local! {
+    static TOKENIZE_CALLS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    static INTERPOLATION_BATCH_CALLS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+#[cfg(test)]
+fn record_tokenize_call() {
+    TOKENIZE_CALLS.with(|calls| calls.set(calls.get() + 1));
+}
+
+#[cfg(test)]
+fn record_interpolation_batch_call() {
+    INTERPOLATION_BATCH_CALLS.with(|calls| calls.set(calls.get() + 1));
+}
+
+/// 测试用：公共词法入口被调用次数（entry-call 特征化：检查 parser 不再逐插值
+/// 重入公共入口；完整词法分析次数仍为 N+1，单遍目标见 WBS 8.2.4）。
+#[cfg(test)]
+pub(crate) fn tokenize_call_count() -> usize {
+    TOKENIZE_CALLS.with(std::cell::Cell::get)
+}
+
+/// 测试用：一次性插值批量词法（lex_interpolations）被调用次数（entry-call
+/// 特征化：每个 f-string 只允许一次批量入口调用；内部仍逐插值跑 Lexer，
+/// 完整词法分析仍 N+1，见 WBS 8.2.4）。
+#[cfg(test)]
+pub(crate) fn interpolation_batch_call_count() -> usize {
+    INTERPOLATION_BATCH_CALLS.with(std::cell::Cell::get)
+}
+
+/// 测试用：清零本线程的两个词法调用计数（thread_local，天然不影响其它用例）。
+#[cfg(test)]
+pub(crate) fn reset_lexing_call_counts() {
+    TOKENIZE_CALLS.with(|calls| calls.set(0));
+    INTERPOLATION_BATCH_CALLS.with(|calls| calls.set(0));
+}
+
 /// Log a token for debugging
 fn log_token(token: &Token) {
     use crate::util::i18n::{t_cur, MSG};
@@ -76,7 +145,7 @@ fn log_token(token: &Token) {
         TokenKind::IntLiteral(n) => (MSG::LexTokenNumber, n.to_string()),
         TokenKind::FloatLiteral(f) => (MSG::LexTokenNumber, f.to_string()),
         TokenKind::StringLiteral(s) => (MSG::LexTokenString, s.clone()),
-        TokenKind::FStringLiteral(s) => (MSG::LexTokenString, format!("f\"{}\"", s)),
+        TokenKind::FStringLiteral(s) => (MSG::LexTokenString, format!("f\"{}\"", s.raw)),
         TokenKind::CharLiteral(c) => (MSG::LexTokenChar, c.to_string()),
         TokenKind::Plus
         | TokenKind::Minus

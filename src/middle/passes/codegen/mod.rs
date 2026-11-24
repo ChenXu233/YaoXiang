@@ -23,11 +23,11 @@ mod tests;
 use crate::frontend::core::sema::MonoType;
 use crate::middle::bytecode::file::{BytecodeFile, FileHeader};
 use crate::middle::ir::ir::{ConstValue, ModuleIR, Operand};
-use crate::middle::passes::codegen::translator::Translator;
 use crate::middle::passes::codegen::flow::{FlowManager, SymbolScopeManager};
 use crate::middle::passes::codegen::operand::OperandResolver;
-use crate::util::i18n::{t, t_simple, MSG};
+use crate::middle::passes::codegen::translator::Translator;
 use crate::util::diagnostic::Diagnostic;
+use crate::util::i18n::{t, t_simple, MSG};
 use crate::util::logger::get_lang;
 use tracing::debug;
 
@@ -165,7 +165,7 @@ impl CodegenContext {
         // 3. 生成类型表（从 TypeDecl 函数中收集）
         //
         // 6.6.12 起类型声明的 TypeDecl 载体自带类型表项（`TypeDeclBody::self_type`，
-        // 由 ir_gen 在 AST 降级期算好），codegen 不再摸语法层 AST。
+        // 由 lower 在 AST 降级期算好），codegen 不再摸语法层 AST。
         let type_table: Vec<MonoType> = self
             .module
             .functions

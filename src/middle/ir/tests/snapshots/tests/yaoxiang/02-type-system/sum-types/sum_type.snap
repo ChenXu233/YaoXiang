@@ -9,41 +9,64 @@ module
     slot[1] a : Int(64) @depth1
     slot[2] b : Int(64) @depth1
     slot[3] e : Int(64) @depth1
-    locals_total=12
-    Load %0 <- void
-    CreateVariant %1 <- Color::1 %0
-    Load %2 <- int(5)
-    CreateVariant %0 <- Result::0 %2
-    Load %3 <- int(5)
-    CreateVariant %2 <- Result::0 %3
-    Load %4 <- string("bad")
-    CreateVariant %3 <- Result::1 %4
-    Load %5 <- %0
-    Load %6 <- %2
-    Eq %4 <- %5, %6
-    JmpIfNot %4 -> instr(14)
-    Load %7 <- string("EQ_OK")
-    Call %8 <- string("std.io.println") [%7] (def=d0)
-    Load %5 <- %0
-    Load %6 <- %3
-    Ne %4 <- %5, %6
-    JmpIfNot %4 -> instr(20)
-    Load %7 <- string("NE_OK")
-    Call %8 <- string("std.io.println") [%7] (def=d0)
-    Load %8 <- %1
-    Load %9 <- void
-    CreateVariant %7 <- Color::1 %9
-    Eq %6 <- %8, %7
-    JmpIfNot %6 -> instr(29)
-    Load %10 <- string("ZERO_PAYLOAD_EQ_OK")
-    Call %11 <- string("std.io.println") [%10] (def=d0)
-    Move %5 <- %11
+    locals_total=7
+    values_total=22
+    value v0: Void @block0
+    value v1: Int(64) @block0
+    value v2: Int(64) @block0
+    value v3: Generic { name: "String", args: [] } @block0
+    value v4: Bool @block0
+    value v5: Generic { name: "Result", args: [Int(64), Generic { name: "String", args: [] }] } @block0
+    value v6: Generic { name: "Result", args: [Int(64), Generic { name: "String", args: [] }] } @block0
+    value v7: TypeRef("?") @block0
+    value v8: Generic { name: "String", args: [] } @block0
+    value v9: Bool @block0
+    value v10: Generic { name: "Result", args: [Int(64), Generic { name: "String", args: [] }] } @block0
+    value v11: Generic { name: "Result", args: [Int(64), Generic { name: "String", args: [] }] } @block0
+    value v12: TypeRef("?") @block0
+    value v13: Generic { name: "String", args: [] } @block0
+    value v14: Void @block0
+    value v15: TypeRef("?") @block0
+    value v16: Bool @block0
+    value v17: Generic { name: "Color", args: [] } @block0
+    value v18: TypeRef("?") @block0
+    value v19: Void @block0
+    value v20: TypeRef("?") @block0
+    value v21: Generic { name: "String", args: [] } @block0
+    Load v0 <- void
+    CreateVariant %0 <- Color::1 v0
+    Load v1 <- int(5)
+    CreateVariant %1 <- Result::0 v1
+    Load v2 <- int(5)
+    CreateVariant %2 <- Result::0 v2
+    Load v3 <- string("bad")
+    CreateVariant %3 <- Result::1 v3
+    Load v5 <- %1
+    Load v6 <- %2
+    Eq v4 <- v5, v6
+    JmpIfNot v4 -> instr(14)
+    Load v8 <- string("EQ_OK")
+    Call v7 <- string("std.io.println") [v8] (def=d0)
+    Load v10 <- %1
+    Load v11 <- %3
+    Ne v9 <- v10, v11
+    JmpIfNot v9 -> instr(20)
+    Load v13 <- string("NE_OK")
+    Call v12 <- string("std.io.println") [v13] (def=d0)
+    Load v17 <- %0
+    Load v19 <- void
+    CreateVariant v18 <- Color::1 v19
+    Eq v16 <- v17, v18
+    JmpIfNot v16 -> instr(29)
+    Load v21 <- string("ZERO_PAYLOAD_EQ_OK")
+    Call v20 <- string("std.io.println") [v21] (def=d0)
+    Move v15 <- v20
     Jmp -> instr(29)
-    Load %4 <- void
-    Drop %0
-    Drop %2
+    Load v14 <- void
     Drop %1
+    Drop %2
+    Drop %0
     Drop %3
-    Ret %4
+    Ret v14
   init (locals=0)
     Call %0 <- string("main") [] (def=d1)

@@ -3,10 +3,10 @@
 //! 定义 YaoXiang 语言服务器支持的 LSP 功能。
 
 use lsp_types::{
-    CodeActionOptions, CompletionOptions, HoverProviderCapability, OneOf, ServerCapabilities,
-    TextDocumentSyncCapability, TextDocumentSyncKind, TextDocumentSyncOptions, SaveOptions,
+    CodeActionOptions, CompletionOptions, HoverProviderCapability, OneOf, SaveOptions,
     SemanticTokensFullOptions, SemanticTokensLegend, SemanticTokensOptions,
-    SemanticTokensServerCapabilities,
+    SemanticTokensServerCapabilities, ServerCapabilities, TextDocumentSyncCapability,
+    TextDocumentSyncKind, TextDocumentSyncOptions,
 };
 
 use crate::frontend::core::sema::semantic_db::{SemanticTokenModifier, SemanticTokenType};

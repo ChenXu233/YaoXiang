@@ -11,10 +11,10 @@
 //!
 //! 本文件把这些形态收成**仓内夹具**（外部探针包不入库），逐条断言编译期错误码。
 
-use crate::frontend::core::sema::probe::TypeLevelNamespace;
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parse;
 use crate::frontend::core::sema::checker::TypeChecker;
+use crate::frontend::core::sema::probe::TypeLevelNamespace;
 
 /// 编译期诊断码集合（真实序列：lex → parse → typecheck）。
 fn compile_codes(source: &str) -> Vec<String> {

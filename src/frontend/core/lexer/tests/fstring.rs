@@ -13,7 +13,7 @@ fn assert_fstring_raw(
     let tokens = tokenize(source).unwrap_or_else(|e| panic!("tokenize({source:?}) 失败: {e:?}"));
     match &tokens[0].kind {
         TokenKind::FStringLiteral(raw) => {
-            assert_eq!(raw, expected, "f-string raw 内容不符: {source:?}")
+            assert_eq!(raw.raw, expected, "f-string raw 内容不符: {source:?}")
         }
         other => panic!("期望 FStringLiteral，实际 {other:?}: {source:?}"),
     }

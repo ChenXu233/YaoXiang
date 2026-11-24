@@ -371,7 +371,7 @@ impl TypeChecker {
     ) {
         use crate::ast::StmtKind;
         use semantic_db::{
-            SemanticToken, SemanticTokenType, SemanticTokenModifier, ScopeInfo, ScopeKind,
+            ScopeInfo, ScopeKind, SemanticToken, SemanticTokenModifier, SemanticTokenType,
         };
 
         let fp = self.env.module_name.clone();

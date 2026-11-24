@@ -8,15 +8,6 @@ use crate::frontend::core::types::{MonoType, TypeConstraintSolver};
 pub struct TypeSystem;
 
 impl TypeSystem {
-    /// 统一两个类型
-    pub fn unify(
-        solver: &mut TypeConstraintSolver,
-        ty1: &MonoType,
-        ty2: &MonoType,
-    ) -> Result<(), String> {
-        solver.unify(ty1, ty2).map_err(|e| format!("{:?}", e))
-    }
-
     /// 从可迭代对象类型推导元素类型
     pub fn infer_element_type(
         solver: &mut TypeConstraintSolver,

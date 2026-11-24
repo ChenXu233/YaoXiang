@@ -46,7 +46,7 @@ pub struct TypeCheckResult {
     pub implementation_proofs: Vec<super::environment::ImplementationProof>,
     /// RFC-011b 接口实现登记表（接口名 → 带类型实参的实例化条目）。
     /// 运算符查询与约束求解的唯一判据——**树内事实**：在相位消费
-    /// （operator_interfaces.rs / inference/expressions.rs），跨阶段零读取
+    /// （operator_interfaces.rs / inference/expressions/expr.rs），跨阶段零读取
     /// （src/middle 0 命中，src/lsp 0 命中）。3.4.9 用户裁决甲改判：将来 LSP
     /// 真需要该表时按 WBS 4.6.x 新登记，此处不再声明镜像。
     pub interface_impl_registry: HashMap<String, Vec<super::environment::InterfaceImplEntry>>,
@@ -73,12 +73,17 @@ pub struct TypeCheckResult {
     /// 警告诊断（#321：未使用导入 W1003 等，Warning 级、不阻断编译）。
     /// 与 diagnostics 分离——混入会被管线按错误计数，破坏非阻断契约。
     pub warnings: Vec<crate::util::diagnostic::Diagnostic>,
+    /// 依赖记录 Σ 的记录模型（类型名 → 模型；typecheck 声明期产出 → IR 生成消费）。
+    /// B.2 起生产路径产出 witness 字段，IR 的 `TypeDeclField.quantity` 与构造
+    /// 参数/默认值填充都从这张表读量词；消费端不得自行重算分类。
+    pub record_models: HashMap<String, super::record_model::RecordModel>,
 }
 
 /// 方法级重载决议表（RFC-011a §3 / RFC-039 D20 / WBS 4.5.2）。
 ///
-/// 键 = **调用表达式节点的 [`PlanId`]**：产出点（`inference/expressions.rs:4550`）与消费点
-/// （`ir_gen.rs:7697` 有绑定 / `:7772` 无绑定，经 [`Self::get`]）读的是同一个调用节点上的
+/// 键 = **调用表达式节点的 [`PlanId`]**：产出点（`inference/expressions/call/mod.rs` 的
+/// `infer_call_expr`）与消费点（`lower/expr/call.rs` 的 `generate_call_expr_ir` 两处：
+/// 有绑定 / 无绑定，经 [`Self::get`]）读的是同一个调用节点上的
 /// 同一个值——不再靠「Call 的 span 两处各算一遍」的位置巧合。
 ///
 /// 消费经 [`Self::get`]（命中即记账，台账与表同体）；结算读
@@ -154,14 +159,14 @@ impl OverloadResolutions {
         self.entries.len()
     }
 
-    /// 标记消费侧已完整跑完一轮（IR 生成成功返回时调用；幂等）。
-    pub fn mark_consumption_completed(&self) {
-        self.consumption.mark_completed();
-    }
-
-    /// 消费侧是否完整跑完一轮（IR 生成成功返回）。
-    pub fn consumption_completed(&self) -> bool {
-        self.consumption.is_completed()
+    /// 消费台账（**标记与结算的唯一入口**：`mark_completed` 标记、
+    /// `is_completed` 读取「消费者真的跑过」判据，见 [`ConsumptionLedger`] 文档）。
+    ///
+    /// #460：此前 `mark_consumption_completed` / `consumption_completed` 两个
+    /// 转发在本类型与 `ReleasePlan` 各抄一份（禁令三 A），现收敛到
+    /// [`ConsumptionLedger`] 单一入口。
+    pub fn consumption(&self) -> &ConsumptionLedger<PlanId> {
+        &self.consumption
     }
 }
 

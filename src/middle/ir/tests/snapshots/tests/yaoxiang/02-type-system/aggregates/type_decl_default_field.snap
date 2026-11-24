@@ -4,39 +4,68 @@ module
   fn main() -> Void
     slot[0] d : Int(64) @depth1
     slot[1] c : Int(64) @depth1
-    locals_total=8
-    Load %0 <- int(3)
-    Load %1 <- string("default")
-    Call %2 <- string("Config") [%0, %1] (def=d0)
-    Load %3 <- %2
-    LoadField %4 <- %3.0
-    Load %5 <- int(3)
-    Eq %1 <- %4, %5
-    Load %6 <- string("默认值字段应初始化为 3")
-    Call %0 <- string("std.assert.assert") [%1, %6] (def=d1)
-    Load %3 <- %2
-    LoadField %4 <- %3.1
-    Load %5 <- string("default")
-    Eq %1 <- %4, %5
-    Load %6 <- string("默认值字段应初始化为 default")
-    Call %0 <- string("std.assert.assert") [%1, %6] (def=d1)
-    Load %1 <- int(7)
-    Load %4 <- string("custom")
-    Call %0 <- string("Config") [%1, %4] (def=d0)
-    Load %6 <- %0
-    LoadField %5 <- %6.0
-    Load %3 <- int(7)
-    Eq %4 <- %5, %3
-    Load %7 <- string("显式实参应覆盖默认值")
-    Call %1 <- string("std.assert.assert") [%4, %7] (def=d1)
-    Load %6 <- %0
-    LoadField %5 <- %6.1
-    Load %3 <- string("custom")
-    Eq %4 <- %5, %3
-    Load %7 <- string("显式实参应覆盖默认值")
-    Call %1 <- string("std.assert.assert") [%4, %7] (def=d1)
+    locals_total=5
+    values_total=28
+    value v0: Int(64) @block0
+    value v1: Generic { name: "String", args: [] } @block0
+    value v2: TypeRef("?") @block0
+    value v3: Bool @block0
+    value v4: TypeRef("?") @block0
+    value v5: Int(64) @block0
+    value v6: Struct(StructType { name: "Config", fields: [("retries", Int(64)), ("name", Generic { name: "String", args: [] })], methods: {}, interfaces: [] }) @block0
+    value v7: Generic { name: "String", args: [] } @block0
+    value v8: TypeRef("?") @block0
+    value v9: Bool @block0
+    value v10: TypeRef("?") @block0
+    value v11: Generic { name: "String", args: [] } @block0
+    value v12: Struct(StructType { name: "Config", fields: [("retries", Int(64)), ("name", Generic { name: "String", args: [] })], methods: {}, interfaces: [] }) @block0
+    value v13: Generic { name: "String", args: [] } @block0
+    value v14: Int(64) @block0
+    value v15: Generic { name: "String", args: [] } @block0
+    value v16: TypeRef("?") @block0
+    value v17: Bool @block0
+    value v18: TypeRef("?") @block0
+    value v19: Int(64) @block0
+    value v20: Struct(StructType { name: "Config", fields: [("retries", Int(64)), ("name", Generic { name: "String", args: [] })], methods: {}, interfaces: [] }) @block0
+    value v21: Generic { name: "String", args: [] } @block0
+    value v22: TypeRef("?") @block0
+    value v23: Bool @block0
+    value v24: TypeRef("?") @block0
+    value v25: Generic { name: "String", args: [] } @block0
+    value v26: Struct(StructType { name: "Config", fields: [("retries", Int(64)), ("name", Generic { name: "String", args: [] })], methods: {}, interfaces: [] }) @block0
+    value v27: Generic { name: "String", args: [] } @block0
+    Load v0 <- int(3)
+    Load v1 <- string("default")
+    Call %0 <- string("Config") [v0, v1] (def=d0)
+    Load v6 <- %0
+    LoadField v4 <- v6.0
+    Load v5 <- int(3)
+    Eq v3 <- v4, v5
+    Load v7 <- string("默认值字段应初始化为 3")
+    Call v2 <- string("std.assert.assert") [v3, v7] (def=d1)
+    Load v12 <- %0
+    LoadField v10 <- v12.1
+    Load v11 <- string("default")
+    Eq v9 <- v10, v11
+    Load v13 <- string("默认值字段应初始化为 default")
+    Call v8 <- string("std.assert.assert") [v9, v13] (def=d1)
+    Load v14 <- int(7)
+    Load v15 <- string("custom")
+    Call %1 <- string("Config") [v14, v15] (def=d0)
+    Load v20 <- %1
+    LoadField v18 <- v20.0
+    Load v19 <- int(7)
+    Eq v17 <- v18, v19
+    Load v21 <- string("显式实参应覆盖默认值")
+    Call v16 <- string("std.assert.assert") [v17, v21] (def=d1)
+    Load v26 <- %1
+    LoadField v24 <- v26.1
+    Load v25 <- string("custom")
+    Eq v23 <- v24, v25
+    Load v27 <- string("显式实参应覆盖默认值")
+    Call v22 <- string("std.assert.assert") [v23, v27] (def=d1)
+    Drop %1
     Drop %0
-    Drop %2
-    Ret %1
+    Ret v22
   init (locals=0)
     Call %0 <- string("main") [] (def=d2)

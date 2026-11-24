@@ -9,7 +9,7 @@
 //! `x > 0` 注入流敏感 Γ。assert 通过 scope 内的 Fn 变量注册，
 //! dep_env 注册 GammaAssume { predicate_arg: 0 }。
 
-use crate::frontend::core::sema::test_util::{binop};
+use crate::frontend::core::sema::test_util::binop;
 use crate::util::plan_id::PlanId;
 use std::collections::HashMap;
 
@@ -19,9 +19,9 @@ use crate::frontend::core::sema::inference::ExpressionInferrer;
 use crate::frontend::core::sema::passes::overload;
 use crate::frontend::core::sema::proof::assumptions::FlowSensitiveGamma;
 use crate::frontend::core::types::const_data::{BinOp, ConstExpr, ConstValue};
-use crate::frontend::core::types::{MonoType, PolyType, TypeConstraintSolver};
-use crate::frontend::core::types::eval::dependent_types::{Effect, EffectSpec};
 use crate::frontend::core::types::eval::dependent_types::DependentTypeEnv;
+use crate::frontend::core::types::eval::dependent_types::{Effect, EffectSpec};
+use crate::frontend::core::types::{MonoType, PolyType, TypeConstraintSolver};
 use crate::util::span::Span;
 
 /// 构造 `x > 0` 的 AST 表达式

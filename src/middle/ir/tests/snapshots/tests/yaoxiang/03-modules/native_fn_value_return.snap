@@ -3,38 +3,58 @@ module
     slot[0] f : Int(64) @depth1
     slot[1] s : Int(64) @depth1
     locals_total=5
+    values_total=3
+    value v0: Void @block0
+    value v1: Generic { name: "String", args: [] } @block0
+    value v2: Fn { params: [Generic { name: "String", args: [] }], return_type: Void } @block0
     Load %0 <- arg%0
     Load %1 <- arg%1
-    Load %2 <- %1
-    Load %3 <- %0
-    CallDyn %4 <- %3 [%2]
-    Ret %4
+    Load v1 <- %1
+    Load v2 <- %0
+    CallDyn v0 <- v2 [v1]
+    Ret v0
   fn main() -> Void
     slot[0] c : Int(64) @depth1
     slot[1] k : Int(64) @depth1
     slot[2] s : Int(64) @depth1
-    locals_total=8
+    locals_total=7
+    values_total=15
+    value v0: Never @block0
+    value v1: Bool @block0
+    value v2: Generic { name: "String", args: [] } @block0
+    value v3: Fn { params: [Bool, Generic { name: "String", args: [] }], return_type: Never } @block0
+    value v4: Generic { name: "String", args: [] } @block0
+    value v5: Generic { name: "String", args: [] } @block0
+    value v6: Fn { params: [Ref { mutable: false, inner: Generic { name: "String", args: [] } }, Ref { mutable: false, inner: Generic { name: "String", args: [] } }], return_type: Generic { name: "String", args: [] } } @block0
+    value v7: TypeRef("?") @block0
+    value v8: Bool @block0
+    value v9: Generic { name: "String", args: [] } @block0
+    value v10: Generic { name: "String", args: [] } @block0
+    value v11: Generic { name: "String", args: [] } @block0
+    value v12: Void @block0
+    value v13: Fn { params: [TypeRef("Any")], return_type: Void } @block0
+    value v14: Generic { name: "String", args: [] } @block0
     Load %0 <- nativefn(std.assert.assert)
-    Load %1 <- bool(true)
-    Load %2 <- string("multi-arg native fn value ok")
-    Load %3 <- %0
-    CallDyn %4 <- %3 [%1, %2]
-    Load %4 <- nativefn(std.string.concat)
-    Load %2 <- string("a")
-    Load %3 <- string("b")
-    Load %5 <- %4
-    CallDyn %1 <- %5 [%2, %3]
-    Load %5 <- %1
-    Load %6 <- string("ab")
-    Eq %3 <- %5, %6
-    Load %7 <- string("concat via function value returns ab")
-    Call %2 <- string("std.assert.assert") [%3, %7] (def=d0)
-    Load %3 <- nativefn(std.io.println)
-    Load %5 <- string("via param")
-    Call %2 <- string("apply1") [%3, %5] (def=d1)
+    Load v1 <- bool(true)
+    Load v2 <- string("multi-arg native fn value ok")
+    Load v3 <- %0
+    CallDyn v0 <- v3 [v1, v2]
+    Load %1 <- nativefn(std.string.concat)
+    Load v4 <- string("a")
+    Load v5 <- string("b")
+    Load v6 <- %1
+    CallDyn %2 <- v6 [v4, v5]
+    Load v9 <- %2
+    Load v10 <- string("ab")
+    Eq v8 <- v9, v10
+    Load v11 <- string("concat via function value returns ab")
+    Call v7 <- string("std.assert.assert") [v8, v11] (def=d0)
+    Load v13 <- nativefn(std.io.println)
+    Load v14 <- string("via param")
+    Call v12 <- string("apply1") [v13, v14] (def=d1)
     Drop %0
-    Drop %4
     Drop %1
-    Ret %2
+    Drop %2
+    Ret v12
   init (locals=0)
     Call %0 <- string("main") [] (def=d2)

@@ -4,8 +4,8 @@ use crate::ast::*;
 
 use super::super::context::FormatContext;
 use super::super::source_map::SourceMap;
-use super::stmt::format_stmt;
 use super::comment::format_comments_before;
+use super::stmt::format_stmt;
 
 /// 格式化模块
 pub fn format_module(

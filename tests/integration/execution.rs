@@ -358,3 +358,279 @@ main = () => {
         "#,
     );
 }
+
+// ============ 3.20.35 / #441：调用形谓词体的精化入口（运行时面） ============
+//
+// 谓词体是用户函数调用（`{ check_nn(x) }` 形 / lambda 形 `(x) => check_nn(x)`）
+// 时，满足值经第 4 级证明调用编译期执行为真 → 程序编译并通过运行；
+// 精化变量的运行时类型是 base（Int），可原样参与运算。编译期拒绝面（违反值
+// E4018 / 缺失被调）由 check.rs 的子进程锚钉住
+// （test_check_call_form_predicate_body_*：语料夹具因基线红线改挂集成测试）。
+
+/// #441 端到端：TypeDefinition 形调用形谓词体（`= { check_nn(x) }`）的
+/// 满足值编译通过且运行正确——精化变量按 base 类型参与 Int 运算。
+/// 修前假拒绝：E1003（实参落类型命名空间）+ E1002。
+#[test]
+fn test_call_form_predicate_body_satisfied_value_runs_and_uses_base_type() {
+    run_ok(
+        r#"
+use std.assert
+
+check_nn: (v: Int) -> Bool = { v >= 0 }
+NonNegative: (x: Int) -> Type = { check_nn(x) }
+
+main = () => {
+    mut y: Int = 5
+    z: NonNegative(y) = y
+    w: NonNegative(7) = 7
+    assert.assert(z + w == 12, "call-form predicate refinement erases to Int base")
+}
+        "#,
+    );
+}
+
+/// #441 端到端：lambda 声明形调用形谓词体（`= (x) => check_nn(x)`）与
+/// TypeDefinition 形同判——满足值编译通过且运行正确。
+/// 修前该形态经证明函数面 IR 路径执行，链接不了用户被调
+/// （「Native function not found: check_nn」→ E4018 执行失败）。
+#[test]
+fn test_call_form_predicate_lambda_body_satisfied_value_runs() {
+    run_ok(
+        r#"
+use std.assert
+
+check_nn: (v: Int) -> Bool = { v >= 0 }
+NonNegativeA: (x: Int) -> Type = (x) => check_nn(x)
+
+main = () => {
+    mut y: Int = 5
+    z: NonNegativeA(y) = y
+    assert.assert(z == 5, "lambda-form call-body predicate refinement passes")
+}
+        "#,
+    );
+}
+
+// #477（WBS 3.8.1）：native 遮蔽用户同名函数——lower 面裸名解析对齐 check 面
+// （用户裁决乙案：用户模块的裸名调用先查用户定义、再查 std native）。
+//
+// divergence 的精确机制：check 面（sema）对 `Expr::Var` 按作用域解析
+// （`scope.get_var_info` 优先命中用户顶层函数，`env.add_var` 注册）；
+// lower 面的 `resolve_function_name`（middle/lower/query.rs）旧四臂只认
+// 「本单元类型名 → use 项别名 → native 名 → std 短名映射」，用户**函数**
+// 名落空到 std 短名映射臂被改写成 native 限定名（如 `read` → `std.os.read`）
+// ——同一调用点 check 绿、run 派发 native。修前实测两形态：
+// ① 实参运行期与 native 兼容时 native 静默执行给错误值（exit 0）；
+// ② 不兼容时运行期 E6007（exit 1，native 实参检查报错）。
+//
+// 值断言全部用程序内 assert 表达（跑通即算对）——锚③的修前形态也是
+// exit 0，只有值断言能区分「native 静默错误值」与「用户函数正确值」。
+
+/// #477 锚①：用户泛型名 `read` 遮蔽 native（issue #477 原形态，WBS 3.8 登记）。
+/// 修前 run 报 E6007（native_read 实参个数不符「read expects 2 arguments」）；
+/// 修后用户泛型恒等函数执行、值原样透传。
+#[test]
+fn test_shadowed_generic_read_resolves_to_user_function() {
+    // Arrange
+    let source = r#"
+use std.io
+use std.assert
+
+read: (T: Type) -> (x: T) -> T = (x) => { x }
+
+main = () => {
+    s = read("hi")
+    assert.assert(s == "hi", "shadowed generic read must execute the user function")
+}
+        "#;
+
+    // Act & Assert
+    let source = crate::fixture::with_main_invoked(source);
+    run(&source).unwrap_or_else(|e| panic!("Execution failed:\n{e:#}\n\nSource:\n{source}"));
+}
+
+/// #477 锚②：兼容遮蔽——用户 `read: (String) -> String` 与 native
+/// `read(file: &File, n: Int)` 元数不同但 check 面按用户签名全绿。
+/// 修前 run 报 E6007（native_read 实参形态不符）；修后用户函数执行、值正确。
+#[test]
+fn test_shadowed_string_read_returns_user_result() {
+    // Arrange
+    let source = r#"
+use std.string
+use std.io
+use std.assert
+
+read: (String) -> String = (s) => { f"{s}-from-user" }
+
+main = () => {
+    s = read("hi")
+    assert.assert(s == "hi-from-user", "shadowed string read must execute the user function")
+}
+        "#;
+
+    // Act & Assert
+    let source = crate::fixture::with_main_invoked(source);
+    run(&source).unwrap_or_else(|e| panic!("Execution failed:\n{e:#}\n\nSource:\n{source}"));
+}
+
+/// #477 锚③：**静默错误值形态**——用户 `read: (File, Int)` 与 native read
+/// 元数与实参运行期形态都兼容（File 运行期即 Int fd）：修前 native_read
+/// 拿用户 fd 真读文件、静默返回文件内容（空文件 → 空串），exit 0 但值错；
+/// 只有值断言能区分两种行为。修后用户函数执行。
+#[test]
+fn test_shadowed_read_with_compatible_arity_returns_user_result() {
+    // Arrange：native_read 修前会真读该文件（fd 查表命中），静默返回文件内容。
+    // 文件放 tempdir，绝对路径（正斜杠）嵌源码——固定名 CWD 文件有中断残留
+    // 面（WBS 3.24.4 F5 卫生）；tempdir RAII 清理在 panic 路径同样生效。
+    let dir = tempfile::tempdir().expect("create tempdir");
+    let anchor_path = dir
+        .path()
+        .join("anchor-silent.tmp")
+        .display()
+        .to_string()
+        .replace('\\', "/");
+    std::fs::write(&anchor_path, "").expect("seed anchor temp file for #477");
+    let source = format!(
+        r#"
+use std.os
+use std.io
+use std.assert
+
+read: (File, Int) -> String = (f, n) => {{ "user-read-called" }}
+
+main = () => {{
+    f = os.open("{anchor_path}", "r")
+    s = read(f, 10)
+    assert.assert(s == "user-read-called", "compatible-arity shadowed read must execute the user function, not native_read")
+}}
+        "#,
+        anchor_path = anchor_path
+    );
+
+    // Act
+    let source = crate::fixture::with_main_invoked(&source);
+
+    // Assert（tempdir 随值销毁自动清理，无中断残留面）
+    run(&source).unwrap_or_else(|e| panic!("Execution failed:\n{e:#}\n\nSource:\n{source}"));
+}
+
+/// #477 对照①：限定名 native 调用（`os.read`）不受用户遮蔽机制影响——
+/// 用户**无**同名定义、走 namespace 臂，修前后都必须派发 native、读到文件内容。
+#[test]
+fn test_qualified_native_read_still_dispatches_to_native() {
+    // Arrange（tempdir 绝对路径嵌源码，正斜杠——固定名 CWD 文件的卫生问题
+    // 同 F5 注记，tempdir RAII 清理在 panic 路径同样生效）
+    let dir = tempfile::tempdir().expect("create tempdir");
+    let anchor_path = dir
+        .path()
+        .join("anchor-qualified.tmp")
+        .display()
+        .to_string()
+        .replace('\\', "/");
+    std::fs::write(&anchor_path, "hello").expect("seed qualified temp file for #477");
+    let source = format!(
+        r#"
+use std.os
+use std.io
+use std.assert
+
+main = () => {{
+    f = os.open("{anchor_path}", "r")
+    s = os.read(f, 10)
+    assert.assert(s == "hello", "qualified os.read must still dispatch to the native function")
+    os.close(f)
+}}
+        "#,
+        anchor_path = anchor_path
+    );
+
+    // Act
+    let source = crate::fixture::with_main_invoked(&source);
+
+    // Assert
+    run(&source).unwrap_or_else(|e| panic!("Execution failed:\n{e:#}\n\nSource:\n{source}"));
+}
+
+/// #477 对照②：std 嵌入单元内部互调零变化——std.json.parse 的 std 单元内部
+/// 裸名互调（parse_value → parse_object/parse_array/parse_string/parse_number/
+/// parse_uchar，src/std/json.yx）走的也是 `declared_fn_names` 臂，命中的是
+/// std 自己的函数名；修后 roundtrip 必须照常（与修前逐字节同值）。
+#[test]
+fn test_std_internal_bare_calls_unaffected() {
+    // Arrange
+    let source = r#"
+use std.json
+use std.result
+use std.assert
+
+main = () => {
+    r = json.parse("\"hello\"")
+    match r {
+        ok(v) => {
+            s = json.stringify(v)
+            assert.assert(s == "\"hello\"", "std.json internal bare calls must roundtrip unchanged")
+        }
+        err(e) => {
+            assert.assert(false, f"std.json.parse unexpectedly failed: {e}")
+        }
+    }
+}
+        "#;
+
+    // Act & Assert
+    let source = crate::fixture::with_main_invoked(source);
+    run(&source).unwrap_or_else(|e| panic!("Execution failed:\n{e:#}\n\nSource:\n{source}"));
+}
+
+/// #477 / WBS 3.24.4 集成锚：用户自定义 print 的 **Var 实参**裸名调用必须执行
+/// 用户函数——print 零开销特例（`src/middle/lower/expr/call.rs`）对类型可取的
+/// 实参走 Stringable/兜底路，print 名计算直接查 std 短名映射，绕过
+/// `resolve_function_name` 的乙案臂（#477）。修前形态（CLI 探针实测）：用户
+/// 函数体不执行、`std.io.print` 原样输出，exit 0 静默错配——本锚用文件标记做
+/// oracle：修前标记文件从未写出，`os.open` 读失败运行期红；修后用户 print
+/// 写出标记、读回内容断言。归因修正（按实测锚定）：字面量实参 `print("hi")`
+/// 的类型在特例入口不可取（`get_expr_mono_type` 落 `_ => None`），走「无法
+/// 获取类型」默认路径、#477 乙案已覆盖——真正红态是 Var 实参形态。
+#[test]
+fn test_user_defined_print_var_arg_executes_user_function() {
+    // Arrange：tempdir 绝对路径嵌源码（正斜杠——Windows 下 std::fs 可解析，
+    // 且 .yx 字符串字面量无反斜杠转义面；固定名 CWD 文件有中断残留面，
+    // 与 3.24.4 F5 的卫生要求同源）
+    let dir = tempfile::tempdir().expect("create tempdir");
+    let marker_path = dir
+        .path()
+        .join("user-print-run.tmp")
+        .display()
+        .to_string()
+        .replace('\\', "/");
+    let source = format!(
+        r#"
+use std.os
+use std.io
+use std.assert
+
+print: (String) -> () = (s) => {{
+    f = os.open("{marker_path}", "w")
+    os.write(f, f"[user]{{s}}")
+    os.close(f)
+}}
+
+main = () => {{
+    s = "hi"
+    print(s)
+    r = os.open("{marker_path}", "r")
+    got = os.read(r, 64)
+    os.close(r)
+    assert.assert(got == "[user]hi", f"user print must execute and write the marker, got: {{got}}")
+}}
+        "#,
+        marker_path = marker_path
+    );
+
+    // Act
+    let source = crate::fixture::with_main_invoked(&source);
+    let result = run(&source);
+
+    // Assert
+    result.unwrap_or_else(|e| panic!("Execution failed:\n{e:#}\n\nSource:\n{source}"));
+}

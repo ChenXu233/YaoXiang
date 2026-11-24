@@ -304,16 +304,29 @@ fn type_head_name(ty: &MonoType) -> Option<&str> {
 }
 
 /// 空结构体骨架（StructType 无 Default 派生，显式构造）
+///
+/// 骨架记录的字段是接口成员（方法签名），**不是构造参数**。旧表示用空的默认值
+/// 向量表达「required=0」；单列无法表达长度不匹配，故逐字段写 `has_default`
+/// 保持旧 arity 行为（零行为；同命名空间口径，见 09a §P6 6.9.5-B.1a 的报告 §R8）。
 fn empty_struct(
     name: &str,
     fields: Vec<(String, MonoType)>,
 ) -> StructType {
     StructType {
         name: name.to_string(),
-        fields,
+        fields: fields
+            .into_iter()
+            .map(
+                |(fname, fty)| crate::frontend::core::types::mono::StructFieldInfo {
+                    name: fname,
+                    ty: fty,
+                    quantity: None,
+                    is_mut: false,
+                    has_default: true,
+                },
+            )
+            .collect(),
         methods: HashMap::new(),
-        field_mutability: Vec::new(),
-        field_has_default: Vec::new(),
         interfaces: Vec::new(),
     }
 }
@@ -424,8 +437,8 @@ fn bind_pattern_args(
         }
         (MonoType::Ref { inner, .. }, _) => bind_pattern_args(inner, actual, subst),
         (MonoType::Struct(s), MonoType::Struct(sa)) => {
-            for ((_, st), (_, at)) in s.fields.iter().zip(sa.fields.iter()) {
-                bind_pattern_args(st, at, subst);
+            for (sf, af) in s.fields.iter().zip(sa.fields.iter()) {
+                bind_pattern_args(&sf.ty, &af.ty, subst);
             }
         }
         _ => {}

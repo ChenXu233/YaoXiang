@@ -6,9 +6,9 @@
 //!
 //! | 07 规则 | 本模块实现 |
 //! | 剥离 Span | 不打印 span 字段 |
-//! | 临时值重命名 | Local/Temp/Arg(n) 按函数内首次出现顺序重写为 %0 %1 ...（保留定义-使用拓扑顺序） |
+//! | 临时值重命名 | Local/Arg(n) 按函数内首次出现顺序重写为 %0 %1 ...；SSA 值按函数内首次出现顺序重写为 v0 v1 ...（保留定义-使用拓扑顺序） |
 //! | 全局槽位相对化 | Global(n) 按模块内首次出现顺序重写为 @0 @1 ... |
-//! | 前驱排序 | successors 打印前按序排列（现状恒为空，规则预留）；Phi 输入随 P7 批 b 变体引入处理 |
+//! | 前驱排序 | `successors` **不进入快照**（块级 CFG 属分配 / 布局细节，判据由 `verify_ssa` 的块级前驱承担）；`Phi` 的 incoming 打印前按前驱 label 升序 |
 //! | 结构体字段排序 | **不排序**——构造顺序是语义（07 原文） |
 //!
 //! 07 已知局限（原文照搬）：规范化会抹掉「第 N 个实参用了哪个寄存器」——
@@ -62,6 +62,9 @@ impl Renamer {
 struct FnCtx {
     locals: Renamer,
     args: Renamer,
+    /// SSA 值（`Operand::Value`）：函数内首现序相对化，编号本身无语义
+    /// （04-ssa.md §值标识方式：函数内稠密编号，单调递增）。
+    values: Renamer,
 }
 
 struct ModCtx {
@@ -76,11 +79,10 @@ fn fmt_operand(
     m: &mut ModCtx,
 ) -> String {
     match op {
-        Operand::Local(n) | Operand::Temp(n) => format!("%{}", f.locals.rename(*n)),
+        Operand::Local(n) => format!("%{}", f.locals.rename(*n)),
         Operand::Arg(n) => format!("arg%{}", f.args.rename(*n)),
         Operand::Global(n) => format!("@{}", m.globals.rename(*n)),
-        Operand::Label(n) => format!("label({n})"),
-        Operand::Register(n) => format!("reg({n})"),
+        Operand::Value(v) => format!("v{}", f.values.rename(v.0 as usize)),
         Operand::Const(c) => fmt_const(c),
     }
 }
@@ -453,6 +455,19 @@ fn fmt_instruction(
             o(closures_list, f, m),
             fmt_plan(plan)
         ),
+        // ---- SSA 汇合（07 第二层「前驱排序」：打印前按前驱 label 升序） ----
+        Instruction::Phi { dst, incoming, .. } => {
+            // 先登记 dst 的规范名，值编号按打印顺序首现分配（定义在读之前）。
+            let dst = o(dst, f, m);
+            let mut entries: Vec<(usize, &Operand)> =
+                incoming.iter().map(|(label, op)| (*label, op)).collect();
+            entries.sort_by_key(|(label, _)| *label);
+            let inner: Vec<String> = entries
+                .iter()
+                .map(|(label, op)| format!("{label}: {}", o(op, f, m)))
+                .collect();
+            format!("Phi {dst} <- [{}]", inner.join(", "))
+        }
     }
 }
 
@@ -587,7 +602,12 @@ pub fn normalize_module(ir: &ModuleIR) -> String {
                     .collect();
                 writeln!(out, "    type_decl [{}]", fields.join(" ; ")).unwrap();
             }
-            FunctionBody::Code { blocks, locals, .. } => {
+            FunctionBody::Code {
+                blocks,
+                locals,
+                values,
+                ..
+            } => {
                 // 具名槽表（源码变量身份；temp 占位槽无信息不打印）
                 for (i, s) in locals.iter().enumerate() {
                     if let Some(name) = &s.name {
@@ -603,14 +623,32 @@ pub fn normalize_module(ir: &ModuleIR) -> String {
                 let mut fctx = FnCtx {
                     locals: Renamer::new(),
                     args: Renamer::new(),
+                    values: Renamer::new(),
                 };
-                for block in blocks {
-                    // successors 恒空（现状）；排序规则预留（07 前驱排序）
-                    let mut succ = block.successors.clone();
-                    succ.sort_unstable();
-                    if !succ.is_empty() {
-                        writeln!(out, "    block[{}] succ={succ:?}", block.label).unwrap();
+                // 7b.2：SSA 值表段（按 ValueId 升序；重命名预置为 `v0..vN`，
+                // 使指令里的 `Operand::Value` 渲染与本节一致）。
+                writeln!(out, "    values_total={}", values.len()).unwrap();
+                for (i, info) in values.iter().enumerate() {
+                    let name = fctx.values.rename(i);
+                    match &info.debug_name {
+                        Some(debug) => writeln!(
+                            out,
+                            "    value v{name}: {:?} @block{} debug={debug}",
+                            info.ty, info.defining_block
+                        )
+                        .unwrap(),
+                        None => writeln!(
+                            out,
+                            "    value v{name}: {:?} @block{}",
+                            info.ty, info.defining_block
+                        )
+                        .unwrap(),
                     }
+                }
+                for block in blocks {
+                    // `successors` 不进入快照：块级 CFG 属分配 / 布局细节
+                    // （7b.4 的线性扫描分配器还可能重塑它），判据由 `verify_ssa`
+                    // 的块级前驱承担（09a §P7 7b.3 契约 §二 第 5 条）。
                     for instr in &block.instructions {
                         writeln!(out, "    {}", fmt_instruction(instr, &mut fctx, &mut mctx))
                             .unwrap();
@@ -636,6 +674,7 @@ pub fn normalize_module(ir: &ModuleIR) -> String {
         let mut fctx = FnCtx {
             locals: Renamer::new(),
             args: Renamer::new(),
+            values: Renamer::new(),
         };
         for instr in &ir.init {
             writeln!(out, "    {}", fmt_instruction(instr, &mut fctx, &mut mctx)).unwrap();

@@ -5,15 +5,16 @@ use clap::{Parser, Subcommand, ValueEnum};
 use std::io::{IsTerminal, Read};
 use std::path::PathBuf;
 use tracing::info;
-use yaoxiang::repl::Repl;
 use yaoxiang::formatter::run_format_command;
-use yaoxiang::{dump_bytecode, ABOUT, VERSION};
+use yaoxiang::package;
+use yaoxiang::repl::Repl;
 use yaoxiang::util::diagnostic::{
-    render_explain_output, run_check_command_once, run_file_with_diagnostics, RunOutcome,
+    render_explain_output, run_check_command_once, run_file_with_diagnostics, ErrorCategory,
+    ErrorCodeDefinition, RunOutcome,
 };
 use yaoxiang::util::i18n::set_lang_from_string;
 use yaoxiang::util::logger::LogLevel;
-use yaoxiang::package;
+use yaoxiang::{dump_bytecode, ABOUT, VERSION};
 
 /// Log level enum for CLI
 #[derive(Debug, Clone, Copy, ValueEnum)]
@@ -127,6 +128,15 @@ enum Commands {
         /// Exclude file(s) or directory path(s) from check
         #[arg(long = "exclude", value_name = "PATH", num_args = 1..)]
         exclude: Vec<PathBuf>,
+
+        /// Suppress warnings by code (repeatable, e.g. --allow W1007 --allow W1003, #499)
+        #[arg(
+            long = "allow",
+            value_name = "CODE",
+            num_args = 1..,
+            value_parser = parse_allow_code
+        )]
+        allow: Vec<String>,
 
         /// Output diagnostics in JSON format
         #[arg(long)]
@@ -406,6 +416,28 @@ enum WorkspaceCommand {
     },
 }
 
+/// `--allow` 的码名校验（issue #499，用户 2026-10-24 裁决 A / 2026-11-20 甲案）。
+///
+/// - 未知码 = 报错：静默忽略会让 typo 后的 flag 毫无效果，用户以为抑制了实则没有；
+/// - 非 W 族码（`ErrorCategory != Warning`）= 报错：`--allow` 是 W 码逐条抑制
+///   机制，错误码不可被 CLI 旗标静音（错误契约底线——被静音的错误会让失败的
+///   check 伪装成通过）。
+///
+/// 权威源 = `ErrorCodeDefinition::find`（`codes/mod.rs` 的 ERROR_CODES 注册表）。
+fn parse_allow_code(code: &str) -> Result<String, String> {
+    match ErrorCodeDefinition::find(code) {
+        None => Err(format!(
+            "unknown diagnostic code '{code}' (--allow accepts W-family warning codes only; \
+             see `yaoxiang explain` for the code list)"
+        )),
+        Some(def) if def.category == ErrorCategory::Warning => Ok(code.to_string()),
+        Some(_) => Err(format!(
+            "'{code}' is not a W-family warning code (--allow suppresses warnings only; \
+             errors cannot be silenced)"
+        )),
+    }
+}
+
 /// 命令行信任决策（RFC-014b 5e）：`--trust` 标志 + 交互性检测
 fn build_trust_decision(flag: bool) -> yaoxiang::package::build::TrustDecision {
     use std::io::IsTerminal;
@@ -461,6 +493,36 @@ fn main() -> Result<()> {
         info!("Host: {}", std::env::consts::OS);
     }
 
+    // issue #540：编译走查（parser 递归 / 类型检查 / IR 下降 / 格式化器 /
+    // LSP 语义收集）都是深递归，主线程默认栈（Windows 1MB）在 ~130-283 层
+    // 嵌套表达式即栈溢出崩溃（0xC00000FD 零诊断）。整个子命令派发放进
+    // 大栈线程执行——主线程仅等待；栈常量与登记依据见
+    // yaoxiang::COMPILE_STACK_SIZE。REPL/LSP 的长驻循环也在本线程上跑：
+    // stdin/stdout 交互与线程归属无关，退出码经 join 透传（进程内
+    // process::exit 不受影响）。
+    let child = std::thread::Builder::new()
+        .name("yaoxiang-main".to_string())
+        .stack_size(yaoxiang::COMPILE_STACK_SIZE)
+        .spawn(move || dispatch_command(command))
+        .map_err(|e| anyhow::anyhow!("Failed to spawn compile thread: {e}"))?;
+    match child.join() {
+        Ok(result) => result,
+        Err(payload) => {
+            // 线程 panic：与主线程 panic 同面呈现（Rust 默认 abort/panic 消息
+            // 已在线程侧打印），这里只补退出语义。
+            let msg = payload
+                .downcast_ref::<String>()
+                .cloned()
+                .or_else(|| payload.downcast_ref::<&str>().map(|s| s.to_string()))
+                .unwrap_or_else(|| "compile thread panicked".to_string());
+            Err(anyhow::anyhow!("{msg}"))
+        }
+    }
+}
+
+/// 子命令派发本体（原 `main` 的 `match command` 逐字迁入，issue #540：
+/// 迁移动机见 main 的大栈线程注释）。
+fn dispatch_command(command: Commands) -> Result<()> {
     match command {
         Commands::Run {
             file,
@@ -556,6 +618,7 @@ fn main() -> Result<()> {
         Commands::Check {
             paths,
             exclude,
+            allow,
             json,
             color,
             no_progress,
@@ -571,6 +634,7 @@ fn main() -> Result<()> {
             match run_check_command_once(
                 &paths,
                 &exclude,
+                &allow,
                 json,
                 use_colors,
                 no_progress,

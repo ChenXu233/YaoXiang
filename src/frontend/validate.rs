@@ -8,9 +8,9 @@ use std::sync::Arc;
 
 use std::sync::Mutex;
 
+use crate::ast::Module;
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parse_with_probe;
-use crate::ast::Module;
 use crate::frontend::core::sema::check_module;
 use crate::frontend::core::sema::SemanticProbe;
 /// FNV-1a 哈希算法（内联自 compilation_cache::content_hash）

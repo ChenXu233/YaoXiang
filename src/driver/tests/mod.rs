@@ -2,6 +2,7 @@
 
 mod check_rootless_mono;
 mod codegen_init_calls;
+mod dce_wiring;
 mod driver;
 mod helpers;
 mod import_cycle;
@@ -16,6 +17,7 @@ mod overload_injection;
 mod program;
 mod ref_pool;
 mod run_rootless;
+mod short_name_dispatch_pins;
 mod stage;
 mod unit;
 mod warning_parity;

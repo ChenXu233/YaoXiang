@@ -8,12 +8,12 @@
 //! - 断点管理: set_breakpoint / remove_breakpoint / has_breakpoint
 //! - 栈追踪: capture_stack 在 step_one 期间的正确性
 
-use std::collections::HashMap;
-use crate::backends::DebuggableExecutor;
-use crate::middle::bytecode::{BytecodeModule, BytecodeFunction, BytecodeInstr, Reg, ConstValue};
 use crate::backends::interpreter::executor::Interpreter;
 use crate::backends::runtime::RuntimeConfig;
 use crate::backends::runtime::RuntimeMode;
+use crate::backends::DebuggableExecutor;
+use crate::middle::bytecode::{BytecodeFunction, BytecodeInstr, BytecodeModule, ConstValue, Reg};
+use std::collections::HashMap;
 
 // ── 辅助函数 ──────────────────────────────────────────────────
 

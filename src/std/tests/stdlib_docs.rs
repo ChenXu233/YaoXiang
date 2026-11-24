@@ -230,17 +230,35 @@ fn yaoxiang_binary() -> PathBuf {
     if let Ok(path) = std::env::var("CARGO_BIN_EXE_yaoxiang-rs") {
         return PathBuf::from(path);
     }
-    // 回退：测试可执行文件位于 target/<profile>/deps/，主二进制在上一层
-    let mut exe = std::env::current_exe().expect("无法定位当前测试可执行文件");
-    exe.pop();
-    if exe.ends_with("deps") {
-        exe.pop();
-    }
-    exe.join(if cfg!(windows) {
+    let name = if cfg!(windows) {
         "yaoxiang-rs.exe"
     } else {
         "yaoxiang-rs"
-    })
+    };
+    let exe = std::env::current_exe().expect("无法定位当前测试可执行文件");
+    // 测试可执行文件有两种落点：target/<profile>/deps/（旧布局）与
+    // target/<profile>/build/<包名>/<哈希>/out/（cargo 1.100 起）。两种布局下
+    // 主二进制都在 target/<profile>/，故按「父目录名为 target」定位 profile 目录。
+    for dir in exe.ancestors() {
+        let profile_dir = dir
+            .parent()
+            .and_then(|parent| parent.file_name())
+            .map(|name| name == "target")
+            .unwrap_or(false);
+        if profile_dir {
+            let candidate = dir.join(name);
+            if candidate.is_file() {
+                return candidate;
+            }
+        }
+    }
+    // 兜底：维持旧行为，给出可直接用于诊断的路径
+    let mut fallback = exe;
+    fallback.pop();
+    if fallback.ends_with("deps") {
+        fallback.pop();
+    }
+    fallback.join(name)
 }
 
 /// 临时文件清理的辅助断言：确认被测路径确实存在（提前暴露构建布局变化）

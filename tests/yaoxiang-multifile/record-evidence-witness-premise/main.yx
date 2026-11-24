@@ -1,0 +1,10 @@
+use std.assert
+use lib.{Box, Holds}
+
+needW: (b: Box, h: Holds(b)) -> Int = { b.v }
+
+main: () -> Void = {
+    b = Box(3)
+    x = needW(b, Box(3))
+    assert.assert(x == 3, "imported witness premise admitted")
+}

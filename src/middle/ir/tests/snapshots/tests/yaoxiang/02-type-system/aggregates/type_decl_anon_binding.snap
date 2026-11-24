@@ -3,32 +3,50 @@ module
     type_decl [x: Int(64)]
   fn main() -> Void
     slot[0] p : Int(64) @depth1
-    locals_total=7
-    Load %0 <- int(1)
-    Call %1 <- string("Point") [%0] (def=d0)
-    Load %2 <- %1
-    LoadField %3 <- %2.0
-    Load %4 <- int(1)
-    Eq %5 <- %3, %4
-    Load %6 <- string("含匿名绑定的类型仍可构造并读回数据字段")
-    Call %0 <- string("std.assert.assert") [%5, %6] (def=d1)
-    Load %5 <- %1
-    Load %3 <- int(5)
-    Call %0 <- string("Point.__anon_cb") [%5, %3] (def=d2)
-    Drop %1
-    Ret %0
+    locals_total=4
+    values_total=10
+    value v0: Int(64) @block0
+    value v1: TypeRef("?") @block0
+    value v2: Bool @block0
+    value v3: TypeRef("?") @block0
+    value v4: Int(64) @block0
+    value v5: Struct(StructType { name: "Point", fields: [("x", Int(64))], methods: {}, interfaces: [] }) @block0
+    value v6: Generic { name: "String", args: [] } @block0
+    value v7: TypeRef("?") @block0
+    value v8: Struct(StructType { name: "Point", fields: [("x", Int(64))], methods: {}, interfaces: [] }) @block0
+    value v9: Int(64) @block0
+    Load v0 <- int(1)
+    Call %0 <- string("Point") [v0] (def=d0)
+    Load v5 <- %0
+    LoadField v3 <- v5.0
+    Load v4 <- int(1)
+    Eq v2 <- v3, v4
+    Load v6 <- string("含匿名绑定的类型仍可构造并读回数据字段")
+    Call v1 <- string("std.assert.assert") [v2, v6] (def=d1)
+    Load v8 <- %0
+    Load v9 <- int(5)
+    Call v7 <- string("Point.__anon_cb") [v8, v9] (def=d2)
+    Drop %0
+    Ret v7
   fn closure_0(Int(64)) -> Void
     slot[0] a : Int(64) @depth2
-    locals_total=5
-    Load %0 <- %1
-    Load %2 <- int(0)
-    Gt %3 <- %0, %2
-    Ret %3
+    locals_total=4
+    values_total=4
+    value v0: TypeRef("?") @block0
+    value v1: Bool @block0
+    value v2: TypeRef("?") @block0
+    value v3: Int(64) @block0
+    Load v2 <- %0
+    Load v3 <- int(0)
+    Gt v1 <- v2, v3
+    Ret v1
   fn Point.__anon_cb(Int(64)) -> Bool
     slot[0] arg0 : Int(64) @depth1
     locals_total=2
+    values_total=1
+    value v0: TypeRef("?") @block0
     Load %0 <- arg%0
-    MakeClosure %1 <- closure_0 env=[] (def=d3)
-    Ret %1
+    MakeClosure v0 <- closure_0 env=[] (def=d3)
+    Ret v0
   init (locals=0)
     Call %0 <- string("main") [] (def=d4)

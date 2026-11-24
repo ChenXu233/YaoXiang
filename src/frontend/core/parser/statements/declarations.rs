@@ -13,21 +13,21 @@
 //! - `functions` - Function definition parsing (fn stmts with params and body)
 //! - `imports` - Use/import statement parsing
 
-use crate::frontend::core::lexer::tokens::*;
 use crate::ast::*;
-use crate::frontend::core::parser::{NameKind, ParserState, BP_LOWEST, BP_ASSIGN};
-use crate::util::diagnostic::ErrorCodeDefinition;
+use crate::frontend::core::lexer::tokens::*;
 use crate::frontend::core::parser::parse_msg;
+use crate::frontend::core::parser::{NameKind, ParserState, BP_ASSIGN, BP_LOWEST};
+use crate::util::diagnostic::ErrorCodeDefinition;
 use crate::util::span::Span;
 
 // Import from sibling modules
-use super::types::{parse_type_annotation_required, parse_fn_type_with_names};
+use super::types::{parse_fn_type_with_names, parse_type_annotation_required};
 
 /// 该形参标注是否为**类型位**（编译期擦除，不占运行期形参位）：具体元类型
 /// `Type`（`(T: Type)`）与**类型级函数**（`(F: (T: Type) -> Type)`——构造器变量，
 /// RFC-010 元类型层级 Type1/Type2+）。
 ///
-/// 判据与 `ast::classify_generic_params` / `ir_gen::split_curry` 的
+/// 判据与 `ast::classify_generic_params` / `lower/curry.rs` 的 `split_curry` /
 /// `is_type_param_ann` **必须同源**：此前此处缺类型级函数分支，同一份声明在
 /// parser 眼里 F 是值参数、在类型检查/IR 眼里是类型参数，于是「声明占几个运行期
 /// 形参位」两处答案不同（WBS 6.8.2a 的 E1112 元数对照当场把这种声明误判成
@@ -577,10 +577,13 @@ fn parse_assign_after_target(
         let initializer = match state.parse_expression(BP_LOWEST) {
             Some(expr) => expr,
             None => {
-                state.error(parse_msg(
-                    state,
-                    "Expected expression after '='".to_string(),
-                ));
+                // 深度闸拒绝（E0019 已发射）时跳过恢复诊断（issue #540 恰 1 条判据）
+                if !state.is_depth_rejected() {
+                    state.error(parse_msg(
+                        state,
+                        "Expected expression after '='".to_string(),
+                    ));
+                }
                 return None;
             }
         };
@@ -704,10 +707,13 @@ pub fn parse_identifier_stmt(
         None => {
             // 解析失败，可能是旧语法残留
             if is_mut {
-                state.error(parse_msg(
-                    state,
-                    "Expected expression after mut".to_string(),
-                ));
+                // 深度闸拒绝（E0019 已发射）时跳过恢复诊断（issue #540 恰 1 条判据）
+                if !state.is_depth_rejected() {
+                    state.error(parse_msg(
+                        state,
+                        "Expected expression after mut".to_string(),
+                    ));
+                }
                 return None;
             }
             return parse_expr_stmt(state, span);
@@ -779,10 +785,13 @@ pub fn parse_identifier_stmt(
         let rhs = match state.parse_expression(BP_LOWEST) {
             Some(expr) => expr,
             None => {
-                state.error(parse_msg(
-                    state,
-                    "Expected expression after '=' in tuple destructuring".to_string(),
-                ));
+                // 深度闸拒绝（E0019 已发射）时跳过恢复诊断（issue #540 恰 1 条判据）
+                if !state.is_depth_rejected() {
+                    state.error(parse_msg(
+                        state,
+                        "Expected expression after '=' in tuple destructuring".to_string(),
+                    ));
+                }
                 return None;
             }
         };
@@ -812,10 +821,13 @@ pub fn parse_identifier_stmt(
         let value = match state.parse_expression(BP_LOWEST) {
             Some(expr) => expr,
             None => {
-                state.error(parse_msg(
-                    state,
-                    "Expected expression after '='".to_string(),
-                ));
+                // 深度闸拒绝（E0019 已发射）时跳过恢复诊断（issue #540 恰 1 条判据）
+                if !state.is_depth_rejected() {
+                    state.error(parse_msg(
+                        state,
+                        "Expected expression after '='".to_string(),
+                    ));
+                }
                 return None;
             }
         };
@@ -928,10 +940,13 @@ pub fn parse_paren_destructure_stmt(
     let rhs = match state.parse_expression(BP_LOWEST) {
         Some(expr) => expr,
         None => {
-            state.error(parse_msg(
-                state,
-                "Expected expression after '=' in tuple destructuring".to_string(),
-            ));
+            // 深度闸拒绝（E0019 已发射）时跳过恢复诊断（issue #540 恰 1 条判据）
+            if !state.is_depth_rejected() {
+                state.error(parse_msg(
+                    state,
+                    "Expected expression after '=' in tuple destructuring".to_string(),
+                ));
+            }
             return None;
         }
     };

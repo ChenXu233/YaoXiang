@@ -33,9 +33,9 @@ pub mod source_map;
 mod tests;
 
 // Re-exports
-pub use options::FormatOptions;
 pub use command::{run_format_command, FormatRunResult};
 pub use formatter::Formatter;
+pub use options::FormatOptions;
 pub use source_map::SourceMap;
 
 use crate::util::diagnostic::Diagnostic;

@@ -5,17 +5,23 @@ module
     slot[2] u : Int(64) @depth1
     slot[3] u2 : Int(64) @depth1
     locals_total=6
-    Load %0 <- int(42)
-    RcNew %1 <- %0
-    Load %2 <- %1
-    Call %0 <- string("std.weak.new") [%2] (def=d0)
-    Load %3 <- %0
-    Call %2 <- string("std.weak.upgrade") [%3] (def=d1)
+    values_total=5
+    value v0: Int(64) @block0
+    value v1: Generic { name: "Arc", args: [Int(64)] } @block0
+    value v2: Generic { name: "Weak", args: [Int(64)] } @block0
+    value v3: Void @block0
+    value v4: Generic { name: "String", args: [] } @block0
+    Load v0 <- int(42)
+    RcNew %0 <- v0
+    Load v1 <- %0
+    Call %1 <- string("std.weak.new") [v1] (def=d0)
+    Load v2 <- %1
+    Call %2 <- string("std.weak.upgrade") [v2] (def=d1)
     Load %3 <- %2
-    Load %4 <- string("option roundtrip ok")
-    Call %5 <- string("std.io.println") [%4] (def=d2)
-    Drop %1
+    Load v4 <- string("option roundtrip ok")
+    Call v3 <- string("std.io.println") [v4] (def=d2)
+    Drop %0
     Drop %3
-    Ret %5
+    Ret v3
   init (locals=0)
     Call %0 <- string("main") [] (def=d3)

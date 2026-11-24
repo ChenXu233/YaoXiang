@@ -2,28 +2,46 @@ module
   fn Point() -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
     type_decl [x: Int(64) ; y: Int(64)]
   fn Point.sum(Ref { mutable: false, inner: TypeRef("Point") }) -> Int(64)
-    locals_total=6
-    Load %0 <- %1
-    LoadField %2 <- %0.0
-    Load %3 <- %1
-    LoadField %4 <- %3.1
-    Add %5 <- %2, %4
-    Ret %5
-    Ret %5
+    locals_total=4
+    values_total=5
+    value v0: TypeRef("?") @block0
+    value v1: TypeRef("?") @block0
+    value v2: TypeRef("?") @block0
+    value v3: Ref { mutable: true, inner: TypeRef("Point") } @block0
+    value v4: Ref { mutable: true, inner: TypeRef("Point") } @block0
+    Load v3 <- %0
+    LoadField v1 <- v3.0
+    Load v4 <- %0
+    LoadField v2 <- v4.1
+    Add v0 <- v1, v2
+    Ret v0
+    Ret v0
   fn Point.shift(Ref { mutable: true, inner: TypeRef("Point") }, Int(64), Int(64)) -> Void
-    locals_total=14
-    Load %0 <- %1
-    Load %2 <- %1
-    LoadField %3 <- %2.0
-    Load %4 <- %5
-    Add %6 <- %3, %4
-    StoreField %0.0 <- %6 (type=None, name=Some("x"))
-    Load %7 <- %1
-    Load %8 <- %1
-    LoadField %9 <- %8.1
-    Load %10 <- %11
-    Add %12 <- %9, %10
-    StoreField %7.1 <- %12 (type=None, name=Some("y"))
+    locals_total=7
+    values_total=11
+    value v0: Ref { mutable: true, inner: TypeRef("Point") } @block0
+    value v1: TypeRef("?") @block0
+    value v2: TypeRef("?") @block0
+    value v3: Int(64) @block0
+    value v4: Ref { mutable: true, inner: TypeRef("Point") } @block0
+    value v5: TypeRef("?") @block0
+    value v6: Ref { mutable: true, inner: TypeRef("Point") } @block0
+    value v7: TypeRef("?") @block0
+    value v8: TypeRef("?") @block0
+    value v9: Int(64) @block0
+    value v10: Ref { mutable: true, inner: TypeRef("Point") } @block0
+    Load v0 <- %0
+    Load v4 <- %0
+    LoadField v2 <- v4.0
+    Load v3 <- %1
+    Add v1 <- v2, v3
+    StoreField v0.0 <- v1 (type=None, name=Some("x"))
+    Load v6 <- %0
+    Load v10 <- %0
+    LoadField v8 <- v10.1
+    Load v9 <- %2
+    Add v7 <- v8, v9
+    StoreField v6.1 <- v7 (type=None, name=Some("y"))
     Ret
   fn Window() -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
     type_decl [view: Ref { mutable: false, inner: TypeRef("Point") }]
@@ -40,125 +58,209 @@ module
     slot[9] r : Int(64) @depth1
     slot[10] t : Int(64) @depth1
     slot[11] w : Int(64) @depth1
-    locals_total=20
-    Load %0 <- int(1)
-    Load %1 <- int(2)
-    Call %2 <- string("Point") [%0, %1] (def=d0)
-    Load %1 <- %2
-    Move %0 <- %1
-    Load %1 <- %0
-    Load %3 <- %0
-    LoadField %4 <- %3.0
-    Load %5 <- int(1)
-    Eq %6 <- %4, %5
-    Load %7 <- string("原令牌活跃")
-    Call %8 <- string("std.assert.assert") [%6, %7] (def=d1)
-    Drop %2
-    Load %3 <- %1
-    LoadField %4 <- %3.1
-    Load %5 <- int(2)
-    Eq %6 <- %4, %5
-    Load %7 <- string("复制令牌活跃")
-    Call %8 <- string("std.assert.assert") [%6, %7] (def=d1)
-    Load %8 <- int(42)
-    Load %6 <- %8
-    Load %9 <- %8
-    Load %10 <- %6
-    Add %3 <- %9, %10
-    Load %7 <- int(84)
-    Eq %5 <- %3, %7
-    Load %11 <- string("原语值复制，两者都可用")
-    Call %4 <- string("std.assert.assert") [%5, %11] (def=d1)
-    Load %5 <- int(3)
-    Load %3 <- int(4)
-    Call %4 <- string("Point") [%5, %3] (def=d0)
-    Load %3 <- %4
-    Call %5 <- string("Point.sum") [%3] (def=d2)
-    Drop %4
-    Load %7 <- %4
-    Load %9 <- int(1)
-    Load %10 <- int(1)
-    Call %3 <- string("Point.shift") [%7, %9, %10] (def=d3)
-    Drop %4
-    Load %7 <- %4
-    Call %3 <- string("Point.sum") [%7] (def=d2)
-    Drop %4
-    Load %10 <- %5
-    Load %11 <- int(7)
-    Eq %9 <- %10, %11
-    Load %12 <- string("变更前读 == 7")
-    Call %7 <- string("std.assert.assert") [%9, %12] (def=d1)
-    Load %10 <- %3
-    Load %11 <- int(9)
-    Eq %9 <- %10, %11
-    Load %12 <- string("变更后读 == 9")
-    Call %7 <- string("std.assert.assert") [%9, %12] (def=d1)
-    Load %7 <- %4
-    Load %13 <- %7
-    LoadField %11 <- %13.0
-    Load %12 <- int(4)
-    Eq %10 <- %11, %12
-    Load %14 <- string("move 后值完整")
-    Call %9 <- string("std.assert.assert") [%10, %14] (def=d1)
-    Load %10 <- int(0)
-    Load %11 <- int(0)
-    Call %9 <- string("Point") [%10, %11] (def=d0)
-    Load %11 <- %9
-    Load %12 <- int(1)
-    Load %13 <- int(0)
-    Call %10 <- string("Point.shift") [%11, %12, %13] (def=d3)
+    locals_total=16
+    values_total=83
+    value v0: Int(64) @block0
+    value v1: Int(64) @block0
+    value v2: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
+    value v3: TypeRef("?") @block0
+    value v4: Bool @block0
+    value v5: TypeRef("?") @block0
+    value v6: Int(64) @block0
+    value v7: Ref { mutable: false, inner: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) } @block0
+    value v8: Generic { name: "String", args: [] } @block0
+    value v9: TypeRef("?") @block0
+    value v10: Bool @block0
+    value v11: TypeRef("?") @block0
+    value v12: Int(64) @block0
+    value v13: Ref { mutable: false, inner: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) } @block0
+    value v14: Generic { name: "String", args: [] } @block0
+    value v15: TypeRef("?") @block0
+    value v16: Bool @block0
+    value v17: Int(64) @block0
+    value v18: Int(64) @block0
+    value v19: Int(64) @block0
+    value v20: Int(64) @block0
+    value v21: Generic { name: "String", args: [] } @block0
+    value v22: Int(64) @block0
+    value v23: Int(64) @block0
+    value v24: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
+    value v25: TypeRef("?") @block0
+    value v26: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
+    value v27: Int(64) @block0
+    value v28: Int(64) @block0
+    value v29: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
+    value v30: TypeRef("?") @block0
+    value v31: Bool @block0
+    value v32: Int(64) @block0
+    value v33: Int(64) @block0
+    value v34: Generic { name: "String", args: [] } @block0
+    value v35: TypeRef("?") @block0
+    value v36: Bool @block0
+    value v37: Int(64) @block0
+    value v38: Int(64) @block0
+    value v39: Generic { name: "String", args: [] } @block0
+    value v40: TypeRef("?") @block0
+    value v41: Bool @block0
+    value v42: TypeRef("?") @block0
+    value v43: Int(64) @block0
+    value v44: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
+    value v45: Generic { name: "String", args: [] } @block0
+    value v46: Int(64) @block0
+    value v47: Int(64) @block0
+    value v48: TypeRef("?") @block0
+    value v49: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
+    value v50: Int(64) @block0
+    value v51: Int(64) @block0
+    value v52: TypeRef("?") @block0
+    value v53: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
+    value v54: Int(64) @block0
+    value v55: Int(64) @block0
+    value v56: TypeRef("?") @block0
+    value v57: Bool @block0
+    value v58: Bool @block0
+    value v59: TypeRef("?") @block0
+    value v60: Int(64) @block0
+    value v61: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
+    value v62: TypeRef("?") @block0
+    value v63: Int(64) @block0
+    value v64: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
+    value v65: Generic { name: "String", args: [] } @block0
+    value v66: Int(64) @block0
+    value v67: Int(64) @block0
+    value v68: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
+    value v69: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
+    value v70: TypeRef("?") @block0
+    value v71: Bool @block0
+    value v72: TypeRef("?") @block0
+    value v73: Int(64) @block0
+    value v74: TypeRef("?") @block0
+    value v75: Struct(StructType { name: "Window", fields: [("view", Ref { mutable: false, inner: TypeRef("Point") })], methods: {}, interfaces: [] }) @block0
+    value v76: Generic { name: "String", args: [] } @block0
+    value v77: TypeRef("?") @block0
+    value v78: Bool @block0
+    value v79: TypeRef("?") @block0
+    value v80: Int(64) @block0
+    value v81: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
+    value v82: Generic { name: "String", args: [] } @block0
+    Load v0 <- int(1)
+    Load v1 <- int(2)
+    Call %0 <- string("Point") [v0, v1] (def=d0)
+    Load v2 <- %0
+    Move %1 <- v2
+    Load %2 <- %1
+    Load v7 <- %1
+    LoadField v5 <- v7.0
+    Load v6 <- int(1)
+    Eq v4 <- v5, v6
+    Load v8 <- string("原令牌活跃")
+    Call v3 <- string("std.assert.assert") [v4, v8] (def=d1)
+    Drop %0
+    Load v13 <- %2
+    LoadField v11 <- v13.1
+    Load v12 <- int(2)
+    Eq v10 <- v11, v12
+    Load v14 <- string("复制令牌活跃")
+    Call v9 <- string("std.assert.assert") [v10, v14] (def=d1)
+    Load %3 <- int(42)
+    Load %4 <- %3
+    Load v19 <- %3
+    Load v20 <- %4
+    Add v17 <- v19, v20
+    Load v18 <- int(84)
+    Eq v16 <- v17, v18
+    Load v21 <- string("原语值复制，两者都可用")
+    Call v15 <- string("std.assert.assert") [v16, v21] (def=d1)
+    Load v22 <- int(3)
+    Load v23 <- int(4)
+    Call %5 <- string("Point") [v22, v23] (def=d0)
+    Load v24 <- %5
+    Call %6 <- string("Point.sum") [v24] (def=d2)
+    Drop %5
+    Load v26 <- %5
+    Load v27 <- int(1)
+    Load v28 <- int(1)
+    Call v25 <- string("Point.shift") [v26, v27, v28] (def=d3)
+    Drop %5
+    Load v29 <- %5
+    Call %7 <- string("Point.sum") [v29] (def=d2)
+    Drop %5
+    Load v32 <- %6
+    Load v33 <- int(7)
+    Eq v31 <- v32, v33
+    Load v34 <- string("变更前读 == 7")
+    Call v30 <- string("std.assert.assert") [v31, v34] (def=d1)
+    Load v37 <- %7
+    Load v38 <- int(9)
+    Eq v36 <- v37, v38
+    Load v39 <- string("变更后读 == 9")
+    Call v35 <- string("std.assert.assert") [v36, v39] (def=d1)
+    Load %8 <- %5
+    Load v44 <- %8
+    LoadField v42 <- v44.0
+    Load v43 <- int(4)
+    Eq v41 <- v42, v43
+    Load v45 <- string("move 后值完整")
+    Call v40 <- string("std.assert.assert") [v41, v45] (def=d1)
+    Load v46 <- int(0)
+    Load v47 <- int(0)
+    Call %9 <- string("Point") [v46, v47] (def=d0)
+    Load v49 <- %9
+    Load v50 <- int(1)
+    Load v51 <- int(0)
+    Call v48 <- string("Point.shift") [v49, v50, v51] (def=d3)
     Drop %9
-    Load %11 <- %9
-    Load %12 <- int(0)
-    Load %13 <- int(1)
-    Call %10 <- string("Point.shift") [%11, %12, %13] (def=d3)
+    Load v53 <- %9
+    Load v54 <- int(0)
+    Load v55 <- int(1)
+    Call v52 <- string("Point.shift") [v53, v54, v55] (def=d3)
     Drop %9
-    Load %15 <- %9
-    LoadField %13 <- %15.0
-    Load %14 <- int(1)
-    Eq %12 <- %13, %14
-    JmpIfNot %12 -> instr(82)
-    Load %16 <- %9
-    LoadField %17 <- %16.1
-    Load %18 <- int(1)
-    Eq %11 <- %17, %18
+    Load v61 <- %9
+    LoadField v59 <- v61.0
+    Load v60 <- int(1)
+    Eq v58 <- v59, v60
+    JmpIfNot v58 -> instr(82)
+    Load v64 <- %9
+    LoadField v62 <- v64.1
+    Load v63 <- int(1)
+    Eq v57 <- v62, v63
     Jmp -> instr(83)
-    Load %11 <- bool(false)
-    Load %19 <- string("&mut 顺序调用")
-    Call %10 <- string("std.assert.assert") [%11, %19] (def=d1)
-    Load %11 <- int(5)
-    Load %12 <- int(6)
-    Call %10 <- string("Point") [%11, %12] (def=d0)
-    Load %13 <- %10
-    Move %12 <- %13
-    Call %11 <- string("Window") [%12] (def=d4)
+    Load v57 <- bool(false)
+    Load v65 <- string("&mut 顺序调用")
+    Call v56 <- string("std.assert.assert") [v57, v65] (def=d1)
+    Load v66 <- int(5)
+    Load v67 <- int(6)
+    Call %10 <- string("Point") [v66, v67] (def=d0)
+    Load v69 <- %10
+    Move v68 <- v69
+    Call %11 <- string("Window") [v68] (def=d4)
     Drop %10
-    Load %18 <- %11
-    LoadField %17 <- %18.0
-    LoadField %14 <- %17.0
-    Load %15 <- int(5)
-    Eq %13 <- %14, %15
-    Load %16 <- string("经令牌字段访问")
-    Call %12 <- string("std.assert.assert") [%13, %16] (def=d1)
-    Load %17 <- %10
-    LoadField %14 <- %17.1
-    Load %15 <- int(6)
-    Eq %13 <- %14, %15
-    Load %18 <- string("派生令牌后源仍可读")
-    Call %12 <- string("std.assert.assert") [%13, %18] (def=d1)
-    Drop %4
+    Load v75 <- %11
+    LoadField v74 <- v75.0
+    LoadField v72 <- v74.0
+    Load v73 <- int(5)
+    Eq v71 <- v72, v73
+    Load v76 <- string("经令牌字段访问")
+    Call v70 <- string("std.assert.assert") [v71, v76] (def=d1)
+    Load v81 <- %10
+    LoadField v79 <- v81.1
+    Load v80 <- int(6)
+    Eq v78 <- v79, v80
+    Load v82 <- string("派生令牌后源仍可读")
+    Call v77 <- string("std.assert.assert") [v78, v82] (def=d1)
+    Drop %5
     Drop %9
     Drop %10
+    Drop %3
+    Drop %4
+    Drop %0
     Drop %8
     Drop %6
-    Drop %2
     Drop %7
-    Drop %5
-    Drop %3
-    Drop %0
     Drop %1
+    Drop %2
     Drop %11
-    Ret %12
+    Ret v77
   init (locals=3)
     islot[0] self : Int(64) @depth1
     islot[1] dx : Int(64) @depth1

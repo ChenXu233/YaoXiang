@@ -15,9 +15,9 @@ use std::collections::HashMap;
 
 use crate::frontend::core::sema::layers::predicate::check_predicate;
 use crate::frontend::core::sema::proof::context::ProofContext;
-use crate::frontend::core::sema::proof::verdict::{ProofFailure, ProofResultExt};
+use crate::frontend::core::sema::proof::verdict::{ProofFailure, ProofResultExt, UnprovenReason};
 use crate::frontend::core::sema::TypeEnvironment;
-use crate::frontend::core::types::const_data::{BinOp, ConstExpr, ConstValue};
+use crate::frontend::core::types::const_data::{BinOp, ConstExpr, ConstValue, UnOp};
 use crate::frontend::core::types::mono::MonoType;
 
 /// `<var> <op> <n>` 常量比较表达式（RFC-027 §3 各层分派用例的共同约束形态）。
@@ -38,6 +38,17 @@ fn refined_int(constraint: ConstExpr) -> MonoType {
     MonoType::Refined {
         base: Box::new(MonoType::Int(64)),
         constraint,
+    }
+}
+
+/// `UnOp{op, Lit(n)}` 一元字面量实参。
+fn unop_lit(
+    op: UnOp,
+    n: i128,
+) -> ConstExpr {
+    ConstExpr::UnOp {
+        op,
+        expr: Box::new(ConstExpr::Lit(ConstValue::Int(n))),
     }
 }
 
@@ -111,4 +122,168 @@ fn test_solver_unavailable_degrades_to_unknown_not_panic() {
         }
         other => panic!("求解器不可用必须降级为 SMTResult::Unknown，实际: {other:?}"),
     }
+}
+
+// ---- Level 4 实参折叠（issue #556：负字面量实参的证明调用不得被 E2031 假拒绝）----
+
+/// RFC-027 §3.1 / issue #556：`Eq(-5, 0)` 的实参 `-5` 落到 Level 4 时是一元取负
+/// 形态——必须折叠为 `Int(-5)` 进证明调用义务（修前：整条义务不进管道落 E2031）。
+#[test]
+fn test_proof_fn_call_folds_unary_negated_literal_args() {
+    // Arrange — 约束 Call{Eq, [UnOp{Neg, Lit(5)}, Lit(0)]}，无绑定（Level 1–3 均不可判）
+    let constraint = ConstExpr::Call {
+        func: "Eq".into(),
+        args: vec![unop_lit(UnOp::Neg, 5), ConstExpr::Lit(ConstValue::Int(0))],
+    };
+    let refined = refined_int(constraint);
+
+    // Act
+    let env = TypeEnvironment::new();
+    let ctx = ProofContext::new(&env);
+    let result = check_predicate(&ctx, &refined, &HashMap::new());
+
+    // Assert — Unproven 携带证明调用义务，实参为折叠后的 [Int(-5), Int(0)]
+    match result {
+        Err(ProofFailure::Unproven {
+            reason,
+            proof_calls,
+            ..
+        }) => {
+            assert!(
+                matches!(reason, UnprovenReason::ProofFunctionRequired),
+                "负字面量实参应折叠为证明函数调用义务，实际: {reason:?}"
+            );
+            assert_eq!(proof_calls.len(), 1, "应产出恰好一条证明调用义务");
+            assert_eq!(proof_calls[0].func_name, "Eq", "义务应指向约束里的被调函数");
+            assert!(
+                matches!(
+                    &proof_calls[0].args[..],
+                    [ConstValue::Int(-5), ConstValue::Int(0)]
+                ),
+                "实参应为折叠后的 [Int(-5), Int(0)]，实际: {:?}",
+                proof_calls[0].args
+            );
+        }
+        other => panic!("期望 Unproven 携带证明调用，实际: {other:?}"),
+    }
+}
+
+/// 取负口径（issue #556 查证项 3）：`-9223372036854775808`（i64::MIN 形态）在
+/// i128 域精确折叠——词法 `Literal::Int` 与 `ConstValue::Int` 同为 i128，
+/// `2^63` 的取负无溢出，不得到达 #507 的饱和极端分支。
+#[test]
+fn test_proof_fn_call_folds_i64_min_negated_literal() {
+    // Arrange — 约束 Call{Eq, [UnOp{Neg, Lit(2^63)}]}：i64::MIN 的取负形态
+    let constraint = ConstExpr::Call {
+        func: "Eq".into(),
+        args: vec![unop_lit(UnOp::Neg, 9223372036854775808)],
+    };
+    let refined = refined_int(constraint);
+
+    // Act
+    let env = TypeEnvironment::new();
+    let ctx = ProofContext::new(&env);
+    let result = check_predicate(&ctx, &refined, &HashMap::new());
+
+    // Assert — 折叠值 -2^63（i128 域），证明调用义务成立
+    match result {
+        Err(ProofFailure::Unproven { proof_calls, .. }) => {
+            assert!(
+                matches!(
+                    &proof_calls[0].args[..],
+                    [ConstValue::Int(-9223372036854775808)]
+                ),
+                "i64::MIN 形态应在 i128 域折叠为 Int(-9223372036854775808)，实际: {:?}",
+                proof_calls[0].args
+            );
+        }
+        other => panic!("期望 Unproven 携带证明调用，实际: {other:?}"),
+    }
+}
+
+/// #507 饱和极端形态的保守边界：`Neg(i128::MIN)` 在 i128 域无表示——共享求值器
+/// 报溢出，折叠返回 None，义务保持「不可折叠」的 Unproven（不 panic、不判伪）。
+#[test]
+fn test_proof_fn_call_unary_neg_of_i128_min_stays_unfoldable() {
+    // Arrange — 实参字面量取负后超出 i128 表示域
+    let constraint = ConstExpr::Call {
+        func: "Eq".into(),
+        args: vec![unop_lit(UnOp::Neg, i128::MIN)],
+    };
+    let refined = refined_int(constraint);
+
+    // Act
+    let env = TypeEnvironment::new();
+    let ctx = ProofContext::new(&env);
+    let result = check_predicate(&ctx, &refined, &HashMap::new());
+
+    // Assert — 空证法 Unproven（判定单元据此落 E2031），进程不 panic
+    match result {
+        Err(ProofFailure::Unproven {
+            reason,
+            proof_calls,
+            ..
+        }) => {
+            assert!(
+                matches!(reason, UnprovenReason::BeyondKernel(_)),
+                "溢出极端形态应保持保守 Unproven，实际: {reason:?}"
+            );
+            assert!(
+                proof_calls.is_empty(),
+                "折叠失败不得产出证明调用义务，实际: {proof_calls:?}"
+            );
+        }
+        other => panic!("期望 Unproven 空证法，实际: {other:?}"),
+    }
+}
+
+/// issue #559/#561 直评面锚：闭合约束含取负溢出极端形态（`-(0 - i128::MAX - 1) > 0`，
+/// 调用点实参位完整表达式文法可达）。Evaluator 的 i128 域 `checked_neg` 对
+/// i128::MIN 无表示 → Level 1 直评失败升级 SMT 面（#559 修复：不再 panic）。
+/// SMT 翻译面整数字面量精确 + 一元负号正确翻译后（issue #561），该约束的
+/// 真实整数语义 `i128::MAX + 1 > 0` 恒真 → Proved 零诊断。
+///
+/// 病史门（issue #561）：修前该形态被 SMT 翻译 artifact 假拒绝——39 位字面量
+/// `parse::<i64>` 失败落自由变量 + 一元负号翻译丢失（`Z3_mk_sub` 单参数官方
+/// 语义恒等），探针实测 E4018 带伪变量反例
+/// `170141183460469231731687303715884105727 = (- 1)`。本锚随 #561 修复翻转
+/// 判向（此前钉保守 Err：Disproved/Unproven）。
+#[test]
+fn test_check_predicate_neg_overflow_constraint_proved_after_smt_literal_faithfulness() {
+    // Arrange — Z3 运行期不可用时 SMT 判向无法观测（保守降级 Unknown），
+    // 与 proof/smt/tests/backend.rs 同模式跳过
+    if crate::frontend::core::sema::proof::smt::backend::default_solver().is_none() {
+        return;
+    }
+    // Gt(UnOp{Neg, Sub{Sub(0, MAX), 1}}, 0)：裸 Sub 链精确落 i128::MIN，
+    // 随后一元取负撞溢出分支（#559 修后）/ panic（修前）。
+    let neg_overflow = ConstExpr::UnOp {
+        op: UnOp::Neg,
+        expr: Box::new(ConstExpr::BinOp {
+            op: BinOp::Sub,
+            left: Box::new(ConstExpr::BinOp {
+                op: BinOp::Sub,
+                left: Box::new(ConstExpr::Lit(ConstValue::Int(0))),
+                right: Box::new(ConstExpr::Lit(ConstValue::Int(i128::MAX))),
+            }),
+            right: Box::new(ConstExpr::Lit(ConstValue::Int(1))),
+        }),
+    };
+    let constraint = ConstExpr::BinOp {
+        op: BinOp::Gt,
+        left: Box::new(neg_overflow),
+        right: Box::new(ConstExpr::Lit(ConstValue::Int(0))),
+    };
+    let refined = refined_int(constraint);
+
+    // Act
+    let env = TypeEnvironment::new();
+    let ctx = ProofContext::new(&env);
+    let result = check_predicate(&ctx, &refined, &HashMap::new());
+
+    // Assert — Proved（真实整数语义恒真；SMT artifact 消除后判向翻转，issue #561）
+    assert!(
+        result.is_proved(),
+        "取负溢出极端形态在 SMT 字面量保真修复后应按真实整数语义判 Proved，实际: {result:?}"
+    );
 }

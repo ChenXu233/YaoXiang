@@ -162,14 +162,17 @@ pub struct VarInfo {
     /// 挂在 VarInfo（per-binding）而不是按名字的旁表：按名的表在块内遮蔽下会取到
     /// 外层同名绑定的值，把程序特化成另一个常量——静默错值比报错严重。
     pub const_value: Option<crate::frontend::core::types::const_data::ConstValue>,
-    /// 该绑定是否**被单值钉住**（RFC-011 §4.1：声明类型就是本帧某个编译期值参数，
-    /// 如 `k: N`）——编译期已知，可作编译期证据。
+    /// 该绑定被单值钉住时，它对应的**编译期值 binder 名**（RFC-011 §4.1：`k: N` ⇒
+    /// `Some("N")`）；其它绑定为 `None`。
+    ///
+    /// 为什么不并列保留 `pinned: bool`：钉住身份的唯一用途是「把 `k` 消解回 `N`」
+    /// （C3 P3 的钉住消去），binder 名是**同一事实**的完整形态——留 bool 等于
+    /// 同一信息两处存，且第二处无法表达消解目标。
     ///
     /// 挂在 VarInfo（per-binding）而不是按名字的旁表：同名**新绑定**（match 臂、
     /// 块内遮蔽）不得继承钉住身份——`match r { k => f(k - 1)(...) }` 的 `k` 是
     /// 运行期值，按名判会把它当编译期证据（t23 F1'：运行期 q=8、按名证据 41）。
-    /// 与 `const_value` 同一条理由：按名的表在遮蔽下取到的是外层绑定的事实。
-    pub pinned: bool,
+    pub pin_binder: Option<String>,
 }
 
 /// 语义定义事件：绑定期单点采集，由 TypeChecker 排空进 SemanticDB（#433/D55）。
@@ -371,7 +374,7 @@ impl ScopeManager {
     ///
     /// 构成（6.9.2-C1 ②：只投影既有判据，不新增判据）：
     /// ① 本帧 q=0 binder 名（`const_binders`：`N` 这类可在类型位置引用的编译期值参数）；
-    /// ② 按**绑定**解析到「单值钉住」的名字（`VarInfo::pinned`，遮蔽不继承——t23 F1'）。
+    /// ② 按**绑定**解析到「单值钉住」的名字（`VarInfo::pin_binder`，遮蔽不继承——t23 F1'）。
     ///
     /// 用途：编期项的自由变量义务（项里出现这些名字 ⇒ 开项，归一化给 `Unproven`）。
     pub fn symbolic_term_names(&self) -> Vec<String> {
@@ -407,7 +410,18 @@ impl ScopeManager {
         &self,
         name: &str,
     ) -> bool {
-        self.get_var_info(name).is_some_and(|info| info.pinned)
+        self.get_var_info(name)
+            .is_some_and(|info| info.pin_binder.is_some())
+    }
+
+    /// 该名字当前解析到的绑定被单值钉住时，返回它的**编译期值 binder 名**
+    /// （`k: N` ⇒ `Some("N")`）。与 [`Self::var_pinned`] 同一条按名解析链。
+    pub fn var_pin_binder(
+        &self,
+        name: &str,
+    ) -> Option<&str> {
+        self.get_var_info(name)
+            .and_then(|info| info.pin_binder.as_deref())
     }
 
     /// 变量类型账本（只读）——所有权检查的 Move/Dup 分类用（#256）
@@ -487,7 +501,7 @@ impl ScopeManager {
             imported: false,
             compile_time_only: false,
             const_value: None,
-            pinned: false,
+            pin_binder: None,
         };
         if self.local_scopes.is_empty() {
             self.globals.insert(name, info);
@@ -517,7 +531,7 @@ impl ScopeManager {
             imported: false,
             compile_time_only: false,
             const_value: None,
-            pinned: false,
+            pin_binder: None,
         };
         if self.local_scopes.is_empty() {
             self.globals.insert(name, info);
@@ -543,7 +557,7 @@ impl ScopeManager {
             imported: true,
             compile_time_only: false,
             const_value: None,
-            pinned: false,
+            pin_binder: None,
         };
         if self.local_scopes.is_empty() {
             self.globals.insert(name, info);
@@ -560,21 +574,23 @@ impl ScopeManager {
         is_mut: bool,
         definition_span: Span,
     ) {
-        self.add_param_kind(name, poly, is_mut, definition_span, false, false);
+        self.add_param_kind(name, poly, is_mut, definition_span, false, None);
     }
 
     /// 添加**被单值钉住**的值参数（`k: N`，N 为本帧编译期值参数）。
     ///
-    /// 与 [`ScopeManager::add_param`] 的唯一差异是置上 [`VarInfo::pinned`]：
-    /// 该绑定编译期已知（可作证据）。标记随绑定走，同名新绑定不继承。
+    /// 与 [`ScopeManager::add_param`] 的唯一差异是记下 [`VarInfo::pin_binder`]
+    /// （`k: N` ⇒ `"N"`）：该绑定编译期已知（可作证据，且能被消解回 binder）。
+    /// 标记随绑定走，同名新绑定不继承。
     pub fn add_pinned_param(
         &mut self,
         name: String,
         poly: PolyType,
         is_mut: bool,
         definition_span: Span,
+        binder: String,
     ) {
-        self.add_param_kind(name, poly, is_mut, definition_span, false, true);
+        self.add_param_kind(name, poly, is_mut, definition_span, false, Some(binder));
     }
 
     /// 添加**类型参数**（`f: (T: Type) -> ...` 的 T）：同样进参数链（体内类型
@@ -586,7 +602,7 @@ impl ScopeManager {
         poly: PolyType,
         definition_span: Span,
     ) {
-        self.add_param_kind(name, poly, false, definition_span, true, false);
+        self.add_param_kind(name, poly, false, definition_span, true, None);
     }
 
     /// 参数链入链的唯一实现（值参数与类型参数共用；`compile_time_only` 是差异点）
@@ -597,7 +613,7 @@ impl ScopeManager {
         is_mut: bool,
         definition_span: Span,
         compile_time_only: bool,
-        pinned: bool,
+        pin_binder: Option<String>,
     ) {
         self.type_ledger
             .insert((self.current_stmt_key, name.clone()), poly.clone());
@@ -610,7 +626,7 @@ impl ScopeManager {
             imported: false,
             compile_time_only,
             const_value: None,
-            pinned,
+            pin_binder,
         };
         if let Some(scope) = self.param_scopes.last_mut() {
             scope.insert(name, info);

@@ -2,32 +2,50 @@ module
   fn main() -> Void
     slot[0] a : Int(64) @depth1
     slot[1] i : Int(64) @depth1
-    locals_total=10
+    locals_total=5
+    values_total=17
+    value v0: Int(64) @block0
+    value v1: Int(64) @block0
+    value v2: Int(64) @block0
+    value v3: Int(64) @block0
+    value v4: Int(64) @block0
+    value v5: Int(64) @block0
+    value v6: Generic { name: "Vec", args: [Int(64)] } @block0
+    value v7: Int(64) @block0
+    value v8: Int(64) @block0
+    value v9: Void @block0
+    value v10: TypeRef("?") @block0
+    value v11: Generic { name: "Vec", args: [Int(64)] } @block0
+    value v12: Int(64) @block0
+    value v13: TypeRef("?") @block0
+    value v14: Generic { name: "Vec", args: [Int(64)] } @block0
+    value v15: Int(64) @block0
+    value v16: TypeRef("?") @block0
     AllocArray %0 size=int(3), elem=int(1)
-    Load %1 <- int(1)
-    Load %2 <- int(0)
-    StoreIndex %0[%2] <- %1
-    Load %3 <- int(2)
-    Load %4 <- int(1)
-    StoreIndex %0[%4] <- %3
-    Load %5 <- int(3)
-    Load %6 <- int(2)
-    StoreIndex %0[%6] <- %5
+    Load v0 <- int(1)
+    Load v1 <- int(0)
+    StoreIndex %0[v1] <- v0
+    Load v2 <- int(2)
+    Load v3 <- int(1)
+    StoreIndex %0[v3] <- v2
+    Load v4 <- int(3)
+    Load v5 <- int(2)
+    StoreIndex %0[v5] <- v4
     Load %1 <- int(5)
-    Load %2 <- %0
-    Load %3 <- %1
-    Load %4 <- int(99)
-    StoreIndex %2[%3] <- %4
-    Load %4 <- %0
-    Load %5 <- int(0)
-    LoadIndex %3 <- %4[%5]
-    Load %7 <- %0
-    Load %8 <- int(0)
-    LoadIndex %6 <- %7[%8]
-    Call %9 <- string("int.to_string") [%6] (def=d0)
-    Call %2 <- string("std.io.print") [%9] (def=d1)
+    Load v6 <- %0
+    Load v7 <- %1
+    Load v8 <- int(99)
+    StoreIndex v6[v7] <- v8
+    Load v11 <- %0
+    Load v12 <- int(0)
+    LoadIndex v10 <- v11[v12]
+    Load v14 <- %0
+    Load v15 <- int(0)
+    LoadIndex v13 <- v14[v15]
+    Call v16 <- string("int.to_string") [v13] (def=d0)
+    Call v9 <- string("std.io.print") [v16] (def=d1)
     Drop %0
     Drop %1
-    Ret %2
+    Ret v9
   init (locals=0)
     Call %0 <- string("main") [] (def=d2)

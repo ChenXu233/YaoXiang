@@ -6,6 +6,17 @@
 // 此前 `Vec(Int)()` 在类型检查阶段直接报 E1001 unknown variable 'Vec'
 // （D6.2）：内置泛型容器名不在值位置的白名单里，也不在 generic_type_defs 里。
 // len= 那一条另暴露了 AllocArray 的 size 操作数被 codegen 丢弃的既有缺陷。
+//
+// 【说明锚（issue #549 甲案收口，2026-11-21）】元素相等断言的形态沿革：
+// - 原形态 `elems[0] == 1` / `elems[2] == 3` / `grown[2] == 9`：编译放行、
+//   运行期逐元素比较值正确。其静态类型实为既有索引推断缺陷——
+//   `Vec(Int)(..)` 构造结果的索引元素被推断成 `Type`（MetaType）而非 Int，
+//   旧 Eq 判定吞掉 unify 失败而未显形（同一形态的算术 `v[0] + 1` 在本批
+//   之前即报 E1002）。
+// - 新形态 `elems == Vec(Int)(1, 2, 3)` / `grown == Vec(Int)(1, 2, 9)`：
+//   两侧同为构造器产物，同型 unify 通过；运行期整容器逐元素深比较，
+//   原测试意图（元素构造定位 / 追加落位）不变。缺陷另立 issue 登记，
+//   不在本批修。
 
 use std.assert
 
@@ -14,11 +25,10 @@ main: () -> Void = {
     empty = Vec(Int)()
     assert.assert(empty.length == 0, "Vec(Int)() len == 0")
 
-    // 元素构造——长度由元素个数确定
+    // 元素构造——长度由元素个数确定（元素逐位断言见下方整容器比较说明锚）
     elems = Vec(Int)(1, 2, 3)
     assert.assert(elems.length == 3, "Vec(Int)(1,2,3) len == 3")
-    assert.assert(elems[0] == 1, "elems[0] == 1")
-    assert.assert(elems[2] == 3, "elems[2] == 3")
+    assert.assert(elems == Vec(Int)(1, 2, 3), "element ctor positions (1,2,3)")
 
     // 槽位分配——n 个零值槽位
     buf = Vec(Int)(len = 8)
@@ -37,7 +47,7 @@ main: () -> Void = {
     mut grown = Vec(Int)(1, 2)
     grown[grown.length] = 9
     assert.assert(grown.length == 3, "grown len == 3")
-    assert.assert(grown[2] == 9, "grown[2] == 9")
+    assert.assert(grown == Vec(Int)(1, 2, 9), "append lands at index 2")
 }
 
 main()

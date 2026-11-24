@@ -256,7 +256,7 @@ fn test_cross_unit_key_scope_reports_unhit_siblings_without_cross_unit_exemption
 /// （读一次 = 记一次消费）。空 `units`/`asts`：本条只钉读取面本身。
 #[test]
 fn test_resolved_method_marks_read_leaves_consumption_ledger_untouched() {
-    // Arrange：一条已登记、尚无消费者（ir_gen 未跑）的决议条目
+    // Arrange：一条已登记、尚无消费者（lower 未跑）的决议条目
     let call = PlanId::from_ordinal(7);
     let mut result = TypeCheckResult::default();
     result.overload_resolutions =

@@ -9,9 +9,9 @@
 //! - 完整诊断管线
 //! - 清除诊断
 
-use lsp_types::{DiagnosticSeverity};
+use lsp_types::DiagnosticSeverity;
 
-use crate::lsp::handlers::diagnostics::{to_lsp_diagnostic, to_lsp_diagnostics, clear_diagnostics};
+use crate::lsp::handlers::diagnostics::{clear_diagnostics, to_lsp_diagnostic, to_lsp_diagnostics};
 
 /// 4.6.1：run_diagnostics 已并入 lsp/analysis.rs 的单次编译入口——本组钉板
 /// 改驱动 analyze_document（诊断半边），断言语义不变。
@@ -23,8 +23,8 @@ fn analyze_diagnostics(
     to_lsp_diagnostics(&diagnostics)
 }
 use crate::util::diagnostic::{Diagnostic, Severity};
-use crate::util::span::Span;
 use crate::util::span::Position as YxPosition;
+use crate::util::span::Span;
 
 fn make_diag(
     severity: Severity,

@@ -9,38 +9,53 @@ module
     slot[0] a : Int(64) @depth1
     slot[1] b : Int(64) @depth1
     locals_total=3
+    values_total=1
+    value v0: Int(64) @block0
     Load %0 <- arg%0
     Load %1 <- arg%1
-    Load %2 <- %0
-    Ret %2
+    Load v0 <- %0
+    Ret v0
   fn via_param(Generic { name: "IsPositive", args: [TypeRef("n")] }) -> Int(64)
     slot[0] n : Int(64) @depth1
     locals_total=4
+    values_total=3
+    value v0: Int(64) @block0
+    value v1: Int(64) @block0
+    value v2: Int(64) @block0
     Load %0 <- arg%0
-    Load %1 <- int(7)
-    Load %2 <- %0
-    Call %3 <- string("divide") [%1, %2] (def=d0)
-    Ret %3
+    Load v1 <- int(7)
+    Load v2 <- %0
+    Call v0 <- string("divide") [v1, v2] (def=d0)
+    Ret v0
   fn guarded(Int(64), Int(64)) -> Int(64)
     slot[0] x : Int(64) @depth1
     slot[1] y : Int(64) @depth1
-    slot[5] z : Int(64) @depth3
-    locals_total=8
+    slot[2] z : Int(64) @depth3
+    locals_total=6
+    values_total=8
+    value v0: Bool @block0
+    value v1: Int(64) @block0
+    value v2: Int(64) @block0
+    value v3: Int(64) @block0
+    value v4: Int(64) @block0
+    value v5: Int(64) @block0
+    value v6: Int(64) @block0
+    value v7: Int(64) @block0
     Load %0 <- arg%0
     Load %1 <- arg%1
-    Load %2 <- %1
-    Load %3 <- int(0)
-    Gt %4 <- %2, %3
-    JmpIfNot %4 -> instr(12)
-    Load %5 <- %0
-    Load %6 <- %1
-    Call %7 <- string("divide") [%5, %6] (def=d0)
-    Load %5 <- %7
-    Ret %5
-    Drop %7
-    Load %6 <- int(1)
-    Neg %5 <- %6
-    Ret %5
+    Load v1 <- %1
+    Load v2 <- int(0)
+    Gt v0 <- v1, v2
+    JmpIfNot v0 -> instr(12)
+    Load v3 <- %0
+    Load v4 <- %1
+    Call %2 <- string("divide") [v3, v4] (def=d0)
+    Load v5 <- %2
+    Ret v5
+    Drop %2
+    Load v7 <- int(1)
+    Neg v6 <- v7
+    Ret v6
   init (locals=0)
     Load %0 <- int(5)
     Call %1 <- string("via_param") [%0] (def=d1)

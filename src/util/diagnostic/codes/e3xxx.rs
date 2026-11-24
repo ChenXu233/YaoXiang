@@ -1,6 +1,6 @@
 //! 错误码定义（define_codes! 单源条目，#326）
 
-use super::{ErrorCategory, ErrorCodeDefinition, DiagnosticBuilder};
+use super::{DiagnosticBuilder, ErrorCategory, ErrorCodeDefinition};
 
 define_codes!(E3XXX, {
     // E3004 不支持的迭代器类型
@@ -21,9 +21,14 @@ define_codes!(E3XXX, {
     ("E3008", Codegen, false, ir_unsupported_pattern(pattern: &str) => .param("pattern", pattern)),
     // E3018 单态化实例化失败（#335：此前静默跳过，下游表现为 E6006 函数表缺失）
     ("E3018", Codegen, false, ir_instantiation_failed(func: &str, reason: &str) => .param("func", func).param("reason", reason)),
-    // E3014 寄存器溢出（span 豁免：寄存器索引上限 u8=255 是编译器内部资源限制，
-    // 与具体源码位置无关；两个触发点（IR 层局部变量总数、OperandResolver 单操作数）
-    // 都拿不到函数 span。此前标 false → debug 构建直接 panic，用户看到内部堆栈）
+    // E3014 寄存器溢出。上限 u8=255 是编译器内部资源限制（与源码位置无因果）。
+    // 语义（7b.4 起）：**分配后帧槽 >255**——具名基址 + 同时活跃值峰值，由
+    // lower/scope.rs 的 finalize_code_body 在槽分配之后判（带函数体 span，
+    // 诊断准确定位）。值总数不再是判据：槽按活跃区间复用，扁平深表达式的
+    // 活跃值是常数级，装得下就必须成功。
+    // 两个触发点：① 上述 IR 层预算闸；② codegen 的 OperandResolver 单操作数
+    // 解析（拿不到函数 span）。②无从取 span，故本码保持 span_exempt=true：缺
+    // span 不 panic。（此前标 false → debug 构建直接 panic，用户看到内部堆栈）
     ("E3014", Codegen, true, register_overflow(id: &str, limit: &str) => .param("id", id).param("limit", limit)),
     // E3017 无效操作数（代码生成）
     ("E3017", Codegen, false, codegen_invalid_operand(reason: &str) => .param("reason", reason)),

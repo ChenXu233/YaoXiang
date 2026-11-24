@@ -2,13 +2,25 @@
 //!
 //! This module provides network-related functionality for YaoXiang programs.
 //!
-//! HTTP 请求为真实实现（#56）：基于 `ureq`（同步阻塞、rustls TLS），与运行时的
+//! HTTP 请求为真实实现（#56）：基于 `ureq` 3（同步阻塞、rustls TLS；#489 从 2.x 迁移，
+//! feature "rustls" = rustls(ring) + webpki-roots 1.x 打包根证书），与运行时的
 //! 显式并发模型（RFC-008/024 worker 线程池）自洽——阻塞调用只阻塞当前 worker。
 //! 响应为结构化字典 `{status: Int, headers: Dict<String, String>, body: String}`。
+//!
+//! ureq 3 下的行为契约（与 2.x 迁移对账，#489）：
+//! - Agent 以 `http_status_as_error(false)` 构建——4xx/5xx 作为正常 `Ok` 响应返回
+//!   （携带状态码与响应体），不是传输错误；
+//! - 超时用 `timeout_global`（DNS→读体全段一个预算，对位 2.x 的 `Request::timeout`）；
+//! - 重定向上限显式设 5（对位 2.x 默认 `redirects: 5`；3.x 默认是 10）；
+//! - 环境代理跟随 ureq 3 默认（`Config::default()` 即含 `Proxy::try_from_env()`，
+//!   读取 HTTP_PROXY/HTTPS_PROXY/ALL_PROXY/NO_PROXY 等标准变量集；用户 2026-11-20
+//!   裁决 issue #571：0.x 不做 2.x 兼容，直接跟进上游默认）；
+//! - 请求头名经 http crate 归一为小写写入报文（HTTP 语义大小写不敏感；2.x 原样保留），
+//!   非法头名/头值在 `call()` 时报错（2.x 是延迟校验，同为 call 时报错）。
 
 use std::collections::HashMap;
 
-use crate::backends::common::{RuntimeValue, HeapValue};
+use crate::backends::common::{HeapValue, RuntimeValue};
 use crate::backends::ExecutorError;
 use crate::std::{NativeContext, NativeExport, StdModule};
 
@@ -64,6 +76,27 @@ pub const NET_MODULE: NetModule = NetModule;
 #[cfg(not(target_arch = "wasm32"))]
 const DEFAULT_TIMEOUT_SECS: u64 = 30;
 
+/// 重定向上限。ureq 2 默认 `redirects: 5`；ureq 3 默认 10——显式对齐 2.x 行为（#489）。
+#[cfg(not(target_arch = "wasm32"))]
+const UREQ_MAX_REDIRECTS: u32 = 5;
+
+/// 按调用级超时与重定向上限构建 ureq Agent。
+///
+/// `http_status_as_error(false)`：4xx/5xx 作为正常响应返回（保留状态码与响应体），
+/// 传输层故障仍走 `Err`。环境代理跟随 ureq 3 默认——`Config::default()` 即含
+/// `Proxy::try_from_env()`，读取 HTTP_PROXY/HTTPS_PROXY/ALL_PROXY/NO_PROXY 等
+/// 标准变量集（用户 2026-11-20 裁决 issue #571：0.x 不做 2.x 兼容，直接跟进
+/// 上游默认，不设禁用兼容层）。
+#[cfg(not(target_arch = "wasm32"))]
+fn ureq_agent(timeout_secs: u64) -> ureq::Agent {
+    ureq::Agent::config_builder()
+        .http_status_as_error(false)
+        .max_redirects(UREQ_MAX_REDIRECTS)
+        .timeout_global(Some(std::time::Duration::from_secs(timeout_secs)))
+        .build()
+        .into()
+}
+
 /// Native implementation: http_get
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) fn native_http_get(
@@ -81,15 +114,13 @@ pub(crate) fn native_http_get(
     let headers = extract_request_headers(args.get(1), "http_get")?;
     let timeout_secs = extract_timeout_secs(args.get(2), "http_get")?;
 
-    let mut request = ureq::get(&url).timeout(std::time::Duration::from_secs(timeout_secs));
+    let mut request = ureq_agent(timeout_secs).get(&url);
     for (name, value) in &headers {
-        request = request.set(name, value);
+        request = request.header(name, value);
     }
 
     match request.call() {
         Ok(resp) => response_to_value(resp, ctx, "http_get", &url),
-        // 4xx/5xx 是合法响应（携带状态码与响应体），不是传输错误
-        Err(ureq::Error::Status(_, resp)) => response_to_value(resp, ctx, "http_get", &url),
         Err(e) => Err(ExecutorError::runtime_only(format!(
             "http_get failed for '{}': {}",
             url, e
@@ -115,14 +146,13 @@ pub(crate) fn native_http_post(
     let headers = extract_request_headers(args.get(2), "http_post")?;
     let timeout_secs = extract_timeout_secs(args.get(3), "http_post")?;
 
-    let mut request = ureq::post(&url).timeout(std::time::Duration::from_secs(timeout_secs));
+    let mut request = ureq_agent(timeout_secs).post(&url);
     for (name, value) in &headers {
-        request = request.set(name, value);
+        request = request.header(name, value);
     }
 
-    match request.send_string(&body) {
+    match request.send(body.as_str()) {
         Ok(resp) => response_to_value(resp, ctx, "http_post", &url),
-        Err(ureq::Error::Status(_, resp)) => response_to_value(resp, ctx, "http_post", &url),
         Err(e) => Err(ExecutorError::runtime_only(format!(
             "http_post failed for '{}': {}",
             url, e
@@ -132,18 +162,19 @@ pub(crate) fn native_http_post(
 
 /// 把 ureq 响应转成 yx 字典：`{status: Int, headers: Dict, body: String}`。
 ///
-/// 响应头键统一小写（HTTP/1.1 语义本就不区分大小写）；同名多值以 ", " 合并。
+/// 响应头键统一小写（HTTP/1.1 语义本就不区分大小写；http crate 的头名本就是小写形态）；
+/// 同名多值以 ", " 合并。
 #[cfg(not(target_arch = "wasm32"))]
 fn response_to_value(
-    resp: ureq::Response,
+    mut resp: ureq::http::Response<ureq::Body>,
     ctx: &mut NativeContext<'_>,
     fname: &str,
     url: &str,
 ) -> Result<RuntimeValue, ExecutorError> {
-    let status = RuntimeValue::Int(resp.status() as i64);
-    // 先取头再读体：`into_string` 会消耗 `Response`。
+    let status = RuntimeValue::Int(resp.status().as_u16() as i64);
+    // 先取头再读体：读体走 `body_mut()` 可变借用，与取头的共享借用分段。
     let headers = response_headers_to_map(&resp);
-    let body = read_response_body(resp, fname, url)?;
+    let body = read_response_body(&mut resp, fname, url)?;
 
     let mut map: HashMap<RuntimeValue, RuntimeValue> = HashMap::new();
     map.insert(RuntimeValue::String("status".into()), status);
@@ -158,12 +189,21 @@ fn response_to_value(
 
 /// 把响应头收集为 `{头名: 值}` 映射：头名按 HTTP/1.1 语义统一小写，同名多值以 `", "` 合并。
 #[cfg(not(target_arch = "wasm32"))]
-fn response_headers_to_map(resp: &ureq::Response) -> HashMap<RuntimeValue, RuntimeValue> {
+fn response_headers_to_map(
+    resp: &ureq::http::Response<ureq::Body>
+) -> HashMap<RuntimeValue, RuntimeValue> {
     let mut headers: HashMap<RuntimeValue, RuntimeValue> = HashMap::new();
-    for name in resp.headers_names() {
-        let joined = resp.all(&name).join(", ");
+    for name in resp.headers().keys() {
+        // `keys()` 对同名多值头会重复给出名字，重算同一份合并结果无副作用。
+        let joined = resp
+            .headers()
+            .get_all(name)
+            .iter()
+            .map(|value| String::from_utf8_lossy(value.as_bytes()).into_owned())
+            .collect::<Vec<_>>()
+            .join(", ");
         headers.insert(
-            RuntimeValue::String(name.into()),
+            RuntimeValue::String(name.as_str().into()),
             RuntimeValue::String(joined.into()),
         );
     }
@@ -171,13 +211,16 @@ fn response_headers_to_map(resp: &ureq::Response) -> HashMap<RuntimeValue, Runti
 }
 
 /// 读取响应体并包成 String 值；失败时报带 `fname`/`url` 上下文的运行时错误。
+///
+/// `read_to_string` 默认上限 10 MB、非法 UTF-8 按 lossy 替换——对位 ureq 2
+/// `into_string` 的 10 MB 上限与 lossy 转换（#489）。
 #[cfg(not(target_arch = "wasm32"))]
 fn read_response_body(
-    resp: ureq::Response,
+    resp: &mut ureq::http::Response<ureq::Body>,
     fname: &str,
     url: &str,
 ) -> Result<RuntimeValue, ExecutorError> {
-    match resp.into_string() {
+    match resp.body_mut().read_to_string() {
         Ok(text) => Ok(RuntimeValue::String(text.into())),
         Err(e) => Err(ExecutorError::runtime_only(format!(
             "{}: failed reading response body of '{}': {}",

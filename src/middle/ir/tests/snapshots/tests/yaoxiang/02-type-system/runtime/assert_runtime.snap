@@ -1,9 +1,13 @@
 module
   fn main() -> Void
     locals_total=3
-    Load %0 <- bool(true)
-    Load %1 <- string("true should pass")
-    Call %2 <- string("std.assert.assert") [%0, %1] (def=d0)
-    Ret %2
+    values_total=3
+    value v0: TypeRef("?") @block0
+    value v1: Bool @block0
+    value v2: Generic { name: "String", args: [] } @block0
+    Load v1 <- bool(true)
+    Load v2 <- string("true should pass")
+    Call v0 <- string("std.assert.assert") [v1, v2] (def=d0)
+    Ret v0
   init (locals=0)
     Call %0 <- string("main") [] (def=d1)

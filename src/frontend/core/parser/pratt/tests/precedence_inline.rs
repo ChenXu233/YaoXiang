@@ -1,82 +1,44 @@
 //! Precedence 模块测试
-//! 规范来源：pratt/precedence.rs（生产零引用的死阶梯，P8 随 05 删除，见 06-cleanup-inventory B6）
 //!
-//! 测试优先级相关功能，包括：
-//! - 优先级枚举转换
-//! - 绑定常量验证
-//! - 优先级上下文操作
+//! 规范来源：pratt/precedence.rs 的绑定力常量。
+//! 历史：本文件由 P1 复活；原先还覆盖 P8 删除的死阶梯 `Precedence` /
+//! `PrecedenceContext`，8.0.1 随死代码一并删除（见 09a §P8 8.0），
+//! 现只保留活常量的相对顺序断言。
 
 use crate::frontend::core::parser::pratt::precedence::{
-    Precedence, PrecedenceContext, BP_ASSIGN, BP_COMPARISON, BP_EQUALITY, BP_FACTOR, BP_HIGHEST,
-    BP_LOGICAL_AND, BP_LOGICAL_OR, BP_LOWEST, BP_TERM, BP_UNARY, BP_CALL,
+    BP_ASSIGN, BP_CALL, BP_COMPARISON, BP_EQUALITY, BP_FACTOR, BP_HIGHEST, BP_LOGICAL_AND,
+    BP_LOGICAL_OR, BP_LOWEST, BP_TERM,
 };
 
 #[test]
-fn test_precedence_conversion_all() {
-    assert_eq!(Precedence::Lowest.to_bp(), BP_LOWEST);
-    assert_eq!(Precedence::Assignment.to_bp(), BP_ASSIGN);
-    assert_eq!(Precedence::LogicalOr.to_bp(), BP_LOGICAL_OR);
-    assert_eq!(Precedence::LogicalAnd.to_bp(), BP_LOGICAL_AND);
-    assert_eq!(Precedence::Equality.to_bp(), BP_EQUALITY);
-    assert_eq!(Precedence::Comparison.to_bp(), BP_COMPARISON);
-    assert_eq!(Precedence::Term.to_bp(), BP_TERM);
-    assert_eq!(Precedence::Factor.to_bp(), BP_FACTOR);
-    assert_eq!(Precedence::Unary.to_bp(), BP_UNARY);
-    assert_eq!(Precedence::Call.to_bp(), BP_CALL);
-    assert_eq!(Precedence::Highest.to_bp(), BP_HIGHEST);
-}
-
-#[test]
-fn test_bp_to_precedence_all() {
-    assert_eq!(Precedence::from_bp(BP_LOWEST), Some(Precedence::Lowest));
-    assert_eq!(Precedence::from_bp(BP_ASSIGN), Some(Precedence::Assignment));
-    assert_eq!(
-        Precedence::from_bp(BP_LOGICAL_OR),
-        Some(Precedence::LogicalOr)
-    );
-    assert_eq!(
-        Precedence::from_bp(BP_LOGICAL_AND),
-        Some(Precedence::LogicalAnd)
-    );
-    assert_eq!(Precedence::from_bp(BP_EQUALITY), Some(Precedence::Equality));
-    assert_eq!(
-        Precedence::from_bp(BP_COMPARISON),
-        Some(Precedence::Comparison)
-    );
-    assert_eq!(Precedence::from_bp(BP_TERM), Some(Precedence::Term));
-    assert_eq!(Precedence::from_bp(BP_FACTOR), Some(Precedence::Factor));
-    assert_eq!(Precedence::from_bp(BP_UNARY), Some(Precedence::Unary));
-    assert_eq!(Precedence::from_bp(BP_CALL), Some(Precedence::Call));
-    assert_eq!(Precedence::from_bp(BP_HIGHEST), Some(Precedence::Highest));
-    assert_eq!(Precedence::from_bp(255), None);
-}
-
-#[test]
-fn test_precedence_context_all() {
-    let ctx = PrecedenceContext::new(BP_ASSIGN);
-    assert!(ctx.can_parse());
-    assert_eq!(ctx.min_bp, BP_ASSIGN);
-    assert_eq!(ctx.precedence, Precedence::Assignment);
-
-    let higher = ctx.increase_bp(BP_CALL);
-    assert_eq!(higher.min_bp, BP_CALL);
-    assert_eq!(higher.precedence, Precedence::Call);
-
-    let lower = higher.decrease_bp(2);
-    assert_eq!(lower.min_bp, BP_CALL - 2);
-
-    let saturated = ctx.decrease_bp(100);
-    assert_eq!(saturated.min_bp, 0);
-}
-
-#[test]
 #[allow(clippy::assertions_on_constants)]
-fn test_bp_ordering() {
-    assert!(BP_LOWEST < BP_ASSIGN);
-    assert!(BP_ASSIGN < BP_LOGICAL_OR);
-    assert!(BP_LOGICAL_AND < BP_EQUALITY);
-    assert!(BP_COMPARISON < BP_TERM);
-    assert!(BP_TERM < BP_FACTOR);
-    assert!(BP_FACTOR <= BP_CALL);
-    assert!(BP_CALL < BP_HIGHEST);
+fn test_bp_ordering_ascends_from_lowest_to_highest() {
+    assert!(
+        BP_LOWEST < BP_ASSIGN,
+        "BP_LOWEST 必须低于赋值层: {BP_LOWEST} vs {BP_ASSIGN}"
+    );
+    assert!(
+        BP_ASSIGN < BP_LOGICAL_OR,
+        "赋值层必须低于逻辑或: {BP_ASSIGN} vs {BP_LOGICAL_OR}"
+    );
+    assert!(
+        BP_LOGICAL_AND < BP_EQUALITY,
+        "逻辑与必须低于相等比较: {BP_LOGICAL_AND} vs {BP_EQUALITY}"
+    );
+    assert!(
+        BP_COMPARISON < BP_TERM,
+        "比较层必须低于加减层: {BP_COMPARISON} vs {BP_TERM}"
+    );
+    assert!(
+        BP_TERM < BP_FACTOR,
+        "加减层必须低于乘除层: {BP_TERM} vs {BP_FACTOR}"
+    );
+    assert!(
+        BP_FACTOR <= BP_CALL,
+        "乘除层不得高于调用层: {BP_FACTOR} vs {BP_CALL}"
+    );
+    assert!(
+        BP_CALL < BP_HIGHEST,
+        "调用层必须低于最高层: {BP_CALL} vs {BP_HIGHEST}"
+    );
 }

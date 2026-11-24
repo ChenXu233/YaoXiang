@@ -6,41 +6,70 @@ module
   fn main() -> Void
     slot[0] a : Int(64) @depth1
     slot[1] counter : Int(64) @depth1
-    locals_total=7
-    Load %0 <- @0
-    Load %1 <- int(42)
-    Eq %2 <- %0, %1
-    Load %3 <- string("x == 42")
-    Call %4 <- string("std.assert.assert") [%2, %3] (def=d0)
-    Load %0 <- @1
-    Load %1 <- string("YaoXiang")
-    Eq %2 <- %0, %1
-    Load %3 <- string("name == YaoXiang")
-    Call %4 <- string("std.assert.assert") [%2, %3] (def=d0)
-    Load %2 <- @2
-    Load %0 <- string("flag is true")
-    Call %4 <- string("std.assert.assert") [%2, %0] (def=d0)
-    Load %2 <- bool(true)
-    Load %0 <- string("pi assigned")
-    Call %4 <- string("std.assert.assert") [%2, %0] (def=d0)
-    Load %4 <- int(100)
-    Load %1 <- %4
-    Load %3 <- int(100)
-    Eq %0 <- %1, %3
-    Load %5 <- string("a == 100")
-    Call %2 <- string("std.assert.assert") [%0, %5] (def=d0)
-    Load %2 <- int(0)
-    Load %0 <- %2
-    Load %1 <- int(1)
-    Add %2 <- %0, %1
-    Load %3 <- %2
-    Load %5 <- int(1)
-    Eq %1 <- %3, %5
-    Load %6 <- string("counter == 1")
-    Call %0 <- string("std.assert.assert") [%1, %6] (def=d0)
-    Drop %4
-    Drop %2
-    Ret %0
+    locals_total=5
+    values_total=28
+    value v0: TypeRef("?") @block0
+    value v1: Bool @block0
+    value v2: Int(64) @block0
+    value v3: Int(64) @block0
+    value v4: Generic { name: "String", args: [] } @block0
+    value v5: TypeRef("?") @block0
+    value v6: Bool @block0
+    value v7: Generic { name: "String", args: [] } @block0
+    value v8: Generic { name: "String", args: [] } @block0
+    value v9: Generic { name: "String", args: [] } @block0
+    value v10: TypeRef("?") @block0
+    value v11: Bool @block0
+    value v12: Generic { name: "String", args: [] } @block0
+    value v13: TypeRef("?") @block0
+    value v14: Bool @block0
+    value v15: Generic { name: "String", args: [] } @block0
+    value v16: TypeRef("?") @block0
+    value v17: Bool @block0
+    value v18: Int(64) @block0
+    value v19: Int(64) @block0
+    value v20: Generic { name: "String", args: [] } @block0
+    value v21: Int(64) @block0
+    value v22: Int(64) @block0
+    value v23: TypeRef("?") @block0
+    value v24: Bool @block0
+    value v25: Int(64) @block0
+    value v26: Int(64) @block0
+    value v27: Generic { name: "String", args: [] } @block0
+    Load v2 <- @0
+    Load v3 <- int(42)
+    Eq v1 <- v2, v3
+    Load v4 <- string("x == 42")
+    Call v0 <- string("std.assert.assert") [v1, v4] (def=d0)
+    Load v7 <- @1
+    Load v8 <- string("YaoXiang")
+    Eq v6 <- v7, v8
+    Load v9 <- string("name == YaoXiang")
+    Call v5 <- string("std.assert.assert") [v6, v9] (def=d0)
+    Load v11 <- @2
+    Load v12 <- string("flag is true")
+    Call v10 <- string("std.assert.assert") [v11, v12] (def=d0)
+    Load v14 <- bool(true)
+    Load v15 <- string("pi assigned")
+    Call v13 <- string("std.assert.assert") [v14, v15] (def=d0)
+    Load %0 <- int(100)
+    Load v18 <- %0
+    Load v19 <- int(100)
+    Eq v17 <- v18, v19
+    Load v20 <- string("a == 100")
+    Call v16 <- string("std.assert.assert") [v17, v20] (def=d0)
+    Load %1 <- int(0)
+    Load v21 <- %1
+    Load v22 <- int(1)
+    Add %1 <- v21, v22
+    Load v25 <- %1
+    Load v26 <- int(1)
+    Eq v24 <- v25, v26
+    Load v27 <- string("counter == 1")
+    Call v23 <- string("std.assert.assert") [v24, v27] (def=d0)
+    Drop %0
+    Drop %1
+    Ret v23
   init (locals=0)
     Load %0 <- int(42)
     Store @0 <- %0
@@ -50,4 +79,4 @@ module
     Store @2 <- %2
     Load %3 <- float(4614253070214989087)
     Store @3 <- %3
-    Call %4 <- string("main") [] (def=d1)
+    Call %2 <- string("main") [] (def=d1)

@@ -3,10 +3,10 @@
 //! Tests for the new backend architecture including interpreter,
 //! common components, and executor functionality.
 
-use yaoxiang::backends::common::{RuntimeValue, Heap, Handle, heap::HeapValue};
-use yaoxiang::backends::{ExecutorConfig, ExecutionState};
-use yaoxiang::middle::bytecode::{BytecodeModule, BytecodeFunction};
+use yaoxiang::backends::common::{heap::HeapValue, Handle, Heap, RuntimeValue};
+use yaoxiang::backends::{ExecutionState, ExecutorConfig};
 use yaoxiang::frontend::core::MonoType;
+use yaoxiang::middle::bytecode::{BytecodeFunction, BytecodeModule};
 use yaoxiang::middle::ConstValue;
 
 #[test]

@@ -25,6 +25,10 @@
 use crate::frontend::core::parser::probe::{NameKind, TypeEnvProbe};
 // 数据面引用（parser::ast 豁免口径，同上）——`TypeLevelNamespace::scan` 的参数类型
 use crate::ast::Module;
+// #441 调用形态约束判据的数据面引用（同上豁免口径）
+use crate::ast::{Expr, Type, TypeBodyItem};
+use crate::frontend::core::types::const_data::ConstExpr;
+use crate::frontend::core::types::eval::const_eval::convert_expr_to_const_expr;
 use crate::frontend::core::types::MonoType;
 use std::collections::HashSet;
 
@@ -105,11 +109,21 @@ pub(crate) fn predicate_decl_shape(stmt: &crate::ast::Stmt) -> Option<PredicateD
             let Type::Struct { body } = definition else {
                 return None;
             };
+            // 内核形态（现状判据逐字保留）：第一个 `Expr(ConstExpr)` 项；
+            // 存在但转换失败 = 整体不登记（不换项重试，避免「挑后面一项」
+            // 的静默语义漂移）。
             let expr = body.iter().find_map(|item| match item {
                 TypeBodyItem::Expr(Type::ConstExpr(e)) => Some(e.as_ref()),
                 _ => None,
-            })?;
-            let c = convert_expr_to_const_expr(expr)?;
+            });
+            let c = match expr {
+                Some(expr) => convert_expr_to_const_expr(expr)?,
+                // #441 调用形态：纯断言体里的 `Expr(Generic)` 项——
+                // `{ check_nn(x) }` 形（RFC-027 §1 的 `{ 断言 }` 体，头是
+                // 用户函数调用）。转换失败同样整体不登记：普通泛型 /
+                // 别名应用语义不变（探针 p18/p19 实证其应用本就不走谓词）。
+                None => generic_call_constraint(body)?,
+            };
             Some(PredicateDeclShape {
                 name,
                 type_annotation: type_annotation.as_ref(),
@@ -140,7 +154,12 @@ pub(crate) fn predicate_decl_shape(stmt: &crate::ast::Stmt) -> Option<PredicateD
                 StmtKind::Return(Some(e)) => Some(e.as_ref()),
                 _ => None,
             })?;
-            let c = convert_expr_to_const_expr(expr)?;
+            let c = convert_expr_to_const_expr(expr)
+                // #441 调用形态：体即调用（`(x) => check_nn(x)` 形）——与
+                // TypeDefinition 形态的 `{ check_nn(x) }` 同一约束通道、同一
+                // 命运（#524 导入面注释已预期 Assign 形态 def 并入模板面）。
+                // 头为裸名的调用才转换；实参仍走常量判据，不放宽。
+                .or_else(|| call_expr_to_const_expr(expr))?;
             Some(PredicateDeclShape {
                 name,
                 type_annotation: fn_annotation.as_ref(),
@@ -149,6 +168,96 @@ pub(crate) fn predicate_decl_shape(stmt: &crate::ast::Stmt) -> Option<PredicateD
         }
         _ => None,
     }
+}
+
+/// 类型体**约束项**判据（#441；模板面 [`predicate_decl_shape`] 与 proof-fn
+/// 登记面 `add_type_definition` 共用——判据单源，不各写一份）：
+///
+/// - `Expr(ConstExpr)`：内核形态（既有判据，行为不变）。
+/// - `Expr(Generic)`：调用形态（`{ check_nn(x) }`）——只在**纯断言体**
+///   （全部项都是表达式项，无 Field 项）成立。带字段的记录体是 RFC-027
+///   §14 依赖记录形态，其 `Assert(N > 0)` 项走记录义务面，不得被谓词
+///   登记劫持（`Wrap: (N: Int) -> Type = { v: Int, Assert(N > 0) }` 的
+///   `Wrap(3)` 注解修前修后都必须走记录构造面）。
+pub(crate) fn is_constraint_body_item(
+    item: &TypeBodyItem,
+    body: &[TypeBodyItem],
+) -> bool {
+    match item {
+        TypeBodyItem::Expr(Type::ConstExpr(_)) => true,
+        TypeBodyItem::Expr(Type::Generic { .. }) => {
+            body.iter().all(|i| matches!(i, TypeBodyItem::Expr(_)))
+        }
+        _ => false,
+    }
+}
+
+/// 纯断言体里的**调用形态约束**（#441）：取第一个可转换为
+/// `ConstExpr::Call` 的 `Expr(Generic)` 项；体非纯断言体（含 Field 项）或
+/// 不可转换 → `None`（整体不登记，普通泛型语义不变）。
+fn generic_call_constraint(body: &[TypeBodyItem]) -> Option<ConstExpr> {
+    let assertion_only = body
+        .iter()
+        .all(|item| matches!(item, TypeBodyItem::Expr(_)));
+    if !assertion_only {
+        return None;
+    }
+    body.iter().find_map(|item| match item {
+        TypeBodyItem::Expr(ty) => generic_type_to_const_expr(ty),
+        _ => None,
+    })
+}
+
+/// `Type::Generic{…}` → `ConstExpr::Call`（#441 调用形态约束项）。
+///
+/// 实参转换：`ConstExpr` 项走 [`convert_expr_to_const_expr`]；`Name` 项是
+/// 形参名占位（`check_nn(x)` 的 `x`——与实参代入的 `NamedVar` 约定同源，
+/// `PredicateResolver::mono_type_to_const_expr` 同款）；嵌套 `Generic` 递归
+/// 为嵌套调用；其余形态（元组/指针等）不可转换 → `None`。头必须是泛型应用
+/// 名——本函数无环境可查（声明形态匹配不触环境），路径调用不在此列。
+fn generic_type_to_const_expr(ty: &Type) -> Option<ConstExpr> {
+    let Type::Generic { name, args, .. } = ty else {
+        return None;
+    };
+    if args.is_empty() {
+        return None;
+    }
+    let converted = args
+        .iter()
+        .map(|arg| match arg {
+            Type::ConstExpr(e) => convert_expr_to_const_expr(e),
+            Type::Name { name, .. } => Some(ConstExpr::NamedVar(name.clone())),
+            Type::Generic { .. } => generic_type_to_const_expr(arg),
+            _ => None,
+        })
+        .collect::<Option<Vec<_>>>()?;
+    Some(ConstExpr::Call {
+        func: name.clone(),
+        args: converted,
+    })
+}
+
+/// `Expr::Call{ func: Var(name), args }` → `ConstExpr::Call`（#441 Assign
+/// 形态调用体）。实参仍走 [`convert_expr_to_const_expr`] 常量判据——不放宽
+/// （字面量/变量/运算可转，嵌套调用递归，其余不可转）。
+fn call_expr_to_const_expr(expr: &Expr) -> Option<ConstExpr> {
+    let Expr::Call { func, args, .. } = expr else {
+        return None;
+    };
+    let Expr::Var(fname, _) = func.as_ref() else {
+        return None;
+    };
+    let converted = args
+        .iter()
+        .map(|arg| match arg {
+            Expr::Call { .. } => call_expr_to_const_expr(arg),
+            _ => convert_expr_to_const_expr(arg),
+        })
+        .collect::<Option<Vec<_>>>()?;
+    Some(ConstExpr::Call {
+        func: fname.clone(),
+        args: converted,
+    })
 }
 
 /// 类型级命名空间——「名是不是谓词」的**声明级事实**

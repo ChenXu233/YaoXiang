@@ -5,18 +5,18 @@
 //! 检查泛型类型边界和约束
 //! 支持鸭子类型：检查类型是否满足接口要求的所有方法（包括方法绑定）
 
-use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition, Result};
-use crate::frontend::core::sema::proof::verdict::{BudgetReport, ProofFailure};
+use crate::frontend::core::sema::environment::TypeEnvironment;
 use crate::frontend::core::sema::proof::verdict::DisproofKind;
 use crate::frontend::core::sema::proof::verdict::DisproofModel;
 use crate::frontend::core::sema::proof::verdict::ProofResult;
 use crate::frontend::core::sema::proof::verdict::UnprovenReason;
+use crate::frontend::core::sema::proof::verdict::{BudgetReport, ProofFailure};
 use crate::frontend::core::types::const_data::ConstVarDef;
-use crate::frontend::core::types::MonoType;
-use crate::frontend::core::types::TraitTable;
 use crate::frontend::core::types::eval::const_eval::ConstGenericEval;
 use crate::frontend::core::types::ConstValue;
-use crate::frontend::core::sema::environment::TypeEnvironment;
+use crate::frontend::core::types::MonoType;
+use crate::frontend::core::types::TraitTable;
+use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition, Result};
 use crate::util::span::Span;
 
 /// 约束检查错误
@@ -135,6 +135,11 @@ impl BoundsChecker {
                                 steps_used: 0,
                                 steps_limit: 0,
                             },
+
+                            // 该判定点无结构化命题（只有约束的文本描述，不是可渲染的项/等式），
+                            // 显式 None，不伪造命题
+                            subject: None,
+                            span: None,
                         });
                     }
                 }
@@ -167,8 +172,8 @@ impl BoundsChecker {
             MonoType::Struct(s) => s
                 .fields
                 .iter()
-                .filter(|(_, ty)| matches!(ty, MonoType::Fn { .. }))
-                .map(|(name, ty)| (name.clone(), ty))
+                .filter(|field| matches!(field.ty, MonoType::Fn { .. }))
+                .map(|field| (field.name.clone(), &field.ty))
                 .collect(),
             _ => Vec::new(),
         };

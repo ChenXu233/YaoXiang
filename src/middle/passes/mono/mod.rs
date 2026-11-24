@@ -5,21 +5,21 @@
 //! 1. 按需特化：只对实际使用的类型组合生成代码
 //! 2. 队列驱动：BFS 处理实例化请求，自动处理嵌套泛型调用
 
-use std::collections::{HashMap, HashSet, VecDeque};
 use crate::util::diagnostic::Diagnostic;
 use crate::util::diagnostic::ErrorCodeDefinition;
+use std::collections::{HashMap, HashSet, VecDeque};
 
 pub mod function;
 pub mod instance;
 
-use function::FunctionMonomorphizer;
-use instance::{GenericFunctionId, InstantiationRequest, SpecializationKey};
 use crate::ast::Quantity;
 use crate::frontend::core::sema::MonoType;
-use crate::util::span::Span;
 use crate::middle::ir::ir::{
     BasicBlock, ConstValue, FunctionBody, FunctionIR, Instruction, LocalSlot, ModuleIR, Operand,
 };
+use crate::util::span::Span;
+use function::FunctionMonomorphizer;
+use instance::{GenericFunctionId, InstantiationRequest, SpecializationKey};
 
 /// 原生类型显示名（约束派发改写面的类型头取值）。int64/float64/string/bool
 /// 经 [`crate::frontend::core::sema::operator_interfaces::
@@ -76,6 +76,16 @@ pub struct Monomorphizer {
     generic_types: HashMap<String, FunctionIR>,
     /// 已生成的特化函数
     specialized_functions: HashMap<String, FunctionIR>,
+    /// 特化/克隆名 → **定义来源函数名**（mono 建件时写入，#443）。
+    ///
+    /// `function_files`（函数名 → source_files 下标）由 link 期按 mono **前**
+    /// 的函数名建表；特化名与柯里克隆名是 mono 期新生，不继承归属的话，
+    /// codegen 给 debug span 定 file_id 时按名查不到、回退 0（文件表首条目）
+    /// ——定义方的行号被贴到调用方文件上（issue #443：std.list 的 157 行
+    /// 显示成用户文件的第 157 行）。建件两处出生点各登记一条来源，
+    /// `build_output` 统一消费成 function_files 条目；不从特化名反推原件
+    /// （字符串反推 = 平行事实，禁令三）。
+    specialized_origins: HashMap<String, String>,
     /// 待处理的实例化队列
     pending_queue: VecDeque<InstantiationRequest>,
     /// 占位请求桶（#335 路径 A）：键 = 所在泛型函数名。含 TypeRef(参数名)
@@ -99,7 +109,7 @@ pub struct Monomorphizer {
     ///
     /// 收集判据见 [`Self::curry_wrapper_target`]：包装体 = 「把本帧全部槽按序
     /// 包成下一层闭包并返回」。判据**不看名字**——层名规则（`__{name}_l{i}`）
-    /// 只属于 ir_gen，mono 在这里解析名字就是同一规则的第二处实现。
+    /// 只属于 lower，mono 在这里解析名字就是同一规则的第二处实现。
     curry_layers: HashMap<String, FunctionIR>,
     /// 逐实例柯里层克隆 → 所属**实例**名（mono 建克隆时写入）。
     ///
@@ -113,6 +123,41 @@ pub struct Monomorphizer {
     /// 擦除另做一份求值。开项（C3 面）与非标量项没有 `Literal` 形态，此时条数会少于
     /// q=0 槽数 ⇒ 擦除计划放弃该实例（宁可留运行期位，不猜）。
     instance_const_values: HashMap<String, Vec<ConstValue>>,
+    /// C3 T-b（F4 裁决 A）的**开项链计数器**：键 = (容器, callee, 静态调用点)。
+    /// 同一静态调用点跨实例累计；到 `MAX_OPEN_CHAIN` 不再建实例（不报错、不删原件）。
+    open_chain: HashMap<(String, String, crate::util::span::Span), usize>,
+    /// 开项链的**未开火登记**（唯一一条登记通道）：到界 / 代入后仍未闭 / 求值失败。
+    /// 消费者 = 直驱测试 + driver 的 debug 通道；不是用户可见诊断（不新增码）。
+    open_fire_cutoffs: Vec<OpenFireCutoff>,
+}
+
+/// 开项链每次开火的上限（C3 T-b，bound 初值 8；R9：不做配置项）。
+const MAX_OPEN_CHAIN: usize = 8;
+
+/// 开项链未开火的原因（同一条登记通道，三个来源）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OpenFireCutoffReason {
+    /// 同一静态调用点已开火 `MAX_OPEN_CHAIN` 次（到界不建实例、不报错）
+    BoundReached,
+    /// 按实例 name_map 代入后仍是开项（容器参数未被本实例钉住）
+    UnclosedTerm,
+    /// 代入后归一化**求值失败**（R4=①：不建请求 + 登记，不报错）
+    DisprovedValue,
+}
+
+/// 一条开项链未开火登记。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OpenFireCutoff {
+    /// 容器函数（实例体的来源泛型名）
+    pub container: String,
+    /// 被调方名
+    pub callee: String,
+    /// 静态调用点（泛型体内的调用位置）
+    pub site: crate::util::span::Span,
+    /// 到界时已开火次数（非到界原因为已尝试次数）
+    pub fired: usize,
+    /// 未开火原因
+    pub reason: OpenFireCutoffReason,
 }
 
 /// 一个函数的闭项擦除计划（6.9.2-C2c）。
@@ -188,6 +233,7 @@ impl Monomorphizer {
             generic_functions: HashMap::new(),
             generic_types: HashMap::new(),
             specialized_functions: HashMap::new(),
+            specialized_origins: HashMap::new(),
             all_function_names: std::collections::HashSet::new(),
             pending_queue: VecDeque::new(),
             deferred: HashMap::new(),
@@ -198,7 +244,14 @@ impl Monomorphizer {
             curry_layers: HashMap::new(),
             instance_owner: HashMap::new(),
             instance_const_values: HashMap::new(),
+            open_chain: HashMap::new(),
+            open_fire_cutoffs: Vec::new(),
         }
+    }
+
+    /// 开项链的未开火登记（C3 T-b）。消费者：直驱测试与 driver 的 debug 通道。
+    pub fn open_fire_cutoffs(&self) -> &[OpenFireCutoff] {
+        &self.open_fire_cutoffs
     }
 
     pub fn with_max_depth(max_depth: usize) -> Self {
@@ -249,11 +302,20 @@ impl Monomorphizer {
                 .unwrap_or_default();
             // 6.9.2-C1：符号判定只在**类型位**上做——编译期项位的自由名由
             // `deferred` 的容器求值负责（C2 面），这里不猜。
-            let symbolic = req
-                .mono_args()
-                .unwrap_or_default()
+            // C3 P4（F4 裁决 A 甲-闭）：**开项也判 symbolic**——项位没有类型位投影
+            // （`as_type()` 为 None）说明实参里还有容器参数；直接入队会在
+            // `monomorphize` 第 3 步的元数闸报 E3018。并入 symbolic 后进 deferred，
+            // 由容器实例开火时按 name_map 代入 + 归一化（P5）。
+            let has_open_term = req
+                .type_args
                 .iter()
-                .any(|t| contains_type_ref(t, &container_params));
+                .any(|arg| arg.as_term().is_some() && arg.as_type().is_none());
+            let symbolic = has_open_term
+                || req
+                    .mono_args()
+                    .unwrap_or_default()
+                    .iter()
+                    .any(|t| contains_type_ref(t, &container_params));
             if symbolic {
                 if let Some(cf) = &req.containing_fn {
                     self.deferred
@@ -270,13 +332,8 @@ impl Monomorphizer {
         // 4. 队列循环（BFS）
         self.process_queue()?;
 
-        // 5. 构建输出
+        // 5. 构建输出（保留全部原件；删除职责归 post-mono DCE，见 build_output）
         let mut output = self.build_output(module);
-
-        // 5b. t3 闭合闸：删除判据（按泛型名）与改写判据（按 (containing_fn, 名, span)
-        //     三元键）粒度不同——未覆盖的调用点在原件被删后会悬空（运行期 E6006）。
-        //     放回「仍被按名调用且调用点不在改写映射里」的原件，使两个判据闭合。
-        self.restore_generics_with_uncovered_call_sites(module, &mut output);
 
         // 6. 替换调用点
         self.replace_call_sites(&mut output);
@@ -323,6 +380,19 @@ impl Monomorphizer {
         format!("{base}({rendered})")
     }
 
+    /// 操作数的物理寄存器槽：`Local` 自身；`Value` 查 7b.2 的过渡映射
+    /// `FunctionBody::Code.value_slots`（mono 判据还原槽身份的唯一来源）。
+    fn operand_slot(
+        func: &FunctionIR,
+        op: &Operand,
+    ) -> Option<usize> {
+        match op {
+            Operand::Local(slot) => Some(*slot),
+            Operand::Value(id) => func.value_slots().get(id.0 as usize).copied(),
+            _ => None,
+        }
+    }
+
     /// 柯里包装体的**形状**判据：`[MakeClosure{dst, env}, Ret(dst)]`，且 `env`
     /// 恰是本帧槽位的前缀（`0..env.len()`，顺序不变）、`dst == env.len()`。
     ///
@@ -331,7 +401,7 @@ impl Monomorphizer {
     ///
     /// 为什么判形状而不是「所有 MakeClosure 目标」：函数值与匿名闭包（`{ f }`、
     /// lambda）同样发 MakeClosure，但它们不是柯里层；按实例克隆它们只会制造
-    /// 无意义的重复函数。为什么不按名字（`__f_l0`）：层名规则只属于 ir_gen，
+    /// 无意义的重复函数。为什么不按名字（`__f_l0`）：层名规则只属于 lower，
     /// mono 再解析一次就是同一规则的第二处实现（P2 要消灭的正是这种映射）。
     fn curry_wrapper_target(func: &FunctionIR) -> Option<&str> {
         let FunctionBody::Code { blocks, .. } = &func.body else {
@@ -341,18 +411,22 @@ impl Monomorphizer {
             return None;
         }
         let [Instruction::MakeClosure {
-            dst: Operand::Local(dst),
+            dst,
             func: target,
             env,
             ..
         }, Instruction::Ret {
-            value: Some(Operand::Local(ret)),
-            ..
+            value: Some(ret), ..
         }] = blocks[0].instructions.as_slice()
         else {
             return None;
         };
-        if dst != ret || *dst != env.len() {
+        if dst != ret {
+            return None;
+        }
+        // 目标闭包槽位 == env 槽数（7b.2 前 dst 是临时 Local 槽，7b.2 起是
+        // Operand::Value——按 `value_slots` 还原物理槽，判据语义不变）。
+        if Self::operand_slot(func, dst) != Some(env.len()) {
             return None;
         }
         let contiguous = env
@@ -446,7 +520,7 @@ impl Monomorphizer {
             return;
         };
         if layer.generic_params.is_some() {
-            // 防御：柯里层由 ir_gen 生成、恒无 generic_params；真命中说明形状判据
+            // 防御：柯里层由 lower 生成、恒无 generic_params；真命中说明形状判据
             // 误捕了一个泛型定义——不克隆（克隆成非泛型会是另一种语义）
             return;
         }
@@ -483,6 +557,9 @@ impl Monomorphizer {
                 self.instance_const_values
                     .insert(clone_name.clone(), values.to_vec());
             }
+            // #443：克隆继承层函数的文件归属（层是 merged IR 具名函数）
+            self.specialized_origins
+                .insert(clone_name.clone(), target.clone());
             self.specialized_functions.insert(clone_name.clone(), clone);
         }
         Self::retarget_make_closure(func, &target, &clone_name);
@@ -607,6 +684,7 @@ impl Monomorphizer {
                 blocks,
                 entry,
                 locals,
+                ..
             } = &func.body
             else {
                 continue;
@@ -692,16 +770,18 @@ impl Monomorphizer {
             instr: &mut Instruction,
             plans: &HashMap<String, ConstErasePlan>,
         ) {
-            let Instruction::Call {
-                func: Operand::Const(ConstValue::String(target)),
-                args,
-                ..
-            } = instr
-            else {
+            // 形态判据与改写面同一单点（[`Monomorphizer::rewritten_call_target`]）：
+            // 少覆盖一种形态 = 被调删了形参位而站点仍传那个实参（帧前段错位）；
+            // 多覆盖 = 对不改名的站点降实参（位置语义错乱）。三处同进同退。
+            let Some((target, _)) = Monomorphizer::rewritten_call_target(instr) else {
                 return;
             };
             let Some(plan) = plans.get(target.as_str()) else {
                 return;
+            };
+            let args = match instr {
+                Instruction::Call { args, .. } | Instruction::TailCall { args, .. } => args,
+                _ => return,
             };
             remove_positions(args, &plan.param_positions());
         }
@@ -764,7 +844,13 @@ impl Monomorphizer {
         func: &mut FunctionIR,
         plan: &ConstErasePlan,
     ) {
-        let FunctionBody::Code { blocks, locals, .. } = &mut func.body else {
+        let FunctionBody::Code {
+            blocks,
+            locals,
+            value_slots,
+            ..
+        } = &mut func.body
+        else {
             return;
         };
         if blocks.is_empty() {
@@ -779,7 +865,7 @@ impl Monomorphizer {
         for block in blocks.iter_mut() {
             for instr in &mut block.instructions {
                 instr.for_each_operand_mut(&mut |op| {
-                    if let Operand::Local(slot) | Operand::Temp(slot) = op {
+                    if let Operand::Local(slot) = op {
                         used.insert(*slot);
                     }
                 });
@@ -820,6 +906,20 @@ impl Monomorphizer {
             });
             replace.insert(*slot, Operand::Local(temp));
         }
+        // 7b.2：值 → 槽映射随槽位密排一起重映射（值槽是临时槽，必在保留集；
+        // 槽位删改后不同步会让 codegen 写错槽）。
+        let slot_remap: HashMap<usize, usize> = replace
+            .iter()
+            .filter_map(|(old, op)| match op {
+                Operand::Local(new) => Some((*old, *new)),
+                _ => None,
+            })
+            .collect();
+        for slot in value_slots.iter_mut() {
+            if let Some(new) = slot_remap.get(slot) {
+                *slot = *new;
+            }
+        }
         // 形参位重排（Arg 是**实参下标**，不是帧槽位，故单独一张表；本轮擦除面
         // 的柯里体不用 Arg，留着是为了同一处不出现第二份位置语义）
         let mut arg_map: HashMap<usize, usize> = HashMap::new();
@@ -834,7 +934,7 @@ impl Monomorphizer {
         for block in blocks.iter_mut() {
             for instr in &mut block.instructions {
                 instr.for_each_operand_mut(&mut |op| match op {
-                    Operand::Local(slot) | Operand::Temp(slot) => {
+                    Operand::Local(slot) => {
                         if let Some(new) = replace.get(slot) {
                             *op = new.clone();
                         }
@@ -1071,6 +1171,9 @@ impl Monomorphizer {
                     // 用它会漏查，递归链在第一层就断（E3005 永不触发，退回擦除执行）
                     self.fire_deferred(&generic_name, &spec.name, &name_map, child_depth);
                     self.scan_for_generic_types(&spec, child_depth);
+                    // #443：特化件继承定义方文件归属（build_output 消费）
+                    self.specialized_origins
+                        .insert(spec.name.clone(), generic_name.clone());
                     self.specialized_functions.insert(spec.name.clone(), spec);
                 }
                 None => {
@@ -1086,94 +1189,22 @@ impl Monomorphizer {
         Ok(())
     }
 
-    /// 收集一个函数体内所有「按名调用的目标名」（`Call`/`CallStatic` 的字符串操作数）。
+    /// 构建单态化输出：**保留全部原件** + 追加实例/克隆（按名排序）。
     ///
-    /// 用于判断一个未特化的泛型函数是否仍被调用——被调用就必须保留。
-    fn call_target_names(func: &FunctionIR) -> Vec<String> {
-        let FunctionBody::Code { blocks, .. } = &func.body else {
-            return Vec::new();
-        };
-        let mut out = Vec::new();
-        for block in blocks {
-            for instr in &block.instructions {
-                if let Instruction::Call {
-                    func: Operand::Const(ConstValue::String(name)),
-                    ..
-                } = instr
-                {
-                    out.push(name.clone());
-                }
-            }
-        }
-        out
-    }
-
+    /// 为什么不再按名删泛型原件（#542）：删除判据按「泛型名集合」、改写判据按
+    /// (containing_fn, 名, span) 三元键——两个粒度不闭合：未覆盖的调用点在原件被删后
+    /// 悬空（运行期 E6006），此前靠「事后放回未覆盖调用点的原件」闭合闸打补丁，
+    /// 删除面与恢复面互为前提。现在删除职责归 post-mono DCE：可达性
+    ///（名字 / DefId / MakeClosure 三面）是唯一判据，mono 只负责生成特化件，不再维护
+    /// 「按名删 + 恢复」这对互相抵消的判据。原件留给 DCE 按边判死；不可达者由 DCE 删除
+    ///（#542 的孤立共享层正是其一，见 `middle/passes/dce` 模块 doc 的根集表）。
     fn build_output(
         &self,
         module: &ModuleIR,
     ) -> ModuleIR {
-        // 保留哪些函数？
-        //
-        // 1. 非泛型函数——当然保留。
-        // 2. 泛型 TypeDecl 构造器——typecheck 对构造器调用不生成 request，
-        //    mono 启用时若删除则函数表缺 Entry → 运行时 E6006（#255）。
-        // 3. 泛型函数但**未产生任何特化**且**仍被某处按名调用**——
-        //    `std.list` 系列（`list.yx` 里声明为 `(A: Type) -> ...`）就是这类：
-        //    它们随嵌入 std 合并进来，调用点写的是 `std.list.push`（原名叫，
-        //    不是特化名）。若一并删掉，一旦别的泛型（如 `mk(Int)`）触发 mono，
-        //    `std.list.push` 就凭空消失，运行时报「Native function not found」
-        //    （实测：不调 `mk` 就正常，一调就崩）。
-        // 本次请求涉及的泛型名（这些会被特化版替换，原泛型应删）。
-        // 用 `self.site_requests` 而非全部请求：`build_output` 在队列处理完后调用，
-        // 此时 `site_requests` 就是最终确定要特化的集合。
-        let requested_generic_names: std::collections::HashSet<String> = self
-            .site_requests
-            .iter()
-            .map(|r| r.generic_id().name().to_string())
-            .collect();
-        let names_called_by_name: std::collections::HashSet<String> = module
-            .functions
-            .iter()
-            .flat_map(Self::call_target_names)
-            // init 段（模块顶层语句）的按名调用同属保留依据：它不在
-            // module.functions 里，漏扫会让「只被顶层调用的泛型」在别的泛型
-            // 触发特化时从函数表消失（与 std.list.push 同型，运行时 E6006）
-            .chain(
-                module
-                    .init
-                    .iter()
-                    .filter_map(|instr| match instr {
-                        Instruction::Call {
-                            func: Operand::Const(ConstValue::String(name)),
-                            ..
-                        } => Some(name.clone()),
-                        _ => None,
-                    })
-                    .collect::<Vec<_>>(),
-            )
-            .collect();
-
-        let mut functions: Vec<FunctionIR> = module
-            .functions
-            .iter()
-            .filter(|f| {
-                if f.generic_params.is_none() || f.is_type_decl() {
-                    return true;
-                }
-                // 已被特化的泛型：删原泛型，保留特化版（特化版由下方追加）。
-                // 判据用「实例化请求里的泛型名」而非特化名前缀——
-                // 特化名形如 `identity(int64)`，前缀匹配无法区分
-                // `identity` 与 `identity2` 这类同名前缀。
-                if requested_generic_names.contains(f.name.as_str()) {
-                    return false;
-                }
-                // 未产生实例化请求，但仍有调用点按名引用（如嵌入 std 的
-                // `std.list.push`）：必须保留，否则一旦别的泛型触发 mono，
-                // 这些函数的定义就从函数表里消失，运行时「function not found」。
-                f.name.starts_with("std.") || names_called_by_name.contains(&f.name)
-            })
-            .cloned()
-            .collect();
+        // 先放全部原件（保序），再由下方按名排序追加实例/克隆——两段都确定性，
+        // 同一源码不会因 HashMap 迭代序产出不同函数序号（dump/.42 可复现）。
+        let mut functions: Vec<FunctionIR> = module.functions.clone();
 
         // HashMap 迭代顺序随进程随机化，直接发射会让同一份源码产出不同的
         // 函数序号（进而 .42 字节不同、dump 不可复现）。按名排序固定顺序。
@@ -1181,6 +1212,20 @@ impl Monomorphizer {
         specialized.sort_by(|a, b| a.name.cmp(&b.name));
         for func in specialized {
             functions.push(func.clone());
+        }
+
+        // #443：特化/克隆名继承定义方的文件归属。`function_files` 是 link 期
+        // 按 mono 前的函数名建的；特化名缺条目时 codegen 的 debug span
+        // file_id 回退 0（文件表首条目），定义方行号贴到调用方文件
+        // （issue #443 的 std.list:157 实例）。来源在建件出生点登记
+        // （`specialized_origins`），此处统一消费——不从名字反推。
+        let mut function_files = module.function_files.clone();
+        for func in &functions {
+            if let Some(origin) = self.specialized_origins.get(&func.name) {
+                if let Some(&idx) = module.function_files.get(origin.as_str()) {
+                    function_files.insert(func.name.clone(), idx);
+                }
+            }
         }
 
         ModuleIR {
@@ -1193,7 +1238,7 @@ impl Monomorphizer {
             ffi_bindings: module.ffi_bindings.clone(),
             entry_function: module.entry_function.clone(),
             source_files: module.source_files.clone(),
-            function_files: module.function_files.clone(),
+            function_files,
         }
     }
 
@@ -1246,6 +1291,8 @@ impl Monomorphizer {
                     scope_depth: slot.scope_depth,
                     // 量词是声明侧的绑定事实，与类型替换无关：原样投影。
                     quantity: slot.quantity,
+                    // 生成帧同理：特化不改槽位归属，内层隔离判据按它比对（WBS 2.1.4）。
+                    origin: slot.origin,
                 })
                 .collect(),
             _ => Vec::new(),
@@ -1294,6 +1341,23 @@ impl Monomorphizer {
         // 生产者死变体），块原样克隆即可。
         let new_blocks: Vec<BasicBlock> = match &generic.body {
             FunctionBody::Code { blocks, .. } => blocks.clone(),
+            _ => Vec::new(),
+        };
+
+        // 7b.2：值表的类型随特化替换；定义块与槽映射原样投影（块未重编号）。
+        let new_values: Vec<crate::middle::ir::ir::ValueInfo> = match &generic.body {
+            FunctionBody::Code { values, .. } => values
+                .iter()
+                .map(|info| crate::middle::ir::ir::ValueInfo {
+                    ty: substitute_heads(&self.substitute_single_type(&info.ty, &type_map)),
+                    debug_name: info.debug_name.clone(),
+                    defining_block: info.defining_block,
+                })
+                .collect(),
+            _ => Vec::new(),
+        };
+        let new_value_slots: Vec<usize> = match &generic.body {
+            FunctionBody::Code { value_slots, .. } => value_slots.clone(),
             _ => Vec::new(),
         };
 
@@ -1375,6 +1439,8 @@ impl Monomorphizer {
                 blocks,
                 entry: new_entry,
                 locals: new_locals,
+                values: new_values,
+                value_slots: new_value_slots,
             },
         }))
     }
@@ -1532,19 +1598,109 @@ impl Monomorphizer {
         name_map: &HashMap<String, MonoType>,
         depth: usize,
     ) {
-        if let Some(bucket) = self.deferred.get(container).cloned() {
-            for r in bucket {
-                // 实参名字替换：类型位按 name_map 代入；项位原样（C2 的符号代入面）
-                let new_args: Vec<crate::frontend::core::types::mono::GenericArg> =
-                    r.type_args.iter().map(|a| a.substitute(name_map)).collect();
-                let mut nr =
-                    InstantiationRequest::new(r.generic_id.clone(), new_args, r.source_location);
-                nr.depth = depth;
-                nr.containing_fn = Some(specialized_name.to_string());
-                // 记录求值后的请求：调用点三元键映射的数据源
-                self.site_requests.push(nr.clone());
-                self.pending_queue.push_back(nr);
+        let Some(bucket) = self.deferred.get(container).cloned() else {
+            return;
+        };
+        for r in bucket {
+            // C3 P5（F4 裁决 A 甲-闭）：实参名字替换——类型位按 name_map 代入；
+            // **项位**按同一 name_map 做名字替换后再归一化（代入 ≠ 求值，P2 的函数）。
+            let mut new_args: Vec<crate::frontend::core::types::mono::GenericArg> =
+                Vec::with_capacity(r.type_args.len());
+            let mut closed_ok = true;
+            let mut disproved = false;
+            for arg in &r.type_args {
+                let crate::frontend::core::types::mono::GenericArg::Const(term) = arg else {
+                    new_args.push(arg.substitute(name_map));
+                    continue;
+                };
+                let substituted =
+                    crate::frontend::core::types::eval::const_eval::substitute_term_names(
+                        term, name_map,
+                    );
+                // 代入后**仍有自由名** ⇒ 仍是开项（容器参数未被本实例钉住）。
+                // 必须先按自由名判「未闭」再进求值器：求值器对未知名字报 Disproved
+                // （「算错」），而这里的事实是「还不能算」——两者不许混（6.9.3a 口径）。
+                if !crate::frontend::core::types::eval::const_eval::const_expr_free_names(
+                    &substituted,
+                )
+                .is_empty()
+                {
+                    closed_ok = false;
+                    break;
+                }
+                let budget =
+                    crate::frontend::core::sema::proof::budget::BudgetTracker::for_judgment();
+                match crate::frontend::core::types::eval::const_eval::normalize(
+                    &substituted,
+                    &crate::frontend::core::types::eval::const_eval::TermEnv::default(),
+                    &budget,
+                ) {
+                    Ok(value) => {
+                        new_args.push(crate::frontend::core::types::mono::GenericArg::Const(
+                            crate::frontend::core::types::const_data::ConstExpr::Lit(value),
+                        ))
+                    }
+                    // 代入后仍是开项（容器参数未被本实例钉住）：不建实例（T-b 的
+                    // 「不建实例」与「不报错」同臂）。
+                    Err(crate::frontend::core::sema::proof::verdict::ProofFailure::Unproven {
+                        ..
+                    }) => {
+                        closed_ok = false;
+                        break;
+                    }
+                    // R4=①：项求值失败 ⇒ 不建请求 + 登记，**不报错**（T-b 的边界）。
+                    Err(crate::frontend::core::sema::proof::verdict::ProofFailure::Disproved(
+                        _,
+                    )) => {
+                        disproved = true;
+                        break;
+                    }
+                }
             }
+            // T-b 键 =（容器, callee, 静态调用点）：同一静态调用点跨实例累计。
+            // 只对**开项链**计数：项位此刻已有类型位投影的请求是 C3 之前的既有
+            // deferred 形态（符号化**类型**实参），不能因 C3 引入的闸被限流。
+            let is_open_term_request = r
+                .type_args
+                .iter()
+                .any(|arg| arg.as_term().is_some() && arg.as_type().is_none());
+            let key = (
+                container.to_string(),
+                r.generic_id.name().to_string(),
+                r.source_location,
+            );
+            let fired = *self.open_chain.get(&key).unwrap_or(&0);
+            let reason = if disproved {
+                Some(OpenFireCutoffReason::DisprovedValue)
+            } else if !closed_ok {
+                Some(OpenFireCutoffReason::UnclosedTerm)
+            } else if is_open_term_request && fired >= MAX_OPEN_CHAIN {
+                Some(OpenFireCutoffReason::BoundReached)
+            } else {
+                None
+            };
+            if let Some(reason) = reason {
+                // 到界 / 未闭 / 失败都不建实例、不报错；原件保留，可达性由
+                // post-mono DCE 判定（本处不删任何原件）。
+                self.open_fire_cutoffs.push(OpenFireCutoff {
+                    container: container.to_string(),
+                    callee: r.generic_id.name().to_string(),
+                    site: r.source_location,
+                    fired,
+                    reason,
+                });
+                continue;
+            }
+            if is_open_term_request {
+                *self.open_chain.entry(key).or_insert(0) += 1;
+            }
+            let mut nr =
+                InstantiationRequest::new(r.generic_id.clone(), new_args, r.source_location);
+            nr.depth = depth;
+            nr.containing_fn = Some(specialized_name.to_string());
+            // 记录求值后的请求：调用点三元键映射的数据源
+            self.site_requests.push(nr.clone());
+            self.pending_queue.push_back(nr);
         }
     }
 
@@ -1657,19 +1813,7 @@ impl Monomorphizer {
         // 顶层调用点保留原泛型名——原泛型又被特化删除，运行期按原名查表
         // 落空（E6006，「Native function not found」，#416 家族）
         for instr in &mut module.init {
-            if let Instruction::Call {
-                func: ref mut callee,
-                span,
-                ..
-            } = instr
-            {
-                if let Operand::Const(ConstValue::String(name)) = callee {
-                    if let Some(specialized_name) = call_site_map.get(&(None, name.clone(), *span))
-                    {
-                        *callee = Operand::Const(ConstValue::String(specialized_name.clone()));
-                    }
-                }
-            }
+            Self::replace_static_call_site(instr, &call_site_map, None);
         }
     }
 
@@ -1704,134 +1848,33 @@ impl Monomorphizer {
         map
     }
 
-    /// t3 闭合闸：把「输出里仍被按名调用、但调用点不在改写映射里」的泛型原件放回函数表。
+    /// 改写面形态的按名目标（`Call` / `TailCall`）：与扫描面
+    /// [`Self::by_name_call_target`] **同一名字口径**，只窄掉 `MakeClosure`。
     ///
-    /// 缺口成因：`build_output` 的删除判据按**泛型名**（`site_requests` 的名字集合，
-    /// mod.rs `requested_generic_names`），而改写判据按 **(containing_fn, 名, span)**
-    /// 三元键（[`Self::build_call_site_map`]）。同一泛型的多个调用点里只要有一个
-    /// 没有请求键——实参符号化使请求进 `deferred` 桶、且所在函数非泛型时不排水；
-    /// 或该调用点从未产出请求——删除原件就让那个调用点悬空：运行期按原名查表落空
-    /// （E6006。实证：`src/std/tests/list_ops.yx:53` 的 `list.is_empty(list.empty(Int))`，
-    /// 该泛型名的请求只存在于同函数内另一调用点）。
-    ///
-    /// 判据与改写**同一份映射**：映射里查不到即视为未覆盖。放回的原件让该调用点
-    /// 退回类型擦除执行——正是单态化未介入时的既有语义；这不是「一律保留」：
-    /// 全部调用点都被覆盖的泛型仍按原判据删除（[`Self::build_output`]）。
-    fn restore_generics_with_uncovered_call_sites(
-        &self,
-        input: &ModuleIR,
-        output: &mut ModuleIR,
-    ) {
-        let call_site_map = self.build_call_site_map(&self.site_requests);
-        // 放回的原件体内可能再引用别的已删泛型 → 迭代到不动点。每轮至少放回一个，
-        // 上界为输入模块函数数，必然终止。
-        loop {
-            // 名单**按函数名排序**后追加：与 `build_output` 的特化函数追加同一纪律
-            //（`specialized.sort_by(|a, b| a.name.cmp(&b.name))`）。`HashSet` 迭代顺序
-            // 随进程/实例随机化（F1 实证：同一输入 4 次构建出 2 个不同的 .42 SHA256），
-            // 直接按迭代序追加会让同一份源码产出不同的函数序号——数序号即产物
-            //（dump/字节码不可复现）。
-            let mut pending: Vec<&FunctionIR> = self
-                .uncovered_call_targets(output, &call_site_map)
-                .into_iter()
-                .filter(|name| !output.functions.iter().any(|f| &f.name == name))
-                // 按名目标不是本模块定义（std native 等）——不归本闸管
-                .filter_map(|name| input.functions.iter().find(|f| f.name == name))
-                .collect();
-            if pending.is_empty() {
-                break;
+    /// 为什么以扫描面为基而不是再写一遍 match：「IR 用字符串名分发的静态调用形态」
+    /// 的唯一事实在 [`Self::by_name_call_target`]；改写面 = 其中会被
+    /// [`Self::set_static_target_name`] 改名的那些（`Call` / `TailCall` 同一操作数
+    /// 布局），`MakeClosure` 另由柯里层克隆路径负责（[`Self::emit_curry_layer_clones`]，
+    /// 6.9.2-C2b P1）。两处各写一遍形态集合 = 平行事实——#541 的病史正是扫描面覆盖
+    /// `TailCall`、改写面只放行 `Call`：站点不改名而原件按「已覆盖」被删 ⇒ 悬空
+    /// （运行期 E6006）。本条只服务改写面；可达性删除已由 post-mono DCE 接管。
+    fn rewritten_call_target(instr: &Instruction) -> Option<(String, crate::util::span::Span)> {
+        match instr {
+            Instruction::Call { .. } | Instruction::TailCall { .. } => {
+                Self::by_name_call_target(instr)
             }
-            pending.sort_by(|a, b| a.name.cmp(&b.name));
-            for original in pending {
-                output.functions.push(original.clone());
-            }
+            _ => None,
         }
-    }
-
-    /// 输出模块里**按名调用**的目标名中，调用点不在改写映射里的那些（去重）。
-    fn uncovered_call_targets(
-        &self,
-        output: &ModuleIR,
-        call_site_map: &HashMap<(Option<String>, String, crate::util::span::Span), String>,
-    ) -> HashSet<String> {
-        let mut names = HashSet::new();
-        for func in &output.functions {
-            let FunctionBody::Code { blocks, .. } = &func.body else {
-                continue;
-            };
-            for block in blocks {
-                for instr in &block.instructions {
-                    let Some((callee, span)) = Self::by_name_call_target(instr) else {
-                        continue;
-                    };
-                    // 调用点改写面只覆盖 `Call`（[`Self::call_form_is_rewritten`]）：
-                    // `TailCall` / `MakeClosure` 的按名目标**不经过它**——所以
-                    // 对本闸而言**一律计未覆盖**、不查映射键：「有键」只说明该站点
-                    // 在 typecheck 侧产过请求，不代表调用点改写面会动它。保守方向：
-                    // 宁保留（该站点退回类型擦除执行，对应特化版可能成为死码）不悬空。
-                    //
-                    // `MakeClosure` 的**柯里包装层**目标确实会被改写，但走的是
-                    // 另一条路（[`Self::emit_curry_layer_clones`] 在建实例时按实例
-                    // 克隆并重定向，6.9.2-C2b P1）；它只覆盖「实例体的包装层目标」，
-                    // 覆盖不到的函数值 / 匿名闭包目标仍需按未覆盖保守保留。
-                    if !Self::call_form_is_rewritten(instr) {
-                        names.insert(callee);
-                        continue;
-                    }
-                    // 与改写同一容器口径（P2）：两处各写一遍会让「已覆盖」与
-                    // 「被改写」分叉——被改写却没被算覆盖 = 原件被删、站点悬空
-                    let container = self.code_container(&func.name).to_string();
-                    let named = (Some(container), callee.clone(), span);
-                    let anon = (None, callee.clone(), span);
-                    if !call_site_map.contains_key(&named) && !call_site_map.contains_key(&anon) {
-                        names.insert(callee);
-                    }
-                }
-            }
-        }
-        // init 段（模块顶层语句）的按名调用：改写侧用 (None, 名, span) 兜底键；
-        // 「非改写面形态一律计未覆盖」同规则适用。
-        for instr in &output.init {
-            let Some((callee, span)) = Self::by_name_call_target(instr) else {
-                continue;
-            };
-            if !Self::call_form_is_rewritten(instr)
-                || !call_site_map.contains_key(&(None, callee.clone(), span))
-            {
-                names.insert(callee);
-            }
-        }
-        names
-    }
-
-    /// 调用点改写面（[`Self::replace_calls_in_function`]）是否覆盖该形态的按名目标。
-    ///
-    /// **只覆盖 `Call`**（且 func 为字符串常量）：`TailCall` / `MakeClosure` 的按名
-    /// 目标**不经过调用点改写面**。扫描面（[`Self::by_name_call_target`]）比改写面宽，
-    /// 不对称只在此单点判定——非改写面形态一律按「未覆盖」保守处理，触发原件保留。
-    ///
-    /// 例外（不是本判据面）：`MakeClosure` 的**柯里包装层**目标由
-    /// [`Self::emit_curry_layer_clones`] 在**建实例时**按实例克隆并重定向
-    /// （6.9.2-C2b P1）——它发生在特化阶段，与调用点改写面无关；本函数回答的是
-    /// 「这个站点会不会被调用点改写面换掉」，故对它仍答「否」。
-    fn call_form_is_rewritten(instr: &Instruction) -> bool {
-        matches!(
-            instr,
-            Instruction::Call {
-                func: Operand::Const(ConstValue::String(_)),
-                ..
-            }
-        )
     }
 
     /// 指令的**按名调用目标**与调用点 span：IR 里以字符串名分发的三种形态
     ///（`Call` / `TailCall` / `MakeClosure`）。
     ///
-    /// 不要据此假定「取到名字即会被改写」：调用点改写面只覆盖 `Call`——某形态是否
-    /// 被它覆盖由 [`Self::call_form_is_rewritten`] 单点判定；扫描面更宽的那些形态在
-    /// [`Self::uncovered_call_targets`] 里一律计未覆盖（保守保留原件，防删除后
-    /// 调用点悬空 → 运行期 E6006）。`MakeClosure` 的柯里包装层目标另由
-    /// [`Self::emit_curry_layer_clones`] 按实例改写（建实例时），不在本判据面内。
+    /// 不要据此假定「取到名字即会被改写」：调用点改写面只覆盖 `Call` / `TailCall`
+    /// ——某形态是否被它覆盖由 [`Self::rewritten_call_target`] 单点判定。
+    /// `MakeClosure` 不在改写面内：其柯里包装层目标另由
+    /// [`Self::emit_curry_layer_clones`] 按实例改写；函数值 / 匿名闭包目标由
+    /// post-mono DCE 的第 5 类根接管（见 `middle/passes/dce` 模块 doc）。
     fn by_name_call_target(instr: &Instruction) -> Option<(String, crate::util::span::Span)> {
         match instr {
             Instruction::Call {
@@ -1866,28 +1909,38 @@ impl Monomorphizer {
         if let FunctionBody::Code { blocks, .. } = &mut func.body {
             for block in blocks {
                 for instr in &mut block.instructions {
-                    // 先把「要改成什么」算出来（借用到 instr 的名字与 span），
-                    // 再动指令——改名会同时清 DefId，见 set_static_target_name
-                    let target = match instr {
-                        Instruction::Call {
-                            func: Operand::Const(ConstValue::String(name)),
-                            span,
-                            ..
-                        } => {
-                            let named = (Some(container.to_string()), name.clone(), *span);
-                            let anon = (None, name.clone(), *span);
-                            call_site_map
-                                .get(&named)
-                                .or_else(|| call_site_map.get(&anon))
-                                .cloned()
-                        }
-                        _ => None,
-                    };
-                    if let Some(target) = target {
-                        Self::set_static_target_name(instr, &target);
-                    }
+                    Self::replace_static_call_site(instr, call_site_map, Some(container));
                 }
             }
+        }
+    }
+
+    /// 单个静态调用站点的按名改写（函数体与模块 init 段**共用**这一份）。
+    ///
+    /// 不共用的历史形态：init 段曾有一段只认 `Call` 的平行实现——与函数体不同源，
+    /// 改写面扩形态时它不会跟着走，于是「扫描面覆盖、改写面落空、原件被删」的悬空
+    /// 会在 init 段复现（#541 的同类）。`container = None` 即 anon 键（顶层语句没有
+    /// 所属函数），函数体传所属实例名。
+    fn replace_static_call_site(
+        instr: &mut Instruction,
+        call_site_map: &HashMap<(Option<String>, String, crate::util::span::Span), String>,
+        container: Option<&str>,
+    ) {
+        // 先把「要改成什么」算出来（借用到 instr 的名字与 span），再动指令——
+        // 改名会同时清 DefId，见 set_static_target_name。形态判据单点 =
+        // rewritten_call_target（Call / TailCall）：与 drop_erased_call_args
+        // 同一集合。
+        let target = Self::rewritten_call_target(instr).and_then(|(name, span)| {
+            if let Some(container) = container {
+                let named = (Some(container.to_string()), name.clone(), span);
+                if let Some(hit) = call_site_map.get(&named) {
+                    return Some(hit.clone());
+                }
+            }
+            call_site_map.get(&(None, name, span)).cloned()
+        });
+        if let Some(target) = target {
+            Self::set_static_target_name(instr, &target);
         }
     }
 }

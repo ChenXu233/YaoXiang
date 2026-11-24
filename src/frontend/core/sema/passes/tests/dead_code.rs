@@ -5,10 +5,10 @@
 //! RFC-029g: `pub` 关键字已删除；未引用的顶层绑定一律参与判定，
 //! 唯一豁免口是包内引用池（RFC-029f，跨文件消费者不可见）
 
+use crate::ast::{Block, Expr, Module, PlanId, Stmt, StmtKind, Type};
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parse;
 use crate::frontend::core::sema::passes::dead_code::{DeadCodeAnalyzer, DeadCodeWarning};
-use crate::ast::{Block, Module, PlanId, Stmt, StmtKind, Expr, Type};
 use crate::util::span::Span;
 
 /// `main = (p: Point) => {}`——Point 仅出现在参数类型注解位置。

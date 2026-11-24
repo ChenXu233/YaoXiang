@@ -11,7 +11,9 @@
 
 use lsp_types::Position as LspPosition;
 
-use crate::lsp::locate::{find_identifier_at_position, span_to_range, find_all_identifier_occurrences};
+use crate::lsp::locate::{
+    find_all_identifier_occurrences, find_identifier_at_position, span_to_range,
+};
 use crate::util::span::Span;
 
 #[test]

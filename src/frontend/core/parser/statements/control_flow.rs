@@ -1,10 +1,10 @@
 //! Control flow statement parsing
 //! Handles if/else, loops, match, and return statements
 
-use crate::frontend::core::lexer::tokens::*;
 use crate::ast::*;
-use crate::util::span::Span;
+use crate::frontend::core::lexer::tokens::*;
 use crate::util::diagnostic::ErrorCodeDefinition;
+use crate::util::span::Span;
 
 /// Parse return statement: `return [expr];`
 pub fn parse_return_stmt(

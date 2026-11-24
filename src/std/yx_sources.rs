@@ -40,9 +40,9 @@ pub fn embedded_source_by_virtual_path(virtual_path: &str) -> Option<&'static st
 /// 直接遍历 vars 会把全部 std native 误标成 `std.test.*` 导出。
 pub fn embedded_std_module_info(use_path: &str) -> Option<crate::frontend::module::ModuleInfo> {
     use crate::frontend::core::parser;
-    use crate::frontend::core::tokenize;
     use crate::frontend::core::sema::checker::TypeChecker;
     use crate::frontend::core::sema::SemanticProbe;
+    use crate::frontend::core::tokenize;
     use crate::frontend::core::types::mono::MonoType;
     use crate::frontend::module::symbol::SymbolTable;
     use crate::frontend::module::{Export, ExportKind, ModuleInfo, ModuleSource};
@@ -58,7 +58,10 @@ pub fn embedded_std_module_info(use_path: &str) -> Option<crate::frontend::modul
     // 模块传入（std.yx 源里现无谓词声明，内置谓词名仍由 scan 收进）
     let namespace =
         crate::frontend::core::sema::probe::TypeLevelNamespace::scan_one(&parsed.module);
-    checker.collect_signatures(&parsed.module, &namespace);
+    // H1：与用户模块面同构——pass1 前补种本单元谓词表
+    let predicate_defs =
+        crate::frontend::core::sema::predicate_resolver::collect_predicate_defs(&parsed.module);
+    checker.collect_signatures(&parsed.module, &namespace, &predicate_defs);
     let vars = checker.env().vars.clone();
     let types = checker.env().types.clone();
     // 声明期类型参数名（按声明序）：跨模块调用的单态化需要它们绑定签名里的
@@ -77,6 +80,13 @@ pub fn embedded_std_module_info(use_path: &str) -> Option<crate::frontend::modul
                 if let Some(ty) = types.get(name).map(|p| p.body.clone()) {
                     // 跨模块类型传播：泛型模板 + 和类型变体 + 接口实现随导出携带
                     let type_payload = checker.type_def_export_payload(name, definition);
+                    // 多参数谓词形参清单（#527）：与 `extract_module_info` 的
+                    // TypeDefinition 臂同一提取器（判据单源），直读本单元 vars
+                    // 的已登记形态。嵌入 std 面当前无谓词声明——正常情况下为
+                    // None，登记面与用户单元保持同构。
+                    let proof_fn_params = vars.get(name).and_then(|p| {
+                        crate::frontend::core::sema::predicate_resolver::PredicateDef::proof_fn_params(&p.body)
+                    });
                     info.add_export(Export {
                         name: name.clone(),
                         full_path: SymbolTable::qualify(use_path, name),
@@ -90,6 +100,10 @@ pub fn embedded_std_module_info(use_path: &str) -> Option<crate::frontend::modul
                         // 跨文件 resolves_to 对 std 一律回退 use 行（4.6.1 口径）
                         definition_span: None,
                         predicate_def: None, // 嵌入 std 面当前无谓词声明（#524 载荷面）
+                        proof_fn_params,
+                        // 类型导出无函数 q=0 事实可言（#539 载荷面只服务函数导出）
+                        const_binders: Vec::new(),
+                        call_site_params: Vec::new(),
                     });
                 }
             }
@@ -104,6 +118,18 @@ pub fn embedded_std_module_info(use_path: &str) -> Option<crate::frontend::modul
                             .map(|v| v.callable_parts().0)
                             .filter(|ps| !ps.is_empty())
                             .map(|ps| ps.iter().map(|p| p.name.clone()).collect());
+                        // q=0 事实随导出携带（#539）：与 `extract_module_info`
+                        // 同一条「定义方已登记形态直读」判据（binder 清单读 vars
+                        // 的 `PolyType`、调用点形参名读签名收集期槽位表）——嵌入
+                        // 面与用户单元的导出载荷保持同构。
+                        let const_binders = vars
+                            .get(name)
+                            .map(|p| p.const_binders.clone())
+                            .unwrap_or_default();
+                        let call_site_params = checker
+                            .call_site_slot(name)
+                            .map(|s| s.names)
+                            .unwrap_or_default();
                         info.add_export(Export {
                             name: name.clone(),
                             full_path: SymbolTable::qualify(use_path, name),
@@ -119,6 +145,9 @@ pub fn embedded_std_module_info(use_path: &str) -> Option<crate::frontend::modul
                             type_payload: None,
                             definition_span: None, // 同上：std 无真实定义文件
                             predicate_def: None,   // 嵌入 std 面当前无谓词声明（#524 载荷面）
+                            proof_fn_params: None, // Assign 形态的 Fn 已随 mono_type 走（#527）
+                            const_binders,
+                            call_site_params,
                         });
                     }
                 }

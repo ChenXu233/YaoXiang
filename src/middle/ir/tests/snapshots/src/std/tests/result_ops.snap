@@ -3,70 +3,121 @@ module
     slot[0] ok_r : Int(64) @depth1
     slot[1] err_r : Int(64) @depth1
     slot[2] r2 : Int(64) @depth1
-    locals_total=11
-    Load %0 <- string("42")
-    Call %1 <- string("std.string.parse_int") [%0] (def=d0)
-    Load %2 <- %1
-    Call %3 <- string("std.result.is_ok") [%2] (def=d1)
-    Load %4 <- string("ok: is_ok")
-    Call %0 <- string("std.assert.assert") [%3, %4] (def=d2)
-    Drop %1
-    Load %4 <- %1
-    Call %2 <- string("std.result.is_err") [%4] (def=d3)
-    Not %3 <- %2
-    Load %5 <- string("ok: not is_err")
-    Call %0 <- string("std.assert.assert") [%3, %5] (def=d2)
-    Drop %1
-    Load %5 <- %1
-    Call %2 <- string("std.result.unwrap") [%5] (def=d4)
-    Load %4 <- int(42)
-    Eq %3 <- %2, %4
-    Load %6 <- string("ok: unwrap == 42")
-    Call %0 <- string("std.assert.assert") [%3, %6] (def=d2)
-    Drop %1
-    Load %5 <- %1
-    Load %7 <- int(1)
-    Neg %6 <- %7
-    Call %2 <- string("std.result.unwrap_or") [%5, %6] (def=d5)
-    Load %4 <- int(42)
-    Eq %3 <- %2, %4
-    Load %8 <- string("ok: unwrap_or == 42")
-    Call %0 <- string("std.assert.assert") [%3, %8] (def=d2)
-    Drop %1
-    Load %3 <- string("oops")
-    Call %0 <- string("std.string.parse_int") [%3] (def=d0)
-    Load %4 <- %0
-    Call %2 <- string("std.result.is_err") [%4] (def=d3)
-    Load %5 <- string("err: is_err")
-    Call %3 <- string("std.assert.assert") [%2, %5] (def=d2)
+    locals_total=6
+    values_total=50
+    value v0: Generic { name: "String", args: [] } @block0
+    value v1: TypeRef("?") @block0
+    value v2: TypeRef("?") @block0
+    value v3: Generic { name: "Result", args: [Int(64), TypeRef("Error")] } @block0
+    value v4: Generic { name: "String", args: [] } @block0
+    value v5: TypeRef("?") @block0
+    value v6: Bool @block0
+    value v7: TypeRef("?") @block0
+    value v8: Generic { name: "Result", args: [Int(64), TypeRef("Error")] } @block0
+    value v9: Generic { name: "String", args: [] } @block0
+    value v10: TypeRef("?") @block0
+    value v11: Bool @block0
+    value v12: TypeRef("?") @block0
+    value v13: Int(64) @block0
+    value v14: Generic { name: "Result", args: [Int(64), TypeRef("Error")] } @block0
+    value v15: Generic { name: "String", args: [] } @block0
+    value v16: TypeRef("?") @block0
+    value v17: Bool @block0
+    value v18: TypeRef("?") @block0
+    value v19: Int(64) @block0
+    value v20: Generic { name: "Result", args: [Int(64), TypeRef("Error")] } @block0
+    value v21: Int(64) @block0
+    value v22: Int(64) @block0
+    value v23: Generic { name: "String", args: [] } @block0
+    value v24: Generic { name: "String", args: [] } @block0
+    value v25: TypeRef("?") @block0
+    value v26: TypeRef("?") @block0
+    value v27: Generic { name: "Result", args: [Int(64), TypeRef("Error")] } @block0
+    value v28: Generic { name: "String", args: [] } @block0
+    value v29: TypeRef("?") @block0
+    value v30: Bool @block0
+    value v31: TypeRef("?") @block0
+    value v32: Generic { name: "Result", args: [Int(64), TypeRef("Error")] } @block0
+    value v33: Generic { name: "String", args: [] } @block0
+    value v34: TypeRef("?") @block0
+    value v35: Bool @block0
+    value v36: TypeRef("?") @block0
+    value v37: Int(64) @block0
+    value v38: Generic { name: "Result", args: [Int(64), TypeRef("Error")] } @block0
+    value v39: Int(64) @block0
+    value v40: Int(64) @block0
+    value v41: Int(64) @block0
+    value v42: Generic { name: "String", args: [] } @block0
+    value v43: Generic { name: "String", args: [] } @block0
+    value v44: TypeRef("?") @block0
+    value v45: Bool @block0
+    value v46: TypeRef("?") @block0
+    value v47: Int(64) @block0
+    value v48: Generic { name: "Result", args: [Int(64), TypeRef("Error")] } @block0
+    value v49: Generic { name: "String", args: [] } @block0
+    Load v0 <- string("42")
+    Call %0 <- string("std.string.parse_int") [v0] (def=d0)
+    Load v3 <- %0
+    Call v2 <- string("std.result.is_ok") [v3] (def=d1)
+    Load v4 <- string("ok: is_ok")
+    Call v1 <- string("std.assert.assert") [v2, v4] (def=d2)
     Drop %0
-    Load %5 <- %0
-    Call %4 <- string("std.result.is_ok") [%5] (def=d1)
-    Not %2 <- %4
-    Load %6 <- string("err: not is_ok")
-    Call %3 <- string("std.assert.assert") [%2, %6] (def=d2)
+    Load v8 <- %0
+    Call v7 <- string("std.result.is_err") [v8] (def=d3)
+    Not v6 <- v7
+    Load v9 <- string("ok: not is_err")
+    Call v5 <- string("std.assert.assert") [v6, v9] (def=d2)
     Drop %0
-    Load %6 <- %0
-    Load %8 <- int(1)
-    Neg %7 <- %8
-    Call %4 <- string("std.result.unwrap_or") [%6, %7] (def=d5)
-    Load %9 <- int(1)
-    Neg %5 <- %9
-    Eq %2 <- %4, %5
-    Load %10 <- string("err: unwrap_or default")
-    Call %3 <- string("std.assert.assert") [%2, %10] (def=d2)
+    Load v14 <- %0
+    Call v12 <- string("std.result.unwrap") [v14] (def=d4)
+    Load v13 <- int(42)
+    Eq v11 <- v12, v13
+    Load v15 <- string("ok: unwrap == 42")
+    Call v10 <- string("std.assert.assert") [v11, v15] (def=d2)
     Drop %0
-    Load %2 <- string("7")
-    Call %3 <- string("std.string.parse_int") [%2] (def=d0)
-    Load %7 <- %3
-    Call %5 <- string("std.result.unwrap") [%7] (def=d4)
-    Load %6 <- int(7)
-    Eq %4 <- %5, %6
-    Load %8 <- string("second instance unwrap == 7")
-    Call %2 <- string("std.assert.assert") [%4, %8] (def=d2)
+    Load v20 <- %0
+    Load v22 <- int(1)
+    Neg v21 <- v22
+    Call v18 <- string("std.result.unwrap_or") [v20, v21] (def=d5)
+    Load v19 <- int(42)
+    Eq v17 <- v18, v19
+    Load v23 <- string("ok: unwrap_or == 42")
+    Call v16 <- string("std.assert.assert") [v17, v23] (def=d2)
     Drop %0
+    Load v24 <- string("oops")
+    Call %1 <- string("std.string.parse_int") [v24] (def=d0)
+    Load v27 <- %1
+    Call v26 <- string("std.result.is_err") [v27] (def=d3)
+    Load v28 <- string("err: is_err")
+    Call v25 <- string("std.assert.assert") [v26, v28] (def=d2)
     Drop %1
-    Drop %3
-    Ret %2
+    Load v32 <- %1
+    Call v31 <- string("std.result.is_ok") [v32] (def=d1)
+    Not v30 <- v31
+    Load v33 <- string("err: not is_ok")
+    Call v29 <- string("std.assert.assert") [v30, v33] (def=d2)
+    Drop %1
+    Load v38 <- %1
+    Load v40 <- int(1)
+    Neg v39 <- v40
+    Call v36 <- string("std.result.unwrap_or") [v38, v39] (def=d5)
+    Load v41 <- int(1)
+    Neg v37 <- v41
+    Eq v35 <- v36, v37
+    Load v42 <- string("err: unwrap_or default")
+    Call v34 <- string("std.assert.assert") [v35, v42] (def=d2)
+    Drop %1
+    Load v43 <- string("7")
+    Call %2 <- string("std.string.parse_int") [v43] (def=d0)
+    Load v48 <- %2
+    Call v46 <- string("std.result.unwrap") [v48] (def=d4)
+    Load v47 <- int(7)
+    Eq v45 <- v46, v47
+    Load v49 <- string("second instance unwrap == 7")
+    Call v44 <- string("std.assert.assert") [v45, v49] (def=d2)
+    Drop %1
+    Drop %0
+    Drop %2
+    Ret v44
   init (locals=0)
     Call %0 <- string("main") [] (def=d6)

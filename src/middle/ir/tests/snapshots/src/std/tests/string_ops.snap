@@ -10,379 +10,724 @@ module
     slot[7] i : Int(64) @depth1
     slot[8] ok_c : Int(64) @depth1
     slot[9] ok_e : Int(64) @depth1
-    locals_total=18
+    locals_total=15
+    values_total=344
+    value v0: TypeRef("?") @block0
+    value v1: Bool @block0
+    value v2: TypeRef("?") @block0
+    value v3: Generic { name: "String", args: [] } @block0
+    value v4: Generic { name: "String", args: [] } @block0
+    value v5: Generic { name: "String", args: [] } @block0
+    value v6: TypeRef("?") @block0
+    value v7: Bool @block0
+    value v8: TypeRef("?") @block0
+    value v9: Generic { name: "String", args: [] } @block0
+    value v10: Generic { name: "String", args: [] } @block0
+    value v11: Generic { name: "String", args: [] } @block0
+    value v12: TypeRef("?") @block0
+    value v13: Bool @block0
+    value v14: TypeRef("?") @block0
+    value v15: Generic { name: "String", args: [] } @block0
+    value v16: Generic { name: "String", args: [] } @block0
+    value v17: Generic { name: "String", args: [] } @block0
+    value v18: TypeRef("?") @block0
+    value v19: Bool @block0
+    value v20: TypeRef("?") @block0
+    value v21: Generic { name: "String", args: [] } @block0
+    value v22: Generic { name: "String", args: [] } @block0
+    value v23: Generic { name: "String", args: [] } @block0
+    value v24: Generic { name: "String", args: [] } @block0
+    value v25: Generic { name: "String", args: [] } @block0
+    value v26: TypeRef("?") @block0
+    value v27: TypeRef("?") @block0
+    value v28: Generic { name: "String", args: [] } @block0
+    value v29: Generic { name: "String", args: [] } @block0
+    value v30: Generic { name: "String", args: [] } @block0
+    value v31: TypeRef("?") @block0
+    value v32: TypeRef("?") @block0
+    value v33: Generic { name: "String", args: [] } @block0
+    value v34: Generic { name: "String", args: [] } @block0
+    value v35: Generic { name: "String", args: [] } @block0
+    value v36: TypeRef("?") @block0
+    value v37: TypeRef("?") @block0
+    value v38: Generic { name: "String", args: [] } @block0
+    value v39: Generic { name: "String", args: [] } @block0
+    value v40: Generic { name: "String", args: [] } @block0
+    value v41: TypeRef("?") @block0
+    value v42: Bool @block0
+    value v43: TypeRef("?") @block0
+    value v44: Int(64) @block0
+    value v45: Generic { name: "String", args: [] } @block0
+    value v46: Generic { name: "String", args: [] } @block0
+    value v47: Generic { name: "String", args: [] } @block0
+    value v48: TypeRef("?") @block0
+    value v49: Bool @block0
+    value v50: TypeRef("?") @block0
+    value v51: Generic { name: "String", args: [] } @block0
+    value v52: Generic { name: "String", args: [] } @block0
+    value v53: Int(64) @block0
+    value v54: Int(64) @block0
+    value v55: Generic { name: "String", args: [] } @block0
+    value v56: TypeRef("?") @block0
+    value v57: Bool @block0
+    value v58: TypeRef("?") @block0
+    value v59: Int(64) @block0
+    value v60: Generic { name: "String", args: [] } @block0
+    value v61: Generic { name: "String", args: [] } @block0
+    value v62: TypeRef("?") @block0
+    value v63: Bool @block0
+    value v64: TypeRef("?") @block0
+    value v65: Generic { name: "String", args: [] } @block0
+    value v66: Generic { name: "String", args: [] } @block0
+    value v67: TypeRef("?") @block0
+    value v68: TypeRef("?") @block0
+    value v69: Generic { name: "String", args: [] } @block0
+    value v70: Generic { name: "String", args: [] } @block0
+    value v71: TypeRef("?") @block0
+    value v72: Bool @block0
+    value v73: TypeRef("?") @block0
+    value v74: Generic { name: "String", args: [] } @block0
+    value v75: Generic { name: "String", args: [] } @block0
+    value v76: Generic { name: "String", args: [] } @block0
+    value v77: Generic { name: "String", args: [] } @block0
+    value v78: TypeRef("?") @block0
+    value v79: Bool @block0
+    value v80: TypeRef("?") @block0
+    value v81: Generic { name: "String", args: [] } @block0
+    value v82: Generic { name: "String", args: [] } @block0
+    value v83: Int(64) @block0
+    value v84: Generic { name: "String", args: [] } @block0
+    value v85: TypeRef("?") @block0
+    value v86: Bool @block0
+    value v87: TypeRef("?") @block0
+    value v88: Generic { name: "String", args: [] } @block0
+    value v89: Generic { name: "String", args: [] } @block0
+    value v90: Generic { name: "String", args: [] } @block0
+    value v91: Generic { name: "String", args: [] } @block0
+    value v92: Generic { name: "String", args: [] } @block0
+    value v93: TypeRef("?") @block0
+    value v94: Bool @block0
+    value v95: Int(64) @block0
+    value v96: Int(64) @block0
+    value v97: Generic { name: "Vec", args: [Generic { name: "String", args: [] }] } @block0
+    value v98: Generic { name: "String", args: [] } @block0
+    value v99: Generic { name: "String", args: [] } @block0
+    value v100: Generic { name: "String", args: [] } @block0
+    value v101: TypeRef("?") @block0
+    value v102: Bool @block0
+    value v103: TypeRef("?") @block0
+    value v104: Generic { name: "String", args: [] } @block0
+    value v105: Generic { name: "Vec", args: [Generic { name: "String", args: [] }] } @block0
+    value v106: Int(64) @block0
+    value v107: Generic { name: "String", args: [] } @block0
+    value v108: Generic { name: "String", args: [] } @block0
+    value v109: TypeRef("?") @block0
+    value v110: Bool @block0
+    value v111: Int(64) @block0
+    value v112: Int(64) @block0
+    value v113: Generic { name: "Vec", args: [Generic { name: "String", args: [] }] } @block0
+    value v114: Generic { name: "String", args: [] } @block0
+    value v115: Generic { name: "String", args: [] } @block0
+    value v116: TypeRef("?") @block0
+    value v117: TypeRef("?") @block0
+    value v118: Generic { name: "Result", args: [Int(64), TypeRef("Error")] } @block0
+    value v119: Generic { name: "String", args: [] } @block0
+    value v120: Generic { name: "String", args: [] } @block0
+    value v121: TypeRef("?") @block0
+    value v122: TypeRef("?") @block0
+    value v123: Generic { name: "Result", args: [Int(64), TypeRef("Error")] } @block0
+    value v124: Generic { name: "String", args: [] } @block0
+    value v125: Generic { name: "String", args: [] } @block0
+    value v126: TypeRef("?") @block0
+    value v127: TypeRef("?") @block0
+    value v128: Generic { name: "Result", args: [Float(64), TypeRef("Error")] } @block0
+    value v129: Generic { name: "String", args: [] } @block0
+    value v130: TypeRef("?") @block0
+    value v131: Bool @block0
+    value v132: TypeRef("?") @block0
+    value v133: Int(64) @block0
+    value v134: Generic { name: "String", args: [] } @block0
+    value v135: Int(64) @block0
+    value v136: Generic { name: "String", args: [] } @block0
+    value v137: TypeRef("?") @block0
+    value v138: Bool @block0
+    value v139: TypeRef("?") @block0
+    value v140: Int(64) @block0
+    value v141: Generic { name: "String", args: [] } @block0
+    value v142: Int(64) @block0
+    value v143: Generic { name: "String", args: [] } @block0
+    value v144: TypeRef("?") @block0
+    value v145: Bool @block0
+    value v146: TypeRef("?") @block0
+    value v147: Int(64) @block0
+    value v148: Generic { name: "String", args: [] } @block0
+    value v149: Int(64) @block0
+    value v150: Generic { name: "String", args: [] } @block0
+    value v151: TypeRef("?") @block0
+    value v152: Bool @block0
+    value v153: TypeRef("?") @block0
+    value v154: Int(64) @block0
+    value v155: Generic { name: "String", args: [] } @block0
+    value v156: Int(64) @block0
+    value v157: Generic { name: "String", args: [] } @block0
+    value v158: TypeRef("?") @block0
+    value v159: Bool @block0
+    value v160: TypeRef("?") @block0
+    value v161: Int(64) @block0
+    value v162: Generic { name: "String", args: [] } @block0
+    value v163: Int(64) @block0
+    value v164: Int(64) @block0
+    value v165: Generic { name: "String", args: [] } @block0
+    value v166: TypeRef("?") @block0
+    value v167: Bool @block0
+    value v168: TypeRef("?") @block0
+    value v169: Int(64) @block0
+    value v170: Generic { name: "String", args: [] } @block0
+    value v171: Int(64) @block0
+    value v172: Int(64) @block0
+    value v173: Generic { name: "String", args: [] } @block0
+    value v174: TypeRef("?") @block0
+    value v175: Bool @block0
+    value v176: TypeRef("?") @block0
+    value v177: Int(64) @block0
+    value v178: Generic { name: "String", args: [] } @block0
+    value v179: Generic { name: "String", args: [] } @block0
+    value v180: TypeRef("?") @block0
+    value v181: Bool @block0
+    value v182: TypeRef("?") @block0
+    value v183: Int(64) @block0
+    value v184: Generic { name: "String", args: [] } @block0
+    value v185: Generic { name: "String", args: [] } @block0
+    value v186: TypeRef("?") @block0
+    value v187: Bool @block0
+    value v188: TypeRef("?") @block0
+    value v189: Int(64) @block0
+    value v190: Generic { name: "String", args: [] } @block0
+    value v191: Generic { name: "String", args: [] } @block0
+    value v192: Generic { name: "String", args: [] } @block0
+    value v193: TypeRef("?") @block0
+    value v194: Bool @block0
+    value v195: TypeRef("?") @block0
+    value v196: Int(64) @block0
+    value v197: Generic { name: "String", args: [] } @block0
+    value v198: Generic { name: "String", args: [] } @block0
+    value v199: Generic { name: "String", args: [] } @block0
+    value v200: Generic { name: "String", args: [] } @block0
+    value v201: Generic { name: "String", args: [] } @block0
+    value v202: TypeRef("?") @block0
+    value v203: Bool @block0
+    value v204: TypeRef("?") @block0
+    value v205: Generic { name: "String", args: [] } @block0
+    value v206: Generic { name: "String", args: [] } @block0
+    value v207: Int(64) @block0
+    value v208: Int(64) @block0
+    value v209: Int(64) @block0
+    value v210: Int(64) @block0
+    value v211: Generic { name: "String", args: [] } @block0
+    value v212: TypeRef("?") @block0
+    value v213: Bool @block0
+    value v214: TypeRef("?") @block0
+    value v215: Int(64) @block0
+    value v216: Generic { name: "String", args: [] } @block0
+    value v217: Int(64) @block0
+    value v218: Generic { name: "String", args: [] } @block0
+    value v219: Int(64) @block0
+    value v220: TypeRef("?") @block0
+    value v221: TypeRef("?") @block0
+    value v222: Generic { name: "Result", args: [Generic { name: "String", args: [] }, TypeRef("Error")] } @block0
+    value v223: Generic { name: "String", args: [] } @block0
+    value v224: TypeRef("?") @block0
+    value v225: Bool @block0
+    value v226: TypeRef("?") @block0
+    value v227: Generic { name: "String", args: [] } @block0
+    value v228: Generic { name: "Result", args: [Generic { name: "String", args: [] }, TypeRef("Error")] } @block0
+    value v229: Generic { name: "String", args: [] } @block0
+    value v230: Int(64) @block0
+    value v231: TypeRef("?") @block0
+    value v232: TypeRef("?") @block0
+    value v233: Generic { name: "Result", args: [Generic { name: "String", args: [] }, TypeRef("Error")] } @block0
+    value v234: Generic { name: "String", args: [] } @block0
+    value v235: TypeRef("?") @block0
+    value v236: Bool @block0
+    value v237: TypeRef("?") @block0
+    value v238: Int(64) @block0
+    value v239: TypeRef("?") @block0
+    value v240: Generic { name: "Result", args: [Generic { name: "String", args: [] }, TypeRef("Error")] } @block0
+    value v241: Int(64) @block0
+    value v242: Generic { name: "String", args: [] } @block0
+    value v243: TypeRef("?") @block0
+    value v244: TypeRef("?") @block0
+    value v245: TypeRef("?") @block0
+    value v246: Int(64) @block0
+    value v247: Int(64) @block0
+    value v248: Generic { name: "String", args: [] } @block0
+    value v249: TypeRef("?") @block0
+    value v250: TypeRef("?") @block0
+    value v251: TypeRef("?") @block0
+    value v252: Int(64) @block0
+    value v253: Generic { name: "String", args: [] } @block0
+    value v254: TypeRef("?") @block0
+    value v255: TypeRef("?") @block0
+    value v256: TypeRef("?") @block0
+    value v257: Int(64) @block0
+    value v258: Generic { name: "String", args: [] } @block0
+    value v259: TypeRef("?") @block0
+    value v260: Bool @block0
+    value v261: TypeRef("?") @block0
+    value v262: Generic { name: "String", args: [] } @block0
+    value v263: Generic { name: "String", args: [] } @block0
+    value v264: Generic { name: "String", args: [] } @block0
+    value v265: Generic { name: "String", args: [] } @block0
+    value v266: TypeRef("?") @block0
+    value v267: Bool @block0
+    value v268: TypeRef("?") @block0
+    value v269: Generic { name: "String", args: [] } @block0
+    value v270: Generic { name: "String", args: [] } @block0
+    value v271: Int(64) @block0
+    value v272: Int(64) @block0
+    value v273: Generic { name: "String", args: [] } @block0
+    value v274: TypeRef("?") @block0
+    value v275: Bool @block0
+    value v276: TypeRef("?") @block0
+    value v277: Generic { name: "String", args: [] } @block0
+    value v278: Generic { name: "String", args: [] } @block0
+    value v279: Generic { name: "String", args: [] } @block0
+    value v280: TypeRef("?") @block0
+    value v281: Bool @block0
+    value v282: TypeRef("?") @block0
+    value v283: Generic { name: "String", args: [] } @block0
+    value v284: Generic { name: "String", args: [] } @block0
+    value v285: Generic { name: "String", args: [] } @block0
+    value v286: TypeRef("?") @block0
+    value v287: Bool @block0
+    value v288: TypeRef("?") @block0
+    value v289: Generic { name: "String", args: [] } @block0
+    value v290: Generic { name: "String", args: [] } @block0
+    value v291: Float(64) @block0
+    value v292: Generic { name: "String", args: [] } @block0
+    value v293: TypeRef("?") @block0
+    value v294: Bool @block0
+    value v295: TypeRef("?") @block0
+    value v296: Generic { name: "String", args: [] } @block0
+    value v297: Generic { name: "String", args: [] } @block0
+    value v298: Int(64) @block0
+    value v299: Int(64) @block0
+    value v300: Generic { name: "String", args: [] } @block0
+    value v301: TypeRef("?") @block0
+    value v302: Bool @block0
+    value v303: TypeRef("?") @block0
+    value v304: Generic { name: "String", args: [] } @block0
+    value v305: Generic { name: "String", args: [] } @block0
+    value v306: Int(64) @block0
+    value v307: Int(64) @block0
+    value v308: Generic { name: "String", args: [] } @block0
+    value v309: TypeRef("?") @block0
+    value v310: Bool @block0
+    value v311: TypeRef("?") @block0
+    value v312: Generic { name: "String", args: [] } @block0
+    value v313: Generic { name: "String", args: [] } @block0
+    value v314: Int(64) @block0
+    value v315: Generic { name: "String", args: [] } @block0
+    value v316: TypeRef("?") @block0
+    value v317: Bool @block0
+    value v318: TypeRef("?") @block0
+    value v319: Generic { name: "String", args: [] } @block0
+    value v320: Generic { name: "String", args: [] } @block0
+    value v321: Float(64) @block0
+    value v322: Generic { name: "String", args: [] } @block0
+    value v323: TypeRef("?") @block0
+    value v324: Bool @block0
+    value v325: TypeRef("?") @block0
+    value v326: Generic { name: "String", args: [] } @block0
+    value v327: Generic { name: "String", args: [] } @block0
+    value v328: Float(64) @block0
+    value v329: Generic { name: "String", args: [] } @block0
+    value v330: TypeRef("?") @block0
+    value v331: Bool @block0
+    value v332: TypeRef("?") @block0
+    value v333: Generic { name: "String", args: [] } @block0
+    value v334: Generic { name: "String", args: [] } @block0
+    value v335: Generic { name: "String", args: [] } @block0
+    value v336: Generic { name: "String", args: [] } @block0
+    value v337: TypeRef("?") @block0
+    value v338: Bool @block0
+    value v339: TypeRef("?") @block0
+    value v340: Generic { name: "String", args: [] } @block0
+    value v341: Generic { name: "String", args: [] } @block0
+    value v342: Generic { name: "String", args: [] } @block0
+    value v343: Generic { name: "String", args: [] } @block0
     Load %0 <- string("  Hello World  ")
-    Load %1 <- %0
-    Call %2 <- string("std.string.trim") [%1] (def=d0)
-    Load %3 <- string("Hello World")
-    Eq %4 <- %2, %3
-    Load %5 <- string("trim")
-    Call %6 <- string("std.assert.assert") [%4, %5] (def=d1)
+    Load v4 <- %0
+    Call v2 <- string("std.string.trim") [v4] (def=d0)
+    Load v3 <- string("Hello World")
+    Eq v1 <- v2, v3
+    Load v5 <- string("trim")
+    Call v0 <- string("std.assert.assert") [v1, v5] (def=d1)
     Drop %0
-    Load %1 <- string("abc")
-    Call %2 <- string("std.string.upper") [%1] (def=d2)
-    Load %3 <- string("ABC")
-    Eq %4 <- %2, %3
-    Load %5 <- string("upper")
-    Call %6 <- string("std.assert.assert") [%4, %5] (def=d1)
-    Load %1 <- string("ABC")
-    Call %2 <- string("std.string.lower") [%1] (def=d3)
-    Load %3 <- string("abc")
-    Eq %4 <- %2, %3
-    Load %5 <- string("lower")
-    Call %6 <- string("std.assert.assert") [%4, %5] (def=d1)
-    Load %1 <- string("a-b-c")
-    Load %5 <- string("-")
-    Load %7 <- string("+")
-    Call %2 <- string("std.string.replace") [%1, %5, %7] (def=d4)
-    Load %3 <- string("a+b+c")
-    Eq %4 <- %2, %3
-    Load %8 <- string("replace")
-    Call %6 <- string("std.assert.assert") [%4, %8] (def=d1)
-    Load %2 <- string("hello")
-    Load %3 <- string("ell")
-    Call %4 <- string("std.string.contains") [%2, %3] (def=d5)
-    Load %1 <- string("contains")
-    Call %6 <- string("std.assert.assert") [%4, %1] (def=d1)
-    Load %2 <- string("hello")
-    Load %3 <- string("he")
-    Call %4 <- string("std.string.starts_with") [%2, %3] (def=d6)
-    Load %1 <- string("starts_with")
-    Call %6 <- string("std.assert.assert") [%4, %1] (def=d1)
-    Load %2 <- string("hello")
-    Load %3 <- string("lo")
-    Call %4 <- string("std.string.ends_with") [%2, %3] (def=d7)
-    Load %1 <- string("ends_with")
-    Call %6 <- string("std.assert.assert") [%4, %1] (def=d1)
-    Load %1 <- string("hello")
-    Load %5 <- string("ll")
-    Call %2 <- string("std.string.index_of") [%1, %5] (def=d8)
-    Load %3 <- int(2)
-    Eq %4 <- %2, %3
-    Load %7 <- string("index_of")
-    Call %6 <- string("std.assert.assert") [%4, %7] (def=d1)
-    Load %1 <- string("hello")
-    Load %5 <- int(1)
-    Load %7 <- int(4)
-    Call %2 <- string("std.string.substring") [%1, %5, %7] (def=d9)
-    Load %3 <- string("ell")
-    Eq %4 <- %2, %3
-    Load %8 <- string("substring")
-    Call %6 <- string("std.assert.assert") [%4, %8] (def=d1)
-    Load %1 <- string("hello")
-    Call %2 <- string("std.string.len") [%1] (def=d10)
-    Load %3 <- int(5)
-    Eq %4 <- %2, %3
-    Load %5 <- string("len")
-    Call %6 <- string("std.assert.assert") [%4, %5] (def=d1)
-    Load %3 <- string("x")
-    Call %2 <- string("std.string.is_empty") [%3] (def=d11)
-    Not %4 <- %2
-    Load %1 <- string("not is_empty")
-    Call %6 <- string("std.assert.assert") [%4, %1] (def=d1)
-    Load %2 <- string("")
-    Call %4 <- string("std.string.is_empty") [%2] (def=d11)
-    Load %3 <- string("is_empty")
-    Call %6 <- string("std.assert.assert") [%4, %3] (def=d1)
-    Load %1 <- string("a")
-    Load %5 <- string("b")
-    Call %2 <- string("std.string.concat") [%1, %5] (def=d12)
-    Load %3 <- string("ab")
-    Eq %4 <- %2, %3
-    Load %7 <- string("concat")
-    Call %6 <- string("std.assert.assert") [%4, %7] (def=d1)
-    Load %1 <- string("ab")
-    Load %5 <- int(3)
-    Call %2 <- string("std.string.repeat") [%1, %5] (def=d13)
-    Load %3 <- string("ababab")
-    Eq %4 <- %2, %3
-    Load %7 <- string("repeat")
-    Call %6 <- string("std.assert.assert") [%4, %7] (def=d1)
-    Load %1 <- string("abc")
-    Call %2 <- string("std.string.reverse") [%1] (def=d14)
-    Load %3 <- string("cba")
-    Eq %4 <- %2, %3
-    Load %5 <- string("reverse")
-    Call %6 <- string("std.assert.assert") [%4, %5] (def=d1)
-    Load %4 <- string("x,y,z")
-    Load %2 <- string(",")
-    Call %6 <- string("std.string.split") [%4, %2] (def=d15)
-    Load %5 <- %6
-    StringLength %3 <- %5
-    Load %1 <- int(3)
-    Eq %2 <- %3, %1
-    Load %7 <- string("split len 3")
-    Call %4 <- string("std.assert.assert") [%2, %7] (def=d1)
-    Load %2 <- string("x,y,z")
-    Load %3 <- string(",")
-    Call %4 <- string("std.string.split") [%2, %3] (def=d15)
-    Load %7 <- %4
-    Load %8 <- int(0)
-    LoadIndex %1 <- %7[%8]
-    Load %5 <- string("x")
-    Eq %3 <- %1, %5
-    Load %9 <- string("split[0] == x")
-    Call %2 <- string("std.assert.assert") [%3, %9] (def=d1)
-    Load %3 <- string("ab")
-    Call %2 <- string("std.string.chars") [%3] (def=d16)
-    Load %8 <- %2
-    StringLength %5 <- %8
-    Load %7 <- int(2)
-    Eq %1 <- %5, %7
-    Load %9 <- string("chars len 2")
-    Call %3 <- string("std.assert.assert") [%1, %9] (def=d1)
-    Load %1 <- string("42")
-    Call %3 <- string("std.string.parse_int") [%1] (def=d17)
-    Load %7 <- %3
-    Call %5 <- string("std.result.is_ok") [%7] (def=d18)
-    Load %8 <- string("parse_int ok")
-    Call %1 <- string("std.assert.assert") [%5, %8] (def=d1)
+    Load v10 <- string("abc")
+    Call v8 <- string("std.string.upper") [v10] (def=d2)
+    Load v9 <- string("ABC")
+    Eq v7 <- v8, v9
+    Load v11 <- string("upper")
+    Call v6 <- string("std.assert.assert") [v7, v11] (def=d1)
+    Load v16 <- string("ABC")
+    Call v14 <- string("std.string.lower") [v16] (def=d3)
+    Load v15 <- string("abc")
+    Eq v13 <- v14, v15
+    Load v17 <- string("lower")
+    Call v12 <- string("std.assert.assert") [v13, v17] (def=d1)
+    Load v22 <- string("a-b-c")
+    Load v23 <- string("-")
+    Load v24 <- string("+")
+    Call v20 <- string("std.string.replace") [v22, v23, v24] (def=d4)
+    Load v21 <- string("a+b+c")
+    Eq v19 <- v20, v21
+    Load v25 <- string("replace")
+    Call v18 <- string("std.assert.assert") [v19, v25] (def=d1)
+    Load v28 <- string("hello")
+    Load v29 <- string("ell")
+    Call v27 <- string("std.string.contains") [v28, v29] (def=d5)
+    Load v30 <- string("contains")
+    Call v26 <- string("std.assert.assert") [v27, v30] (def=d1)
+    Load v33 <- string("hello")
+    Load v34 <- string("he")
+    Call v32 <- string("std.string.starts_with") [v33, v34] (def=d6)
+    Load v35 <- string("starts_with")
+    Call v31 <- string("std.assert.assert") [v32, v35] (def=d1)
+    Load v38 <- string("hello")
+    Load v39 <- string("lo")
+    Call v37 <- string("std.string.ends_with") [v38, v39] (def=d7)
+    Load v40 <- string("ends_with")
+    Call v36 <- string("std.assert.assert") [v37, v40] (def=d1)
+    Load v45 <- string("hello")
+    Load v46 <- string("ll")
+    Call v43 <- string("std.string.index_of") [v45, v46] (def=d8)
+    Load v44 <- int(2)
+    Eq v42 <- v43, v44
+    Load v47 <- string("index_of")
+    Call v41 <- string("std.assert.assert") [v42, v47] (def=d1)
+    Load v52 <- string("hello")
+    Load v53 <- int(1)
+    Load v54 <- int(4)
+    Call v50 <- string("std.string.substring") [v52, v53, v54] (def=d9)
+    Load v51 <- string("ell")
+    Eq v49 <- v50, v51
+    Load v55 <- string("substring")
+    Call v48 <- string("std.assert.assert") [v49, v55] (def=d1)
+    Load v60 <- string("hello")
+    Call v58 <- string("std.string.len") [v60] (def=d10)
+    Load v59 <- int(5)
+    Eq v57 <- v58, v59
+    Load v61 <- string("len")
+    Call v56 <- string("std.assert.assert") [v57, v61] (def=d1)
+    Load v65 <- string("x")
+    Call v64 <- string("std.string.is_empty") [v65] (def=d11)
+    Not v63 <- v64
+    Load v66 <- string("not is_empty")
+    Call v62 <- string("std.assert.assert") [v63, v66] (def=d1)
+    Load v69 <- string("")
+    Call v68 <- string("std.string.is_empty") [v69] (def=d11)
+    Load v70 <- string("is_empty")
+    Call v67 <- string("std.assert.assert") [v68, v70] (def=d1)
+    Load v75 <- string("a")
+    Load v76 <- string("b")
+    Call v73 <- string("std.string.concat") [v75, v76] (def=d12)
+    Load v74 <- string("ab")
+    Eq v72 <- v73, v74
+    Load v77 <- string("concat")
+    Call v71 <- string("std.assert.assert") [v72, v77] (def=d1)
+    Load v82 <- string("ab")
+    Load v83 <- int(3)
+    Call v80 <- string("std.string.repeat") [v82, v83] (def=d13)
+    Load v81 <- string("ababab")
+    Eq v79 <- v80, v81
+    Load v84 <- string("repeat")
+    Call v78 <- string("std.assert.assert") [v79, v84] (def=d1)
+    Load v89 <- string("abc")
+    Call v87 <- string("std.string.reverse") [v89] (def=d14)
+    Load v88 <- string("cba")
+    Eq v86 <- v87, v88
+    Load v90 <- string("reverse")
+    Call v85 <- string("std.assert.assert") [v86, v90] (def=d1)
+    Load v91 <- string("x,y,z")
+    Load v92 <- string(",")
+    Call %1 <- string("std.string.split") [v91, v92] (def=d15)
+    Load v97 <- %1
+    StringLength v95 <- v97
+    Load v96 <- int(3)
+    Eq v94 <- v95, v96
+    Load v98 <- string("split len 3")
+    Call v93 <- string("std.assert.assert") [v94, v98] (def=d1)
+    Load v99 <- string("x,y,z")
+    Load v100 <- string(",")
+    Call %2 <- string("std.string.split") [v99, v100] (def=d15)
+    Load v105 <- %2
+    Load v106 <- int(0)
+    LoadIndex v103 <- v105[v106]
+    Load v104 <- string("x")
+    Eq v102 <- v103, v104
+    Load v107 <- string("split[0] == x")
+    Call v101 <- string("std.assert.assert") [v102, v107] (def=d1)
+    Load v108 <- string("ab")
+    Call %3 <- string("std.string.chars") [v108] (def=d16)
+    Load v113 <- %3
+    StringLength v111 <- v113
+    Load v112 <- int(2)
+    Eq v110 <- v111, v112
+    Load v114 <- string("chars len 2")
+    Call v109 <- string("std.assert.assert") [v110, v114] (def=d1)
+    Load v115 <- string("42")
+    Call %4 <- string("std.string.parse_int") [v115] (def=d17)
+    Load v118 <- %4
+    Call v117 <- string("std.result.is_ok") [v118] (def=d18)
+    Load v119 <- string("parse_int ok")
+    Call v116 <- string("std.assert.assert") [v117, v119] (def=d1)
+    Drop %4
+    Load v120 <- string("not_a_number")
+    Call %5 <- string("std.string.parse_int") [v120] (def=d17)
+    Load v123 <- %5
+    Call v122 <- string("std.result.is_err") [v123] (def=d19)
+    Load v124 <- string("parse_int err on invalid")
+    Call v121 <- string("std.assert.assert") [v122, v124] (def=d1)
+    Drop %5
+    Load v125 <- string("xxx")
+    Call %6 <- string("std.string.parse_float") [v125] (def=d20)
+    Load v128 <- %6
+    Call v127 <- string("std.result.is_err") [v128] (def=d19)
+    Load v129 <- string("parse_float err on invalid")
+    Call v126 <- string("std.assert.assert") [v127, v129] (def=d1)
+    Drop %6
+    Load v134 <- string("A")
+    Load v135 <- int(0)
+    Call v132 <- string("std.string.char_code") [v134, v135] (def=d21)
+    Load v133 <- int(65)
+    Eq v131 <- v132, v133
+    Load v136 <- string("char_code ASCII")
+    Call v130 <- string("std.assert.assert") [v131, v136] (def=d1)
+    Load v141 <- string("é")
+    Load v142 <- int(0)
+    Call v139 <- string("std.string.char_code") [v141, v142] (def=d21)
+    Load v140 <- int(233)
+    Eq v138 <- v139, v140
+    Load v143 <- string("char_code Latin-1")
+    Call v137 <- string("std.assert.assert") [v138, v143] (def=d1)
+    Load v148 <- string("字")
+    Load v149 <- int(0)
+    Call v146 <- string("std.string.char_code") [v148, v149] (def=d21)
+    Load v147 <- int(23383)
+    Eq v145 <- v146, v147
+    Load v150 <- string("char_code CJK")
+    Call v144 <- string("std.assert.assert") [v145, v150] (def=d1)
+    Load v155 <- string("héllo")
+    Load v156 <- int(1)
+    Call v153 <- string("std.string.char_code") [v155, v156] (def=d21)
+    Load v154 <- int(233)
+    Eq v152 <- v153, v154
+    Load v157 <- string("char_code index past multibyte")
+    Call v151 <- string("std.assert.assert") [v152, v157] (def=d1)
+    Load v162 <- string("hi")
+    Load v163 <- int(2)
+    Call v160 <- string("std.string.char_code") [v162, v163] (def=d21)
+    Load v164 <- int(1)
+    Neg v161 <- v164
+    Eq v159 <- v160, v161
+    Load v165 <- string("char_code out of range → -1")
+    Call v158 <- string("std.assert.assert") [v159, v165] (def=d1)
+    Load v170 <- string("")
+    Load v171 <- int(0)
+    Call v168 <- string("std.string.char_code") [v170, v171] (def=d21)
+    Load v172 <- int(1)
+    Neg v169 <- v172
+    Eq v167 <- v168, v169
+    Load v173 <- string("char_code on empty → -1")
+    Call v166 <- string("std.assert.assert") [v167, v173] (def=d1)
+    Load v178 <- string("héllo")
+    Call v176 <- string("std.string.len") [v178] (def=d10)
+    Load v177 <- int(5)
+    Eq v175 <- v176, v177
+    Load v179 <- string("len counts code points")
+    Call v174 <- string("std.assert.assert") [v175, v179] (def=d1)
+    Load v184 <- string("中")
+    Call v182 <- string("std.string.len") [v184] (def=d10)
+    Load v183 <- int(1)
+    Eq v181 <- v182, v183
+    Load v185 <- string("len CJK scalar")
+    Call v180 <- string("std.assert.assert") [v181, v185] (def=d1)
+    Load v190 <- string("héllo")
+    Load v191 <- string("é")
+    Call v188 <- string("std.string.index_of") [v190, v191] (def=d8)
+    Load v189 <- int(1)
+    Eq v187 <- v188, v189
+    Load v192 <- string("index_of scalar index")
+    Call v186 <- string("std.assert.assert") [v187, v192] (def=d1)
+    Load v197 <- string("héllo")
+    Load v198 <- string("lo")
+    Call v195 <- string("std.string.index_of") [v197, v198] (def=d8)
+    Load v196 <- int(3)
+    Eq v194 <- v195, v196
+    Load v199 <- string("index_of after multibyte")
+    Call v193 <- string("std.assert.assert") [v194, v199] (def=d1)
+    Load v200 <- string("héllo")
+    Load v201 <- string("é")
+    Call %7 <- string("std.string.index_of") [v200, v201] (def=d8)
+    Load v206 <- string("héllo")
+    Load v207 <- %7
+    Load v209 <- %7
+    Load v210 <- int(1)
+    Add v208 <- v209, v210
+    Call v204 <- string("std.string.substring") [v206, v207, v208] (def=d9)
+    Load v205 <- string("é")
+    Eq v203 <- v204, v205
+    Load v211 <- string("index_of feeds substring")
+    Call v202 <- string("std.assert.assert") [v203, v211] (def=d1)
+    Load v216 <- string("héllo")
+    Load v217 <- %7
+    Call v214 <- string("std.string.char_code") [v216, v217] (def=d21)
+    Load v215 <- int(233)
+    Eq v213 <- v214, v215
+    Load v218 <- string("index_of feeds char_code")
+    Call v212 <- string("std.assert.assert") [v213, v218] (def=d1)
+    Load v219 <- int(65)
+    Call %8 <- string("std.string.from_char_code") [v219] (def=d22)
+    Load v222 <- %8
+    Call v221 <- string("std.result.is_ok") [v222] (def=d18)
+    Load v223 <- string("from_char_code ok")
+    Call v220 <- string("std.assert.assert") [v221, v223] (def=d1)
+    Drop %8
+    Load v228 <- %8
+    Call v226 <- string("std.result.unwrap") [v228] (def=d23)
+    Load v227 <- string("A")
+    Eq v225 <- v226, v227
+    Load v229 <- string("from_char_code roundtrip ASCII")
+    Call v224 <- string("std.assert.assert") [v225, v229] (def=d1)
+    Drop %8
+    Load v230 <- int(128512)
+    Call %9 <- string("std.string.from_char_code") [v230] (def=d22)
+    Load v233 <- %9
+    Call v232 <- string("std.result.is_ok") [v233] (def=d18)
+    Load v234 <- string("from_char_code astral ok")
+    Call v231 <- string("std.assert.assert") [v232, v234] (def=d1)
+    Drop %9
+    Load v240 <- %9
+    Call v239 <- string("std.result.unwrap") [v240] (def=d23)
+    Load v241 <- int(0)
+    Call v237 <- string("std.string.char_code") [v239, v241] (def=d21)
+    Load v238 <- int(128512)
+    Eq v236 <- v237, v238
+    Load v242 <- string("astral roundtrip")
+    Call v235 <- string("std.assert.assert") [v236, v242] (def=d1)
+    Drop %9
+    Load v247 <- int(1)
+    Neg v246 <- v247
+    Call v245 <- string("std.string.from_char_code") [v246] (def=d22)
+    Call v244 <- string("std.result.is_err") [v245] (def=d19)
+    Load v248 <- string("negative codepoint err")
+    Call v243 <- string("std.assert.assert") [v244, v248] (def=d1)
+    Load v252 <- int(55296)
+    Call v251 <- string("std.string.from_char_code") [v252] (def=d22)
+    Call v250 <- string("std.result.is_err") [v251] (def=d19)
+    Load v253 <- string("surrogate half err")
+    Call v249 <- string("std.assert.assert") [v250, v253] (def=d1)
+    Load v257 <- int(1114112)
+    Call v256 <- string("std.string.from_char_code") [v257] (def=d22)
+    Call v255 <- string("std.result.is_err") [v256] (def=d19)
+    Load v258 <- string("beyond max err")
+    Call v254 <- string("std.assert.assert") [v255, v258] (def=d1)
+    Load v263 <- string("Hello {}")
+    Load v264 <- string("world")
+    Call v261 <- string("std.string.format") [v263, v264] (def=d24)
+    Load v262 <- string("Hello world")
+    Eq v260 <- v261, v262
+    Load v265 <- string("format basic")
+    Call v259 <- string("std.assert.assert") [v260, v265] (def=d1)
+    Load v270 <- string("{0}+{1}={0}")
+    Load v271 <- int(1)
+    Load v272 <- int(2)
+    Call v268 <- string("std.string.format") [v270, v271, v272] (def=d24)
+    Load v269 <- string("1+2=1")
+    Eq v267 <- v268, v269
+    Load v273 <- string("format indexed reuse")
+    Call v266 <- string("std.assert.assert") [v267, v273] (def=d1)
+    Load v278 <- string("{{}}")
+    Call v276 <- string("std.string.format") [v278] (def=d24)
+    Load v277 <- string("{}")
+    Eq v275 <- v276, v277
+    Load v279 <- string("format brace escape")
+    Call v274 <- string("std.assert.assert") [v275, v279] (def=d1)
+    Load v284 <- string("a}}b")
+    Call v282 <- string("std.string.format") [v284] (def=d24)
+    Load v283 <- string("a}b")
+    Eq v281 <- v282, v283
+    Load v285 <- string("format lone close brace literal")
+    Call v280 <- string("std.assert.assert") [v281, v285] (def=d1)
+    Load v290 <- string("{0:.2f}")
+    Load v291 <- float(4614256650576692846)
+    Call v288 <- string("std.string.format") [v290, v291] (def=d24)
+    Load v289 <- string("3.14")
+    Eq v287 <- v288, v289
+    Load v292 <- string("format .2f")
+    Call v286 <- string("std.assert.assert") [v287, v292] (def=d1)
+    Load v297 <- string("[{0:5d}]")
+    Load v299 <- int(5)
+    Neg v298 <- v299
+    Call v295 <- string("std.string.format") [v297, v298] (def=d24)
+    Load v296 <- string("[   -5]")
+    Eq v294 <- v295, v296
+    Load v300 <- string("format width align")
+    Call v293 <- string("std.assert.assert") [v294, v300] (def=d1)
+    Load v305 <- string("{0:05d}")
+    Load v307 <- int(5)
+    Neg v306 <- v307
+    Call v303 <- string("std.string.format") [v305, v306] (def=d24)
+    Load v304 <- string("-0005")
+    Eq v302 <- v303, v304
+    Load v308 <- string("format zero flag")
+    Call v301 <- string("std.assert.assert") [v302, v308] (def=d1)
+    Load v313 <- string("{0:x}|{0:#x}|{0:b}|{0:o}")
+    Load v314 <- int(255)
+    Call v311 <- string("std.string.format") [v313, v314] (def=d24)
+    Load v312 <- string("ff|0xff|11111111|377")
+    Eq v310 <- v311, v312
+    Load v315 <- string("format radix presentations")
+    Call v309 <- string("std.assert.assert") [v310, v315] (def=d1)
+    Load v320 <- string("{0:e}")
+    Load v321 <- float(4614256650576692846)
+    Call v318 <- string("std.string.format") [v320, v321] (def=d24)
+    Load v319 <- string("3.141590e+00")
+    Eq v317 <- v318, v319
+    Load v322 <- string("format scientific")
+    Call v316 <- string("std.assert.assert") [v317, v322] (def=d1)
+    Load v327 <- string("{0:%}")
+    Load v328 <- float(4598175219545276416)
+    Call v325 <- string("std.string.format") [v327, v328] (def=d24)
+    Load v326 <- string("25.000000%")
+    Eq v324 <- v325, v326
+    Load v329 <- string("format percent")
+    Call v323 <- string("std.assert.assert") [v324, v329] (def=d1)
+    Load v334 <- string("{0:.3}")
+    Load v335 <- string("hello")
+    Call v332 <- string("std.string.format") [v334, v335] (def=d24)
+    Load v333 <- string("hel")
+    Eq v331 <- v332, v333
+    Load v336 <- string("format string precision")
+    Call v330 <- string("std.assert.assert") [v331, v336] (def=d1)
+    Load v341 <- string("{0:^7}")
+    Load v342 <- string("hi")
+    Call v339 <- string("std.string.format") [v341, v342] (def=d24)
+    Load v340 <- string("  hi   ")
+    Eq v338 <- v339, v340
+    Load v343 <- string("format center align")
+    Call v337 <- string("std.assert.assert") [v338, v343] (def=d1)
     Drop %3
-    Load %5 <- string("not_a_number")
-    Call %1 <- string("std.string.parse_int") [%5] (def=d17)
-    Load %8 <- %1
-    Call %7 <- string("std.result.is_err") [%8] (def=d19)
-    Load %9 <- string("parse_int err on invalid")
-    Call %5 <- string("std.assert.assert") [%7, %9] (def=d1)
-    Drop %1
-    Load %7 <- string("xxx")
-    Call %5 <- string("std.string.parse_float") [%7] (def=d20)
-    Load %9 <- %5
-    Call %8 <- string("std.result.is_err") [%9] (def=d19)
-    Load %10 <- string("parse_float err on invalid")
-    Call %7 <- string("std.assert.assert") [%8, %10] (def=d1)
+    Drop %6
     Drop %5
-    Load %11 <- string("A")
-    Load %12 <- int(0)
-    Call %9 <- string("std.string.char_code") [%11, %12] (def=d21)
-    Load %10 <- int(65)
-    Eq %8 <- %9, %10
-    Load %13 <- string("char_code ASCII")
-    Call %7 <- string("std.assert.assert") [%8, %13] (def=d1)
-    Load %11 <- string("é")
-    Load %12 <- int(0)
-    Call %9 <- string("std.string.char_code") [%11, %12] (def=d21)
-    Load %10 <- int(233)
-    Eq %8 <- %9, %10
-    Load %13 <- string("char_code Latin-1")
-    Call %7 <- string("std.assert.assert") [%8, %13] (def=d1)
-    Load %11 <- string("字")
-    Load %12 <- int(0)
-    Call %9 <- string("std.string.char_code") [%11, %12] (def=d21)
-    Load %10 <- int(23383)
-    Eq %8 <- %9, %10
-    Load %13 <- string("char_code CJK")
-    Call %7 <- string("std.assert.assert") [%8, %13] (def=d1)
-    Load %11 <- string("héllo")
-    Load %12 <- int(1)
-    Call %9 <- string("std.string.char_code") [%11, %12] (def=d21)
-    Load %10 <- int(233)
-    Eq %8 <- %9, %10
-    Load %13 <- string("char_code index past multibyte")
-    Call %7 <- string("std.assert.assert") [%8, %13] (def=d1)
-    Load %11 <- string("hi")
-    Load %12 <- int(2)
-    Call %9 <- string("std.string.char_code") [%11, %12] (def=d21)
-    Load %13 <- int(1)
-    Neg %10 <- %13
-    Eq %8 <- %9, %10
-    Load %14 <- string("char_code out of range → -1")
-    Call %7 <- string("std.assert.assert") [%8, %14] (def=d1)
-    Load %11 <- string("")
-    Load %12 <- int(0)
-    Call %9 <- string("std.string.char_code") [%11, %12] (def=d21)
-    Load %13 <- int(1)
-    Neg %10 <- %13
-    Eq %8 <- %9, %10
-    Load %14 <- string("char_code on empty → -1")
-    Call %7 <- string("std.assert.assert") [%8, %14] (def=d1)
-    Load %11 <- string("héllo")
-    Call %9 <- string("std.string.len") [%11] (def=d10)
-    Load %10 <- int(5)
-    Eq %8 <- %9, %10
-    Load %12 <- string("len counts code points")
-    Call %7 <- string("std.assert.assert") [%8, %12] (def=d1)
-    Load %11 <- string("中")
-    Call %9 <- string("std.string.len") [%11] (def=d10)
-    Load %10 <- int(1)
-    Eq %8 <- %9, %10
-    Load %12 <- string("len CJK scalar")
-    Call %7 <- string("std.assert.assert") [%8, %12] (def=d1)
-    Load %11 <- string("héllo")
-    Load %12 <- string("é")
-    Call %9 <- string("std.string.index_of") [%11, %12] (def=d8)
-    Load %10 <- int(1)
-    Eq %8 <- %9, %10
-    Load %13 <- string("index_of scalar index")
-    Call %7 <- string("std.assert.assert") [%8, %13] (def=d1)
-    Load %11 <- string("héllo")
-    Load %12 <- string("lo")
-    Call %9 <- string("std.string.index_of") [%11, %12] (def=d8)
-    Load %10 <- int(3)
-    Eq %8 <- %9, %10
-    Load %13 <- string("index_of after multibyte")
-    Call %7 <- string("std.assert.assert") [%8, %13] (def=d1)
-    Load %8 <- string("héllo")
-    Load %9 <- string("é")
-    Call %7 <- string("std.string.index_of") [%8, %9] (def=d8)
-    Load %12 <- string("héllo")
-    Load %13 <- %7
-    Load %15 <- %7
-    Load %16 <- int(1)
-    Add %14 <- %15, %16
-    Call %10 <- string("std.string.substring") [%12, %13, %14] (def=d9)
-    Load %11 <- string("é")
-    Eq %9 <- %10, %11
-    Load %17 <- string("index_of feeds substring")
-    Call %8 <- string("std.assert.assert") [%9, %17] (def=d1)
-    Load %12 <- string("héllo")
-    Load %13 <- %7
-    Call %10 <- string("std.string.char_code") [%12, %13] (def=d21)
-    Load %11 <- int(233)
-    Eq %9 <- %10, %11
-    Load %14 <- string("index_of feeds char_code")
-    Call %8 <- string("std.assert.assert") [%9, %14] (def=d1)
-    Load %9 <- int(65)
-    Call %8 <- string("std.string.from_char_code") [%9] (def=d22)
-    Load %11 <- %8
-    Call %10 <- string("std.result.is_ok") [%11] (def=d18)
-    Load %12 <- string("from_char_code ok")
-    Call %9 <- string("std.assert.assert") [%10, %12] (def=d1)
-    Drop %8
-    Load %13 <- %8
-    Call %11 <- string("std.result.unwrap") [%13] (def=d23)
-    Load %12 <- string("A")
-    Eq %10 <- %11, %12
-    Load %14 <- string("from_char_code roundtrip ASCII")
-    Call %9 <- string("std.assert.assert") [%10, %14] (def=d1)
-    Drop %8
-    Load %10 <- int(128512)
-    Call %9 <- string("std.string.from_char_code") [%10] (def=d22)
-    Load %12 <- %9
-    Call %11 <- string("std.result.is_ok") [%12] (def=d18)
-    Load %13 <- string("from_char_code astral ok")
-    Call %10 <- string("std.assert.assert") [%11, %13] (def=d1)
-    Drop %9
-    Load %15 <- %9
-    Call %14 <- string("std.result.unwrap") [%15] (def=d23)
-    Load %16 <- int(0)
-    Call %12 <- string("std.string.char_code") [%14, %16] (def=d21)
-    Load %13 <- int(128512)
-    Eq %11 <- %12, %13
-    Load %17 <- string("astral roundtrip")
-    Call %10 <- string("std.assert.assert") [%11, %17] (def=d1)
-    Drop %9
-    Load %14 <- int(1)
-    Neg %13 <- %14
-    Call %12 <- string("std.string.from_char_code") [%13] (def=d22)
-    Call %11 <- string("std.result.is_err") [%12] (def=d19)
-    Load %15 <- string("negative codepoint err")
-    Call %10 <- string("std.assert.assert") [%11, %15] (def=d1)
-    Load %13 <- int(55296)
-    Call %12 <- string("std.string.from_char_code") [%13] (def=d22)
-    Call %11 <- string("std.result.is_err") [%12] (def=d19)
-    Load %14 <- string("surrogate half err")
-    Call %10 <- string("std.assert.assert") [%11, %14] (def=d1)
-    Load %13 <- int(1114112)
-    Call %12 <- string("std.string.from_char_code") [%13] (def=d22)
-    Call %11 <- string("std.result.is_err") [%12] (def=d19)
-    Load %14 <- string("beyond max err")
-    Call %10 <- string("std.assert.assert") [%11, %14] (def=d1)
-    Load %14 <- string("Hello {}")
-    Load %15 <- string("world")
-    Call %12 <- string("std.string.format") [%14, %15] (def=d24)
-    Load %13 <- string("Hello world")
-    Eq %11 <- %12, %13
-    Load %16 <- string("format basic")
-    Call %10 <- string("std.assert.assert") [%11, %16] (def=d1)
-    Load %14 <- string("{0}+{1}={0}")
-    Load %15 <- int(1)
-    Load %16 <- int(2)
-    Call %12 <- string("std.string.format") [%14, %15, %16] (def=d24)
-    Load %13 <- string("1+2=1")
-    Eq %11 <- %12, %13
-    Load %17 <- string("format indexed reuse")
-    Call %10 <- string("std.assert.assert") [%11, %17] (def=d1)
-    Load %14 <- string("{{}}")
-    Call %12 <- string("std.string.format") [%14] (def=d24)
-    Load %13 <- string("{}")
-    Eq %11 <- %12, %13
-    Load %15 <- string("format brace escape")
-    Call %10 <- string("std.assert.assert") [%11, %15] (def=d1)
-    Load %14 <- string("a}}b")
-    Call %12 <- string("std.string.format") [%14] (def=d24)
-    Load %13 <- string("a}b")
-    Eq %11 <- %12, %13
-    Load %15 <- string("format lone close brace literal")
-    Call %10 <- string("std.assert.assert") [%11, %15] (def=d1)
-    Load %14 <- string("{0:.2f}")
-    Load %15 <- float(4614256650576692846)
-    Call %12 <- string("std.string.format") [%14, %15] (def=d24)
-    Load %13 <- string("3.14")
-    Eq %11 <- %12, %13
-    Load %16 <- string("format .2f")
-    Call %10 <- string("std.assert.assert") [%11, %16] (def=d1)
-    Load %14 <- string("[{0:5d}]")
-    Load %16 <- int(5)
-    Neg %15 <- %16
-    Call %12 <- string("std.string.format") [%14, %15] (def=d24)
-    Load %13 <- string("[   -5]")
-    Eq %11 <- %12, %13
-    Load %17 <- string("format width align")
-    Call %10 <- string("std.assert.assert") [%11, %17] (def=d1)
-    Load %14 <- string("{0:05d}")
-    Load %16 <- int(5)
-    Neg %15 <- %16
-    Call %12 <- string("std.string.format") [%14, %15] (def=d24)
-    Load %13 <- string("-0005")
-    Eq %11 <- %12, %13
-    Load %17 <- string("format zero flag")
-    Call %10 <- string("std.assert.assert") [%11, %17] (def=d1)
-    Load %14 <- string("{0:x}|{0:#x}|{0:b}|{0:o}")
-    Load %15 <- int(255)
-    Call %12 <- string("std.string.format") [%14, %15] (def=d24)
-    Load %13 <- string("ff|0xff|11111111|377")
-    Eq %11 <- %12, %13
-    Load %16 <- string("format radix presentations")
-    Call %10 <- string("std.assert.assert") [%11, %16] (def=d1)
-    Load %14 <- string("{0:e}")
-    Load %15 <- float(4614256650576692846)
-    Call %12 <- string("std.string.format") [%14, %15] (def=d24)
-    Load %13 <- string("3.141590e+00")
-    Eq %11 <- %12, %13
-    Load %16 <- string("format scientific")
-    Call %10 <- string("std.assert.assert") [%11, %16] (def=d1)
-    Load %14 <- string("{0:%}")
-    Load %15 <- float(4598175219545276416)
-    Call %12 <- string("std.string.format") [%14, %15] (def=d24)
-    Load %13 <- string("25.000000%")
-    Eq %11 <- %12, %13
-    Load %16 <- string("format percent")
-    Call %10 <- string("std.assert.assert") [%11, %16] (def=d1)
-    Load %14 <- string("{0:.3}")
-    Load %15 <- string("hello")
-    Call %12 <- string("std.string.format") [%14, %15] (def=d24)
-    Load %13 <- string("hel")
-    Eq %11 <- %12, %13
-    Load %16 <- string("format string precision")
-    Call %10 <- string("std.assert.assert") [%11, %16] (def=d1)
-    Load %14 <- string("{0:^7}")
-    Load %15 <- string("hi")
-    Call %12 <- string("std.string.format") [%14, %15] (def=d24)
-    Load %13 <- string("  hi   ")
-    Eq %11 <- %12, %13
-    Load %16 <- string("format center align")
-    Call %10 <- string("std.assert.assert") [%11, %16] (def=d1)
-    Drop %2
-    Drop %5
-    Drop %1
     Drop %7
     Drop %8
     Drop %9
-    Drop %3
-    Drop %6
     Drop %4
+    Drop %1
+    Drop %2
     Drop %0
-    Ret %10
+    Ret v337
   init (locals=0)
     Call %0 <- string("main") [] (def=d25)

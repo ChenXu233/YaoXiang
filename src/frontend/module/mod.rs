@@ -78,7 +78,7 @@ pub struct Export {
     ///    导入方 `export_type` 据它登记短名与限定名两个键，调用点才拿得到
     ///    类型参数名（`lookup_type_params`）与实例化请求的 `generic_id`。
     /// 2. **兜底**：从签名形态反推——真实落点是 `collect_instantiation_request`
-    ///    的第二条分支（`expressions.rs` 里 `let mut type_var_indices = …` 那段
+    ///    的第二条分支（`inference/expressions/call/instantiation.rs` 的 `collect_instantiation_request` 里 `let mut type_var_indices = …` 那段
     ///    位置直扫：只收「参数位直接是 TypeVar」的位），底层取变量用
     ///    `collect_type_vars_positional`。只在第 1 条拿不到名字时生效，且
     ///    **收不全**——类型参数只出现在嵌套/借用位置（`x: &T`、`Vec(T)`）时
@@ -116,6 +116,55 @@ pub struct Export {
     /// （第零遍与导出提取共同委托）；导入方 `register_use_export` 按 use
     /// 门控并入（未导入的谓词解析失败是正确行为，2026-11-03 用户裁决）。
     pub predicate_def: Option<crate::frontend::core::sema::predicate_resolver::PredicateDef>,
+    /// proof-fn 形态的形参类型清单（#527/#551，声明序；定义方 vars 形态不是
+    /// proof-fn 形态——`Fn` 且返回 `MetaType`——为 None）。
+    ///
+    /// 全部 proof-fn 形态（单参数与多参数）统一从定义方 `env.vars` 的
+    /// **已登记形态**直读（判据单源仍是 add_type_definition 与
+    /// `PredicateDef::proof_fn_type`，导出面不重新推导）；导入方
+    /// `register_use_export` 据此经 `proof_fn_type` 重建同构变量——
+    /// 「导入谓词与本地面同权」（#524 甲案）在全部 proof-fn 形态成立。
+    /// #527 缘起：多参数谓词拿不到 def（def 构建判据按单参数收窄，
+    /// `PredicateResolver::try_resolve` 的阶段 1 模型即单参数），导入面曾
+    /// 回退成 Struct poly ⇒ 导入使用被 E1012 + E1002 拒绝。#551 补齐单参数
+    /// 侧：**不再按「def 缺席」分流**——单参数无标注形参的谓词 def 有登记
+    /// 但 vars 形参表为空（本地 Phase 2.5 臂丢弃无标注形参），若此字段只在
+    /// def 缺席时携带，导入面会拿 `def.param_type` 的 Int(64) 默认值重建出
+    /// 本地面没有的形参表 ⇒ 两臂构造的 Fn 形态分歧（本地拒绝、导入放行）。
+    /// 模板面分流不随行：多参数谓词的 def 仍不进 `env.predicate_defs`
+    /// （阶段 1 单参数模型，E1093 设计面）；单参数 def 由 `predicate_def`
+    /// 载荷照旧并入（#524 甲案语义不变）；use 门控不变。
+    ///
+    /// **本载荷只服务 Type 臂**（`ExportKind::Type`，TypeDefinition 形态
+    /// 谓词——`P: (x: Int) -> Type = { x > 0 }`）。Assign 形态谓词（体是
+    /// lambda/表达式，`StmtKind::Assign` 导出臂）走的是另一条双通道：
+    /// proof-fn 形态变量由导出 `mono_type` 直读携带（定义方 vars 已登记
+    /// 形态，`export_register_type` 原样入值空间）、约束体模板由
+    /// `predicate_def` 并入——`proof_fn_params` 对该形态恒为 None，
+    /// `register_use_export` 的非 Type 臂也不消费它。
+    pub proof_fn_params: Option<Vec<MonoType>>,
+    /// 该导出函数的 **q=0（编译期值）binder**（声明序；定义方
+    /// `PolyType::const_binders` 的已登记形态直读，不从 AST 重推），
+    /// 非 const 泛型函数为空表。
+    ///
+    /// E1113（6.9.2-B）的调用点证据检查要按 q=0 槽位判——定义方的
+    /// binder 清单登记在签名收集期写入的 `PolyType` 里，此前导出面只取
+    /// `body` 丢弃 binder，导入面 `const_names` 为空 ⇒ 整段判定
+    /// `NotTarget`，运行期值填 q=0 槽静默通过（issue #539 的缺口）。
+    /// 消费点唯一：导入方 `import_binding` 按本清单重建同构 `PolyType`
+    /// （与定义方 `check_fn_stmt` 的登记形态一致），判定函数零改动。
+    pub const_binders: Vec<crate::frontend::core::types::const_data::ConstVarDef>,
+    /// 该导出函数的**调用点实参序列形参名**（声明序拍平口径、q=0 位保留；
+    /// 定义方 `declared_call_site_params` 槽位表的已登记形态直读），
+    /// 无名可取为空表。
+    ///
+    /// E1113 的槽位判据按**调用点序列**把实参对到 q=0 槽上——名字只在
+    /// 声明 AST 里（`Type::runtime_value_params` 是这条序列的唯一实现），
+    /// 导入方拿不到定义方 AST，随导出携带。消费点唯一：导入方
+    /// `import_binding` 写进同一张 `declared_call_site_params` 表（函数条目
+    /// 同款：`const_params` 留空，q=0 名以 [`Export::const_binders`] 为登记口），
+    /// 判定函数零改动。
+    pub call_site_params: Vec<String>,
 }
 
 /// 类型定义导出载荷（见 [`Export::type_payload`]）。
@@ -132,6 +181,10 @@ pub struct TypeDefPayload {
         String,
         crate::frontend::core::sema::environment::InterfaceImplEntry,
     )>,
+    /// 证据/自引用义务的导出载体；无义务记录为 None（B.4 §三.2）
+    pub record_model: Option<crate::frontend::core::sema::record_model::RecordModel>,
+    /// 导出侧证据环境指纹（不是 §4.1 签名；B.4 §六）
+    pub signature_hash: crate::util::content_hash::ContentHash,
 }
 
 /// 模块源类型

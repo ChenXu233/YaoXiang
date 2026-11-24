@@ -55,6 +55,7 @@ fn struct_with_field(
             ty,
             default: None,
             is_mut: false,
+            quantity: None,
         })],
     }
 }

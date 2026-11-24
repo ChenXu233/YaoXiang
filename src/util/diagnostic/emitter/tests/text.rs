@@ -2,9 +2,9 @@
 //!
 //! §4.1: Emitter 合并（RichEmitter → TextEmitter）
 
-use crate::util::diagnostic::emitter::{TextEmitter, EmitterConfig};
-use crate::util::diagnostic::emitter::ansi::strip_ansi;
 use crate::util::diagnostic::codes::ErrorCodeDefinition;
+use crate::util::diagnostic::emitter::ansi::strip_ansi;
+use crate::util::diagnostic::emitter::{EmitterConfig, TextEmitter};
 use crate::util::span::Span;
 
 #[test]

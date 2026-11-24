@@ -2,7 +2,7 @@
 //!
 //! §2.2 运算符优先级表一元前缀组：`!`（逻辑非），紧绑定（Zig 式）
 //!
-//! 回归背景：issue #229。`ir_gen.rs` 中 `Expr::UnOp { op: Not }` 分支
+//! 回归背景：issue #229。`lower/expr/op.rs` 的 `generate_un_op_expr_ir` 中 `ast::UnOp::Not` 分支
 //! 未生成 `UnaryOp::Not` 指令，而是直接加载常量 `Int(0)`，导致 `!true` 和
 //! `!false` 都恒返回 `0`（整数零）。
 //!
@@ -12,8 +12,8 @@
 use crate::backends::common::RuntimeValue;
 use crate::backends::interpreter::executor::Interpreter;
 use crate::backends::Executor;
-use crate::middle::bytecode::{BytecodeFunction, BytecodeInstr, ConstValue, Reg, UnaryOp};
 use crate::frontend::core::sema::MonoType;
+use crate::middle::bytecode::{BytecodeFunction, BytecodeInstr, ConstValue, Reg, UnaryOp};
 use std::collections::HashMap;
 
 /// 构造一个函数：r0 = const[val], r1 = !r0, return r1

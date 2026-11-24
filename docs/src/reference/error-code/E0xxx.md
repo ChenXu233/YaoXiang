@@ -9,7 +9,7 @@ description: '词法分析器（Lexer）与语法分析器（Parser）阶段产�
 
 词法分析器（Lexer）与语法分析器（Parser）阶段产生的错误。
 
-本族共 **11** 个码，全部在 `define_codes!` 注册表中，类别为 `Lexer / Parser`。完整索引见[错误码首页](./index.md)。
+本族共 **12** 个码，全部在 `define_codes!` 注册表中，类别为 `Lexer / Parser`。完整索引见[错误码首页](./index.md)。
 
 ## 码一览
 
@@ -19,13 +19,14 @@ description: '词法分析器（Lexer）与语法分析器（Parser）阶段产�
 | `E0002` | 无效数字字面量 | `Lexer` | 否 | `无效数字字面量：'{literal}'` | ✅ 1 处 |
 | `E0003` | 未终止的字符串 | `Lexer` | 否 | `字符串从第 {line} 行开始未终止` | ⚠ 暂未发射 |
 | `E0004` | 无效字符字面量 | `Lexer` | 否 | `无效字符字面量：'{literal}'` | ⚠ 暂未发射 |
-| `E0010` | 期望的令牌 | `Parser` | 否 | `期望 {expected}，找到 {found}` | ✅ 4 处 |
+| `E0010` | 期望的令牌 | `Parser` | 否 | `期望 {expected}，找到 {found}` | ✅ 6 处 |
 | `E0011` | 意外的令牌 | `Parser` | 否 | `意外的令牌：'{token}'` | ✅ 18 处 |
 | `E0012` | 无效语法 | `Parser` | 否 | `无效语法：{reason}` | ✅ 14 处 |
 | `E0013` | 不匹配的括号 | `Parser` | 否 | `不匹配的 {bracket_type}：在第 {open_line} 行、第 {open_col} 列打开，未闭合` | ⚠ 暂未发射 |
 | `E0014` | 缺少分号 | `Parser` | 否 | `{statement} 后缺少分号` | ⚠ 暂未发射 |
 | `E0016` | 期望表达式 | `Parser` | 否 | `期望表达式：{context}` | ✅ 4 处 |
 | `E0018` | 关键字作名称 | `Parser` | 否 | `'{keyword}' 是关键字，不能用作名称` | ✅ 1 处 |
+| `E0019` | 表达式嵌套过深 | `Parser` | 否 | `表达式嵌套超过最大递归深度（{limit}）` | ✅ 1 处 |
 
 ## 逐码说明
 
@@ -77,7 +78,7 @@ description: '词法分析器（Lexer）与语法分析器（Parser）阶段产�
 - **模板**：`期望 {expected}，找到 {found}`
 - **消息**：解析器期望特定的令牌
 - **帮助**：检查语法并添加期望的令牌
-- **发射点**：`src/frontend/core/parser/parser_state.rs:153`、`src/frontend/core/parser/statements/bindings.rs:131`、`src/frontend/core/parser/statements/bindings.rs:162` 等 4 处
+- **发射点**：`src/frontend/core/parser/parser_state.rs:274`、`src/frontend/core/parser/pratt/nud.rs:1032`、`src/frontend/core/parser/pratt/nud.rs:1052` 等 6 处
 
 ### E0011：意外的令牌
 
@@ -127,7 +128,7 @@ description: '词法分析器（Lexer）与语法分析器（Parser）阶段产�
 - **模板**：`期望表达式：{context}`
 - **消息**：解析器期望一个表达式
 - **帮助**：在此位置提供一个有效的表达式
-- **发射点**：`src/frontend/core/parser/pratt/nud.rs:133`、`src/frontend/core/parser/pratt/nud.rs:173`、`src/frontend/core/parser/pratt/nud.rs:190` 等 4 处
+- **发射点**：`src/frontend/core/parser/pratt/nud.rs:134`、`src/frontend/core/parser/pratt/nud.rs:174`、`src/frontend/core/parser/pratt/nud.rs:191` 等 4 处
 
 ### E0018：关键字作名称
 
@@ -137,5 +138,16 @@ description: '词法分析器（Lexer）与语法分析器（Parser）阶段产�
 - **模板**：`'{keyword}' 是关键字，不能用作名称`
 - **消息**：关键字不能用作变量或表达式名称
 - **帮助**：换一个不同的标识符代替关键字
-- **发射点**：`src/frontend/core/parser/parser_state.rs:265`
+- **发射点**：`src/frontend/core/parser/parser_state.rs:478`
 - **源码注释名**：关键字作变量名
+
+### E0019：表达式嵌套过深
+
+- **类别**：`Parser`
+- **span 豁免**：否
+- **构造函数**：`ErrorCodeDefinition::expression_too_deep(limit)`
+- **模板**：`表达式嵌套超过最大递归深度（{limit}）`
+- **消息**：表达式嵌套超过 {limit} 层，超出解析器递归上限
+- **帮助**：简化表达式，或把深层嵌套的部分拆成中间变量或辅助函数
+- **发射点**：`src/frontend/core/parser/parser_state.rs:116`
+- **源码注释名**：解析递归深度超限（issue #540：深嵌套表达式此前让编译器栈溢出

@@ -1,20 +1,20 @@
 //! 钉测试：**具名导入的别名通道**与跨单元调用矩阵。
 //!
-//! 背景：ir_gen 的 `qualify_names` 用**别名表**把具名导入的调用名改写成限定名
+//! 背景：`lower/module_ir.rs` 的 `qualify_names` 用**别名表**把具名导入的调用名改写成限定名
 //!（`use lib.{pick}` 的 `pick(7)` → `lib.pick(7)`），而 typecheck 的实例化请求
 //! 名是裸名 `pick`。t5 的聚合侧只按单元键限定化（`pick` → `main.pick`，不存在）
 //! 且删掉了后缀启发式，于是这类请求无解析路径——mono 误报 E3018（t6 回归）。
 //!
 //! 本组钉两件事：
-//! ① 请求名解析与 IR 调用名**同源**：聚合侧直调 ir_gen 的
+//! ① 请求名解析与 IR 调用名**同源**：聚合侧直调 `lower/module_ir.rs` 的
 //!    `AstToIrGenerator::import_aliases_from(ast, registry)`（`qualify_names`
 //!    改写调用名用的同一个实现）取别名表，再走**同一个解析函数**
 //!    `AstToIrGenerator::resolve_call_target`——三形态（具名导入 / 整模块导入 /
 //!    限定调用）都不得再触发 E3018；
 //! ② 跨单元矩阵的多文件执行结果与**单文件同表达式**等价。
 
-use crate::frontend::core::sema::probe::TypeLevelNamespace;
 use super::driver::{make_script_project, run_multi};
+use crate::frontend::core::sema::probe::TypeLevelNamespace;
 
 /// 跑合并 IR 的 codegen + 解释器，返回 (全部全局槽位值, 执行错误)。
 fn run_codegen(module: crate::middle::ModuleIR) -> (Vec<String>, Option<String>) {
@@ -55,7 +55,7 @@ fn single_file_values(source: &str) -> Vec<String> {
         "单文件对照程序必须类型检查通过：{:?}",
         tr.diagnostics
     );
-    let mut generator = crate::middle::ir::ir_gen::AstToIrGenerator::new_with_type_result(
+    let mut generator = crate::middle::lower::AstToIrGenerator::new_with_type_result(
         &tr,
         crate::frontend::module::registry::ModuleRegistry::with_std(),
         None,

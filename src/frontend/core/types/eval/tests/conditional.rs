@@ -5,12 +5,12 @@
 //! §5.2: 模式匹配 (MatchPattern, PatternMatcher, PatternMatchType, PatternBuilder)
 //! §5.2: 类型族 (TypeFamily, Nat, Bool)
 
-use crate::frontend::core::types::MonoType;
 use crate::frontend::core::types::eval::conditional::{
-    conditions, If, TypeCondition, MatchType, MatchPattern, MatchBinding, PatternBuilder,
-    PatternMatcher, PatternMatchType, PatternMatchArm, nat_examples,
+    conditions, nat_examples, If, MatchBinding, MatchPattern, MatchType, PatternBuilder,
+    PatternMatchArm, PatternMatchType, PatternMatcher, TypeCondition,
 };
 use crate::frontend::core::types::eval::TypeLevelResult;
+use crate::frontend::core::types::MonoType;
 
 // §5.1: TypeCondition — 所有条件变体
 

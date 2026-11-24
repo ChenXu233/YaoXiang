@@ -6,68 +6,107 @@ module
     type_decl [name: Generic { name: "String", args: [] } ; age_years: Int(64)]
   fn Dog.speak(Ref { mutable: false, inner: TypeRef("Dog") }) -> Generic { name: "String", args: [] }
     locals_total=2
-    Load %0 <- string("Woof")
-    Ret %0
-    Ret %0
+    values_total=1
+    value v0: Generic { name: "String", args: [] } @block0
+    Load v0 <- string("Woof")
+    Ret v0
+    Ret v0
   fn Dog.age(Ref { mutable: false, inner: TypeRef("Dog") }) -> Int(64)
     locals_total=3
-    Load %0 <- %1
-    LoadField %2 <- %0.1
-    Ret %2
-    Ret %2
+    values_total=2
+    value v0: TypeRef("?") @block0
+    value v1: Ref { mutable: false, inner: TypeRef("Dog") } @block0
+    Load v1 <- %0
+    LoadField v0 <- v1.1
+    Ret v0
+    Ret v0
   fn Dog.age_up(Ref { mutable: false, inner: TypeRef("Dog") }, Int(64)) -> Int(64)
-    locals_total=6
-    Load %0 <- %1
-    LoadField %2 <- %0.1
-    Load %3 <- %4
-    Add %5 <- %2, %3
-    Ret %5
-    Ret %5
+    locals_total=5
+    values_total=4
+    value v0: TypeRef("?") @block0
+    value v1: TypeRef("?") @block0
+    value v2: Int(64) @block0
+    value v3: Ref { mutable: false, inner: TypeRef("Dog") } @block0
+    Load v3 <- %0
+    LoadField v1 <- v3.1
+    Load v2 <- %1
+    Add v0 <- v1, v2
+    Ret v0
+    Ret v0
   fn Cat() -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
     type_decl [lives: Int(64)]
   fn Cat.speak(Ref { mutable: false, inner: TypeRef("Cat") }) -> Generic { name: "String", args: [] }
     locals_total=2
-    Load %0 <- string("Meow")
-    Ret %0
-    Ret %0
+    values_total=1
+    value v0: Generic { name: "String", args: [] } @block0
+    Load v0 <- string("Meow")
+    Ret v0
+    Ret v0
   fn Cat.age(Ref { mutable: false, inner: TypeRef("Cat") }) -> Int(64)
-    locals_total=5
-    Load %0 <- %1
-    LoadField %2 <- %0.0
-    Load %3 <- int(3)
-    Mul %4 <- %2, %3
-    Ret %4
-    Ret %4
+    locals_total=4
+    values_total=4
+    value v0: TypeRef("?") @block0
+    value v1: TypeRef("?") @block0
+    value v2: Int(64) @block0
+    value v3: Ref { mutable: false, inner: TypeRef("Dog") } @block0
+    Load v3 <- %0
+    LoadField v1 <- v3.0
+    Load v2 <- int(3)
+    Mul v0 <- v1, v2
+    Ret v0
+    Ret v0
   fn Cat.age_up(Ref { mutable: false, inner: TypeRef("Cat") }, Int(64)) -> Int(64)
-    locals_total=8
-    Load %0 <- %1
-    LoadField %2 <- %0.0
-    Load %3 <- int(3)
-    Mul %4 <- %2, %3
-    Load %5 <- %6
-    Add %7 <- %4, %5
-    Ret %7
-    Ret %7
+    locals_total=5
+    values_total=6
+    value v0: TypeRef("?") @block0
+    value v1: TypeRef("?") @block0
+    value v2: Int(64) @block0
+    value v3: TypeRef("?") @block0
+    value v4: Int(64) @block0
+    value v5: Ref { mutable: false, inner: TypeRef("Dog") } @block0
+    Load v5 <- %0
+    LoadField v3 <- v5.0
+    Load v4 <- int(3)
+    Mul v1 <- v3, v4
+    Load v2 <- %1
+    Add v0 <- v1, v2
+    Ret v0
+    Ret v0
   fn describe(TypeRef("Animal")) -> Generic { name: "String", args: [] }
     slot[0] a : Int(64) @depth1
-    locals_total=10
+    locals_total=6
+    values_total=11
+    value v0: TypeRef("?") @block0
+    value v1: TypeRef("Animal") @block0
+    value v2: TypeRef("?") @block0
+    value v3: Int(64) @block0
+    value v4: Bool @block0
+    value v5: TypeRef("?") @block0
+    value v6: Int(64) @block0
+    value v7: Bool @block0
+    value v8: TypeRef("?") @block0
+    value v9: Bool @block0
+    value v10: Generic { name: "String", args: [] } @block0
     Load %0 <- arg%0
-    Load %1 <- %0
-    VariantTag %2 <- %1 : Animal$Group
-    Load %3 <- int(0)
-    Eq %4 <- %2, %3
-    JmpIfNot %4 -> instr(9)
-    VariantPayload %5 <- %1 : Animal$Group
-    Call %6 <- string("Cat.speak") [%5] (def=d0)
-    Jmp -> instr(15)
-    Load %7 <- int(1)
-    Eq %8 <- %2, %7
-    JmpIfNot %8 -> instr(15)
-    VariantPayload %9 <- %1 : Animal$Group
-    Call %6 <- string("Dog.speak") [%9] (def=d1)
-    Jmp -> instr(15)
-    Ret %6
-    Ret %6
+    Load v1 <- %0
+    VariantTag v2 <- v1 : Animal$Group
+    Load v3 <- int(0)
+    Eq v4 <- v2, v3
+    JmpIfNot v4 -> instr(9)
+    VariantPayload v5 <- v1 : Animal$Group
+    Call v0 <- string("Cat.speak") [v5] (def=d0)
+    Jmp -> instr(18)
+    Load v6 <- int(1)
+    Eq v7 <- v2, v6
+    JmpIfNot v7 -> instr(15)
+    VariantPayload v8 <- v1 : Animal$Group
+    Call v0 <- string("Dog.speak") [v8] (def=d1)
+    Jmp -> instr(18)
+    Load v9 <- bool(false)
+    Load v10 <- string("interface dispatch: unknown variant tag for Animal::speak")
+    Call v0 <- string("std.assert.assert") [v9, v10] (def=d2)
+    Ret v0
+    Ret v0
   fn main() -> Void
     slot[0] animals : Int(64) @depth1
     slot[1] s0 : Int(64) @depth1
@@ -75,154 +114,286 @@ module
     slot[3] a1 : Int(64) @depth1
     slot[4] d : Int(64) @depth1
     slot[5] animals2 : Int(64) @depth1
-    locals_total=21
+    locals_total=11
+    values_total=116
+    value v0: TypeRef("Animal") @block0
+    value v1: TypeRef("?") @block0
+    value v2: Generic { name: "String", args: [] } @block0
+    value v3: Int(64) @block0
+    value v4: Int(64) @block0
+    value v5: TypeRef("Animal") @block0
+    value v6: TypeRef("?") @block0
+    value v7: Int(64) @block0
+    value v8: Int(64) @block0
+    value v9: TypeRef("?") @block0
+    value v10: Generic { name: "Vec", args: [TypeRef("Animal")] } @block0
+    value v11: Int(64) @block0
+    value v12: TypeRef("?") @block0
+    value v13: Int(64) @block0
+    value v14: Bool @block0
+    value v15: TypeRef("?") @block0
+    value v16: Int(64) @block0
+    value v17: Bool @block0
+    value v18: TypeRef("?") @block0
+    value v19: Bool @block0
+    value v20: Generic { name: "String", args: [] } @block0
+    value v21: TypeRef("?") @block0
+    value v22: Bool @block0
+    value v23: Generic { name: "String", args: [] } @block0
+    value v24: Generic { name: "String", args: [] } @block0
+    value v25: Generic { name: "String", args: [] } @block0
+    value v26: TypeRef("?") @block0
+    value v27: Generic { name: "Vec", args: [TypeRef("Animal")] } @block0
+    value v28: Int(64) @block0
+    value v29: TypeRef("?") @block0
+    value v30: Int(64) @block0
+    value v31: Bool @block0
+    value v32: TypeRef("?") @block0
+    value v33: Int(64) @block0
+    value v34: Bool @block0
+    value v35: TypeRef("?") @block0
+    value v36: Bool @block0
+    value v37: Generic { name: "String", args: [] } @block0
+    value v38: TypeRef("?") @block0
+    value v39: Bool @block0
+    value v40: Generic { name: "String", args: [] } @block0
+    value v41: Generic { name: "String", args: [] } @block0
+    value v42: Generic { name: "String", args: [] } @block0
+    value v43: TypeRef("?") @block0
+    value v44: Generic { name: "Vec", args: [TypeRef("Animal")] } @block0
+    value v45: Int(64) @block0
+    value v46: Int(64) @block0
+    value v47: TypeRef("?") @block0
+    value v48: Int(64) @block0
+    value v49: Bool @block0
+    value v50: TypeRef("?") @block0
+    value v51: Int(64) @block0
+    value v52: Bool @block0
+    value v53: TypeRef("?") @block0
+    value v54: Bool @block0
+    value v55: Generic { name: "String", args: [] } @block0
+    value v56: TypeRef("?") @block0
+    value v57: Bool @block0
+    value v58: Int(64) @block0
+    value v59: Int(64) @block0
+    value v60: Generic { name: "String", args: [] } @block0
+    value v61: Generic { name: "Vec", args: [TypeRef("Animal")] } @block0
+    value v62: Int(64) @block0
+    value v63: TypeRef("?") @block0
+    value v64: Bool @block0
+    value v65: TypeRef("?") @block0
+    value v66: Generic { name: "String", args: [] } @block0
+    value v67: TypeRef("Animal") @block0
+    value v68: TypeRef("?") @block0
+    value v69: Int(64) @block0
+    value v70: Bool @block0
+    value v71: TypeRef("?") @block0
+    value v72: Int(64) @block0
+    value v73: Bool @block0
+    value v74: TypeRef("?") @block0
+    value v75: Bool @block0
+    value v76: Generic { name: "String", args: [] } @block0
+    value v77: Generic { name: "String", args: [] } @block0
+    value v78: TypeRef("?") @block0
+    value v79: Bool @block0
+    value v80: Generic { name: "String", args: [] } @block0
+    value v81: Generic { name: "String", args: [] } @block0
+    value v82: TypeRef("?") @block0
+    value v83: Generic { name: "Vec", args: [TypeRef("Animal")] } @block0
+    value v84: Int(64) @block0
+    value v85: Generic { name: "String", args: [] } @block0
+    value v86: TypeRef("?") @block0
+    value v87: Bool @block0
+    value v88: Generic { name: "String", args: [] } @block0
+    value v89: Generic { name: "String", args: [] } @block0
+    value v90: TypeRef("?") @block0
+    value v91: Generic { name: "Vec", args: [TypeRef("Animal")] } @block0
+    value v92: Int(64) @block0
+    value v93: Generic { name: "String", args: [] } @block0
+    value v94: Generic { name: "Vec", args: [TypeRef("Animal")] } @block0
+    value v95: TypeRef("Animal") @block0
+    value v96: TypeRef("?") @block0
+    value v97: Generic { name: "String", args: [] } @block0
+    value v98: Int(64) @block0
+    value v99: TypeRef("?") @block0
+    value v100: Bool @block0
+    value v101: TypeRef("?") @block0
+    value v102: Generic { name: "String", args: [] } @block0
+    value v103: TypeRef("?") @block0
+    value v104: Generic { name: "Vec", args: [TypeRef("Animal")] } @block0
+    value v105: Int(64) @block0
+    value v106: TypeRef("?") @block0
+    value v107: Int(64) @block0
+    value v108: Bool @block0
+    value v109: TypeRef("?") @block0
+    value v110: Int(64) @block0
+    value v111: Bool @block0
+    value v112: TypeRef("?") @block0
+    value v113: Bool @block0
+    value v114: Generic { name: "String", args: [] } @block0
+    value v115: Generic { name: "String", args: [] } @block0
     AllocArray %0 size=int(2), elem=int(1)
-    Load %1 <- string("Rex")
-    Load %2 <- int(3)
-    Call %3 <- string("Dog") [%1, %2] (def=d2)
-    CreateVariant %4 <- Animal$Group::1 %3
-    Load %5 <- int(0)
-    StoreIndex %0[%5] <- %4
-    Load %6 <- int(9)
-    Call %7 <- string("Cat") [%6] (def=d3)
-    CreateVariant %8 <- Animal$Group::0 %7
-    Load %9 <- int(1)
-    StoreIndex %0[%9] <- %8
-    Load %1 <- %0
-    Load %2 <- int(0)
-    LoadIndex %3 <- %1[%2]
-    VariantTag %5 <- %3 : Animal$Group
-    Load %8 <- int(0)
-    Eq %7 <- %5, %8
-    JmpIfNot %7 -> instr(22)
-    VariantPayload %6 <- %3 : Animal$Group
-    Call %4 <- string("Cat.speak") [%6] (def=d0)
-    Jmp -> instr(28)
-    Load %9 <- int(1)
-    Eq %10 <- %5, %9
-    JmpIfNot %10 -> instr(28)
-    VariantPayload %11 <- %3 : Animal$Group
-    Call %4 <- string("Dog.speak") [%11] (def=d1)
-    Jmp -> instr(28)
-    Load %2 <- %4
-    Load %5 <- string("Woof")
-    Eq %1 <- %2, %5
-    Load %8 <- string("Dog element dispatches speak -> Woof")
-    Call %3 <- string("std.assert.assert") [%1, %8] (def=d4)
-    Load %2 <- %0
-    Load %5 <- int(1)
-    LoadIndex %1 <- %2[%5]
-    VariantTag %8 <- %1 : Animal$Group
-    Load %7 <- int(0)
-    Eq %6 <- %8, %7
-    JmpIfNot %6 -> instr(43)
-    VariantPayload %9 <- %1 : Animal$Group
-    Call %3 <- string("Cat.speak") [%9] (def=d0)
-    Jmp -> instr(49)
-    Load %10 <- int(1)
-    Eq %11 <- %8, %10
-    JmpIfNot %11 -> instr(49)
-    VariantPayload %12 <- %1 : Animal$Group
-    Call %3 <- string("Dog.speak") [%12] (def=d1)
-    Jmp -> instr(49)
-    Load %5 <- %3
-    Load %8 <- string("Meow")
-    Eq %2 <- %5, %8
-    Load %7 <- string("Cat element dispatches speak -> Meow")
-    Call %1 <- string("std.assert.assert") [%2, %7] (def=d4)
-    Load %5 <- %0
-    Load %8 <- int(1)
-    LoadIndex %2 <- %5[%8]
-    Load %7 <- int(1)
-    VariantTag %6 <- %2 : Animal$Group
-    Load %9 <- int(0)
-    Eq %10 <- %6, %9
-    JmpIfNot %10 -> instr(65)
-    VariantPayload %11 <- %2 : Animal$Group
-    Call %1 <- string("Cat.age_up") [%11, %7] (def=d5)
-    Jmp -> instr(71)
-    Load %12 <- int(1)
-    Eq %13 <- %6, %12
-    JmpIfNot %13 -> instr(71)
-    VariantPayload %14 <- %2 : Animal$Group
-    Call %1 <- string("Dog.age_up") [%14, %7] (def=d6)
-    Jmp -> instr(71)
-    Load %8 <- %1
-    Load %7 <- int(28)
-    Eq %5 <- %8, %7
-    Load %6 <- string("Cat age_up(1) dispatches with argument (27+1)")
-    Call %2 <- string("std.assert.assert") [%5, %6] (def=d4)
-    Load %5 <- %0
-    Load %8 <- int(0)
-    LoadIndex %2 <- %5[%8]
-    Load %9 <- %2
-    VariantTag %10 <- %9 : Animal$Group
-    Load %11 <- int(0)
-    Eq %12 <- %10, %11
-    JmpIfNot %12 -> instr(87)
-    VariantPayload %13 <- %9 : Animal$Group
-    Call %7 <- string("Cat.speak") [%13] (def=d0)
-    Jmp -> instr(93)
-    Load %14 <- int(1)
-    Eq %15 <- %10, %14
-    JmpIfNot %15 -> instr(93)
-    VariantPayload %16 <- %9 : Animal$Group
-    Call %7 <- string("Dog.speak") [%16] (def=d1)
-    Jmp -> instr(93)
-    Load %6 <- string("Woof")
-    Eq %8 <- %7, %6
-    Load %17 <- string("two-step element dispatch")
-    Call %5 <- string("std.assert.assert") [%8, %17] (def=d4)
-    Load %10 <- %0
-    Load %11 <- int(0)
-    LoadIndex %9 <- %10[%11]
-    Call %7 <- string("describe") [%9] (def=d7)
-    Load %6 <- string("Woof")
-    Eq %8 <- %7, %6
-    Load %12 <- string("fn param polymorphism (Dog)")
-    Call %5 <- string("std.assert.assert") [%8, %12] (def=d4)
-    Load %10 <- %0
-    Load %11 <- int(1)
-    LoadIndex %9 <- %10[%11]
-    Call %7 <- string("describe") [%9] (def=d7)
-    Load %6 <- string("Meow")
-    Eq %8 <- %7, %6
-    Load %12 <- string("fn param polymorphism (Cat)")
-    Call %5 <- string("std.assert.assert") [%8, %12] (def=d4)
-    Load %8 <- %0
-    Load %9 <- string("Bella")
-    Load %10 <- int(5)
-    Call %6 <- string("Dog") [%9, %10] (def=d2)
-    CreateVariant %7 <- Animal$Group::1 %6
-    Call %5 <- string("std.list.append") [%8, %7] (def=d8)
+    Load v2 <- string("Rex")
+    Load v3 <- int(3)
+    Call v1 <- string("Dog") [v2, v3] (def=d3)
+    CreateVariant v0 <- Animal$Group::1 v1
+    Load v4 <- int(0)
+    StoreIndex %0[v4] <- v0
+    Load v7 <- int(9)
+    Call v6 <- string("Cat") [v7] (def=d4)
+    CreateVariant v5 <- Animal$Group::0 v6
+    Load v8 <- int(1)
+    StoreIndex %0[v8] <- v5
+    Load v10 <- %0
+    Load v11 <- int(0)
+    LoadIndex v9 <- v10[v11]
+    VariantTag v12 <- v9 : Animal$Group
+    Load v13 <- int(0)
+    Eq v14 <- v12, v13
+    JmpIfNot v14 -> instr(22)
+    VariantPayload v15 <- v9 : Animal$Group
+    Call %1 <- string("Cat.speak") [v15] (def=d0)
+    Jmp -> instr(31)
+    Load v16 <- int(1)
+    Eq v17 <- v12, v16
+    JmpIfNot v17 -> instr(28)
+    VariantPayload v18 <- v9 : Animal$Group
+    Call %1 <- string("Dog.speak") [v18] (def=d1)
+    Jmp -> instr(31)
+    Load v19 <- bool(false)
+    Load v20 <- string("interface dispatch: unknown variant tag for Animal::speak")
+    Call %1 <- string("std.assert.assert") [v19, v20] (def=d2)
+    Load v23 <- %1
+    Load v24 <- string("Woof")
+    Eq v22 <- v23, v24
+    Load v25 <- string("Dog element dispatches speak -> Woof")
+    Call v21 <- string("std.assert.assert") [v22, v25] (def=d2)
+    Load v27 <- %0
+    Load v28 <- int(1)
+    LoadIndex v26 <- v27[v28]
+    VariantTag v29 <- v26 : Animal$Group
+    Load v30 <- int(0)
+    Eq v31 <- v29, v30
+    JmpIfNot v31 -> instr(46)
+    VariantPayload v32 <- v26 : Animal$Group
+    Call %2 <- string("Cat.speak") [v32] (def=d0)
+    Jmp -> instr(55)
+    Load v33 <- int(1)
+    Eq v34 <- v29, v33
+    JmpIfNot v34 -> instr(52)
+    VariantPayload v35 <- v26 : Animal$Group
+    Call %2 <- string("Dog.speak") [v35] (def=d1)
+    Jmp -> instr(55)
+    Load v36 <- bool(false)
+    Load v37 <- string("interface dispatch: unknown variant tag for Animal::speak")
+    Call %2 <- string("std.assert.assert") [v36, v37] (def=d2)
+    Load v40 <- %2
+    Load v41 <- string("Meow")
+    Eq v39 <- v40, v41
+    Load v42 <- string("Cat element dispatches speak -> Meow")
+    Call v38 <- string("std.assert.assert") [v39, v42] (def=d2)
+    Load v44 <- %0
+    Load v45 <- int(1)
+    LoadIndex v43 <- v44[v45]
+    Load v46 <- int(1)
+    VariantTag v47 <- v43 : Animal$Group
+    Load v48 <- int(0)
+    Eq v49 <- v47, v48
+    JmpIfNot v49 -> instr(71)
+    VariantPayload v50 <- v43 : Animal$Group
+    Call %3 <- string("Cat.age_up") [v50, v46] (def=d5)
+    Jmp -> instr(80)
+    Load v51 <- int(1)
+    Eq v52 <- v47, v51
+    JmpIfNot v52 -> instr(77)
+    VariantPayload v53 <- v43 : Animal$Group
+    Call %3 <- string("Dog.age_up") [v53, v46] (def=d6)
+    Jmp -> instr(80)
+    Load v54 <- bool(false)
+    Load v55 <- string("interface dispatch: unknown variant tag for Animal::age_up")
+    Call %3 <- string("std.assert.assert") [v54, v55] (def=d2)
+    Load v58 <- %3
+    Load v59 <- int(28)
+    Eq v57 <- v58, v59
+    Load v60 <- string("Cat age_up(1) dispatches with argument (27+1)")
+    Call v56 <- string("std.assert.assert") [v57, v60] (def=d2)
+    Load v61 <- %0
+    Load v62 <- int(0)
+    LoadIndex %4 <- v61[v62]
+    Load v67 <- %4
+    VariantTag v68 <- v67 : Animal$Group
+    Load v69 <- int(0)
+    Eq v70 <- v68, v69
+    JmpIfNot v70 -> instr(96)
+    VariantPayload v71 <- v67 : Animal$Group
+    Call v65 <- string("Cat.speak") [v71] (def=d0)
+    Jmp -> instr(105)
+    Load v72 <- int(1)
+    Eq v73 <- v68, v72
+    JmpIfNot v73 -> instr(102)
+    VariantPayload v74 <- v67 : Animal$Group
+    Call v65 <- string("Dog.speak") [v74] (def=d1)
+    Jmp -> instr(105)
+    Load v75 <- bool(false)
+    Load v76 <- string("interface dispatch: unknown variant tag for Animal::speak")
+    Call v65 <- string("std.assert.assert") [v75, v76] (def=d2)
+    Load v66 <- string("Woof")
+    Eq v64 <- v65, v66
+    Load v77 <- string("two-step element dispatch")
+    Call v63 <- string("std.assert.assert") [v64, v77] (def=d2)
+    Load v83 <- %0
+    Load v84 <- int(0)
+    LoadIndex v82 <- v83[v84]
+    Call v80 <- string("describe") [v82] (def=d7)
+    Load v81 <- string("Woof")
+    Eq v79 <- v80, v81
+    Load v85 <- string("fn param polymorphism (Dog)")
+    Call v78 <- string("std.assert.assert") [v79, v85] (def=d2)
+    Load v91 <- %0
+    Load v92 <- int(1)
+    LoadIndex v90 <- v91[v92]
+    Call v88 <- string("describe") [v90] (def=d7)
+    Load v89 <- string("Meow")
+    Eq v87 <- v88, v89
+    Load v93 <- string("fn param polymorphism (Cat)")
+    Call v86 <- string("std.assert.assert") [v87, v93] (def=d2)
+    Load v94 <- %0
+    Load v97 <- string("Bella")
+    Load v98 <- int(5)
+    Call v96 <- string("Dog") [v97, v98] (def=d3)
+    CreateVariant v95 <- Animal$Group::1 v96
+    Call %5 <- string("std.list.append") [v94, v95] (def=d8)
     Drop %0
-    Load %11 <- %5
-    Load %12 <- int(2)
-    LoadIndex %10 <- %11[%12]
-    VariantTag %13 <- %10 : Animal$Group
-    Load %14 <- int(0)
-    Eq %15 <- %13, %14
-    JmpIfNot %15 -> instr(130)
-    VariantPayload %16 <- %10 : Animal$Group
-    Call %6 <- string("Cat.speak") [%16] (def=d0)
-    Jmp -> instr(136)
-    Load %17 <- int(1)
-    Eq %18 <- %13, %17
-    JmpIfNot %18 -> instr(136)
-    VariantPayload %19 <- %10 : Animal$Group
-    Call %6 <- string("Dog.speak") [%19] (def=d1)
-    Jmp -> instr(136)
-    Load %9 <- string("Woof")
-    Eq %7 <- %6, %9
-    Load %20 <- string("append implements-member then dispatch")
-    Call %8 <- string("std.assert.assert") [%7, %20] (def=d4)
-    Drop %1
+    Load v104 <- %5
+    Load v105 <- int(2)
+    LoadIndex v103 <- v104[v105]
+    VariantTag v106 <- v103 : Animal$Group
+    Load v107 <- int(0)
+    Eq v108 <- v106, v107
+    JmpIfNot v108 -> instr(142)
+    VariantPayload v109 <- v103 : Animal$Group
+    Call v101 <- string("Cat.speak") [v109] (def=d0)
+    Jmp -> instr(151)
+    Load v110 <- int(1)
+    Eq v111 <- v106, v110
+    JmpIfNot v111 -> instr(148)
+    VariantPayload v112 <- v103 : Animal$Group
+    Call v101 <- string("Dog.speak") [v112] (def=d1)
+    Jmp -> instr(151)
+    Load v113 <- bool(false)
+    Load v114 <- string("interface dispatch: unknown variant tag for Animal::speak")
+    Call v101 <- string("std.assert.assert") [v113, v114] (def=d2)
+    Load v102 <- string("Woof")
+    Eq v100 <- v101, v102
+    Load v115 <- string("append implements-member then dispatch")
+    Call v99 <- string("std.assert.assert") [v100, v115] (def=d2)
+    Drop %3
     Drop %0
     Drop %5
-    Drop %2
     Drop %4
-    Drop %3
-    Ret %8
+    Drop %1
+    Drop %2
+    Ret v99
   init (locals=2)
     islot[0] self : Int(64) @depth1
     islot[1] years : Int(64) @depth1

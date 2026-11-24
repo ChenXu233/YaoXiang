@@ -10,101 +10,166 @@ module
     slot[5] r3 : Int(64) @depth1
     slot[6] q : Int(64) @depth1
     slot[7] spawned : Int(64) @depth1
-    locals_total=18
-    Load %0 <- int(3)
-    Load %1 <- int(4)
-    Call %2 <- string("Point") [%0, %1] (def=d0)
-    Spawn %0 <- [] plan(groups=[], deps=[], resources=[])
-    Load %3 <- %2
-    LoadField %4 <- %3.0
-    Load %5 <- %2
-    LoadField %6 <- %5.1
-    Add %1 <- %4, %6
-    Move %0 <- %1
-    Load %6 <- %0
-    Load %3 <- int(7)
-    Eq %4 <- %6, %3
-    Load %5 <- string("Standard spawn 捕获 Struct 字段 p.x+p.y == 7")
-    Call %1 <- string("std.assert.assert") [%4, %5] (def=d1)
-    AllocArray %1 size=int(3), elem=int(1)
-    Load %4 <- int(1)
-    Load %6 <- int(0)
-    StoreIndex %1[%6] <- %4
-    Load %3 <- int(2)
-    Load %5 <- int(1)
-    StoreIndex %1[%5] <- %3
-    Load %7 <- int(3)
-    Load %8 <- int(2)
-    StoreIndex %1[%8] <- %7
-    Spawn %4 <- [] plan(groups=[], deps=[], resources=[])
-    Load %3 <- %1
-    Load %5 <- int(1)
-    LoadIndex %6 <- %3[%5]
-    Move %4 <- %6
-    Load %5 <- %4
-    Load %7 <- int(2)
-    Eq %3 <- %5, %7
-    Load %8 <- string("Standard spawn 捕获 List 元素 items[1] == 2")
-    Call %6 <- string("std.assert.assert") [%3, %8] (def=d1)
-    Load %3 <- string("a")
-    Load %5 <- int(10)
-    Load %7 <- string("b")
-    Load %8 <- int(20)
-    NewDict %6 <- keys=[%3, %7] values=[%5, %8]
+    locals_total=12
+    values_total=64
+    value v0: Int(64) @block0
+    value v1: Int(64) @block0
+    value v2: TypeRef("?") @block0
+    value v3: TypeRef("?") @block0
+    value v4: TypeRef("?") @block0
+    value v5: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
+    value v6: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
+    value v7: TypeRef("?") @block0
+    value v8: Bool @block0
+    value v9: Int(64) @block0
+    value v10: Int(64) @block0
+    value v11: Generic { name: "String", args: [] } @block0
+    value v12: Int(64) @block0
+    value v13: Int(64) @block0
+    value v14: Int(64) @block0
+    value v15: Int(64) @block0
+    value v16: Int(64) @block0
+    value v17: Int(64) @block0
+    value v18: TypeRef("?") @block0
+    value v19: Generic { name: "Vec", args: [Int(64)] } @block0
+    value v20: Int(64) @block0
+    value v21: TypeRef("?") @block0
+    value v22: Bool @block0
+    value v23: Int(64) @block0
+    value v24: Int(64) @block0
+    value v25: Generic { name: "String", args: [] } @block0
+    value v26: Generic { name: "String", args: [] } @block0
+    value v27: Int(64) @block0
+    value v28: Generic { name: "String", args: [] } @block0
+    value v29: Int(64) @block0
+    value v30: TypeRef("?") @block0
+    value v31: Generic { name: "Dict", args: [Generic { name: "String", args: [] }, Int(64)] } @block0
+    value v32: Generic { name: "String", args: [] } @block0
+    value v33: TypeRef("?") @block0
+    value v34: Bool @block0
+    value v35: Int(64) @block0
+    value v36: Int(64) @block0
+    value v37: Generic { name: "String", args: [] } @block0
+    value v38: Int(64) @block0
+    value v39: Int(64) @block0
+    value v40: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
+    value v41: Int(64) @block0
+    value v42: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
+    value v43: Int(64) @block0
+    value v44: TypeRef("?") @block0
+    value v45: TypeRef("?") @block0
+    value v46: TypeRef("?") @block0
+    value v47: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
+    value v48: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
+    value v49: TypeRef("?") @block0
+    value v50: Bool @block0
+    value v51: Int(64) @block0
+    value v52: Int(64) @block0
+    value v53: Generic { name: "String", args: [] } @block0
+    value v54: TypeRef("?") @block0
+    value v55: Bool @block0
+    value v56: Bool @block0
+    value v57: TypeRef("?") @block0
+    value v58: Int(64) @block0
+    value v59: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
+    value v60: TypeRef("?") @block0
+    value v61: Int(64) @block0
+    value v62: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
+    value v63: Generic { name: "String", args: [] } @block0
+    Load v0 <- int(3)
+    Load v1 <- int(4)
+    Call %0 <- string("Point") [v0, v1] (def=d0)
+    Spawn %1 <- [] plan(groups=[], deps=[], resources=[])
+    Load v5 <- %0
+    LoadField v3 <- v5.0
+    Load v6 <- %0
+    LoadField v4 <- v6.1
+    Add v2 <- v3, v4
+    Move %1 <- v2
+    Load v9 <- %1
+    Load v10 <- int(7)
+    Eq v8 <- v9, v10
+    Load v11 <- string("Standard spawn 捕获 Struct 字段 p.x+p.y == 7")
+    Call v7 <- string("std.assert.assert") [v8, v11] (def=d1)
+    AllocArray %2 size=int(3), elem=int(1)
+    Load v12 <- int(1)
+    Load v13 <- int(0)
+    StoreIndex %2[v13] <- v12
+    Load v14 <- int(2)
+    Load v15 <- int(1)
+    StoreIndex %2[v15] <- v14
+    Load v16 <- int(3)
+    Load v17 <- int(2)
+    StoreIndex %2[v17] <- v16
     Spawn %3 <- [] plan(groups=[], deps=[], resources=[])
-    Load %7 <- %6
-    Load %8 <- string("a")
-    LoadIndex %5 <- %7[%8]
-    Move %3 <- %5
-    Load %8 <- %3
-    Load %9 <- int(10)
-    Eq %7 <- %8, %9
-    Load %10 <- string("Standard spawn 捕获 Dict m[\"a\"] == 10")
-    Call %5 <- string("std.assert.assert") [%7, %10] (def=d1)
-    Load %7 <- int(0)
-    Load %8 <- int(0)
-    Call %5 <- string("Point") [%7, %8] (def=d0)
-    Load %8 <- %5
-    Load %9 <- int(5)
-    StoreField %8.0 <- %9 (type=None, name=Some("x"))
-    Drop %5
-    Load %10 <- %5
-    Load %11 <- int(7)
-    StoreField %10.1 <- %11 (type=None, name=Some("y"))
-    Drop %5
+    Load v19 <- %2
+    Load v20 <- int(1)
+    LoadIndex v18 <- v19[v20]
+    Move %3 <- v18
+    Load v23 <- %3
+    Load v24 <- int(2)
+    Eq v22 <- v23, v24
+    Load v25 <- string("Standard spawn 捕获 List 元素 items[1] == 2")
+    Call v21 <- string("std.assert.assert") [v22, v25] (def=d1)
+    Load v26 <- string("a")
+    Load v27 <- int(10)
+    Load v28 <- string("b")
+    Load v29 <- int(20)
+    NewDict %4 <- keys=[v26, v28] values=[v27, v29]
+    Spawn %5 <- [] plan(groups=[], deps=[], resources=[])
+    Load v31 <- %4
+    Load v32 <- string("a")
+    LoadIndex v30 <- v31[v32]
+    Move %5 <- v30
+    Load v35 <- %5
+    Load v36 <- int(10)
+    Eq v34 <- v35, v36
+    Load v37 <- string("Standard spawn 捕获 Dict m[\"a\"] == 10")
+    Call v33 <- string("std.assert.assert") [v34, v37] (def=d1)
+    Load v38 <- int(0)
+    Load v39 <- int(0)
+    Call %6 <- string("Point") [v38, v39] (def=d0)
+    Load v40 <- %6
+    Load v41 <- int(5)
+    StoreField v40.0 <- v41 (type=None, name=Some("x"))
+    Drop %6
+    Load v42 <- %6
+    Load v43 <- int(7)
+    StoreField v42.1 <- v43 (type=None, name=Some("y"))
+    Drop %6
     Spawn %7 <- [] plan(groups=[], deps=[], resources=[])
-    Load %12 <- %5
-    LoadField %13 <- %12.0
-    Load %14 <- %5
-    LoadField %15 <- %14.1
-    Add %16 <- %13, %15
-    Move %7 <- %16
-    Load %10 <- %7
-    Load %11 <- int(12)
-    Eq %9 <- %10, %11
-    Load %16 <- string("Standard spawn 内写 q.x+q.y == 12")
-    Call %8 <- string("std.assert.assert") [%9, %16] (def=d1)
-    Load %13 <- %5
-    LoadField %11 <- %13.0
-    Load %16 <- int(5)
-    Eq %10 <- %11, %16
-    JmpIfNot %10 -> instr(83)
-    Load %14 <- %5
-    LoadField %15 <- %14.1
-    Load %12 <- int(7)
-    Eq %9 <- %15, %12
+    Load v47 <- %6
+    LoadField v45 <- v47.0
+    Load v48 <- %6
+    LoadField v46 <- v48.1
+    Add v44 <- v45, v46
+    Move %7 <- v44
+    Load v51 <- %7
+    Load v52 <- int(12)
+    Eq v50 <- v51, v52
+    Load v53 <- string("Standard spawn 内写 q.x+q.y == 12")
+    Call v49 <- string("std.assert.assert") [v50, v53] (def=d1)
+    Load v59 <- %6
+    LoadField v57 <- v59.0
+    Load v58 <- int(5)
+    Eq v56 <- v57, v58
+    JmpIfNot v56 -> instr(83)
+    Load v62 <- %6
+    LoadField v60 <- v62.1
+    Load v61 <- int(7)
+    Eq v55 <- v60, v61
     Jmp -> instr(84)
-    Load %9 <- bool(false)
-    Load %17 <- string("Standard spawn 写回共享 Struct 可见")
-    Call %8 <- string("std.assert.assert") [%9, %17] (def=d1)
-    Drop %5
-    Drop %1
+    Load v55 <- bool(false)
+    Load v63 <- string("Standard spawn 写回共享 Struct 可见")
+    Call v54 <- string("std.assert.assert") [v55, v63] (def=d1)
     Drop %6
     Drop %2
-    Drop %0
     Drop %4
+    Drop %0
+    Drop %1
     Drop %3
+    Drop %5
     Drop %7
-    Ret %8
+    Ret v54
   init (locals=0)
     Call %0 <- string("main") [] (def=d2)

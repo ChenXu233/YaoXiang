@@ -19,7 +19,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use crate::package::source::git::{
-    GitRef, GitSource, git_command, guard_repo_absent, guard_repo_created,
+    git_command, guard_repo_absent, guard_repo_created, GitRef, GitSource,
 };
 use crate::package::source::{Source, SourceKind};
 

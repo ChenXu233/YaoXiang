@@ -23,9 +23,9 @@ use crate::frontend::core::sema::checker::TypeChecker;
 use crate::frontend::core::sema::MonoType;
 use crate::frontend::core::sema::SemanticProbe;
 use crate::frontend::module::registry::ModuleRegistry;
-use crate::middle::ir::ir::{FunctionBody, Instruction};
-use crate::middle::ir::ir_gen::AstToIrGenerator;
+use crate::middle::ir::ir::{FunctionBody, Instruction, Operand, ValueId};
 use crate::middle::ir::normalize::normalize_module;
+use crate::middle::lower::AstToIrGenerator;
 use crate::util::span::Span;
 
 use super::corpus::{corpus_files, reaches_ir_generation};
@@ -243,4 +243,30 @@ fn test_span_stripped_makes_identical_output() {
 
     // Assert
     assert_eq!(a, b, "span 差异不得出现在规范化输出中：\nA={a}\nB={b}");
+}
+
+/// `Phi` 渲染：incoming 打印前按前驱 label 升序，SSA 值按函数内首现序相对化
+/// （07 §第二层「前驱排序」；09a §P7 7b.1a 契约 §二 第 3 行）。
+#[test]
+fn test_normalize_renders_phi_incoming_sorted_by_predecessor() {
+    // Arrange：incoming 故意乱序（label 2 在前、0 在后），dst 与输入用不同 ValueId
+    let phi = Instruction::Phi {
+        dst: Operand::Value(ValueId(0)),
+        incoming: vec![
+            (2, Operand::Value(ValueId(1))),
+            (0, Operand::Value(ValueId(2))),
+        ],
+        span: Span::dummy(),
+    };
+    let f = func("f", vec![], MonoType::Void, vec![], vec![phi, ret_void()]);
+    let m = module_with(vec![f]);
+
+    // Act
+    let text = normalize_module(&m);
+
+    // Assert：升序后 0 → Value(2) 首现为 v1，2 → Value(1) 次现为 v2
+    assert!(
+        text.contains("Phi v0 <- [0: v1, 2: v2]"),
+        "Phi 渲染必须按前驱 label 升序且 SSA 值按首现序相对化：\n{text}"
+    );
 }

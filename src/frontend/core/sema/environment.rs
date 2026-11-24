@@ -4,8 +4,8 @@
 
 use std::collections::HashMap;
 
-use crate::frontend::core::types::{MonoType, PolyType, TypeConstraintSolver};
 use crate::frontend::core::types::eval::const_eval::ConstFunction;
+use crate::frontend::core::types::{MonoType, PolyType, TypeConstraintSolver};
 
 use super::passes::overload;
 use super::types::ImportInfo;
@@ -259,6 +259,9 @@ pub struct TypeEnvironment {
     /// 存储已注册的编译期谓词模板，供 PredicateResolver 使用
     pub predicate_defs:
         HashMap<String, crate::frontend::core::sema::predicate_resolver::PredicateDef>,
+    /// 依赖记录 Σ 的记录模型（类型名 → 模型）。B.2 声明期一遍的**唯一写入点**；
+    /// 消费面 = 构造义务（refined walk）与 IR 量词传播（经 `TypeCheckResult`）。
+    pub record_models: HashMap<String, crate::frontend::core::sema::record_model::RecordModel>,
 }
 
 impl TypeEnvironment {
@@ -698,22 +701,20 @@ impl TypeEnvironment {
                 ty.clone()
             }
             MonoType::Struct(s) => {
-                let new_fields: Vec<(String, MonoType)> = s
+                let new_fields: Vec<crate::frontend::core::types::mono::StructFieldInfo> = s
                     .fields
                     .iter()
-                    .map(|(name, field_ty)| {
-                        (
-                            name.clone(),
-                            Self::replace_type_params_walk(field_ty, param_names, args),
-                        )
-                    })
+                    .map(
+                        |field_info| crate::frontend::core::types::mono::StructFieldInfo {
+                            ty: Self::replace_type_params_walk(&field_info.ty, param_names, args),
+                            ..field_info.clone()
+                        },
+                    )
                     .collect();
                 MonoType::Struct(crate::frontend::core::types::mono::StructType {
                     name: s.name.clone(),
                     fields: new_fields,
                     methods: s.methods.clone(),
-                    field_mutability: s.field_mutability.clone(),
-                    field_has_default: s.field_has_default.clone(),
                     interfaces: s.interfaces.clone(),
                 })
             }
@@ -770,17 +771,20 @@ impl TypeEnvironment {
                 MonoType::from_builtin_name(name).unwrap_or_else(|| ty.clone())
             }
             MonoType::Struct(s) => {
-                let new_fields: Vec<(String, MonoType)> = s
+                let new_fields: Vec<crate::frontend::core::types::mono::StructFieldInfo> = s
                     .fields
                     .iter()
-                    .map(|(name, field_ty)| (name.clone(), Self::resolve_type_refs(field_ty)))
+                    .map(
+                        |field_info| crate::frontend::core::types::mono::StructFieldInfo {
+                            ty: Self::resolve_type_refs(&field_info.ty),
+                            ..field_info.clone()
+                        },
+                    )
                     .collect();
                 MonoType::Struct(crate::frontend::core::types::mono::StructType {
                     name: s.name.clone(),
                     fields: new_fields,
                     methods: s.methods.clone(),
-                    field_mutability: s.field_mutability.clone(),
-                    field_has_default: s.field_has_default.clone(),
                     interfaces: s.interfaces.clone(),
                 })
             }

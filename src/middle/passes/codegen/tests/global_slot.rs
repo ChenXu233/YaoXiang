@@ -2,15 +2,15 @@
 //!
 //! 覆盖 T1 基础设施：`Operand::Global` 经 translator 编成 `LOAD_GLOBAL` /
 //! `STORE_GLOBAL`，解释器的 `global_slots` 承接读写。
-//! 这些测试手工构造 IR——不依赖 ir_gen 的顶层绑定改造（T2），
+//! 这些测试手工构造 IR——不依赖 lower 的顶层绑定改造（T2），
 //! 故 T1 可独立验证。
 
 use crate::backends::common::RuntimeValue;
 use crate::backends::Executor;
 use crate::frontend::core::sema::MonoType;
 use crate::middle::ir::ir::{
-    BasicBlock, ConstValue, FunctionBody, FunctionIR, GlobalSlot, Instruction, ModuleIR, Operand,
-    LocalSlot,
+    BasicBlock, ConstValue, FunctionBody, FunctionIR, GlobalSlot, Instruction, LocalSlot, ModuleIR,
+    Operand,
 };
 use crate::middle::passes::codegen::CodegenContext;
 use crate::util::span::Span;
@@ -69,6 +69,8 @@ fn store_then_load_module() -> ModuleIR {
                 LocalSlot::temp(MonoType::Int(64)),
                 LocalSlot::temp(MonoType::Int(64)),
             ],
+            values: Vec::new(),
+            value_slots: Vec::new(),
         },
     });
     module

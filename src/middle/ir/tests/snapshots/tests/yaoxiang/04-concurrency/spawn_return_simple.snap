@@ -1,17 +1,25 @@
 module
   fn main() -> Void
     slot[0] result : Int(64) @depth1
-    locals_total=5
+    locals_total=4
+    values_total=7
+    value v0: Int(64) @block0
+    value v1: Int(64) @block0
+    value v2: Int(64) @block0
+    value v3: TypeRef("?") @block0
+    value v4: Bool @block0
+    value v5: Int(64) @block0
+    value v6: Int(64) @block0
     Spawn %0 <- [] plan(groups=[], deps=[], resources=[])
-    Load %1 <- int(10)
-    Load %2 <- int(20)
-    Add %3 <- %1, %2
-    Move %0 <- %3
-    Load %2 <- %0
-    Load %4 <- int(30)
-    Eq %1 <- %2, %4
-    Call %3 <- string("std.assert.assert") [%1] (def=d0)
+    Load v1 <- int(10)
+    Load v2 <- int(20)
+    Add v0 <- v1, v2
+    Move %0 <- v0
+    Load v5 <- %0
+    Load v6 <- int(30)
+    Eq v4 <- v5, v6
+    Call v3 <- string("std.assert.assert") [v4] (def=d0)
     Drop %0
-    Ret %3
+    Ret v3
   init (locals=0)
     Call %0 <- string("main") [] (def=d1)

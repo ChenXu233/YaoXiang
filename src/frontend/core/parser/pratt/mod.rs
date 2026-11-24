@@ -74,13 +74,48 @@ fn expr_end_line(expr: &Expr) -> usize {
 }
 
 impl ParserState<'_> {
-    /// Internal expression parsing method
+    /// Internal expression parsing method：前缀（nud）+ 中缀循环（led）。
+    ///
+    /// 解析递归深度闸的**表达式**汇点（issue #540）：pratt 的全部表达式
+    /// 递归（前缀臂回入 `parse_expression`、调用实参、括号、列表等）都再进
+    /// 本函数；pratt 内不经本函数的递归面只有模式汇点（`parse_pattern` 的
+    /// 字段臂自递归）——它与类型汇点（`parse_type_annotation` /
+    /// `parse_fn_type_with_names`）同机制过同一计数器，见
+    /// [`MAX_PARSE_DEPTH`](crate::frontend::core::parser::parser_state::MAX_PARSE_DEPTH)。
+    /// 超限在闸值处发射 E0019 并以 `None` 逐层弹出。
     pub fn parse_expression_internal(
         &mut self,
         min_bp: u8,
     ) -> Option<Expr> {
-        let left = self.parse_prefix()?;
+        if !self.enter_nested_parse() {
+            return None;
+        }
+        let result = self.parse_expression_nested(min_bp);
+        self.exit_nested_parse();
+        result
+    }
 
+    /// [`Self::parse_expression_internal`] 的闸内本体（原实现逐字保留）。
+    fn parse_expression_nested(
+        &mut self,
+        min_bp: u8,
+    ) -> Option<Expr> {
+        let left = self.parse_prefix()?;
+        self.parse_infix_from(left, min_bp)
+    }
+
+    /// 从**已解析的左侧表达式**继续走中缀循环（Pratt 的 led 半场）。
+    ///
+    /// `parse_expression_internal` = `parse_prefix()` + 本函数，所以这里是**全仓唯一**
+    /// 的中缀运算符循环。类型位的常量表达式（`Array(Int, 2+3)` 的 `2+3`）以字面量 /
+    /// 标识符为种子时也从这里续接，不得另写一份同构循环（此前 `statements/types.rs`
+    /// 内联过一份，字面量种子不在其中，故 `2+3` 被外层 `expect(RParen)` 报成
+    /// 「expected RParen, found Plus」——issue #543）。
+    pub fn parse_infix_from(
+        &mut self,
+        left: Expr,
+        min_bp: u8,
+    ) -> Option<Expr> {
         let mut left = left;
 
         while let Some(_token) = self.current().cloned() {

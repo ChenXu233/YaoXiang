@@ -11,13 +11,12 @@
 //! - patterns: 模式匹配
 //! - bounds: 类型边界
 //! - scope: 作用域
-//! - assignment: 赋值检查
 
 mod arg_binding;
-mod assignment;
 mod bounds;
 mod bounds_duck;
 mod expressions;
+mod judgement;
 mod patterns;
 mod scope;
 mod statements;

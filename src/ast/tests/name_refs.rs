@@ -164,3 +164,21 @@ fn test_collect_name_refs_named_call_arguments() {
         "具名实参的键是**形参名**（被调方命名空间的局部名），不是引用；实际: {refs:?}"
     );
 }
+/// T21（6.9.5-B.3）：`Type::ConstExpr(FieldAccess)` 经 `collect_name_refs` 只收基名，
+/// 字段名不计引用；不得新增第二份表达式遍历。
+#[test]
+fn test_const_expr_field_path_collects_base_name_only() {
+    // Arrange
+    let ty = Type::ConstExpr(Box::new(Expr::FieldAccess {
+        expr: Box::new(Expr::Var("bb".to_string(), Span::dummy())),
+        field: "w".to_string(),
+        span: Span::dummy(),
+    }));
+
+    // Act
+    let refs = refs_of(&ty);
+
+    // Assert
+    assert!(refs.contains("bb"), "基名 bb 必须计入引用；实际: {refs:?}");
+    assert!(!refs.contains("w"), "字段名 w 不是引用；实际: {refs:?}");
+}

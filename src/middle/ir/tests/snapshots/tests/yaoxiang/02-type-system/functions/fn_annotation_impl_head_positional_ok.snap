@@ -2,21 +2,32 @@ module
   fn f(Int(64), Int(64)) -> Int(64)
     slot[0] b : Int(64) @depth1
     slot[1] a : Int(64) @depth1
-    locals_total=4
+    locals_total=3
+    values_total=2
+    value v0: TypeRef("?") @block0
+    value v1: Int(64) @block0
     Load %0 <- arg%0
     Load %1 <- arg%1
-    Load %2 <- %0
-    Ret %2
+    Load v1 <- %0
+    Ret v1
     Ret
   fn main() -> Void
-    locals_total=7
-    Load %0 <- int(1)
-    Load %1 <- int(2)
-    Call %2 <- string("f") [%0, %1] (def=d0)
-    Load %3 <- int(1)
-    Eq %4 <- %2, %3
-    Load %5 <- string("实现头按位置绑定：名字不重排实参")
-    Call %6 <- string("std.assert.assert") [%4, %5] (def=d1)
-    Ret %6
+    locals_total=3
+    values_total=7
+    value v0: TypeRef("?") @block0
+    value v1: Bool @block0
+    value v2: Int(64) @block0
+    value v3: Int(64) @block0
+    value v4: Int(64) @block0
+    value v5: Int(64) @block0
+    value v6: Generic { name: "String", args: [] } @block0
+    Load v4 <- int(1)
+    Load v5 <- int(2)
+    Call v2 <- string("f") [v4, v5] (def=d0)
+    Load v3 <- int(1)
+    Eq v1 <- v2, v3
+    Load v6 <- string("实现头按位置绑定：名字不重排实参")
+    Call v0 <- string("std.assert.assert") [v1, v6] (def=d1)
+    Ret v0
   init (locals=0)
     Call %0 <- string("main") [] (def=d2)

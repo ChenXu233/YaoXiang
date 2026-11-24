@@ -7,8 +7,8 @@
 
 use std::collections::HashMap;
 
-use crate::frontend::core::types::const_data::{BinOp, ConstExpr, ConstValue, UnOp};
 use super::ast::{SMTCommand, SMTExpr, SMTSort};
+use crate::frontend::core::types::const_data::{BinOp, ConstExpr, ConstValue, UnOp};
 
 /// 翻译编译期约束为 SMT 命令序列
 ///
@@ -18,12 +18,18 @@ use super::ast::{SMTCommand, SMTExpr, SMTSort};
 /// - `var_sorts`: 变量名 → SMT 排序的映射
 ///
 /// # 返回
-/// 完整的 SMT 命令序列（declare-const + assert + 目标取反 + check-sat + get-model）
+/// - `Some(commands)`：完整命令序列（declare-const + assert + 目标取反 + check-sat +
+///   get-model）——**永不为空**（最少 CheckSat + GetModel 两条）；
+/// - `None`：约束或任一假设**不可翻译**（位运算 / Float 字面量 / FieldPath 等，
+///   见 [`translate_expr`]）。
+///
+/// 调用方必须把 `None` 当「**无法判断**」（Unproven / 升级），**不得**把空断言集
+/// 交给求解器：空集 check-sat 恒 `sat`，会被读成反例（F10，09a §P6 6.9.5-B.4 §十三）。
 pub fn translate_constraint(
     constraint: &ConstExpr,
     assumptions: &[ConstExpr],
     var_sorts: &HashMap<String, SMTSort>,
-) -> Vec<SMTCommand> {
+) -> Option<Vec<SMTCommand>> {
     let mut commands = Vec::new();
 
     // 1. 声明所有变量
@@ -32,13 +38,16 @@ pub fn translate_constraint(
     }
 
     // 2. 背景断言（假设栈）
+    // 不可翻译项（含证据字段路径）：整组命令不产出——显式 None，由调用方 gate 到
+    // 非 SMT 路径（**不**返回空表：空表在求解器侧等价「无条件成立」= 伪反例）。
     for assumption in assumptions {
-        commands.push(SMTCommand::Assert(translate_expr(assumption)));
+        let expr = translate_expr(assumption)?;
+        commands.push(SMTCommand::Assert(expr));
     }
 
     // 3. 目标取反：(assert (not constraint))
     //    Z3 返回 unsat = 目标在所有假设下成立
-    let goal = translate_expr(constraint);
+    let goal = translate_expr(constraint)?;
     let not_goal = SMTExpr::App("not".into(), vec![goal]);
     commands.push(SMTCommand::Assert(not_goal));
 
@@ -46,30 +55,36 @@ pub fn translate_constraint(
     commands.push(SMTCommand::CheckSat);
     commands.push(SMTCommand::GetModel);
 
-    commands
+    Some(commands)
 }
 
-/// ConstExpr → SMTExpr 翻译
-pub(crate) fn translate_expr(expr: &ConstExpr) -> SMTExpr {
+/// ConstExpr → SMTExpr 翻译。
+///
+/// 返回 `None` 表示该项不是 SMT 可翻译项——**不产出伪造 atom**。
+/// V1 的 `FieldPath`（证据字段路径，RFC-027 §14.5）走此路：SMT 面无项语言。
+pub(crate) fn translate_expr(expr: &ConstExpr) -> Option<SMTExpr> {
     match expr {
         // 字面量
-        ConstExpr::Lit(value) => match value {
+        ConstExpr::Lit(value) => Some(match value {
             ConstValue::Int(n) => SMTExpr::Atom(n.to_string()),
             ConstValue::Bool(true) => SMTExpr::Atom("true".into()),
             ConstValue::Bool(false) => SMTExpr::Atom("false".into()),
-            _ => SMTExpr::Atom(format!("{:?}", value)),
-        },
+            _ => return None,
+        }),
 
         // 变量引用
-        ConstExpr::NamedVar(name) => SMTExpr::Atom(name.clone()),
+        ConstExpr::NamedVar(name) => Some(SMTExpr::Atom(name.clone())),
 
         // Const 变量引用
-        ConstExpr::Var(var) => SMTExpr::Atom(var.to_string()),
+        ConstExpr::Var(var) => Some(SMTExpr::Atom(var.to_string())),
+
+        // 证据字段路径不是 SMT 项（RFC-027 §14.5）：显式拒绝，不产物化 atom。
+        ConstExpr::FieldPath { .. } => None,
 
         // 二元运算
         ConstExpr::BinOp { op, left, right } => {
-            let l = translate_expr(left);
-            let r = translate_expr(right);
+            let l = translate_expr(left)?;
+            let r = translate_expr(right)?;
             let smt_op = match op {
                 BinOp::Gt => ">",
                 BinOp::Ge => ">=",
@@ -85,29 +100,25 @@ pub(crate) fn translate_expr(expr: &ConstExpr) -> SMTExpr {
                 BinOp::And => "and",
                 BinOp::Or => "or",
                 // 位运算暂不支持 SMT 翻译
-                _ => {
-                    return SMTExpr::Atom(format!("{:?}", expr));
-                }
+                _ => return None,
             };
-            SMTExpr::App(smt_op.into(), vec![l, r])
+            Some(SMTExpr::App(smt_op.into(), vec![l, r]))
         }
 
         // 一元运算
         ConstExpr::UnOp { op, expr: inner } => {
-            let i = translate_expr(inner);
+            let i = translate_expr(inner)?;
             let smt_op = match op {
                 UnOp::Not => "not",
                 UnOp::Neg => "-",
-                UnOp::Pos => return i, // 正号直接透传
-                _ => {
-                    return SMTExpr::Atom(format!("{:?}", expr));
-                }
+                UnOp::Pos => return Some(i), // 正号直接透传
+                _ => return None,
             };
-            SMTExpr::App(smt_op.into(), vec![i])
+            Some(SMTExpr::App(smt_op.into(), vec![i]))
         }
 
         // If/Range/Call 在阶段 2 不做 SMT 翻译——走 Evaluator 直接求值路径
-        _ => SMTExpr::Atom(format!("{:?}", expr)),
+        _ => None,
     }
 }
 

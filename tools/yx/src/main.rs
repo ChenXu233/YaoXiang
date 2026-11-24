@@ -6,10 +6,6 @@
 //!
 //! 有意不用 clap：透传动词面无上限，手写分发保证参数逐字转发。
 
-// ureq::Error 体量大（272B），把它 Box 进自有 Error 不值得——前门是短命进程，
-// 错误只走 eprintln 一条路
-#![allow(clippy::result_large_err)]
-
 mod dispatch;
 mod dl;
 mod error;

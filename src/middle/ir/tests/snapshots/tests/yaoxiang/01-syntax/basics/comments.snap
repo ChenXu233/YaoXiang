@@ -1,11 +1,17 @@
 module
   fn main() -> Void
-    locals_total=5
-    Load %0 <- string("comments_work")
-    Load %1 <- string("comments_work")
-    Eq %2 <- %0, %1
-    Load %3 <- string("string literal")
-    Call %4 <- string("std.assert.assert") [%2, %3] (def=d0)
-    Ret %4
+    locals_total=3
+    values_total=5
+    value v0: TypeRef("?") @block0
+    value v1: Bool @block0
+    value v2: Generic { name: "String", args: [] } @block0
+    value v3: Generic { name: "String", args: [] } @block0
+    value v4: Generic { name: "String", args: [] } @block0
+    Load v2 <- string("comments_work")
+    Load v3 <- string("comments_work")
+    Eq v1 <- v2, v3
+    Load v4 <- string("string literal")
+    Call v0 <- string("std.assert.assert") [v1, v4] (def=d0)
+    Ret v0
   init (locals=0)
     Call %0 <- string("main") [] (def=d1)

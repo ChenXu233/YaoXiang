@@ -15,7 +15,7 @@ use crate::package::manifest::{PackageManifest, MANIFEST_FILE};
 use crate::package::source::github::GitHubClient;
 use crate::package::workspace::{find_workspace_root, load_workspace};
 use crate::package::yxpkg;
-use crate::util::i18n::{t, t_simple, current_lang, MSG};
+use crate::util::i18n::{current_lang, t, t_simple, MSG};
 
 /// publish 参数
 #[derive(Debug, Clone, Copy, Default)]

@@ -38,10 +38,15 @@ pub mod checker;
 pub mod signature;
 // 类型定义
 pub mod types;
+// 依赖记录 Σ 的记录模型（RFC-027 §14 / SPEC §8.3；声明期一遍的产出）
+pub mod record_model;
 // 证明管道基础设施
 pub mod proof;
 // 证明层（本目录无调度器：调用先后由 checker::check_module_impl 决定）
 pub mod layers;
+
+/// 判定点协议（6.9.3d）：unify → 回滚 → 判等的**唯一**入口
+pub mod judgement;
 // 独立分析遍
 pub mod passes;
 
@@ -55,22 +60,21 @@ mod tests;
 
 // 使用 core 层的类型系统（显式导出以避免 ambiguous glob re-exports）
 pub use crate::frontend::core::types::{
-    MonoType, PolyType, TypeVar, TypeBinding, StructType, EnumType, TypeConstraint,
-    TypeConstraintSolver, TypeConstraintError, ConstValue, ConstExpr, ConstKind, ConstVarDef,
-    UniverseLevel,
+    ConstExpr, ConstKind, ConstValue, ConstVarDef, EnumType, MonoType, PolyType, StructType,
+    TypeBinding, TypeConstraint, TypeConstraintError, TypeConstraintSolver, TypeVar, UniverseLevel,
 };
 
 // 重新导出子模块
-pub use probe::{is_builtin_predicate_name, is_constraint_name, SemanticProbe};
-pub use environment::*;
-pub use inference::*;
 pub use crate::frontend::core::types::eval::evaluator::*;
 pub use checker::*;
+pub use environment::*;
+pub use inference::*;
+pub use probe::{is_builtin_predicate_name, is_constraint_name, SemanticProbe};
 pub use signature::*;
 pub use types::*;
 
 // 导入诊断系统
-pub use crate::util::diagnostic::{Diagnostic, ErrorCollector, ErrorCodeDefinition, I18nRegistry};
+pub use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition, ErrorCollector, I18nRegistry};
 
 /// 类型推断结果
 pub type TypeResult<T> = Result<T, Diagnostic>;
@@ -254,26 +258,29 @@ pub fn add_native_function_types(
 
     // 显式注册 Native 模块变量，使 Native.c / Native.rs 在 FieldAccess 中可解析
     // 注意：add_var 循环（line 280-282）只注册"Native.c"和"Native.rs"这样的点分全名，
-    // 不注册"Native"本身。而 FieldAccess（expressions.rs:961）通过 extract_namespace_path
+    // 不注册"Native"本身。而 FieldAccess（`inference/expressions/expr.rs` 的 `infer_expr` 分支）通过 extract_namespace_path
     // 从 Var("Native") 开始构建路径，因此"Native"必须在作用域中且类型为 Struct（有字段）。
     env.add_var(
         "Native".to_string(),
         PolyType::mono(MonoType::Struct(crate::frontend::core::types::StructType {
             name: "Native".to_string(),
             fields: vec![
-                (
-                    "c".to_string(),
-                    MonoType::Fn {
+                crate::frontend::core::types::mono::StructFieldInfo {
+                    name: "c".to_string(),
+                    ty: MonoType::Fn {
                         params: vec![MonoType::make_string()],
                         return_type: Box::new(MonoType::LibraryRef {
                             mechanism: "c".to_string(),
                             lib: String::new(),
                         }),
                     },
-                ),
-                (
-                    "rs".to_string(),
-                    MonoType::Fn {
+                    quantity: None,
+                    is_mut: false,
+                    has_default: false,
+                },
+                crate::frontend::core::types::mono::StructFieldInfo {
+                    name: "rs".to_string(),
+                    ty: MonoType::Fn {
                         params: vec![MonoType::make_string()],
                         return_type: Box::new(MonoType::ExternRef {
                             mechanism: "rs".to_string(),
@@ -281,11 +288,12 @@ pub fn add_native_function_types(
                             symbol: String::new(),
                         }),
                     },
-                ),
+                    quantity: None,
+                    is_mut: false,
+                    has_default: false,
+                },
             ],
             methods: std::collections::HashMap::new(),
-            field_mutability: vec![false, false],
-            field_has_default: vec![false, false],
             interfaces: Vec::new(),
         })),
     );

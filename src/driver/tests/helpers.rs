@@ -40,6 +40,8 @@ fn unit_ir(function_names: &[&str]) -> ModuleIR {
                 blocks: Vec::new(),
                 entry: 0,
                 locals: Vec::new(),
+                values: Vec::new(),
+                value_slots: Vec::new(),
             },
         })
         .collect();
@@ -108,7 +110,7 @@ fn test_aggregate_resolves_named_import_request_through_alias_channel() {
     ];
     let irs = vec![Some(unit_ir(&["main.main"])), Some(unit_ir(&["lib.pick"]))];
     // 入口单元的真实 `use lib.{pick}` AST + 同一 registry：聚合函数据此调
-    // ir_gen 的 import_aliases_from 取别名表（与生成期同源）
+    // `lower/module_ir.rs` 的 `import_aliases_from` 取别名表（与生成期同源）
     let tokens =
         crate::frontend::core::lexer::tokenize("use lib.{pick}\n").expect("use 行可词法分析");
     let parsed = crate::frontend::core::parser::parse(&tokens);
@@ -130,6 +132,9 @@ fn test_aggregate_resolves_named_import_request_through_alias_channel() {
         type_payload: None,
         definition_span: None,
         predicate_def: None,
+        proof_fn_params: None,
+        const_binders: Vec::new(), // 测试桩导出无登记面（#539 载荷面）
+        call_site_params: Vec::new(),
     });
     registry.register(lib);
     let result = type_result(vec![request("pick", None)]);

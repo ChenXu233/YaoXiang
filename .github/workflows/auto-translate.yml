@@ -107,3 +107,9 @@ jobs:
           git diff --staged --quiet || git commit -m ":pencil: docs: auto-translate documentation"
           git pull --rebase origin dev
           git push
+
+      - name: Notify CNB mirror
+        uses: ./.github/actions/notify-cnb
+        with:
+          token: ${{ secrets.CNB_TOKEN }}
+

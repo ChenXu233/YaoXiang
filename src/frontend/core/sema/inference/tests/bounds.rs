@@ -8,27 +8,35 @@
 //! RFC-027 §4: 编译期证明管道 — const 参数通过证明管道验证
 
 use crate::frontend::core::sema::inference::bounds::BoundsChecker;
-use crate::frontend::core::types::{MonoType, StructType, TraitTable};
-use crate::frontend::core::sema::proof::verdict::{ProofResultExt};
+use crate::frontend::core::sema::proof::verdict::ProofResultExt;
 use crate::frontend::core::types::const_data::ConstVarDef;
+use crate::frontend::core::types::{MonoType, StructType, TraitTable};
 use std::collections::HashMap;
 
-/// 记录类型夹具：`methods`/`interfaces` 为空，两个元数据向量原样传入（沿用各用例既有形态）。
+/// 记录类型夹具：`methods`/`interfaces` 为空；可变性/默认值按位传入
+/// （测试夹具与被测事实无关，保持既有调用点形状）。
 fn record(
     name: &str,
     fields: Vec<(&str, MonoType)>,
-    field_mutability: Vec<bool>,
-    field_has_default: Vec<bool>,
+    mutability: Vec<bool>,
+    defaults: Vec<bool>,
 ) -> MonoType {
     MonoType::Struct(StructType {
         name: name.to_string(),
         fields: fields
             .into_iter()
-            .map(|(n, t)| (n.to_string(), t))
+            .enumerate()
+            .map(
+                |(i, (n, t))| crate::frontend::core::types::mono::StructFieldInfo {
+                    name: n.to_string(),
+                    ty: t,
+                    quantity: None,
+                    is_mut: mutability.get(i).copied().unwrap_or(false),
+                    has_default: defaults.get(i).copied().unwrap_or(false),
+                },
+            )
             .collect(),
         methods: HashMap::new(),
-        field_mutability,
-        field_has_default,
         interfaces: vec![],
     })
 }
@@ -220,9 +228,9 @@ fn test_check_trait_bounds_dup_struct_auto_derive_fails() {
 
 #[test]
 fn test_validate_const_args_int_matches() {
-    use crate::frontend::core::types::const_data::{ConstKind, ConstVarDef, ConstValue};
-    use crate::frontend::core::types::MonoType;
     use crate::frontend::core::sema::inference::bounds::validate_const_args;
+    use crate::frontend::core::types::const_data::{ConstKind, ConstValue, ConstVarDef};
+    use crate::frontend::core::types::MonoType;
 
     let binders = vec![ConstVarDef::new("N".to_string(), ConstKind::Int(None), 0)];
     let args = vec![MonoType::Literal {
@@ -238,9 +246,9 @@ fn test_validate_const_args_int_matches() {
 fn test_validate_const_args_type_mismatch() {
     // #324：这些 API 生产上运行于类型检查 walk 内（guard 覆盖），单测直调需模拟 walk 上下文
     let _walk_guard = crate::util::diagnostic::push_current_span(crate::util::span::Span::dummy());
-    use crate::frontend::core::types::const_data::{ConstKind, ConstVarDef, ConstValue};
-    use crate::frontend::core::types::MonoType;
     use crate::frontend::core::sema::inference::bounds::validate_const_args;
+    use crate::frontend::core::types::const_data::{ConstKind, ConstValue, ConstVarDef};
+    use crate::frontend::core::types::MonoType;
 
     let binders = vec![ConstVarDef::new("N".to_string(), ConstKind::Int(None), 0)];
     let args = vec![MonoType::Literal {
@@ -257,7 +265,7 @@ fn test_validate_const_args_type_mismatch() {
 
 #[test]
 fn test_check_const_bounds_fast_path_proved() {
-    use crate::frontend::core::types::const_data::{ConstKind, ConstVarDef, ConstValue};
+    use crate::frontend::core::types::const_data::{ConstKind, ConstValue, ConstVarDef};
     use crate::frontend::core::types::MonoType;
 
     let checker = BoundsChecker::new();

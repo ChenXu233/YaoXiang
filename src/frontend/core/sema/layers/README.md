@@ -34,7 +34,7 @@
 （`src/frontend/core/sema/tests/rfc027_phase1_integration.rs:13`、
 `src/frontend/core/sema/tests/rfc027_phase4_e2e.rs:15`）；同文件的 `is_subtype`
 是生产路径上的共享助手（`src/frontend/core/sema/inference/assignment.rs:17`），
-`structurally_equal` 现仅测试引用（`layers/tests/equivalence.rs:5`）。
+`structurally_equal` 已于 2026-11-12 随判等内核删除（第二份结构等价，`Refined` 臂只比 base ⇒ 假等价）；等价判定收敛到 `defeq`。
 它当下的身份是**共享类型比较工具 + 一个仅测试使用的证明入口**，不是被顺序调用的层。
 
 **跨模块共享助手**：第 1 步的精化走查会调用 `termination` 的纯函数——`negate_guard`

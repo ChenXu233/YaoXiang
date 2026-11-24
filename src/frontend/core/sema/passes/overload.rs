@@ -597,11 +597,14 @@ fn substitute_return_type(
             fields: s
                 .fields
                 .iter()
-                .map(|(n, f)| (n.clone(), substitute_return_type(f, substitutions)))
+                .map(
+                    |field_info| crate::frontend::core::types::mono::StructFieldInfo {
+                        ty: substitute_return_type(&field_info.ty, substitutions),
+                        ..field_info.clone()
+                    },
+                )
                 .collect(),
             methods: s.methods.clone(),
-            field_mutability: s.field_mutability.clone(),
-            field_has_default: s.field_has_default.clone(),
             interfaces: s.interfaces.clone(),
         }),
         MonoType::Enum(e) => MonoType::Enum(e.clone()),

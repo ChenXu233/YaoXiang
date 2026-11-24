@@ -3,10 +3,10 @@
 //! This module implements `RuntimeValue`, the unified representation of all values
 //! in YaoXiang programs at runtime.
 
-use std::sync::Arc;
 use std::collections::HashMap;
 use std::fmt;
 use std::hash::{Hash, Hasher};
+use std::sync::Arc;
 
 /// Wrapper for `*mut c_void` that implements Send + Sync.
 ///

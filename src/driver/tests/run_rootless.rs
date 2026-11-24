@@ -5,7 +5,7 @@
 //! 与 check 半边（check_rootless_mono.rs）同一家族的 run 侧判据：
 //! - Script 无入口概念——Linking 不得给 rootless 合并 IR 设 entry_function
 //!   （#413 T4：顶层语句即程序主体，自动调 main 会与显式 main() 双跑，#356）；
-//! - Script 语义保持——顶层可执行语句不报 E3023（ir_gen 的 script_mode 由
+//! - Script 语义保持——顶层可执行语句不报 E3023（`lower/mod.rs` 的 script_mode 由
 //!   rootless 驱动，与限定名键解耦，同 3.4.8 ③ 的 check 半边）；
 //! - Bin 形态对照——带 manifest 的项目入口语义不变（entry_function 照旧设置），
 //!   证明 Script 侧断言不是空转。

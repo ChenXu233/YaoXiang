@@ -1,30 +1,48 @@
 module
   fn f(Int(64)) -> Generic { name: "Terminates", args: [TypeRef("n")] }
     slot[0] n : Int(64) @depth1
-    locals_total=7
+    locals_total=4
+    values_total=10
+    value v0: Bool @block0
+    value v1: Int(64) @block0
+    value v2: Int(64) @block0
+    value v3: Int(64) @block0
+    value v4: Refined { base: TypeVar(TypeVar(40)), constraint: Call { func: "Terminates", args: [NamedVar("n")] } } @block0
+    value v5: Refined { base: TypeVar(TypeVar(40)), constraint: Call { func: "Terminates", args: [NamedVar("n")] } } @block0
+    value v6: Int(64) @block0
+    value v7: Int(64) @block0
+    value v8: Int(64) @block0
+    value v9: Int(64) @block0
     Load %0 <- arg%0
-    Load %1 <- %0
-    Load %2 <- int(0)
-    Eq %3 <- %1, %2
-    JmpIfNot %3 -> instr(7)
-    Load %4 <- int(0)
-    Ret %4
-    Load %5 <- %0
-    Load %6 <- int(1)
-    Add %4 <- %5, %6
-    Call %1 <- string("f") [%4] (def=d0)
-    Load %2 <- int(1)
-    Add %3 <- %1, %2
-    Ret %3
-    Ret %3
+    Load v1 <- %0
+    Load v2 <- int(0)
+    Eq v0 <- v1, v2
+    JmpIfNot v0 -> instr(7)
+    Load v3 <- int(0)
+    Ret v3
+    Load v8 <- %0
+    Load v9 <- int(1)
+    Add v7 <- v8, v9
+    Call v5 <- string("f") [v7] (def=d0)
+    Load v6 <- int(1)
+    Add v4 <- v5, v6
+    Ret v4
+    Ret v4
   fn main() -> Void
-    locals_total=6
-    Load %0 <- int(1)
-    Call %1 <- string("f") [%0] (def=d0)
-    Load %2 <- int(0)
-    Eq %3 <- %1, %2
-    Load %4 <- string("不可达：无限递归不应返回值")
-    Call %5 <- string("std.assert.assert") [%3, %4] (def=d1)
-    Ret %5
+    locals_total=3
+    values_total=6
+    value v0: TypeRef("?") @block0
+    value v1: Bool @block0
+    value v2: Refined { base: TypeVar(TypeVar(40)), constraint: Call { func: "Terminates", args: [NamedVar("n")] } } @block0
+    value v3: Int(64) @block0
+    value v4: Int(64) @block0
+    value v5: Generic { name: "String", args: [] } @block0
+    Load v4 <- int(1)
+    Call v2 <- string("f") [v4] (def=d0)
+    Load v3 <- int(0)
+    Eq v1 <- v2, v3
+    Load v5 <- string("不可达：无限递归不应返回值")
+    Call v0 <- string("std.assert.assert") [v1, v5] (def=d1)
+    Ret v0
   init (locals=0)
     Call %0 <- string("main") [] (def=d2)

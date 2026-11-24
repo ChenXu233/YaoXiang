@@ -1,6 +1,6 @@
 // src/std/tests/time_ops.yx
 // 覆盖: std.time 模块 — 时间获取（纯值，无借用）
-// 验证: now/timestamp/timestamp_ms 返回正值 + DateTime 字段访问
+// 验证: now/timestamp/timestamp_ms 返回正值 + 日期分量字段访问
 // 状态: ✅
 
 use std.assert

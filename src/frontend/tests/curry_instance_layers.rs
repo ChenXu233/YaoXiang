@@ -20,7 +20,7 @@
 //! ## 夹具为什么是「两条值层」
 //!
 //! 类型层在 IR 层已擦除（`A: Type` 不占运行期槽），柯里包装层只在**值层 ≥ 2** 时出现
-//! （`ir_gen::generate_curry_function_ir` 按值层切层）；单值层的泛型函数直接就是目标
+//! （`lower/curry.rs` 的 `generate_curry_function_ir` 按值层切层）；单值层的泛型函数直接就是目标
 //! 函数本身，没有包装层可克隆。
 
 use crate::frontend::compiler::Compiler;
@@ -175,18 +175,17 @@ fn test_layer_clone_calls_the_instance_of_its_owner() {
     }
 }
 
-/// tripwire（**当前事实**，勿读成「正确行为」）：开项递归调用的实例化仍未接通。
+/// C3（6.9.2-C3，F4 裁决 A 甲-闭 + T-b）：开项递归调用**接通到自己的实例**。
 ///
-/// `factorial(k - 1)` 的编译期实参是**开项**（自由名 `k` 只在本帧内成立），
-/// 6.9.2-C1 只让**闭项**进实例化请求（`collect_const_arg_instantiation_request`：
-/// 开项 ⇒ `Evidenced(None)`），故 `factorial(int64::4)` **不存在**，逐实例包装层的
-/// 内部调用点仍指向原件。
-///
-/// 这是 C3（开项开火 + `fire_deferred` 归一化）的剩余面，不是 P1/P2 的缺陷：
-/// P1/P2 提供的是「逐实例层存在且可被独立改写」，开项接通后本条的断言必须改成
-/// 「指向 `factorial(int64::4)`」并删掉本 tripwire。
+/// 前身是 C2b 的 tripwire（开项未接通时断言「无 `factorial(int64::4)`、克隆指原件」），
+/// 它自己的注释里写明「开项接通后本条的断言必须改成指向 `factorial(int64::4)`」。
+/// 本轮（C3）兑现该交接：P1 钉住消解 → P3 开项入请求 → P4 进 deferred →
+/// P5 按实例 name_map 代入 + 归一化开火，于是：
+/// - 开项链按 T-b 恰好开火 8 次（bound；键 =（容器, callee, 静态调用点））；
+/// - 逐实例包装层的调用点落到**下一层实例**（`factorial(int64::4)`），不是原件；
+/// - 原件仍被放回（到界边由它承担运行期语义）。
 #[test]
-fn test_open_term_recursive_call_is_currently_not_specialized() {
+fn test_open_term_recursive_call_fires_into_its_instance() {
     // Arrange
     let functions = compile_to_bytecode(RECURSIVE_CONST_GENERIC);
     let names: Vec<&str> = functions.iter().map(|f| f.name.as_str()).collect();
@@ -196,19 +195,30 @@ fn test_open_term_recursive_call_is_currently_not_specialized() {
         names.contains(&"__factorial_l0(int64::5)"),
         "逐实例包装层 __factorial_l0(int64::5) 应已存在（P1）；实际函数表: {names:?}"
     );
-    // Assert 2：tripwire——开项实例尚未生成
+    // Assert 2：T-b bound=8——开项链恰好 8 个实例（从 5 起：4,3,2,1,0,-1,-2,-3）；
+    // 第 9 次开火（-4）必须被切（到界不建实例），闭项实例 ::5 不属开项链。
+    for want in ["4", "3", "2", "1", "0", "-1", "-2", "-3"] {
+        let name = format!("factorial(int64::{want})");
+        assert!(
+            names.contains(&name.as_str()),
+            "开项链应含 {name}（T-b bound=8）；实际: {names:?}"
+        );
+    }
     assert!(
-        !names.iter().any(|n| n.starts_with("factorial(int64::4")),
-        "tripwire 失效：开项递归已开始产生实例（C3 已落地）⇒ 请把本测试改成\
-         「克隆的调用点指向 factorial(int64::4)」并删掉 tripwire；实际函数表: {names:?}"
+        !names.iter().any(|n| n.starts_with("factorial(int64::-4")),
+        "T-b 到界：第 9 次开火必须被切（不得出现 factorial(int64::-4)）；实际: {names:?}"
     );
-    // Assert 3：于是克隆的调用点仍指原件（不是「指向了别的实例」）
-    let original = index_of(&functions, "factorial") as u32;
+    // Assert 3：包装层克隆的静态调用点落到**下一层实例**，不是原件
+    let want = index_of(&functions, "factorial(int64::4)") as u32;
     let got = static_target(&functions, "__factorial_l0(int64::5)", opcode::CALL_STATIC);
     assert_eq!(
-        got, original,
-        "开项未接通时，逐实例包装层的调用点应仍指向原件 factorial（下标 {original}）——\
-         指向任何实例都说明本 tripwire 已过期"
+        got, want,
+        "开项接通后，__factorial_l0(int64::5) 的调用点必须指向 factorial(int64::4)（下标 {want}）"
+    );
+    // Assert 4：原件仍在（到界边退回原件，不删原件）
+    assert!(
+        names.contains(&"factorial"),
+        "原件 factorial 必须保留（到界边由它承担运行期语义）；实际: {names:?}"
     );
 }
 

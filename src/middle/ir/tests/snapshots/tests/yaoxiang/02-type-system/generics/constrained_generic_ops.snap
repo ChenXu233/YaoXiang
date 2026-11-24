@@ -2,70 +2,113 @@ module
   fn Vec3() -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
     type_decl [x: Float(64) ; y: Float(64) ; z: Float(64)]
   fn Vec3.add(Ref { mutable: false, inner: TypeRef("Vec3") }, Ref { mutable: false, inner: TypeRef("Vec3") }) -> TypeRef("Vec3")
-    locals_total=18
-    Load %0 <- %1
-    LoadField %2 <- %0.0
-    Load %3 <- %4
-    LoadField %5 <- %3.0
-    Add %6 <- %2, %5
-    Load %7 <- %1
-    LoadField %8 <- %7.1
-    Load %9 <- %4
-    LoadField %10 <- %9.1
-    Add %11 <- %8, %10
-    Load %12 <- %1
-    LoadField %13 <- %12.2
-    Load %14 <- %4
-    LoadField %15 <- %14.2
-    Add %16 <- %13, %15
-    Call %17 <- string("Vec3") [%6, %11, %16] (def=d0)
-    Ret %17
-    Ret %17
+    locals_total=7
+    values_total=16
+    value v0: TypeRef("Vec3") @block0
+    value v1: TypeRef("?") @block0
+    value v2: TypeRef("?") @block0
+    value v3: TypeRef("?") @block0
+    value v4: Ref { mutable: false, inner: TypeRef("Vec3") } @block0
+    value v5: Ref { mutable: false, inner: TypeRef("Vec3") } @block0
+    value v6: TypeRef("?") @block0
+    value v7: TypeRef("?") @block0
+    value v8: TypeRef("?") @block0
+    value v9: Ref { mutable: false, inner: TypeRef("Vec3") } @block0
+    value v10: Ref { mutable: false, inner: TypeRef("Vec3") } @block0
+    value v11: TypeRef("?") @block0
+    value v12: TypeRef("?") @block0
+    value v13: TypeRef("?") @block0
+    value v14: Ref { mutable: false, inner: TypeRef("Vec3") } @block0
+    value v15: Ref { mutable: false, inner: TypeRef("Vec3") } @block0
+    Load v4 <- %0
+    LoadField v2 <- v4.0
+    Load v5 <- %1
+    LoadField v3 <- v5.0
+    Add v1 <- v2, v3
+    Load v9 <- %0
+    LoadField v7 <- v9.1
+    Load v10 <- %1
+    LoadField v8 <- v10.1
+    Add v6 <- v7, v8
+    Load v14 <- %0
+    LoadField v12 <- v14.2
+    Load v15 <- %1
+    LoadField v13 <- v15.2
+    Add v11 <- v12, v13
+    Call v0 <- string("Vec3") [v1, v6, v11] (def=d0)
+    Ret v0
+    Ret v0
   fn sum(TypeRef("T"), TypeRef("T")) -> TypeRef("T")
     generic_params: ["T"]
     slot[0] a : Int(64) @depth1
     slot[1] b : Int(64) @depth1
     locals_total=5
-    Load %0 <- %1
-    Load %2 <- %3
-    Call %4 <- string("T.add") [%0, %2] (def=_)
-    Ret %4
+    values_total=3
+    value v0: TypeRef("?") @block0
+    value v1: Struct(StructType { name: "Vec3", fields: [("x", Float(64)), ("y", Float(64)), ("z", Float(64))], methods: {}, interfaces: ["Add"] }) @block0
+    value v2: Struct(StructType { name: "Vec3", fields: [("x", Float(64)), ("y", Float(64)), ("z", Float(64))], methods: {}, interfaces: ["Add"] }) @block0
+    Load v1 <- %0
+    Load v2 <- %1
+    Call v0 <- string("T.add") [v1, v2] (def=_)
+    Ret v0
   fn main() -> Void
     slot[0] i : Int(64) @depth1
     slot[1] a : Int(64) @depth1
     slot[2] b : Int(64) @depth1
     slot[3] v : Int(64) @depth1
-    locals_total=10
-    Load %0 <- int(1)
-    Load %1 <- int(2)
-    Call %2 <- string("sum") [%0, %1] (def=d1)
-    Load %3 <- %2
-    Load %4 <- int(3)
-    Eq %1 <- %3, %4
-    Load %5 <- string("constrained generic over Int")
-    Call %0 <- string("std.assert.assert") [%1, %5] (def=d2)
-    Load %1 <- float(4607182418800017408)
-    Load %3 <- float(4611686018427387904)
-    Load %4 <- float(4613937818241073152)
-    Call %0 <- string("Vec3") [%1, %3, %4] (def=d0)
-    Load %3 <- float(4616189618054758400)
-    Load %4 <- float(4617315517961601024)
-    Load %5 <- float(4618441417868443648)
-    Call %1 <- string("Vec3") [%3, %4, %5] (def=d0)
-    Load %4 <- %0
-    Load %5 <- %1
-    Call %3 <- string("sum") [%4, %5] (def=d1)
-    Load %6 <- %3
-    LoadField %7 <- %6.0
-    Load %8 <- float(4617315517961601024)
-    Eq %5 <- %7, %8
-    Load %9 <- string("constrained generic over Vec3")
-    Call %4 <- string("std.assert.assert") [%5, %9] (def=d2)
-    Drop %0
+    locals_total=7
+    values_total=21
+    value v0: Int(64) @block0
+    value v1: Int(64) @block0
+    value v2: TypeRef("?") @block0
+    value v3: Bool @block0
+    value v4: Int(64) @block0
+    value v5: Int(64) @block0
+    value v6: Generic { name: "String", args: [] } @block0
+    value v7: Float(64) @block0
+    value v8: Float(64) @block0
+    value v9: Float(64) @block0
+    value v10: Float(64) @block0
+    value v11: Float(64) @block0
+    value v12: Float(64) @block0
+    value v13: Struct(StructType { name: "Vec3", fields: [("x", Float(64)), ("y", Float(64)), ("z", Float(64))], methods: {}, interfaces: ["Add"] }) @block0
+    value v14: Struct(StructType { name: "Vec3", fields: [("x", Float(64)), ("y", Float(64)), ("z", Float(64))], methods: {}, interfaces: ["Add"] }) @block0
+    value v15: TypeRef("?") @block0
+    value v16: Bool @block0
+    value v17: TypeRef("?") @block0
+    value v18: Float(64) @block0
+    value v19: Struct(StructType { name: "Vec3", fields: [("x", Float(64)), ("y", Float(64)), ("z", Float(64))], methods: {}, interfaces: ["Add"] }) @block0
+    value v20: Generic { name: "String", args: [] } @block0
+    Load v0 <- int(1)
+    Load v1 <- int(2)
+    Call %0 <- string("sum") [v0, v1] (def=d1)
+    Load v4 <- %0
+    Load v5 <- int(3)
+    Eq v3 <- v4, v5
+    Load v6 <- string("constrained generic over Int")
+    Call v2 <- string("std.assert.assert") [v3, v6] (def=d2)
+    Load v7 <- float(4607182418800017408)
+    Load v8 <- float(4611686018427387904)
+    Load v9 <- float(4613937818241073152)
+    Call %1 <- string("Vec3") [v7, v8, v9] (def=d0)
+    Load v10 <- float(4616189618054758400)
+    Load v11 <- float(4617315517961601024)
+    Load v12 <- float(4618441417868443648)
+    Call %2 <- string("Vec3") [v10, v11, v12] (def=d0)
+    Load v13 <- %1
+    Load v14 <- %2
+    Call %3 <- string("sum") [v13, v14] (def=d1)
+    Load v19 <- %3
+    LoadField v17 <- v19.0
+    Load v18 <- float(4617315517961601024)
+    Eq v16 <- v17, v18
+    Load v20 <- string("constrained generic over Vec3")
+    Call v15 <- string("std.assert.assert") [v16, v20] (def=d2)
     Drop %1
     Drop %2
+    Drop %0
     Drop %3
-    Ret %4
+    Ret v15
   init (locals=2)
     islot[0] self : Int(64) @depth1
     islot[1] other : Int(64) @depth1

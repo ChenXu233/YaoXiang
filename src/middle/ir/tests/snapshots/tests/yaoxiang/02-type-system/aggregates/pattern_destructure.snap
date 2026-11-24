@@ -6,135 +6,208 @@ module
   fn main() -> Void
     slot[0] p : Int(64) @depth1
     slot[1] v : Int(64) @depth1
-    slot[3] a : Int(64) @depth2
-    slot[4] b : Int(64) @depth2
-    slot[5] q : Int(64) @depth1
-    slot[6] w : Int(64) @depth1
-    slot[8] a : Int(64) @depth2
-    slot[9] b : Int(64) @depth2
-    slot[10] pt : Int(64) @depth1
-    slot[11] area : Int(64) @depth1
-    slot[13] x : Int(64) @depth2
-    slot[14] b : Int(64) @depth2
-    slot[15] r : Int(64) @depth1
-    slot[16] got : Int(64) @depth1
-    slot[18] n : Int(64) @depth2
-    locals_total=29
-    Load %0 <- int(3)
-    Load %1 <- int(4)
-    NewTuple %2 <- [%0, %1]
-    CreateVariant %3 <- Pair::0 %2
-    Load %2 <- void
-    Load %0 <- %3
-    VariantTag %4 <- %0 : Pair
-    Load %5 <- int(0)
-    Eq %6 <- %4, %5
-    JmpIfNot %6 -> instr(20)
-    VariantPayload %7 <- %0 : Pair
-    LoadField %8 <- %7.0
-    Move %1 <- %8
-    LoadField %9 <- %7.1
-    Move %10 <- %9
-    Load %11 <- %1
-    Load %12 <- %10
-    Mul %13 <- %11, %12
-    Move %2 <- %13
+    slot[2] a : Int(64) @depth2
+    slot[3] b : Int(64) @depth2
+    slot[4] q : Int(64) @depth1
+    slot[5] w : Int(64) @depth1
+    slot[6] a : Int(64) @depth2
+    slot[7] b : Int(64) @depth2
+    slot[8] pt : Int(64) @depth1
+    slot[9] area : Int(64) @depth1
+    slot[10] x : Int(64) @depth2
+    slot[11] b : Int(64) @depth2
+    slot[12] r : Int(64) @depth1
+    slot[13] got : Int(64) @depth1
+    slot[14] n : Int(64) @depth2
+    locals_total=19
+    values_total=72
+    value v0: TypeRef("?") @block0
+    value v1: Int(64) @block0
+    value v2: Int(64) @block0
+    value v3: Generic { name: "Pair", args: [] } @block0
+    value v4: TypeRef("?") @block0
+    value v5: Int(64) @block0
+    value v6: Bool @block0
+    value v7: TypeRef("?") @block0
+    value v8: TypeRef("?") @block0
+    value v9: TypeRef("?") @block0
+    value v10: Int(64) @block0
+    value v11: Int(64) @block0
+    value v12: Int(64) @block0
+    value v13: TypeRef("?") @block0
+    value v14: Int(64) @block0
+    value v15: Bool @block0
+    value v16: Int(64) @block0
+    value v17: TypeRef("?") @block0
+    value v18: Bool @block0
+    value v19: Int(64) @block0
+    value v20: Int(64) @block0
+    value v21: Generic { name: "String", args: [] } @block0
+    value v22: Void @block0
+    value v23: Generic { name: "Pair", args: [] } @block0
+    value v24: TypeRef("?") @block0
+    value v25: Int(64) @block0
+    value v26: Bool @block0
+    value v27: TypeRef("?") @block0
+    value v28: TypeRef("?") @block0
+    value v29: TypeRef("?") @block0
+    value v30: Int(64) @block0
+    value v31: Int(64) @block0
+    value v32: Int(64) @block0
+    value v33: TypeRef("?") @block0
+    value v34: Int(64) @block0
+    value v35: Bool @block0
+    value v36: Int(64) @block0
+    value v37: TypeRef("?") @block0
+    value v38: Bool @block0
+    value v39: Int(64) @block0
+    value v40: Int(64) @block0
+    value v41: Generic { name: "String", args: [] } @block0
+    value v42: Int(64) @block0
+    value v43: Int(64) @block0
+    value v44: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
+    value v45: TypeRef("?") @block0
+    value v46: TypeRef("?") @block0
+    value v47: Int(64) @block0
+    value v48: Int(64) @block0
+    value v49: Int(64) @block0
+    value v50: TypeRef("?") @block0
+    value v51: Bool @block0
+    value v52: Int(64) @block0
+    value v53: Int(64) @block0
+    value v54: Generic { name: "String", args: [] } @block0
+    value v55: Int(64) @block0
+    value v56: Generic { name: "Result", args: [Int(64), Generic { name: "String", args: [] }] } @block0
+    value v57: TypeRef("?") @block0
+    value v58: Int(64) @block0
+    value v59: Bool @block0
+    value v60: TypeRef("?") @block0
+    value v61: Int(64) @block0
+    value v62: TypeRef("?") @block0
+    value v63: Int(64) @block0
+    value v64: Bool @block0
+    value v65: TypeRef("?") @block0
+    value v66: Int(64) @block0
+    value v67: TypeRef("?") @block0
+    value v68: Bool @block0
+    value v69: Int(64) @block0
+    value v70: Int(64) @block0
+    value v71: Generic { name: "String", args: [] } @block0
+    Load v1 <- int(3)
+    Load v2 <- int(4)
+    NewTuple v0 <- [v1, v2]
+    CreateVariant %0 <- Pair::0 v0
+    Load %1 <- void
+    Load v3 <- %0
+    VariantTag v4 <- v3 : Pair
+    Load v5 <- int(0)
+    Eq v6 <- v4, v5
+    JmpIfNot v6 -> instr(20)
+    VariantPayload v7 <- v3 : Pair
+    LoadField v8 <- v7.0
+    Move %2 <- v8
+    LoadField v9 <- v7.1
+    Move %3 <- v9
+    Load v11 <- %2
+    Load v12 <- %3
+    Mul v10 <- v11, v12
+    Move %1 <- v10
     Jmp -> instr(27)
-    VariantTag %14 <- %0 : Pair
-    Load %15 <- int(1)
-    Eq %16 <- %14, %15
-    JmpIfNot %16 -> instr(27)
-    Load %17 <- int(0)
-    Move %2 <- %17
+    VariantTag v13 <- v3 : Pair
+    Load v14 <- int(1)
+    Eq v15 <- v13, v14
+    JmpIfNot v15 -> instr(27)
+    Load v16 <- int(0)
+    Move %1 <- v16
     Jmp -> instr(27)
-    Load %6 <- %2
-    Load %7 <- int(12)
-    Eq %5 <- %6, %7
-    Load %8 <- string("multi-payload destructure")
-    Call %4 <- string("std.assert.assert") [%5, %8] (def=d0)
+    Load v19 <- %1
+    Load v20 <- int(12)
+    Eq v18 <- v19, v20
+    Load v21 <- string("multi-payload destructure")
+    Call v17 <- string("std.assert.assert") [v18, v21] (def=d0)
+    Load v22 <- void
+    CreateVariant %4 <- Pair::1 v22
     Load %5 <- void
-    CreateVariant %4 <- Pair::1 %5
-    Load %5 <- void
-    Load %6 <- %4
-    VariantTag %9 <- %6 : Pair
-    Load %13 <- int(0)
-    Eq %11 <- %9, %13
-    JmpIfNot %11 -> instr(50)
-    VariantPayload %12 <- %6 : Pair
-    LoadField %14 <- %12.0
-    Move %7 <- %14
-    LoadField %15 <- %12.1
-    Move %8 <- %15
-    Load %17 <- %7
-    Load %18 <- %8
-    Add %16 <- %17, %18
-    Move %5 <- %16
+    Load v23 <- %4
+    VariantTag v24 <- v23 : Pair
+    Load v25 <- int(0)
+    Eq v26 <- v24, v25
+    JmpIfNot v26 -> instr(50)
+    VariantPayload v27 <- v23 : Pair
+    LoadField v28 <- v27.0
+    Move %6 <- v28
+    LoadField v29 <- v27.1
+    Move %7 <- v29
+    Load v31 <- %6
+    Load v32 <- %7
+    Add v30 <- v31, v32
+    Move %5 <- v30
     Jmp -> instr(57)
-    VariantTag %19 <- %6 : Pair
-    Load %20 <- int(1)
-    Eq %21 <- %19, %20
-    JmpIfNot %21 -> instr(57)
-    Load %22 <- int(42)
-    Move %5 <- %22
+    VariantTag v33 <- v23 : Pair
+    Load v34 <- int(1)
+    Eq v35 <- v33, v34
+    JmpIfNot v35 -> instr(57)
+    Load v36 <- int(42)
+    Move %5 <- v36
     Jmp -> instr(57)
-    Load %11 <- %5
-    Load %12 <- int(42)
-    Eq %13 <- %11, %12
-    Load %14 <- string("zero-payload arm")
-    Call %9 <- string("std.assert.assert") [%13, %14] (def=d0)
-    Load %13 <- int(3)
-    Load %11 <- int(4)
-    Call %9 <- string("Point") [%13, %11] (def=d1)
-    Load %13 <- void
-    Load %11 <- %9
-    LoadField %15 <- %11.0
-    Move %12 <- %15
-    LoadField %16 <- %11.1
-    Move %14 <- %16
-    Load %18 <- %12
-    Load %19 <- %14
-    Mul %17 <- %18, %19
-    Move %13 <- %17
+    Load v39 <- %5
+    Load v40 <- int(42)
+    Eq v38 <- v39, v40
+    Load v41 <- string("zero-payload arm")
+    Call v37 <- string("std.assert.assert") [v38, v41] (def=d0)
+    Load v42 <- int(3)
+    Load v43 <- int(4)
+    Call %8 <- string("Point") [v42, v43] (def=d1)
+    Load %9 <- void
+    Load v44 <- %8
+    LoadField v45 <- v44.0
+    Move %10 <- v45
+    LoadField v46 <- v44.1
+    Move %11 <- v46
+    Load v48 <- %10
+    Load v49 <- %11
+    Mul v47 <- v48, v49
+    Move %9 <- v47
     Jmp -> instr(76)
-    Load %17 <- %13
-    Load %18 <- int(12)
-    Eq %16 <- %17, %18
-    Load %19 <- string("struct pattern with rename")
-    Call %15 <- string("std.assert.assert") [%16, %19] (def=d0)
-    Load %16 <- int(7)
-    CreateVariant %15 <- Result::0 %16
-    Load %16 <- void
-    Load %17 <- %15
-    VariantTag %19 <- %17 : Result
-    Load %20 <- int(0)
-    Eq %21 <- %19, %20
-    JmpIfNot %21 -> instr(94)
-    VariantPayload %22 <- %17 : Result
-    Move %18 <- %22
-    Load %23 <- %18
-    Move %16 <- %23
+    Load v52 <- %9
+    Load v53 <- int(12)
+    Eq v51 <- v52, v53
+    Load v54 <- string("struct pattern with rename")
+    Call v50 <- string("std.assert.assert") [v51, v54] (def=d0)
+    Load v55 <- int(7)
+    CreateVariant %12 <- Result::0 v55
+    Load %13 <- void
+    Load v56 <- %12
+    VariantTag v57 <- v56 : Result
+    Load v58 <- int(0)
+    Eq v59 <- v57, v58
+    JmpIfNot v59 -> instr(94)
+    VariantPayload v60 <- v56 : Result
+    Move %14 <- v60
+    Load v61 <- %14
+    Move %13 <- v61
     Jmp -> instr(102)
-    VariantTag %24 <- %17 : Result
-    Load %25 <- int(1)
-    Eq %26 <- %24, %25
-    JmpIfNot %26 -> instr(102)
-    VariantPayload %27 <- %17 : Result
-    Load %28 <- int(0)
-    Move %16 <- %28
+    VariantTag v62 <- v56 : Result
+    Load v63 <- int(1)
+    Eq v64 <- v62, v63
+    JmpIfNot v64 -> instr(102)
+    VariantPayload v65 <- v56 : Result
+    Load v66 <- int(0)
+    Move %13 <- v66
     Jmp -> instr(102)
-    Load %21 <- %16
-    Load %22 <- int(7)
-    Eq %20 <- %21, %22
-    Load %23 <- string("variant payload binding")
-    Call %19 <- string("std.assert.assert") [%20, %23] (def=d0)
-    Drop %13
-    Drop %16
-    Drop %3
+    Load v69 <- %13
+    Load v70 <- int(7)
+    Eq v68 <- v69, v70
+    Load v71 <- string("variant payload binding")
+    Call v67 <- string("std.assert.assert") [v68, v71] (def=d0)
     Drop %9
+    Drop %13
+    Drop %0
+    Drop %8
     Drop %4
-    Drop %15
-    Drop %2
+    Drop %12
+    Drop %1
     Drop %5
-    Ret %19
+    Ret v67
   init (locals=0)
     Call %0 <- string("main") [] (def=d2)

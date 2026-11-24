@@ -3,7 +3,7 @@
 //! §4.5: SuggestionEngine 集成
 //! X1: get_suggestions() 接入
 
-use crate::util::diagnostic::suggest::{SuggestionEngine, Suggestion};
+use crate::util::diagnostic::suggest::{Suggestion, SuggestionEngine};
 
 #[test]
 fn test_similarity_identical_strings() {

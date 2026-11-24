@@ -1,0 +1,9 @@
+// 06-compile-errors/types/type_const_expr_incomplete_err.yx
+// 覆盖: 类型位常量表达式的**真语法错**（issue #543）——运算符缺右操作数
+// 验证: `Array(Int, 2+)` 的 `+` 没有右操作数 ⇒ E0012「类型位的常量表达式不完整」；
+//       不再产出「字面量 + 悬空算符」的半截 AST 让外层误报成 expected RParen。
+// 状态: ❌ 应被编译期拒绝
+
+// expect: compile-error E0012
+
+d: Array(Int, 2+) = [1]

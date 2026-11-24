@@ -11,7 +11,7 @@
 use lsp_types::Uri;
 use std::str::FromStr;
 
-use super::support::{SAMPLE_URI, open_and_check};
+use super::support::{open_and_check, SAMPLE_URI};
 use crate::lsp::handlers::rename::handle_rename;
 use crate::lsp::session::Session;
 use crate::lsp::world::World;

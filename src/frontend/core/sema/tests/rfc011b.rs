@@ -926,3 +926,133 @@ fn test_rfc010b_bool_literal_coverage_exhaustive() {
         result.diagnostics
     );
 }
+
+// ===================== 范围模式（issue #405，SPEC syntax §2.8） =====================
+
+/// 规范（issue #405）：Int 范围臂 + 兜底臂——类型一致，零诊断
+#[test]
+fn test_rfc010b_range_pattern_typechecks_with_fallback() {
+    let source = r#"
+        main: () -> Void = {
+            score = 85
+            grade = match score {
+                90..99 => "A",
+                80..89 => "B",
+                _ => "F",
+            }
+            return
+        }
+    "#;
+    let (result, _checker) = check_source_with_checker(source);
+    assert!(
+        result.diagnostics.is_empty(),
+        "range arms with fallback should typecheck: {:?}",
+        result.diagnostics
+    );
+}
+
+/// 规范（issue #405）：范围端点限定 Int——Float 端点语法成立、类型检查拒绝
+#[test]
+fn test_rfc010b_range_pattern_float_bound_reports_e1002() {
+    let source = r#"
+        main: () -> Void = {
+            x = 1.5
+            r = match x {
+                1.5..2.5 => "f",
+                _ => "o",
+            }
+            return
+        }
+    "#;
+    let (result, _checker) = check_source_with_checker(source);
+    assert!(
+        result.diagnostics.iter().any(|d| d.code == "E1002"),
+        "float range bound should report E1002: {:?}",
+        result.diagnostics
+    );
+}
+
+/// 规范（issue #405）：倒序范围（lo > hi）是空范围——恒不命中，E1031
+#[test]
+fn test_rfc010b_range_pattern_reversed_reports_e1031() {
+    let source = r#"
+        main: () -> Void = {
+            x = 5
+            r = match x {
+                10..0 => "rev",
+                _ => "o",
+            }
+            return
+        }
+    "#;
+    let (result, _checker) = check_source_with_checker(source);
+    assert!(
+        result.diagnostics.iter().any(|d| d.code == "E1031"),
+        "reversed range should report E1031: {:?}",
+        result.diagnostics
+    );
+}
+
+/// 规范（issue #405）：同端点的重复范围臂不可达——E1031（与重复字面量臂同构）
+#[test]
+fn test_rfc010b_range_pattern_duplicate_reports_e1031() {
+    let source = r#"
+        main: () -> Void = {
+            x = 85
+            r = match x {
+                80..89 => "B",
+                80..89 => "again",
+                _ => "F",
+            }
+            return
+        }
+    "#;
+    let (result, _checker) = check_source_with_checker(source);
+    assert!(
+        result.diagnostics.iter().any(|d| d.code == "E1031"),
+        "duplicate range arm should report E1031: {:?}",
+        result.diagnostics
+    );
+}
+
+/// 规范（RFC-010b 全穷尽定案 × issue #405）：范围臂是受检非兜底模式——
+/// Int 值域开放，唯一范围臂不可能穷尽，无兜底即 E1030
+#[test]
+fn test_rfc010b_range_pattern_requires_fallback_e1030() {
+    let source = r#"
+        main: () -> Void = {
+            x = 85
+            r = match x {
+                80..89 => "B",
+            }
+            return
+        }
+    "#;
+    let (result, _checker) = check_source_with_checker(source);
+    assert!(
+        result.diagnostics.iter().any(|d| d.code == "E1030"),
+        "range arm without fallback should report E1030: {:?}",
+        result.diagnostics
+    );
+}
+
+/// 规范（issue #405 × RFC-010b）：范围臂 + 通配兜底——穷尽成立，零诊断
+#[test]
+fn test_rfc010b_range_pattern_with_wildcard_exhaustive() {
+    let source = r#"
+        main: () -> Void = {
+            x = 85
+            r = match x {
+                80..89 => "B",
+                _ => "F",
+            }
+            return
+        }
+    "#;
+    let (result, _checker) = check_source_with_checker(source);
+    assert!(
+        result.diagnostics.is_empty(),
+        "range arm plus wildcard should be exhaustive: {:?}",
+        result.diagnostics
+    );
+}

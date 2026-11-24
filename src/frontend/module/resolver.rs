@@ -16,9 +16,9 @@
 
 use std::collections::HashMap;
 
-use std::cell::Ref;
 use super::registry::ModuleRegistry;
 use super::symbol::{DefId, SymbolTable};
+use std::cell::Ref;
 
 /// 名字解析器：在给定文件上下文（模块键 + 用户命名空间）下把名字解析为限定名 / DefId。
 ///

@@ -10,7 +10,7 @@
 | 009a-borrow-proof-pipeline.md | RFC-009a: 令牌生命期分析——基于霍尔证明管道 | 已接受 | accepted\009a-borrow-proof-pipeline.md | #129 | -- | -- | -- |
 | 010-unified-type-syntax.md | RFC-010: 统一类型语法 - name: type = value 模型 | 已接受 | accepted\010-unified-type-syntax.md | #127 | -- | -- | -- |
 | 010a-tail-expression-and-return.md | RFC-010a: 尾表达式求值与 return 语义 | 已接受 | accepted\010a-tail-expression-and-return.md | #342 | -- | -- | -- |
-| 010b-pattern-matching-completeness.md | RFC-010b: 模式匹配完备化（变体解构与穷尽性） | 已接受 | accepted\010b-pattern-matching-completeness.md | #330 | -- | -- | -- |
+| 010b-pattern-matching-completeness.md | RFC-010b: 模式匹配完备化（变体解构与穷尽性） | 已接受 | accepted\010b-pattern-matching-completeness.md | #330 | #330, #389 | -- | -- |
 | 011-generic-type-system.md | RFC-011: 泛型系统设计 - 零成本抽象与宏替代 | 已接受 | accepted\011-generic-type-system.md | #128 | #45, #46, #73, #90, #96, #40, #151 | #122 | -- |
 | 011a-interface-implementation.md | RFC-011a: 接口实现与动态分发 | 已接受 | accepted\011a-interface-implementation.md | -- | -- | -- | -- |
 | 011b-operator-overloading.md | RFC-011b: 运算符重载与接口驱动运算符 | 已接受 | accepted\011b-operator-overloading.md | #341 | -- | -- | -- |

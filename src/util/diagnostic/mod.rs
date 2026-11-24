@@ -32,13 +32,13 @@ pub mod result;
 pub mod suggest;
 
 // 重新导出
-pub use codes::{ErrorCategory, ErrorCodeDefinition, I18nRegistry, DiagnosticBuilder, ErrorInfo};
 pub use codes::builder::{current_span, push_current_span, SpanGuard};
+pub use codes::{DiagnosticBuilder, ErrorCategory, ErrorCodeDefinition, ErrorInfo, I18nRegistry};
 pub use collect::ErrorCollector;
 pub use command::render_explain_output;
 #[cfg(feature = "cli")]
 pub use command::run_check_command_once;
-pub use emitter::{TextEmitter, JsonEmitter, EmitterConfig};
+pub use emitter::{EmitterConfig, JsonEmitter, TextEmitter};
 pub use error::{Diagnostic, Severity};
 pub use result::Result;
 pub use suggest::SuggestionEngine;
@@ -61,6 +61,43 @@ pub struct CheckResult {
     pub source_files: HashMap<String, SourceFile>,
     pub error_count: usize,
     pub warning_count: usize,
+}
+
+impl CheckResult {
+    /// 按码抑制诊断（issue #499 `--allow`，用户 2026-10-24 裁决 A）。
+    ///
+    /// 抑制语义 = 对用户**完全不可见**：诊断从结果中移除，且与
+    /// [`push_diagnostic`] 的记账规则**对称递减**对应计数（同一桶位 +1 的逆
+    /// 操作，不复制第二份 severity→计数映射）。消费方因此一致地看不到被抑制
+    /// 的码：文本/JSON 输出、`--deny-warnings` 与 `--deny-shadowing` 的升级
+    /// 判定、返回给调用方的计数。
+    ///
+    /// Error 级诊断不可抑制：`--allow` 是 W 码抑制机制，错误不可被 CLI 旗标
+    /// 静音。W 族码可被发射点显式升为 Error（唯一组合 W1090，见
+    /// `codes/w1xxx.rs` 的码族与发射级别解耦注释），此处按**发射级别**判定。
+    ///
+    /// `codes` 为空 = 无操作（不带 `--allow` 的调用零行为变化）。
+    pub fn suppress_codes(
+        &mut self,
+        codes: &[String],
+    ) {
+        if codes.is_empty() {
+            return;
+        }
+        let mut kept = Vec::with_capacity(self.diagnostics.len());
+        for entry in self.diagnostics.drain(..) {
+            let suppressed = entry.diagnostic.severity != Severity::Error
+                && codes.iter().any(|code| code == &entry.diagnostic.code);
+            if suppressed {
+                // guard 已排除 Error 级 ⇒ 恒为 warning_count 桶（push_diagnostic
+                // 记账规则的对称面）
+                self.warning_count -= 1;
+            } else {
+                kept.push(entry);
+            }
+        }
+        self.diagnostics = kept;
+    }
 }
 
 /// 渲染编译错误

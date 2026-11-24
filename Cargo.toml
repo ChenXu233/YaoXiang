@@ -5,7 +5,7 @@ resolver = "2"
 
 # RFC-037：工具链单一版本源（引擎 yaoxiang-rs 与前门 yx 同版本发布）
 [workspace.package]
-version = "0.8.8"
+version = "0.8.9"
 
 [package]
 name = "yaoxiang"
@@ -37,6 +37,8 @@ path = "src/main.rs"
 [dev-dependencies]
 criterion = "0.8.1"
 proptest = "1.11"
+# 8.3 go/no-go 探针：生成 parser 只在 cfg(test) 下编译，生产运行时依赖不变。
+lalrpop-util = "=0.23.2"
 
 [[bench]]
 name = "lib"
@@ -131,8 +133,10 @@ default-target = "x86_64-unknown-linux-gnu"
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 # tokio net 特性（reqwest/GitHub 适配层）：mio 仅支持原生目标
 tokio = { version = "1", default-features = false, features = ["net"] }
-# HTTP 客户端（std.net #56）——同步阻塞 + rustls，不引入 tokio 运行时树
-ureq = { version = "2", default-features = false, features = ["tls"] }
+# HTTP 客户端（std.net #56）——同步阻塞 + rustls，不引入 tokio 运行时树。
+# ureq 3 的 feature "rustls" = rustls(ring provider) + webpki-roots 1.x 打包根证书，
+# 对位 ureq 2 的 feature "tls"（#489：解除 RUSTSEC-2026-0381 的 0.26 线 webpki-roots）
+ureq = { version = "3", default-features = false, features = ["rustls"] }
 # 临时文件/目录创建（std.fs #104；安全唯一名语义，std 无对位）
 tempfile = "3.27.0"
 
@@ -142,3 +146,4 @@ web-time = "1"
 [build-dependencies]
 code-tables = { path = "tools/code-tables" }
 type-tables = { path = "tools/type-tables" }
+lalrpop = "=0.23.2"

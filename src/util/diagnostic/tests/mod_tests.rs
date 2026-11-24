@@ -3,18 +3,18 @@
 //! §4.4: 错误处理修复（E1-E8）
 //! §5.2: 跨文件分析流程（check_modules_with_shared_env）
 
-use crate::util::diagnostic::{
-    parse_compile_error, check_files_with_diagnostics, render_runtime_error, ErrorCodeDefinition,
-    TextEmitter,
-};
-use crate::frontend::config::CompileConfig;
-use crate::util::span::{DebugSpan, SourceFile, SourceMap, Span, Position};
 use crate::backends::{ExecutorError, StackFrame};
-use crate::middle::bytecode::{BytecodeModule, BytecodeFunction, BytecodeInstr};
+use crate::frontend::config::CompileConfig;
+use crate::middle::bytecode::{BytecodeFunction, BytecodeInstr, BytecodeModule};
+use crate::util::diagnostic::emitter::ansi::strip_ansi;
+use crate::util::diagnostic::{
+    check_files_with_diagnostics, parse_compile_error, render_runtime_error, CheckDiagnostic,
+    CheckResult, ErrorCodeDefinition, Severity, TextEmitter,
+};
+use crate::util::span::{DebugSpan, Position, SourceFile, SourceMap, Span};
 use std::collections::HashMap;
 use std::fs;
 use tempfile::tempdir;
-use crate::util::diagnostic::emitter::ansi::strip_ansi;
 
 /// Helper: test_render_runtime_function_not_found_with_span 的完整夹具与断言（逐条断言见函数体）。
 /// Fixture: `error.yx = main() { foo() }` 的源表 + 单函数模块（ip=0 → 2:3-2:6）。
@@ -223,4 +223,79 @@ main: () -> Void = {
     assert_eq!(result.error_count, 0);
     assert_eq!(result.warning_count, 0);
     assert!(result.diagnostics.is_empty());
+}
+
+// ==================== CheckResult::suppress_codes（issue #499 --allow） ====================
+//
+// 契约（run_check_command_once 唯一过滤闸的对称记账方法）：
+// - 被允许的 Warning 级诊断移除且 warning_count 对称递减——抑制 = 对用户
+//   完全不可见（issue #499，用户 2026-10-24 裁决 A / 2026-11-20 甲案）；
+// - Error 级诊断不可抑制——错误不可被 CLI 旗标静音（W 族码可被发射点显式
+//   升为 Error，唯一组合 W1090，见 codes/w1xxx.rs 的解耦注释）；
+// - 空码表 = 无操作（不带 --allow 的调用零行为变化）。
+
+#[test]
+fn test_suppress_codes_removes_matching_warning_and_decrements_count() {
+    // Arrange: W1001 与 W1003 各一条，warning_count = 2（push_diagnostic 口径）
+    let _walk_guard = crate::util::diagnostic::push_current_span(crate::util::span::Span::dummy());
+    let mut result = CheckResult::default();
+    result.diagnostics.push(CheckDiagnostic {
+        file: "a.yx".to_string(),
+        diagnostic: ErrorCodeDefinition::unused_function("foo").build(),
+    });
+    result.diagnostics.push(CheckDiagnostic {
+        file: "a.yx".to_string(),
+        diagnostic: ErrorCodeDefinition::unused_import("io").build(),
+    });
+    result.warning_count = 2;
+
+    // Act
+    result.suppress_codes(&["W1001".to_string()]);
+
+    // Assert
+    assert_eq!(result.warning_count, 1, "被抑制码的计数应对称递减");
+    assert_eq!(result.diagnostics.len(), 1, "被抑制码的诊断应被移除");
+    assert_eq!(
+        result.diagnostics[0].diagnostic.code, "W1003",
+        "未被允许的码应保留"
+    );
+}
+
+#[test]
+fn test_suppress_codes_keeps_error_severity_diagnostics() {
+    // Arrange: W1090 以显式 Error 级发射（码族与发射级别解耦）
+    let mut result = CheckResult::default();
+    result.diagnostics.push(CheckDiagnostic {
+        file: "a.yx".to_string(),
+        diagnostic: ErrorCodeDefinition::obligation_not_drained("field", "a.yx", "detail")
+            .severity(Severity::Error)
+            .build(),
+    });
+    result.error_count = 1;
+
+    // Act
+    result.suppress_codes(&["W1090".to_string()]);
+
+    // Assert: Error 级不可被 --allow 静音——被静音的错误会让失败的 check 伪装成通过
+    assert_eq!(result.error_count, 1, "Error 级诊断不可抑制");
+    assert_eq!(result.diagnostics.len(), 1, "Error 级诊断应保留");
+}
+
+#[test]
+fn test_suppress_codes_empty_list_is_noop() {
+    // Arrange
+    let _walk_guard = crate::util::diagnostic::push_current_span(crate::util::span::Span::dummy());
+    let mut result = CheckResult::default();
+    result.diagnostics.push(CheckDiagnostic {
+        file: "a.yx".to_string(),
+        diagnostic: ErrorCodeDefinition::unused_function("foo").build(),
+    });
+    result.warning_count = 1;
+
+    // Act: 空码表（不带 --allow 的调用形态）
+    result.suppress_codes(&[]);
+
+    // Assert
+    assert_eq!(result.warning_count, 1, "空码表不得改变计数");
+    assert_eq!(result.diagnostics.len(), 1, "空码表不得移除诊断");
 }

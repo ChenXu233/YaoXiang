@@ -1,0 +1,59 @@
+// 02-type-system/generics/const_arg_gamma_equality_shadow_ok.yx
+// 覆盖: RFC-039 D62 / 6.9.4（issue #534）修复 F-1 的**不误杀**面——match 臂的
+//       模式绑定遮蔽同名外层绑定只让事实在**本臂内**失效；出臂还原，臂内自产事实可用
+// 验证: ① 臂内遮蔽后，臂**外**的 f(y)(42) 仍凭外层守卫 y == 42 通过（值 42）；
+//       ② 臂内裸 assert(y == 7) 命中臂绑定，f(y)(7) 通过（值 7）；
+//       ③ 未遮蔽的其它名字事实不受影响（z == 7 在含遮蔽臂的分支内仍可用）。
+// 反面对照（必须拒绝）见 06-compile-errors/patterns/match_arm_shadow_fact_err.yx。
+// 状态: ✅ 可运行
+
+use std.assert
+use std.option
+
+f: (N: Int) -> (n: N) -> Int = (n) => n
+
+restored: (y: Int) -> Int = {
+    if y == 42 {
+        r = match Option(Int).some(7) {
+            some(y) => y,
+            none() => 0,
+        }
+        f(y)(42)
+    } else {
+        0
+    }
+}
+
+own_fact: () -> Int = {
+    r = match Option(Int).some(7) {
+        some(y) => {
+            assert(y == 7, "臂内自产事实")
+            f(y)(7)
+        },
+        none() => 0,
+    }
+    r
+}
+
+other_name: (y: Int, z: Int) -> Int = {
+    if y == 42 and z == 7 {
+        r = match Option(Int).some(0) {
+            some(y) => y,
+            none() => 0,
+        }
+        f(z)(7)
+    } else {
+        0
+    }
+}
+
+main: () -> Void = {
+    a: Int = restored(42)
+    assert.assert(a == 42, "遮蔽臂之后外层事实仍成立")
+    b: Int = own_fact()
+    assert.assert(b == 7, "臂内自产等式事实可用")
+    c: Int = other_name(42, 7)
+    assert.assert(c == 7, "未被遮蔽的名字不受影响")
+}
+
+main()

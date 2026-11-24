@@ -2,25 +2,36 @@ module
   fn main() -> Void
     slot[0] i : Int(64) @depth1
     slot[1] last : Int(64) @depth1
-    locals_total=7
+    locals_total=5
+    values_total=10
+    value v0: Bool @block0
+    value v1: Int(64) @block0
+    value v2: Int(64) @block0
+    value v3: Int(64) @block0
+    value v4: Int(64) @block0
+    value v5: TypeRef("?") @block0
+    value v6: Bool @block0
+    value v7: Int(64) @block0
+    value v8: Int(64) @block0
+    value v9: Generic { name: "String", args: [] } @block0
     Load %0 <- int(0)
     Load %1 <- void
-    Load %2 <- %0
-    Load %3 <- int(0)
-    Lt %4 <- %2, %3
-    JmpIfNot %4 -> instr(11)
-    Load %5 <- %0
-    Load %6 <- int(1)
-    Add %0 <- %5, %6
+    Load v1 <- %0
+    Load v2 <- int(0)
+    Lt v0 <- v1, v2
+    JmpIfNot v0 -> instr(11)
+    Load v3 <- %0
+    Load v4 <- int(1)
+    Add %0 <- v3, v4
     Load %1 <- %0
     Jmp -> instr(2)
-    Load %3 <- %1
-    Load %5 <- int(0)
-    Eq %2 <- %3, %5
-    Load %6 <- string("零迭代 while 的值：残留形态，应在使用点响亮失败")
-    Call %4 <- string("std.assert.assert") [%2, %6] (def=d0)
+    Load v7 <- %1
+    Load v8 <- int(0)
+    Eq v6 <- v7, v8
+    Load v9 <- string("零迭代 while 的值：残留形态，应在使用点响亮失败")
+    Call v5 <- string("std.assert.assert") [v6, v9] (def=d0)
     Drop %0
     Drop %1
-    Ret %4
+    Ret v5
   init (locals=0)
     Call %0 <- string("main") [] (def=d1)

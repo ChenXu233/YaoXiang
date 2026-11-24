@@ -12,8 +12,8 @@
 //!   ?:                     （错误传播）
 //!   =>:                    （Lambda，右结合）
 
-use crate::frontend::core::lexer::tokenize;
 use crate::ast::{BinOp, Expr};
+use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::{NullProbe, ParserState};
 
 fn parse_expr(source: &str) -> Expr {

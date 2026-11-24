@@ -1,12 +1,12 @@
 //! RFC-004 Binding syntax parsing
 //! Handles binding declarations: `Type.method = value`
 
-use crate::frontend::core::lexer::tokens::*;
-use crate::util::diagnostic::ErrorCodeDefinition;
 use crate::ast::*;
-use crate::frontend::core::parser::{NullProbe, ParserState};
+use crate::frontend::core::lexer::tokens::*;
+use crate::frontend::core::parser::statements::functions::{parse_fn_body, parse_fn_params};
 use crate::frontend::core::parser::statements::types::parse_type_annotation_required;
-use crate::frontend::core::parser::statements::functions::{parse_fn_params, parse_fn_body};
+use crate::frontend::core::parser::{NullProbe, ParserState};
+use crate::util::diagnostic::ErrorCodeDefinition;
 use crate::util::span::Span;
 
 /// Parse method binding: `Type.method: (Type, ...) -> ReturnType = (params) => body`

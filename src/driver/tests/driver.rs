@@ -13,7 +13,7 @@ use crate::driver::{
 };
 use crate::frontend::config::CompileConfig;
 use crate::frontend::module::orchestrator::OrchestratorError;
-use crate::frontend::pipeline::{PipelineError};
+use crate::frontend::pipeline::PipelineError;
 use std::path::{Path, PathBuf};
 
 /// 构造 SingleFile 程序并跑 Driver。

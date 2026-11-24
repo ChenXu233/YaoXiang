@@ -19,7 +19,7 @@ use crate::frontend::core::types::mono::UniverseLevel;
 use crate::frontend::core::types::var::TypeVar;
 use crate::middle::ir::ir::{
     BasicBlock, ConstValue, FunctionBody, FunctionIR, Instruction, LocalSlot, ModuleIR, Operand,
-    TypeDeclBody, TypeDeclField,
+    TypeDeclBody, TypeDeclField, ValueInfo,
 };
 use crate::middle::passes::mono::instance::{GenericFunctionId, InstantiationRequest};
 use crate::middle::passes::mono::Monomorphizer;
@@ -55,6 +55,8 @@ fn make_identity_ir() -> FunctionIR {
             }],
             entry: 0,
             locals: vec![LocalSlot::temp(param_type.clone())],
+            values: Vec::new(),
+            value_slots: Vec::new(),
         },
     }
 }
@@ -67,6 +69,7 @@ fn make_pair_type_ir(fields: &[&str]) -> FunctionIR {
         .map(|name| TypeDeclField {
             name: (*name).to_string(),
             ty: MonoType::TypeRef("T".to_string()),
+            quantity: None,
             is_mut: false,
             has_default: false,
             is_method: false,
@@ -118,6 +121,8 @@ fn make_fn_ir(
             }],
             entry: 0,
             locals,
+            values: Vec::new(),
+            value_slots: Vec::new(),
         },
     }
 }
@@ -323,6 +328,7 @@ fn make_generic_type_decl_ir(
         .map(|name| TypeDeclField {
             name: (*name).to_string(),
             ty: MonoType::TypeRef(param.to_string()),
+            quantity: None,
             is_mut: false,
             has_default: false,
             is_method: false,
@@ -400,6 +406,118 @@ fn test_specialize_identity_with_int() {
     assert!(func.generic_params.is_none(), "泛型标记应已清除");
     assert_eq!(func.blocks().len(), 1);
     assert_eq!(func.blocks()[0].instructions.len(), 2);
+}
+
+/// 7b.2：特化时值表 `ty` 随类型实参替换；定义块与槽映射原样投影。
+#[test]
+fn test_specialize_substitutes_value_types_and_keeps_slots() {
+    // Arrange：identity 的体带一个 TypeVar 类型的值 + 槽映射
+    let mut mono = Monomorphizer::new();
+    let mut generic = make_identity_ir();
+    if let FunctionBody::Code {
+        values,
+        value_slots,
+        ..
+    } = &mut generic.body
+    {
+        values.push(ValueInfo {
+            ty: MonoType::TypeVar(TypeVar::new(0)),
+            debug_name: None,
+            defining_block: 0,
+        });
+        value_slots.push(1);
+    }
+    mono.generic_functions
+        .insert("identity".to_string(), generic);
+    let req = InstantiationRequest::new(
+        GenericFunctionId::new("identity".to_string(), vec!["T".to_string()]),
+        vec![crate::frontend::core::types::mono::GenericArg::Type(
+            MonoType::Int(64),
+        )],
+        Span::default(),
+    );
+
+    // Act
+    let result = mono
+        .specialize_function(&req)
+        .expect("特化不应报错")
+        .expect("特化应成功");
+
+    // Assert
+    assert_eq!(result.values().len(), 1, "值表条目数必须原样保留");
+    assert_eq!(
+        result.values()[0].ty,
+        MonoType::Int(64),
+        "值表的 TypeVar 必须按类型实参替换"
+    );
+    assert_eq!(
+        result.values()[0].defining_block,
+        0,
+        "defining_block 原样投影（块未重编号）"
+    );
+    assert_eq!(
+        result.value_slots().to_vec(),
+        vec![1],
+        "值 → 槽映射原样复制（7b.2 过渡映射）"
+    );
+}
+
+/// 7b.3：特化克隆函数体时块与块级出边原样投影——块未重编号，`successors`
+/// 不必重建（块级 CFG 在 lowering 已定，特化不改控制流）。
+#[test]
+fn test_specialize_preserves_block_successors() {
+    // Arrange：identity 的体改成两块（块 0 跳转进块 1），块 0 有块级出边
+    let mut mono = Monomorphizer::new();
+    let mut generic = make_identity_ir();
+    if let FunctionBody::Code { blocks, .. } = &mut generic.body {
+        blocks[0].instructions = vec![
+            Instruction::Load {
+                dst: Operand::Local(0),
+                src: Operand::Arg(0),
+                span: Span::dummy(),
+            },
+            Instruction::Jmp {
+                target: 2,
+                span: Span::dummy(),
+            },
+        ];
+        blocks[0].successors = vec![1];
+        blocks.push(BasicBlock {
+            label: 1,
+            instructions: vec![Instruction::Ret {
+                value: Some(Operand::Local(0)),
+                span: Span::dummy(),
+            }],
+            successors: Vec::new(),
+        });
+    }
+    mono.generic_functions
+        .insert("identity".to_string(), generic);
+    let req = InstantiationRequest::new(
+        GenericFunctionId::new("identity".to_string(), vec!["T".to_string()]),
+        vec![crate::frontend::core::types::mono::GenericArg::Type(
+            MonoType::Int(64),
+        )],
+        Span::default(),
+    );
+
+    // Act
+    let result = mono
+        .specialize_function(&req)
+        .expect("特化不应报错")
+        .expect("特化应成功");
+
+    // Assert
+    assert_eq!(result.blocks().len(), 2, "特化必须原样保留块数");
+    assert_eq!(
+        result.blocks()[0].successors,
+        vec![1],
+        "块 0 的块级出边必须原样投影（块未重编号）"
+    );
+    assert!(
+        result.blocks()[1].successors.is_empty(),
+        "块 1 的块级出边必须原样投影（空）"
+    );
 }
 
 #[test]
@@ -514,10 +632,15 @@ fn test_monomorphize_end_to_end_specializes_and_replaces_calls() {
     let requests = [identity_request(MonoType::Int(64))];
 
     // Act
-    let result = mono.monomorphize(&module, &requests).unwrap();
+    let mut result = mono.monomorphize(&module, &requests).unwrap();
 
-    // Assert: 应有 2 个函数：main（调用已替换）+ identity(int64)
-    assert_eq!(result.functions.len(), 2);
+    // Assert: mono 输出保留全部原件 + 实例 ⇒ 3 个函数（main / identity(int64) / identity）
+    assert_eq!(
+        result.functions.len(),
+        3,
+        "mono 不再按名删原件（删除职责归 DCE）：实际 {:?}",
+        result.functions.iter().map(|f| &f.name).collect::<Vec<_>>()
+    );
 
     // Assert: main 中的调用应被替换为 identity(int64)
     let main_out = find_fn(&result, "main", "模块中应存在 main 函数");
@@ -532,18 +655,32 @@ fn test_monomorphize_end_to_end_specializes_and_replaces_calls() {
         specialized.generic_params.is_none(),
         "特化函数的泛型标记应已清除"
     );
+
+    // Assert: 删除职责归 DCE——全部调用点已改写成实例名 ⇒ 原件不可达、被删
+    crate::middle::passes::dce::eliminate(&mut result).expect("DCE 不应失败");
+    assert!(
+        !result.functions.iter().any(|f| f.name == "identity"),
+        "全部调用点改写后原件不可达，应由 DCE 删除；实际 {:?}",
+        result.functions.iter().map(|f| &f.name).collect::<Vec<_>>()
+    );
+    assert!(
+        result.functions.iter().any(|f| f.name == "identity(int64)"),
+        "实例必须存活（main 的调用点已指向它）"
+    );
 }
 
 /// 「identity(int64) 特化函数应存在」的失败文案。
 const MISSING_SPECIALIZED: &str = "应该存在 identity(int64) 特化函数";
 
-/// 机制（3.4.8-R1+ / t3）：删除判据按**泛型名**（site_requests 的名字集合），
-/// 调用点改写判据按 **(containing_fn, 名, span)** 三元键。同一泛型的两个调用点
-/// 里只要有一个没有请求键（请求因符号化实参进 deferred 桶未排水，或该调用点
-/// 从未产出请求），删除原件就让那个调用点悬空——运行期按原名查表落空（E6006）。
+/// 机制（3.4.8-R1+ / #542-D3）：mono 不再按泛型名删原件——**保留全部原件**，
+/// 删除职责归 post-mono DCE。同一泛型的两个调用点里只要有一个没有请求键
+///（请求因符号化实参进 deferred 桶未排水，或该调用点从未产出请求），该站点
+/// 仍按原名引用原件；DCE 的 Call 名字边据此判活 ⇒ 原件保留、站点不悬空
+///（运行期不会 E6006）。
 ///
-/// 规范：RFC-011 §4 泛型函数特化。实证现场：src/std/tests/list_ops.yx:53 的
-/// `list.is_empty(list.empty(Int))`——该泛型的请求只存在于同一函数内的另一调用点。
+/// 规范：RFC-011 §4 泛型函数特化与 §7 可达性删除。实证现场：
+/// src/std/tests/list_ops.yx:53 的 `list.is_empty(list.empty(Int))`——该泛型的
+/// 请求只存在于同一函数内的另一调用点。
 #[test]
 fn test_monomorphize_keeps_original_generic_when_call_site_lacks_request_key() {
     // Arrange：泛型 std.list.is_empty + main 里两个调用点（仅前者有请求键）
@@ -580,7 +717,7 @@ fn test_monomorphize_keeps_original_generic_when_call_site_lacks_request_key() {
     let requests = [covered_request];
 
     // Act
-    let result = Monomorphizer::new()
+    let mut result = Monomorphizer::new()
         .monomorphize(&module, &requests)
         .expect("单态化不应失败");
 
@@ -598,19 +735,28 @@ fn test_monomorphize_keeps_original_generic_when_call_site_lacks_request_key() {
         is_call_to(&main_out.blocks()[0].instructions[1], "std.list.is_empty"),
         "无请求键的调用点应保持原名 std.list.is_empty"
     );
-    // Assert 3：原件必须保留——删除会让 Assert 2 的调用点悬空（运行期 E6006）
+    // Assert 3：mono 输出保留全部原件（删除职责已归 DCE）
     assert!(
         result
             .functions
             .iter()
             .any(|f| f.name == "std.list.is_empty"),
-        "存在未覆盖调用点时不得删除原件（否则运行期按原名查表落空 E6006）"
+        "mono 输出必须保留原件（按名删 + 恢复闸已由 post-mono DCE 接管）"
+    );
+    // Assert 4：DCE 后原件仍在——未覆盖调用点仍按原名引用它（名字边判活）
+    crate::middle::passes::dce::eliminate(&mut result).expect("DCE 不应失败");
+    assert!(
+        result
+            .functions
+            .iter()
+            .any(|f| f.name == "std.list.is_empty"),
+        "DCE 后原件必须保留：未覆盖的按名调用点仍引用它（否则运行期 E6006）"
     );
 }
 
-/// 泛型 `std.list.is_empty` **只**被一个「非改写面」站点（`MakeClosure` / `TailCall`）
-/// 按名引用，且该站点在请求集合里有键（span 对齐）——用于钉「非改写面站点一律计
-/// 未覆盖」。返回（模块, 请求）。
+/// 泛型 `std.list.is_empty` 被一个指定形态的站点（`MakeClosure` / `TailCall`）按名
+/// 引用，且该站点在请求集合里有键（span 对齐）——用于钉「非改写面形态的引用面」。
+/// 返回（模块, 请求）。
 ///
 /// 注意本夹具的站点**不是**柯里包装体（`main` 的直接调用序列），故不经过逐实例
 /// 柯里层克隆路径（`emit_curry_layer_clones`，6.9.2-C2b P1）：那条路只改写「实例
@@ -645,16 +791,16 @@ fn non_rewritable_ref_case(
     (module_with(vec![generic, main_func]), vec![req])
 }
 
-/// 指令形态不对称（3.4.8-R1+++ / t6）：扫描面（`by_name_call_target`）覆盖
-/// `Call`/`TailCall`/`MakeClosure`，调用点改写面（`replace_calls_in_function`）**只**
-/// 处理 `Call`。`MakeClosure` 臂若照常查映射键，「有键」会被误判为「已覆盖」——原件
-/// 被删而该站点不被这个改写面改写 → 悬空（t3 同缺陷类）。钉住：一律计未覆盖 → 原件保留。
+/// 指令形态不对称（3.4.8-R1+++ / #542-D3）：调用点改写面只覆盖 `Call` / `TailCall`；
+/// 只被 `MakeClosure` 按名引用的泛型原件**不经过改写面**，但它也不是死码——
+/// post-mono DCE 的第 5 类根（MakeClosure 目标是无条件根）保住它。mono 侧只保留
+/// 全部原件、不判死；DCE 按边判活后原件仍在 ⇒ 站点不悬空。
 ///
-/// 6.9.2-C2b 起 `MakeClosure` 的**柯里包装层**目标会有另一条改写路（建实例时按实例
-/// 克隆，见 `emit_curry_layer_clones`），本夹具与那条路无关（它不是包装体），故本闸的
-/// 判据与断言不变：调用点改写面覆盖不到的目标，一律按未覆盖保守保留。
+/// 6.9.2-C2b 起 `MakeClosure` 的**柯里包装层**目标另有逐实例克隆路径
+///（`emit_curry_layer_clones`）；本夹具不是包装体，钉的是「函数值 / 匿名闭包目标」
+/// 这条更宽的根面。
 #[test]
-fn test_restore_gate_keeps_generic_referenced_only_by_make_closure() {
+fn test_dce_keeps_generic_referenced_only_by_make_closure() {
     // Arrange：仅 MakeClosure 站点按名引用，且该站点有对齐的请求键
     let reference_span = span_at(10, 5, 100, 12, 107);
     let reference = Instruction::MakeClosure {
@@ -667,29 +813,58 @@ fn test_restore_gate_keeps_generic_referenced_only_by_make_closure() {
     let (module, requests) = non_rewritable_ref_case(reference, reference_span);
 
     // Act
-    let result = Monomorphizer::new()
+    let mut result = Monomorphizer::new()
         .monomorphize(&module, &requests)
         .expect("单态化不应失败");
+    crate::middle::passes::dce::eliminate(&mut result).expect("DCE 不应失败");
 
-    // Assert：原件保留（MakeClosure 站点不会被改写，删除即悬空）
+    // Assert：原件保留（MakeClosure 目标是无条件根；删除即悬空）
     assert!(
         result
             .functions
             .iter()
             .any(|f| f.name == "std.list.is_empty"),
-        "MakeClosure 按名目标一律计未覆盖：原件必须保留（修复前「有键→判覆盖→被删」）"
+        "MakeClosure 是 DCE 的无条件根：原件必须保留（否则闭包目标悬空）"
     );
 }
 
-/// 同上缺陷类：`TailCall` 也不在改写面内，同样一律计未覆盖（注释早已如此声明，
-/// 修复前代码却仍查映射键）。钉住行为与声明一致。
+/// 帮助函数：静态按名目标（`Call` / `TailCall` 的字符串 func）。
+fn static_target_name(instr: &Instruction) -> Option<&str> {
+    match instr {
+        Instruction::Call {
+            func: Operand::Const(ConstValue::String(name)),
+            ..
+        }
+        | Instruction::TailCall {
+            func: Operand::Const(ConstValue::String(name)),
+            ..
+        } => Some(name),
+        _ => None,
+    }
+}
+
+/// 帮助函数：静态调用的实参表（`Call` / `TailCall` 同一操作数布局）。
+fn static_call_args(instr: &Instruction) -> Option<&Vec<Operand>> {
+    match instr {
+        Instruction::Call { args, .. } | Instruction::TailCall { args, .. } => Some(args),
+        _ => None,
+    }
+}
+
+/// #541 第一半：`TailCall` 站点**进入调用点改写面**——与 `Call` 同一份映射键、
+/// 同一份改名操作（名字 + 清 DefId）。
+///
+/// 前身是 t3 的 tripwire（断言「TailCall 一律计未覆盖、原件必须保留」）：当时改写面
+/// 只放行 `Call`，于是扫描面覆盖 `TailCall` 而改写面落空，「有键→判覆盖→原件被删」
+/// ⇒ 站点悬空（运行期 E6006）。本条把那个 tripwire 换成性质判据：改写面覆盖的形态
+/// 集合与 [`Monomorphizer::rewritten_call_target`] 一致，`TailCall` 在内。
 #[test]
-fn test_restore_gate_keeps_generic_referenced_only_by_tail_call() {
-    // Arrange：仅 TailCall 站点按名引用，且该站点有对齐的请求键
+fn test_tail_call_site_is_rewritten_to_specialized_name() {
+    // Arrange：泛型 std.list.is_empty + main 里一个 TailCall 站点（有对齐请求键）
     let reference_span = span_at(20, 5, 200, 12, 207);
     let reference = Instruction::TailCall {
         func: Operand::Const(ConstValue::String("std.list.is_empty".to_string())),
-        args: vec![],
+        args: vec![Operand::Local(0)],
         def: None,
         span: reference_span,
     };
@@ -700,13 +875,213 @@ fn test_restore_gate_keeps_generic_referenced_only_by_tail_call() {
         .monomorphize(&module, &requests)
         .expect("单态化不应失败");
 
-    // Assert：原件保留（TailCall 站点不会被改写，删除即悬空）
+    // Assert 1：TailCall 站点被改写成特化名
+    let main_out = find_fn(&result, "main", "模块中应存在 main 函数");
+    let site = &main_out.blocks()[0].instructions[0];
+    assert_eq!(
+        static_target_name(site),
+        Some("std.list.is_empty(int64)"),
+        "TailCall 站点必须与 Call 一样被改写成特化名（#541）；实际: {:?}",
+        static_target_name(site)
+    );
+    // Assert 2：改名同时清 DefId（翻译器优先 DefId，只改名不改 def = 静默失效）
+    match site {
+        Instruction::TailCall { def, .. } => assert!(
+            def.is_none(),
+            "改写后 TailCall 的 DefId 必须清空（与 set_static_target_name 同纪律）"
+        ),
+        other => panic!("站点应仍是 TailCall；实际: {other:?}"),
+    }
+    // Assert 3：站点指到的实例在函数表里（无悬空）
     assert!(
         result
             .functions
             .iter()
-            .any(|f| f.name == "std.list.is_empty"),
-        "TailCall 按名目标一律计未覆盖：原件必须保留（修复前「有键→判覆盖→被删」）"
+            .any(|f| f.name == "std.list.is_empty(int64)"),
+        "改写后的目标必须在输出函数表里；实际函数表: {:?}",
+        result.functions.iter().map(|f| &f.name).collect::<Vec<_>>()
+    );
+}
+
+/// #541 第二半：`TailCall` 站点的 **q=0 实参按被调计划裁剪**——与 `Call` 同一份
+/// `ConstErasePlan`（同一位置集合），且**只裁一次**（无双重擦除）。
+///
+/// 夹具：泛型 `g` 的被擦除实例（q=0 形参 + 柯里包装体形状），`main` 用 `TailCall`
+/// 传两个实参（q=0 位 + 普通位）。修复前三处不同进同退：站点不改名（第一半红）且
+/// 实参不裁（本半红）——被调删了形参位而站点仍传两个 ⇒ 帧前段错位。
+#[test]
+fn test_tail_call_site_drops_erased_const_arg_once() {
+    // Arrange：泛型 g（q=0 形参 + 包装体）与 main 的 TailCall 站点
+    use crate::frontend::core::types::const_data::{ConstExpr as CE, ConstValue as CoreCV};
+    use crate::frontend::core::types::mono::GenericArg;
+    let call_span = span_at(30, 5, 300, 12, 307);
+    let wrapper_ty = MonoType::Fn {
+        params: vec![MonoType::Int(64)],
+        return_type: Box::new(MonoType::Int(64)),
+    };
+    let mut param_slot = LocalSlot::temp(MonoType::TypeRef("N".to_string()));
+    param_slot.name = Some("n".to_string());
+    param_slot.quantity = Some(crate::ast::Quantity::Zero);
+    let generic = make_fn_ir(
+        "g",
+        vec![MonoType::TypeRef("N".to_string())],
+        wrapper_ty.clone(),
+        Some(vec!["N".to_string()]),
+        vec![
+            Instruction::MakeClosure {
+                dst: Operand::Local(1),
+                func: "inner".to_string(),
+                def: None,
+                env: vec![Operand::Local(0)],
+                span: Span::default(),
+            },
+            ret_instr(Some(Operand::Local(1))),
+        ],
+        vec![param_slot, LocalSlot::temp(wrapper_ty)],
+    );
+    let main_func = make_main_ir(
+        MonoType::Void,
+        vec![
+            Instruction::TailCall {
+                func: Operand::Const(ConstValue::String("g".to_string())),
+                args: vec![
+                    Operand::Const(ConstValue::Int(5)),
+                    Operand::Const(ConstValue::Int(7)),
+                ],
+                def: None,
+                span: call_span,
+            },
+            ret_instr(None),
+        ],
+        vec![],
+    );
+    let module = module_with(vec![generic, main_func]);
+    let mut req = InstantiationRequest::new(
+        GenericFunctionId::new("g".to_string(), vec!["N".to_string()]),
+        vec![GenericArg::Const(CE::Lit(CoreCV::Int(5)))],
+        call_span,
+    );
+    req.containing_fn = Some("main".to_string());
+
+    // Act
+    let result = Monomorphizer::new()
+        .monomorphize(&module, &[req])
+        .expect("单态化不应失败");
+
+    // Assert 1：站点改写到实例名（第一半）
+    let main_out = find_fn(&result, "main", "模块中应存在 main 函数");
+    let site = &main_out.blocks()[0].instructions[0];
+    assert_eq!(
+        static_target_name(site),
+        Some("g(int64::5)"),
+        "TailCall 站点应改写到 g(int64::5)；实际: {:?}",
+        static_target_name(site)
+    );
+    // Assert 2：q=0 实参被裁掉、普通位保持原位（只裁一次：2 ⇒ 1，不是 0）
+    let args = static_call_args(site).expect("站点应是静态调用");
+    assert_eq!(
+        args,
+        &vec![Operand::Const(ConstValue::Int(7))],
+        "q=0 实参（位置 0）应被裁掉且只裁一次（2 ⇒ 1）；实际: {args:?}"
+    );
+    // Assert 3：被调实例已擦除 q=0 形参位（两侧同进同退，不只是调用侧）
+    let instance = find_fn(&result, "g(int64::5)", "应生成 g(int64::5) 实例");
+    assert!(
+        instance.params.is_empty(),
+        "实例的 q=0 形参位应已被擦除；实际: {:?}",
+        instance.params
+    );
+}
+
+/// 改写面形态集合**单点**：`rewritten_call_target` 只覆盖 `Call` / `TailCall`
+/// （字符串常量 func），不覆盖 `MakeClosure` / `CallDyn` / 非常量 func 的 `Call`。
+/// 删除面（`MakeClosure` 目标）已由 post-mono DCE 接管，不在本判据里。
+#[test]
+fn test_rewritten_call_target_covers_only_static_call_forms() {
+    // Arrange
+    let string_call = call_instr(None, "f", vec![]);
+    let string_tail = Instruction::TailCall {
+        func: Operand::Const(ConstValue::String("f".to_string())),
+        args: vec![],
+        def: None,
+        span: Span::default(),
+    };
+    let make_closure = Instruction::MakeClosure {
+        dst: Operand::Local(0),
+        func: "f".to_string(),
+        def: None,
+        env: vec![],
+        span: Span::default(),
+    };
+    let call_dyn = Instruction::CallDyn {
+        dst: None,
+        func: Operand::Local(0),
+        args: vec![],
+        span: Span::default(),
+    };
+    let int_call = Instruction::Call {
+        dst: None,
+        func: Operand::Const(ConstValue::Int(3)),
+        args: vec![],
+        def: None,
+        span: Span::default(),
+    };
+
+    // Act / Assert：改写目标存在 ⇔ 形态属于 Call|TailCall（字符串常量 func）
+    for (instr, want) in [
+        (&string_call, true),
+        (&string_tail, true),
+        (&make_closure, false),
+        (&call_dyn, false),
+        (&int_call, false),
+    ] {
+        assert_eq!(
+            Monomorphizer::rewritten_call_target(instr).is_some(),
+            want,
+            "改写面形态集合与改写目标不符：{instr:?}"
+        );
+    }
+}
+
+/// 模块 init 段（顶层语句）与函数体**共用**同一份站点改写：`TailCall` 同样被改写。
+/// 前身是 init 段的平行 `Call`-only 实现——改写面扩形态时它不跟着走，悬空会在
+/// init 段复现。
+#[test]
+fn test_module_init_tail_call_is_rewritten() {
+    // Arrange：init 段一个 TailCall 站点（anon 键：containing_fn = None）
+    let call_span = span_at(40, 5, 400, 12, 407);
+    let generic = make_fn_ir(
+        "identity",
+        vec![MonoType::TypeVar(TypeVar::new(0))],
+        MonoType::TypeVar(TypeVar::new(0)),
+        Some(vec!["T".to_string()]),
+        vec![ret_instr(Some(Operand::Arg(0)))],
+        vec![],
+    );
+    let mut module = module_with(vec![generic]);
+    module.init = vec![
+        Instruction::TailCall {
+            func: Operand::Const(ConstValue::String("identity".to_string())),
+            args: vec![Operand::Const(ConstValue::Int(42))],
+            def: None,
+            span: call_span,
+        },
+        ret_instr(None),
+    ];
+    let mut req = identity_request(MonoType::Int(64));
+    req.source_location = call_span;
+
+    // Act
+    let result = Monomorphizer::new()
+        .monomorphize(&module, &[req])
+        .expect("单态化不应失败");
+
+    // Assert：init 段的 TailCall 目标被改写到实例名
+    assert_eq!(
+        static_target_name(&result.init[0]),
+        Some("identity(int64)"),
+        "init 段的 TailCall 站点也必须被改写（与函数体同一份实现）；实际: {:?}",
+        static_target_name(&result.init[0])
     );
 }
 
@@ -1007,9 +1382,10 @@ fn test_deep_nested_type_operations_survive_default_stack() {
 
 /// #492 不变量：原生函数作值的**常量形态不是按名调用目标**。
 ///
-/// `uncovered_call_targets` 只把 `Call`/`TailCall`/`MakeClosure` 的按名目标算
-/// 「未覆盖」（进而保留原件）。原生函数没有 IR 函数体——把它计成按名调用目标，
-/// 保留逻辑会去找一个不存在的原件；不计则它随指令留在 IR 里，运行时按名分发。
+/// 扫描面（`by_name_call_target`）只认 `Call`/`TailCall`/`MakeClosure` 的字符串
+/// 名字；原生函数没有 IR 函数体——把它计成按名目标没有表项可指向。DCE 侧同一条
+/// 不变量由「名字不在表里就跳过、不报错、不建根」承担（`middle/passes/dce` 的
+/// N5 直驱测试）。
 #[test]
 fn test_native_fn_const_is_not_a_by_name_call_target() {
     // Arrange：原生函数作值的 IR 形态（#492 的单一常量形态）
@@ -1026,5 +1402,251 @@ fn test_native_fn_const_is_not_a_by_name_call_target() {
     assert!(
         target.is_none(),
         "原生函数值常量不得被计为按名调用目标，实际: {target:?}",
+    );
+}
+
+// ==================== function_files 归属继承（#443 / WBS 3.20.28） ====================
+
+/// #443 不变量：特化名必须继承定义方的 `function_files` 归属。
+///
+/// `function_files`（函数名 → source_files 下标）由 link 期按 mono **前**的
+/// 函数名建表；特化名是 mono 期新生——缺条目时 codegen 给 debug span 定
+/// file_id 按名查不到、回退 0（文件表首条目），定义方的行号被贴到调用方
+/// 文件上（issue #443 的 std.list:157 实例：std 第 157 行的错误显示为用户
+/// 文件第 157 行，而该文件根本没有那么多行）。修法 = 建件出生点登记来源、
+/// `build_output` 统一消费成 function_files 条目；本测试钉登记面（生产端），
+/// 消费端（运行期渲染 `<std/list>` 虚拟路径）由 tests/integration/cli_e2e.rs
+/// 的 #443 锚直驱覆盖。
+///
+/// 规范：RFC-036 §4（嵌入 std 以虚拟路径作为种子模块走正常前端管道——虚拟
+/// 路径就是 std 模块的文件身份）+ RFC-011 §4（泛型函数特化）。
+#[test]
+fn test_monomorphize_specialized_inherits_function_files_entry() {
+    // Arrange: 泛型 `identity` 定义在文件表 0 号单元（模拟 `<std/list>`），
+    // 调用方 main 在 1 号单元
+    let identity = make_identity_ir();
+    let main_func = make_main_ir(
+        MonoType::Int(64),
+        vec![
+            identity_call(Operand::Const(ConstValue::Int(42))),
+            ret_instr(Some(Operand::Local(0))),
+        ],
+        vec![LocalSlot::temp(MonoType::Int(64))],
+    );
+    let mut module = module_with(vec![identity, main_func]);
+    module.source_files = vec!["<std/list>".to_string(), "main.yx".to_string()];
+    module.function_files.insert("identity".to_string(), 0);
+    module.function_files.insert("main".to_string(), 1);
+    let mut mono = Monomorphizer::new();
+
+    // Act
+    let result = mono
+        .monomorphize(&module, &[identity_request(MonoType::Int(64))])
+        .unwrap();
+
+    // Assert: 特化名继承定义方的文件归属（0 号单元），不再缺条目
+    assert_eq!(
+        result.function_files.get("identity(int64)"),
+        Some(&0),
+        "特化名应继承定义方的 function_files 条目（#443）"
+    );
+    // Assert: 原件与调用方的既有条目原样保留（继承只增不改）
+    assert_eq!(
+        result.function_files.get("identity"),
+        Some(&0),
+        "原件条目不得被继承改写"
+    );
+    assert_eq!(
+        result.function_files.get("main"),
+        Some(&1),
+        "调用方条目不得被继承改写"
+    );
+}
+
+// ==================== C3（6.9.2-C3，F4 裁决 A）：甲-闭 + T-b ====================
+
+/// 开项请求夹具：q=0 实参是**项**（含容器 binder 的表达式，无类型位投影）。
+fn open_term_request(
+    term: crate::frontend::core::types::const_data::ConstExpr
+) -> InstantiationRequest {
+    InstantiationRequest::new(
+        GenericFunctionId::new("identity".to_string(), vec!["N".to_string()]),
+        vec![crate::frontend::core::types::mono::GenericArg::Const(term)],
+        Span::default(),
+    )
+}
+
+/// 容器实例的 name_map：`N → Literal{v}`。
+fn binder_map(v: i128) -> std::collections::HashMap<String, MonoType> {
+    [(
+        "N".to_string(),
+        MonoType::Literal {
+            name: format!("{v}"),
+            base_type: Box::new(MonoType::Int(64)),
+            value: crate::frontend::core::types::const_data::ConstValue::Int(v),
+        },
+    )]
+    .into_iter()
+    .collect()
+}
+
+/// T-b：同一静态调用点最多开火 `MAX_OPEN_CHAIN`(8) 次；到界不建实例、不报错，
+/// 并登记 `OpenFireCutoff{BoundReached}`。
+#[test]
+fn test_open_chain_stops_at_bound() {
+    // Arrange —— 开项链：`N - 1`（P3 的钉住消解产物）
+    use crate::frontend::core::types::const_data::{BinOp as CBinOp, ConstExpr as CE};
+    let mut mono = Monomorphizer::new();
+    mono.generic_functions
+        .insert("identity".to_string(), make_identity_ir());
+    let chain = CE::BinOp {
+        op: CBinOp::Sub,
+        left: Box::new(CE::NamedVar("N".into())),
+        right: Box::new(CE::Lit(
+            crate::frontend::core::types::const_data::ConstValue::Int(1),
+        )),
+    };
+    mono.deferred
+        .entry("f".to_string())
+        .or_default()
+        .push(open_term_request(chain));
+
+    // Act —— 10 次开火（对应实例 5..-4）
+    for v in (-4..=5).rev() {
+        mono.fire_deferred("f", &format!("f(int64::{v})"), &binder_map(v), 1);
+    }
+
+    // Assert 1：恰好 8 个实例入队（bound），前 8 次开火成功
+    assert_eq!(
+        mono.pending_queue.len(),
+        8,
+        "同一静态调用点最多开火 MAX_OPEN_CHAIN=8 次；实际入队 {}",
+        mono.pending_queue.len()
+    );
+    // Assert 2：入队请求的 q=0 实参已归一化为字面量（代入 + 归一化，不是原样转手）
+    let first = mono.pending_queue.front().unwrap();
+    assert_eq!(
+        first.type_args(),
+        vec![MonoType::Literal {
+            name: "4".into(),
+            base_type: Box::new(MonoType::Int(64)),
+            value: crate::frontend::core::types::const_data::ConstValue::Int(4),
+        }],
+        "第 1 次开火应把 N-1 归一化成 int64::4"
+    );
+    // Assert 3：到界登记（2 次被切：-3、-4 那一层）
+    let cutoffs = mono.open_fire_cutoffs();
+    assert_eq!(
+        cutoffs.len(),
+        2,
+        "10 次开火 − 8 次上限 = 2 条到界登记；实际: {cutoffs:?}"
+    );
+    assert!(
+        cutoffs
+            .iter()
+            .all(|c| c.reason == crate::middle::passes::mono::OpenFireCutoffReason::BoundReached),
+        "到界登记的原因必须是 BoundReached；实际: {cutoffs:?}"
+    );
+    assert_eq!(cutoffs[0].container, "f", "登记必须带容器名");
+    assert_eq!(cutoffs[0].callee, "identity", "登记必须带 callee 名");
+}
+
+/// 代入后仍是开项（容器参数未被本实例钉住）⇒ 不建实例 + 登记 `UnclosedTerm`。
+#[test]
+fn test_open_chain_unclosed_term_is_not_fired() {
+    // Arrange —— 项里引用未映射的 `M`
+    use crate::frontend::core::types::const_data::ConstExpr as CE;
+    let mut mono = Monomorphizer::new();
+    mono.generic_functions
+        .insert("identity".to_string(), make_identity_ir());
+    mono.deferred
+        .entry("f".to_string())
+        .or_default()
+        .push(open_term_request(CE::NamedVar("M".into())));
+
+    // Act
+    mono.fire_deferred("f", "f(int64::5)", &binder_map(5), 1);
+
+    // Assert
+    assert!(
+        mono.pending_queue.is_empty(),
+        "未闭的项不得建实例（不能把开项当闭项入队）"
+    );
+    let cutoffs = mono.open_fire_cutoffs();
+    assert_eq!(cutoffs.len(), 1, "必须登记一条未开火；实际: {cutoffs:?}");
+    assert_eq!(
+        cutoffs[0].reason,
+        crate::middle::passes::mono::OpenFireCutoffReason::UnclosedTerm
+    );
+}
+
+/// R4=①：代入后**求值失败**（如 `1 / 0`）⇒ 不建请求 + 登记，**不报错**。
+#[test]
+fn test_open_term_disproved_value_is_not_fired() {
+    // Arrange
+    use crate::frontend::core::types::const_data::{BinOp as CBinOp, ConstExpr as CE};
+    let mut mono = Monomorphizer::new();
+    mono.generic_functions
+        .insert("identity".to_string(), make_identity_ir());
+    let bad = CE::BinOp {
+        op: CBinOp::Div,
+        left: Box::new(CE::Lit(
+            crate::frontend::core::types::const_data::ConstValue::Int(1),
+        )),
+        right: Box::new(CE::Lit(
+            crate::frontend::core::types::const_data::ConstValue::Int(0),
+        )),
+    };
+    mono.deferred
+        .entry("f".to_string())
+        .or_default()
+        .push(open_term_request(bad));
+
+    // Act —— 不 panic、不返回 Err（fire_deferred 无错误通道 = 不报错）
+    mono.fire_deferred("f", "f(int64::5)", &binder_map(5), 1);
+
+    // Assert
+    assert!(mono.pending_queue.is_empty(), "求值失败不得建请求");
+    let cutoffs = mono.open_fire_cutoffs();
+    assert_eq!(
+        cutoffs[0].reason,
+        crate::middle::passes::mono::OpenFireCutoffReason::DisprovedValue,
+        "求值失败必须登记 DisprovedValue（R4=①）；实际: {cutoffs:?}"
+    );
+}
+
+/// 既有 deferred 形态（符号化**类型**实参）不受 T-b 闸限流——闸只圈开项**项位**。
+#[test]
+fn test_symbolic_type_request_is_not_limited_by_open_chain() {
+    // Arrange
+    let mut mono = Monomorphizer::new();
+    mono.generic_functions
+        .insert("identity".to_string(), make_identity_ir());
+    let req = InstantiationRequest::new(
+        GenericFunctionId::new("identity".to_string(), vec!["T".to_string()]),
+        vec![crate::frontend::core::types::mono::GenericArg::Type(
+            MonoType::TypeRef("T".to_string()),
+        )],
+        Span::default(),
+    );
+    mono.deferred.entry("f".to_string()).or_default().push(req);
+
+    // Act —— 10 次开火，每次 T 映射到同一具体类型
+    for _ in 0..10 {
+        let map: std::collections::HashMap<String, MonoType> =
+            [("T".to_string(), MonoType::Int(64))].into_iter().collect();
+        mono.fire_deferred("f", "f(int64)", &map, 1);
+    }
+
+    // Assert：全部入队、零登记（C3 的闸不得改变 C2 之前的语义）
+    assert_eq!(
+        mono.pending_queue.len(),
+        10,
+        "符号化类型实参的既有 deferred 路径不得被 T-b 限流"
+    );
+    assert!(
+        mono.open_fire_cutoffs().is_empty(),
+        "该路径不应产生任何到界登记；实际: {:?}",
+        mono.open_fire_cutoffs()
     );
 }

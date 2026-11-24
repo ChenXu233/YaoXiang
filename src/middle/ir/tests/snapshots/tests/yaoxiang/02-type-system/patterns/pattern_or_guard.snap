@@ -8,123 +8,185 @@ module
     slot[5] label : Int(64) @depth1
     slot[6] b : Int(64) @depth1
     slot[7] size : Int(64) @depth1
-    slot[9] n : Int(64) @depth2
-    slot[10] c : Int(64) @depth1
-    slot[11] size2 : Int(64) @depth1
-    slot[13] n : Int(64) @depth2
-    locals_total=19
+    slot[8] n : Int(64) @depth2
+    slot[9] c : Int(64) @depth1
+    slot[10] size2 : Int(64) @depth1
+    slot[11] n : Int(64) @depth2
+    locals_total=16
+    values_total=61
+    value v0: Int(64) @block0
+    value v1: Int(64) @block0
+    value v2: Bool @block0
+    value v3: Int(64) @block0
+    value v4: Bool @block0
+    value v5: Generic { name: "String", args: [] } @block0
+    value v6: Generic { name: "String", args: [] } @block0
+    value v7: TypeRef("?") @block0
+    value v8: Bool @block0
+    value v9: Generic { name: "String", args: [] } @block0
+    value v10: Generic { name: "String", args: [] } @block0
+    value v11: Generic { name: "String", args: [] } @block0
+    value v12: Int(64) @block0
+    value v13: Int(64) @block0
+    value v14: Bool @block0
+    value v15: Int(64) @block0
+    value v16: Bool @block0
+    value v17: Generic { name: "String", args: [] } @block0
+    value v18: Generic { name: "String", args: [] } @block0
+    value v19: TypeRef("?") @block0
+    value v20: Bool @block0
+    value v21: Generic { name: "String", args: [] } @block0
+    value v22: Generic { name: "String", args: [] } @block0
+    value v23: Generic { name: "String", args: [] } @block0
+    value v24: Int(64) @block0
+    value v25: Generic { name: "Option", args: [Int(64)] } @block0
+    value v26: TypeRef("?") @block0
+    value v27: Int(64) @block0
+    value v28: Bool @block0
+    value v29: TypeRef("?") @block0
+    value v30: TypeRef("?") @block0
+    value v31: Int(64) @block0
+    value v32: Bool @block0
+    value v33: Generic { name: "String", args: [] } @block0
+    value v34: TypeRef("?") @block0
+    value v35: Bool @block0
+    value v36: Generic { name: "String", args: [] } @block0
+    value v37: Generic { name: "String", args: [] } @block0
+    value v38: Generic { name: "String", args: [] } @block0
+    value v39: Int(64) @block0
+    value v40: Bool @block0
+    value v41: Int(64) @block0
+    value v42: Int(64) @block0
+    value v43: Generic { name: "String", args: [] } @block0
+    value v44: Generic { name: "String", args: [] } @block0
+    value v45: TypeRef("?") @block0
+    value v46: Bool @block0
+    value v47: Generic { name: "String", args: [] } @block0
+    value v48: Generic { name: "String", args: [] } @block0
+    value v49: Generic { name: "String", args: [] } @block0
+    value v50: Int(64) @block0
+    value v51: Bool @block0
+    value v52: Int(64) @block0
+    value v53: Int(64) @block0
+    value v54: Generic { name: "String", args: [] } @block0
+    value v55: Generic { name: "String", args: [] } @block0
+    value v56: TypeRef("?") @block0
+    value v57: Bool @block0
+    value v58: Generic { name: "String", args: [] } @block0
+    value v59: Generic { name: "String", args: [] } @block0
+    value v60: Generic { name: "String", args: [] } @block0
     Load %0 <- int(2)
     Load %1 <- void
-    Load %2 <- %0
-    Load %3 <- int(1)
-    Eq %4 <- %2, %3
-    JmpIfNot %4 -> instr(7)
+    Load v0 <- %0
+    Load v1 <- int(1)
+    Eq v2 <- v0, v1
+    JmpIfNot v2 -> instr(7)
     Jmp -> instr(10)
-    Load %5 <- int(2)
-    Eq %6 <- %2, %5
-    JmpIfNot %6 -> instr(13)
-    Load %7 <- string("低")
-    Move %1 <- %7
+    Load v3 <- int(2)
+    Eq v4 <- v0, v3
+    JmpIfNot v4 -> instr(13)
+    Load v5 <- string("低")
+    Move %1 <- v5
     Jmp -> instr(16)
-    Load %8 <- string("其他")
-    Move %1 <- %8
+    Load v6 <- string("其他")
+    Move %1 <- v6
     Jmp -> instr(16)
-    Load %4 <- %1
-    Load %5 <- string("低")
-    Eq %3 <- %4, %5
-    Load %6 <- string("or matches first alternative")
-    Call %2 <- string("std.assert.assert") [%3, %6] (def=d0)
+    Load v9 <- %1
+    Load v10 <- string("低")
+    Eq v8 <- v9, v10
+    Load v11 <- string("or matches first alternative")
+    Call v7 <- string("std.assert.assert") [v8, v11] (def=d0)
     Load %2 <- int(5)
     Load %3 <- void
-    Load %4 <- %2
-    Load %5 <- int(1)
-    Eq %6 <- %4, %5
-    JmpIfNot %6 -> instr(28)
+    Load v12 <- %2
+    Load v13 <- int(1)
+    Eq v14 <- v12, v13
+    JmpIfNot v14 -> instr(28)
     Jmp -> instr(31)
-    Load %7 <- int(2)
-    Eq %8 <- %4, %7
-    JmpIfNot %8 -> instr(34)
-    Load %9 <- string("低")
-    Move %3 <- %9
+    Load v15 <- int(2)
+    Eq v16 <- v12, v15
+    JmpIfNot v16 -> instr(34)
+    Load v17 <- string("低")
+    Move %3 <- v17
     Jmp -> instr(37)
-    Load %10 <- string("其他")
-    Move %3 <- %10
+    Load v18 <- string("其他")
+    Move %3 <- v18
     Jmp -> instr(37)
-    Load %6 <- %3
-    Load %7 <- string("其他")
-    Eq %5 <- %6, %7
-    Load %8 <- string("or falls through")
-    Call %4 <- string("std.assert.assert") [%5, %8] (def=d0)
-    Load %5 <- int(9)
-    CreateVariant %4 <- Option::0 %5
+    Load v21 <- %3
+    Load v22 <- string("其他")
+    Eq v20 <- v21, v22
+    Load v23 <- string("or falls through")
+    Call v19 <- string("std.assert.assert") [v20, v23] (def=d0)
+    Load v24 <- int(9)
+    CreateVariant %4 <- Option::0 v24
     Load %5 <- void
-    Load %6 <- %4
-    VariantTag %7 <- %6 : Option
-    Load %8 <- int(0)
-    Eq %9 <- %7, %8
-    JmpIfNot %9 -> instr(52)
-    VariantPayload %10 <- %6 : Option
+    Load v25 <- %4
+    VariantTag v26 <- v25 : Option
+    Load v27 <- int(0)
+    Eq v28 <- v26, v27
+    JmpIfNot v28 -> instr(52)
+    VariantPayload v29 <- v25 : Option
     Jmp -> instr(56)
-    VariantTag %11 <- %6 : Option
-    Load %12 <- int(1)
-    Eq %13 <- %11, %12
-    JmpIfNot %13 -> instr(59)
-    Load %14 <- string("有形状")
-    Move %5 <- %14
+    VariantTag v30 <- v25 : Option
+    Load v31 <- int(1)
+    Eq v32 <- v30, v31
+    JmpIfNot v32 -> instr(59)
+    Load v33 <- string("有形状")
+    Move %5 <- v33
     Jmp -> instr(59)
-    Load %8 <- %5
-    Load %9 <- string("有形状")
-    Eq %7 <- %8, %9
-    Load %10 <- string("variant or-pattern")
-    Call %6 <- string("std.assert.assert") [%7, %10] (def=d0)
+    Load v36 <- %5
+    Load v37 <- string("有形状")
+    Eq v35 <- v36, v37
+    Load v38 <- string("variant or-pattern")
+    Call v34 <- string("std.assert.assert") [v35, v38] (def=d0)
     Load %6 <- int(5)
     Load %7 <- void
-    Load %8 <- %6
-    Move %9 <- %8
-    Load %11 <- %9
-    Load %12 <- int(3)
-    Gt %10 <- %11, %12
-    JmpIfNot %10 -> instr(75)
-    Load %13 <- string("大")
-    Move %7 <- %13
+    Load v39 <- %6
+    Move %8 <- v39
+    Load v41 <- %8
+    Load v42 <- int(3)
+    Gt v40 <- v41, v42
+    JmpIfNot v40 -> instr(75)
+    Load v43 <- string("大")
+    Move %7 <- v43
     Jmp -> instr(78)
-    Load %14 <- string("小")
-    Move %7 <- %14
+    Load v44 <- string("小")
+    Move %7 <- v44
     Jmp -> instr(78)
-    Load %12 <- %7
-    Load %13 <- string("大")
-    Eq %11 <- %12, %13
-    Load %14 <- string("guard true arm")
-    Call %10 <- string("std.assert.assert") [%11, %14] (def=d0)
-    Load %10 <- int(2)
-    Load %11 <- void
-    Load %12 <- %10
-    Move %13 <- %12
-    Load %15 <- %13
-    Load %16 <- int(3)
-    Gt %14 <- %15, %16
-    JmpIfNot %14 -> instr(94)
-    Load %17 <- string("大")
-    Move %11 <- %17
+    Load v47 <- %7
+    Load v48 <- string("大")
+    Eq v46 <- v47, v48
+    Load v49 <- string("guard true arm")
+    Call v45 <- string("std.assert.assert") [v46, v49] (def=d0)
+    Load %9 <- int(2)
+    Load %10 <- void
+    Load v50 <- %9
+    Move %11 <- v50
+    Load v52 <- %11
+    Load v53 <- int(3)
+    Gt v51 <- v52, v53
+    JmpIfNot v51 -> instr(94)
+    Load v54 <- string("大")
+    Move %10 <- v54
     Jmp -> instr(97)
-    Load %18 <- string("小")
-    Move %11 <- %18
+    Load v55 <- string("小")
+    Move %10 <- v55
     Jmp -> instr(97)
-    Load %16 <- %11
-    Load %17 <- string("小")
-    Eq %15 <- %16, %17
-    Load %18 <- string("guard falls through")
-    Call %14 <- string("std.assert.assert") [%15, %18] (def=d0)
+    Load v58 <- %10
+    Load v59 <- string("小")
+    Eq v57 <- v58, v59
+    Load v60 <- string("guard falls through")
+    Call v56 <- string("std.assert.assert") [v57, v60] (def=d0)
     Drop %4
     Drop %6
-    Drop %10
+    Drop %9
     Drop %5
     Drop %7
-    Drop %11
+    Drop %10
     Drop %1
     Drop %3
     Drop %0
     Drop %2
-    Ret %14
+    Ret v56
   init (locals=0)
     Call %0 <- string("main") [] (def=d1)

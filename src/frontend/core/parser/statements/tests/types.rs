@@ -8,9 +8,11 @@
 //! - RFC-010 废弃语法的错误路径回归
 //! - 记录类型体里的匿名函数绑定 `name: FnType[pos] = lambda`（WBS 6.6.7：非 Fn 注解报诊断）
 
+use crate::ast::{
+    BinOp, BindingKind, Expr, Param, Stmt, StmtKind, StructField, Type, TypeBodyItem,
+};
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::statements::types::parse_type_annotation;
-use crate::ast::{BinOp, BindingKind, Expr, Param, Stmt, StmtKind, StructField, Type, TypeBodyItem};
 use crate::frontend::core::parser::{parse, NullProbe, ParserState};
 
 fn with_type<F>(
@@ -187,6 +189,26 @@ fn test_struct_type_fields() {
         assert_eq!(fields.len(), 2);
         assert_eq!(fields[0].name, "x");
         assert_eq!(fields[1].name, "y");
+    });
+}
+
+/// R2：解析器产出的字段量词读数恒为 `None`（witness 的产出入 B.2，不在 B.1a）。
+#[test]
+fn test_struct_type_fields_default_quantity_is_none() {
+    with_type("{ x: Float, y: Float }", |t| {
+        // Arrange & Act
+        let fields = struct_fields(&t);
+
+        // Assert
+        assert_eq!(fields.len(), 2, "夹具必须有 2 个字段");
+        assert!(
+            fields.iter().all(|field| field.quantity.is_none()),
+            "解析器不得产出 witness 字段；实际: {:?}",
+            fields
+                .iter()
+                .map(|f| (&f.name, f.quantity))
+                .collect::<Vec<_>>()
+        );
     });
 }
 
@@ -732,6 +754,114 @@ fn test_anon_binding_with_fn_annotation_keeps_extracted_signature() {
     );
 }
 
+// ---- RFC-004 外部绑定位置的字面量域（issue #563 甲案 + #560 同族 panic）----
+//
+// parse_binding_positions 的字面量载荷是 i128：域内精确落位（合法位置逐字
+// 零变化）；超 i64 表示域以哨兵桥接交 checker E1064 判域（AST 位置域是 i64，
+// 原文无法承载）；取负在 i128 域做，`[-i64::MIN 形态]` 修前在此裸 `-i64::MIN`
+// 溢出 panic（#560 同族遗留），修后精确取负为 i64::MIN。
+
+/// 从模块首语句取记录类型体里名为 `name` 的 External 绑定位置。
+fn external_binding_positions(
+    source: &str,
+    name: &str,
+) -> Vec<i64> {
+    let tokens = tokenize(source).expect("tokenize 源码失败");
+    let result = parse(&tokens);
+    assert!(
+        !result.has_errors,
+        "源码应解析成功，实际错误: {:?}",
+        result.errors
+    );
+    let Some(StmtKind::TypeDefinition {
+        definition: Type::Struct { body },
+        ..
+    }) = result.module.items.first().map(|s| &s.kind)
+    else {
+        panic!("应解析为记录类型定义，实际: {:?}", result.module.items);
+    };
+    let Some(TypeBodyItem::Binding(binding)) = body
+        .iter()
+        .find(|it| matches!(it, TypeBodyItem::Binding(b) if b.name == name))
+    else {
+        panic!("类型体里应有名为 {name} 的绑定，实际: {body:?}");
+    };
+    let BindingKind::External { positions, .. } = &binding.kind else {
+        panic!("绑定种类应是 External，实际: {:?}", binding.kind);
+    };
+    positions.clone()
+}
+
+#[test]
+fn test_binding_position_literal_overflow_sentinels_to_i64_max() {
+    // Arrange — `m = f[18446744073709551617]`（2^64+1）：修前 `as i64` 静默截断为 1。
+    let source = "T: Type = { m = f[18446744073709551617] }";
+
+    // Act
+    let positions = external_binding_positions(source, "m");
+
+    // Assert
+    assert_eq!(
+        positions,
+        vec![i64::MAX],
+        "2^64+1 位置字面量应以 i64::MAX 哨兵出 parse（交 checker E1064 判域），\
+         不得静默截断为 1"
+    );
+}
+
+#[test]
+fn test_binding_position_literal_neg_i64_min_form_takes_exact_negative_not_panic() {
+    // Arrange — `m = f[-9223372036854775808]`（-i64::MIN 形态）：修前在
+    // parse_binding_positions 裸取负溢出 panic（探针实测 types.rs:942，
+    // "attempt to negate with overflow"）。
+    let source = "T: Type = { m = f[-9223372036854775808] }";
+
+    // Act
+    let positions = external_binding_positions(source, "m");
+
+    // Assert
+    assert_eq!(
+        positions,
+        vec![i64::MIN],
+        "-i64::MIN 形态应 i128 域精确取负为 i64::MIN（负位极端，交 checker \
+         E1064 判域）而非 panic（#560 同族遗留）"
+    );
+}
+
+#[test]
+fn test_binding_position_literal_negative_overflow_sentinels_to_i64_min() {
+    // Arrange — `m = f[-18446744073709551615]`（-(2^64-1)）：修前 `as i64`
+    // 截断低 64 位得 1。
+    let source = "T: Type = { m = f[-18446744073709551615] }";
+
+    // Act
+    let positions = external_binding_positions(source, "m");
+
+    // Assert
+    assert_eq!(
+        positions,
+        vec![i64::MIN],
+        "-(2^64-1) 位置字面量应以 i64::MIN 哨兵出 parse（归一化后仍负，交 \
+         checker E1064 判域），不得静默截断为 1"
+    );
+}
+
+#[test]
+fn test_binding_position_literal_in_domain_values_pass_through_exactly() {
+    // Arrange — 域内合法位置：正位 / 负位 / 元组（对照锚，逐字零变化）。
+    let source = "T: Type = { a = f[0], b = f[-1], c = f[0, -1] }";
+
+    // Act
+    let a = external_binding_positions(source, "a");
+    let b = external_binding_positions(source, "b");
+    let c = external_binding_positions(source, "c");
+
+    // Assert
+    assert_eq!(a, vec![0], "[0] 应原样保留");
+    assert_eq!(b, vec![-1], "[-1] 应原样保留（RFC-004 附录 A 负位）");
+    assert_eq!(c, vec![0, -1], "[0, -1] 应逐位保留");
+}
+
 /// AST 里是否还有「`return_type = Name("()")`」的匿名函数绑定。
 ///
 /// 旧代码在非 Fn 注解时伪造这个返回类型（6.3 的 `Type::Void` 兜底改写而来）：
@@ -756,4 +886,210 @@ fn has_anonymous_binding_with_unit_return(items: &[Stmt]) -> bool {
             )
         })
     })
+}
+
+// ==================== 类型位常量表达式的种子形态（issue #543） ====================
+//
+// 类型位常量实参（`Array(Int, 2+3)` 的 `2+3`）由**同一个** Pratt 中缀入口续接：
+// 标识符种子（`N+1`）、整数字面量种子（`2+3`）、负字面量种子（`-1+2`）同构。
+// 修复前字面量种子解析完字面量就返回，中缀算符留给外层 `expect(RParen)` 报成
+// 「expected RParen, found Plus」。
+
+/// 取 `Array(Int, <expr>)` 的长度实参表达式。
+fn array_len_expr(ty: &Type) -> &Expr {
+    let Type::Generic { name, args, .. } = ty else {
+        panic!("Expected Type::Generic, got: {ty:?}");
+    };
+    assert_eq!(name, "Array", "类型名应为 Array，got: {name}");
+    assert_eq!(args.len(), 2, "Array 应有两个实参，got: {args:?}");
+    let Type::ConstExpr(expr) = &args[1] else {
+        panic!("长度实参应是 Type::ConstExpr，got: {:?}", args[1]);
+    };
+    expr
+}
+
+/// 字面量种子 + 加法：`Array(Int, 2+3)` 的 `2+3` 解析为完整加法表达式。
+#[test]
+fn test_type_position_literal_start_addition_parses() {
+    // Arrange & Act
+    with_type("Array(Int, 2+3)", |t| {
+        let expr = array_len_expr(&t);
+
+        // Assert
+        assert!(
+            matches!(expr, Expr::BinOp { op: BinOp::Add, .. }),
+            "2+3 应解析为加法表达式（不是悬空的字面量 2），got: {expr:?}"
+        );
+    });
+}
+
+/// 字面量种子 + 减法：`Array(Int, 7-2)` 解析为减法表达式。
+#[test]
+fn test_type_position_literal_start_subtraction_parses() {
+    // Arrange & Act
+    with_type("Array(Int, 7-2)", |t| {
+        let expr = array_len_expr(&t);
+
+        // Assert
+        assert!(
+            matches!(expr, Expr::BinOp { op: BinOp::Sub, .. }),
+            "7-2 应解析为减法表达式，got: {expr:?}"
+        );
+    });
+}
+
+/// 字面量种子 + 乘法与比较：约束位 `Assert(2 * 3 > 0)` 解析为完整嵌套表达式。
+#[test]
+fn test_type_position_literal_start_multiplication_and_comparison_parses() {
+    // Arrange & Act
+    with_type("{ _assert_n: Assert(2 * 3 > 0), data: Int }", |t| {
+        let expr = extract_assert_arg(&t);
+
+        // Assert
+        assert!(
+            matches!(
+                expr,
+                Expr::BinOp { op: BinOp::Gt, left, .. }
+                    if matches!(left.as_ref(), Expr::BinOp { op: BinOp::Mul, .. })
+            ),
+            "2 * 3 > 0 应解析为「乘法嵌在比较左操作数」，got: {expr:?}"
+        );
+    });
+}
+
+/// 负字面量种子：`Array(Int, -1+2)` 保留一元负号并续接加法。
+#[test]
+fn test_type_position_negative_literal_start_parses() {
+    // Arrange & Act
+    with_type("Array(Int, -1+2)", |t| {
+        let expr = array_len_expr(&t);
+
+        // Assert
+        assert!(
+            matches!(
+                expr,
+                Expr::BinOp { op: BinOp::Add, left, .. }
+                    if matches!(left.as_ref(), Expr::UnOp { op: crate::ast::UnOp::Neg, .. })
+            ),
+            "-1+2 应是「(-1) + 2」，got: {expr:?}"
+        );
+    });
+}
+
+/// **不回归**：标识符种子 `(N: Int) -> Array(Int, N+1)` 仍产出完整表达式。
+#[test]
+fn test_type_position_ident_start_annotation_still_parses() {
+    // Arrange & Act
+    with_type("(N: Int) -> Array(Int, N+1)", |t| {
+        let Type::Fn { return_type, .. } = &t else {
+            panic!("应是函数类型，got: {t:?}");
+        };
+        let expr = array_len_expr(return_type);
+
+        // Assert
+        assert!(
+            matches!(expr, Expr::BinOp { op: BinOp::Add, .. }),
+            "N+1 应保持为加法表达式（标识符种子路径不得回归），got: {expr:?}"
+        );
+    });
+}
+
+/// 真语法错：`Array(Int, 2+)` 的算符缺右操作数 ⇒ E0012，且半截 AST 不静默。
+#[test]
+fn test_type_position_incomplete_expression_reports_syntax_error() {
+    // Arrange
+    let tokens = tokenize("d: Array(Int, 2+) = [1]").expect("tokenize 源码失败");
+
+    // Act
+    let result = parse(&tokens);
+
+    // Assert
+    assert!(
+        result.has_errors,
+        "2+ 缺右操作数必须报解析错误，实际诊断: {:?}",
+        result.errors
+    );
+    assert!(
+        result
+            .errors
+            .iter()
+            .any(|e| e.code == "E0012" && e.message.contains("类型位的常量表达式不完整")),
+        "错误应是 E0012 且指出表达式不完整，实际: {:?}",
+        result.errors
+    );
+}
+
+/// **不回归**：单值字面量类型标注 `n: 3 = 3` 的类型位只取字面量，`=` 留给初始化符。
+///
+/// 续接闸门把 `=` 判为绑定分隔符（与标识符种子同一判据）——否则类型位会被读成
+/// `3 = 3` 的赋值表达式，绑定丢掉初始化器（「declaration requires an initializer」）。
+#[test]
+fn test_type_position_literal_type_annotation_keeps_initializer() {
+    // Arrange
+    let tokens = tokenize("n: 3 = 3").expect("tokenize 源码失败");
+
+    // Act
+    let result = parse(&tokens);
+
+    // Assert
+    assert!(
+        !result.has_errors,
+        "单值字面量类型标注应解析成功，实际: {:?}",
+        result.errors
+    );
+    let Some(StmtKind::Assign {
+        type_annotation,
+        value,
+        ..
+    }) = result.module.items.first().map(|s| &s.kind)
+    else {
+        panic!("应是绑定语句，实际: {:?}", result.module.items);
+    };
+    assert!(
+        matches!(type_annotation, Some(Type::ConstExpr(e)) if matches!(e.as_ref(), Expr::Lit(..))),
+        "类型位应是单个字面量表达式，got: {type_annotation:?}"
+    );
+    assert!(
+        value.is_some(),
+        "初始化器不得被类型位的续接吞掉，实际 AST: {:?}",
+        result.module.items
+    );
+}
+
+/// **不回归**：返回位字面量类型 `g: () -> 3 = { 3 }` 同样不被续接吞掉 `=`。
+#[test]
+fn test_type_position_literal_return_annotation_keeps_initializer() {
+    // Arrange
+    let tokens = tokenize("g: () -> 3 = { 3 }").expect("tokenize 源码失败");
+
+    // Act
+    let result = parse(&tokens);
+
+    // Assert
+    assert!(
+        !result.has_errors,
+        "返回位字面量类型应解析成功，实际: {:?}",
+        result.errors
+    );
+    let Some(StmtKind::Assign {
+        type_annotation,
+        value,
+        ..
+    }) = result.module.items.first().map(|s| &s.kind)
+    else {
+        panic!("应是绑定语句，实际: {:?}", result.module.items);
+    };
+    assert!(
+        matches!(
+            type_annotation,
+            Some(Type::Fn { return_type, .. })
+                if matches!(return_type.as_ref(), Type::ConstExpr(_))
+        ),
+        "返回位应是单个字面量表达式，got: {type_annotation:?}"
+    );
+    assert!(
+        value.is_some(),
+        "初始化器不得被类型位的续接吞掉，实际 AST: {:?}",
+        result.module.items
+    );
 }

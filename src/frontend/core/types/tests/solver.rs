@@ -12,6 +12,7 @@
 //! §3.8: 泛型实例化
 
 use crate::frontend::core::types::{MonoType, StructType, TypeConstraintSolver, UniverseLevel};
+use crate::util::diagnostic::push_current_span;
 use crate::util::span::Span;
 
 fn s() -> TypeConstraintSolver {
@@ -22,16 +23,21 @@ fn struct_ty(
     name: &str,
     fields: Vec<(&str, MonoType)>,
 ) -> MonoType {
-    let field_count = fields.len();
     MonoType::Struct(StructType {
         name: name.to_string(),
         fields: fields
             .into_iter()
-            .map(|(n, t)| (n.to_string(), t))
+            .map(
+                |(n, t)| crate::frontend::core::types::mono::StructFieldInfo {
+                    name: n.to_string(),
+                    ty: t,
+                    quantity: None,
+                    is_mut: false,
+                    has_default: false,
+                },
+            )
             .collect(),
         methods: std::collections::HashMap::new(),
-        field_mutability: vec![false; field_count],
-        field_has_default: vec![false; field_count],
         interfaces: vec![],
     })
 }
@@ -60,10 +66,14 @@ fn assert_contains_var_positive(
     // Struct field
     let s = MonoType::Struct(StructType {
         name: "W".to_string(),
-        fields: vec![("v".to_string(), MonoType::TypeVar(v))],
+        fields: vec![crate::frontend::core::types::mono::StructFieldInfo {
+            name: "v".to_string(),
+            ty: MonoType::TypeVar(v),
+            quantity: None,
+            is_mut: false,
+            has_default: false,
+        }],
         methods: std::collections::HashMap::new(),
-        field_mutability: vec![false],
-        field_has_default: vec![false],
         interfaces: vec![],
     });
     assert!(solver.contains_var(&s, v));
@@ -572,14 +582,21 @@ fn test_expand_mut_struct_with_bound_var() {
     let _ = solver.bind(v, &MonoType::Float(64));
     let s = MonoType::Struct(StructType {
         name: "P".to_string(),
-        fields: vec![("x".to_string(), MonoType::TypeVar(v))],
+        fields: vec![crate::frontend::core::types::mono::StructFieldInfo {
+            name: "x".to_string(),
+            ty: MonoType::TypeVar(v),
+            quantity: None,
+            is_mut: false,
+            has_default: false,
+        }],
         methods: std::collections::HashMap::new(),
-        field_mutability: vec![false],
-        field_has_default: vec![false],
         interfaces: vec![],
     });
     let resolved = solver.resolve(&s);
-    assert!(matches!(resolved, MonoType::Struct(ref ss) if ss.fields[0].1 == MonoType::Float(64)));
+    assert!(
+        matches!(resolved, MonoType::Struct(ref ss) if ss.fields[0].ty == MonoType::Float(64)),
+        "展开必须把字段位里的绑定变量抵到底层类型"
+    );
 }
 
 #[test]
@@ -635,4 +652,92 @@ fn test_metatype_unify_different_level() {
         solver.unify(&a, &b).is_err(),
         "unify(Type₀, Type₁) should fail — different levels"
     );
+}
+
+// ===== 6.9.3d：判定点回滚（RFC-027 §12.1）=====
+
+/// Fn 形参位成功绑定、返回位失败：绑定必须先落盘（判据的承重），再由日志撤销。
+#[test]
+fn test_journal_rollback_restores_partial_fn_binding() {
+    // Arrange
+    // unify 的 E1002 缺省取 walk 上下文 span（#324）；直驱测试须显式进上下文
+    let _walk = push_current_span(Span::dummy());
+    let mut solver = s();
+    let t = solver.new_var();
+    let lhs = MonoType::Fn {
+        params: vec![t.clone()],
+        return_type: Box::new(MonoType::Int(64)),
+    };
+    let rhs = MonoType::Fn {
+        params: vec![MonoType::Int(64)],
+        return_type: Box::new(MonoType::make_string()),
+    };
+    let mark = solver.journal_mark();
+
+    // Act
+    let result = solver.unify(&lhs, &rhs);
+
+    // Assert — 半截绑定确实存在（= 泄漏形态的正面证据），回滚后必须回到未绑定
+    assert!(result.is_err(), "返回位 int64 与 string 应统一失败");
+    assert_eq!(
+        solver.resolve_type(&t),
+        MonoType::Int(64),
+        "失败前形参位绑定已落盘（未回滚时的泄漏形态）"
+    );
+    solver.journal_rollback(mark);
+    assert!(
+        matches!(solver.resolve_type(&t), MonoType::TypeVar(_)),
+        "回滚后形参位必须回到未绑定，实际: {}",
+        solver.resolve_type(&t)
+    );
+}
+
+/// 同一形状但整体成功：提交后绑定保留（回滚不得误伤成功路径）。
+#[test]
+fn test_journal_commit_keeps_fn_binding() {
+    // Arrange
+    let mut solver = s();
+    let t = solver.new_var();
+    let lhs = MonoType::Fn {
+        params: vec![t.clone()],
+        return_type: Box::new(MonoType::Int(64)),
+    };
+    let rhs = MonoType::Fn {
+        params: vec![MonoType::Int(64)],
+        return_type: Box::new(MonoType::Int(64)),
+    };
+
+    // Act
+    let mark = solver.journal_mark();
+    let result = solver.unify(&lhs, &rhs);
+    solver.journal_commit();
+
+    // Assert
+    assert!(result.is_ok(), "两侧同形应统一成功",);
+    assert_eq!(
+        solver.resolve_type(&t),
+        MonoType::Int(64),
+        "提交后形参位绑定必须保留（标记位点 {mark}）"
+    );
+}
+
+/// ground 判据只排除类型变量：TypeRef 是 δ 展开的输入，不得算作「未解析」。
+#[test]
+fn test_has_type_var_ignores_typeref() {
+    // Arrange
+    let mut solver = s();
+    let var = solver.new_var();
+    let aliased = MonoType::make_list(MonoType::TypeRef("Five".to_string()));
+    let open = MonoType::make_list(var);
+
+    // Act
+    let aliased_has_var = solver.has_type_var(&aliased);
+    let open_has_var = solver.has_type_var(&open);
+
+    // Assert
+    assert!(
+        !aliased_has_var,
+        "TypeRef 不是类型变量，ground 判据应放行（否则 δ 展开永远进不去）"
+    );
+    assert!(open_has_var, "含类型变量的一侧不是 ground");
 }

@@ -287,7 +287,7 @@
     "title": "字段未找到",
     "message": "访问了不存在的结构体字段",
     "template": "在结构体 '{struct}' 中找不到字段 '{field}'",
-    "help": "检查结构体的可用字段",
+    "help": "检查结构体的可用字段；若为谓词体的证据字段路径，请核对记录定义中的 evidence 字段名",
     "example": "point.z;",
     "error_output": "error[E1042]: 字段未找到\n --> example.yx:1:7\n  |\n1 | point.z;\n  |       ^ 在结构体 'Point' 中找不到字段 'z'"
   },
@@ -689,6 +689,8 @@
     "example": "",
     "error_output": ""
   },
+  "E8001.span_missing.message": "诊断 {code} 缺少 span：调用点未 .at(span) 且不在类型检查 walk 上下文中（编译器 bug，见 #324）",
+  "E8001.span_missing.help": "请在调用点补 .at(span)，或在类型检查 walk 上下文内构造",
   "E8002": {
     "title": "意外 Panic",
     "message": "编译器遇到意外 panic",
@@ -876,6 +878,8 @@
   "E4018.no_free_var.note": "\n\n（约束不含自由变量，注解自身不成立）",
   "E4018.proof_false.note": "\n\n（证明函数返回 false，无具体反例）",
   "E4018.proof_error.note": "\n\n（证明函数执行出错，无具体反例）",
+  "E4018.proof_false.constraint": "证明函数 '{func}' 返回 false，约束不满足（参数: {args}）；检查约束条件或修改传入值",
+  "E4018.proof_error.constraint": "证明函数 '{func}' 执行失败: {error}",
   "E4019": {
     "title": "类型等式不成立",
     "message": "类型等式在证明管道内证伪",
@@ -928,11 +932,19 @@
     "example": "if = 1;",
     "error_output": "error[E0018]: 关键字作名称\n --> example.yx:1:1\n  |\n1 | if = 1;\n  | ^^ 'if' 是关键字"
   },
+  "E0019": {
+    "title": "表达式嵌套过深",
+    "message": "表达式嵌套超过 {limit} 层，超出解析器递归上限",
+    "template": "表达式嵌套超过最大递归深度（{limit}）",
+    "help": "简化表达式，或把深层嵌套的部分拆成中间变量或辅助函数",
+    "example": "main = () => { y = - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 1\n    print(y) }",
+    "error_output": "error[E0019]: 表达式嵌套过深\n --> example.yx:1:24\n  |\n1 | main = () => { y = - - - ...\n  |                        ^ 表达式嵌套超过最大递归深度（1024）"
+  },
   "E1092": {
     "title": "精化类型实参形态非法",
     "message": "精化类型实参无法转换为编译期常量表达式",
     "template": "'{name}' 要求编译期常量实参，但所给实参无法转换",
-    "help": "谓词/证明函数实参必须是字面量、变量或单参数类型应用，否则精化约束无法生成",
+    "help": "谓词/证明函数实参必须是字面量、变量或单参数类型应用，否则精化约束无法生成；若在类型位或谓词体：证据字段路径必须整条为该谓词唯一形参的 evidence 字段，基名须与应用实参名一致",
     "example": "y: IsSmall(List(Int)) = 9999",
     "error_output": "error[E1092]: 'IsSmall' 要求编译期常量实参，但所给实参无法转换"
   },
@@ -1035,6 +1047,22 @@
     "help": "传入字面量或编译期常量，或把该形参改为普通运行期值参数",
     "example": "f: (N: Int) -> (n: N) -> Int = (n) => n\nk: (y: Int) -> Int = f(y)",
     "error_output": "error[E1113]: 编译期值参数缺少编译期证据\n --> example.yx:2:24\n  |\n2 | k: (y: Int) -> Int = f(y)\n  |                        ^ 编译期值参数 'N' 需要编译期证据，但实参无法在编译期确定"
+  },
+  "E1114": {
+    "title": "witness 字段不可值级读取",
+    "message": "witness 字段 '{field}' 是记录 '{type}' 的编译期证据，运行期没有数据槽，不能在值级读取",
+    "template": "witness 字段 '{field}' 是记录 '{type}' 的编译期证据，运行期没有数据槽，不能在值级读取",
+    "help": "witness 字段在类型级使用：`b.w` 是证据项，可作为证明的前提；它不是值级读取（运行期没有数据槽）。需要运行期数据时，请把该字段建成普通数据字段。",
+    "example": "Box: Type = { v: Int, w: Pos(v) }  // w 是 witness 字段，运行期无数据槽\nmain: () -> Void = {\n    b: Box = Box(v = 1)\n    b.w\n}",
+    "error_output": "error[E1114]: witness 字段不可值级读取\n --> example.yx:5:5\n  |\n5 |     b.w\n  |     ^^^ witness 字段 'w' 是记录 'Box' 的编译期证据，运行期没有数据槽，不能在值级读取"
+  },
+  "E1115": {
+    "title": "witness-bearing 记录不可变",
+    "message": "记录 '{type}' 含 witness 字段，其全部字段在构造后必须保持不变",
+    "template": "记录 '{type}' 含 witness 字段，其全部字段在构造后必须保持不变",
+    "help": "witness-bearing 记录不能声明 `mut` 字段、不能字段赋值、不能 `&mut` 借用，也不能调用需要写借用的方法；需要可变的数据请拆到不含 witness 的记录。",
+    "example": "Box: Type = { v: Int, w: Pos(v) }\nmain: () -> Void = {\n    b: Box = Box(v = 1)\n    b.v = 2\n}",
+    "error_output": "error[E1115]: witness-bearing 记录不可变\n --> example.yx:4:5\n  |\n4 |     b.v = 2\n  |     ^^^^^^^ 记录 'Box' 含 witness 字段，其全部字段在构造后必须保持不变"
   },
   "E1064": {
     "title": "绑定位置索引无效",
@@ -1185,6 +1213,12 @@
     "message": "该递归调用点的测度未能严格递减，无法证明递归终止（已附反例）",
     "template": "测度不成立：此调用点无法证明测度严格递减\n\n反例：\n{counterexample}",
     "help": "这是精化类型主张的终止性义务：带 `Terminates` 测度的递归函数，每个递归调用点都必须证明测度严格递减。反例给出了一组使递减不成立的取值。请检查测度选择是否恰当，或补充分支守卫使递归路径上的下降成立。参考 RFC-027a。"
+  },
+  "E4023": {
+    "title": "无法在内核内证明",
+    "message": "编译器无法在给定资源与推理规则内证明该义务（不等于命题为假）",
+    "template": "无法证明：{proposition}（{reason}）",
+    "help": "这是编译器推理能力的边界，不是程序错误。请补充编译期已知的实参或证据，或把义务改写成内核可判定的形态（例如显式给出类型实参的值）。参见 RFC-027 §12.3。"
   },
   "package_outdated_none": "所有依赖均为最新。",
   "package_outdated_found": "发现 {0} 个过时依赖:",

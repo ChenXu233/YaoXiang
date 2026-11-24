@@ -18,8 +18,8 @@ use lsp_types::{
 
 use crate::frontend::core::sema::semantic_db::SemanticDB;
 use crate::lsp::handlers::semantic_tokens::{
-    handle_semantic_tokens_full, handle_semantic_tokens_full_delta, SemanticTokensCache,
-    diff_semantic_tokens,
+    diff_semantic_tokens, handle_semantic_tokens_full, handle_semantic_tokens_full_delta,
+    SemanticTokensCache,
 };
 
 use crate::frontend::core::sema::semantic_db::{

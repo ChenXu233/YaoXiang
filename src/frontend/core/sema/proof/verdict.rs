@@ -3,8 +3,10 @@
 //! 所有编译期检查（类型等式、所有权、终止性、精化谓词）
 //! 统一返回此类型。这是 RFC-027 Section 4.1 的核心数据类型。
 
-use crate::util::diagnostic::Diagnostic;
+use crate::frontend::core::types::const_data::ConstExpr;
+use crate::frontend::core::types::MonoType;
 use crate::util::diagnostic::codes::ErrorCodeDefinition;
+use crate::util::diagnostic::Diagnostic;
 use crate::util::span::Span;
 
 /// TypeChecker 发出的信号：这个证明函数需要被编译期执行
@@ -55,6 +57,22 @@ pub enum DisproofKind {
 /// [`ProofFailure`] 一种类型，项层归一化（`const_eval::normalize`）也返回它。
 pub type ProofResult = Result<(), ProofFailure>;
 
+/// 未解命题的**主体**（t66 / RFC-027 §12.3）：诊断必须能说清「在证什么」。
+///
+/// 为什么不是 `ConstExpr`：项形状装不下**类型等式**命题（`A ≡ B`）——它不是项。
+/// 只用一个 `ConstExpr` 会把判等义务逼成 `None`，诊断退化成中性主语「该义务」，
+/// 与 §12.3「必须携带未解命题」的字面要求不符。
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum UnprovenSubject {
+    /// 编译期项命题（如 `n > 0`、`N == 5` 的项形态）
+    Term(ConstExpr),
+    /// 类型等式命题 `A ≡ B`（判等/子类型义务）
+    ///
+    /// 两侧**装箱**：`MonoType` 是大枚举，直接内联会把 `ProofFailure` 撑大，
+    /// 触发 `large_enum_variant` / `result_large_err`（clippy -D warnings）。
+    TypeEquivalence(Box<MonoType>, Box<MonoType>),
+}
+
 /// 证明失败（唯一失败类型）
 ///
 /// 两臂语义互不降格：`Disproved` = 已算出「命题为假」（可给反例），
@@ -74,6 +92,17 @@ pub enum ProofFailure {
         /// 功能不留待实现」）。语义与 6.9.3a 之前逐字一致。
         proof_calls: Vec<ProofFunctionCall>,
         budget: BudgetReport,
+        /// **未解命题的主体**（t64/t66 / RFC-027 §12.3）：可渲染的结构化命题。
+        ///
+        /// `None` = 该判定点**没有**结构化命题（如单侧归约失败、终止性自带原因）；
+        /// 构造点必须显式写 `None`，**不得**用哑串冒充（`Option` 就是为了让
+        /// 「没有命题」与「命题是空串」在类型上可区分）。
+        subject: Option<UnprovenSubject>,
+        /// 该义务的位置（t64 / RFC-027 §12.3）：有则 E4023 指向它。
+        ///
+        /// `None` = 该义务无源码位置（如纯类型层判等）；诊断构造处回落
+        /// `Span::dummy()` 并 `tracing::debug!` 记录，不静默丢失。
+        span: Option<Span>,
     },
 }
 
@@ -85,7 +114,13 @@ impl ProofFailure {
     pub fn into_diagnostic(self) -> Diagnostic {
         match self {
             Self::Disproved(model) => model.into_diagnostic(),
-            Self::Unproven { reason, .. } => reason.to_diagnostic(),
+            Self::Unproven {
+                reason,
+                subject,
+                span,
+                budget,
+                ..
+            } => reason.to_diagnostic(subject.as_ref(), span, &budget),
         }
     }
 }
@@ -304,18 +339,55 @@ pub struct BudgetReport {
 }
 
 impl UnprovenReason {
-    /// 将「无法证明」转为用户可读诊断
+    /// 一般性「无法证明」的诊断（t64：专属 **E4023**）。
     ///
-    /// # 为什么不用统一走 E8001
+    /// `subject` 缺失时不伪造命题：用中性主语「该义务」占位，具体内容由
+    /// `reason` 一栏承载（模板 `无法证明：{proposition}（{reason}）`）。
     ///
-    /// `E8001` 是 `Internal` 类的 ICE，文案是「内部编译器错误，请去提 issue」。
-    /// 把「编译器推理能力边界」套用该码，会误导用户以为编译器故障。
-    /// 能力边界必须走各自语义的用户域错误码。
+    /// 两类主体分别渲染：`Term(t)` ⇒ `t` 的 Display；`TypeEquivalence(a, b)` ⇒
+    /// `a ≡ b`（类型等式的字面形态，RFC-027 §12.3「未解命题」可直接读出）。
+    /// 位置优先用调用方给的 `span`；缺失时用 `Span::dummy()` 并记日志——
+    /// E4023 的码表条目 `span_exempt=false`，不给位置会触发 span 强制（debug 下
+    /// panic、release 降级 E8001），等于把能力边界又变回 ICE。
+    fn unproven_general_diagnostic(
+        subject: Option<&UnprovenSubject>,
+        span: Option<Span>,
+        reason: &str,
+    ) -> Diagnostic {
+        let proposition_text = match subject {
+            Some(UnprovenSubject::Term(term)) => term.to_string(),
+            Some(UnprovenSubject::TypeEquivalence(lhs, rhs)) => format!("{lhs} ≡ {rhs}"),
+            None => {
+                tracing::debug!("无法证明：该判定点没有结构化命题，用中性主语渲染");
+                "该义务".to_string()
+            }
+        };
+        let span = match span {
+            Some(span) => span,
+            None => {
+                tracing::debug!("无法证明：该义务没有源码位置，回落 dummy span");
+                Span::dummy()
+            }
+        };
+        ErrorCodeDefinition::unproven_general(&proposition_text, reason)
+            .at(span)
+            .build()
+    }
+
+    /// 将「无法证明」转为用户可读诊断（**穷尽 match**，无 ICE 兜底）。
     ///
-    /// 下方 `_` 分支保留 E8001：走到那里的确属于未分类的内部情况，
-    /// 指向 issue 是正确出路。新增可预期的能力边界时，应补显式分支
-    /// 而非依赖该兵底。
-    fn to_diagnostic(&self) -> Diagnostic {
+    /// 每个变体都有显式分支：`LoopTerminationUnproven` → E4021（自带 span）、
+    /// `ProofFunctionRequired` → E4020、其余三条**一般性**原因（`Symbolic` /
+    /// `BudgetExceeded` / `BeyondKernel`）→ **专属 E4023**（t64 / RFC-027 §12.3）。
+    ///
+    /// E2031 只服务**精化通道**（带真实 `assigned`/`var` 两槽）：一般义务不再借用它，
+    /// 因为空串形态的 E2031 会误导用户以为问题出在精化约束上。
+    fn to_diagnostic(
+        &self,
+        subject: Option<&UnprovenSubject>,
+        span: Option<Span>,
+        budget: &BudgetReport,
+    ) -> Diagnostic {
         match self {
             Self::LoopTerminationUnproven { span } => {
                 ErrorCodeDefinition::loop_termination_unproven()
@@ -323,7 +395,26 @@ impl UnprovenReason {
                     .build()
             }
             Self::ProofFunctionRequired => ErrorCodeDefinition::proof_function_required().build(),
-            _ => ErrorCodeDefinition::internal_error(&format!("无法证明: {:?}", self)).build(),
+            // 符号名：用户能看懂「依赖哪个编译期名字」，措辞不带 Rust 调试文本
+            Self::Symbolic(name) => {
+                Self::unproven_general_diagnostic(subject, span, &format!("含未绑定符号 `{name}`"))
+            }
+            // 预算：消息只放**一行摘要**（步数），完整分解进日志（RFC-027 §12.3 的形式放松）
+            Self::BudgetExceeded => {
+                tracing::debug!(
+                    "无法证明：预算耗尽（已用 {} 步 / 上限 {} 步）",
+                    budget.steps_used,
+                    budget.steps_limit
+                );
+                Self::unproven_general_diagnostic(
+                    subject,
+                    span,
+                    &format!("预算耗尽（{} 步）", budget.steps_used),
+                )
+            }
+            // `BeyondKernel` 的载荷由**构造方**给出用户域措辞（6.9.3c 已把
+            // `equivalence.rs` 里原先的 Rust `Debug` 串改成类型域文案）
+            Self::BeyondKernel(detail) => Self::unproven_general_diagnostic(subject, span, detail),
         }
     }
 }

@@ -2,94 +2,147 @@ module
   fn main() -> Void
     slot[0] f : Int(64) @depth1
     slot[1] w : Int(64) @depth1
-    slot[3] x : Int(64) @depth2
-    slot[4] n : Int(64) @depth1
-    slot[5] v : Int(64) @depth1
-    slot[7] x : Int(64) @depth2
-    slot[8] tag : Int(64) @depth1
-    locals_total=20
-    Load %0 <- string("125.0")
-    Call %1 <- string("std.string.parse_float") [%0] (def=d0)
-    Load %0 <- void
-    Load %2 <- %1
-    VariantTag %3 <- %2 : Result
-    Load %4 <- int(0)
-    Eq %5 <- %3, %4
-    JmpIfNot %5 -> instr(13)
-    VariantPayload %6 <- %2 : Result
-    Move %7 <- %6
-    Load %8 <- %7
-    Move %0 <- %8
+    slot[2] x : Int(64) @depth2
+    slot[3] n : Int(64) @depth1
+    slot[4] v : Int(64) @depth1
+    slot[5] x : Int(64) @depth2
+    slot[6] tag : Int(64) @depth1
+    locals_total=11
+    values_total=52
+    value v0: Generic { name: "String", args: [] } @block0
+    value v1: Generic { name: "Result", args: [Float(64), TypeRef("Error")] } @block0
+    value v2: TypeRef("?") @block0
+    value v3: Int(64) @block0
+    value v4: Bool @block0
+    value v5: TypeRef("?") @block0
+    value v6: Float(64) @block0
+    value v7: TypeRef("?") @block0
+    value v8: Int(64) @block0
+    value v9: Bool @block0
+    value v10: TypeRef("?") @block0
+    value v11: Float(64) @block0
+    value v12: TypeRef("?") @block0
+    value v13: Bool @block0
+    value v14: Float(64) @block0
+    value v15: Float(64) @block0
+    value v16: Generic { name: "String", args: [] } @block0
+    value v17: Generic { name: "String", args: [] } @block0
+    value v18: Generic { name: "Result", args: [Int(64), TypeRef("Error")] } @block0
+    value v19: TypeRef("?") @block0
+    value v20: Int(64) @block0
+    value v21: Bool @block0
+    value v22: TypeRef("?") @block0
+    value v23: Float(64) @block0
+    value v24: TypeRef("?") @block0
+    value v25: Int(64) @block0
+    value v26: Bool @block0
+    value v27: TypeRef("?") @block0
+    value v28: Int(64) @block0
+    value v29: Int(64) @block0
+    value v30: TypeRef("?") @block0
+    value v31: Bool @block0
+    value v32: Int(64) @block0
+    value v33: Int(64) @block0
+    value v34: Int(64) @block0
+    value v35: Generic { name: "String", args: [] } @block0
+    value v36: Generic { name: "Result", args: [Float(64), TypeRef("Error")] } @block0
+    value v37: TypeRef("?") @block0
+    value v38: Int(64) @block0
+    value v39: Bool @block0
+    value v40: TypeRef("?") @block0
+    value v41: Generic { name: "String", args: [] } @block0
+    value v42: TypeRef("?") @block0
+    value v43: Int(64) @block0
+    value v44: Bool @block0
+    value v45: TypeRef("?") @block0
+    value v46: Generic { name: "String", args: [] } @block0
+    value v47: TypeRef("?") @block0
+    value v48: Bool @block0
+    value v49: Generic { name: "String", args: [] } @block0
+    value v50: Generic { name: "String", args: [] } @block0
+    value v51: Generic { name: "String", args: [] } @block0
+    Load v0 <- string("125.0")
+    Call %0 <- string("std.string.parse_float") [v0] (def=d0)
+    Load %1 <- void
+    Load v1 <- %0
+    VariantTag v2 <- v1 : Result
+    Load v3 <- int(0)
+    Eq v4 <- v2, v3
+    JmpIfNot v4 -> instr(13)
+    VariantPayload v5 <- v1 : Result
+    Move %2 <- v5
+    Load v6 <- %2
+    Move %1 <- v6
     Jmp -> instr(21)
-    VariantTag %9 <- %2 : Result
-    Load %10 <- int(1)
-    Eq %11 <- %9, %10
-    JmpIfNot %11 -> instr(21)
-    VariantPayload %12 <- %2 : Result
-    Load %13 <- float(0)
-    Move %0 <- %13
+    VariantTag v7 <- v1 : Result
+    Load v8 <- int(1)
+    Eq v9 <- v7, v8
+    JmpIfNot v9 -> instr(21)
+    VariantPayload v10 <- v1 : Result
+    Load v11 <- float(0)
+    Move %1 <- v11
     Jmp -> instr(21)
-    Load %5 <- %0
-    Load %6 <- float(4638496509959077888)
-    Eq %4 <- %5, %6
-    Load %8 <- string("match native ok arm payload")
-    Call %3 <- string("std.assert.assert") [%4, %8] (def=d1)
-    Load %4 <- string("nope")
-    Call %3 <- string("std.string.parse_int") [%4] (def=d2)
+    Load v14 <- %1
+    Load v15 <- float(4638496509959077888)
+    Eq v13 <- v14, v15
+    Load v16 <- string("match native ok arm payload")
+    Call v12 <- string("std.assert.assert") [v13, v16] (def=d1)
+    Load v17 <- string("nope")
+    Call %3 <- string("std.string.parse_int") [v17] (def=d2)
     Load %4 <- void
-    Load %5 <- %3
-    VariantTag %8 <- %5 : Result
-    Load %9 <- int(0)
-    Eq %10 <- %8, %9
-    JmpIfNot %10 -> instr(39)
-    VariantPayload %11 <- %5 : Result
-    Move %6 <- %11
-    Load %12 <- %6
-    Move %4 <- %12
+    Load v18 <- %3
+    VariantTag v19 <- v18 : Result
+    Load v20 <- int(0)
+    Eq v21 <- v19, v20
+    JmpIfNot v21 -> instr(39)
+    VariantPayload v22 <- v18 : Result
+    Move %5 <- v22
+    Load v23 <- %5
+    Move %4 <- v23
     Jmp -> instr(48)
-    VariantTag %13 <- %5 : Result
-    Load %14 <- int(1)
-    Eq %15 <- %13, %14
-    JmpIfNot %15 -> instr(48)
-    VariantPayload %16 <- %5 : Result
-    Load %17 <- int(1)
-    Neg %18 <- %17
-    Move %4 <- %18
+    VariantTag v24 <- v18 : Result
+    Load v25 <- int(1)
+    Eq v26 <- v24, v25
+    JmpIfNot v26 -> instr(48)
+    VariantPayload v27 <- v18 : Result
+    Load v29 <- int(1)
+    Neg v28 <- v29
+    Move %4 <- v28
     Jmp -> instr(48)
-    Load %10 <- %4
-    Load %12 <- int(1)
-    Neg %11 <- %12
-    Eq %9 <- %10, %11
-    Load %13 <- string("match native err arm payload")
-    Call %8 <- string("std.assert.assert") [%9, %13] (def=d1)
-    Load %8 <- void
-    Load %9 <- %1
-    VariantTag %10 <- %9 : Result
-    Load %11 <- int(0)
-    Eq %12 <- %10, %11
-    JmpIfNot %12 -> instr(64)
-    VariantPayload %13 <- %9 : Result
-    Load %14 <- string("parsed")
-    Move %8 <- %14
+    Load v32 <- %4
+    Load v34 <- int(1)
+    Neg v33 <- v34
+    Eq v31 <- v32, v33
+    Load v35 <- string("match native err arm payload")
+    Call v30 <- string("std.assert.assert") [v31, v35] (def=d1)
+    Load %6 <- void
+    Load v36 <- %0
+    VariantTag v37 <- v36 : Result
+    Load v38 <- int(0)
+    Eq v39 <- v37, v38
+    JmpIfNot v39 -> instr(64)
+    VariantPayload v40 <- v36 : Result
+    Load v41 <- string("parsed")
+    Move %6 <- v41
     Jmp -> instr(72)
-    VariantTag %15 <- %9 : Result
-    Load %16 <- int(1)
-    Eq %18 <- %15, %16
-    JmpIfNot %18 -> instr(72)
-    VariantPayload %17 <- %9 : Result
-    Load %19 <- string("failed")
-    Move %8 <- %19
+    VariantTag v42 <- v36 : Result
+    Load v43 <- int(1)
+    Eq v44 <- v42, v43
+    JmpIfNot v44 -> instr(72)
+    VariantPayload v45 <- v36 : Result
+    Load v46 <- string("failed")
+    Move %6 <- v46
     Jmp -> instr(72)
-    Load %11 <- %8
-    Load %12 <- string("parsed")
-    Eq %10 <- %11, %12
-    Load %13 <- string("match native exhaustive arms")
-    Call %9 <- string("std.assert.assert") [%10, %13] (def=d1)
-    Drop %1
-    Drop %3
-    Drop %8
-    Drop %4
+    Load v49 <- %6
+    Load v50 <- string("parsed")
+    Eq v48 <- v49, v50
+    Load v51 <- string("match native exhaustive arms")
+    Call v47 <- string("std.assert.assert") [v48, v51] (def=d1)
     Drop %0
-    Ret %9
+    Drop %3
+    Drop %6
+    Drop %4
+    Drop %1
+    Ret v47
   init (locals=0)
     Call %0 <- string("main") [] (def=d3)

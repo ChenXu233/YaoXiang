@@ -223,14 +223,14 @@ RFC-027 的三个单测（`src/frontend/core/sema/tests/rfc027_phase25_proof_fn.
 
 **结论：第三层判据需要补充多文件语料层，否则它无法充当本文的验收工具。** 见「实施要点」S1。
 
-### 义务字段：13 个「产出即契约」的字段，零机制保证
+### 义务字段：14 个「产出即契约」的字段，零机制保证
 
-`src/frontend/core/sema/types.rs:16-76` 的 `TypeCheckResult` 中，有 **13 个字段**的文档注释明确写着「由 X 阶段产出 → Y 阶段消费」，即它们本质上是**跨阶段义务**：
+`src/frontend/core/sema/types.rs:16-80` 的 `TypeCheckResult` 中，有 **14 个字段**的文档注释明确写着「由 X 阶段产出 → Y 阶段消费」，即它们本质上是**跨阶段义务**：
 
 | 字段 | 定义行 | 产出方 → 消费方 |
 | --- | --- | --- |
 
-> **取行约定**：定义行 = `types.rs` 里该字段的**声明行**（`pub` / `pub(super)` 那一行），不是 doc 注释首行——同一字段的注释块可能多行，声明行才是唯一可锚定的位置。本表上方那句里的**结构体范围**（`src/frontend/core/sema/types.rs:16-76`）随结构体行号浮动，由门禁 **F5** 机械对账（写错即红）；定义行列由 **F4** 对账。
+> **取行约定**：定义行 = `types.rs` 里该字段的**声明行**（`pub` / `pub(super)` 那一行），不是 doc 注释首行——同一字段的注释块可能多行，声明行才是唯一可锚定的位置。本表上方那句里的**结构体范围**（`src/frontend/core/sema/types.rs:16-80`）随结构体行号浮动，由门禁 **F5** 机械对账（写错即红）；定义行列由 **F4** 对账。
 | `proof_calls` | `36` | typecheck → **proof_execution** |
 | `release_plan` | `38` | ownership → IR 生成（**`PlanId` 键控**：`ir_gen.rs:360` 读（`type_result.release_plan.clone()`）、`:3103` 用（`ReleasePlan::consume`）；结算完成标记 `:1095`） |
 | `escaped_refs` | `40` | ownership → IR 生成 |
@@ -244,6 +244,7 @@ RFC-027 的三个单测（`src/frontend/core/sema/tests/rfc027_phase25_proof_fn.
 | `try_expr_impls` | `65` | typecheck → IR 生成（span 键控） |
 | `match_scrutinee_types` | `69` | typecheck → IR 生成（span 键控） |
 | `module_namespaces` | `72` | typecheck → IR 生成 |
+| `record_models` | `79` | typecheck（声明期一遍）→ IR 生成（量词传播；B.2 起 witness 字段的 `TypeDeclField.quantity` 与构造参数/默认值填充都从这张表读） |
 
 **改判记录（3.4.9，2026-10-13 用户裁决甲）**：原第 14 行 `interface_impl_registry`（types.rs:49）已**改判为树内事实**——它按设计由 typecheck 在相位消费、跨阶段零读取，不是义务：
 
@@ -258,7 +259,7 @@ RFC-027 的三个单测（`src/frontend/core/sema/tests/rfc027_phase25_proof_fn.
 - `release_plan` 的消费者 `ir_gen.rs:360`（`release_plan: type_result.release_plan.clone()`）位于 `generate_ir_with_context` 内部，而 `compile_project:154-156` **恰好把完整的 `&TypeCheckResult` 传给了它**——消费者在下游模块，而下游模块在所有入口的必经之路上。
 - `proof_calls` 的消费者在 `pipeline.rs` **顶层**，属于**另一个入口实现**。orchestrator 的四个入口根本不经过 `pipeline.rs` 这一层。
 
-**已核实事实**：目前全仓库**没有任何机制**保证这 13 个字段被消费。唯一"保护"是 `ReleasePlan` 恰好搭上了 IR 生成的便车。
+**已核实事实**：目前全仓库**没有任何机制**保证这 14 个字段被消费。唯一"保护"是 `ReleasePlan` 恰好搭上了 IR 生成的便车。
 
 ### 非义务字段登记：`TypeCheckResult` 里的通道 / 在相位 / 树内事实字段
 
@@ -1274,7 +1275,7 @@ pub enum Aggregation {
 - `src/frontend/core/sema/layers/README.md` — 层序调用表与 `equivalence` 的真实身份（无 short-circuit）
 - `src/frontend/core/sema/layers/predicate.rs:31-32` — SMT 初始化硬失败的明文理由
 - `src/frontend/core/sema/proof/smt/backend.rs:60` — 「调用方应保守降级」的契约声明（与 `predicate.rs` 矛盾）
-- `src/frontend/core/sema/types.rs:16-76` — 13 个下游必须消费的义务字段（3.4.4/3.4.5/3.4.9 清账后）
+- `src/frontend/core/sema/types.rs:16-80` — 14 个下游必须消费的义务字段（3.4.4/3.4.5/3.4.9 清账后）
 - `src/frontend/core/sema/tests/rfc027_refined_transparency.rs:13-15` — 单测自认「停在 pipeline 之前」
 - `tests/yaoxiang/06-compile-errors/refinement/refined_annotation_literal_violates_err.yx:12-13` — 语料自认「由 pipeline.rs 在 check_module 之后执行」
 - `wasm/src/lib.rs` 的 `compile_playground`（`run_code` 经它编译）— playground 的第四个编译调用方（单文件路径，故执行 proof_execution）

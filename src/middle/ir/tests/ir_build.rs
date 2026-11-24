@@ -3,7 +3,8 @@
 
 use crate::frontend::core::sema::MonoType;
 use crate::middle::ir::ir::{
-    BasicBlock, ConstValue, FunctionBody, FunctionIR, Instruction, LocalSlot, ModuleIR, Operand,
+    BasicBlock, ConstValue, FrameId, FunctionBody, FunctionIR, Instruction, LocalSlot, ModuleIR,
+    Operand, ValueId, ValueInfo,
 };
 use crate::util::span::Span;
 
@@ -20,6 +21,22 @@ pub fn named_slot(
         ty,
         scope_depth: 0,
         quantity: None,
+        origin: None,
+    }
+}
+
+/// 具名槽，且**归属指定生成帧**（不变量 7「内层隔离」的负控/正控夹具用）。
+pub fn named_slot_in_frame(
+    name: &str,
+    ty: MonoType,
+    origin: FrameId,
+) -> LocalSlot {
+    LocalSlot {
+        name: Some(name.to_string()),
+        ty,
+        scope_depth: 0,
+        quantity: None,
+        origin: Some(origin),
     }
 }
 
@@ -30,6 +47,38 @@ pub fn func(
     locals: Vec<LocalSlot>,
     instrs: Vec<Instruction>,
 ) -> FunctionIR {
+    func_with_blocks(
+        name,
+        params,
+        return_type,
+        locals,
+        Vec::new(),
+        vec![block(0, instrs, Vec::new())],
+    )
+}
+
+/// 单块函数体（块 label、指令序、块级后继由调用方给定）。
+pub fn block(
+    label: usize,
+    instructions: Vec<Instruction>,
+    successors: Vec<usize>,
+) -> BasicBlock {
+    BasicBlock {
+        label,
+        instructions,
+        successors,
+    }
+}
+
+/// 多块函数体构造器（Phi 前驱判据用）：`values` 为空表即 7b.1b 生产形态。
+pub fn func_with_blocks(
+    name: &str,
+    params: Vec<MonoType>,
+    return_type: MonoType,
+    locals: Vec<LocalSlot>,
+    values: Vec<ValueInfo>,
+    blocks: Vec<BasicBlock>,
+) -> FunctionIR {
     FunctionIR {
         name: name.to_string(),
         def: None,
@@ -37,14 +86,47 @@ pub fn func(
         return_type,
         generic_params: None,
         body: FunctionBody::Code {
-            blocks: vec![BasicBlock {
-                label: 0,
-                instructions: instrs,
-                successors: Vec::new(),
-            }],
+            blocks,
             entry: 0,
             locals,
+            values,
+            value_slots: Vec::new(),
         },
+    }
+}
+
+/// 一条 `ValueInfo`（`defining_block` 由调用方给，类型取 `ty`）。
+pub fn value_info(
+    ty: MonoType,
+    defining_block: usize,
+) -> ValueInfo {
+    ValueInfo {
+        ty,
+        debug_name: None,
+        defining_block,
+    }
+}
+
+/// `Operand::Value` 的简写（测试夹具专用；生产构造点 0）。
+pub fn ssa_value(id: u32) -> Operand {
+    Operand::Value(ValueId(id))
+}
+
+pub fn phi_instr(
+    dst: Operand,
+    incoming: Vec<(usize, Operand)>,
+) -> Instruction {
+    Instruction::Phi {
+        dst,
+        incoming,
+        span: Span::dummy(),
+    }
+}
+
+pub fn jmp(target: usize) -> Instruction {
+    Instruction::Jmp {
+        target,
+        span: Span::dummy(),
     }
 }
 

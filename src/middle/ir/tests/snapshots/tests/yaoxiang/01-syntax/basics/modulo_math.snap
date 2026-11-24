@@ -1,73 +1,138 @@
 module
   fn main() -> Void
     slot[0] folded : Int(64) @depth1
-    locals_total=10
-    Load %0 <- int(10)
-    Load %1 <- int(3)
-    Mod %2 <- %0, %1
-    Load %3 <- int(1)
-    Eq %4 <- %2, %3
-    Load %5 <- string("10 % 3 == 1")
-    Call %6 <- string("std.assert.assert") [%4, %5] (def=d0)
-    Load %5 <- int(7)
-    Neg %0 <- %5
-    Load %1 <- int(3)
-    Mod %2 <- %0, %1
-    Load %3 <- int(2)
-    Eq %4 <- %2, %3
-    Load %7 <- string("-7 % 3 == 2")
-    Call %6 <- string("std.assert.assert") [%4, %7] (def=d0)
-    Load %0 <- int(7)
-    Load %5 <- int(3)
-    Neg %1 <- %5
-    Mod %2 <- %0, %1
-    Load %7 <- int(2)
-    Neg %3 <- %7
-    Eq %4 <- %2, %3
-    Load %8 <- string("7 % -3 == -2")
-    Call %6 <- string("std.assert.assert") [%4, %8] (def=d0)
-    Load %5 <- int(7)
-    Neg %0 <- %5
-    Load %7 <- int(3)
-    Neg %1 <- %7
-    Mod %2 <- %0, %1
-    Load %8 <- int(1)
-    Neg %3 <- %8
-    Eq %4 <- %2, %3
-    Load %9 <- string("-7 % -3 == -1")
-    Call %6 <- string("std.assert.assert") [%4, %9] (def=d0)
-    Load %0 <- float(4620130267728707584)
-    Load %1 <- float(4611686018427387904)
-    Mod %2 <- %0, %1
-    Load %3 <- float(4609434218613702656)
-    Eq %4 <- %2, %3
-    Load %5 <- string("7.5 % 2.0 == 1.5")
-    Call %6 <- string("std.assert.assert") [%4, %5] (def=d0)
-    Load %5 <- float(4620130267728707584)
-    Neg %0 <- %5
-    Load %1 <- float(4611686018427387904)
-    Mod %2 <- %0, %1
-    Load %3 <- float(4602678819172646912)
-    Eq %4 <- %2, %3
-    Load %7 <- string("-7.5 % 2.0 == 0.5")
-    Call %6 <- string("std.assert.assert") [%4, %7] (def=d0)
-    Load %3 <- int(7)
-    Neg %4 <- %3
-    Load %2 <- int(3)
-    Mod %6 <- %4, %2
-    Load %3 <- %6
-    Load %0 <- int(2)
-    Eq %2 <- %3, %0
-    Load %1 <- string("const-folded -7 % 3 == 2")
-    Call %4 <- string("std.assert.assert") [%2, %1] (def=d0)
-    Load %1 <- int(5)
-    Load %5 <- int(5)
-    Mod %3 <- %1, %5
-    Load %0 <- int(0)
-    Eq %2 <- %3, %0
-    Load %7 <- string("5 % 5 == 0")
-    Call %4 <- string("std.assert.assert") [%2, %7] (def=d0)
-    Drop %6
-    Ret %4
+    locals_total=4
+    values_total=64
+    value v0: TypeRef("?") @block0
+    value v1: Bool @block0
+    value v2: Int(64) @block0
+    value v3: Int(64) @block0
+    value v4: Int(64) @block0
+    value v5: Int(64) @block0
+    value v6: Generic { name: "String", args: [] } @block0
+    value v7: TypeRef("?") @block0
+    value v8: Bool @block0
+    value v9: Int(64) @block0
+    value v10: Int(64) @block0
+    value v11: Int(64) @block0
+    value v12: Int(64) @block0
+    value v13: Int(64) @block0
+    value v14: Generic { name: "String", args: [] } @block0
+    value v15: TypeRef("?") @block0
+    value v16: Bool @block0
+    value v17: Int(64) @block0
+    value v18: Int(64) @block0
+    value v19: Int(64) @block0
+    value v20: Int(64) @block0
+    value v21: Int(64) @block0
+    value v22: Int(64) @block0
+    value v23: Generic { name: "String", args: [] } @block0
+    value v24: TypeRef("?") @block0
+    value v25: Bool @block0
+    value v26: Int(64) @block0
+    value v27: Int(64) @block0
+    value v28: Int(64) @block0
+    value v29: Int(64) @block0
+    value v30: Int(64) @block0
+    value v31: Int(64) @block0
+    value v32: Int(64) @block0
+    value v33: Generic { name: "String", args: [] } @block0
+    value v34: TypeRef("?") @block0
+    value v35: Bool @block0
+    value v36: Float(64) @block0
+    value v37: Float(64) @block0
+    value v38: Float(64) @block0
+    value v39: Float(64) @block0
+    value v40: Generic { name: "String", args: [] } @block0
+    value v41: TypeRef("?") @block0
+    value v42: Bool @block0
+    value v43: Float(64) @block0
+    value v44: Float(64) @block0
+    value v45: Float(64) @block0
+    value v46: Float(64) @block0
+    value v47: Float(64) @block0
+    value v48: Generic { name: "String", args: [] } @block0
+    value v49: Int(64) @block0
+    value v50: Int(64) @block0
+    value v51: Int(64) @block0
+    value v52: TypeRef("?") @block0
+    value v53: Bool @block0
+    value v54: Int(64) @block0
+    value v55: Int(64) @block0
+    value v56: Generic { name: "String", args: [] } @block0
+    value v57: TypeRef("?") @block0
+    value v58: Bool @block0
+    value v59: Int(64) @block0
+    value v60: Int(64) @block0
+    value v61: Int(64) @block0
+    value v62: Int(64) @block0
+    value v63: Generic { name: "String", args: [] } @block0
+    Load v4 <- int(10)
+    Load v5 <- int(3)
+    Mod v2 <- v4, v5
+    Load v3 <- int(1)
+    Eq v1 <- v2, v3
+    Load v6 <- string("10 % 3 == 1")
+    Call v0 <- string("std.assert.assert") [v1, v6] (def=d0)
+    Load v13 <- int(7)
+    Neg v11 <- v13
+    Load v12 <- int(3)
+    Mod v9 <- v11, v12
+    Load v10 <- int(2)
+    Eq v8 <- v9, v10
+    Load v14 <- string("-7 % 3 == 2")
+    Call v7 <- string("std.assert.assert") [v8, v14] (def=d0)
+    Load v19 <- int(7)
+    Load v21 <- int(3)
+    Neg v20 <- v21
+    Mod v17 <- v19, v20
+    Load v22 <- int(2)
+    Neg v18 <- v22
+    Eq v16 <- v17, v18
+    Load v23 <- string("7 % -3 == -2")
+    Call v15 <- string("std.assert.assert") [v16, v23] (def=d0)
+    Load v30 <- int(7)
+    Neg v28 <- v30
+    Load v31 <- int(3)
+    Neg v29 <- v31
+    Mod v26 <- v28, v29
+    Load v32 <- int(1)
+    Neg v27 <- v32
+    Eq v25 <- v26, v27
+    Load v33 <- string("-7 % -3 == -1")
+    Call v24 <- string("std.assert.assert") [v25, v33] (def=d0)
+    Load v38 <- float(4620130267728707584)
+    Load v39 <- float(4611686018427387904)
+    Mod v36 <- v38, v39
+    Load v37 <- float(4609434218613702656)
+    Eq v35 <- v36, v37
+    Load v40 <- string("7.5 % 2.0 == 1.5")
+    Call v34 <- string("std.assert.assert") [v35, v40] (def=d0)
+    Load v47 <- float(4620130267728707584)
+    Neg v45 <- v47
+    Load v46 <- float(4611686018427387904)
+    Mod v43 <- v45, v46
+    Load v44 <- float(4602678819172646912)
+    Eq v42 <- v43, v44
+    Load v48 <- string("-7.5 % 2.0 == 0.5")
+    Call v41 <- string("std.assert.assert") [v42, v48] (def=d0)
+    Load v51 <- int(7)
+    Neg v49 <- v51
+    Load v50 <- int(3)
+    Mod %0 <- v49, v50
+    Load v54 <- %0
+    Load v55 <- int(2)
+    Eq v53 <- v54, v55
+    Load v56 <- string("const-folded -7 % 3 == 2")
+    Call v52 <- string("std.assert.assert") [v53, v56] (def=d0)
+    Load v61 <- int(5)
+    Load v62 <- int(5)
+    Mod v59 <- v61, v62
+    Load v60 <- int(0)
+    Eq v58 <- v59, v60
+    Load v63 <- string("5 % 5 == 0")
+    Call v57 <- string("std.assert.assert") [v58, v63] (def=d0)
+    Drop %0
+    Ret v57
   init (locals=0)
     Call %0 <- string("main") [] (def=d1)

@@ -136,6 +136,7 @@ src/
 │   │   └── synth.rs               #     唯一允许构造 ast::Expr 的地方
 │   ├── passes/                    #   IR 上的 pass
 │   │   ├── mono/                  #     单态化（删 415 行闭包残余）
+│   │   ├── dce/                   #     post-mono 死代码消除（根集 mark-sweep）
 │   │   └── ...
 │   ├── codegen/                   #   IR → 字节码 lowering
 │   │   ├── mod.rs                 #     CodegenContext
@@ -198,6 +199,7 @@ src/
 | `middle/bytecode/` | 字节码域：opcode 词表 + `.42` 容器 + 编解码 | **opcode 词表唯一归属**；`backends/` 只消费不定义；`sema` 不感知 opcode |
 | `backends/` | 执行 | **不得**反向引用 L1/L2；不感知 AST |
 | `middle/passes/mono/` | IR 上的 pass | 不得引用 `frontend` |
+| `middle/passes/dce/` | IR 上的 pass（post-mono 可达性删除） | 不得引用 `frontend`；根集/删除判据单点在本模块 |
 | `formatter/`、`lsp/`、`repl/`、`package/` | 外围工具层（不在 L1-L4 模型内） | 只消费 L1-L4 的 `pub` API；不得触碰 `pub(crate)`（该泄漏计数同样约束它们） |
 
 ### 现状 → 目标映射
@@ -213,7 +215,7 @@ src/
 | `frontend/core/parser/statements/declarations.rs`（1015 行，8-10 段职责） | `frontend/parser/` 拆分 + 删 120 行死旧语法 | 05 |
 | `typecheck/checker.rs`（4167 行 + 三个真子模块 `checker/annotations.rs` 470 行、`checker/refinement.rs` 1107 行、`checker/semantic_tokens.rs` 1553 行） | `sema/check/` + `sema/refine/`；`include!` 改真 `mod`（5.1 已完成）、精化块迁子模块与入口收口（5.2 已完成：入口为 `&self` + 返回诊断）、注解族迁子模块（5.3 已完成） | 02 / 05 |
 | `typecheck/checker/semantic_tokens.rs`（1553 行，已是 `checker` 的真子模块） | `sema/check/semantic_tokens.rs` | 02 |
-| `typecheck/inference/expressions.rs`（5525 行） | `sema/infer/{call/,expr,stmt}.rs` | 05 / 04 |
+| `typecheck/inference/expressions.rs`（原单文件） | `sema/inference/expressions/{mod,expr}.rs` + `expressions/call/{mod,args,instantiation,method}.rs`（7.0.4 已拆分；`statements.rs` 归并与 `inference/` 改名另案） | 05 / 04 |
 | `typecheck/inference/statements.rs`（2887 行） | `sema/infer/stmt.rs` + `sema/infer/mod.rs` | 05 |
 | `typecheck/types/mono.rs`（1077 行，含同义词表） | `sema/types/{repr,universe}.rs` | 03 |
 | `typecheck/types/const_data.rs`（第二套运算符枚举） | 与 `ast::Type` 的运算符合一 | 03 |
@@ -221,7 +223,7 @@ src/
 | `typecheck/layers/dispatch.rs`（整链零调用） | 删除 | 06 |
 | `typecheck/layers/` | `sema/layers/` + `README.md` 改为实际层序 | 06 |
 | `typecheck/proof/` | 提为一级 `proof/` | 02 |
-| `middle/core/ir_gen.rs`（8448 行，零测试） | `middle/lower/`（14 个模块） | 04 |
+| `middle/core/ir_gen.rs`（原单文件，零测试） | `middle/lower/{mod,scope,query,stmt,loops,globals,module_ir,const_eval,curry}.rs` + `lower/expr/{mod,call,access,control,container,lit,op,reference,closure,spawn}.rs`（7.0.1–7.0.3 已拆分） | 04 |
 | `middle/core/ir.rs`（905 行） | `middle/ir/` + `verify.rs` | 04 |
 | `middle/core/bytecode.rs`（2422 行，1400 行 `From`）+ `middle/passes/codegen/bytecode.rs`（763 行，序列化） | 合并为 `middle/bytecode/`：`opcode.rs` 词表 + `file.rs` 容器序列化 + `decode/`（10 个模块） | 06 |
 | `backends/common/opcode.rs`（83 常量词表） | `middle/bytecode/opcode.rs`（消除 L3→L4 反向） | 06 |
@@ -291,7 +293,7 @@ src/
 | **为规避跨模块依赖而制造的重复** | `ast.rs:847 name_used_as_type_in` 与 `declarations.rs:42 name_used_as_type` **同义但独立实现**，`ast.rs:845-846` 注释自认「此处独立实现以避免 parser 内部跨模块依赖」 | 随 03 的 probe 数据流合并为单一实现 | 03 |
 | checker → layers 内部函数 | `checker/refinement.rs` 的走查族与 `revalidate_refined` / `check_return_refinement` 调 `layers::termination::{negate_guard, substitute_const_expr}`（原 `checker.rs:4857/4986/5246/5384`） | 上移到 `sema/refine/` 或 `sema/layers/termination` 的公开 API | 02 |
 | 3 套平行类型表示 | `ast::Type`（`ast.rs:427-541`）/ `MonoType`（`types/mono.rs`）/ `ir::Type`（`ir.rs:3` 以 `pub use` 再导出）+ 序列化 `type_table`；靠 `From<MonoType> for IrType`（`bytecode.rs:2353-2390`）搭桥 | 收敛为单一表示 | 03 |
-| 手写同义词表 | `types/mono.rs:618-643` `from_builtin_name` 维护 `"Int" \| "int" \| "Int64" \| "int64" \| "i64" => Some(MonoType::Int(64))` 等分支 | 随类型表示收敛而删除 | 03 |
+| 手写同义词表 | 已消除——6.1.2 删 22 个小写拼写别名（S11.1 再迁出 DateTime 兼容别名，issue #513）；`from_builtin_name` 现 `mono.rs:1121-1143`（15 个规范名，无别名） | 已完成（6.1.2 + S11.1） | 03 |
 | **3 套平行运算符枚举** | `ast.rs:191` `pub enum BinOp`（20 变体）/ `ast.rs:217` `pub enum UnOp`（4，独有 `Deref`）；`types/const_data.rs:234` `pub enum BinOp`（18，`Ne` 而非 `Neq`）/ `:321` `pub enum UnOp`（4，独有 `BitNot`）；`middle/core/bytecode.rs:70` `BinaryOp`（11，`Rem`/`Xor`/`Sar` 又一套命名）+ `:97` `UnaryOp` + `:106` `CompareOp`。**ast ↔ const_data 之间无任何 `From` / `TryFrom`**，只有 `const_eval.rs:185-216` 的手写有损自由函数（`Range`/`Assign`/`BitNot` 等返回 `None` 静默丢弃），迫使 5+ 文件在 import 处起别名（`AstBinOp` / `AB` / `CEBinOp` / `ConstBinOp` / `B`），见 `types/eval/const_eval.rs:19,1061`、`typecheck/layers/tests/ownership.rs:19`、`typecheck/layers/tests/termination.rs:15,226`、`middle/core/ir_gen.rs:2317` | L2 两套由同源生成收敛（见 05）；bytecode 层一套由 opcode 生成期门禁对拍（见 06 F8） | 03 / 05 |
 | `include!` | 已消除（5.1：`checker.rs` 改真 `mod semantic_tokens`） | 完成 | — |
 

@@ -19,7 +19,7 @@ pub use const_data::{BinOp, ConstExpr, ConstKind, ConstValue, ConstVarDef, UnOp}
 pub use constraint::TypeConstraint;
 pub use error::TypeConstraintError;
 pub use mono::{
-    get_ast_type_universe_level, calculate_meta_type_level, ast_type_to_poly_type, EnumType,
+    ast_type_to_poly_type, calculate_meta_type_level, get_ast_type_universe_level, EnumType,
     MonoType, PolyType, StructType, TypeBinding, UniverseLevel,
 };
 pub use solver::TypeConstraintSolver;

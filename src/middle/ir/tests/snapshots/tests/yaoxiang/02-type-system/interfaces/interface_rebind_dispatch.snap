@@ -7,37 +7,61 @@ module
   fn animal_speak(Ref { mutable: false, inner: TypeRef("Bird") }) -> Generic { name: "String", args: [] }
     slot[0] self : Int(64) @depth1
     locals_total=2
+    values_total=1
+    value v0: Generic { name: "String", args: [] } @block0
     Load %0 <- arg%0
-    Load %1 <- string("Tweet")
-    Ret %1
-    Ret %1
+    Load v0 <- string("Tweet")
+    Ret v0
+    Ret v0
   fn main() -> Void
     slot[0] zoo : Int(64) @depth1
     slot[1] s : Int(64) @depth1
-    locals_total=9
+    locals_total=6
+    values_total=18
+    value v0: TypeRef("Animal") @block0
+    value v1: TypeRef("?") @block0
+    value v2: Generic { name: "String", args: [] } @block0
+    value v3: Int(64) @block0
+    value v4: TypeRef("?") @block0
+    value v5: Generic { name: "Vec", args: [TypeRef("Animal")] } @block0
+    value v6: Int(64) @block0
+    value v7: TypeRef("?") @block0
+    value v8: Int(64) @block0
+    value v9: Bool @block0
+    value v10: TypeRef("?") @block0
+    value v11: Bool @block0
+    value v12: Generic { name: "String", args: [] } @block0
+    value v13: TypeRef("?") @block0
+    value v14: Bool @block0
+    value v15: Generic { name: "String", args: [] } @block0
+    value v16: Generic { name: "String", args: [] } @block0
+    value v17: Generic { name: "String", args: [] } @block0
     AllocArray %0 size=int(1), elem=int(1)
-    Load %1 <- string("Kiwi")
-    Call %2 <- string("Bird") [%1] (def=d0)
-    CreateVariant %3 <- Animal$Group::0 %2
-    Load %4 <- int(0)
-    StoreIndex %0[%4] <- %3
-    Load %1 <- %0
-    Load %4 <- int(0)
-    LoadIndex %2 <- %1[%4]
-    VariantTag %5 <- %2 : Animal$Group
-    Load %6 <- int(0)
-    Eq %7 <- %5, %6
-    JmpIfNot %7 -> instr(16)
-    VariantPayload %8 <- %2 : Animal$Group
-    Call %3 <- string("animal_speak") [%8] (def=d1)
-    Jmp -> instr(16)
-    Load %4 <- %3
-    Load %5 <- string("Tweet")
-    Eq %1 <- %4, %5
-    Load %6 <- string("rebound method dispatches through variant match")
-    Call %2 <- string("std.assert.assert") [%1, %6] (def=d2)
-    Drop %3
+    Load v2 <- string("Kiwi")
+    Call v1 <- string("Bird") [v2] (def=d0)
+    CreateVariant v0 <- Animal$Group::0 v1
+    Load v3 <- int(0)
+    StoreIndex %0[v3] <- v0
+    Load v5 <- %0
+    Load v6 <- int(0)
+    LoadIndex v4 <- v5[v6]
+    VariantTag v7 <- v4 : Animal$Group
+    Load v8 <- int(0)
+    Eq v9 <- v7, v8
+    JmpIfNot v9 -> instr(16)
+    VariantPayload v10 <- v4 : Animal$Group
+    Call %1 <- string("animal_speak") [v10] (def=d1)
+    Jmp -> instr(19)
+    Load v11 <- bool(false)
+    Load v12 <- string("interface dispatch: unknown variant tag for Animal::speak")
+    Call %1 <- string("std.assert.assert") [v11, v12] (def=d2)
+    Load v15 <- %1
+    Load v16 <- string("Tweet")
+    Eq v14 <- v15, v16
+    Load v17 <- string("rebound method dispatches through variant match")
+    Call v13 <- string("std.assert.assert") [v14, v17] (def=d2)
+    Drop %1
     Drop %0
-    Ret %2
+    Ret v13
   init (locals=0)
     Call %0 <- string("main") [] (def=d3)

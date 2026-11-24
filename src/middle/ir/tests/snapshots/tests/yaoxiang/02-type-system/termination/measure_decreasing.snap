@@ -4,31 +4,49 @@ module
   fn countdown(Int(64), Generic { name: "NonNegative", args: [TypeRef("b")] }) -> Generic { name: "Terminates", args: [TypeRef("b")] }
     slot[0] n : Int(64) @depth1
     slot[1] b : Int(64) @depth1
-    locals_total=7
+    locals_total=6
+    values_total=9
+    value v0: Bool @block0
+    value v1: Int(64) @block0
+    value v2: Int(64) @block0
+    value v3: Int(64) @block0
+    value v4: Refined { base: TypeVar(TypeVar(40)), constraint: Call { func: "Terminates", args: [NamedVar("b")] } } @block0
+    value v5: Int(64) @block0
+    value v6: Int(64) @block0
+    value v7: Int(64) @block0
+    value v8: Int(64) @block0
     Load %0 <- arg%0
     Load %1 <- arg%1
-    Load %2 <- %1
-    Load %3 <- int(0)
-    Eq %4 <- %2, %3
-    JmpIfNot %4 -> instr(8)
-    Load %5 <- %0
-    Ret %5
-    Load %2 <- %0
-    Load %5 <- %1
-    Load %6 <- int(1)
-    Sub %3 <- %5, %6
-    Call %4 <- string("countdown") [%2, %3] (def=d0)
-    Ret %4
-    Ret %4
+    Load v1 <- %1
+    Load v2 <- int(0)
+    Eq v0 <- v1, v2
+    JmpIfNot v0 -> instr(8)
+    Load v3 <- %0
+    Ret v3
+    Load v5 <- %0
+    Load v7 <- %1
+    Load v8 <- int(1)
+    Sub v6 <- v7, v8
+    Call v4 <- string("countdown") [v5, v6] (def=d0)
+    Ret v4
+    Ret v4
   fn main() -> Void
-    locals_total=7
-    Load %0 <- int(7)
-    Load %1 <- int(3)
-    Call %2 <- string("countdown") [%0, %1] (def=d0)
-    Load %3 <- int(7)
-    Eq %4 <- %2, %3
-    Load %5 <- string("countdown(7, 3) == 7（零边界返回 n）")
-    Call %6 <- string("std.assert.assert") [%4, %5] (def=d1)
-    Ret %6
+    locals_total=3
+    values_total=7
+    value v0: TypeRef("?") @block0
+    value v1: Bool @block0
+    value v2: Refined { base: TypeVar(TypeVar(40)), constraint: Call { func: "Terminates", args: [NamedVar("b")] } } @block0
+    value v3: Int(64) @block0
+    value v4: Int(64) @block0
+    value v5: Int(64) @block0
+    value v6: Generic { name: "String", args: [] } @block0
+    Load v4 <- int(7)
+    Load v5 <- int(3)
+    Call v2 <- string("countdown") [v4, v5] (def=d0)
+    Load v3 <- int(7)
+    Eq v1 <- v2, v3
+    Load v6 <- string("countdown(7, 3) == 7（零边界返回 n）")
+    Call v0 <- string("std.assert.assert") [v1, v6] (def=d1)
+    Ret v0
   init (locals=0)
     Call %0 <- string("main") [] (def=d2)

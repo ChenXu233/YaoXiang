@@ -1,24 +1,35 @@
 module
   fn main() -> Void
     slot[0] l : Int(64) @depth1
-    slot[2] x : Int(64) @depth1
-    locals_total=7
+    slot[1] x : Int(64) @depth1
+    locals_total=5
+    values_total=10
+    value v0: Int(64) @block0
+    value v1: Int(64) @block0
+    value v2: Int(64) @block0
+    value v3: Int(64) @block0
+    value v4: Int(64) @block0
+    value v5: Int(64) @block0
+    value v6: TypeRef("?") @block0
+    value v7: Generic { name: "Vec", args: [Int(64)] } @block0
+    value v8: Int(64) @block0
+    value v9: Int(64) @block0
     AllocArray %0 size=int(3), elem=int(1)
-    Load %1 <- int(1)
-    Load %2 <- int(0)
-    StoreIndex %0[%2] <- %1
-    Load %3 <- int(2)
-    Load %4 <- int(1)
-    StoreIndex %0[%4] <- %3
-    Load %5 <- int(3)
-    Load %6 <- int(2)
-    StoreIndex %0[%6] <- %5
-    Load %3 <- %0
-    Load %5 <- int(1)
-    Neg %4 <- %5
-    LoadIndex %2 <- %3[%4]
+    Load v0 <- int(1)
+    Load v1 <- int(0)
+    StoreIndex %0[v1] <- v0
+    Load v2 <- int(2)
+    Load v3 <- int(1)
+    StoreIndex %0[v3] <- v2
+    Load v4 <- int(3)
+    Load v5 <- int(2)
+    StoreIndex %0[v5] <- v4
+    Load v7 <- %0
+    Load v9 <- int(1)
+    Neg v8 <- v9
+    LoadIndex %1 <- v7[v8]
     Drop %0
-    Drop %2
+    Drop %1
     Ret
   init (locals=0)
     Call %0 <- string("main") [] (def=d0)

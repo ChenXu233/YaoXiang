@@ -1,15 +1,16 @@
 # YaoXiang Reference Documentation
 
-> YaoXiang is currently in the **experimental validation phase** (for the current version, see
-> [Language Specification Overview](language-spec/index.md)), and the standard library and APIs are
+> YaoXiang is currently in the **experimental validation stage** (for the current version, see
+> [Language Specification Overview](language-spec/index.md)); the standard library and APIs are
 > being gradually improved.
 >
-> The standard library's **authoritative module-by-module reference** is available in the
-> [Standard Library Reference](stdlib/index.md); this page serves only as an entry-point index.
+> The **authoritative, module-by-module reference** for the standard library is in the
+> [Standard Library Reference](stdlib/index.md); this page serves only as an index.
 
 ## Reference Entry Points
 
-- [Error Code Reference](error-code/index.md) - Overview of diagnostic codes and category lookup
+- [Error Code Reference](error-code/index.md) - Overview of diagnostic codes and category-based
+  lookup
 - [Warning Codes](warning-code/warning-codes.md)
 - [Package Management](package/index.md) - Manifests, lockfiles, and commands
 - [Tool Commands](check-command.md) / [format](format-command.md) / [test](test-command.md)
@@ -17,12 +18,12 @@
 ## Language Specification
 
 - [Language Specification Overview](language-spec/index.md)
-- [Syntax Specification](language-spec/syntax.md) - Lexical structure, grammar rules, operator
+- [Syntax Specification](language-spec/syntax.md) - Lexical structure, grammar rules, and operator
   precedence
-- [Type System](language-spec/type-system.md) - Basic types, composite types, generics, traits
-- [Module System](language-spec/modules.md) - Module definitions, imports and exports, scopes
+- [Type System](language-spec/type-system.md) - Basic types, composite types, generics, and traits
+- [Module System](language-spec/modules.md) - Module definitions, imports and exports, and scopes
 - [Concurrency Model](language-spec/concurrency.md) - Asynchronous programming, concurrency
-  primitives, memory model
+  primitives, and the memory model
 - [FFI](language-spec/ffi.md) - Foreign function interface
 - [Standard Library](language-spec/stdlib.md) - Standard library overview
 
@@ -30,7 +31,7 @@
 
 | Module           | Status         | Description                        | Reference                          |
 | ---------------- | -------------- | ---------------------------------- | ---------------------------------- |
-| `std.io`         | ✅ Implemented | Input/output                       | [io](stdlib/io.md)                 |
+| `std.io`         | ✅ Implemented | Input and output                   | [io](stdlib/io.md)                 |
 | `std.string`     | ✅ Implemented | String operations                  | [string](stdlib/string.md)         |
 | `std.list`       | ✅ Implemented | List operations                    | [list](stdlib/list.md)             |
 | `std.dict`       | ✅ Implemented | Dictionary operations              | [dict](stdlib/dict.md)             |
@@ -38,7 +39,7 @@
 | `std.math`       | ✅ Implemented | Mathematical functions             | [math](stdlib/math.md)             |
 | `std.net`        | ✅ Implemented | Network operations (ureq + rustls) | [net](stdlib/net.md)               |
 | `std.concurrent` | ✅ Implemented | Concurrency primitives             | [concurrent](stdlib/concurrent.md) |
-| `std.os`         | ✅ Implemented | Operating system interface         | [os](stdlib/os.md)                 |
+| `std.os`         | ✅ Implemented | Operating system interfaces        | [os](stdlib/os.md)                 |
 | `std.fs`         | ✅ Implemented | File system                        | [fs](stdlib/fs.md)                 |
 | `std.time`       | ✅ Implemented | Time and dates                     | [time](stdlib/time.md)             |
 | `std.convert`    | ✅ Implemented | Type conversion                    | [convert](stdlib/convert.md)       |
@@ -46,8 +47,8 @@
 | `std.assert`     | ✅ Implemented | Assertions                         | [assert](stdlib/assert.md)         |
 | `std.weak`       | ✅ Implemented | Weak references                    | [weak](stdlib/weak.md)             |
 
-> `std.net` was initially a “placeholder implementation that made no requests,” but has now been
-> changed to a real implementation (#56).
+> In its early days, `std.net` was a “placeholder implementation that sent no requests”; it has now
+> been changed to a real implementation (#56).
 
 ## Built-in Types
 
@@ -55,7 +56,7 @@
 
 | Type      | Description                         | Example         |
 | --------- | ----------------------------------- | --------------- |
-| `Never`   | Zero constructors (divergent)       | —               |
+| `Never`   | Zero constructor (diverging)        | —               |
 | `Void`    | Void/no return value                | `()`            |
 | `Bool`    | Boolean value                       | `true`, `false` |
 | `Int`     | Integer (= `Int64`)                 | `42`, `-10`     |
@@ -70,12 +71,12 @@
 | `String`  | String                              | `"hello"`       |
 | `Bytes`   | Raw bytes                           | —               |
 
-> These are all 15 built-in type names (`()` is the type syntax for `Void`). For the authoritative
+> These are all 15 built-in type names (`()` is the type notation for `Void`). For the authoritative
 > table and spelling rules, see [Language Specification §2.1](language-spec/type-system.md): **only
-> the capitalized spelling is valid**, and spellings such as `int` / `i64` / `str` / `bool` were
-> removed in WBS 6.1.2. `DateTime` is not a built-in name—it is a temporary compatibility alias in
-> the std layer (the `now` / `parse_time` signatures of `std.time`); its migration is covered in P10
-> S11 (issue #513).
+> capitalized spelling is valid**, and lowercase forms such as `int` / `i64` / `str` / `bool` were
+> removed in WBS 6.1.2. `DateTime` is not a built-in name—`now` / `parse_time` in `std.time` return
+> an `Int` timestamp (the temporary compatibility alias was moved out in P10 S11 / issue #513: a
+> bare `DateTime` annotation reports an unknown type error).
 
 ### Composite Types
 
@@ -87,13 +88,13 @@
 > #299: Container types (`List(T)` / `Vec(T)` / `Array(T, N)` / `Dict(K, V)`) are not built-in
 > primitives; they are generic type constructors and receive the same treatment as user-defined
 > generics, handled through a unified generic instantiation path. Literal syntax (`[...]` / `{...}`)
-> is retained in the core, with its target determined by contextual annotations. Set has been
-> removed (#300); see the [Language Specification](language-spec/syntax.md) for details.
+> remains in the core, with its target determined by contextual inference. Set was removed (#300);
+> see the [Language Specification](language-spec/syntax.md).
 >
 > The three container concepts are distinguished by where their length information resides:
-> `Array(T, N)` stores its length in the type (fixed-length), `Vec(T)` has a runtime length value (a
-> raw buffer primitive), and `List(T)` is a standard library type (`{ data: Vec(T), length: Int }`),
-> with all strategy handled by the library.
+> `Array(T, N)` stores its length in the type (fixed-size), `Vec(T)` stores its length as a runtime
+> value (the underlying buffer primitive), and `List(T)` is a standard-library type
+> (`{ data: Vec(T), length: Int }`), with all policy implemented in the library.
 
 ### User-Defined Types
 
@@ -134,22 +135,22 @@ is_type(value, type)  // Check the type
 
 ## Keywords
 
-| Keyword                   | Description           |
-| ------------------------- | --------------------- |
-| `Type`                    | Meta type             |
-| `spawn`                   | Mark a spawn function |
-| `spawn for`               | Parallel loop         |
-| `spawn {}`                | Spawn block           |
-| `if` / `else if` / `else` | Conditional branches  |
-| `match`                   | Pattern matching      |
-| `while` / `for`           | Loops                 |
-| `return`                  | Return value          |
-| `ref`                     | Create a reference    |
-| `mut`                     | Mutable marker        |
+| Keyword                   | Description            |
+| ------------------------- | ---------------------- |
+| `Type`                    | Meta type              |
+| `spawn`                   | Marks a spawn function |
+| `spawn for`               | Parallel loop          |
+| `spawn {}`                | Spawn block            |
+| `if` / `else if` / `else` | Conditional branch     |
+| `match`                   | Pattern matching       |
+| `while` / `for`           | Loop                   |
+| `return`                  | Return value           |
+| `ref`                     | Create a reference     |
+| `mut`                     | Mutable marker         |
 
 ## Syntax Quick Reference
 
-### Variable Declarations
+### Variable Declaration
 
 ```yaoxiang
 // Immutable variable (default)
@@ -161,7 +162,7 @@ mut count: Int = 0
 count = count + 1
 ```
 
-### Function Definitions
+### Function Definition
 
 ```yaoxiang
 // Regular function
@@ -207,32 +208,32 @@ data = fetch_file(path)?
 
 ## Operator Precedence
 
-| Precedence | Operator                                                                                                                                                                                            |
-| ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Highest    | `( )` Function call                                                                                                                                                                                 |
-|            | `.` Field access                                                                                                                                                                                    |
-|            | `[ ]` Index                                                                                                                                                                                         |
-|            | `unary -` Unary minus                                                                                                                                                                               |
-|            | `* / %` Multiplication, division, and modulo                                                                                                                                                        |
-|            | (Operator precedence and associativity are fixed by the language; the semantics of `+ - * / %`, `== !=`, and `[]` may be overloaded by types that implement the corresponding interface (RFC-011b)) |
-|            | `+ -` Addition and subtraction                                                                                                                                                                      |
-|            | `== != < > <= >=` Comparison                                                                                                                                                                        |
-|            | `and or` Logical operations                                                                                                                                                                         |
-| Lowest     | `=` Assignment                                                                                                                                                                                      |
+| Precedence | Operator                                                                                                                                                                                  |
+| ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Highest    | `( )` Function call                                                                                                                                                                       |
+|            | `.` Field access                                                                                                                                                                          |
+|            | `[ ]` Indexing                                                                                                                                                                            |
+|            | `unary -` Unary minus                                                                                                                                                                     |
+|            | `* / %` Multiplication, division, modulo                                                                                                                                                  |
+|            | (Operator precedence and associativity are fixed by the language; the semantics of `+ - * / %`, `== !=`, and `[]` may be type-overloaded through the corresponding interfaces (RFC-011b)) |
+|            | `+ -` Addition and subtraction                                                                                                                                                            |
+|            | `== != < > <= >=` Comparison                                                                                                                                                              |
+|            | `and or` Logical operations                                                                                                                                                               |
+| Lowest     | `=` Assignment                                                                                                                                                                            |
 
 ## Standard Library Usage Examples
 
 ```yaoxiang
-// Import the standard library
+# Import the standard library
 use std.io.{print, println}
 
-// List operations
+# List operations
 use std.list.{list_push, list_pop, list_len}
 
-// Math functions
+# Mathematical functions
 use std.math.{sqrt, sin, cos, PI}
 
-// Usage
+# Usage
 println("Hello, YaoXiang!")
 result = sqrt(16.0)  // 4.0
 ```
@@ -275,14 +276,14 @@ main: () -> Void = {
 ## Related Resources
 
 - [Tutorial](../tutorial/) - Learn YaoXiang
-- [Design Documents](../explanation/) - Language design decisions
+- [Design Documentation](../explanation/) - Language design decisions
 - [GitHub](https://github.com/ChenXu233/YaoXiang)
 
-## Contribution Guide
+## Contribution Guidelines
 
 The standard library is under construction, and contributions are welcome!
 
-1. Choose a module (such as `std.io`, `std.net`)
+1. Choose a module (such as `std.io` or `std.net`)
 2. Implement functions in `src/std/`
 3. Add documentation comments
 4. Submit a PR

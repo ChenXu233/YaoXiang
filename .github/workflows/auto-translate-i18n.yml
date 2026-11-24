@@ -78,3 +78,9 @@ jobs:
           git pull --rebase origin dev
           git push
           if [ "$STASHED" = "1" ]; then git stash pop || echo "::warning::stash pop 冲突，改动保留在 stash"; fi
+
+      - name: Notify CNB mirror
+        uses: ./.github/actions/notify-cnb
+        with:
+          token: ${{ secrets.CNB_TOKEN }}
+

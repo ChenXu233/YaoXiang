@@ -2,7 +2,8 @@
 //!
 //! 提供通用的类型替换算法，消除各模块间的重复代码。
 
-use crate::frontend::core::types::{MonoType, TypeVar, StructType, EnumType};
+use crate::frontend::core::types::mono::StructFieldInfo;
+use crate::frontend::core::types::{EnumType, MonoType, StructType, TypeVar};
 use std::collections::HashMap;
 
 /// 类型替换映射（使用类型变量索引）
@@ -97,7 +98,7 @@ pub fn ctor_head_name(ty: &MonoType) -> Option<String> {
 ///（构造器参数名 → 实参构造器名）改写为真实构造器。
 ///
 /// 共享实现在此（复审轮 1 F2 校正：此前 `sema/environment.rs` 与
-/// `sema/inference/expressions.rs` 各有一份内联改名，与当时「只有一处
+/// `sema/inference/expressions/mod.rs` 的 `substitute_type_params_with_vars` 各有一份内联改名，与当时「只有一处
 /// 实现」的表述不符；历史提交信息不改写，此处按事实更正）。两处调用点现均为
 /// 「先做各自的 TypeRef/变量遍历，再调用本函数」。
 ///
@@ -132,7 +133,10 @@ pub fn substitute_ctor_heads(
             fields: s
                 .fields
                 .iter()
-                .map(|(n, t)| (n.clone(), substitute_ctor_heads(t, head_map)))
+                .map(|field_info| StructFieldInfo {
+                    ty: substitute_ctor_heads(&field_info.ty, head_map),
+                    ..field_info.clone()
+                })
                 .collect(),
             ..s.clone()
         }),
@@ -182,6 +186,161 @@ pub fn substitute_ctor_heads(
             value: value.clone(),
         },
         _ => ty.clone(),
+    }
+}
+
+/// 名义类型引用的改写：把 `TypeRef(名)` 按 `rebinds`（定义名 → 本地名）改名。
+///
+/// 用途（WBS 3.24.3 / issue #504）：跨单元导入的函数签名携带**定义单元的裸
+/// 名义名**（`make_b: () -> Temp` 的返回位 `TypeRef("Temp")`），而导入方的
+/// 注解写的是本地名（`use b.{Temp as TempB}` 后的 `TempB`）。两处在判等点的
+/// 字符串比对（`solver.rs` TypeRef/TypeRef 臂）下判异，合法程序被误拒
+/// （E1012 + E1002）。导入方登记导入项时用本函数把签名里的裸名引用改绑到
+/// 本地名，注解侧与值侧回到同一来源。
+///
+/// 与 [`substitute_ctor_heads`] 的分工：那是构造器**应用头部**改名
+///（`Generic{name}` 的头部），不触碰 `TypeRef` 引用体；本函数恰好相反——
+/// 改写名义引用体与接口实现名（`Struct.interfaces`：接口名是名义名位，
+/// 语义与 `TypeRef` 引用体同——别名导入接口后，实现判定按本地名同源）；
+/// 头部与记录名（`Generic{name}` / `Struct.name` / 构造器名）一律不动。
+/// 改写头部或记录名会改变诊断渲染与记录查表键，不是本函数的语义。
+/// 与 [`MonoType::substitute`] 的分工：那是类型**变量**替换（目标是
+/// 任意 `MonoType`，如换进求解器新变量），且不遍历 `Struct` 字段 / `DepFn` /
+/// `Refined` / `Literal`；本函数按名义引用语义结构递归全部变体。
+pub fn rebind_nominal_refs(
+    ty: &MonoType,
+    rebinds: &HashMap<String, String>,
+) -> MonoType {
+    if rebinds.is_empty() {
+        return ty.clone();
+    }
+    match ty {
+        MonoType::TypeRef(name) => {
+            MonoType::TypeRef(rebinds.get(name).cloned().unwrap_or_else(|| name.clone()))
+        }
+        MonoType::Fn {
+            params,
+            return_type,
+        } => MonoType::Fn {
+            params: params
+                .iter()
+                .map(|p| rebind_nominal_refs(p, rebinds))
+                .collect(),
+            return_type: Box::new(rebind_nominal_refs(return_type, rebinds)),
+        },
+        MonoType::Generic { name, args } => MonoType::Generic {
+            name: name.clone(),
+            args: args
+                .iter()
+                .map(|a| rebind_nominal_refs(a, rebinds))
+                .collect(),
+        },
+        MonoType::Struct(s) => MonoType::Struct(StructType {
+            fields: s
+                .fields
+                .iter()
+                .map(|field_info| StructFieldInfo {
+                    ty: rebind_nominal_refs(&field_info.ty, rebinds),
+                    ..field_info.clone()
+                })
+                .collect(),
+            // 接口实现名是名义名位（语义与 TypeRef 引用体同）：别名导入接口
+            // 后，实现类型的接口名按本地名同源——不改绑则 Struct-vs-TypeRef
+            // 判等臂（solver `s.interfaces.contains`）拿定义单元裸名与本地名
+            // 判异，合法程序被误拒（E1002）。记录名（身份面）不动。
+            interfaces: s
+                .interfaces
+                .iter()
+                .map(|iface| rebinds.get(iface).cloned().unwrap_or_else(|| iface.clone()))
+                .collect(),
+            ..s.clone()
+        }),
+        MonoType::Ref { mutable, inner } => MonoType::Ref {
+            mutable: *mutable,
+            inner: Box::new(rebind_nominal_refs(inner, rebinds)),
+        },
+        MonoType::Union(types) => MonoType::Union(
+            types
+                .iter()
+                .map(|t| rebind_nominal_refs(t, rebinds))
+                .collect(),
+        ),
+        MonoType::Intersection(types) => MonoType::Intersection(
+            types
+                .iter()
+                .map(|t| rebind_nominal_refs(t, rebinds))
+                .collect(),
+        ),
+        MonoType::MetaType {
+            universe_level,
+            type_params,
+        } => MonoType::MetaType {
+            universe_level: universe_level.clone(),
+            type_params: type_params
+                .iter()
+                .map(|t| rebind_nominal_refs(t, rebinds))
+                .collect(),
+        },
+        MonoType::AssocType {
+            host_type,
+            assoc_name,
+            assoc_args,
+        } => MonoType::AssocType {
+            host_type: Box::new(rebind_nominal_refs(host_type, rebinds)),
+            assoc_name: assoc_name.clone(),
+            assoc_args: assoc_args
+                .iter()
+                .map(|t| rebind_nominal_refs(t, rebinds))
+                .collect(),
+        },
+        MonoType::Literal {
+            name,
+            base_type,
+            value,
+        } => MonoType::Literal {
+            name: name.clone(),
+            base_type: Box::new(rebind_nominal_refs(base_type, rebinds)),
+            value: value.clone(),
+        },
+        MonoType::Refined { base, constraint } => MonoType::Refined {
+            base: Box::new(rebind_nominal_refs(base, rebinds)),
+            constraint: constraint.clone(),
+        },
+        MonoType::DepFn {
+            params,
+            return_type,
+        } => MonoType::DepFn {
+            params: params
+                .iter()
+                .map(|dep_param| crate::frontend::core::types::mono::DepParam {
+                    name: dep_param.name.clone(),
+                    ty: rebind_nominal_refs(&dep_param.ty, rebinds),
+                })
+                .collect(),
+            return_type: Box::new(rebind_nominal_refs(return_type, rebinds)),
+        },
+        // 无名义引用位的十个变体——逐名显式穷尽、无兜底臂（3.24.3 t3 F1）：
+        // 新增变体时编译器在此指路，不再静默吞掉。Enum 是名字串表、TypeVar
+        // 由求解器管理、原语（Never/Void/Bool/Int/Float/Char）与 FFI 形态
+        //（LibraryRef/ExternRef）无名义引用位——原样克隆。
+        MonoType::Never | MonoType::Void | MonoType::Bool | MonoType::Char => ty.clone(),
+        MonoType::Int(width) => MonoType::Int(*width),
+        MonoType::Float(width) => MonoType::Float(*width),
+        MonoType::Enum(e) => MonoType::Enum(e.clone()),
+        MonoType::TypeVar(tv) => MonoType::TypeVar(*tv),
+        MonoType::LibraryRef { mechanism, lib } => MonoType::LibraryRef {
+            mechanism: mechanism.clone(),
+            lib: lib.clone(),
+        },
+        MonoType::ExternRef {
+            mechanism,
+            lib,
+            symbol,
+        } => MonoType::ExternRef {
+            mechanism: mechanism.clone(),
+            lib: lib.clone(),
+            symbol: symbol.clone(),
+        },
     }
 }
 
@@ -292,16 +451,18 @@ impl Substituter {
                 let new_fields = struct_type
                     .fields
                     .iter()
-                    .map(|(name, field_ty)| {
-                        (name.clone(), self.substitute_internal(field_ty, lookup))
+                    .map(|field_info| {
+                        let field_ty = self.substitute_internal(&field_info.ty, lookup);
+                        StructFieldInfo {
+                            ty: field_ty,
+                            ..field_info.clone()
+                        }
                     })
                     .collect();
                 MonoType::Struct(StructType {
                     name: struct_type.name.clone(),
                     fields: new_fields,
                     methods: struct_type.methods.clone(),
-                    field_mutability: struct_type.field_mutability.clone(),
-                    field_has_default: struct_type.field_has_default.clone(),
                     interfaces: struct_type.interfaces.clone(),
                 })
             }
@@ -356,7 +517,7 @@ pub fn contains_type_vars(ty: &MonoType) -> bool {
         MonoType::Struct(struct_type) => struct_type
             .fields
             .iter()
-            .any(|(_, field_ty)| contains_type_vars(field_ty)),
+            .any(|field| contains_type_vars(&field.ty)),
         MonoType::Union(types) | MonoType::Intersection(types) => {
             types.iter().any(contains_type_vars)
         }

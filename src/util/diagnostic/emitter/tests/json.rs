@@ -3,10 +3,10 @@
 //!
 //! 覆盖 `JsonEmitter` 的单个/多个诊断渲染、严重级别映射等功能。
 
+use crate::util::diagnostic::codes::ErrorCodeDefinition;
 use crate::util::diagnostic::emitter::json::{JsonEmitter, LspDiagnostic, LspDiagnosticSeverity};
 use crate::util::diagnostic::Diagnostic;
-use crate::util::diagnostic::codes::ErrorCodeDefinition;
-use crate::util::span::{Span, Position};
+use crate::util::span::{Position, Span};
 
 #[test]
 fn test_render_single_diagnostic() {

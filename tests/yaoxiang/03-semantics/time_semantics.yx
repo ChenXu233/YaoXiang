@@ -1,8 +1,9 @@
 // 03-semantics/time_semantics.yx
-// 覆盖: #338 / #340——DateTime 别名 + parse_time 的 fmt 驱动解析
+// 覆盖: #338 / #340——时间戳返回类型（Int）+ parse_time 的 fmt 驱动解析
 // 状态: ✅ 可运行
 //
-// #338：`DateTime` 是**时间戳的别名**（即 Int），运行时本就是 RuntimeValue::Int。
+// #338：`now` / `parse_time` 的返回值就是时间戳（`Int`）——临时兼容别名已由
+//       P10 S11（issue #513）迁出，std.time 的签名串直接写 `Int`。
 //       访问器导出名从 `DateTime::year` 改为 `datetime_year`（`::` 是词法保留记号）。
 // #340：`parse_time(fmt, s)` 的 fmt 此前被忽略，只硬认 ISO 8601；现按 fmt
 //       提取字段，与 format_time 互为逆运算。

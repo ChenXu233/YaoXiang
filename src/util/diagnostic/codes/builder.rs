@@ -2,9 +2,9 @@
 //!
 //! 支持模板参数化的错误消息构建器，替代 trait-per-error 设计
 
-use crate::util::span::Span;
 use crate::util::diagnostic::{Diagnostic, Severity};
 use crate::util::i18n::error_lang;
+use crate::util::span::Span;
 use std::cell::RefCell;
 use std::collections::HashMap;
 
@@ -164,7 +164,10 @@ impl DiagnosticBuilder {
             .unwrap_or("Internal error: missing i18n template");
 
         // param_from_key 登记的参数：用已收集参数渲染 locales 平键模板，
-        // 产物并入参数表（校验与渲染都用完整参数表）
+        // 产物并入参数表（校验与渲染都用完整参数表）。同名键后并入者生效
+        // （render_str 的参数表按收集序建 HashMap，后者覆盖）——发射点先经
+        // 注册表快捷方法传入占位空串、再以 param_from_key 登记同键真值时，
+        // 依赖的就是这一次序（issue #509 残留②的 constraint 参数位形态）。
         let mut params = self.params.clone();
         for (key, template_key) in &self.template_params {
             if let Some(rendered) = i18n.render_key(template_key, &self.params) {
@@ -217,19 +220,32 @@ impl DiagnosticBuilder {
         };
 
         // #324：span 强制——显式 .at() > walk 上下文自动填 > 都没有则按模式处理
-        // （debug panic 拒绝构造；release 降级 E8001，与上方参数校验同策略）
+        // （debug panic 拒绝构造；release 降级 E8001，与上方参数校验同策略）。
+        // 降级诊断的 message/help 文案在 locales（`E8001.span_missing.*`，issue
+        // #509 残留①）——发射点不硬编成品串；唯一变量参数是诊断码。
         let span = match self.effective_span() {
             Ok(span) => span,
-            Err(violation) => {
+            Err(()) => {
+                let code_param = self.code.to_string();
+                let message = i18n
+                    .render_key(
+                        "E8001.span_missing.message",
+                        &[("code", code_param.clone())],
+                    )
+                    // 链上 miss 的兜底串是 dev 面防御（与上方缺参降级路径的英文
+                    // 内部串同策略），非用户文案；debug 下 render_key 的护栏先行报错
+                    .unwrap_or_else(|| {
+                        format!(
+                            "E8001: diagnostic {code_param} missing span (compiler bug, see #324)"
+                        )
+                    });
                 if cfg!(debug_assertions) {
-                    panic!("{}", violation);
+                    panic!("{}", message);
                 }
-                let mut diagnostic = Diagnostic::error(
-                    "E8001".to_string(),
-                    violation,
-                    "请在调用点补 .at(span)，或在类型检查 walk 上下文内构造".to_string(),
-                    None,
-                );
+                let help = i18n
+                    .render_key("E8001.span_missing.help", &[])
+                    .unwrap_or_default();
+                let mut diagnostic = Diagnostic::error("E8001".to_string(), message, help, None);
                 if !self.related.is_empty() {
                     diagnostic = diagnostic.with_related(self.related.clone());
                 }
@@ -263,8 +279,12 @@ impl DiagnosticBuilder {
         diagnostic
     }
 
-    /// #324：span 解析——显式 `.at()` > walk 上下文自动填 > 都没有且要求 span 时 Err
-    fn effective_span(&self) -> Result<Option<Span>, String> {
+    /// #324：span 解析——显式 `.at()` > walk 上下文自动填 > 都没有且要求 span 时 Err。
+    ///
+    /// Err 不携带文案：唯一违规形态的变量参数（诊断码）就在 `self.code` 上，
+    /// 文案本体在 locales（`E8001.span_missing.message` / `.help`，issue #509
+    /// 残留①），由 [`Self::build`] 渲染——debug panic 与 release 降级诊断同源。
+    fn effective_span(&self) -> Result<Option<Span>, ()> {
         if let Some(span) = self.span {
             return Ok(Some(span));
         }
@@ -272,10 +292,7 @@ impl DiagnosticBuilder {
             return Ok(Some(span));
         }
         if super::code_requires_span(self.code) {
-            Err(format!(
-                "诊断 {} 缺少 span：调用点未 .at(span) 且不在类型检查 walk 上下文中（编译器 bug，见 #324）",
-                self.code
-            ))
+            Err(())
         } else {
             Ok(None)
         }
@@ -428,8 +445,8 @@ impl I18nRegistry {
 
     /// 根据语言代码获取注册表（从统一 locale 加载器读取，与 MSG 翻译同源）
     pub fn new(lang: &str) -> &'static Self {
-        use std::sync::LazyLock;
         use std::collections::HashMap;
+        use std::sync::LazyLock;
 
         static REGISTRIES: LazyLock<HashMap<String, I18nRegistry>> = LazyLock::new(|| {
             let mut map = HashMap::new();
@@ -530,17 +547,29 @@ impl I18nRegistry {
     /// 键与错误码条目同住 locale JSON（字符串值），加载与渲染复用同一管线；
     /// 回退方向与错误码条目的 [`Self::fallbacks`] 一致（请求语言 → en → zh）。
     /// 键在整条回退链上都不存在时返回 `None`（调用方按缺参策略兜底）。
+    ///
+    /// #509 残留⑤护栏：本方法的键都是发射点的 `'static` 字面量，六个 locale
+    /// 文件的键集已机械对账（codes/tests 的键集对账测试）——整条链 miss 说明
+    /// 键拼错或键集漂移，help 会静默置空省略、与 message 缺参的 debug panic
+    /// 策略不对称。debug 下此情形直接断言失败，让漂移在测试期暴露。
     pub fn render_key(
         &self,
         key: &str,
         params: &[(&'static str, String)],
     ) -> Option<String> {
+        let mut found = None;
         for lang in [self.lang, "en", "zh"] {
             if let Some(template) = crate::util::i18n::translation_for(lang, key) {
-                return Some(Self::render_str(&template, params));
+                found = Some(Self::render_str(&template, params));
+                break;
             }
         }
-        None
+        debug_assert!(
+            found.is_some(),
+            "per-site 键 '{key}' 在整条回退链（{} → en → zh）上都不存在：help 将静默置空省略。键是发射点 'static 字面量且六文件键集已机械对账，整链 miss = 键拼错或键集漂移（issue #469 机制 / #509 残留⑤护栏）",
+            self.lang
+        );
+        found
     }
 
     /// 模板渲染算法（参数占位 `{key}` 替换，缺参占位符保留原样）。
@@ -677,9 +706,12 @@ mod span_enforcement_tests {
     }
 
     #[test]
-    #[should_panic(expected = "缺少 span")]
+    #[should_panic(expected = "missing span")]
     fn test_required_span_panics_without_context() {
-        // E1002 非豁免码：无显式 .at() 且不在 walk 上下文 → 拒绝构造
+        // E1002 非豁免码：无显式 .at() 且不在 walk 上下文 → 拒绝构造。
+        // panic 文案经 locales 渲染（#509 残留①：文案不在发射点硬编）——
+        // 钉住 en 使断言与环境语言配置无关（先例：arg_binding.rs 同款写法）。
+        crate::util::i18n::set_lang_from_string("en".to_string());
         let _ = ErrorCodeDefinition::type_mismatch("Int", "String").build();
     }
 

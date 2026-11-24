@@ -7,42 +7,71 @@ module
     slot[4] x : Int(64) @depth1
     slot[5] y : Int(64) @depth1
     slot[6] z : Int(64) @depth1
-    locals_total=11
+    locals_total=10
+    values_total=28
+    value v0: TypeRef("?") @block0
+    value v1: Bool @block0
+    value v2: Int(64) @block0
+    value v3: Int(64) @block0
+    value v4: TypeRef("?") @block0
+    value v5: Bool @block0
+    value v6: Int(64) @block0
+    value v7: Int(64) @block0
+    value v8: TypeRef("?") @block0
+    value v9: Bool @block0
+    value v10: Int(64) @block0
+    value v11: Int(64) @block0
+    value v12: TypeRef("?") @block0
+    value v13: Bool @block0
+    value v14: Int(64) @block0
+    value v15: Int(64) @block0
+    value v16: TypeRef("?") @block0
+    value v17: Bool @block0
+    value v18: Int(64) @block0
+    value v19: Int(64) @block0
+    value v20: TypeRef("?") @block0
+    value v21: Bool @block0
+    value v22: Int(64) @block0
+    value v23: Int(64) @block0
+    value v24: TypeRef("?") @block0
+    value v25: Bool @block0
+    value v26: Int(64) @block0
+    value v27: Int(64) @block0
     Load %0 <- int(1)
     Load %1 <- int(2)
-    Load %2 <- %0
-    Load %3 <- int(1)
-    Eq %4 <- %2, %3
-    Call %5 <- string("std.assert.assert") [%4] (def=d0)
-    Load %2 <- %1
-    Load %3 <- int(2)
-    Eq %4 <- %2, %3
-    Call %5 <- string("std.assert.assert") [%4] (def=d0)
-    Load %5 <- int(3)
-    Load %4 <- int(4)
-    Load %6 <- %5
-    Load %7 <- int(3)
-    Eq %3 <- %6, %7
-    Call %2 <- string("std.assert.assert") [%3] (def=d0)
-    Load %6 <- %4
-    Load %7 <- int(4)
-    Eq %3 <- %6, %7
-    Call %2 <- string("std.assert.assert") [%3] (def=d0)
-    Load %2 <- int(10)
-    Load %3 <- int(20)
+    Load v2 <- %0
+    Load v3 <- int(1)
+    Eq v1 <- v2, v3
+    Call v0 <- string("std.assert.assert") [v1] (def=d0)
+    Load v6 <- %1
+    Load v7 <- int(2)
+    Eq v5 <- v6, v7
+    Call v4 <- string("std.assert.assert") [v5] (def=d0)
+    Load %2 <- int(3)
+    Load %3 <- int(4)
+    Load v10 <- %2
+    Load v11 <- int(3)
+    Eq v9 <- v10, v11
+    Call v8 <- string("std.assert.assert") [v9] (def=d0)
+    Load v14 <- %3
+    Load v15 <- int(4)
+    Eq v13 <- v14, v15
+    Call v12 <- string("std.assert.assert") [v13] (def=d0)
+    Load %4 <- int(10)
+    Load %5 <- int(20)
     Load %6 <- int(30)
-    Load %8 <- %2
-    Load %9 <- int(10)
-    Eq %10 <- %8, %9
-    Call %7 <- string("std.assert.assert") [%10] (def=d0)
-    Load %8 <- %3
-    Load %9 <- int(20)
-    Eq %10 <- %8, %9
-    Call %7 <- string("std.assert.assert") [%10] (def=d0)
-    Load %8 <- %6
-    Load %9 <- int(30)
-    Eq %10 <- %8, %9
-    Call %7 <- string("std.assert.assert") [%10] (def=d0)
-    Ret %7
+    Load v18 <- %4
+    Load v19 <- int(10)
+    Eq v17 <- v18, v19
+    Call v16 <- string("std.assert.assert") [v17] (def=d0)
+    Load v22 <- %5
+    Load v23 <- int(20)
+    Eq v21 <- v22, v23
+    Call v20 <- string("std.assert.assert") [v21] (def=d0)
+    Load v26 <- %6
+    Load v27 <- int(30)
+    Eq v25 <- v26, v27
+    Call v24 <- string("std.assert.assert") [v25] (def=d0)
+    Ret v24
   init (locals=0)
     Call %0 <- string("main") [] (def=d1)

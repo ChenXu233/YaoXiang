@@ -1,19 +1,29 @@
 module
   fn main() -> Void
     slot[0] s : Int(64) @depth1
-    locals_total=6
-    Load %0 <- int(42)
-    Load %1 <- string("int")
-    Call %2 <- string("std.io.format_fallback") [%0, %1] (def=d0)
-    Load %3 <- %2
-    Load %4 <- string("42")
-    Call %1 <- string("std.string.contains") [%3, %4] (def=d1)
-    Load %5 <- string("int value rendered")
-    Call %0 <- string("std.assert.assert") [%1, %5] (def=d2)
-    Drop %2
-    Load %1 <- string("io_ops: print/println smoke")
-    Call %0 <- string("std.io.println") [%1] (def=d3)
-    Drop %2
-    Ret %0
+    locals_total=4
+    values_total=9
+    value v0: Int(64) @block0
+    value v1: Generic { name: "String", args: [] } @block0
+    value v2: TypeRef("?") @block0
+    value v3: TypeRef("?") @block0
+    value v4: Generic { name: "String", args: [] } @block0
+    value v5: Generic { name: "String", args: [] } @block0
+    value v6: Generic { name: "String", args: [] } @block0
+    value v7: TypeRef("?") @block0
+    value v8: Generic { name: "String", args: [] } @block0
+    Load v0 <- int(42)
+    Load v1 <- string("int")
+    Call %0 <- string("std.io.format_fallback") [v0, v1] (def=d0)
+    Load v4 <- %0
+    Load v5 <- string("42")
+    Call v3 <- string("std.string.contains") [v4, v5] (def=d1)
+    Load v6 <- string("int value rendered")
+    Call v2 <- string("std.assert.assert") [v3, v6] (def=d2)
+    Drop %0
+    Load v8 <- string("io_ops: print/println smoke")
+    Call v7 <- string("std.io.println") [v8] (def=d3)
+    Drop %0
+    Ret v7
   init (locals=0)
     Call %0 <- string("main") [] (def=d4)

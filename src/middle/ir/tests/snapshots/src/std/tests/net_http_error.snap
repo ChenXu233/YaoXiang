@@ -1,10 +1,15 @@
 module
   fn main() -> Void
     locals_total=4
-    Load %0 <- string("not a url")
-    Call %1 <- string("std.dict.new") [] (def=d0)
-    Load %2 <- int(5)
-    Call %3 <- string("std.net.http_get") [%0, %1, %2] (def=d1)
-    Ret %3
+    values_total=4
+    value v0: TypeRef("?") @block0
+    value v1: Generic { name: "String", args: [] } @block0
+    value v2: TypeRef("?") @block0
+    value v3: Int(64) @block0
+    Load v1 <- string("not a url")
+    Call v2 <- string("std.dict.new") [] (def=d0)
+    Load v3 <- int(5)
+    Call v0 <- string("std.net.http_get") [v1, v2, v3] (def=d1)
+    Ret v0
   init (locals=0)
     Call %0 <- string("main") [] (def=d2)

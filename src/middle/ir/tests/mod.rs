@@ -5,16 +5,22 @@
 
 pub mod alias_fn_value;
 pub mod batch_method_bind;
+pub mod blocks;
 pub mod corpus;
 pub mod def_assign;
 pub mod fn_param_slots;
 pub mod generic_params;
+pub mod ir;
 pub mod ir_build;
 pub mod local_slots;
 pub mod namespace_scope;
 pub mod native_fn_value;
 pub mod overload_resolutions;
+mod record_evidence_layout;
 pub mod release_plan_spans;
 pub mod snapshot;
 pub mod type_decl;
+mod type_decl_quantity;
+pub mod values;
 pub mod verify;
+mod witness_quantity;

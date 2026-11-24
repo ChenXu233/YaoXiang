@@ -271,7 +271,7 @@
     "title": "field not found",
     "message": "accessed a non-existent struct field",
     "template": "field '{field}' not found in struct '{struct}'",
-    "help": "check the available fields of the struct",
+    "help": "Check the fields available on the struct; for an evidence field path in a predicate body, verify the evidence field name in the record definition.",
     "example": "point.z;",
     "error_output": "error[E1042]: field not found\n --> example.yx:1:7\n  |\n1 | point.z;\n  |       ^ field 'z' not found in struct 'Point'"
   },
@@ -657,6 +657,8 @@
     "example": "",
     "error_output": ""
   },
+  "E8001.span_missing.message": "Diagnostic {code} missing span: no .at(span) at the emission point and not inside a typecheck walk context (compiler bug, see #324)",
+  "E8001.span_missing.help": "Add .at(span) at the emission point, or construct the diagnostic inside a typecheck walk context",
   "E8002": {
     "title": "Unexpected Panic",
     "message": "The compiler encountered an unexpected panic",
@@ -851,6 +853,8 @@
   "E4018.no_free_var.note": "\n\n(The constraint has no free variables; the annotation itself is unsatisfiable.)",
   "E4018.proof_false.note": "\n\n(Proof function returned false; no concrete counterexample.)",
   "E4018.proof_error.note": "\n\n(Proof function failed to execute; no concrete counterexample.)",
+  "E4018.proof_false.constraint": "Proof function '{func}' returned false: constraint not satisfied (args: {args}); check the constraint or change the arguments",
+  "E4018.proof_error.constraint": "Proof function '{func}' failed to execute: {error}",
   "E4019": {
     "title": "Type equality does not hold",
     "message": "Type equality falsified within the proof pipeline",
@@ -898,11 +902,19 @@
     "example": "if = 1;",
     "error_output": "error[E0018]: keyword used as name\n --> example.yx:1:1\n  |\n1 | if = 1;\n  | ^^ 'if' is a keyword"
   },
+  "E0019": {
+    "title": "expression nesting too deep",
+    "message": "expressions nested deeper than {limit} levels exceed the parser recursion limit",
+    "template": "expression nesting exceeds the maximum recursion depth ({limit})",
+    "help": "simplify the expression or split deeply nested parts into intermediate variables or helper functions",
+    "example": "main = () => { y = - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 1\n    print(y) }",
+    "error_output": "error[E0019]: expression nesting too deep\n --> example.yx:1:24\n  |\n1 | main = () => { y = - - - ...\n  |                        ^ expression nesting exceeds the maximum recursion depth (1024)"
+  },
   "E1092": {
     "title": "invalid refinement type argument form",
     "message": "refinement type argument cannot be converted to a compile-time constant expression",
     "template": "'{name}' requires a compile-time constant argument, but the given argument cannot be converted",
-    "help": "predicate/proof function arguments must be literals, variables, or single-argument type applications, otherwise the refinement constraint cannot be generated",
+    "help": "Predicate/proof function arguments must be literals, variables, or single-parameter type applications; otherwise, a refinement constraint cannot be generated. In a type position or predicate body, an evidence field path must consist solely of the evidence field of the predicate's sole formal parameter, and its base name must match the name of the applied argument.",
     "example": "y: IsSmall(List(Int)) = 9999",
     "error_output": "error[E1092]: 'IsSmall' requires a compile-time constant argument, but the given argument cannot be converted",
     "messageinement type argument cannot be converted to a": "ref compile-time constant expression"
@@ -1130,6 +1142,12 @@
     "template": "Measure does not hold: this call site cannot prove that the measure strictly decreases\n\nCounterexample:\n{counterexample}",
     "help": "This is a termination obligation of refinement type propositions: for recursive functions annotated with the `Terminates` measure, every recursive call site must prove that the measure strictly decreases. The counterexample provides a set of values for which the decrease does not hold. Please check whether the measure is appropriate, or add branch guards so that the decrease holds on recursive paths. See RFC-027a."
   },
+  "E4023": {
+    "title": "Cannot be proven within the kernel",
+    "message": "The compiler could not prove this obligation within the given resources and inference rules (this does not mean the proposition is false)",
+    "template": "Cannot prove: {proposition} ({reason})",
+    "help": "This is a boundary of the compiler's reasoning, not a program error. Supply compile-time-known arguments or evidence, or rewrite the obligation into a form the kernel can decide (for example, give the type argument's value explicitly). See RFC-027 Section 12.3."
+  },
   "package_outdated_none": "All dependencies are up to date.",
   "package_outdated_found": "Found {0} outdated dependencies:",
   "package_outdated_row": "  {0}: {1} -> {2}",
@@ -1217,6 +1235,22 @@
     "help": "Pass a literal or a compile-time constant, or make that parameter an ordinary runtime value parameter",
     "example": "f: (N: Int) -> (n: N) -> Int = (n) => n\nk: (y: Int) -> Int = f(y)",
     "error_output": "error[E1113]: compile-time value parameter lacks compile-time evidence\n --> example.yx:2:24\n  |\n2 | k: (y: Int) -> Int = f(y)\n  |                        ^ compile-time value parameter 'N' requires compile-time evidence, but the argument cannot be determined at compile time"
+  },
+  "E1114": {
+    "title": "Witness field is not readable at value level",
+    "message": "Witness field '{field}' is compile-time evidence of record '{type}' and has no runtime data slot; it cannot be read at value level",
+    "template": "Witness field '{field}' is compile-time evidence of record '{type}' and has no runtime data slot; it cannot be read at value level",
+    "help": "The witness field is used at the type level: `b.w` is an evidence item that can serve as a premise in a proof; it is not a value-level read (there is no data slot at runtime). When runtime data is needed, define the field as a regular data field.",
+    "example": "Box: Type = { v: Int, w: Pos(v) }  // w is a witness field with no runtime data slot\nmain: () -> Void = {\n    b: Box = Box(v = 1)\n    b.w\n}",
+    "error_output": "error[E1114]: witness field is not readable at value level\n --> example.yx:5:5\n  |\n5 |     b.w\n  |     ^^^ witness field 'w' is compile-time evidence of record 'Box' and has no runtime data slot; it cannot be read at value level"
+  },
+  "E1115": {
+    "title": "Witness-bearing record is immutable",
+    "message": "Record '{type}' carries a witness field, so all of its fields must stay unchanged after construction",
+    "template": "Record '{type}' carries a witness field, so all of its fields must stay unchanged after construction",
+    "help": "A witness-bearing record cannot declare `mut` fields, assign fields, take `&mut` borrows, or call methods that require a write borrow; move mutable data into a record without witnesses.",
+    "example": "Box: Type = { v: Int, w: Pos(v) }\nmain: () -> Void = {\n    b: Box = Box(v = 1)\n    b.v = 2\n}",
+    "error_output": "error[E1115]: witness-bearing record is immutable\n --> example.yx:4:5\n  |\n4 |     b.v = 2\n  |     ^^^^^^^ record 'Box' carries a witness field, so all of its fields must stay unchanged after construction"
   },
   "W1007": {
     "title": "Module import cycle",

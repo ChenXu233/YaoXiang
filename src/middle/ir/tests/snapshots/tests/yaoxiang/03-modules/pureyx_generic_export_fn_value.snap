@@ -3,54 +3,90 @@ module
     slot[0] f : Int(64) @depth1
     slot[1] v : Int(64) @depth1
     slot[2] doubled : Int(64) @depth1
-    locals_total=10
+    locals_total=6
+    values_total=30
+    value v0: Int(64) @block0
+    value v1: Int(64) @block0
+    value v2: Int(64) @block0
+    value v3: Int(64) @block0
+    value v4: Int(64) @block0
+    value v5: Int(64) @block0
+    value v6: Generic { name: "Vec", args: [Int(64)] } @block0
+    value v7: TypeRef("?") @block0
+    value v8: Fn { params: [Ref { mutable: false, inner: Generic { name: "Vec", args: [TypeVar(TypeVar(55))] } }, Fn { params: [TypeVar(TypeVar(55))], return_type: TypeVar(TypeVar(56)) }], return_type: Generic { name: "Vec", args: [TypeVar(TypeVar(56))] } } @block0
+    value v9: TypeRef("?") @block0
+    value v10: Bool @block0
+    value v11: TypeRef("?") @block0
+    value v12: Int(64) @block0
+    value v13: Generic { name: "Vec", args: [Int(64)] } @block0
+    value v14: Int(64) @block0
+    value v15: Generic { name: "String", args: [] } @block0
+    value v16: TypeRef("?") @block0
+    value v17: Bool @block0
+    value v18: TypeRef("?") @block0
+    value v19: Int(64) @block0
+    value v20: Generic { name: "Vec", args: [Int(64)] } @block0
+    value v21: Int(64) @block0
+    value v22: Generic { name: "String", args: [] } @block0
+    value v23: TypeRef("?") @block0
+    value v24: Bool @block0
+    value v25: TypeRef("?") @block0
+    value v26: Int(64) @block0
+    value v27: Generic { name: "Vec", args: [Int(64)] } @block0
+    value v28: Int(64) @block0
+    value v29: Generic { name: "String", args: [] } @block0
     MakeClosure %0 <- std.list.map env=[] (def=d0)
     AllocArray %1 size=int(3), elem=int(1)
-    Load %2 <- int(1)
-    Load %3 <- int(0)
-    StoreIndex %1[%3] <- %2
-    Load %4 <- int(2)
-    Load %5 <- int(1)
-    StoreIndex %1[%5] <- %4
-    Load %6 <- int(3)
-    Load %7 <- int(2)
-    StoreIndex %1[%7] <- %6
-    Load %3 <- %1
-    MakeClosure %4 <- closure_0 env=[] (def=d1)
-    Load %5 <- %0
-    CallDyn %2 <- %5 [%3, %4]
+    Load v0 <- int(1)
+    Load v1 <- int(0)
+    StoreIndex %1[v1] <- v0
+    Load v2 <- int(2)
+    Load v3 <- int(1)
+    StoreIndex %1[v3] <- v2
+    Load v4 <- int(3)
+    Load v5 <- int(2)
+    StoreIndex %1[v5] <- v4
+    Load v6 <- %1
+    MakeClosure v7 <- closure_0 env=[] (def=d1)
+    Load v8 <- %0
+    CallDyn %2 <- v8 [v6, v7]
     Drop %1
-    Load %7 <- %2
-    Load %8 <- int(0)
-    LoadIndex %5 <- %7[%8]
-    Load %6 <- int(2)
-    Eq %4 <- %5, %6
-    Load %9 <- string("f(v, x => x*2)[0] == 2")
-    Call %3 <- string("std.assert.assert") [%4, %9] (def=d2)
-    Load %7 <- %2
-    Load %8 <- int(1)
-    LoadIndex %5 <- %7[%8]
-    Load %6 <- int(4)
-    Eq %4 <- %5, %6
-    Load %9 <- string("f(v, x => x*2)[1] == 4")
-    Call %3 <- string("std.assert.assert") [%4, %9] (def=d2)
-    Load %7 <- %2
-    Load %8 <- int(2)
-    LoadIndex %5 <- %7[%8]
-    Load %6 <- int(6)
-    Eq %4 <- %5, %6
-    Load %9 <- string("f(v, x => x*2)[2] == 6")
-    Call %3 <- string("std.assert.assert") [%4, %9] (def=d2)
+    Load v13 <- %2
+    Load v14 <- int(0)
+    LoadIndex v11 <- v13[v14]
+    Load v12 <- int(2)
+    Eq v10 <- v11, v12
+    Load v15 <- string("f(v, x => x*2)[0] == 2")
+    Call v9 <- string("std.assert.assert") [v10, v15] (def=d2)
+    Load v20 <- %2
+    Load v21 <- int(1)
+    LoadIndex v18 <- v20[v21]
+    Load v19 <- int(4)
+    Eq v17 <- v18, v19
+    Load v22 <- string("f(v, x => x*2)[1] == 4")
+    Call v16 <- string("std.assert.assert") [v17, v22] (def=d2)
+    Load v27 <- %2
+    Load v28 <- int(2)
+    LoadIndex v25 <- v27[v28]
+    Load v26 <- int(6)
+    Eq v24 <- v25, v26
+    Load v29 <- string("f(v, x => x*2)[2] == 6")
+    Call v23 <- string("std.assert.assert") [v24, v29] (def=d2)
     Drop %2
     Drop %0
     Drop %1
-    Ret %3
+    Ret v23
   fn closure_0(Int(64)) -> Void
     slot[0] x : Int(64) @depth2
-    locals_total=8
-    Load %0 <- %1
-    Load %2 <- int(2)
-    Mul %3 <- %0, %2
-    Ret %3
+    locals_total=4
+    values_total=4
+    value v0: TypeRef("?") @block0
+    value v1: TypeVar(TypeVar(44)) @block0
+    value v2: TypeVar(TypeVar(44)) @block0
+    value v3: Int(64) @block0
+    Load v2 <- %0
+    Load v3 <- int(2)
+    Mul v1 <- v2, v3
+    Ret v1
   init (locals=0)
     Call %0 <- string("main") [] (def=d3)

@@ -9,7 +9,7 @@
 
 use std::collections::BTreeMap;
 
-use crate::package::lock::{LockFile};
+use crate::package::lock::LockFile;
 
 #[test]
 fn test_new_lock_file() {

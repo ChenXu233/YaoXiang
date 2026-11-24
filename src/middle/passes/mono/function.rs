@@ -3,7 +3,7 @@
 //! 提供函数单态化相关的辅助函数和trait
 
 use crate::frontend::core::sema::MonoType;
-use crate::middle::ir::ir::{BasicBlock, FunctionBody, FunctionIR, LocalSlot, ModuleIR};
+use crate::middle::ir::ir::{BasicBlock, FunctionBody, FunctionIR, LocalSlot, ModuleIR, ValueInfo};
 use crate::middle::passes::mono::instance::{FunctionId, InstantiationRequest};
 use std::collections::HashMap;
 
@@ -181,6 +181,8 @@ impl FunctionMonomorphizer for super::Monomorphizer {
                     scope_depth: slot.scope_depth,
                     // 量词是声明侧的绑定事实，与类型替换无关：原样投影。
                     quantity: slot.quantity,
+                    // 生成帧同理：特化不改槽位归属，内层隔离判据按它比对（WBS 2.1.4）。
+                    origin: slot.origin,
                 })
                 .collect(),
             _ => Vec::new(),
@@ -189,6 +191,22 @@ impl FunctionMonomorphizer for super::Monomorphizer {
         // 死变体），块级改写退化为原样克隆——不再有逐指令映射这一步。
         let new_blocks: Vec<BasicBlock> = match &generic_func.body {
             FunctionBody::Code { blocks, .. } => blocks.clone(),
+            _ => Vec::new(),
+        };
+        // 7b.2：值表类型随特化替换；定义块与槽映射原样投影（块未重编号）。
+        let new_values: Vec<ValueInfo> = match &generic_func.body {
+            FunctionBody::Code { values, .. } => values
+                .iter()
+                .map(|info| ValueInfo {
+                    ty: self.substitute_single_type(&info.ty, &type_param_map),
+                    debug_name: info.debug_name.clone(),
+                    defining_block: info.defining_block,
+                })
+                .collect(),
+            _ => Vec::new(),
+        };
+        let new_value_slots: Vec<usize> = match &generic_func.body {
+            FunctionBody::Code { value_slots, .. } => value_slots.clone(),
             _ => Vec::new(),
         };
         let new_entry = match &generic_func.body {
@@ -207,6 +225,8 @@ impl FunctionMonomorphizer for super::Monomorphizer {
                 blocks: new_blocks,
                 entry: new_entry,
                 locals: new_locals,
+                values: new_values,
+                value_slots: new_value_slots,
             },
         }
     }

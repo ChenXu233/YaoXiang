@@ -2,68 +2,108 @@ module
   fn gt(Int(64)) -> Fn { params: [Int(64)], return_type: Bool }
     slot[0] t : Int(64) @depth1
     locals_total=2
-    MakeClosure %0 <- __gt_l0 env=[%1] (def=d0)
-    Ret %0
+    values_total=1
+    value v0: TypeRef("?") @block0
+    MakeClosure v0 <- __gt_l0 env=[%0] (def=d0)
+    Ret v0
   fn make_adder(Int(64)) -> Fn { params: [Int(64)], return_type: Int(64) }
     slot[0] n : Int(64) @depth1
     locals_total=2
-    MakeClosure %0 <- __make_adder_l0 env=[%1] (def=d1)
-    Ret %0
+    values_total=1
+    value v0: TypeRef("?") @block0
+    MakeClosure v0 <- __make_adder_l0 env=[%0] (def=d1)
+    Ret v0
   fn main() -> Void
     slot[0] add5 : Int(64) @depth1
     slot[1] evens : Int(64) @depth1
-    locals_total=13
-    Load %0 <- int(5)
-    Call %1 <- string("make_adder") [%0] (def=d2)
-    Load %2 <- int(3)
-    Load %3 <- %1
-    CallDyn %4 <- %3 [%2]
-    Load %5 <- int(8)
-    Eq %6 <- %4, %5
-    Load %7 <- string("make_adder(5)(3) == 8")
-    Call %0 <- string("std.assert.assert") [%6, %7] (def=d3)
-    AllocArray %6 size=int(4), elem=int(1)
-    Load %4 <- int(1)
-    Load %5 <- int(0)
-    StoreIndex %6[%5] <- %4
-    Load %2 <- int(6)
-    Load %3 <- int(1)
-    StoreIndex %6[%3] <- %2
-    Load %7 <- int(3)
-    Load %8 <- int(2)
-    StoreIndex %6[%8] <- %7
-    Load %9 <- int(8)
-    Load %10 <- int(3)
-    StoreIndex %6[%10] <- %9
-    Load %11 <- int(5)
-    Call %12 <- string("gt") [%11] (def=d4)
-    Call %0 <- string("std.list.filter") [%6, %12] (def=d5)
-    Load %3 <- %0
-    Call %5 <- string("std.list.len") [%3] (def=d6)
-    Load %2 <- int(2)
-    Eq %4 <- %5, %2
-    Load %7 <- string("gt(5) 谓词 filter 保留 6,8")
-    Call %6 <- string("std.assert.assert") [%4, %7] (def=d3)
-    Drop %1
+    locals_total=5
+    values_total=25
+    value v0: Int(64) @block0
+    value v1: TypeRef("?") @block0
+    value v2: Bool @block0
+    value v3: Int(64) @block0
+    value v4: Int(64) @block0
+    value v5: Int(64) @block0
+    value v6: Fn { params: [Int(64)], return_type: Int(64) } @block0
+    value v7: Generic { name: "String", args: [] } @block0
+    value v8: TypeRef("?") @block0
+    value v9: Int(64) @block0
+    value v10: Int(64) @block0
+    value v11: Int(64) @block0
+    value v12: Int(64) @block0
+    value v13: Int(64) @block0
+    value v14: Int(64) @block0
+    value v15: Int(64) @block0
+    value v16: Int(64) @block0
+    value v17: Fn { params: [Int(64)], return_type: Bool } @block0
+    value v18: Int(64) @block0
+    value v19: TypeRef("?") @block0
+    value v20: Bool @block0
+    value v21: TypeRef("?") @block0
+    value v22: Int(64) @block0
+    value v23: Generic { name: "Vec", args: [Int(64)] } @block0
+    value v24: Generic { name: "String", args: [] } @block0
+    Load v0 <- int(5)
+    Call %0 <- string("make_adder") [v0] (def=d2)
+    Load v5 <- int(3)
+    Load v6 <- %0
+    CallDyn v3 <- v6 [v5]
+    Load v4 <- int(8)
+    Eq v2 <- v3, v4
+    Load v7 <- string("make_adder(5)(3) == 8")
+    Call v1 <- string("std.assert.assert") [v2, v7] (def=d3)
+    AllocArray v8 size=int(4), elem=int(1)
+    Load v9 <- int(1)
+    Load v10 <- int(0)
+    StoreIndex v8[v10] <- v9
+    Load v11 <- int(6)
+    Load v12 <- int(1)
+    StoreIndex v8[v12] <- v11
+    Load v13 <- int(3)
+    Load v14 <- int(2)
+    StoreIndex v8[v14] <- v13
+    Load v15 <- int(8)
+    Load v16 <- int(3)
+    StoreIndex v8[v16] <- v15
+    Load v18 <- int(5)
+    Call v17 <- string("gt") [v18] (def=d4)
+    Call %1 <- string("std.list.filter") [v8, v17] (def=d5)
+    Load v23 <- %1
+    Call v21 <- string("std.list.len") [v23] (def=d6)
+    Load v22 <- int(2)
+    Eq v20 <- v21, v22
+    Load v24 <- string("gt(5) 谓词 filter 保留 6,8")
+    Call v19 <- string("std.assert.assert") [v20, v24] (def=d3)
     Drop %0
-    Ret %6
+    Drop %1
+    Ret v19
   fn __gt_l0(Int(64)) -> Bool
     slot[0] t : Int(64) @depth1
     slot[1] x : Int(64) @depth1
-    locals_total=6
-    Load %0 <- %1
-    Load %2 <- %3
-    Gt %4 <- %0, %2
-    Ret %4
+    locals_total=5
+    values_total=4
+    value v0: TypeRef("?") @block0
+    value v1: Bool @block0
+    value v2: Int(64) @block0
+    value v3: Int(64) @block0
+    Load v2 <- %0
+    Load v3 <- %1
+    Gt v1 <- v2, v3
+    Ret v1
     Ret
   fn __make_adder_l0(Int(64)) -> Int(64)
     slot[0] n : Int(64) @depth1
     slot[1] x : Int(64) @depth1
-    locals_total=6
-    Load %0 <- %1
-    Load %2 <- %3
-    Add %4 <- %0, %2
-    Ret %4
+    locals_total=5
+    values_total=4
+    value v0: TypeRef("?") @block0
+    value v1: Int(64) @block0
+    value v2: Int(64) @block0
+    value v3: Int(64) @block0
+    Load v2 <- %0
+    Load v3 <- %1
+    Add v1 <- v2, v3
+    Ret v1
     Ret
   init (locals=0)
     Call %0 <- string("main") [] (def=d7)

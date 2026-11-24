@@ -3,16 +3,18 @@
 //! §3.2: 原类型（Int 默认 8 字节 = Int(64)）
 //! §4.1-§4.10: 表达式分类
 //! RFC-010: 统一类型语法
-//! RFC-029: 模块限定名 `{module_key}.{bare}`（ir_gen 的 `qualify_names` 与
+//! RFC-029: 模块限定名 `{module_key}.{bare}`（`lower/module_ir.rs` 的 `qualify_names` 与
 //!   `SymbolTable::qualify` 同源）
 //! RFC-039 §3.4.8 ①: 跨模块限定调用 `lib.f(x)` 发泛型实例化请求（generic_id
 //!   用限定名，与 merged-IR 的函数表键对齐）
+//! issue #509 残留④（WBS 3.21.5）：二元运算 Never 短路判据收敛为共享纯函数
+//!   （expressions::never_short_circuit）——裁决表 pin（两遍历器同输入同裁决）
 
-use crate::frontend::core::sema::probe::TypeLevelNamespace;
+use crate::ast::Expr;
 use crate::frontend::core::sema::inference::expressions::ExpressionInferrer;
 use crate::frontend::core::sema::inference::scope::ScopeManager;
+use crate::frontend::core::sema::probe::TypeLevelNamespace;
 use crate::frontend::core::types::{MonoType, TypeConstraintSolver};
-use crate::ast::Expr;
 use crate::util::span::Span;
 
 use std::collections::HashMap;
@@ -168,7 +170,7 @@ fn test_infer_undefined_variable() {
 
 /// RFC-039 §3.4.8 ① / RFC-029：`use lib` 后限定调用泛型函数 `lib.f(x)` 必须
 /// 发出实例化请求，且 `generic_id` 用与 merged-IR 同源的限定名 `lib.f`
-///（ir_gen 的 `qualify_names` 把每个模块的顶层函数重写为 `{module_key}.{bare}`；
+///（`lower/module_ir.rs` 的 `qualify_names` 把每个模块的顶层函数重写为 `{module_key}.{bare}`；
 /// 用裸名 `f` 在 merged-IR 的函数表里匹配不到，请求会被下游静默跳过）。
 ///
 /// D2 裁甲（2026-10-10）：用户模块导出随 `Export::type_params` 携带声明期
@@ -441,5 +443,50 @@ fn test_qualified_generic_call_borrowed_param_uses_export_declared_type_params()
         vec!["T".to_string()],
         "声明序类型参数名必须由导出快照携带（用户模块 Export::type_params），实际：{:?}",
         triples[0].1
+    );
+}
+
+// ============ issue #509 残留④锚（WBS 3.21.5）============
+
+/// 判据（issue #509 残留④，门 = 病史 + 证明）：二元运算 Never 短路判据原为
+/// `ExpressionInferrer::infer_binary` 与 `StatementChecker` 二元运算臂两份
+/// 逐字拷贝（仅注释互指），一处改另一处忘改即两路径裁决分歧（#469 处 3 引入、
+/// #509 收敛为共享纯函数）。本测试钉住裁决表——两个遍历器现在调用**同一个**
+/// 函数，同输入必得同裁决；任何一侧的裁决变化都必然先过这张表。
+#[test]
+fn test_never_short_circuit_criterion_pins_shared_verdict_for_both_traversers() {
+    use crate::frontend::core::sema::inference::expressions::{
+        never_short_circuit, NeverShortCircuit,
+    };
+
+    // Arrange：四个输入形态——两侧 Never / 仅左 / 仅右 / 两侧具体类型
+    let never = MonoType::Never;
+    let int = MonoType::Int(64);
+
+    // Act & Assert：裁决表（两遍历器共用的唯一实现）
+    assert!(
+        matches!(
+            never_short_circuit(&never, &never),
+            Some(NeverShortCircuit::Both)
+        ),
+        "两侧都是 Never 必须裁决 Both（调用方发 fresh var 推迟）"
+    );
+    assert!(
+        matches!(
+            never_short_circuit(&never, &int),
+            Some(NeverShortCircuit::TakeRight)
+        ),
+        "仅左侧 Never 必须裁决 TakeRight（结果取右侧具体形态）"
+    );
+    assert!(
+        matches!(
+            never_short_circuit(&int, &never),
+            Some(NeverShortCircuit::TakeLeft)
+        ),
+        "仅右侧 Never 必须裁决 TakeLeft（结果取左侧具体形态）"
+    );
+    assert!(
+        never_short_circuit(&int, &int).is_none(),
+        "两侧都非 Never 必须返回 None（按正常推断走，不短路）"
     );
 }

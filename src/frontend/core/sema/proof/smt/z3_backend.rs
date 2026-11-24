@@ -257,6 +257,17 @@ unsafe fn sort_to_z3(
     }
 }
 
+/// 字符串是否是十进制整数字面量（可选前导负号 + 纯 ASCII 数字）。
+///
+/// Atom 通道的数字/变量判据（issue #561）：判据成立即整串原样交给
+/// `Z3_mk_numeral`（任意精度），不经任何固定宽度解析——超过 i64 的字面量
+/// 不再落自由变量、可 parse 但超 i32 的字面量不再被 `as i32` 截断。
+/// 变量名（标识符）不可能全为数字（词法规则），与变量分支无歧义。
+fn is_decimal_integer(s: &str) -> bool {
+    let digits = s.strip_prefix('-').unwrap_or(s);
+    !digits.is_empty() && digits.bytes().all(|b| b.is_ascii_digit())
+}
+
 /// SMTExpr → Z3_ast
 unsafe fn expr_to_z3(
     ctx: super::z3_ffi::Z3_context,
@@ -264,8 +275,16 @@ unsafe fn expr_to_z3(
 ) -> super::z3_ffi::Z3_ast {
     match expr {
         SMTExpr::Atom(s) => {
-            if let Ok(n) = s.parse::<i64>() {
-                super::z3_ffi::Z3_mk_int(ctx, n as i32, super::z3_ffi::Z3_mk_int_sort(ctx))
+            if is_decimal_integer(s) {
+                // 整数字面量：十进制串原样进 Z3_mk_numeral（任意精度，issue #561）。
+                // 原实现 `parse::<i64>` 失败落自由变量（超 i64 字面量被当成变量，
+                // #559 直评面 E4018 伪反例机理）、`as i32` 截断（超 i32 字面量
+                // 判向失真）——两条失真一并消灭。
+                super::z3_ffi::Z3_mk_numeral(
+                    ctx,
+                    CString::new(s.as_str()).unwrap().as_ptr(),
+                    super::z3_ffi::Z3_mk_int_sort(ctx),
+                )
             } else if s == "true" {
                 super::z3_ffi::Z3_mk_true(ctx)
             } else if s == "false" {
@@ -311,7 +330,16 @@ unsafe fn expr_to_z3(
 
                 // 算术运算
                 "+" => super::z3_ffi::Z3_mk_add(ctx, z3_args.len() as u32, z3_args.as_ptr()),
-                "-" => super::z3_ffi::Z3_mk_sub(ctx, z3_args.len() as u32, z3_args.as_ptr()),
+                "-" => {
+                    if z3_args.len() == 1 {
+                        // 一元负号：`Z3_mk_sub` 官方语义是 `args[0] - ... - args[n-1]`，
+                        // 单参数退化为恒等——取负必须走 `Z3_mk_unary_minus`
+                        //（issue #561：修前负号整体丢失，`(- 5) > 0` 被判成 `5 > 0`）
+                        super::z3_ffi::Z3_mk_unary_minus(ctx, z3_args[0])
+                    } else {
+                        super::z3_ffi::Z3_mk_sub(ctx, z3_args.len() as u32, z3_args.as_ptr())
+                    }
+                }
                 "*" => super::z3_ffi::Z3_mk_mul(ctx, z3_args.len() as u32, z3_args.as_ptr()),
                 "div" => super::z3_ffi::Z3_mk_div(ctx, z3_args[0], z3_args[1]),
                 "mod" => super::z3_ffi::Z3_mk_mod(ctx, z3_args[0], z3_args[1]),

@@ -64,7 +64,7 @@ dead-code = "warn"
 - **span 豁免**：否
 - **模板**：`未使用的导入：'{name}'`
 - **帮助**：考虑移除未使用的导入
-- **发射点**：`src/frontend/core/sema/checker.rs:2931`
+- **发射点**：`src/frontend/core/sema/checker.rs:3589`
 
 ### W1004：未使用的私有变量
 
@@ -88,7 +88,7 @@ dead-code = "warn"
 - **span 豁免**：否
 - **模板**：`本地模块 '{module}' 遮蔽了依赖包 '{dependency}'`
 - **帮助**：本地模块解析优先级最高（RFC-014）：'./src/{module}' 覆盖 .yaoxiang/vendor/ 中的依赖包 '{dependency}'。若遮蔽非本意请重命名本地模块；可用 --deny-shadowing 将其升级为错误
-- **发射点**：`src/driver/arms.rs:676`、`src/util/diagnostic/command.rs:87`
+- **发射点**：`src/driver/arms.rs:676`、`src/util/diagnostic/command.rs:94`
 
 ### W1007：模块导入环
 
@@ -96,7 +96,7 @@ dead-code = "warn"
 - **span 豁免**：否
 - **模板**：`模块导入环 {cycle}：环内初始化顺序不可判定，环内先后只按路径字典序作确定性约定（非语义保证）`
 - **帮助**：初始化顺序按 use 依赖的拓扑序决定；环内先后只有「环内路径字典序」这一确定性约定，不是语义保证。打破环（把环上某条 use 移出环，或改为函数体里的延迟求值）即可让初始化顺序可判定。与 E3019 的分工：E3019 判单元内顶层绑定之间的初始化成环，本码判模块之间的导入成环。
-- **发射点**：`src/driver/arms.rs:1853`
+- **发射点**：`src/driver/arms.rs:1877`
 
 ### W1063：const 泛型约束无法求值
 
@@ -104,7 +104,7 @@ dead-code = "warn"
 - **span 豁免**：否
 - **模板**：`const 泛型约束无法求值: \`{constraint}\``
 - **帮助**：确保 const 参数是编译期常量
-- **发射点**：`src/frontend/core/sema/checker.rs:1207`
+- **发射点**：`src/frontend/core/sema/checker.rs:1437`
 
 ### W1080：编译期证明降级
 
@@ -120,7 +120,7 @@ dead-code = "warn"
 - **span 豁免**：否
 - **模板**：`{count} 条终止性测度义务未判定（SMT 求解器不可用）`
 - **帮助**：安装 Z3 求解器后重新检查，以获得终止性判定；「未判定」不等于「不终止」，但义务的判定被跳过了
-- **发射点**：`src/frontend/core/sema/checker.rs:1194`
+- **发射点**：`src/frontend/core/sema/checker.rs:1424`
 
 ### W1082：所有权分析降级
 
@@ -128,7 +128,7 @@ dead-code = "warn"
 - **span 豁免**：否
 - **模板**：`所有权分析降级：本次编译没有函数体检查器（类型账本与调用点所有权表缺失），所有权判定按空账本进行、不检测借用冲突`
 - **帮助**：这是编译器内部的阶段契约缺陷，不是你的程序写错了：所有权层运行时拿不到函数体检查器提供的类型账本与调用点所有权表，于是「什么都不冲突」地放行——借用冲突检查被整体跳过。请把这条诊断连同最小复现程序报成 issue。
-- **发射点**：`src/frontend/core/sema/checker.rs:1280`
+- **发射点**：`src/frontend/core/sema/checker.rs:1511`
 
 ### W1090：义务已产出但无消费者
 
@@ -136,7 +136,7 @@ dead-code = "warn"
 - **span 豁免**：是
 - **模板**：`义务字段 \`{field}\` 在 {file} 已产出但从未被消费：{detail}`
 - **帮助**：这是编译器内部的阶段契约缺陷，不是你的程序写错了：某阶段产出的义务字段没有被下一阶段读取，义务的效果可能已被静默丢弃。请把这条诊断连同字段名与文件路径报成 issue，并附最小复现程序。  本码属 **W 族**（码号前缀 W），但**发射级别为 error**：2026-10-13 用户裁决（WBS 4.3.2，RFC-039 D5 的终态）**同码升 E**——不新增 E 码（同一事实两个码即平行表示），发射级别由显式 severity 决定；触发即计入 error_count 并改变退出码。注意：健康程序零发射（义务全部有交付标记时不报），因此升级只在此缺陷真的出现时影响构建结果。
-- **发射点**：`src/driver/obligations.rs:105`、`src/driver/obligations.rs:535`
+- **发射点**：`src/driver/obligations.rs:105`、`src/driver/obligations.rs:547`
 
 ## 警告级别
 

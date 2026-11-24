@@ -15,16 +15,24 @@ use crate::frontend::core::sema::MonoType;
 use crate::frontend::module::symbol::DefId;
 use crate::util::span::Span;
 
+/// SSA 值标识：函数内稠密编号，单调递增、永不回滚（04-ssa.md §值标识方式）。
+///
+/// 本批（7b.1a）只建立表示：生产构造点 0、无求值/分配语义；7b.2 起
+/// `next_temp_reg` 改产出 `Operand::Value`（09a §P7 7b.1a 契约 §三 占位 2）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct ValueId(pub u32);
+
 /// Instruction operand
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Operand {
     Const(ConstValue),
+    /// SSA 值：函数内稠密编号，唯一定义（04-ssa.md §SSA 形态定义）
+    Value(ValueId),
+    /// 具名局部变量的存储槽：可寻址、允许多次定义（非 SSA 部分）
     Local(usize),
+    /// 函数入口的隐式定义（参数即块 0 的定义）
     Arg(usize),
-    Temp(usize),
     Global(usize),
-    Label(usize),
-    Register(u8), // Added for codegen
 }
 
 /// 任务组：组内任务可并行执行，组间串行
@@ -315,7 +323,7 @@ pub enum Instruction {
     },
     /// membership 谓词（#299 §3）：`dst = elem in container` → Bool
     /// 容器：List/Array/Tuple 线性扫、Dict 键查、String 子串；
-    /// Range 不走此指令——ir_gen 直接脱糖成比较链
+    /// Range 不走此指令——lower 直接脱糖成比较链
     Contains {
         dst: Operand,
         elem: Operand,
@@ -530,6 +538,24 @@ pub enum Instruction {
         src: Operand,
         span: Span,
     },
+    // =====================
+    // SSA 汇合
+    // =====================
+    /// 汇合点：每个前驱基本块提供该值的一个定义（04-ssa.md §`Phi` 作为新
+    /// `Instruction` 变体）。
+    ///
+    /// 构造约定：
+    /// - `dst` 必为 [`Operand::Value`]；
+    /// - `incoming` 按前驱 block label **升序**排列（构造时保证，便于规范化；
+    ///   `verify_ssa` 检查、`normalize` 渲染前再排序）。
+    ///
+    /// 本批（7b.1a）只引入变体：lowering 生产构造点 0，translator 的消费臂是
+    /// 带不变量注释的占位，真翻译归 7b.3（09a §P7 7b.1a 契约 §二/§三）。
+    Phi {
+        dst: Operand,
+        incoming: Vec<(usize, Operand)>,
+        span: Span,
+    },
 }
 
 impl Instruction {
@@ -613,6 +639,7 @@ impl Instruction {
             Instruction::LoadUpvalue { span, .. } => *span,
             Instruction::StoreUpvalue { span, .. } => *span,
             Instruction::CloseUpvalue { span, .. } => *span,
+            Instruction::Phi { span, .. } => *span,
         }
     }
 
@@ -836,16 +863,340 @@ impl Instruction {
                 f(src);
                 f(index);
             }
+            // `dst` 是定义位，每个 `incoming` 输入是使用位——本函数一视同仁。
+            Instruction::Phi { dst, incoming, .. } => {
+                f(dst);
+                for (_, op) in incoming {
+                    f(op);
+                }
+            }
         }
     }
 }
 
-/// Basic block
+impl Instruction {
+    /// 槽位语义判定哲学：def = 槽位本身被赋予新值（之后读该槽得到新值）；
+    /// use = 槽位当前值被读取。StoreField / StoreIndex / PtrStore 的 dst 是
+    /// 容器/指针（读），写入的是其内部字段而非槽位本身。
+    pub fn def_operands(&self) -> Vec<&Operand> {
+        match self {
+            Instruction::Move { dst, .. }
+            | Instruction::Load { dst, .. }
+            | Instruction::Store { dst, .. }
+            | Instruction::Pop { dst, .. }
+            | Instruction::Neg { dst, .. }
+            | Instruction::Not { dst, .. }
+            | Instruction::Alloc { dst, .. }
+            | Instruction::AllocArray { dst, .. }
+            | Instruction::AllocFixedArray { dst, .. }
+            | Instruction::LoadField { dst, .. }
+            | Instruction::LoadIndex { dst, .. }
+            | Instruction::Contains { dst, .. }
+            | Instruction::HeapAlloc { dst, .. }
+            | Instruction::CreateStruct { dst, .. }
+            | Instruction::NewDict { dst, .. }
+            | Instruction::NewTuple { dst, .. }
+            | Instruction::NewRange { dst, .. }
+            | Instruction::CreateVariant { dst, .. }
+            | Instruction::VariantTag { dst, .. }
+            | Instruction::VariantPayload { dst, .. }
+            | Instruction::MakeClosure { dst, .. }
+            | Instruction::ArcNew { dst, .. }
+            | Instruction::RcNew { dst, .. }
+            | Instruction::ArcClone { dst, .. }
+            | Instruction::PtrFromRef { dst, .. }
+            | Instruction::PtrDeref { dst, .. }
+            | Instruction::PtrLoad { dst, .. }
+            | Instruction::StringLength { dst, .. }
+            | Instruction::StringConcat { dst, .. }
+            | Instruction::StringGetChar { dst, .. }
+            | Instruction::StringFromInt { dst, .. }
+            | Instruction::StringFromFloat { dst, .. }
+            | Instruction::LoadUpvalue { dst, .. } => vec![dst],
+            Instruction::Add { dst, .. }
+            | Instruction::Sub { dst, .. }
+            | Instruction::Mul { dst, .. }
+            | Instruction::Div { dst, .. }
+            | Instruction::Mod { dst, .. }
+            | Instruction::And { dst, .. }
+            | Instruction::Or { dst, .. }
+            | Instruction::Xor { dst, .. }
+            | Instruction::Shl { dst, .. }
+            | Instruction::Shr { dst, .. }
+            | Instruction::Sar { dst, .. }
+            | Instruction::Eq { dst, .. }
+            | Instruction::Ne { dst, .. }
+            | Instruction::Lt { dst, .. }
+            | Instruction::Le { dst, .. }
+            | Instruction::Gt { dst, .. }
+            | Instruction::Ge { dst, .. } => vec![dst],
+            Instruction::Call { dst, .. }
+            | Instruction::CallVirt { dst, .. }
+            | Instruction::CallDyn { dst, .. } => dst.iter().collect(),
+            Instruction::Spawn { result, .. } | Instruction::SpawnFromList { result, .. } => {
+                vec![result]
+            }
+            Instruction::Push { .. }
+            | Instruction::Dup { .. }
+            | Instruction::Swap { .. }
+            | Instruction::Jmp { .. }
+            | Instruction::JmpIf { .. }
+            | Instruction::JmpIfNot { .. }
+            | Instruction::TailCall { .. }
+            | Instruction::Ret { .. }
+            | Instruction::Free { .. }
+            | Instruction::StoreField { .. }
+            | Instruction::StoreIndex { .. }
+            | Instruction::Yield { .. }
+            | Instruction::Drop { .. }
+            | Instruction::ArcDrop { .. }
+            | Instruction::UnsafeBlockStart { .. }
+            | Instruction::UnsafeBlockEnd { .. }
+            | Instruction::PtrStore { .. }
+            | Instruction::StoreUpvalue { .. }
+            | Instruction::CloseUpvalue { .. } => Vec::new(),
+            // Phi 的 dst 是 SSA 值的定义点（07 第一层「值定义唯一性」的 def 面）
+            Instruction::Phi { dst, .. } => vec![dst],
+        }
+    }
+
+    pub fn use_operands(&self) -> Vec<&Operand> {
+        match self {
+            Instruction::Move { src, .. }
+            | Instruction::Load { src, .. }
+            | Instruction::Store { src, .. }
+            | Instruction::Push { src, .. }
+            | Instruction::Neg { src, .. }
+            | Instruction::Not { src, .. }
+            | Instruction::Free { src, .. }
+            | Instruction::Drop { src, .. }
+            | Instruction::ArcDrop { src, .. }
+            | Instruction::PtrLoad { src, .. }
+            | Instruction::StringLength { src, .. }
+            | Instruction::StringFromInt { src, .. }
+            | Instruction::StringFromFloat { src, .. }
+            | Instruction::StoreUpvalue { src, .. }
+            | Instruction::CloseUpvalue { src, .. } => vec![src],
+            Instruction::Add { lhs, rhs, .. }
+            | Instruction::Sub { lhs, rhs, .. }
+            | Instruction::Mul { lhs, rhs, .. }
+            | Instruction::Div { lhs, rhs, .. }
+            | Instruction::Mod { lhs, rhs, .. }
+            | Instruction::And { lhs, rhs, .. }
+            | Instruction::Or { lhs, rhs, .. }
+            | Instruction::Xor { lhs, rhs, .. }
+            | Instruction::Shl { lhs, rhs, .. }
+            | Instruction::Shr { lhs, rhs, .. }
+            | Instruction::Sar { lhs, rhs, .. }
+            | Instruction::Eq { lhs, rhs, .. }
+            | Instruction::Ne { lhs, rhs, .. }
+            | Instruction::Lt { lhs, rhs, .. }
+            | Instruction::Le { lhs, rhs, .. }
+            | Instruction::Gt { lhs, rhs, .. }
+            | Instruction::Ge { lhs, rhs, .. }
+            | Instruction::StringConcat { lhs, rhs, .. } => vec![lhs, rhs],
+            Instruction::Pop { .. }
+            | Instruction::Dup { .. }
+            | Instruction::Swap { .. }
+            | Instruction::Jmp { .. }
+            | Instruction::Yield { .. }
+            | Instruction::UnsafeBlockStart { .. }
+            | Instruction::UnsafeBlockEnd { .. }
+            | Instruction::LoadUpvalue { .. } => Vec::new(),
+            Instruction::JmpIf { cond, .. } | Instruction::JmpIfNot { cond, .. } => vec![cond],
+            Instruction::Call { func, args, .. } | Instruction::CallDyn { func, args, .. } => {
+                let mut v = vec![func];
+                v.extend(args);
+                v
+            }
+            Instruction::CallVirt { obj, args, .. } => {
+                let mut v = vec![obj];
+                v.extend(args);
+                v
+            }
+            Instruction::TailCall { func, args, .. } => {
+                let mut v = vec![func];
+                v.extend(args);
+                v
+            }
+            Instruction::Ret { value, .. } => value.iter().collect(),
+            Instruction::Alloc { size, .. } => vec![size],
+            Instruction::AllocArray {
+                size, elem_size, ..
+            } => vec![size, elem_size],
+            Instruction::AllocFixedArray { .. } => Vec::new(),
+            Instruction::LoadField { src, .. } => vec![src],
+            // StoreField/StoreIndex：dst 是容器（读），写入其内部而非槽位本身
+            Instruction::StoreField { dst, src, .. } => vec![dst, src],
+            Instruction::LoadIndex { src, index, .. } => vec![src, index],
+            Instruction::StoreIndex {
+                dst, index, src, ..
+            } => vec![dst, index, src],
+            Instruction::Contains {
+                elem, container, ..
+            } => vec![elem, container],
+            Instruction::Spawn { closures, .. } => closures.iter().collect(),
+            Instruction::SpawnFromList { closures_list, .. } => vec![closures_list],
+            Instruction::HeapAlloc { .. } => Vec::new(),
+            Instruction::CreateStruct { fields, .. } => fields.iter().collect(),
+            Instruction::NewDict { keys, values, .. } => keys.iter().chain(values.iter()).collect(),
+            Instruction::NewTuple { items, .. } => items.iter().collect(),
+            Instruction::NewRange {
+                start, end, step, ..
+            } => vec![start, end, step],
+            Instruction::CreateVariant { payload, .. } => vec![payload],
+            Instruction::VariantTag { obj, .. } | Instruction::VariantPayload { obj, .. } => {
+                vec![obj]
+            }
+            Instruction::MakeClosure { env, .. } => env.iter().collect(),
+            Instruction::ArcNew { src, .. }
+            | Instruction::RcNew { src, .. }
+            | Instruction::ArcClone { src, .. } => {
+                vec![src]
+            }
+            Instruction::PtrFromRef { src, .. } | Instruction::PtrDeref { src, .. } => vec![src],
+            Instruction::PtrStore { dst, src, .. } => vec![dst, src],
+            Instruction::StringGetChar { src, index, .. } => vec![src, index],
+            // Phi 的每个 incoming 输入都是使用点（来自前驱的值）
+            Instruction::Phi { incoming, .. } => incoming.iter().map(|(_, op)| op).collect(),
+        }
+    }
+}
+
+/// 基本块：一段连续指令 + 块级 CFG 出边。
+///
+/// 生产构造点一律走 [`partition_blocks`]（lower / codegen 的唯一块构造入口）：
+/// `label` 按布局序稠密发放（0..N-1），`successors` 是按块尾终结指令与布局推导
+/// 的**块级后继**。两套坐标并存：块级 CFG 用块 `label` 作边端点，而
+/// `Jmp` / `JmpIf` / `JmpIfNot` 的 `target` 仍是函数内展平的**绝对指令下标**
+/// （[`partition_blocks`] 是两者之间唯一的映射点）。
 #[derive(Debug, Clone)]
 pub struct BasicBlock {
     pub label: usize,
     pub instructions: Vec<Instruction>,
+    /// 块级后继：块 `label` 集，升序去重（`verify_ssa` 的块级前驱由它反推）。
     pub successors: Vec<usize>,
+}
+
+/// 把展平的指令序列切成真实基本块，并填好块级 CFG。
+///
+/// 这是 `lower` / `codegen` 的**唯一**块构造入口（禁令三：切分与出边规则不得在
+/// 调用点各写一份）。设计依据：04-ssa.md §目标设计「`Phi` 作为新 `Instruction`
+/// 变体」三条构造约束之二——`Phi` 的 incoming 键是块 `label`，前驱集从
+/// [`BasicBlock::successors`] 反推，故块必须是真基本块且 CFG 必须真实。
+///
+/// 切分点（leader）：
+/// 1. 函数入口（下标 0）；
+/// 2. 每条 `Jmp` / `JmpIf` / `JmpIfNot` 的目标下标（越界目标跳过——那是
+///    `verify` 的「jump 目标存在」判据该报的违规，不是本函数的职责）；
+/// 3. 每条跳转 / `Ret` / `TailCall` 之后的下一条指令。
+///
+/// 块级出边只看块尾终结指令与指令布局（块之间按 `blocks` 顺序相邻，故「下一条
+/// 指令所属块」= 布局上的下一块）：
+/// - `Jmp` → 目标指令所属块；
+/// - `JmpIf` / `JmpIfNot` → 目标指令所属块 + 布局上的下一块（落空边）；
+/// - `Ret` / `TailCall` → 无出边；
+/// - 其余块尾（布局落空）→ 布局上的下一块；末块的落空不产生边。
+///
+/// 边连的是块 `label`，所以「块内跳转」在切分后不存在（跳转目标必是 leader ⇒
+/// 必是新块首）；自环只来自「跳转目标正是本块块首」的真循环。跳转目标的
+/// **坐标不变**（仍是展平绝对指令下标），因此 `translator` 的
+/// `global_ir_index` 回填表、`verify` 的指令级 CFG 与 `.42` 字节码都不受影响
+/// （09a §P7 7b.3 契约 §二 第 1 条）。
+pub fn partition_blocks(instructions: Vec<Instruction>) -> Vec<BasicBlock> {
+    let total = instructions.len();
+    if total == 0 {
+        // 空体保持「一块、label 0、无出边」的形态（既有渲染与翻译路径对空体的
+        // 处理都基于这个形态）。
+        return vec![BasicBlock {
+            label: 0,
+            instructions: Vec::new(),
+            successors: Vec::new(),
+        }];
+    }
+
+    // 1. 标记 leader
+    let mut is_leader = vec![false; total];
+    is_leader[0] = true;
+    for (i, instr) in instructions.iter().enumerate() {
+        let (target, ends_block) = match instr {
+            Instruction::Jmp { target, .. } => (Some(*target), true),
+            Instruction::JmpIf { target, .. } | Instruction::JmpIfNot { target, .. } => {
+                (Some(*target), true)
+            }
+            Instruction::Ret { .. } | Instruction::TailCall { .. } => (None, true),
+            _ => (None, false),
+        };
+        if let Some(target) = target {
+            if target < total {
+                is_leader[target] = true;
+            }
+        }
+        if ends_block && i + 1 < total {
+            is_leader[i + 1] = true;
+        }
+    }
+
+    // 2. 切分；同时记下「展平指令下标 → 块 label」的唯一映射
+    let mut blocks: Vec<BasicBlock> = Vec::new();
+    let mut label_of_index = vec![0usize; total];
+    let mut current_block = 0usize;
+    for (i, instr) in instructions.into_iter().enumerate() {
+        if is_leader[i] {
+            blocks.push(BasicBlock {
+                label: blocks.len(),
+                instructions: Vec::new(),
+                successors: Vec::new(),
+            });
+            current_block = blocks.len() - 1;
+        }
+        label_of_index[i] = blocks[current_block].label;
+        blocks[current_block].instructions.push(instr);
+    }
+
+    // 3. 块级出边
+    let block_count = blocks.len();
+    for index in 0..block_count {
+        let fallthrough = blocks.get(index + 1).map(|next| next.label);
+        let mut successors: Vec<usize> = Vec::new();
+        match blocks[index].instructions.last() {
+            Some(Instruction::Jmp { target, .. }) => {
+                if let Some(block) = label_of_index.get(*target) {
+                    successors.push(*block);
+                }
+            }
+            Some(Instruction::JmpIf { target, .. } | Instruction::JmpIfNot { target, .. }) => {
+                if let Some(block) = label_of_index.get(*target) {
+                    successors.push(*block);
+                }
+                successors.extend(fallthrough);
+            }
+            Some(Instruction::Ret { .. } | Instruction::TailCall { .. }) => {}
+            _ => successors.extend(fallthrough),
+        }
+        successors.sort_unstable();
+        successors.dedup();
+        blocks[index].successors = successors;
+    }
+    blocks
+}
+
+/// SSA 值信息（04-ssa.md §值标识方式）：与 `locals` 并存的**值表**。
+///
+/// `locals` 承载可寻址具名变量（可能多次定义），本表承载单定义 SSA 值
+/// （`Operand::Value`）——locals 的存在不违反 SSA，它就是 SSA 之外的存储部分
+/// （LLVM 的 alloca 模型）。
+///
+/// 本批（7b.1b）只建立结构与访问器：生产侧一律空表（`Operand::Value` 的生产
+/// 归 7b.2），故 `values` 不进入任何渲染 / 翻译路径（快照零漂移）。
+#[derive(Debug, Clone)]
+pub struct ValueInfo {
+    /// 值类型（收敛后的单一 `MonoType`）
+    pub ty: MonoType,
+    /// 调试名（来自被消除的具名槽位），`None` 表示纯临时值
+    pub debug_name: Option<String>,
+    /// 定义所在基本块的 label
+    pub defining_block: usize,
 }
 
 /// 函数体形态
@@ -860,6 +1211,15 @@ pub enum FunctionBody {
         blocks: Vec<BasicBlock>,
         entry: usize,
         locals: Vec<LocalSlot>,
+        /// SSA 值表（与 `locals` 并存；7b.2 起由 `next_temp_reg` 生产 `Operand::Value`）
+        values: Vec<ValueInfo>,
+        /// 值 → 寄存器槽的**过渡映射**（7b.2 引入；与 `values` 同索引，index = `ValueId`）。
+        ///
+        /// 槽号由 lowering 既有的临时槽分配器（`next_temp` / `temp_high_water` /
+        /// 三处语句级回收）给出——7b.2 不改分配语义，故这里原样记录，使 codegen 能还原
+        /// 与改动前相同的字节码槽号（C4 行为等价）。7b.4 的线性扫描分配器接管后
+        /// 重算本表（09a §P7 7b.2 契约 §二 第 6 条）。
+        value_slots: Vec<usize>,
     },
     /// 返回值是类型 → {} 是类型字面量
     ///
@@ -873,7 +1233,7 @@ pub enum FunctionBody {
 /// **收窄口径**（WBS 6.6.12）：IR 只消费三样东西——① 字段的个数与顺序；② 每个字段的
 /// 类型（`MonoType`）；③ 该类型在字节码类型表里的项（[`TypeDeclBody::self_type`]）。
 /// **默认值表达式 / const 界表达式 / 匿名方法绑定 / span 一律不进**：默认值在
-/// `ir_gen` 已降级成指令、const 界在类型检查层消费、匿名绑定在 `register_type_bindings`
+/// `lower` 已降级成指令、const 界在类型检查层消费、匿名绑定在 `register_type_bindings`
 /// 另有归宿；span 只在源码诊断里有意义，而 IR 快照按文本比对（保留 span 会让快照
 /// 携带源码偏移，见 07 §快照规范化表「剥离 Span」一项此前并未真正成立）。
 #[derive(Debug, Clone)]
@@ -892,12 +1252,17 @@ pub struct TypeDeclBody {
 pub struct TypeDeclField {
     /// 字段名。IR 不按名查找；AST 侧字段恒有名字，故这里不是 `Option`。
     pub name: String,
-    /// 字段类型（构造参数类型；AST→`MonoType` 的降级在 `ir_gen` 完成）
+    /// 字段类型（构造参数类型；AST→`MonoType` 的降级在 `lower` 完成）
     pub ty: MonoType,
     /// 字段可变性标记（快照显示用）
     pub is_mut: bool,
-    /// 是否有默认值**标记**（默认值表达式不进载体，它在 `ir_gen` 已降级成指令）
+    /// 是否有默认值**标记**（默认值表达式不进载体，它在 `lower` 已降级成指令）
     pub has_default: bool,
+    /// 量词读数（6.9.5-B.1a / H1）：`Some(Zero)` = witness 字段，`None` = data 字段。
+    ///
+    /// 只服务快照与后续阶段的判定输入；B.1a 的所有构造点都写 `None`
+    ///（witness 的产出入 B.2）。
+    pub quantity: Option<crate::ast::Quantity>,
     /// 是否为**函数类型字段**（方法）。
     ///
     /// SPEC `type-system.md:443`：函数类型字段不生成构造参数。载体必须能表达这个
@@ -906,7 +1271,19 @@ pub struct TypeDeclField {
     pub is_method: bool,
 }
 
-/// 局部变量槽位：类型 + 源码名 + 作用域深度。
+/// 生成帧身份（WBS 2.1.4）。
+///
+/// 一次**嵌套函数体**生成（函数 / 方法 / lambda / 匿名绑定 / 柯里层）对应一个帧号，
+/// 由 `lower::scope::NestedBodyGuard` 的两个构造函数发放；同一帧内登记的全部槽位
+/// 共享同一个号码。
+///
+/// 与 `DefId` 的分工：`DefId` 是**绑定名**的身份（`assign_defs` 按最终名字 intern，
+/// mono 特化重命名后失效）；帧号是**生成期槽位表归属**的身份，与名字无关，也不受
+/// mono 改名影响。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct FrameId(pub u32);
+
+/// 局部变量槽位：类型 + 源码名 + 作用域深度 + 登记帧。
 ///
 /// `name` 为 `None` 表示编译器内部临时寄存器（无对应源码变量）。
 /// 用 `Option` 而非空串：调用方必须显式处理“无名字”，
@@ -924,16 +1301,43 @@ pub struct LocalSlot {
     /// 无名来源为 `None`（= 未解析，不是「默认 q=1」）。擦除前识别 q=0 引用靠它，
     /// 故它是**绑定事实的 IR 侧投影**，不是第二张旁表：`FunctionIR` 不挂 quantity 表。
     pub quantity: Option<Quantity>,
+    /// 登记该槽的**生成帧**（见 [`FrameId`]）——槽位身份，不是名字。
+    ///
+    /// 一张槽位表里出现两种帧号 = 该表被两个函数体生成期共用（lower 的
+    /// `cur_locals` save/restore 失败）。这正是「内层隔离」不变量要抓的形态，
+    /// 它在判据里取代了「按名字求交集」。
+    ///
+    /// `None` = 无生成来源：只出现在手工构造的测试 IR 与 mono/codegen 合成的
+    /// 槽位上——不参与判定（「未解析」不是「本帧」）。
+    pub origin: Option<FrameId>,
 }
 
 impl LocalSlot {
-    /// 无名槽位（编译器临时寄存器）
+    /// 无名槽位（编译器临时寄存器），无生成帧归属。
     pub fn temp(ty: MonoType) -> Self {
         Self {
             name: None,
             ty,
             scope_depth: 0,
             quantity: None,
+            origin: None,
+        }
+    }
+
+    /// 无名槽位，且**归属指定生成帧**：`lower` 在自己的帧内补空槽时用它。
+    ///
+    /// 与 [`Self::temp`] 的区别是身份：`temp` 表示「无来源」（手工 IR / 合成槽），
+    /// 本构造函数表示「本帧登记的空槽」——泄漏判定靠的正是这个区别。
+    pub fn temp_in(
+        ty: MonoType,
+        origin: FrameId,
+    ) -> Self {
+        Self {
+            name: None,
+            ty,
+            scope_depth: 0,
+            quantity: None,
+            origin: Some(origin),
         }
     }
 }
@@ -988,6 +1392,30 @@ impl FunctionIR {
         }
     }
 
+    /// 获取 SSA 值表（仅 Code 体有效）
+    pub fn values(&self) -> &[ValueInfo] {
+        match &self.body {
+            FunctionBody::Code { values, .. } => values,
+            FunctionBody::TypeDecl { .. } => &[],
+        }
+    }
+
+    /// 获取可变 SSA 值表（仅 Code 体有效）
+    pub fn values_mut(&mut self) -> &mut Vec<ValueInfo> {
+        match &mut self.body {
+            FunctionBody::Code { values, .. } => values,
+            FunctionBody::TypeDecl { .. } => panic!("values_mut called on TypeDecl"),
+        }
+    }
+
+    /// 获取值 → 寄存器槽的过渡映射（仅 Code 体有效；index = ValueId）
+    pub fn value_slots(&self) -> &[usize] {
+        match &self.body {
+            FunctionBody::Code { value_slots, .. } => value_slots,
+            FunctionBody::TypeDecl { .. } => &[],
+        }
+    }
+
     /// 获取入口基本块索引（仅 Code 体有效）
     pub fn entry(&self) -> usize {
         match &self.body {
@@ -1028,6 +1456,31 @@ pub enum ConstValue {
     /// `CallDyn` 按名分发。FFI 元数据（mechanism/lib/symbol）不在这里复制第二份：
     /// 直接调用仍由 codegen 的元数据缓存解析（`CallNative` 同一来源）。
     NativeFn(String),
+}
+
+impl ConstValue {
+    /// 常量的单态类型（无稳定 `MonoType` 对应时 `None`）。
+    ///
+    /// 单一来源：lower 的值表类型推导与 verify 的类型一致判据共用本方法
+    /// （09a §P7 7b.2 契约 §二 第 2 条）。
+    pub fn mono_type(&self) -> Option<MonoType> {
+        match self {
+            Self::Void => Some(MonoType::Void),
+            Self::Bool(_) => Some(MonoType::Bool),
+            Self::Int(_) => Some(MonoType::Int(64)),
+            Self::Float(_) => Some(MonoType::Float(64)),
+            Self::Char(_) => Some(MonoType::Char),
+            Self::String(_) => Some(MonoType::Generic {
+                name: "String".to_string(),
+                args: Vec::new(),
+            }),
+            // Bytes / 原生函数值 / FFI 引用无稳定 MonoType 对应（信息不足）。
+            Self::Bytes(_)
+            | Self::LibraryRef { .. }
+            | Self::ExternRef { .. }
+            | Self::NativeFn(_) => None,
+        }
+    }
 }
 
 impl PartialEq for ConstValue {

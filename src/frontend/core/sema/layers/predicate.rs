@@ -9,17 +9,18 @@
 
 use std::collections::HashMap;
 
-use crate::frontend::core::types::const_data::{ConstExpr, ConstValue};
-use crate::frontend::core::types::eval::evaluator::Evaluator;
-use crate::frontend::core::types::mono::MonoType;
 use super::super::proof::context::ProofContext;
 use super::super::proof::smt::ast::SMTResult;
 use super::super::proof::smt::backend::{with_shared_solver, SolverConsumer};
 use super::super::proof::smt::translate;
 use super::super::proof::verdict::{
     BudgetReport, DisproofKind, DisproofModel, ProofFailure, ProofFunctionCall, ProofResult,
-    ProofResultExt, UnprovenReason,
+    ProofResultExt, UnprovenReason, UnprovenSubject,
 };
+use crate::frontend::core::types::const_data::{ConstExpr, ConstValue};
+use crate::frontend::core::types::eval::const_eval::ConstGenericEval;
+use crate::frontend::core::types::eval::evaluator::Evaluator;
+use crate::frontend::core::types::mono::MonoType;
 
 // 求解器获取面（RFC-039 D58）：本模块**不再**自持 `static SOLVER` 私有单例。
 //
@@ -57,10 +58,43 @@ pub fn check_predicate(
     refined: &MonoType,
     bindings: &HashMap<String, ConstValue>,
 ) -> ProofResult {
+    check_predicate_with_mode(ctx, refined, bindings, PredicateMode::Full)
+}
+
+/// 判定档位（RFC-027 §4 三值判定的来源限制）。
+///
+/// `Full` = 现有四级（direct eval → 精确 Γ → SMT 蕴含/求解 → 证明函数）。
+/// `NoSmt` = 只走 direct eval / 精确 Γ / 证明函数：SMT 只作加速提示、**不作
+/// 证明来源**。依赖记录 Σ 的构造点义务用这一档（09a 契约 §四 的 D3 待裁形态；
+/// 裁决前不得把 SMT 的 Unsat 当成构造义务的证明）。
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum PredicateMode {
+    /// 全部四级（既有调用点口径）
+    Full,
+    /// 不用 SMT 作证明来源（构造点义务口径）
+    NoSmt,
+}
+
+/// 按档位判定（唯一实现：[check_predicate] 是 `Full` 的薄包装）。
+pub fn check_predicate_with_mode(
+    ctx: &ProofContext<'_>,
+    refined: &MonoType,
+    bindings: &HashMap<String, ConstValue>,
+    mode: PredicateMode,
+) -> ProofResult {
     let constraint = match refined {
         MonoType::Refined { constraint, .. } => constraint,
         _ => return Ok(()),
     };
+
+    // RFC-027 §14.5 / 09a §P6 6.9.5-B.3 §五：evidence 字段路径是**准入前提**，不是值求值。
+    // 唯一判定点；判据只看「R→记录模型 + f 是 evidence 字段」（应用面负责基名一致性）。
+    if crate::frontend::core::sema::record_model::witness_premise_admitted(
+        &ctx.env.record_models,
+        refined,
+    ) {
+        return Ok(());
+    }
 
     // === 第 1 级：Evaluator 直接求值 ===
     if let Some(result) = try_direct_eval(ctx, constraint, bindings) {
@@ -72,22 +106,34 @@ pub fn check_predicate(
     if ctx.assumptions.contains(constraint) {
         return Ok(());
     }
-    // 2b：SMT 蕴含——假设非空但不精确匹配
-    if !ctx.assumptions.is_empty() {
-        if let Some(result) = try_implication(ctx, constraint, bindings) {
-            return result;
+    if mode == PredicateMode::Full {
+        // 2b：SMT 蕴含——假设非空但不精确匹配
+        // 含证据字段路径的假设不是 SMT 可翻译项（RFC-027 §14.5）：整条蕴含跳过，
+        // 免得把 FieldPath 翻成伪造 atom 后得到错误结论。
+        // 约束**整棵树**含证据字段路径时也不进 SMT（根形态 gate 不够：`{ bb.w > 0 }` 的根是 BinOp）。
+        let constraint_has_field_path = contains_field_path(constraint);
+        let assumptions_have_field_path = ctx.assumptions.current().iter().any(contains_field_path);
+        if !ctx.assumptions.is_empty() && !assumptions_have_field_path && !constraint_has_field_path
+        {
+            if let Some(result) = try_implication(ctx, constraint, bindings) {
+                return result;
+            }
         }
-    }
 
-    // === 第 3 级：SMT 求解 ===
-    // SMT 翻译不支持 Call/If/Range 形式——跳过，直接进入第 4 级
-    if !matches!(
-        constraint,
-        ConstExpr::Call { .. } | ConstExpr::If { .. } | ConstExpr::Range { .. }
-    ) {
-        let smt_result = try_smt_solve(ctx, constraint, bindings);
-        if smt_result.is_proved() || matches!(smt_result, Err(ProofFailure::Disproved(_))) {
-            return smt_result;
+        // === 第 3 级：SMT 求解 ===
+        // SMT 翻译不支持 Call/If/Range 形式——跳过，直接进入第 4 级
+        // 证据字段路径同样不是 SMT 可翻译项（RFC-027 §14.5）：不进求解器，
+        // 由 admission / 第 4 级处理。
+        if !constraint_has_field_path
+            && !matches!(
+                constraint,
+                ConstExpr::Call { .. } | ConstExpr::If { .. } | ConstExpr::Range { .. }
+            )
+        {
+            let smt_result = try_smt_solve(ctx, constraint, bindings);
+            if smt_result.is_proved() || matches!(smt_result, Err(ProofFailure::Disproved(_))) {
+                return smt_result;
+            }
         }
     }
 
@@ -104,7 +150,7 @@ fn try_direct_eval(
     constraint: &ConstExpr,
     bindings: &HashMap<String, ConstValue>,
 ) -> Option<ProofResult> {
-    let mut evaluator = Evaluator::new(ctx.env, &ctx.budget, &ctx.dep_env);
+    let mut evaluator = Evaluator::new(&ctx.env.types, &ctx.budget, &ctx.dep_env);
     match evaluator.eval_expr(constraint, bindings) {
         Ok(ConstValue::Bool(true)) => Some(Ok(())),
         Ok(ConstValue::Bool(false)) => Some(Err(ProofFailure::Disproved(DisproofModel {
@@ -121,6 +167,9 @@ fn try_direct_eval(
             reason: UnprovenReason::BeyondKernel("约束表达式未求值为 Bool".into()),
             proof_calls: vec![],
             budget: ctx.budget.report(),
+
+            subject: Some(UnprovenSubject::Term(constraint.clone())),
+            span: None,
         })),
         Err(_) => None,
     }
@@ -145,7 +194,8 @@ fn try_implication(
         }
     }
 
-    let commands = translate::translate_constraint(constraint, &assumptions, &var_sorts);
+    // 不可翻译（F10）：不送空表给求解器——与「假设不蕴含」同向升级（None）
+    let commands = translate::translate_constraint(constraint, &assumptions, &var_sorts)?;
 
     // 共享口（RFC-039 D58）；求解器不可用（None）= 无法判断 →
     // 经 `?` 返回升级（与 Unknown 同一降级方向）
@@ -169,7 +219,20 @@ fn try_smt_solve(
 ) -> ProofResult {
     let var_sorts = translate::infer_var_sorts(constraint, bindings);
     let assumptions = ctx.assumptions.current();
-    let commands = translate::translate_constraint(constraint, &assumptions, &var_sorts);
+    // 不可翻译（F10）：约束或任一假设不是 SMT 项 ⇒ **无法判断**（Unproven），
+    // 不得把空断言集交给求解器（空集恒 sat ⇒ 伪造反例 E4018）。
+    let Some(commands) = translate::translate_constraint(constraint, &assumptions, &var_sorts)
+    else {
+        return Err(ProofFailure::Unproven {
+            reason: UnprovenReason::BeyondKernel(
+                "约束或假设含 SMT 不可翻译项（位运算/浮点/证据字段路径）".into(),
+            ),
+            proof_calls: vec![],
+            budget: ctx.budget.report(),
+            subject: Some(UnprovenSubject::Term(constraint.clone())),
+            span: None,
+        });
+    };
 
     // 共享口（RFC-039 D58）；Z3 缺失不 panic——按 Unknown 保守降级（WBS 3.3.1）
     let smt_result = with_shared_solver(SolverConsumer::Predicate, |solver| match solver {
@@ -189,6 +252,9 @@ fn try_smt_solve(
             reason: UnprovenReason::BeyondKernel(reason),
             proof_calls: vec![],
             budget: ctx.budget.report(),
+
+            subject: Some(UnprovenSubject::Term(constraint.clone())),
+            span: None,
         }),
     }
 }
@@ -203,31 +269,22 @@ fn try_proof_fn_call(
     budget_report: BudgetReport,
 ) -> ProofResult {
     if let ConstExpr::Call { func, args } = constraint {
-        // 将 ConstExpr args 转为 ConstValue
+        // 将 ConstExpr args 转为 ConstValue（折叠失败 = 义务不进证明管道，
+        // 判定单元落 E2031——见 judge_refined_obligation 的空证法分支）
         let mut const_args: Vec<ConstValue> = Vec::with_capacity(args.len());
         for a in args {
-            match a {
-                ConstExpr::Lit(v) => const_args.push(v.clone()),
-                ConstExpr::NamedVar(name) => {
-                    if let Some(val) = bindings.get(name) {
-                        const_args.push(val.clone());
-                    } else {
-                        return Err(ProofFailure::Unproven {
-                            reason: UnprovenReason::BeyondKernel(
-                                "证明函数实参包含未绑定变量".into(),
-                            ),
-                            proof_calls: vec![],
-                            budget: budget_report,
-                        });
-                    }
-                }
-                _ => {
+            match fold_proof_call_arg(a, bindings) {
+                Some(value) => const_args.push(value),
+                None => {
                     return Err(ProofFailure::Unproven {
                         reason: UnprovenReason::BeyondKernel(
                             "证明函数实参必须是字面量或已绑定变量".into(),
                         ),
                         proof_calls: vec![],
                         budget: budget_report,
+
+                        subject: Some(UnprovenSubject::Term(constraint.clone())),
+                        span: None,
                     });
                 }
             }
@@ -240,6 +297,9 @@ fn try_proof_fn_call(
                 args: const_args,
             }],
             budget: budget_report,
+
+            subject: Some(UnprovenSubject::Term(constraint.clone())),
+            span: None,
         });
     }
 
@@ -247,5 +307,68 @@ fn try_proof_fn_call(
         reason: UnprovenReason::BeyondKernel("无法自动证明且无证明函数".into()),
         proof_calls: vec![],
         budget: budget_report,
+
+        subject: Some(UnprovenSubject::Term(constraint.clone())),
+        span: None,
     })
+}
+
+/// 约束树里是否含证据字段路径（SMT 面 gate 与声明面共用的**单一收集器**）。
+///
+/// `pub(crate)`：第二个调用点是 `checker::validate_predicate_witness_paths`
+/// （禁令一 B：复用同一遍历，不写第二份）。
+pub(crate) fn contains_field_path(expr: &ConstExpr) -> bool {
+    match expr {
+        ConstExpr::FieldPath { .. } => true,
+        ConstExpr::BinOp { left, right, .. } => {
+            contains_field_path(left) || contains_field_path(right)
+        }
+        ConstExpr::UnOp { expr, .. } => contains_field_path(expr),
+        ConstExpr::Call { args, .. } => args.iter().any(contains_field_path),
+        ConstExpr::If {
+            condition,
+            then_branch,
+            else_branch,
+        } => {
+            contains_field_path(condition)
+                || contains_field_path(then_branch)
+                || contains_field_path(else_branch)
+        }
+        ConstExpr::Range { start, end } => contains_field_path(start) || contains_field_path(end),
+        _ => false,
+    }
+}
+
+/// 折叠单个证明函数实参（RFC-027 §3.1：实参就是函数调用的实参——`f(5)` 与
+/// `f(-5)` 同为合法调用形态，issue #556）。
+///
+/// 字面量直取、名字查绑定；一元运算（取负/取正/逻辑非）折叠内层后交**共享
+/// const 求值器** [`ConstGenericEval`]——取负走 i128 `checked_neg`，与 #507
+/// 备案的饱和极端形态同源，不在此另写第二套取负。其余形态（二元运算、嵌套
+/// 调用、If/Range 等）不可折叠 → `None`，由调用方走保守「不可折叠」分支
+/// （义务不进证明管道，判定单元落 E2031）。
+fn fold_proof_call_arg(
+    arg: &ConstExpr,
+    bindings: &HashMap<String, ConstValue>,
+) -> Option<ConstValue> {
+    match arg {
+        ConstExpr::Lit(v) => Some(v.clone()),
+        ConstExpr::NamedVar(name) => bindings.get(name).cloned(),
+        ConstExpr::UnOp { op, expr } => {
+            let inner = fold_proof_call_arg(expr, bindings)?;
+            let evaluator = ConstGenericEval::new();
+            // 求值失败（溢出/类型不合）时 `ConstGenericEval` 会经 span 强制的
+            // builder 构造诊断；折叠只要「成不成」，诊断被 `.ok()` 丢弃——
+            // 与 `normalize` 同款占位 span 守卫，避免在 walk 上下文外 panic。
+            let _span_guard =
+                crate::util::diagnostic::push_current_span(crate::util::span::Span::default());
+            evaluator
+                .eval(&ConstExpr::UnOp {
+                    op: *op,
+                    expr: Box::new(ConstExpr::Lit(inner)),
+                })
+                .ok()
+        }
+        _ => None,
+    }
 }

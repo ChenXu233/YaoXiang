@@ -27,11 +27,11 @@ pub fn compute_file_checksum(path: &Path) -> PackageResult<String> {
     Ok(hex(&hasher.finalize()))
 }
 
-/// 计算内存字节的 SHA-256 校验和（打包的 Inline 条目，如 publish 的 manifest 替换）
+/// 计算内存字节的 SHA-256 校验和（打包的 Inline 条目，如 publish 的 manifest 替换）。
+///
+/// H6 单源：委托 [`crate::util::content_hash::ContentHash`]，输出逐字不变。
 pub fn compute_bytes_checksum(data: &[u8]) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(data);
-    hex(&hasher.finalize())
+    crate::util::content_hash::ContentHash::of_bytes(data).to_hex()
 }
 
 /// 计算目录的 SHA-256 校验和

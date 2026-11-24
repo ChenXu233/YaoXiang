@@ -43,11 +43,11 @@ mod tests;
 
 use std::sync::MutexGuard;
 
+use crate::backends::common::{Handle, Heap, HeapValue, RuntimeValue};
 use crate::backends::interpreter::ffi::FfiRegistry;
-use crate::backends::common::{Handle, RuntimeValue, Heap, HeapValue};
 use crate::backends::ExecutorError;
-use crate::frontend::module::{Export, ExportKind, ModuleInfo, ModuleSource};
 pub use crate::frontend::core::types::eval::dependent_types::{Effect, EffectSpec};
+use crate::frontend::module::{Export, ExportKind, ModuleInfo, ModuleSource};
 
 /// Type alias for native function call signature
 /// Simplifies complex type definitions
@@ -240,6 +240,8 @@ pub struct TypeFamilyExport {
     pub name: &'static str,
     /// 类型参数名（如 ["cond"]）
     pub params: Vec<&'static str>,
+    /// 所属空间（Proof/Data；RFC-027 §14.1 的 space 判据唯一登记点）
+    pub space: crate::frontend::core::types::eval::dependent_types::SortSpace,
     /// 关联类型定义
     pub definition: crate::frontend::core::types::eval::dependent_types::AssociatedTypeDef,
 }
@@ -248,11 +250,13 @@ impl TypeFamilyExport {
     pub fn new(
         name: &'static str,
         params: Vec<&'static str>,
+        space: crate::frontend::core::types::eval::dependent_types::SortSpace,
         definition: crate::frontend::core::types::eval::dependent_types::AssociatedTypeDef,
     ) -> Self {
         Self {
             name,
             params,
+            space,
             definition,
         }
     }
@@ -303,6 +307,7 @@ pub trait StdModule {
                 export.params.iter().map(|s| s.to_string()).collect(),
                 vec![],
                 export.definition.clone(),
+                export.space,
             );
             dep_env.register_type_family(family);
         }
@@ -331,6 +336,9 @@ pub trait StdModule {
                 type_payload: None,
                 definition_span: None, // native std 导出无源码定义位置（4.6.1）
                 predicate_def: None,   // native std 无谓词 def（#524 载荷面）
+                proof_fn_params: None, // 同上（#527 载荷面）
+                const_binders: Vec::new(), // native 导出无 yx 登记面（#539 载荷面）
+                call_site_params: Vec::new(),
             });
         }
 
@@ -347,6 +355,9 @@ pub trait StdModule {
                 type_payload: None,
                 definition_span: None, // native std 导出无源码定义位置（4.6.1）
                 predicate_def: None,   // native std 无谓词 def（#524 载荷面）
+                proof_fn_params: None, // 同上（#527 载荷面）
+                const_binders: Vec::new(), // native 导出无 yx 登记面（#539 载荷面）
+                call_site_params: Vec::new(),
             });
         }
 

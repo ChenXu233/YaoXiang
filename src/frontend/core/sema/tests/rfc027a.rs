@@ -6,13 +6,13 @@
 //! 本文件覆盖 **T1**（`Terminates` 进类型解析器）、**T2**（测度提取）。
 //! 义务生成（T3）、SMT 判定（T4）见后续任务。
 
-use crate::frontend::core::sema::probe::TypeLevelNamespace;
-use crate::frontend::core::sema::checker::TypeChecker;
-use crate::frontend::core::sema::types::TypeCheckResult;
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parse_with_probe;
+use crate::frontend::core::sema::checker::TypeChecker;
+use crate::frontend::core::sema::probe::TypeLevelNamespace;
+use crate::frontend::core::sema::types::TypeCheckResult;
 use crate::frontend::core::sema::SemanticProbe;
-use crate::frontend::core::types::const_data::{ConstExpr};
+use crate::frontend::core::types::const_data::ConstExpr;
 use crate::util::diagnostic::Diagnostic;
 
 /// 解析源代码并类型检查

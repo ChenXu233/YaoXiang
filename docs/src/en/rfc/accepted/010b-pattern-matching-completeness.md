@@ -1,217 +1,227 @@
 ---
 title: 'RFC-010b: Pattern Matching Completeness (Variant Destructuring and Exhaustiveness)'
-status: 'Accepted'
+status: 'accepted'
 author: 'Chenxu'
 created: '2026-09-03'
-updated: '2026-09-27'
+updated: '2026-11-17'
 issue: '#330'
+issues_impl:
+  - '#330'
+  - '#389'
 parent: 'RFC-010'
 ---
 
 # RFC-010b: Pattern Matching Completeness (Variant Destructuring and Exhaustiveness)
 
 > This document is a sub-RFC of [RFC-010](010-unified-type-syntax.md) (Unified Type Syntax). Variant
-> declaration, constructor call forms, and the runtime tagged-union representation (including the
-> `variant_id` declaration order — the input variant set for exhaustiveness checks in this document)
-> are defined by RFC-010's "Record-style and Type-style Variant Construction (Authoritative
-> Definition)" section; this document carries its mirror side: match destructuring and
-> exhaustiveness checks. Construction and destructuring must come in pairs, so they belong together
-> in RFC-010.
+> declarations, constructor call forms, and the runtime tagged union representation (including the
+> `variant_id` declaration order—the input variant set for this document's exhaustiveness checks)
+> are defined in RFC-010's “Record-Style and Typed Variant Construction (Authoritative Definition)”
+> section. This document covers the mirrored side: match destructuring and exhaustiveness checking.
+> Construction and destructuring must be paired, so both belong to RFC-010.
 >
-> Originally numbered RFC-039 (drafted 2026-09-03); on 2026-09-25 it was merged into RFC-010 as a
-> sub-RFC and renumbered RFC-010b by owner decision, with tracking issue still #330. The body was
-> expanded on 2026-09-27 and landed with the implementation (head e368958f); on the same day the
-> owner confirmed promotion to accepted.
+> Originally numbered RFC-039 (drafted on 2026-09-03); on 2026-09-25, by decision of the owner, it
+> was merged into RFC-010 as a sub-RFC and renumbered RFC-010b, while its tracking issue remains
+> #330. The main text was expanded on 2026-09-27 and landed with the implementation (head e368958f);
+> on the same day, the owner confirmed its formal acceptance (accepted).
 
 ## Summary
 
-Flesh out `match` pattern matching from "literals + wildcard only" into a complete capability:
-variant destructuring (including zero- and multi-payload), struct/tuple patterns, or-patterns and
-guards, final identifier-binding semantics, and exhaustiveness checks (E1030/E1031 transitioning
-from empty stubs to real emission). This RFC is a prerequisite for the
-`Error { kind: ErrorKind, message }` evolution path (RFC-013 "Runtime Error Values and Code
-Integration" evolution section), but its motivation is independent — pattern matching is a general
-language capability serving all types with variants.
+Complete the pattern matching capabilities of `match` from “literals only + wildcard” to a
+full-featured facility: variant destructuring (including zero-payload and multi-payload variants),
+struct/tuple patterns, or-patterns and guards, finalized identifier-binding semantics, and
+exhaustiveness checking (turning E1030/E1031 from codes registered without emission points into
+diagnostics that are actually emitted). This RFC is a prerequisite for the
+`Error { kind: ErrorKind, message }` evolution roadmap (the evolution section of RFC-013, “Runtime
+Error Values and Code Propagation”), but its motivation is independent: pattern matching is a
+general-purpose language capability that serves every type with variants.
 
 ## Motivation
 
-### Current State (2026-09-03, v0.7.12 code; all resolved by 2026-09-27)
+### Empirical Status (2026-09-03, v0.7.12 code; fully resolved on 2026-09-27)
 
-1. **Only literal patterns are real at the IR layer.** The AST defines the full pattern set, but IR
-   generation only implements the `Literal` branch; other patterns fall into a stub — loading
-   constant 0 for equality comparison, never matching; and when the scrutinee happens to be 0, the
-   stub arm is falsely matched.
-2. **The `match ok(v)/err(e)` example in stdlib.md is paper-only capability.**
-3. **Exhaustiveness checks hang empty.** E1030/E1031 are registered in the code table but have no
-   emission point.
-4. **Error-handling evolution is blocked** (RFC-013's structured error modeling depends on variant
+1. **Only literal patterns work at the IR layer**. The AST already defines the complete pattern set,
+   but IR generation implements only the `Literal` branch. All other patterns fall into a stub that
+   loads the constant 0 for equality comparison and therefore never matches; moreover, it
+   incorrectly matches the stub arm when the scrutinee is exactly 0.
+2. **The `match ok(v)/err(e)` example in stdlib.md exists only on paper**.
+3. **Exhaustiveness checking is hollow**. E1030/E1031 are registered in the code table but have no
+   emission points.
+4. **Error-handling evolution is blocked** (RFC-013's structured error model depends on variant
    destructuring).
 
 ### Design Goals
 
-- **Variant destructuring usable**: `match r { ok(v) => ..., err(e) => ... }` and destructuring of
-  user-defined variant sets are semantically consistent across all execution paths.
-- **Exhaustiveness dependable**: E1030/E1031 emit for real; a `match` with a missing branch is a
-  compile error.
-- **Stubs cleared**: unsupported patterns raise a compile-time error rather than silently going
-  wrong (the #330 safety net — this transition strategy is progressively replaced by real encoding
-  during implementation, until all stubs are cleared).
+- **Variant destructuring is available**: `match r { ok(v) => ..., err(e) => ... }` and
+  destructuring of user-defined variant sets have consistent semantics across all execution paths.
+- **Exhaustiveness can be relied upon**: E1030/E1031 are actually emitted, and a match with a
+  missing branch is a compile-time error.
+- **Stubs are eliminated**: unsupported patterns produce a compile-time error instead of silently
+  taking the wrong path (the #330 safety net—this transitional strategy is progressively replaced
+  with real encodings during implementation, ultimately eliminating all stubs).
 
-## Proposal (Finalized and landed 2026-09-27)
+## Proposal (Finalized and Implemented on 2026-09-27)
 
-| Capability                             | Status | Notes                                                                                                           |
-| -------------------------------------- | ------ | --------------------------------------------------------------------------------------------------------------- |
-| Union variant patterns                 | ✅     | `Variant` / `Variant(binding)` / multi-payload `make(a, b)` + payload bindings enter the arm's scope            |
-| Struct / Tuple patterns                | ✅     | Field patterns (shorthand binding / `name: sub-pattern`), tuple patterns; declared fields must be fully covered |
-| Or-pattern and Guard                   | ✅     | `p1 \| p2` and `pat if cond`: alternative-level failure chain, guard failure falls through to next arm          |
-| Exhaustiveness check                   | ✅     | E1030 missing branch, E1031 unreachable, scope covers the variant set                                           |
-| Identifier-pattern semantics confirmed | ✅     | Finalized as **binding** (see section below)                                                                    |
+| Capability                             | Status | Description                                                                                                         |
+| -------------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------- |
+| Union variant patterns                 | ✅     | `Variant` / `Variant(binding)` / multi-payload `make(a, b)` + payload bindings introduced into the arm's scope      |
+| Struct / Tuple patterns                | ✅     | Field patterns (shorthand binding / `name: subpattern`) and tuple patterns; declared fields must be covered in full |
+| Or patterns and guards                 | ✅     | `p1 \| p2` and `pat if cond`: alternative-level failure chains; a failed guard falls through to the next arm        |
+| Exhaustiveness checking                | ✅     | E1030 for missing branches and E1031 for unreachable arms; coverage spans the variant set                           |
+| Identifier pattern semantics confirmed | ✅     | Finalized as **binding** (see below)                                                                                |
 
 ## Design Decisions
 
-### Identifier Pattern: Binding, Not Assignment, Nor Comparison
+### Identifier Patterns: Binding, Not Assignment or Comparison
 
-A bare identifier `y` in `match x { y => ... }` is finalized as **binding** — it introduces a new
-name that captures the matched value and matches unconditionally (equivalent to a named wildcard).
-Three reasons:
+In `match x { y => ... }`, the bare identifier `y` is finalized as a **binding**: it introduces a
+new name that captures the matched value and always matches (equivalent to a named wildcard). This
+decision has three foundations:
 
-1. **Structural argument**: In pattern position, identifiers naturally play two roles — the
-   discriminator slot (the `ok` in `ok(v)`, checked against the variant table) and the leaf slot
-   (the `v` in `ok(v)`, bound). Parameter lists (lambda) have only the leaf slot, so there's no
-   ambiguity; a bare identifier simultaneously occupies the discriminator slot while looking like
-   the leaf slot — that's where the ambiguity comes from. YaoXiang has a static variant table: the
-   discriminator name is resolved by "table lookup" (if the pattern head is a name or literal that
-   exists in the scrutinee's variant set → discriminator; otherwise a bare name → binding), without
-   needing Rust-style case conventions.
-2. **Degeneracy of value comparison**: "A bound name in a pattern means equality" (unification
-   semantics) is a relic of single-assignment tradition; in a language with reassignable variables
-   it cannot be statically determined whether something has been bound, so that semantics does not
-   hold. YaoXiang variables can be reassigned (`mut`), so we follow Rust's legislation.
-3. **The need to match an existing value is delegated to guards**: `n if n == threshold` (write the
-   if-chain until guards land).
+1. **Structural argument**: an identifier in a pattern position naturally has two roles—the
+   discriminant position (the `ok` in `ok(v)`, compared against the variant table) and the leaf
+   position (the `v` in `ok(v)`, which binds). Parameter lists (lambdas) have only leaf positions
+   and are therefore unambiguous. A bare identifier both occupies the discriminant position and
+   resembles a leaf, which is where the ambiguity arises. YaoXiang has a static variant table, so
+   discriminant names are resolved by table lookup (if the pattern head is a name or literal in the
+   scrutinee's variant set, it is a discriminant; if a bare name is absent from the table, it is a
+   binding). No Rust-style capitalization convention is required.
+2. **Degeneracy of value comparison**: the rule that “an already-bound name in a pattern means
+   equality” (unification semantics) is an artifact of the single-assignment tradition. In a mutable
+   language, it is impossible to statically determine whether a name “has been bound,” so this
+   semantics does not apply. YaoXiang variables can be reassigned (`mut`), following Rust's rule.
+3. **The need to match an existing value belongs in guards**: `n if n == threshold` (use an if-chain
+   until guards are implemented).
 
-**Binding is not assignment** (the position aligned with the owner on 2026-09-27): pattern binding
-introduces a **new name**, scoped within the arm, shadowing same-named outer variables, gone after
-the arm (probe: outer `v = 999` remains as-is after `some(v)` matches); assignment overwrites an
-existing name (the E2010 / `mut` set of laws). The two coexist and are conceptually separate in this
-language; `=` dispatches based on whether the name already exists (spec §4.3, assignment takes
-precedence), and pattern position belongs only to the binding side.
+**A binding is not an assignment** (the position agreed with the owner on 2026-09-27): a pattern
+binding introduces a **new name** whose scope is the arm; it shadows an outer variable with the same
+name and expires when the arm is left (probe: an outer `v = 999` remains unchanged after `some(v)`
+matches). Assignment rewrites an **existing** name (the E2010/`mut` rules). Both concepts coexist in
+this language and remain distinct: `=` is routed according to whether the name already exists (spec
+§4.3 gives assignment precedence), while a pattern position always belongs to the binding side.
 
-### match Is an Expression, Not an Assignment Statement
+### `match` Is an Expression, Not an Assignment Statement
 
-`match` yields the value of the matched arm (the value of the whole expression); `v = match ...` is
-just ordinary binding syntax capturing it. The teeth of exhaustiveness checks come from "arms must
-yield a value": a missing shape = the assignee gets no value = compile error (E1030); a
-statement-style switch with a missing branch can only fall silent.
+`match` produces the value of the arm that matched (the value of the entire expression);
+`v = match ...` is merely ordinary binding syntax that captures it. The strictness of exhaustiveness
+checking comes from the requirement that every arm must produce a value: a missing shape means that
+the receiver cannot obtain a value, which is a compile-time error (E1030). A switch used in
+statement form can only silently ignore missing branches.
 
-### Arm Semantic Model and Implementation
+### Arm Semantics and Implementation
 
-An arm = **a single-parameter function with an address plate**: `some(v) => body` ≈ `λv.body`,
-called only when the argument has the `some` shape; the binding semantics come from "the left side
-is the parameter slot". It shares the same `=>` source as lambda. Implementation-wise, an arm **is
-not a closure**: the IR recursive pattern compiler (`compile_pattern`) inlines a test chain
-(VariantTag/LoadField/Eq + JmpIfNot) with payload extraction (VariantPayload); on hit, it falls into
-the arm body, on miss it jumps to the next arm — zero call overhead.
+An arm is a **name-tagged single-argument function**: `some(v) => body` ≈ `λv.body`, and it is
+invoked only when the argument has the `some` shape. Its binding semantics follow from the left-hand
+side being in a parameter position. It shares the same `=>` notation as lambdas. In the
+implementation, an arm is **not a closure**: the IR's recursive pattern compiler (`compile_pattern`)
+inlines and emits a test chain (VariantTag/LoadField/Eq + JmpIfNot) and payload extraction
+(VariantPayload). A match proceeds directly to the arm body, while a failure jumps to the next
+arm—there is no call overhead.
 
-### Or-pattern and Guard
+### Or Patterns and Guards
 
-- `p1 | p2`: alternatives tried in order; a non-final alternative failing → next alternative, hit →
-  extract payload and go straight to the arm body; the final alternative failing → next arm. **All
-  alternatives' binding name sets must be identical** (E1033); same-named bindings share an
-  arm-level pre-allocated register (what the body reads must necessarily be the value written by the
-  hit alternative).
-- `pat if cond`: after the pattern hits, evaluate `cond` (**pattern bindings are visible to the
-  guard**); if false, fall through to the next arm. The guard condition must yield `Bool`. **Arms
-  with guards do not count toward exhaustiveness coverage** (a guard may not match; same rule as
-  Rust), but a repeated variant arm with a guard is reachable (a refinement of the prior arm).
+- `p1 | p2`: alternatives are attempted in order. If a non-final alternative fails, the next
+  alternative is tried; if one matches, its payload is extracted and control proceeds directly to
+  the arm body. If the final alternative fails, control proceeds to the next arm. **All alternatives
+  must have identical binding-name sets** (E1033). Bindings with the same name share an arm-level
+  preallocated register, ensuring that the arm body reads the value written by the alternative that
+  matched.
+- `pat if cond`: after the pattern matches, `cond` is evaluated (**pattern bindings are visible to
+  the guard**). If it evaluates to false, control proceeds to the next arm. A guard condition must
+  produce a `Bool`. **Arms with guards do not contribute to exhaustiveness coverage** (a guard may
+  fail to match, as in Rust), but a duplicate variant arm with a guard remains reachable as a
+  refinement of an earlier arm.
 
-### Struct Pattern
+### Struct Patterns
 
-`Point { x, y: b }`: shorthand binds the same name, `name: sub-pattern` recurses. **Declared fields
-must be fully covered** (E1034 for missing field); unknown fields are rejected (E1042); the same
-field appearing twice raises E1032. `..` rest pattern and generic struct patterns are not yet
-supported (see Open Questions).
+In `Point { x, y: b }`, field shorthand binds the field under the same name, while
+`name: subpattern` applies recursively. **All declared fields must be covered** (E1034 for missing
+fields), unknown fields are rejected (E1042), and the same field appearing more than once produces
+E1032. Field omission with `..` and generic struct patterns are not yet supported (see Open
+Questions).
 
 ### Variant Destructuring (Symmetric with RFC-010 Construction)
 
-| Construction                       | Destructuring      | Payload Representation                                                                                |
-| ---------------------------------- | ------------------ | ----------------------------------------------------------------------------------------------------- |
-| `Result(Int, String).ok(5)`        | `ok(v)`            | Single payload: bound directly                                                                        |
-| `Pair.make(3, 4)`                  | `make(a, b)`       | Multi payload: Tuple-packed, unpacked by position                                                     |
-| `Color.red()` / `Option(T).none()` | `red()` / `none()` | Zero payload: `pattern: None`, arity check (writing `ok()` for a payload-bearing variant is an error) |
+| Construction                       | Destructuring      | Payload representation                                                                                 |
+| ---------------------------------- | ------------------ | ------------------------------------------------------------------------------------------------------ |
+| `Result(Int, String).ok(5)`        | `ok(v)`            | Single payload: direct binding                                                                         |
+| `Pair.make(3, 4)`                  | `make(a, b)`       | Multiple payloads: packed into a Tuple and unpacked positionally                                       |
+| `Color.red()` / `Option(T).none()` | `red()` / `none()` | Zero payload: `pattern: None`, with arity validation (`ok()` on a payload-bearing variant is an error) |
 
-The payload type = the variant parameters with the scrutinee's type arguments substituted in
-(declaration order); nested patterns (`ok(some(v))` across sum types, `Point { pos: Tuple(a, b) }`
-across structs) recurse by sub-type.
+Payload type = the variant parameters after substitution with the scrutinee's type arguments (in
+declaration order). Nested patterns (`ok(some(v))` across sum types, `Point { pos: Tuple(a, b) }`
+across structs) recurse by subtype.
 
 ### Exhaustiveness and Reachability
 
-- **E1030 (missing branch, full exhaustiveness)**: **all types** of scrutinee — no catch-all arm
-  means check coverage. Sum types: the variant set must be fully covered by guard-less Union arms
-  (arms with guards don't count; a guard may not match); non-sum types: the value domain is open
-  (Int/String/Char etc.), literal arms cannot be exhaustive, **a catch-all arm is required**.
-  Enumerable exceptions: `Bool`'s `true`+`false` two literal arms are exhaustive; `Void` has no
-  inhabited value, vacuously exhaustive. (2026-09-27 owner finalization: a `match` with no catch-all
-  arm is an implicit assumption that "the remaining values cannot occur" — don't be implicit where
-  it shouldn't be; the assumption must be written as `_`.)
-- **E1031 (unreachable)**: any arm after a catch-all arm (an irrefutable pattern that always matches
-  unconditionally: Identifier / Wildcard / Tuple / Struct, without a guard); guard-less repeated
-  variant arms; repeated literal arms.
+- **E1030 (missing branch, fully exhaustive)**: coverage is checked for a scrutinee of **every
+  type** whenever there is no fallback arm. For sum types, the variant set must be fully covered by
+  unguarded union arms (guarded arms do not count because a guard may fail to match). For non-sum
+  types, the value domain is open (Int/String/Char, etc.), so literal arms cannot be exhaustive and
+  **a fallback arm is required**. The enumerable exceptions are Bool, for which true and false
+  literal arms are exhaustive, and Void, which has no inhabiting values and is therefore vacuously
+  exhaustive. (Decision by the owner on 2026-09-27: a match without a fallback arm implicitly
+  assumes that “no other values will occur”—such assumptions should not be implicit where they are
+  not warranted; every assumption must be written as `_`.)
+- **E1031 (unreachable)**: any arm after a fallback arm (an unguarded irrefutable pattern:
+  Identifier/Wildcard/Tuple/Struct), an unguarded duplicate variant arm, or a duplicate literal arm.
 
 ### Diagnostics
 
 | Code  | Meaning                                                                                    |
 | ----- | ------------------------------------------------------------------------------------------ |
-| E1030 | Pattern coverage insufficient (lists missing variants)                                     |
-| E1031 | Unreachable pattern (after catch-all arm / repeated variant / repeated literal)            |
-| E1032 | Duplicate binding in pattern (same binding name appears multiple times within one pattern) |
-| E1033 | Or-pattern binding inconsistent (alternatives have different binding name sets)            |
-| E1034 | Struct pattern missing field                                                               |
-| E3008 | IR-layer safety net retained (defensive branch; unreachable for well-formed programs)      |
+| E1030 | Non-exhaustive pattern match (lists the missing variants)                                  |
+| E1031 | Unreachable pattern (after a fallback arm / duplicate variant / duplicate literal)         |
+| E1032 | Duplicate pattern binding (the same binding name appears more than once in one pattern)    |
+| E1033 | Inconsistent bindings in an or-pattern (the alternatives have different binding-name sets) |
+| E1034 | Struct pattern is missing fields                                                           |
+| E3008 | IR-layer safety net retained (a defensive branch that is unreachable in normal programs)   |
 
-### Boundary with Assignment/lambda (Anti-Confusion Memo)
+### Boundaries with Assignment/Lambdas (Memo to Prevent Confusion)
 
-- Pattern binding ≠ assignment: introduces a new name vs. overwrites an existing name (E2010 /
-  `mut`);
-- Or-pattern ≈ lambda application extended (semantic model), but implemented as inlined jumps, not
-  closure calls;
-- Literal patterns compile to Eq + conditional jump chains — the "optimized form of if/elif"
-  intuition holds for literals; `match`'s increment is in shape judgment and unpacked binding.
+- Pattern binding ≠ assignment: it introduces a new name rather than rewriting an existing name
+  (E2010/`mut`);
+- An or-pattern ≈ an extension of lambda application (semantic model), but it is implemented as
+  inline jumps rather than a closure call;
+- A literal pattern compiles to an Eq + conditional jump chain—the intuition of an “optimized form
+  of if/elif” applies to literals, while what `match` adds is shape discrimination and destructuring
+  bindings.
 
-## Implementation Landing Points
+## Implementation Points
 
-- parser: `parse_pattern` (variant call reassembly / struct pattern `Ident { .. }` branch / nested
-  or-pattern restoration), `parse_match` or-pattern closing chain + guard (`no_fat_arrow` flag so
-  `=>` doesn't act as lambda infix)
+- parser: `parse_pattern` (variant-call restructuring / struct pattern `Ident { .. }` branch /
+  nested or-pattern reconstruction), `parse_match` or-pattern chain closure and guards (the
+  `no_fat_arrow` flag prevents `=>` from acting as an infix lambda operator)
 - typecheck: `check_match_expr` unified arm loop + `check_pattern` recursive checker (binding
-  registration, guard Bool validation, exhaustiveness bookkeeping)
+  registration, guard Bool validation, and exhaustiveness accounting)
 - ir_gen: `compile_pattern` recursive pattern compiler + `sum_type_variants` mirror carrying payload
-  types and `sum_type_param_names` (payload types substituted by scrutinee arguments)
-- Corpus: `02-type-system/aggregates/pattern_destructure.yx`, `pattern_or_guard.yx`; unit tests
+  types and `sum_type_param_names` (payload types are substituted according to the scrutinee's type
+  arguments)
+- corpus: `02-type-system/aggregates/pattern_destructure.yx`, `pattern_or_guard.yx`; unit tests for
   E1030/E1031/E1032/E1033/E1034 (rfc011b.rs)
 
 ## Open Questions
 
-- [x] Identifier pattern: bind a new variable or match an existing value? → **Bind** (discriminator
-      slot resolved by variant-table lookup, no case convention); matching an existing value is
-      delegated to guards.
-- [x] Exhaustiveness applicability boundary: → **Full exhaustiveness** (2026-09-27 owner
-      finalization) — non-sum types with no catch-all arm also raise E1030; enumerable exceptions
-      are only `Bool`'s two literals and `Void`.
-- [x] During the transition period before stub loading-0 mis-match is fixed, should it first raise a
-      compile error? → Yes (#330 safety net); all replaced by real encoding.
-- [ ] Struct pattern `..` rest pattern (some fields + catch-all) — is it needed? (Affects the
-      field-coverage rule.)
-- [ ] Generic struct pattern (`Box { v, n }` against a `Box(Int)` value) — TBD. Currently rejected
-      by a typecheck pre-check.
-- [ ] `non_exhaustive`-class attribute (the break-radius of std variant-set extension on user
-      `match`es) — TBD.
+- [x] Identifier patterns: bind a new variable or match an existing value? → **Binding** (the
+      discriminant position is resolved by variant-table lookup, with no capitalization convention);
+      matching an existing value belongs in a guard.
+- [x] Scope of exhaustiveness checking: → **Fully exhaustive** (decision by the owner on
+      2026-09-27)—non-sum types likewise produce E1030 without a fallback arm; the only enumerable
+      exceptions are Bool with two literal arms and Void.
+- [x] Should the transition period before fixing the stub's load-0 mismatch first produce a
+      compile-time error? → Yes (the #330 safety net); all such cases have been replaced with real
+      encodings.
+- [ ] Is struct-pattern `..` field omission (partial fields + fallback) needed? (This affects the
+      field-coverage rules.)
+- [ ] Generic struct patterns (e.g., `Box { v, n }` on a `Box(Int)` value) remain undecided—they are
+      currently rejected by a typecheck precondition.
+- [ ] A `non_exhaustive`-style attribute (the blast radius of extending the std variant set for user
+      matches) remains undecided.
 
-## Related
+## Related RFCs
 
-- RFC-013 "Runtime Error Values and Code Integration" evolution section (`Error { kind, message }`
+- RFC-013, “Runtime Error Values and Code Propagation,” evolution section (`Error { kind, message }`
   depends on this RFC)
-- RFC-036 testing model (match-when-asserting-error-branch syntax in tests)
-- RFC-011b Phase 2 (`?` interfacization and Result/Option promoted to std: the variant-set
-  exhaustiveness in this RFC rides on the `sum_types` mirror; the determination does not depend on
-  type ownership)
+- RFC-036, Test Model (how to write matches when asserting error branches in tests)
+- RFC-011b Stage 2 (making `?` interface-based and standardizing Result/Option in std: this RFC's
+  variant-set exhaustiveness follows the `sum_types` mirror and does not depend on type ownership)

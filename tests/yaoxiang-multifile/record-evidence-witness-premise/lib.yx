@@ -1,0 +1,8 @@
+Pos: (v: Int) -> Type = { v > 0 }
+
+Box: Type = {
+    v: Int,
+    w: Pos(v),
+}
+
+Holds: (bb: Box) -> Type = { bb.w }

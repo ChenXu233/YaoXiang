@@ -8,12 +8,10 @@ pub mod const_eval;
 pub mod dependent_types;
 pub mod evaluator;
 
-pub use evaluator::Evaluator;
 pub use evaluator::EvalConfig;
 pub use evaluator::EvalError;
-pub mod normalizer;
+pub use evaluator::Evaluator;
 pub mod operations;
-pub mod reducer;
 pub mod type_families;
 
 #[cfg(test)]

@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 use crate::package::error::PackageResult;
-use crate::util::i18n::{t_simple, current_lang, MSG};
+use crate::util::i18n::{current_lang, t_simple, MSG};
 
 /// The lock file name
 pub const LOCK_FILE: &str = "yaoxiang.lock";

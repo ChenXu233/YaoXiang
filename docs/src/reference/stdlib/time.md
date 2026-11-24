@@ -1,6 +1,6 @@
 ---
 title: 'std.time'
-description: '时间戳、格式化与 DateTime 字段访问'
+description: '时间戳、格式化与日期分量访问'
 ---
 
 # std.time
@@ -13,11 +13,11 @@ use std.time
 
 > **实现缺口已修复（#338 / #340，2026-09-19）**。
 >
-> `DateTime` 是**时间戳的别名**（即 `Int`，见
-> `src/frontend/core/types/mono.rs:621-627`）——运行时本就是
-> `RuntimeValue::Int`（`src/std/time.rs:243`），此前只是一个没实体的名字，使 `now()` 的
-> 返回值传不进 `format_time` 与访问器。访问器导出名也从 `DateTime::year` 改为
-> **`datetime_year`**（`::` 是词法保留记号，不能出现在字段访问位置）。
+> `now` / `parse_time` 的返回类型是 **`Int`**（Unix 时间戳，秒）。`DateTime`
+> 不是内置类型名——旧版本曾以临时兼容别名承载同一含义（运行时就是
+> `Int`，#338 连带修复），**P10 S11（issue #513）已把它迁出**：裸写 `DateTime`
+> 注解按未知类型报错，时间戳一律写 `Int`。访问器导出名是扁平形式
+> **`datetime_year`** 等（`::` 是词法保留记号，不能出现在字段访问位置）。
 >
 > 现在 `now()` / `parse_time()` 的返回值可直接用于算术、格式化与全部访问器。
 >
@@ -31,12 +31,12 @@ use std.time
 
 | 函数 | 签名 |
 | ---- | ---- |
-| `now` | `() -> DateTime` |
+| `now` | `() -> Int` |
 | `timestamp` | `() -> Int` |
 | `timestamp_ms` | `() -> Int` |
 | `sleep` | `(seconds: Float) -> Void` |
 | `format_time` | `(dt: Int, fmt: String) -> String` |
-| `parse_time` | `(fmt: String, s: String) -> DateTime` |
+| `parse_time` | `(fmt: String, s: String) -> Int` |
 | `datetime_year` | `(dt: Int) -> Int` |
 | `datetime_month` | `(dt: Int) -> Int` |
 | `datetime_day` | `(dt: Int) -> Int` |
@@ -53,7 +53,7 @@ use std.time
 <!-- stdlib:sig:time.now start -->
 
 ```yaoxiang
-now: () -> DateTime
+now: () -> Int
 ```
 
 <!-- stdlib:sig:time.now end -->
@@ -61,9 +61,8 @@ now: () -> DateTime
 返回当前时间。
 
 返回：`Int` 时间戳（**秒**），即 Unix epoch 起的秒数（`src/std/time.rs:238-244` 直接
-`RuntimeValue::Int`）。签名里写作 `DateTime`，但 `DateTime` 是 `Int` 的别名
-（`src/frontend/core/types/mono.rs:627`），因此返回值**就是** `Int`——可直接参与算术与
-比较，也可直接传给 [`format_time`](#format_time) 与全部 `datetime_*` 访问器。
+`RuntimeValue::Int`）——返回值**就是** `Int`：可直接参与算术与比较，也可直接传给
+[`format_time`](#format_time) 与全部 `datetime_*` 访问器。
 
 需要毫秒精度用 [`timestamp_ms`](#timestamp_ms)。
 
@@ -79,8 +78,8 @@ main: () -> Void = {
 }
 ```
 
-> [`now`](#now) 与 [`timestamp`](#timestamp) 返回同一个东西（都是 Unix 秒时间戳），
-> 区别只在可读性：前者的返回类型标注为 `DateTime`，后者标注为 `Int`。
+> [`now`](#now) 与 [`timestamp`](#timestamp) 返回同一个东西（都是 Unix 秒时间戳，
+> 类型同为 `Int`）；保留两个名字只为调用点可读性。
 
 ### timestamp
 
@@ -169,8 +168,8 @@ format_time: (dt: Int, fmt: String) -> String
 - `dt` —— Unix 时间戳（**秒**），必须是 `Int`
 - `fmt` —— 格式串
 
-> `DateTime` 是 `Int` 的别名，所以传 [`now`](#now) 或 [`parse_time`](#parse_time) 的
-> 返回值**不会**报 `E1002`——双方都是 `Int`，可直接传入。
+> [`now`](#now) 与 [`parse_time`](#parse_time) 的返回值就是 `Int`，直接传入
+> **不会**报 `E1002`。
 
 支持的占位符：
 
@@ -213,7 +212,7 @@ main: () -> Void = {
 <!-- stdlib:sig:time.parse_time start -->
 
 ```yaoxiang
-parse_time: (fmt: String, s: String) -> DateTime
+parse_time: (fmt: String, s: String) -> Int
 ```
 
 <!-- stdlib:sig:time.parse_time end -->
@@ -223,7 +222,7 @@ parse_time: (fmt: String, s: String) -> DateTime
 - `fmt` —— 格式串，**参与解析**（`src/std/time.rs:382` 调 `parse_by_format(&fmt, &s)`）
 - `s` —— 待解析字符串
 
-返回：`Int` 时间戳（签名写作 `DateTime`，实为 `Int` 别名，见 [`now`](#now)），
+返回：`Int` 时间戳（**秒**；见 [`now`](#now)），
 可直接用于算术、[`format_time`](#format_time) 与全部 `datetime_*` 访问器。
 
 `fmt` 认得的指示符与 [`format_time`](#format_time) 一一对应：`%Y` `%m` `%d` `%H` `%M`
@@ -253,7 +252,7 @@ main: () -> Void = {
 }
 ```
 
-## DateTime 字段访问
+## 日期分量访问
 
 `std.time` 导出 8 个日期分量访问器（`#338` 已修复，导出名为扁平形式）：
 
@@ -268,8 +267,8 @@ main: () -> Void = {
 | `datetime_weekday`      | `(dt: Int) -> Int`    | 星期（0 = 周日）    |
 | `datetime_to_string`    | `(dt: Int) -> String` | ISO 8601 形态字符串 |
 
-`DateTime` 是**时间戳的别名**（即 `Int`）——`now()` / `parse_time()` 的返回值
-可直接传入这些访问器，也可直接用于 [`format_time`](#format_time)。拆解按 **UTC**
+`now()` / `parse_time()` 的返回值是 `Int` 时间戳——可直接传入这些访问器，
+也可直接用于 [`format_time`](#format_time)。拆解按 **UTC**
 （`src/std/time.rs:123-178` 纯算术，不含本地时区偏移）：
 
 ```yaoxiang

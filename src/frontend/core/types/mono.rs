@@ -7,11 +7,11 @@
 //! - UniverseLevel: RFC-010 类型宇宙层级
 
 use crate::ast;
+use crate::frontend::core::types::const_data::{ConstExpr, ConstValue, ConstVarDef};
 use crate::frontend::core::types::var::TypeVar;
-use crate::frontend::core::types::const_data::{ConstExpr, ConstVarDef, ConstValue};
 use std::collections::HashMap;
 use std::fmt;
-use std::hash::Hash;
+use std::hash::{Hash, Hasher};
 
 /// RFC-010: 类型宇宙层级
 ///
@@ -431,12 +431,44 @@ impl MonoType {
     }
     /// 内建**运行时长度缓冲**：`Vec(T)`。D8-B 之前这个角色叫 `List`。
     ///
-    /// 名字分层（RFC-011）：内置层只有 `Vec(T)`（运行时长度的原始缓冲）
-    /// 与 `Array(T, N)`（定长）；`List(T)` 是**标准库类型**
-    /// （`std/list.yx` 里的 `{ data: Vec(T), length: Int }`），不在内置层。
+    /// 名字分层：内置层的可增长列表只有 `Vec(T)`（运行时长度的原始缓冲），
+    /// 定长形态是 `Array(T, N)`。`std/list.yx` 自 22a67d93 起整体以
+    /// `Vec(T)` 为底座（"Vec(T) 即列表"），不再定义 `List` 记录。
     /// 因此 `[1,2,3]` 字面量的类型是 `Vec(Int)`，可直接传给库函数。
     pub fn is_list(&self) -> bool {
         self.is_generic_named("Vec")
+    }
+
+    /// 源面容器名的**落点归一**（#403）：源名 `List` 进类型域即落 `Vec` 面。
+    ///
+    /// SPEC syntax.md §1.6.4 与 type-system.md §4.1.1 关键规则同口径：
+    /// 「裸字面量与 `List(T)` 注解落可增长列表」——当前架构里可增长列表就是
+    /// `Vec(T)`（见 [`Self::is_list`]）。若放行 `Generic{"List"}` 进类型域，
+    /// 它没有任何 unify 对象：字面量、构造器、std.list 全部产 `Vec` 面，
+    /// `v: List(Int) = [1,2]`、`v: List(Int) = []` 与对 List 标注值做 for
+    /// 迭代都被 E1002 假拒绝（修前合法程序假拒绝 = 旧行为非成功，D59 C 类，
+    /// #556/#538 同族判据）。
+    ///
+    /// 判据单源：源名进类型域的门共四处——AST 注解（[`From<ast::Type>`]）、
+    /// 调用点显式类型实参（`type_arg_of_expr`，typecheck 侧）、native 签名串
+    /// 解析（`parse_type_str_with_generics`）、L3 IR 视图提取（`lower/query.rs`
+    /// 的 `type_arg_of_expr_ir`）——穷尽扫描动态名 `MonoType::Generic` 构造
+    /// 以这四处为全口径，四处都调本函数，不各写一份映射。
+    ///
+    /// 注意：这是**源名**归一，不是类型域内的名字重写——替换/传播走
+    /// `Substituter` 等既有通道，`Generic{"List"}` 在**幽灵面口径**（经上述
+    /// 各门进类型域的源名）下不再新生，既有按名特判的 List 臂在该口径下
+    /// 不可达，保持原样不动。user-List 遮挡形态下值面仍可达：用户自定义
+    /// `List` 和类型时，`call` 侧 sum_types 守卫链按和类型名直造值面
+    /// `Generic{"List"}`（`inference/expressions/call` 的类型实参应用臂，
+    /// 不经本归一），按名特判臂会把用户容器误判为内建 List 臂——修前既有
+    /// 歧义，非 #403 引入，备案不修。
+    pub(crate) fn source_container_face(name: &str) -> String {
+        if name == "List" {
+            "Vec".to_string()
+        } else {
+            name.to_string()
+        }
     }
     pub fn is_dict(&self) -> bool {
         self.is_generic_named("Dict")
@@ -684,7 +716,7 @@ impl MonoType {
             MonoType::Struct(s) => s
                 .fields
                 .iter()
-                .all(|(_, ty)| matches!(ty, MonoType::Fn { .. })),
+                .all(|field| matches!(field.ty, MonoType::Fn { .. })),
             // TypeRef 指向的可能是约束类型（需要结合类型环境判断）
             // 这里返回 false，具体判断在类型检查时结合环境确定
             MonoType::TypeRef(_) => false,
@@ -702,8 +734,8 @@ impl MonoType {
                 // 只返回函数字段
                 s.fields
                     .iter()
-                    .filter(|(_, ty)| matches!(ty, MonoType::Fn { .. }))
-                    .map(|(name, ty)| (name.clone(), ty))
+                    .filter(|field| matches!(field.ty, MonoType::Fn { .. }))
+                    .map(|field| (field.name.clone(), &field.ty))
                     .collect()
             }
             _ => Vec::new(),
@@ -730,10 +762,11 @@ impl MonoType {
         }
 
         /// 逆序压入「子节点 + 分隔符」，使弹出顺序 = 书写顺序。
+        /// `children` 来自 [`MonoType::type_children`]（书写序）。
         fn push_joined<'a>(
             stack: &mut Vec<Task<'a>>,
             sep: &'static str,
-            children: &'a [MonoType],
+            children: &[&'a MonoType],
         ) {
             for (i, child) in children.iter().enumerate().rev() {
                 stack.push(Task::Node(child));
@@ -771,73 +804,88 @@ impl MonoType {
                 MonoType::Generic { name, args } if name == "Tuple" && !args.is_empty() => {
                     out.push('(');
                     stack.push(Task::Lit(")"));
-                    push_joined(&mut stack, ", ", args);
+                    push_joined(&mut stack, ", ", &ty.type_children());
                 }
                 MonoType::Generic { name, args } if name == "Tuple" && args.is_empty() => {
                     out.push_str("()");
                 }
                 MonoType::Generic { name, args } if name == "Option" && !args.is_empty() => {
+                    // 渲染只消费 walker 序列的首实参（其余实参不参与渲染）
+                    let children = ty.type_children();
                     stack.push(Task::Lit("?"));
-                    stack.push(Task::Node(&args[0]));
+                    stack.push(Task::Node(children[0]));
                 }
                 MonoType::Generic { name, args } if name == "Result" && args.len() == 2 => {
+                    // 渲染消费 walker 序列前缀 2（恰为全集）
+                    let children = ty.type_children();
                     out.push_str("Result(");
                     stack.push(Task::Lit(")"));
-                    stack.push(Task::Node(&args[1]));
+                    stack.push(Task::Node(children[1]));
                     stack.push(Task::Lit(", "));
-                    stack.push(Task::Node(&args[0]));
+                    stack.push(Task::Node(children[0]));
                 }
-                MonoType::Fn {
-                    params,
-                    return_type,
-                } => {
+                MonoType::Fn { .. } => {
                     out.push_str("fn(");
+                    // walker 序列 = 参数类型在前、return_type 恒最后
+                    let mut children = ty.type_children();
+                    let return_type = children
+                        .pop()
+                        .expect("Fn 的 walker 序列恒以 return_type 收尾");
                     stack.push(Task::Node(return_type));
                     stack.push(Task::Lit(") -> "));
-                    push_joined(&mut stack, ", ", params);
+                    push_joined(&mut stack, ", ", &children);
                 }
                 MonoType::TypeVar(v) => out.push_str(&format!("{}", v)),
                 MonoType::TypeRef(name) => out.push_str(name),
                 MonoType::Generic { name, args } if name == "Range" && !args.is_empty() => {
+                    // 渲染只消费 walker 序列的首实参
+                    let children = ty.type_children();
                     out.push_str("Range(");
                     stack.push(Task::Lit(")"));
-                    stack.push(Task::Node(&args[0]));
+                    stack.push(Task::Node(children[0]));
                 }
-                MonoType::Union(types) => {
+                MonoType::Union(_) => {
                     out.push('(');
                     stack.push(Task::Lit(")"));
-                    push_joined(&mut stack, " | ", types);
+                    push_joined(&mut stack, " | ", &ty.type_children());
                 }
-                MonoType::Intersection(types) => {
+                MonoType::Intersection(_) => {
                     out.push('(');
                     stack.push(Task::Lit(")"));
-                    push_joined(&mut stack, " & ", types);
+                    push_joined(&mut stack, " & ", &ty.type_children());
                 }
                 MonoType::Generic { name, args } if name == "Arc" && !args.is_empty() => {
+                    // 渲染只消费 walker 序列的首实参
+                    let children = ty.type_children();
                     out.push_str("Arc(");
                     stack.push(Task::Lit(")"));
-                    stack.push(Task::Node(&args[0]));
+                    stack.push(Task::Node(children[0]));
                 }
                 MonoType::Generic { name, args } if name == "Weak" && !args.is_empty() => {
+                    // 渲染只消费 walker 序列的首实参
+                    let children = ty.type_children();
                     out.push_str("Weak(");
                     stack.push(Task::Lit(")"));
-                    stack.push(Task::Node(&args[0]));
+                    stack.push(Task::Node(children[0]));
                 }
-                MonoType::Generic { name, args } => {
+                MonoType::Generic { name, .. } => {
                     out.push_str(name);
                     out.push('(');
                     stack.push(Task::Lit(")"));
-                    push_joined(&mut stack, ", ", args);
+                    push_joined(&mut stack, ", ", &ty.type_children());
                 }
-                MonoType::Ref { mutable, inner } => {
+                MonoType::Ref { mutable, .. } => {
                     out.push_str(if *mutable { "&mut " } else { "&" });
-                    stack.push(Task::Node(inner));
+                    // walker 序列 = [inner]
+                    let children = ty.type_children();
+                    stack.push(Task::Node(children[0]));
                 }
-                MonoType::AssocType {
-                    host_type,
-                    assoc_name,
-                    assoc_args,
-                } => {
+                MonoType::AssocType { assoc_name, .. } => {
+                    // walker 序列 = host_type 恒首、assoc_args 随后
+                    let children = ty.type_children();
+                    let (host_type, assoc_args) = children
+                        .split_first()
+                        .expect("AssocType 的 walker 序列恒以 host_type 开头");
                     // 书写顺序：host::name(args)；逆序压入 ⇒ 弹出即书写顺序
                     if !assoc_args.is_empty() {
                         stack.push(Task::Lit(")"));
@@ -847,37 +895,41 @@ impl MonoType {
                     stack.push(Task::Text(format!("::{assoc_name}")));
                     stack.push(Task::Node(host_type));
                 }
-                MonoType::Literal {
-                    name: _,
-                    base_type,
-                    value,
-                } => {
+                MonoType::Literal { value, .. } => {
+                    // walker 序列 = [base_type]
+                    let children = ty.type_children();
                     // 书写顺序：base::value；逆序压入 ⇒ 弹出即书写顺序
                     stack.push(Task::Text(format!("::{}", value)));
-                    stack.push(Task::Node(base_type));
+                    stack.push(Task::Node(children[0]));
                 }
                 MonoType::MetaType {
                     universe_level: _,
                     type_params: _,
                 } => {
                     // RFC-010: Type is always just "Type", no [] syntax
+                    // 渲染不消费任何类型子节点（type_params 不参与渲染）
                     out.push_str("Type");
                 }
-                MonoType::Refined { base, constraint } => {
+                MonoType::Refined { constraint, .. } => {
+                    // walker 序列 = [base]
+                    let children = ty.type_children();
                     stack.push(Task::Lit("}"));
                     stack.push(Task::Text(format!("{}", constraint)));
                     stack.push(Task::Lit(" {"));
-                    stack.push(Task::Node(base));
+                    stack.push(Task::Node(children[0]));
                 }
-                MonoType::DepFn {
-                    params,
-                    return_type,
-                } => {
+                MonoType::DepFn { params, .. } => {
                     out.push('(');
+                    // walker 序列 = 参数类型在前、return_type 恒最后
+                    let mut children = ty.type_children();
+                    let return_type = children
+                        .pop()
+                        .expect("DepFn 的 walker 序列恒以 return_type 收尾");
                     stack.push(Task::Node(return_type));
                     stack.push(Task::Lit(") -> "));
                     for (i, p) in params.iter().enumerate().rev() {
-                        stack.push(Task::Node(&p.ty));
+                        // children[i] 与 params[i].ty 对齐（walker 序列约定）
+                        stack.push(Task::Node(children[i]));
                         stack.push(Task::Text(format!("{}: ", p.name)));
                         if i > 0 {
                             stack.push(Task::Lit(", "));
@@ -921,7 +973,7 @@ impl MonoType {
 
         let mut stack: Vec<Frame<'_>> = vec![Frame {
             node: self,
-            children: type_subtree_children(self),
+            children: self.type_children(),
             next: 0,
             done: Vec::new(),
         }];
@@ -943,7 +995,7 @@ impl MonoType {
             if let Some(child) = child {
                 stack.push(Frame {
                     node: child,
-                    children: type_subtree_children(child),
+                    children: child.type_children(),
                     next: 0,
                     done: Vec::new(),
                 });
@@ -959,6 +1011,78 @@ impl MonoType {
         unreachable!("根节点必然在工作列表排空时重建")
     }
 
+    /// `MonoType` 的**类型子节点枚举**——单一定义（issue #474 / WBS S9.2）。
+    ///
+    /// 按字段声明顺序枚举本变体直接持有的全部 `MonoType` 子节点。三个消费者共用
+    /// 这一份定义：
+    ///
+    /// - `type_name`（渲染）：消费该序列的全集或前缀（如 `Option` 只消费首实参、
+    ///   `MetaType` 不消费），标签 / 分隔符 / 常量文本帧留在渲染侧；
+    /// - `type_name_hash`（mono/instance.rs）：把该序列逆序压入哈希工作列表——
+    ///   `ConstValue` / `Name` / `DerivedHash` 三帧是哈希面特有，不经此枚举；
+    ///   `Fn` 在哈希面不消费任何子节点（只写 `"fn"` 标签）；
+    /// - `clone_deep`（栈安全深拷贝）：按序克隆后由 `rebuild_with_children` 重建。
+    ///
+    /// **本 match 禁止兜底臂**：新增 `MonoType` 变体时编译器在此指路——新变体的
+    /// 类型子节点面必须先在此登记，再由各消费者补臂（渲染与哈希的 match 同样穷尽）。
+    ///
+    /// 序列约定（位置即语义，消费者依赖）：
+    /// - `Fn` / `DepFn`：参数类型在前，`return_type` 恒最后；
+    /// - `AssocType`：`host_type` 恒首，`assoc_args` 随后；
+    /// - `Literal`：`base_type`；`Refined`：`base`；`Ref`：`inner`；
+    /// - `Generic` / `Union` / `Intersection` / `MetaType`：全部实参按序。
+    ///
+    /// `Struct` / `Enum` 返回空表：它们不是「类型逐层增长」的载体——`MonoType`
+    /// 载在 `StructType` / `EnumType` 的字段表里，不是本变体直接持有的子节点，
+    /// 其复合载荷走派生克隆（issue #447）。
+    pub fn type_children(&self) -> Vec<&MonoType> {
+        match self {
+            MonoType::Never
+            | MonoType::Void
+            | MonoType::Bool
+            | MonoType::Int(_)
+            | MonoType::Float(_)
+            | MonoType::Char
+            | MonoType::Struct(_)
+            | MonoType::Enum(_)
+            | MonoType::TypeVar(_)
+            | MonoType::TypeRef(_)
+            | MonoType::LibraryRef { .. }
+            | MonoType::ExternRef { .. } => Vec::new(),
+            MonoType::Fn {
+                params,
+                return_type,
+            } => {
+                let mut children: Vec<&MonoType> = params.iter().collect();
+                children.push(return_type);
+                children
+            }
+            MonoType::Generic { args, .. } => args.iter().collect(),
+            MonoType::Union(types) | MonoType::Intersection(types) => types.iter().collect(),
+            MonoType::Ref { inner, .. } => vec![inner],
+            MonoType::AssocType {
+                host_type,
+                assoc_args,
+                ..
+            } => {
+                let mut children: Vec<&MonoType> = vec![host_type];
+                children.extend(assoc_args.iter());
+                children
+            }
+            MonoType::Literal { base_type, .. } => vec![base_type],
+            MonoType::MetaType { type_params, .. } => type_params.iter().collect(),
+            MonoType::Refined { base, .. } => vec![base],
+            MonoType::DepFn {
+                params,
+                return_type,
+            } => {
+                let mut children: Vec<&MonoType> = params.iter().map(|p| &p.ty).collect();
+                children.push(return_type);
+                children
+            }
+        }
+    }
+
     /// 如果是 TypeVar 变体，返回内部 TypeVar
     pub fn type_var(&self) -> Option<TypeVar> {
         match self {
@@ -971,7 +1095,8 @@ impl MonoType {
     /// **「哪些名字是内置类型名」的唯一真相源**（WBS 6.1.2 / 03 §5.3）。
     /// 接受面 = 定稿的 15 个名字（`Never` / `Void` / `()` / `Bool` / `Int` /
     /// `Int8` / `Int16` / `Int32` / `Int64` / `Float` / `Float32` / `Float64` /
-    /// `Char` / `String` / `Bytes`）+ 临时兼容别名 `DateTime`。
+    /// `Char` / `String` / `Bytes`）；`DateTime` 的临时兼容别名已随 P10 S11
+    /// （issue #513）迁出，接受面不再含它。
     ///
     /// `()` 是 `Void` 的**类型写法**（标准库签名串里形如 `() -> Void`），与 `Void`
     /// 同臂；它不是另一个类型。
@@ -986,10 +1111,13 @@ impl MonoType {
     /// 报未知类型（不静默放行）。把其中任何一个加回本表，`types/tests/mono.rs`
     /// 的负向用例立即变红。
     ///
-    /// `DateTime` **不属内置名**，只是 **std 层语义别名**：`src/std/interfaces/time.yx`
-    /// 与 `src/std/time.rs` 的签名串仍写 `DateTime`（`now` / `parse_time`），运行时
-    /// 它就是 `RuntimeValue::Int`（#338 连带修复）。把它迁出内置名表、改由 std 侧
-    /// 承载属 P10 S11（issue #513）——届时删除本臂。
+    /// `DateTime` **不属内置名**：它曾是 std 层的临时兼容别名（运行时就是
+    /// `RuntimeValue::Int`，#338 连带修复），已由 P10 S11（issue #513）迁出——
+    /// `std.time` 的 `now` / `parse_time` 签名串直接写 `Int`，本表不再接受
+    /// `DateTime`（裸 `DateTime` 注解落 `TypeRef`，由
+    /// `TypeEnvironment::resolves_type_name` 报未知类型）。把它加回本表，
+    /// `types/tests/mono.rs` 的负向用例与 `tools/type-tables` 的 T2.5 哨兵
+    /// 立即变红。
     pub fn from_builtin_name(name: &str) -> Option<MonoType> {
         match name {
             "Never" => Some(MonoType::Never),
@@ -1009,8 +1137,6 @@ impl MonoType {
                 name: "Bytes".into(),
                 args: vec![],
             }),
-            // 临时兼容别名：待 P10 S11（issue #513）迁出，届时删除本臂。
-            "DateTime" => Some(MonoType::Int(64)),
             _ => None,
         }
     }
@@ -1024,8 +1150,8 @@ impl MonoType {
     ///
     /// 返回 `None` 表示该类型没有规范名（容器泛型、Tuple、Ref、Fn、Struct、
     /// TypeVar 等）——调用方必须按**结构**回写（`Generic{..}` / `Tuple` / `Ref` /
-    /// `Fn`），或走既有的有损兜底。`DateTime` **永不在此出现**：它是 std 层
-    /// 单向别名（`from_builtin_name("DateTime")` → `Int(64)`），只入不出。
+    /// `Fn`），或走既有的有损兜底。`DateTime` **永不在此出现**：它不属内置名
+    /// （P10 S11 / issue #513 已迁出，解析表不接受它）。
     pub fn canonical_name(&self) -> Option<&'static str> {
         match self {
             MonoType::Never => Some("Never"),
@@ -1100,18 +1226,18 @@ impl From<ast::Type> for MonoType {
                 Self::from_builtin_name(&name).unwrap_or(MonoType::TypeRef(name))
             }
             ast::Type::Struct { body } => {
-                let mut field_names = Vec::new();
-                let mut field_types = Vec::new();
-                let mut field_mutability = Vec::new();
-                let mut field_has_default = Vec::new();
+                let mut fields = Vec::new();
                 let mut interfaces = Vec::new();
                 for item in body {
                     match item {
                         ast::TypeBodyItem::Field(f) => {
-                            field_names.push(f.name.clone());
-                            field_types.push(MonoType::from(f.ty.clone()));
-                            field_mutability.push(f.is_mut);
-                            field_has_default.push(f.default.is_some());
+                            fields.push(StructFieldInfo {
+                                name: f.name.clone(),
+                                ty: MonoType::from(f.ty.clone()),
+                                quantity: f.quantity,
+                                is_mut: f.is_mut,
+                                has_default: f.default.is_some(),
+                            });
                         }
                         ast::TypeBodyItem::Interface(s) => {
                             interfaces.push(s.clone());
@@ -1126,10 +1252,8 @@ impl From<ast::Type> for MonoType {
                 }
                 MonoType::Struct(StructType {
                     name: String::new(),
-                    fields: field_names.into_iter().zip(field_types).collect(),
+                    fields,
                     methods: HashMap::new(),
-                    field_mutability,
-                    field_has_default,
                     interfaces,
                 })
             }
@@ -1158,34 +1282,39 @@ impl From<ast::Type> for MonoType {
             },
             ast::Type::Generic { name, args, .. } => {
                 // #299：不再对 Option/Result/List/Dict/Set/Arc/Weak lower 成原生变体，统一走 Generic
+                // #403：源名落点归一——`List` 进类型域即落 `Vec` 面（判据见
+                // [`MonoType::source_container_face`]）。用户自定义 `List` 类型
+                // 不经此臂定格：注解消费侧的 `try_instantiate_generic_type`
+                // 先查 `generic_type_defs`，命中用户定义按记录展开，本归一只
+                // 兜住无定义时的落点。
                 MonoType::Generic {
-                    name,
+                    name: MonoType::source_container_face(&name),
                     args: args.into_iter().map(MonoType::from).collect(),
                 }
             }
             // NamedStruct and Sum types (placeholder implementations)
-            ast::Type::NamedStruct { name, fields, .. } => {
-                let (field_names, field_types, field_mutability) = fields
+            //
+            // R8（6.9.5-B.1a）：此前这里把「有无默认值」建成**空向量**（与字段表
+            // 等长契约不符：字段 N 个、默认值标记 0 个）。探针钉住的旧行为是：
+            // 该注解类型的 arity 判定从不被查询（构造调用的签名取自**定义**侧），
+            // 起作用的是按字段的可变性。收敛成单列后按字段写真实标记；该语法
+            // 不产生默认值本身，故每个字段的默认值标记与旧空向量在可达面等价
+            //（证据见 09a §P6 6.9.5-B.1a 的报告 §R8）。
+            ast::Type::NamedStruct { name, fields, .. } => MonoType::Struct(StructType {
+                name,
+                fields: fields
                     .into_iter()
-                    .map(|f| (f.name, MonoType::from(f.ty), f.is_mut))
-                    .fold(
-                        (Vec::new(), Vec::new(), Vec::new()),
-                        |(mut names, mut types, mut mutability), (n, t, m)| {
-                            names.push(n);
-                            types.push(t);
-                            mutability.push(m);
-                            (names, types, mutability)
-                        },
-                    );
-                MonoType::Struct(StructType {
-                    name,
-                    fields: field_names.into_iter().zip(field_types).collect(),
-                    methods: HashMap::new(),
-                    field_mutability,
-                    field_has_default: Vec::new(),
-                    interfaces: vec![],
-                })
-            }
+                    .map(|f| StructFieldInfo {
+                        name: f.name,
+                        ty: MonoType::from(f.ty),
+                        quantity: f.quantity,
+                        is_mut: f.is_mut,
+                        has_default: f.default.is_some(),
+                    })
+                    .collect(),
+                methods: HashMap::new(),
+                interfaces: vec![],
+            }),
             ast::Type::Literal {
                 name, base_type, ..
             } => {
@@ -1331,16 +1460,18 @@ impl GenericArg {
         }
     }
 
-    /// 名字替换（mono 的 name_map）：类型位交给 `MonoType::substitute`；
-    /// 项位在 C1 原样——**项的自由名替换是 C2 的符号代入面**（那时项里的
-    /// `k` 由所在实例的 name_map 换成值再归一化），本批不动。
+    /// 名字替换（mono 的 name_map）：类型位交给 `MonoType::substitute`；项位交给
+    /// `const_eval::substitute_term_names`（C3 P5：`N-1` 在 `N→Literal{5}` 的
+    /// name_map 下变成 `5-1`，再由调用方归一化成 `4`——代入不是求值）。
     pub fn substitute(
         &self,
         subst: &std::collections::HashMap<String, MonoType>,
     ) -> GenericArg {
         match self {
             GenericArg::Type(ty) => GenericArg::Type(ty.substitute(subst)),
-            GenericArg::Const(term) => GenericArg::Const(term.clone()),
+            GenericArg::Const(term) => GenericArg::Const(
+                crate::frontend::core::types::eval::const_eval::substitute_term_names(term, subst),
+            ),
         }
     }
 }
@@ -1387,18 +1518,104 @@ pub fn get_ast_type_universe_level(ast_type: &ast::Type) -> usize {
     }
 }
 
+/// 记录的一个字段（6.9.5-B.1a：表示收敛，H1 + H10）。
+///
+/// 此前「字段名 + 字段类型」在 `fields`，而「可变性」「有无默认值」在同长的并行
+/// 向量里——三份事实两套下标，任何一处漏步进就静默错位。收敛成一列后，
+/// 字段的身份与它的全部事实同生同灭。
+///
+/// `quantity`：`Some(Quantity::Zero)` = witness 字段（编译期，运行期无数据槽）；
+/// `None` = data 字段。B.1a 只落**表示**，不产出 witness（构造点全部是 `None`）。
 #[derive(Debug, Clone)]
+pub struct StructFieldInfo {
+    /// 字段名（记录内的名字；不参与跨记录的名义身份）
+    pub name: String,
+    /// 字段类型
+    pub ty: MonoType,
+    /// 量词读数：`Some(Zero)` = witness，`None` = data（B.1a 恒为 `None`）
+    pub quantity: Option<crate::ast::Quantity>,
+    /// 是否可变（`mut` 字段）
+    pub is_mut: bool,
+    /// 该字段是否声明了默认值
+    pub has_default: bool,
+}
+
+#[derive(Clone)]
 pub struct StructType {
     pub name: String,
-    pub fields: Vec<(String, MonoType)>,
+    pub fields: Vec<StructFieldInfo>,
     /// 方法表：方法名 -> 方法类型
     pub methods: HashMap<String, PolyType>,
-    /// 字段可变性标记：与 fields 索引对应
-    pub field_mutability: Vec<bool>,
-    /// 字段默认值标记：与 fields 索引对应，标记哪些字段有默认值
-    pub field_has_default: Vec<bool>,
     /// RFC-010: 接口约束列表
     pub interfaces: Vec<String>,
+}
+
+/// 相等口径（R9 + 6.9.5-B.1a 的零行为约束）。
+///
+/// * `has_default` **不参与**：旧 `StructType` 的 Eq 只比 `name` + `fields`，
+///   默认值标记不在其中——零行为要求保持。
+/// * `is_mut` **也不参与**：同上（可变性由 `TypeConstraintSolver::unify` 的
+///   Struct 臂**单独**逐字段比较，与旧实现比较可变性向量的口径相同）。
+/// * `quantity` **参与**：`Some(Zero)`（witness-bearing 记录）与 `None`（data
+///   记录）是不同类型，缓存的键必须区分。
+impl PartialEq for StructFieldInfo {
+    fn eq(
+        &self,
+        other: &Self,
+    ) -> bool {
+        self.name == other.name && self.ty == other.ty && self.quantity == other.quantity
+    }
+}
+
+impl Eq for StructFieldInfo {}
+
+impl Hash for StructFieldInfo {
+    fn hash<H: Hasher>(
+        &self,
+        state: &mut H,
+    ) {
+        // 与 Eq 同口径（Eq 忽略的字段不得进 Hash）
+        self.name.hash(state);
+        self.ty.hash(state);
+        self.quantity.hash(state);
+    }
+}
+
+/// 打印边界：`StructType` 的 Debug 保持**旧形态**（6.9.5-B.1a / R7）。
+///
+/// 字段表从 `Vec<(String, MonoType)>` 收敛成 `Vec<StructFieldInfo>` 后，派生 Debug
+/// 会把每项打印成 `StructFieldInfo { .. }`，任何以 `{:?}` 渲染类型的快照、诊断、
+/// `dump` 都会跟着漂移。故在这里把一致性收在**打印边界**（同 `Param` 的先例）：
+/// `fields` 仍按 `[(名字, 类型)]` 打印，其余段与派生形态一致。
+///
+/// 被删掉的两个并行向量（旧的字段可变性/默认值标记）不再打印：它们已不是
+/// `StructType` 的事实，其信息在同一条记录里（`is_mut`/`has_default`）。
+impl fmt::Debug for StructType {
+    fn fmt(
+        &self,
+        f: &mut fmt::Formatter<'_>,
+    ) -> fmt::Result {
+        f.debug_struct("StructType")
+            .field("name", &self.name)
+            .field("fields", &LegacyFieldList(&self.fields))
+            .field("methods", &self.methods)
+            .field("interfaces", &self.interfaces)
+            .finish()
+    }
+}
+
+/// `StructType.fields` 的旧打印形态：`[(名字, 类型)]`。
+struct LegacyFieldList<'a>(&'a [StructFieldInfo]);
+
+impl fmt::Debug for LegacyFieldList<'_> {
+    fn fmt(
+        &self,
+        f: &mut fmt::Formatter<'_>,
+    ) -> fmt::Result {
+        f.debug_list()
+            .entries(self.0.iter().map(|field| (&field.name, &field.ty)))
+            .finish()
+    }
 }
 
 impl StructType {
@@ -1409,11 +1626,84 @@ impl StructType {
     ) -> Option<bool> {
         self.fields
             .iter()
-            .position(|(name, _)| name == field_name)
-            .map(|idx| self.field_mutability.get(idx).copied().unwrap_or(false))
+            .find(|field| field.name == field_name)
+            .map(|field| field.is_mut)
     }
 }
 
+/// 字段量词事实的唯一读数：`Some(Quantity::Zero)` = witness 字段。
+///
+/// **这是全仓唯一把「量词读数」翻译成「witness 布尔」的地方**（6.9.5-B.1b /
+/// H2）。AST 的 `crate::ast::StructField::quantity`、IR 的
+/// `crate::middle::ir::ir::TypeDeclField::quantity` 与本文件的
+/// `StructFieldInfo::quantity` 是同一事实的三个投影；任何「跳过 witness」
+/// 的映射都必须从本函数派生，不得各写一份 `== Some(Zero)`。
+pub fn quantity_is_witness(quantity: Option<crate::ast::Quantity>) -> bool {
+    quantity == Some(crate::ast::Quantity::Zero)
+}
+
+/// 声明序字段索引 → 运行期数据索引（6.9.5-B.1b / H2 的唯一映射点）。
+///
+/// witness 字段不占运行期槽：命中 witness ⇒ `None`（值级访问必须被拒绝，
+/// 不是「字段不存在」）；数据字段返回它前面有多少个数据字段。
+/// 越界同样返回 `None`。
+///
+/// 接受 `Option<Quantity>` 的迭代器而不是具体字段类型：AST / IR / Mono 三侧
+/// 的字段表结构不同，但映射只有这一份实现（调用方传
+/// `fields.iter().map(|f| f.quantity)`）。
+pub fn runtime_field_index<I>(
+    quantities: I,
+    declared_index: usize,
+) -> Option<usize>
+where
+    I: IntoIterator<Item = Option<crate::ast::Quantity>>,
+{
+    let mut runtime_index = 0usize;
+    for (index, quantity) in quantities.into_iter().enumerate() {
+        if index == declared_index {
+            return if quantity_is_witness(quantity) {
+                None
+            } else {
+                Some(runtime_index)
+            };
+        }
+        if !quantity_is_witness(quantity) {
+            runtime_index += 1;
+        }
+    }
+    None
+}
+
+/// 运行期数据槽个数 = 非 witness 字段数（构造参数个数、局部槽布局的唯一来源）。
+pub fn runtime_field_count<I>(quantities: I) -> usize
+where
+    I: IntoIterator<Item = Option<crate::ast::Quantity>>,
+{
+    quantities
+        .into_iter()
+        .filter(|quantity| !quantity_is_witness(*quantity))
+        .count()
+}
+
+/// 量词序列中是否存在 witness 字段（记录是否 witness-bearing）。
+pub fn quantities_are_witness_bearing<I>(quantities: I) -> bool
+where
+    I: IntoIterator<Item = Option<crate::ast::Quantity>>,
+{
+    quantities.into_iter().any(quantity_is_witness)
+}
+
+impl StructFieldInfo {
+    /// 本字段是否 witness（编译期证据，运行期无数据槽）。
+    pub fn is_witness(&self) -> bool {
+        quantity_is_witness(self.quantity)
+    }
+}
+
+/// 记录是否 witness-bearing：任一字段是 witness。
+pub fn is_witness_bearing(fields: &[StructFieldInfo]) -> bool {
+    quantities_are_witness_bearing(fields.iter().map(|field| field.quantity))
+}
 // 为 StructType 实现自定义的 Hash 和 Eq
 impl PartialEq for StructType {
     fn eq(
@@ -1433,7 +1723,6 @@ impl Hash for StructType {
     ) {
         self.name.hash(state);
         self.fields.hash(state);
-        self.field_mutability.hash(state);
     }
 }
 
@@ -1514,49 +1803,8 @@ impl fmt::Display for PolyType {
 
 // ==================== 栈安全深拷贝的辅助（WBS 3.10.1 / issue #447） ====================
 
-/// 取出 `MonoType` 的**类型子节点**（按变体声明顺序）。
-///
-/// 只有直接持有 `MonoType` 子树、且属于「类型逐层增长」载体的变体返回子节点；
-/// 其余变体（含携带字段/方法等复合载荷的 `Struct`/`Enum`）返回空表，
-/// 由 `rebuild_with_children` 走派生克隆（它们不是本路径的深度增长源）。
-fn type_subtree_children(ty: &MonoType) -> Vec<&MonoType> {
-    match ty {
-        MonoType::Generic { args, .. } => args.iter().collect(),
-        MonoType::Fn {
-            params,
-            return_type,
-        } => {
-            let mut v: Vec<&MonoType> = params.iter().collect();
-            v.push(return_type);
-            v
-        }
-        MonoType::Ref { inner, .. } => vec![inner],
-        MonoType::Union(types) | MonoType::Intersection(types) => types.iter().collect(),
-        MonoType::AssocType {
-            host_type,
-            assoc_args,
-            ..
-        } => {
-            let mut v: Vec<&MonoType> = vec![host_type];
-            v.extend(assoc_args.iter());
-            v
-        }
-        MonoType::Literal { base_type, .. } => vec![base_type],
-        MonoType::MetaType { type_params, .. } => type_params.iter().collect(),
-        MonoType::Refined { base, .. } => vec![base],
-        MonoType::DepFn {
-            params,
-            return_type,
-        } => {
-            let mut v: Vec<&MonoType> = params.iter().map(|p| &p.ty).collect();
-            v.push(return_type);
-            v
-        }
-        _ => Vec::new(),
-    }
-}
-
-/// 用按序克隆好的子节点重建节点（`children` 数量必须等于 `type_subtree_children`）。
+/// 用按序克隆好的子节点重建节点（`children` 数量必须等于
+/// [`MonoType::type_children`] 的枚举）。
 fn rebuild_with_children(
     node: &MonoType,
     children: Vec<MonoType>,

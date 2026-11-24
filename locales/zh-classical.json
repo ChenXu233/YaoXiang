@@ -139,8 +139,8 @@
     "example": "x: Int = \"hello\";",
     "error_output": "error[E1002]: 类型不匹配\n --> example.yx:1:12\n  |\n1 | x: Int = \"hello\";\n  |            ^ 期望 'Int'，得 'String'"
   },
-  "E1002.borrowed_arith.help": "The left side reads as '{l}' and the right side as '{r}'; when a borrow (&T) participates in arithmetic its inner type is used — to operate on a container, index into it (e.g. v[0]) or dereference it (*t) first",
-  "E1002.binop_mismatch.help": "The left and right types are '{l}' and '{r}', which do not support this operator; check whether a conversion is missing or an operand is wrong",
+  "E1002.borrowed_arith.help": "左读作 '{l}'、右读作 '{r}'；借用（&T）参与算术，依内型判定。欲对容器运算，先取其元素（如 v[0]），或解引用（*t）",
+  "E1002.binop_mismatch.help": "左右之型各为 '{l}' 与 '{r}'，二者弗承此运算符；审是否缺转换，或误书操作数",
   "E1003": {
     "title": "未知类型",
     "message": "所引类型不存在",
@@ -157,7 +157,7 @@
     "example": "add(1, 2, 3);",
     "error_output": "error[E1010]: 参数之数不契\n --> example.yx:1:1\n  |\n1 | add(1, 2, 3);\n  |     ^ 函数冀 2 参数，得 3"
   },
-  "E1010.missing_named.help": "Missing required parameters: {missing} (named arguments fill slots by parameter name and do not occupy leading positions)",
+  "E1010.missing_named.help": "缺必需形参：{missing}（命名实参唯依形参名入槽，弗占前导之位）",
   "E1011": {
     "title": "参数之型不契",
     "message": "参数之型审验有乖",
@@ -234,7 +234,7 @@
     "title": "字段未得",
     "message": "访问不存之结构体字段",
     "template": "于结构体 '{struct}' 中未得字段 '{field}'",
-    "help": "审结构体之所存字段",
+    "help": "稽核结构体之可用字段；若为谓词体之证据字段路径，须核对记录定义中 evidence 字段之名",
     "example": "point.z;",
     "error_output": "error[E1042]: 字段未得\n --> example.yx:1:7\n  |\n1 | point.z;\n  |       ^ 于结构体 'Point' 中未得字段 'z'"
   },
@@ -488,7 +488,7 @@
     "example": "use foo::bar;",
     "error_output": "error[E5001]: 模块未获\n --> example.yx:1:5\n  |\n1 | use foo::bar;\n  |     ^ 模块'foo'未获"
   },
-  "E5001.vendor_missing.help": "Dependency package '{pkg}' is not installed in .yaoxiang/vendor/; run `yaoxiang install`",
+  "E5001.vendor_missing.help": "依赖包 '{pkg}' 未安装于 .yaoxiang/vendor/，请运行 `yaoxiang install`",
   "E5002": {
     "title": "导入有讹",
     "message": "导入模块未成",
@@ -591,6 +591,8 @@
     "example": "",
     "error_output": ""
   },
+  "E8001.span_missing.message": "诊断 {code} 缺 span：调用点未 .at(span)，亦弗在类型检查 walk 上下文中（编译器之误，见 #324）",
+  "E8001.span_missing.help": "请于调用点补 .at(span)，或于类型检查 walk 上下文内构建",
   "E8002": {
     "title": "意外之恐慌",
     "message": "编译器忽遇意外之恐慌",
@@ -739,10 +741,12 @@
     "template": "精化谓词有违：{constraint}{counterexample}",
     "help": "谓词已证为伪——有赋值致约束为假。请审变量之值，或宽其约束。"
   },
-  "E4018.counterexample.section": "\n\nCounterexample:\n{assignments}",
-  "E4018.no_free_var.note": "\n\n(The constraint has no free variables; the annotation itself is unsatisfiable.)",
-  "E4018.proof_false.note": "\n\n(Proof function returned false; no concrete counterexample.)",
-  "E4018.proof_error.note": "\n\n(Proof function failed to execute; no concrete counterexample.)",
+  "E4018.counterexample.section": "\n\n反例：\n{assignments}",
+  "E4018.no_free_var.note": "\n\n（约束不含自由变量，注解自身弗立）",
+  "E4018.proof_false.note": "\n\n（证明函数返回 false，无具体反例）",
+  "E4018.proof_error.note": "\n\n（证明函数执行出错，无具体反例）",
+  "E4018.proof_false.constraint": "证明函数 '{func}' 返回 false，约束不满足（参数: {args}）；请审约束条件，或改所传之值",
+  "E4018.proof_error.constraint": "证明函数 '{func}' 执行失败: {error}",
   "E4019": {
     "title": "类型等式不立",
     "message": "类型等式于证明管道内已被证伪",
@@ -790,6 +794,14 @@
     "example": "if = 1;",
     "error_output": "error[E0018]: 以关键字为名\n --> example.yx:1:1\n  |\n1 | if = 1;\n  | ^^ 'if' 乃关键字"
   },
+  "E0019": {
+    "title": "表达式嵌套过深",
+    "message": "表达式嵌套逾 {limit} 层，逾解析器递归之限",
+    "template": "表达式嵌套逾最大递归深度（{limit}）",
+    "help": "简化表达式，或拆深层嵌套为中间变量、辅助之函数",
+    "example": "main = () => { y = - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 1\n    print(y) }",
+    "error_output": "error[E0019]: 表达式嵌套过深\n --> example.yx:1:24\n  |\n1 | main = () => { y = - - - ...\n  |                        ^ 表达式嵌套逾最大递归深度（1024）"
+  },
   "E1062": {
     "title": "const 泛型约束未立",
     "message": "const 泛型参数之值约束未合",
@@ -810,7 +822,7 @@
     "title": "精化类型实参之形非法",
     "message": "精化类型实参不可转为编译期之常量表达式",
     "template": "'{name}'须编译期之常量实参，然所予实参不可转",
-    "help": "谓词/证明函数之实参须为字面量、变量或单参数类型之应用，否则精化约束不可生",
+    "help": "谓词／证明函数之实参必为字面量、变量或单参数类型应用；否则精化约束弗能生成。若在类型位或谓词体，证据字段路径须通体为该谓词唯一形参之 evidence 字段，且其基名须与应用实参之名一致",
     "example": "y: IsSmall(List(Int)) = 9999",
     "error_output": "error[E1092]: 'IsSmall'须编译期之常量实参，然所予实参不可转"
   },
@@ -1130,6 +1142,12 @@
     "template": "测度不立：此调用点无以证测度严格递减\n\n反例：\n{counterexample}",
     "help": "此乃精化类型主张之终止性义务：凡携 `Terminates` 测度之递归函数，每一递归调用点皆须证测度严格递减。反例陈一组取值使递减不立。请审测度之择是否允当，或补分支守卫使递归路径之降得立。参 RFC-027a。"
   },
+  "E4023": {
+    "title": "未能於内核内證明",
+    "message": "編譯器於所給資源與推理規則之內，未能證明此義務（非謂命題為偽）",
+    "template": "未能證明：{proposition}（{reason}）",
+    "help": "此乃編譯器推理之限，非程序之誤也。宜補編譯期已知之實參或證據，或改義務為内核可判之形（如明示類型實參之值）。參見 RFC-027 §12.3。"
+  },
   "package_outdated_none": "诸依赖悉皆新。",
   "package_outdated_found": "得 {0} 个过时依赖:",
   "package_outdated_row": "  {0}: {1} -> {2}",
@@ -1218,6 +1236,22 @@
     "example": "f: (N: Int) -> (n: N) -> Int = (n) => n\nk: (y: Int) -> Int = f(y)",
     "error_output": "error[E1113]: 编译期值参数阙编译期证据\n --> example.yx:2:24\n  |\n2 | k: (y: Int) -> Int = f(y)\n  |                        ^ 编译期值参数 'N' 须有编译期之证，而实参不可于编译期定"
   },
+  "E1114": {
+    "title": "witness 字段不可于值级读取",
+    "message": "witness 字段 '{field}' 乃记录 '{type}' 之编译期证据，运行期无数据槽，不可于值级读取",
+    "template": "witness 字段 '{field}' 乃记录 '{type}' 之编译期证据，运行期无数据槽，不可于值级读取",
+    "help": "witness 字段于类型级使用：`b.w` 乃证据项，可为证明之前提；此非值级读取也（运行期无数据槽）。须运行期数据者，请将该字段建为普通数据字段。",
+    "example": "Box: Type = { v: Int, w: Pos(v) }  // w 乃 witness 字段，运行期无数据槽\nmain: () -> Void = {\n    b: Box = Box(v = 1)\n    b.w\n}",
+    "error_output": "error[E1114]: witness 字段不可于值级读取\n --> example.yx:5:5\n  |\n5 |     b.w\n  |     ^^^ witness 字段 'w' 乃记录 'Box' 之编译期证据，运行期无数据槽，不可于值级读取"
+  },
+  "E1115": {
+    "title": "witness-bearing 记录不可变",
+    "message": "记录 '{type}' 含 witness 字段，其诸字段于构造之后必守不变",
+    "template": "记录 '{type}' 含 witness 字段，其诸字段于构造之后必守不变",
+    "help": "witness-bearing 记录不得立 `mut` 字段、不得字段赋值、不得 `&mut` 借用，亦不得调用需写借用之方法；可变之数据请析入不含 witness 之记录。",
+    "example": "Box: Type = { v: Int, w: Pos(v) }\nmain: () -> Void = {\n    b: Box = Box(v = 1)\n    b.v = 2\n}",
+    "error_output": "error[E1115]: witness-bearing 记录不可变\n --> example.yx:4:5\n  |\n4 |     b.v = 2\n  |     ^^^^^^^ 记录 'Box' 含 witness 字段，其诸字段于构造之后必守不变"
+  },
   "W1082": {
     "title": "所有权析降级",
     "message": "无函数体检查器，所有权之析已循空账本降级运行",
@@ -1234,7 +1268,7 @@
     "example": "// zlib.yx: use zother.{o_val}\n// zother.yx: use zlib.{z_val}\n// => zlib → zother → zlib：两模块彼此导入，环中先后仅依路径字典序作约定",
     "error_output": "warning[W1007]: 模块导入环 zlib → zother → zlib：环中初始化次序不可判定；环中先后仅依路径字典序作确定性约定（非语义保证）\n --> zother.yx:2:1\n  |\n2 | use zlib.{z_val}\n  | ^^^^^^^^^^^^^^^^^\n  |\nhelp: 环中值依赖与 use 次序相逆：zlib 读 zother.o_val 时，zother 尚未初始化（所违之边：zother 导入 zlib，拓扑序据此置 zlib 于前）。初始化次序依 use 依赖而定，环中值依赖无法同时满足——破此环，或将该顶层值改为函数，以延迟求值"
   },
-  "W1007.value_edge.help": "The value dependency runs against the use order: {reader} reads {slot} while {owner} is not yet initialized (violated edge: {owner} imports {reader}; the topological order therefore places {reader} first). Initialization follows use dependencies; inside a cycle both cannot hold — break the cycle, or defer the top-level value behind a function.",
+  "W1007.value_edge.help": "环中值依赖与 use 次序相逆：{reader} 读 {slot} 时，{owner} 尚未初始化（所违之边：{owner} 导入 {reader}，拓扑序据此置 {reader} 于前）。初始化次序依 use 依赖而定，环中值依赖无法同时满足——破此环，或将该顶层值改为函数，以延迟求值",
   "E3024": {
     "title": "項目配置不可讀",
     "template": "項目配置 {path} 不可讀：{detail}",

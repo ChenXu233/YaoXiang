@@ -599,7 +599,12 @@ impl BytecodeInstr {
                 BinaryOp::Sar => opcode::I64_SAR,
                 BinaryOp::Shr => opcode::I64_SHR,
             },
-            BytecodeInstr::UnaryOp { .. } => opcode::I64_NEG,
+            // RFC-039 D33 / issue #562：`op` 字段必须区分（Not 与 Neg 分码），
+            // 不得静默把 Not 退化为 I64_NEG
+            BytecodeInstr::UnaryOp { op, .. } => match op {
+                UnaryOp::Neg => opcode::I64_NEG,
+                UnaryOp::Not => opcode::I64_NOT,
+            },
             BytecodeInstr::Compare { cmp, .. } => match cmp {
                 CompareOp::Eq => opcode::I64_EQ,
                 CompareOp::Ne => opcode::I64_NE,
@@ -1256,6 +1261,20 @@ impl From<crate::middle::bytecode::file::BytecodeFile> for BytecodeModule {
                                 dst: Reg(dst),
                                 src: Reg(src),
                                 op: UnaryOp::Neg,
+                            });
+                        }
+                    }
+                    opcode::I64_NOT => {
+                        // Unary logical not: !x（RFC-039 D33 / issue #562：与取负分码，
+                        // 往返保真还原 Not）
+                        // Operands: dst(1) + src(1)
+                        if instr.operands.len() >= 2 {
+                            let dst = instr.operands[0] as u16;
+                            let src = instr.operands[1] as u16;
+                            decoded_instructions.push(BytecodeInstr::UnaryOp {
+                                dst: Reg(dst),
+                                src: Reg(src),
+                                op: UnaryOp::Not,
                             });
                         }
                     }

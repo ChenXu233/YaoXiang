@@ -16,7 +16,7 @@ description: '模块系统与导入解析相关的错误。'
 | 码号 | 中文名 | 类别 | span 豁免 | 模板 | 发射点 |
 | --- | --- | --- | --- | --- | --- |
 | `E5001` | 模块未找到 | `Module` | 否 | `模块 '{module}' 未找到` | ✅ 1 处 |
-| `E5002` | 导入错误 | `Module` | 否 | `导入模块 '{module}' 失败：{reason}` | ⚠ 暂未发射 |
+| `E5002` | 导入错误 | `Module` | 否 | `导入模块 '{module}' 失败：{reason}` | ✅ 1 处 |
 | `E5003` | 导出未找到 | `Module` | 否 | `在模块 '{module}' 中找不到导出 '{export}'` | ✅ 1 处 |
 | `E5004` | 循环依赖 | `Module` | 否 | `检测到循环依赖：{path}` | ⚠ 暂未发射 |
 | `E5005` | 无效的模块路径 | `Module` | 否 | `无效的模块路径：'{path}'` | ⚠ 暂未发射 |
@@ -34,7 +34,7 @@ description: '模块系统与导入解析相关的错误。'
 - **模板**：`模块 '{module}' 未找到`
 - **消息**：引用的模块不存在
 - **帮助**：检查模块路径，确保它存在
-- **发射点**：`src/frontend/core/sema/inference/statements.rs:744`
+- **发射点**：`src/frontend/core/sema/inference/statements.rs:894`
 
 ### E5002：导入错误
 
@@ -44,7 +44,7 @@ description: '模块系统与导入解析相关的错误。'
 - **模板**：`导入模块 '{module}' 失败：{reason}`
 - **消息**：导入模块失败
 - **帮助**：检查导入路径和模块解析
-- **发射点**：⚠ 暂未发射（注册表中保留该码，但非测试代码里没有调用处，用户无法触发）
+- **发射点**：`src/frontend/core/sema/checker.rs:3471`
 
 ### E5003：导出未找到
 
@@ -54,7 +54,7 @@ description: '模块系统与导入解析相关的错误。'
 - **模板**：`在模块 '{module}' 中找不到导出 '{export}'`
 - **消息**：模块中不存在的导出
 - **帮助**：检查模块的导出
-- **发射点**：`src/frontend/core/sema/inference/statements.rs:829`
+- **发射点**：`src/frontend/core/sema/inference/statements.rs:993`
 
 ### E5004：循环依赖
 
@@ -82,7 +82,7 @@ description: '模块系统与导入解析相关的错误。'
 - **构造函数**：`ErrorCodeDefinition::duplicate_import(name)`
 - **模板**：`重复导入：'{name}' 已被导入`
 - **帮助**：请移除重复的导入，或使用不同名字/模块别名
-- **发射点**：`src/frontend/core/sema/inference/statements.rs:349`
+- **发射点**：`src/frontend/core/sema/inference/statements.rs:468`
 
 ### E5007：模块导出
 
@@ -101,5 +101,5 @@ description: '模块系统与导入解析相关的错误。'
 - **构造函数**：`ErrorCodeDefinition::import_name_conflict(name, module)`
 - **模板**：`导入名 '{name}' 与现有绑定冲突（导入自 '{module}'）`
 - **帮助**：请使用不同名字或模块别名
-- **发射点**：`src/frontend/core/sema/inference/statements.rs:358`
+- **发射点**：`src/frontend/core/sema/inference/statements.rs:477`
 - **源码注释名**：导入名与现有绑定冲突（#414，RFC-029 §导入冲突）

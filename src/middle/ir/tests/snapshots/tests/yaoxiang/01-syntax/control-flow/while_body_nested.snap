@@ -2,95 +2,151 @@ module
   fn main() -> Void
     slot[0] total : Int(64) @depth1
     slot[1] i : Int(64) @depth1
-    slot[18] x : Int(64) @depth3
-    slot[19] found : Int(64) @depth1
-    slot[20] n : Int(64) @depth1
-    slot[34] label : Int(64) @depth4
-    locals_total=40
+    slot[2] x : Int(64) @depth3
+    slot[3] found : Int(64) @depth1
+    slot[4] n : Int(64) @depth1
+    slot[5] label : Int(64) @depth4
+    locals_total=11
+    values_total=55
+    value v0: Void @block0
+    value v1: Bool @block0
+    value v2: Int(64) @block0
+    value v3: Int(64) @block0
+    value v4: Int(64) @block0
+    value v5: Int(64) @block0
+    value v6: TypeRef("?") @block0
+    value v7: Int(64) @block0
+    value v8: Int(64) @block0
+    value v9: Int(64) @block0
+    value v10: Int(64) @block0
+    value v11: Int(64) @block0
+    value v12: Int(64) @block0
+    value v13: Int(64) @block0
+    value v14: Int(64) @block0
+    value v15: TypeRef("?") @block0
+    value v16: TypeRef("?") @block0
+    value v17: TypeRef("?") @block0
+    value v18: Bool @block0
+    value v19: Int(64) @block0
+    value v20: Int(64) @block0
+    value v21: TypeRef("?") @block0
+    value v22: Bool @block0
+    value v23: Int(64) @block0
+    value v24: Int(64) @block0
+    value v25: TypeRef("?") @block0
+    value v26: Int(64) @block0
+    value v27: Int(64) @block0
+    value v28: TypeRef("?") @block0
+    value v29: Bool @block0
+    value v30: Int(64) @block0
+    value v31: Int(64) @block0
+    value v32: Generic { name: "String", args: [] } @block0
+    value v33: Void @block0
+    value v34: Bool @block0
+    value v35: Int(64) @block0
+    value v36: Int(64) @block0
+    value v37: Int(64) @block0
+    value v38: Int(64) @block0
+    value v39: TypeRef("?") @block0
+    value v40: Bool @block0
+    value v41: Int(64) @block0
+    value v42: Int(64) @block0
+    value v43: Int(64) @block0
+    value v44: Int(64) @block0
+    value v45: TypeRef("?") @block0
+    value v46: Int(64) @block0
+    value v47: Int(64) @block0
+    value v48: Int(64) @block0
+    value v49: Int(64) @block0
+    value v50: TypeRef("?") @block0
+    value v51: Bool @block0
+    value v52: Int(64) @block0
+    value v53: Int(64) @block0
+    value v54: Generic { name: "String", args: [] } @block0
     Load %0 <- int(0)
     Load %1 <- int(0)
-    Load %2 <- void
-    Load %3 <- %1
-    Load %4 <- int(3)
-    Lt %5 <- %3, %4
-    JmpIfNot %5 -> instr(43)
-    Load %6 <- %1
-    Load %7 <- int(1)
-    Add %1 <- %6, %7
-    AllocArray %8 size=int(4), elem=int(1)
-    Load %9 <- int(1)
-    Load %10 <- int(0)
-    StoreIndex %8[%10] <- %9
-    Load %11 <- int(2)
-    Load %12 <- int(1)
-    StoreIndex %8[%12] <- %11
-    Load %13 <- int(3)
-    Load %14 <- int(2)
-    StoreIndex %8[%14] <- %13
-    Load %15 <- int(4)
-    Load %16 <- int(3)
-    StoreIndex %8[%16] <- %15
-    Call %17 <- string("std.list.iter") [%8] (def=d0)
-    Call %18 <- string("std.list.has_next") [%17] (def=d1)
-    JmpIfNot %18 -> instr(42)
-    Call %19 <- string("std.list.next") [%17] (def=d2)
-    Store %20 <- %19
-    Load %21 <- %20
-    Load %22 <- int(2)
-    Eq %23 <- %21, %22
-    JmpIfNot %23 -> instr(33)
+    Load v0 <- void
+    Load v2 <- %1
+    Load v3 <- int(3)
+    Lt v1 <- v2, v3
+    JmpIfNot v1 -> instr(43)
+    Load v4 <- %1
+    Load v5 <- int(1)
+    Add %1 <- v4, v5
+    AllocArray v6 size=int(4), elem=int(1)
+    Load v7 <- int(1)
+    Load v8 <- int(0)
+    StoreIndex v6[v8] <- v7
+    Load v9 <- int(2)
+    Load v10 <- int(1)
+    StoreIndex v6[v10] <- v9
+    Load v11 <- int(3)
+    Load v12 <- int(2)
+    StoreIndex v6[v12] <- v11
+    Load v13 <- int(4)
+    Load v14 <- int(3)
+    StoreIndex v6[v14] <- v13
+    Call v15 <- string("std.list.iter") [v6] (def=d0)
+    Call v16 <- string("std.list.has_next") [v15] (def=d1)
+    JmpIfNot v16 -> instr(42)
+    Call v17 <- string("std.list.next") [v15] (def=d2)
+    Store %2 <- v17
+    Load v19 <- %2
+    Load v20 <- int(2)
+    Eq v18 <- v19, v20
+    JmpIfNot v18 -> instr(33)
     Jmp -> instr(24)
-    Load %19 <- %20
-    Load %23 <- int(4)
-    Eq %18 <- %19, %23
-    JmpIfNot %18 -> instr(38)
+    Load v23 <- %2
+    Load v24 <- int(4)
+    Eq v22 <- v23, v24
+    JmpIfNot v22 -> instr(38)
     Jmp -> instr(42)
-    Load %18 <- %0
-    Load %19 <- %20
-    Add %0 <- %18, %19
+    Load v26 <- %0
+    Load v27 <- %2
+    Add %0 <- v26, v27
     Jmp -> instr(24)
     Jmp -> instr(3)
-    Load %23 <- %0
-    Load %21 <- int(12)
-    Eq %19 <- %23, %21
-    Load %22 <- string("while 嵌套 for 的 break/continue 语义")
-    Call %18 <- string("std.assert.assert") [%19, %22] (def=d3)
-    Load %18 <- int(0)
-    Load %19 <- int(0)
-    Load %23 <- void
-    Load %22 <- %19
-    Load %24 <- int(5)
-    Lt %21 <- %22, %24
-    JmpIfNot %21 -> instr(75)
-    Load %25 <- %19
-    Load %26 <- int(1)
-    Add %19 <- %25, %26
-    Load %27 <- %19
-    Load %28 <- int(2)
-    Mod %29 <- %27, %28
-    Load %30 <- int(0)
-    Eq %31 <- %29, %30
-    JmpIfNot %31 -> instr(73)
-    Load %32 <- %19
-    Load %33 <- int(10)
-    Mul %34 <- %32, %33
-    Load %35 <- %18
-    Load %36 <- %34
-    Add %18 <- %35, %36
-    Drop %34
-    Move %37 <- %38
+    Load v30 <- %0
+    Load v31 <- int(12)
+    Eq v29 <- v30, v31
+    Load v32 <- string("while 嵌套 for 的 break/continue 语义")
+    Call v28 <- string("std.assert.assert") [v29, v32] (def=d3)
+    Load %3 <- int(0)
+    Load %4 <- int(0)
+    Load v33 <- void
+    Load v35 <- %4
+    Load v36 <- int(5)
+    Lt v34 <- v35, v36
+    JmpIfNot v34 -> instr(75)
+    Load v37 <- %4
+    Load v38 <- int(1)
+    Add %4 <- v37, v38
+    Load v43 <- %4
+    Load v44 <- int(2)
+    Mod v41 <- v43, v44
+    Load v42 <- int(0)
+    Eq v40 <- v41, v42
+    JmpIfNot v40 -> instr(73)
+    Load v46 <- %4
+    Load v47 <- int(10)
+    Mul %5 <- v46, v47
+    Load v48 <- %3
+    Load v49 <- %5
+    Add %3 <- v48, v49
+    Drop %5
+    Move v39 <- v45
     Jmp -> instr(73)
-    Load %23 <- void
+    Load v33 <- void
     Jmp -> instr(51)
-    Load %35 <- %18
-    Load %36 <- int(60)
-    Eq %33 <- %35, %36
-    Load %39 <- string("while 体 if 分支内带注解绑定（20 + 40）")
-    Call %32 <- string("std.assert.assert") [%33, %39] (def=d3)
-    Drop %18
+    Load v52 <- %3
+    Load v53 <- int(60)
+    Eq v51 <- v52, v53
+    Load v54 <- string("while 体 if 分支内带注解绑定（20 + 40）")
+    Call v50 <- string("std.assert.assert") [v51, v54] (def=d3)
+    Drop %3
     Drop %1
-    Drop %19
+    Drop %4
     Drop %0
-    Ret %32
+    Ret v50
   init (locals=0)
     Call %0 <- string("main") [] (def=d4)

@@ -36,7 +36,7 @@ proptest-regressions/
 node_modules/
 cache/
 dist/
-# Inno Setup OutputDir=..\dist 相对 .iss 目录解析 → 产物落这里（dist/ 无前导斜杠已覆盖，显式声明防未来改成 /dist/）
+# Inno Setup OutputDir=..\dist 相对 .iss 目录解析
 scripts/dist/
 
 benches/shootout/bench/out/
@@ -50,19 +50,16 @@ docs/.env
 .codegraph
 .crush
 .worktrees
-# DSH AgentTeams 运行时状态（mailbox / team.json），非源码
+# DSH AgentTeams 运行时状态
 .agent-teams
 .z3/
 pkg/
-# 本地安装的 cargo-dist 二进制（仓库只 vendor 其生成的配置，RFC-037）
+# 本地安装的 cargo-dist 二进制
 tools/cargo-dist/
 
 # Wasm playground build artifacts
 docs/src/.vitepress/public/wasm/*.wasm
 docs/src/.vitepress/public/wasm/*.js
-
-# TextMate grammar build artifacts (synced from vscode-extension/language-pack/syntaxes/)
-docs/src/.vitepress/syntaxes/yaoxiang.tmLanguage.json
 
 # i18n translation scripts
 scripts/i18n/.env
@@ -118,3 +115,5 @@ scripts/ci/_docs-*.txt
 
 # 本机 agent 工具数据目录（记忆/会话缓存，不入库）
 .dsh-*/
+
+docs/src/blog/cubk-style-comment.md

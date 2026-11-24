@@ -1,0 +1,7 @@
+use lib.{Box2}
+
+Eq: (a: Int, b: Int) -> Type = { a == b }
+
+main: () -> Void = {
+    b = Box2(3)
+}

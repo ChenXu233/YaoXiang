@@ -15,7 +15,7 @@ impl TypeChecker {
     ) -> Option<ConstValue> {
         let const_expr = convert_expr_to_const_expr(expr)?;
         let mut evaluator = crate::frontend::core::types::eval::evaluator::Evaluator::new(
-            ctx.env,
+            &ctx.env.types,
             &ctx.budget,
             &ctx.dep_env,
         );
@@ -164,6 +164,8 @@ impl TypeChecker {
                 // RFC-027 §3.4：绑定初始值若为调用，校验其实参
                 if let Some(v) = value.as_deref() {
                     self.check_call_arg_refinements(v, unit, ctx);
+                    // B.2：构造点义务（表达式任意位置，含嵌套）
+                    self.walk_ctor_obligations(v, unit, ctx);
                 }
                 registered
             }
@@ -211,6 +213,10 @@ impl TypeChecker {
                     }
                     _ => {}
                 }
+                // B.2：构造点义务（Block/Lambda 已由上面的路由独立走查）
+                if !matches!(rhs.as_ref(), Expr::Block(_) | Expr::Lambda { .. }) {
+                    self.walk_ctor_obligations(rhs, unit, ctx);
+                }
                 Vec::new()
             }
             StmtKind::If {
@@ -224,6 +230,7 @@ impl TypeChecker {
                 // 的分支（不可达分支不产生验证义务、不并进汇合）；不可判定时
                 // 保守展开。各路径从同一前置值环境出发，汇合取等值交集——
                 // 仅部分分支改写（或声明）的变量出块即值未知
+                self.walk_ctor_obligations(condition, unit, ctx);
                 let paths = self.refined_walk_if_paths(
                     condition,
                     &then_branch.stmts,
@@ -235,11 +242,20 @@ impl TypeChecker {
                 unit.values = meet_value_paths(paths);
                 Vec::new()
             }
-            StmtKind::For { var, body, .. } => {
+            StmtKind::For {
+                var,
+                iterable,
+                body,
+                ..
+            } => {
+                self.walk_ctor_obligations(iterable, unit, ctx);
                 self.refined_walk_loop_body(Some(var), body, unit, ctx);
                 Vec::new()
             }
             StmtKind::Expr(expr) => {
+                // B.2：构造点义务（语句位置的表达式树；Block/While/For 的体由
+                // 下面的路由独立走查，不重复下钻）
+                self.walk_ctor_obligations(expr, unit, ctx);
                 match expr.as_ref() {
                     // 值块：当前作用域顺序执行
                     Expr::Block(block) => {
@@ -261,6 +277,10 @@ impl TypeChecker {
                     }
                     _ => {}
                 }
+                Vec::new()
+            }
+            StmtKind::Return(Some(value)) => {
+                self.walk_ctor_obligations(value, unit, ctx);
                 Vec::new()
             }
             _ => Vec::new(),
@@ -463,7 +483,7 @@ impl TypeChecker {
     ///
     /// 取不出实参（不是谓词、形态不可转换、元数不符）时返回 `None` 且**不报诊断**：
     /// 那几条路径的诊断归属注册路径，此处只负责「按 AST 无损代入」。
-    fn refine_predicate_from_ast_args(
+    pub(super) fn refine_predicate_from_ast_args(
         &self,
         name: &str,
         args: &[crate::ast::Type],
@@ -480,10 +500,40 @@ impl TypeChecker {
                     std::slice::from_ref(&def.param_name),
                     std::slice::from_ref(&arg_expr),
                 );
-            return Some(MonoType::Refined {
+            let refined = MonoType::Refined {
                 base: Box::new(def.param_type.clone()),
                 constraint,
-            });
+            };
+            // 应用面（B.3 §五）：证据字段路径的基名必须与**应用实参名**一致；
+            // 非 NamedVar 基座（字面量/调用/嵌套路径）一律拒绝——返回 None 交既有
+            // 「实参不可转换/未知类型」诊断面，不静默把漏代入的 `bb` 当前提。
+            if matches!(
+                &refined,
+                MonoType::Refined {
+                    constraint: ConstExpr::FieldPath { .. },
+                    ..
+                }
+            ) {
+                let actual = match &args[0] {
+                    crate::ast::Type::Name { name, .. } => Some(name.as_str()),
+                    crate::ast::Type::ConstExpr(expr) => match expr.as_ref() {
+                        crate::ast::Expr::Var(name, _) => Some(name.as_str()),
+                        _ => None,
+                    },
+                    _ => None,
+                };
+                let matched = actual
+                    .map(|name| {
+                        crate::frontend::core::sema::record_model::field_path_base_matches(
+                            &refined, name,
+                        )
+                    })
+                    .unwrap_or(false);
+                if !matched {
+                    return None;
+                }
+            }
+            return Some(refined);
         }
         // 2. 证明函数（源码定义、返回 `Type`）：约束是不透明应用
         let mono_args: Vec<MonoType> = args.iter().map(|a| MonoType::from(a.clone())).collect();
@@ -510,7 +560,7 @@ impl TypeChecker {
     /// 后才变成占位 `"<const-expr>"`。取不出时退回 `MonoType` 形态（与
     /// `mono_type_to_const_expr` 同源：裸名 → `NamedVar`、字面量 → `Lit`），
     /// 使实参覆盖面与既有路径一致。
-    fn ast_type_to_const_expr(
+    pub(super) fn ast_type_to_const_expr(
         &self,
         ty: &crate::ast::Type,
     ) -> Option<ConstExpr> {
@@ -720,6 +770,33 @@ impl TypeChecker {
         span: crate::util::span::Span,
         evidence: Option<crate::frontend::core::types::const_data::ConstExpr>,
     ) {
+        Self::judge_refined_obligation_with_mode(
+            ctx,
+            substituted,
+            bindings,
+            assigned,
+            subject,
+            display,
+            span,
+            evidence,
+            crate::frontend::core::sema::layers::predicate::PredicateMode::Full,
+        );
+    }
+
+    /// 判定单元的档位版（唯一实现；构造点义务用 `NoSmt`——SMT 只作提示，
+    /// 不作证明来源，D3 裁决前不得把 SMT Unsat 当成构造义务的证明）。
+    #[allow(clippy::too_many_arguments)]
+    fn judge_refined_obligation_with_mode(
+        ctx: &mut RefinedWalkCtx<'_, '_>,
+        substituted: &MonoType,
+        bindings: &HashMap<String, ConstValue>,
+        assigned: &str,
+        subject: &str,
+        display: &str,
+        span: crate::util::span::Span,
+        evidence: Option<crate::frontend::core::types::const_data::ConstExpr>,
+        mode: crate::frontend::core::sema::layers::predicate::PredicateMode,
+    ) {
         let scoped = evidence.is_some();
         if scoped {
             ctx.shared_ctx.assumptions.enter_scope();
@@ -727,10 +804,11 @@ impl TypeChecker {
                 ctx.shared_ctx.assumptions.inject(evidence);
             }
         }
-        let outcome = crate::frontend::core::sema::layers::predicate::check_predicate(
+        let outcome = crate::frontend::core::sema::layers::predicate::check_predicate_with_mode(
             ctx.shared_ctx,
             substituted,
             bindings,
+            mode,
         );
         if scoped {
             ctx.shared_ctx.assumptions.exit_scope();
@@ -770,6 +848,541 @@ impl TypeChecker {
                     ctx.proof_calls.extend(calls);
                 }
             }
+        }
+    }
+
+    /// 构造点义务（RFC-027 §14.2 / SPEC §8.3.2）：记录构造实参逐条证明 evidence。
+    ///
+    /// 调用方（[Self::walk_ctor_obligations]）负责遍历；本函数只做：
+    /// ① 取记录模型；② 按共享判据绑定数据字段；③ 用 `substitute_const_expr`
+    /// 把字段名代换成实参项；④ 交**唯一判定单元**（NoSmt 档：direct eval /
+    /// 精确 Γ / 证明函数；SMT 不作证明来源，D3 裁决前不借码）。
+    ///
+    /// 判定不了的模型（参数/缺省折叠不出）保留符号项 `NamedVar`：判定降为
+    /// Unproven（E2031 或证明调用），**不静默放行**。
+    fn check_record_ctor_obligations(
+        &self,
+        expr: &Expr,
+        unit: &RefinedScopeUnit,
+        ctx: &mut RefinedWalkCtx<'_, '_>,
+    ) {
+        let Expr::Call {
+            func,
+            args,
+            named_args,
+            span,
+            ..
+        } = expr
+        else {
+            return;
+        };
+        self.check_record_family_kind_in_call(expr, ctx);
+
+        let (callee, generic_actual_exprs, generic_call_span) = match func.as_ref() {
+            // 单括号调用由推断层按「类型构造位逐位匹配 / 值构造」分流；此处的
+            // 义务判定只处理裸记录构造与已完成内层实例化的两层构造。
+            Expr::Var(name, _) if !self.env.generic_type_defs.contains_key(name) => {
+                (name.as_str(), None, None)
+            }
+            Expr::Call {
+                func: inner,
+                args: generic_args,
+                span: inner_span,
+                ..
+            } => match inner.as_ref() {
+                Expr::Var(name, _) => (
+                    name.as_str(),
+                    Some(generic_args.as_slice()),
+                    Some(*inner_span),
+                ),
+                _ => return,
+            },
+            _ => return,
+        };
+        let Some(model) = self.env.record_models.get(callee) else {
+            return;
+        };
+        if model.obligations.is_empty() && model.admission_fields.is_empty() {
+            return;
+        }
+        // B.4 §八.3：导入模型的证明来源前置检查（唯一；F1 修复点）。
+        // 本地可执行 + 导出已登记 + 逐库指纹一致；任一不通过 ⇒ 一条 E4020，
+        // 跳过本记录其余义务判定（失败闭合，不连锁 E4018）。
+        if model.from_payload {
+            let mut heads: Vec<&str> = Vec::new();
+            for obligation in &model.obligations {
+                heads.extend(obligation.proposition.constraint.call_heads());
+            }
+            for admission in &model.admission_fields {
+                heads.extend(admission.proposition.constraint.call_heads());
+            }
+            for slot in &model.evidence {
+                if let Some(proposition) = &slot.proposition {
+                    heads.extend(proposition.constraint.call_heads());
+                }
+            }
+            let mut rejected = false;
+            for head in heads {
+                let locally_executable = !self
+                    .imported_names
+                    .iter()
+                    .any(|(imported, _)| imported == head)
+                    && matches!(
+                        self.env.vars.get(head).map(|poly| &poly.body),
+                        Some(crate::frontend::core::types::mono::MonoType::Fn {
+                            return_type,
+                            ..
+                        }) if matches!(
+                            **return_type,
+                            crate::frontend::core::types::mono::MonoType::MetaType { .. }
+                        )
+                    );
+                // 来源身份 = **(定义名, 指纹)**：同名多条**不同指纹** ⇒ 无法确定
+                // 这条义务指的是哪一次绑定（按名取第一条 = F-1 同病史的按名不按绑定），
+                // 失败闭合。
+                let mut digests: Vec<crate::util::content_hash::ContentHash> = model
+                    .libraries
+                    .iter()
+                    .filter(|library| library.id == head)
+                    .map(|library| library.hash)
+                    .collect();
+                digests.sort_unstable();
+                digests.dedup();
+                let digest_matches = digests.len() == 1
+                    && self
+                        .proof_source_digest(head)
+                        .is_some_and(|digest| digest == digests[0]);
+                if !locally_executable || !digest_matches {
+                    rejected = true;
+                    break;
+                }
+            }
+            if rejected {
+                ctx.diags.push(
+                    crate::util::diagnostic::ErrorCodeDefinition::proof_function_required()
+                        .at(*span)
+                        .build(),
+                );
+                return;
+            }
+        }
+        let data_indices: Vec<usize> = model.data_field_indices().collect();
+        if args.len() + named_args.len() > data_indices.len() {
+            return;
+        }
+        // 内层类型构造已失败（同一 span 上有 Error 级诊断：const 约束 E1062、
+        // 实参位 E1010 / E1002）时，实例化命题并不存在——义务判定的输入是
+        // 「实例化后的命题」，输入没成型就不判，避免同一处错误叠三条。
+        if generic_call_span.is_some_and(|inner_span| self.instantiation_already_failed(inner_span))
+        {
+            return;
+        }
+        let template_args = Self::record_template_args(model, generic_actual_exprs);
+        let param_names: Vec<String> = data_indices
+            .iter()
+            .map(|index| model.fields[*index].name.clone())
+            .collect();
+        let optional: Vec<bool> = data_indices
+            .iter()
+            .map(|index| model.fields[*index].has_default)
+            .collect();
+        let Ok(slots) = crate::frontend::core::sema::inference::arg_binding::bind_args_to_params(
+            callee,
+            &param_names,
+            args,
+            named_args,
+            0,
+            &optional,
+            *span,
+        ) else {
+            return;
+        };
+        for obligation in &model.obligations {
+            let field = match model.fields.get(obligation.field) {
+                Some(field) => field,
+                None => continue,
+            };
+            if !model.type_params.is_empty() && template_args.is_none() {
+                ctx.diags.push(
+                    super::record_uninstantiated_obligation(
+                        callee,
+                        &Self::obligation_subject(model, obligation),
+                        &format!("{}", obligation.proposition.constraint),
+                    )
+                    .at(*span)
+                    .build(),
+                );
+                continue;
+            }
+            let constraint = match template_args.as_ref() {
+                Some(template) => match self.instantiate_record_constraint(
+                    model,
+                    obligation,
+                    template,
+                    &data_indices,
+                    &slots,
+                    args,
+                    named_args,
+                    callee,
+                    ctx,
+                    *span,
+                ) {
+                    Some(constraint) => constraint,
+                    None => continue,
+                },
+                None => self.substitute_record_fields(
+                    &obligation.proposition.constraint,
+                    model,
+                    obligation,
+                    &data_indices,
+                    &slots,
+                    args,
+                    named_args,
+                ),
+            };
+            let refined = MonoType::Refined {
+                base: Box::new(obligation.proposition.base.clone()),
+                constraint,
+            };
+            ctx.shared_ctx.budget =
+                crate::frontend::core::sema::proof::budget::BudgetTracker::for_judgment();
+            Self::judge_refined_obligation_with_mode(
+                ctx,
+                &refined,
+                &unit.values,
+                callee,
+                &format!("{}.{}", callee, field.name),
+                &format!("{}", obligation.proposition.constraint),
+                *span,
+                None,
+                crate::frontend::core::sema::layers::predicate::PredicateMode::NoSmt,
+            );
+        }
+        for admission in &model.admission_fields {
+            let Some(field) = model.fields.get(admission.field) else {
+                continue;
+            };
+            let Some(slot) = data_indices
+                .iter()
+                .position(|index| *index == admission.field)
+            else {
+                continue;
+            };
+            let value = match slots.iter().position(|bound| *bound == slot) {
+                Some(argument) if argument < args.len() => {
+                    convert_expr_to_const_expr(&args[argument])
+                }
+                Some(argument) => named_args
+                    .get(argument.saturating_sub(args.len()))
+                    .and_then(|(_, expr)| convert_expr_to_const_expr(expr)),
+                None => None,
+            };
+            let self_term = value.unwrap_or_else(|| ConstExpr::NamedVar(field.name.clone()));
+            let constraint =
+                crate::frontend::core::sema::layers::termination::substitute_const_expr(
+                    &admission.proposition.constraint,
+                    std::slice::from_ref(&field.name),
+                    std::slice::from_ref(&self_term),
+                );
+            let refined = MonoType::Refined {
+                base: Box::new(admission.proposition.base.clone()),
+                constraint,
+            };
+            ctx.shared_ctx.budget =
+                crate::frontend::core::sema::proof::budget::BudgetTracker::for_judgment();
+            Self::judge_refined_obligation_with_mode(
+                ctx,
+                &refined,
+                &unit.values,
+                callee,
+                &format!("{}.{}", callee, field.name),
+                &format!("{}", admission.proposition.constraint),
+                *span,
+                None,
+                crate::frontend::core::sema::layers::predicate::PredicateMode::NoSmt,
+            );
+        }
+    }
+
+    /// 泛型记录的内层实参：按记录模型声明序对位；const 位折叠成常量项，
+    /// family/type 位保留 Expr::Var 名。开项或形态不支持时返回 None。
+    fn record_template_args(
+        model: &super::RecordModel,
+        generic_actual_exprs: Option<&[Expr]>,
+    ) -> Option<Vec<crate::frontend::core::types::const_data::ConstExpr>> {
+        let actuals = generic_actual_exprs?;
+        if actuals.len() != model.type_params.len() {
+            return None;
+        }
+        let mut terms = Vec::with_capacity(actuals.len());
+        for (param, actual) in model.type_params.iter().zip(actuals.iter()) {
+            let term = match (&param.kind, actual) {
+                (super::RecordTypeParamKind::Const, _) => convert_expr_to_const_expr(actual)?,
+                (_, Expr::Var(name, _)) => ConstExpr::NamedVar(name.clone()),
+                _ => return None,
+            };
+            terms.push(term);
+        }
+        Some(terms)
+    }
+
+    /// 内层类型构造是否已经报过错（同一 span 上的 Error 级诊断）。
+    ///
+    /// 义务判定的输入是「实例化后的命题」；内层构造自己失败（const 约束、
+    /// 实参位、元数）时命题没有成型，再补一条义务诊断只是把同一处错误说三遍。
+    fn instantiation_already_failed(
+        &self,
+        span: crate::util::span::Span,
+    ) -> bool {
+        self.env.errors.errors().iter().any(|diagnostic| {
+            diagnostic.severity == crate::util::diagnostic::Severity::Error
+                && diagnostic.span == Some(span)
+        })
+    }
+
+    /// 义务诊断的主体名（E2031 的 var 槽）：`记录名.字段名`。
+    fn obligation_subject(
+        model: &super::RecordModel,
+        obligation: &crate::frontend::core::sema::record_model::FieldObligation,
+    ) -> String {
+        match model.fields.get(obligation.field) {
+            Some(field) => format!("{}.{}", model.name, field.name),
+            None => model.name.clone(),
+        }
+    }
+
+    /// 数据字段依赖代入：depends_on 下标不变，折叠不出的值保留符号项。
+    #[allow(clippy::too_many_arguments)]
+    fn substitute_record_fields(
+        &self,
+        template: &crate::frontend::core::types::const_data::ConstExpr,
+        model: &super::RecordModel,
+        obligation: &crate::frontend::core::sema::record_model::FieldObligation,
+        data_indices: &[usize],
+        slots: &[usize],
+        args: &[Expr],
+        named_args: &[(String, Expr)],
+    ) -> crate::frontend::core::types::const_data::ConstExpr {
+        let mut field_names = Vec::new();
+        let mut field_terms = Vec::new();
+        for dependency in &obligation.depends_on {
+            let Some(dependency_field) = model.fields.get(*dependency) else {
+                continue;
+            };
+            let Some(slot) = data_indices.iter().position(|index| index == dependency) else {
+                continue;
+            };
+            let value = match slots.iter().position(|bound| *bound == slot) {
+                Some(argument) if argument < args.len() => {
+                    convert_expr_to_const_expr(&args[argument])
+                }
+                Some(argument) => named_args
+                    .get(argument.saturating_sub(args.len()))
+                    .and_then(|(_, expr)| convert_expr_to_const_expr(expr)),
+                None => None,
+            };
+            field_names.push(dependency_field.name.clone());
+            field_terms
+                .push(value.unwrap_or_else(|| ConstExpr::NamedVar(dependency_field.name.clone())));
+        }
+        crate::frontend::core::sema::layers::termination::substitute_const_expr(
+            template,
+            &field_names,
+            &field_terms,
+        )
+    }
+
+    /// 模板命题代换：const 代常量项，family 改 Call.func 并校验 kind；
+    /// predicate_defs 命中则内联谓词体，否则保留 Call 走证明函数执行。
+    #[allow(clippy::too_many_arguments)]
+    fn instantiate_record_constraint(
+        &self,
+        model: &super::RecordModel,
+        obligation: &crate::frontend::core::sema::record_model::FieldObligation,
+        template_args: &[crate::frontend::core::types::const_data::ConstExpr],
+        data_indices: &[usize],
+        slots: &[usize],
+        args: &[Expr],
+        named_args: &[(String, Expr)],
+        callee: &str,
+        ctx: &mut RefinedWalkCtx<'_, '_>,
+        span: crate::util::span::Span,
+    ) -> Option<crate::frontend::core::types::const_data::ConstExpr> {
+        use crate::frontend::core::types::const_data::ConstExpr as CE;
+        let param_names: Vec<String> = model
+            .type_params
+            .iter()
+            .map(|param| param.name.clone())
+            .collect();
+        let mut constraint =
+            crate::frontend::core::sema::layers::termination::substitute_const_expr(
+                &obligation.proposition.constraint,
+                &param_names,
+                template_args,
+            );
+        let oracle = RecordKindOracle::Environment {
+            types: &self.env.types,
+            generic_type_defs: &self.env.generic_type_defs,
+            predicate_defs: &self.env.predicate_defs,
+            namespace_predicates: &self.type_level_namespace.predicates,
+            dep_env: &self.dependent_type_env,
+        };
+        for index in &obligation.param_refs {
+            let Some(param) = model.type_params.get(*index) else {
+                continue;
+            };
+            if !matches!(param.kind, super::RecordTypeParamKind::Family { .. }) {
+                continue;
+            }
+            let Some(CE::NamedVar(actual)) = template_args.get(*index) else {
+                continue;
+            };
+            match oracle.space_of(actual) {
+                // kind 错误由内层调用面的 kind 检查发射（walk 必走到同一个 Call
+                // 节点）——此处只停止义务判定，不重复发射同一处错误。
+                super::RecordParamSpace::Data => return None,
+                super::RecordParamSpace::Unknown => {
+                    ctx.diags.push(
+                        super::record_uninstantiated_obligation(
+                            callee,
+                            &Self::obligation_subject(model, obligation),
+                            &format!("{}", obligation.proposition.constraint),
+                        )
+                        .at(span)
+                        .build(),
+                    );
+                    return None;
+                }
+                super::RecordParamSpace::Proof => {}
+            }
+            let call_args = if let CE::Call { func, args, .. } = &mut constraint {
+                *func = actual.clone();
+                args.clone()
+            } else {
+                Vec::new()
+            };
+            if let Some(def) = self.env.predicate_defs.get(actual) {
+                if call_args.len() == 1 {
+                    constraint =
+                        crate::frontend::core::sema::layers::termination::substitute_const_expr(
+                            &def.constraint,
+                            std::slice::from_ref(&def.param_name),
+                            std::slice::from_ref(&call_args[0]),
+                        );
+                }
+            }
+        }
+        Some(self.substitute_record_fields(
+            &constraint,
+            model,
+            obligation,
+            data_indices,
+            slots,
+            args,
+            named_args,
+        ))
+    }
+
+    /// 构造面 kind 检查：泛型类型构造若把 proof family 位绑定 data family，
+    /// 直接在 walk 阶段发 E1002（D1 复用类型不匹配码），避免进入 IR 内部错误。
+    ///
+    /// 三个发射面里这是**唯一**的 kind 发射点：两层构造的内层调用必被
+    /// `walk_ctor_obligations` 走到（它先走外层、再走 `func`），故实例化面不再
+    /// 重复发射（见 `instantiate_record_constraint` 的 Data 分支）。按位判定，
+    /// 不做跨站点去重——两处各自写错必须各报一条。
+    fn check_record_family_kind_in_call(
+        &self,
+        expr: &Expr,
+        ctx: &mut RefinedWalkCtx<'_, '_>,
+    ) {
+        let Expr::Call {
+            func, args, span, ..
+        } = expr
+        else {
+            return;
+        };
+        let Expr::Var(name, _) = func.as_ref() else {
+            return;
+        };
+        let Some(model) = self.env.record_models.get(name) else {
+            return;
+        };
+        // 元数不符由推断层报 E1010：逐位对齐才谈得上 kind。
+        if args.len() != model.type_params.len() {
+            return;
+        }
+        let actuals: Vec<Option<String>> = args
+            .iter()
+            .map(|arg| match arg {
+                // 族名可写成裸名（`Pos`）或类型应用（`Pos(...)`）：kind 只看头名。
+                Expr::Var(actual, _) => Some(actual.clone()),
+                Expr::Call { func, .. } => match func.as_ref() {
+                    Expr::Var(actual, _) => Some(actual.clone()),
+                    _ => None,
+                },
+                _ => None,
+            })
+            .collect();
+        let oracle = RecordKindOracle::Environment {
+            types: &self.env.types,
+            generic_type_defs: &self.env.generic_type_defs,
+            predicate_defs: &self.env.predicate_defs,
+            namespace_predicates: &self.type_level_namespace.predicates,
+            dep_env: &self.dependent_type_env,
+        };
+        if let Some(actual) = oracle.family_kind_error(model, &actuals) {
+            ctx.diags
+                .push(super::record_family_kind_error(&actual).at(*span).build());
+        }
+    }
+
+    /// 表达式树里的构造点遍历（B.2：构造义务必须**满覆盖**，不能只查语句位置）。
+    ///
+    /// `Block` / `Lambda` 不在此下钻：语句走查与函数体走查已各自路由到
+    /// `refined_walk_stmts` / `refined_walk_fn_body`，重复下钻会双判。
+    fn walk_ctor_obligations(
+        &self,
+        expr: &Expr,
+        unit: &RefinedScopeUnit,
+        ctx: &mut RefinedWalkCtx<'_, '_>,
+    ) {
+        match expr {
+            Expr::Call {
+                func,
+                args,
+                named_args,
+                ..
+            } => {
+                self.check_record_ctor_obligations(expr, unit, ctx);
+                self.walk_ctor_obligations(func, unit, ctx);
+                for arg in args {
+                    self.walk_ctor_obligations(arg, unit, ctx);
+                }
+                for (_, arg) in named_args {
+                    self.walk_ctor_obligations(arg, unit, ctx);
+                }
+            }
+            Expr::BinOp { left, right, .. } => {
+                self.walk_ctor_obligations(left, unit, ctx);
+                self.walk_ctor_obligations(right, unit, ctx);
+            }
+            Expr::UnOp { expr, .. } => self.walk_ctor_obligations(expr, unit, ctx),
+            Expr::FieldAccess { expr, .. } => self.walk_ctor_obligations(expr, unit, ctx),
+            Expr::Tuple(items, _) | Expr::List(items, _) => {
+                for item in items {
+                    self.walk_ctor_obligations(item, unit, ctx);
+                }
+            }
+            // 表达式形态的 `if`：分支是 Block（语句走查的覆盖面），此处只走条件，
+            // 不下钻分支——避免与语句路由重复判定。
+            Expr::If { condition, .. } => self.walk_ctor_obligations(condition, unit, ctx),
+            Expr::Cast { expr, .. } => self.walk_ctor_obligations(expr, unit, ctx),
+            Expr::Index { expr, index, .. } => {
+                self.walk_ctor_obligations(expr, unit, ctx);
+                self.walk_ctor_obligations(index, unit, ctx);
+            }
+            Expr::Return(Some(value), _) => self.walk_ctor_obligations(value, unit, ctx),
+            _ => {}
         }
     }
 

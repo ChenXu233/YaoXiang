@@ -3,86 +3,160 @@ module
     slot[0] t : Int(64) @depth1
     slot[1] ts : Int(64) @depth1
     slot[2] ts2 : Int(64) @depth1
-    locals_total=10
+    locals_total=6
+    values_total=73
+    value v0: TypeRef("?") @block0
+    value v1: Bool @block0
+    value v2: TypeRef("?") @block0
+    value v3: Int(64) @block0
+    value v4: Int(64) @block0
+    value v5: Generic { name: "String", args: [] } @block0
+    value v6: TypeRef("?") @block0
+    value v7: Bool @block0
+    value v8: TypeRef("?") @block0
+    value v9: Generic { name: "String", args: [] } @block0
+    value v10: Int(64) @block0
+    value v11: Generic { name: "String", args: [] } @block0
+    value v12: Generic { name: "String", args: [] } @block0
+    value v13: Generic { name: "String", args: [] } @block0
+    value v14: Generic { name: "String", args: [] } @block0
+    value v15: TypeRef("?") @block0
+    value v16: Bool @block0
+    value v17: Int(64) @block0
+    value v18: Int(64) @block0
+    value v19: Generic { name: "String", args: [] } @block0
+    value v20: TypeRef("?") @block0
+    value v21: Bool @block0
+    value v22: TypeRef("?") @block0
+    value v23: Generic { name: "String", args: [] } @block0
+    value v24: Int(64) @block0
+    value v25: Generic { name: "String", args: [] } @block0
+    value v26: Generic { name: "String", args: [] } @block0
+    value v27: Generic { name: "String", args: [] } @block0
+    value v28: Generic { name: "String", args: [] } @block0
+    value v29: TypeRef("?") @block0
+    value v30: Bool @block0
+    value v31: TypeRef("?") @block0
+    value v32: Generic { name: "String", args: [] } @block0
+    value v33: Int(64) @block0
+    value v34: Generic { name: "String", args: [] } @block0
+    value v35: Generic { name: "String", args: [] } @block0
+    value v36: TypeRef("?") @block0
+    value v37: Bool @block0
+    value v38: TypeRef("?") @block0
+    value v39: Generic { name: "String", args: [] } @block0
+    value v40: Int(64) @block0
+    value v41: Generic { name: "String", args: [] } @block0
+    value v42: Generic { name: "String", args: [] } @block0
+    value v43: TypeRef("?") @block0
+    value v44: Bool @block0
+    value v45: TypeRef("?") @block0
+    value v46: Generic { name: "String", args: [] } @block0
+    value v47: Int(64) @block0
+    value v48: Generic { name: "String", args: [] } @block0
+    value v49: Generic { name: "String", args: [] } @block0
+    value v50: TypeRef("?") @block0
+    value v51: Bool @block0
+    value v52: TypeRef("?") @block0
+    value v53: Generic { name: "String", args: [] } @block0
+    value v54: Int(64) @block0
+    value v55: Generic { name: "String", args: [] } @block0
+    value v56: Generic { name: "String", args: [] } @block0
+    value v57: TypeRef("?") @block0
+    value v58: Bool @block0
+    value v59: TypeRef("?") @block0
+    value v60: Generic { name: "String", args: [] } @block0
+    value v61: Int(64) @block0
+    value v62: Generic { name: "String", args: [] } @block0
+    value v63: Generic { name: "String", args: [] } @block0
+    value v64: TypeRef("?") @block0
+    value v65: Bool @block0
+    value v66: TypeRef("?") @block0
+    value v67: Generic { name: "String", args: [] } @block0
+    value v68: Int(64) @block0
+    value v69: Generic { name: "String", args: [] } @block0
+    value v70: Generic { name: "String", args: [] } @block0
+    value v71: TypeRef("?") @block0
+    value v72: Generic { name: "String", args: [] } @block0
     Call %0 <- string("std.time.now") [] (def=d0)
-    Load %1 <- %0
-    Call %2 <- string("std.time.datetime_year") [%1] (def=d1)
-    Load %3 <- int(2020)
-    Ge %4 <- %2, %3
-    Load %5 <- string("now() flows into accessors")
-    Call %6 <- string("std.assert.assert") [%4, %5] (def=d2)
-    Load %1 <- %0
-    Load %5 <- string("%Y-%m")
-    Call %2 <- string("std.time.format_time") [%1, %5] (def=d3)
-    Load %3 <- string("")
-    Ne %4 <- %2, %3
-    Load %7 <- string("now() flows into format_time")
-    Call %6 <- string("std.assert.assert") [%4, %7] (def=d2)
-    Load %4 <- string("%d/%m/%Y")
-    Load %2 <- string("15/01/2024")
-    Call %6 <- string("std.time.parse_time") [%4, %2] (def=d4)
-    Load %3 <- %6
-    Load %1 <- int(1705276800)
-    Eq %2 <- %3, %1
-    Load %5 <- string("parse_time honors fmt")
-    Call %4 <- string("std.assert.assert") [%2, %5] (def=d2)
-    Load %5 <- %6
-    Load %7 <- string("%Y-%m-%d")
-    Call %3 <- string("std.time.format_time") [%5, %7] (def=d3)
-    Load %1 <- string("2024-01-15")
-    Eq %2 <- %3, %1
-    Load %8 <- string("roundtrip")
-    Call %4 <- string("std.assert.assert") [%2, %8] (def=d2)
-    Load %2 <- string("%Y-%m-%dT%H:%M:%S")
-    Load %3 <- string("2024-01-15T10:30:00")
-    Call %4 <- string("std.time.parse_time") [%2, %3] (def=d4)
-    Load %7 <- %4
-    Load %8 <- string("%H:%M:%S")
-    Call %1 <- string("std.time.format_time") [%7, %8] (def=d3)
-    Load %5 <- string("10:30:00")
-    Eq %3 <- %1, %5
-    Load %9 <- string("ISO with fmt")
-    Call %2 <- string("std.assert.assert") [%3, %9] (def=d2)
-    Load %7 <- int(0)
-    Load %8 <- string("%Y-%m-%d")
-    Call %1 <- string("std.time.format_time") [%7, %8] (def=d3)
-    Load %5 <- string("1970-01-01")
-    Eq %3 <- %1, %5
-    Load %9 <- string("epoch")
-    Call %2 <- string("std.assert.assert") [%3, %9] (def=d2)
-    Load %7 <- int(951782400)
-    Load %8 <- string("%Y-%m-%d")
-    Call %1 <- string("std.time.format_time") [%7, %8] (def=d3)
-    Load %5 <- string("2000-02-29")
-    Eq %3 <- %1, %5
-    Load %9 <- string("leap day")
-    Call %2 <- string("std.assert.assert") [%3, %9] (def=d2)
-    Load %7 <- int(1705276800)
-    Load %8 <- string("%Y-%m-%d")
-    Call %1 <- string("std.time.format_time") [%7, %8] (def=d3)
-    Load %5 <- string("2024-01-15")
-    Eq %3 <- %1, %5
-    Load %9 <- string("2024")
-    Call %2 <- string("std.assert.assert") [%3, %9] (def=d2)
-    Load %7 <- int(1735689600)
-    Load %8 <- string("%Y-%m-%d")
-    Call %1 <- string("std.time.format_time") [%7, %8] (def=d3)
-    Load %5 <- string("2025-01-01")
-    Eq %3 <- %1, %5
-    Load %9 <- string("2025")
-    Call %2 <- string("std.assert.assert") [%3, %9] (def=d2)
-    Load %7 <- int(1583020800)
-    Load %8 <- string("%Y-%m-%d")
-    Call %1 <- string("std.time.format_time") [%7, %8] (def=d3)
-    Load %5 <- string("2020-03-01")
-    Eq %3 <- %1, %5
-    Load %9 <- string("2020")
-    Call %2 <- string("std.assert.assert") [%3, %9] (def=d2)
-    Load %3 <- string("time semantics ok")
-    Call %2 <- string("std.io.println") [%3] (def=d5)
+    Load v4 <- %0
+    Call v2 <- string("std.time.datetime_year") [v4] (def=d1)
+    Load v3 <- int(2020)
+    Ge v1 <- v2, v3
+    Load v5 <- string("now() flows into accessors")
+    Call v0 <- string("std.assert.assert") [v1, v5] (def=d2)
+    Load v10 <- %0
+    Load v11 <- string("%Y-%m")
+    Call v8 <- string("std.time.format_time") [v10, v11] (def=d3)
+    Load v9 <- string("")
+    Ne v7 <- v8, v9
+    Load v12 <- string("now() flows into format_time")
+    Call v6 <- string("std.assert.assert") [v7, v12] (def=d2)
+    Load v13 <- string("%d/%m/%Y")
+    Load v14 <- string("15/01/2024")
+    Call %1 <- string("std.time.parse_time") [v13, v14] (def=d4)
+    Load v17 <- %1
+    Load v18 <- int(1705276800)
+    Eq v16 <- v17, v18
+    Load v19 <- string("parse_time honors fmt")
+    Call v15 <- string("std.assert.assert") [v16, v19] (def=d2)
+    Load v24 <- %1
+    Load v25 <- string("%Y-%m-%d")
+    Call v22 <- string("std.time.format_time") [v24, v25] (def=d3)
+    Load v23 <- string("2024-01-15")
+    Eq v21 <- v22, v23
+    Load v26 <- string("roundtrip")
+    Call v20 <- string("std.assert.assert") [v21, v26] (def=d2)
+    Load v27 <- string("%Y-%m-%dT%H:%M:%S")
+    Load v28 <- string("2024-01-15T10:30:00")
+    Call %2 <- string("std.time.parse_time") [v27, v28] (def=d4)
+    Load v33 <- %2
+    Load v34 <- string("%H:%M:%S")
+    Call v31 <- string("std.time.format_time") [v33, v34] (def=d3)
+    Load v32 <- string("10:30:00")
+    Eq v30 <- v31, v32
+    Load v35 <- string("ISO with fmt")
+    Call v29 <- string("std.assert.assert") [v30, v35] (def=d2)
+    Load v40 <- int(0)
+    Load v41 <- string("%Y-%m-%d")
+    Call v38 <- string("std.time.format_time") [v40, v41] (def=d3)
+    Load v39 <- string("1970-01-01")
+    Eq v37 <- v38, v39
+    Load v42 <- string("epoch")
+    Call v36 <- string("std.assert.assert") [v37, v42] (def=d2)
+    Load v47 <- int(951782400)
+    Load v48 <- string("%Y-%m-%d")
+    Call v45 <- string("std.time.format_time") [v47, v48] (def=d3)
+    Load v46 <- string("2000-02-29")
+    Eq v44 <- v45, v46
+    Load v49 <- string("leap day")
+    Call v43 <- string("std.assert.assert") [v44, v49] (def=d2)
+    Load v54 <- int(1705276800)
+    Load v55 <- string("%Y-%m-%d")
+    Call v52 <- string("std.time.format_time") [v54, v55] (def=d3)
+    Load v53 <- string("2024-01-15")
+    Eq v51 <- v52, v53
+    Load v56 <- string("2024")
+    Call v50 <- string("std.assert.assert") [v51, v56] (def=d2)
+    Load v61 <- int(1735689600)
+    Load v62 <- string("%Y-%m-%d")
+    Call v59 <- string("std.time.format_time") [v61, v62] (def=d3)
+    Load v60 <- string("2025-01-01")
+    Eq v58 <- v59, v60
+    Load v63 <- string("2025")
+    Call v57 <- string("std.assert.assert") [v58, v63] (def=d2)
+    Load v68 <- int(1583020800)
+    Load v69 <- string("%Y-%m-%d")
+    Call v66 <- string("std.time.format_time") [v68, v69] (def=d3)
+    Load v67 <- string("2020-03-01")
+    Eq v65 <- v66, v67
+    Load v70 <- string("2020")
+    Call v64 <- string("std.assert.assert") [v65, v70] (def=d2)
+    Load v72 <- string("time semantics ok")
+    Call v71 <- string("std.io.println") [v72] (def=d5)
     Drop %0
-    Drop %6
-    Drop %4
-    Ret %2
+    Drop %1
+    Drop %2
+    Ret v71
   init (locals=0)
     Call %0 <- string("main") [] (def=d6)

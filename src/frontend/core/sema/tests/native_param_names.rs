@@ -14,14 +14,14 @@
 //! 2. 四形态各一判据，且**与普通用户函数同码**（同一判据、同一码）；
 //! 3. 可选位（`?name`）与必需下限同出一源：省略可选位的命名调用放行、缺必需位报 E1010。
 
-use crate::frontend::core::sema::probe::TypeLevelNamespace;
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parse;
 use crate::frontend::core::sema::checker::TypeChecker;
 use crate::frontend::core::sema::environment::ExportParamInfo;
+use crate::frontend::core::sema::probe::TypeLevelNamespace;
 use crate::frontend::core::sema::{MonoType, PolyType};
 use crate::frontend::module::registry::ModuleRegistry;
-use crate::middle::ir::ir_gen::AstToIrGenerator;
+use crate::middle::lower::AstToIrGenerator;
 
 /// 宿主嵌入形态同 `Native`：命名空间根是 **Struct 变量**（FieldAccess 可解析），
 /// 成员是两个经 `add_native_signature`（**签名串**入参）注册的 native 函数。
@@ -43,10 +43,23 @@ fn host_checker() -> TypeChecker {
         "host".to_string(),
         PolyType::mono(MonoType::Struct(crate::frontend::core::types::StructType {
             name: "host".to_string(),
-            fields: vec![("add".to_string(), add_ty), ("flag".to_string(), flag_ty)],
+            fields: vec![
+                crate::frontend::core::types::mono::StructFieldInfo {
+                    name: "add".to_string(),
+                    ty: add_ty,
+                    quantity: None,
+                    is_mut: false,
+                    has_default: false,
+                },
+                crate::frontend::core::types::mono::StructFieldInfo {
+                    name: "flag".to_string(),
+                    ty: flag_ty,
+                    quantity: None,
+                    is_mut: false,
+                    has_default: false,
+                },
+            ],
             methods: std::collections::HashMap::new(),
-            field_mutability: vec![false, false],
-            field_has_default: vec![false, false],
             interfaces: Vec::new(),
         })),
     );

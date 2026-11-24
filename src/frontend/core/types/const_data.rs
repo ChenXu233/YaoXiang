@@ -192,6 +192,55 @@ pub enum ConstExpr {
     /// 命名变量引用（谓词体中引用程序变量，如 `{ x > 0 }` 中的 x）
     /// 与 Var(ConstVar) 不同：ConstVar 是索引化的 const 泛型变量，NamedVar 是名字化的程序变量
     NamedVar(String),
+    /// 类型级证据字段路径（RFC-027 §14.5）：`b.w`。
+    /// V1 的 `base` 只允许 `NamedVar`（应用面/判定面拒绝其他基座，见 09a §P6 6.9.5-B.3 §五）；
+    /// `field` 是源码字段名，声明序由 `RecordModel.field_path` 解析（不固化下标）。
+    FieldPath { base: Box<ConstExpr>, field: String },
+}
+
+impl ConstExpr {
+    /// 收集表达式树中所有函数调用头（`Call.func`，含实参内的嵌套调用）。
+    ///
+    /// B.4 `libraries` 派生的**单源**收集器（不写第二份遍历）。
+    pub fn call_heads(&self) -> Vec<&str> {
+        let mut out = Vec::new();
+        self.collect_call_heads(&mut out);
+        out
+    }
+
+    fn collect_call_heads<'a>(
+        &'a self,
+        out: &mut Vec<&'a str>,
+    ) {
+        match self {
+            ConstExpr::Call { func, args } => {
+                out.push(func.as_str());
+                for arg in args {
+                    arg.collect_call_heads(out);
+                }
+            }
+            ConstExpr::BinOp { left, right, .. } => {
+                left.collect_call_heads(out);
+                right.collect_call_heads(out);
+            }
+            ConstExpr::UnOp { expr, .. } => expr.collect_call_heads(out),
+            ConstExpr::If {
+                condition,
+                then_branch,
+                else_branch,
+            } => {
+                condition.collect_call_heads(out);
+                then_branch.collect_call_heads(out);
+                else_branch.collect_call_heads(out);
+            }
+            ConstExpr::Range { start, end } => {
+                start.collect_call_heads(out);
+                end.collect_call_heads(out);
+            }
+            ConstExpr::FieldPath { base, .. } => base.collect_call_heads(out),
+            ConstExpr::Lit(_) | ConstExpr::Var(_) | ConstExpr::NamedVar(_) => {}
+        }
+    }
 }
 
 impl fmt::Display for ConstExpr {
@@ -231,6 +280,7 @@ impl fmt::Display for ConstExpr {
             ),
             ConstExpr::Range { start, end } => write!(f, "{}..{}", start, end),
             ConstExpr::NamedVar(name) => write!(f, "{}", name),
+            ConstExpr::FieldPath { base, field } => write!(f, "{}.{}", base, field),
         }
     }
 }

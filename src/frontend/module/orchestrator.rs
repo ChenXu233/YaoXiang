@@ -25,11 +25,10 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::{Path, PathBuf};
 
 use crate::ast::{Expr, StmtKind};
-use crate::util::diagnostic::Diagnostic;
 use crate::frontend::core::parser::{self, Module};
-use crate::frontend::core::tokenize;
 use crate::frontend::core::sema::checker::TypeChecker;
 use crate::frontend::core::sema::SemanticProbe;
+use crate::frontend::core::tokenize;
 use crate::frontend::core::types::mono::MonoType;
 use crate::frontend::core::types::PolyType;
 use crate::frontend::module::registry::ModuleRegistry;
@@ -37,6 +36,7 @@ use crate::frontend::module::roles;
 use crate::frontend::module::symbol::SymbolTable;
 use crate::frontend::module::{Export, ExportKind, ModuleInfo, ModuleSource};
 use crate::middle::ModuleIR;
+use crate::util::diagnostic::Diagnostic;
 
 // manifest 解析依赖 package 模块（wasm32 下不编译）——角色上下文在 wasm 降级
 #[cfg(not(target_arch = "wasm32"))]
@@ -228,8 +228,14 @@ pub struct LspAnalysis {
 /// 用项目上下文分析一份**内存源码**（LSP 脏缓冲区 / 未落盘编辑）——
 /// 一次编译同时产出诊断与语义数据（WBS 4.6.1）。
 ///
-/// 管线与降级策略同 `check_source_in_project`（本函数即其诊断半边的
-/// 实现，4.6.1 起它转调本函数）。
+/// 注册表来自磁盘发现（同 `check_project`），被检查的模块用传入源码——
+/// 编辑器因此能得到与 `yaoxiang check` 一致的跨文件解析结果。
+///
+/// 入口瘦身为 `Program { kind: Lsp }` 构造器并转调 Driver（02 §改动清单，
+/// WBS 4.2.3 / 4.6.1）。降级策略按文件来源分流（2026-10-09 用户裁决）：磁盘
+/// 文件 parse 失败同 Check 的方案 B（收集 + 退出编译单元——修复旧行为对无关
+/// 磁盘文件硬中止、handler 静默退回单文件路径的怪癖）；被编辑缓冲区 parse
+/// 失败保留残缺 AST 继续 typecheck（编辑器哲学）。
 pub fn analyze_source_in_project(
     path: &Path,
     source: &str,
@@ -267,29 +273,6 @@ pub fn analyze_source_in_project(
             semantic_db: outcome.semantic_db,
         }),
     }
-}
-
-/// 用项目上下文检查一份**内存源码**（LSP 脏缓冲区 / 未落盘编辑）。
-///
-/// 注册表来自磁盘发现（同 `check_project`），被检查的模块用传入源码——
-/// 编辑器因此能得到与 `yaoxiang check` 一致的跨文件解析结果。
-///
-/// 02 §改动清单（WBS 4.2.3）：入口已瘦身为 `Program { kind: Lsp }` 构造器
-/// 并转调 Driver。降级策略按文件来源分流（2026-10-09 用户裁决）：磁盘
-/// 文件 parse 失败同 Check 的方案 B（收集 + 退出编译单元——修复旧行为
-/// 对无关磁盘文件硬中止、handler 静默退回单文件路径的怪癖）；被编辑
-/// 缓冲区 parse 失败保留残缺 AST 继续 typecheck（编辑器哲学）。返回
-/// 目标文件的诊断集（其余文件的收集条目不返回——LSP 按文档发布模型，
-/// 诊断由各自的 didOpen/didChange 驱动）。
-///
-/// WBS 4.6.1：实现转调 `analyze_source_in_project` 并只取诊断半边；
-/// 语义数据面由 LSP 的分析入口消费。
-pub fn check_source_in_project(
-    path: &Path,
-    source: &str,
-    config: crate::frontend::config::CompileConfig,
-) -> Result<Vec<Diagnostic>, OrchestratorError> {
-    Ok(analyze_source_in_project(path, source, config)?.diagnostics)
 }
 
 /// RFC-014 §项目模式前置检查（2026-09-15 决议）。
@@ -1066,7 +1049,12 @@ pub(crate) fn extract_module_info(
     namespace: &crate::frontend::core::sema::probe::TypeLevelNamespace,
 ) -> ModuleInfo {
     let mut checker = TypeChecker::new(module_key);
-    checker.collect_signatures(ast, namespace);
+    // 编译期谓词 def（#524 甲案）：构建判据与第零遍同源（单源自由函数，
+    // `predicate_resolver::collect_predicate_defs`）。H1：必须在 pass1 前补种，
+    // 否则 Registry 面把谓词分类成 `Call{Pos,[v]}`（B.4 §四.1）。
+    let predicate_defs =
+        crate::frontend::core::sema::predicate_resolver::collect_predicate_defs(ast);
+    checker.collect_signatures(ast, namespace, &predicate_defs);
     // #397：无标注顶层绑定也要进导出面——收割推断出的具体类型。
     // 此前这类绑定既不在签名表也无标注可读，导出面直接丢弃，
     // 导入方访问时报误导性的「成员未找到」。
@@ -1077,13 +1065,10 @@ pub(crate) fn extract_module_info(
     // （反推区分不了类型参数与普通类型名，会误伤 `Dict(K,V)` / `File` 等）。
     let fn_type_params = checker.generic_fn_type_params_snapshot();
 
-    // 编译期谓词 def（#524 甲案）：构建判据与第零遍同源（单源自由函数，
-    // `predicate_resolver::collect_predicate_defs`）。按名附到对应导出上随
-    // Registry 面携带——导入方 `register_use_export` 按 use 门控并入
-    // `env.predicate_defs`；未导入的谓词解析失败是正确行为（2026-11-03
-    // 用户裁决：use 是唯一跨单元名引入机制）。
-    let predicate_defs =
-        crate::frontend::core::sema::predicate_resolver::collect_predicate_defs(ast);
+    // 谓词 def 随导出携带（#524 甲案）：按名附到对应导出上随 Registry 面
+    // 携带——导入方 `register_use_export` 按 use 门控并入 `env.predicate_defs`；
+    // 未导入的谓词解析失败是正确行为（2026-11-03 用户裁决：use 是唯一跨单元
+    // 名引入机制）。同一结果已在 pass1 前补种给签名收集器（H1）。
 
     // TypeEnvironment 不实现 Clone，只克隆需要的几张表。
     let vars = checker.env().vars.clone();
@@ -1125,6 +1110,21 @@ pub(crate) fn extract_module_info(
                     if let Some(def) = predicate_defs.get(name.as_str()) {
                         export.predicate_def = Some(def.clone());
                     }
+                    // proof-fn 形参清单随导出携带（#527/#551）：**全部** proof-fn
+                    // 形态（单参数与多参数）统一直读定义方 `env.vars` 的已登记
+                    // 形态（判据单源，不从 AST 重推），导入方经
+                    // `PredicateDef::proof_fn_type` 重建同构变量。
+                    // #551 缘起：此臂此前只在 def 缺席时走（#527 的多参数分流），
+                    // 单参数无标注形参的谓词 def 有登记但 vars 形参表为空（本地
+                    // Phase 2.5 臂丢弃无标注形参），导入面便拿 `def.param_type`
+                    // 的 Int(64) 默认值重建出本地面没有的形参表——两臂构造的
+                    // Fn 形态分歧，本地拒绝、导入放行。分流取消后两臂同源。
+                    // 模板面不随行：多参数谓词 `predicate_def` 保持 None，与
+                    // 本地面的第零遍收窄一致（E1093 设计面不扩权）。
+                    export.proof_fn_params = vars.get(name.as_str())
+                        .and_then(|p| {
+                            crate::frontend::core::sema::predicate_resolver::PredicateDef::proof_fn_params(&p.body)
+                        });
                     info.add_export(export);
                 }
             }
@@ -1158,6 +1158,20 @@ pub(crate) fn extract_module_info(
                             Some(*name_span),
                         );
                         export.predicate_def = predicate_def;
+                        // q=0 事实随导出携带（#539）：**定义方已登记形态直读**
+                        //（判据单源，不从 AST 重推）——binder 清单读签名收集期
+                        // 写入 vars 的 `PolyType`（`collect_function_signature` 的
+                        // `new_with_const` 登记口），调用点形参名读同一次 walk 的
+                        // 槽位表（`call_site_slot`）。常量导出的 PolyType 无
+                        // binder、槽位表无条目，两字段自然为空表。
+                        export.const_binders = vars
+                            .get(name.as_str())
+                            .map(|p| p.const_binders.clone())
+                            .unwrap_or_default();
+                        export.call_site_params = checker
+                            .call_site_slot(name)
+                            .map(|s| s.names)
+                            .unwrap_or_default();
                         info.add_export(export);
                     } else if let Some(type_ann) = type_annotation {
                         // 普通常量（如 `value: Int = 7`）不会被当作签名收集，
@@ -1216,6 +1230,11 @@ fn make_export(
         type_payload: None,
         definition_span,
         predicate_def: None,
+        proof_fn_params: None,
+        // q=0 事实（#539）由调用方按定义方已登记形态填充；此处默认空表
+        //（非函数导出 / 无 q=0 位）。
+        const_binders: Vec::new(),
+        call_site_params: Vec::new(),
     }
 }
 

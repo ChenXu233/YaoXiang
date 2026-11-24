@@ -10,8 +10,42 @@ use std::process::Command;
 const Z3_VERSION: &str = "4.16.0";
 
 fn main() {
-    // 重建触发面显式化：build.rs 只在这些路径（及自身/Cargo.toml）变化时重跑
-    println!("cargo:rerun-if-changed=locales/zh.json");
+    process_grammar_probe();
+
+    // 重建触发面显式化：build.rs 只在这些路径与环境变量（及自身/Cargo.toml）变化时重跑。
+    //
+    // locales 用目录级声明——触发面必须 ⊇ 构建期校验的输入面（#458）：下文
+    // code_tables::validate 的输入面是全部 locale 文件。「孤立条目」判据对
+    // 任何语言（zh 与全部 bot 语言）都是 error：翻译残留 bot 不会清理，任何
+    // 语言的 locale 里出现实现未定义的码都拒绝编译；「bot 语言缺失」判据
+    // 覆盖 en/ja/ru/zh-classical/zh-x-miao 全部 bot 语言。而 i18n bot
+    // （auto-translate-i18n.yml）以 zh.json 为触发、异步写非 zh 文件；旧触发面
+    // 只声明 zh.json ⇒ 非 zh 变更（bot 落地、人工清理翻译残留）永不触发校验：
+    // 假告警停留在上一次运行的结论上（cargo 重放旧 output 的 warning），真孤立
+    // 条目漏检。目录级声明由 cargo 扫描整个目录的变更，非 zh 文件变化即重跑。
+    println!("cargo:rerun-if-changed=locales");
+    // #548：触发面补齐其余三处输入面缺口（判据同 #458：触发面 ⊇ build.rs 输出
+    // 结论的输入面）。cargo 一旦收到任意 rerun-if 声明就只跟踪已声明项，不再
+    // 默认跟踪包内全部文件——漏声明的输入永远不触发重跑，结论停留在上一次
+    // 运行的缓存上（cargo 重放旧 output）。
+    //
+    // 1) .z3 目录：host 分支的 find_local_z3 读它找本地 Z3，自动下载/解压写它。
+    //    目录级声明由 cargo 递归扫描：内部内容变化（文件 mtime 超过 build script
+    //    output 文件）或目录整个消失（删掉 .z3 后的增量构建也必须重新判定，禁
+    //    缓存跳过）都触发重跑；下载/解压写 .z3 的自触发是幂等重跑（下一轮结论
+    //    相同即停止传导），无害且正确。原 wasm 分支内的同名声明已合并至此——
+    //    顶部声明对全部目标（含 wasm32）生效，路径相对 package root 解析，两处
+    //    指向同一目录，保留两份只是平行事实。
+    println!("cargo:rerun-if-changed=.z3");
+    // 2) Z3_SYS_Z3_HEADER：host 分支读它决定是否改用系统 Z3（值对应路径存在 ⇒
+    //    链接系统 Z3 并提前返回）。rerun-if-env-changed 按「值或缺省」入指纹
+    //    哈希：从未设置→设置、值变化、设置→取消三种迁移都触发重跑。
+    println!("cargo:rerun-if-env-changed=Z3_SYS_Z3_HEADER");
+    // 3) CXXSTDLIB：link_z3 非 Windows 且非 macOS 分支读它决定
+    //    cargo:rustc-link-lib 输出（未设置时回退 stdc++）——macOS 目标硬编码
+    //    c++、不读该变量。只影响那一部分链接面；Windows/macOS 构建不读它，
+    //    声明本身无害（值不变即不触发）。
+    println!("cargo:rerun-if-env-changed=CXXSTDLIB");
     // RFC-013 路径单一源在 code_tables::RFC013_REL，此处复用避免双份漂移
     println!("cargo:rerun-if-changed={}", code_tables::RFC013_REL);
     println!("cargo:rerun-if-changed=src/util/diagnostic/codes");
@@ -85,8 +119,6 @@ fn main() {
         // 构建（8 天无人察觉的事故形态）；现在找不到 = 构建失败。
         let manifest = env::var("CARGO_MANIFEST_DIR").unwrap();
         let z3_root = Path::new(&manifest).join(".z3");
-        // 资产目录纳入指纹：删掉 .z3 后的增量构建也必须重新判定（禁缓存跳过）
-        println!("cargo:rerun-if-changed={}", z3_root.display());
         let Some(dir) = find_local_z3_wasm(&z3_root) else {
             panic!(
                 "wasm32 构建需要 Z3 wasm 预编译资产：\
@@ -174,6 +206,20 @@ fn main() {
     copy_shared_lib(&z3_dir);
 }
 
+/// 8.3 最小 LALRPOP 探针：有 grammar 输入时 build-time 生成，生成物不入库。
+///
+/// 无输入目录时提前返回；有输入时也只追加生成步骤，不绕过既有错误码、类型表
+/// 与 Z3 构建门禁。parser 生产入口不在这里接线。
+fn process_grammar_probe() {
+    let manifest = env::var("CARGO_MANIFEST_DIR").unwrap();
+    let grammar_dir = Path::new(&manifest).join("src/frontend/core/parser/grammar");
+    if !grammar_dir.exists() {
+        return;
+    }
+    println!("cargo:rerun-if-changed={}", grammar_dir.display());
+    lalrpop::process_root().expect("LALRPOP 探针文法生成失败");
+}
+
 fn link_z3(z3_dir: &Path) {
     let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap();
     // Z3 官方包把静态库放 lib/ 或 bin/（osx/linux 资产在 bin/，含 libz3.a）；
@@ -230,9 +276,28 @@ fn link_z3(z3_dir: &Path) {
     }
 }
 
+/// 从 OUT_DIR 上溯定位 cargo 的 profile 目录（`target/<triple>/<profile>`）。
+///
+/// 不按固定层数上溯：cargo 1.100 起把单元产物目录从
+/// `<profile>/build/<pkg>-<hash>/out` 改为 `<profile>/build/<pkg>/<hash>/out`，
+/// OUT_DIR 与 profile 的层距随工具链版本变化（旧布局 3 层、新布局 4 层）。
+/// 两种布局的共同锚点是路径中最近的 `build` 目录：它的父目录恒为 profile
+/// 目录，带 target triple 时（`target/<triple>/<profile>/build/...`）同样成立。
+fn profile_dir(out: &Path) -> Option<&Path> {
+    out.ancestors()
+        .find(|p| p.file_name().is_some_and(|name| name == "build"))?
+        .parent()
+}
+
 /// 把 Z3 共享库复制进 target profile 目录，本地 cargo run/测试才能加载；
 /// Z3 许可证（MIT 分发义务）随库一并落盘。发版产物由 package-dist.sh
 /// 从同一目录取用，不重复维护平台映射。
+///
+/// 布局差异：cargo < 1.100 的测试二进制落在 `<profile>/deps`，与依赖库同目录，
+/// 因此旧布局还要副本进 `deps`；cargo >= 1.100 取消 `deps`，每个单元各占
+/// `<profile>/build/<pkg>/<hash>/out`，构建脚本无法预知这些目录——该布局下
+/// 跑测试须把 Z3 共享库所在目录加入动态库搜索路径（Windows `PATH`、
+/// Linux `LD_LIBRARY_PATH`）。
 fn copy_shared_lib(z3_dir: &Path) {
     let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap();
     let name = match target_os.as_str() {
@@ -257,17 +322,15 @@ fn copy_shared_lib(z3_dir: &Path) {
         None => return,
     };
     let out = env::var("OUT_DIR").unwrap();
-    let profile = Path::new(&out)
-        .parent()
-        .unwrap()
-        .parent()
-        .unwrap()
-        .parent()
-        .unwrap();
-    let deps = profile.join("deps");
-    let _ = fs::create_dir_all(&deps);
+    let Some(profile) = profile_dir(Path::new(&out)) else {
+        return;
+    };
     let _ = fs::copy(&src, profile.join(name));
-    let _ = fs::copy(&src, deps.join(name));
+    // 旧布局的共享测试库目录；新布局不创建它，也就不复制
+    let deps = profile.join("deps");
+    if deps.is_dir() {
+        let _ = fs::copy(&src, deps.join(name));
+    }
     // MIT 要求分发二进制时附带许可文本；Z3 发行包根有 LICENSE.txt
     for license in ["LICENSE.txt", "LICENSE"] {
         let license_src = z3_dir.join(license);

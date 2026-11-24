@@ -2,57 +2,104 @@ module
   fn main() -> Void
     slot[0] a : Int(64) @depth1
     slot[1] shift : Int(64) @depth1
-    locals_total=11
+    locals_total=5
+    values_total=46
+    value v0: TypeRef("?") @block0
+    value v1: Bool @block0
+    value v2: Int(64) @block0
+    value v3: Int(64) @block0
+    value v4: Int(64) @block0
+    value v5: Int(64) @block0
+    value v6: Generic { name: "String", args: [] } @block0
+    value v7: TypeRef("?") @block0
+    value v8: Bool @block0
+    value v9: Int(64) @block0
+    value v10: Int(64) @block0
+    value v11: Int(64) @block0
+    value v12: Int(64) @block0
+    value v13: Generic { name: "String", args: [] } @block0
+    value v14: TypeRef("?") @block0
+    value v15: Bool @block0
+    value v16: Int(64) @block0
+    value v17: Int(64) @block0
+    value v18: Int(64) @block0
+    value v19: Int(64) @block0
+    value v20: Generic { name: "String", args: [] } @block0
+    value v21: TypeRef("?") @block0
+    value v22: Bool @block0
+    value v23: Int(64) @block0
+    value v24: Int(64) @block0
+    value v25: Int(64) @block0
+    value v26: Int(64) @block0
+    value v27: Generic { name: "String", args: [] } @block0
+    value v28: TypeRef("?") @block0
+    value v29: Bool @block0
+    value v30: Int(64) @block0
+    value v31: Int(64) @block0
+    value v32: Int(64) @block0
+    value v33: Int(64) @block0
+    value v34: Int(64) @block0
+    value v35: Int(64) @block0
+    value v36: Generic { name: "String", args: [] } @block0
+    value v37: TypeRef("?") @block0
+    value v38: Bool @block0
+    value v39: Int(64) @block0
+    value v40: Int(64) @block0
+    value v41: Int(64) @block0
+    value v42: Int(64) @block0
+    value v43: Generic { name: "String", args: [] } @block0
+    value v44: TypeRef("?") @block0
+    value v45: Generic { name: "String", args: [] } @block0
     Load %0 <- int(1024)
-    Load %1 <- %0
-    Load %2 <- int(2)
-    Shl %3 <- %1, %2
-    Load %4 <- int(4096)
-    Eq %5 <- %3, %4
-    Load %6 <- string("左移字面量")
-    Call %7 <- string("std.assert.assert") [%5, %6] (def=d0)
-    Load %1 <- %0
-    Load %2 <- int(2)
-    Shr %3 <- %1, %2
-    Load %4 <- int(256)
-    Eq %5 <- %3, %4
-    Load %6 <- string("右移字面量")
-    Call %7 <- string("std.assert.assert") [%5, %6] (def=d0)
-    Load %7 <- int(3)
-    Load %2 <- %0
-    Load %6 <- %7
-    Shl %4 <- %2, %6
-    Load %1 <- int(8192)
-    Eq %3 <- %4, %1
-    Load %8 <- string("左移变量")
-    Call %5 <- string("std.assert.assert") [%3, %8] (def=d0)
-    Load %2 <- %0
-    Load %6 <- %7
-    Shr %4 <- %2, %6
-    Load %1 <- int(128)
-    Eq %3 <- %4, %1
-    Load %8 <- string("右移变量")
-    Call %5 <- string("std.assert.assert") [%3, %8] (def=d0)
-    Load %8 <- %0
-    Load %9 <- int(2)
-    Shr %2 <- %8, %9
-    Load %6 <- int(2)
-    Shr %4 <- %2, %6
-    Load %1 <- int(64)
-    Eq %3 <- %4, %1
-    Load %10 <- string("链式移位左结合")
-    Call %5 <- string("std.assert.assert") [%3, %10] (def=d0)
-    Load %2 <- %0
-    Load %6 <- int(2)
-    Shr %4 <- %2, %6
-    Load %1 <- int(256)
-    Eq %3 <- %4, %1
-    Load %8 <- string("移位与比较")
-    Call %5 <- string("std.assert.assert") [%3, %8] (def=d0)
-    Load %3 <- string("SHIFT_OPS_OK")
-    Call %5 <- string("std.io.println") [%3] (def=d1)
+    Load v4 <- %0
+    Load v5 <- int(2)
+    Shl v2 <- v4, v5
+    Load v3 <- int(4096)
+    Eq v1 <- v2, v3
+    Load v6 <- string("左移字面量")
+    Call v0 <- string("std.assert.assert") [v1, v6] (def=d0)
+    Load v11 <- %0
+    Load v12 <- int(2)
+    Shr v9 <- v11, v12
+    Load v10 <- int(256)
+    Eq v8 <- v9, v10
+    Load v13 <- string("右移字面量")
+    Call v7 <- string("std.assert.assert") [v8, v13] (def=d0)
+    Load %1 <- int(3)
+    Load v18 <- %0
+    Load v19 <- %1
+    Shl v16 <- v18, v19
+    Load v17 <- int(8192)
+    Eq v15 <- v16, v17
+    Load v20 <- string("左移变量")
+    Call v14 <- string("std.assert.assert") [v15, v20] (def=d0)
+    Load v25 <- %0
+    Load v26 <- %1
+    Shr v23 <- v25, v26
+    Load v24 <- int(128)
+    Eq v22 <- v23, v24
+    Load v27 <- string("右移变量")
+    Call v21 <- string("std.assert.assert") [v22, v27] (def=d0)
+    Load v34 <- %0
+    Load v35 <- int(2)
+    Shr v32 <- v34, v35
+    Load v33 <- int(2)
+    Shr v30 <- v32, v33
+    Load v31 <- int(64)
+    Eq v29 <- v30, v31
+    Load v36 <- string("链式移位左结合")
+    Call v28 <- string("std.assert.assert") [v29, v36] (def=d0)
+    Load v41 <- %0
+    Load v42 <- int(2)
+    Shr v39 <- v41, v42
+    Load v40 <- int(256)
+    Eq v38 <- v39, v40
+    Load v43 <- string("移位与比较")
+    Call v37 <- string("std.assert.assert") [v38, v43] (def=d0)
+    Load v45 <- string("SHIFT_OPS_OK")
+    Call v44 <- string("std.io.println") [v45] (def=d1)
     Drop %0
-    Drop %7
-    Ret %5
+    Drop %1
+    Ret v44
   init (locals=0)
     Call %0 <- string("main") [] (def=d2)

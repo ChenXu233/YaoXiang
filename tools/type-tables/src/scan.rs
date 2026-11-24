@@ -15,8 +15,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
-use syn::visit::{self, Visit};
 use syn::punctuated::Punctuated;
+use syn::visit::{self, Visit};
 use syn::{
     ExprMatch, ExprPath, ExprStruct, ImplItemFn, ItemFn, ItemImpl, ItemMod, ItemUse, Macro, Pat,
     Token, TraitItemFn, UseTree,

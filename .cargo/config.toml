@@ -28,6 +28,37 @@ ar = "x86_64-w64-mingw32-ar"
 # linker = "clang"  # macOS 上默认使用系统 clang
 
 # =============================================================================
+# 运行期 Z3 共享库查找（cargo runner）
+# =============================================================================
+#
+# `build.rs` 把 libz3 复制到 <profile>，主程序与它同目录，加载没有问题。但
+# cargo 1.100 起单元产物落在 `<profile>/build/<包名>/<哈希>/out`，`deps/` 不再
+# 创建：测试与基准二进制各自散在哈希目录里，构建脚本无法预知这些路径，动态
+# 链接的 libz3 在启动时找不到（Windows STATUS_DLL_NOT_FOUND / Linux 缺少共享
+# 对象）。
+#
+# runner 在 cargo 运行任何产物（run / test / bench）前执行
+# `scripts/dev/z3_runner.py`，把 `.z3` 资产里的共享库目录前置进
+# PATH / LD_LIBRARY_PATH / DYLD_LIBRARY_PATH，再原样转交产物与退出码；找不到
+# 资产时原样透传。脚本路径相对仓库根，从仓库根调用 cargo 即可。
+#
+# Windows 的 runner 指向 `scripts/dev/z3_runner.cmd` 包装（cmd.exe 解释，
+# Rust std 对 .cmd 走 cmd.exe 转交）：runner 串里直接写解释器名字
+# （`python`/`py`）要靠 cargo 进程继承的 PATH 解析——门禁宿主可能以
+# 绝对解释器路径调起门禁而 PATH 不含任何 Python 目录，runner 生成即
+# 失败（实测 program not found，快照门禁没跑到任何测试）。包装按确定
+# 位置探测解释器（%SystemRoot%\py.exe → 按用户 Launcher → PATH 上的
+# python/python3），只要求 cmd.exe 与 %SystemRoot% 存在；z3_runner.py
+# 本体由 %~dp0 定位，与调用 cwd 无关。unix 侧 CI 环境恒有 python3，维持
+# 直连。
+
+[target.'cfg(windows)']
+runner = "scripts\\dev\\z3_runner.cmd"
+
+[target.'cfg(unix)']
+runner = "python3 scripts/dev/z3_runner.py"
+
+# =============================================================================
 # 优化配置
 # =============================================================================
 

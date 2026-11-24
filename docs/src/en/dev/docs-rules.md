@@ -1,49 +1,47 @@
 ---
 title: 'Documentation Rules (docs-rules)'
 description:
-  'Classification rules (Diátaxis) and wiki-style language standards for YaoXiang documentation'
+  'YaoXiang documentation classification rules (Diátaxis) and wiki-style writing guidelines'
 ---
 
 # Documentation Rules (docs-rules)
 
-> This document is the **authoritative source** for documentation rules; before making changes, use
-> [HOWTO.md](./HOWTO.md) (the unified manual; Section 2 covers modifying documentation) as the entry
-> point for pre-change self-checks. This document is at the same level as
-> [coding-rules.md](./coding-rules.md): coding-rules governs code, while this document governs
-> documentation.
+> This article is the **canonical source** for documentation rules; before starting any work, use
+> [HOWTO.md](./HOWTO.md) as the self-check entry point (the unified manual; Section 2 covers
+> document changes). This article is at the same level as [coding-rules.md](./coding-rules.md):
+> coding-rules governs code, while this article governs documentation.
 
 ## 0. Three Prohibitions (Documentation Edition)
 
-These mirror the three prohibitions in coding-rules; reviews should reject changes on the same
-grounds:
+These mirror the three prohibitions in coding-rules; reviews reject violations on the same basis:
 
-1. **Do not invent terminology or document types**: Before introducing a new term or document type,
-   first prove that it does not duplicate an existing concept—check
-   [docs/glossary.json](https://github.com/ChenXu233/yaoxiang/blob/main/docs/glossary.json), consult
-   the §1 classification table, and grep the existing documentation.
+1. **Do not invent**: Before introducing a new term or documentation type, first demonstrate that it
+   does not duplicate an existing concept—check
+   [docs/glossary.json](https://github.com/ChenXu233/yaoxiang/blob/main/docs/glossary.json), the
+   classification table in §1, and grep existing documentation.
 2. **Do not accumulate responsibilities**: A document belongs to only one quadrant and serves only
-   one audience. Putting a reference table in a tutorial or design rationale in a reference is an
-   accumulation of responsibilities.
-3. **Refactor rather than patch**: If the same content appears in ≥2 places, a directory mixes two
-   audiences, or a single change affects ≥3 synonymous statements—stop, adjust the structure first,
-   and then write the content.
+   one audience. Putting a reference table in a tutorial or design rationale in a reference document
+   accumulates responsibilities.
+3. **Refactor; do not patch**: If the same content appears in ≥2 places, one directory mixes two
+   audiences, or one change touches ≥3 synonymous formulations—stop, adjust the structure first,
+   then write the content.
 
 ## 1. Classification Rules: Six Top-Level Directories, Six Audiences
 
 The documentation site organizes user documentation according to the four
-[Diátaxis](https://diataxis.fr/) quadrants, plus two directories for the repository itself:
+[Diátaxis](https://diataxis.fr/) quadrants, plus two directories aimed at the repository itself:
 
-| Directory      | Quadrant                             | Audience                | Reader’s question                                             | Document form                      |
-| -------------- | ------------------------------------ | ----------------------- | ------------------------------------------------------------- | ---------------------------------- |
-| `tutorial/`    | Tutorial (learning-oriented)         | Beginners               | “Take me through making my first thing”                       | Progressive course                 |
-| `guide/`       | Guide (task-oriented)                | Users                   | “I need to complete X; how do I do it?”                       | Step-by-step checklist             |
-| `reference/`   | Reference (information-oriented)     | Users                   | “What does X mean exactly?”                                   | Lookup-oriented description        |
-| `explanation/` | Explanation (understanding-oriented) | Readers who are curious | “Why is it designed this way?”                                | Expository discussion              |
-| `dev/`         | — (outside Diátaxis)                 | Contributors            | “I want to modify this repository; what rules must I follow?” | Rules, architecture, and processes |
-| `rfc/`         | — (language governance)              | Language designers      | “How is this feature decided, and how do I propose one?”      | Proposals + status directory       |
+| Directory      | Quadrant                             | Audience           | Reader's question                                            | Document form                 |
+| -------------- | ------------------------------------ | ------------------ | ------------------------------------------------------------ | ----------------------------- |
+| `tutorial/`    | Tutorial (learning-oriented)         | Beginners          | “Take me through building my first thing”                    | A progressive course          |
+| `guide/`       | Guide (task-oriented)                | Users              | “I want to complete X; how do I do that?”                    | A step-by-step checklist      |
+| `reference/`   | Reference (information-oriented)     | Users              | “What exactly does X mean?”                                  | A lookup-oriented description |
+| `explanation/` | Explanation (understanding-oriented) | Curious readers    | “Why is it designed this way?”                               | An exposition                 |
+| `dev/`         | — (Outside Diátaxis)                 | Contributors       | “I want to modify this repository; which rules do I follow?” | Rules, architecture, workflow |
+| `rfc/`         | — (Language governance)              | Language designers | “How is this feature decided, and how do I propose one?”     | Proposals + status directory  |
 
-`blog/` is for time-bound, outward-facing narratives, while `archive/` is cold storage excluded from
-publication; neither participates in the classification.
+`blog/` is a time-based, external narrative, and `archive/` is unpublished cold storage; neither
+participates in classification.
 
 ### Decision Tree
 
@@ -54,131 +52,133 @@ publication; neither participates in the classification.
 2. Does the reader need to **modify the compiler or repository**? → `dev/`
 3. Is the reader **reviewing or submitting a language feature**? → `rfc/`
 
-If a document cannot yield a unique answer, it is serving two audiences—split it and put each part
-in its proper place.
+If a document cannot yield a single answer, it is serving two audiences—split it and place each part
+where it belongs.
 
-### Commonly Confused Boundaries (Empirical Examples)
+### Commonly Confused Boundaries (Empirical Cases)
 
-| Content                                                                                    | Destination                   | Common incorrect destination                                |
-| ------------------------------------------------------------------------------------------ | ----------------------------- | ----------------------------------------------------------- |
-| Command-line usage of `yx check`                                                           | `reference/check-command.md`  | `dev/design/check/`                                         |
-| Design specification for `yx check` (zero-false-positive principle, incremental mechanism) | `dev/design/check/`           | `reference/`                                                |
-| Formatting rule clauses (implementation behavior specifications)                           | `dev/design/formatter/`       | `reference/`                                                |
-| Command-line usage of `yx format`                                                          | `reference/format-command.md` | `dev/design/formatter/`                                     |
-| Language philosophy and manifesto (evergreen discourse)                                    | `explanation/`                | `blog/` (blog is time-bound)                                |
-| Compiler architecture and implementation plan                                              | `dev/architecture/`           | `explanation/` (it is an operations manual, not exposition) |
-| Feature proposals and decision records                                                     | `rfc/`                        | `dev/` (the RFC audience extends beyond contributors)       |
+| Content                                                                                    | Destination                   | Common misplacement                                           |
+| ------------------------------------------------------------------------------------------ | ----------------------------- | ------------------------------------------------------------- |
+| Command-line usage of `yx check`                                                           | `reference/check-command.md`  | dev/design/check/                                             |
+| Design specification for `yx check` (zero-false-positive principle, incremental mechanism) | `dev/design/check/`           | reference/                                                    |
+| Formatting rules (implementation behavior specifications)                                  | `dev/design/formatter/`       | reference/                                                    |
+| Command-line usage of `yx format`                                                          | `reference/format-command.md` | dev/design/formatter/                                         |
+| Language philosophy and manifestos (evergreen discourse)                                   | `explanation/`                | blog/ (blog is time-based)                                    |
+| Compiler architecture and implementation roadmap                                           | `dev/architecture/`           | explanation/ (it is an operational manual, not an exposition) |
+| Feature proposals and finalized decision records                                           | `rfc/`                        | dev/ (the audience for an RFC extends beyond contributors)    |
 
 ## 2. Language Style (Wiki-Style Writing)
 
-This section follows the core principles of Wikipedia’s formatting manual and applies to all
-directories; person and tone vary slightly by quadrant (§2.4).
+This section draws on the core principles of Wikipedia's formatting manual and applies to all
+directories. Adjust person and tone slightly by quadrant (§2.4).
 
 ### 2.1 Prefer the Active Voice
 
 - Write “The compiler reports E1001,” not “E1001 is reported by the compiler.”
 - Use the passive voice only when the actor is unknown or unimportant.
-- Test: Whenever a sentence uses a passive construction, ask “Who did it?” If there is an answer,
-  rewrite the sentence in the active voice.
+- Quick check: when a sentence contains a passive construction, ask “Who does it?” If there is an
+  answer, rewrite it in the active voice.
 
-### 2.2 Make Definite Assertions
+### 2.2 Definite Statements
 
 - Write “yx check does not generate code,” not “yx check may not generate code.”
-- State facts as assertions. Uncertain content has only two acceptable forms:
-  - State a precise condition: “When `--watch` is enabled, yx check rechecks only the affected
-    files.”
-  - Delete it, then write it after verification.
-- Do not use vague wording: “may,” “perhaps,” “probably,” “basically,” or “to some extent.” Use
+- State facts definitively. There are only two valid ways to express uncertainty:
+  - State a precise condition: “When `--watch` is enabled, yx check rechecks only affected files.”
+  - Remove it, verify it, and then write it.
+- Ban vague terms such as “may,” “perhaps,” “probably,” “basically,” and “to some extent.” Use
   “should” only to express obligation (“You should run the tests”), never speculation.
 
-### 2.3 Use the Present Tense
+### 2.3 Present Tense
 
 - Write “The parser rejects empty modules,” not “The parser will reject empty modules.”
   Documentation describes the behavior of the current version.
-- Exception: When `rfc/draft/` and `rfc/review/` describe proposals that have not yet been
-  implemented, use “will”; after the proposal is implemented, return to the present tense.
+- Exception: when `rfc/draft/` and `rfc/review/` describe proposals that have not yet been
+  implemented, use “will”; once the proposal has been implemented, return to the present tense.
 
 ### 2.4 Person
 
-- `reference/`, `explanation/`, `rfc/`: Use impersonal statements (“The function returns Result”).
-- `tutorial/`, `guide/`: Use the second person, “you” (“You run yx new”).
-- `dev/`: Keep rule statements impersonal; operational instructions may use “you.”
-- Never use “we” in any directory: Write “Recommended,” not “We recommend.”
+- `reference/`, `explanation/`, `rfc/`: use impersonal statements (“The function returns Result”).
+- `tutorial/`, `guide/`: use the second person, “you” (“You run yx new”).
+- `dev/`: rule statements should be impersonal, while operational instructions may use “you.”
+- Do not use “we” in any directory: write “Recommended” instead of “We recommend.”
 
 ### 2.5 One Idea per Sentence
 
-- A sentence asserts one thing; if it contains two assertions, write two sentences.
-- Use a list for three or more parallel facts instead of a long sentence.
+- A sentence should assert only one thing; if it contains two assertions, write two sentences.
+- Use a list instead of a long sentence for three or more parallel facts.
 
 ### 2.6 Consistent Terminology
 
-- A concept has only one name across the entire site. If an earlier passage says “ownership,” a
-  later passage must not switch to “proprietorship.”
-- Before adding a term, check `docs/glossary.json` and its usage in the existing documentation.
-- At its first occurrence, provide a definition or link to its definition.
+- A concept must have only one name across the entire site. If earlier text says “ownership,” later
+  text must not switch to “proprietorship.”
+- Before introducing a new term, check docs/glossary.json and existing usage in the documentation.
+- On its first occurrence, define a term or link to its definition.
 
 ### 2.7 Objective Neutrality
 
-- Do not write “very simple,” “only need to,” or “effortless.” When readers get stuck, such words
-  mock them.
+- Do not write “very simple,” “only needs,” or “effortless.” When readers get stuck, such words read
+  as mockery.
 - Do not use marketing terms such as “powerful,” “elegant,” or “seamless.” Replace them with
   verifiable facts: “Compile-time monomorphization, with no runtime overhead.”
-- When comparing other languages, state behavioral differences rather than evaluating merits.
+- When comparing other languages, state behavioral differences without evaluating which is better.
 
 ### 2.8 Verifiability
 
-- Every behavioral assertion must be verifiable through code or tests; do not write assertions that
-  cannot be substantiated.
-- Code examples must be executable: CI (`scripts/ci/check-docs-examples.py`) runs them. Mark
-  examples that cannot be executed with `<!-- docs-example: skip -->` and provide a reason.
+- Every behavioral claim must be substantiated by code or tests; do not write claims that cannot be
+  substantiated.
+- Code examples must be executable: CI (`scripts/ci/check-docs-examples.py`) runs them. Mark any
+  non-executable example with `<!-- docs-example: skip -->` and provide a reason.
 
 ## 3. Structural and Mechanical Rules
 
-- **Frontmatter**: `title` is required (sidebar generation depends on it); `description` is
+- **Frontmatter**: `title` is required (sidebar generation depends on it), and `description` is
   recommended.
-- **Headings**: Each document has one H1, the body starts at H2, and heading levels are not skipped.
-- **Links**: All internal links must use relative paths to the target files, not absolute site
-  paths. The build configuration `ignoreDeadLinks: false` causes dead links to fail the build.
-- **Moving a file = changing the URL**: All site references, both sidebar configurations, the `en/`
-  mirror, scripts that reference the path, and AGENTS.md must be updated in sync. See Section 2,
-  “Six Synchronization Steps for Moving Documents,” of [HOWTO.md](./HOWTO.md) for the complete
-  process.
+- **Headings**: Use one H1 per document, start the body at H2, and do not skip heading levels.
+- **Links**: Internal links must always use a relative path to the target file, never a
+  site-absolute path. The build configuration uses `ignoreDeadLinks: false`; dead links cause the
+  build to fail.
+- **Do not include line numbers**: Line numbers drift with every change, while `check-docs-refs.py`
+  validates only whether a path resolves. Locate content through a semantic description (“the arm in
+  `ir_gen` that obtains the span of `Expr::Cast`”); when a line number is genuinely necessary,
+  retrieve it again from the referenced revision (`git show <rev>:<file>`).
+- **Moving a file = changing the URL**: Synchronize all site-wide references, both sidebar
+  configurations, the en mirror, scripts that reference the path, and AGENTS.md. For the complete
+  process, see Section 2, “Six Synchronizations for Moving a Document,” in [HOWTO.md](./HOWTO.md).
 - **Formatting**: Prettier (`docs/.prettierrc.json`) and markdownlint enforce table alignment and
-  blank lines in fenced code blocks.
-- **Chinese–English mirror**: zh is the source, and en is synchronized by the translation workflow.
-  After adding or moving a zh file, the path on the en side must match.
+  blank lines around fenced blocks.
+- **Chinese/English mirrors**: zh is the source, and en is synchronized through the translation
+  workflow. After adding or moving a zh file, its path on the en side must match.
 
 ## 4. Responsibilities of Directory Index Pages
 
-The `index.md` page in each top-level directory answers two questions: “What belongs in this
-directory, and what does not?” The index page links to these rules and does not duplicate the
-content list—a manually maintained list will inevitably become outdated (the sole source of truth
-for RFC status is `rfc/TRACKING.md`, which is generated by a script; the same principle applies
-here).
+The `index.md` for each top-level directory answers two questions: “What does this directory
+include, and what does it exclude?” The index page points to these rules and does not separately
+maintain a content list—any hand-written list will inevitably become outdated (the sole authority
+for RFC status is `rfc/TRACKING.md`, which is generated by a script; the same principle applies).
 
 ## 5. Authority Chain and Prerequisites for Modification
 
-**The authority chain is unidirectional**: RFC (establishes the basis) → SPEC / specification /
-design documentation. A SPEC may say “For design rationale, see RFC-xxx”; an **RFC must not use a
-SPEC as its basis**—once an RFC depends on a SPEC, the SPEC can never be changed again, and design
-authority is undermined.
+**The authority chain is unidirectional**: RFC (establishes the basis) → SPEC / specifications /
+design documents. An SPEC may state, “For design rationale, see RFC-xxx”; an **RFC must never use an
+SPEC as its basis**—once an RFC depends on an SPEC, the SPEC can no longer be changed, effectively
+undermining design authority.
 
-**Before modifying documentation, you must read three things**:
+**Before modifying a document, you must read three things**:
 
-1. **Upstream design**: Identify which decision in which RFC is the basis for the document being
-   changed (the D1–D59 decision register in [RFC-039](../rfc/accepted/039-compiler-architecture.md),
-   or a specialized RFC for that domain). If you cannot identify one, this change has no basis.
-2. **Peer documents at the same level**: Check whether the same table or group of terms is already
-   defined elsewhere—maintaining separate copies is just the “Do not invent terminology or document
-   types” rule from §0 all over again.
-3. The red lines in **[commit-convention.md](./commit-convention.md)** and
+1. **Upstream design**: Which decision in which RFC the conclusion of the document being changed
+   comes from (the D1–D59 decision register in
+   [RFC-039](../rfc/accepted/039-compiler-architecture.md), or a subject-specific RFC in that area).
+   If you cannot identify it, the change has no basis.
+2. **Adjacent peer documents**: Whether the same table or set of terms has already been defined
+   elsewhere—writing the same definition in two places is a variant of §0, “Do not invent.”
+3. **The red lines in** [commit-convention.md](./commit-convention.md) **and**
    [coding-rules.md](./coding-rules.md).
 
-**Correct in place**: If documentation conflicts with the facts, directly change the body to match
-the facts and delete the old wording; do not retain comparisons such as “Originally it was … now it
-is …” or “Erratum”—history is in git, and readers should not have to read the wrong version before
-the correct one.
+**Correct in place**: When a document does not match the facts, change the body text directly to
+match the facts and delete the old wording. Do not retain side-by-side wording such as “formerly...
+now...” or “errata”—the history is in git, and readers should not have to read the incorrect version
+before the correct one.
 
-**Criterion**: Every added or modified sentence must be able to answer “Who must do what under what
-conditions?” A sentence that cannot is explanatory prose and belongs in the RFC’s “Motivation”
+**Criterion**: Every sentence added or modified must be able to answer “who, under what conditions,
+must do what.” A sentence that cannot is explanatory prose and belongs in the RFC's “Motivation”
 section, not in the normative body.

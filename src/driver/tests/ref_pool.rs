@@ -19,8 +19,8 @@ use std::path::{Path, PathBuf};
 
 use crate::driver::helpers::collect_compilation_refs;
 use crate::driver::{Driver, DriverError, DriverOutcome, Program, ProgramKind, Unit};
-use crate::frontend::module::roles::FileRole;
 use crate::frontend::config::CompileConfig;
+use crate::frontend::module::roles::FileRole;
 
 /// 合法 manifest（[package] 可解析 ⇒ 角色上下文可用 ⇒ Bin/Lib/Internal 分类生效）
 pub(super) const MANIFEST: &str = "[package]\nname = \"ref-pool\"\nversion = \"0.1.0\"\n";

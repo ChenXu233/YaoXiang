@@ -1,0 +1,47 @@
+name: Notify CNB mirror
+description: |
+  提交推上去之后，通知 CNB 做一次按需镜像。
+  GitHub 上由 bot 推送的提交（GITHUB_TOKEN 推送，或提交信息带 [skip ci]）不会触发下游 workflow，
+  所以在推提交的 workflow 里显式通知，否则 CNB 只能等每天 03:17 的兜底。
+
+inputs:
+  token:
+    description: CNB 访问令牌（需要能触发 ChenXu233/YaoXiang 的构建）
+    required: true
+  scope:
+    description: 镜像方向：repos = 主干与标签；prs = 回关 PR
+    required: false
+    default: repos
+  repo:
+    description: CNB 仓库路径
+    required: false
+    default: ChenXu233/YaoXiang
+  branch:
+    description: CNB 侧读取 .cnb.yml 的分支
+    required: false
+    default: dev
+
+runs:
+  using: composite
+  steps:
+    - name: Trigger CNB mirror
+      shell: bash
+      env:
+        CNB_TOKEN: ${{ inputs.token }}
+        MIRROR_SCOPE: ${{ inputs.scope }}
+        CNB_REPO: ${{ inputs.repo }}
+        MIRROR_BRANCH: ${{ inputs.branch }}
+      run: |
+        if [ -z "$CNB_TOKEN" ]; then
+          echo "::warning::CNB_TOKEN 未配置，跳过 CNB 镜像通知"
+          exit 0
+        fi
+        payload="$(jq -n --arg scope "$MIRROR_SCOPE" --arg branch "$MIRROR_BRANCH" \
+          '{event: "api_trigger", branch: $branch, title: ("GH 通知-" + $scope), env: {MIRROR_SCOPE: $scope}}')"
+        curl -sS -f -X POST \
+          -H "Authorization: Bearer $CNB_TOKEN" \
+          -H "accept: application/json" \
+          -H "content-type: application/json" \
+          --data "$payload" \
+          "https://api.cnb.cool/$CNB_REPO/-/build/start"
+        echo "已通知 CNB 镜像（scope=$MIRROR_SCOPE）"

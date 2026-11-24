@@ -16,14 +16,14 @@ use lsp_types::notification::{
     DidChangeTextDocument, DidCloseTextDocument, DidOpenTextDocument, Exit, Initialized,
     PublishDiagnostics,
 };
-use lsp_types::request::{Completion, GotoDefinition, Initialize, References, Rename, Shutdown};
-use lsp_types::request::HoverRequest;
-use lsp_types::request::SemanticTokensFullRequest;
-use lsp_types::request::SemanticTokensFullDeltaRequest;
-use lsp_types::request::SemanticTokensRefresh;
 use lsp_types::request::Formatting;
-use lsp_types::request::RangeFormatting;
+use lsp_types::request::HoverRequest;
 use lsp_types::request::InlayHintRequest;
+use lsp_types::request::RangeFormatting;
+use lsp_types::request::SemanticTokensFullDeltaRequest;
+use lsp_types::request::SemanticTokensFullRequest;
+use lsp_types::request::SemanticTokensRefresh;
+use lsp_types::request::{Completion, GotoDefinition, Initialize, References, Rename, Shutdown};
 use lsp_types::InitializeParams;
 use tracing::{debug, info, warn};
 

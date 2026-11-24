@@ -1,0 +1,8 @@
+// expect: compile-error E1114
+
+use lib.{Box}
+
+main: () -> Void = {
+    b = Box(3)
+    x = b.w
+}

@@ -1,0 +1,7 @@
+// expect: compile-error E4018
+
+use lib.{Box}
+
+main: () -> Void = {
+    b = Box(-3, 5)
+}

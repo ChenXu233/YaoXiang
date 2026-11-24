@@ -2,98 +2,167 @@ module
   fn tail_expr_value(Int(64)) -> Int(64)
     slot[0] x : Int(64) @depth1
     locals_total=4
+    values_total=3
+    value v0: Int(64) @block0
+    value v1: Int(64) @block0
+    value v2: Int(64) @block0
     Load %0 <- arg%0
-    Load %1 <- %0
-    Load %2 <- int(2)
-    Mul %3 <- %1, %2
-    Ret %3
+    Load v1 <- %0
+    Load v2 <- int(2)
+    Mul v0 <- v1, v2
+    Ret v0
   fn early_return(Int(64)) -> Int(64)
     slot[0] x : Int(64) @depth1
-    locals_total=5
+    locals_total=4
+    values_total=5
+    value v0: Bool @block0
+    value v1: Int(64) @block0
+    value v2: Int(64) @block0
+    value v3: Int(64) @block0
+    value v4: Int(64) @block0
     Load %0 <- arg%0
-    Load %1 <- %0
-    Load %2 <- int(0)
-    Lt %3 <- %1, %2
-    JmpIfNot %3 -> instr(7)
-    Load %4 <- int(0)
-    Ret %4
-    Load %3 <- %0
-    Ret %3
+    Load v1 <- %0
+    Load v2 <- int(0)
+    Lt v0 <- v1, v2
+    JmpIfNot v0 -> instr(7)
+    Load v3 <- int(0)
+    Ret v3
+    Load v4 <- %0
+    Ret v4
   fn block_tail_in_function(Int(64)) -> Int(64)
     slot[0] x : Int(64) @depth1
     slot[1] a : Int(64) @depth1
     locals_total=5
+    values_total=5
+    value v0: Int(64) @block0
+    value v1: Int(64) @block0
+    value v2: Int(64) @block0
+    value v3: Int(64) @block0
+    value v4: Int(64) @block0
     Load %0 <- arg%0
-    Load %1 <- %0
-    Load %2 <- int(1)
-    Add %3 <- %1, %2
-    Load %2 <- %3
-    Load %4 <- int(2)
-    Mul %1 <- %2, %4
-    Drop %3
-    Ret %1
+    Load v0 <- %0
+    Load v1 <- int(1)
+    Add %1 <- v0, v1
+    Load v3 <- %1
+    Load v4 <- int(2)
+    Mul v2 <- v3, v4
+    Drop %1
+    Ret v2
   fn explicit_and_tail(Int(64)) -> Int(64)
     slot[0] x : Int(64) @depth1
-    locals_total=6
+    locals_total=4
+    values_total=8
+    value v0: Bool @block0
+    value v1: Int(64) @block0
+    value v2: Int(64) @block0
+    value v3: Int(64) @block0
+    value v4: Int(64) @block0
+    value v5: Int(64) @block0
+    value v6: Int(64) @block0
+    value v7: Int(64) @block0
     Load %0 <- arg%0
-    Load %1 <- %0
-    Load %2 <- int(0)
-    Lt %3 <- %1, %2
-    JmpIfNot %3 -> instr(8)
-    Load %4 <- int(1)
-    Neg %5 <- %4
-    Ret %5
-    Load %1 <- %0
-    Load %2 <- int(10)
-    Mul %3 <- %1, %2
-    Ret %3
+    Load v1 <- %0
+    Load v2 <- int(0)
+    Lt v0 <- v1, v2
+    JmpIfNot v0 -> instr(8)
+    Load v4 <- int(1)
+    Neg v3 <- v4
+    Ret v3
+    Load v6 <- %0
+    Load v7 <- int(10)
+    Mul v5 <- v6, v7
+    Ret v5
   fn no_return_has_side_effect() -> Void
     locals_total=2
-    Load %0 <- string("side effect ok")
-    Call %1 <- string("std.io.println") [%0] (def=d0)
-    Ret %1
+    values_total=2
+    value v0: TypeRef("?") @block0
+    value v1: Generic { name: "String", args: [] } @block0
+    Load v1 <- string("side effect ok")
+    Call v0 <- string("std.io.println") [v1] (def=d0)
+    Ret v0
   fn main() -> Void
-    locals_total=8
-    Load %0 <- int(21)
-    Call %1 <- string("tail_expr_value") [%0] (def=d1)
-    Load %2 <- int(42)
-    Eq %3 <- %1, %2
-    Load %4 <- string("tail_expr_value(21) should be 42")
-    Call %5 <- string("std.assert.assert") [%3, %4] (def=d2)
-    Load %4 <- int(5)
-    Neg %0 <- %4
-    Call %1 <- string("early_return") [%0] (def=d3)
-    Load %2 <- int(0)
-    Eq %3 <- %1, %2
-    Load %6 <- string("early_return(-5) should be 0")
-    Call %5 <- string("std.assert.assert") [%3, %6] (def=d2)
-    Load %0 <- int(7)
-    Call %1 <- string("early_return") [%0] (def=d3)
-    Load %2 <- int(7)
-    Eq %3 <- %1, %2
-    Load %4 <- string("early_return(7) should be 7")
-    Call %5 <- string("std.assert.assert") [%3, %4] (def=d2)
-    Load %0 <- int(1)
-    Call %1 <- string("block_tail_in_function") [%0] (def=d4)
-    Load %2 <- int(4)
-    Eq %3 <- %1, %2
-    Load %4 <- string("block_tail_in_function(1) should be 4")
-    Call %5 <- string("std.assert.assert") [%3, %4] (def=d2)
-    Load %4 <- int(1)
-    Neg %0 <- %4
-    Call %1 <- string("explicit_and_tail") [%0] (def=d5)
-    Load %6 <- int(1)
-    Neg %2 <- %6
-    Eq %3 <- %1, %2
-    Load %7 <- string("explicit_and_tail(-1) should be -1")
-    Call %5 <- string("std.assert.assert") [%3, %7] (def=d2)
-    Load %0 <- int(3)
-    Call %1 <- string("explicit_and_tail") [%0] (def=d5)
-    Load %2 <- int(30)
-    Eq %3 <- %1, %2
-    Load %4 <- string("explicit_and_tail(3) should be 30")
-    Call %5 <- string("std.assert.assert") [%3, %4] (def=d2)
-    Call %5 <- string("no_return_has_side_effect") [] (def=d6)
-    Ret %5
+    locals_total=3
+    values_total=40
+    value v0: TypeRef("?") @block0
+    value v1: Bool @block0
+    value v2: Int(64) @block0
+    value v3: Int(64) @block0
+    value v4: Int(64) @block0
+    value v5: Generic { name: "String", args: [] } @block0
+    value v6: TypeRef("?") @block0
+    value v7: Bool @block0
+    value v8: Int(64) @block0
+    value v9: Int(64) @block0
+    value v10: Int(64) @block0
+    value v11: Int(64) @block0
+    value v12: Generic { name: "String", args: [] } @block0
+    value v13: TypeRef("?") @block0
+    value v14: Bool @block0
+    value v15: Int(64) @block0
+    value v16: Int(64) @block0
+    value v17: Int(64) @block0
+    value v18: Generic { name: "String", args: [] } @block0
+    value v19: TypeRef("?") @block0
+    value v20: Bool @block0
+    value v21: Int(64) @block0
+    value v22: Int(64) @block0
+    value v23: Int(64) @block0
+    value v24: Generic { name: "String", args: [] } @block0
+    value v25: TypeRef("?") @block0
+    value v26: Bool @block0
+    value v27: Int(64) @block0
+    value v28: Int(64) @block0
+    value v29: Int(64) @block0
+    value v30: Int(64) @block0
+    value v31: Int(64) @block0
+    value v32: Generic { name: "String", args: [] } @block0
+    value v33: TypeRef("?") @block0
+    value v34: Bool @block0
+    value v35: Int(64) @block0
+    value v36: Int(64) @block0
+    value v37: Int(64) @block0
+    value v38: Generic { name: "String", args: [] } @block0
+    value v39: Void @block0
+    Load v4 <- int(21)
+    Call v2 <- string("tail_expr_value") [v4] (def=d1)
+    Load v3 <- int(42)
+    Eq v1 <- v2, v3
+    Load v5 <- string("tail_expr_value(21) should be 42")
+    Call v0 <- string("std.assert.assert") [v1, v5] (def=d2)
+    Load v11 <- int(5)
+    Neg v10 <- v11
+    Call v8 <- string("early_return") [v10] (def=d3)
+    Load v9 <- int(0)
+    Eq v7 <- v8, v9
+    Load v12 <- string("early_return(-5) should be 0")
+    Call v6 <- string("std.assert.assert") [v7, v12] (def=d2)
+    Load v17 <- int(7)
+    Call v15 <- string("early_return") [v17] (def=d3)
+    Load v16 <- int(7)
+    Eq v14 <- v15, v16
+    Load v18 <- string("early_return(7) should be 7")
+    Call v13 <- string("std.assert.assert") [v14, v18] (def=d2)
+    Load v23 <- int(1)
+    Call v21 <- string("block_tail_in_function") [v23] (def=d4)
+    Load v22 <- int(4)
+    Eq v20 <- v21, v22
+    Load v24 <- string("block_tail_in_function(1) should be 4")
+    Call v19 <- string("std.assert.assert") [v20, v24] (def=d2)
+    Load v30 <- int(1)
+    Neg v29 <- v30
+    Call v27 <- string("explicit_and_tail") [v29] (def=d5)
+    Load v31 <- int(1)
+    Neg v28 <- v31
+    Eq v26 <- v27, v28
+    Load v32 <- string("explicit_and_tail(-1) should be -1")
+    Call v25 <- string("std.assert.assert") [v26, v32] (def=d2)
+    Load v37 <- int(3)
+    Call v35 <- string("explicit_and_tail") [v37] (def=d5)
+    Load v36 <- int(30)
+    Eq v34 <- v35, v36
+    Load v38 <- string("explicit_and_tail(3) should be 30")
+    Call v33 <- string("std.assert.assert") [v34, v38] (def=d2)
+    Call v39 <- string("no_return_has_side_effect") [] (def=d6)
+    Ret v39
   init (locals=0)
     Call %0 <- string("main") [] (def=d7)

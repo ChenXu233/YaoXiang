@@ -1,53 +1,84 @@
 module
   fn always_fails() -> Generic { name: "Result", args: [Void, Generic { name: "String", args: [] }] }
     locals_total=3
-    Load %0 <- int(1)
-    Load %1 <- int(2)
-    Call %2 <- string("std.test.assert_eq") [%0, %1] (def=d0)
-    Ret %2
+    values_total=3
+    value v0: TypeRef("?") @block0
+    value v1: Int(64) @block0
+    value v2: Int(64) @block0
+    Load v1 <- int(1)
+    Load v2 <- int(2)
+    Call v0 <- string("std.test.assert_eq") [v1, v2] (def=d0)
+    Ret v0
   fn pop_still_runs() -> Generic { name: "Result", args: [Void, Generic { name: "String", args: [] }] }
     slot[0] xs : Int(64) @depth1
     slot[1] shorter : Int(64) @depth1
-    locals_total=6
+    locals_total=5
+    values_total=9
+    value v0: Int(64) @block0
+    value v1: Int(64) @block0
+    value v2: Int(64) @block0
+    value v3: Int(64) @block0
+    value v4: Generic { name: "Vec", args: [Int(64)] } @block0
+    value v5: TypeRef("?") @block0
+    value v6: Int(64) @block0
+    value v7: Generic { name: "Vec", args: [Int(64)] } @block0
+    value v8: Int(64) @block0
     AllocArray %0 size=int(2), elem=int(1)
-    Load %1 <- int(1)
-    Load %2 <- int(0)
-    StoreIndex %0[%2] <- %1
-    Load %3 <- int(2)
-    Load %4 <- int(1)
-    StoreIndex %0[%4] <- %3
-    Load %2 <- %0
-    Call %1 <- string("std.list.pop") [%2] (def=d1)
+    Load v0 <- int(1)
+    Load v1 <- int(0)
+    StoreIndex %0[v1] <- v0
+    Load v2 <- int(2)
+    Load v3 <- int(1)
+    StoreIndex %0[v3] <- v2
+    Load v4 <- %0
+    Call %1 <- string("std.list.pop") [v4] (def=d1)
     Drop %0
-    Load %4 <- %1
-    StringLength %3 <- %4
-    Load %5 <- int(1)
-    Call %2 <- string("std.test.assert_eq") [%3, %5] (def=d0)
+    Load v7 <- %1
+    StringLength v6 <- v7
+    Load v8 <- int(1)
+    Call v5 <- string("std.test.assert_eq") [v6, v8] (def=d0)
     Drop %1
     Drop %0
-    Ret %2
+    Ret v5
   fn main() -> Void
-    locals_total=10
-    AllocArray %0 size=int(2), elem=int(1)
-    Load %1 <- string("always_fails")
-    MakeClosure %2 <- closure_0 env=[] (def=d2)
-    NewTuple %3 <- [%1, %2]
-    Load %4 <- int(0)
-    StoreIndex %0[%4] <- %3
-    Load %5 <- string("pop_still_runs")
-    MakeClosure %6 <- closure_1 env=[] (def=d3)
-    NewTuple %7 <- [%5, %6]
-    Load %8 <- int(1)
-    StoreIndex %0[%8] <- %7
-    Call %9 <- string("std.test.suite") [%0] (def=d4)
-    Ret %9
+    locals_total=4
+    values_total=10
+    value v0: TypeRef("?") @block0
+    value v1: TypeRef("?") @block0
+    value v2: TypeRef("?") @block0
+    value v3: Generic { name: "String", args: [] } @block0
+    value v4: TypeRef("?") @block0
+    value v5: Int(64) @block0
+    value v6: TypeRef("?") @block0
+    value v7: Generic { name: "String", args: [] } @block0
+    value v8: TypeRef("?") @block0
+    value v9: Int(64) @block0
+    AllocArray v1 size=int(2), elem=int(1)
+    Load v3 <- string("always_fails")
+    MakeClosure v4 <- closure_0 env=[] (def=d2)
+    NewTuple v2 <- [v3, v4]
+    Load v5 <- int(0)
+    StoreIndex v1[v5] <- v2
+    Load v7 <- string("pop_still_runs")
+    MakeClosure v8 <- closure_1 env=[] (def=d3)
+    NewTuple v6 <- [v7, v8]
+    Load v9 <- int(1)
+    StoreIndex v1[v9] <- v6
+    Call v0 <- string("std.test.suite") [v1] (def=d4)
+    Ret v0
   fn closure_0() -> Void
-    locals_total=5
-    Call %0 <- string("always_fails") [] (def=d5)
-    Ret %0
+    locals_total=2
+    values_total=2
+    value v0: TypeRef("?") @block0
+    value v1: Generic { name: "Result", args: [Void, Generic { name: "String", args: [] }] } @block0
+    Call v1 <- string("always_fails") [] (def=d5)
+    Ret v1
   fn closure_1() -> Void
-    locals_total=9
-    Call %0 <- string("pop_still_runs") [] (def=d6)
-    Ret %0
+    locals_total=2
+    values_total=2
+    value v0: TypeRef("?") @block0
+    value v1: Generic { name: "Result", args: [Void, Generic { name: "String", args: [] }] } @block0
+    Call v1 <- string("pop_still_runs") [] (def=d6)
+    Ret v1
   init (locals=0)
     Call %0 <- string("main") [] (def=d7)

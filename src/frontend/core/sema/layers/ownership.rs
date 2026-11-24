@@ -10,17 +10,17 @@
 //! § 快速通道: 反向 BFS 活性分析
 //! § 慢速通道: SMT 逻辑切断
 
-use std::collections::{HashMap, HashSet};
-use crate::util::consumption::ConsumptionLedger;
-use crate::util::plan_id::PlanId;
-use crate::util::span::Span;
 use super::super::proof::context::ProofContext;
 use super::super::proof::verdict::{ProofFailure, ProofResult, ProofResultExt};
 use crate::frontend::core::types::const_data::{BinOp, ConstExpr, UnOp};
+use crate::util::consumption::ConsumptionLedger;
+use crate::util::plan_id::PlanId;
+use crate::util::span::Span;
+use std::collections::{HashMap, HashSet};
 
-use crate::frontend::core::sema::proof::smt::ast::{SMTSort, SMTResult};
-use crate::frontend::core::sema::proof::smt::translate::translate_constraint;
+use crate::frontend::core::sema::proof::smt::ast::{SMTResult, SMTSort};
 use crate::frontend::core::sema::proof::smt::backend::{with_shared_solver, SolverConsumer};
+use crate::frontend::core::sema::proof::smt::translate::translate_constraint;
 
 // ── ReleasePlan ───────────────────────────────────────────
 
@@ -69,17 +69,15 @@ impl ReleasePlan {
         ids
     }
 
-    /// 标记消费侧已完整跑完一轮（IR 生成成功返回时调用；幂等）。
+    /// 消费台账（**标记与结算的唯一入口**：`mark_completed` 标记、
+    /// `is_completed` 读取「消费者真的跑过」判据——失败 / 未运行时不标，
+    /// 此时未消费键不判，见 [`ConsumptionLedger`] 文档）。
     ///
-    /// 结算的「消费者真的跑过」判据——失败 / 未运行时不标，此时未消费键不判
-    /// （见 [`ConsumptionLedger::is_completed`]）。
-    pub fn mark_consumption_completed(&self) {
-        self.consumption.mark_completed();
-    }
-
-    /// 消费侧是否完整跑完一轮（IR 生成成功返回）。
-    pub fn consumption_completed(&self) -> bool {
-        self.consumption.is_completed()
+    /// #460：此前 `mark_consumption_completed` / `consumption_completed` 两个
+    /// 转发在本类型与 `OverloadResolutions` 各抄一份（禁令三 A），现收敛到
+    /// [`ConsumptionLedger`] 单一入口。
+    pub fn consumption(&self) -> &ConsumptionLedger<PlanId> {
+        &self.consumption
     }
 }
 
@@ -672,7 +670,10 @@ pub(crate) fn smt_cut(
         let mut var_sorts: HashMap<String, SMTSort> = HashMap::new();
         collect_var_sorts(&conj, &mut var_sorts);
 
-        let commands = translate_constraint(&constraint, &[], &var_sorts);
+        // 不可翻译（F10）：判不了就不切断（保守方向 = 回边穿越），不送空表给求解器
+        let Some(commands) = translate_constraint(&constraint, &[], &var_sorts) else {
+            return false;
+        };
 
         // 共享口（RFC-039 D58）：此前每次回边判定新建 Z3 实例，缓存计数与
         // CACHE_CAP 空转；改走进程级共享单例后，同形回边的查询可命中缓存。
@@ -772,6 +773,8 @@ fn collect_var_sorts(
             collect_numeric(start, sorts);
             collect_numeric(end, sorts);
         }
+        // 证据字段路径不是 ownership 约束的变量：不登记 sort（编译完整性补臂）
+        ConstExpr::FieldPath { .. } => {}
     }
 }
 
@@ -1441,7 +1444,7 @@ impl OwnershipChecker {
                 if st
                     .fields
                     .iter()
-                    .all(|(_, field_ty)| self.is_copyable_field(field_ty, depth - 1))
+                    .all(|field| self.is_copyable_field(&field.ty, depth - 1))
                 {
                     CopySemantics::Dup
                 } else {
@@ -1571,8 +1574,8 @@ impl OwnershipChecker {
                 crate::frontend::core::types::MonoType::Struct(st) => st
                     .fields
                     .iter()
-                    .find(|(n, _)| n == fname)
-                    .map(|(_, ty)| ty.clone())?,
+                    .find(|field| &field.name == fname)
+                    .map(|field| field.ty.clone())?,
                 crate::frontend::core::types::MonoType::Ref { inner, .. } => inner.as_ref().clone(),
                 crate::frontend::core::types::MonoType::TypeRef(n) => {
                     let poly = env.types.get(n)?;
@@ -1581,8 +1584,8 @@ impl OwnershipChecker {
                         crate::frontend::core::types::MonoType::Struct(st) => st
                             .fields
                             .iter()
-                            .find(|(f, _)| f == fname)
-                            .map(|(_, ty)| ty.clone())?,
+                            .find(|field| &field.name == fname)
+                            .map(|field| field.ty.clone())?,
                         _ => return None,
                     }
                 }

@@ -8,104 +8,170 @@ module
     slot[5] total : Int(64) @depth1
     slot[6] items4 : Int(64) @depth1
     slot[7] result : Int(64) @depth1
-    locals_total=17
+    locals_total=11
+    values_total=65
+    value v0: Int(64) @block0
+    value v1: Int(64) @block0
+    value v2: Int(64) @block0
+    value v3: Int(64) @block0
+    value v4: Int(64) @block0
+    value v5: Int(64) @block0
+    value v6: Int(64) @block0
+    value v7: Int(64) @block0
+    value v8: Int(64) @block0
+    value v9: Int(64) @block0
+    value v10: Generic { name: "Vec", args: [Int(64)] } @block0
+    value v11: TypeRef("?") @block0
+    value v12: TypeRef("?") @block0
+    value v13: Bool @block0
+    value v14: Generic { name: "String", args: [] } @block0
+    value v15: Int(64) @block0
+    value v16: Int(64) @block0
+    value v17: Int(64) @block0
+    value v18: Int(64) @block0
+    value v19: Int(64) @block0
+    value v20: Int(64) @block0
+    value v21: Int(64) @block0
+    value v22: Int(64) @block0
+    value v23: Int(64) @block0
+    value v24: Int(64) @block0
+    value v25: Generic { name: "Vec", args: [Int(64)] } @block0
+    value v26: TypeRef("?") @block0
+    value v27: TypeRef("?") @block0
+    value v28: Bool @block0
+    value v29: Generic { name: "String", args: [] } @block0
+    value v30: Int(64) @block0
+    value v31: Int(64) @block0
+    value v32: Int(64) @block0
+    value v33: Int(64) @block0
+    value v34: Int(64) @block0
+    value v35: Int(64) @block0
+    value v36: Int(64) @block0
+    value v37: Int(64) @block0
+    value v38: Int(64) @block0
+    value v39: Int(64) @block0
+    value v40: Generic { name: "Vec", args: [Int(64)] } @block0
+    value v41: TypeRef("?") @block0
+    value v42: Int(64) @block0
+    value v43: TypeRef("?") @block0
+    value v44: Bool @block0
+    value v45: Int(64) @block0
+    value v46: Int(64) @block0
+    value v47: Generic { name: "String", args: [] } @block0
+    value v48: Int(64) @block0
+    value v49: Int(64) @block0
+    value v50: Int(64) @block0
+    value v51: Int(64) @block0
+    value v52: Int(64) @block0
+    value v53: Int(64) @block0
+    value v54: Int(64) @block0
+    value v55: Int(64) @block0
+    value v56: Int(64) @block0
+    value v57: Int(64) @block0
+    value v58: TypeRef("?") @block0
+    value v59: Generic { name: "Vec", args: [Int(64)] } @block0
+    value v60: TypeRef("?") @block0
+    value v61: TypeRef("?") @block0
+    value v62: TypeRef("?") @block0
+    value v63: Bool @block0
+    value v64: Generic { name: "String", args: [] } @block0
     AllocArray %0 size=int(5), elem=int(1)
-    Load %1 <- int(1)
-    Load %2 <- int(0)
-    StoreIndex %0[%2] <- %1
-    Load %3 <- int(2)
-    Load %4 <- int(1)
-    StoreIndex %0[%4] <- %3
-    Load %5 <- int(3)
-    Load %6 <- int(2)
-    StoreIndex %0[%6] <- %5
-    Load %7 <- int(4)
-    Load %8 <- int(3)
-    StoreIndex %0[%8] <- %7
-    Load %9 <- int(5)
-    Load %10 <- int(4)
-    StoreIndex %0[%10] <- %9
-    Load %2 <- %0
-    MakeClosure %3 <- closure_0 env=[] (def=d0)
-    Call %1 <- string("std.list.map") [%2, %3] (def=d1)
+    Load v0 <- int(1)
+    Load v1 <- int(0)
+    StoreIndex %0[v1] <- v0
+    Load v2 <- int(2)
+    Load v3 <- int(1)
+    StoreIndex %0[v3] <- v2
+    Load v4 <- int(3)
+    Load v5 <- int(2)
+    StoreIndex %0[v5] <- v4
+    Load v6 <- int(4)
+    Load v7 <- int(3)
+    StoreIndex %0[v7] <- v6
+    Load v8 <- int(5)
+    Load v9 <- int(4)
+    StoreIndex %0[v9] <- v8
+    Load v10 <- %0
+    MakeClosure v11 <- closure_0 env=[] (def=d0)
+    Call %1 <- string("std.list.map") [v10, v11] (def=d1)
     Drop %0
-    Load %3 <- bool(true)
-    Load %4 <- string("list.map works")
-    Call %2 <- string("std.assert.assert") [%3, %4] (def=d2)
+    Load v13 <- bool(true)
+    Load v14 <- string("list.map works")
+    Call v12 <- string("std.assert.assert") [v13, v14] (def=d2)
     AllocArray %2 size=int(5), elem=int(1)
-    Load %3 <- int(1)
-    Load %4 <- int(0)
-    StoreIndex %2[%4] <- %3
-    Load %5 <- int(2)
-    Load %6 <- int(1)
-    StoreIndex %2[%6] <- %5
-    Load %7 <- int(3)
-    Load %8 <- int(2)
-    StoreIndex %2[%8] <- %7
-    Load %9 <- int(4)
-    Load %10 <- int(3)
-    StoreIndex %2[%10] <- %9
-    Load %11 <- int(5)
-    Load %12 <- int(4)
-    StoreIndex %2[%12] <- %11
-    Load %4 <- %2
-    MakeClosure %5 <- closure_1 env=[] (def=d3)
-    Call %3 <- string("std.list.filter") [%4, %5] (def=d4)
+    Load v15 <- int(1)
+    Load v16 <- int(0)
+    StoreIndex %2[v16] <- v15
+    Load v17 <- int(2)
+    Load v18 <- int(1)
+    StoreIndex %2[v18] <- v17
+    Load v19 <- int(3)
+    Load v20 <- int(2)
+    StoreIndex %2[v20] <- v19
+    Load v21 <- int(4)
+    Load v22 <- int(3)
+    StoreIndex %2[v22] <- v21
+    Load v23 <- int(5)
+    Load v24 <- int(4)
+    StoreIndex %2[v24] <- v23
+    Load v25 <- %2
+    MakeClosure v26 <- closure_1 env=[] (def=d3)
+    Call %3 <- string("std.list.filter") [v25, v26] (def=d4)
     Drop %2
-    Load %5 <- bool(true)
-    Load %6 <- string("list.filter works")
-    Call %4 <- string("std.assert.assert") [%5, %6] (def=d2)
+    Load v28 <- bool(true)
+    Load v29 <- string("list.filter works")
+    Call v27 <- string("std.assert.assert") [v28, v29] (def=d2)
     AllocArray %4 size=int(5), elem=int(1)
-    Load %5 <- int(1)
-    Load %6 <- int(0)
-    StoreIndex %4[%6] <- %5
-    Load %7 <- int(2)
-    Load %8 <- int(1)
-    StoreIndex %4[%8] <- %7
-    Load %9 <- int(3)
-    Load %10 <- int(2)
-    StoreIndex %4[%10] <- %9
-    Load %11 <- int(4)
-    Load %12 <- int(3)
-    StoreIndex %4[%12] <- %11
-    Load %13 <- int(5)
-    Load %14 <- int(4)
-    StoreIndex %4[%14] <- %13
-    Load %6 <- %4
-    MakeClosure %7 <- closure_2 env=[] (def=d5)
-    Load %8 <- int(0)
-    Call %5 <- string("std.list.reduce") [%6, %7, %8] (def=d6)
+    Load v30 <- int(1)
+    Load v31 <- int(0)
+    StoreIndex %4[v31] <- v30
+    Load v32 <- int(2)
+    Load v33 <- int(1)
+    StoreIndex %4[v33] <- v32
+    Load v34 <- int(3)
+    Load v35 <- int(2)
+    StoreIndex %4[v35] <- v34
+    Load v36 <- int(4)
+    Load v37 <- int(3)
+    StoreIndex %4[v37] <- v36
+    Load v38 <- int(5)
+    Load v39 <- int(4)
+    StoreIndex %4[v39] <- v38
+    Load v40 <- %4
+    MakeClosure v41 <- closure_2 env=[] (def=d5)
+    Load v42 <- int(0)
+    Call %5 <- string("std.list.reduce") [v40, v41, v42] (def=d6)
     Drop %4
-    Load %8 <- %5
-    Load %9 <- int(15)
-    Eq %7 <- %8, %9
-    Load %10 <- string("list.reduce sum of 1..5 should be 15")
-    Call %6 <- string("std.assert.assert") [%7, %10] (def=d2)
+    Load v45 <- %5
+    Load v46 <- int(15)
+    Eq v44 <- v45, v46
+    Load v47 <- string("list.reduce sum of 1..5 should be 15")
+    Call v43 <- string("std.assert.assert") [v44, v47] (def=d2)
     AllocArray %6 size=int(5), elem=int(1)
-    Load %7 <- int(1)
-    Load %8 <- int(0)
-    StoreIndex %6[%8] <- %7
-    Load %9 <- int(2)
-    Load %10 <- int(1)
-    StoreIndex %6[%10] <- %9
-    Load %11 <- int(3)
-    Load %12 <- int(2)
-    StoreIndex %6[%12] <- %11
-    Load %13 <- int(4)
-    Load %14 <- int(3)
-    StoreIndex %6[%14] <- %13
-    Load %15 <- int(5)
-    Load %16 <- int(4)
-    StoreIndex %6[%16] <- %15
-    Load %9 <- %6
-    MakeClosure %10 <- closure_3 env=[] (def=d7)
-    Call %8 <- string("std.list.filter") [%9, %10] (def=d4)
-    MakeClosure %11 <- closure_4 env=[] (def=d8)
-    Call %7 <- string("std.list.map") [%8, %11] (def=d1)
+    Load v48 <- int(1)
+    Load v49 <- int(0)
+    StoreIndex %6[v49] <- v48
+    Load v50 <- int(2)
+    Load v51 <- int(1)
+    StoreIndex %6[v51] <- v50
+    Load v52 <- int(3)
+    Load v53 <- int(2)
+    StoreIndex %6[v53] <- v52
+    Load v54 <- int(4)
+    Load v55 <- int(3)
+    StoreIndex %6[v55] <- v54
+    Load v56 <- int(5)
+    Load v57 <- int(4)
+    StoreIndex %6[v57] <- v56
+    Load v59 <- %6
+    MakeClosure v60 <- closure_3 env=[] (def=d7)
+    Call v58 <- string("std.list.filter") [v59, v60] (def=d4)
+    MakeClosure v61 <- closure_4 env=[] (def=d8)
+    Call %7 <- string("std.list.map") [v58, v61] (def=d1)
     Drop %6
-    Load %9 <- bool(true)
-    Load %10 <- string("chained list.map and list.filter works")
-    Call %8 <- string("std.assert.assert") [%9, %10] (def=d2)
+    Load v63 <- bool(true)
+    Load v64 <- string("chained list.map and list.filter works")
+    Call v62 <- string("std.assert.assert") [v63, v64] (def=d2)
     Drop %1
     Drop %3
     Drop %0
@@ -114,44 +180,71 @@ module
     Drop %6
     Drop %7
     Drop %5
-    Ret %8
+    Ret v62
   fn closure_0(Int(64)) -> Void
     slot[0] x : Int(64) @depth2
-    locals_total=11
-    Load %0 <- %1
-    Load %2 <- int(2)
-    Mul %3 <- %0, %2
-    Ret %3
+    locals_total=4
+    values_total=4
+    value v0: TypeRef("?") @block0
+    value v1: TypeVar(TypeVar(44)) @block0
+    value v2: TypeVar(TypeVar(44)) @block0
+    value v3: Int(64) @block0
+    Load v2 <- %0
+    Load v3 <- int(2)
+    Mul v1 <- v2, v3
+    Ret v1
   fn closure_1(Int(64)) -> Void
     slot[0] x : Int(64) @depth2
-    locals_total=13
-    Load %0 <- %1
-    Load %2 <- int(2)
-    Mod %3 <- %0, %2
-    Load %4 <- int(0)
-    Eq %5 <- %3, %4
-    Ret %5
+    locals_total=4
+    values_total=6
+    value v0: TypeRef("?") @block0
+    value v1: Bool @block0
+    value v2: TypeVar(TypeVar(44)) @block0
+    value v3: Int(64) @block0
+    value v4: TypeVar(TypeVar(44)) @block0
+    value v5: Int(64) @block0
+    Load v4 <- %0
+    Load v5 <- int(2)
+    Mod v2 <- v4, v5
+    Load v3 <- int(0)
+    Eq v1 <- v2, v3
+    Ret v1
   fn closure_2(Int(64), Int(64)) -> Void
     slot[0] acc : Int(64) @depth2
     slot[1] x : Int(64) @depth2
-    locals_total=15
-    Load %0 <- %1
-    Load %2 <- %3
-    Add %4 <- %0, %2
-    Ret %4
+    locals_total=5
+    values_total=4
+    value v0: TypeRef("?") @block0
+    value v1: TypeVar(TypeVar(56)) @block0
+    value v2: TypeVar(TypeVar(56)) @block0
+    value v3: TypeVar(TypeVar(44)) @block0
+    Load v2 <- %0
+    Load v3 <- %1
+    Add v1 <- v2, v3
+    Ret v1
   fn closure_3(Int(64)) -> Void
     slot[0] x : Int(64) @depth2
-    locals_total=17
-    Load %0 <- %1
-    Load %2 <- int(2)
-    Gt %3 <- %0, %2
-    Ret %3
+    locals_total=4
+    values_total=4
+    value v0: TypeRef("?") @block0
+    value v1: Bool @block0
+    value v2: TypeVar(TypeVar(44)) @block0
+    value v3: Int(64) @block0
+    Load v2 <- %0
+    Load v3 <- int(2)
+    Gt v1 <- v2, v3
+    Ret v1
   fn closure_4(Int(64)) -> Void
     slot[0] x : Int(64) @depth2
-    locals_total=17
-    Load %0 <- %1
-    Load %2 <- int(10)
-    Mul %3 <- %0, %2
-    Ret %3
+    locals_total=4
+    values_total=4
+    value v0: TypeRef("?") @block0
+    value v1: TypeVar(TypeVar(44)) @block0
+    value v2: TypeVar(TypeVar(44)) @block0
+    value v3: Int(64) @block0
+    Load v2 <- %0
+    Load v3 <- int(10)
+    Mul v1 <- v2, v3
+    Ret v1
   init (locals=0)
     Call %0 <- string("main") [] (def=d9)

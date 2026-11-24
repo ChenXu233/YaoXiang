@@ -68,8 +68,9 @@
 > 这就是全部 15 个内置类型名（`()` 是 `Void` 的类型写法）。权威表与拼写规则见
 > [语言规范 §2.1](language-spec/type-system.md)：**只有大写这一种拼写**，
 > `int` / `i64` / `str` / `bool` 之类在 WBS 6.1.2 已删除。
-> `DateTime` 不属内置名——它是 std 层的临时兼容别名（`std.time` 的
-> `now` / `parse_time` 签名），迁出见 P10 S11（issue #513）。
+> `DateTime` 不属内置名——`std.time` 的 `now` / `parse_time` 返回的就是
+> `Int` 时间戳（临时兼容别名已由 P10 S11 / issue #513 迁出：裸写 `DateTime`
+> 注解按未知类型报错）。
 
 ### 复合类型
 

@@ -3,25 +3,25 @@
 //! This module implements the main interpreter that executes bytecode.
 //! It follows the standard fetch-decode-execute cycle.
 
-use std::collections::HashMap;
-use std::fmt;
-use std::sync::Arc;
-use crate::backends::{ExecutorConfig, ExecutorError, ExecutorResult, ExecutionState};
-use crate::backends::common::{RuntimeValue, Heap, HeapValue};
 use crate::backends::common::value::{
     AsyncState, AsyncValue, FunctionId, FunctionValue, TaskId, ValueType,
 };
-use crate::middle::bytecode::{BytecodeFunction, Reg, BinaryOp, CompareOp, ConstValue};
+use crate::backends::common::{Heap, HeapValue, RuntimeValue};
+use crate::backends::interpreter::ffi::FfiRegistry;
 use crate::backends::interpreter::image::Image;
 use crate::backends::interpreter::{Frame, PendingCall, ReturnTarget};
-use crate::backends::interpreter::ffi::FfiRegistry;
-use crate::backends::runtime::{Runtime, RuntimeConfig};
 use crate::backends::runtime::engine::{
-    SyncValue, TaskCancelReason, TaskFailure, TaskMeta, TaskOutcome, TaskResult, sv,
+    sv, SyncValue, TaskCancelReason, TaskFailure, TaskMeta, TaskOutcome, TaskResult,
 };
-use crate::util::i18n::MSG;
-use crate::tlog;
+use crate::backends::runtime::{Runtime, RuntimeConfig};
+use crate::backends::{ExecutionState, ExecutorConfig, ExecutorError, ExecutorResult};
+use crate::middle::bytecode::{BinaryOp, BytecodeFunction, CompareOp, ConstValue, Reg};
 use crate::std::NativeContext;
+use crate::tlog;
+use crate::util::i18n::MSG;
+use std::collections::HashMap;
+use std::fmt;
+use std::sync::Arc;
 
 /// Maximum call stack depth
 const DEFAULT_MAX_STACK_DEPTH: usize = 1024;
@@ -1179,12 +1179,27 @@ impl Interpreter {
             }
             // 类型不匹配的比较：硬错误，禁止静默返回 false
             // （同函数算术分支已报错，保持一致；类型检查器应先拦截，此处为底线防御）
+            //
+            // #500：操作数带 Void 时追加初始化顺序 hint。运行期 Void 的主来源是
+            // LoadGlobal 读尚未写入的全局槽（exec_reg 的 unwrap_or(Void)），环内
+            // 模块初始化顺序不可判定（编译期 W1007）时正落到这里。Void 的另一
+            // 历史来源——Eq/Neq 编译期放行的异型比较——其「异型与跨类型静态
+            // Void 值」面已由 #549（2026-11-20 用户裁决甲案）收口：infer_equality
+            // 非记录形态走「两侧同型」纪律编译期拒绝；**同型 Void 比较（如
+            // void == void，unify 专属臂放行）与 Any 槽位运行期异型值仍可达
+            // 本兜底臂**（本批 multifile 夹具 f(a:Any,b:Any) 传 (1,"a") 即实证）；
+            // hint 按观测陈述措辞（usually / if）不变，未初始化读仍是其覆盖场景。
+            // 无 Void 操作数时消息逐字不变。
             (op, l, r) => {
                 let stack = self.capture_stack();
-                return Err(ExecutorError::type_error(
-                    format!("type mismatch in comparison {:?}: {:?} vs {:?}", op, l, r),
-                    stack,
-                ));
+                let mut message =
+                    format!("type mismatch in comparison {:?}: {:?} vs {:?}", op, l, r);
+                if matches!(l, RuntimeValue::Void) || matches!(r, RuntimeValue::Void) {
+                    message.push_str(
+                        "; a Void operand usually means a top-level value was read before initialization — if this happened during module initialization, check the initialization order inside the import cycle (compile-time warning W1007 reports that cycle)",
+                    );
+                }
+                return Err(ExecutorError::type_error(message, stack));
             }
         };
 

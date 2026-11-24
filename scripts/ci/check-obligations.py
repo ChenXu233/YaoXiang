@@ -63,7 +63,13 @@ TYPECHECK_TREE = 'src/frontend/core/sema'
 # 消费者阶段 → 声明式消费者文件（判据 2 的扫描面）
 CONSUMER_FILES = {
     'ProofExecution': ['src/driver/arms.rs', 'src/frontend/proof_execution.rs'],
-    'IrGeneration': ['src/middle/ir/ir_gen.rs'],
+    'IrGeneration': [
+        'src/middle/lower/mod.rs',
+        'src/middle/lower/query.rs',
+        'src/middle/lower/module_ir.rs',
+        'src/middle/lower/expr/control.rs',
+        'src/middle/lower/expr/reference.rs',
+    ],
     'Monomorphization': ['src/driver/arms.rs', 'src/driver/helpers.rs'],
 }
 
@@ -159,12 +165,19 @@ def strip_comments(text):
 
 
 def cut_test_sections(text):
-    """截断到 #[cfg(test)] / mod tests 之前（测试代码不算消费证据）。"""
+    """截断到**内联**测试模块之前（测试代码不算消费证据）。
+
+    只认带实体 { 的测试模块（#[cfg(test)] mod tests { ... } 或 mod tests { ... }）。
+    仅声明 `mod tests;` 的文件（测试体在别的文件）不截断——否则把
+    `#[cfg(test)] mod tests;` 写在文件前部的模块会把整个文件当测试代码，
+    真实读取被整体丢弃（2026-11-22 `src/middle/lower/mod.rs` 实例）。
+    """
     cut = -1
-    for marker in ('#[cfg(test)]', 'mod tests'):
-        idx = text.find(marker)
-        if idx != -1 and (cut == -1 or idx < cut):
-            cut = idx
+    for pattern in (r'#\[cfg\(test\)\]\s*mod\s+\w+\s*\{',
+                    r'(?m)^\s*(?:pub(?:\([^)]*\))?\s+)?mod\s+tests\s*\{'):
+        m = re.search(pattern, text)
+        if m and (cut == -1 or m.start() < cut):
+            cut = m.start()
     return text if cut == -1 else text[:cut]
 
 

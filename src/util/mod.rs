@@ -4,6 +4,7 @@ pub mod arith;
 pub mod cache;
 pub mod config;
 pub mod consumption;
+pub mod content_hash;
 pub mod diagnostic;
 pub mod i18n;
 pub mod logger;

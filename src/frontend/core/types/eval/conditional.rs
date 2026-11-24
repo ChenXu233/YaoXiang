@@ -21,8 +21,8 @@
 //! }
 //! ```
 
-use crate::frontend::core::types::MonoType;
 use crate::frontend::core::types::eval::{TypeLevelError, TypeLevelResult};
+use crate::frontend::core::types::MonoType;
 
 /// 条件类型的布尔条件
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

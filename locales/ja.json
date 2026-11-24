@@ -179,8 +179,8 @@
     "example": "x: Int = \"hello\";",
     "error_output": "error[E1002]: 型の不一致\n --> example.yx:1:12\n  |\n1 | x: Int = \"hello\";\n  |            ^ 'Int' が必要ですが、'String' が見つかりました"
   },
-  "E1002.borrowed_arith.help": "The left side reads as '{l}' and the right side as '{r}'; when a borrow (&T) participates in arithmetic its inner type is used — to operate on a container, index into it (e.g. v[0]) or dereference it (*t) first",
-  "E1002.binop_mismatch.help": "The left and right types are '{l}' and '{r}', which do not support this operator; check whether a conversion is missing or an operand is wrong",
+  "E1002.borrowed_arith.help": "左側は '{l}' と読み、右側は '{r}' と読みます。借用（&T）が算術に参加する場合は内部の型で判定されます。コンテナに対して演算したい場合は、先に要素を取り出す（例：v[0]）か、参照外し（*t）してください",
+  "E1002.binop_mismatch.help": "左右の型はそれぞれ '{l}' と '{r}' で、この演算子はサポートされていません。型変換が不足しているか、オペランドを書き間違えていないか確認してください",
   "E1003": {
     "title": "未知の型",
     "message": "参照された型が存在しません",
@@ -197,7 +197,7 @@
     "example": "add(1, 2, 3);",
     "error_output": "error[E1010]: 引数の数が一致しません\n --> example.yx:1:1\n  |\n1 | add(1, 2, 3);\n  |     ^ 関数は 2 個の引数を期待していますが、3 個見つかりました"
   },
-  "E1010.missing_named.help": "Missing required parameters: {missing} (named arguments fill slots by parameter name and do not occupy leading positions)",
+  "E1010.missing_named.help": "必須の仮引数が不足しています：{missing}（名前付き実引数は仮引数名だけでスロットに入り、先行位置を占有しません）",
   "E1011": {
     "title": "引数の型が一致しません",
     "message": "引数の型チェックに失敗しました",
@@ -274,7 +274,7 @@
     "title": "フィールドが見つかりません",
     "message": "存在しない構造体フィールドにアクセスしました",
     "template": "構造体 '{struct}' にフィールド '{field}' が見つかりません",
-    "help": "構造体で利用可能なフィールドを確認してください",
+    "help": "構造体で使用可能なフィールドを確認してください。evidence フィールドパスが述語本体のものである場合は、レコード定義の evidence フィールド名を確認してください。",
     "example": "point.z;",
     "error_output": "error[E1042]: フィールドが見つかりません\n --> example.yx:1:7\n  |\n1 | point.z;\n  |       ^ 構造体 'Point' にフィールド 'z' が見つかりません"
   },
@@ -528,7 +528,7 @@
     "example": "use foo::bar;",
     "error_output": "error[E5001]: モジュールが見つかりません\n --> example.yx:1:5\n  |\n1 | use foo::bar;\n  |     ^ モジュール 'foo' が見つかりません"
   },
-  "E5001.vendor_missing.help": "Dependency package '{pkg}' is not installed in .yaoxiang/vendor/; run `yaoxiang install`",
+  "E5001.vendor_missing.help": "依存パッケージ '{pkg}' が .yaoxiang/vendor/ にインストールされていません。`yaoxiang install` を実行してください",
   "E5002": {
     "title": "インポートエラー",
     "message": "モジュールのインポートに失敗しました",
@@ -631,6 +631,8 @@
     "example": "",
     "error_output": ""
   },
+  "E8001.span_missing.message": "診断 {code} に span がありません：呼び出し点で .at(span) が指定されておらず、型検査 walk のコンテキスト内にもありません（コンパイラのバグ、#324 を参照）",
+  "E8001.span_missing.help": "呼び出し点で .at(span) を補うか、型検査 walk のコンテキスト内で構築してください",
   "E8002": {
     "title": "予期しないパニック",
     "message": "コンパイラが予期しないパニックを検出しました",
@@ -779,10 +781,12 @@
     "template": "精化述語違反：{constraint}{counterexample}",
     "help": "述語が反証されました——制約を偽にする代入が存在します。変数の値を確認するか、制約を緩和してください。"
   },
-  "E4018.counterexample.section": "\n\nCounterexample:\n{assignments}",
-  "E4018.no_free_var.note": "\n\n(The constraint has no free variables; the annotation itself is unsatisfiable.)",
-  "E4018.proof_false.note": "\n\n(Proof function returned false; no concrete counterexample.)",
-  "E4018.proof_error.note": "\n\n(Proof function failed to execute; no concrete counterexample.)",
+  "E4018.counterexample.section": "\n\n反例：\n{assignments}",
+  "E4018.no_free_var.note": "\n\n（制約に自由変数がなく、注釈自体が成立しません）",
+  "E4018.proof_false.note": "\n\n（証明関数が false を返し、具体的な反例はありません）",
+  "E4018.proof_error.note": "\n\n（証明関数の実行でエラーが発生し、具体的な反例はありません）",
+  "E4018.proof_false.constraint": "証明関数 '{func}' が false を返しました：制約を満たしていません（引数: {args}）；制約条件を確認するか、渡す値を修正してください",
+  "E4018.proof_error.constraint": "証明関数 '{func}' の実行に失敗しました：{error}",
   "E4019": {
     "title": "型等式が成立しません",
     "message": "型等式が証明パイプライン内で反証されました",
@@ -830,6 +834,14 @@
     "example": "if = 1;",
     "error_output": "error[E0018]: キーワードを名前として使用\n --> example.yx:1:1\n  |\n1 | if = 1;\n  | ^^ 'if' はキーワードです"
   },
+  "E0019": {
+    "title": "式のネストが深すぎます",
+    "message": "式が {limit} 段を超えてネストしており、パーサーの再帰上限を超えました",
+    "template": "式のネストが最大再帰深度（{limit}）を超えています",
+    "help": "式を簡略化するか、深くネストした部分を中間変数や補助関数に分割してください",
+    "example": "main = () => { y = - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 1\n    print(y) }",
+    "error_output": "error[E0019]: 式のネストが深すぎます\n --> example.yx:1:24\n  |\n1 | main = () => { y = - - - ...\n  |                        ^ 式のネストが最大再帰深度（1024）を超えています"
+  },
   "E1062": {
     "title": "const ジェネリック制約の失敗",
     "message": "const ジェネリック引数の値制約が満たされていません",
@@ -850,7 +862,7 @@
     "title": "リファインメント型引数の形式が不正",
     "message": "リファインメント型引数をコンパイル時定数式に変換できません",
     "template": "'{name}' はコンパイル時定数引数を要求しますが、与えられた引数は変換できません",
-    "help": "述語/証明関数の引数はリテラル、変数、または単一引数の型適用である必要があります。そうでない場合、リファインメント制約を生成できません",
+    "help": "述語/証明関数の実引数は、リテラル、変数、または単一型パラメータの型適用でなければなりません。そうでない場合、精緻化制約を生成できません。型位置または述語本体では、evidence フィールドパス全体が、その述語の唯一の仮引数の evidence フィールドでなければならず、ベース名は適用された実引数の名前と一致する必要があります。",
     "example": "y: IsSmall(List(Int)) = 9999",
     "error_output": "error[E1092]: 'IsSmall' はコンパイル時定数引数を要求しますが、与えられた引数は変換できません"
   },
@@ -1124,6 +1136,12 @@
     "template": "測度不成立：この呼び出し点で測度が厳密に減少することを証明できません\n\n反例：\n{counterexample}",
     "help": "これは精錬型アサーションの停止性義務です：`Terminates` 測度を持つ再帰関数では、すべての再帰呼び出し点で測度が厳密に減少することを証明する必要があります。反例は減少が成立しない値の組を提供します。測度の選択が適切か確認するか、分岐ガードを追加して再帰パス上の減少を成立させてください。RFC-027a を参照。"
   },
+  "E4023": {
+    "title": "カーネル内で証明できません",
+    "message": "コンパイラは与えられた資源と推論規則の範囲でこの義務を証明できませんでした（命題が偽であることを意味しません）",
+    "template": "証明できません：{proposition}（{reason}）",
+    "help": "これはコンパイラの推論能力の境界であり、プログラムの誤りではありません。コンパイル時に既知の実引数や根拠を補うか、カーネルが判定できる形に書き換えてください（例：型実引数の値を明示する）。RFC-027 第 12.3 節を参照してください。"
+  },
   "package_outdated_none": "すべての依存関係は最新です。",
   "package_outdated_found": "{0} 個の古い依存関係が見つかりました:",
   "package_outdated_row": "  {0}: {1} -> {2}",
@@ -1212,6 +1230,22 @@
     "example": "f: (N: Int) -> (n: N) -> Int = (n) => n\nk: (y: Int) -> Int = f(y)",
     "error_output": "error[E1113]: コンパイル時値パラメータの証拠が不足\n --> example.yx:2:24\n  |\n2 | k: (y: Int) -> Int = f(y)\n  |                        ^ コンパイル時値パラメータ 'N' にはコンパイル時の証拠が必要ですが、実引数をコンパイル時に確定できません"
   },
+  "E1114": {
+    "title": "witness フィールドは値レベルで読み取れません",
+    "message": "witness フィールド '{field}' はレコード '{type}' のコンパイル時の証拠であり、実行時のデータスロットを持たないため、値レベルで読み取れません",
+    "template": "witness フィールド '{field}' はレコード '{type}' のコンパイル時の証拠であり、実行時のデータスロットを持たないため、値レベルで読み取れません",
+    "help": "witness フィールドは型レベルで使用します。`b.w` は証拠項であり、証明の前提として 사용할 수 있습니다。これは値レベルの読み取りではありません（実行時にデータスロットはありません）。実行時データが必要な場合は、このフィールドを通常のデータフィールドとして作成してください。",
+    "example": "Box: Type = { v: Int, w: Pos(v) }  // w は実行時データスロットを持たない witness フィールド\nmain: () -> Void = {\n    b: Box = Box(v = 1)\n    b.w\n}",
+    "error_output": "error[E1114]: witness フィールドは値レベルで読み取れません\n --> example.yx:5:5\n  |\n5 |     b.w\n  |     ^^^ witness フィールド 'w' はレコード 'Box' のコンパイル時の証拠であり、実行時のデータスロットを持たないため、値レベルで読み取れません"
+  },
+  "E1115": {
+    "title": "witness を持つレコードは不変です",
+    "message": "レコード '{type}' は witness フィールドを持つため、構築後に全フィールドが変わらないことが必要です",
+    "template": "レコード '{type}' は witness フィールドを持つため、構築後に全フィールドが変わらないことが必要です",
+    "help": "witness を持つレコードでは、`mut` フィールドの宣言、フィールド代入、`&mut` 借用、書き込み借用を要するメソッド呼び出しができません。可変データは witness を含まないレコードに分けてください。",
+    "example": "Box: Type = { v: Int, w: Pos(v) }\nmain: () -> Void = {\n    b: Box = Box(v = 1)\n    b.v = 2\n}",
+    "error_output": "error[E1115]: witness を持つレコードは不変です\n --> example.yx:4:5\n  |\n4 |     b.v = 2\n  |     ^^^^^^^ レコード 'Box' は witness フィールドを持つため、構築後に全フィールドが変わらないことが必要です"
+  },
   "W1082": {
     "title": "所有権分析の降格",
     "message": "関数本体チェッカーがなく、所有権分析は空の台帳で降格実行されています",
@@ -1228,7 +1262,7 @@
     "example": "// zlib.yx: use zother.{o_val}\n// zother.yx: use zlib.{z_val}\n// => zlib → zother → zlib：両モジュールが相互にインポートしています。サイクル内の順序はパスの辞書順による規約にすぎません",
     "error_output": "warning[W1007]: モジュールインポートサイクル zlib → zother → zlib：サイクル内の初期化順序は判定不能。サイクル内の順序はパスの辞書順による決定的な規約にすぎない（意味的保証なし）\n --> zother.yx:2:1\n  |\n2 | use zlib.{z_val}\n  | ^^^^^^^^^^^^^^^^^\n  |\nhelp: サイクル内の値依存関係が use の順序と逆になっています：zlib が zother.o_val を読み込む時点では zother がまだ初期化されていません（違反された辺：zother が zlib をインポートするため、トポロジカル順序では zlib が先に置かれます）。初期化順序は use の依存関係に従いますが、サイクル内では値依存関係を同時に満たすことはできません——サイクルを壊すか、このトップレベル値を遅延評価する関数に変更してください"
   },
-  "W1007.value_edge.help": "The value dependency runs against the use order: {reader} reads {slot} while {owner} is not yet initialized (violated edge: {owner} imports {reader}; the topological order therefore places {reader} first). Initialization follows use dependencies; inside a cycle both cannot hold — break the cycle, or defer the top-level value behind a function.",
+  "W1007.value_edge.help": "環内の値依存が use の順序と逆になっています：{reader} が {slot} を読む時点で {owner} はまだ初期化されていません（違反された辺：{owner} が {reader} をインポートするため、トポロジカル順序では {reader} が先に置かれます）。初期化順序は use の依存に従って決まりますが、環内では値依存を同時に満たすことができません——環を断ち切るか、このトップレベル値を遅延評価する関数に変更してください",
   "E3024": {
     "title": "プロジェクト設定を読み取れません",
     "template": "プロジェクト設定 {path} を読み取れません：{detail}",

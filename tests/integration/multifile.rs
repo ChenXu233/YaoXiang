@@ -299,6 +299,264 @@ main = () => {
     run_project_ok(&[("lib.yx", lib), ("main.yx", main)], "main.yx");
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// WBS 3.24.3 / issue #504：导入类型的返回注解身份
+//
+// 病史锚（#504）：跨单元函数返回**别名引入**的导入类型时，返回注解与实得类型
+// 不可判等——E1012（返回位）+ E1002（赋值位）、exit 1。规范来源：RFC-029
+// §导入（use 是唯一跨单元名引入机制）；判据 = 导入项签名里引用的定义单元
+// 类型名，按 use 登记改绑到本地名后与注解同源。
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// #504 夹具的 b 单元：定义 Temp 并导出返回它的函数。
+const TEMP_LIB: &str = r#"
+Temp: Type = { v: Float }
+
+make_b: () -> Temp = () => {
+    Temp(2.0)
+}
+"#;
+
+#[test]
+fn test_multifile_use_type_alias_fn_return_annotation_matches_defining_type() {
+    // #504 主锚（E1002 赋值位）：main 经 `Temp as TempB` 别名引入后写
+    // `u: TempB = make_b()`。修复前签名返回位是定义单元裸名 `Temp`、注解是
+    // 本地名 `TempB`，裸名判等判异 ⇒ E1002、exit 1；修复后导入面把签名里的
+    // 裸名引用按 use 登记改绑到本地名，两侧同源 ⇒ 编译通过且值正确。
+    // Arrange
+    let main = r#"
+use std.assert
+use b.{Temp as TempB, make_b}
+
+u: TempB = make_b()
+
+main = () => {
+    assert.assert(u.v == 2.0, "u.v should be 2.0")
+}
+"#;
+
+    // Act / Assert
+    run_project_ok(&[("b.yx", TEMP_LIB), ("main.yx", main)], "main.yx");
+}
+
+#[test]
+fn test_multifile_use_type_alias_wrap_fn_return_annotation_matches_call_result() {
+    // #504 锚（E1012 返回位）：main 内包装函数的返回注解写别名 TempB、体返回
+    // make_b() 的实得值。修复前注解 TypeRef("TempB") 与调用产物签名携带的裸名
+    // TypeRef("Temp") 判异 ⇒ E1012（返回类型不匹配）、exit 1。
+    // Arrange
+    let main = r#"
+use std.assert
+use b.{Temp as TempB, make_b}
+
+wrap: () -> TempB = () => {
+    make_b()
+}
+
+u: TempB = wrap()
+
+main = () => {
+    assert.assert(u.v == 2.0, "u.v should be 2.0")
+}
+"#;
+
+    // Act / Assert
+    run_project_ok(&[("b.yx", TEMP_LIB), ("main.yx", main)], "main.yx");
+}
+
+#[test]
+fn test_multifile_use_type_plain_import_fn_return_annotation_unchanged() {
+    // 对照锚：非别名导入（本地名 = 定义名）的返回注解，改绑前（今日已绿）后
+    // 行为一致——恒等改名零行为变化，防止接线把已绿面弄红。
+    // Arrange
+    let main = r#"
+use std.assert
+use b.{Temp, make_b}
+
+u: Temp = make_b()
+
+main = () => {
+    assert.assert(u.v == 2.0, "u.v should be 2.0")
+}
+"#;
+
+    // Act / Assert
+    run_project_ok(&[("b.yx", TEMP_LIB), ("main.yx", main)], "main.yx");
+}
+
+#[test]
+fn test_multifile_use_type_alias_constructor_annotation_chain_unchanged() {
+    // 对照锚：别名构造器 + 别名注解链（修前已绿——注册面双名镜像路径），
+    // 改绑接线后零行为变化。
+    // Arrange
+    let lib = r#"
+Temp: Type = { v: Float }
+"#;
+    let main = r#"
+use std.assert
+use b.{Temp as TempB}
+
+x: TempB = TempB(2.0)
+y: TempB = x
+
+main = () => {
+    assert.assert(y.v == 2.0, "y.v should be 2.0")
+}
+"#;
+
+    // Act / Assert
+    run_project_ok(&[("b.yx", lib), ("main.yx", main)], "main.yx");
+}
+
+#[test]
+fn test_multifile_cross_unit_same_named_type_alias_imports_stay_distinct() {
+    // 守卫锚：b.Temp 与 c.Temp 同名异型。别名引入后 make_c 的返回值进 TempB
+    // 注解**必须仍被拒绝**——修前因裸名 `Temp` 与别名 `TempB` 判异而拒绝；
+    // 改绑后 make_c 的返回位落在本地名 `TempC`，与 `TempB` 仍判异。语义不变，
+    // 防止「按名判等」把跨单元同名类型误判同型（过宽回归）。
+    // Arrange
+    let b = r#"
+Temp: Type = { v: Float }
+
+make_b: () -> Temp = () => {
+    Temp(1.0)
+}
+"#;
+    let c = r#"
+Temp: Type = { w: Int }
+
+make_c: () -> Temp = () => {
+    Temp(2)
+}
+"#;
+    let main = r#"
+use b.{Temp as TempB, make_b}
+use c.{Temp as TempC, make_c}
+
+x: TempB = make_c()
+
+main = () => {
+    print(x.v)
+}
+"#;
+
+    // Act
+    let err = run_project(&[("b.yx", b), ("c.yx", c), ("main.yx", main)], "main.yx")
+        .expect_err("cross-unit same-named types must stay distinct: TempB != TempC");
+
+    // Assert
+    assert!(
+        err.contains("E1002"),
+        "assignment across distinct same-named types must be E1002, got:\n{err}"
+    );
+}
+
+#[test]
+fn test_multifile_use_type_alias_separate_use_statements_fn_return_annotation_matches() {
+    // 3.24.3 t3 F4（先红后绿）：改绑表按条 use 构建时，函数与其返回类型分离
+    // 两条 use 引入（make_b 先、Temp as TempB 后），签名裸名不改绑 ⇒ E1002
+    // 假拒绝（探针实测）。修复后改绑表为本单元全部类型导入的合集（按来源
+    // 模块分域）⇒ 任一条 use 的导入点都取到全域，两侧同源。
+    // Arrange
+    let main = r#"
+use std.assert
+use b.{make_b}
+use b.{Temp as TempB}
+
+u: TempB = make_b()
+
+main = () => {
+    assert.assert(u.v == 2.0, "u.v should be 2.0")
+}
+"#;
+
+    // Act / Assert
+    run_project_ok(&[("b.yx", TEMP_LIB), ("main.yx", main)], "main.yx");
+}
+
+/// 3.24.3 t3 F3 夹具的 b 单元：接口、实现类型、未实现类型与两个构造函数。
+const WIDGET_LIB: &str = r#"
+Drawable: Type = { draw: () -> Void }
+
+Widget: Type = { name: String, Drawable }
+
+Stray: Type = { other: Int }
+
+make_widget: () -> Widget = () => {
+    Widget("w")
+}
+
+make_stray: () -> Stray = () => {
+    Stray(1)
+}
+"#;
+
+#[test]
+fn test_multifile_use_interface_alias_impl_assign_matches_defining_interface() {
+    // 3.24.3 t3 F3（先红后绿）：接口实现名是名义名位（语义与 TypeRef 引用体
+    // 同）——别名导入接口后，实现类型赋给接口类型变量的判定按本地名同源。
+    // 修复前类型载荷保留定义单元裸名 `Drawable`，注解是本地名 `D`，
+    // Struct-vs-TypeRef 判等臂（`s.interfaces.contains`）判异 ⇒ E1002（探针实测）。
+    // Arrange
+    let main = r#"
+use b.{Drawable as D, Widget, make_widget}
+
+w: D = make_widget()
+
+main = () => {
+    print("ok")
+}
+"#;
+
+    // Act / Assert
+    run_project_ok(&[("b.yx", WIDGET_LIB), ("main.yx", main)], "main.yx");
+}
+
+#[test]
+fn test_multifile_use_interface_plain_import_impl_assign_unchanged() {
+    // 对照锚：非别名导入接口（本地名 = 定义名）的赋值判定，改绑接线后
+    // 行为一致——恒等改名零行为变化，防止接线把已绿面弄红。
+    // Arrange
+    let main = r#"
+use b.{Drawable, Widget, make_widget}
+
+w: Drawable = make_widget()
+
+main = () => {
+    print("ok")
+}
+"#;
+
+    // Act / Assert
+    run_project_ok(&[("b.yx", WIDGET_LIB), ("main.yx", main)], "main.yx");
+}
+
+#[test]
+fn test_multifile_use_interface_alias_non_impl_type_still_rejected() {
+    // 守卫锚：改绑不放宽判等——导入但未实现接口的类型赋给接口位仍被拒。
+    // 修复面只在「实现名同源」，接口成员判定照旧。
+    // Arrange
+    let main = r#"
+use b.{Drawable as D, Stray, make_stray}
+
+s: D = make_stray()
+
+main = () => {
+    print("ok")
+}
+"#;
+
+    // Act
+    let err = run_project(&[("b.yx", WIDGET_LIB), ("main.yx", main)], "main.yx")
+        .expect_err("a type without the interface must stay rejected at an interface annotation");
+
+    // Assert
+    assert!(
+        err.contains("E1002"),
+        "assigning a non-implementing type to an interface annotation must be E1002, got:\n{err}"
+    );
+}
+
 #[test]
 fn test_multifile_cross_unit_method_overload_resolves_by_argument_type() {
     // WBS 4.9.7 / #464：跨单元（registry 解析）方法调用的同名重载按**实参类型**决议。
@@ -1183,4 +1441,166 @@ fn test_multifile_namespace_qualified_fn_value_call_emits_call_dyn() {
         !static_calls.iter().any(|name| name == "lib.f"),
         "不得再以 lib.f 为名字发静态 Call（运行期会 E6006 Native function not found）：{static_calls:?}"
     );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// #500：导入环内读未初始化顶层值——运行期 E6007 的消息带初始化顺序 hint
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// #500 主锚（运行期）：三模块导入环（main → zlib → zother → zlib）中 main 的
+/// 顶层绑定读 zlib.z_val、main() 里拿它与 Int 比较——环内初始化顺序不可判定
+/// 使 z_val 尚未写入，运行期比较操作数为 Void，落 E6007 通用运行时错误
+///（RFC-013：ExecutorError 未映射变体统一落点）。
+///
+/// 判据：stderr 含 E6007 **且**消息带初始化顺序 hint 的两段关键片段——
+/// 观测陈述段（Void 通常来自未初始化读）与 W1007 指引段（编译期环告警）。
+/// 修前（issue #500 报告时）消息只有 type mismatch 文本，用户被引向错误方向，
+/// 本测试在那时红。hint 走 E6007 的 message 参数（单轨渲染链：
+/// exec_compare 兜底臂 → ExecutorError::Type → runtime_error(message) →
+/// locales 模板），不动 help 静态模板。
+#[test]
+fn test_multifile_import_cycle_void_comparison_runtime_hint_points_to_init_order() {
+    // Arrange：tempdir 落 manifest 项目——issue #500 报告的复现形态
+    //（zlib 与 zother 互相 use 成环，两者顶层值互读，main 只依赖 zlib）
+    let dir = tempfile::tempdir().expect("create tempdir");
+    std::fs::write(
+        dir.path().join("yaoxiang.toml"),
+        "[package]\nname = \"t\"\nversion = \"0.1.0\"\n",
+    )
+    .expect("write manifest");
+    std::fs::write(
+        dir.path().join("zlib.yx"),
+        "use zother.{o_val}\n\nz_val: Int = o_val\n",
+    )
+    .expect("write zlib.yx");
+    std::fs::write(
+        dir.path().join("zother.yx"),
+        "use zlib.{z_val}\n\no_val: Int = 1\n",
+    )
+    .expect("write zother.yx");
+    std::fs::write(
+        dir.path().join("main.yx"),
+        "use std.assert\nuse zlib.{z_val}\n\nm_val: Int = z_val\n\nmain = () => {\n    assert.assert(m_val == 1, \"probe\")\n}\n",
+    )
+    .expect("write main.yx");
+
+    // Act：CLI run 子进程——断言面是用户看到的 stderr 渲染文本
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_yaoxiang-rs"))
+        .arg("run")
+        .arg(dir.path().join("main.yx"))
+        .output()
+        .expect("spawn yaoxiang-rs run");
+    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+
+    // Assert：运行期失败；E6007 码出现；hint 两段关键片段各断一次
+    //（观测陈述段 + W1007 指引段，只断其一不足以钉住完整引导链）
+    assert!(
+        output.status.code().unwrap_or(-1) != 0,
+        "环内读未初始化顶层值必须运行期失败，实际退出成功:\nSTDERR:\n{stderr}"
+    );
+    assert!(
+        stderr.contains("E6007"),
+        "stderr 必须含 E6007 码，实际:\n{stderr}"
+    );
+    assert!(
+        stderr.contains(
+            "a Void operand usually means a top-level value was read before initialization"
+        ),
+        "E6007 消息必须带观测陈述段（Void 通常来自未初始化读），实际:\n{stderr}"
+    );
+    assert!(
+        stderr.contains("W1007"),
+        "E6007 消息必须指回编译期 W1007（环内初始化顺序），实际:\n{stderr}"
+    );
+}
+
+/// #500 反向锚（集成面）：比较类型不匹配**无 Void 操作数**时，E6007 消息必须
+/// **不含** hint——hint 的触发面只有 Void 操作数。
+///
+/// 夹具沿革：2026-11-13 建锚时跨类型**相等**比较（`1 == "a"`）编译期放行
+/// （`infer_equality` 对非记录类型吞掉 unify 结果）、运行期落 E6007，是当时
+/// 唯一能端到端构造「无 Void 比较类型不匹配」的形态；建锚注释即写明——若
+/// 未来 Eq 也按比较纪律编译期拒绝，本锚随该语义修正同步迁移。issue #549
+/// （2026-11-20 用户裁决甲案）收口了该差异：`1 == "a"` 现已编译期拒绝（编译
+/// 期面由 check.rs 的 #549 锚组钉住），本锚夹具换用仍合法触达运行期兜底臂的
+/// 形态——`Any` 槽位（unify 顶部类型规则放行）在运行期携带异型值。四条断言
+/// （E6007 出现 + 消息主体裸 type mismatch + 无 hint + 无 W1007）逐字不变。
+#[test]
+fn test_multifile_comparison_mismatch_without_void_message_has_no_hint() {
+    // Arrange：单文件 script。`f(1, "a")` 经 Any 形参槽位把异型值带进函数体内的
+    // `a == b`（编译期 Any == Any 放行，运行期 Int vs String 落兜底臂）
+    let dir = tempfile::tempdir().expect("create tempdir");
+    let entry = dir.path().join("main.yx");
+    std::fs::write(
+        &entry,
+        "f: (a: Any, b: Any) -> Bool = (a, b) => {\n    return a == b\n}\nx = f(1, \"a\")\n",
+    )
+    .expect("write main.yx");
+
+    // Act
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_yaoxiang-rs"))
+        .arg("run")
+        .arg(&entry)
+        .output()
+        .expect("spawn yaoxiang-rs run");
+    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+
+    // Assert：E6007 出现且消息主体是裸 type mismatch；hint 关键片段不得出现
+    assert!(
+        output.status.code().unwrap_or(-1) != 0,
+        "无 Void 的比较类型不匹配必须运行期失败，实际退出成功:\nSTDERR:\n{stderr}"
+    );
+    assert!(
+        stderr.contains("E6007"),
+        "stderr 必须含 E6007 码，实际:\n{stderr}"
+    );
+    assert!(
+        stderr.contains(r#"type mismatch in comparison Eq: Int(1) vs String("a")"#),
+        "E6007 消息主体必须保持裸 type mismatch 文本，实际:\n{stderr}"
+    );
+    assert!(
+        !stderr.contains("read before initialization"),
+        "无 Void 操作数的比较错误不得携带初始化顺序 hint，实际:\n{stderr}"
+    );
+    assert!(
+        !stderr.contains("W1007"),
+        "无 Void 操作数的比较错误不得引用 W1007，实际:\n{stderr}"
+    );
+}
+
+#[test]
+fn test_multifile_shadowed_std_short_name_resolves_per_unit() {
+    // #477（WBS 3.8.1，用户裁决乙案）：两个单元各自定义与 std native 短名同名
+    // 的函数 `read`（std.os.read，`read(file: &File, n: Int) -> String`）并裸名
+    // 调用——各单元的调用必须解析到**自己单元**的定义（互不劫持、native 不抢
+    // 派发），与 check 面（sema 按作用域解析到用户函数）一致。
+    // 修前形态：lower 面 resolve_function_name 只认「类型名优先」，函数名落到
+    // std 短名映射臂被改写成 std.os.read——B 的裸名调用被 native 劫持（实参
+    // 形态兼容时 native 静默执行给错误值，不兼容时运行期 E6007）。A 的定义
+    // 一臂静态不可达：B 的裸名 read 落 std.os.read，B 的 rename 表只含 B
+    // 自己的函数、前缀不命中原样保留——劫持源只能由 native 或 #577（同短名
+    // 多来源无 tie-break 的随机源）构成。
+    // 对照：限定名调用（os.read 走 namespace 臂）不受影响，仍派发 native。
+    let a = r#"
+read: (String) -> String = (s) => f"a-{s}"
+
+call_read: (String) -> String = (s) => read(s)
+"#;
+    let b = r#"
+read: (String) -> String = (s) => f"b-{s}"
+
+call_read: (String) -> String = (s) => read(s)
+"#;
+    let main = r#"
+use std.assert
+use a.{read as a_read, call_read as a_call_read}
+use b.{call_read as b_call_read}
+
+main = () => {
+    assert.assert(a_read("x") == "a-x", "A's read must resolve to A's definition")
+    assert.assert(a_call_read("x") == "a-x", "A's internal bare call must resolve to A")
+    assert.assert(b_call_read("y") == "b-y", "B's bare call must not be hijacked by A or native")
+}
+"#;
+    run_project_ok(&[("a.yx", a), ("b.yx", b), ("main.yx", main)], "main.yx");
 }

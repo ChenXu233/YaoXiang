@@ -1,9 +1,9 @@
 //! Pratt parser expression tests — based on spec §4, §4.2, §4.10
 
-use crate::frontend::core::lexer::tokenize;
-use crate::frontend::core::parser::parse_expression;
 use crate::ast::{BinOp, Expr, FStringSegment, UnOp};
+use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::lexer::tokens::Literal;
+use crate::frontend::core::parser::parse_expression;
 
 fn parse_expr(source: &str) -> Expr {
     let tokens = tokenize(source).unwrap();
@@ -151,4 +151,38 @@ fn test_fstring_segments_format_spec() {
     let segments = fstring_segments(r#"f"{pi:.2f}""#);
     assert_eq!(segments.len(), 1, "仅一个插值段");
     assert_interpolation(&segments[0], Some(".2f"));
+}
+
+#[test]
+fn test_fstring_interpolation_does_not_reenter_public_lexer_entry() {
+    // entry-call 特征化（WBS 8.2.4）：只守「parser 不逐插值重入公共词法入口
+    // tokenize」这条入口边界，不宣称「完整词法分析只做 1 次」——批量入口内部
+    // 对每个插值仍各跑一次完整 Lexer，完整词法分析次数仍为 N+1。
+    // 05:107 的 N+1 可观测量的真正收敛（单遍覆盖全部插值段）由 WBS 8.2.4 承接。
+    use crate::frontend::core::lexer::{
+        interpolation_batch_call_count, reset_lexing_call_counts, tokenize_call_count,
+    };
+
+    // Arrange
+    let source = r#"f"{a} {b} {c}""#;
+    let interpolation_count = 3;
+    reset_lexing_call_counts();
+
+    // Act
+    let tokens = tokenize(source).unwrap();
+    let expr = parse_expression(&tokens);
+
+    // Assert
+    assert!(expr.is_ok(), "f-string 必须解析成功: {expr:?}");
+    assert_eq!(
+        tokenize_call_count(),
+        1,
+        "parser 不得重入公共词法入口（entry-call 特征化；改前为 1 + N = {} 次；完整词法仍 N+1，单遍目标见 WBS 8.2.4）",
+        1 + interpolation_count
+    );
+    assert_eq!(
+        interpolation_batch_call_count(),
+        1,
+        "每个 f-string 只允许一次批量入口调用（entry-call 特征化；内部仍逐插值跑 Lexer，见 WBS 8.2.4）"
+    );
 }

@@ -65,7 +65,7 @@ pub use e8xxx::*;
 pub use w1xxx::*;
 
 pub mod builder;
-pub use builder::{DiagnosticBuilder, I18nRegistry, ErrorInfo};
+pub use builder::{DiagnosticBuilder, ErrorInfo, I18nRegistry};
 
 use crate::util::diagnostic::Diagnostic;
 

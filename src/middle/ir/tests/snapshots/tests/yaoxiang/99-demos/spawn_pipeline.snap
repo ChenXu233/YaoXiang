@@ -1,45 +1,72 @@
 module
   fn main() -> Void
-    slot[1] t1 : Int(64) @depth2
-    slot[2] t2 : Int(64) @depth2
-    slot[3] t3 : Int(64) @depth2
-    slot[8] name : Int(64) @depth1
-    slot[10] age : Int(64) @depth1
-    slot[12] city : Int(64) @depth1
-    locals_total=16
+    slot[0] t1 : Int(64) @depth2
+    slot[1] t2 : Int(64) @depth2
+    slot[2] t3 : Int(64) @depth2
+    slot[3] name : Int(64) @depth1
+    slot[4] age : Int(64) @depth1
+    slot[5] city : Int(64) @depth1
+    locals_total=11
+    values_total=26
+    value v0: TypeRef("?") @block0
+    value v1: TypeRef("?") @block0
+    value v2: Generic { name: "String", args: [] } @block0
+    value v3: Int(64) @block0
+    value v4: Generic { name: "String", args: [] } @block0
+    value v5: Int(64) @block0
+    value v6: Int(64) @block0
+    value v7: Int(64) @block0
+    value v8: TypeRef("?") @block0
+    value v9: Bool @block0
+    value v10: Generic { name: "String", args: [] } @block0
+    value v11: TypeRef("?") @block0
+    value v12: Generic { name: "String", args: [] } @block0
+    value v13: TypeRef("?") @block0
+    value v14: Bool @block0
+    value v15: Generic { name: "String", args: [] } @block0
+    value v16: TypeRef("?") @block0
+    value v17: Int(64) @block0
+    value v18: TypeRef("?") @block0
+    value v19: Bool @block0
+    value v20: Generic { name: "String", args: [] } @block0
+    value v21: TypeRef("?") @block0
+    value v22: Generic { name: "String", args: [] } @block0
+    value v23: TypeRef("?") @block0
+    value v24: Bool @block0
+    value v25: Generic { name: "String", args: [] } @block0
     Load %0 <- string("Alice")
     Load %1 <- int(30)
     Load %2 <- string("Beijing")
-    Spawn %3 <- [] plan(groups=[], deps=[], resources=[])
-    Load %4 <- %0
-    Load %5 <- %1
-    Load %6 <- %2
-    NewTuple %7 <- [%4, %5, %6]
-    Move %3 <- %7
-    Load %8 <- int(0)
-    LoadIndex %9 <- %3[%8]
-    Load %10 <- int(1)
-    LoadIndex %11 <- %3[%10]
-    Load %12 <- int(2)
-    LoadIndex %13 <- %3[%12]
-    Load %14 <- bool(true)
-    Load %15 <- string("name received from spawn")
-    Call %12 <- string("std.assert.assert") [%14, %15] (def=d0)
-    Load %14 <- %9
-    Call %12 <- string("std.io.println") [%14] (def=d1)
-    Load %14 <- bool(true)
-    Load %15 <- string("age received from spawn")
-    Call %12 <- string("std.assert.assert") [%14, %15] (def=d0)
-    Load %14 <- %11
-    Call %12 <- string("std.io.println") [%14] (def=d1)
-    Load %14 <- bool(true)
-    Load %15 <- string("city received from spawn")
-    Call %12 <- string("std.assert.assert") [%14, %15] (def=d0)
-    Load %14 <- %13
-    Call %12 <- string("std.io.println") [%14] (def=d1)
-    Load %14 <- bool(true)
-    Load %15 <- string("all passed")
-    Call %12 <- string("std.assert.assert") [%14, %15] (def=d0)
-    Ret %12
+    Spawn v0 <- [] plan(groups=[], deps=[], resources=[])
+    Load v2 <- %0
+    Load v3 <- %1
+    Load v4 <- %2
+    NewTuple v1 <- [v2, v3, v4]
+    Move v0 <- v1
+    Load v5 <- int(0)
+    LoadIndex %3 <- v0[v5]
+    Load v6 <- int(1)
+    LoadIndex %4 <- v0[v6]
+    Load v7 <- int(2)
+    LoadIndex %5 <- v0[v7]
+    Load v9 <- bool(true)
+    Load v10 <- string("name received from spawn")
+    Call v8 <- string("std.assert.assert") [v9, v10] (def=d0)
+    Load v12 <- %3
+    Call v11 <- string("std.io.println") [v12] (def=d1)
+    Load v14 <- bool(true)
+    Load v15 <- string("age received from spawn")
+    Call v13 <- string("std.assert.assert") [v14, v15] (def=d0)
+    Load v17 <- %4
+    Call v16 <- string("std.io.println") [v17] (def=d1)
+    Load v19 <- bool(true)
+    Load v20 <- string("city received from spawn")
+    Call v18 <- string("std.assert.assert") [v19, v20] (def=d0)
+    Load v22 <- %5
+    Call v21 <- string("std.io.println") [v22] (def=d1)
+    Load v24 <- bool(true)
+    Load v25 <- string("all passed")
+    Call v23 <- string("std.assert.assert") [v24, v25] (def=d0)
+    Ret v23
   init (locals=0)
     Call %0 <- string("main") [] (def=d2)

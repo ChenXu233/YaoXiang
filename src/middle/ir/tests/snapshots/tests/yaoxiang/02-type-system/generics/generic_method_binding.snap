@@ -4,105 +4,179 @@ module
     type_decl [v: TypeRef("T")]
   fn Box.get(Ref { mutable: false, inner: Generic { name: "Box", args: [TypeRef("T")] } }) -> Fn { params: [Ref { mutable: false, inner: Generic { name: "Box", args: [TypeRef("T")] } }], return_type: TypeRef("T") }
     locals_total=3
-    Load %0 <- %1
-    LoadField %2 <- %0.0
-    Ret %2
-    Ret %2
+    values_total=2
+    value v0: TypeRef("?") @block0
+    value v1: Ref { mutable: true, inner: Generic { name: "MyList", args: [TypeRef("T")] } } @block0
+    Load v1 <- %0
+    LoadField v0 <- v1.0
+    Ret v0
+    Ret v0
   fn MyList(MetaType { universe_level: UniverseLevel { level: "0" }, type_params: [] }) -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
     generic_params: ["T"]
     type_decl [data: Generic { name: "Vec", args: [TypeRef("T")] } ; length: Int(64)]
   fn MyList.push(Ref { mutable: true, inner: Generic { name: "MyList", args: [TypeRef("T")] } }, TypeRef("T")) -> Fn { params: [Ref { mutable: true, inner: Generic { name: "MyList", args: [TypeRef("T")] } }, TypeRef("T")], return_type: Void }
-    locals_total=13
-    Load %0 <- %1
-    LoadField %2 <- %0.0
-    Load %3 <- %1
-    LoadField %4 <- %3.1
-    Load %5 <- %6
-    StoreIndex %2[%4] <- %5
-    Load %7 <- %1
-    Load %8 <- %1
-    LoadField %9 <- %8.1
-    Load %10 <- int(1)
-    Add %11 <- %9, %10
-    StoreField %7.1 <- %11 (type=None, name=Some("length"))
+    locals_total=6
+    values_total=11
+    value v0: TypeRef("?") @block0
+    value v1: Ref { mutable: true, inner: Generic { name: "MyList", args: [TypeRef("T")] } } @block0
+    value v2: TypeRef("?") @block0
+    value v3: Ref { mutable: true, inner: Generic { name: "MyList", args: [TypeRef("T")] } } @block0
+    value v4: TypeRef("T") @block0
+    value v5: TypeRef("?") @block0
+    value v6: Ref { mutable: true, inner: Generic { name: "MyList", args: [TypeRef("T")] } } @block0
+    value v7: TypeRef("?") @block0
+    value v8: TypeRef("?") @block0
+    value v9: Int(64) @block0
+    value v10: Ref { mutable: true, inner: Generic { name: "MyList", args: [TypeRef("T")] } } @block0
+    Load v1 <- %0
+    LoadField v0 <- v1.0
+    Load v3 <- %0
+    LoadField v2 <- v3.1
+    Load v4 <- %1
+    StoreIndex v0[v2] <- v4
+    Load v6 <- %0
+    Load v10 <- %0
+    LoadField v8 <- v10.1
+    Load v9 <- int(1)
+    Add v7 <- v8, v9
+    StoreField v6.1 <- v7 (type=None, name=Some("length"))
     Ret
   fn MyList.get(Ref { mutable: false, inner: Generic { name: "MyList", args: [TypeRef("T")] } }, Int(64)) -> Fn { params: [Ref { mutable: false, inner: Generic { name: "MyList", args: [TypeRef("T")] } }, Int(64)], return_type: TypeRef("T") }
-    locals_total=6
-    Load %0 <- %1
-    LoadField %2 <- %0.0
-    Load %3 <- %4
-    LoadIndex %5 <- %2[%3]
-    Ret %5
-    Ret %5
+    locals_total=5
+    values_total=4
+    value v0: TypeRef("?") @block0
+    value v1: TypeRef("?") @block0
+    value v2: Ref { mutable: true, inner: Generic { name: "MyList", args: [TypeRef("T")] } } @block0
+    value v3: TypeRef("?") @block0
+    Load v2 <- %0
+    LoadField v1 <- v2.0
+    Load v3 <- %1
+    LoadIndex v0 <- v1[v3]
+    Ret v0
+    Ret v0
   fn read_box() -> Int(64)
     slot[0] b : Int(64) @depth1
     locals_total=3
-    Load %0 <- int(7)
-    Call %1 <- string("Box") [%0] (def=d0)
-    Load %2 <- %1
-    Call %0 <- string("Box.get") [%2] (def=d1)
-    Ret %0
-    Drop %1
-    Ret %0
+    values_total=3
+    value v0: Int(64) @block0
+    value v1: TypeRef("?") @block0
+    value v2: Generic { name: "Box", args: [Int(64)] } @block0
+    Load v0 <- int(7)
+    Call %0 <- string("Box") [v0] (def=d0)
+    Load v2 <- %0
+    Call v1 <- string("Box.get") [v2] (def=d1)
+    Ret v1
+    Drop %0
+    Ret v1
   fn build_list() -> Int(64)
     slot[0] l : Int(64) @depth1
-    locals_total=8
-    AllocArray %0 size=int(1), elem=int(1)
-    Load %1 <- int(0)
-    Load %2 <- int(0)
-    StoreIndex %0[%2] <- %1
-    Load %3 <- int(0)
-    Call %4 <- string("MyList") [%0, %3] (def=d2)
-    Load %1 <- %4
-    Load %2 <- int(42)
-    Call %0 <- string("MyList.push") [%1, %2] (def=d3)
-    Load %5 <- %4
-    LoadField %2 <- %5.1
-    Load %3 <- int(1)
-    Eq %1 <- %2, %3
-    Load %6 <- string("push grows length")
-    Call %0 <- string("std.assert.assert") [%1, %6] (def=d4)
-    Load %5 <- %4
-    Load %6 <- int(0)
-    Call %2 <- string("MyList.get") [%5, %6] (def=d5)
-    Load %3 <- int(42)
-    Eq %1 <- %2, %3
-    Load %7 <- string("pushed value at slot 0")
-    Call %0 <- string("std.assert.assert") [%1, %7] (def=d4)
-    Load %1 <- %4
-    Load %2 <- int(43)
-    Call %0 <- string("MyList.push") [%1, %2] (def=d3)
-    Load %5 <- %4
-    LoadField %2 <- %5.1
-    Load %3 <- int(2)
-    Eq %1 <- %2, %3
-    Load %6 <- string("second push")
-    Call %0 <- string("std.assert.assert") [%1, %6] (def=d4)
-    Load %5 <- %4
-    Load %6 <- int(1)
-    Call %2 <- string("MyList.get") [%5, %6] (def=d5)
-    Load %3 <- int(43)
-    Eq %1 <- %2, %3
-    Load %7 <- string("second pushed value")
-    Call %0 <- string("std.assert.assert") [%1, %7] (def=d4)
-    Load %1 <- %4
-    LoadField %0 <- %1.1
-    Ret %0
-    Drop %4
-    Ret %0
+    locals_total=4
+    values_total=38
+    value v0: TypeRef("?") @block0
+    value v1: Int(64) @block0
+    value v2: Int(64) @block0
+    value v3: Int(64) @block0
+    value v4: TypeRef("?") @block0
+    value v5: Generic { name: "MyList", args: [Int(64)] } @block0
+    value v6: Int(64) @block0
+    value v7: TypeRef("?") @block0
+    value v8: Bool @block0
+    value v9: TypeRef("?") @block0
+    value v10: Int(64) @block0
+    value v11: Generic { name: "MyList", args: [Int(64)] } @block0
+    value v12: Generic { name: "String", args: [] } @block0
+    value v13: TypeRef("?") @block0
+    value v14: Bool @block0
+    value v15: TypeRef("?") @block0
+    value v16: Int(64) @block0
+    value v17: Generic { name: "MyList", args: [Int(64)] } @block0
+    value v18: Int(64) @block0
+    value v19: Generic { name: "String", args: [] } @block0
+    value v20: TypeRef("?") @block0
+    value v21: Generic { name: "MyList", args: [Int(64)] } @block0
+    value v22: Int(64) @block0
+    value v23: TypeRef("?") @block0
+    value v24: Bool @block0
+    value v25: TypeRef("?") @block0
+    value v26: Int(64) @block0
+    value v27: Generic { name: "MyList", args: [Int(64)] } @block0
+    value v28: Generic { name: "String", args: [] } @block0
+    value v29: TypeRef("?") @block0
+    value v30: Bool @block0
+    value v31: TypeRef("?") @block0
+    value v32: Int(64) @block0
+    value v33: Generic { name: "MyList", args: [Int(64)] } @block0
+    value v34: Int(64) @block0
+    value v35: Generic { name: "String", args: [] } @block0
+    value v36: TypeRef("?") @block0
+    value v37: Generic { name: "MyList", args: [Int(64)] } @block0
+    AllocArray v0 size=int(1), elem=int(1)
+    Load v1 <- int(0)
+    Load v2 <- int(0)
+    StoreIndex v0[v2] <- v1
+    Load v3 <- int(0)
+    Call %0 <- string("MyList") [v0, v3] (def=d2)
+    Load v5 <- %0
+    Load v6 <- int(42)
+    Call v4 <- string("MyList.push") [v5, v6] (def=d3)
+    Load v11 <- %0
+    LoadField v9 <- v11.1
+    Load v10 <- int(1)
+    Eq v8 <- v9, v10
+    Load v12 <- string("push grows length")
+    Call v7 <- string("std.assert.assert") [v8, v12] (def=d4)
+    Load v17 <- %0
+    Load v18 <- int(0)
+    Call v15 <- string("MyList.get") [v17, v18] (def=d5)
+    Load v16 <- int(42)
+    Eq v14 <- v15, v16
+    Load v19 <- string("pushed value at slot 0")
+    Call v13 <- string("std.assert.assert") [v14, v19] (def=d4)
+    Load v21 <- %0
+    Load v22 <- int(43)
+    Call v20 <- string("MyList.push") [v21, v22] (def=d3)
+    Load v27 <- %0
+    LoadField v25 <- v27.1
+    Load v26 <- int(2)
+    Eq v24 <- v25, v26
+    Load v28 <- string("second push")
+    Call v23 <- string("std.assert.assert") [v24, v28] (def=d4)
+    Load v33 <- %0
+    Load v34 <- int(1)
+    Call v31 <- string("MyList.get") [v33, v34] (def=d5)
+    Load v32 <- int(43)
+    Eq v30 <- v31, v32
+    Load v35 <- string("second pushed value")
+    Call v29 <- string("std.assert.assert") [v30, v35] (def=d4)
+    Load v37 <- %0
+    LoadField v36 <- v37.1
+    Ret v36
+    Drop %0
+    Ret v36
   fn main() -> Void
-    locals_total=5
-    Call %0 <- string("read_box") [] (def=d6)
-    Load %1 <- int(7)
-    Eq %2 <- %0, %1
-    Load %3 <- string("generic method reads own field")
-    Call %4 <- string("std.assert.assert") [%2, %3] (def=d4)
-    Call %0 <- string("build_list") [] (def=d7)
-    Load %1 <- int(2)
-    Eq %2 <- %0, %1
-    Load %3 <- string("library-style List built in YaoXiang")
-    Call %4 <- string("std.assert.assert") [%2, %3] (def=d4)
-    Ret %4
+    locals_total=3
+    values_total=10
+    value v0: TypeRef("?") @block0
+    value v1: Bool @block0
+    value v2: Int(64) @block0
+    value v3: Int(64) @block0
+    value v4: Generic { name: "String", args: [] } @block0
+    value v5: TypeRef("?") @block0
+    value v6: Bool @block0
+    value v7: Int(64) @block0
+    value v8: Int(64) @block0
+    value v9: Generic { name: "String", args: [] } @block0
+    Call v2 <- string("read_box") [] (def=d6)
+    Load v3 <- int(7)
+    Eq v1 <- v2, v3
+    Load v4 <- string("generic method reads own field")
+    Call v0 <- string("std.assert.assert") [v1, v4] (def=d4)
+    Call v7 <- string("build_list") [] (def=d7)
+    Load v8 <- int(2)
+    Eq v6 <- v7, v8
+    Load v9 <- string("library-style List built in YaoXiang")
+    Call v5 <- string("std.assert.assert") [v6, v9] (def=d4)
+    Ret v5
   init (locals=2)
     islot[0] self : Int(64) @depth1
     islot[1] i : Int(64) @depth1

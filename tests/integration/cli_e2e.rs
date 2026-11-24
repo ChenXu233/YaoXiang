@@ -399,6 +399,390 @@ fn test_e2e_check_deny_warnings_clean_file_exits_zero() {
     assert_eq!(code, 0, "无警告文件在 --deny-warnings 下应 exit 0");
 }
 
+// check 命令 — `--allow` W 码逐条抑制（issue #499，用户 2026-10-24 裁决 A / 2026-11-20 甲案）
+// 契约：`--allow <CODE>` 只抑制指定码——该码不输出、不计入 warning_count、
+// 不触发 `--deny-warnings` / `--deny-shadowing` 升级；其他码照常；未知码与
+// 非 W 族码 = 参数错误（clap exit 2）。抑制语义 = 对用户完全不可见，过滤闸
+// 单点在 `run_check_command_once`（先过滤后消费）。
+// 对照锚：`test_e2e_check_without_allow_prints_and_counts_all_warnings` 钉住
+// 不带 flag 的逐字基线；本文件上方既有 W1001/W1003/`--deny-warnings` 锚
+// 与下方补齐的 `--deny-shadowing` 锚共同守住零漂移。
+
+#[test]
+fn test_e2e_check_without_allow_prints_and_counts_all_warnings() {
+    // Arrange: 双码夹具（W1001 死函数 + W1003 未使用导入）
+    let tmp = TempDir::new().unwrap();
+    let src = write_yx(
+        tmp.path(),
+        "two_codes.yx",
+        "use std.io\ndead_fn = (x: Int) => x\nmain = () => { x = 1 }",
+    );
+
+    // Act: 不带 --allow（对照面——过滤闸必须对此形态零行为变化）
+    let (code, _stdout, stderr) = run_yx(&["check", src.to_str().unwrap()], tmp.path());
+
+    // Assert: 两码照常输出且都计入摘要
+    assert_eq!(code, 0, "存在警告不构成错误，check 应 exit 0");
+    assert!(
+        stderr.contains("warning [W1001]"),
+        "不带 --allow 时 W1001 应照常输出，实际: {stderr:?}"
+    );
+    assert!(
+        stderr.contains("warning [W1003]"),
+        "不带 --allow 时 W1003 应照常输出，实际: {stderr:?}"
+    );
+    assert!(
+        stderr.contains("Summary: 0 error(s), 2 warning(s)"),
+        "不带 --allow 时两码都计入 warning_count，实际: {stderr:?}"
+    );
+}
+
+#[test]
+fn test_e2e_check_allow_suppresses_named_code_only_and_count() {
+    // Arrange: 双码夹具（W1001 死函数 + W1003 未使用导入）
+    let tmp = TempDir::new().unwrap();
+    let src = write_yx(
+        tmp.path(),
+        "two_codes.yx",
+        "use std.io\ndead_fn = (x: Int) => x\nmain = () => { x = 1 }",
+    );
+
+    // Act: --allow W1001。参数序：变参 flag（num_args = 1..）置于位置参数
+    // 之后——空格形式在前会把位置参数吞进值表（--exclude 同款先例，见
+    // test_e2e_check_explicit_path_under_target_is_honored 的参数序注释）
+    let (code, _stdout, stderr) = run_yx(
+        &["check", src.to_str().unwrap(), "--allow", "W1001"],
+        tmp.path(),
+    );
+
+    // Assert: W1001 不输出、不计数；未被允许的 W1003 照常
+    assert_eq!(code, 0, "--allow 不改变其余警告的退出码语义");
+    assert!(
+        !stderr.contains("warning [W1001]"),
+        "被允许的码 W1001 应完全不输出，实际: {stderr:?}"
+    );
+    assert!(
+        stderr.contains("warning [W1003]"),
+        "未被允许的码 W1003 应照常输出，实际: {stderr:?}"
+    );
+    assert!(
+        stderr.contains("Summary: 0 error(s), 1 warning(s)"),
+        "被允许的码不计入 warning_count（摘要只剩 W1003 一条），实际: {stderr:?}"
+    );
+}
+
+#[test]
+fn test_e2e_check_allow_equals_form_works_before_path() {
+    // Arrange: 单码夹具（仅 W1001）。裁决验收例的调用形态
+    // `check --allow=W1007 <项目>`——等号形式单值不吞后续位置参数
+    // （空格形式在前会吞，见 --exclude 先例实测与本文件参数序注释）
+    let tmp = TempDir::new().unwrap();
+    let src = write_yx(
+        tmp.path(),
+        "only1001.yx",
+        "dead_fn = (x: Int) => x\nmain = () => { x = 1 }",
+    );
+
+    // Act
+    let (code, _stdout, stderr) = run_yx(
+        &["check", "--allow=W1001", src.to_str().unwrap()],
+        tmp.path(),
+    );
+
+    // Assert
+    assert_eq!(code, 0, "等号形式的 --allow 应正常抑制，实际: {stderr:?}");
+    assert!(
+        !stderr.contains("warning [W1001]"),
+        "等号形式 --allow=W1001 应使 W1001 不输出，实际: {stderr:?}"
+    );
+    assert!(
+        stderr.contains("Summary: 0 error(s), 0 warning(s)"),
+        "等号形式 --allow=W1001 应使 W1001 不计数，实际: {stderr:?}"
+    );
+}
+
+#[test]
+fn test_e2e_check_allow_repeatable_flag_suppresses_all_named_codes() {
+    // Arrange: 双码夹具（W1001 死函数 + W1003 未使用导入）。裁决原文「可重复」
+    // 分支（#499，2026-10-24 裁决 A：CLI 级 --allow=<CODE>（可重复））的行为
+    // 锚——help 文本示例形态（--allow W1007 --allow W1003）由此获得 e2e 钉
+    let tmp = TempDir::new().unwrap();
+    let src = write_yx(
+        tmp.path(),
+        "two_codes.yx",
+        "use std.io\ndead_fn = (x: Int) => x\nmain = () => { x = 1 }",
+    );
+
+    // Act: 两个 --allow 各带一码——可重复 flag 形态
+    let (code, _stdout, stderr) = run_yx(
+        &[
+            "check",
+            src.to_str().unwrap(),
+            "--allow",
+            "W1001",
+            "--allow",
+            "W1003",
+        ],
+        tmp.path(),
+    );
+
+    // Assert: 两码都被抑制——不输出、不计数
+    assert_eq!(code, 0, "可重复形态下两码全抑制，应 exit 0");
+    assert!(
+        !stderr.contains("warning [W1001]"),
+        "可重复形态下 W1001 应不输出，实际: {stderr:?}"
+    );
+    assert!(
+        !stderr.contains("warning [W1003]"),
+        "可重复形态下 W1003 应不输出，实际: {stderr:?}"
+    );
+    assert!(
+        stderr.contains("Summary: 0 error(s), 0 warning(s)"),
+        "可重复形态下两码都不计入 warning_count，实际: {stderr:?}"
+    );
+}
+
+#[test]
+fn test_e2e_check_allow_space_multi_value_suppresses_all_named_codes() {
+    // Arrange: 双码夹具（W1001 死函数 + W1003 未使用导入）。num_args = 1..
+    // 空格多值形态（--exclude 同款先例，#499 甲案）——单个 --allow 后跟
+    // 两个码值，两码都进抑制表
+    let tmp = TempDir::new().unwrap();
+    let src = write_yx(
+        tmp.path(),
+        "two_codes.yx",
+        "use std.io\ndead_fn = (x: Int) => x\nmain = () => { x = 1 }",
+    );
+
+    // Act: 单个 --allow 带两个空格分隔的码。参数序：变参 flag 置于位置参数
+    // 之后——空格形式在前会把位置参数吞进值表（见上方 --allow W1001 锚的
+    // 参数序注释）
+    let (code, _stdout, stderr) = run_yx(
+        &["check", src.to_str().unwrap(), "--allow", "W1001", "W1003"],
+        tmp.path(),
+    );
+
+    // Assert: 两码都被抑制——不输出、不计数
+    assert_eq!(code, 0, "空格多值形态下两码全抑制，应 exit 0");
+    assert!(
+        !stderr.contains("warning [W1001]"),
+        "空格多值形态下 W1001 应不输出，实际: {stderr:?}"
+    );
+    assert!(
+        !stderr.contains("warning [W1003]"),
+        "空格多值形态下 W1003 应不输出，实际: {stderr:?}"
+    );
+    assert!(
+        stderr.contains("Summary: 0 error(s), 0 warning(s)"),
+        "空格多值形态下两码都不计入 warning_count，实际: {stderr:?}"
+    );
+}
+
+#[test]
+fn test_e2e_check_allow_with_deny_warnings_exits_zero_when_only_allowed_code() {
+    // Arrange: 单码夹具（仅 W1001）。裁决钉住的组合：
+    // `--deny-warnings --allow=W1007`——抑制语义 = 完全不可见 ⇒ 升级判定
+    // 看到的 warning_count 已不含被允许的码
+    let tmp = TempDir::new().unwrap();
+    let src = write_yx(
+        tmp.path(),
+        "only1001.yx",
+        "dead_fn = (x: Int) => x\nmain = () => { x = 1 }",
+    );
+
+    // Act
+    let (code, _stdout, stderr) = run_yx(
+        &[
+            "check",
+            "--deny-warnings",
+            src.to_str().unwrap(),
+            "--allow",
+            "W1001",
+        ],
+        tmp.path(),
+    );
+
+    // Assert
+    assert_eq!(
+        code, 0,
+        "--deny-warnings --allow W1001：被允许的码不触发升级，应 exit 0；stderr: {stderr:?}"
+    );
+    assert!(
+        stderr.contains("Summary: 0 error(s), 0 warning(s)"),
+        "计数在升级判定前已被过滤，摘要应为零警告，实际: {stderr:?}"
+    );
+}
+
+#[test]
+fn test_e2e_check_allow_with_deny_warnings_exits_one_for_unallowed_code() {
+    // Arrange: 双码夹具，只允许 W1001
+    let tmp = TempDir::new().unwrap();
+    let src = write_yx(
+        tmp.path(),
+        "two_codes.yx",
+        "use std.io\ndead_fn = (x: Int) => x\nmain = () => { x = 1 }",
+    );
+
+    // Act
+    let (code, _stdout, stderr) = run_yx(
+        &[
+            "check",
+            "--deny-warnings",
+            src.to_str().unwrap(),
+            "--allow",
+            "W1001",
+        ],
+        tmp.path(),
+    );
+
+    // Assert: 未被允许的 W1003 仍触发 --deny-warnings 升级
+    assert_eq!(
+        code, 1,
+        "未被允许的 W1003 仍应触发 --deny-warnings 升级；stderr: {stderr:?}"
+    );
+}
+
+#[test]
+fn test_e2e_check_allow_unknown_code_is_rejected() {
+    // Arrange
+    let tmp = TempDir::new().unwrap();
+    let src = write_yx(tmp.path(), "ok.yx", "main = () => { x = 1 }");
+
+    // Act: 未知码——静默忽略会让 typo 后的 flag 毫无效果，故设计为参数错误
+    let (code, _stdout, stderr) = run_yx(
+        &["check", src.to_str().unwrap(), "--allow", "W9999"],
+        tmp.path(),
+    );
+
+    // Assert: clap 参数错误 exit 2，消息点名未知码
+    assert_eq!(code, 2, "未知码必须是参数错误（clap exit 2）");
+    assert!(
+        stderr.contains("unknown diagnostic code 'W9999'"),
+        "错误消息应点名未知码，实际: {stderr:?}"
+    );
+}
+
+#[test]
+fn test_e2e_check_allow_error_family_code_is_rejected() {
+    // Arrange
+    let tmp = TempDir::new().unwrap();
+    let src = write_yx(tmp.path(), "ok.yx", "main = () => { x = 1 }");
+
+    // Act: 非 W 族码——--allow 是 W 码抑制机制，错误不可被 CLI 旗标静音
+    let (code, _stdout, stderr) = run_yx(
+        &["check", src.to_str().unwrap(), "--allow", "E1001"],
+        tmp.path(),
+    );
+
+    // Assert: clap 参数错误 exit 2，消息说明只接受 W 族
+    assert_eq!(code, 2, "E 族码必须是参数错误（clap exit 2）");
+    assert!(
+        stderr.contains("not a W-family warning code"),
+        "错误消息应说明 --allow 只接受 W 族码，实际: {stderr:?}"
+    );
+}
+
+#[test]
+fn test_e2e_check_deny_shadowing_upgrades_w1006_to_failure() {
+    // Arrange: 本地模块 foo.yx + vendor 中同名包目录 ⇒ W1006 遮蔽（RFC-014）。
+    // 本 flag 此前无 e2e 覆盖——随 #499 过滤闸入库补齐对照锚：过滤闸位于
+    // --deny-shadowing 判定之前，本锚钉住其既有行为零漂移
+    let tmp = TempDir::new().unwrap();
+    let proj = tmp.path().join("proj");
+    std::fs::create_dir_all(proj.join(".yaoxiang").join("vendor").join("foo-1.0.0"))
+        .expect("create vendor package dir");
+    std::fs::write(
+        proj.join("yaoxiang.toml"),
+        "[package]\nname = \"proj\"\nversion = \"0.1.0\"\n",
+    )
+    .expect("write manifest");
+    std::fs::write(proj.join("foo.yx"), "helper = () => 42\n").expect("write foo.yx");
+    let main_yx = proj.join("main.yx");
+    std::fs::write(
+        &main_yx,
+        "use foo\n\nmain = () => { print(foo.helper()) }\n",
+    )
+    .expect("write main.yx");
+
+    // Act: ① 不带 flag（W1006 是普通警告）② --deny-shadowing（升级为失败）
+    let (code_plain, _out_plain, stderr_plain) =
+        run_yx(&["check", main_yx.to_str().unwrap()], &proj);
+    let (code_deny, _out_deny, stderr_deny) = run_yx(
+        &["check", main_yx.to_str().unwrap(), "--deny-shadowing"],
+        &proj,
+    );
+
+    // Assert
+    assert_eq!(
+        code_plain, 0,
+        "W1006 是警告，不带 flag 不阻断退出码；stderr: {stderr_plain:?}"
+    );
+    assert!(
+        stderr_plain.contains("warning [W1006]"),
+        "遮蔽应先以 W1006 警告呈现，实际: {stderr_plain:?}"
+    );
+    assert_ne!(code_deny, 0, "--deny-shadowing 应以非零码退出");
+    assert!(
+        stderr_deny.contains("shadow vendored dependencies"),
+        "--deny-shadowing 失败消息应说明原因，实际: {stderr_deny:?}"
+    );
+}
+
+#[test]
+fn test_e2e_check_allow_with_deny_shadowing_exits_zero_when_only_allowed_code() {
+    // Arrange: 与上方 deny-shadowing 对照锚同一夹具——本地模块 foo.yx + vendor
+    // 同名包目录 ⇒ W1006 遮蔽（RFC-014）。#499 过滤闸（suppress_codes，先于
+    // --deny-shadowing 消费面）吞掉被允许的 W1006 后，遮蔽计数为 0，升级
+    // 判定不应触发——单点闸的交互面由此钉住
+    let tmp = TempDir::new().unwrap();
+    let proj = tmp.path().join("proj");
+    std::fs::create_dir_all(proj.join(".yaoxiang").join("vendor").join("foo-1.0.0"))
+        .expect("create vendor package dir");
+    std::fs::write(
+        proj.join("yaoxiang.toml"),
+        "[package]\nname = \"proj\"\nversion = \"0.1.0\"\n",
+    )
+    .expect("write manifest");
+    std::fs::write(proj.join("foo.yx"), "helper = () => 42\n").expect("write foo.yx");
+    let main_yx = proj.join("main.yx");
+    std::fs::write(
+        &main_yx,
+        "use foo\n\nmain = () => { print(foo.helper()) }\n",
+    )
+    .expect("write main.yx");
+
+    // Act: --deny-shadowing 与 --allow W1006 组合——被允许的码必须同样逃过
+    // 升级判定（抑制 = 对全部消费面不可见）
+    let (code, _stdout, stderr) = run_yx(
+        &[
+            "check",
+            "--deny-shadowing",
+            main_yx.to_str().unwrap(),
+            "--allow",
+            "W1006",
+        ],
+        &proj,
+    );
+
+    // Assert: W1006 被抑制后无遮蔽可升级，exit 0
+    assert_eq!(
+        code, 0,
+        "--allow W1006 抑制后 --deny-shadowing 无遮蔽可升级，应 exit 0；stderr: {stderr:?}"
+    );
+    assert!(
+        !stderr.contains("warning [W1006]"),
+        "被允许的码 W1006 应完全不输出，实际: {stderr:?}"
+    );
+    assert!(
+        !stderr.contains("shadow vendored dependencies"),
+        "W1006 被抑制后不应出现 --deny-shadowing 失败消息，实际: {stderr:?}"
+    );
+    assert!(
+        stderr.contains("Summary: 0 error(s), 0 warning(s)"),
+        "被允许的码不计入 warning_count（计数面同样先过滤），实际: {stderr:?}"
+    );
+}
+
 // init 命令 — 目录结构契约 + 退出码
 // 规范来源：RFC-014 包管理系统 — 项目初始化
 
@@ -1168,6 +1552,87 @@ fn test_e2e_script_mode_top_level_for_loop_completes() {
     );
 }
 
+/// 提取 std 栈帧声明的行号（`at std.list.remove_at(int64) (<std/list>:行:列)`）。
+/// 解析不出时返回 None——由调用方带着 combined 上下文断言。
+fn std_frame_line(combined: &str) -> Option<usize> {
+    combined
+        .split("at std.list.remove_at(int64) (<std/list>:")
+        .nth(1)
+        .and_then(|rest| rest.split(':').next())
+        .and_then(|num| num.parse::<usize>().ok())
+}
+
+#[test]
+fn test_e2e_std_frame_error_names_std_virtual_path() {
+    // Arrange: issue #443——运行期错误发生在内嵌 std 函数体内时，诊断位置
+    // 此前是「用户文件路径 + std 源行号」（file_id 按特化名查 function_files
+    // 落空回退 0），指向用户文件里不存在的行。修法：mono 建特化件时继承
+    // 定义方文件归属，std 帧以 RFC-036 §4 的虚拟路径（`<std/list>`）呈现。
+    // 夹具 = issue 同族形态：std.list.remove_at 上界越界（错误落 std
+    // 体内 `probe = list[index]` 入口探测行；issue 原文用空表、此处用
+    // [1, 2, 3] 取 5，同一发射点同一错配机理）。
+    let tmp = TempDir::new().unwrap();
+    let src = write_yx(
+        tmp.path(),
+        "std_span.yx",
+        "use std.io\nuse std.list\n\nio.println(list.remove_at([1, 2, 3], 5))\n",
+    );
+
+    // Act
+    let (code, stdout, stderr) = run_yx(&["run", src.to_str().unwrap()], tmp.path());
+    let combined = format!("{stdout}{stderr}");
+
+    // Assert: 运行期失败面不变（退出码、错误码）
+    assert_ne!(
+        code, 0,
+        "越界应是非零退出；stdout: {stdout:?} stderr: {stderr:?}"
+    );
+    assert!(
+        combined.contains("E6003"),
+        "应报 E6003 索引越界；combined: {combined:?}"
+    );
+
+    // Assert: 主错误与 std 栈帧的文件字段 = std 虚拟路径。行号数值不冻结
+    //（编辑 std/list.yx 会平移行号——正是 #443 指出的「错误绑定源码行号」
+    // 腐化模式），存在性由下方按嵌入源行数校验。
+    assert!(
+        combined.contains("--> <std/list>:"),
+        "主错误的文件字段应是 std 虚拟路径（#443）；combined: {combined:?}"
+    );
+    assert!(
+        combined.contains("(<std/list>:"),
+        "std 栈帧的位置应落在虚拟路径上（#443）；combined: {combined:?}"
+    );
+
+    // Assert: 修前错配形态不得复现——std 帧位置不得渲染成用户文件路径
+    let user_path = src.to_str().unwrap();
+    assert!(
+        !combined.contains(&format!("at std.list.remove_at(int64) ({user_path}")),
+        "std 帧不得把 std 行号贴到用户文件路径上（#443 修前形态）；combined: {combined:?}"
+    );
+
+    // Assert: 位置存在性（issue #443 验收判据 1）——声明的行号必须能在其
+    // 声明的文件中解析到行。std 源文本取自嵌入表（`<std/list>` 读盘必失败，
+    // 渲染由 #327 的嵌入回填承载）。
+    let std_line = std_frame_line(&combined).unwrap_or_else(|| {
+        panic!("std 栈帧应携带 <std/list>:行:列 形态的位置；combined: {combined:?}")
+    });
+    let std_source = yaoxiang::std::yx_sources::embedded_source_by_virtual_path("<std/list>")
+        .expect("std/list 应在嵌入源表内（RFC-036 §4）");
+    let total_lines = std_source.lines().count();
+    assert!(
+        (1..=total_lines).contains(&std_line),
+        "std 帧行号 {std_line} 应落在 std/list.yx 行数范围内（1..={total_lines}）——位置存在性"
+    );
+
+    // Assert: 对照锚——用户单元初始化帧的位置仍指向用户文件路径
+    //（本修只给特化名补归属，用户文件诊断零变化）
+    assert!(
+        combined.contains(&format!("at __yx_module_init ({user_path}")),
+        "用户单元初始化帧的位置应仍指向用户文件；combined: {combined:?}"
+    );
+}
+
 #[test]
 fn test_e2e_bin_mode_top_level_statement_is_user_error() {
     // Arrange: 规范 §3.11——Bin 角色（有 yaoxiang.toml）顶层不允许可执行语句。
@@ -1768,7 +2233,7 @@ fn test_e2e_run_standalone_value_main_evaluated_at_init_exits_zero() {
 #[test]
 fn test_e2e_check_explicit_path_under_target_is_honored() {
     // Arrange - issue #463：默认排除表（`.git`/`.yaoxiang`/`target`）只应作用于**遍历到的子项**，
-    // 不应作用于**用户显式给出的路径**——AGENTS.md 第 9 条要求零散探针可放 `target/yx-scratch/<batch>/` 下直接跑。
+    // 不应作用于**用户显式给出的路径**——AGENTS.md 团队编排约定「验证证据」要求零散探针可放 `target/yx-scratch/<batch>/` 下直接跑。
     // 夹具写在仓库 `target/` 下（这正是判据要覆盖的位置），含①显式文件 ②显式目录 ③嵌套默认排除子项 三形态。
     let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let root = repo
@@ -1806,7 +2271,7 @@ fn test_e2e_check_explicit_path_under_target_is_honored() {
         code_dir, 0,
         "显式给出的 target/ 下目录应被遍历（不是只看文件分支）；stderr: {err_dir:?}"
     );
-    // Assert - 反向判据：嵌套在显式目录里的 `target/` 子目录仍须跳过（AGENTS 第 9 条「不进语料差分」的依赖面）
+    // Assert - 反向判据：嵌套在显式目录里的 `target/` 子目录仍须跳过（探针位置见 AGENTS.md 团队编排约定「验证证据」）
     let nested_content = std::fs::read_to_string(&nested_probe).expect("nested probe readable");
     assert!(
         nested_content.contains("main"),
@@ -1820,5 +2285,362 @@ fn test_e2e_check_explicit_path_under_target_is_honored() {
     assert!(
         err_ex.contains("No .yx files found"),
         "被 --exclude 排除后应报零发现；stderr: {err_ex:?}"
+    );
+}
+
+// ==================== 深表达式崩溃面锚（issue #540 / WBS 3.20.30） ====================
+//
+// 规范来源：RFC-013 错误码规范 E0019/E3014 + D59 C 类崩溃面直修授权
+// （用户裁决：编排层大栈线程 + 解析深度闸 1024）。
+//
+// 修前崩溃形态逐字留档（debug 构建 / 1MB 主线程栈实测）：
+//   Checking 1 file(s)...
+//
+//   thread 'main' has overflowed its stack
+//   （Windows 原生退出码 3221225725 = 0xC00000FD；Git Bash 呈现 127）
+//
+// 本节锚在子进程级验证用户真实路径：崩溃退出码不得再现。
+
+/// Windows 栈溢出的原生进程退出码（STATUS_STACK_OVERFLOW）
+const STATUS_STACK_OVERFLOW: i32 = -1_073_741_571;
+
+/// 深表达式夹具（issue #540 主锚 + 裁决 ② 的 1100 项变体）：300 项二元链作
+/// 普通函数实参，必须**编译并运行成功**。
+///
+/// 7b.4 起 E3014 只表示「分配后帧槽 >255」（具名基址 + 同时活跃值）：扁平左
+/// 结合链每层只活一个左值 ⇒ 活跃值是常数级 ⇒ 帧槽远小于上限。修前的崩溃形态
+/// （0xC00000FD）与「被 E3014 假拒绝」的中间态都不得再现（D59 C 类假拒绝直修，
+/// 用户 2026-11-22 裁决 ②）。
+fn assert_deep_binop_chain_runs(
+    terms: usize,
+    expected_stdout: &str,
+) {
+    let dir = TempDir::new().expect("temp dir");
+    let expr = "1 + ".repeat(terms) + "1";
+    let file = dir.path().join(format!("deep{terms}.yx"));
+    std::fs::write(
+        &file,
+        format!(
+            "id: (Int) -> Int = (x) => x\nmain = () => {{\n    y = id({expr})\n    print(y)\n}}\nmain()\n"
+        ),
+    )
+    .expect("write fixture");
+
+    // Act
+    let output = Command::new(yx_bin())
+        .arg("run")
+        .arg(&file)
+        .output()
+        .expect("run yaoxiang-rs");
+
+    // Assert
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "{terms} 项扁平链必须编译并运行成功，不得再现 0xC00000FD 或被资源闸拒绝"
+    );
+    assert_ne!(
+        output.status.code(),
+        Some(STATUS_STACK_OVERFLOW),
+        "修前崩溃形态不得再现"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        !stderr.contains("E3014"),
+        "帧槽装得下的形态不得再被 E3014 拒绝: {stderr}"
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert_eq!(
+        stdout.trim(),
+        expected_stdout,
+        "运行时结果必须是逐项相加的正确值: {stdout}"
+    );
+}
+
+#[test]
+fn test_run_deep_binop_argument_300_terms_compiles_and_runs() {
+    assert_deep_binop_chain_runs(300, "301");
+}
+
+#[test]
+fn test_run_deep_binop_argument_1100_terms_compiles_and_runs() {
+    // 裁决 ② 条件②：1100 项变体——解析闸不触发（扁平链是迭代），分配器把
+    // 活跃值压到常数级，故编译 + 运行成功且非栈溢出。
+    assert_deep_binop_chain_runs(1100, "1101");
+}
+
+#[test]
+fn test_check_parser_recursive_deep_nesting_reports_e0019_once() {
+    // Arrange：1100 层一元链（解析真递归形态，闸值 1024）。修前 1MB 栈
+    // 在 282 层即崩溃；修后解析闸在拒绝点给出恰 1 条 E0019。
+    let dir = TempDir::new().expect("temp dir");
+    let expr = format!("{}1", "- ".repeat(1100));
+    let file = dir.path().join("deep_unary.yx");
+    std::fs::write(
+        &file,
+        format!("main = () => {{\n    y = {expr}\n    print(y)\n}}\n"),
+    )
+    .expect("write fixture");
+
+    // Act
+    let output = Command::new(yx_bin())
+        .arg("check")
+        .arg(&file)
+        .output()
+        .expect("run yaoxiang-rs check");
+
+    // Assert
+    assert_eq!(output.status.code(), Some(1), "超限形态必须以正式诊断退出");
+    assert_ne!(
+        output.status.code(),
+        Some(STATUS_STACK_OVERFLOW),
+        "修前崩溃形态不得再现"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(
+        stderr.matches("E0019").count(),
+        1,
+        "恰 1 条 E0019（禁止恢复级联）: {stderr}"
+    );
+}
+
+#[test]
+fn test_run_deep_fstring_interpolation_reports_e0019_not_literal_text() {
+    // Arrange：顶层 f-string 内嵌 1100 层括号（外层+内层合计超解析闸 1024）。
+    // 修前实测留档（WBS 3.20.30 t1r 探针，HEAD 3dab6db6）：check 0 错误、
+    // run exit 0 且 stdout 输出字面插值源文本「{(((…1…)))}」——内层闸拒绝
+    // 推进内嵌实例自己的 errors、实例随字面文本回退被整体丢弃（D59 C 类
+    // 静默给错答案）。修后：内层拒绝传导到外层诊断集，恰 1 条 E0019。
+    let dir = TempDir::new().expect("temp dir");
+    let expr = format!("{}1{}", "(".repeat(1100), ")".repeat(1100));
+    let file = dir.path().join("deep_fstring.yx");
+    std::fs::write(&file, format!("s = f\"{{{expr}}}\"\nprint(s)\n")).expect("write fixture");
+
+    // Act
+    let output = Command::new(yx_bin())
+        .arg("run")
+        .arg(&file)
+        .output()
+        .expect("run yaoxiang-rs");
+
+    // Assert：不得再以「编译成功 + 字面改写」静默通过
+    assert_eq!(output.status.code(), Some(1), "深内插必须以正式诊断退出");
+    assert_ne!(
+        output.status.code(),
+        Some(STATUS_STACK_OVERFLOW),
+        "修前崩溃形态不得再现"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(
+        stderr.matches("E0019").count(),
+        1,
+        "恰 1 条 E0019（内层拒绝传导、同因不得双诊断）: {stderr}"
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        !stdout.contains("{(((("),
+        "运行输出不得再出现字面插值源文本（静默给错答案）: {stdout}"
+    );
+}
+
+#[test]
+fn test_check_deep_call_razor_125_compiles_in_subprocess() {
+    // Arrange：125 层调用嵌套——修前崩溃区内（1MB 主线程实测崩溃起点
+    // 124 层），修后大栈线程编译成功。既有 razor 锚（check.rs 的
+    // razor_call 形态）在内联测试线程上跑、无法机械复现修前崩溃；本锚
+    // 在子进程级钉住 crash→success 的披露面：用户真实路径上 exit 0。
+    let dir = TempDir::new().expect("temp dir");
+    let expr = format!("{}1{}", "id(".repeat(125), ")".repeat(125));
+    let file = dir.path().join("razor_call125.yx");
+    std::fs::write(
+        &file,
+        format!("id: (Int) -> Int = (x) => x\nmain = () => {{\n    y = {expr}\n    print(y)\n}}\n"),
+    )
+    .expect("write fixture");
+
+    // Act
+    let output = Command::new(yx_bin())
+        .arg("check")
+        .arg(&file)
+        .output()
+        .expect("run yaoxiang-rs check");
+
+    // Assert：非崩溃且零错误（修前 exit 0xC00000FD 零诊断）
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "125 层调用嵌套在用户真实路径上必须编译成功（修前崩溃区内形态）"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        !stderr.contains("E0019") && !stderr.contains("E3014"),
+        "razor 区形态不得触发任何资源闸: {stderr}"
+    );
+}
+
+// ── #403 主锚运行时面（WBS 3.20.33）：`List(Int)` 注解值的迭代取值 ─────────
+// 条款门：SPEC syntax.md §1.6.4——裸字面量与 `List(Int)` 注解落可增长列表。
+// 病史门：issue #403——修前注解落幽灵面 Generic{"List"} 被 E1002 假拒绝，
+// 程序根本无法运行；修后迭代取值/计数/求和与空构造长度在运行时逐项正确。
+// 修前红态（CLI 探针逐字留档，2026-11-18，dev@8ff9f21d）：check 报
+// error [E1002] Expected type 'List(int64)', found type 'Vec(int64)'
+// error [E1002] Expected type 'List/Array/Range/String/Dict/Tuple（可迭代）',
+// found type 'never'（run 同因编译失败退出非零）。
+
+#[test]
+fn test_e2e_run_list_type_annotation_iteration_prints_counts_and_sums() {
+    // Arrange - 注解值迭代 + 计数/求和 + 空列表构造（stdout 三行：2 / 3 / 0）
+    let tmp = TempDir::new().unwrap();
+    let src = write_yx(
+        tmp.path(),
+        "list_annot_iteration.yx",
+        r#"
+use std.io
+
+main: () -> Void = {
+    v: List(Int) = [1, 2]
+    mut count = 0
+    mut total = 0
+    for x in v {
+        count = count + 1
+        total = total + x
+    }
+    io.println(count)
+    io.println(total)
+
+    w: List(Int) = []
+    io.println(w.length)
+}
+main()
+"#,
+    );
+
+    // Act
+    let (code, stdout, stderr) = run_yx(&["run", src.to_str().unwrap()], tmp.path());
+
+    // Assert - 编译零诊断（修前 E1002 双条），运行时迭代值/计数/求和/空构造正确
+    assert_eq!(
+        code, 0,
+        "List(Int)-annotated iteration must compile and run after the landing-face unification; stderr: {stderr:?}"
+    );
+    assert!(
+        stdout.contains("2\n3\n0"),
+        "iteration over a List(Int)-annotated value must yield the elements (count 2, sum 3) and the empty construction must report length 0; got: {stdout:?}"
+    );
+}
+
+// run 命令 — 用户自定义 print/println 与零开销特例的分发优先级
+// 规范来源：issue #477（用户裁决乙案：用户定义优先，lower 面对齐 check 面）
+// + WBS 3.24.4（print 零开销特例入口闸：本单元已声明的函数名不走特例）。
+
+/// 修前形态（CLI 探针实测）：用户 `print(s: String)` 的 **Var 实参**裸名调用被
+/// print 零开销特例拦截，Stringable 路直接派发 `std.io.print`——stdout 原样
+/// "hi"、自定义前缀缺席，check 绿 exit 0（静默错配）。修后：用户函数执行。
+/// 归因修正（按实测锚定）：字面量实参 `print("hi")` 的类型在特例入口不可取
+/// （`get_expr_mono_type` 对字面量落 `_ => None`，query.rs），走「无法获取类型」
+/// 默认路径、#477 乙案已覆盖——真正红态是 Var 实参形态（local_var_types 命中
+/// → Some(String)），与 2268543d 锚定修正任务前提归因同款处理。
+#[test]
+fn test_e2e_user_defined_print_shadowed_bare_call_executes_user_function() {
+    // Arrange
+    let tmp = TempDir::new().unwrap();
+    let src = write_yx(
+        tmp.path(),
+        "user_print.yx",
+        r#"
+use std.io
+
+print: (String) -> () = (s) => { io.print(f"[user]{s}") }
+
+main = () => {
+    s = "hi"
+    print(s)
+}
+        "#,
+    );
+
+    // Act
+    let (code, stdout, _stderr) = run_yx(&["run", src.to_str().unwrap()], tmp.path());
+
+    // Assert
+    assert_eq!(code, 0, "user-defined print program should exit 0");
+    assert!(
+        stdout.contains("[user]hi"),
+        "bare print call with a local variable argument must execute the user-defined print (custom prefix), got: {stdout:?}"
+    );
+}
+
+/// println 同面抽一锚：用户 `println(s: String)` 的 Var 实参裸名调用修前被
+/// 特例 Stringable 路派发 `std.io.println`（原样输出），修后执行用户函数。
+#[test]
+fn test_e2e_user_defined_println_shadowed_bare_call_executes_user_function() {
+    // Arrange
+    let tmp = TempDir::new().unwrap();
+    let src = write_yx(
+        tmp.path(),
+        "user_println.yx",
+        r#"
+use std.io
+
+println: (String) -> () = (s) => { io.print(f"[user]{s}\n") }
+
+main = () => {
+    s = "yo"
+    println(s)
+}
+        "#,
+    );
+
+    // Act
+    let (code, stdout, _stderr) = run_yx(&["run", src.to_str().unwrap()], tmp.path());
+
+    // Assert
+    assert_eq!(code, 0, "user-defined println program should exit 0");
+    assert!(
+        stdout.contains("[user]yo"),
+        "bare println call with a local variable argument must execute the user-defined println (custom prefix), got: {stdout:?}"
+    );
+}
+
+/// 对照锚：**非遮蔽** print 的零开销特例修前修后零变化——Stringable 路
+/// （Var 实参 String → `std.io.print` 原样输出）与兜底路（Var 实参 List →
+/// `std.io.format_fallback` 类型信息）输出形态不变（修前 CLI 探针实测
+/// "hi" + "unknown([1, 2])"）。本锚在 F1 闸的变异预演中必须保持绿
+/// （闸只拦本单元已声明的名字）。
+#[test]
+fn test_e2e_std_print_stringable_and_fallback_paths_unaffected() {
+    // Arrange
+    let tmp = TempDir::new().unwrap();
+    let src = write_yx(
+        tmp.path(),
+        "std_print.yx",
+        r#"
+use std.io
+
+main = () => {
+    s = "hi"
+    print(s)
+    xs = [1, 2]
+    print(xs)
+}
+        "#,
+    );
+
+    // Act
+    let (code, stdout, _stderr) = run_yx(&["run", src.to_str().unwrap()], tmp.path());
+
+    // Assert
+    assert_eq!(code, 0, "std print program should exit 0");
+    assert!(
+        stdout.contains("hi"),
+        "Stringable path (String var) must keep printing the value, got: {stdout:?}"
+    );
+    assert!(
+        stdout.contains("unknown([1, 2])"),
+        "fallback path (List var) must keep printing the type fallback, got: {stdout:?}"
+    );
+    assert!(
+        !stdout.contains("[user]"),
+        "no user-defined print exists in this program, so no custom prefix may appear, got: {stdout:?}"
     );
 }

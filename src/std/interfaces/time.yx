@@ -1,7 +1,7 @@
 // time.yx - 标准库 std.time 模块接口
 // 仅供 LSP 跳转和类型查看，不参与实际执行
 
-now: () -> DateTime = {
+now: () -> Int = {
     ...
 }
 
@@ -21,7 +21,7 @@ format_time: (dt: Int, fmt: String) -> String = {
     ...
 }
 
-parse_time: (fmt: String, s: String) -> DateTime = {
+parse_time: (fmt: String, s: String) -> Int = {
     ...
 }
 

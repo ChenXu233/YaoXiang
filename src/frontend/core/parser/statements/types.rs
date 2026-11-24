@@ -9,11 +9,11 @@
 //! - Constructor types: `Name(Type1, Type2)` — the ONLY generic application syntax
 //! - Meta types: `Type`
 
-use crate::frontend::core::lexer::tokens::*;
-use crate::ast::*;
 use crate::ast::StructField;
-use crate::frontend::core::parser::{ParserState, BP_LOWEST};
+use crate::ast::*;
+use crate::frontend::core::lexer::tokens::*;
 use crate::frontend::core::parser::parse_msg;
+use crate::frontend::core::parser::{ParserState, BP_LOWEST};
 use crate::util::diagnostic::ErrorCodeDefinition;
 use crate::util::span::Span;
 
@@ -37,6 +37,12 @@ pub fn parse_type_annotation_required(state: &mut ParserState<'_>) -> Option<Typ
     if let Some(ty) = parse_type_annotation(state) {
         return Some(ty);
     }
+    // 深度闸拒绝（issue #540 修复轮）：E0019 已在拒绝点发射，此处再报
+    // E0010 是同因双诊断——保持「恰 1 条正式诊断」，与 expect() 的压制
+    // 语义同构。标志在每条语句开始时复位，不影响后续语句的正常恢复。
+    if state.is_depth_rejected() {
+        return None;
+    }
     let span = state.span();
     let found = state
         .current()
@@ -52,7 +58,26 @@ pub fn parse_type_annotation_required(state: &mut ParserState<'_>) -> Option<Typ
 }
 
 /// Parse type annotation
+///
+/// 解析递归深度闸的**类型汇点**（issue #540 修复轮）：Ptr/Ref/泛型构造/
+/// 具名 struct/函数类型/元组/类型体各臂的自递归与互递归都回入本函数，
+/// 全部经同一 enter/exit 计数（与语句/表达式两汇点同机制、同一
+/// [`MAX_PARSE_DEPTH`](crate::frontend::core::parser::parser_state::MAX_PARSE_DEPTH)
+/// 常数，不另设第二套计数）。实测登记（1MB 参照线程，debug 构建）：
+/// 类型递归崩溃起点 struct 386 / generic 595 / Ptr 928 / Ref 930 / Fn 930
+/// 层——全部 ≤ 闸值 1024，按「类型闸值 ≥ 实测崩溃起点」判据并入单闸；
+/// 闸上（≥1025 层）发射 E0019 并以 `None` 逐层弹出。
 pub fn parse_type_annotation(state: &mut ParserState<'_>) -> Option<Type> {
+    if !state.enter_nested_parse() {
+        return None;
+    }
+    let result = parse_type_annotation_nested(state);
+    state.exit_nested_parse();
+    result
+}
+
+/// [`parse_type_annotation`] 的闸内本体（原实现逐字保留）。
+fn parse_type_annotation_nested(state: &mut ParserState<'_>) -> Option<Type> {
     match state.current().map(|t| &t.kind) {
         Some(TokenKind::Star) => {
             // Raw pointer type: *T
@@ -141,22 +166,38 @@ pub fn parse_type_annotation(state: &mut ParserState<'_>) -> Option<Type> {
                     return parse_constructor_type(name, name_span, state);
                 }
             }
-            // 后视检查：如果不是类型语法专用的 token，则作为表达式解析（blacklist）
-            if state.infix_info().is_some()
-                && !matches!(
-                    state.current().map(|t| &t.kind),
-                    Some(TokenKind::Dot | TokenKind::Eq | TokenKind::KwAs)
+            // RFC-027 §14.5：类型位单层证据字段路径 `b.w`。V1 只允许 `ident.ident`；
+            // 多级路径在这里也先按嵌套 `FieldAccess` 解析，由转换点拒绝（T03）。
+            // 复用下方同一个 `Type::ConstExpr` 构造点（类型表门禁 T1 的构造点计数不含新站）。
+            let mut field_path_seed: Option<Expr> = None;
+            if state.at(&TokenKind::Dot)
+                && matches!(
+                    state.peek().map(|t| &t.kind),
+                    Some(TokenKind::Identifier(_))
                 )
             {
-                // 使用完整的 Pratt 循环解析整个表达式（从 Var 开始）
                 let mut expr = Expr::Var(name.clone(), name_span);
-                while state.current().is_some() {
-                    let (_bp_left, bp_right, parser_fn) = match state.infix_info() {
-                        Some(info) => info,
-                        None => break,
+                while state.at(&TokenKind::Dot) {
+                    state.bump(); // '.'
+                    let Some(TokenKind::Identifier(field)) = state.current().map(|t| &t.kind)
+                    else {
+                        break;
                     };
-                    expr = parser_fn(state, expr, bp_right)?;
+                    let field = field.clone();
+                    state.bump();
+                    // 字段名 span 不参与语义；基名 span 供诊断定位（与值级读取不同，值级另有发射点）
+                    expr = Expr::FieldAccess {
+                        expr: Box::new(expr),
+                        field,
+                        span: name_span,
+                    };
                 }
+                field_path_seed = Some(expr);
+            }
+            // 后视检查：如果不是类型语法专用的 token，则作为表达式解析（blacklist）
+            if field_path_seed.is_some() || type_position_expr_continues(state) {
+                let seed = field_path_seed.unwrap_or_else(|| Expr::Var(name.clone(), name_span));
+                let expr = parse_type_position_const_expr(state, seed);
                 return Some(Type::ConstExpr(Box::new(expr)));
             }
             Some(Type::Name {
@@ -233,6 +274,11 @@ pub fn parse_type_annotation(state: &mut ParserState<'_>) -> Option<Type> {
             }
 
             if !state.skip(&TokenKind::RParen) {
+                // 深度闸拒绝弹出期（issue #540 修复轮）：元组回退重试同样只
+                // 会以错位起点重扫残骸——直退，残骸交给语句层的 drain。
+                if state.is_depth_rejected() {
+                    return None;
+                }
                 state.restore_position(saved);
                 return parse_tuple_type(state);
             }
@@ -309,37 +355,87 @@ pub fn parse_type_annotation(state: &mut ParserState<'_>) -> Option<Type> {
             );
             None
         }
-        // 整数字面量类型：IsPositive(5) 中的 5
+        // 整数字面量类型：IsPositive(5) 中的 5；也支持算术表达式（`Array(Int, 2+3)`）
         Some(TokenKind::IntLiteral(n)) => {
             let n = *n;
             let span = state.span();
             state.bump();
-            Some(Type::ConstExpr(Box::new(Expr::Lit(
-                crate::frontend::core::lexer::tokens::Literal::Int(n),
-                span,
-            ))))
+            let expr = parse_type_position_const_expr(
+                state,
+                Expr::Lit(crate::frontend::core::lexer::tokens::Literal::Int(n), span),
+            );
+            Some(Type::ConstExpr(Box::new(expr)))
         }
-        // 负整数字面量类型：IsPositive(-1) 中的 -1
+        // 负整数字面量类型：IsPositive(-1) 中的 -1；同样接中缀（`-1+2`）
         Some(TokenKind::Minus) => {
             let span = state.span();
             state.bump();
             if let Some(TokenKind::IntLiteral(n)) = state.current().map(|t| &t.kind) {
                 let n = *n;
                 state.bump();
-                Some(Type::ConstExpr(Box::new(Expr::UnOp {
+                let seed = Expr::UnOp {
                     op: crate::ast::UnOp::Neg,
                     expr: Box::new(Expr::Lit(
                         crate::frontend::core::lexer::tokens::Literal::Int(n),
                         span,
                     )),
                     span,
-                })))
+                };
+                let expr = parse_type_position_const_expr(state, seed);
+                Some(Type::ConstExpr(Box::new(expr)))
             } else {
                 None
             }
         }
         // Note: fn type uses (Params) -> ReturnType syntax, not `fn` keyword
         _ => None,
+    }
+}
+
+/// 种子后面紧跟的是「表达式续接」还是类型 / 绑定分隔符？
+///
+/// 黑名单与标识符种子路径的既有判据同源：`=`（绑定的初始化符）、`.`（类型名路径）、
+/// `as`（转换）都**不**开启续接。少了这道闸门，`n: 3 = 3`（单值字面量类型标注）
+/// 会被读成 `3 = 3` 的赋值表达式，绑定丢掉初始化器。
+fn type_position_expr_continues(state: &ParserState<'_>) -> bool {
+    state.infix_info().is_some()
+        && !matches!(
+            state.current().map(|t| &t.kind),
+            Some(TokenKind::Dot | TokenKind::Eq | TokenKind::KwAs)
+        )
+}
+
+/// 类型位常量表达式的**中缀续接**：从已解析的种子（标识符 / 整数字面量 /
+/// 负字面量）继续走 Pratt 的 led 链，返回完整表达式。
+///
+/// 中缀解析的**唯一实现**是 `ParserState::parse_infix_from`（语句位表达式同一条
+/// 链），本函数不复制第二份运算符解析。三种种子因此同构：`N+1`、`2+3`、`-1+2`
+/// 都产出完整的 `BinOp` 树（issue #543：此前字面量种子解析完字面量就返回，中缀
+/// 算符留给外层 `expect(RParen)` 报成「expected RParen, found Plus」）。
+///
+/// 续接失败（`2+` 这类真语法错）时发 E0012 并**保留种子**做错误恢复：
+/// 诊断已经发出（不是静默），外层仍能闭合括号，不会再多报一条误导性的
+/// 「expected a type, found RParen」。
+fn parse_type_position_const_expr(
+    state: &mut ParserState<'_>,
+    seed: Expr,
+) -> Expr {
+    if !type_position_expr_continues(state) {
+        return seed;
+    }
+    match state.parse_infix_from(seed.clone(), 0) {
+        Some(expr) => expr,
+        None => {
+            // 深度闸拒绝（issue #540 修复轮）：E0019 已发射，同因双诊断压制，
+            // 与 expect() 的弹出期压制同构。
+            if !state.is_depth_rejected() {
+                state.error(parse_msg(
+                    state,
+                    "类型位的常量表达式不完整：运算符缺少右操作数",
+                ));
+            }
+            seed
+        }
     }
 }
 
@@ -421,7 +517,22 @@ fn parse_constructor_type(
 /// Returns (Vec<Param>, return_type)
 /// This is for RFC-010 unified syntax: `name: (a: Int, b: Int) -> Ret = body`
 /// Also supports const generic literal types: `factorial: [n: Int](n: n) -> Int`
+///
+/// 解析递归深度闸的**柯里组汇点**（issue #540 修复轮）：curry 组与括号
+/// 返回位的自递归（`-> (a: Int) -> (b: Int) -> …`）不经
+/// [`parse_type_annotation`]，须在本入口过同一 enter/exit 计数——否则深
+/// 柯里链是真递归栈膨胀的绕闸入口。
 pub fn parse_fn_type_with_names(state: &mut ParserState<'_>) -> Option<(Vec<Param>, Box<Type>)> {
+    if !state.enter_nested_parse() {
+        return None;
+    }
+    let result = parse_fn_type_with_names_nested(state);
+    state.exit_nested_parse();
+    result
+}
+
+/// [`parse_fn_type_with_names`] 的闸内本体（原实现逐字保留）。
+fn parse_fn_type_with_names_nested(state: &mut ParserState<'_>) -> Option<(Vec<Param>, Box<Type>)> {
     if !state.expect(&TokenKind::LParen) {
         return None;
     }
@@ -541,6 +652,12 @@ pub fn parse_fn_type_with_names(state: &mut ParserState<'_>) -> Option<(Vec<Para
                 return_type: inner_ret,
             };
             return Some((params, Box::new(nested_fn)));
+        }
+        // 深度闸拒绝弹出期（issue #540 修复轮）：内层已报 E0019，回退重试
+        // 只会以错位起点重解析残骸（同因第二诊断 + 二次方重扫）——残骸交给
+        // 语句层的 drain_broken_construct，与 expect() 的弹出期压制同构。
+        if state.is_depth_rejected() {
+            return None;
         }
         state.restore_position(saved);
     }
@@ -730,6 +847,17 @@ fn parse_struct_type(state: &mut ParserState<'_>) -> Option<Type> {
                     format!("Expected ':' after 'mut' in field '{}'", name),
                 ));
                 return None;
+            } else if state.at(&TokenKind::Dot)
+                && matches!(
+                    state.peek().map(|t| &t.kind),
+                    Some(TokenKind::Identifier(_))
+                )
+            {
+                // 类型体里的证据字段路径（形如 { bb.w }，RFC-027 §14.5）：整条路径作为
+                // 类型体表达式项，交汇到 parse_type_annotation 的同一入口（不另写解析）。
+                state.restore_position(name_start);
+                let ty = parse_type_annotation(state)?;
+                body.push(TypeBodyItem::Expr(ty));
             } else if matches!(
                 state.current().map(|t| &t.kind),
                 Some(
@@ -810,8 +938,31 @@ pub(crate) fn parse_binding_positions(state: &mut ParserState<'_>) -> Result<Vec
 
         match state.current().map(|t| &t.kind) {
             Some(TokenKind::IntLiteral(n)) => {
-                let value = *n as i64;
-                positions.push(if is_negative { -value } else { value });
+                // RFC-004 位置绑定。字面量载荷是 i128（词法 parse::<i128> 恒非负）：
+                // - i64 域内：精确落位——合法位置逐字零变化（#563 语义边界）；
+                // - 取负在 i128 域做（checked_neg 恒成功），#560 同族 panic
+                //   （`[-i64::MIN 形态]` 修前在此裸 `-i64::MIN` 溢出，debug 构建
+                //   exit 101）随之消除；`[-2^63]` 精确得 i64::MIN，与 ast 侧
+                //   extract_binding_positions 的取负口径一致；
+                // - 超出 i64 表示域：AST 位置域是 i64，原文无法承载——以哨兵
+                //   桥接交 checker 的 E1064 判域（#563 甲案：正溢出取 i64::MAX
+                //   必越参数上界、负溢出取 i64::MIN 归一化后仍负，两条都必落
+                //   normalize_binding_positions 的 E1064）。哨兵文面显示的是
+                //   哨兵值而非原字面量，裁决心智与 ast 侧「超域拒绝」一致。
+                let magnitude = *n;
+                let signed: i128 = if is_negative {
+                    magnitude.checked_neg().unwrap_or(i64::MIN as i128)
+                } else {
+                    magnitude
+                };
+                let value = if signed > i64::MAX as i128 {
+                    i64::MAX
+                } else if signed < i64::MIN as i128 {
+                    i64::MIN
+                } else {
+                    signed as i64
+                };
+                positions.push(value);
                 state.bump();
                 state.skip(&TokenKind::Comma);
             }

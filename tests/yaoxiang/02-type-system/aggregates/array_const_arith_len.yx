@@ -1,0 +1,25 @@
+// 02-type-system/aggregates/array_const_arith_len.yx
+// 覆盖: 类型位常量表达式的**字面量种子**（issue #543）——`Array(Int, 2+3)`
+// 验证: 类型位的 `2+3` / `2*3` / `7-2` 与字面量同形：注解长度按折叠值
+//       校验（元素数不符即 E1002/E6003 一类报错），运行期下标可读证明长度确为 5/6。
+// 状态: ✅ 可运行
+//
+// 修复前这三条全部在**解析期**被拒（E0010「expected RParen, found Plus/Star/Minus」）：
+// 字面量种子解析完字面量就返回，中缀算符没有续接。残缺表达式的负例见
+// 06-compile-errors/types/type_const_expr_incomplete_err.yx。
+
+use std.assert
+
+main: () -> Void = {
+    a: Array(Int, 2+3) = [1, 2, 3, 4, 5]
+    assert.assert(a[4] == 5, "Array(Int, 2+3) 的长度是 5（下标 4 可读）")
+
+    b: Array(Int, 2*3) = [1, 2, 3, 4, 5, 6]
+    assert.assert(b[5] == 6, "Array(Int, 2*3) 的长度是 6（下标 5 可读）")
+
+    c: Array(Int, 7-2) = [1, 2, 3, 4, 5]
+    assert.assert(c[0] == 1, "Array(Int, 7-2) 的长度是 5")
+}
+
+// T4 入口语义：Script 模式的 main **不会**隐式执行——必须显式调用，运行期断言才生效。
+main()

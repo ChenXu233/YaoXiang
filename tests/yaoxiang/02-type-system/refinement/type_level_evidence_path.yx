@@ -1,0 +1,23 @@
+// 02-type-system/refinement/type_level_evidence_path.yx
+// 覆盖: RFC-027 §14.5 / SPEC §8.3.5 —— 类型级证据字段路径（admission V1）
+// 验证: Form B 谓词体 `{ bb.w }` 作为类型级证据前提；`needW(b, Box(3))` 的第二实参位
+//       `Holds(b)` 由 admission 放行（构造点已证 + 5A 不可变），值级读取不使用。
+// 状态: ✅ 可运行（0 error；6 条已知未使用声明 warning，与同目录 call_arg_evidence.yx 同口径）
+use std.assert
+
+Pos: (v: Int) -> Type = { v > 0 }
+
+Box: Type = {
+    v: Int,
+    w: Pos(v),
+}
+
+Holds: (bb: Box) -> Type = { bb.w }
+
+needW: (b: Box, h: Holds(b)) -> Int = {
+    b.v
+}
+
+b = Box(3)
+x = needW(b, Box(3))
+assert.assert(x == 3, "类型级证据路径 admission 放行")

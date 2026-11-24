@@ -2,27 +2,41 @@ module
   fn main() -> Void
     slot[0] items : Int(64) @depth1
     slot[1] first : Int(64) @depth1
-    locals_total=7
+    locals_total=5
+    values_total=13
+    value v0: Int(64) @block0
+    value v1: Int(64) @block0
+    value v2: Int(64) @block0
+    value v3: Int(64) @block0
+    value v4: Int(64) @block0
+    value v5: Int(64) @block0
+    value v6: Generic { name: "Vec", args: [Int(64)] } @block0
+    value v7: Int(64) @block0
+    value v8: TypeRef("?") @block0
+    value v9: Bool @block0
+    value v10: Int(64) @block0
+    value v11: Int(64) @block0
+    value v12: Generic { name: "String", args: [] } @block0
     AllocArray %0 size=int(3), elem=int(1)
-    Load %1 <- int(1)
-    Load %2 <- int(0)
-    StoreIndex %0[%2] <- %1
-    Load %3 <- int(2)
-    Load %4 <- int(1)
-    StoreIndex %0[%4] <- %3
-    Load %5 <- int(3)
-    Load %6 <- int(2)
-    StoreIndex %0[%6] <- %5
-    Load %2 <- %0
-    Load %3 <- int(0)
-    LoadIndex %1 <- %2[%3]
-    Load %4 <- %1
-    Load %5 <- int(1)
-    Eq %3 <- %4, %5
-    Load %6 <- string("first element should be 1")
-    Call %2 <- string("std.assert.assert") [%3, %6] (def=d0)
+    Load v0 <- int(1)
+    Load v1 <- int(0)
+    StoreIndex %0[v1] <- v0
+    Load v2 <- int(2)
+    Load v3 <- int(1)
+    StoreIndex %0[v3] <- v2
+    Load v4 <- int(3)
+    Load v5 <- int(2)
+    StoreIndex %0[v5] <- v4
+    Load v6 <- %0
+    Load v7 <- int(0)
+    LoadIndex %1 <- v6[v7]
+    Load v10 <- %1
+    Load v11 <- int(1)
+    Eq v9 <- v10, v11
+    Load v12 <- string("first element should be 1")
+    Call v8 <- string("std.assert.assert") [v9, v12] (def=d0)
     Drop %1
     Drop %0
-    Ret %2
+    Ret v8
   init (locals=0)
     Call %0 <- string("main") [] (def=d1)

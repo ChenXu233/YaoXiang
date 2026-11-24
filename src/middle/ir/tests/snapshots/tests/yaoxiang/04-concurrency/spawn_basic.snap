@@ -2,26 +2,38 @@ module
   fn main() -> Void
     slot[0] result : Int(64) @depth1
     slot[1] t1 : Int(64) @depth2
-    slot[4] t2 : Int(64) @depth2
-    locals_total=10
-    Load %0 <- int(1)
-    Load %1 <- int(1)
-    Add %2 <- %0, %1
-    Load %3 <- int(2)
-    Load %4 <- int(2)
-    Add %5 <- %3, %4
-    Spawn %6 <- [] plan(groups=[], deps=[], resources=[])
-    Load %7 <- %2
-    Load %8 <- %5
-    Add %9 <- %7, %8
-    Move %6 <- %9
+    slot[2] t2 : Int(64) @depth2
+    locals_total=6
+    values_total=11
+    value v0: Int(64) @block0
+    value v1: Int(64) @block0
+    value v2: Int(64) @block0
+    value v3: Int(64) @block0
+    value v4: Int(64) @block0
+    value v5: Int(64) @block0
+    value v6: Int(64) @block0
+    value v7: TypeRef("?") @block0
+    value v8: Bool @block0
+    value v9: Int(64) @block0
+    value v10: Int(64) @block0
+    Load v0 <- int(1)
+    Load v1 <- int(1)
+    Add %0 <- v0, v1
+    Load v2 <- int(2)
+    Load v3 <- int(2)
+    Add %1 <- v2, v3
+    Spawn %2 <- [] plan(groups=[], deps=[], resources=[])
+    Load v5 <- %0
+    Load v6 <- %1
+    Add v4 <- v5, v6
+    Move %2 <- v4
+    Drop %0
+    Drop %1
+    Load v9 <- %2
+    Load v10 <- int(6)
+    Eq v8 <- v9, v10
+    Call v7 <- string("std.assert.assert") [v8] (def=d0)
     Drop %2
-    Drop %5
-    Load %9 <- %6
-    Load %7 <- int(6)
-    Eq %4 <- %9, %7
-    Call %3 <- string("std.assert.assert") [%4] (def=d0)
-    Drop %6
-    Ret %3
+    Ret v7
   init (locals=0)
     Call %0 <- string("main") [] (def=d1)

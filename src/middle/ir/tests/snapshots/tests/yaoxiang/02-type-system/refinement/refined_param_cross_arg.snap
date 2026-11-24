@@ -5,45 +5,72 @@ module
     slot[0] a : Int(64) @depth1
     slot[1] b : Int(64) @depth1
     locals_total=3
+    values_total=1
+    value v0: Int(64) @block0
     Load %0 <- arg%0
     Load %1 <- arg%1
-    Load %2 <- %0
-    Ret %2
+    Load v0 <- %0
+    Ret v0
   fn main() -> Void
     slot[0] x : Int(64) @depth1
     slot[1] y : Int(64) @depth1
     slot[2] z : Int(64) @depth1
-    locals_total=8
-    Load %0 <- int(1)
-    Load %1 <- int(5)
-    Neg %2 <- %1
-    Call %3 <- string("h") [%0, %2] (def=d0)
-    Load %1 <- %3
-    Load %4 <- int(1)
-    Eq %2 <- %1, %4
-    Load %5 <- string("h(1, -5) 应返回 1（约束属 a，b 的取值与本约束无关）")
-    Call %0 <- string("std.assert.assert") [%2, %5] (def=d1)
-    Load %2 <- int(1)
-    Load %4 <- int(5)
-    Neg %1 <- %4
-    Call %0 <- string("h") [%2, %1] (def=d0)
-    Load %4 <- %0
-    Load %5 <- int(1)
-    Eq %1 <- %4, %5
-    Load %6 <- string("命名实参同判：a = 1 满足 a > 0")
-    Call %2 <- string("std.assert.assert") [%1, %6] (def=d1)
-    Load %4 <- int(5)
-    Neg %1 <- %4
-    Load %5 <- int(1)
-    Call %2 <- string("h") [%5, %1] (def=d0)
-    Load %5 <- %2
-    Load %6 <- int(1)
-    Eq %4 <- %5, %6
-    Load %7 <- string("乱序命名实参按形参名入槽，判定不受书写序影响")
-    Call %1 <- string("std.assert.assert") [%4, %7] (def=d1)
-    Drop %3
+    locals_total=6
+    values_total=24
+    value v0: Int(64) @block0
+    value v1: Int(64) @block0
+    value v2: Int(64) @block0
+    value v3: TypeRef("?") @block0
+    value v4: Bool @block0
+    value v5: Int(64) @block0
+    value v6: Int(64) @block0
+    value v7: Generic { name: "String", args: [] } @block0
+    value v8: Int(64) @block0
+    value v9: Int(64) @block0
+    value v10: Int(64) @block0
+    value v11: TypeRef("?") @block0
+    value v12: Bool @block0
+    value v13: Int(64) @block0
+    value v14: Int(64) @block0
+    value v15: Generic { name: "String", args: [] } @block0
+    value v16: Int(64) @block0
+    value v17: Int(64) @block0
+    value v18: Int(64) @block0
+    value v19: TypeRef("?") @block0
+    value v20: Bool @block0
+    value v21: Int(64) @block0
+    value v22: Int(64) @block0
+    value v23: Generic { name: "String", args: [] } @block0
+    Load v0 <- int(1)
+    Load v2 <- int(5)
+    Neg v1 <- v2
+    Call %0 <- string("h") [v0, v1] (def=d0)
+    Load v5 <- %0
+    Load v6 <- int(1)
+    Eq v4 <- v5, v6
+    Load v7 <- string("h(1, -5) 应返回 1（约束属 a，b 的取值与本约束无关）")
+    Call v3 <- string("std.assert.assert") [v4, v7] (def=d1)
+    Load v8 <- int(1)
+    Load v10 <- int(5)
+    Neg v9 <- v10
+    Call %1 <- string("h") [v8, v9] (def=d0)
+    Load v13 <- %1
+    Load v14 <- int(1)
+    Eq v12 <- v13, v14
+    Load v15 <- string("命名实参同判：a = 1 满足 a > 0")
+    Call v11 <- string("std.assert.assert") [v12, v15] (def=d1)
+    Load v17 <- int(5)
+    Neg v16 <- v17
+    Load v18 <- int(1)
+    Call %2 <- string("h") [v18, v16] (def=d0)
+    Load v21 <- %2
+    Load v22 <- int(1)
+    Eq v20 <- v21, v22
+    Load v23 <- string("乱序命名实参按形参名入槽，判定不受书写序影响")
+    Call v19 <- string("std.assert.assert") [v20, v23] (def=d1)
     Drop %0
+    Drop %1
     Drop %2
-    Ret %1
+    Ret v19
   init (locals=0)
     Call %0 <- string("main") [] (def=d2)

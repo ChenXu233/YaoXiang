@@ -1,0 +1,7 @@
+// expect: compile-error E4020
+
+use lib.{Box2}
+
+main: () -> Void = {
+    b = Box2(3)
+}

@@ -18,16 +18,17 @@ fn safe_canonicalize(path: &Path) -> PathBuf {
     })
 }
 
-use super::{ErrorCodeDefinition, ErrorInfo, I18nRegistry, JsonEmitter};
-#[cfg(feature = "cli")]
-use super::{CheckResult, EmitterConfig, TextEmitter};
 #[cfg(feature = "cli")]
 use super::check_files_with_diagnostics;
+#[cfg(feature = "cli")]
+use super::{CheckResult, EmitterConfig, TextEmitter};
+use super::{ErrorCodeDefinition, ErrorInfo, I18nRegistry, JsonEmitter};
 
 #[cfg(feature = "cli")]
 pub fn run_check_command_once(
     paths: &[PathBuf],
     excludes: &[PathBuf],
+    allow: &[String],
     json: bool,
     use_colors: bool,
     no_progress: bool,
@@ -52,7 +53,13 @@ pub fn run_check_command_once(
     .with_context(|| "读取项目配置 yaoxiang.toml 失败")?
     .compile_config();
 
-    let result = check_files_with_diagnostics(&files, compile_config)?;
+    let mut result = check_files_with_diagnostics(&files, compile_config)?;
+    // --allow（issue #499，用户 2026-10-24 裁决 A）：唯一过滤闸，必须先于全部
+    // 消费面——文本渲染、JSON 输出、--deny-shadowing 升级判定、返回给 main 的
+    // 计数（main.rs 据此做 --deny-warnings 退出码判定）。被允许的码对用户
+    // 完全不可见：不输出、不计数、不触发任何升级。allow 为空时是零开销
+    // 无操作（不带 --allow 的行为逐字不变）。
+    result.suppress_codes(allow);
 
     if json {
         output_check_json(&result)?;
@@ -188,7 +195,7 @@ fn collect_yx_files_from_paths(
         }
         // issue #463：显式给出的路径只受 `--exclude` 约束。默认排除表（`.git` /
         // `.yaoxiang` / `target`）描述的是「遍历时该跳过哪些子项」，不是「用户点名
-        // 要看的路径也要拒绝」——否则 AGENTS.md 第 9 条指定的探针位置
+        // 要看的路径也要拒绝」——否则 AGENTS.md 团队编排约定「验证证据」指定的探针位置
         // （`target/yx-scratch/<batch>/`）无法直接跑。判据序：`--exclude` >
         // 显式路径 > 默认排除表。
         if is_user_excluded(path, &excludes) {

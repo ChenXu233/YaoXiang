@@ -1113,7 +1113,7 @@
 
 > **一、3.23.1 清单解析失败 / 缺必填字段的静默退化**（WBS 二级 `3.23`「清单解析失败 / 缺必填字段的静默退化」下的唯一三级任务，issue [#503](https://github.com/ChenXu233/YaoXiang/issues/503)）：`yaoxiang.toml` 解析失败（非法 TOML）或缺必填字段（如 `[package] version`）时，CLI **不报清单错误**、静默退化为单文件语义 ⇒ 跨文件引用池失效 ⇒ 两个都被入口引用的类型被误报 `W1002`×2，且 `check` 仍退出 0；pre-fix 与 4.9.8 修复后逐条相同 ⇒ **先于 #465、与本修复无关**。根因在清单解析路径（`src/driver/helpers.rs:727` 的清单反序列化以 `.ok()` 吞错；`src/package/manifest.rs:28` 的 `version` 为必填字段），不在死代码判据本身。D59 **D 类**，**语义待裁**（甲 报错并退出 / 乙 继续但发 W 码 / 丙 维持现状）——终态判据待裁决后定稿。证据细节留在 issue 里。
 >
-> **二、3.18.2 导入类型的注解身份**（WBS 二级 `3.18` 下的第二个三级任务，issue [#504](https://github.com/ChenXu233/YaoXiang/issues/504)）：`make_b: () -> TempB` + `u: TempB = make_b()` ⇒ `E1012` + `E1002`、退出码 1，双二进制（修复前 / 4.9.8 修复后）逐条一致；归因同 `3.18` 的 MonoType 裸名义名族；分类待队内定（疑 D 类）。证据细节留在 issue 里。
+> **二、3.18.2 导入类型的注解身份**（WBS 二级 `3.18` 下的第二个三级任务，issue [#504](https://github.com/ChenXu233/YaoXiang/issues/504)）：`make_b: () -> TempB` + `u: TempB = make_b()` ⇒ `E1012` + `E1002`、退出码 1，双二进制（修复前 / 4.9.8 修复后）逐条一致；归因同 `3.18` 的 MonoType 裸名义名族；分类待队内定（疑 D 类）。证据细节留在 issue 里。（2026-11-20 更正：分类定 C 类——假拒绝非 D 类，修复迁移至 3.24.3，见下文 §P3 3.24.3。）
 >
 > **三、3.20.3 算子接口方法的 W1005 误报**（WBS 二级 `3.20` 下的第三个三级任务，issue [#505](https://github.com/ChenXu233/YaoXiang/issues/505)）：算子接口方法被 `u[0]` / `u == t` 实际调用，`check` 仍报 `W1005 Unused method`——合法清单 + 类型体内 `Index(Temp, Int, Float)` / `Equal(Temp, Temp)` 声明下，`check` 为 0 error + 4 条 W1005，而 `run` 值正确（20.0 / false）⇒ 死代码可达性**不计算子派发**；本地单文件夹具 2 条、跨单元 4 条；与 #465 无关（修复前后同样存在）。改的是**成功程序**的警告面 ⇒ D 类，登记待排期；证据细节留在 issue。
 >
@@ -4245,7 +4245,7 @@ RFC-039 D62 四阶段的第三阶段「证据强制」。t18 / t21 / t24 三轮�
 
 ### 七、已知边界
 
-- 方法面（`Type.method`，值接收者）：`callee_generic_name` 返回 `None` ⇒ 整段 `NotTarget`，当前零诊断；已钉 tripwire（`test_method_bound_const_generic_argument_is_currently_unchecked`）。追踪 issue #538。
+- 方法面（`Type.method`，值接收者）：`callee_generic_name` 返回 `None` ⇒ 整段 `NotTarget`，当前零诊断；已钉 tripwire（`test_method_bound_const_generic_argument_is_currently_unchecked`）。**已完成（2026-11-13，提交 `8355a283`）**：方法面接入 E1113 证据检查（槽位表加宽 `CallSiteSlots`，与函数面共用判定/发射）；显式 self 接收者、类型体方法、外部绑定、跨模块导入仍按「宁可少报」不判（跨模块另见 #539）。
 - 跨模块导入面：`Export` 只带 `type_params` / `param_names`、无 q=0 事实 ⇒ 导入调用维持 0 诊断（基线与终态同码），未回退运行期猜测。追踪 issue #539。
 
 ### 八、机械面与数字
@@ -4405,7 +4405,7 @@ P1 的形状判据与 ir_gen 的包装层产出形态耦合——「不再匹配
 
 ### 五、三条更正（t43 复审判定，t44 修复，t46 复核兑现）
 
-- **F1（成立，仍开放）**：IR 校验器（`verify` / `verify_loose` / `verify_ssa`）全仓**无生产调用点**——只有 IR 测试面与本批的 post-mono 门禁调用它（`yxpkg` 的 verify 是包校验，同名不同物）⇒「覆盖闸删原件 ⇒ `verify_loose` Dominance 红」目前不可观测。触发条件：校验器升为生产门禁（RFC-039 D38 / 04-ssa.md 批 a 准入）时，「删除原件」不得与「共享层读 env 之外的槽」同时成立；本批靠保守保留原件规避（原件仍带 q=0 槽，克隆体把体内读物化成常量），该规避在 verify 升门禁前不得移除。
+- **F1（成立，仍开放）**：IR 校验器（`verify` / `verify_loose` / `verify_ssa`）全仓**无生产调用点**——只有 IR 测试面与本批的 post-mono 门禁调用它（`yxpkg` 的 verify 是包校验，同名不同物）⇒「覆盖闸删原件 ⇒ `verify_loose` Dominance 红」目前不可观测。触发条件：**post-mono 生产门禁接线时**（P7 批 a 只用 ir_gen-only IR，不被 #542 阻断；见 09a §P6 6.9.2 #542 §二.3），「删除原件」不得与「共享层读 env 之外的槽」同时成立；本批靠保守保留原件规避（原件仍带 q=0 槽，克隆体把体内读物化成常量），该规避在 verify 升门禁前不得移除。
 - **F2（已修，措辞更正）**：原判据「克隆代入 Literal 会让 verify 红」**不成立**——verify 的 `types_compatible` 对任一侧 `TypeVar`/`TypeRef` 一律判相容，校验器结构上看不见代入与否（实测：克隆带未代入条目时 `verify_loose` 照样绿）。真正的欠账是**克隆的声明向量没有随槽一起裁剪**（它是原层 params 的逐字副本），实测形态为发射函数表里克隆显示 `Params: (N)` 而实例显示 `Params: ()`。该欠账已修：建件时代入 + 擦除时同源裁剪，两半各有门禁。
 - **F3（表述准确，仍开放）**：扩 `TailCall` 需三处单点同进同退——`call_form_is_rewritten`（当前只放行 `Call` + 字符串常量 func）、`replace_calls_in_function`（受其门控）、`drop_erased_call_args`（当前只 match `Instruction::Call`）；缺一处则擦除侧与改写侧单边不一致。扫描面 `by_name_call_target` 已覆盖 `Call`/`TailCall`/`MakeClosure`，今日保守策略使 `TailCall` 形态不悬空、只是不被特化 ⇒ 覆盖缺口而非正确性缺陷；触发条件：`TailCall` 指向带 q=0 形参的函数。
 
@@ -4413,7 +4413,7 @@ P1 的形状判据与 ir_gen 的包装层产出形态耦合——「不再匹配
 
 1. `TailCall` 未进调用点改写面（覆盖缺口，触发条件如上；扩面时三处同进同退）⇒ issue [#541](https://github.com/ChenXu233/YaoXiang/issues/541)。
 2. 校验器升生产门禁时的「保守保留原件」规避不得移除（见 F1）。
-3. 孤立的共享层（原件与其兜底件）属死代码消除遗留，登记口径不变 ⇒ issue [#542](https://github.com/ChenXu233/YaoXiang/issues/542)（须在校验器升门禁前落地或同步豁免）。
+3. 孤立的共享层（原件与其兜底件）属死代码消除遗留，登记口径不变 ⇒ issue [#542](https://github.com/ChenXu233/YaoXiang/issues/542)（须在校验器升门禁前落地或同步豁免）。**处置已定（2026-11-16，用户裁决 B）**：按「排期另案」处理——P7 批 a 后、post-mono 生产门禁接线前做 DCE；见 §P6 6.9.2 #542。
 4. 已修项留档：克隆声明与槽同源的两半修复及其门禁（见上）。
 
 ### 七、不宣称
@@ -4467,3 +4467,4518 @@ P1 的形状判据与 ir_gen 的包装层产出形态耦合——「不再匹配
 ### 计数与环境
 
 三级 +1 = 3.20.12（224→225）；二级不变。issue [#442](https://github.com/ChenXu233/YaoXiang/issues/442) **关闭**；嵌套括号 return 位相邻缺陷归 [#546](https://github.com/ChenXu233/YaoXiang/issues/546)。批次树 t3.20.12-verify release + gc。批次存续期内并行会话发布 V0.8.8（含本修复随版），量测按冻结 revision 不受影响。
+
+## P6 6.9.3b defeq 内核（2026-11-12，提交 `6b958851`）
+
+### 一、范围
+
+把类型判等收敛成三层、各只有一个实现；删两个生产零调用者的归约模块与其测试；不接 `can_assign`（判等内核先行、接线归 6.9.3c）、不动码表与 locales、不实现 Σ/Π。判据锚：RFC-027 §12、RFC-011 §4.1、RFC-039 D62 / issue #533、6.9.3b 的契约。
+
+### 二、实现
+
+1. 唯一类型归一化 `normalize_type`（包既有 Evaluator，不新写求值器）：递归进 Generic 实参后整体再求值；Literal 用 `MonoType::literal_of_value` 重建规范形态（ι，只读 value 不读 name）；Refined 保留 constraint、只归约 base（修正 Evaluator 丢约束）；预算按「一类型节点一步」扣（Evaluator 的类型路径不吃预算）。
+2. 唯一等价判定 `defeq`（顺序即语义）：0) Refined 先特判——两侧谓词相同 ⇒ 递归比基类型；谓词不同 / 一侧精化一侧不是 ⇒ Unproven（BeyondKernel）；1) 派生 PartialEq 同一性短路；2) 两侧归一化——都成功且相等 ⇒ Proved，都成功不等 ⇒ Disproved(TypeMismatch)，任一侧 Unproven ⇒ 原样传播（不降格）。
+3. 删 `structurally_equal`（派生 PartialEq 的第二份结构等价，其 Refined 臂只比 base ⇒ 假等价）；`check_type_equivalence` 降为 defeq 的兼容入口（生产零调用者）。
+4. 删两个生产零调用者的归约模块（`types/eval/normalizer.rs` 320 行、`reducer.rs` 697 行）与其 29 条测试（测试对象即被删类型）；唯一仍被生产使用的纯字符串助手 `split_args_at_depth_zero` 迁入 `const_eval.rs`（唯一调用方，注明来源）。
+
+### 三、先红后绿
+
+旧树 `defeq(Refined{Int,p}, Refined{Int,q})` 实测 `Ok(())`（假等价）⇒ 现为 `Unproven{BeyondKernel}`。
+
+### 四、实测（复审独立复核，在批次树单独检出该提交）
+
+构建通过；fast 通道 exit 0（1 波 2041 条、跳过 0 波）；语料 386 行与该提交自身的基线逐字节一致；IR 快照与错误码生成物零差异（本提交未触及任何诊断发射点）；lib 1650 = 1669 + 10 − 29（无 live 判据被删或放宽）；defeq 11 条新测试逐条钉住三态语义；`structurally_equal` 代码零命中；defeq/`check_type_equivalence`/`normalize_type` 的调用者只有测试 ⇒ BeyondKernel 本轮到不了用户诊断。
+
+### 五、口径收窄登记
+
+`check_type_equivalence` 旧实现的第 2 步「双向子类型 ⇒ 等价」已删（判等改为「归一化后同一」）。该入口生产零调用者 ⇒ 对用户程序零行为影响，但属判据口径变更，6.9.3c 接 `can_assign` 时须按新口径重新确认。
+
+### 六、遗留登记
+
+1. BeyondKernel 的用户可见文案归 6.9.3c 码表轮。
+2. 非预算 `EvalError → BeyondKernel` 的分类当前无区分性判官（无测试驱动到该分支），6.9.3c 补一条分类断言。
+3. defeq 尚未接入任何生产判定面。
+4. 归一化的预算口径（Evaluator 类型路径不吃预算、归一化自己按类型节点扣步）若将来要与表达式求值共享预算，需另开裁决。
+5. 本提交的两份 README 同步更新随本提交落（`types/eval/README.md` 删两个已删模块条目并留删除说明；`sema/layers/README.md` 把 `structurally_equal` 的声明改为「已删除」并把行号引用改成语义描述）——该修正由复审 F55-A 抓出后 amend 进本提交。
+
+### 七、不宣称
+
+本步只做判等内核与两个死模块的清理；判等未接入生产判定面、码表未动、Σ/Π 未落地；Π/Σ 完全体未收口。
+
+## P6 #543 类型位常量实参支持字面量种子（2026-11-12，提交 `b352b360`）
+
+### 一、范围
+
+解析层。类型位常量表达式的**字面量种子**（`Array(Int, 2+3)` / `2*3` / `7-2` / `-1+2`）接入既有 Pratt 中缀链；未碰类型检查与判定内核，未接 `can_assign`，未改 AST 变体集合。
+
+### 二、根因与改法
+
+1. 旧实现里，整数字面量/负字面量分支解析完字面量就返回，中缀算符留给外层 `expect(RParen)` 报成 E0010「expected RParen, found Plus/Star/Minus」；标识符分支则内联过一份自己的中缀循环（同一行为的第二份复制）。
+2. 改法：把 Pratt 的中缀半场提成独立函数（语句位表达式入口 = 前缀解析 + 中缀续接），**全仓只此一处中缀运算符循环**；类型位的常量表达式以字面量/标识符为种子时从同一函数续接，**三条种子同构**；类型位续接另设一道闸门（`=` / `.` / `as` 不开启续接），因为少了它，单值字面量类型标注（`n: 3 = 3`）会被读成赋值表达式、绑定丢掉初始化器。
+3. 续接失败（`2+` 这类真语法错）发 E0012「类型位的常量表达式不完整：运算符缺少右操作数」并**保留种子**做恢复：诊断已发（不静默），外层仍能闭合括号。
+
+### 三、验证
+
+- 闸门承重：去掉黑名单后 parser 类型测试 **42 通过 / 5 失败**（两条「字面量类型标注保住初始化器」新测 + 三条既有测试：结构体默认值、具名函数类型参数、函数类型参数同名同节点）；还原后源文件逐字节一致、47 条复绿。
+- 反例：`n: 3 = 3` 类型检查通过（绑定保住初始化器）。
+- 算术形态：类型位长度按折叠值校验（`2+3`→5、`2*3`→6、`7-2`→5）。
+
+### 四、诊断口径
+
+提交内语料夹具形态（顶层声明带初始化器 `d: Array(Int, 2+) = [1]`）实测**恰一条 E0012**；同一残缺表达式放进**块内且不带初始化器**时会带出两条级联诊断（「声明缺少初始化器」+「expected RBrace, found Eof」）⇒ 诊断已发、不静默，但**不是任何形态都单条**；未闭合括号（`Array(Int, (2+3`）仍报 E0010。
+
+### 五、错误类型（D59）
+
+**A 类**——旧行为是合法程序在解析期被拒（E0010），属「旧行为非成功」⇒ 可随重构顺路修；先红后绿、不改变原先成功程序的对外表现（既有语料条目零改判、既有 IR 快照零变化）、同提交登记、基线同提交再生、人工 review 五项齐备。残缺表达式的 E0010→E0012 属同一被拒类别内的诊断归因修正，不构成 D 类。
+
+### 六、零回归面
+
+测试只增（parser +8、defeq +1，均为新增，无删无放宽）；语料差分 +2（既有零改判）；IR 快照 +1（既有 228 份零变化）；错误码生成物未触碰且重跑幂等；`testsuite run fast` 2050 条 0 跳过、exit=0；五道 CI 独有门禁 + fmt 全绿。
+
+### 七、移交（本提交不碰文档，登记为文档债）
+
+1. `docs/src/dev/test-gate-census.tsv` 未收录本轮 4 个新测试（该表对 parser 测试文件有 39 处引用 ⇒ 是活表，需随本轮更新）。
+2. `docs/src/dev/architecture/03` 的 parser 行号引用已随本次改动漂移——按「文档里不得写行号」的口径，这批存量行号引用随 03 重写统一清零。
+
+## P3 3.20.13 收口（build.rs 的 locales 重建触发面对齐校验输入面——#458，2026-11-13）
+
+> **一、判据与修法**：判据 = **触发面 ⊇ 构建期校验的输入面**——任何能改变 build.rs 输出结论（告警/error/panic/链接指令）的文件输入都必须在触发声明里。修法 = `cargo:rerun-if-changed` 从 `locales/zh.json` 改目录级 `locales`（cargo 对目录按内容递归扫描变更，实测工具链 1.97.1），机理注释同步：validate 的「孤立条目」判据对任何语言（zh 与全部 bot 语言）都是 error（翻译残留 bot 不会清理）、「bot 语言缺失」判据覆盖全部 bot 语言，i18n bot（`.github/workflows/auto-translate-i18n.yml`）以 zh.json 为触发异步写全部非 zh 文件——旧触发面 ⇒ 非 zh 变更永不触发校验：假告警停留旧结论（cargo 重放旧 output 的 warning）、真孤立条目漏检。
+
+> **二、双轮独立查证（issue 正文不作事实源）**：队长与实现者各自独立推导、结论一致。五源：① `build.rs` 触发行与四处结论调用（parse_registry / validate / check_rfc_tables / type_tables::build_gate）；② code-tables 的 validate：孤立条目对 zh + 全部 bot 语言判 error、缺失对 bot 语言判 warning；③ 两个翻译 bot 工作流的分工（`.github/workflows/auto-translate-i18n.yml` 触发 zh.json、写 locales 全部非 zh 文件；`.github/workflows/auto-translate.yml` 只写 `docs/src/en/` 不触 locales）；④ RFC-013 三方一致性（诊断码注册源 ↔ locales ↔ 码表）与运行期码表注册源 `src/std/result.rs`；⑤ type-tables 基线为源内常量、build_gate 只跑 T1 且被扫描根目录级触发面覆盖。非缺口备案：MONO_REL / LSP_REL 触发声明对 build_gate 结论冗余但无害（T2 消费面保留触发正确）。
+
+> **三、红绿探针（mtime 实证，两轮独立）**：t1 主树——修前 touch locales/en.json（仅 mtime）后 build-script 重跑 0 次（非 zh 变更不触发校验；同期树上存在 E9999 哨兵孤立条目而校验未在其后运行 = 真孤立漏检的直接实证），修后同探针重跑 1 次、无 touch 全 Fresh 无虚假重跑循环、真跑告警面仅「type-tables T1 门禁通过」一行（6 语言齐备、无缺失告警）。t2 批次树（冻结 revision `41e69f10`）独立复测闭环一致。
+
+> **四、t2 变异与等价性（批次号 t3.20.13-verify @ `41e69f10`，trial 机械可逆 + 每轮 trial 后 rebuild）**：M1（触发行回退 zh.json）⇒ touch 后重跑 0 次（缺陷复现，判据能失败）；M2（en.json 注入 E9999 哨兵孤立键）⇒ 构建失败，「locales 孤立: E9999」+ 校验 panic 拒编——同时证明「非 zh 内容变更触发重跑」与「孤立判据端到端真跑」（t1 报告的「孤立判据无单元自测」证据缺口由此补上）。等价性：IR 快照比对 1 passed、语料差分逐字节零漂移；卫生：blob 比对 CLEAN + 树内 git status 干净 + release 完成。
+
+> **五、t3 对抗复审 APPROVE（七镜头）+ findings 处置**：①触发面对齐（注释机理与 validate 实码核对一致）；②无第二份路径来源（low 备案：locales 目录路径在 build.rs 与 code-tables lib 共三处字面量、无共享常量——父提交原状、本笔未新引入漂移面，与 RFC013_REL / type_tables 常量形态的差距随 #548 邻域观察）；③修本体非遮蔽（无校验逻辑改动、无 error 降级）；④边界（diff 仅 build.rs 触发行 + 注释两处）；⑤机理正确性（bot 分工与 cargo 目录扫描叙述与实文件一致）；⑥注释规范（无裸行号、无私有内容）；⑦诚实性（探针数字与 cargo 文档机理静态自洽，t3 未复跑探针——该缺口由 t2 批次树独立复测闭环）。info 备案两条：BOT_LOCALES 枚举的散文复述将来会失真（行为不受影响）；触发声明无入库测试守护（构建级指纹行为按约定探针不入库，重窄化只能靠 review）。
+
+> **六、流程事件**：会话流程事故——工作区曾出现未授权的 E9999 注入残留（一条被中断的探针命令部分执行所致），实现者 escalate、队长裁决 `git restore` 还原后继续；其 cargo 构建中断遗留的 rlib archive 损坏（LNK1120）由实现者删档重建恢复，均非仓库内容问题。教训（不入库，归队长记忆）：被中断的工具调用可能已部分执行，中断后必须核实工作树状态。
+
+> **七、计数与移交**：三级 +1 = 3.20.13（225→226）；二级不变。issue [#458](https://github.com/ChenXu233/YaoXiang/issues/458) **关闭**。同类缺口（host 分支 `.z3` 触发面、Z3_SYS_Z3_HEADER / CXXSTDLIB 环境变量 rerun-if-env-changed、两条非缺口备案）另案登记 [#548](https://github.com/ChenXu233/YaoXiang/issues/548)。批次树已 release。
+
+## P3 3.20.14 收口（E6007 比较兜底臂 Void 操作数初始化顺序 hint——#500，2026-11-13）
+
+> **一、判据与修法**：issue 自带甲案 A（只改文案/hint；乙案 B「解释器识别未初始化全局槽」需动运行期状态与 IR 表达，另议不采）+ 队长精确化：hint 进 **message 参数**（E6007 的 message 是参数、help 是该码静态模板——改 help 会打到全部 E6007 场景），条件 = 比较兜底臂**任一操作数是 `RuntimeValue::Void`**。修法 = 消息尾追加观测陈述 + 条件归因文案（a Void operand usually means a top-level value was read before initialization — if this happened during module initialization, check the initialization order inside the import cycle — compile-time warning W1007 reports that cycle），无 Void 操作数时消息**逐字不变**。
+
+> **二、查证（实现者推翻任务书一个前提，如实登记）**：实现者七源独立复核同意队长主体推导，但**「静态 Void vs Int 编译期拒绝」不成立**——Eq/Neq 的编译期类型规则走 `infer_equality`（非 `infer_binary` 的比较臂），对非记录形态吞掉 unify 结果恒返 Ok(Bool)：实测 `1 == "a"`、`v = void; v == 1`、`f: () -> Void; f() == 1` 三形态编译期全绿、运行期才落 E6007；排序比较（Lt/Le/Gt/Ge）才有两侧同型纪律（判据本体 = infer_binary 比较臂，mixed_comparison_err.yx 钉）。⇒ 运行期比较的 Void 操作数并非「未初始化读」单一来源，还可能是编译期放行的 Void 值比较——hint 按 usually/if 措辞容纳（#500 场景逐字准确）。Eq/Neq 与纪律的不一致另案登记 [#549](https://github.com/ChenXu233/YaoXiang/issues/549)（本笔只报告不修）。队长复审发现实现初版注释仍写「编译期比较规则已拦掉静态 Void」（与自身实测矛盾——成因断言过强，#519 批次同类），提交前修正为与实测一致。
+
+> **三、锚四层（先红后绿）**：集成主锚（三模块导入环 CLI run 端到端，hint 两段子串断言）修前红（E6007 文本与 issue 报告逐字一致、无 hint）、修后绿；集成反向锚（无 Void 场景无 hint）；单元锚（字节码直驱兜底臂——Void 左/右形态有 hint，(Int, String) 无 hint 消息 assert_eq 逐字钉死，修前红 2 锚）；编译期守卫（排序比较拒绝跨类型，钉真实纪律——把「编译期拦截」判据钉在它真正成立的排序比较上）。
+
+> **四、t2 变异与等价性（批次号 t3.20.14-verify @ `2038ac6b`——push 前 rebase 重写为终态 `67ba8575`、树内容逐字节同，trial 机械可逆 + 每轮 trial 后 rebuild）**：M1（摘 hint，Void 条件恒 false）⇒ 主锚红；M2（守卫删除，hint 无条件追加）⇒ 反向锚红（assert_eq 逐字失败）——「无 Void 逐字不变」判据有牙。修复态锚全绿；IR 快照比对 1 passed、语料差分逐字节零漂移；卫生 blob CLEAN + release 完成。
+
+> **五、t3 对抗复审 APPROVE（七镜头）+ findings 处置**：①唯一发射点（hint 仅比较兜底臂一处，其他 type_error 臂未动）；②诊断语义（E6007 码与 Err 通路不变、注册表与 locales 零改动、反向锚钉死）；③注释与事实一致（队长修正后的 Eq/Neq 陈述与提交信息口径吻合）；④边界（5 文件全录，无 locales/生成物/基线/W1007 告警面触碰）；⑤W1007 引用正确（模块导入环告警、value_edge help 点名边与被读槽）；⑥测试规范；⑦诚实性。3 info 全备案：提交信息锚列举不全但无虚构（第四锚被行为声明隐含覆盖）、测试模块清单散文排序微瑕、门禁声称由 t2 批次树独立复测闭环。
+
+> **六、计数与移交**：三级 +1 = 3.20.14（226→227）；二级不变。issue [#500](https://github.com/ChenXu233/YaoXiang/issues/500) **关闭**。Eq/Neq 编译期放行（跨类型相等与静态 Void 值比较编译期全绿、运行期落 E6007，与排序比较纪律不一致）归 [#549](https://github.com/ChenXu233/YaoXiang/issues/549)。批次树已 release。
+
+## P3 3.20.15 收口（嵌套括号声明的块体 return lambda 假拒绝——#546，2026-11-13）
+
+> **一、根因（两轴判别为轴 B，探针实测）**：return 语句在 parser 有**两种并存表示**——箭头糖路径产 `StmtKind::Return`（单表达式体糖化，parser/pratt/led.rs），手写 return 路径产 `StmtKind::Expr(Expr::Return)`（parser/statements/control_flow.rs）。值级分解的 wrapped_closure 探测只认 `StmtKind::Expr(Lambda)` 与 `StmtKind::Return(Some(Lambda))` 两种，漏认手写形态的载荷 lambda ⇒ 落进类型泛型注册分支剥一层 ⇒ expected 被剥到最内层标量（观测 `expected 'Box(t38)'`）。轴 A（parser 对包裹 Fn 的括号保留形态）未成主因——无泛型嵌套括号形态修前即绿（不同轴实证）。
+
+> **二、修法**：wrapped_closure 第三臂识别 `Expr(Return(Some(Lambda)))`（与既有两臂同轴：体是外层函数本体），expected 保括号声明层（内层 Fn 整体，#501 闭包包装语义）。括号语义/柯里链路/mono 面（TypeRef 声明名保留链路）零触碰。**生成物随代码**：statements.rs 净增 12 行致 E1001/E2010/E2013 四处发射点 +12 平移，生成器再生、二次运行幂等（diff 逐字节一致）、语义零变化（提交信息含 10⑤ 分类说明）。t1 首轮即被「生成物零 diff」门禁拦住、按门禁指引再生转绿——该门禁再次实证拦住行号平移欠账。
+
+> **三、锚**：主锚（issue 夹具 0 诊断，修前 E1012 逐字复现）+ **收口补充反向锚**（同形态真不匹配 `return (v) => 42` 恰 1 条 E1012；expected 侧语义形状断言 = 内层 Fn 整体 `expected 'fn(tX) -> Box(tX)'` 且无 `-> fn(t`——类型变量号随分配序漂移故不逐字钉全串的取舍记录在锚注释；实测诊断形状先于落锚）。回归锚全绿：#501 七锚 / #442 五锚 / #523 四锚 / 柯里集成锚 / 语料 generic_slot_alignment.yx 与 paren_return_fn.yx。
+
+> **四、t2 变异与等价性（批次号 t3.20.15-verify @ `0e0e5fce`，trial 机械可逆 + 每轮 trial 后 rebuild）**：M1（摘第三臂）⇒ 主锚红（假拒绝复现）；M2（摘 Lambda 载荷守卫，任意载荷都算 wrapped_closure）⇒ 自造裸链块体标量 return 夹具翻红——**守卫承重**；t2 非阻塞观察：M2 红态还连带 std 函数体 5 条 E1012（Vec/Iter 签名），「载荷必须 lambda」的承重面比 #546 单点更宽，误摘守卫 std 即碎（留档 m2-trial-full.log，批次树随 gc 回收，结论落此）。修复态锚全绿；IR 快照 1 passed、语料差分逐字节零漂移；卫生 blob CLEAN + release。
+
+> **五、t3 首轮 REJECT → 修复轮 → 聚焦复审 APPROVE**：REJECT 一 minor = 「值级形态」段注释计数残留（主注释已改「三种 parser 标记」、该段仍写「两种标记见上」——同一提交内注释更新不完整，与提交信息声称矛盾；否决理由 = 可读性）。队长修复 = 该行注释更正 + 提交信息 integration 计数 345→346（含收口补充的反向锚）amend（修复轮段落因原文换行匹配失败未入提交信息，由本节承载）；聚焦复审（新 ask 自包含前轮结论）APPROVE：修复面仅一行注释、无残留。t3 另两条 info：边界探针/生成器幂等声称在只读约束下未复跑（探针不入库约定 + 只读铁律，静态对账替代）——如实标注。
+
+> **六、计数与移交**：三级 +1 = 3.20.15（227→228）；二级不变。issue [#546](https://github.com/ChenXu233/YaoXiang/issues/546) **关闭**。修复笔推送终态 `82a8f2e8`（量测冻结版 `0e0e5fce`/amend 版 `f93fef84`，树内容逐字节同——本笔先推修复笔取终态号再写收口，避免 3.20.14 的修正笔循环）。修复笔推送终态 `2617c71c`（先推修复笔再写收口，无修正笔）。批次树已 release。
+
+## P3 3.20.17 收口（build.rs 触发面剩余三处——#548，2026-11-13）
+
+> **一、查证（cargo 源码级）**：实现者把 cargo 语义查到源码层——目录触发走 mtime_recursive 递归扫描且路径缺失 = MissingFile = stale（fingerprint 模块）；rerun-if-changed 路径相对 package root 解析、绝对路径在指纹存储时 strip_prefix 归一（wasm 合并依据）；rerun-if-env-changed 按「值或缺省」入指纹哈希，未设置→设置/值变/设置→取消三迁移全触发；cargo 收到任意 rerun-if 声明后只跟踪已声明项（缺口机理本体）。修法 = 顶部补 .z3 目录级触发 + Z3_SYS_Z3_HEADER / CXXSTDLIB 两条 env 触发；wasm 分支内重复声明合并（顶部块对全部目标无条件执行）。
+
+> **二、红绿探针矩阵（mtime/env 实证，cargo 1.97.1）**：修前 touch .z3 内文件 / 设置 Z3_SYS_Z3_HEADER / 设置 CXXSTDLIB 三探针重跑全 0（168 Fresh，缺口实态）；修后同探针全 ≥1、无变化全 Fresh（无虚假重跑循环）、env 三迁移逐一 1 次、幂等无循环（同 touch 第二轮 0）。探针只 touch 与 env 设置，.z3 内容零改动。
+
+> **三、t2 变异与等价性（批次号 t3.20.17-verify @ `534dc0ba`，trial 机械可逆）**：M1（摘 .z3 触发行）⇒ touch 探针翻 0；M2（摘两条 env 声明）⇒ env 探针翻 0（CXXSTDLIB 为 t2 超出任务点名的顺带加测，双向 0 均计入）。t2 诚实披露：探针锚经历三轮自修正（v1 只数 stdout 漏 stderr 进度行、v2 锚格式与本机 cargo -v 不符、v3 合并两流 + 排除 rustc.exe）后对四项全量重测，output 文件 mtime 交叉印证（触发后重写于 touch+0.25s）——量测工具自身的可靠性迭代在案。修复态探针全绿；语料差分零漂移；卫生 blob CLEAN + release。
+
+> **四、t3 首轮 REJECT → 修复轮 → 聚焦复审 APPROVE**：major = 修复笔 `534dc0ba` 提交信息「CI 交叉核查：无 target 指纹缓存层」**可静态证伪为假**——ci.yml 三作业（check/test/msrv）actions/cache 均缓存 target（含 .fingerprint 指纹库）与 .z3，指纹跨 run 存续；实现者与队长的 CI 交叉查证都只看了 cache 的 registry 面、未读 path 清单（workflow 文件声称与代码声称同需多源查证——教训固化）。该提交已推送不可 amend：事实更正由修复笔 `f3bc6a94` 提交信息（成因 + 实际结论——本修在 CI 缓存语义下同样生效且更有价值）与本节承载。low = CXXSTDLIB 注释读取面比实际宽（macOS 硬编码 c++ 不读该变量）→ 修复笔注释收窄。聚焦复审 APPROVE：修复面仅注释三行、CI 缓存事实独立确认。
+
+> **五、计数与移交**：三级 +1 = 3.20.17（229→230）；二级不变。issue [#548](https://github.com/ChenXu233/YaoXiang/issues/548) **关闭**。批次树已 release。
+
+## P3 3.20.18 收口（单参数谓词导入/本地面同构——#551，2026-11-13）
+
+> **一、方向反转（探针实证，issue 框架被推翻）**：issue 按 #527 框架预期「本地面可解析、导入面拒绝」，实测恰好相反——无标注单参数谓词本地面**假拒绝**（Phase 2.5 臂 filter_map 丢弃无标注形参 ⇒ vars 形参表空 ⇒ params.first() 取不到基类型 ⇒ 不进 proof_fn_bases ⇒ 值绑定/返回位注解不精化，E1012+E1002 两错）、导入面**假放行**（#524 单参数臂按 def.param_type——collect_predicate_defs 对无标注形参的 Int(64) 默认值——重建 ⇒ 进 proof_fn_bases ⇒ 0 诊断）。任务契约预设「分歧方向以探针为准（假拒绝或假放行都算红）」，实现者按实测执行。
+
+> **二、修法**：导入 proof-fn 变量构造**统一 vars 直读口径**——orchestrator 取消「def 缺席」分流（proof_fn_params 提取器本身形态无关：Fn+MetaType 即 Some，改的是分流非判据）；checker 导入臂单/多参数同通道（def.param_type 构造降为现网不可达兜底臂）；def 仍进 env.predicate_defs（模板面 #524 语义不变）；Int(64) 默认值在模板面的消费保留（红线：模板面零变化）；本地面零变化。
+
+> **三、D59 边角披露**：修后导入面对「修前假放行」的程序转为拒绝（与本地面同判）——严格字面触及「改变原先成功程序」方向。按同族对称性修正归 C 类收口的依据：① 无标注形参谓词的语义本就未定义（本地面丢弃、导入面伪造 Int(64)，两 face 各自即兴、无设计行为）；② 统一到 vars 直读是判据单源的唯一自洽解（反向统一 = 本地面接纳伪造形参，更大的语义发明）；③ 暴露面实测为空（语料/测试无此类夹具、该形态属作者笔误域）。若日后出现真实受影响程序，语义取舍交用户裁决。本地面自身对该形态的假拒绝未动（与 #550 注解位精化同区，如需修属新裁决）。
+
+> **四、锚与验证**：前提锚（本地面现状 ==2 钉住）/ 主锚（导入与本地面同判，修前 import 0 vs local 2）/ 反向锚（真不满足仍拒 E1093 expected 1）/ 回归（#524 三锚 + #527 五锚 + #522 面锚 2 条全绿，integration 全量 354 passed）。t1 门禁 14 项全绿（testsuite fast 2071 条、IR/语料零漂移、生成器 5 条目 8 发射点行号平移再生二三次运行 diff 相同）。t2（批次号 t3.20.18-verify @ `0fe41d3f`，trial 机械可逆）：M1（恢复 def 分流）⇒ 主锚红（import 0 vs local 2 复现）；M2（注入 predicate_defs）⇒ #527 元数锚翻红（模板面守卫有牙）；修复态锚全绿；IR/语料零漂移；卫生 blob CLEAN + release。
+
+> **五、t3 对抗复审 APPROVE（七镜头）+ findings 处置**：2 low 备案 = 文档精度（Export.proof_fn_params 字段文档的机制模型未覆盖 Assign 形态谓词的 `_ =>` 臂双通道分工——该形态谓词的同权走 export_register_type 直读 + def 并入，不走 proof_fn_params；兜底臂「全部经它或显式双 None」两分法漏第三类 Assign 臂 Function 导出——行为正确无影响，随 #550 批次顺修）；1 info = 只读约束下未核实的运行时声称（主锚修前数字、门禁数字）由 t2 批次树独立复测闭环。
+
+> **六、计数与移交**：三级 +1 = 3.20.18（230→231）；二级不变。issue [#551](https://github.com/ChenXu233/YaoXiang/issues/551) **关闭**。修复笔推送终态 `0fe41d3f`。批次树已 release。
+
+## P3 3.20.19 收口（块局部绑定的谓词注解精化——#550，2026-11-13）
+
+> **一、双出口查证 → 出口 A（设计缺口）**：RFC-027 §3.1 明文谓词约束「同样适用于局部变量声明」、SPEC type-system §7.1 无排除 ⇒ 绑定注解位精化是设计内行为，实现缺 = C 类直修。缺口精确层 = **走查器分叉**（不在注解位 vs 签名位）：StatementChecker::check_stmt 面（顶层 / 带 Fn 注解函数体）的正格化本已通（修前 CLI 绿、Refined Display「int64 {IsPositive(5)}」证实转换发生），ExpressionInferrer::infer_stmt 的 Assign 臂（块局部绑定：main 块 / if 分支 / while 体 / spawn 体经 infer_block 走查）直接 raw Generic 统一 ⇒ E1002。#550 issue 记载的「四组合逐字同判」与此吻合（四组合都落在 inferrer 面）。
+
+> **二、修法（判据单源，禁令三）**：check_var_stmt_inner 的内联正格化提取为共享自由函数 refine_binding_annotation——Terminates 内置谓词分支（base 新鲜变量）+ proof_fn_bases 分支（base = 声明首形参）语义逐行保留（含 RFC-027a T2 测度保真缺口注记随迁）；infer_stmt Assign 臂同源接入（Refined 对统一透明——unify 入口剥基，RFC-027 §6.1）；顺修 #527 t3 备案的 2 low 文档精度（proof_fn_params 字段文档补 Assign 形态谓词 `_ =>` 臂双通道分工、兜底臂两分法补第三类 Assign 臂 Function 导出）。**生成物随代码**：statements −53 / expressions +12 / checker +5，发射点行号平移再生，二次运行 GEN_IDEMPOTENT_OK。
+
+> **三、锚与验证**：主锚（块局部单参数 IsPositive(5)=3 与多参数 SumUpTo(1,2)=5 ⇒ 0 诊断，修前 E1002 逐字）/ 反向锚（SumUpTo(1,3)=5 不满足仍拒——E4018 在场 + E1002 缺席双断言，实测 E4018「约束不满足（参数: [Int(1), Int(3)]）」，判据走证明函数面非吞诊断）/ 回归（#524/#527/#551 全部既有锚 + statement 面四形态修前绿修后仍绿，integration 全量 357 passed）。t1 门禁 14 项全绿（testsuite fast 2074 条、IR 快照 / 语料差分零漂移）。t2（批次号 t3.20.19-verify @ `14cc97ce`，trial 机械可逆）：M1（摘接线）⇒ 块局部双主锚红（E1002 复现）；M2（遮蔽形态：调用但丢弃结果）⇒ 双主锚红——「接线结果被消费」承重（非仅调用即过）；修复态锚全绿；IR/语料零漂移；卫生 blob CLEAN + release。
+
+> **四、t3 对抗复审 APPROVE（七镜头）+ findings 处置**：2 info 备案：①反向锚的 E4018 在场 / E1002 缺席是对 CLI 合并输出的全局子串检查——对消息文本演化有耦合（当前 E4018 模板不含该串，现实不构成缺陷）；②生成器幂等与主锚修前逐字文本在只读约束下未直接复跑（发射点行号抽查全中 + 消息生成机理静态自洽作间接佐证），由 t2 批次树独立复测闭环。
+
+> **五、轴 2 另案（交裁决）**：导入面**多参数**谓词的约束求值跨模块不可达——post-pass3 refined walk 的证明执行只查主模块 AST ⇒ 导入多参谓词绑定注解（含顶层）在 Refined 转换与 unify 均已过后仍被 E4018 假拒绝（修前拒于 E1002、修后拒于 E4018——同拒换轴无回归）；导入单参数走模板面求值故绿。修复路径两条均有设计权重：proof_execution 接依赖模块 AST（pipeline + orchestrator 共 5 调用点签名贯通）或扩模板面（被 #527 元数边界锚显式封锁，走此路须先推翻 E1093 设计）⇒ 不满足 C 类顺路修条件，登记 [#552](https://github.com/ChenXu233/YaoXiang/issues/552) 交用户裁决。
+
+> **六、计数与移交**：三级 +1 = 3.20.19（231→232）；二级不变。issue [#550](https://github.com/ChenXu233/YaoXiang/issues/550) **关闭**。修复笔推送终态 `14cc97ce`。批次树已 release。
+
+## P3 3.20.16 收口（多参数谓词导入面同构——#527，2026-11-13）
+
+> **一、查证与载体选型**：实现者七源查证确认 issue 双前提成立（本地面 add_type_definition RFC-027 Phase 2.5 臂登记 proof-fn Fn 形态变量、经 lookup_proof_fn_base_type 按全形参查可解析；导入面 collect_predicate_defs 单参数收窄拿不到 def → Export.predicate_def=None → register_use_export 回退 Struct poly → E1012+E1002）。载体选型 b 案 = Export 增 proof_fn_params（多参数谓词 proof-fn 形参清单）：生产端经对称提取器 PredicateDef::proof_fn_params（构造/解构同栖）从定义方 env.vars 已登记形态直读——判据单源仍 = add_type_definition + proof_fn_type，导出面不重推；a 案（PredicateDef 扩参数列表）被否：会把多参数 def 带进 env.predicate_defs 破坏模板面 try_resolve 阶段 1 单参数模型（E1093 设计面）。消费臂不并入 predicate_defs（与本地第零遍收窄一致）；Assign 形态多参数谓词本来就通（Fn 随 mono_type 走），缺陷面仅 TypeDefinition 形态。
+
+> **二、锚五条**：本地面现状（修前修后同绿）/ 主锚（导入后与本地面同判，修前 `E1012 expected 'int64', found 'SumUpTo(b, int64::4)'` + E1002 逐字复现）/ 多参数 use 门控（#524 常驻锚只覆盖单参数，本条补多参数形态）/ 反向（真不满足恰 1 条 E1002，与本地同判）/ 元数边界（错元数 E1093 发射且 expected=2——模板面若被扩权该锚自动翻红的设计面守卫）。#524 三锚原样绿。
+
+> **三、t2 变异与等价性（批次号 t3.20.16-verify @ `2617c71c`，trial 机械可逆 + 每轮 trial 后 rebuild）**：M1（摘消费臂回退 Struct poly）⇒ 主锚红（假拒绝复现）；M2（注入 a 案行为——伪造多参数 PredicateDef 并入 predicate_defs）⇒ 元数边界锚翻红（模板面单参数模型吞掉元数失配、E1093 消失）——E1093 设计面守卫有牙。修复态五锚全绿；IR 快照 1 passed、语料差分逐字节零漂移；卫生 blob CLEAN + release。
+
+> **四、t3 对抗复审 APPROVE（七镜头）+ findings 处置**：1 low = 提交信息平移清单漏 E1091（invalid_generic_self_reference 同样 +19 平移且已再生——再生本身正确、8 处发射点与再生条目逐一对上，仅枚举不全）；1 info = **#524 时代既有的单参数臂参数源不对称**（无标注形参：collect_predicate_defs 默认 Int(64) vs 本地面 Phase 2.5 臂丢弃——两臂构造的 Fn 形态不同；暴露面 = def 有登记且形参无标注的边角；#527 多参数臂直读 vars 已登记形态恰是更忠实的口径）→ 登记 [#551](https://github.com/ChenXu233/YaoXiang/issues/551)；运行时声称（生成器 md5 幂等、门禁数字、修前逐字文本、Assign 形态实测）按只读铁律标「未核实」，由 t2 批次树独立复测与实现轮实跑闭环。
+
+> **五、实现轮观察项**：绑定注解位**正确元数**的谓词精化（`y: SumUpTo(1, 2) = 5`，值可满足）E1002 假拒绝——annotation 停留 raw Generic、Refined 转换未发生；单/多参数 × 本地/导入四组合实测逐字同判（不属导入面不同构轴），与 #442 注解面同族不同轴 → 登记 [#550](https://github.com/ChenXu233/YaoXiang/issues/550)。
+
+> **六、计数与移交**：三级 +1 = 3.20.16（228→229）；二级不变。issue [#527](https://github.com/ChenXu233/YaoXiang/issues/527) **关闭**。修复笔推送终态 `2617c71c`（先推修复笔再写收口，无修正笔）。批次树已 release。
+
+## P6 6.9.3c Unproven 诊断与 E4023（2026-11-13，提交 `5aa7a54d`，RFC 增补 `c52f54b6`）
+
+### 一、范围
+
+把「无法证明」的诊断出口做成可携带命题的用户域诊断，零 ICE；判等定义与诊断形状写进 RFC-027 §12。本轮**不含**判定点接线（见 §六 撤回链），不动 Σ/Π。
+
+### 二、实现
+
+1. **载荷**：`ProofFailure::Unproven` 增 `subject`（未解命题主体：项命题 `Term(ConstExpr)` 或类型等式 `TypeEquivalence(Box<MonoType>, Box<MonoType>)`）与 `span`（义务位置）。`None` 显式表示「该判定点无结构化命题」，不以哑串冒充（类型层面区分「无命题」与「空串」）。
+2. **生产构造点 15 处逐个填值**：判等失败 2 处给等式命题；单侧归约失败 3 处给 None（该点只归约一侧，不是等式义务）；项归一化 2 处给失败项本身；约束判定 6 处给约束本身；终止性 1 处与边界检查 1 处给 None（前者原因自带位置，后者只有约束文本）。无该填而未填、无伪造。
+3. **形状偏离（实测理由）**：类型等式两侧用 `Box<MonoType>`。MonoType 176 字节、内联后枚举 352 字节（差 272 字节超 clippy 大变体阈值 200），去掉装箱即触发 `large_enum_variant` 与 `result_large_err`；装箱后该枚举 80 字节。改用字符串摘要不可取——会把「无命题」与「空串命题」重新混同，且要另写一套有损渲染。
+4. **诊断**：一般性「无法证明」落新码 **E4023**（E4xxx 面、`Generic`、非豁免位置、模板「无法证明：{proposition}（{reason}）」），六语齐备；原因承载能力边界/预算耗尽/未绑定符号名；预算一行摘要、完整步数进日志；位置缺失落默认位置并记日志。E2031 退回精化通道专用。
+5. **RFC**：RFC-027 §12 增补判等定义（归一化后同一、子类型独立、Refined 谓词不同 ⇒ Unproven、归约失败不产生 Disproved、判等不绑定变量）、`Unproven ≠ False` 在类型等式上的落点、诊断形状（命题+原因+位置；预算报告形式放松为一行摘要并给出理由）。
+
+### 三、先红
+
+旧路径断言 `实际: 'E2031'` ⇒ 新实现 E4023；变异「`TypeEquivalence` 渲染成中性主语」使断言红（`Cannot prove: 该义务`）。
+
+### 四、实测（复审独立复核）
+
+语料逐字节一致；IR 快照 0 行差异；fast 2058 全绿；lib 1662 全过；错误码生成器幂等；`build.rs` 码表区间对账随构建通过；装箱必要性实测（176/80/352/80 字节 + clippy 红）。
+
+### 五、登记项（6.9.3d 接线前处理）
+
+1. **E4023 今天无用户可达发射路径** ⇒ 零差异是「没走到」而非「没影响」。15 个生产点的去向我逐个核过：predicate 6 处被精化通道拦下改报 E2031；bounds 1 处经 environment 变 W1063；termination 1 处走 E4021；expressions 静默；equivalence 5 处与 const_eval 2 处所在的 defeq/normalize_type 无生产调用者；checker 的所有权层防御臂不构造 Unproven。
+2. **「不得伪造命题」只有注释约束、没有门禁**：把某 None 站点改成编造项，14 条 verdict 测试仍全绿 ⇒ 接线前须补门禁（每点 subject 要么 None、要么可回溯到该点真值）。
+3. **一般性义务诊断在生产上暂无真实位置**（唯一填位置的站点走另一码）⇒ 接线到用户面时必须带真位置。
+4. 终止测度未随诊断给出（先于本批的既有形态）。
+5. 「需要证明函数」码 E4020 不携带命题，载荷中的命题不渲染（接线时确认是否该带）。
+
+> 2026-11-13 第一性重写后，以上五项已并入 [09](./09-execution-wbs.md) §P6 6.9 的 I5/I7/E 验收；本节的「登记项」保留为历史出处。
+
+### 六、撤回链
+
+6.9.3c 先在首版实现 `can_assign` 的 defeq 兜底，随后整段撤回：`can_assign`/`check_assignment` **生产零调用者**（生产赋值兼容走 `solver.unify`）⇒ 接线「单元可达、用户不可达」，语料零变化是「没走到」而非「兜对了」。撤回后仅保留穷尽 match、Debug 串清除、`DefeqContext` 最小环境。判等何时真正接入生产判定面，留 6.9.3d 在真实判定点接线后再宣称。
+
+### 七、流程登记（本次的违规与纠正）
+
+1. **评审轮换超限**：`reviewer-b` 连续 7 轮未换，违反团队约定「同一评审连续 5 轮以上即换人」；`reviewer` 随后连审 5 轮亦到限。纠正：收口后的复审起改由未参与本批的成员复审，并按 5 轮上限交替。
+2. **接线契约的前提未先证**：6.9.3b/6.9.3c 的接线契约假设 `can_assign` 是生产判定点，实际不是 ⇒ 两轮工作落在不可达路径。纠正：此后任何「接线」类契约须先给出生产调用图证据。
+3. **宣称超前**：曾称「6.9.3c 让用户第一次感知判等」，实际未接线 ⇒ 已在 09a 更正。
+
+### 八、不宣称
+
+判等尚未接入生产判定面；E4023 尚无用户可达路径；Σ/Π 未落地；6.9.3d、6.9.2-C3、6.9.4、6.9.5 未开工。
+
+## P3 3.20.20 收口（Eq/Neq 编译期放行的语义判别——#549 裁决包呈报等用户，2026-11-13 查证呈报；本节与 WBS 行 2026-11-14 补登）
+
+> **一、查证结论（探针矩阵，证伪「可按 C 类顺修」的前提）**：issue 框架的「编译期放行」实测拆成两类后果——①容器异型 Eq 4 形态族（列表 vs 元组、元素类型异型的组合）编译通过且**运行成功打印 false**：#304 已裁定的运行期语义支撑这些程序属「原先成功」程序，编译拒绝将改变其可观察行为 ⇒ D59 **D 类**，不满足顺路修条件；②标量异型比较、静态 Void 值比较、异型 Dict 比较在运行期落 E6007（旧行为非成功），属可顺修面但不构成独立裁决点。顺带观测**同型** Dict==Dict 运行期也 E6007（Handle 无比较臂）——备案，不在本裁决点内。受影响面 grep 实测零依赖（语料 / 测试无此类夹具）。
+
+> **二、裁决包（按四件套呈报 issue #549 评论，等用户裁决）**：情况与探针证据 / 每选项优缺点（选项 A 编译拒绝、全量对齐排序比较的两侧同型静态纪律（判据本体 = infer_binary 比较臂，mixed_comparison_err.yx 钉）——推荐，代价 = 改变容器异型比较程序行为、需基线再生与人工 review；选项 B 保留运行期 false、走设计流程）/ 推荐 A / 不可逆点（行为变更面）。裁决后另行实施与收口。
+
+> **三、关联**：#500 实现轮（3.20.14）在比较兜底臂注释登记了 Eq/Neq 编译期吞 unify 结果的机理（与排序比较纪律不一致的根因位置）。本批次零代码改动（查证 + 呈报），无验证链。
+
+## P3 3.20.21 收口（方法面证据检查——#538，2026-11-14）
+
+> **一、查证推翻 issue 夹具前提**：issue 复现夹具的 `y: Int = 3`（非 mut）按 6.8.5-2a 值环境是编译期已知值（先例 `2fa43b2a`，早于 issue 复现 revision），证据判定两面都通过；函数面对同形报 E1002（特化强制）而非 E1113——真缺陷红态 = `mut y` 变体。实现者处置：mut 锚钉红转绿 + 原文夹具作现状锚 + 判据注记（翻面注释随提交登记）。
+
+> **二、第一笔修法（`8355a283`）与 t3 首轮 REJECT**：修法 = CallSiteSlots{names, const_params} 槽位表加宽（一条注入链贯通方法/函数面）+ 方法键注册（`Type.method` 与 method_bindings 同构造）+ 方法键状态位（last_type_args 先例）+ 发射点方法/函数面共用同段判定；函数面零变化；特化形态门对方法键天然关 ⇒ IR 零变化；剩余形态（显式 self 接收者 / 类型体方法 / 外部绑定 / 跨模块）按宁可少报不判 → 登记 [#553](https://github.com/ChenXu233/YaoXiang/issues/553)（跨模块归 [#539](https://github.com/ChenXu233/YaoXiang/issues/539)）。t2 PASS（M1 摘方法臂主锚红静默复现 / M2 键解析不消费主锚红——解析-消费链承重）。t3 七镜头 **REJECT，3 findings 全 verified**：F1(high) 判定消费点在实参推断之后、实参 FieldAccess 覆盖键，判定对象错误（字段文档「同一表达式」契约被结构性违反）；F2(medium) Some 分支与非字段访问被调方消费残留键；F3(low) 主锚缺 span 断言。族测绘同时产出：[#537](https://github.com/ChenXu233/YaoXiang/issues/537) 分叉 = 调用点精化义务检查首行只认 Var 被调方；[#539](https://github.com/ChenXu233/YaoXiang/issues/539) 分叉 = Export 边界不携 q=0 事实。
+
+> **三、复审修复笔（`cf4b7828`）**：修法 = **快照判据**——调用推断在推断被调方之后立即 take 方法键、被调方是字段访问才保留、经参数传入判定函数，判定只消费参数不读状态位；不从被调方表达式重解析键（避免第二份解析判据）。F1 两路径先红后绿：清键漏报（`b.get(b.v)(y)`——普通字段实参触发字段访问臂入口清键，判定取到 None 早退，修前 0 错静默吞 E1113）修后报恰 1 条 E1113 点名被调方自己的 binder；错键（`b.get(f.other)(y)`——实参 method 引用写键覆盖，修前借错方法槽位表发射、点名错 binder 'M'）修后点名 'N'，'N' 在场 + 'M' 缺席双向断言。F2 探针三重阻断证伪跨语句可达（函数声明体不可见外层局部 / 别名形态 ir_gen E3005 且推断器逐语句新建 / 值位置 method 引用被类型面 E1002 拒）⇒ 按字段文档自述契约（「其余路径不读」）结构性消除、不设可观测锚——**实现者探针同时修正队长的两个理论**：「错键路由到 const_params 为空的表」不可构造（方法键的槽位表登记被非空门控）、可构造漏报走清键路径；「跨语句残留」不可达（推断器逐语句新建）。F3 主锚补 span 断言（探针实测行号 + 语义注释）。
+
+> **四、验证链（修复笔）**：t1 门禁 14 项全绿（integration 362、testsuite fast 2079、IR 快照稳定、语料差分逐字节一致、生成器两次再生逐文件 md5 相等）。t2（批次号 t3.20.21-verify @ `cf4b7828`，trial 机械可逆）：M1（恢复旧消费——判定读状态位）⇒ 清键漏报锚红（E1113 消失）+ 错键锚红（点名回 'M'）——快照对应性承重；M2（快照丢失无条件传 None）⇒ 主锚红（方法面判定整体消失）——参数通道唯一；修复态五锚绿；IR / 语料零漂移；卫生 CLEAN + release。t3 七镜头 **APPROVE**：2 info 备案（错键锚未断言 span 行号的纪律不对称——与锚①/主锚不一致，可读性观察非阻断；「构造器 None」实测 4 处的计数口径更正）；1 观察项由队长核伪（锚注释引用的先例测试名 test_const_arg_missing_evidence_is_reported 实存于 compile_time_evidence——t2 树内检索面遗漏，注释无漂移，无需修改）。
+
+> **五、教训**：last_type_args「同款」状态位只复制了模式、没复制其对应性守卫（对照：函数面实例化请求的消费点有类型过滤与元数守卫）——复制状态位机制时必须连带对应性校验；t3 对 F2 的静态走查给出跨语句可达结论，被实现轮探针部分证伪——复审只读约束下的静态结论须由验证轮探针闭环。
+
+> **六、计数与移交**：三级 +2 = 3.20.20（补登，裁决包批次）+ 3.20.21（232→234）；二级不变。issue [#538](https://github.com/ChenXu233/YaoXiang/issues/538) **关闭**。第一笔修复笔推送终态 `8355a283`、复审修复笔推送终态 `cf4b7828`。批次树已 release。
+
+## P3 3.20.22 收口（证明函数形参精化的嵌套义务展开——#537，2026-11-14）
+
+> **一、查证推翻 issue 两个自称（探针 14 个 + RFC 原文）**：①递归义务展开非 D 类裁决事项——RFC-027 §3.1（「`b: Positive(b)` 和 `f(5)` 一样，就是函数调用」）/ §3.3（调用点前置条件）/ §12.2（Unproven 不得静默放行）/ §3.4（凡编译器无法静态证明的代码不得通过编译）/ 语法节（精化约束绝不静默丢弃）组合明文，是既有规则的缺失接线；②tripwire 自述的「空谓词命名空间」不是根因——插桩实锤真根因两层：证明函数按 TypeDefinition 语句注册的分支跳过 `resolve_type_annotation`（被调签名精化位停留裸 `Generic`，被调签名实测停留裸形态）+ 执行器只求值函数体不展开被调方自身形参精化。D59 判 **A 类**（07 表「该报的错误被吞掉」）。探针矩阵同时钉住三个既有边界另案：负字面量实参折叠（[#556](https://github.com/ChenXu233/YaoXiang/issues/556)）、普通函数面模块常量（[#557](https://github.com/ChenXu233/YaoXiang/issues/557)，归 6.9.4 Γ 等式桥）、自引用精化环去重收口（修复内覆盖）。
+
+> **二、修法（判据单源，两层）**：登记面——proof-fn 注册分支的形参位接 `resolve_type_annotation`（与 Assign 臂同一归一化管线，#263 口径同步：非法用法写诊断不静默）；执行器——广度优先工作清单展开嵌套义务（`expand_callee_param_refinements` 先于体求值）：被调形参名以调用实参代入，Call 形态入队继续执行，谓词内联的闭合 Bool 约束以「形参实参 + 模块常量」为值环境求值判伪出 E4018（与 `revalidate_refined` 闭合支同码同形态）；去重集（自引用链）+ 预算 128（逐层变化的链）收口，触界停止展开（不判 ≠ 判伪，已展开义务照常判定）；模块级不可变绑定字面值折叠（按声明序，mut 与不可折叠不收——与 `check_call_arg_refinements` 缺值闸门同向）。tripwire 翻面成真锚。RFC-027 §11 落地注记补第四义务面一句（证明执行器嵌套展开——声明与事实同源，随轮顺修）。
+
+> **三、锚与验证**：锚四条——主锚（嵌套义务违反报 E4018 参数 [Int(7), Int(0)]，与 issue 期望逐字一致）/ 模块常量变体锚 / 内联形态锚 / 合法链控制锚（嵌套义务成立零诊断）；翻面 tripwire + 普通函数对照锚原样绿。t1 门禁 14 项全绿（integration 366、testsuite fast 2086、IR 快照稳定、语料差分逐字节一致、生成器再生 E4018 发射点 5→6 + E1092/93/94 行号平移幂等）。t2（批次号 t3.20.22-verify @ `bbe7168f`，trial 机械可逆）：M1（摘登记面归一化）⇒ 主锚红（签名精化位回裸 Generic、义务链静默断裂复现）；M2（摘执行器展开）⇒ 主锚红（只看体为真就放行复现）——两层各自独立承重；修复态锚全绿；IR / 语料零漂移；卫生 CLEAN + release。t3 七镜头 **APPROVE**：2 minor 备案——①RFC-027 章节归属笔误（代码注释与提交信息写「§8：预算硬限制是停机问题的工程解」，该原句实际在 §4.1，§8 提供预算表——实质主张两章都支持；**本节即事实更正**：预算工程解 = §4.1 原句 + §8 预算表组合；注释行随下次触碰 proof_execution.rs 顺修）；②预算耗尽的剩余静默面（>128 层合法深链自第 129 层起不判——已展开义务照常判定；实现者披露论据成立：改为报错会让义务链全真但超 128 层的原先成功程序报错，属 D 类；展开预算是 RFC §8 判定预算之外未明文覆盖的维度，属 D59 安全选择，记录在案）；1 info = 代码注释对「3.20.22 实录」的前向引用由本节兑现核销；未核实项（探针出处 / 修前红态 / 生成器幂等 / 语料零漂移）由 t2 批次树复测与静态对账闭环。
+
+> **四、计数与移交**：三级 +1 = 3.20.22（234→235）；二级不变。issue [#537](https://github.com/ChenXu233/YaoXiang/issues/537) **关闭**。修复笔推送终态 `bbe7168f`（rebase 重写前 `5be643c9`，树内容同）。批次树已 release。
+
+## P3 3.20.23 收口（跨模块导入的 const 泛型调用接入证据检查——#539，2026-11-14）
+
+> **一、机理细化（读码证实）**：导出面 lookup 只克隆 `PolyType.body` 丢掉 const_binders（binder 实际登记在签名收集期写入 env.vars 的 PolyType）+ `declared_call_site_params` 槽位表无导入条目——导入面**两样事实都缺**；推断器消费点在 statements.rs `import_binding`（pass3 入 body scope，`add_imported_var` HashMap 末写胜出 ⇒ 单点接线即全覆盖模块级 + 块级 use）。特化请求的跨模块消费通道已存在（driver aggregate_instantiation_requests 用 ir_gen 同一 resolve_call_target + 别名表）——字面量导入调用修前就能跑通特化，缺的只是证据判定面。
+
+> **二、D59 分类依据**：C 类（静默不动作）——义务本身已被 RFC-039 D62 裁决（「f(y) 无证据从静默通过变编译错误」，不可逆变更已获批准）；SPEC type-system §7.1 与 RFC-011 §4.1 同文「调用侧义务按声明强度检查」无跨模块豁免；RFC-027 §12 同向。**口径注记（t3 info 备案的事实更正）**：07 §分流判据的 C 行表格原文不含「静默不动作」字样——该标注依据为 AGENTS 概述与 09a 在案先例（3.21.1 等），属家族既定口径；oracle C 行是否补字属文档面另事，本批不改。另一处措辞更正：issue #539 原文原因段已列两样都缺，提交信息「查证修正 issue 前提」措辞略重——本笔真正细化的是机理（lookup 只克隆 body 的丢 binder 点）。
+
+> **三、修法（判据单源，判定函数零改动）**：Export 新增 `const_binders` + `call_site_params` 两载荷（定义方已登记形态直读，与 #527 proof_fn_params b 案同模式；三处导出面同构填充，native 与测试桩空表——native 导出无 yx 登记面）；checker 新增导出面读取口 `call_site_slot`（纯直读，与 `generic_fn_type_params_snapshot` 同一纪律）；`import_binding` 按本地面 check_fn_stmt 同款登记重建同构 PolyType（binder 非空才包 `new_with_const`，与本地两臂逐字一致）+ 写同一张 declared_call_site_params（or_insert 首登记，函数条目同款）。注释同步三处：#538 判定函数「导入面尚未携带事实」、CallSiteSlots 文档补导入面条目、checker 缺项注记（导入函数面不再是缺项）。
+
+> **四、行为变更披露与边界**：导入面特化强制同步生效——issue 原文夹具（非 mut y）修后 0 错 → E1002 与本地同判（修前「成功」实为静默放行本地语义下的无效程序，D62 已裁决该强制）；特化对齐锚钉住。保持不判边界另案：#558（模块限定调用 lib.pick(y)(y)——判定 face 分支对限定名取不到值条目，覆盖需值命名空间新增限定名条目，语义新增超范围）；#553（方法面跨模块——需方法槽位随 ModuleInfo.method_bindings 跨界的平行载体，函数面 Export 两载荷模式不直接适用；#553 已评论家族图更新）。
+
+> **五、锚与验证**：锚三条——主锚（跨模块 mut y 填 q=0 槽报恰 1 条 E1113 点名被调方 binder）/ 合法形态锚（字面量与 const 表达式导入调用修前修后同绿）/ 特化对齐锚（pick(3)(4) → E1002 与本地同判）。t1 门禁 14 项全绿（integration 369、lib 1665、yx_multifile_runner / formatter_integration 全过、IR 快照稳定、语料差分 388 行逐字节一致、生成器行号平移幂等）。t2（批次号 t3.20.23-verify @ `0ccd458e`，trial 机械可逆）：M1（摘 Export binder 载荷）⇒ 主锚红（导入重建回 mono、整段判定 NotTarget 静默复现）；M2（摘导入槽位登记）⇒ 主锚红（binder 在但槽位查表落空）——两载荷各自独立承重；修复态锚全绿；IR / 语料零漂移；卫生 CLEAN + release。t3 七镜头 **APPROVE**：1 low 备案 = 导入面「值环境证据」路线（非 mut y 夹具 0 错 → E1002）无直接锚——t3 在冻结 rev CLI 实测该行为与本地逐字同判为真（同码同位置），逐字翻面锚随下次触碰本区补；2 info = 上述口径注记两点。
+
+> **六、计数与移交**：三级 +1 = 3.20.23（235→236）；二级不变。issue [#539](https://github.com/ChenXu233/YaoXiang/issues/539) **关闭**。修复笔推送终态 `0ccd458e`（rebase 重写前 `d0ab294c`，树内容同）。批次树已 release。
+
+## P3 3.20.24 收口（负字面量证明调用实参接入折叠——#556，2026-11-14）
+
+> **一、查证结论（探针 8 夹具 + grep 穷举）**：修前负字面量实参的证明调用落 E2031（违反值与满足值同拒，对照正字面量正确判定）；嵌套义务面 UnOp 臂**不可达**（声明侧负字面量在类型域经共享项归一化折叠、ConstValue 实参直取——p6/p8 修前已正确判定）；grep 全仓 `ConstExpr::Lit` 形态受限实参折叠判据恰 2 处，唯一可达 = predicate.rs `try_proof_fn_call`（另一处 const_expr_args_to_values 不可达臂保持不动）。**出处归属更正（t3 minor 备案，本节承载）**：issue #556 原文并无「嵌套面走不判」表述——被更正的实际出处是 3.20.22 遗留的 check.rs 隔离结论注释（本修按更正就地写入改写）；RFC §3.1 引号句为扩写非逐字引用（「无非负限定」结论经 §3.1 全文核实属实）。
+
+> **二、D59 分类与口径注记**：C 类（修前合法程序被 E2031 假拒绝 = 旧行为非成功；#539 同族先例——同为假拒绝接入证据检查）。**口径备案（t3 info，交用户裁量的规则提议）**：07 §分流判据的白名单 C 行（「崩溃、爆栈、未初始化槽位、字节码版本不符」）不含「合法程序被假拒绝」形态——本修与 #539 的 C 类归类实际依据是入口判据（修前硬错误 → 程序未编译 → 非成功）+ AGENTS D59 总纲 + 09a 在案先例；是否把「合法程序假拒绝」显式补进 07 白名单属规则文本固化，按仓库规则需先呈用户过目，未动。
+
+> **三、修法（判据单源）**：实参折叠提取为共享 helper `fold_proof_call_arg`（字面量直取 / 名字查绑定 / 全 UnOp 面折叠内层后交**共享 ConstGenericEval**——i128 checked_neg 与 #507 备案同源，零第二套取负；其余形态 None → 保守不可折叠分支不变）；i64::MIN 形态 i128 域精确折叠（单测钉住）、Neg(i128::MIN) 溢出保守 Unproven 不 panic（该路径暴露的 builder span panic 按 normalize 既有同款占位 span 守卫修掉）。行为披露：NamedVar 未绑定 Unproven 细节文案并入「必须是字面量或已绑定变量」——对外不可观察（两个消费方对空证法 Unproven 一律落 E2031、细节不进诊断、全仓无该文案断言）。
+
+> **四、锚与验证**：锚六条——**实质先红后绿 4/6（t3 minor 备案更正「六条先红后绿」声称）**：单测折叠值 [Int(-5), Int(0)] / 集成违反值 E4018 参数段正确且 E2031 缺席 / 集成满足值 0 错为红绿锚；i128::MIN 单测（溢出守卫）与嵌套面现状锚 [Int(5), Int(-1)] 为回归/守卫锚（修前即绿，性质本不应红）。t1 门禁 14 项全绿（integration 372、testsuite fast 2095、IR 快照 stable、语料差分零 diff、生成器 DOCS-UNCHANGED 零新码零平移）。t2（批次号 t3.20.24-verify @ `02a6a5d1`，trial 机械可逆）：M1（UnOp 臂改 None）⇒ 违反/满足双锚红（E2031 复现）；M2（取负丢失——直取内层不应用取负）⇒ 违反锚红且参数段错误——折叠面与取负应用各自承重；修复态锚全绿；IR / 语料零漂移；卫生 CLEAN + release。t3 七镜头 **APPROVE**：2 minor 备案（锚声称与出处归属——均由本节承载更正）+ 3 info（07 白名单提议、WBS 行收口义务、testsuite 数字与修前红态未独立复跑由 t2 变异红态闭环）。
+
+> **五、计数与移交**：三级 +1 = 3.20.24（236→237）；二级不变。issue [#556](https://github.com/ChenXuXu233/YaoXiang/issues/556) **关闭**。修复笔推送终态 `02a6a5d1`（rebase 重写前 `d73512b9`，树内容同）。批次树已 release。既有边界另案：[#559](https://github.com/ChenXuXu233/YaoXiang/issues/559)（一级求值器取负裸 -n 与常量求值器 checked_neg 口径不一致，可达性极端）。
+
+## P3 3.20.25 收口（一级求值器取负改 checked 通道——#559，2026-11-14）
+
+> **一、查证推翻「可达性极端」判断**：ConstValue::Int 为 i128（issue 前提成立）；i128::MIN 词法不可写但可经裸 Sub 链两步精确构造（`0 - i128::MAX - 1` 两步均在值域不溢出）——**两条生产可达路径实测 panic**（debug 构建 exit 101，panic 逐字 attempt to negate with overflow）：①赋值折叠面（refinement.rs fold_value，一行即触）；②约束直评面（语料原版 IsPositive 模板 + 调用点取负实参符号代入 → check_predicate 直评）。取负臂穷举对照表六面：backend arith.rs checked_neg（#468）/ const_eval checked_neg（#507）/ evaluator 裸（本条）/ ir_gen wrapping_neg（定义良好）/ operations.rs 裸（零生产调用方，今日不可达不改）/ ast/mod.rs i64 域裸（**用户源码可达**——另案 [#560](https://github.com/ChenXuXu233/YaoXiang/issues/560)）。
+
+> **二、修法与验证**：取负臂改 checked_neg，Err 走本面既有 EvalError::ArithmeticError 通道（与 Div/0、Mod/0 同构，不新增诊断码——本面无诊断码表，不照搬 E6007；构造与 #468/#507 同源）；三个生产消费方全保守降级。t1 门禁 14 项全绿（integration 372、testsuite fast 2095、IR 快照只读比对、语料差分零漂移、生成器零新码）。t2（批次号 t3.20.25-verify @ `001041c6`，trial 机械可逆）：M1（checked 摘除回裸 -*n）⇒ 主锚红 panic 复现；M2（wrap 代报错）⇒ 主锚红——错误通道承重（非仅不 panic）；修复态锚全绿；IR / 语料零漂移；卫生 CLEAN + release。
+
+> **三、t3 REJECT（声称面）与本节事实更正**：t2 PASS 后 t3 七镜头 **REJECT**，三条声称面更正由本节承载（代码行为经 t2 实测正确——panic 确实消失、锚全绿）：
+>
+> - **[medium] 直评面机理声称被静态证伪（承重墙级）**：提交信息称「Z3 真实整数语义判 MIN>0 为假 → E4018」——实际机理（frozen rev 逐环核实）= 39 位字面量 `parse::<i64>` 失败在 Z3 侧**落成自由 Int 变量** → 取反目标可满足 → Sat → Disproved → E4018 带伪变量反例；真实整数语义下该约束（i128::MAX + 1 > 0）恒真 → 应 Proved 零诊断。**直评面当前 E4018 是 SMT 翻译 artifact 的假拒绝**（修前是 panic——崩溃换错诊断，C 类改善但非终态）。artifact 与依赖登记 [#561](https://github.com/ChenXuXu233/YaoXiang/issues/561)：修复大字面量保真时必须同步翻 #559 直评面锚（现锚钉 E4018，保真后应钉 0 诊断）并全量核对 SMT 翻译面其它依赖判向。
+> - **[low] 锚双重计数更正**：提交信息「新测试 4 个先红后绿」不成立——实际 **2 条先红后绿**（i128::MIN ArithmeticError / 约束直评面不再 panic）+ **2 条对照锚载体**（-5 / -MAX / i64::MIN-1 与裸 Sub 链——即 c1-c4，修前即绿，被同一条消息双重计数）；「reverse-patch 机械演示红态」是演示手段名非已提交测试名。
+> - **[low] 回归锚计数更正**：#556 折叠锚实数 6（具名测试函数）非提交信息所写 7（若按子断言口径未写明）。
+> - **[info] 相邻既有缺陷另案**：字节码 Not 编码 I64_NEG 但解码一律还原 Neg（有损往返）→ [#562](https://github.com/ChenXuXu233/YaoXiang/issues/562)；z3_backend 超界截断 as i32（并入 [#561](https://github.com/ChenXuXu233/YaoXiang/issues/561) 同根）。
+
+> **四、教训**：t3 静态复审对「机理声称」的逐环核实的价值在本批达到峰值——修复行为正确（t2 实测）但提交信息的机理描述恰好把一个 artifact 假拒绝包装成「正确判定」；若无人逐环核实，未来 SMT 保真修复会让 #559 直评面锚静默翻面且无人知道判向依赖。**机理声称必须逐环对照冻结代码，不得以「实测出对了结果」反推机理正确**（结果正确 + 机理描述错误在此批同时成立）。
+
+> **五、计数与移交**：三级 +1 = 3.20.25（237→238）；二级不变。issue [#559](https://github.com/ChenXuXu233/YaoXiang/issues/559) **关闭**（panic 修复成立；直评面判向 artifact 移交 [#561](https://github.com/ChenXuXu233/YaoXiang/issues/561)）。修复笔推送终态 `001041c6`（rebase 重写前 `eefe1e7c`，树内容同）。批次树已 release。
+
+## P3 3.20.26 收口（ast 层 fn[pos] 位置取负改 checked——#560，2026-11-14）
+
+> **一、查证定案**：RFC-004 附录 A 负数索引是合法语义（从末尾计数）；checker normalize_binding_positions 既有 E1064 承载无效位置判域（对应伪代码 InvalidBindingPosition——t3 备案：实现判域为伪代码超集，「归一化后仍负」是附录 A 决策后的合理扩展，非逐字复制）；panic 在提取阶段（修前 `-(n as i64)` 对截断成 i64::MIN 的形态 overflow，debug exit 101 探针逐字）。前置校验形态否决（正确性/可读性判据）：extract 无错误通道，前置校验要么改签名（新机制）要么 ast 层第二套校验（同义重复）——下游既有校验已覆盖。
+
+> **二、修复笔与复审修复轮（t2 FAIL 揭出生产哨兵算术错误）**：修复笔 `c4e70011` 的 [-N] 臂改 i128 域 checked_neg + 溢出哨兵 unwrap_or(i128::MIN)。t2 FAIL——但 FAIL 的判据成立性证伪揭出**生产哨兵算术错误**：i128::MIN（0x8000…0000）低 64 位全零、`as i64` 截断实得 **0**（非注释所称 i64::MIN）——探针四项实测（checked_neg()=None / unwrap_or(i128::MIN) as i64=0 / 纯 Lit 臂 [0] / Neg 臂 [0]）；后果 = 哨兵与 unwrap_or(0) 对所有输入行为等价（M2 不可杀死）+ 极端形态静默绑定位 0（注释契约「必落 E1064」未兑现）。补锚轮实现者升级裁决（四项实测 + 逐文件直读），队长裁决 A 最小形态：哨兵改 `unwrap_or(i64::MIN as i128)`（转回 i64 恒等、无截断歧义、必落 E1064）+ 注释更正 + None 路径病史锚（test_extract_binding_positions_neg_i128_min_overflow_sentinel_returns_i64_min，断言 vec![i64::MIN]）；实现者的「normalize 对 i64::MIN 加法会溢出」担忧被裁决纠正（i64::MIN + 小正数向零方向移动恒可表示，checked_add 不需要——实现者自行复算确认）。**复核失误登记：队长 review c4e70011 diff 时未抓住 i128::MIN 截断歧义**（t2 首轮 FAIL 被误判为纯测试面缺口，实为生产错误）。
+
+> **三、验证链**：t1 门禁 14 项全绿（integration 372、testsuite fast 2095、IR 快照只读、语料差分零漂移、生成器 DOCS-UNCHANGED）→ t2 FAIL（哨兵等价不可杀死——判据无法满足，如实上报升级）→ 复审修复笔 `b9d327ca`（补锚轮 14 门禁全绿：testsuite fast 2106、M2 自查翻红 [0] vs [i64::MIN]、还原字节级比对 BYTE-IDENTICAL）→ t3 **APPROVE** 七镜头（2 info：运行侧声称只读不可重现——修前 panic 路径静态必然性核实（父 rev 同臂截断后取负为 Rust 溢出语义必然 panic）+ E1064 超集备案）→ t2r 聚焦复验 **PASS**（M1 回修复前原形态 `-(*n as i64)`——任务原公式 `-(n as i64)` 因引用绑定不可编译 E0606——主锚红 panic 复现；M2 哨兵丢失新锚红 [0] vs [i64::MIN]——哨兵选值从等价变为可杀死；IR / 语料零漂移；卫生 CLEAN + release）。运行面 stash 对照：[-1] 绑末位、[0] 绑首位（37/73 输出）——RFC-004 负位语义修前修后正确。
+
+> **四、教训**：①哨兵选值必须做**截断等价性自查**（哨兵经同一转换链后是否仍落在预期判域——i128::MIN as i64 = 0 的低 64 位全零陷阱）；②「M2 变异不可杀死」不是测试面缺陷的同义词——它可能证明生产代码两形态语义等价，验证者如实上报判据不可能满足 + 实现者升级裁决是本批抓出生产错误的正确链路；③队长 diff review 抓不住位级算术歧义（i128::MIN 低 64 位全零）——位级哨兵的注释声称（「必落 X 判域」）需要锚实际钉住而非读注释信任。
+
+> **五、计数与移交**：三级 +1 = 3.20.26（238→239）；二级不变。issue [#560](https://github.com/ChenXuXu233/YaoXiang/issues/560) **关闭**。修复笔推送终态 `c4e70011` + 复审修复笔推送终态 `b9d327ca`。批次树已 release。披露另案 [#563](https://github.com/ChenXuXu233/YaoXiang/issues/563)（超 i64 字面量位置静默截断落合法域——语言级语义 D/E 类待用户裁决；checker total=0 窗口）。
+>
+## P6 6.9 计划重写（第一性，2026-11-13）
+
+### 一、旧结构的问题
+
+旧 6.9 按发现顺序堆叠：6.9.1 是证据层的一个特例（关系谓词 #532），却被当成第一个阶段；6.9.2 把量词事实/视图（I1）与擦除（I4）混在同一编号下；6.9.3 把判等内核（I2）与接线/诊断（I5/I7）混在一起；6.9.4 是第四证据源，却单列成阶段；总述写 6.9.1 → 6.9.2 → 6.9.3 → 6.9.4 串行，与 C3 依赖 6.9.3 出口的事实矛盾。后果是「完成度」按子阶段名记而不是按不变量记：a/b/c 跑完就容易被读成判等已完成，实际生产判定点未接、E4023 不可达；接线契约的 `can_assign` 前提错误正是这种记法的代价。
+
+### 二、新结构
+
+按 D62 的四个阶段与八条不变量重写（模型与 I1–I8 见 [09](./09-execution-wbs.md) §P6 6.9 的「模型与不变式」）。工作单元仍是 6.9.1–6.9.5 五行，但每行以「阶段 + 不变式」定位：
+
+| 旧 | 新 | 说明 |
+| --- | --- | --- |
+| 6.9.1 | C.1 | 证据层特例；不再当阶段 |
+| 6.9.2 | A | 量词事实/视图/擦除；C3 未完成 |
+| 6.9.3 | B | 判等内核 + 接线 + 诊断；d 未完成 |
+| 6.9.4 | C.2 | Γ 第四证据源；不是新阶段 |
+| 6.9.5 | D | Σ；不阻塞 P7 |
+
+### 三、重写后仍未决/未登记
+
+1. **F4 三案未裁**（C3 前置）：`type_args` 承载符号表达式 / 保持不特化 / mono 侧求值；裁决前 C3 不得开工（09a §P6 6.9.2-B §六）。
+2. **判定点协议未成文**（d 前置）：入口、ground 条件、回滚边界、预算共享方式均无裁决；接线契约已因假设 `can_assign` 是判定点而浪费两轮（09a §P6 6.9.3c §六/七）。
+3. **#537 D 类未裁**：证明函数形参精化在调用点静默丢弃；修复会让原先通过的程序报错，需用户裁决。
+4. **#542 未落地/未写豁免**：孤立共享层必须在 `verify`/`verify_loose` 升生产门禁前处置——2026-11-16 用户裁决 B 定为「排期另案」（P7 批 a 后、post-mono 门禁接线前做 DCE），故本条在排期完成前**持续成立**，见 §P6 6.9.2 #542。
+5. **#538 已修未登记**：提交 `8355a283` 修方法面 E1113 证据检查（9 文件、+133 行 integration），提交自称「WBS 3.20.21」；但 09 的 3.20 线无 3.20.20/21，三级计数仍 232。本次按 C 阶段表面收口登记，不新增 3.20 行；3.20.21 号不再使用。
+6. **6.9.3b 遗留 2 未补**：非预算 `EvalError → BeyondKernel` 的分类断言未进 `layers/tests/equivalence.rs`；遗留 4（预算共享）同样无归属。
+7. **E4023 无用户可达路径**：6.9.3c 的 15 个生产构造点去向已逐个核过，零差异是「没走到」而非「没影响」。
+
+### 四、计数与边界
+
+三级仍 5 行（6.9.1–6.9.5），总数 232 不变；不新增编号。模型/阶段表不是三级任务，不计入 232。`#529` 的 P7 闸口改为「阶段 A/B/C 出口」，D（Σ）不阻塞；7.0 纯搬移批是 P7 前置，不受闸口约束。
+
+## P6 6.9.2-C3 F4 首轮分析（2026-11-13，只读，HEAD `e4478d83`）
+
+### 一、范围与方法
+
+f4-analyst 只读分析，未构建、未跑测试、未跑 CLI；所有运行期结论标注为「读码推断/待量测」。读了 AGENTS/HOWTO/coding-rules、09 §P6 6.9、09a §P6 6.9.2-B/C1/C2a/C2b/C2c、RFC-011 §4.1，以及 `collect_const_arg_instantiation_request`、`GenericArg`、`VarInfo`、`monomorphize`/`process_queue` 等代码。
+
+### 二、已核实的事实（结构性）
+
+1. **F4 前提表述过期**：`ConstEvidence` / `CheckOnly` 在 `src/` 全仓零命中（6.9.2-C1 已删）。现行机制是 `collect_const_arg_instantiation_request` 只把归一化后的闭项 `ConstExpr::Lit(value)` 放进 `type_args`；开项 `normalize` 返回 `Unproven(Symbolic)` 时该臂跳过，最终 `Evidenced(None)` ⇒ 不建请求。
+2. **表示已存在**：`GenericArg::Const(ConstExpr)` 是既有项语言，`BinOp` 能表达 `k-1`；`substitute` 的 `Const` 臂当前恒等，`as_type` 用 `TermEnv::default()` 归一化，失败给 `None`，`type_name` 给 `<open-term>`。甲不是「新增表示」。
+3. **k 的值不在 mono 的 name_map**：`VarInfo::pinned` 只有 `bool`；mono 的 `name_map` 只来自 `generic_params` ↔ `type_args()`。要在 mono 求值，必须先补「钉住消解」事实（推荐收集期把 `k` 消解到 binder，避免第二绑定源）。
+4. **开项直接入队会缺 type_args**：`monomorphize` 第 3 步的 symbolic 判据只看 `mono_args()`（类型位），开项请求的 `type_args()` 为空 ⇒ 读码预测 `type_args_len != n_type_params` 报 E3018（待量测）。
+5. **递归链终止没有值链机制**：每个实例原样克隆静态调用 `factorial(k-1)`，`fire_deferred` 对每个实例重发；`processed` 按 `SpecializationKey`（名+值）去重，5/4/3… 不去重；唯一护栏是 `req.depth > max_depth`（默认 100）⇒ `ir_internal_error`（E3005 面）。读码预测 `factorial(5)(5)` 的值链到 101 层撞 E3005，语料从「运行 120」变编译错误——这是三案共同的真正闸门（待量测）。
+
+### 三、三案重述
+
+旧「甲/乙/丙」不正交：甲答「请求里放什么」，丙答「在哪求值」；丙-1（第二字段）破单一表示，丙-2（从 IR 复原 `k-1`）破单一求值器且耦合擦除位次，丙-3（mono 读克隆声明 `Literal` 取值）仍要求项进请求 = 甲的取值细节。可裁的是 **D-a 表示（甲/乙）× D-b 求值点（mono）+ F4-T 终止**。
+
+### 四、首轮推荐
+
+**甲-闭**：`deferred` 桶允许存开项请求，`fire_deferred` 在入队前代入 + 归一化为 `Const(Lit(v))`；`Unproven` 不建请求（退回原件）。**配 F4-T**：优先 **T-b**（有界开火 + 到界退回原件不报错，登记「该边未特化」），T-a（实例内按钉住值折条件）另立三级任务，T-c（复用终止性层/改规范）属 E 类。理由：单一表示、单一求值器、无第二本账；乙让 I4/A 出口/P7 闸口落空。
+
+### 五、裁决前量测（M1–M6）
+
+| # | 指标 | 用途 |
+| --- | --- | --- |
+| M1 | 语料 `const_generic_recursive_factorial.yx` 的 exit/stdout；函数表无 `factorial(int64::4)`、克隆内部指原件 | 证明「开项未特化」是用户可观测现状 |
+| M2 | `factorial(int64::5)` / `__factorial_l0` 的 `params` 与 `LocalSlot.ty` | 选 `k` 取值来源（VarInfo 扩字段 vs 读克隆声明） |
+| M5 | `f(k+1)` 今天是否零请求；开项直接入队是否 E3018 | 确认 `monomorphize` 第 3 步必须改 |
+| M3 | 原型开火后的实例名序列、`req.depth` 峰值、是否 E3005、`processed` 规模 | F4-T 的 go/no-go |
+| M4 | 语料基线逐字节 diff、IR 快照 zero-diff、fast、错误码生成器幂等 | D59 分类与代价 |
+| M6 | 开项实例的 `slots.len()==values.len()`、`is_curry_shaped`、擦除自动覆盖 | 确认 C2c 零改动 |
+
+### 六、未核实
+
+所有运行期结论未实测；`max_depth` / `max_total_instantiations` 的生产配置链路未逐层核；`deferred` 两跳以上漏查未构造实验；`PINNED_EXPRESSION` 从「不特化」变「特化」的连带影响未核；`#541`/`#542` 暴露面未评估；09 的 A.C3 依赖 6.9.3c 的具体接口未核；英文镜像未逐字核对。
+
+## P6 6.9.3d 首轮分析：真实判定点与判定点协议（2026-11-13，只读，HEAD `e4478d83`）
+
+### 一、范围
+
+protocol-analyst 只读：38 处 `.unify(` 全量分类；未编译、未跑测试、未写文件；运行期结论标 [未核实]。
+
+### 二、已核实（静态）
+
+1. unify 唯一定义；生产入口 = driver `Stage::Typecheck` → `check_module` → body checker；单文件/多文件/check/LSP/wasm 五条用户可达。
+2. 38 点 = 19 判定 + 16 试探（`let _ =`）+ 2 克隆沙盒 + 1 模板绑定；递归内部 8 处。
+3. can_assign 唯一调用者 check_assignment，check_assignment 仅测试；AssignmentChecker 生产零实例化；is_subtype/defeq/check_type_equivalence 生产零；`TypeSystem::unify` 零调用者。
+4. solver 无 env/budget/dep_env，且被 `TypeEnvironment` 拥有 ⇒ solver 外层包装不可行；StatementChecker 无 env；`DefeqContext` 要 `&TypeEnvironment`。
+5. 回滚只有 Union/unordered 两处 `bindings.clone()`；Fn/Generic/Struct 的 `?` 递归失败留绑定（Fn 例子：形参位 `t:=Int` 落盘，返回位 Int vs String 报 E1002；调用方拿到 Err 但 t 已解析为 Int）。快照窗口内不得 `new_var`（`self.bindings = snapshot` 会截断 Vec）。
+6. defeq 相对 unify 的增益面 = δ 展开（TypeRef 别名）；字面量/Generic 结构/Refined/Never/Any 已由 unify 覆盖。`Array(Int,2+3)` 在 `From<ast::Type>` 的 ConstExpr 臂折叠成 Literal ⇒ 生产 unify 前已同形；`check_var_stmt_inner` 的 `seed_container` 阶梯绕过 unify。
+7. 诊断：unify E1002；defeq 的 Unproven 需上层填 subject/span；E4020 不由 decide 产；预算 `for_judgment` 唯一工厂，unify 不吃预算。
+
+### 三、协议推荐
+
+- 入口：sema 新 `decide` 层（solver 包装不可行；记录-后判 = 第二路径，否决）。
+- 归约输入：`DefeqContext.env` 收窄为 `types` 表（E2），`Evaluator` 同改；`type_defs` 已有注入链。
+- 回滚：日志式 `mark/rollback_to/commit`（J），替换 Union/unordered 两处克隆或登记不改理由。
+- 预算：一次判定一份（`for_judgment`，只在 unify 失败路径新建）。
+- 映射 b：Proved→Ok；Disproved→E1002（保留原文/span）；Unproven→E4023（subject=TypeEquivalence(展开后两侧)、span=判定点）。
+- 覆盖：19 判定点全接；16 试探点留 unify 并登记泄漏；2 沙盒点保留；1 模板点保留。
+- ground：回滚后判「无 TypeVar」；不得复用 `contains_unresolved_param`（TypeRef 不算未解析会挡 δ）；从 `contains_var` 的遍历提一份 `visit_vars` 派生。
+- 删除：`TypeSystem::unify`（零调用者 + 第二套错误映射）与 `can_assign`/`check_assignment`/`AssignmentChecker` 链（生产零可达）按 coding-rules 7.3 处置，需在契约里登记同批或另案。
+
+### 四、验收（契约草案要点）
+
+1. 生产红判据先实测为红：δ 展开形态（`Five: Type = 5` + 调用实参位/返回位），不得用 `Array(Int,2+3)` 冒充。
+2. 生产调用图 19 点表 + 16 试探/2 沙盒/1 模板不迁移理由；grep/门禁对账。
+3. 回滚三形状（Fn/Generic/Struct 前位成功后位失败）测试；Union/unordered 无泄漏保持；快照窗口不分配变量。
+4. 预算量测：decide 次数、进 defeq 次数、总步数、单次最大步数；生产零 `BudgetTracker::new()`。
+5. E4023 用户可达（`Compiler::compile`，code=E4023，含两侧/原因/span）；找不到用户形态则报裁决，不得单测直构。
+6. subject 门禁：decide 无条件覆写 subject/span + 变异测试；`unproven_general_diagnostic` 调用点唯一。
+7. 6.9.3b 遗留 2：非预算 `EvalError→Unproven{BeyondKernel}` 且 `budget.steps_used < limit`。
+8. E4020：结论不带（decide 不产 E4020），在 verdict 臂注释。
+9. 等价性：语料/IR 零漂移或逐条 D59 分类；fast/integration/生成器/五门禁。
+10. 单源门禁：unify 调用点 = 契约清单；defeq 调用点只有 decide + 测试。
+
+### 五、未核实
+
+验收形态能否先红（最高）；δ 是否真能救；`type_defs` 快照是否够；`EvalError` 用户可达；CollectAll/LSP 诊断集变化；日志 vs 克隆成本；is_subtype 去留；两处既有克隆是否同批改造。
+
+## P6 6.9.5 D.0 设计复核（sigma-reviewer，2026-11-13，只读，HEAD `e4478d83`）
+
+### 一、范围与方法
+
+只读；未跑测试/探针；所有「当前接受/拒绝」为静态阅读。读了 issue #536/#537/#539/#552、09/09a 6.9、AST/Mono/IR 字段载体、`infer_call_expr` 构造臂、`FieldAccess`、`add_type_definition`、`judge_refined_obligation`、`RuntimeOutcome`、`Export`/`TypeDefPayload`。
+
+### 二、已核实（静态）
+
+1. 字段载体没有 per-field binder：AST `StructField` 只有 name/ty/default；Mono `StructType.fields` 是 (String, MonoType)；IR `TypeDeclField` 同；`DepFn` 零生产者；`ConstExpr` 无字段路径项。
+2. 构造点：泛型两层构造检查位置实参类型，命名实参只查必需字段；非泛型 `Struct` 构造臂只查 arity/必需字段，无逐字段类型统一；未知命名实参不拦（静态）。
+3. 投影：`FieldAccess` 直接返回字段类型；没有把前序字段名替换成投影路径/值；保留 `Refined`/`Generic` 会把自由字段名泄漏到使用点（捕获风险）。
+4. `Refined`：类型体字段没有走 `resolve_type_annotation`；`add_type_definition` 只 `MonoType::from`；`judge_refined_obligation` 私有，自然构造点在 `inference/expressions.rs`，`pub(super)` 不可达，`ExpressionInferrer` 无 `TypeEnvironment`/`ProofContext`。
+5. witness 擦除存在（`Refined`→base），runtime check 不存在（`RuntimeOutcome`/`InsertCheck`/`RuntimeCheck` 零命中；W1080 无发射点）。
+6. 预算：`collect_refined_binding_checks` 一份 `ProofContext` 走全模块，`BudgetTracker` 无 reset；「一次判定一份」未兑现。
+
+### 三、决策 0（H0，必须先裁）
+
+A：w 是运行期 Int 数据字段，`Pos(v)` 是它的精化类型；构造点证明 v>0，w 只做 base 检查；witness 擦除，字段值保留；投影 `b.w : Int`。代价小，不满足 issue「w0 满足谓词」的字面读法。
+B：w 是 `Pos(v)` 的证明/见证，不是运行期数据；构造时证明 `Pos(v0)`，witness 整体擦除；构造 arity/布局/投影都变。代价大，需 proof-term/erased-field 设计，与 q=0 擦除/defeq 新依赖。
+首轮推荐 **V1-A（admission-only）**，issue #536 的「w0 必须满足 Pos(v0)」应改写为「构造点必须证明 Pos(v0)」。若选 B，6.9.5 不能按当前 D 阶段/旧行直接开工，另立设计。
+
+### 四、V1-A scope
+
+In：同模块、非泛型 `Type::Struct`；字段 i 只引用严格前序 0..i-1；只收单参数 `predicate_defs`；构造点用 `bind_args_to_params` 绑字段、base unify、谓词代入、`judge_refined_obligation`；投影擦 base；witness 擦除；admission-only。
+Out：Π/`DepFn`、完整 Σ 消去、泛型 Σ、类型位值依赖、跨模块、导入多参数谓词、runtime check、字段可写性强制、6.9.3d/defeq 生产化。
+
+### 五、硬前置 H1–H7
+
+H1 构造点字段绑定 + base 检查（现状非泛型构造不查字段类型；未知命名实参不拦）；
+H2 依赖字段存储擦 base（否则投影泄漏自由名/捕获）；
+H3 判定单元放 `checker/refinement.rs` 的 refined walk（`judge_refined_obligation` 私有；`pub(super)` 到不了 inference）；
+H4 admission-only（字段可写性当前未按 `is_mut` 强制；不承诺构造后不变量）；
+H5 预算一次判定一份（`ProofContext` 一份走全模块，无 reset）；
+H6 不支持形态声明处拒绝（泛型 Σ、类型位值依赖、多参数/证明函数形态），不得静默；
+H7 生产可达性（每个用户面锚 CLI check/run，不许单测直构）。
+
+### 六、三个 issue
+
+- **#537** 条件性硬前置：V1 限定单参数 `predicate_defs` 时不阻塞；若字段用带精化形参的证明函数，先裁/修。
+- **#539** 否（对 V1）：函数调用面 q=0 证据；V1 同模块；跨模块 Σ 还需字段依赖导出，仅修 #539 不够。
+- **#552** 条件性：V1 排除导入多参数谓词；若要求该形态，先修/裁。
+
+### 七、测试矩阵（摘要）
+
+T01 正锚 `Box(3,4)` 0 诊断；T02 负锚 `Box(-1,4)` E4018；T03 `Box(3,"x")` E1002（现状可能漏）；T04/T05 命名/乱序；T06 arity E1010 不重复；T07 未知名 E1014；T08 默认值；T09/T10 链式前序；T11 同名局部捕获；T12/T13 投影 base；T14–T18 声明拒绝（自引用/后向/未知名/泛型 Σ/多参数）；T19/T20 导入边界；T21 admission-only 字段改写；T22 IR 字段 base；T23 语料/快照零漂移；T24 预算边界；T25/T26 变异。
+
+### 八、go/no-go
+
+D.0 GO；6.9.5 实现 CONDITIONAL GO（先裁 H0 + V1-A scope + H1–H4 方案）；按旧 WBS 行直接开工 NO-GO；宣称 Π/Σ 完全体 NO-GO。
+破坏性：非泛型构造 base 检查会让原先「字段类型写错能编译」的程序报 E1002；未知命名实参检查会让原先忽略的形态报 E1014；B 读法改布局/arity/投影。均需 D59 分类/裁决。
+
+### 九、未核实
+
+未跑测试；非泛型构造字段检查缺口是否被其它路径兜住未实测；字段赋值可写性未实测；预算共享未核实；#537 根因/#552 触发面未复现；跨模块 `TypeDefPayload` 行为未实测；`NamedStruct` 的 `field_has_default` 空向量 panic 风险登记；09a 的 `pub(super)` 可见性前提被静态反驳。
+
+> **2026-11-13 用户裁决：H0 = B。** 本节 A/V1-A 分析保留为历史；V1-A 不采用，6.9.5 改按 B 设计包，见下节。
+
+## P6 6.9.4 Γ 等式桥首轮设计（gamma-designer-2，2026-11-13，只读，HEAD `e4478d83`）
+
+### 一、范围与方法
+
+只读；未构建/未跑测试；「今天行为」= 5 条 stdin 探针 + 代码路径推断，其余为代码阅读。读了四份规则、09/09a 6.9、`assumptions.rs`/`ownership.rs`/`refinement.rs`/`expressions.rs`/`statements.rs`/`checker.rs`/`const_eval.rs` 等。
+
+### 二、已核实
+
+1. Γ 唯一实现 = `FlowSensitiveGamma`（ConstExpr 命题 + alive + scope_depth；inject/kill/enter/exit/current/contains）。`exit_scope` 已给分支合流交集语义；`kill` 按名保守整条作废；`ownership.rs` 的 `walk_if`/`walk_while` 与 `refinement.rs` 的 `refined_walk_branch_with_guard` 是真消费者；`statements.rs` 的 Reassign 与 `expressions.rs` 的 assert effect 注入。
+2. **生产 Γ 是 None**：`checker.rs` 的 `init_body_checker`/`body_checker_mut` 两处 `StatementChecker::new(..., None, ...)`；`check_module_impl` 的 refined/termination/ownership 都在函数体类型检查之后 ⇒ Γ 事实今天到不了 E1113；`check_if_stmt` 不碰 Γ。
+3. 证据接口唯一 = `TermEnv`；`frame_term_env` 是唯一生产构造点；`admits`/`normalize` 唯一判据；`TypeEnvironment` 不是证据接口。
+4. `judge_refined_obligation` 唯一精化判定单元，私有；`check_refined_obligation` 全仓零命中（任务书该名应指前者）。
+5. 今天：`f(y)(42)` E1113；`if y==42` 内仍 E1113；else/嵌套/谓词守卫全 E1113；`f(42)(y)` E1002（第二 y 不属 6.9.4）。
+6. 测试/语料：`compile_time_evidence.rs` 是 E1113 直驱范式；`gamma_assume_effect.rs` 直构 gamma（非生产可达）；`call_arg_evidence.yx` 是守卫证据正控；`rfc027_refined_transparency` 四条开约束 tripwire 记在 6.9.4 名下但形态是 `Eq(N,n)`。
+
+### 三、设计
+
+- Γ 事实 = `ConstExpr::BinOp(Eq, 一侧闭常量, 一侧唯一 NamedVar)`；42==y 同义；合取只分解；单点 `const_equalities()`。
+- 收集点 = `check_if_stmt`：check_expr → enter_scope → inject(condition_as_const) → check_block → exit_scope；else 用 `negate_guard`；不做 match/while/早返回。
+- kill set = 既有 Reassign + `&mut name` 借出；保守方向。
+- 分支合流 = `exit_scope` 既有交集，零新代码，只加测试。
+- 嵌套 = enter/exit 天然；必须补函数体帧成对 enter/exit，否则跨函数泄漏（unsound）。
+- 证据 = `frame_term_env` 把 `const_equalities` 并入 `TermEnv` values（同名 values 优先，从 symbolic 剔除）；admits/normalize 不改；生产 Γ = 两处 new 的 None→Some。
+- 不新增第二入口：`const_equalities` 单定义、`TermEnv::new` 调用点不增、`MissingEvidence` 单构造点。
+- 三态/E1113 码位文案不动；`Evidenced` 到达率提高。
+- assert effect 甲（接受为第二来源，推荐）/乙（只守卫）待裁；语料 `assert.assert(FieldAccess)` 可能使甲零漂移（未实测）。
+- RFC 示例收窄：交付 `if y==42 { f(y)(42) }`；`f(y)(y)` 第二 y 不属本项。
+
+### 四、测试矩阵（摘要）
+
+分支内正控/IR 同形；分支外/else E1113；反向 `42==y`；kill/`&mut`；分支合流；合取；嵌套；谓词守卫不产值；函数边界不泄漏；经典路径不变；方法面/导入面边界；新增 2 语料 + 基线零漂移；变异 `const_equalities`。
+
+### 五、契约要点
+
+inScope：`sema/proof/assumptions.rs`、`inference/statements.rs`、`inference/expressions.rs`、`checker.rs`、`checker/refinement.rs`、`types/eval/const_eval.rs`、测试家目录、直驱文件、语料/基线、README/注释、09/09a；若动码表则 codes/locales/generated。
+outOfScope：match/while/早返回；`&mut` 之外的非直接写面（索引/字段/别名；需先定 soundness 处置）；`f(y)(y)` 第二值位；#539/#537/Σ/defeq/E4023；`rfc027_refined_transparency` 的开约束 tripwire。
+验收：先红后绿（5 条今日 E1113）、生产入口、语料/快照零漂移、既有断言不放宽、D59 新增能力、门禁、禁第二入口判据。
+
+### 六、未核实
+
+`check_refined_obligation` 不存在；生产 Γ Some 后的语料/快照零漂移未实测（最高风险）；assert effect 是否变活未实测；跨函数泄漏是代码阅读；`&mut`/索引/字段/别名写未穷举（unsound 缺口需先定处置）；rfc027 tripwire 归属冲突；探针二进制早于最后一笔 src 提交（只 subject/span diff，未重建）；工作树脏；6.9.3/6.9.4 代码级耦合未找到，WBS「依赖 6.9.3」口径需 lead 确认。
+
+## P6 6.9.5 H0 裁决（2026-11-13）：B（witness 字段）
+
+用户裁决选 **B**：`w: Pos(v)` 的 `w` 是编译期 witness（证明 `Pos(v)`），不是运行期数据字段；A（运行期数据字段 + admission）放弃。理由：A 会把记录布局钉成「w 是 Int 数据字段」，后面做真 Σ 时要再改布局/构造/投影，代价更大。
+
+### 一、后果
+
+- 6.9.5 不再是 V1-A；旧 D 行「构造点逐字段验证 / 复用 defeq」作废。
+- B 设计先行，设计包确认前不实现。
+- 用户可见：`Box(3, 4)` 不再是「w=4」；witness 字段无运行期值；构造 arity/布局/投影变；原先写 `w: Pos(v)` 但静默不检查的程序会转为编译期拒绝/擦除（D/E 类，需 D59 分类）。
+
+### 二、B 设计包必须回答
+
+1. 字段量词：witness = 记录层 q=0（复用 `Quantity` / 6.9.2 擦除模型）还是新概念？优先复用，避免第二套擦除。
+2. 证明项表示：`ProofCall` / `ConstExpr` / 新 `Witness`；是否复用 `proof_calls`/`ProofContext`；单一表示，不造第二套证明世界。
+3. 构造 arity：witness 是否占调用点参数位；显式 proof vs 编译器自动证明（RFC-027 §4.2）；运行期构造只含数据字段。
+4. 布局/投影：`StructType`/`TypeDeclField`/bytecode 如何标记 witness；`CreateStruct`/字段索引如何跳过；`b.w` 只能类型级使用，值级报错。
+5. 可变性：被 witness 依赖的数据字段必须不可变/记录不可变，否则 proof 失效；soundness 规则。
+6. 导出：`TypeDefPayload` 携带字段量词/witness 类型；跨模块 Σ 是否 V1。
+7. 与 6.9.2 q=0 擦除、6.9.3 defeq、6.9.4 Γ 的接口；哪些是 B 的硬前置。
+8. 分阶段：B.0 设计 → B.1 表示/布局/擦除 → B.2 构造证明 → B.3 投影/类型级使用 → B.4 导出/测试；每阶段可失败判据。
+
+### 三、边界
+
+- 只覆盖记录 Σ（witness 字段）；不碰 Π/`DepFn`；不宣称 Π/Σ 完全体。
+- 旧 D.0 的 A/V1-A 分析保留为历史；V1-A 不采用。
+- 设计包未确认前，不改 `src/`；B 的实现另立契约。
+
+> **2026-11-13 lead 第一性裁决：4A + 5A。** 4A = V1 不提供用户 `b.w` 投影；witness 仍是编译期字段、构造时证明、运行期擦除。理由：`b.w` 需要类型级字段路径（`ConstExpr::FieldPath`）与 proof token，属独立 term 语言设计；现在加会造第二 term world。4A 的字段表示（quantity + 命题类型）向前兼容 B.3-b，不构成“A 式运行期字段”。5A = witness-bearing 记录整体不可变；理由：字段可变会让 witness 命题失效，当前无 runtime check/revalidation，整体不可变是唯一 sound 规则；更细粒度留后续线性/唯一性设计。
+
+## P6 6.9.4 契约与补丁计划（gamma-designer-2，2026-11-13）
+
+### 一、已实测
+
+- 裸 `assert(y == 42, ...)` 与 `assert.assert(y == 42, ...)` 在现有二进制上**都可解析、都通过**。
+- 语料：`assert.assert` 454 处、裸 `assert` 28 处；含 q=0 形参的 8 个语料文件里 `if` 与裸 `assert` 全为 0 ⇒ 两个新证据源在现有语料上**结构化零漂移**（预测，未构建）。
+
+### 二、Lead 确认
+
+- 函数体 / 闭包体 / spawn 体边界用 **barrier**：体内自己的守卫照常生效；外层事实不进入；不引入显式白名单。
+- 本批只覆盖**裸** `assert(...)`；`assert.assert`（`FieldAccess`）不扩，扩面另立裁决（454 处语料）。
+- `is_empty` 改走 `visible()`：口径为「当前 barrier 以上为空」，不是放宽断言。
+- T17/T18/T19/T20 重写：体外事实不入体、体内自产事实对体内可见、体内事实随体亡；T18(b) 为红→绿正控。
+- P1 修正（自捉）：`enter_barrier` 必须同时 `enter_scope` 并把 barrier 设在新深度；`restore_barrier` 必须先 `exit_scope` 再还原 barrier。只还原深度会漏掉体内裸 `assert` 的事实（T17c/T18c/T20 履行哨）。
+
+### 三、补丁计划 P1–P9
+
+P1 `FlowSensitiveGamma` 增 `barrier_depth`/`enter_barrier`/`restore_barrier`/`visible()`/`const_equalities()`；P2 `TermEnv::with_equalities`（values 优先、symbolic 剔除）；P3 `frame_term_env` 合并等式；P4 `check_if_stmt` 单收集点；P5 三处边界 barrier；P6 `checker.rs` 两处 `StatementChecker::new` 由 None→Some（**唯一行为翻转提交**）；P7 `&mut` kill；P8 新增 2 条语料 + 基线；P9 收口。
+
+### 四、风险
+
+R1：P6 后裸 `assert` 全量注入，语料交集为空但未构建；R2：`assert.assert` 不扩；R3：`is_empty` 口径；R4：`&mut` 的 Arc 语义未核实；R5：闭包边界按 soundness 推，语料无反例。
+
+## P6 6.9.4 实现轮（2026-11-15，契约见本节上文「6.9.4 契约与补丁计划」）
+
+### 一、落地（P1–P9 → 代码）
+
+| 步 | 内容 | 落点 |
+| --- | --- | --- |
+| P1 | `FlowSensitiveGamma` 增 `barrier_depth` / `enter_barrier` / `restore_barrier` / `visible()` / `const_equalities()`；`is_empty` 与 `current` 统一走 `is_visible`（口径 =「当前 barrier 以上」） | `src/frontend/core/sema/proof/assumptions.rs` |
+| P2 | `TermEnv::with_equalities`（等式并入**值**侧；值环境同名的值优先，符号集同名剔除） | `src/frontend/core/types/eval/const_eval.rs` |
+| P3 | `frame_term_env` 合并 `const_equalities()`；`TermEnv::new` 的调用点不增（唯一生产构造点不变） | `src/frontend/core/sema/inference/expressions.rs` |
+| P4 | `check_if_stmt` 单收集点：then / else-if 注入自身守卫（合取逐项分解），else 注入 `negate_guard`；分支帧在**错误路径**也出栈（`gamma_push_guard` / `gamma_pop_guard` 成对） | `src/frontend/core/sema/inference/statements.rs` |
+| P5 | 三处边界 barrier：函数体（`check_fn_body` 两条退出路径各一次 restore）、lambda 体（`infer_lambda`）、spawn 体（`infer_expr` 的 Spawn 臂） | statements.rs / expressions.rs |
+| P6 | `checker.rs` 两处 `StatementChecker::new` 由 `None`→`Some(FlowSensitiveGamma::new())`（**唯一行为翻转点**）；并补 `AssertModule.effect_specs()` 的生产登记（见 §二） | `src/frontend/core/sema/checker.rs` |
+| P7 | `&mut name` 借出时 `gamma.kill(name)`（与既有 Reassign kill 同一保守方向；只认直接 `Var` 写形态）；**并在表达式侧 walker 的 `BindingAction::Reassign` 臂补同一个 kill**（spawn / lambda 体内的语句走 `infer_stmt`，与语句侧共用同一 `classify_binding` 判定；不补则体内 `assert(y == 42); y = 43` 之后旧等式仍被当证据，见 §四末条） | expressions.rs |
+| P8 | 新增 2 条语料 + 语料基线 + 1 条 IR 快照 | `tests/yaoxiang/`、`tests/baselines/`、`src/middle/ir/tests/snapshots/` |
+| P9 | 本记录 + [09](./09-execution-wbs.md) 状态更新 | 本文 / 09 |
+
+### 二、查证结论：`assert` 效应在生产端从未接线（本轮实质发现）
+
+- 消费端已有：`inference/expressions.rs` 调用成功后按 `dep_env.get_effect_spec(fn_name)` 把
+  `GammaAssume` 的谓词注入 Γ（只覆盖 `Expr::Var` 被调方 = **裸** `assert`；`assert.assert`
+  是 `FieldAccess`，天然不进）。
+- 生产端缺失：`AssertModule.effect_specs()` 只被 `src/std/mod.rs` 的 `register_all`（FFI 注册表
+  路径）消费；`TypeChecker` 初始化 `dependent_type_env` 时只调了 `register_type_families`，
+  **没有登记效应**。因此生产 Γ 即使变 Some，裸 `assert(y == 42)` 也永不注入
+  （`get_effect_spec` 恒 `None`）。
+- 此前唯一覆盖是 `sema/tests/gamma_assume_effect.rs` 手工构造 `dep_env` 的直驱测试——
+  正是 coding-rules 第六部分点名的「消费端测试手工构造登记数据 = 静默通道」。
+- 修法：`checker.rs` 在初始化 `dependent_type_env` 处按**同一** `AssertModule` 声明面登记
+  `effect_specs()`（不新增第二来源、不新增证据入口、不碰 `src/std/`）。端到端直驱由 T18(b) 承担。
+
+### 三、先红后绿（实测）
+
+只加测试、未改实现时，`cargo test --lib gamma_equality` = **6 failed / 11 passed**（当时 17 条）；
+6 条失败全部是「应通过而报 E1113」：分支内等式、反向书写、合取、嵌套分支、函数体内裸
+`assert`、嵌套体退出后外层体事实。实现后同一命令 **17 passed / 0 failed**（该文件现为 18 条，
+补了体内重赋值 kill 一条）。
+
+### 四、T17–T20（barrier 三性质）与正控
+
+| 编号 | 性质 | 观察点（测试） |
+| --- | --- | --- |
+| T17(a)(b)(c) | **体外事实不入体** | 外层守卫事实不进入嵌套**函数体** / **lambda 体** / **spawn 体**：体内 `f(y)(42)` 仍 E1113（T17(a) 是 soundness 正题：体内同名形参是新的运行期绑定） |
+| T18 | **体内自产事实对体内可见** | (a) 函数体内 `if y == 42` 分支 → 合法；(b) **正控**：函数体内裸 `assert(y == 42, …)` 后 `f(y)(42)` → 合法（改前红）；(c) 嵌套体退出后外层体事实仍可见 |
+| T19 | **体内事实随体亡** | spawn 体内裸 `assert` 的等式出体即失效：出体后 `f(y)(42)` 仍 E1113 |
+| T20 | 嵌套边界还原到**外层体**深度（不是 0） | 函数体事实 + 嵌套 lambda 体：体外两层各自成立 |
+
+补充（**体内重赋值 kill**）：spawn 体共享外层帧，体内 `assert(y == 42)` 之后再 `y = 43`，
+其后的 `f(y)(42)` 必须仍报 E1113。该形态由表达式侧 walker 的 `BindingAction::Reassign` 承担
+（与语句侧同一判定）；关掉这个 kill 镜像（变异 M5）该用例实测由绿转红 ⇒ 判据有牙齿。
+lambda 体无此形态：lambda 体的外层**局部**不可见、外层**形参**不可变，故不可达。
+
+γ 层的对应原语另有直驱单测（`proof/tests/assumptions.rs`）：`enter_barrier` 后
+`visible()/is_empty()/const_equalities()` 均按新边界口径、`restore_barrier` 先 `exit_scope`
+再还原（只还原深度会漏体内事实）。
+
+### 五、语料 / 快照 / 基线
+
+- 新增 `tests/yaoxiang/02-type-system/generics/const_arg_gamma_equality.yx`（正控：if 守卫 /
+  反向 / 合取 / 体内裸 `assert` 四形态，运行 `exit 0`、零诊断，并与 `f(42)(42)` 同值）。
+- 新增 `tests/yaoxiang/06-compile-errors/generics/const_arg_gamma_equality_barrier_err.yx`
+  （`// expect: compile-error E1113`；两条：嵌套函数体第 17 行、spawn 出体第 30 行）。
+- **「与 `f(42)(42)` 同形」的判据面**：同形的落点是**证据值**，不是 IR 文本——Γ 等式与
+  字面量在唯一判定点产出的都是 `ConstValue::Int(42)`，请求里存的是 `ConstExpr::Lit(42)`
+  （`collect_const_arg_instantiation_request` 第 4 步），故两个调用点登记**同一个**特化。
+  `middle/ir` 快照只到「特化请求之前」（q=0 擦除在 mono 阶段），因此不以快照文本比对充当
+  同形判据；运行期同值由新语料的 `assert.assert(guarded_value == literal, …)` 钉住。
+- IR 快照：**+1**（`const_arg_gamma_equality.snap`），其余既有快照 **0 漂移**
+  （`git status` 只多一个 `??` 快照文件）——Γ 桥不改 IR 形状。
+- 语料基线 `tests/baselines/corpus-parity.jsonl`：**+10 行 / -0 行**，逐条分类：
+  - 2 行 = 本轮新增语料（正控 `exit 0` + 负控两条 E1113）；
+  - 8 行 = `tests/yaoxiang-multifile/record-evidence-*` 的**欠账补录**：这 8 个夹具由
+    6.9.5-B.4（`14faf419`）新增，但当时的基线再生（最后一次是 `8c4ee8f1`）没有覆盖
+    `tests/yaoxiang-multifile` 新增目录 ⇒ 基线在 HEAD 上已缺这 8 条。它们的行为记录与各自
+    `// expect:` 一致（`W1001/W1002` 警告、`E4018/E4020/E1114` 拒绝），不含本轮代码的任何影响。
+
+### 六、生产调用图 / 用户可达
+
+- `TypeChecker::check_module_impl` → `init_body_checker`（`checker.rs`）→
+  `StatementChecker::new(…, Some(Γ), …)`；模块级语句与函数体走 `body_checker_mut()`，
+  后者是**第二处**构造点（懒初始化）。
+- 用户可达 = 常规 `yaoxiang check` / `yaoxiang run` 单文件路径（无需测试专用开关）；
+  新语料正控与 T18(b) 都是这一条链上的 CLI 级证据。
+- 证据判定出口仍是唯一一处：`collect_const_arg_instantiation_request` →
+  `ConstArgOutcome::MissingEvidence`（E1113）。本批**不新增**第二证据入口：
+  `const_equalities` 单定义、`TermEnv::new` 调用点不增、`MissingEvidence` 单构造点。
+
+### 七、门禁（本机实测，2026-11-15）
+
+| 命令 | 结果 |
+| --- | --- |
+| `cargo fmt --check` | exit 0 |
+| `cargo clippy --all --all-features --all-targets -- -D warnings` | exit 0 |
+| `cargo test --lib record_evidence` | 28 passed / 0 failed |
+| `cargo test --lib gamma` | 30 passed / 0 failed（18 条 6.9.4 端到端 + 10 条 γ 原语 + 2 条既有 Γ 注入） |
+| `python scripts/dev/testsuite.py run fast` | exit 0：1 波 2266 条，跳过 0 波 |
+| `python scripts/dev/testsuite.py markers --check` | exit 0（2269 条 `#[test]` 清单 = 2266 执行 + 3 条 `#[ignore]`；`cost:` 标记 3 条全对上） |
+| `python scripts/ci/check-obligations.py` | exit 0（TypeCheckResult 22 字段 − 接线 14 − 归档登记 8 = 0） |
+| `python scripts/ci/check-docs-refs.py` | exit 0（1201 个跟踪文本文件 / 12199 个路径状 token，零不可解析引用） |
+| `python scripts/ci/check-docs-truth.py` | exit 0（错误码/模块/版本/CLI/关键字五面对账一致） |
+| `python scripts/ci/check-boundary.py` | exit 0（report-only；**存量 1 处与本轮无关**：`middle/bytecode/opcode.rs` 实测 84 个 opcode 常量 / 库存 83，来源是 `b5624a35` 的 Not/Neg 分码） |
+| `python scripts/ci/check-fanout.py` | exit 0（report-only；存量 8 处 / 库存 7 处，全部在 `driver/`，本轮未触碰该目录） |
+| `python scripts/ci/check-test-channel.py` | exit 0（fast 目标集四处同源） |
+| `python scripts/rfc/check_tracking.py` | exit 0（53 个 RFC 文件 / 7 条不一致沿前，全部 WARNING） |
+
+变异（手工改—测—还原，用于证明 T17–T20 有牙齿）：
+
+| 变异 | 红掉的测试 |
+| --- | --- |
+| M1 关闭函数体 barrier（`enter_barrier` 换成 `None`） | T17(a) `test_gamma_barrier_function_body_blocks_outer_fact`（唯一红） |
+| M2 `restore_barrier` 只还原深度、不退 scope | T19 `test_gamma_barrier_body_fact_dies_with_spawn_body` + γ 层 T19/T20 两条（共 3 红） |
+| M3 关闭 lambda 体 barrier | T17(b) `test_gamma_barrier_lambda_body_blocks_outer_fact`（唯一红） |
+| M4 证据读取忽略 barrier（`is_visible` 去掉深度判据） | γ 层 `test_gamma_barrier_hides_outer_facts` + T17(a)(b)(c) 三条（共 4 红） |
+| M5 关闭体内重赋值 kill（表达式侧 `Reassign` 臂的 `gamma.kill`） | `test_gamma_equality_killed_by_body_reassign_reports_missing_evidence`（唯一红：旧等式仍被当证据，用例由 E1113 变通过） |
+
+### 八、边界与残留（不宣称）
+
+- 只覆盖裸 `assert`；`assert.assert`（`FieldAccess`）**不扩**（新测试钉住它仍报 E1113）。
+- 只做常量等式：谓词守卫（`y > 0`）、不等式、两侧都是名字（`y == z`）都不产值；
+  `f(y)(y)` 的第二值位不属本项（E1002 另案）。
+- 收集点只有 `check_if_stmt`：`match` / `while` / 早返回**不收集**；lambda / spawn 体内的
+  `if` 走 `infer_if_expr`，同样不收集（它们的证据只来自裸 `assert`）。
+- `&mut name` 之外的写面（索引 / 字段 / 别名写）不进 kill set（与契约的 outOfScope 一致）。
+- #539（导入面 q=0）未闭 ⇒ 只覆盖模块内；#537 不修也不依赖；`rfc027_refined_transparency`
+  的四条开约束 tripwire 未动，仍不属本项。
+- 未核实：生产 Γ Some 后 `tests/yaoxiang-multifile` 的 8 条 6.9.5 夹具行为只能靠本轮
+  **首次**记录（无前值可比），它们的「零漂移」是相对补录后基线成立，不是相对历史基线。
+
+## P6 6.9.4 修复轮 F-1 + B.4 T23 前置（2026-11-16）：按绑定解析，禁止按名匹配
+
+> 来源 = 6.9.4 实现轮（上节）合入后的独立复审（F-1 soundness）与 B.4 复审移交（T23/E4020
+> 来源前置按名不按绑定）。两处是**同一条缺陷类**：证据按名字索引、消费面按绑定解析。
+> 本轮只修这一条缺陷类的两处，不扩证据面、不加收集点、不改语义档位。
+
+### 一、现象与根因（F-1）
+
+**现象（主工作树实测，复现脚本在 `target/` 之外的探针目录，不进仓库）**：
+
+| 形态 | 修前 | 说明 |
+| --- | --- | --- |
+| p31：外层 `if y == 42` + `match Option(Int).some(7) { some(y) => f(y)(42), … }` | **check exit 0** | 臂里的 `y` 是载荷 7，却被当成 42 |
+| p32：同形去掉外层守卫 | E1113 | 无反例事实时本就拒绝（证明 p31 的红来自**串事实**） |
+| p33/p34：p31 + 臂内 `assert.assert(y == 7)` | **check exit 0** | `assert.assert` 是运行期文档、不注入 Γ；编译期按 42 特化、运行期是 7 |
+| p35：同形态走值环境（`y = 7`） | E1113 | 值环境按绑定解析，本就不认外层值 ⇒ 两面不一致 |
+| p36：`some(y) if f(y)(42) > 0`（守卫里消费证据） | **check exit 0** | 遮蔽帧必须同时覆盖模式守卫 |
+
+**根因**：Γ 的常量等式事实按**名字**索引（`const_equalities` 返回 `(名字, 值)`），
+`frame_term_env` 再按名字并入 `TermEnv` 的**值**侧；而值环境
+（`ScopeManager::get_var_info` / `const_bindings`）按**绑定**解析（最内层绑定胜出）。
+`match` 臂的模式绑定是语义上**唯一**允许「同名新绑定进入活事实作用域」的形态
+（普通赋值/循环变量按 E2013 拒绝遮蔽；函数体/闭包体/spawn 体有证据边界），于是外层守卫事实
+会跨过绑定代换继续当证据。
+
+### 二、修法（选定①「事实带绑定身份」；与 6.9.2 轮 t23（F1'）同口径）
+
+**先例**：同一类缺陷 6.9.2 轮 t23（F1'，high）已经踩过一次——值环境曾按**名字**判「单值钉住」，
+`match` 臂的同名绑定遮蔽钉住形参后运行期值被当编译期证据放行；当时的修法是
+**per-binding 的 `VarInfo::pinned` / `const_value` + `get_var_info` 取最内层**（按名旁表在
+遮蔽下会取到外层同名绑定的值，静默错值）。病史锚：§P6 6.9.2 判据与
+`tests/yaoxiang/06-compile-errors/generics/const_arg_pinned_shadowed_err.yx`。
+
+**本轮同口径修法**：Γ 的等式事实带**绑定身份快照**——注入时把每个自由名解析到
+`VarInfo::definition_span`（与值环境 `const_bindings`、LSP `resolves_to` 同一条按名解析链），
+读取口 `FlowSensitiveGamma::const_equalities_resolved(resolve)` 逐名要求「此刻解析到同一次绑定」
+才采用该事实。于是：
+
+- `match` 臂的模式绑定遮蔽同名外层绑定时，臂里解析到的是臂绑定 ⇒ 外层守卫事实不产值；
+- 出臂后解析回外层绑定 ⇒ 事实照旧可用（**不误杀**）；
+- 永久 kill（重赋值）仍独立生效；证据边界（barrier）判据不变；
+- **无绑定快照的事实不是证据**（fail-closed）：`inject` 只服务不读等式的消费者；
+- 不新增名字表：身份来源唯一（`scope_binding_key`），两个注入点与读取点都走它。
+
+**为什么不选②（进臂 kill）**：遮蔽是**作用域局部**的，按名 kill 会连臂**外**仍成立的事实一起
+杀掉（假拒绝），且需要在每个绑定引入点复制 kill 判据——与先例「按绑定解析」的方向相反。
+
+### 三、T23/E4020 来源前置：同一条缺陷类（按名不按绑定）
+
+B.4 的导入构造前置（`checker/refinement.rs`）与来源指纹（`checker.rs::proof_source_digest`）
+此前都只按**名字**匹配：
+
+| 位置 | 旧行为 | 本轮 |
+| --- | --- | --- |
+| `derive_libraries`（导出侧） | 按**名字**去重（`BTreeMap<id, hash>`）⇒ 同名第二次绑定被静默丢掉 | 按 **(id, hash)** 去重并排序 ⇒ 同名不同绑定**各自成条** |
+| 前置检查（导入侧） | `libraries.find(id == head)` 取**第一条** + 单独比指纹 ⇒ 刚好命中匹配项就放行 | 取该名字的**全部**指纹：**>1 个不同指纹 ⇒ 客观歧义 ⇒ E4020**（fail-closed） |
+| `proof_source_digest`（谓词臂） | 用 `env.predicate_defs`（含 `use` 并入的导入登记）算指纹 | 追加「必须有**本地定义体**」：导入的同名谓词没有本地体 ⇒ `None` ⇒ E4020 |
+
+**身份口径**：跨模块不能用 `definition_span`（文件局部），故 T23 的身份是**规范文本指纹**
+（定义文本等价 = 同一次绑定）；Γ 的身份是定义事件 span。两者都不按名字匹配，也都不新增名字表。
+
+### 四、红→绿（实测）
+
+| 形态 | 修前 | 修后 |
+| --- | --- | --- |
+| p31（guard + 臂遮蔽） | exit 0 | **E1113** |
+| p33/p34（臂内 `assert.assert`） | exit 0 | **E1113** |
+| p36（守卫消费证据） | exit 0 | **E1113** |
+| p32 / p35（无守卫 / 值环境） | E1113 | E1113（保持，两面同判） |
+| 不误杀（臂后仍用外层 `y`） | exit 0 | **exit 0（保持）** |
+| 臂内自产事实（裸 `assert(y == 7)` + `f(y)(7)`） | exit 0 | **exit 0（保持）** |
+| T23 同名两条不同指纹的 `libraries` | 前置检查按名取第一条 ⇒ **exit 0** | **E4020** |
+
+### 五、语料 / 快照 / 基线
+
+- 语料基线 +**2**/-0（只含本轮新增的两条语料）；对既有 **400** 条的差分**为空**——
+  F-1/T23 修复不改变任何既有语料的观测（根因面窄：需要「外层等式事实 + 臂内同名遮蔽」
+  或「同名多指纹的来源 payload」）。
+- IR 快照 +**1**（新增的正控语料），既有快照 0 漂移。
+- ~tests/yaoxiang-multifile/record-evidence-import~ 行为夹具仍是 0 诊断（本地同源 `Eq` 路径不受 T23 收紧影响）。
+
+- 只处理**值绑定遮蔽**这一条缝：`match` 臂模式绑定。其它形态（普通赋值、`for` 变量、
+  lambda/函数形参）要么按 E2013 拒绝遮蔽，要么有证据边界，不在本轮范围。
+- 身份是**定义事件 span**（`VarInfo::definition_span`），不是绑定 id：dummy 定义事件
+  （无可核名源位置）按「不同一绑定」**fail-closed**，不宣称能区分 dummy 与 dummy。
+- T23 侧只覆盖**来源指纹**这一层身份（跨模块不能用文件局部 span）；同一份定义文本在
+  两个模块里出现视为**同一次绑定**（文本等价），不宣称能区分「文本相同但刻意不同源」的两次绑定。
+- `derive_libraries` 现在保留同名多指纹（歧义）；这类 payload 会被前置检查判 E4020——
+  即「同名不同绑定」在 V1 里是**拒绝**而不是「选出正确的那条」。
+- 不新增 Γ 收集点；`match` / `while` / 早返回**仍不收集**事实（6.9.4 的边界不变）。
+- `assert.assert` 仍不注入 Γ（上节的边界不变）；#537/#539 边界不变；C3/F4、Π/DepFn 不碰。
+
+### 七、门禁（本机实测，2026-11-16）
+
+| 命令 | 结果 |
+| --- | --- |
+| `cargo fmt --check` | exit 0 |
+| `cargo clippy --all --all-features --all-targets -- -D warnings` | exit 0 |
+| `cargo test --lib gamma` | 46 passed / 0 failed（26 条 6.9.4 E2E + 8 条绑定身份原语 + 既有） |
+| `cargo test --lib record_evidence` | 37 passed / 0 failed（含 T23 歧义负控） |
+| `python scripts/dev/testsuite.py run fast` | exit 0：1 波 **2296** 条，跳过 0 波 |
+| `python scripts/dev/testsuite.py markers --check` | exit 0（2299 条 `#[test]` 清单 = 2296 执行 + 3 `#[ignore]`） |
+| 六个 python 门禁 + `rfc/check_tracking.py` | 全部 exit 0（`check-docs-refs`：1205 个跟踪文本文件；报告类门禁无新增命中） |
+| 语料 / IR 快照 | `corpus_probe` **402/402 差异空**（既有 400 条 + 本轮 2 条语料）；IR 快照 +1（新语料），既有快照 0 漂移 |
+
+**一次工具面事故（如实登记）**：本轮中途 `cargo test --lib` 链接失败（`LNK1120: 552 个无法解析的外部命令`，全部是 `anon.*.llvm.*` 与 `alloc` 泛型符号）。排查：源码无外来改动（`git status` 仅本轮文件），`cargo build` 正常，仅**测试可执行文件**链接失败——判定为 `target/` 里并发 cargo（本机多个成员共用 target）留下的**陈旧/被截断的中间产物**；`cargo clean -p yaoxiang` 后重建即恢复（`1m51s`）。登记为共享工作树的构建产物污染，与本轮代码无关；后续同类现象先 `clean -p` 再排查。
+
+## P6 6.9.5-B 设计包（sigma-reviewer，2026-11-13，只读）
+
+### 一、核心决策（推荐）
+
+1. **字段量词 1A**：witness = `Some(Quantity::Zero)`；数据字段 `None`；不新增 `FieldRole`/`Quantity::Witness`。同源 = 无运行期槽；不同源 = 证据规则（`ProofContext`/`judge_refined_obligation`，不是 q=0 四源）；调用点 arity 由记录构造规则单独定义。字段上下文的 `None` = 数据字段，不是「未解析」。
+2. **证明项 2A**：命题用 `ConstExpr`/`Refined`；证明搜索复用 `ProofContext`/`check_predicate`/`ProofFunctionCall`/`execute_proof_calls`；不新增 `Witness` term；witness 是 proof-irrelevant。
+3. **构造 arity 3B**：witness 不占构造参数位；运行期构造只含数据字段；`Box(v0)`，不是 `Box(v0,w0)`；证不出时用独立证明函数（RFC-027 §4.2），不是构造实参。
+4. **布局**：AST `StructField.quantity`；Mono `StructType.fields` → `Vec<StructFieldInfo>{name,ty,quantity,is_mut,has_default}`，删除 `field_mutability`/`field_has_default` 平行向量；IR `TypeDeclField.quantity`；`CreateStruct` 只装数据字段；数据字段索引单一 helper（`runtime_field_index`），`{v,w,z}` 的 `z` 索引必须是 1。
+5. **投影 4A（V1 推荐）**：值级 `b.w` 报错；类型级 `b.w` 无用户语法；witness 只在声明/构造义务/导出中用。若要求类型级 `b.w`，B.3-b 新增 `Type::WitnessProjection`/`ConstExpr::FieldPath`，另立设计。
+6. **可变性 5A**：witness-bearing 记录不可变；数据字段不得 `mut`；不得字段赋值/`&mut`；否则 proof 失效。D 类行为变更，需 D59 登记。
+7. **导出 6A**：`TypeDefPayload.field_obligations`；含 witness 的非泛型类型返回 `Some`；跨模块放 B.4，不放进 B.1–B.3。
+
+### 二、阶段
+
+B.0 设计（本节）→ B.1 表示/布局/擦除（`StructFieldInfo`/`TypeDeclField`/`CreateStruct`/数据索引/值级 `b.w` 拒绝）→ B.2 构造证明（`FieldObligation`/`bind_args_to_params`/自动证明/`ProofFunctionCall`）→ B.3 投影/类型级使用/不可变规则 → B.4 导出/跨模块/多文件夹具。
+
+### 三、硬前置 H1–H10
+
+H1 `StructFieldInfo` 重构（45+ 构造点）；H2 数据索引单一映射；H3 判定单元放 `checker/refinement.rs` 的 refined walk；H4 不可变/借用规则；H5 值级 `b.w` 拒绝 + 类型级决策；H6 `TypeDefPayload`；H7 诊断码；H8 预算一次判定一份；H9 生产可达性（CLI/语料）；H10 `StructType` 重构机械面（Hash/PartialEq/solver/substitute/快照/测试直造）。
+
+### 四、issue
+
+- **#537** 条件性（用单参数 `predicate_defs` 则不阻塞；用带形参精化的证明函数则硬前置）；**#539** 否（B.1–B.3），B.4 条件性；**#552** 条件性（B.4 导入多参数）。
+
+### 五、接口
+
+- 6.9.2：复用 `Quantity::Zero` 的「无运行期槽」事实，不复用 `ConstErasePlan`；q=0 四源证据不适用 witness。
+- 6.9.3：B.1–B.3 不需要 defeq；类型等式 witness 才需要，另案。
+- 6.9.4：B 构造用 `ProofContext.assumptions`（既有分支守卫）；`y==42` 等式桥未做；B V1 排除，等 6.9.4。
+- 6.9.1：只复用 `judge_refined_obligation`/`check_predicate`；构造检查放 refined walk；字段绑定复用 `bind_args_to_params`；预算 H8。
+
+### 六、未核实
+
+未跑测试；`CreateStruct`/`GetField`/`SetField` 跳过 witness 未实测；`resolve_field_index` 数据序未实现；`StructType` 45+ 构造点未逐点枚举；`TypeDefPayload` Some 后导入行为未实测；字段赋值/`&mut` 当前是否真的被接受未实测；`ProofFunctionCall` 只有 `ConstValue` 实参、符号字段值只能 Unproven；预算共享未核实；#537/#552 未复现。
+
+## P6 6.9.2-C3 F4 契约与原型计划（f4-analyst，2026-11-13，只读）
+
+### 一、目标与三不变量
+
+甲-闭：开项进 deferred；入队前代入 + 归一化；T-b 有界开火、到界退回原件不报错。单一表示（`GenericArg::Const(ConstExpr)`）、单一求值器（`normalize`/`ConstGenericEval`）、无第二本账（mono 绑定源仍只有 `name_map`）。
+
+### 二、五个补丁点
+
+P1 `VarInfo.pinned`: `bool` → `pin_binder: Option<String>`（按绑定解析，不并列保留 bool）；P2 `const_eval::substitute_term_names`（8 变体穷尽；substitution 不是 evaluation）；P3 `compile_time_term` 钉住消去 `k→N`，`collect_const_arg_instantiation_request` 开项入请求；P4 `monomorphize` 第 3 步 `has_open_term` 并入 symbolic（不改会 E3018）；P5 `GenericArg::substitute` 的 Const 臂 + `fire_deferred` 代入/归一化 + T-b。
+
+### 三、T-b
+
+键 =（container 定义名, callee, site Span），同一静态调用点跨实例累计；`MAX_OPEN_CHAIN` 建议 8（M3 定）；到界不建实例/不报错/不删原件（依赖 `restore_generics_with_uncovered_call_sites`）/登记 `OpenFireCutoff`；消费者 = 直驱测试 + driver debug（不得 info/warn；不做 State 字段）。
+
+### 四、Lead 决策
+
+- R4 = ①：mono 求值 `Disproved` 不建请求 + 登记，不报错（守住 T-b；不新增码/发射点；outOfScope codes/locales/generated 成立）。
+- R9：bound 初值 8，M3 的实例数/编译时间表定；不做配置项。
+
+### 五、测试/量测摘要
+
+M1 现状锚（无 `int64::4`；check/run 0）；M2 钉住载体；M5 `f(k+1)` 零请求/E3018；M3 无界 E3005 + bound 8/32 实例数；M4 语料/快照/生成器；M6 与 C2c 对接。A1–A4 typecheck、B1–B5 mono、C1–C3 直驱、D1–D4 用户可达、E1–E5 变异。
+**不宣称 I4 完全体**（到界边未擦除）；#541/#542 原样。
+
+## P6 6.9.2-C3 F4 裁决（用户裁决 A，2026-11-16）：甲-闭 + 丙-3 + T-b + bound 8
+
+> 本节 = 裁决落定 + t2 的 M1–M6 量测包（只读，批次树冻结 revision `ecdd095b`，已 release + gc）。
+> 裁决面见上两节（首轮分析的三案重述、契约与原型计划 P1–P5/R4/R9）；**C3 实现另立任务（t11）**，
+> 本节只登记裁决与量测，不改代码。
+
+### 一、裁决内容（D-a / D-b / F4-T / bound）
+
+| 决策点 | 裁决 | 依据 |
+| --- | --- | --- |
+| **D-a 表示** | **甲-闭**：`deferred` 桶允许存**开项**请求；`fire_deferred` 在入队前代入 + 归一化为 `Const(Lit(v))`；`Unproven` 不建请求（退回原件） | 单一表示（`GenericArg::Const(ConstExpr)`）、单一求值器（`normalize`/`ConstGenericEval`）、无第二本账；乙（第二字段）让 I4/A 出口/P7 闸口落空 |
+| **D-b 求值点** | **丙-3**：mono 读克隆声明的 `Literal` 取值（作为甲的取值细节，不并列保留 `VarInfo::pinned: bool`） | P1 把 `pinned: bool` 换成 `pin_binder: Option<String>`（按绑定解析）；M2 实测「k 的值不在 mono `name_map`」——不补钉住消解则开火不发生（函数表与 HEAD 全同），补 `k→N` 后开火成立 ⇒ P1 是机械必需面 |
+| **F4-T 终止** | **T-b**：有界开火，到界**退回原件、不入队、不报错**，登记「该边未特化」；T-a（实例内按钉住值折条件）另立三级任务；T-c（复用终止性层/改规范）属 E 类不取 | M3 实测：无界 ⇒ **E3005（特化链深度超过 100，当前 101）**，语料从「运行 120」变编译错误；T-b bound=8 ⇒ run exit 0（120 正确）；bound=32 同绿 |
+| **bound** | **8**（不做配置项） | M3：bound 8/32 都使语料 run exit 0；8 的实例面（40 个函数表条目）远小于 32（95 个）；到界退回由既有 `restore_generics_with_uncovered_call_sites` 闭合闸自然兑现，**零新代码** |
+
+### 二、M1–M6 量测包（实测，批次树 `ecdd095b`）
+
+| # | 量测 | 实测结论 |
+| --- | --- | --- |
+| **M1** | 语料 `const_generic_recursive_factorial.yx` 现状锚 | `check` 0 error 0 warning exit 0；`run` exit 0；函数表 31 个：`__factorial_l0`（原件，params `(N)`）、`__factorial_l0(int64::5)`（#27 克隆，体内 `I64Sub` 运行期算 k-1，`CallStatic` const#29 → 原件）、`factorial(int64::5)`、`factorial`（原件）；**无 `factorial(int64::4)`** ⇒ 开项未特化是用户可观测现状 |
+| **M2** | 钉住载体 | `VarInfo.pinned: bool`（`statements.rs:1373` 判定后 `add_pinned_param` 置位）；替换后槽类型是基类型 `int64`（钉住标记随绑定不随类型）；k 的值**不在** mono `name_map`（2. name_map 只来自 `generic_params ↔ type_args()`）。原型实测：无钉住消去时开火**不发生**（函数表与 HEAD 全同），补 `k→N` 消去后开火成立 |
+| **M5** | 开项零请求 / E3018 | 探针 `inner(k+1)(k)`（k 钉住）：`check` exit 0；`dump` 无任何 `inner(int64::X)` 实例 ⇒ 开项**零请求**。开项直接入队 ⇒ **E3018**（`类型实参数不匹配：期望 1 个，得到 0 个`；同型在语料 14:27 处复现）⇒ `monomorphize` 第 3 步必须扩符号闸（P4） |
+| **M3** | 无界 E3005 + bound 8/32 | 原型 = P1–P5 忠实最小实现（9 个可重放 `.diff`）。无界：**E3005 深度超过 100（当前 101）**，exit 1。T-b bound=8：run exit 0（120 正确），函数表 40 个，开项链恰 8 实例 `{4,3,2,1,0,-1,-2,-3}` + 闭项 `::5`；bound=32：run exit 0，开项链恰 32 实例 `{4..0,-1..-27}`，函数表 95 个 |
+| **M4** | 语料/快照/生成器 | 补丁树 vs HEAD 树 `corpus_probe` **逐字节 0 行差异**；与冻结基线差 8 行 = `record-evidence-*` 多文件语料（**基线欠账**，HEAD 无补丁侧同差 8 行，归因干净）；IR 快照 zero-diff；错误码生成器幂等 |
+| **M6** | 与 C2c 对接 | 开项实例 `slots.len()==values.len()`、`is_curry_shaped` 一致；擦除自动覆盖 ⇒ **C2c 零改动** |
+
+### 三、落地面（交 t11 执行，本节不实现）
+
+P1 `pin_binder: Option<String>`（按绑定解析，不并列保留 bool）／P2 `const_eval::substitute_term_names`（8 变体穷尽；substitution 不是 evaluation）／P3 开项入请求 + `eliminate_pinned_names`(`k→N`)／P4 符号闸加 `has_open_term`／P5 `fire_deferred` Const 臂代入 + 归一化；R4=①（mono 求值 `Disproved` 不建请求 + 登记，不报错）；bound 初值 8。
+
+### 四、边界与不宣称
+
+- 本裁决**只定方案与量测数字**，C3 一行未实现；`const_generic_recursive_factorial.yx` 现状仍是无开项特化。
+- 量测在**原型**（P1–P5 最小实现）上取得，非生产提交；t11 的验收必须重新给出生产面数字（实例数/编译时间/语料/快照/生成器）。
+- M5 的 E3018 与 M3 的 E3005 是**当前缺口的实证**，不是新缺陷登记；T-b 的「到界登记」在 V1 只有运行期退回、无用户可见提示（不新增码/发射点）。
+- 开项特化后的语义承诺以 RFC-011 §4.1 与 T-b 为界；T-a/T-c 不取。
+
+## P6 6.9.2-C3 实现轮（2026-11-16）：甲-闭 + 丙-3 + T-b + bound 8
+
+> 依据 = 用户裁决 A（上节 §P6 6.9.2-C3 F4 裁决）。本轮按契约 P1–P5 落地 C3，
+> 只做「开项/递归 q=0 擦除」，**不宣称 I4 完全体**；#541/#542 原样。
+
+### 一、落地内容（P1–P5 + T-b）
+
+| 点 | 落点 | 说明 |
+| --- | --- | --- |
+| **P1** | `inference/scope.rs` 的 `VarInfo.pinned: bool` → `pin_binder: Option<String>` | 钉住身份的唯一用途是「把 `k` 消解回 `N`」，binder 名是同一事实的完整形态；不并列保留 bool（同一信息两处存 ⇒ 第二处无法表达消解目标）。`var_pinned` 降为派生判据，新增 `var_pin_binder`。登记口 `add_pinned_param(..., binder)` 由 `statements.rs` 从 `const_subst` 的键取（与替换前类型同源） |
+| **P2** | `types/eval/const_eval.rs`：`substitute_term_names` / `rename_term_names` | 两个 facade 共用**唯一**走树实现 `rewrite_term_names`（`ConstExpr` 8 变体穷尽）。substitution ≠ evaluation：只换名字/值，不做算术。值代入只认 `MonoType::Literal`，改名只换名字 |
+| **P3** | `inference/expressions.rs`：`compile_time_term` 内**钉住消去**（`eliminate_pinned_names` → `k → N`）；`collect_const_arg_instantiation_request` 开项**入请求**（保留代入前的项；闭项仍放归一化后的 `Lit`；类型位投影只对闭项要求） | 开项不再 `Evidenced(None)` 丢弃；`Unproven` 仍不降格 `Disproved` |
+| **P4** | `middle/passes/mono/mod.rs` 第 3 步：`has_open_term`（`Const` 实参无类型位投影）并入 `symbolic` | 不改会在元数闸报 E3018（M5 实测兑现）；并入后进 `deferred`，由容器实例开火 |
+| **P5** | `types/mono.rs::GenericArg::substitute` 的 `Const` 臂；`mono::fire_deferred` 代入 + 归一化 | 项位按实例 `name_map` 名字替换；代入后仍**有自由名** ⇒ 未闭（不建实例）；无自由名 ⇒ `normalize`：`Ok` 建实例（`Const(Lit)`）、`Disproved` ⇒ 不建请求 + 登记（R4=①，不报错） |
+| **T-b** | `mono::mod`：`MAX_OPEN_CHAIN = 8`、`open_chain: HashMap<(容器, callee, 静态调用点), usize>`、`OpenFireCutoff{reason: BoundReached/UnclosedTerm/DisprovedValue}` | 键 =（容器, callee, **静态调用点**），同一静态调用点跨实例累计；到界**不建实例、不报错、不删原件**（原件由既有 `restore_generics_with_uncovered_call_sites` 放回）；只对**开项链**计数（C3 之前既有 deferred 形态 = 符号化类型实参，不受闸限流，有负控测试钉住） |
+
+消费者：**直驱测试**（`mono::tests::monomorphizer` 4 条 + `curry_instance_layers` 1 条）+ `Monomorphizer::open_fire_cutoffs()` 公开 getter（**能力声明**：可被 driver debug 读取；当前**无** driver 侧消费者，偏差见 §八 T13-F1）。不做 State 字段、不进 info/warn、不新增用户可见码。
+
+### 二、M1–M6 实测（本机，主工作树）
+
+| # | 量测 | 实测 |
+| --- | --- | --- |
+| **M1** | 语料 `const_generic_recursive_factorial.yx` 现状锚 | 修前：`check` 0 error、`run` exit 0（120），函数表 31 个，**无** `factorial(int64::4)`；本轮修后：同语料 `check`/`run` 仍 0/0，函数表 46 个（t12 在冻结提交上按全量 dump 计 **47**，差 1 为本机 dump 过滤口径），出现 `factorial(int64::4)`…`int64::-3` 开项链 |
+| **M2** | 钉住载体 | `VarInfo.pin_binder`（per-binding，按绑定解析）；`k` 的值不在 mono `name_map` ⇒ 必须先在 typecheck 侧消解 `k → N`（P3）再由实例 `name_map` 代入（P5）；实测：消解前开火不发生（同 t2 原型），消解后开火成立 |
+| **M5** | 开项零请求 / E3018 | 探针 `g: (N: Int) -> (k: N) -> Int = { f(k + 1)(k + 1) }` + `g(5)(5)`：修前开项 ⇒ 零请求（P4 前会被 E3018 拦）；修后 `check` 通过、函数表出现 `f(int64::6)`、`run` exit 0（值 6） |
+| **M3** | 无界 E3005 + bound 8/32 | 生产面：bound=8 时开项链恰 8 个实例（`{4,3,2,1,0,-1,-2,-3}`，直驱测试逐名断言 + 「第 9 次被切（无 `-4`）」断言）；到界退回原件（原件 `factorial` 仍在，`run` 120 正确）。无界面（`max_depth` 100）本轮不另测——T-b 的闸在开火点，先于深度闸 |
+| **M4** | 语料/快照/生成器 | `corpus_probe` **402/402 差异空**；IR 快照 `git status` 干净（快照取 mono **前** IR，C3 不改它）；未动错误码发射点/码表 ⇒ 生成器幂等（无新码） |
+| **M6** | 与 C2c 对接 | 开项链实例的 `const_values` 由 `as_type()` 投影（P5 已把项归一化成 `Lit`）⇒ 擦除计划照常覆盖，`factorial(5)(5)` 仍 120（q=0 槽已擦除、运行期语义正确） |
+
+### 三、测试矩阵（本轮落点）
+
+| 级 | 判据 | 落点 |
+| --- | --- | --- |
+| A（typecheck） | 开项入请求、钉住消去、闭项不变 | 语料 `const_generic_recursive_factorial.yx`（A 级正控，原有）+ `m5` 形态探针（见 §二） |
+| B（mono） | 开项请求进 deferred；`fire_deferred` 代入 + 归一化；到界/未闭/求值失败三臂 | `src/middle/passes/mono/tests/monomorphizer.rs` 新增 4 条：`test_open_chain_stops_at_bound` / `test_open_chain_unclosed_term_is_not_fired` / `test_open_term_disproved_value_is_not_fired` / `test_symbolic_type_request_is_not_limited_by_open_chain` |
+| C（直驱替换层） | 代入/改名的 8 变体穷尽与语义 | `const_eval::tests` 新增 3 条：`test_substitute_term_names_replaces_literal_mapped_names` / `test_substitute_term_names_keeps_unmapped_names` / `test_rename_term_names_swaps_names_only` |
+| D（用户可达） | 语料 `factorial(5)(5)` 接通到下一层实例、开项链 8 个、原件仍在 | `frontend/tests/curry_instance_layers.rs`：C2b 的 tripwire **按其自身注释兑现**为 `test_open_term_recursive_call_fires_into_its_instance`（断言 `__factorial_l0(int64::5)` 的调用点下标 = `factorial(int64::4)`） |
+| E（变异） | 见 §四 | — |
+
+### 四、变异（牙齿）
+
+| 变异 | 预期红 | 实测 |
+| --- | --- | --- |
+| **MC3-1** 停用钉住消去（`compile_time_term` 不再 `k → N`；手工改—测—还原） | D 级 `test_open_term_recursive_call_fires_into_its_instance` | **实测红**（开项链零实例，D 级断言失败）；还原后 5 passed |
+| **MC3-2** P4 不并 `has_open_term`（手工改—测—还原） | 开项直接入队 ⇒ E3018 | **实测红**（D 级 `test_open_term_recursive_call_fires_into_its_instance` 编译即失败：`E3018 类型实参数不匹配：期望 1 个，得到 0 个`）；还原后全绿 |
+| **MC3-3** T-b 闸不计数（`fired >= MAX_OPEN_CHAIN` 恒假；手工改—测—还原） | 直驱 `test_open_chain_stops_at_bound` + D 级实例数断言 | **实测双红**（入队 10 而非 8；D 级开项链实例数断言失败）；还原后全绿 |
+| **MC3-4** `fire_deferred` 求值失败改为 `Disproved` 传播（手工改—测—还原） | `test_open_term_disproved_value_is_not_fired` | **实测红**（求值失败也照常入队 ⇒ 「不得建请求」断言失败）；还原后全绿 |
+
+### 五、边界与不宣称
+
+- **不宣称 I4 完全体**：到界边未擦除（该边由原件承担运行期语义）；`#541`/`#542` 原样。
+- T-b 到界的用户可见提示**没有**（不新增码/发射点）；登记只走 `open_fire_cutoffs()`（直驱 + debug）。
+- 身份/钉住按**绑定**解析（`VarInfo` per-binding）；按名旁表仍不允许（t23 F1' 口径）。
+- 开项链的计数键含**静态调用点** Span：同一泛型体内不同调用点各自计数（契约键口径）。
+- `substitute_term_names` 只认 `MonoType::Literal` 目标；其余映射原样保留名字（不猜值）。
+
+### 六、独立验证（t12）与复审（t13）
+
+| 环节 | 结论（逐条要点） |
+| --- | --- |
+| **t12 独立验证**（批次树冻结 C3 提交） | P1–P5 静态对号逐条成立；CLI 实测：语料 check 0 诊断 / run exit 0（120 正确），dump 函数表 **47** 个、开项链恰 8（4,3,2,1,0,-1,-2,-3）+ 对应 `__factorial_l0` 克隆、**无 `-4`（第 9 次被切）**、闭项 `::5` 与原件在；**到界退回逐实例核验**：`__factorial_l0(int64::-3)` 的 CallStatic = 原件下标（越过 0 的边由原件承担运行期语义），`__factorial_l0(int64::4)` 指 `factorial(int64::3)`（链内逐层）；D 级断言 `__factorial_l0(int64::5)` → `factorial(int64::4)`（tripwire 改指兑现）；M5 探针 run 打印 6、出现 `f(int64::6)`/`__f_l0(int64::6)`（非只有 `k-1` 形态）；MC3-1/MC3-3 补做 trial 机械变异（均红、还原后全绿） |
+| **t13 复审 verdict = pass**（5 项 low，无 blocking/high） | P1–P5、甲-闭、丙-3、单表示/单求值器/单账、T-b 键与 bound、到界三臂、测试未删/放宽逐条成立；**实现比契约更强的一处**：`ConstExpr` 枚举实为 **9 个变体**（契约写 8），`rewrite_term_names` 穷尽 9 臂——按实现记录，不按契约数字回改代码；跨实例累计的关键被点名核对（`fire_deferred` 首参是 `generic_name` 而非实例名） |
+
+t13 的 5 项 low 与处置见 §八。
+
+### 七、D59 处置（C3）
+
+**不属 A/B/C 类语义修正，按「机制补齐」记**：C3 之前生产路径上开项**不特化**（开项零请求），C3 之后特化到 bound 8、到界由原件承担运行期语义 ⇒ **对外可观察行为零变化**（`corpus_probe` 402/402 差异空、IR 快照零漂移、语料 `factorial(5)(5)=120` 不变）。旧行为既非崩溃也非静默错答（只是少特化），故不套用 D59 的 A/B/C 顺路修条款；本轮无行为变更需裁决。**若将来放开 bound 或改到界语义（例如给用户可见提示），那才是 D 类，需裁决。**
+
+### 八、残余与处置（t13 findings）
+
+| # | 残余 | 处置 |
+| --- | --- | --- |
+| **T13-F1** | `OpenFireCutoff` 只有直驱测试读，**无 driver 侧消费者**；§一「供 driver debug 读取」是能力声明而非既有消费者 | **登记偏差，不修**：裁决要求「消费者 = 直驱测试 + driver debug」，当前仅直驱达成；到界在生产侧只写不读。补 driver debug 通道需先定调试面口径（本项目无 info/warn 之外的调试通道），另立三级任务；本轮把 §一 的措辞收窄为「能力声明」 |
+| **T13-F2** | 「越过 0 的边退回原件」只被 t12 字节级实测与语料端到端值间接覆盖，**无单测断言**钉住 `__factorial_l0(int64::-3)` → 原件 | **登记**：t12 已给出可复现的字节级证据，未落成判据；建议随下一判据轮补一条断言（`static_target(functions, "__factorial_l0(int64::-3)", CALL_STATIC) == index_of("factorial")`） |
+| **T13-F3** | MC3-2/MC3-4 无 trial 机械证据 | **本轮已闭**：MC3-2（停用 P4 的 `has_open_term` 并入）⇒ D 级测试红（E3018「期望 1 个，得到 0 个」）；MC3-4（`Disproved` 照常入队）⇒ `test_open_term_disproved_value_is_not_fired` 红；均还原后全绿 |
+| **T13-F4** | `src/frontend/tests/curry_instance_layers.rs` 不在 t11 inScope（tripwire 按自身注释交接，已文字申报） | **登记进 PR 必填块**（契约边界，非越界实现） |
+| **T13-F5** | D59 处置未写 | **本轮已闭**：见 §七（按「机制补齐」记，无行为变更 ⇒ 无裁决事项） |
+
+## P6 6.9.2 #542：孤立共享层 = 排期另案（2026-11-16，用户裁决 B）
+
+> **状态（2026-11-19）**：DCE 已落地并接到 post-mono 两个生产入口；复核点逐条回答与 6.9 收口建议见下一节 §P6 6.9.2 #542 落地轮。
+
+### 一、裁决与排期（本节的规范内容）
+
+用户裁决（2026-11-16）采纳分析师的**时机**建议、不采纳「现在落地或现在写豁免」：
+
+- **#542 记为「排期另案」**：DCE（回收孤立共享层）排在 **P7 批 a 完成后、post-mono 生产门禁接线前**执行。
+- **现在不做**：不删除原件/兜底共享层、不写 D38 豁免、不动 `verify`/`verify_loose` 的门禁时点。
+- **6.9 保持打开**：排期完成（DCE 落地且 post-mono 门禁绿）才收口。09/09a 均不得写「#542 已完成」。
+
+### 二、登记证据（全部实证，来源 = t16 裁决包，HEAD 2fae8202）
+
+1. **触发面在现网语料里就存在**：`tests/yaoxiang/02-type-system/generics/fn_const_generic.yx` 的 .42 字节码表 = `__f_l0` + `__f_l0(int64::42)`，**原件 `f` 不在**——共享层失去唯一 `MakeClosure` 引用者成为孤立死 IR（非假设形态）。全调用点覆盖的双实例探针同形（`f(42)(42)` + `f(7)(7)` ⇒ `__f_l0` 孤留）。代码锚：mono `build_output:1195` 的删除判据只删 `requested_generic_names`（泛型原件），`emit_curry_layer_clones` 把实例 `MakeClosure` 重定向到克隆、共享层失去唯一引用者；`fn_const_generic.yx` 是单调用点全覆盖形态。形态复核需重建并 dump——`corpus-parity` 只记诊断/退出码/stdout，不记函数表。
+
+2. **为什么阻断 verify 升门禁（静态证明）**：`verify`（src/middle/ir/verify.rs）的 env 槽数**只能从 `MakeClosure` 侧反推**（`env_lens` 只由 `MakeClosure{func, env}` 建立，查不到 = 0；`FnView::from_function(func, env_len)`）。孤立 `__f_l0` 的槽形 = `Params: (N)` + `Locals: N@0, k@1, x@2`，体内 `LoadLocal 05 01` 读槽 1；`env_len` 反推为 0 ⇒ `entry_defined_range = 0..(0+1)` 只覆盖槽 0 ⇒ 槽 1 的读无入口定义路径 ⇒ `check_dominance` 报 `InvariantKind::Dominance`（use-before-def）。仓内两处文字独立记载同一条红路：`src/frontend/tests/curry_erasure.rs`（「共享层 `__f_l0` 失去唯一 `MakeClosure` 引用……被判成 env 长度 0」）与 issue #542 正文。
+
+3. **P7 批 a 不被 #542 阻断**：批 a 的前置是 `verify_loose` 在**现有非 SSA IR**（`lex→parse→typecheck→ir_gen`，不含 mono）上跑绿——今日已绿（测试级判据 `test_verify_loose_corpus_green`）。孤立共享层只在 **post-mono** IR 上出现，故批 a 可先行；被阻断的是更后一步的「post-mono 生产门禁」。
+
+4. **C3 之后面收窄**：C3 的 T-b 到界退回使「第 9 次开火」的调用点留在原件上 ⇒ 原件被 `restore_generics_with_uncovered_call_sites` 放回 ⇒ 共享层仍有引用者 ⇒ **递归形态（factorial 族）不再孤立**；#542 的面收窄到**非递归全覆盖形态**（`fn_const_generic` 族）。
+
+### 三、边界（本轮不做的事）
+
+- **src/ 与 tests/ 零 diff**：本轮只改 09/09a 两份文档。
+- **不删代码**：删除属不可逆（函数表裁剪 + 可达性根集），须与 DCE 一并做，且 DCE 是新 pass（`middle/passes/` 现无 DCE），按 D1 需先论证「既有概念无法表达」。
+- **不写豁免**：任何 D38 豁免都会污染「`verify_loose` 跑不绿不开豁免」的口径，故不写。
+- **不动门禁时点**：`verify`/`verify_loose` 的生产接线时点不在本任务（outOfScope）。
+
+### 四、复核点（排期完成时必须逐条回答）
+
+1. DCE 的**可达性根集**是否完备：`main`、模块 init、native/FFI 导出面、跨模块 `Export`/`TypeDefPayload` 引用（#539 未闭时尤其要核）。
+2. 删除后 **`verify_loose` 在 post-mono IR 上绿**（并给出红→绿判据：删除前 `fn_const_generic` 的孤立层必须红）。
+3. C2c 的「保守保留原件」规避**与 #542 同批移除**（09 的 A/I4 保留条件段），不得单边移除。
+4. 语料/IR 零漂移或逐条分类；若字节码函数表变化，逐条说明。
+
+## P6 6.9.2 #542 落地轮（2026-11-19）：DCE pass + post-mono 接线 + C2c 规避移除
+
+> 依据 = 用户裁决 B（2026-11-16，见上节）与 09 的 6.9 收口判据。本机落库两笔：`46998477`（DCE pass，3 文件 +1261 行）、`cfdf9cf0`（post-mono 接线 + C2c 规避移除，7 文件 +344/−294）。本轮不 push；量测在批次树按冻结 revision 执行。§二–§五逐条回答上节 §四的四条复核点。
+
+### 一、落地内容与生产调用图
+
+**新 pass（`46998477`）**：`src/middle/passes/dce/` —— post-mono `ModuleIR` 上的可达性 mark-sweep。唯一入口 `dce::eliminate(&mut ModuleIR) -> Result<DceReport, Diagnostic>`；`DceReport { deleted, kept }`；模块 doc 的九行根集表是根集判据的单一事实源。运营开关 `DCE_ENABLED`（默认 true）的唯一读取点是 `eliminate`（回滚见 §六）。
+
+**接线（`cfdf9cf0`）**：
+
+- 单文件：`Pipeline::run`（`ProgramKind::SingleFile`）→ `Driver` → `Stage::Monomorphization` 臂 `arms::monomorphization` → mono 成功后、codegen 前调 `helpers::run_post_mono_dce`。
+- 多文件：`ProgramKind::MultiFile` → `arms::monomorphization_multi_file` → mono 成功后同一 helper。
+- Check 形态无产物、诊断面必须不变 ⇒ 在调用前按 `ProgramKind::Check` 早退；mono 因 `ConfigDisabled` / `NoObligations` 早退时调用点不可达 ⇒ DCE 同步跳过。
+- helper `run_post_mono_dce` 只做序列位置、错误映射与归因日志；根集/删除判据仍单点在 `middle/passes/dce`。
+- 生产可达性判据：`src/driver/tests/dce_wiring.rs` 三条（单文件入口 / 多文件入口 / 语料孤立共享层）；`git grep run_post_mono_dce` = 1 定义 + 2 调用点（两臂各一）。
+
+### 二、复核点①：根集完备
+
+九类根（与 `middle/passes/dce` 模块 doc 同表）：①entry/main（含 `main`/`.main` 与 #476 script-main 提示契约）；②模块 init 的按名/DefId 目标；③native/FFI 显式非根（无 IR 体，NativeFn 不是表键）；④跨模块 `Export`/`TypeDefPayload` 引用在 IR 的投影（限定名字符串；#539 未闭 ⇒ 不以请求表当不可达证据）；⑤`MakeClosure` 目标（无条件根；另有「目标活 ⇒ 全部引用者活」的反向闭合，防删除唯一引用者使存活闭包体 env 槽反推失效）；⑥字符串常量名的全部形态（`Call`/`TailCall`/`MakeClosure` 是表键；NativeFn/LibraryRef/ExternRef/类型名不是）；⑦方法面/vtable（存活 `TypeDecl` 的 `t.` 前缀函数恒根；**禁猜名**：不从 `CallVirt.method_name` 反推表键）；⑧DefId 边；⑨非根不动面（`TypeDecl`/init 项/globals/FFI 表/类型表/const pool 一律不删）。删除面只动 `functions` 中不可达的 Code 表项与按名键的 `function_files`；no-renumber（下标记由 codegen 重建）；遇 `Const(Int)` 索引调用目标、重复函数名或重复 DefId 即中止。
+
+直驱测试 N1–N6（`src/middle/passes/dce/tests/`）与附加格：N1 字符串常量名保留；N2 `MakeClosure` 目标保留；N3 跨模块限定名经 init 保留；N4 仅 `CallVirt` 可达的方法经 `TypeDecl` 前缀保留（合成 IR——语料无 `CALL_VIRT` 生成点）；N5 NativeFn 常量不建根、同名表项按死码处理；N6 无引用函数与传递死链必删。附加：类型名字符串不是函数根、entry/main/#476、DefId-only 目标、反向 `MakeClosure` 闭合、`Const(Int)` 中止且 IR 不变、`DCE_ENABLED=false` 逐字节不变、幂等、`function_files` 修剪。共 20 条直驱测试。
+
+### 三、复核点②：verify_loose 红→绿
+
+冻结 revision 对照（同一探针补丁，批次树）：
+
+- 接线前 `46998477`：`fn_const_generic.yx` 的 post-mono `verify_loose` 报 `Dominance`（`function="__f_l0"`，读 `Local(1)` 无定义路径）；同族 6 文件全红（`curry_tail_expr`、`const_arg_evidence_forms`、`const_arg_gamma_equality`、`const_arg_gamma_equality_shadow_ok`、`fn_const_generic`、`fn_const_generic_lowercase`）。
+- 接线后 `cfdf9cf0`：同 6 文件全部 OK，无新增红。
+- 字节码函数表（6 文件 `dump`）：200 → 50，removed=150、added=0（每文件 -25 个不可达 std 函数）；`fn_const_generic` 单文件 30 → 5（`main` / `std.list.Iter`（TypeDecl）/ `__f_l0(int64::42)` / `f(int64::42)` / 模块 init），CLI `check`/`run` exit 0。
+- 非本族红（如实登记）：`native_fn_member_value.yx` / `pureyx_export_fn_value.yx` 的 `InnerIsolation` 在接线前即红、接线后诊断逐字不变；它们是**不同不变量**（内层局部名隔离），不是 #542 族，`verify` 未放宽。登记为 2.1.4（见 09），**verify 升门禁前必须处置**。
+
+### 四、复核点③：C2c 边界（删/留逐条）
+
+**删（t1 判定的临时规避，全部同批移除）**：`build_output` 的按泛型名删除分支（`requested_generic_names`）与 `names_called_by_name` / `std.` 前缀保留名单、其私有辅助 `call_target_names`；`restore_generics_with_uncovered_call_sites`（整函数）；`uncovered_call_targets`（整函数）；`call_form_is_rewritten`（整函数，唯一生产消费者是被删的 `uncovered_call_targets`）。
+
+**留（长期正确，未动）**：`rewritten_call_target`（改写面形态单点，生产用于 curry 目标重定向与站点改写）；`by_name_call_target`（其扫描面基；NativeFn 仍不计按名目标）；`emit_curry_layer_clones`（逐实例柯里层克隆）；`ERASE_CONST_PARAMS` / `plan_const_erasure` 的「只擦实例/克隆、原件不擦」。`uncovered_call_targets` 的 `MakeClosure` 臂语义转写为 DCE 第 ⑤ 类根；mono 的两条闸测试按性质 retarget（不删测试），不以删测试或放宽判据换绿。
+
+证据：`git grep` 三个已删符号在 `src/` 0 命中；`src/driver/tests/dce_wiring.rs` 走两个生产入口钉接线可达；`middle/passes/mono/tests/monomorphizer.rs` 的 retarget 测试分别钉「未覆盖调用点的名字边保活」「MakeClosure 根保活」「改写面形态集合」与「mono 保留全部原件 + DCE 删不可达原件」。
+
+### 五、复核点④：零漂移与函数表逐条归因
+
+- 语料：`corpus_probe` 402/402 与基线**差异为空**（行为等价）。
+- IR 快照：`test_ir_snapshots_stable` 绿（快照取 mono **前** IR，与 DCE 不相交），快照目录零改动。
+- 全语料 232 文件生产 IR 前后对照：6687 → 5835 个函数，removed=852、added=0；每个被删名在 post 存活 IR 的名字/DefId/`MakeClosure` 引用面中均无出现（无悬空引用、无入口命中、无存活 TypeDecl 家族命中）。分类：`std.` 纯 yx 死原件 845（旧 `std.` 前缀规则放过、DCE 按可达性删）；孤立共享层 6（`__g_l0` 1 + `__f_l0` 5）；其它死原件 1（`lambdas.yx` 的 `max`）。
+- 顺序：仅 2 文件 3 个名字从「恢复闸尾追加」移回模块位置（`list_ops.yx` 的 `std.list.is_empty`、`std.list.pop`；`const_generic_recursive_factorial.yx` 的 `factorial`）；全语料函数多重集相等（无新增/改名/重名），其余相对顺序不变。函数下标由 codegen 重建（no-renumber），402/402 行为等价。
+- `dump` 样本（6 个族内文件）字节码函数表只减不增：200 → 50。
+
+### 六、DCE_ENABLED 回滚与保守面
+
+`DCE_ENABLED` 默认 true，唯一读取点 `dce::eliminate`；false 时立即返回空报告且**不触碰 `ModuleIR`**（函数表、`function_files` 与指令逐字节不变，直驱测试断言）。回滚 = 翻这一个 const，无数据迁移、无配置项；回滚后 #542 红判据按预期复现——那是红灯信号，不得用豁免表掩盖。
+
+保留的保守面（登记，不静默）：mono 因 `ConfigDisabled`/`NoObligations` 跳过 ⇒ DCE 不跑，残留死码属既有行为（无共享层克隆 ⇒ 无 #542 红）；`TypeDecl` 及其 `t.` 前缀方法恒留（vtable/类型表面）；`main`/`.main` 恒留（#476）；反向 `MakeClosure` 闭合会保留死引用者（宁可多留）。
+
+### 七、偏差与编排登记
+
+- **编排偏差（如实登记）**：复审成员 reviewer-dce 连续三次 PI_AI_ERROR，无法承接复审；复审改由 verifier-dce 承接——同模型家族，且同一会话已做过验证轮。降偏措施：①七项判据命令全部重跑、零证据引用验证轮输出；②对抗用例独立重新构造（首轮曾因夹具 bug 真实失败，证明判据有判别力）；③代码审计以 `git show <sha>:<path>` 绑定被复核 revision，不读工作树；④生成物表检查器独立重写。复审结论 verdict=pass。
+- **同一会话完成验证与复审**：t4 验证与 t5 复审在同一会话内完成，本条按事实登记，不宣称两者独立于彼此；独立于实现轮的依据见上条。
+- **提交 amend**：接线笔曾 amend 一次，仅修正 `mono_cross_unit` 注释中对已删恢复闸的引用（2 行注释）；最终 revision `cfdf9cf0`，生产代码与被复核 revision 逐字节一致。
+- **门禁口径**：`verify_loose` 全仓无生产调用点，本轮的「绿」是测试/验证面判据；把它升为生产门禁仍是 2.1.2 / 7b 的独立事项，不在本项宣称。
+- **形态门控**：Check 形态不跑 DCE（无产物、诊断面不变）；`WasmPlayground` 与单文件同通道（跑 DCE）。
+
+### 八、6.9 收口建议（不自行勾选）
+
+**建议：可收口。** 按 09「6.9 收口判据」逐条：①I1–I3、I5、I7 成立（09 现行口径）；②I4：闭项 C2c、开项/递归 C3（甲-闭 + 丙-3 + T-b bound 8）与 #542（DCE 删除死码）均已落地，「无死槽/死码」有本节的函数表归因证据——到界边由原件承担是 C3 已裁决语义，故 I4 仍按既有口径「不宣称完全体」；若评审要求 I4 字面完全体，本条是唯一保留；③I6 按 6.9.5 设计复核结论收口；④I8 每片有证据（本片：402/402 差异空、IR 零漂移、函数表 852/0）。残留项：#537（D 类，用户裁决前不修，6.9.4/6.9.5 已明确不依赖）、#539（导入面 q=0，6.9.4 只覆盖模块内，已登记边界）、#540 关闭、#541 已收、#542 已落地、#552 另案。**唯一未裁事项 = #537**；若收口口径要求它先经用户裁决，需在勾选前补裁决。勾选动作由队长/用户执行。
+
+### 九、不宣称/边界
+
+不把 DCE 接到 Check/LSP；不删 `TypeDecl`/init/globals/FFI/类型表/const pool；不宣称 I4 完全体；2 个 `InnerIsolation` 红是另案（2.1.4），本项未放宽 `verify`；函数表删除面只覆盖不可达 Code 函数，不做类型流/死存储/重编号。
+
+## P6 6.9.2 #541：TailCall 进调用点改写/擦除面（2026-11-16）
+
+### 一、缺陷形态
+
+IR 里以**字符串名**分发的静态调用有三种：`Call` / `TailCall` / `MakeClosure`。扫描面（`by_name_call_target`）三种都收，调用点改写面（`call_form_is_rewritten` → `replace_calls_in_function`）与**擦除面**（`drop_erased_call_args`）只放行 `Call`。于是 `TailCall` 站点同时踩两个坑：
+
+1. **该改名的没改名**：站点仍按原名调，而泛型原件已按「已覆盖」被删 ⇒ 运行期按原名查表落空（E6006 家族）。t3 的闭合闸（`restore_generics_with_uncovered_call_sites`）当时把 `TailCall` 一律计「未覆盖」保守保留原件——这只是把悬空变成「少特化」，不是闭合。
+2. **该裁实参的没裁**：被调实例删了 q=0 形参位，而站点仍传那个实参 ⇒ 帧前段错位（静默错配）。
+
+init 段（模块顶层语句）还另有一份只认 `Call` 的平行改写实现：改写面扩形态时它不会跟着走，悬空会在 init 段复现（同一行为两处实现 = 禁令三 A）。
+
+### 二、落地（单点 + 三处同进同退）
+
+| 点 | 做法 |
+| --- | --- |
+| **形态集合单点** | 新增 `rewritten_call_target(instr)`：以扫描面 `by_name_call_target` 为基，只窄掉 `MakeClosure`；`call_form_is_rewritten` 降为 `rewritten_call_target(instr).is_some()` |
+| **改写面** | `replace_calls_in_function` 改用该单点取 (名, span)，改名仍走 `set_static_target_name`（该函数本就同时覆盖 `Call`/`TailCall`，同时清 DefId） |
+| **擦除面** | `drop_erased_call_args::drop_in` 改用同一单点取目标名，再按 `Call`/`TailCall` 同一操作数布局取 `&mut args` 调 `remove_positions`（同一份 `ConstErasePlan`，同一位置集合） |
+| **init 段** | 抽出 `replace_static_call_site(instr, map, container)`：函数体（`container=Some(实例名)`，named 键优先、anon 兜底）与 init 段（`container=None`，anon 键）**共用一份**，删掉 init 段的 `Call`-only 平行实现 |
+
+不改 opcode 语义，也不动 `translate_tail_call`（TailCall 至今**无 IR 生成点**，翻译面本轮不涉及）。
+
+### 三、D59 分类与零漂移
+
+**A 类**（旧行为非成功：站点悬空 ⇒ E6006；实参错位 ⇒ 静默错配），按条款顺路修：先红后绿成立（见 §四）、不改变「原先成功」程序的对外表现——TailCall 无 IR 生成点，语料里不存在该形态，故 **corpus_probe 402/402 差异空、IR 快照 `git status` 干净**（快照取 mono 前 IR，本改动全在 mono 之后）。
+
+**init 段 DefId 副作用（T19-F2 登记）**：init 段旧平行实现只换名、不动 `DefId`；统一到 `set_static_target_name` 后同时清 `DefId`。翻译面优先 `DefId`（`translate_call` 先判 `def_idx`），旧路径下 init 段的特化实例是死码；新路径与函数体同一纪律，语义等价、零漂移，同属 A 类。
+
+### 四、判据（mono 直驱，`src/middle/passes/mono/tests/monomorphizer.rs`）
+
+| 判据 | 钉住的性质 |
+| --- | --- |
+| `test_tail_call_site_is_rewritten_to_specialized_name` | `TailCall` 站点进改写面：目标改成特化名 + DefId 清空 + 目标在输出函数表里（无悬空）。前身是 t3 的 tripwire（断言「一律计未覆盖、原件保留」）；其注释只刻画修复前行为、并无交接指示，本条是在前提被修复使命失效后新立的更强性质判据（MakeClosure 负控保留，退役合规） |
+| `test_tail_call_site_drops_erased_const_arg_once` | `TailCall` 站点按被调计划裁 q=0 实参：2 ⇒ 1（**只裁一次**）、剩余实参保持位置语义、被调实例的 q=0 形参位也被裁（两侧同进同退） |
+| `test_call_form_coverage_matches_rewritten_call_target` | 形态集合单点：覆盖判定 ⇔ 有改写目标；集合恰为 `Call`/`TailCall`（字符串常量 func），`MakeClosure`/`CallDyn`/Int-func 的 `Call` 均不覆盖 |
+| `test_module_init_tail_call_is_rewritten` | init 段与函数体共用同一份站点改写（`TailCall` 在 init 段同样被改名） |
+| `test_restore_gate_keeps_generic_referenced_only_by_make_closure`（既有，未改） | 负控：`MakeClosure` 仍不在改写面内 ⇒ 有键也一律计未覆盖、原件保留 |
+
+### 五、变异（M541-1/2/3 先手工红；t18 已用 scratch.py trial 机械重跑同三条，以 trial 轮为准）
+
+| 变异 | 预期红 | 实测 |
+| --- | --- | --- |
+| **M541-1** `rewritten_call_target` 退回只认 `Call`（= 修复前行为） | 四条 TailCall 判据 + 单点判据 | **实测 4 红**（站点名仍 `g` / `std.list.is_empty` / init 段 `identity`；覆盖判定不符） |
+| **M541-2** 擦除面只认 `Call`（改写面仍覆盖 `TailCall`）= 单边 | `test_tail_call_site_drops_erased_const_arg_once` | **实测红**（实参仍 `[Int(5), Int(7)]`）；改名半仍绿 ⇒ 两半判据相互独立，能分开抓「单边」 |
+| **M541-3** 双重擦除（同一位置删两次） | 同上 | **实测红**（实参 `[]`，期望 `[Int(7)]`） |
+
+### 六、边界
+
+- 不改 opcode 语义；`translate_tail_call`（IR 侧 `func` 取 `Int` 形态）保持原样——TailCall 无生成点，翻译面与 IR 生成面均不在本轮。
+- `#542`（孤立共享层）另案，不在本轮：本轮的改写面扩形态不改变「共享层只有一份体」的事实。
+- 新增的 `rewritten_call_target` / `replace_static_call_site` 是**共享层**（供四处调用），不是第 4、5 份同义映射：形态集合与站点改写各只剩一个写点。
+
+## P6 6.9.3d 契约与 M1/M2/M5 实测（protocol-analyst，2026-11-13）
+
+### 一、红判据实测（批次树 6.9-bd @ a8ccf78c）
+
+| 探针 | 形态 | 结果 |
+| --- | --- | --- |
+| P1 | 变量声明位 `b: Array(Int, Five) = [..]` | exit 0 放行（`seed_container`/长度槽阶梯绕过 unify） |
+| P2 | 调用实参位 `take(b)`，`take: (a: Array(Int,5)) -> Int` | exit 1 **E1002** `Expected 'Array(int64, int64::5)', found 'Array(int64, Five)'` |
+| P3 | `Idx: Type = Array(Int,5)` + `x: Idx = [..]` | exit 1 E1002 `Expected 'Idx', found 'Vec(int64)'` — 真不等，defeq Disproved（负控） |
+| P4 | `Array(Int,2+3)` 对 `Array(Int,5)` | exit 0 — AST→Mono 的 ConstExpr 臂已折叠成 Literal{5} |
+
+结论：**生产红判据 = P2**；P1/P4 不得当红判据；P3 是负控。
+
+### 二、契约
+
+inScope：`types/solver.rs`（日志回滚）、`eval/evaluator.rs`/`layers/equivalence.rs`（E2 收窄）、`inference/`（`decide` + 19 点 + 删 `can_assign` 链）、`environment.rs`/`checker.rs`（注入/死路径）、`tests/`、`layers/tests/`、codes/`docs/src/reference/error-code/`（发射点再生）、baselines/snapshots、09/09a。
+outOfScope：C3/F4；`check_var_stmt_inner` 阶梯面（只加注释）；类型族结构归约；E4020 带命题；`int64` vs `int64::5` 槽/声明差；#537/#539/#540/#541/#542；`ProofContext` 只注册 Assert。
+验收 10 条：P2 先红后绿；19/16/2/1 调用图表；Fn/Generic/Struct 回滚三形状；预算数字；E4023 用户可达；subject 覆写+变异；6.9.3b 遗留 2；E4020 不带；语料/IR 零漂移；单源门禁。
+
+### 三、生产调用图
+
+入口唯一：driver `Stage::Typecheck` → `check_module`/`check_module_collect_all` → `check_module_impl` → `init_body_checker` → StatementChecker/ExpressionInferrer；五张阶段表全含 Typecheck。
+19 判定（`assign_var`×2、`infer_binary`、`check_match_expr`×3、`collect_instantiation_request`×3、`infer_try_expr`、`infer_call_expr`×4、`infer_stmt`、`annotation_matches`、`check_var_stmt_inner`×3）→ `decide`。
+16 试探（`let _ =`）留 unify 并登记泄漏；2 克隆沙盒；1 模板点。
+死面：`can_assign`/`check_assignment`/`AssignmentChecker` 生产零；`is_subtype`/`defeq`/`check_type_equivalence` 生产零；`TypeSystem::unify` 零；`add_constraint` 零。
+
+### 四、M1/M2/M5
+
+- **M1**：dump 31 函数；`factorial` 原件、`factorial(int64::5)`、`__factorial_l0`、`__factorial_l0(int64::5)`；无 `int64::4`；克隆内部 `CallStatic #29` 原件；semacheck 1 条请求（main），mono 1 条；递归体内零请求。
+- **M2**：`k` 的 Literal 只在声明 params/返回；槽类型是基类型 `int64`；`N` 槽 `int64` + q=Zero；POST-ERASE `k` 1→0；`factorial` 原件不擦。
+- **M5**：`f(k+1)`（`k` 运行期）E1113，sema 请求 0；模拟开项入队 `type_args().len()=0` ⇒ **E3018**；F4 案① 必须改队列 symbolic 闸。
+
+### 五、卫生/未核实
+
+批次树 CLEAN 已 release；两次 trial 机械还原 blob 一致，trial 后重建；主工作树未触碰。
+未核实：E4023 用户可写形态；`type_defs` 快照；E2 语义中性；预算/回滚数字；CollectAll/LSP；返回位红；`pinned k` 对照；#540。
+
+## P6 6.9.3d 实现轮（protocol-analyst，2026-11-13，批次树 → 主工作树）
+
+### 一、落地内容
+
+主工作树 29 文件 +1441/−621（含生成物）。生产侧 19 个判定点全部改走 `sema::judgement::decide`（14 在 `inference/expressions.rs`、5 在 `inference/statements.rs`）；最终调用图 = **19 判定 / 15 试探 / 2 克隆沙盒 / 1 模板绑定**。上一轮报的「16 试探 / 38 调用点」多算了一处 `.is_err()` 判定型——实测总数 37 处（另有 `solver.rs` 内部递归 8 处与 `solve()` 1 处不改）。
+
+`decide` 的形态：日志标记 → `unify` → 失败无条件回滚 → 回滚后取两侧展开形态 → 含类型变量则退回原文诊断（ground 门）→ 一次判定一份预算的 `defeq` → 三态（Proved 放行 / Disproved 原文 E1002 / Unproven E4023 并覆写命题与位置）。
+
+`TypeConstraintSolver`：`journal` 只在 `journal_depth > 0` 记 bind 覆盖前的旧值；`journal_mark/commit/rollback` 按层记账，最外层提交清空。`contains_var` 的形态遍历提成 `visit_vars`，`has_type_var` 从同一份遍历派生（ground 只排除类型变量，不排除 TypeRef——TypeRef 正是 δ 展开的输入）。
+
+`DefeqContext.env` → `types: &HashMap<String, PolyType>`；`Evaluator` 同步收窄，归约层不再依赖 `TypeEnvironment`。`StatementChecker.type_defs` 抬成 `PolyType` 表，与 `TypeEnvironment.types` 同型同源（不另造第二张表）。
+
+删死链：`TypeSystem::unify`（零调用、第二套错误映射）、`inference/assignment.rs` 134 行（`can_assign`/`check_assignment`/`AssignmentChecker`/`ConstraintAssignmentInfo`）与其直驱测试 193 行（随对象退役，按 6.1 先例登记）。
+
+### 二、设计补充：失败两臂（实现轮实测逼出）
+
+按契约字面让 `decide` 只回一个 `Diagnostic` 时，19 个站点都用 `.is_err()` + 自撰报文，**E4023 被全部改写成 E1002**（`--log-level debug` 里 `decide` 已判 Unproven，用户仍只见 E1002）。最终返回 `Result<(), JudgementFailure>`，两臂 `Mismatch`/`Unproven`，站点用 `or_site()`：Mismatch 用站点报文（零文本变化），Unproven 原样上抛。类型上逼每个站点显式选择，I5 在用户面才成立。替代方案（19 处按 code 字符串判断）可读性更差且容易漏。
+
+### 三、实测
+
+- **红→绿（P2）**：实现前干净二进制 `E1002 Expected type 'Array(int64, int64::5)', found type 'Array(int64, Five)'`；实现后 `test_alias_actual_arg_is_judged_equal` 绿。负控 `Idx: Type = Array(Int,5)` + `x: Idx = [..]` 仍 E1002。
+- **E4023 用户可达**：`A: Type = B` / `B: Type = A` + `take(b)`，CLI exit=1，`error [E4023] Cannot prove: Array(int64, A) ≡ Array(int64, int64::5) (无法在编译期归约该类型（求值失败）)`，位置 = 实参 `b`。101 层别名链同得 E4023（未做成测试，只留环形态）。
+- **预算**（全语料 348 个 `.yx`，逐文件新建 `Compiler`）：decide=22611、进入 defeq=30、Proved=0、steps_total=66、steps_max=5。解读：全语料只有 30 次判等尝试且无一放行，与「语料零改判」互相印证。
+- **语料差分 388 行逐字节相同**；IR 快照稳定；`testsuite.py run fast` 执行 2089 条 exit 0（标记通道 2092 个 `#[test]`，3 条 `#[ignore]` 均带 `cost:` 标记）。
+- **变异**：T1 把 subject 换 None → E4023 报文退化、测试红；T2 删 `journal_rollback` → 回滚与 ground 两条判据红；blob 机械还原 CLEAN。
+- **错误码生成物**：5 份文件 56/56 行，逐行核对为发射点行号平移 + E1002 73→71（删除的 `assignment.rs` 两处发射点退役）；生成器重跑零漂移。
+
+### 四、合入时的两处收敛（lead）
+
+- 批次里 `decide_with_budget` 与 `metrics` 是 `pub(crate)`（`check-boundary` 计数 173）；合入时改为 `pub(super)`，量测测试从 `frontend/tests/` 移入 `sema/tests/`——两者都只服务 `sema` 内的测试，不需要 crate 级可见。合入后计数 170（回到 6.9.3d 前的基线）。
+- 批次树 tree CLEAN、已 release；合入后 `scratch.py gc` 删除两棵批次树（释放约 13.2 GB）。
+
+### 五、未统一 / 风险
+
+- `is_subtype` 删 `can_assign` 后零生产调用者，契约只授权删三项，保留并登记待裁；`exit_type_matches` 仍是 bool 助手（Unproven 被吞成 false，最终报文由调用点构造）；`check_type_equivalence` 生产零调用者、单测直连 defeq。
+- `CollectAll`/LSP 聚合路径的诊断集变化未单独量测；别名环是否应在声明期拒绝是语义裁决（当前只在判定点报 E4023）；预算口径为「每文件新建 Compiler」；#540 深嵌套未触发（101 层未到边界）。
+- `or_site` 的「零文本变化」只在语料层验证（388 行零漂移），未逐一比对 19 站点报文形态。
+
+## P6 6.9 第一批收口 residual（t5/t7/t10，2026-11-16）
+
+- **t5 复审 pass（2 medium / 3 low）**：T5-F1 `4e19c2ae` 附两处 runner 转发（`benches/shootout/runner/scripts/dev/z3_runner.py`、`tools/yx/scripts/dev/z3_runner.py`），不在 6.9.4 契约 inScope；因共享工作树 pre-commit 阻塞无法拆笔，内容为构建面、不改产品行为，PR 必填块登记，后续可单独拆；T5-F2 `DestructureAssign` 绑定不经 `classify_binding`/`gamma.kill`，静态论证当前 HEAD 不产生错证（解构定义 span 与快照不同 ⇒ 事实失效），但缺判据，另案补测；T5-F3 6.9.4 错误类型 **A**（旧行为非成功：应通过而报 E1113 的程序现在通过；先红后绿 + 原先成功程序零漂移 + 同提交登记）；T5-F4 `assumptions.rs` 注释「一次判定一份预算」与实现不符，登记；T5-F5 谓词形态事实进 SMT 假设通道未受绑定身份校验，无可达反例，登记 guard 另案；T5-F6 E5002 为防御性检查、payload 内存同源不可用户触发（口径登记）。
+- **t7 复审 pass**：T7-F1 已由 t10 补证（MT06/MT16/MT15 三条 trial 全红且机械还原，fast 2279）；T7-F2 grep 判据按名、T7-F3 layers 三文件 inScope 外、T7-F4 D59、T7-F5 文件头、T7-F6 E5002 口径，均登记。
+- **t10**：MT06 指纹校验、MT16 双键、MT15 `quantity_is_witness` 三条 trial 在 `bf64039f` 批次树红→还原→恢复绿；trial 补丁与 blob 比对按 09a §P6 6.9.4 修复轮 §七 的批次树流程复现（冻结 `bf64039f`，apply/apply -R + blob 比对），不引用工作区路径。
+
+## P6 6.9.5-B.1 契约（sigma-reviewer，2026-11-13，只读）
+
+### 一、目标
+
+把 witness 落到表示与布局，不做 B.2 构造证明、B.3 投影、B.4 导出：
+
+- `StructType` 字段收敛为 `Vec<StructFieldInfo>{name,ty,quantity,is_mut,has_default}`，删除 `field_mutability`/`field_has_default`；
+- AST `StructField.quantity` / IR `TypeDeclField.quantity`；`Some(Zero)` = witness，`None` = data；
+- `CreateStruct` 数据-only、`synthesize_constructor` 数据-only、`resolve_field_index` 数据索引、`GetField`/`SetField` 无 witness；
+- 值级 `b.w` 拒绝（E1114），类型级 `b.w` V1 无语法；
+- 5A 整体不可变（E1115：`mut_field`/`field_assign`/`mutable_borrow`/`method_receiver`）；
+- 既有语料/IR 快照零漂移。
+
+### 二、inScope / outOfScope
+
+inScope：`src/ast/mod.rs`、`types/mono.rs`、`types/solver.rs`、`types/substitute.rs`、`sema/environment.rs`、`sema/checker.rs`、`operator_interfaces.rs`、`sema/mod.rs`、`passes/overload.rs`、`inference/expressions.rs`、`inference/statements.rs`、`inference/patterns.rs`、`layers/ownership.rs`（若落点）、`middle/ir/ir.rs`、`ir_gen.rs`、`normalize.rs`、`translator.rs`、`mono/mod.rs`、`bytecode/mod.rs`、codes/locales/error-code 生成物、测试直造点、baselines/snapshots、09/09a。
+outOfScope：B.2 构造证明；B.3 `b.w` 类型级/`ConstExpr::FieldPath`/proof token；B.4 payload/跨模块；泛型 Σ/类型位值依赖/runtime check/defeq/`DepFn`/`ConstErasePlan`；新 parser 语法。
+
+### 三、三笔提交（lead 调整）
+
+- **B.1a 纯表示（H1+H10）**：`StructFieldInfo`/AST/IR quantity/构造点/Eq-Hash/Debug；零行为；既有语料/快照零漂移。
+- **B.1b 布局（H2）**：`CreateStruct` 数据-only/`runtime_field_index`/`synthesize_constructor` 跳过/`resolve_field_index` 数据索引/`b.w` 拒绝/`z` 索引。
+- **B.1c 5A**：`mut`/字段赋值/`&mut`/方法接收者；E1115。
+
+**B.1b 与 B.1c 必须同批 ship**：只做布局不做不可变，witness 擦除后 record 仍可写，B.2 一旦用 witness 就是 unsound；不得 push 中间态。
+
+### 四、Lead 决策
+
+- **E1114/E1115 新码**：接受；inScope 含 codes/locales/error-code 生成物；六语 + `gen-error-code-docs.py` 幂等。
+- **5A 覆盖必须含自动 `WriteBorrow`/方法接收者**；若 B.1 测出绕过，B.1c 停工补点，不得宣称 sound。
+- **`NamedStruct` 的 `field_has_default` 历史空向量**：先用探针钉旧行为，再决定修/保留；不得在重构里静默改 C 类行为。
+- **`StructType` Eq/Hash 当前不一致**（Eq 忽略 mutability，Hash 含）：B.1a 就地修正并加 `hash_eq_contract`；若缓存行为变化，按 D59。
+- **`StructType` Debug 自定义**，守住既有快照零漂移。
+
+### 五、验收/测试
+
+T01 数据-only `CreateStruct`（`Box(3)`，fields.len=1）；T02 `z` 索引 1；T03 `b.v` 读；T04 `b.w` E1114；T05 IR quantity 直读；T06 Mono quantity 直读；T07/T08 `mut` E1115；T09 字段赋值 E1115；T10/T11 `&mut` E1115；T12 普通记录不变；T13 Eq/Hash；T14 语料零漂移；T15 快照零漂移；T16 fast；T17–T23 变异（不跳 witness/声明索引/不拒 `b.w`/不拒 5A/计入 witness/Hash 含 mutability/打印 quantity）。
+
+### 六、风险
+
+grep 清单 41/45/64 需 `cargo check` 驱动补齐；`NamedStruct` 历史缺陷；Debug 快照；Eq/Hash 缓存；5A 自动借用；`b.w` 当前是运行期字段（D 类）；mono 克隆 quantity；解析副本 vs 原 AST；`runtime_field_index` 层归属；E1114/E1115 码表机械面。
+
+### 七、顺序
+
+B.1 等 B.d 合并后再动（`solver.rs`/`inference/`/`environment.rs`/`checker.rs` 文件面冲突）；B.1a 先行；B.1b+c 同批；F4/Γ 批次树实验等 B.d 树释放后排队。
+
+### 八、B.1a first-red（sigma-reviewer 准备，HEAD 8a2a224f）
+
+- R1 `hash_eq_contract`：同 name/fields、不同 `is_mut` ⇒ Eq 与 Hash 都相等；当前 HEAD 红（Eq 忽略、Hash 含）。
+- R2–R5 编译红：`StructFieldInfo.quantity` / `StructField.quantity` / `TypeDeclField.quantity` / 构造器默认 `None`。
+- R6 源码门禁：`rg 'field_mutability|field_has_default' src` = 0；当前 45+45 红。
+- R7 `StructType` Debug 旧文本逐字；R8 `NamedStruct` 旧行为探针；R9 Eq 忽略 `has_default`。
+- B.1a 不写 `CreateStruct`/`b.w`/5A/E1114/E1115 的红测试；这些留 B.1b+c 同批。
+- B.1a 预期 15–20 生产文件 + 8–10 测试文件；`mono.rs` 是主体；`tests/baselines`/IR 快照/码表零 diff。
+
+## P6 6.9.5-B.1a 实现轮（protocol-analyst，2026-11-13，主工作树）
+
+### 一、落地内容
+
+35 文件 +747/−313（含 4 份错误码生成物与 1 个新测试）。`StructType` 从「`fields: Vec<(String, MonoType)>` + 两个等长 `Vec<bool>`」收敛为单列 `fields: Vec<StructFieldInfo>{name, ty, quantity, is_mut, has_default}`；AST `StructField.quantity`、IR `TypeDeclField.quantity` 同步（解析器与 B.1a 的全部构造点写 `None`）。
+
+Eq/Hash：`StructFieldInfo` 忽略 `is_mut`/`has_default`（旧 Eq 口径），`quantity` 参与；`StructType::hash` 与 Eq 同口径，修掉旧 Eq 忽略 mutability 而 Hash 含之的违例。`StructType` 自定义 Debug 让 `fields` 保持旧 `[(名字, 类型)]` 形态。`solver`/`substitute`/`environment`/`equivalence`/`ownership`/`overload`/`bounds`/`trait_data`/`ir_gen` 的读取点全部改为按字段访问；`unify` 的 Struct 臂按字段比 `is_mut`（等价于旧的等长向量比较）。AST `Quantity` 补 `Hash`。
+
+不新增诊断码；`CreateStruct`/`resolve_field_index`/`synthesize_constructor` 未改；E1114/E1115 与 5A 属 B.1b+c。
+
+### 二、R1–R9
+
+| R | 红态（改动前） | 绿态 |
+| --- | --- | --- |
+| R1 | `test_struct_type_eq_hash_contract_ignores_mutability` FAILED：Eq 相等而 Hash 不同 | 9 passed；Hash 只吃 `name/ty/quantity` |
+| R2–R5 | `cargo check --all-targets` 171 errors / 26 文件（`expected StructFieldInfo`、`no field field_mutability`、`missing field quantity`） | 0 error 0 warning；AST→Mono 与真实四段管线的 quantity 直读各 1 条 |
+| R6 | `rg` 搜 `field_mutability` / `field_has_default`（src 全树）52/51 次 | 0 命中 |
+| R7 | 中间态派生 Debug 打印 `StructFieldInfo { .. }` | 自定义 Debug 保持 `fields: [("x", Int(64))]`；`test_struct_type_debug_keeps_legacy_field_tuple_form` |
+| R8 | 探针集在 HEAD 上取旧行为（`Point()` E1010 expected 1；`Point(1,2)` expected 1；`mut` 两处语法位 E0010/E0011；正常构造/读/写 exit 0） | 改动后逐字相同 |
+| R9 | 中间态派生 PartialEq 比 `has_default` | 自定义 Eq 忽略它；`test_struct_type_eq_ignores_has_default` |
+
+### 三、两处裁定
+
+1. **R6 与 R7 互斥**。旧派生 Debug 逐字包含 `field_mutability`/`field_has_default` 两段；R6 要求这两个标识符在 `src` 全树 0 命中（含注释），R7 要求旧文本逐字——两者不能同时成立。实现取「R6 是硬门禁、R7 的判据是快照零漂移」：自定义 Debug 保留 `fields` 的旧元组形态与其余段，但不再打印两个已不存在的向量（打印它们等于伪造事实）。实测 229 份快照中 0 处渲染 `StructType`（`dump` 的类型明细会打印，但当前无基线/判据读它），故零漂移不依赖这两段。**登记**：`dump` 的类型明细文本会少两个空数组，属可观察的调试输出变化，不是语言行为。
+2. **骨架记录的 required=0**。旧表示用**空**默认值向量表达「命名空间/接口骨架的成员不是构造参数」；单列无法表达长度不匹配。5 处（整模块命名空间、分组导入、`get_module_type`、`operator_interfaces::empty_struct`、std `Error` 族）逐字段写 `has_default: true` 以保旧 arity。首轮语料差分 16 行 / 8 个原 exit 0 变 E1010（`assert(v == 5, "msg")` 被算成 3 个必需构造参数），即漏掉此转换的实测后果。`NamedStruct` 与结构体模式记录的旧向量亦空，但探针证明其 arity 路径不可达（构造签名取定义侧；模式记录不作 callee），按字段写真实标记并登记。
+
+**合入时的一处修正**：交接版本里 `operator_interfaces::empty_struct` 写的是 `false`（与其报告「5 处已改 true」不符）；lead 复核时按旧空向量语义改为 `true`，并重跑语料差分（仍 388 行相同）与 fast（2095 条 exit 0）。
+
+### 四、门禁
+
+fmt / clippy -D warnings / testsuite fast（2095 条 exit 0）/ corpus parity（388 行 SHA256 相同）/ IR 快照零漂移 / check-boundary（违规 0，计数 170）/ check-fanout（违规 0）/ check-docs-refs / check-docs-truth / check-test-channel / markers --check 全 exit 0；错误码生成器重跑，4 份生成物 36/36 行仅发射点行号平移，码表与计数未变。
+
+### 五、未核实 / 风险
+
+- `dump` 的 `StructType` 文本少两个空数组（见 §三.1），无基线消费者。
+- `ast::Pattern::Struct` 造的记录（`has_default: false`）未做 R8 式探针；判断其不作 callee。
+- 快照计数口径：契约写 204 份，树内实有 229 个 `.snap`；fast 的比对判据全绿，差额未追（不在 B.1a 判据内）。
+- E1114/E1115/CreateStruct/5A/B.2–B.4 全部未动；B.1b+c 仍须同批 ship。
+
+## P3 3.20.27 收口（SMT/Z3 整数字面量翻译保真——#561，2026-11-14）
+
+> **一、查证（三层失真）**：确认 #561 两层失真属实 + 实测发现第三处同根——①Atom 分支 `parse::<i64>` 失败落自由变量（超 i64 字面量被 Z3 当变量）；②可 parse 但超 i32 的字面量 `as i32` 截断（5e9 → 705032704，判向失真）；③`App("-")` 单参数经 Z3_mk_sub——官方语义 args[0]-...-args[n-1] 单参数恒等、一元负号整体丢失（`(- 5) > 0` 被判成 `5 > 0`）——第三处是 #559 直评面锚翻 Proved 的前置条件（只修 Atom 达不到）。D59 C 类（静默错配——截断与自由变量都不是任何已裁决语义；RFC-027 §8 无字面量精度口径）。
+
+> **二、修法**：z3_backend Atom 分支整数字面量判据 `is_decimal_integer`（可选负号 + 纯 ASCII 数字；变量名不可能全数字，与变量分支无歧义）原样交 **Z3_mk_numeral** 任意精度十进制串（不经任何固定宽度解析）；FFI 补 Z3_mk_numeral / Z3_mk_unary_minus 声明（与官方头 z3_api.h 逐字对应，机械必需面）；App("-") 单参数走 unary_minus。**scope 扩张披露**：任务义务二只授权 Atom 分支，义务三要求 #559 锚翻 Proved——实测证实二者不能同时成立除非 unary_minus 一并修，同根一并修并在提交信息披露。
+
+> **三、行为变更与锚**：#559 直评面锚同步翻转（极端形态 E4018 伪反例 → Proved 零诊断——语义正确方向，#561 依赖登记义务兑现）；4e9 蕴含对 / x+(-x)=0 截断错判纠正；伪反例文本全仓无测试断言（回读同步清单为空）。锚 8 条——**实质先红后绿 7/8（t3 low 备案更正口径）**：负小字面量回归对照锚修前修后同绿（Atom("-5") 修前 mk_int(-5)、修后 numeral "-5" 判向相同）；首版截断锚断言错误自查更正（两侧同截断保序不翻转——更正为一侧截断一侧不截断的蕴含对后真红）。基线锚逐字不变（-5 → E4018、5 → 零诊断）。回归全绿：proof::smt 27 / predicate 7 / rfc027 系列 82 / termination 18 / ownership 62。
+
+> **四、验证链与复审修复轮**：t1 门禁 14 项全绿（IR 快照与语料差分零漂移、生成器零改动）→ t2 **PASS**（M1 numeral 摘除回 `parse::<i64>`/mk_int ⇒ 截断/自由变量锚红 artifact 复现 + #559 翻转锚红；M2 App 单参数回 mk_sub ⇒ 单参数取负锚红 Unsat 假接受复现——两通道独立承重，trial 机械可逆）→ t3 **REJECT（孤儿声明）**：修复笔把 Z3_mk_int 全仓唯一调用点替换后未删旧声明，z3_ffi 文件头「仅包含 YaoXiang 实际使用的函数」收纳契约失真（词边界 grep 实测零代码调用）→ 复审修复笔 `2844e7d4`（删除 5 行裸声明，注释文字的历史提及保留，14 门禁全绿，零行为影响）→ 收口备案（2 low/info：锚口径 7/8 更正；"+5" 形态与旧 parse 通道的理论分歧行态经生产面 Atom 产出穷举不可达——translate.rs 五处 + termination.rs 两处均不可产生 '+' 前缀串，备案不处理）。
+
+> **五、计数与移交**：三级 +1 = 3.20.27（239→240）；二级不变。issue [#561](https://github.com/ChenXuXu233/YaoXiang/issues/561) **关闭**。修复笔推送终态 `93901c2e` + 复审修复笔推送终态 `2844e7d4`。批次树已 release。
+
+## P6 6.9.5-B.1b+c 实现轮（b1bc-impl-2，2026-11-14，主工作树）
+
+推送终态 = `74c92c3b`。B.1b 布局/擦除与 B.1c 5A 同批 ship；只消费 `quantity == Some(Quantity::Zero)`，不生产 witness、不新增 parser 语法；E1114/E1115 本批直驱可达，用户可达留 B.2。
+
+### 一、落地内容
+
+主工作树 26 文件 +1268/−43（含 3 个新测试文件 731 行、4 份生成物、6 份 locales、013 两行）。
+
+- **唯一映射点**（`types/mono.rs`）：`quantity_is_witness`、`runtime_field_index`（声明序 → 运行期数据序；witness 命中返回 `None`）、`runtime_field_count`、`quantities_are_witness_bearing`、`StructFieldInfo::is_witness`、`is_witness_bearing`。只吃 `Option`（元素为 `Quantity`）迭代器，AST/IR/Mono 三侧共用。
+- **构造数据-only**（`translator::synthesize_constructor`）：Load / Arg / `CreateStruct` / 局部槽 / 结果槽只含数据字段。`Box(v,w,z)`（w=witness）实测 2 条 Load、`CreateStruct` operands `[0,1]`、`dst=2`、`local_count=3`；`b.z` 的 `LoadField.field == 1`。
+- **字段索引**（`ir_gen::resolve_field_index`）：仅命中记录字段的两条路径换算运行期数据索引；tuple / `Vec.length` / Range 恒等；witness 命中返回 `None`。
+- **E1114**（2 发射点）：值级 `b.w` 在 FieldAccess 的 `Struct` 臂与 `TypeRef→Struct` 臂均拒绝。
+- **E1115**（4 发射点）：声明 `mut` 字段 / 字段赋值 / `&mut` / 方法接收者（`co.receiver` 与 `co.args[0]` 的 `WriteBorrow` 收在同一点，覆盖用户不写 `&mut` 的自动写借用）。
+- 码表 + 六 locales + 013 + 生成物：index 156→158、E1xxx 59→61、合计 161→163；E1114「2 处」/E1115「4 处」。生成器重跑 11 份生成物 hash 全不变。
+
+### 二、判据
+
+- 19 条新测试：codegen 3（T01/T02/T12）、IR 1（T05）、sema 10（T03/T04/T07–T12，含 4 条普通记录负控）、types 4（映射/计数/witness-bearing/T13）。
+- 5A 方法接收者探针：`Box.shift(self: &mut Box)` + `b.shift()` ⇒ E1115；同形普通记录零 E1114/E1115。
+- 零行为：语料 388 行 SHA256 与基线逐字节相同；IR 快照零漂移；fast 2147 条 exit 0；普通记录四类写入负控全放行。
+- 变异 T17–T23 均机械可逆（`git apply -R` + blob 前后一致）；T20 拆 3 个补丁分别红；T22/T23 红在 Eq/Hash 与 Debug。T21 首版只断 `local_count` 为绿，补 `CreateStruct.dst` 断言后转录为红（测试强度修正，非放宽判据）。
+
+### 三、裁定/偏离
+
+1. **E1115 单码单文案、四发射点**：未拆四个构造函数/四条文案（`site` 参数会污染六语文案）；四类写入共用「记录整体不可变」判据。lead 接受。
+2. **`inference::mono_type_is_witness_bearing`（`pub(super)`）**：只做剥 `Ref` 与 `TypeRef` 一层解析，避免三处各写一份；witness 判定本体仍唯一（`mono.rs`）。
+3. **E1114 的 `Struct` 字面量臂未单独直驱**：测试走 `TypeRef` 路径；两臂共用 `is_witness` 判据。
+4. **方法接收者只覆盖 `Var` 接收者**：`b.inner.method()` 等嵌套接收者未检（宁漏检不误报）；泛型记录实例留 B.4。
+5. **声明面 `Box.shift: (self: &mut Box)` 本身不拒绝**：只拒调用点；若契约要求声明面也拒，需追加。
+6. **locale example 用 `w: Pos(v)`**（设计包形态）；B.1 无用户语法，B.2 定义声明形式时同步校正。
+
+### 四、边界
+
+E1114/E1115 用户可达留 B.2；本批无新语法、无 witness 产出；不宣称 Σ 完全体。`z` 索引、`CreateStruct`/`local_count` 的证据均在直驱 IR/bytecode 测试内。
+
+## P3 3.20.28 收口（mono 特化名缺 function_files 条目——std 诊断行号贴用户文件，#443，2026-11-14）
+
+> **一、查证（出处归属修正）**：issue 自述根因指向展示层；实测根因在 mono 层——`function_files` 由 link 期按 mono **前**的函数名建表，特化名与柯里克隆名是 mono 期新生、缺条目；codegen 给 debug span 定 file_id 时按名查不到、`unwrap_or(0)` 回退文件表首条目；且首条目是入口还是 `<std/list>` 取决于入口路径与虚拟路径的 Path 排序（Windows Prefix 组件排前的平台偶然）。症状：std.list 第 157 行的错误被贴成仅 15 行用户文件的第 157 行——诊断指向不存在的行，用户照行号查不到内容。分类按 07 oracle 表登记 **B 类**（任务书预设 C 类，判据以 07 表为准）。
+
+> **二、修法（判据单源）**：Monomorphizer 增 `specialized_origins` 登记面——特化件与柯里克隆件两个出生点各登记来源函数名（特化出生点 = 泛型原函数名，克隆出生点 = 柯里层名），`build_output` 统一消费成 `function_files` 条目；不从特化名反推原件（字符串反推 = 平行事实，禁令三）。修后诊断文件字段 = RFC-036 §4 虚拟路径 `<std/list>`、行号落在 std 源真实行（157 行 `probe = list[index]` 逐字核对）——用户照诊断能找到真实现场。
+
+> **三、基线再生（升级裁决）**：语料基线把 #443 缺陷形态逐字冻结（旧条目 list_remove_at_oob_err 的 E6003 文件字段 = 用户文件 + std 行号 157）。按批次协议升级裁决（队长批准，2026-11-14）：漂移即修复的预期可观察变化 ⇒ 由实现者再生，diff 恰 1 行（该条目文件字段 → `<std/list>`，行号与 W1004/check 半边逐字不变，其余 387 条零变化，numstat 1/1），与修复同提交（红线：基线与行为改动同提交），队长提交前人工亲核该行（旧形态 = 缺陷本身的记录，新形态 = 修复行为）。
+
+> **四、冲突解决（红线 10⑩）**：本笔与并行会话 6.9.5-B.1b+c（`74c92c3b`）的 translator.rs 编辑同文件相撞——rebase 中双方 E8xxx 发射点行号平移冲突。解法 = 逐 hunk 解（不整文件取一方）+ 在合并树上重跑 gen-error-code-docs.py（生成器是唯一事实源），E8001 发射点终态 297/1380；解后本地编译 + cli_e2e 64 / monomorphize 17 全绿才 `git rebase --continue`。t3 备案：终态 297 与 rebase 前原笔同值是算术巧合（对方净增行全部落在该发射点之后），「非任一侧」按点位只对第 2 点严格成立，实质（合并树重跑、双方编辑共存）成立——措辞按点位须精确的教训。
+
+> **五、验证链与 t3 备案**：t1 门禁 14 项全绿 → t2 **PASS**（M1 登记面摘除 ⇒ 单元锚红；M2 消费面摘除 ⇒ 单元锚红——登记与消费各自承重，trial 机械可逆 blob 比对；修复态双锚绿 + list_remove_at_oob_err 夹具 CLI 实跑文件字段 = `<std/list>` 行号 157；IR 快照零漂移；语料差分对再生后基线逐字节零漂移）→ t3 **APPROVE**（5 条 info 备案，无阻塞）：①E8001 终态措辞按点位不够精确（实质成立，见四）；②「git stash 先红后绿手法」只记录在提交信息、两处新测试注释无 stash 字样——缓解 = 修前红态由断言机械蕴含（`function_files` 无条目 → assert_eq 失败）+ 基线冻结的缺陷行独立佐证；③提交信息回归计数 mono 81 / predicate 30 属 cargo filter 口径静态不可精确重构，可静态核对的四个计数（integration 375 / cli_e2e 64 / binding_positions 5 / evaluator 16）全精确命中；④基线再生裁决记录在冻结 rev 仅存提交信息——按团队编排第 8 条收口文档最后落属正常时序（本节即落档兑现）；⑤build_output 消费点 origin 查不到时静默跳过——按出生点不变式该分支不可达（两出生点 origin 均在 link 期建表覆盖集内），防御性残留非缺陷。
+
+> **六、计数与移交**：三级 +1 = 3.20.28（240→241）；二级不变。issue [#443](https://github.com/ChenXu233/YaoXiang/issues/443) **关闭**。修复笔推送终态 `794430f0`（含 rebase 冲突解决终态）。批次树已 release。
+
+## P3 3.20.29 收口（字节码 Not 与 Neg 分码 I64_NOT——往返保真，#562，2026-11-14）
+
+> **一、查证（issue 成立 + 事实细化）**：issue 来源 = 3.20.25 批次 t3 穷举发现。实测证实：IR `Not` 经 translator 与 `Neg` 同发 `I64_NEG`，解码一律还原 `UnaryOp::Neg`——编码/解码往返把逻辑非改写为取负。关键细化：语言规范限定 `!` 操作数为 Bool（`infer_unary` 非 Bool 即报 E1051），修前**用户可见答案靠解释器 Neg-on-Bool 补偿臂运行期兜对**——缺陷面 = 编码保真（`.42` 往返/直跑改写语义）而非现行错答案；且执行器 `UnaryOp::Not` 执行臂既有（Int/Bool 两臂 + 既有 logical_not.rs 测试），缺的只是编码/解码分码。分类 = RFC-039 决议 **D33** 判别为修（「静默改变语义是最危险的一类」）。`opcode()` 方法本身产线零调用（仅测试消费），但它是 bytecode 层编码映射的声明面——B10 债的登记本体。
+
+> **二、修法**：新增专用指令码 `I64_NOT`（0x2C，位于 I64_NEG 0x2B 之后、比较段 0x60 之前无冲突）：opcode() 编码按 `op` 字段分码（Neg→I64_NEG / Not→I64_NOT，不再 `{ .. }` 忽略）+ 解码新臂还原 `UnaryOp::Not` + translator `Not` 臂换发 `I64_NOT` + `opcode_name` 登记。执行器既有 `Not` 臂自然接通；旧 `.42` 文件 I64_NEG 解码仍还原 Neg（对照锚钉住——兼容零变化）。穷尽匹配补臂点核验（队长 grep）：encode/decode/opcode_name/translator 四面全覆盖，执行器臂既有，无遗漏分发点。
+
+> **三、错误码生成物再生（提交信息归因更正，t3 info 备案）**：修复笔在 translator.rs 插 2 行注释、bytecode/mod.rs 插 14 行——t1 第一轮门禁抓到 E8xxx.md 漂移，重跑生成器后恰 1 行（E8001 发射点 translator.rs 1380→1382），幂等验证（二次运行零 diff）。**t3 备案更正提交信息归因**：提交信息写「translator.rs 与 bytecode/mod.rs 的插入平移 E8001」——实测 bytecode/mod.rs 全文件零诊断发射点，其插入不平移任何文档行；平移仅来自 translator.rs +2 注释行。E8xxx 恰 1 行的声称经静态复核为真。
+
+> **四、验证链与 t2 FAIL 归因（队长派工失误登记）**：t1 门禁 14 项（第一轮抓生成器行号平移欠账 → 重跑幂等后全绿）→ 队长 diff review 通过 → t2 **FAIL**——归因 = **契约处方错误非修复缺陷**：M1 处方只摘 opcode() 的 UnaryOp 臂 ⇒ 主锚未红，因为主锚的编码面是 translator 直发 `I64_NOT`、opcode() 产线零调用（**队长派工失误如实登记：写 M1 处方时未核对锚-机制接线**，预核 grep 过 opcode 常量但没追 opcode() 方法的产线调用面）。验证者当轮实测更正补丁（translator Not 臂回退 + opcode() 臂塌缩 = 精确复现修前编码面）下主锚红 + 变异态与修前 blob 逐字节一致 → **t2r 聚焦复验 PASS**（trial 机械可逆；端到端锚绿 = Neg-on-Bool 补偿臂兜对，与查证事实互证——这正是「修前答案正确、缺陷在编码保真」的行为学证据）→ t3 **APPROVE**（3 条：①06 清单 B10 行未随修注记 low——收口兑现（B10 行重写为已修态 + 汇总行移出待办 + S6 标记 B10 完成，B13 先例）；②提交信息 E8001 归因措辞 info——本节三承载事实更正；③端到端锚 match+panic 断言形态 info——与同文件既有惯例一致，不要求改）。其余 t2 量测全过：修复态六锚绿 + CLI 实跑探针（`!b` 发射 I64Not、取负仍 I64Neg）+ M2 解码锚红 + IR 快照/语料差分零漂移 + 卫生全清。
+
+> **五、计数与移交**：三级 +1 = 3.20.29（241→242）；二级不变。issue [#562](https://github.com/ChenXu233/YaoXiang/issues/562) **关闭**。修复笔推送终态 `b5624a35`。06-cleanup-inventory B10 债清账（S6 剩 B8/B9/F8）。批次树已 release。
+
+## P6 6.9.5-B.2 契约（b2-impl，2026-11-14，只读；lead 复核）
+
+> 本节点是 **B.2 实现轮的契约**，不是实现记录：只落接口、判据、测试矩阵与红态实测，不动 `src/`。它把 RFC-027 §14.1–§14.3 与 §14.6、SPEC §3.4/§4.3/§8.3.1–§8.3.3/§8.3.6 落成可执行契约；§14.4（跨模块）与 §14.5（类型级 `b.w`）分别归 B.4 / B.3，逐条在「覆盖矩阵」点名。实现验收以 09 的 6.9.5-B 行 + 本节为准。
+>
+> **红态口径**：下表「红态」是本节写作时在 HEAD `3892ea81` 的 `check` 上**实测**的现状（同一台机器、同一二进制），不是推断；「绿态」是 B.2 验收期望。每条判据都必须先红：实现轮先落红测试，确认它抓住的是当前行为，再改代码。**负控/保持型判据**（T02/T08/T18/T21/T26）今天本就为绿：它们的「红」由 §七 的变异表给出（对应变异下必须红），不是当前失败。
+
+### 一、目标与两笔提交
+
+B.2 把「命题形态的字段」从数据字段变成 evidence 字段，并让构造点按 §14.2 产出证明义务。落到现有管线分两笔，**各自 sound、可独立 revert**：
+
+- **B.2a（非泛型记录）**：`RecordModel` 与声明期分类一遍（§14.1）；构造点字段绑定、字段类型检查（B.0 的 H1：非泛型构造 arm 今天不查字段类型）与命题义务（§14.2）；IR 量词传播与数据序（§14.6）；C 类构造字段检查（D59）；E4018/E2031/E1114/E1115 用户可达；每次判定一份预算（B.0 的 H8）。B.2a 不对泛型记录建模型（保持今天的 None 与 arity）。
+- **B.2b（泛型记录）**：编译期值参数证据（`Matrix`/`SafeArray` 的 `Assert(Rows > 0)`）；proof family 参数（`Cell`）的声明期按 `space=Proof` 假设分类、实例化处 kind 校验、实例化后重判定、未绑定 ⇒ 构造点 `Unproven`（E2031）；每实例的 IR 量词保留。B.2b 的源级形态见 §十二 的 D0。
+- 顺序：B.2a 先；B.2b 不得单独先于 B.2a。B.2a 单独 ship 时泛型记录**保持今天的形态**（不分类、不产 witness、arity 不变）——这是「中间态不引入 unsound」的边界，不是「泛型 Σ 留后续」。
+
+**不做（outOfScope，逐条有归属）**：§14.4 跨模块导出与签名哈希（B.4）；§14.5 类型级 `b.w`、`ConstExpr::FieldPath`、`EvidenceTerm`（B.3）；`Kernel::check`/`LogicSignature`/`Certificate` 的完整落地与 §13 证书留存（超出 B.2，见映射表）；§8.6 的 SMT 裸信缺口（不修、不加剧）；#537/#539/#552；defeq/6.9.3；Π/`DepFn`；runtime check/revalidation；方法字段不进构造参数的 6.6.12 已知不一致（**保持现状**，B.2 不得顺手改）；`NamedStruct`/和类型字段；更细粒度可变性。
+
+### 二、唯一模型与唯一判定单元（接口）
+
+**位置与所有权**：
+
+- 数据类型（`RecordModel` 等）落 `src/frontend/core/sema/record_model.rs`（新模块，`sema/mod.rs` 声明，类型 `pub`）；纯分类辅助函数同文件。
+- 声明期一遍的编排是 `TypeChecker` 方法，落 `src/frontend/core/sema/checker/record_model.rs`（`checker` 的私有子模块；可调 `checker.rs` 的私有 `resolve_type_annotation`，自身以 `pub(super)` 供 `add_type_definition` 调用——**不得**把 `resolve_type_annotation`/`judge_refined_obligation` 放宽成 `pub(crate)`，`pub(crate)` 计数只许不变）。
+- 记录模型表挂 `TypeEnvironment.record_models: HashMap<String, RecordModel>`；唯一写入点 = 声明期一遍。
+
+**结构（字段名与语义；任务书点名的五个部分逐项落位）**：
+
+```text
+RecordModel {
+    name        : String
+    type_params : [RecordTypeParam]        // 声明序；kind = Type | Const{const_type} | Family{arity}
+    fields      : [StructFieldInfo]        // 声明序；与 StructType.fields 同一表示，quantity 已写
+    obligations : [FieldObligation]        // 每条 evidence 字段一条；与 evidence 同长同序
+    evidence    : [EvidenceSlot]           // 证据槽；B.2 只填 field/quantity/proposition
+    field_path  : [(String, usize)]        // 字段名 → 声明序（§14.1 位置判据与构造代入的唯一查找）
+}
+FieldObligation {
+    record      : String
+    field       : usize                    // 声明序
+    proposition : Proposition
+    depends_on  : [usize]                  // 严格前序数据字段（声明序；代入位）
+    param_refs  : [usize]                  // 命题引用的编译期值参数（type_params 下标）
+}
+Proposition      { base: MonoType, constraint: ConstExpr }      // base = Refined.base；Assert 取 Void
+EvidenceSlot     { field: usize, quantity: Quantity, proposition: Option<Proposition> }   // Registry 面为 None
+RecordTypeParam  { name: String, kind: RecordTypeParamKind }
+RecordTypeParamKind = Type | Const{const_type: MonoType} | Family{arity: usize}
+```
+
+规则：
+
+- `fields[i].quantity` 是分类的**唯一落点**：`Some(Quantity::Zero)` = evidence，`None` = 数据字段。不新增 `role`/`is_evidence` 平行字段（禁令三 A）。
+- `field_path` 是**声明期索引**（名字 → 声明序；`Vec` 保声明序、导出可比）；运行期索引仍只由 `mono::runtime_field_index` 回答（唯一映射点）。两套索引不得互相顶替。B.3 的 `ConstExpr::FieldPath` 在 `field_path` 之上构造，不另造第二张表。
+- `FieldObligation` 是 RFC §14.2 的**子集**：`evidence_ref`/`certificate_ref` 两槽随显式证据声明与证书缓存在 B.3/B.4 加入。B.2 的显式证据路径 = 约束里的证明函数（`ConstExpr::Call` → `ProofFunctionCall` → 编译期执行），与 §4.3 同一机制，**不新增** `EvidenceRef` 载体。**不宣称** §13 的 `Proved(checked)` 留存与复用。
+- 命题项只用统一项世界的既有表示：谓词/证明函数/`Terminates` 应用由 `PredicateResolver`/`refine_predicate_from_ast_args` 正格化为 `Refined`；`Assert(x)` 的命题 = 其布尔实参的 `ConstExpr`（`ast_type_to_const_expr`）；族参数应用 `P(v)` 的命题由实例化后的类型解析产出（B.2b）。
+- `obligations` 与 `evidence` 不是同一事实的两份表示：前者是**构造期代入模板**（`depends_on`/`param_refs` 直接服务 `substitute_const_expr`），后者是 RFC §14.4 `EvidenceSlot` 的前置形态（B.4 再加 `evidence_ref`/`certificate_ref`/`signature_hash`）；两者同长同序只因为同一条 evidence 字段各占一个面，B.2 一起给出可避免 B.4 再拆一次结构。
+
+**唯一判定单元（构造期「同 helper」）**：`checker/refinement.rs` 的 `judge_refined_obligation`——三值映射、E4018/E2031 发射、`proof_calls` 上抛、Γ 作用域都在它里面，B.2 **一行判据都不复制**。构造义务的调用方只做四步：① 取记录模型；② 按名/按位绑定数据字段（`bind_args_to_params`，六条规则同源）；③ 用 `substitute_const_expr` 代入命题；④ 交单元。
+
+- **预算**：进入单元时重设一份 `BudgetTracker::for_judgment()`（B.0 的 H8，「一次判定一份」）。今天 `ProofContext` 一份走全模块、从不 reset；不修则模块后段的构造义务会被前序判定的步数拖成 E2031（静默错判，C 类）。变异：摘掉重设 ⇒ 长链义务后的构造点红。
+- **空间判据（§14.1 第一步）的唯一读数**：`field_space` 查询。`Proof` 集合 = 归一化后的 `Refined{..}` ∪ 注册为 Proof 空间的内置类型族 ∪ `Family` 参数应用；其余一律 `Data`。内置类型族空间的载体是 `TypeFamilyExport`（新增 `space: SortSpace`：`Assert`/`IsTrue` = Proof，`Error` = Data）——这是 §4.1 `SortDecl.space` 的种子：表是数据，`field_space` 只查表，B.4/内核批次用 `signature.sorts` 替换时分类逻辑零改动。**不硬编码信任根**：不出现按库名/求解器名/字段名分支的判据。
+- **消费面只有三处**：声明期自己（结果落 `env.record_models`）、refined walk（构造义务）、IR 生成（量词传播）。IR 只经 `TypeCheckResult.record_models` 读，不自行重算分类（禁令三 A）。
+
+**与 RFC §4 的映射与差距（B.2 的「内核」= 现管线）**：
+
+| RFC 接口 | B.2 的落点 | 状态 |
+| --- | --- | --- |
+| `Kernel::check(signature, certificate, proposition)` | `layers::predicate::check_predicate` + 证明调用执行 | 三值职责成立；**无显式 certificate**（§8.6 缺口保持） |
+| `LogicSignature.sorts` | `field_space` 的 Proof/Data 表（本批的 `space` 登记） | 种子；`rules/axioms/libraries/hash` 未落（B.4/内核批次） |
+| `Certificate` / `EvidenceRef` / `ProducerHint` | 证明函数路径（`ProofFunctionCall`）与 SMT verdict | 不物化证明项；§4.2 的重放未落 |
+| §13 证书留存/复用 | 无 | **不宣称**：构造义务每次编译重证 |
+| 跨签名三路径 | 无 | B.4 |
+
+> 这张表是**覆盖承诺的边界**：B.2 只保证「构造点命题经既有证明管道三值判定、E4018/E2031 分派正确、证明函数路径可达」，不宣称 §4 的完整内核。
+
+### 三、声明期一遍（§14.1 / §14.2 / §14.3）
+
+B.2a 只对 `type_params` 为空的非泛型 `Type::Struct` 调本遍（泛型分支由 B.2b 落同一函数，中间态边界见 §一）。`add_type_definition` 在构造 `poly` **之前**调一次 `classify_record`；`poly` 的 `StructType.fields[i].quantity` 就地写分类结果（`env.types`/`env.vars`/`GenericTypeDef.poly` 三处因此同源），`env.record_models.insert(name, model)`。算法：
+
+1. 只处理 `Type::Struct{body}` 的 `TypeBodyItem::Field`；`Binding`/`Interface`/`Expr` 项不动（类型体级 `Assert(...)` 仍是既有 const-bound 面，E1062 保持）。
+2. 按源码序收集字段；`type_params` 由 `classify_generic_params` 的结论投影（`Type`/`Const{..}`/`is_type_level_fn` 标注 → `Family{arity}`）。
+3. 逐字段三步：**space → position → category**。
+   - **space**：先 `refine_predicate_from_ast_args`（AST 无损）正格化谓词/证明函数应用；非谓词头再查 `field_space` 表（内置族 / `Family` 参数 / 其余 Data）。**不改写字段的 `MonoType`**——`StructType` 只写 `quantity`，命题只进模型。这样避免 `Refined` 字段类型改变下游 unify/投影语义（B.1 的「解析副本 vs 原 AST」风险不重演）。
+   - **position**：命题自由名经 `const_eval::const_expr_free_names` 收集（不新增第二份遍历）；自由名分三类：本记录字段（按 `field_path` 查）、类型参数、其余（模块级编译期常量等）。**只有 `space=Proof` 才做位置判据**；`space=Data` 一律数据字段（`Buf` 的 `data: Array(Int, n)` 不因引用前序字段变 witness）。
+   - **category**：
+
+     | 形态 | 判定 | quantity |
+     | --- | --- | --- |
+     | Proof + 自由名字段 ⊆ 严格前序数据字段（空集：只引用编译期值参数/常量） | evidence | `Some(Zero)` |
+     | Proof + 自由名字段 = {本字段} 且无其他字段引用（自引用精化 admission） | 数据字段 | `None` |
+     | Data（含数据类型族应用、普通记录、方法字段、类型参数） | 数据字段 | `None` |
+     | Proof + 前向引用后序字段 / 引用另一 evidence 字段 / 把自身当 evidence 实参（与其它字段混用） | **声明期拒绝**（§14.1 第 4 行；`P` 的 kind 为 data family 是另一类，由 D1 在实例化处判） | — |
+
+   - evidence 字段额外检查：不得有默认值（SPEC §3.1.1/§8.3）；记录含任一 evidence ⇒ 声明面 `mut` 走既有 E1115（B.1c 的判据改读模型的 quantity，不再读 AST 的空 `quantity`）；`Terminates(...)` 字段照 §14.1 归 evidence，但字段位无计算可终止 ⇒ 构造点 E2031（见 §四 义务生成），**不**声明期拒（保持 §14.6 的拒绝清单不变）。
+4. 拒绝类诊断码是**裁决点 D2**（§十二）：RFC §14.1 第 4 行与 §14.6 只写「声明期拒绝」未给码。按「四码各管一面、不借码」的原则推荐**新增一个声明期码**（reason 区分前向引用/证据引用/自身混用/默认值）；若裁复用，则前向 → E1001、引用 evidence → E1114、默认值 → E1092，并在 09a 登记借码理由。
+5. **两阶段一致性**：`collect_signatures`（Registry 面）也走同一 `classify_record`，但 `predicate_defs` 为空 ⇒ 只填 `fields[].quantity` 与 `evidence` 槽（`proposition = None`），`obligations` 留空；`check_module` 面填全。判据：同一 fixture 两阶段的 `fields[].quantity` 逐位相等（T07）。**不得**让 Registry 面停在「全 data」——那会让导出面与实检面分叉。
+6. 判定源单点：space 表、`refine_predicate_from_ast_args`、`const_expr_free_names`、`runtime_field_index`、`quantity_is_witness` 全部复用既有实现；本批新增的只有 `field_space` 壳与 `space` 登记项。
+7. 派生（SPEC §11.2）：`auto_derive_traits` 的字段集改为「非 witness 字段」——evidence 不参与 Clone/Debug 派生判定；拒绝/接受规则本身不动。
+
+### 四、构造期（§14.2 + 构造字段检查）
+
+**构造点收敛到一个绑定 helper**。今天的实际状态（B.0 已登记、本节实测）：非泛型 `Struct` 构造 arm 只查 arity/必需名，**不查字段类型**，未知命名实参静默丢弃；泛型两层/值构造 arm 查字段类型但按「全部字段」计 arity；IR 的默认值填充与命名重排按 AST 全字段切片。B.2 判据：
+
+1. **构造参数 = 非 witness 字段**（数据字段 + 方法字段——方法字段的 6.6.12 已知不一致保持，不改）。`bind_args_to_params` 是唯一绑定入口：`param_names` = 非 witness 字段名（声明序）、`optional` = `has_default`、`recv_offset=0`；位置/命名/争槽/未知名/重复名/缺参六条诊断由它发（E1010/E1014/E1111/E1015），**不重复发射**。
+2. **逐字段类型检查**：位置实参按「非 witness 字段序」对齐、命名实参按名入槽后，逐个 `decide`（6.9.3d 判定协议）字段类型与实参类型；不匹配走 E1002（与泛型 arm 同码同判）。这是 D59 的 **C 类**修复：今天 `Point("a", 2)` 的 `check` 通过、`run` 打印 `a`（静默给错答案），修后编译期 E1002。
+3. 证据字段**不占位**：多传实参（`Box(3, 5, evidence)`）落不到任何数据形参槽 ⇒ E1010/E1014 一族；命名实参指向 witness 字段 ⇒ E1014（可用名列表 = 非 witness 字段名）。
+4. **构造义务生成**（refined walk，`checker/refinement.rs`）：对每个「callee 解析到带 obligations 的记录」的构造点，按声明序逐条生成义务：
+   - 绑定：与 typecheck 同一 helper（数据字段序；缺省字段取默认值表达式，空构造的零值填充与 IR 同口径）；
+   - 代入：`depends_on` → 相应实参的 `ConstExpr`（`convert_expr_to_const_expr`；折叠不出则保留符号项）；`param_refs` → 编译期值参数实参；`substitute_const_expr` 一次代入；
+   - 判定：`judge_refined_obligation(ctx, &MonoType::Refined{base, constraint}, &bindings, record_name, field_name, display, call_span, None)`；`bindings` = walk 的值环境（`unit.values`）；
+   - 三值：`Proved` 无诊断；`Disproved` E4018（带反例）；`Unproven` 有证法 → `proof_calls` 上抛；无证法 → E2031。**一条字段一条义务、声明序、不短路**（前面的失败不吞后面的诊断）；
+   - 判定不了模型（callee 是带 obligations 的泛型模板但给不出实例，或族参数未绑定）⇒ **E2031**，不静默跳过（§14.3：未实例化 = 构造点 Unproven）；
+   - `Terminates` 约束字段 ⇒ 直接 E2031（不支持形态；`constraint_is_terminates` 同源判据）。
+5. **遍历覆盖必须满覆盖，不能沿用 6.9.1 的语句级缺口**：构造点在**表达式任意位置**都要判。实现为 refined walk 的表达式遍历：`walk_constructions_in_expr` 递归 `Call` 实参、`BinOp`/`UnOp` 操作数、`FieldAccess` 基、`List`/`Tuple`/`Map` 元素、`If` 分支、`Return` 载荷；`Expr::Block` 路由回 `refined_walk_stmts`（同一语句只走一次，避免双判）；`Lambda` 体走既有 `refined_walk_fn_body`（独立单元）。调用点精化（`check_call_arg_refinements`）的覆盖面**不动**（不顺势扩嵌套调用——那是另一条修复，避免本批夹带）。变异：把遍历改成只看语句位置 ⇒ 嵌套构造锚红（T14）。
+6. IR 构造点同源：`ir_gen` 的默认值填充与命名重排按「非 witness 字段序」切片（`struct_definitions` 的量词来自模型），`synthesize_constructor` 已是 data-only（B.1b），两者必须同序——判据是 T28 的指令形状，不是「看起来对」。
+7. **不得**改变：普通记录的既有诊断集与退出码；方法字段的 arity；`CreateStruct` 的数据序（B.1b 已定）。
+
+### 五、IR quantity 传播（§14.6 擦除面）
+
+1. `TypeCheckResult` 新增 `record_models: HashMap<String, RecordModel>`（产出 = typecheck 声明期一遍；消费 = `ir_gen`）。它是**义务字段**：必须同时登记 `src/driver/obligations.rs` 的 `Obligation::RecordModels`/`INVENTORY`/`IR_GENERATION_DELIVERED`、`docs/src/dev/architecture/02-stage-contract.md` §义务字段表（表头 13→14、定义行、结构体范围 F5 锚点）、以及消费端 `ir_gen.rs` 的真读取——`scripts/ci/check-obligations.py` 的清单对账/读出证据/交付标记/F1/F4/F5 全部要绿。**这是机械必需面，不许用旁路（如塞 `semantic_db`）绕开登记。**
+2. `ir_gen` 建 `TypeDeclBody.fields` 时 quantity 取自模型（同名类型），不再读 AST `StructField.quantity`（生产恒 `None`）；`struct_definitions` 的字段切片同样用模型的量词投影（同一个 helper），使 `resolve_field_index`/`synthesize_constructor`/默认值填充看到同一份分类。
+3. mono 透传：`MonoType::substitute`/`replace_type_params_walk`/`solver` 的 Struct 臂已按字段 `..clone()` 透传 quantity（B.1a），B.2 只加断言（T26）；B.2b 的实例化必须保留该事实。
+4. **快照零漂移的机制**：`normalize` 的 `type_decl` 行不打印 quantity（已核实），故 B.2a 的 quantity 变化不产生快照文本 diff；**不**靠再生快照「消漂移」。B.2b 的 6 个 `Assert` 语料文件同理（待实测）。
+
+### 六、诊断码分工与 D59 分类
+
+| 码 | 触发面 | B.2 的动作 | 红态（HEAD 实测） |
+| --- | --- | --- | --- |
+| E4018 | 构造点 evidence 命题被判伪 | 复用既有发射（判定单元） | `Box(-1, 99)` exit 0 |
+| E2031 | 构造点 Unproven（含未实例化/不支持形态/预算） | 复用 | 见 T12/T25 |
+| E1114 | 值级读 witness | 已实现；B.2 使其用户可达 | `b.w` exit 0 |
+| E1115 | witness-bearing 记录的写 | 已实现 4 发射点；声明面改读模型 | `mut`/字段赋值 exit 0 |
+| E1062 | 类型实例化的 Assert 常量约束 | **保留不动**（语料 2 例依赖：`assert_compile_error` / `assert_lt_compile_error`） | 既有绿 |
+| E1002 | 构造字段类型 / 泛型 kind 不符 | 复用（C 类补齐 + B.2b kind） | `Point("a", 2)` exit 0 |
+| E1010/E1014/E1111/E1015 | 构造实参绑定 | 复用共享 helper | `Box(v=3, w=9, z=5)` exit 0 |
+| 声明期新码 | 前向引用/证据引用/自身混用/默认值 | **D2 裁决** | `w: Pos(z)` exit 0 |
+
+**D59 分类**：主错 **C**（静默错配/静默给错答案——把命题族字段当数据字段、构造字段类型不查）；交付面的用户可见变化（构造 arity/布局、`b.w` 可读性）属 **D 类**，已由 2026-11-13 的 H0=B 用户裁决覆盖。四条照办：先红后绿（§七 每条红态）、不改变「原先成功」的对外表现（普通记录/不带证据的程序零变化；带证据的程序按 H0=B 的既定变更）、同提交登记（09/09a + PR 错误类型行）、基线同提交再生 + 人工 review。**语料影响面**：`Assert` 字段仅 6 个文件、全部只作类型位使用、无值构造 ⇒ B.2a 预期零漂移；B.2b 的 quantity 变化不改快照文本，仍需实测。
+
+### 七、测试矩阵 T01–T29（先红后绿）
+
+测试落点：声明期/构造期/负控 → `src/frontend/core/sema/tests/`（新文件 `record_evidence.rs`，真实 lex→parse→check）；IR → `src/middle/ir/tests/`（新文件 `record_evidence_layout.rs`，走真实四段管线）；语料 → `tests/yaoxiang/`。命名/AAA/断言消息按 `test-specification.md`。
+
+**声明期（B.2a）**
+
+| # | 判据 | 红态（HEAD 实测） | 绿态 |
+| --- | --- | --- | --- |
+| T01 | `Box: Type = { v: Int, w: Pos(v), z: Int }` 分类：`fields[].quantity = [None, Some(Zero), None]`、`evidence.len()=1`、`obligations.len()=1`、`field_path` 三项 | 全 `None`（无 witness 产出） | 三投影一致；`runtime_field_index` 给 z=1 |
+| T02 | 数据族反例 `Buf: Type = { n: Int, data: Array(Int, n) }`：`data` 仍是数据字段 | 通过（负控） | 全 `None`；arity=2 不变 |
+| T03 | admission `Box: Type = { v: Positive(v) }`：判数据字段 + 构造点义务（`Box(5)` 0 诊断；`Box(-5)` E4018） | `Box(-5)` exit 0 | 数据字段 + E4018 |
+| T04 | 前向引用 `{ w: Pos(z), z: Int }` ⇒ 声明期拒绝（D2 码） | exit 0 | 硬错误，不静默降级 |
+| T05 | 引用另一 evidence 字段 `{ v, w: Pos(v), e: NonNeg(w) }` ⇒ 声明期拒绝（D2 码） | exit 0 | 硬错误 |
+| T06 | evidence 字段带默认值 `w: Pos(v) = 7` ⇒ 声明期拒绝（D2 码） | exit 0 | 硬错误 |
+| T07 | 两阶段一致：同一 fixture 在 `collect_signatures` 与 `check_module` 的 `quantity` 逐位相等且非全 None | 两阶段都全 `None`（恒等） | 相等且非全 None |
+| T08 | 只引用编译期值参数/模块常量的 evidence（`Assert(Rows > 0)` 泛型模板、`K` 常量）不被误拒 | 通过（负控） | evidence + `param_refs` 正确 |
+| T09 | 非法精化实参（`Pos(1, 2)` 元数错 / 实参不可转换）⇒ 既有 E1093/E1092 | 字段位今天无诊断 | 既有码在字段位发射 |
+
+**构造期（B.2a）**
+
+| # | 判据 | 红态（HEAD 实测） | 绿态 |
+| --- | --- | --- | --- |
+| T10 | 正锚 `Box(3, 5)`（v、z 数据实参；w 不占位） | E1010 expected 3 found 2 | 0 诊断；`Pos(3)` Proved |
+| T11 | 负锚 `Box(-3, 5)` | E1010（同上） | E4018（带反例） |
+| T12 | Unproven 形态：证明函数实参不可折叠（`f: (n: Int) -> Void = { b: Box2 = Box2(n, 0) }`，`w: Eq(v, 3)`） | exit 0（w 当数据字段静默接受） | E2031（未解命题 + 原因） |
+| T13 | 证明函数证据：`w: Eq(v, 3)` + `Box(3)` 0 诊断；`Box(4)` E4018（`ProofFunctionCall` 编译期执行） | `Box(3, 0)`/`Box(4, 0)` 都 exit 0 | 正 0 诊断、负 E4018 |
+| T14 | 嵌套位置构造（`Box: Type = { v: Int, w: Pos(v) }`）：`take(Box(-1, 99))` 的义务仍生成 | exit 0（2 参构造把 w 当数据字段） | E4018 |
+| T15 | 命名实参：`Box(v=3, z=5)` 0 诊断；`Box(w=9)` E1014；`Box(v=3, v=4, w=9, z=5)` E1015 | 分别：E1002（缺 w，把它当必需字段）/ E1002（缺 v、z）/ exit 0（重复命名静默） | 三条各自命中 |
+| T16 | 证据实参/缺参：`Box(3, 5, 9)` E1010；`Box(3)`（z 无默认）E1010 | 前者 exit 0；后者 E1010 expected 3 found 1 | 前者 E1010、后者 E1010（期望值改为 2） |
+| T17 | 构造字段类型（C 类）：`Point("a", 2)` E1002；`Point(1, 2)` 0 诊断 | `check` exit 0、`run` 打印 `a` | 编译期 E1002；正锚 0 诊断 |
+| T18 | 普通记录负控：构造/读/写全路径零 E1114/E1115/E4018/E2031 | 通过（负控） | 保持零 |
+| T19 | E1114 用户可达：`Box` 含 witness 时 `b.w` ⇒ E1114 | `b.w` exit 0（3 参构造） | E1114，位置在 `b.w` |
+| T20 | E1115 用户可达（4 发射点）：声明 `mut` / 字段赋值 / `&mut` / 方法接收者 | 声明 `mut` 与函数体内字段赋值实测 exit 0；`&mut`/方法接收者由 B.1c 直驱覆盖（用户面需 `mut` 绑定） | 四条各 E1115 |
+| T21 | 方法字段 arity 保持：方法字段仍算构造参数（6.6.12 不一致不被顺手改） | 现状（方法字段算参数） | 逐字保持 |
+
+**泛型（B.2b）**
+
+| # | 判据 | 红态（HEAD 实测） | 绿态 |
+| --- | --- | --- | --- |
+| T22 | const 参数证据：`SafeArray(Int, 3)([1, 2, 3])` 0 诊断；`SafeArray(Int, 0)` 仍 E1062 | 前者 E1010 expected 2 found 1 | 前者 0 诊断；后者 E1062 原样 |
+| T23 | proof family：`Cell(Int, Pos)(3)` 0 诊断且 w 义务 `Pos(3)` Proved；`Cell(Int, Pos)(-3)` E4018（源级形态按 D0 裁定） | `(3)` ⇒ E1010 expected 2 found 1；`(3, 9)` ⇒ E1002（`Pos(v)` vs int） | 正 0 诊断、负 E4018 |
+| T24 | kind 不符：`Cell(Int, Array)` ⇒ E1002（expected proof family / found data family） | exit 0（annotation 放行） | E1002 |
+| T25 | 未实例化/外层族参数：泛型函数体内构造 `Cell(T, P)(x)` ⇒ E2031 | exit 0（`Cell(T, P)(x)` 与 `(x, 0)` 都静默通过，实测） | E2031（开项 Unproven） |
+| T26 | 实例化/替换透传 quantity：`substitute`/`replace_type_params_walk`/`solver` Struct 臂保留 `Some(Zero)` | 直断（B.1a 已实现，无用户路径） | 断言保留 |
+
+**IR / 能力 / 语料**
+
+| # | 判据 | 红态（HEAD 实测） | 绿态 |
+| --- | --- | --- | --- |
+| T27 | IR quantity 传播：真实管线产出的 `TypeDeclBody.fields[].quantity = [None, Some(Zero), None]` | 全 `None` | 三值如上；量词来自模型 |
+| T28 | IR 零 witness / 构造代码同形：`Box(3, 5)` 的构造函数 IR = `Load × 2 + CreateStruct{2 operands} + Ret`、`local_count = 3`；`b.z` 的 `LoadField.field = 1`；无任何指令引用 witness 槽 | 3 个 Load/CreateStruct{3}/local_count=4 | 如上（与等价 data-only 记录的构造形状逐项相同） |
+| T29 | 语料/快照零漂移 + fast：B.2a 的语料差分与 IR 快照逐字节零 diff；`testsuite run fast` 全绿 | — | 零 diff；B.2b 的 6 文件如产生 diff 须逐条分类 |
+
+**变异（M；每条机械可逆，`git apply -R` + blob 比对）**：M01 构造 arity 不跳 witness（`runtime_field_count` 返回全字段数）⇒ T10/T28 红；M02 声明期不写 quantity ⇒ T01/T27 红；M03 构造义务不生成 ⇒ T10/T11/T13 红；M04 义务不走同一单元（换一个不注入 Γ 的判定）⇒ T14 与守卫负控红；M05 IR `struct_definitions` 不注入量词 ⇒ T28 的 z 索引红；M06 摘掉 kind 校验 ⇒ T24 红。
+
+### 八、能力/性能验收（P01–P04）
+
+- **P01（IR 零 witness）**：无 `CreateStruct`/`local_count`/`GetField`/`SetField`/`LoadField`/构造形参指向 witness 字段；IR 量词必须「在运行时零槽位」又「事实不丢」——两条都断言（T27/T28）。
+- **P02（构造代码同形）**：同一数据字段序列下，witness-bearing 记录的构造 IR 与「把这些 witness 声明成数据字段」的对照记录相比，数据侧指令形状逐项相同（多出的只有对照记录自己的数据槽）；判据是断言，不是目测。
+- **P03（语料编译时间）**：`tests/yaoxiang` 全量 348 个 `.yx` 逐文件 `check` 单轮基线（2026-11-14 实测）70.2 s；B.2 后同法三次取中位数 ≤ 110% 基线。B.2a 的语料义务数为 0（无构造证据记录），分类只做线性扫描；若超阈值须给出归因或改判据，不得静默。
+- **P04（门禁）**：`check-obligations.py`（含 `--selftest`）、`check-docs-truth.py`、`check-boundary.py`、`check-fanout.py`、`check-docs-refs.py`、`check-test-channel.py`、`markers --check`、错误码生成器幂等、`testsuite.py run fast`、语料差分、IR 快照全部 exit 0；改动错误码/发射点时必须重跑生成器并确认零 diff。
+
+### 九、覆盖矩阵（RFC/SPEC → 阶段）
+
+| 规范条款 | 内容 | B.2 落点 |
+| --- | --- | --- |
+| RFC §4 / §4.1 / §4.2 | 内核三值、逻辑签名、证书与重放 | 现管线承接（§二 映射表）；不宣称 certificate/签名 JSON |
+| RFC §4.3 / §13 | 显式证据、证书留存 | 显式证据 = 约束里的证明函数（B.2 落地）；留存不宣称 |
+| RFC §8 / §8.6 | SMT 是不可信 producer、裸信缺口 | **不修、不加剧**；构造义务继承现状 |
+| RFC §14.1 | 三步判据、四行表、`base` 不进布局、接口名 | B.2a 非泛型；B.2b 泛型/族 |
+| RFC §14.2 | data-only 构造、`FieldObligation`、两 Option 槽、多传实参报错 | B.2a 构造视图与义务；两槽落子集；多传 E1010/E1014 |
+| RFC §14.3 | proof family 参数、实例化重判、未绑定 Unproven | B.2b（源级形态见 D0） |
+| RFC §14.4 | `TypeDefPayload`/`EvidenceSlot`/`libraries`/签名哈希 | **B.4** |
+| RFC §14.5 | `ConstExpr::FieldPath`/`EvidenceTerm`/类型级 `b.w`/值级 E1114 | **B.3**；B.2 落 `field_path` 底座 + E1114 用户可达 |
+| RFC §14.6 | 5A、擦除、五码分工、声明期拒绝清单（前向/证据引用/`P` kind） | B.2a/b；`P` kind 走 D1；E4023/E4020 不动；声明期码 D2 |
+| SPEC §3.4 | 构造参数=数据字段、arity、多传实参、构造义务 | B.2a |
+| SPEC §4.3 | 泛型构造调用规则、`Matrix` 例 | B.2a arity 收敛；B.2b const 参数证据 |
+| SPEC §8.3.1 / §8.3.2 | proof-space 判据、四行表、admission、构造点义务与三值 | B.2a |
+| SPEC §8.3.3 | proof family、实例化重判、未实例化 | B.2b |
+| SPEC §8.3.4 | 跨模块导出与导入方验证 | **B.4** |
+| SPEC §8.3.5 | 类型级 `b.w` 与值级 E1114 | B.3 + B.2 的 E1114 |
+| SPEC §8.3.6 | 5A、擦除、码分工 | B.2a（用户可达）+ B.4（跨模块擦除证据） |
+| SPEC §3.1.1 / §11.2 | evidence 无默认值、不参与 Dup 派生 | B.2a |
+
+### 十、inScope / outOfScope
+
+**inScope（路径前缀）**：
+
+`src/frontend/core/sema/record_model.rs`、`src/frontend/core/sema/checker/record_model.rs`、`src/frontend/core/sema/mod.rs`、`src/frontend/core/sema/checker.rs`、`src/frontend/core/sema/checker/`、`src/frontend/core/sema/environment.rs`、`src/frontend/core/sema/types.rs`、`src/frontend/core/sema/inference/`、`src/frontend/core/types/mono.rs`、`src/frontend/core/types/eval/dependent_types.rs`、`src/frontend/core/types/eval/const_eval.rs`、`src/std/mod.rs`、`src/std/assert.rs`、`src/std/result.rs`、`src/middle/ir/ir_gen.rs`、`src/middle/passes/mono/mod.rs`、`src/driver/obligations.rs`、`src/driver/arms.rs`、`src/util/diagnostic/codes/`、`locales/`、`docs/src/reference/error-code/`、`src/frontend/core/sema/tests/`、`src/middle/ir/tests/`、`src/middle/passes/codegen/tests/`、`tests/yaoxiang/`、`tests/yaoxiang-multifile/`、`tests/baselines/`、`src/middle/ir/tests/snapshots/`、`docs/src/dev/architecture/02-stage-contract.md`、`docs/src/dev/architecture/09-execution-wbs.md`、`docs/src/dev/architecture/09a-wbs-history.md`。
+
+其中**机械必需面**（AGENTS.md 契约要求）：`TypeCheckResult` 字段 ⇒ obligations 三处对账（`src/driver/obligations.rs` + `02-stage-contract.md` + 消费端读取）；新语料 ⇒ `tests/baselines/` + `src/middle/ir/tests/snapshots/`；错误码/发射点 ⇒ `src/util/diagnostic/codes/` + `locales/` 六语 + `docs/src/reference/error-code/` 生成物；声明期 E1115 判据改源 ⇒ B.1c 的直驱测试与 locale 示例同步。
+
+**outOfScope**：B.3（`ConstExpr::FieldPath`/`EvidenceTerm`/类型级 `b.w`）；B.4（`TypeDefPayload`/`EvidenceSlot` 导出/`signature_hash`/`libraries`/跨模块/多文件）；`Kernel::check`/`LogicSignature`/`Certificate`/§13 证书留存；§8.6 SMT 裸信；defeq/6.9.3；Π/`DepFn`；runtime check/revalidation；#537/#539/#552；方法字段 arity（6.6.12）；`NamedStruct`/和类型字段；更细粒度可变性；`f(y)(y)` 第二值位。
+
+### 十一、风险与未核实
+
+- **语料重分类的零漂移是预期、未实测**：6 个 `Assert` 文件只作类型位使用（已 grep），但 `StructType` Eq/Hash 因 quantity 变化改缓存键、`instantiate_generic_type` 的实例化产物是否被其它路径消费，需 B.2b 实测（T29）。
+- **两阶段一致性**：Registry 面 `predicate_defs` 为空是既有事实；分类器必须对「PROOF/非 PROOF」可判而命题可空，否则两阶段 quantity 分叉。T07 是唯一硬判据。
+- **refined walk 的表达式遍历**是本批新增面：Block/Lambda 的单次路由若写错会重复判定（重复 E4018/E2031）或漏判；T14 + 全语料零漂移是底线。
+- **IR `struct_definitions` 的切片改造**触及 B.1b 的 data-only 假设与默认值填充：方法与证据字段的 kind 不同（方法算构造参数、证据不算），切片必须区分，不得按「非 data」一刀切。
+- **`Assert` 作为 Proof 空间的登记位置**：本契约推荐 `TypeFamilyExport.space`；若实现时发现注册路径不在 `TypeChecker` 可达面，需在契约外补一个登记通道（须先报 lead，不得改用名字硬编码）。
+- **声明期拒绝的 D2 码**未定：若裁复用，E1114 的文案是「值级读取」，用在声明位置语义偏移；借码理由必须登记。
+- **B.2b 的 proof family 源级形态**：RFC/SPEC 现写 `P: (T) -> Type`，但该形态的 `P` **不被 `classify_generic_params` 识别为类型参数**（实测 `Cell(Int, Pos)` ⇒ E1010 expected 1 found 2）；`P: (T: Type) -> Type` 可用（实测 `Cell(Int, Pos)(3)` 报的是 arity 2，说明 P 已是类型参数）。D0 必须先裁（§十二）。
+- **T25 的可写形态**：泛型函数体内的**带注解**写法 `c: Cell(T, P)` 今天先撞 E1003 `Unknown type: 'P'`（类型级函数参数没有进嵌套注解的合法类型名集，既有缺口，非 B.2 引入）；**不带注解**的 `c = Cell(T, P)(x)` 今天 exit 0（实测），T25 按该形态写。若 B.2b 需要注解形态，须把「类型级函数参数」并进 `check_annotation_type_names` 的 `generic_names`（小改，登记在实现轮；不属本契约新增判据）。
+- **未核实（实现前必须实测/确认）**：`Assert` 字段被分类后 `process_body_expr_item` 的 const-bound 是否仍按原路径注册（E1062 保持）；`TypeCheckResult` 加字段引发的 obligations 门禁行号平移量；`const_expr_free_names` 对 `Var(ConstVar)` 的收集是否会把 q=0 形参误判为字段引用（需在分类器里按 `type_params` 先分流）。
+
+### 十二、裁决点（D0–D2，需 lead/用户裁）
+
+- **D0（proof family 源级形态）**：RFC-027 §14.3 与 SPEC §8.3.3 的 `Cell: (T: Type, P: (T) -> Type)` 在当前实现里 `P` 不是类型参数（`Cell(Int, Pos)` ⇒ E1010 expected 1 found 2，实测）；`P: (T: Type) -> Type` 可被判为类型参数（`Cell(Int, Pos)(3)` 只余 arity 2 的既有错）。**推荐**：把 RFC/SPEC 的源级写法改为 `P: (T: Type) -> Type`（kind 记法 `T -> Proposition` 保留在正文），并把 `yaoxiang` 示例同步；这是文档修正，零实现风险。**备选**：保留现写法，B.2b 扩展 `classify_generic_params`/`is_type_level_fn` 接受「裸名参数且是同一声明已声明的类型参数」——会扩大泛型参数启发式的面，须单独红态与回归。
+- **D1（kind 不符的诊断码）**：实例化 `Cell(Int, Array)` 的 kind 不符推荐复用 **E1002**（expected `proof family (T -> Proposition)` / found `data family (T -> Type)`），不新增码；备选 E1061（无实参槽）。
+- **D2（声明期非法位置的诊断码）**：RFC §14.6 只写「声明期拒绝」未给码。**推荐新增一个声明期码**（reason 区分前向引用/引用 evidence/自身混用/evidence 默认值；机械面 = 码表 + 六 locales + 013 + 生成物）；备选复用（E1001/E1114/E1092）并登记借码理由。若裁新增，属 E 类对外契约变化，需用户裁决。
+
+### 十三、顺序与交接
+
+1. 裁决 D0–D2（lead/用户）→ 若 D0 选文档修正，先由 docs 面同步 RFC/SPEC，再开 B.2b。
+2. B.2a：先落红测试（T01–T21 的当前红态）→ `RecordModel`/声明期 → 构造 helper 与义务 → IR 传播 → obligations 登记 → E1114/E1115 可达 → 语料/门禁收口；一次可 revert 的提交。
+3. B.2b：const 参数证据 → proof family 假设/kind → 实例化义务 → mono 量词 → 语料分类；独立提交。
+4. 收口证据：09a 实现轮记录（红→绿、语料/快照 diff 分类、fast/门禁计数、D59 登记、本节 §七/§八 逐项对号）+ 09 行状态更新。**不宣称** Π/Σ 完全体、不宣称 B.3/B.4 的接口已落。
+5. 本节点提交只含 `docs/src/dev/architecture/09-execution-wbs.md` 与本节所在文件；`src/` 零改动——这是「不先写代码」的机械判据。
+
+## P6 6.9.5-B.2a 实现轮（b2-impl，2026-11-14；B.2b 与 D2/D3 待裁决）
+
+> 契约见 §P6 6.9.5-B.2。本轮按 captain 指示只落**不依赖裁决**的 B.2a 面：泛型记录分类（B.2b）、D2 的专用声明期码、D3 的 SMT 档位留到裁决后。工作方式：主工作树、不 commit/push，lead 复核提交；工作树原有 `.gitignore` 修改与未跟踪 blog 文件未触碰。
+
+### 一、落地内容
+
+- **记录模型与声明期一遍**（新模块 `sema/record_model.rs` + `sema/checker/record_model.rs`）：space（谓词 / 证明函数 / Proof 空间类型族）→ position（前向 / 证据 / 自身 / 常量）→ category；`fields[].quantity` 是唯一落点；admission 字段的值类型写成命题 base；`apply_quantities` 把量词写进 `poly`（`env.types` / `env.vars` / `generic_type_defs` 三处同源）；auto-derive 只看数据字段（SPEC §11.2）；5A 的声明面判据改读模型。B.1 的直驱预标量词通道保留（生产 parser 恒 `None`）。
+- **构造期收敛**：`bind_record_ctor_args`（共享 `bind_args_to_params` 六规则 + 超参上限）与 `check_ctor_field_type`（List/Vec 字面量豁免、引用字段边界）；非泛型 / 两层泛型 / 泛型值构造三个 arm 使用同一份判据。非泛型构造 arm 首次有逐字段类型检查（D59 C 类：`Point("a", 2)` 编译期 E1002，此前 check 通过、run 静默给错答案）。
+- **构造义务**：refined walk 增表达式遍历（Call 实参 / BinOp / FieldAccess / List / Tuple / Index / Cast / Return / If 条件 / For iterable），evidence 义务与 admission 义务都交唯一判定单元 `judge_refined_obligation_with_mode`；新增 `PredicateMode::NoSmt` 档 = direct eval / 精确 Γ / 证明函数（**SMT 不作证明来源**，D3 待裁）；每条义务前重设一份判定预算（H8）。依赖折叠不出时保留符号项 → Unproven（E2031），失败闭合、不静默放行。
+- **IR 传播**：`TypeCheckResult.record_models` 是第 14 个义务字段（obligations 三处对账 + IR 生成交付标记）；`ir_gen` 的 `TypeDeclBody` / `struct_definitions` 从模型取量词，构造默认值填充与命名重排按数据字段投影；`resolve_field_index` 经同一份 `struct_definitions` 自动前移。
+- **声明期拒绝**：T04–T06 的检测落地，码位集中在 `record_rejection_diagnostic` 一处（当前是契约 §三 的 fallback：前向 → E1001、引用 evidence → E1114、自身混用 → E1001、默认值 → E1092；**D2 裁决后只改该函数**）；T09 的字段位非法实参转发既有解析器诊断（E1092/E1093）。
+- **E1114 / E1115 生产可达**；E1114 的码注释与六语 help 改为「类型级用法合法、值级读取拒绝」（t3 finding 4），错误码生成物同批再生（E1001 4→6、E1002 71→69、E1010 19→18、E1092 3→4 的站点计数变化来自本轮收敛，机械再生、未手改）。
+
+### 二、红→绿（红态见 §P6 6.9.5-B.2 §七，均为 HEAD `3892ea81` 实测）
+
+| 判据 | 绿态证据 |
+| --- | --- |
+| T01 / T02 | 量词序列、`field_path`、evidence/obligations 同长；`Buf` 的数据族自引用仍是数据字段 |
+| T03 | self-refined 字段值类型 = base；`Box(-5)` E4018（`(-5 > 0)`） |
+| T04–T06 | 前向引用 / 引用 evidence / evidence 默认值各产硬错误（码位待 D2） |
+| T07 | Registry 面与实检面的 `quantity` 逐位相等且非全 `None` |
+| T08 | `Assert(K > 0)` 的无构造模板不被拒；`Box(3)` 零诊断 |
+| T09 | 字段位 `Pos(1, 2)` 报 E1093 |
+| T10 / T11 / T14 / T15 / T16 | `Box(3, 5)` 零诊断；`Box(-3, 5)` E4018；嵌套 `take(Box(-1, 99))` E4018；`Box(v=3, z=5)` 零诊断 / `Box(w=9)` E1014；`Box(3,5,9)`、`Box(3)` E1010 |
+| T12 / T13 | 参数依赖的构造义务 → E2031；`Eq(3, 3)` 零诊断 / `Eq(4, 3)` E4018（证明函数执行器直驱） |
+| T17 | `Point("a", 2)` E1002 / `Point(1, 2)` 零诊断 |
+| T18 | 普通记录的构造/读/写零新码 |
+| T19 / T20 | 生产源码 `b.w` → E1114；`mut` 字段 → E1115 |
+| T27 / T28 | 真实四段管线：TypeDecl 量词 `[None, Some(Zero), None]`；`b.z` 的 `LoadField.field = 1`；合成构造函数 2 个 LOAD_ARG / CreateStruct 2 字段 / `local_count = 3` |
+| T29 | 语料 348 条差分为空；IR 快照零漂移 |
+
+新增测试 18 条：`sema/tests/record_evidence.rs` 15 条 + `middle/ir/tests/record_evidence_layout.rs` 3 条。
+
+### 三、语料 / 快照（三轮收窄，逐条登记）
+
+- **首轮 11 个语料改判**：`use std.assert` 后裸名 `assert(...)` 解析成模块命名空间 Struct（导出面也以 Struct 形态挂在 `vars` 上），旧的 Struct 分支只查 arity 故静默通过；新判据把它当记录构造做字段检查。修法 = 只对**已声明记录**（`env.types[name]` 是 Struct）走 Σ 构造判据，命名空间/导出面保留旧宽容。
+- **第二轮 3 个语料**：List 字面量落 `List` 字段（容器命名分层，原判据只豁免 `Vec` 字段）；`&mut Int` / `&Point` 引用字段的构造实参桥接归所有权层（显式登记为边界豁免）。修后 `equal_linear_token_err` 恢复 E1101、`compare_rust_side_by_side` 恢复 exit 0。
+- **终轮**：`corpus_probe` 348 条与 `tests/baselines/corpus-parity.jsonl` **逐字节相同**；`UPDATE_SNAPSHOTS=1 cargo test --lib snapshot -- --ignored` 后快照目录 `git status` 为 0 个改动（normalize 不打印 quantity）。
+
+### 四、门禁与量测
+
+- `cargo fmt --all`、`cargo clippy --all --all-features --all-targets -- -D warnings`：0。
+- `testsuite.py run fast`：2174 条、exit 0（跳过 0 波；3 条 `#[ignore]`、2 条 manual 按计划不跑）。
+- `check-obligations.py`：PASS（14 义务 / 14 交付 / 字段数 22 − 义务 14 − 非义务 8 = 0）。
+- `check-boundary` / `check-fanout` / `check-test-channel` / `check-docs-truth` / `check-docs-orphan` / `check-docs-refs` / `docs:build`：exit 0；错误码生成器幂等。
+- B.1 的直驱测试随构造 arity 收敛更新夹具（`Box(v = 1, w = 2)` → `Box(v = 1)`）：预标 witness 后构造参数只含数据字段，这是 B.2a 的既定语义，不是放宽判据。
+
+### 五、边界与未完成（如实）
+
+- **B.2b 未做**：泛型记录不分类（`SafeArray(Int, 3)([...])` 仍 E1010 expected 2 found 1）；proof family（D0）、实例化构造义务、默认值入模型均未落。
+- **D2 码位 provisional**；**D3** 已按 NoSmt 落地（SMT 不是构造义务的证明来源），裁决若允许 SMT，只改该档位。
+- 构造义务的诊断文案沿用既有 `judge_refined_obligation` 形态（subject/assigned 仍写 `Box.w` / `Box2`），文案打磨未做。
+- 预算重设只覆盖构造义务；其它判定点沿用既有口径。
+- 引用字段与 List/Vec 字面量落点是既有语义边界，本轮显式豁免并登记，不扩大检查面。
+
+### 六、变异验证（t12 补登，2026-11-14；scratch.py trial，机械可逆）
+
+> t6 复审 F3（medium）指出契约 §七 的 M01–M05 无执行登记。本节由复审成员在同一台机器、同一批次树
+> `t6-mutations`（`init --rev a8e98587` → `build` 全量 49 s）上补跑；
+> 补丁文件与原始输出随批次树回收（`gc`，不入库、不作为引用出处），登记的硬证据是下表的 blob 对与红态测试名。
+> 命令口径：`python scripts/dev/scratch.py trial t6-mutations --patch <p> -- cargo test --lib <filter>`；
+> 每个 trial 的机械还原能力由 trial 本身保证（apply → 跑 → apply -R → 逐文件 blob 对 HEAD + `git status` CLEAN）。
+> 两点登记口径：① M01 首跑用 `record_evidence witness_quantity` 双词过滤器实际命中 0 条（cargo 单模式匹配），
+> 基线探针（M00 无操作补丁 + `--list`）确认单 filter `record_evidence` 命中 15 条语义面测试后重跑；
+> ② M05 首补丁摘的是 `seed_cross_file_types`（多文件面，ir_gen.rs:2111）的注入，测试走单文件面未红——
+> **多文件面的量词注入当前无测试钉住**（见下表 M05a 结论行）；M05b 摘 `generate_stmt_ir` 面（ir_gen.rs:2345）后即红。
+
+| 变异 | 补丁（改坏点 → 行为） | 判定命令（--lib filter） | 红态 | blob 对（HEAD → 变异 → 还原） |
+| --- | --- | --- | --- | --- |
+| M00（基线探针） | mono.rs 注释行注入（无行为变化） | `record_evidence -- --list` | 15 条命中、exit 0 | e401c8b1 → 6d7cc9cf → e401c8b1 |
+| M01 | `mono.rs` `runtime_field_count` 去掉 witness 过滤（witness 重新占构造位） | `test_runtime_field_count_excludes_witness` | **FAILED**，exit 101 | e401c8b1 → fbb5776e → e401c8b1 |
+| M01（面观察） | 同上 | `record_evidence` / `translator` | 18/18 绿、4/4 绿（语义面消费 `data_field_indices`，不经 `runtime_field_count`） | 同上 |
+| M02 | `checker.rs` 声明期 `apply_quantities` 改恒等（量词不进 poly） | `record_evidence` | **9 FAILED / 9 passed**（T01 分类、T03 admission、T10/T16 arity、T13 证明函数、T15 命名、T19 E1114、T20 E1115、T27 TypeDecl 量词、T28 构造形状/索引全红），exit 101 | d9e603a1 → 7a34dbc0 → d9e603a1 |
+| M04 | `refinement.rs` 判定单元 NoSmt 臂改直接 `Ok(())`（构造义务静默放行） | `record_evidence` | **4 FAILED**：T11 E4018、T12 E2031、T13 证明函数、T14 嵌套构造，exit 101 | 61e71af8 → f60b9807 → 61e71af8 |
+| M05a | `ir_gen.rs` `seed_cross_file_types`（多文件面）量词注入摘除 | `record_evidence` | 18/18 绿——**判据抓不到**：多文件面无测试；登记为守卫缺口，随 B.4 跨模块面补钉 | e20fcc76 → 76f6a509 → e20fcc76 |
+| M05b | `ir_gen.rs` `generate_stmt_ir`（单文件构造面）量词注入摘除 | `record_evidence` | **1 FAILED**：T28 `test_runtime_field_index_skips_witness`（b.z 索引 1 断言红），exit 101 | e20fcc76 → 5bc97514 → e20fcc76 |
+
+**结论**：M01/M02/M04/M05b 四条判据全部可失败且机械可逆（还原后 blob 与 HEAD 一致、status CLEAN）；
+M03 此前已由 t6 复审探针证成（禁用 `check_record_ctor_obligations` 调用后 T11/T12/T13/T14 转红，14 passed/4 failed）。
+**新缺口**：M05a 证明 `seed_cross_file_types` 的多文件量词注入零守卫——契约 §七 的「M05 ⇒ T28 红」在多文件面不成立，
+该面归 B.4（跨模块导出）补齐测试后此变异才有红态。
+**首次全量构建**：`build` 49 s（复用主仓缓存）；批次已 `release` + `gc`（回收 4881.9 MB）。
+
+## P6 6.9.5-B.2b 实现轮（2026-11-14；D0 文档修正收口，D2/D3 维持）
+
+> 契约见 §P6 6.9.5-B.2。本轮落 B.2b 的五个断点（`type_params` 来源、proof family 实例化、容器字面量 `Array` 落点、模板命题代换、kind oracle）。D0（proof family 源级形态）已按文档修正收口（RFC-027 §14.3 / SPEC §8.3.3 改为解析器可接受的 `P: (T: Type) -> Type`，`33ac1b55`）；D2 仍用借码 fallback（单点 `record_rejection_diagnostic`）；D3 维持 `PredicateMode::NoSmt`（SMT 只提示、不作证明来源）。工作方式：主工作树、不 commit/push，lead 复核提交；工作树原有 `.gitignore` 修改与未跟踪 blog 文件未触碰。
+
+### 一、落地内容
+
+- **`RecordModel.type_params` 改从原始签名构造**：新增 `checker/record_model.rs::record_type_params`，`MetaType` / `Name(Type)` → `Type`、`is_type_level_fn` → `Family{arity}`、`is_const_param_type_name` → `Const`。不再从 `classify_generic_params` 的筛选结果反推——后者只捞签名内被类型位引用的 const 形参。实测后果：改前 `SafeArray(Int, 3)([...])` 报 E2031（`N` 掉出 `type_params`，模板命题没有可对位的实参）。
+- **无字段类型体不登记记录模型**：proof family 的约束体（`Pos: (v: Int) -> Type = { v > 0 }`）解析成零字段 `Type::Struct`；若登记成 Σ，义务账本会多出一条 `record_models` 未交付诊断（`add_type_definition` 的交付标记与模型落库同一判据）。
+- **proof family 模板与实例化**（`refinement.rs::instantiate_record_constraint`）：声明期 `P(v)` 留不透明 `Call{P, args}`；实例化时 const 位折 `convert_expr_to_const_expr`、family 位取内层实参名并过 kind；`predicate_defs` 命中则内联谓词体，否则保留 `Call` 走证明函数执行器。`depends_on` 下标不变（依赖数据字段的实参另行代入）。
+- **kind oracle 单一实现**（`checker.rs::RecordKindOracle`）：proof family = 谓词名 / `predicate_defs` / Proof 空间类型族；data family = `env.types` / `generic_type_defs` / 内建类型名 / Data 空间类型族；未解析名 = Unknown → E2031。消费面三处：构造面 walk（**唯一** kind 发射点——两层构造的内层调用必被 `walk_ctor_obligations` 先外层后 `func` 地走到）、注解面 `resolve_type_annotation`、实例化面（kind 不符只停止义务判定，不重复发射）。
+- **容器字面量落点补 `Array`**：`check_ctor_field_type` 的 List 字面量豁免原只认 `Vec` / `List`；不补则 arity 修好后 `SafeArray(Int, 3)([1, 2, 3])` 先报 `E1002 Array(int64, N) vs Vec(int64)`。
+- **内层实例化失败的抑制**：内层类型构造在同一 span 上已有 Error 级诊断（const binder 约束 E1062、实参位 E1010 / E1002）时，构造义务不再判定——义务的输入是实例化后的命题，输入没成型。判据是 span + severity，顺带消掉 `Cell(Int)(3)` 的 E1010→E2031 级联。
+- **诊断形态**：kind 不符复用 E1002（D1），两槽填类型形态（`proof family (T -> Proposition)` / `data family Array`），用户可见句子留在 locales（发射点不再硬编散文）；E2031 的 var 槽统一为 `记录名.字段名`（此前 Unknown 分支误填族实参名）。
+
+### 二、红→绿（红态在 B.2a 绿态 `a8e98587` 的 CLI 上实测）
+
+| 判据 | 绿态证据 |
+| --- | --- |
+| T22 const 参数记录 | `SafeArray(Int, 3)([1, 2, 3])` 零诊断；`SafeArray(Int, 0)([1, 2, 3])` 报 E1062（`N = 0` 不成立——`Assert(N > 0)` 字段位经 `process_body_expr_item` 同时登记为 binder 约束，是 B.1 起的既有路径，故此处不重复发 E4018） |
+| T23 proof family 实例化 | `Cell(Int, Pos)(3)` 零诊断；`Cell(Int, Pos)(-3)` 报 E4018（`(-3 > 0)`，谓词体内联）；二元族 `Cell2: (T: Type, P: (T: Type, Int) -> Type)` 的 `Cell2(Int, Eq)(4)` 报 E4018（证明函数 `Eq` 返回 false，保留 `Call` 走执行器） |
+| T24 kind | 构造面 `Cell(Int, Array)` 与注解面 `c: Cell(Int, Array) = 1` 各报一条 E1002；两处各自写错 data family 时**各报一条**（跨站点全局去重会静默吞掉后一处，该去重已删除） |
+| T25 未实例化 | 泛型函数体内 `Cell(T, P)(x)` 报 E2031（主体 `Cell.w`） |
+| T26 mono 量词 | 模板模型的 `w` 仍为 `Some(Quantity::Zero)`；泛型记录实例化不改写字段 `MonoType`，量词随模型走 |
+| 泛型 + 数据字段依赖 | `G: (T: Type) -> Type = { v: T, w: Pos(v) }`：`G(Int)(3)` 零诊断、`G(Int)(-3)` E4018 |
+| 级联抑制 | `Cell(Int)(3)` 只报 E1010，不再补 E2031 |
+| 证明函数族 | `Eq: (a: Int, b: Int) -> Type` 作 family 实参：`Cell2(Int, Eq)(3)` 零诊断（族名代换后 `Call` 保留，交证明执行器） |
+
+新增测试 9 条（`sema/tests/record_evidence.rs`）：T22 / T23 / T24（构造 + 注解）/ T25 / T26 五条判据，加四条边界守卫（单括号类型构造不补 E2031、约束体不登记模型、跨站点各报一条、内层实例化失败不补 E2031）。
+
+### 三、语料 / 快照（逐条分类）
+
+- **语料差分**：`cargo run --quiet --example corpus_probe` 的产出与 `tests/baselines/corpus-parity.jsonl` **逐字节相同**（388 行）——语料均是诊断面判据，B.2b 不改变任何语料文件的诊断。
+- **IR 快照 1 个文件变更**：`tests/yaoxiang/02-type-system/generics/const_generic_lt_le_bound.snap`。`Capped(Int, 3)` 是单括号**类型构造**；B.2b 起泛型记录被分类，`_assert_lt` / `_assert_le` 是 evidence 而非数据字段，故 IR 不再为它补第三个构造操作数（`Load %2 <- int(0)` 消失、后续局部编号前移一位）。这是 B.2b 的既定语义（泛型记录的 evidence 不占构造槽），不是格式漂移；diff 人工 review 后与代码同提交。
+- 其余 228 个快照文件零漂移（`test_ir_snapshots_stable` 绿）。
+
+### 四、门禁与量测
+
+- `cargo fmt --all` 0；`cargo clippy --all --all-features --all-targets -- -D warnings` 0。
+- `python scripts/dev/testsuite.py run fast`：2210 条、exit 0、1 波、171.3 s、跳过 0 条（`#[ignore]` 3 条 + `mode=manual` 2 条按计划不执行）。
+- `check-obligations.py` PASS（14 义务 / 14 交付 / 字段 22 − 义务 14 − 非义务 8 = 0）；`check-boundary` / `check-fanout` / `check-test-channel` / `check-docs-truth` / `check-docs-orphan` / `check-docs-refs` / `check-concepts` 全部 exit 0（boundary / fanout 为 report-only；本轮改动不含 `src/middle/bytecode/`，既有 opcode 常量计数 84 vs 库存 83 与本轮无关）。
+- 错误码生成物：`python scripts/docs/gen-error-code-docs.py` 幂等（连跑两次生成物哈希一致）；站点计数变化（E1002 69→70、E2031 2→3）来自本轮 kind 发射点与 B.2a 收敛，机械再生、未手改。
+- `docs:build`（VitePress 真实构建）exit 0；改动的 7 个 md 文件 markdownlint exit 0；prettier 对这 7 个文件仍红，但同文件 HEAD 版本单独检查同样红（既有全仓 126 md 债务，非本轮回归）。
+
+### 五、边界与未完成（如实）
+
+- **嵌套容器字面量**：`Array(Array(T, N), M)` 字段吃 `[[1, 2], [3, 4]]` 仍报 E1002。根因在 List 字面量推断（`[[1, 2], [3, 4]]` 推断为 `Vec(Vec(int64))`）与落点豁免只逐层 unify 一层元素；**非 B.2b 引入**——非泛型记录构造（`Matrix: Type = { data: Array(Array(Int, 2), 2) }`）与变量注解（`d: Array(Array(Int, 2), 2) = [[1, 2], [3, 4]]`）在位同形同样报错，归容器 / 字面量推断面。
+- **族实参不是裸名或类型应用**（如 `Cell(Int, Wrap(Pos))(...)`）走 E2031 未实例化；kind 判定不做表达式级反向推导。
+- **默认值字段作 evidence 依赖**仍按符号项 → E2031（B.2a 起的登记边界）。
+- **D2 码位**仍 provisional（单点 helper，裁决后只改一处）；**D3** 维持 NoSmt。
+- **proof family 旧写法不再支持**：`P: (T) -> Type` 的 `P` 不被 `classify_generic_params` 认作类型参数；RFC-027 §14.3 / SPEC §8.3.3 已改为 `P: (T: Type) -> Type`，kind 记法 `T -> Proposition` 只留正文。
+
+### 六、复审（t14，2026-11-15）
+
+verdict=pass，对齐提交版 `3dafb813`。四项验收全过：① F1/F2/F3 的文档与变异证据在提交版消除失实/方向违规/缺登记；② B.2b 红态在冻结 `a8e98587` 批次树独立复现，绿态在 B.2b 树独立复现 T22–T26，`record_evidence` 27/27；③ 修复轮三处缺陷（kind 去重吞站点 / 槽位散文 / 级联 E2031）均有守卫测试；④ NoSmt 未被绕过（`predicate.rs` 零改动，构造义务两处消费面仍 NoSmt，新增诊断不经 SMT）。obligations 14/14、docs-refs/truth/markdownlint 绿；快照 1 文件已分类；批次已 release+gc（2308.1 MB）。非阻断观察：本节“批次树”重复措辞已改正；t16 交办的 SPEC §8.3.1 第 4 行对齐已在提交版完成，无遗留。
+
+## P6 6.9.5-B.3 契约（impl，2026-11-15，只读；HEAD `e64139dc` 实测）
+
+> 本节是 **B.3 实现轮的契约**，不是实现记录：只落语义、代码落点、判据、测试矩阵与红态实测，不动 `src/`。它把 RFC-027 §14.5 与 SPEC §8.3.5 落成可执行判据；§14.4（跨模块导出）归 B.4。实现验收以 09 的 6.9.5-B 行 + 本节为准。
+>
+> **红态口径**：下表「红态」是本节写作时在 HEAD `e64139dc` 的 `check` 上**实测**的现状（同一二进制；`cargo build --bin yaoxiang-rs` 后运行），不是推断；「绿态」是 B.3 验收期望。负控/保持型判据今天本就为绿：它们的「红」由 §七 的变异表给出，不是当前失败。探针文件是工作区产物，只登记形态与实测输出，不作引用出处。
+
+### 一、目标与能力边界（先说做不到的）
+
+B.3 让类型级 `b.w` 成为**可解析、可判定、不可值级读取**的统一项。三件可做，一件明确不做：
+
+1. **项表示**：`ConstExpr::FieldPath { base: Box<ConstExpr>, field: String }`（§三）。
+2. **源级语法**：类型位单层字段路径（`bb.w`）由解析器接受并转成上述项（§四）。
+3. **判定语义（V1 = admission）**：`b.w` 是「该证据槽命题在构造点已被证明」的**准入前提**；判定点唯一（`check_predicate_with_mode` 第 1 级之前，只看类型与槽）；base 名与实参名的一致性在**应用面**校验（§五 分层）。值级读取保持 E1114、运行期零槽位（§六）。
+4. **不可做（本批不做）**：RFC §14.5 的 `EvidenceTerm(FieldPath, EvidenceRef, signature_hash)` 所要求的**证书重放**（§4.2 `Certificate` + §13 留存 + `LogicSignature`）。仓库当前没有 `Certificate`/`Kernel::check` 的物化实现（B.2 契约 §二映射表已登记「不物化证明项」）；在 B.3 内实现它会把 §4.2/§13 整个内核拉进 6.9.5。故 B.3 的 evidence term 语义 = **admission 读法**；能力缺口按 §十一 的 D2 四件套处置，默认推荐 A 案。
+
+**不宣称**：§4.2 证书重放、§4.1 跨签名三路径、Σ 完全体、`b.w` 跨模块（B.4 之前导入记录没有 `RecordModel`，见 §六.3）。
+
+### 二、逐条映射（RFC-027 §14.5 / SPEC §8.3.5）
+
+| # | 条款 | 要求 | B.3 落点 / 裁决 | 判据 |
+| --- | --- | --- | --- | --- |
+| 1 | RFC §14.5「项表示」 | `ConstExpr::FieldPath { base, field }` 是统一项世界的字段路径项 | 唯一定义处 `types/const_data.rs` 的 `ConstExpr` 增变体；全 match 补臂见 §三.5 | T01–T03、§三.5 表 |
+| 2 | RFC §14.5「`b.w` 解析」 | 类型位置解析为 `FieldPath(NamedVar("b"), "w")` | parser 接受单层 `ident.ident`；`convert_expr_to_const_expr` 增 `Expr::FieldAccess` 臂（只接受 `Var.field`） | T01–T03 |
+| 3 | RFC §14.5「evidence term」 | `EvidenceTerm(FieldPath, EvidenceRef, signature_hash)` 指向该槽的证据 | **不新增结构**：evidence term ≡ `(FieldPath, RecordModel.evidence[slot])` 读法；B.2 的 `EvidenceSlot{field, quantity, proposition}` 是同一事实的导出槽，B.4 补 `evidence_ref`/`certificate_ref`/`signature_hash` 后与 RFC 同构 | §三.3、§三.5 表 |
+| 4 | RFC §14.5「类型级用途」四类位置 | 谓词实参、类型构造实参、另一命题前提、`evidence_slots[i].proposition` | V1 只支持「谓词体整条路径 + `Refined{base=记录类型}`」一类；其余为**明确拒绝面**（§五 拒绝面、§十 D1）；`evidence_slots.proposition` 交给 B.4 消费同一项表示 | T05、T09、T10 |
+| 5 | RFC §14.5 / SPEC §8.3.5「值级拒绝」 | 值级 `b.w` 报 E1114 | 既有 2 发射点（`inference/expressions.rs` 的 `Struct` 臂与 `TypeRef→Struct` 臂）不动；B.3 只加回归钉 | T06、M08 |
+| 6 | RFC §14.5「不产生运行期值」 | `FieldPath` 不进求值器、不产物化、不占槽 | evaluator / ConstGenericEval 遇 FieldPath 返回错误（不静默当 NamedVar）；IR 零槽位判据 | T15、T18、M03 |
+| 7 | RFC §14.5「穷尽 match 补臂」 | `substitute`、`free_names`、`Display`、`translate`、`proof_execution`、`fold_proof_call_arg` 等 | §三.5 的逐点表（含 catch-all 的行为相关面） | T15–T17、M03–M05 |
+| 8 | RFC §14.5「未支持求值器」 | 遇 FieldPath 返回 Unproven，不静默当 NamedVar | `Evaluator::eval_expr`、`ConstGenericEval::eval`、SMT gate 三处（§三.5） | T15、T16 |
+| 9 | RFC §14.5 末「取代 4A」 | 类型级 `b.w` 是用户可写语法 | 规范正文已写；B.3 修正 SPEC 的**五处**现状陈述（§8.3.5 末段/示例/重放句 + §3.4/§8.3 实现状态注的 B.3 半句；§8.3 的槽句改随 B.4），en 镜像同改（§八 机械必需面） | T20 + docs 门禁 |
+| 10 | SPEC §8.3.5 示例 `Proved(b.w)` +「按当前逻辑签名重放」 | 证据项前提、内核重放 | `Proved` 是内核项、不是源级构造（RFC §14.5 已标「非可编译片段」）；V1 源级形态 = **谓词体里的裸 `b.w`**（§四），语义 = admission（§五），§4.2 未落地。SPEC 示例与「重放」句按 §八 机械必需面改写，en 镜像同改 | T04、T05 + docs 门禁 |
+
+### 三、项表示、字段 id 规则与穷尽 match 补臂点
+
+```text
+ConstExpr::FieldPath { base: Box<ConstExpr>, field: String }
+```
+
+1. `field` 存**源码字段名**，不固化声明序。理由：term 在 substitute / SMT / 诊断里跨类型浮动；`FieldId` 的解析唯一源是 `RecordModel.field_path`（B.2 已有），由消费点解析一次。固化声明序会造第二套索引，并与 `runtime_field_index`（运行期数据序）混淆——两套索引不得互相顶替。
+2. `base` 在 V1 只接受 `NamedVar`（裸值名）。`a.b.c`、`f().w`、字面量基座在转换点返回 `None`（走既有「实参不可转换」诊断形态），不产生 FieldPath。
+3. **EvidenceTerm 关系单一定义**：`EvidenceTerm ≡ (FieldPath, RecordModel.evidence[slot])`。B.2 的 `EvidenceSlot{field, quantity, proposition}` 与 `FieldObligation` 是同一事实的两个面；B.4 在槽上补 `evidence_ref`/`certificate_ref`/`signature_hash` 后，`(FieldPath, slot)` 与 RFC 的三字段同构。**B.3 不新增 `EvidenceTerm`/`Witness` 等任何结构**——第二个 term world 的唯一正确形态是没有第二个。
+4. `FieldPath` 在 `Refined` 里只作为**整条 constraint** 出现（V1）；出现于 `BinOp`/`Call` 实参等组合位置一律拒绝（§五 拒绝面）。
+
+#### 三.5 穷尽 match 补臂点（全仓；符号定位，不写行号）
+
+**编译强制面**（对 `ConstExpr` 的穷尽 `match`；加变体即编译错误，漏补即红）：
+
+| 文件 / 符号 | 当前形态 | `FieldPath` 臂行为 | 备注 |
+| --- | --- | --- | --- |
+| `types/const_data.rs` / `impl Display for ConstExpr` | 穷尽 | 打印 `base.field`（诊断显示用） | 不得打印成占位名 |
+| `types/eval/const_eval.rs` / `const_expr_free_names` | 穷尽（栈遍历） | 递归 base，收集 base 的自由名；`field` 不计自由名 | 与 `normalize` 的符号名闸门同口径 |
+| `types/eval/const_eval.rs` / `const_expr_node_count` | 穷尽（栈遍历） | `1 + base` 节点数 | 预算扣步单位与既有项一致 |
+| `types/eval/const_eval.rs` / `ConstGenericEval::eval` | 穷尽 | `Err(const_eval_failed)` | **不得**查 bindings 当 NamedVar（RFC §14.5 末条） |
+| `types/eval/evaluator.rs` / `Evaluator::eval_expr` | 穷尽 | `Err(EvalError::TypeMismatch)` | direct-eval 因而升级，不产出值 |
+| `sema/proof/dep_graph.rs` / `collect_free_vars` | 穷尽 | 递归 base | 与 `const_expr_free_names` 同口径 |
+| `sema/layers/ownership.rs` / `collect_var_sorts` | 穷尽 | 不登记 sort | ownership 约束不读用户谓词；补臂为编译完整性 |
+| `sema/predicate_resolver.rs` / `substitute_in_const_expr` | catch-all（`_ => expr.clone()`） | 递归 base 后重建 | **行为相关**：漏臂则谓词实参代入不进 base（§七 M05） |
+| `sema/layers/termination.rs` / `substitute_const_expr` | catch-all（`other => other.clone()`） | 递归 base 后重建 | **行为相关**：构造义务/返回位都经它代入 |
+| `sema/layers/termination.rs` / `const_expr_refs` | catch-all（`_ => false`） | 递归 base | 漏臂会让测度引用漏名 |
+| `sema/proof/assumptions.rs` / `references_var` | catch-all（`_ => false`） | 递归 base | 保证重绑/改名对 `b.w` 的 kill 覆盖 |
+| `sema/proof/smt/translate.rs` / `translate_expr` | catch-all（`_ => {:?} atom`） | 不产出伪造 SMT atom | 实现取 §九 R5 的 gate + 显式拒绝 |
+| `sema/proof/smt/translate.rs` / `infer_sorts_in_expr` | catch-all（`_ => {}`） | 不计 sort | 与 translate 同一 gate |
+| `sema/layers/predicate.rs` / SMT 跳过闸（只放行 Call/If/Range 三形态） | 白名单 | 含 `FieldPath` 的约束不进 SMT | 两入口都 gate：`try_implication` 的 assumptions 与 `try_smt_solve` 的 constraint |
+| `sema/layers/predicate.rs` / `fold_proof_call_arg` | catch-all（`_ => None`） | 显式返回 `None` | 证明函数实参不闭合 → 保守不判 |
+| `frontend/proof_execution.rs` / `const_expr_args_to_values` | catch-all（`_ => None`） | 显式返回 `None` | 同上 |
+| `frontend/proof_execution.rs` / 嵌套证明调用前提的 `match substituted` | catch-all（`ref constraint` 分支） | 显式跳过（不判） | 证明函数前提含 FieldPath 属未支持形态（§九 R6） |
+| `sema/layers/ownership.rs` / `collect_numeric` | catch-all（`_ => {}`） | 不登记 sort | 同 `collect_var_sorts` |
+
+**语法/形状面**（不是 match，但形状改变必须同名落点）：
+
+| 文件 / 符号 | B.3 动作 | 备注 |
+| --- | --- | --- |
+| `sema/record_model.rs` | 新增纯函数 `resolve_record_model` / `witness_premise_admitted` | `resolve_record_model` 为 `pub(crate)`，**两个调用点**（判定面 `witness_premise_admitted` + 声明面 `validate_predicate_witness_paths`，满足禁令一 B 的可见性判据）；`witness_premise_admitted` 只判「R→模型 + f 是 evidence 字段」，**不判 base 名**（§五）；`RecordModel.field_path` 是字段名 → 声明序的唯一解析源 |
+| `sema/checker/refinement.rs` + `sema/predicate_resolver.rs` | 应用面 base 名一致性：`refine_predicate_from_ast_args` / `PredicateResolver::try_resolve` 代入后基名必须 == 唯一实参名 | 两处共用同一 helper `field_path_base_matches`；判定面不重复（§五） |
+| `parser/statements/types.rs` / `parse_type_annotation_nested` + `type_position_expr_continues` | 标识符种子后允许单层 `.ident`，产出 `Type::ConstExpr(Expr::FieldAccess)` | 只允许单层；`a.b.c` 由转换点拒绝（T03） |
+| `types/eval/const_eval.rs` / `convert_expr_to_const_expr` | 增 `Expr::FieldAccess` 臂（base 必须是 `Var`） | 其他基座返回 `None`，走既有诊断 |
+| `sema/checker/annotations.rs` / `collect_unknown_type_names` 的 `Type::Generic` 臂 | 在 `is_predicate_head` 提前返回之前，拒绝谓词实参里的 `FieldAccess` | 注解面拒绝（§五 拒绝面第 2 条） |
+| `sema/checker.rs` / `check_module_impl` | 第 1 遍后新增 `validate_predicate_witness_paths` | 声明面唯一校验点（§五 拒绝面第 1 条） |
+| `ast/mod.rs` / `collect_expr_ident_refs` 的 `FieldAccess` 臂 | **零改动**（已收基名）；补测试钉住 | `name_used_as_type` 经它已覆盖；不得再写第二份表达式遍历 |
+| `sema/inference/expressions.rs` / E1114 两发射点 | **零改动**；只加回归钉 | 值级拒绝保持 |
+
+### 四、源级形态、真实用户可达场景与 HEAD 红态
+
+**V1 唯一支持的写法（Form B，推荐）**：
+
+```yaoxiang
+Pos: (v: Int) -> Type = { v > 0 }
+Box: Type = { v: Int, w: Pos(v) }
+
+// 证据前提谓词：体 = 唯一形参名 + 该记录类型的 witness 字段
+Holds: (bb: Box) -> Type = { bb.w }
+
+// 使用：参数/返回位用该谓词；调用点由 admission 规则放行
+needW: (b: Box, h: Holds(b)) -> Int = { b.v }
+
+main: () -> Void = {
+    b = Box(3)
+    x = needW(b, Box(5))
+}
+```
+
+正控判据：`needW(b, Box(5))` 0 诊断。负控：值级 `b.w` E1114；谓词体写数据字段 `bb.v` 声明期拒绝；未知字段 `bb.zzz` 报 E1042。
+
+**为什么必须是谓词整条路径**：`Refined{base, constraint}` 的 `base` 是谓词的参数类型（记录类型本身），admission 规则只靠它就能解析记录模型，不需要变量类型环境；而 `Q(b.w)`（Q 的参数为 Int）会让 `base=Int`，语义上是把证明项当值用，V1 必须拒绝（§五 拒绝面）。
+
+**HEAD 红态实测（同一二进制，HEAD `e64139dc`）**：
+
+| 探针 | 形态 | HEAD 结果 |
+| --- | --- | --- |
+| P1 | 值级 `x = b.w`（`Box` 含 witness） | **E1114 ×1，exit 1**（保持型判据） |
+| P2 | `useW: (b: Box) -> Type = { Q(b.w) }` | **E0010 ×2**：`expected RParen, found Dot` + `expected a type, found Dot`，exit 1 |
+| P3 | `useW: (b: Box) -> Type = { b.w }` | **E0010 ×1**：`expected a type, found Dot`，exit 1 |
+| P4 | `Q(b.v)`（数据字段路径） | **E0010 ×2**（同 P2 两行），exit 1 |
+| P5 | 记录字段类型 `e: Q(b.w)` | **E0010 ×2 + E0011 ×2**（级联），exit 1 |
+| P6 | TypeDefinition 体 `{ true }` | **E0010**：`expected a type, found BoolLiteral(true)`（类型体表达式只接受受限种子） |
+| P7 | Assign 形谓词 `Holds: (bb: Box) -> Type = ((bb) => { true })` + 使用 | 仅 **E2014**（`f(b, b)` 二次 move），exit 1；**无 E1003/E1112** ⇒ Assign 形 `(bb: Box) -> Type` 声明被接受、`Holds(b)` 可解析（是否进 `predicate_defs` 由 P0 钉） |
+| P8 | 同 P7 但体为 `{ bb.w }` | **E1114**（体被当值级读取）+ **E2031**（`Holds(b)` 当证明函数 `Call` 判不成立）+ E2014 |
+| P9 | TypeDefinition 体 `{ 1 > 0 }` | **E0010**：`expected a type, found IntLiteral(1)`，exit 1（类型体表达式的整数字面量种子不可用） |
+| P10 | Assign 形谓词 `Pos2: (v: Int) -> Type = ((v) => { v > 0 })`（无使用） | **exit 0，仅 W1001**（unused function）⇒ Assign 形谓词体作为**值表达式**被正常检查，`bb.w` 体因此触发 E1114（P8） |
+| P11/P12 | TypeDefinition 形 `Holds: (bb: Box) -> Type = { Pos(3) }` + 使用 | **E1002** `Expected type 'Holds(b)', found type 'Box'` + E2014；**无声明期错误** ⇒ 记录型形参的类型定义被接受，但体不是 `Type::ConstExpr` 时**不登记谓词**，`Holds(b)` 仍是类型应用 |
+
+结论：语法红态 = 所有类型位 `b.w` 形态都在 **Dot 处被解析器拒绝**（E0010，P2–P5）；类型级 `b.w` 的语义当前为零。**类型体种子**：标识符可用（`v > 0`，P7/P10），整数字面量与布尔字面量不可用（P9 `IntLiteral(1)`、P6 `BoolLiteral(true)`）——Form B 的谓词体以标识符 `bb` 开头，故必须走标识符种子路径。Assign 形声明可用但体被当值级表达式检查（P8/P10）；TypeDefinition 形的体不走值级检查，但要求体是常量表达式项（P11/P12）。
+
+**P0（实现第一步，强制）**：先只落「解析器接受单层路径 + `convert_expr_to_const_expr` 的 FieldAccess 臂」两处，**不接任何语义**，用 Form B 形态探针确认：`predicate_defs["Holds"].constraint == FieldPath{NamedVar("bb"), "w"}`、`param_type == TypeRef("Box")`、声明期零新诊断、`Holds(b)` 解析成 `Refined{base: Box, constraint: FieldPath(NamedVar("b"), "w")}`。P0 不成立（例如类型定义的记录型形参被拒绝/改判）时**停工报 lead**：此时在「Form A + 返回 `Type` 的函数体不走值级 E1114 检查」与「新增专用谓词声明形态」之间裁决，不得擅自换形态。
+
+### 五、语义：admission 规则（唯一判定点）
+
+**规则（分两面，F1）**：判定面 `witness_premise_admitted(models, refined)` 只看两条——`Refined{ base: R, constraint: FieldPath{ base: NamedVar(_), field: f } }` 中 `R` 解析到含证据槽的记录模型、`f` 是 `R` 的 **evidence 字段**；满足即 `Proved`。**base 名与实参名的一致性不在判定面**（判定面拿不到「应用实参」这一事实），而在**应用面**：`refine_predicate_from_ast_args` / `PredicateResolver::try_resolve` 在代入之后校验 `FieldPath` 基名 == 该谓词应用唯一实参名，不一致即拒绝（§五 拒绝面第 3 条）。两面合起来才是完整规则；判定不读值环境、不扣预算、不起 SMT。**基座形态**：两面都只接受 `FieldPath.base = NamedVar`；字面量实参 `Holds(3)` 代入后基座是 `Lit(3)`，以及 `Call`/嵌套 `FieldPath` 基座，一律拒绝（应用面给硬诊断，判定面返回 false），不得当 `NamedVar("<const-expr>")` 静默占位。
+
+**soundness 依据（三条，逐条可核）**：
+
+1. **构造点已证**：`f` 的命题是构造义务（B.2 的 `FieldObligation` / `judge_refined_obligation`），任何生成 `R` 值的构造点都必须证过它；证不出/判伪 ⇒ 编译错误（E2031/E4018），不存在「带假 witness 的 `R` 值」。
+2. **5A 不可变**：witness-bearing 记录整体不可变（B.1c：`mut`/字段赋值/`&mut`/写接收者均 E1115），构造后命题不会失效；故「值存在 ⇒ 槽命题成立」对任意 `R` 值成立，无需 runtime check/revalidation。
+3. **无第二生产者**：`R` 的运行期值只有构造器一条产出路径（`CreateStruct` / `synthesize_constructor`），模式匹配/解构不造新值；B.2 的构造义务 walk 覆盖表达式任意位置。**边界**：`unsafe`/FFI 若把外部字节解释成 witness-bearing 记录，则规则不成立——V1 按既有 admission-only 边界**排除**（不宣称），登记为风险（§九 R1）。
+
+**落点（单点）**：`layers/predicate.rs::check_predicate_with_mode` 在第 1 级 direct eval **之前**插入 admission。实现为 `record_model.rs` 的纯函数：
+
+```text
+resolve_record_model(models, ty) -> Option<&RecordModel>   // 两调用点：判定面 witness_premise_admitted + 声明面 validate_predicate_witness_paths（禁令一 B）
+witness_premise_admitted(models, refined) -> bool          // 只判：R→模型 + f 是 evidence 字段（不看 base 名）
+field_path_base_matches(refined, actual_name) -> bool      // 应用面专用：代入后 FieldPath 基名 == 应用实参名
+```
+
+`check_predicate_with_mode` 只调用第二者；`field_path_base_matches` 只在两个应用面调用（见拒绝面第 3 条）。**不新增第二判定入口**：所有消费面（调用点实参、返回位、构造义务、`revalidate_refined`）都已经过 `check_predicate`/`check_predicate_with_mode`，而 `judge_refined_obligation_with_mode` 是唯一包装——admission 因此在同一条管道内生效。
+
+**不注入 Γ**：admission 不往 `FlowSensitiveGamma` 写任何事实。`b.w` 的前提是类型事实（对所有 `R` 值成立），不是路径条件；写进 Γ 会让它跨函数/跨分支泄漏，并需要额外 kill 语义。Γ 的 `references_var`、`collect_var_sorts` 等面只做编译完整性补臂（§三.5 表），不改变行为。
+
+**拒绝面（声明面 + 注解面 + 应用面）**：
+
+1. **声明面**：`check_module_impl` 第 1 遍（类型定义）之后、谓词表与记录模型都就绪时，新增 `validate_predicate_witness_paths`：遍历 `env.predicate_defs` 中 constraint 含 `FieldPath` 的条目，用 `resolve_record_model`（与判定面**同一解析**，不另写按名查表）解析其唯一形参类型 → 记录模型，要求「整条 constraint 是该谓词唯一形参名 + 其记录类型的 evidence 字段」；否则硬诊断（D1 定码）。未知字段 → **E1042**（`field_not_found`，既有码）；数据字段/非前提位置 → 默认 **E1092**（`refined_arg_not_const`）或 D1 裁定的新码。
+2. **注解面**：`checker/annotations.rs` 的注解类型名走查（`collect_unknown_type_names` 的 `Type::Generic` 臂在 `is_predicate_head` 提前返回之前）新增：谓词应用实参里的 `Type::ConstExpr(Expr::FieldAccess)` 一律拒绝（V1 不支持把证据项当实参）。该走查覆盖绑定/函数注解/返回位/类型定义体；谓词声明的**体**不在本走查的拒绝面（体由声明面第 1 条判定）。
+3. **应用面（base 名一致性，F1）**：`refine_predicate_from_ast_args` / `PredicateResolver::try_resolve` 组装出 `Refined` 后做两道校验：①`field_path_base_matches`——代入后 `FieldPath` 基名必须等于该谓词应用唯一实参名（挡住 substitute 漏臂，§七 M05；判定面不重复判此条）；②`witness_premise_admitted` 的模型/字段前置（base 非记录 / 字段非 evidence ⇒ 拒绝）；③基座不是 `NamedVar`（字面量 / `Call` / 嵌套 `FieldPath`；`Holds(3)` 代入后的 `Lit(3)` 属此类）⇒ 拒绝。任一不成立即返回诊断，不得静默 `Unproven`。T11 钉应用面两向，T12 钉判定面五个断言——两者判据互斥即契约缺陷。
+
+**码位分工（不借码）**：E1114 仍只表示「值级读取」；E1042 表示「字段不存在」；E1092（或 D1 新码）表示「类型位的字段路径不是可判定的证据前提」。E4018/E2031/E4023 一个都不改。
+
+### 六、擦除、持久与跨模块边界
+
+1. **运行期零槽位**：`FieldPath` 是类型/命题位置项，不进 `CreateStruct`/`GetField`/`local_count`/字节码；B.1b/B.2 的 data-only 布局不改。判据：加入正控场景后 IR 与「无 witness 的等价记录」逐项同形（复用 B.2 的 T28/P02 口径）。
+2. **IR 快照零漂移**：`normalize` 不打印 `ConstExpr`（B.2 已核实量词不打印）；B.3 预期既有快照零漂移，新增语料与快照另行同提交。
+3. **跨模块边界**：导入记录的 `RecordModel` 不在 `env.record_models`（B.2 只登记本模块）；B.3 的 admission 对导入记录**不触发** ⇒ 诚实落到 E2031，不静默放行、也不冒充成立。B.4 的 `TypeDefPayload` 导入面把模型放进同一张表后，同一 admission 规则自动生效。B.3 不实现 payload、不读 `libraries`、不碰 `signature_hash`。
+4. **泛型记录**：`resolve_record_model` 按名接受 `Struct`/`Generic`（模板模型）；实例化后的证据已由 B.2b 逐实例检查，admission 只读模型的字段量词与 `field_path`，不重新分类。
+
+### 七、测试矩阵（先红后绿）
+
+测试落点（全部写入 §八 inScope）：`src/frontend/core/sema/tests/`（新文件 `record_witness_term.rs`，真实 lex→parse→check）、`src/frontend/core/parser/statements/tests/types.rs`（语法）、`src/frontend/core/types/eval/tests/const_eval.rs`（转换）、`src/frontend/core/sema/proof/smt/tests/translate.rs`（SMT 拒绝面）、`src/middle/ir/tests/`（IR 零变化）、`src/ast/tests/name_refs.rs`（AST 名字收集，T21）、`tests/yaoxiang/`（语料）。命名/AAA/断言消息按 `test-specification.md`；每条红测试必须先在 P0 状态红。
+
+| # | 判据 | 红态 | 绿态 |
+| --- | --- | --- | --- |
+| T01 | 语法：`Holds: (bb: Box) -> Type = { bb.w }` 产出 `Type::ConstExpr(Expr::FieldAccess)` | E0010（P3） | AST 断言（基名/字段名/单层） |
+| T02 | 转换：`convert_expr_to_const_expr` 对 `Var.field` 产出 `FieldPath` | 返回 `None`（当前无 FieldAccess 臂） | 项断言（`base=NamedVar`、`field` 名） |
+| T03 | 项规则：`a.b.c` / `f().w` / 字面量基座 → 不产生 FieldPath | 不可写（Dot 拒绝） | 转换返回 `None`，走既有 E1092 形态 |
+| T04 | P0 登记：Form B 进 `predicate_defs`（constraint/param_type 断言） | 未登记（P11/P12） | def 三字段断言 |
+| T05 | 正控：`needW(b, Box(5))` 0 诊断 | E0010（P2/P3 形态） | 0 诊断，exit 0 |
+| T06 | 负控（保持型）：值级 `x = b.w` 仍 E1114 | 绿（P1） | 保持；反向由 M08 给红 |
+| T07 | 负控：谓词体写数据字段 `bb.v` ⇒ 声明期硬拒绝（D1 码） | E0010 | 恰 1 条硬错误，无 E4018/E2031 级联 |
+| T08 | 负控：未知字段 `bb.zzz` ⇒ E1042 | E0010 | E1042 |
+| T09 | 负控：证据项出现在非前提位置（`Q(b.w)`、`Assert(b.w)`、字段类型 `e: Q(b.w)`）⇒ 注解面拒绝 | E0010 / 静默占位 | 硬错误，不得变 `NamedVar("<const-expr>")` |
+| T10 | 负控：路径基名不是谓词形参（如模块级变量 `other.w`）⇒ 拒绝 | E0010 | 硬错误 |
+| T11 | 应用面基名一致性（两向）：模拟 substitute 漏臂（`Refined{base=Box, constraint=FieldPath(NamedVar("bb"),"w")}`，应用实参名 `zz`）⇒ 拒绝；正常代入（基名 `zz` == 实参 `zz`）⇒ 放行 | 无判据 | `field_path_base_matches` 两向断言；**M05 不影响本行**（直驱 helper，不经 substitute） |
+| T12 | 判定面纯函数直驱（不传 base 名）：`witness_premise_admitted(Box, b.w)`⇒true；`(Box, b.v)`、`(Int, b.w)`、`(Point, p.x)`、`(Box, Lit(3).w)`（`Holds(3)` 代入后的字面量基座）⇒false | 函数不存在 | 五条断言（与 T11 无交集） |
+| T13 | 管道端到端：真实 `check` 的调用点义务经 `check_predicate_with_mode` 放行 | E0010 | 0 诊断；M05/M06 下红（base 名不符 / 字段丢失） |
+| T14 | 返回位同源：`make: () -> (r: Holds(r)) = { Box(3) }` 0 诊断 | E0010 | 0 诊断 |
+| T15 | 未支持求值器：`ConstGenericEval::eval` 与 `Evaluator::eval_expr` 对 FieldPath 返回 Err（不是 NamedVar）；`const_expr_free_names` 取 base 自由名；`const_expr_node_count` = 1+base | 编译错误（无臂） | 逐项断言 |
+| T16 | SMT 不参与：`translate_expr(FieldPath)` 不产出伪造 atom（见 §九 R4 的两案）；`Full` 档下含 FieldPath 的约束不得由 SMT 判 Proved/Disproved | 编译错误 | 升级为 Unproven 路径 |
+| T17 | 面补臂直驱：`substitute_const_expr`/`substitute_in_const_expr` 递归 base；`const_expr_refs`/`references_var`/`collect_free_vars` 递归 base；`fold_proof_call_arg`/`const_expr_args_to_values` 返回 None；`collect_var_sorts`/`infer_sorts_in_expr` 不计 sort | 编译错误（穷尽面） | 逐项断言 |
+| T18 | IR：正控场景与等价 data-only 记录逐项同形、零 witness 槽、构造 arity 不变 | 不可写 | 指令形状断言 |
+| T19 | 语料：新增正控 `.yx`（0 error；警告集与既有行为夹具同口径）+ 值级读取负控（E1114/E1115 形态）；`corpus_probe` 与基线 diff 逐条分类 | 不可写 | 基线同提交 + 逐条登记 |
+| T20 | 门禁：fmt / clippy / `testsuite run fast` / 五门禁 / 生成器幂等 / `markers --check` / `docs:build` | — | 全 exit 0 |
+| T21 | AST 名字收集保持型：`ast::collect_expr_ident_refs` 对 `Expr::FieldAccess` 收**基名**（`Type::ConstExpr` 经它进 `name_used_as_type`）；直驱断言 `bb.w` 收集到 `bb`、`w` 不计；全仓 grep 无第二份表达式遍历（§三.5 的零改动行） | 绿（`FieldAccess` 臂既有；B.3 不新增形态） | 断言通过；若新增第二份遍历则红（review 打回） |
+
+**变异（M；每条机械可逆，`git apply -R` + blob 比对）**：
+
+- **M01** admission 去掉字段 evidence 判据（只看 witness-bearing 记录）⇒ T12（`Box` 的 `b.v` 象限）红；声明面 T07 由独立校验负责，不受此变异影响。
+- **M02** admission 去掉 base 模型解析（任何 FieldPath 都放行）⇒ T12（`Int`/`Point` base）红。
+- **M03** `ConstGenericEval::eval` 的 FieldPath 臂改成查 bindings（NamedVar 语义）⇒ T15 红。
+- **M04** SMT gate 去掉 FieldPath 跳过 ⇒ T16 红（伪造 atom 或非 Unproven）。
+- **M05** `substitute_const_expr` 漏 FieldPath 臂（走 clone）⇒ **T13** 红（端到端：base 名仍是 `bb`，应用面拒绝）；T11 **不受影响**（它直驱 `field_path_base_matches`，不经 substitute）。
+- **M06** 转换把 FieldAccess 折成 `NamedVar(base)`（丢 field）⇒ T02/T13 红（E2031 而非 Proved）。
+- **M07** 声明面校验移除 ⇒ T07/T08 红（错误降级到使用点或静默）。
+- **M08** 值级 E1114 检查移除 ⇒ T06 红（保持型判据的反向锚）。
+
+**负控清单**（与上表对应）：T06 值级读取；T07 数据字段路径；T08 未知字段；T09 非前提位置；T10 非形参基名；T11 应用面基名不一致；T12 判定面五象限；T18 IR 零槽位；T21 AST 名字收集。
+
+### 八、inScope / outOfScope
+
+**inScope（路径前缀）**：
+
+`src/frontend/core/types/const_data.rs`、`src/frontend/core/types/eval/const_eval.rs`、`src/frontend/core/types/eval/evaluator.rs`、`src/frontend/core/sema/record_model.rs`、`src/frontend/core/sema/predicate_resolver.rs`、`src/frontend/core/sema/checker.rs`、`src/frontend/core/sema/checker/annotations.rs`、`src/frontend/core/sema/checker/refinement.rs`、`src/frontend/core/sema/layers/predicate.rs`、`src/frontend/core/sema/layers/termination.rs`、`src/frontend/core/sema/layers/ownership.rs`、`src/frontend/core/sema/proof/assumptions.rs`、`src/frontend/core/sema/proof/dep_graph.rs`、`src/frontend/core/sema/proof/smt/translate.rs`、`src/frontend/core/sema/proof/smt/tests/translate.rs`、`src/frontend/proof_execution.rs`、`src/frontend/core/parser/statements/types.rs`、`src/frontend/core/parser/statements/tests/types.rs`、`src/frontend/core/parser/pratt/`、`src/frontend/core/sema/tests/`、`src/frontend/core/types/eval/tests/`、`src/frontend/core/sema/layers/tests/`、`src/middle/ir/tests/`、`src/ast/tests/`、`tests/yaoxiang/`、`tests/baselines/`、`src/middle/ir/tests/snapshots/`、`docs/src/dev/architecture/09-execution-wbs.md`、`docs/src/dev/architecture/09a-wbs-history.md`、`docs/src/reference/language-spec/type-system.md`、`docs/src/en/reference/language-spec/type-system.md`、`src/util/diagnostic/codes/`、`locales/`、`docs/src/reference/error-code/`、`docs/src/reference/warning-code/`。**后四项无条件**：D1 即使复用 E1092/E1042 也要改 locale help 与生成物的发射点计数/行号；`src/ast/tests/` 承载 T21。
+
+**机械必需面**（逐项同提交）：① SPEC 的**五处**现状陈述（行号为写作时证据、会漂移，实现时按句子定位）——(a) §8.3.5 重放句（写作时 :967-968）「由证明内核按当前逻辑签名重放」改为 admission 口径或显式标注「§4.2 未落地」；(b) §8.3.5 `Proved(b.w)` 示例（:970-981）改为 V1 可达形态（`Holds: (bb: Box) -> Type = { bb.w }` 的谓词体裸路径）或显式标注「内核项，非可编译片段」；(c) §8.3.5 末段（:992-994）「类型级字段路径的语法与解析尚未落地」改为已落地事实；(d) §3.4 实现状态注末句（:367）「类型级 `b.w`（B.3）与跨模块导出（B.4）尚未落地」的 **B.3 半句**改为已落地（B.4 半句归 B.4 轮，§P6 6.9.5-B.4 已列）；(e) §8.3 实现状态注（:826-827）同句的 B.3 半句改已落地（B.4 半句归 B.4 轮），且其中「`evidence_ref` / `certificate_ref` 槽随 B.3 / B.4 加入」按 §三.3 改为**随 B.4 加入**（B.3 不物化两槽）。② en 镜像 `docs/src/en/reference/language-spec/type-system.md` 同改、逐句对齐五处：§3.4 状态句（:405）、§8.3 状态句（:946-947，槽句改 "with B.4"）、§8.3.5 重放句（:1119）、`Proved` 示例（:1131）、末段（:1146）。③ 新增语料 ⇒ `tests/baselines/` + IR 快照同提交；④ 动码表/发射点/文案 ⇒ `python scripts/docs/gen-error-code-docs.py` 重跑并确认**幂等**（连跑两次产物哈希一致、`git diff` 只含预期行）；D1 复用 E1092/E1042 时 locale help 六语同改；⑤ 测试家目录（含 `src/ast/tests/`）随新测试落位。
+
+**outOfScope**：B.4（`TypeDefPayload`、`EvidenceSlot` 的 `evidence_ref`/`certificate_ref`/`signature_hash`/`libraries`、跨模块导入模型）；`Certificate`/`Kernel::check`/`LogicSignature`/§13 留存与重放；`FieldPath` 的组合位置（`Q(b.w)`、算术、`Call` 实参、类型构造实参）；多级路径 `a.b.c`；数据字段路径作为编译期项；Γ 注入与路径条件；runtime check/revalidation；泛型模板未实例化判据；显式证据语法（§4.3 证明函数仍按既有面）；Π/`DepFn`；defeq；E1114/E1115 文案；B.2 构造义务 walk；#537/#539/#552。
+
+### 九、风险与未核实
+
+- **R1（高）**：admission 的 soundness 依赖「witness-bearing 记录只有构造器一条产出路径 + 记录不可变」。`unsafe`/FFI/外部字节伪造该类型的值会破坏它；B.3 按 admission-only 边界排除并登记，不在本批新增 runtime check。
+- **R2（高）**：Form B 的记录型形参在类型定义里被接受（P11/P12 实测），但它同时可能作为**类型构造器**进 `env.types`/`generic_type_defs`；`Holds` 的双重身份对 `check_record_family_kind_annotation`、`auto_derive_traits`、E1094 面的影响未核实。P0 必须把「声明期诊断集」与「`param_type == TypeRef("Box")`」实测钉住。
+- **R3（中）**：`bb` 在类型体被引用（`name_used_as_type` 经 `Type::ConstExpr` → `collect_expr_ident_refs` 已收 `FieldAccess` 基名）会把 `bb` 计为「被当类型用」；`bb: Box` 不是 const 参数类型 ⇒ 不入 q=0 候选，但类型定义泛型参数分类是否把它当类型参数未核实（P0 判据之一）。
+- **R4（中）**：parser 的 `type_position_expr_continues` 当前把 `Dot` 列为「类型名路径」不续接；本批只允许 `identifier . identifier` 单层。必须钉住 `n: 3.14`（单个 FloatLiteral token，不经 Dot）与既有类型注解零变化；模块名点路径在语料实测 0 处，但解析器当前同样不接受，属新增语法面而非回归面。
+- **R5（中）**：SMT 面若维持 `translate_expr` 的既有签名，则必须两处 gate（`try_implication` 的 assumptions 与 `try_smt_solve` 的 constraint）都跳过 FieldPath；任一漏 gate 就会把 FieldPath 翻成伪造 atom（静默错判）。契约取「gate + 显式不产出 atom 的臂」，测试同时钉两处。
+- **R6（中）**：`proof_execution` 的 `match substituted` 兜底臂会把 FieldPath 送进内联求值（求值失败 → 静默不判）；本批显式跳过（保守），并把「证明函数前提含 FieldPath」登记为未支持。
+- **R7（低）**：正控需要两个 `Box` 值（move 语义），`needW(b, Box(5))` 避开 E2014；带 witness 记录首次进语料，`run` 面（擦除后输出）需实测。
+- **R8（低）**：若 P0 失败、改走 Form A（`((bb) => { bb.w })`），需让返回 `Type` 的函数体不触发值级 E1114——会改动值级检查面（影响所有 Type 返回函数），必须另立裁决，不在默认路径。
+- **未核实**：P0 三项（登记/param_type/解析形态）；类型定义的记录型形参分类；`Holds` 双身份副作用；`ProofContext.env.record_models` 在精化走查时的填充时机（B.2 声明期一遍与 walk 的先后在本契约中按「walk 在模块检查尾部」推定）；导入记录的 E2031 形态；语料/快照零漂移（预期、未实测）；`translate_expr` 的调用点数量与改造面。
+
+### 十、裁决点（D0–D2）
+
+> **四件套模板**：D0–D2 若需用户裁决，一律按 AGENTS「请求用户裁决时」与 §十一 的模板给全四件——情况（现状 + 证据：file:line / grep 输出）、逐项优缺点、明确推荐 + 代价、破坏性点名。**D0 默认由 P0 门控自动关闭**（P0 成立即无需裁决）；P0 失败时与 D1 合并，按模板一次给全四件，不拆成两次问。
+
+- **D0（源级形态，实现前置）**：Form B（推荐，§四）vs Form A（备选，§九 R8）。**情况**：P0 探针（§四）钉「Form B 是否登记为谓词、`param_type == TypeRef("Box")`、声明期零新诊断」；P0 绿 ⇒ 自动关闭。**若 P0 红**：与 D1 合并给四件——选项 = Form A + 返回 `Type` 函数体豁免值级 E1114 / 新增专用谓词声明形态；缺点 = 分别改动值级检查面或扩声明语法；推荐 = 依 P0 实测决定；破坏性 = A 类语法扩展面变化。
+- **D1（拒绝面码位）**：**情况**：RFC/SPEC 只写「声明期拒绝/Unproven」，未给码；无生产者证据见 §十一 情况（grep 0 命中同类结构）。**选项**：A（推荐）复用 **E1092**（类型位实参不是编译期常量项）+ **E1042**（未知字段），零码表变更，locale 补一条「证据项前提」help；B 新增专用码（E 类对外契约变化，六语 + 013 + 生成物）。**推荐 A**：正确性上 E1092 覆盖「不是可判定的编译期项」、E1042 覆盖未知字段；可读性上不扩码表；边界后果 = 文案不如新码精确，由 help 补偿。**破坏性**：A 不改任何「原先成功」程序；B 改对外码表。
+- **D2（EvidenceTerm 语义）**：见 §十一 的完整四件套，推荐 A 案。
+
+### 十一、D2 四件套：类型级 `b.w` 的语义档位
+
+> 本节是 **D0–D2 共用的四件套模板**：D2 给完整实例（情况+证据、逐项优缺点、推荐+代价、破坏性）；D0/D1 按同一四件填写（情况见 §十 与 §四 P0；证据 = file:line/grep 输出）。
+
+**情况**：RFC §14.5 要求 `b.w` 指称 `EvidenceTerm(FieldPath, EvidenceRef, signature_hash)`，并由 `Kernel::check` 按签名重放。证据：`src/frontend/core/sema/record_model.rs:83-90` 的 `EvidenceSlot` 只有 `field`/`quantity`/`proposition` 三字段（无 `evidence_ref`/`certificate_ref`/`signature_hash`）；B.2 契约 §二 映射表（本文件 5407 行）已登记 `Certificate`/`EvidenceRef`/`ProducerHint`「不物化证明项；§4.2 的重放未落」；`rg -n -e '\bEvidenceRef\b' -e '\bCertificateRef\b' -e '\bLogicSignature\b' src/` = **0 命中**（exit 1）。因此「证据项作为另一命题前提」的完整语义在本批不可实现；可用的只有 admission 读法（值的类型保证槽命题成立）。
+
+**选项与优缺点**：
+
+- **A（推荐）admission V1**：本契约 §五 的规则。优点 = 用户语法可用、sound（三条依据）、零运行期面、与 B.4 的 `evidence_slots.proposition` 共用同一项表示；缺点 = `b.w` 的信息量等于类型事实（对任何 `R` 值恒成立），不提供证书复用/跨签名，不宣称 §4.2。
+- **B parse-only**：语法接受、语义一律 Unproven。优点 = 零语义风险；缺点 = 写法永远证不出（用户面不可用），等于「核心功能留待实现」，违反红线第 2 条。
+- **C 推迟 B.3**：等 §4.2/§13 内核批次。优点 = 一次到位。缺点（正确性）= `b.w` 的语法与 admission 语义继续缺失，B.4 的 `evidence_slots.proposition` 面只能携带不含 FieldPath 的项，规范（RFC §14.5 已写类型级可写）与实现的读法长期不一致，读者无法从代码确认边界。范围/进度（D 阶段收口、B.4 排期）只作附带影响，不构成否决理由。
+- **D 在 B.3 内实现 §4.2 + §13**：优点 = 语义完整、可复用导出方证书。缺点（正确性）= 在无 §4.1 `LogicSignature`/§13 缓存的前提下，必须在本批现定签名、证书与重放语义——这些是尚未裁决的内核契约，凭空落地会把未定语义固化；可读性 = 一个批次同时引入项语言、内核与证据缓存，边界无法从提交信息读出。范围/成本只作附带影响，不构成否决理由。
+
+**推荐**：A。理由（判据只取正确性与可读性）= 正确性上 sound（§五 三条 + 判定面/应用面分层）、可读性上单一 term world 与单一判定点；边界后果 = 只覆盖「构造已证 + 5A 不可变」的记录值，跨签名/跨模块/证书复用明确不宣称。范围与进度只作附带影响；推荐项自身代价与风险如实写在 §九（FFI 伪造边界、证书语义不宣称）。
+
+**不可逆/破坏性**：A 新增 A 类语法（原先 E0010 的写法变成可编译）与拒绝面；若 D1 选新码，则是 E 类对外契约变化（码表/六语/生成物），需用户裁决后才落。无基线破坏性再生（预期零漂移；若语料出现漂移须逐条分类并报 lead）。
+
+### 十二、顺序与交接
+
+1. P0 探针（只开 parser + 转换）→ 记录结论；不成立则停工报 lead（D0）。
+2. 红测试：T01–T03（语法/转换/项规则）、T04（P0 登记）、T05–T11（语义/负控）、T15–T17（面）、T21（AST 名字收集保持型），确认红态与 §三.5 表一致。
+3. 实现：项变体 + 全 match 臂 → parser + 转换 → 应用面 base 名一致性（`refine_predicate_from_ast_args` / `PredicateResolver::try_resolve`）→ 判定面 admission 单点 + 记录模型解析助手（`resolve_record_model` 两调用点：判定面 + 声明面）→ 声明面/注解面拒绝 → SMT gate/translate 面。
+4. 语料/快照/文档：新增正控 + 值级负控语料；基线同提交；SPEC **五处**现状陈述与 en 镜像同改（§8.3.5 三处 + §3.4/§8.3 状态注的 B.3 半句，§八 机械必需面）；`src/ast/tests/` 的 T21 落位；09/09a 状态更新。
+5. 门禁：fmt / clippy / `testsuite run fast` / 五门禁 / `python scripts/docs/gen-error-code-docs.py` 幂等（连跑两次哈希一致）/ `markers --check` / `docs:build`；变异 M01–M08 走 `scripts/dev/scratch.py trial`（机械可逆）。
+6. 收口证据：09a 实现轮（红→绿、语料/快照 diff 分类、D59 分类、门禁计数、变异表）+ 09 行状态。**不宣称**证书重放/跨签名/跨模块（B.4）。
+
+### 十三、实现轮（收口，2026-11-15；D2 裁决 A）
+
+> 本节记录 B.3 实现轮的**红→绿、变异、等价面与门禁**；09 WBS 状态已同步为已落地。
+
+**裁决**：B.3 D2 = A（admission V1）；B.3 D1（拒绝面码位）按契约推荐复用 **E1092 + E1042**，不新增码。
+
+**已落（工作树）**：
+
+1. **项表示**：`ConstExpr::FieldPath { base, field }` 是唯一新增变体；`Display` 打印 `base.field`。全仓编译强制面补齐（`const_expr_free_names`/`node_count`、`ConstGenericEval::eval` 报错、`Evaluator::eval_expr` 报错、`dep_graph::collect_free_vars`、`ownership::collect_var_sorts`、`predicate_resolver::substitute_in_const_expr`、`termination::substitute_const_expr`/`const_expr_refs`、`assumptions::references_var`）。
+2. **语法**：类型注解位接受单层 `ident.ident`（`parse_type_annotation_nested`，复用既有 `Type::ConstExpr` 构造点）；类型体 `{ bb.w }` 走 `parse_struct_type` 的 dot 分支（契约 §三.5 补记的第 8 个语法落点）；`convert_expr_to_const_expr` 只对 `Var` 基座产出 `FieldPath`。
+3. **admission**：`record_model.rs` 增 `resolve_record_model`（`pub(crate)`，两调用点）、`witness_premise_admitted`（只判 R→模型 + f 是 evidence 字段）、`field_path_base_matches`（应用面基名 == 实参名；非 `NamedVar` 基座拒绝）。`check_predicate_with_mode` 在第 1 级之前调用 admission；`PredicateResolver::try_resolve` 在应用面校验（新 `WitnessPathBaseMismatch` → E1092）。
+4. **拒绝面**：声明面 `validate_predicate_witness_paths`（E1042 未知字段 / E1092 数据字段或非形参基座）；注解面 `reject_witness_path_args`（谓词实参里的 `FieldAccess` → E1092）。
+5. **SMT 面**：含 `FieldPath` 的约束不进 `try_smt_solve`；含该形态的假设整条跳过 `try_implication`（不产出伪造 atom）。
+
+**红→绿（实测）**：先只落变体+编译强制臂+测试，回退 parser+converter 后 `cargo test --lib record_witness_term` = 3 failed / 1 passed——T01/T04 为 `E0010 expected a type, found Dot`、T02 为「Var.field 必须转换为 FieldPath；实际: None」、T03（非 Var 基座负控）pass；恢复实现后该 4 条子集转绿。终态 `record_witness_term` **15/15 green**（含 t19 的复合声明负控与项级助手断言）；后续 11 条未逐条留实现前红态，以 M01–M08 + M03b/M18 的**变异红**替代（M03b 出处 t18/t19 批次 `b3-review` rev 1c2f7e4a；M18 出处 t18 批次 `b3-verify`）。
+
+**变异（目标锚均红）**：M01 关 admission ⇒ T05 红；M02 关应用面校验 ⇒ T09 红；M03 求值器把 FieldPath 当值 ⇒ T15 红；**M03b**（t18/t19 批次 `b3-review` rev 1c2f7e4a）FieldPath 查 bindings ⇒ T15 红（`Ok(Int(3))`，bind_var 守卫）；M04 摘 SMT gate 且关 admission ⇒ T16 以求解器错（`Sort mismatch`）失败（gate 在 admission 短路下不可单独达，故标注依赖 M01）；M05 `substitute_const_expr` 漏臂 ⇒ T05/T14/T09 面红；M06 转换器丢 field ⇒ T02/T05 红；M07 关声明面 ⇒ T07/T08 红；M08 摘两处 witness 值级拒绝 ⇒ T06 红；**M18**（t18 批次 `b3-verify`）`runtime_field_count→fields.len()` ⇒ T17 的 `CreateStruct dst` 断言红（`实际 3`）。
+
+**t19 修复（t7 F1/F2/F3，2026-11-15）**：① SMT 面——`translate_expr` 改 `Option<SMTExpr>`，`FieldPath` 显式 `None`（不产物化 atom）；`try_implication`/`try_smt_solve` gate 扩到约束整棵树（`contains_field_path` 单一收集器，checker 声明面复用）。② 声明面——从「根为 FieldPath」改成「整棵树含 FieldPath」并校验整条 constraint 恰为唯一形参 + evidence 字段；复合形态 `{ bb.w > 0 }`/`{ bb.w == bb.w }`/`{ bb.w >= bb.w }` 实测恰 1 条 E1092、无 E4018/E2031、exit 1（修复前分别 E4018 与 exit 0 静默）。③ `proof_execution` 兜底臂显式跳过 `FieldPath`（不内联求值、不静默通过）。④ 六语 locale help 补 E1092/E1042 的证据路径语境，`E1xxx.md` 再生（两次运行哈希一致）。⑤ `record_evidence_layout`/`record_witness_term` 补 dst/求值器/自由名/节点数/翻译断言。
+
+**t20 复审残留（备案）**：F10 `translate_constraint` 对不可翻译项返回空命令表——admission 短路 + 整树 gate 下无可达路径，登记待后续轮；F11 复合形态在**含使用点**的程序会「声明面 E1092 + 调用点 E2031」级联，§十三「恰 1 条」仅限**纯声明探针**（负控测试即纯声明）；F12 en locale 残键为既有问题，另案。
+
+**D59 分类（t19 补）**：现状——类型级 `b.w` 从旧行为 E0010（解析器拒绝）变为可用，属**新增能力**；值级读取仍 E1114、5A/量词/擦除未变；既有成功程序零变化；本批新增的拒绝面 E1092/E1042 发射点是**新缺陷的硬诊断**，不是旧行为的语义修正。分流结论：类型级 b.w 的旧行为 E0010 = 非成功路径 ⇒ **A 类顺路修**成立（先红后绿 + 不改变原先成功程序 + 同提交登记 + 基线同提交）；t19 修复的 F1/F2（SMT 伪造 atom、声明面漏拦）属**本批缺陷修复**，不入 A/B/C 顺路修；值级 E1114 与 5A 面零变化，无需分类。09 WBS 的 6.9.5 D 行同处标注「错误类型 A」并指向本节。
+
+**T17/T21/T19（本轮补齐）**：T17 在 `src/middle/ir/tests/record_evidence_layout.rs` 断言「加 `Holds`/`needW` 后 `Box` 的 `LOAD_ARG`=2 / `CREATE_STRUCT` 字段数=2 / `local_count`=3」（零 witness 槽）；T21 在 `src/ast/tests/name_refs.rs` 钉 `Type::ConstExpr(FieldAccess)` 只收基名 `bb`、字段名不计引用；T19 新增语料 `02-type-system/refinement/type_level_evidence_path.yx`（behavior，exit 0，警告集与既有 `call_arg_evidence.yx` 同类）与 `06-compile-errors/refinement/witness_field_read_err.yx`（`// expect: compile-error E1114`，E1114 在第 17 行），`corpus-parity.jsonl` 同批 **+2 行**（一条 behavior、一条 compile-error），新增 IR 快照 **1 个**（`type_level_evidence_path.snap`，负控不达 IR）。
+
+**等价面（最终字节）**：`testsuite run fast` exit 0——lib 1787 passed / 1 ignored、integration 52、yx_runner 383、formatter_integration 1、yx_multifile_runner 2，全 0 failed；`corpus_probe` 与基线逐行一致；IR 快照比对 0 漂移（新增 1 个快照入库）。
+
+**已同改文档**：SPEC §3.4 / §8.3 实现状态注的 B.3 半句、§8.3.5 重放句/`Proved(b.w)` 示例/末段，en 镜像五处；错误码生成物按新发射点机械再生（E1xxx/E2xxx/E4xxx/index + warning-codes 行号随 `checker.rs` 平移，第二次运行产物稳定）；t19 补 E1092/E1042 的六语 help（`locales/*.json`）并再生 `E1xxx.md`。
+
+**门禁（最终字节）**：`cargo fmt --check` 0；clippy `-D warnings` 0；docs markdownlint / refs / truth / `docs:build` 0；`check-obligations` / `check-boundary` / `check-fanout` / `check-test-channel` / `markers --check` / `rfc/check_tracking` 0。
+
+## P6 6.9.5-B.4 契约（impl，2026-11-15，只读；HEAD `e64139dc` 实测）
+
+> 本节是 **B.4 实现轮的契约**，不是实现记录：只落 payload 形状、导出一条链、导入一条链、哈希对象、libraries 与缺失诊断、测试矩阵与红态实测，不动 `src/`。它把 RFC-027 §14.4 与 SPEC §8.3.4 落成可执行判据；B.3（类型级 `b.w`/admission）已在 §P6 6.9.5-B.3 定契约，B.4 实现轮在其之后。
+>
+> **红态口径**：下表「红态」是本节写作时在 HEAD `e64139dc` 的 `check` 上**实测**的现状（同一二进制；`cargo build --bin yaoxiang-rs` 后运行），不是推断；「绿态」是 B.4 验收期望。探针文件是工作区产物，只登记形态与实测输出，不作引用出处。
+
+### 一、目标、硬前置与能力边界
+
+B.4 做四件事：①把**含证据字段的记录模型**随 `TypeDefPayload` 导出（非泛型记录从 `None` 变 `Some`）；②导入方把模型**原样恢复**进 `env.record_models`（含 `field_path`/量词/义务/证据槽），构造义务继续走**唯一判定单元** `judge_refined_obligation_with_mode`；③给 payload 一个**真实可算**的 `signature_hash`（导出侧证据环境指纹，不是 §4.1 逻辑签名）；④登记 RFC `libraries` 并以「证明来源可否在导入单元本地执行 **且本地同名来源指纹与导出登记一致**」给出**缺失/漂移诊断**，不硬编码信任根（F1）。
+
+**硬前置（H1–H7，实现顺序即此序）**：
+
+- **H1 Registry 面分类补种**：`collect_signatures` 在 pass1 之前要能看到本单元谓词定义，否则 Registry 面把 `w: Pos(v)` 分类成 **`Call{Pos,[v]}`** 而不是内联命题 `v > 0`（实测依据：分组导入下 Registry 面导出的 `Box` arity 已按数据字段=2 计 ⇒ 量词对；命题形态在无谓词表时只能来自 proof-fn 回退路径 `Call{Pos,[v]}`——这是代码阅读结论，T01 是其实测判据）。payload 的命题必须与定义方 check 面同形，故 `collect_signatures` 增谓词表参数并在 pass1 前写入 `env.predicate_defs`；两个生产调用方（用户模块 `extract_module_info`、嵌入 std `embedded_std_module_info`）都先算 `collect_predicate_defs(ast)` 再传入。
+- **H2 导出构造单点**：`checker::type_def_export_payload` 是 payload 的**唯一构造点**（Registry 面两调用方共用），不得在导入方或 IR 侧重算。
+- **H3 None→Some 触发条件**：见 §三.2；数据-only 记录保持 `None`（零行为）。
+- **H4 导入恢复单点（扩展既有方法，F5）**：`register_type_payload`（`checker.rs` 既有方法，已由 `register_use_export` 的 Type 臂调用）是 `env.record_models` 的**唯一导入写入点**；B.4 **只扩展该方法体**，不新增入口/调用点。键 = 导入本地名（别名优先），并在记录定义名与本地名不同时**同源双键**（同一模型 clone，不新增第二张表）——IR 侧 `classified_fields` 按定义名查（§五.4）。
+- **H5 构造义务前置检查**：导入记录（`model.from_payload`）的证明来源**不可本地执行**或**本地同名来源指纹与 `LibraryRef.hash` 不符**时，在构造点报 **Unproven 家族**（D2 码位）而不是落进证明函数执行器被误标 E4018（§八）。
+- **H6 哈希设施单源**：`ContentHash` + SHA-256 文本指纹落 `src/util/content_hash.rs`；`package/vendor/checksum.rs` 的字节校验改调同一设施（禁令三 A，防第二套 hex/摘要）。
+- **H7 门禁与夹具**：多文件夹具与 `yx_multifile_runner`、错误码生成物（E4020/E5002 新发射点）、09/09a 状态；**SPEC §8.3.4 的 B.4 半句加实施状态注**（V1 只实现「重新证明」；「用自己的逻辑签名验证」在 V1 = 逐库内容指纹比对 + 重证；三路径其余两条待 §4.1 内核）。**B.3 半句**（类型级 `b.w` 尚未落地、两槽随 B.3/B.4 加入）归 B.3 轮/t15，t14 不重复改——两轮改同一 status blockquote，逐句对齐、不留半句失实。en 镜像同改（只改 B.4 半句）。
+
+**不做（边界，逐条有归属）**：`LogicSignature`/`Kernel::check`/`Certificate`/§13 证书留存与重放；跨签名**翻译项**与**桥接公理**（无逻辑签名项语言、无公理库 manifest 与内核，见 §七）；跨模块**证明函数执行**（#552，执行器按单元 AST 查函数，见 §七/§八）；记录定义引用**导入谓词**时的 pass1 分类（B.2 既有边界，§十二 R2）；proof-fn 声明序硬化（D3）；runtime check；Π/`DepFn`；defeq；显式证据声明语法（§4.3）。
+
+### 二、RFC-027 §14.4 / SPEC §8.3.4 逐条映射
+
+| # | 条款 | 要求 | B.4 落点 / 裁决 | 判据 |
+| --- | --- | --- | --- | --- |
+| 1 | RFC §14.4「载体」 | `frontend::module::TypeDefPayload` 携带命题/证据槽 | 既有三字段不动，新增 `record_model` / `signature_hash`（§三） | T01/T02 |
+| 2 | RFC §14.4 `type_params` | 含 `P: T -> Proposition` 的 kind | ≡ `record_model.type_params`（B.2 的 `Type\|Const\|Family`）；非记录类型走既有 `type_def.poly` binders，不复制第二份 | T01 |
+| 3 | RFC §14.4 `field_obligations` | 每条 evidence 字段一条义务 | ≡ `record_model.obligations`（唯一表示，payload 不另存列表） | T01/T02 |
+| 4 | RFC §14.4 `evidence_slots` 的 `field/quantity/proposition` | 每条证据槽三面 | ≡ `record_model.evidence`（B.2 子集；与 obligations 同长同序） | T01 |
+| 5 | RFC §14.4 `evidence_slots[].evidence_ref/certificate_ref` | 显式证据来源 / 已验证证书 | **D1 裁决点**：V1 无生产者（无显式证据声明面、无证书缓存），不物化空壳字段；§十二 风险登记 | — |
+| 6 | RFC §14.4 `evidence_slots[].signature_hash` | 随 §4.1 签名失效 | 同值不逐槽复制：统一为 `payload.signature_hash`（§六；语义 = 导出侧证据环境指纹，不是 §4.1） | T04 |
+| 7 | RFC §14.4 `libraries` | 命题/证据引用到的库随导出携带 | ≡ `record_model.libraries`（`LibraryRef`，§八）；V1 只产 `Proof` 类来源 | T05 |
+| 8 | RFC §14.4「导出面」 | 构造 `TypeDefPayload` 时逐槽填 `EvidenceSlot`；两表同源 | `type_def_export_payload` 从同一 `RecordModel` 投影（不各写一份）；`field_obligations` 与 `evidence_slots` 的同源由 B.2 保证 | T01–T08 |
+| 9 | RFC §14.4「导入面」 | 导入方拿槽后验证 | `register_type_payload`：完整性校验 + 恢复模型 + IR 量词同源（§五） | T06/T13/T18 |
+| 10 | RFC §14.4 / SPEC §8.3.4「用自己的签名验证」 | 不得直接复用导出方 `Proved` | V1 无一复用路径；义务先在构造点比对**逐库来源指纹**（§八.3），一致后经同一判定单元**重证**（路径 3，§七） | T10–T12、T22 |
+| 11 | SPEC §8.3.4「签名不一致三路径」 | 翻译 / 桥接 / 重证 | V1 只实施**重证**；翻译与桥接不可实施（无 §4.1 项语言/公理库），D2 边界登记（§七）；SPEC §8.3.4 加实施状态注，en 镜像同改（§八 机械必需面） | §七 表 + docs 门禁 |
+| 12 | SPEC §8.3.4「库缺失」 | 结论 Unproven，提示登记库或写桥接 | 构造点前置检查：来源不可本地执行 **或本地同名来源指纹不符** ⇒ Unproven 家族（D2 码位）；**不得**静默放行或误标 E4018（§八） | T09/T10/T22 |
+| 13 | RFC §14.4「不新增第二套判定入口」 | 多文件构造点复用同一 `judge_refined_obligation` | 构造义务仍走 `check_record_ctor_obligations` → `judge_refined_obligation_with_mode`；B.4 只加模型恢复与前置检查，不新判定入口 | T09/T18 |
+
+### 三、payload 字段精确类型与语义
+
+**新增/使用的类型（所有路径相对仓库根）**：
+
+```text
+// src/util/content_hash.rs（新，H6）
+pub struct ContentHash([u8; 32]);          // Debug/Clone/Copy/PartialEq/Eq/Hash; Display = 64 位小写 hex
+impl ContentHash {
+    pub fn of_bytes(bytes: &[u8]) -> Self; // SHA-256
+    pub fn of_text(text: &str) -> Self;    // of_bytes(text.as_bytes())
+    pub fn to_hex(&self) -> String;
+}
+
+// src/frontend/core/sema/record_model.rs（B.2 结构上追加）
+pub struct RecordModel {
+    // …B.2 既有字段（name/type_params/fields/obligations/evidence/admission_fields/field_path）…
+    pub libraries: Vec<LibraryRef>,        // 导出构造时填；本地定义面恒空（§八）
+    pub from_payload: bool,                // 导入面标记：只在 register_type_payload 置 true（§八.3）
+}
+pub enum LibraryKind { Proof, Axiom }      // Axiom：V1 零生产者（无公理库语法），保留 RFC 形状的种子
+pub struct LibraryRef {
+    pub kind: LibraryKind,
+    pub id: String,                        // 被引用的本地定义名（证明函数头）
+    pub hash: ContentHash,                 // 该定义在导出方的规范文本指纹（§六）
+}
+
+// src/frontend/module/mod.rs（payload 追加）
+pub struct TypeDefPayload {
+    // …既有 type_def / sum_variants / interface_impls 不动…
+    pub record_model: Option<RecordModel>, // 证据/自引用义务的导出载体；无义务记录为 None
+    pub signature_hash: ContentHash,       // 导出侧证据环境指纹（§六），不是 §4.1 签名
+}
+```
+
+1. **单源**：RFC 的 `type_params` / `field_obligations` / `evidence_slots` / `libraries` 四面都由 `record_model` 承载（§二 #2/#3/#4/#7）。payload 不复制这些列表——B.2 已裁决 obligations 与 evidence 不各写一份，B.4 延续；复制会造第二真相（禁令三 A）。
+2. **`record_model: None → Some` 的触发条件（精确）**：`type_def_export_payload` 的返回值由下式决定（`model` 为 `self.env.record_models.get(name)`，仅在 Registry 面 pass1 已分类时存在）：
+
+   ```text
+   let carrier = model.filter(|m| m.has_evidence() || !m.admission_fields.is_empty());
+   if type_def.is_none() && sum_variants.is_empty()
+      && interface_impls.is_empty() && carrier.is_none() { return None; }
+   payload.record_model = carrier;                 // 其余情况 Some(payload)，carrier 可 None
+   ```
+
+   即：**证据字段或自引用精化字段至少一个**的记录，payload 从 `None` 变 `Some`；泛型记录本来因 `type_def` 非空已是 `Some`，B.4 只补 `record_model`；纯数据记录保持 `None`（零行为、零克隆成本）。谓词（proof family 约束体）与空类型体在 B.2 起就**不登记**记录模型，故不产生 payload。
+3. **键与名字**：`RecordModel.name` 恒为**定义名**（导出口径）；`register_type_payload` 以**导入本地名**为键写入 `env.record_models`（别名导入时二者不同），并同时以 `model.name` 写一份同源 clone（IR 的 `classified_fields` 按定义名查；见 §五.4）。不得改写 `model.name`。
+4. **本地面不变**：定义模块自身 `env.record_models` 的 `libraries` 恒空；`type_def_export_payload` 在 clone 上填 `libraries` 与 `signature_hash`，不回写 env（导出是纯投影）。
+5. **字段序**：`libraries` 按 `(id 字典序)` 去重排序后导出，使指纹与哈希稳定（不依赖 `HashMap` 迭代序）。
+6. **导入面标记**：`RecordModel.from_payload: bool` 默认 `false`，只在 `register_type_payload` 恢复模型时置 `true`；构造点据此启用**来源指纹校验**（§八.3）。它**不进 `canonical_text`**（导出面恒 `false`，导入面写回态不改变 payload 完整性）。
+
+### 四、导出链（构造点）
+
+1. **H1 补种**：`TypeChecker::collect_signatures` 增加 `predicate_defs: &HashMap<String, PredicateDef>` 参数，在 pass1 之前写入 `self.env.predicate_defs`（仅本单元声明，与 check 面第零遍同一张表、同一构建判据 `collect_predicate_defs`）。`extract_module_info` 与 `embedded_std_module_info` 先算该表再调用；`extract_module_info` 既有`predicate_defs`局部变量前移复用（同一结果同时服务 `export.predicate_def` 与补种，不重复计算）。
+2. **构造算法**（`type_def_export_payload`，`&self`）：
+   ① 取 `env.generic_type_defs` / `sum_types` / `interface_impls`（既有三面）；
+   ② 取 `env.record_models.get(name)` 并按 §三.2 过滤，得到 `carrier`；
+   ③ `carrier` 有值时：派生 `libraries`（§八.1）→ 填 `libraries` → 算 `signature_hash = model.signature_hash()`（§六）；
+   ④ 按 §三.2 判定返回 `None` 或 `Some(TypeDefPayload)`。
+3. **两个调用方**：`orchestrator::extract_module_info`（用户模块 Registry 臂）与 `std::yx_sources::embedded_std_module_info`（嵌入 std）。两者都在 `collect_signatures` 之后调用本函数；**不得**在别处复制构造逻辑（含 `std` 侧当前硬写 `predicate_def: None` 的臂——B.4 改为从同一 `collect_predicate_defs` 结果取值，与用户面同构）。
+4. **与 check 面同形**：H1 之后，Registry 面 `Box` 的命题是内联 `v > 0`（与 check 面相同）；不补种时是 `Call{Pos,[v]}`（代码阅读；T01 钉其红态）——后者会让导入方被迫执行 `Pos`（跨单元不可执行），使**合法的导入构造全部变成 Unproven**。H1 是 B.4 的硬前置，不是优化。
+5. **可观察差异（HEAD 实测）**：Registry 面导出的 `Box` arity 已是 2（数据字段 v/z；`use lib.{Box}` 后 `Box(-3)` 报 E1010 expected 2），证明量词在 Registry 面正确；B.4 不改量词，只补命题形态。
+
+### 五、导入链（消费点）
+
+1. **注册（扩展既有单点，F5）**：`register_type_payload`（`checker.rs` 既有方法，`register_use_export` 的 `Type` 臂在既有三张表之后已调用它）**只扩展方法体**——不新增入口、不改调用图、不新增调用点。后者：
+   ① 若 `payload.record_model` 为 `Some`：用**同一指纹函数**重算 `model.signature_hash()` 并与 `payload.signature_hash` 比对；不一致 ⇒ 发 `E5002 import_error(<导出全路径 export.full_path>, "证据载荷指纹不一致")`（**硬错误**，挂 use 行 span），**不注册**该模型；
+   ② 一致 ⇒ 复制模型（含 `libraries`，置 `from_payload = true`），写入 `env.record_models[register_name]`，并在 `register_name != model.name` 时再写一份 `env.record_models[model.name]`（同源 clone）；
+   ③ 既有三张表的恢复逻辑不变，但**两侧形态不同源（F6）**：env 侧落点是 `env.interface_impl_registry: HashMap<String, Vec<InterfaceImplEntry>>`（`environment.rs:216`）；payload 侧是 `interface_impls: Vec<(String, InterfaceImplEntry)>`（按接口名扁平聚合）。投影口径 = 逐对 `env.add_interface_impl(interface_name, entry.clone())`（既有投影，B.4 不改、不另写第二套）；`generic_type_defs`/`sum_types` 分别由 `type_def`/`sum_variants` 一对一恢复；
+   ④ 谓词 def 的恢复逻辑不变（`use` 门控）。
+2. **span 接线**：`register_use_export` 增 `span: Span` 参数（7 个调用点均在 `collect_function_signature` 的 `Use` 臂内，逐点传 `stmt.span`；子模块递归点传外层 use span）。注册面诊断（E5002）因此落在用户 wrote 的 `use` 行。
+3. **构造义务不变**：`check_record_ctor_obligations` 仍按 `env.record_models.get(callee)` 取模型、按数据字段序绑定、用 `substitute_const_expr` 代入、交 `judge_refined_obligation_with_mode`（`NoSmt`）。B.4 只在判定前插入 `§八.3 前置检查`（本地可执行 + 来源指纹一致）；**不新增**任何证明入口、不改 E4018/E2031 映射。
+4. **IR 量词同源**：`TypeCheckResult.record_models = env.record_models.clone()`（既有），导入模型因此自然进入当前单元结果；`ir_gen::classified_fields` 按定义名查到模型后把 AST 字段量词补齐（`seed_cross_file_types` 与 `generate_stmt_ir` 两处同一 helper）。这同时补上 B.2 变异 M05a 登记的空缺：**多文件面量词注入此前无测试钉住**——B.4 的 IR 测试必须钉住「导入记录构造只装数据字段、witness 不占槽」。
+5. **整模块导入的裸名登记**：`register_use_export` 的两处「整模块/分组别名」臂只对 `type_payload.is_some()` 的 Type 导出补裸名镜像。B.4 之后证据记录也满足条件 ⇒ `use lib` 后裸名 `Box(...)` 从 HEAD 的 **E1001 Unknown variable** 变为可构造（A 类行为扩展：原先被拒、现在接受）。这是一致化（泛型导出早已如此），登记为可观察变化。
+6. **别名导入**：`use lib.{Box as B}` 时模型以 `B` 为键注册；构造 `B(-3,5)` 的 E1010/E4018 判定走同一模型。HEAD 实测别名路径当前报 `E1010 expected 3 found 2`（witness 被当构造位），B.4 后应为 arity 2 + E4018（§九 m6）。
+7. **未构造不拒绝**（负控）：导入证据记录但从不构造（只传值/只作形参类型）时零诊断；缺失来源的前置检查只在**构造点**触发（§八.3）——导入本身不承担重证义务。
+8. **B.3 联合**：导入的 `Box` 模型恢复后，B.3 的 admission 分两面规则（判定面只看「R→模型 + f 是 evidence 字段」；应用面要求 `FieldPath` 基名 == 应用实参名，B.3 §五）在导入方同样生效：`Holds(b)` 参数位的义务可证。B.4 不为 B.3 增设第二通道；测试见 T17。
+
+### 六、`signature_hash` 的真实哈希对象（不伪造内核）
+
+`signature_hash` 的语义在本批**明确限定**为「导出侧证据环境指纹」：
+
+```text
+model.signature_hash() = ContentHash::of_text(model.canonical_text())
+canonical_text(RecordModel) =
+  "record " name
+  for p in type_params:  "param " p.name " " kind_tag(p)              // Type / Const / Family(arity)
+  for f in fields:       "field " f.name " " quantity_tag " " ty_display " " is_mut " " has_default
+  for o in obligations:  "obligation " o.field " " base_display " " constraint_display
+                         " " depends_on_debug " " param_refs_debug
+  for a in admission:    "admission " a.field " " base_display " " constraint_display
+  for s in evidence:     "evidence " s.field " " quantity_tag " " proposition_display?
+  for l in libraries:    "library " kind_tag " " l.id " " l.hash.to_hex()
+```
+
+1. **取哈希的对象**：记录模型的**证据相关投影**——类型参数 kind、字段量词、构造义务命题（`base` + `constraint` 的 `Display`）、`depends_on`/`param_refs`、证据槽命题、`libraries` 清单（含每条 `hash`）。**不覆盖** `type_def`/`sum_variants`/`interface_impls`（它们不是证据面，且已有各自的跨单元完整性通路）；不覆盖导入面写回的 `unresolved` 状态（不存在该字段，见 §八.3 的做法）。
+2. **每条 `LibraryRef.hash`**：导出方按**本地已登记定义**算规范文本指纹，**必须覆盖定义体**（只哈希签名会漏掉语义漂移）：谓词 → `PredicateDef { param_name, param_type Display, constraint Display }`；证明函数 → `Fn` 形态的形参/返回 `Display` + **约束体表达式** `Display`（来自 `type_definition_bodies` 里该定义的 `TypeBodyItem::Expr(Type::ConstExpr(expr))`，即 `Eq: (a,b) -> Type = { a > b }` 的 `a > b`）。两者共用一个 `TypeChecker::proof_source_digest(name) -> Option<ContentHash>`（导出口与导入构造前置检查**同源**，不得各写一份）；**无约束体可辨的来源**（Assign 形证明函数、无体的证明入口）返回 `None` ⇒ 导出登记 `unresolved:<id>` 哨兵，导入构造必然拒绝（不静默，R5）。导出方算一次随 payload 携带；**导入方在构造点前置检查中必须比对**：本地同名来源的指纹与 `LibraryRef.hash` 不一致 ⇒ 拒绝（§八.3）；一致 ⇒ 允许继续重证（必要非充分，见 3）。
+3. **`Display` 非单射的诚实声明（必要非充分）**：`MonoType`/`ConstExpr` 的 `Display` 把 `Neg(Lit(3))` 与 `Lit(-3)` 都渲染成 `-3` 一类同形（其余形态同理）。因此：**指纹不一致 ⇒ 两项来源必不同**（`Display` 是项的确定性函数，不同输出不可能来自同一项）——构造点据此**拒绝**是 sound 的；**指纹一致 ⇏ 语义同一**（非单射碰撞）——放行只是**必要条件**，最终仍由本地重证判定。碰撞的残留面 = 两个结构不同但 `Display` 同形的定义被误当同源；缓解备选 = 导出时对**可转换体**的证明函数内联命题体（与 B.2 谓词内联同机制，另案），或等 §4.1 `LogicSignature.hash`（D1/§七）。V1 不把 fingerprint 当证明依据。
+4. **不是 §4.1 签名**：RFC §14.4 的 `signature_hash` 语义是「随 §4.1 签名失效」；仓库当前无 `LogicSignature`/`Kernel::check`/`ContentHash` for sorts/rules/axioms（B.2 契约 §二映射表已登记「不物化」）。B.4 **不伪造**该对象：字段名保留 `signature_hash`，正文与实现注释写明「V1 = 证据载荷指纹；§4.1 落地后切换为 `signature.hash`，字段与消费点不换名」。这是 D1 的一部分。
+5. **单源设施**：`ContentHash` 与 SHA-256 只在 `src/util/content_hash.rs` 实现；`package/vendor/checksum.rs` 的 `compute_bytes_checksum` 改调 `ContentHash::of_bytes(...).to_hex()`（输出逐字不变，既有 package 测试为判据），不再保留第二份 hex/摘要实现（禁令三 A）。
+6. **两个比较点，职责不同**：①payload 级 `signature_hash`——导入方在 `register_type_payload` 重算（§五.1①），只覆盖「进程内 payload 被篡改/陈旧」的编译器不变量；②逐库 `LibraryRef.hash`——导入方在**构造点**与本地同名来源比对（§八.3），覆盖「同名不同义」的语义漂移，是 F1 的修复点。两者都不覆盖跨签名的翻译/桥接。
+
+### 七、导入方验证与三路径的可实施边界
+
+| §4.1 路径 | 前提 | V1 可实施 | 落点 / 边界 |
+| --- | --- | --- | --- |
+| 翻译项（`translate: A.Prop → B.Prop` + B 下证书） | 两种逻辑签名的项语言与翻译器 | **否** | 无 `LogicSignature`、无跨签名项语言；D2 边界登记，不伪造 |
+| 桥接公理（B.libraries 的 Axiom 条目 + 证书引用） | 公理库 manifest/hash + 内核 check | **否** | `LibraryKind::Axiom` 只作 RFC 形状种子（零生产者）；无内核 |
+| 重新证明（在 B 下对 P 直接构造新证书） | B 的本地同名定义 + **来源指纹一致（必要条件）** + 唯一判定单元 | **是（V1 唯一路径）** | 导入方构造点先按 `LibraryRef.hash` 比对本地来源（§八.3），一致后交 `judge_refined_obligation_with_mode` 重跑；从不复用导出方结论（本来也无证书可复用） |
+
+**结论**：V1 不比较**全局**「导出方签名 vs 导入方签名」（没有可比较的签名对象），一切义务在导入方**重证**；但**逐库内容指纹必须比对**——本地同名来源与导出登记不一致 ⇒ 拒绝（Unproven，D2 码位），不得静默改写定义方义务语义（F1）。指纹一致只是**必要非充分**（`Display` 非单射，§六.3）；残留碰撞的备选见 §六.3/§十二 R6。跨签名其余两条路径待 §4.1 内核；D2 记录「当 §4.1 落地，指纹不符必须路由到三路径选择」的切换点。
+
+### 八、`libraries` 表示与缺失诊断
+
+1. **表示与产出**：`record_model.libraries` 由 `type_def_export_payload` 在 clone 上派生：遍历 `obligations[].proposition.constraint` 与 `evidence[].proposition.constraint` 的 `ConstExpr::Call` 头（新增 `ConstExpr::call_heads(&self) -> Vec<&str>` 收集器，单源），过滤三类：① `record_model.type_params` 里的 proof family 参数（`P` 不是库，是参数）；② 内置谓词头：`probe::BUILTIN_PREDICATES` 当前**只有 `Terminates`**（`sema/probe.rs`，`is_builtin_predicate_name` 是其唯一判定入口）——编译器内置，不是可导入库；`Assert` 是 Proof 族、B.2 分类期已内联为布尔命题，不会成为 `Call` 头，无需过滤（F4）；③ 重复名。每个剩余头经 `self.proof_source_digest(name)`（§六.2 单源）取导出方指纹（谓词 → def 指纹；证明函数 → 形参/返回 + **约束体**指纹）；`None`（无体可辨）⇒ 头本身仍登记（`hash = "unresolved:<id>"` 的文本指纹）并在导出面**不静默**（该形态只能来自 B.2 的 proof-fn 回退，实测可达；登记为风险 R5）。`kind` 恒 `Proof`（V1 无公理库语法，`Axiom` 零生产者）。
+2. **为什么谓词一般不在 `libraries` 里**：H1 之后，记录定义位可解析的谓词在分类时**内联**为命题体（`Pos(v)` → `v > 0`），`Call` 头消失；只有证明函数证据（`w: Eq(v,3)`，`Eq` 非单参数谓词）保留 `Call`。故 V1 的库 = **证明函数来源**。
+3. **构造点前置检查（唯一；F1 修复点）**：仅对 `model.from_payload == true` 的导入模型生效（本地记录不受影响）。`check_record_ctor_obligations` 在每条义务的 `constraint` 代入完成之后、交判定单元之前扫描 `call_heads`；对每个头 `head`：
+
+   ```text
+   本地可执行 = !self.imported_names.iter().any(|(n, _)| n == head)     // 别名为导入（即使同形）不可执行（执行器按本单元 AST 查函数）
+              && matches!(self.env.vars.get(head).map(|p| &p.body),
+                          Some(MonoType::Fn { return_type, .. }) if matches!(**return_type, MetaType))
+   来源指纹   = self.proof_source_digest(head)                          // 与导出口同源（§六.2；含约束体）
+   登记       = model.libraries.iter().find(|l| l.id == head)
+
+   通过 ⇔ 本地可执行 && 登记.is_some() && 登记.hash == 来源指纹
+   ```
+
+   不通过（不可执行 / 导出未登记该来源 / 指纹不符）⇒ 该构造点发**一条** Unproven 家族诊断（D2 码位，推荐 E4020 `proof_function_required`；span = 构造调用；不逐义务重复），并**跳过本记录其余义务判定**（失败闭合，不连锁 E4018）。没有这条检查，导出方 `Eq{a>b}` 与本地 `Eq{a>=b}` 会让 `Box2(3)` 被静默接受（m8）——F1 的 soundness 洞。指纹一致**才**进入判定单元重证（必要非充分，§六.3）；判据读**项**的 `Call` 头 + `libraries` 的登记（两处都来自 payload），不另写第二套来源表。
+4. **正控/负控（路径 3）**：导入方**在本地**定义**同源**同名证明函数（文本与定义方一致、指纹相符）时，头命中且指纹一致 → 交判定单元 → 本单元执行器执行 → 通过。负控两条：①只 `use lib.{Eq}` 而不本地定义 → 不可执行 → Unproven（即使同形也执行不了，因为执行器按单元 AST 查函数；#552 边界）；②本地同名但**语义漂移**（导出 `Eq: a > b`、本地 `Eq: a >= b`）→ 指纹不符 → Unproven，**必须拒绝**（m8 夹具；不得只登记风险）。
+5. **不硬编码信任根**：可执行性来自本单元 AST/env 事实（`imported_names` + `env.vars` 的 proof-fn 形态），不来自库名/求解器名白名单；内置头过滤来自既有 `probe::is_builtin_predicate_name` 单源。
+
+### 九、多文件夹具与用户可达场景（HEAD `e64139dc` 实测）
+
+**对照（同模块，已绿）**：本地 `Box(-3,5)` → E4018 `(-3 > 0)`；本地 `G(Int)(-3)` → E4018；本地 `Box2(4)`（`w: Eq(v,3)`）→ E4018（证明函数返回 false）。三者 exit 1——证明义务在**同模块**生效。
+
+**跨模块红态（HEAD 实测，全部 exit 0 或错误码不符）**：
+
+| 编号 | 夹具形态（lib → main） | main 动作 | HEAD 结果 | B.4 绿态 |
+| --- | --- | --- | --- | --- |
+| m1 | lib: `Pos` + `Box{v,w: Pos(v),z}`；main: `use lib.{Box}` | `Box(-3, 5)` | **exit 0**（义务被整体丢弃；W1002 `Pos` 未用） | E4018 `(-3 > 0)`，exit 1 |
+| m2 | lib: `Pos` + 泛型 `G(T) = {v: T, w: Pos(v)}`；main: `use lib.{G, Pos}` | `G(Int)(-3)` | **exit 0**（泛型记录模型未随导出） | E4018，exit 1 |
+| m3 | lib: `Eq` + `Box2{v, w: Eq(v,3)}`；main: `use lib.{Box2}` | `Box2(3)` | **exit 0**（无模型，义务丢弃） | Unproven 家族（D2，推荐 E4020：来源 `Eq` 不可本地执行），exit 1 |
+| m4 | 同 m3，lib `Eq: a == b` | main **本地**定义同源 `Eq: a == b` 后 `Box2(3)` | **exit 0**（同因；不能区分路径） | 0 诊断，exit 0（路径 3 重证正控） |
+| m5 | 同 m1 | `use lib`（整模块）后裸名 `Box(-3,5)` | **E1001 Unknown variable 'Box'**，exit 1 | E4018，exit 1（A 类扩展：裸名可构造） |
+| m6 | 同 m1 | `use lib.{Box as B}` 后 `B(-3, 5)` | **E1010 function 'Box' expected 3 arguments, found 2**，exit 1 | E4018，exit 1（arity 修正为 2 + 义务生效） |
+| m7 | 同 m1 | `use lib.{Box}`，只声明 `(b: Box) -> Int` 形参，不构造 | **exit 0**（负控：不得因导入而拒绝） | 保持 exit 0 |
+| m8 | lib: `Eq: (a,b) -> Type = { a > b }` + `Box2{v, w: Eq(v,3)}`；main: **本地** `Eq: (a,b) -> Type = { a >= b }` | `Box2(3)` | **exit 0**（模型缺失，义务被丢弃；语义漂移无从暴露） | Unproven 家族（D2，推荐 E4020：`LibraryRef.hash` 与本地 `Eq` 指纹不符），exit 1（F1 负控） |
+
+**D59 分类（按 [07](07-equivalence-oracle.md) §语义修正的分流判据，F3）**：本批**主错 = A 类静默失败**——m1–m4/m8 的跨模块证据义务被整体丢弃、exit 0（该报的错误被吞掉）。m5（E1001 → 裸名可构造）与 m6（E1010 expected 3 → arity 2）原先均**不是成功**，属同一根因最小修改集的**附带行为变更**，在 PR 的 **D3 补丁判定行**逐条列出，**不归 C 类**（C 类 = 崩溃/爆栈/未初始化槽位/字节码版本不符）。
+
+**用户可达场景（多文件夹具，check/run 期望）**——落 `tests/yaoxiang-multifile/`（README 的表同步扩行）：
+
+| 夹具 | 类别 | main 形态 | 期望 |
+| --- | --- | --- | --- |
+| `record-evidence-import` | 行为 | lib 证据记录 + main 构造合法值并 `run` 读数据字段 | `check`/`run` exit 0，值断言通过 |
+| `record-evidence-import-violation` | compile-error | main 构造 `Box(-3, 5)` | `expect: compile-error E4018` |
+| `record-evidence-proof-source-missing` | compile-error | main 构造证明函数证据记录且不本地定义 `Eq` | `expect: compile-error E4020`（D2 码位） |
+| `record-evidence-proof-source-local` | 行为 | main 本地定义**同源** `Eq` 后构造 `Box2(3)` | exit 0（路径 3 重证） |
+| `record-evidence-source-drift` | compile-error | lib `Eq: a > b` + `Box2`；main 本地 `Eq: a >= b` 后构造 `Box2(3)` | `expect: compile-error E4020`（F1 负控：同名不同义必须拒绝） |
+| `record-evidence-import-unused` | 行为 | main 仅导入/传递记录值，不构造 | exit 0（不因导入拒绝） |
+| `record-evidence-witness-premise` | 行为 | lib `Box`+`Holds`；main 导入后 `needW(b, Box(3))` + 值级 `b.w` 负控（B.3 联合） | 正控 exit 0；负控 `expect: compile-error E1114`（拆两个夹具：正控行为夹具 + 负控 compile-error 夹具） |
+
+### 十、测试矩阵（先红后绿）
+
+测试落点：payload/哈希 → `src/frontend/module/tests/type_def_payload.rs`（新文件 + `tests/mod.rs` 挂载）；导入恢复/构造前置 → `src/frontend/core/sema/tests/record_evidence_import.rs`（新文件 + `tests/mod.rs`）；多文件语义 → `tests/integration/multifile.rs`；契约语料 → `tests/yaoxiang-multifile/`；IR → `src/middle/ir/tests/record_evidence_layout.rs`（扩）。命名/AAA/断言消息按 `test-specification.md`。
+
+| # | 判据 | 红态 | 绿态 |
+| --- | --- | --- | --- |
+| T01 | 证据记录 payload `None→Some`：`Box` 的 `record_model` 有 evidence 1 / obligations 1 / type_params / field_path；命题为**内联** `(-3 > 0)` 形态（非 `Call{Pos}`） | `type_payload == None` | 逐字段断言 |
+| T02 | 泛型证据记录 `G` 的 payload 含 record_model（既有 `type_def` 已是 Some） | payload 有 `type_def`、无 `record_model` | `record_model.is_some()` |
+| T03 | 负控：纯数据记录 `Point` payload 仍为 `None`（零行为） | 绿（保持） | 保持；M01 反向 |
+| T04 | `signature_hash` 可算且自洽：等于 `record_model.signature_hash()`、非零、同模型重算相等；`ContentHash` Display 为 64 位小写 hex | 字段不存在（编译红） | 断言通过 |
+| T05 | `libraries`：`Box2` 导出 `[LibraryRef{Proof,"Eq",digest}]`；`Box`（谓词内联）导出空表 | 字段不存在 | 逐项断言 |
+| T06 | 完整性：注册指纹不符的 payload（直驱构造）⇒ `E5002` 且模型不注册 | 无校验 | E5002 一条 + `record_models` 无条目 |
+| T07 | 导入正控：`Box(3,5)` 0 诊断（保持型，M02 反向） | HEAD 亦 0（因无义务） | 0 诊断 |
+| T08 | 导入违规：`Box(-3,5)` ⇒ E4018（m1 形态） | exit 0 | E4018 |
+| T09 | 泛型导入违规：`G(Int)(-3)` ⇒ E4018（m2） | exit 0 | E4018 |
+| T10 | 来源不可用：`Box2(3)` 且无本地 `Eq`（m3），或本地同名但**指纹不符**（m8）⇒ Unproven 家族（D2，推荐 E4020），不得 E4018 | exit 0 | 期望码 + exit 1；M03/M09 下红 |
+| T11 | 路径 3 正控：本地定义**同源** `Eq`（文本一致、`LibraryRef.hash` 相符）后 `Box2(3)` ⇒ 0 诊断（m4） | exit 0（不可区分） | 0 诊断；M03/M09 下红 |
+| T12 | 整模块导入裸名：`use lib` 后 `Box(-3,5)` ⇒ E4018（m5） | E1001 | E4018 |
+| T13 | 别名导入：`use lib.{Box as B}`，`B(-3,5)` ⇒ E4018（m6） | E1010 expected 3 | E4018 |
+| T14 | 不构造负控：导入 `Box` 仅作形参类型 ⇒ 0 诊断（m7） | 绿（保持） | 保持 |
+| T15 | IR：导入记录的构造代码 `CreateStruct` operands = 数据字段数、`local_count` 不含 witness，`b.z` 的 `LoadField.field = 1`（补 B.2 M05a 空缺） | 整模块/别名形态 HEAD 不可达（E1001/E1010），分组导入形态可达但义务被丢弃；多文件量词注入此前无测试 | 指令形状断言 |
+| T16 | 直接驱：`register_type_payload` 后 `env.record_models` 有本地名与定义名两键、同源；`TypeCheckResult.record_models` 含导入模型 | 无函数/无字段 | 三断言 |
+| T17 | B.3 联合（按修订后 B.3 §五 两面）：导入 `Box`+`Holds` 后，应用面基名 == 实参名、判定面模型+evidence 槽命中 ⇒ `Holds(b)` 参数位义务 0 诊断；值级 `b.w` E1114 | 缺模型 ⇒ E2031（B.3 红） | 0 / E1114 |
+| T18 | 单源判定：导入构造点的 E4018/E4020 由 `judge_refined_obligation_with_mode` 或唯一前置检查发出；全仓无第二证明入口（grep 级 + 测试断言） | — | 判据通过 |
+| T19 | 哈希设施：`compute_bytes_checksum` 委托后输出逐字不变（既有 package 测试）；`ContentHash` 单测 | 实现不存在 | 全绿 |
+| T20 | 门禁：fmt/clippy/`testsuite run fast`/`yx_multifile_runner`/五门禁/生成器幂等/`markers --check`/`docs:build`；语料与 IR 快照零漂移（预期） | — | 全 exit 0 |
+| T22 | **语义漂移负控（F1 必测）**：lib `Eq{a>b}` + 本地 `Eq{a>=b}` + `Box2(3)` ⇒ 拒绝（m8） | exit 0（静默接受） | E4020 + exit 1 |
+| T23 | 未登记来源负控：手工构造 `from_payload` 模型，`Call` 头无对应 `LibraryRef` ⇒ 拒绝（防「列表缺项时静默放行」） | 无判据 | E4020 |
+
+**变异（M；机械可逆，`git apply -R` + blob 比对）**：
+
+- **M01** `type_def_export_payload` 对证据记录仍返回 `None` ⇒ T01/T08/T12/T13 红。
+- **M02** 不恢复导入模型（跳过 `env.record_models` 写入）⇒ T08/T09/T15 红。
+- **M03** 去掉构造点来源前置检查 ⇒ T10/T22/T23 红（不可执行与指纹不符都退化为静默/E4018）。
+- **M04** H1 补种摘除（Registry 面 `predicate_defs` 置空）⇒ T01（命题变 `Call`）/T08/T12 红（导入退化为不可执行来源）。
+- **M05** 别名导入按定义名注册（不用本地名）⇒ T13 红（别名构造查不到模型）。
+- **M06** 指纹函数改常量（不覆盖模型）⇒ T04/T06 红。
+- **M07** `libraries` 派生不排除 family 参数 ⇒ T05（`Cell` 模板出现 `P` 库）/T10 红。
+- **M08** 导入侧按定义名改写 `model.name` 为本地名 ⇒ T16（双键断言）/T15 红。
+- **M09** 前置检查跳过 `LibraryRef.hash` 比对（只判可执行）⇒ T22 红（语义漂移被静默接受——F1 反向锚）。
+
+**负控清单**：T03 纯数据记录、T07 合法构造、T14 未构造导入、T17 值级 E1114、T19 校验和逐字、T20 语料零漂移、T22 语义漂移、T23 未登记来源。
+
+### 十一、inScope / outOfScope
+
+**inScope（路径前缀）**：`src/util/content_hash.rs`（新）、`src/util/mod.rs`、`src/package/vendor/checksum.rs`、`src/frontend/module/mod.rs`、`src/frontend/module/orchestrator.rs`、`src/frontend/module/tests/`、`src/frontend/core/sema/record_model.rs`、`src/frontend/core/sema/checker.rs`、`src/frontend/core/sema/checker/record_model.rs`、`src/frontend/core/sema/checker/refinement.rs`、`src/frontend/core/sema/predicate_resolver.rs`、`src/frontend/core/sema/types.rs`（若 `TypeCheckResult` 需派生）、`src/frontend/core/sema/tests/`、`src/frontend/core/types/const_data.rs`（`call_heads` 收集器）、`src/frontend/core/types/mono.rs`（若 `Display` 需稳定化）、`src/std/yx_sources.rs`、`src/middle/ir/ir_gen.rs`（仅 `classified_fields` 查找与测试；量词逻辑不改）、`src/middle/ir/tests/`、`tests/integration/multifile.rs`、`tests/yaoxiang-multifile/`、`tests/baselines/`（预期零漂移；若语料受影响则同提交）、`src/middle/ir/tests/snapshots/`（同上）、`src/util/diagnostic/codes/`（仅注释/发射点计数）、`locales/`（仅兜底/多语一致性）、`docs/src/reference/error-code/`（生成物）、`docs/src/reference/warning-code/`（生成物）、`docs/src/reference/language-spec/type-system.md`、`docs/src/en/reference/language-spec/type-system.md`、`docs/src/dev/architecture/09-execution-wbs.md`、`docs/src/dev/architecture/09a-wbs-history.md`。
+
+**机械必需面**：**SPEC §8.3.4 只改 B.4 半句**——「跨模块导出（B.4）尚未落地」及正文「用自己的逻辑签名验证 / 三路径 / 库必须在导入方列表」的实施状态口径（加状态注：V1 只重证、逐库指纹比对、翻译/桥接待 §4.1 内核）；两条 language-spec 路径（中英）已列入 §十一 inScope，`changedPaths` 可解析。**同一 status blockquote 两轮都改、按句分工、不得互相覆盖**：**B.3 半句**（类型级 `b.w` 尚未落地；`evidence_ref`/`certificate_ref` 槽句的时序从「B.3/B.4」收敛为「B.4」）归 t15/B.3 轮；**B.4 半句**（跨模块导出尚未落地 + 正文签名/三路径/库列表状态注）归 B.4 轮。先后：契约修订由 t15 先定 B.3 五处、本节只补 B.4 半句与两条 language-spec 路径；实现轮按 B.3（t5）→ B.4 的顺序落地，B.4 轮基于 B.3 终态逐句对齐；若两轮并行，合并时逐句 diff、不得整段替换。**D1 联动**：若 D1 裁 A（V1 不物化两槽），B.4 轮在**自己的状态注**里写明「V1 不物化两槽、随 §4.1 内核批次加入」；槽句最终措辞由两轮对齐后落地，不允许任一轮静默覆盖另一轮。en 镜像同改（只改 B.4 半句）。E4020/E5002 新发射点 ⇒ 重跑 `gen-error-code-docs.py` 并同提交生成物（行号/计数变化逐条分类）；`RecordModel` 形状变化 ⇒ B.2 直驱测试与构造点同步（机械）；多文件夹具 ⇒ `tests/yaoxiang-multifile/README.md` 表同步；`collect_signatures` 签名变化 ⇒ 2 个生产调用方 + 2 个测试调用方同步。
+
+**outOfScope**：`LogicSignature`/`Kernel::check`/`Certificate`/§13 留存/重放；翻译项与桥接公理（§七）；跨模块证明函数执行（#552）；记录定义引用导入谓词的 pass1 分类（R2）；proof-fn 声明序硬化（D3）；`evidence_ref`/`certificate_ref` 物化（D1）；公理库 manifest/语法；序列化格式（payload 是进程内结构，无磁盘格式）；Π/`DepFn`/defeq/runtime check；B.2 构造义务遍历与 E4018/E2031 映射；B.3 的语法/语义（联合测试除外）。
+
+### 十二、风险与未核实
+
+- **R1（高）**：H1 让 Registry 面分类看到谓词表，命题从 `Call{Pos}` 变内联 `v > 0`。这改变的是**导出 payload 的内容**；Registry 面 checker 的诊断是否被消费未核实（当前 `extract_module_info` 丢弃 env.errors），预期零用户可见变化，须以语料/多文件全量实测确认。
+- **R2（高）**：记录定义引用**导入谓词**时，pass1（两个面）都还没有导入表 ⇒ 该字段静默分类成数据字段（B.2 既有边界；按 07 属**静默错配/静默失败**，A/B 类）。B.4 不修；夹具约定「谓词/证明函数先声明、且定义单元内可解析」，并在 09a 登记为移交项（建议另立先红后绿批次）。
+- **R3（中）**：整模块导入对证据记录新增裸名镜像注册（m5），可能与其他整模块导入的同名证据记录冲突（`register_use_export` 早退静默取先到者）。B.4 不加冲突诊断，登记为负控/风险；若测试发现静默错绑，须报 D3 扩裁决。
+- **R4（中）**：别名导入 + `run` 形态的 IR 名字映射（构造名 `B` vs 定义名 `Box`）未实测；契约只要求别名夹具走 `check`（compile-error E4018），`run` 面风险登记、不阻塞。
+- **R5（中）**：`libraries` 派生遇到本地也解析不到的 `Call` 头（B.2 proof-fn 回退可达，如声明序在前/引用导入证明函数）⇒ 用 `unresolved:<id>` 指纹登记而不是丢弃；**Assign 形证明函数**没有约束体可哈希，同样落 `unresolved` 哨兵 ⇒ 导入构造被拒绝（诚实边界，V1 只支持 TypeDefinition 约束体作为库来源；R5 与 R2 同属声明期边界）。须在导出侧加断言/测试钉住「不 panic、不静默丢条目」。
+- **R6（中）**：逐库指纹用 `Display`（非单射）：**不一致必拒**是 sound 的，残留面是**碰撞导致误判同源**（必要非充分，§六.3）；缓解备选 = 导出时内联可转换证明函数体（另案）或 §4.1 `LogicSignature.hash`。V1 不把指纹当证明依据，最终判定仍是本地重证。
+- **R7（中）**：D2 若复用 E4020，会扩展该码的可见语境——它当前只有 1 处构造点（`verdict.rs` 的 `ProofFunctionRequired → E4020` 映射，生成物口径「✅ 1 处」），不在精化义务面；B.2 裁决「E4020 不带命题」不变，但语境从「需要证明函数」扩到「导入来源不可本地执行」，locale 文案与 013 说明需同步核对。
+- **R8（低）**：`RecordModel` 加入 `libraries` 后，B.2 的直驱测试与 `RecordModel::default()` 构造点（若有 struct literal）需机械补字段；`TypeCheckResult.record_models` 的 obligations 计数等既有断言不受影响（新字段不进 obligations 门禁）。
+- **R9（低）**：payload 克隆成本（模型含 obligations/evidence/fields）与 Registry 面分类成本上升；语料无证据记录 ⇒ 预期零增量，须量测或说明。
+- **未核实**：H1 后 Registry 面命题内联是否与 check 面逐字一致（T01 判据）；别名/整模块导入的 IR 可达性；E5002 挂 use 行 span 的实际形态；`extract_module_info` 丢弃的 Registry 面诊断是否含新告警；`std` 嵌入模块是否存在证据记录；多文件 runner 对新增夹具的路径/分类；错误码生成物行号漂移量。
+
+### 十三、裁决点（D1–D3）
+
+- **D1（payload 的两个引用槽与 `signature_hash` 语义）**：**情况**——RFC §14.4 要求 `evidence_slots[].evidence_ref/certificate_ref/signature_hash`；仓库无显式证据声明面（§4.3 未落地）、无证书缓存（§13 不宣称），两个引用字段在 V1 **零生产者**；`LogicSignature` 也不存在。**选项**：A（推荐）不物化两引用槽，payload 只带**证据载荷指纹** `signature_hash` + 逐库 `LibraryRef.hash`（字段名保留，语义限定并在实现注释/09a 登记；§4.1 落地后切到 `signature.hash`）；B 物化空壳枚举/结构（RFC 形状齐，但零生产者、违反禁令一 B，且诱导误读为「已支持证书复用」——可读性上把未实现的路径伪装成已实现）；C 推迟整个 B.4 到内核批次（B.4 的 payload/libraries/导入重证不依赖内核；推迟会让 SPEC §8.3.4 的读法与实现持续缺口）。**推荐 A**：正确性上不伪造、且 F1 的逐库指纹比对有实际行为作用；可读性上单一真相、字段名与 RFC 对齐；边界后果 = 明确不宣称证书复用/跨签名。**破坏性/D59（F3，按 07 §语义修正的分流判据）**：本批**主错 = A 类静默失败**（跨模块证据义务被整体丢弃；m1–m4/m8 红态 exit 0），按 07 可随重构顺路修（先红后绿、不改变原先成功程序、同提交登记、基线同提交）；m5（E1001 → 裸名可构造）与 m6（E1010 expected 3 → arity 2）原先均**不是成功**，属同一根因最小修改集的**附带行为变更**，在 PR 的 **D3 补丁判定行**逐条列出，**不归 C 类**（C 类 = 崩溃/爆栈/未初始化槽位/字节码版本不符）；若实现中发现二者改变「原先成功」程序，升级 D 类，需用户裁决。
+- **D2（导入来源不可本地执行的诊断码）**：**情况**——导入记录的证据命题引用证明函数时，执行器只查本单元 AST，导入的函数不可执行；V1 只能路径 3（本地重定义同名证明函数）。需要一个**用户可见、可测**的 Unproven 诊断。**选项**：A（推荐）复用 **E4020 `proof_function_required`**（无参、语义即「补证明函数」，与路径 3 的补救动作一致；B.2 已裁 E4020 不带命题）；B 复用 **E2031**（精化通道 Unproven；但需把来源名塞进 `constraint` 槽，混语言散文，B.2 文案边界）；C 新增专用码（E 类对外契约变化，六语 + 013 + 生成物，需用户裁决）。**推荐 A**：零码表变更、语义贴合、可测；代价是 locale help 需从「写证明函数」覆盖到「本地定义/导入来源」两种语境（六语文案微调，机械面）。**破坏性（F7）**：A 不新增码，只扩展 E4020 的可见语境（当前 1 处构造点，R7），不改任何「原先成功」程序；B 把来源名塞进 E2031 约束槽，改变 E2031 既有诊断文本形态（D 类，需用户裁决）；C 新增码（E 类，需用户裁决）。
+- **D3（proof-fn 声明序硬化）**：**情况**——记录定义引用证明函数时，若证明函数声明在记录之后，pass1 分类看不到其 proof-fn 形态，字段静默降级为数据字段（B.2 既有静默缺口；按 07 属**静默错配/失败**，A/B 类）。B.4 的导出 payload 会把这个分类结果原样跨模块传播，放大影响。**选项**：A（推荐）B.4 不修，夹具约定「证明函数先声明」，把硬化登记为独立先红后绿批次（要动 `add_type_definition`/分类两面的注册顺序）；B 在 B.4 内做预注册（复制 Phase 2.5 注册逻辑或抽公共 helper，触及 B.2 分类面）。**推荐 A**：正确性上硬化属声明期分类、与跨模块 payload 的正确性面不同，混批会让红态不可区分；可读性上独立提交边界更清晰；边界后果 = 声明序依赖作为 B.2 既有缺口被显式登记（R2），不扩大 B.4 裁决面。**破坏性（F7）**：A 不改任何「原先成功」程序（只把静默降级登记为移交项）；B 会改变 B.2 声明期分类结果（原先静默通过的记录可能变为证据字段并产生新错误），属 D 类，需用户裁决后才可并入。
+
+### 十四、顺序与交接
+
+1. **H1 先落**（`collect_signatures` 补种 + 两调用方），用 T01 钉住「Registry 面命题 = check 面内联形态」；H1 不成立则停工报 lead（不得先做 payload 再补命题）。
+2. 哈希设施（H6）与 `ContentHash` 单测 → payload 形状（`record_model`/`signature_hash`/`libraries`）→ 导出构造 → 红测试 T01–T06。
+3. 导入链（H4/H5）：恢复模型/双键/完整性校验 → 构造点前置检查（可执行 + **指纹一致**）→ T08–T16、T18、T22–T23。
+4. IR 同源（T15）与多文件夹具（§九 表 + README）→ `yx_multifile_runner` 全绿。
+5. 门禁与生成物：fmt/clippy/fast/五门禁/生成器幂等/`markers --check`/`docs:build`；语料与 IR 快照逐条分类（预期零漂移）；变异 M01–M09 走 `scratch.py trial`。
+6. 收口证据：09a 实现轮（红→绿、语料/快照 diff 分类、D59 分类、门禁计数、变异表）+ 09 行状态。**不宣称** §4.1 签名/翻译/桥接/跨模块证明执行（#552）；D1/D2/D3 按 lead/用户裁决结果落地。
+
+### 十三、B.4 实现轮（收口，2026-11-15；D1 裁决 A）
+
+> 本节记录 B.4 实现轮的落点、用户可达证据与门禁；D1 结论按队长裁定「按契约推荐 A 执行（用户未反对；若撤回则回退）」，不写成用户已拍板。
+
+**裁决**：D1 = A——payload 只带 `record_model` + 证据载荷指纹，不物化 `evidence_ref`/`certificate_ref`；D2 码位沿用 E4020（证明来源 Unproven）与 E5002（载荷指纹不一致），不新增码。
+
+**落点**：
+
+1. **H6 单源设施**：`src/util/content_hash.rs`（`ContentHash`/SHA-256/64 位小写 hex）；`package/vendor/checksum::compute_bytes_checksum` 改委托，输出逐字不变。
+2. **payload**：`TypeDefPayload` 增 `record_model: Option<RecordModel>` + `signature_hash: ContentHash`；`type_def_export_payload` 是唯一构造点（carrier 条件 = evidence 或 admission 字段；纯数据记录保持 `None`）。
+3. **模型投影**：`RecordModel` 增 `libraries`/`from_payload` 与 `canonical_text`/`signature_hash`（类型参数 kind、字段量词、义务、admission、证据槽、libraries；不含 `from_payload`）。
+4. **H1**：`collect_signatures` 增 `predicate_defs` 参数并在 pass1 前补种；`extract_module_info` 与 `embedded_std_module_info` 都先算 `collect_predicate_defs`，导出命题因此是内联形态。
+5. **libraries 派生**：`ConstExpr::call_heads` 单源收集；过滤 proof family 参数与内置谓词，按 id 字典序去重；每条来源经 `proof_source_digest`（谓词三元 / 证明函数形参·返回·约束体）取指纹；无体来源登记 `unresolved:<id>` 指纹。
+6. **导入**：`register_type_payload`（既有单点）重算模型指纹，不符 ⇒ E5002 且不注册；一致 ⇒ `from_payload = true` 写入本地名键，并在本地名 != 定义名时写同源双键；量词在 `add_type`/`add_var` **之前**由 `apply_quantities` 落地，并把同一类型表示镜像进 `body_checker.type_defs`（定义名 + 本地名）——修掉别名导入 `B(-3,5)` 仍按 3 参数报 E1010 的缺口。
+7. **构造点前置检查**：`check_record_ctor_obligations` 对 `from_payload` 模型扫义务/证据槽的 `Call` 头，要求「本地可执行（未被别名导入 + `env.vars` 是 MetaType 返回的证明函数）+ 已登记 + `proof_source_digest` 与 `LibraryRef.hash` 一致」；不通过 ⇒ 恰一条 E4020 并跳过本记录其余义务（失败闭合，不连锁 E4018）；通过才交 `judge_refined_obligation_with_mode` 重证，从不复用导出方结论。
+8. **契约 m4 修正**：§九 m4 改为 lib `Eq: a == b` + `Box2(3)`（原 `a > b` 与「0 诊断」自相矛盾）；m8 漂移负控仍为 lib `a > b` / 本地 `a >= b`。
+
+**用户可达证据（CLI）**：m1 `Box(-3,5)` ⇒ E4018 `(-3 > 0)`（HEAD 为 exit 0）；m3 无本地 `Eq` 的 `Box2(3)` ⇒ E4020；m5 整模块裸名 ⇒ E4018（HEAD E1001）；m6 别名 `B(-3,5)` ⇒ **仅 E4018**（HEAD E1010 expected 3）；m7 只导入不构造 ⇒ exit 0；m8 本地 `a>=b` 漂移 ⇒ E4020（HEAD exit 0）；m4 本地同源 `a == b` ⇒ exit 0。
+
+**测试与语料**：`src/frontend/module/tests/type_def_payload.rs` 新增 T01–T05（payload 载体、泛型记录、纯数据 None、指纹可重算/64 hex、libraries 仅证明函数来源）；`tests/yaoxiang-multifile/` 新增 8 个夹具（import / violation / source-missing / source-local / source-drift / import-unused / witness-premise / witness-premise-value-err），README 表同步；`yx_multifile_runner` 全绿。T06/T15/T16/T18/T23 的直驱判据未单独立测，由上述夹具 + `register_type_payload` 代码路径覆盖（登记为后续补测项，不宣称已逐条独立断言）。
+
+**D59 分类**：主错 = **A 类静默失败**（跨模块证据义务整体丢弃、exit 0；m1–m4/m8）；m5（E1001→裸名可构造）与 m6（E1010 expected 3→arity 2）原行为均**不是成功**，属同一根因最小修改集的**附带行为变更**，在 PR 的 D3 补丁判定行逐条列出，**不归 C 类**。
+
+**门禁（最终字节）**：`cargo fmt --check` 0；clippy `-D warnings` 0；`cargo test --lib record_evidence` 28 passed；`testsuite run fast` exit 0（lib 1797 passed/1 ignored、integration 52、yx_runner 383、formatter 1、yx_multifile_runner 2，全 0 failed）；obligations / docs-refs / docs-truth / boundary / fanout / test-channel / markers / RFC 跟踪均 0；错误码生成物再生（E1xxx/E2xxx/E4xxx/E5xxx/index）且两次运行哈希一致。语料与 IR 快照零漂移（B.4 不改单文件语料；multifile 夹具由 runner 覆盖）。
+
+**t10 复审 residual（2026-11-15）**：N1 §十一 inScope 缺 `docs/src/reference/warning-code/`——本收口笔补入（生成器产物）；N2 SPEC §8.3.4 正文缺 V1 状态注——本收口笔在中英 §8.3.4 末补；N3 `derive_libraries` 只扫 obligations/evidence，而构造前置额外扫 `admission_fields`，含未内联 `Call` 头的 admission 会被保守 E4020（fail-closed；未构造可达形态，另案）；N4 t9 报告「T06 直驱单测」与 t8「未独立立测」措辞不一致，以本节为准（T06 未独立立测，登记为后续补测项）。以上均非阻断。
+
+### 十四、B.3/B.4 残留补测轮（t3，2026-11-16；F10 + T06/T15/T16/T18/T23）
+
+> 来源 = §十三 **t20 复审残留**（F10 latent）与 §十 的「T06/T15/T16/T18/T23 未独立立测」。
+> 本轮只补登记面与一条实质修复（F10）；F11/F12 按派工只登记，不修。
+
+**一、F10（修）：空 SMT 命令表不得映射成 Disproved**
+
+- 改法：`proof/smt/translate.rs` 的 `translate_constraint` 返回类型 `Vec<SMTCommand>` →
+  **`Option<Vec<SMTCommand>>`**：约束或任一假设不可翻译（位运算 / Float 字面量 / `FieldPath` /
+  嵌套 `Call`，判据仍在 `translate_expr` 单点）⇒ 显式 `None`；成功路径**永不为空**
+  （最少 `CheckSat` + `GetModel`）。
+- 五个调用点各自把 `None` 映射成「**无法判断**」（旧行为是拿空表去询问解器）：
+  - `layers/predicate.rs::try_implication` → 返回 `None`（升级）；
+  - `layers/predicate.rs::try_smt_solve` → `Unproven{BeyondKernel}`——**F10 的实质修复点**：
+    旧路径把空断言集交给 Z3，空集 check-sat 恒 `sat`，于是被判成反例（E4018 + 伪造赋值）；
+  - `layers/termination.rs` 两处 → `MeasureVerdict::NotProved`（与 Unknown 同向）；
+  - `layers/ownership.rs::smt_cut` → 不切断（保守 = 回边穿越）。
+- **inScope 缺口（如实登记）**：本轮契约 inScope 只有 `src/frontend/core/sema/proof/smt/`，
+  但改签名强制 4 个调用方文件（`sema/layers/` 下）机械同步。按 AGENTS「契约的 inScope 必须
+  覆盖机械必需面」就地补做；未触碰任何 outOfScope 项。
+
+**二、F10 红→绿（实测）**
+
+夹具 = **不可翻译的分支守卫**（`if y & 3 == 0`）+ 无法证明的义务（`f: (x: Pos(x))` 里 `f(y)`）：
+
+| 阶段 | 实测 |
+| --- | --- |
+| 改前 | `E4018 Refinement predicate violated: (y > 0)` + `Counterexample:` **`y = 0`**（空表伪造反例） |
+| 改后 | `E2031`（Unproven，无 `Counterexample` 段） |
+| 保持型负控 | 可翻译的真反例（`f(0)` 对 `x > 0`）仍 `E4018` |
+| 变异 **MF10** | 把 `None` 退回「空表交求解器」⇒ 该用例由绿转红（回到 E4018） |
+
+单测另有一条结构不变量（`proof/smt/tests/translate.rs`）：**成功翻译的命令表永不为空**——
+把「None / 空表 / 成功」三态钉开，空表不再可能与「不可翻译」混同。
+
+**三、T06/T16/T18/T23（直驱，新文件 `sema/tests/record_evidence_import.rs`）**
+
+生产端到端：payload 由**生产导出构造点** `orchestrator::extract_module_info` 产出，导入侧走
+`TypeChecker::check_module` 的 `use` 解析 → `register_use_export` → `register_type_payload`
+（生产唯一导入写入点）——不是手工拼登记表。
+
+| # | 判据 | 断言要点 |
+| --- | --- | --- |
+| T06 | 指纹不符的 payload（注册前篡改 `signature_hash`） | 恰一条 **E5002**（message 含 reason 段「证据载荷指纹不一致」）且 `record_models` 空 |
+| T16 | 别名导入 `use lib.{Box as B}` 后 `record_models` 双键同源 | `B` 与 `Box` 都在、都 `from_payload`、`canonical_text()` 相等、`name == "Box"`、witness 量词已恢复 |
+| T23 | 手工构造「`Call` 头无对应 `LibraryRef`」的模型（清空 libraries 后重算指纹） | 本地**确有**可执行同源 `Eq` 也恰一条 **E4020**（凭「未登记」拒绝，不连锁 E4018） |
+| T23 正控 | libraries 完整 + 本地同源 `Eq` | 前置检查通过、义务交唯一判定单元重证（`Eq(5,3)`=`5>3` 成立）⇒ 0 诊断 |
+| T18 行为面 | 导入构造 `Box2(3)`（`3 > 3` 假） | **E4018**，且消息点名模型里的证明函数 `Eq` 与实参 `[Int(3), Int(3)]`（判定单元/其证明执行结算） |
+| T18 grep 级 | 全仓生产源码（排除 `tests/`） | `check_record_ctor_obligations` **只在 `checker/refinement.rs`、共 2 处**（定义 + 唯一调用点）；`judge_refined_obligation_with_mode` 只在该文件；E4020 发射点在该文件恰 1 处 |
+
+**四、T15（IR，扩 `middle/ir/tests/record_evidence_layout.rs`）**
+
+- 夹具镜像 driver 的 IrGeneration 臂：`seed_cross_file_types(&[定义方 AST, 入口 AST])`。**不预注册
+  时导入字段访问在 IR 侧报 E3005「无法解析字段索引」**——这是测试夹具要求，不是生产缺口
+  （生产由 `driver/arms.rs` 注入）。
+- 断言 1（导入单元）：`B(3, 5)` 构造调用只装 **2** 个数据字段；`b.z` 的 `LoadField.field = 1`；
+  导入单元**不复制** `TypeDecl`（witness 类型声明不重复进 IR）。
+- 断言 2（定义方单元，导入构造实际解析到的构造函数）：`CreateStruct` 字段计数 = **2**、
+  `local_count = 3`（2 数据字段 + 1 结果槽，witness 不占槽）。
+- **判据面更正（如实登记）**：T15 原文把三条断言都写在「导入 IR」上，但 `CreateStruct`/`local_count`
+  只存在于**定义方**的合成构造函数（导入单元没有 TypeDecl）；三条判据跨两个单元成立，本轮按此落测。
+
+**五、T 系列变异（手工改—测—还原，均已还原）**
+
+| 变异 | 红掉的测试 |
+| --- | --- |
+| **MT06** 去掉 `register_type_payload` 的指纹校验 | T06（唯一红） |
+| **MT16** 丢掉定义名同源键 | T16 双键 + T15（`LoadField` 变 2：量词按名从 `record_models` 补齐，丢键即丢量词） |
+| **MT15（=契约 M02）** 跳过导入模型恢复 | T15 + T16 + T23 + T18 行为面（4 红） |
+| **MT23（=契约 M03）** 去掉构造点来源前置检查 | T23（唯一红：`[]`——既不 E4020 也不 E4018 的静默放行） |
+
+**六、查证结论与登记（不宣称）**
+
+- **E5002 不可用户触发**：payload 的 `record_model` 与 `signature_hash` 由同一构造点产出、同源，
+  正常编译路径造不出不符；它的「用户可见形态」= 码表项 + reason 文案（本轮以直驱篡改断言），
+  触发面只有内存/载体被改写。登记为**防御性检查**，不宣称 CLI 可达。
+- **T15 的单元归属**见上；导入字段访问依赖 driver 的类型上下文预注册，单文件入口（`Compiler`）
+  不走跨文件预注册、也不覆盖导入形态。
+- **F11 / F12（只登记，不修，与 §十三 t20 复审残留同文）**：
+  - **F11**：复合形态在**含使用点**的程序会「声明面 E1092 + 调用点 E2031」级联；§十三「恰 1 条」
+    仅限**纯声明探针**（负控测试即纯声明）。触发面 = 同一谓词既被拒绝又被使用；本轮未触碰。
+  - **F12**：en locale 残键是既有问题（与 B.3/B.4 无关的六语面欠账），另案；本轮未触碰。
+- `#552`（跨模块证明函数执行）、`#537/#539/#541/#542`、C3/F4、runtime check、Π/DepFn：本轮未触碰。
+
+**七、门禁（本机实测，2026-11-16）**
+
+| 命令 | 结果 |
+| --- | --- |
+| `cargo fmt --check` | exit 0 |
+| `cargo clippy --all --all-features --all-targets -- -D warnings` | exit 0 |
+| `cargo test --lib record_evidence` | 36 passed / 0 failed（含本轮 6 条直驱 + 2 条 T15 IR） |
+| `cargo test --lib smt_untranslatable` | 2 passed / 0 failed（F10 红→绿 + 真反例保持型负控） |
+| `cargo test --lib` 内的 `translate` / `record_evidence_layout` | 全绿（`translate` 新增 3 条结构不变量） |
+| `python scripts/dev/testsuite.py run fast` | exit 0：1 波 2279 条，跳过 0 波 |
+| `python scripts/dev/testsuite.py markers --check` | exit 0（2282 条 `#[test]` 清单 = 2279 执行 + 3 `#[ignore]`） |
+| `python scripts/ci/check-obligations.py` / `check-docs-refs.py` / `check-docs-truth.py` / `check-boundary.py` / `check-fanout.py` / `check-test-channel.py` / `rfc/check_tracking.py` | 全部 exit 0（boundary / fanout 为 report-only，存量项见 6.9.4 轮的登记，本轮未新增） |
+| 语料 / IR 快照 | `corpus_probe` 400/400 **差异空**（F10 修复不改任何语料行为）；IR 快照零漂移（`test_ir_snapshots_stable` 在 fast 内绿） |
+| `cargo fmt --check` / `cargo clippy --all --all-features --all-targets -- -D warnings` | exit 0（clippy 首轮被 `question_mark` lint 拦下，改 `?` 后转绿） |
+
+## P3 3.20.30 收口（深嵌套表达式栈溢出改正式诊断——大栈线程 + 解析闸 E0019，#540，2026-11-14）
+
+> **一、查证（崩溃环测绘 + razor 区判死静态单闸）**：issue 夹具（300 项 binop 实参）修前 check 逐字崩溃（thread 'main' has overflowed its stack，Git Bash exit 127 / Windows 0xC00000FD，零诊断）。崩溃环 ≥4 个实测：parser pratt 真递归（一元/调用/括号/块）、typecheck infer_expr（call/field 形态）、ir_gen 下降（binop/unary/list/ifnest——E3014 检查在走完之后不挡下降）、LSP semantic_tokens collect_expr_tokens；运行面被 E3014 寄存器上限间接兜住无崩溃（登记）。**各形态 razor 区**（debug 构建 / 1MB 主线程栈实测）：call 通过 ≤120 崩 @125、block 通过 ≤220 崩 @230、unary 通过 ~≤255 崩 @282、binop 129..282 为 E3014 拒绝区、括号嵌套 600 层通过 / 崩溃起点 ~650——通过与崩溃边界相邻，**任何静态单阈值要么拒掉 razor 区原先成功程序（违 D59）要么漏崩溃**。规范判据：SPEC/RFC 无表达式嵌套深度口径；闸门先例 mono.max_depth=100/E3005、const_eval DEFAULT_MAX_DEPTH=256；码表 E0xxx 最大 E0018 → E0019 空闲走新码流程。分类 D59 C 类崩溃面直修。
+
+> **二、修法（两分法，升级裁决批准）**：①编排层 64MB 大栈线程（`COMPILE_STACK_SIZE`，CLI 子命令派发整体迁入；登记依据 = 实测最坏 ~7.7KB/层 × 闸内解析峰值 ~3MB + 8 倍余量；panic 载荷透传保退出语义；REPL/LSP 长驻循环同线程）——崩溃阈值推至 ~8500 层，razor 区变闸下成功区；②parser 深度闸 `MAX_PARSE_DEPTH=1024`（窗口 [640, 8499]：下限 = 1MB 参照环境既有通过区最深 ~602 层，上限 = 大栈阈值 1/8），超限报新码 **E0019**（码表 + 六 locales + RFC 013 区间 + 生成器幂等，全流程）；③扁平二元链 parser 迭代不经解析闸，由 IR 层既有 E3014 寄存器上限拒绝——issue 夹具 300 项修后 = 恰 1 条 E3014 正式诊断（修前崩溃零诊断）。**裁决锚规格两处实测更正（队长知情批准随收口登记）**：裁决原稿「300 项 → E0019」不可满足（binop 链 parser 迭代，该形态真实根因 = 寄存器溢出）→ 主锚落 E3014、E0019 主锚改 unary-1100；「block-225 修前成功」实测为崩溃 → razor 成功锚改 block-220（实测 exit 0）。
+
+> **三、t3 REJECT 六条与复审修复轮（修复笔）**：**F1（HIGH）** f-string 内嵌表达式深度继承只修崩溃半边——内层实例的 E0019 被字面文本回退整体丢弃（全 parser 零 errors 合并点），深内插「编译成功 + 输出字面插值源文本」= D59 静默给错答案 → 修法 = `absorb_depth_rejection` 传导恰 1 条（与外层 depth_rejected 协同），普通解析失败的既有字面回退逐字保留（`is_depth_rejected` 区分两条路径）。**F2（HIGH）** `parse_type_annotation` 与模式嵌套是绕闸的第三/第四条真递归入口、三处在码声明与事实不符 → 穷尽扫描后同机制过闸（类型汇点/模式汇点，原实现逐字保留为闸内本体）；**闸位实测**：1MB 参照线程八形态崩溃边界 struct 386 / generic 595 / array 596 / ptr 928 / ref 930 / fn 930 / curry 958 / pattern 980——全部 ≤1024，按「闸值 ≥ 实测崩溃起点」判据并入单闸（1024 裁决值不变）。**F3（MEDIUM）** 深块居函数中部 E0019 逐语句级联（synchronize 不识别 RBrace 吞外层闭合符、各层块帧深度不回收）→ synchronize 加 RBrace 停步（闭合符还调用方块帧、深度逐帧回收；既有恢复面测试全绿零漂移；候选②深度感知 fast-fail 以正确性理由否决）。F4 探针目录指针出仓库文字（元规则①，check-docs-refs 的 .rs 抽取面抓不到——门禁缺口备案）→ 三处删除。F5「12 锚先红后绿」失真（实 7/12，5 条为设计性护栏/不变行为锚；razor call 锚内联 2MiB 测试线程无法机械复现修前崩溃）→ 补子进程级 razor call-125 锚（exit 0），计数更正见六。F6 razor call 边界三处口径不一 → 逐层实测统一（118..123 成功 / 124..128 崩溃）。
+
+> **四、基线再生（升级裁决 A 案，2026-11-14）**：修复轮 R3（synchronize RBrace 停步）对普通恢复路径顺带改善——语料差分 2 行漂移（break_label_err / continue_label_err 两夹具的同因 E0010 级联消失，主诊断 E0011 与 exit 1、expectation=compile-error 逐字不变）。裁决 A 案（B 案收窄到 depth_rejected 保留噪声 = 负值复杂度，否决）：实现者再生、diff 恰 2 行（numstat 2/2，无第三行）、**队长提交前逐行人工 review**（staged diff 实核：仅两条 E0010 移除，[E0011,file,14] 与 exit 1 不变）、闭环验证（再跑探针对新基线零漂移）。判据 = 编译错误程序（非成功面）的诊断质量收敛，方向正确。
+
+> **五、验证链与 t2r/t3r 备案**：t1 门禁 14 项全绿（含实现者主动跑 docs:build 与 check-test-channel；12 锚）→ 队长 diff review（四汇点接线、E0019 机械必需面、修正后锚规格）→ t2 **PASS**（M1 大栈摘除崩溃面锚红 / M2 闸摘除 E0019 锚红；偏差声明：任务文本 `--test cli_e2e` target 名笔误——锚实际挂 integration target，同过滤器等价执行）→ t3 **REJECT**（6 条，见三）→ 修复笔（14 门禁 + 15 新锚 + A 案再生）→ t2r **PASS**（五变异各自承重：M1 大栈 / M2 闸 / M3 fstring 传导 / M4 类型+模式汇点 / M5 RBrace 停步；偏差声明：批次树 init 不可行按 scratch.py 设计 use 切 rev 增量、M4 首版补丁漏 parse_pattern 片段自查后双文件单补丁重跑——首版 trial 数据仍有效且两版均机械还原）→ t3r **APPROVE**（4 LOW 备案，无阻塞）：①#524 主锚 Arrange 注释探针目录同类残留（**修前既存非本笔回归**，备案顺修清单新增）；②「修复轮 15 锚先红后绿」实 **11 先红后绿 + 4 零变化对照锚**（提交信息计数更正由本节承载）；③fstring 内层 E0019 坐标无重映射（内嵌实例对子串独立 tokenize 无偏移参数——诊断指向插值内容内部而非用户文件行；严格优于修前零诊断，定位瑕疵备案）；④「array 596」边界数据仅提交信息可查（闸位判据不受影响：1024 ≥ 实测最大 980；贡献者复核路径缺锚——备案）。**登记边界四条**（提交信息在场）：扁平链 ~17500 层以上理论残余崩溃面 / wasm+embedded 库调用方无大栈线程（解析闸兜底）/ 自行抬栈机器 641..8500 成功→E0019（与 rustc/clang 固定深度限制同型——行为与机器栈配置解耦）/ LSP 面保留残缺 AST 继续分析（E0019 后可带少量降级诊断）。
+
+> **六、计数与移交**：三级 +1 = 3.20.30（242→243）；二级不变。issue [#540](https://github.com/ChenXu233/YaoXiang/issues/540) **关闭**。修复笔推送终态 `3dab6db6` + 复审修复笔推送终态 `b463bfed`。**备案顺修清单新增两条**：#524 锚注释探针目录残留；fstring 内层 E0019 坐标重映射（需内嵌 tokenizer 偏移参数——独立小批）。批次树已 release + gc。
+
+## P3 3.20.31 收口（SPEC syntax 类型位常量实参口径对齐 + #543 收尾，2026-11-14）
+
+> **一、查证修正任务前提（派工失误如实登记）**：本批按 issue #543 自述立项（「剩余唯一实质项 = 选项 1 类型位语法扩展 D 类裁决包」）并派只读查证工作流——实测推翻前提：issue 已于 2026-11-12 由 owner 更正为解析器不对称缺陷（A 类、无需 RFC、S-needs-decision 撤销），修复笔 `b352b360` 同日落地（字面量种子 + 中缀续接 + 正式诊断，09a §P6 #543 有完整登记），`ast::Type::ConstExpr` 早已在 AST 且被 checker/mono 消费、标识符头路径（`Array(Int, N+1)`）本就可用——只有「字面量开头」失败是同一功能两路径不对称。**队长派工失误：立项前未核 issue 评论与 git 历史**（与 #466 根因教训同款——issue 正文 ≠ issue 状态）。当前 HEAD 实测（18/18 事实 verified）：三形态全可用、`2+3` ≟ `5` 端到端折叠判等、IR 快照 count=5、`type_position` 8 单测 + defeq 判等单测全绿。
+
+> **二、本轮实质 = 新发现的 SPEC 失实条目**：syntax.md §1.6.4「复合表达式（如 2+1）解析期拒绝」与 HEAD 行为直接矛盾（最后实质修改 fe405233 早于 b352b360，未同步且不在任何债务清单——查证工作流新发现）。就地更正两行：①文法形态 = 字面量/常量名/编译期值参数引用起始的中缀常量表达式、按折叠值参与个数校验；②解析期拒绝 = 浮点/字符串种子（E0010）、不完整表达式（E0012）、标识符+`(` 走构造器类型路径（E1003）。**语法边界三处未决登记**（将来若做「完整 ConstExpr 进类型位」D 类扩展，此即边界事实）：调用形态实参、浮点/字符串种子、转换通道不产 Call/If/Range（求值器反而支持）。
+
+> **三、遗留与移交**：09a §P6 #543 已登记的两条文档债维持登记不动（test-gate-census.tsv 缺 4 个新 parser 测试、03 行号漂移——归属原批顺修）。issue [#543](https://github.com/ChenXu233/YaoXiang/issues/543) **关闭**（证据评论引 owner 更正原文 + `b352b360` + HEAD 实测 + SPEC 更正笔）。SPEC 更正笔与 WBS/09a 收口同提交；三级 +1 = 3.20.31（243→244）。本轮无代码改动、无批次树。
+
+## P7 7.0 纯搬移拆分收口（2026-11-17）
+
+> 计划见 [09](./09-execution-wbs.md) §P7 7.0（7.0.1–7.0.6）。本批只做纯搬移：`middle/ir/ir_gen.rs` → `middle/lower/`（7.0.1–7.0.3）、`sema/inference/expressions.rs` → `sema/inference/expressions/`（7.0.4，甲案）。判据 = 除路径外零语义 diff + IR 快照与语料基线零漂移。
+
+### 一、判据链
+
+- **C1 快照**：`test_ir_snapshots_stable` 232 条零漂移；语料差分 402/402 行，搬移前后两 revision 的产出 SHA256 相同。
+- **除路径外零语义 diff**：逐文件人工 review；复审按「impl 方法 + 文件级自由函数」逐方法对齐 token 流，归一化差异只有 `pub(...)` 可见性前缀、`super::` 路径简化与 rustfmt 换行。
+- **对外路径**：`middle` 的 `pub use ir_gen::*` 收敛为显式 3 项（`generate_ir` / `generate_ir_with_context` / `AstToIrGenerator`）；`sema::inference::expressions` 的模块路径不变。
+- **规模不变**：`generate_call_expr_ir`（871 行）与 `infer_call_expr`（1719 行）保持单块，方法级拆分仍归 7d.1。
+
+### 二、方法计数对照
+
+计数口径：只数 `fn` 定义（`impl` 块内方法 + 文件级自由函数），不含测试函数与宏生成；两 revision 同口径、按名称多重集比对。
+
+| 批次 | 搬移前 | 搬移后 | 落点 |
+| --- | --- | --- | --- |
+| 7.0.1–7.0.3 | 158（151 方法 + 7 自由函数） | 158（同口径） | `lower/` 19 个文件 |
+| 7.0.4 | 113（99 方法 + 14 自由函数） | 113（同口径） | `expressions/` 6 个文件 |
+
+- 7.0.1：`lower/{mod,scope,query}.rs`；7.0.2：`lower/{stmt,loops,globals,module_ir,const_eval}.rs`；7.0.3：`lower/curry.rs` + `lower/expr/` 10 个文件；7.0.4：`expressions/{mod,expr}.rs` + `expressions/call/{mod,args,instantiation,method}.rs`。
+- 可见性：`pub(crate)` 181→181 净零；新增的 `pub(in crate::middle)` 是多文件 impl 的机械需要，逐项 grep 证明 `lower/` 外零消费者。
+
+### 三、门禁与量测
+
+- `cargo fmt --check` 0；`cargo clippy --all --all-features --all-targets -- -D warnings` 0。
+- `python scripts/dev/testsuite.py run fast`：2306 条、0 跳过、exit 0。
+- `check-obligations.py` PASS（14 义务 / 14 交付 / 红名单 0 / 非义务登记 8）；`check-boundary` / `check-fanout` / `check-test-channel` / `check-docs-*` 全部 exit 0（boundary B5 为既有 report-only，见 §六）。
+- 批次树按 `scripts/dev/scratch.py` 规程冻结 revision 后量测并 release + gc；rebase 后复核 `git diff -- src tests Cargo.toml Cargo.lock` 为空（内容等价）。
+
+### 四、复审结论
+
+独立复审 verdict=pass，无 findings。五项判据独立复算：①方法唯一且无转发壳/副本（名称多重集一致、新家零重复名）；②外部路径全仓无 `middle::ir::ir_gen` 代码引用；③方法级拆分未偷跑；④`tests/yaoxiang` 零 diff、`tests/baselines` 仅 obligations-gate 夹具同内容改名；⑤无 `include!`、无跨层反向依赖，`pub(crate)` 净零。方法计数按 §二 口径统一为 158/158 与 113/113。
+
+### 五、偏差登记
+
+1. **rebase 后内容等价**：收口提交经 rebase 重排后与冻结 revision 的代码内容逐字节等价，量测只在冻结 revision 上取证。
+2. **契约口径偏差**：7.0.1 的搬运清单最初按「第一批方法数」表述，实际按「一方法一份」收口（158）；7.0.4 的目录名按甲案实际落为 `expressions/`，计划文里 `sema/infer/` 是整体改名的目标名，不在本批执行。
+3. **`lower/*.rs` provenance 头保留**：19 个文件头保留「方法体逐字搬自原 `middle/ir/ir_gen.rs`」的来源说明，属刻意保留的可审计线索，非活动指针。
+4. **`ir_gen` 阶段名残留**：`ast`、`parser`、`spawn/analysis` 等处 6 行「ir_gen」是行为/阶段名描述（无 file:line 指针），按既有登记保留，本批不统一改名。
+
+### 六、验证轮三项发现登记
+
+1. **错误码文档既有欠账**：`scripts/docs/gen-error-code-docs.py` 再生后 58 行变更，逐条归因 = 33 行搬移路径改写（`expressions.rs` / `ir_gen.rs` 锚点改指新家）+ 25 行纯行号欠账；在搬移前 revision 上再生同样产生 55 行 diff，当前 58 行的旧行全部包含于其中、0 行只在基线出现，证明欠账先于本批存在。本批再生随提交入库，只改「发射点」锚点，码表、locales 与计数未动，无诊断语义变化。
+2. **check-boundary B5 既有 report-only**：opcode 常量 84 vs 库存 83，搬移前同样存在，非本批引入。
+3. **批次树 Z3 资产解压静默失败**（环境侧）：自动下载/解压报 LNK1181 但未响亮失败；改用 build.rs 支持的本地 `.z3/` 路径供给后构建绿。只登记，不修。
+
+### 七、提交
+
+7.0.1–7.0.3 与 7.0.4 分两笔本地提交（未 push），pre-commit 全链绿；本收口文档与错误码生成物同笔提交。
+
+## P3 3.20.32 收口（方法面证据检查剩余形态——显式接收者 + 外部绑定，#553，2026-11-18）
+
+> **一、查证（四形态修前红态 + 形态②前提更正）**：HEAD 纯净构建 CLI 探针实测四形态修前全部 0 error 静默通过——①显式 self 接收者（`b.get(y)(y)` mut y）、③顶层外部绑定（`Box.get=f` mut y）、接收者型被绑函数、类型体外部绑定（`{ get = f }`）。**形态②原文语法更正**：`{ get: FnType = lambda }`（无 [pos]）是默认值字段非方法绑定；Anonymous 带 q=0 槽被 E1003/E1094/E1002 三道既有门拦死——无 E1113 面；可构造的类型体方法即外部绑定（与③同一登记口）。分类 = D59 C 类静默不动作（同 #538 判据）。链路测绘：#538 链路（method_binding_key 快照 → collect_const_arg_instantiation_request → CallSiteSlots）逐环节读码，grep method_binding 全部消费点确认无第四形态。
+
+> **二、修法（判定函数零改动，判据单源）**：①显式接收者形态——判定入口以 `method_binding_call_key` 既有接收者校验为唯一判据改 `recv_offset` 路由（0→1；回退对位三处同步 `recv_offset+i`——柯里化签名槽位表是全链拍平名、首次调用只填外层位 ⇒ 回退必须跳过接收者位，否则实参错对到接收者槽；与 `bind_named_args` 的 offset 1 同口径，共用同一 `bind_args_to_params` 判据，不造第二份）。②③外部绑定——新增 `register_external_method_slots` 在顶层与类型体两条绑定登记口补写槽位事实：直读被绑函数已登记形态 + `const_binders` 过滤位置绑定，无事实早退（不猜），#539 同纪律。字段文档同步更新（缺项收窄为 face ④）。**face ④ 跨模块方法导入另案不修**：`ModuleInfo.method_bindings` 携带方法类型跨界但槽位事实（declared_call_site_params）无载体；Export 两载荷模式不直接适用（方法非导出，需 ModuleInfo 平行表 + 方法随 use 的门控粒度设计）——裁决素材登记新 issue（S-needs-decision）。
+
+> **三、rebase 冲突解决（红线 10⑩ 第三次实战）**：修复笔与并行会话周末大搬移相撞——7.0.4 把 `inference/expressions.rs` 拆为 `expressions/` 目录（修复 hunk 落在被删文件 → DU）、7.0.1–7.0.3 ir_gen 拆 lower、P7 收口批重跑生成物（E1xxx/E2xxx/warning-codes 三份 UU）。解法 = 修复 hunk 逐字重放至新家 `expressions/call/instantiation.rs` + 旧文件 git rm（内容已迁）+ 生成物从合并树重跑生成器；解后本地编译 + compile_time_evidence 14 / method 锚 7 / external 锚 3 / integration 全量 389 全绿才 `git rebase --continue`。t3 核对重放语义同一性：`git diff 0d198305 3a3fad47 -- src/frontend/core/sema/` 除文件路径外零逻辑 diff（纯搬移判据兑现）。
+
+> **四、验证链与 t3 事实更正**：t1 门禁 14 项一轮过（integration 389 = 383+6、fast 2207 条 0 跳过、IR/语料零漂移）→ 队长 diff review（recv_offset 三处回退同步、登记口覆盖 grep、声明与事实一致）→ t2 **PASS**（M1 接收者路由摘除 ⇒ 显式接收者锚红 / M2 登记摘除 ⇒ 外部绑定锚红——两机制各自承重，trial 机械可逆；偏差备案：M2 trial 首跑 cargo 用法拒绝后重跑未作判据、CLI 探针 8 文件为任务 5 项超集全部符合预期）→ t3 **REJECT**（2 条）：①[low] **提交信息 E5xxx 归因错误——事实更正由本节承载（提交已推送不改写）**：E5xxx.md 恰 1 行（E5002 import_error 发射点 checker.rs:3267→3339，+72）实为本修复自身 checker.rs 净 +72 插入（文档注释 +5、绑定口 +9、帮助函数 +64）平移 **6.9 B.4 批引入的 E5002 发射点**；7.0 搬移批两笔 --stat 不含 checker.rs（其引起的 +18 平移已被 P7 收口批 `2ac633fe` 吸收）；修前修复笔 0d198305 未触 E5xxx.md 是因为基线 72f12e99 树尚无该发射点。生成物本身正确（checker.rs:3339 确为该发射点，文档与代码一致）——缺陷仅提交信息因果记录，追溯者以本节为准。②[info] 运行时声称（修前探针/回归计数/幂等/E1014 修前对照）属运行时证据复审未重放——t2 已全部独立实测闭环；静态侧核到：四形态修前静默与 diff 删除行一致、p1_named_const 的 E1014 与调用侧 bind_named_args（#452 既有、offset 1 硬编）路径一致——**E1014 为修前既有边界备案**（命名调用面对接收者形态声明），非本批引入。
+
+> **五、锚与移交**：锚 6 条新（tests/integration/check.rs：显式接收者 / 外部绑定 ×2 / 类型体外部绑定 / 对照 ×2，修前红态逐字留档段头）；回归 #538/#539/#556/#537 系列原样绿。三级 +1 = 3.20.32（244→245）；二级不变。issue [#553](https://github.com/ChenXu233/YaoXiang/issues/553) **关闭**；face ④ 另案立新 issue（跨模块方法导入载体，S-needs-decision）。修复笔推送终态 `3a3fad47`。批次树已 release + gc。
+
+## P7 7a 切断多次定义收口（2026-11-18）
+
+> 计划见 [09](./09-execution-wbs.md) §P7 7a。原定三笔：7a.1 删三处语句级回收 / 7a.2 save-restore 换 RAII guard / 7a.3 口径统一与 E3014 共享检查。**7a.1 在开工第一轮被实测证伪前提，经用户裁决 C 拆出，移至批 b 与 7b.4 同批**；批 a 落 7a.2 + 7a.3，并顺路修两处既有缺陷（第 7 处缺失保存、接口分发链缺兜底臂）。代码与 3 份快照提交 `cf88580b`（父 `50bd3c3e`，9 files / +380 / −285）。
+
+### 一、判据链
+
+- **C1 快照**：`test_ir_snapshots_stable` 232 条。前 6 处纯重构靠分阶段实证——只留 6 处 guard 化、临时撤掉第 7 处时，232/232 与父 revision 全等；加第 7 处后唯一漂移是 `lambdas.snap` 的 `locals_total 8→7`（§四）。
+- **C4 行为等价**：语料差分 402/402、diff 为空（`check-corpus-parity` exit 0）。
+- **verify_loose**：`cargo test --lib verify` 21 条全绿，含全语料 `verify_loose`。
+- **门禁**：`cargo fmt --check` / `cargo clippy --all --all-features --all-targets -- -D warnings` / `testsuite run fast`（2306 条）/ `check-docs-truth` / `check-fanout` / `check-test-channel` 全 exit 0；`check-docs-refs` 与 `check-boundary --strict` 是既有项（§七）。
+- **04 的两处推论就此定稿**：`04-ssa.md` §可行性前提「其二」的「去掉回滚不会让槽位失控」被删回滚试验证伪（§二）；`verify_loose` 的 temp 槽豁免掩盖了分发链的 use-before-def（§三）。
+
+### 二、7a.1 的前提证伪与用户裁决 C
+
+删掉三处语句级回收（`src/middle/lower/stmt.rs` 的 `generate_function_ir` 与 `generate_block_ir`、`src/middle/lower/expr/closure.rs` 的 `generate_lambda_body_ir`）后，在冻结 revision 的批次树上跑全语料：
+
+| 观测 | 删回滚后 |
+| --- | --- |
+| 槽位越界转 E3014 | 2 条语料：`src/std/tests/string_ops.yx` 354 槽、`tests/yaoxiang/01-syntax/control-flow/list_comp.yx` 323 槽（上限 255） |
+| 全语料槽位峰值 | 51 → 211 |
+| `verify_loose` 转红 | 接口分发两条语料共 8 处 use-before-def：`interface_dynamic_dispatch.yx` / `interface_rebind_dispatch.yx` |
+| IR 快照漂移 | 208 / 232 |
+
+**用户裁决 C（2026-11-17）**：三处回收保留，`next_temp` 仍可回滚，**不改成单调计数器**；7a.1 拆出本批、移至批 b，与 7b.4 同批。理由即上表：删回滚要求分配器先承担槽位复用，否则槽位数失控（354 / 323 越 255、峰值 51→211）。**04 的可行性前提据此就地更正**，09 的 7a.1 行标注「拆出，移至批 b，与 7b.4 同批」并在 7b.4 行登记前置。
+
+### 三、两处前置修复与判据链
+
+两处都是**既有缺陷**（父 revision 上同样可复现），旧行为非成功（槽位越界未被捕获 / 静默错值），按 D59 随重构顺路修并同提交登记。
+
+**修复 1：第 7 处 = 嵌套函数定义路径的缺失保存。** `generate_method_ir` / `generate_function_ir` 走 `enter_decl`，三项计数不回滚——这是 C1 的约束（模块初始化流接着子体终值编号）。但嵌套函数定义的调用点原先没有对应的 guard：子体把父的 `next_temp` / `temp_high_water` / `temp_floor` 换成子体终值后，父体继续分配就从偏低的水位起算，父体已引用的槽位可能落在 `locals_total` 之外。
+
+- 红色判据（父 revision 二进制，冻结 revision 上复现）：`main` 体内先分配若干临时槽、末尾一个嵌套函数定义 ⇒ `verify_loose` 报「local 槽位 4/5/6 越界（上限 4）」；HEAD 同夹具绿。
+- 修复：该调用点改用 `NestedBodyGuard::enter`（含三项计数），父帧在调用返回后原样恢复。
+
+**修复 2：接口动态分发链缺兜底臂（7a.3a）。** `src/middle/lower/expr/call.rs` 的 `emit_variant_dispatch` 逐变体生成 `JmpIfNot` / `VariantPayload` / `Call result`，末臂 `JmpIfNot` 失败时直接落到汇合点——未知 tag 路径**从不写结果槽**。
+
+- 红色判据（父 revision）：`probe = (a: Animal) -> Void = { s = a.speak(); assert.assert(s == "Woof", "probe") }` ⇒ `verify_loose` 报「[use-before-def 支配性] probe: 读取槽位 Local(1) 存在无定义路径」；HEAD 同夹具绿。`Local(1)` 是具名绑定 `s`——`generate_local_stmt_ir` 的赋值臂把具名槽直接交给 `generate_expr_ir`，分发链的结果槽因此是具名槽。
+- **为什么此前看不见**：`verify` 的支配性判定按槽名生效，无名字的 temp 槽不参与（`src/middle/ir/verify.rs` 的 `check_dominance` 里 `name.is_none()` 的分支）。语料里分发结果槽多先落 temp 再 `Store` 进具名槽，于是静态不可见；运行时后果是**静默错值**（未知 tag 时该 temp 保留上一条语句留下的值），不是读 Void。
+- 修复：兜底臂三条指令——`Load false` / `Load msg`（`interface dispatch: unknown variant tag for {iface}::{method}`）/ `Call result std.assert.assert`。`std.assert.assert` 声明返回 `Never`（`Never <: T`），写进任意结果槽合规；IR 的 def 集合把 `Call{dst}` 计为定义，故全路径有定义。运行期 false 走既有 native 陷阱，**不新增诊断码**，命中臂的指令与顺序逐字未变。
+
+### 四、快照漂移逐份归因（3 份，232 条中）
+
+| 快照 | 行数 | 归因 |
+| --- | --- | --- |
+| `01-syntax/functions/lambdas.snap` | +1 / −1 | `main` 的 `locals_total 8→7`：旧 8 是末尾嵌套 lambda 体（`max`）自己的 `locals_total`，被子体终值污染；新 7 = `main` 内最大引用 `%6` + 1。同文件其余三个函数（`double` / `add` / `max`）逐字节不变。 |
+| `02-type-system/interfaces/interface_rebind_dispatch.snap` | +5 / −2 | 1 条分发链的兜底臂 3 条指令 + 2 行替换（跳过兜底臂的 `Jmp` 目标、`locals_total 9→11`）。 |
+| `02-type-system/interfaces/interface_dynamic_dispatch.snap` | +52 / −34 | 6 条链 × 3 = 18 条兜底臂指令；其余 +34 / −34 是等量替换（`Jmp` 下标平移、temp 编号、def id 首现序）；`locals_total` 只有 `describe 10→12` 与 `main 21→23` 两处 +2。 |
+
+**归因口径（勿再误写）**：兜底臂的两个 temp（false / msg）是**每条链各自分配**的；`locals_total` 的 +2 来自**峰值位移**——语句级回收让下一条链从不高于上一条的水位起算，6 条链不叠加，只有最高的那条把峰值抬高 2 槽。不是「逐链复用同一对 temp」。
+
+剥离兜底三行并把数字掩码后，两份接口快照与父 revision 逐行全等（`rebind` 44 行、`dynamic` 230 行）⇒ 命中臂的指令、顺序、分支未变，只有兜底插入与编号位移。
+
+### 五、E3014 红→绿（预算单点）
+
+- **单点**：`src/middle/lower/scope.rs` 的 `take_body_locals` 是唯一的取表 + 预算点（按 `temp_high_water` 截取，越界 `.at(cur_span)` 报 E3014）；`MAX_REGISTERS = 255` 全仓一处定义；`take_cur_locals` 只在它内部调用。六个函数体形态（函数 / 方法 / lambda / 匿名绑定 / curry 中间层 / curry 最内层）全经它取表。
+- **红（父 revision 二进制）**：>255 槽的函数体有 E3014 但**无 span**；方法体 / curry 层 / 匿名绑定**静默 exit 0**（方法体此前按参数个数截表、且无预算检查）。
+- **绿（HEAD）**：五种形态的 >255 探针全部报 E3014 并带 `--> file:line:col`（探针槽位数 303 / 900 / 303 / 901 / 303，诊断指到声明处）。
+
+### 六、验证与复审结论
+
+- **独立验证两轮**：首轮在冻结 revision 上复跑全部判据；第二轮（冻结 revision 未变，`cf88580b` / `277dfbb4…`，父 `50bd3c3e`）独立复跑同一批判据，结论一致：语料 402/402 零 diff、快照 3 份漂移逐份归因、`verify_loose` 绿、`fast` 2306 条 exit 0；`check-docs-refs` 为既有项（§七）。
+- **变异试验**（机械还原、每条之后重新构建）：M1 删空 guard 的 `Drop` 恢复体 ⇒ 44/232 快照漂移（证明 guard 承重）；M2 回退三处回收 ⇒ 两条语料 E3014（§二，证明裁决 C 的前提）；M3 预算闸短路 ⇒ `integration` 的 `test_check_deep_binop_argument_reports_e3014_not_stack_overflow` 转红（证明闸有回归测试承重）。
+- **复审 verdict=pass**：五项判据独立复算——7 个 guard 构造点与父 6 对 `saved_*` 的消失、第 7 处修复是修复而非掩盖（父二进制复现越界）、预算单点与 E3014 带 span、分发兜底 7 条链全部满足「末臂落兜底 / 兜底定义结果槽 / 命中臂跳过兜底」、快照恰好 3 份。四条非阻塞观察见 §七。
+
+### 七、偏差与既有项登记
+
+**编排偏差**
+
+1. **契约轮与实现轮合并**：7a.1 的前提实测在实现前完成，第一轮直接产出「不落地」结论（§二），未单独成契约轮。
+2. **收口轮重建**：验证/复审完成后，收口契约因 7a.1 拆出与两处顺路修而重写，收口轮以新契约重建。
+3. **验证与复审的同家族偏差**：原定的异家族验证/复审因子模型配额耗尽而中断，改用同家族成员承担。补偿证据：①全部量测在冻结 revision 的批次树上做，两次独立复跑同内容；②独立复算（快照逐行掩码比对、3 份漂移逐份归因、方法/指令计数）；③三条变异试验（M1/M2/M3，机械还原后每条重新构建）；④**真双二进制探针**——父 revision 与 HEAD 各自构建二进制、对同一夹具各跑一遍（第 7 处槽位越界、分发 use-before-def、E3014 五种形态）。本节如实登记，不宣称异家族独立。
+
+**复审观察登记（不改）**
+
+4. `enter_decl` **额外**恢复了 `cur_span`：声明面的口径是「回滚槽位表、三项计数不回滚」，实际 guard 连 `cur_span` 一起恢复。影响面：`cur_span` 只决定诊断定位，不改变编号与指令，量测无可见差异（提交信息已登记）。
+5. `generate_lambda_body_ir` 的 `enter` 恢复父帧，但子体自己不重置 `temp_high_water` / `temp_floor`：沿用 C1 既有约束（重置会改变编号）；方向是「只会多算不会少算」，不会掩盖越界。
+
+**既有项（非本批引入，登记不修）**
+
+6. `check-docs-refs` 红：`docs/src/en/dev/architecture/09-execution-wbs.md` 有一条证据出处写成了被 `.gitignore` 规则命中的工作区路径（`coverage` 之下的字段产物）。父 revision `50bd3c3e` 同红；该文件在 `be0be749`（自动翻译提交）之前不含该串 ⇒ 归属上游翻译流水线，不在 7a 面。
+7. `check-boundary --strict` 红：`middle/bytecode/opcode.rs` 的 opcode 常量 84 处 vs 库存 83。父 revision 同值；CI 跑的是 plain 模式（report-only，exit 0），`--strict` 是 P9 转硬后的目标模式。属 bytecode 库存欠账，登记不修。
+8. `04-ssa.md` 其余行号引用（缺陷类 2–4 与「代码位置」附录中未纳入本批的条目）仍指向搬移前的 `ir_gen.rs` 行号：本批只把 7a 触及的段落（§可行性前提、§缺陷类 1、逐项处置表 1/1b/1c、风险节、缺陷类 1 附录）改为符号路径，其余随各自批次的收口转换，登记为文档欠账。
+
+### 八、提交
+
+代码与 3 份快照：`cf88580b`（9 files / +380 / −285），pre-commit 全链绿。本收口提交 = `04-ssa.md` / `09-execution-wbs.md` / 本文三份文档 + `src/util/diagnostic/codes/e3xxx.rs` 的 E3014 span 注释（复审观察 (a)：IR 闸已带 span，注释改为现状；只改注释、零可执行语句改动）。
+
+## P3 3.20.33 收口（List(T) 注解落点归一 Vec 面——幽灵面假拒绝 + 遮挡退出，#403，2026-11-19）
+
+> **一、查证与裁决**：issue #403（P1，2026-10-01 立项零评论）当前 HEAD 逐字复现——`v: List(Int) = [1,2]` 后 for 迭代 E1002、`List(Int) = []` 无法构造。机理读码实锤：`List(T)` 注解落成**幽灵面** `Generic{"List"}`（无定义无值无构造方），而字面量/构造器/std.list 全部产出 `Vec` 面（std/list.yx 自 22a67d93 以 Vec 为底座）——幽灵面与 Vec 面必败 unify。修复候选①②实测可修好全部 issue 形态但**共同撞 D59 墙**：user-List 记录遮挡类程序修前「成功」（p9 探针——List 名被用户记录占用时幽灵面恰好有定义）。A/B/C 四件套呈报，**用户裁决 A 案（2026-11-18 批）**：无条件 List→Vec 落点归一 + user-List 遮挡类退出报正式诊断 + operator_index.snap 同批再生 + SPEC/RFC stale 对齐；B（def-aware 同名双态）负值复杂度否决、C（摘 List 名）与既有 SPEC 落点裁决冲突否决。快照再生归属 = 实现者再生 + 队长人工 review（协议第三次兑现：恰 1 文件 1 行 type_decl cells List→Vec，已逐行核）。
+
+> **二、修法（A 案）**：落点归一**单源** `MonoType::source_container_face`——源名 List 进类型域即落 Vec 面；源名进类型域的门经复验更正为**四门**（AST 注解 `From<ast::Type>` / typecheck 显式类型实参 `type_arg_of_expr` / native 签名串 `parse_type_str_with_generics` / **L3 IR 视图提取 `lower/query.rs type_arg_of_expr_ir`**——初版声称三门被 t3 grep 复核抓出 L3 镜像直传反例，修复轮补第四门后口径按四门重述）；statements.rs 泛型注解回存的手写构造与 From 同形（同义重复）统一走 From 消灭。**遮挡退出**：注解消费侧 `try_instantiate_generic_type` 先查 `generic_type_defs`——用户自定义 List 记录命中按记录展开、字段访问恰 1 条 E1053（修前依赖幽灵面偶然形态静默成功，A 案授权改正式诊断）。既有按名特判 List 臂成为幽灵面口径下的不可达余留保持原样（user-List 值面可达性为修前既有歧义，备案不修）。
+
+> **三、附带面（查证实战产出，同批先行入库）**：①z3_runner.cmd Windows 包装（`ae4f37c0`）——门禁宿主剥 PATH 调 cargo 时 runner 串 `python` 按名字解析失败（快照门禁假红「program not found」没跑到任何测试）；包装按确定位置探测解释器（SystemRoot py → 按用户 Launcher → PATH python/python3），testsuite.py cargo_env 前置解释器目录，.gitattributes *.cmd eol=crlf；②0.2.4 行斜杠连写二次复发（`8ff9f21d`）——bot 翻译把 zh 源「阶段覆盖/字段消费」译成英文时把 coverage 与 field 两词以斜杠连写，命中 .gitignore 的 coverage 目录规则（bot 译文原文见该提交 diff），zh 源源头改「与」连写 + en 同步。
+
+> **四、修复轮（t2 上报环境级缺陷 + t3 REJECT）**：**R1 runner 退出码塌码**——括号 if 块内 %ERRORLEVEL% 解析期展开，子进程 exit 0/1/2/5/101/127 六档位全塌平（经 cargo 调用 cargo 视角恒 0）——本机按退出码判定的门禁在运行期失败时漏红；重写为全文件无括号块 + goto 线性 + 顶层执行期展开。**塌码掩蔽的真实测试失败首次露出**：test_from_ast_type_generic_custom 期望停 A 案前口径（A 案笔漏同步该测试——lib 失败 exit 101 从未穿透 cargo）；按 test-specification 0 + coding-rules 7.5 判「判据错非实现错」改夹具 Matrix（真正自定义名，#299 自定义泛型名不 lower 不归一的原性质保留 + 自定义消息 + AAA），失败腿 1868 passed / 0 failed。**R2 L3 镜像直传绕过单源**（t3 medium）：query.rs:1008 补第四门（L2/L3 表示劈叉消灭）+ 四门重述 + 锚④；**R3** 锚③改名名实相符（stays_accepted → reports_existing_e3004）；**R4** 不可达余留披露收窄幽灵面口径 + user-List 值面可达性备案。
+
+> **五、验证链（四轮验证 + 三次修复/聚焦）**：t1 四轮（markers 失败根因 = 门禁宿主 PATH → testsuite 前置修复；docs-refs 假阳性 → zh 源改写；快照门禁红 = runner spawn 失败非漂移（t1 诚实判别）→ R1 修复 → 全绿）→ A 案落地一轮（14 门禁，7 锚先红后绿 stash 实测）→ 队长 review + 快照人工 review → 主修笔 `7c8d3837` → t2 **PASS**（M1/M2 双变异；塌码使 trial 误判「变异后仍成功」——红绿以 libtest 输出判定不受污染；上报 runner 塌码环境缺陷）→ t3 **REJECT**（R2 medium + 3 low）→ 修复笔 `2e15d521`（R1–R4）→ t3r **APPROVE**（Matrix「判据错非实现错」归属复核成立——警惕「判据错」滥用为放宽判据的借口；4 备案）→ t2r **FAIL**（M3 敏感性缺钉——第四门摘除在 check/dump/run 三面无可观测差异，锚④只护加门方向；其余全过）→ 聚焦 pin 轮 `8c8d4e53`（**L2/L3 单元双 pin**：From 臂 List 注解落 Vec 面 / L3 IR 视图内层归一——变异自证红转绿 + 正交性实测各自杀死本面变异；落位决策 = type_arg_of_expr_ir 私有 E0624，按 test-spec 1.1 落父级 tests/ 经唯一消费点 get_expr_mono_type 驱动同一数据流，M3 判定力变异实测等价；4 文件 128 行纯新增零生产代码）→ t2r2 **PASS**（MP3 摘第四门 ⇒ L3 pin 红 / MP1 摘归一 ⇒ L2 pin 红，trial 机械可逆）。
+
+> **六、教训与移交**：①**「判据能失败才算验证过」适用于门禁 harness 本身**——runner 修复未测失败路径的退出码传播，塌码潜伏到变异红态才暴露（gate 的失败路径必须有自己的 RED）；②**门级单源修复的敏感性 pin 要落在表示面**——行为面无可观测差异的门（L3 视图）需要表示面断言，锚「只断言可接受性」对摘门方向不敏感；③单源声称（三门穷尽）在 t3 被 grep 反例推翻——穷尽扫描结论必须随修复同步重述；④提交信息归因（E5xxx 式）与措辞精度教训延续。三级 +1 = 3.20.33（245→246）；二级不变。issue [#403](https://github.com/ChenXu233/YaoXiang/issues/403) **关闭**。推送终态：基建笔 `ae4f37c0` / `8ff9f21d`、主修笔 `7c8d3837`、修复笔 `2e15d521`、pin 笔 `8c8d4e53`。批次树已 release + gc。备案顺修清单不变。
+
+## P3 3.20.34 收口（refactor 收账批——#472/#460/#473，2026-11-19）
+
+> **一、前提核验**：三 issue 行号经 7.0 搬移批全部作废，按语义重定位——A 项两符号仍在（signature.rs / orchestrator.rs）；B 项转发面重定位为 types.rs OverloadResolutions + layers/ownership.rs ReleasePlan（issue 的 refinement.rs 坐标为搬移前）；C 项灌注块两份仍在（7.0 后 setter 20/20 而非 issue 时 20/17，顺序漂移仍在）。
+
+> **二、三项修法**：**A·#472** 按 issue 各自处置——parse_signature_param_names 真死代码删除（依赖 export_signature_param_info 有真实消费者链保留、clippy 零 dead_code 佐证）；check_source_in_project ②类委托残留零调用点删除（check-fanout.py RETIRED 条目 site is None 仅 print 不计违规——实读主循环确认），条目移①段 + 三处活断言注释改名。**B·#460** 各加 `consumption()` 单一入口、删 4 转发方法、6 消费点改调（公开面净 -2，按 issue 方案；mark_completed/is_completed 幂等 &self 无次序敏感）。**C·#473** **形态更正**：issue 建议的 fn helper 因借用冲突不可编译（inferrer 持 checker &mut scope/solver 借用贯穿灌注期，E0502 实证）——改调用点展开宏 `apply_shared_inferrer_context`（宏在调用点展开保持字段级借用与原代码同型），字段序按 ExpressionInferrer 字段声明序归一（唯一声明处写入宏 doc），差异项留调用侧；行为零变化证据 = 全部 setter 纯字段赋值/注入实读 + IR 快照全语料零漂移。
+
+> **三、两专项登记（本批不修）**：①check_source_in_project 删除后 02-stage-contract.md 8 处 + 07-equivalence-oracle.md + RFC-039 引用悬空——check-docs-truth 不校验任意符号存在性（门禁不打红），涉 en/ 镜像，文档专项另批；②#473 订正所指回流差异属实：块 A（二元运算符委托回流段）不回收 `inferrer.unevaluable_const_constraints`、块 B 回收（消费者在 checker.rs W1063 链）——修复会改变块 A 路径诊断行为，D59 需先红后绿 + 基线同提交再生，超本批红线授权，另案登记。
+
+> **四、门禁实战与诚实更正**：①check-docs-refs 抓出 3.20.33 收口写入 09a 的假阳性——描述 0.2.4 事故时把 coverage 与 field 两词以斜杠连写引用了触发串本身，被同一门禁再次命中（非本批引入，git diff 实证 09a 不在本批改动集）；按元规则 1 就地改写为事实与证据本身（bot 译文原文经提交号 `8ff9f21d` diff 可查证），更正不留对照。**上一轮实现者「CI 四脚本 check-docs-refs 全过」为错误陈述（只取 tail -2 未验证退出码，违规行被截断）——本轮已完整验证 exit 0 并如实撤回**。②错误码生成物再生（statements.rs 插行平移发射点，幂等二跑稳定）随 C 组同提交。
+
+> **五、验证链与移交**：t1 两轮全绿（clippy 敏感门零新 dead_code、定向 cargo test 六面全绿、IR 快照零漂移、语料零漂移）→ 队长 diff review（B 组 accessor 模式、C 组宏展开形态、A 组 fanout 条目移段）→ **按项拆分三笔提交**（每笔一个理由独立 revert）：A 组 `2fa90965`、B 组 `0d9852d2`、C 组 `26d94454`（生成物随 C；初稿误写 rebase 前哈希 d29fc675/35d416c8/a90e7aec 为悬空对象——t3 抓出，按「push 后取提交号」规则更正）。三级 +1 = 3.20.34（246→247）；二级不变。三 issue 关闭（关闭评论含两专项登记指针）。备案顺修清单新增：悬空引用文档专项、回流差异 D59 另案。
+
+> **六、修复笔（t3 blocker——本节初稿两项自伤）**：t2 PASS 后 t3 抓出收口笔 `bf56eff7` 两项：①「本轮已完整验证 exit 0」在冻结 rev 上为假——叙述修正时又原样引用触发串（WBS 行 + 本节各 1 处，违规净 1→2，origin/dev 已指向该笔）；②§五三笔提交号写的是 rebase 前悬空哈希。修复笔就地更正（本段即其组成）：触发串形态全部改为「两词以斜杠连写」的描述式引用、哈希更正为 push 后终态；check-docs-refs 修复后 exit 0 复验。**同款错误第二次复发**（3.20.33 修 0.2.4 假阳性、3.20.34 叙述该修正时复发）——「引用触发串写事实」的改写必须以描述式（词名分写）为唯一形态，登记为写文档的固定手法。
+
+## P3 3.20.35 收口（调用形谓词体登记为证明函数——精化类型源码入口，#441，2026-11-19）
+
+> **一、查证与 RFC 归属判定**：issue #441（0.8.3 时代立项）的证明面描述经 3.20.21–3.20.28 与 6.9.3d 大改后全面重核。**RFC 归属判定**：入口语法 RFC-027 **已定**——§3.1「编译期谓词在绑定位置使用时，参数由程序员显式传入——就是函数调用，零隐式」（027:209-222）、§1「{} 内一切皆断言、编译器不区分类型断言与值断言」（027:112-122，RFC 自举示例体含用户调用 sum(arr[0..i]) 027:127）、调用点代入语义（027:156-158）⇒ 实现工作（假拒绝合法程序 = D59 C 类，#556/#538 同族）。**命名更正登记**：「Phase 2.5」是仓库实现线命名（02-stage-contract.md），RFC-027 阶段表仅阶段 1-4；「第 4 级」= predicate.rs 四级分派自述。复现矩阵：issue 夹具 + 多形态变体（std 谓词体 / 表达式体 / 多实参 / 字面量 vs 变量 vs 表达式实参）逐字留档。
+
+> **二、修法（判据单源零新机制）**：`is_constraint_body_item` 收宽——内核形态（ConstExpr 项）判据逐字保留；调用形态（纯断言体里的 Expr(Generic) 项，`{ check_nn(x) }` 形）同批登记；predicate_decl_shape 两声明形态 + checker.rs Phase 2.5 登记臂同批收宽（模板面 predicate_defs 与 proof-fn 形态变量恢复既有双登记形状，is_predicate_head / proof_fn_bases / 导出 payload 三面同判）；转换失败整体不登记（不换项重试防静默漂移——t3 精度备案：调用形态 find_map「第一个可转换项获胜」在该形态下与「整体不登记」言过其实，奇异体修前全被 E1003 拒绝，C 类口径内备案）。执行复用 try_proof_fn_call → fold_proof_call_arg(#556) → execute_proof_calls 既有链路，零新码。
+
+> **三、四项残差如实登记（既有缺口或新工作项，09a 承载）**：①跨模块证明执行缺口——execute_single_proof_fn 只搜主模块 AST（imp2 探针 stash 验证与本批无关）；②多实参调用形体执行面缺口（修前 E1003/E1094 假拒绝，修后拒绝但诊断更聚焦）；③E4020 未按 issue 期望转正——缺失被调落 E4018 proof_error 位（execute_proof_calls Err 臂），改映射波及 p11 族既有发射形态，登记后续工作项（check.rs 锚注释已写明）；④Assert 头调用体（p8）修后 E2031（fold 不可折叠）——语义上应展开为内核约束，新工作项。
+
+> **四、验证链与 t2 FAIL 归因（契约敏感锚指错面——第三次，队长派工失误登记）**：t1 一轮全绿（IR 232 文件 / 语料 402 条零漂移；开发中 5 个语料夹具因基线红线改挂集成测试并删除——如实登记）→ 队长 diff review → t2 **FAIL**：M1（摘 probe.rs 的 generic_call_constraint fallback）的判据锚指到 check 面主锚不红——该面由 checker 臂继续承重；**M1 的真实敏感锚 = execution.rs 满足值运行锚**（实测红：证明函数未在 AST 中找到）。与 3.20.29（opcode() 面）/ 3.20.30（binop 链）同款——「契约敏感锚指错面」第三次，登记为派工前核锚-机制接线的固定项。注释更正笔 `a29b2676`（t3 low：拒绝面锚引用悬空语料路径 call_form_*.yx——开发中夹具删除后注释未同步，check-docs-refs 只拦覆盖目录引用不拦「跟踪路径不存在」）→ t3 **APPROVE**（5 备案：悬空引用 low 已微修、单源表述精度 2 low、命名更正既有欠账 info、运行时声称未核实 info——替代证据闭合）→ t2r **PASS**（杀伤矩阵：M1 ⇒ execution 满足值锚红（登记面敏感）/ M2 ⇒ check 主锚红（checker 臂敏感）——与「登记双面」结构一致，trial 机械可逆）。
+
+> **五、锚与移交**：锚 7 条新（check.rs 5 + execution.rs 2，准入门条款 RFC-027 §3.1/§4.3 + 病史 #441 修前假拒绝实测写入注释）；回归 rfc027 82 / proof 90 / predicate 35 / integration 全量绿。三级 +1 = 3.20.35（247→248）；二级不变。issue [#441](https://github.com/ChenXu233/YaoXiang/issues/441) **关闭**。主修笔推送终态 `299ade37` + 注释笔 `a29b2676`。批次树已 release + gc。
+
+## P6 6.9 收口（2026-11-19，用户裁决）
+
+> 用户裁决：6.9 收口。判据按「不变量成立」逐条核对，不以子阶段勾选代替；历史证据见本文件对应各节。
+>
+> - **I1–I3、I5、I7 成立**：单源、纯判等、证据完备、诊断诚实、接线真实。
+> - **I4**：闭项与开项/递归 C3 已落地；#541（TailCall）与 #542（孤立共享层 DCE）已收；到界边（T-b bound 8）由原件承担，属已登记的边界，**不宣称完全体**。
+> - **I6**：按 6.9.5 的设计复核结论收口（B.1–B.4 与残留补测；不宣称 Π/Σ 完全体）。
+> - **I8**：每片均有语料/IR 快照零漂移或逐条分类的证据。
+> - **残留**：#537 维持「用户裁决前不修」登记（D 类；6.9.4/6.9.5 不得依赖其修复）；#539 导入面与 #552 维持另案；#540/#541 已关闭；#542 已落地（见上一节）。
+> - **同日新增欠账 2.1.4**（post-mono 内层隔离红态）不属 6.9，阻塞 verify 升门禁。
+> - **2026-11-20 结清**：2.1.4 已落地（内层隔离判据按槽身份重写，非放宽），verify 升门禁的 2.1.4 前置解除；见本文 §P2 2.1.4 收口。
+>
+> 收口后 6.9 不再接受新工作；P7 消费量词派生视图与 defeq 接口时不另建平行账本（WBS 闸口约定不变）。
+
+## P3 3.20.36 修复轮（t1r）——#489 迁移差异⑦方向登记反更正 + t2 判据缺陷处置 + t3 REJECT 修复，2026-11-19
+
+> **零、范围与状态**：本节是 3.20.36 修复轮（t1r）实录。修复笔推送终态 `92418ceb`（本地初稿 `83f0f77d` 与并行会话 6.9 收口笔在 09a 尾部相撞，rebase 逐 hunk 解决、两节都保留）。**t2r2 聚焦复验 PASS**（批次树 t3.20.36-t2r2，已 release + gc）：G0 audit 清零复测——exit 0、RUSTSEC-2026-0381 不出现、零漏洞、clipboard-win yanked 警告逐字保留，advisory DB 时点声明 = 工具自报 1533 条（本地库 commit `472a4c9a`，2026-11-18）；G1 定向回归 net 7/7 + yx tests::dl 11/11（`--test-threads=1` 资源上限）；M-A 代理敏感性变异（恰两行删除 .proxy(None) ⇒ net 侧探针 panic 于 tests/net.rs:338 改道假代理 os error 10061、yx 侧 panic 于 tests/dl.rs:100 Network(Io(10061))，对照形态 direct_connection_without_proxy_env 保持 ok）；M-B 依赖回退变异（Cargo.lock 单行 1.0.10→1.0.9 ⇒ audit exit 1、RUSTSEC-2026-0381 重现）；两次 trial 均 apply -R 机械还原 + blob 与 HEAD 一致 + 还原后 build + 树 CLEAN；IR 快照与语料差分零漂移。三级 +1 = 3.20.36（249→250，基线含并行会话同日 +1 = 2.1.4）；二级不变；WBS 3.20.36 行见 [09](./09-execution-wbs.md)。冻结基线 = 迁移笔 `a2177186`（#489 ureq 2.12.1→3.5.2，其提交信息口径更正见本节四）。
+
+> **一、t3 major：迁移差异⑦「env 代理两侧均不读」方向登记反——按「保持既有行为」更正（先红后绿）**。源码实证：ureq 2.12.1 的 proxy-from-env 是 opt-in 空 feature（其 crate 清单 `proxy-from-env = []`），本仓声明 default-features=false ⇒ 2.x **不读**环境代理；ureq 3.5.2 的 `Config::default()` 含 `proxy: Proxy::try_from_env()`（无 feature gate），`Agent::config_builder()` 即 `Config::builder()`、起点同为 `Config::default()`（两版 crate 源码均可在本地 registry 缓存逐行核对），其迁移指南 MIGRATE-2-to-3.md 明文「proxy-from-env is the default now」⇒ 3.x **读**。设置 HTTP_PROXY 的环境下原先直连成功的程序迁移后改走代理 = 改变原先成功程序的可观察行为（RFC-039 D59 裁决面），被「两侧均不读」的错误登记绕过；同笔注释「config_builder 与 new_with_defaults 在 env proxy 上不同」同被证伪（两者起点同为 `Config::default()`）。**修法（队长裁决：保持既有行为）**：两处 agent 构建链显式 `.proxy(None)`——ureq 3 的关闭 API 是 `ConfigBuilder::proxy(Option<Proxy>)` 传 `None`，无独立 disabled 构造——src/std/net.rs 的 `ureq_agent` 与 tools/yx/src/dl.rs 的 `http_agent` 同链一致；两处注释按真实现状改写，更正不留对照。**「std http_get 是否应支持环境代理」另立 issue 交用户裁决（语言级设计问题，本批不动语义）。** 锚 3 条新（std::tests::net 2 + tests::dl 1）：重新拉起本测试可执行文件、只在子进程清空全部代理变量后注入 HTTP_PROXY=http://127.0.0.1:1（必失败假代理），目标为本地 TcpListener 随机端口——代理变量是进程级的，进程内改写会污染同进程并行测试，形态先例 = src/package/source/tests/git.rs 的 GIT_DIR 重拉形态。**红态实测（逐字留档）**：修前子进程 panic——net 面 `Runtime("http_get failed for 'http://127.0.0.1:57110/data': io: 由于目标计算机积极拒绝，无法连接。 (os error 10061)")`、yx 面 `Network(Io(Os { code: 10061, kind: ConnectionRefused, ... }))` = 请求被改道假代理而拒绝；修后同形态直连本地目标成功。对照形态（清空代理变量直连）两轮全绿；顺带收益：既有直连测试不再受宿主机代理变量影响。准入按 coding-rules 7.2 **证明门**：性质 = HTTP 面不拾取环境代理变量，任何读环境代理的实现必红、任何显式禁用的正确实现不红，观察点为全离线确定性的本地监听 + 假代理注入。
+
+> **二、t3 minor：2.x 幂等方法自动重试 3.x 移除——查证后报用户裁决（本轮未实现）**。ureq 2.12.1 源码实证：自动重试仅发生在**连接池复用连接**上——①请求行发送失败 ⇒ 不论方法换新连接重试一次；②响应读取期连接过早关闭 ⇒ 且方法幂等（DELETE/GET/HEAD/OPTIONS/PUT/TRACE，RFC 7231 §8.1.3 口径）且请求体为空/零长 ⇒ 重试一次（两种均至多一次）。ureq 3 迁移指南明文「No retry idempotent——3.x has no built-in retries」（其表述 GET/HEAD，实际面以 2.x 源码为准）。**不在包装层实现**，理由：2.x 重试条件含「连接来自连接池」，ureq 3 不外露池命中信息，包装层无法复现该条件；2.x 的 connection_closed 谓词在 3.x 无对应（过早断连表现为泛型 `Error::Io`）；包装层若按「Io 错误 + GET 重试一次」自造，会超出 2.x 语义（首连失败 2.x 原样上抛、包装层会重试）——既不保真也属猜测实现。**裁决请求四件套**：①情况——池连接被服务端侧超时关闭这类瞬态故障下，原先自动恢复的 http_get 现在向调用方报错（瞬态条件，常规路径不可复现）；②候选——(a) 接受 3.x 语义并登记差异（优点：零新码、随上游演进；缺点：瞬态故障从「透明恢复」变「报错」）；(b) src/std/net.rs 包装层对 GET 限次重试（优点：对位 2.x 的多数可观察结果；缺点：与 2.x 语义不保真——首连失败也会重试，且给 std 面引入隐藏重试行为）；③推荐——(a) 登记接受：瞬态恢复属 HTTP 客户端内建行为，调用方可自重试；代价 = 该类瞬态故障可见性上升（如实登记于 09a 本节）；④破坏性——(b) 引入新的可观察行为面，需先红后绿 + 基线核账；(a) 无破坏性面（登记即可）。
+
+> **三、t2 判据缺陷处置：M1「ignore 回填」自相矛盾，依赖回退为正典**。t2 唯一 FAIL = M1 变异与门的目的互斥：cargo audit 的 ignore 只能压制**树上存在**的 advisory，ignore 被回填后「RUSTSEC-2026-0381 重新出现」恰证明树上仍有该 advisory（即门已在守它），变异自证不能作为判据。**正典变异 = 依赖回退**：Cargo.lock 的 webpki-roots 1.0.10→1.0.9 ⇒ cargo audit 报 1 vulnerability、RUSTSEC-2026-0381 复现、exit 1——t2 已实测红（变异写成 Cargo.lock 补丁、trial 机械还原，验证轮产出），本轮不重跑。**判据口径登记两条**：①audit 门的变异形态 = 依赖回退，非 ignore 回填；②cargo audit 输出确定性受本地 advisory DB 异步更新影响，判据口径固定时须声明 DB 时点。
+
+> **四、t3 minor ×2：已推送迁移笔 `a2177186` 的口径更正（09a 承载，提交不改写）**。①lock 纪律「51 行变更逐行核对」→ 口径为**非空变更行**：git numstat 为 32 增 / 22 删 = 54 变更行，其中 3 行为纯空行（2 增 1 删），非空 = 51（本笔以 `git show a2177186 -- Cargo.lock` 逐行复算）。②windows-sys「五包去重」→ 分类措辞更正：0.52.0→0.61.2 的 5 处变更是**依赖引用行**的重解析——迁移前 lock 已同时存在 windows-sys 0.52.0 与 0.61.2 两个包条目（`git show 773b54db:Cargo.lock` 实证），迁移后包集不变（仍两版本并存：ring 的 ^0.52 要求保留 0.52.0，rustix 的 >=0.52,<0.62 统一到 0.61.2）——是「重解析统一到迁移前已存在版本」，非「升级到新版本」。③fmt「净」→ 按提交文件口径成立、全仓 --check 口径不成立：迁移笔 8 文件全在 workspace 内、根 `cargo fmt --check` exit 0（本笔实测）；tools/type-tables（独立 crate，不在 workspace members）的 src/scan.rs 有一处 import 排序漂移（最后一次改动 2026-11-01 提交 `56654352`，距今 18 天，非本批引入；在 tools/type-tables 内 `cargo fmt --check` exit 1 实测）——既有欠账本批不修，登记待顺修。
+
+> **五、验证与移交**：本轮改动集 = src/std/net.rs、src/std/tests/net.rs（+2 锚）、tools/yx/src/dl.rs、tools/yx/src/tests/dl.rs（+1 锚）、本节。定向验证实测：`CARGO_BUILD_JOBS=2 RUST_TEST_THREADS=1 cargo test --lib std::tests::net -- --test-threads=1` 修前 6 通过 1 失败 → 修后 7/7 绿；`CARGO_BUILD_JOBS=2 RUST_TEST_THREADS=1 cargo test -p yx tests::dl -- --test-threads=1` 修前 10 通过 1 失败 → 修后 11/11 绿。全量门禁（fmt --check / markers --check / CI 四脚本 / 错误码生成器幂等 / clippy 全量 -D warnings / IR 快照比对 / integration 全量 / testsuite fast / 语料差分比对）由脚本统一跑，不在本节下结论。收口笔回填完成：WBS 3.20.36 行 + 三级计数（249→250）+ 修复笔推送终态 `92418ceb` + R1 的 env 代理设计裁决 issue [#571](https://github.com/ChenXu233/YaoXiang/issues/571)（甲维持禁用推荐）+ issue [#489](https://github.com/ChenXu233/YaoXiang/issues/489) 关闭（证据评论）；R2 重试面裁决四件套留本节二待用户裁决。
+
+> **六、env 代理终局（#571 修正裁决，由 571 跟随批落笔）**：用户 2026-11-20 修正裁决（issue [#571](https://github.com/ChenXu233/YaoXiang/issues/571) 的第二条裁决评论，取代同日早前「甲维持禁用」的关闭评论）：**0.x 不做任何 2.x 兼容（未发版不堆兼容层），直接跟进 ureq 3 默认**——本节一按「保持既有行为」落下的两处代理禁用构建参数（ConfigBuilder 链上的 `.proxy(None)`，src/std/net.rs 的 ureq_agent 与 tools/yx/src/dl.rs 的 http_agent）删除，环境代理行为跟随 ureq 3 默认（`Config::default()` 即含 `Proxy::try_from_env()`，读取 HTTP_PROXY/HTTPS_PROXY/ALL_PROXY/NO_PROXY 等标准变量集）；两处 agent 契约注释与两个测试文件模块头按新契约就地改写不留对照（理由错误的旧注释不保留）。D59 分类 = **D 类**（设置代理变量的环境下原先直连成功的程序改走代理），由用户裁决覆盖。先红后绿 = honoring 钉翻面：原「忽略环境代理」钉（std::tests::net 与 tools/yx tests::dl 各一条，ignores 命名）改名为「死代理必败」形态（uses_dead 命名）——子进程形态不变：清空全部 8 个代理变量后注入 HTTP_PROXY=http://127.0.0.1:1 死代理，目标为本地 TcpListener 活端口（直连本可成功），断言 http_get / get_text 必败、直连成功即钉红。红态实测：禁用在位时两侧子进程分别 `Ok(Dict(...))` / `Ok("ok")` 直连成功而红；删除后定向 7/7 + 11/11 全绿。变异预演：把禁用参数加回 ⇒ std 侧钉红（兼容层回归即被抓），机械还原后复绿；对照钉（清空代理变量直连成功）保持原样两轮全绿。重试面裁决（本节二候选 a：跟随 3.x 无内建重试）不变零动作。
+
+## P3 3.21.5 收口（#509 五残留收账 + dce 单元测试重锚，2026-11-20）
+
+> **一、范围与终态**：issue [#509](https://github.com/ChenXu233/YaoXiang/issues/509) 的五项收账（3.21.2 / 3.21.4 收口时登记的遗留面）+ 附带 dce 单元测试重锚笔。D59 分类不适用——文本面机制迁移与判据收敛，行为语义不变（zh 输出逐字节保真，语料 402/402 零漂移 t1 与 t2 双实测）。推送终态三笔：重锚笔 `a928a2b8`（test(middle)）+ 残留批 `0e99ff10`（chore(util)，19 文件）+ 模块头注释同步 `0d4f00f6`（docs(middle)，t3 info）。三级 +1 = 3.21.5（250→251）；二级不变。issue [#509](https://github.com/ChenXu233/YaoXiang/issues/509) 关闭（证据评论）。
+
+> **二、坐标重定位（如实登记）**：issue 坐标为 2026-10-25 口径，7.0 搬移与 6.9 批后漂移，全部按语义重定位（t1 查证）。①verdict.rs「无法证明」全树零命中——该残留已被 6.9 批吸收，登记关闭（非实现者漏做）；②`src/frontend/proof_execution.rs`（7.0 搬移后新家）实存中文四处：:100/:110 为用户可见诊断面（已迁 per-site 键）、:376/:400 为内部 Err 文本（`format!("证明函数 '{}' 未在 AST 中找到")` 等，登记不迁移）；③E1002 expected 两处并非逐字相同（表达式臂带「或实现对应算术接口」后缀——常量只收公共基文，输出逐字节不变）。
+
+> **三、编号对账（t3 low 更正——跨文档编号不可解析）**：issue 自编号 §1 message/参数位中文、§2 Never 双拷贝、§3 help 键护栏、§4 毒化静默边界、§5 四语言占位；本批代码注释与提交信息使用另一套（①E8001 ②E4018 constraint ③E1002 参数 ④Never ⑤护栏 ⑥键集对账）——同一「⑤」在提交信息（毒化）与代码注释（护栏）指向不同对象，且都与 issue 编号不符。**以 issue 编号为准的对账表（本节为唯一可解析映射，提交已推送不改写）**：§1 = 处置①（builder.rs E8001.span_missing.* 迁移，effective_span 收窄为 Err(()) 不携文案、debug panic 与 release 降级同源渲染）+ 处置②（proof_execution.rs E4018.proof_false.constraint / proof_error.constraint，func/args 作模板参数；{error} 为内部 Err 载荷渲染进 message——t3 精确化：确实用户可见，不迁移是登记的设计面）；§2 = 处置④（共享纯函数 never_short_circuit + 裁决枚举 NeverShortCircuit，fresh var 留调用方——#473 借用冲突教训落实）；§3 = 处置⑤（render_key 整链 miss debug_assert，与 message 缺参 debug panic 策略对称；release 路 None→help 置空省略的既有行为未变）；§5 = 处置⑥（四语言 13 平键补真翻译；**口径更正**：迁移前英文占位 = 9 键 = 5 per-site help + 4 E4018 段键，本批另新增 4 键 = 2 个 E4018.*.constraint + 2 个 E8001.span_missing.*，总 13）；§4 = 不修（毒化静默边界为 #469 甲案已批设计的内在代价）；另 E1002 expected 参数收敛（§1 同族）= 共享常量 E1002_ARITH_EXPECTED（Modulo 臂不收敛——接受集 Int/Float 不同，同一常量承载两接受集才是错）。
+
+> **四、dce 单元测试重锚（coding-rules 7.3 登记）**：test_post_mono_shared_layer_turns_verify_green_after_dce 在 dev HEAD 为既有红（t1 testsuite fast 门禁 exit 101 抓出；A/B 实测 HEAD `6504228a` 即红——git stash 双向验证，非本批引入）。根因 = 并行会话 `75c28a09`（接线 post-mono DCE 并移除 mono 恢复闸，2026-11-18）的设计变更作废旧前提：「post-mono 已按名删掉原件 f → verify 必红」——原件保留后共享层恒有 MakeClosure 引用者、不再成孤儿，pre-DCE verify 由红变绿；该提交 retarget 了 mono 两条闸测试并新增 driver/tests/dce_wiring.rs，未触 dce/tests/mod.rs。按 7.5 顺序判定：红 = 判据错了（前提失效），非实现错了。**修法 = retarget 不删**（75c28a09 自身对 mono 闸测试的 retarget 先例）：test_post_mono_dce_removes_mono_retained_originals_and_keeps_instances 钉住现架构不变量——pre-DCE：mono 保留原件与共享层（has(f) + has(__f_l0)）且 verify_loose 自洽绿（mono 只生成不删除；**#542 类孤儿缺陷在现架构下唯一的单元级观察点**——接线测试只看 DCE 后终态，DCE 会把孤儿静默清掉，生产入口测试无法区分谁删的）；post-DCE：原件与共享层恰被删、实例与克隆保留、verify 绿、report.deleted 归因闭合、assert_references_closed。旧测试后态断言全部保留，前态断言由「必红」换「必自洽 + 原件在表」——断言总数不减且新增两条，非放宽。判据门 = 病史（#542 / #542-D3）+ 证明门，写进测试头注释。先红后绿：旧测试现架构下两次实测红；新测试首跑 1 passed；重锚后 gate 原命令复跑两次 exit 0（lib 1906 / integration 408 / formatter_integration 52 / yx_runner 2 / yx_multifile_runner 1）。夹带登记（t3 info）：a928a2b8 内 src/driver/tests/dce_wiring.rs 一处纯 import 排序换位（无语义差异，提交信息未提及——粒度瑕疵备案）；模块头 doc「红→绿」漏同步一行由 `0d4f00f6` 更正。
+
+> **五、验证链**：t1 两轮（第 1 轮 11 门禁绿 + testsuite fast 抓既有红 → 根因定位与重锚 → 第 2 轮 14 门禁全绿）→ 队长 diff review + 按理由拆两笔提交（重锚笔 / 残留批——一笔一个理由）→ t2 **PASS**（批次树量测：六组锚复测全绿——codes.rs 键集对账与渲染断言 / proof_execution 单元锚 / inference 判据 pin / 重锚后 dce 测试 / diagnostic_i18n CLI 子进程锚（YAOXIANG_LANG 钉语言）/ 四语言无英文占位对账；三变异敏感性 M1（E1002_ARITH_EXPECTED 改字 ⇒ statements 臂锚红）/ M2（never_short_circuit 左右臂对调 ⇒ 判据 pin 红）/ M3（六文件删 E8001.span_missing.message 键 ⇒ debug_assert 断言红）trial 机械可逆 + 还原后 build + 树 CLEAN；重锚核账旧名全仓零命中；IR 快照与语料差分零漂移）→ t3 **APPROVE**（1 low + 5 info 全部口径级，处置见三、四段；实体内容零正确性问题）→ 收口笔（本节）。批次树已 release + gc。
+
+## P3 3.6.6 收口（#494 三处「限定名指向什么」判据收敛，2026-11-20）
+
+> **一、范围与终态**：issue [#494](https://github.com/ChenXu233/YaoXiang/issues/494)（2026-10-22 登记，3.6.5 批次复审的禁令三扫描引出）。行为不变重构（D59 分类不适用）——IR 快照与语料 402 行零漂移（t1/t2 双实测）。推送终态两笔：`480a00b7`（refactor(frontend)，8 文件 +615/−93）+ `c27aa3fa`（test(frontend)，AAA 注释笔，t3 low）。**三级计数不变**（3.6.6 已计入 2026-10-22 的 +5 登记）。issue [#494](https://github.com/ChenXu233/YaoXiang/issues/494) 关闭（证据评论）。
+
+> **二、收敛形态（三臂差异表为不可合并的实证）**：收敛前该判据三处各答一次——原生名判定（registry::is_native_name）/ 命名空间臂（lower 侧 registry.symbols().def + DefKind 分派）/ 别名判据（lower 侧 qualified_export_is_code，#479 引入、#493 改导出粒度）；拆名机械面在 4 处各写一份（rfind 与 rsplit_once 并存、语义等价同取末点）。收敛为**关注面参数化接口** `ModuleRegistry::qualified_name_is(qualified, QualifiedNameConcern)`：三变体 NativeName / FunctionCodeExport / FunctionOrMethodDef 各自保真原臂语义——**三变体不是同一谓词的别名**（对同一形态答案可相反：native 函数导出 std.io.println = 是/否/是；native 常量 std.math.PI = 是/否/否；纯 yx std 函数 = 是/是/是；用户函数 lib.greet = 否/是/是；方法 def = 否/否/是）——合并成单一布尔属行为变更，调用点按关注面传参。拆名机械面收拢为唯一基底 `split_qualified`（文档注明与 resolve_export 语义不同不可互替）；is_native_name 与 qualified_export_is_code 溶解（全仓零残留引用，沿革保留在接口文档）；同族 is_yx_std_export / is_native_fn_export（#493/#492 出生即单点）同批改走基底。数据面差异如实登记：A/B 在模块表 + 导出面（B 叠加 #493 导出粒度 yx 集），C 在项目符号表 intern 面——三臂是同一问题的三个关注面而非同一谓词的三次抄写。
+
+> **三、坐标重定位与穷尽搜索**：issue 坐标为重构前口径（src/middle/core/ir_gen.rs），7.0 搬移后按语义重定位——`lower/query.rs:359`（qualified_export_is_code）/ `expr/access.rs:35`（消费）/ `registry.rs:270`（is_native_name）；is_native_name 消费 4 外部（query.rs:901、access.rs:53/:209/:301）+ 1 内部组合（is_native_fn_export，#492 出生即组合体非复制品）。第四处同行为副本穷尽 grep 零命中（is_native_name / qualified / has_export / resolve_export / ModuleSource::Std / DefKind / rsplit_once+rfind / symbols().def 八类模式）；相邻**不同**行为三处正确不收敛：query.rs is_type_export（类型域归属走既有 resolve_export）、semantic_tokens.rs:76（L1 IDE 着色）、checker.rs:4037（use 根分类）——「同一行为 ≥2 处复制」判据不命中。
+
+> **四、锚与变异**：8 条面板 pin（registry 形态矩阵 3 条——10 形态 × 3 关注面全矩阵；lower 消费臂 4 条——命名空间常量零参 Call / 别名常量零参 Call / 原生函数 Load NativeFn / 方法 def MakeClosure；query 臂序 1 条）。三变异 **trial 正典**（t2 批次树机械可逆）：M1 FunctionCodeExport 摘 yx 析取 ⇒ 面板 FunctionCodeExport 列红 + alias_fn_value 红、其余列绿（面间独立性）；M2 拆名基底改首点分割 ⇒ 5 pin / 3 文件同红（同源接线证明；query 2 pin 不经嵌套拆名正确保持绿）；M3 FunctionOrMethodDef 摘 Method ⇒ def 面 pin 红。**如实登记两条**：①别名路由下 NativeName 变异不可观测（别名兜底臂发出同一条零参 Call）；②std.result 的 Try 方法不 intern（register 的 surface-merge 分支 def=None → E3005）为既有行为，不在收敛面。P1/P6 复测：标签出自外部批次复审报告、仓库内无定义，按语义映射——P1 捕获函数 = nested_fn_capture 9/9、P6 泛型函数 = alias_fn_value 1/1、#479 三转钉 = fn_value_call 10/10，收敛前后均绿。
+
+> **五、验证链**：t1 一轮全绿（14 门禁；变异预演为主树自查形态，t2 在批次树以 trial 正典重做）→ 队长 diff review → 提交推送 `480a00b7` → t2 **PASS**（六组锚复测 + 三变异 trial 机械可逆 + 溶解核账旧符号零残留 + IR/语料零漂移 + 卫生）→ t3 **APPROVE**（2 条：面板三测试 AAA 合并段 low → 注释笔 `c27aa3fa` 循环体内拆显式 // Act 与 // Assert；动态量测声称归 t2 的 info 分工说明）→ 收口笔（本节）。批次树已 release + gc。
+
+## P3 3.18.3 收口（#506 两条短名派发臂同经唯一判据，2026-11-20）
+
+> **一、范围与终态**：issue [#506](https://github.com/ChenXu233/YaoXiang/issues/506)（2026-10-25 登记）。行为不变收敛（D59 分类不适用）——可达路径上判据改写与 qualify_names 终点一致，IR 快照/语料 402 行零漂移实测。推送终态一笔：`e09c38e1`（refactor(middle)，4 文件，含钉测试新家 driver/tests/short_name_dispatch_pins.rs）。**三级计数不变**（3.18.3 已计入 2026-10-25 的 +2 登记）。issue [#506](https://github.com/ChenXu233/YaoXiang/issues/506) 关闭（证据评论）。
+
+> **二、可达性前提复测（修正 issue 两处，如实登记）**：①to_string 臂对**基础类型可达**——带类型信息实参 → `int.to_string`（std/convert.rs 原生注册）；裸字面量 print(42) 无类型信息走默认处理臂；issue 的「不可达」仅对用户结构体成立，机制 = MonoType::Struct.methods 在全部推断构造点恒为空表，type_implements_stringable 对用户结构体恒假。②Try 臂**非别名导入今天可达**且终点名已限定（qualify_names/resolve_call_target）——#465 同族错派面不可达的前提精确化：别名导入（use lib.{Maybe as MaybeB}）被 E1082 挡（expr.rs:2842；operator_interfaces.rs:403 按定义侧类型名键控）、同名非别名导入被 E5006 挡、**撞本地绑定形态被 E5008 挡**（statements.rs:408-415——t3 low 更正：提交信息只列 E5006 属措辞不完整，三形态都是硬错，错派面不可达的结论不变，本节承载更正）。③call.rs:715-760 判定：已是 3.18.1 收敛形态，不在本批面。
+
+> **三、修法（两臂最小接入）**：call.rs 零开销臂短名拼好后经 `method_dispatch_name`（print 实参为接收者）；op.rs Try 四方法链在 std 方法绑定映射后逐名经 `method_dispatch_name`（? 操作数为接收者）——与 call.rs:760 既有收敛臂同构；短类型名是裸名义名（#465 同族），接收者类型经导入面（含别名）引入时按定义单元限定，基础类型/本单元类型原样返回。E1082 与 type_implements_stringable **未被放开**（放开属 D59 裁决面，本批纪律）。
+
+> **四、锚与变异**：钉测试 6 条（新家 driver/tests/short_name_dispatch_pins.rs）——钉① test_print_user_struct_with_to_string_keeps_fallback_repr（临时让 Stringable 对 Struct 返回 true ⇒ FAILED 零开销臂产出 Point.to_string → 机械还原回绿）；钉② test_aliased_imported_user_try_type_rejected_by_e1082（临时让 query_try_impl 别名感知 ⇒ FAILED → 还原回绿）；对照 4 条（基础类型 int.to_string / 同单元 Try 终点名 main.Maybe.*/ 非别名跨单元 Try 终点名 lib.Maybe.* / ? 载荷值断言 Int(5)）钉住收敛零漂移；既有 method_dispatch 10 条 #465 守卫无回归。t2 三变异 **trial 正典**：M1/M2 = 前提钉敏感性（分别重演钉①②的红态）；M3 = **接线证明**——method_dispatch_name 基础类型透传臂加 mangling ⇒ 对照钉 int.to_string 红 + 既有 method_dispatch 单元测试红 + 非别名跨单元 Try 终点名钉红（判据改动传导两臂输出；若某臂本地拼名绕过判据则其 pin 保持绿 = 接线缺口暴露——实测无缺口）。
+
+> **五、验证链**：t1 一轮全绿（14 门禁）→ 队长 diff review（两 hunk 最小、接收者选择正确）→ 推送 `e09c38e1` → t2 **PASS**（四组锚复测 + M1/M2/M3 trial 机械可逆 + 等价性 + 卫生，全部量测项实跑无未跑项）→ t3 **APPROVE**（1 low = E5006/E5008 措辞更正，本节二承载）→ 收口笔（本节）。批次树已 release + gc。
+
+## P10 S9.2 收口（#474 MonoType 类型子节点枚举单源化，2026-11-20）
+
+> **一、范围与终态**：issue [#474](https://github.com/ChenXu233/YaoXiang/issues/474)（2026-10-18 登记，发版前审计的抽象化收口组）。行为逐字节不变重构（D59 分类不适用）。推送终态两笔：`1aaeb3c5`（refactor(frontend)，3 文件 +731/−118）+ `d459b07f`（test(monomorphize)，zip 长度守卫笔，t3 low）。**三级计数不变**（S9.2 已计入 2026-10-18 的 +12 登记）。issue [#474](https://github.com/ChenXu233/YaoXiang/issues/474) 关闭（证据评论）。**无决策存量 issue 队列至此清零。**
+
+> **二、收敛形态与边界扩展（队长追认登记）**：新增 `MonoType::type_children()`（Vec 形态）作为「哪些字段是类型子节点」的唯一定义——22 变体穷尽 match、无 `_` 兜底臂（新增变体编译器报错指路 = issue 验收「编译器能指路」的实现机制）。三处消费收敛：①type_name（mono.rs 渲染器）类型子节点臂走 walker；②type_name_hash（instance.rs 哈希器）类型子节点走 walker、ConstValue/Name/DerivedHash 三哈希特有帧留本地（issue 纪律「两函数不合并」保持）；③**clone_deep 的私有辅助 type_subtree_children 收敛删除**——它是子节点枚举的第三份手写副本且带 `_` 通配臂（恰是 issue「漏改不报错」的病灶、禁令三 A 违规面），实现者上报、队长追认：臂面与顺序逐变体核对等价 + clone_deep 257+30 测试全绿 + 快照/语料零漂移，保留即与单源化目标矛盾。两函数本身未合并（渲染 vs 哈希语义不同，issue 纪律）。
+
+> **三、预核偏差修正（如实登记）**：①变体数实为 22（队长预核写约 30+）；②issue/预核声称「两函数都有兜底臂」不符——type_name_hash 22 显式臂无 `_`、type_name 穷尽（Generic 无 guard 臂收尾），带 `_` 的是第三副本；「漏改不报错」的实质在臂内子节点面，walker 单源 + pin 双保险兜住；③walker 取 `Vec<&MonoType>` 形态而非回调 for_each_type_child——显式栈两遍历器压栈均需逆序，回调形态迫使二次收集反而多一层间接；位置约定（Fn/DepFn return_type 恒尾、AssocType host 恒首）写入 walker 文档并由 pin 兜底。
+
+> **四、硬判据与变异**：输出逐字节不变三方证实——45-case 渲染/哈希双 pin（**抓取纪律**：动第一行前抓基线；PinHasher FNV-1a 规避 DefaultHasher 跨 rustc 版不稳定；经 pub 入口 SpecializationKey::hash 驱动——type_name_hash 私有不可直接见；**pin 先在未重构代码上验证绿**证明期望值来自重构前实现）+ IR 快照零漂移 + 语料 402 行零漂移。过程证据：AssocType 臂初稿漏写 `"assoc_type".hash(state)` ⇒ pin 当场红 ⇒ 补实现不改判据。稀见变体对照入库（LibraryRef/ExternRef/MetaType 渲染与哈希分歧——type_params 只进哈希；Generic String 实参被渲染忽略但进哈希；Struct 复合载荷 fields 不进哈希/渲染）。t2 三变异 **trial 正典**：M1 walker 跳 Union/Intersection ⇒ 渲染 pin 红 + 哈希 pin 红（两遍历器接线证明）且 **IR 快照绿——盲区证实**（语料面无 Union 类型名渲染位，实现者如实登记、t2 独立证实，pin 补位）；M2 跳 Generic 实参 ⇒ 双 pin 红 + 快照红；M3 AssocType host 移尾 ⇒ 顺序 pin 红（位置约定由 pin 兜底的证明）。
+
+> **五、验证链**：t1 一轮全绿（14 门禁）→ 队长 diff review（walker 穷尽性 + 第三副本收敛追认）→ 推送 `1aaeb3c5` → t2 **PASS**（五组锚复测 + 三变异 trial 机械可逆 + 溶解核账 type_subtree_children 零残留 + 等价性 + 卫生；运维注记：scratch.py init/build/release 须从主树 cwd 调用，trial 子命令不经 shell）→ t3 **APPROVE**（1 low = 双 pin zip 静默截断隐患 → `d459b07f` 两处循环前补长度相等断言；2 info = 提交信息行号为父提交口径注记 / 动态声称归 t2 且 pin 抓取锚点静态自洽——父提交 0b1cee05 仅改 en 镜像 docs，src 与 a60a93cb 等价）→ 收口笔（本节）。批次树已 release + gc。
+>
+## P2 2.1.4 收口（2026-11-20）：内层隔离判据按槽身份重写
+
+> **现象与登记**：post-mono `verify_loose` 在 `tests/yaoxiang/03-modules/native_fn_member_value.yx` 与 `tests/yaoxiang/03-modules/pureyx_export_fn_value.yx` 上各报 1 条 `InnerIsolation`——`main` 与 `std.json.parse` 的具名局部名交集 `["r"]`。2026-11-19 随 #542 接线轮登记为 2.1.4：接线前即红、非 #542 族。
+>
+> **一、先证后改：定性为判据假阳性**（两个生产入口都复现：单文件 `Compiler` 与多文件 `compile_project`，各 1 条；函数/指令面 fns=56 instrs=2291 与 fns=24 instrs=1492）。四条身份证据：
+>
+> 1. **槽号不同**：同一个 `r` 落在三个不同槽——`main` 的两份分别是 outer@2 与 outer@1，`std.json.parse` 的 `r` 在 inner@7。
+> 2. **两表互不为前缀**：逐槽 (name, ty, scope_depth) 比对为假。真泄漏的形态是同一张槽位表被复用（下述 M1/M2 变异实测：泄漏时同槽号同名恒为真）。
+> 3. **`std.json.parse` 的槽表是它自己的声明序**：`s`（参数）→ `cs` → `i` → `rv` → `e` → `r` → `end`，与 `src/std/json.yx` 的 `parse` 体逐条对应；低槽区没有任何 `main` 的名字。若父帧泄漏，`main` 的 `p`/`q`/`r`（或 `f`/`r`/`j`）会以原槽号出现在 `parse` 表里。
+> 4. **目标身份是模块级声明**：`MakeClosure{func: "std.json.parse", env: [], def: Some(DefId)}`；两文件的函数表 56 项里没有任何 `closure_*`，`main`(#0) 与 `std.json.parse`(#4) 是同层兄弟。`env: []` 不构成判据——真嵌套闭包也可以 env 为空（探针实测）。
+>
+> **根因**：`MakeClosure` 在本仓是**函数值的一等表示**（`lower/expr/access.rs` 的 `emit_module_export_value` 三条路径共用；另有 `lower/curry.rs` 的柯里层与 `lower/expr/closure.rs` 的真闭包）。旧判据把「函数值引用」当成「词法嵌套」反推父子关系，于是任何被作值引用的顶层具名函数都进了比较面——判据的关系推断前提本身失效。
+>
+> **二、修法**：`LocalSlot` 增 `origin: Option<FrameId>`（生成帧身份）。帧号的唯一发放点是 `lower/scope.rs` 的 `NestedBodyGuard::enter` / `enter_decl`（7 处嵌套函数体入口全部经它），`register_local` / `take_cur_locals` 就地盖戳（覆盖已有槽时重盖本帧）。不变量 7 从「MakeClosure 反推嵌套 + 具名局部名交集」改为**函数内不变量**：一张槽位表里出现的生成帧至多一种（`None` 不计）；模块初始化序列（帧 0）同判据。嵌套推断整体删除。
+>
+> **三、判据更强而非更弱**（本项验收核心）：
+>
+> | 判定面 | 旧判据（名字交集） | 新判据（帧身份） |
+> | --- | --- | --- |
+> | 名字重用（同一源码名、两个独立声明） | 红（假阳性） | 绿 |
+> | 内层同名复用旧槽号 | 红（假阳性） | 绿 |
+> | 内层表混入外层帧槽（真泄漏） | 红，但只在名字撞上时 | 红 |
+> | 无名 temp 槽泄漏 | 看不见（按名过滤） | 红 |
+> | 外层表被清空型泄漏 | 漏报（名交集的外侧为空） | 红 |
+> | 模块初始化序列混帧 | 不在检查面 | 红 |
+> | 是否依赖 `MakeClosure` 站点存在 | 是（无站点即跳过） | 否 |
+>
+> 判据未被放宽的证据（独立复核）：生产管线注入真泄漏后同轮全语料清点——旧判据 12 个语料文件红、新判据 61 个红，**旧集是新集的真子集**（缺失 0、新独占 49）；反向泄漏（`Drop` 不还原父帧表）同样 61 个。不变量本身未删、未降级、无白名单：唯一的「豁免」是 `origin: None`，而生产侧只有 `register_local` / `take_cur_locals` 两条产生路径，两者都盖戳。
+>
+> **四、负控与定向回归（入库 7 条 + 1 条 DCE 侧替补）**：
+>
+> - `test_inner_isolation_foreign_frame_slot_rejected`：双帧一表必红，且断言被测 IR 内**没有任何 `MakeClosure`**——证明判据已脱离嵌套推断。
+> - `test_inner_isolation_inherited_outer_slot_rejected`：内层表继承外层帧槽必红，且违规归属混入帧的那张表（不是外层）。
+> - `test_inner_isolation_same_local_name_across_frames_pass` / `test_inner_isolation_independent_functions_same_local_name_pass` / `test_inner_isolation_lifted_lambda_for_var_name_reuse_pass`：三类假阳性形态必绿；其中同名用例带「只改外层局部名」的对照夹具，钉住「结论不取决于名字」。
+> - `test_inner_isolation_nested_lambda_frames_isolated`：真闭包与外层各自一帧必绿，且断言夹具真的生成了 `closure_*`（防空转）。变异实测：把 `NestedBodyGuard::enter` 改成「保存但不清空」或「不保存」，本测试各以 exit 101 失败，机械还原后重建转绿。
+> - `test_inner_isolation_library_fn_as_value_post_mono_pass`：两语料本体（`include_str!`）直驱生产入口后 post-mono 必绿。
+> - DCE 侧替补：`test_orphan_shared_layer_without_site_is_dominance_red`（直构无 `MakeClosure` 站点的共享层 ⇒ 支配性红），承接同批退役的 #542 陈旧红侧断言。
+>
+> **五、红面 2→0**：三种独立探针口径一致——本项 232 个走通文件（fns=5826 instrs=104939）修复前 `InnerIsolation` 2 条、修复后 0 条且其它不变量 0 条；独立验证探针 257 个文件 2→0；另一路复核探针 250 个文件 2→0。数字差异来自各探针的编译成功集合不同，红面结论一致。
+>
+> **六、基线与 e2e**：语料差分 402/402 零 diff；IR 快照 232 条 zero-diff（`normalize` 不打印 `origin`）；`.42` 无格式变更（`LocalSlot` 无 serde，字节码只带 `local_names`），两目标语料的 `.42` 与 `dump` 输出两版逐字节相同；两语料 CLI `run` 两版一致（stdout 13 字节 `member hello\n`、stderr 空、exit 0）。门禁：`cargo fmt --check`、`clippy --all --all-features --all-targets -- -D warnings`、`testsuite run fast`（2359 条 0 失败）、五项 CI 文档与边界检查全 exit 0。
+>
+> **七、偏差登记（流程面，与本次红测试同一根因）**：#542 收口笔 `75c28a09` 同时带进两件东西——(a) 使 `test_post_mono_shared_layer_turns_verify_green_after_dce` 的两条前提失效（`build_output` 不再按泛型名删原件、恢复闸删除 ⇒ 原件 `f` 留在表里且 `__f_l0` 的 `MakeClosure` 站点仍在，`verify` 的 env 槽数反推成立 ⇒ 删除前不再红），(b) `src/driver/tests/dce_wiring.rs` 的 1 行 import 顺序漂移（`cargo fmt --check` 在 `ae47df55` 上本就红在这一行）。可判定事实：`75c28a09` 之后到 `ae47df55` 之间**没有任何一笔改动 `src/**/*.rs`**（区间内全是 docs / 自动翻译 / `chore(bench)[skip ci]` / 依赖清单），而 pre-commit 的 Rust 钩子按 `types: [rust]` 触发 ⇒ `fmt` 与 `fast` 再没在任何最终版上跑过。不可判定项：git 不记录钩子执行结果，无法从仓库判定当时是 `--no-verify`、`SKIP=<hook>` 还是钩子未生效。处置：`f95883fc` 退役两条陈旧断言（改成断言新形态：mono 保留原件 `f` 且 `f` 仍持有 `__f_l0` 的站点）并补直构红侧负控，`fmt` 漂移同笔机械修正；其余绿侧断言全部保留。**建议**（未落规则）：把「docs-only 提交之前的最后一个 Rust 提交」列为必须人工跑一次 `fmt` + `fast` 的检查点。
+>
+> **八、提交与归口**：`f95883fc`（测试自洽：退役 + 负控 + fmt 漂移）、`53d5291d`（判据按槽身份 + 7 条负控/回归）、本笔（09 勾选与本文收口）。`LocalSlot.origin` 属 `ir.rs` 结构变更，归口 WBS 7b.1b（独占 commit / C4），需在 7b.1b 落地时一并计入。
+
+## P7 7b.1a 契约（`Operand` 变体收敛 + `Instruction::Phi` 引入，2026-11-19）
+
+> 计划见 [09](./09-execution-wbs.md) §P7 7b 表 7b.1a 行；设计依据 [04](./04-ssa.md) §目标设计（`Operand` 变体 / `Phi` / 值标识）与 §IR 结构变更的连锁影响。本段在动工前写下改动面、占位与回滚点；实测数字取 7b.1a 契约笔之前的冻结 revision（RFC-010b 规范回写之后的那一笔 HEAD，`git grep -n`，行号以该 revision 为准）。代码按本段落地，收口轮在本文件追加实测与偏差。
+
+### 一、全仓 `Operand` 构造点 / 匹配点实测
+
+**定义**（`src/middle/ir/ir.rs:20-28`）：7 变体 `Const(ConstValue)` / `Local(usize)` / `Arg(usize)` / `Temp(usize)` / `Global(usize)` / `Label(usize)` / `Register(u8)`。
+
+**三个死变体（本批删除）**：`Operand::Temp|Label|Register` 全仓 **11 处匹配臂、0 处构造点**（与任务书初查一致），逐处：
+
+| # | 位置 | 当前形态 | 处置 |
+| 1 | `src/middle/ir/normalize.rs:79` | `Operand::Local(n) \| Operand::Temp(n)` 渲染 | 收敛为 `Local(n)`（`Temp` 0 构造点，输出不变） |
+| 2 | `src/middle/ir/normalize.rs:82` | `Operand::Label(n)` 渲染 | 删臂 |
+| 3 | `src/middle/ir/normalize.rs:83` | `Operand::Register(n)` 渲染 | 删臂 |
+| 4 | `src/middle/ir/verify.rs:384` | `Local \| Temp` 槽位越界分类 | 收敛为 `Local` |
+| 5 | `src/middle/ir/verify.rs:770` | `if let Local \| Temp` 定义点收集 | 收敛为 `Local` |
+| 6 | `src/middle/ir/verify.rs:776` | `if let Local \| Temp` 使用点收集 | 收敛为 `Local` |
+| 7 | `src/middle/ir/verify.rs:916` | `Local \| Temp` 参数槽类型查询 | 收敛为 `Local` |
+| 8 | `src/middle/passes/codegen/operand.rs:39` | `Operand::Temp(id)` 解析为 u8 槽 | 删臂；`Value` 臂改为显式诊断（§三 占位 2） |
+| 9 | `src/middle/passes/codegen/operand.rs:75` | `is_register` 的 `Local \| Temp \| Arg` | 收敛为 `Local \| Arg`（`Value` 待 7b.2 纳入，§三） |
+| 10 | `src/middle/passes/mono/mod.rs:844` | `if let Local \| Temp` 擦除期物化判据 | 收敛为 `Local` |
+| 11 | `src/middle/passes/mono/mod.rs:899` | `Local \| Temp` 槽位重排 | 收敛为 `Local` |
+
+变体定义行 `src/middle/ir/ir.rs:24`（`Temp(usize)`）、`:26`（`Label(usize)`）、`:27`（`Register(u8) // Added for codegen`）删除。
+
+**同名非同物（不删）**：`src/middle/passes/codegen/flow.rs:248` 的 `Storage::Temp(usize)` 是符号表存储位置枚举，不是 `Operand`；`src/middle/bytecode/mod.rs:57` 的 `Label(pub u32)` 是字节码跳转标签。两者都不在本批改动面。
+
+**保留变体实测规模**（`src/` 全量含测试，`git grep -c` 按文件求和）：
+
+| 变体 | 文件数 | 命中数 | 本批处置 |
+| --- | --- | --- | --- |
+| `Const` | 33 | 137 | 不变 |
+| `Local` | 29 | 414 | 不变；与 `Temp` 的联合臂收敛后语义不变 |
+| `Arg` | 8 | 11 | 不变（函数入口的隐式定义，04 §243） |
+| `Global` | 17 | 27 | 不变 |
+| `Value(ValueId)` | 0 | 0 | **新增**；生产构造点 0，匹配点仅下列表示面 |
+
+**`Operand` 穷尽 match 全仓仅 1 处**：`src/middle/ir/normalize.rs:78` 的 `fmt_operand`（加 `Value` 臂）。其余操作数匹配都带通配臂：`codegen/operand.rs:30`、`ir/verify.rs:383` 与 `:915`、`codegen/translator.rs:728`、`mono/mod.rs:898` 的回调、`lower/query.rs:928`。
+
+### 二、`Instruction::Phi` 引入后的穷尽 match 清单与逐处处置
+
+新增变体：
+
+```rust
+Phi {
+    dst: Operand,                    // 约定：必为 Operand::Value
+    incoming: Vec<(usize, Operand)>, // (前驱 block label, 来自该前驱的值)，按 label 升序
+    span: Span,
+}
+```
+
+本批 `lower/` 不生产 `Phi`（生产构造点 = 0）。`incoming` 升序由构造方保证、`verify_ssa` 检查、`normalize` 渲染前再排序。全仓对 `Instruction` 的穷尽 match 共 6 处，逐处处置：
+
+| # | 位置 | 处置 |
+| --- | --- | --- |
+| 1 | `src/middle/ir/ir.rs:541` `span()` | 加 `Phi { span, .. } => *span` |
+| 2 | `src/middle/ir/ir.rs:631` `for_each_operand_mut()` | 加臂：`f(dst)` 加逐 `(_, op)` 调 `f(op)`（定义位与使用位一视同仁） |
+| 3 | `src/middle/ir/normalize.rs:125` `fmt_instruction` | 加渲染臂：`Phi <dst> <- [<label>: <op>, ...]`；`incoming` 渲染前按 label 升序排序（07 第二层「前驱排序」规则）；`fmt_operand` 的 `Value` 臂按函数内首现序相对化（`Renamer`），不泄漏原编号 |
+| 4 | `src/middle/ir/verify.rs:577` `def_operands` | `Phi { dst, .. } => vec![dst]`（Phi 是 dst 的定义点） |
+| 5 | `src/middle/ir/verify.rs:657` `use_operands` | `Phi { incoming, .. } => incoming.iter().map(\|(_, op)\| op).collect()`（每个输入是使用点） |
+| 6 | `src/middle/passes/codegen/translator.rs:502` `translate_instruction` | **占位**：`unreachable!` 加不变量注释，登记 7b.3 换真翻译（方案 A：展开为 Move 串） |
+
+构造点口径：生产构造点 = `src/` 内非测试模块的 `Instruction::Phi` 值位置构造，落地后以 `git grep` 验证为 0；测试夹具为直驱新臂会在 `src/middle/ir/tests/` 构造 `Phi`（只进测试编译单元，不进入编译器生产路径），逐处登记在收口轮。
+
+非穷尽、逐处确认无需 Phi 臂（通配臂语义正确，不是静默跳过）：`codegen/translator.rs:453` 的 `get_jump_target`（`_ => None`）、`ir/verify.rs:355` 的 `check_jump_targets`（`_ => continue`）、`ir/verify.rs:420` 的 `build_cfg`（`_ => next`，Phi 无控制流效果）、`ir/verify.rs:942` 的 `check_type_consistency`（`_ => {}`，单列于 §三 占位 3）、`util/diagnostic/mod.rs:546/571/579`、`dce/mod.rs:144/160/173`、`driver/arms.rs:1844`、`lower/module_ir.rs:233/438/552`、`mono/mod.rs:582/764/920/1803/1820`，以及各测试文件内的 `if let` / `_` 匹配。
+
+`verify_ssa` 的 Phi 一致性（`src/middle/ir/verify.rs:300-305` 现为注释占位）：本批落两条可判定约束——`dst` 必为 `Operand::Value`、`incoming` 的 label 严格升序（04 三条构造约束 1/2 的构造侧部分），违规报 `InvariantKind::PhiConsistency`；`incoming.len() == 该块前驱数` 与逐输入类型一致依赖值表与块级 CFG（7b.1b），登记于 §三。
+
+### 三、占位登记（每处由哪个批次替换）
+
+| # | 占位 | 位置（本契约时） | 形态 | 替换批次 | 不变量与当前不可达理由 |
+| --- | --- | --- | --- | --- | --- |
+| 1 | translator `Phi` 臂 | `codegen/translator.rs:502` | `unreachable!` 加注释 | 7b.3 | 本批 Phi 生产构造点 0，lowering 产不出 Phi；若到达说明有生产点漏登记，响亮失败优于 NOP 静默错值 |
+| 2 | `OperandResolver::to_reg` 的 `Value` 臂 | `codegen/operand.rs:30` | 显式诊断 `codegen_invalid_operand`，消息点名 7b.2 前不可解析 | 7b.2 | 本批 `Value` 生产构造点 0；7b.2 起 `next_temp_reg` 产 `Value`，届时解析为 u8 槽位 |
+| 3 | `verify_ssa` 的 Phi 前驱数 / 逐输入类型一致 | `ir/verify.rs:300-305` | 违规类别已建，两条判据未落 | 7b.1b | 需要 `values` 值表与块级前驱关系；本批语料无 Phi，不掩盖任何现有违规 |
+
+三处都不新增 `todo!()` / `unimplemented!()`，不做静默跳过或静默错值。
+
+### 四、快照与语料影响预判
+
+- **IR 快照**：零漂移。三个死变体全仓 0 构造点，不出现在任何现有 IR 文本；保留变体渲染文本逐字不变；`Value` / `Phi` 渲染只对新形态生效，语料无 Phi。基线份数 = 232（`src/middle/ir/tests/snapshots/**/*.snap` 实测 232 份；`test_ir_snapshots_stable` 于上述冻结 revision 实测绿）。
+- **语料差分**：402/402 零 diff。本批不改 lowering、翻译与执行，语料产出逐字节不变。
+- **verify**：`verify_loose` 行为不变；`verify_ssa` 只对含 Phi 的 IR 新增结构检查（现有语料无 Phi）。
+- **槽位预算**：不变。`next_temp`、三处语句级回收、`take_body_locals` 均不在本批改动面（分别归 7b.2、7b.4 与 7a.1）。
+
+### 五、测试面与范围
+
+- **直驱测试**：`span()`、`for_each_operand_mut()`（`src/middle/ir/tests/ir.rs`，新建）、`Phi` 渲染（`src/middle/ir/tests/snapshot.rs`）、`verify_ssa` 的 Phi 结构检查（`src/middle/ir/tests/verify.rs`），各一条；先红后绿由落地后的机械变异取证。
+- **inScope**：`src/middle/ir/`、`src/middle/passes/mono/mod.rs`、`src/middle/passes/codegen/operand.rs`、`src/middle/passes/codegen/translator.rs`、`tests/baselines/`、本文件。
+- **out of scope**：`src/middle/lower/`、`src/backends/`、`src/frontend/`、`src/std/`、`tests/yaoxiang/`、`09-execution-wbs.md`、`04-ssa.md`。
+- **D59 错误类型**：无行为变更（表示重塑），不属于 A–F 任何语义修正类：本批不修旧行为缺陷，也不改变原先成功程序的对外表现。
+- **文档欠账登记**：`04-ssa.md:335` 与 `docs/src/en/dev/architecture/04-ssa.md:514` 仍以「`Operand::Register(u8)` 全仓 0 构造点」论证寄存器分配器选型；变体删除后该句成为历史事实陈述。04 不在本批 inScope，登记给后续 P7 收口轮同步（与 7a §七第 8 条同类欠账）。
+
+### 六、回滚点
+
+- 本契约段单独一笔文档提交，先于代码提交。
+- 代码与测试为**独占一笔提交**：`git revert <code-sha>` 整笔回滚 `ir.rs` 形状变更。`Operand` 变体增删波及全仓编译，不可增量回滚（04 §回滚策略），因此不与任何无关改动混笔。
+- 回滚基线 = 本契约提交后的 HEAD；回滚后工作树干净，快照与语料零漂移（本批不产生基线变更）。
+
+## P0 0.4.2 修复轮（`scratch.py trial` 参数形态，2026-11-20）
+
+> 用户 2026-11-20 裁决「现在就修（插队）」：`trial` 的文档形态与 Python 3.12.5 的 argparse 实际行为不一致。跨框（P0 0.4）已获准并入 7b 团队执行；WBS 登记见 [09](./09-execution-wbs.md) §P0 0.4 表的 0.4.2 行（三级计数 252）。本项只改工具 CLI 契约与文档，**不动 trial 的安全语义**。
+
+### 一、复现（改动前：7b.1a 代码笔（rebase 后）的 t1 收口 HEAD，冻结 revision）
+
+批次树 `p7-7b1a-trialargs`（基线 = 上述冻结 revision），补丁 = 验证侧留下的 `patches/m1.patch`（改 `src/middle/ir/ir.rs` 的 `for_each_operand_mut` 的 Phi 臂）：
+
+| 形态 | 命令 | 实测 |
+| --- | --- | --- |
+| 文档形态 | `trial <batch> --patch <m1> -- git status --short` | exit 2；stderr `scratch.py: error: unrecognized arguments: -- git status --short`；树 `git status --porcelain` 为空（未进入 `cmd_trial`） |
+| 命令在前 | `trial <batch> git status --patch <m1>` | exit 0：`已应用变异补丁：src/middle/ir/ir.rs`、`HEAD=b6a27487616a… → 变异后=d445073067d1…`、`命令退出码 = 0`、`apply -R 成功`、`还原后=b6a27487616a… 与 HEAD 一致=是`、`还原后 git status：CLEAN` |
+| 命令在前 + 参数 | `trial <batch> cargo test --lib --patch <m1>` | exit 2；stderr `error: unrecognized arguments: --lib` |
+
+结论：文档写的是唯一能承载任意命令参数的形态，但它不可用；可用形态承载不了带参数的命令。
+
+### 二、修法（两种形态都接受）
+
+`scripts/dev/scratch.py`：
+
+1. 新增 `split_trial_argv()`：`argv[0] == "trial"` 且 `--` 出现在其后时，取**第一个** `--`，把其后 token 收为命令、从 argv 移除；随后才交给 argparse。这样 `--` 不再进入 argparse，其后的 `-`/`--` 参数也不再被误判为 scratch 选项。
+2. `main()` 把预处理结果写回 `args.command`；`--patch` 仍由 argparse 校验（必须写在 `--` 之前）。
+3. `cmd_trial` 删除 `if cmd and cmd[0] == "--"` 死分支（argparse 不会把 `--` 留给位置参数）；把「命令为空」校验前移到 `cmd_trial` 入口（`git apply` 之前），缺命令提示两形态并列并注明「命令不可为空」。
+4. `main()` 检测混用形态（`--` 之前 argparse 已解析出 command 且 `--` 之后又有 command）时报错 exit 2，提示二选一，不静默丢弃任何一段命令。
+5. `trial --help` 增加 `description` + 原始格式 `epilog`（两形态 + 「命令不可为空 / 混用会被拒绝」）与参数 help；文件头 docstring 用法同步。
+
+安全语义未改：干净树检查、`git apply` / `-R`、失败时 `git checkout --` 兜底、逐文件 `hash-object` 对 HEAD blob、还原后 `git status` 非空或 blob 不一致 ⇒ exit 3。命令未能启动时（如命令不存在）`subprocess.run` 抛 `FileNotFoundError` 并如实上抛 ⇒ 进程 **exit 1**，restore 仍由 `finally` 必达；代码里的 `if rc is None: sys.exit(2)` 是防御分支、当前实现下不可达，保留不改变退出码语义（收敛为 exit 2 属退出码语义变更，需另作裁决）。
+
+### 三、实测（首次修复后，同一批次树 `p7-7b1a-trialargs` @ 同一冻结 revision + 同一 m1 补丁）
+
+| 形态 | 命令 | 实测 |
+| --- | --- | --- |
+| 文档形态 | `trial <batch> --patch <m1> -- git status --short` | exit 0；`执行：git status --short`（`--short` 已作为命令参数）；HEAD=b6a27487616a… → 变异后=d445073067d1…；`apply -R 成功`；`还原后=b6a27487616a… 与 HEAD 一致=是`；`还原后 git status：CLEAN` |
+| 命令在前 | `trial <batch> git status --patch <m1>` | exit 0；同样完成 apply→命令→restore 三段；`还原后 git status：CLEAN` |
+| 文档形态 + 非零退出 | `trial <batch> --patch <m1> -- python -c "import sys; sys.exit(7)"` | exit 0；`命令退出码 = 7`；`apply -R 成功`；`与 HEAD 一致=是`；`CLEAN`（命令失败不跳过 restore，工具自身退出码语义不变） |
+| 干净树守卫 | 先在树内建 `dirty_probe.txt`，再跑文档形态 | exit 2；`拒绝：树里已有未提交改动……` 并列出 `?? dirty_probe.txt`；删除探针后树 CLEAN |
+| 独立 blob 复核 | 三次 trial 后 `git -C <tree> hash-object src/middle/ir/ir.rs` 对比 `git -C <tree> rev-parse HEAD:src/middle/ir/ir.rs` | 均为 `b6a27487616a…`；树 HEAD = 上述冻结 revision |
+
+批次树按规程 `release --by impl-1` 后 `gc`。本次**不构建 CLI**：被测对象是 `scratch.py` 的 CLI 解析，trial 内命令用 `git status` / `python -c`，不涉及批次树二进制；`build` 步骤不在本项判据面。
+
+#### 修复轮补充实测（t7 F1/F2/F4，批次树 `p7-0-4-2-fix` @ t6 笔 revision + 同一 m1 补丁）
+
+| 场景 | 命令 | 实测 |
+| --- | --- | --- |
+| 缺命令（`--` 形态） | `trial <b> --patch <m1> --` | exit 2；`拒绝：命令不可为空……`；**补丁未 apply**：树 `git status --porcelain` 为空、`hash-object` = `HEAD:blob` = `b6a27487616a…` |
+| 缺命令（无 `--`） | `trial <b> --patch <m1>` | exit 2；同上，树未变异 |
+| 混用两形态 | `trial <b> git status --patch <m1> -- echo hello` | exit 2；`error: 混用了两种命令形态：…['git', 'status']…['echo', 'hello']；二选一`；树 CLEAN |
+| 命令未启动（F2 事实） | `trial <b> --patch <m1> -- no_such_cmd_xyz` | exit 1；先输出 `还原：apply -R 成功`、`与 HEAD 一致=是`、`CLEAN`，随后 `FileNotFoundError` 轨迹如实上抛 |
+| 修复后两形态复测 | 文档形态 `-- git status --short` / 命令在前 `git status --patch <m1>` | 各 exit 0；apply→命令→restore 三段齐全、`CLEAN` |
+
+修复轮批次树 `p7-0-4-2-fix` 按规程 `release --by impl-1` + `gc`（释放 23.8 MB）；本项同样不构建 CLI。
+
+### 四、判据（实测）
+
+- `python -m py_compile scripts/dev/scratch.py` exit 0。
+- `python scripts/dev/scratch.py trial --help` exit 0，输出含两形态 epilog 与「命令不可为空 / 混用会被拒绝」。
+- 两种真实补丁 trial 各一次 + 非零退出 + 干净树守卫均符合预期；还原后树 CLEAN、blob 回 HEAD。
+- 修复轮：缺命令两种形态各一次（exit 2、树未变异、blob = HEAD）；混用形态（exit 2、树 CLEAN）；命令不存在（exit 1、restore 必达、CLEAN）。
+- `check-docs-truth.py` / `check-docs-refs.py` / `check-docs-orphan.py` exit 0。
+
+### 五、偏差与边界
+
+1. **表单边界**：命令含 `-`/`--` 开头参数时用 `--` 形态（推荐形态）；命令在前形态只适用于无 `-` 开头参数的命令。两种形态都写进 `--help` 与 HOWTO §三，不是隐式限制。
+2. **`--patch` 位置**：必须写在 `--` 之前；写在 `--` 之后按「命令段原样」处理，argparse 会提示缺 `--patch`。
+3. **范围**：只改 `scripts/dev/scratch.py`、HOWTO §三、09/09a 登记；未碰 `testsuite.py`、`scripts/ci/`、`src/`、`tests/`。
+4. **既有引用**：09a 历史记录里出现过的 `trial ... --patch <p> -- cargo test --lib ...` 形态在修复后重新成立，不改写历史记录。
+5. **WBS 组行**：0.4 组行按 0.2.4 先例保持「本二级不整行勾完成」（`- [ ]`）并加注记；0.4.1 与 0.4.2 的完成状态在各自行内。
+6. **缺命令形态（t7 F1）**：修前 `trial <b> --patch <m1> --`（本笔推荐的 `--` 形态、命令为空）先 `git apply` 再拒绝，树残留变异态（reviewer 实测 `hash-object` = 变异 blob ≠ HEAD）。缺陷本体在 0.4.2 之前已存在，本笔把推荐形态的可达面扩大到该早退路径。修复：校验前移到 `cmd_trial` 入口（`git apply` 之前）；现在两种缺命令形态都在变异前 exit 2，树 `git status --porcelain` 为空、blob = HEAD。HOWTO §三 与 `--help` 已注明「命令不可为空」。
+7. **退出码实测更正（t7 F2）**：命令未启动（如命令不存在）时 `subprocess.run` 抛 `FileNotFoundError` 并如实上抛，进程 **exit 1**；restore 仍必达（`apply -R 成功`、blob 回 HEAD、CLEAN）。`if rc is None: sys.exit(2)` 是防御分支、当前实现下不可达，保留不改变退出码语义；若要收敛为 exit 2 属退出码语义变更，需另作裁决。t6 提交信息（被复审对象）**不改写历史**，事实更正以本记录与修复提交说明承载。
+8. **本地哈希（t7 F3）**：t6 记录里引用的**本地未推送 revision 哈希**已从 §一/§三 移除，改为「7b.1a 代码笔（rebase 后）的 t1 收口 HEAD（冻结 revision）」的不带哈希描述；§三 表内的完整前缀同步改为「上述冻结 revision」。7b.1a 契约段引用的 7b.1a 登记笔哈希属既有欠账，已在 **t4 收口** 一并改为不带哈希的描述，本任务不改写。
+9. **混用形态（t7 F4）**：`main()` 检测「argparse 已解析出 command 且 `--` 之后也有命令」→ `p.error` 报「二选一」、exit 2，树未变异；HOWTO §三 与 `--help` 已写明「混用会被拒绝」。此前静默丢弃 argparse 命令的行为不再出现。
+
+## P7 7b.1a 收口（`Operand` 变体收敛 + `Instruction::Phi` 引入，2026-11-20）
+
+> 收口对象 = WBS 二级任务 7b 的首轮三级任务 7b.1a。代码由实现轮落库，验证轮在冻结 revision 的批次树上独立复算，复审轮给出 verdict=pass。**本段在 rebase 集成后按新基线改写**：判据数字重绑到集成重验轮（§一、§四），rebase 前的验证与复审结论按历史语境保留，集成事实见 §九。**不写本地提交号**（哈希随 `pull --rebase` 改写），指向以「笔的性质 + 文件清单」定位。
+
+### 一、判据链（实测数字）
+
+冻结 revision = **7b.1a 集成 HEAD**（rebase 后 = `origin/dev` + 7b.1a 契约笔与代码笔 + 0.4.2 两笔 + 7b.1a 收口登记两笔 + 再生错误码文档笔；含 origin 侧 2.1.4 的源码改动）。验证与复审轮的全部量测在 `scripts/dev/scratch.py` 的批次树内完成（`init` → `use --rev` → `build` → 量测 → `release` → `gc`），主仓工作树全程干净；复审轮以 `git show <rev>:<file>` / `git grep <rev>` 复核，未读工作树。本表数字全部取自 **rebase 后集成重验轮**（rebase 前基线的对应数字与差异见 §九）。
+
+| 门禁 | 结果 |
+| --- | --- |
+| `cargo fmt --check` | exit 0 |
+| `cargo clippy --all --all-features --all-targets -- -D warnings` | exit 0 |
+| `cargo test --lib snapshot` | exit 0 = 6 passed / 0 failed / 1 ignored（IR 快照 **232 份零漂移**） |
+| `cargo test --lib verify` | exit 0 = **30 passed / 0 failed / 0 ignored** |
+| `cargo test --lib middle::ir::tests` | exit 0 = **64 passed / 0 failed / 1 ignored** |
+| `cargo test --lib phi` | exit 0 = 33 passed |
+| `python scripts/dev/testsuite.py run fast` | exit 0 = 1 波 **2398 条**，跳过 0 波 |
+| `cargo run --example corpus_probe` + 语料差分门禁 | exit 0 = **402 / 402**，逐条差分空 |
+| `check-docs-truth` / `check-fanout` / `check-test-channel` / `check-docs-refs` / `check-docs-orphan` | 全 exit 0（docs-refs = **1244 个跟踪文本文件 / 12920 个路径状 token**） |
+| `python scripts/docs/gen-error-code-docs.py` + `git diff --quiet` | exit 0 且差分为空（生成器幂等） |
+
+**零漂移的归因不是「基线整批重写」**：7b.1a 的代码笔未触碰任何基线文件（`git diff --stat origin/dev..HEAD -- src/middle/ir/tests/snapshots tests/baselines` 为空；IR 快照 **232 份**与语料差分基线（`tests/baselines/corpus-parity.jsonl`，402 行记录）相对 `origin/dev` 零 diff）。行为等价的静态理由与运行时证据互证——三个死变体在 7b.1a 动工前的冻结 revision 上只有 11 处**模式匹配**、0 处值位置构造（逐处判读），删臂不改变任何既有 IR 的渲染与分析输出；新增的 `Value` / `Phi` 面语料不可达。
+
+**真双 / 三方二进制探针**（逐字节，rebase 前基线的独立验证轮证据）：三个 revision 各自再生 232 份规范化 IR 文本，两组对比各 **232 / 232 相同**；CLI 探针 5 夹具 × check/run/dump × stdout/stderr/exit = **45 / 45 逐字节相同**；语料差分 JSONL 两份各 402 行、SHA-256 相同。登记差异：三个二进制的 SHA-256 互不相同（rustc 输出不可复现，同源不同字节），行为面零差。rebase 后的等价证据 = 集成重验轮的快照与语料相对 `origin/dev` 零 diff（见 §一 表与 §四）。
+
+**机械可逆变异**（补丁 → 转红 → 机械还原 → build → 重测全绿）：rebase 前基线——实现轮 4 条、验证轮 5 条、复审轮 2 条；rebase 后集成重验轮 **3 条**（`for_each` 的 `Phi` 臂摘 incoming / 渲染删前驱升序 / `verify` 的 `dst` 判据短路），分别 62 passed / 2 failed、63 passed / 1 failed、63 passed / 1 failed 转红，还原并重建后一律 **64 passed / 0 failed / 1 ignored** 回绿。变异命中本批新增的直驱判据（`for_each_operand_mut` 的访问序与写穿、`verify_ssa` 的 `dst` 必为 `Operand::Value`、渲染的前驱升序），证明这些判据在承重。
+
+### 二、`Operand` 收敛与 `Instruction::Phi` 引入的机械证据
+
+1. **死变体零命中**：`git grep -n -E "Operand::(Temp|Label|Register)" <冻结 revision> -- src` 零命中（exit 1），变体声明行同样零命中；全仓剩余命中都在文档里。
+2. **`Phi` 生产构造点 0**：`Instruction::Phi` 的值位置构造共 5 处，全部在 `src/middle/ir/tests/`（`tests/ir.rs` 的 `phi_with_span` 夹具、`tests/snapshot.rs` 的渲染夹具、`tests/verify.rs` 的正例与两类反例）；`Operand::Value(` 的生产构造点 0。
+3. **穷尽 match 全覆盖**：全仓对 `Instruction` 的穷尽 match 恰 6 处，逐处有 `Phi` 臂——`src/middle/ir/ir.rs` 的 `Instruction::span()` 与 `Instruction::for_each_operand_mut()`、`src/middle/ir/normalize.rs` 的 `fmt_instruction`、`src/middle/ir/verify.rs` 的 `def_operands` 与 `use_operands`、`src/middle/passes/codegen/translator.rs` 的 `translate_instruction`。编译器佐证：闭合 enum 漏臂即 E0004，fmt / clippy 全绿。
+4. **新增直驱测试 7 条**（命名 `test_<what>_<scenario>`、AAA 三段、断言带自定义消息、枚举匹配用 `assert!(matches!(...))`）：`test_phi_span_returns_own_span`、`test_phi_for_each_operand_mut_visits_dst_and_incoming_in_order`、`test_phi_for_each_operand_mut_writes_through`、`test_normalize_renders_phi_incoming_sorted_by_predecessor`、`test_ssa_phi_well_formed_passes`、`test_ssa_phi_with_slot_dst_fails`、`test_ssa_phi_incoming_not_ascending_fails`。
+5. **形状符合 04**：04 §`Phi` 小节定义的 `Phi { dst: Operand, incoming: Vec<(usize, Operand)>, span: Span }` 与 `ValueId`（`u32` 新类型，derive 列表一致）逐字落地。
+
+### 三、`Phi` 占位与替换批次登记
+
+| 占位 | 位置 | 形态 | 替换批次 | 不变量与当前不可达理由 |
+| --- | --- | --- | --- | --- |
+| translator 的 `Phi` 臂 | `src/middle/passes/codegen/translator.rs` 的 `translate_instruction` | `unreachable!` + 不变量注释 | 7b.3 | 本批 `Phi` 生产构造点 0；lowering 产不出 `Phi`，到达即说明有生产点漏登记——响亮失败优于静默错值 |
+| `OperandResolver::to_reg` 的 `Value` 臂 | `src/middle/passes/codegen/operand.rs` | 显式诊断 E3017（消息点名 7b.2） | 7b.2 | 本批 `Value` 生产构造点 0；7b.2 起 `next_temp_reg` 产 `Value`，届时解析为 `u8` 槽位 |
+| `verify_ssa` 的 Phi 前驱数 / 逐输入类型一致 | `src/middle/ir/verify.rs` | 违规类别已建，判据未落 | 7b.1b | 需要值表与块级前驱关系；本批语料无 `Phi`，不掩盖任何现有违规 |
+
+本批已落的两条构造侧判据在 `src/middle/ir/verify.rs` 的 `check_phi_structure`：`dst` 必为 `Operand::Value`、`incoming` 的 label 严格升序（违规类别 `InvariantKind::PhiConsistency`）。**7b.3 落地前禁止出现 `Phi` 生产点**——否则 translator 的占位会以 panic 形式暴露。
+
+### 四、验证与复审结论
+
+- **验证轮（独立验证）：通过。**（rebase 前基线）13 条门禁全绿；真双 / 三方二进制探针逐字节零差；5 条机械可逆变异各自转红后还原。**rebase 后集成重验：通过。** 新基线上 13 条门禁全绿（数字见 §一 表）；补丁级冲突合并审计（7b.1a 增量的 10 个文件中 9 个逐行一致，唯一差异是 `src/middle/ir/tests/verify.rs` 的 import 行两侧并存）；`src/` 侧相对 `origin/dev` 的差异只含 7b.1a 的增量，origin 2.1.4 的按槽身份判据（`LocalSlot::origin` / `FrameId` / `slot_frames()`）原样在位；3 条机械可逆变异各自转红后还原并重建回绿。
+- **复审轮：verdict = pass。** 八类逐条成立：D0（权威源 = `src/middle/ir/ir.rs`；目录职责表 01-routing 的 `middle/ir/` = 「IR 定义与不变量」）、D1/D2（`ValueId` 与 `Phi` 依据 04 §值标识方式 / §`Phi` 变体，无同语义别名、无 import 别名弥合）、D3/D4（无新入口、落在既有职责类别）、红线（`todo!` / `unimplemented!` 在动工前后同 9 处逐行相同、`include!` 0、`pub(crate)` 183→183→183、`use super::*` 0 命中、未删测试未放宽判据）、inScope（代码笔的 10 个文件全在契约 §五 内）、契约一致性（11 + 6 + 3 三组清单逐处对应）、占位诚实性（见 §三）、等价性归因（见 §一）、提交规范（代码独占一笔、提交信息含 D0–D4 与 D59「无行为变更（表示重塑）」、契约笔先于代码笔、工作树干净、未 push）。
+- **跨框前置（rebase 前历史轮次，本批不含其提交）**：DCE 测试重定向那一轮（rebase 前作为跨框前置执行：把同一 DCE 测试的红改到终态形态，红→绿性质交给合成夹具 `test_orphan_shared_layer_dominance_red_turns_green_after_dce` 承担）在 rebase 整合时**未重放**——origin 侧的 3.21.5 已承接同一修复（同一 DCE 测试红、同一终态判据），故本批不含该轮的两笔提交；rebase 前的复核结论（真实语料侧删除前已绿、未删测试、未 `#[ignore]`、未放宽断言）按历史语境保留。
+
+### 五、独立性与编排偏差（如实登记）
+
+**两种事实并存**：团队状态页显示 impl-1 / verify-1 / review-1 分属不同路由；但成员会话内无可观测模型标识，且批准前的团队简介称「本机唯一可用路由」——因此**不宣称已证实的异家族独立**。
+
+**本轮编排**：
+
+- 复审终审由 **docs-1** 承担（用户 2026-11-20 裁决 B 后改派：review-1 的 GLM 5 小时额度于当日 17:29:53 用尽）。偏差如实登记：docs-1 与实现者不同族、**与验证者同族、且与本收口轮为同一成员** ⇒ 复审、验证、收口三者互不独立。
+- review-1 在复审轮留下的实质证据：批次树内的四门测试复跑（snapshot / verify / ir::tests / phi 全绿，**rebase 前基线**）、18 个 CLI 探针、2 条机械可逆变异（各自转红后还原、树 CLEAN）。该证据与终审结论并列保留，不互相替代。
+- 0.4.2 的复审（t7 → t8 → t9）由 **verify-1** 承担（与验证者同族）：t7 给出 needs_revision 的四条 findings（F1 缺命令守卫前移、F2 命令未启动的退出码表述、F3 本地哈希引用、F4 混用形态未拒绝），t8 修复轮逐条收口，t9 复审轮 2 给出 **pass** 并附一条不阻塞的残余 F5。**0.4.2 的复审结论以 t9 为准。**
+- 验证轮的 verdict 绑定 rebase 后的 **7b.1a 集成 HEAD**（§九）。集成重验以 `origin/dev` 为基线复核：快照与语料基线相对 `origin/dev` **零 diff**（`git diff --stat origin/dev..HEAD -- src/middle/ir/tests/snapshots tests/baselines` 为空）；`src/` 侧相对 `origin/dev` 的差异只含 7b.1a 的增量（`Local|Temp`→`Local`、`Phi` 臂、`check_phi_structure`），origin 2.1.4 的按槽身份判据原样在位。
+
+**补偿证据**（按 7a 先例）：冻结 revision 独立复核、机械可逆变异、真双 / 三方二进制探针、生成物差分逐行 review。
+
+### 六、生成物与推送门禁（本轮新发现）
+
+7b.1a 的代码笔改动了诊断发射点面，但**生成物未随代码再生**：新增 `src/middle/passes/codegen/operand.rs` 的 E3017 发射点（`Operand::Value` 显式诊断）、删除 `Temp` 臂带走的一处 E3014 发射点、`translator.rs` 行号平移带动的 E8xxx 发射点行号变化。跑 `python scripts/docs/gen-error-code-docs.py` 的差分 = 2 文件 3 行：`docs/src/reference/error-code/index.md` 的 `E3017`「✅ 3 处」→「✅ 4 处」、`E3014`「✅ 4 处」→「✅ 3 处」；`docs/src/reference/error-code/E8xxx.md` 的发射点行号 `translator.rs:1382` → `1391`。逐行 review 确认全部是 7b.1a 引入的机械平移，无内容改写。rebase 整合后该生成物在**合并后的树上重新再生**（origin 侧已为 2.1.4 再生过一次，不能沿用 rebase 前的差分），再生结果与上表一致：`E3017` = 4 处、`E3014` = 3 处、E8xxx 发射点行号 `translator.rs:1391`；生成器幂等（`git diff --quiet` 为空）。
+
+CI 的「Error-code docs up to date (generator idempotent)」步骤（`.github/workflows/ci.yml`）以「跑生成器 + `git diff --quiet` 非空即 exit 1」拦截，不补笔则推送后必红——该门禁的注释本身记着同类事故（2026-10-15 #452/#454：收敛提交未再跑生成器，页面停在旧计数上）。按 **AGENTS 团队编排约定第 6 条**（契约 inScope 必须覆盖「生成物」）把 `docs/src/reference/error-code/` 纳入该批 inScope，补一笔「再生错误码文档」并入本批；**该笔已随本批落库（合并后重新再生的一笔），推送前须确认它在待推分支上**。
+
+### 七、复审备案（OBS-1–OBS-6）与已知残余
+
+- **OBS-1（low，04 欠账枚举补全）**：7b.1a 契约 §五只点名 04 的 `Operand::Register(u8)` 句；同段另一条（后端把 `Operand::Local/Temp/Arg` 解析为 `u8`、`39-45` 的 `Temp` 臂溢出即 E3014）在变体删除后同样成为历史事实陈述，en 镜像同段一并更正。
+- **OBS-2（info，`ValueId` 的判据面）**：`ValueId` 本批生产构造点 0，生产面只由 `Operand::Value(ValueId)` 承载；属分批引入表示，依据 04 §值标识方式 + 7b.2 计划成立，**在 7b.2 落地时复核该判据自动消解**。
+- **OBS-3（info，渲染测试的性质）**：`test_normalize_renders_phi_incoming_sorted_by_predecessor` 冻结渲染文本形态，按 coding-rules §7.1 属特征化而非性质检查；准入走「条款」门（07 §第二层「前驱排序」+ 09a 契约 §二），合规，但**不得当作对替代渲染器的门禁**。
+- **OBS-4（info，静默通道边界）**：`Phi` 的生产端本批不存在、消费端是响亮 `unreachable!`——生产者先于消费者出现时会 panic 而非静默通过；该性质依赖 7b.2 / 7b.3 的顺序，**7b.3 落地前禁止出现 `Phi` 生产点**。
+- **OBS-5（info，登记补齐）**：5 处测试夹具的 `Phi` 构造点已在 §二 逐处登记；09 的 7b.1a 行已标「已完成（2026-11-20）」，7b 组勾选框按「6 个三级任务未全完」保持未勾。
+- **OBS-6（info，跨笔归属）**：父 revision 的 fmt 欠账（`src/driver/tests/dce_wiring.rs` 的 1 行 import 排序，零行为）在 rebase 整合时**未重放**——origin 侧已有同改动（`git show origin/dev:…` 同形），故本批不再保留该笔。
+- **F5（既有、low、不阻塞，来自 0.4.2 复审轮 2）**：`scratch.py trial` 对**空补丁 / 被 `.gitignore` 忽略的路径**的早退仍发生在 `git apply` 之后且不还原——树在早退后可能残留变异态。该边界在 0.4.2 之前已存在，本轮**不修**；建议另开 **0.4.3** 处理（把「空补丁 / 被忽略路径」的判定前移到 apply 之前）。
+
+### 八、偏差与既有项
+
+1. **04 的旧路径欠账（既有）**：04 的「编译器改动清单」与「IR 结构变更的连锁影响」两节仍有 7.0 搬移前的路径（如 `src/middle/core/ir_gen.rs`、`src/middle/core/bytecode.rs` 系列），属 7b.2 / 7c / 7d 批次的既有欠账；本轮只就地更正本批触及的行（改动项 1–6 与连锁影响的 `ir.rs` 段），其余留各自批次落地时就地更正。
+2. **`Instruction` 变体数口径更正**：04 原写「76 个变体 → 新增 `Phi` → 77」；现树实测 `ir.rs` 的 `Instruction` 枚举为 **75 个**变体（`Phi` 已含在内），按现树更正（计数口径 = 枚举变体名计数）。
+3. **本地哈希引用清理（既有欠账，由 0.4.2 修复轮登记给本轮）**：7b.1a 契约段原先引用的冻结 revision 哈希已改为不带哈希的描述（「7b.1a 契约笔之前的冻结 revision」）；0.4.2 段两处「登记笔后的 t1 收口 HEAD」描述已改为「7b.1a 代码笔（rebase 后）的 t1 收口 HEAD」。
+4. **本轮（rebase 后收口改写）只改 09 / 09a / 04 三个文件**，未碰 `src/`、`tests/`、`scripts/`；未跑 `git push` / `fetch` / `pull`。
+5. **en 镜像（04）未手改**：中英镜像的规则是「zh 是源，en 由翻译工作流同步」；本轮 inScope 不含 `docs/src/en/dev/architecture/04-ssa.md`，故只核对未改写。zh 本轮更新的实测数字（`Operand` 变体表的命中数、`Operand::Local(` 的处数、连锁影响段的符号路径）在 en 侧仍为 rebase 前的值，待翻译工作流按 zh 同步——**en 侧在那之前不是 zh 的等价镜像，属已知待同步项**。
+
+### 九、rebase 整合（集成事实）
+
+本地 7b 分支已重放到 `origin/dev`（rebase 前的 `pull --rebase` 启动后中止，改为 reset 到 `origin/dev` + 逐笔 cherry-pick）。`origin/dev` 期间并发推进 **30 笔**（2.1.4 收口、3.21.5 的 DCE 测试重锚、错误码文档再生、批 a 收口等），与本批的交集如下：
+
+- **丢弃的三笔（与 origin 重复）**：父 revision 的 fmt 欠账笔（只重排 `src/driver/tests/dce_wiring.rs` 的 1 行 import）——origin 侧已有同改动；DCE 测试重定向那一轮的测试修复笔与其登记笔——origin 侧的 3.21.5 已承接同一 DCE 测试红与同一终态判据。故本批不再含这两类提交，相应叙述已从本节与 0.4.2 段改写。
+- **保留并重放的**：7b.1a 契约笔、7b.1a 代码笔、0.4.2 两笔（工具面）、7b.1a 收口登记两笔；错误码生成物笔在**合并后的树上重新再生**（origin 侧已为 2.1.4 再生过一次，不能沿用 rebase 前的差分）。
+- **0.4.2 的 WBS 编号**：origin 的三级计数为 251（含 3.21.5 / 3.20.36 / 2.1.4 的登记），本批的 0.4.2 使其变为 **252**（09 的计数表已含「+1 = 0.4.2」）。
+- **冲突合并要点（逐处核对，不只看编译通过）**：`src/middle/ir/ir.rs` 同时含 7b.1a 的 `Operand::Value(ValueId)`、`Instruction::Phi`、span / for_each 两臂与 origin 的 `FrameId`、`LocalSlot::origin`；`src/middle/ir/verify.rs` 同时含 7b.1a 的 `check_phi_structure`、`InvariantKind::PhiConsistency`、`Phi` 的 def/use 臂与 origin 的 `slot_frames()`；`src/middle/passes/mono/mod.rs` 相对 origin 只差两处 `Local|Temp`→`Local`，origin 的 `LocalSlot { … origin: slot.origin, … }` 原样保留。补丁级对比：7b.1a 增量的 10 个文件中 9 个逐行一致，唯一差异是 `src/middle/ir/tests/verify.rs` 的 import 行（保留 origin 新增的 `FrameId, LocalSlot`，并加入 `ValueId`）。
+- **本节与集成重验报告的差异说明**：集成重验报告把 `tests/baselines` 记为「1 个文件」；严格说该目录下另有义务账本门禁的夹具目录（不属于本批判据面），本节按「语料差分基线 = `tests/baselines/corpus-parity.jsonl`（402 行记录）1 个文件」表述。其余数字（verify 30 / ir::tests 64 / run fast 2398 / 语料 402·402 / 快照 232 份零漂移 / docs-refs 1244·12920 / 生成器幂等）与集成重验报告一致；rebase 前基线的对应数字（verify 26 / ir::tests 59 / run fast 2361 / docs-refs 1240·12703）已被本轮重验取代，只作历史语境保留在本节。
+
+## P3 3.24.1 收口（#405 范围模式 RangePattern 实现，2026-11-20）
+
+> **一、范围与终态**：issue [#405](https://github.com/ChenXu233/YaoXiang/issues/405)（教学文档教了规范未定义、实现不支持的 `lo..hi` 写法——E0010）。**用户裁决（2026-11-20）：a 纳入 RFC-010b 范围直接实现，不走 RFC 流程**——RFC-010b 正文不改，SPEC syntax.md 是唯一规范载体；新组 WBS 3.24 登记，三级 +1 = 3.24.1（252→253，基线含并行会话同日 +1 = 0.4.2）。D59 分类不适用——语言特性新增，既有程序零破坏（语料差分 402 行与既有 IR 快照零漂移实测；tests/baselines/ 改动集零出现）。推送终态两笔：主修笔 `4d608df3`（feat(parser)，20 文件 +1041/−59）+ 修复笔 `2c016861`（docs(parser)，4 文件，t3 REJECT 处置）。issue [#405](https://github.com/ChenXu233/YaoXiang/issues/405) 关闭（证据评论）。
+
+> **二、设计登记（按查证证据定夺，实现者定夺并登记）**：①端点语义 = **双闭 [lo,hi]**——80 与 89 都命中 `80..89`（教学语义暗示/issue 诉求/判定谓词语义/既有程序零破坏四理由）；与表达式位 Range 左闭右开**有意分立**，SPEC §2.8 与 §2.12 两处显式声明（模式位 = 离散值域上的判定谓词，表达式位 = 迭代序列构造记号）——「两种 `..` 证据冲突」的两难以有原则的分立解决；②首版端点限 Int 字面量（负号前缀归一化；上界 token 直读绕开 pratt lambda 吞噬——负号上界的前缀操作数以 BP_UNARY+1 解析时 `=>`（绑定力 11）会被吞成 lambda 报 E0012）；Float/Bool/String/Char 端点语法成立类型检查拒绝（E1002，首版不支持 Float 范围）；标识符端点在模式位是绑定名无判定语义，语法层拒绝（E0010）；倒序空范围（两端点编译期可判）与同端点重复臂报不可达（E1031）；③穷尽性 = 受检、部分覆盖、非兜底（Int 值域开放，范围臂需通配/标识符臂兜底——E1030）；重叠/包含分析留登记；④**零新码**（复用 E0010/E1002/E1031，四步流程不触发）。
+
+> **三、验证链**：t1 两轮（**第 1 轮改写语料差分基线违反红线被门禁抓出**——git diff --cached 实证 +6 行纯追加；且 corpus_probe 全量枚举 tests/yaoxiang/**/*.yx，新语料落该目录则差分必然非空 ⇒ 修复 = 基线恢复 HEAD 零触碰实证 + 新语料移出差分枚举面，行为锚迁集成测试 6 条内联源码（yaoxiang::run 公共 API + 程序内 assert 值级 oracle）、IR 形态锚迁 middle 层单测 2 条（Load+Ge+JmpIfNot+Load+Le+JmpIfNot 双闭链窗口，仅发一端的替代实现必红；孤儿快照同批清理）→ 14 门禁全绿）→ 推送主修笔 → t2 **PASS**（四组锚复测 + M1 摘上界比较 / M2 双闭改右开 / M3 摘收编臂三变异 trial 机械可逆 + 零破坏核账 + 卫生）→ t3 **REJECT**（5 条）→ 修复笔 `2c016861` → t3r **APPROVE**（1 low 注记）→ 收口笔（本节）。批次树已 release + gc。
+
+> **四、t3 五条 findings 处置（如实登记）**：①**F1 medium 夹带恢复**——zh 教程 match 示例输出注释被实现笔夹带掉冒号（与三行上代码行矛盾：RFC-012 插值 `{}` 外冒号是字面量，输出含冒号），且 **en 镜像也被 bot 7a10a805 污染**（镜像同步了夹带态）——两文件一并恢复避免反向分叉；4 hunk 逐个核对无其它夹带；机器门禁漏网有据（check-docs-examples.py:18-19 明示只验 check 不比对注释）。②**F2 low 计数口径更正**（本节承载，提交不改写）：实现笔提交信息「parser/sema 拒绝锚 11 条」实为锚总数——拒绝锚 5 条（E0010 非字面量端点 / E1002 Float 端点 / E1031 倒序 / E1031 重复臂 / E1030 非兜底）+ accept 形态正锚 6 条。③**F3 low 补锚**：上界标识符 `80..n` 拒绝锚补齐（与下界 `n..20` 对称）；红态自查——摘掉 parse_range_bound 拒绝臂后新锚红（非字面量上界落入 lambda 吞噬报 E0012 形态）、同族下界锚保持绿，还原后 14/14 绿。④**F4 low EBNF 精度**：查证 syntax.md 中 Literal 无产生式定义（词法层整数/浮点均无符号形态）⇒ 产生式补显式可选负号 `RangePattern ::= ('-')? Literal '..' ('-')? Literal`（与文件既有可选组风格一致）；en syntax.md 未动（zh 是源，bot 镜像）。⑤**F5 low AAA 登记不修**：sema rfc011b.rs 新增 6 条无显式 AAA——同文件既有测试全部同形（紧凑风格），单独补造成风格分裂，登记为该文件既有风格债，未来该文件统一时一并处理。
+
+> **五、移交登记（非本批阻塞）**：①check-boundary（report-only）既有违规 1 处：opcode.rs 常量 84 vs 脚本基线 83（b5624a35/#562 未同步，非本批引入）；②切片 `array[Range]` 纸面能力（运行时 E6007）留后续裁决面；③模式位负数字面量模式 `-1 =>` 报 E0012（前缀负号 min_bp=9 低于 lambda 绑定力 11，led.rs:390——既有缺陷，`-i64::MIN` 同族，未夹带）；④RFC-010b 正文未改（用户裁决）；⑤发版 changelog 应为「范围模式新增」单列条目（新语言能力，收口时一并落档）。
+
+## P7 7b.1b 契约（`values` 表 + `ValueInfo` + 访问器 + Phi 残项判据，2026-11-20）
+
+> 计划见 [09](./09-execution-wbs.md) §P7 7b 表 7b.1b 行；设计依据 [04](./04-ssa.md) §目标设计（`ValueInfo` / 值表 / Phi 三条构造约束）与 §IR 结构变更的连锁影响 #3-5；前置 = [09a §P7 7b.1a 收口](#p7-7b1a-收口operand-变体收敛--instructionphi-引入2026-11-20)（占位 3 由本批替换）。基线 = `origin/dev` 顶端 `6d8cfe15`（7b.1a 已集成，工作树干净）；实测行号取该 revision。
+
+### 一、全仓 `FunctionBody::Code` 构造点 / 匹配点实测
+
+`git grep -n "FunctionBody::Code {" -- src tests` = 56 处。分类：**结构体字面量构造 17 处**（全部需补 `values`，均在本批 inScope 的 `src/middle/` 与 `src/driver/tests/`）、**无 `..` 的模式匹配 1 处**（加字段即编译失败，需补 `..`）、其余 38 处模式匹配都带 `..`（不受影响）。
+
+构造点 17 处（逐处补 `values: Vec::new()`）：
+
+| # | file:line | 上下文 |
+| 1 | `src/driver/tests/helpers.rs:39` | driver 测试夹具 |
+| 2 | `src/middle/ir/tests/ir_build.rs:56` | IR 测试共享构造器 `func()` |
+| 3 | `src/middle/lower/curry.rs:222` | 柯里层函数体 |
+| 4 | `src/middle/lower/curry.rs:333` | 柯里层函数体 |
+| 5 | `src/middle/lower/expr/closure.rs:205` | 闭包函数体 |
+| 6 | `src/middle/lower/globals.rs:414` | 全局初始化函数体 |
+| 7 | `src/middle/lower/stmt.rs:580` | 嵌套函数体 |
+| 8 | `src/middle/lower/stmt.rs:787` | 嵌套函数体 |
+| 9 | `src/middle/passes/codegen/tests/global_slot.rs:41` | codegen 测试 |
+| 10 | `src/middle/passes/codegen/tests/translator.rs:61` | codegen 测试 |
+| 11 | `src/middle/passes/codegen/translator.rs:432` | init 合成函数 |
+| 12 | `src/middle/passes/dce/tests/mod.rs:70` | DCE 测试 `code_fn` |
+| 13 | `src/middle/passes/dce/tests/mod.rs:827` | DCE 测试 `code_fn_with_locals` |
+| 14 | `src/middle/passes/mono/function.rs:208` | mono 特化克隆体 |
+| 15 | `src/middle/passes/mono/mod.rs:1383` | mono 特化克隆体 |
+| 16 | `src/middle/passes/mono/tests/monomorphizer.rs:40` | mono 测试夹具 |
+| 17 | `src/middle/passes/mono/tests/monomorphizer.rs:114` | mono 测试夹具 |
+
+无 `..` 的模式匹配（必须同步）：`src/middle/passes/mono/mod.rs:666` 的 `let FunctionBody::Code { blocks, entry, locals } = &func.body else` —— 补 `..`。
+
+带 `..` 的模式匹配（无需改，仅登记核对面）：`src/middle/ir/ir.rs:1038/1048/1056/1064/1072`、`src/middle/ir/normalize.rs:605`、`src/middle/ir/verify.rs:230`、`src/middle/passes/codegen/translator.rs:162/286`、`src/middle/passes/mono/function.rs:176/193/197`、`src/middle/passes/mono/mod.rs:394/529/557/636/771/793/829/1248/1305/1310/1662/1852`、`src/frontend/tests/curry_erasure.rs:94/136/161/190`、`src/middle/ir/tests/*`（`alias_fn_value`/`def_assign`/`local_slots`/`record_evidence_layout`/`release_plan_spans`/`snapshot`/`witness_quantity`）与 `tests/integration/multifile.rs:1162`（只读）。
+
+**`values` 生产形态**：本批全部空表（`Operand::Value` / `Instruction::Phi` 的生产仍归 7b.2 / 7b.3）。动工前 `git grep -n ValueInfo -- src tests` 仅 2 处文档注释（`verify.rs` 文件头引用 04 §262），代码零命中。
+
+### 二、结构形态
+
+```rust
+/// SSA 值信息（04 §值标识方式）：与 locals 并存的值表。
+#[derive(Debug, Clone)]
+pub struct ValueInfo {
+    pub ty: MonoType,
+    pub debug_name: Option<String>,   // 来自被消除的具名槽位；None = 纯临时值
+    pub defining_block: usize,        // 定义所在基本块的 label
+}
+
+pub enum FunctionBody {
+    Code {
+        blocks: Vec<BasicBlock>,
+        entry: usize,
+        locals: Vec<LocalSlot>,
+        values: Vec<ValueInfo>,       // 本批新增
+    },
+    // TypeDecl 不变
+}
+```
+
+访问器镜像 `locals()`（只读、TypeDecl 返回 `&[]`）与 `blocks_mut()`（可变、TypeDecl panic）：
+
+- `FunctionIR::values(&self) -> &[ValueInfo]`；
+- `FunctionIR::values_mut(&mut self) -> &mut Vec<ValueInfo>`（TypeDecl 上 `panic!("values_mut called on TypeDecl")`）。
+
+两处**登记给后续批次**（本批空表使其行为等价，不改变任何可观察输出）：
+
+1. mono 特化克隆的两个构造点（`passes/mono/function.rs:208`、`passes/mono/mod.rs:1383`）本批写空表 ⇒ 若 7b.2 开始填表，特化时必须补类型替换与 `defining_block` 映射；登记给 7b.2。
+2. `normalize` 不打印 values 表（空表 ⇒ 快照零漂移）；值表有内容时必须扩展渲染并把快照再生纳入该批；登记给 7b.2。
+
+`LocalSlot::origin` / `FrameId` / `slot_frames()`（origin 2.1.4）原样保留：`ir.rs:958/986/1007`、`verify.rs:1087`、mono 的 `origin: slot.origin` 投影逐处核对，不做修改。
+
+### 三、`verify_ssa` Phi 残项的判定依据
+
+7b.1a 已落两条（`dst` 必为 `Operand::Value`、`incoming` label 严格升序），本批在其后追加三条：
+
+1. **前驱集来源**：块级，从 `BasicBlock.successors` 反推——对每条 `block → successors` 边，`predecessors[s] ∋ block.label`；`FnView` 增「指令下标 → 所属块 label」映射与 `predecessors` 表。`ModuleIR.init` 无基本块结构：Phi 出现在 init 序列时**显式报违规**（「无基本块结构，前驱集不可判定」），不静默跳过。
+2. **前驱数**：`incoming.len() != predecessors[block].len()` ⇒ 报 `PhiConsistency`（计数差异）。
+3. **前驱 label 集合**：计数相等但 `incoming` label 集合 ≠ 前驱集合 ⇒ 报 `PhiConsistency`（集合差异）。集合相等已隐含计数相等，故计数不等时只报计数，避免同一缺陷双报。
+4. **逐输入类型一致**：`Operand::Value(v)` 且 `values` 非空时取 `values[v].ty`；可得类型之间用既有 `types_compatible`（文件头「现实语义记录」第 3 条）比对，不一致报 `PhiConsistency`。类型不可得的三种形态**显式登记、不静默放行**：
+   - `values.is_empty()`（本批生产恒为空）：类型判定依据不存在 ⇒ 不判定（与文件头「类型不可得」同口径；7b.2 填表后自动收紧）；
+   - `values` 非空而 `v` 越界：无值信息 ⇒ 报 `PhiConsistency`（ValueId 越界）；
+   - 非 `Value` 操作数（Const/Local/Arg/Global）：无 values 类型源 ⇒ 不判定（文档化，不视为豁免）。
+
+**实测前提（重要）**：全仓 15 处 `successors` 构造全部是 `Vec::new()`，没有生产填充点（`git grep -n "successors:" -- src` 逐处判读）⇒ 当前块级前驱恒空。于是本判据对**生产 Phi** 的约束是：7b.3 生产 Phi 之前必须先填块级 `successors`，否则任何带 incoming 的 Phi 都会被 `verify_ssa` 拒（这是判据的应有行为，不是批内缺陷；本批语料无 Phi，`verify_loose` 不受影响）。登记为 **7b.3 前置**。
+
+### 四、快照 / 语料影响预判
+
+- IR 快照：**零漂移**。`normalize` 不打印 values，`FunctionBody::Code` 渲染路径只受模式匹配影响；基线 232 份。
+- 语料差分：**402/402 零 diff**；`values` 空表不进入任何渲染 / 翻译路径。
+- verify 计数：现有 `cargo test --lib verify` = 30 passed、`middle::ir::tests` = 64 passed / 1 ignored、`phi` = 33 passed（7b.1a 收口实测数字）；本批新增测试会抬高计数，收口按实测记录。
+- 行为等价（C4）：本批对 `values` 只有访问器与 Phi 校验两处读取，生产 IR 无 Phi ⇒ 不改变降低 / 翻译 / 执行。
+
+### 五、测试面
+
+- `src/middle/ir/tests/ir.rs`：`test_code_body_values_start_empty`、`test_code_body_values_mut_writes_through`、`test_value_info_construction_preserves_fields`。
+- `src/middle/ir/tests/verify.rs`：更新 7b.1a 的三条 Phi 测试以带块级前驱（否则新判据会额外报计数 / 集合违规）；新增正例 `test_ssa_phi_with_matching_predecessors_passes`（空 values）与 `test_ssa_phi_with_matching_types_passes`（带类型），反例 `test_ssa_phi_predecessor_count_mismatch_fails` / `test_ssa_phi_predecessor_set_mismatch_fails` / `test_ssa_phi_incoming_type_mismatch_fails`，以及 init 无块结构 `test_ssa_phi_in_init_without_blocks_is_reported`。
+- 合成 IR 夹具：`ir_build.rs` 增 `block(label, instrs, successors)`、`func_with_blocks(...)`（含 values 参数）与 `value_info(...)`；既有 `func()` 保持签名不变（内部委托）。
+
+### 六、范围、D59 与回滚点
+
+- inScope：`src/middle/`、`src/driver/tests/`、`src/frontend/tests/`、`tests/baselines/`、本文件；out of scope：`src/backends/`、`src/std/`、`tests/yaoxiang/`、09、04、`scripts/`。
+- D59：**无行为变更（表示重塑）**——values 本批恒空、无生产 Phi；不改变原先成功程序的对外表现。
+- 回滚点：本契约段单独一笔文档提交，先于代码；代码为独占一笔，`git revert` 整笔回滚（`FunctionBody::Code` 加字段波及全仓编译，不可增量回滚）。
+
+## P7 7b.1b 收口（`values` 值表 + `ValueInfo` + 访问器 + Phi 残项判据，2026-11-20）
+
+> 收口对象 = WBS 二级任务 7b 的第二个三级任务 7b.1b（`ir.rs` 结构变更 #3-5）。代码由实现轮落库（**契约笔先于代码笔**），验证轮在冻结 revision 的批次树上独立复算，复审轮给出 verdict=pass。本段按登记口径写实测数字与机械证据；**不写本地提交号**（哈希随 `pull --rebase` 改写），指向以「笔的性质 + 文件清单」定位。
+
+### 一、判据链（实测数字）
+
+冻结 revision = **推送前的最终 base**（= origin/dev 顶端 + 本批四笔：契约笔 / 代码笔 / 收口笔 / 数字重绑笔；origin 顶端含范围模式 RangePattern、#571 std 代理、3.24.1 收口与三笔自动翻译，见 §七 与 §八）。验证轮的全部量测在 `scripts/dev/scratch.py` 的批次树内完成（`init` → `use --rev` → `build` → 量测 → `release` → `gc`），主仓工作树全程干净；复审轮在同一 revision 上以 `git show <rev>:<file>` / `git grep <rev>` 复核，未读工作树。**本表数字取自推送前最终 base 的复跑**（更早两轮的数字见 §七，已被取代）。
+
+| 门禁 | 结果 |
+| --- | --- |
+| `cargo fmt --check` | exit 0 |
+| `cargo clippy --all --all-features --all-targets -- -D warnings` | exit 0 |
+| `cargo test --lib snapshot` | exit 0 = 6 passed / 0 failed / 1 ignored（IR 快照 **232 份零漂移**；**最终 base 复跑，同值**） |
+| `cargo test --lib verify` | exit 0 = **35 passed / 0 failed / 0 ignored**（**最终 base 复跑，同值**） |
+| `cargo test --lib middle::ir::tests` | exit 0 = **72 passed / 0 failed / 1 ignored**（**最终 base 复跑，同值**） |
+| `cargo test --lib phi` | exit 0 = **38 passed**（**最终 base 复跑，同值**） |
+| `python scripts/dev/testsuite.py run fast` | exit 0 = 1 波 **2426 条**，跳过 0 波（上一轮 2425 ⇒ **+1** = origin 的 #571 std 代理测试；该旧值已被取代） |
+| `cargo run --example corpus_probe` + 语料差分门禁 | exit 0 = **402 / 402**，逐条差分空（**最终 base 复跑，同值**） |
+| `check-docs-truth` / `check-fanout` / `check-test-channel` / `check-docs-refs` / `check-docs-orphan` | 全 exit 0（docs-refs = **1247 个跟踪文本文件 / 13088 个路径状 token**；上一轮 13041、上一轮之前的本地复跑 13055，均已被取代） |
+| `python scripts/docs/gen-error-code-docs.py` + `git diff --quiet` | exit 0 且差分为空（生成器幂等；**最终 base 复跑**） |
+
+**零漂移的归因不是「基线整批重写」**：7b.1b 的代码笔未触碰任何基线文件（`git show --name-only` 无 `src/middle/ir/tests/snapshots` 与 `tests/baselines` 条目）⇒ 232 份 IR 快照与语料差分基线（`tests/baselines/corpus-parity.jsonl`，402 行记录）原样。rebase 后相对**新的 origin 顶端**仍同面：`git diff --stat origin/dev..HEAD -- src/middle/ir/tests/snapshots tests/baselines` 为空。行为等价的结构理由与运行时证据互证——`values` 本批恒为空表、`normalize` 不打印 values（渲染路径未改）⇒ 快照与语料必然不变；生产侧 `Operand::Value(` / `Instruction::Phi` 的构造点为 0 ⇒ 新增的 Phi 判据对现有 IR 不产生任何输出。
+
+### 二、值表 / `ValueInfo` / 访问器与全仓构造点
+
+1. **结构形态**：`ValueInfo { ty: MonoType, debug_name: Option<String>, defining_block: usize }`（`src/middle/ir/ir.rs` 的 `ValueInfo` 定义）与 04 §值标识方式 **逐字一致**；`FunctionBody::Code` 增 `values: Vec<ValueInfo>`（同文件 `FunctionBody` 定义）；访问器 `values()`（只读、TypeDecl 返回空表，镜像 `locals()`）与 `values_mut()`（可变、TypeDecl `panic!`，镜像 `blocks_mut()`）落在 `impl FunctionIR`。
+2. **全仓构造点**：`git grep -n "FunctionBody::Code {" -- src tests` = **58** 处（结构体字面量构造与模式匹配两类）；生产侧 `values: Vec::new()` 恰好 **17 处**，与契约 §一 的 17 处清单逐处吻合；非空 `values` 只出现在两处测试夹具（`src/middle/ir/tests/ir_build.rs` 的 `func_with_blocks` 参数、`src/middle/ir/tests/verify.rs` 的合成模块）⇒ **本批值表恒空**。
+   口径注记：契约 §一 的动工前基线为 56；差额 = 本笔 +3（新模式 / 访问器）−1（`ir_build` 的 `func()` 改为委托 `func_with_blocks`）= 58。**收口一律用 58**。
+3. **一处无 `..` 的模式匹配已同步**：`src/middle/passes/mono/mod.rs` 的 `let FunctionBody::Code { blocks, entry, locals, .. } = &func.body else`（加字段即编译失败的那一处）；其余带 `..` 的模式匹配未动。
+4. **值表不进入渲染 / 翻译路径**：mono 特化克隆的两个构造点本批写空表 ⇒ 若 7b.2 开始填表，特化时必须补类型替换与 `defining_block` 映射（登记给 7b.2）；`normalize` 不打印 values ⇒ 值表有内容时必须扩展渲染并把快照再生纳入该批（同样登记给 7b.2）。
+5. **访问器是登记式接口**：本批 `values()` / `values_mut()` 的调用方只有测试，生产消费者随 7b.2 的 `next_temp_reg` 改产 `Operand::Value` 而来（见 §六 INFO-1）。
+
+### 三、Phi 残项三条判据与类型不可得策略
+
+7b.1a 已落两条（`dst` 必为 `Operand::Value`、`incoming` 的 label 严格升序）；本批在 `src/middle/ir/verify.rs` 追加三条（`check_phi_structure` 与 `check_phi_incoming_types`）：
+
+1. **前驱集来源（块级）**：`block_predecessors()` 按「`block → successors` 边 ⇒ `predecessors[succ] ∋ block.label`」反推；`FnView` 增「展平指令下标 → 所属块 label」映射与前驱表（块级坐标与指令级 CFG 是两套坐标）。
+2. **前驱数**：`incoming.len() != 前驱数` ⇒ 报 `PhiConsistency`（计数差异）。
+3. **前驱 label 集合**：计数相等但集合不等 ⇒ 报 `PhiConsistency`（集合差异）；集合相等已隐含计数相等，故计数不等时**只报计数**，避免同一缺陷双报。
+4. **逐输入类型一致**：`Operand::Value(v)` 且值表非空时取 `values[v].ty`，用既有 `types_compatible` 比对（未引入第三套类型兼容判断），不一致报 `PhiConsistency`。
+
+**类型不可得三策略（逐条落档，不静默放行）**：
+
+- 值表为空 ⇒ 类型判定依据不存在 ⇒ **不判定**（本批生产形态；7b.2 填表后自动收紧）；
+- 值表非空而 `ValueId` 越界 ⇒ **报 `PhiConsistency`**（越界，无值信息）；
+- 非 `Value` 操作数（`Const` / `Local` / `Arg` / `Global`）⇒ 无值表类型源 ⇒ **不判定**（文档化，不视为豁免）。
+
+另：Phi 出现在模块 init（无基本块结构）⇒ **显式报违规**（「无基本块结构，前驱集不可判定」），不静默跳过、也不叠报计数 / 集合。
+
+**正反例（合成夹具承担，单缺陷可归因）**：正例 2 条（空值表的前驱一致 / 带类型的相容类型）；反例 6 条（`dst` 落存储槽、label 未升序、前驱数不等、前驱集合不等、类型不一致、init 无块结构）。每条反例把其余判据对齐，断言消息分别点名「前驱数」「前驱集合」「类型不一致」「无基本块结构」。夹具 `two_pred_phi_module`（`src/middle/ir/tests/verify.rs`）给出真实块级前驱：块 0 / 1 的 `successors` 都指向块 label 3 ⇒ 块 3 的前驱集 = {0, 1}。
+
+**实测前提与 7b.3 前置**：全仓 `BasicBlock.successors`（`Vec<usize>`）的 **15 处生产构造全部是 `Vec::new()`**（`git grep -n "successors:" -- src` 逐处判读）⇒ 块级前驱恒空 ⇒ 本批的前驱数 / 前驱集合判据在**真实 IR 上无数据**，由合成夹具承担；**这不是判据缺失**。7b.3 生产 Phi 之前必须先填块级 `successors`，否则任何带 incoming 的 Phi 都会被 `verify_ssa` 拒 —— 登记为 **7b.3 前置**（三处一致登记：契约 §三、`src/middle/ir/verify.rs` 文件头「前置登记」、代码笔提交信息「实测前提登记」）。
+
+### 四、验证与复审结论
+
+- **验证轮（独立验证，批次树）：通过。** 本表各门禁全绿；结构审计逐处通过（普查 58、17 处构造点、值表恒空、`ValueInfo` 与 04 逐字一致、访问器镜像既有形态）；Phi 残项三条与访问器经 **5 条有效机械可逆变异**（补丁 → 转红 → 机械还原 → 重建 → 重测全绿）证明判据在承重。如实登记验证方自身的两处问题：生成器首跑因量测脚本的赋值行与注释粘连而 exit 1（删除后树复归 CLEAN，改用树内直接调用复测 exit 0 + CLEAN）；1 条变异因无效未计入承重证据。**rebase 后的增量重验轮（合并树）结论同样为通过**，数字与证据见 §一 与 §七。
+- **复审轮：verdict = pass。** 八类逐条成立：
+  - **D0–D4**：权威源 = `src/middle/ir/ir.rs`（01-routing 的 `middle/ir/` = 「IR 定义与不变量」）；`ValueInfo` 与既有概念**不重复**（仓库既有 `*Info` 全在 frontend/sema 域；最近邻 `LocalSlot` 的字段集不同）；访问器属 `middle/ir` 既有职责、不是新增入口；无 import 别名弥合。
+  - **红线**：`todo!()` / `unimplemented!()` 命中文件数 7 → 7（无新增）；`include!` 0 → 0；`pub(crate)` 183 → 183；改动目录 `use super::*` 0 命中；7b.1a 的 3 条 Phi 测试是**改名 + 加强**（`test_ssa_phi_well_formed_passes` → `test_ssa_phi_with_matching_predecessors_passes`，并补齐前驱集使反例单缺陷可归因），未删测试、未放宽判据。
+  - **inScope**：代码笔的 17 个 src 文件全在契约 §六 内，out-of-scope 目录一个未出现；`git diff --name-only origin/dev..HEAD` = 20 文件（17 src + 09a 契约段 + 2 个生成物），未混 7b.1a / 0.4.2 / 文档收口。
+  - **`LocalSlot::origin` 零回退**：`LocalSlot` 仍含 `pub origin: Option<FrameId>` 与 `FrameId`；mono 的 origin 投影 `origin: slot.origin`（`src/middle/passes/mono/function.rs`、`src/middle/passes/mono/mod.rs` 各一处）原样在位；`ir.rs` / `verify.rs` / `mono` 的 diff 内无任何 origin 相关删改（origin 侧 2.1.4 的按槽身份判据完整保留）。
+  - **测试规范**：命名 `test_<what>_<scenario>`、AAA 三段、断言带自定义消息、枚举匹配用 `assert!(matches!(...))`、无 `use super::*`、无 inline `mod tests {}`；夹具复用化且既有 `func()` 签名不变。
+  - **独立性**：状态页路由不同与成员会话内不可自证两事实并存 ⇒ **不宣称异家族独立**。偏差如实登记：复审由 **docs-1** 承担（review-1 的额度受限未产出结论，按用户 2026-11-20 裁决 B 先例改派），与实现者不同族、**与验证者同族、且与本收口轮为同一成员** ⇒ 复审、验证、收口三者互不独立。补偿证据 = 冻结 revision 上的对象级复核（17 构造点 / Phi 三残项 / `LocalSlot::origin` / 15 处 `successors` / 58 普查 / 两生成物行号平移 / 生成器幂等 / 提交信息行宽逐行量算 / 红绿 grep 差分）。
+
+### 五、生成物与 inScope 扩面（队长契约缺陷登记）
+
+7b.1b 的代码笔改动了诊断发射点所在文件的行号（mono +2 行、translator +1 行）⇒ 错误码文档的发射点行号随之平移。按 **AGENTS 团队编排约定第 6 条**（契约 `inScope` 必须覆盖「生成物」），`scripts/docs/gen-error-code-docs.py` 在合并后的树上重新再生，两处生成物随代码并入代码笔：
+
+- `docs/src/reference/error-code/E1xxx.md`：`src/middle/passes/mono/mod.rs` 的发射点行号平移（+2 行）；
+- `docs/src/reference/error-code/E8xxx.md`：`src/middle/passes/codegen/translator.rs` 的发射点行号平移（+1 行）。
+
+两文件的 diff **只有发射点行号的机械平移**，无内容改写；生成器幂等（跑生成器 exit 0 + `git diff --quiet` 为空）。
+
+**契约缺陷（队长侧）**：7b.1b 契约 §六 的 `inScope` 只列了 `src/middle/`、`src/driver/tests/`、`src/frontend/tests/`、`tests/baselines/` 与本文件，**漏声明 `docs/src/reference/error-code/` 前缀** ⇒ 该两文件的并入属**契约缺陷下的授权例外，不判实现越界**（复审轮同此结论）。**后续契约写法教训**：凡改动会连带触到机械必需面（生成物 / 直驱测试 / 快照与语料基线 / 全仓穷尽 `match` 的补臂点），必须在 `inScope` 里写成**可被路径匹配器解析的前缀**（如 `docs/src/reference/error-code/`）——散文限定会被 `changedPaths` 拒收。
+
+### 六、偏差与既有项
+
+1. **提交信息行宽（既有项，本批不修，如实登记）**：`docs/src/dev/commit-convention.md` 规定 subject 不超过 50 字符（表头 subject 行与「Subject（主题）」节），正文每行不超过 72 字符。实测：**7b.1b 代码笔** subject 76 字符、正文 4 行超 72（79 / 80 / 74 / 75）；**7b.1b 契约笔** subject 57 字符同样超 50。**处置：不 amend**——message-only 改写会改写未推送哈希，使验证轮与复审轮绑定的冻结 revision 失效；且复审判定格式偏离不是正确性 / 可读性缺陷。取舍依据：仓库近期同类超长存在，单独修这两笔而不修同类会制造不一致。**若用户要求 amend，另案处理**（改写后须重做验证轮与复审轮的冻结 revision 绑定）。
+2. **INFO-1 · `values()` / `values_mut()` 暂无生产消费者**：本批调用方只有测试；生产消费者随 7b.2（`next_temp_reg` 改产 `Operand::Value`）而来。属 04 改动清单第 5 项的登记式接口，不是新增入口；已由 3 条直驱测试覆盖。
+3. **INFO-2 · 测试段注释写法（既有项，本笔只登记不改测试）**：`src/middle/ir/tests/ir.rs` 的 `test_value_info_construction_preserves_fields` 用「// Arrange + Act」合并段注释，与 test-specification 的 AAA 三段写法有轻微出入（不影响判据承重）。登记为既有项，交后续批次顺带规范。
+4. **INFO-3 · 实测前提三处一致登记**：15 处 `successors` 全空已在契约 §三、`src/middle/ir/verify.rs` 文件头、代码笔提交信息三处一致登记；真实 IR 无前驱数据**不判为判据缺失**。
+5. **en 镜像未手改**：中英镜像的规则是「zh 是源，en 由翻译工作流同步」；本轮 `inScope` 不含 `docs/src/en/dev/architecture/04-ssa.md`，故只核对未改写——en 侧 04 的值表 / 访问器 / Phi 残项段仍是 7b.1b 落地前的表述，待翻译工作流按 zh 同步（**已知待同步项**）。
+6. **本轮未改动 inScope 外文件**；未跑 `git push` / `fetch` / `pull`。
+
+### 七、收口后 rebase（合并树事实）
+
+（本节记录第一次 rebase；其后 origin 又推进 6 笔、本地四笔再 rebase 一次，**最终状态见 §八**。）
+
+7b.1b 收口笔落库之后，`origin/dev` 又推进 **3 笔**：两笔自动翻译笔（`13abb20d`、`7a10a805`）与一笔功能笔 `4d608df3`（范围模式 RangePattern，20 files +1041/−59）。本地三笔（契约笔 / 代码笔 / 收口笔）随即 rebase 到新的 origin 顶端 `7a10a805`（reflog 佐证：`pull --rebase origin dev` → checkout 新 origin 顶端 → 三次 pick）。**本节记录 rebase 后的合并树事实，§一 的判据数字已按合并树重绑。**
+
+**逐笔 patch-id 一致（diff 内容零变化）**——复核命令：`git show <笔> | git patch-id --stable`（输出第二列是提交 sha，rebase 后必变，**按哈希列比对**），并与 `git show --stat` / `--numstat` / `--name-only` 对账：
+
+| 笔 | patch-id | diff 主体 | `--stat` |
+| --- | --- | --- | --- |
+| 契约笔 | 与 rebase 前**逐笔一致** | 逐字节相等 | 1 file +100/−0 |
+| 代码笔 | 与 rebase 前**逐笔一致** | 逐字节相等 | **19 files +541/−71** |
+| 收口笔 | 与 rebase 前**逐笔一致** | 逐字节相等 | 3 files +103/−12 |
+
+⇒ **本批三笔的内容在 rebase 后零变化**；因此 §一~§六 的全部结论与登记继续成立。
+
+**交互审计（RangePattern × 7b.1b 表面）**：`4d608df3` **未触碰 `src/middle/ir/`**，其 diff 中 `FunctionBody::Code` 命中 **0** ⇒ 新增字面量 0（`Range` 在 ast / parser 层）；`src/middle/ir/ir.rs` 的 `Instruction` 变体数仍 **75**；`FunctionBody::Code {` 普查 **58 → 58** 不变；`values` 仍恒空（`Operand::Value(` 只出现在模式与显式诊断臂、`Instruction::Phi` 只出现在穷尽 match 臂与占位文本 ⇒ 生产构造 0）；`LocalSlot::origin`（`src/middle/ir/ir.rs`）与 `FrameId` 原样，本批三笔对 `ir.rs` 的 diff 中含 origin / FrameId 的增删行 **0** ⇒ origin 侧 2.1.4 的按槽身份判据未被触碰。
+
+**C4 零漂移双证**：①`git diff --stat origin/dev..HEAD -- src/middle/ir/tests/snapshots tests/baselines` 为空；②`git diff --name-only <新 origin 顶端> <本地集成 HEAD> -- 同两项` 为空 ⇒ 232 份快照与 402/402 语料与新 origin 同面。
+
+**判据承重抽验（合并树）**：3 条机械可逆变异（短路前驱数判据 / 摘掉逐输入类型一致判据的调用 / 让 `values()` 对 Code 体返回空表）分别在合并树转红（各 71 passed / 1 failed），还原并重建后一律 **72 passed / 0 failed / 1 ignored** 回绿、树 CLEAN ⇒ 7b.1b 的判据与访问器在合并树仍承重。
+
+**生成物**：本批三笔对两处 error-code 生成物的贡献与 rebase 前**逐字节一致**（相对新 origin 仍只有两处发射点行号平移：`src/middle/passes/mono/mod.rs` 1459→1461、`src/middle/passes/codegen/translator.rs` 1391→1392）。两文件的**绝对内容**与 rebase 前不同，原因已核：origin 那三笔自己再生了错误码文档（E1002 发射点 70→74 处、E1031 3→5 处、`sema/expr.rs` 行号平移）——属 origin 的变更，不是本批三笔；合并树上的生成物与生成器**同步**（生成器 exit 0 + `git diff --quiet` 空）。
+
+**环境性红（如实登记）**：rebase 后的重验轮首次 `run fast` exit 3 与 `corpus_probe` exit 101，根因 = **F: 盘空间耗尽**（rustc 报 `IO failure on output stream: no space on device`，剩余 0 GB），**非代码缺陷**；处置 = 删除主仓 `target/` 下两个被忽略的构建缓存（释放 10 GB；未动源码、文档、证据目录，也未动他人持有的批次树），随后**原样重跑**全部转绿——§一 表的数字即重跑后的结果。
+
+**既有待收口项在 rebase 后依然成立**：生成物 inScope 声明欠账、提交信息行宽、普查数口径三条随代码内容逐字节不变而原样保留（已在 §五 / §六 登记，不重复展开）；普查数的**落地口径仍是 58**（合并树复核仍为 58）。
+
+**独立性**：该增量重验轮由验证者承担，与实现者同模型 ⇒ **不宣称异家族独立**；结论只对本轮合并树负责，补偿证据 = 逐笔 patch-id 与 diff 主体逐字节比对 + 交互审计逐项 + 合并树门禁复跑 + C4 双证 + 3 条机械可逆变异。
+
+### 八、最终同步（推送前）
+
+§七 记录的是第一次 rebase；此后 `origin/dev` **又推进 6 笔**，本地四笔再 rebase 一次，本节记录推送前的最终状态。
+
+**origin/dev 推进的 6 笔**：`327cf647`（#571：std `http_get` 跟随 ureq 3 默认拾取环境代理，删兼容禁用层；触及 `src/std/net.rs` 与 `tools/yx/src/dl.rs` 及其测试）、`1bcc509a` / `1f97d46c` / `a188b7b5`（三笔自动翻译）、`2c016861`（3.24.1 修复轮：t3 REJECT 处置——F1 夹带恢复 + F3 补锚 + F4 文法精度）、`d295eb0b`（3.24.1 收口：#405 范围模式落档，新组 3.24，只改 09 与 09a）。
+
+**本地四笔再 rebase**：契约笔 / 代码笔 / 收口笔 / 数字重绑笔 rebase 到新的 origin 顶端。四笔的 `--stat` 与 rebase 前一致：契约笔 1 file +100/−0、**代码笔 19 files +541/−71**、收口笔 3 files +103/−12、数字重绑笔 1 file +38/−10。
+
+**代码笔 patch-id 逐笔一致**——复核命令：`git show <笔> | git patch-id --stable`（输出第二列是提交 sha，rebase 后必变，**按哈希列比对**）：代码笔的 patch-id 在三次 rebase（初次落库 → 第一次 rebase → 本次 rebase）之间**逐笔一致**，diff 主体逐字节相等 ⇒ **本批代码内容自落库起零变化**，§二 / §三 的全部结构结论与判据在最终 base 上继续成立。
+
+**最终 base 的判据复跑**：见 §一 表（run fast **2426 条**、docs-refs **1247 文件 / 13088 token**；verify 35、middle::ir::tests 72（1 ignored）、phi 38、snapshot 6/0/1（232 份零漂移）、语料 402/402 差分空、生成器幂等——与上一轮同值）。
+
+**09 的三级计数 = 253**：新增的 1 个是 origin 侧 3.24.1 收口登记的三级任务（3.24.1），本批 7b.1b 不新增计数（其 0.4.2 已在 252 计入）。
+
+**C4 相对最终 base 复核**：`git diff --stat origin/dev..HEAD -- src/middle/ir/tests/snapshots tests/baselines` **为空** ⇒ 232 份快照与语料基线与最终 base 同面。
+
+**7b.1b 表面未变**（RangePattern 与 #571 均属 origin 侧改动）：`Instruction` 变体数仍 **75**；`FunctionBody::Code {` 普查仍 **58**；`values` 仍恒空（`Operand::Value(` 在 `src/`（排除测试）只出现在模式与显式诊断臂，`Instruction::Phi` 只出现在穷尽 match 臂与占位文本 ⇒ 生产构造 0）；`LocalSlot::origin` 与 `FrameId` 原样（`src/middle/ir/ir.rs`）。
+
+**本节不写本地提交号**：本地四笔以「契约笔 / 代码笔 / 收口笔 / 数字重绑笔」定位；上文哈希均为 origin 侧已推送提交。
+
+## P3 3.24.2 收口（#549 异型 Eq 编译期拒绝——用户甲案，2026-11-20）
+
+> **一、范围与终态**：issue [#549](https://github.com/ChenXu233/YaoXiang/issues/549)（Eq/Neq 非记录形态吞 unify 恒放行跨类型与静态 Void 值比较——与排序比较的两侧同型纪律不一致）。**用户 2026-11-20 裁决甲案**（全量对齐），D59 **D 类**行为变更经裁决覆盖。推送终态两笔：主修笔 `fbca156b`（fix(sema)，13 文件）+ 修复笔 `d5475ace`（fix(backends)，t3 medium 注释更正）。三级 +1 = 3.24.2（253→254，基线含并行会话同日 +0.4.2 与 +7b.1a 组）；二级不变（归 3.24 组）。issue [#549](https://github.com/ChenXu233/YaoXiang/issues/549) 关闭（证据评论含 M2 降级登记）。
+
+> **二、修法与放行面**：infer_equality 非记录臂由 `let _ = self.solver.unify(...)` 吞结果恒放行改为与 infer_binary 排序比较臂同款 **decide 入口**——unify 失败报 E1002（resolve 后两侧原始形态，与排序比较臂同族同文）。放行面按既有规则收窄（判定函数文档登记，各带实现出处）：**Any/Never** 走 unify 顶部/底部类型规则放行（std/test.yx 的 Any == Any 槽位实测保活）；**TypeVar** 一侧延后判定（泛型体内合法）；**借用操作数**按 RFC-009 比较读穿透剥层（std/list.yx 的 list[i] == item 形态）。记录类型接口判定臂（E1101 逐字段）与接口存在值路径零变化；运行期兜底臂成不可达防御保留（executor.rs 注释明说编译期应先拦——本笔兑现）。接口存在类型包装值相等边界（调研开放问题①）实测走记录臂 E1101 零变化，锚 1 组钉住。
+
+> **三、语料处置（escalation 四条件裁定）**：t1 前两轮 IR 快照门禁红 = 两份语料在甲案下的预期漂移，实现者上报真死锁（「修复」与「禁止再生基线」在实现者侧互斥）⇒ 队长裁定解除本批再生禁令附四条件。**因果核清**（批次树实跑 d295eb0b）：两文件本批前均通过 ⇒ 分支②（漂移由本批引起）。①range_equality.yx:31 断言的正是被废除行为 ⇒ 迁 06-compile-errors/types/cross_container_equality_err.yx（mixed_comparison_err.yx 先例格式，expect: compile-error E1002），其余同型断言保留。②builtin_container_ctor.yx 的 E1002 显形根因 = **既有索引推断缺陷**（`Vec(Int)[..]` 的 `(i)` 下标形态元素位推断为 Type——v[0]+1 在本批前的 d295eb0b 即复现，与甲案无关）⇒ **另立 [#575](https://github.com/ChenXu233/YaoXiang/issues/575)**（本批不修），语料最小改写整容器同型比较绕开（原意图运行期深比较等价保留，说明锚双形态入文件头）。③基线再生 diff 全文留档逐条归因 + 队长人工核 PASS：parity 402→403（+1 = 新拒绝记录；两改动文件记录回归 exit 0 空诊断与旧基线同形）、range_equality.snap -14 行（迁移块）、builtin_container_ctor.snap 26+/19−（断言替换 + locals 14→18），无闭包外漂移。
+
+> **四、验证链与两项裁定**：t1 三轮（前两轮快照门禁红待裁定 → 第三轮 14 门禁全绿）→ 主修笔推送 → t2 **FAIL**（**M2 判据缺口**——「摘 TypeVar 延后臂 ⇒ std 泛型槽位锚红」被实测否定：decide 的 unify 对 TypeVar 是 bind 成功路径（solver.rs:520-526），摘臂与保留观测等价，全 lib 1957 / 集成 424 / 语料 403 三面全绿）+ t3 **REJECT**（1 medium + 3 info）→ **M2 降级裁定（选验证者方案②）**：该臂当前放行面上无独立可观测保护面，其行为由 unify 的 bind 语义自身维持——不造 occurs-check 夹具配无观测差异面的红判据（3.20.33 M3 教训：无观测差异面如实登记而非构造）；验证轮按其余八项（全 PASS）收口，降级登记于 #549 关闭评论与本节。**修复笔 `d5475ace`**：t3 medium = **兜底臂注释可达性断言过强**（称异型与静态 Void 比较已收口「不再放行到本臂」，但 void==void 同型经 unify 专属臂放行仍可达、Any 槽位运行期异型值仍可达——本笔 multifile 夹具 f(a:Any,b:Any) 传 (1,"a") 即实证）——**3.20.14 收口时队长修正过同一注释位的同款过强措辞（09a:4563 在案），同位复发**，就地改回观测陈述（异型与跨类型静态 Void 面已收口、同型 Void 与 Any 槽位运行期异型仍可达），仅注释行为零变化——按 3.23.2 先例（仅注释、代码行为逐字节一致）免 t3r。t3 info 三条处置：①**B9 悬空编号替换**（09:230 与 09a 两处「对齐 B9」→「判据本体 = infer_binary 比较臂，mixed_comparison_err.yx 钉」可解析指针——S6 的 B9=Switch 有 06 定义不动）；②锚列举 4 为 6 子集无虚构（check.rs 实为六形态探针）登记；③裁决落库时序正常（本节即闭环承载）。
+
+> **五、移交登记**：①#575（索引推断缺陷）待排期——修复涉及 builtin ctor 类型合成路径（D6.2 邻域）；②锚 7 组与 multifile 新夹具入 integration；③异型 Eq 收窄后 `#500` Void 主锚保持（hint 措辞观测陈述不变）；④语料 403 条新基线为甲案契约的冻结证据。批次树已 release + gc。
+
+## P3 3.24.3 收口（#504 导入类型注解误拒修绿——导入面名义名改绑，2026-11-20）
+
+> **一、范围与终态**：issue [#504](https://github.com/ChenXu233/YaoXiang/issues/504) 自 3.18.2 迁入（用户裁决「按推荐」：分类定 **C 类**——合法程序 E1012+E1002 exit 1 被误拒，非登记疑虑的 D 类；3.18.2 行与本文件:1116 已就地更正）。D59 三条件：先红后绿 + 原先成功程序零变化（渲染零漂移实测）+ 同批登记。推送终态两笔：主修笔 `ea16fde0`（fix(sema)，7 文件）+ 修复笔 `361f933f`（t3 REJECT 八条处置，9 文件）。三级 +1 = 3.24.3（254→255）；二级不变（归 3.24 组）。issue [#504](https://github.com/ChenXu233/YaoXiang/issues/504) 关闭（C 类定案）。
+
+> **二、修法（爆炸半径判定一批装下）**：types/substitute.rs 新增共享实现 **rebind_nominal_refs**——名义引用改写只触 TypeRef 体与 Struct.interfaces 名义名位；Generic 头部 / Struct.name / 构造器名身份面不动（与 substitute_ctor_heads、MonoType::substitute 分工写明）。改绑表**按来源模块路径分域**（path → 定义名 → 本地名）——**修正派工前提的探针证据**：跨单元同名（b.Temp as TempB / c.Temp as TempC）必须保持判异（E5006/E5008 只拦同名本地绑定不拦跨模块同定义名），平面合一会放宽语义。预收集一次供两用（F5 收敛）。**零 MonoType 形变**（派生 PartialEq/Eq/Hash/Debug 逐位不变）⇒ 渲染零漂移实测（IR 快照 / 语料 403 行 / testsuite fast 2442 / integration 426 全绿）。变体加字段形态（TypeRef 携带定义模块，全仓 TypeRef 站点约 370 量级）预测超一批不硬装 ⇒ **P6 全量身份收敛登记 3.18 主线后续**；qualify_deferred_method 派发面评估后原样保留零触碰（其登记缺口属派发面非注解面）。
+
+> **三、t3 八条 findings 处置（修复笔 `361f933f`）**：①**F1 medium 穷尽化**——通配臂吞 10 变体（Never/Void/Bool/Char/Int/Float/Enum/TypeVar/LibraryRef/ExternRef，今日均无名义引用位无现行缺陷）改十变体逐名显式 clone、match 无兜底臂（新增变体编译器指路——P6 加字段不再被静默吞）+ 语义面钉（枚举名/变体串撞表键不得改写）。②**F3 low 可达性探针实证 = 可达**——接口即 TypeDefinition、是 ExportKind::Type 唯一来源：use 别名导入接口后 Struct-vs-TypeRef 判等臂（s.interfaces.contains）拿定义单元裸名与本地名判异，合法程序被误拒（红态实测）⇒ interfaces 纳入改绑（名义名位语义与 TypeRef 体同）+ register_use_export 类型载荷面按来源模块域接线 + 三锚一负探针（判等未放宽）。③**F4 low 跨 use 残留修绿**——分离两条 use 形态先红后绿锚；**修正派工前提**（平面合一被探针否定，分域合集保守卫）。④**F2 low 守卫钉有牙**——Generic 头部钉补表内名 case（按表中介改写头部的变异必红）。⑤**F5 low 收敛**——别名解析预收集一次供两用。⑥**F6 info 计数口径更正（本节承载）**：实现笔提交信息「~346 TypeRef 站点」口径不可复现（实测 372/288 依口径），量级一致结论不受影响。⑦F7 info 动态声称归 t2。⑧**F8 info 裁决落档**（本节 + 3.18.2 行与:1116 就地更正承载）。
+
+> **四、验证链**：t1 一轮全绿（14 门禁）→ 主修笔推送 → t2 **PASS**（四组锚 + M1 摘改绑回红 / M2 范围过度反向钉 + CLI 探针契约成立）→ t3 **REJECT**（8 条）→ 修复笔 → t3r **APPROVE**（1 info = 两条收集器冲突策略分歧（insert 后写胜 vs entry 首登记）——仅同条 use 内同一定义名重复导入时分歧，被 E5006/E5008 拦无观察面，留观察）→ 收口笔（本节）。批次树已 release + gc。
+
+> **五、移交登记**：①#575（索引推断缺陷）待排期——修复涉及 builtin ctor 类型合成路径（D6.2 邻域）；②P6 全量身份收敛（变体加字段形态）归 3.18 主线后续，届时 rebind_nominal_refs 判据面同批扩展（穷尽 match 已保证编译器指路）；③别名解析在 checker.rs:2236 与 dead_code.rs:169 仍有副本（超出本面，顺修候选）；④两条收集器冲突策略分歧留观察（同条 use 重复导入被 E5006/E5008 拦）；⑤#504 的 C 类定案随本节与 3.18.2 行更正落库。
+>
+## P3 3.24.6 收口（#563 fn[pos] 超界位置字面量编译期拒绝——甲案，2026-11-21）
+
+> **一、范围与终态**：issue [#563](https://github.com/ChenXu233/YaoXiang/issues/563)（fn[pos] 超 i64 位置字面量静默截断可落回合法域；用户 2026-11-20 裁决**甲案**：编译期拒绝，复用 E1064）。D59 **B/C 类**（静默给错答案 + parser 崩溃）经裁决覆盖。推送终态两笔：主修笔 `16530f96`（fix(parser)，11 文件 +590/−78）+ 修复笔 `22ae8473`（docs(sema)，t3 minor 措辞更正）。三级 +1 = 3.24.6（257→258）；二级不变（归 3.24 组）。issue [#563](https://github.com/ChenXu233/YaoXiang/issues/563) 关闭（证据评论含披露②更正与移交登记）。
+
+> **二、RFC-004 条款与语义边界**：docs/src/rfc/accepted/004-curry-multi-position-binding.md:314-319 伪代码——位置必须落在参数范围内（`pos >= func.params.len()` 即 InvalidBindingPosition）。位置是**结构性参数**（决定被绑函数的实参槽位）不是值：写 f[2^64+1] 而实际绑定位 1，作者意图与绑定事实静默错开——故位置字面量超 i64 表示域编译期拒绝，**运行时 Int = i64 的值字面量截断是另一条既有语义**（对照锚钉住不动：print(18446744073709551617) → 1 既有快照承载）。
+
+> **三、两截断点与 total=0 成因新发现**：①ast 提取器 extract_binding_positions（mod.rs:1845）签名改 `Result<Vec<i64>, String>`——超 i64 表示域返回 Err、载荷按书写形态 i128 精确渲染（checker/lower 提取时原 Expr 可见故精确）；②parser 提取器 parse_binding_positions（types.rs）i128 域精确取负 + 超域哨兵桥接（parse 期 checker 只见已产 `Vec<i64>`、超域信息不可恢复——AST 位置域 i64 以哨兵桥接交 checker E1064 判域；文面代价 = 类型体超域字面量显示哨兵值非原字面量，09a 登记两处文面代价）——**M9 类型体取负 panic（types.rs:942 "attempt to negate with overflow"，#560 同族）修后零 panic**。**total=0 成因新发现**：collect_function_signature 的 `filter_map(|p| p.ty)` 把 RFC-007 匿名形参丢弃——`(Int, Int) -> Int` 登记成 `params:[]`（插桩实测），total 恒 0 ⇒ E1064 既有判域对最常见匿名风格完全不生效（**issue 主复现全绿的机制**）——收口 = checker.rs 新增 binding_position_total：MonoType 参数虚减为 0 时以 declared_call_site_params（同一注解 AST 的 runtime_value_params，签名收集阶段登记）为元数事实源回退；仍 0（真零元/非 Fn）时 normalize 收口臂对非空位置报 E1064。E1064 发射点 1→3 处（提取器 Err 臂 / total=0 收口臂 / 范围判定臂），生成器随批再生。
+
+> **四、验证链**：t1 一轮全绿（14 门禁）→ 推送主修笔 → t2 **PASS**（三组锚 #563 七新锚 / #560 不回归 / 绑定 23 + M1 摘 Err 臂+收口臂 / M2 摘哨兵双变异 trial 机械可逆（合法位置对照两次变异保持绿——防误伤獠牙）+ CLI 五形态探针 + 零漂移核账 + 卫生）→ t3 **APPROVE**（5 条：2 minor + 3 info）→ 修复笔 `22ae8473` → 收口笔（本节）。批次树已 release + gc。
+
+> **五、t3 五条 findings 处置**：①**minor binding_position_total 文档 pass1 措辞**——「pass1 登记于此」与代码库 pass 词表不符（登记实际发生在 collect_function_signature，宿主循环即 pass2；pass1 收集类型定义）→ 修复笔 `22ae8473` 就地更正为「签名收集阶段登记于此——collect_function_signature，宿主循环即 pass2」（与同文件字段文档措辞一致）。②**minor 提交信息锚段措辞**（本节承载，提交不改写）：「跨模块具名 [0] 打印 42 不变」无库内新增测试（仓库内不存在该形态锚）；「运行时值字面量截断对照不动」由**既有锚**承载（int_overflow.snap / execution.rs:219/:246 / int_overflow.yx——事实成立非本批新增）——读者勿将「锚：」段误读为本批新增运行行为测试。③**info 5 构造清单（本节承载）**：M1 顶层匿名 2 参超界 2^64+1 / M2-M7 i64 域内超范围匿名与类型体同字面量与负超域 / M34 真零元 [0] / M9 类型体 [-i64::MIN 形态] panic / D2a 跨模块匿名极端（ownership panic）/ D2b 模块内极端截断+调用——五构造（披露②核证用）= M1、D2a、D2b、跨模块具名 [0] 正常调用、E1042 拦截形态。④info 收口档时序正常（本节即承载）。⑤info types.rs:921 行号差一格（实 :920，:942 精确）。**披露②收窄**：5 构造无一复现 issue 披露的「极端 positions 进 ir_gen 重排参数短缺错配」——机理 = typecheck 对绑定后方法签名做元数闸（method_type_after_binding）+ ir_gen 重排循环上界 positions.len()+args.len()（越界项永不命中 obj 臂），A==N−P 不变量结构性拦截 ⇒ issue 实际暴露面更正为 parser panic（已修）+ ownership panic（跨模块匿名，现转 E1064）+ 静默错位绑定（现 E1064）。
+
+> **六、移交登记**：①**filter_map 丢匿名形参本体**（跨模块导入函数 MonoType 同样经有损登记丢参——pkg 探针实测 params:[]，declared_call_site_params 不含导入名）——修前即 ownership panic 非成功程序，本次转 E1064；根治需修 filter_map 丢参本体（影响 MonoType 消费面/HM，漂移风险）——**待排期登记（#575 式移交）**。②文面代价两条在案（跨模块匿名与真零元 E1064 total 显示 0；类型体超域字面量显示哨兵值）。③裸 `m: (Int) -> Int[5]` 是返回类型 const 泛型实参非位置绑定（验证匿名面须用 Paren 记载语法——验证者注意项）。④#560 本体（顶层 [-i64::MIN] 形态）已有 E1064 锚不回归。
+
+## P3 3.24.4 收口（#477 native 遮蔽用户优先——lower 对齐 check，2026-11-21）
+
+> **一、范围与终态**：issue [#477](https://github.com/ChenXu233/YaoXiang/issues/477) 自 3.8.1 迁入（**用户 2026-11-20 裁决乙案**：用户定义优先——推翻 2026-10-18 审计推荐的 native 优先方案；D59 行为变更批：被修旧行为 = 静默错配与静默失败）。推送终态两笔：主修笔 `2268543d`（fix(middle)，5 文件 +250/−1）+ 修复笔 `3061b65d`（t3 REJECT 五条处置，5 文件）。三级 +1 = 3.24.4（255→256）；二级不变（归 3.24 组）。issue [#477](https://github.com/ChenXu233/YaoXiang/issues/477) 关闭（证据评论）。
+
+> **二、根因链与 std 边界（逐行实读）**：check 面裸名解析用户优先（expr.rs:1984-2025——native 签名只进 native_signatures 不进 scope，scope 命中即用户定义胜出）vs lower 面 resolve_function_name 四臂（query.rs:851-875——①declared_type_names（D10 类型面）②use_aliases ③qualified_name_is(NativeName) ④short_to_qualified_map ⑤兜底裸名——用户函数名落④被改写成 std native 限定名）。divergence 精确触发条件 = 本单元同名 + 裸名调用 + 未显式 use 导入。**std 边界精确实现**：std 嵌入单元各自 IR 生成（declared_fn_names 按单元填充）——std 内部互调（限定名互调 + 同模块裸名互调）修前修后产物逐字节同名零变化（std.json roundtrip 10 连跑稳定）。常量面实测无同款分歧（值加载不经 resolve_function_name）——登记不修不立 issue。
+
+> **三、修法与锚**：declared_fn_names = declared_type_names 的对称扩展（D1 同形不同面）；resolve_function_name 加一臂返回裸名 → qualify_names/resolve_call_target 按本单元 rename 表限定成用户函数。锚：三形态先红后绿（**按实测锚定修正任务前提归因**——①兼容遮蔽（File,Int 实参运行期兼容）= 静默 native 错误值 exit 0 真读文件；①b 用户泛型 read = E6007 形态（WBS 3.8 审计文案逐字）；②(String) 形态 = E6007 非静默；修后三形态全部执行用户函数值正确——**值断言非只看退出码**：①形态修前修后都 exit 0）+ 对照锚（非遮蔽/std 内部互调/限定名显式访问被遮蔽 std 名/跨单元 A-B 各自解析互不劫持）+ 变异 M1 优先级回退精确区分遮蔽与非遮蔽面。E6007 发射面变化登记（遮蔽形态修后不再触发；码语义不动、生成物零变化）。
+
+> **四、t3 五条 findings 处置（修复笔 `3061b65d`）**：①**F1 high print/println 旁路面**——bare print 调用按纯名进零开销特例（call.rs:978-988）、两计算点直查 std 短名映射完全绕过新臂（用户自定义 print 修后仍静默错配——教程最常见自定义名，违反 #477 自身验收）→ 裁定走 t3 路径 (a) 本批修：特例入口闸一处覆盖两计算点（is_print_call 补 declared_fn_names 判定、单源与乙案臂同集合），命中落默认路径按乙案解析；先红后绿含**归因修正**（字面量实参形态修前已绿——get_expr_mono_type 落 `_ => None` 本就走默认路；真红态 = Var 实参形态）+ 对照零变化（非自定义 print 三条分发路逐字节同）+ 变异预演摘闸红。②F3 multifile 注释归因收窄（A 的定义一臂静态不可达——B 的 rename 表只含 B 自己的函数前缀不命中，劫持源只能由 native 或 #577 构成）。③F5 锚 .tmp 迁 tempfile::TempDir（RAII 防中断残留仓库根）。④**F2 arms.rs 指代更正——修复轮直写 09a（越权产出经队长追认留用）**：主修笔「arms.rs 两实例」指代不精确，实际三链路（ir_generation_embedded → generate_ir_with_context / merge_embedded_std_ir → compile_embedded_module / orchestrated 逐单元）共用 declared_fn_names 唯一填充点（module_ir.rs:48-65），结论不受影响；提交信息不回改以本节为准。⑤#577 边界核（改动集未修 tie-break、锚 f-string 规避随机面语义意图保持）。**附带发现 [#577](https://github.com/ChenXu233/YaoXiang/issues/577)**：short_to_qualified_map 同短名多来源无 tie-break——裸名解析随构建种子随机派发（20 连跑 8 绿 12 红，D59 静默错配类），修复方向建议 = tie-break 规则或冲突编译期诊断。
+
+> **五、验证链**：t1 两轮（第 1 轮跨单元语料夹具进 corpus_probe 发现集而基线无记录被门禁抓 → 按 tests/yaoxiang-multifile/README.md D48 职责分工撤夹具、跨单元锚迁 tempdir 语义单测层）→ 推送主修笔 → t2 **PASS**（三组锚 + M1 优先级回退变异精确区分遮蔽/非遮蔽 + 零漂移核账 + CLI 三形态值断言 + std roundtrip）→ t3 **REJECT**（5 条：1 high print 旁路 + 4 low）→ 修复笔 → t3r **APPROVE**（零 findings）→ 收口笔（本节）。批次树已 release + gc.
+
+## P10 S11.1 收口（#513 DateTime 迁出内置类型名，2026-11-20）
+
+> **一、范围与终态**：issue [#513](https://github.com/ChenXu233/YaoXiang/issues/513)（S11.1 已登记方案一刀切；**用户 2026-11-20 裁决「按推荐」**）。D59 **D 类**行为变更经裁决覆盖（裸 DateTime 注解原先被 from_builtin_name 静默收成 Int(64) 零诊断）。推送终态两笔：主修笔 `1c6d5dd9`（fix(std)，17 文件）+ 修复笔 `0da1cb2f`（docs(docs)，t3 REJECT 处置）。**三级计数不变**（S11.1 已计入 2026-10-27 的 +1 登记）。issue [#513](https://github.com/ChenXu233/YaoXiang/issues/513) 关闭（证据评论）。
+
+> **二、6.1 终态类型查证（非两难，未触发停报）**：DateTime 不在任何 RFC（accepted+draft 大小写不敏感 grep 零命中）；终态定案 = 09a:1408（P6 6.1 收口，2026-10-27）+ 03-type-unification.md:429-440——DateTime 是 std.time 的语义别名、**终态类型 = Int**（运行时即 RuntimeValue::Int，「最终由标准库提供」）。4 处签名据此落 `() -> Int` / `(fmt: String, s: String) -> Int`（time.yx:4/:24 + time.rs:24/:53）。
+
+> **三、实现与验证**：①4 处签名落 Int；②mono.rs from_builtin_name 的 DateTime 兼容别名臂删除（接受面 = 定稿 15 名，文档同步）；③**T2 类型表门禁自 6.1 以来首次三表全绿**（dispositions 清空 + 哨兵收编 DateTime 至 23 条）；④教学文档 zh+en 改写经 gen-stdlib-docs 再生；⑤WBS 验收 `grep -rn DateTime src/std` 归零实测。锚：裸 DateTime 注解先红后绿（修前 exit 0 静默 → 修后 E1003+E1002 exit 1，发射链 annotations.rs:431/:440 → :370，双码逐字吻合预测）；新形态锚 datetime_newform.yx 全链值断言修前修后均绿；对照锚逐字不变；变异预演三道门禁有牙（加回臂 ⇒ CLI 锚红 + lib 负向用例红 + type-tables T2.5 报红）。**零漂移**：签名解析终态修前修后同为 Int(64)（修前 TypeRef("DateTime") 经臂/solver 统一，修后 parse_signature 直产 Int(64)）⇒ IR 快照/语料 403 行零漂移，**无基线再生欠账**——语料/Rust 夹具无一处裸 DateTime 注解。验证链 = t1 一轮全绿 → t2 **PASS**（五组锚 + M1 兼容臂回加变异三道门禁齐红 + 零漂移核账）→ t3 **REJECT**（4 条）→ 修复笔 `0da1cb2f` → t3r **APPROVE** → 收口笔（本节）。批次树已 release + gc。
+
+## P3 3.24.5 收口（#499 W 码逐条抑制 CLI --allow——甲案，2026-11-21）
+
+> **一、范围与终态**：issue [#499](https://github.com/ChenXu233/YaoXiang/issues/499)（兑现 2026-10-24 裁决 A 部分「CLI 级 `--allow=<CODE>`（可重复）」+ 2026-11-20 裁决「按推荐」甲案；源级属性 B 部分待 RFC 不碰——RFC-013:551 指 source-level attributes 与 CLI flag 不矛盾）。CLI 面新增，D59 分类不适用——**不带 flag 行为逐字不变零漂移实测**（--help diff 仅新增行 / IR 快照 / 语料 403 行）。推送终态两笔：主修笔 `d1431d52`（feat(util)，9 文件 +437/−23）+ 修复笔 `fe302bdc`（test(util)，3 新锚 + 文档交互提示行，**src 生产代码零 diff**）。三级 +1 = 3.24.5（256→257）；二级不变（归 3.24 组）。issue [#499](https://github.com/ChenXu233/YaoXiang/issues/499) 关闭（证据评论）。
+
+> **二、语义登记（过滤闸单点）**：run_check_command_once 内、check_files_with_diagnostics 返回后——文本渲染 / JSON 输出 / --deny-shadowing 升级判定 / 返回计数（main.rs 据此做 --deny-warnings 退出码判定）四个消费面的唯一聚合点，**先过滤后消费**。被允许码完全不可见：不输出、不计入 warning_count（与 push_diagnostic 对称递减，不复制第二份 severity→桶位映射）、不触发两升级闸。W1090 Error 级不可抑制（按发射级别判定，单元测试钉）。未知码与非 W 族码 = clap value_parser exit 2（权威源 ErrorCodeDefinition::find + ErrorCategory::Warning）。allow 空表 = 零开销无操作。命令面 = 仅 check（裁决验收面只写 check，不扩面）；逗号分隔不实现（--exclude 先例无此形态）。
+
+> **三、验证链**：t1 一轮全绿（14 门禁）→ 推送主修笔 → t2 **PASS**（三组锚 cli_e2e 25 / 单元 3 / check 101 + M1 摘过滤闸 trial 机械可逆判别正确（3 抑制锚红 / 3 校验锚绿）+ CLI 探针四形态 + 零漂移核账 + 卫生）→ t3 **APPROVE**（4 条非阻塞）→ 修复笔 `fe302bdc` → 收口笔（本节）。批次树已 release + gc。t2 流程偏差如实自报告：零漂移首轮因 shell cwd 残留误在主树执行（同 commit 同 blob）——删除仓外再生产物、核验主树 clean 后批次树内原命令重跑，提交证据全部出自批次树。
+
+> **四、t3 四条处置**：①**F-A low 交互锚补齐**（--allow W1006 + --deny-shadowing ⇒ shadows=0 不升级 exit 0——单点闸语义的交互面直接行为钉，修复轮 cli_e2e 补）+ **check-command.md --allow 行补 deny-warnings/deny-shadowing 交互说明**。②**F-B low 可重复/多值形态锚**（--allow W1001 --allow W1003 可重复 flag / --allow W1001 W1003 空格多值——help 示例双 flag 形态获得行为锚，修复轮补两条）。③**F-C info 防御备注（本节承载）**：suppress_codes 对称递减依赖 CheckResult 计数与 diagnostics 一致——两计数字段 pub，外部手工错配计数 usize 下溢 panic；生产路径 push_diagnostic 唯一写点恒一致，纯防御备注非可达缺陷。④F-D info 动态声称归 t2。另：**--deny-shadowing 此前全仓无 e2e 覆盖**（grep 证实）——本批补对照锚（覆盖缺口顺带收口）。
+
+> **五、移交登记**：①**[#578](https://github.com/ChenXu233/YaoXiang/issues/578)（`W1001 <unknown>` 误报）**——W1001 核证推翻调研「良性环」归因：触发判据 = 项目模式 + run 子命令（核证矩阵无环 23/零引用 25/良性环 24/standalone 0/check 0），内容 = src/std/*.yx 库内部函数、文件字段 unknown；修法方向 = run 链死代码分析的 std 过滤面（check 链已干净，两链过滤不对称）；本批不修（--allow W1001 可临时抑制症状）。②源级属性语法（裁决 B 部分）RFC 待定；③02-stage-contract.md:550 的 main.rs 行号本批前即陈旧（既有欠账顺修候选）。
+
+> **四、t3/t3r findings 处置**：t3 四条——①**F-A medium 悬空锚**（stdlib/index.md zh 行锚 time#datetime-字段访问 对改名后标题悬空，en 侧已同步 zh 漏改）→ 修复笔就地改指现标题（中文 slug 惯例依据同文件先例 + VitePress 构建产物 id 实证；旧锚全仓仅此一处）。②**F-B medium 03 六处现状断言失实**（该文档自述「只记录代码事实」，按旧文施工会把刚删的 DateTime 臂加回去）→ 修复笔六处就地更正（§5.3 负向面 23 拼写现状 / :446 哨兵 23 / §5.7 接受面 15 名无别名 + T2.1 实测 14 臂 15 写法 / §6.3 row 20 补注 / §6.4 窗口关闭 / 附录 :1123）。③**F-C low 残留登记补全（本节承载）**：src/frontend/core/sema/tests/signature.rs:141-152（7 处 DateTime：注释 + test 断言 parse_signature("(f: File) -> DateTime") 返回 TypeRef("DateTime")）——**同样不依赖已删臂**（parse_signature 自有表 signature.rs:523-543 从不接受 DateTime、不调 from_builtin_name，DateTime 落 `_ => TypeRef`，修前修后行为不变），按实现笔同款理由豁免、逐字不动。④F-D info 收口档时序正常（本节即承载）。t3r **穷尽复核增补 7 条**（修复笔后增量）：①en 锚 bot 回退系统性问题 → **另立 [#576](https://github.com/ChenXu233/YaoXiang/issues/576)**（en 镜像按惯例逐字复制 zh 中文锚、bot 回退手工修正——本收口笔手工修 en 锚为临时态，管线裁决归 #576）；②03:817 附录 `From<ast::Type>` 行号 :960→:1216 更正（13 臂复核在场）；③01-routing.md:296 路由表行三重失实 → 随收口笔更新为已完成口径（该表 :298 有更新先例）；④03:424 行号漂移随收口笔更正；⑤03:574-575 CONST_PARAM_TYPES 位置（sema/probe.rs:57——parser/ast.rs:1574 注释明言移至 L3）+ :562 typecheck/probe.rs 路径更正；⑥03:12/:63 弱同性质行号（「改造前负担」语境）——**裁量保留**（带日期语境，非现状断言）；⑦:191/:207 带日期历史口径裁量保留（:215 登记明示行号仅供定位）。03 相邻四处同性质（:431/:438/:440/:562——修复者如实上报按不夹带红线未动）随收口笔一并更正（与已更正六处同性质，不改则内部矛盾）。
+
+> **五、移交登记**：①**发版 changelog 条目**（S11.1 移交登记兑现）：裸 DateTime 注解写法的程序将编译失败（E1003/E1002）——std.time 签名落 Int，迁移写法 = `use std.time.{now, parse_time, ...}` + Int 类型；②#576（en 锚管线）待裁决；③T2 类型表三表全绿为 6.1 定稿的收尾证据（dispositions 清空）；④signature.rs 与 sema/signature.rs:525 的 DateTime 提及为 parse_signature 通道示例（不依赖已删臂），逐字保留。
+
+## P3 3.24.4 修复轮（t1r）——t3 REJECT 五条处置（2026-11-21）
+
+> **一、范围与终态**：#477 乙案主修笔 `2268543d`（lower 面裸名解析用户优先，已推送）的 t3 REJECT 五条处置：F1 high（print/println 零开销特例旁路面）+ F3 low（multifile 锚注释归因过宽）+ F5 low（锚 .tmp 文件卫生）+ F2 low（arms.rs 指代不精确，本节承载更正、代码不修）。D59 归类：F1 属 **A 类**（旧行为非成功——用户自定义 print 的 Var 实参裸名调用 check 绿而 run 派发 std.io.print，exit 0 静默错配），条件三件：先红后绿（本节三实测）+ 原先成功程序对外表现零变化（对照锚 + #477 既有锚 8/8 回归）+ 同批登记（本节）。
+
+> **二、F1 修法与红绿链（按实测锚定修正任务前提归因）**：print 特例入口闸一处覆盖特例内 print 名两个计算点（Stringable 路 + 兜底路），判据单源 = `declared_fn_names`（与 `resolve_function_name` 乙案臂同一集合，query.rs）——本单元已声明的函数名 `matches!` 短名后落默认处理路径，由 `resolve_function_name`/`qualify_names` 按乙案解析到用户函数；限定名 `std.io.print` 不受闸影响（`declared_fn_names` 只装本单元裸名）。**归因修正**：任务锚描述的字面量实参形态 `print("hi")` 修前已绿——字符串字面量的类型在特例入口不可取（`get_expr_mono_type` 对字面量落 `_ => None`），本就走「无法获取类型」默认路径、乙案已覆盖；**真正红态是 Var 实参形态**（`s = "hi"; print(s)` → local_var_types 命中 → Some(String) → 特例 Stringable 路 → std.io.print，CLI 探针实测 stdout 原样 "hi" exit 0、用户函数体不执行）。锚三层：CLI 层用户 print/println 各一锚（stdout 自定义前缀断言，cli_e2e.rs）+ 集成层文件标记锚（tempdir 绝对路径嵌源码，修前 os.open 读失败运行期红）+ 对照锚（非遮蔽 Stringable/兜底两路输出形态零变化 + 无前缀负断言）。红绿实测：修前 3 红 1 绿 → 修后 8/8 全绿（4 新锚 + #477 既有锚 read 遮蔽/限定名 native/std 内部互调/多文件跨单元回归）。变异预演：摘入口闸（回无条件进特例）⇒ 遮蔽 3 锚红、对照锚保持绿——闸有牙，还原后复绿。std 面零变化依据：std .yx 源（json/list/option/result/test）grep 裸名 `print(`/`println(` 零命中，std/interfaces/io.yx 的 print/println 声明仅服务 LSP 不参与执行。
+
+> **三、F2 更正（arms.rs 指代不精确——本节承载，代码不修）**：主修笔提交信息「std 嵌入单元各自做 IR 生成（**arms.rs 两实例**、declared_fn_names 按单元填充）」的「arms.rs 两实例」指代不精确。实际链路按形态分三条（逐行实读）：①Driver Embedded 形态经 `ir_generation_embedded` → `generate_ir_with_context`（arms.rs:935/:965）；②Driver SingleFile/WasmPlayground 形态经 `merge_embedded_std_ir` → `compile_embedded_module`（helpers.rs:36 起，arms.rs:1044 调 merge，orchestrator.rs:979 定义 compile_embedded_module）；③多文件 orchestrated 形态 std 单元以虚拟路径混入单元集（arms.rs Discovery 臂注记），逐单元经 `ir_generation_orchestrated` → `generate_ir_with_context`（arms.rs:1103）。三条链路共用 `generate_module_ir` 内的 `declared_fn_names` 唯一填充点（module_ir.rs:48-65），「std 内部互调零变化」的结论不受影响。提交信息与 arms.rs 注释均不回改（前者已推送），以本节为准。
+
+> **四、F3/F5 处置**：F3——multifile.rs `test_multifile_shadowed_std_short_name_resolves_per_unit` 注释「B 的裸名调用被 A 的定义或 native 劫持」就地收窄为实际可达面：A 的定义一臂静态不可达（B 的裸名 read 落 std.os.read，B 的 rename 表只含 B 自己的函数、前缀不命中原样保留），劫持源只能由 native 或 #577（同短名多来源无 tie-break 的随机源）构成。F5——execution.rs #477 锚③/对照① 的固定名 CWD `.tmp` 文件（yx-477-anchor-silent.tmp / yx-477-anchor-qualified.tmp）迁 tempfile::TempDir，绝对路径（正斜杠）嵌入 .yx 源；「先清理临时文件再判定」的手动序列由 tempdir RAII 替代（panic 路径同样生效）。两测试断言语义不变。
+
+## P8 8.2 词法收敛与 f-string 插值词法期切段收口（2026-11-21）
+
+> **一、范围与终态**：8.2 词法收敛的四个三级任务中，8.2.1（四基数扫描器 / 三处转义解码 / 两个多行串扫描器各收敛为唯一实现）与 8.2.2（f-string 插值改词法期切段与批量取回）已完成交付；8.2.3（插值内诊断 span 相对语义，issue [#574](https://github.com/ChenXu233/YaoXiang/issues/574)）与 8.2.4（插值单遍词法与逐插值隔离语义裁决）为登记待排期，均不阻塞主线。改动面限于 `src/frontend/core/lexer/`（`literals.rs` / `tokens.rs` / `mod.rs` 及其测试）、`src/frontend/core/parser/pratt/nud.rs`、`src/frontend/core/parser/tests/expressions.rs` 与 `05` 文档的锚与口径；`src/middle/`、`src/backends/`、`src/ast/`、`tests/baselines/`、IR 快照零改动。主交付提交主题「收敛词法重复，f-string 插值改词法期切段与批量取回（WBS 8.2.1/8.2.2）」。
+>
+> **二、8.2.1 单源收敛与行数账**：四基数扫描器收敛为 `Radix` 描述符 + `scan_radix_digits` 唯一数字骨架 + `scan_radix_number` 唯一入口（非十进制整数收尾与十进制收尾各自单点）；四处转义解码收敛为唯一 `decode_escape` + `EscapeMode`（Strict / Char / Lenient），`scan_string`、多行串骨架、`scan_char`、`scan_fstring` 共用；普通多行串与多行 f-string 合并为唯一 `scan_triple_quoted` 骨架。旧函数名全仓零残留（`scan_hex_number` / `scan_octal_number` / `scan_binary_number` / `scan_decimal_number` / `scan_multi_line_string` / `scan_fstring_multi_line` / `push_fstring_escape`，`git grep` 可复核），无 import 别名。行为保持：57 例探针矩阵改前/改后归一化负载 SHA256 全同；`cargo test --all -- --list` 2468→2476（+8，无删测试）；`check-corpus-parity` 402/402 零漂移；IR 快照 `test_ir_snapshots_stable` 零漂移。`literals.rs` 行数两段式：8.2.1 交付时 1621→1147（−474）；8.2.2 追加切段与载荷约 138 行后交付树 1621→1285（−336，diff 统计 455/791），05「约 −500 行」的估算在交付树达成约 67%。
+>
+> **三、8.2.2 达成项 / 未达成项与 span 基线**：lexer 在扫描期把 f-string 内容切成 `Text` / `Interpolation` 段放入 token 载荷（`FStringToken` / `FStringTokenSegment`），parser 直接消费，不再自己扫 raw 切分；parser 在首次需要节点时调用唯一单点 `lex_interpolations`，一次取回该 f-string 全部插值的 token 流并缓存；parser 生产代码零 `lexer::tokenize` 调用（`git grep` 于 `src/frontend/core/parser/` 生产文件零命中）。达成项：词法期切段、parser 零重扫、批量单点、缓存、切分与格式说明单源。未达成项：05:107 / 05:359 的「N+1→1」——批量入口内部对每个插值仍各跑一次完整 `Lexer`，完整词法分析次数仍为 N+1；实测 N=3 时公共词法入口调用 1+N→1（计数器红 `left: 4` / `right: 1` → 绿），批量入口 1 次。该项登记为 8.2.4，须先裁决逐插值隔离语义（单遍合并会让拼接源中的未终结字符串吞掉后续插值）。span 基线：由父 revision 的改前实现（冻结 revision 的批次树二进制）产出，9 个探针程序 / 10 个输出文件与改后逐字节相同；独立复核对 15 个探针 / 30 个输出文件、覆盖单插值 / 多插值 / 格式说明符 / 嵌套 / 多行五类形态，插值内 7 条诊断的 file/line/col/code/message 逐条相同。基线证实插值内 span 本就是相对语义（全部 line=1、col 相对插值文本），属既有独立缺陷，按 05:623「既有问题单独修」出口保持逐条不变并登记为 8.2.3。
+>
+> **四、红绿、变异与门禁**：计数器测试先红（改前 1+N 次，`left: 4` / `right: 1`）后绿；三组变异经机械可逆 trial 各自恰红：插值 span +1 → span 基线 12/30 文件红；去掉批量入口 → 计数判据红；把计数点搬进共享词法实现 → `left: 4` / `right: 1`（证明 N+1 未降）。计数器曾用进程级静态量，在 libtest 多线程下会与其它用例串台；改为 `thread_local` 后，窄过滤与模块级 13 条并发各连跑 20 次（`--test-threads=24`）全绿，判伪力保持不变。门禁：`cargo fmt --check`、`cargo clippy --all --all-features --all-targets -- -D warnings`、`testsuite run fast`（2400 条、0 跳过）、语料差分 402/402、IR 快照全部通过；错误码文档生成器重跑后与源码一致（E0016 `expected_expression` 的可见发射点行号整体 +1）；测试总数 2468→2477。
+>
+> **五、验证工艺教训（变异与还原的构建指纹）**：变异 trial 的机械还原若用保留 mtime 的复制，`cargo` 会认为源码未变而继续复用变异产物——此时红态与绿态都不可信。本轮实证：按备份复制还原后未 touch，`cargo test` 复跑仍红；`touch` 文件强制重编后才复绿。判据：trial 之后必须 `build` 再量测；手工还原后必须 `touch` 目标文件并确认重编，方可采信红绿。该教训与 HOWTO「验证量测」的 `trial` 条款同源，补上「手工还原」这一缺口。
+>
+> **六、编排偏差与本轮补偿安排（如实登记）**：8.2.2 的独立复审未按常规形态完成——原定复审者触发 429 额度上限、无实质产出即失败；复审改派给验证代理后，该交付的验证与复审由同一代理完成，独立性弱于 8.2.1（后者由另一模型家族的代理独立复审）。其职责中的两处高风险独立挑战（插桩判 N+1、自建父 revision 基线）并入改派后的复审验收。补偿控制：冻结 revision 上独立复现全部判据、三组变异 trial、计数点插桩实验、父 revision 的改前二进制产出 span 基线。本记录把上述安排写成一次补偿，不作为常规形态。
+>
+> **七、边界与未动项**：`src/ast` 公共形状（`Expr::FString` / `FStringSegment`）零改动；未新增诊断码、locales 零改动；05 的设计结论未改（仅按现树重取「编译器改动清单」锚、校正两处函数签名文案）；`tests/baselines/` 与 `src/middle/ir/tests/snapshots/` 未动。8.2.2 的「N+1→1」未达成，不在任何文档中宣称已兑现。
+
+## P7 7b.2 契约（`next_temp_reg` 改产 `Operand::Value` + values 生产 + codegen 解析 + 快照再生，2026-11-21）
+
+> 计划见 [09](./09-execution-wbs.md) §P7 7b 表 7b.2 行；设计依据 [04](./04-ssa.md) §值标识方式与 §编译器改动清单第 7 项；前置 = [09a §P7 7b.1b 契约](#p7-7b1b-契约values-表--valueinfo--访问器--phi-残项判据2026-11-20)（`values` / `ValueInfo` / 访问器已落地、双处登记转本批）。基线 = `origin/dev` 顶端 `37e9aee6`（7b.1b 已集成，工作树干净）。**本批只改临时值的身份（`Operand::Local` → `Operand::Value`）；寄存器槽分配语义（`next_temp` / `temp_high_water` / `temp_floor` / 三处语句级回收）原样保留**（删回收归 7a.1+7b.4）——因此字节码槽号不变，C4 走最强形态（行为等价 + 快照差异仅表示面）。
+
+### 一、实测面（基线 revision）
+
+| 面 | 实测 |
+| --- | --- |
+| `next_temp_reg()` 调用点 | **140 处 / 14 文件**（全在 `src/middle/lower/`：call 30、loops 23、control 22、stmt 20、container 15、op 12、access 4、spawn 4、curry 2、lit 2、reference 2、globals 2、expr/mod 1、closure 1） |
+| `Operand::Local(` | `src/middle/lower/` **342 处 / 14 文件**（04 的旧实测 332 为 7b.1a 前数字；另有 ir/verify/tests 与 passes 的机制面不在本次机械替换面） |
+| `result_reg: usize` 参数链 | **35 个函数** + `Option<usize>` 结果位 **3 个**（`generate_block_ir` / `generate_for` / `generate_while` 形态） |
+| 结果位调用点 | `generate_expr_ir` **84**、`generate_block_ir` **12**、`generate_tail_stmt_ir` **6** |
+| `register_local(` | **13 处**：参数固定槽 4（curry 2 / closure 1 / globals 1 / stmt 2）不需新分配；**9 处经 `next_temp_reg` 分配具名槽**（container 1、control 1、op 1、spawn 1、loops 2、stmt 3）→ 改为新的「具名槽分配」入口 |
+| 基本块 label | lower 全部 **7 处** `BasicBlock` 构造 `label: 0`、`successors: Vec::new()`（单块函数体；多块/Phi 归 7b.3） |
+| `Operand::Value(` 现有生产点 | 0（只有 7b.1a 测试夹具与 verify 消费臂） |
+
+### 二、逐项定夺
+
+1. **调用点分三类，全部机械可判**：(a) 临时值位（`Operand::Local(temp)` / 结果位实参 / `Ret` 值）→ 直接持 `Operand`；(b) 具名变量槽（9 处 `next_temp_reg` + `register_local`）→ 新 `next_local_slot() -> usize`（旧 `next_temp_reg` 的槽语义，三处回收照旧可回滚它）；(c) 槽号专用消费（`take_cur_locals` / 预算 / `temp_floor`）不变。`generate_expr_ir` / `generate_block_ir` / `generate_tail_stmt_ir` 的结果位类型由 `usize` 改 `Operand`（具名槽调用点传 `Operand::Local(slot)`），**不引入隐式转换 trait**。
+2. **`ValueInfo.ty` 来源**（只取 lowering 已有信息，不新造类型判定器）：①`generate_expr_ir` 入口按 `expr_value_type(expr)` 落值类型——变量走 `type_result.local_var_types` / `lookup_var_type` 的真实 `MonoType`，构造器调用落 `TypeRef(名)`，普通函数调用从 `lookup_var_type` 的 `Fn { ret }` 取返回类型；②字面量在 `generate_lit_expr_ir` 落字面量类型；③比较/逻辑/一元结果在**函数体收尾的前向类型推导**（`take_body_values` 前）按指令语义传播：`Eq/Ne/Lt/Le/Gt/Ge/Not` → `Bool`、`StringLength` → `Int(64)`、`StringConcat` → `String`、`Load/Move` 取 `src` 类型、`Add/Sub/Mul/Div/Mod/And/Or/Xor/Shl/Shr/Sar` 取 `lhs` 类型、`Neg` 取操作数类型。④**不得静默 `Int(64)` 占位**：`LocalSlot.ty` 一律不读（lower 从不写它）；仍不可得的值落**显式未知 `MonoType::TypeRef("?")`**（与 verify「TypeRef = 信息不足」同口径），收口按语料登记未知占比，不把未知伪装成具体类型。
+3. **`defining_block`**：取生成期当前块 label（新增 `cur_block_label`，初始 0；本批全仓 lowering 单块，实测 label 恒 0）。多块与 Phi 归 7b.3；契约登记「字段已可承载、本批值恒 0」。
+4. **`debug_name`**：本批全部 `None`（具名变量仍是 `Local`，不迁到值表），与 04「纯临时值一律 None」一致。
+5. **计数器隔离**：新增独立 `next_value: u32`（`ValueId` 单调递增、本函数体内**永不回滚**）；三处语句级回收只回滚 `next_temp`（槽），不触碰 `next_value`。`NestedBodyGuard` 的 `SavedFrame` 增存/取 `next_value` / `cur_values` / `cur_value_slots`（每个函数体一套值表，与 `cur_locals` 同构）；这与「`ValueId` 函数内稠密」一致。`take_body_locals` 的 255 预算（`temp_high_water`）与 `take_body_values` 分离。
+6. **codegen 槽位解析（过渡）**：`FunctionBody::Code` 增 `value_slots: Vec<usize>`（与 `values` 同索引，index = ValueId；元素 = 既有 `next_temp` 槽号）。理由：值表不含槽号，而字节码必须落 `u8` 槽；槽号由 lowering 的槽分配器（含语句级回收）给出，必须随值记录才能在 codegen 还原**同一字节码**。备选「每值独占一槽」实测不可行——`src/std/tests/string_ops.yx` 354 槽、`tests/yaoxiang/01-syntax/control-flow/list_comp.yx` 323 槽（09a §P7 7a 实测）会越过 255，C4 红。`OperandResolver` 变为持有当前函数映射（`set_value_slots`），`to_reg(Value(v))`：`value_slots[v]` 存在 ⇒ `u8`（`>255` 报 E3014）；越界/无映射 ⇒ E3017 显式诊断。`Phi` 占位不动（7b.3）。
+7. **normalize**：`FunctionBody::Code` 渲染新增 `values_total=N` + 每值一行 `value v{k}: {ty:?} @block{b}`（`v{k}` 由 `FnCtx.values` 预置重命名：按 ValueId 升序分配，指令渲染沿用同一重命名）；**不渲染 `value_slots`**（分配细节，7b.4 会重算；语义面由 values 段承载）。232 份快照再生后 diff 只允许两类：`Operand::Local` 临时位变 `Operand::Value` 的 `%n`→`v k` 重命名、`values_total`/`value` 段新增；`locals_total` 与具名 `slot[i]` 段不变（temp 占位槽本来不打印）。收口逐份脚本核对 diff 类别 + 抽样人工 review。
+8. **mono 特化**：两处克隆（`passes/mono/function.rs` 与 `passes/mono/mod.rs`）对 values 逐条 `ty` 走既有 `substitute_single_type`、`debug_name` / `defining_block` 原样投影、`value_slots` 原样复制；空表时行为与基线一致。
+9. **dce / 其它 pass**：DCE 只做 `module.functions.retain`（整函数删除，实测），不动函数体内 `values` / `value_slots`；`Operand::Value` 不参与按名存活判定。新增断言测试「DCE 后 values/ValueId 仍可索引、未定义值不被静默使用」。
+10. **C4**：语料差分基线是**行为面**（402 行，`run` 的 stdout/stderr/exit/diagnostics），表示面变化不进入该基线 ⇒ 目标 402/402 零 diff；IR 快照属表示面，按第 7 条再生并复核；另加 CLI 探针（`check`/`run` 逐字节输出）覆盖典型语料。
+
+### 三、影响预判与回滚点
+
+- 快照：232 份全部再生（每个有临时值的函数都会出现 `values_total` 与 `value` 行、`%n`→`vk` 重命名）；无临时值的函数只剩 `values_total=0` 一行（若采纳渲染；实现以最小 diff 为准）。
+- 语料/运行：槽号分配与指令语义不变 ⇒ 行为等价；`verify_loose` 的现有判据不受影响（`Operand::Value` 在槽位判据里不是槽）；`verify_ssa` 因 values 非空自动收紧 Phi 类型检查（语料无 Phi）。
+- 生成物：`OperandResolver` 的 E3017 发射点面变化 → `scripts/docs/gen-error-code-docs.py` 再生 `docs/src/reference/error-code/` 并随代码同提交。
+- 回滚点：本契约段单独一笔文档提交，先于代码；代码 + 快照 + 生成物一笔（`FunctionBody::Code` 加字段波及全仓编译，不可增量回滚），整笔 `git revert` 可回基线。
+
+## P7 7b.2 实现记录（`next_temp_reg` 改产 `Operand::Value` + values 生产 + 快照再生，2026-11-21）
+
+### 一、终态与提交
+
+- 基线 = `origin/dev` 顶端 `37e9aee6`（7b.1b 已集成）。三笔：契约笔（09a §P7 7b.2 契约，先于代码）→ 基线死链修复笔（09-execution-wbs.md:259 / 09a:7805 里 3.24.2 记录的 `Vec(Int)[..]` 与 `(i)` 相邻写法被 markdown 解析器误判为链接；与 7b.2 无关的预存红，队长授权并入本批）→ 代码笔（259 文件 = 源码 + 232 份快照再生 + 5 份错误码生成物）。
+- 代码笔为**表示重塑**，D59 分类「无行为变更」：`check`/`run` 的对外表现不变，证据见 §三（语料 403/403 行为记录零 diff）。
+
+### 二、逐项落地（对应契约 §二 的 10 条定夺）
+
+1. **调用点**：`next_temp_reg()` 返回 `Operand::Value(ValueId)`；全仓 **140** 个调用点与 **35** 个 `result_reg` 参数（+ 3 个 `Option<usize>` 结果位、`obj_reg`/`dst_reg`/`compile_pattern` 的 `reg`）机械替换为 `Operand`；**342** 处 `Operand::Local(` 临时位改持 `Operand`；**9** 处「分配后 `register_local`」改用 `next_local_slot()`，或复用值已占用的槽（`slot_for_operand`，不新增指令）。
+2. **`ValueInfo.ty` 来源**：字面量（`ConstValue::mono_type`，与 verify 共用单一映射）、`generate_expr_ir` 入口的变量类型（`type_result.local_var_types` / `lookup_var_type`）、普通函数返回类型（绑定函数类型的 `Fn { ret }`）、以及函数体收尾的前向推导（`Eq/Ne/Lt/Le/Gt/Ge/Not`→`Bool`、`StringLength`→`Int(64)`、字符串族→`String`、`Load/Move/Neg` 取源、算术取 `lhs`）。不可得落**显式未知 `TypeRef("?")`**，不读 `LocalSlot.ty`、不用 `Int(64)` 占位。232 份快照的值分布实测：**9425** 条值，其中真实类型 **7080**（`Int(64)` 2982 / `String` 1744 / `Bool` 1135 / `Float(64)` 210 / 容器与记录型若干），**未知 2345（24.9%，显式 `?`）**——未知集中在调用/字段/索引/容器构造等需要跨过程或声明面信息的形态，登记给后续轮次按需收紧。
+3. **`defining_block`**：生成期 `cur_block_label` 初始 0；lower 全部单块函数体（`BasicBlock` 构造 7 处 label 恒 0）⇒ 本批值定义块恒 0。
+4. **`debug_name`**：全部 `None`（具名变量仍是 `Local`，不迁入值表）。
+5. **计数器隔离**：新增 `next_value`（每函数体从 0 起、单调递增）；`NestedBodyGuard` 保存/还原 `next_value`/`cur_values`/`cur_value_slots`/`value_mode`；三处语句级回收只回滚 `next_temp`，不触碰 `next_value`。**模块 init / 顶层语句没有值表**：`value_mode=false` 时 `next_temp_reg` 退化为旧的 `Local` 槽分配，init 序列与其 codegen 路径逐字节不变（快照中 init 段与基线一致即证据）。柯里层循环里每层重置 `next_value` 与值表（每层一个 `FunctionIR`）；这是实现期实测缺陷：不重置会让第二层起的 `ValueId` 从 1 起而值表已清空，代码生成取不到槽。
+6. **codegen 槽位解析（过渡）**：`FunctionBody::Code.value_slots: Vec<usize>`（index=ValueId）记录 lowering 既有临时槽分配；`OperandResolver` 增加 `Value → u8`（槽号 >255 报 E3014、无映射/越界报 E3017，且 E3017 按 #324 带指令 span——translator 逐指令 `set_span`）；`Phi` 占位保持 7b.1a 原样（7b.3）。
+7. **normalize**：每个函数体渲染 `values_total=N` 与 `value v{k}: <ty> @block{b}`（`v` 编号按 ValueId 升序预置）；**不渲染 `value_slots`**（是分配细节，7b.4 会重算）。232 份快照再生，**221** 份实际变化、**491** 个 values 段；11 份未变 = 仅 `type_decl`/init 的快照。
+8. **mono 特化**：两处克隆（`passes/mono/function.rs`、`passes/mono/mod.rs`）对 `values[].ty` 走既有类型替换（TypeVar + 头替换）、`debug_name`/`defining_block` 原样、`value_slots` 复制；**常量擦除**路径的槽位密排同步重映射 `value_slots`（不重映射会让 codegen 写错槽）；柯里层形状判据从「`dst` 是 `Operand::Local`」改为「按 `value_slots` 还原物理槽 == env 槽数」，语义与原判据一致。
+9. **dce**：仍只做整函数 `retain`；新增直驱测试断言存活函数的 `values`/`value_slots` 原样保留、`ValueId` 仍在值表范围内。
+10. **C4**：语料差分基线（行为面）在本批基线上为 **403 行**（含 3.24.2 新增的拒绝记录），`check-corpus-parity` **403/403 逐条差分空**；`cargo test --lib` **1975 passed**、`cargo test --test integration` **458 passed**；另有两份大函数语料（`string_ops.yx` 354 槽、`list_comp.yx` 323 槽风险面）的 CLI `run` 实测 exit 0。
+
+### 三、快照再生的机械核对（人工 review 的替代判据）
+
+232 份全量再生后运行核对脚本：对 221 份变化文件，**删除 `values_total` / `value` 行、把 `%n`/`arg%n`/`@n`/`v n` 全部归一化为 `OP`** 后，新旧文件的指令文本逐字节相同；`locals_total` 全部不变。⇒ diff 仅含「临时槽操作数 → SSA 值重命名」与「values 段新增」两类机械变化，无语义漂移。抽样人工核看 `literals.snap` / `string_ops.snap` 亦符合（`%n` 改为 `v n`、新增 `values_total` 与 `value` 行）。
+
+### 四、判据与门禁（全绿实测）
+
+| 门禁 | 结果 |
+| --- | --- |
+| `cargo fmt --check` | exit 0 |
+| `cargo clippy --all --all-features --all-targets -- -D warnings` | exit 0 |
+| `cargo test --lib snapshot` | 6 passed / 0 failed / 1 ignored（232 份再生后与当前 IR 零 diff） |
+| `cargo test --lib verify` | 35 passed |
+| `cargo test --lib middle::ir::tests` | 74 passed / 1 ignored（+2 = 值表生产/normalize 渲染） |
+| `cargo test --lib phi` | 39 passed |
+| `cargo test --lib`（全量） | **1981 passed / 0 failed / 3 ignored** |
+| `cargo test --test integration` | **458 passed / 0 failed** |
+| `python scripts/dev/testsuite.py run fast` | exit 0：1 波 **2494 条**，跳过 0 |
+| `corpus_probe` + `check-corpus-parity` | 403 行；**403/403** 逐条差分空 |
+| docs 四脚本（truth / refs / orphan / fanout / test-channel） | 全 exit 0（refs = 1247 文件 / 13240 token） |
+| `gen-error-code-docs.py` + 二次运行 | exit 0 且二次运行零额外 diff（幂等；再生含 E3017/E1106 发射点与基线 checker 行号漂移） |
+
+新增直驱测试：`test_values_production_type_block_and_index`、`test_normalize_renders_values_table_both_shapes`（`middle/ir/tests/values.rs`）、`test_value_resolves_through_value_slots`、`test_value_without_mapping_or_over_budget_is_rejected`（codegen/operand）、`test_specialize_substitutes_value_types_and_keeps_slots`（mono）、`test_dce_preserves_values_and_value_slots_of_live_functions`（dce）。
+
+### 五、登记与遗留
+
+1. **7b.3 前置不变**：生产 `Phi` 前必须先填 `BasicBlock.successors`（7b.1b 契约已登记）；本批单块 label 恒 0，`defining_block` 已可承载多块。
+2. **7b.4 接管**：`value_slots` 是过渡映射——线性扫描分配器落地后重算该表（并可考虑是否保留字段），同批删除三处语句级回收（7a.1）；本批未改回收语义。
+3. **`ValueInfo.ty` 的已知未知面**：2345/9425（24.9%）为显式 `TypeRef("?")`，集中在调用/字段/索引/容器构造；后续若要提高精度需类型检查结果暴露表达式级 MonoType（跨 `src/frontend`，不在本批 inScope），按需另立任务。
+4. **归口**：`value_slots` 的分配语义属 `src/middle/lower/scope.rs`（生成端）；codegen 只消费。normalize 不渲染它，故快照不钉分配细节，分配一致性由 C4 行为面兜底。
+
+## P7 7b.2 收口（`next_temp_reg` 改产 `Operand::Value` + values 生产 + codegen 槽解析 + 快照再生，2026-11-22）
+
+> 收口对象 = WBS 二级任务 7b 的第三个三级任务 7b.2。代码由实现轮落库（契约笔先于代码笔），验证轮在冻结 revision 的批次树上独立复算（结论：通过），复审轮给出 **verdict = pass**。本段按登记口径写实测数字与机械证据；**不写本地提交号**（哈希随 `pull --rebase` 改写），指向以「笔的性质 + 文件清单」定位。
+
+### 一、判据链（实测数字）
+
+冻结 revision = **7b.2 代码独占笔终态**（= origin/dev 顶端 + 7b.2 契约笔 / 基线死链修复笔 / 代码笔 / 实现记录笔，工作树干净）。验证轮的全部量测在 `scripts/dev/scratch.py` 的批次树内完成（`init` → `use --rev` → `build` → 量测 → `release` → `gc`，收口「没有批次树」），主仓工作树全程干净；复审轮在**代码独占笔终态**上以 `git show <rev>:<file>` / `git grep <rev>` 复核，不读正在动的工作树；收口轮复跑的门禁落在本仓树上——其 `src/` 与代码独占笔终态**逐字节一致**（`git diff --stat <代码独占笔> HEAD -- src/` 为空），工作树里的三笔增量均为纯文档笔。
+
+| 门禁 | 结果 |
+| --- | --- |
+| `cargo fmt --check` | exit 0 |
+| `cargo clippy --all --all-features --all-targets -- -D warnings` | exit 0 |
+| `cargo test --lib snapshot` | 6 passed / 0 failed / 1 ignored（232 份再生后与当前 IR 零 diff） |
+| `cargo test --lib verify` | 35 passed / 0 failed |
+| `cargo test --lib middle::ir::tests` | 74 passed / 1 ignored（+2 = 值表生产 / normalize 渲染两条直驱测试） |
+| `cargo test --lib phi` | 39 passed |
+| `cargo test --lib`（全量） | **1981 passed / 0 failed / 3 ignored**（复审轮独立复跑同值；与六条新直驱测试之和自洽） |
+| `cargo test --test integration` | 458 passed / 0 failed |
+| `python scripts/dev/testsuite.py run fast` | exit 0：1 波 **2494 条**，跳过 0 |
+| `corpus_probe` + `check-corpus-parity` | **403 行；403/403 逐条差分空**（复审轮重跑探针 exit 0、逐字节对账同值；语料基线在代码笔内**零改动**） |
+| docs 五脚本（truth / refs / orphan / fanout / test-channel） | 全 exit 0（refs = 1248 文件 / 13254 token；7b.2 契约段落库后的更新值） |
+| `gen-error-code-docs.py` + `git diff --quiet` | exit 0 且差分为空（生成器幂等，收口轮复跑实证） |
+
+### 二、`next_temp_reg` 单调性与 7a.1 边界
+
+- **身份与槽分离**：`next_temp_reg() -> Operand`（`src/middle/lower/scope.rs`）产 `Operand::Value(ValueId)`；旧槽语义原样收进 `alloc_register_slot`（`next_temp` 步进 + `temp_high_water` 真高水位维护逐字保留）。`next_local_slot() -> usize` 是具名变量槽入口（不产 `ValueId`、不写值表）。
+- **单调不回滚**：`next_value: u32` 每函数体从 0 起算、单调递增；全部写点 = 分配点自增（scope.rs 的 `next_temp_reg`）、`NestedBodyGuard` 两个构造函数置 0、`Drop` 还原父帧值、柯里层循环逐层重置（每层一个 `FunctionIR`）。**三处语句级回收（`stmt.rs` 的 `generate_function_ir` / `generate_block_ir`、`expr/closure.rs` 的 `generate_lambda_body_ir`）与基线逐字同形、只回滚 `next_temp`，不触碰 `next_value`**（删回收归 7a.1 + 7b.4）。复审轮逐处对照基线确认同形同位仅行号平移。
+- **模块 init 退化路径**：`value_mode=false`（模块 init / 顶层语句，`ModuleIR.init` 没有值表）时 `next_temp_reg` 退化为旧的 `Local` 槽分配——init 序列与其 codegen 路径零变化（快照 init 段与基线一致即证据）。
+- **柯里层逐层重置（实现期实测缺陷修复）**：不重置会让第二层起的 `ValueId` 从 1 起而值表已清空，代码生成取不到槽；修复被 403 条语料中的柯里族（`curry_tail_expr` / `curry_value_fix` / `fn_const_generic`）行为面锚住——若回归，codegen 走 E3017 响亮失败而非静默错槽。
+- **直驱证据**：111 份多值表函数快照全部「首条 value 为 `v0`」重启、零违例（复审轮全量文本探针）；`Operand::Value` 的生产入口唯一 = `next_temp_reg`。
+
+### 三、values 生产（ty / defining_block / debug_name / 索引）
+
+- **ty 来源**（只取 lowering 已有信息）：字面量经 `ConstValue::mono_type()`（与 verify 的 `const_type` 收敛为单一映射——verify 侧收编为委托，属既有「同一行为两处 → 提到共享层」的正向收敛）；`generate_expr_ir` 入口 `expr_value_type`（变量走 `type_result.local_var_types` / `lookup_var_type`，构造器落 `TypeRef(名)`，普通函数取 `Fn { ret }`）；函数体收尾 `take_body_values` 前按指令语义前向推导（比较/逻辑 → `Bool`、`StringLength` → `Int(64)`、字符串族 → `String`、`Load/Move/Neg` 取源、算术取 `lhs`）。不可得落**显式未知 `TypeRef("?")`**（`UNKNOWN_VALUE_TYPE` 单点哨兵），不读 `LocalSlot.ty`、无 `Int(64)` 静默占位。
+- **实测分布**（232 份快照全量审计，复审轮独立复算）：**9425** 条值 = 真实类型 **7080** + 未知 **2345（24.9%）**；`debug_name` 全 `None`；`defining_block` 全 0（与 lower 单块 label 恒 0 前提一致）；`value_slots` 与 `values` 同索引同长；指令里的 `ValueId` 全部落在值表范围内。未知集中在调用/字段/索引/容器构造等需跨过程或声明面信息的形态（登记见 §十）。
+- **`ValueId` 稠密性**：值表索引 = ValueId、每函数体独立从 0；`value_slots`（index=ValueId）与值同生共死，由 `take_body_values` 与槽表一起取走。
+
+### 四、codegen：Value→u8 槽映射与 255 预算
+
+- `OperandResolver` 持当前函数映射（`set_value_slots` / `clear_value_slots`——translator 进函数体时设置、模块 init 序列清空）与当前指令 span（逐指令 `set_span`，#324 的 E3017 带 span 要求）。`to_reg(Value(v))`：查 `value_slots[v]` → `u8`（`>255` 报 E3014 寄存器溢出；无映射 / 越界报 E3017 且带指令 span）；`is_register` 收敛为 `Local | Arg | Value`。
+- **非猜测实现**：槽号全部来自 lowering 既有分配器（含语句级回收语义原样），codegen 只消费不分配——线性扫描分配器归 7b.4。`Phi` 占位保持 7b.1a 原样（生产构造点 0 + translator 臂 `unreachable!` 响亮失败）。
+- 两条直驱测试（`test_value_resolves_through_value_slots` / `test_value_without_mapping_or_over_budget_is_rejected`）与验证轮 W1 变异（槽映射偏移）证明该映射判据在承重。
+
+### 五、normalize 渲染与 232 份快照再生 review
+
+- 渲染：每函数体新增 `values_total=N` + 每值一行 `value v{k}: {ty:?} @block{b}`（`debug_name` 有值才追加 `debug=`；`v` 编号按 ValueId 升序预置，指令渲染共用同一重命名）；**不渲染 `value_slots`**（分配细节，7b.4 重算）。232 份快照再生，**221 份实际变化 / 491 个 values 段**；11 份未变 = 仅 `type_decl` / init 的快照。
+- **机械核对**（实现轮核对脚本 + 复审轮独立探针互证）：删除 values 段并把 `%n`/`arg%n`/`@n`/`v n` 归一化后，**221/221 份指令文本与基线逐字节相同**、`locals_total` 不变、errors 0 ⇒ diff 只含「临时槽操作数 → SSA 值重命名」与「values 段新增」两类机械变化。复审轮的全量骨架掩码探针（232/232 骨架与基线逐字节相等）加**牙齿自检**（注入语义变化必被抓出、纯重命名不误报）独立复证；人工目检 10 份（hello / literals / float_comparison / fstrings / break_continue / for / string_ops / curry_value_fix / fn_const_generic / error_codes）只含该两类变化。
+
+### 六、mono 类型替换与块映射 / dce 一致性
+
+- **mono 特化**：两处克隆（`passes/mono/function.rs`、`passes/mono/mod.rs`）对 `values[].ty` 走既有类型替换（TypeVar 替换 + 头替换），`debug_name` / `defining_block` 原样投影（块未重编号），`value_slots` 原样复制；**常量擦除路径的槽位密排同步重映射 `value_slots`**（值槽必在保留集——不重映射会让 codegen 写错槽）；柯里层形状判据从「`dst` 是 `Operand::Local`」改为「按 `value_slots` 还原物理槽 == env 槽数」，与基线判据语义等价。直驱测试 `test_specialize_substitutes_value_types_and_keeps_slots` 复审轮复跑绿。
+- **dce 一致性**：DCE 仍只做整函数 `retain`，不动存活函数的 `values` / `value_slots`；直驱测试 `test_dce_preserves_values_and_value_slots_of_live_functions` 断言「存活函数的值表与槽映射原样保留、指令里的 ValueId 仍在值表范围内」。
+
+### 七、C4 行为等价证据
+
+- **语料差分**（C4 最强形态的运行面）：代码笔未触碰 `tests/baselines/`（基线 revision 与代码笔之间对 `tests/baselines` 的 diff 为空）——行为面基线零改动本身就是等价的第一证据；`corpus_probe` 重跑 403 行 + `check-corpus-parity` **403/403 逐条差分空**（实现 / 验证 / 复审三轮同值；403 = 3.24.2 收口后的基线行数，契约行文里的 402 为陈旧数字，按实测 403 报告）。覆盖面正反两面齐：behavior 235 / compile-error 153 / runtime-error 15（168 条非零退出记录被基线逐条钉住）。
+- **大函数风险面**：`string_ops.yx`（354 槽）与 `list_comp.yx`（323 槽）两条越预算语料的 `run` 实测 exit 0——`value_slots` 过渡映射保住字节码槽号是 255 预算内零行为漂移的原因，备选「每值独占一槽」会撞 E3014（契约 §二 第 6 条实测）。
+- **表示面（IR 快照）**：232 份再生、diff 只含两类机械变化（见 §五）。
+
+### 八、验证与复审结论、独立性
+
+- **验证轮（review-1）：通过。** 批次树 p7-t20-rev 上 13 条门禁全绿（数字与 §一 一致）；C4 真双二进制探针：6 夹具 × run/check/dump 在冻结 revision 与基线二进制上对比，剥 PowerShell 包装后 run/check 逐字节全等，dump 唯一真实差异 = `Mov`/`StoreLocal` 同语义标签（解释器两臂逐字相同，防御臂不再命中所致）；3 条机械可逆变异（W1 槽映射偏移 / W2 值类型占位 / W3 渲染数值）各自使直驱测试 FAILED(101)、机械还原 blob 回 HEAD、树 CLEAN、每条后 build 回绿。验证轮如实登记两条环境性红（首跑 fast 干扰、corpus UTF-16 BOM 编码事故），均已归因探针侧并重跑采信。
+- **复审轮（review-2）：verdict = pass。** 12 类逐条成立：D0–D4（权威源 = `src/middle/ir/ir.rs` 值身份 + `src/middle/lower/scope.rs` 分配语义；`ValueInfo` 与 `LocalSlot` 两维度不混用；35 个 `result_reg: Operand` 签名；无隐式转换 trait、无 import 别名、无新入口）、红线（`todo!` 两处在基线已存在非本批新增；`#[test]` src/ 1978→1984 仅 +6 零删除；`pub(crate)` 基线/冻结均 2 处零新增；`include!` 零）、inScope（33 个非快照 src 文件全在触碰面内）、契约 10 条逐项落地、`next_temp_reg` 单调与 7a.1 边界（§二）、values 生产（§三）、codegen（§四）、mono/dce（§六）、快照（§五）、C4（§七）、生成物（§九）、提交与测试规范（六条新测试命名 / AAA / 断言消息 / `matches!` / 无 `use super::*` 全合规）。
+- **独立性（如实登记，不宣称异家族独立验证）**：实现者 DeepSeek、验证者 review-1（GLM）、复审者 review-2（GLM）——复审与实现者不同族成立；**复审与验证同族为当前可达性偏差**（MiniMax 路由对长任务连续 transport 失败，复审从 docs-1 改派 review-2，队长合同修订在案），已按合同修订如实登记。补偿证据：两轮的全部结论都出自冻结 revision 的独立复算（对象级 `git show` 取证、全量快照骨架探针 + 牙齿自检、语料差分重跑、门禁复跑、生成器幂等实测），非交叉引用对方报告。
+- **非阻塞登记三条（复审轮）**：①代码笔提交消息的 lib 计数写 1975，与实现记录 / 复审轮实测的 1981 差 6（= 恰好六条新直驱测试，写消息时点的旧计数）——登记性偏差，不阻塞；②实现轮报文「E3017 3→4 处」与实物不符——`index.md` 基线/冻结均为 4 处（占位诊断换无映射诊断同数），纯报告措辞；③未知类型面 2345/9425（24.9%）登记给后续轮次按需收紧（见 §十）。
+
+### 九、生成物与 inScope 扩面（队长追认）
+
+代码笔含 5 份生成物：`docs/src/reference/error-code/` 4 份（E1xxx / E5xxx / E8xxx / index）+ **`docs/src/reference/warning-code/warning-codes.md`**。逐行 review 确认：error-code 4 份只含发射点行号平移（`sema/checker.rs` 基线 +1 行漂移属并行会话遗留、本笔自身源码增长的行号平移）与计数更新——`E3014` 3→4 处 = `operand.rs` 新增的 Value 槽 >255 预算臂（契约 §二 第 6 条明文）；`E3005` 19→20 处 = `lower/expr/control.rs` 模式绑定处新增的「绑定值没有可复用的寄存器槽」防御臂（`usize`→`Operand` 签名变更的响亮伴随，`slot_for_operand` 解析不了显式报 E3005 而非静默猜槽）；warning-code 1 份只含 `checker.rs` 基线行号平移。**生成器幂等**（收口轮重跑 exit 0 + `git diff --quiet` 为空）。
+
+**契约缺陷（队长侧）登记**：7b.2 契约的 inScope 声明了 `docs/src/reference/error-code/`，**漏声明 `docs/src/reference/warning-code/` 前缀**——生成器对 warning-codes.md 的顺带再生（基线 checker 行号漂移，非本批语义）属机械必需面，队长已追认随代码笔入库、不判实现越界、不拆分。与 7b.1b 收口的 error-code 前缀漏声明同性质：**后续契约写法教训同前——机械必需面必须写成可被路径匹配器解析的前缀**。
+
+### 十、偏差与既有项
+
+1. **语料基线行数口径**：契约 §二 第 10 条写的 402/402 为登记时点的陈旧数字；实测与验收一律按 **403/403**（3.24.2 收口后的基线行数），三轮实测同值。
+2. **基线死链修复笔**：`09`/`09a` 里 3.24.2 记录的 `Vec(Int)[..]` 与 `(i)` 相邻写法被 markdown 链接解析器误判为死链（预存红，与 7b.2 无关），队长授权并入本批、独立成笔；修法 = `]` 与 `(` 之间断开（实测反引号不能阻断该正则），只改两行。
+3. **04 就地更正**（本收口笔承载）：改动清单第 7 项（`next_temp_reg`）与第 32 项（`Operand::Value` 解析臂）标「7b.2 已落地」；§值标识方式补生产形态（计数器隔离 / 模块 init 退化 / 柯里层逐层重置）、类型来源与显式未知策略、`value_slots` 过渡映射与 255 预算；§normalize/快照再生按现树更正；改动量估算补实测。en 镜像不手改（zh 是源，en 由翻译工作流同步，已知待同步项）。
+4. **04 的旧路径欠账（既有，本批不修）**：04 的「编译器改动清单」与「IR 结构变更的连锁影响」仍有 7.0 搬移前的路径（`src/middle/core/ir_gen.rs`、`src/middle/core/bytecode.rs` 系列），按 7b.1a 收口的既定分工留各自批次落地时就地更正；本收口只更正第 7 / 32 项与本批触及的段落。
+5. **7b.3 前置不变**：生产 `Phi` 前必须先填 `BasicBlock.successors`（7b.1b 契约登记）；本批单块 label 恒 0，`defining_block` 已可承载多块。**7b.3 落地前禁止出现 `Phi` 生产点**（translator 占位会以 panic 形式暴露）。
+6. **7b.4 接管**：`value_slots` 是过渡映射——线性扫描分配器落地后重算该表，同批删除三处语句级回收（7a.1）；本批未改回收语义。
+7. **本轮（收口笔）只改 `09` / `09a` / `04` 三个文件**，未碰 `src/`、`tests/`、`scripts/`；未跑 `git push` / `fetch` / `pull`；09 顶部三级计数保持不动（7b.2 是既有三级任务，不新增）。
+
+### 十一、收口后 rebase（最终 base）
+
+收口笔之后、推送之前，`origin/dev` 又推进 7 笔（顶端 `b6d29ca8`）：WBS 8.2 词法收敛与 f-string 插值词法期切段收口（8.2.1/8.2.2 交付、8.2.3/8.2.4 登记，三级计数 258→**260**）、`fb5ebbf5` VitePress 构建与死链预检的两类写法修复、`a1b71f9d` 错误码文档再生（`checker.rs` 行号 +1 漂移）、3 笔 auto-translate。本地 7b.2 五笔已 rebase 到新顶端：唯一冲突在 09a 尾部（origin 的 8.2 收口段 vs 本批 7b.2 契约段），两段都保留；09/09a 的 3.24.2 死链写法在 origin `fb5ebbf5` 已同修，本批基线笔保留更明确的「`Vec(Int)[..]` 的 `(i)` 下标形态」措辞，`check-docs-orphan` 仍为 0。
+
+**代码内容零变化**：rebase 后代码笔的 `src` 面 patch-id 与 rebase 前逐字节一致，221 份快照面的 patch-id 也一致；差异只在生成物——rebase 前代码笔的生成物 diff 为 5 文件 12+/12−，合并 origin 已再生的两文件后为 3 文件 4+/4−；合并树上生成器重跑零 diff（幂等）。
+
+**最终 base 复跑**（队长集成检查，非独立验证）：fmt 0；snapshot 6/0/1（232 份零漂移）；verify 35；`middle::ir::tests` 74/1；phi 39；`testsuite run fast` **2503 条** exit 0；语料 **403/403** 差分空；docs 五脚本 0（docs-refs 1248 文件 / **13321** token）；生成器幂等。
+**口径更正**：§十.7 的「09 顶部三级计数保持不动」是收口时点（258）的事实；最终 base 为 **260**（origin 的 8.2.3/8.2.4 登记），7b.2 仍不新增计数。
+**独立性边界**：t20/t21 的独立验证/复审绑定 rebase 前的代码笔；本节的最终 base 复跑是队长在合并树上的集成检查，不替代独立验证。`src`/快照 patch-id 逐字节一致是「代码内容未变」的机械证据；若需要最终 base 的独立重验，另开任务。
+
+## P7 7b.3 契约（`BasicBlock.successors` 填充 + translator `Phi` 臂（方案 A），2026-11-22）
+
+> 计划见 [09](./09-execution-wbs.md) §P7 7b 表 7b.3 行（判据 C4 + `.42` 往返测试）；设计依据 [04](./04-ssa.md) §「`Phi` 的字节码形态」方案 A（IR-only 伪指令，translator 展开为 Move 串，不新增 opcode、`.42` 零变更）、§目标设计「`Phi` 作为新 `Instruction` 变体」、§值标识方式（`value_slots` 过渡映射）；前置 = [09a §P7 7b.1b 契约](#p7-7b1b-契约values-表--valueinfo--访问器--phi-残项判据2026-11-20) §三（「生产 `Phi` 之前必须先填块级 `successors`」）与 [09a §P7 7b.2 收口](#p7-7b2-收口next_temp_reg-改产-operandvalue--values-生产--codegen-槽解析--快照再生2026-11-22)（`Operand::Value` 生产 + `value_slots` 槽映射）。基线 = `origin/dev` 顶端 `d276e652`（7b.2 已集成，工作树干净）；行号取该 revision。
+>
+> 本段在动工前写下改动面、逐项定夺、影响预判与回滚点；代码按本段落地，收口轮在本文件追加实测与偏差。
+
+### 一、实测面（基线 `d276e652`）
+
+| 面 | 实测 |
+| --- | --- |
+| `BasicBlock` 字面量构造点 | **14 处**：`git grep -n "BasicBlock {" -- src` 共 16 行 = 结构体定义 1 + 构造 14 + 共享测试助手 `block()` 的返回类型行 1。14 处 = **生产 7**（`lower/curry.rs` 2、`lower/stmt.rs` 2、`lower/globals.rs` 1、`lower/expr/closure.rs` 1、`passes/codegen/translator.rs` 合成的构造函数体 1）+ **测试夹具 6**（`passes/mono/tests` 2、`passes/dce/tests` 2、`passes/codegen/tests` 2）+ **共享助手 1**（`ir/tests/ir_build.rs` 的 `block()` 把 `successors` 作为参数） |
+| `successors: Vec::new()` 写点 | **13 处**（上述 14 处构造中除 `ir_build::block` 外的 13 处一律空表）。7b.1b 登记的「15 处」把结构体定义行与 `block()` 的返回类型行一并计入；本批按 **构造点 14 / 空表写点 13** 报告 |
+| 块级 CFG 现状 | 生产侧**全仓单块**：7 处生产构造 `label: 0` + 空 `successors`，无填充点 ⇒ 块级前驱恒空（7b.1b 契约 §三 实测前提） |
+| 跳转目标坐标 | `Jmp` / `JmpIf` / `JmpIfNot` 的 `target` 是**函数内展平后的绝对指令下标**（`lower/module_ir.rs` 的 `rebase_jump_targets` 明文 + `translator.rs` 的 `global_ir_index` 回填），不是块 label；`BasicBlock.label` 当前不参与控制流（`ir/verify.rs` 文件头「现实语义记录」第 1 条） |
+| `Instruction::Phi` 生产点 | **0**（`git grep -n "Instruction::Phi" -- src` 的非测试命中只有 `ir.rs` 的定义与 span / def-use 臂、`normalize.rs` 渲染、`verify.rs` 判据、`translator.rs` 的 `unreachable!` 占位） |
+| `Operand::Value` 生产入口 | 唯一 = `lower/scope.rs` 的 `next_temp_reg()`（7b.2 落地）；槽映射 = `FunctionIR::value_slots()`（`ir.rs`，index = `ValueId`） |
+| `translator` 的 `Phi` 臂 | `passes/codegen/translator.rs` 的 `translate_instruction` 末臂：`unreachable!("…真翻译归 7b.3…")` |
+| `normalize` 的 `successors` 渲染 | `ir/normalize.rs` 的 `FunctionBody::Code` 分支：`succ` 非空才写一行 `block[<label>] succ=[…]`；现状恒空 ⇒ 快照里不出现 |
+| `ValueInfo.defining_block` | 由 lowering 生成期记录（7b.2 的 `cur_block_label`，单块 ⇒ 恒 0） |
+
+### 二、逐项定夺
+
+1. **`successors` 的语义：块级 CFG，边只连不同块（含真自环）；来源是跳转与布局落空。** 「`BasicBlock` 是基本块」在现实 IR 里不成立——块内允许绝对下标的跳转。本批把块做成真基本块：在 `lower` 构造函数体时按 **leader** 切分（函数入口、每条跳转的目标、跳转/返回之后的下一条指令），并把切分与 CFG 推导收敛到**单一构造入口** `src/middle/ir/ir.rs` 的 `partition_blocks(instructions) -> Vec<BasicBlock>`（禁令三：14 处构造点不得各写一份规则）。块级出边按块尾终结指令推导：`Jmp` → 目标指令所属块；`JmpIf` / `JmpIfNot` → 目标块 + 布局上的下一块；`Ret` / `TailCall` → 无；其余块尾（布局落空）→ 下一块。跳转目标落在本块之外才成边；块内跳转在切分后不存在（目标必为 leader ⇒ 它必是新块首），唯一例外是「单条 `Jmp` 自指」形成的**真自环**。块 label 按布局序稠密发放（0..N-1），`entry` 仍为 0；**跳转目标坐标不变**（仍是展平绝对指令下标）⇒ `translator` 的 `global_ir_index` 回填路径、`verify` 的指令级 CFG、`.42` 字节码**全部不变**。
+2. **`Phi` 的 translator 展开（方案 A）**：`Phi` 是 IR-only 伪指令，**不新增 opcode**、`.42` 格式与 `VERSION` 零变更、`executor/` 零改动。落形态：`Phi` 的 Move 串按**前驱选择 incoming**——每个前驱一条「组」（组 = 本块全部 `Phi` 在该前驱上的 `Move { dst: vreg, src: incoming[i] }`），组落在**汇合块入口**；组间用既有 `JMP` 跳过，入边跳转按「前驱 → 组起点」重定向（临界边无需新块、无需新码）。组序由落空前驱（布局上紧邻且块尾非 `Jmp` / `Ret` / `TailCall` 的前驱）领首，其余按前驱 label 升序——这样落空路径自然进入它自己的组。单前驱时组内只有 Move、无 `JMP`。`Phi` 指令本身不产出字节码（与「`executor` 永远看不到 `Phi`」同性质），`dump_bytecode` 里看不到 `Phi`（04 §关键决策与理由 决策三 已登记该代价）。
+3. **`Operand::Value` / `value_slots` 在 `Phi` 臂的解析**：Move 串逐条复用既有 `Translator::translate_move`（`dst` 为 `Operand::Value` ⇒ `MOV dst_slot, src_slot`），槽号由 `OperandResolver::to_reg` 经 `value_slots[v]` 解析（7b.2 落地；`>255` 报 E3014、无映射 / 越界报 E3017 且带指令 span）。**不新造第二条 Value → 槽 解析路径**（禁令三）。`Phi` 的 `dst` 非 `Operand::Value`、`incoming` 缺落空前驱、组内出现并行拷贝环（`dst` 槽在组内被后序 Move 当 `src` 读，需要临时槽）等形态一律**响亮失败**（`E8001` 内部错误诊断），不静默 NOP、不静默错值；这些形态的判据归 `verify_ssa`，translator 只做「不产出错代码」的自保。
+4. **`.42` 往返测试形态**：合成 IR（**不经 lowering**）构造含单 / 多前驱 `Phi` 的多块函数 → `CodegenContext::generate()` → `BytecodeFile::write_to` → `BytecodeFile::read_from` → `BytecodeModule::from`，断言：①解码前后字节码一致；②`Phi` 不进字节码（无新 opcode、`MOV` 串按前驱分组）；③解释器 `execute_module` 的全局槽位结果等于直接翻译（未序列化）路径，且等于按被选前驱的期望值。测试不依赖 lowering 生产 `Phi`（生产点仍为 0）。
+5. **C4 判据**：既有程序（无 `Phi` 生产）零行为变化 = 语料差分 **403/403** 逐条空、IR 快照 **232 份零漂移**、`verify` / `middle::ir::tests` / `phi` / fast 全绿。快照零漂移的结构理由：块切分不改变指令的展平顺序与内容（`normalize` 逐块按序渲染指令，块本身不产生行），且 `normalize` 的 `successors` 渲染分支**删除**（「`successors` 不进入快照」是本批前提：CFG 形状属分配 / 布局细节，7b.4 的线性扫描分配器还可能重塑它）。字节码零变化的机械理由：`translator` 按块的布局序展平，`global_ir_index` 与跳转回填表不变，块切分对 `Phi` 生产为 0 的程序不产生任何新指令。
+6. **快照 / 语料影响与回滚点**：IR 快照零漂移（不重生成基线）；语料差分基线零改动；错误码文档只需在生成器口径下确认幂等（本批不新增诊断码，`E8001` 已注册）。回滚点：本契约段单独一笔文档提交（先于代码）；代码 + 测试为一笔独占提交，`git revert` 整笔回滚；`partition_blocks` 与 `Phi` 展开各自可独立回退（前者只影响 `successors` / 块切分，后者只影响 `Phi` 消费）。
+
+### 三、测试面（合成 IR 承担 `Phi` 生产，直驱测试钉住两侧）
+
+- `src/middle/ir/tests/blocks.rs`（新）：`partition_blocks` 的切分与 CFG 推导（直线体单块空表 / `Jmp` / 条件跳转双边 + 落空 / `Ret` / 自环 / 真 lowering 产物的块级前驱非空）。
+- `src/middle/passes/codegen/tests/phi.rs`（新）：单前驱 / 多前驱 `Phi` 的 Move 串形态（`dst` / `src` 槽）、前驱选择（运行时取被选前驱的值）、`.42` 往返一致、解释执行 == 直接翻译、并行拷贝环响亮失败。
+- `src/middle/ir/tests/verify.rs`：补一条「块级前驱来自真实 lowering 产物」的直驱断言（`verify_ssa` 的块级前驱判据自此有真实数据）。
+- `passes/mono` / `passes/dce`：各补一条「`successors` 在特化克隆 / DCE 后原样保留」的直驱断言。
+- 既有测试不做放宽；新增测试按 [test-specification](../test-specification.md)（命名 `test_<what>_<scenario>`、三段式、断言带消息、`matches!`、无 `use super::*`、无 inline `mod tests`）。
+
+### 四、范围、D59 与风险登记
+
+- inScope：`src/middle/`、`src/driver/tests/`、`src/frontend/tests/`、`tests/baselines/`、`docs/src/reference/error-code/`、本文件；out of scope：`src/backends/`、`src/std/`、`tests/yaoxiang/`、`09`、`04`、`scripts/`。
+- D59：**无行为变更（表示重塑 + 消费端接线）**——`Phi` 生产仍为 0，块切分不改变指令序 / 字节码 / 执行结果，故不改变「原先成功」程序的对外表现。
+- 风险与登记（本批不做，收口按实测登记）：①`ValueInfo.defining_block` 仍是生成期块号（7b.2 的 `cur_block_label`，恒 0）；块切分后它与真实定义块不一致。本批不改：改则 232 份快照的 `values` 段 `@block` 漂移，与本批「快照零漂移」判据冲突；修正须与快照再生同批（登记给 `Phi` 生产批次 / 7b.4）。②`04` 的落地标记（改动清单第 31 项、§实测前提「15 处空表」、`§值标识方式` 的「多块随 7b.3」）与 `07`「前驱排序」规范化项在 `successors` 不再渲染后的口径，均属 out-of-scope 文档，由收口笔就地更正。③`Phi` 生产（lowering 产 `Phi`）仍不在本批：`successors` 与消费端先就位，生产端留给后续批次。
+
+## P7 7b.3 实现记录（`BasicBlock.successors` 填充 + translator `Phi` 臂（方案 A），2026-11-22）
+
+> 基线 = `origin/dev` 顶端 `d276e652`。两笔：契约笔（本文 §P7 7b.3 契约，先于代码）→ 代码笔（16 文件 = 源码 7 + 测试 6 + 生成物 2 + 测试模块声明 2，+1523/−98）。代码笔为**表示重塑 + 消费端接线**，D59 分类「无行为变更」。
+
+### 一、`successors` 填充（块级 CFG）
+
+1. **单一构造入口**：`src/middle/ir/ir.rs` 的 `partition_blocks(instructions) -> Vec<BasicBlock>`——按 leader（入口 / 每条跳转目标 / 跳转后下一条）切块，块 label 按布局序稠密发放（0..N-1），出边按块尾终结指令与布局落空推导（`Jmp` 单边、`JmpIf` / `JmpIfNot` 双边、`Ret` / `TailCall` 无边、其余落空边），升序去重。**跳转目标坐标不变**（仍是函数内展平绝对指令下标），故 `translator` 的回填表、`verify` 的指令级 CFG 与 `.42` 字节码不受影响。
+2. **调用面**：`lower` 的 6 处生产构造（`curry.rs` 2 / `stmt.rs` 2 / `globals.rs` 1 / `expr/closure.rs` 1）+ `codegen` 合成的构造函数体 1 处，全部改走 `partition_blocks`；`BasicBlock` 字面量在**生产侧只剩 `partition_blocks` 内 1 处**。测试夹具保留手写块（单块无跳转 ⇒ 空 `successors` 即真实值；多块夹具显式声明块图，新夹具 `codegen/tests/phi.rs` 的汇合块以 `Ret` 结尾故 `successors` 为空）。实测：`git grep -n "successors: Vec::new()" -- src` 的 15 行全部落在这两类（1 处属 ownership 图的同名字段、2 处在 `partition_blocks` 内、12 处为夹具的终结块 / 无跳转单块）。
+3. **真实数据证据**：`src/middle/ir/tests/blocks.rs` 的 `test_lowered_while_body_has_real_block_successors`——真 lowering 的 `while` 体切出多块、存在双出边与回边、指令总数守恒、块级前驱非空；`test_ssa_phi_on_lowered_blocks_reports_real_predecessor_count` 在该真实 IR 上插入 `incoming` 为空的 `Phi`，`verify_ssa` 按真实 successors 报出「前驱数」差异且前驱集非空（登记-消费闭环；若 successors 退回空表则该断言以「前驱=[]」失败）。
+
+### 二、translator `Phi` 臂（方案 A）
+
+1. **展开点与形态**：`translate_function` 进块时先发射该块的 `Phi` 组（`plan_phi_edges` 计算、`emit_phi_prologue` 发射）——每个前驱一组 `Move { dst, src }`（`dst` 为 `Operand::Value` ⇒ 复用既有 `translate_move` ⇒ `MOV dst_slot, src_slot`；槽号经 `OperandResolver::to_reg` 由 `value_slots` 解析），组落在汇合块入口；组间用既有 `JMP` 跳过，入边跳转按 `edge_entry`（键 = (前驱 label, 汇合块首条指令的展平下标)）重定向到本前驱组起点。组序：**落空前驱领首**（布局紧邻且块尾非 `Jmp` / `Ret` / `TailCall`），其余按前驱 label 升序。单前驱时组内只有 Move、无 `JMP`；临界边无需新块、无需新 opcode。`Phi` 指令本身不产出字节码（与「`executor` 永远看不到 `Phi`」同性质）。
+2. **形态自保（E8001）**：`Phi` 非块首连续指令 / `dst` 非 `Operand::Value` / 入口块含 `Phi` / 同块多 `Phi` 的 incoming 前驱集不一致 / 落空前驱不在 incoming / 组内并行拷贝环（需临时槽）⇒ `phi_layout_violation` 单点构造 E8001，不静默 NOP、不静默错值。生成器因此把 E8001 发射点 15→**16 处**并平移行号，两生成物随代码笔入库（幂等复跑零额外 diff）。
+3. **`Phi` 生产仍为 0**：`git grep -n "Instruction::Phi" -- src` 的非测试命中 = 定义 / span / def-use / 渲染 / 判据 / translator 的展开与防御臂，**lowering 无生产点**。
+4. **偏差登记（与契约验收措辞的差异，提请裁决）**：契约第 3 条写「`translator` 的 `Phi` 臂替换为展开」；实现把展开放在**块入口**（`plan_phi_edges` / `emit_phi_prologue`），`translate_instruction` 的 `Phi` 臂收敛为**不可达的 E8001 防御臂**。理由：`translate_instruction` 的返回位是**单条**字节码，而方案 A 的展开是「按前驱分布的多条 Move」，块入口是唯一能同时满足「按前驱选择」与「单条返回位」的位置；防御臂与「`executor` 永远看不到 `Phi`」同性质。`unreachable!` 占位已删除，展开本身由 5 条直驱测试覆盖（单 / 多前驱、临界边、`.42` 往返、并行拷贝环）。
+
+### 三、测试面（15 条新增，全部直驱）
+
+- `src/middle/ir/tests/blocks.rs`（新，8 条）：直线体单块空表 / 条件跳转双边 + 落空 / 循环回边 / 真自环 / 越界目标不产生边 / 空体单空块 / 真 lowering 多块 + 双出边 + 回边 + 指令守恒 / `verify_ssa` 消费真实前驱。
+- `src/middle/passes/codegen/tests/phi.rs`（新，5 条）：单前驱 Move 串无跳转 / 菱形多前驱运行时按被选边取值 / **临界边**（条件跳转重定向到自己的组，否则拿到错值）/ `.42` 写读往返字节码逐条一致且解释执行同值 / 组内并行拷贝环 E8001。
+- `passes/mono/tests`：`test_specialize_preserves_block_successors`（特化克隆原样投影块与出边）。
+- `passes/dce/tests`：`test_dce_preserves_block_successors_of_live_functions`（DCE 只整函数删除，存活函数块/出边原样）。
+
+### 四、判据与门禁（全绿实测）
+
+| 门禁 | 结果 |
+| --- | --- |
+| `cargo fmt --check` | exit 0 |
+| `cargo clippy --all --all-features --all-targets -- -D warnings` | exit 0 |
+| `cargo test --lib snapshot` | 6 passed / 0 failed / 1 ignored（**232 份 IR 快照零漂移**——块切分不产生快照行，`successors` 不再渲染） |
+| `cargo test --lib verify` | 35 passed / 0 failed（与 7b.2 基线同值） |
+| `cargo test --lib middle::ir::tests` | **82 passed / 1 ignored**（74 → 82，+8 = blocks.rs） |
+| `cargo test --lib phi` | **46 passed**（39 → 46） |
+| `python scripts/dev/testsuite.py run fast` | exit 0：1 波 **2518 条**，跳过 0（2503 → 2518，+15 = 新增测试） |
+| `corpus_probe` + `check-corpus-parity` | **403 行；403/403 逐条差分空**（C4 最强形态） |
+| `check-docs-truth` / `check-fanout` / `check-test-channel` | 全 exit 0 |
+| `gen-error-code-docs.py` + 复跑 | exit 0，两生成物只含 E8001 计数 15→16 与发射点行号平移；复跑零额外 diff（幂等） |
+
+**环境性事故（如实登记）**：`corpus_probe` 首跑用 PowerShell 的 `>` 重定向，产出为 UTF-16 LE（BOM `FF FE`），`check-corpus-parity` 以 `UnicodeDecodeError` exit 1；改用 `cmd /c` 直接重定向后 UTF-8 正常、403/403 差分空。此为此前 7b.2 验证轮同款编码坑，探针侧问题，不影响判据结论。
+
+### 五、登记与遗留
+
+1. **`defining_block` 仍恒 0**（契约 §四 ①）：块切分后与真实定义块不一致；修正须与 232 份快照 `values` 段再生同批，登记给 `Phi` 生产批次 / 7b.4。
+2. **`successors` 不进入快照**：`normalize` 的 `succ` 渲染分支删除（契约 §二 第 5 条）；`07`「前驱排序」规范化项自此只有 `Phi` incoming 一条消费面，`07` 属 out-of-scope 文档，收口笔就地更正。
+3. **out-of-scope 文档待更**：`04` 的落地标记（改动清单第 31 项 / §实测前提「15 处空表」/「多块随 7b.3」）与 `09` 的 7b.3 行勾选（`09` 由队长统一维护）。
+4. **`Phi` 生产（lowering）不在本批**：`successors` 与消费端已就位；生产端落地时 `verify_ssa` 的块级前驱判据直接生效。
+5. **契约 §三 的测试落位微调**：原写「`src/middle/ir/tests/verify.rs` 补块级前驱直驱断言」，实现落在 `src/middle/ir/tests/blocks.rs`（该断言需要 lowering 真实产物与 `partition_blocks` 语境，与块级判据同文件更内聚）；内容与判据不变。
+
+## P7 7b.3 收口（`BasicBlock.successors` 填充 + translator `Phi` 臂方案 A + `.42` 往返，2026-11-22）
+
+> 收口对象 = WBS 二级任务 7b 的第四个三级任务 7b.3。代码由实现轮落库（契约笔先于代码笔），验证轮在冻结 revision 的批次树上独立复算（结论：通过），复审轮给出 **verdict = pass**（队长的偏差裁决在案：方案 A 的规范性落形态以 7b.3 契约 §二 第 2 条为准，`translate_instruction` 的不可达 E8001 防御臂合规）。本段按登记口径写实测数字与机械证据；**不写本地提交号**（哈希随 `pull --rebase` 改写），指向以「笔的性质 + 文件清单」定位。
+
+### 一、判据链（实测数字）与 revision 关系
+
+**验证轮的量测 revision = 7b.3 代码独占笔终态**（工作树干净；批次树 `init` → `use --rev` → `build` → 量测 → `release` → `gc` 全流程，主仓工作树未量测）。代码笔之后有**两笔仅注释的修复笔**（均只改 `src/middle/ir/verify.rs` 的 `///` 文本）：① `check_phi_structure` 文档注里「生产侧 `successors` 当前恒空」的过期说法（7b.3 验证轮发现、当轮更正）；② `FnView::values` 与 `check_phi_incoming_types` 文档注里两处「本批生产恒空」的过期断言（values 自 7b.2 起已生产）。`git diff <代码独占笔> HEAD -- src` 的独立核验 = 该文件 9 行 diff 全为注释文本（blob 比对其余 16 个关键文件含 `opcode.rs` / `.42` 序列化 / executor / 语料基线全部逐字节一致）；**复审轮在含这两笔的终态上作出结论**。验证轮的量测数字不得解读为在终态上复跑——终态的补偿性复跑（见下）逐项同值，两笔注释不改任何可执行内容。
+
+| 门禁 | 验证轮（冻结 revision 批次树） | 复审轮 / 终态补偿 |
+| --- | --- | --- |
+| `cargo fmt --check` | exit 0 | — |
+| `cargo clippy --all --all-features --all-targets -- -D warnings` | exit 0 | — |
+| `cargo test --lib snapshot` | 6 passed / 0 failed / 1 ignored（**232 份零漂移**） | 终态复跑 6 / 0 / 1 同值 |
+| `cargo test --lib verify` | 35 passed / 0 failed | — |
+| `cargo test --lib middle::ir::tests` | **82 passed / 1 ignored**（74 → 82，+8 = blocks.rs） | 终态复跑 82 / 1 同值 |
+| `cargo test --lib phi` | **46 passed**（39 → 46） | 终态复跑 46 同值 |
+| `python scripts/dev/testsuite.py run fast` | exit 0：1 波 **2518 条**，跳过 0（2503 → 2518，+15 = 新增测试） | — |
+| `corpus_probe` + `check-corpus-parity` | **403 行；403/403 逐条差分空**（树内 bin 录制） | 终态主仓复跑 403/403 差分空同值 |
+| docs 脚本（truth / refs / orphan / fanout / test-channel） | 全 exit 0 | 终态复跑 truth / refs / orphan / fanout 全 exit 0 |
+| `gen-error-code-docs.py` + `git diff --quiet` | exit 0、差分为空（生成器幂等） | 终态复跑同值 |
+
+### 二、`successors` 真实 CFG 与 pass 保留
+
+- **单一构造入口**：`src/middle/ir/ir.rs` 的 `partition_blocks` 按 leader（入口 / 每条跳转目标 / 跳转后下一条）切块，块 label 按布局序稠密发放；出边按块尾终结指令与布局落空推导（`Jmp` 单边、`JmpIf` / `JmpIfNot` 双边、`Ret` / `TailCall` 无边、其余落空边），升序去重，越界目标不加边（那是 `verify` 的「jump 目标存在」判据职责）。**跳转目标坐标不变**（仍是函数内展平绝对指令下标），故 `translator` 的回填表、`verify` 的指令级 CFG 与 `.42` 字节码零影响。
+- **构造点实测**（复审轮独立计数）：生产侧 `BasicBlock` 字面量构造只剩 `partition_blocks` 内 2 处（空体单空块 + 切块）；`lower` 的 6 处（curry 2 / stmt 2 / globals 1 / closure 1）与 codegen 合成构造函数体 1 处全部改走该入口。`git grep -n "successors: Vec::new()" -- src` 的 15 行残留按契约 §一 实测面与 §二 第 1 条口径逐类核实：ownership 图同名字段 1（非 `BasicBlock`）+ `partition_blocks` 内 2（空体与切块的初始空表）+ 测试夹具 12（直线体 / 终结块，空表即真值；多块夹具显式声明真实块图）。
+- **登记-消费闭环**：`verify_ssa` 的块级前驱只认 `BasicBlock.successors` 反推；`blocks.rs` 的直驱测试在真 lowering 的 while 体上断言多块 / 双出边 / 回边 / 指令守恒 / 前驱非空，并注入空 incoming 的 `Phi` 证明前驱判据按真实 successors 报「前驱数」差异（若 successors 退回空表，该断言以「前驱=[]」失败）。mono（特化克隆）与 dce（整函数删除）的保留断言直驱：存活函数的块与出边原样投影、不重建。
+- **快照零漂移的结构理由**：`normalize` 不渲染 `successors`（CFG 属分配 / 布局细节），块切分不产生快照行 ⇒ 232 份零漂移（验证 + 复审 + 终态补偿三轮同值）。
+
+### 三、translator `Phi` 臂（方案 A）与落位裁决
+
+- **规范性落形态**（契约 §二 第 2 条为准；验收条「Phi 臂替换为展开」是简写，与 `translate_instruction` 的单条返回位冲突时按队长裁决以落形态条为准）：展开在**块入口**——`plan_phi_edges` 计算每块的 `Phi` 组（块首连续 Phi 收集 / `dst` 必 `Operand::Value` / 入口块禁 `Phi` / 同块多 `Phi` 前驱集一致 / 落空前驱必在 incoming），`emit_phi_prologue` 逐前驱发 `Move { dst, src }` 组（复用 `translate_move`），组间用既有 `JMP` 跳过，入边跳转按 `(前驱块 label, 汇合块首指令展平下标)` 重定向到本前驱组起点（临界边无需新块）。组序 = 落空前驱领首 + 其余按 label 升序。**`translate_instruction` 的 `Phi` 臂收敛为不可达 E8001 防御臂**（复审判定三路径不可达：函数翻译路径的 Phi 在进块前已被跳过、init 序列无块结构、合成构造器为单块直线体；到达即返回响亮 `Err(E8001)`，非 panic、非 NOP 静默）。
+- **前驱选择与 Move 串**（直驱测试五锚）：单前驱展开为恰好一条 `Mov`（槽对 `(2, 1)`，值槽经 `value_slots` 解析）且组内无跳转；菱形双前驱运行时按被选边取对应值（20 / 10）；临界边条件跳转重定向到自己的组（10 / 20，不重定向会拿到错值）；组内并行拷贝环（「先写槽、后读槽」需要临时槽）以 E8001 响亮拒绝——临时槽归 7b.4。
+- **`Operand::Value` / `value_slots`**：`dst` / `src` 全部经 `OperandResolver::to_reg` 由 `value_slots`（7b.2 的过渡映射）解析为 `u8` 槽，不新造第二条解析路径；模块 init 序列清空映射。Phi 生产构造点全仓 **0**（非测试命中只有定义 / span / def-use / 渲染 / 判据 / 展开与防御臂）。
+- **无新 opcode / `.42` 零变更 / executor 零改动**：`opcode.rs` 与 `.42` 序列化文件对 7b.3 前基线的 diff 为空（复审轮机械核）；`.42` 写读往返（`write_to` → `read_from` → `BytecodeModule`）后字节码逐条一致、解释执行与直接翻译同值；`VERSION` 维持 4。
+
+### 四、C4 证据（正反两面）
+
+- **正面**：语料 403/403 逐条差分空（验证轮在批次树、复审轮在终态主仓两轮同值）；232 份 IR 快照零漂移（块切分不产生快照行、`successors` 不渲染）；`testsuite run fast` 2518 条全绿；验证轮另做 8 夹具 × 双二进制（冻结树 bin vs 主仓同冻结内容 bin）× run / check / dump / build→`.42` 的逐字节对比，0 失配。
+- **反面**（机械变异，`scratch.py trial` 全自动 apply → 跑 → apply -R → 逐文件 blob 回 HEAD）：①破坏 successors 出边推导 → blocks 判据 3 条转红；②取反 Phi 前驱选择 → phi 行为测试 4 条转红；③破坏 `.42` 版本判据 → `.42` 往返测试转红。三条各自 build 复测回绿、树 CLEAN。
+- **C4 判据**：既有程序（无 Phi 生产）零行为变化成立——块切分不改变指令展平序 / 字节码 / 执行结果，D59 分类「无行为变更（表示重塑 + 消费端接线）」。
+
+### 五、验证与复审结论、独立性（如实登记）
+
+- **验证轮：通过。** 全部门禁数字见 §一；三条机械变异全部转红后回绿（§四）；如实登记的过程项：`.42` 往返变异首跑选错测试过滤器（判绿无效，重做转红）、trial 命令两次启动失败（本机无 WSL / pwsh 缺失，bash 形态的假红不计证据）、`run fast` 首跑与语料探针并发撞 cargo 文件锁 exit 3（排程失误，排空后复跑 exit 0）、批次树 `use` 一次误用截短 SHA 被拒（改完整 SHA）。低严重度发现 F1（`check_phi_structure` 注释过期）当轮由注释笔更正。
+- **复审轮：verdict = pass，无新 findings。** 逐类成立：D0（不触 opcode / `.42` 表，生成物由生成器再生随代码笔：E8001 发射点 15→16）、D1/D2（`partition_blocks` 调用点 7 处、无 import 别名、无平行概念）、D3（7 处构造收敛单点 = 正向合并）、D4（middle/ir 与 codegen 既有职责类别）；红线（零新增 `todo!` / `unimplemented!` / `include!`，测试零删除、快照零触碰、`pub(crate)` 计数无增，跨层 use 新增全在测试文件且有先例）；inScope 未混其它二级；契约逐项一致；提交粒度合规（契约笔先于代码笔、代码独占一笔可整体 revert、工作树干净、未 push）；15 条新测试命名 / AAA / 断言消息 / `matches!` / 无 `use super::*` 全合规。
+- **独立性（如实登记，不宣称异族独立）**：实现者 DeepSeek；原复审路由 MiniMax 对长任务连续 transport 中断（attempt 1 = TRANSPORT，无结论），复审与收口改由 GLM 执行——实现与验证 / 复审 / 收口异族成立，但**验证、复审、收口三者同族（GLM）**为当前可达性偏差，已按队长登记如实记录。补偿证据：三轮的全部结论都出自机械取证（冻结 revision 的 `git show` / blob 比对 / diff 统计、生成器幂等实测、语料差分重跑、变异工件可复现）与队长的落位裁决（家族外判据），非交叉引用报告措辞。
+
+### 六、偏差与登记
+
+1. **落位裁决**：实现把展开放在块入口、`translate_instruction` 的臂收敛为不可达 E8001 防御臂，理由（单条返回位 vs 按前驱分布的多条 Move）与偏差登记在实现记录 §二 第 4 条；**队长裁决接受该落位**（实现轮的「`Phi` 臂替换为展开」验收措辞是简写，规范性落形态以本文件 §二 第 2 条为准），复审按此判据执行。
+2. **注释修复笔与终态关系**（契约必写项）：验证轮量测绑定代码独占笔终态；其后两笔**仅注释**（F1 + values 过期注，`git diff` 可证不改可执行内容），复审绑定含这两笔的终态；**验证轮数字不是终态复跑**——终态另有补偿性复跑（§一 右列），逐项同值。
+3. **`defining_block` 仍恒 0**：块切分后与真实定义块不一致；修正须与 232 份快照 `values` 段再生同批，登记给 `Phi` 生产批次 / 7b.4。
+4. **断言落位微调**：契约 §三 原写「`src/middle/ir/tests/verify.rs` 补块级前驱直驱断言」，实现落在 `blocks.rs`（需 lowering 真实产物与 `partition_blocks` 语境，同文件更内聚）；内容与判据不变。
+5. **`04` 就地更正**（本收口笔承载）：改动清单第 31 项标「7b.3 已落地」并按裁决写落位；§实测前提（「15 处空表」）按现树更正为「已由 `partition_blocks` 真实填充」；§`ValueInfo.defining_block` 的「多块随 7b.3」按现树更正（多块已落地，值仍恒 0 待值表再生批）。en 镜像不手改（zh 是源，en 由翻译工作流同步，已知待同步项）。
+6. **`07` 口径**：「前驱排序」规范化项自此只有 `Phi` incoming 一条消费面；`07` 属 out-of-scope 文档，由本收口笔之后就地更正（7b.3 实现记录已登记）。
+7. **本轮（收口笔）只改 `09` / `09a` / `04` 三个文件**，未碰 `src/`、`tests/`、`scripts/`；未跑 `git push` / `fetch` / `pull`；`09` 顶部三级计数保持 origin 当前值（7b.3 是既有三级任务，不新增）。
+8. **验证轮过程项（非缺陷，如实登记）**：批次树 `use` 的 SHA 必须完整——截短 SHA 的 `git checkout` 会失败（「unable to read tree」），验证轮首次尝试即被拒、改完整 SHA 后成功；`run fast` 与 `corpus_probe` 不可并发（共享树 bin 的 cargo 文件锁），须排空后单跑。
+
+## P8 8.0 死阶梯清理（C6）收口（2026-11-22）
+
+> **一、范围与终态**：8.0.1 删除 `Precedence` 枚举与 `PrecedenceContext`（连同两个 impl），`precedence.rs` 134→43 行，全部 `BP_*` 常量保留；8.0.2 把 `..` 的裸绑定力 `(6,7)` 与模式位探测阈值 `12` 具名化为 `BP_RANGE_L` / `BP_RANGE_R` / `BP_PATTERN_PROBE`。整批是 C6（纯删除/纯改名），行为零变化。
+>
+> **二、8.0.1 判据与与 C1 的偏差**：`Precedence::` 与 `PrecedenceContext` 全仓 `git grep` 零命中（唯一引用是自身定义与被测测试）；`precedence_inline.rs` 中 3 条只测死对象的用例随对象一并删除，`test_bp_ordering` 保留、改名 `test_bp_ordering_ascends_from_lowest_to_highest` 并补齐断言消息——活常量（`BP_LOWEST` < `BP_ASSIGN` < … < `BP_HIGHEST`）的相对顺序仍被钉住。**与冲突登记 C1 的字面关系**：C1 原写「该测试文件在 8.6 随 Pratt 删除」，实际处置是 8.0.1 删除被测对象后文件继续存在（只留活常量断言），8.6 只删 Pratt 本体——按事实登记，不按 C1 字面等到 8.6。
+>
+> **三、8.0.2 判据与陈旧项**：`led.rs` 的 `Some(TokenKind::DotDot) => Some((6, 7, …))` 改为 `(BP_RANGE_L, BP_RANGE_R)`，其中 `BP_RANGE_R = BP_RANGE`（不复制字面量 7，单一来源）；`nud.rs` 三处 `parse_expression(12)`（1 处代码 + 2 处注释）改为 `BP_PATTERN_PROBE`，并在常量处写明「高于任何中缀绑定力，使 `lo..hi` 范围模式可被整体探测」。WBS 原文列的 `(11,1)` 在当前树已不存在（lambda 中缀不在该处决策），登记为陈旧项，不为它造常量。
+>
+> **四、门禁**：`cargo fmt --all`、`cargo clippy --all --all-features --all-targets -- -D warnings` 均为 0；`testsuite run fast` 2515 条、0 跳过、exit 0；语料差分 403/403 零漂移；IR 快照零漂移（本批不动 IR 形状，删的是零生产引用的死类型与等价改名）。
+>
+> **五、边界与未动项**：未动任何 `BP_*` 的数值（`BP_UNARY` 与 `BP_CAST` 同为 8 的既有并列保留）；未删其它未被引用的 `pub` 常量（归 P10 S5）；05 的设计结论未改，只在阶段 0 清单前加了执行状态注记；`Precedence` 的零构造状态由 05 的 C6 清单记录，本批执行后该清单的行号锚成为历史值。
+
+## P7 7b.4 契约（线性扫描分配器 + 7a.1 删三处语句级回收，2026-11-22）
+
+> 计划见 [09](./09-execution-wbs.md) §P7 7b 表 7b.4 行与 7a 表的 7a.1 行（已拆出、与 7b.4 同批）；设计依据 [04](./04-ssa.md) §寄存器分配器（自研线性扫描、u8/255 槽模型）、§缺陷类 1 与 §逐项处置表 1c（三处语句级回收）、§可行性前提（其二已被 7a 实测证伪）、§编译器改动清单第 37 项、§批 b 顺序；前置 = [09a §P7 7b.2 收口](#p7-7b2-收口next_temp_reg-改产-operandvalue--values-生产--codegen-槽解析--快照再生2026-11-22)（`value_slots` 过渡映射与「7b.4 重算该表」的登记）、[09a §P7 7b.3 收口](#p7-7b3-收口basicblocksuccessors-填充--translator-phi-臂方案-a--42-往返2026-11-22)（`successors` 真实块级 CFG——区间计算的数据源）、[09a §P7 7a 收口](#p7-7a-切断多次定义收口2026-11-18) §二（删回收的前提证伪实测与用户裁决 C）。基线 = `origin/dev` 顶端 `991b773f`（7b.3 已收口，工作树干净）。**本段只做设计与审计定夺；队长与用户放行前不进入实现。**
+
+### 一、实测面（基线 `991b773f`，读代码与既有实测记录，不转述 04）
+
+| 面 | 实测 |
+| --- | --- |
+| 三处语句级回收 | `lower/stmt.rs` 的 `generate_function_ir` 语句循环、`generate_block_ir` 语句循环（带 `result_reg.is_none()` 守卫）、`lower/expr/closure.rs` 的 `generate_lambda_body_ir` 语句循环：语句边界执行 `next_temp = named_watermark.max(temp_floor)`；`named_watermark` = `cur_locals` 最后一个具名槽下标 + 1；`temp_floor` 由 `lower/loops.rs` 进入循环时置为当时的 `next_temp`、出循环恢复 `saved_temp_floor` |
+| 槽位分配入口 | `lower/scope.rs`：`alloc_register_slot` 是**唯一 bump 点**（`next_temp += 1` + `temp_high_water` 真高水位）；调用者只有 `next_local_slot`（具名槽）与 `next_temp_reg`（临时值 / `value_mode=false` 退化）。`next_temp_reg` 在 `value_mode=true` 时发放 `ValueId` 并把槽号记进 `cur_value_slots`；`value_mode=false`（模块 init / 顶层语句）退化为 `Operand::Local(alloc_register_slot())` |
+| `slot_for_operand` 调用面 | **1 个生产调用点**：`lower/expr/control.rs` 的 `bind_pattern` 的 `ast::Pattern::Identifier` 臂——「绑定复用该值已占用的寄存器槽（只登记名字，不加指令）」；同函数 `pre`（或模式）分支走 `Move` 到臂级预分配槽，不经它。`Local` → 自身槽号；`Value` → `cur_value_slots` |
+| `take_body_locals` | **唯一取表 + 预算点**：`temp_high_water > MAX_REGISTERS(255)` ⇒ `register_overflow` 带 `.at(cur_span)` 报 E3014；`MAX_REGISTERS` 全仓 1 处。E3014 词条自述两个触发点（本闸 + codegen 的 `OperandResolver` 单操作数解析），`span_exempt=true` |
+| 6 处 `FunctionBody::Code` 构造点 | `curry.rs` 2 / `expr/closure.rs` 1 / `globals.rs` 1 / `stmt.rs` 2；**顺序统一**：`take_body_locals()` → `take_body_values(&instructions, &param_types)` → `partition_blocks(instructions)` → 构造字段。即 `instructions` 与 `values` 在取表之后即可得，`blocks` 在构造点当步可得 |
+| `def_operands` / `use_operands` | 现为 `ir/verify.rs` 的**私有**函数（`Instruction` 只暴露 `for_each_operand_mut`）；区间计算需要同一份 def/use 分类 |
+| 删回收的既有实测（7a 收口 §二 / 变异 M2，冻结 revision 的批次树） | 2 条语料槽数越界转 E3014（`src/std/tests/string_ops.yx` 354 槽、`tests/yaoxiang/01-syntax/control-flow/list_comp.yx` 323 槽，上限 255）；当时的 402 条语料峰值 51→211；`verify_loose` 转红 2 文件 8 处 use-before-def；IR 快照漂移 208/232 |
+| 深表达式夹具（issue #540） | `tests/integration/cli_e2e.rs` 的 `test_check_deep_binop_argument_reports_e3014_not_stack_overflow`：300 项扁平二元链作普通函数实参，`yx check` 当前以 E3014 退出 1（300 项在同一表达式内、无语句边界 ⇒ 回收不生效 ⇒ 槽数 ≈303）。该测试同时断言「退出码 1、非栈溢出、恰 1 条 E3014」 |
+| 模块方向 | `middle/passes/mod.rs` 已 `pub use crate::middle::lower::{generate_ir, …, AstToIrGenerator}`（passes → lower 方向存在）；`scripts/ci/check-boundary.py` 只查 L2/L3/L4 跨层，`middle/lower` 与 `middle/passes` 同属 `middle/` 前缀 ⇒ **机器查不出**二者成环 |
+| `FunctionIR` 是否带 span | 不带（字段只有 name / def / params / return_type / generic_params / body）⇒ 任何 post-lowering pass 拿不到函数体声明处的 span |
+
+### 二、逐项定夺
+
+**A. 分配器落位与接口——`src/middle/lower/regalloc.rs`（lower 子模块），不是 04 改动清单 37 的 `middle/passes/regalloc.rs`。**
+
+理由（只按正确性与可读性）：①**预算闸必须带 span**——E3014 的 IR 层唯一发射点在 `take_body_locals`（`cur_span` 指向函数体声明处）；`FunctionIR` 不带 span，做成 post-lowering pass 就拿不到声明 span，会把 7a 刚修好的「E3014 带 `--> file:line:col`」退回无 span 形态（从首条指令取 span 只能拿到首条语句的位置，不是声明处）。②**依赖方向**——`passes` 已再导出 `lower`，让 `lower` 反过来 `use passes::regalloc` 会形成 lower ↔ passes 环，而 `check-boundary.py` 的层表只到 `middle/` 前缀、查不出这个环，故由设计禁止。③**禁令三 B（新增入口）**——做成 pass 要在 driver 的阶段序里新增一格并接线；`value_slots` 的生成点本来就在 lower 内（7b.2 收口 §二），继续在 lower 内完成不新增管线入口。
+
+接口（实现轮不再改形）：
+
+```text
+// src/middle/lower/regalloc.rs
+pub(in crate::middle) struct Allocation {
+    value_slots: Vec<usize>,   // index = ValueId，与 values 同长
+    frame_slots: usize,        // named_base + max_live，即 locals 表长度
+}
+pub(in crate::middle) struct Budget { required: usize, limit: usize }
+pub(in crate::middle) fn allocate_value_slots(
+    blocks: &[BasicBlock],     // 7b.3 起 successors 真实
+    values: &[ValueInfo],
+    named_base: usize,         // 具名槽区间 [0, named_base)
+    pinned: &[(ValueId, usize)],
+) -> Result<Allocation, Budget>
+```
+
+分配器**不接触 `Diagnostic`/`Span`**：失败返回 `Budget`，由 `scope.rs` 用既有 E3014（`register_overflow(required, limit).at(cur_span)`）发射——码号、文案、span 面全部不变，不新增码。
+
+**唯一入口**：6 处构造点不再各自做「取表 → 取值表 → 切块」，统一走 `scope.rs` 的新方法
+
+```text
+fn finalize_code_body(&mut self, instructions: Vec<Instruction>, params: &[MonoType])
+    -> Result<(Vec<LocalSlot>, Vec<ValueInfo>, Vec<usize>, Vec<BasicBlock>), Diagnostic>
+```
+
+内部顺序固定：`take_body_values`（补 `ValueInfo.ty`）→ `partition_blocks` → `allocate_value_slots`（含 pin 占位）→ 预算闸（E3014）→ `take_cur_locals(frame_slots)`。块切分、槽位分配、取表**三合一单点**（禁令三 A）。`FunctionBody::TypeDecl` 与模块 init 不进本函数。
+
+**B. 活跃区间与线性扫描。**
+
+- **def/use 分类提层**：把 `ir/verify.rs` 的 `def_operands` / `use_operands` 提升为 `ir.rs` 的 `Instruction::def_operands()` / `Instruction::use_operands()`，`verify` 侧改为委托（禁令三：同一分类只能一份）。区间计算与不变量判据自此同源。
+- **Phi 处理**：`dst` 的定义点在汇合块入口；每个 `(P, v)` 是**前驱 P 出口的使用**——`v ∈ live_out(P)`，`dst ∈ live_in(汇合块)`。这与 7b.3 的 translator 语义一致（Move 组在块入口定义 `dst`、组的 `src` 在前驱出口之后活着），两侧不各立一套。
+- **区间端点**：块级后向数据流（`live_in` / `live_out`，用 `successors`）⇒ 每值 `start` = 定义指令的展平下标（Phi dst 取块首指令下标），`end` = max（使用点下标、`live_out` 块的末指令下标）。**闭区间**（定义点与最后使用点都占槽）。
+- **回边兜底**：若某值的使用点展平下标早于 `start`（循环携带），把 `end` 提到函数末尾并计入计数器；lowering 现状不产这类值，但分配器不得假设「不产」。**收口实测更正**：`wrap_count` 当前计算后未外露（`regalloc.rs` 的 `let _ = wrap_count`），无实测登记；lowering 现状不产（`Phi` 生产 0），`Phi` 生产批须先暴露 / 复测再启用（与 `defining_block` 同列前置）。
+- **扫描**：按 `start` 升序；活跃集按 `end` 排序；`end < start` 即释放（闭区间，判据 `end < start`）；槽 = `named_base + 首个空闲索引`。`pinned` 值先占固定槽、其槽不进自由池、其他值与它的区间不得重叠。
+- **预算**：`frame_slots = named_base + max_live ≤ 255`。可行性论证（**判据，不是猜测**）：对任一函数体恒有 `named_base + max_live ≤ named_base + 值总数`，故 `named_base + 值总数 ≤ 255` 的文件**无论复用效果如何都必然安全**；7a 的删回收实测显示当时 402 条语料里只有 2 条越 255（其余峰值 211）⇒ 排除这 2 条后全部必然安全，而 2 条（354 / 323 单调数）的 `max_live` 才是真问题：**这是实现轮的 go/no-go 实测项**（探针：在 `finalize_code_body` 打印 `named_base` / `max_live` / 值总数），本契约不预判该数。压不到 ≤255 ⇒ 停下来报裁决（备选 spill / 分帧 / 语料结构改写，三者都超出 7b.4）。
+
+**C. `slot_for_operand` 耦合的处置——改成「值钉子（pin）」，不加指令。**
+
+现状只有 1 个生产调用点（`bind_pattern` 的 Identifier 臂）：它让具名绑定 `s` 复用「值已占用的槽」，从而**不加 `Move`**。晚分配后值槽在 lowering 结束时才存在，故把机制改为：`slot_for_operand` 只解析 `Local`；新增 `pin_value_to_local_slot(&mut self, value: ValueId) -> usize`——从具名计数器发放一个**具名槽** `S`、登记 `pins.push((value, S))`、返回 `S`，调用点照旧 `binds.push((name, S))` + `register_local`。分配器把该值固定在 `S`（`S < named_base`）。**不新增指令、不改变赋值形态**，字节码只在全局重编号下变化。
+
+未选「具名变量独立槽 + 补一条 Move」：它会让命中臂多一条 Store（同一程序指令数变化、字节码面扩大），行为虽等价但可读性与既有「赋值不复制」的形态不一致。
+
+**D. 三处回收的删除顺序——先让分配器接管槽位（笔 2），回收随即恒等，再纯删（笔 3）。**
+
+恒等性论证（笔 2 落地后）：`next_temp` 只被具名分配 bump（临时值不再调用 `alloc_register_slot`），故语句边界上 `named_watermark == next_temp`；`temp_floor` 由 `loops.rs` 在进循环时置为当时的 `next_temp` 且只可能被 `max` 抬高 ⇒ `max(named_watermark, temp_floor) == next_temp`，回收是**恒等操作**。**收口实测更正**：笔 3 只对函数体是恒等删除——模块 init / 顶层语句（`value_mode=false`）也走同一处语句级回收，删除后 init 的临时槽变单调，3 份快照的 `init (locals=)` / `islot[i]` 编号漂移（`match_call_scrutinee` 在笔 2 即 105→103；`top_level_for` / `top_level_control_flow` 为笔 3 的 islot 编号漂移）；行为等价由语料 403/403 与快照结构零差异证明，`.42` 槽号随之为变（格式不变）。笔 3 同时删：三处回收表达式、`generate_block_ir` 的 `result_reg.is_none()` 守卫、`temp_floor` / `saved_temp_floor` 与 `loops.rs` 的入/出循环地板簿记（删完即无读者的字段不留）。`next_temp_reg` 的 `value_mode=false` 退化路径**不动**（模块 init / 顶层语句无值表、无块图，不进分配器）。
+
+**E. `take_body_locals` / `temp_high_water` 口径。**
+
+- `locals` 表长 = `frame_slots = named_base + max_live`，由 `finalize_code_body` 决定；`take_cur_locals(total)` 仍按 total 补本帧空槽（形态不变）。
+- 具名 `Local` 槽仍由 `next_local_slot` 单调发放；`temp_high_water` 退化为**具名高水位**（只由具名分配 bump），即 `named_base` 的读数。实现轮「把字段改名为 `named_high_water`」与「保留原名、只改注释」二选一，但**不得出现两个读源**。
+- E3014 的时机：**分配之后、`FunctionIR` 构造之前**（与今日同处「函数体收尾」），span 仍是 `cur_span`（与今日同源）。`value_mode=false`（init / 顶层语句）继续用旧的单调计数、不跑分配器；但 `enter_decl` 不回滚计数、且笔 3 删除 init 路径的语句级回收，init 的槽号 / 表长会随函数体命名槽数变化而平移（实测 3 份快照，见 D 的收口更正），行为等价由 403/403 覆盖。
+
+**F. 基线影响预判（给判据，不猜）。**
+
+- **IR 快照：232 份预计漂移，且只允许两类行**——①`locals_total`（表长由 `temp_high_water` 变为 `named_base + max_live`）；②`slot[i] <name>` 的 `i`（具名槽从「与临时槽交错编号」变为「自 `local_var_start` 起连续」）。`slot` 的**名字集合与出现顺序不变**；指令文本（`%n` 按首现重命名、`v k` 按 `ValueId`）、`values_total` / `value … @block` 段、`Phi` 行**不变**。核对判据：脚本对 232 份「删 `locals_total` 行 + 掩码 `slot[i]` 的 `i`」后与基线逐字节相同 + 抽样人工 review 10 份。**出现第三类变化 = 槽语义被改坏，停下来报裁决。** 收口实测：35 份逐字节相同 / 197 份全部落在允许类（`locals_total` 194、`slot` 或 `islot` 下标 42、init locals 3、仅 `%` 重编号 7），不可归因残差 0；具名槽序列逐份一致（`%n` 与 `init (locals=)` 属同一原因的第三类表象，见实现记录 §八.2）。
+- **语料：目标 403/403 行为等价**（差分基线是行为面：stdout / stderr / exit / diagnostics）。风险面只有 2 条越界语料可能新报 E3014（见 B 的 go/no-go）。
+- **`.42`：格式零变更**（`VERSION` 仍 4、opcode 词表零变化、无新字段）；字节码内容随槽号重排而变，但 `.42` 是构建产物、不入库。
+- **`executor/`：零改动**（槽号语义不变：仍是帧内 `0..local_count-1` 的下标）。
+- **`dump_bytecode`：输出随槽号变化**；核对结果：`tests/baselines/` 只有行为面基线 `corpus-parity.jsonl`，无 dump 基线 ⇒ 无入库影响。
+- **`verify` / `verify_loose`：零变化**（判据不读 `value_slots`；块级/指令级 CFG 与值唯一定义判据不受槽号影响）。
+
+**G. 提交粒度与回滚点。**
+
+| 笔 | 内容 | 可独立 revert 的条件 |
+| --- | --- | --- |
+| 笔 1（本次） | 本契约段（docs only） | 与代码无耦合 |
+| 笔 2 | `regalloc.rs` + `finalize_code_body` 单点接线 + pin + def/use 提层 + **232 份快照再生**（基线随代码同笔，仓库硬规则） | 笔 3 未落地时可独立 revert（回到今日 `value_slots` = lowering 槽号） |
+| 笔 3 | 删三处回收 + `result_reg` 守卫 + `temp_floor` 簿记（纯删除；函数体零漂移，init 编号漂移见 §二 D 收口更正） | 总是可独立 revert（恢复回收，行为回到今日） |
+| 笔 4（可选，收口轮） | 09 勾选 / 09a 实录 / 04 就地更正（§寄存器分配器与改动清单 37 的落位按本契约 A 更正） | 文档笔 |
+
+**组合回滚约束（登记）**：笔 2 与笔 3 不是任意顺序可逆——笔 3 已落地时单独 revert 笔 2 会让临时值没有槽（`value_slots` 缺失 ⇒ codegen 报 E3017）。必须 LIFO：先 revert 笔 3，再 revert 笔 2。
+
+**H. D59 分类与需裁决点。**
+
+主线是 **C4「无行为变更（表示重塑）」**：既有成功程序输出不变、`.42` 版本不升、executor 不动。但有**两个面不能归入 C4**：
+
+1. **E3014 触发面变化——用户裁决（2026-11-22）＝ ②「接受行为变更、改写锚而不退役」**：255 槽从「总临时数」改为「具名基址 + 同时活跃数」后，扁平深表达式的 `max_live` 是常数级（左结合链每层只活一个左值）⇒ `tests/integration/cli_e2e.rs` 的 #540 夹具（300 项二元链实参）不再触发 E3014，程序从「被拒」变「通过」；E3014 自此**只表示「分配后帧槽 >255」**。D59 分类＝**C 类假拒绝直修**（旧行为非成功：把可编译且可运行的深表达式误判为寄存器溢出），条件与附加约束：先红后绿、语料 `403/403` 行为等价、不改变原先成功程序的对外表现。**四条件**：①300 / 600 / 1100 项夹具在分配器落地后补 `build` + `run` 实测，任一崩溃即停回报；②#540 锚加 1100 项变体（锚改写、不删除）；③7a 的 5 个 >255 探针判据按新语义重写并登记（帧槽 ≤255 的形态必须成功，真装不下才 E3014 且带 span）；④本节与实现记录登记 D59 C 类与裁决。
+2. **2 条越界语料的可行性（go/no-go，不是设计自由度）**：见 B。压不到 ≤255 即停下来报裁决。**收口实测通过**：`string_ops.yx` 帧槽 15（值 344）、`list_comp.yx` 24（值 304），直驱测试 `middle::lower::tests::budget` 断言 ≤255 + 复用实证。
+
+删除三处回收本身是 7a 裁决 C 的既定动作（用户已裁决「与 7b.4 同批」），本契约不重复裁决。
+
+### 三、inScope（实现轮）
+
+`src/middle/lower/`（`regalloc.rs` 新 + `scope.rs` / `stmt.rs` / `expr/closure.rs` / `expr/control.rs` / `loops.rs` / `curry.rs` / `globals.rs`）、`src/middle/ir/ir.rs`（def/use 提层）、`src/middle/ir/verify.rs`（改为委托）、`src/middle/ir/tests/snapshots/`（再生）、`src/middle/ir/tests/`（新判据）、`src/middle/passes/codegen/`（预计零改动，若接口微调则在此）、`src/driver/tests/`、`src/frontend/tests/`、`tests/integration/`（#540 夹具按裁决处置）、`docs/src/reference/error-code/`（仅在生成口径变化时；预计零改动）、本文件。
+
+实现轮的机械面（按裁决 ② 与 inScope 可路径匹配的前缀）：`src/middle/lower/`（含新 `regalloc.rs`）、`src/middle/ir/ir.rs`、`src/middle/ir/verify.rs`、`src/middle/ir/tests/` 与 `src/middle/ir/tests/snapshots/`、`src/middle/passes/codegen/`、`src/frontend/core/parser/parser_state.rs` 与 `src/frontend/core/parser/tests/parser_state.rs`（解析闸注释里「深表达式由 E3014 拒绝」的旧口径）、`src/util/diagnostic/codes/`（`e0xxx.rs` 的同款注释；`e3xxx.rs` 的 E3014 词条注释）、`tests/integration/`（#540 锚与 5 探针）、`src/driver/tests/`、`src/frontend/tests/`、`docs/src/reference/error-code/`（生成物）、本文件。
+
+out of scope：`src/backends/`、`src/std/`、`tests/yaoxiang/`、`09`、`04`、`scripts/`；`Phi` 生产（lowering 产 `Phi`）；03 类型表示收敛；spill / 分帧 / 语料结构改写（后三者只在 go/no-go 失败时作为裁决备选出现）。
+
+### 四、判据链（实现轮门禁）
+
+- **C4**：语料 `403/403` 逐条差分空；`testsuite run fast` 全绿。
+- **快照**：232 份按 F 再生；「两类行」机械核对（脚本）+ 抽样人工 review 10 份；`cargo test --lib snapshot` 绿。
+- **verify**：`cargo test --lib verify`、`--lib middle::ir::tests` 绿（含全语料 `verify_loose`）。
+- **预算（按裁决 ② 改写）**：E3014 只表示「分配后帧槽 >255」——帧槽 ≤255 的形态（含 7a 探针里那些「单调槽数越 255 但 `max_live` 装得下」的形态）**必须成功**；真正装不下的形态（具名槽 >255、或同时活跃值 >255）**必须 E3014 且带 span**。5 个探针按此重写为「成功面 + 拒绝面」两半并实测登记，不得静默删。
+- **复用实证（新增直驱测试）**：①同一函数内两段互不重叠的临时值必须共享同一槽（`value_slots[a] == value_slots[b]` 且 `frame_slots < 值总数`）；②pin 值固定落其具名槽；③两条越界语料打印 `frame_slots ≤ 255`。
+- **门禁**：fmt / clippy / `--lib snapshot` / `--lib verify` / `middle::ir::tests` / `phi` / `run fast` / `corpus_probe` + `check-corpus-parity` / docs 四脚本 / 生成器幂等。
+- **变异（批次树、机械还原）**：M1 关掉复用（每值独占槽）⇒ 两条语料 E3014 复现（证明复用承重）；M2 只删一处回收 ⇒ 行为面应无变化（证明三处等价的独立性）。
+
+### 五、风险登记与待裁决
+
+1. **已裁决（2026-11-22，H.1 = ②）**：E3014 触发面变化按 C 类假拒绝直修，附四条件（见 H.1）；剩余执行风险只有「四条件」里未完成的实测项（300 / 600 / 1100 项不崩、1100 变体落地、5 探针重写）。
+2. **go/no-go**：两条越界语料的 `max_live`（B）；失败即停。
+3. **快照第三类漂移**：若出现，说明槽语义被改坏，停下来报裁决（F）。
+4. **`slot_for_operand` 语义来源收窄**：改动后「具名绑定复用值槽」只能经 pin 一处表达；后续新代码不得再写第二处复用（登记为写下来源）。
+5. **7a 的峰值数字跨批次**：51→211 是 7a baseline（402 条语料、7b.2 之前）的实测；本批语料已 403 条且 values 已生产，故可行性论证用的是「`named_base + 值总数`」这一逐文件必然上界，实现轮必须复测该上界而不是引用旧峰值。
+
+### P7 7b.4 实现记录（线性扫描分配器 + 删三处回收）
+
+#### 一、提交序列与 revision 关系
+
+| 顺序 | commit | 内容 |
+| --- | --- | --- |
+| 1 | `ddc9a9c8` | 契约登记用户裁决 ②（E3014 触发面按 D59 C 类直修）+ 四条件 + §三/§四/§五 就地更新（仅 09a） |
+| 2 | `503c129b` | 分配器 + `finalize_code_body` 单点 + 232 快照再生 + #540 锚改写/1100 变体 + 5 探针重写 |
+| 3 | `d48232eb` | 纯删除：三处语句级回收 + `result_reg.is_none()` 守卫 + `temp_floor`/`saved_temp_floor` 全链 |
+| 4 | 本节 | 实现记录（实测数字、go/no-go、探针、D59 C 类、偏差） |
+
+revision 关系：笔 2 与笔 3 是 LIFO 耦合——笔 3 之后回滚笔 2 会让临时值没有槽
+（codegen 走 E3017），要回到笔 2 之前必须先回滚笔 3。笔 1 只动 09a，可与任一笔
+独立回滚。本批**未**修改 09/04/backends/std/scripts/tests/yaoxiang，也未 push。
+
+#### 二、落地形态（与契约 A–H 的对应）
+
+- **分配器**：`src/middle/lower/regalloc.rs`，接口 `Allocation` / `Budget` /
+  `allocate_value_slots(blocks, values, named_base, pinned, limit)`。活跃区间用
+  7b.3 的 `BasicBlock.successors` 做后向数据流（`live_in = gen ∪ (live_out − kill)`，
+  `gen` 只收向上暴露的使用——否则单块函数体里每个值都被拉到块首、复用失效）；
+  `Phi` 的 `dst` 定义点取汇合块首，`incoming` 的 `(前驱, v)` 记成前驱块的
+  `live_out`（等价于 translator 在前驱出口展开的 Move 组）；闭区间、回边兜底
+  计数；pinned 值固定落具名槽、自由池从 `pool_base = max(named_base, max_pin+1)`
+  起，`frame_slots = max(named_base, next_slot)`，超 `limit` 返回 `Budget`。
+- **收尾单点**：`scope.rs` 的 `finalize_code_body` 返回 `FinalizedCodeBody`
+  （`locals` / `values` / `value_slots` / `blocks`）——值类型 → `partition_blocks`
+  → 分配 → E3014（`register_overflow(required, limit).at(cur_span)`）→
+  `take_cur_locals(frame_slots)`。6 处 `FunctionBody::Code` 构造点全部改走它。
+- **具名基址**：`named_base = max(temp_high_water, next_temp)`。具名槽仍单调
+  （`alloc_register_slot` 只服务形参 / env / 具名绑定）；`value_mode=true` 的
+  `next_temp_reg` 不再占槽。`temp_high_water` 自此是**具名**高水位。
+- **值钉子**：`slot_for_operand` 收窄为 `Local`；新增 `pin_value_to_local_slot`
+  （值 → 具名槽），`lower/expr/control.rs` 的 `bind_pattern` Identifier 臂改走
+  pin，不新增指令。
+- **def/use 提层**：`Instruction::def_operands()` / `use_operands()` 落到
+  `ir/ir.rs`（穷尽 match 原样搬），`ir/verify.rs` 委托；槽位语义哲学注释随行。
+
+#### 三、实现中发现并修掉的一处既有隐患
+
+闭包体（`generate_lambda_body_ir`）此前只装 `next_temp = local_var_start`，
+**没有**同步 `temp_high_water`——6 个函数体形态里唯一漏配对的一处。7b.2 前它无害
+（槽数按临时高水位算，父帧高水位已覆盖）；分配器落地后具名基址可能落进
+env / 形参槽区间，实测 `src/std/tests/list_ops.yx` 的 `reduce sum == 10` 断言翻红
+（值槽与 env 槽重叠）。补齐配对（`frame.temp_high_water = local_var_start`）后语料
+差分回到 403/403。这一处属「分配器落地才显形」的既有缺陷，按 D59 C 类顺路修。
+
+#### 四、基线（实测）
+
+- **IR 快照**：笔 2 再生 232 份——37 份逐字节相同、195 份只含「Local 槽编号 +
+  表长」漂移、**结构差异 0**。笔 3 相对笔 2：230 份逐字节相同、2 份
+  （`top_level_for` / `top_level_control_flow`）只含 Local 槽编号漂移——模块
+  init 序列也走同一处语句级回收，删掉后 init 的临时槽变单调，**结构差异 0**。
+  机械核对脚本对全量 232 份执行，口径（两类允许变化）：抹掉
+  `locals_total=<n>`、`init (locals=<n>)` 的 n、`slot[<n>]` / `islot[<n>]` 的下标、
+  `%<n>` 重命名标签，其余逐字节比对。抽样人工 review 10 份：
+  `top_level_init_expression`、`empty_block_semantics`、`string_ops`、
+  `list_comp`、`match_call_scrutinee`、`assignment_semantics`、`typed_vars`、
+  `native_arity_range`、`top_level_binding`、`top_level_control_flow`。
+- **语料差分**：笔 2 与笔 3 各测一次，均 403/403、差分空（行为等价）。
+- **测试面**：snapshot 6 passed / 1 ignored（232 份零漂移）、verify 35、
+  `middle::ir::tests` 82 / 1、phi 47、`testsuite.py run fast` 2527 条 exit 0。
+- **生成物**：`gen-error-code-docs.py` 幂等；E0xxx/E1xxx 只随注释行号平移
+  （parser_state 与 stmt 的注释改动，一处一行）。
+
+#### 五、go/no-go（裁决 ② 条件①）
+
+| 语料 | 不回收时的单调槽数（7a 实测） | 7b.4 分配后最大帧槽 | 值总数 |
+| --- | --- | --- | --- |
+| `src/std/tests/string_ops.yx` | 354 | **15** | 344 |
+| `tests/yaoxiang/01-syntax/control-flow/list_comp.yx` | 323 | **24** | 304 |
+
+直驱测试：`middle::lower::tests::budget::test_corpus_over_budget_forms_fit_after_allocation`
+（`locals.len() ≤ 255` + 复用实证 `具名 + 值 > 帧槽`）。数字取自两份快照的
+`locals_total` / `values_total`（快照即分配结果的落盘面）。
+
+深链夹具（`id(1 + … + 1)` 在 `main` 内）：**300 / 600 / 1100 项**均 `check` +
+`build` + `run` exit 0，stdout 分别 `301` / `601` / `1101`，无栈溢出、无 E3014
+（1100 为裁决 ② 条件②的变体，已落成 `cli_e2e` 集成锚）。
+
+#### 六、7a 的 5 个 >255 探针按新语义重写（裁决 ② 条件③）
+
+| 形态 | 成功面：300 项扁平链（值总数 >255、活跃值常数级） | 拒绝面：300 个具名绑定（具名基址 >255） |
+| --- | --- | --- |
+| 函数体 | 零诊断 | 恰 1 条 E3014，带 span |
+| 方法体 | 零诊断 | 恰 1 条 E3014，带 span |
+| lambda 体 | 零诊断 | 恰 1 条 E3014，带 span |
+| curry 最内层 | 零诊断 | 恰 1 条 E3014，带 span |
+| 匿名绑定体（类型体内联匿名函数） | 零诊断 | 恰 1 条 E3014，带 span |
+
+落点：`tests/integration/check.rs` 的
+`test_slot_budget_deep_chain_succeeds_in_five_body_forms` 与
+`test_slot_budget_named_base_overflow_reports_e3014_with_span_in_five_body_forms`。
+7a 的原始 5 个探针是批次树里的临时形态，没有入库载体；本表把它们重写成
+「成功面 + 拒绝面」的常驻判据（契约 §四的预算判据即此两半）。
+
+#### 七、D59 分类与四条件对账
+
+D59 分类 = **C 类假拒绝直修**：旧行为把可编译且可运行的深表达式判成 E3014
+寄存器溢出（非成功面），修后按「分配后帧槽」判。条件：先红后绿（7a 的
+delete-recycle 变异实测 354/323 槽越界 ⇒ 本批分配器落地后才绿）、语料 403/403、
+原先成功程序零变化（笔 3 的 fast 全绿 + 语料差分空）。
+
+四条件对账：①300/600/1100 三项 `check`+`build`+`run` 实测不崩（§五）；②#540 锚
+改写不删 + 1100 变体（`test_run_deep_binop_argument_300_terms_compiles_and_runs` /
+`…_1100_terms_…`）；③5 个探针重写登记（§六）；④本节 + 契约 H.1 登记裁决与分类。
+
+#### 八、偏差登记（契约 → 实现）
+
+1. **分配器入参**：契约 A 写 `allocate_value_slots(blocks, values, named_base, pinned)`，
+   实现多一个 `limit`——`Budget` 需要 limit 来源，且预算判据要单点持有上限
+   （`MAX_REGISTERS` 仍只在 `scope.rs` 定义）。
+2. **快照漂移类别**：契约 F 只列了 `locals_total` 与 `slot[i]` 下标两类行；实测
+   还有第三类**表象**：`%<n>` 重命名标签与 `init (locals=<n>)`。原因同一——快照
+   格式按首次出现给 Local 编 `%n`、且具名槽号是裸数字，Local 槽号一改，标签跟着
+   改。机械核对因此按「Local 槽身份 + 表长」抹平后比对（结构差异 0），并抽样
+   人工确认；`values` 段、指令结构、`slot[i] x : ty` 的具名槽名一律未变。
+3. **`take_body_locals` 删除**：契约 E 说「唯一取表点」仍是它；实际 6 个构造点改走
+   `finalize_code_body` 后它已无调用者，故删除，唯一取表点变为 `finalize_code_body`，
+   E3014 的发射点同址迁入（码号 / 文案 / span 面不变）。
+4. **init 路径与契约口径更正**：`value_mode=false`（模块 init / 顶层语句）不走分配器、
+   预算闸也不覆盖它（`init_locals` 仍取 `cur_locals`）；但**契约 §二 E 的「init 零
+   变化」不成立**——`enter_decl` 不回滚计数且笔 3 删除 init 路径的语句级回收，init
+   的槽号 / 表长随函数体命名槽数变化而平移（实测 3 份快照：`match_call_scrutinee` 在
+   笔 2 即 105→103，`top_level_for` / `top_level_control_flow` 为笔 3 的 islot 编号
+   漂移）。行为等价由语料 403/403 覆盖，契约 D/E/G 已按实测口径就地更正。
+
+## P7 7b.4 收口（线性扫描分配器 + 删三处语句级回收，2026-11-22）
+
+> 收口对象 = WBS 二级任务 7b 的第五个（最后一个）三级任务 7b.4；代码由实现轮落库（契约笔先于代码笔，五笔：契约 → 裁决登记 → 分配器/快照/锚 → 纯删除 → 实现记录）。验证与复审由队长按用户 2026-11-22 裁决 D 直接执行（外部验证路由不可用：GLM 429 至 11-25、MiniMax 连续 TRANSPORT），复审 verdict = pass。本段按登记口径写实测数字与机械证据；**不写本地提交号**（哈希随 `pull --rebase` 改写）。
+
+### 一、判据链（实测）
+
+| 门禁 | 结果 |
+| --- | --- |
+| `cargo fmt --check` / `cargo clippy --all --all-features --all-targets -- -D warnings` | 0 / 0 |
+| `cargo test --lib snapshot` | 6 passed / 0 failed / 1 ignored（232 份再生后自洽） |
+| `cargo test --lib verify` | 35 passed |
+| `cargo test --lib middle::ir::tests` | 82 passed / 1 ignored |
+| `cargo test --lib phi` | 47 passed |
+| `cargo test --lib middle::lower::tests` | 10 passed（budget go/no-go + regalloc 5 条） |
+| `python scripts/dev/testsuite.py run fast` | 2527 条、跳过 0、exit 0 |
+| corpus_probe + check-corpus-parity | 403 行；403/403 逐条差分空 |
+| docs truth / refs / orphan / fanout / test-channel | 全 exit 0（refs 1253 文件 / 13502 token，收口轮实测） |
+| `gen-error-code-docs.py` + `git diff --quiet` | exit 0、差分为空（幂等） |
+
+冻结 revision = 7b.4 代码笔终态（含契约、裁决登记、删除与实现记录笔）；全部量测在 `scripts/dev/scratch.py` 批次树完成（init → use → build → 量测 → release → gc，收口「没有批次树」），主仓工作树未量测。
+
+### 二、快照归因（独立复核）
+
+232 份对基线（7b.3 收口顶端）：
+
+- 35 份逐字节相同；197 份变化全部落在允许类：`locals_total` 194、`slot[]` / `islot[]` 下标 42、`init (locals=)` 3、仅 `%N` 重编号 7；
+- 不可归因残差 **0**；`slot[]` 的具名槽名/类型/顺序逐份一致；`values_total` / `value … @block` / 指令结构未变。
+
+契约 F 原只列两类；`%N` 与 init 表长是同一原因的第三类表象（快照按首现给 Local 编 `%N`）。**契约 §二 E 的「init 零变化」被实测证伪**：`enter_decl` 不回滚计数，且笔 3 删除 init 路径的语句级回收，init 槽号/表长随函数体命名槽数平移（`match_call_scrutinee` 在笔 2 即 105→103；`top_level_for` / `top_level_control_flow` 为笔 3 的 islot 编号漂移）。契约 §二 D/E/G 已按实测口径就地更正；行为等价由 403/403 与结构零差异证明。
+
+### 三、go/no-go 与深链、探针
+
+- **go/no-go 通过**：`src/std/tests/string_ops.yx` 354 单调槽 → 帧槽 **15**（值 344）；`list_comp.yx` 323 → **24**（值 304）。直驱测试 `middle::lower::tests::budget` 断言 `locals.len() ≤255` + 复用实证。
+- **深链**：300 / 600 / 1100 项 `check` + `build` + `run` exit 0，stdout 301 / 601 / 1101，无 E3014、无栈溢出。
+- **#540**：旧锚改写（不删）为 `run` 断言（exit 0、正确 stdout、无 E3014）+ 1100 变体（`cli_e2e` 两条）。
+- **5 探针**：成功面 5 形态（函数 / 方法 / lambda / curry 最内层 / 匿名绑定）300 项链零诊断；拒绝面同 5 形态 300 具名绑定各恰 1 条 E3014 且带函数体 span（`tests/integration/check.rs` 两条）。
+
+### 四、分配器、删回收与既有缺陷
+
+- `src/middle/lower/regalloc.rs`（271 行）：块级活跃性（`successors`）+ 闭区间 + Phi 前驱出口 + pinned 固定 + `frame_slots = named_base + max_live`；`finalize_code_body` 单点接线 6 处函数体；`value_mode=true` 的临时值不再占 `next_temp`；`def_operands` / `use_operands` 提层到 `Instruction`、verify 委托。
+- 笔 3 删三处语句级回收 + `result_reg.is_none()` 守卫 + `temp_floor` / `saved_temp_floor` 全链；函数体侧零漂移，init 侧见 §二。
+- 顺路修既有缺陷：闭包体只装 `next_temp` 未装 `temp_high_water`（6 形态唯一漏配对），分配器落地后 `list_ops` 的 reduce 断言翻红，补齐后回绿（D59 C 类）。
+- `wrap_count` 计算后未外露（`let _ = wrap_count`）：契约 §二 B 的「回边兜底计数实测登记」未兑现；lowering 现状不产（Phi 生产 0），**Phi 生产批须先暴露/复测再启用**（与 `defining_block` 同列前置）。
+
+### 五、D59 与 E3014 口径
+
+用户裁决 ②：E3014 只表示「分配后帧槽 >255」；D59 C 类假拒绝直修（旧行为把可编译且可运行的深表达式误判为溢出）。`.42` 格式/VERSION、opcode 词表、`executor/` 零改动（`git diff` 对基线为空）；E3014 词条注释按帧槽语义更新，错误码生成物只随注释行号平移。接受集变化（原先被拒的扁平深表达式现在通过）经用户裁决。
+
+### 六、偏差与残余
+
+1. 分配器接口多 `limit` 入参（Budget 上限来源）。
+2. 快照第三类表象 `%N` / init 表长（同因，见 §二）。
+3. `take_body_locals` 无调用者后删除，唯一取表点变 `finalize_code_body`。
+4. 笔 3 的 init 编号漂移（见 §二）。
+5. 残余：`ValueInfo.defining_block` 仍恒 0（与真实定义块不一致，须与 values 段再生同批修正；登记给 Phi 生产批次）；`wrap_count` 未外露（同上）；en 镜像由翻译工作流跟进（已知待同步）。
+6. `07` 的「前驱排序」口径本笔已更正（`successors` 不进入渲染，仅 Phi incoming 消费）。
+
+### 七、独立性与复审
+
+实现者 DeepSeek；验证、复审、收口均由队长执行——用户 2026-11-22 裁决 D（GLM 429 至 11-25、MiniMax 连续 TRANSPORT，外部路由不可用）。**同族（DeepSeek）偏差如实登记，不宣称异族独立**；补偿证据：全部量测第一手在批次树、自写快照归一化脚本（残差 0）、机械 diff（零改动面/无删除测试）、生成器幂等、门禁全绿。复审 verdict = pass；两项收口必改（init 口径与 wrap 计数）已在本笔落实。
+
+### 八、WBS 计数核对（INFO，既有笔误）
+
+7b 组行原写「6 个三级任务」，但表内只有 5 个任务行（7b.1a / 1b / 2 / 3 / 4）；在 7b.1a 契约时的 09 版本同样只有 5 行，全仓与历史 grep 无 `7b.5`。判定为历史计数笔误（7a.1 随批 b 执行被误计入 7b 组），已就地改为 5；**顶部三级计数 260 不变**（本批未新增/删除三级任务）。
+
+### 九、推送前 rebase 终态
+
+收口笔之后、推送之前，`origin/dev` 又推进 10 笔（顶端 `7cf822b6`：P8 8.0 死阶梯清理 C6 收口、三笔 CI 修复、`url` 依赖升级、auto-translate 等）。本地 7b.4 六笔 rebase 到新顶端；唯一冲突在 09a 尾部（origin 的 8.0 收口段 vs 本批 7b.4 契约段），两段都保留（8.0 收口在前）。**终态复跑（合并树）**：fmt / clippy 0；`testsuite run fast` **2524 条** exit 0（验证轮 2527 − origin 8.0 随死对象删除的 3 条 `precedence` 测试）；语料 403/403 差分空；docs 五脚本 exit 0（refs 1253 文件 / 13514 token）；生成器幂等 diff 空。**本批的 `src/middle/lower` / `src/middle/ir` / 快照与测试面相对验证 revision 逐字节一致**（`git diff` 为空，origin 只动 `src/frontend/core/parser/pratt/*` 与 `src/std/tests/stdlib_docs.rs`），故验证结论对合并树高保真；数字差异只来自 origin 侧测试删除。
+
+## P8 8.8 测试补全（8.8.1 结合性 / 优先级用例 + 8.8.2 四类字面量错误路径）收口（2026-11-23）
+
+> **一、范围与终态**：8.8 的三个三级任务中，8.8.1 与 8.8.2 已完成；8.8.3（`parser/tests/` 的接线自检断言）按排期留待 8.6 删 Pratt 后由同一团队追加，故 WBS 的 8.8 组行不勾选。改动面 6 个文件：新增 `src/frontend/core/parser/tests/associativity.rs`、`src/frontend/core/parser/tests/mod.rs`（+1 行 mod 声明）、`src/frontend/core/lexer/tests/literals.rs`（补测段），以及三份文档 `05` / `09` / `09a`（本节）。**生产代码零改动**：`src/frontend/core/parser/` 与 `src/frontend/core/lexer/` 的生产文件均未修改（`git status` 只列测试与文档）。
+>
+> **二、8.8.1 判据口径**：用例只经公共入口 `parser::parse_with_probe` 断言**语言级 AST 形状**，文件内 `pratt::` 零命中（`git grep -n 'pratt::'` 复核 exit 1），故 8.4 双解析器差分与 8.6 删 Pratt 之后原样存活——守的是 C5 等价面「合法程序的 AST 形状不变」。覆盖矩阵：
+>
+> | 性质 | 用例 | 断言的形状 |
+> | --- | --- | --- |
+> | SPEC §2.2 级 5「左到右」 | `test_sub_is_left_associative` | `a - b - c` → `Sub(Sub(a,b),c)` |
+> | SPEC §2.2 级 4「左到右」 | `test_div_is_left_associative` | `a / b / c` → `Div(Div(a,b),c)` |
+> | SPEC §2.2 级 4 高于级 5 | `test_mul_binds_tighter_than_add` | `a + b * c` → `Add(a, Mul(b,c))` |
+> | SPEC §2.2 级 9 低于级 5 | `test_comparison_binds_looser_than_addition_on_both_operands` | `a + b < c + d` → `Lt(Add(a,b), Add(c,d))` |
+> | SPEC §2.2 级 7 高于级 8 | `test_shift_binds_tighter_than_bitwise_ops_on_both_operands` | `a & b << c` → `BitAnd(a, Shl(b,c))`；`a << b & c` → `BitAnd(Shl(a,b), c)` |
+> | SPEC §2.2 级 8 同级「左到右」 | `test_bitwise_level_is_left_associative_across_operators` | `a \| b ^ c` → `BitXor(BitOr(a,b), c)` |
+> | SPEC §2.2 Range 注 / §2.12 | `test_range_upper_bound_swallows_addition` | `0..n + 2` → `Range(0, Add(n,2))` |
+> | SPEC §2.2 Range 注（step 形态） | `test_range_chain_is_left_associative` | `a..b..c` → `Range(Range(a,b), c)` |
+> | SPEC §2.10（体为完整 Expr） | `test_lambda_body_is_right_greedy` | `(x) => x + 1` → `Lambda{x, return Add(x,1)}` |
+> | SPEC §2.2 级 12「右到左」 | `test_assignment_is_right_associative` | `a = b = c` → `Assign(a, Assign(b,c))` |
+> | SPEC §2.2 级 1 高于级 2 / §2.6 | `test_cast_target_stops_at_call_suffix_boundary` | `f(x) as Int` → `Cast(Call(f,[x]), Int)` |
+> | SPEC §2.11 / §2.2 级 1 | `test_try_postfix_binds_tighter_than_addition` | `f(x)? + 1` → `Add(Try(Call(f,[x])), 1)` |
+> | SPEC §2.2 级 1 / §2.3–§2.5 | `test_call_chain_postfix_binds_tighter_than_addition` | `a.b(c)[0] + 1` → `Add(Index(Call(Field(a,b),[c]),0), 1)` |
+> | SPEC §2.8 `MatchArm ::= Pattern ('\|' Pattern)*` | `test_pattern_or_chain_collects_all_alternatives` | `1 \| 2 \| 3` 臂 → `Or([1,2,3])` |
+> | SPEC §2.1 括号分组（区分力对照） | `test_grouped_sub_expression_overrides_left_associativity` | `a - (b - c)` → `Sub(a, Sub(b,c))` |
+>
+> **三、「层内绑定力严格递增、无重复」不设门禁**：05 阶段 3 原列该断言。按 coding-rules 7.1，换一个把同层数值重排的正确实现它就会红——它冻的是实现选择，只能作特征化。本批不设该断言，层级关系由上表逐条守；05 的阶段 3 文本已就地改为「语言级 AST 形状」口径，并写明这一条不作门禁。
+>
+> **四、与 WBS 原文「先红后绿」的偏差**：本批零生产改动，用例先于 LALRPOP 文法落地，**没有红态可走**；要造红只能改 `pratt/` 生产代码，而它不在本批 inScope，且 8.8 的职责正是把等价锚提前钉在公共入口上。等价锚的实际效力由 8.4 双解析器差分兑现（两套 parser 对同一语料逐位比 AST），8.6 删 Pratt 时由上表给出可判定的回归面。**区分力证据**：`test_sub_is_left_associative` 与 `test_grouped_sub_expression_overrides_left_associativity` 在同一断言面上给出相反分组，说明断言不是恒真；其余各条的替代分组都落在断言的另一侧（如 `a + b * c` 若右收即得 `Mul(Add(a,b), c)`）。
+>
+> **五、8.8.2 四类对照表**（旧四类 = 05 阶段 4 按改造前树登记；8.2.1 重写后函数名与形态已变，路径按**现树**重新定位）：
+>
+> | 旧四类 | 现树路径 | 状态 | 依据 / 用例 | 门 |
+> | --- | --- | --- | --- | --- |
+> | 四基数溢出 | `lexer/literals.rs`：`scan_radix_digits` 的溢出分支 + `scan_integer_literal` / `scan_decimal_literal` 收尾 | **已被 8.2 覆盖**，不重复造 | `test_radix_literals_overflow_rejected_with_literal_text`（8.2.1 新增；5 例：hex 33 位、hex 2^127 边界、octal、binary、decimal，断言 E0002 的 literal 参数是完整字面量） | 条款 §1.6.1 |
+> | 乘法溢出后继续消费分支 | `scan_radix_digits` 的 `if overflow { value.push(c); lexer.advance(); }`（溢出后仍推进流位置，token 流不裂） | **新增** | `test_radix_overflow_consumes_all_digits_before_next_token`：`Lexer::next_token` 直驱——错误 token 之后流直接结束，遗留数字未另起 token。8.2.1 的溢出用例只断言 payload 文本，未观察流位置 | 条款 §1.6.1 |
+> | `scan_leading_dot` 整体 | `lexer/literals.rs::scan_leading_dot`（数字 / 下划线 / 指数 / 后缀拒绝 / f64 收尾） | **原有 1 条弱断言，新增 5 条** | 原有 `test_leading_dot_invalid_trailing_letter_is_error` 只覆盖「后缀字母」；新增 `.5`（主路径值）、`.5e3`（指数）、`.5_5`（分隔符接受）、`.5_`（分隔符后非数字）、`.5e`（指数缺数字） | 证明（C5 行为保持）/ 病史（1775f378）；`.5_` 一条为特征化（D5） |
+> | `\x` / `\u` 非法转义 | `lexer/literals.rs::decode_escape` / `decode_hex_byte` / `decode_unicode` | **新增 3 条字符串 + 1 条字符** | `test_string_hex_escape_requires_two_digits`（`\x1` / `\x` / `\xZZ`）、`test_string_unicode_escape_requires_braced_codepoint`（`\u41` / `\u{}` / `\u{110000}`）、`test_string_unknown_escape_rejected`（`\q`）、`test_char_hex_escape_decodes_two_digits_and_rejects_one`（`'\x41'` → `'A'`，`'\x1'` 必须拒绝） | 证明（`\u{110000}` 按 Unicode 标量语义）；条款仅覆盖 `\q` 一条 |
+>
+> 错误类判据只断言词法错误**变体**（E0002 `InvalidNumber` / E0012 `InvalidEscape`），不断言消息措辞与 span 数值——后者是实现形状（coding-rules 7.1）。
+>
+> 门依据更正（复审 R1 / R4）：上表前两行属**条款门**（SPEC §1.6.1 有该形态）；后两行的 `.5` 前导点族与 `\x` / `\u` 转义**不在** SPEC §1.6.2 / §1.6.3 的文法内（§1.6.2 的 Float 要求整数部分；§1.6.3 的 Escape 产生式只含 `[nrt'"\\]` 与 `UnicodeEscape`），故改记**证明门**（C5 行为保持：同一输入的 token 流 / 诊断不变）与**病史门**（提交 1775f378：`t.0` 被读成 `t + 0.0`）。补 SPEC 正文属语言设计流程，本批不做、也不静默补。
+>
+> 计数（复审 R5）：四类共新增 **10** 条 = 溢出后继续消费 1 + 前导点 5 + 非法转义 3（字符串）+ 字符 `\x` 1；其中 `.5_` 一条为**特征化**（缺陷 D5），总数仍 10。
+>
+> **六、缺陷登记（本批发现，均不在本批修复）**：
+>
+> | # | 现象（实测） | 与规范的偏差 | 根因（读码定位） |
+> | --- | --- | --- | --- |
+> | D1 | `x as Int * y` → `Cast { target_type: ConstExpr(BinOp { Mul, Var("Int"), Var("y") }) }`；`x as Int + y`、`a as Int < b`、`f(x) as Int + 1` 同形，**零诊断** | SPEC syntax §2.2 级 2（`as` 高于 `*` / `<`）与 §2.6 `TypeCast ::= Expr 'as' TypeExpr`：目标类型必须是类型，不得吞掉其后的值级中缀 | 类型位的标识符种子会开启中缀续接（`statements/types.rs` 的 `type_position_expr_continues` / `parse_type_position_const_expr`）；该形态在 #543（提交 `b352b360`）之前即已存在，#543 只是抽成函数并让字面量种子复用 |
+> | D2 | `x * y as Int` → `Cast(Mul(x,y), Int)` | 同上级 2 > 级 4：应为 `x * (y as Int)` | `BP_CAST == BP_MUL`（05 §数值碰撞 已登记该碰撞，当时判为「偶然正确、不炸」；实测它在 `as` 上给出可见差异） |
+> | D3 | `a == b < c` → `Eq(a, Lt(b,c))`（`a != b > c` 同形）；反方向 `a < b == c` → `Eq(Lt(a,b), c)` 与规范一致 | SPEC §2.2 级 9 把 `==` `!=` `<` `>` `<=` `>=` 列为同一级、结合性「左到右」，故应为 `Lt(Eq(a,b), c)` | 同上：`BP_EQ` 与 `BP_CMP` 分列两层 |
+> | D4 | `'\x1'` → `InvalidToken { message: "Empty character literal" }` | 拒绝本身正确，但丢了错误归因：目标是「不再被 Empty character literal 覆盖，仍以 `InvalidEscape`（E0012）报出」；把 InvalidEscape 改指 E0001 属 E 类契约变更，另立裁决，不在本批 | `decode_hex_byte` 已发 `InvalidEscape`，随后 `scan_char` 的「空字符字面量」把 `lexer.error` 覆盖 |
+> | D5 | `.5_` → `Err(InvalidNumber)`，而整数路径 `1_` / `0x1_` / `1__0` / `0x1__F` 全部接受（实测） | 同一分隔符在两条路径上口径不一致：前导点路径要求分隔符两侧都有数字，整数路径不要求；SPEC §1.6.1 的 `[0-9][0-9_]*` 允许尾随 `_`，故整数路径的行为本身也在规范灰区 | `scan_radix_digits` 对 `_` 无条件跳过（四基数共用一条骨架）；`scan_leading_dot` 自带「下划线后必须是数字」检查 |
+>
+> D5 处置：`.5_` 断言降为**特征化**（用例保留、注释写明守的是现行为），不设门禁；修复方向是两条路径同判，届时同步改写该用例。观测方法：在 `lexer/tests/literals.rs` 临时加一条打印 `tokenize(<字面量>).map(|t| t[0].kind)` 的用例、跑完即删（未入库）。
+>
+> **CLI 实测（2026-11-23；探针未入库，复现方法与命令如下）**：三个探针各存一个 `.yx` 文件——(a) 三行 `x = 2` / `y = 3` / `z = x as Int * y`；(b) 前两行同上、末行 `z = x * y as Int`；(c) 一行 `z = (1 == 2 < 3)`；再 `cargo build --bin yaoxiang-rs`，逐个跑 `target/debug/yaoxiang-rs.exe check <file>`。结果：(a)(b) 都报 **1 error `E3005 IR generation error: unhandled expression in IR generation: Discriminant(14)` + 3 warning `W1004`（unused variable）**（`Expr::Cast` 在 ir_gen 无实现——SPEC syntax §2.6 ⑤ 已登记该缺口），**类型检查通过**；`z = (1 == 2 < 3)` 报 `E1002 Expected type 'int64', found type 'bool'`。即：三种形态今天都**不是**成功程序，D1–D3 不改变任何「原先成功」程序的对外表现，它们的实际消费者是 8.4 的 AST 逐位差分。按 D59 分流倾向 A/B/C 面（原先非成功），但仍须先裁「文法按 SPEC 还是按现行为」——这条决定 8.4 的比对基线。
+>
+> D1–D3 的 AST 形状观测方法：在 `parser/tests/` 下临时加一条打印 `parse_with_probe(&tokenize(<expr>), &NullProbe)` 结果的用例、跑完即删（未入库）；CLI 侧只能看到上述错误码，没有 AST dump 入口。
+>
+> **对 8.3 / 8.4 的直接输入**：D1–D3 都落在「差分按哪一侧对齐」上——LALRPOP 文法若按 SPEC 实现，`as` 与相等 / 比较的混合表达式必报不等价；先裁决「文法复刻现行为（C5 等价优先）」还是「先修缺陷再建文法」。D1 的吞并面最大（其后整条表达式都进类型位），建议在 8.3 开工前裁决。相关测试**不冻结错误形状**：`as` 与 `*` 的两种现行为只在 `associativity.rs` 文件头作事实登记，不写成用例。
+>
+> **七、census 欠账（实测；生成物未动）**：`docs/src/dev/test-gate-census.tsv` 最后一次入库是提交 `b73823b0`（2026-11-07），此后未再生。本轮 `python scripts/dev/test-gate-census.py --check` 得 exit 1（「TSV 与当前树不一致」）；把 `--stdout` 的输出与入库 TSV 按 (`测试名`, `入库文件路径`) 键逐行比对：入库 **2055** 行、当前树 **2638** 行，**当前树有、表内无 = 631 条**，其中**本轮新增 25 条**（`parser/tests/associativity.rs` 15 + `lexer/tests/literals.rs` 10）、**存量欠账 606 条**；**表内有、树中无 = 48 条**（陈旧行：8.0 删除 `Precedence` 死对象的用例、已删除的 sema / type-eval 用例等）。两份生成物（`test-gate-census.tsv` / `.md`）本批零改动；**再生承接：8.3 批次入批前置调查**（不新增任务号，避免出现没有承接人的散文化归属）。
+>
+> **八、门禁（本机实测，2026-11-23）**：`cargo fmt` 0；`cargo clippy --all --all-features --all-targets -- -D warnings` 0；`python scripts/dev/testsuite.py run fast` exit 0（**2549 条、跳过 0 条**）；`python scripts/ci/check-test-channel.py` exit 0；`cargo test --lib` **改前 2008 通过 / 0 失败 / 3 ignored → 改后 2033 通过 / 0 失败 / 3 ignored**（+25，等于新增用例数）。
+>
+> **九、边界与未动项**：未删任何既有用例（`tests/literals.rs` 的 diff 只有 import 行改写与新增段）；未新增 `#[ignore]` / `todo!` / `unimplemented!`；`parser/tests/mod.rs` 只加一行 `mod associativity;`；`docs/src/en/` 由 auto-translate 同步，`tests/`、`src/middle/`、`src/std/`、`Cargo.toml` 未动；`05` 只改阶段 3 一段（阶段 5 的 `pratt/tests/mod.rs` 口径留给 8.8.3 随 8.6 一并处理）。
+> **十、编排与偏差登记（队长补记，2026-11-23）**：
+>
+> - **团队与范围**：`yx-88-tests`，范围 = WBS 8.8 首轮（8.8.1 / 8.8.2）；8.8.3 待 8.6 删 `pratt/tests/` 后由同一团队追加，不重建队。
+> - **成员路由切换（偏差）**：初配的验证 / 复审成员走异族路由，在 t2 上连续 4 次 `TRANSPORT`（含任务收窄之后），移除后换到与实现者同一模型（verifier2 / reviewer2），此后 t2 / t4 / t7 一次通过。**代价**：验证 / 复审不再异族，`AGENTS.md` 第 5 条的异族要求以「独立会话 + 独立冻结树复现 + 变异探针」补偿，在此如实登记。
+> - **拆棒**：t2 收窄为静态对账（9 条 acceptance 对账、新增用例点名跑、census 复核），变异 trial 与语料 / IR 漂移移入 t4，降低单轮负载；判据强度不变。
+> - **池派工事故（已纠正）**：`remove_member` 把 t2 / t4 退回共享池后，调度把 **t2 派给了实现者**（自验）；队长同回合改派新验证成员，实现者未产出任何验证结论，证据链未被污染。
+> - **复审回环**：t3 判 `needs_revision`（R1–R9：门依据与文档精确性）→ 自动生成修复任务 t6，但其契约的 `inScope` 继承自 t1、混入非路径项并漏掉 `09`；队长按 AGENTS 编排约定第 6 条（`inScope` 必须是可被路径匹配器解析的前缀且覆盖机械必需面）修订契约（`revision_count = 1`）→ t6 修复 4 文件 +73/−43 → t7 复审 **pass**。
+> - **冻结对象与用途**：评审期用三个本地冻结树对象（`git commit-tree` 生成、未推送）分别作为 t2/t4 量测对象（t1 交付树）、t3 审核对象（t1 + 措辞精确化）、t7 审核与推送对象（t1 + 措辞精确化 + R1–R9 修复）；推送树 = 末者内容 + 本节「十」的队长补记（编排记录，不在 t7 的复审范围内）+ markdownlint 自动补的一行空行。
+> - **未动项**：`test-gate-census.tsv` / `.md` 未再生（欠账与承接见七）；`docs/src/en/` 由 auto-translate bot 同步；`docs/src/reference/`（SPEC）零改动。
+
+## P8 8.3 开工前裁决与 P8 收尾裁决（2026-11-24，用户「按推荐」）
+
+> **一、文法基线（§P8 8.8 六 的待裁决项）——裁决：甲′。** LALRPOP 文法按 SPEC syntax §2.2 / §2.6 实现，**不复刻** D1–D3 的三处现行为；D1–D3 作为「随文法化的既有缺陷修正」由新增三级任务 **8.3.4** 承接（红证 = 现树 Pratt 在父 revision 的实测形状，已固定在 §P8 8.8 六；绿态 = LALRPOP 侧的 SPEC 形状，三条断言在 8.3 批内先红后绿）。被否选项与理由：乙「文法复刻现行为」会把三处错误优先级写进唯一的长期资产，后续修缺陷要再动一次文法，且与 RFC-039 D26「结合性显式声明、不靠 `bp_right = bp_left + 1` 约定」相悖；丙「先修 Pratt 再建文法」改的是一段 8.6 就整段删除的代码，D1 还触及 #543 刚抽出的类型位种子续接共享函数（const 泛型实参回归风险），收益只覆盖 8.4 / 8.5 两批。**代价与前提**：8.4 的逐位等价只在语料 / 标准库测试面成立，入批先做 AST 级普查证明 D1–D3 形态零暴露（`as` 强制转换已实测 0 处）；若普查命中，语料诊断基线同批再生并人工 review，登记为「有意修正」；本次裁决不放宽 C5、不存在 C5′。
+>
+> **二、8.8.3 归属——裁决：丙（移交 8.6 批执行，跨二级登记）。** 8.8.3 的判据面是「`pratt/tests/` 删除后的接线自检」，天然属于 8.6 的删除批；`yx-88-tests` 团队据此归档，8.8 二级任务的完成登记等 8.8.3 随 8.6 落地后勾选（8.8.1 / 8.8.2 的收口见上一节）。
+>
+> **三、D4 归属——裁决：另立 P3 任务 3.25（3.25.1）。** `'\x1'` 的错误归因被「空字符字面量」覆盖，D59 **C 类**（静默给错错误码）；先红后绿 + 不改「原先成功」程序 + 同提交登记。§P8 8.8 六 的 R3 已纠正 E0001 → E0012 的映射，3.25.1 修的是「归因被覆盖」本身，不改码表。
+>
+> **四、D5——裁决：先登记、8.3 收口后单独裁。** 前导点路径与整数路径的下划线规则不一致（`1_` / `0x1_` / `1__0` 接受，`.5_` 拒绝）；修它要先定「下划线规则唯一口径」（可能牵动 SPEC §1.6.1 措辞），属语言设计级裁决。本项不排期，触发条件 = 8.3 收口后由用户单独裁；现状登记在 §P8 8.8 六 D5 与 8.8.2 行的「特征化」处置里。
+>
+> **五、P8 前序三条技术选择（2026-11-23「按推荐开」时生效，此处补登）**：① LALRPOP 采用 **build-time 生成、生成物不入库**（文法单一源，杜绝文法与生成物不同步的静默错解析；代价 = 构建变慢与 `build.rs` 失败面扩大）；② C5 比对口径 **扩 `corpus_probe` 记录 `code + line + col` 并同批再生基线**（把 05 / 07 的「code+span 逐条相同」做实；现探针只比 code+file+line）；③ f-string 在 8.3 只做**等价迁移**、入口形态冻结，8.2.4 的「单遍词法 vs 逐插值隔离」语义裁决后置（D 类，另行裁决）。
+>
+> **六、判据不变**：C5 无放宽、不存在 C5′；8.4 / 8.5 的等价性证明面仍是语料 + `src/std/tests` 的 AST 与诊断逐条比对；D1–D3 的 SPEC 形状由 8.3.4 的红证 / 绿态承担，不混入 8.5 的行为等价断言。
+
+## P8 8.3 入批前置：census 再生与 D1–D3 语料 AST 普查（2026-11-24）
+
+### 一、范围与结论
+
+本批只再生测试普查表并补文档账目；生产代码、语料与 `tests/baselines/` 零改动。临时 AST 探针在运行后删除，接线还原。
+
+- `python scripts/dev/test-gate-census.py` 再生 exit 0；随后 `--check` exit 0，当前表为 **2646 条 / 328 文件**。
+- AST 普查覆盖 `tests/yaoxiang` **355** 与 `src/std/tests` **23**，合计 **378/378**；`Expr::Cast` **0**，D1 / D2 / D3 均 **0 命中**。因此没有需要列出的命中 `文件:行`，也不需要改语料或诊断基线。
+- 这兑现 8.4 入批的「三形态在语料面零暴露」前提；它不是后续 LALRPOP 施工的 go/no-go 探针结论。
+
+### 二、census 新数字
+
+按门：**条款 997 · 病史 539 · 证明 568 · 待判 536 · 均不通过 6 = 2646**。按处置：**留 1107 · 待核 1259 · 待判 222 · 退役候选 58 = 2646**。留的构成 = 证明 568（spec-shaped 516 + 现状锚 52）+ 病史 539。
+
+扫描面：`src/` 2044 · `tests/integration` 461 · `tests/formatter_integration.rs` 52 · 两个 runner 2 / 1 · `tools/` 77 · `benches/` 9；共 328 文件，其中 160 文件的头部有可核节号。上述数字与 `test-gate-census.md` 当前分布表同批更新。
+
+键对账：旧表 2055 → 当前 2646，净增 591；当前树有、旧表无 = **639**（8.8 本轮新增 25 + 存量 606 + t2 `grammar_probe` 新增 8），旧表有、当前树无 = **48**。另有 46 个同键条目的断言摘要 / 门 / 处置随当前源码重算；它们不属于新增或删除键。
+
+### 三、本轮新增 25 条逐键入表
+
+以下 15 条位于 `src/frontend/core/parser/tests/associativity.rs`：
+
+| # | 测试名 |
+| --- | --- |
+| 1 | `test_sub_is_left_associative` |
+| 2 | `test_div_is_left_associative` |
+| 3 | `test_mul_binds_tighter_than_add` |
+| 4 | `test_comparison_binds_looser_than_addition_on_both_operands` |
+| 5 | `test_shift_binds_tighter_than_bitwise_ops_on_both_operands` |
+| 6 | `test_bitwise_level_is_left_associative_across_operators` |
+| 7 | `test_range_upper_bound_swallows_addition` |
+| 8 | `test_range_chain_is_left_associative` |
+| 9 | `test_lambda_body_is_right_greedy` |
+| 10 | `test_assignment_is_right_associative` |
+| 11 | `test_cast_target_stops_at_call_suffix_boundary` |
+| 12 | `test_try_postfix_binds_tighter_than_addition` |
+| 13 | `test_call_chain_postfix_binds_tighter_than_addition` |
+| 14 | `test_pattern_or_chain_collects_all_alternatives` |
+| 15 | `test_grouped_sub_expression_overrides_left_associativity` |
+
+以下 10 条位于 `src/frontend/core/lexer/tests/literals.rs`：
+
+| # | 测试名 |
+| --- | --- |
+| 16 | `test_radix_overflow_consumes_all_digits_before_next_token` |
+| 17 | `test_leading_dot_float_literal_value` |
+| 18 | `test_leading_dot_exponent_decoded` |
+| 19 | `test_leading_dot_underscore_between_digits_accepted` |
+| 20 | `test_leading_dot_underscore_before_nondigit_rejected` |
+| 21 | `test_leading_dot_exponent_without_digits_rejected` |
+| 22 | `test_string_hex_escape_requires_two_digits` |
+| 23 | `test_string_unicode_escape_requires_braced_codepoint` |
+| 24 | `test_string_unknown_escape_rejected` |
+| 25 | `test_char_hex_escape_decodes_two_digits_and_rejects_one` |
+
+### 四、存量 606 条入表对账
+
+606 = 631 − 25，分布在下表 86 个既有测试文件；每个测试名与路径的逐键判定已经写入 TSV，不用合计数替代逐键入表。
+
+| 区域 | 条数 |
+| --- | --- |
+| `src/ast/` | 24 |
+| `src/frontend/core/sema/` | 181 |
+| `src/frontend/core/parser/`（不含本轮 15） | 40 |
+| `src/frontend/core/lexer/`（本文件既有 8） | 8 |
+| `src/frontend/` 其他 | 78 |
+| `src/middle/` | 119 |
+| `src/` 其他 | 27 |
+| `tests/` | 126 |
+| `tools/` | 3 |
+| **合计** | **606** |
+
+### 五、旧表有、树中无的 48 条逐条去向
+
+键按 `(测试名, 入库文件路径)` 比对。48 条中没有「同一测试名迁到另一文件」的纯移位；逐条结果如下。
+
+#### 5.1 `src/frontend/core/parser/pratt/tests/precedence_inline.rs`（4 条）
+
+提交 `f3c9794f` 删除 `Precedence` / `PrecedenceContext` 死对象；前三条只测这些对象，第四条保留并改名。
+
+| # | 旧测试名 | 处置 | 去向 |
+| --- | --- | --- | --- |
+| 1 | `test_precedence_conversion_all` | 已删除 | 被测 `Precedence` 已删除，无后继 |
+| 2 | `test_bp_to_precedence_all` | 已删除 | 被测 `Precedence` 已删除，无后继 |
+| 3 | `test_precedence_context_all` | 已删除 | 被测 `PrecedenceContext` 已删除，无后继 |
+| 4 | `test_bp_ordering` | 改名 | 同文件 `test_bp_ordering_ascends_from_lowest_to_highest` |
+
+#### 5.2 `src/frontend/core/sema/inference/tests/assignment.rs`（6 条）
+
+提交 `0cf96524` 删除生产死链 `inference/assignment.rs` 与其直驱测试文件；新判定点的覆盖在 `src/frontend/core/sema/inference/tests/judgement.rs` 与 `src/frontend/tests/equivalence_judgement.rs`，不是六条旧测试的一对一改名。
+
+| # | 旧测试名 | 处置 | 去向 |
+| --- | --- | --- | --- |
+| 5 | `test_assignment_same_type` | 已删除 | 随 `AssignmentChecker` 死链删除，无同名后继 |
+| 6 | `test_assignment_int_to_float_widening` | 已删除 | 同上 |
+| 7 | `test_assignment_constraint_concrete` | 已删除 | 同上 |
+| 8 | `test_assignment_fn_type_compatibility` | 已删除 | 同上 |
+| 9 | `test_assignment_new_checker_has_no_constraint_info` | 已删除 | 同上 |
+| 10 | `test_assignment_constraint_info_reset_on_non_constraint` | 已删除 | 同上 |
+
+#### 5.3 判等、诊断与 const 参数（各 1 条，合计 3 条）
+
+| # | 旧测试名 / 文件 | 处置 | 去向 |
+| --- | --- | --- | --- |
+| 11 | `test_structurally_equal_int` / `src/frontend/core/sema/layers/tests/equivalence.rs` | 改名并改写 | `6b958851`：同文件 `test_defeq_syntactic_identity_is_proved` |
+| 12 | `test_into_result_unclassified_unproven_still_reports_ice` / `src/frontend/core/sema/proof/tests/verdict.rs` | 改名并改写 | `fec4d88b` 先改为 E2031 口径，`fb35d0a7` 定名为同文件 `test_into_result_general_unproven_uses_e4023` |
+| 13 | `test_used_as_const_in_annotation_scans_own_group_param_annotation` / `src/frontend/core/sema/tests/const_param.rs` | 改名并改写 | `5d554c5f`：同文件 `test_param_quantities_scan_own_group_param_annotation` |
+
+#### 5.4 `src/frontend/core/types/eval/tests/normalizer.rs`（9 条）
+
+提交 `6b958851` 删除无人调用的 `normalizer.rs` / `reducer.rs` 两个归约模块及其直驱测试文件；这些旧测试没有逐条同名后继。新的判等覆盖由 `src/frontend/core/sema/layers/tests/equivalence.rs` 的 `defeq` / `normalize_type` 用例承担。
+
+| # | 旧测试名 | 处置 | 去向 |
+| --- | --- | --- | --- |
+| 14 | `test_reduction_config_default` | 已删除 | 随归约模块删除，无同名后继 |
+| 15 | `test_reduction_config_custom` | 已删除 | 同上 |
+| 16 | `test_normalizer_normalize_primitives` | 已删除 | 同上 |
+| 17 | `test_normalizer_context` | 已删除 | 同上 |
+| 18 | `test_normalization_context_apply_no_change` | 已删除 | 同上 |
+| 19 | `test_normalization_context_substitute_var` | 已删除 | 同上 |
+| 20 | `test_normalization_context_add_substitutions` | 已删除 | 同上 |
+| 21 | `test_normalization_context_cache_mut` | 已删除 | 同上 |
+| 22 | `test_normalization_context_cache_ref` | 已删除 | 同上 |
+
+#### 5.5 `src/frontend/core/types/eval/tests/reducer.rs`（20 条）
+
+删除提交与替代覆盖同 5.4。
+
+| # | 旧测试名 | 处置 | 去向 |
+| --- | --- | --- | --- |
+| 23 | `test_type_computer_new_and_with_config` | 已删除 | 随归约模块删除，无同名后继 |
+| 24 | `test_type_computer_compute_type_ref` | 已删除 | 同上 |
+| 25 | `test_reducer_stuck_on_primitives` | 已删除 | 同上 |
+| 26 | `test_reducer_delta_reduces_alias` | 已删除 | 同上 |
+| 27 | `test_reducer_unknown_alias_stays_stuck` | 已删除 | 同上 |
+| 28 | `test_reducer_with_config` | 已删除 | 同上 |
+| 29 | `test_reducer_register_alias` | 已删除 | 同上 |
+| 30 | `test_reducer_register_aliases` | 已删除 | 同上 |
+| 31 | `test_reducer_step_count` | 已删除 | 同上 |
+| 32 | `test_reducer_reduce_type_ref_with_alias_chain` | 已删除 | 同上 |
+| 33 | `test_reducer_reduce_type_ref_self_referential` | 已删除 | 同上 |
+| 34 | `test_unifier_new_and_reset` | 已删除 | 同上 |
+| 35 | `test_unifier_same_types` | 已删除 | 同上 |
+| 36 | `test_unifier_with_config` | 已删除 | 同上 |
+| 37 | `test_unifier_unify_composite_types` | 已删除 | 同上 |
+| 38 | `test_unifier_unify_different_concrete` | 已删除 | 同上 |
+| 39 | `test_unifier_unify_var_with_list` | 已删除 | 同上 |
+| 40 | `test_unifier_reset_clears_substitution` | 已删除 | 同上 |
+| 41 | `test_unifier_unify_void_with_void` | 已删除 | 同上 |
+| 42 | `test_compute_config` | 已删除 | 同上 |
+
+#### 5.6 其余改名（6 条）
+
+| # | 旧测试名 / 文件 | 处置 | 去向 |
+| --- | --- | --- | --- |
+| 43 | `test_from_builtin_name_keeps_datetime_as_compat_alias` / `src/frontend/core/types/tests/mono.rs` | 改名并改写 | `1c6d5dd9`：同文件 `test_from_builtin_name_rejects_datetime_after_s11_migration` |
+| 44 | `test_inner_local_name_leaking_to_outer_fails` / `src/middle/ir/tests/verify.rs` | 改名并改写 | `a0da0af5`：同文件 `test_inner_isolation_inherited_outer_slot_rejected` |
+| 45 | `test_disjoint_inner_locals_pass` / 同文件 | 改名并改写 | `a0da0af5`：同文件 `test_inner_isolation_same_local_name_across_frames_pass` |
+| 46 | `test_restore_gate_keeps_generic_referenced_only_by_make_closure` / `src/middle/passes/mono/tests/monomorphizer.rs` | 改名并改写 | `75c28a09`：同文件 `test_dce_keeps_generic_referenced_only_by_make_closure` |
+| 47 | `test_restore_gate_keeps_generic_referenced_only_by_tail_call` / 同文件 | 改名并改写 | `19261d26`：同文件 `test_tail_call_site_is_rewritten_to_specialized_name` |
+| 48 | `test_removed_spellings_list_is_the_agreed_twenty_two` / `tools/type-tables/src/tables.rs` | 改名并改写 | `1c6d5dd9`：同文件 `test_removed_spellings_list_is_the_agreed_twenty_three` |
+
+合计复核：4 + 6 + 3 + 9 + 20 + 6 = **48**；已删除 38、改名或语义后继替换 10、纯移位 0。
+
+### 六、D1–D3 的 AST 普查方法与结果
+
+**方法**：递归收集 `tests/yaoxiang/**/*.yx` 355 与 `src/std/tests/*.yx` 23；用 `tokenize` 与生产同款 `SemanticProbe` 调 `parse_with_probe`，再穷举遍历 `Module` / `StmtKind` / `Expr` / `Type` 的子节点，包含 `Type::ConstExpr`、lambda 参数标注、类型体默认值、模式 guard 与 f-string 插值。判定只读 AST，不用正则或字符串匹配语料源码。
+
+负向语料不跳过：`binary_literal_trailing_digit_err.yx`、`decimal_literal_trailing_alpha_err.yx`、`hex_literal_trailing_alpha_err.yx` 三个词法失败文件改由 `Lexer` 取完整恢复 token 流并补 EOF 后解析；另有 10 个 `06-compile-errors` 文件产生语法诊断，仍遍历其部分 AST。最终 378 个文件都进入遍历，无文件因预期错误被排除。
+
+| 形态 | AST 判定 | 命中 |
+| --- | --- | --- |
+| D1 | `Expr::Cast.target_type` 子树含 `Expr::BinOp`（含 `Type::ConstExpr` 内的二元表达式），记录完整 `Type` | **0** |
+| D2 | `Cast.expr = BinOp::Mul`，或 `BinOp::Mul` 的任一直接操作数为 `Cast` | **0** |
+| D3 | `BinOp::Eq/Neq` 的任一直接操作数为 `Lt/Le/Gt/Ge` | **0** |
+
+遍历计数：表达式节点 **18753**、类型节点 **3618**、二元节点 **1419**、`Cast` **0**、`Mul` **70**、`Eq/Neq` **848**、f-string 插值 **15**、模式 guard **3**。`as` 强制转换的实测暴露面因此为 0 处。
+
+**合成正控**：`x as Int * y` 触发 D1=1；`x * y as Int` 与 `x * (y as Int)` 分别触发 `Cast.expr = Mul` 与 `Mul.right = Cast`；`a == b < c` 触发 `Eq.right = Lt`。全语料普查加三条正控共 **4 passed / 0 failed**，证明零命中不是检测器空转。临时探针与接线已在验证后删除。
+
+### 七、执行记录
+
+- `python scripts/dev/test-gate-census.py` → exit 0（2646 条 / 328 文件）。
+- `CARGO_BUILD_JOBS=2 RUST_TEST_THREADS=1 cargo test --lib ast_exposure -- --nocapture --test-threads=1` → exit 0（4 passed；临时探针已删）。
+- `python scripts/dev/test-gate-census.py --check` → exit 0（TSV 最新，2646 条）。
+- `python scripts/ci/check-docs-truth.py` / `python scripts/ci/check-docs-refs.py` → 均 exit 0。
+- 三份变更 Markdown 的定向 markdownlint → exit 0。全站 `pnpm lint:md` 另报 4 处 MD056，全部位于未改且出 scope 的 `docs/src/en/`；本批不越界修英文镜像。
+
+## P8 8.3 go/no-go 探针：三项高危构造（2026-11-24）
+
+### 一、结论与边界
+
+**探针结论 = go（最小可行性通过），建议用户选择「继续全量文法」。** 这里的 go 只表示三项高危构造都有可运行的 LR(1) 表达与对照证据，不表示全量文法、全量诊断或 8.4 差分已经完成。继续或回落仍由用户裁决。
+
+最终 `cargo test --lib grammar_probe` 为 **8 passed / 0 failed**。生产 `parse()` 未接线：`git diff --exit-code HEAD -- src/frontend/core/parser/mod.rs src/frontend/core/parser/pratt src/frontend/core/parser/statements src/frontend/core/parser/parser_state.rs src/frontend/core/lexer` 为 0；`git grep -n "pub fn parse" -- src/frontend/core/parser/mod.rs` 仍指向原入口。
+
+### 二、build-time 接入
+
+- `Cargo.toml`：`lalrpop = "=0.23.2"` 仅进 `[build-dependencies]`；`lalrpop-util = "=0.23.2"` 仅进 `[dev-dependencies]`，生产 crate 运行时依赖不变。`Cargo.lock` 锁定两者均为 **0.23.2**。
+- `build.rs::process_grammar_probe` 是独立分支：无 `src/frontend/core/parser/grammar/` 时早退；有输入时调用 `lalrpop::process_root()` 并声明目录级 `rerun-if-changed`。该分支只追加生成步骤，不跳过既有错误码、类型表与 Z3 门禁。
+- `src/frontend/core/parser/tests/grammar_probe.rs` 经 `lalrpop_mod!` 引入生成 parser。生成物只在 OUT_DIR，源码树没有生成文件；生产 `parser/mod.rs` 未改。
+
+### 三、A：RFC-038 换行终止
+
+探针适配器只读现有 token span：跨行且不是点号续行时合成 `newline`；跨行点号标为 `newline_dot`；跨行左括号标为 `newline_lparen`。生产 lexer 未改。核心产生式为：
+
+```lalrpop
+StmtList = {
+    #[precedence(level="1")] Stmt,
+    #[precedence(level="2")] #[assoc(side="left")]
+    StmtList StmtSeparator Stmt,
+};
+StmtSeparator = { ";", "newline" };
+
+PostfixSuffix = {
+    "(" Args ")",
+    "." "ident",
+    "newline_dot" "ident",
+};
+
+Stmt = {
+    AssignmentTarget "=" Expr,
+    Expr,
+    "newline_lparen" "ident" ")",
+    !,
+};
+```
+
+| 用例 | token / span 依据 | 新文法结果 | 现树对照 |
+| --- | --- | --- | --- |
+| `a\n.b` | 第二行 `.` 标为 `newline_dot`；字段 token `b` 为 2:2–2:3 | 一条 `FieldAccess(a,b)`，span 精确为 2:2–2:3 | AST Debug 与 span 逐项相同 |
+| `a\n(b)` | 第二行 `(` 标为 `newline_lparen`，不能进入调用后缀 | 两条语句：`a` 与分组 `b` | 两条 AST 与 span 逐项相同 |
+| `a(b)`（对照） | 同行 `(` 保留为调用后缀 | 一条 `Call(a,[b])` | 现树同为一条调用语句 |
+
+### 四、B：显式错误产生式与诊断 code+span
+
+文法把 `!` 放在语句级恢复点，动作直接收集 LALRPOP 的 `ErrorRecovery { error, dropped_tokens }` 并构造 `StmtKind::Error`。原始 `ParseError` 的 token span 映射到既有 `ErrorCodeDefinition`，不是从恢复占位节点猜位置。
+
+```lalrpop
+Stmt = {
+    AssignmentTarget "=" Expr,
+    Expr,
+    "newline_lparen" "ident" ")",
+    ! => {
+        errors.push(<>);
+        StmtKind::Error(Span::dummy())
+    },
+};
+```
+
+最小反例：`main = { a = 1 + ; b = 2 }`。
+
+| 诊断 | 现树 `synchronize()` | LALRPOP `!` | 差异 |
+| --- | --- | --- | --- |
+| code | E0012 | E0012 | 0 |
+| file | `grammar_probe.yx`（两侧固定同一输入标签） | 同左 | 0 |
+| start line:col | 1:18 | 1:18 | 0 |
+| end line:col | 1:19 | 1:19 | 0 |
+| 后续语句 | 保留 `b = 2` | 保留 `b = 2` | 0 |
+
+诊断总数两侧均 1，差异条数为 **0**。
+
+### 五、C：模式与 f-string 上下文
+
+统一 `Expr` 的层级为：原子 1、后缀 2、加法 3、lambda 4。后缀比加法紧，lambda 在最外层向右吞入完整 `x + 1`。`ParenExpr` 不再与一般分组共用 LR(2) 形状：`(` 在表达式中进入 lambda，`newline_lparen` 在语句层进入 RFC-038 独立分组。
+
+```lalrpop
+pub Expr = {
+    #[precedence(level="1")] Atom,
+    #[precedence(level="2")] #[assoc(side="left")] Expr PostfixSuffix,
+    #[precedence(level="3")] #[assoc(side="left")] Expr "+" Expr,
+    #[precedence(level="4")]
+    "(" "ident" ")" "=>" Expr,
+};
+
+pub MatchArm = Pattern Guard? "=>" Expr;
+Guard = "if" Expr;
+
+pub Pattern = {
+    PatternAtom ("|" PatternAtom)+,
+    PatternAtom,
+};
+PatternAtom = {
+    "int",
+    "ident",
+    "ident" "(" Pattern ")",
+};
+
+FStringPart = {
+    "text",
+    "interpolation_begin" Expr "interpolation_end",
+};
+```
+
+对照结果：
+
+- `(x) => x + 1` 产 `Lambda(x, Return(Add(x,1)))`，没有 `no_fat_arrow` 或 `parse_expression(12)`；
+- `ok(v) => 1` 产 `Union(ok, Identifier(v))`，由模式产生式直接构造，不走「Var+LParen 重组」；
+- `1 | 2 => 0` 产 `Or([Literal(1), Literal(2)])`，由模式侧的 `|` 链直接构造；
+- `f"lambda {(x) => x + 1}"` 的插值内部产完整 lambda。适配器复用既有 `lex_interpolations` 批量入口，插值起止由 `interpolation_begin/end` 静态限定，f-string 入口形态未改。
+
+### 六、失败面（不得外推）
+
+1. **A 的覆盖边界**：只证明两条 RFC-038 分支与同行调用对照。通用括号 / 方括号、全部 chainable 尾形态和完整语句族尚未覆盖；跨行标记来自探针适配器，完整施工必须把它纳入唯一 token 适配层，不能在多个 parser 入口各写一份。
+2. **B 的覆盖边界**：只证明 `;` 同步点的一条恢复用例。`synchronize()` 的 `Identifier + ':' / '=' / '(' / '{'` 启发式、`RBrace` 留边、深层块与连续多错误尚未证明。LALRPOP 原生错误文案与现树不同；本探针只保证映射后的 code+span 相同，不证明所有输入都能如此映射。
+3. **C 的覆盖边界**：只证明指定 lambda、变体、或模式与 f-string 插值。一般括号表达式、struct / range / 嵌套或模式、format_spec 与插值内绝对 span 尚未覆盖。
+4. **构建成本与生成物**：每次文法变化都在 build-time 重新生成大 parser；本探针未做全量构建耗时基线。生成物不入库，不能把它当作第二个文法来源。
+
+### 七、继续 / 回落建议
+
+推荐继续全量文法，因为 A/B/C 都有最小反例证明，且 B 的 code+span 差异为零。推荐项的代价是：必须把探针适配器收敛为单一实现，并把 B 的同步点矩阵与 C 的完整模式族补齐；若 8.3.3 或 8.4 连续两个迭代仍有不等价项，仍按 05:642 回落到「保留 Pratt + 单套声明式优先级表 + 两套 BinOp 同源生成」。本探针不触发回落，也不放宽 C5。
+
+### 八、执行记录
+
+- `cargo test --lib grammar_probe` → exit 0（**8 passed / 0 failed**）。
+- `cargo fmt` → exit 0。
+- clippy 首轮发现 56 条同源 `ptr_arg`，全部位于 LALRPOP 生成的固定 `&mut Vec<ErrorRecovery>` 签名；在 `lalrpop_mod!` 上定向 `#[allow(clippy::ptr_arg)]` 并附 `// reason:`。
+- `cargo clippy --all --all-features --all-targets -- -D warnings` → exit 0。
+- `python scripts/dev/testsuite.py run fast` → exit 0（**2557 条，0 失败，0 波跳过**）。
+- **2026-11-24 跟进**：8 条 `grammar_probe` 已全部再生入 census，当前表为 **2646 条 / 328 文件**；`python scripts/dev/test-gate-census.py --check` exit 0。
+
+### 九、编排与偏差登记（队长补记，2026-11-24）
+
+- **成员路由**：首轮三个成员的路由由部署侧分配；初期复审成员的异族路由在 t4 首轮连续 `TRANSPORT` 失败后被移除，改由队长新增复审成员（与实现者同路由）并把 t4 改派过去，此后一次通过。异族属性以「独立会话 + 独立冻结对象 + 独立复现 + 负变异」补偿；具体路由属部署配置，不入库。
+- **独立性事故（两次，已纠正）**：`remove_member` 把验证 / 复审任务退回共享池后，调度两次把复审任务派给实现者（8.8 队的 t2、本队的 t4）；队长均在同回合改派，实现者未产出任何 verdict。**规程**：退回共享池的验证 / 复审任务必须由队长显式 reassign，不得依赖调度。
+- **t5 的由来**：t2 新增 8 条 `cfg(test)` 用例使 census 落后；t2 的 `inScope` 未含 census 生成物（如实登记），由新增 t5 闭合（2646 条 / 328 文件）。
+- **非阻塞遗留**：构建耗时未做基线（8.3.1 首棒补）；`test-gate-census.md` 与本节的 `t2` 代号已改为语义名「8.3 go/no-go 探针」；本节 §5.6 两处路径补 `src/` 前缀（队长按复审观察就地更正）。

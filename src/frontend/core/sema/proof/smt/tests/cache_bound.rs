@@ -7,7 +7,7 @@
 use std::collections::HashMap;
 
 #[cfg(not(target_arch = "wasm32"))]
-use crate::frontend::core::sema::proof::smt::ast::{SMTResult};
+use crate::frontend::core::sema::proof::smt::ast::SMTResult;
 #[cfg(not(target_arch = "wasm32"))]
 #[cfg(not(target_arch = "wasm32"))]
 use crate::frontend::core::sema::proof::smt::z3_backend::{evict_if_full, CACHE_CAP};

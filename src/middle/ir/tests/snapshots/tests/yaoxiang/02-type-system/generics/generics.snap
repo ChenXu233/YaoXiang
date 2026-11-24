@@ -3,29 +3,45 @@ module
     generic_params: ["T"]
     slot[0] x : Int(64) @depth1
     locals_total=3
-    Load %0 <- %1
-    Ret %0
+    values_total=2
+    value v0: TypeRef("?") @block0
+    value v1: Int(64) @block0
+    Load v1 <- %0
+    Ret v1
     Ret
   fn main() -> Void
     slot[0] x : Int(64) @depth1
     slot[1] s : Int(64) @depth1
-    locals_total=7
-    Load %0 <- int(42)
-    Call %1 <- string("identity") [%0] (def=d0)
-    Load %2 <- %1
-    Load %3 <- int(42)
-    Eq %4 <- %2, %3
-    Load %5 <- string("identity(42) should be 42")
-    Call %0 <- string("std.assert.assert") [%4, %5] (def=d1)
-    Load %4 <- string("hello")
-    Call %0 <- string("identity") [%4] (def=d0)
-    Load %3 <- %0
-    Load %5 <- string("hello")
-    Eq %2 <- %3, %5
-    Load %6 <- string("identity(\"hello\") should be \"hello\"")
-    Call %4 <- string("std.assert.assert") [%2, %6] (def=d1)
-    Drop %0
+    locals_total=5
+    values_total=12
+    value v0: Int(64) @block0
+    value v1: TypeRef("?") @block0
+    value v2: Bool @block0
+    value v3: Int(64) @block0
+    value v4: Int(64) @block0
+    value v5: Generic { name: "String", args: [] } @block0
+    value v6: Generic { name: "String", args: [] } @block0
+    value v7: TypeRef("?") @block0
+    value v8: Bool @block0
+    value v9: Generic { name: "String", args: [] } @block0
+    value v10: Generic { name: "String", args: [] } @block0
+    value v11: Generic { name: "String", args: [] } @block0
+    Load v0 <- int(42)
+    Call %0 <- string("identity") [v0] (def=d0)
+    Load v3 <- %0
+    Load v4 <- int(42)
+    Eq v2 <- v3, v4
+    Load v5 <- string("identity(42) should be 42")
+    Call v1 <- string("std.assert.assert") [v2, v5] (def=d1)
+    Load v6 <- string("hello")
+    Call %1 <- string("identity") [v6] (def=d0)
+    Load v9 <- %1
+    Load v10 <- string("hello")
+    Eq v8 <- v9, v10
+    Load v11 <- string("identity(\"hello\") should be \"hello\"")
+    Call v7 <- string("std.assert.assert") [v8, v11] (def=d1)
     Drop %1
-    Ret %4
+    Drop %0
+    Ret v7
   init (locals=0)
     Call %0 <- string("main") [] (def=d2)

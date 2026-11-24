@@ -11,7 +11,7 @@
 use lsp_types::{CompletionItemKind, CompletionParams, CompletionResponse};
 
 use crate::lsp::handlers::completion::{
-    handle_completion, keyword_items, reserved_word_items, document_symbol_items,
+    document_symbol_items, handle_completion, keyword_items, reserved_word_items,
 };
 use crate::lsp::session::Session;
 use crate::lsp::world::World;

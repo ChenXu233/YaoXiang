@@ -3,10 +3,10 @@
 //! §3.2-§3.17: From<ast::Type> 转换 — 覆盖所有 AST 类型到 MonoType 的转换路径
 //! + 补充 expand_type 各类容器变体的测试
 
-use crate::frontend::core::types::{MonoType, PolyType, StructType, TypeVar};
 use crate::ast;
 use crate::frontend::core::lexer::tokens::Literal;
 use crate::frontend::core::types::EnumType;
+use crate::frontend::core::types::{MonoType, PolyType, StructType, TypeVar};
 use crate::util::span::Span;
 use std::collections::HashMap;
 
@@ -231,10 +231,14 @@ fn test_from_ast_type_struct_with_defaults() {
             is_mut: false,
             ty: name_ty("Float64"),
             default: Some(Box::new(ast::Expr::Lit(Literal::Float(0.0), Span::dummy()))),
+            quantity: None,
         })],
     };
     let mono: MonoType = ast_ty.into();
-    assert!(matches!(mono, MonoType::Struct(s) if s.field_has_default == vec![true]));
+    assert!(
+        matches!(mono, MonoType::Struct(s) if s.fields.len() == 1 && s.fields[0].has_default),
+        "有默认值的字段必须在单列表示里带上 has_default"
+    );
 }
 
 #[test]
@@ -349,15 +353,56 @@ fn test_from_ast_type_generic() {
 
 #[test]
 fn test_from_ast_type_generic_custom() {
+    // Arrange - 真正自定义的泛型名：不得撞上内建容器名，也不得是 #403 A 案
+    // 在本臂做源名归一的 `List`（它落 `Vec` 面，不再是「自定义」反例）。
+    let ast_ty = ast::Type::Generic {
+        name: "Matrix".to_string(),
+        name_span: Span::dummy(),
+        args: vec![name_ty("Int32")],
+    };
+
+    // Act
+    let mono: MonoType = ast_ty.into();
+
+    // Assert - #299：泛型不再 lower 成原生变体，保持 Generic；自定义名与实参
+    // 逐字保留（#403 A 案的源名归一只收 `List`→`Vec`，自定义名不经改写）。
+    assert!(
+        matches!(
+            &mono,
+            MonoType::Generic { name, args } if name == "Matrix" && args[0] == MonoType::Int(32)
+        ),
+        "自定义泛型名应原样保留（不 lower、不归一），实际 {mono:?}"
+    );
+}
+
+#[test]
+fn test_from_ast_type_list_annotation_lands_on_vec_face() {
+    // Arrange — #403 A 案核心行为的 L2 直接 pin：源名 `List(T)` 注解经
+    // From<ast::Type> 的 Generic 臂进类型域，按 [`MonoType::source_container_face`]
+    // 落点归一（四门之一；判据源即该函数文档，规范锚 SPEC type-system.md §4.1.1
+    // 「源名 List 进类型域统一落 Vec 面」）。
     let ast_ty = ast::Type::Generic {
         name: "List".to_string(),
         name_span: Span::dummy(),
         args: vec![name_ty("Int32")],
     };
+
+    // Act
     let mono: MonoType = ast_ty.into();
-    // #299：泛型不再 lower 成原生变体，保持 Generic
+
+    // Assert — M1 变异自证（摘 From 臂的 source_container_face 调用，name 退回
+    // 源名原样）实测红（cargo test --lib 本测试，M1 挂载时）：
+    //   panicked at src\frontend\core\types\tests\mono.rs:
+    //   `… 实际 Generic { name: "List", args: [Int(32)] }`
+    //   `test result: FAILED. 0 passed; 1 failed`
+    // 同时域的 L3 pin（middle::lower::tests::query）在 M1 下保持绿——两 pin 各自
+    // 杀死本面变异（M3），互不搭便车。
     assert!(
-        matches!(mono, MonoType::Generic { name, args } if name == "List" && args[0] == MonoType::Int(32))
+        matches!(
+            &mono,
+            MonoType::Generic { name, args } if name == "Vec" && args[0] == MonoType::Int(32)
+        ),
+        "List(Int) 注解必须落 Vec 面（归一摘除即红：Generic{{\"List\"}} 无 unify 对象，字面量/构造器/std.list 全产 Vec 面必被 E1002 假拒绝），实际 {mono:?}"
     );
 }
 
@@ -444,43 +489,15 @@ fn test_from_ast_type_literal() {
 
 #[test]
 fn test_struct_type_eq_same_fields() {
-    let a = StructType {
-        name: "P".to_string(),
-        fields: vec![("x".to_string(), MonoType::Int(32))],
-        methods: HashMap::new(),
-        field_mutability: vec![false],
-        field_has_default: vec![false],
-        interfaces: vec![],
-    };
-    let b = StructType {
-        name: "P".to_string(),
-        fields: vec![("x".to_string(), MonoType::Int(32))],
-        methods: HashMap::new(),
-        field_mutability: vec![false],
-        field_has_default: vec![false],
-        interfaces: vec![],
-    };
+    let a = record_with("P", vec![("x", MonoType::Int(32), false, false)]);
+    let b = record_with("P", vec![("x", MonoType::Int(32), false, false)]);
     assert_eq!(a, b);
 }
 
 #[test]
 fn test_struct_type_eq_different_fields() {
-    let a = StructType {
-        name: "P".to_string(),
-        fields: vec![("x".to_string(), MonoType::Int(32))],
-        methods: HashMap::new(),
-        field_mutability: vec![false],
-        field_has_default: vec![false],
-        interfaces: vec![],
-    };
-    let b = StructType {
-        name: "P".to_string(),
-        fields: vec![("y".to_string(), MonoType::Int(32))],
-        methods: HashMap::new(),
-        field_mutability: vec![false],
-        field_has_default: vec![false],
-        interfaces: vec![],
-    };
+    let a = record_with("P", vec![("x", MonoType::Int(32), false, false)]);
+    let b = record_with("P", vec![("y", MonoType::Int(32), false, false)]);
     assert_ne!(a, b);
 }
 
@@ -558,20 +575,18 @@ fn test_type_var_extraction() {
 
 #[test]
 fn test_is_constraint_and_constraint_fields() {
-    let iface = MonoType::Struct(StructType {
-        name: "Clone".to_string(),
-        fields: vec![(
-            "clone".to_string(),
+    let iface = MonoType::Struct(record_with(
+        "Clone",
+        vec![(
+            "clone",
             MonoType::Fn {
                 params: vec![],
                 return_type: Box::new(MonoType::TypeRef("Self".to_string())),
             },
+            false,
+            false,
         )],
-        methods: HashMap::new(),
-        field_mutability: vec![false],
-        field_has_default: vec![false],
-        interfaces: vec![],
-    });
+    ));
     assert!(iface.is_constraint());
     let fields = iface.constraint_fields();
     assert_eq!(fields.len(), 1);
@@ -582,17 +597,13 @@ fn test_is_constraint_and_constraint_fields() {
 
 #[test]
 fn test_struct_field_is_mut_found() {
-    let s = StructType {
-        name: "S".to_string(),
-        fields: vec![
-            ("a".to_string(), MonoType::Int(32)),
-            ("b".to_string(), MonoType::Bool),
+    let s = record_with(
+        "S",
+        vec![
+            ("a", MonoType::Int(32), true, false),
+            ("b", MonoType::Bool, false, false),
         ],
-        methods: HashMap::new(),
-        field_mutability: vec![true, false],
-        field_has_default: vec![false, false],
-        interfaces: vec![],
-    };
+    );
     assert_eq!(s.field_is_mut("a"), Some(true));
     assert_eq!(s.field_is_mut("b"), Some(false));
     assert_eq!(s.field_is_mut("nonexistent"), None);
@@ -660,16 +671,13 @@ fn test_canonical_name_uses_width_explicit_spellings() {
     assert_eq!(MonoType::Int(64).canonical_name(), Some("Int64"));
     assert_eq!(MonoType::Float(64).canonical_name(), Some("Float64"));
     assert_eq!(MonoType::Void.canonical_name(), Some("Void"));
-    // DateTime 是 std 层单向别名：只允许 from_builtin_name 接受，永不写出。
-    assert_eq!(
-        MonoType::from_builtin_name("DateTime"),
-        Some(MonoType::Int(64)),
-        "DateTime 仍是接受面内的临时别名"
-    );
+    // DateTime 不属内置名（P10 S11 / issue #513 已迁出）：接受面归零由
+    // test_from_builtin_name_rejects_datetime_after_s11_migration 守；
+    // 这里守「只入不出」的出向半边——Int(64) 的规范名恒为 Int64。
     assert_ne!(
         MonoType::Int(64).canonical_name(),
         Some("DateTime"),
-        "DateTime 不得作为回写名（只入不出）"
+        "DateTime 不得作为回写名（它不属内置名）"
     );
 }
 
@@ -727,21 +735,274 @@ fn test_mono_type_option_variant() {
     );
 }
 
-// ─── WBS 6.1.2 / SPEC §2.1：内置类型名表（15 名 + 临时兼容别名 DateTime）───
+// ─── WBS 6.1.2 / SPEC §2.1：内置类型名表（15 名；DateTime 已随 P10 S11 迁出）───
 
 #[test]
-fn test_from_builtin_name_keeps_datetime_as_compat_alias() {
-    // Arrange：DateTime 是 std 层语义别名（src/std/time.rs 的签名串仍在用），
-    // 迁出内置名表属 P10 S11（issue #513）
+fn test_from_builtin_name_rejects_datetime_after_s11_migration() {
+    // Arrange：DateTime 曾是 std 层临时兼容别名（#338 连带修复），已由
+    // P10 S11（issue #513）迁出——std.time 的签名串直接写 Int，解析表不再接受
     // Act
     let upper = MonoType::from_builtin_name("DateTime");
     let lower = MonoType::from_builtin_name("datetime");
 
-    // Assert：只保留大写形态，且归一为时间戳的运行时表示 Int(64)
+    // Assert：大写与小写都不得被解析表接受（加回即回退，T2.5 哨兵同判）
     assert_eq!(
-        upper,
-        Some(MonoType::Int(64)),
-        "DateTime 应归一为 Int(64)（#338 连带修复）"
+        upper, None,
+        "裸 DateTime 注解必须报未知类型（P10 S11 / issue #513 迁出后不得再静默收成 Int(64)）"
     );
-    assert_eq!(lower, None, "小写 datetime 已删除，不是兼容别名的形态");
+    assert_eq!(lower, None, "小写 datetime 已随 WBS 6.1.2 删除，仍不得接受");
+}
+
+// ===== 6.9.5-B.1a：StructType 表示收敛的契约判据（H1 + H10）=====
+
+/// 构造测试用记录：`(字段名, 类型, 是否 mut, 是否有默认值)`。
+fn record_with(
+    name: &str,
+    fields: Vec<(&str, MonoType, bool, bool)>,
+) -> StructType {
+    StructType {
+        name: name.to_string(),
+        fields: fields
+            .into_iter()
+            .map(|(n, t, is_mut, has_default)| {
+                crate::frontend::core::types::mono::StructFieldInfo {
+                    name: n.to_string(),
+                    ty: t,
+                    quantity: None,
+                    is_mut,
+                    has_default,
+                }
+            })
+            .collect(),
+        methods: HashMap::new(),
+        interfaces: vec![],
+    }
+}
+
+fn hash_of(st: &StructType) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    st.hash(&mut hasher);
+    hasher.finish()
+}
+
+/// R1（first-red）：Eq 与 Hash 契约必须一致。
+///
+/// 判据锚：`Eq`/`Hash` 的接口契约（`a == b ⇒ hash(a) == hash(b)`）。现状 Eq 只比
+/// name+fields、Hash 还含 mutability ⇒ 同 name/fields、不同 `is_mut` 的两次记录
+/// 相等却哈希不同，作为缓存键时行为不确定。
+#[test]
+fn test_struct_type_eq_hash_contract_ignores_mutability() {
+    // Arrange — 两个记录只在 is_mut 上不同
+    let immutable = record_with("Point", vec![("x", MonoType::Int(64), false, false)]);
+    let mutable = record_with("Point", vec![("x", MonoType::Int(64), true, false)]);
+
+    // Act
+    let equal = immutable == mutable;
+    let (hash_immutable, hash_mutable) = (hash_of(&immutable), hash_of(&mutable));
+
+    // Assert
+    assert!(
+        equal,
+        "既有 Eq 语义（零行为）：同 name/fields 的记录相等，B.1a 不改"
+    );
+    assert_eq!(
+        hash_immutable, hash_mutable,
+        "Eq 相等 ⇒ Hash 必须相等；Hash 含 mutability 时这里会不等"
+    );
+}
+
+/// R9：Eq 忽略 `has_default`（与旧行为一致），Hash 同口径。
+#[test]
+fn test_struct_type_eq_ignores_has_default() {
+    // Arrange — 两个记录只在 has_default 上不同
+    let no_default = record_with("P", vec![("x", MonoType::Int(64), false, false)]);
+    let with_default = record_with("P", vec![("x", MonoType::Int(64), false, true)]);
+
+    // Act
+    let equal = no_default == with_default;
+    let (hash_a, hash_b) = (hash_of(&no_default), hash_of(&with_default));
+
+    // Assert
+    assert!(equal, "旧 Eq 不比 has_default；B.1a 保持零行为");
+    assert_eq!(
+        hash_a, hash_b,
+        "Eq 相等 ⇒ Hash 必须相等（Hash 也不得含 has_default）"
+    );
+}
+
+/// R7：`StructType` 的 Debug 打印必须守住**旧形态**（`fields` 仍是 `[(名字, 类型)]`）。
+///
+/// 字段表改成 `Vec<StructFieldInfo>` 后，派生 Debug 会把每项打印成 `StructFieldInfo { .. }`；
+/// 打印边界一旦漂移，任何以 `{:?}` 渲染类型的快照/诊断都会跟着变。
+#[test]
+fn test_struct_type_debug_keeps_legacy_field_tuple_form() {
+    // Arrange
+    let st = record_with("Point", vec![("x", MonoType::Int(64), false, false)]);
+
+    // Act
+    let text = format!("{:?}", st);
+
+    // Assert
+    assert!(
+        text.contains("fields: [(\"x\", Int(64))]"),
+        "Debug 的字段段必须保持旧形态 `fields: [(名字, 类型)]`；实际: {text}"
+    );
+    assert!(
+        !text.contains("StructFieldInfo"),
+        "表示重构不得渗透到打印边界；实际: {text}"
+    );
+}
+
+// ===== 6.9.5-B.1a / R2 + R5：字段量词读数的表示与穿透 =====
+
+/// R2/R5：AST 的 `quantity` 必须原样穿到 `MonoType` 的字段记录（默认 `None`）。
+///
+/// 判据锚：量词读数是槽位分配的唯一输入（D62-I1）；若转换处丢掉它，
+/// B.2 的 witness 会在字面量之外自成一套账。
+#[test]
+fn test_struct_field_quantity_survives_ast_to_mono() {
+    // Arrange — 一个 data 字段（None）、一个 witness 字段（Some(Zero)）
+    let mut witness = ast::StructField::new("w".to_string(), false, name_ty("Int"));
+    witness.quantity = Some(crate::ast::Quantity::Zero);
+    let ast_ty = ast::Type::Struct {
+        body: vec![
+            ast::TypeBodyItem::Field(ast::StructField::new(
+                "v".to_string(),
+                false,
+                name_ty("Int"),
+            )),
+            ast::TypeBodyItem::Field(witness),
+        ],
+    };
+
+    // Act
+    let mono: MonoType = ast_ty.into();
+
+    // Assert
+    let MonoType::Struct(record) = mono else {
+        panic!("记录类型必须降级成 Struct");
+    };
+    assert_eq!(record.fields.len(), 2, "字段数必须保持");
+    assert_eq!(
+        record.fields[0].quantity, None,
+        "data 字段的量词读数必须是 None"
+    );
+    assert_eq!(
+        record.fields[1].quantity,
+        Some(crate::ast::Quantity::Zero),
+        "witness 字段的量词读数必须穿到单态表示（否则 B.2 没有输入）"
+    );
+}
+
+// ===== 6.9.5-B.1b / H2：运行期数据索引的唯一映射（T01/T02 的单元锚）=====
+
+/// 量词取自参数：`Some(Zero)` = witness，`None` = data。
+fn record_with_quantities(
+    name: &str,
+    fields: Vec<(&str, Option<ast::Quantity>)>,
+) -> StructType {
+    StructType {
+        name: name.to_string(),
+        fields: fields
+            .into_iter()
+            .map(
+                |(field_name, quantity)| crate::frontend::core::types::mono::StructFieldInfo {
+                    name: field_name.to_string(),
+                    ty: MonoType::Int(64),
+                    quantity,
+                    is_mut: false,
+                    has_default: false,
+                },
+            )
+            .collect(),
+        methods: HashMap::new(),
+        interfaces: vec![],
+    }
+}
+
+/// T02：声明序索引必须按「跳过 witness」换算成运行期数据索引。
+#[test]
+fn test_runtime_field_index_maps_data_positions_after_witness() {
+    // Arrange — `Box(v, w, z, q)`，w 与 q 是 witness
+    let record = record_with_quantities(
+        "Box",
+        vec![
+            ("v", None),
+            ("w", Some(ast::Quantity::Zero)),
+            ("z", None),
+            ("q", Some(ast::Quantity::Zero)),
+        ],
+    );
+    let quantities = || record.fields.iter().map(|field| field.quantity);
+
+    // Act + Assert — 每个声明序下标单独求值（判定函数是纯函数，无副作用）
+    let indices: Vec<Option<usize>> = (0..5)
+        .map(|index| crate::frontend::core::types::mono::runtime_field_index(quantities(), index))
+        .collect();
+
+    assert_eq!(
+        indices,
+        vec![Some(0), None, Some(1), None, None],
+        "witness 字段无运行期槽（None），其后的数据字段前移一位；越界也是 None"
+    );
+}
+
+/// T01：运行期数据槽个数 = 非 witness 字段数。
+#[test]
+fn test_runtime_field_count_excludes_witness() {
+    // Arrange
+    let record = record_with_quantities(
+        "Box",
+        vec![("v", None), ("w", Some(ast::Quantity::Zero)), ("z", None)],
+    );
+
+    // Act
+    let count = crate::frontend::core::types::mono::runtime_field_count(
+        record.fields.iter().map(|field| field.quantity),
+    );
+
+    // Assert
+    assert_eq!(count, 2, "三个声明字段中只有两个数据字段占运行期槽");
+}
+
+/// 记录是否 witness-bearing 只由「任一字段 q=0」回答（唯一读数）。
+#[test]
+fn test_struct_type_is_witness_bearing_reads_quantity() {
+    // Arrange
+    let witness =
+        record_with_quantities("Box", vec![("v", None), ("w", Some(ast::Quantity::Zero))]);
+    let data = record_with_quantities("Box", vec![("v", None), ("w", None)]);
+
+    // Act
+    let witness_bearing = crate::frontend::core::types::mono::is_witness_bearing(&witness.fields);
+    let data_bearing = crate::frontend::core::types::mono::is_witness_bearing(&data.fields);
+
+    // Assert
+    assert!(witness_bearing, "含 q=0 字段的记录必须是 witness-bearing");
+    assert!(!data_bearing, "全 None 的记录不得被误判为 witness-bearing");
+}
+
+/// T13：`quantity` 参与 Eq（witness 与 data 记录是不同类型），且 Eq/Hash 契约不回退。
+#[test]
+fn test_witness_record_eq_distinguishes_quantity_and_hash_stays_consistent() {
+    // Arrange — 只差一个字段的量词读数
+    let witness =
+        record_with_quantities("Box", vec![("v", None), ("w", Some(ast::Quantity::Zero))]);
+    let data = record_with_quantities("Box", vec![("v", None), ("w", None)]);
+    let witness_again =
+        record_with_quantities("Box", vec![("v", None), ("w", Some(ast::Quantity::Zero))]);
+
+    // Act
+    let differs = witness == data;
+    let same = witness == witness_again;
+    let hash_same = hash_of(&witness) == hash_of(&witness_again);
+
+    // Assert
+    assert!(
+        !differs,
+        "quantity 必须参与 Eq：witness 记录与 data 记录不得相等（缓存键必须区分）"
+    );
+    assert!(same, "同 name/fields/quantity 的记录必须相等");
+    assert!(hash_same, "Eq 相等 ⇒ Hash 必须相等（B.1a 的契约不得回退）");
 }

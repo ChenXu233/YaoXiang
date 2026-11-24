@@ -1,8 +1,8 @@
 //! 诊断渲染器
 
-use crate::util::span::SourceFile;
 use crate::util::diagnostic::Diagnostic;
 use crate::util::diagnostic::Severity;
+use crate::util::span::SourceFile;
 
 /// 渲染器配置
 #[derive(Debug, Clone)]

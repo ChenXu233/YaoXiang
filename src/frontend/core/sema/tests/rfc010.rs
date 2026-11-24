@@ -10,10 +10,10 @@
 //! - §3.5: 泛型类型 `List: (T: Type) -> Type = { ... }`
 //! - §3.6: 方法定义 `Point.draw: (self: Point, ...) -> ...`
 
-use crate::frontend::core::sema::probe::TypeLevelNamespace;
-use crate::frontend::core::sema::checker::TypeChecker;
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parse;
+use crate::frontend::core::sema::checker::TypeChecker;
+use crate::frontend::core::sema::probe::TypeLevelNamespace;
 
 /// RFC-010：类型 base 的 `Point.get_x = get_x` 源码（方法登记走类型空间）。
 const TYPE_BASE_SRC: &str = r#"

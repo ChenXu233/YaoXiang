@@ -12,29 +12,29 @@ use crate::frontend::core::lexer;
 use crate::frontend::core::parser::{self, Module};
 use crate::frontend::core::sema::checker::TypeChecker;
 use crate::frontend::core::sema::environment::MethodOverloadCandidates;
+use crate::frontend::core::sema::passes::dead_code::DeadCodeAnalyzer;
 use crate::frontend::core::sema::SemanticProbe;
 use crate::frontend::core::sema::TypeCheckResult;
-use crate::frontend::core::sema::passes::dead_code::DeadCodeAnalyzer;
 use crate::frontend::module::orchestrator::{self, OrchestratorError};
 use crate::frontend::module::registry::ModuleRegistry;
 use crate::frontend::module::roles::{self, FileRole};
 use crate::frontend::module::ModuleSource;
 use crate::frontend::pipeline::PipelineError;
 use crate::middle::ir::ir::{Instruction, Operand};
-use crate::middle::ir::ir_gen::AstToIrGenerator;
+use crate::middle::lower::AstToIrGenerator;
 use crate::middle::passes::mono::Monomorphizer;
 use crate::middle::ModuleIR;
 use crate::util::diagnostic::ErrorCodeDefinition;
 use crate::util::span::Span;
 
-use super::obligations::{Obligation, IR_GENERATION_DELIVERED};
 use super::helpers::{
     aggregate_instantiation_requests, allocate_global_slots, ast_has_main,
     collect_compilation_refs, collect_package_refs, declared_type_param_names,
     expand_dispatch_groups, generic_instantiation_map, init_topological_order, is_bin_role,
-    link_module_irs, merge_embedded_std_ir, resolved_method_marks, role_context, ImportCycle,
-    InitOrder, RoleContext,
+    link_module_irs, merge_embedded_std_ir, resolved_method_marks, role_context, run_post_mono_dce,
+    ImportCycle, InitOrder, RoleContext,
 };
+use super::obligations::{Obligation, IR_GENERATION_DELIVERED};
 use super::state::{DriverError, SkipReason, SkippedStage, State, UnitState};
 use super::{Aggregation, Driver, ProgramKind, Stage, Unit};
 
@@ -851,7 +851,7 @@ impl Driver {
 
     /// Check 形态（4.2.5，用户裁决）：IR 生成在 check 里是**检查**不是
     /// 产物——逐文件收集 IR 级错误（E3019 初始化环 / E1014-E1015 命名
-    /// 参数 / E3023 等，ir_gen 是这些码的唯一产生点），不中止。standalone
+    /// 参数 / E3023 等，lower 是这些码的唯一产生点），不中止。standalone
     /// check 旧路径（pipeline 全链）本就跑 IR 生成；项目 check 从此补上
     /// 这一层（02 不一致表第 11 行缺口）。typecheck 失败的单元无
     /// type_result，自然跳过（与 run 路径门控一致）。
@@ -1199,7 +1199,14 @@ impl Driver {
         let mut mono =
             Monomorphizer::with_max_depth(max_depth).with_max_instantiations(max_instantiations);
         match mono.monomorphize(ir, &type_result.instantiation_requests) {
-            Ok(mono_ir) => *ir = mono_ir,
+            Ok(mono_ir) => {
+                *ir = mono_ir;
+                // post-mono 序列点：mono 成功之后、codegen 之前（DCE 唯一接线处）。
+                if let Err(diag) = run_post_mono_dce(ir) {
+                    errors.push(PipelineError::TypeCheck(diag));
+                    failed_stages.push(Stage::Monomorphization);
+                }
+            }
             Err(diag) => {
                 errors.push(PipelineError::TypeCheck(diag));
                 failed_stages.push(Stage::Monomorphization);
@@ -1234,41 +1241,58 @@ impl Driver {
         };
         let mut mono =
             Monomorphizer::with_max_depth(max_depth).with_max_instantiations(max_instantiations);
-        match mono.monomorphize(&merged, &requests) {
-            Ok(mono_ir) => state.merged_ir = Some(mono_ir),
-            Err(diag) => {
-                // Check（3.4.8 ③）：mono 失败是**检查诊断**——进逐文件收集
-                // 通道（同 IrGeneration 的 Check 形态），不因它丢掉其余文件
-                // 已收的诊断；标记阶段失败使下游按拓扑跳过（本阶段之后无
-                // 下游，记录口径与 run 路径一致）。
-                //
-                // 归属入口文件：与 run 路径同口径（`OrchestratorError::
-                // TypeCheck{path}` 恒为入口）——mono 诊断是程序级事实，失败
-                // 请求的 span 不携带文件身份，无从逐文件归属。
-                if matches!(state.program.kind, ProgramKind::Check) {
-                    let entry_index = state
-                        .program
-                        .units
-                        .iter()
-                        .position(|u| u.path == state.entry_path)
-                        // 防御：发现成功必含入口单元；不可达时退回首单元
-                        //（归属偏差好过静默丢诊断）
-                        .unwrap_or(0);
-                    state.units[entry_index].check_diagnostics.push(diag);
-                    state.failed_stages.push(Stage::Monomorphization);
-                    return Ok(());
-                }
-                let message = diag.to_string();
-                state.fail_with(
-                    Stage::Monomorphization,
-                    OrchestratorError::TypeCheck {
-                        path: state.entry_path.display().to_string(),
-                        message,
-                        diagnostics: vec![diag],
-                    },
-                );
+        let mut mono_ir = match mono.monomorphize(&merged, &requests) {
+            Ok(mono_ir) => mono_ir,
+            Err(diag) => return self.fail_monomorphization(state, diag),
+        };
+        // post-mono 序列点：mono 成功之后、codegen 之前。Check 形态无产物且
+        // 诊断面必须不变 ⇒ 不跑 DCE；mono 被 ConfigDisabled/NoObligations 跳过时
+        // 不会到此处（早返），故「mono 跳过 ⇒ DCE 跳过」由序列位置保证。
+        if !matches!(state.program.kind, ProgramKind::Check) {
+            if let Err(diag) = run_post_mono_dce(&mut mono_ir) {
+                return self.fail_monomorphization(state, diag);
             }
         }
+        state.merged_ir = Some(mono_ir);
+        Ok(())
+    }
+
+    /// mono 之后失败的统一分流（mono 本身或 post-mono DCE）。
+    ///
+    /// Check（3.4.8 ③）：失败是**检查诊断**——进逐文件收集通道（同 IrGeneration
+    /// 的 Check 形态），不因它丢掉其余文件已收的诊断；标记阶段失败使下游按拓扑
+    /// 跳过（mono 之后无下游，记录口径与 run 路径一致）。MultiFile：走
+    /// orchestrator 故障通道（`OrchestratorError::TypeCheck`）。
+    ///
+    /// 归属入口文件：与 run 路径同口径（`TypeCheck{path}` 恒为入口）——mono/DCE
+    /// 诊断是程序级事实，失败请求的 span 不携带文件身份，无从逐文件归属。
+    fn fail_monomorphization(
+        &self,
+        state: &mut State,
+        diag: crate::util::diagnostic::Diagnostic,
+    ) -> Result<(), DriverError> {
+        if matches!(state.program.kind, ProgramKind::Check) {
+            let entry_index = state
+                .program
+                .units
+                .iter()
+                .position(|u| u.path == state.entry_path)
+                // 防御：发现成功必含入口单元；不可达时退回首单元
+                //（归属偏差好过静默丢诊断）
+                .unwrap_or(0);
+            state.units[entry_index].check_diagnostics.push(diag);
+            state.failed_stages.push(Stage::Monomorphization);
+            return Ok(());
+        }
+        let message = diag.to_string();
+        state.fail_with(
+            Stage::Monomorphization,
+            OrchestratorError::TypeCheck {
+                path: state.entry_path.display().to_string(),
+                message,
+                diagnostics: vec![diag],
+            },
+        );
         Ok(())
     }
 
@@ -1523,7 +1547,7 @@ impl Driver {
         // Monomorphization 臂消费。
         //
         // t10：请求名要对齐成 IR 调用指令里的名字，故这里连同单元 AST 与 registry
-        // 一起交给聚合函数——它用 ir_gen 的 `import_aliases_from`（`qualify_names`
+        // 一起交给聚合函数——它用 `lower/module_ir.rs` 的 `import_aliases_from`（`qualify_names`
         // 改写调用名用的同一实现）现场取别名表，驱动侧不另建表。
         {
             let unit_irs: Vec<Option<ModuleIR>> =

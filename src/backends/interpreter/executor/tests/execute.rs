@@ -5,11 +5,11 @@
 //! - 借用令牌（ZST）的拷贝、释放及边界行为
 //! - #299 §2: NewArray 定长数组指令——分配、Void 占位、字节码编解码往返
 
-use crate::backends::Executor;
 use crate::backends::common::RuntimeValue;
-use crate::middle::bytecode::{BytecodeFunction, BytecodeInstr, Reg, ConstValue};
-use std::collections::HashMap;
 use crate::backends::interpreter::executor::Interpreter;
+use crate::backends::Executor;
+use crate::middle::bytecode::{BytecodeFunction, BytecodeInstr, ConstValue, Reg};
+use std::collections::HashMap;
 
 fn make_function(instrs: Vec<BytecodeInstr>) -> BytecodeFunction {
     BytecodeFunction {
@@ -96,7 +96,7 @@ fn assert_new_array_decoded(func: &BytecodeFunction) {
 ///
 /// `main` 的字节码依次：创建两个闭包 → Spawn 并发执行 → 两结果相加 → 返回。
 fn spawn_two_tasks_module() -> crate::middle::bytecode::BytecodeModule {
-    use crate::middle::bytecode::{BytecodeModule, BytecodeFunction, BytecodeInstr};
+    use crate::middle::bytecode::{BytecodeFunction, BytecodeInstr, BytecodeModule};
 
     // task_a: 返回 Int(10)
     let task_a = BytecodeFunction {
