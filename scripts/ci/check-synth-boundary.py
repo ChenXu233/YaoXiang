@@ -255,38 +255,45 @@ def pattern_mask(tokens: list[Token], pairs: dict[int, int]) -> list[bool]:
     return mask
 
 
+USE_ROOT_PATTERN = r"(?:(?:crate|self)::|(?:super::)+)?ast|[A-Za-z_][A-Za-z0-9_]*"
+AST_ROOTS = {"ast", "crate::ast", "self::ast"}
+
+
+def is_ast_root(root: str) -> bool:
+    return root in AST_ROOTS or re.fullmatch(r"(?:super::)+ast", root) is not None
+
+
+def use_items(tail: str) -> list[str]:
+    """按组内层级拆分 use 项，丢弃尾随逗号产生的空项。"""
+    tail = tail.strip()
+    if not tail:
+        return []
+    if not (tail.startswith("{") and tail.endswith("}")):
+        return [tail]
+    inner = tail[1:-1]
+    parts: list[str] = []
+    start = 0
+    depth = 0
+    for index, char in enumerate(inner):
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+        elif char == "," and depth == 0:
+            parts.append(inner[start:index])
+            start = index + 1
+    parts.append(inner[start:])
+    return [item for part in parts for item in use_items(part) if item.strip()]
+
+
 def ast_names(code: str) -> tuple[dict[str, str], bool, set[str]]:
     """返回合法 Rust use 导入形成的 AST 名称、glob 状态与模块别名。"""
     names: dict[str, str] = {}
     glob_imported = False
-    ast_roots = {"ast", "crate::ast", "self::ast", "super::ast"}
-
-    def use_items(tail: str) -> list[str]:
-        """按组内层级拆分 use 项，丢弃尾随逗号产生的空项。"""
-        tail = tail.strip()
-        if not tail:
-            return []
-        if not (tail.startswith("{") and tail.endswith("}")):
-            return [tail]
-        inner = tail[1:-1]
-        parts: list[str] = []
-        start = 0
-        depth = 0
-        for index, char in enumerate(inner):
-            if char == "{":
-                depth += 1
-            elif char == "}":
-                depth -= 1
-            elif char == "," and depth == 0:
-                parts.append(inner[start:index])
-                start = index + 1
-        parts.append(inner[start:])
-        return [item for part in parts for item in use_items(part) if item.strip()]
-
     use_groups = [
         (root, use_items(tail))
         for root, tail in re.findall(
-            r"\buse\s+((?:(?:crate|self|super)::)?ast|[A-Za-z_][A-Za-z0-9_]*)::(.*?);",
+            rf"\buse\s+({USE_ROOT_PATTERN})::(.*?);",
             code,
             flags=re.DOTALL,
         )
@@ -294,13 +301,11 @@ def ast_names(code: str) -> tuple[dict[str, str], bool, set[str]]:
     module_targets = {
         alias: root
         for root, alias in re.findall(
-            r"\buse\s+((?:(?:crate|self|super)::)?ast|[A-Za-z_][A-Za-z0-9_]*)\s+as\s+([A-Za-z_][A-Za-z0-9_]*)\s*;",
+            rf"\buse\s+({USE_ROOT_PATTERN})\s+as\s+([A-Za-z_][A-Za-z0-9_]*)\s*;",
             code,
         )
     }
     for root, items in use_groups:
-        if root not in ast_roots:
-            continue
         for item in items:
             self_alias = re.fullmatch(r"self\s+as\s+([A-Za-z_][A-Za-z0-9_]*)", item)
             if self_alias:
@@ -310,14 +315,14 @@ def ast_names(code: str) -> tuple[dict[str, str], bool, set[str]]:
     while True:
         changed = False
         for alias, root in module_targets.items():
-            if alias not in modules and (root in ast_roots or root in modules):
+            if alias not in modules and (is_ast_root(root) or root in modules):
                 modules.add(alias)
                 changed = True
         if not changed:
             break
 
     for root, items in use_groups:
-        if root not in ast_roots and root not in modules:
+        if not is_ast_root(root) and root not in modules:
             continue
         for item in items:
             if item == "*":
@@ -341,7 +346,7 @@ def ast_names(code: str) -> tuple[dict[str, str], bool, set[str]]:
         changed = False
         for alias, target in alias_targets.items():
             canonical = None
-            qualified = re.fullmatch(r"(?:(?:crate|self|super)::)?ast::(Expr|Stmt|Type)", target)
+            qualified = re.fullmatch(r"(?:(?:crate|self)::|(?:super::)+)?ast::(Expr|Stmt|Type)", target)
             aliased = re.fullmatch(r"([A-Za-z_][A-Za-z0-9_]*)::(Expr|Stmt|Type)", target)
             if qualified:
                 canonical = qualified.group(1)
@@ -357,6 +362,48 @@ def ast_names(code: str) -> tuple[dict[str, str], bool, set[str]]:
         if not changed:
             break
     return names, glob_imported, modules
+
+
+def find_ast_reexports(source: str) -> list[tuple[int, str]]:
+    """禁止扫描面重导出 AST 节点，保证单文件名字解析封闭。"""
+    code = sanitize(source)
+    tokens = tokenize(code)
+    tests = test_item_ranges(code, tokens)
+    _, _, modules = ast_names(code)
+    findings: list[tuple[int, str]] = []
+    for match in re.finditer(
+        r"\bpub(?:\s*\([^)]*\))?\s+use\s+([^;]+);", code, flags=re.DOTALL
+    ):
+        if any(start <= match.start() < end for start, end in tests):
+            continue
+        statement = match.group(1).strip()
+        module = re.fullmatch(rf"({USE_ROOT_PATTERN})", statement)
+        direct = re.fullmatch(
+            rf"({USE_ROOT_PATTERN})\s+as\s+[A-Za-z_][A-Za-z0-9_]*", statement
+        )
+        if module:
+            root = module.group(1)
+            relevant = True
+        elif direct:
+            root = direct.group(1)
+            relevant = True
+        else:
+            path = re.fullmatch(rf"({USE_ROOT_PATTERN})::(.*)", statement, flags=re.DOTALL)
+            if not path:
+                continue
+            root, tail = path.groups()
+            relevant = any(
+                item == "*"
+                or re.fullmatch(r"self(?:\s+as\s+[A-Za-z_][A-Za-z0-9_]*)?", item)
+                or re.fullmatch(
+                    r"(Expr|Stmt|Type)(?:\s+as\s+[A-Za-z_][A-Za-z0-9_]*)?", item
+                )
+                for item in use_items(tail)
+            )
+        if relevant and (is_ast_root(root) or root in modules):
+            line = source.count("\n", 0, match.start()) + 1
+            findings.append((line, "pub use AST 节点重导出会破坏单文件闭包"))
+    return findings
 
 
 def find_constructions(path: Path, source: str) -> list[tuple[int, str]]:
@@ -436,6 +483,8 @@ def scan(root: Path) -> tuple[int, list[str]]:
         source = io.open(path, "r", encoding="utf-8").read()
         for line, description in find_constructions(path, source):
             violations.append(f"{relative}:{line}: {description}（只允许 {SYNTH_FILE}）")
+        for line, description in find_ast_reexports(source):
+            violations.append(f"{relative}:{line}: {description}")
     return len(files), violations
 
 
@@ -462,6 +511,7 @@ fn queries(expr: &Expr, stmt: &Stmt, ty: &Type) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    pub use crate::ast::Expr as TestExpr;
     fn fixture() -> Expr { Expr::Var("test".into(), Span::dummy()) }
 }
 '''
@@ -558,6 +608,20 @@ fn f(expr: &a::Expr) {
     let query = a::Expr::extract_binding_positions(expr);
 }
 '''
+    transitive_lines = ["use crate::ast as a0;"]
+    for index in range(1, 17):
+        if index % 2:
+            transitive_lines.append(f"use a{index - 1} as a{index};")
+        else:
+            transitive_lines.append(f"use a{index - 1}::{{self as a{index}}};")
+    transitive_lines.extend(
+        ["type F0 = a16::Expr;", "type F1 = F0;", "type F = F1;", "fn f() {"]
+    )
+    transitive_construction_line = len(transitive_lines) + 1
+    transitive_lines.extend(
+        ['    let hidden = F::Var("hidden".into(), span);', "}"]
+    )
+    transitive_source = "\n".join(transitive_lines) + "\n"
     alias_import_matrix = {
         "mixed_self_as_rename": ('''use crate::ast::{self as a, Expr as E};
 fn f(expr: &E) {
@@ -637,6 +701,36 @@ fn f() {
     let made = E::Var("x".into(), span);
 }
 ''', [6]),
+        "alias_self": ('''use crate::ast as a;
+use a::{self as b};
+type F = b::Expr;
+fn f() {
+    let hidden = F::Var("hidden".into(), span);
+}
+''', [5]),
+        "alias_self_mixed": ('''use crate::ast as a;
+use a::{self as b, Expr as E};
+fn f(expr: &E) {
+    let direct = E::Var("direct".into(), span);
+    let hidden = b::Stmt { kind, span, plan_id };
+    if let b::Stmt { .. } = &hidden {}
+    let query = b::Expr::extract_binding_positions(expr);
+}
+''', [4, 5]),
+        "alias_self_glob_nested_trailing": ('''use crate::ast as a;
+use a::{self as b, {Expr}, *,};
+type F = b::Stmt;
+fn f() {
+    let direct = Expr::Var("direct".into(), span);
+    let hidden = F { kind, span, plan_id };
+}
+''', [5, 6]),
+        "relative_super_chain": ('''use super::super::ast::Expr as E;
+fn f() {
+    let made = E::Var("x".into(), span);
+}
+''', [3]),
+        "transitive_alias_closure": (transitive_source, [transitive_construction_line]),
     }
     bare_type_alias = 'use crate::ast::Expr;\ntype E = Expr;\nfn f() { let made = E::Var("x".into(), span); }'
     chained_type_alias = 'use crate::ast::Expr;\ntype First = Expr;\ntype E = First;\nfn f() { let made = E::Var("x".into(), span); }'
@@ -717,6 +811,27 @@ fn f() {
         failures.append(f"真构造未全部判红：observed={sorted(observed_files)}")
     if unexpected:
         failures.append(f"非构造/允许面误报：{unexpected}")
+    reexport_control = "\n".join(
+        [
+            "pub use crate::ast::Expr as PublicExpr;",
+            "pub use crate::ast::*;",
+            "pub use crate::ast::{self as a, Stmt as S};",
+            "use crate::ast::Type;",
+            "pub use other::Expr;",
+            "pub use crate::ast as a;",
+            "pub(crate) use crate::ast::Type;",
+            "pub use crate::ast;",
+            "pub use other;",
+        ]
+    )
+    observed_reexports = [
+        line for line, _ in find_ast_reexports(reexport_control)
+    ]
+    if observed_reexports != [1, 2, 3, 6, 7, 8]:
+        failures.append(
+            f"AST 重导出封闭规则错误：expected=[1, 2, 3, 6, 7, 8], "
+            f"observed={observed_reexports}"
+        )
     expected_alias_lines = {
         "src/middle/lower/module_alias_type_expr.rs": [4],
         "src/middle/lower/module_alias_type_stmt.rs": [5, 6],
@@ -734,7 +849,7 @@ fn f() {
         observed_lines = [
             int(item.split(":", 2)[1])
             for item in violations
-            if item.split(":", 1)[0] == relative
+            if item.split(":", 1)[0] == relative and "重导出" not in item
         ]
         if observed_lines != expected_lines:
             failures.append(
@@ -746,7 +861,8 @@ fn f() {
             print(f"SELFTEST FAIL: {failure}", file=sys.stderr)
         return 1
     print("check-synth-boundary selftest: PASS")
-    print(f"  真构造判红：{len(forbidden)} 处，覆盖 middle/sema/backends/std")
+    construction_count = sum("重导出" not in item for item in forbidden)
+    print(f"  真构造判红：{construction_count} 处，覆盖 middle/sema/backends/std")
     print("  非构造零误报：match/if-let/while-let/let-else/matches!/查询/注释/字符串/cfg(test)/tests 路径")
     print(f"  唯一允许文件：{SYNTH_FILE}")
     return 0
