@@ -256,13 +256,27 @@ def pattern_mask(tokens: list[Token], pairs: dict[int, int]) -> list[bool]:
 
 
 def ast_names(code: str) -> tuple[dict[str, str], bool, set[str]]:
-    """返回 AST 裸名/直接类型别名、glob 状态与模块别名。"""
+    """返回 AST 裸名/再导入/类型别名、glob 状态与模块别名。"""
     names: dict[str, str] = {}
     glob_imported = False
+    modules = set(
+        re.findall(r"\buse\s+(?:crate::)?ast\s+as\s+([A-Za-z_][A-Za-z0-9_]*)\s*;", code)
+    )
+    modules.update(
+        re.findall(
+            r"\buse\s+(?:crate::)?ast::\{\s*self\s+as\s+([A-Za-z_][A-Za-z0-9_]*)\s*\}\s*;",
+            code,
+        )
+    )
     for match in re.finditer(
-        r"\buse\s+(?:crate::)?ast::(.*?);", code, flags=re.DOTALL
+        r"\buse\s+((?:crate::)?ast|[A-Za-z_][A-Za-z0-9_]*)::(.*?);",
+        code,
+        flags=re.DOTALL,
     ):
-        tail = match.group(1).strip()
+        root, tail = match.groups()
+        if root not in ("ast", "crate::ast") and root not in modules:
+            continue
+        tail = tail.strip()
         items = tail[1:-1] if tail.startswith("{") and tail.endswith("}") else tail
         for item in items.split(","):
             item = item.strip()
@@ -282,14 +296,17 @@ def ast_names(code: str) -> tuple[dict[str, str], bool, set[str]]:
         alias, target = match.groups()
         alias_targets[alias] = target
 
-    # 直接、裸名与链式别名按固定点展开；非 AST 的同名类型不会被收录。
+    # 直接、模块别名、裸名与链式别名按固定点展开；非 AST 的同名类型不会被收录。
     while True:
         changed = False
         for alias, target in alias_targets.items():
             canonical = None
             qualified = re.fullmatch(r"(?:crate::)?ast::(Expr|Stmt|Type)", target)
+            aliased = re.fullmatch(r"([A-Za-z_][A-Za-z0-9_]*)::(Expr|Stmt|Type)", target)
             if qualified:
                 canonical = qualified.group(1)
+            elif aliased and aliased.group(1) in modules:
+                canonical = aliased.group(2)
             elif target in CANONICAL and (target in names or glob_imported):
                 canonical = target
             elif target in names:
@@ -299,9 +316,6 @@ def ast_names(code: str) -> tuple[dict[str, str], bool, set[str]]:
                 changed = True
         if not changed:
             break
-    modules = set(
-        re.findall(r"\buse\s+(?:crate::)?ast\s+as\s+([A-Za-z_][A-Za-z0-9_]*)\s*;", code)
-    )
     return names, glob_imported, modules
 
 
@@ -464,6 +478,46 @@ fn control_arm(expr: &Expr, condition: bool) {
     }
 }
 '''
+    module_alias_type_expr = '''use crate::ast as a;
+type E = a::Expr;
+fn f(expr: &a::Expr) {
+    let made = E::Var("x".into(), span);
+    if let E::Var(_, _) = expr {}
+    let query = a::Expr::extract_binding_positions(expr);
+}
+'''
+    module_alias_type_stmt = '''use crate::ast as a;
+type E = a::Stmt;
+type T = a::Type;
+fn f(stmt: &a::Stmt) {
+    let statement = E { kind, span, plan_id };
+    let ty = T::Name { name, span };
+    if let E { .. } = stmt {}
+}
+'''
+    reimport_expr = '''use crate::ast as a;
+use a::Expr;
+fn f(expr: &Expr) {
+    let made = Expr::Var("x".into(), span);
+    if let Expr::Var(_, _) = expr {}
+    let query = Expr::extract_binding_positions(expr);
+}
+'''
+    reimport_expr_as = '''use crate::ast as a;
+use a::Expr as E;
+fn f(expr: &E) {
+    let made = E::Var("x".into(), span);
+    if let E::Var(_, _) = expr {}
+    let query = E::extract_binding_positions(expr);
+}
+'''
+    self_module_alias = '''use crate::ast::{self as a};
+fn f(expr: &a::Expr) {
+    let made = a::Expr::Var("x".into(), span);
+    if let a::Expr::Var(_, _) = expr {}
+    let query = a::Expr::extract_binding_positions(expr);
+}
+'''
     bare_type_alias = 'use crate::ast::Expr;\ntype E = Expr;\nfn f() { let made = E::Var("x".into(), span); }'
     chained_type_alias = 'use crate::ast::Expr;\ntype First = Expr;\ntype E = First;\nfn f() { let made = E::Var("x".into(), span); }'
     with tempfile.TemporaryDirectory(prefix="check-synth-boundary-") as temporary:
@@ -488,6 +542,11 @@ fn control_arm(expr: &Expr, condition: bool) {
             "src/middle/lower/qualified_constructor.rs": qualified_constructor,
             "src/frontend/core/sema/alias_patterns.rs": alias_negative,
             "src/middle/lower/if_else_arm.rs": if_else_arm,
+            "src/middle/lower/module_alias_type_expr.rs": module_alias_type_expr,
+            "src/middle/lower/module_alias_type_stmt.rs": module_alias_type_stmt,
+            "src/middle/lower/reimport_expr.rs": reimport_expr,
+            "src/middle/lower/reimport_expr_as.rs": reimport_expr_as,
+            "src/middle/lower/self_module_alias.rs": self_module_alias,
             "src/middle/lower/bare_type_alias.rs": bare_type_alias,
             "src/middle/lower/chained_type_alias.rs": chained_type_alias,
         }
@@ -509,6 +568,11 @@ fn control_arm(expr: &Expr, condition: bool) {
         "src/middle/lower/named_constructor.rs",
         "src/middle/lower/qualified_constructor.rs",
         "src/middle/lower/if_else_arm.rs",
+        "src/middle/lower/module_alias_type_expr.rs",
+        "src/middle/lower/module_alias_type_stmt.rs",
+        "src/middle/lower/reimport_expr.rs",
+        "src/middle/lower/reimport_expr_as.rs",
+        "src/middle/lower/self_module_alias.rs",
         "src/middle/lower/bare_type_alias.rs",
         "src/middle/lower/chained_type_alias.rs",
     }
@@ -524,6 +588,24 @@ fn control_arm(expr: &Expr, condition: bool) {
         failures.append(f"真构造未全部判红：observed={sorted(observed_files)}")
     if unexpected:
         failures.append(f"非构造/允许面误报：{unexpected}")
+    expected_alias_lines = {
+        "src/middle/lower/module_alias_type_expr.rs": [4],
+        "src/middle/lower/module_alias_type_stmt.rs": [5, 6],
+        "src/middle/lower/reimport_expr.rs": [4],
+        "src/middle/lower/reimport_expr_as.rs": [4],
+        "src/middle/lower/self_module_alias.rs": [3],
+    }
+    for relative, expected_lines in expected_alias_lines.items():
+        observed_lines = [
+            int(item.split(":", 2)[1])
+            for item in violations
+            if item.split(":", 1)[0] == relative
+        ]
+        if observed_lines != expected_lines:
+            failures.append(
+                f"合法别名构造判据错误：{relative} "
+                f"expected={expected_lines}, observed={observed_lines}"
+            )
     if failures:
         for failure in failures:
             print(f"SELFTEST FAIL: {failure}", file=sys.stderr)
