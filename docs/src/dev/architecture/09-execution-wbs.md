@@ -28,7 +28,7 @@
 | --- | --- | --- |
 | G1 | **P5 无任何施工步骤**。RFC 定义了 P5（checker 拆分）与验收（C1 zero-diff），但 7 篇文档中没有一节描述这个拆分怎么做；`01-routing.md` 的目录树里出现过 `annotations.rs` 一行，是全批唯一提及 | P5 步骤由本文补齐（见下） |
 | G2 | **`include!` 改造三处归属、零处落地**。RFC 列在 P4；`02` 的参见归给自己；`06` 的 S7 也列了。但 `02` 的改动清单（6 新增 + 20 修改）里**没有 `semantic_tokens.rs`** | 施工步骤归本文 §P5 5.1（前置 P4 完成）；RFC 与 06 的引用已同步指向这里 |
-| G3 | **CI 脚本三套并存清单**。`RFC` 列 4 个 `scripts/ci/*.py`；`01` 列 4 脚本 + 1 `cargo test`；`07` 另列 4 个检查（命名全不同）；`04` 还要 `check-synth-boundary.py`。去重后**至少 9 个新脚本，无统一清单**；`check-obligations.py` 在 P4 与 P9 双重归属 | 统一清单见本文 §P9（11 个脚本，各归属一个阶段），其他文档一律引用该表 |
+| G3 | **CI 脚本三套并存清单**。`RFC` 列 4 个 `scripts/ci/*.py`；`01` 列 4 脚本 + 1 `cargo test`；`07` 另列 4 个检查（命名全不同）；`04` 还列过 `check-synth-boundary.py`（该脚本经用户 2026-11-24 裁决丁取消）。去重后**至少 9 个新脚本，无统一清单**；`check-obligations.py` 在 P4 与 P9 双重归属 | 统一清单见本文 §P9（10 个在用脚本，各归属一个阶段），其他文档一律引用该表 |
 | G4 | **`precedence_inline.rs` 生死冲突**。`06` 把它算进「1005 行需复活」，同一份文档的 B6 又说它与 `Precedence` 枚举「必须同时删除」，`05` 主张删除 | **P1 复活、P8 随 Pratt 删除**（决议登记 C1）——先让 CI 重新获得覆盖，删除动作在 P8 的 8.6 随死阶梯一并发生 |
 | G5 | **L2 目标表述冲突**。RFC 与本目录索引写"文法驱动语法"，但 `05` 自评"**没有采用真正的文法驱动（LALRPOP），只做到了声明式查表**" | 已收敛为 **LALRPOP 完整文法驱动**（05 §语法：完整文法驱动），G7/G8 验收门禁按该承诺执行 |
 
@@ -532,7 +532,7 @@ P10 其余清理与状态修正             06 §S2/S3/S4/S5/S6
 | | 7b.2 `next_temp_reg` 改 `Operand::Value` | 7b.1 | 同上；**已完成（2026-11-22，实录见 [09a](./09a-wbs-history.md) §P7 7b.2 收口）** |
 | | 7b.3 `translator.rs` 加 `Phi` 臂 | 7b.1 | C4 + `.42` 往返测试；**已完成（2026-11-22，实录见 [09a](./09a-wbs-history.md) §P7 7b.3 收口）** |
 | | 7b.4 线性扫描分配器（u8/255 槽模型内） | 7b.3 + **7a.1**（拆出的删回滚同批） | 同上（+500~1000 行）；**已完成（2026-11-22，实录见 [09a](./09a-wbs-history.md) §P7 7b.4 收口）** |
-| 7c 隐式契约显式化 | 7c.1 `synth.rs` 边界 + 边界检查脚本；D59 **B 类**（嵌套闭包捕获错配、错误后捕获状态残留、spawn-for 匿名前缀槽位错配与双运行时 item/capture 错值；仅实际红态用例作修复证据，其余为回归覆盖） | 7b.4 | C4 + 新脚本入 CI |
+| 7c 隐式契约显式化 | 7c.1 `synth.rs` 边界（边界检查脚本经用户 2026-11-24 裁决丁取消）+ 显式 `SynthEnv` / `BindingLocation` + spawn-for 双运行时 env / args / upvalue 修复；D59 **B 类**（嵌套闭包捕获错配、错误后捕获状态残留、spawn-for 匿名前缀槽位错配与双运行时 item/capture 错值；仅实际红态用例作修复证据，其余为回归覆盖） | 7b.4 | C4（不含门禁脚本） |
 | | 7c.2 span 消费计数 | 7c.1 | 消费计数**零触发** |
 | | 7c.3 `method_def_ordinals` 只读化 | 7c.1 | 归属存疑（C7） |
 | 7d 最后做 | 7d.1 `generate_call_expr_ir` 拆为 `CallArgs` + 6 个 `emit_*` | 7c.x | C1 快照 zero-diff |
@@ -587,9 +587,9 @@ P10 其余清理与状态修正             06 §S2/S3/S4/S5/S6
 
 来源：[01](01-routing.md) §防反弹机制 + [08](08-maintenance-mechanism.md) §可机器检查的规则
 
-**这是全部 CI 脚本的唯一权威清单**（11 个脚本）。脚本在「引入阶段」接入 CI；标注 report-only 的在 P9 统一转硬（从"报告"改为"失败"）——存量违规（平行表示、消歧别名等）要等 P6/P8 才清零，提前转硬会让 CI 长期红、门禁被人工绕过，P9 转硬时门禁应当恰好全绿。P2 的 2.5、P4 的 4.3.2、P7 的 7c.1 均引用本表，不另立清单。
+**这是全部 CI 脚本的唯一权威清单**（10 个在用脚本；9.8 行保留为取消登记）。脚本在「引入阶段」接入 CI；标注 report-only 的在 P9 统一转硬（从"报告"改为"失败"）——存量违规（平行表示、消歧别名等）要等 P6/P8 才清零，提前转硬会让 CI 长期红、门禁被人工绕过，P9 转硬时门禁应当恰好全绿。P2 的 2.5、P4 的 4.3.2、P7 的 7c.1 均引用本表，不另立清单。
 
-- [ ] **9.1–9.11 十一个脚本按引入阶段接入，P9 统一转硬**（明细见下表）
+- [ ] **9.1–9.11 中十个在用脚本按引入阶段接入，P9 统一转硬**（9.8 行经用户 2026-11-24 裁决丁取消；明细见下表）
 - [x] **9.12 转硬前置：判据 C 接线点重定基与陈旧库存清账**（2 个三级任务，**2026-10-26 登记、同日收口**）：登记时标题写作「清存量同名多定义」是**误标**——`--strict` 的违规只来自判据 C（入口接线），A 判据（同名定义，181 条）report-only、永不使 `--strict` 红，收口时一并更正。根因：`STAGE_MARKERS` 是 2026-10-06 按 P4 之前「六条路径各自手工接线」的现状标定的，注释明写「P4 统一 Driver 后本表随库存一起删除」，但 P4 落地后词表与 19 条 `KNOWN_WIRING_SITES` 都没退休，于是判据把 Driver **自己的阶段表**（`Stage::DeadCodeAnalysis` 变体名、`slug` 字符串表、`state.rs` 依赖表）判成违规，与禁令三判据 C 的规则文本（「新增第 N 个入口**而非登记进声明式阶段表** → 违规」）正好相反。处置 = **重定基判据**而非补白名单。结果：`--strict` 违规 9 → 0、库存 19 → **7**、接线点实测 18 → **8**（7 库存 + 1 调度点）、A 段同名定义 181 → 180（删 `build_registry` 的同名条目所致）、`pub(crate)` 167 → 166。**归属阶段：P9；是否阻塞主线：否（阻塞 P9 转硬）。**
   - 9.12.1 重定基交付（四笔提交，逐条见 [09a](./09a-wbs-history.md) 的收口实录）：① **判据重定基**——LEX 并入 `Parsing`（`src/driver/stage.rs` 与 02 §目标设计 1 都写明 `Parsing` =「词法 + 语法分析（lex → parse）」）、DEADCODE/MONO 只认调用形态、`#[cfg(test)] mod` 以**花括号配对**求范围豁免、`dispatch` 单列 `DECLARED_DISPATCH_POINTS`、清 13 条陈旧库存（逐条给移出理由，按实测分三类：函数已删除 5 / 函数仍存但已无阶段原语 5 / 仅因 LEX 并入而降为单阶段 3）；② **臂形态改为派生**——12 个变体的 `self.<臂>(` 从 `dispatch` 的穷尽 match 派生（`Stage::ALL` 取变体，单一源）+ 三条 fail-loud 守护（变体源失效 / 找不到臂 / 臂无 `fn` 定义），并修掉「签名行计入被测体导致 `fn check_project(` 自匹配 TC」的虚报（`fn_body` 切掉签名段，实测「≥2 → <2 阶段」减少量为 0）；③ **覆盖面声明改为事实**——4 个变体（VendorConsistency / Discovery / Registry / RoleClassification）的阶段实现是 Driver 之外的共享原语，如实登记为已知盲区；④ **盲区段按性质分述**——活接线（`collect_package_refs`，`driver/arms.rs:626` 调用）与死代码候选（`build_registry`，零调用者）不能按同一处置。三轮独立复审均判 `needs_revision`（medium → medium → low，三个 finding 全部真修）、第四轮 **pass** 无 finding。**验收**：`python scripts/ci/check-fanout.py --strict` exit 0（违规 0 / 库存 6 / 调度点 1）✅
   - 9.12.2 判据 C 覆盖面扩张与 `build_registry` 清账（**已完成，2026-10-26 收口**；用户裁决 **D1-A 收录 + D2-A 删除**）：① **删除**零调用者链 `build_registry` / `build_registry_from`（原 `orchestrator.rs:379-396`）与随之失去唯一调用者的 `discover`（原 `:416-418`），`DiscoveredFile` / `Discovery` / `extract_module_info` / `parse_file` 全部保留；`build_registry` 因 `src/lib.rs:27 pub mod frontend` → `frontend/module/mod.rs:20 pub mod orchestrator` 属 **lib 目标公开项**，删除前已按对外 API 面变更单独裁决。② **收录**删除后仍存在的 Driver 外阶段原语：VendorConsistency ← `ensure_vendor_consistency`、Discovery ← `discover_with_used`、RoleClassification ← `roles::classify`（收紧为限定形态——裸名会误伤其它模块同名助手，实测构造例可复现）、Registry ← `extract_module_info`（不用裸 `.register(`，仓内多处同名）。③ 新暴露**恰一处**：`collect_package_refs`（`driver/helpers.rs:1057`，活代码、`driver/arms.rs:626` 调用）登记为库存 **6 → 7**，接线点实测 7 → 8。④ 判据 docstring 的覆盖面声明改为事实：合并「6+6」旧划分为 **10+2**、补 R1–R3 可判定收录口径、删掉被表内 5 项证伪的「凡构造该阶段数据的函数就不收」，并修掉三处陈旧行号/未实测数字与两处失实注释（`orchestrator.rs:7` 模块头、`statements.rs:737` 引用已删函数）。行为中性：语料 356 行逐字节一致、216 快照零漂移、`cargo test --lib` 2855/0/2、`pub(crate)` 167 → 166（删 `discover` 的必然结果）。复审链：轮 1 `needs_revision`（1 medium + 2 low）→ 修复 → 轮 2 **pass**（用自造探针独立复现）；随后 F4/F5/F6/F8 清理轮 → 窄复审 **pass**（用 AST 逐语句比对确认判据无夹带改动）。**归属阶段：P9；是否阻塞主线：否。**
@@ -603,7 +603,7 @@ P10 其余清理与状态修正             06 §S2/S3/S4/S5/S6
 | 9.5 | `check-snapshot-drift.sh` | 快照有 diff 而提交信息无 `snapshot-update` 标记 | P2 | 同上 |
 | 9.6 | `check-ir-verifier.sh` | 全语料 `verify_loose` 非空 | P2 | 同上 |
 | 9.7 | `check-corpus-parity.py` | 语料差分非空（诊断 code+span 逐条比对，**无任何分组放宽**） | P2 | 同上 |
-| 9.8 | `check-synth-boundary.py` | `synth.rs` 之外出现 `ast::Expr` 构造 | P7 | 同上 |
+| 9.8 | `check-synth-boundary.py`（经用户 2026-11-24 裁决丁取消） | 不再执行；原判据为 `synth.rs` 之外出现 `ast::Expr` 构造，脚本与 CI job 已删除 | P7 | — |
 | 9.9 | `check-concepts.py` | 禁令一 A/B/C/D（平行表示、消歧别名、同义词表） | **P0**（report-only，P9 转硬） | 必须在未改动代码上报出 3 套运算符枚举 |
 | 9.10 | `check-fanout.py` | 禁令三 A/B/C | **P0** | 故意新增第 6 个入口式接线必须红 |
 | 9.11 | `check-classification.py` | PR 必填块「错误类型（A–F，按 RFC-039 D59）」标注：A/B/C 类须附红判据引用，D/E/F 类须附决议号或用户裁决 | **P4**（report-only，P9 转硬） | 故意漏标或错标一个 A 类改动必须红 |
@@ -679,7 +679,7 @@ P10 其余清理与状态修正             06 §S2/S3/S4/S5/S6
 ## 关键决策与理由
 
 - **P0 独立成阶段而非并入 P9**——门禁是"事后检查"，规程是"事前判断"。P9 的脚本无法阻止"该重构却打了补丁"，只有 D0–D4 的 review 清单能。
-- **P9 作为 CI 脚本的唯一权威清单**——原缺口 G3 的三套并存清单导致无法收口。本表合并后 11 个脚本各归属一个阶段，report-only 与转硬时点显式可查。
+- **P9 作为 CI 脚本的唯一权威清单**——原缺口 G3 的三套并存清单导致无法收口。本表合并后 10 个在用脚本各归属一个阶段（9.8 经用户 2026-11-24 裁决丁取消），report-only 与转硬时点显式可查。
 - **P3.5 收编 RFC-029g 而非留作"独立轨道、等重构后做"**——它的删除面与 P4/P5/P6/P7/P8 的重写面重合（RFC-039 D56）。留待重构后执行，等于在新文法、新 checker 布局与新 IR 上把同一批删除重做一遍；这与 7e 收编 `2315`/`2341`、S4 收编 RFC 状态修正是同一条教训。
 - **P5 的步骤由本文补齐而非并入 P4**——P4 已是最大单点风险，再叠加 checker 拆分会超出可回滚粒度。
 - **5.3.2 以"零调用方改动"为硬验收**——拆分必须能独立 revert。

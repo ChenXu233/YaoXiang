@@ -8605,3 +8605,11 @@ delete-recycle 变异实测 354/323 槽越界 ⇒ 本批分配器落地后才绿
 - 复审给出的三形态（`use a::{self as b}`、`use a::{self as b, Expr as E}`、`use a::{self as b, *}`）修复前均空命中或部分命中，修复后只报真实构造；既有 49 项矩阵保留并扩到 56 项。
 
 范围与同步：D22 判据不变——L3/L4 除 `middle/lower/synth.rs` 外禁止合成 AST；门禁只承诺合法 Rust，不可编译 token 文本不在保证范围。本次修复只改扫描器，未改 `src/`、RFC 或 en；04-ssa 的判据段已按本节同步传递闭包、封闭规则与承诺范围。
+
+## P7 7c.1 门禁取消（2026-11-24）
+
+用户 2026-11-24 裁决丁：取消 synth 边界自动门禁。删除 `scripts/ci/check-synth-boundary.py`（962 行）与 `.github/workflows/ci.yml` 的 `synth-boundary` job（`Synth AST Boundary (WBS 9.8)`，含 `Check L3/L4 AST synthesis boundary` 与 `Self-test construction vs pattern detection` 两步），CI job 数 8→7，其余 job 逐项不变；运行面（`scripts/`、`.github/`、`src/`、`tests/`、`AGENTS.md`）grep 脚本名与 job 名零残留。
+
+保留 D22 的 `synth.rs` 合成边界本身、显式 `SynthEnv` / `BindingLocation` 与 spawn-for 双运行时 env / args / upvalue 修复；产品代码与既有测试零改动，403 条语料等价结论继续成立。AST 合成边界自此由代码结构与 review 保证，不再有自动扫描判据。
+
+取消理由：启发式 token 扫描无法覆盖任意合法的 use / 别名 / 重导出形态——历次补口（模块别名、self-as、重命名链、类型别名、重导出封闭规则）后仍被 `pub type` 重导出绕过；维护成本超过收益。此前各小节记录的门禁发现、补口、闭包性测试与真实树 trial 是当时的实施证据，保留为历史；对应门禁已取消，不再作为现行承诺。

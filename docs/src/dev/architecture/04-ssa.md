@@ -309,7 +309,7 @@ pub struct ValueInfo {
 | **1c. 三处语句级回收判据** | **是（7b.4 已落地）** | 三处回收 + `generate_block_ir` 的 `result_reg.is_none()` 守卫 + `temp_floor` 簿记已删；槽位复用归 `src/middle/lower/regalloc.rs` 的线性扫描分配器（`frame_slots = named_base + max_live`） | C4：行为等价（403/403）+ 不变量 |
 | **2. `arg_regs` 语义重排** | **部分** | SSA 让"用错寄存器"变成"用错值 ID"且可被支配性检查抓住，但**重排逻辑本身仍在**。真正的消除靠函数拆分——6 个分支各自 `push`，`arg_regs` 所有权留在函数顶部 | 第一层支配性不变量（快照对此免疫） |
 | **3. span 键控失效** | **否** | SSA 完全不触及。见「span 键控的额外机制」 | 07 的 `test_release_plan_spans_consumed` |
-| **4. 隐式顺序依赖** | **否** | 见「`synth.rs` 边界」 | 需新增显式判据 |
+| **4. 隐式顺序依赖** | **否** | 见「`synth.rs` 边界」 | 由代码结构与 review 保证；原门禁脚本经用户 2026-11-24 裁决丁取消 |
 | `compile_pattern` 298 行 | 否 | 见「SSA 不会解决的」 | — |
 | `eval_const_expr` 191 行 | 否 | 见「SSA 不会解决的」 | — |
 | `Instruction` 75 变体 | 否（+1，已落地） | `Phi` 已由 7b.1a 引入；方案 A 下它是 IR-only 伪指令，不新增 opcode | — |
@@ -390,10 +390,7 @@ pub(super) fn synth_closure(
 - SpawnFromList 在 Embedded 与 Standard 共用 `env + [匿名 item]` 的 args 布局，并以同一份 env 注入 upvalues。匿名迭代值固定为 env[0]，命名捕获从匿名前缀后读取，形参从全部 env 之后起算。
 - 双运行时行为测试显式调用 main()，在 spawn-for 任务内分别断言无捕获 item 值与 item+外层捕获；无捕获形态同时覆盖 74febd1f 引入的回归恢复。IR 断言与真实执行分别记录，403 条既有语料零漂移不冒充该形态的行为覆盖。
 
-**判据**：`scripts/ci/check-synth-boundary.py` 扫描 01-routing 对应的 sema、proof、middle、backends 与 std 生产面，唯一合成例外是 `middle/lower/synth.rs`；仓库扫描与 `--selftest` 均接入 CI 的 WBS 9.8 门禁，自检证明 56 处真构造会红、非构造读取不误报。脚本以 token 上下文区分构造与 match / if let / let-else / matches! / 查询 / 注释 / 字符串 / 测试代码，识别模块别名、glob、直接 / 裸名 / 链式类型别名与 AST 唯一具名构造器 `Expr::call`；无逗号 block 臂体在块结束后复位，if/else block 臂体在 else 块结束后才复位。门禁只承诺合法 Rust，不可编译 token 文本（包括非块 else）不在保证范围。
-
-- **名字解析按 use 文法取传递闭包**：`ast_names` 对全部 use 组根登记 `self as` 别名，根可以是 `ast` / `crate::ast` / `self::ast` / `super::…::ast`，也可以是已登记的模块别名；`module_targets` 固定点（反复展开直至集合不再变化）由此展开任意长度的 `use a as b` 与 `use a::{self as b}` 重命名链，乱序声明同样收敛。glob 在同一解析器内登记为裸名来源；类型别名固定点接受模块别名限定的 `Expr` / `Stmt` / `Type`、裸名与链式别名。两段固定点串成同一条解析链，四类来源收敛到同一 AST 目标。合法 use 矩阵（crate:: / 相对路径、单名导入、as 重命名、glob、混合 / 嵌套大括号组与尾随逗号）与 16 级 as / self-as 交替链收敛到同一目标，selftest 按行断言只报真实构造。
-- **封闭规则：扫描面内不得 `pub use` 重导出 AST 节点类型**。`pub` / `pub(crate) use` 的 `ast::Expr` / `ast::Stmt` / `ast::Type`、`ast::*`、`ast as a`、`{self as a, …}` 与裸 `ast` 模块均违规；规则同样作用于 `synth.rs`（允许合成，不允许重导出），`#[cfg(test)]` 范围豁免。**理由**：扫描面内禁重导出后，任何文件的 AST 名字只能来自本文件的 use / type alias 或 `ast` 根，本地单文件解析才充分；重导出会让名字经第三方模块进入扫描面，定义链不在本文件内。当前生产树 318 个文件零命中；selftest 的 9 行重导出控制样本判红 6 行（`use crate::ast::Type;`、`pub use other::Expr;`、`pub use other;` 不判红）。
+**判据**：D22 的 AST 合成边界由代码结构保证——L3/L4 生产代码只在 `src/middle/lower/synth.rs` 中构造 `ast::Expr` / `ast::Stmt` / `ast::Type`，模式匹配、只读查询与测试夹具不属于合成；`synth.rs` 之外的合成点由 review 拒绝。原 `scripts/ci/check-synth-boundary.py` 与 CI 的 `synth-boundary` job 已按用户 2026-11-24 裁决丁删除，不再维护自动扫描门禁：启发式 token 扫描无法覆盖任意合法的 use / 别名 / 重导出形态（历次补口后仍被 `pub type` 重导出绕过），维护成本超过收益。
 
 D1/D2：`SynthEnv` 与 `BindingLocation` 都是本批新增的内部类型，不是既有类型复用。前者把生产端 env 操作数、命名项与槽位推导集中为一个显式参数；后者把原 `SymbolEntry.local_idx` 提升为可判别的 Local/Upvalue 位置。替代方案是继续传三份共享字段（无法阻止嵌套覆盖与错误残留），或只传 `Vec<Operand>`（无法表达匿名前缀与命名捕获的对应关系）；两者均因正确性理由否决。新概念不与既有 AST/消费台账同义，也不需要 import 别名或转换表。
 
@@ -536,7 +533,7 @@ self.release_plan_total = type_result.release_plan.drops.len();
 | 35 | `src/middle/core/bytecode.rs` | `2312` | `upvalue_count: 0` 修正 |
 | 36 | `src/backends/interpreter/executor/**` | — | **方案 A 下零改动** |
 | 37 | `src/middle/lower/regalloc.rs` | **新建** | 线性扫描分配器（**7b.4 已落地**：271 行；`allocate_value_slots(blocks, values, named_base, pinned, limit)`，返回 `value_slots` 与 `frame_slots = named_base + max_live`；越界返回 `Budget` 由 `finalize_code_body` 报 E3014） |
-| 38 | `scripts/ci/check-synth-boundary.py` | **新建** | `synth.rs` 边界哨兵检查 |
+| 38 | `scripts/ci/check-synth-boundary.py` | **取消** | 边界哨兵脚本经用户 2026-11-24 裁决丁取消，不新建 |
 
 ### 向后兼容性：`.42` 格式的版本号
 
@@ -560,7 +557,7 @@ self.release_plan_total = type_result.release_plan.drops.len();
 | --- | --- | --- | --- | --- |
 | **批 a** | 切断多次定义：删 3 处语句级回收 → 6 处 save/restore 换 RAII guard → 口径统一 | 8-10（先）→ 11-16 → 17-18 | 删除回收：**C4**（行为等价 + 第一层支配性不变量）。RAII 与口径统一属纯搬移：**C1** 快照 zero-diff | 逐项单 commit，`git revert` 即回滚 |
 | **批 b** | SSA 形态切换：`ir.rs` 结构变更 + 临时值改产 `Operand::Value`（机械替换）→ `translator.rs` 的 `Phi` 臂（方案 A）→ 线性扫描分配器。批内按 WBS 三级任务串行：7b.1a（`Operand` 变体收敛 + `Instruction::Phi` 引入，**已落地**）→ 7b.1b（`FunctionIR` / `BasicBlock` / 类型标注字段，**已落地**）→ 7b.2（`next_temp_reg` 改产 `Operand::Value`，**已落地**）→ 7b.3（`translator.rs` 的 `Phi` 臂 + `BasicBlock.successors` 填充，**已落地**）→ 7b.4（线性扫描分配器 + 删三处语句级回收，与 7a.1 同批，**已落地**） | 1-5、7 → 31-32 → 37 | **C4**：行为等价 + `verify_ssa` 全绿 + `.42` 往返测试 | `ir.rs` 变更**独占一个 commit**（类型变更波及全仓编译，不可增量回滚） |
-| **批 c** | 隐式契约显式化：`synth.rs` 边界 + 哨兵脚本 → span 消费计数 → `method_def_ordinals` 只读化 | 20-24、29、38 → 25 → 26 | **C4**：行为等价 + 新脚本纳入 CI；消费计数在新诊断上零触发（否则说明真存在失配） | 独立 commit |
+| **批 c** | 隐式契约显式化：`synth.rs` 边界 → span 消费计数 → `method_def_ordinals` 只读化（哨兵脚本经用户 2026-11-24 裁决丁取消） | 20-24、29 → 25 → 26 | **C4**：行为等价；消费计数在新诊断上零触发（否则说明真存在失配） | 独立 commit |
 | **批 d** | `generate_call_expr_ir` 拆分 + "补 0" 兜底断言化 | 27-28 | 纯搬移部分：**C1** 快照 zero-diff。断言化部分：**C4** 语料差分 + 第一层校验器 | 独立 commit |
 
 **批内顺序不可交换的三处依赖：**
