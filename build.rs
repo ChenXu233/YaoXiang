@@ -10,6 +10,8 @@ use std::process::Command;
 const Z3_VERSION: &str = "4.16.0";
 
 fn main() {
+    process_grammar_probe();
+
     // 重建触发面显式化：build.rs 只在这些路径与环境变量（及自身/Cargo.toml）变化时重跑。
     //
     // locales 用目录级声明——触发面必须 ⊇ 构建期校验的输入面（#458）：下文
@@ -202,6 +204,20 @@ fn main() {
 
     link_z3(&z3_dir);
     copy_shared_lib(&z3_dir);
+}
+
+/// 8.3 最小 LALRPOP 探针：有 grammar 输入时 build-time 生成，生成物不入库。
+///
+/// 无输入目录时提前返回；有输入时也只追加生成步骤，不绕过既有错误码、类型表
+/// 与 Z3 构建门禁。parser 生产入口不在这里接线。
+fn process_grammar_probe() {
+    let manifest = env::var("CARGO_MANIFEST_DIR").unwrap();
+    let grammar_dir = Path::new(&manifest).join("src/frontend/core/parser/grammar");
+    if !grammar_dir.exists() {
+        return;
+    }
+    println!("cargo:rerun-if-changed={}", grammar_dir.display());
+    lalrpop::process_root().expect("LALRPOP 探针文法生成失败");
 }
 
 fn link_z3(z3_dir: &Path) {
