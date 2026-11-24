@@ -8572,3 +8572,11 @@ delete-recycle 变异实测 354/323 槽越界 ⇒ 本批分配器落地后才绿
 用户明确批准 **A＋简化**：门禁只承诺合法 Rust，不为不可编译 token 文本继续维护启发式状态机。本次删除 `non_block_else` / `else_can_end` / `else_continues` 专用状态与分支，删除 `non_block_else_wildcard` / `non_block_else_call_pattern` / `non_block_else_adjacent` 三组 fixture 及其专用行断言，不新增后继 lookahead。不可编译文本的漏报或误报不属于本门禁的保证范围。
 
 保留 L3/L4 除 `middle/lower/synth.rs` 外禁止 AST 合成的 D22 判据，以及合法 Rust 的 block、if/else block、match/if let/while let/let-else/matches!、别名、具名构造器与真实 sema 构造正负控。选择理由是正确性与可读性：对可编译生产代码给出可核保证，不把局部 token 启发式表述为通用解析。
+
+### 合法 Rust 别名组合补口
+
+独立复审发现五类合法写法均被旧判据漏报：模块别名限定的类型目标 `type E = a::Expr`、同路径的 `Stmt` 结构构造、`use a::Expr`、`use a::Expr as E`，以及 `use crate::ast::{self as a}` 后的限定构造。五类修复前的 `find_constructions` 均为空，rustc 已验证这些写法合法。
+
+修复把模块别名收集提前到 use 路径与类型别名展开之前；同一 use 解析器接受模块别名根路径、单名导入与 as 重命名，类型别名固定点接受模块别名限定的 `Expr` / `Stmt` / `Type`。五组新增 fixture 对真实构造逐行断言，模式与查询保持零误报；selftest 总计 32 处真实构造，真实树 318 文件扫描通过。
+
+真实树以模块别名加类型别名注入合法构造：修复前门禁错误 PASS，修复后只报告注入的 `E::Var`。两次机械 trial 均 apply -R 成功且 CLEAN，随后分别重新 build；post-trial 扫描恢复 PASS，批次树释放并回收。完整 fast、IR 快照、403 条语料差分、静态门禁与生成器幂等通过，未修改 src、RFC 或 en。
