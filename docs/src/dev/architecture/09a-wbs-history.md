@@ -8588,3 +8588,20 @@ delete-recycle 变异实测 354/323 槽越界 ⇒ 本批分配器落地后才绿
 修复以递归组拆分取代整体正则匹配，逐项注册任意位置的 self 别名、混合/嵌套组与尾随逗号；模块目标表通过固定点解析 `use a as b` 和乱序长链。矩阵同时覆盖单名、as、glob、crate::/裸/self::/super:: 路径、pub use、模块别名类型目标与合法模式/查询负控。49 处真实构造均按行断言，嵌套组另经 rustc 编译验证。
 
 真实树 mixed self-as 控制修复前错误 PASS，修复后只报告注入的 `a::Stmt`。两次 trial 均机械还原、CLEAN 并分别重新 build，post 扫描与真实 318 文件检查通过。完整 fast、IR 快照、403 条语料差分、静态门禁和生成器幂等通过；本项只修改扫描器，文档在本实录中同步。
+
+### AST 名字解析传递闭包与重导出封闭规则
+
+第二轮独立复审的 F1（high）表明 `use crate::ast as a; use a::{self as b}; type F = b::Expr; F::Var`、`use a::{self as b, Expr as E}` 下的 `b::Stmt` 与 `use a::{self as b, *}` 三类合法写法仍被漏报；前两类经 rustc 编译 exit 0 验证。根因是 self-as 只对 `ast` 根登记，模块别名根被跳过，`b` 不进入模块目标表，后续 `b::Expr` / `b::Stmt` 与 `type F = b::Expr` 都不展开。此前多轮漏报均按具体形态补丁（模块别名限定目标、`use a::Expr` / `as E`、混合 self-as、重命名链），同根因换一种写法即复发。
+
+修复改为结构性闭合，不再按形态枚举。`ast_names` 对全部 use 组根登记 `self as` 别名，可达性由 `module_targets` 固定点判定（根为 `ast` 根或已登记模块别名）；固定点展开任意长度的 `use a as b` / `use a::{self as b}` 链，乱序声明同样收敛。glob 在同一解析器内登记为裸名来源；类型别名固定点接受模块别名限定的 `Expr` / `Stmt` / `Type`、裸名与链式别名。
+
+新增 `find_ast_reexports` 封闭规则：扫描面内禁止 `pub` / `pub(crate) use` 重导出 AST 节点类型与模块（`Expr` / `Stmt` / `Type`、`ast::*`、`ast as a`、`{self as a, …}`、裸 `ast`），规则同样作用于 `synth.rs`（允许合成、不允许重导出），`#[cfg(test)]` 范围豁免。理由：禁重导出后，扫描面内任何文件的 AST 名字只能来自本文件的 use / type alias 或 `ast` 根，单文件解析才充分；重导出会让名字经第三方模块进入扫描面，定义链无法本地闭合。
+
+测试与真实树证据：
+
+- `--selftest` 56 处真构造逐行断言，含 16 级 as / self-as 交替链、`type F0 = a16::Expr` 的链式展开、`use a::{self as b, Expr as E}`、`use a::{self as b, {Expr}, *,}`、`use b as c` 的乱序重命名链、`super::super::ast` 与既有矩阵；合法模式 / 查询 / 注释 / 字符串 / `cfg(test)` 零误报。重导出控制样本 9 行判红 6 行（`use crate::ast::Type;`、`pub use other::Expr;`、`pub use other;` 不判红）。
+- 当前树扫描 318 个文件零重导出命中；临时负控中普通文件与 `synth.rs` 的重导出均判红，`pub use other::Expr` 不判红。
+- 真实树 trial（冻结在上一轮文档提交 `:memo: docs(design): 同步合法 Rust 导入矩阵` 的顶端 revision）：注入 `use crate::ast as a; use a::{self as b}; type F = b::Expr; F::Var` 形态到查询文件。修复前旧扫描器 exit 0 / PASS（漏报）；修复后 exit 1，唯一命中即注入行。两次 trial 均 apply -R 成功且 CLEAN、blob 逐字节还原；init 后的初始 build 与两次 trial 后的重建分别为 8m42 / 4m02 / 3m59，post 扫描 318 文件 PASS；批次树 release 释放 1439.5 MB，收口 `status=[]`。
+- 复审给出的三形态（`use a::{self as b}`、`use a::{self as b, Expr as E}`、`use a::{self as b, *}`）修复前均空命中或部分命中，修复后只报真实构造；既有 49 项矩阵保留并扩到 56 项。
+
+范围与同步：D22 判据不变——L3/L4 除 `middle/lower/synth.rs` 外禁止合成 AST；门禁只承诺合法 Rust，不可编译 token 文本不在保证范围。本次修复只改扫描器，未改 `src/`、RFC 或 en；04-ssa 的判据段已按本节同步传递闭包、封闭规则与承诺范围。
