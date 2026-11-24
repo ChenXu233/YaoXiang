@@ -478,11 +478,12 @@ def scan(root: Path) -> tuple[int, list[str]]:
 
     violations: list[str] = []
     for relative, path in sorted(files.items()):
-        if relative == SYNTH_FILE or is_test_path(relative):
+        if is_test_path(relative):
             continue
         source = io.open(path, "r", encoding="utf-8").read()
-        for line, description in find_constructions(path, source):
-            violations.append(f"{relative}:{line}: {description}（只允许 {SYNTH_FILE}）")
+        if relative != SYNTH_FILE:
+            for line, description in find_constructions(path, source):
+                violations.append(f"{relative}:{line}: {description}（只允许 {SYNTH_FILE}）")
         for line, description in find_ast_reexports(source):
             violations.append(f"{relative}:{line}: {description}")
     return len(files), violations
