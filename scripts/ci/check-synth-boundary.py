@@ -256,30 +256,70 @@ def pattern_mask(tokens: list[Token], pairs: dict[int, int]) -> list[bool]:
 
 
 def ast_names(code: str) -> tuple[dict[str, str], bool, set[str]]:
-    """返回 AST 裸名/再导入/类型别名、glob 状态与模块别名。"""
+    """返回合法 Rust use 导入形成的 AST 名称、glob 状态与模块别名。"""
     names: dict[str, str] = {}
     glob_imported = False
-    modules = set(
-        re.findall(r"\buse\s+(?:crate::)?ast\s+as\s+([A-Za-z_][A-Za-z0-9_]*)\s*;", code)
-    )
-    modules.update(
-        re.findall(
-            r"\buse\s+(?:crate::)?ast::\{\s*self\s+as\s+([A-Za-z_][A-Za-z0-9_]*)\s*\}\s*;",
+    ast_roots = {"ast", "crate::ast", "self::ast", "super::ast"}
+
+    def use_items(tail: str) -> list[str]:
+        """按组内层级拆分 use 项，丢弃尾随逗号产生的空项。"""
+        tail = tail.strip()
+        if not tail:
+            return []
+        if not (tail.startswith("{") and tail.endswith("}")):
+            return [tail]
+        inner = tail[1:-1]
+        parts: list[str] = []
+        start = 0
+        depth = 0
+        for index, char in enumerate(inner):
+            if char == "{":
+                depth += 1
+            elif char == "}":
+                depth -= 1
+            elif char == "," and depth == 0:
+                parts.append(inner[start:index])
+                start = index + 1
+        parts.append(inner[start:])
+        return [item for part in parts for item in use_items(part) if item.strip()]
+
+    use_groups = [
+        (root, use_items(tail))
+        for root, tail in re.findall(
+            r"\buse\s+((?:(?:crate|self|super)::)?ast|[A-Za-z_][A-Za-z0-9_]*)::(.*?);",
+            code,
+            flags=re.DOTALL,
+        )
+    ]
+    module_targets = {
+        alias: root
+        for root, alias in re.findall(
+            r"\buse\s+((?:(?:crate|self|super)::)?ast|[A-Za-z_][A-Za-z0-9_]*)\s+as\s+([A-Za-z_][A-Za-z0-9_]*)\s*;",
             code,
         )
-    )
-    for match in re.finditer(
-        r"\buse\s+((?:crate::)?ast|[A-Za-z_][A-Za-z0-9_]*)::(.*?);",
-        code,
-        flags=re.DOTALL,
-    ):
-        root, tail = match.groups()
-        if root not in ("ast", "crate::ast") and root not in modules:
+    }
+    for root, items in use_groups:
+        if root not in ast_roots:
             continue
-        tail = tail.strip()
-        items = tail[1:-1] if tail.startswith("{") and tail.endswith("}") else tail
-        for item in items.split(","):
-            item = item.strip()
+        for item in items:
+            self_alias = re.fullmatch(r"self\s+as\s+([A-Za-z_][A-Za-z0-9_]*)", item)
+            if self_alias:
+                module_targets[self_alias.group(1)] = root
+
+    modules: set[str] = set()
+    while True:
+        changed = False
+        for alias, root in module_targets.items():
+            if alias not in modules and (root in ast_roots or root in modules):
+                modules.add(alias)
+                changed = True
+        if not changed:
+            break
+
+    for root, items in use_groups:
+        if root not in ast_roots and root not in modules:
+            continue
+        for item in items:
             if item == "*":
                 glob_imported = True
             imported = re.fullmatch(
@@ -301,7 +341,7 @@ def ast_names(code: str) -> tuple[dict[str, str], bool, set[str]]:
         changed = False
         for alias, target in alias_targets.items():
             canonical = None
-            qualified = re.fullmatch(r"(?:crate::)?ast::(Expr|Stmt|Type)", target)
+            qualified = re.fullmatch(r"(?:(?:crate|self|super)::)?ast::(Expr|Stmt|Type)", target)
             aliased = re.fullmatch(r"([A-Za-z_][A-Za-z0-9_]*)::(Expr|Stmt|Type)", target)
             if qualified:
                 canonical = qualified.group(1)
@@ -518,6 +558,86 @@ fn f(expr: &a::Expr) {
     let query = a::Expr::extract_binding_positions(expr);
 }
 '''
+    alias_import_matrix = {
+        "mixed_self_as_rename": ('''use crate::ast::{self as a, Expr as E};
+fn f(expr: &E) {
+    let direct = E::Var("direct".into(), span);
+    let hidden = a::Stmt { kind, span, plan_id };
+    if let a::Stmt { .. } = &hidden {}
+    let query = a::Expr::extract_binding_positions(expr);
+}
+''', [3, 4]),
+        "mixed_self_as_plain": ('''use crate::ast::{self as a, Expr};
+fn f(expr: &Expr) {
+    let direct = Expr::Var("direct".into(), span);
+    let hidden = a::Stmt { kind, span, plan_id };
+    if let a::Stmt { .. } = &hidden {}
+    let query = a::Expr::extract_binding_positions(expr);
+}
+''', [3, 4]),
+        "mixed_self_as_after_stmt": ('''use crate::ast::{Stmt, self as a};
+fn f(stmt: &Stmt, expr: &a::Expr) {
+    let direct = Stmt { kind, span, plan_id };
+    let hidden = a::Expr::Var("hidden".into(), span);
+    if let a::Expr::Var(_, _) = expr {}
+    let query = a::Expr::extract_binding_positions(expr);
+}
+''', [3, 4]),
+        "module_rename": ('''use crate::ast as a;
+use a as b;
+type E = b::Expr;
+fn f(expr: &E) {
+    let hidden = E::Var("hidden".into(), span);
+    if let E::Var(_, _) = expr {}
+    let query = a::Expr::extract_binding_positions(expr);
+}
+''', [5]),
+        "direct_as": ('''use crate::ast::Expr as E;
+fn f() {
+    let made = E::Var("x".into(), span);
+}
+''', [3]),
+        "trailing_comma": ('''use crate::ast::{self as a, Expr,};
+fn f() {
+    let made = a::Stmt { kind, span, plan_id };
+}
+''', [3]),
+        "nested_brace_group": ('''use crate::ast::{self as a, {Expr, Stmt as S}};
+fn f() {
+    let direct = Expr::Var("x".into(), span);
+    let statement = S { kind, span, plan_id };
+    let ty = a::Type::Name { name, span };
+}
+''', [3, 4, 5]),
+        "relative_bare": ('''use ast::Expr as E;
+fn f() {
+    let made = E::Var("x".into(), span);
+}
+''', [3]),
+        "relative_self": ('''use self::ast::Expr as E;
+fn f() {
+    let made = E::Var("x".into(), span);
+}
+''', [3]),
+        "relative_super": ('''use super::ast::Expr as E;
+fn f() {
+    let made = E::Var("x".into(), span);
+}
+''', [3]),
+        "pub_use": ('''pub use crate::ast::Expr as E;
+fn f() {
+    let made = E::Var("x".into(), span);
+}
+''', [3]),
+        "module_rename_chain": ('''use b as c;
+use a as b;
+use crate::ast as a;
+type E = c::Expr;
+fn f() {
+    let made = E::Var("x".into(), span);
+}
+''', [6]),
+    }
     bare_type_alias = 'use crate::ast::Expr;\ntype E = Expr;\nfn f() { let made = E::Var("x".into(), span); }'
     chained_type_alias = 'use crate::ast::Expr;\ntype First = Expr;\ntype E = First;\nfn f() { let made = E::Var("x".into(), span); }'
     with tempfile.TemporaryDirectory(prefix="check-synth-boundary-") as temporary:
@@ -550,6 +670,12 @@ fn f(expr: &a::Expr) {
             "src/middle/lower/bare_type_alias.rs": bare_type_alias,
             "src/middle/lower/chained_type_alias.rs": chained_type_alias,
         }
+        fixtures.update(
+            {
+                f"src/middle/lower/{name}.rs": source
+                for name, (source, _) in alias_import_matrix.items()
+            }
+        )
         for relative, source in fixtures.items():
             path = root / relative
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -576,6 +702,9 @@ fn f(expr: &a::Expr) {
         "src/middle/lower/bare_type_alias.rs",
         "src/middle/lower/chained_type_alias.rs",
     }
+    expected_files.update(
+        f"src/middle/lower/{name}.rs" for name in alias_import_matrix
+    )
     forbidden = [
         item for item in violations if item.split(":", 1)[0] in expected_files
     ]
@@ -595,6 +724,12 @@ fn f(expr: &a::Expr) {
         "src/middle/lower/reimport_expr_as.rs": [4],
         "src/middle/lower/self_module_alias.rs": [3],
     }
+    expected_alias_lines.update(
+        {
+            f"src/middle/lower/{name}.rs": lines
+            for name, (_, lines) in alias_import_matrix.items()
+        }
+    )
     for relative, expected_lines in expected_alias_lines.items():
         observed_lines = [
             int(item.split(":", 2)[1])
