@@ -15,6 +15,7 @@ use crate::frontend::core::sema::environment::MethodOverloadCandidates;
 use crate::frontend::core::sema::passes::dead_code::DeadCodeAnalyzer;
 use crate::frontend::core::sema::SemanticProbe;
 use crate::frontend::core::sema::TypeCheckResult;
+use crate::frontend::module::import_face::TypeCandidateProviders;
 use crate::frontend::module::orchestrator::{self, OrchestratorError};
 use crate::frontend::module::registry::ModuleRegistry;
 use crate::frontend::module::roles::{self, FileRole};
@@ -1750,62 +1751,18 @@ fn visible_method_overloads(
     own_module_key: &str,
     registry: &ModuleRegistry,
 ) -> Vec<(String, MethodOverloadCandidates)> {
-    let names = DeadCodeAnalyzer::collect_module_names(ast);
-    // 裸类型名 → 带它进作用域的模块键，按**提供方优先级**分两级登记
-    // （4.9.9 修复轮 2 / F1）：裸名提供方（`local == target`）与别名提供方分开存，
-    // 冲突（同名字被 ≥2 模块带进作用域）也**分级判**——别名的存在不影响裸名侧，
-    // 裸名侧的多模块冲突也不会被别名「救回」（见文档③）。
-    let mut bare: HashMap<String, String> = HashMap::new();
-    let mut aliased: HashMap<String, String> = HashMap::new();
-    let mut conflicted_bare: HashSet<String> = HashSet::new();
-    let mut conflicted_alias: HashSet<String> = HashSet::new();
-    for (local, target, use_path) in &names.imported {
-        // use 路径必须命中注册表模块、且该模块确实导出这个名字（未解析导入 /
-        // 子模块名都不构成裸类型名）；查法与 checker 的 use 处理同表
-        let Some(exports) = registry.get_exports(use_path) else {
-            continue;
-        };
-        if !exports.contains_key(target) {
-            continue;
-        }
-        // 本地别名不参与候选键：键的前缀是接收者的已解析类型名 = 定义侧名字
-        // （见本函数文档②）。这里只决定**提供方优先级**：裸名提供方优先。
-        let (table, conflicted) = if local == target {
-            (&mut bare, &mut conflicted_bare)
-        } else {
-            (&mut aliased, &mut conflicted_alias)
-        };
-        match table.get(target) {
-            Some(existing) if existing != use_path => {
-                conflicted.insert(target.clone()); // ③ 同级同名被多模块带进作用域
-            }
-            Some(_) => {}
-            None => {
-                table.insert(target.clone(), use_path.clone());
-            }
-        }
-    }
+    // 提供方表是**共享单点**（`frontend::module::import_face::TypeCandidateProviders`）：
+    // 候选注入面（本函数）与消费侧同源判据（`middle::lower::query`）读同一份表，
+    // 不再各自演化 provide-priority 规则。规则说明见该类型的文档。
+    let providers = TypeCandidateProviders::scan(ast, registry);
     let own_keys: HashSet<String> = registry
         .get(own_module_key)
         .map(|module| module.method_overloads.keys().cloned().collect())
         .unwrap_or_default();
     // 名字 ← 提供模块**逐对**取候选：只有「键的提供模块 == 该类型名前缀的提供模块」
     // 的候选组才进决议表（跨对组合会把别的模块的同名类型候选塞进来 ⇒ 2 候选 ⇒ E1107）。
-    // 名字升序 ⇒ 合并顺序确定（不同前缀的键互不相干）。
-    // 提供方优先级：裸名提供方优先；别名提供方只补「裸名侧完全没有该名字」的位。
-    // 裸名侧有冲突（多模块同名）⇒ 该名字整名跳过，别名也不得补位（源程序名字层
-    // 已歧义）。
-    let bare_names: HashSet<String> = bare.keys().cloned().collect();
-    let mut pairs: Vec<(String, String)> = bare
-        .into_iter()
-        .filter(|(name, _)| !conflicted_bare.contains(name))
-        .collect();
-    pairs.extend(
-        aliased
-            .into_iter()
-            .filter(|(name, _)| !bare_names.contains(name) && !conflicted_alias.contains(name)),
-    );
-    pairs.sort();
+    // 名字升序 ⇒ 合并顺序确定（不同前缀的键互不相干）；提供方优先级在共享表里。
+    let pairs = providers.injected_pairs();
     let mut merged: Vec<(String, MethodOverloadCandidates)> = Vec::new();
     for (name, module) in pairs {
         for (key, group) in registry.merge_method_overloads(&[module]) {

@@ -339,7 +339,9 @@ impl AstToIrGenerator {
         &self,
         name: &str,
     ) -> bool {
-        self.is_closure_fn_name(name) || self.declared_fn_names.contains(name)
+        self.is_closure_fn_name(name)
+            || self.declared_fn_names.contains(name)
+            || self.is_declared_nested_fn(name)
     }
     /// 生成 Call 表达式 IR
     ///
@@ -422,33 +424,26 @@ impl AstToIrGenerator {
         // 检查是否是方法调用：func 是 FieldAccess
         // 检查是否是方法调用：func 是 FieldAccess
         if let Expr::FieldAccess { expr, field, .. } = func {
-            // **名字层歧义的消费侧判据**（WBS 4.9.9 修复轮 3 / 复审轮；裁决口径 b）：
-            // 本单元导入面里同一个定义侧类型名由 **≥2 个模块**提供时：
-            //   - **命名实参**一律响亮拒绝（共享判据的空表出口 = 既有 E1014）：
-            //     typecheck 用注入的名表核对名字、IR 却按接收者自己的名表重排实参，
-            //     形参名相同、类型不同时就是静默错值（实测别名侧 `x.bump(n = 2.0)`
-            //     打出 200.0）；
-            //   - **位置实参**只在各提供方的候选签名**完全一致**时允许（4.9.8 的派发
-            //     归因：IR 按 `method_dispatch_name` 落到接收者所属单元）；签名不一致
-            //     时同样响亮拒绝（既有 E1107「N 个候选匹配，无法区分」）——实测三例
-            //     静默错值：形参类型不同 ⇒ 111 而非 2.0、元数不同 ⇒ 300 而非 7、
-            //     返回类型不同 ⇒ 200 而非 2.0（判据：`ambiguous_method_signature_conflict`）。
-            //   位置的签名比对是**保守近似**（只比候选签名，不比实现），残余风险登记
-            //   在 4.9.10 行。
-            if let Some((leaf, providers)) = self.receiver_type_provider_count(expr) {
-                if providers >= 2 {
-                    let key = format!("{leaf}.{field}");
-                    if !named_args.is_empty() {
+            // **名字层歧义的消费侧判据**（WBS 4.9.9 修复轮 4）：候选注入面选用的
+            // 提供模块（winner）必须与接收者所属模块（owner）同源。
+            // - owner == winner：typecheck 与 IR 用同一模块的候选 ⇒ 放行（裸名侧
+            //   位置实参属此，实测 2.0 + 2.0 = 4.0 的形态此前被全局签名比较误拒）；
+            // - owner != winner：仅当两模块对同一方法的候选签名完全一致才放行
+            //   （候选选择不影响类型核对，值由接收者所属单元决定——跨单元同名类型
+            //   经内联别名引入的既有行为），否则响亮拒绝（既有 E1107）。
+            // 命名实参在名字层歧义（同名类型由 ≥2 模块提供）下仍一律响亮拒绝
+            // （既有 E1014）：名表来源不可信，无法按名核对。
+            if let Some(owner) = self.receiver_type_owner(expr) {
+                if let Some((_owner_module, leaf)) = owner.rsplit_once('.') {
+                    if !named_args.is_empty() && self.type_name_provider_count(leaf) >= 2 {
+                        let key = format!("{leaf}.{field}");
                         return Err(Self::reject_named_args_without_param_names(
                             &key, args, named_args, *span,
                         ));
                     }
-                    if let Some(conflicting) =
-                        self.ambiguous_method_signature_conflict(&leaf, field)
-                    {
+                    if let Some((key, providers)) = self.method_source_mismatch(expr, field) {
                         return Err(ErrorCodeDefinition::ambiguous_method_overload(
-                            &key,
-                            conflicting,
+                            &key, providers,
                         )
                         .at(*span)
                         .build());

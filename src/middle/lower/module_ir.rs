@@ -26,6 +26,12 @@ impl AstToIrGenerator {
         }
         // use 导入别名表（含 #245 条目别名）：生成期解析调用名用。
         self.use_aliases = self.build_import_aliases(module);
+        // 类型候选提供方表（与候选注入面同一份共享表；同源判据的消费侧）
+        self.candidate_providers =
+            crate::frontend::module::import_face::TypeCandidateProviders::scan(
+                module,
+                &self.registry,
+            );
         // 谓词名可见面**不在生成期扫描**（F14-A）：生成的可见范围必须与走查期
         // （typecheck / registry）**同一份**，因此由调用方经 `new_with_type_result`
         // 注入并在这里原样使用——`self.type_level` 已在构造期就位。

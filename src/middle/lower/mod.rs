@@ -206,6 +206,10 @@ pub struct AstToIrGenerator {
     /// 本文件 use 导入的本地名 → 限定名（含 #245 条目别名）。
     /// 生成期解析调用名时优先于 registry 的全局短名表（文件级精确）。
     pub(super) use_aliases: HashMap<String, String>,
+    /// 本单元导入面的**类型候选提供方表**（唯一生产在
+    /// `frontend::module::import_face::TypeCandidateProviders`；候选注入面与消费侧
+    /// 同源判据读同一份，避免 provide-priority 规则分叉）。
+    pub(super) candidate_providers: crate::frontend::module::import_face::TypeCandidateProviders,
     /// 本文件持有的模块注册表（std + 用户模块），取代生成期多处 `with_std()` 重建。
     pub(super) registry: ModuleRegistry,
     /// 本文件的模块限定键（多文件模式 Some → 启用限定；单文件 None → 不限定）。
@@ -376,6 +380,8 @@ impl AstToIrGenerator {
             release_plan: type_result.release_plan.clone(),
             user_namespaces: HashMap::new(),
             use_aliases: HashMap::new(),
+            candidate_providers:
+                crate::frontend::module::import_face::TypeCandidateProviders::default(),
             registry,
             module_key,
             script_mode,

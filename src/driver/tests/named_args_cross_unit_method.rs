@@ -508,29 +508,37 @@ fn test_top_level_closure_named_arg_keeps_legacy_behavior() {
     );
 }
 
-/// **具名嵌套函数声明**（Fn 注解 + 声明形参）不是闭包值，按声明函数处理——形参名表
-/// 当前未登记（`stmt.rs` 的嵌套函数臂只生成函数体、不登记 `fn_param_names`），故命名
-/// 实参走兜底**响亮拒绝**。旧行为是静默丢参 + 运行期失败（实测 check=0/run=1 运行期
-/// E6007），属非成功 ⇒ C 类可顺修；「形参名表接入 lookup」登记为已知缺口。
+/// 具名嵌套函数声明（Fn 注解 + 声明形参）是**声明函数**，与闭包值、块体声明函数一样
+/// **不进**共享兜底——命名实参在这些形态上保留旧行为（被忽略），不得因为兜底变严格而
+/// 改判原先成功的程序（D59 D 类）。
+///
+/// 本例的函数体**忽略形参**，旧行为 = 编译通过、返回 7（命名实参被忽略）。该形态登记
+/// 为已知缺口（D60 ② 该报未报，A 类），与闭包值、块体声明函数同列；函数体**消费**形参
+/// 的同形态旧行为是运行期 E6007（同样保留，不在此断言）。
 #[test]
-fn test_named_nested_function_named_arg_rejects_loudly() {
-    // Arrange：函数体内具名嵌套函数 + 命名实参
+fn test_named_nested_function_named_arg_keeps_legacy_behavior() {
+    // Arrange：函数体内具名嵌套函数（body 忽略形参）+ 命名实参
     let (_dir, entry) = make_script_project(&[(
         "main.yx",
-        "main = () => {\n    g: (a: Int, b: Int) -> Int = {\n        return a + b\n    }\n    r = g(b = 2, a = 3)\n    return r\n}\n\nr = main()\n",
+        "main = () => {\n    g: (a: Int, b: Int) -> Int = {\n        7\n    }\n    r = g(a = 1, b = 2)\n    return r\n}\n\nr = main()\n",
     )]);
 
     // Act
-    let (codes, no_hard_failure) = check_codes(&entry);
+    let outcome = run_multi(&entry).expect("driver run failed");
 
     // Assert
-    assert!(no_hard_failure, "IR 级诊断必须收进逐文件通道：{codes:?}");
     assert!(
-        codes.iter().any(|code| code == "E1014"),
-        "具名嵌套函数声明的命名实参必须响亮拒绝（旧行为是静默丢参 + 运行期失败）：{codes:?}"
+        outcome.failure.is_none(),
+        "具名嵌套函数声明的命名实参必须保留旧行为（不得被兜底改判编译期拒绝）：{:?}",
+        outcome.failure.as_ref().map(|e| format!("{e}"))
+    );
+    let module = outcome.module.expect("Linking + mono 必须产出合并 IR");
+    let values = run_merged_slot_values(module);
+    assert!(
+        values.iter().any(|value| value == "Int(7)"),
+        "具名嵌套函数的命名实参按旧行为被忽略：g(a = 1, b = 2) 返回 Int(7)，实际全局槽位：{values:?}"
     );
 }
-
 /// 边界①：**两个裸名提供方冲突**——导入层既有判据已响亮拒绝（E5006 duplicate import），
 /// 本判据固定它不被 4.9.9 的收窄/兜底改动静默掉。
 #[test]
@@ -671,5 +679,107 @@ fn test_mixed_alias_bare_import_positional_signature_conflict_rejects_loudly() {
     assert!(
         codes.iter().any(|code| code == "E1107"),
         "歧义形态 + 位置实参 + 候选签名不一致必须响亮拒绝（既有 E1107），不得静默错值：{codes:?}"
+    );
+}
+
+/// 同源判据的**放行**一侧（D59 D 类修复）：裸名侧接收者（owner == winner）的位置实参
+/// 即使两个提供方的候选签名不同，也照常按接收者所属模块派发——typecheck 与 IR 用同
+/// 一模块的候选，不存在错值。此前「全局签名比较」把这一侧也拒了（实测 0/0 打印 4.0
+/// 被误拒为 E1107）。
+#[test]
+fn test_bare_side_positional_with_differing_signatures_dispatches_to_owner() {
+    // Arrange：a 的 bump 收 Int（常量体 111），b 的 bump 收 Float（v + n）；裸名导入 b
+    let (_dir, entry) = make_script_project(&[
+        (
+            "a.yx",
+            "Temp: Type = { v: Float }\n\nTemp.bump: (self: &Temp, n: Int) -> Int = {\n    return 111\n}\n",
+        ),
+        (
+            "b.yx",
+            "Temp: Type = { v: Float }\n\nTemp.bump: (self: &Temp, n: Float) -> Float = {\n    return self.v + n\n}\n",
+        ),
+        (
+            "main.yx",
+            "use std.assert\nuse a.{Temp as X}\nuse b.{Temp}\n\nx = X(1.0)\nt = Temp(2.0)\nr = t.bump(2.0)\nassert.assert(r == 4.0, \"bare side dispatches to b.Temp.bump\")\n",
+        ),
+    ]);
+
+    // Act
+    let outcome = run_multi(&entry).expect("driver run failed");
+
+    // Assert
+    assert!(
+        outcome.failure.is_none(),
+        "裸名侧（owner == winner）的位置实参必须放行（differing signatures 也不拒）：{:?}",
+        outcome.failure.as_ref().map(|e| format!("{e}"))
+    );
+    let module = outcome.module.expect("Linking + mono 必须产出合并 IR");
+    let values = run_merged_slot_values(module);
+    assert!(
+        values.iter().any(|value| value == "Float(4.0)"),
+        "裸名侧必须派发到 b.Temp.bump（2.0 + 2.0 = 4.0），实际全局槽位：{values:?}"
+    );
+}
+
+/// 同源判据的**拒绝**一侧：别名侧接收者（owner != winner）且两模块候选**元数**不同 ⇒
+/// 响亮拒绝（既有 E1107）。实测旧行为：变异前（全局签名比较之前）check 通过、多出的
+/// 实参被丢，返回 300 而非 7。
+#[test]
+fn test_alias_side_positional_arity_mismatch_rejects_loudly() {
+    // Arrange：a 的 bump 单参（n * 100），b 的 bump 双参（p + q）；别名侧调用两参
+    let (_dir, entry) = make_script_project(&[
+        (
+            "a.yx",
+            "Temp: Type = { v: Float }\n\nTemp.bump: (self: &Temp, n: Int) -> Int = {\n    return n * 100\n}\n",
+        ),
+        (
+            "b.yx",
+            "Temp: Type = { v: Float }\n\nTemp.bump: (self: &Temp, p: Int, q: Int) -> Int = {\n    return p + q\n}\n",
+        ),
+        (
+            "main.yx",
+            "use a.{Temp as X}\nuse b.{Temp}\n\nx = X(1.0)\nr = x.bump(3, 4)\n",
+        ),
+    ]);
+
+    // Act
+    let (codes, no_hard_failure) = check_codes(&entry);
+
+    // Assert
+    assert!(no_hard_failure, "IR 级诊断必须收进逐文件通道：{codes:?}");
+    assert!(
+        codes.iter().any(|code| code == "E1107"),
+        "别名侧元数不一致的候选必须响亮拒绝（既有 E1107），不得丢实参静默错值：{codes:?}"
+    );
+}
+
+/// 同源判据的**拒绝**一侧：别名侧接收者 + 两模块候选**返回类型**不同 ⇒ 响亮拒绝
+///（既有 E1107）。实测旧行为：check 通过、返回 200（a 的 Int 实现）而非 b 的 2.0。
+#[test]
+fn test_alias_side_positional_return_type_mismatch_rejects_loudly() {
+    // Arrange：a 的 bump 返回 Int（n*100），b 的 bump 同形参返回 Float（2.0）
+    let (_dir, entry) = make_script_project(&[
+        (
+            "a.yx",
+            "Temp: Type = { v: Float }\n\nTemp.bump: (self: &Temp, n: Int) -> Int = {\n    return n * 100\n}\n",
+        ),
+        (
+            "b.yx",
+            "Temp: Type = { v: Float }\n\nTemp.bump: (self: &Temp, n: Int) -> Float = {\n    return 2.0\n}\n",
+        ),
+        (
+            "main.yx",
+            "use a.{Temp as X}\nuse b.{Temp}\n\nx = X(1.0)\nr = x.bump(2)\n",
+        ),
+    ]);
+
+    // Act
+    let (codes, no_hard_failure) = check_codes(&entry);
+
+    // Assert
+    assert!(no_hard_failure, "IR 级诊断必须收进逐文件通道：{codes:?}");
+    assert!(
+        codes.iter().any(|code| code == "E1107"),
+        "别名侧返回类型不一致的候选必须响亮拒绝（既有 E1107），不得静默返回别家实现的值：{codes:?}"
     );
 }

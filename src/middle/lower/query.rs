@@ -784,105 +784,80 @@ impl AstToIrGenerator {
         format!("{owner}.{rest}")
     }
 
-    /// 接收者的**名字层提供方**统计：解析到定义单元的限定名后，数本单元导入面里
-    /// 同一个定义侧类型名（叶子）由几个模块提供。返回 `(叶子类型名, 提供方数)`；
-    /// 接收者不是导入类型（本单元自有 / 非类型写出名）时返回 `None`。
+    /// 接收者所属模块的**定义单元限定名**（`{module}.{Type}`）；接收者不是导入类型
+    /// （本单元自有 / 非类型写出名）时为 None。
     ///
-    /// 判据源只有两张既有表：`use_aliases`（本文件 use 项的本地名 → 限定名）与
-    /// 注册表类型导出面 [`Self::is_type_export`]；「提供方」= 限定名去掉最后一段
-    ///（模块键）。接收者先经 [`Self::imported_type_owner`] 解析（与
-    /// `method_dispatch_name` 的归属判定同一实现）。
-    ///
-    /// 为什么消费侧要单独判（WBS 4.9.9 修复轮 3 / 复审轮）：候选注入面按
-    /// **提供方优先级**只取裸名提供方的候选（`driver::arms::visible_method_overloads`），
-    /// 而调用点的调用键前缀是定义侧类型名——两个同名类型共用同一个键：typecheck
-    /// 用裸名提供方的签名做匹配，IR 却按接收者归属派发到别名模块的方法。形参名
-    /// 相同、类型不同时就是**静默错值**（实测 `x.bump(n = 2.0)` 打出 200.0：别名
-    /// 模块的方法体以 Float 执行 Int 参数）；位置实参同样可能各猜一个模块。
-    /// 故提供方数 ≥2（名字层歧义）时，该类型上的方法调用一律响亮拒绝；非歧义
-    ///（仅别名 / 仅裸名单一提供方）不受影响。
-    ///
-    /// 本单元自有类型不参与判定：`imported_type_owner` 对自有类型返回 None，
-    /// 调用点解析到的就是本单元那一个。
-    pub(in crate::middle) fn receiver_type_provider_count(
+    /// 归属判定唯一实现是 [`Self::imported_type_owner`]（与 `method_dispatch_name`
+    /// 同一份）：本单元自有类型返回 None——那类调用点解析到的就是本单元那一个，
+    /// 不存在跨单元同源问题。
+    pub(in crate::middle) fn receiver_type_owner(
         &self,
         recv: &ast::Expr,
-    ) -> Option<(String, usize)> {
-        let qualified = match recv {
+    ) -> Option<String> {
+        match recv {
             ast::Expr::Var(name, _) => self
                 .binding_written_type(name)
                 .and_then(|written| self.imported_type_owner(written)),
             _ => self
                 .constructor_written_type_name(recv)
                 .and_then(|written| self.imported_type_owner(&written)),
-        }?;
-        let leaf = qualified
-            .rsplit('.')
-            .next()
-            .unwrap_or(qualified.as_str())
-            .to_string();
-        if leaf.is_empty() || !leaf.chars().all(|c| c.is_alphanumeric() || c == '_') {
-            return None;
         }
-        let mut modules: std::collections::HashSet<&str> = std::collections::HashSet::new();
-        for imported in self.use_aliases.values() {
-            if !self.is_type_export(imported) {
-                continue;
-            }
-            if let Some((module, name)) = imported.rsplit_once('.') {
-                if name == leaf {
-                    modules.insert(module);
-                }
-            }
-        }
-        Some((leaf, modules.len()))
     }
-    /// 名字层歧义的**位置实参**判据：同名类型由 ≥2 模块提供时，如果这些模块对
-    /// `{leaf}.{method}` 的**候选签名集合不完全一致**，位置实参同样可能「按一家的
-    /// 候选核对、按另一家的方法执行」——返回提供该方法的模块数（≥2）；一致或只有
-    /// 一个模块提供该方法时返回 `None`（此时候选选择不影响类型核对，4.9.8 的派发
-    /// 归因可以独立成立）。
+
+    /// 该定义侧类型名在本单元导入面里的**提供模块数**（≥2 = 名字层歧义）。
     ///
-    /// 判据源：`use_aliases`（导入面）+ 注册表各模块的 `method_overloads`（与
-    /// `method_param_info` 同一份候选载体）。实测（`target/t9-evidence` 探针矩阵，
-    /// WBS 4.9.9 复审轮）：形参类型不同 ⇒ 常量体返回 111 而非 2.0；元数不同 ⇒
-    /// 多出的实参被丢，返回 300 而非 7；返回类型不同 ⇒ 返回 200 而非 2.0——三例
-    /// 都是 check 通过、结果错（静默）。签名一致时（4.9.8 的夹具）值只由接收者
-    /// 所属单元决定，派发正确。
-    pub(in crate::middle) fn ambiguous_method_signature_conflict(
+    /// 判据源是共享提供方表 `frontend::module::import_face::TypeCandidateProviders`（与候选注入面同一份，
+    /// 见 `frontend::module::import_face`）：命名实参在歧义形态下无法可信核对
+    /// 形参名，调用点据此一律响亮拒绝（既有 E1014）。
+    pub(in crate::middle) fn type_name_provider_count(
         &self,
-        leaf: &str,
+        type_name: &str,
+    ) -> usize {
+        self.candidate_providers.provider_count(type_name)
+    }
+
+    /// **同源判据**（WBS 4.9.9 修复轮 4）：候选注入面选用的提供模块（`winner`）
+    /// 与接收者所属模块（`owner`）不同源、且两者对同一方法的候选签名不一致时，
+    /// 返回 `(候选键, 提供模块数)`——调用点应响亮拒绝（既有 E1107）。返回 None
+    /// 表示放行。
+    ///
+    /// 三种放行情形：
+    /// 1. `owner == winner`：typecheck 与 IR 用同一模块的候选，裸名侧位置实参属此
+    ///    （实测 2.0 + 2.0 = 4.0 的形态此前被全局签名比较误拒）；
+    /// 2. `owner != winner` 但两模块对该键的候选签名完全一致：候选选择不影响类型
+    ///    核对，值由接收者所属单元的实现决定（跨单元同名类型经内联别名引入时的
+    ///    既有行为，0/0 且派发正确）；
+    /// 3. 任一模块没有该键的候选组：注入面没有为该键贡献候选，typecheck 的候选
+    ///    来自别的来源，不构成「按别家签名核对」。
+    ///
+    /// 拒绝情形即真正的静默错值来源：别名侧接收者用裸名提供方的签名核对、IR 却
+    /// 派发到别名模块——实测形参类型不同（常量体返回 111 而非 2.0）、元数不同
+    /// （多出的实参被丢，返回 300 而非 7）、返回类型不同（返回 200 而非 2.0）三例
+    /// 都是 check 通过、结果错。
+    pub(in crate::middle) fn method_source_mismatch(
+        &self,
+        recv: &ast::Expr,
         method: &str,
-    ) -> Option<usize> {
+    ) -> Option<(String, usize)> {
+        let owner = self.receiver_type_owner(recv)?;
+        let (owner_module, leaf) = owner.rsplit_once('.')?;
+        let winner = self.candidate_providers.winner(leaf)?;
+        if winner == owner_module {
+            return None;
+        }
         let key = format!("{leaf}.{method}");
-        let mut seen: std::collections::HashSet<&str> = std::collections::HashSet::new();
-        let mut signatures: Vec<&Vec<crate::frontend::core::sema::MonoType>> = Vec::new();
-        for imported in self.use_aliases.values() {
-            if !self.is_type_export(imported) {
-                continue;
-            }
-            let Some((module, name)) = imported.rsplit_once('.') else {
-                continue;
-            };
-            if name != leaf || !seen.insert(module) {
-                continue;
-            }
-            if let Some(group) = self
-                .registry
-                .get(module)
-                .and_then(|info| info.method_overloads.get(&key))
-            {
-                signatures.push(&group.candidates);
-            }
-        }
-        if signatures.len() < 2 {
+        let injected = self
+            .registry
+            .get(winner)
+            .and_then(|info| info.method_overloads.get(&key))?;
+        let dispatched = self
+            .registry
+            .get(owner_module)
+            .and_then(|info| info.method_overloads.get(&key))?;
+        if injected.candidates == dispatched.candidates {
             return None;
         }
-        let first = signatures[0];
-        if signatures[1..].iter().all(|sig| *sig == first) {
-            return None;
-        }
-        Some(signatures.len())
+        Some((key, self.candidate_providers.provider_count(leaf).max(2)))
     }
     /// 声明期分类的量词投影（`TypeCheckResult.record_models` 是唯一来源）。
     ///
