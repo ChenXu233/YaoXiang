@@ -1,36 +1,36 @@
 # YaoXiang Quick Start
 
-> This guide helps you get up and running with the YaoXiang programming language quickly.
+> This guide helps you get started quickly with the YaoXiang programming language.
 >
-> **Note**: The code examples in this document are written based on the YaoXiang language
-> specification. If you encounter syntax differences during actual execution, please refer to the
+> **Note**: The code examples in this document are written according to the YaoXiang language
+> specification. If you encounter syntax differences when running them in practice, see the
 > [Language Specification](../reference/language-spec/index.md).
 
 ## Installation
 
-### Build from Source (Recommended)
+### Building from Source (Recommended)
 
 ```bash
 # Clone the repository
 git clone https://github.com/ChenXu233/YaoXiang.git
 cd yaoxiang
 
-# Build (debug version, for development testing)
+# Build (debug version, for development and testing)
 cargo build
 
 # Build (release version, recommended for production)
 cargo build --release
 
-# Run tests
+# Run the tests
 cargo test
 
-# Check version
+# View the version
 ./target/debug/yaoxiang-rs --version
-# or
+# Or
 ./target/release/yaoxiang-rs --version
 ```
 
-**Verify Successful Installation**:
+**Verify the installation**:
 
 ```bash
 ./target/debug/yaoxiang-rs --version
@@ -39,14 +39,14 @@ cargo test
 
 ## Your First Program
 
-Create the file `hello.yx`:
+Create a file named `hello.yx`:
 
 ```yaoxiang
 // hello.yx
 use std.io
 
-// Function definition: name: (param: Type, ...) -> return_type = { return ... }  # Code blocks must explicitly use return
-// Expression form:      name: (param: Type, ...) -> return_type = expr            # The expression returns its value directly
+// Function definition: name: (param: Type, ...) -> return_type = { return ... }  # Code blocks must explicitly return
+// Expression form: name: (param: Type, ...) -> return_type = expr           # The expression returns the value directly
 main: () -> Void = {
     print("Hello, YaoXiang!")
 }
@@ -56,7 +56,7 @@ Run it:
 
 ```bash
 ./target/debug/yaoxiang-rs run hello.yx
-# or use the release version
+# Or use the release version
 ./target/release/yaoxiang-rs run hello.yx
 ```
 
@@ -72,19 +72,19 @@ Hello, YaoXiang!
 
 ```yaoxiang
 // Automatic type inference
-x = 42  // inferred as Int
-name = "YaoXiang"  // inferred as String
-pi = 3.14159  // inferred as Float
-is_valid = true  // inferred as Bool
+x = 42  // Inferred as Int
+name = "YaoXiang"  // Inferred as String
+pi = 3.14159  // Inferred as Float
+is_valid = true  // Inferred as Bool
 
-// Explicit type annotation (using the centralized type convention is recommended)
+// Explicit type annotations (a centralized type convention is recommended)
 count: Int = 100
 
-// Immutable by default (safety feature)
+// Immutable by default (a safety feature)
 x = 10
-x = 20  // ❌ Compile error! Immutable.
+x = 20  // ❌ Compile error! Immutable
 
-// Mutable variable (requires explicit declaration)
+// Mutable variables (an explicit declaration is required)
 mut counter = 0
 counter = counter + 1  // ✅ OK
 ```
@@ -93,10 +93,10 @@ counter = counter + 1  // ✅ OK
 
 ```yaoxiang
 // Function definition syntax
-// Expression form: returns the value directly, no return needed
+// Expression form: directly returns a value; no return needed
 add: (a: Int, b: Int) -> Int = a + b
 
-// Code block form: must use return to return a value
+// Block form: return is required to return a value
 // add: (a: Int, b: Int) -> Int = { return a + b }
 
 // Call
@@ -118,16 +118,16 @@ name: String = "YaoXiang"
 // Function definition
 add: (a: Int, b: Int) -> Int = a + b
 
-// Type definition (using curly braces)
+// Type definition (using braces)
 Point: Type = { x: Float, y: Float }
 
-// Using the type
+// Use the type
 p: Point = Point(x=1.0, y=2.0)
 p.x  // 1.0
 p.y  // 2.0
 ```
 
-#### Record Type
+#### Record Types
 
 <!-- docs-example: skip -->
 
@@ -136,12 +136,12 @@ p.y  // 2.0
 Point: Type = { x: Float, y: Float }
 Rect: Type = { x: Float, y: Float, width: Float, height: Float }
 
-// Usage
+// Use
 p = Point(x=3.0, y=4.0)
 r = Rect(x=0.0, y=0.0, width=10.0, height=20.0)
 ```
 
-#### Interface Definition
+#### Interface Definitions
 
 An interface is a record type whose fields are all function types:
 
@@ -164,7 +164,7 @@ EmptyInterface: Type = {}
 
 #### Type Methods
 
-Use the `Type.method: (Type, ...) -> Return = ...` syntax to define type methods:
+Define type methods using the `Type.method: (Type, ...) -> Return = ...` syntax:
 
 <!-- docs-example: skip -->
 
@@ -181,7 +181,7 @@ Point.serialize: (self: Point) -> String = {
     "Point({self.x}, {self.y})"
 }
 
-// Using the method (syntactic sugar)
+// Method call (syntax sugar)
 p = Point(x=1.0, y=2.0)
 p.draw(screen)  // → Point.draw(p, screen)
 str = p.serialize()  // → Point.serialize(p)
@@ -189,11 +189,11 @@ str = p.serialize()  // → Point.serialize(p)
 
 #### No Implicit Binding
 
-Methods are not automatically attached to types, and the `pub` keyword has also been removed
-(RFC-029g) — to add a method, write it explicitly using `Type.method: (self: T, …) -> R = …` as in
-the previous section, and use `.` at the call site.
+Methods are not automatically bound to types, and the `pub` keyword has also been removed
+(RFC-029g)—to add a method, explicitly write it using the `Type.method: (self: T, …) -> R = …`
+syntax from the previous section, and use `.` at the call site.
 
-#### Enum Type
+#### Enum Types
 
 ```yaoxiang
 // Simple enum
@@ -202,13 +202,13 @@ Color: Type = { red: () -> Color, green: () -> Color, blue: () -> Color }
 // Enum with data
 Result: (T: Type, E: Type) -> Type = { ok: (T) -> Result(T, E), err: (E) -> Result(T, E) }
 
-// Using generics — variant constructors must be qualified with "Type.variant"
-// Writing bare ok(42) / err("not found") reports E1001
+// Use generics—the variant constructor must be qualified as "type.variant"
+// Writing ok(42) / err("not found") without qualification raises E1001
 success: Result(Int, String) = Result(Int, String).ok(42)
 failure: Result(Int, String) = Result(Int, String).err("not found")
 ```
 
-#### Generic Type
+#### Generic Types
 
 ```yaoxiang
 // Generic type definition
@@ -263,8 +263,8 @@ first = numbers[0]  // 1
 scores = {"Alice": 90, "Bob": 85}
 alice_score = scores["Alice"]  // 90
 
-// Adding elements: lists have no instance methods, call std.list functions
-// Note: don't name a variable `list` — it would shadow the module
+// Add an element: lists have no instance methods; call the function form from std.list
+// Note: do not name a variable list—that would shadow the module
 mut items = [1, 2, 3]
 items = list.push(items, 4)  // [1, 2, 3, 4]
 ```
@@ -273,7 +273,7 @@ items = list.push(items, 4)  // [1, 2, 3, 4]
 
 ```yaoxiang
 // match expression
-// Note: Result constructors need std.result imported first; bare ok(42) reports E1001
+// Note: the Result constructor requires use std.result first; writing ok(42) without qualification raises E1001
 use std.result
 result: Result(Int, String) = Result(Int, String).ok(42)
 
@@ -285,26 +285,26 @@ message = match result {
 
 ## Spawn Programming (Concurrency)
 
-YaoXiang's concurrency model is built around the `spawn <expr>` primitive — it is the only entry
-point for parallelism.
+YaoXiang's concurrency model is built around the `spawn <expr>` primitive—it is the only entry point
+for parallelism.
 
 <!-- docs-example: skip -->
 
 ```yaoxiang
-// spawn decorates any expression and runs it in parallel automatically
+// spawn decorates any expression and executes it in parallel automatically
 main: () -> Void = {
-    user = spawn fetch_user(1)   // runs in the background
-    posts = spawn fetch_posts()  // another parallel step
+    user = spawn fetch_user(1)   // Runs in the background
+    posts = spawn fetch_posts()  // Another parallel step
 
-    // When the result is needed, it automatically blocks and waits
+    // Automatically blocks and waits when a result is needed
     print(user.name)
     print(posts.length)
 }
 ```
 
-**Core rule**: An expression decorated with `spawn` runs in the background, and the outer
-synchronous code blocks and waits for its result. Tasks without dependencies run in parallel
-automatically, scheduled by the runtime's GMP model.
+**Core rule**: An expression decorated by `spawn` runs in the background, while the outer expression
+synchronously blocks and waits for the result. Tasks without dependencies run in parallel
+automatically and are scheduled by the runtime's GMP model.
 
 ## Module System
 
@@ -313,17 +313,17 @@ automatically, scheduled by the runtime's GMP model.
 use std.io
 use std.math
 
-// Use imported functions
+// Use an imported function
 result = math.sqrt(16.0)  // 4.0
 print("Hello!")
 ```
 
-## FAQ
+## Frequently Asked Questions
 
-### Q: Variables are immutable by default. How do I change a variable?
+### Q: How do I modify a variable when variables are immutable by default?
 
 ```yaoxiang
-// Use the mut keyword to declare a mutable variable
+// Declare a mutable variable with the mut keyword
 mut x = 10
 x = 20  // ✅ OK
 ```
@@ -341,9 +341,9 @@ add = (a, b) => a + b
 ### Q: How do I handle errors?
 
 ```yaoxiang
-// Record-style enum variants are written as "field: (payload) -> Type"
-// Note: `|` cannot be used inside a type body — `{ ok(T) | err(E) }` fails to parse with E0010
-// In practice, just use the built-in Result from the standard library
+// Record and enum type variants are written as "field name: (payload) -> type"
+// Note: | cannot be used in a type body—parsing { ok(T) | err(E) } raises E0010
+// In projects, use the Result type built into the standard library
 use std.result
 
 r = Result(Int, String).ok(42)
@@ -357,9 +357,10 @@ match r {
 
 ## Next Steps
 
-- 📚 Check the [Language Specification](../reference/language-spec/index.md) for the complete syntax
+- 📚 Read the [Language Specification](../reference/language-spec/index.md) to learn the complete
+  syntax
 - 🏗️ Browse the [Design Documents](../explanation/) for implementation details
-- 💡 Read the [Design Manifesto](../explanation/manifesto.md) to learn the core ideas
+- 💡 Read the [Design Manifesto](../explanation/manifesto.md) to learn the core principles
 
 ## Related Resources
 

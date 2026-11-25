@@ -1,16 +1,16 @@
 ---
-title: 'Syntax Cheatsheet'
+title: 'Syntax Cheat Sheet'
 ---
 
-# Syntax Cheatsheet
+# Syntax Cheat Sheet
 
-Learn YaoXiang's core syntax in 5 minutes. For in-depth learning, visit
+Understand the core syntax of YaoXiang in 5 minutes. For an in-depth introduction, see the
 [Tutorial](../tutorial/index.md).
 
 ## Variables
 
 ```yaoxiang
-x = 42                    // Immutable (default)
+x = 42                    // Immutable (by default)
 mut y = 0                 // Mutable
 
 name: String = "hello"    // Explicit type
@@ -26,7 +26,7 @@ Everything is `name: type = value`. Functions are values too.
 ```yaoxiang
 use std.io
 
-// Expression form (returns value directly)
+// Expression form (returns a value directly)
 add: (a: Int, b: Int) -> Int = a + b
 
 // Block form (explicit return)
@@ -35,19 +35,19 @@ factorial: (n: Int) -> Int = {
     return n * factorial(n - 1)
 }
 
-// Lambda (parameter names can be omitted when signature is complete)
+// Lambda (parameter names can be omitted when the signature is complete)
 double = (x) => x * 2
 add = (a, b) => a + b
-inc = x => x + 1            // Single parameter can omit parentheses
+inc = x => x + 1            // Parentheses can be omitted for a single parameter
 
-// Block form requires return
+// A return is required inside a block
 process: (x: Int) -> Int = {
     a = x * 2
     b = a + 1
     return b
 }
 
-// Void functions don't need return
+// Void functions do not need a return
 greet: (name: String) -> Void = {
     io.println("Hello, " + name)
 }
@@ -55,7 +55,8 @@ greet: (name: String) -> Void = {
 
 ## Types
 
-No `type`, `struct`, `trait`, or `impl` keywords. A single unified declaration handles everything.
+There are no `type`, `struct`, `trait`, or `impl` keywords. A single unified declaration handles
+everything.
 
 <!-- docs-example: skip -->
 
@@ -73,12 +74,12 @@ Point(x=1.0)                   // OK: x=1.0, y=0
 // Variant type (enum)
 Color: Type = { red: () -> Color, green: () -> Color, blue: () -> Color }
 
-// Note: std.option (Option + Try) is already built into the standard library, not recommended to define your own
+// Note: std.option (Option + Try) is built into the standard library; defining your own is not recommended
 // Option: (T: Type) -> Type = { some: (T) -> Option(T), none: () -> Option(T) }
-// Note: bare constructors ok/err currently report E1001 (verified), see std.result in the standard library
+// Note: the bare constructors ok/err currently produce E1001 (observed); see std.result in the standard library
 // Result: (T: Type, E: Type) -> Type = { ok: (T) -> Result(T, E), err: (E) -> Result(T, E) }
 
-// Interface (record type with all function-type fields)
+// Interface (a record type whose fields are all function types)
 Drawable: Type = { draw: (Surface) -> Void }
 
 // Interface composition
@@ -87,8 +88,8 @@ DrawableSerializable: Type = Drawable & Serializable
 // Declare interface implementations within a type
 Circle: Type = {
     radius: Float,
-    Drawable,              // Implement Drawable interface
-    Serializable,          // Implement Serializable interface
+    Drawable,              // Implements the Drawable interface
+    Serializable,          // Implements the Serializable interface
 }
 
 // Generic type
@@ -99,10 +100,10 @@ List: (T: Type) -> Type = {
     map: (R: Type) -> ((self: List(T), f: (T) -> R) -> List(R)),
 }
 
-// Generic constraint
-// Generic constraint signatures are not yet supported by the current parser, verified to report E0011
+// Generic constraints
+// The generic-constraint signature is not yet supported by the parser; testing reports E0011
 clone: (value: T) -> T = value
-// Generic constraint signatures are not yet supported by the current parser, verified to report E0011
+// The generic-constraint signature is not yet supported by the parser; testing reports E0011
 sort: (list: List(T)) -> List(T)
 ```
 
@@ -111,20 +112,20 @@ sort: (list: List(T)) -> List(T)
 <!-- docs-example: skip -->
 
 ```yaoxiang
-// Namespace function (Type.method is just an attribution marker, not a binding)
+// Namespace function (Type.method is only an association marker, not a binding)
 Point.distance: (a: &Point, b: &Point) -> Float = {
     dx = a.x - b.x
     dy = a.y - b.y
-    // Note: parenthesized expressions cannot directly attach methods (verified E1053), need to first bind to a variable
+    // Note: a method cannot be attached directly to a parenthesized expression (observed E1053); bind it to a variable first
     d2 = dx * dx + dy * dy
     return d2.sqrt()
 }
 
-// Dot-call syntax is only available after explicit binding
+// The . call syntax is available only after an explicit binding
 Point.distance = distance[0]
-// After this, p1.distance(p2) → distance(p1, p2)
+// From then on, p1.distance(p2) → distance(p1, p2)
 
-// Quick define + bind
+// Quick definition + binding
 Point.draw: (self: &Point, surface: Surface) -> Void = {
     surface.plot(self.x, self.y)
 }
@@ -147,7 +148,7 @@ result = match value {
     _ -> "unknown",
 }
 
-// Loop
+// Loops
 for i in 0..5 { io.println(i) }
 for item in items { io.println(item) }
 
@@ -176,9 +177,9 @@ doubled = [x * 2 for x in nums]
 
 ## Pattern Matching
 
-> **Note**: 0.8.2 **does not yet implement record/struct destructuring patterns** (verified
-> `match s { circle(r) -> ... }` reports E0010), the following is the target syntax, not yet
-> runnable.
+> **Note**: 0.8.2 **does not yet implement record/struct destructuring patterns** (testing
+> `match s { circle(r) -> ... }` reports E0010). The following is the target syntax and cannot run
+> yet.
 
 <!-- docs-example: skip -->
 
@@ -202,7 +203,7 @@ match t {
 // Destructuring assignment
 a, b = (1, 2)              // a=1, b=2
 
-// Guard expressions
+// Guard expression
 match age {
     n if n >= 18 -> true,
     _ -> false,
@@ -212,43 +213,43 @@ match age {
 ## Modules and Imports
 
 ```yaoxiang
-// Import entire module, access via namespace
+// Import an entire module and access it through its namespace
 use std.io
 
-// Import only specified items, use directly
+// Import only selected entries and use them directly without a namespace
 use std.math.{sqrt, sin, cos}
 use std.{list, string}
 
-// Inline alias for items
+// Inline alias for an entry
 use std.io.{print as say}
 
 io.println("hello")
-result = sqrt(16.0)       // 4.0 (Note: Int input returns 0.0, must pass Float)
+result = sqrt(16.0)       // 4.0 (note: an Int argument returns 0.0; you must pass a Float)
 say("aliased")
 
-// All top-level bindings of a module are importable by default, no pub needed
+// All top-level bindings in a module can be imported externally by default; no pub is required
 add: (a: Int, b: Int) -> Int = a + b
 Point: Type = { x: Float, y: Float }
 ```
 
-For module paths, directory entry conventions, and the complete form of `use`, see
+For module paths, directory entry-point conventions, and the complete forms of `use`, see the
 [Module System](modules).
 
 ## Ownership
 
 ```yaoxiang
-// Move: default ownership transfer
+// Move: ownership is transferred by default
 p1 = Point(1.0, 2.0)
 p2 = p1                   // p1 is moved
 
-// Borrow &: automatic token creation (no manual & needed)
+// Borrow &: tokens are created automatically (you do not need to add & manually)
 distance: (a: &Point, b: &Point) -> Float = ...
-d = distance(p1, p2)      // Compiler automatically creates borrow tokens
+d = distance(p1, p2)      // The compiler automatically creates a borrow token
 
 // Mutable borrow &mut
 update: (p: &mut Point, x: Float) -> Void = { p.x = x }
 
-// ref: shared ownership (compiler automatically chooses Rc/Arc)
+// ref: shared ownership (the compiler automatically chooses Rc/Arc)
 shared = ref data
 
 // clone: explicit deep copy
@@ -257,12 +258,12 @@ backup = data.clone()
 
 ## Concurrency
 
-`spawn` is the only parallel primitive. No async/await, no Send/Sync.
+spawn is the only primitive for parallelism. There is no async/await and no Send/Sync.
 
 <!-- docs-example: skip -->
 
 ```yaoxiang
-// spawn block: sub-expressions automatically run in parallel
+// spawn block: subexpressions run in parallel automatically
 result = spawn {
     user = fetch_user(1)
     posts = fetch_posts()
@@ -291,5 +292,5 @@ pi = 3.14159
 name = "YaoXiang"
 print(f"Hello {name}")               // Hello YaoXiang
 print(f"Sum: {10 + 20}")             // Sum: 30
-print(f"Pi: {pi}")                    // Verified: format specifiers not yet implemented, outputs 3.14159
+print(f"Pi: {pi}")                    // Observed: format specifiers are not yet implemented; output: 3.14159
 ```
