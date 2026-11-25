@@ -214,23 +214,16 @@ fn test_cross_unit_method_named_arg_selects_overload_by_parameter_name() {
         "Int 候选（n * 10）应求值为 Int(30)，实际全局槽位：{values:?}"
     );
 }
-/// F1 回归（WBS 4.9.9 修复轮 2）：**别名 + 裸名导入同名类型**——候选名字表按
-/// 「目标名」归并后被收窄规则③整名跳过，调用方拿不到名字表。此时 IR 侧不得
-/// 静默丢弃命名实参，必须响亮拒绝（既有 E1014）。
+/// F1 修复轮 3（t3 复审）：**混合别名 + 裸名导入同名类型**——候选按**裸名提供方**
+/// 注入（`local == target` 优先）。裸名侧（b.Temp）的命名实参按 b 的声明名入槽：
+/// 编译通过、值正确（2 + 3 = 5.0）。
 ///
-/// 先红后绿的定义（**红 = 静默丢参**，不是「编译失败」）：
-/// - 修复前（第一次修复之后）：check exit=0、run exit=1，运行期
-///   `E6007 type mismatch in binary operation Add`（b.yx 的 `self.v + step_b`
-///   收不到 step_b）——命名实参被丢弃，编译期不报；
-/// - 修复后：check exit=1，`error [E1014] Function bump has no parameter named
-///   step_b (available: )`。
-///
-/// 对照（同批）：位置实参形态（p13x）与「别名导入的是另一类型」（p13d）修复
-/// 前后都照常 0/0——本判据只改「拿不到名字表 + 有命名实参」这一格。
+/// 三态（同一夹具，见报告）：pre-t1 `1e05dc3e` = 0/0；修复轮 2 `091b835b` = E1002
+/// （规则③把裸名提供方候选一起跳过，位置实参重载退回单绑定）；本修复后 = 0/0。
 #[test]
-fn test_cross_unit_named_arg_mixed_alias_bare_import_rejects_loudly() {
-    // Arrange：两模块各定义同名类型 Temp（方法形参名不同），调用方别名导入 a 的、
-    // 裸名导入 b 的——裸名 Temp 上的命名实参调用应响亮拒绝
+fn test_mixed_alias_bare_import_binds_bare_provider_names() {
+    // Arrange：a 的 Temp 别名导入为 X（方法形参名 step_a），b 的同名 Temp 裸名导入
+    // （方法形参名 step_b）；命名实参调用落在裸名导入的 b.Temp 上
     let (_dir, entry) = make_script_project(&[
         (
             "a.yx",
@@ -242,7 +235,45 @@ fn test_cross_unit_named_arg_mixed_alias_bare_import_rejects_loudly() {
         ),
         (
             "main.yx",
-            "use a.{Temp as X}\nuse b.{Temp}\n\nt = Temp(2.0)\nv = t.bump(step_b = 3.0)\n",
+            "use a.{Temp as X}\nuse b.{Temp}\n\nx = X(1.0)\nt = Temp(2.0)\nv = t.bump(step_b = 3.0)\n",
+        ),
+    ]);
+
+    // Act
+    let outcome = run_multi(&entry).expect("driver run failed");
+
+    // Assert
+    assert!(
+        outcome.failure.is_none(),
+        "裸名提供方的候选必须注入：命名实参 step_b 应入槽（修复轮 2 实测 E1002）：{:?}",
+        outcome.failure.as_ref().map(|e| format!("{e}"))
+    );
+    let module = outcome.module.expect("Linking + mono 必须产出合并 IR");
+    let values = run_merged_slot_values(module);
+    assert!(
+        values.iter().any(|value| value == "Float(5.0)"),
+        "b.Temp.bump(step_b = 3.0) 应为 2 + 3 = 5.0，实际全局槽位：{values:?}"
+    );
+}
+
+/// F1 修复轮 3（t3 复审）·别名侧边界：别名导入的 a.Temp 实例与裸名侧共用同一个
+/// 裸名候选键，用 a 的形参名（step_a）调用必须**响亮拒绝**（E1014），不得静默
+/// 错派到 b 的方法（「避免静默错派」= 别名侧评估结论）。
+#[test]
+fn test_mixed_alias_bare_import_alias_side_named_arg_rejects_loudly() {
+    // Arrange：同一混合导入形态，调用落在别名导入的 X（= a.Temp）上，用 a 的形参名
+    let (_dir, entry) = make_script_project(&[
+        (
+            "a.yx",
+            "Temp: Type = { v: Float }\n\nTemp.bump: (self: &Temp, step_a: Float) -> Float = {\n    return self.v + step_a\n}\n",
+        ),
+        (
+            "b.yx",
+            "Temp: Type = { v: Float }\n\nTemp.bump: (self: &Temp, step_b: Float) -> Float = {\n    return self.v + step_b\n}\n",
+        ),
+        (
+            "main.yx",
+            "use a.{Temp as X}\nuse b.{Temp}\n\nx = X(1.0)\nv = x.bump(step_a = 5.0)\n",
         ),
     ]);
 
@@ -250,13 +281,10 @@ fn test_cross_unit_named_arg_mixed_alias_bare_import_rejects_loudly() {
     let (codes, no_hard_failure) = check_codes(&entry);
 
     // Assert
-    assert!(
-        no_hard_failure,
-        "IR 级诊断必须收进逐文件通道，不得硬中止（其余文件诊断不得丢）：{codes:?}"
-    );
+    assert!(no_hard_failure, "IR 级诊断必须收进逐文件通道：{codes:?}");
     assert!(
         codes.iter().any(|code| code == "E1014"),
-        "拿不到形参名表时命名实参必须响亮拒绝（既有 E1014），不得静默丢弃；实际诊断：{codes:?}"
+        "别名侧用 a 的形参名（step_a）必须响亮拒绝（既有 E1014），不得静默错派到 b 的方法：{codes:?}"
     );
 }
 
@@ -315,5 +343,128 @@ fn test_cross_unit_named_arg_whole_module_import_rejects_loudly() {
     assert!(
         codes.iter().any(|code| code == "E1014"),
         "整体模块导入形态没有名字表时，命名实参必须响亮拒绝（既有 E1014）：{codes:?}"
+    );
+}
+/// F1 回归（t3 复审，4.9.9 修复轮 3）：**混合别名 + 裸名导入同名类型 + 两候选 + 位置实参**。
+///
+/// 收窄规则③原先按 target 判跨模块冲突并整名跳过 ⇒ 裸名提供方 b 的候选也不注入，
+/// 位置实参的重载决议退回 `method_bindings` 单值（实测 `t.bump(3.0)` 报 E1002，
+/// 而 pre-t1 是 0/0）。修复轮 3 加**提供方优先级**：裸名提供方（`local == target`）
+/// 优先，别名只在裸名缺席时补位。
+///
+/// 三态（同一夹具，见报告）：pre-t1 `1e05dc3e` = 0/0；修复轮 2 `091b835b` = E1002；
+/// 本修复后 = 0/0（Float 5.0 / Int 30 两条值断言）。
+#[test]
+fn test_mixed_alias_bare_import_keeps_bare_provider_overloads() {
+    // Arrange：a 提供 Temp（别名导入为 X），b 提供同名 Temp 且有两个同名重载；
+    // 调用只落在裸名导入的 b.Temp 上，位置实参分别命中 Float / Int 候选
+    let (_dir, entry) = make_script_project(&[
+        (
+            "a.yx",
+            "Temp: Type = { v: Float }\n\nTemp.tag: (self: &Temp) -> Float = {\n    return self.v\n}\n",
+        ),
+        (
+            "b.yx",
+            "Temp: Type = { v: Float }\n\nTemp.bump: (self: &Temp, step: Float) -> Float = {\n    return self.v + step\n}\n\nTemp.bump: (self: &Temp, n: Int) -> Int = {\n    return n * 10\n}\n",
+        ),
+        (
+            "main.yx",
+            "use std.assert\nuse a.{Temp as X}\nuse b.{Temp}\n\nx = X(1.0)\nt = Temp(2.0)\ntotal = x.v + t.v\nf = t.bump(3.0)\ni = t.bump(3)\nassert.assert(total == 3.0, \"both imports used\")\nassert.assert(f == 5.0, \"Float overload: 2+3 = 5.0\")\nassert.assert(i == 30, \"Int overload: 3*10 = 30\")\n",
+        ),
+    ]);
+
+    // Act
+    let outcome = run_multi(&entry).expect("driver run failed");
+
+    // Assert
+    assert!(
+        outcome.failure.is_none(),
+        "混合别名+裸名同 target 时，裸名提供方的候选不得整名消失（修复轮 2 实测 E1002）：{:?}",
+        outcome.failure.as_ref().map(|e| format!("{e}"))
+    );
+    let module = outcome.module.expect("Linking + mono 必须产出合并 IR");
+    let values = run_merged_slot_values(module);
+    assert!(
+        values.iter().any(|value| value == "Float(5.0)"),
+        "位置实参 3.0 必须命中 Float 候选（2+3 = 5.0），实际全局槽位：{values:?}"
+    );
+    assert!(
+        values.iter().any(|value| value == "Int(30)"),
+        "位置实参 3 必须命中 Int 候选（3*10 = 30），实际全局槽位：{values:?}"
+    );
+}
+
+/// F2 回归（t3 复审，4.9.9 修复轮 3）：**闭包 / 函数体内嵌套 lambda 调用**的命名实参
+/// 保留旧行为（静默忽略，不因兜底变成编译期拒绝）。
+///
+/// 零参闭包 `f = () => 7; g = f(x = 1)` 在兜底前编译通过且结果正确（`g == 7`），
+/// 按 07 的入口判据属「原先成功」——改判编译期错误是 D59 D 类，超出 4.9.9 目标。
+/// 故 IR 兜底只作用于**声明函数名**，函数体内 lambda 绑定（`nested_functions`）不进兜底；
+/// 「命名实参被静默忽略」登记为已知缺口（D60 ② 该报未报，A 类），见 09 的 4.9.9 行。
+#[test]
+fn test_dynamic_call_named_arg_keeps_legacy_behavior() {
+    // Arrange：零参闭包 + 命名实参（旧行为：忽略命名实参、返回 7）；
+    // 一参闭包 + 命名实参（旧行为：同样忽略，本判据只固定「不变成编译期拒绝」）
+    let (_dir, entry) = make_script_project(&[(
+        "main.yx",
+        "use std.assert\n\nmain = () => {\n    f = () => 7\n    g = f(x = 1)\n    h = (a: Int) => a\n    k = h(a = 2)\n    assert.assert(g == 7, \"zero-param closure ignores named arg\")\n    return g\n}\n\nr = main()\n",
+    )]);
+
+    // Act
+    let outcome = run_multi(&entry).expect("driver run failed");
+
+    // Assert
+    assert!(
+        outcome.failure.is_none(),
+        "闭包 / 嵌套 lambda 调用的命名实参必须保留旧行为，不得被兜底改判编译期拒绝：{:?}",
+        outcome.failure.as_ref().map(|e| format!("{e}"))
+    );
+    let module = outcome.module.expect("Linking + mono 必须产出合并 IR");
+    let values = run_merged_slot_values(module);
+    assert!(
+        values.iter().any(|value| value == "Int(7)"),
+        "零参闭包的命名实参按旧行为被忽略：f(x = 1) 返回 Int(7)，实际全局槽位：{values:?}"
+    );
+}
+
+/// F3 回归（t3 复审，4.9.9 修复轮 3）：**内置容器构造**对非 `len` 的命名实参响亮拒绝。
+///
+/// `generate_builtin_container_ir` 原先只认 `len`，其余命名实参既不入槽也不拒绝
+/// （`Vec(Int)(foo = 3)` 修复前后都 check=0 ⇒ D60 禁止的静默择一）。修复轮 3 复用
+/// 共享兜底的空表出口报既有 E1014；`len` 形态不受影响（正控见下一条）。
+#[test]
+fn test_builtin_container_ctor_rejects_unknown_named_arg() {
+    // Arrange：非 len 命名实参
+    let (_dir, entry) = make_script_project(&[("main.yx", "v = Vec(Int)(foo = 3)\n")]);
+
+    // Act
+    let (codes, no_hard_failure) = check_codes(&entry);
+
+    // Assert
+    assert!(no_hard_failure, "IR 级诊断必须收进逐文件通道：{codes:?}");
+    assert!(
+        codes.iter().any(|code| code == "E1014"),
+        "容器构造的未知命名实参必须响亮拒绝（既有 E1014），不得静默忽略：{codes:?}"
+    );
+}
+
+/// F3 正控：`Vec(Int)(len = 3)` 仍按槽位分配走通（不得被兜底误伤）。
+#[test]
+fn test_builtin_container_ctor_len_named_arg_still_passes() {
+    // Arrange
+    let (_dir, entry) =
+        make_script_project(&[("main.yx", "v = Vec(Int)(len = 3)\nw = v.length\n")]);
+
+    // Act
+    let (codes, no_hard_failure) = check_codes(&entry);
+
+    // Assert
+    assert!(
+        no_hard_failure,
+        "len 形态不得被兜底改判编译期错误：{codes:?}"
+    );
+    assert!(
+        !codes.iter().any(|code| code == "E1014"),
+        "len 是容器构造的合法命名实参，不得报 E1014：{codes:?}"
     );
 }

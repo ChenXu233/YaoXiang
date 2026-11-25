@@ -258,7 +258,7 @@ impl AstToIrGenerator {
     /// `available` 口径不另算：空名表 + 命名实参在共享判据
     /// `arg_binding::bind_args_to_params` 里就是「未知名」⇒ 既有 E1014，
     /// available = 名表[recv_offset..] = 空串——与 typecheck / D20 臂同一实现。
-    fn reject_named_args_without_param_names(
+    pub(super) fn reject_named_args_without_param_names(
         key: &str,
         args: &[Expr],
         named_args: &[(String, Expr)],
@@ -285,6 +285,25 @@ impl AstToIrGenerator {
             .at(span)
             .build(),
         }
+    }
+
+    /// 该名字是不是**本函数体内绑定的 lambda / 嵌套函数**（闭包类别）。
+    ///
+    /// 判据来源是 lowering 自己的登记面：`f = () => 7` 在函数体内绑定时走
+    /// `StmtKind::Assign` 的嵌套函数臂（生成为 `nested_functions` 条目），不是
+    /// 局部变量——调用点因此看着像静态函数名（`is_static_fn_name` 为真），
+    /// 但它不是声明函数、形参名表里没有它。
+    ///
+    /// 用途（4.9.9 修复轮 3 / F2）：这类调用**不进**「拿不到名字表 ⇒ 响亮拒绝」
+    /// 的兜底——零参闭包 `f = () => 7; g = f(x = 1)` 在兜底之前编译通过且结果
+    /// 正确，按 07 入口判据属「原先成功」，改判编译期错误是 D 类变更、超出 4.9.9
+    /// 目标。旧行为（命名实参不参与绑定）保留，并在 09 的 4.9.9 行登记为已知缺口
+    /// （D60 ② 该报未报，A 类）。
+    fn is_nested_lambda_name(
+        &self,
+        name: &str,
+    ) -> bool {
+        self.nested_functions.iter().any(|f| f.name == name)
     }
 
     /// 生成 Call 表达式 IR
@@ -353,8 +372,9 @@ impl AstToIrGenerator {
         // 此前这条路径根本不存在：`Vec(Int)()` 在类型检查阶段就报
         // E1001 unknown variable 'Vec'（类型名不在值位置的白名单里）。
         if let Expr::Call { func: inner, .. } = func {
-            if let Some(_ctor) = self.builtin_container_ctor_name(inner) {
+            if let Some(ctor) = self.builtin_container_ctor_name(inner) {
                 return self.generate_builtin_container_ir(
+                    &ctor,
                     args,
                     named_args,
                     span,
@@ -1049,10 +1069,21 @@ impl AstToIrGenerator {
                             })
                         })
                         .collect();
-                } else if !is_ctor {
-                    // F1（WBS 4.9.9 修复轮 2）：普通函数调用的形参名表不可得（本模块
-                    // 表与导出面都查不到）时，此前命名实参被静默丢弃。响亮拒绝：
+                } else if !is_ctor
+                    && self.is_static_fn_name(func)
+                    && !self.is_nested_lambda_name(callee.as_deref().unwrap_or(""))
+                {
+                    // F1（WBS 4.9.9 修复轮 2）：**静态**函数名的形参名表不可得（本
+                    // 模块表与导出面都查不到）时，此前命名实参被静默丢弃。响亮拒绝：
                     // 共享判据的空表出口 = 既有 E1014，available 同一口径。
+                    //
+                    // 边界（4.9.9 修复轮 3 / F2）：**动态/闭包调用不在此列**——零参
+                    // 闭包 `f = () => 7; g = f(x = 1)` 修复前编译通过且结果正确，按
+                    // 07 的入口判据属「原先成功」，把命名实参改判为编译期错误是 D 类
+                    // 变更、超出 4.9.9 目标。此处恢复旧行为（命名实参不参与绑定），
+                    // 并把「闭包/动态调用的命名实参静默忽略」作为**已知缺口**登记在
+                    // 09 的 4.9.9 行（D60 ② 该报未报，A 类）；判据见 driver 级
+                    // `test_dynamic_call_named_arg_keeps_legacy_behavior`。
                     return Err(Self::reject_named_args_without_param_names(
                         callee.as_deref().unwrap_or("<fn>"),
                         args,

@@ -174,8 +174,10 @@ impl AstToIrGenerator {
     ///
     /// 前两者与容器字面量同形，直接复用 `generate_list_expr_ir`；
     /// 第三者用 `AllocFixedArray` 分配 n 个 Void 占位（与 Array 字面量落点同款）。
+    #[allow(clippy::too_many_arguments)]
     pub(super) fn generate_builtin_container_ir(
         &mut self,
+        ctor: &str,
         args: &[Expr],
         named_args: &[(String, Expr)],
         span: &Span,
@@ -183,6 +185,26 @@ impl AstToIrGenerator {
         instructions: &mut Vec<Instruction>,
         constants: &mut Vec<ConstValue>,
     ) -> Result<(), Diagnostic> {
+        // F3（WBS 4.9.9 修复轮 3）：本臂只认 `len`。其余命名实参此前既不入槽也
+        // 不拒绝——**静默丢弃**（D60 禁止静默择一；实测 `Vec(Int)(foo = 3)` 在
+        // 修复前后都 check=0）。响亮拒绝：空名表走共享判据的 E1014 出口
+        // （available 同一口径 = 空串），不新造诊断码、不改文案；`len` 形态不受
+        // 影响（`Vec(Int)(len = 3)` 仍 0/0）。判据见 driver 级
+        // `test_builtin_container_ctor_rejects_unknown_named_arg`。
+        let unknown_named: Vec<(String, Expr)> = named_args
+            .iter()
+            .filter(|(name, _)| name != "len")
+            .cloned()
+            .collect();
+        if !unknown_named.is_empty() {
+            return Err(Self::reject_named_args_without_param_names(
+                ctor,
+                args,
+                &unknown_named,
+                *span,
+            ));
+        }
+
         // `len = n`：分配 n 个零值槽位。
         // 长度是**运行期**值（RFC-011：Vec 是运行时长度的地基），
         // 故用 AllocArray 而非编译期定长的 AllocFixedArray。

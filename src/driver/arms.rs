@@ -1725,7 +1725,15 @@ impl Driver {
 ///    单元 AST 产出）。故配 `target`，按 `local` 配会查一个注册表里不存在的
 ///    类型名 ⇒ 别名导入的候选永远注入不进来（4.9.9 实测：`use lib.{Point as P}`
 ///    的 `p.scale_by(k = 2.0)` 命名实参被静默丢弃，落运行期 E6007）；
-/// ③ 同一个裸类型名被**多个模块**带进作用域时整名跳过（同上：源程序已歧义）。
+/// ③ 同一裸类型名在**同级来源内**被多个模块带进作用域时整名跳过（同上：源程序已
+///    歧义）。**提供方优先级**（4.9.9 修复轮 2 / F1）：裸名提供方（`local == target`）
+///    优先，只有裸名提供方缺席时才用别名提供方——别名不产生裸名，不该参与
+///    「裸名的多模块歧义」判定；否则 `use a.{Temp as X}` + `use b.{Temp}` 会把裸名
+///    提供方 b 的候选一起跳掉（裸名侧位置实参的重载决议退回 method_bindings 单值，
+///    实测 `t.bump(3.0)` 报 E1002；pre-t1 的实际行为正是裸名侧候选照常注入）。
+///    残留（已登记，见 09 的 4.9.9 行）：裸名与别名并存时，别名侧实例与裸名侧
+///    实例共用同一个裸名候选键，调用点无法按名区分——名字层歧义属源程序本身，
+///    候选按裸名提供方取（不猜、不重命名）。
 ///
 /// 本单元**自有键位不外并**：同名裸类型在本单元已有定义时，调用点解析到的就是
 /// 本单元那一个（模块身份优先）；自有候选由本单元自己的签名收集现场登记。
@@ -1739,12 +1747,15 @@ fn visible_method_overloads(
     registry: &ModuleRegistry,
 ) -> Vec<(String, MethodOverloadCandidates)> {
     let names = DeadCodeAnalyzer::collect_module_names(ast);
-    // 裸类型名 → 带它进作用域的模块键（重复 = 名字层歧义 ⇒ 整名跳过）
-    let mut scope: HashMap<String, String> = HashMap::new();
-    let mut conflicted: HashSet<String> = HashSet::new();
-    for (_local, target, use_path) in &names.imported {
-        // 本地别名（`use M.{Type as P}`）不参与候选键：键的前缀是接收者的已解析
-        // 类型名 = 定义侧名字（见本函数文档②）。
+    // 裸类型名 → 带它进作用域的模块键，按**提供方优先级**分两级登记
+    // （4.9.9 修复轮 2 / F1）：裸名提供方（`local == target`）与别名提供方分开存，
+    // 冲突（同名字被 ≥2 模块带进作用域）也**分级判**——别名的存在不影响裸名侧，
+    // 裸名侧的多模块冲突也不会被别名「救回」（见文档③）。
+    let mut bare: HashMap<String, String> = HashMap::new();
+    let mut aliased: HashMap<String, String> = HashMap::new();
+    let mut conflicted_bare: HashSet<String> = HashSet::new();
+    let mut conflicted_alias: HashSet<String> = HashSet::new();
+    for (local, target, use_path) in &names.imported {
         // use 路径必须命中注册表模块、且该模块确实导出这个名字（未解析导入 /
         // 子模块名都不构成裸类型名）；查法与 checker 的 use 处理同表
         let Some(exports) = registry.get_exports(use_path) else {
@@ -1753,13 +1764,20 @@ fn visible_method_overloads(
         if !exports.contains_key(target) {
             continue;
         }
-        match scope.get(target) {
+        // 本地别名不参与候选键：键的前缀是接收者的已解析类型名 = 定义侧名字
+        // （见本函数文档②）。这里只决定**提供方优先级**：裸名提供方优先。
+        let (table, conflicted) = if local == target {
+            (&mut bare, &mut conflicted_bare)
+        } else {
+            (&mut aliased, &mut conflicted_alias)
+        };
+        match table.get(target) {
             Some(existing) if existing != use_path => {
-                conflicted.insert(target.clone()); // ③ 同名被多模块带进作用域
+                conflicted.insert(target.clone()); // ③ 同级同名被多模块带进作用域
             }
             Some(_) => {}
             None => {
-                scope.insert(target.clone(), use_path.clone());
+                table.insert(target.clone(), use_path.clone());
             }
         }
     }
@@ -1770,10 +1788,19 @@ fn visible_method_overloads(
     // 名字 ← 提供模块**逐对**取候选：只有「键的提供模块 == 该类型名前缀的提供模块」
     // 的候选组才进决议表（跨对组合会把别的模块的同名类型候选塞进来 ⇒ 2 候选 ⇒ E1107）。
     // 名字升序 ⇒ 合并顺序确定（不同前缀的键互不相干）。
-    let mut pairs: Vec<(String, String)> = scope
+    // 提供方优先级：裸名提供方优先；别名提供方只补「裸名侧完全没有该名字」的位。
+    // 裸名侧有冲突（多模块同名）⇒ 该名字整名跳过，别名也不得补位（源程序名字层
+    // 已歧义）。
+    let bare_names: HashSet<String> = bare.keys().cloned().collect();
+    let mut pairs: Vec<(String, String)> = bare
         .into_iter()
-        .filter(|(name, _)| !conflicted.contains(name))
+        .filter(|(name, _)| !conflicted_bare.contains(name))
         .collect();
+    pairs.extend(
+        aliased
+            .into_iter()
+            .filter(|(name, _)| !bare_names.contains(name) && !conflicted_alias.contains(name)),
+    );
     pairs.sort();
     let mut merged: Vec<(String, MethodOverloadCandidates)> = Vec::new();
     for (name, module) in pairs {
