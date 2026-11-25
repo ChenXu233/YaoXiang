@@ -17,8 +17,10 @@ use crate::util::span::Span;
 
 /// SSA 值标识：函数内稠密编号，单调递增、永不回滚（04-ssa.md §值标识方式）。
 ///
-/// 本批（7b.1a）只建立表示：生产构造点 0、无求值/分配语义；7b.2 起
-/// `next_temp_reg` 改产出 `Operand::Value`（提交信息）。
+/// 7b.1a 建立表示；7f.1（AOT 分支）起生产构造点已由
+/// `middle::ir::ssa::construct_ssa` 落地：按支配边界插入 Phi、按支配关系重命名
+/// 值，`Operand::Value` 与值表进入生产 IR；`ValueInfo.defining_block` 记真实
+/// 定义块。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct ValueId(pub u32);
 
@@ -1213,8 +1215,9 @@ pub fn partition_blocks(instructions: Vec<Instruction>) -> Vec<BasicBlock> {
 /// （`Operand::Value`）——locals 的存在不违反 SSA，它就是 SSA 之外的存储部分
 /// （LLVM 的 alloca 模型）。
 ///
-/// 本批（7b.1b）只建立结构与访问器：生产侧一律空表（`Operand::Value` 的生产
-/// 归 7b.2），故 `values` 不进入任何渲染 / 翻译路径（快照零漂移）。
+/// 7b.1b 建立结构与访问器；7f.1（AOT 分支）起生产侧由
+/// `middle::ir::ssa::construct_ssa` 真实填充（Phi/重命名值与真实
+/// `defining_block`），`verify_ssa` 读取该表做一致性检查。
 #[derive(Debug, Clone)]
 pub struct ValueInfo {
     /// 值类型（收敛后的单一 `MonoType`）

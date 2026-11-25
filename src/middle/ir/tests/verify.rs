@@ -1450,10 +1450,9 @@ fn test_ssa_value_use_not_dominated_fails() {
     );
 }
 
-/// 反例：Phi incoming 的源只在另一前驱定义——在所选前驱出口不受支配。
-#[test]
-fn test_ssa_phi_incoming_source_not_dominated_fails() {
-    // Arrange：v0 只在块 2 定义，Phi 在块 3 同时从前驱 1、2 读取它
+/// Phi incoming 源未受支配夹具：v0 只在块 2 定义，块 3 的 Phi 同时从
+/// 前驱 1、2 读取它；前驱 1 出口处 v0 没有支配定义。
+fn phi_source_undominated_module() -> ModuleIR {
     let phi = phi_instr(ssa_value(1), vec![(1, ssa_value(0)), (2, ssa_value(0))]);
     let f = func_with_blocks(
         "f",
@@ -1483,9 +1482,17 @@ fn test_ssa_phi_incoming_source_not_dominated_fails() {
             block(3, vec![phi, value_ret(1)], vec![]),
         ],
     );
+    module_with(vec![f])
+}
+
+/// 反例：Phi incoming 的源只在另一前驱定义——在所选前驱出口不受支配。
+#[test]
+fn test_ssa_phi_incoming_source_not_dominated_fails() {
+    // Arrange：v0 只在块 2 定义，Phi 从前驱 1、2 读取；helpers 见上。
+    let m = phi_source_undominated_module();
 
     // Act
-    let r = verify_ssa(&module_with(vec![f]));
+    let r = verify_ssa(&m);
 
     // Assert
     assert_eq!(
@@ -1778,11 +1785,11 @@ fn test_ssa_phi_known_type_conflict_fails() {
     );
 }
 
-/// 门禁负例自证：五类坏 IR 必须分别被 verify_ssa 拒绝且归到正确不变量。
+/// 门禁负例自证：六类坏 IR 必须分别被 verify_ssa 拒绝且归到正确不变量。
 /// 这是 check-ir-verifier.sh 第三条判据的直驱测试——破坏任一断言都会让脚本红。
 #[test]
 fn test_verify_ssa_negative_controls() {
-    // Arrange：五个独立合成 ModuleIR，每个只制造一种 SSA 违规。
+    // Arrange：六个独立合成 ModuleIR，每个只制造一种 SSA 违规。
     let double_definition = module_with(vec![func_with_blocks(
         "double_definition",
         vec![],
@@ -1857,6 +1864,8 @@ fn test_verify_ssa_negative_controls() {
         vec![block(0, vec![value_ret(0)], vec![])],
     )]);
 
+    let phi_source_undominated = phi_source_undominated_module();
+
     // Act
     let double_err = verify_ssa(&double_definition).expect_err("Value 双定义必须报错");
     let undominated_err = verify_ssa(&undominated_use).expect_err("未受支配使用必须报错");
@@ -1865,8 +1874,40 @@ fn test_verify_ssa_negative_controls() {
     let defining_err =
         verify_ssa(&defining_block_mismatch).expect_err("defining_block 不一致必须报错");
     let undefined_err = verify_ssa(&reachable_undefined).expect_err("可达使用无定义必须报错");
+    let phi_source_err =
+        verify_ssa(&phi_source_undominated).expect_err("Phi incoming 源未受支配必须报错");
 
     // Assert
+    assert_eq!(
+        double_err.violations.len(),
+        1,
+        "Value 双定义夹具只应产生 1 项总违规：{double_err}"
+    );
+    assert_eq!(
+        undominated_err.violations.len(),
+        1,
+        "未受支配使用夹具只应产生 1 项总违规：{undominated_err}"
+    );
+    assert_eq!(
+        phi_err.violations.len(),
+        1,
+        "Phi 已知冲突夹具只应产生 1 项总违规：{phi_err}"
+    );
+    assert_eq!(
+        defining_err.violations.len(),
+        1,
+        "defining_block 不一致夹具只应产生 1 项总违规：{defining_err}"
+    );
+    assert_eq!(
+        undefined_err.violations.len(),
+        1,
+        "可达使用无定义夹具只应产生 1 项总违规：{undefined_err}"
+    );
+    assert_eq!(
+        phi_source_err.violations.len(),
+        1,
+        "Phi incoming 源未受支配夹具只应产生 1 项总违规：{phi_source_err}"
+    );
     assert_eq!(
         double_err
             .violations
@@ -1931,5 +1972,21 @@ fn test_verify_ssa_negative_controls() {
     assert!(
         undefined_err.to_string().contains("没有支配"),
         "可达无定义诊断应点名无支配定义：{undefined_err}"
+    );
+    assert_eq!(
+        phi_source_err
+            .violations
+            .iter()
+            .filter(|v| v.invariant == InvariantKind::Dominance)
+            .count(),
+        1,
+        "Phi incoming 源未受支配应报 1 项 Dominance：{phi_source_err}"
+    );
+    assert!(
+        phi_source_err
+            .to_string()
+            .contains("Phi incoming 源 ValueId(0)")
+            && phi_source_err.to_string().contains("前驱块 1"),
+        "Phi 源支配诊断应点名值与前驱块：{phi_source_err}"
     );
 }
