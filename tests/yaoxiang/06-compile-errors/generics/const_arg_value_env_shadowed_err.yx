@@ -10,7 +10,7 @@ f: (N: Int) -> (n: N) -> Int = (n) => n
 k0: Int = 7
 g: (r: Int) -> Int = {
     return match r {
-        k0 => f(k0 - 1)(k0 - 1)
+        k0 -> f(k0 - 1)(k0 - 1)
     }
 }
 

@@ -142,7 +142,7 @@ fn test_match_expression_available() {
     // Arrange
     let source = r#"
         main = () => {
-            r1 = match 1 { 1 => 100, _ => 0 }
+            r1 = match 1 { 1 -> 100, _ -> 0 }
         }
     "#;
 

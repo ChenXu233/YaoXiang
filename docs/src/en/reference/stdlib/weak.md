@@ -103,8 +103,8 @@ main: () -> Void = {
     // upgrade: returns some(v) while the target is alive, or none() once it has been freed
     u = weak.upgrade(w)
     match u {
-        some(v) => println("alive"),
-        none() => println("dropped"),
+        some(v) -> println("alive"),
+        none() -> println("dropped"),
     }
 }
 ```

@@ -13,23 +13,23 @@ main: () -> Void = {
     // native 返回 Ok 载荷
     f = string.parse_float("125.0")
     w = match f {
-        ok(x) => x,
-        err(_) => 0.0,
+        ok(x) -> x,
+        err(_) -> 0.0,
     }
     assert.assert(w == 125.0, "match native ok arm payload")
 
     // native 返回 Err 载荷
     n = string.parse_int("nope")
     v = match n {
-        ok(x) => x,
-        err(_) => -1,
+        ok(x) -> x,
+        err(_) -> -1,
     }
     assert.assert(v == -1, "match native err arm payload")
 
     // 穷尽性：两臂覆盖后结果类型一致
     tag = match f {
-        ok(_) => "parsed",
-        err(_) => "failed",
+        ok(_) -> "parsed",
+        err(_) -> "failed",
     }
     assert.assert(tag == "parsed", "match native exhaustive arms")
 }

@@ -357,12 +357,12 @@ AppError: Type = {
 // 概念形态（map_err 不可用，改用 match 显式搬运）
 process: (url: String, path: FilePath) -> Result(Data, AppError) = {
     fetched = match fetch(url) {
-        ok(v) => v
-        err(e) => return AppError.Http(e)
+        ok(v) -> v
+        err(e) -> return AppError.Http(e)
     }
     content = match read_file(path) {
-        ok(v) => v
-        err(e) => return AppError.Io(e)
+        ok(v) -> v
+        err(e) -> return AppError.Io(e)
     }
     return parse(fetched + content)
 }

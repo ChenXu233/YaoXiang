@@ -136,6 +136,8 @@
     "example": "x = 1 @ 2;",
     "error_output": "error[E0011]: unexpected token\n --> example.yx:1:7\n  |\n1 | x = 1 @ 2;\n  |       ^ unexpected token '@'"
   },
+  "E0011.branch_arrow.message": "=> should be -> (use -> for match arms; => is only for lambdas)",
+  "E0011.branch_arrow.help": "Change the match arm arrow to '->'; '->' is the arm arrow and '=>' is only for lambdas",
   "E0012": {
     "title": "Invalid syntax",
     "message": "Syntax error in expression or statement",

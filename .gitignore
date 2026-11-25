@@ -117,3 +117,6 @@ scripts/ci/_docs-*.txt
 .dsh-*/
 
 docs/src/blog/cubk-style-comment.md
+
+# 工具误把 %SystemDrive% 当相对路径展开时留下的目录，禁止入库
+%SystemDrive%/

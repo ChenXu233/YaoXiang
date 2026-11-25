@@ -9,7 +9,7 @@ id: (x: Int) -> Int = x
 f: (N: Int) -> (n: N) -> Int = (n) => n
 g: (N: Int) -> (k: N) -> (r: Int) -> Int = {
     return match r {
-        k => f(k - 1)(k - 1)
+        k -> f(k - 1)(k - 1)
     }
 }
 

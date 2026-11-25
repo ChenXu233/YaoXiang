@@ -584,7 +584,7 @@ fn test_measure_obligation_proved_when_solver_reports_unsat() {
 
     // Arrange — gcd 形态，测度 b；恒 Unsat 桩
     let source = "gcd: (a: Int, b: Int) -> Terminates(b) = { \
-                  if b == 0 { return a } \
+                  if b == 0 { return a }; \
                   return gcd(b, a % b) }";
     let measures = [("gcd", ConstExpr::NamedVar("b".to_string()))];
     // 桩求解器先绑定：检查器只**借用**求解器（D58 生命周期参数化）
@@ -609,7 +609,7 @@ fn test_measure_obligation_disproved_when_solver_reports_sat() {
 
     // Arrange
     let source = "gcd: (a: Int, b: Int) -> Terminates(b) = { \
-                  if b == 0 { return a } \
+                  if b == 0 { return a }; \
                   return gcd(b, a % b) }";
     let measures = [("gcd", ConstExpr::NamedVar("b".to_string()))];
     // 桩求解器先绑定：检查器只**借用**求解器（D58 生命周期参数化）
@@ -636,7 +636,7 @@ fn test_measure_obligation_unjudged_without_solver() {
 
     // Arrange
     let source = "f: (n: Int) -> Terminates(n) = { \
-                  if n == 0 { return 0 } \
+                  if n == 0 { return 0 }; \
                   return f(n - 1) }";
     let measures = [("f", ConstExpr::NamedVar("n".to_string()))];
 
@@ -663,7 +663,7 @@ fn test_real_solver_proves_genuinely_decreasing_measure() {
 
     // Arrange
     let source = "f: (n: Int) -> Terminates(n) = { \
-                  if n == 0 { return 0 } \
+                  if n == 0 { return 0 }; \
                   return f(n - 1) }";
     let measures = [("f", ConstExpr::NamedVar("n".to_string()))];
     let solver = default_solver().expect("本用例需要 Z3（default_solver）");
@@ -691,7 +691,7 @@ fn test_real_solver_rejects_increasing_measure() {
 
     // Arrange — f(n + 1)：n + 1 < n 有反例
     let source = "f: (n: Int) -> Terminates(n) = { \
-                  if n == 0 { return 0 } \
+                  if n == 0 { return 0 }; \
                   return f(n + 1) }";
     let measures = [("f", ConstExpr::NamedVar("n".to_string()))];
     let solver = default_solver().expect("本用例需要 Z3（default_solver）");
@@ -741,7 +741,7 @@ fn test_well_founded_unjudged_without_solver() {
 
     // Arrange
     let source = "gcd: (a: Int, b: Int) -> Terminates(b) = { \
-                  if b == 0 { return a } \
+                  if b == 0 { return a }; \
                   return gcd(b, a % b) }";
     let measures = [("gcd", ConstExpr::NamedVar("b".to_string()))];
     let assumptions = [(
@@ -809,7 +809,7 @@ fn test_measure_obligation_not_proved_when_solver_reports_unknown() {
 
     // Arrange
     let source = "gcd: (a: Int, b: Int) -> Terminates(b) = { \
-                  if b == 0 { return a } \
+                  if b == 0 { return a }; \
                   return gcd(b, a % b) }";
     let measures = [("gcd", ConstExpr::NamedVar("b".to_string()))];
     // 桩求解器先绑定：检查器只**借用**求解器（D58 生命周期参数化）
@@ -838,7 +838,7 @@ fn test_measure_disproof_emits_e4022_when_well_founded() {
     // Arrange —— 测度 b：有下界精化（良基性可证），但递增实参 `b + 1` 使 `b + 1 < b` 判伪
     let source = "NonNegative: (x: Int) -> Type = { x >= 0 }\n\
                   f: (n: Int, b: NonNegative(b)) -> Terminates(b) = { \
-                  if b == 0 { return n } \
+                  if b == 0 { return n }; \
                   return f(n, b + 1) }";
     let solver = default_solver().expect("本用例需要 Z3");
     let mut checker = checker_with_measures(

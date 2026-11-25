@@ -138,28 +138,28 @@ Maybe: Type = {
 
 Maybe.is_failure: (self: &Maybe) -> Bool = (self) => {
     match self {
-        nothing() => true,
-        just(_) => false,
+        nothing() -> true,
+        just(_) -> false,
     }
 }
 
 Maybe.success: (self: &Maybe) -> Int = (self) => {
     match self {
-        just(v) => v,
-        nothing() => assert.assert(false),
+        just(v) -> v,
+        nothing() -> assert.assert(false),
     }
 }
 
 Maybe.residual: (self: &Maybe) -> String = (self) => {
     match self {
-        nothing() => \"empty\",
-        just(_) => assert.assert(false),
+        nothing() -> \"empty\",
+        just(_) -> assert.assert(false),
     }
 }
 
 Maybe.from_error: (e: String) -> Maybe = (e) => {
     match e {
-        _ => Maybe.nothing(),
+        _ -> Maybe.nothing(),
     }
 }
 ";

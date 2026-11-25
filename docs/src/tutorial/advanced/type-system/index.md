@@ -105,9 +105,9 @@ Shape: Type = { circle: (Float) -> Shape, rect: (Float, Float) -> Shape, point: 
 <!-- docs-example: skip -->
 ```yaoxiang
 area: (s: Shape) -> Float = match s {
-    circle(r) => 3.14159 * r * r,
-    rect(w, h) => w * h,
-    point => 0,
+    circle(r) -> 3.14159 * r * r,
+    rect(w, h) -> w * h,
+    point -> 0,
 }
 
 print(area(circle(5.0)))    // 78.53975

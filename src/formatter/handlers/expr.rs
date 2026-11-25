@@ -594,14 +594,14 @@ fn format_match_expr(
         if line_len > ctx.options.line_width && pattern_len > 10 {
             // pattern 过长，换行
             result.push_str(&format!(
-                "{}{}\n{}    => {},\n",
+                "{}{}\n{}    -> {},\n",
                 inner_indent, pattern_str, inner_indent, body_str
             ));
         } else {
             // 对齐 pattern
             let padding = " ".repeat(max_pattern_len.saturating_sub(pattern_len));
             result.push_str(&format!(
-                "{}{}{} => {},\n",
+                "{}{}{} -> {},\n",
                 inner_indent, pattern_str, padding, body_str
             ));
         }
@@ -731,6 +731,35 @@ pub fn format_block(
             let single_line = format!("{{ {} }}", stmt_str);
 
             // 检查单行格式是否超过行宽
+            if ctx.indent_width() + single_line.len() <= ctx.options.line_width {
+                return single_line;
+            }
+        }
+    }
+
+    // §6.2 单行代码块（多语句）：源里块体在同一行且无内部注释时，保持单行
+    // 并用 `; ` 分隔——「同行多语句用分号」（syntax.md §3.1）的 formatter 面。
+    if block.stmts.len() > 1
+        && source_map
+            .block_close_offset(block.span.start.offset)
+            .is_some()
+    {
+        let first_line = block.stmts[0].span.start.line;
+        let all_on_first_line = block.stmts.iter().all(|s| s.span.start.line == first_line);
+        let close = source_map
+            .block_close_offset(block.span.start.offset)
+            .unwrap_or(usize::MAX);
+        let comment_inside = source_map
+            .comments
+            .iter()
+            .any(|c| c.span.start.offset > block.span.start.offset && c.span.end.offset <= close);
+        if all_on_first_line && !comment_inside {
+            let parts: Vec<String> = block
+                .stmts
+                .iter()
+                .map(|stmt| super::stmt::format_stmt(&stmt.kind, &inner_ctx, source_map))
+                .collect();
+            let single_line = format!("{{ {} }}", parts.join("; "));
             if ctx.indent_width() + single_line.len() <= ctx.options.line_width {
                 return single_line;
             }

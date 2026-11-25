@@ -181,8 +181,8 @@ if x > 0 {
 
 // 模式匹配
 match result {
-    ok(value) => print("success: " + value),
-    err(error) => print("error: " + error),
+    ok(value) -> print("success: " + value),
+    err(error) -> print("error: " + error),
 }
 
 // 循环

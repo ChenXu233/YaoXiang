@@ -14,7 +14,7 @@ Point: Type = {
 main: () -> Void = {
     p = Point(1, 2)
     v = match p {
-        Point(x, y) => x
-        _ => 0
+        Point(x, y) -> x
+        _ -> 0
     }
 }

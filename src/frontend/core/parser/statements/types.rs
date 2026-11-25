@@ -27,6 +27,11 @@ impl ParserState<'_> {
     pub fn parse_type_annotation_required(&mut self) -> Option<Type> {
         parse_type_annotation_required(self)
     }
+
+    /// 解析 `as` 的目标类型（D1：目标类型不吞其后值级中缀，故禁止顶层常量续接）。
+    pub fn parse_cast_target_type(&mut self) -> Option<Type> {
+        parse_cast_target_type(self)
+    }
 }
 
 /// 严格变体：仅用于调用方已消费 `:` 或 `as` 的位置（类型必需）。
@@ -68,27 +73,50 @@ pub fn parse_type_annotation_required(state: &mut ParserState<'_>) -> Option<Typ
 /// 层——全部 ≤ 闸值 1024，按「类型闸值 ≥ 实测崩溃起点」判据并入单闸；
 /// 闸上（≥1025 层）发射 E0019 并以 `None` 逐层弹出。
 pub fn parse_type_annotation(state: &mut ParserState<'_>) -> Option<Type> {
+    parse_type_annotation_with(state, true)
+}
+
+/// 类型转换（`as`）的目标类型：**禁止**顶层常量表达式续接。
+///
+/// D1（09a §P8 8.8 六）：类型位的标识符 / 字面量种子会经同一个 Pratt 中缀循环
+/// 续接，于是「x as Int * y」的目标类型被读成「Int * y」。规范 §2.6 的
+/// TypeCast ::= Expr 'as' TypeExpr 只吃一个类型，值级中缀属于外层表达式；
+/// 类型级常量表达式（Array(Int, N + 1)、Assert(N > 0)）只出现在实参位，
+/// 因此续接由「是否在实参位」这一个开关决定，而不是每个调用点各自判断。
+pub fn parse_cast_target_type(state: &mut ParserState<'_>) -> Option<Type> {
+    parse_type_annotation_with(state, false)
+}
+
+/// parse_type_annotation 的实际实现：allow_const_expr 决定顶层种子是否允许
+/// 值级中缀续接（见上一条注释的 D1 说明）。
+fn parse_type_annotation_with(
+    state: &mut ParserState<'_>,
+    allow_const_expr: bool,
+) -> Option<Type> {
     if !state.enter_nested_parse() {
         return None;
     }
-    let result = parse_type_annotation_nested(state);
+    let result = parse_type_annotation_nested(state, allow_const_expr);
     state.exit_nested_parse();
     result
 }
 
 /// [`parse_type_annotation`] 的闸内本体（原实现逐字保留）。
-fn parse_type_annotation_nested(state: &mut ParserState<'_>) -> Option<Type> {
+fn parse_type_annotation_nested(
+    state: &mut ParserState<'_>,
+    allow_const_expr: bool,
+) -> Option<Type> {
     match state.current().map(|t| &t.kind) {
         Some(TokenKind::Star) => {
             // Raw pointer type: *T
             state.bump(); // consume '*'
-            let inner_type = Box::new(parse_type_annotation(state)?);
+            let inner_type = Box::new(parse_type_annotation_with(state, allow_const_expr)?);
             Some(Type::Ptr(inner_type))
         }
         Some(TokenKind::Ampersand) => {
             // &T — immutable reference type
             state.bump(); // consume &
-            let inner = parse_type_annotation(state)?;
+            let inner = parse_type_annotation_with(state, allow_const_expr)?;
             let span = state.span();
             Some(Type::Ref {
                 mutable: false,
@@ -99,7 +127,7 @@ fn parse_type_annotation_nested(state: &mut ParserState<'_>) -> Option<Type> {
         Some(TokenKind::MutRef) => {
             // &mut T — mutable reference type
             state.bump(); // consume &mut
-            let inner = parse_type_annotation(state)?;
+            let inner = parse_type_annotation_with(state, allow_const_expr)?;
             let span = state.span();
             Some(Type::Ref {
                 mutable: true,
@@ -195,9 +223,11 @@ fn parse_type_annotation_nested(state: &mut ParserState<'_>) -> Option<Type> {
                 field_path_seed = Some(expr);
             }
             // 后视检查：如果不是类型语法专用的 token，则作为表达式解析（blacklist）
-            if field_path_seed.is_some() || type_position_expr_continues(state) {
+            if field_path_seed.is_some()
+                || (allow_const_expr && type_position_expr_continues(state))
+            {
                 let seed = field_path_seed.unwrap_or_else(|| Expr::Var(name.clone(), name_span));
-                let expr = parse_type_position_const_expr(state, seed);
+                let expr = parse_type_position_const_expr(state, seed, allow_const_expr);
                 return Some(Type::ConstExpr(Box::new(expr)));
             }
             Some(Type::Name {
@@ -248,7 +278,7 @@ fn parse_type_annotation_nested(state: &mut ParserState<'_>) -> Option<Type> {
                     }
 
                     // Parse the type
-                    if let Some(ty) = parse_type_annotation(state) {
+                    if let Some(ty) = parse_type_annotation_with(state, allow_const_expr) {
                         named_params.push((param_name, param_name_span));
                         param_types.push(ty);
                     } else {
@@ -263,7 +293,7 @@ fn parse_type_annotation_nested(state: &mut ParserState<'_>) -> Option<Type> {
             } else {
                 // Parse types without names: (Type, Type, ...) -> ReturnType
                 if !state.at(&TokenKind::RParen) {
-                    while let Some(ty) = parse_type_annotation(state) {
+                    while let Some(ty) = parse_type_annotation_with(state, allow_const_expr) {
                         param_types.push(ty);
 
                         if !state.skip(&TokenKind::Comma) {
@@ -286,7 +316,7 @@ fn parse_type_annotation_nested(state: &mut ParserState<'_>) -> Option<Type> {
             // Check if followed by ->
             if state.at(&TokenKind::Arrow) {
                 state.bump(); // consume '->'
-                let return_type = Box::new(parse_type_annotation(state)?);
+                let return_type = Box::new(parse_type_annotation_with(state, allow_const_expr)?);
                 // 名字与类型同栖（RFC-039 6.8.1）：具名参数位带真实名字，
                 // 无名位置（纯类型列表）合成匿名形参——名字不再另存。
                 let params: Vec<Param> = param_types
@@ -363,6 +393,7 @@ fn parse_type_annotation_nested(state: &mut ParserState<'_>) -> Option<Type> {
             let expr = parse_type_position_const_expr(
                 state,
                 Expr::Lit(crate::frontend::core::lexer::tokens::Literal::Int(n), span),
+                allow_const_expr,
             );
             Some(Type::ConstExpr(Box::new(expr)))
         }
@@ -381,7 +412,7 @@ fn parse_type_annotation_nested(state: &mut ParserState<'_>) -> Option<Type> {
                     )),
                     span,
                 };
-                let expr = parse_type_position_const_expr(state, seed);
+                let expr = parse_type_position_const_expr(state, seed, allow_const_expr);
                 Some(Type::ConstExpr(Box::new(expr)))
             } else {
                 None
@@ -419,11 +450,12 @@ fn type_position_expr_continues(state: &ParserState<'_>) -> bool {
 fn parse_type_position_const_expr(
     state: &mut ParserState<'_>,
     seed: Expr,
+    allow_const_expr: bool,
 ) -> Expr {
-    if !type_position_expr_continues(state) {
+    if !allow_const_expr || !type_position_expr_continues(state) {
         return seed;
     }
-    match state.parse_infix_from(seed.clone(), 0) {
+    match state.parse_infix_from(seed.clone(), BP_LOWEST) {
         Some(expr) => expr,
         None => {
             // 深度闸拒绝（issue #540 修复轮）：E0019 已发射，同因双诊断压制，

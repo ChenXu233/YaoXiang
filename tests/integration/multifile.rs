@@ -1054,8 +1054,8 @@ use lib.{Shape}
 main = () => {
     c = Shape.circle(2.0)
     v = match c {
-        circle(r) => r,
-        square(_) => 0.0,
+        circle(r) -> r,
+        square(_) -> 0.0,
     }
     assert.assert(v == 2.0, "cross-module sum type ctor + match")
 }
@@ -1080,8 +1080,8 @@ use lib
 main = () => {
     s = Shape.square("hi")
     v = match s {
-        circle(r) => r,
-        square(_) => 1.0,
+        circle(r) -> r,
+        square(_) -> 1.0,
     }
     assert.assert(v == 1.0, "whole-import sum type ctor + match")
 }

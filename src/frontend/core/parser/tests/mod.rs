@@ -6,7 +6,6 @@ mod associativity;
 mod ast;
 mod error_recovery;
 mod expressions;
-mod grammar_probe;
 mod integration;
 mod parser_state;
 mod patterns;

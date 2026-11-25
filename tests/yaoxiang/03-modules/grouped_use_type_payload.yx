@@ -11,16 +11,16 @@ main: () -> Void = {
     // 分组 use 后类型裸名可用（构造）
     a = Result(Int, String).ok(21)
     v = match a {
-        ok(x) => x * 2,
-        err(_) => 0,
+        ok(x) -> x * 2,
+        err(_) -> 0,
     }
     assert.assert(v == 42, "grouped use type bare name + match")
 
     // 分组 use 后 match native 返回的 Result
     n = string.parse_int("nope")
     tag = match n {
-        ok(_) => "parsed",
-        err(_) => "failed",
+        ok(_) -> "parsed",
+        err(_) -> "failed",
     }
     assert.assert(tag == "failed", "grouped use match native Result")
 }

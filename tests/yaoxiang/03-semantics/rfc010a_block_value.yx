@@ -28,8 +28,8 @@ tail_if: () -> Int = {
 // 规则①：尾位置为 match 表达式
 tail_match: (x: Int) -> Int = {
     match x {
-        1 => 10
-        _ => 20
+        1 -> 10
+        _ -> 20
     }
 }
 

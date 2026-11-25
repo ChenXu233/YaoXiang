@@ -30,9 +30,9 @@ use std.assert
 
 main: () -> Void = {
     grade = match 85 {
-        90..99 => "A",
-        80..89 => "B",
-        _ => "F",
+        90..99 -> "A",
+        80..89 -> "B",
+        _ -> "F",
     }
     assert.assert(grade == "B", "85 in 80..89 => B")
 }
@@ -50,30 +50,30 @@ use std.assert
 
 main: () -> Void = {
     at_lo = match 80 {
-        90..99 => "A",
-        80..89 => "B",
-        _ => "F",
+        90..99 -> "A",
+        80..89 -> "B",
+        _ -> "F",
     }
     assert.assert(at_lo == "B", "lower bound 80 is included (closed)")
 
     at_hi = match 89 {
-        90..99 => "A",
-        80..89 => "B",
-        _ => "F",
+        90..99 -> "A",
+        80..89 -> "B",
+        _ -> "F",
     }
     assert.assert(at_hi == "B", "upper bound 89 is included (closed)")
 
     above = match 90 {
-        90..99 => "A",
-        80..89 => "B",
-        _ => "F",
+        90..99 -> "A",
+        80..89 -> "B",
+        _ -> "F",
     }
     assert.assert(above == "A", "90 passes 80..89 into 90..99")
 
     below = match 79 {
-        90..99 => "A",
-        80..89 => "B",
-        _ => "F",
+        90..99 -> "A",
+        80..89 -> "B",
+        _ -> "F",
     }
     assert.assert(below == "F", "79 below the range falls to fallback")
 }
@@ -90,23 +90,23 @@ use std.assert
 
 main: () -> Void = {
     at_lo = match -5 {
-        -5..-1 => "neg",
-        0..10 => "nonneg",
-        _ => "other",
+        -5..-1 -> "neg",
+        0..10 -> "nonneg",
+        _ -> "other",
     }
     assert.assert(at_lo == "neg", "lower bound -5 is included")
 
     at_hi = match -1 {
-        -5..-1 => "neg",
-        0..10 => "nonneg",
-        _ => "other",
+        -5..-1 -> "neg",
+        0..10 -> "nonneg",
+        _ -> "other",
     }
     assert.assert(at_hi == "neg", "upper bound -1 is included (closed)")
 
     zero = match 0 {
-        -5..-1 => "neg",
-        0..10 => "nonneg",
-        _ => "other",
+        -5..-1 -> "neg",
+        0..10 -> "nonneg",
+        _ -> "other",
     }
     assert.assert(zero == "nonneg", "0 outside -5..-1 falls to 0..10")
 }
@@ -123,23 +123,23 @@ use std.assert
 
 main: () -> Void = {
     mid = match 95 {
-        90..94 | 96..99 => "gap",
-        95 => "hit95",
-        _ => "other",
+        90..94 | 96..99 -> "gap",
+        95 -> "hit95",
+        _ -> "other",
     }
     assert.assert(mid == "hit95", "95 skips the gap alternatives")
 
     lo = match 91 {
-        90..94 | 96..99 => "gap",
-        95 => "hit95",
-        _ => "other",
+        90..94 | 96..99 -> "gap",
+        95 -> "hit95",
+        _ -> "other",
     }
     assert.assert(lo == "gap", "91 hits the first range alternative")
 
     hi = match 97 {
-        90..94 | 96..99 => "gap",
-        95 => "hit95",
-        _ => "other",
+        90..94 | 96..99 -> "gap",
+        95 -> "hit95",
+        _ -> "other",
     }
     assert.assert(hi == "gap", "97 hits the second range alternative")
 }
@@ -158,16 +158,16 @@ threshold = 85
 
 main: () -> Void = {
     low = match 83 {
-        80..89 if 83 >= threshold => "high B",
-        80..89 => "low B",
-        _ => "other",
+        80..89 if 83 >= threshold -> "high B",
+        80..89 -> "low B",
+        _ -> "other",
     }
     assert.assert(low == "low B", "guard failure falls to next arm")
 
     high = match 88 {
-        80..89 if 88 >= threshold => "high B",
-        80..89 => "low B",
-        _ => "other",
+        80..89 if 88 >= threshold -> "high B",
+        80..89 -> "low B",
+        _ -> "other",
     }
     assert.assert(high == "high B", "guard success takes the first arm")
 }
@@ -184,23 +184,23 @@ use std.assert
 
 main: () -> Void = {
     first = match 70 {
-        60..79 => "range hit",
-        70 => "literal hit",
-        _ => "other",
+        60..79 -> "range hit",
+        70 -> "literal hit",
+        _ -> "other",
     }
     assert.assert(first == "range hit", "first matching arm wins")
 
     in_range = match 200 {
-        404 => "Not Found",
-        200..299 => "Success",
-        _ => "Unknown",
+        404 -> "Not Found",
+        200..299 -> "Success",
+        _ -> "Unknown",
     }
     assert.assert(in_range == "Success", "200 in 200..299")
 
     on_literal = match 404 {
-        404 => "Not Found",
-        200..299 => "Success",
-        _ => "Unknown",
+        404 -> "Not Found",
+        200..299 -> "Success",
+        _ -> "Unknown",
     }
     assert.assert(on_literal == "Not Found", "404 keeps its literal arm")
 }

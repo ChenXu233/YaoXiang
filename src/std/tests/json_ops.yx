@@ -101,8 +101,8 @@ check_unicode: () -> () = {
     // 解码 3 个 Unicode 标量值：é(U+00E9) + 😀(U+1F600，代理对合一) + '9'
     jv = result.unwrap(runi)
     decoded = match jv {
-        str(s) => s,
-        _ => "",
+        str(s) -> s,
+        _ -> "",
     }
     assert.assert(decoded != "", "string variant payload extracted")
     c0 = string.char_code(string.substring(decoded, 0, 1), 0)

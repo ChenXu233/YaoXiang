@@ -99,8 +99,8 @@ main: () -> Void = {
     // upgrade：目标存活返回 some(v)，已释放返回 none()
     u = weak.upgrade(w)
     match u {
-        some(v) => println("alive"),
-        none() => println("dropped"),
+        some(v) -> println("alive"),
+        none() -> println("dropped"),
     }
 }
 ```

@@ -41,9 +41,9 @@ while n > 0 {
 
 // match pattern matching
 description = match number {
-    0 => "零",
-    1 => "一",
-    _ => "其他",
+    0 -> "零",
+    1 -> "一",
+    _ -> "其他",
 }
 print(description)
 ```

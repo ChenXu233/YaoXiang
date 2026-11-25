@@ -41,8 +41,8 @@ const BODY_READS_N: &str = concat!(
 const RECURSIVE_FALLBACK: &str = concat!(
     "factorial: (N: Int) -> (k: N) -> Int = {\n",
     "    return match k {\n",
-    "        0 => 1,\n",
-    "        _ => k * factorial(k - 1)(k - 1)\n",
+    "        0 -> 1,\n",
+    "        _ -> k * factorial(k - 1)(k - 1)\n",
     "    }\n",
     "}\n",
     "main: () -> Void = {\n",

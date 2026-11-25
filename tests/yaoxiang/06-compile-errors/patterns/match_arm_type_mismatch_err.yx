@@ -14,8 +14,8 @@ Maybe: Type = {
 main: () -> Void = {
     m = Maybe.just(1)
     v: Int = match m {
-        just(x) => x,
-        nothing() => "not an int",
+        just(x) -> x,
+        nothing() -> "not an int",
     }
 }
 

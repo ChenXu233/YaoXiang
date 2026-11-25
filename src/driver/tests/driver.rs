@@ -81,7 +81,7 @@ fn test_driver_run_success_skips_obligation_free_stages() {
 #[test]
 fn test_driver_run_typecheck_error_maps_and_aborts() {
     // Arrange: 类型不匹配（Int 绑定 String 字面量）
-    let source = "let x: Int = \"hello\";";
+    let source = "x: Int = \"hello\"\n";
 
     // Act
     let outcome = run_single(source, CompileConfig::default()).expect("driver run failed");

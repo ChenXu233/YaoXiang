@@ -22,59 +22,61 @@ impl<'a> ParserState<'a> {
 
 impl<'a> ParserState<'a> {
     /// Get prefix binding power and parser for current token
+    ///
+    /// 前缀算子的绑定力与策略来自 `precedence::PREFIX_OPS`（唯一声明处）；
+    /// 本函数只做「查表 + 原子层回落」，不再列第二份 token → 绑定力表。
     #[inline]
     #[allow(clippy::type_complexity)]
     pub(crate) fn prefix_info(&self) -> Option<(u8, fn(&mut Self) -> Option<Expr>)> {
-        match self.current().map(|t| &t.kind) {
-            // Unary operators (including deref *)
-            Some(TokenKind::Minus)
-            | Some(TokenKind::Plus)
-            | Some(TokenKind::Not)
-            | Some(TokenKind::Star) => Some((BP_UNARY, Self::parse_unary)),
-            // Borrow operators: &expr / &mut expr
-            Some(TokenKind::Ampersand) | Some(TokenKind::MutRef) => {
-                Some((BP_UNARY, Self::parse_borrow))
-            }
-            // Literals
-            Some(TokenKind::IntLiteral(_)) => Some((BP_HIGHEST, Self::parse_int_literal)),
-            Some(TokenKind::FloatLiteral(_)) => Some((BP_HIGHEST, Self::parse_float_literal)),
-            Some(TokenKind::StringLiteral(_)) => Some((BP_HIGHEST, Self::parse_string_literal)),
-            Some(TokenKind::CharLiteral(_)) => Some((BP_HIGHEST, Self::parse_char_literal)),
-            Some(TokenKind::BoolLiteral(_)) => Some((BP_HIGHEST, Self::parse_bool_literal)),
-            Some(TokenKind::VoidLiteral) => Some((BP_HIGHEST, Self::parse_void_literal)),
+        let kind = self.current().map(|t| &t.kind)?;
+        if let Some(entry) = prefix_op(kind) {
+            let parser_fn: fn(&mut Self) -> Option<Expr> = match entry.strategy {
+                PrefixStrategy::Unary => Self::parse_unary,
+                PrefixStrategy::Borrow => Self::parse_borrow,
+            };
+            return Some((entry.bp, parser_fn));
+        }
+        // 原子层（字面量 / 标识符 / 分组 / 块 / if / match …）：绑定力是原子层常量，
+        // 不是逐算子的属性，故留在这里而不是进算子表。
+        match kind {
+            TokenKind::IntLiteral(_) => Some((BP_HIGHEST, Self::parse_int_literal)),
+            TokenKind::FloatLiteral(_) => Some((BP_HIGHEST, Self::parse_float_literal)),
+            TokenKind::StringLiteral(_) => Some((BP_HIGHEST, Self::parse_string_literal)),
+            TokenKind::CharLiteral(_) => Some((BP_HIGHEST, Self::parse_char_literal)),
+            TokenKind::BoolLiteral(_) => Some((BP_HIGHEST, Self::parse_bool_literal)),
+            TokenKind::VoidLiteral => Some((BP_HIGHEST, Self::parse_void_literal)),
             // RFC-012: F-string literal
-            Some(TokenKind::FStringLiteral(_)) => Some((BP_HIGHEST, Self::parse_fstring)),
+            TokenKind::FStringLiteral(_) => Some((BP_HIGHEST, Self::parse_fstring)),
             // Identifier or path
-            Some(TokenKind::Identifier(_)) => Some((BP_HIGHEST, Self::parse_identifier)),
+            TokenKind::Identifier(_) => Some((BP_HIGHEST, Self::parse_identifier)),
             // Wildcard pattern (_)
-            Some(TokenKind::Underscore) => Some((BP_HIGHEST, Self::parse_wildcard)),
+            TokenKind::Underscore => Some((BP_HIGHEST, Self::parse_wildcard)),
             // Grouped expression or tuple
-            Some(TokenKind::LParen) => Some((BP_HIGHEST, Self::parse_group_or_tuple)),
+            TokenKind::LParen => Some((BP_HIGHEST, Self::parse_group_or_tuple)),
             // List literal or list comprehension
-            Some(TokenKind::LBracket) => Some((BP_HIGHEST, Self::parse_list_or_comp)),
+            TokenKind::LBracket => Some((BP_HIGHEST, Self::parse_list_or_comp)),
             // Block expression
-            Some(TokenKind::LBrace) => Some((BP_HIGHEST, Self::parse_block)),
+            TokenKind::LBrace => Some((BP_HIGHEST, Self::parse_block)),
             // If expression
-            Some(TokenKind::KwIf) => Some((BP_HIGHEST, Self::parse_if)),
+            TokenKind::KwIf => Some((BP_HIGHEST, Self::parse_if)),
             // Match expression
-            Some(TokenKind::KwMatch) => Some((BP_HIGHEST, Self::parse_match)),
+            TokenKind::KwMatch => Some((BP_HIGHEST, Self::parse_match)),
             // While expression
-            Some(TokenKind::KwWhile) => Some((BP_HIGHEST, Self::parse_while)),
+            TokenKind::KwWhile => Some((BP_HIGHEST, Self::parse_while)),
             // For expression
-            Some(TokenKind::KwFor) => Some((BP_HIGHEST, Self::parse_for)),
-            // ref 关键字：创建 Arc
-            Some(TokenKind::KwRef) => Some((BP_HIGHEST, Self::parse_ref)),
+            TokenKind::KwFor => Some((BP_HIGHEST, Self::parse_for)),
+            // ref 关键字：创建 Arc（前缀策略见 PREFIX_OPS；保留在原子层是因为它绑定 body 整块）
+            TokenKind::KwRef => Some((BP_HIGHEST, Self::parse_ref)),
             // unsafe 块：系统级操作
-            Some(TokenKind::KwUnsafe) => Some((BP_HIGHEST, Self::parse_unsafe)),
+            TokenKind::KwUnsafe => Some((BP_HIGHEST, Self::parse_unsafe)),
             // Spawn expression: spawn { ... } or spawn for ... in ... { ... }
-            Some(TokenKind::KwSpawn) => Some((BP_HIGHEST, Self::parse_spawn)),
+            TokenKind::KwSpawn => Some((BP_HIGHEST, Self::parse_spawn)),
             // Control flow expressions (return)
             // #314：break/continue 移出表达式位置——仅语句，Python 风格定案
-            Some(TokenKind::KwReturn) => Some((BP_LOWEST, Self::parse_return_expr)),
+            TokenKind::KwReturn => Some((BP_LOWEST, Self::parse_return_expr)),
             _ => None,
         }
     }
-
     /// Parse ref expression: `ref expr` creates an Arc
     fn parse_ref(&mut self) -> Option<Expr> {
         let span = self.span();
@@ -852,7 +854,7 @@ impl<'a> ParserState<'a> {
             // Parse pattern - use BP_LAMBDA + 1 to prevent => from being parsed as lambda
             // Lambda binding power is 11, so we use 12 to stop before =>
             //
-            // RFC-010b: 变体模式 `ok(v)` 的调用结合力（BP_CALL=9）低于 12，
+            // RFC-010b: 变体模式 `ok(v)` 的调用结合力（BP_CALL=10）低于阈值 12，
             // parse_expression(BP_PATTERN_PROBE) 会把 `ok` 停成裸 Var、`(` 成意外 token——
             // 特判 Var 后跟 LParen 的形态，手动走 parse_call 重组调用
             //（expr_to_pattern 随后把它转成 Union 变体模式）。
@@ -870,14 +872,12 @@ impl<'a> ParserState<'a> {
                     Pattern::Or(patterns)
                 }
             };
-            // RFC-010b: 守卫 `pat if cond => ...`——守卫表达式在 no_fat_arrow
-            // 模式下完整解析并停在 `=>`
+            // 守卫 `pat if cond -> ...`（syntax.md §2.8）：条件位是完整 Expr，
+            // 臂箭头 `->` 不参与表达式文法，故条件解析自然停在 `->`——不需要
+            // 任何「禁止 lambda”的旁路开关。
             let pattern = if self.at(&TokenKind::KwIf) {
                 self.bump();
-                let saved = self.no_fat_arrow;
-                self.no_fat_arrow = true;
                 let condition = self.parse_expression(BP_LOWEST);
-                self.no_fat_arrow = saved;
                 Pattern::Guard {
                     pattern: Box::new(pattern),
                     condition: condition?,
@@ -886,7 +886,22 @@ impl<'a> ParserState<'a> {
                 pattern
             };
 
-            self.expect(&TokenKind::FatArrow);
+            // 分支箭头 `->`（syntax.md §2.8）。`=>` 只用于 lambda：遇到时给出
+            // 可操作建议（per-site 文案键 E0011.branch_arrow.*），并消费该 token
+            // 继续按分支体解析，避免级联诊断。
+            if self.at(&TokenKind::FatArrow) {
+                let arrow_span = self.span();
+                let diagnostic =
+                    crate::util::diagnostic::ErrorCodeDefinition::unexpected_token("=>")
+                        .param_from_key("token", "E0011.branch_arrow.message")
+                        .with_help_key("E0011.branch_arrow.help")
+                        .at(arrow_span)
+                        .build();
+                self.error(diagnostic);
+                self.bump();
+            } else {
+                self.expect(&TokenKind::Arrow);
+            }
 
             // Parse body - can be a block expression or a simple expression
             let body = if self.at(&TokenKind::LBrace) {
@@ -1017,7 +1032,7 @@ impl<'a> ParserState<'a> {
     /// [`Self::parse_pattern`] 的闸内本体（原实现逐字保留）。
     fn parse_pattern_nested(&mut self) -> Option<Pattern> {
         let probe = self.parse_expression(BP_PATTERN_PROBE)?;
-        // issue #405：范围模式 `lo..hi`——`..` 中缀绑定力（BP_RANGE_L/BP_RANGE_R）低于模式阈值 BP_PATTERN_PROBE，
+        // issue #405：范围模式 `lo..hi`——`..` 中缀绑定力（BP_RANGE_LEFT/BP_RANGE_RIGHT）低于模式阈值 BP_PATTERN_PROBE，
         // pratt 循环停在 DotDot、probe 持有下界端点表达式，此处收编为 Range 模式。
         // 端点限定：字面量（负号前缀归一化为负值）；标识符端点在模式位是绑定，
         // 无判定语义，显式拒绝（E0010 点名范围端点）。上界不走 pratt 探测——

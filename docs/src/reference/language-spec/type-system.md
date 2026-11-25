@@ -741,8 +741,8 @@ arr: Measure(Int, factorial(5))  // 编译器在编译期计算 factorial(5) = 1
 // 故 k - 1 携带编译期证据，可填入递归调用的 N 位。
 factorial: (N: Int) -> (k: N) -> Int = {
     match k {
-        0 => 1,
-        _ => k * factorial(k - 1)(k - 1)
+        0 -> 1,
+        _ -> k * factorial(k - 1)(k - 1)
     }
 }
 ```
@@ -774,16 +774,16 @@ IfType        ::= 'If' '(' BoolExpr ',' TypeExpr ',' TypeExpr ')'
 ```yaoxiang
 // 类型级 If
 If: (C: Bool, T: Type, E: Type) -> Type = match C {
-    True => T,
-    False => E
+    True -> T,
+    False -> E
 }
 
 // 示例：编译期分支
 NonEmpty: (T: Type) -> Type = If(T != Void, T, Never)
 // IsTrue 桥接与 Assert 精化类型（详见 §8.4）
 IsTrue: (b: Bool) -> Type = match b {
-    true => Void,      // ⊤，程序继续
-    false => Never,    // ⊥，发散/编译错误
+    true -> Void,       // ⊤，程序继续
+    false -> Never,     // ⊥，发散/编译错误
 }
 Assert: (cond: Bool) -> Type = IsTrue(cond)
 ```
@@ -793,10 +793,10 @@ Assert: (cond: Bool) -> Type = IsTrue(cond)
 ```yaoxiang
 // 编译期类型转换
 AsString: (T: Type) -> Type = match T {
-    Int => String,
-    Float => String,
-    Bool => String,
-    _ => String
+    Int -> String,
+    Float -> String,
+    Bool -> String,
+    _ -> String
 }
 ```
 
@@ -1570,7 +1570,7 @@ Measure: (T: Type, N: Int) -> Type = { data: Array(T, N), length: N }
 Cell: (T: Type, P: (T: Type) -> Type) -> Type = { v: T, w: P(v) }
 
 // 条件类型
-If: (C: Bool, T: Type, E: Type) -> Type = match C { True => T, False => E }
+If: (C: Bool, T: Type, E: Type) -> Type = match C { True -> T, False -> E }
 
 // 函数特化
 sum: (arr: Array(Int)) -> Int = { ... }

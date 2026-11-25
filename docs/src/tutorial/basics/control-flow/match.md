@@ -14,14 +14,14 @@ title: 'match 基础'
 
 ```
 match Expr { MatchArm+ }
-MatchArm : Pattern ('|' Pattern)* ('if' Expr)? '=>' Expr ','
+MatchArm : Pattern ('|' Pattern)* ('if' Expr)? '->' Expr ','
 ```
 
 分解来看：
 
 - `match` 后面跟一个要匹配的值
 - `{}` 中包含一个或多个 **匹配臂**（MatchArm）
-- 每个匹配臂：**模式** 后面跟 `=>`，然后是**结果表达式**
+- 每个匹配臂：**模式** 后面跟 `->`，然后是**结果表达式**
 - 每个臂用逗号结尾
 
 一个最简单的例子：
@@ -30,9 +30,9 @@ MatchArm : Pattern ('|' Pattern)* ('if' Expr)? '=>' Expr ','
 number = 2
 
 text = match number {
-    0 => "零",
-    1 => "一",
-    2 => "二",
+    0 -> "零",
+    1 -> "一",
+    2 -> "二",
 }
 print(text)  // "二"
 ```
@@ -45,11 +45,11 @@ print(text)  // "二"
 score = 85
 
 grade = match score {
-    n if n >= 90 => "A",
-    80..89 => "B",     // 范围模式：80 到 89（含两端）都命中
-    n if n >= 70 => "C",
-    n if n >= 60 => "D",
-    _ => "F",          // 通配符：匹配所有剩余情况
+    n if n >= 90 -> "A",
+    80..89 -> "B",     // 范围模式：80 到 89（含两端）都命中
+    n if n >= 70 -> "C",
+    n if n >= 60 -> "D",
+    _ -> "F",          // 通配符：匹配所有剩余情况
 }
 print(grade)  // "B"
 ```
@@ -73,11 +73,11 @@ Int 的全部取值。卫表达式（`pattern if 条件`）会在
 response = 404
 
 message = match response {
-    200 => "OK",
-    301 => "Moved",
-    404 => "Not Found",
-    500 => "Server Error",
-    _ => "Unknown",
+    200 -> "OK",
+    301 -> "Moved",
+    404 -> "Not Found",
+    500 -> "Server Error",
+    _ -> "Unknown",
 }
 print(message)  // "Not Found"
 ```
@@ -93,13 +93,13 @@ use std.result
 r: Result(Int, String) = Result(Int, String).ok(42)
 
 description = match r {
-    ok(value) => "成功，值是: {value}",
-    err(e) => "失败，原因: " + e,
+    ok(value) -> "成功，值是: {value}",
+    err(e) -> "失败，原因: " + e,
 }
 print(description)  // "成功，值是: 42"
 ```
 
-`ok(value)` 中的 `value` 是一个标识符模式——它捕获了 `ok` 包裹的实际值，你可以在 `=>`
+`ok(value)` 中的 `value` 是一个标识符模式——它捕获了 `ok` 包裹的实际值，你可以在 `->`
 后面的表达式里使用它。
 
 ### 范围模式
@@ -110,9 +110,9 @@ print(description)  // "成功，值是: 42"
 temp = 37
 
 state = match temp {
-    35..36 => "偏低",
-    36..38 => "正常",
-    _ => "异常",
+    35..36 -> "偏低",
+    36..38 -> "正常",
+    _ -> "异常",
 }
 print(state)  // "正常"
 ```
@@ -129,10 +129,10 @@ print(state)  // "正常"
 command = "exit"
 
 action = match command {
-    "start" => "启动服务",
-    "stop" => "停止服务",
-    "restart" => "重启服务",
-    _ => "未知指令: " + command,
+    "start" -> "启动服务",
+    "stop" -> "停止服务",
+    "restart" -> "重启服务",
+    _ -> "未知指令: " + command,
 }
 print(action)  // "未知指令: exit"
 ```
@@ -146,15 +146,15 @@ YaoXiang 的 `match` 要求覆盖所有可能的情况——如果编译器发�
 // 这段代码会编译失败
 // value = true
 // result = match value {
-//     true => "是",
+//     true -> "是",
 //     // 缺少 false 分支——编译错误！
 // }
 
 // 正确——使用 _ 兜底
 value = true
 result = match value {
-    true => "是",
-    _ => "否",      // _ 确保 false 也有处理
+    true -> "是",
+    _ -> "否",      // _ 确保 false 也有处理
 }
 ```
 
@@ -168,9 +168,9 @@ result = match value {
 day = "sunday"
 
 type = match day {
-    "monday" | "tuesday" | "wednesday" | "thursday" | "friday" => "工作日",
-    "saturday" | "sunday" => "休息日",
-    _ => "无效",
+    "monday" | "tuesday" | "wednesday" | "thursday" | "friday" -> "工作日",
+    "saturday" | "sunday" -> "休息日",
+    _ -> "无效",
 }
 print(type)  // "休息日"
 ```
@@ -184,8 +184,8 @@ print(type)  // "休息日"
 number = 5
 
 result = match number {
-    _ => "其他",     // 通配符匹配一切，这里会匹配
-    5 => "五",       // 永远不会被执行——上面已经匹配了
+    _ -> "其他",     // 通配符匹配一切，这里会匹配
+    5 -> "五",       // 永远不会被执行——上面已经匹配了
 }
 print(result)  // "其他"
 ```
@@ -199,14 +199,14 @@ print(result)  // "其他"
 
 | 要点       | 说明                                   |
 | ---------- | -------------------------------------- |
-| 语法       | `match 值 { 模式 => 表达式, ... }`     |
+| 语法       | `match 值 { 模式 -> 表达式, ... }`     |
 | 表达式     | `match` 计算出一个值，所有分支类型一致 |
-| 字面量模式 | 精确匹配具体值：`200 => "OK"`          |
-| 标识符模式 | 捕获值到变量：`ok(value) => ...`       |
-| 范围模式   | 匹配整数区间（含两端）：`80..89 => "B"` |
+| 字面量模式 | 精确匹配具体值：`200 -> "OK"`          |
+| 标识符模式 | 捕获值到变量：`ok(value) -> ...`       |
+| 范围模式   | 匹配整数区间（含两端）：`80..89 -> "B"` |
 | 通配符 `_` | 匹配任何值，做兜底                     |
 | 穷尽性     | 必须覆盖所有可能，编译器会检查         |
-| 多模式     | `模式1 \| 模式2 => 表达式`             |
+| 多模式     | `模式1 \| 模式2 -> 表达式`             |
 | 顺序执行   | 从上到下，第一个匹配的分支生效         |
 
 > **下一步**：本文覆盖了 `match` 的基础用法。更高级的模式（嵌套模式、卫表达式、结构体解构等）请参阅

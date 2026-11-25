@@ -20,22 +20,22 @@ main: () -> Void = {
 
     // 载荷绑定：ok 载荷进臂作用域，value * 2 = 42
     v = match a {
-        ok(value) => value * 2,
-        err(e) => 0,
+        ok(value) -> value * 2,
+        err(e) -> 0,
     }
     io.println(v)
 
     // 各臂结果类型一致
     msg = match b {
-        ok(x) => "number",
-        err(msg) => msg,
+        ok(x) -> "number",
+        err(msg) -> msg,
     }
     io.println(msg)
 
     // 通配兜底臂豁免穷尽性
     tag = match a {
-        ok(x) => "is-ok",
-        other => "not-ok",
+        ok(x) -> "is-ok",
+        other -> "not-ok",
     }
     io.println(tag)
 }

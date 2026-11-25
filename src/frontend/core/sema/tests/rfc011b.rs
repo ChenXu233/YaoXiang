@@ -574,8 +574,8 @@ fn test_rfc010b_match_variant_destructuring() {
         main: () -> Void = {
             a = Result(Int, String).ok(21)
             v = match a {
-                ok(value) => value * 2,
-                err(e) => 0,
+                ok(value) -> value * 2,
+                err(e) -> 0,
             }
             return
         }
@@ -604,7 +604,7 @@ fn test_rfc010b_non_exhaustive_reports_e1030() {
         main: () -> Void = {
             a = Result(Int, String).ok(5)
             v = match a {
-                ok(v) => v,
+                ok(v) -> v,
             }
             return
         }
@@ -633,9 +633,9 @@ fn test_rfc010b_duplicate_variant_reports_e1031() {
         main: () -> Void = {
             a = Result(Int, String).ok(5)
             v = match a {
-                ok(v) => v,
-                ok(w) => w,
-                err(e) => 0,
+                ok(v) -> v,
+                ok(w) -> w,
+                err(e) -> 0,
             }
             return
         }
@@ -667,8 +667,8 @@ fn test_rfc011b_generic_curried_method_body_self_typed() {
         }
         Result.is_failure: (T: Type, E: Type) -> ((self: &Result(T, E)) -> Bool) = (self) => {
             match self {
-                err(_) => true,
-                ok(_) => false,
+                err(_) -> true,
+                ok(_) -> false,
             }
         }
     "#;
@@ -750,8 +750,8 @@ fn test_dbg_match_baseline() {
         main: () -> Void = {
             r = Result(Int, String).ok(5)
             v = match r {
-                ok(x) => x,
-                err(_) => 0,
+                ok(x) -> x,
+                err(_) -> 0,
             }
             return
         }
@@ -779,8 +779,8 @@ fn test_rfc010b_duplicate_binding_reports_e1032() {
         main: () -> Void = {
             p = Pair.make(1, 2)
             v = match p {
-                make(a, a) => a,
-                empty() => 0,
+                make(a, a) -> a,
+                empty() -> 0,
             }
             return
         }
@@ -804,7 +804,7 @@ fn test_rfc010b_or_binding_mismatch_reports_e1033() {
         main: () -> Void = {
             o = Option(Int).some(1)
             v = match o {
-                some(x) | none() => x,
+                some(x) | none() -> x,
             }
             return
         }
@@ -825,7 +825,7 @@ fn test_rfc010b_struct_pattern_missing_field_reports_e1034() {
         main: () -> Void = {
             p = Point(1, 2)
             v = match p {
-                Point { x } => x,
+                Point { x } -> x,
             }
             return
         }
@@ -849,8 +849,8 @@ fn test_rfc010b_guarded_arm_not_exhaustive() {
         main: () -> Void = {
             o = Option(Int).some(1)
             v = match o {
-                some(x) if x > 0 => x,
-                none() => 0,
+                some(x) if x > 0 -> x,
+                none() -> 0,
             }
             return
         }
@@ -870,8 +870,8 @@ fn test_rfc010b_guard_non_bool_rejected() {
         main: () -> Void = {
             x = 5
             v = match x {
-                n if n => "bad",
-                _ => "other",
+                n if n -> "bad",
+                _ -> "other",
             }
             return
         }
@@ -892,8 +892,8 @@ fn test_rfc010b_nonsum_match_requires_fallback_e1030() {
         main: () -> Void = {
             x = 2
             t = match x {
-                1 => "一",
-                2 => "二",
+                1 -> "一",
+                2 -> "二",
             }
             return
         }
@@ -913,8 +913,8 @@ fn test_rfc010b_bool_literal_coverage_exhaustive() {
         main: () -> Void = {
             b = true
             t = match b {
-                true => 1,
-                false => 0,
+                true -> 1,
+                false -> 0,
             }
             return
         }
@@ -936,9 +936,9 @@ fn test_rfc010b_range_pattern_typechecks_with_fallback() {
         main: () -> Void = {
             score = 85
             grade = match score {
-                90..99 => "A",
-                80..89 => "B",
-                _ => "F",
+                90..99 -> "A",
+                80..89 -> "B",
+                _ -> "F",
             }
             return
         }
@@ -958,8 +958,8 @@ fn test_rfc010b_range_pattern_float_bound_reports_e1002() {
         main: () -> Void = {
             x = 1.5
             r = match x {
-                1.5..2.5 => "f",
-                _ => "o",
+                1.5..2.5 -> "f",
+                _ -> "o",
             }
             return
         }
@@ -979,8 +979,8 @@ fn test_rfc010b_range_pattern_reversed_reports_e1031() {
         main: () -> Void = {
             x = 5
             r = match x {
-                10..0 => "rev",
-                _ => "o",
+                10..0 -> "rev",
+                _ -> "o",
             }
             return
         }
@@ -1000,9 +1000,9 @@ fn test_rfc010b_range_pattern_duplicate_reports_e1031() {
         main: () -> Void = {
             x = 85
             r = match x {
-                80..89 => "B",
-                80..89 => "again",
-                _ => "F",
+                80..89 -> "B",
+                80..89 -> "again",
+                _ -> "F",
             }
             return
         }
@@ -1023,7 +1023,7 @@ fn test_rfc010b_range_pattern_requires_fallback_e1030() {
         main: () -> Void = {
             x = 85
             r = match x {
-                80..89 => "B",
+                80..89 -> "B",
             }
             return
         }
@@ -1043,8 +1043,8 @@ fn test_rfc010b_range_pattern_with_wildcard_exhaustive() {
         main: () -> Void = {
             x = 85
             r = match x {
-                80..89 => "B",
-                _ => "F",
+                80..89 -> "B",
+                _ -> "F",
             }
             return
         }

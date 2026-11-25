@@ -273,8 +273,8 @@ use std.result
 result: Result(Int, String) = Result(Int, String).ok(42)
 
 message = match result {
-    ok(value) => "Success: " + value.to_string()
-    err(error) => "Error: " + error
+    ok(value) -> "Success: " + value.to_string()
+    err(error) -> "Error: " + error
 }
 ```
 
@@ -342,8 +342,8 @@ r = Result(Int, String).ok(42)
 
 // 模式匹配处理
 match r {
-    ok(value) => print("Success: {value}")
-    err(e) => print("Error: " + e)
+    ok(value) -> print("Success: {value}")
+    err(e) -> print("Error: " + e)
 }
 ```
 

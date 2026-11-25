@@ -501,22 +501,22 @@ pretty: (v: &Json) -> String = {
 
 write_value: (v: &Json, pretty_mode: Bool, depth: Int) -> String = {
     match v {
-        null() => return "null",
-        bool(b) => {
+        null() -> return "null",
+        bool(b) -> {
             if b {
                 return "true"
             }
             return "false"
         }
-        num(f) => return convert.to_string(f),
-        str(sv) => return escape_string(sv),
-        arr(items) => {
+        num(f) -> return convert.to_string(f),
+        str(sv) -> return escape_string(sv),
+        arr(items) -> {
             if items.length == 0 {
                 return "[]"
             }
             return write_array(items, pretty_mode, depth)
         }
-        obj(d) => {
+        obj(d) -> {
             if dict.len(d) == 0 {
                 return "{}"
             }

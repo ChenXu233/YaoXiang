@@ -48,10 +48,6 @@ pub struct ParserState<'a> {
     /// 故以 trait 注入；无环境入口传 [`NullProbe`](super::probe::NullProbe)，
     /// 生产入口传编译器内置封闭集探针或 L3 语义探针。
     probe: &'a dyn super::probe::TypeEnvProbe,
-    /// match 臂守卫模式（RFC-010b）：为真时 `=>` 不作为 lambda 中缀被
-    /// 表达式循环消费——守卫表达式 `n if n > 3 => ...` 要完整解析 `n > 3`
-    /// 并停在 `=>`。save/restore 语义，嵌套（守卫里再写 match）安全。
-    pub(crate) no_fat_arrow: bool,
     /// RFC-027：本模块已解析的**谓词名**（返回 `Type` 的声明）。
     ///
     /// 用于判定类型标注里的类型应用是「编译期谓词应用」（实参位是**值**）
@@ -89,7 +85,6 @@ impl<'a> ParserState<'a> {
             pos: 0,
             errors: Vec::new(),
             probe,
-            no_fat_arrow: false,
             predicate_names: HashSet::new(),
             next_plan_id: 0,
             parse_depth: 0,
@@ -328,6 +323,51 @@ impl<'a> ParserState<'a> {
     pub fn can_start_stmt(&self) -> bool {
         !self.at_end() && !self.at(&TokenKind::Semicolon)
     }
+    /// 上一条已消费 token 的结束行（无已消费 token 时为 None）。
+    pub fn prev_token_end_line(&self) -> Option<usize> {
+        if self.pos == 0 {
+            None
+        } else {
+            self.tokens.get(self.pos - 1).map(|t| t.span.end.line)
+        }
+    }
+
+    /// 当前 token 是否落在上一条已消费 token 的**后继行**（RFC-038 换行边界）。
+    pub fn at_line_start(&self) -> bool {
+        match (self.prev_token_end_line(), self.current()) {
+            (Some(prev_end), Some(next)) => next.span.start.line > prev_end,
+            _ => false,
+        }
+    }
+
+    /// 语句分隔判定（syntax.md §3.1）：相邻语句必须以分号或换行分隔。
+    ///
+    /// 调用点在**每条语句解析完成后**，与「谁消费了分号」无关：上一个 token
+    /// 是分号即视为已分隔（各语句解析器自行 skip(Semicolon) 的既有形态不必改）。
+    /// 缺分隔时发射 E0012（消息带可操作写法），返回 false 但**不推进**——
+    /// 调用方继续解析下一语句，避免级联诊断。
+    pub fn end_statement(&mut self) -> bool {
+        if self.at_end() || self.at(&TokenKind::RBrace) {
+            return true;
+        }
+        // 待消费的 `;` 本身就是分隔符：语句解析器不一定吃掉它（`if`/块语句
+        // 都不吃），块体循环的 `;`-skip 又发生在下一轮——在此统一收掉。
+        if self.skip(&TokenKind::Semicolon) {
+            return true;
+        }
+        let semicolon_consumed = self
+            .tokens
+            .get(self.pos.wrapping_sub(1))
+            .is_some_and(|t| matches!(t.kind, TokenKind::Semicolon));
+        if semicolon_consumed || self.at_line_start() {
+            return true;
+        }
+        self.error(parse_msg(
+            self,
+            "相邻语句必须用换行或分号分隔：上一条语句之后缺少分隔符",
+        ));
+        false
+    }
     pub fn synchronize(&mut self) {
         while !self.at_end() {
             if self.at(&TokenKind::Semicolon) {
@@ -376,6 +416,11 @@ impl<'a> ParserState<'a> {
             // 形态），实测 block-1024 在闸值上无限打转（58877 轮拒绝）。
             None
         };
+        // 语句分隔（syntax.md §3.1）：语句是唯一咽喉点，五处块/顶层循环无需各自接线。
+        // 只在解析成功时判——失败路径由各循环的恢复逻辑接手。
+        if result.is_some() {
+            let _ = self.end_statement();
+        }
         if result.is_none() && self.depth_rejected {
             // 深度闸拒绝：拒绝点位于嵌套构造中部，`None` 弹出留下未消费
             // 的残骸 token。残骸若交给外层循环的 synchronize()，其

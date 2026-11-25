@@ -123,12 +123,12 @@ fn test_for_loop() {
 
 #[test]
 fn test_match_expr() {
-    assert_run_ok("main = () => { r = match 1 { 1 => 10, _ => 0 } }");
+    assert_run_ok("main = () => { r = match 1 { 1 -> 10, _ -> 0 } }");
 }
 
 #[test]
 fn test_match_string() {
-    assert_run_ok(r#"main = () => { r = match "a" { "a" => 1, _ => 0 } }"#);
+    assert_run_ok(r#"main = () => { r = match "a" { "a" -> 1, _ -> 0 } }"#);
 }
 
 // 数据结构

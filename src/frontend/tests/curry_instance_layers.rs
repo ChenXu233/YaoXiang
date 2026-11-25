@@ -44,8 +44,8 @@ const TWO_VALUE_LAYER_GENERIC: &str = concat!(
 const RECURSIVE_CONST_GENERIC: &str = concat!(
     "factorial: (N: Int) -> (k: N) -> Int = {\n",
     "    return match k {\n",
-    "        0 => 1,\n",
-    "        _ => k * factorial(k - 1)(k - 1)\n",
+    "        0 -> 1,\n",
+    "        _ -> k * factorial(k - 1)(k - 1)\n",
     "    }\n",
     "}\n",
     "main: () -> Void = {\n",

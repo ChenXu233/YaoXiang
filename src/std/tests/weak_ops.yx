@@ -20,8 +20,8 @@ main: () -> Void = {
     u = weak.upgrade(w)
     mut got = 0
     match u {
-        some(v) => { got = 1 }
-        none() => { got = 0 }
+        some(v) -> { got = 1 }
+        none() -> { got = 0 }
     }
     assert.assert(got == 1, "upgrade of live Arc must be some")
 }

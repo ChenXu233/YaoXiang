@@ -120,6 +120,8 @@
     "example": "x = 1 @ 2;",
     "error_output": "error[E0011]: 意外的令牌喵\n --> example.yx:1:7\n  |\n1 | x = 1 @ 2;\n  |       ^ 意外的令牌 '@'喵~"
   },
+  "E0011.branch_arrow.message": "=> 要改成 -> 喵（match 分支箭头用 ->，=> 只给 lambda 用nya~）",
+  "E0011.branch_arrow.help": "把 match 分支的 '=>' 改成 '->' 喵；'->' 是分支箭头，'=>' 只给 lambda 用nya~",
   "E0012": {
     "title": "无效语法喵",
     "message": "表达式或语句存在语法错误喵~",

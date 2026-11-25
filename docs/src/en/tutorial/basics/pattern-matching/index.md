@@ -37,8 +37,8 @@ use std.result
 
 // Function uses match to handle Result
 handle: (r: Result(Int, String)) -> String = match r {
-    ok(value) => "成功！得到的值是: {value}",
-    err(msg) => "出错啦: {msg}",
+    ok(value) -> "成功！得到的值是: {value}",
+    err(msg) -> "出错啦: {msg}",
 }
 
 main: () -> Void = {
@@ -58,8 +58,8 @@ main: () -> Void = {
 use std.option
 
 describe: (opt: Option(Int)) -> String = match opt {
-    some(n) => "有值: {n}",
-    none() => "什么也没有",
+    some(n) -> "有值: {n}",
+    none() -> "什么也没有",
 }
 
 main: () -> Void = {
@@ -76,9 +76,9 @@ main: () -> Void = {
 Color: Type = { red: () -> Color, green: () -> Color, blue: () -> Color }
 
 to_hex: (c: Color) -> String = match c {
-    red() => "#FF0000",
-    green() => "#00FF00",
-    blue() => "#0000FF",
+    red() -> "#FF0000",
+    green() -> "#00FF00",
+    blue() -> "#0000FF",
 }
 
 main: () -> Void = {
@@ -108,7 +108,7 @@ Rect: Type = { x: Float, y: Float, width: Float, height: Float }
 
 // Target syntax: struct pattern destructuring
 area: (shape: Rect) -> Float = match shape {
-    { x: _, y: _, width: w, height: h } => w * h,
+    { x: _, y: _, width: w, height: h } -> w * h,
 }
 
 r = Rect(x= 0.0, y= 0.0, width= 10.0, height= 20.0)
@@ -141,11 +141,11 @@ parser:
 
 ```yaoxiang
 first: (p: (Int, String)) -> Int = match p {
-    (n, _) => n,
+    (n, _) -> n,
 }
 
 second: (p: (Int, String)) -> String = match p {
-    (_, s) => s,
+    (_, s) -> s,
 }
 
 main: () -> Void = {
@@ -166,8 +166,8 @@ Token: Type = { number: (Int) -> Token, plus: () -> Token, minus: () -> Token, t
 // Note: variants must be parenthesized in pattern position; writing the bare `plus | minus`
 // is treated as identifier patterns and reports E1033 "both sides of `|` must bind the same name set"
 is_operator: (t: Token) -> Bool = match t {
-    plus() | minus() | times() | divide() => true,
-    _ => false,
+    plus() | minus() | times() | divide() -> true,
+    _ -> false,
 }
 
 main: () -> Void = {
@@ -179,7 +179,7 @@ main: () -> Void = {
 Two hard rules for `|`: ① both sides must bind the **same set of variable names**
 (`circle(r) | square(r)` is valid, while `circle(r) | square(s)` reports `E1033`); ② or patterns are
 only used for **multiple choices within a single match arm**—don't split them into multiple arms:
-`ok(0) => ...` and `ok(n) => ...` trigger `E1031 Unreachable pattern`.
+`ok(0) -> ...` and `ok(n) -> ...` trigger `E1031 Unreachable pattern`.
 
 ## Guard Expressions (if Guards)
 
@@ -192,8 +192,8 @@ use std.result
 // Guard expression adds an extra condition
 // Note: arms with `if` are not counted in exhaustiveness checks; you must add `_` at the end (otherwise E1030)
 can_drive: (a: Result(Int, String)) -> Bool = match a {
-    ok(n) if n >= 18 => true,
-    _ => false,
+    ok(n) if n >= 18 -> true,
+    _ -> false,
 }
 
 main: () -> Void = {
@@ -216,10 +216,10 @@ Direction: Type = { north: () -> Direction, south: () -> Direction, east: () -> 
 // ✅ Correct: all four directions are covered
 // Note: variant construction must be written as `Direction.east()`; the bare `east` is an undefined variable (E1001)
 turn: (d: Direction) -> Direction = match d {
-    north() => Direction.east(),
-    east() => Direction.south(),
-    south() => Direction.west(),
-    west() => Direction.north(),
+    north() -> Direction.east(),
+    east() -> Direction.south(),
+    south() -> Direction.west(),
+    west() -> Direction.north(),
 }
 
 main: () -> Void = {
@@ -230,9 +230,9 @@ main: () -> Void = {
 
 // ❌ Compile error: missing west
 // broken: (d: Direction) -> Direction = match d {
-//     north() => Direction.east(),
-//     east() => Direction.south(),
-//     south() => Direction.west(),
+//     north() -> Direction.east(),
+//     east() -> Direction.south(),
+//     south() -> Direction.west(),
 //     // west not handled → compile error
 // }
 ```
@@ -251,9 +251,9 @@ Expr: Type = { literal: (Int) -> Expr, add: (Expr, Expr) -> Expr, mul: (Expr, Ex
 // ⚠️ Each variant can only have one arm—writing add(literal(0), right) and
 // add(left, literal(0)) as two arms reports E1031 Unreachable pattern
 simplify: (e: Expr) -> Int = match e {
-    add(literal(0), right) => 1,   // matches 0 + x
-    mul(literal(1), right) => 2,   // matches 1 * x
-    literal(n) => n,              // fallback: treat the literal itself as the result
+    add(literal(0), right) -> 1,   // matches 0 + x
+    mul(literal(1), right) -> 2,   // matches 1 * x
+    literal(n) -> n,              // fallback: treat the literal itself as the result
 }
 
 main: () -> Void = {

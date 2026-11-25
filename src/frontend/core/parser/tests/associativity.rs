@@ -16,11 +16,9 @@
 //! 冻的是实现选择（换一个把同层数值重排的正确实现就会红），属特征化、不能当门禁；
 //! 层级关系改由下面的语言级 AST 形状逐条守。
 //!
-//! 已知缺口（不冻结成断言）：`as` 与 `*` 的相对层级与 SPEC syntax §2.2 级 2/4 不符——
-//! 实测 `x as Int * y` 收成 `Cast { target_type: ConstExpr(Int * y) }`（转换的目标类型
-//! 吞掉其后全部中缀），`x * y as Int` 收成 `(x * y) as Int`（转换不高于乘法）。两种形态
-//! 都已登记为缺陷（见 09a §P8 8.8 实录）；修复前本文件不写出与之不符的绿断言，
-//! 也不把错误形状冻成用例。
+//! `as` 与 `*`、相等与比较的相对层级（SPEC syntax §2.2 级 2/4/9）曾是两条已登记缺陷
+//! （09a §P8 8.8 六 D1–D3）；WBS 8.3.1 修复后由下面的用例钉住：`as` 高于 `*`、
+//! 转换目标类型不吞其后中缀、`==`/`!=` 与 `<`/`>`/`<=`/`>=` 同级左结合。
 
 use crate::ast::{BinOp, Block, Expr, Param, Pattern, StmtKind, Type};
 use crate::frontend::core::lexer::tokenize;
@@ -595,7 +593,7 @@ fn test_call_chain_postfix_binds_tighter_than_addition() {
 fn test_pattern_or_chain_collects_all_alternatives() {
     // Arrange：1 | 2 | 3 三备选——SPEC syntax §2.8
     // MatchArm ::= Pattern ('|' Pattern)* ('if' Expr)? '=>' Expr ','（臂尾逗号是文法的一部分）
-    let source = r#"r = match x { 1 | 2 | 3 => "n", _ => "o", }"#;
+    let source = r#"r = match x { 1 | 2 | 3 -> "n", _ -> "o", }"#;
 
     // Act
     let expr = assigned_expr(source);
@@ -653,4 +651,243 @@ fn test_grouped_sub_expression_overrides_left_associativity() {
     );
     expect_var(inner_lhs, "b", "§2.1 括号分组：内层左操作数", source);
     expect_var(inner_rhs, "c", "§2.1 括号分组：内层右操作数", source);
+}
+
+/// SPEC syntax §2.2 级 2 高于级 4：`as` 的目标类型不得吞掉其后的乘号。
+///
+/// 病史：09a §P8 8.8 六 D1——修复前 `x as Int * y` 收成
+/// `Cast { target_type: ConstExpr(Int * y) }`（值级中缀整条进了类型位）。
+#[test]
+fn test_cast_target_does_not_swallow_following_multiplication() {
+    // Arrange
+    let source = "r = x as Int * y";
+
+    // Act
+    let expr = assigned_expr(source);
+
+    // Assert：外层是乘法；左操作数是转换（目标类型是单个 Int），右操作数是 y
+    let (lhs, rhs) = expect_bin_op(
+        &expr,
+        BinOp::Mul,
+        "§2.2 级 2 高于级 4：as 不得吞掉其后的 *",
+        source,
+    );
+    match lhs {
+        Expr::Cast {
+            expr: inner,
+            target_type,
+            ..
+        } => {
+            expect_var(inner, "x", "§2.2 级 2：转换操作数", source);
+            assert!(
+                matches!(target_type, Type::Name { name, .. } if name == "Int"),
+                "§2.6 TypeCast 只吃一个类型：目标类型必须是 Int，实际 {target_type:?}（源码: {source:?}）"
+            );
+        }
+        other => panic!(
+            "§2.2 级 2 高于级 4：左操作数必须是转换 x as Int，实际 {other:?}（源码: {source:?}）"
+        ),
+    }
+    expect_var(rhs, "y", "§2.2 级 2 高于级 4：乘法右操作数", source);
+}
+
+/// SPEC syntax §2.2 级 2 高于级 4：`x * y as Int` 的转换只包住 y。
+///
+/// 病史：09a §P8 8.8 六 D2——修复前收成 `Cast(Mul(x, y), Int)`。
+#[test]
+fn test_cast_binds_tighter_than_multiplication_on_the_right_operand() {
+    // Arrange
+    let source = "r = x * y as Int";
+
+    // Act
+    let expr = assigned_expr(source);
+
+    // Assert：外层乘法；右操作数是转换（操作数 y）
+    let (lhs, rhs) = expect_bin_op(
+        &expr,
+        BinOp::Mul,
+        "§2.2 级 2 高于级 4：转换必须紧贴右操作数",
+        source,
+    );
+    expect_var(lhs, "x", "§2.2 级 2 高于级 4：乘法左操作数", source);
+    match rhs {
+        Expr::Cast {
+            expr: inner,
+            target_type,
+            ..
+        } => {
+            expect_var(inner, "y", "§2.2 级 2：转换操作数", source);
+            assert!(
+                matches!(target_type, Type::Name { name, .. } if name == "Int"),
+                "§2.6 TypeCast 只吃一个类型：目标类型必须是 Int，实际 {target_type:?}（源码: {source:?}）"
+            );
+        }
+        other => panic!(
+            "§2.2 级 2 高于级 4：右操作数必须是转换 y as Int，实际 {other:?}（源码: {source:?}）"
+        ),
+    }
+}
+
+/// SPEC syntax §2.2 级 9：`==` `!=` `<` `>` `<=` `>=` 同级、左到右。
+///
+/// 病史：09a §P8 8.8 六 D3——修复前 `1 == 2 < 3` 收成 `Eq(1, Lt(2, 3))`
+/// （相等层比比较层松，与「同级左结合」相反）。
+#[test]
+fn test_equality_and_comparison_share_one_left_associative_level() {
+    // Arrange：两种顺序都必须在同一级上左结合
+    let equal_first = "r = (1 == 2 < 3)";
+    let less_first = "r = (1 < 2 == 3)";
+
+    // Act
+    let equal_first_expr = assigned_expr(equal_first);
+    let less_first_expr = assigned_expr(less_first);
+
+    // Assert：`1 == 2 < 3` → Lt(Eq(1,2), 3)
+    let (lhs, rhs) = expect_bin_op(
+        &equal_first_expr,
+        BinOp::Lt,
+        "§2.2 级 9 同级左结合：外层必须是右侧的 <",
+        equal_first,
+    );
+    let (inner_lhs, inner_rhs) = expect_bin_op(
+        lhs,
+        BinOp::Eq,
+        "§2.2 级 9 同级左结合：左操作数必须是先算的 ==",
+        equal_first,
+    );
+    expect_int_lit(inner_lhs, 1, "§2.2 级 9：== 左操作数", equal_first);
+    expect_int_lit(inner_rhs, 2, "§2.2 级 9：== 右操作数", equal_first);
+    expect_int_lit(rhs, 3, "§2.2 级 9：< 右操作数", equal_first);
+
+    // Assert：`1 < 2 == 3` → Eq(Lt(1,2), 3)
+    let (lhs, rhs) = expect_bin_op(
+        &less_first_expr,
+        BinOp::Eq,
+        "§2.2 级 9 同级左结合：外层必须是右侧的 ==",
+        less_first,
+    );
+    let (inner_lhs, inner_rhs) = expect_bin_op(
+        lhs,
+        BinOp::Lt,
+        "§2.2 级 9 同级左结合：左操作数必须是先算的 <",
+        less_first,
+    );
+    expect_int_lit(inner_lhs, 1, "§2.2 级 9：< 左操作数", less_first);
+    expect_int_lit(inner_rhs, 2, "§2.2 级 9：< 右操作数", less_first);
+    expect_int_lit(rhs, 3, "§2.2 级 9：== 右操作数", less_first);
+}
+
+/// SPEC syntax §2.6 `TypeCast ::= Expr 'as' TypeExpr`：`&mut T` 形态的目标类型
+/// 同样只能吃一个类型——`* y` 属于外层乘法（D1 的引用形态）。
+///
+/// 病史：09a §P8 8.8 六 D1；复审 t29 F3——修复前 `x as &mut Int * y` 收成
+/// `Cast { target_type: Ref { mutable: true, inner: ConstExpr(Int * y) } }`。
+#[test]
+fn test_cast_to_mut_ref_target_does_not_swallow_multiplication() {
+    // Arrange
+    let source = "r = x as &mut Int * y";
+
+    // Act
+    let expr = assigned_expr(source);
+
+    // Assert：外层是乘法，左操作数是转换，目标类型是 &mut Int
+    let (lhs, rhs) = expect_bin_op(
+        &expr,
+        BinOp::Mul,
+        "§2.6 目标类型不得吞其后中缀：&mut Int 之后必须回到乘法",
+        source,
+    );
+    match lhs {
+        Expr::Cast {
+            expr: inner,
+            target_type,
+            ..
+        } => {
+            expect_var(inner, "x", "§2.6：转换操作数", source);
+            match target_type {
+                Type::Ref {
+                    mutable: true,
+                    inner: inner_ty,
+                    ..
+                } => assert!(
+                    matches!(inner_ty.as_ref(), Type::Name { name, .. } if name == "Int"),
+                    "§2.6：&mut 的内层必须是 Int，实际 {inner_ty:?}（源码: {source:?}）"
+                ),
+                other => {
+                    panic!("§2.6：目标类型必须是 &mut Int，实际 {other:?}（源码: {source:?}）")
+                }
+            }
+        }
+        other => panic!("§2.6：左操作数必须是转换，实际 {other:?}（源码: {source:?}）"),
+    }
+    expect_var(rhs, "y", "§2.6：乘法右操作数", source);
+}
+
+/// SPEC syntax §2.6：函数类型 cast 目标的返回位同样不吞其后中缀。
+///
+/// 病史：复审 t29 F3——修复前 `x as (a: Int) -> Int * y` 的返回位吞掉 `* y`。
+#[test]
+fn test_cast_to_fn_type_target_does_not_swallow_multiplication() {
+    // Arrange
+    let source = "r = x as (a: Int) -> Int * y";
+
+    // Act
+    let expr = assigned_expr(source);
+
+    // Assert：外层乘法；左操作数是转换，目标类型是函数类型
+    let (lhs, rhs) = expect_bin_op(
+        &expr,
+        BinOp::Mul,
+        "§2.6 目标类型不得吞其后中缀：函数类型返回位之后必须回到乘法",
+        source,
+    );
+    match lhs {
+        Expr::Cast {
+            expr: inner,
+            target_type,
+            ..
+        } => {
+            expect_var(inner, "x", "§2.6：转换操作数", source);
+            match target_type {
+                Type::Fn { return_type, .. } => assert!(
+                    matches!(return_type.as_ref(), Type::Name { name, .. } if name == "Int"),
+                    "§2.6：函数类型的返回位必须是 Int，实际 {return_type:?}（源码: {source:?}）"
+                ),
+                other => panic!("§2.6：目标类型必须是函数类型，实际 {other:?}（源码: {source:?}）"),
+            }
+        }
+        other => panic!("§2.6：左操作数必须是转换，实际 {other:?}（源码: {source:?}）"),
+    }
+    expect_var(rhs, "y", "§2.6：乘法右操作数", source);
+}
+
+/// 「表行被消费」的变异锚：赋值的算子必须同时等于语义常量与表行声明。
+///
+/// 若 parse_assign 退回硬编 `BinOp::Assign`（不经表），把表行 op 改成别的算子时
+/// 第二条断言会红——这正是复审 t29 F1 要求的「经生产 parse 路径的消费证据」。
+#[test]
+fn test_assign_infix_operator_is_consumed_from_the_table() {
+    // Arrange：`r = a = b` 的右侧是表达式位赋值；表行声明是唯一期望源
+    use crate::frontend::core::lexer::tokens::TokenKind;
+    use crate::frontend::core::parser::pratt::precedence::infix_ast_op;
+    let table_op = infix_ast_op(&TokenKind::Eq).expect("表必须声明 = 的算子");
+    let source = "r = a = b";
+
+    // Act
+    let expr = assigned_expr(source);
+
+    // Assert：生产 parse 产出的算子 = 语义常量 = 表行声明（两向都钉住）
+    let Expr::BinOp { op, left, .. } = &expr else {
+        panic!("表达式位赋值必须产 BinOp，实际 {expr:?}（源码: {source:?}）");
+    };
+    assert_eq!(
+        *op,
+        BinOp::Assign,
+        "表达式位赋值必须产 Assign（源码: {source:?}）"
+    );
+    assert_eq!(
+        *op, table_op,
+        "生产 parse 的算子必须等于表行声明——表行被消费（源码: {source:?}）"
+    );
+    expect_var(left, "a", "赋值左操作数", source);
 }

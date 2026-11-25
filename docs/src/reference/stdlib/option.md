@@ -94,8 +94,8 @@ main: () -> Void = {
     for x in [1, -1] {
         v = name_of(x)
         match v {
-            some(n) => println(n),
-            none() => println("no value"),
+            some(n) -> println(n),
+            none() -> println("no value"),
         }
     }
 }

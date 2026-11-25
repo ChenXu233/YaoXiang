@@ -131,7 +131,7 @@ fn test_match_simple() {
     run_ok(
         r#"
         main = () => {
-            r1 = match 1 { 1 => 100, _ => 0 }
+            r1 = match 1 { 1 -> 100, _ -> 0 }
         }
         "#,
     );
@@ -590,11 +590,11 @@ use std.assert
 main = () => {
     r = json.parse("\"hello\"")
     match r {
-        ok(v) => {
+        ok(v) -> {
             s = json.stringify(v)
             assert.assert(s == "\"hello\"", "std.json internal bare calls must roundtrip unchanged")
         }
-        err(e) => {
+        err(e) -> {
             assert.assert(false, f"std.json.parse unexpectedly failed: {e}")
         }
     }

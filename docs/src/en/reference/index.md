@@ -189,8 +189,8 @@ if x > 0 {
 
 // Pattern matching
 match result {
-    ok(value) => print("success: " + value),
-    err(error) => print("error: " + error),
+    ok(value) -> print("success: " + value),
+    err(error) -> print("error: " + error),
 }
 
 // Loop

@@ -348,8 +348,9 @@ IfExpr      ::= 'if' Expr Block ('else' 'if' Expr Block)* ('else' Block)?
 ### 2.8 模式匹配
 
 ```
-MatchExpr   ::= 'match' Expr '{' MatchArm+ '}'
-MatchArm    ::= Pattern ('|' Pattern)* ('if' Expr)? '=>' Expr ','
+MatchExpr    ::= 'match' Expr '{' MatchArm (ArmSeparator MatchArm)* '}'
+MatchArm     ::= Pattern ('|' Pattern)* ('if' Expr)? '->' Expr
+ArmSeparator ::= ',' | <换行>
 Pattern     ::= Literal
               | Identifier
               | Wildcard
@@ -360,6 +361,9 @@ Pattern     ::= Literal
               | OrPattern
 RangePattern ::= ('-')? Literal '..' ('-')? Literal   // 端点可带负号前缀，负值归一化——见下文「范围模式」注
 ```
+
+> **分支箭头与分隔**：分支用 `->`；
+> `=>` 只用于 lambda。分支之间用换行或 `,` 分隔——与语句的「换行或 `;`」同一规则（[RFC-038](../../rfc/accepted/038-statement-termination.md)）。
 
 > **变体解构的变体集要求**（RFC-010b）：`EnumPattern`（`ok(v)`、`some(x)` 等
 > 变体名按 scrutinee 裁决）要求 scrutinee 的类型是**变体集在场的和类型**。
@@ -407,7 +411,8 @@ Block       ::= '{' Stmt* Expr? '}'
 ```
 
 > **语句终止规则**：Stmt 之间的分隔与换行行为（`;` 显式分隔、换行终止、续行例外、行首 `(`/`[`
-> 永不合并）由 [RFC-038](../../rfc/accepted/038-statement-termination.md) 定义。
+> 永不合并）由 [RFC-038](../../rfc/accepted/038-statement-termination.md) 定义；**相邻语句缺分隔即语法错误**，
+> 同一规则（换行或显式分隔符）用于 match 分支（见 §2.8）。
 
 #### 2.9.1 `{` 的三种形态
 
@@ -548,6 +553,9 @@ identity(5)      // → 5
 ```
 Lambda      ::= '(' ParamList? ')' '=>' Expr
             |  '(' ParamList? ')' '=>' Block
+            |  Identifier '=>' Expr
+
+裸单参形态（`Identifier '=>' Expr`）只允许**单个标识符、不带类型注解**；多参或带注解一律用括号式。
 ```
 
 ### 2.11 错误传播运算符
@@ -677,7 +685,10 @@ add: (a: Int, b: Int) -> Int = {
 ### 3.1 语句分类
 
 ```
+StmtList    ::= Stmt (StmtSep Stmt)*
+StmtSep     ::= ';' | <换行>
 Stmt        ::= LetStmt
+              | DestructureStmt
               | ExprStmt
               | ReturnStmt
               | BreakStmt
@@ -693,6 +704,19 @@ Stmt        ::= LetStmt
 
 ```
 LetStmt     ::= ('mut')? Identifier (':' TypeExpr)? '=' Expr
+```
+
+#### 3.2.1 解构赋值
+
+```
+DestructureStmt ::= '(' Pattern (',' Pattern)* ')' '=' Expr
+```
+
+按位置把右值的元素绑定到模式；模式里的裸标识符引入**新名字**（与 match 模式同一规则），
+不是比较，也不是对已存在名字的赋值。右值的元数必须与被解构模式的元数一致。
+
+```yaoxiang
+(a, b) = (1, 2)
 ```
 
 ### 3.3 return 语句
@@ -1073,8 +1097,8 @@ Expr '?'              // 错误传播（Result 类型）
 
 ```
 match value {
-    pattern1 => expr1,
-    pattern2 if guard => expr2,
-    _ => default_expr,
+    pattern1 -> expr1,
+    pattern2 if guard -> expr2,
+    _ -> default_expr,
 }
 ```

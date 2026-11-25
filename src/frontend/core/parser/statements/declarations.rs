@@ -747,6 +747,13 @@ pub fn parse_identifier_stmt(
 
         state.bump(); // consume ','
 
+        // syntax.md §3.2.1：解构赋值只保留括号式 `(a, b) = e`；裸形态取消。
+        // 报一次可操作诊断后仍按解构继续解析（避免级联），诊断使编译失败。
+        state.error(parse_msg(
+            state,
+            "解构赋值必须写成 `(a, b) = e`：裸形态 `a, b = e` 已取消",
+        ));
+
         let mut names = vec![first_name];
 
         while !state.at_end() {

@@ -10,8 +10,8 @@ use std.assert
 
 factorial: (N: Int) -> (k: N) -> Int = {
     return match k {
-        0 => 1,
-        _ => k * factorial(k - 1)(k - 1)
+        0 -> 1,
+        _ -> k * factorial(k - 1)(k - 1)
     }
 }
 

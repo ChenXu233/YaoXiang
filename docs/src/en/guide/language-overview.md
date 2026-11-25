@@ -142,9 +142,9 @@ grade = if score >= 90 { "A" } else if score >= 60 { "B" } else { "C" }   // "B"
 
 // match
 result = match value {
-    ok(v) => "success: {v}",
-    err(e) => "error: {e}",
-    _ => "unknown",
+    ok(v) -> "success: {v}",
+    err(e) -> "error: {e}",
+    _ -> "unknown",
 }
 
 // Loop
@@ -177,26 +177,26 @@ doubled = [x * 2 for x in nums]
 ## Pattern Matching
 
 > **Note**: 0.8.2 **does not yet implement record/struct destructuring patterns** (verified
-> `match s { circle(r) => ... }` reports E0010), the following is the target syntax, not yet
+> `match s { circle(r) -> ... }` reports E0010), the following is the target syntax, not yet
 > runnable.
 
 <!-- docs-example: skip -->
 
 ```yaoxiang
 match shape {
-    circle(r) => pi * r * r,
-    rect(w, h) => w * h,
-    point => 0,
+    circle(r) -> pi * r * r,
+    rect(w, h) -> w * h,
+    point -> 0,
 }
 
 // Struct/tuple patterns
 match p {
-    { x: 0, y: 0 } => "origin",
-    { x, y } => "({x}, {y})",
+    { x: 0, y: 0 } -> "origin",
+    { x, y } -> "({x}, {y})",
 }
 match t {
-    (0, 0) => "origin",
-    (x, y) => "({x}, {y})",
+    (0, 0) -> "origin",
+    (x, y) -> "({x}, {y})",
 }
 
 // Destructuring assignment
@@ -204,8 +204,8 @@ a, b = (1, 2)              // a=1, b=2
 
 // Guard expressions
 match age {
-    n if n >= 18 => true,
-    _ => false,
+    n if n >= 18 -> true,
+    _ -> false,
 }
 ```
 

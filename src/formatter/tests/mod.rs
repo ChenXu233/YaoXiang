@@ -3,3 +3,4 @@ mod command;
 mod idempotency;
 mod properties;
 mod source_map;
+mod surface;
