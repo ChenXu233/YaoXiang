@@ -855,11 +855,14 @@ fn test_two_alias_conflict_positional_param_type_mismatch_rejects_loudly() {
     );
 }
 
-/// 两别名冲突 + 位置实参、两提供方**同参同返回**：实参与 owner 的候选形参相容 ⇒ 放行，
-/// 值由接收者所属单元（a）决定（旧行为 0/0 打印 200）。
+/// 两别名冲突 + 位置实参：**一律 E1107**（不看实参类型、元数、owner 是哪一侧）。
+///
+/// 这是「冲突形态一律拒绝」的代价之一：两提供方同参同返回时 pre-t5 是 0/0 打印 200，
+/// 本判据下变 E1107（D 类，登记在 09 的 4.9.9 行，待用户裁决）。判据只依赖导入面，
+/// 因此同一输入重复跑结果确定（连跑 5 次断言同一诊断）。
 #[test]
-fn test_two_alias_conflict_same_signature_keeps_legacy_behavior() {
-    // Arrange
+fn test_two_alias_conflict_positional_rejects_loudly() {
+    // Arrange：两别名 X/Y，a 的 bump 返回 n*100、b 的返回 n*10（同参同返回）
     let (_dir, entry) = make_script_project(&[
         (
             "a.yx",
@@ -871,31 +874,31 @@ fn test_two_alias_conflict_same_signature_keeps_legacy_behavior() {
         ),
         (
             "main.yx",
-            "use std.assert\nuse a.{Temp as X}\nuse b.{Temp as Y}\n\nx = X(1.0)\nr = x.bump(2)\nassert.assert(r == 200, \"conflict same-signature dispatches to owner a\")\n",
+            "use a.{Temp as X}\nuse b.{Temp as Y}\n\nx = X(1.0)\nr = x.bump(2)\n",
         ),
     ]);
 
     // Act
-    let outcome = run_multi(&entry).expect("driver run failed");
+    let mut observed: Vec<Vec<String>> = Vec::new();
+    for _ in 0..5 {
+        let (codes, no_hard_failure) = check_codes(&entry);
+        assert!(no_hard_failure, "IR 级诊断必须收进逐文件通道：{codes:?}");
+        observed.push(codes);
+    }
 
     // Assert
     assert!(
-        outcome.failure.is_none(),
-        "同参同返回的冲突形态必须保留旧行为（0/0，值由 owner 决定）：{:?}",
-        outcome.failure.as_ref().map(|e| format!("{e}"))
-    );
-    let module = outcome.module.expect("Linking + mono 必须产出合并 IR");
-    let values = run_merged_slot_values(module);
-    assert!(
-        values.iter().any(|value| value == "Int(200)"),
-        "冲突同参形态必须派发到 owner a（2*100 = 200），实际全局槽位：{values:?}"
+        observed
+            .iter()
+            .all(|codes| codes.iter().any(|code| code == "E1107")),
+        "冲突形态 + 位置实参必须确定性 E1107（不看类型/元数/owner）：{observed:?}"
     );
 }
-
-/// 两别名冲突 + 位置实参、两提供方**同参不同返回**：实参相容（返回类型差异不改变
-/// 实参相容性）⇒ 放行，值由 owner 决定（旧行为 0/0 打印 200）。
+/// 两别名冲突 + 位置实参（两提供方同参不同返回）：同样**一律 E1107**。
+///
+/// pre-t5 该形态 0/0 打印 200（实参相容），本判据下变 E1107（D 类，登记在 09，待裁决）。
 #[test]
-fn test_two_alias_conflict_return_type_diff_keeps_legacy_behavior() {
+fn test_two_alias_conflict_return_type_diff_rejects_loudly() {
     // Arrange：a 返回 Int（n*100），b 同参返回 Float（2.0）
     let (_dir, entry) = make_script_project(&[
         (
@@ -913,18 +916,172 @@ fn test_two_alias_conflict_return_type_diff_keeps_legacy_behavior() {
     ]);
 
     // Act
-    let outcome = run_multi(&entry).expect("driver run failed");
+    let (codes, no_hard_failure) = check_codes(&entry);
 
     // Assert
+    assert!(no_hard_failure, "IR 级诊断必须收进逐文件通道：{codes:?}");
     assert!(
-        outcome.failure.is_none(),
-        "同参不同返回的冲突形态必须保留旧行为（实参相容 ⇒ 放行，值由 owner 决定）：{:?}",
-        outcome.failure.as_ref().map(|e| format!("{e}"))
+        codes.iter().any(|code| code == "E1107"),
+        "冲突形态 + 位置实参必须一律 E1107（同参不同返回不再放行）：{codes:?}"
     );
-    let module = outcome.module.expect("Linking + mono 必须产出合并 IR");
-    let values = run_merged_slot_values(module);
+}
+
+/// 冲突形态 + 位置实参 + **Int→Float 加宽**（pre-t5 0/0 打印 2.5）：新判据一律 E1107。
+/// 这是「冲突形态一律拒绝」的 D 类清单之一（登记在 09 的 4.9.9 行，待用户裁决）。
+#[test]
+fn test_conflict_widening_int_literal_rejects_loudly() {
+    // Arrange：owner a 的 bump 收 Float（n + 0.5），另一提供方收 Int
+    let (_dir, entry) = make_script_project(&[
+        (
+            "a.yx",
+            "Temp: Type = { v: Float }\n\nTemp.bump: (self: &Temp, n: Float) -> Float = {\n    return n + 0.5\n}\n",
+        ),
+        (
+            "b.yx",
+            "Temp: Type = { v: Float }\n\nTemp.bump: (self: &Temp, n: Int) -> Int = {\n    return n * 10\n}\n",
+        ),
+        (
+            "main.yx",
+            "use a.{Temp as X}\nuse b.{Temp as Y}\n\nx = X(1.0)\nr = x.bump(2)\n",
+        ),
+    ]);
+
+    // Act
+    let (codes, no_hard_failure) = check_codes(&entry);
+
+    // Assert
+    assert!(no_hard_failure, "IR 级诊断必须收进逐文件通道：{codes:?}");
     assert!(
-        values.iter().any(|value| value == "Int(200)"),
-        "冲突返回差形态仍派发到 owner a（2*100 = 200），实际全局槽位：{values:?}"
+        codes.iter().any(|code| code == "E1107"),
+        "冲突形态下 Int→Float 加宽也一律 E1107（不再复刻 typecheck 相容规则）：{codes:?}"
+    );
+}
+
+/// 冲突形态 + 位置实参 + Int→Float 加宽（实参是**变量**）：同样 E1107。
+#[test]
+fn test_conflict_widening_int_variable_rejects_loudly() {
+    // Arrange
+    let (_dir, entry) = make_script_project(&[
+        (
+            "a.yx",
+            "Temp: Type = { v: Float }\n\nTemp.bump: (self: &Temp, n: Float) -> Float = {\n    return n + 0.5\n}\n",
+        ),
+        (
+            "b.yx",
+            "Temp: Type = { v: Float }\n\nTemp.bump: (self: &Temp, n: Int) -> Int = {\n    return n * 10\n}\n",
+        ),
+        (
+            "main.yx",
+            "use a.{Temp as X}\nuse b.{Temp as Y}\n\nx = X(1.0)\nk: Int = 2\nr = x.bump(k)\n",
+        ),
+    ]);
+
+    // Act
+    let (codes, no_hard_failure) = check_codes(&entry);
+
+    // Assert
+    assert!(no_hard_failure, "IR 级诊断必须收进逐文件通道：{codes:?}");
+    assert!(
+        codes.iter().any(|code| code == "E1107"),
+        "冲突形态下变量实参的加宽同样 E1107：{codes:?}"
+    );
+}
+
+/// 冲突形态 + **整体导入 owner**（`use c` + `c.Temp(...)`，c 不在花括号提供方表里）：
+/// 位置实参同样 E1107（只看名字层歧义，不查 owner 是否在提供方列表内）。
+/// pre-t5 该形态 0/0 打印 9 —— 属 D 类清单（登记在 09，待裁决）。
+#[test]
+fn test_conflict_whole_module_owner_positional_rejects_loudly() {
+    // Arrange：a/b 两别名冲突，c 整体导入并自带接受 Int 的 bump
+    let (_dir, entry) = make_script_project(&[
+        (
+            "a.yx",
+            "Temp: Type = { v: Float }\n\nTemp.bump: (self: &Temp, n: Int) -> Int = {\n    return n * 100\n}\n",
+        ),
+        (
+            "b.yx",
+            "Temp: Type = { v: Float }\n\nTemp.bump: (self: &Temp, n: Int) -> Int = {\n    return n * 10\n}\n",
+        ),
+        (
+            "c.yx",
+            "Temp: Type = { v: Float }\n\nTemp.bump: (self: &Temp, n: Int) -> Int = {\n    return n + 7\n}\n",
+        ),
+        (
+            "main.yx",
+            "use a.{Temp as X}\nuse b.{Temp as Y}\nuse c\n\nq = c.Temp(1.0)\nr = q.bump(2)\n",
+        ),
+    ]);
+
+    // Act
+    let (codes, no_hard_failure) = check_codes(&entry);
+
+    // Assert
+    assert!(no_hard_failure, "IR 级诊断必须收进逐文件通道：{codes:?}");
+    assert!(
+        codes.iter().any(|code| code == "E1107"),
+        "冲突形态下整体导入 owner 的位置实参也必须 E1107：{codes:?}"
+    );
+}
+
+/// mixed（winner == 裸名 b、owner == 别名 a）且实参对 owner 相容：仍按签名判据
+/// E1107（实参类型相容性由 typecheck 负责，IR 不再复刻）——pre-t5 0/0 打印 200，
+/// 属 D 类清单（登记在 09，待裁决）。
+#[test]
+fn test_mixed_owner_compatible_positional_rejects_loudly() {
+    // Arrange：a 别名（owner，Int=200），b 裸名（winner，Float）
+    let (_dir, entry) = make_script_project(&[
+        (
+            "a.yx",
+            "Temp: Type = { v: Float }\n\nTemp.bump: (self: &Temp, n: Int) -> Int = {\n    return n * 100\n}\n",
+        ),
+        (
+            "b.yx",
+            "Temp: Type = { v: Float }\n\nTemp.bump: (self: &Temp, n: Float) -> Float = {\n    return self.v + n\n}\n",
+        ),
+        (
+            "main.yx",
+            "use a.{Temp as X}\nuse b.{Temp}\n\nx = X(1.0)\nr = x.bump(2)\n",
+        ),
+    ]);
+
+    // Act
+    let (codes, no_hard_failure) = check_codes(&entry);
+
+    // Assert
+    assert!(no_hard_failure, "IR 级诊断必须收进逐文件通道：{codes:?}");
+    assert!(
+        codes.iter().any(|code| code == "E1107"),
+        "mixed 形态（owner != winner、签名不同）位置实参必须 E1107：{codes:?}"
+    );
+}
+
+/// 冲突形态 + 位置实参 + **元数不匹配**（owner 只收一个值参、调用传两个）：E1107，
+/// 不再出现「额外实参被丢、打印 300」的静默错值（pre-t5 与上一轮均为 0/0 打印 300）。
+#[test]
+fn test_conflict_arity_owner_one_two_args_rejects_loudly() {
+    // Arrange
+    let (_dir, entry) = make_script_project(&[
+        (
+            "a.yx",
+            "Temp: Type = { v: Float }\n\nTemp.bump: (self: &Temp, n: Int) -> Int = {\n    return n * 100\n}\n",
+        ),
+        (
+            "b.yx",
+            "Temp: Type = { v: Float }\n\nTemp.bump: (self: &Temp, p: Int, q: Int) -> Int = {\n    return p + q\n}\n",
+        ),
+        (
+            "main.yx",
+            "use a.{Temp as X}\nuse b.{Temp as Y}\n\nx = X(1.0)\nr = x.bump(3, 4)\n",
+        ),
+    ]);
+
+    // Act
+    let (codes, no_hard_failure) = check_codes(&entry);
+
+    // Assert
+    assert!(no_hard_failure, "IR 级诊断必须收进逐文件通道：{codes:?}");
+    assert!(
+        codes.iter().any(|code| code == "E1107"),
+        "冲突形态的元数不匹配必须 E1107，不得静默丢实参打印 300：{codes:?}"
     );
 }

@@ -133,21 +133,22 @@ impl TypeCandidateProviders {
         self.providers(type_name).len()
     }
 
-    /// 该类型名是否**冲突**（同一级来源被 ≥2 个模块带进作用域）。
+    /// 该类型名是否**冲突**（任一级来源被 ≥2 个模块带进作用域）。
     ///
-    /// 与「未导入」区分：冲突是「有多个提供方、注入面整名跳过」；未导入是
-    /// 「没有任何提供方」。消费侧对两者的处置不同。
+    /// 两级**取或**：裸名侧多模块、或别名侧多模块，都构成名字层歧义。
+    /// （候选注入面在裸名存在时仍按裸名优先注入；本判据只回答「这个名字在名字层
+    /// 是否已经不唯一」，供消费侧决定是否按名/按位置拒绝。）
     pub fn is_conflicted(
         &self,
         type_name: &str,
     ) -> bool {
-        match self.bare.get(type_name) {
-            Some(modules) => modules.len() > 1,
-            None => self
+        self.bare
+            .get(type_name)
+            .is_some_and(|modules| modules.len() > 1)
+            || self
                 .aliased
                 .get(type_name)
-                .is_some_and(|modules| modules.len() > 1),
-        }
+                .is_some_and(|modules| modules.len() > 1)
     }
 }
 
@@ -254,5 +255,27 @@ mod tests {
         );
         assert!(!providers.is_conflicted("Temp"), "单提供方不是冲突");
         assert_eq!(providers.provider_count("Temp"), 1, "单提供方计数必须为 1");
+    }
+
+    #[test]
+    fn test_bare_and_alias_conflict_is_or_of_both_levels() {
+        // Arrange：裸名提供方 a（1 个）+ 别名提供方 b、c（2 个 ⇒ 别名侧冲突）
+        let providers = table(&[("Temp", "a")], &[("Temp", "b"), ("Temp", "c")]);
+
+        // Act
+        let conflicted = providers.is_conflicted("Temp");
+        let winner = providers.winner("Temp");
+        let count = providers.provider_count("Temp");
+
+        // Assert
+        assert!(
+            conflicted,
+            "别名侧多模块必须被 is_conflicted 记为冲突（两级取或），实际：false"
+        );
+        assert!(
+            winner == Some("a"),
+            "裸名存在时 winner 仍按裸名优先（注入面规则），实际：{winner:?}"
+        );
+        assert_eq!(count, 3, "providers 必须列出全部三个提供模块");
     }
 }

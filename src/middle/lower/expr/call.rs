@@ -441,7 +441,7 @@ impl AstToIrGenerator {
                             &key, args, named_args, *span,
                         ));
                     }
-                    if let Some((key, providers)) = self.method_source_mismatch(expr, field, args) {
+                    if let Some((key, providers)) = self.method_source_mismatch(expr, field) {
                         return Err(ErrorCodeDefinition::ambiguous_method_overload(
                             &key, providers,
                         )
