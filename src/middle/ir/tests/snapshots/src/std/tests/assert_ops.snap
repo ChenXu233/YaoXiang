@@ -1,7 +1,7 @@
 module
   fn main() -> Void
     locals_total=3
-    values_total=29
+    values_total=31
     value v0: TypeRef("?") @block0
     value v1: Bool @block0
     value v2: Int(64) @block0
@@ -14,23 +14,25 @@ module
     value v9: Generic { name: "String", args: [] } @block0
     value v10: Generic { name: "String", args: [] } @block0
     value v11: Generic { name: "String", args: [] } @block0
-    value v12: TypeRef("?") @block0
-    value v13: Bool @block0
+    value v12: TypeRef("?") @block3
+    value v13: Bool @block1
     value v14: Bool @block0
     value v15: Int(64) @block0
     value v16: Int(64) @block0
-    value v17: Int(64) @block0
-    value v18: Int(64) @block0
-    value v19: Generic { name: "String", args: [] } @block0
-    value v20: TypeRef("?") @block0
-    value v21: Bool @block0
-    value v22: Bool @block0
-    value v23: Generic { name: "String", args: [] } @block0
-    value v24: TypeRef("?") @block0
-    value v25: Bool @block0
-    value v26: Int(64) @block0
-    value v27: Int(64) @block0
-    value v28: Generic { name: "String", args: [] } @block0
+    value v17: Int(64) @block1
+    value v18: Int(64) @block1
+    value v19: Generic { name: "String", args: [] } @block3
+    value v20: TypeRef("?") @block3
+    value v21: Bool @block3
+    value v22: Bool @block3
+    value v23: Generic { name: "String", args: [] } @block3
+    value v24: TypeRef("?") @block3
+    value v25: Bool @block3
+    value v26: Int(64) @block3
+    value v27: Int(64) @block3
+    value v28: Generic { name: "String", args: [] } @block3
+    value v29: Bool @block2
+    value v30: Bool @block3
     Load v4 <- int(1)
     Load v5 <- int(1)
     Add v2 <- v4, v5
@@ -51,9 +53,10 @@ module
     Load v18 <- int(5)
     Lt v13 <- v17, v18
     Jmp -> instr(21)
-    Load v13 <- bool(false)
+    Load v29 <- bool(false)
+    Phi v30 <- [1: v13, 2: v29]
     Load v19 <- string("logical and")
-    Call v12 <- string("std.assert.assert") [v13, v19] (def=d0)
+    Call v12 <- string("std.assert.assert") [v30, v19] (def=d0)
     Load v22 <- bool(false)
     Not v21 <- v22
     Load v23 <- string("logical not")

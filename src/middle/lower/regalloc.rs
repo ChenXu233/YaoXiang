@@ -269,3 +269,91 @@ pub(in crate::middle) fn allocate_value_slots(
         frame_slots,
     })
 }
+/// 打破 translator Phi Move 组的**真并行拷贝环**（7b.3 的临时槽未落地的补偿）。
+///
+/// translator 的方案 A 把每个汇合块入口的 Phi 组按前驱展开为一串 Move；它明确
+/// 拒绝「前序 Move 写过的槽被后序 Move 读」的环（7b.3 留待临时槽）。本函数在
+/// 值槽分配之后检查同一判据：把环中某个 Phi dst 的槽改到 frame_slots 的新
+/// 顶端槽（该槽不属于任何现有 Move 源/目的），等价于标准 SSA 销毁时插入临时槽，
+/// 不改变 Phi 的并行语义。pinned 到具名槽的 Phi dst 不动；若环全由 pinned 值
+/// 构成则保留原状，由 translator 响亮失败。
+pub(in crate::middle) fn break_phi_copy_cycles(
+    blocks: &[BasicBlock],
+    value_slots: &mut [usize],
+    frame_slots: &mut usize,
+    named_base: usize,
+    limit: usize,
+) -> Result<(), Budget> {
+    let mut groups: BTreeMap<(usize, usize), Vec<(usize, usize)>> = BTreeMap::new();
+    for block in blocks {
+        for instruction in &block.instructions {
+            let Instruction::Phi { dst, incoming, .. } = instruction else {
+                continue;
+            };
+            let Operand::Value(dst) = dst else {
+                continue;
+            };
+            for (pred, src) in incoming {
+                let Operand::Value(src) = src else {
+                    continue;
+                };
+                groups
+                    .entry((block.label, *pred))
+                    .or_default()
+                    .push((dst.0 as usize, src.0 as usize));
+            }
+        }
+    }
+
+    loop {
+        let mut changed = false;
+        for moves in groups.values() {
+            let mut slots: Vec<(usize, usize)> = Vec::with_capacity(moves.len());
+            let mut valid = true;
+            for (dst, src) in moves {
+                let (Some(&dst_slot), Some(&src_slot)) =
+                    (value_slots.get(*dst), value_slots.get(*src))
+                else {
+                    valid = false;
+                    break;
+                };
+                slots.push((dst_slot, src_slot));
+            }
+            if !valid {
+                continue;
+            }
+
+            let offending = slots.iter().enumerate().find_map(|(index, (dst_slot, _))| {
+                if !slots[index + 1..]
+                    .iter()
+                    .any(|(_, src_slot)| src_slot == dst_slot)
+                {
+                    return None;
+                }
+                let (dst_value, _) = moves[index];
+                if value_slots[dst_value] < named_base {
+                    None
+                } else {
+                    Some(dst_value)
+                }
+            });
+            let Some(dst_value) = offending else {
+                continue;
+            };
+            let new_slot = *frame_slots;
+            if new_slot >= limit {
+                return Err(Budget {
+                    required: new_slot + 1,
+                    limit,
+                });
+            }
+            value_slots[dst_value] = new_slot;
+            *frame_slots += 1;
+            changed = true;
+            break;
+        }
+        if !changed {
+            return Ok(());
+        }
+    }
+}

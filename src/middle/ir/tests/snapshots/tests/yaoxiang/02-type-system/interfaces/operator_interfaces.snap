@@ -66,7 +66,7 @@ module
     slot[3] d : Int(64) @depth1
     slot[4] e : Int(64) @depth1
     locals_total=8
-    values_total=70
+    values_total=76
     value v0: TypeRef("?") @block0
     value v1: Bool @block0
     value v2: Int(64) @block0
@@ -101,42 +101,48 @@ module
     value v31: Float(64) @block0
     value v32: Struct(StructType { name: "Point", fields: [("x", Float(64)), ("y", Float(64))], methods: {}, interfaces: ["Add", "Multiply"] }) @block0
     value v33: Struct(StructType { name: "Point", fields: [("x", Float(64)), ("y", Float(64))], methods: {}, interfaces: ["Add", "Multiply"] }) @block0
-    value v34: TypeRef("?") @block0
-    value v35: Bool @block0
+    value v34: TypeRef("?") @block3
+    value v35: Bool @block1
     value v36: Bool @block0
     value v37: TypeRef("?") @block0
     value v38: Float(64) @block0
     value v39: TypeRef("Point") @block0
-    value v40: TypeRef("?") @block0
-    value v41: Float(64) @block0
-    value v42: TypeRef("Point") @block0
-    value v43: Generic { name: "String", args: [] } @block0
-    value v44: Struct(StructType { name: "Point", fields: [("x", Float(64)), ("y", Float(64))], methods: {}, interfaces: ["Add", "Multiply"] }) @block0
-    value v45: Float(64) @block0
-    value v46: TypeRef("?") @block0
-    value v47: Bool @block0
-    value v48: Bool @block0
-    value v49: TypeRef("?") @block0
-    value v50: Float(64) @block0
-    value v51: TypeRef("Point") @block0
-    value v52: TypeRef("?") @block0
-    value v53: Float(64) @block0
-    value v54: TypeRef("Point") @block0
-    value v55: Generic { name: "String", args: [] } @block0
-    value v56: TypeRef("?") @block0
-    value v57: Struct(StructType { name: "Point", fields: [("x", Float(64)), ("y", Float(64))], methods: {}, interfaces: ["Add", "Multiply"] }) @block0
-    value v58: Struct(StructType { name: "Point", fields: [("x", Float(64)), ("y", Float(64))], methods: {}, interfaces: ["Add", "Multiply"] }) @block0
-    value v59: Struct(StructType { name: "Point", fields: [("x", Float(64)), ("y", Float(64))], methods: {}, interfaces: ["Add", "Multiply"] }) @block0
-    value v60: TypeRef("?") @block0
-    value v61: Bool @block0
-    value v62: Bool @block0
-    value v63: TypeRef("?") @block0
-    value v64: Float(64) @block0
-    value v65: TypeRef("Point") @block0
-    value v66: TypeRef("?") @block0
-    value v67: Float(64) @block0
-    value v68: TypeRef("Point") @block0
-    value v69: Generic { name: "String", args: [] } @block0
+    value v40: TypeRef("?") @block1
+    value v41: Float(64) @block1
+    value v42: TypeRef("Point") @block1
+    value v43: Generic { name: "String", args: [] } @block3
+    value v44: Struct(StructType { name: "Point", fields: [("x", Float(64)), ("y", Float(64))], methods: {}, interfaces: ["Add", "Multiply"] }) @block3
+    value v45: Float(64) @block3
+    value v46: TypeRef("?") @block6
+    value v47: Bool @block4
+    value v48: Bool @block3
+    value v49: TypeRef("?") @block3
+    value v50: Float(64) @block3
+    value v51: TypeRef("Point") @block3
+    value v52: TypeRef("?") @block4
+    value v53: Float(64) @block4
+    value v54: TypeRef("Point") @block4
+    value v55: Generic { name: "String", args: [] } @block6
+    value v56: TypeRef("?") @block6
+    value v57: Struct(StructType { name: "Point", fields: [("x", Float(64)), ("y", Float(64))], methods: {}, interfaces: ["Add", "Multiply"] }) @block6
+    value v58: Struct(StructType { name: "Point", fields: [("x", Float(64)), ("y", Float(64))], methods: {}, interfaces: ["Add", "Multiply"] }) @block6
+    value v59: Struct(StructType { name: "Point", fields: [("x", Float(64)), ("y", Float(64))], methods: {}, interfaces: ["Add", "Multiply"] }) @block6
+    value v60: TypeRef("?") @block9
+    value v61: Bool @block7
+    value v62: Bool @block6
+    value v63: TypeRef("?") @block6
+    value v64: Float(64) @block6
+    value v65: TypeRef("Point") @block6
+    value v66: TypeRef("?") @block7
+    value v67: Float(64) @block7
+    value v68: TypeRef("Point") @block7
+    value v69: Generic { name: "String", args: [] } @block9
+    value v70: Bool @block2
+    value v71: Bool @block5
+    value v72: Bool @block8
+    value v73: Bool @block3
+    value v74: Bool @block6
+    value v75: Bool @block9
     Load v4 <- int(1)
     Load v5 <- float(4612811918334230528)
     Add v2 <- v4, v5
@@ -184,9 +190,10 @@ module
     Load v41 <- float(4618441417868443648)
     Eq v35 <- v40, v41
     Jmp -> instr(48)
-    Load v35 <- bool(false)
+    Load v70 <- bool(false)
+    Phi v73 <- [1: v35, 2: v70]
     Load v43 <- string("Point + Point")
-    Call v34 <- string("std.assert.assert") [v35, v43] (def=d2)
+    Call v34 <- string("std.assert.assert") [v73, v43] (def=d2)
     Load v44 <- %0
     Load v45 <- float(4613937818241073152)
     Call %3 <- string("Point.multiply") [v44, v45] (def=d4)
@@ -194,15 +201,16 @@ module
     LoadField v49 <- v51.0
     Load v50 <- float(4613937818241073152)
     Eq v48 <- v49, v50
-    JmpIfNot v48 -> instr(63)
+    JmpIfNot v48 -> instr(64)
     Load v54 <- %3
     LoadField v52 <- v54.1
     Load v53 <- float(4618441417868443648)
     Eq v47 <- v52, v53
-    Jmp -> instr(64)
-    Load v47 <- bool(false)
+    Jmp -> instr(65)
+    Load v71 <- bool(false)
+    Phi v74 <- [4: v47, 5: v71]
     Load v55 <- string("Point * Float scaling")
-    Call v46 <- string("std.assert.assert") [v47, v55] (def=d2)
+    Call v46 <- string("std.assert.assert") [v74, v55] (def=d2)
     Load v58 <- %0
     Load v59 <- %1
     Call v56 <- string("Point.add") [v58, v59] (def=d3)
@@ -212,15 +220,16 @@ module
     LoadField v63 <- v65.0
     Load v64 <- float(4617315517961601024)
     Eq v62 <- v63, v64
-    JmpIfNot v62 -> instr(81)
+    JmpIfNot v62 -> instr(83)
     Load v68 <- %4
     LoadField v66 <- v68.1
     Load v67 <- float(4620693217682128896)
     Eq v61 <- v66, v67
-    Jmp -> instr(82)
-    Load v61 <- bool(false)
+    Jmp -> instr(84)
+    Load v72 <- bool(false)
+    Phi v75 <- [7: v61, 8: v72]
     Load v69 <- string("chained Point + Point")
-    Call v60 <- string("std.assert.assert") [v61, v69] (def=d2)
+    Call v60 <- string("std.assert.assert") [v75, v69] (def=d2)
     Drop %0
     Drop %1
     Drop %2

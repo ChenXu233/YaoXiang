@@ -12,120 +12,121 @@ module
     slot[9] j : Int(64) @depth1
     slot[10] k : Int(64) @depth2
     locals_total=16
-    values_total=113
+    values_total=114
     value v0: Void @block0
-    value v1: Bool @block0
-    value v2: Int(64) @block0
-    value v3: Int(64) @block0
-    value v4: Int(64) @block0
-    value v5: Int(64) @block0
-    value v6: TypeRef("?") @block0
-    value v7: Bool @block0
-    value v8: Int(64) @block0
-    value v9: Int(64) @block0
+    value v1: Bool @block1
+    value v2: Int(64) @block1
+    value v3: Int(64) @block1
+    value v4: Int(64) @block2
+    value v5: Int(64) @block2
+    value v6: TypeRef("?") @block4
+    value v7: Bool @block2
+    value v8: Int(64) @block2
+    value v9: Int(64) @block2
     value v10: TypeRef("?") @block0
-    value v11: TypeRef("?") @block0
-    value v12: Bool @block0
-    value v13: Int(64) @block0
-    value v14: Int(64) @block0
-    value v15: Generic { name: "String", args: [] } @block0
-    value v16: Void @block0
-    value v17: Bool @block0
-    value v18: Int(64) @block0
-    value v19: Int(64) @block0
-    value v20: Int(64) @block0
-    value v21: Int(64) @block0
-    value v22: Bool @block0
-    value v23: Int(64) @block0
-    value v24: Int(64) @block0
+    value v11: TypeRef("?") @block6
+    value v12: Bool @block6
+    value v13: Int(64) @block6
+    value v14: Int(64) @block6
+    value v15: Generic { name: "String", args: [] } @block6
+    value v16: Void @block6
+    value v17: Bool @block7
+    value v18: Int(64) @block7
+    value v19: Int(64) @block7
+    value v20: Int(64) @block8
+    value v21: Int(64) @block8
+    value v22: Bool @block8
+    value v23: Int(64) @block8
+    value v24: Int(64) @block8
     value v25: TypeRef("?") @block0
-    value v26: Int(64) @block0
-    value v27: Int(64) @block0
-    value v28: TypeRef("?") @block0
-    value v29: Bool @block0
-    value v30: Int(64) @block0
-    value v31: Int(64) @block0
-    value v32: Generic { name: "String", args: [] } @block0
-    value v33: TypeRef("?") @block0
-    value v34: Int(64) @block0
-    value v35: Int(64) @block0
-    value v36: Int(64) @block0
-    value v37: Int(64) @block0
-    value v38: Int(64) @block0
-    value v39: Int(64) @block0
-    value v40: Int(64) @block0
-    value v41: Int(64) @block0
-    value v42: Int(64) @block0
-    value v43: Int(64) @block0
-    value v44: TypeRef("?") @block0
-    value v45: TypeRef("?") @block0
-    value v46: TypeRef("?") @block0
-    value v47: Bool @block0
-    value v48: Int(64) @block0
-    value v49: Int(64) @block0
+    value v26: Int(64) @block10
+    value v27: Int(64) @block10
+    value v28: TypeRef("?") @block11
+    value v29: Bool @block11
+    value v30: Int(64) @block11
+    value v31: Int(64) @block11
+    value v32: Generic { name: "String", args: [] } @block11
+    value v33: TypeRef("?") @block11
+    value v34: Int(64) @block11
+    value v35: Int(64) @block11
+    value v36: Int(64) @block11
+    value v37: Int(64) @block11
+    value v38: Int(64) @block11
+    value v39: Int(64) @block11
+    value v40: Int(64) @block11
+    value v41: Int(64) @block11
+    value v42: Int(64) @block11
+    value v43: Int(64) @block11
+    value v44: TypeRef("?") @block11
+    value v45: TypeRef("?") @block12
+    value v46: TypeRef("?") @block13
+    value v47: Bool @block13
+    value v48: Int(64) @block13
+    value v49: Int(64) @block13
     value v50: TypeRef("?") @block0
-    value v51: Int(64) @block0
-    value v52: Int(64) @block0
-    value v53: TypeRef("?") @block0
-    value v54: Bool @block0
-    value v55: Int(64) @block0
-    value v56: Int(64) @block0
-    value v57: Generic { name: "String", args: [] } @block0
-    value v58: TypeRef("?") @block0
-    value v59: Int(64) @block0
-    value v60: Int(64) @block0
-    value v61: Int(64) @block0
-    value v62: Int(64) @block0
-    value v63: Int(64) @block0
-    value v64: Int(64) @block0
-    value v65: Int(64) @block0
-    value v66: Int(64) @block0
-    value v67: Int(64) @block0
-    value v68: Int(64) @block0
-    value v69: TypeRef("?") @block0
-    value v70: TypeRef("?") @block0
-    value v71: TypeRef("?") @block0
-    value v72: Bool @block0
-    value v73: Int(64) @block0
-    value v74: Int(64) @block0
+    value v51: Int(64) @block15
+    value v52: Int(64) @block15
+    value v53: TypeRef("?") @block16
+    value v54: Bool @block16
+    value v55: Int(64) @block16
+    value v56: Int(64) @block16
+    value v57: Generic { name: "String", args: [] } @block16
+    value v58: TypeRef("?") @block16
+    value v59: Int(64) @block16
+    value v60: Int(64) @block16
+    value v61: Int(64) @block16
+    value v62: Int(64) @block16
+    value v63: Int(64) @block16
+    value v64: Int(64) @block16
+    value v65: Int(64) @block16
+    value v66: Int(64) @block16
+    value v67: Int(64) @block16
+    value v68: Int(64) @block16
+    value v69: TypeRef("?") @block16
+    value v70: TypeRef("?") @block17
+    value v71: TypeRef("?") @block18
+    value v72: Bool @block18
+    value v73: Int(64) @block18
+    value v74: Int(64) @block18
     value v75: TypeRef("?") @block0
-    value v76: Int(64) @block0
-    value v77: Int(64) @block0
-    value v78: TypeRef("?") @block0
-    value v79: Bool @block0
-    value v80: Int(64) @block0
-    value v81: Int(64) @block0
-    value v82: Generic { name: "String", args: [] } @block0
-    value v83: Void @block0
-    value v84: Bool @block0
-    value v85: Int(64) @block0
-    value v86: Int(64) @block0
-    value v87: Int(64) @block0
-    value v88: Int(64) @block0
-    value v89: Void @block0
-    value v90: Bool @block0
-    value v91: Int(64) @block0
-    value v92: Int(64) @block0
-    value v93: Int(64) @block0
-    value v94: Int(64) @block0
-    value v95: Bool @block0
-    value v96: Int(64) @block0
-    value v97: Int(64) @block0
+    value v76: Int(64) @block20
+    value v77: Int(64) @block20
+    value v78: TypeRef("?") @block21
+    value v79: Bool @block21
+    value v80: Int(64) @block21
+    value v81: Int(64) @block21
+    value v82: Generic { name: "String", args: [] } @block21
+    value v83: Void @block21
+    value v84: Bool @block22
+    value v85: Int(64) @block22
+    value v86: Int(64) @block22
+    value v87: Int(64) @block23
+    value v88: Int(64) @block23
+    value v89: Void @block23
+    value v90: Bool @block24
+    value v91: Int(64) @block24
+    value v92: Int(64) @block24
+    value v93: Int(64) @block25
+    value v94: Int(64) @block25
+    value v95: Bool @block25
+    value v96: Int(64) @block25
+    value v97: Int(64) @block25
     value v98: TypeRef("?") @block0
-    value v99: Int(64) @block0
-    value v100: Int(64) @block0
-    value v101: Int(64) @block0
-    value v102: Int(64) @block0
-    value v103: TypeRef("?") @block0
-    value v104: Bool @block0
-    value v105: Int(64) @block0
-    value v106: Int(64) @block0
-    value v107: Generic { name: "String", args: [] } @block0
-    value v108: TypeRef("?") @block0
-    value v109: Bool @block0
-    value v110: Int(64) @block0
-    value v111: Int(64) @block0
-    value v112: Generic { name: "String", args: [] } @block0
+    value v99: Int(64) @block27
+    value v100: Int(64) @block27
+    value v101: Int(64) @block28
+    value v102: Int(64) @block28
+    value v103: TypeRef("?") @block29
+    value v104: Bool @block29
+    value v105: Int(64) @block29
+    value v106: Int(64) @block29
+    value v107: Generic { name: "String", args: [] } @block29
+    value v108: TypeRef("?") @block29
+    value v109: Bool @block29
+    value v110: Int(64) @block29
+    value v111: Int(64) @block29
+    value v112: Generic { name: "String", args: [] } @block29
+    value v113: Void @block5
     Load %0 <- int(0)
     Load v0 <- void
     Load v2 <- %0
@@ -142,7 +143,7 @@ module
     Jmp -> instr(18)
     Move v6 <- v10
     Jmp -> instr(16)
-    Load v0 <- void
+    Load v113 <- void
     Jmp -> instr(2)
     Load v13 <- %0
     Load v14 <- int(3)

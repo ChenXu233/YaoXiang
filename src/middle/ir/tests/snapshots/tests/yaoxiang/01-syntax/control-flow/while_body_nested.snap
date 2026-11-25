@@ -7,69 +7,71 @@ module
     slot[4] n : Int(64) @depth1
     slot[5] label : Int(64) @depth4
     locals_total=11
-    values_total=55
+    values_total=56
     value v0: Void @block0
-    value v1: Bool @block0
-    value v2: Int(64) @block0
-    value v3: Int(64) @block0
-    value v4: Int(64) @block0
-    value v5: Int(64) @block0
-    value v6: TypeRef("?") @block0
-    value v7: Int(64) @block0
-    value v8: Int(64) @block0
-    value v9: Int(64) @block0
-    value v10: Int(64) @block0
-    value v11: Int(64) @block0
-    value v12: Int(64) @block0
-    value v13: Int(64) @block0
-    value v14: Int(64) @block0
-    value v15: TypeRef("?") @block0
-    value v16: TypeRef("?") @block0
-    value v17: TypeRef("?") @block0
-    value v18: Bool @block0
-    value v19: Int(64) @block0
-    value v20: Int(64) @block0
+    value v1: Bool @block1
+    value v2: Int(64) @block1
+    value v3: Int(64) @block1
+    value v4: Int(64) @block2
+    value v5: Int(64) @block2
+    value v6: TypeRef("?") @block2
+    value v7: Int(64) @block2
+    value v8: Int(64) @block2
+    value v9: Int(64) @block2
+    value v10: Int(64) @block2
+    value v11: Int(64) @block2
+    value v12: Int(64) @block2
+    value v13: Int(64) @block2
+    value v14: Int(64) @block2
+    value v15: TypeRef("?") @block2
+    value v16: TypeRef("?") @block3
+    value v17: TypeRef("?") @block4
+    value v18: Bool @block4
+    value v19: Int(64) @block4
+    value v20: Int(64) @block4
     value v21: TypeRef("?") @block0
-    value v22: Bool @block0
-    value v23: Int(64) @block0
-    value v24: Int(64) @block0
+    value v22: Bool @block6
+    value v23: Int(64) @block6
+    value v24: Int(64) @block6
     value v25: TypeRef("?") @block0
-    value v26: Int(64) @block0
-    value v27: Int(64) @block0
-    value v28: TypeRef("?") @block0
-    value v29: Bool @block0
-    value v30: Int(64) @block0
-    value v31: Int(64) @block0
-    value v32: Generic { name: "String", args: [] } @block0
-    value v33: Void @block0
-    value v34: Bool @block0
-    value v35: Int(64) @block0
-    value v36: Int(64) @block0
-    value v37: Int(64) @block0
-    value v38: Int(64) @block0
-    value v39: TypeRef("?") @block0
-    value v40: Bool @block0
-    value v41: Int(64) @block0
-    value v42: Int(64) @block0
-    value v43: Int(64) @block0
-    value v44: Int(64) @block0
+    value v26: Int(64) @block8
+    value v27: Int(64) @block8
+    value v28: TypeRef("?") @block10
+    value v29: Bool @block10
+    value v30: Int(64) @block10
+    value v31: Int(64) @block10
+    value v32: Generic { name: "String", args: [] } @block10
+    value v33: Void @block10
+    value v34: Bool @block11
+    value v35: Int(64) @block11
+    value v36: Int(64) @block11
+    value v37: Int(64) @block12
+    value v38: Int(64) @block12
+    value v39: TypeRef("?") @block13
+    value v40: Bool @block12
+    value v41: Int(64) @block12
+    value v42: Int(64) @block12
+    value v43: Int(64) @block12
+    value v44: Int(64) @block12
     value v45: TypeRef("?") @block0
-    value v46: Int(64) @block0
-    value v47: Int(64) @block0
-    value v48: Int(64) @block0
-    value v49: Int(64) @block0
-    value v50: TypeRef("?") @block0
-    value v51: Bool @block0
-    value v52: Int(64) @block0
-    value v53: Int(64) @block0
-    value v54: Generic { name: "String", args: [] } @block0
+    value v46: Int(64) @block13
+    value v47: Int(64) @block13
+    value v48: Int(64) @block13
+    value v49: Int(64) @block13
+    value v50: TypeRef("?") @block15
+    value v51: Bool @block15
+    value v52: Int(64) @block15
+    value v53: Int(64) @block15
+    value v54: Generic { name: "String", args: [] } @block15
+    value v55: Void @block14
+    Load v45 <- void
     Load %0 <- int(0)
     Load %1 <- int(0)
     Load v0 <- void
     Load v2 <- %1
     Load v3 <- int(3)
     Lt v1 <- v2, v3
-    JmpIfNot v1 -> instr(43)
+    JmpIfNot v1 -> instr(44)
     Load v4 <- %1
     Load v5 <- int(1)
     Add %1 <- v4, v5
@@ -88,24 +90,24 @@ module
     StoreIndex v6[v14] <- v13
     Call v15 <- string("std.list.iter") [v6] (def=d0)
     Call v16 <- string("std.list.has_next") [v15] (def=d1)
-    JmpIfNot v16 -> instr(42)
+    JmpIfNot v16 -> instr(43)
     Call v17 <- string("std.list.next") [v15] (def=d2)
     Store %2 <- v17
     Load v19 <- %2
     Load v20 <- int(2)
     Eq v18 <- v19, v20
-    JmpIfNot v18 -> instr(33)
-    Jmp -> instr(24)
+    JmpIfNot v18 -> instr(34)
+    Jmp -> instr(25)
     Load v23 <- %2
     Load v24 <- int(4)
     Eq v22 <- v23, v24
-    JmpIfNot v22 -> instr(38)
-    Jmp -> instr(42)
+    JmpIfNot v22 -> instr(39)
+    Jmp -> instr(43)
     Load v26 <- %0
     Load v27 <- %2
     Add %0 <- v26, v27
-    Jmp -> instr(24)
-    Jmp -> instr(3)
+    Jmp -> instr(25)
+    Jmp -> instr(4)
     Load v30 <- %0
     Load v31 <- int(12)
     Eq v29 <- v30, v31
@@ -117,7 +119,7 @@ module
     Load v35 <- %4
     Load v36 <- int(5)
     Lt v34 <- v35, v36
-    JmpIfNot v34 -> instr(75)
+    JmpIfNot v34 -> instr(76)
     Load v37 <- %4
     Load v38 <- int(1)
     Add %4 <- v37, v38
@@ -126,7 +128,7 @@ module
     Mod v41 <- v43, v44
     Load v42 <- int(0)
     Eq v40 <- v41, v42
-    JmpIfNot v40 -> instr(73)
+    JmpIfNot v40 -> instr(74)
     Load v46 <- %4
     Load v47 <- int(10)
     Mul %5 <- v46, v47
@@ -135,9 +137,9 @@ module
     Add %3 <- v48, v49
     Drop %5
     Move v39 <- v45
-    Jmp -> instr(73)
-    Load v33 <- void
-    Jmp -> instr(51)
+    Jmp -> instr(74)
+    Load v55 <- void
+    Jmp -> instr(52)
     Load v52 <- %3
     Load v53 <- int(60)
     Eq v51 <- v52, v53

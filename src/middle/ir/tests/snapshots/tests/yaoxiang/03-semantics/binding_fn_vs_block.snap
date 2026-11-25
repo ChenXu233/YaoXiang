@@ -25,7 +25,7 @@ module
     slot[0] v : Int(64) @depth1
     locals_total=2
     values_total=1
-    value v0: Int(64) @block0
+    value v0: Int(64) @block1
     Load %0 <- int(13)
     Ret %0
     Load v0 <- %0

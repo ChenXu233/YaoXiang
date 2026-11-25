@@ -59,7 +59,7 @@ module
     slot[10] t : Int(64) @depth1
     slot[11] w : Int(64) @depth1
     locals_total=16
-    values_total=83
+    values_total=85
     value v0: Int(64) @block0
     value v1: Int(64) @block0
     value v2: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
@@ -116,33 +116,35 @@ module
     value v53: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
     value v54: Int(64) @block0
     value v55: Int(64) @block0
-    value v56: TypeRef("?") @block0
-    value v57: Bool @block0
+    value v56: TypeRef("?") @block3
+    value v57: Bool @block1
     value v58: Bool @block0
     value v59: TypeRef("?") @block0
     value v60: Int(64) @block0
     value v61: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
-    value v62: TypeRef("?") @block0
-    value v63: Int(64) @block0
-    value v64: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
-    value v65: Generic { name: "String", args: [] } @block0
-    value v66: Int(64) @block0
-    value v67: Int(64) @block0
-    value v68: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
-    value v69: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
-    value v70: TypeRef("?") @block0
-    value v71: Bool @block0
-    value v72: TypeRef("?") @block0
-    value v73: Int(64) @block0
-    value v74: TypeRef("?") @block0
-    value v75: Struct(StructType { name: "Window", fields: [("view", Ref { mutable: false, inner: TypeRef("Point") })], methods: {}, interfaces: [] }) @block0
-    value v76: Generic { name: "String", args: [] } @block0
-    value v77: TypeRef("?") @block0
-    value v78: Bool @block0
-    value v79: TypeRef("?") @block0
-    value v80: Int(64) @block0
-    value v81: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
-    value v82: Generic { name: "String", args: [] } @block0
+    value v62: TypeRef("?") @block1
+    value v63: Int(64) @block1
+    value v64: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block1
+    value v65: Generic { name: "String", args: [] } @block3
+    value v66: Int(64) @block3
+    value v67: Int(64) @block3
+    value v68: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block3
+    value v69: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block3
+    value v70: TypeRef("?") @block3
+    value v71: Bool @block3
+    value v72: TypeRef("?") @block3
+    value v73: Int(64) @block3
+    value v74: TypeRef("?") @block3
+    value v75: Struct(StructType { name: "Window", fields: [("view", Ref { mutable: false, inner: TypeRef("Point") })], methods: {}, interfaces: [] }) @block3
+    value v76: Generic { name: "String", args: [] } @block3
+    value v77: TypeRef("?") @block3
+    value v78: Bool @block3
+    value v79: TypeRef("?") @block3
+    value v80: Int(64) @block3
+    value v81: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block3
+    value v82: Generic { name: "String", args: [] } @block3
+    value v83: Bool @block2
+    value v84: Bool @block3
     Load v0 <- int(1)
     Load v1 <- int(2)
     Call %0 <- string("Point") [v0, v1] (def=d0)
@@ -225,9 +227,10 @@ module
     Load v63 <- int(1)
     Eq v57 <- v62, v63
     Jmp -> instr(83)
-    Load v57 <- bool(false)
+    Load v83 <- bool(false)
+    Phi v84 <- [1: v57, 2: v83]
     Load v65 <- string("&mut 顺序调用")
-    Call v56 <- string("std.assert.assert") [v57, v65] (def=d1)
+    Call v56 <- string("std.assert.assert") [v84, v65] (def=d1)
     Load v66 <- int(5)
     Load v67 <- int(6)
     Call %10 <- string("Point") [v66, v67] (def=d0)

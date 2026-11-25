@@ -17,64 +17,64 @@ module
     value v0: Int(64) @block0
     value v1: Int(64) @block0
     value v2: Bool @block0
-    value v3: Int(64) @block0
-    value v4: Bool @block0
-    value v5: Generic { name: "String", args: [] } @block0
-    value v6: Generic { name: "String", args: [] } @block0
-    value v7: TypeRef("?") @block0
-    value v8: Bool @block0
-    value v9: Generic { name: "String", args: [] } @block0
-    value v10: Generic { name: "String", args: [] } @block0
-    value v11: Generic { name: "String", args: [] } @block0
-    value v12: Int(64) @block0
-    value v13: Int(64) @block0
-    value v14: Bool @block0
-    value v15: Int(64) @block0
-    value v16: Bool @block0
-    value v17: Generic { name: "String", args: [] } @block0
-    value v18: Generic { name: "String", args: [] } @block0
-    value v19: TypeRef("?") @block0
-    value v20: Bool @block0
-    value v21: Generic { name: "String", args: [] } @block0
-    value v22: Generic { name: "String", args: [] } @block0
-    value v23: Generic { name: "String", args: [] } @block0
-    value v24: Int(64) @block0
-    value v25: Generic { name: "Option", args: [Int(64)] } @block0
-    value v26: TypeRef("?") @block0
-    value v27: Int(64) @block0
-    value v28: Bool @block0
-    value v29: TypeRef("?") @block0
-    value v30: TypeRef("?") @block0
-    value v31: Int(64) @block0
-    value v32: Bool @block0
-    value v33: Generic { name: "String", args: [] } @block0
-    value v34: TypeRef("?") @block0
-    value v35: Bool @block0
-    value v36: Generic { name: "String", args: [] } @block0
-    value v37: Generic { name: "String", args: [] } @block0
-    value v38: Generic { name: "String", args: [] } @block0
-    value v39: Int(64) @block0
-    value v40: Bool @block0
-    value v41: Int(64) @block0
-    value v42: Int(64) @block0
-    value v43: Generic { name: "String", args: [] } @block0
-    value v44: Generic { name: "String", args: [] } @block0
-    value v45: TypeRef("?") @block0
-    value v46: Bool @block0
-    value v47: Generic { name: "String", args: [] } @block0
-    value v48: Generic { name: "String", args: [] } @block0
-    value v49: Generic { name: "String", args: [] } @block0
-    value v50: Int(64) @block0
-    value v51: Bool @block0
-    value v52: Int(64) @block0
-    value v53: Int(64) @block0
-    value v54: Generic { name: "String", args: [] } @block0
-    value v55: Generic { name: "String", args: [] } @block0
-    value v56: TypeRef("?") @block0
-    value v57: Bool @block0
-    value v58: Generic { name: "String", args: [] } @block0
-    value v59: Generic { name: "String", args: [] } @block0
-    value v60: Generic { name: "String", args: [] } @block0
+    value v3: Int(64) @block2
+    value v4: Bool @block2
+    value v5: Generic { name: "String", args: [] } @block3
+    value v6: Generic { name: "String", args: [] } @block4
+    value v7: TypeRef("?") @block5
+    value v8: Bool @block5
+    value v9: Generic { name: "String", args: [] } @block5
+    value v10: Generic { name: "String", args: [] } @block5
+    value v11: Generic { name: "String", args: [] } @block5
+    value v12: Int(64) @block5
+    value v13: Int(64) @block5
+    value v14: Bool @block5
+    value v15: Int(64) @block7
+    value v16: Bool @block7
+    value v17: Generic { name: "String", args: [] } @block8
+    value v18: Generic { name: "String", args: [] } @block9
+    value v19: TypeRef("?") @block10
+    value v20: Bool @block10
+    value v21: Generic { name: "String", args: [] } @block10
+    value v22: Generic { name: "String", args: [] } @block10
+    value v23: Generic { name: "String", args: [] } @block10
+    value v24: Int(64) @block10
+    value v25: Generic { name: "Option", args: [Int(64)] } @block10
+    value v26: TypeRef("?") @block10
+    value v27: Int(64) @block10
+    value v28: Bool @block10
+    value v29: TypeRef("?") @block11
+    value v30: TypeRef("?") @block12
+    value v31: Int(64) @block12
+    value v32: Bool @block12
+    value v33: Generic { name: "String", args: [] } @block13
+    value v34: TypeRef("?") @block14
+    value v35: Bool @block14
+    value v36: Generic { name: "String", args: [] } @block14
+    value v37: Generic { name: "String", args: [] } @block14
+    value v38: Generic { name: "String", args: [] } @block14
+    value v39: Int(64) @block14
+    value v40: Bool @block14
+    value v41: Int(64) @block14
+    value v42: Int(64) @block14
+    value v43: Generic { name: "String", args: [] } @block15
+    value v44: Generic { name: "String", args: [] } @block16
+    value v45: TypeRef("?") @block17
+    value v46: Bool @block17
+    value v47: Generic { name: "String", args: [] } @block17
+    value v48: Generic { name: "String", args: [] } @block17
+    value v49: Generic { name: "String", args: [] } @block17
+    value v50: Int(64) @block17
+    value v51: Bool @block17
+    value v52: Int(64) @block17
+    value v53: Int(64) @block17
+    value v54: Generic { name: "String", args: [] } @block18
+    value v55: Generic { name: "String", args: [] } @block19
+    value v56: TypeRef("?") @block20
+    value v57: Bool @block20
+    value v58: Generic { name: "String", args: [] } @block20
+    value v59: Generic { name: "String", args: [] } @block20
+    value v60: Generic { name: "String", args: [] } @block20
     Load %0 <- int(2)
     Load %1 <- void
     Load v0 <- %0

@@ -75,18 +75,21 @@ module
   fn describe(TypeRef("Animal")) -> Generic { name: "String", args: [] }
     slot[0] a : Int(64) @depth1
     locals_total=6
-    values_total=11
-    value v0: TypeRef("?") @block0
+    values_total=14
+    value v0: TypeRef("?") @block1
     value v1: TypeRef("Animal") @block0
     value v2: TypeRef("?") @block0
     value v3: Int(64) @block0
     value v4: Bool @block0
-    value v5: TypeRef("?") @block0
-    value v6: Int(64) @block0
-    value v7: Bool @block0
-    value v8: TypeRef("?") @block0
-    value v9: Bool @block0
-    value v10: Generic { name: "String", args: [] } @block0
+    value v5: TypeRef("?") @block1
+    value v6: Int(64) @block2
+    value v7: Bool @block2
+    value v8: TypeRef("?") @block3
+    value v9: Bool @block4
+    value v10: Generic { name: "String", args: [] } @block4
+    value v11: TypeRef("?") @block3
+    value v12: TypeRef("?") @block4
+    value v13: TypeRef("?") @block5
     Load %0 <- arg%0
     Load v1 <- %0
     VariantTag v2 <- v1 : Animal$Group
@@ -100,12 +103,13 @@ module
     Eq v7 <- v2, v6
     JmpIfNot v7 -> instr(15)
     VariantPayload v8 <- v1 : Animal$Group
-    Call v0 <- string("Dog.speak") [v8] (def=d1)
+    Call v11 <- string("Dog.speak") [v8] (def=d1)
     Jmp -> instr(18)
     Load v9 <- bool(false)
     Load v10 <- string("interface dispatch: unknown variant tag for Animal::speak")
-    Call v0 <- string("std.assert.assert") [v9, v10] (def=d2)
-    Ret v0
+    Call v12 <- string("std.assert.assert") [v9, v10] (def=d2)
+    Phi v13 <- [1: v0, 3: v11, 4: v12]
+    Ret v13
     Ret v0
   fn main() -> Void
     slot[0] animals : Int(64) @depth1
@@ -115,7 +119,7 @@ module
     slot[4] d : Int(64) @depth1
     slot[5] animals2 : Int(64) @depth1
     locals_total=11
-    values_total=116
+    values_total=122
     value v0: TypeRef("Animal") @block0
     value v1: TypeRef("?") @block0
     value v2: Generic { name: "String", args: [] } @block0
@@ -131,107 +135,113 @@ module
     value v12: TypeRef("?") @block0
     value v13: Int(64) @block0
     value v14: Bool @block0
-    value v15: TypeRef("?") @block0
-    value v16: Int(64) @block0
-    value v17: Bool @block0
-    value v18: TypeRef("?") @block0
-    value v19: Bool @block0
-    value v20: Generic { name: "String", args: [] } @block0
-    value v21: TypeRef("?") @block0
-    value v22: Bool @block0
-    value v23: Generic { name: "String", args: [] } @block0
-    value v24: Generic { name: "String", args: [] } @block0
-    value v25: Generic { name: "String", args: [] } @block0
-    value v26: TypeRef("?") @block0
-    value v27: Generic { name: "Vec", args: [TypeRef("Animal")] } @block0
-    value v28: Int(64) @block0
-    value v29: TypeRef("?") @block0
-    value v30: Int(64) @block0
-    value v31: Bool @block0
-    value v32: TypeRef("?") @block0
-    value v33: Int(64) @block0
-    value v34: Bool @block0
-    value v35: TypeRef("?") @block0
-    value v36: Bool @block0
-    value v37: Generic { name: "String", args: [] } @block0
-    value v38: TypeRef("?") @block0
-    value v39: Bool @block0
-    value v40: Generic { name: "String", args: [] } @block0
-    value v41: Generic { name: "String", args: [] } @block0
-    value v42: Generic { name: "String", args: [] } @block0
-    value v43: TypeRef("?") @block0
-    value v44: Generic { name: "Vec", args: [TypeRef("Animal")] } @block0
-    value v45: Int(64) @block0
-    value v46: Int(64) @block0
-    value v47: TypeRef("?") @block0
-    value v48: Int(64) @block0
-    value v49: Bool @block0
-    value v50: TypeRef("?") @block0
-    value v51: Int(64) @block0
-    value v52: Bool @block0
-    value v53: TypeRef("?") @block0
-    value v54: Bool @block0
-    value v55: Generic { name: "String", args: [] } @block0
-    value v56: TypeRef("?") @block0
-    value v57: Bool @block0
-    value v58: Int(64) @block0
-    value v59: Int(64) @block0
-    value v60: Generic { name: "String", args: [] } @block0
-    value v61: Generic { name: "Vec", args: [TypeRef("Animal")] } @block0
-    value v62: Int(64) @block0
-    value v63: TypeRef("?") @block0
-    value v64: Bool @block0
-    value v65: TypeRef("?") @block0
-    value v66: Generic { name: "String", args: [] } @block0
-    value v67: TypeRef("Animal") @block0
-    value v68: TypeRef("?") @block0
-    value v69: Int(64) @block0
-    value v70: Bool @block0
-    value v71: TypeRef("?") @block0
-    value v72: Int(64) @block0
-    value v73: Bool @block0
-    value v74: TypeRef("?") @block0
-    value v75: Bool @block0
-    value v76: Generic { name: "String", args: [] } @block0
-    value v77: Generic { name: "String", args: [] } @block0
-    value v78: TypeRef("?") @block0
-    value v79: Bool @block0
-    value v80: Generic { name: "String", args: [] } @block0
-    value v81: Generic { name: "String", args: [] } @block0
-    value v82: TypeRef("?") @block0
-    value v83: Generic { name: "Vec", args: [TypeRef("Animal")] } @block0
-    value v84: Int(64) @block0
-    value v85: Generic { name: "String", args: [] } @block0
-    value v86: TypeRef("?") @block0
-    value v87: Bool @block0
-    value v88: Generic { name: "String", args: [] } @block0
-    value v89: Generic { name: "String", args: [] } @block0
-    value v90: TypeRef("?") @block0
-    value v91: Generic { name: "Vec", args: [TypeRef("Animal")] } @block0
-    value v92: Int(64) @block0
-    value v93: Generic { name: "String", args: [] } @block0
-    value v94: Generic { name: "Vec", args: [TypeRef("Animal")] } @block0
-    value v95: TypeRef("Animal") @block0
-    value v96: TypeRef("?") @block0
-    value v97: Generic { name: "String", args: [] } @block0
-    value v98: Int(64) @block0
-    value v99: TypeRef("?") @block0
-    value v100: Bool @block0
-    value v101: TypeRef("?") @block0
-    value v102: Generic { name: "String", args: [] } @block0
-    value v103: TypeRef("?") @block0
-    value v104: Generic { name: "Vec", args: [TypeRef("Animal")] } @block0
-    value v105: Int(64) @block0
-    value v106: TypeRef("?") @block0
-    value v107: Int(64) @block0
-    value v108: Bool @block0
-    value v109: TypeRef("?") @block0
-    value v110: Int(64) @block0
-    value v111: Bool @block0
-    value v112: TypeRef("?") @block0
-    value v113: Bool @block0
-    value v114: Generic { name: "String", args: [] } @block0
-    value v115: Generic { name: "String", args: [] } @block0
+    value v15: TypeRef("?") @block1
+    value v16: Int(64) @block2
+    value v17: Bool @block2
+    value v18: TypeRef("?") @block3
+    value v19: Bool @block4
+    value v20: Generic { name: "String", args: [] } @block4
+    value v21: TypeRef("?") @block5
+    value v22: Bool @block5
+    value v23: Generic { name: "String", args: [] } @block5
+    value v24: Generic { name: "String", args: [] } @block5
+    value v25: Generic { name: "String", args: [] } @block5
+    value v26: TypeRef("?") @block5
+    value v27: Generic { name: "Vec", args: [TypeRef("Animal")] } @block5
+    value v28: Int(64) @block5
+    value v29: TypeRef("?") @block5
+    value v30: Int(64) @block5
+    value v31: Bool @block5
+    value v32: TypeRef("?") @block6
+    value v33: Int(64) @block7
+    value v34: Bool @block7
+    value v35: TypeRef("?") @block8
+    value v36: Bool @block9
+    value v37: Generic { name: "String", args: [] } @block9
+    value v38: TypeRef("?") @block10
+    value v39: Bool @block10
+    value v40: Generic { name: "String", args: [] } @block10
+    value v41: Generic { name: "String", args: [] } @block10
+    value v42: Generic { name: "String", args: [] } @block10
+    value v43: TypeRef("?") @block10
+    value v44: Generic { name: "Vec", args: [TypeRef("Animal")] } @block10
+    value v45: Int(64) @block10
+    value v46: Int(64) @block10
+    value v47: TypeRef("?") @block10
+    value v48: Int(64) @block10
+    value v49: Bool @block10
+    value v50: TypeRef("?") @block11
+    value v51: Int(64) @block12
+    value v52: Bool @block12
+    value v53: TypeRef("?") @block13
+    value v54: Bool @block14
+    value v55: Generic { name: "String", args: [] } @block14
+    value v56: TypeRef("?") @block15
+    value v57: Bool @block15
+    value v58: Int(64) @block15
+    value v59: Int(64) @block15
+    value v60: Generic { name: "String", args: [] } @block15
+    value v61: Generic { name: "Vec", args: [TypeRef("Animal")] } @block15
+    value v62: Int(64) @block15
+    value v63: TypeRef("?") @block20
+    value v64: Bool @block20
+    value v65: TypeRef("?") @block16
+    value v66: Generic { name: "String", args: [] } @block20
+    value v67: TypeRef("Animal") @block15
+    value v68: TypeRef("?") @block15
+    value v69: Int(64) @block15
+    value v70: Bool @block15
+    value v71: TypeRef("?") @block16
+    value v72: Int(64) @block17
+    value v73: Bool @block17
+    value v74: TypeRef("?") @block18
+    value v75: Bool @block19
+    value v76: Generic { name: "String", args: [] } @block19
+    value v77: Generic { name: "String", args: [] } @block20
+    value v78: TypeRef("?") @block20
+    value v79: Bool @block20
+    value v80: Generic { name: "String", args: [] } @block20
+    value v81: Generic { name: "String", args: [] } @block20
+    value v82: TypeRef("?") @block20
+    value v83: Generic { name: "Vec", args: [TypeRef("Animal")] } @block20
+    value v84: Int(64) @block20
+    value v85: Generic { name: "String", args: [] } @block20
+    value v86: TypeRef("?") @block20
+    value v87: Bool @block20
+    value v88: Generic { name: "String", args: [] } @block20
+    value v89: Generic { name: "String", args: [] } @block20
+    value v90: TypeRef("?") @block20
+    value v91: Generic { name: "Vec", args: [TypeRef("Animal")] } @block20
+    value v92: Int(64) @block20
+    value v93: Generic { name: "String", args: [] } @block20
+    value v94: Generic { name: "Vec", args: [TypeRef("Animal")] } @block20
+    value v95: TypeRef("Animal") @block20
+    value v96: TypeRef("?") @block20
+    value v97: Generic { name: "String", args: [] } @block20
+    value v98: Int(64) @block20
+    value v99: TypeRef("?") @block25
+    value v100: Bool @block25
+    value v101: TypeRef("?") @block21
+    value v102: Generic { name: "String", args: [] } @block25
+    value v103: TypeRef("?") @block20
+    value v104: Generic { name: "Vec", args: [TypeRef("Animal")] } @block20
+    value v105: Int(64) @block20
+    value v106: TypeRef("?") @block20
+    value v107: Int(64) @block20
+    value v108: Bool @block20
+    value v109: TypeRef("?") @block21
+    value v110: Int(64) @block22
+    value v111: Bool @block22
+    value v112: TypeRef("?") @block23
+    value v113: Bool @block24
+    value v114: Generic { name: "String", args: [] } @block24
+    value v115: Generic { name: "String", args: [] } @block25
+    value v116: TypeRef("?") @block18
+    value v117: TypeRef("?") @block19
+    value v118: TypeRef("?") @block23
+    value v119: TypeRef("?") @block24
+    value v120: TypeRef("?") @block20
+    value v121: TypeRef("?") @block25
     AllocArray %0 size=int(2), elem=int(1)
     Load v2 <- string("Rex")
     Load v3 <- int(3)
@@ -332,13 +342,14 @@ module
     Eq v73 <- v68, v72
     JmpIfNot v73 -> instr(102)
     VariantPayload v74 <- v67 : Animal$Group
-    Call v65 <- string("Dog.speak") [v74] (def=d1)
+    Call v116 <- string("Dog.speak") [v74] (def=d1)
     Jmp -> instr(105)
     Load v75 <- bool(false)
     Load v76 <- string("interface dispatch: unknown variant tag for Animal::speak")
-    Call v65 <- string("std.assert.assert") [v75, v76] (def=d2)
+    Call v117 <- string("std.assert.assert") [v75, v76] (def=d2)
+    Phi v120 <- [16: v65, 18: v116, 19: v117]
     Load v66 <- string("Woof")
-    Eq v64 <- v65, v66
+    Eq v64 <- v120, v66
     Load v77 <- string("two-step element dispatch")
     Call v63 <- string("std.assert.assert") [v64, v77] (def=d2)
     Load v83 <- %0
@@ -370,21 +381,22 @@ module
     VariantTag v106 <- v103 : Animal$Group
     Load v107 <- int(0)
     Eq v108 <- v106, v107
-    JmpIfNot v108 -> instr(142)
+    JmpIfNot v108 -> instr(143)
     VariantPayload v109 <- v103 : Animal$Group
     Call v101 <- string("Cat.speak") [v109] (def=d0)
-    Jmp -> instr(151)
+    Jmp -> instr(152)
     Load v110 <- int(1)
     Eq v111 <- v106, v110
-    JmpIfNot v111 -> instr(148)
+    JmpIfNot v111 -> instr(149)
     VariantPayload v112 <- v103 : Animal$Group
-    Call v101 <- string("Dog.speak") [v112] (def=d1)
-    Jmp -> instr(151)
+    Call v118 <- string("Dog.speak") [v112] (def=d1)
+    Jmp -> instr(152)
     Load v113 <- bool(false)
     Load v114 <- string("interface dispatch: unknown variant tag for Animal::speak")
-    Call v101 <- string("std.assert.assert") [v113, v114] (def=d2)
+    Call v119 <- string("std.assert.assert") [v113, v114] (def=d2)
+    Phi v121 <- [21: v101, 23: v118, 24: v119]
     Load v102 <- string("Woof")
-    Eq v100 <- v101, v102
+    Eq v100 <- v121, v102
     Load v115 <- string("append implements-member then dispatch")
     Call v99 <- string("std.assert.assert") [v100, v115] (def=d2)
     Drop %3

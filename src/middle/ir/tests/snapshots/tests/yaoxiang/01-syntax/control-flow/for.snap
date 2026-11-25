@@ -13,15 +13,15 @@ module
     value v5: Int(64) @block0
     value v6: Generic { name: "Vec", args: [Int(64)] } @block0
     value v7: TypeRef("?") @block0
-    value v8: TypeRef("?") @block0
-    value v9: TypeRef("?") @block0
-    value v10: Int(64) @block0
-    value v11: Int(64) @block0
-    value v12: TypeRef("?") @block0
-    value v13: Bool @block0
-    value v14: Int(64) @block0
-    value v15: Int(64) @block0
-    value v16: Generic { name: "String", args: [] } @block0
+    value v8: TypeRef("?") @block1
+    value v9: TypeRef("?") @block2
+    value v10: Int(64) @block2
+    value v11: Int(64) @block2
+    value v12: TypeRef("?") @block3
+    value v13: Bool @block3
+    value v14: Int(64) @block3
+    value v15: Int(64) @block3
+    value v16: Generic { name: "String", args: [] } @block3
     AllocArray %0 size=int(3), elem=int(1)
     Load v0 <- int(10)
     Load v1 <- int(0)

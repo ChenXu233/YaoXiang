@@ -25,9 +25,9 @@ module
     value v1: Bool @block0
     value v2: Int(64) @block0
     value v3: Int(64) @block0
-    value v4: Int(64) @block0
-    value v5: Int(64) @block0
-    value v6: Int(64) @block0
+    value v4: Int(64) @block1
+    value v5: Int(64) @block2
+    value v6: Int(64) @block3
     Load v0 <- int(3)
     Store @0 <- v0
     Load %0 <- int(6)

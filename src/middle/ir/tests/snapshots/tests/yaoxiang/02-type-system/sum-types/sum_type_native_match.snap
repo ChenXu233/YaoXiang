@@ -14,53 +14,53 @@ module
     value v2: TypeRef("?") @block0
     value v3: Int(64) @block0
     value v4: Bool @block0
-    value v5: TypeRef("?") @block0
-    value v6: Float(64) @block0
-    value v7: TypeRef("?") @block0
-    value v8: Int(64) @block0
-    value v9: Bool @block0
-    value v10: TypeRef("?") @block0
-    value v11: Float(64) @block0
-    value v12: TypeRef("?") @block0
-    value v13: Bool @block0
-    value v14: Float(64) @block0
-    value v15: Float(64) @block0
-    value v16: Generic { name: "String", args: [] } @block0
-    value v17: Generic { name: "String", args: [] } @block0
-    value v18: Generic { name: "Result", args: [Int(64), TypeRef("Error")] } @block0
-    value v19: TypeRef("?") @block0
-    value v20: Int(64) @block0
-    value v21: Bool @block0
-    value v22: TypeRef("?") @block0
-    value v23: Float(64) @block0
-    value v24: TypeRef("?") @block0
-    value v25: Int(64) @block0
-    value v26: Bool @block0
-    value v27: TypeRef("?") @block0
-    value v28: Int(64) @block0
-    value v29: Int(64) @block0
-    value v30: TypeRef("?") @block0
-    value v31: Bool @block0
-    value v32: Int(64) @block0
-    value v33: Int(64) @block0
-    value v34: Int(64) @block0
-    value v35: Generic { name: "String", args: [] } @block0
-    value v36: Generic { name: "Result", args: [Float(64), TypeRef("Error")] } @block0
-    value v37: TypeRef("?") @block0
-    value v38: Int(64) @block0
-    value v39: Bool @block0
-    value v40: TypeRef("?") @block0
-    value v41: Generic { name: "String", args: [] } @block0
-    value v42: TypeRef("?") @block0
-    value v43: Int(64) @block0
-    value v44: Bool @block0
-    value v45: TypeRef("?") @block0
-    value v46: Generic { name: "String", args: [] } @block0
-    value v47: TypeRef("?") @block0
-    value v48: Bool @block0
-    value v49: Generic { name: "String", args: [] } @block0
-    value v50: Generic { name: "String", args: [] } @block0
-    value v51: Generic { name: "String", args: [] } @block0
+    value v5: TypeRef("?") @block1
+    value v6: Float(64) @block1
+    value v7: TypeRef("?") @block2
+    value v8: Int(64) @block2
+    value v9: Bool @block2
+    value v10: TypeRef("?") @block3
+    value v11: Float(64) @block3
+    value v12: TypeRef("?") @block4
+    value v13: Bool @block4
+    value v14: Float(64) @block4
+    value v15: Float(64) @block4
+    value v16: Generic { name: "String", args: [] } @block4
+    value v17: Generic { name: "String", args: [] } @block4
+    value v18: Generic { name: "Result", args: [Int(64), TypeRef("Error")] } @block4
+    value v19: TypeRef("?") @block4
+    value v20: Int(64) @block4
+    value v21: Bool @block4
+    value v22: TypeRef("?") @block5
+    value v23: Float(64) @block5
+    value v24: TypeRef("?") @block6
+    value v25: Int(64) @block6
+    value v26: Bool @block6
+    value v27: TypeRef("?") @block7
+    value v28: Int(64) @block7
+    value v29: Int(64) @block7
+    value v30: TypeRef("?") @block8
+    value v31: Bool @block8
+    value v32: Int(64) @block8
+    value v33: Int(64) @block8
+    value v34: Int(64) @block8
+    value v35: Generic { name: "String", args: [] } @block8
+    value v36: Generic { name: "Result", args: [Float(64), TypeRef("Error")] } @block8
+    value v37: TypeRef("?") @block8
+    value v38: Int(64) @block8
+    value v39: Bool @block8
+    value v40: TypeRef("?") @block9
+    value v41: Generic { name: "String", args: [] } @block9
+    value v42: TypeRef("?") @block10
+    value v43: Int(64) @block10
+    value v44: Bool @block10
+    value v45: TypeRef("?") @block11
+    value v46: Generic { name: "String", args: [] } @block11
+    value v47: TypeRef("?") @block12
+    value v48: Bool @block12
+    value v49: Generic { name: "String", args: [] } @block12
+    value v50: Generic { name: "String", args: [] } @block12
+    value v51: Generic { name: "String", args: [] } @block12
     Load v0 <- string("125.0")
     Call %0 <- string("std.string.parse_float") [v0] (def=d0)
     Load %1 <- void

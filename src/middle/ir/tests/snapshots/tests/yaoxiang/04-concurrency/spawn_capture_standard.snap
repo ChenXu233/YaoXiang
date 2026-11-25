@@ -11,7 +11,7 @@ module
     slot[6] q : Int(64) @depth1
     slot[7] spawned : Int(64) @depth1
     locals_total=12
-    values_total=64
+    values_total=66
     value v0: Int(64) @block0
     value v1: Int(64) @block0
     value v2: TypeRef("?") @block0
@@ -66,16 +66,18 @@ module
     value v51: Int(64) @block0
     value v52: Int(64) @block0
     value v53: Generic { name: "String", args: [] } @block0
-    value v54: TypeRef("?") @block0
-    value v55: Bool @block0
+    value v54: TypeRef("?") @block3
+    value v55: Bool @block1
     value v56: Bool @block0
     value v57: TypeRef("?") @block0
     value v58: Int(64) @block0
     value v59: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
-    value v60: TypeRef("?") @block0
-    value v61: Int(64) @block0
-    value v62: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
-    value v63: Generic { name: "String", args: [] } @block0
+    value v60: TypeRef("?") @block1
+    value v61: Int(64) @block1
+    value v62: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block1
+    value v63: Generic { name: "String", args: [] } @block3
+    value v64: Bool @block2
+    value v65: Bool @block3
     Load v0 <- int(3)
     Load v1 <- int(4)
     Call %0 <- string("Point") [v0, v1] (def=d0)
@@ -159,9 +161,10 @@ module
     Load v61 <- int(7)
     Eq v55 <- v60, v61
     Jmp -> instr(84)
-    Load v55 <- bool(false)
+    Load v64 <- bool(false)
+    Phi v65 <- [1: v55, 2: v64]
     Load v63 <- string("Standard spawn 写回共享 Struct 可见")
-    Call v54 <- string("std.assert.assert") [v55, v63] (def=d1)
+    Call v54 <- string("std.assert.assert") [v65, v63] (def=d1)
     Drop %6
     Drop %2
     Drop %4

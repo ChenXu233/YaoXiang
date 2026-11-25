@@ -11,127 +11,145 @@ module
     slot[8] count4 : Int(64) @depth1
     slot[9] i : Int(64) @depth2
     locals_total=15
-    values_total=120
+    values_total=138
     value v0: Int(64) @block0
     value v1: Int(64) @block0
     value v2: Int(64) @block0
-    value v3: TypeRef("?") @block0
+    value v3: TypeRef("?") @block3
     value v4: TypeRef("?") @block0
     value v5: Int(64) @block0
     value v6: Generic { name: "Range", args: [Int(64)] } @block0
     value v7: TypeRef("?") @block0
     value v8: Int(64) @block0
     value v9: Bool @block0
-    value v10: Generic { name: "String", args: [] } @block0
-    value v11: TypeRef("?") @block0
-    value v12: Bool @block0
-    value v13: TypeRef("?") @block0
-    value v14: Int(64) @block0
-    value v15: Generic { name: "Range", args: [Int(64)] } @block0
-    value v16: TypeRef("?") @block0
-    value v17: Int(64) @block0
-    value v18: Bool @block0
-    value v19: Generic { name: "String", args: [] } @block0
-    value v20: Generic { name: "Range", args: [Int(64)] } @block0
-    value v21: TypeRef("?") @block0
-    value v22: TypeRef("?") @block0
-    value v23: Int(64) @block0
-    value v24: Bool @block0
-    value v25: TypeRef("?") @block0
-    value v26: TypeRef("?") @block0
-    value v27: Int(64) @block0
-    value v28: Int(64) @block0
-    value v29: TypeRef("?") @block0
-    value v30: Bool @block0
-    value v31: Int(64) @block0
-    value v32: Int(64) @block0
-    value v33: Generic { name: "String", args: [] } @block0
-    value v34: TypeRef("?") @block0
-    value v35: Int(64) @block0
-    value v36: Int(64) @block0
-    value v37: Int(64) @block0
-    value v38: TypeRef("?") @block0
-    value v39: TypeRef("?") @block0
-    value v40: Int(64) @block0
-    value v41: Bool @block0
-    value v42: TypeRef("?") @block0
-    value v43: TypeRef("?") @block0
-    value v44: Int(64) @block0
-    value v45: Int(64) @block0
-    value v46: TypeRef("?") @block0
-    value v47: Bool @block0
-    value v48: Int(64) @block0
-    value v49: Int(64) @block0
-    value v50: Generic { name: "String", args: [] } @block0
-    value v51: TypeRef("?") @block0
-    value v52: TypeRef("?") @block0
-    value v53: Int(64) @block0
-    value v54: TypeRef("?") @block0
-    value v55: Int(64) @block0
-    value v56: Int(64) @block0
-    value v57: Int(64) @block0
-    value v58: TypeRef("?") @block0
-    value v59: Int(64) @block0
-    value v60: Bool @block0
-    value v61: Generic { name: "String", args: [] } @block0
-    value v62: TypeRef("?") @block0
-    value v63: Bool @block0
-    value v64: TypeRef("?") @block0
-    value v65: Int(64) @block0
-    value v66: TypeRef("?") @block0
-    value v67: Int(64) @block0
-    value v68: Int(64) @block0
-    value v69: Int(64) @block0
-    value v70: TypeRef("?") @block0
-    value v71: Int(64) @block0
-    value v72: Bool @block0
-    value v73: Generic { name: "String", args: [] } @block0
-    value v74: TypeRef("?") @block0
-    value v75: Int(64) @block0
-    value v76: Int(64) @block0
-    value v77: Int(64) @block0
-    value v78: Int(64) @block0
-    value v79: TypeRef("?") @block0
-    value v80: TypeRef("?") @block0
-    value v81: Int(64) @block0
-    value v82: Bool @block0
-    value v83: TypeRef("?") @block0
-    value v84: TypeRef("?") @block0
-    value v85: Int(64) @block0
-    value v86: Int(64) @block0
-    value v87: TypeRef("?") @block0
-    value v88: Bool @block0
-    value v89: Int(64) @block0
-    value v90: Int(64) @block0
-    value v91: Generic { name: "String", args: [] } @block0
-    value v92: TypeRef("?") @block0
-    value v93: Int(64) @block0
-    value v94: Int(64) @block0
-    value v95: Int(64) @block0
-    value v96: TypeRef("?") @block0
-    value v97: TypeRef("?") @block0
-    value v98: Int(64) @block0
-    value v99: Bool @block0
-    value v100: TypeRef("?") @block0
-    value v101: TypeRef("?") @block0
-    value v102: Int(64) @block0
-    value v103: Int(64) @block0
-    value v104: TypeRef("?") @block0
-    value v105: Bool @block0
-    value v106: Int(64) @block0
-    value v107: Int(64) @block0
-    value v108: Generic { name: "String", args: [] } @block0
-    value v109: TypeRef("?") @block0
-    value v110: TypeRef("?") @block0
-    value v111: Int(64) @block0
-    value v112: TypeRef("?") @block0
-    value v113: Int(64) @block0
-    value v114: Int(64) @block0
-    value v115: Int(64) @block0
-    value v116: TypeRef("?") @block0
-    value v117: Int(64) @block0
-    value v118: Bool @block0
-    value v119: Generic { name: "String", args: [] } @block0
+    value v10: Generic { name: "String", args: [] } @block3
+    value v11: TypeRef("?") @block6
+    value v12: Bool @block6
+    value v13: TypeRef("?") @block3
+    value v14: Int(64) @block3
+    value v15: Generic { name: "Range", args: [Int(64)] } @block3
+    value v16: TypeRef("?") @block3
+    value v17: Int(64) @block3
+    value v18: Bool @block3
+    value v19: Generic { name: "String", args: [] } @block6
+    value v20: Generic { name: "Range", args: [Int(64)] } @block6
+    value v21: TypeRef("?") @block6
+    value v22: TypeRef("?") @block6
+    value v23: Int(64) @block6
+    value v24: Bool @block6
+    value v25: TypeRef("?") @block9
+    value v26: TypeRef("?") @block10
+    value v27: Int(64) @block10
+    value v28: Int(64) @block10
+    value v29: TypeRef("?") @block11
+    value v30: Bool @block11
+    value v31: Int(64) @block11
+    value v32: Int(64) @block11
+    value v33: Generic { name: "String", args: [] } @block11
+    value v34: TypeRef("?") @block11
+    value v35: Int(64) @block11
+    value v36: Int(64) @block11
+    value v37: Int(64) @block11
+    value v38: TypeRef("?") @block11
+    value v39: TypeRef("?") @block11
+    value v40: Int(64) @block11
+    value v41: Bool @block11
+    value v42: TypeRef("?") @block14
+    value v43: TypeRef("?") @block15
+    value v44: Int(64) @block15
+    value v45: Int(64) @block15
+    value v46: TypeRef("?") @block16
+    value v47: Bool @block16
+    value v48: Int(64) @block16
+    value v49: Int(64) @block16
+    value v50: Generic { name: "String", args: [] } @block16
+    value v51: TypeRef("?") @block19
+    value v52: TypeRef("?") @block16
+    value v53: Int(64) @block16
+    value v54: TypeRef("?") @block16
+    value v55: Int(64) @block16
+    value v56: Int(64) @block16
+    value v57: Int(64) @block16
+    value v58: TypeRef("?") @block16
+    value v59: Int(64) @block16
+    value v60: Bool @block16
+    value v61: Generic { name: "String", args: [] } @block19
+    value v62: TypeRef("?") @block22
+    value v63: Bool @block22
+    value v64: TypeRef("?") @block19
+    value v65: Int(64) @block19
+    value v66: TypeRef("?") @block19
+    value v67: Int(64) @block19
+    value v68: Int(64) @block19
+    value v69: Int(64) @block19
+    value v70: TypeRef("?") @block19
+    value v71: Int(64) @block19
+    value v72: Bool @block19
+    value v73: Generic { name: "String", args: [] } @block22
+    value v74: TypeRef("?") @block22
+    value v75: Int(64) @block22
+    value v76: Int(64) @block22
+    value v77: Int(64) @block22
+    value v78: Int(64) @block22
+    value v79: TypeRef("?") @block22
+    value v80: TypeRef("?") @block22
+    value v81: Int(64) @block22
+    value v82: Bool @block22
+    value v83: TypeRef("?") @block25
+    value v84: TypeRef("?") @block26
+    value v85: Int(64) @block26
+    value v86: Int(64) @block26
+    value v87: TypeRef("?") @block27
+    value v88: Bool @block27
+    value v89: Int(64) @block27
+    value v90: Int(64) @block27
+    value v91: Generic { name: "String", args: [] } @block27
+    value v92: TypeRef("?") @block27
+    value v93: Int(64) @block27
+    value v94: Int(64) @block27
+    value v95: Int(64) @block27
+    value v96: TypeRef("?") @block27
+    value v97: TypeRef("?") @block27
+    value v98: Int(64) @block27
+    value v99: Bool @block27
+    value v100: TypeRef("?") @block30
+    value v101: TypeRef("?") @block31
+    value v102: Int(64) @block31
+    value v103: Int(64) @block31
+    value v104: TypeRef("?") @block32
+    value v105: Bool @block32
+    value v106: Int(64) @block32
+    value v107: Int(64) @block32
+    value v108: Generic { name: "String", args: [] } @block32
+    value v109: TypeRef("?") @block35
+    value v110: TypeRef("?") @block32
+    value v111: Int(64) @block32
+    value v112: TypeRef("?") @block32
+    value v113: Int(64) @block32
+    value v114: Int(64) @block32
+    value v115: Int(64) @block32
+    value v116: TypeRef("?") @block32
+    value v117: Int(64) @block32
+    value v118: Bool @block32
+    value v119: Generic { name: "String", args: [] } @block35
+    value v120: TypeRef("?") @block1
+    value v121: TypeRef("?") @block4
+    value v122: TypeRef("?") @block7
+    value v123: TypeRef("?") @block12
+    value v124: TypeRef("?") @block17
+    value v125: TypeRef("?") @block20
+    value v126: TypeRef("?") @block23
+    value v127: TypeRef("?") @block28
+    value v128: TypeRef("?") @block33
+    value v129: TypeRef("?") @block3
+    value v130: TypeRef("?") @block6
+    value v131: TypeRef("?") @block9
+    value v132: TypeRef("?") @block14
+    value v133: TypeRef("?") @block19
+    value v134: TypeRef("?") @block22
+    value v135: TypeRef("?") @block25
+    value v136: TypeRef("?") @block30
+    value v137: TypeRef("?") @block35
     Load v0 <- int(1)
     Load v1 <- int(10)
     Load v2 <- int(1)
@@ -143,22 +161,24 @@ module
     Load v8 <- int(0)
     Eq v9 <- v7, v8
     JmpIfNot v9 -> instr(13)
-    VariantPayload v4 <- v4 : Result
+    VariantPayload v120 <- v4 : Result
     Jmp -> instr(14)
     Call _ <- string("std.range.abort_invalid_step") [v6] (def=d1)
+    Phi v129 <- [1: v120, 2: v4]
     Load v10 <- string("5 in r")
-    Call v3 <- string("std.assert.assert") [v4, v10] (def=d2)
+    Call v3 <- string("std.assert.assert") [v129, v10] (def=d2)
     Load v14 <- int(11)
     Load v15 <- %0
     Call v13 <- string("std.range.contains") [v15, v14] (def=d0)
     VariantTag v16 <- v13 : Result
     Load v17 <- int(0)
     Eq v18 <- v16, v17
-    JmpIfNot v18 -> instr(25)
-    VariantPayload v13 <- v13 : Result
-    Jmp -> instr(26)
+    JmpIfNot v18 -> instr(26)
+    VariantPayload v121 <- v13 : Result
+    Jmp -> instr(27)
     Call _ <- string("std.range.abort_invalid_step") [v15] (def=d1)
-    Not v12 <- v13
+    Phi v130 <- [4: v121, 5: v13]
+    Not v12 <- v130
     Load v19 <- string("11 not in r")
     Call v11 <- string("std.assert.assert") [v12, v19] (def=d2)
     Load %1 <- int(0)
@@ -167,18 +187,19 @@ module
     VariantTag v22 <- v21 : Result
     Load v23 <- int(0)
     Eq v24 <- v22, v23
-    JmpIfNot v24 -> instr(38)
-    VariantPayload v21 <- v21 : Result
-    Jmp -> instr(39)
+    JmpIfNot v24 -> instr(40)
+    VariantPayload v122 <- v21 : Result
+    Jmp -> instr(41)
     Call _ <- string("std.range.abort_invalid_step") [v20] (def=d1)
-    Call v25 <- string("std.range.has_next") [v21] (def=d4)
-    JmpIfNot v25 -> instr(47)
-    Call v26 <- string("std.range.next") [v21] (def=d5)
+    Phi v131 <- [7: v122, 8: v21, 10: v131]
+    Call v25 <- string("std.range.has_next") [v131] (def=d4)
+    JmpIfNot v25 -> instr(50)
+    Call v26 <- string("std.range.next") [v131] (def=d5)
     Store %2 <- v26
     Load v27 <- %1
     Load v28 <- int(1)
     Add %1 <- v27, v28
-    Jmp -> instr(39)
+    Jmp -> instr(41)
     Load v31 <- %1
     Load v32 <- int(9)
     Eq v30 <- v31, v32
@@ -193,18 +214,19 @@ module
     VariantTag v39 <- v38 : Result
     Load v40 <- int(0)
     Eq v41 <- v39, v40
-    JmpIfNot v41 -> instr(64)
-    VariantPayload v38 <- v38 : Result
-    Jmp -> instr(65)
+    JmpIfNot v41 -> instr(67)
+    VariantPayload v123 <- v38 : Result
+    Jmp -> instr(68)
     Call _ <- string("std.range.abort_invalid_step") [v34] (def=d1)
-    Call v42 <- string("std.range.has_next") [v38] (def=d4)
-    JmpIfNot v42 -> instr(73)
-    Call v43 <- string("std.range.next") [v38] (def=d5)
+    Phi v132 <- [12: v123, 13: v38, 15: v132]
+    Call v42 <- string("std.range.has_next") [v132] (def=d4)
+    JmpIfNot v42 -> instr(77)
+    Call v43 <- string("std.range.next") [v132] (def=d5)
     Store %4 <- v43
     Load v44 <- %3
     Load v45 <- int(1)
     Add %3 <- v44, v45
-    Jmp -> instr(65)
+    Jmp -> instr(68)
     Load v48 <- %3
     Load v49 <- int(5)
     Eq v47 <- v48, v49
@@ -219,12 +241,13 @@ module
     VariantTag v58 <- v52 : Result
     Load v59 <- int(0)
     Eq v60 <- v58, v59
-    JmpIfNot v60 -> instr(90)
-    VariantPayload v52 <- v52 : Result
-    Jmp -> instr(91)
+    JmpIfNot v60 -> instr(94)
+    VariantPayload v124 <- v52 : Result
+    Jmp -> instr(95)
     Call _ <- string("std.range.abort_invalid_step") [v54] (def=d1)
+    Phi v133 <- [17: v124, 18: v52]
     Load v61 <- string("4 is aligned")
-    Call v51 <- string("std.assert.assert") [v52, v61] (def=d2)
+    Call v51 <- string("std.assert.assert") [v133, v61] (def=d2)
     Load v65 <- int(5)
     Load v67 <- int(0)
     Load v68 <- int(10)
@@ -234,11 +257,12 @@ module
     VariantTag v70 <- v64 : Result
     Load v71 <- int(0)
     Eq v72 <- v70, v71
-    JmpIfNot v72 -> instr(105)
-    VariantPayload v64 <- v64 : Result
-    Jmp -> instr(106)
+    JmpIfNot v72 -> instr(110)
+    VariantPayload v125 <- v64 : Result
+    Jmp -> instr(111)
     Call _ <- string("std.range.abort_invalid_step") [v66] (def=d1)
-    Not v63 <- v64
+    Phi v134 <- [20: v125, 21: v64]
+    Not v63 <- v134
     Load v73 <- string("5 is not aligned")
     Call v62 <- string("std.assert.assert") [v63, v73] (def=d2)
     Load %5 <- int(0)
@@ -251,18 +275,19 @@ module
     VariantTag v80 <- v79 : Result
     Load v81 <- int(0)
     Eq v82 <- v80, v81
-    JmpIfNot v82 -> instr(122)
-    VariantPayload v79 <- v79 : Result
-    Jmp -> instr(123)
+    JmpIfNot v82 -> instr(128)
+    VariantPayload v126 <- v79 : Result
+    Jmp -> instr(129)
     Call _ <- string("std.range.abort_invalid_step") [v74] (def=d1)
-    Call v83 <- string("std.range.has_next") [v79] (def=d4)
-    JmpIfNot v83 -> instr(131)
-    Call v84 <- string("std.range.next") [v79] (def=d5)
+    Phi v135 <- [23: v126, 24: v79, 26: v135]
+    Call v83 <- string("std.range.has_next") [v135] (def=d4)
+    JmpIfNot v83 -> instr(138)
+    Call v84 <- string("std.range.next") [v135] (def=d5)
     Store %6 <- v84
     Load v85 <- %5
     Load v86 <- int(1)
     Add %5 <- v85, v86
-    Jmp -> instr(123)
+    Jmp -> instr(129)
     Load v89 <- %5
     Load v90 <- int(5)
     Eq v88 <- v89, v90
@@ -278,18 +303,19 @@ module
     VariantTag v97 <- v96 : Result
     Load v98 <- int(0)
     Eq v99 <- v97, v98
-    JmpIfNot v99 -> instr(149)
-    VariantPayload v96 <- v96 : Result
-    Jmp -> instr(150)
+    JmpIfNot v99 -> instr(156)
+    VariantPayload v127 <- v96 : Result
+    Jmp -> instr(157)
     Call _ <- string("std.range.abort_invalid_step") [v92] (def=d1)
-    Call v100 <- string("std.range.has_next") [v96] (def=d4)
-    JmpIfNot v100 -> instr(158)
-    Call v101 <- string("std.range.next") [v96] (def=d5)
+    Phi v136 <- [28: v127, 29: v96, 31: v136]
+    Call v100 <- string("std.range.has_next") [v136] (def=d4)
+    JmpIfNot v100 -> instr(166)
+    Call v101 <- string("std.range.next") [v136] (def=d5)
     Store %9 <- v101
     Load v102 <- %8
     Load v103 <- int(1)
     Add %8 <- v102, v103
-    Jmp -> instr(150)
+    Jmp -> instr(157)
     Load v106 <- %8
     Load v107 <- int(3)
     Eq v105 <- v106, v107
@@ -304,12 +330,13 @@ module
     VariantTag v116 <- v110 : Result
     Load v117 <- int(0)
     Eq v118 <- v116, v117
-    JmpIfNot v118 -> instr(175)
-    VariantPayload v110 <- v110 : Result
-    Jmp -> instr(176)
+    JmpIfNot v118 -> instr(183)
+    VariantPayload v128 <- v110 : Result
+    Jmp -> instr(184)
     Call _ <- string("std.range.abort_invalid_step") [v112] (def=d1)
+    Phi v137 <- [33: v128, 34: v110]
     Load v119 <- string("6 in stepped range with var step")
-    Call v109 <- string("std.assert.assert") [v110, v119] (def=d2)
+    Call v109 <- string("std.assert.assert") [v137, v119] (def=d2)
     Drop %1
     Drop %3
     Drop %5

@@ -2,141 +2,171 @@ module
   fn main() -> Void
     slot[0] p : Int(64) @depth1
     locals_total=4
-    values_total=76
-    value v0: TypeRef("?") @block0
-    value v1: Bool @block0
+    values_total=98
+    value v0: TypeRef("?") @block3
+    value v1: Bool @block1
     value v2: Bool @block0
-    value v3: Generic { name: "String", args: [] } @block0
-    value v4: TypeRef("?") @block0
-    value v5: Bool @block0
-    value v6: Bool @block0
-    value v7: Bool @block0
-    value v8: Generic { name: "String", args: [] } @block0
-    value v9: TypeRef("?") @block0
-    value v10: Bool @block0
-    value v11: Bool @block0
-    value v12: Bool @block0
-    value v13: Generic { name: "String", args: [] } @block0
-    value v14: TypeRef("?") @block0
-    value v15: Bool @block0
-    value v16: Bool @block0
-    value v17: Bool @block0
-    value v18: Generic { name: "String", args: [] } @block0
-    value v19: TypeRef("?") @block0
-    value v20: Bool @block0
-    value v21: Bool @block0
-    value v22: Generic { name: "String", args: [] } @block0
-    value v23: TypeRef("?") @block0
-    value v24: Bool @block0
-    value v25: Bool @block0
-    value v26: Generic { name: "String", args: [] } @block0
-    value v27: TypeRef("?") @block0
-    value v28: Bool @block0
-    value v29: Bool @block0
-    value v30: Generic { name: "String", args: [] } @block0
-    value v31: TypeRef("?") @block0
-    value v32: Bool @block0
-    value v33: Bool @block0
-    value v34: Bool @block0
-    value v35: Generic { name: "String", args: [] } @block0
-    value v36: TypeRef("?") @block0
-    value v37: Bool @block0
-    value v38: Bool @block0
-    value v39: Int(64) @block0
-    value v40: Int(64) @block0
-    value v41: Generic { name: "String", args: [] } @block0
-    value v42: TypeRef("?") @block0
-    value v43: Bool @block0
-    value v44: Bool @block0
-    value v45: Bool @block0
-    value v46: Bool @block0
-    value v47: Generic { name: "String", args: [] } @block0
-    value v48: TypeRef("?") @block0
-    value v49: Bool @block0
-    value v50: Bool @block0
-    value v51: Bool @block0
-    value v52: Generic { name: "String", args: [] } @block0
-    value v53: TypeRef("?") @block0
-    value v54: Bool @block0
-    value v55: TypeRef("?") @block0
-    value v56: Generic { name: "String", args: [] } @block0
-    value v57: Generic { name: "String", args: [] } @block0
-    value v58: Bool @block0
-    value v59: Bool @block0
-    value v60: Generic { name: "String", args: [] } @block0
-    value v61: Generic { name: "String", args: [] } @block0
-    value v62: TypeRef("?") @block0
-    value v63: Bool @block0
-    value v64: TypeRef("?") @block0
-    value v65: Generic { name: "String", args: [] } @block0
-    value v66: Generic { name: "String", args: [] } @block0
-    value v67: Bool @block0
-    value v68: Bool @block0
-    value v69: Generic { name: "String", args: [] } @block0
-    value v70: Generic { name: "String", args: [] } @block0
-    value v71: TypeRef("?") @block0
-    value v72: Bool @block0
-    value v73: TypeRef("?") @block0
-    value v74: Generic { name: "String", args: [] } @block0
-    value v75: Generic { name: "String", args: [] } @block0
+    value v3: Generic { name: "String", args: [] } @block3
+    value v4: TypeRef("?") @block6
+    value v5: Bool @block6
+    value v6: Bool @block4
+    value v7: Bool @block3
+    value v8: Generic { name: "String", args: [] } @block6
+    value v9: TypeRef("?") @block9
+    value v10: Bool @block9
+    value v11: Bool @block7
+    value v12: Bool @block6
+    value v13: Generic { name: "String", args: [] } @block9
+    value v14: TypeRef("?") @block12
+    value v15: Bool @block12
+    value v16: Bool @block10
+    value v17: Bool @block9
+    value v18: Generic { name: "String", args: [] } @block12
+    value v19: TypeRef("?") @block15
+    value v20: Bool @block13
+    value v21: Bool @block12
+    value v22: Generic { name: "String", args: [] } @block15
+    value v23: TypeRef("?") @block18
+    value v24: Bool @block16
+    value v25: Bool @block15
+    value v26: Generic { name: "String", args: [] } @block18
+    value v27: TypeRef("?") @block21
+    value v28: Bool @block19
+    value v29: Bool @block18
+    value v30: Generic { name: "String", args: [] } @block21
+    value v31: TypeRef("?") @block24
+    value v32: Bool @block24
+    value v33: Bool @block22
+    value v34: Bool @block21
+    value v35: Generic { name: "String", args: [] } @block24
+    value v36: TypeRef("?") @block24
+    value v37: Bool @block24
+    value v38: Bool @block24
+    value v39: Int(64) @block24
+    value v40: Int(64) @block24
+    value v41: Generic { name: "String", args: [] } @block24
+    value v42: TypeRef("?") @block24
+    value v43: Bool @block24
+    value v44: Bool @block24
+    value v45: Bool @block24
+    value v46: Bool @block24
+    value v47: Generic { name: "String", args: [] } @block24
+    value v48: TypeRef("?") @block30
+    value v49: Bool @block26
+    value v50: Bool @block24
+    value v51: Bool @block25
+    value v52: Generic { name: "String", args: [] } @block30
+    value v53: TypeRef("?") @block30
+    value v54: Bool @block30
+    value v55: TypeRef("?") @block30
+    value v56: Generic { name: "String", args: [] } @block30
+    value v57: Generic { name: "String", args: [] } @block30
+    value v58: Bool @block31
+    value v59: Bool @block30
+    value v60: Generic { name: "String", args: [] } @block31
+    value v61: Generic { name: "String", args: [] } @block31
+    value v62: TypeRef("?") @block33
+    value v63: Bool @block33
+    value v64: TypeRef("?") @block33
+    value v65: Generic { name: "String", args: [] } @block33
+    value v66: Generic { name: "String", args: [] } @block33
+    value v67: Bool @block34
+    value v68: Bool @block33
+    value v69: Generic { name: "String", args: [] } @block34
+    value v70: Generic { name: "String", args: [] } @block34
+    value v71: TypeRef("?") @block36
+    value v72: Bool @block36
+    value v73: TypeRef("?") @block36
+    value v74: Generic { name: "String", args: [] } @block36
+    value v75: Generic { name: "String", args: [] } @block36
+    value v76: Bool @block2
+    value v77: Bool @block5
+    value v78: Bool @block8
+    value v79: Bool @block11
+    value v80: Bool @block14
+    value v81: Bool @block17
+    value v82: Bool @block20
+    value v83: Bool @block23
+    value v84: Bool @block27
+    value v85: Bool @block29
+    value v86: Bool @block32
+    value v87: Bool @block35
+    value v88: Bool @block3
+    value v89: Bool @block6
+    value v90: Bool @block9
+    value v91: Bool @block12
+    value v92: Bool @block15
+    value v93: Bool @block18
+    value v94: Bool @block21
+    value v95: Bool @block24
+    value v96: Bool @block28
+    value v97: Bool @block30
     Load v2 <- bool(true)
     JmpIfNot v2 -> instr(4)
     Load v1 <- bool(true)
     Jmp -> instr(5)
-    Load v1 <- bool(false)
+    Load v76 <- bool(false)
+    Phi v88 <- [1: v1, 2: v76]
     Load v3 <- string("and tt")
-    Call v0 <- string("std.assert.assert") [v1, v3] (def=d0)
+    Call v0 <- string("std.assert.assert") [v88, v3] (def=d0)
     Load v7 <- bool(true)
-    JmpIfNot v7 -> instr(11)
+    JmpIfNot v7 -> instr(12)
     Load v6 <- bool(false)
-    Jmp -> instr(12)
-    Load v6 <- bool(false)
-    Not v5 <- v6
+    Jmp -> instr(13)
+    Load v77 <- bool(false)
+    Phi v89 <- [4: v6, 5: v77]
+    Not v5 <- v89
     Load v8 <- string("and tf")
     Call v4 <- string("std.assert.assert") [v5, v8] (def=d0)
     Load v12 <- bool(false)
-    JmpIfNot v12 -> instr(19)
+    JmpIfNot v12 -> instr(21)
     Load v11 <- bool(true)
-    Jmp -> instr(20)
-    Load v11 <- bool(false)
-    Not v10 <- v11
+    Jmp -> instr(22)
+    Load v78 <- bool(false)
+    Phi v90 <- [7: v11, 8: v78]
+    Not v10 <- v90
     Load v13 <- string("and ft")
     Call v9 <- string("std.assert.assert") [v10, v13] (def=d0)
     Load v17 <- bool(false)
-    JmpIfNot v17 -> instr(27)
+    JmpIfNot v17 -> instr(30)
     Load v16 <- bool(false)
-    Jmp -> instr(28)
-    Load v16 <- bool(false)
-    Not v15 <- v16
+    Jmp -> instr(31)
+    Load v79 <- bool(false)
+    Phi v91 <- [10: v16, 11: v79]
+    Not v15 <- v91
     Load v18 <- string("and ff")
     Call v14 <- string("std.assert.assert") [v15, v18] (def=d0)
     Load v21 <- bool(true)
-    JmpIf v21 -> instr(35)
+    JmpIf v21 -> instr(39)
     Load v20 <- bool(true)
-    Jmp -> instr(36)
-    Load v20 <- bool(true)
+    Jmp -> instr(40)
+    Load v80 <- bool(true)
+    Phi v92 <- [13: v20, 14: v80]
     Load v22 <- string("or tt")
-    Call v19 <- string("std.assert.assert") [v20, v22] (def=d0)
+    Call v19 <- string("std.assert.assert") [v92, v22] (def=d0)
     Load v25 <- bool(true)
-    JmpIf v25 -> instr(42)
+    JmpIf v25 -> instr(47)
     Load v24 <- bool(false)
-    Jmp -> instr(43)
-    Load v24 <- bool(true)
+    Jmp -> instr(48)
+    Load v81 <- bool(true)
+    Phi v93 <- [16: v24, 17: v81]
     Load v26 <- string("or tf")
-    Call v23 <- string("std.assert.assert") [v24, v26] (def=d0)
+    Call v23 <- string("std.assert.assert") [v93, v26] (def=d0)
     Load v29 <- bool(false)
-    JmpIf v29 -> instr(49)
+    JmpIf v29 -> instr(55)
     Load v28 <- bool(true)
-    Jmp -> instr(50)
-    Load v28 <- bool(true)
+    Jmp -> instr(56)
+    Load v82 <- bool(true)
+    Phi v94 <- [19: v28, 20: v82]
     Load v30 <- string("or ft")
-    Call v27 <- string("std.assert.assert") [v28, v30] (def=d0)
+    Call v27 <- string("std.assert.assert") [v94, v30] (def=d0)
     Load v34 <- bool(false)
-    JmpIf v34 -> instr(56)
+    JmpIf v34 -> instr(63)
     Load v33 <- bool(false)
-    Jmp -> instr(57)
-    Load v33 <- bool(true)
-    Not v32 <- v33
+    Jmp -> instr(64)
+    Load v83 <- bool(true)
+    Phi v95 <- [22: v33, 23: v83]
+    Not v32 <- v95
     Load v35 <- string("or ff")
     Call v31 <- string("std.assert.assert") [v32, v35] (def=d0)
     Load v39 <- int(3)
@@ -152,16 +182,18 @@ module
     Load v47 <- string("!true == false —— ! 紧绑定到操作数")
     Call v42 <- string("std.assert.assert") [v43, v47] (def=d0)
     Load v50 <- bool(true)
-    JmpIf v50 -> instr(80)
+    JmpIf v50 -> instr(89)
     Load v51 <- bool(false)
-    JmpIfNot v51 -> instr(78)
+    JmpIfNot v51 -> instr(86)
     Load v49 <- bool(false)
-    Jmp -> instr(79)
-    Load v49 <- bool(false)
-    Jmp -> instr(81)
-    Load v49 <- bool(true)
+    Jmp -> instr(87)
+    Load v84 <- bool(false)
+    Phi v96 <- [26: v49, 27: v84]
+    Jmp -> instr(90)
+    Load v85 <- bool(true)
+    Phi v97 <- [28: v96, 29: v85]
     Load v52 <- string("true or (false and false) ≡ true")
-    Call v48 <- string("std.assert.assert") [v49, v52] (def=d0)
+    Call v48 <- string("std.assert.assert") [v97, v52] (def=d0)
     Load %0 <- string("/tmp/yaoxiang_shortcircuit_and.yx")
     Load v56 <- %0
     Call v55 <- string("std.fs.exists") [v56] (def=d1)
@@ -170,12 +202,12 @@ module
     Call v53 <- string("std.assert.assert") [v54, v57] (def=d0)
     Drop %0
     Load v59 <- bool(false)
-    JmpIfNot v59 -> instr(96)
+    JmpIfNot v59 -> instr(106)
     Load v60 <- %0
     Load v61 <- string("side effect")
     Call v58 <- string("std.fs.write_file") [v60, v61] (def=d2)
-    Jmp -> instr(97)
-    Load v58 <- bool(false)
+    Jmp -> instr(107)
+    Load v86 <- bool(false)
     Drop %0
     Load v65 <- %0
     Call v64 <- string("std.fs.exists") [v65] (def=d1)
@@ -184,12 +216,12 @@ module
     Call v62 <- string("std.assert.assert") [v63, v66] (def=d0)
     Drop %0
     Load v68 <- bool(true)
-    JmpIf v68 -> instr(110)
+    JmpIf v68 -> instr(120)
     Load v69 <- %0
     Load v70 <- string("side effect")
     Call v67 <- string("std.fs.write_file") [v69, v70] (def=d2)
-    Jmp -> instr(111)
-    Load v67 <- bool(true)
+    Jmp -> instr(121)
+    Load v87 <- bool(true)
     Drop %0
     Load v74 <- %0
     Call v73 <- string("std.fs.exists") [v74] (def=d1)

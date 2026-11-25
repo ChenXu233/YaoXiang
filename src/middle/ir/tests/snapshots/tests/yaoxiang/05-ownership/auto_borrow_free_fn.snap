@@ -26,7 +26,7 @@ module
     slot[4] n1 : Int(64) @depth1
     slot[5] n2 : Int(64) @depth1
     locals_total=9
-    values_total=36
+    values_total=38
     value v0: Int(64) @block0
     value v1: Int(64) @block0
     value v2: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
@@ -55,14 +55,16 @@ module
     value v25: Int(64) @block0
     value v26: Generic { name: "Vec", args: [Int(64)] } @block0
     value v27: Generic { name: "Vec", args: [Int(64)] } @block0
-    value v28: TypeRef("?") @block0
-    value v29: Bool @block0
+    value v28: TypeRef("?") @block3
+    value v29: Bool @block1
     value v30: Bool @block0
     value v31: Int(64) @block0
     value v32: Int(64) @block0
-    value v33: Int(64) @block0
-    value v34: Int(64) @block0
-    value v35: Generic { name: "String", args: [] } @block0
+    value v33: Int(64) @block1
+    value v34: Int(64) @block1
+    value v35: Generic { name: "String", args: [] } @block3
+    value v36: Bool @block2
+    value v37: Bool @block3
     Load v0 <- int(3)
     Load v1 <- int(4)
     Call %0 <- string("Point") [v0, v1] (def=d0)
@@ -112,9 +114,10 @@ module
     Load v34 <- int(3)
     Eq v29 <- v33, v34
     Jmp -> instr(50)
-    Load v29 <- bool(false)
+    Load v36 <- bool(false)
+    Phi v37 <- [1: v29, 2: v36]
     Load v35 <- string("std read fn reuses xs")
-    Call v28 <- string("std.assert.assert") [v29, v35] (def=d2)
+    Call v28 <- string("std.assert.assert") [v37, v35] (def=d2)
     Drop %0
     Drop %1
     Drop %2

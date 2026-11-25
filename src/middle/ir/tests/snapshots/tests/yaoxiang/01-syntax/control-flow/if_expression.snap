@@ -8,68 +8,73 @@ module
     slot[5] d : Int(64) @depth1
     slot[6] score : Int(64) @depth1
     slot[7] grade : Int(64) @depth1
-    locals_total=11
-    values_total=55
+    locals_total=12
+    values_total=59
     value v0: Bool @block0
-    value v1: Int(64) @block0
-    value v2: Int(64) @block0
-    value v3: TypeRef("?") @block0
-    value v4: Bool @block0
-    value v5: Int(64) @block0
-    value v6: Int(64) @block0
-    value v7: Generic { name: "String", args: [] } @block0
-    value v8: Bool @block0
-    value v9: Int(64) @block0
-    value v10: Int(64) @block0
-    value v11: TypeRef("?") @block0
-    value v12: Bool @block0
-    value v13: Int(64) @block0
-    value v14: Int(64) @block0
-    value v15: Generic { name: "String", args: [] } @block0
-    value v16: Bool @block0
-    value v17: Int(64) @block0
-    value v18: Int(64) @block0
-    value v19: Int(64) @block0
-    value v20: Int(64) @block0
-    value v21: TypeRef("?") @block0
-    value v22: Bool @block0
-    value v23: Int(64) @block0
-    value v24: Int(64) @block0
-    value v25: Generic { name: "String", args: [] } @block0
-    value v26: Bool @block0
-    value v27: Int(64) @block0
-    value v28: Bool @block0
-    value v29: Int(64) @block0
-    value v30: Int(64) @block0
-    value v31: Int(64) @block0
-    value v32: TypeRef("?") @block0
-    value v33: Bool @block0
-    value v34: Int(64) @block0
-    value v35: Int(64) @block0
-    value v36: Generic { name: "String", args: [] } @block0
-    value v37: Bool @block0
-    value v38: Int(64) @block0
-    value v39: Int(64) @block0
-    value v40: Generic { name: "String", args: [] } @block0
-    value v41: Bool @block0
-    value v42: Int(64) @block0
-    value v43: Int(64) @block0
-    value v44: Generic { name: "String", args: [] } @block0
-    value v45: Bool @block0
-    value v46: Int(64) @block0
-    value v47: Int(64) @block0
-    value v48: Generic { name: "String", args: [] } @block0
-    value v49: Generic { name: "String", args: [] } @block0
-    value v50: TypeRef("?") @block0
-    value v51: Bool @block0
-    value v52: Generic { name: "String", args: [] } @block0
-    value v53: Generic { name: "String", args: [] } @block0
-    value v54: Generic { name: "String", args: [] } @block0
+    value v1: Int(64) @block1
+    value v2: Int(64) @block2
+    value v3: TypeRef("?") @block3
+    value v4: Bool @block3
+    value v5: Int(64) @block3
+    value v6: Int(64) @block3
+    value v7: Generic { name: "String", args: [] } @block3
+    value v8: Bool @block3
+    value v9: Int(64) @block4
+    value v10: Int(64) @block5
+    value v11: TypeRef("?") @block6
+    value v12: Bool @block6
+    value v13: Int(64) @block6
+    value v14: Int(64) @block6
+    value v15: Generic { name: "String", args: [] } @block6
+    value v16: Bool @block6
+    value v17: Int(64) @block7
+    value v18: Int(64) @block7
+    value v19: Int(64) @block7
+    value v20: Int(64) @block8
+    value v21: TypeRef("?") @block9
+    value v22: Bool @block9
+    value v23: Int(64) @block9
+    value v24: Int(64) @block9
+    value v25: Generic { name: "String", args: [] } @block9
+    value v26: Bool @block9
+    value v27: Int(64) @block11
+    value v28: Bool @block10
+    value v29: Int(64) @block11
+    value v30: Int(64) @block12
+    value v31: Int(64) @block14
+    value v32: TypeRef("?") @block15
+    value v33: Bool @block15
+    value v34: Int(64) @block15
+    value v35: Int(64) @block15
+    value v36: Generic { name: "String", args: [] } @block15
+    value v37: Bool @block15
+    value v38: Int(64) @block15
+    value v39: Int(64) @block15
+    value v40: Generic { name: "String", args: [] } @block16
+    value v41: Bool @block17
+    value v42: Int(64) @block17
+    value v43: Int(64) @block17
+    value v44: Generic { name: "String", args: [] } @block18
+    value v45: Bool @block19
+    value v46: Int(64) @block19
+    value v47: Int(64) @block19
+    value v48: Generic { name: "String", args: [] } @block20
+    value v49: Generic { name: "String", args: [] } @block21
+    value v50: TypeRef("?") @block22
+    value v51: Bool @block22
+    value v52: Generic { name: "String", args: [] } @block22
+    value v53: Generic { name: "String", args: [] } @block22
+    value v54: Generic { name: "String", args: [] } @block22
+    value v55: Int(64) @block12
+    value v56: Int(64) @block13
+    value v57: Int(64) @block15
+    value v58: TypeRef("?") @block0
+    Load v58 <- void
     Load v0 <- bool(true)
-    JmpIfNot v0 -> instr(5)
+    JmpIfNot v0 -> instr(6)
     Load v1 <- int(42)
     Move %0 <- v1
-    Jmp -> instr(7)
+    Jmp -> instr(8)
     Load v2 <- int(0)
     Move %0 <- v2
     Load v5 <- %0
@@ -78,10 +83,10 @@ module
     Load v7 <- string("if true 分支应返回 42")
     Call v3 <- string("std.assert.assert") [v4, v7] (def=d0)
     Load v8 <- bool(false)
-    JmpIfNot v8 -> instr(17)
+    JmpIfNot v8 -> instr(18)
     Load v9 <- int(100)
     Move %1 <- v9
-    Jmp -> instr(19)
+    Jmp -> instr(20)
     Load v10 <- int(200)
     Move %1 <- v10
     Load v13 <- %1
@@ -90,7 +95,7 @@ module
     Load v15 <- string("if false 分支应返回 200")
     Call v11 <- string("std.assert.assert") [v12, v15] (def=d0)
     Load v16 <- bool(true)
-    JmpIfNot v16 -> instr(35)
+    JmpIfNot v16 -> instr(36)
     Load %2 <- int(10)
     Load %3 <- int(20)
     Load v18 <- %2
@@ -99,7 +104,7 @@ module
     Drop %2
     Drop %3
     Move %4 <- v17
-    Jmp -> instr(37)
+    Jmp -> instr(38)
     Load v20 <- int(0)
     Move %4 <- v20
     Load v23 <- %4
@@ -108,18 +113,20 @@ module
     Load v25 <- string("块内多语句 + 尾随表达式应作为块的值")
     Call v21 <- string("std.assert.assert") [v22, v25] (def=d0)
     Load v26 <- bool(true)
-    JmpIfNot v26 -> instr(53)
+    JmpIfNot v26 -> instr(55)
     Load v28 <- bool(false)
-    JmpIfNot v28 -> instr(49)
+    JmpIfNot v28 -> instr(50)
     Load v29 <- int(1)
     Move v27 <- v29
-    Jmp -> instr(51)
+    Jmp -> instr(52)
     Load v30 <- int(2)
-    Move v27 <- v30
-    Move %5 <- v27
-    Jmp -> instr(55)
+    Move v55 <- v30
+    Phi v56 <- [11: v27, 12: v55]
+    Move %5 <- v56
+    Jmp -> instr(57)
     Load v31 <- int(3)
     Move %5 <- v31
+    Phi v57 <- [13: v56, 14: v58]
     Load v34 <- %5
     Load v35 <- int(2)
     Eq v33 <- v34, v35
@@ -129,24 +136,24 @@ module
     Load v38 <- %6
     Load v39 <- int(90)
     Ge v37 <- v38, v39
-    JmpIfNot v37 -> instr(68)
+    JmpIfNot v37 -> instr(71)
     Load v40 <- string("A")
     Move %7 <- v40
-    Jmp -> instr(84)
+    Jmp -> instr(87)
     Load v42 <- %6
     Load v43 <- int(80)
     Ge v41 <- v42, v43
-    JmpIfNot v41 -> instr(75)
+    JmpIfNot v41 -> instr(78)
     Load v44 <- string("B")
     Move %7 <- v44
-    Jmp -> instr(84)
+    Jmp -> instr(87)
     Load v46 <- %6
     Load v47 <- int(70)
     Ge v45 <- v46, v47
-    JmpIfNot v45 -> instr(82)
+    JmpIfNot v45 -> instr(85)
     Load v48 <- string("C")
     Move %7 <- v48
-    Jmp -> instr(84)
+    Jmp -> instr(87)
     Load v49 <- string("D")
     Move %7 <- v49
     Load v52 <- %7

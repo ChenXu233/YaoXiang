@@ -51,68 +51,72 @@ module
     slot[4] v : Int(64) @depth1
     slot[5] s3 : Int(64) @depth1
     locals_total=10
-    values_total=61
+    values_total=65
     value v0: Int(64) @block0
     value v1: Int(64) @block0
     value v2: TypeRef("?") @block0
     value v3: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
     value v4: Int(64) @block0
     value v5: Int(64) @block0
-    value v6: TypeRef("?") @block0
-    value v7: Bool @block0
+    value v6: TypeRef("?") @block3
+    value v7: Bool @block1
     value v8: Bool @block0
     value v9: TypeRef("?") @block0
     value v10: Int(64) @block0
     value v11: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
-    value v12: TypeRef("?") @block0
-    value v13: Int(64) @block0
-    value v14: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
-    value v15: Generic { name: "String", args: [] } @block0
-    value v16: TypeRef("?") @block0
-    value v17: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
-    value v18: Int(64) @block0
-    value v19: Int(64) @block0
-    value v20: TypeRef("?") @block0
-    value v21: Bool @block0
-    value v22: Bool @block0
-    value v23: TypeRef("?") @block0
-    value v24: Int(64) @block0
-    value v25: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
-    value v26: TypeRef("?") @block0
-    value v27: Int(64) @block0
-    value v28: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
-    value v29: Generic { name: "String", args: [] } @block0
-    value v30: Int(64) @block0
-    value v31: Int(64) @block0
-    value v32: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
-    value v33: TypeRef("?") @block0
-    value v34: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
-    value v35: Int(64) @block0
-    value v36: Int(64) @block0
-    value v37: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
-    value v38: TypeRef("?") @block0
-    value v39: Bool @block0
-    value v40: Int(64) @block0
-    value v41: Int(64) @block0
-    value v42: Generic { name: "String", args: [] } @block0
-    value v43: TypeRef("?") @block0
-    value v44: Bool @block0
-    value v45: Int(64) @block0
-    value v46: Int(64) @block0
-    value v47: Generic { name: "String", args: [] } @block0
-    value v48: TypeRef("?") @block0
-    value v49: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
-    value v50: TypeRef("?") @block0
-    value v51: Bool @block0
-    value v52: Ref { mutable: false, inner: Int(64) } @block0
-    value v53: Int(64) @block0
-    value v54: Generic { name: "String", args: [] } @block0
-    value v55: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
-    value v56: TypeRef("?") @block0
-    value v57: Bool @block0
-    value v58: Int(64) @block0
-    value v59: Int(64) @block0
-    value v60: Generic { name: "String", args: [] } @block0
+    value v12: TypeRef("?") @block1
+    value v13: Int(64) @block1
+    value v14: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block1
+    value v15: Generic { name: "String", args: [] } @block3
+    value v16: TypeRef("?") @block3
+    value v17: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block3
+    value v18: Int(64) @block3
+    value v19: Int(64) @block3
+    value v20: TypeRef("?") @block6
+    value v21: Bool @block4
+    value v22: Bool @block3
+    value v23: TypeRef("?") @block3
+    value v24: Int(64) @block3
+    value v25: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block3
+    value v26: TypeRef("?") @block4
+    value v27: Int(64) @block4
+    value v28: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block4
+    value v29: Generic { name: "String", args: [] } @block6
+    value v30: Int(64) @block6
+    value v31: Int(64) @block6
+    value v32: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block6
+    value v33: TypeRef("?") @block6
+    value v34: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block6
+    value v35: Int(64) @block6
+    value v36: Int(64) @block6
+    value v37: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block6
+    value v38: TypeRef("?") @block6
+    value v39: Bool @block6
+    value v40: Int(64) @block6
+    value v41: Int(64) @block6
+    value v42: Generic { name: "String", args: [] } @block6
+    value v43: TypeRef("?") @block6
+    value v44: Bool @block6
+    value v45: Int(64) @block6
+    value v46: Int(64) @block6
+    value v47: Generic { name: "String", args: [] } @block6
+    value v48: TypeRef("?") @block6
+    value v49: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block6
+    value v50: TypeRef("?") @block6
+    value v51: Bool @block6
+    value v52: Ref { mutable: false, inner: Int(64) } @block6
+    value v53: Int(64) @block6
+    value v54: Generic { name: "String", args: [] } @block6
+    value v55: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block6
+    value v56: TypeRef("?") @block6
+    value v57: Bool @block6
+    value v58: Int(64) @block6
+    value v59: Int(64) @block6
+    value v60: Generic { name: "String", args: [] } @block6
+    value v61: Bool @block2
+    value v62: Bool @block5
+    value v63: Bool @block3
+    value v64: Bool @block6
     Load v0 <- int(1)
     Load v1 <- int(2)
     Call %0 <- string("Point") [v0, v1] (def=d0)
@@ -131,9 +135,10 @@ module
     Load v13 <- int(22)
     Eq v7 <- v12, v13
     Jmp -> instr(19)
-    Load v7 <- bool(false)
+    Load v61 <- bool(false)
+    Phi v63 <- [1: v7, 2: v61]
     Load v15 <- string("&mut 接收者写回源对象")
-    Call v6 <- string("std.assert.assert") [v7, v15] (def=d2)
+    Call v6 <- string("std.assert.assert") [v63, v15] (def=d2)
     Load v17 <- %0
     Load v18 <- int(1)
     Load v19 <- int(1)
@@ -143,15 +148,16 @@ module
     LoadField v23 <- v25.0
     Load v24 <- int(12)
     Eq v22 <- v23, v24
-    JmpIfNot v22 -> instr(36)
+    JmpIfNot v22 -> instr(37)
     Load v28 <- %0
     LoadField v26 <- v28.1
     Load v27 <- int(23)
     Eq v21 <- v26, v27
-    Jmp -> instr(37)
-    Load v21 <- bool(false)
+    Jmp -> instr(38)
+    Load v62 <- bool(false)
+    Phi v64 <- [4: v21, 5: v62]
     Load v29 <- string("连续 &mut 接收者顺序复用")
-    Call v20 <- string("std.assert.assert") [v21, v29] (def=d2)
+    Call v20 <- string("std.assert.assert") [v64, v29] (def=d2)
     Load v30 <- int(3)
     Load v31 <- int(4)
     Call %1 <- string("Point") [v30, v31] (def=d0)

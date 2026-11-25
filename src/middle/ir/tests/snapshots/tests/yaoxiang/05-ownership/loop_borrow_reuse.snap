@@ -18,25 +18,26 @@ module
     slot[1] i : Int(64) @depth1
     slot[2] v : Int(64) @depth1
     locals_total=6
-    values_total=18
+    values_total=19
     value v0: Int(64) @block0
     value v1: Int(64) @block0
     value v2: Void @block0
-    value v3: Bool @block0
-    value v4: Int(64) @block0
-    value v5: Int(64) @block0
-    value v6: Int(64) @block0
-    value v7: Int(64) @block0
-    value v8: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
-    value v9: TypeRef("?") @block0
-    value v10: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
-    value v11: Void @block0
-    value v12: Ref { mutable: false, inner: Int(64) } @block0
-    value v13: Ref { mutable: false, inner: Int(64) } @block0
-    value v14: Generic { name: "String", args: [] } @block0
-    value v15: TypeRef("?") @block0
-    value v16: Void @block0
-    value v17: Generic { name: "String", args: [] } @block0
+    value v3: Bool @block1
+    value v4: Int(64) @block1
+    value v5: Int(64) @block1
+    value v6: Int(64) @block2
+    value v7: Int(64) @block2
+    value v8: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block2
+    value v9: TypeRef("?") @block3
+    value v10: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block3
+    value v11: Void @block3
+    value v12: Ref { mutable: false, inner: Int(64) } @block3
+    value v13: Ref { mutable: false, inner: Int(64) } @block3
+    value v14: Generic { name: "String", args: [] } @block3
+    value v15: TypeRef("?") @block3
+    value v16: Void @block3
+    value v17: Generic { name: "String", args: [] } @block3
+    value v18: Void @block2
     Load v0 <- int(1)
     Load v1 <- int(2)
     Call %0 <- string("Point") [v0, v1] (def=d0)
@@ -50,7 +51,7 @@ module
     Load v7 <- int(1)
     Add %1 <- v6, v7
     Load v8 <- %0
-    Call v2 <- string("good_seq") [v8] (def=d1)
+    Call v18 <- string("good_seq") [v8] (def=d1)
     Drop %0
     Jmp -> instr(5)
     Load v10 <- %0

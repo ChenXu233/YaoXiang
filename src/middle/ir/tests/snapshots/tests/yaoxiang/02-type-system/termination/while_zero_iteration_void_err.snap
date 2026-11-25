@@ -4,16 +4,16 @@ module
     slot[1] last : Int(64) @depth1
     locals_total=5
     values_total=10
-    value v0: Bool @block0
-    value v1: Int(64) @block0
-    value v2: Int(64) @block0
-    value v3: Int(64) @block0
-    value v4: Int(64) @block0
-    value v5: TypeRef("?") @block0
-    value v6: Bool @block0
-    value v7: Int(64) @block0
-    value v8: Int(64) @block0
-    value v9: Generic { name: "String", args: [] } @block0
+    value v0: Bool @block1
+    value v1: Int(64) @block1
+    value v2: Int(64) @block1
+    value v3: Int(64) @block2
+    value v4: Int(64) @block2
+    value v5: TypeRef("?") @block3
+    value v6: Bool @block3
+    value v7: Int(64) @block3
+    value v8: Int(64) @block3
+    value v9: Generic { name: "String", args: [] } @block3
     Load %0 <- int(0)
     Load %1 <- void
     Load v1 <- %0

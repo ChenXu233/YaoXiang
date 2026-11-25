@@ -25,7 +25,7 @@ fn ret_void() -> Instruction {
     }
 }
 
-/// 值表生产：ValueId 稠密可索引、槽映射同长、类型真实、定义块 0、debug_name=None。
+/// 值表生产：ValueId 稠密可索引、槽映射同长、类型真实、定义块为真实 label、debug_name=None。
 #[test]
 fn test_values_production_type_block_and_index() {
     // Arrange：f 的比较结果落 Bool 值；main 的字面量落 Int(64) 值。
@@ -61,11 +61,15 @@ main()
             "{}: value_slots 必须与 values 同索引同长",
             function.name
         );
+        let block_labels: std::collections::HashSet<usize> =
+            blocks.iter().map(|block| block.label).collect();
         for info in values {
-            assert_eq!(
-                info.defining_block, 0,
-                "{}: 本批单块函数体的定义块必须是 0",
-                function.name
+            assert!(
+                block_labels.contains(&info.defining_block),
+                "{}: defining_block({}) 必须是真实块 label 之一 {:?}",
+                function.name,
+                info.defining_block,
+                block_labels
             );
             assert!(
                 info.debug_name.is_none(),
@@ -91,6 +95,17 @@ main()
                             id.0,
                             values.len()
                         );
+                        if instr
+                            .def_operands()
+                            .iter()
+                            .any(|def| matches!(def, Operand::Value(def_id) if def_id == id))
+                        {
+                            assert_eq!(
+                                values[id.0 as usize].defining_block, block.label,
+                                "{}: ValueId({}) 的 defining_block 必须等于定义块 {}",
+                                function.name, id.0, block.label
+                            );
+                        }
                     }
                 });
             }

@@ -10,16 +10,18 @@ module
   fn guarded(Int(64)) -> Int(64)
     slot[0] y : Int(64) @depth1
     locals_total=4
-    values_total=9
-    value v0: Int(64) @block0
+    values_total=11
+    value v0: Int(64) @block1
     value v1: Bool @block0
     value v2: Int(64) @block0
     value v3: Int(64) @block0
-    value v4: TypeRef("?") @block0
-    value v5: Int(64) @block0
-    value v6: Fn { params: [TypeRef("N")], return_type: Int(64) } @block0
-    value v7: Int(64) @block0
-    value v8: Int(64) @block0
+    value v4: TypeRef("?") @block1
+    value v5: Int(64) @block1
+    value v6: Fn { params: [TypeRef("N")], return_type: Int(64) } @block1
+    value v7: Int(64) @block1
+    value v8: Int(64) @block2
+    value v9: Int(64) @block2
+    value v10: Int(64) @block3
     Load %0 <- arg%0
     Load v2 <- %0
     Load v3 <- int(42)
@@ -32,21 +34,24 @@ module
     Move v0 <- v4
     Jmp -> instr(13)
     Load v8 <- int(0)
-    Move v0 <- v8
-    Ret v0
+    Move v9 <- v8
+    Phi v10 <- [1: v0, 2: v9]
+    Ret v10
   fn reversed(Int(64)) -> Int(64)
     slot[0] y : Int(64) @depth1
     locals_total=4
-    values_total=9
-    value v0: Int(64) @block0
+    values_total=11
+    value v0: Int(64) @block1
     value v1: Bool @block0
     value v2: Int(64) @block0
     value v3: Int(64) @block0
-    value v4: TypeRef("?") @block0
-    value v5: Int(64) @block0
-    value v6: Fn { params: [TypeRef("N")], return_type: Int(64) } @block0
-    value v7: Int(64) @block0
-    value v8: Int(64) @block0
+    value v4: TypeRef("?") @block1
+    value v5: Int(64) @block1
+    value v6: Fn { params: [TypeRef("N")], return_type: Int(64) } @block1
+    value v7: Int(64) @block1
+    value v8: Int(64) @block2
+    value v9: Int(64) @block2
+    value v10: Int(64) @block3
     Load %0 <- arg%0
     Load v2 <- int(42)
     Load v3 <- %0
@@ -59,25 +64,30 @@ module
     Move v0 <- v4
     Jmp -> instr(13)
     Load v8 <- int(0)
-    Move v0 <- v8
-    Ret v0
+    Move v9 <- v8
+    Phi v10 <- [1: v0, 2: v9]
+    Ret v10
   fn conjunction(Int(64), Int(64)) -> Int(64)
     slot[0] y : Int(64) @depth1
     slot[1] z : Int(64) @depth1
     locals_total=5
-    values_total=12
-    value v0: Int(64) @block0
-    value v1: Bool @block0
+    values_total=16
+    value v0: Int(64) @block4
+    value v1: Bool @block1
     value v2: Bool @block0
     value v3: Int(64) @block0
     value v4: Int(64) @block0
-    value v5: Int(64) @block0
-    value v6: Int(64) @block0
-    value v7: TypeRef("?") @block0
-    value v8: Int(64) @block0
-    value v9: Fn { params: [TypeRef("N")], return_type: Int(64) } @block0
-    value v10: Int(64) @block0
-    value v11: Int(64) @block0
+    value v5: Int(64) @block1
+    value v6: Int(64) @block1
+    value v7: TypeRef("?") @block4
+    value v8: Int(64) @block4
+    value v9: Fn { params: [TypeRef("N")], return_type: Int(64) } @block4
+    value v10: Int(64) @block4
+    value v11: Int(64) @block5
+    value v12: Int(64) @block5
+    value v13: Bool @block2
+    value v14: Bool @block3
+    value v15: Int(64) @block6
     Load %0 <- arg%0
     Load %1 <- arg%1
     Load v3 <- %0
@@ -88,17 +98,19 @@ module
     Load v6 <- int(7)
     Eq v1 <- v5, v6
     Jmp -> instr(11)
-    Load v1 <- bool(false)
-    JmpIfNot v1 -> instr(18)
+    Load v13 <- bool(false)
+    Phi v14 <- [1: v1, 2: v13]
+    JmpIfNot v14 -> instr(19)
     Load v8 <- int(7)
     Load v10 <- %1
     Call v9 <- string("f") [v10] (def=d1)
     CallDyn v7 <- v9 [v8]
     Move v0 <- v7
-    Jmp -> instr(20)
+    Jmp -> instr(21)
     Load v11 <- int(0)
-    Move v0 <- v11
-    Ret v0
+    Move v12 <- v11
+    Phi v15 <- [4: v0, 5: v12]
+    Ret v15
   fn asserted(Int(64)) -> Int(64)
     slot[0] y : Int(64) @depth1
     locals_total=4

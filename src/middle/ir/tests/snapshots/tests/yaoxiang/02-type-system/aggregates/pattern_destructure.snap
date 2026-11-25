@@ -28,71 +28,71 @@ module
     value v4: TypeRef("?") @block0
     value v5: Int(64) @block0
     value v6: Bool @block0
-    value v7: TypeRef("?") @block0
-    value v8: TypeRef("?") @block0
-    value v9: TypeRef("?") @block0
-    value v10: Int(64) @block0
-    value v11: Int(64) @block0
-    value v12: Int(64) @block0
-    value v13: TypeRef("?") @block0
-    value v14: Int(64) @block0
-    value v15: Bool @block0
-    value v16: Int(64) @block0
-    value v17: TypeRef("?") @block0
-    value v18: Bool @block0
-    value v19: Int(64) @block0
-    value v20: Int(64) @block0
-    value v21: Generic { name: "String", args: [] } @block0
-    value v22: Void @block0
-    value v23: Generic { name: "Pair", args: [] } @block0
-    value v24: TypeRef("?") @block0
-    value v25: Int(64) @block0
-    value v26: Bool @block0
-    value v27: TypeRef("?") @block0
-    value v28: TypeRef("?") @block0
-    value v29: TypeRef("?") @block0
-    value v30: Int(64) @block0
-    value v31: Int(64) @block0
-    value v32: Int(64) @block0
-    value v33: TypeRef("?") @block0
-    value v34: Int(64) @block0
-    value v35: Bool @block0
-    value v36: Int(64) @block0
-    value v37: TypeRef("?") @block0
-    value v38: Bool @block0
-    value v39: Int(64) @block0
-    value v40: Int(64) @block0
-    value v41: Generic { name: "String", args: [] } @block0
-    value v42: Int(64) @block0
-    value v43: Int(64) @block0
-    value v44: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
-    value v45: TypeRef("?") @block0
-    value v46: TypeRef("?") @block0
-    value v47: Int(64) @block0
-    value v48: Int(64) @block0
-    value v49: Int(64) @block0
-    value v50: TypeRef("?") @block0
-    value v51: Bool @block0
-    value v52: Int(64) @block0
-    value v53: Int(64) @block0
-    value v54: Generic { name: "String", args: [] } @block0
-    value v55: Int(64) @block0
-    value v56: Generic { name: "Result", args: [Int(64), Generic { name: "String", args: [] }] } @block0
-    value v57: TypeRef("?") @block0
-    value v58: Int(64) @block0
-    value v59: Bool @block0
-    value v60: TypeRef("?") @block0
-    value v61: Int(64) @block0
-    value v62: TypeRef("?") @block0
-    value v63: Int(64) @block0
-    value v64: Bool @block0
-    value v65: TypeRef("?") @block0
-    value v66: Int(64) @block0
-    value v67: TypeRef("?") @block0
-    value v68: Bool @block0
-    value v69: Int(64) @block0
-    value v70: Int(64) @block0
-    value v71: Generic { name: "String", args: [] } @block0
+    value v7: TypeRef("?") @block1
+    value v8: TypeRef("?") @block1
+    value v9: TypeRef("?") @block1
+    value v10: Int(64) @block1
+    value v11: Int(64) @block1
+    value v12: Int(64) @block1
+    value v13: TypeRef("?") @block2
+    value v14: Int(64) @block2
+    value v15: Bool @block2
+    value v16: Int(64) @block3
+    value v17: TypeRef("?") @block4
+    value v18: Bool @block4
+    value v19: Int(64) @block4
+    value v20: Int(64) @block4
+    value v21: Generic { name: "String", args: [] } @block4
+    value v22: Void @block4
+    value v23: Generic { name: "Pair", args: [] } @block4
+    value v24: TypeRef("?") @block4
+    value v25: Int(64) @block4
+    value v26: Bool @block4
+    value v27: TypeRef("?") @block5
+    value v28: TypeRef("?") @block5
+    value v29: TypeRef("?") @block5
+    value v30: Int(64) @block5
+    value v31: Int(64) @block5
+    value v32: Int(64) @block5
+    value v33: TypeRef("?") @block6
+    value v34: Int(64) @block6
+    value v35: Bool @block6
+    value v36: Int(64) @block7
+    value v37: TypeRef("?") @block8
+    value v38: Bool @block8
+    value v39: Int(64) @block8
+    value v40: Int(64) @block8
+    value v41: Generic { name: "String", args: [] } @block8
+    value v42: Int(64) @block8
+    value v43: Int(64) @block8
+    value v44: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block8
+    value v45: TypeRef("?") @block8
+    value v46: TypeRef("?") @block8
+    value v47: Int(64) @block8
+    value v48: Int(64) @block8
+    value v49: Int(64) @block8
+    value v50: TypeRef("?") @block9
+    value v51: Bool @block9
+    value v52: Int(64) @block9
+    value v53: Int(64) @block9
+    value v54: Generic { name: "String", args: [] } @block9
+    value v55: Int(64) @block9
+    value v56: Generic { name: "Result", args: [Int(64), Generic { name: "String", args: [] }] } @block9
+    value v57: TypeRef("?") @block9
+    value v58: Int(64) @block9
+    value v59: Bool @block9
+    value v60: TypeRef("?") @block10
+    value v61: Int(64) @block10
+    value v62: TypeRef("?") @block11
+    value v63: Int(64) @block11
+    value v64: Bool @block11
+    value v65: TypeRef("?") @block12
+    value v66: Int(64) @block12
+    value v67: TypeRef("?") @block13
+    value v68: Bool @block13
+    value v69: Int(64) @block13
+    value v70: Int(64) @block13
+    value v71: Generic { name: "String", args: [] } @block13
     Load v1 <- int(3)
     Load v2 <- int(4)
     NewTuple v0 <- [v1, v2]

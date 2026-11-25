@@ -9,41 +9,41 @@ module
     locals_total=9
     values_total=36
     value v0: Void @block0
-    value v1: Bool @block0
-    value v2: Int(64) @block0
-    value v3: Int(64) @block0
-    value v4: Int(64) @block0
-    value v5: Int(64) @block0
-    value v6: Int(64) @block0
-    value v7: Int(64) @block0
-    value v8: TypeRef("?") @block0
-    value v9: Bool @block0
-    value v10: Int(64) @block0
-    value v11: Int(64) @block0
-    value v12: Generic { name: "String", args: [] } @block0
-    value v13: TypeRef("?") @block0
-    value v14: Bool @block0
-    value v15: Int(64) @block0
-    value v16: Int(64) @block0
-    value v17: Generic { name: "String", args: [] } @block0
-    value v18: TypeRef("?") @block0
-    value v19: Bool @block0
-    value v20: Int(64) @block0
-    value v21: Int(64) @block0
-    value v22: Generic { name: "String", args: [] } @block0
-    value v23: Void @block0
-    value v24: Bool @block0
-    value v25: Int(64) @block0
-    value v26: Int(64) @block0
-    value v27: Int(64) @block0
-    value v28: Int(64) @block0
-    value v29: Int(64) @block0
-    value v30: Int(64) @block0
-    value v31: TypeRef("?") @block0
-    value v32: Bool @block0
-    value v33: Int(64) @block0
-    value v34: Int(64) @block0
-    value v35: Generic { name: "String", args: [] } @block0
+    value v1: Bool @block1
+    value v2: Int(64) @block1
+    value v3: Int(64) @block1
+    value v4: Int(64) @block2
+    value v5: Int(64) @block2
+    value v6: Int(64) @block2
+    value v7: Int(64) @block2
+    value v8: TypeRef("?") @block3
+    value v9: Bool @block3
+    value v10: Int(64) @block3
+    value v11: Int(64) @block3
+    value v12: Generic { name: "String", args: [] } @block3
+    value v13: TypeRef("?") @block3
+    value v14: Bool @block3
+    value v15: Int(64) @block3
+    value v16: Int(64) @block3
+    value v17: Generic { name: "String", args: [] } @block3
+    value v18: TypeRef("?") @block3
+    value v19: Bool @block3
+    value v20: Int(64) @block3
+    value v21: Int(64) @block3
+    value v22: Generic { name: "String", args: [] } @block3
+    value v23: Void @block3
+    value v24: Bool @block4
+    value v25: Int(64) @block4
+    value v26: Int(64) @block4
+    value v27: Int(64) @block5
+    value v28: Int(64) @block5
+    value v29: Int(64) @block5
+    value v30: Int(64) @block5
+    value v31: TypeRef("?") @block6
+    value v32: Bool @block6
+    value v33: Int(64) @block6
+    value v34: Int(64) @block6
+    value v35: Generic { name: "String", args: [] } @block6
     Load %0 <- int(0)
     Load %1 <- int(1)
     Load %2 <- int(0)

@@ -20,6 +20,7 @@ pub mod overload_resolutions;
 mod record_evidence_layout;
 pub mod release_plan_spans;
 pub mod snapshot;
+pub mod ssa;
 pub mod type_decl;
 mod type_decl_quantity;
 pub mod values;

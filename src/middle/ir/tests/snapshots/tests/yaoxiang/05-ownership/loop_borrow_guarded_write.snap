@@ -26,41 +26,42 @@ module
     slot[3] reads : Int(64) @depth1
     slot[4] x : Int(64) @depth2
     locals_total=8
-    values_total=34
+    values_total=35
     value v0: Int(64) @block0
     value v1: Int(64) @block0
     value v2: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
     value v3: Void @block0
-    value v4: Bool @block0
-    value v5: Int(64) @block0
-    value v6: Int(64) @block0
-    value v7: Ref { mutable: false, inner: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) } @block0
-    value v8: TypeRef("?") @block0
-    value v9: Bool @block0
-    value v10: Int(64) @block0
-    value v11: Int(64) @block0
-    value v12: Generic { name: "String", args: [] } @block0
-    value v13: Int(64) @block0
-    value v14: Int(64) @block0
-    value v15: Int(64) @block0
-    value v16: Int(64) @block0
-    value v17: Void @block0
-    value v18: Bool @block0
-    value v19: Int(64) @block0
-    value v20: Int(64) @block0
-    value v21: Void @block0
-    value v22: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
-    value v23: TypeRef("?") @block0
-    value v24: Bool @block0
-    value v25: Int(64) @block0
-    value v26: Int(64) @block0
-    value v27: Generic { name: "String", args: [] } @block0
-    value v28: TypeRef("?") @block0
-    value v29: Bool @block0
-    value v30: TypeRef("?") @block0
-    value v31: Int(64) @block0
-    value v32: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
-    value v33: Generic { name: "String", args: [] } @block0
+    value v4: Bool @block1
+    value v5: Int(64) @block1
+    value v6: Int(64) @block1
+    value v7: Ref { mutable: false, inner: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) } @block2
+    value v8: TypeRef("?") @block2
+    value v9: Bool @block2
+    value v10: Int(64) @block2
+    value v11: Int(64) @block2
+    value v12: Generic { name: "String", args: [] } @block2
+    value v13: Int(64) @block2
+    value v14: Int(64) @block2
+    value v15: Int(64) @block2
+    value v16: Int(64) @block2
+    value v17: Void @block3
+    value v18: Bool @block2
+    value v19: Int(64) @block2
+    value v20: Int(64) @block2
+    value v21: Void @block3
+    value v22: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block3
+    value v23: TypeRef("?") @block5
+    value v24: Bool @block5
+    value v25: Int(64) @block5
+    value v26: Int(64) @block5
+    value v27: Generic { name: "String", args: [] } @block5
+    value v28: TypeRef("?") @block5
+    value v29: Bool @block5
+    value v30: TypeRef("?") @block5
+    value v31: Int(64) @block5
+    value v32: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block5
+    value v33: Generic { name: "String", args: [] } @block5
+    value v34: Void @block4
     Load v0 <- int(1)
     Load v1 <- int(2)
     Call %0 <- string("Point") [v0, v1] (def=d0)
@@ -95,7 +96,7 @@ module
     Drop %0
     Move v17 <- v21
     Jmp -> instr(34)
-    Load v3 <- void
+    Load v34 <- void
     Drop %4
     Jmp -> instr(8)
     Load v25 <- %3

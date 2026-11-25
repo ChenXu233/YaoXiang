@@ -6,8 +6,8 @@ module
     slot[3] name : Int(64) @depth1
     slot[4] age : Int(64) @depth1
     slot[5] city : Int(64) @depth1
-    locals_total=11
-    values_total=26
+    locals_total=10
+    values_total=27
     value v0: TypeRef("?") @block0
     value v1: TypeRef("?") @block0
     value v2: Generic { name: "String", args: [] } @block0
@@ -34,6 +34,7 @@ module
     value v23: TypeRef("?") @block0
     value v24: Bool @block0
     value v25: Generic { name: "String", args: [] } @block0
+    value v26: TypeRef("?") @block0
     Load %0 <- string("Alice")
     Load %1 <- int(30)
     Load %2 <- string("Beijing")
@@ -42,13 +43,13 @@ module
     Load v3 <- %1
     Load v4 <- %2
     NewTuple v1 <- [v2, v3, v4]
-    Move v0 <- v1
+    Move v26 <- v1
     Load v5 <- int(0)
-    LoadIndex %3 <- v0[v5]
+    LoadIndex %3 <- v26[v5]
     Load v6 <- int(1)
-    LoadIndex %4 <- v0[v6]
+    LoadIndex %4 <- v26[v6]
     Load v7 <- int(2)
-    LoadIndex %5 <- v0[v7]
+    LoadIndex %5 <- v26[v7]
     Load v9 <- bool(true)
     Load v10 <- string("name received from spawn")
     Call v8 <- string("std.assert.assert") [v9, v10] (def=d0)

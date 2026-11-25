@@ -34,29 +34,32 @@ module
     slot[0] N : Int(64) @depth1
     slot[1] k : Int(64) @depth1
     locals_total=8
-    values_total=15
+    values_total=18
     value v0: Void @block0
     value v1: Int(64) @block0
     value v2: Int(64) @block0
     value v3: Bool @block0
-    value v4: Int(64) @block0
-    value v5: Int(64) @block0
-    value v6: Int(64) @block0
-    value v7: TypeRef("?") @block0
-    value v8: Int(64) @block0
-    value v9: Int(64) @block0
-    value v10: Int(64) @block0
-    value v11: Fn { params: [TypeRef("N")], return_type: Int(64) } @block0
-    value v12: Int(64) @block0
-    value v13: Int(64) @block0
-    value v14: Int(64) @block0
+    value v4: Int(64) @block1
+    value v5: Int(64) @block2
+    value v6: Int(64) @block2
+    value v7: TypeRef("?") @block2
+    value v8: Int(64) @block2
+    value v9: Int(64) @block2
+    value v10: Int(64) @block2
+    value v11: Fn { params: [TypeRef("N")], return_type: Int(64) } @block2
+    value v12: Int(64) @block2
+    value v13: Int(64) @block2
+    value v14: Int(64) @block2
+    value v15: Void @block1
+    value v16: Void @block2
+    value v17: Void @block3
     Load v0 <- void
     Load v1 <- %0
     Load v2 <- int(0)
     Eq v3 <- v1, v2
     JmpIfNot v3 -> instr(8)
     Load v4 <- int(1)
-    Move v0 <- v4
+    Move v15 <- v4
     Jmp -> instr(20)
     Load v6 <- %0
     Load v9 <- %0
@@ -68,9 +71,10 @@ module
     Call v11 <- string("factorial") [v12] (def=d1)
     CallDyn v7 <- v11 [v8]
     Mul v5 <- v6, v7
-    Move v0 <- v5
+    Move v16 <- v5
     Jmp -> instr(20)
-    Ret v0
+    Phi v17 <- [1: v15, 2: v16]
+    Ret v17
     Ret v0
   init (locals=0)
     Call %0 <- string("main") [] (def=d3)

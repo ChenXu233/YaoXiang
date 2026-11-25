@@ -1,7 +1,7 @@
 module
   fn main() -> Void
     locals_total=4
-    values_total=140
+    values_total=146
     value v0: TypeRef("?") @block0
     value v1: Bool @block0
     value v2: TypeRef("?") @block0
@@ -118,30 +118,36 @@ module
     value v113: Float(64) @block0
     value v114: Float(64) @block0
     value v115: Generic { name: "String", args: [] } @block0
-    value v116: TypeRef("?") @block0
-    value v117: Bool @block0
+    value v116: TypeRef("?") @block3
+    value v117: Bool @block1
     value v118: Bool @block0
     value v119: Float(64) @block0
     value v120: Float(64) @block0
-    value v121: Float(64) @block0
-    value v122: Float(64) @block0
-    value v123: Generic { name: "String", args: [] } @block0
-    value v124: TypeRef("?") @block0
-    value v125: Bool @block0
-    value v126: Bool @block0
-    value v127: Float(64) @block0
-    value v128: Float(64) @block0
-    value v129: Float(64) @block0
-    value v130: Float(64) @block0
-    value v131: Generic { name: "String", args: [] } @block0
-    value v132: TypeRef("?") @block0
-    value v133: Bool @block0
-    value v134: Bool @block0
-    value v135: Float(64) @block0
-    value v136: Float(64) @block0
-    value v137: Float(64) @block0
-    value v138: Float(64) @block0
-    value v139: Generic { name: "String", args: [] } @block0
+    value v121: Float(64) @block1
+    value v122: Float(64) @block1
+    value v123: Generic { name: "String", args: [] } @block3
+    value v124: TypeRef("?") @block6
+    value v125: Bool @block4
+    value v126: Bool @block3
+    value v127: Float(64) @block3
+    value v128: Float(64) @block3
+    value v129: Float(64) @block4
+    value v130: Float(64) @block4
+    value v131: Generic { name: "String", args: [] } @block6
+    value v132: TypeRef("?") @block9
+    value v133: Bool @block7
+    value v134: Bool @block6
+    value v135: Float(64) @block6
+    value v136: Float(64) @block6
+    value v137: Float(64) @block7
+    value v138: Float(64) @block7
+    value v139: Generic { name: "String", args: [] } @block9
+    value v140: Bool @block2
+    value v141: Bool @block5
+    value v142: Bool @block8
+    value v143: Bool @block3
+    value v144: Bool @block6
+    value v145: Bool @block9
     Load v5 <- int(5)
     Neg v4 <- v5
     Call v2 <- string("std.math.abs") [v4] (def=d0)
@@ -266,31 +272,34 @@ module
     Load v122 <- float(4614275588213125939)
     Lt v117 <- v121, v122
     Jmp -> instr(125)
-    Load v117 <- bool(false)
+    Load v140 <- bool(false)
+    Phi v143 <- [1: v117, 2: v140]
     Load v123 <- string("PI in range")
-    Call v116 <- string("std.assert.assert") [v117, v123] (def=d1)
+    Call v116 <- string("std.assert.assert") [v143, v123] (def=d1)
     Call v127 <- string("std.math.E") [] (def=d17)
     Load v128 <- float(4613284796295104430)
     Gt v126 <- v127, v128
-    JmpIfNot v126 -> instr(135)
+    JmpIfNot v126 -> instr(136)
     Call v129 <- string("std.math.E") [] (def=d17)
     Load v130 <- float(4613307314293241283)
     Lt v125 <- v129, v130
-    Jmp -> instr(136)
-    Load v125 <- bool(false)
+    Jmp -> instr(137)
+    Load v141 <- bool(false)
+    Phi v144 <- [4: v125, 5: v141]
     Load v131 <- string("E in range")
-    Call v124 <- string("std.assert.assert") [v125, v131] (def=d1)
+    Call v124 <- string("std.assert.assert") [v144, v131] (def=d1)
     Call v135 <- string("std.math.TAU") [] (def=d18)
     Load v136 <- float(4618756669842359583)
     Gt v134 <- v135, v136
-    JmpIfNot v134 -> instr(146)
+    JmpIfNot v134 -> instr(148)
     Call v137 <- string("std.math.TAU") [] (def=d18)
     Load v138 <- float(4618767928841428009)
     Lt v133 <- v137, v138
-    Jmp -> instr(147)
-    Load v133 <- bool(false)
+    Jmp -> instr(149)
+    Load v142 <- bool(false)
+    Phi v145 <- [7: v133, 8: v142]
     Load v139 <- string("TAU in range")
-    Call v132 <- string("std.assert.assert") [v133, v139] (def=d1)
+    Call v132 <- string("std.assert.assert") [v145, v139] (def=d1)
     Ret v132
   init (locals=0)
     Call %0 <- string("main") [] (def=d19)

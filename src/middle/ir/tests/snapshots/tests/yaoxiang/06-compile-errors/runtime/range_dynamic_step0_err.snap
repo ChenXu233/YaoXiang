@@ -4,7 +4,7 @@ module
     slot[1] r : Int(64) @depth1
     slot[2] i : Int(64) @depth2
     locals_total=8
-    values_total=15
+    values_total=17
     value v0: Int(64) @block0
     value v1: Int(64) @block0
     value v2: Int(64) @block0
@@ -14,12 +14,14 @@ module
     value v6: TypeRef("?") @block0
     value v7: Int(64) @block0
     value v8: Bool @block0
-    value v9: TypeRef("?") @block0
-    value v10: TypeRef("?") @block0
-    value v11: Void @block0
-    value v12: Int(64) @block0
-    value v13: Int(64) @block0
-    value v14: TypeRef("?") @block0
+    value v9: TypeRef("?") @block3
+    value v10: TypeRef("?") @block4
+    value v11: Void @block4
+    value v12: Int(64) @block4
+    value v13: Int(64) @block4
+    value v14: TypeRef("?") @block4
+    value v15: TypeRef("?") @block1
+    value v16: TypeRef("?") @block3
     Load %0 <- int(0)
     Load v0 <- int(1)
     Load v1 <- int(10)
@@ -31,12 +33,13 @@ module
     Load v7 <- int(0)
     Eq v8 <- v6, v7
     JmpIfNot v8 -> instr(13)
-    VariantPayload v5 <- v5 : Result
+    VariantPayload v15 <- v5 : Result
     Jmp -> instr(14)
     Call _ <- string("std.range.abort_invalid_step") [v4] (def=d1)
-    Call v9 <- string("std.range.has_next") [v5] (def=d2)
-    JmpIfNot v9 -> instr(23)
-    Call v10 <- string("std.range.next") [v5] (def=d3)
+    Phi v16 <- [1: v15, 2: v5, 4: v16]
+    Call v9 <- string("std.range.has_next") [v16] (def=d2)
+    JmpIfNot v9 -> instr(24)
+    Call v10 <- string("std.range.next") [v16] (def=d3)
     Store %2 <- v10
     Load v12 <- %2
     Load v13 <- %2

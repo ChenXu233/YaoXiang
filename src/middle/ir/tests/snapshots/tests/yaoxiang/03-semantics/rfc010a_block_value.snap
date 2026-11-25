@@ -32,13 +32,15 @@ module
     Ret v2
   fn tail_if() -> Int(64)
     locals_total=3
-    values_total=6
-    value v0: Int(64) @block0
+    values_total=8
+    value v0: Int(64) @block1
     value v1: Bool @block0
     value v2: Int(64) @block0
     value v3: Int(64) @block0
-    value v4: Int(64) @block0
-    value v5: Int(64) @block0
+    value v4: Int(64) @block1
+    value v5: Int(64) @block2
+    value v6: Int(64) @block2
+    value v7: Int(64) @block3
     Load v2 <- int(1)
     Load v3 <- int(1)
     Eq v1 <- v2, v3
@@ -47,18 +49,22 @@ module
     Move v0 <- v4
     Jmp -> instr(9)
     Load v5 <- int(6)
-    Move v0 <- v5
-    Ret v0
+    Move v6 <- v5
+    Phi v7 <- [1: v0, 2: v6]
+    Ret v7
   fn tail_match(Int(64)) -> Int(64)
     slot[0] x : Int(64) @depth1
-    locals_total=5
-    values_total=6
+    locals_total=4
+    values_total=9
     value v0: Void @block0
     value v1: Void @block0
     value v2: Int(64) @block0
     value v3: Bool @block0
-    value v4: Int(64) @block0
-    value v5: Int(64) @block0
+    value v4: Int(64) @block1
+    value v5: Int(64) @block2
+    value v6: Void @block1
+    value v7: Void @block2
+    value v8: Void @block3
     Load %0 <- arg%0
     Load v0 <- void
     Load v1 <- %0
@@ -66,12 +72,13 @@ module
     Eq v3 <- v1, v2
     JmpIfNot v3 -> instr(9)
     Load v4 <- int(10)
-    Move v0 <- v4
+    Move v6 <- v4
     Jmp -> instr(12)
     Load v5 <- int(20)
-    Move v0 <- v5
+    Move v7 <- v5
     Jmp -> instr(12)
-    Ret v0
+    Phi v8 <- [1: v6, 2: v7]
+    Ret v8
   fn tail_assign() -> Void
     slot[0] x : Int(64) @depth1
     locals_total=3
@@ -87,17 +94,17 @@ module
     slot[1] y : Int(64) @depth1
     locals_total=5
     values_total=11
-    value v0: Int(64) @block0
+    value v0: Int(64) @block1
     value v1: Bool @block0
     value v2: Int(64) @block0
     value v3: Int(64) @block0
-    value v4: Int(64) @block0
+    value v4: Int(64) @block1
     value v5: TypeRef("?") @block0
-    value v6: Int(64) @block0
-    value v7: Bool @block0
-    value v8: Int(64) @block0
-    value v9: Int(64) @block0
-    value v10: Int(64) @block0
+    value v6: Int(64) @block3
+    value v7: Bool @block2
+    value v8: Int(64) @block2
+    value v9: Int(64) @block2
+    value v10: Int(64) @block3
     Load v2 <- int(1)
     Load v3 <- int(1)
     Eq v1 <- v2, v3
@@ -124,8 +131,8 @@ module
     value v0: Bool @block0
     value v1: Int(64) @block0
     value v2: Int(64) @block0
-    value v3: Int(64) @block0
-    value v4: Int(64) @block0
+    value v3: Int(64) @block1
+    value v4: Int(64) @block2
     Load %0 <- arg%0
     Load v1 <- %0
     Load v2 <- int(0)

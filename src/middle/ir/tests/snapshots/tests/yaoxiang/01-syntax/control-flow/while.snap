@@ -6,29 +6,29 @@ module
     locals_total=6
     values_total=24
     value v0: Void @block0
-    value v1: Bool @block0
-    value v2: Int(64) @block0
-    value v3: Int(64) @block0
-    value v4: Int(64) @block0
-    value v5: Int(64) @block0
-    value v6: TypeRef("?") @block0
-    value v7: Bool @block0
-    value v8: Int(64) @block0
-    value v9: Int(64) @block0
-    value v10: Generic { name: "String", args: [] } @block0
-    value v11: Void @block0
-    value v12: Bool @block0
-    value v13: Int(64) @block0
-    value v14: Int(64) @block0
-    value v15: Int(64) @block0
-    value v16: Int(64) @block0
-    value v17: Int(64) @block0
-    value v18: Int(64) @block0
-    value v19: TypeRef("?") @block0
-    value v20: Bool @block0
-    value v21: Int(64) @block0
-    value v22: Int(64) @block0
-    value v23: Generic { name: "String", args: [] } @block0
+    value v1: Bool @block1
+    value v2: Int(64) @block1
+    value v3: Int(64) @block1
+    value v4: Int(64) @block2
+    value v5: Int(64) @block2
+    value v6: TypeRef("?") @block3
+    value v7: Bool @block3
+    value v8: Int(64) @block3
+    value v9: Int(64) @block3
+    value v10: Generic { name: "String", args: [] } @block3
+    value v11: Void @block3
+    value v12: Bool @block4
+    value v13: Int(64) @block4
+    value v14: Int(64) @block4
+    value v15: Int(64) @block5
+    value v16: Int(64) @block5
+    value v17: Int(64) @block5
+    value v18: Int(64) @block5
+    value v19: TypeRef("?") @block6
+    value v20: Bool @block6
+    value v21: Int(64) @block6
+    value v22: Int(64) @block6
+    value v23: Generic { name: "String", args: [] } @block6
     Load %0 <- int(3)
     Load v0 <- void
     Load v2 <- %0

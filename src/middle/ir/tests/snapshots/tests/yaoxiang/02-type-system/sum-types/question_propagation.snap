@@ -6,13 +6,13 @@ module
     values_total=9
     value v0: Ref { mutable: false, inner: Generic { name: "String", args: [] } } @block0
     value v1: TypeRef("?") @block0
-    value v2: TypeRef("?") @block0
-    value v3: TypeRef("?") @block0
-    value v4: TypeRef("?") @block0
-    value v5: TypeRef("?") @block0
-    value v6: Int(64) @block0
-    value v7: Int(64) @block0
-    value v8: Int(64) @block0
+    value v2: TypeRef("?") @block1
+    value v3: TypeRef("?") @block2
+    value v4: TypeRef("?") @block2
+    value v5: TypeRef("?") @block3
+    value v6: Int(64) @block3
+    value v7: Int(64) @block3
+    value v8: Int(64) @block3
     Load %0 <- arg%0
     Load v0 <- %0
     Call %1 <- string("std.string.parse_int") [v0] (def=d0)
@@ -38,13 +38,13 @@ module
     values_total=9
     value v0: Ref { mutable: false, inner: Generic { name: "String", args: [] } } @block0
     value v1: TypeRef("?") @block0
-    value v2: TypeRef("?") @block0
-    value v3: TypeRef("?") @block0
-    value v4: TypeRef("?") @block0
-    value v5: TypeRef("?") @block0
-    value v6: Int(64) @block0
-    value v7: Int(64) @block0
-    value v8: Int(64) @block0
+    value v2: TypeRef("?") @block1
+    value v3: TypeRef("?") @block2
+    value v4: TypeRef("?") @block2
+    value v5: TypeRef("?") @block3
+    value v6: Int(64) @block3
+    value v7: Int(64) @block3
+    value v8: Int(64) @block3
     Load %0 <- arg%0
     Load v0 <- %0
     Call %1 <- string("parse_double") [v0] (def=d1)

@@ -9,7 +9,7 @@
 //! 4. 值钉子固定落具名槽；5. 预算闸按 `frame_slots` 判。
 
 use crate::middle::ir::ir::{BasicBlock, ConstValue, Instruction, Operand, ValueId, ValueInfo};
-use crate::middle::lower::regalloc::{allocate_value_slots, Allocation};
+use crate::middle::lower::regalloc::{allocate_value_slots, break_phi_copy_cycles, Allocation};
 use crate::util::span::Span;
 
 // ── 辅助函数（规则 5.3：集中在文件顶部）──────────────
@@ -272,4 +272,54 @@ fn test_allocator_budget_is_judged_by_frame_slots_not_value_count() {
         Some((256, 255)),
         "预算报告必须给 required/limit"
     );
+}
+// ── 判据 6：并行拷贝环打破 ─────────────────────
+
+/// translator 的 Phi 组是并行语义：真 2-cycle 必须靠临时槽破环。分配后把环中
+/// 一个 Phi dst 移到新顶端槽，不改变并行结果。
+#[test]
+fn test_phi_cycle_breaker_moves_one_destination_to_fresh_slot() {
+    // Arrange：块 1 两个 Phi 在前驱 0 上形成 (5<-6)、(6<-5) 的 2-cycle。
+    let blocks = vec![
+        block(0, vec![load_value(2, 1), load_value(3, 2), jmp(3)], vec![1]),
+        block(
+            1,
+            vec![
+                Instruction::Phi {
+                    dst: value(0),
+                    incoming: vec![(0, value(2))],
+                    span: Span::dummy(),
+                },
+                Instruction::Phi {
+                    dst: value(1),
+                    incoming: vec![(0, value(3))],
+                    span: Span::dummy(),
+                },
+                ret_value(0),
+            ],
+            Vec::new(),
+        ),
+    ];
+    let mut value_slots = vec![5usize, 6, 6, 5];
+    let mut frame_slots = 7usize;
+
+    // Act
+    break_phi_copy_cycles(&blocks, &mut value_slots, &mut frame_slots, 2, 255)
+        .expect("环打破不应超预算");
+
+    // Assert
+    let moves = [
+        (value_slots[0], value_slots[2]),
+        (value_slots[1], value_slots[3]),
+    ];
+    for (index, (dst_slot, _)) in moves.iter().enumerate() {
+        assert!(
+            !moves[index + 1..]
+                .iter()
+                .any(|(_, src_slot)| src_slot == dst_slot),
+            "环打破后不得再有前序写、后序读同一槽：{moves:?}"
+        );
+    }
+    assert_eq!(value_slots[0], 7, "环中第一个 Phi dst 必须移到新顶端槽");
+    assert_eq!(frame_slots, 8, "新槽必须计入 frame_slots");
 }

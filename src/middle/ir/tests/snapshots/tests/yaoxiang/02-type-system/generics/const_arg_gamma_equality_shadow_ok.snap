@@ -12,27 +12,29 @@ module
     slot[1] r : Int(64) @depth3
     slot[2] y : Int(64) @depth4
     locals_total=7
-    values_total=20
-    value v0: Int(64) @block0
+    values_total=22
+    value v0: Int(64) @block5
     value v1: Bool @block0
     value v2: Int(64) @block0
     value v3: Int(64) @block0
-    value v4: TypeRef("?") @block0
-    value v5: TypeRef("?") @block0
-    value v6: Int(64) @block0
-    value v7: TypeRef("?") @block0
-    value v8: Int(64) @block0
-    value v9: Bool @block0
-    value v10: TypeRef("?") @block0
-    value v11: Int(64) @block0
-    value v12: TypeRef("?") @block0
-    value v13: Int(64) @block0
-    value v14: Bool @block0
-    value v15: Int(64) @block0
-    value v16: Int(64) @block0
-    value v17: Fn { params: [TypeRef("N")], return_type: Int(64) } @block0
-    value v18: Int(64) @block0
-    value v19: Int(64) @block0
+    value v4: TypeRef("?") @block5
+    value v5: TypeRef("?") @block1
+    value v6: Int(64) @block1
+    value v7: TypeRef("?") @block1
+    value v8: Int(64) @block1
+    value v9: Bool @block1
+    value v10: TypeRef("?") @block2
+    value v11: Int(64) @block2
+    value v12: TypeRef("?") @block3
+    value v13: Int(64) @block3
+    value v14: Bool @block3
+    value v15: Int(64) @block4
+    value v16: Int(64) @block5
+    value v17: Fn { params: [TypeRef("N")], return_type: Int(64) } @block5
+    value v18: Int(64) @block5
+    value v19: Int(64) @block6
+    value v20: Int(64) @block6
+    value v21: Int(64) @block7
     Load %0 <- arg%0
     Load v2 <- %0
     Load v3 <- int(42)
@@ -65,8 +67,9 @@ module
     Move v0 <- v4
     Jmp -> instr(33)
     Load v19 <- int(0)
-    Move v0 <- v19
-    Ret v0
+    Move v20 <- v19
+    Phi v21 <- [5: v0, 6: v20]
+    Ret v21
   fn own_fact() -> Int(64)
     slot[0] r : Int(64) @depth1
     slot[1] y : Int(64) @depth2
@@ -77,21 +80,21 @@ module
     value v2: TypeRef("?") @block0
     value v3: Int(64) @block0
     value v4: Bool @block0
-    value v5: TypeRef("?") @block0
-    value v6: TypeRef("?") @block0
-    value v7: TypeRef("?") @block0
-    value v8: Bool @block0
-    value v9: Int(64) @block0
-    value v10: Int(64) @block0
-    value v11: Generic { name: "String", args: [] } @block0
-    value v12: Int(64) @block0
-    value v13: Fn { params: [TypeRef("N")], return_type: Int(64) } @block0
-    value v14: Int(64) @block0
-    value v15: TypeRef("?") @block0
-    value v16: Int(64) @block0
-    value v17: Bool @block0
-    value v18: Int(64) @block0
-    value v19: Int(64) @block0
+    value v5: TypeRef("?") @block1
+    value v6: TypeRef("?") @block1
+    value v7: TypeRef("?") @block1
+    value v8: Bool @block1
+    value v9: Int(64) @block1
+    value v10: Int(64) @block1
+    value v11: Generic { name: "String", args: [] } @block1
+    value v12: Int(64) @block1
+    value v13: Fn { params: [TypeRef("N")], return_type: Int(64) } @block1
+    value v14: Int(64) @block1
+    value v15: TypeRef("?") @block2
+    value v16: Int(64) @block2
+    value v17: Bool @block2
+    value v18: Int(64) @block3
+    value v19: Int(64) @block4
     Load %0 <- void
     Load v1 <- int(7)
     CreateVariant v0 <- Option::0 v1
@@ -128,30 +131,34 @@ module
     slot[2] r : Int(64) @depth3
     slot[3] y : Int(64) @depth4
     locals_total=8
-    values_total=23
-    value v0: Int(64) @block0
-    value v1: Bool @block0
+    values_total=27
+    value v0: Int(64) @block8
+    value v1: Bool @block1
     value v2: Bool @block0
     value v3: Int(64) @block0
     value v4: Int(64) @block0
-    value v5: Int(64) @block0
-    value v6: Int(64) @block0
-    value v7: TypeRef("?") @block0
-    value v8: TypeRef("?") @block0
-    value v9: Int(64) @block0
-    value v10: TypeRef("?") @block0
-    value v11: Int(64) @block0
-    value v12: Bool @block0
-    value v13: TypeRef("?") @block0
-    value v14: Int(64) @block0
-    value v15: TypeRef("?") @block0
-    value v16: Int(64) @block0
-    value v17: Bool @block0
-    value v18: Int(64) @block0
-    value v19: Int(64) @block0
-    value v20: Fn { params: [TypeRef("N")], return_type: Int(64) } @block0
-    value v21: Int(64) @block0
-    value v22: Int(64) @block0
+    value v5: Int(64) @block1
+    value v6: Int(64) @block1
+    value v7: TypeRef("?") @block8
+    value v8: TypeRef("?") @block4
+    value v9: Int(64) @block4
+    value v10: TypeRef("?") @block4
+    value v11: Int(64) @block4
+    value v12: Bool @block4
+    value v13: TypeRef("?") @block5
+    value v14: Int(64) @block5
+    value v15: TypeRef("?") @block6
+    value v16: Int(64) @block6
+    value v17: Bool @block6
+    value v18: Int(64) @block7
+    value v19: Int(64) @block8
+    value v20: Fn { params: [TypeRef("N")], return_type: Int(64) } @block8
+    value v21: Int(64) @block8
+    value v22: Int(64) @block9
+    value v23: Int(64) @block9
+    value v24: Bool @block2
+    value v25: Bool @block3
+    value v26: Int(64) @block10
     Load %0 <- arg%0
     Load %1 <- arg%1
     Load v3 <- %0
@@ -162,37 +169,39 @@ module
     Load v6 <- int(7)
     Eq v1 <- v5, v6
     Jmp -> instr(11)
-    Load v1 <- bool(false)
-    JmpIfNot v1 -> instr(38)
+    Load v24 <- bool(false)
+    Phi v25 <- [1: v1, 2: v24]
+    JmpIfNot v25 -> instr(39)
     Load %2 <- void
     Load v9 <- int(0)
     CreateVariant v8 <- Option::0 v9
     VariantTag v10 <- v8 : Option
     Load v11 <- int(0)
     Eq v12 <- v10, v11
-    JmpIfNot v12 -> instr(24)
+    JmpIfNot v12 -> instr(25)
     VariantPayload v13 <- v8 : Option
     Move %3 <- v13
     Load v14 <- %3
     Move %2 <- v14
-    Jmp -> instr(31)
+    Jmp -> instr(32)
     VariantTag v15 <- v8 : Option
     Load v16 <- int(1)
     Eq v17 <- v15, v16
-    JmpIfNot v17 -> instr(31)
+    JmpIfNot v17 -> instr(32)
     Load v18 <- int(0)
     Move %2 <- v18
-    Jmp -> instr(31)
+    Jmp -> instr(32)
     Load v19 <- int(7)
     Load v21 <- %1
     Call v20 <- string("f") [v21] (def=d1)
     CallDyn v7 <- v20 [v19]
     Drop %2
     Move v0 <- v7
-    Jmp -> instr(40)
+    Jmp -> instr(41)
     Load v22 <- int(0)
-    Move v0 <- v22
-    Ret v0
+    Move v23 <- v22
+    Phi v26 <- [8: v0, 9: v23]
+    Ret v26
   fn main() -> Void
     slot[0] a : Int(64) @depth1
     slot[1] b : Int(64) @depth1

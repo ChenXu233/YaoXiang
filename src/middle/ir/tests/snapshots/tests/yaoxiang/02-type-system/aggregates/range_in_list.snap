@@ -11,7 +11,7 @@ module
     slot[8] pairs : Int(64) @depth1
     slot[9] p : Int(64) @depth2
     locals_total=16
-    values_total=75
+    values_total=79
     value v0: TypeRef("?") @block0
     value v1: Int(64) @block0
     value v2: Int(64) @block0
@@ -24,69 +24,74 @@ module
     value v9: Int(64) @block0
     value v10: Generic { name: "Vec", args: [Generic { name: "Range", args: [Int(64)] }] } @block0
     value v11: TypeRef("?") @block0
-    value v12: TypeRef("?") @block0
-    value v13: TypeRef("?") @block0
-    value v14: Generic { name: "Range", args: [Int(64)] } @block0
-    value v15: TypeRef("?") @block0
-    value v16: TypeRef("?") @block0
-    value v17: Int(64) @block0
-    value v18: Bool @block0
-    value v19: TypeRef("?") @block0
-    value v20: TypeRef("?") @block0
-    value v21: Int(64) @block0
-    value v22: Int(64) @block0
-    value v23: TypeRef("?") @block0
-    value v24: Bool @block0
-    value v25: Int(64) @block0
-    value v26: Int(64) @block0
-    value v27: Generic { name: "String", args: [] } @block0
-    value v28: TypeRef("?") @block0
-    value v29: Int(64) @block0
-    value v30: Int(64) @block0
-    value v31: Int(64) @block0
-    value v32: Int(64) @block0
-    value v33: Int(64) @block0
-    value v34: TypeRef("?") @block0
-    value v35: Int(64) @block0
-    value v36: Int(64) @block0
-    value v37: Int(64) @block0
-    value v38: Int(64) @block0
-    value v39: Int(64) @block0
-    value v40: Generic { name: "Vec", args: [Generic { name: "Vec", args: [Int(64)] }] } @block0
-    value v41: TypeRef("?") @block0
-    value v42: TypeRef("?") @block0
-    value v43: TypeRef("?") @block0
-    value v44: Generic { name: "Vec", args: [Int(64)] } @block0
-    value v45: TypeRef("?") @block0
-    value v46: TypeRef("?") @block0
-    value v47: TypeRef("?") @block0
-    value v48: Int(64) @block0
-    value v49: Int(64) @block0
-    value v50: TypeRef("?") @block0
-    value v51: Bool @block0
-    value v52: Int(64) @block0
-    value v53: Int(64) @block0
-    value v54: Generic { name: "String", args: [] } @block0
-    value v55: TypeRef("?") @block0
-    value v56: Int(64) @block0
-    value v57: Generic { name: "String", args: [] } @block0
-    value v58: Int(64) @block0
-    value v59: TypeRef("?") @block0
-    value v60: Int(64) @block0
-    value v61: Generic { name: "String", args: [] } @block0
-    value v62: Int(64) @block0
+    value v12: TypeRef("?") @block1
+    value v13: TypeRef("?") @block2
+    value v14: Generic { name: "Range", args: [Int(64)] } @block2
+    value v15: TypeRef("?") @block2
+    value v16: TypeRef("?") @block2
+    value v17: Int(64) @block2
+    value v18: Bool @block2
+    value v19: TypeRef("?") @block5
+    value v20: TypeRef("?") @block6
+    value v21: Int(64) @block6
+    value v22: Int(64) @block6
+    value v23: TypeRef("?") @block8
+    value v24: Bool @block8
+    value v25: Int(64) @block8
+    value v26: Int(64) @block8
+    value v27: Generic { name: "String", args: [] } @block8
+    value v28: TypeRef("?") @block8
+    value v29: Int(64) @block8
+    value v30: Int(64) @block8
+    value v31: Int(64) @block8
+    value v32: Int(64) @block8
+    value v33: Int(64) @block8
+    value v34: TypeRef("?") @block8
+    value v35: Int(64) @block8
+    value v36: Int(64) @block8
+    value v37: Int(64) @block8
+    value v38: Int(64) @block8
+    value v39: Int(64) @block8
+    value v40: Generic { name: "Vec", args: [Generic { name: "Vec", args: [Int(64)] }] } @block8
+    value v41: TypeRef("?") @block8
+    value v42: TypeRef("?") @block9
+    value v43: TypeRef("?") @block10
+    value v44: Generic { name: "Vec", args: [Int(64)] } @block10
+    value v45: TypeRef("?") @block10
+    value v46: TypeRef("?") @block11
+    value v47: TypeRef("?") @block12
+    value v48: Int(64) @block12
+    value v49: Int(64) @block12
+    value v50: TypeRef("?") @block14
+    value v51: Bool @block14
+    value v52: Int(64) @block14
+    value v53: Int(64) @block14
+    value v54: Generic { name: "String", args: [] } @block14
+    value v55: TypeRef("?") @block14
+    value v56: Int(64) @block14
+    value v57: Generic { name: "String", args: [] } @block14
+    value v58: Int(64) @block14
+    value v59: TypeRef("?") @block14
+    value v60: Int(64) @block14
+    value v61: Generic { name: "String", args: [] } @block14
+    value v62: Int(64) @block14
     value v63: TypeRef("?") @block0
-    value v64: Generic { name: "Vec", args: [Generic { name: "Tuple", args: [Int(64), Generic { name: "String", args: [] }] }] } @block0
-    value v65: TypeRef("?") @block0
-    value v66: TypeRef("?") @block0
-    value v67: TypeRef("?") @block0
-    value v68: TypeRef("?") @block0
-    value v69: Bool @block0
-    value v70: TypeRef("?") @block0
-    value v71: Int(64) @block0
-    value v72: Generic { name: "Tuple", args: [Int(64), Generic { name: "String", args: [] }] } @block0
-    value v73: Int(64) @block0
-    value v74: Generic { name: "String", args: [] } @block0
+    value v64: Generic { name: "Vec", args: [Generic { name: "Tuple", args: [Int(64), Generic { name: "String", args: [] }] }] } @block14
+    value v65: TypeRef("?") @block14
+    value v66: TypeRef("?") @block15
+    value v67: TypeRef("?") @block16
+    value v68: TypeRef("?") @block16
+    value v69: Bool @block16
+    value v70: TypeRef("?") @block16
+    value v71: Int(64) @block16
+    value v72: Generic { name: "Tuple", args: [Int(64), Generic { name: "String", args: [] }] } @block16
+    value v73: Int(64) @block16
+    value v74: Generic { name: "String", args: [] } @block16
+    value v75: TypeRef("?") @block3
+    value v76: TypeRef("?") @block1
+    value v77: TypeRef("?") @block5
+    value v78: TypeRef("?") @block0
+    Load v78 <- void
     AllocArray %0 size=int(2), elem=int(1)
     Load v1 <- int(0)
     Load v2 <- int(3)
@@ -103,8 +108,9 @@ module
     Load %1 <- int(0)
     Load v10 <- %0
     Call v11 <- string("std.list.iter") [v10] (def=d0)
+    Phi v76 <- [0: v78, 7: v77]
     Call v12 <- string("std.list.has_next") [v11] (def=d1)
-    JmpIfNot v12 -> instr(38)
+    JmpIfNot v12 -> instr(41)
     Call v13 <- string("std.list.next") [v11] (def=d2)
     Store %2 <- v13
     Load v14 <- %2
@@ -112,19 +118,20 @@ module
     VariantTag v16 <- v15 : Result
     Load v17 <- int(0)
     Eq v18 <- v16, v17
-    JmpIfNot v18 -> instr(28)
-    VariantPayload v15 <- v15 : Result
-    Jmp -> instr(29)
+    JmpIfNot v18 -> instr(30)
+    VariantPayload v75 <- v15 : Result
+    Jmp -> instr(31)
     Call _ <- string("std.range.abort_invalid_step") [v14] (def=d4)
-    Call v19 <- string("std.range.has_next") [v15] (def=d5)
-    JmpIfNot v19 -> instr(37)
-    Call v20 <- string("std.range.next") [v15] (def=d6)
+    Phi v77 <- [3: v75, 4: v15, 6: v77]
+    Call v19 <- string("std.range.has_next") [v77] (def=d5)
+    JmpIfNot v19 -> instr(40)
+    Call v20 <- string("std.range.next") [v77] (def=d6)
     Store %3 <- v20
     Load v21 <- %1
     Load v22 <- int(1)
     Add %1 <- v21, v22
-    Jmp -> instr(29)
-    Jmp -> instr(16)
+    Jmp -> instr(31)
+    Jmp -> instr(17)
     Load v25 <- %1
     Load v26 <- int(6)
     Eq v24 <- v25, v26
@@ -153,20 +160,20 @@ module
     Load v40 <- %4
     Call v41 <- string("std.list.iter") [v40] (def=d0)
     Call v42 <- string("std.list.has_next") [v41] (def=d1)
-    JmpIfNot v42 -> instr(80)
+    JmpIfNot v42 -> instr(83)
     Call v43 <- string("std.list.next") [v41] (def=d2)
     Store %6 <- v43
     Load v44 <- %6
     Call v45 <- string("std.list.iter") [v44] (def=d0)
     Call v46 <- string("std.list.has_next") [v45] (def=d1)
-    JmpIfNot v46 -> instr(79)
+    JmpIfNot v46 -> instr(82)
     Call v47 <- string("std.list.next") [v45] (def=d2)
     Store %7 <- v47
     Load v48 <- %5
     Load v49 <- %7
     Add %5 <- v48, v49
-    Jmp -> instr(71)
-    Jmp -> instr(65)
+    Jmp -> instr(74)
+    Jmp -> instr(68)
     Load v52 <- %5
     Load v53 <- int(10)
     Eq v51 <- v52, v53
@@ -186,7 +193,7 @@ module
     Load v64 <- %8
     Call v65 <- string("std.list.iter") [v64] (def=d0)
     Call v66 <- string("std.list.has_next") [v65] (def=d1)
-    JmpIfNot v66 -> instr(110)
+    JmpIfNot v66 -> instr(113)
     Call v67 <- string("std.list.next") [v65] (def=d2)
     Store %9 <- v67
     Load v72 <- %9
@@ -196,7 +203,7 @@ module
     Gt v69 <- v70, v71
     Load v74 <- string("tuple element index via loop var")
     Call v68 <- string("std.assert.assert") [v69, v74] (def=d7)
-    Jmp -> instr(98)
+    Jmp -> instr(101)
     Drop %4
     Drop %8
     Drop %0

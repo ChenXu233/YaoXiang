@@ -42,6 +42,7 @@ module
     value v35: Int(64) @block0
     value v36: Generic { name: "String", args: [] } @block0
     value v37: Generic { name: "String", args: [] } @block0
+    Load v31 <- void
     Load v4 <- int(42)
     Call v2 <- string("std.convert.to_string") [v4] (def=d0)
     Load v3 <- string("42")

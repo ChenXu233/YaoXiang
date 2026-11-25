@@ -17,7 +17,7 @@ module
     slot[3] c : Int(64) @depth1
     slot[4] d : Int(64) @depth1
     locals_total=8
-    values_total=29
+    values_total=31
     value v0: TypeRef("?") @block0
     value v1: Bool @block0
     value v2: Generic { name: "String", args: [] } @block0
@@ -39,14 +39,16 @@ module
     value v18: Generic { name: "String", args: [] } @block0
     value v19: Generic { name: "String", args: [] } @block0
     value v20: Generic { name: "String", args: [] } @block0
-    value v21: TypeRef("?") @block0
-    value v22: Bool @block0
+    value v21: TypeRef("?") @block3
+    value v22: Bool @block1
     value v23: Bool @block0
     value v24: Generic { name: "String", args: [] } @block0
     value v25: Generic { name: "String", args: [] } @block0
-    value v26: Generic { name: "String", args: [] } @block0
-    value v27: Generic { name: "String", args: [] } @block0
-    value v28: Generic { name: "String", args: [] } @block0
+    value v26: Generic { name: "String", args: [] } @block1
+    value v27: Generic { name: "String", args: [] } @block1
+    value v28: Generic { name: "String", args: [] } @block3
+    value v29: Bool @block2
+    value v30: Bool @block3
     Load %0 <- string("hello")
     Load %1 <- %0
     Load v2 <- %1
@@ -81,9 +83,10 @@ module
     Load v27 <- string("hello")
     Eq v22 <- v26, v27
     Jmp -> instr(35)
-    Load v22 <- bool(false)
+    Load v29 <- bool(false)
+    Phi v30 <- [1: v22, 2: v29]
     Load v28 <- string("multiple copies coexist")
-    Call v21 <- string("std.assert.assert") [v22, v28] (def=d1)
+    Call v21 <- string("std.assert.assert") [v30, v28] (def=d1)
     Drop %0
     Drop %1
     Drop %3

@@ -445,25 +445,49 @@ impl AstToIrGenerator {
         let span = self.cur_span;
         let values = self.take_body_values(&instructions, params);
         let blocks = crate::middle::ir::ir::partition_blocks(instructions);
+        let pinned = std::mem::take(&mut self.cur_pins);
+        // 7f.1：在块切分之后、值槽分配之前做 SSA 构造。无值表路径（模块
+        // init / 顶层语句）在 construct_ssa 内直接跳过。
+        let entry = blocks.first().map(|block| block.label).unwrap_or(0);
+        let ssa = crate::middle::ir::ssa::construct_ssa(blocks, values, entry, &pinned).map_err(
+            |error| {
+                ErrorCodeDefinition::ir_internal_error(&error.message)
+                    .at(error.span.unwrap_or(span))
+                    .build()
+            },
+        )?;
+        let blocks = ssa.blocks;
+        let values = ssa.values;
+        let pinned = ssa.pins;
         // 具名基址 = 本帧具名槽的上界：高水位与当前计数器取大（语句级回收
         // 可能把 next_temp 回滚到高水位之下，而任何具名分配都抬高两者之一）。
         let named_base = self.temp_high_water.max(self.next_temp);
-        let pinned = std::mem::take(&mut self.cur_pins);
-        let allocation = super::regalloc::allocate_value_slots(
-            &blocks,
-            &values,
-            named_base,
-            &pinned,
-            MAX_REGISTERS,
-        )
-        .map_err(|budget| {
+        let budget_error = |budget: super::regalloc::Budget| {
             ErrorCodeDefinition::register_overflow(
                 &budget.required.to_string(),
                 &budget.limit.to_string(),
             )
             .at(span)
             .build()
-        })?;
+        };
+        let mut allocation = super::regalloc::allocate_value_slots(
+            &blocks,
+            &values,
+            named_base,
+            &pinned,
+            MAX_REGISTERS,
+        )
+        .map_err(budget_error)?;
+        // 7b.3 的 translator 按前驱展开 Phi 组，遇到真并行拷贝环会响亮失败；
+        // 分配后把环中一个 Phi dst 移到新顶端槽，等价于标准 SSA 销毁临时槽。
+        super::regalloc::break_phi_copy_cycles(
+            &blocks,
+            &mut allocation.value_slots,
+            &mut allocation.frame_slots,
+            named_base,
+            MAX_REGISTERS,
+        )
+        .map_err(budget_error)?;
         Ok(FinalizedCodeBody {
             locals: self.take_cur_locals(allocation.frame_slots),
             values,

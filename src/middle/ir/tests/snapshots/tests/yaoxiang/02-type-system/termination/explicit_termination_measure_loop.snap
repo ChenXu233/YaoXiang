@@ -5,12 +5,12 @@ module
     slot[2] acc : Int(64) @depth1
     locals_total=6
     values_total=6
-    value v0: Bool @block0
-    value v1: Int(64) @block0
-    value v2: Int(64) @block0
-    value v3: Int(64) @block0
-    value v4: Int(64) @block0
-    value v5: TypeVar(TypeVar(45)) @block0
+    value v0: Bool @block1
+    value v1: Int(64) @block1
+    value v2: Int(64) @block1
+    value v3: Int(64) @block2
+    value v4: Int(64) @block2
+    value v5: TypeVar(TypeVar(45)) @block3
     Load %0 <- arg%0
     Load %1 <- int(0)
     Load %2 <- void
@@ -33,14 +33,14 @@ module
     slot[2] acc : Int(64) @depth1
     locals_total=6
     values_total=8
-    value v0: Bool @block0
-    value v1: Int(64) @block0
-    value v2: Int(64) @block0
-    value v3: Int(64) @block0
-    value v4: Int(64) @block0
-    value v5: Int(64) @block0
-    value v6: Int(64) @block0
-    value v7: TypeVar(TypeVar(45)) @block0
+    value v0: Bool @block1
+    value v1: Int(64) @block1
+    value v2: Int(64) @block1
+    value v3: Int(64) @block2
+    value v4: Int(64) @block2
+    value v5: Int(64) @block2
+    value v6: Int(64) @block2
+    value v7: TypeVar(TypeVar(45)) @block3
     Load %0 <- arg%0
     Load %1 <- int(0)
     Load %2 <- void

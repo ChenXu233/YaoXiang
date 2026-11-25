@@ -6,7 +6,7 @@ module
     slot[3] got : Int(64) @depth1
     slot[4] v : Int(64) @depth2
     locals_total=11
-    values_total=19
+    values_total=21
     value v0: Int(64) @block0
     value v1: Generic { name: "Arc", args: [Int(64)] } @block0
     value v2: Generic { name: "Weak", args: [Int(64)] } @block0
@@ -15,17 +15,21 @@ module
     value v5: TypeRef("?") @block0
     value v6: Int(64) @block0
     value v7: Bool @block0
-    value v8: TypeRef("?") @block0
+    value v8: TypeRef("?") @block1
     value v9: TypeRef("?") @block0
-    value v10: TypeRef("?") @block0
-    value v11: Int(64) @block0
-    value v12: Bool @block0
+    value v10: TypeRef("?") @block2
+    value v11: Int(64) @block2
+    value v12: Bool @block2
     value v13: TypeRef("?") @block0
-    value v14: TypeRef("?") @block0
-    value v15: Bool @block0
-    value v16: Int(64) @block0
-    value v17: Int(64) @block0
-    value v18: Generic { name: "String", args: [] } @block0
+    value v14: TypeRef("?") @block4
+    value v15: Bool @block4
+    value v16: Int(64) @block4
+    value v17: Int(64) @block4
+    value v18: Generic { name: "String", args: [] } @block4
+    value v19: Void @block1
+    value v20: Void @block3
+    Load v9 <- void
+    Load v13 <- void
     Load v0 <- int(42)
     RcNew %0 <- v0
     Load v1 <- %0
@@ -38,19 +42,19 @@ module
     VariantTag v5 <- v4 : Option
     Load v6 <- int(0)
     Eq v7 <- v5, v6
-    JmpIfNot v7 -> instr(18)
+    JmpIfNot v7 -> instr(20)
     VariantPayload v8 <- v4 : Option
     Move %4 <- v8
     Load %3 <- int(1)
-    Move v3 <- v9
-    Jmp -> instr(25)
+    Move v19 <- v9
+    Jmp -> instr(27)
     VariantTag v10 <- v4 : Option
     Load v11 <- int(1)
     Eq v12 <- v10, v11
-    JmpIfNot v12 -> instr(25)
+    JmpIfNot v12 -> instr(27)
     Load %3 <- int(0)
-    Move v3 <- v13
-    Jmp -> instr(25)
+    Move v20 <- v13
+    Jmp -> instr(27)
     Load v16 <- %3
     Load v17 <- int(1)
     Eq v15 <- v16, v17

@@ -9,23 +9,23 @@ module
     locals_total=5
     values_total=18
     value v0: Void @block0
-    value v1: Bool @block0
-    value v2: Int(64) @block0
-    value v3: Int(64) @block0
-    value v4: Int(64) @block0
-    value v5: Int(64) @block0
-    value v6: Int(64) @block0
-    value v7: Int(64) @block0
-    value v8: TypeRef("?") @block0
-    value v9: Bool @block0
-    value v10: Int(64) @block0
-    value v11: Int(64) @block0
-    value v12: Generic { name: "String", args: [] } @block0
-    value v13: TypeRef("?") @block0
-    value v14: Bool @block0
-    value v15: Int(64) @block0
-    value v16: Int(64) @block0
-    value v17: Generic { name: "String", args: [] } @block0
+    value v1: Bool @block1
+    value v2: Int(64) @block1
+    value v3: Int(64) @block1
+    value v4: Int(64) @block2
+    value v5: Int(64) @block2
+    value v6: Int(64) @block2
+    value v7: Int(64) @block2
+    value v8: TypeRef("?") @block3
+    value v9: Bool @block3
+    value v10: Int(64) @block3
+    value v11: Int(64) @block3
+    value v12: Generic { name: "String", args: [] } @block3
+    value v13: TypeRef("?") @block3
+    value v14: Bool @block3
+    value v15: Int(64) @block3
+    value v16: Int(64) @block3
+    value v17: Generic { name: "String", args: [] } @block3
     Load %0 <- int(0)
     Load %1 <- int(10)
     Load v0 <- void

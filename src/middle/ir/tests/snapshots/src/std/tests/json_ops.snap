@@ -348,53 +348,53 @@ module
     value v75: TypeRef("?") @block0
     value v76: Int(64) @block0
     value v77: Bool @block0
-    value v78: TypeRef("?") @block0
-    value v79: Generic { name: "String", args: [] } @block0
-    value v80: Generic { name: "String", args: [] } @block0
-    value v81: TypeRef("?") @block0
-    value v82: Bool @block0
-    value v83: Generic { name: "String", args: [] } @block0
-    value v84: Generic { name: "String", args: [] } @block0
-    value v85: Generic { name: "String", args: [] } @block0
-    value v86: TypeRef("?") @block0
-    value v87: Generic { name: "String", args: [] } @block0
-    value v88: Int(64) @block0
-    value v89: Int(64) @block0
-    value v90: Int(64) @block0
-    value v91: TypeRef("?") @block0
-    value v92: Bool @block0
-    value v93: Int(64) @block0
-    value v94: Int(64) @block0
-    value v95: Generic { name: "String", args: [] } @block0
-    value v96: TypeRef("?") @block0
-    value v97: Generic { name: "String", args: [] } @block0
-    value v98: Int(64) @block0
-    value v99: Int(64) @block0
-    value v100: Int(64) @block0
-    value v101: TypeRef("?") @block0
-    value v102: Bool @block0
-    value v103: Int(64) @block0
-    value v104: Int(64) @block0
-    value v105: Generic { name: "String", args: [] } @block0
-    value v106: TypeRef("?") @block0
-    value v107: Generic { name: "String", args: [] } @block0
-    value v108: Int(64) @block0
-    value v109: Int(64) @block0
-    value v110: Int(64) @block0
-    value v111: TypeRef("?") @block0
-    value v112: Bool @block0
-    value v113: Int(64) @block0
-    value v114: Int(64) @block0
-    value v115: Generic { name: "String", args: [] } @block0
-    value v116: Generic { name: "String", args: [] } @block0
-    value v117: Generic { name: "String", args: [] } @block0
-    value v118: Generic { name: "String", args: [] } @block0
-    value v119: Generic { name: "String", args: [] } @block0
-    value v120: Generic { name: "String", args: [] } @block0
-    value v121: TypeRef("?") @block0
-    value v122: TypeRef("?") @block0
-    value v123: Generic { name: "Result", args: [TypeRef("Json"), TypeRef("Error")] } @block0
-    value v124: Generic { name: "String", args: [] } @block0
+    value v78: TypeRef("?") @block1
+    value v79: Generic { name: "String", args: [] } @block1
+    value v80: Generic { name: "String", args: [] } @block2
+    value v81: TypeRef("?") @block3
+    value v82: Bool @block3
+    value v83: Generic { name: "String", args: [] } @block3
+    value v84: Generic { name: "String", args: [] } @block3
+    value v85: Generic { name: "String", args: [] } @block3
+    value v86: TypeRef("?") @block3
+    value v87: Generic { name: "String", args: [] } @block3
+    value v88: Int(64) @block3
+    value v89: Int(64) @block3
+    value v90: Int(64) @block3
+    value v91: TypeRef("?") @block3
+    value v92: Bool @block3
+    value v93: Int(64) @block3
+    value v94: Int(64) @block3
+    value v95: Generic { name: "String", args: [] } @block3
+    value v96: TypeRef("?") @block3
+    value v97: Generic { name: "String", args: [] } @block3
+    value v98: Int(64) @block3
+    value v99: Int(64) @block3
+    value v100: Int(64) @block3
+    value v101: TypeRef("?") @block3
+    value v102: Bool @block3
+    value v103: Int(64) @block3
+    value v104: Int(64) @block3
+    value v105: Generic { name: "String", args: [] } @block3
+    value v106: TypeRef("?") @block3
+    value v107: Generic { name: "String", args: [] } @block3
+    value v108: Int(64) @block3
+    value v109: Int(64) @block3
+    value v110: Int(64) @block3
+    value v111: TypeRef("?") @block3
+    value v112: Bool @block3
+    value v113: Int(64) @block3
+    value v114: Int(64) @block3
+    value v115: Generic { name: "String", args: [] } @block3
+    value v116: Generic { name: "String", args: [] } @block3
+    value v117: Generic { name: "String", args: [] } @block3
+    value v118: Generic { name: "String", args: [] } @block3
+    value v119: Generic { name: "String", args: [] } @block3
+    value v120: Generic { name: "String", args: [] } @block3
+    value v121: TypeRef("?") @block3
+    value v122: TypeRef("?") @block3
+    value v123: Generic { name: "Result", args: [TypeRef("Json"), TypeRef("Error")] } @block3
+    value v124: Generic { name: "String", args: [] } @block3
     Load v1 <- int(34)
     Call v0 <- string("std.string.from_char_code") [v1] (def=d3)
     Call %0 <- string("std.result.unwrap") [v0] (def=d4)

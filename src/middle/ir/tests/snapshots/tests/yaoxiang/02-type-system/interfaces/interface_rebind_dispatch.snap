@@ -28,14 +28,14 @@ module
     value v7: TypeRef("?") @block0
     value v8: Int(64) @block0
     value v9: Bool @block0
-    value v10: TypeRef("?") @block0
-    value v11: Bool @block0
-    value v12: Generic { name: "String", args: [] } @block0
-    value v13: TypeRef("?") @block0
-    value v14: Bool @block0
-    value v15: Generic { name: "String", args: [] } @block0
-    value v16: Generic { name: "String", args: [] } @block0
-    value v17: Generic { name: "String", args: [] } @block0
+    value v10: TypeRef("?") @block1
+    value v11: Bool @block2
+    value v12: Generic { name: "String", args: [] } @block2
+    value v13: TypeRef("?") @block3
+    value v14: Bool @block3
+    value v15: Generic { name: "String", args: [] } @block3
+    value v16: Generic { name: "String", args: [] } @block3
+    value v17: Generic { name: "String", args: [] } @block3
     AllocArray %0 size=int(1), elem=int(1)
     Load v2 <- string("Kiwi")
     Call v1 <- string("Bird") [v2] (def=d0)

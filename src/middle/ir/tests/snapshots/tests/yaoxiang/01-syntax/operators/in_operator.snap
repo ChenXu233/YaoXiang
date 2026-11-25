@@ -2,7 +2,7 @@ module
   fn main() -> Void
     slot[0] ok : Int(64) @depth1
     locals_total=6
-    values_total=81
+    values_total=85
     value v0: TypeRef("?") @block0
     value v1: TypeRef("?") @block0
     value v2: Int(64) @block0
@@ -49,7 +49,7 @@ module
     value v43: Int(64) @block0
     value v44: Int(64) @block0
     value v45: Generic { name: "String", args: [] } @block0
-    value v46: TypeRef("?") @block0
+    value v46: TypeRef("?") @block3
     value v47: TypeRef("?") @block0
     value v48: Int(64) @block0
     value v49: TypeRef("?") @block0
@@ -59,31 +59,35 @@ module
     value v53: TypeRef("?") @block0
     value v54: Int(64) @block0
     value v55: Bool @block0
-    value v56: Generic { name: "String", args: [] } @block0
-    value v57: TypeRef("?") @block0
-    value v58: Bool @block0
-    value v59: TypeRef("?") @block0
-    value v60: Int(64) @block0
-    value v61: TypeRef("?") @block0
-    value v62: Int(64) @block0
-    value v63: Int(64) @block0
-    value v64: Int(64) @block0
-    value v65: TypeRef("?") @block0
-    value v66: Int(64) @block0
-    value v67: Bool @block0
-    value v68: Generic { name: "String", args: [] } @block0
-    value v69: TypeRef("?") @block0
-    value v70: Int(64) @block0
-    value v71: TypeRef("?") @block0
-    value v72: Int(64) @block0
-    value v73: Int(64) @block0
-    value v74: Int(64) @block0
-    value v75: TypeRef("?") @block0
-    value v76: Int(64) @block0
-    value v77: Int(64) @block0
-    value v78: TypeRef("?") @block0
-    value v79: Bool @block0
-    value v80: Generic { name: "String", args: [] } @block0
+    value v56: Generic { name: "String", args: [] } @block3
+    value v57: TypeRef("?") @block6
+    value v58: Bool @block6
+    value v59: TypeRef("?") @block3
+    value v60: Int(64) @block3
+    value v61: TypeRef("?") @block3
+    value v62: Int(64) @block3
+    value v63: Int(64) @block3
+    value v64: Int(64) @block3
+    value v65: TypeRef("?") @block3
+    value v66: Int(64) @block3
+    value v67: Bool @block3
+    value v68: Generic { name: "String", args: [] } @block6
+    value v69: TypeRef("?") @block6
+    value v70: Int(64) @block6
+    value v71: TypeRef("?") @block6
+    value v72: Int(64) @block6
+    value v73: Int(64) @block6
+    value v74: Int(64) @block7
+    value v75: TypeRef("?") @block7
+    value v76: Int(64) @block7
+    value v77: Int(64) @block7
+    value v78: TypeRef("?") @block9
+    value v79: Bool @block9
+    value v80: Generic { name: "String", args: [] } @block9
+    value v81: TypeRef("?") @block1
+    value v82: TypeRef("?") @block4
+    value v83: TypeRef("?") @block3
+    value v84: TypeRef("?") @block6
     Load v2 <- int(2)
     AllocArray v3 size=int(3), elem=int(1)
     Load v4 <- int(1)
@@ -146,11 +150,12 @@ module
     Load v54 <- int(0)
     Eq v55 <- v53, v54
     JmpIfNot v55 -> instr(64)
-    VariantPayload v47 <- v47 : Result
+    VariantPayload v81 <- v47 : Result
     Jmp -> instr(65)
     Call _ <- string("std.range.abort_invalid_step") [v49] (def=d2)
+    Phi v83 <- [1: v81, 2: v47]
     Load v56 <- string("range in")
-    Call v46 <- string("std.assert.assert") [v47, v56] (def=d0)
+    Call v46 <- string("std.assert.assert") [v83, v56] (def=d0)
     Load v60 <- int(11)
     Load v62 <- int(1)
     Load v63 <- int(10)
@@ -160,11 +165,12 @@ module
     VariantTag v65 <- v59 : Result
     Load v66 <- int(0)
     Eq v67 <- v65, v66
-    JmpIfNot v67 -> instr(79)
-    VariantPayload v59 <- v59 : Result
-    Jmp -> instr(80)
+    JmpIfNot v67 -> instr(80)
+    VariantPayload v82 <- v59 : Result
+    Jmp -> instr(81)
     Call _ <- string("std.range.abort_invalid_step") [v61] (def=d2)
-    Not v58 <- v59
+    Phi v84 <- [4: v82, 5: v59]
+    Not v58 <- v84
     Load v68 <- string("range not in")
     Call v57 <- string("std.assert.assert") [v58, v68] (def=d0)
     Load v70 <- int(5)
@@ -173,14 +179,14 @@ module
     Load v73 <- int(0)
     StoreIndex v71[v73] <- v72
     Contains v69 <- v70 in v71
-    JmpIfNot v69 -> instr(97)
+    JmpIfNot v69 -> instr(99)
     Load v74 <- int(3)
     AllocArray v75 size=int(1), elem=int(1)
     Load v76 <- int(3)
     Load v77 <- int(0)
     StoreIndex v75[v77] <- v76
     Contains %0 <- v74 in v75
-    Jmp -> instr(98)
+    Jmp -> instr(100)
     Load %0 <- bool(false)
     Load v79 <- %0
     Load v80 <- string("in composes with &&")

@@ -5,43 +5,45 @@ module
     slot[0] flag : Int(64) @depth1
     slot[1] i : Int(64) @depth1
     locals_total=6
-    values_total=19
+    values_total=20
     value v0: Void @block0
-    value v1: Bool @block0
-    value v2: Int(64) @block0
-    value v3: Int(64) @block0
-    value v4: TypeRef("?") @block0
-    value v5: Bool @block0
-    value v6: Int(64) @block0
-    value v7: Int(64) @block0
+    value v1: Bool @block1
+    value v2: Int(64) @block2
+    value v3: Int(64) @block2
+    value v4: TypeRef("?") @block3
+    value v5: Bool @block2
+    value v6: Int(64) @block2
+    value v7: Int(64) @block2
     value v8: TypeRef("?") @block0
-    value v9: TypeRef("?") @block0
-    value v10: Bool @block0
-    value v11: Bool @block0
-    value v12: Bool @block0
-    value v13: Generic { name: "String", args: [] } @block0
-    value v14: TypeRef("?") @block0
-    value v15: Bool @block0
-    value v16: Int(64) @block0
-    value v17: Int(64) @block0
-    value v18: Generic { name: "String", args: [] } @block0
+    value v9: TypeRef("?") @block5
+    value v10: Bool @block5
+    value v11: Bool @block5
+    value v12: Bool @block5
+    value v13: Generic { name: "String", args: [] } @block5
+    value v14: TypeRef("?") @block5
+    value v15: Bool @block5
+    value v16: Int(64) @block5
+    value v17: Int(64) @block5
+    value v18: Generic { name: "String", args: [] } @block5
+    value v19: Void @block4
+    Load v8 <- void
     Load %0 <- bool(true)
     Load %1 <- int(10)
     Load v0 <- void
     Load v1 <- %0
-    JmpIfNot v1 -> instr(17)
+    JmpIfNot v1 -> instr(18)
     Load v2 <- %1
     Load v3 <- int(1)
     Sub %1 <- v2, v3
     Load v6 <- %1
     Load v7 <- int(0)
     Le v5 <- v6, v7
-    JmpIfNot v5 -> instr(15)
+    JmpIfNot v5 -> instr(16)
     Load %0 <- bool(false)
     Move v4 <- v8
-    Jmp -> instr(15)
-    Load v0 <- void
-    Jmp -> instr(3)
+    Jmp -> instr(16)
+    Load v19 <- void
+    Jmp -> instr(4)
     Load v11 <- %0
     Load v12 <- bool(false)
     Eq v10 <- v11, v12

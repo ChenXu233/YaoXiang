@@ -96,27 +96,27 @@ module
     value v84: TypeRef("?") @block0
     value v85: Generic { name: "Dict", args: [TypeVar(TypeVar(59)), TypeVar(TypeVar(60))] } @block0
     value v86: Generic { name: "String", args: [] } @block0
-    value v87: TypeRef("?") @block0
-    value v88: Bool @block0
-    value v89: TypeRef("?") @block0
-    value v90: Int(64) @block0
-    value v91: Generic { name: "Dict", args: [TypeVar(TypeVar(59)), TypeVar(TypeVar(60))] } @block0
-    value v92: Generic { name: "String", args: [] } @block0
-    value v93: Generic { name: "String", args: [] } @block0
-    value v94: TypeRef("?") @block0
-    value v95: Bool @block0
-    value v96: TypeRef("?") @block0
-    value v97: Int(64) @block0
-    value v98: Generic { name: "Dict", args: [TypeVar(TypeVar(59)), TypeVar(TypeVar(60))] } @block0
-    value v99: Generic { name: "String", args: [] } @block0
-    value v100: Generic { name: "Dict", args: [TypeVar(TypeVar(59)), TypeVar(TypeVar(60))] } @block0
-    value v101: Generic { name: "String", args: [] } @block0
-    value v102: TypeRef("?") @block0
-    value v103: Bool @block0
-    value v104: TypeRef("?") @block0
-    value v105: Generic { name: "Dict", args: [TypeVar(TypeVar(105)), TypeVar(TypeVar(106))] } @block0
-    value v106: Generic { name: "String", args: [] } @block0
-    value v107: Generic { name: "String", args: [] } @block0
+    value v87: TypeRef("?") @block1
+    value v88: Bool @block1
+    value v89: TypeRef("?") @block1
+    value v90: Int(64) @block1
+    value v91: Generic { name: "Dict", args: [TypeVar(TypeVar(59)), TypeVar(TypeVar(60))] } @block1
+    value v92: Generic { name: "String", args: [] } @block1
+    value v93: Generic { name: "String", args: [] } @block1
+    value v94: TypeRef("?") @block2
+    value v95: Bool @block2
+    value v96: TypeRef("?") @block2
+    value v97: Int(64) @block2
+    value v98: Generic { name: "Dict", args: [TypeVar(TypeVar(59)), TypeVar(TypeVar(60))] } @block2
+    value v99: Generic { name: "String", args: [] } @block2
+    value v100: Generic { name: "Dict", args: [TypeVar(TypeVar(59)), TypeVar(TypeVar(60))] } @block2
+    value v101: Generic { name: "String", args: [] } @block2
+    value v102: TypeRef("?") @block2
+    value v103: Bool @block2
+    value v104: TypeRef("?") @block2
+    value v105: Generic { name: "Dict", args: [TypeVar(TypeVar(105)), TypeVar(TypeVar(106))] } @block2
+    value v106: Generic { name: "String", args: [] } @block2
+    value v107: Generic { name: "String", args: [] } @block2
     Call %0 <- string("std.dict.new") [] (def=d0)
     Load v0 <- %0
     Load v1 <- string("a")

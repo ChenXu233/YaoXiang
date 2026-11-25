@@ -5,13 +5,13 @@ module
     locals_total=5
     values_total=8
     value v0: TypeRef("?") @block0
-    value v1: TypeRef("?") @block0
-    value v2: TypeRef("?") @block0
-    value v3: TypeRef("?") @block0
-    value v4: TypeRef("?") @block0
-    value v5: Int(64) @block0
-    value v6: Int(64) @block0
-    value v7: Int(64) @block0
+    value v1: TypeRef("?") @block1
+    value v2: TypeRef("?") @block2
+    value v3: TypeRef("?") @block2
+    value v4: TypeRef("?") @block3
+    value v5: Int(64) @block3
+    value v6: Int(64) @block3
+    value v7: Int(64) @block3
     Load %0 <- arg%0
     Load %1 <- %0
     Call v0 <- string("std.option.Option.is_failure") [%1] (def=d0)
@@ -36,7 +36,7 @@ module
     slot[3] v : Int(64) @depth2
     slot[4] propagated : Int(64) @depth1
     locals_total=10
-    values_total=38
+    values_total=43
     value v0: Int(64) @block0
     value v1: Void @block0
     value v2: Generic { name: "Option", args: [Int(64)] } @block0
@@ -46,35 +46,40 @@ module
     value v6: TypeRef("?") @block0
     value v7: Int(64) @block0
     value v8: Bool @block0
-    value v9: TypeRef("?") @block0
-    value v10: TypeRef("?") @block0
-    value v11: Bool @block0
-    value v12: Int(64) @block0
-    value v13: Int(64) @block0
-    value v14: Generic { name: "String", args: [] } @block0
-    value v15: TypeRef("?") @block0
-    value v16: Int(64) @block0
-    value v17: Bool @block0
-    value v18: TypeRef("?") @block0
-    value v19: Bool @block0
-    value v20: Generic { name: "String", args: [] } @block0
-    value v21: Generic { name: "Option", args: [Int(64)] } @block0
-    value v22: Generic { name: "Option", args: [Int(64)] } @block0
-    value v23: Void @block0
-    value v24: Generic { name: "Option", args: [Int(64)] } @block0
-    value v25: TypeRef("?") @block0
-    value v26: Int(64) @block0
-    value v27: Bool @block0
-    value v28: TypeRef("?") @block0
-    value v29: TypeRef("?") @block0
-    value v30: Bool @block0
-    value v31: Generic { name: "String", args: [] } @block0
-    value v32: TypeRef("?") @block0
-    value v33: Int(64) @block0
-    value v34: Bool @block0
-    value v35: TypeRef("?") @block0
-    value v36: Bool @block0
-    value v37: Generic { name: "String", args: [] } @block0
+    value v9: TypeRef("?") @block1
+    value v10: TypeRef("?") @block1
+    value v11: Bool @block1
+    value v12: Int(64) @block1
+    value v13: Int(64) @block1
+    value v14: Generic { name: "String", args: [] } @block1
+    value v15: TypeRef("?") @block2
+    value v16: Int(64) @block2
+    value v17: Bool @block2
+    value v18: TypeRef("?") @block3
+    value v19: Bool @block3
+    value v20: Generic { name: "String", args: [] } @block3
+    value v21: Generic { name: "Option", args: [Int(64)] } @block4
+    value v22: Generic { name: "Option", args: [Int(64)] } @block4
+    value v23: Void @block4
+    value v24: Generic { name: "Option", args: [Int(64)] } @block4
+    value v25: TypeRef("?") @block4
+    value v26: Int(64) @block4
+    value v27: Bool @block4
+    value v28: TypeRef("?") @block5
+    value v29: TypeRef("?") @block5
+    value v30: Bool @block5
+    value v31: Generic { name: "String", args: [] } @block5
+    value v32: TypeRef("?") @block6
+    value v33: Int(64) @block6
+    value v34: Bool @block6
+    value v35: TypeRef("?") @block7
+    value v36: Bool @block7
+    value v37: Generic { name: "String", args: [] } @block7
+    value v38: Void @block1
+    value v39: Void @block3
+    value v40: Void @block5
+    value v41: Void @block7
+    value v42: Void @block8
     Load v0 <- int(4)
     CreateVariant %0 <- Option::0 v0
     Load v1 <- void
@@ -96,7 +101,7 @@ module
     Eq v11 <- v12, v13
     Load v14 <- string("? keeps some payload")
     Call v10 <- string("std.assert.assert") [v11, v14] (def=d5)
-    Move v4 <- v10
+    Move v38 <- v10
     Jmp -> instr(32)
     VariantTag v15 <- v5 : Option
     Load v16 <- int(1)
@@ -105,7 +110,7 @@ module
     Load v19 <- bool(false)
     Load v20 <- string("? must not turn some into none")
     Call v18 <- string("std.assert.assert") [v19, v20] (def=d5)
-    Move v4 <- v18
+    Move v39 <- v18
     Jmp -> instr(32)
     Load v22 <- %1
     Move v21 <- v22
@@ -121,7 +126,7 @@ module
     Load v30 <- bool(false)
     Load v31 <- string("? must not fabricate a value")
     Call v29 <- string("std.assert.assert") [v30, v31] (def=d5)
-    Move v23 <- v29
+    Move v40 <- v29
     Jmp -> instr(57)
     VariantTag v32 <- v24 : Option
     Load v33 <- int(1)
@@ -130,12 +135,13 @@ module
     Load v36 <- bool(true)
     Load v37 <- string("? propagates none")
     Call v35 <- string("std.assert.assert") [v36, v37] (def=d5)
-    Move v23 <- v35
+    Move v41 <- v35
     Jmp -> instr(57)
+    Phi v42 <- [5: v40, 6: v23, 7: v41]
     Drop %2
     Drop %1
     Drop %4
     Drop %0
-    Ret v23
+    Ret v42
   init (locals=0)
     Call %0 <- string("main") [] (def=d6)

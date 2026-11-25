@@ -11,10 +11,10 @@ module
     locals_total=3
     values_total=5
     value v0: Bool @block0
-    value v1: TypeRef("?") @block0
-    value v2: Void @block0
-    value v3: TypeRef("?") @block0
-    value v4: Int(64) @block0
+    value v1: TypeRef("?") @block1
+    value v2: Void @block1
+    value v3: TypeRef("?") @block2
+    value v4: Int(64) @block2
     Load %0 <- arg%0
     Load v0 <- %0
     JmpIfNot v0 -> instr(6)
@@ -30,10 +30,10 @@ module
     locals_total=3
     values_total=5
     value v0: Bool @block0
-    value v1: TypeRef("?") @block0
-    value v2: Int(64) @block0
-    value v3: TypeRef("?") @block0
-    value v4: Generic { name: "String", args: [] } @block0
+    value v1: TypeRef("?") @block1
+    value v2: Int(64) @block1
+    value v3: TypeRef("?") @block2
+    value v4: Generic { name: "String", args: [] } @block2
     Load %0 <- arg%0
     Load v0 <- %0
     JmpIfNot v0 -> instr(6)
