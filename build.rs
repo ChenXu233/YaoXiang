@@ -179,15 +179,41 @@ fn main() {
     let archive = z3_root.join(&archive_name);
     let z3_dir = z3_root.join(format!("z3-{}-{}", Z3_VERSION, target));
 
-    if !z3_dir.join("include").join("z3.h").exists() {
-        if !archive.exists() {
-            println!(
-                "cargo:warning=Downloading Z3 {} for {}...",
-                Z3_VERSION, target
+    // 下载可能被截断（网络抖动、代理中途断流），而**截断的 zip 仍能解出前若干个条目**：
+    // 症状是 bin/libz3.dll 在，include/z3.h 与 bin/libz3.lib 不在，最终以
+    // 「LNK1181: cannot open input file 'libz3.lib'」这种与病因无关的链接错误暴露
+    // （v0.8.9 Windows dist 连续两轮如此；同一个 zip 本机完整下载 66 MB，解压正常）。
+    // 故解压后必须验证锚点文件，缺则清掉半成品重下；重试耗尽则点名 Z3 失败，
+    // 不再让链接器替这里兜底。
+    const Z3_MAX_ATTEMPTS: u32 = 3;
+    let mut attempt = 0;
+    while !z3_dir.join("include").join("z3.h").exists() {
+        attempt += 1;
+        if attempt > Z3_MAX_ATTEMPTS {
+            panic!(
+                "Z3 {} 解压后仍缺少 include/z3.h（{}）：重试 {} 次均失败。\
+                 检查到 {} 的网络，或设置 Z3_SYS_Z3_HEADER / 手动把 Z3 放到 .z3/。",
+                Z3_VERSION,
+                z3_dir.display(),
+                Z3_MAX_ATTEMPTS,
+                url
             );
-            download(&url, &archive);
         }
-        // 验证下载的文件是否合法（至少 1MB）
+        if attempt > 1 {
+            // 半成品目录会被下一次解压复用（只补新增条目），先整体清掉
+            println!(
+                "cargo:warning=Z3 解压不完整，清理后重试（第 {} / {} 次）...",
+                attempt, Z3_MAX_ATTEMPTS
+            );
+            let _ = fs::remove_dir_all(&z3_dir);
+        }
+        let _ = fs::remove_file(&archive);
+        println!(
+            "cargo:warning=Downloading Z3 {} for {}...",
+            Z3_VERSION, target
+        );
+        download(&url, &archive);
+        // 下限只能拦「下到的根本不是压缩包」；截断只能在解压后按锚点文件判定
         let meta = fs::metadata(&archive).expect("Failed to read Z3 archive metadata");
         if meta.len() < 1024 * 1024 {
             let _ = fs::remove_file(&archive);
@@ -421,15 +447,18 @@ fn extract(
 ) {
     // 使用宿主平台的工具，不是目标平台
     let status = if cfg!(target_os = "windows") {
-        Command::new("powershell")
-            .args([
-                "-Command",
-                &format!(
-                    "Expand-Archive -Path '{}' -DestinationPath '{}' -Force",
-                    archive.display(),
-                    dest.display()
-                ),
-            ])
+        // 不用 Expand-Archive：Windows PowerShell 5.1 会加载 PowerShell 7 的
+        // Microsoft.PowerShell.Archive 模块，其内部调用的
+        // ZipFileExtensions::ExtractToDirectory 三参数重载在 .NET Framework 上不存在，
+        // 于是 cmdlet 只抛**非终止**错误、一个条目都不解压，而 `powershell -Command`
+        // 仍以 0 退出——症状是「下载成功、解压声称成功、产物什么都没有」，最终由链接器
+        // 以 LNK1181 报出来（v0.8.9 Windows dist 与本地增量构建均实测）。
+        // bsdtar 随 Windows 10/11 与 GitHub runner 提供，退出码真实。
+        Command::new("tar")
+            .arg("-xf")
+            .arg(archive)
+            .arg("-C")
+            .arg(dest)
             .status()
     } else {
         Command::new("unzip")
