@@ -107,7 +107,7 @@ SSA 化要新增 `Phi` 变体，要给每个 SSA 值记录类型（供 07 校验
 
 ### 缺陷类 2：`generate_call_expr_ir` 的 `arg_regs` 语义重排
 
-**已核实事实。** `generate_call_expr_ir` 位于 `ir_gen.rs:7269-8014`，**746 行**，单函数。函数签名（`7269-7279`）接受 `func: &Expr` / `args: &[Expr]` / `named_args: &[(String, Expr)]` / `span: &Span`（另带 `_expr` / `result_reg` / `instructions` / `constants`），内部 6 个分支共享同一个 `Vec<Operand>` 并做**语义重写**：
+**已核实事实（审计时点口径；现状位置已按 7c 批 c 拆分同步）。** `generate_call_expr_ir` 现位于 `src/middle/lower/expr/call.rs`（从 `src/middle/core/ir_gen.rs` 拆出，后者已不存在），单函数；函数签名接受 `func: &Expr` / `args: &[Expr]` / `named_args: &[(String, Expr)]` / `span: &Span` / `call_plan_id: PlanId` / `result_reg: Operand` / `instructions` / `constants`（`call_plan_id` 是 RFC-039 D20 的决议消费键），内部多个分支共享同一个 `Vec<Operand>` 并做**语义重写**（下表行号为审计时点版本，拆分后按符号定位）：
 
 | 行 | 语义 |
 | --- | --- |
@@ -143,6 +143,8 @@ let final_args: Vec<Operand> = arg_regs.clone();
 ```
 
 `7835-7848` 的注释自述：「未覆盖的槽位：保持缺席，由类型检查阶段报 E1010。运行期为安全起见补 0（正常路径不会到这里）。」
+
+**命名实参的现状补充（4.9.9 起）**：命名实参进入重排前先按**声明期形参名表**绑定——共享判据 `arg_binding::bind_args_to_params`（IR 侧名字表经 `lookup_param_info` / `method_param_info` 取，来源是本单元 `fn_param_names` 与跨单元方法候选组）；拿不到名字表且不属于既有豁免面（闭包值绑定 / 本单元顶层函数绑定 / 具名嵌套函数声明）时当场报 `E1014`（空表出口），不再静默重排。上面表格里的「补 0」仍是位置实参与兜底臂的运行期安全网，正常路径不可达。
 
 **这个设计有两重风险**：
 
