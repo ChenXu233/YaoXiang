@@ -1,0 +1,6 @@
+[package]
+name = "named-args-cross-unit-method-alias-overload"
+version = "0.1.0"
+
+[run]
+main = "main.yx"

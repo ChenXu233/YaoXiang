@@ -132,16 +132,22 @@ impl AstToIrGenerator {
 
     /// 查一个函数的**声明期形参名 + 必需下限**（供命名参数重排与「可选位放行」）。
     ///
-    /// 两个来源，按就近优先：
+    /// 三个来源，按就近/精确优先：
     /// 1. 本模块的 `fn_param_names`（定义与调用同文件）——同模块函数的形参表
     ///    不含可选位语义，故 `required_min` 取全长（全必需）
-    /// 2. 模块注册表里的导出：优先用导出携带的 `param_names`（无必需下限信息，
+    /// 2. **跨单元方法**的候选组（[Self::method_param_info]）：`{module}.{Type}.{method}`
+    ///    形态按定义单元限定名精确取声明期形参名（WBS 4.9.9）。方法键的首段是
+    ///    **类型名**不是模块键，来源 3 的导出面对它恒不命中——本条缺位时跨单元
+    ///    方法的命名实参拿不到名字表（实测 E1014 `available:` 为空）
+    /// 3. 模块注册表里的导出：优先用导出携带的 `param_names`（无必需下限信息，
     ///    同样按全必需），否则走**与 typecheck 原生臂同一出口**
     ///    `signature::export_signature_param_info`（同一签名串给出形参名与必需下限）。
     ///    这层同源是 t14 的要点：ir_gen 曾硬编全必需位 ⇒ 合法省略可选位的命名调用
     ///    被共享判据误报 E1010（实测 `assert.assert(cond = 1 == 1)`）。
     ///
-    /// `full_path` 是解析后的限定名（如 `std.list.push`）；`leaf` 是短名。
+    /// `full_path` 是解析后的限定名（如 `std.list.push`；跨单元方法形如
+    /// `lib.Point.scale_by`，由 [Self::method_dispatch_name] 定位到定义单元）；
+    /// `leaf` 是短名。
     pub(in crate::middle) fn lookup_param_info(
         &self,
         full_path: &str,
@@ -157,6 +163,12 @@ impl AstToIrGenerator {
                 names,
                 required_min,
             });
+        }
+        // WBS 4.9.9：跨单元方法的形参名。放在**叶名回退之前**——叶名键在本单元
+        // 也定义了同名方法时会命中**别的类型**的名字表（错名字比缺名字更危险：
+        // 命名实参会按错位槽入参，静默给错答案）。
+        if let Some(info) = self.method_param_info(full_path) {
+            return Some(info);
         }
         if let Some(names) = self.fn_param_names.get(leaf) {
             let names = names.clone();
@@ -182,6 +194,55 @@ impl AstToIrGenerator {
         Some(crate::frontend::core::sema::environment::ExportParamInfo {
             names,
             required_min,
+        })
+    }
+
+    /// **跨单元方法**的声明期形参名（WBS 4.9.9）：`qualified` = 定义单元限定名
+    /// `{module}.{Type}.{method}[#N]`（[Self::method_dispatch_name] 的产出形态）。
+    ///
+    /// 为什么必须单列这条通路：方法是**类型成员**，不占模块导出位，而方法键的首段
+    /// 是**类型名**不是模块键——[Self::lookup_param_info] 的来源 3（模块导出面
+    /// `resolve_export("{module}.{export}")`）对方法键恒不命中。声明期形参名
+    /// 跨单元只有**一条**载体：`ModuleInfo::method_overloads` 的候选组
+    /// （候选 ↔ 混编 IR 名 ↔ 形参名 三向量同序，由
+    /// `orchestrator::extract_module_info` 从定义单元的
+    /// `TypeEnvironment::method_overload_snapshot` 直取——与 typecheck 的
+    /// 注入面**同一份**，此处不引入第二份名字表）。
+    ///
+    /// 定位规则：模块 = 限定名除**末两段**外的全部（类型名与方法名都是标识符，
+    /// 不含 `.`）；键 = 末两段拼成的 `{Type}.{method}`（含重载序 `#N` 的只有
+    /// 混编名，键与候选表都是定义侧裸名）；候选序 = `ir_names` 与末两段**逐字相同**
+    /// 的那一位——决议命中的混编名与登记时的混编名同源，序位因此唯一。
+    ///
+    /// 名字表为空 = 声明期拿不到名字（登记期与候选签名对不齐，
+    /// 见 `add_method_overload_with_params`）：返回 `None` 让调用点按
+    /// 「名字不可用」处理——**不**拿空表冒充「名字已核对」。
+    fn method_param_info(
+        &self,
+        qualified: &str,
+    ) -> Option<crate::frontend::core::sema::environment::ExportParamInfo> {
+        let (scoped_type, method) = qualified.rsplit_once('.')?;
+        let (module_key, type_name) = scoped_type.rsplit_once('.')?;
+        // 定义侧混编名（末两段原样）与候选表键（去掉重载序）——同一次拆分得出，
+        // 两个名字不会各算一份
+        let definition_name = format!("{type_name}.{method}");
+        let candidate_key = format!("{type_name}.{}", method.split('#').next().unwrap_or(method));
+        let group = self
+            .registry
+            .get(module_key)?
+            .method_overloads
+            .get(&candidate_key)?;
+        let ordinal = group
+            .ir_names
+            .iter()
+            .position(|registered| *registered == definition_name)?;
+        let names = group.param_names.get(ordinal)?.clone();
+        if names.is_empty() {
+            return None;
+        }
+        Some(crate::frontend::core::sema::environment::ExportParamInfo {
+            required_min: names.len(),
+            names,
         })
     }
 

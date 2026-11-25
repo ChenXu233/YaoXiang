@@ -1,0 +1,25 @@
+// named-args-cross-unit-method-alias-overload/main.yx
+// 覆盖: SPEC syntax §2.3（命名实参 `name = value`）+ RFC-011a §3（重载候选按形参名筛）
+//       + #245（内联别名导入 `use M.{T as X}`）
+// 验证: ① 别名导入的跨单元方法同样按**声明期形参名**入槽；
+//       ② 两个重载候选按**形参名**筛（k = 2.0 → Float 候选、n = 3 → Int 候选），
+//          不得落到首候选；
+//       ③ 位置实参仍按实参类型决议（2.0 → Float 候选 = 6.0、3 → Int 候选 = 30）。
+// 状态: ✅ 可运行（run 退出码 0）
+//       修复前：① 候选注入面按本地别名配对 ⇒ 别名导入的候选永远注入不进来，命名实参
+//       被**静默丢弃**，运行期 `E6007 type mismatch in binary operation Mul`
+//       （lib.yx:4 的 self.x * k）；② 空表 available 的 E1014（同单候选形态）。
+use std.assert
+use lib.{Point as P}
+
+main = () => {
+    p = P(3.0, 4.0)
+    float_by_name = p.scale_by(k = 2.0)
+    int_by_name = p.scale_by(n = 3)
+    float_by_position = p.scale_by(2.0)
+    int_by_position = p.scale_by(3)
+    assert.assert(float_by_name == 6.0, "命名实参 k = 2.0 应命中 Float 候选（self.x * k = 6.0）")
+    assert.assert(int_by_name == 30, "命名实参 n = 3 应命中 Int 候选（n * 10 = 30），不得落首候选")
+    assert.assert(float_by_position == 6.0, "位置实参 2.0 的既有决议不得改变（6.0）")
+    assert.assert(int_by_position == 30, "位置实参 3 的既有决议不得改变（30）")
+}

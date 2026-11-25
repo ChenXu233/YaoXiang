@@ -1,0 +1,18 @@
+// named-args-cross-unit-method/main.yx
+// 覆盖: SPEC syntax §2.3（命名实参 `name = value`；名字进契约、以声明为准）
+//       + RFC-011a §3（方法级重载候选的命名实参筛选）+ RFC-029（跨文件方法调用）
+// 验证: 跨单元方法的命名实参按**声明期形参名**入槽——`p.scale_by(k = 2.0)` 求值为
+//       self.x * k = 6.0；同形态的位置实参（`p.scale_by(2.0)`）行为不变。
+// 状态: ✅ 可运行（run 退出码 0）
+//       修复前：`error [E1014] Function 'scale_by' has no parameter named 'k' (available: )`
+//       ——名字表在 IR 生成侧按模块导出面查，而方法键的首段是**类型名**不是模块键。
+use std.assert
+use lib.{Point}
+
+main = () => {
+    p = Point(3.0, 4.0)
+    by_name = p.scale_by(k = 2.0)
+    by_position = p.scale_by(2.0)
+    assert.assert(by_name == 6.0, "命名实参 k = 2.0 应入槽 self.x * k，求值 6.0")
+    assert.assert(by_position == 6.0, "位置实参 2.0 的既有行为不得改变（6.0）")
+}

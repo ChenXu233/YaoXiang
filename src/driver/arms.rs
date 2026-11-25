@@ -1719,8 +1719,12 @@ impl Driver {
 /// ① 只认**花括号项**形态（`use M.{Type}`）：整体导入 `use M` 把类型名挂在模块
 ///    命名空间下（另按导出名补一份裸名镜像），两形态混用时裸名归属由导入顺序
 ///    静默决定（last-wins）——这种源程序在名字层已经歧义，本函数不为它产条目；
-/// ② 只认**局部名 = 目标名**（无内联别名 `as`）：决议键的前缀是调用方写的裸名，
-///    别名形态下它与定义侧前缀不同名，配不上（不猜、不重命名）；
+/// ② 内联别名（`use M.{Type as P}`）按**目标名**配对：决议键的前缀是接收者的
+///    **已解析类型名**——导入面把类型体按定义名镜像进类型/值空间，本地别名只是
+///    本单元对这个导出的称呼；候选键同样是定义侧名字（`{Type}.{method}` 由定义
+///    单元 AST 产出）。故配 `target`，按 `local` 配会查一个注册表里不存在的
+///    类型名 ⇒ 别名导入的候选永远注入不进来（4.9.9 实测：`use lib.{Point as P}`
+///    的 `p.scale_by(k = 2.0)` 命名实参被静默丢弃，落运行期 E6007）；
 /// ③ 同一个裸类型名被**多个模块**带进作用域时整名跳过（同上：源程序已歧义）。
 ///
 /// 本单元**自有键位不外并**：同名裸类型在本单元已有定义时，调用点解析到的就是
@@ -1738,10 +1742,9 @@ fn visible_method_overloads(
     // 裸类型名 → 带它进作用域的模块键（重复 = 名字层歧义 ⇒ 整名跳过）
     let mut scope: HashMap<String, String> = HashMap::new();
     let mut conflicted: HashSet<String> = HashSet::new();
-    for (local, target, use_path) in &names.imported {
-        if local != target {
-            continue; // ② 内联别名：调用方写的裸名与定义侧前缀不同名
-        }
+    for (_local, target, use_path) in &names.imported {
+        // 本地别名（`use M.{Type as P}`）不参与候选键：键的前缀是接收者的已解析
+        // 类型名 = 定义侧名字（见本函数文档②）。
         // use 路径必须命中注册表模块、且该模块确实导出这个名字（未解析导入 /
         // 子模块名都不构成裸类型名）；查法与 checker 的 use 处理同表
         let Some(exports) = registry.get_exports(use_path) else {

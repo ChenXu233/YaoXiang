@@ -381,6 +381,8 @@
 {"check":{"diagnostics":[["W1007","tests/yaoxiang-multifile/import-cycle-reads-before-init/zother.yx",2]],"exit":0},"expectation":"runtime-error","file":"tests/yaoxiang-multifile/import-cycle-reads-before-init/main.yx","run":{"diagnostics":[["E6007","",0],["W1007","tests/yaoxiang-multifile/import-cycle-reads-before-init/zother.yx",2]],"exit":1,"stderr":[],"stdout":[]}}
 {"expectation":"behavior","file":"tests/yaoxiang-multifile/init-order-dep-fn-reads-own-value/main.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
 {"expectation":"behavior","file":"tests/yaoxiang-multifile/init-order-entry-reads-dep-value/main.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang-multifile/named-args-cross-unit-method/main.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang-multifile/named-args-cross-unit-method-alias-overload/main.yx","run":{"diagnostics":[],"exit":0,"stderr":[],"stdout":[]}}
 {"check":{"diagnostics":[["E0012","tests/yaoxiang-multifile/parse-error-in-collect-all/lib.yx",3],["E5001","tests/yaoxiang-multifile/parse-error-in-collect-all/main.yx",14]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang-multifile/parse-error-in-collect-all/main.yx"}
 {"check":{"diagnostics":[["E4018","",0],["W1001","tests/yaoxiang-multifile/proof-obligation-honored/main.yx",15]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang-multifile/proof-obligation-honored/main.yx"}
 {"expectation":"behavior","file":"tests/yaoxiang-multifile/record-evidence-import/main.yx","run":{"diagnostics":[["W1002","tests/yaoxiang-multifile/record-evidence-import/lib.yx",1]],"exit":0,"stderr":[],"stdout":[]}}

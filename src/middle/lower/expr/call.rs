@@ -576,9 +576,16 @@ impl AstToIrGenerator {
                         // 实参也按位置错配）。实参按**形参声明序**重建：位置实参占
                         // 前导槽位、命名实参按名入槽；名字不可得则响亮报错，
                         // 不静默丢弃命名实参。
+                        // WBS 4.9.8 / #465：决议给的是**定义侧裸名**（`Temp.tag`）；
+                        // 接收者是导入类型时把类型前缀换成它的定义单元限定名。
+                        // WBS 4.9.9：形参名表按**这个限定名**查——跨单元方法的声明期
+                        // 形参名只随注册表的重载候选组走（`{module}.{Type}.{method}`），
+                        // 而导出面（`lookup_param_info` 的来源 3）对方法键恒不命中。
+                        // 名字来源与派发名是同一个标识，不另算一份。
+                        let dispatch_name = self.method_dispatch_name(expr, &mangled);
                         let leaf = Self::call_name_leaf(&mangled).to_string();
                         let names = self
-                            .lookup_param_info(&mangled, &leaf)
+                            .lookup_param_info(&dispatch_name, &leaf)
                             .map(|info| info.names)
                             .unwrap_or_default();
                         // F3：诊断用决议出的真实方法名（叶子段），不再硬编 <method>
@@ -612,9 +619,6 @@ impl AstToIrGenerator {
                             self.generate_expr_ir(arg_expr, r.clone(), instructions, constants)?;
                             call_args.push(r.clone());
                         }
-                        // WBS 4.9.8 / #465：决议给的是**定义侧裸名**（`Temp.tag`）；
-                        // 接收者是导入类型时把类型前缀换成它的定义单元限定名。
-                        let dispatch_name = self.method_dispatch_name(expr, &mangled);
                         instructions.push(Instruction::Call {
                             dst: Some(result_reg.clone()),
                             func: Operand::Const(ConstValue::String(dispatch_name)),

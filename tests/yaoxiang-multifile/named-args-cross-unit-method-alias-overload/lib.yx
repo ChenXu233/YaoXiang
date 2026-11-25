@@ -1,0 +1,11 @@
+// lib.yx —— 被导入单元：同名方法两个候选（签名不同 ⇒ 各占一个声明序），
+// 形参名互不相同（k: Float / n: Int）——命名实参按名字筛候选的唯一依据。
+Point: Type = { x: Float, y: Float }
+
+Point.scale_by: (self: &Point, k: Float) -> Float = {
+    return self.x * k
+}
+
+Point.scale_by: (self: &Point, n: Int) -> Int = {
+    return n * 10
+}
