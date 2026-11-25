@@ -46,10 +46,10 @@
 //!   7b.1b 落三条残项——前驱数（`BasicBlock.successors` 反推的块级前驱集）、
 //!   前驱 label 集合、逐输入类型一致（`values` 值表提供类型；类型不可得按
 //!   文件头「现实语义记录」第 3 条显式不判定 / 显式报越界，不静默放行）。
-//!   **前置已落地**：块级 `successors` 自 7b.3 起由 `ir::ir::partition_blocks`
-//!   在每条生产构造点真实填充（`lower` 的块按跳转与布局落空切分），故前驱数 /
-//!   前驱 label 集合两条判据在真实 IR 上有数据；`Phi` 的生产（lowering 产 Phi）
-//!   仍为 0，届时**直接**受本判据约束（提交信息）。
+//!   **7f.1 已落地**：块级 `successors` 自 7b.3 起由 `ir::ir::partition_blocks`
+//!   在每条生产构造点真实填充（`lower` 的块按跳转与布局落空切分）；Phi 的生产
+//!   构造点已由 7f.1 的 `middle::ir::ssa` 落地，生产语料 `verify_ssa` 全绿
+//!   （7f.2 门禁）。
 //! - 「内层隔离」的 ModuleIR 级可操作化（WBS 2.1.4 改为**按槽身份**）：lower 的
 //!   save/restore 契约（lower/mod.rs 的 `cur_locals` / `next_temp` / `cur_span` 字段）
 //!   失败形态是**同一张槽位表被两个函数体生成期共用**。身份维度 = `LocalSlot::origin`
@@ -69,18 +69,18 @@ use crate::frontend::core::sema::MonoType;
 use crate::ast::Quantity;
 
 use super::ir::{
-    ConstValue, FrameId, FunctionBody, FunctionIR, Instruction, LocalSlot, ModuleIR, Operand,
-    ValueInfo,
+    first_known_phi_type_conflict, is_explicit_unknown_type, ConstValue, FrameId, FunctionBody,
+    FunctionIR, Instruction, LocalSlot, ModuleIR, Operand, ValueInfo,
 };
 
-/// 校验模式（07 §207）：非 SSA 现状用 Loose；SSA 形态（P7 批 b 后）用 Ssa。
+/// 校验模式（07 §207）：非 SSA 历史 IR 用 Loose；生产 IR 已由 7f.1 SSA 化，用 Ssa。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum VerifyMode {
     /// 宽松模式：支配性 + jump 目标 + 槽位越界 + 类型一致 + 内层隔离。
     /// 允许同槽多次定义（现状临时槽位语句级回收，#393）。
     Loose,
-    /// 严格模式：Loose 全部 + 值定义唯一性 + Phi 一致性。
-    /// 现有 IR 必然红（多次定义是现行分配策略），P7 批 b 后转绿。
+    /// 严格模式：Loose 全部 + 值定义唯一性/支配 + defining_block 一致 + Phi 一致性。
+    /// 生产 IR 已由 7f.1 SSA 化，生产语料 `verify_ssa` 全绿（7f.2 门禁）。
     Ssa,
 }
 
@@ -1016,17 +1016,15 @@ fn check_phi_incoming_types(
         return;
     }
     let mut typed: Vec<(&usize, &MonoType)> = Vec::new();
-    let mut has_unknown = false;
     for (label, operand) in incoming {
         let Operand::Value(id) = operand else {
             continue;
         };
         match view.values.get(id.0 as usize) {
             Some(info) => {
-                if is_explicit_unknown_type(&info.ty) {
-                    has_unknown = true;
+                if !is_explicit_unknown_type(&info.ty) {
+                    typed.push((label, &info.ty));
                 }
-                typed.push((label, &info.ty));
             }
             None => out.push(Violation {
                 invariant: InvariantKind::PhiConsistency,
@@ -1040,27 +1038,15 @@ fn check_phi_incoming_types(
             }),
         }
     }
-    // 任一输入为显式未知时，已知类型之间也不判冲突（04-ssa 显式未知契约）。
-    if has_unknown {
-        return;
-    }
-    let Some((first_label, first_ty)) = typed.first() else {
-        return;
-    };
-    if let Some((label, ty)) = typed.iter().find(|(_, ty)| !types_compatible(first_ty, ty)) {
+    // 跳过显式未知后比较剩余已知输入；已知输入冲突必须报，不能被未知掩盖。
+    if let Some((previous, ty)) = first_known_phi_type_conflict(typed.iter().map(|(_, ty)| *ty)) {
         out.push(Violation {
             invariant: InvariantKind::PhiConsistency,
             function: view.name.clone(),
             instruction: Some(at),
-            message: format!(
-                "Phi incoming 类型不一致：label {label} 为 {ty:?}，与 label {first_label} 的 {first_ty:?} 不相容"
-            ),
+            message: format!("Phi incoming 类型不一致：{previous:?} vs {ty:?}"),
         });
     }
-}
-
-fn is_explicit_unknown_type(ty: &MonoType) -> bool {
-    matches!(ty, MonoType::TypeRef(name) if name == "?")
 }
 
 // =====================

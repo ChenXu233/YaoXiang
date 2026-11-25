@@ -22,6 +22,32 @@ use crate::util::span::Span;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct ValueId(pub u32);
 
+/// SSA 显式未知类型标记（04-ssa「值标识方式」）：IR 不发明具体类型，也不静默
+/// 用 Int(64) 占位；生产端构造 Phi 与校验端判 Phi 类型共用此判定。
+pub(crate) fn is_explicit_unknown_type(ty: &MonoType) -> bool {
+    matches!(ty, MonoType::TypeRef(name) if name == "?")
+}
+
+/// Phi incoming 的已知类型冲突：跳过显式未知，按 MonoType 精确相等比较剩余
+/// 已知输入；返回第一对冲突类型。生产端（构造 Phi）与校验端必须共用此判据，
+/// 避免安全网比生产者更松。
+pub(crate) fn first_known_phi_type_conflict<'a>(
+    types: impl IntoIterator<Item = &'a MonoType>
+) -> Option<(&'a MonoType, &'a MonoType)> {
+    let mut first: Option<&MonoType> = None;
+    for ty in types {
+        if is_explicit_unknown_type(ty) {
+            continue;
+        }
+        match first {
+            None => first = Some(ty),
+            Some(previous) if previous == ty => {}
+            Some(previous) => return Some((previous, ty)),
+        }
+    }
+    None
+}
+
 /// Instruction operand
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Operand {

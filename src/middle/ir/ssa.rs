@@ -23,7 +23,10 @@
 use std::collections::{BTreeSet, HashMap, HashSet};
 
 use crate::frontend::core::sema::MonoType;
-use crate::middle::ir::ir::{BasicBlock, ConstValue, Instruction, Operand, ValueId, ValueInfo};
+use crate::middle::ir::ir::{
+    first_known_phi_type_conflict, is_explicit_unknown_type, BasicBlock, ConstValue, Instruction,
+    Operand, ValueId, ValueInfo,
+};
 use crate::util::span::Span;
 
 /// SSA 构造输出。
@@ -72,10 +75,6 @@ struct PhiSite {
     var: usize,
     dst: ValueId,
     span: Span,
-}
-
-fn is_unknown_type(ty: &MonoType) -> bool {
-    matches!(ty, MonoType::TypeRef(name) if name == "?")
 }
 
 fn def_span(
@@ -811,7 +810,9 @@ pub fn construct_ssa(
     })
 }
 
-/// Phi 类型：优先原值表类型；原值未知时要求全部已知输入同型；仍不可得则显式报错。
+/// Phi 类型：跳过显式未知输入，按 MonoType 精确相等比较剩余已知输入；
+/// 已知输入冲突显式报错。原值表类型已知时还须与已知输入一致；原值未知时
+/// 收敛到已知输入类型，否则保留显式未知标记。
 pub(crate) fn resolve_phi_type(
     values: &[ValueInfo],
     var: usize,
@@ -819,28 +820,25 @@ pub(crate) fn resolve_phi_type(
     entries: &[(usize, Operand)],
 ) -> Result<MonoType, SsaConstructionError> {
     let original = &values[var].ty;
-    let mut incoming_type: Option<MonoType> = None;
+    let mut known: Vec<&MonoType> = Vec::new();
     for (_, operand) in entries {
         let Operand::Value(id) = operand else {
             continue;
         };
         let ty = &values[id.0 as usize].ty;
-        if is_unknown_type(ty) {
-            continue;
-        }
-        match &incoming_type {
-            None => incoming_type = Some(ty.clone()),
-            Some(previous) if previous == ty => {}
-            Some(previous) => {
-                return Err(SsaConstructionError::at(
-                    span,
-                    format!("Phi（ValueId({var})）的输入类型不一致：{previous:?} vs {ty:?}"),
-                ));
-            }
+        if !is_explicit_unknown_type(ty) {
+            known.push(ty);
         }
     }
+    if let Some((previous, ty)) = first_known_phi_type_conflict(known.iter().copied()) {
+        return Err(SsaConstructionError::at(
+            span,
+            format!("Phi（ValueId({var})）的输入类型不一致：{previous:?} vs {ty:?}"),
+        ));
+    }
+    let incoming_type = known.first().map(|ty| (*ty).clone());
 
-    if !is_unknown_type(original) {
+    if !is_explicit_unknown_type(original) {
         if let Some(incoming) = &incoming_type {
             if incoming != original {
                 return Err(SsaConstructionError::at(
@@ -855,6 +853,6 @@ pub(crate) fn resolve_phi_type(
     }
 
     // 原值表为显式未知：已知输入同型则收敛到该类型；否则沿用仓库既有的
-    // 显式未知标记（`TypeRef("?")`），不发明具体类型、不静默用 Int(64) 占位。
+    // 显式未知标记（TypeRef("?")），不发明具体类型、不静默用 Int(64) 占位。
     Ok(incoming_type.unwrap_or_else(|| MonoType::TypeRef("?".to_string())))
 }

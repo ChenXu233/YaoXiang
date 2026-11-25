@@ -14,14 +14,17 @@ run_verify_test() {
     local label="$2"
     local output
     output=$(cargo test --all-features --lib middle::ir::tests::verify -- --exact "$test_name" 2>&1) || {
-        echo "$output" | tail -30
+        # 失败时打印完整 cargo 输出：语料判据会把全部违规拼在失败消息里，
+        # 截尾会丢掉最早出问题的文件。
+        printf '%s\n' "$output"
         echo "check-ir-verifier: FAIL（$label 语料判据红）"
         exit 1
     }
     echo "$output" | tail -3
-    # 防假门禁双保险：该条测试必须真实执行且通过（1 passed）
-    if ! echo "$output" | grep -q "1 passed"; then
-        echo "check-ir-verifier: FAIL（$label 判据测试未执行——过滤名失效？）"
+    # 防假门禁双保险：精确匹配测试摘要，避免 "11 passed" 等子串误命中。
+    if ! echo "$output" | grep -qE "test result: ok\. 1 passed; 0 failed"; then
+        printf '%s\n' "$output"
+        echo "check-ir-verifier: FAIL（$label 判据测试未真实执行或未通过）"
         exit 1
     fi
 }

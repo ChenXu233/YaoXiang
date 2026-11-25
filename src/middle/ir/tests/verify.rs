@@ -1167,14 +1167,14 @@ fn test_ssa_phi_with_matching_predecessors_passes() {
 
 #[test]
 fn test_ssa_phi_with_matching_types_passes() {
-    // Arrange：V1=Int(64)、V2=Int(32)（同数值宽度族，相容），定义块真实。
+    // Arrange：V1=Int(64)、V2=Int(64)（SSA 值表要求同型），定义块真实。
     let phi = phi_instr(ssa_value(0), vec![(1, ssa_value(1)), (2, ssa_value(2))]);
     let m = two_pred_value_module(
         phi,
         vec![
             value_info(MonoType::Int(64), 3),
             value_info(MonoType::Int(64), 1),
-            value_info(MonoType::Int(32), 2),
+            value_info(MonoType::Int(64), 2),
             value_info(MonoType::Bool, 0),
         ],
     );
@@ -1594,6 +1594,87 @@ fn test_ssa_reachable_use_without_definition_fails() {
         1,
         "可达使用无定义值应报 1 项 Dominance：{:?}",
         r.err().map(|e| e.to_string())
+    );
+}
+
+/// 三前驱菱形：块 0 分叉 1/2，块 2 再分叉 3；块 4 放 Phi 并 Ret。
+/// v1=Int(64)、v2=Bool、v3=TypeRef("?")，用于钉住「跳过未知后已知冲突仍报」。
+fn three_pred_value_module(
+    phi: Instruction,
+    values: Vec<ValueInfo>,
+) -> ModuleIR {
+    let f = func_with_blocks(
+        "f",
+        vec![],
+        MonoType::Void,
+        vec![temp_slot(MonoType::Int(64))],
+        values,
+        vec![
+            block(
+                0,
+                vec![
+                    value_load(4, 1),
+                    Instruction::JmpIf {
+                        cond: ssa_value(4),
+                        target: 4,
+                        span: Span::dummy(),
+                    },
+                ],
+                vec![1, 2],
+            ),
+            block(1, vec![value_load(1, 1), jmp(9)], vec![4]),
+            block(
+                2,
+                vec![
+                    value_load(5, 1),
+                    value_load(2, 0),
+                    Instruction::JmpIf {
+                        cond: ssa_value(5),
+                        target: 9,
+                        span: Span::dummy(),
+                    },
+                ],
+                vec![3, 4],
+            ),
+            block(3, vec![value_load(3, 1), jmp(9)], vec![4]),
+            block(4, vec![phi, value_ret(0)], vec![]),
+        ],
+    );
+    module_with(vec![f])
+}
+
+#[test]
+fn test_ssa_phi_known_conflict_with_unknown_still_fails() {
+    // Arrange：incoming 依次 Int(64)、Bool、未知 ?；两个已知输入冲突。
+    let phi = phi_instr(
+        ssa_value(0),
+        vec![(1, ssa_value(1)), (2, ssa_value(2)), (3, ssa_value(3))],
+    );
+    let m = three_pred_value_module(
+        phi,
+        vec![
+            value_info(MonoType::Int(64), 4),
+            value_info(MonoType::Int(64), 1),
+            value_info(MonoType::Bool, 2),
+            value_info(MonoType::TypeRef("?".to_string()), 3),
+            value_info(MonoType::Bool, 0),
+            value_info(MonoType::Bool, 2),
+        ],
+    );
+
+    // Act
+    let r = verify_ssa(&m);
+    let detail = r.as_ref().err().map(|e| e.to_string()).unwrap_or_default();
+
+    // Assert
+    assert_eq!(
+        violations_of(&r, InvariantKind::PhiConsistency),
+        1,
+        "未知输入不得掩盖已知 Int/Bool 冲突：{detail}"
+    );
+    assert!(
+        detail.contains("类型不一致"),
+        "归因消息应点名类型不一致：{detail}"
     );
 }
 
