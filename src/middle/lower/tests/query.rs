@@ -14,9 +14,11 @@
 //! `source_container_face` 调用上。
 
 use crate::ast::{Expr, PlanId};
+use crate::frontend::core::sema::environment::MethodOverloadCandidates;
 use crate::frontend::core::sema::probe::TypeLevelNamespace;
 use crate::frontend::core::sema::{MonoType, TypeCheckResult};
 use crate::frontend::module::registry::ModuleRegistry;
+use crate::frontend::module::{ModuleInfo, ModuleSource};
 use crate::middle::ir::ir::{ConstValue, Operand};
 use crate::middle::lower::AstToIrGenerator;
 use crate::util::span::Span;
@@ -133,4 +135,76 @@ fn test_resolve_function_name_native_arm_keeps_chain_order() {
         bare_name, "std.io.println",
         "裸名 println 必须经 std 短名限定表解析为 std.io.println（NativeName 对无点裸名答「否」，臂序不得改动）"
     );
+}
+
+/// F2 守卫（WBS 4.9.9 修复轮 2）：`method_param_info` 的**空形参名表**分支。
+///
+/// 这是**单元级守卫测试**，不是生产端直驱（coding-rules 第六部分）：空名表形态
+/// 在现有公开语法下不可达——登记期 `add_method_overload_with_params` 只在
+/// 「形参名与候选签名对不齐」时留空，而能造出对不齐的 RFC-004 外部绑定形态在
+/// 跨单元下另有既有缺陷（被绑函数名未限定 ⇒ 运行期 E6006，位置实参同样失败），
+/// 与命名实参无关；t2 的 m5 变异（删掉 `if names.is_empty() { return None; }`）
+/// 后整套多文件判据仍全绿。故本测试**手工构造**注册表里的空名表候选组，只钉
+/// 一条性质：名字不可用 ⇒ 查询返回 None（不得把空表当成「名字已核对」）；
+/// 同表非空的正对照证明守卫只拦空表。用途是防止守卫被误删。
+#[test]
+fn test_method_param_info_empty_name_table_returns_none() {
+    // Arrange：两个模块各带一个同名方法候选组——`empty` 的形参名表留空
+    //（登记期对不齐），`named` 的名字表与候选同序
+    let candidate = MonoType::Fn {
+        params: vec![MonoType::Int(64), MonoType::Float(64)],
+        return_type: Box::new(MonoType::Float(64)),
+    };
+    let mut registry = ModuleRegistry::new();
+    registry.register(module_with_group(
+        "empty",
+        "Point.scale_by",
+        MethodOverloadCandidates {
+            candidates: vec![candidate.clone()],
+            ir_names: vec!["Point.scale_by".to_string()],
+            param_names: vec![Vec::new()],
+        },
+    ));
+    registry.register(module_with_group(
+        "named",
+        "Point.scale_by",
+        MethodOverloadCandidates {
+            candidates: vec![candidate],
+            ir_names: vec!["Point.scale_by".to_string()],
+            param_names: vec![vec!["self".to_string(), "k".to_string()]],
+        },
+    ));
+    let type_result = TypeCheckResult::default();
+    let generator = AstToIrGenerator::new_with_type_result(
+        &type_result,
+        registry,
+        None,
+        TypeLevelNamespace::default(),
+    );
+
+    // Act
+    let empty = generator.lookup_param_info("empty.Point.scale_by", "scale_by");
+    let named = generator.lookup_param_info("named.Point.scale_by", "scale_by");
+
+    // Assert
+    assert!(
+        empty.is_none(),
+        "空形参名表必须返回 None（名字不可用），不得拿空表冒充名字已核对；实际: {empty:?}"
+    );
+    assert_eq!(
+        named.map(|info| info.names),
+        Some(vec!["self".to_string(), "k".to_string()]),
+        "同表非空的候选必须原样返回声明序形参名（正对照：守卫只拦空表）"
+    );
+}
+
+/// 造一个只带一个方法候选组的注册表模块（[F2] 守卫测试的输入面）。
+fn module_with_group(
+    key: &str,
+    group_key: &str,
+    group: MethodOverloadCandidates,
+) -> ModuleInfo {
+    let mut module = ModuleInfo::new(key.to_string(), ModuleSource::User);
+    module.method_overloads.insert(group_key.to_string(), group);
+    module
 }

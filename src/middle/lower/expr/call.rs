@@ -247,6 +247,46 @@ impl AstToIrGenerator {
         Ok(())
     }
 
+    /// F1（WBS 4.9.9 修复轮 2）：命名实参存在而 IR 侧**拿不到形参名表**时的响亮拒绝。
+    ///
+    /// 所有此类臂共用本函数（判据单点，不新造诊断码、不新造名字表）：RFC-004 绑定臂、
+    /// 命名空间臂、无决议的普通方法臂、普通函数臂。此前它们都「不按名入槽」⇒ 命名
+    /// 实参被**静默丢弃**，运行期才以 E6007/E6006 冒出（甚至按位置错配后给出错值）。
+    /// 这是 4.9.9 要消灭的静默通道：第一次修复只覆盖「有候选名字表」的 D20 臂，被
+    /// 候选收窄规则跳过的形态（同名类型冲突、整体模块导入、RFC-004 绑定）漏在外面。
+    ///
+    /// `available` 口径不另算：空名表 + 命名实参在共享判据
+    /// `arg_binding::bind_args_to_params` 里就是「未知名」⇒ 既有 E1014，
+    /// available = 名表[recv_offset..] = 空串——与 typecheck / D20 臂同一实现。
+    fn reject_named_args_without_param_names(
+        key: &str,
+        args: &[Expr],
+        named_args: &[(String, Expr)],
+        span: Span,
+    ) -> Diagnostic {
+        debug_assert!(
+            !named_args.is_empty(),
+            "只在存在命名实参时调用（调用方已判空）"
+        );
+        match crate::frontend::core::sema::inference::arg_binding::bind_args_to_params(
+            key,
+            &[],
+            args,
+            named_args,
+            0,
+            &[],
+            span,
+        ) {
+            Err(diagnostic) => diagnostic,
+            // 空名表 + 命名实参被共享判据放行 = 判据与调用不一致；不得回退到静默丢弃
+            Ok(_) => ErrorCodeDefinition::ir_internal_error(
+                "命名实参调用缺少形参名表，但共享判据未拒绝（判据与调用不一致）",
+            )
+            .at(span)
+            .build(),
+        }
+    }
+
     /// 生成 Call 表达式 IR
     ///
     /// `call_plan_id` = **本调用节点的身份**（`Expr::Call::plan_id`，RFC-039 D20）：
@@ -415,6 +455,15 @@ impl AstToIrGenerator {
                             slots[*pos] = Some(reg);
                         }
                         arg_regs = slots.into_iter().flatten().collect();
+                    } else {
+                        // F1（WBS 4.9.9 修复轮 2）：形参名表不可得（本模块表与导出面
+                        // 都查不到）⇒ 命名实参此前被静默丢弃。响亮拒绝。
+                        return Err(Self::reject_named_args_without_param_names(
+                            &method_function_name,
+                            args,
+                            named_args,
+                            *span,
+                        ));
                     }
                 }
                 instructions.push(Instruction::Call {
@@ -472,13 +521,13 @@ impl AstToIrGenerator {
                         .map(|info| info.names);
                     let mut method_arg_regs = Vec::new();
                     if !named_args.is_empty() {
+                        // F3：诊断用真实方法名（不是硬编 <method>，也不是 self）
+                        let diag_key = if field.is_empty() {
+                            Self::call_name_leaf(&binding.function)
+                        } else {
+                            field.as_str()
+                        };
                         if let Some(names) = bound_params {
-                            // F3：诊断用真实方法名（不是硬编 <method>，也不是 self）
-                            let diag_key = if field.is_empty() {
-                                Self::call_name_leaf(&binding.function)
-                            } else {
-                                field.as_str()
-                            };
                             // #456：绑定**判定**走共享判据（形参表[0] 是接收者位，
                             // 实参从槽 1 起）；本处只按槽位序搬运实参。
                             //
@@ -512,6 +561,14 @@ impl AstToIrGenerator {
                                 )?;
                                 method_arg_regs.push(arg_reg.clone());
                             }
+                        } else {
+                            // F1（WBS 4.9.9 修复轮 2）：绑定函数的形参名表不可得（跨单元
+                            // 被绑函数名与导出面都查不到）时，此前整段跳过绑定 ⇒ 命名实参
+                            // 被静默丢弃（运行期 E6007/E6006，或错位后错值）。响亮拒绝：
+                            // 共享判据的空表出口 = 既有 E1014，available 同一口径。
+                            return Err(Self::reject_named_args_without_param_names(
+                                diag_key, args, named_args, *span,
+                            ));
                         }
                     }
                     if method_arg_regs.is_empty() {
@@ -627,6 +684,17 @@ impl AstToIrGenerator {
                             def: None,
                         });
                         return Ok(());
+                    }
+                    // F1（WBS 4.9.9 修复轮 2）：无重载决议 ⇒ 本臂没有形参名表可用
+                    //（候选面未注入：名字冲突被收窄规则跳过、整体模块导入、非候选面
+                    // 形态），命名实参此前被整段丢弃。响亮拒绝，判据同共享判据空表出口。
+                    if !named_args.is_empty() {
+                        return Err(Self::reject_named_args_without_param_names(
+                            field.as_str(),
+                            args,
+                            named_args,
+                            *span,
+                        ));
                     }
                     // 接口直接赋值优化：检查对象是否是约束变量
                     let mut arg_regs = Vec::new();
@@ -981,6 +1049,16 @@ impl AstToIrGenerator {
                             })
                         })
                         .collect();
+                } else if !is_ctor {
+                    // F1（WBS 4.9.9 修复轮 2）：普通函数调用的形参名表不可得（本模块
+                    // 表与导出面都查不到）时，此前命名实参被静默丢弃。响亮拒绝：
+                    // 共享判据的空表出口 = 既有 E1014，available 同一口径。
+                    return Err(Self::reject_named_args_without_param_names(
+                        callee.as_deref().unwrap_or("<fn>"),
+                        args,
+                        named_args,
+                        *span,
+                    ));
                 }
             }
 

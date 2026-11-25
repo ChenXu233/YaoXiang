@@ -13,12 +13,45 @@
 //! GlobalSlotAlloc → IrGeneration → Linking）产出——生产端与消费端同批直驱；
 //! 消费端测试手工构造登记数据即静默通道（review 打回）。
 //!
-//! 修复前红态（实测）：`error [E1014] Function 'scale_by' has no parameter named 'k'
-//! (available: )`——IR 生成侧只按「本单元 `fn_param_names`」与「模块导出面」查名字，
-//! 而方法键的首段是**类型名**不是模块键，导出面对它恒不命中。
+//! 修复前红态（第一次修复前，实测）：`error [E1014] Function 'scale_by' has no
+//! parameter named 'k' (available: )`——IR 生成侧只按「本单元 `fn_param_names`」
+//! 与「模块导出面」查名字，而方法键的首段是**类型名**不是模块键，导出面对它恒不命中。
+//!
+//! 修复轮 2（t2-F1 回归）：候选名字表按「目标名」归并后，**别名 + 裸名导入同名
+//! 类型**（`use a.{Temp as X}` + `use b.{Temp}`）会被收窄规则③整名跳过 ⇒ 调用方
+//! 没有候选名字表。第一次修复此时把**编译期响亮 E1014** 放成了**运行期静默丢参**
+//! （check=0、run=1 运行期 E6007）。本文件后三条用例把「不静默丢弃命名实参」补齐
+//! 到 IR 侧的兜底：拿不到名字表就响亮拒绝（既有 E1014，available 与共享判据同一
+//! 口径），覆盖绑定臂 / 无决议普通方法臂 / 整体模块导入形态。
+
+use std::path::Path;
 
 use super::driver::{make_script_project, run_merged_slot_values, run_multi};
+use crate::driver::{Driver, Program, ProgramKind, Unit};
+use crate::frontend::config::CompileConfig;
 use crate::middle::ir::ir::{ConstValue, Instruction, Operand};
+
+/// 以 Check 形态跑多文件脚本项目 → （逐文件诊断码展平，是否未硬中止）。
+///
+/// 选 Check 形态的理由：IR 生成期诊断（E1014 只由 lower 产生）在 Check 形态
+/// 收进逐文件通道，判据直接读码——不必依赖 CLI 退出码，也覆盖「硬中止会丢掉
+/// 其余文件诊断」的契约（`outcome.failure.is_none()`）。
+fn check_codes(entry: &Path) -> (Vec<String>, bool) {
+    let program = Program::new(
+        ProgramKind::Check,
+        vec![Unit::new("main", entry, "")],
+        CompileConfig::default(),
+    );
+    let outcome = Driver::new()
+        .run(program)
+        .expect("driver run must not error out");
+    let codes = outcome
+        .check_diagnostics
+        .iter()
+        .flat_map(|(_, diagnostics)| diagnostics.iter().map(|d| d.code.clone()))
+        .collect();
+    (codes, outcome.failure.is_none())
+}
 
 /// 合并 IR 里**被调名以 `suffix` 结尾**的调用 → `(被调名, 实参数)`（函数体 + init 段）。
 ///
@@ -179,5 +212,108 @@ fn test_cross_unit_method_named_arg_selects_overload_by_parameter_name() {
     assert!(
         values.iter().any(|value| value == "Int(30)"),
         "Int 候选（n * 10）应求值为 Int(30)，实际全局槽位：{values:?}"
+    );
+}
+/// F1 回归（WBS 4.9.9 修复轮 2）：**别名 + 裸名导入同名类型**——候选名字表按
+/// 「目标名」归并后被收窄规则③整名跳过，调用方拿不到名字表。此时 IR 侧不得
+/// 静默丢弃命名实参，必须响亮拒绝（既有 E1014）。
+///
+/// 先红后绿的定义（**红 = 静默丢参**，不是「编译失败」）：
+/// - 修复前（第一次修复之后）：check exit=0、run exit=1，运行期
+///   `E6007 type mismatch in binary operation Add`（b.yx 的 `self.v + step_b`
+///   收不到 step_b）——命名实参被丢弃，编译期不报；
+/// - 修复后：check exit=1，`error [E1014] Function bump has no parameter named
+///   step_b (available: )`。
+///
+/// 对照（同批）：位置实参形态（p13x）与「别名导入的是另一类型」（p13d）修复
+/// 前后都照常 0/0——本判据只改「拿不到名字表 + 有命名实参」这一格。
+#[test]
+fn test_cross_unit_named_arg_mixed_alias_bare_import_rejects_loudly() {
+    // Arrange：两模块各定义同名类型 Temp（方法形参名不同），调用方别名导入 a 的、
+    // 裸名导入 b 的——裸名 Temp 上的命名实参调用应响亮拒绝
+    let (_dir, entry) = make_script_project(&[
+        (
+            "a.yx",
+            "Temp: Type = { v: Float }\n\nTemp.bump: (self: &Temp, step_a: Float) -> Float = {\n    return self.v + step_a\n}\n",
+        ),
+        (
+            "b.yx",
+            "Temp: Type = { v: Float }\n\nTemp.bump: (self: &Temp, step_b: Float) -> Float = {\n    return self.v + step_b\n}\n",
+        ),
+        (
+            "main.yx",
+            "use a.{Temp as X}\nuse b.{Temp}\n\nt = Temp(2.0)\nv = t.bump(step_b = 3.0)\n",
+        ),
+    ]);
+
+    // Act
+    let (codes, no_hard_failure) = check_codes(&entry);
+
+    // Assert
+    assert!(
+        no_hard_failure,
+        "IR 级诊断必须收进逐文件通道，不得硬中止（其余文件诊断不得丢）：{codes:?}"
+    );
+    assert!(
+        codes.iter().any(|code| code == "E1014"),
+        "拿不到形参名表时命名实参必须响亮拒绝（既有 E1014），不得静默丢弃；实际诊断：{codes:?}"
+    );
+}
+
+/// F1 回归：**RFC-004 绑定臂**（类型体内 `shrink = shrink_impl[0]`）在被绑函数的
+/// 形参名表不可得时同样响亮拒绝。
+///
+/// 注意边界：本形态的**位置实参**调用另有既有跨单元绑定缺陷（被绑函数名未限定
+/// ⇒ 运行期 E6006），与本判据无关；本测试只钉「命名实参不静默丢弃」。
+#[test]
+fn test_cross_unit_named_arg_binding_arm_rejects_loudly() {
+    // Arrange：类型体内绑定方法，被绑函数定义在另一个单元
+    let (_dir, entry) = make_script_project(&[
+        (
+            "lib.yx",
+            "Widget: Type = {\n    v: Float,\n    shrink = shrink_impl[0],\n}\n\nshrink_impl: (self: &Widget, delta: Float) -> Float = {\n    return self.v - delta\n}\n",
+        ),
+        (
+            "main.yx",
+            "use lib.{Widget}\n\nw = Widget(5.0)\nv = w.shrink(delta = 2.0)\n",
+        ),
+    ]);
+
+    // Act
+    let (codes, no_hard_failure) = check_codes(&entry);
+
+    // Assert
+    assert!(no_hard_failure, "IR 级诊断必须收进逐文件通道：{codes:?}");
+    assert!(
+        codes.iter().any(|code| code == "E1014"),
+        "绑定臂拿不到被绑函数的形参名表时，命名实参必须响亮拒绝（既有 E1014）：{codes:?}"
+    );
+}
+
+/// F1 回归：**整体模块导入**（`use lib` + `lib.Circle(...)`）——收窄规则①不为
+/// 整体导入产候选条目，调用方没有名字表；命名实参此前被静默丢弃（运行期
+/// E6007），现同样响亮拒绝。
+#[test]
+fn test_cross_unit_named_arg_whole_module_import_rejects_loudly() {
+    // Arrange
+    let (_dir, entry) = make_script_project(&[
+        (
+            "lib.yx",
+            "Circle: Type = { r: Float }\n\nCircle.area_with: (self: &Circle, factor: Float) -> Float = {\n    return self.r * self.r * factor\n}\n",
+        ),
+        (
+            "main.yx",
+            "use lib\n\nc = lib.Circle(2.0)\nv = c.area_with(factor = 3.0)\n",
+        ),
+    ]);
+
+    // Act
+    let (codes, no_hard_failure) = check_codes(&entry);
+
+    // Assert
+    assert!(no_hard_failure, "IR 级诊断必须收进逐文件通道：{codes:?}");
+    assert!(
+        codes.iter().any(|code| code == "E1014"),
+        "整体模块导入形态没有名字表时，命名实参必须响亮拒绝（既有 E1014）：{codes:?}"
     );
 }
