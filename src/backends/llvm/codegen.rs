@@ -6,7 +6,9 @@ use std::fmt::Display;
 use anyhow::{anyhow, bail, Result};
 use inkwell::module::{Linkage, Module};
 use inkwell::types::{BasicMetadataTypeEnum, BasicType, BasicTypeEnum};
-use inkwell::values::{BasicMetadataValueEnum, BasicValue, BasicValueEnum, FunctionValue, PointerValue};
+use inkwell::values::{
+    BasicMetadataValueEnum, BasicValue, BasicValueEnum, FunctionValue, PointerValue,
+};
 use inkwell::{AddressSpace, IntPredicate};
 
 use crate::middle::ir::ir::{ConstValue, FunctionBody, FunctionIR, Instruction, ModuleIR, Operand};

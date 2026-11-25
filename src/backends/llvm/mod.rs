@@ -12,7 +12,9 @@ use std::path::Path;
 
 use anyhow::{anyhow, Context, Result};
 use inkwell::passes::PassBuilderOptions;
-use inkwell::targets::{CodeModel, FileType, InitializationConfig, RelocMode, Target, TargetTriple};
+use inkwell::targets::{
+    CodeModel, FileType, InitializationConfig, RelocMode, Target, TargetTriple,
+};
 use inkwell::OptimizationLevel;
 use tempfile::TempDir;
 
