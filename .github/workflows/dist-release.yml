@@ -171,7 +171,11 @@ jobs:
           git tag "$TAG"
           git push origin "$TAG"
 
+      # 镜像通知不属于发版结论：CNB_TOKEN 失效（401/403）不得跳过 tag 之后的构建与发布
+      # ——v0.8.9 实测 tag 已推送成功，通知 403 却让 plan/build/publish 全部 skip。
+      # 镜像本身的健康由 cnb-sync 工作流报警，这里只尽力而为。
       - name: Notify CNB mirror
+        continue-on-error: true
         uses: ./.github/actions/notify-cnb
         with:
           token: ${{ secrets.CNB_TOKEN }}
@@ -442,7 +446,11 @@ jobs:
           git commit -m ":package: apt repo: $VERSION" || exit 0
           git push origin HEAD:apt-repo
 
+      # 镜像通知不属于发版结论：CNB_TOKEN 失效（401/403）不得跳过 tag 之后的构建与发布
+      # ——v0.8.9 实测 tag 已推送成功，通知 403 却让 plan/build/publish 全部 skip。
+      # 镜像本身的健康由 cnb-sync 工作流报警，这里只尽力而为。
       - name: Notify CNB mirror
+        continue-on-error: true
         uses: ./.github/actions/notify-cnb
         with:
           token: ${{ secrets.CNB_TOKEN }}
