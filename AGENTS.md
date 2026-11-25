@@ -105,6 +105,8 @@ git log --oneline dev..origin/dev   # 作者是 github-actions[bot] 即是它
 git pull --rebase origin dev        # 与对端无冲突（merge-tree 干净）；已应用的补丁会被自动丢弃
 ```
 
+**issue 不随 dev 上的提交自动关闭**：自动关闭关键词（`关闭 #N` / `Closes #N`）只在提交进入**默认分支**时由 GitHub 处理；本仓默认分支是 `main`，日常推送目标是 `dev`，所以 dev 提交信息里的 `关闭 #N` 当下不会关闭任何 issue。修完 issue 后在 GitHub 上**手动关闭**（如 `gh issue close <N> --comment <证据>`），评论里写清修复提交 sha 与回归测试——关闭理由必须能独立核验。
+
 **门禁不在会话里等**：推送后不看 run、不轮询；**CI 结论也不写进文档**——按 sha 在 GitHub 上就能查，写进去没有消费者，而回填提交又会拉起新一轮 CI。只在两处看：① **红了**——收到失败通知或顺手看到，查日志定位并修（那是诊断输入，不是门禁仪式）；② **发版 / 合并前的统一核对**。连推取消前一轮 run 属正常（`concurrency`），不必记录覆盖关系。
 
 ## 红线（review 必打回）
