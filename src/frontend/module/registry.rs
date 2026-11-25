@@ -165,9 +165,18 @@ impl ModuleRegistry {
 
     /// 获取所有模块的方法绑定（RFC-029 跨文件方法调用）。
     pub fn all_method_bindings(&self) -> HashMap<String, MonoType> {
-        let mut bindings = HashMap::new();
-        for module in self.modules.values() {
-            bindings.extend(module.method_bindings.clone());
+        // 确定性（WBS 4.9.9 修复轮 5）：模块**按键升序**合并——此前按 HashMap
+        // 迭代序 `extend`，同名类型的方法键随机覆盖，同一输入跨进程给出不同
+        // 单绑定（实测 12/20 与 8/20 两种诊断）。升序 + 后者覆盖 ⇒ 每次取
+        // 模块键最大的那一个，冲突形态的处置交给调用点（`import_face` 的提供
+        // 方表 + 同源判据）；本表只保证「单绑定是确定的」，不保证它是最优的。
+        let mut modules: Vec<&String> = self.modules.keys().collect();
+        modules.sort();
+        let mut bindings: HashMap<String, MonoType> = HashMap::new();
+        for path in modules {
+            if let Some(module) = self.modules.get(path) {
+                bindings.extend(module.method_bindings.clone());
+            }
         }
         bindings
     }

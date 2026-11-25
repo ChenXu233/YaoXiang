@@ -220,7 +220,7 @@ fn test_cross_unit_method_named_arg_selects_overload_by_parameter_name() {
 ///
 /// 三态（同一夹具，见报告）：pre-t1 `1e05dc3e` = 0/0；修复轮 2 `091b835b` = E1002
 /// （规则③把裸名提供方候选一起跳过，位置实参重载退回单绑定）；本修复后 = 0/0。
-/// 名字层歧义的消费侧判据（WBS 4.9.9 修复轮 3 / 复审轮；用户裁决 A 口径）：**混合别名 +
+/// 名字层歧义的消费侧判据（WBS 4.9.9 修复轮 3–5）：**混合别名 +
 /// 裸名导入同名类型**时，该类型上的**命名实参一律响亮拒绝**（E1014，共享判据的空表出口）。
 ///
 /// 机制：候选注入面按提供方优先级只取裸名提供方的候选，而调用键前缀是定义侧类型名
@@ -561,15 +561,16 @@ fn test_conflicting_bare_imports_reject_duplicate_type_name() {
     );
 }
 
-/// **不变量判据**（复审轮要求，裁决口径 b）：typecheck 采用的候选集与 IR 实际派发目标
+/// **不变量判据**（WBS 4.9.9 修复轮 4–5）：typecheck 采用的候选集与 IR 实际派发目标
 /// 必须同源。用可观测形式表达：
 /// - **歧义形态 + 命名实参**：check 必红（E1014）——名表来源不可信，不许静默；
 /// - **歧义形态 + 位置实参**：check/run 必须 0/0，且值断言证明 IR 派发到**接收者所属
 ///   模块**（a 的 bump 返回 n*100，b 的 bump 返回 n*10，两实现可区分）；
 /// - **非歧义形态**（仅别名 / 仅裸名单一提供方）：check/run 0/0 且派发到正确模块。
 ///
-/// 该判据对三棵树都成立：pre-t1 与中间坏态的「歧义 + 命名实参」不红（静默丢参/错值），
-/// 本修复后成立。位置实参一侧的候选/派发同源性风险另行由 4.9.10 的探针矩阵评估。
+/// 各 revision 的实测分开记（不合并成一句）：pre-t1（`1e05dc3e`）该形态是 E1014（原 bug，
+/// 响亮）；`5edfb53e` 是静默丢参 / 静默错值；`7e96a844` 起是 E1014（共享兜底）；本提交起
+/// 冲突形态另有位置实参的保守相容判定。位置实参一侧的残余风险由 4.9.10 的模块限定键根治。
 #[test]
 fn test_method_identity_invariant_ambiguous_named_red_positional_green() {
     // Arrange：a.Temp.bump 返回 n*100（Int），b.Temp.bump 返回 v+step（Float）——
@@ -781,5 +782,149 @@ fn test_alias_side_positional_return_type_mismatch_rejects_loudly() {
     assert!(
         codes.iter().any(|code| code == "E1107"),
         "别名侧返回类型不一致的候选必须响亮拒绝（既有 E1107），不得静默返回别家实现的值：{codes:?}"
+    );
+}
+
+/// 两别名冲突（**同一目标类型由两个模块各经内联别名引入**，本地名不同）：命名实参
+/// 一律响亮拒绝（E1014，名字层歧义下名表来源不可信）。
+#[test]
+fn test_two_alias_conflict_named_arg_rejects_loudly() {
+    // Arrange：`use a.{Temp as X}` + `use b.{Temp as Y}`，两侧 bump 签名相同
+    let (_dir, entry) = make_script_project(&[
+        (
+            "a.yx",
+            "Temp: Type = { v: Float }\n\nTemp.bump: (self: &Temp, n: Int) -> Int = {\n    return n * 100\n}\n",
+        ),
+        (
+            "b.yx",
+            "Temp: Type = { v: Float }\n\nTemp.bump: (self: &Temp, n: Int) -> Int = {\n    return n * 10\n}\n",
+        ),
+        (
+            "main.yx",
+            "use a.{Temp as X}\nuse b.{Temp as Y}\n\nx = X(1.0)\nr = x.bump(n = 2)\n",
+        ),
+    ]);
+
+    // Act
+    let (codes, no_hard_failure) = check_codes(&entry);
+
+    // Assert
+    assert!(no_hard_failure, "IR 级诊断必须收进逐文件通道：{codes:?}");
+    assert!(
+        codes.iter().any(|code| code == "E1014"),
+        "两别名冲突形态的命名实参必须响亮拒绝（既有 E1014）：{codes:?}"
+    );
+}
+
+/// 两别名冲突 + **位置实参**：实参标量类型与接收者 owner 的候选形参不相容 ⇒ 确定性
+/// E1107（不得出现 0/0 打印 200.0）。判据是 `method_source_mismatch` 的冲突分支
+///（owner 的候选形参类型 vs 实参静态类型的标量相容性）；连续跑 5 次固定同一结果，
+/// 防止再退回依赖 HashMap 迭代序的不确定行为。
+#[test]
+fn test_two_alias_conflict_positional_param_type_mismatch_rejects_loudly() {
+    // Arrange：a 的 bump 收 Int（n*100），b 的 bump 收 Float（v + n）；x 走别名 X（owner a）
+    let (_dir, entry) = make_script_project(&[
+        (
+            "a.yx",
+            "Temp: Type = { v: Float }\n\nTemp.bump: (self: &Temp, n: Int) -> Int = {\n    return n * 100\n}\n",
+        ),
+        (
+            "b.yx",
+            "Temp: Type = { v: Float }\n\nTemp.bump: (self: &Temp, n: Float) -> Float = {\n    return self.v + n\n}\n",
+        ),
+        (
+            "main.yx",
+            "use a.{Temp as X}\nuse b.{Temp as Y}\n\nx = X(1.0)\nr = x.bump(2.0)\n",
+        ),
+    ]);
+
+    // Act
+    let mut observed: Vec<Vec<String>> = Vec::new();
+    for _ in 0..5 {
+        let (codes, no_hard_failure) = check_codes(&entry);
+        assert!(no_hard_failure, "IR 级诊断必须收进逐文件通道：{codes:?}");
+        observed.push(codes);
+    }
+
+    // Assert
+    assert!(
+        observed
+            .iter()
+            .all(|codes| codes.iter().any(|code| code == "E1107")),
+        "冲突形态 + 位置实参标量不相容必须确定性 E1107（不得 0/0 打印 200.0）：{observed:?}"
+    );
+}
+
+/// 两别名冲突 + 位置实参、两提供方**同参同返回**：实参与 owner 的候选形参相容 ⇒ 放行，
+/// 值由接收者所属单元（a）决定（旧行为 0/0 打印 200）。
+#[test]
+fn test_two_alias_conflict_same_signature_keeps_legacy_behavior() {
+    // Arrange
+    let (_dir, entry) = make_script_project(&[
+        (
+            "a.yx",
+            "Temp: Type = { v: Float }\n\nTemp.bump: (self: &Temp, n: Int) -> Int = {\n    return n * 100\n}\n",
+        ),
+        (
+            "b.yx",
+            "Temp: Type = { v: Float }\n\nTemp.bump: (self: &Temp, n: Int) -> Int = {\n    return n * 10\n}\n",
+        ),
+        (
+            "main.yx",
+            "use std.assert\nuse a.{Temp as X}\nuse b.{Temp as Y}\n\nx = X(1.0)\nr = x.bump(2)\nassert.assert(r == 200, \"conflict same-signature dispatches to owner a\")\n",
+        ),
+    ]);
+
+    // Act
+    let outcome = run_multi(&entry).expect("driver run failed");
+
+    // Assert
+    assert!(
+        outcome.failure.is_none(),
+        "同参同返回的冲突形态必须保留旧行为（0/0，值由 owner 决定）：{:?}",
+        outcome.failure.as_ref().map(|e| format!("{e}"))
+    );
+    let module = outcome.module.expect("Linking + mono 必须产出合并 IR");
+    let values = run_merged_slot_values(module);
+    assert!(
+        values.iter().any(|value| value == "Int(200)"),
+        "冲突同参形态必须派发到 owner a（2*100 = 200），实际全局槽位：{values:?}"
+    );
+}
+
+/// 两别名冲突 + 位置实参、两提供方**同参不同返回**：实参相容（返回类型差异不改变
+/// 实参相容性）⇒ 放行，值由 owner 决定（旧行为 0/0 打印 200）。
+#[test]
+fn test_two_alias_conflict_return_type_diff_keeps_legacy_behavior() {
+    // Arrange：a 返回 Int（n*100），b 同参返回 Float（2.0）
+    let (_dir, entry) = make_script_project(&[
+        (
+            "a.yx",
+            "Temp: Type = { v: Float }\n\nTemp.bump: (self: &Temp, n: Int) -> Int = {\n    return n * 100\n}\n",
+        ),
+        (
+            "b.yx",
+            "Temp: Type = { v: Float }\n\nTemp.bump: (self: &Temp, n: Int) -> Float = {\n    return 2.0\n}\n",
+        ),
+        (
+            "main.yx",
+            "use a.{Temp as X}\nuse b.{Temp as Y}\n\nx = X(1.0)\nr = x.bump(2)\n",
+        ),
+    ]);
+
+    // Act
+    let outcome = run_multi(&entry).expect("driver run failed");
+
+    // Assert
+    assert!(
+        outcome.failure.is_none(),
+        "同参不同返回的冲突形态必须保留旧行为（实参相容 ⇒ 放行，值由 owner 决定）：{:?}",
+        outcome.failure.as_ref().map(|e| format!("{e}"))
+    );
+    let module = outcome.module.expect("Linking + mono 必须产出合并 IR");
+    let values = run_merged_slot_values(module);
+    assert!(
+        values.iter().any(|value| value == "Int(200)"),
+        "冲突返回差形态仍派发到 owner a（2*100 = 200），实际全局槽位：{values:?}"
     );
 }

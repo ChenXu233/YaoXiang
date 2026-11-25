@@ -1,4 +1,4 @@
-//! 导入面的**类型候选提供方表**（WBS 4.9.9 修复轮 4）。
+//! 导入面的**类型候选提供方表**（WBS 4.9.9 修复轮 4–5）。
 //!
 //! 唯一生产：候选注入面（`driver::arms::visible_method_overloads`）与消费侧同源判据
 //! （`middle::lower::query`）都从本表读「某个定义侧类型名的候选提供模块」，避免两条
@@ -10,24 +10,29 @@
 //! ③ **提供方优先级**：裸名提供方（`local == target`）优先；裸名侧缺席时才用别名
 //!    提供方；同一级内被多个模块带进作用域 = 该名字在名字层已歧义 ⇒ 整名跳过
 //!    （裸名侧冲突时别名也不得补位）。
+//!
+//! 冲突（同一名字被 ≥2 个模块带进作用域）**必须可见**：`providers` 返回全部提供
+//! 模块、`provider_count` 反映真实数量、`winner` 返回 None 且 `is_conflicted` 为真。
+//! 消费侧据此识别「冲突」而不是「未知」：命名实参响亮拒绝、位置实参走接收者
+//! owner 的保守相容判定（见 `middle::lower::query::method_source_mismatch`）。
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use crate::ast;
 use crate::frontend::core::sema::passes::dead_code::DeadCodeAnalyzer;
 use crate::frontend::module::registry::ModuleRegistry;
 
 /// 本单元导入面里，每个**定义侧类型名**的候选提供模块（按来源分级登记）。
+///
+/// 每个名字保留**全部**提供模块（按 use 面书写序，去重）：冲突数量与顺序都是
+/// 可观测事实，不再只留「第一个模块 + 一个冲突标记」（4.9.9 修复轮 4 的前车之鉴：
+/// 只存一个模块时 `provider_count` 对冲突返回 1，消费侧误判为「未知」而静默放行）。
 #[derive(Debug, Default, Clone)]
 pub struct TypeCandidateProviders {
-    /// 裸名提供方：`use M.{Type}`（本地名 == 目标名）
-    bare: HashMap<String, String>,
-    /// 别名提供方：`use M.{Type as P}`（键仍取目标名）
-    aliased: HashMap<String, String>,
-    /// 裸名侧被 ≥2 个模块带进作用域的名字（名字层歧义 ⇒ 整名跳过）
-    conflicted_bare: HashSet<String>,
-    /// 别名侧被 ≥2 个模块带进作用域的名字
-    conflicted_alias: HashSet<String>,
+    /// 裸名提供方：`use M.{Type}`（本地名 == 目标名），按书写序
+    bare: HashMap<String, Vec<String>>,
+    /// 别名提供方：`use M.{Type as P}`（键仍取目标名），按书写序
+    aliased: HashMap<String, Vec<String>>,
 }
 
 impl TypeCandidateProviders {
@@ -49,19 +54,15 @@ impl TypeCandidateProviders {
             }
             // 本地别名不参与候选键：键的前缀是接收者的已解析类型名 = 定义侧名字。
             // 这里只决定**提供方优先级**：裸名提供方优先。
-            let (table, conflicted) = if local == target {
-                (&mut providers.bare, &mut providers.conflicted_bare)
+            let table = if local == target {
+                &mut providers.bare
             } else {
-                (&mut providers.aliased, &mut providers.conflicted_alias)
+                &mut providers.aliased
             };
-            match table.get(target) {
-                Some(existing) if existing != use_path => {
-                    conflicted.insert(target.clone());
-                }
-                Some(_) => {}
-                None => {
-                    table.insert(target.clone(), use_path.clone());
-                }
+            let modules = table.entry(target.clone()).or_default();
+            // 去重但保留书写序：顺序是确定性判据的一部分（不得读 HashMap 迭代序）。
+            if !modules.iter().any(|module| module == use_path) {
+                modules.push(use_path.clone());
             }
         }
         providers
@@ -69,53 +70,52 @@ impl TypeCandidateProviders {
 
     /// 候选注入面实际采用的「类型名 → 提供模块」逐对列表（升序）。
     ///
-    /// 裸名提供方优先；裸名侧有冲突（多模块同名）⇒ 该名字整名跳过、别名不得补位；
-    /// 别名只在裸名侧完全没有该名字时补位。
+    /// 裸名提供方优先；裸名侧或别名侧冲突（多模块同名）⇒ 该名字整名跳过；
+    /// 别名只在裸名侧完全没有该名字时补位。顺序按类型名升序（合并顺序确定）。
     pub fn injected_pairs(&self) -> Vec<(String, String)> {
         let mut pairs: Vec<(String, String)> = self
             .bare
             .iter()
-            .filter(|(name, _)| !self.conflicted_bare.contains(*name))
-            .map(|(name, module)| (name.clone(), module.clone()))
+            .filter(|(_, modules)| modules.len() == 1)
+            .map(|(name, modules)| (name.clone(), modules[0].clone()))
             .collect();
         pairs.extend(
             self.aliased
                 .iter()
-                .filter(|(name, _)| {
-                    !self.bare.contains_key(*name) && !self.conflicted_alias.contains(*name)
-                })
-                .map(|(name, module)| (name.clone(), module.clone())),
+                .filter(|(name, modules)| modules.len() == 1 && !self.bare.contains_key(*name))
+                .map(|(name, modules)| (name.clone(), modules[0].clone())),
         );
         pairs.sort();
         pairs
     }
 
     /// 某个定义侧类型名的候选**提供模块**（候选注入面选用的那一个）；
-    /// 该名字无候选（未导入 / 名字层歧义）时为 None。
+    /// 冲突（同级多模块同名）或未导入时为 None——冲突可用
+    /// [`Self::is_conflicted`] 与未导入区分。
     pub fn winner(
         &self,
         type_name: &str,
     ) -> Option<&str> {
-        if let Some(module) = self.bare.get(type_name) {
-            if self.conflicted_bare.contains(type_name) {
-                return None;
-            }
-            return Some(module.as_str());
+        if let Some(modules) = self.bare.get(type_name) {
+            return (modules.len() == 1).then(|| modules[0].as_str());
         }
-        if self.conflicted_alias.contains(type_name) {
-            return None;
-        }
-        self.aliased.get(type_name).map(String::as_str)
+        self.aliased
+            .get(type_name)
+            .filter(|modules| modules.len() == 1)
+            .map(|modules| modules[0].as_str())
     }
 
-    /// 该类型名在本单元导入面里的全部提供模块（去重；裸名提供方在前）。
+    /// 该定义侧类型名在本单元导入面里的**全部**提供模块（去重；裸名在前）。
     pub fn providers(
         &self,
         type_name: &str,
     ) -> Vec<&str> {
         let mut modules: Vec<&str> = Vec::new();
-        for module in [self.bare.get(type_name), self.aliased.get(type_name)]
+        for module in self
+            .bare
+            .get(type_name)
             .into_iter()
+            .chain(self.aliased.get(type_name))
             .flatten()
         {
             if !modules.contains(&module.as_str()) {
@@ -131,5 +131,128 @@ impl TypeCandidateProviders {
         type_name: &str,
     ) -> usize {
         self.providers(type_name).len()
+    }
+
+    /// 该类型名是否**冲突**（同一级来源被 ≥2 个模块带进作用域）。
+    ///
+    /// 与「未导入」区分：冲突是「有多个提供方、注入面整名跳过」；未导入是
+    /// 「没有任何提供方」。消费侧对两者的处置不同。
+    pub fn is_conflicted(
+        &self,
+        type_name: &str,
+    ) -> bool {
+        match self.bare.get(type_name) {
+            Some(modules) => modules.len() > 1,
+            None => self
+                .aliased
+                .get(type_name)
+                .is_some_and(|modules| modules.len() > 1),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::TypeCandidateProviders;
+
+    /// 直接构造（单元测试不建 AST/注册表）；顺序即构造顺序。
+    fn table(
+        bare: &[(&str, &str)],
+        aliased: &[(&str, &str)],
+    ) -> TypeCandidateProviders {
+        let mut providers = TypeCandidateProviders::default();
+        for (target, module) in bare {
+            providers
+                .bare
+                .entry((*target).to_string())
+                .or_default()
+                .push((*module).to_string());
+        }
+        for (target, module) in aliased {
+            providers
+                .aliased
+                .entry((*target).to_string())
+                .or_default()
+                .push((*module).to_string());
+        }
+        providers
+    }
+
+    #[test]
+    fn test_conflicting_alias_providers_list_all_modules() {
+        // Arrange：两个别名（不同本地名）从两个模块引入同名类型 Temp
+        let providers = table(&[], &[("Temp", "a"), ("Temp", "b")]);
+
+        // Act
+        let modules = providers.providers("Temp");
+        let count = providers.provider_count("Temp");
+
+        // Assert
+        assert!(
+            modules == vec!["a", "b"],
+            "冲突 alias 的 providers 必须列出全部提供模块（书写序），实际：{modules:?}"
+        );
+        assert!(
+            count >= 2,
+            "冲突 alias 的 provider_count 必须 ≥2（修复前只存一个模块、返回 1），实际：{count}"
+        );
+    }
+
+    #[test]
+    fn test_conflicting_alias_has_no_winner_and_is_conflicted() {
+        // Arrange
+        let providers = table(&[], &[("Temp", "a"), ("Temp", "b")]);
+
+        // Act
+        let winner = providers.winner("Temp");
+        let conflicted = providers.is_conflicted("Temp");
+
+        // Assert
+        assert!(
+            winner.is_none(),
+            "冲突时没有唯一候选提供模块，winner 必须为 None，实际：{winner:?}"
+        );
+        assert!(
+            conflicted,
+            "冲突必须能被消费侧识别为『冲突』而不是『未导入』"
+        );
+    }
+
+    #[test]
+    fn test_conflicting_alias_is_skipped_by_injected_pairs() {
+        // Arrange：Temp 冲突（两别名），Other 单提供方
+        let providers = table(&[("Other", "b")], &[("Temp", "a"), ("Temp", "b")]);
+
+        // Act
+        let pairs = providers.injected_pairs();
+
+        // Assert
+        assert!(
+            pairs.iter().all(|(name, _)| name != "Temp"),
+            "冲突名字必须整名跳过（不注入候选），实际 pairs：{pairs:?}"
+        );
+        assert!(
+            pairs
+                .iter()
+                .any(|(name, module)| name == "Other" && module == "b"),
+            "非冲突的裸名提供方必须照常注入，实际 pairs：{pairs:?}"
+        );
+    }
+
+    #[test]
+    fn test_single_alias_has_winner_and_single_provider() {
+        // Arrange
+        let providers = table(&[], &[("Temp", "a")]);
+
+        // Act
+        let winner = providers.winner("Temp");
+
+        // Assert
+        assert!(
+            winner == Some("a"),
+            "单个别名提供方必须有 winner（4.9.9 别名形态的既有收益），实际：{winner:?}"
+        );
+        assert!(!providers.is_conflicted("Temp"), "单提供方不是冲突");
+        assert_eq!(providers.provider_count("Temp"), 1, "单提供方计数必须为 1");
     }
 }

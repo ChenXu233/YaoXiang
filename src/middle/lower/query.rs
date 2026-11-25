@@ -38,6 +38,15 @@ fn flatten_namespace(expr: &ast::Expr) -> Option<(&str, Vec<&str>)> {
     }
 }
 
+/// 标量类型类别（冲突形态的窄相容判定用；只覆盖标量，未知/复合为 None）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ScalarKind {
+    Int,
+    Float,
+    Bool,
+    Char,
+}
+
 impl AstToIrGenerator {
     /// 当前文件的模块限定键（单文件模式默认 `main`，与 TypeChecker 一致）。
     fn module_key_or_main(&self) -> &str {
@@ -816,36 +825,56 @@ impl AstToIrGenerator {
         self.candidate_providers.provider_count(type_name)
     }
 
-    /// **同源判据**（WBS 4.9.9 修复轮 4）：候选注入面选用的提供模块（`winner`）
-    /// 与接收者所属模块（`owner`）不同源、且两者对同一方法的候选签名不一致时，
-    /// 返回 `(候选键, 提供模块数)`——调用点应响亮拒绝（既有 E1107）。返回 None
-    /// 表示放行。
+    /// **同源判据 + 冲突分支**（WBS 4.9.9 修复轮 4–5）：候选注入面选用的提供模块
+    /// （`winner`）与接收者所属模块（`owner`）不同源时，返回 `(候选键, 提供模块数)`
+    /// ——调用点应响亮拒绝（既有 E1107）；返回 None 表示放行。
     ///
-    /// 三种放行情形：
+    /// 四种放行情形：
     /// 1. `owner == winner`：typecheck 与 IR 用同一模块的候选，裸名侧位置实参属此
     ///    （实测 2.0 + 2.0 = 4.0 的形态此前被全局签名比较误拒）；
     /// 2. `owner != winner` 但两模块对该键的候选签名完全一致：候选选择不影响类型
     ///    核对，值由接收者所属单元的实现决定（跨单元同名类型经内联别名引入时的
     ///    既有行为，0/0 且派发正确）；
     /// 3. 任一模块没有该键的候选组：注入面没有为该键贡献候选，typecheck 的候选
-    ///    来自别的来源，不构成「按别家签名核对」。
+    ///    来自别的来源，不构成「按别家签名核对」；
+    /// 4. **冲突形态**（`winner == None` 且 `provider_count >= 2`）：注入面整名跳过，
+    ///    typecheck 落到单绑定兜底（该兜底读 HashMap 序，同一输入会给出不同结果——
+    ///    实测 12/20 次 0/0 打印 200.0、8/20 次 E1002）。此处不得静默放行：
+    ///    - 命名实参由调用点按 `type_name_provider_count >= 2` 响亮拒绝（E1014）；
+    ///    - 位置实参按**接收者 owner 的候选形参类型与实参静态类型的标量相容性**判定：
+    ///      owner 不在提供方内、或存在一个候选与实际实参标量类型不相容 ⇒ 拒绝；
+    ///      否则放行（值由 owner 单元决定，保留 pre-t5 的 0/0 200 / 0/0 111 旧行为）。
     ///
-    /// 拒绝情形即真正的静默错值来源：别名侧接收者用裸名提供方的签名核对、IR 却
-    /// 派发到别名模块——实测形参类型不同（常量体返回 111 而非 2.0）、元数不同
-    /// （多出的实参被丢，返回 300 而非 7）、返回类型不同（返回 200 而非 2.0）三例
-    /// 都是 check 通过、结果错。
+    /// **窄判据的覆盖边界（技术债，见 09 的 4.9.10 行）**：只覆盖**标量相等/不等**
+    /// （Int / Float / Bool / Char）；未知类型（`get_expr_mono_type` 缺席）与复合类型
+    /// 一律视为相容。这是冲突形态的保守兜底——根治是 4.9.10 的模块限定方法键
+    /// （typecheck 按接收者 owner 的候选做完整类型检查，本判据随即可删）。
     pub(in crate::middle) fn method_source_mismatch(
         &self,
         recv: &ast::Expr,
         method: &str,
+        args: &[ast::Expr],
     ) -> Option<(String, usize)> {
         let owner = self.receiver_type_owner(recv)?;
         let (owner_module, leaf) = owner.rsplit_once('.')?;
-        let winner = self.candidate_providers.winner(leaf)?;
+        let key = format!("{leaf}.{method}");
+        let Some(winner) = self.candidate_providers.winner(leaf) else {
+            // 未知（未导入）⇒ 放行；冲突 ⇒ 走保守相容判定
+            if !self.candidate_providers.is_conflicted(leaf) {
+                return None;
+            }
+            let providers = self.candidate_providers.providers(leaf);
+            if !providers.contains(&owner_module) {
+                return Some((key, providers.len()));
+            }
+            if self.positional_args_rejected_by_owner(owner_module, &key, args) {
+                return Some((key, providers.len()));
+            }
+            return None;
+        };
         if winner == owner_module {
             return None;
         }
-        let key = format!("{leaf}.{method}");
         let injected = self
             .registry
             .get(winner)
@@ -859,6 +888,84 @@ impl AstToIrGenerator {
         }
         Some((key, self.candidate_providers.provider_count(leaf).max(2)))
     }
+
+    /// 冲突形态的**窄**相容判定：接收者 owner 的候选里有没有一个能接受这批
+    /// 位置实参（按标量类型相等/不等判定；未知与复合类型一律视为相容）。
+    ///
+    /// 返回 `true` = **全部**候选都在某个实参上标量不相容 ⇒ 调用点应拒绝。
+    fn positional_args_rejected_by_owner(
+        &self,
+        owner_module: &str,
+        key: &str,
+        args: &[ast::Expr],
+    ) -> bool {
+        let Some(group) = self
+            .registry
+            .get(owner_module)
+            .and_then(|info| info.method_overloads.get(key))
+        else {
+            // owner 没有该键的候选：运行期派发会响亮失败（E6006），不在 IR 改判
+            return false;
+        };
+        if args.is_empty() {
+            return false;
+        }
+        let actual_kinds: Vec<Option<ScalarKind>> =
+            args.iter().map(|arg| self.expr_scalar_kind(arg)).collect();
+        !group.candidates.iter().any(|candidate| {
+            let MonoType::Fn { params, .. } = candidate else {
+                return true; // 非函数形态的候选不参与相容判定（保守放行）
+            };
+            // 方法候选的形参表通常含接收者位（`self: &Temp`）：按元数差选定
+            // 唯一对齐口径（不得两种口径都试——`&Temp` 对实参是「未知」会
+            // 把不相容的实参放过去）。
+            let offset = if params.len() == args.len() + 1 {
+                1
+            } else if params.len() == args.len() {
+                0
+            } else {
+                return true; // 元数未知 ⇒ 保守放行
+            };
+            actual_kinds.iter().enumerate().all(|(index, actual)| {
+                let expected = &params[index + offset];
+                match (Self::scalar_kind_of_mono(expected), actual) {
+                    (Some(expected), Some(actual)) => expected == *actual,
+                    _ => true, // 任一侧未知/复合 ⇒ 保守视为相容
+                }
+            })
+        })
+    }
+
+    /// 实参的标量类型类别（字面量按语法形态取，其余走 typecheck 静态类型）；
+    /// 未知/复合返回 None。
+    fn expr_scalar_kind(
+        &self,
+        expr: &ast::Expr,
+    ) -> Option<ScalarKind> {
+        match expr {
+            ast::Expr::Lit(ast::Literal::Int(_), _) => Some(ScalarKind::Int),
+            ast::Expr::Lit(ast::Literal::Float(_), _) => Some(ScalarKind::Float),
+            ast::Expr::Lit(ast::Literal::Bool(_), _) => Some(ScalarKind::Bool),
+            ast::Expr::Lit(ast::Literal::Char(_), _) => Some(ScalarKind::Char),
+            _ => self
+                .get_expr_mono_type(expr)
+                .as_ref()
+                .and_then(Self::scalar_kind_of_mono),
+        }
+    }
+
+    /// 标量类型类别（穿透 `&` / `&mut`；其它一律 None）。
+    fn scalar_kind_of_mono(ty: &MonoType) -> Option<ScalarKind> {
+        match ty {
+            MonoType::Ref { inner, .. } => Self::scalar_kind_of_mono(inner),
+            MonoType::Int(_) => Some(ScalarKind::Int),
+            MonoType::Float(_) => Some(ScalarKind::Float),
+            MonoType::Bool => Some(ScalarKind::Bool),
+            MonoType::Char => Some(ScalarKind::Char),
+            _ => None,
+        }
+    }
+
     /// 声明期分类的量词投影（`TypeCheckResult.record_models` 是唯一来源）。
     ///
     /// `struct_definitions` 与 `TypeDeclBody` 都从这里取字段：AST 的
