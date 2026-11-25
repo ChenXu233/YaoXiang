@@ -517,7 +517,7 @@ P10 其余清理与状态修正 06 §S2/S3/S4/S5/S6
 
 - [x] **7c 隐式契约显式化** ✅ 535933ce、4185dcdf、21ddf23f、138f9e0f
 
-> **7c 遗留（非本笔，未修）**：① 跨单元单定义方法以命名实参调用会上报 E6007——新旧 revision 完全一致（非本笔引入、本次未放大；2026-11-25 复验）。② 精化谓词求解预算固定 100ms（`src/frontend/core/sema/proof/budget.rs:41`、`:50`，经 `src/frontend/core/sema/layers/predicate.rs:203`、`:239` 传给 Z3）：求解超过该预算时落 Unknown/Unproven 分支，语料 `tests/yaoxiang/06-compile-errors/refinement/call_arg_no_evidence_err.yx` 由 E4018 退化为 E2031；标准批次环境实测 5/5 为 E4018，高负载作为触发条件未获复现。③ 4.5.2 的 `overload_resolutions` 常驻差集判据（含 `examined`/`consumed` 证据面下限，`src/middle/ir/tests/overload_resolutions.rs`）已不存在，模块头仍宣称差集判据——独立未决项，不表示该测试仍在；恢复判据或更正口径待裁决。
+> **7c 遗留（非本笔，未修）**：① 跨单元单定义方法以命名实参调用会上报 E6007——新旧 revision 完全一致（非本笔引入、本次未放大；2026-11-25 复验）。② 精化谓词求解预算固定 100ms（`src/frontend/core/sema/proof/budget.rs:41`、`:50`，经 `src/frontend/core/sema/layers/predicate.rs:203`、`:239` 传给 Z3）：求解超过该预算时落 Unknown/Unproven 分支，语料 `tests/yaoxiang/06-compile-errors/refinement/call_arg_no_evidence_err.yx` 由 E4018 退化为 E2031；标准批次环境实测 5/5 为 E4018，高负载作为触发条件未获复现。③ 4.5.2 的 `overload_resolutions` 常驻差集判据（含 `examined`/`consumed` 证据面下限，`src/middle/ir/tests/overload_resolutions.rs`）已不存在——**2026-11-25 已更正口径**：模块头改为事实陈述（原文为「差集必须为空」，现写明该语料级用例已于 2026-11-07 批量退役中删除、仓内无自动执行点、同款证据面由 `release_plan_spans` 承担），恢复判据需过测试准入三扇门。
 
 - [ ] **7d 最后做**（2 个三级任务）
 - [ ] **7e `.42` 数据丢失修复**（3 个三级任务；2315/2341 由"独立 issue"收编，2026-10-05）
