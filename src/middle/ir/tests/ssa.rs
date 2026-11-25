@@ -674,6 +674,11 @@ fn test_ssa_phi_conflicting_known_inputs_reports_error() {
         "冲突错误消息必须点名类型不一致，实际 {}",
         error.message
     );
+    assert!(
+        error.message.contains("前驱 0") && error.message.contains("前驱 1"),
+        "冲突错误消息必须点名冲突前驱 label，实际 {}",
+        error.message
+    );
 }
 
 #[test]

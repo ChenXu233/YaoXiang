@@ -820,23 +820,27 @@ pub(crate) fn resolve_phi_type(
     entries: &[(usize, Operand)],
 ) -> Result<MonoType, SsaConstructionError> {
     let original = &values[var].ty;
-    let mut known: Vec<&MonoType> = Vec::new();
-    for (_, operand) in entries {
+    let mut known: Vec<(usize, &MonoType)> = Vec::new();
+    for (label, operand) in entries {
         let Operand::Value(id) = operand else {
             continue;
         };
         let ty = &values[id.0 as usize].ty;
         if !is_explicit_unknown_type(ty) {
-            known.push(ty);
+            known.push((*label, ty));
         }
     }
-    if let Some((previous, ty)) = first_known_phi_type_conflict(known.iter().copied()) {
+    if let Some((previous_label, previous, label, ty)) =
+        first_known_phi_type_conflict(known.iter().copied())
+    {
         return Err(SsaConstructionError::at(
             span,
-            format!("Phi（ValueId({var})）的输入类型不一致：{previous:?} vs {ty:?}"),
+            format!(
+                "Phi（ValueId({var})）的输入类型不一致：前驱 {previous_label} 为 {previous:?}，前驱 {label} 为 {ty:?}"
+            ),
         ));
     }
-    let incoming_type = known.first().map(|ty| (*ty).clone());
+    let incoming_type = known.first().map(|(_, ty)| (*ty).clone());
 
     if !is_explicit_unknown_type(original) {
         if let Some(incoming) = &incoming_type {

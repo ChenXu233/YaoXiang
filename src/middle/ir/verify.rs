@@ -1039,12 +1039,16 @@ fn check_phi_incoming_types(
         }
     }
     // 跳过显式未知后比较剩余已知输入；已知输入冲突必须报，不能被未知掩盖。
-    if let Some((previous, ty)) = first_known_phi_type_conflict(typed.iter().map(|(_, ty)| *ty)) {
+    if let Some((previous_label, previous, label, ty)) =
+        first_known_phi_type_conflict(typed.iter().map(|(label, ty)| (**label, *ty)))
+    {
         out.push(Violation {
             invariant: InvariantKind::PhiConsistency,
             function: view.name.clone(),
             instruction: Some(at),
-            message: format!("Phi incoming 类型不一致：{previous:?} vs {ty:?}"),
+            message: format!(
+                "Phi incoming 类型不一致：前驱 {previous_label} 为 {previous:?}，前驱 {label} 为 {ty:?}"
+            ),
         });
     }
 }

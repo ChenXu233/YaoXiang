@@ -29,20 +29,20 @@ pub(crate) fn is_explicit_unknown_type(ty: &MonoType) -> bool {
 }
 
 /// Phi incoming 的已知类型冲突：跳过显式未知，按 MonoType 精确相等比较剩余
-/// 已知输入；返回第一对冲突类型。生产端（构造 Phi）与校验端必须共用此判据，
-/// 避免安全网比生产者更松。
+/// 已知输入；返回第一对冲突（双方前驱 label + 类型）。生产端（构造 Phi）与
+/// 校验端必须共用此判据，避免安全网比生产者更松，并让诊断能定位前驱。
 pub(crate) fn first_known_phi_type_conflict<'a>(
-    types: impl IntoIterator<Item = &'a MonoType>
-) -> Option<(&'a MonoType, &'a MonoType)> {
-    let mut first: Option<&MonoType> = None;
-    for ty in types {
+    types: impl IntoIterator<Item = (usize, &'a MonoType)>
+) -> Option<(usize, &'a MonoType, usize, &'a MonoType)> {
+    let mut first: Option<(usize, &MonoType)> = None;
+    for (label, ty) in types {
         if is_explicit_unknown_type(ty) {
             continue;
         }
         match first {
-            None => first = Some(ty),
-            Some(previous) if previous == ty => {}
-            Some(previous) => return Some((previous, ty)),
+            None => first = Some((label, ty)),
+            Some((_, previous)) if previous == ty => {}
+            Some((previous_label, previous)) => return Some((previous_label, previous, label, ty)),
         }
     }
     None

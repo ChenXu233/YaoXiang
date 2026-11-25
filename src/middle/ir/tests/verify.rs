@@ -1321,6 +1321,10 @@ fn test_ssa_phi_incoming_type_mismatch_fails() {
         detail.contains("类型不一致"),
         "归因消息应点名类型不一致：{detail}"
     );
+    assert!(
+        detail.contains("前驱 1") && detail.contains("前驱 2"),
+        "归因消息应点名冲突前驱 label：{detail}"
+    );
 }
 
 /// 7b.1b 反例（无块结构）：Phi 出现在模块 init 指令流（无基本块）⇒ 显式报违规。
@@ -1676,12 +1680,16 @@ fn test_ssa_phi_known_conflict_with_unknown_still_fails() {
         detail.contains("类型不一致"),
         "归因消息应点名类型不一致：{detail}"
     );
+    assert!(
+        detail.contains("前驱 1") && detail.contains("前驱 2"),
+        "归因消息应点名冲突前驱 label：{detail}"
+    );
 }
 
-/// 正例：Phi 任一路输入为显式未知 TypeRef("?") 时不判已知冲突。
+/// 正例：未知输入被跳过，只剩一个已知输入时不构成冲突。
 #[test]
-fn test_ssa_phi_unknown_type_does_not_conflict() {
-    // Arrange：v1=Int、v2=?，若按已知类型比较会冲突
+fn test_ssa_phi_single_known_plus_unknown_passes() {
+    // Arrange：v1=Int(64)、v2=显式未知 ?；v1 与 v2 都定义在真实块。
     let phi = phi_instr(ssa_value(0), vec![(1, ssa_value(1)), (2, ssa_value(2))]);
     let m = two_pred_value_module(
         phi,
@@ -1699,7 +1707,38 @@ fn test_ssa_phi_unknown_type_does_not_conflict() {
     // Assert
     assert!(
         r.is_ok(),
-        "含显式未知输入的 Phi 不应因类型冲突报错：{:?}",
+        "未知被跳过且只剩一个已知输入时不应报类型冲突：{:?}",
+        r.err().map(|e| e.to_string())
+    );
+}
+
+/// 正例：未知被跳过，两个同型已知输入之间仍不冲突。
+#[test]
+fn test_ssa_phi_same_known_plus_unknown_passes() {
+    // Arrange：v1/v2=Int(64)、v3=显式未知 ?；Phi 覆盖三个前驱。
+    let phi = phi_instr(
+        ssa_value(0),
+        vec![(1, ssa_value(1)), (2, ssa_value(2)), (3, ssa_value(3))],
+    );
+    let m = three_pred_value_module(
+        phi,
+        vec![
+            value_info(MonoType::Int(64), 4),
+            value_info(MonoType::Int(64), 1),
+            value_info(MonoType::Int(64), 2),
+            value_info(MonoType::TypeRef("?".to_string()), 3),
+            value_info(MonoType::Bool, 0),
+            value_info(MonoType::Bool, 2),
+        ],
+    );
+
+    // Act
+    let r = verify_ssa(&m);
+
+    // Assert
+    assert!(
+        r.is_ok(),
+        "同型已知输入 + 未知应绿（未知被跳过，不制造冲突）：{:?}",
         r.err().map(|e| e.to_string())
     );
 }
@@ -1732,5 +1771,165 @@ fn test_ssa_phi_known_type_conflict_fails() {
     assert!(
         detail.contains("类型不一致"),
         "归因消息应点名类型不一致：{detail}"
+    );
+    assert!(
+        detail.contains("前驱 1") && detail.contains("前驱 2"),
+        "归因消息应点名冲突前驱 label：{detail}"
+    );
+}
+
+/// 门禁负例自证：五类坏 IR 必须分别被 verify_ssa 拒绝且归到正确不变量。
+/// 这是 check-ir-verifier.sh 第三条判据的直驱测试——破坏任一断言都会让脚本红。
+#[test]
+fn test_verify_ssa_negative_controls() {
+    // Arrange：五个独立合成 ModuleIR，每个只制造一种 SSA 违规。
+    let double_definition = module_with(vec![func_with_blocks(
+        "double_definition",
+        vec![],
+        MonoType::Void,
+        vec![],
+        vec![value_info(MonoType::Int(64), 0)],
+        vec![block(
+            0,
+            vec![value_load(0, 1), value_load(0, 2), value_ret(0)],
+            vec![],
+        )],
+    )]);
+
+    let undominated_use = module_with(vec![func_with_blocks(
+        "undominated_use",
+        vec![],
+        MonoType::Void,
+        vec![],
+        vec![
+            value_info(MonoType::Int(64), 1),
+            value_info(MonoType::Bool, 0),
+        ],
+        vec![
+            block(
+                0,
+                vec![
+                    value_load(1, 1),
+                    Instruction::JmpIf {
+                        cond: ssa_value(1),
+                        target: 5,
+                        span: Span::dummy(),
+                    },
+                ],
+                vec![1, 2],
+            ),
+            block(1, vec![value_load(0, 1), jmp(5)], vec![3]),
+            block(2, vec![jmp(5)], vec![3]),
+            block(3, vec![value_ret(0)], vec![]),
+        ],
+    )]);
+
+    let phi_conflict_with_unknown = three_pred_value_module(
+        phi_instr(
+            ssa_value(0),
+            vec![(1, ssa_value(1)), (2, ssa_value(2)), (3, ssa_value(3))],
+        ),
+        vec![
+            value_info(MonoType::Int(64), 4),
+            value_info(MonoType::Int(64), 1),
+            value_info(MonoType::Bool, 2),
+            value_info(MonoType::TypeRef("?".to_string()), 3),
+            value_info(MonoType::Bool, 0),
+            value_info(MonoType::Bool, 2),
+        ],
+    );
+
+    let defining_block_mismatch = module_with(vec![func_with_blocks(
+        "defining_block_mismatch",
+        vec![],
+        MonoType::Void,
+        vec![],
+        vec![value_info(MonoType::Int(64), 1)],
+        vec![block(0, vec![value_load(0, 1), ret_void()], vec![])],
+    )]);
+
+    let reachable_undefined = module_with(vec![func_with_blocks(
+        "reachable_undefined",
+        vec![],
+        MonoType::Void,
+        vec![],
+        vec![value_info(MonoType::Int(64), 0)],
+        vec![block(0, vec![value_ret(0)], vec![])],
+    )]);
+
+    // Act
+    let double_err = verify_ssa(&double_definition).expect_err("Value 双定义必须报错");
+    let undominated_err = verify_ssa(&undominated_use).expect_err("未受支配使用必须报错");
+    let phi_err =
+        verify_ssa(&phi_conflict_with_unknown).expect_err("含未知输入的已知 Phi 冲突必须报错");
+    let defining_err =
+        verify_ssa(&defining_block_mismatch).expect_err("defining_block 不一致必须报错");
+    let undefined_err = verify_ssa(&reachable_undefined).expect_err("可达使用无定义必须报错");
+
+    // Assert
+    assert_eq!(
+        double_err
+            .violations
+            .iter()
+            .filter(|v| v.invariant == InvariantKind::UniqueDefinition)
+            .count(),
+        1,
+        "Value 双定义应报 1 项 UniqueDefinition：{double_err}"
+    );
+    assert!(
+        double_err.to_string().contains("ValueId(0)"),
+        "双定义诊断应点名 ValueId(0)：{double_err}"
+    );
+    assert_eq!(
+        undominated_err
+            .violations
+            .iter()
+            .filter(|v| v.invariant == InvariantKind::Dominance)
+            .count(),
+        1,
+        "未受支配使用应报 1 项 Dominance：{undominated_err}"
+    );
+    assert!(
+        undominated_err.to_string().contains("没有支配"),
+        "未受支配诊断应点名无支配定义：{undominated_err}"
+    );
+    assert_eq!(
+        phi_err
+            .violations
+            .iter()
+            .filter(|v| v.invariant == InvariantKind::PhiConsistency)
+            .count(),
+        1,
+        "含未知输入的已知 Phi 冲突应报 1 项 PhiConsistency：{phi_err}"
+    );
+    assert!(
+        phi_err.to_string().contains("前驱 1") && phi_err.to_string().contains("前驱 2"),
+        "Phi 冲突诊断应点名冲突前驱 label：{phi_err}"
+    );
+    assert_eq!(
+        defining_err
+            .violations
+            .iter()
+            .filter(|v| v.invariant == InvariantKind::UniqueDefinition)
+            .count(),
+        1,
+        "defining_block 不一致应报 1 项 UniqueDefinition：{defining_err}"
+    );
+    assert!(
+        defining_err.to_string().contains("defining_block"),
+        "defining_block 诊断应点名字段：{defining_err}"
+    );
+    assert_eq!(
+        undefined_err
+            .violations
+            .iter()
+            .filter(|v| v.invariant == InvariantKind::Dominance)
+            .count(),
+        1,
+        "可达使用无定义应报 1 项 Dominance：{undefined_err}"
+    );
+    assert!(
+        undefined_err.to_string().contains("没有支配"),
+        "可达无定义诊断应点名无支配定义：{undefined_err}"
     );
 }

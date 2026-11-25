@@ -17,7 +17,7 @@ run_verify_test() {
         # 失败时打印完整 cargo 输出：语料判据会把全部违规拼在失败消息里，
         # 截尾会丢掉最早出问题的文件。
         printf '%s\n' "$output"
-        echo "check-ir-verifier: FAIL（$label 语料判据红）"
+        echo "check-ir-verifier: FAIL（$label 判据红）"
         exit 1
     }
     echo "$output" | tail -3
@@ -31,4 +31,5 @@ run_verify_test() {
 
 run_verify_test middle::ir::tests::verify::test_verify_loose_corpus_green "verify_loose"
 run_verify_test middle::ir::tests::verify::test_verify_ssa_corpus_green "verify_ssa"
-echo "check-ir-verifier: PASS（全语料 verify_loose + verify_ssa 绿，校验面非空）"
+run_verify_test middle::ir::tests::verify::test_verify_ssa_negative_controls "verify_ssa_negative_controls"
+echo "check-ir-verifier: PASS（全语料 verify_loose + verify_ssa 绿，负例自证绿，校验面非空）"
