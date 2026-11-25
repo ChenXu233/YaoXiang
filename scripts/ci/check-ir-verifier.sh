@@ -1,9 +1,14 @@
 #!/usr/bin/env bash
 # 门禁 9.6（WBS P2 / RFC-039）：IR 静态校验器语料门禁。
 #
-# 判据：全语料（tests/yaoxiang/ + src/std/tests/ 中到达 IR 生成的文件）产出的
-# ModuleIR 必须过 verify_loose 与 verify_ssa，且校验面非空（防「校验器没跑到」的
-# 假绿——非空断言内置于测试：files > 200 且 fns/instrs > 0）。
+# 三条判据（与下方三条 run_verify_test 一一对应）：
+#   1. verify_loose：全语料（tests/yaoxiang/ + src/std/tests/ 中到达 IR 生成的文件）
+#      产出的 ModuleIR 过宽松校验，且校验面非空（防「校验器没跑到」的假绿——
+#      非空断言内置于测试：files > 200 且 fns/instrs > 0）。
+#   2. verify_ssa：同批语料的 ModuleIR 过严格校验（值定义唯一性、值使用受定义支配、
+#      defining_block 一致、Phi 一致性）。
+#   3. verify_ssa_negative_controls：合成坏 IR 必须被拒绝（负例自证——证明校验器
+#      确实拦得住，而不是只证明生产语料绿）。
 #
 # 跑红 = ir_gen 存在隐式缺陷（D38：不开豁免，修 ir_gen 而非放宽判据）。
 set -euo pipefail

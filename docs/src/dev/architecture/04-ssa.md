@@ -246,15 +246,22 @@ Phi {
 
 1. `incoming.len() == 该块前驱数`。
 2. `incoming` 的 label 集合 == `blocks` 中所有 `successors` 含本块 label 的那些块的 label 集合。
-3. 所有 `incoming` 值的 `MonoType` 相同（**依赖 03 的类型表示已收敛**）。
+3. 所有 `incoming` 值的 `MonoType` 相同（**依赖 03 的类型表示已收敛**）；类型显式未知的输入被跳过，剩余已知输入之间类型必须一致（权威规则与实现落点见下）。
 
-`verify_ssa` 的落地状态（7b.1b 已补齐前三条）：约束 1 与 2 需要值表与块级 CFG，已于 **7b.1b** 落地为「块级前驱数」与「前驱 label 集合」两条判据——前驱集从 `BasicBlock.successors` 反推（`src/middle/ir/verify.rs` 的 `block_predecessors`），计数不等只报计数、集合不等才报集合（同一缺陷不双报）；约束 3 的逐输入类型一致同期落地，取值来自值表 `values[v].ty`，**复用既有的 `types_compatible`**（未引入第三套类型兼容判断；03 的类型表示收敛仍是「前置条件（硬性）·前置二」，届时 `ValueInfo::ty` 仍是 `MonoType`）。三条判据的违规类别均为 `InvariantKind::PhiConsistency`。
+`verify_ssa` 的落地状态（7b.1b 已补齐前三条）：约束 1 与 2 需要值表与块级 CFG，已于 **7b.1b** 落地为「块级前驱数」与「前驱 label 集合」两条判据——前驱集从 `BasicBlock.successors` 反推（`src/middle/ir/verify.rs` 的 `block_predecessors`），计数不等只报计数、集合不等才报集合（同一缺陷不双报）；约束 3 的逐输入类型一致同期落地，取值来自值表 `values[v].ty`；该判据比较的是剩余已知输入之间的 `MonoType` 精确相等（权威规则与两层实现落点见下），而 `check_type_consistency` 用的 `types_compatible` 判的是单条指令 dst/src 的相容性——两者判的不是一件事。03 的类型表示收敛仍是「前置条件（硬性）·前置二」，届时 `ValueInfo::ty` 仍是 `MonoType`。三条判据的违规类别均为 `InvariantKind::PhiConsistency`。
 
 **类型不可得的三种形态（显式登记，不静默放行）**：值表为空 ⇒ 判定依据不存在（模块 init / 顶层语句的恒常形态，`value_mode=false` 路径）；值表非空而 `ValueId` 越界 ⇒ 报违规；非 `Value` 操作数（`Const` / `Local` / `Arg` / `Global`）⇒ 无值表类型源，不判定。
 
-**实测前提（已于 7b.3 兑现）**：7b.3 之前全仓 `BasicBlock.successors` 的生产构造全部是 `Vec::new()`（块级前驱恒空，前驱数与前驱集合两条判据当时由合成夹具承担）。**7b.3 起块级 `successors` 由 `src/middle/ir/ir.rs` 的 `partition_blocks` 在每条生产构造点真实填充**（`lower` 6 处 + codegen 合成构造函数体 1 处全部走该唯一入口；`lower` 产物的循环 / 分支块有多块、双出边与回边），故前驱数与前驱集合两条判据在真实 IR 上有数据——真 lowering 产物上的直驱测试钉住该登记-消费闭环。`Phi` 的生产构造点仍为 0（生产端归后续批次），落地时直接受本判据约束。
+**`Phi` 输入类型的权威规则：显式未知被跳过、剩余已知输入比较、已知冲突报错。** 显式未知类型由 `src/middle/ir/ir.rs` 的 `is_explicit_unknown_type` 判定（`MonoType::TypeRef("?")`）；被跳过的输入不参与判定，剩余已知输入之间按 `MonoType` 精确相等比较，出现冲突即报错。规则由两层共同保证：
 
-7b.1a 只引入变体：lowering 生产构造点为 0（至今仍为 0，生产端归后续批次）。`translator.rs` 的消费面已于 **7b.3 落地**：方案 A 在块入口按前驱展开为 `Move` 串（组落在汇合块入口、组间既有 `JMP` 跳过、入边跳转按前驱重定向到组起点），`translate_instruction` 的 `Phi` 臂是不可达 E8001 防御臂（`executor` 永远看不到 `Phi`）。
+- **调用点过滤**：生产端 `src/middle/ir/ssa.rs` 的 `resolve_phi_type` 与校验端 `src/middle/ir/verify.rs` 的 `check_phi_incoming_types` 各自跳过非 `Value` 操作数与显式未知类型，只把剩余已知输入连同前驱 label 交给下一步；校验端另报 `ValueId` 越界（无值信息可判定）。
+- **共享判据**：`src/middle/ir/ir.rs` 的 `first_known_phi_type_conflict` 对剩余已知输入按 `MonoType` 精确相等比较，返回第一对冲突（双方前驱 label 与类型）；生产端据此报构造失败，校验端据此报 `PhiConsistency` 违规，两端诊断都带前驱定位。
+
+两层缺一不可：helper 只处理调用点已过滤的输入，单改 helper 不改变判定；调用点若各自实现比较，生产端与校验端会出现两套口径，安全网可能比生产者更松。
+
+**实测前提（已于 7b.3 兑现）**：7b.3 之前全仓 `BasicBlock.successors` 的生产构造全部是 `Vec::new()`（块级前驱恒空，前驱数与前驱集合两条判据当时由合成夹具承担）。**7b.3 起块级 `successors` 由 `src/middle/ir/ir.rs` 的 `partition_blocks` 在每条生产构造点真实填充**（`lower` 6 处 + codegen 合成构造函数体 1 处全部走该唯一入口；`lower` 产物的循环 / 分支块有多块、双出边与回边），故前驱数与前驱集合两条判据在真实 IR 上有数据——真 lowering 产物上的直驱测试钉住该登记-消费闭环。`Phi` 的生产构造点已非 0：生产端按支配边界在汇合块首插入 `Phi`（`src/middle/ir/ssa.rs` 的 `construct_ssa`，由 `src/middle/lower/scope.rs` 的 `finalize_code_body` 在块切分之后、值槽分配之前调用），`Phi` 直接受本节三条约束约束。
+
+7b.1a 只引入变体；生产构造点由生产端 SSA 构造提供（`src/middle/ir/ssa.rs` 的 `construct_ssa`，提交 `46133853`）。`translator.rs` 的消费面已于 **7b.3 落地**：方案 A 在块入口按前驱展开为 `Move` 串（组落在汇合块入口、组间既有 `JMP` 跳过、入边跳转按前驱重定向到组起点），`translate_instruction` 的 `Phi` 臂是不可达 E8001 防御臂（`executor` 永远看不到 `Phi`）。
 
 **处置 `3632-3638` 的守卫问题**：现状 `generate_block_ir` 的回收有 `if result_reg.is_none()` 守卫（`3626-3631` 注释：表达式操作数位的块，外层可能持有跨块存活的兄弟实参临时）。SSA 化后该守卫**不再需要**——因为临时值不再回滚，跨块存活的兄弟实参持有的是自己的 `ValueId`，不会被回滚波及。**这一条是 SSA 化能真正简化代码的地方，而不只是改名。**
 
@@ -282,7 +289,7 @@ pub struct ValueInfo {
 
 - **计数器隔离**：`ValueId` 由独立计数器 `next_value: u32` 发放，每函数体从 0 起算、单调递增、永不回滚；`NestedBodyGuard` 保存/还原它与值表（每个函数体一套）；三处语句级回收只回滚 `next_temp`（槽），不触碰 `next_value`；柯里层循环逐层重置（每层一个 `FunctionIR`）。模块 init / 顶层语句没有值表——`value_mode=false` 时 `next_temp_reg` 退化为旧的 `Local` 槽分配，init 序列零变化。
 - **ty 来源**（只取 lowering 已有信息，不新造类型判定器）：字面量经 `ConstValue::mono_type()`（与 verify 的常量类型映射收敛为单一来源）；变量/调用经 `generate_expr_ir` 入口查类型检查结果与绑定函数返回类型；比较/逻辑/字符串族/前向传播在函数体收尾按指令语义补齐。不可得落**显式未知 `MonoType::TypeRef("?")`**（不静默 `Int(64)` 占位，`LocalSlot.ty` 一律不读）。232 份快照实测：9425 条值中真实类型 7080、显式未知 2345（24.9%），未知集中在调用/字段/索引/容器构造形态。
-- **defining_block**：取生成期当前块 label；**7b.3 起块切分已落地**（真 lowering 的 while 体为多块），但本字段的取值仍是生成期 `cur_block_label`（当前恒 0）——与真实定义块暂不一致；7b.4 再生 232 份快照时未改本字段（`values` 段 `@block` 未漂移），更正须与 `values` 段再生同批，**明确移交 `Phi` 生产批次**。
+- **defining_block**：取真实定义块 label——生产端 SSA 构造在支配树重命名时写入定义所在块（`Phi` 的 dst 取 `Phi` 所在块，`src/middle/ir/ssa.rs`），并由 `verify_ssa` 的 `defining_block` 一致性判据核对（`src/middle/ir/verify.rs`）。
 - **debug_name**：全 `None`（具名变量仍是 `Local`，不迁值表）。
 - **索引**：`value_slots: Vec<usize>`（index = ValueId）与 `values` 同索引，记录值 → 帧槽映射；7b.4 起由 `src/middle/lower/regalloc.rs` 的线性扫描分配器按活跃区间重算（`frame_slots = named_base + max_live`），codegen 的 `OperandResolver` 只消费不分配。
 
