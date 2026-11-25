@@ -13,7 +13,7 @@ module
     value v1: Bool @block0
     value v2: Int(64) @block0
     value v3: Int(64) @block0
-    value v4: Generic { name: "Vec", args: [MetaType { universe_level: UniverseLevel { level: "0" }, type_params: [] }] } @block0
+    value v4: Generic { name: "Vec", args: [Int(64)] } @block0
     value v5: Generic { name: "String", args: [] } @block0
     value v6: Int(64) @block0
     value v7: Int(64) @block0
@@ -25,11 +25,11 @@ module
     value v13: Bool @block0
     value v14: Int(64) @block0
     value v15: Int(64) @block0
-    value v16: Generic { name: "Vec", args: [MetaType { universe_level: UniverseLevel { level: "0" }, type_params: [] }] } @block0
+    value v16: Generic { name: "Vec", args: [Int(64)] } @block0
     value v17: Generic { name: "String", args: [] } @block0
     value v18: TypeRef("?") @block0
     value v19: Bool @block0
-    value v20: Generic { name: "Vec", args: [MetaType { universe_level: UniverseLevel { level: "0" }, type_params: [] }] } @block0
+    value v20: Generic { name: "Vec", args: [Int(64)] } @block0
     value v21: TypeRef("?") @block0
     value v22: Int(64) @block0
     value v23: Int(64) @block0
@@ -43,7 +43,7 @@ module
     value v31: Bool @block0
     value v32: Int(64) @block0
     value v33: Int(64) @block0
-    value v34: Generic { name: "Vec", args: [MetaType { universe_level: UniverseLevel { level: "0" }, type_params: [] }] } @block0
+    value v34: Generic { name: "Vec", args: [Int(64)] } @block0
     value v35: Generic { name: "String", args: [] } @block0
     value v36: Int(64) @block0
     value v37: Int(64) @block0
@@ -52,7 +52,7 @@ module
     value v40: Bool @block0
     value v41: Int(64) @block0
     value v42: Int(64) @block0
-    value v43: Generic { name: "Vec", args: [MetaType { universe_level: UniverseLevel { level: "0" }, type_params: [] }] } @block0
+    value v43: Generic { name: "Vec", args: [Int(64)] } @block0
     value v44: Generic { name: "String", args: [] } @block0
     value v45: Int(64) @block0
     value v46: Int(64) @block0
@@ -68,19 +68,19 @@ module
     value v56: Int(64) @block0
     value v57: Int(64) @block0
     value v58: Int(64) @block0
-    value v59: Generic { name: "Vec", args: [MetaType { universe_level: UniverseLevel { level: "0" }, type_params: [] }] } @block0
+    value v59: Generic { name: "Vec", args: [Int(64)] } @block0
     value v60: Int(64) @block0
-    value v61: Generic { name: "Vec", args: [MetaType { universe_level: UniverseLevel { level: "0" }, type_params: [] }] } @block0
+    value v61: Generic { name: "Vec", args: [Int(64)] } @block0
     value v62: Int(64) @block0
     value v63: TypeRef("?") @block0
     value v64: Bool @block0
     value v65: Int(64) @block0
     value v66: Int(64) @block0
-    value v67: Generic { name: "Vec", args: [MetaType { universe_level: UniverseLevel { level: "0" }, type_params: [] }] } @block0
+    value v67: Generic { name: "Vec", args: [Int(64)] } @block0
     value v68: Generic { name: "String", args: [] } @block0
     value v69: TypeRef("?") @block0
     value v70: Bool @block0
-    value v71: Generic { name: "Vec", args: [MetaType { universe_level: UniverseLevel { level: "0" }, type_params: [] }] } @block0
+    value v71: Generic { name: "Vec", args: [Int(64)] } @block0
     value v72: TypeRef("?") @block0
     value v73: Int(64) @block0
     value v74: Int(64) @block0

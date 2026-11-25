@@ -157,6 +157,30 @@ fn test_list_operations() {
     );
 }
 
+/// #575：内置容器构造结果的索引元素按**元素类型**定型，而不是 `Type`。
+///
+/// 值级 oracle：修复前 `v[0]` 的类型是 `Type`，`v[0] + 1` 在编译期报
+/// E1002（同一元素位在算术/比较两臂都应按 Int 定型）；`Vec(Int)(len = …)`
+/// 的槽位分配是未修分支对照，不得受本修影响。
+#[test]
+fn test_vec_ctor_index_element_is_element_type() {
+    run_ok(
+        r#"
+use std.assert
+
+main = () => {
+    v = Vec(Int)(1, 2, 3)
+    assert.assert(v[0] + 1 == 2, "index element must be Int (not Type)")
+    assert.assert(v[0] == 1, "equality against Int literal")
+    a = Array(Int, 3)(1, 2, 3)
+    assert.assert(a[0] + 1 == 2, "Array(T, N) index element must be Int")
+    buf = Vec(Int)(len = 3)
+    assert.assert(buf.length == 3, "len-slot ctor keeps working")
+}
+        "#,
+    );
+}
+
 // 函数调用语义测试
 
 #[test]

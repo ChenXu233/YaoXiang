@@ -9,7 +9,9 @@ use crate::middle::passes::mono::instance::{GenericFunctionId, InstantiationRequ
 use crate::util::diagnostic::ErrorCodeDefinition;
 use std::collections::{HashMap, HashSet};
 
-use super::super::{ConstArgOutcome, ExpressionInferrer};
+use super::super::{
+    concrete_type_from_expr_arg, extract_const_value_from_expr, ConstArgOutcome, ExpressionInferrer,
+};
 use crate::frontend::core::sema::inference::arg_binding;
 
 impl<'a> ExpressionInferrer<'a> {
@@ -128,6 +130,50 @@ impl<'a> ExpressionInferrer<'a> {
                 }
             }
             _ => MonoType::TypeRef("_".to_string()),
+        }
+    }
+
+    /// 内置容器构造器 `Vec(T)` / `Array(T, N)` 在**值位置**的类型实参解包。
+    ///
+    /// `Vec(Int)` 的被调名推断成 `MetaType`，实参 `Int` 的推断结果同样只是
+    /// `MetaType` 空壳（不携带具体类型名）——直接把这些实参塞进 `Generic{…}`
+    /// 会让元素位变成 `Type`，`v[0] + 1` 报 E1002（#575）。这里按 AST 取回
+    /// 具体类型：类型位复用 `type_arg_of_expr`（与显式类型实参 `mk(Int)` 同一
+    /// 单点）；`Array` 的长度位按注解同形落 `Literal`（`container_length_slot`
+    /// 读的就是它），非字面量保持原推断类型。实参不是类型表达式时（如
+    /// `Vec(3)` 的长度字面量）保持既有推断结果，不把值误当类型。
+    pub(super) fn builtin_container_ctor_args(
+        &self,
+        fn_name: Option<&str>,
+        args: &[crate::ast::Expr],
+        arg_types: &[MonoType],
+    ) -> Option<Vec<MonoType>> {
+        let is_type_arg = |i: usize| -> bool {
+            matches!(arg_types.get(i), Some(MonoType::MetaType { .. }))
+                || concrete_type_from_expr_arg(&args[i], self.type_defs, self.generic_type_defs)
+                    .is_some()
+        };
+        let type_slot = |i: usize| -> MonoType {
+            if is_type_arg(i) {
+                Self::type_arg_of_expr(&args[i])
+            } else {
+                arg_types[i].clone()
+            }
+        };
+        match fn_name? {
+            "Vec" if args.len() == 1 => Some(vec![type_slot(0)]),
+            "Array" if args.len() == 2 => {
+                let length = match extract_const_value_from_expr(&args[1]) {
+                    Some(value) => MonoType::Literal {
+                        name: format!("{value}"),
+                        base_type: Box::new(arg_types[1].clone()),
+                        value,
+                    },
+                    None => arg_types[1].clone(),
+                };
+                Some(vec![type_slot(0), length])
+            }
+            _ => None,
         }
     }
 
@@ -291,6 +337,7 @@ impl<'a> ExpressionInferrer<'a> {
         func_ty: MonoType,
         arg_types: &[MonoType],
         fn_name: Option<&str>,
+        builtin_ctor_args: Option<Vec<MonoType>>,
     ) -> MonoType {
         // 内置容器构器：`Vec(Int)` / `Array(Int, 3)`。
         //
@@ -299,17 +346,18 @@ impl<'a> ExpressionInferrer<'a> {
         // `Vec(Int)()` 的 `func_ty` 就悬空成 `tN`，`.length` 报
         // E1053「非结构体不能取字段」（D6.2）。这里先把「MetaType 应用类型实参」
         // 收成 `Generic{name, args}`——这正是 `Vec(Int)` 应有的类型。
+        //
+        // 实参本身也只是 `MetaType` 空壳（`Int` 在值位置不携带具体名字，见
+        // #575），故具体类型实参由调用点按 AST 形态解出后传入；直接复用
+        // `arg_types` 会让元素位退化成 `Type`（`v[0] + 1` 报 E1002）。
         if matches!(func_ty, MonoType::MetaType { .. }) {
-            if let Some(name) = fn_name {
-                if matches!(name, "Vec" | "Array") {
-                    let args: Vec<MonoType> = arg_types.to_vec();
-                    if !args.is_empty() {
-                        self.last_type_args = args.clone();
-                        return MonoType::Generic {
-                            name: name.to_string(),
-                            args,
-                        };
-                    }
+            if let (Some(name), Some(args)) = (fn_name, builtin_ctor_args) {
+                if matches!(name, "Vec" | "Array") && !args.is_empty() {
+                    self.last_type_args = args.clone();
+                    return MonoType::Generic {
+                        name: name.to_string(),
+                        args,
+                    };
                 }
             }
         }

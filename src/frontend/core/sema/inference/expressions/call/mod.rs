@@ -497,7 +497,16 @@ impl<'a> ExpressionInferrer<'a> {
             crate::ast::Expr::FieldAccess { field, .. } => Some(field.as_str()),
             _ => None,
         };
-        let mono_func_ty = self.monomorphize(func_ty.clone(), &value_arg_types, fn_name_for_mono);
+        // 内置容器构造器（`Vec(Int)` / `Array(Int, 3)`）的类型实参在值位置
+        // 只是 `MetaType` 空壳，具体类型必须按 AST 形态解出（#575）。
+        let builtin_ctor_args =
+            self.builtin_container_ctor_args(fn_name_for_mono, args, &arg_types);
+        let mono_func_ty = self.monomorphize(
+            func_ty.clone(),
+            &value_arg_types,
+            fn_name_for_mono,
+            builtin_ctor_args,
+        );
 
         // #394：`{}` 空块落入容器参数位——调用实参位没有 current_expected
         // 可用，但签名形参在 mono 后已知，按位预扫：空块实参 × 容器形参
