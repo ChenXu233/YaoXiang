@@ -287,25 +287,60 @@ impl AstToIrGenerator {
         }
     }
 
-    /// 该名字是不是**本函数体内绑定的 lambda / 嵌套函数**（闭包类别）。
+    /// 该名字是不是本单元登记过的**闭包值绑定**（绑定值写成 `=>` lambda，且声明里没有值形参）。
     ///
-    /// 判据来源是 lowering 自己的登记面：`f = () => 7` 在函数体内绑定时走
-    /// `StmtKind::Assign` 的嵌套函数臂（生成为 `nested_functions` 条目），不是
-    /// 局部变量——调用点因此看着像静态函数名（`is_static_fn_name` 为真），
-    /// 但它不是声明函数、形参名表里没有它。
+    /// 判据源是 `closure_fn_names`（由 `stmt.rs` 的两个 Assign 函数绑定臂按**绑定形态**
+    /// 登记）——不是「名字出现在 `nested_functions` 里」：后者同时含**具名嵌套函数声明**
+    /// （Fn 注解 + 声明形参），它们是声明函数，不属于闭包值，照常进兜底（见下一段）。
+    /// 只看值形态也不够：parser 会把 `g: (a, b) -> Int = { .. }` 的块体归一成 lambda 值，
+    /// 故登记面同时要求「声明里没有值形参」。
     ///
-    /// 用途（4.9.9 修复轮 3 / F2）：这类调用**不进**「拿不到名字表 ⇒ 响亮拒绝」
-    /// 的兜底——零参闭包 `f = () => 7; g = f(x = 1)` 在兜底之前编译通过且结果
-    /// 正确，按 07 入口判据属「原先成功」，改判编译期错误是 D 类变更、超出 4.9.9
-    /// 目标。旧行为（命名实参不参与绑定）保留，并在 09 的 4.9.9 行登记为已知缺口
-    /// （D60 ② 该报未报，A 类）。
-    fn is_nested_lambda_name(
+    /// 用途（WBS 4.9.9 修复轮 3 / 复审轮）：闭包值调用**不进**「拿不到名字表 ⇒ 响亮拒绝」
+    /// 的兜底——`f = () => 7; g = f(x = 1)`（顶层或函数体内）在兜底之前编译通过、结果
+    /// 正确，按 07 入口判据属「原先成功」，改判编译期错误是 D59 D 类变更、超出 4.9.9
+    /// 目标。旧行为（命名实参不参与绑定）保留，并登记为已知缺口（D60 ② 该报未报，A 类）。
+    fn is_closure_fn_name(
+        &self,
+        name: &str,
+    ) -> bool {
+        self.closure_fn_names.contains(name)
+    }
+
+    /// 该名字是不是**具名嵌套函数声明**（函数体内用 Fn 注解声明的函数，非闭包值）。
+    ///
+    /// 判据源是 `nested_functions` 的名字集合——与 [`Self::is_closure_fn_name`] 互补：
+    /// 同一个列表里既有具名嵌套函数声明，也有 lambda 生成的函数体，闭包值集合负责把
+    /// 后者剔掉。具名嵌套函数是**声明函数**：形参名表本应可用，当前登记面只覆盖顶层
+    /// 绑定（`stmt.rs` 的嵌套函数臂不登记 `fn_param_names`），故按「拿不到名字表 ⇒
+    /// 响亮拒绝」处理（旧行为是静默丢参 + 运行期失败，属 D59 C 类可顺修）；
+    /// 「嵌套函数形参名接入 lookup」登记为已知缺口，见 09 的 4.9.9 行。
+    fn is_declared_nested_fn(
         &self,
         name: &str,
     ) -> bool {
         self.nested_functions.iter().any(|f| f.name == name)
     }
 
+    /// 该名字的调用是否属于**本单元声明面**（闭包值绑定 / 本单元顶层函数绑定）。
+    ///
+    /// 这类调用**不进**「拿不到名字表 ⇒ 响亮拒绝」的兜底，理由分两类：
+    /// - 闭包值绑定（`f = () => 7`，顶层或函数体内，判据源 [`Self::is_closure_fn_name`]）：
+    ///   兜底之前编译通过且结果正确（命名实参被忽略），改判编译期错误是 D59 D 类变更；
+    /// - 本单元顶层函数绑定（`declared_fn_names`，判据源与裸名解析的用户定义优先同一张表）：
+    ///   声明期的名字表由本单元登记面（`fn_param_names`）负责；登记面缺席说明声明里
+    ///   没有可用的值形参表（如块体实现），旧行为是静默忽略——同样不得在兜底里改判
+    ///   （实测 `f: (a: Int) -> Int = { 7 }; g = f(a = 1)` 旧行为编译通过、结果 7）。
+    ///   这两类都登记为已知缺口（D60 ② 该报未报，A 类），见 09 的 4.9.9 行。
+    ///
+    /// **具名嵌套函数声明不在本判据内**（既不在 `declared_fn_names` 也不是闭包值）
+    /// ——它们是声明函数，旧行为是「静默丢参 + 运行期失败」＝非成功，按 C 类顺修成
+    /// 响亮拒绝（见 [`Self::is_declared_nested_fn`]）。
+    fn binding_is_local_declaration(
+        &self,
+        name: &str,
+    ) -> bool {
+        self.is_closure_fn_name(name) || self.declared_fn_names.contains(name)
+    }
     /// 生成 Call 表达式 IR
     ///
     /// `call_plan_id` = **本调用节点的身份**（`Expr::Call::plan_id`，RFC-039 D20）：
@@ -385,7 +420,41 @@ impl AstToIrGenerator {
             }
         }
         // 检查是否是方法调用：func 是 FieldAccess
+        // 检查是否是方法调用：func 是 FieldAccess
         if let Expr::FieldAccess { expr, field, .. } = func {
+            // **名字层歧义的消费侧判据**（WBS 4.9.9 修复轮 3 / 复审轮；裁决口径 b）：
+            // 本单元导入面里同一个定义侧类型名由 **≥2 个模块**提供时：
+            //   - **命名实参**一律响亮拒绝（共享判据的空表出口 = 既有 E1014）：
+            //     typecheck 用注入的名表核对名字、IR 却按接收者自己的名表重排实参，
+            //     形参名相同、类型不同时就是静默错值（实测别名侧 `x.bump(n = 2.0)`
+            //     打出 200.0）；
+            //   - **位置实参**只在各提供方的候选签名**完全一致**时允许（4.9.8 的派发
+            //     归因：IR 按 `method_dispatch_name` 落到接收者所属单元）；签名不一致
+            //     时同样响亮拒绝（既有 E1107「N 个候选匹配，无法区分」）——实测三例
+            //     静默错值：形参类型不同 ⇒ 111 而非 2.0、元数不同 ⇒ 300 而非 7、
+            //     返回类型不同 ⇒ 200 而非 2.0（判据：`ambiguous_method_signature_conflict`）。
+            //   位置的签名比对是**保守近似**（只比候选签名，不比实现），残余风险登记
+            //   在 4.9.10 行。
+            if let Some((leaf, providers)) = self.receiver_type_provider_count(expr) {
+                if providers >= 2 {
+                    let key = format!("{leaf}.{field}");
+                    if !named_args.is_empty() {
+                        return Err(Self::reject_named_args_without_param_names(
+                            &key, args, named_args, *span,
+                        ));
+                    }
+                    if let Some(conflicting) =
+                        self.ambiguous_method_signature_conflict(&leaf, field)
+                    {
+                        return Err(ErrorCodeDefinition::ambiguous_method_overload(
+                            &key,
+                            conflicting,
+                        )
+                        .at(*span)
+                        .build());
+                    }
+                }
+            }
             // 方法调用 - 转换为普通函数调用
             // 命名空间机制：p.method() -> method(p)
 
@@ -1070,8 +1139,9 @@ impl AstToIrGenerator {
                         })
                         .collect();
                 } else if !is_ctor
-                    && self.is_static_fn_name(func)
-                    && !self.is_nested_lambda_name(callee.as_deref().unwrap_or(""))
+                    && !self.binding_is_local_declaration(callee.as_deref().unwrap_or(""))
+                    && (self.is_static_fn_name(func)
+                        || self.is_declared_nested_fn(callee.as_deref().unwrap_or("")))
                 {
                     // F1（WBS 4.9.9 修复轮 2）：**静态**函数名的形参名表不可得（本
                     // 模块表与导出面都查不到）时，此前命名实参被静默丢弃。响亮拒绝：

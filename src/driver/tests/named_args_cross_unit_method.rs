@@ -220,10 +220,21 @@ fn test_cross_unit_method_named_arg_selects_overload_by_parameter_name() {
 ///
 /// 三态（同一夹具，见报告）：pre-t1 `1e05dc3e` = 0/0；修复轮 2 `091b835b` = E1002
 /// （规则③把裸名提供方候选一起跳过，位置实参重载退回单绑定）；本修复后 = 0/0。
+/// 名字层歧义的消费侧判据（WBS 4.9.9 修复轮 3 / 复审轮；用户裁决 A 口径）：**混合别名 +
+/// 裸名导入同名类型**时，该类型上的**命名实参一律响亮拒绝**（E1014，共享判据的空表出口）。
+///
+/// 机制：候选注入面按提供方优先级只取裸名提供方的候选，而调用键前缀是定义侧类型名
+/// ——两个同名类型共用同一个键：typecheck 会用裸名提供方的签名匹配，IR 却按接收者
+/// 归属派发到别名模块的方法；形参名相同、类型不同时就是**静默错值**（实测别名侧
+/// `x.bump(n = 2.0)` 曾打出 200.0：别名模块的方法体以 Float 执行 Int 参数）。
+///
+/// 三态（同一夹具，见报告）：pre-t1 `1e05dc3e` = check=1 E1014；第一次修复
+/// `02ed42d2` = check=0/run=1（运行期 E6007）；中间一轮 `5edfb53e` = check=0/run=0
+/// （静默打出 200.0）；本修复后 = check=1 E1014（响亮）。
 #[test]
-fn test_mixed_alias_bare_import_binds_bare_provider_names() {
+fn test_mixed_alias_bare_import_named_arg_rejects_loudly() {
     // Arrange：a 的 Temp 别名导入为 X（方法形参名 step_a），b 的同名 Temp 裸名导入
-    // （方法形参名 step_b）；命名实参调用落在裸名导入的 b.Temp 上
+    // （方法形参名 step_b）；调用落在裸名导入的 b.Temp 上
     let (_dir, entry) = make_script_project(&[
         (
             "a.yx",
@@ -235,27 +246,20 @@ fn test_mixed_alias_bare_import_binds_bare_provider_names() {
         ),
         (
             "main.yx",
-            "use a.{Temp as X}\nuse b.{Temp}\n\nx = X(1.0)\nt = Temp(2.0)\nv = t.bump(step_b = 3.0)\n",
+            "use a.{Temp as X}\nuse b.{Temp}\n\nt = Temp(2.0)\nv = t.bump(step_b = 3.0)\n",
         ),
     ]);
 
     // Act
-    let outcome = run_multi(&entry).expect("driver run failed");
+    let (codes, no_hard_failure) = check_codes(&entry);
 
     // Assert
+    assert!(no_hard_failure, "IR 级诊断必须收进逐文件通道：{codes:?}");
     assert!(
-        outcome.failure.is_none(),
-        "裸名提供方的候选必须注入：命名实参 step_b 应入槽（修复轮 2 实测 E1002）：{:?}",
-        outcome.failure.as_ref().map(|e| format!("{e}"))
-    );
-    let module = outcome.module.expect("Linking + mono 必须产出合并 IR");
-    let values = run_merged_slot_values(module);
-    assert!(
-        values.iter().any(|value| value == "Float(5.0)"),
-        "b.Temp.bump(step_b = 3.0) 应为 2 + 3 = 5.0，实际全局槽位：{values:?}"
+        codes.iter().any(|code| code == "E1014"),
+        "名字层歧义类型上的命名实参必须响亮拒绝（既有 E1014），不得静默错派/静默丢弃：{codes:?}"
     );
 }
-
 /// F1 修复轮 3（t3 复审）·别名侧边界：别名导入的 a.Temp 实例与裸名侧共用同一个
 /// 裸名候选键，用 a 的形参名（step_a）调用必须**响亮拒绝**（E1014），不得静默
 /// 错派到 b 的方法（「避免静默错派」= 别名侧评估结论）。
@@ -345,15 +349,13 @@ fn test_cross_unit_named_arg_whole_module_import_rejects_loudly() {
         "整体模块导入形态没有名字表时，命名实参必须响亮拒绝（既有 E1014）：{codes:?}"
     );
 }
-/// F1 回归（t3 复审，4.9.9 修复轮 3）：**混合别名 + 裸名导入同名类型 + 两候选 + 位置实参**。
+/// 名字层歧义下**位置实参保留注入候选**（4.9.8 的派发归因，判据必须继续 0/0）：同名
+/// Temp 由 a（别名导入）与 b（裸名导入）两个模块提供，b 侧有两个同名重载；位置实参
+/// 分别按 Float / Int 命中，且 IR 按接收者所属单元派发。
 ///
-/// 收窄规则③原先按 target 判跨模块冲突并整名跳过 ⇒ 裸名提供方 b 的候选也不注入，
-/// 位置实参的重载决议退回 `method_bindings` 单值（实测 `t.bump(3.0)` 报 E1002，
-/// 而 pre-t1 是 0/0）。修复轮 3 加**提供方优先级**：裸名提供方（`local == target`）
-/// 优先，别名只在裸名缺席时补位。
-///
-/// 三态（同一夹具，见报告）：pre-t1 `1e05dc3e` = 0/0；修复轮 2 `091b835b` = E1002；
-/// 本修复后 = 0/0（Float 5.0 / Int 30 两条值断言）。
+/// 三态（同一夹具，见报告）：pre-t1 `1e05dc3e` = 0/0；第一次修复后 `02ed42d2`
+/// = check=1 E1002（规则③整名跳过，候选全丢）；中间一轮与本修复后 = 0/0（值断言
+/// 5.0 / 30 证明派发与候选都正确）。
 #[test]
 fn test_mixed_alias_bare_import_keeps_bare_provider_overloads() {
     // Arrange：a 提供 Temp（别名导入为 X），b 提供同名 Temp 且有两个同名重载；
@@ -379,18 +381,18 @@ fn test_mixed_alias_bare_import_keeps_bare_provider_overloads() {
     // Assert
     assert!(
         outcome.failure.is_none(),
-        "混合别名+裸名同 target 时，裸名提供方的候选不得整名消失（修复轮 2 实测 E1002）：{:?}",
+        "名字层歧义下位置实参必须保留注入候选（4.9.8 判据）：{:?}",
         outcome.failure.as_ref().map(|e| format!("{e}"))
     );
     let module = outcome.module.expect("Linking + mono 必须产出合并 IR");
     let values = run_merged_slot_values(module);
     assert!(
         values.iter().any(|value| value == "Float(5.0)"),
-        "位置实参 3.0 必须命中 Float 候选（2+3 = 5.0），实际全局槽位：{values:?}"
+        "位置实参 3.0 必须命中 Float 候选（2+3 = 5.0）并派发到 b.Temp，实际全局槽位：{values:?}"
     );
     assert!(
         values.iter().any(|value| value == "Int(30)"),
-        "位置实参 3 必须命中 Int 候选（3*10 = 30），实际全局槽位：{values:?}"
+        "位置实参 3 必须命中 Int 候选（3*10 = 30）并派发到 b.Temp，实际全局槽位：{values:?}"
     );
 }
 
@@ -449,22 +451,225 @@ fn test_builtin_container_ctor_rejects_unknown_named_arg() {
 }
 
 /// F3 正控：`Vec(Int)(len = 3)` 仍按槽位分配走通（不得被兜底误伤）。
+/// F3 正控（含**值断言**）：`Vec(Int)(len = 3)` 仍按槽位分配走通——`len` 被静默忽略
+/// 时该正控也必须能红，故断言 `v.length == 3`（脚本内 assert + 全局槽位 `Int(3)` 双证）。
 #[test]
 fn test_builtin_container_ctor_len_named_arg_still_passes() {
     // Arrange
-    let (_dir, entry) =
-        make_script_project(&[("main.yx", "v = Vec(Int)(len = 3)\nw = v.length\n")]);
+    let (_dir, entry) = make_script_project(&[(
+        "main.yx",
+        "use std.assert\n\nv = Vec(Int)(len = 3)\nw = v.length\nassert.assert(w == 3, \"Vec(Int)(len = 3) allocates 3 slots\")\n",
+    )]);
+
+    // Act
+    let outcome = run_multi(&entry).expect("driver run failed");
+
+    // Assert
+    assert!(
+        outcome.failure.is_none(),
+        "len 是容器构造的合法命名实参，不得被兜底改判编译期错误：{:?}",
+        outcome.failure.as_ref().map(|e| format!("{e}"))
+    );
+    let module = outcome.module.expect("Linking + mono 必须产出合并 IR");
+    let values = run_merged_slot_values(module);
+    assert!(
+        values.iter().any(|value| value == "Int(3)"),
+        "Vec(Int)(len = 3) 必须真的分配 3 个槽位（v.length == 3），实际全局槽位：{values:?}"
+    );
+}
+
+/// 名字层歧义下**顶层闭包值绑定**的命名实参保留旧行为（顶层与函数体内一视同仁）。
+///
+/// 顶层 `f = () => 7; g = f(x = 1)` 在兜底之前编译通过且 `g == 7`（脚本内断言 + 槽位
+/// `Int(7)` 双证）；只按 `nested_functions` 排除时顶层闭包不在该列表 ⇒ 被兜底改判
+/// E1014（D59 D 类，已由本判据钉死）。
+#[test]
+fn test_top_level_closure_named_arg_keeps_legacy_behavior() {
+    // Arrange：顶层（模块体）闭包 + 命名实参
+    let (_dir, entry) = make_script_project(&[(
+        "main.yx",
+        "use std.assert\n\nf = () => 7\ng = f(x = 1)\nassert.assert(g == 7, \"top-level zero-param closure ignores named arg\")\n",
+    )]);
+
+    // Act
+    let outcome = run_multi(&entry).expect("driver run failed");
+
+    // Assert
+    assert!(
+        outcome.failure.is_none(),
+        "顶层闭包值绑定的命名实参必须保留旧行为，不得被兜底改判编译期拒绝：{:?}",
+        outcome.failure.as_ref().map(|e| format!("{e}"))
+    );
+    let module = outcome.module.expect("Linking + mono 必须产出合并 IR");
+    let values = run_merged_slot_values(module);
+    assert!(
+        values.iter().any(|value| value == "Int(7)"),
+        "顶层零参闭包的命名实参按旧行为被忽略：f(x = 1) 返回 Int(7)，实际全局槽位：{values:?}"
+    );
+}
+
+/// **具名嵌套函数声明**（Fn 注解 + 声明形参）不是闭包值，按声明函数处理——形参名表
+/// 当前未登记（`stmt.rs` 的嵌套函数臂只生成函数体、不登记 `fn_param_names`），故命名
+/// 实参走兜底**响亮拒绝**。旧行为是静默丢参 + 运行期失败（实测 check=0/run=1 运行期
+/// E6007），属非成功 ⇒ C 类可顺修；「形参名表接入 lookup」登记为已知缺口。
+#[test]
+fn test_named_nested_function_named_arg_rejects_loudly() {
+    // Arrange：函数体内具名嵌套函数 + 命名实参
+    let (_dir, entry) = make_script_project(&[(
+        "main.yx",
+        "main = () => {\n    g: (a: Int, b: Int) -> Int = {\n        return a + b\n    }\n    r = g(b = 2, a = 3)\n    return r\n}\n\nr = main()\n",
+    )]);
 
     // Act
     let (codes, no_hard_failure) = check_codes(&entry);
 
     // Assert
+    assert!(no_hard_failure, "IR 级诊断必须收进逐文件通道：{codes:?}");
     assert!(
-        no_hard_failure,
-        "len 形态不得被兜底改判编译期错误：{codes:?}"
+        codes.iter().any(|code| code == "E1014"),
+        "具名嵌套函数声明的命名实参必须响亮拒绝（旧行为是静默丢参 + 运行期失败）：{codes:?}"
+    );
+}
+
+/// 边界①：**两个裸名提供方冲突**——导入层既有判据已响亮拒绝（E5006 duplicate import），
+/// 本判据固定它不被 4.9.9 的收窄/兜底改动静默掉。
+#[test]
+fn test_conflicting_bare_imports_reject_duplicate_type_name() {
+    // Arrange：两个模块都用裸名导入同名类型
+    let (_dir, entry) = make_script_project(&[
+        ("a.yx", "Temp: Type = { v: Float }\n"),
+        ("b.yx", "Temp: Type = { v: Float }\n"),
+        ("main.yx", "use a.{Temp}\nuse b.{Temp}\n\nt = Temp(2.0)\n"),
+    ]);
+
+    // Act
+    let (codes, no_hard_failure) = check_codes(&entry);
+
+    // Assert
+    assert!(no_hard_failure, "IR 级诊断必须收进逐文件通道：{codes:?}");
+    assert!(
+        codes.iter().any(|code| code == "E5006"),
+        "两个裸名提供方冲突必须在导入层响亮拒绝（既有 E5006），不得被静默择一：{codes:?}"
+    );
+}
+
+/// **不变量判据**（复审轮要求，裁决口径 b）：typecheck 采用的候选集与 IR 实际派发目标
+/// 必须同源。用可观测形式表达：
+/// - **歧义形态 + 命名实参**：check 必红（E1014）——名表来源不可信，不许静默；
+/// - **歧义形态 + 位置实参**：check/run 必须 0/0，且值断言证明 IR 派发到**接收者所属
+///   模块**（a 的 bump 返回 n*100，b 的 bump 返回 n*10，两实现可区分）；
+/// - **非歧义形态**（仅别名 / 仅裸名单一提供方）：check/run 0/0 且派发到正确模块。
+///
+/// 该判据对三棵树都成立：pre-t1 与中间坏态的「歧义 + 命名实参」不红（静默丢参/错值），
+/// 本修复后成立。位置实参一侧的候选/派发同源性风险另行由 4.9.10 的探针矩阵评估。
+#[test]
+fn test_method_identity_invariant_ambiguous_named_red_positional_green() {
+    // Arrange：a.Temp.bump 返回 n*100（Int），b.Temp.bump 返回 v+step（Float）——
+    // 两个实现的值可区分，故「派发到哪个模块」可观测
+    // 两侧签名**相同**（`bump(n: Int) -> Int`），实现可区分（a: n*100，b: n*10）：
+    // 这样位置实参的 typecheck 不会因签名差异先报错，值断言能直接证明 IR 的派发归属。
+    let modules: [(&str, &str); 2] = [
+        (
+            "a.yx",
+            "Temp: Type = { v: Float }\n\nTemp.bump: (self: &Temp, n: Int) -> Int = {\n    return n * 100\n}\n",
+        ),
+        (
+            "b.yx",
+            "Temp: Type = { v: Float }\n\nTemp.bump: (self: &Temp, n: Int) -> Int = {\n    return n * 10\n}\n",
+        ),
+    ];
+    let alias_only = make_script_project(&[
+        modules[0],
+        (
+            "main.yx",
+            "use std.assert\nuse a.{Temp as X}\n\nx = X(1.0)\nr = x.bump(2)\nassert.assert(r == 200, \"alias-only dispatches to a.Temp.bump\")\n",
+        ),
+    ]);
+    let bare_named = make_script_project(&[
+        modules[0],
+        modules[1],
+        (
+            "main.yx",
+            "use a.{Temp as X}\nuse b.{Temp}\n\nt = Temp(2.0)\ns = t.bump(n = 2)\n",
+        ),
+    ]);
+    let ambiguous_positional = make_script_project(&[
+        modules[0],
+        modules[1],
+        (
+            "main.yx",
+            "use std.assert\nuse a.{Temp as X}\nuse b.{Temp}\n\nx = X(1.0)\nt = Temp(2.0)\nr = x.bump(2)\ns = t.bump(2)\nassert.assert(r == 200, \"alias receiver dispatches to a.Temp.bump\")\nassert.assert(s == 20, \"bare receiver dispatches to b.Temp.bump\")\n",
+        ),
+    ]);
+
+    // Act
+    let (named_codes, named_ok) = check_codes(&bare_named.1);
+    let alias_outcome = run_multi(&alias_only.1).expect("driver run failed");
+    let positional_outcome = run_multi(&ambiguous_positional.1).expect("driver run failed");
+
+    // Assert
+    assert!(named_ok, "IR 级诊断必须收进逐文件通道：{named_codes:?}");
+    assert!(
+        named_codes.iter().any(|code| code == "E1014"),
+        "歧义形态 + 命名实参必须响亮拒绝（既有 E1014），不得静默错派：{named_codes:?}"
     );
     assert!(
-        !codes.iter().any(|code| code == "E1014"),
-        "len 是容器构造的合法命名实参，不得报 E1014：{codes:?}"
+        alias_outcome.failure.is_none(),
+        "仅别名单一提供方必须 0/0（不得被歧义判据误伤）：{:?}",
+        alias_outcome.failure.as_ref().map(|e| format!("{e}"))
+    );
+    let values = run_merged_slot_values(alias_outcome.module.expect("合并 IR"));
+    assert!(
+        values.iter().any(|value| value == "Int(200)"),
+        "仅别名形态必须派发到 a.Temp.bump（2*100 = 200），实际全局槽位：{values:?}"
+    );
+    assert!(
+        positional_outcome.failure.is_none(),
+        "歧义形态 + 位置实参必须 0/0（4.9.8 派发归因）：{:?}",
+        positional_outcome.failure.as_ref().map(|e| format!("{e}"))
+    );
+    let values = run_merged_slot_values(positional_outcome.module.expect("合并 IR"));
+    assert!(
+        values.iter().any(|value| value == "Int(200)"),
+        "歧义形态位置实参：别名侧接收者必须派发到 a.Temp.bump（2*100 = 200），实际全局槽位：{values:?}"
+    );
+    assert!(
+        values.iter().any(|value| value == "Int(20)"),
+        "歧义形态位置实参：裸名侧接收者必须派发到 b.Temp.bump（2*10 = 20），实际全局槽位：{values:?}"
+    );
+}
+/// 名字层歧义 + **位置实参**：两侧候选签名不一致时同样响亮拒绝（既有 E1107）——
+/// 判据是各提供方对 `{Type}.{method}` 的候选签名集合是否完全一致
+///（`ambiguous_method_signature_conflict`）。
+///
+/// 实测静默错值三例（见 4.9.10 的探针矩阵）：形参类型不同 ⇒ 常量体返回 111 而非
+/// 2.0；元数不同 ⇒ 多出的实参被丢、返回 300 而非 7；返回类型不同 ⇒ 返回 200 而非
+/// 2.0。签名一致时（4.9.8 夹具）位置实参仍 0/0 且派发正确（见不变量判据）。
+#[test]
+fn test_mixed_alias_bare_import_positional_signature_conflict_rejects_loudly() {
+    // Arrange：a 的 Temp 别名导入为 X（bump 收 Int），b 的同名 Temp 裸名导入（bump 收 Float）
+    let (_dir, entry) = make_script_project(&[
+        (
+            "a.yx",
+            "Temp: Type = { v: Float }\n\nTemp.bump: (self: &Temp, n: Int) -> Int = {\n    return 111\n}\n",
+        ),
+        (
+            "b.yx",
+            "Temp: Type = { v: Float }\n\nTemp.bump: (self: &Temp, n: Float) -> Float = {\n    return n\n}\n",
+        ),
+        (
+            "main.yx",
+            "use a.{Temp as X}\nuse b.{Temp}\n\nx = X(1.0)\nr = x.bump(2.0)\n",
+        ),
+    ]);
+
+    // Act
+    let (codes, no_hard_failure) = check_codes(&entry);
+
+    // Assert
+    assert!(no_hard_failure, "IR 级诊断必须收进逐文件通道：{codes:?}");
+    assert!(
+        codes.iter().any(|code| code == "E1107"),
+        "歧义形态 + 位置实参 + 候选签名不一致必须响亮拒绝（既有 E1107），不得静默错值：{codes:?}"
     );
 }
