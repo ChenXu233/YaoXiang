@@ -477,11 +477,10 @@ fn test_int_width_family_compatible() {
 // 不变量 2：值定义唯一性（SSA 模式语义）
 // =====================
 
-/// 不变量 2（SSA 模式语义）：同槽两次定义——Loose 放行（现行语句级回收策略），
-/// Ssa 必报。这是 D38 红性的直接证据：verify_ssa 在现有分配策略下红是设计预期。
+/// Local 多次写是存储语义：Loose 与 SSA 都必须放行（值唯一性只判 Value）。
 #[test]
-fn test_duplicate_definition_loose_passes_ssa_fails() {
-    // Arrange：槽 0 定义两次（instr#0/#1），instr#2 读之
+fn test_local_multiple_writes_loose_and_ssa_pass() {
+    // Arrange：槽 0 写两次（instr#0/#1），instr#2 读之
     let mk = || {
         func(
             "f",
@@ -497,25 +496,20 @@ fn test_duplicate_definition_loose_passes_ssa_fails() {
         )
     };
 
-    // Act：同一 IR 分别跑两种模式
+    // Act
     let loose = verify_loose(&module_with(vec![mk()]));
     let ssa = verify_ssa(&module_with(vec![mk()]));
-    let detail = ssa
-        .as_ref()
-        .err()
-        .map(|e| e.to_string())
-        .unwrap_or_default();
 
-    // Assert：Loose 绿（允许多次定义）；Ssa 恰好 1 项唯一定义违规
+    // Assert
     assert!(
         loose.is_ok(),
-        "Loose 模式应放行多次定义：{:?}",
+        "Loose 模式应放行 Local 多次写：{:?}",
         loose.err().map(|e| e.to_string())
     );
-    assert_eq!(
-        violations_of(&ssa, InvariantKind::UniqueDefinition),
-        1,
-        "Ssa 模式对双定义槽应恰好报 1 项 UniqueDefinition 违规：{detail}"
+    assert!(
+        ssa.is_ok(),
+        "Local 多次写是存储语义，SSA 模式也必须放行：{:?}",
+        ssa.err().map(|e| e.to_string())
     );
 }
 
@@ -908,8 +902,11 @@ main()
 ///
 /// 非空断言（门禁 9.6 防假门禁）：校验的函数数与指令数必须 > 0，
 /// 防止「校验器根本没跑到」的假绿。
-#[test]
-fn test_verify_loose_corpus_green() {
+/// 全语料真实生成序列的统一驱动器：逐文件走 lex→parse→typecheck→ir_gen，
+/// 对产出的 ModuleIR 调用给定校验函数并收集违规。返回 (files,fns,instrs,failures)。
+fn run_corpus_verifier(
+    verify_fn: fn(&ModuleIR) -> Result<(), VerifyError>
+) -> (usize, usize, usize, Vec<String>) {
     let mut files_checked = 0usize;
     let mut fns_checked = 0usize;
     let mut instrs_checked = 0usize;
@@ -924,7 +921,6 @@ fn test_verify_loose_corpus_green() {
             .unwrap_or(&file)
             .display()
             .to_string();
-        // 生成前置阶段失败的文件不构成判据证据（同 2.4.4 合同面判定）
         let Ok(source) = std::fs::read_to_string(&file) else {
             continue;
         };
@@ -962,7 +958,7 @@ fn test_verify_loose_corpus_green() {
             .sum::<usize>()
             + module_ir.init.len();
 
-        if let Err(e) = verify_loose(&module_ir) {
+        if let Err(e) = verify_fn(&module_ir) {
             for v in e.violations {
                 failures.push(format!(
                     "{relative}: [{}] {}: {}",
@@ -973,16 +969,39 @@ fn test_verify_loose_corpus_green() {
             }
         }
     }
+    (files_checked, fns_checked, instrs_checked, failures)
+}
 
-    // 非空断言：校验面必须真实覆盖语料（防「没跑到」的假绿）
+/// 全语料（tests/yaoxiang/ + src/std/tests/，剔 skip / compile-error）产出的
+/// ModuleIR 必须过 verify_loose，且校验面非空。
+#[test]
+fn test_verify_loose_corpus_green() {
+    let (files_checked, fns_checked, instrs_checked, failures) = run_corpus_verifier(verify_loose);
+
     assert!(
         files_checked > 200 && fns_checked > 0 && instrs_checked > 0,
         "校验面异常收窄（files={files_checked}, fns={fns_checked}, instrs={instrs_checked}）——判据失效"
     );
     assert!(
         failures.is_empty(),
-        "verify_loose 在现有 IR 上跑红（D38：不开豁免，红 = ir_gen 缺陷，
-         files={files_checked} fns={fns_checked} instrs={instrs_checked}）：\n{}",
+        "verify_loose 在现有 IR 上跑红（files={files_checked} fns={fns_checked} instrs={instrs_checked}）：\n{}",
+        failures.join("\n")
+    );
+}
+
+/// 全语料产出的 ModuleIR 必须过 verify_ssa（7f.1 生产 SSA 后的门禁），
+/// 且校验面非空——与 verify_loose 同样防「测试没跑到」的假绿。
+#[test]
+fn test_verify_ssa_corpus_green() {
+    let (files_checked, fns_checked, instrs_checked, failures) = run_corpus_verifier(verify_ssa);
+
+    assert!(
+        files_checked > 200 && fns_checked > 0 && instrs_checked > 0,
+        "校验面异常收窄（files={files_checked}, fns={fns_checked}, instrs={instrs_checked}）——判据失效"
+    );
+    assert!(
+        failures.is_empty(),
+        "verify_ssa 在生产语料上跑红（files={files_checked} fns={fns_checked} instrs={instrs_checked}）：\n{}",
         failures.join("\n")
     );
 }
@@ -1067,13 +1086,73 @@ fn two_pred_phi_module(
     module_with(vec![f])
 }
 
-/// 7b.1a + 7b.1b 正例：dst 为 Value、incoming 按 label 升序且与前驱集一致；
-/// `values` 空表（7b.1b 生产形态）⇒ 类型判定依据不存在，显式不判定。
+/// SSA 值形态的最小双前驱菱形：入口块 0 条件跳到块 1/2，两分支各定义
+/// ValueId(1)/ValueId(2)，块 3 放给定 Phi 并 Ret 其 dst。
+/// 所有 Value 单定义、定义块在 values 中登记；用于 SSA 判据的正反例。
+fn value_load(
+    id: u32,
+    n: i128,
+) -> Instruction {
+    Instruction::Load {
+        dst: ssa_value(id),
+        src: int_const(n),
+        span: Span::dummy(),
+    }
+}
+
+fn value_ret(id: u32) -> Instruction {
+    Instruction::Ret {
+        value: Some(ssa_value(id)),
+        span: Span::dummy(),
+    }
+}
+
+fn two_pred_value_module(
+    phi: Instruction,
+    values: Vec<ValueInfo>,
+) -> ModuleIR {
+    let f = func_with_blocks(
+        "f",
+        vec![],
+        MonoType::Void,
+        vec![temp_slot(MonoType::Int(64))],
+        values,
+        vec![
+            block(
+                0,
+                vec![
+                    value_load(3, 1),
+                    Instruction::JmpIf {
+                        cond: ssa_value(3),
+                        target: 6,
+                        span: Span::dummy(),
+                    },
+                ],
+                vec![1, 2],
+            ),
+            block(1, vec![value_load(1, 1), jmp(6)], vec![3]),
+            block(2, vec![value_load(2, 2), jmp(6)], vec![3]),
+            block(3, vec![phi, value_ret(0)], vec![]),
+        ],
+    );
+    module_with(vec![f])
+}
+
+fn two_pred_values() -> Vec<ValueInfo> {
+    vec![
+        value_info(MonoType::Int(64), 3),
+        value_info(MonoType::Int(64), 1),
+        value_info(MonoType::Int(64), 2),
+        value_info(MonoType::Bool, 0),
+    ]
+}
+
+/// 正例：菱形两块各定义 incoming，Phi 在汇合块读取，全部值单定义。
 #[test]
 fn test_ssa_phi_with_matching_predecessors_passes() {
     // Arrange
-    let phi = phi_instr(ssa_value(0), vec![(0, ssa_value(1)), (1, ssa_value(2))]);
-    let m = two_pred_phi_module(phi, Vec::new());
+    let phi = phi_instr(ssa_value(0), vec![(1, ssa_value(1)), (2, ssa_value(2))]);
+    let m = two_pred_value_module(phi, two_pred_values());
 
     // Act
     let r = verify_ssa(&m);
@@ -1081,22 +1160,22 @@ fn test_ssa_phi_with_matching_predecessors_passes() {
     // Assert
     assert!(
         r.is_ok(),
-        "前驱集一致的 Phi（空 values）不应产生违规：{:?}",
+        "前驱集与定义均合法的 Phi 不应产生违规：{:?}",
         r.err().map(|e| e.to_string())
     );
 }
 
-/// 7b.1b 正例（带类型）：`values` 提供两个相容类型的输入 ⇒ 类型一致通过。
 #[test]
 fn test_ssa_phi_with_matching_types_passes() {
-    // Arrange：V0=dst, V1=Int(64), V2=Int(32)（同数值宽度族，相容）
-    let phi = phi_instr(ssa_value(0), vec![(0, ssa_value(1)), (1, ssa_value(2))]);
-    let m = two_pred_phi_module(
+    // Arrange：V1=Int(64)、V2=Int(32)（同数值宽度族，相容），定义块真实。
+    let phi = phi_instr(ssa_value(0), vec![(1, ssa_value(1)), (2, ssa_value(2))]);
+    let m = two_pred_value_module(
         phi,
         vec![
             value_info(MonoType::Int(64), 3),
-            value_info(MonoType::Int(64), 0),
-            value_info(MonoType::Int(32), 1),
+            value_info(MonoType::Int(64), 1),
+            value_info(MonoType::Int(32), 2),
+            value_info(MonoType::Bool, 0),
         ],
     );
 
@@ -1213,17 +1292,18 @@ fn test_ssa_phi_predecessor_set_mismatch_fails() {
     );
 }
 
-/// 7b.1b 反例（类型一致）：两个 incoming 类型不相容 ⇒ 必报 1 项 PhiConsistency。
+/// 7b.1b 反例（类型一致）：全部已知且 Int/Bool 冲突 ⇒ 1 项 PhiConsistency。
 #[test]
 fn test_ssa_phi_incoming_type_mismatch_fails() {
-    // Arrange：V1=Int(64)、V2=Bool（既有 types_compatible 判不相容）
-    let phi = phi_instr(ssa_value(0), vec![(0, ssa_value(1)), (1, ssa_value(2))]);
-    let m = two_pred_phi_module(
+    // Arrange：V1=Int(64)、V2=Bool，定义块真实。
+    let phi = phi_instr(ssa_value(0), vec![(1, ssa_value(1)), (2, ssa_value(2))]);
+    let m = two_pred_value_module(
         phi,
         vec![
             value_info(MonoType::Int(64), 3),
-            value_info(MonoType::Int(64), 0),
-            value_info(MonoType::Bool, 1),
+            value_info(MonoType::Int(64), 1),
+            value_info(MonoType::Bool, 2),
+            value_info(MonoType::Bool, 0),
         ],
     );
 
@@ -1263,5 +1343,313 @@ fn test_ssa_phi_in_init_without_blocks_is_reported() {
     assert!(
         detail.contains("无基本块结构"),
         "归因消息应点名无基本块结构：{detail}"
+    );
+}
+// =====================
+// 7f.2：verify_ssa 新判据（Value 唯一性 / 支配 / defining_block / 悬空值）
+// =====================
+
+/// 正例：一个 Value 单定义、使用在其定义之后，SSA 绿。
+#[test]
+fn test_ssa_value_single_definition_passes() {
+    // Arrange
+    let f = func_with_blocks(
+        "f",
+        vec![],
+        MonoType::Void,
+        vec![],
+        vec![value_info(MonoType::Int(64), 0)],
+        vec![block(0, vec![value_load(0, 1), value_ret(0)], vec![])],
+    );
+
+    // Act
+    let r = verify_ssa(&module_with(vec![f]));
+
+    // Assert
+    assert!(
+        r.is_ok(),
+        "单定义且使用受支配的 Value 不应报错：{:?}",
+        r.err().map(|e| e.to_string())
+    );
+}
+
+/// 反例：同一 ValueId 在块内定义两次，必报 UniqueDefinition。
+#[test]
+fn test_ssa_value_double_definition_fails() {
+    // Arrange
+    let f = func_with_blocks(
+        "f",
+        vec![],
+        MonoType::Void,
+        vec![],
+        vec![value_info(MonoType::Int(64), 0)],
+        vec![block(
+            0,
+            vec![value_load(0, 1), value_load(0, 2), value_ret(0)],
+            vec![],
+        )],
+    );
+
+    // Act
+    let r = verify_ssa(&module_with(vec![f]));
+
+    // Assert
+    assert_eq!(
+        violations_of(&r, InvariantKind::UniqueDefinition),
+        1,
+        "同一 ValueId 两次定义应报 1 项 UniqueDefinition：{:?}",
+        r.err().map(|e| e.to_string())
+    );
+}
+
+/// 反例：Value 只在一条分支定义、汇合块使用——使用不受定义支配。
+#[test]
+fn test_ssa_value_use_not_dominated_fails() {
+    // Arrange：块 1 定义 v0，块 2 不定义，块 3 使用 v0
+    let f = func_with_blocks(
+        "f",
+        vec![],
+        MonoType::Void,
+        vec![],
+        vec![
+            value_info(MonoType::Int(64), 1),
+            value_info(MonoType::Bool, 0),
+        ],
+        vec![
+            block(
+                0,
+                vec![
+                    value_load(1, 1),
+                    Instruction::JmpIf {
+                        cond: ssa_value(1),
+                        target: 5,
+                        span: Span::dummy(),
+                    },
+                ],
+                vec![1, 2],
+            ),
+            block(1, vec![value_load(0, 1), jmp(5)], vec![3]),
+            block(2, vec![jmp(5)], vec![3]),
+            block(3, vec![value_ret(0)], vec![]),
+        ],
+    );
+
+    // Act
+    let r = verify_ssa(&module_with(vec![f]));
+
+    // Assert
+    assert_eq!(
+        violations_of(&r, InvariantKind::Dominance),
+        1,
+        "只有一条路径定义的值在汇合块使用应报 Dominance：{:?}",
+        r.err().map(|e| e.to_string())
+    );
+}
+
+/// 反例：Phi incoming 的源只在另一前驱定义——在所选前驱出口不受支配。
+#[test]
+fn test_ssa_phi_incoming_source_not_dominated_fails() {
+    // Arrange：v0 只在块 2 定义，Phi 在块 3 同时从前驱 1、2 读取它
+    let phi = phi_instr(ssa_value(1), vec![(1, ssa_value(0)), (2, ssa_value(0))]);
+    let f = func_with_blocks(
+        "f",
+        vec![],
+        MonoType::Void,
+        vec![],
+        vec![
+            value_info(MonoType::Int(64), 2),
+            value_info(MonoType::Int(64), 3),
+            value_info(MonoType::Bool, 0),
+        ],
+        vec![
+            block(
+                0,
+                vec![
+                    value_load(2, 1),
+                    Instruction::JmpIf {
+                        cond: ssa_value(2),
+                        target: 5,
+                        span: Span::dummy(),
+                    },
+                ],
+                vec![1, 2],
+            ),
+            block(1, vec![jmp(5)], vec![3]),
+            block(2, vec![value_load(0, 1), jmp(5)], vec![3]),
+            block(3, vec![phi, value_ret(1)], vec![]),
+        ],
+    );
+
+    // Act
+    let r = verify_ssa(&module_with(vec![f]));
+
+    // Assert
+    assert_eq!(
+        violations_of(&r, InvariantKind::Dominance),
+        1,
+        "Phi incoming 源在前驱出口未受支配应报 Dominance：{:?}",
+        r.err().map(|e| e.to_string())
+    );
+}
+
+/// 反例：ValueInfo.defining_block 与真实定义块不一致，必报登记类违规。
+#[test]
+fn test_ssa_defining_block_mismatch_fails() {
+    // Arrange：v0 实际定义在块 0，元数据却写块 1
+    let f = func_with_blocks(
+        "f",
+        vec![],
+        MonoType::Void,
+        vec![],
+        vec![value_info(MonoType::Int(64), 1)],
+        vec![block(0, vec![value_load(0, 1), ret_void()], vec![])],
+    );
+
+    // Act
+    let r = verify_ssa(&module_with(vec![f]));
+    let detail = r.as_ref().err().map(|e| e.to_string()).unwrap_or_default();
+
+    // Assert
+    assert_eq!(
+        violations_of(&r, InvariantKind::UniqueDefinition),
+        1,
+        "defining_block 不一致应报 1 项 UniqueDefinition：{detail}"
+    );
+    assert!(
+        detail.contains("defining_block"),
+        "归因消息应点名 defining_block：{detail}"
+    );
+}
+
+/// 正例：无定义、无使用的悬空 ValueInfo 条目合法。
+#[test]
+fn test_ssa_dangling_unused_value_passes() {
+    // Arrange
+    let f = func_with_blocks(
+        "f",
+        vec![],
+        MonoType::Void,
+        vec![],
+        vec![value_info(MonoType::Int(64), 0)],
+        vec![block(0, vec![ret_void()], vec![])],
+    );
+
+    // Act
+    let r = verify_ssa(&module_with(vec![f]));
+
+    // Assert
+    assert!(
+        r.is_ok(),
+        "无定义无使用的悬空条目必须合法：{:?}",
+        r.err().map(|e| e.to_string())
+    );
+}
+
+/// 正例：无定义、仅不可达块使用的悬空条目合法。
+#[test]
+fn test_ssa_dangling_only_unreachable_use_passes() {
+    // Arrange：块 1 不可达，使用无定义的 Value0
+    let f = func_with_blocks(
+        "f",
+        vec![],
+        MonoType::Void,
+        vec![],
+        vec![value_info(MonoType::Int(64), 0)],
+        vec![
+            block(0, vec![ret_void()], vec![]),
+            block(1, vec![value_ret(0)], vec![]),
+        ],
+    );
+
+    // Act
+    let r = verify_ssa(&module_with(vec![f]));
+
+    // Assert
+    assert!(
+        r.is_ok(),
+        "仅不可达块使用的无定义 Value 必须豁免：{:?}",
+        r.err().map(|e| e.to_string())
+    );
+}
+
+/// 反例：可达块使用无定义的 Value，必报 Dominance。
+#[test]
+fn test_ssa_reachable_use_without_definition_fails() {
+    // Arrange
+    let f = func_with_blocks(
+        "f",
+        vec![],
+        MonoType::Void,
+        vec![],
+        vec![value_info(MonoType::Int(64), 0)],
+        vec![block(0, vec![value_ret(0)], vec![])],
+    );
+
+    // Act
+    let r = verify_ssa(&module_with(vec![f]));
+
+    // Assert
+    assert_eq!(
+        violations_of(&r, InvariantKind::Dominance),
+        1,
+        "可达使用无定义值应报 1 项 Dominance：{:?}",
+        r.err().map(|e| e.to_string())
+    );
+}
+
+/// 正例：Phi 任一路输入为显式未知 TypeRef("?") 时不判已知冲突。
+#[test]
+fn test_ssa_phi_unknown_type_does_not_conflict() {
+    // Arrange：v1=Int、v2=?，若按已知类型比较会冲突
+    let phi = phi_instr(ssa_value(0), vec![(1, ssa_value(1)), (2, ssa_value(2))]);
+    let m = two_pred_value_module(
+        phi,
+        vec![
+            value_info(MonoType::Int(64), 3),
+            value_info(MonoType::Int(64), 1),
+            value_info(MonoType::TypeRef("?".to_string()), 2),
+            value_info(MonoType::Bool, 0),
+        ],
+    );
+
+    // Act
+    let r = verify_ssa(&m);
+
+    // Assert
+    assert!(
+        r.is_ok(),
+        "含显式未知输入的 Phi 不应因类型冲突报错：{:?}",
+        r.err().map(|e| e.to_string())
+    );
+}
+
+/// 反例：Phi 全部已知且 Int/Bool 冲突，必报 PhiConsistency。
+#[test]
+fn test_ssa_phi_known_type_conflict_fails() {
+    // Arrange
+    let phi = phi_instr(ssa_value(0), vec![(1, ssa_value(1)), (2, ssa_value(2))]);
+    let m = two_pred_value_module(
+        phi,
+        vec![
+            value_info(MonoType::Int(64), 3),
+            value_info(MonoType::Int(64), 1),
+            value_info(MonoType::Bool, 2),
+            value_info(MonoType::Bool, 0),
+        ],
+    );
+
+    // Act
+    let r = verify_ssa(&m);
+    let detail = r.as_ref().err().map(|e| e.to_string()).unwrap_or_default();
+
+    // Assert
+    assert_eq!(
+        violations_of(&r, InvariantKind::PhiConsistency),
+        1,
+        "全部已知的 Int/Bool Phi 输入应报 1 项 PhiConsistency：{detail}"
+    );
+    assert!(
+        detail.contains("类型不一致"),
+        "归因消息应点名类型不一致：{detail}"
     );
 }

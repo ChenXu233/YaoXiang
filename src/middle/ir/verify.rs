@@ -364,7 +364,27 @@ fn check_fn(
     check_type_consistency(view, ir, &reachable, out);
 
     if mode == VerifyMode::Ssa {
-        check_unique_definition(view, &defs, &entry_defined, out);
+        let (value_defs, value_defs_at, value_uses, phi_uses) = collect_value_defs_uses(view);
+        let n_value_slots = value_slot_space(view, &value_defs, &value_uses, &phi_uses);
+        let value_def_in = must_defined(
+            view.instrs.len(),
+            n_value_slots,
+            &pred,
+            0,
+            &reachable,
+            &value_defs_at,
+            &HashSet::new(),
+        );
+        check_value_dominance(
+            view,
+            &value_uses,
+            &phi_uses,
+            &value_def_in,
+            &value_defs_at,
+            &reachable,
+            out,
+        );
+        check_unique_value_definition(view, &value_defs, out);
         check_phi_structure(view, out);
     }
 }
@@ -720,25 +740,166 @@ fn check_dominance(
 }
 
 // =====================
-// 不变量 2：值定义唯一性（仅 Ssa）
+// 不变量 2：值定义唯一性 / defining_block 一致性（仅 Ssa）
 // =====================
 
-fn check_unique_definition(
+/// 收集 Value 的定义/使用。Phi 的 incoming 是**前驱出口使用**，不能按
+/// 指令所在块判支配；单独放入 phi_uses，由 check_value_dominance 用
+/// 前驱块末的 must-defined 状态检查。
+type ValueDefs = HashMap<usize, Vec<usize>>;
+type ValueUse = (usize, usize);
+type PhiValueUse = (usize, usize, usize);
+
+fn collect_value_defs_uses(
+    view: &FnView<'_>
+) -> (ValueDefs, Vec<Vec<usize>>, Vec<ValueUse>, Vec<PhiValueUse>) {
+    let mut defs: HashMap<usize, Vec<usize>> = HashMap::new();
+    let mut defs_at: Vec<Vec<usize>> = vec![Vec::new(); view.instrs.len()];
+    let mut uses: Vec<(usize, usize)> = Vec::new();
+    let mut phi_uses: Vec<(usize, usize, usize)> = Vec::new();
+    for (i, instr) in view.instrs.iter().enumerate() {
+        for op in instr.def_operands() {
+            if let Operand::Value(id) = op {
+                defs.entry(id.0 as usize).or_default().push(i);
+                defs_at[i].push(id.0 as usize);
+            }
+        }
+        if let Instruction::Phi { incoming, .. } = instr {
+            for (pred, op) in incoming {
+                if let Operand::Value(id) = op {
+                    phi_uses.push((id.0 as usize, *pred, i));
+                }
+            }
+        } else {
+            for op in instr.use_operands() {
+                if let Operand::Value(id) = op {
+                    uses.push((id.0 as usize, i));
+                }
+            }
+        }
+    }
+    (defs, defs_at, uses, phi_uses)
+}
+
+/// Value 位集长度：值表长与所有被引用 ValueId 取大（越界 id 也留位，
+/// 由支配性/唯一性判据显式报告，不 panic）。
+fn value_slot_space(
     view: &FnView<'_>,
-    defs: &HashMap<usize, Vec<usize>>,
-    entry_defined: &HashSet<usize>,
+    defs: &ValueDefs,
+    uses: &[ValueUse],
+    phi_uses: &[PhiValueUse],
+) -> usize {
+    let max_ref = defs
+        .keys()
+        .chain(uses.iter().map(|(id, _)| id))
+        .chain(phi_uses.iter().map(|(id, _, _)| id))
+        .copied()
+        .max()
+        .map_or(0, |max| max + 1);
+    view.values.len().max(max_ref)
+}
+
+/// 值支配：可达普通使用必须在 must-defined 中；Phi incoming 的源必须在
+/// 被选前驱块末的 must-defined 中（不可达前驱/块豁免）。
+fn check_value_dominance(
+    view: &FnView<'_>,
+    uses: &[ValueUse],
+    phi_uses: &[PhiValueUse],
+    def_in: &[BitSet],
+    defs_at: &[Vec<usize>],
+    reachable: &HashSet<usize>,
     out: &mut Vec<Violation>,
 ) {
-    for (&slot, points) in defs {
-        // SSA 下参数槽即值，重写参数槽 = 第二定义点
-        let total = points.len() + usize::from(entry_defined.contains(&slot));
-        if total > 1 {
+    for &(id, use_at) in uses {
+        if !reachable.contains(&use_at) {
+            continue;
+        }
+        if !def_in[use_at].get(id) {
+            out.push(Violation {
+                invariant: InvariantKind::Dominance,
+                function: view.name.clone(),
+                instruction: Some(use_at),
+                message: format!(
+                    "ValueId({id}) 在可达指令 {use_at} 被使用，但没有支配该位置的定义"
+                ),
+            });
+        }
+    }
+
+    let mut block_last: HashMap<usize, usize> = HashMap::new();
+    for (index, label) in view.block_labels.iter().enumerate() {
+        block_last.insert(*label, index);
+    }
+    for &(id, pred_label, phi_at) in phi_uses {
+        if !reachable.contains(&phi_at) {
+            continue;
+        }
+        let Some(&pred_last) = block_last.get(&pred_label) else {
+            continue;
+        };
+        if !reachable.contains(&pred_last) {
+            continue;
+        }
+        // Phi incoming 在前驱**执行完最后一条指令后**读取：最后一条指令的
+        // 定义也要算进前驱出口状态（DefOut = DefIn ∪ defs_at）。
+        let defined_at_exit = def_in[pred_last].get(id) || defs_at[pred_last].contains(&id);
+        if !defined_at_exit {
+            out.push(Violation {
+                invariant: InvariantKind::Dominance,
+                function: view.name.clone(),
+                instruction: Some(phi_at),
+                message: format!(
+                    "Phi incoming 源 ValueId({id}) 在前驱块 {pred_label} 出口处没有支配定义"
+                ),
+            });
+        }
+    }
+}
+
+/// 每个有定义的 ValueId 恰一定义点；其 ValueInfo.defining_block 必须等于
+/// 真实定义块（Phi dst 取 Phi 所在块）。无定义条目合法（悬空值口径）。
+fn check_unique_value_definition(
+    view: &FnView<'_>,
+    defs: &ValueDefs,
+    out: &mut Vec<Violation>,
+) {
+    for (&id, points) in defs {
+        if points.len() > 1 {
             out.push(Violation {
                 invariant: InvariantKind::UniqueDefinition,
                 function: view.name.clone(),
-                instruction: points.get(1).copied().or_else(|| points.first().copied()),
-                message: format!("槽位 Local({slot}) 有 {total} 个定义点（SSA 要求唯一）"),
+                instruction: points.get(1).copied(),
+                message: format!("ValueId({id}) 有 {} 个定义点（SSA 要求唯一）", points.len()),
             });
+            continue;
+        }
+        let Some(&def_at) = points.first() else {
+            continue;
+        };
+        // 模块 init 没有块结构，defining_block 无可比对象（Phi 另有判据）。
+        let Some(&real_block) = view.block_labels.get(def_at) else {
+            continue;
+        };
+        match view.values.get(id) {
+            Some(info) if info.defining_block == real_block => {}
+            Some(info) => out.push(Violation {
+                invariant: InvariantKind::UniqueDefinition,
+                function: view.name.clone(),
+                instruction: Some(def_at),
+                message: format!(
+                    "ValueId({id}) 的 defining_block={} 与实际定义块 {real_block} 不一致",
+                    info.defining_block
+                ),
+            }),
+            None => out.push(Violation {
+                invariant: InvariantKind::UniqueDefinition,
+                function: view.name.clone(),
+                instruction: Some(def_at),
+                message: format!(
+                    "ValueId({id}) 在块 {real_block} 有定义，但 values 表长 {} 无对应 ValueInfo",
+                    view.values.len()
+                ),
+            }),
         }
     }
 }
@@ -855,12 +1016,18 @@ fn check_phi_incoming_types(
         return;
     }
     let mut typed: Vec<(&usize, &MonoType)> = Vec::new();
+    let mut has_unknown = false;
     for (label, operand) in incoming {
         let Operand::Value(id) = operand else {
             continue;
         };
         match view.values.get(id.0 as usize) {
-            Some(info) => typed.push((label, &info.ty)),
+            Some(info) => {
+                if is_explicit_unknown_type(&info.ty) {
+                    has_unknown = true;
+                }
+                typed.push((label, &info.ty));
+            }
             None => out.push(Violation {
                 invariant: InvariantKind::PhiConsistency,
                 function: view.name.clone(),
@@ -872,6 +1039,10 @@ fn check_phi_incoming_types(
                 ),
             }),
         }
+    }
+    // 任一输入为显式未知时，已知类型之间也不判冲突（04-ssa 显式未知契约）。
+    if has_unknown {
+        return;
     }
     let Some((first_label, first_ty)) = typed.first() else {
         return;
@@ -886,6 +1057,10 @@ fn check_phi_incoming_types(
             ),
         });
     }
+}
+
+fn is_explicit_unknown_type(ty: &MonoType) -> bool {
+    matches!(ty, MonoType::TypeRef(name) if name == "?")
 }
 
 // =====================
