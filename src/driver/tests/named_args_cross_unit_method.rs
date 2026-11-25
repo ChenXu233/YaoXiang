@@ -1085,3 +1085,70 @@ fn test_conflict_arity_owner_one_two_args_rejects_loudly() {
         "冲突形态的元数不匹配必须 E1107，不得静默丢实参打印 300：{codes:?}"
     );
 }
+
+/// 冲突形态 + **零实参**方法（两提供方同签名 `tag(): Int`）：位置实参一律 E1107。
+///
+/// 旧行为（pre-t5）：0/0 打印 111（owner a 的实现）；本提交起 E1107（D 类清单，
+/// 待用户裁决；分类与示例见 09 的 4.9.9 / 4.9.10 行）。
+#[test]
+fn test_conflict_zero_arg_same_signature_rejects_loudly() {
+    // Arrange：两别名 X/Y，两侧 tag 都是零值形参、返回 Int（实现可区分）
+    let (_dir, entry) = make_script_project(&[
+        (
+            "a.yx",
+            "Temp: Type = { v: Float }\n\nTemp.tag: (self: &Temp) -> Int = {\n    return 111\n}\n",
+        ),
+        (
+            "b.yx",
+            "Temp: Type = { v: Float }\n\nTemp.tag: (self: &Temp) -> Int = {\n    return 222\n}\n",
+        ),
+        (
+            "main.yx",
+            "use a.{Temp as X}\nuse b.{Temp as Y}\n\nx = X(1.0)\nr = x.tag()\n",
+        ),
+    ]);
+
+    // Act
+    let (codes, no_hard_failure) = check_codes(&entry);
+
+    // Assert
+    assert!(no_hard_failure, "IR 级诊断必须收进逐文件通道：{codes:?}");
+    assert!(
+        codes.iter().any(|code| code == "E1107"),
+        "冲突形态的零实参方法必须 E1107（旧行为 0/0 打印 111）：{codes:?}"
+    );
+}
+
+/// 冲突形态 + **owner 收 Int、另一提供方收 Float、实参 Int**：位置实参一律 E1107。
+///
+/// 旧行为（pre-t5）：0/0 打印 200（owner a 的 `n * 100`）；本提交起 E1107
+///（D 类清单，待用户裁决）。这是与「Int→Float 加宽」相反方向的相容形态，
+/// 同属「冲突一律拒绝」的代价，不再逐个补回。
+#[test]
+fn test_conflict_owner_int_float_provider_actual_int_rejects_loudly() {
+    // Arrange：owner a 别名（收 Int），另一提供方 b 收 Float；实参是 Int 字面量
+    let (_dir, entry) = make_script_project(&[
+        (
+            "a.yx",
+            "Temp: Type = { v: Float }\n\nTemp.bump: (self: &Temp, n: Int) -> Int = {\n    return n * 100\n}\n",
+        ),
+        (
+            "b.yx",
+            "Temp: Type = { v: Float }\n\nTemp.bump: (self: &Temp, n: Float) -> Float = {\n    return self.v + n\n}\n",
+        ),
+        (
+            "main.yx",
+            "use a.{Temp as X}\nuse b.{Temp as Y}\n\nx = X(1.0)\nr = x.bump(2)\n",
+        ),
+    ]);
+
+    // Act
+    let (codes, no_hard_failure) = check_codes(&entry);
+
+    // Assert
+    assert!(no_hard_failure, "IR 级诊断必须收进逐文件通道：{codes:?}");
+    assert!(
+        codes.iter().any(|code| code == "E1107"),
+        "冲突形态下 owner 收 Int、另一提供方收 Float、实参 Int 也必须 E1107（旧行为 0/0 打印 200）：{codes:?}"
+    );
+}
