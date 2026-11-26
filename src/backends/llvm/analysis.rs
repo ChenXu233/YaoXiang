@@ -94,6 +94,8 @@ pub(super) fn analyze_module(
         }
     }
     let reachable = reachable_functions(module, &definitions);
+    reject_unused_script_main(module, &reachable, source_name)?;
+
     let mut signatures = HashMap::new();
     for function in module
         .functions
@@ -215,6 +217,45 @@ pub(super) fn analyze_module(
 /// AOT-3.5 的 Local 形态边界：同一 Local 在汇合块的多个前驱块首次被写，
 /// 且汇合块（或其后继）读取它时，codegen 会在各自分支创建 alloca，汇合点的
 /// load 无单一支配定义。分析层先拒绝，避免 LLVM verifier 原文外泄。
+/// Script 形态（无 entry_function）定义了 main 却没有任何可达调用时，
+/// 原生路径必须构建期拒绝：AOT 不隐式调用 main，静默 exit 0 会掩盖程序未执行。
+fn reject_unused_script_main(
+    module: &ModuleIR,
+    reachable: &HashSet<String>,
+    source_name: &str,
+) -> Result<()> {
+    if module.entry_function.is_some() || reachable.contains("main") {
+        return Ok(());
+    }
+    let Some(main) = module
+        .functions
+        .iter()
+        .find(|function| function.name == "main")
+    else {
+        return Ok(());
+    };
+    let span = match &main.body {
+        FunctionBody::Code { blocks, .. } => blocks
+            .iter()
+            .flat_map(|block| block.instructions.iter())
+            .next()
+            .map(|instruction| instruction.span()),
+        FunctionBody::TypeDecl { .. } => None,
+    };
+    let file = module
+        .function_files
+        .get("main")
+        .and_then(|file_id| module.source_files.get(*file_id))
+        .map(String::as_str)
+        .unwrap_or(source_name);
+    let (line, column) = span
+        .map(|span| (span.start.line, span.start.column))
+        .unwrap_or((0, 0));
+    bail!(
+        "native AOT unsupported input at {file}:{line}:{column} in main: Script defines main but never calls it; AOT does not call main implicitly. Use a Bin project (yaoxiang.toml) or remove the unused main"
+    );
+}
+
 fn check_local_merge_boundary(
     blocks: &[BasicBlock],
     function_name: &str,

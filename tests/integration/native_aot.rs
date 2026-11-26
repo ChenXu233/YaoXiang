@@ -212,17 +212,17 @@ mod enabled {
     }
 
     #[test]
-    fn test_native_script_does_not_implicitly_call_main() {
-        // Arrange：单文件 Script 只定义 main，顶层不调用；两边都不得执行 main。
+    fn test_native_script_unused_main_is_rejected() {
+        // Arrange：单文件 Script 只定义 main、顶层不调用；native 必须在构建期拒绝。
         let dir = TempDir::new().expect("script no-entry tempdir");
         let source = dir.path().join("script.yx");
         let executable = dir.path().join("script");
         std::fs::write(&source, "main = () => {\n    10 / 0\n}\n").expect("write Script fixture");
 
         // Act
-        build_native_with_options(&source, &executable, false, false)
-            .unwrap_or_else(|e| panic!("build Script no-entry fixture: {e:#}"));
-        let native = run_native(&executable);
+        let error = build_native_with_options(&source, &executable, false, false)
+            .expect_err("Script with uncalled main must fail at AOT build time");
+        let detail = format!("{error:#}");
         let vm = Command::new(test_yx_bin())
             .current_dir(dir.path())
             .arg("run")
@@ -232,14 +232,44 @@ mod enabled {
 
         // Assert
         assert!(
-            native.status.success(),
-            "Script native must not call main implicitly: {}",
-            String::from_utf8_lossy(&native.stderr)
+            detail.contains("Script defines main but never calls it")
+                && detail.contains("AOT does not call main implicitly"),
+            "diagnostic must explain the Script/main boundary: {detail}"
         );
+        assert!(
+            detail.contains(&format!("{}:2:", source.display())),
+            "diagnostic must carry the main definition position: {detail}"
+        );
+        assert!(
+            !executable.exists(),
+            "AOT must not write an artifact for rejected Script/main input"
+        );
+        assert_eq!(vm.status.code(), Some(1), "VM #476 hint still exits 1");
         let vm_diagnostic = String::from_utf8_lossy(&vm.stderr);
         assert!(
             vm_diagnostic.contains("不会自动执行 main") && vm_diagnostic.contains("main 未被调用"),
-            "VM script hint must confirm main is not implicit: {vm_diagnostic}"
+            "VM script hint must remain unchanged: {vm_diagnostic}"
+        );
+    }
+
+    #[test]
+    fn test_native_script_without_main_still_builds() {
+        // Arrange：无 main 的 Script 不属于 F1 拒绝边界。
+        let dir = TempDir::new().expect("script no-main tempdir");
+        let source = dir.path().join("plain.yx");
+        let executable = dir.path().join("plain");
+        std::fs::write(&source, "1 + 1\n").expect("write Script no-main fixture");
+
+        // Act
+        build_native_with_options(&source, &executable, false, false)
+            .unwrap_or_else(|e| panic!("Script without main must build: {e:#}"));
+        let native = run_native(&executable);
+
+        // Assert
+        assert!(
+            native.status.success(),
+            "Script without main should build and run: {}",
+            String::from_utf8_lossy(&native.stderr)
         );
     }
 
