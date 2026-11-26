@@ -217,15 +217,6 @@ impl AstToIrGenerator {
     /// 名字表为空 = 声明期拿不到名字（登记期与候选签名对不齐，
     /// 见 `add_method_overload_with_params`）：返回 `None` 让调用点按
     /// 「名字不可用」处理——**不**拿空表冒充「名字已核对」。
-    ///
-    /// 空表守卫的**可观测性**（WBS 4.9.9 修复轮 2 / t2-F2，如实标注）：现有公开
-    /// 语法形态产不出「候选已登记、形参名表为空」的调用——登记期签名对不齐就留空，
-    /// 而能触发这种对不齐的 RFC-004 外部绑定形态在跨单元下另有既有缺陷（被绑函数
-    /// 名未限定 ⇒ 运行期 E6006，位置实参同样失败），与命名实参无关。删掉这条守卫，
-    /// 现有整套多文件判据仍全绿（t2 的 m5 变异实测）。故它是**防御性守卫**，守护
-    /// 登记期与候选签名对不齐的未来形态，不是当前可观测行为的判据；
-    /// 守卫本身由 `middle::lower::tests::query` 的单元级守卫测试钉住
-    /// （手工构造空名表候选组，按 coding-rules 第六部分注明不冒充生产端直驱）。
     fn method_param_info(
         &self,
         qualified: &str,
@@ -784,89 +775,6 @@ impl AstToIrGenerator {
         format!("{owner}.{rest}")
     }
 
-    /// 接收者所属模块的**定义单元限定名**（`{module}.{Type}`）；接收者不是导入类型
-    /// （本单元自有 / 非类型写出名）时为 None。
-    ///
-    /// 归属判定唯一实现是 [`Self::imported_type_owner`]（与 `method_dispatch_name`
-    /// 同一份）：本单元自有类型返回 None——那类调用点解析到的就是本单元那一个，
-    /// 不存在跨单元同源问题。
-    pub(in crate::middle) fn receiver_type_owner(
-        &self,
-        recv: &ast::Expr,
-    ) -> Option<String> {
-        match recv {
-            ast::Expr::Var(name, _) => self
-                .binding_written_type(name)
-                .and_then(|written| self.imported_type_owner(written)),
-            _ => self
-                .constructor_written_type_name(recv)
-                .and_then(|written| self.imported_type_owner(&written)),
-        }
-    }
-
-    /// 该定义侧类型名在本单元导入面里的**提供模块数**（≥2 = 名字层歧义）。
-    ///
-    /// 判据源是共享提供方表 `frontend::module::import_face::TypeCandidateProviders`（与候选注入面同一份，
-    /// 见 `frontend::module::import_face`）：命名实参在歧义形态下无法可信核对
-    /// 形参名，调用点据此一律响亮拒绝（既有 E1014）。
-    pub(in crate::middle) fn type_name_provider_count(
-        &self,
-        type_name: &str,
-    ) -> usize {
-        self.candidate_providers.provider_count(type_name)
-    }
-
-    /// **同源判据 + 冲突分支**（WBS 4.9.9 修复轮 4–6）：候选注入面选用的提供模块
-    /// （`winner`）与接收者所属模块（`owner`）不同源时，返回 `(候选键, 提供模块数)`
-    /// ——调用点应响亮拒绝（既有 E1107）；返回 None 表示放行。
-    ///
-    /// 规则（只依赖导入面，不读实参类型/元数/实现）：
-    /// 1. `owner == winner`：typecheck 与 IR 用同一模块的候选 ⇒ 放行（裸名侧位置实参
-    ///    属此，实测 2.0 + 2.0 = 4.0 的形态此前被全局签名比较误拒）；
-    /// 2. `owner != winner` 但两模块对该键的候选签名完全一致 ⇒ 放行（候选选择不影响
-    ///    类型核对，值由接收者所属单元决定——4.9.8 的既有行为）；
-    /// 3. 任一模块没有该键的候选组 ⇒ 放行（注入面没有为该键贡献候选，不构成
-    ///    「按别家签名核对」）；
-    /// 4. **冲突形态**（`winner == None` 且 `is_conflicted`）：名字层歧义、提供方 ≥2，
-    ///    候选注入面整名跳过、typecheck 落到单绑定兜底（该兜底读 HashMap 序，同一
-    ///    输入曾给出不同结果）——**位置实参一律响亮拒绝**（E1107），不看实参类型、
-    ///    元数或 owner 是哪一侧。判定只依赖导入面，因此天然确定。
-    ///
-    /// 已知代价（登记在 09 的 4.9.9 / 4.9.10 行，待用户裁决）：冲突形态里少数在
-    /// pre-t5 可用的形态（Int→Float 加宽、整体导入 owner、同参同返回等）会变成
-    /// E1107——这是「冲突形态一律拒绝」的 D 类清单，不是本判据可以逐个补回的；
-    /// 根治是 4.9.10 的模块限定方法键。
-    pub(in crate::middle) fn method_source_mismatch(
-        &self,
-        recv: &ast::Expr,
-        method: &str,
-    ) -> Option<(String, usize)> {
-        let owner = self.receiver_type_owner(recv)?;
-        let (owner_module, leaf) = owner.rsplit_once('.')?;
-        let key = format!("{leaf}.{method}");
-        let Some(winner) = self.candidate_providers.winner(leaf) else {
-            // 未导入 ⇒ 无同源问题；冲突 ⇒ 位置实参一律拒绝（见文档 4）
-            if !self.candidate_providers.is_conflicted(leaf) {
-                return None;
-            }
-            return Some((key, self.candidate_providers.provider_count(leaf).max(2)));
-        };
-        if winner == owner_module {
-            return None;
-        }
-        let injected = self
-            .registry
-            .get(winner)
-            .and_then(|info| info.method_overloads.get(&key))?;
-        let dispatched = self
-            .registry
-            .get(owner_module)
-            .and_then(|info| info.method_overloads.get(&key))?;
-        if injected.candidates == dispatched.candidates {
-            return None;
-        }
-        Some((key, self.candidate_providers.provider_count(leaf).max(2)))
-    }
     /// 声明期分类的量词投影（`TypeCheckResult.record_models` 是唯一来源）。
     ///
     /// `struct_definitions` 与 `TypeDeclBody` 都从这里取字段：AST 的

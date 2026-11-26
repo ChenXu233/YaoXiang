@@ -117,16 +117,6 @@ pub struct AstToIrGenerator {
     /// 实例——集合天然按单元作用域工作，std 模块内部互调命中的仍是 std 自己
     /// 的函数名（与原兜底臂 + `qualify_names` 改写产物同名，零漂移）。
     pub(super) declared_fn_names: std::collections::HashSet<String>,
-    /// 本单元的**闭包值绑定名**（绑定值写成 `=>` lambda 的绑定；顶层与函数体
-    /// 内一视同仁）。
-    ///
-    /// 用途（WBS 4.9.9 修复轮 3）：IR 侧「带命名实参但拿不到形参名表 ⇒ 响亮拒绝」
-    /// 的兜底**必须排除闭包值**——`f = () => 7; g = f(x = 1)` 这类形态在兜底之前
-    /// 编译通过且结果正确（命名实参被忽略），把它改判编译期错误属 D59 D 类变更、
-    /// 超出 4.9.9 目标。判据是**绑定形态**（`Expr::Lambda` 值），不是「名字出现在
-    /// `nested_functions` 里」——后者还含**具名嵌套函数声明**（声明函数，不属闭包，
-    /// 照常进兜底）。
-    pub(super) closure_fn_names: std::collections::HashSet<String>,
     /// 类型级命名空间（谓词名可见面）：SPEC §7.1 的「谓词应用的实参位是值不是
     /// 类型」判据要用它——保守假值会让同形不遮蔽失效。
     ///
@@ -206,10 +196,6 @@ pub struct AstToIrGenerator {
     /// 本文件 use 导入的本地名 → 限定名（含 #245 条目别名）。
     /// 生成期解析调用名时优先于 registry 的全局短名表（文件级精确）。
     pub(super) use_aliases: HashMap<String, String>,
-    /// 本单元导入面的**类型候选提供方表**（唯一生产在
-    /// `frontend::module::import_face::TypeCandidateProviders`；候选注入面与消费侧
-    /// 同源判据读同一份，避免 provide-priority 规则分叉）。
-    pub(super) candidate_providers: crate::frontend::module::import_face::TypeCandidateProviders,
     /// 本文件持有的模块注册表（std + 用户模块），取代生成期多处 `with_std()` 重建。
     pub(super) registry: ModuleRegistry,
     /// 本文件的模块限定键（多文件模式 Some → 启用限定；单文件 None → 不限定）。
@@ -362,7 +348,6 @@ impl AstToIrGenerator {
 
             declared_type_names: std::collections::HashSet::new(),
             declared_fn_names: std::collections::HashSet::new(),
-            closure_fn_names: std::collections::HashSet::new(),
             type_level,
             type_bindings: HashMap::new(),
             nested_functions: Vec::new(),
@@ -380,8 +365,6 @@ impl AstToIrGenerator {
             release_plan: type_result.release_plan.clone(),
             user_namespaces: HashMap::new(),
             use_aliases: HashMap::new(),
-            candidate_providers:
-                crate::frontend::module::import_face::TypeCandidateProviders::default(),
             registry,
             module_key,
             script_mode,

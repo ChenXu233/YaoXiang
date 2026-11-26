@@ -17,7 +17,6 @@
 //! 3. 支持循环依赖检测
 
 pub mod consistency;
-pub mod import_face;
 pub mod orchestrator;
 pub mod registry;
 pub mod resolver;

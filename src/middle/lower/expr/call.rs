@@ -247,102 +247,6 @@ impl AstToIrGenerator {
         Ok(())
     }
 
-    /// F1（WBS 4.9.9 修复轮 2）：命名实参存在而 IR 侧**拿不到形参名表**时的响亮拒绝。
-    ///
-    /// 所有此类臂共用本函数（判据单点，不新造诊断码、不新造名字表）：RFC-004 绑定臂、
-    /// 命名空间臂、无决议的普通方法臂、普通函数臂。此前它们都「不按名入槽」⇒ 命名
-    /// 实参被**静默丢弃**，运行期才以 E6007/E6006 冒出（甚至按位置错配后给出错值）。
-    /// 这是 4.9.9 要消灭的静默通道：第一次修复只覆盖「有候选名字表」的 D20 臂，被
-    /// 候选收窄规则跳过的形态（同名类型冲突、整体模块导入、RFC-004 绑定）漏在外面。
-    ///
-    /// `available` 口径不另算：空名表 + 命名实参在共享判据
-    /// `arg_binding::bind_args_to_params` 里就是「未知名」⇒ 既有 E1014，
-    /// available = 名表[recv_offset..] = 空串——与 typecheck / D20 臂同一实现。
-    pub(super) fn reject_named_args_without_param_names(
-        key: &str,
-        args: &[Expr],
-        named_args: &[(String, Expr)],
-        span: Span,
-    ) -> Diagnostic {
-        debug_assert!(
-            !named_args.is_empty(),
-            "只在存在命名实参时调用（调用方已判空）"
-        );
-        match crate::frontend::core::sema::inference::arg_binding::bind_args_to_params(
-            key,
-            &[],
-            args,
-            named_args,
-            0,
-            &[],
-            span,
-        ) {
-            Err(diagnostic) => diagnostic,
-            // 空名表 + 命名实参被共享判据放行 = 判据与调用不一致；不得回退到静默丢弃
-            Ok(_) => ErrorCodeDefinition::ir_internal_error(
-                "命名实参调用缺少形参名表，但共享判据未拒绝（判据与调用不一致）",
-            )
-            .at(span)
-            .build(),
-        }
-    }
-
-    /// 该名字是不是本单元登记过的**闭包值绑定**（绑定值写成 `=>` lambda，且声明里没有值形参）。
-    ///
-    /// 判据源是 `closure_fn_names`（由 `stmt.rs` 的两个 Assign 函数绑定臂按**绑定形态**
-    /// 登记）——不是「名字出现在 `nested_functions` 里」：后者同时含**具名嵌套函数声明**
-    /// （Fn 注解 + 声明形参），它们是声明函数，不属于闭包值，照常进兜底（见下一段）。
-    /// 只看值形态也不够：parser 会把 `g: (a, b) -> Int = { .. }` 的块体归一成 lambda 值，
-    /// 故登记面同时要求「声明里没有值形参」。
-    ///
-    /// 用途（WBS 4.9.9 修复轮 3 / 复审轮）：闭包值调用**不进**「拿不到名字表 ⇒ 响亮拒绝」
-    /// 的兜底——`f = () => 7; g = f(x = 1)`（顶层或函数体内）在兜底之前编译通过、结果
-    /// 正确，按 07 入口判据属「原先成功」，改判编译期错误是 D59 D 类变更、超出 4.9.9
-    /// 目标。旧行为（命名实参不参与绑定）保留，并登记为已知缺口（D60 ② 该报未报，A 类）。
-    fn is_closure_fn_name(
-        &self,
-        name: &str,
-    ) -> bool {
-        self.closure_fn_names.contains(name)
-    }
-
-    /// 该名字是不是**具名嵌套函数声明**（函数体内用 Fn 注解声明的函数，非闭包值）。
-    ///
-    /// 判据源是 `nested_functions` 的名字集合——与 [`Self::is_closure_fn_name`] 互补：
-    /// 同一个列表里既有具名嵌套函数声明，也有 lambda 生成的函数体，闭包值集合负责把
-    /// 后者剔掉。具名嵌套函数是**声明函数**：形参名表本应可用，当前登记面只覆盖顶层
-    /// 绑定（`stmt.rs` 的嵌套函数臂不登记 `fn_param_names`），故按「拿不到名字表 ⇒
-    /// 响亮拒绝」处理（旧行为是静默丢参 + 运行期失败，属 D59 C 类可顺修）；
-    /// 「嵌套函数形参名接入 lookup」登记为已知缺口，见 09 的 4.9.9 行。
-    fn is_declared_nested_fn(
-        &self,
-        name: &str,
-    ) -> bool {
-        self.nested_functions.iter().any(|f| f.name == name)
-    }
-
-    /// 该名字的调用是否属于**本单元声明面**（闭包值绑定 / 本单元顶层函数绑定）。
-    ///
-    /// 这类调用**不进**「拿不到名字表 ⇒ 响亮拒绝」的兜底，理由分两类：
-    /// - 闭包值绑定（`f = () => 7`，顶层或函数体内，判据源 [`Self::is_closure_fn_name`]）：
-    ///   兜底之前编译通过且结果正确（命名实参被忽略），改判编译期错误是 D59 D 类变更；
-    /// - 本单元顶层函数绑定（`declared_fn_names`，判据源与裸名解析的用户定义优先同一张表）：
-    ///   声明期的名字表由本单元登记面（`fn_param_names`）负责；登记面缺席说明声明里
-    ///   没有可用的值形参表（如块体实现），旧行为是静默忽略——同样不得在兜底里改判
-    ///   （实测 `f: (a: Int) -> Int = { 7 }; g = f(a = 1)` 旧行为编译通过、结果 7）。
-    ///   这两类都登记为已知缺口（D60 ② 该报未报，A 类），见 09 的 4.9.9 行。
-    ///
-    /// **具名嵌套函数声明不在本判据内**（既不在 `declared_fn_names` 也不是闭包值）
-    /// ——它们是声明函数，旧行为是「静默丢参 + 运行期失败」＝非成功，按 C 类顺修成
-    /// 响亮拒绝（见 [`Self::is_declared_nested_fn`]）。
-    fn binding_is_local_declaration(
-        &self,
-        name: &str,
-    ) -> bool {
-        self.is_closure_fn_name(name)
-            || self.declared_fn_names.contains(name)
-            || self.is_declared_nested_fn(name)
-    }
     /// 生成 Call 表达式 IR
     ///
     /// `call_plan_id` = **本调用节点的身份**（`Expr::Call::plan_id`，RFC-039 D20）：
@@ -409,9 +313,8 @@ impl AstToIrGenerator {
         // 此前这条路径根本不存在：`Vec(Int)()` 在类型检查阶段就报
         // E1001 unknown variable 'Vec'（类型名不在值位置的白名单里）。
         if let Expr::Call { func: inner, .. } = func {
-            if let Some(ctor) = self.builtin_container_ctor_name(inner) {
+            if let Some(_ctor) = self.builtin_container_ctor_name(inner) {
                 return self.generate_builtin_container_ir(
-                    &ctor,
                     args,
                     named_args,
                     span,
@@ -422,34 +325,7 @@ impl AstToIrGenerator {
             }
         }
         // 检查是否是方法调用：func 是 FieldAccess
-        // 检查是否是方法调用：func 是 FieldAccess
         if let Expr::FieldAccess { expr, field, .. } = func {
-            // **名字层歧义的消费侧判据**（WBS 4.9.9 修复轮 4）：候选注入面选用的
-            // 提供模块（winner）必须与接收者所属模块（owner）同源。
-            // - owner == winner：typecheck 与 IR 用同一模块的候选 ⇒ 放行（裸名侧
-            //   位置实参属此，实测 2.0 + 2.0 = 4.0 的形态此前被全局签名比较误拒）；
-            // - owner != winner：仅当两模块对同一方法的候选签名完全一致才放行
-            //   （候选选择不影响类型核对，值由接收者所属单元决定——跨单元同名类型
-            //   经内联别名引入的既有行为），否则响亮拒绝（既有 E1107）。
-            // 命名实参在名字层歧义（同名类型由 ≥2 模块提供）下仍一律响亮拒绝
-            // （既有 E1014）：名表来源不可信，无法按名核对。
-            if let Some(owner) = self.receiver_type_owner(expr) {
-                if let Some((_owner_module, leaf)) = owner.rsplit_once('.') {
-                    if !named_args.is_empty() && self.type_name_provider_count(leaf) >= 2 {
-                        let key = format!("{leaf}.{field}");
-                        return Err(Self::reject_named_args_without_param_names(
-                            &key, args, named_args, *span,
-                        ));
-                    }
-                    if let Some((key, providers)) = self.method_source_mismatch(expr, field) {
-                        return Err(ErrorCodeDefinition::ambiguous_method_overload(
-                            &key, providers,
-                        )
-                        .at(*span)
-                        .build());
-                    }
-                }
-            }
             // 方法调用 - 转换为普通函数调用
             // 命名空间机制：p.method() -> method(p)
 
@@ -539,15 +415,6 @@ impl AstToIrGenerator {
                             slots[*pos] = Some(reg);
                         }
                         arg_regs = slots.into_iter().flatten().collect();
-                    } else {
-                        // F1（WBS 4.9.9 修复轮 2）：形参名表不可得（本模块表与导出面
-                        // 都查不到）⇒ 命名实参此前被静默丢弃。响亮拒绝。
-                        return Err(Self::reject_named_args_without_param_names(
-                            &method_function_name,
-                            args,
-                            named_args,
-                            *span,
-                        ));
                     }
                 }
                 instructions.push(Instruction::Call {
@@ -605,13 +472,13 @@ impl AstToIrGenerator {
                         .map(|info| info.names);
                     let mut method_arg_regs = Vec::new();
                     if !named_args.is_empty() {
-                        // F3：诊断用真实方法名（不是硬编 <method>，也不是 self）
-                        let diag_key = if field.is_empty() {
-                            Self::call_name_leaf(&binding.function)
-                        } else {
-                            field.as_str()
-                        };
                         if let Some(names) = bound_params {
+                            // F3：诊断用真实方法名（不是硬编 <method>，也不是 self）
+                            let diag_key = if field.is_empty() {
+                                Self::call_name_leaf(&binding.function)
+                            } else {
+                                field.as_str()
+                            };
                             // #456：绑定**判定**走共享判据（形参表[0] 是接收者位，
                             // 实参从槽 1 起）；本处只按槽位序搬运实参。
                             //
@@ -645,14 +512,6 @@ impl AstToIrGenerator {
                                 )?;
                                 method_arg_regs.push(arg_reg.clone());
                             }
-                        } else {
-                            // F1（WBS 4.9.9 修复轮 2）：绑定函数的形参名表不可得（跨单元
-                            // 被绑函数名与导出面都查不到）时，此前整段跳过绑定 ⇒ 命名实参
-                            // 被静默丢弃（运行期 E6007/E6006，或错位后错值）。响亮拒绝：
-                            // 共享判据的空表出口 = 既有 E1014，available 同一口径。
-                            return Err(Self::reject_named_args_without_param_names(
-                                diag_key, args, named_args, *span,
-                            ));
                         }
                     }
                     if method_arg_regs.is_empty() {
@@ -768,17 +627,6 @@ impl AstToIrGenerator {
                             def: None,
                         });
                         return Ok(());
-                    }
-                    // F1（WBS 4.9.9 修复轮 2）：无重载决议 ⇒ 本臂没有形参名表可用
-                    //（候选面未注入：名字冲突被收窄规则跳过、整体模块导入、非候选面
-                    // 形态），命名实参此前被整段丢弃。响亮拒绝，判据同共享判据空表出口。
-                    if !named_args.is_empty() {
-                        return Err(Self::reject_named_args_without_param_names(
-                            field.as_str(),
-                            args,
-                            named_args,
-                            *span,
-                        ));
                     }
                     // 接口直接赋值优化：检查对象是否是约束变量
                     let mut arg_regs = Vec::new();
@@ -1133,28 +981,6 @@ impl AstToIrGenerator {
                             })
                         })
                         .collect();
-                } else if !is_ctor
-                    && !self.binding_is_local_declaration(callee.as_deref().unwrap_or(""))
-                    && (self.is_static_fn_name(func)
-                        || self.is_declared_nested_fn(callee.as_deref().unwrap_or("")))
-                {
-                    // F1（WBS 4.9.9 修复轮 2）：**静态**函数名的形参名表不可得（本
-                    // 模块表与导出面都查不到）时，此前命名实参被静默丢弃。响亮拒绝：
-                    // 共享判据的空表出口 = 既有 E1014，available 同一口径。
-                    //
-                    // 边界（4.9.9 修复轮 3 / F2）：**动态/闭包调用不在此列**——零参
-                    // 闭包 `f = () => 7; g = f(x = 1)` 修复前编译通过且结果正确，按
-                    // 07 的入口判据属「原先成功」，把命名实参改判为编译期错误是 D 类
-                    // 变更、超出 4.9.9 目标。此处恢复旧行为（命名实参不参与绑定），
-                    // 并把「闭包/动态调用的命名实参静默忽略」作为**已知缺口**登记在
-                    // 09 的 4.9.9 行（D60 ② 该报未报，A 类）；判据见 driver 级
-                    // `test_dynamic_call_named_arg_keeps_legacy_behavior`。
-                    return Err(Self::reject_named_args_without_param_names(
-                        callee.as_deref().unwrap_or("<fn>"),
-                        args,
-                        named_args,
-                        *span,
-                    ));
                 }
             }
 

@@ -164,17 +164,17 @@ impl ModuleRegistry {
     }
 
     /// 获取所有模块的方法绑定（RFC-029 跨文件方法调用）。
+    ///
+    /// **确定性**（WBS 4.9.9）：按**模块键升序**合并——同名类型的同名方法键在
+    /// 多个单元里存在时，哈希表迭代序会让合并结果随进程变化（实测同一输入曾
+    /// 给出两种诊断）。升序 + 后者覆盖 ⇒ 末位模块稳定胜出；本表只保证「同一
+    /// 输入同一结果」，不判断胜出的是否是最优绑定。
     pub fn all_method_bindings(&self) -> HashMap<String, MonoType> {
-        // 确定性（WBS 4.9.9 修复轮 5）：模块**按键升序**合并——此前按 HashMap
-        // 迭代序 `extend`，同名类型的方法键随机覆盖，同一输入跨进程给出不同
-        // 单绑定（实测 12/20 与 8/20 两种诊断）。升序 + 后者覆盖 ⇒ 每次取
-        // 模块键最大的那一个，冲突形态的处置交给调用点（`import_face` 的提供
-        // 方表 + 同源判据）；本表只保证「单绑定是确定的」，不保证它是最优的。
-        let mut modules: Vec<&String> = self.modules.keys().collect();
-        modules.sort();
-        let mut bindings: HashMap<String, MonoType> = HashMap::new();
-        for path in modules {
-            if let Some(module) = self.modules.get(path) {
+        let mut module_keys: Vec<&String> = self.modules.keys().collect();
+        module_keys.sort();
+        let mut bindings = HashMap::new();
+        for module_key in module_keys {
+            if let Some(module) = self.modules.get(module_key) {
                 bindings.extend(module.method_bindings.clone());
             }
         }
@@ -680,6 +680,57 @@ mod tests {
             "作用域只含 a 时不得并入 b 的候选"
         );
         assert!(empty.is_empty(), "空作用域必须得到空表（无候选来源）");
+    }
+
+    /// **C 类判据**（WBS 4.9.9 收窄轮，非原始 bug 的修复）：`all_method_bindings`
+    /// 的合并结果必须与 HashMap 实例的随机哈希种子无关——同一组模块、同一方法键
+    /// 只给出**一个**单绑定。
+    ///
+    /// **准入（病史门）**：本判据钉的是一次真实缺陷——`all_method_bindings` 曾按
+    /// HashMap 迭代序覆盖同名方法键，同一输入跨进程给出不同单绑定（诊断随进程
+    /// 变化）。判别力（先红后绿）：合并曾按 `modules.values()` 的迭代序 `extend`，
+    /// 两个模块定义同名方法键时「谁最后覆盖」取决于 HashMap 随机种子 ⇒ 同一输入
+    /// 跨实例给出不同单绑定。本判据构造 32 个**插入序交替**的注册表实例，断言
+    /// 同名键的单绑定完全一致；删掉升序合并的变异实测给出 {"Int(64)", "Bool"}
+    /// 两种结果（32 实例偶然全同的概率 2^-31）。
+    #[test]
+    fn test_all_method_bindings_merge_is_deterministic_across_hash_seeds() {
+        // Arrange：a / b 两个模块各自定义同名键 Temp.tag，单绑定类型可区分
+        let mut observed: std::collections::HashSet<String> = std::collections::HashSet::new();
+        for instance in 0..32 {
+            let mut registry = ModuleRegistry::new();
+            let mut a = ModuleInfo::new("a".to_string(), ModuleSource::User);
+            a.method_bindings
+                .insert("Temp.tag".to_string(), MonoType::Bool);
+            let mut b = ModuleInfo::new("b".to_string(), ModuleSource::User);
+            b.method_bindings
+                .insert("Temp.tag".to_string(), MonoType::Int(64));
+            // 插入序交替：模块迭代序还受哈希种子影响，两种写法都要覆盖
+            if instance % 2 == 0 {
+                registry.register(a);
+                registry.register(b);
+            } else {
+                registry.register(b);
+                registry.register(a);
+            }
+
+            // Act
+            let binding = registry
+                .all_method_bindings()
+                .get("Temp.tag")
+                .cloned()
+                .expect("同名方法键必须留在合并结果里");
+
+            // Assert 的输入面：逐实例收集单绑定的调试形态
+            observed.insert(format!("{binding:?}"));
+        }
+
+        // Assert：32 个实例只能观察到同一种单绑定
+        assert_eq!(
+            observed.len(),
+            1,
+            "同一组模块对同一方法键只能给出一个单绑定（不得随 HashMap 哈希种子变化），实际出现：{observed:?}"
+        );
     }
 
     #[test]

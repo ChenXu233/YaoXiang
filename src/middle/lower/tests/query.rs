@@ -137,13 +137,13 @@ fn test_resolve_function_name_native_arm_keeps_chain_order() {
     );
 }
 
-/// F2 守卫（WBS 4.9.9 修复轮 2）：`method_param_info` 的**空形参名表**分支。
+/// 空名表守卫（WBS 4.9.9）：`method_param_info` 的**空形参名表**分支。
 ///
 /// 这是**单元级守卫测试**，不是生产端直驱（coding-rules 第六部分）：空名表形态
 /// 在现有公开语法下不可达——登记期 `add_method_overload_with_params` 只在
 /// 「形参名与候选签名对不齐」时留空，而能造出对不齐的 RFC-004 外部绑定形态在
 /// 跨单元下另有既有缺陷（被绑函数名未限定 ⇒ 运行期 E6006，位置实参同样失败），
-/// 与命名实参无关；t2 的 m5 变异（删掉 `if names.is_empty() { return None; }`）
+/// 与命名实参无关；把守卫整行删掉（`if names.is_empty() { return None; }`）
 /// 后整套多文件判据仍全绿。故本测试**手工构造**注册表里的空名表候选组，只钉
 /// 一条性质：名字不可用 ⇒ 查询返回 None（不得把空表当成「名字已核对」）；
 /// 同表非空的正对照证明守卫只拦空表。用途是防止守卫被误删。
@@ -198,7 +198,7 @@ fn test_method_param_info_empty_name_table_returns_none() {
     );
 }
 
-/// 造一个只带一个方法候选组的注册表模块（[F2] 守卫测试的输入面）。
+/// 造一个只带一个方法候选组的注册表模块（空名表守卫测试的输入面）。
 fn module_with_group(
     key: &str,
     group_key: &str,

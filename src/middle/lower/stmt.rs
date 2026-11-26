@@ -191,27 +191,6 @@ impl AstToIrGenerator {
                     }
                     _ => return Ok(None),
                 };
-                // 闭包值绑定名（WBS 4.9.9 修复轮 3 / 复审轮 F2–F3）：绑定值写成
-                // `=>` lambda 的才是**闭包值**，登记进 `closure_fn_names`，供 IR 侧
-                // 「拿不到形参名表 ⇒ 响亮拒绝」的兜底排除——这类形态在兜底之前
-                // 编译通过（命名实参被忽略），改判编译期错误属 D59 D 类变更。
-                // 判据是**绑定形态**而不是「名字出现在 `nested_functions` 里」：
-                // 后者还含具名嵌套函数声明（Fn 注解 + 块体），它们是声明函数，
-                // 照常进兜底（旧行为是静默丢参 + 运行期失败 = C 类可顺修）。
-                // 方法重绑定（`Type.method = ...`）不是闭包绑定名，不登记。
-                // 判据二：声明里**没有值形参**（`signature` 为空）。有值形参声明的
-                // 绑定属声明函数（形参名表由声明面负责，缺席走 09 登记的已知缺口），
-                // 不登记为闭包值——实测 parser 会把 `g: (a, b) -> Int = { .. }` 的
-                // 块体也归一成 lambda 值，单看值形态无法区分「闭包」与「具名嵌套
-                // 函数声明」。
-                if type_name.is_none()
-                    && signature.is_empty()
-                    && value
-                        .as_deref()
-                        .is_some_and(|v| matches!(v, Expr::Lambda { .. }))
-                {
-                    self.closure_fn_names.insert(name.clone());
-                }
                 // RFC-010a 附录D：`name = { ... }` 无注解时按内容推断（块值是尾表达式）；
                 // 非 Fn 注解→块值。后者不得当函数体处理，否则变量拿不到值。
                 let is_fn_binding = ast::Expr::block_binding_is_function(
@@ -964,20 +943,6 @@ impl AstToIrGenerator {
                         .build())
                     }
                 };
-                // 闭包值绑定名（WBS 4.9.9 修复轮 3 / 复审轮 F2）：函数体内的
-                // `f = () => 7` 同样是**闭包值**绑定，登记进 `closure_fn_names`；
-                // 判据是绑定形态（lambda 值），不是 `nested_functions` 的名字集合
-                //（后者同时含具名嵌套函数声明，见对照注释）。
-                // 判据二同顶层：声明里没有值形参（`signature` 为空）才登记——
-                // `g: (a, b) -> Int = { .. }` 的块体被 parser 归一成 lambda 值，
-                // 只看值形态会把具名嵌套函数声明误当闭包（它们要按声明函数进兜底）。
-                if signature.is_empty()
-                    && value
-                        .as_deref()
-                        .is_some_and(|v| matches!(v, Expr::Lambda { .. }))
-                {
-                    self.closure_fn_names.insert(name.clone());
-                }
                 // RFC-010a 附录D：`name = { ... }` 无注解时按内容推断（块值是尾表达式）；
                 // 非 Fn 注解→块值。
                 let is_fn_binding = ast::Expr::block_binding_is_function(
