@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
 """AOT 七条最小等价账本门禁。
 
-账本是机器可读的 `tests/aot-ledger.json`。本脚本先解析并校验恰好七条，
-再用 `cargo test --all-features --test integration native_aot -- --list`
-精确核对测试名，最后逐条用 `--exact` 执行并断言 1 passed / 0 failed。
-缺条目、多条目、重复、未知测试名或没有执行到测试都必须 exit 非 0。
+账本是机器可读的 `tests/aot-ledger.json`。决策文本的唯一来源是设计文档，
+本脚本内嵌七条期望 id/state 做机械对账，防止账本与文档漂移。脚本先精确核对
+测试名，再逐条逐判据用 `--exact` 执行并断言精确的
+`test result: ok. 1 passed; 0 failed`；缺条目、多条目、重复、未知测试名、
+id/state 不符或没有执行到测试都必须 exit 非 0。
 """
 
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -19,6 +21,18 @@ LEDGER = ROOT / "tests" / "aot-ledger.json"
 TARGET = "native_aot"
 EXPECTED_ENTRIES = 7
 STATES = {"supported", "expected-reject"}
+EXPECTED = [
+    ("branch-no-phi", "supported"),
+    ("loop-local", "supported"),
+    ("multifile-init-order", "supported"),
+    ("failure-diagnostic", "supported"),
+    ("phi-boundary", "expected-reject"),
+    ("local-merge-boundary", "expected-reject"),
+    ("unknown-type-boundary", "expected-reject"),
+]
+RESULT_PATTERN = re.compile(
+    r"^test result: ok\. 1 passed; 0 failed", re.MULTILINE
+)
 LIST_CMD = [
     "cargo",
     "test",
@@ -50,7 +64,7 @@ def run_cargo(cmd: list[str]) -> subprocess.CompletedProcess[str]:
         fail(f"无法执行 {' '.join(cmd)}: {error}")
 
 
-def load_entries() -> list[dict[str, str]]:
+def load_entries() -> list[dict[str, object]]:
     try:
         raw = json.loads(LEDGER.read_text(encoding="utf-8"))
     except FileNotFoundError:
@@ -75,30 +89,41 @@ def load_entries() -> list[dict[str, str]]:
 
     seen_ids: set[str] = set()
     seen_tests: set[str] = set()
-    validated: list[dict[str, str]] = []
+    validated: list[dict[str, object]] = []
+    actual_order: list[tuple[str, str]] = []
     for index, entry in enumerate(entries):
         where = f"entries[{index}]"
         if not isinstance(entry, dict):
             fail(f"{where} 必须是对象")
-        for field in ("id", "state", "decision", "test"):
-            value = entry.get(field)
-            if not isinstance(value, str) or not value.strip():
-                fail(f"{where}.{field} 必须是非空字符串")
-        if entry["state"] not in STATES:
+        if "decision" in entry:
+            fail(f"{where} 不应包含 decision（决策文本唯一来源是设计文档）")
+        entry_id = entry.get("id")
+        state = entry.get("state")
+        tests = entry.get("tests")
+        if not isinstance(entry_id, str) or not entry_id.strip():
+            fail(f"{where}.id 必须是非空字符串")
+        if state not in STATES:
             fail(f"{where}.state 必须是 {sorted(STATES)} 之一")
-        if entry["id"] in seen_ids:
-            fail(f"重复 id: {entry['id']}")
-        if entry["test"] in seen_tests:
-            fail(f"重复 test: {entry['test']}")
-        seen_ids.add(entry["id"])
-        seen_tests.add(entry["test"])
-        validated.append(
-            {
-                "id": entry["id"],
-                "state": entry["state"],
-                "decision": entry["decision"],
-                "test": entry["test"],
-            }
+        if not isinstance(tests, list) or not tests:
+            fail(f"{where}.tests 必须是非空数组")
+        normalized_tests: list[str] = []
+        for test_index, test in enumerate(tests):
+            if not isinstance(test, str) or not test.strip():
+                fail(f"{where}.tests[{test_index}] 必须是非空字符串")
+            if test in seen_tests:
+                fail(f"重复 test: {test}")
+            seen_tests.add(test)
+            normalized_tests.append(test)
+        if entry_id in seen_ids:
+            fail(f"重复 id: {entry_id}")
+        seen_ids.add(entry_id)
+        actual_order.append((entry_id, state))
+        validated.append({"id": entry_id, "state": state, "tests": normalized_tests})
+
+    if actual_order != EXPECTED:
+        fail(
+            "账本 id/state/顺序与内嵌期望不一致；"
+            f"实际={actual_order}，期望={EXPECTED}"
         )
     return validated
 
@@ -119,28 +144,35 @@ def discover_tests() -> set[str]:
     return names
 
 
-def run_entry(entry: dict[str, str], available: set[str]) -> None:
-    test = entry["test"]
-    if test not in available:
-        fail(f"账本条目的测试不存在: {test}")
-    cmd = [
-        "cargo",
-        "test",
-        "--all-features",
-        "--test",
-        "integration",
-        "--",
-        "--exact",
-        test,
-    ]
-    result = run_cargo(cmd)
-    output = result.stdout + result.stderr
-    passed = "1 passed; 0 failed" in output
-    if result.returncode != 0 or not passed:
-        print(f"[aot-ledger] FAIL {entry['id']} ({entry['state']}): {test}")
-        print(output[-4000:], file=sys.stderr)
-        fail("测试没有以 1 passed / 0 failed 完成（0 执行也必须红）")
-    print(f"[aot-ledger] OK {entry['id']} ({entry['state']}): {test}")
+def run_entry(entry: dict[str, object], available: set[str]) -> None:
+    entry_id = str(entry["id"])
+    state = str(entry["state"])
+    tests = entry["tests"]
+    assert isinstance(tests, list)
+    for test in tests:
+        assert isinstance(test, str)
+        if test not in available:
+            fail(f"账本条目 {entry_id} 的测试不存在: {test}")
+        cmd = [
+            "cargo",
+            "test",
+            "--all-features",
+            "--test",
+            "integration",
+            "--",
+            "--exact",
+            test,
+        ]
+        result = run_cargo(cmd)
+        output = result.stdout + result.stderr
+        if result.returncode != 0 or not RESULT_PATTERN.search(output):
+            print(f"[aot-ledger] FAIL {entry_id} ({state}): {test}")
+            print(output[-4000:], file=sys.stderr)
+            fail(
+                "测试没有以精确的 test result: ok. 1 passed; 0 failed 完成"
+                "（0 执行也必须红）"
+            )
+        print(f"[aot-ledger] OK {entry_id} ({state}): {test}")
 
 
 def main() -> None:
