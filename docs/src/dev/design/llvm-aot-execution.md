@@ -10,7 +10,7 @@ description:
 x86-64 上，把一份真实的 YaoXiang 源程序编译成 ELF 可执行文件。在没有 LLVM 和 YaoXiang
 VM 的同类系统上运行它，既能算对结果，也能在出错时指出源码位置。生成一份 LLVM IR 文本不算完成。
 
-**状态：批次 3 已开工（值证据与无 Phi CFG 子集），发布验收未完成。**
+**状态：批次 3 已开工（值证据、无 `Phi` CFG 子集与多文件项目入口），发布验收未完成。**
 [RFC-018](../../rfc/accepted/018-llvm-aot-compiler.md)
 已接受 LLVM 提前编译（AOT）的方向，并在附录 B 登记构建产物契约；[跟踪议题 #134](https://github.com/ChenXu233/YaoXiang/issues/134)
 是这项工作的入口。首批实现不占用 [RFC-039 施工表](../architecture/09-execution-wbs.md)
@@ -25,7 +25,7 @@ VM 的同类系统上运行它，既能算对结果，也能在出错时指出�
 
 - [x] **批次 1 固定构建环境并隔离 LLVM 依赖**（`5828eb46`、`5b14f1ff`）——可选 Cargo feature `llvm` 与 Inkwell 0.11.0、LLVM 18.1 的固定组合入库；CI 组合动作 `.github/actions/setup-llvm/action.yml` 安装 `llvm-18-dev` 并设置 `LLVM_SYS_181_PREFIX` 与 `LLVM_SYS_181_STRICT_VERSIONING`；`check-no-llvm` 作业验证默认通道不依赖 LLVM、原生请求不回退字节码；批次构建工具 `scripts/dev/scratch.py` 的 `build` 支持 `--features llvm`。缺链接器有独立用例（`test_native_missing_linker_preserves_output`）；LLVM 主版本不匹配由 `LLVM_SYS_181_STRICT_VERSIONING` 在构建期拒绝。
 - [x] **批次 2 交付第一个真实源程序**（`5828eb46`）——AOT-0/AOT-1 原型入库（`src/backends/llvm/`）：`yx build --emit exe` 走原生路径，`--emit bytecode` 走字节码路径，裸 `build` 仍默认生成 `.42`。判据在 `tests/integration/native_aot.rs`。原型限单文件直线标量子集，发布验收未完成。
-- [ ] **批次 3 接正式共享 IR，扩到控制流与多文件**——3.1/3.2 已收口（`fc6bcda3`、`9fea7a9d`、`6657fbfb`、`15c5807b`）：Linux 构建恢复、AOT 入口接到 `verify_ssa`；单文件的无 `Phi` 分支与循环已发射（break/continue、嵌套 if/else、嵌套 while、循环内 `Local`、跨块 `Value` 均与 VM 同结果），`Phi` 与多前驱 `Local` 汇合仍显式拒绝（见“阶段 1 支持集与拒绝边界”）。3.3/3.4 待开工；多文件与入口身份仍未开工（`src/backends/llvm/analysis.rs` 对多文件模块直接拒绝）。判据在 `tests/integration/native_aot.rs` 与 `src/backends/llvm/tests/analysis.rs`。
+- [ ] **批次 3 接正式共享 IR，扩到控制流与多文件**——3.1/3.2/3.3 已收口（`fc6bcda3`、`9fea7a9d`、`6657fbfb`、`15c5807b`、`9ad5f603`、`8056c7ac`）：Linux 构建恢复、AOT 入口接到 `verify_ssa`；单文件的无 `Phi` 分支与循环已发射（break/continue、嵌套 if/else、嵌套 while、循环内 `Local`、跨块 `Value` 均与 VM 同结果）；多文件项目入口与文件身份已落地（B-i：库 API 项目入口，CLI 单入口文件），`Phi` 与多前驱 `Local` 汇合仍显式拒绝（见“阶段 1 支持集与拒绝边界”）。3.4 待开工：把等价账本的七条最小集固化为可执行判据。判据在 `tests/integration/native_aot.rs` 与 `src/backends/llvm/tests/analysis.rs`。
 - [ ] **批次 3.5 `Phi` 映射**——把需要 `Phi` 的汇合值从能力拒绝改为 `Phi`/边拷贝映射，并纳入等价账本；生产端已产出 `Phi`（见“前置”），AOT 侧在 AOT-3.1 显式拒绝，映射未开工。
 - [ ] **批次 4 链接原生运行时，再接 FFI 与并作**——未开始；原生运行时只有最小 C ABI（`src/backends/llvm/runtime.c`），没有 FFI 与并作。
 
@@ -135,16 +135,19 @@ AOT 不得在 L4 后端重建 SSA 或类型（见“开工前确认什么”）�
 
 ### 阶段 1 支持集与拒绝边界（等价账本）
 
-阶段 1 按可执行判据登记支持集；支持集之外必须显式拒绝并带源码位置，禁止静默回退。判据分两处：集成判据在 `tests/integration/native_aot.rs`，后端单元判据在 `src/backends/llvm/tests/analysis.rs`。
+阶段 1 按可执行判据登记支持集；支持集之外必须显式拒绝并带源码位置，禁止静默回退。判据分两处：集成判据在 `tests/integration/native_aot.rs`，后端单元判据在 `src/backends/llvm/tests/analysis.rs`。本节逐条列边界；等价账本的最小交付边界见节末的七条表。
 
 **支持集**：
 
-- 单文件脚本；`Int`、`Bool`、`String`、`Void` 标量与直接调用。
+- 单文件脚本或多文件项目；`Int`、`Bool`、`String`、`Void` 标量与直接调用。
 - 直线指令；无 `Phi` 的分支和循环（`Jmp`、`JmpIf`、`JmpIfNot` 按 `BasicBlock` 发射），判据为 `test_native_no_phi_branch_executes_both_edges`、`test_native_no_phi_loop_matches_vm`。
 - 控制流正例（真实 Driver 源文件，native O0/O2 与 VM 的退出码与 stdout 逐项对照）：break/continue `test_native_break_continue_matches_vm`、嵌套 if/else `test_native_nested_if_else_matches_vm`、嵌套 while `test_native_nested_while_matches_vm`、循环内 `Local` 更新 `test_native_loop_local_update_matches_vm`、跨块 `Value` 直用 `test_native_cross_block_value_matches_vm`。
 - 失败路径：受支持的上下文里运行期失败与 VM 同诊断码与位置——循环内除零 `test_native_loop_division_by_zero_matches_vm_diagnostic`（E6001）、直线溢出 `test_native_add_overflow_reports_source`（E6007）。
 - `Operand::Value` 作指令 dst 并读回：`test_native_value_destination_readback`。
 - `Operand::Value` 的类型来自 `ValueInfo.ty`；`Local` 保持存储语义，`Arg`/`Global` 不变。
+- 多文件项目（入口与合并）：库 API `build_native_project_with_options` 复用编排层的发现、合并与初始化次序，CLI 的 `build <entry.yx> --emit exe` 在入口向上找到 `yaoxiang.toml` 时走项目路径，找不到项目根保持单文件路径（B-i）。多文件夹具（跨文件常量、子目录模块、init 次序）在 CLI 与 API 形态下均与 VM 同结果，判据为 `test_native_multifile_use_constant_cli_and_api`、`test_native_multifile_subdirectory_module_cli_and_api`、`test_native_multifile_init_order_cli_and_api`。
+- 入口身份：模块先执行 `__yx_module_init`，再按 `ModuleIR.entry_function` 调 Bin 入口；`Script` 的 `entry_function` 为空时不隐式调用 `main`。
+- 文件身份：函数按 `function_files`、模块 init 按 `init_file_ids` 选择真实文件路径，带位置诊断与运行期错误指向真实文件，判据为 `test_native_multifile_dependency_init_diagnostic_uses_real_file`、`test_native_multifile_dependency_function_diagnostic_uses_real_file`。
 
 **拒绝边界**：
 
@@ -152,16 +155,38 @@ AOT 不得在 L4 后端重建 SSA 或类型（见“开工前确认什么”）�
 - 同一 `Local` 在多个前驱块首次写、汇合后读：报 AOT-3.5，带源码位置；集成判据 `test_native_local_merge_boundary_reports_aot_35`，后端单元判据 `test_native_local_merge_boundary_rejects_multi_predecessor_write` 与 `test_native_local_merge_boundary_rejects_single_arm_write`——单支臂首次写这一变体目前只有合成 IR 级证据，尚无真实 Driver 集成判据。顺序写与循环重复写合法，后端单元判据 `test_native_local_sequential_write_is_allowed`、`test_native_local_loop_repeated_write_is_allowed`。LLVM verifier 兜底失败同样包装为 AOT 自有诊断，不外泄 LLVM 原文。
 - if 表达式作值：合并值在 IR 中的类型为显式未知 `TypeRef("?")`，AOT 报带值 id 与原始类型的 unsupported；这是 lower 侧类型覆盖缺口，补齐归 lower，不在 AOT 推断或静默 Void。判据为 `test_native_explicit_unknown_value_is_rejected`（集成与后端单元各一条）。
 - if 表达式作尾值：合并值需要 `Phi`，被拒并指向 AOT-3.5 边界；集成判据 `test_native_unsupported_merge_value_preserves_output`（断言错误指向原生能力边界，且失败构建不覆盖上次产物）。
-- 函数体内的 `std` 调用：调用结果在 IR 中的值类型为显式未知 `TypeRef("?")`，同归 lower 类型覆盖缺口。**因此循环内 assert 失败不在支持集**——断言依赖函数体内 `std` 调用结果，AOT 必然拒绝；仓内失败路径判据改用循环内除零（E6001）与直线溢出（E6007），见「支持集」。
-- 多文件与项目入口：模块的 `source_files` 非空或带 `entry_function` 时直接拒绝（`src/backends/llvm/analysis.rs`），多文件与入口身份未开工。
+- 函数体内的 `std` 调用：调用结果在 IR 中的值类型为显式未知 `TypeRef("?")`，AOT 报带值 id 与原始类型的 unsupported；缺口归 lower 的类型覆盖补齐。**例外只有 `std.assert` 一项**：该内建的返回类型由分析器直接拥有（`Void`），因此函数体内的断言可用；其余 `std` 调用仍按显式未知拒绝，例外不外扩。
+- `Script` 定义了 `main` 却没有任何调用：构建期显式拒绝（带 `source:line:column` 的 AOT 能力边界诊断，不产生产物），文案说明「`Script` 定义 `main` 但未调用、AOT 不隐式调用」并给出改用 Bin 项目或移除未调用 `main` 的路径；集成判据 `test_native_script_unused_main_is_rejected`。`Script` 无 `main` 仍可构建（`test_native_script_without_main_still_builds`），`Script` 显式调用 `main` 与 Bin 项目入口不受影响（`test_native_project_bin_entry_function_is_called`）。
 - 已知静默 Void 两处（**未收口**）：`Operand::Global` 缺指针时读取返回 `Value::void()`，`load_slot` 无指针时返回 `Value::void()`。后续批次改为显式拒绝或补齐证据，不得标成已收口。
 
 **L4 自有判据的性质（L3 裁决点）**：`src/backends/llvm/analysis.rs` 的 `check_local_merge_boundary` 自建可达块 CFG、前驱表、must-def 集合不动点与支配集，判定「同一 `Local` 的多个 alloca 创建点都可达同一读块」。这是**支持集判定**——判定程序是否落在 AOT 支持集内并给出带位置的拒绝，不是重建 SSA 或类型：不生成 `Phi`、不重命名，类型证据仍取 `ValueInfo.ty`。是否把这套判据提升到 L3 供其他后端复用，在批次 3.5 开工前裁决。
 
+**登记项（2026-11-26 复审）**：
+
+- **项目配置的取用有两条链**：CLI 从项目根的 `yaoxiang.toml` 读出编译配置再灌入项目 native 构建；库 API 由调用方直接传入编译配置，库侧不读 toml。两条链汇到同一处（`build_native_project_with_options` 的配置形参），因此项目 native 路径与 `run`/`check` 链读到同一份上限。
+- **`--emit bytecode` 仍是单文件语义**：项目入口只作用于 `--emit exe`；字节码路径恒按单个文件构建，不合并项目。
+- **`Script` 不隐式调用 `main` 的保证是两条合起来**：发射层按 `ModuleIR.entry_function` 调 Bin 入口，`Script` 的 `entry_function` 为空时不调 `main`；分析层再拒绝「定义了 `main` 却不可达」的 `Script`。二者合起来，`Script` 加未调用 `main` 不会静默 exit 0。
+- **assert 白名单是硬判**：分析层对 `std.assert.assert` 硬判参数形态（`Bool` 或 `(Bool, String)`），返回类型由分析器直接拥有（`Void`），不推断其他未知值。
+- **L4 补证据只有这一个例外**：`std.assert` 的结果值类型由 L4 分析器拥有；其余显式未知仍按拒绝处理，缺口归 lower 的类型覆盖补齐。
+
+**等价账本（最小集，七条）**：
+
+| # | 条目 | 状态 | 判据 | 守的决策 |
+| --- | --- | --- | --- | --- |
+| 1 | 无 `Phi` 分支 | 已收口 | `test_native_no_phi_branch_executes_both_edges` | 支持集声明：无 `Phi` 的分支在支持集内，条件两条边都要发射 |
+| 2 | 无 `Phi` 循环与 `Local` 存储 | 已收口 | `test_native_no_phi_loop_matches_vm`、`test_native_loop_local_update_matches_vm` | `Local` 保持存储语义：顺序写与循环重复写合法 |
+| 3 | 多文件 init 次序 | 已收口 | `test_native_multifile_init_order_cli_and_api` | 入口身份：模块先执行 `__yx_module_init`，再调 Bin 入口 |
+| 4 | 循环内除零（E6001） | 已收口 | `test_native_loop_division_by_zero_matches_vm_diagnostic` | 失败路径与 VM 同诊断码与位置 |
+| 5 | `Phi` 映射边界 | 已收口（拒绝） | `test_native_phi_is_rejected_at_batch_35` | `Phi` 显式拒绝并指向批次 3.5，不静默产出 |
+| 6 | 合并 `Local` 边界 | 已收口（拒绝） | `test_native_local_merge_boundary_reports_aot_35` | 合并 `Local` 显式拒绝并指向批次 3.5，不外泄 LLVM 原文 |
+| 7 | 显式未知类型 | 已收口（拒绝） | `test_native_explicit_unknown_value_is_rejected` | 未知类型不静默猜测、不静默 Void |
+
+这七条是本阶段的最小交付边界：**已支持项不得移出集合换绿**——支持集只增不减，绿灯不得靠把已支持项移出集合获得。把七条固化为可执行判据在批次 3.4 落地。
+
 **裁决（2026-11-26）**：
 
-- **B-i（入口形态）**：库 API 增加项目/多文件入口，CLI 保持单入口文件。当前 AOT 入口对多文件模块直接拒绝（见「拒绝边界」）。
-- **D（等价账本口径）**：less is more——账本只保留覆盖关键决策与拒绝边界的必要条目，不以夹具数量防御。
+- **B-i（入口形态）**：库 API 增加项目/多文件入口，CLI 保持单入口文件。项目 native 构建按编排层的发现、合并与初始化次序执行（见「支持集」）。
+- **D（等价账本口径）**：less is more——账本只保留覆盖关键决策与拒绝边界的必要条目，不以夹具数量防御；本阶段的账本按上表的七条最小集给出。
 
 ### 0. 值契约闭合（P7 的 SSA 生产端）
 
