@@ -20,14 +20,11 @@ use crate::frontend::core::lexer::tokens::TokenKind;
 
 /// 表达式 / 子表达式的入口绑定力。
 pub const BP_LOWEST: u8 = 0;
-/// 级 12：`=`（右结合）。
+/// 级 13：`=`（右结合）。
 pub const BP_ASSIGN: u8 = 1;
-/// 级 10：`or`。
-///
-/// 已知偏差（不在 8.3.1 范围）：SPEC §2.2 把 `and` / `or` 列为同一级左结合，
-/// 现树分列两层——改它会改变「原先成功」程序的求值顺序（短路分支），须单独裁决。
+/// 级 11：`or`。
 pub const BP_OR: u8 = 2;
-/// 级 10：`and`（同上，与 `or` 分列是既有偏差）。
+/// 级 10：`and`。
 pub const BP_AND: u8 = 3;
 /// 级 9：`==` `!=` `<` `>` `<=` `>=` `in`（同一级、左结合）。
 pub const BP_EQUALITY: u8 = 4;

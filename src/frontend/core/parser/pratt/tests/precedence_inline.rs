@@ -25,11 +25,11 @@ fn test_bp_ordering_follows_spec_levels() {
     );
     assert!(
         BP_ASSIGN < BP_OR,
-        "赋值（级 12）必须低于 or（级 10）：{BP_ASSIGN} vs {BP_OR}"
+        "赋值（级 13）必须低于 or（级 11）：{BP_ASSIGN} vs {BP_OR}"
     );
     assert!(
         BP_OR < BP_AND,
-        "or 低于 and（既有分层，见表内偏差说明）：{BP_OR} vs {BP_AND}"
+        "or（级 11）低于 and（级 10）：{BP_OR} vs {BP_AND}"
     );
     assert!(
         BP_AND < BP_EQUALITY,

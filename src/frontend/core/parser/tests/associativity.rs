@@ -444,7 +444,7 @@ fn test_lambda_body_is_right_greedy() {
 
 #[test]
 fn test_assignment_is_right_associative() {
-    // Arrange：(a = b = c)——SPEC syntax §2.2 级 12（=）结合性「右到左」；
+    // Arrange：(a = b = c)——SPEC syntax §2.2 级 13（=）结合性「右到左」；
     // 括号让它落在表达式位，避免与语句位绑定的 r = ... 混淆
     let source = "r = (a = b = c)";
 
@@ -455,18 +455,18 @@ fn test_assignment_is_right_associative() {
     let (lhs, rhs) = expect_bin_op(
         &expr,
         BinOp::Assign,
-        "§2.2 级 12 右结合：外层必须是 =",
+        "§2.2 级 13 右结合：外层必须是 =",
         source,
     );
-    expect_var(lhs, "a", "§2.2 级 12 右结合：外层左操作数", source);
+    expect_var(lhs, "a", "§2.2 级 13 右结合：外层左操作数", source);
     let (inner_lhs, inner_rhs) = expect_bin_op(
         rhs,
         BinOp::Assign,
-        "§2.2 级 12 右结合：外层右操作数必须是内层 b = c",
+        "§2.2 级 13 右结合：外层右操作数必须是内层 b = c",
         source,
     );
-    expect_var(inner_lhs, "b", "§2.2 级 12 右结合：内层左操作数", source);
-    expect_var(inner_rhs, "c", "§2.2 级 12 右结合：内层右操作数", source);
+    expect_var(inner_lhs, "b", "§2.2 级 13 右结合：内层左操作数", source);
+    expect_var(inner_rhs, "c", "§2.2 级 13 右结合：内层右操作数", source);
 }
 
 #[test]

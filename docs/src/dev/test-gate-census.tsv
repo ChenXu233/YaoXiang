@@ -205,14 +205,33 @@ test_multi_file_cross_unit_pathological_recursion_at_5000_reports_e3005	src/driv
 test_cross_unit_method_named_arg_binds_declaration_parameter_name	src/driver/tests/named_args_cross_unit_method.rs	assertx3 is_nonex1 expectx2	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
 test_cross_unit_method_named_arg_alias_import_binds_parameter_name	src/driver/tests/named_args_cross_unit_method.rs	assertx3 is_nonex1 expectx2	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
 test_cross_unit_method_named_arg_selects_overload_by_parameter_name	src/driver/tests/named_args_cross_unit_method.rs	assertx5 is_nonex1 expectx2	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
-test_mixed_alias_bare_import_binds_bare_provider_names	src/driver/tests/named_args_cross_unit_method.rs	assertx2 is_nonex1 expectx2	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
+test_mixed_alias_bare_import_named_arg_rejects_loudly	src/driver/tests/named_args_cross_unit_method.rs	assertx2 helperx1	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
 test_mixed_alias_bare_import_alias_side_named_arg_rejects_loudly	src/driver/tests/named_args_cross_unit_method.rs	assertx2 helperx1	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
 test_cross_unit_named_arg_binding_arm_rejects_loudly	src/driver/tests/named_args_cross_unit_method.rs	assertx2 helperx1	病史	函数体/注释点名 issue/回归/缺陷/事故	留
 test_cross_unit_named_arg_whole_module_import_rejects_loudly	src/driver/tests/named_args_cross_unit_method.rs	assertx2 helperx1	病史	函数体/注释点名 issue/回归/缺陷/事故	留
-test_mixed_alias_bare_import_keeps_bare_provider_overloads	src/driver/tests/named_args_cross_unit_method.rs	assertx3 is_nonex1 expectx2 helperx3	病史	函数体/注释点名 issue/回归/缺陷/事故	留
+test_mixed_alias_bare_import_keeps_bare_provider_overloads	src/driver/tests/named_args_cross_unit_method.rs	assertx3 is_nonex1 expectx2 helperx3	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
 test_dynamic_call_named_arg_keeps_legacy_behavior	src/driver/tests/named_args_cross_unit_method.rs	assertx2 is_nonex1 expectx2 helperx1	病史	函数体/注释点名 issue/回归/缺陷/事故	留
 test_builtin_container_ctor_rejects_unknown_named_arg	src/driver/tests/named_args_cross_unit_method.rs	assertx2 helperx1	病史	函数体/注释点名 issue/回归/缺陷/事故	留
-test_builtin_container_ctor_len_named_arg_still_passes	src/driver/tests/named_args_cross_unit_method.rs	assertx2 helperx1	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
+test_builtin_container_ctor_len_named_arg_still_passes	src/driver/tests/named_args_cross_unit_method.rs	assertx2 is_nonex1 expectx2 helperx1	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
+test_top_level_closure_named_arg_keeps_legacy_behavior	src/driver/tests/named_args_cross_unit_method.rs	assertx2 is_nonex1 expectx2 helperx1	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
+test_named_nested_function_named_arg_keeps_legacy_behavior	src/driver/tests/named_args_cross_unit_method.rs	assertx2 is_nonex1 expectx2	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
+test_conflicting_bare_imports_reject_duplicate_type_name	src/driver/tests/named_args_cross_unit_method.rs	assertx2 helperx1	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
+test_method_identity_invariant_ambiguous_named_red_positional_green	src/driver/tests/named_args_cross_unit_method.rs	assertx7 is_nonex2 expectx4 helperx4	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
+test_mixed_alias_bare_import_positional_signature_conflict_rejects_loudly	src/driver/tests/named_args_cross_unit_method.rs	assertx2 helperx1	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
+test_bare_side_positional_with_differing_signatures_dispatches_to_owner	src/driver/tests/named_args_cross_unit_method.rs	assertx2 is_nonex1 expectx2 helperx1	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
+test_alias_side_positional_arity_mismatch_rejects_loudly	src/driver/tests/named_args_cross_unit_method.rs	assertx2 helperx1	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
+test_alias_side_positional_return_type_mismatch_rejects_loudly	src/driver/tests/named_args_cross_unit_method.rs	assertx2 helperx1	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
+test_two_alias_conflict_named_arg_rejects_loudly	src/driver/tests/named_args_cross_unit_method.rs	assertx2 helperx1	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
+test_two_alias_conflict_positional_param_type_mismatch_rejects_loudly	src/driver/tests/named_args_cross_unit_method.rs	assertx2 helperx1	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
+test_two_alias_conflict_positional_rejects_loudly	src/driver/tests/named_args_cross_unit_method.rs	assertx2 helperx1	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
+test_two_alias_conflict_return_type_diff_rejects_loudly	src/driver/tests/named_args_cross_unit_method.rs	assertx2 helperx1	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
+test_conflict_widening_int_literal_rejects_loudly	src/driver/tests/named_args_cross_unit_method.rs	assertx2 helperx1	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
+test_conflict_widening_int_variable_rejects_loudly	src/driver/tests/named_args_cross_unit_method.rs	assertx2 helperx1	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
+test_conflict_whole_module_owner_positional_rejects_loudly	src/driver/tests/named_args_cross_unit_method.rs	assertx2 helperx1	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
+test_mixed_owner_compatible_positional_rejects_loudly	src/driver/tests/named_args_cross_unit_method.rs	assertx2 helperx1	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
+test_conflict_arity_owner_one_two_args_rejects_loudly	src/driver/tests/named_args_cross_unit_method.rs	assertx2 helperx1	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
+test_conflict_zero_arg_same_signature_rejects_loudly	src/driver/tests/named_args_cross_unit_method.rs	assertx2 helperx1	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
+test_conflict_owner_int_float_provider_actual_int_rejects_loudly	src/driver/tests/named_args_cross_unit_method.rs	assertx2 helperx1	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
 test_named_import_bare_call_in_function_body	src/driver/tests/named_import_calls.rs	helperx1	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
 test_named_import_bare_call_in_module_init	src/driver/tests/named_import_calls.rs	helperx1	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
 test_whole_module_import_qualified_call	src/driver/tests/named_import_calls.rs	helperx1	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
@@ -1449,6 +1468,11 @@ test_type_var_display	src/frontend/core/types/tests/var.rs	assert_eqx1	条款	�
 test_type_var_equality	src/frontend/core/types/tests/var.rs	assert_eqx1 assert_nex1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_const_var_display	src/frontend/core/types/tests/var.rs	assert_eqx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_const_var_equality	src/frontend/core/types/tests/var.rs	assert_eqx1 assert_nex1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
+test_conflicting_alias_providers_list_all_modules	src/frontend/module/import_face.rs	assertx2	待判	两门皆不过；含强断言，证明门需人工复核	待判
+test_conflicting_alias_has_no_winner_and_is_conflicted	src/frontend/module/import_face.rs	assertx2 is_nonex1	待判	两门皆不过；断言只有 is_ok/is_some/unwrap 一类弱断言	退役候选
+test_conflicting_alias_is_skipped_by_injected_pairs	src/frontend/module/import_face.rs	assertx2	待判	两门皆不过；含强断言，证明门需人工复核	待判
+test_single_alias_has_winner_and_single_provider	src/frontend/module/import_face.rs	assert_eqx1 assertx2	待判	两门皆不过；含强断言，证明门需人工复核	待判
+test_bare_and_alias_conflict_is_or_of_both_levels	src/frontend/module/import_face.rs	assert_eqx1 assertx2	待判	两门皆不过；含强断言，证明门需人工复核	待判
 test_user_module_function_exports_carry_declared_type_params_snapshot	src/frontend/module/orchestrator.rs	assert_eqx4 assertx1 expectx1	待判	文件头只引整篇 RFC/规范而无节号（收紧后不算条款门）——需人工核	待核
 test_user_module_function_exports_carry_interface_and_const_param_names	src/frontend/module/orchestrator.rs	assert_eqx4 assertx1 expectx1	待判	文件头只引整篇 RFC/规范而无节号（收紧后不算条款门）——需人工核	待核
 test_extract_module_info_consumes_namespace_across_units	src/frontend/module/orchestrator.rs	assert_eqx1 assertx1 expectx1	待判	文件头只引整篇 RFC/规范而无节号（收紧后不算条款门）——需人工核	待核
