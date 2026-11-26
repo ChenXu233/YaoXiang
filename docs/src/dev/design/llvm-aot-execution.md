@@ -23,9 +23,9 @@ VM 的同类系统上运行它，既能算对结果，也能在出错时指出�
 
 ### 施工顺序
 
-- [x] **批次 1 固定构建环境并隔离 LLVM 依赖**（`5828eb46`、`5b14f1ff`）——可选 Cargo feature `llvm` 与 Inkwell 0.11.0、LLVM 18.1 的固定组合入库；CI 组合动作 `.github/actions/setup-llvm/action.yml` 安装 `llvm-18-dev` 并设置 `LLVM_SYS_181_PREFIX` 与 `LLVM_SYS_181_STRICT_VERSIONING`；`check-no-llvm` 作业验证默认通道不依赖 LLVM、原生请求不回退字节码；批次构建工具 `scripts/dev/scratch.py` 的 `build` 支持 `--features llvm`。缺链接器有独立用例（`test_native_missing_linker_preserves_output`）；LLVM 主版本不匹配由 `LLVM_SYS_181_STRICT_VERSIONING` 在构建期拒绝。
-- [x] **批次 2 交付第一个真实源程序**（`5828eb46`）——AOT-0/AOT-1 原型入库（`src/backends/llvm/`）：`yx build --emit exe` 走原生路径，`--emit bytecode` 走字节码路径，裸 `build` 仍默认生成 `.42`。判据在 `tests/integration/native_aot.rs`。原型限单文件直线标量子集，发布验收未完成。
-- [ ] **批次 3 接正式共享 IR，扩到控制流与多文件**——3.1/3.2/3.3/3.4 已收口（`fc6bcda3`、`9fea7a9d`、`6657fbfb`、`15c5807b`、`9ad5f603`、`8056c7ac`、`4fb03302`、`3c046c8d`）：Linux 构建恢复、AOT 入口接到 `verify_ssa`；单文件的无 `Phi` 分支与循环已发射（break/continue、嵌套 if/else、嵌套 while、循环内 `Local`、跨块 `Value` 均与 VM 同结果）；多文件项目入口与文件身份已落地（B-i：库 API 项目入口，CLI 单入口文件），`Phi` 与多前驱 `Local` 汇合仍显式拒绝（见“阶段 1 支持集与拒绝边界”）。等价账本的七条最小集已有可执行门禁（机器可读账本 + 检查器 + CI 作业，见“等价账本（最小集，七条）”）。判据在 `tests/integration/native_aot.rs` 与 `src/backends/llvm/tests/analysis.rs`。
+- [x] **批次 1 固定构建环境并隔离 LLVM 依赖**（`c7dcf603`、`abeaca98`）——可选 Cargo feature `llvm` 与 Inkwell 0.11.0、LLVM 18.1 的固定组合入库；CI 组合动作 `.github/actions/setup-llvm/action.yml` 安装 `llvm-18-dev` 并设置 `LLVM_SYS_181_PREFIX` 与 `LLVM_SYS_181_STRICT_VERSIONING`；`check-no-llvm` 作业验证默认通道不依赖 LLVM、原生请求不回退字节码；批次构建工具 `scripts/dev/scratch.py` 的 `build` 支持 `--features llvm`。缺链接器有独立用例（`test_native_missing_linker_preserves_output`）；LLVM 主版本不匹配由 `LLVM_SYS_181_STRICT_VERSIONING` 在构建期拒绝。
+- [x] **批次 2 交付第一个真实源程序**（`c7dcf603`）——AOT-0/AOT-1 原型入库（`src/backends/llvm/`）：`yx build --emit exe` 走原生路径，`--emit bytecode` 走字节码路径，裸 `build` 仍默认生成 `.42`。判据在 `tests/integration/native_aot.rs`。原型限单文件直线标量子集，发布验收未完成。
+- [ ] **批次 3 接正式共享 IR，扩到控制流与多文件**——3.1/3.2/3.3/3.4 已收口（`151eaf3f`、`56e9da77`、`850841b2`、`3d389358`、`9a86e1d2`、`2f633910`、`1e27af37`、`e2501c3d`）：Linux 构建恢复、AOT 入口接到 `verify_ssa`；单文件的无 `Phi` 分支与循环已发射（break/continue、嵌套 if/else、嵌套 while、循环内 `Local`、跨块 `Value` 均与 VM 同结果）；多文件项目入口与文件身份已落地（B-i：库 API 项目入口，CLI 单入口文件），`Phi` 与多前驱 `Local` 汇合仍显式拒绝（见“阶段 1 支持集与拒绝边界”）。等价账本的七条最小集已有可执行门禁（机器可读账本 + 检查器 + CI 作业，见“等价账本（最小集，七条）”）。判据在 `tests/integration/native_aot.rs` 与 `src/backends/llvm/tests/analysis.rs`。
 - [ ] **批次 3.5 `Phi` 映射**——把需要 `Phi` 的汇合值从能力拒绝改为 `Phi`/边拷贝映射，并纳入等价账本；生产端已产出 `Phi`（见“前置”），AOT 侧在 AOT-3.1 显式拒绝，映射未开工。
 - [ ] **批次 4 链接原生运行时，再接 FFI 与并作**——未开始；原生运行时只有最小 C ABI（`src/backends/llvm/runtime.c`），没有 FFI 与并作。
 
@@ -37,9 +37,9 @@ VM 的同类系统上运行它，既能算对结果，也能在出错时指出�
 
 ### 前置
 
-- [x] **IR 值契约（P7 的 SSA 生产端）**（`46133853`、`5b3cc40b`、`5bde3090`、`b9dda258`）——生产端已做 SSA 构造：按支配边界在汇合块首插入 `Phi`、按支配关系重命名、`ValueInfo.defining_block` 记真实定义块；`verify_ssa` 覆盖 `Operand::Value` 定义唯一性、值使用受定义支配、`defining_block` 一致与 `Phi` 输入类型；门禁 `scripts/ci/check-ir-verifier.sh` 同时跑 `verify_loose`、生产语料 `verify_ssa` 与负例自证。
-- [x] **7b SSA 同步**（`fc6bcda3`）——IR 已按 7b.1a 收敛：`src/middle/ir/ir.rs` 的 `Operand` 只余 Const、Value、Local、Arg、Global 五个变体；`src/backends/llvm/analysis.rs` 与 `src/backends/llvm/codegen.rs` 不再引用 `Operand::Temp`，AOT 入口调用 `verify_ssa`。批次 3 的前置在 Linux+LLVM 18.1.3 通道实测满足。
-- [x] **Linux + LLVM 18.1 验证通道**（`5828eb46`、`5b14f1ff`）——与批次 1 同批入库：CI 固定 LLVM 18.1 工具链、无 LLVM 通道隔离、批次树构建的 `--features llvm` 开关。
+- [x] **IR 值契约（P7 的 SSA 生产端）**（`b503138b`、`ba482c8d`、`bdda6d53`、`aeb4cbea`）——生产端已做 SSA 构造：按支配边界在汇合块首插入 `Phi`、按支配关系重命名、`ValueInfo.defining_block` 记真实定义块；`verify_ssa` 覆盖 `Operand::Value` 定义唯一性、值使用受定义支配、`defining_block` 一致与 `Phi` 输入类型；门禁 `scripts/ci/check-ir-verifier.sh` 同时跑 `verify_loose`、生产语料 `verify_ssa` 与负例自证。
+- [x] **7b SSA 同步**（`151eaf3f`）——IR 已按 7b.1a 收敛：`src/middle/ir/ir.rs` 的 `Operand` 只余 Const、Value、Local、Arg、Global 五个变体；`src/backends/llvm/analysis.rs` 与 `src/backends/llvm/codegen.rs` 不再引用 `Operand::Temp`，AOT 入口调用 `verify_ssa`。批次 3 的前置在 Linux+LLVM 18.1.3 通道实测满足。
+- [x] **Linux + LLVM 18.1 验证通道**（`c7dcf603`、`abeaca98`）——与批次 1 同批入库：CI 固定 LLVM 18.1 工具链、无 LLVM 通道隔离、批次树构建的 `--features llvm` 开关。
 
 ## 接在哪里
 
@@ -112,11 +112,11 @@ python scripts/dev/testsuite.py plan
 - **执行忠实**：原生产物与 VM 在支持集上可观察等价。
 - **证据可核**：每层边界有可执行判据，生产声明附红绿证据与支持集账本。
 
-第二条的值契约已在生产端闭合（`46133853`、`5b3cc40b`、`5bde3090`、`b9dda258`；收口登记见 [施工任务表](../architecture/09-execution-wbs.md) 的 P7 7f）：生产端按支配边界在汇合块首插入 `Phi` 并按支配关系重命名，`ValueInfo.defining_block` 记真实定义块；`verify_ssa` 的定义唯一性判据挂在 `Operand::Value` 上，另覆盖值使用受定义支配、`defining_block` 一致与 `Phi` 输入类型；门禁 `scripts/ci/check-ir-verifier.sh` 同时跑 `verify_loose`、生产语料 `verify_ssa` 与负例自证。
+第二条的值契约已在生产端闭合（`b503138b`、`ba482c8d`、`bdda6d53`、`aeb4cbea`；收口登记见 [施工任务表](../architecture/09-execution-wbs.md) 的 P7 7f）：生产端按支配边界在汇合块首插入 `Phi` 并按支配关系重命名，`ValueInfo.defining_block` 记真实定义块；`verify_ssa` 的定义唯一性判据挂在 `Operand::Value` 上，另覆盖值使用受定义支配、`defining_block` 一致与 `Phi` 输入类型；门禁 `scripts/ci/check-ir-verifier.sh` 同时跑 `verify_loose`、生产语料 `verify_ssa` 与负例自证。
 
 仍在的缺口有三处，各自指向后续阶段：
 
-- **lower 侧的类型覆盖不全**：生产语料 9586 个值中 2403 个类型显式未知（25.1%，`46133853` 记录），未知集中在调用、字段、索引与容器构造形态；类型证据补齐归阶段 1。
+- **lower 侧的类型覆盖不全**：生产语料 9586 个值中 2403 个类型显式未知（25.1%，`b503138b` 记录），未知集中在调用、字段、索引与容器构造形态；类型证据补齐归阶段 1。
 - **未定义值只能物化为显式未知的 `Load Void`**：全函数 0 定义与部分前驱未定义两类，生产端在入口物化一条 `Load Void`（类型显式未知），语义等价但类型证据缺失；归阶段 1。
 - **`translator` 没有 `Const` 源**：`OperandResolver::to_reg` 只接受槽位类操作数（`Local` / `Arg` / `Value`），`Move` 的源不能是 `Operand::Const`，生产端因此不把常量内联成 SSA 值——常量以 `Operand::Const` 留在 IR 里，原生后端单独消费该变体；原生路径消费常量的证据归阶段 1。
 AOT 不得在 L4 后端重建 SSA 或类型（见“开工前确认什么”），因此这三处缺口按所在层立项补足，不在原生后端另造一套语义。
@@ -125,7 +125,7 @@ AOT 不得在 L4 后端重建 SSA 或类型（见“开工前确认什么”）�
 
 | 阶段 | 内容 | 入口条件 | 放行证据 |
 | --- | --- | --- | --- |
-| 0 值契约（**已闭合**：`46133853`、`5b3cc40b`、`5bde3090`、`b9dda258`） | SSA 构造、校验器补全、基线再生（见下节） | 7b 形态切换完成 | `verify_ssa` 在生产语料全绿；快照与语料基线同提交并人工 review；VM 与 `.42` 行为零变化 |
+| 0 值契约（**已闭合**：`b503138b`、`ba482c8d`、`bdda6d53`、`aeb4cbea`） | SSA 构造、校验器补全、基线再生（见下节） | 7b 形态切换完成 | `verify_ssa` 在生产语料全绿；快照与语料基线同提交并人工 review；VM 与 `.42` 行为零变化 |
 | 1 AOT 核心 | 值/类型证据、CFG 与 `Phi` 映射、多文件与入口身份、等价账本（批次 3） | 阶段 0 | 支持集上 VM 与原生 O0/O2 同结果；拒绝边界可核 |
 | 2 运行时 | 值/容器/闭包/资源、受检算术与断言、FFI、并作（批次 4） | 阶段 1 | 对应语料与错误码等价 |
 | 3 目标与链接 | Linux ELF、Windows x64 MSVC COFF、macOS（见“发布与回退”） | 阶段 2 | 每个目标实机编译、链接、运行；产物不依赖 LLVM 与 VM |
@@ -198,7 +198,7 @@ AOT 不得在 L4 后端重建 SSA 或类型（见“开工前确认什么”）�
 - `src/middle/lower/`：`finalize_code_body` 在块切分之后、值槽分配之前调用构造；
 - `src/backends/llvm/` 只消费经校验的 IR，不重建 SSA。
 
-三个工作单元（已落地，提交 `46133853` / `5b3cc40b` / `5bde3090` / `b9dda258`）：
+三个工作单元（已落地，提交 `b503138b` / `ba482c8d` / `bdda6d53` / `aeb4cbea`）：
 
 - **SSA 构造**（`src/middle/ir/ssa.rs` 的 `construct_ssa`）：对每个多次定义或跨块未受定义支配的 `Operand::Value` 做 SSA 构造——计算支配树与支配边界，在汇合块首插入 `Phi`，按支配关系重命名（新值编号；`defining_block` 记真实块 label）。`Locals` 保持存储语义；`Const`/`Arg`/`Global` 不变；无值表的初始化路径跳过。产物满足：每个 `Operand::Value` 单定义；每个使用被其定义支配；`Phi` 的 incoming 覆盖全部前驱，并按前驱 label 升序。
 - **校验器补全**（`src/middle/ir/verify.rs`）：`verify_ssa` 的定义唯一性判据挂在 `Operand::Value` 上——`Locals` 是存储，`7b.4` 的线性扫描分配器按活跃区间复用槽位，同一槽多次写是合法形态，对 `Local` 的唯一性要求与槽复用语义冲突；同时有“值使用受其定义支配”与 `defining_block` 一致性的判据，保留具名槽的 use-before-def 支配性检查。门禁 `scripts/ci/check-ir-verifier.sh` 跑三条判据：全语料 `verify_loose`、生产语料 `verify_ssa`、负例自证（合成坏 IR 必须被拒绝）。

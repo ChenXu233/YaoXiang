@@ -261,7 +261,7 @@ Phi {
 
 **实测前提（已于 7b.3 兑现）**：7b.3 之前全仓 `BasicBlock.successors` 的生产构造全部是 `Vec::new()`（块级前驱恒空，前驱数与前驱集合两条判据当时由合成夹具承担）。**7b.3 起块级 `successors` 由 `src/middle/ir/ir.rs` 的 `partition_blocks` 在每条生产构造点真实填充**（`lower` 6 处 + codegen 合成构造函数体 1 处全部走该唯一入口；`lower` 产物的循环 / 分支块有多块、双出边与回边），故前驱数与前驱集合两条判据在真实 IR 上有数据——真 lowering 产物上的直驱测试钉住该登记-消费闭环。`Phi` 的生产构造点已非 0：生产端按支配边界在汇合块首插入 `Phi`（`src/middle/ir/ssa.rs` 的 `construct_ssa`，由 `src/middle/lower/scope.rs` 的 `finalize_code_body` 在块切分之后、值槽分配之前调用），`Phi` 直接受本节三条约束约束。
 
-7b.1a 只引入变体；生产构造点由生产端 SSA 构造提供（`src/middle/ir/ssa.rs` 的 `construct_ssa`，提交 `46133853`）。`translator.rs` 的消费面已于 **7b.3 落地**：方案 A 在块入口按前驱展开为 `Move` 串（组落在汇合块入口、组间既有 `JMP` 跳过、入边跳转按前驱重定向到组起点），`translate_instruction` 的 `Phi` 臂是不可达 E8001 防御臂（`executor` 永远看不到 `Phi`）。
+7b.1a 只引入变体；生产构造点由生产端 SSA 构造提供（`src/middle/ir/ssa.rs` 的 `construct_ssa`，提交 `b503138b`）。`translator.rs` 的消费面已于 **7b.3 落地**：方案 A 在块入口按前驱展开为 `Move` 串（组落在汇合块入口、组间既有 `JMP` 跳过、入边跳转按前驱重定向到组起点），`translate_instruction` 的 `Phi` 臂是不可达 E8001 防御臂（`executor` 永远看不到 `Phi`）。
 
 **处置 `3632-3638` 的守卫问题**：现状 `generate_block_ir` 的回收有 `if result_reg.is_none()` 守卫（`3626-3631` 注释：表达式操作数位的块，外层可能持有跨块存活的兄弟实参临时）。SSA 化后该守卫**不再需要**——因为临时值不再回滚，跨块存活的兄弟实参持有的是自己的 `ValueId`，不会被回滚波及。**这一条是 SSA 化能真正简化代码的地方，而不只是改名。**
 
