@@ -651,25 +651,16 @@ fn parse_fn_type_with_names_nested(state: &mut ParserState<'_>) -> Option<(Vec<P
     // 返回类型本身可能是元组类型 (T, U)（#253），否则会把元组误判为 curry 参数组。
     let saved = state.save_position();
     let is_named_curry = if state.at(&TokenKind::LParen) {
-        state.bump();
-        let starts_with_name =
-            if let Some(TokenKind::Identifier(_)) = state.current().map(|t| &t.kind) {
-                let next = state.peek().map(|t| &t.kind);
+        let starts_with_name = match state.peek().map(|t| &t.kind) {
+            Some(TokenKind::Identifier(_)) => {
+                let next = state.peek_nth(2).map(|t| &t.kind);
                 matches!(next, Some(TokenKind::Colon))
                     || matches!(next, Some(TokenKind::Comma) | Some(TokenKind::RParen))
-            } else {
-                false
-            };
-        // 扫描括号内容，确认 `)` 后跟 `->`
-        let mut paren_depth = 1;
-        while paren_depth > 0 && !state.at_end() {
-            if state.at(&TokenKind::LParen) {
-                paren_depth += 1;
-            } else if state.at(&TokenKind::RParen) {
-                paren_depth -= 1;
             }
-            state.bump();
-        }
+            _ => false,
+        };
+        // 扫描括号内容，确认 `)` 后跟 `->`
+        state.skip_balanced_parens();
         let after_is_arrow = state.at(&TokenKind::Arrow);
         state.restore_position(saved);
         starts_with_name && after_is_arrow

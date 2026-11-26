@@ -248,6 +248,32 @@ impl<'a> ParserState<'a> {
             false
         }
     }
+    /// 跳过一对配对括号（当前 token 必须是 `(`）。
+    ///
+    /// 从**当前** `(` 起消费到配平它的 `)`（含），当前 token 落在 `)` 之后；括号
+    /// 未闭合时停在 EOF，不发射诊断——本方法只是前瞻工具，判据留在调用方。
+    ///
+    /// WBS 8.7.1：「跳过配对括号」的唯一实现点。`statements/declarations.rs` 与
+    /// `statements/types.rs` 此前各自手写同一段「深度计数 + bump」循环，现全部
+    /// 改为调用本方法。
+    pub(crate) fn skip_balanced_parens(&mut self) {
+        debug_assert!(
+            self.at(&TokenKind::LParen),
+            "skip_balanced_parens 要求当前 token 是 `(`"
+        );
+        if !self.skip(&TokenKind::LParen) {
+            return;
+        }
+        let mut depth = 1;
+        while depth > 0 && !self.at_end() {
+            if self.at(&TokenKind::LParen) {
+                depth += 1;
+            } else if self.at(&TokenKind::RParen) {
+                depth -= 1;
+            }
+            self.bump();
+        }
+    }
     pub fn expect(
         &mut self,
         kind: &TokenKind,
