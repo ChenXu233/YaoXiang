@@ -12,12 +12,14 @@
 //! - 用户命名空间别名  → 其模块限定键 + `{field...}`（`use math.geometry` 后 `geometry.foo` → `math.geometry.foo`）
 //! - 其余裸名         → 视为模块/类型前缀直接限定
 //!
-//! 限定名生成统一经 [`SymbolTable::qualify`]；DefId 查 [`SymbolTable::def`]。
+//! 限定名生成统一经 [`DefPath::project`]（唯一的拼接实现）；DefId 反查分两条口：
+//! 持有 模块/归属/裸名 三段时走 [`SymbolTable::def_path`]（权威），只持有本编译期
+//! **投影产物**（命名空间路径本身就是投影）时走 [`SymbolTable::def_by_projection`]。
 
 use std::collections::HashMap;
 
 use super::registry::ModuleRegistry;
-use super::symbol::{DefId, SymbolTable};
+use super::symbol::{DefId, DefPath, SymbolTable};
 use std::cell::Ref;
 
 /// 名字解析器：在给定文件上下文（模块键 + 用户命名空间）下把名字解析为限定名 / DefId。
@@ -59,7 +61,54 @@ impl<'a> Resolver<'a> {
             || self.user_namespaces.contains_key(name)
     }
 
-    /// 把命名空间路径（头 + 字段段列表）解析为限定名。
+    /// 命名空间**头**对应的模块键：`std` 原样；std 子模块 `io` → `std.io`；
+    /// 用户别名 → 其模块键；其余裸名视为模块/类型前缀原样。
+    fn namespace_head_key(
+        &self,
+        head: &str,
+    ) -> String {
+        if head == "std" {
+            "std".to_string()
+        } else if self.registry.is_std_submodule(head) {
+            DefPath::item("std", head).project()
+        } else if let Some(mk) = self.user_namespaces.get(head) {
+            mk.clone()
+        } else {
+            head.to_string()
+        }
+    }
+
+    /// 命名空间路径的**模块键**：头键 + 前缀段逐段并成。
+    ///
+    /// 段与段的拼接仍只经 [`DefPath::project`]（本函数不自行用点号拼字符串）。
+    fn namespace_module_key(
+        &self,
+        head: &str,
+        prefix: &[&str],
+    ) -> String {
+        prefix
+            .iter()
+            .fold(self.namespace_head_key(head), |acc, seg| {
+                DefPath::item(&acc, seg).project()
+            })
+    }
+
+    /// 命名空间路径的**路径**：最后一段是裸名，其余段并成模块键。
+    ///
+    /// 无字段段（只有命名空间头）时没有裸名可言 → `None`（结果就是模块键本身）。
+    fn namespace_def_path(
+        &self,
+        head: &str,
+        fields: &[&str],
+    ) -> Option<DefPath> {
+        let (name, prefix) = fields.split_last()?;
+        Some(DefPath::item(
+            &self.namespace_module_key(head, prefix),
+            name,
+        ))
+    }
+
+    /// 把命名空间路径（头 + 字段段列表）解析为限定名（路径的投影）。
     ///
     /// 例：`resolve_namespace("io", &["println"])` → `std.io.println`；
     /// `resolve_namespace("geometry", &["foo"])`（geometry → math.geometry）→ `math.geometry.foo`。
@@ -68,28 +117,21 @@ impl<'a> Resolver<'a> {
         head: &str,
         fields: &[&str],
     ) -> String {
-        let mut base = if head == "std" {
-            "std".to_string()
-        } else if self.registry.is_std_submodule(head) {
-            SymbolTable::qualify("std", head)
-        } else if let Some(mk) = self.user_namespaces.get(head) {
-            mk.clone()
-        } else {
-            head.to_string()
-        };
-        for f in fields {
-            base = SymbolTable::qualify(&base, f);
+        match self.namespace_def_path(head, fields) {
+            Some(path) => path.project(),
+            // 只有命名空间头：结果就是模块键本身，无需拼接
+            None => self.namespace_head_key(head),
         }
-        base
     }
 
-    /// 把命名空间路径解析为 DefId（先限定，再查符号表）。
+    /// 把命名空间路径解析为 DefId。路径三段齐备，故走**权威反查**。
     pub fn resolve_namespace_def(
         &self,
         head: &str,
         fields: &[&str],
     ) -> Option<DefId> {
-        self.symbols.def(&self.resolve_namespace(head, fields))
+        self.symbols
+            .def_path(&self.namespace_def_path(head, fields)?)
     }
 
     /// 解析本文件顶层绑定（函数/类型/常量）的 DefId。
@@ -97,8 +139,7 @@ impl<'a> Resolver<'a> {
         &self,
         bare: &str,
     ) -> Option<DefId> {
-        self.symbols
-            .def(&SymbolTable::qualify(self.module_key, bare))
+        self.symbols.def_path(&DefPath::item(self.module_key, bare))
     }
 
     /// 解析本文件类型上的方法 DefId（经静态 vtable 按名查槽）。
@@ -128,13 +169,13 @@ mod tests {
     ) {
         let mut symbols = SymbolTable::new();
         // 本文件 lib 的顶层绑定与方法
-        symbols.intern_kind("lib", "helper", DefKind::Function);
-        symbols.intern_method("lib", "Point", "get_x");
+        symbols.intern(DefPath::item("lib", "helper"), DefKind::Function);
+        symbols.intern_method(DefPath::method("lib", "Point", "get_x"));
         // std 导出
-        symbols.intern_full("std.io.println", DefKind::Function);
-        symbols.intern_full("std.math.geometry.foo", DefKind::Function);
+        symbols.intern(DefPath::item("std.io", "println"), DefKind::Function);
+        symbols.intern(DefPath::item("std.math.geometry", "foo"), DefKind::Function);
         // 另一用户模块的导出（供跨文件命名空间解析）
-        symbols.intern_full("other.helper", DefKind::Function);
+        symbols.intern(DefPath::item("other", "helper"), DefKind::Function);
 
         let registry = ModuleRegistry::with_std();
 

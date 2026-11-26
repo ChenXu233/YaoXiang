@@ -1489,17 +1489,23 @@ import_surface_exports_over_lib_over_none	src/frontend/module/roles.rs	assertx4 
 default_rules_hit_tests_dir	src/frontend/module/roles.rs	assertx2	待判	文件头只引整篇 RFC/规范而无节号（收紧后不算条款门）——需人工核	待核
 custom_patterns_hit_nested_dir	src/frontend/module/roles.rs	assertx2	待判	文件头只引整篇 RFC/规范而无节号（收紧后不算条款门）——需人工核	待核
 exclude_removes_from_include_subtree	src/frontend/module/roles.rs	assertx2	待判	文件头只引整篇 RFC/规范而无节号（收紧后不算条款门）——需人工核	待核
-qualify_is_single_source_of_format	src/frontend/module/symbol.rs	assert_eqx2	待判	文件头只引整篇 RFC/规范而无节号（收紧后不算条款门）——需人工核	待核
-intern_is_idempotent_and_unique	src/frontend/module/symbol.rs	assert_eqx5 assert_nex1	待判	文件头只引整篇 RFC/规范而无节号（收紧后不算条款门）——需人工核	待核
-intern_records_kind	src/frontend/module/symbol.rs	assert_eqx5	待判	文件头只引整篇 RFC/规范而无节号（收紧后不算条款门）——需人工核	待核
-intern_method_links_parent_and_builds_vtable	src/frontend/module/symbol.rs	assert_eqx9 expectx1	待判	文件头只引整篇 RFC/规范而无节号（收紧后不算条款门）——需人工核	待核
-intern_method_is_idempotent	src/frontend/module/symbol.rs	assert_eqx2 unwrapx1	待判	文件头只引整篇 RFC/规范而无节号（收紧后不算条款门）——需人工核	待核
-same_type_name_coexist_with_independent_vtables	src/frontend/module/symbol.rs	assert_eqx2 assert_nex2 unwrapx2	待判	文件头只引整篇 RFC/规范而无节号（收紧后不算条款门）——需人工核	待核
-vtable_empty_for_typeless_or_function_def	src/frontend/module/symbol.rs	assertx1	待判	文件头只引整篇 RFC/规范而无节号（收紧后不算条款门）——需人工核	待核
 test_is_yx_std_export_export_granular_on_mixed_surface	src/frontend/module/tests/registry.rs	assertx2	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_qualified_name_native_name_answers_by_form	src/frontend/module/tests/registry.rs	assert_eqx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_qualified_name_function_code_export_answers_by_form	src/frontend/module/tests/registry.rs	assert_eqx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_qualified_name_function_or_method_def_answers_by_form	src/frontend/module/tests/registry.rs	assert_eqx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
+test_def_path_item_project_joins_module_and_bare_name	src/frontend/module/tests/symbol.rs	assert_eqx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
+test_def_path_item_project_keeps_module_key_verbatim	src/frontend/module/tests/symbol.rs	assert_eqx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
+test_def_path_method_project_joins_owner_segment	src/frontend/module/tests/symbol.rs	assert_eqx2	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
+test_def_path_method_project_joins_nested_module_and_owner	src/frontend/module/tests/symbol.rs	assert_eqx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
+test_def_path_without_module_projects_bare_name	src/frontend/module/tests/symbol.rs	assert_eqx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
+test_intern_same_path_returns_same_def_id	src/frontend/module/tests/symbol.rs	assert_eqx4	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
+test_intern_same_bare_name_in_different_modules_gets_distinct_def_ids	src/frontend/module/tests/symbol.rs	assert_eqx2 assert_nex1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
+test_intern_records_kind_and_parent	src/frontend/module/tests/symbol.rs	assert_eqx5	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
+test_intern_method_links_parent_and_builds_vtable	src/frontend/module/tests/symbol.rs	assert_eqx6 expectx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
+test_intern_method_is_idempotent	src/frontend/module/tests/symbol.rs	assert_eqx2 expectx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
+test_method_paths_of_same_type_name_stay_independent	src/frontend/module/tests/symbol.rs	assert_eqx2 assert_nex2 expectx2	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
+test_vtable_empty_for_binding_without_methods	src/frontend/module/tests/symbol.rs	assertx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
+test_def_by_projection_indexes_only_projected_names	src/frontend/module/tests/symbol.rs	assert_eqx3	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_evidence_record_payload_carries_record_model	src/frontend/module/tests/type_def_payload.rs	assert_eqx3 assertx2 expectx2	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_generic_evidence_record_payload_has_model	src/frontend/module/tests/type_def_payload.rs	assertx2 is_somex2 expectx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_pure_data_record_payload_stays_none	src/frontend/module/tests/type_def_payload.rs	assertx1 is_nonex1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核

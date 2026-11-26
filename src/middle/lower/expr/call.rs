@@ -6,6 +6,7 @@
 
 use crate::ast::Expr;
 use crate::frontend::core::sema::MonoType;
+use crate::frontend::module::symbol::DefPath;
 use crate::middle::ir::ir::{ConstValue, Instruction, Operand};
 use crate::middle::lower::AstToIrGenerator;
 use crate::middle::lower::BindingInfo;
@@ -1072,7 +1073,7 @@ impl AstToIrGenerator {
                                     {
                                         qualified.clone()
                                     } else {
-                                        format!("std.io.{}", name)
+                                        DefPath::item("std.io", name).project()
                                     }
                                 } else {
                                     name.clone()
@@ -1130,7 +1131,7 @@ impl AstToIrGenerator {
                                     {
                                         qualified.clone()
                                     } else {
-                                        format!("std.io.{}", name)
+                                        DefPath::item("std.io", name).project()
                                     }
                                 } else {
                                     name.clone()

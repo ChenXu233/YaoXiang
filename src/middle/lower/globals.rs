@@ -9,7 +9,7 @@ use super::AstToIrGenerator;
 use super::PendingInit;
 use crate::ast;
 use crate::frontend::core::sema::MonoType;
-use crate::frontend::module::symbol::SymbolTable;
+use crate::frontend::module::symbol::DefPath;
 use crate::middle::ir::ir::{ConstValue, FunctionBody, FunctionIR, Instruction, Operand};
 use crate::middle::lower::expr::collect_free_vars_expr;
 use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};
@@ -63,7 +63,7 @@ impl AstToIrGenerator {
                 .unwrap_or(MonoType::Int(64));
             // 名字已限定（多文件）时布局键用限定名，否则用裸名
             let key = match &self.module_key {
-                Some(k) => SymbolTable::qualify(k, name),
+                Some(k) => DefPath::item(k, name).project(),
                 None => name.clone(),
             };
             let slot = self.global_slot_base + self.global_vars.len();
@@ -200,7 +200,7 @@ impl AstToIrGenerator {
         name: &str,
     ) -> Option<usize> {
         let key = match &self.module_key {
-            Some(k) => SymbolTable::qualify(k, name),
+            Some(k) => DefPath::item(k, name).project(),
             None => name.to_string(),
         };
         self.global_slot_layout.get(&key).copied()
@@ -283,7 +283,7 @@ impl AstToIrGenerator {
         });
         // T3：入待定队列（不直接追加到 module_init）——尾部按依赖拓扑排序后写入。
         let key = match &self.module_key {
-            Some(k) => SymbolTable::qualify(k, name),
+            Some(k) => DefPath::item(k, name).project(),
             None => name.to_string(),
         };
         let deps = initializer
@@ -313,7 +313,7 @@ impl AstToIrGenerator {
         let mut out = Vec::new();
         Self::walk_expr_vars(expr, &mut |name: &str| {
             let key = match &self.module_key {
-                Some(k) => SymbolTable::qualify(k, name),
+                Some(k) => DefPath::item(k, name).project(),
                 None => name.to_string(),
             };
             // 自引用不算依赖（由循环检测单独报）

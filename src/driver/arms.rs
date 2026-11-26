@@ -18,6 +18,7 @@ use crate::frontend::core::sema::TypeCheckResult;
 use crate::frontend::module::orchestrator::{self, OrchestratorError};
 use crate::frontend::module::registry::ModuleRegistry;
 use crate::frontend::module::roles::{self, FileRole};
+use crate::frontend::module::symbol::DefPath;
 use crate::frontend::module::ModuleSource;
 use crate::frontend::pipeline::PipelineError;
 use crate::middle::ir::ir::{Instruction, Operand};
@@ -1641,7 +1642,7 @@ impl Driver {
         //   CollectAll 语义下不得因一个入口中止整轮收集）。
         if is_bin_role(&state.entry_path) {
             let check_form = matches!(state.program.kind, ProgramKind::Check);
-            let qualified_main = format!("{}.main", state.entry_key);
+            let qualified_main = DefPath::item(&state.entry_key, "main").project();
             let has_main_fn = merged.functions.iter().any(|f| f.name == qualified_main);
             let has_main_value = merged
                 .globals

@@ -4,7 +4,7 @@
 //! §4.1-§4.10: 表达式分类
 //! RFC-010: 统一类型语法
 //! RFC-029: 模块限定名 `{module_key}.{bare}`（`lower/module_ir.rs` 的 `qualify_names` 与
-//!   `SymbolTable::qualify` 同源）
+//!   `DefPath::project` 同源）
 //! RFC-039 §3.4.8 ①: 跨模块限定调用 `lib.f(x)` 发泛型实例化请求（generic_id
 //!   用限定名，与 merged-IR 的函数表键对齐）
 //! issue #509 残留④（WBS 3.21.5）：二元运算 Never 短路判据收敛为共享纯函数

@@ -4,6 +4,7 @@
 
 use crate::ast::Expr;
 use crate::frontend::module::registry::QualifiedNameConcern;
+use crate::frontend::module::symbol::DefPath;
 use crate::middle::ir::ir::{ConstValue, Instruction, Operand};
 use crate::middle::lower::AstToIrGenerator;
 use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};
@@ -212,7 +213,7 @@ impl AstToIrGenerator {
             if let Some(full_path) = {
                 let reg = &self.registry;
                 if reg.is_std_submodule(module_name) {
-                    let path = format!("std.{}", field);
+                    let path = DefPath::item("std", field).project();
                     if reg.qualified_name_is(&path, QualifiedNameConcern::NativeName) {
                         Some(path)
                     } else {

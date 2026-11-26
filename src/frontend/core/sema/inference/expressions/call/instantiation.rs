@@ -4,7 +4,7 @@
 //! 仅补跨模块可见性（`pub(super)`）与相对路径（`super::` 改指 crate 路径）。
 
 use crate::frontend::core::types::MonoType;
-use crate::frontend::module::symbol::SymbolTable;
+use crate::frontend::module::symbol::DefPath;
 use crate::middle::passes::mono::instance::{GenericFunctionId, InstantiationRequest};
 use crate::util::diagnostic::ErrorCodeDefinition;
 use std::collections::{HashMap, HashSet};
@@ -661,7 +661,7 @@ impl<'a> ExpressionInferrer<'a> {
     /// - 裸 `Var`：其名本身（既有行为，`main`/单文件路径一字不改）；
     /// - 限定调用 `lib.f`：与 merged-IR 同源的限定名 `{module_key}.{f}`——
     ///   `module_key` 取该别名的模块限定键（use 路径），拼接经
-    ///   [`SymbolTable::qualify`]（全仓限定名格式的唯一所有者，与 ir_gen
+    ///   [`DefPath::project`]（唯一拼接实现，与 ir_gen
     ///   `qualify_names`、`Resolver::resolve_namespace` 同源）。
     ///
     /// 返回 None 的形态不发请求：非 Var 结尾的接收者（lambda 调用、值接收者
@@ -681,7 +681,7 @@ impl<'a> ExpressionInferrer<'a> {
                     return None;
                 };
                 let module_key = self.module_namespaces?.get(alias)?;
-                Some(SymbolTable::qualify(module_key, field))
+                Some(DefPath::item(module_key, field).project())
             }
             _ => None,
         }

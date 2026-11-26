@@ -7,7 +7,7 @@ use super::scope::NestedBodyGuard;
 use super::AstToIrGenerator;
 use crate::ast;
 use crate::frontend::core::sema::MonoType;
-use crate::frontend::module::symbol::SymbolTable;
+use crate::frontend::module::symbol::DefPath;
 use crate::middle::ir::ir::{
     ConstValue, FunctionBody, FunctionIR, Instruction, Operand, TypeDeclBody, TypeDeclField,
 };
@@ -352,7 +352,7 @@ impl AstToIrGenerator {
                     // 此前无差别当声明，导致 `mut i = 0; i = i + 1` 被当成
                     // 两份初始化 → 自引用 → 误报 E3019。
                     let key = match &self.module_key {
-                        Some(k) => SymbolTable::qualify(k, &name),
+                        Some(k) => DefPath::item(k, &name).project(),
                         None => name.clone(),
                     };
                     if self.declared_globals.contains(&key) {

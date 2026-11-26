@@ -170,7 +170,7 @@ pub struct ExpressionInferrer<'a> {
     /// **与 merged-IR 同源的限定名** `{module_key}.{f}`——ir_gen 的
     /// `qualify_names` 把每个模块的顶层函数重写为这一格式，下游 mono 消费
     /// merged_ir 时按名匹配泛型定义表；用裸 `f` 匹配不到 `lib.f`，请求被静默
-    /// 跳过。限定名拼接一律经 [`crate::frontend::module::symbol::SymbolTable::qualify`]（格式唯一所有者）。
+    /// 跳过。限定名拼接一律经 [`crate::frontend::module::symbol::DefPath::project`]（唯一拼接实现）。
     ///
     /// None（测试直构 / 独立表达式推断）→ 限定调用不发请求，行为与注入前一致。
     module_namespaces: Option<&'a HashMap<String, String>>,

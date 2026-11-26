@@ -7,7 +7,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use super::symbol::{DefKind, SymbolTable};
+use super::symbol::{DefKind, DefPath, SymbolTable};
 use super::{Export, ExportKind, ModuleError, ModuleInfo, ModuleSource};
 use crate::frontend::core::sema::environment::MethodOverloadCandidates;
 use crate::frontend::core::types::mono::MonoType;
@@ -16,7 +16,7 @@ use crate::frontend::core::types::mono::MonoType;
 ///
 /// 收敛前「这个限定名指向什么」在三处各答一次：原生名判定（原
 /// `ModuleRegistry::is_native_name`）/ 命名空间臂（lower 侧
-/// `registry.symbols().def + DefKind` 分派）/ 别名判据（lower 侧
+/// `registry.symbols().def_by_projection + DefKind` 分派）/ 别名判据（lower 侧
 /// `qualified_export_is_code`，#479 引入、#493 改导出粒度）。按禁令三
 /// （同一行为 ≥2 处复制 ⇒ 收敛到共享层），判据本体只保留在
 /// [`ModuleRegistry::qualified_name_is`] 一处，调用点按本枚举传关注面；
@@ -112,9 +112,12 @@ impl ModuleRegistry {
 
     /// 把一个模块的导出与方法登记进项目符号表。
     ///
-    /// 限定名直接采用 `export.full_path`（即 `{module_key}.{bare}`，与 SymbolTable::qualify 一致）。
-    /// 子模块不是绑定，跳过。方法从 `method_bindings`（键 `Type.method`）登记，
-    /// 链接到所属类型并构建静态 vtable。
+    /// 导出项按**路径**登记：模块键 + 导出裸名。用户模块与嵌入 yx std 的
+    /// `full_path` 就是该路径的投影（`orchestrator::make_export` /
+    /// `embedded_std_module_info` 两处都经 `DefPath::item(..).project()` 生成）；
+    /// native 的 FFI 名允许是任意字面量，那类按**无模块扁平名**登记（见循环内注释），
+    /// 投影仍与 `full_path` 逐字相同。子模块不是绑定，跳过。方法从
+    /// `method_bindings`（键 `Type.method`）登记，链接到所属类型并构建静态 vtable。
     fn intern_module(
         &mut self,
         module: &ModuleInfo,
@@ -126,15 +129,28 @@ impl ModuleRegistry {
                 ExportKind::Constant => DefKind::Constant,
                 ExportKind::SubModule => continue,
             };
-            self.symbols
-                .borrow_mut()
-                .intern_full(&export.full_path, kind);
+            // 导出面的 `full_path` 是权威投影：一般形态即 `{module}.{bare}`。native
+            // 的 FFI 名允许是任意字面量（VM 内建 `int.to_string` 就注册在 std.convert
+            // 下），那类不是「模块 + 裸名」的投影 —— 按**无模块扁平名**登记，
+            // 投影仍与 `full_path` 逐字相同（否则调用侧按 full_path 查投影索引会落空）。
+            let canonical = DefPath::item(&module.path, &export.name);
+            let path = if canonical.project() == export.full_path {
+                canonical
+            } else {
+                DefPath::item("", &export.full_path)
+            };
+            self.symbols.borrow_mut().intern(path, kind);
         }
         for method_key in module.method_bindings.keys() {
+            // `method_key` 是**定义侧** `Type.method` 键：类型名是标识符、不含点，
+            // 故首段可无歧义地当归属段（与 `std_method_binding_qualified_map`、
+            // `qualify_names` 同一判据）。
             if let Some((type_bare, method)) = method_key.split_once('.') {
-                self.symbols
-                    .borrow_mut()
-                    .intern_method(&module.path, type_bare, method);
+                self.symbols.borrow_mut().intern_method(DefPath::method(
+                    &module.path,
+                    type_bare,
+                    method,
+                ));
             }
         }
     }
@@ -288,8 +304,14 @@ impl ModuleRegistry {
                 continue;
             }
             for key in module.method_bindings.keys() {
-                map.entry(key.clone())
-                    .or_insert_with(|| format!("{}.{}", module.path, key));
+                // `key` 是**定义侧** `Type.method` 键：类型名是标识符、不含点，
+                // 故首段可无歧义地当归属段（与 `intern_method` 同一判据）；无点键
+                // 不是方法键，按顶层绑定路径投影（保底，不改历史拼接结果）。
+                let path = match key.split_once('.') {
+                    Some((type_bare, method)) => DefPath::method(&module.path, type_bare, method),
+                    None => DefPath::item(&module.path, key),
+                };
+                map.entry(key.clone()).or_insert_with(|| path.project());
             }
         }
         map
@@ -313,7 +335,7 @@ impl ModuleRegistry {
     /// 限定名指向什么——registry 侧单一查询接口（issue #494 / WBS 3.6.6）。
     ///
     /// 收敛前三份判据（原生名 / lower 侧 `qualified_export_is_code`（#479/#493）/
-    /// lower 侧命名空间臂 `symbols().def + DefKind`）各答一次「这个限定名指向
+    /// lower 侧命名空间臂 `symbols().def_by_projection + DefKind`）各答一次「这个限定名指向
     /// 什么」，拆名与查表的机械面随之复制——按禁令三收拢为本接口；调用点各自
     /// 传关注面参数（[`QualifiedNameConcern`]），**新增第四处消费不得再各写一份**。
     /// 三臂语义与收敛前逐字节一致（形态全集 × 三关注面的答案表钉在
@@ -348,7 +370,9 @@ impl ModuleRegistry {
             QualifiedNameConcern::FunctionOrMethodDef => {
                 // 原 lower 侧命名空间臂判据原样：项目符号表 def 类别分派。
                 let symbols = self.symbols.borrow();
-                symbols.def(qualified).is_some_and(|def| {
+                // 入参是本编译期的**投影产物**（调用名/限定名），故走投影索引；
+                // 索引只读、不反解字符串（权威反查是 `SymbolTable::def_path`）。
+                symbols.def_by_projection(qualified).is_some_and(|def| {
                     matches!(symbols.kind(def), DefKind::Function | DefKind::Method)
                 })
             }
@@ -423,7 +447,7 @@ impl ModuleRegistry {
         &self,
         name: &str,
     ) -> bool {
-        let path = format!("std.{}", name);
+        let path = DefPath::item("std", name).project();
         self.modules.contains_key(&path)
     }
 
@@ -749,15 +773,23 @@ mod tests {
 
         let symbols = registry.symbols();
         // 导出按类别登记
-        let helper = symbols.def("lib.helper").expect("function interned");
-        let point = symbols.def("lib.Point").expect("type interned");
-        let pi = symbols.def("lib.PI").expect("constant interned");
+        let helper = symbols
+            .def_by_projection("lib.helper")
+            .expect("function interned");
+        let point = symbols
+            .def_by_projection("lib.Point")
+            .expect("type interned");
+        let pi = symbols
+            .def_by_projection("lib.PI")
+            .expect("constant interned");
         assert_eq!(symbols.kind(helper), DefKind::Function);
         assert_eq!(symbols.kind(point), DefKind::Type);
         assert_eq!(symbols.kind(pi), DefKind::Constant);
 
         // 方法登记并链接到类型，构建静态 vtable
-        let get_x = symbols.def("lib.Point.get_x").expect("method interned");
+        let get_x = symbols
+            .def_by_projection("lib.Point.get_x")
+            .expect("method interned");
         assert_eq!(symbols.kind(get_x), DefKind::Method);
         assert_eq!(symbols.parent(get_x), Some(point));
         let vt = symbols.vtable(point);
@@ -773,7 +805,13 @@ mod tests {
         registry.register(lib.clone());
         registry.register(lib);
         // 重复注册不产生重复 DefId
-        assert_eq!(registry.symbols().def("lib.helper").map(|d| d.0), Some(0));
+        assert_eq!(
+            registry
+                .symbols()
+                .def_by_projection("lib.helper")
+                .map(|d| d.0),
+            Some(0)
+        );
         assert_eq!(registry.symbols().len(), 1);
     }
 
@@ -781,7 +819,7 @@ mod tests {
     fn with_std_interns_std_exports() {
         let registry = ModuleRegistry::with_std();
         // std.io.println 应被 intern 为函数
-        let println = registry.symbols().def("std.io.println");
+        let println = registry.symbols().def_by_projection("std.io.println");
         assert!(println.is_some(), "std.io.println interned");
         assert_eq!(registry.symbols().kind(println.unwrap()), DefKind::Function);
     }

@@ -6,6 +6,7 @@ use std::collections::HashMap;
 
 use crate::frontend::core::types::eval::const_eval::ConstFunction;
 use crate::frontend::core::types::{MonoType, PolyType, TypeConstraintSolver};
+use crate::frontend::module::symbol::DefPath;
 
 use super::passes::overload;
 use super::types::ImportInfo;
@@ -953,7 +954,7 @@ impl TypeEnvironment {
             .std_submodule_names()
             .iter()
             .any(|sub| {
-                let path = format!("std.{sub}");
+                let path = DefPath::item("std", sub).project();
                 self.module_registry
                     .get(&path)
                     .and_then(|m| m.get_export(name))

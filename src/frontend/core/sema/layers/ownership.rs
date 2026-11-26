@@ -13,6 +13,7 @@
 use super::super::proof::context::ProofContext;
 use super::super::proof::verdict::{ProofFailure, ProofResult, ProofResultExt};
 use crate::frontend::core::types::const_data::{BinOp, ConstExpr, UnOp};
+use crate::frontend::module::symbol::DefPath;
 use crate::util::consumption::ConsumptionLedger;
 use crate::util::plan_id::PlanId;
 use crate::util::span::Span;
@@ -1178,7 +1179,7 @@ impl OwnershipChecker {
             .or_else(|| {
                 if func_name.contains('.') && !func_name.starts_with("std.") {
                     env.native_signatures
-                        .get(&format!("std.{func_name}"))
+                        .get(&DefPath::item("std", func_name).project())
                         .cloned()
                 } else {
                     None

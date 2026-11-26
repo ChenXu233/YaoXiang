@@ -14,6 +14,7 @@ mod method;
 use crate::frontend::core::sema::judgement::decide;
 use crate::frontend::core::sema::passes::overload;
 use crate::frontend::core::types::MonoType;
+use crate::frontend::module::symbol::DefPath;
 use crate::util::diagnostic::{ErrorCodeDefinition, Result};
 use std::collections::{HashMap, HashSet};
 
@@ -1608,7 +1609,7 @@ impl<'a> ExpressionInferrer<'a> {
                         .or_else(|| {
                             ns_key
                                 .as_deref()
-                                .map(|k| format!("std.{k}"))
+                                .map(|k| DefPath::item("std", k).project())
                                 .and_then(|k| self.native_arity.get(k.as_str()).copied())
                         });
                     // #454 / t12-F1 / t14：原生导出与方法级调用**同一套判据**——
@@ -1623,7 +1624,7 @@ impl<'a> ExpressionInferrer<'a> {
                             .or_else(|| {
                                 ns_key
                                     .as_deref()
-                                    .map(|k| format!("std.{k}"))
+                                    .map(|k| DefPath::item("std", k).project())
                                     .and_then(|k| self.native_param_names.get(k.as_str()))
                             })
                         {

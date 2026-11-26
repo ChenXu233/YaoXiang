@@ -4,4 +4,5 @@
 //! - registry：模块注册表的导出面与**导出粒度**判据（#493）
 
 mod registry;
+mod symbol;
 mod type_def_payload;

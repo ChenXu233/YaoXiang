@@ -44,7 +44,7 @@ pub fn embedded_std_module_info(use_path: &str) -> Option<crate::frontend::modul
     use crate::frontend::core::sema::SemanticProbe;
     use crate::frontend::core::tokenize;
     use crate::frontend::core::types::mono::MonoType;
-    use crate::frontend::module::symbol::SymbolTable;
+    use crate::frontend::module::symbol::DefPath;
     use crate::frontend::module::{Export, ExportKind, ModuleInfo, ModuleSource};
 
     let source = embedded_std_source(use_path)?;
@@ -89,7 +89,7 @@ pub fn embedded_std_module_info(use_path: &str) -> Option<crate::frontend::modul
                     });
                     info.add_export(Export {
                         name: name.clone(),
-                        full_path: SymbolTable::qualify(use_path, name),
+                        full_path: DefPath::item(use_path, name).project(),
                         kind: ExportKind::Type,
                         signature: String::new(),
                         mono_type: Some(ty),
@@ -132,7 +132,7 @@ pub fn embedded_std_module_info(use_path: &str) -> Option<crate::frontend::modul
                             .unwrap_or_default();
                         info.add_export(Export {
                             name: name.clone(),
-                            full_path: SymbolTable::qualify(use_path, name),
+                            full_path: DefPath::item(use_path, name).project(),
                             kind: if matches!(ty, MonoType::Fn { .. }) {
                                 ExportKind::Function
                             } else {

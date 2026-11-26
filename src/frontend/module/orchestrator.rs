@@ -33,7 +33,7 @@ use crate::frontend::core::types::mono::MonoType;
 use crate::frontend::core::types::PolyType;
 use crate::frontend::module::registry::ModuleRegistry;
 use crate::frontend::module::roles;
-use crate::frontend::module::symbol::SymbolTable;
+use crate::frontend::module::symbol::DefPath;
 use crate::frontend::module::{Export, ExportKind, ModuleInfo, ModuleSource};
 use crate::middle::ModuleIR;
 use crate::util::diagnostic::Diagnostic;
@@ -959,7 +959,7 @@ pub(crate) fn scan_use_refs(source: &str) -> Vec<UsePathRef> {
             i += 2; // 跳过 `.{`
             while let Some(TokenKind::Identifier(name)) = tokens.get(i).map(|t| &t.kind) {
                 paths.push(UsePathRef {
-                    path: format!("{prefix}.{name}"),
+                    path: DefPath::item(&prefix, name).project(),
                     span: tokens[i].span,
                 });
                 expanded = true;
@@ -1241,7 +1241,8 @@ fn make_export(
     };
     Export {
         name: name.to_string(),
-        full_path: SymbolTable::qualify(module_key, name),
+        // 限定名是路径的**投影**：拼接只在 `DefPath::project` 一处发生。
+        full_path: DefPath::item(module_key, name).project(),
         kind,
         signature: String::new(),
         mono_type: Some(ty),

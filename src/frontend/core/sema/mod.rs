@@ -7,6 +7,7 @@
 //! - RFC-004/010/011 支撑
 
 use crate::ast::Module;
+use crate::frontend::module::symbol::DefPath;
 
 // ============ 子模块声明 ============
 
@@ -183,7 +184,7 @@ pub fn add_native_function_types(
 
     // 遍历所有 std 子模块，自动注册导出的函数
     for submodule_name in registry.std_submodule_names() {
-        let module_path = format!("std.{}", submodule_name);
+        let module_path = DefPath::item("std", &submodule_name).project();
         if let Some(module) = registry.get(&module_path) {
             for export in module.exports.values() {
                 // 使用签名字符串解析出正确的函数类型

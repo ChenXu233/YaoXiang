@@ -17,6 +17,7 @@
 //! ModuleSource::Std——任何按模块来源的回答都会在这里判错一半。
 
 use crate::frontend::module::registry::{ModuleRegistry, QualifiedNameConcern};
+use crate::frontend::module::symbol::DefPath;
 
 /// 混合面：同一个 std.result 里，yx 定义的导出答「是」、native 导出答「否」。
 #[test]
@@ -56,7 +57,7 @@ fn registry_with_user_module() -> ModuleRegistry {
     ] {
         lib.add_export(Export {
             name: name.to_string(),
-            full_path: format!("lib.{name}"),
+            full_path: DefPath::item("lib", name).project(),
             kind,
             signature: String::new(),
             mono_type: Some(MonoType::Int(64)),

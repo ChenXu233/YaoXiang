@@ -17,7 +17,7 @@ use crate::frontend::module::orchestrator;
 use crate::frontend::module::orchestrator::OrchestratorError;
 use crate::frontend::module::registry::ModuleRegistry;
 use crate::frontend::module::roles::{self, FileRole};
-use crate::frontend::module::symbol::SymbolTable;
+use crate::frontend::module::symbol::DefPath;
 use crate::middle::passes::mono::instance::{GenericFunctionId, InstantiationRequest};
 use crate::middle::ModuleIR;
 use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};
@@ -86,7 +86,7 @@ pub(in crate::driver) fn merge_embedded_std_ir(
 /// AST clone——原签名里的 PathBuf 本就未被使用）。
 ///
 /// 返回 `(限定名 → 绝对槽位号, 各文件的槽位基址)`。槽位号按发现顺序连续
-/// 分配；限定名用 `{module_key}.{name}`（与 `SymbolTable::qualify` 同源），
+/// 分配；限定名用 `{module_key}.{name}`（经 `DefPath::project` —— 拼接唯一实现），
 /// 使 `use lib.{value}` 解析到 `lib.value`。只登记**真正的值绑定**
 /// （非函数）——函数进函数表，不占全局槽位。
 pub(in crate::driver) fn allocate_global_slots(
@@ -102,7 +102,7 @@ pub(in crate::driver) fn allocate_global_slots(
             continue; // 上游失败（FailFast 下 run 循环已中止，防御）
         };
         for (name, _ty) in extract_global_defs(ast) {
-            layout.push((SymbolTable::qualify(&unit.key, &name), next_slot));
+            layout.push((DefPath::item(&unit.key, &name).project(), next_slot));
             next_slot += 1;
         }
     }
@@ -567,7 +567,7 @@ pub(in crate::driver) fn link_module_irs(
     // 入口函数仅在 main 为**函数**绑定时设置：值 main 的程序体就是初始化
     // 序列（求值即执行），无需入口调用——与 Script 同款执行形态（#356
     // 防双跑：初始化与入口调用绝不叠加）。
-    let entry_fn = format!("{}.main", entry_key);
+    let entry_fn = DefPath::item(entry_key, "main").project();
     if merged.functions.iter().any(|f| f.name == entry_fn) {
         merged.entry_function = Some(entry_fn);
     }
@@ -618,7 +618,7 @@ pub(in crate::driver) fn run_post_mono_dce(ir: &mut ModuleIR) -> Result<(), Diag
 /// rootless（无项目根）check 形态由 `ir_generation_check` 传单元键 +
 /// `with_script_mode(true)`（限定名与 Script 语义解耦）。因此本函数不再需要
 /// 「限定名 ⇄ 扁平名」的桥：请求名要么已与 IR 调用名同源（限定名），要么经
-/// `qualify(unit.key, name)` 兜底命中定义键——两条路径都落在同一张限定表上。
+/// `DefPath::item(unit.key, name).project()` 兜底命中定义键——两条路径都落在同一张限定表上。
 pub(in crate::driver) fn aggregate_instantiation_requests(
     units: &[Unit],
     unit_irs: &[Option<ModuleIR>],
@@ -671,7 +671,7 @@ pub(in crate::driver) fn aggregate_instantiation_requests(
             let raw = raw.filter(|r| program_functions.contains(r.as_str()));
             // 别名未命中时按单元键限定化——这正是 `qualify_names` 对**本单元**
             raw.or_else(|| {
-                let qualified = SymbolTable::qualify(&units[i].key, name);
+                let qualified = DefPath::item(&units[i].key, name).project();
                 program_functions
                     .contains(qualified.as_str())
                     .then_some(qualified)
@@ -694,7 +694,7 @@ pub(in crate::driver) fn aggregate_instantiation_requests(
             }
             // 所在函数名：裸名 → 本单元限定名，使 deferred 桶键与 merged IR 同源
             if let Some(bare) = request.containing_fn.as_deref() {
-                let qualified = SymbolTable::qualify(&units[i].key, bare);
+                let qualified = DefPath::item(&units[i].key, bare).project();
                 if top_level.contains(qualified.as_str()) {
                     request.containing_fn = Some(qualified);
                 }
@@ -962,7 +962,7 @@ fn resolve_import_module(
     name: &str,
     module_keys: &HashSet<String>,
 ) -> Option<String> {
-    let submodule = format!("{use_path}.{name}");
+    let submodule = DefPath::item(use_path, name).project();
     if module_keys.contains(&submodule) {
         return Some(submodule);
     }
