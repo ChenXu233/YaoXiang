@@ -536,6 +536,45 @@ mod enabled {
     }
 
     #[test]
+    fn test_native_local_merge_boundary_reports_aot_35() {
+        // Arrange：两臂各写 a、汇合后读 a；分析层必须在 LLVM verifier 前拒绝。
+        let dir = TempDir::new().expect("local merge tempdir");
+        let source_path = dir.path().join("local_merge.yx");
+        let output_path = dir.path().join("local_merge");
+        std::fs::write(
+            &source_path,
+            concat!(
+                "test: (c: Bool) -> Void = (c) => {\n",
+                "    a = if c { 42 } else { 0 }\n",
+                "    b = a + 1\n",
+                "}\n",
+                "\n",
+                "test(true)\n",
+            ),
+        )
+        .expect("write local merge fixture");
+
+        // Act
+        let error = build_native_with_options(&source_path, &output_path, false, false)
+            .expect_err("Local merge must be rejected by AOT analysis");
+
+        // Assert
+        let detail = format!("{error:#}");
+        assert!(
+            detail.contains("AOT-3.5"),
+            "diagnostic must point at the AOT-3.5 boundary: {detail}"
+        );
+        assert!(
+            detail.contains(&format!("{}:3:5", source_path.display())),
+            "diagnostic must carry the source position: {detail}"
+        );
+        assert!(
+            !detail.contains("Instruction does not dominate all uses"),
+            "LLVM verifier text must not leak: {detail}"
+        );
+    }
+
+    #[test]
     fn test_native_value_destination_readback() {
         // Arrange
         let module = value_module();
@@ -595,12 +634,20 @@ mod enabled {
 
     #[test]
     fn test_native_no_phi_branch_executes_both_edges() {
-        // Arrange / Act / Assert：条件真走 fallthrough（assert true），
-        // 条件假走 target（assert false）。
-        for (condition, expected_success) in [(true, true), (false, false)] {
+        // Arrange：条件真走 fallthrough（assert true），条件假走 target（assert false）。
+        let cases = [(true, true), (false, false)];
+        let mut outcomes = Vec::new();
+
+        // Act
+        for (condition, expected_success) in cases {
             let module = branch_module(condition);
             let (_dir, executable) = build_synthetic(&module, "branch");
             let output = run_native(&executable);
+            outcomes.push((condition, expected_success, output));
+        }
+
+        // Assert
+        for (condition, expected_success, output) in outcomes {
             assert_eq!(
                 output.status.success(),
                 expected_success,
@@ -729,39 +776,66 @@ mod enabled {
     }
 
     #[test]
-    fn test_native_value_evidence_and_ssa_boundaries() {
-        // Arrange / Act / Assert：显式未知、不支持类型、多定义、Phi 四条边界。
-        let unknown = compile_error(&simple_value_module(
+    fn test_native_explicit_unknown_value_is_rejected() {
+        // Arrange
+        let module = simple_value_module(
             yaoxiang::frontend::core::sema::MonoType::TypeRef("?".to_string()),
             false,
-        ));
-        assert!(
-            unknown.contains("ValueId(0)") && unknown.contains("TypeRef(\"?\")"),
-            "unknown value diagnostic must name id/type: {unknown}"
         );
 
-        let unsupported = compile_error(&simple_value_module(
-            yaoxiang::frontend::core::sema::MonoType::Float(64),
-            false,
-        ));
-        assert!(
-            unsupported.contains("ValueId(0)") && unsupported.contains("Float(64)"),
-            "unsupported value diagnostic must name id/type: {unsupported}"
-        );
+        // Act
+        let detail = compile_error(&module);
 
-        let duplicate = compile_error(&simple_value_module(
-            yaoxiang::frontend::core::sema::MonoType::Int(64),
-            true,
-        ));
+        // Assert
         assert!(
-            duplicate.contains("verification"),
-            "multi-definition must fail SSA entry verification: {duplicate}"
+            detail.contains("ValueId(0)") && detail.contains("TypeRef(\"?\")"),
+            "unknown value diagnostic must name id/type: {detail}"
         );
+    }
 
-        let phi = compile_error(&phi_module());
+    #[test]
+    fn test_native_unsupported_value_type_is_rejected() {
+        // Arrange
+        let module =
+            simple_value_module(yaoxiang::frontend::core::sema::MonoType::Float(64), false);
+
+        // Act
+        let detail = compile_error(&module);
+
+        // Assert
         assert!(
-            phi.contains("3.5"),
-            "Phi must be rejected with the AOT-3.5 boundary: {phi}"
+            detail.contains("ValueId(0)") && detail.contains("Float(64)"),
+            "unsupported value diagnostic must name id/type: {detail}"
+        );
+    }
+
+    #[test]
+    fn test_native_multi_definition_value_is_rejected() {
+        // Arrange
+        let module = simple_value_module(yaoxiang::frontend::core::sema::MonoType::Int(64), true);
+
+        // Act
+        let detail = compile_error(&module);
+
+        // Assert
+        assert!(
+            detail.contains("verification"),
+            "multi-definition must fail SSA entry verification: {detail}"
+        );
+    }
+
+    #[test]
+    fn test_native_phi_is_rejected_at_batch_35() {
+        // Arrange
+        let module = phi_module();
+
+        // Act
+        let detail = compile_error(&module);
+
+        // Assert
+        assert!(
+            detail.contains("3.5"),
+            "Phi must be rejected with the AOT-3.5 boundary: {detail}"
         );
     }
 }

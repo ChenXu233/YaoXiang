@@ -10,7 +10,7 @@ description:
 x86-64 上，把一份真实的 YaoXiang 源程序编译成 ELF 可执行文件。在没有 LLVM 和 YaoXiang
 VM 的同类系统上运行它，既能算对结果，也能在出错时指出源码位置。生成一份 LLVM IR 文本不算完成。
 
-**状态：AOT-0/AOT-1 原型实现，发布验收未完成。**
+**状态：批次 3 已开工（值证据与无 Phi CFG 子集），发布验收未完成。**
 [RFC-018](../../rfc/accepted/018-llvm-aot-compiler.md)
 已接受 LLVM 提前编译（AOT）的方向，并在附录 B 登记构建产物契约；[跟踪议题 #134](https://github.com/ChenXu233/YaoXiang/issues/134)
 是这项工作的入口。首批实现不占用 [RFC-039 施工表](../architecture/09-execution-wbs.md)
@@ -25,8 +25,8 @@ VM 的同类系统上运行它，既能算对结果，也能在出错时指出�
 
 - [x] **批次 1 固定构建环境并隔离 LLVM 依赖**（`5828eb46`、`5b14f1ff`）——可选 Cargo feature `llvm` 与 Inkwell 0.11.0、LLVM 18.1 的固定组合入库；CI 组合动作 `.github/actions/setup-llvm/action.yml` 安装 `llvm-18-dev` 并设置 `LLVM_SYS_181_PREFIX` 与 `LLVM_SYS_181_STRICT_VERSIONING`；`check-no-llvm` 作业验证默认通道不依赖 LLVM、原生请求不回退字节码；批次构建工具 `scripts/dev/scratch.py` 的 `build` 支持 `--features llvm`。缺链接器有独立用例（`test_native_missing_linker_preserves_output`）；LLVM 主版本不匹配由 `LLVM_SYS_181_STRICT_VERSIONING` 在构建期拒绝。
 - [x] **批次 2 交付第一个真实源程序**（`5828eb46`）——AOT-0/AOT-1 原型入库（`src/backends/llvm/`）：`yx build --emit exe` 走原生路径，`--emit bytecode` 走字节码路径，裸 `build` 仍默认生成 `.42`。判据在 `tests/integration/native_aot.rs`。原型限单文件直线标量子集，发布验收未完成。
-- [ ] **批次 3 接正式共享 IR，扩到控制流与多文件**——未开始；原型对控制流明确拒绝（`test_native_unsupported_control_flow_preserves_output`）。生产端阶段 0 已落地，AOT 侧待 7b SSA 同步（见“前置”）后开工。
-- [ ] **批次 3.5 `Phi` 映射**——把需要 `Phi` 的汇合值从能力拒绝改为 `Phi`/边拷贝映射，并纳入等价账本；生产端已产出 `Phi`（见“前置”），AOT 侧待 7b SSA 同步后开工。
+- [ ] **批次 3 接正式共享 IR，扩到控制流与多文件**——已开工：AOT-3.1 恢复 Linux 构建并把入口接到 `verify_ssa`；单文件的无 Phi 分支与循环已发射，`Phi` 和多前驱 Local 汇合仍显式拒绝（见“阶段 1 支持集与拒绝边界”）；多文件未开始。判据在 `tests/integration/native_aot.rs`，合并值拒绝指针为 `test_native_unsupported_merge_value_preserves_output`。
+- [ ] **批次 3.5 `Phi` 映射**——把需要 `Phi` 的汇合值从能力拒绝改为 `Phi`/边拷贝映射，并纳入等价账本；生产端已产出 `Phi`（见“前置”），AOT 侧在 AOT-3.1 显式拒绝，映射未开工。
 - [ ] **批次 4 链接原生运行时，再接 FFI 与并作**——未开始；原生运行时只有最小 C ABI（`src/backends/llvm/runtime.c`），没有 FFI 与并作。
 
 ### 平台验收
@@ -38,7 +38,7 @@ VM 的同类系统上运行它，既能算对结果，也能在出错时指出�
 ### 前置
 
 - [x] **IR 值契约（P7 的 SSA 生产端）**（`46133853`、`5b3cc40b`、`5bde3090`、`b9dda258`）——生产端已做 SSA 构造：按支配边界在汇合块首插入 `Phi`、按支配关系重命名、`ValueInfo.defining_block` 记真实定义块；`verify_ssa` 覆盖 `Operand::Value` 定义唯一性、值使用受定义支配、`defining_block` 一致与 `Phi` 输入类型；门禁 `scripts/ci/check-ir-verifier.sh` 同时跑 `verify_loose`、生产语料 `verify_ssa` 与负例自证。
-- [ ] **7b SSA 同步**——IR 已按 7b.1a 收敛：`src/middle/ir/ir.rs` 的 `Operand` 只余 Const、Value、Local、Arg、Global 五个变体；`src/backends/llvm/analysis.rs` 与 `src/backends/llvm/codegen.rs` 仍引用已移除的 `Operand::Temp`。批次 3 的前置未满足（静态认定，未实测编译）。
+- [x] **7b SSA 同步**（`fc6bcda3`）——IR 已按 7b.1a 收敛：`src/middle/ir/ir.rs` 的 `Operand` 只余 Const、Value、Local、Arg、Global 五个变体；`src/backends/llvm/analysis.rs` 与 `src/backends/llvm/codegen.rs` 不再引用 `Operand::Temp`，AOT 入口调用 `verify_ssa`。批次 3 的前置在 Linux+LLVM 18.1.3 通道实测满足。
 - [x] **Linux + LLVM 18.1 验证通道**（`5828eb46`、`5b14f1ff`）——与批次 1 同批入库：CI 固定 LLVM 18.1 工具链、无 LLVM 通道隔离、批次树构建的 `--features llvm` 开关。
 
 ## 接在哪里
@@ -114,14 +114,12 @@ python scripts/dev/testsuite.py plan
 
 第二条的值契约已在生产端闭合（`46133853`、`5b3cc40b`、`5bde3090`、`b9dda258`；收口登记见 [施工任务表](../architecture/09-execution-wbs.md) 的 P7 7f）：生产端按支配边界在汇合块首插入 `Phi` 并按支配关系重命名，`ValueInfo.defining_block` 记真实定义块；`verify_ssa` 的定义唯一性判据挂在 `Operand::Value` 上，另覆盖值使用受定义支配、`defining_block` 一致与 `Phi` 输入类型；门禁 `scripts/ci/check-ir-verifier.sh` 同时跑 `verify_loose`、生产语料 `verify_ssa` 与负例自证。
 
-仍在的缺口有四处，各自指向后续阶段：
+仍在的缺口有三处，各自指向后续阶段：
 
 - **lower 侧的类型覆盖不全**：生产语料 9586 个值中 2403 个类型显式未知（25.1%，`46133853` 记录），未知集中在调用、字段、索引与容器构造形态；类型证据补齐归阶段 1。
 - **未定义值只能物化为显式未知的 `Load Void`**：全函数 0 定义与部分前驱未定义两类，生产端在入口物化一条 `Load Void`（类型显式未知），语义等价但类型证据缺失；归阶段 1。
 - **`translator` 没有 `Const` 源**：`OperandResolver::to_reg` 只接受槽位类操作数（`Local` / `Arg` / `Value`），`Move` 的源不能是 `Operand::Const`，生产端因此不把常量内联成 SSA 值——常量以 `Operand::Const` 留在 IR 里，原生后端单独消费该变体；原生路径消费常量的证据归阶段 1。
-- **AOT 入口仍用 `verify_loose`**：`src/backends/llvm/analysis.rs` 只调 `verify_loose`，原生路径未接 `verify_ssa`；归阶段 1。
-
-AOT 不得在 L4 后端重建 SSA 或类型（见“开工前确认什么”），因此这四处缺口按所在层立项补足，不在原生后端另造一套语义。
+AOT 不得在 L4 后端重建 SSA 或类型（见“开工前确认什么”），因此这三处缺口按所在层立项补足，不在原生后端另造一套语义。
 
 ### 阶段与依赖
 
@@ -133,7 +131,24 @@ AOT 不得在 L4 后端重建 SSA 或类型（见“开工前确认什么”）�
 | 3 目标与链接 | Linux ELF、Windows x64 MSVC COFF、macOS（见“发布与回退”） | 阶段 2 | 每个目标实机编译、链接、运行；产物不依赖 LLVM 与 VM |
 | 4 证据与发布 | 支持集账本、受控变异、RFC-018 附录 B 对账、默认产物切换 | 阶段 3 | 声明与账本一致；没有实测值不作规模或性能承诺 |
 
-阶段 0 已落地；AOT 侧仍未映射 `Phi`（批次 3.5）：受限预览拒绝需要 `Phi` 的合并值，不宣称“SSA 值直映”。
+阶段 0 已落地；AOT 侧仍未映射 `Phi`（批次 3.5）：受限预览拒绝需要 `Phi` 的合并值，不宣称“SSA 值直映”。阶段 1 的支持集与拒绝边界由下节登记；新增可编译形态必须同时给出正例和带位置的拒绝判据。
+
+### 阶段 1 支持集与拒绝边界（等价账本）
+
+阶段 1 按可执行判据登记支持集；支持集之外必须显式拒绝并带源码位置，禁止静默回退。
+
+**支持集**：
+
+- 单文件脚本；`Int`、`Bool`、`String`、`Void` 标量与直接调用。
+- 直线指令；无 `Phi` 的分支和循环（`Jmp`、`JmpIf`、`JmpIfNot` 按 `BasicBlock` 发射），判据为 `test_native_no_phi_branch_executes_both_edges`、`test_native_no_phi_loop_matches_vm`。
+- `Operand::Value` 的类型来自 `ValueInfo.ty`；`Local` 保持存储语义，`Arg`/`Global` 不变。
+
+**拒绝边界**：
+
+- `Phi` 与 `Phi` dst：报 AOT-3.5，映射归批次 3.5；判据为 `test_native_phi_is_rejected_at_batch_35`、`test_native_phi_is_rejected_with_batch_35_boundary`。
+- 同一 `Local` 在多个前驱块首次写、汇合后读：报 AOT-3.5，带源码位置；判据为 `test_native_local_merge_boundary_reports_aot_35`。LLVM verifier 兜底失败同样包装为 AOT 自有诊断，不外泄 LLVM 原文。
+- 函数体内的 `std` 调用：调用结果在 IR 中的值类型为显式未知 `TypeRef("?")`，AOT 报带值 id 与原始类型的 unsupported；这是 lower 侧类型覆盖缺口，补齐归 lower，不在 AOT 推断或静默 Void。
+- 已知静默 Void 两处（**未收口**）：`Operand::Global` 缺指针时读取返回 `Value::void()`，`load_slot` 无指针时返回 `Value::void()`。后续批次改为显式拒绝或补齐证据，不得标成已收口。
 
 ### 0. 值契约闭合（P7 的 SSA 生产端）
 
@@ -177,7 +192,7 @@ AOT 不得在 L4 后端重建 SSA 或类型（见“开工前确认什么”）�
 
 - **输入**：让现有 Driver 编译一份单文件脚本。只接受能从常量、已确定的函数签名和直线指令确定类型的数据流。支持
   `Int`、`Bool`、直接调用、返回、顶层初始化，以及观察结果所需的最小断言入口。不承诺通用标准库支持。
-- **生成**：先用 `verify_loose`
+- **生成**：先用 `verify_ssa`
   排除结构错误，再逐指令检查该子集的类型依据。先声明函数，再翻译函数体与模块初始化。对脚本只调用初始化序列；不按名字再找一次
   `main`。依次执行 LLVM 模块验证、目标文件发射、链接。链接成功后再交付最终文件；失败不覆盖上次成功的产物。
 - **命令**：通过 `yx build demo.yx --emit exe` 进入原生路径，通过 `--emit bytecode`

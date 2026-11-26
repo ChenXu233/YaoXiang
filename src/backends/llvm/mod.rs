@@ -7,6 +7,9 @@ mod analysis;
 mod codegen;
 mod linker;
 
+#[cfg(test)]
+mod tests;
+
 use std::ffi::OsString;
 use std::path::Path;
 
@@ -63,18 +66,22 @@ pub fn compile_ir_to_executable(
     module.set_triple(&triple);
     let data_layout = machine.get_target_data().get_data_layout();
     module.set_data_layout(&data_layout);
-    module
-        .verify()
-        .map_err(|e| anyhow!("LLVM module verification failed before optimization: {e}"))?;
+    module.verify().map_err(|_| {
+        anyhow!(
+            "native AOT LLVM verification failed for {source_name}; the module is outside the AOT-3.1 support set (see AOT-3.5 boundary rules)"
+        )
+    })?;
     if optimize {
         let passes = PassBuilderOptions::create();
         passes.set_verify_each(true);
         module
             .run_passes("default<O2>", &machine, passes)
             .map_err(|e| anyhow!("LLVM O2 pipeline failed: {e}"))?;
-        module
-            .verify()
-            .map_err(|e| anyhow!("LLVM module verification failed after optimization: {e}"))?;
+        module.verify().map_err(|_| {
+            anyhow!(
+                "native AOT LLVM verification failed for {source_name} after optimization; the module is outside the AOT-3.1 support set"
+            )
+        })?;
     }
 
     let work = TempDir::new().context("failed to create LLVM object scratch directory")?;

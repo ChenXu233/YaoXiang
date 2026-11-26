@@ -639,6 +639,8 @@ impl<'ctx> Emitter<'ctx> {
             Operand::Global(index) => {
                 let ty = self.analysis.globals[index];
                 let Some(pointer) = self.globals.get(index).copied() else {
+                    // AOT-3.1 known gap（阶段 1 支持集账本）：Global 缺指针时
+                    // 当前静默返回 Void；后续批次改为带位置的显式拒绝。
                     return Ok(Value::void());
                 };
                 self.load_slot(Slot {
@@ -658,6 +660,8 @@ impl<'ctx> Emitter<'ctx> {
         slot: Slot<'ctx>,
     ) -> Result<Value<'ctx>> {
         let Some(pointer) = slot.pointer else {
+            // AOT-3.1 known gap（阶段 1 支持集账本）：无指针槽位当前静默返回
+            // Void；后续批次改为带位置的显式拒绝。
             return Ok(Value::void());
         };
         let repr = llvm(self.builder.build_load(

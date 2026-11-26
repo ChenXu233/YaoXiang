@@ -178,6 +178,7 @@ pub(super) fn analyze_module(
             .map(|value| value.ty.clone())
             .collect::<Vec<_>>();
         let block_starts = block_starts(blocks);
+        check_local_merge_boundary(blocks, &function.name, source_name)?;
         let signature = &analysis.signatures[&function.name];
         let body = analyze_stream(
             module,
@@ -202,6 +203,152 @@ pub(super) fn analyze_module(
         }
     }
     Ok(analysis)
+}
+
+/// AOT-3.5 的 Local 形态边界：同一 Local 在汇合块的多个前驱块首次被写，
+/// 且汇合块（或其后继）读取它时，codegen 会在各自分支创建 alloca，汇合点的
+/// load 无单一支配定义。分析层先拒绝，避免 LLVM verifier 原文外泄。
+fn check_local_merge_boundary(
+    blocks: &[BasicBlock],
+    function_name: &str,
+    source_name: &str,
+) -> Result<()> {
+    if blocks.len() < 2 {
+        return Ok(());
+    }
+    let index_by_label: HashMap<usize, usize> = blocks
+        .iter()
+        .enumerate()
+        .map(|(index, block)| (block.label, index))
+        .collect();
+    let mut predecessors: Vec<Vec<usize>> = vec![Vec::new(); blocks.len()];
+    let mut reachable = vec![false; blocks.len()];
+    let mut queue = vec![0usize];
+    reachable[0] = true;
+    while let Some(index) = queue.pop() {
+        for successor in &blocks[index].successors {
+            let Some(&next) = index_by_label.get(successor) else {
+                continue;
+            };
+            if !reachable[next] {
+                reachable[next] = true;
+                queue.push(next);
+            }
+            if !predecessors[next].contains(&index) {
+                predecessors[next].push(index);
+            }
+        }
+    }
+
+    let written_at: Vec<HashSet<usize>> = blocks
+        .iter()
+        .map(|block| {
+            block
+                .instructions
+                .iter()
+                .flat_map(|instruction| instruction.def_operands())
+                .filter_map(|operand| match operand {
+                    Operand::Local(slot) => Some(*slot),
+                    _ => None,
+                })
+                .collect()
+        })
+        .collect();
+
+    let mut must_in: Vec<HashSet<usize>> = vec![HashSet::new(); blocks.len()];
+    let mut changed = true;
+    while changed {
+        changed = false;
+        for index in 0..blocks.len() {
+            if !reachable[index] || index == 0 {
+                continue;
+            }
+            let reachable_preds: Vec<usize> = predecessors[index]
+                .iter()
+                .copied()
+                .filter(|pred| reachable[*pred])
+                .collect();
+            let mut entry: HashSet<usize> = HashSet::new();
+            if let Some(first) = reachable_preds.first() {
+                entry = must_in[*first]
+                    .union(&written_at[*first])
+                    .copied()
+                    .collect();
+                for pred in &reachable_preds[1..] {
+                    let out: HashSet<usize> =
+                        must_in[*pred].union(&written_at[*pred]).copied().collect();
+                    entry.retain(|slot| out.contains(slot));
+                }
+            }
+            if entry != must_in[index] {
+                must_in[index] = entry;
+                changed = true;
+            }
+        }
+    }
+
+    // 每个 Local 的 alloca 创建点：进入块时尚未定义的写。两个创建点
+    // 都可达同一读块时，汇合 load 没有单一支配的 alloca，归 AOT-3.5。
+    let mut alloca_sites: HashMap<usize, Vec<usize>> = HashMap::new();
+    for (index, written) in written_at.iter().enumerate() {
+        if !reachable[index] {
+            continue;
+        }
+        for slot in written {
+            if !must_in[index].contains(slot) {
+                alloca_sites.entry(*slot).or_default().push(index);
+            }
+        }
+    }
+    if alloca_sites.values().all(|sites| sites.len() < 2) {
+        return Ok(());
+    }
+
+    let mut reachable_from = vec![vec![false; blocks.len()]; blocks.len()];
+    for start in 0..blocks.len() {
+        let mut stack = vec![start];
+        reachable_from[start][start] = true;
+        while let Some(index) = stack.pop() {
+            for successor in &blocks[index].successors {
+                let Some(&next) = index_by_label.get(successor) else {
+                    continue;
+                };
+                if !reachable_from[start][next] {
+                    reachable_from[start][next] = true;
+                    stack.push(next);
+                }
+            }
+        }
+    }
+
+    for (index, block) in blocks.iter().enumerate() {
+        if !reachable[index] {
+            continue;
+        }
+        for instruction in &block.instructions {
+            for operand in instruction.use_operands() {
+                let Operand::Local(slot) = operand else {
+                    continue;
+                };
+                let Some(sites) = alloca_sites.get(slot) else {
+                    continue;
+                };
+                let reaching = sites
+                    .iter()
+                    .filter(|site| reachable_from[**site][index])
+                    .count();
+                if reaching >= 2 {
+                    let span = instruction.span();
+                    return Err(anyhow!(
+                        "native AOT unsupported input at {source_name}:{}:{} in {function_name}: AOT-3.5 boundary: Local({slot}) is written in multiple predecessor blocks and read after the merge",
+                        span.start.line,
+                        span.start.column
+                    ));
+                }
+            }
+        }
+    }
+    Ok(())
 }
 
 fn block_starts(blocks: &[BasicBlock]) -> Vec<usize> {
@@ -554,242 +701,4 @@ fn require_type(
         bail!("{role} must be {expected:?}, got {actual:?}");
     }
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::middle::ir::ir::{BasicBlock, FunctionIR, ValueInfo};
-    use crate::util::span::Span;
-
-    fn base_function(
-        return_type: MonoType,
-        values: Vec<ValueInfo>,
-        instructions: Vec<Instruction>,
-    ) -> FunctionIR {
-        FunctionIR {
-            name: "f".to_string(),
-            def: None,
-            params: vec![],
-            return_type,
-            generic_params: None,
-            body: FunctionBody::Code {
-                blocks: vec![BasicBlock {
-                    label: 0,
-                    instructions,
-                    successors: vec![],
-                }],
-                entry: 0,
-                locals: vec![],
-                values,
-                value_slots: vec![],
-            },
-        }
-    }
-
-    fn module_with(function: FunctionIR) -> ModuleIR {
-        let mut module = ModuleIR::default();
-        module.functions.push(function);
-        module.init.push(Instruction::Call {
-            dst: None,
-            func: Operand::Const(ConstValue::String("f".to_string())),
-            args: vec![],
-            def: None,
-            span: Span::dummy(),
-        });
-        module
-    }
-
-    fn load_value(
-        id: u32,
-        src: Operand,
-    ) -> Instruction {
-        Instruction::Load {
-            dst: Operand::Value(ValueId(id)),
-            src,
-            span: Span::dummy(),
-        }
-    }
-
-    fn ret_value(id: u32) -> Instruction {
-        Instruction::Ret {
-            value: Some(Operand::Value(ValueId(id))),
-            span: Span::dummy(),
-        }
-    }
-
-    #[test]
-    fn test_native_value_type_known_scalar_passes() {
-        // Arrange
-        let function = base_function(
-            MonoType::Int(64),
-            vec![ValueInfo {
-                ty: MonoType::Int(64),
-                debug_name: None,
-                defining_block: 0,
-            }],
-            vec![
-                load_value(0, Operand::Const(ConstValue::Int(1))),
-                ret_value(0),
-            ],
-        );
-        let module = module_with(function);
-
-        // Act
-        let analysis = analyze_module(&module, "value_known.yx")
-            .expect("known scalar value should be accepted");
-
-        // Assert
-        assert_eq!(
-            analysis.functions["f"].values[0],
-            MonoType::Int(64),
-            "known value type must be carried from ValueInfo"
-        );
-    }
-
-    #[test]
-    fn test_native_explicit_unknown_value_is_rejected() {
-        // Arrange
-        let function = base_function(
-            MonoType::Int(64),
-            vec![ValueInfo {
-                ty: MonoType::TypeRef("?".to_string()),
-                debug_name: None,
-                defining_block: 0,
-            }],
-            vec![
-                load_value(0, Operand::Const(ConstValue::Int(1))),
-                ret_value(0),
-            ],
-        );
-        let module = module_with(function);
-
-        // Act
-        let error = analyze_module(&module, "value_unknown.yx")
-            .err()
-            .expect("explicit unknown value type must be rejected");
-
-        // Assert
-        let detail = error.to_string();
-        assert!(
-            detail.contains("ValueId(0)") && detail.contains("TypeRef(\"?\")"),
-            "diagnostic must include value id and original type: {detail}"
-        );
-    }
-
-    #[test]
-    fn test_native_unsupported_value_type_is_rejected() {
-        // Arrange
-        let function = base_function(
-            MonoType::Int(64),
-            vec![ValueInfo {
-                ty: MonoType::Float(64),
-                debug_name: None,
-                defining_block: 0,
-            }],
-            vec![
-                load_value(0, Operand::Const(ConstValue::Int(1))),
-                ret_value(0),
-            ],
-        );
-        let module = module_with(function);
-
-        // Act
-        let error = analyze_module(&module, "value_unsupported.yx")
-            .err()
-            .expect("unsupported value type must be rejected");
-
-        // Assert
-        let detail = error.to_string();
-        assert!(
-            detail.contains("ValueId(0)") && detail.contains("Float(64)"),
-            "diagnostic must include value id and unsupported type: {detail}"
-        );
-    }
-
-    #[test]
-    fn test_native_multi_definition_value_is_rejected_by_verify_ssa() {
-        // Arrange
-        let function = base_function(
-            MonoType::Int(64),
-            vec![ValueInfo {
-                ty: MonoType::Int(64),
-                debug_name: None,
-                defining_block: 0,
-            }],
-            vec![
-                load_value(0, Operand::Const(ConstValue::Int(1))),
-                load_value(0, Operand::Const(ConstValue::Int(2))),
-                ret_value(0),
-            ],
-        );
-        let module = module_with(function);
-
-        // Act
-        let error = analyze_module(&module, "value_double.yx")
-            .err()
-            .expect("multi-definition value must fail SSA entry verification");
-
-        // Assert
-        assert!(
-            error.to_string().contains("verification"),
-            "diagnostic must identify SSA verification: {error}"
-        );
-    }
-
-    #[test]
-    fn test_native_phi_is_rejected_with_batch_35_boundary() {
-        // Arrange: block 0 jumps to block 1, which contains a valid Phi.
-        let function = FunctionIR {
-            name: "f".to_string(),
-            def: None,
-            params: vec![],
-            return_type: MonoType::Int(64),
-            generic_params: None,
-            body: FunctionBody::Code {
-                blocks: vec![
-                    BasicBlock {
-                        label: 0,
-                        instructions: vec![Instruction::Jmp {
-                            target: 1,
-                            span: Span::dummy(),
-                        }],
-                        successors: vec![1],
-                    },
-                    BasicBlock {
-                        label: 1,
-                        instructions: vec![
-                            Instruction::Phi {
-                                dst: Operand::Value(ValueId(0)),
-                                incoming: vec![(0, Operand::Const(ConstValue::Int(1)))],
-                                span: Span::dummy(),
-                            },
-                            ret_value(0),
-                        ],
-                        successors: vec![],
-                    },
-                ],
-                entry: 0,
-                locals: vec![],
-                values: vec![ValueInfo {
-                    ty: MonoType::Int(64),
-                    debug_name: None,
-                    defining_block: 1,
-                }],
-                value_slots: vec![],
-            },
-        };
-        let module = module_with(function);
-
-        // Act
-        let error = analyze_module(&module, "phi.yx")
-            .err()
-            .expect("Phi must remain outside AOT-3.1");
-
-        // Assert
-        assert!(
-            error.to_string().contains("3.5"),
-            "diagnostic must name the AOT-3.5 boundary: {error}"
-        );
-    }
 }
