@@ -24,7 +24,7 @@
 | [02-stage-contract.md](02-stage-contract.md) | L1 编排 | 编译阶段契约与义务账本：11 处阶段不一致、8 步漏洞证据链、16 个义务字段、`Stage` 枚举、`Obligations` 账本、统一 `Driver`、`ProgramKind`（含 `WasmPlayground`） | 746 行 |
 | [03-type-unification.md](03-type-unification.md) | L2/L3 根因 | 类型表示单一化：26 个 `ast::Type` 变体逐个处置、13 个前向零构造变体、`NameKind` 替代手写同义词表、类型表生成期门禁 T1-T4 | 785 行 |
 | [04-ssa.md](04-ssa.md) | L3 IR | 中间表示 SSA 化：四类缺陷、SSA 形态定义、分配器评估、38 项改动清单 | 751 行 |
-| [05-frontend-paradigm.md](05-frontend-paradigm.md) | L2 前端 | 词法收敛为唯一实现 / 语法 LALRPOP 文法驱动、改运算符改动面收敛、死阶梯处理、测试重建 | 792 行 |
+| [05-frontend-paradigm.md](05-frontend-paradigm.md) | L2 前端 | 词法收敛为唯一实现 / 无二义语言面 + 单套声明式优先级表、改运算符改动面收敛、死阶梯处理、测试重建 | 700 行 |
 | [06-cleanup-inventory.md](06-cleanup-inventory.md) | 全域 | 死代码与空头设计清理：可达性分析方法、23 文件 1081 行孤儿、1500+ 行零调用死代码、空头设计逐项处置 | 260 行 |
 | [07-equivalence-oracle.md](07-equivalence-oracle.md) | 跨层 | 等价性判据：C1-C6 分级、三层判据（IR 校验器 / 规范化快照 / 语料差分）、性能基线、回归门禁 | 222 行 |
 | [08-maintenance-mechanism.md](08-maintenance-mechanism.md) | 跨层 | **仓库维护机制**：三条禁令、D0–D4 决策程序、可机检规则清单、代码审查清单、外部惯例参照（含不可照搬清单） | 241 行 |
