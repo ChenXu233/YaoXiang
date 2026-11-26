@@ -1,0 +1,6 @@
+[package]
+name = "rfc004-binding-same-unit-named-args"
+version = "0.1.0"
+
+[run]
+main = "main.yx"

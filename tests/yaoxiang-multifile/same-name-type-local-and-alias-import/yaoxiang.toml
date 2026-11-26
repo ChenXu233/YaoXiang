@@ -1,0 +1,6 @@
+[package]
+name = "same-name-type-local-and-alias-import"
+version = "0.1.0"
+
+[run]
+main = "main.yx"

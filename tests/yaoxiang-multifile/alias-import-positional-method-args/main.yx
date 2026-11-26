@@ -1,0 +1,13 @@
+// alias-import-positional-method-args/main.yx
+// 覆盖: RFC-029 跨文件方法调用（内联别名导入）+ SPEC syntax §2.3 位置实参
+// 验证: use lib.{Temp as X} 后 X(3.0).bump(2.0) 按位置入槽，求值 5.0；
+//       别名导入不得改变位置实参的既有成功行为（P0 形态 4）。
+// 状态: ✅ 可运行（run 退出码 0）
+use std.assert
+use lib.{Temp as X}
+
+main = () => {
+    t = X(3.0)
+    by_position = t.bump(2.0)
+    assert.assert(by_position == 5.0, "别名导入 + 位置实参应求值 3.0 + 2.0 = 5.0")
+}

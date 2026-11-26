@@ -1,0 +1,6 @@
+// a.yx —— 模块 a：Temp.tag_of 语义 tag × 1
+Temp: Type = { tag: Float }
+
+Temp.tag_of: (self: &Temp) -> Float = {
+    return self.tag
+}

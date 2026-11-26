@@ -58,6 +58,12 @@ P4「统一 Driver」是全计划最大风险点，本层是 P4 唯一可执行�
 | ref-pool-cross-unit-method | 跨单元方法调用的定义单元归因：未被调用的同名同序方法如实报 W1005（WBS 4.9.7 / #464） | 行为 |
 | ref-pool-cross-unit-name-owner | 跨单元方法候选注入面的名字归属过滤：每个裸类型名只由自己的提供模块供候选（WBS 4.9.7 / #464） | 行为 |
 | named-args-cross-unit-method | 跨单元方法的命名实参按声明期形参名入槽（裸名导入；位置实参同形态作对照）（WBS 4.9.9） | 行为 |
+| alias-import-positional-method-args | 别名导入（`use lib.{Temp as X}`）+ **位置**实参方法调用：`X(3.0).bump(2.0)` = 5.0（P0 形态 4 的入库锚） | 行为 |
+| namespace-form-positional-method-args | 命名空间写法 `lib.Temp` 构造 + **位置**实参方法调用：`lib.Temp(3.0).bump(2.0)` = 5.0（P0 形态 6b 的入库锚） | 行为 |
+| same-name-type-local-and-alias-import | 本单元自有同名类型 + 别名导入同名类型**身份共存**：`Temp(1.0).tag_of()` = 101.0、`TempA(2.0).tag_of()` = 20.0（P0 形态 9 同形） | 行为 |
+| same-name-type-two-modules-alias-disambig | 两模块同名类型经**别名**消歧：`TempA(2.0).tag_of()` = 2.0、`TempB(2.0).tag_of()` = 20.0（P0 形态 11b/11c 同形；裸名双导入 E5006 仍是拒绝面） | 行为 |
+| inferred-receiver-method-args | 推断型接收者的**位置**实参 + 写出注解后的**命名**实参：`r.scale_by(2.0)` = 6.0、`p: Point = make(); p.scale_by(k = 2.0)` = 6.0（P0 形态 10b/10c 的入库锚） | 行为 |
+| rfc004-binding-same-unit-named-args | RFC-004 方法绑定**同单元**（`Temp.bump = bump[0]`）：`t.bump(k = 2.0)` 与 `t.bump(2.0)` 同为 5.0（P0 形态 8c/8d 的入库锚） | 行为 |
 | init-order-entry-reads-dep-value | 初始化按 `use` 依赖拓扑序：入口顶层绑定读**被依赖单元**顶层值（修复前读到 void → 运行期 E6007，#467 / WBS 4.10.4） | 行为 |
 | init-order-dep-fn-reads-own-value | 同上序：入口顶层绑定调用依赖单元的函数，该函数读**本单元**顶层值（修复前运行期 E6007，#467 / WBS 4.10.4） | 行为 |
 | import-cycle-reads-before-init | 模块导入环：环内初始化顺序不可判定，编译期发 W1007（消息含环路径 + 被违反的边）；check/run 退出码均不变（#491 / WBS 4.10.5） | runtime-error |
