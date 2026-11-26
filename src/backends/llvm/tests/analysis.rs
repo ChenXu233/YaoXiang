@@ -241,3 +241,284 @@ fn test_native_phi_is_rejected_with_batch_35_boundary() {
         "diagnostic must name the AOT-3.5 boundary: {error}"
     );
 }
+
+fn local_merge_module(two_arms: bool) -> ModuleIR {
+    let condition = Instruction::JmpIfNot {
+        cond: Operand::Const(ConstValue::Bool(true)),
+        target: 3,
+        span: Span::dummy(),
+    };
+    let write = |value: i128| Instruction::Load {
+        dst: Operand::Local(0),
+        src: Operand::Const(ConstValue::Int(value)),
+        span: Span::dummy(),
+    };
+    let jump = |target: usize| Instruction::Jmp {
+        target,
+        span: Span::dummy(),
+    };
+    let read = Instruction::Load {
+        dst: Operand::Value(ValueId(0)),
+        src: Operand::Local(0),
+        span: Span::dummy(),
+    };
+    let ret = Instruction::Ret {
+        value: None,
+        span: Span::dummy(),
+    };
+    let blocks = if two_arms {
+        vec![
+            BasicBlock {
+                label: 0,
+                instructions: vec![condition],
+                successors: vec![1, 2],
+            },
+            BasicBlock {
+                label: 1,
+                instructions: vec![write(42), jump(5)],
+                successors: vec![3],
+            },
+            BasicBlock {
+                label: 2,
+                instructions: vec![write(0), jump(5)],
+                successors: vec![3],
+            },
+            BasicBlock {
+                label: 3,
+                instructions: vec![read, ret],
+                successors: vec![],
+            },
+        ]
+    } else {
+        vec![
+            BasicBlock {
+                label: 0,
+                instructions: vec![condition],
+                successors: vec![1, 2],
+            },
+            BasicBlock {
+                label: 1,
+                instructions: vec![write(42), jump(3)],
+                successors: vec![2],
+            },
+            BasicBlock {
+                label: 2,
+                instructions: vec![read, ret],
+                successors: vec![],
+            },
+        ]
+    };
+    let function = FunctionIR {
+        name: "merge".to_string(),
+        def: None,
+        params: vec![],
+        return_type: MonoType::Void,
+        generic_params: None,
+        body: FunctionBody::Code {
+            blocks,
+            entry: 0,
+            locals: vec![crate::middle::ir::ir::LocalSlot::temp(MonoType::Int(64))],
+            values: vec![ValueInfo {
+                ty: MonoType::Int(64),
+                debug_name: None,
+                defining_block: if two_arms { 3 } else { 2 },
+            }],
+            value_slots: vec![],
+        },
+    };
+    let mut module = ModuleIR::default();
+    module.functions.push(function);
+    module.init.push(Instruction::Call {
+        dst: None,
+        func: Operand::Const(ConstValue::String("merge".to_string())),
+        args: vec![],
+        def: None,
+        span: Span::dummy(),
+    });
+    module
+}
+
+fn local_sequential_module() -> ModuleIR {
+    let function = FunctionIR {
+        name: "sequential".to_string(),
+        def: None,
+        params: vec![],
+        return_type: MonoType::Void,
+        generic_params: None,
+        body: FunctionBody::Code {
+            blocks: vec![BasicBlock {
+                label: 0,
+                instructions: vec![
+                    Instruction::Load {
+                        dst: Operand::Local(0),
+                        src: Operand::Const(ConstValue::Int(1)),
+                        span: Span::dummy(),
+                    },
+                    Instruction::Load {
+                        dst: Operand::Value(ValueId(0)),
+                        src: Operand::Local(0),
+                        span: Span::dummy(),
+                    },
+                    Instruction::Ret {
+                        value: None,
+                        span: Span::dummy(),
+                    },
+                ],
+                successors: vec![],
+            }],
+            entry: 0,
+            locals: vec![crate::middle::ir::ir::LocalSlot::temp(MonoType::Int(64))],
+            values: vec![ValueInfo {
+                ty: MonoType::Int(64),
+                debug_name: None,
+                defining_block: 0,
+            }],
+            value_slots: vec![],
+        },
+    };
+    let mut module = ModuleIR::default();
+    module.functions.push(function);
+    module.init.push(Instruction::Call {
+        dst: None,
+        func: Operand::Const(ConstValue::String("sequential".to_string())),
+        args: vec![],
+        def: None,
+        span: Span::dummy(),
+    });
+    module
+}
+
+fn local_loop_module() -> ModuleIR {
+    let function = FunctionIR {
+        name: "loop".to_string(),
+        def: None,
+        params: vec![],
+        return_type: MonoType::Void,
+        generic_params: None,
+        body: FunctionBody::Code {
+            blocks: vec![
+                BasicBlock {
+                    label: 0,
+                    instructions: vec![
+                        Instruction::Load {
+                            dst: Operand::Local(0),
+                            src: Operand::Const(ConstValue::Int(0)),
+                            span: Span::dummy(),
+                        },
+                        Instruction::Jmp {
+                            target: 2,
+                            span: Span::dummy(),
+                        },
+                    ],
+                    successors: vec![1],
+                },
+                BasicBlock {
+                    label: 1,
+                    instructions: vec![
+                        Instruction::Load {
+                            dst: Operand::Local(0),
+                            src: Operand::Const(ConstValue::Int(1)),
+                            span: Span::dummy(),
+                        },
+                        Instruction::Load {
+                            dst: Operand::Value(ValueId(0)),
+                            src: Operand::Local(0),
+                            span: Span::dummy(),
+                        },
+                        Instruction::Jmp {
+                            target: 2,
+                            span: Span::dummy(),
+                        },
+                    ],
+                    successors: vec![1],
+                },
+            ],
+            entry: 0,
+            locals: vec![crate::middle::ir::ir::LocalSlot::temp(MonoType::Int(64))],
+            values: vec![ValueInfo {
+                ty: MonoType::Int(64),
+                debug_name: None,
+                defining_block: 1,
+            }],
+            value_slots: vec![],
+        },
+    };
+    let mut module = ModuleIR::default();
+    module.functions.push(function);
+    module.init.push(Instruction::Call {
+        dst: None,
+        func: Operand::Const(ConstValue::String("loop".to_string())),
+        args: vec![],
+        def: None,
+        span: Span::dummy(),
+    });
+    module
+}
+
+#[test]
+fn test_native_local_merge_boundary_rejects_multi_predecessor_write() {
+    // Arrange
+    let module = local_merge_module(true);
+
+    // Act
+    let error = analyze_module(&module, "merge_multi.yx")
+        .err()
+        .expect("multi-predecessor Local merge must be rejected");
+
+    // Assert
+    let detail = error.to_string();
+    assert!(
+        detail.contains("AOT-3.5") && detail.contains("Local(0)"),
+        "multi-arm Local merge diagnostic must name AOT-3.5 and Local: {detail}"
+    );
+}
+
+#[test]
+fn test_native_local_merge_boundary_rejects_single_arm_write() {
+    // Arrange
+    let module = local_merge_module(false);
+
+    // Act
+    let error = analyze_module(&module, "merge_single.yx")
+        .err()
+        .expect("single-arm Local write must not dominate a merged read");
+
+    // Assert
+    let detail = error.to_string();
+    assert!(
+        detail.contains("AOT-3.5") && detail.contains("Local(0)"),
+        "single-arm Local merge diagnostic must name AOT-3.5 and Local: {detail}"
+    );
+}
+
+#[test]
+fn test_native_local_sequential_write_is_allowed() {
+    // Arrange
+    let module = local_sequential_module();
+
+    // Act
+    let analysis = analyze_module(&module, "sequential.yx")
+        .expect("a dominating sequential Local write should be accepted");
+
+    // Assert
+    assert!(
+        analysis.functions.contains_key("sequential"),
+        "sequential Local function should be analyzed"
+    );
+}
+
+#[test]
+fn test_native_local_loop_repeated_write_is_allowed() {
+    // Arrange
+    let module = local_loop_module();
+
+    // Act
+    let analysis = analyze_module(&module, "loop_write.yx")
+        .expect("loop back-edge writes reusing a dominating slot should be accepted");
+
+    // Assert
+    assert!(
+        analysis.functions.contains_key("loop"),
+        "loop Local function should be analyzed"
+    );
+}

@@ -300,8 +300,41 @@ fn check_local_merge_boundary(
             }
         }
     }
-    if alloca_sites.values().all(|sites| sites.len() < 2) {
-        return Ok(());
+    let reachable_blocks: HashSet<usize> = (0..blocks.len())
+        .filter(|index| reachable[*index])
+        .collect();
+    let mut dominators: Vec<HashSet<usize>> = vec![HashSet::new(); blocks.len()];
+    dominators[0].insert(0);
+    for index in 1..blocks.len() {
+        if reachable[index] {
+            dominators[index] = reachable_blocks.clone();
+        }
+    }
+    let mut changed = true;
+    while changed {
+        changed = false;
+        for index in 1..blocks.len() {
+            if !reachable[index] {
+                continue;
+            }
+            let reachable_preds: Vec<usize> = predecessors[index]
+                .iter()
+                .copied()
+                .filter(|pred| reachable[*pred])
+                .collect();
+            let mut next: HashSet<usize> = match reachable_preds.first() {
+                Some(first) => dominators[*first].clone(),
+                None => HashSet::new(),
+            };
+            for pred in &reachable_preds[1..] {
+                next.retain(|block| dominators[*pred].contains(block));
+            }
+            next.insert(index);
+            if next != dominators[index] {
+                dominators[index] = next;
+                changed = true;
+            }
+        }
     }
 
     let mut reachable_from = vec![vec![false; blocks.len()]; blocks.len()];
@@ -333,14 +366,26 @@ fn check_local_merge_boundary(
                 let Some(sites) = alloca_sites.get(slot) else {
                     continue;
                 };
-                let reaching = sites
+                let reaching: Vec<usize> = sites
                     .iter()
-                    .filter(|site| reachable_from[**site][index])
-                    .count();
-                if reaching >= 2 {
-                    let span = instruction.span();
+                    .copied()
+                    .filter(|site| reachable_from[*site][index])
+                    .collect();
+                let span = instruction.span();
+                let dominant = reaching.iter().find(|site| {
+                    dominators[index].contains(site)
+                        && reaching
+                            .iter()
+                            .all(|other| dominators[*other].contains(site))
+                });
+                if dominant.is_none() {
+                    let detail = if reaching.len() >= 2 {
+                        "is written in multiple predecessor blocks and read after the merge"
+                    } else {
+                        "is first written on one predecessor path and read after the merge; its alloca does not dominate the read"
+                    };
                     return Err(anyhow!(
-                        "native AOT unsupported input at {source_name}:{}:{} in {function_name}: AOT-3.5 boundary: Local({slot}) is written in multiple predecessor blocks and read after the merge",
+                        "native AOT unsupported input at {source_name}:{}:{} in {function_name}: AOT-3.5 boundary: Local({slot}) {detail}",
                         span.start.line,
                         span.start.column
                     ));

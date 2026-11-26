@@ -657,6 +657,170 @@ mod enabled {
         }
     }
 
+    fn assert_native_matches_vm(
+        source: &str,
+        stem: &str,
+    ) {
+        let (_vm_dir, source_path, _) = build(source, &format!("{stem}_vm"), false);
+        let vm = Command::new(test_yx_bin())
+            .arg("run")
+            .arg(&source_path)
+            .output()
+            .expect("run VM control-flow fixture");
+
+        for optimize in [false, true] {
+            let (_dir, _source, executable) = build(source, stem, optimize);
+            let native = run_native(&executable);
+            assert!(
+                native.status.success(),
+                "native control-flow fixture {stem} failed (optimize={optimize}): {}",
+                String::from_utf8_lossy(&native.stderr)
+            );
+            assert!(
+                vm.status.success(),
+                "VM control-flow fixture {stem} failed: {}",
+                String::from_utf8_lossy(&vm.stderr)
+            );
+            assert_eq!(
+                native.status.code(),
+                vm.status.code(),
+                "native/VM status mismatch for {stem} (optimize={optimize})"
+            );
+            assert_eq!(
+                native.stdout, vm.stdout,
+                "native/VM stdout mismatch for {stem} (optimize={optimize})"
+            );
+        }
+    }
+
+    #[test]
+    fn test_native_break_continue_matches_vm() {
+        // Arrange
+        let source = concat!(
+            "use std.assert\n",
+            "main: () -> Int = {\n",
+            "    mut i = 0\n",
+            "    while i < 10 {\n",
+            "        i = i + 1\n",
+            "        break\n",
+            "    }\n",
+            "    while i < 10 {\n",
+            "        i = i + 1\n",
+            "        continue\n",
+            "    }\n",
+            "    i\n",
+            "}\n",
+            "assert.assert(main() == 10, \"break/continue final i is 10\")\n",
+        );
+
+        // Act
+        assert_native_matches_vm(source, "break_continue");
+
+        // Assert
+        // assert_native_matches_vm 已断言 native/VM 的 O0 与 O2 结果一致。
+    }
+
+    #[test]
+    fn test_native_nested_if_else_matches_vm() {
+        // Arrange
+        let source = concat!(
+            "use std.assert\n",
+            "nested: (c: Bool) -> Int = (c) => {\n",
+            "    mut v = 0\n",
+            "    if c {\n",
+            "        if 1 < 2 {\n",
+            "            v = 1\n",
+            "        } else {\n",
+            "            v = 2\n",
+            "        }\n",
+            "    } else {\n",
+            "        v = 3\n",
+            "    }\n",
+            "    v\n",
+            "}\n",
+            "assert.assert(nested(true) == 1, \"nested if/else selects inner true\")\n",
+        );
+
+        // Act
+        assert_native_matches_vm(source, "nested_if");
+
+        // Assert
+        // assert_native_matches_vm 已断言 native/VM 的 O0 与 O2 结果一致。
+    }
+
+    #[test]
+    fn test_native_nested_while_matches_vm() {
+        // Arrange
+        let source = concat!(
+            "use std.assert\n",
+            "nested: () -> Int = {\n",
+            "    mut i = 0\n",
+            "    mut sum = 0\n",
+            "    while i < 3 {\n",
+            "        mut j = 0\n",
+            "        while j < 2 {\n",
+            "            sum = sum + 1\n",
+            "            j = j + 1\n",
+            "        }\n",
+            "        i = i + 1\n",
+            "    }\n",
+            "    sum\n",
+            "}\n",
+            "assert.assert(nested() == 6, \"nested while executes 3 x 2\")\n",
+        );
+
+        // Act
+        assert_native_matches_vm(source, "nested_while");
+
+        // Assert
+        // assert_native_matches_vm 已断言 native/VM 的 O0 与 O2 结果一致。
+    }
+
+    #[test]
+    fn test_native_loop_local_update_matches_vm() {
+        // Arrange
+        let source = concat!(
+            "use std.assert\n",
+            "loop_update: () -> Int = {\n",
+            "    mut i = 0\n",
+            "    while i < 3 {\n",
+            "        i = i + 1\n",
+            "    }\n",
+            "    i\n",
+            "}\n",
+            "assert.assert(loop_update() == 3, \"loop Local update\")\n",
+        );
+
+        // Act
+        assert_native_matches_vm(source, "loop_update");
+
+        // Assert
+        // assert_native_matches_vm 已断言 native/VM 的 O0 与 O2 结果一致。
+    }
+
+    #[test]
+    fn test_native_cross_block_value_matches_vm() {
+        // Arrange
+        let source = concat!(
+            "use std.assert\n",
+            "cross: () -> Int = {\n",
+            "    v = 21\n",
+            "    mut i = 0\n",
+            "    while i < 2 {\n",
+            "        i = i + 1\n",
+            "    }\n",
+            "    v\n",
+            "}\n",
+            "assert.assert(cross() == 21, \"cross-block Value direct use\")\n",
+        );
+
+        // Act
+        assert_native_matches_vm(source, "cross_value");
+
+        // Assert
+        // assert_native_matches_vm 已断言 native/VM 的 O0 与 O2 结果一致。
+    }
+
     fn simple_value_module(
         ty: yaoxiang::frontend::core::sema::MonoType,
         duplicate: bool,
