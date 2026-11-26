@@ -397,7 +397,7 @@ mod fstring_tests;
 | `parse_meta_type_def` | MetaType 定义 | 待核实 | 本文 |
 | `parse_plain_init` | 普通初始化 | 待核实 | 本文 |
 
-配套：把 4 份"跳过配对括号"（`96-105` / `147-156` / `191-200` / `224-233`）收敛为 `ParserState` 上的唯一方法 `skip_balanced_parens()`，4 处改为调用它。
+配套：把 5 处「跳过配对括号」（`declarations.rs` 4 处 + `statements/types.rs:663`）收敛为 `ParserState` 上的唯一方法 `skip_balanced_parens()`。
 
 **净效果（设计判断）**：507 行 → 8 个单一职责函数 + 1 个前瞻工具；前瞻代码从 48 行降到约 12 行；类型层逻辑移出后（约 80 行）实际归属本文的部分约 300 行。
 
@@ -455,7 +455,7 @@ C5 等价面「合法程序的 AST 形状不变」：
 
 **阶段 4：补字面量错误路径。** 针对未覆盖路径表中的四类逐条加用例：四基数溢出、`checked_mul` 后继续消费分支、`scan_leading_dot` 整体、`\x` / `\u` 非法转义。
 
-**阶段 5：删除 `precedence_inline.rs`**（随死代码删除），并在 `pratt/tests/mod.rs` 补一条**接线自检**断言，防止再出现孤儿。
+**阶段 5：删除 `precedence_inline.rs`**（随死代码删除），并在 `parser/tests/wiring.rs` 补接线自检断言（`mod` ↔ 文件、无孤儿），防止再出现孤儿。
 
 ### 改一个运算符要改几处：前后对比
 
@@ -541,7 +541,7 @@ C5 等价面「合法程序的 AST 形状不变」：
 | 同上 | 全文 | 删除 7 个空壳的 `mod` 声明与 `pub use` 行 |
 | 同上 | 全文 | 删除 `pub use ... ::*;` 再导出块（`28-38`） |
 | `src/frontend/core/lexer/tests/` | 7 个空壳文件 | 删除文件 |
-| `src/frontend/core/parser/pratt/tests/mod.rs` | `4-7` | 新增接线自检断言 |
+| `src/frontend/core/parser/tests/wiring.rs` | 新增 | 接线自检断言（`mod` ↔ 文件、无孤儿） |
 | `src/frontend/core/parser/pratt/tests/precedence.rs` | `6-13` | 用真实结合性断言替换空转断言 |
 
 范式变更（阶段 2-4）：

@@ -8,7 +8,7 @@
 //! 门依据（coding-rules 7.2）：**病史门**。本仓发生过一次同类缺陷：`lexer/tests/`
 //! 整棵子树因 `lexer/mod.rs` 缺 `mod tests;` 而从未参与编译（实测 629 行 / 5 个
 //! 真实测试文件，见 05-frontend-paradigm.md「词法层只有一个测试文件在跑」）；
-//! 同一缺陷形态在本子树复现时已有一处：`tests/syntax_surface.rs` 的 8 个用例
+//! 同一缺陷形态在本子树复现时已有一处：`tests/syntax_surface.rs` 的 7 个用例
 //! 未被 `tests/mod.rs` 声明（本批接线）。换一个正确的排序/命名实现，本断言不会红
 //! ——它冻的是模块接线事实，不是实现选择。
 //!
