@@ -25,7 +25,7 @@ VM 的同类系统上运行它，既能算对结果，也能在出错时指出�
 
 - [x] **批次 1 固定构建环境并隔离 LLVM 依赖**（`5828eb46`、`5b14f1ff`）——可选 Cargo feature `llvm` 与 Inkwell 0.11.0、LLVM 18.1 的固定组合入库；CI 组合动作 `.github/actions/setup-llvm/action.yml` 安装 `llvm-18-dev` 并设置 `LLVM_SYS_181_PREFIX` 与 `LLVM_SYS_181_STRICT_VERSIONING`；`check-no-llvm` 作业验证默认通道不依赖 LLVM、原生请求不回退字节码；批次构建工具 `scripts/dev/scratch.py` 的 `build` 支持 `--features llvm`。缺链接器有独立用例（`test_native_missing_linker_preserves_output`）；LLVM 主版本不匹配由 `LLVM_SYS_181_STRICT_VERSIONING` 在构建期拒绝。
 - [x] **批次 2 交付第一个真实源程序**（`5828eb46`）——AOT-0/AOT-1 原型入库（`src/backends/llvm/`）：`yx build --emit exe` 走原生路径，`--emit bytecode` 走字节码路径，裸 `build` 仍默认生成 `.42`。判据在 `tests/integration/native_aot.rs`。原型限单文件直线标量子集，发布验收未完成。
-- [ ] **批次 3 接正式共享 IR，扩到控制流与多文件**——3.1/3.2/3.3 已收口（`fc6bcda3`、`9fea7a9d`、`6657fbfb`、`15c5807b`、`9ad5f603`、`8056c7ac`）：Linux 构建恢复、AOT 入口接到 `verify_ssa`；单文件的无 `Phi` 分支与循环已发射（break/continue、嵌套 if/else、嵌套 while、循环内 `Local`、跨块 `Value` 均与 VM 同结果）；多文件项目入口与文件身份已落地（B-i：库 API 项目入口，CLI 单入口文件），`Phi` 与多前驱 `Local` 汇合仍显式拒绝（见“阶段 1 支持集与拒绝边界”）。3.4 待开工：把等价账本的七条最小集固化为可执行判据。判据在 `tests/integration/native_aot.rs` 与 `src/backends/llvm/tests/analysis.rs`。
+- [ ] **批次 3 接正式共享 IR，扩到控制流与多文件**——3.1/3.2/3.3/3.4 已收口（`fc6bcda3`、`9fea7a9d`、`6657fbfb`、`15c5807b`、`9ad5f603`、`8056c7ac`、`4fb03302`、`3c046c8d`）：Linux 构建恢复、AOT 入口接到 `verify_ssa`；单文件的无 `Phi` 分支与循环已发射（break/continue、嵌套 if/else、嵌套 while、循环内 `Local`、跨块 `Value` 均与 VM 同结果）；多文件项目入口与文件身份已落地（B-i：库 API 项目入口，CLI 单入口文件），`Phi` 与多前驱 `Local` 汇合仍显式拒绝（见“阶段 1 支持集与拒绝边界”）。等价账本的七条最小集已有可执行门禁（机器可读账本 + 检查器 + CI 作业，见“等价账本（最小集，七条）”）。判据在 `tests/integration/native_aot.rs` 与 `src/backends/llvm/tests/analysis.rs`。
 - [ ] **批次 3.5 `Phi` 映射**——把需要 `Phi` 的汇合值从能力拒绝改为 `Phi`/边拷贝映射，并纳入等价账本；生产端已产出 `Phi`（见“前置”），AOT 侧在 AOT-3.1 显式拒绝，映射未开工。
 - [ ] **批次 4 链接原生运行时，再接 FFI 与并作**——未开始；原生运行时只有最小 C ABI（`src/backends/llvm/runtime.c`），没有 FFI 与并作。
 
@@ -174,14 +174,16 @@ AOT 不得在 L4 后端重建 SSA 或类型（见“开工前确认什么”）�
 | # | 条目 | 状态 | 判据 | 守的决策 |
 | --- | --- | --- | --- | --- |
 | 1 | 无 `Phi` 分支 | 已收口 | `test_native_no_phi_branch_executes_both_edges` | 支持集声明：无 `Phi` 的分支在支持集内，条件两条边都要发射 |
-| 2 | 无 `Phi` 循环与 `Local` 存储 | 已收口 | `test_native_no_phi_loop_matches_vm`、`test_native_loop_local_update_matches_vm` | `Local` 保持存储语义：顺序写与循环重复写合法 |
+| 2 | 无 `Phi` 循环与 `Local` 存储 | 已收口 | 可执行账本同时钉住两条判据：`test_native_no_phi_loop_matches_vm`、`test_native_loop_local_update_matches_vm` | `Local` 保持存储语义：顺序写与循环重复写合法 |
 | 3 | 多文件 init 次序 | 已收口 | `test_native_multifile_init_order_cli_and_api` | 入口身份：模块先执行 `__yx_module_init`，再调 Bin 入口 |
 | 4 | 循环内除零（E6001） | 已收口 | `test_native_loop_division_by_zero_matches_vm_diagnostic` | 失败路径与 VM 同诊断码与位置 |
 | 5 | `Phi` 映射边界 | 已收口（拒绝） | `test_native_phi_is_rejected_at_batch_35` | `Phi` 显式拒绝并指向批次 3.5，不静默产出 |
 | 6 | 合并 `Local` 边界 | 已收口（拒绝） | `test_native_local_merge_boundary_reports_aot_35` | 合并 `Local` 显式拒绝并指向批次 3.5，不外泄 LLVM 原文 |
 | 7 | 显式未知类型 | 已收口（拒绝） | `test_native_explicit_unknown_value_is_rejected` | 未知类型不静默猜测、不静默 Void |
 
-这七条是本阶段的最小交付边界：**已支持项不得移出集合换绿**——支持集只增不减，绿灯不得靠把已支持项移出集合获得。把七条固化为可执行判据在批次 3.4 落地。
+这七条是本阶段的最小交付边界：**已支持项不得移出集合换绿**——支持集只增不减，绿灯不得靠把已支持项移出集合获得。
+
+可执行账本是机器可读的 `tests/aot-ledger.json`，由 `scripts/ci/check-aot-ledger.py` 对账并接入 CI 的 LLVM 作业：账本的 target 是集成测试目标 `native_aot`，七条的 id 与状态以脚本内嵌期望机械核对，账本只存 id、状态与判据名。**决策文本以本表为唯一来源。** 后端单元判据（顺序写与循环重复写合法、单支臂合并只有合成 IR 级证据等）不在账本 target 内，仍见「支持集」小节。
 
 **裁决（2026-11-26）**：
 
