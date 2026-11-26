@@ -141,6 +141,60 @@ mod enabled {
     }
 
     #[test]
+    fn test_native_loop_division_by_zero_matches_vm_diagnostic() {
+        // Arrange：循环调用会除零的函数；无 Phi、无 std 调用、无合并 Local。
+        let source = concat!(
+            "broken: (n: Int) -> Int = (n) => 10 / n\n",
+            "main: () -> Void = {\n",
+            "    mut i = 1\n",
+            "    mut sum = 0\n",
+            "    while i < 3 {\n",
+            "        sum = sum + broken(i - 1)\n",
+            "        i = i + 1\n",
+            "    }\n",
+            "}\n",
+            "\n",
+            "main()\n",
+        );
+        let dir = TempDir::new().expect("loop division tempdir");
+        let source_path = dir.path().join("loop_div_zero.yx");
+        std::fs::write(&source_path, source).expect("write loop division fixture");
+        let o0_path = dir.path().join("loop_div_zero_o0");
+        let o2_path = dir.path().join("loop_div_zero_o2");
+
+        // Act
+        build_native_with_options(&source_path, &o0_path, false, false)
+            .unwrap_or_else(|e| panic!("build loop division O0: {e:#}"));
+        build_native_with_options(&source_path, &o2_path, false, true)
+            .unwrap_or_else(|e| panic!("build loop division O2: {e:#}"));
+        let vm = Command::new(test_yx_bin())
+            .arg("run")
+            .arg(&source_path)
+            .output()
+            .expect("run VM loop division fixture");
+        let native_o0 = run_native(&o0_path);
+        let native_o2 = run_native(&o2_path);
+
+        // Assert
+        for (optimize, native) in [("O0", &native_o0), ("O2", &native_o2)] {
+            assert_eq!(
+                native.status.code(),
+                Some(1),
+                "native {optimize} loop division exit: {}",
+                String::from_utf8_lossy(&native.stderr)
+            );
+            assert_eq!(
+                vm.status.code(),
+                Some(1),
+                "VM loop division exit: {}",
+                String::from_utf8_lossy(&vm.stderr)
+            );
+            assert_diagnostic(&native.stderr, "E6001", &source_path, 1);
+            assert_diagnostic(&vm.stderr, "E6001", &source_path, 1);
+        }
+    }
+
+    #[test]
     fn test_native_division_by_zero_reports_source() {
         // Arrange
         let source = concat!(
