@@ -214,6 +214,6 @@
   "src/explanation/index.md:en": "3dc95c6110cb38d3635600268ffe904a",
   "src/rfc/accepted/039-compiler-architecture.md:en": "73fdd55a9b09973c23710a606989b1c5",
   "src/rfc/accepted/027a-termination-explicit-measure.md:en": "fe67f308209f9a47a64c5fcf08be3425",
-  "src/dev/test-gate-census.md:en": "3ee2116e867b97903559f36ab431e63e",
+  "src/dev/test-gate-census.md:en": "e903c0931c439c15906449d59ec84634",
   "src/dev/design/llvm-aot-execution.md:en": "9f26b93e18d526f916ee0578c7d96b8b"
 }
