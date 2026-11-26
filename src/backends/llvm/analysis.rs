@@ -1,16 +1,18 @@
-//! AOT-1 的类型证据与能力边界。
+//! AOT-3.1 的值证据与能力边界。
 //!
-//! 当前共享 IR 的槽位可重复写入，且临时槽的 `Int(64)` 可能只是占位。
-//! 本模块只从函数签名、常量、指令结果和直接调用签名传播标量类型；
-//! 不能把类型证明交给 LLVM 猜测，也不能把本分析扩张成第二套通用 SSA。
+//! 只消费经 `verify_ssa` 校验的 `ModuleIR`：`Operand::Value` 的类型取
+//! `ValueInfo.ty`，`Local` 保持存储语义；本模块不重建 SSA 或类型，也不把
+//! 类型证明交给 LLVM 猜测。显式未知与不支持类型按能力边界返回带值 id 的诊断。
 
 use std::collections::{HashMap, HashSet};
 
 use anyhow::{anyhow, bail, Result};
 
 use crate::frontend::core::sema::MonoType;
-use crate::middle::ir::ir::{ConstValue, FunctionBody, Instruction, ModuleIR, Operand};
-use crate::middle::ir::verify::verify_loose;
+use crate::middle::ir::ir::{
+    BasicBlock, ConstValue, FunctionBody, Instruction, ModuleIR, Operand, ValueId,
+};
+use crate::middle::ir::verify::verify_ssa;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum ScalarType {
@@ -45,6 +47,27 @@ pub(super) struct OwnedSignature {
 #[derive(Clone, Default)]
 pub(super) struct FunctionAnalysis {
     pub(super) locals: HashMap<usize, ScalarType>,
+    pub(super) values: Vec<MonoType>,
+}
+
+impl FunctionAnalysis {
+    /// Operand::Value 的类型证据：只取函数值表，显式未知/不支持类型在这里
+    /// 转成带 ValueId 与原始类型的诊断；不在 AOT 侧猜类型。
+    pub(super) fn value_type(
+        &self,
+        id: ValueId,
+    ) -> Result<ScalarType> {
+        let ty = self
+            .values
+            .get(id.0 as usize)
+            .ok_or_else(|| anyhow!("ValueId({}) has no ValueInfo", id.0))?;
+        ScalarType::from_mono(ty).map_err(|e| {
+            anyhow!(
+                "ValueId({}) has unsupported type {ty:?} for native AOT: {e}",
+                id.0
+            )
+        })
+    }
 }
 
 pub(super) struct ModuleAnalysis {
@@ -59,7 +82,7 @@ pub(super) fn analyze_module(
     module: &ModuleIR,
     source_name: &str,
 ) -> Result<ModuleAnalysis> {
-    verify_loose(module).map_err(|e| anyhow!("native AOT IR verification failed: {e}"))?;
+    verify_ssa(module).map_err(|e| anyhow!("native AOT IR verification failed: {e}"))?;
     if !module.source_files.is_empty() || module.entry_function.is_some() {
         bail!("native AOT currently supports a single script file, not a multi-file project");
     }
@@ -130,6 +153,8 @@ pub(super) fn analyze_module(
         &[],
         ScalarType::Void,
         &init_instructions,
+        &[],
+        &[],
         source_name,
     )?;
     analysis
@@ -141,13 +166,18 @@ pub(super) fn analyze_module(
         .iter()
         .filter(|function| analysis.reachable.contains(&function.name))
     {
-        let FunctionBody::Code { blocks, .. } = &function.body else {
+        let FunctionBody::Code { blocks, values, .. } = &function.body else {
             unreachable!("type declarations were rejected above")
         };
         let instructions = blocks
             .iter()
             .flat_map(|block| block.instructions.iter())
             .collect::<Vec<_>>();
+        let value_types = values
+            .iter()
+            .map(|value| value.ty.clone())
+            .collect::<Vec<_>>();
+        let block_starts = block_starts(blocks);
         let signature = &analysis.signatures[&function.name];
         let body = analyze_stream(
             module,
@@ -158,6 +188,8 @@ pub(super) fn analyze_module(
             &signature.params,
             signature.return_type,
             &instructions,
+            &value_types,
+            &block_starts,
             source_name,
         )?;
         analysis.functions.insert(function.name.clone(), body);
@@ -170,6 +202,16 @@ pub(super) fn analyze_module(
         }
     }
     Ok(analysis)
+}
+
+fn block_starts(blocks: &[BasicBlock]) -> Vec<usize> {
+    let mut starts = Vec::with_capacity(blocks.len());
+    let mut flat = 0;
+    for block in blocks {
+        starts.push(flat);
+        flat += block.instructions.len();
+    }
+    starts
 }
 
 fn reachable_functions(
@@ -238,15 +280,33 @@ fn analyze_stream(
     params: &[ScalarType],
     return_type: ScalarType,
     instructions: &[&Instruction],
+    value_types: &[MonoType],
+    block_starts: &[usize],
     source_name: &str,
 ) -> Result<FunctionAnalysis> {
-    let mut result = FunctionAnalysis::default();
+    let mut result = FunctionAnalysis {
+        values: value_types.to_vec(),
+        ..FunctionAnalysis::default()
+    };
     for (index, ty) in params.iter().enumerate() {
         result.locals.insert(index, *ty);
     }
 
     let mut terminated = false;
     for (index, instruction) in instructions.iter().enumerate() {
+        // 每块独立检查终止性：前一 Ret/Jmp 不吞掉下一块。
+        if block_starts.contains(&index) {
+            terminated = false;
+        }
+        // lower 会在显式返回后追加一个仅含 Ret(None) 的无前驱落空块；
+        // 标量函数里它是不可达填充，不作为真实返回参与类型分析。
+        if index > 0
+            && index + 1 == instructions.len()
+            && matches!(instruction, Instruction::Ret { value: None, .. })
+            && return_type != ScalarType::Void
+        {
+            continue;
+        }
         let span = instruction.span();
         let unsupported = |detail: String| {
             anyhow!(
@@ -275,13 +335,23 @@ fn analyze_stream(
                      globals: &mut HashMap<usize, ScalarType>|
          -> Result<()> {
             match dst {
-                Operand::Local(slot) | Operand::Temp(slot) => {
+                Operand::Local(slot) => {
                     if let Some(old) = result.locals.insert(*slot, ty) {
                         if old != ty {
                             return Err(unsupported(format!(
                                 "slot {slot} changes type from {old:?} to {ty:?}"
                             )));
                         }
+                    }
+                    Ok(())
+                }
+                Operand::Value(id) => {
+                    let declared = result.value_type(*id)?;
+                    if declared != ty {
+                        return Err(unsupported(format!(
+                            "ValueId({}) type {declared:?} disagrees with instruction result {ty:?}",
+                            id.0
+                        )));
                     }
                     Ok(())
                 }
@@ -409,13 +479,29 @@ fn analyze_stream(
             Instruction::Drop { src, .. } => {
                 read(src, &result)?;
             }
+            Instruction::Phi { .. } => {
+                return Err(unsupported(
+                    "Phi mapping is deferred to batch 3.5 (AOT-3.5 boundary)".to_string(),
+                ));
+            }
+            Instruction::Jmp { .. } => {}
+            Instruction::JmpIf { cond, .. } | Instruction::JmpIfNot { cond, .. } => {
+                require_type(read(cond, &result)?, ScalarType::Bool, "branch condition")
+                    .map_err(|e| unsupported(e.to_string()))?;
+            }
             other => {
                 return Err(unsupported(format!(
                     "instruction outside the straight-line AOT-1 subset: {other:?}"
                 )))
             }
         }
-        if matches!(instruction, Instruction::Ret { .. }) {
+        if matches!(
+            instruction,
+            Instruction::Ret { .. }
+                | Instruction::Jmp { .. }
+                | Instruction::JmpIf { .. }
+                | Instruction::JmpIfNot { .. }
+        ) {
             terminated = true;
         }
     }
@@ -434,11 +520,12 @@ fn operand_type(
         Operand::Const(ConstValue::Bool(_)) => Ok(ScalarType::Bool),
         Operand::Const(ConstValue::Int(_)) => Ok(ScalarType::Int),
         Operand::Const(ConstValue::String(_)) => Ok(ScalarType::String),
-        Operand::Local(slot) | Operand::Temp(slot) => function
+        Operand::Local(slot) => function
             .locals
             .get(slot)
             .copied()
             .ok_or_else(|| anyhow!("local slot {slot} has no established type")),
+        Operand::Value(id) => function.value_type(*id),
         Operand::Arg(index) => params
             .get(*index)
             .copied()
@@ -467,4 +554,242 @@ fn require_type(
         bail!("{role} must be {expected:?}, got {actual:?}");
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::middle::ir::ir::{BasicBlock, FunctionIR, ValueInfo};
+    use crate::util::span::Span;
+
+    fn base_function(
+        return_type: MonoType,
+        values: Vec<ValueInfo>,
+        instructions: Vec<Instruction>,
+    ) -> FunctionIR {
+        FunctionIR {
+            name: "f".to_string(),
+            def: None,
+            params: vec![],
+            return_type,
+            generic_params: None,
+            body: FunctionBody::Code {
+                blocks: vec![BasicBlock {
+                    label: 0,
+                    instructions,
+                    successors: vec![],
+                }],
+                entry: 0,
+                locals: vec![],
+                values,
+                value_slots: vec![],
+            },
+        }
+    }
+
+    fn module_with(function: FunctionIR) -> ModuleIR {
+        let mut module = ModuleIR::default();
+        module.functions.push(function);
+        module.init.push(Instruction::Call {
+            dst: None,
+            func: Operand::Const(ConstValue::String("f".to_string())),
+            args: vec![],
+            def: None,
+            span: Span::dummy(),
+        });
+        module
+    }
+
+    fn load_value(
+        id: u32,
+        src: Operand,
+    ) -> Instruction {
+        Instruction::Load {
+            dst: Operand::Value(ValueId(id)),
+            src,
+            span: Span::dummy(),
+        }
+    }
+
+    fn ret_value(id: u32) -> Instruction {
+        Instruction::Ret {
+            value: Some(Operand::Value(ValueId(id))),
+            span: Span::dummy(),
+        }
+    }
+
+    #[test]
+    fn test_native_value_type_known_scalar_passes() {
+        // Arrange
+        let function = base_function(
+            MonoType::Int(64),
+            vec![ValueInfo {
+                ty: MonoType::Int(64),
+                debug_name: None,
+                defining_block: 0,
+            }],
+            vec![
+                load_value(0, Operand::Const(ConstValue::Int(1))),
+                ret_value(0),
+            ],
+        );
+        let module = module_with(function);
+
+        // Act
+        let analysis = analyze_module(&module, "value_known.yx")
+            .expect("known scalar value should be accepted");
+
+        // Assert
+        assert_eq!(
+            analysis.functions["f"].values[0],
+            MonoType::Int(64),
+            "known value type must be carried from ValueInfo"
+        );
+    }
+
+    #[test]
+    fn test_native_explicit_unknown_value_is_rejected() {
+        // Arrange
+        let function = base_function(
+            MonoType::Int(64),
+            vec![ValueInfo {
+                ty: MonoType::TypeRef("?".to_string()),
+                debug_name: None,
+                defining_block: 0,
+            }],
+            vec![
+                load_value(0, Operand::Const(ConstValue::Int(1))),
+                ret_value(0),
+            ],
+        );
+        let module = module_with(function);
+
+        // Act
+        let error = analyze_module(&module, "value_unknown.yx")
+            .err()
+            .expect("explicit unknown value type must be rejected");
+
+        // Assert
+        let detail = error.to_string();
+        assert!(
+            detail.contains("ValueId(0)") && detail.contains("TypeRef(\"?\")"),
+            "diagnostic must include value id and original type: {detail}"
+        );
+    }
+
+    #[test]
+    fn test_native_unsupported_value_type_is_rejected() {
+        // Arrange
+        let function = base_function(
+            MonoType::Int(64),
+            vec![ValueInfo {
+                ty: MonoType::Float(64),
+                debug_name: None,
+                defining_block: 0,
+            }],
+            vec![
+                load_value(0, Operand::Const(ConstValue::Int(1))),
+                ret_value(0),
+            ],
+        );
+        let module = module_with(function);
+
+        // Act
+        let error = analyze_module(&module, "value_unsupported.yx")
+            .err()
+            .expect("unsupported value type must be rejected");
+
+        // Assert
+        let detail = error.to_string();
+        assert!(
+            detail.contains("ValueId(0)") && detail.contains("Float(64)"),
+            "diagnostic must include value id and unsupported type: {detail}"
+        );
+    }
+
+    #[test]
+    fn test_native_multi_definition_value_is_rejected_by_verify_ssa() {
+        // Arrange
+        let function = base_function(
+            MonoType::Int(64),
+            vec![ValueInfo {
+                ty: MonoType::Int(64),
+                debug_name: None,
+                defining_block: 0,
+            }],
+            vec![
+                load_value(0, Operand::Const(ConstValue::Int(1))),
+                load_value(0, Operand::Const(ConstValue::Int(2))),
+                ret_value(0),
+            ],
+        );
+        let module = module_with(function);
+
+        // Act
+        let error = analyze_module(&module, "value_double.yx")
+            .err()
+            .expect("multi-definition value must fail SSA entry verification");
+
+        // Assert
+        assert!(
+            error.to_string().contains("verification"),
+            "diagnostic must identify SSA verification: {error}"
+        );
+    }
+
+    #[test]
+    fn test_native_phi_is_rejected_with_batch_35_boundary() {
+        // Arrange: block 0 jumps to block 1, which contains a valid Phi.
+        let function = FunctionIR {
+            name: "f".to_string(),
+            def: None,
+            params: vec![],
+            return_type: MonoType::Int(64),
+            generic_params: None,
+            body: FunctionBody::Code {
+                blocks: vec![
+                    BasicBlock {
+                        label: 0,
+                        instructions: vec![Instruction::Jmp {
+                            target: 1,
+                            span: Span::dummy(),
+                        }],
+                        successors: vec![1],
+                    },
+                    BasicBlock {
+                        label: 1,
+                        instructions: vec![
+                            Instruction::Phi {
+                                dst: Operand::Value(ValueId(0)),
+                                incoming: vec![(0, Operand::Const(ConstValue::Int(1)))],
+                                span: Span::dummy(),
+                            },
+                            ret_value(0),
+                        ],
+                        successors: vec![],
+                    },
+                ],
+                entry: 0,
+                locals: vec![],
+                values: vec![ValueInfo {
+                    ty: MonoType::Int(64),
+                    debug_name: None,
+                    defining_block: 1,
+                }],
+                value_slots: vec![],
+            },
+        };
+        let module = module_with(function);
+
+        // Act
+        let error = analyze_module(&module, "phi.yx")
+            .err()
+            .expect("Phi must remain outside AOT-3.1");
+
+        // Assert
+        assert!(
+            error.to_string().contains("3.5"),
+            "diagnostic must name the AOT-3.5 boundary: {error}"
+        );
+    }
 }

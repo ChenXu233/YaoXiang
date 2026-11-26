@@ -45,7 +45,12 @@ mod enabled {
     use std::process::{Command, Output};
 
     use tempfile::TempDir;
+    use yaoxiang::backends::llvm::compile_ir_to_executable;
     use yaoxiang::build_native_with_options;
+    use yaoxiang::middle::ir::ir::{
+        BasicBlock, ConstValue, FunctionBody, FunctionIR, Instruction, ModuleIR, Operand,
+    };
+    use yaoxiang::util::span::Span;
 
     fn build(
         source: &str,
@@ -219,8 +224,8 @@ mod enabled {
     }
 
     #[test]
-    fn test_native_unsupported_control_flow_preserves_output() {
-        // Arrange
+    fn test_native_unsupported_merge_value_preserves_output() {
+        // Arrange：跨分支合并值仍受 Phi/未知类型边界约束，不是无 Phi 分支。
         let dir = TempDir::new().expect("native test tempdir");
         let source_path = dir.path().join("branch.yx");
         let output_path = dir.path().join("branch");
@@ -237,7 +242,7 @@ mod enabled {
 
         // Act
         let error = build_native_with_options(&source_path, &output_path, false, false)
-            .expect_err("branches are outside AOT-1");
+            .expect_err("merge values outside the no-Phi branch subset must be rejected");
 
         // Assert
         assert!(
@@ -362,6 +367,401 @@ mod enabled {
         assert!(
             run_native(&executable).status.success(),
             "default native output should run"
+        );
+    }
+
+    fn build_synthetic(
+        module: &ModuleIR,
+        stem: &str,
+    ) -> (TempDir, PathBuf) {
+        let dir = TempDir::new().expect("synthetic native tempdir");
+        let output = dir.path().join(stem);
+        let source = dir.path().join(format!("{stem}.yx"));
+        compile_ir_to_executable(module, &source.display().to_string(), &output, false)
+            .unwrap_or_else(|e| panic!("build synthetic native fixture {stem}: {e:#}"));
+        (dir, output)
+    }
+
+    fn value_module() -> ModuleIR {
+        let function = FunctionIR {
+            name: "value_destination".to_string(),
+            def: None,
+            params: vec![],
+            return_type: yaoxiang::frontend::core::sema::MonoType::Void,
+            generic_params: None,
+            body: FunctionBody::Code {
+                blocks: vec![BasicBlock {
+                    label: 0,
+                    instructions: vec![
+                        Instruction::Load {
+                            dst: Operand::Value(yaoxiang::middle::ir::ir::ValueId(0)),
+                            src: Operand::Const(ConstValue::Int(41)),
+                            span: Span::dummy(),
+                        },
+                        Instruction::Add {
+                            dst: Operand::Value(yaoxiang::middle::ir::ir::ValueId(1)),
+                            lhs: Operand::Value(yaoxiang::middle::ir::ir::ValueId(0)),
+                            rhs: Operand::Const(ConstValue::Int(1)),
+                            span: Span::dummy(),
+                        },
+                        Instruction::Eq {
+                            dst: Operand::Value(yaoxiang::middle::ir::ir::ValueId(2)),
+                            lhs: Operand::Value(yaoxiang::middle::ir::ir::ValueId(1)),
+                            rhs: Operand::Const(ConstValue::Int(42)),
+                            span: Span::dummy(),
+                        },
+                        Instruction::Call {
+                            dst: None,
+                            func: Operand::Const(ConstValue::String(
+                                "std.assert.assert".to_string(),
+                            )),
+                            args: vec![Operand::Value(yaoxiang::middle::ir::ir::ValueId(2))],
+                            def: None,
+                            span: Span::dummy(),
+                        },
+                        Instruction::Ret {
+                            value: None,
+                            span: Span::dummy(),
+                        },
+                    ],
+                    successors: vec![],
+                }],
+                entry: 0,
+                locals: vec![],
+                values: vec![
+                    yaoxiang::middle::ir::ir::ValueInfo {
+                        ty: yaoxiang::frontend::core::sema::MonoType::Int(64),
+                        debug_name: None,
+                        defining_block: 0,
+                    },
+                    yaoxiang::middle::ir::ir::ValueInfo {
+                        ty: yaoxiang::frontend::core::sema::MonoType::Int(64),
+                        debug_name: None,
+                        defining_block: 0,
+                    },
+                    yaoxiang::middle::ir::ir::ValueInfo {
+                        ty: yaoxiang::frontend::core::sema::MonoType::Bool,
+                        debug_name: None,
+                        defining_block: 0,
+                    },
+                ],
+                value_slots: vec![],
+            },
+        };
+        let mut module = ModuleIR::default();
+        module.functions.push(function);
+        module.init.push(Instruction::Call {
+            dst: None,
+            func: Operand::Const(ConstValue::String("value_destination".to_string())),
+            args: vec![],
+            def: None,
+            span: Span::dummy(),
+        });
+        module
+    }
+
+    fn branch_module(condition: bool) -> ModuleIR {
+        let function = FunctionIR {
+            name: "branch".to_string(),
+            def: None,
+            params: vec![yaoxiang::frontend::core::sema::MonoType::Bool],
+            return_type: yaoxiang::frontend::core::sema::MonoType::Void,
+            generic_params: None,
+            body: FunctionBody::Code {
+                blocks: vec![
+                    BasicBlock {
+                        label: 0,
+                        instructions: vec![Instruction::JmpIfNot {
+                            cond: Operand::Arg(0),
+                            target: 3,
+                            span: Span::dummy(),
+                        }],
+                        successors: vec![1, 2],
+                    },
+                    BasicBlock {
+                        label: 1,
+                        instructions: vec![
+                            Instruction::Call {
+                                dst: None,
+                                func: Operand::Const(ConstValue::String(
+                                    "std.assert.assert".to_string(),
+                                )),
+                                args: vec![Operand::Const(ConstValue::Bool(true))],
+                                def: None,
+                                span: Span::dummy(),
+                            },
+                            Instruction::Ret {
+                                value: None,
+                                span: Span::dummy(),
+                            },
+                        ],
+                        successors: vec![],
+                    },
+                    BasicBlock {
+                        label: 2,
+                        instructions: vec![
+                            Instruction::Call {
+                                dst: None,
+                                func: Operand::Const(ConstValue::String(
+                                    "std.assert.assert".to_string(),
+                                )),
+                                args: vec![Operand::Const(ConstValue::Bool(false))],
+                                def: None,
+                                span: Span::dummy(),
+                            },
+                            Instruction::Ret {
+                                value: None,
+                                span: Span::dummy(),
+                            },
+                        ],
+                        successors: vec![],
+                    },
+                ],
+                entry: 0,
+                locals: vec![],
+                values: vec![],
+                value_slots: vec![],
+            },
+        };
+        let mut module = ModuleIR::default();
+        module.functions.push(function);
+        module.init.push(Instruction::Call {
+            dst: None,
+            func: Operand::Const(ConstValue::String("branch".to_string())),
+            args: vec![Operand::Const(ConstValue::Bool(condition))],
+            def: None,
+            span: Span::dummy(),
+        });
+        module
+    }
+
+    #[test]
+    fn test_native_value_destination_readback() {
+        // Arrange
+        let module = value_module();
+
+        // Act
+        let (_dir, executable) = build_synthetic(&module, "value_destination");
+        let output = run_native(&executable);
+
+        // Assert
+        assert!(
+            output.status.success(),
+            "Value 产出/读回链路应运行成功：{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    #[test]
+    fn test_native_no_phi_loop_matches_vm() {
+        // Arrange：循环只有 Local 存储与 Int/Bool 值，不产生 Phi。
+        let source = concat!(
+            "main: () -> Void = {\n",
+            "    mut i = 0\n",
+            "    while i < 3 {\n",
+            "        i = i + 1\n",
+            "    }\n",
+            "}\n",
+            "\n",
+            "main()\n",
+        );
+        let (_vm_dir, source_path, _) = build(source, "no_phi_loop_vm", false);
+
+        // Act
+        let vm = Command::new(test_yx_bin())
+            .arg("run")
+            .arg(&source_path)
+            .output()
+            .expect("run VM no-Phi loop fixture");
+
+        // Assert
+        for optimize in [false, true] {
+            let (_dir, _source, executable) = build(source, "no_phi_loop", optimize);
+            let native = run_native(&executable);
+            assert!(
+                native.status.success(),
+                "native no-Phi loop failed (optimize={optimize}): {}",
+                String::from_utf8_lossy(&native.stderr)
+            );
+            assert_eq!(
+                native.status.success(),
+                vm.status.success(),
+                "native and VM must agree on no-Phi loop (optimize={optimize}): native={}, vm={}",
+                String::from_utf8_lossy(&native.stderr),
+                String::from_utf8_lossy(&vm.stderr)
+            );
+        }
+    }
+
+    #[test]
+    fn test_native_no_phi_branch_executes_both_edges() {
+        // Arrange / Act / Assert：条件真走 fallthrough（assert true），
+        // 条件假走 target（assert false）。
+        for (condition, expected_success) in [(true, true), (false, false)] {
+            let module = branch_module(condition);
+            let (_dir, executable) = build_synthetic(&module, "branch");
+            let output = run_native(&executable);
+            assert_eq!(
+                output.status.success(),
+                expected_success,
+                "condition={condition} 的无 Phi 分支应走预期边：{}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+        }
+    }
+
+    fn simple_value_module(
+        ty: yaoxiang::frontend::core::sema::MonoType,
+        duplicate: bool,
+    ) -> ModuleIR {
+        let mut instructions = vec![Instruction::Load {
+            dst: Operand::Value(yaoxiang::middle::ir::ir::ValueId(0)),
+            src: Operand::Const(ConstValue::Int(1)),
+            span: Span::dummy(),
+        }];
+        if duplicate {
+            instructions.push(Instruction::Load {
+                dst: Operand::Value(yaoxiang::middle::ir::ir::ValueId(0)),
+                src: Operand::Const(ConstValue::Int(2)),
+                span: Span::dummy(),
+            });
+        }
+        instructions.push(Instruction::Ret {
+            value: Some(Operand::Value(yaoxiang::middle::ir::ir::ValueId(0))),
+            span: Span::dummy(),
+        });
+        let function = FunctionIR {
+            name: "value".to_string(),
+            def: None,
+            params: vec![],
+            return_type: yaoxiang::frontend::core::sema::MonoType::Int(64),
+            generic_params: None,
+            body: FunctionBody::Code {
+                blocks: vec![BasicBlock {
+                    label: 0,
+                    instructions,
+                    successors: vec![],
+                }],
+                entry: 0,
+                locals: vec![],
+                values: vec![yaoxiang::middle::ir::ir::ValueInfo {
+                    ty,
+                    debug_name: None,
+                    defining_block: 0,
+                }],
+                value_slots: vec![],
+            },
+        };
+        let mut module = ModuleIR::default();
+        module.functions.push(function);
+        module.init.push(Instruction::Call {
+            dst: None,
+            func: Operand::Const(ConstValue::String("value".to_string())),
+            args: vec![],
+            def: None,
+            span: Span::dummy(),
+        });
+        module
+    }
+
+    fn phi_module() -> ModuleIR {
+        let function = FunctionIR {
+            name: "phi".to_string(),
+            def: None,
+            params: vec![],
+            return_type: yaoxiang::frontend::core::sema::MonoType::Int(64),
+            generic_params: None,
+            body: FunctionBody::Code {
+                blocks: vec![
+                    BasicBlock {
+                        label: 0,
+                        instructions: vec![Instruction::Jmp {
+                            target: 1,
+                            span: Span::dummy(),
+                        }],
+                        successors: vec![1],
+                    },
+                    BasicBlock {
+                        label: 1,
+                        instructions: vec![
+                            Instruction::Phi {
+                                dst: Operand::Value(yaoxiang::middle::ir::ir::ValueId(0)),
+                                incoming: vec![(0, Operand::Const(ConstValue::Int(1)))],
+                                span: Span::dummy(),
+                            },
+                            Instruction::Ret {
+                                value: Some(Operand::Value(yaoxiang::middle::ir::ir::ValueId(0))),
+                                span: Span::dummy(),
+                            },
+                        ],
+                        successors: vec![],
+                    },
+                ],
+                entry: 0,
+                locals: vec![],
+                values: vec![yaoxiang::middle::ir::ir::ValueInfo {
+                    ty: yaoxiang::frontend::core::sema::MonoType::Int(64),
+                    debug_name: None,
+                    defining_block: 1,
+                }],
+                value_slots: vec![],
+            },
+        };
+        let mut module = ModuleIR::default();
+        module.functions.push(function);
+        module.init.push(Instruction::Call {
+            dst: None,
+            func: Operand::Const(ConstValue::String("phi".to_string())),
+            args: vec![],
+            def: None,
+            span: Span::dummy(),
+        });
+        module
+    }
+
+    fn compile_error(module: &ModuleIR) -> String {
+        let dir = TempDir::new().expect("synthetic error tempdir");
+        let output = dir.path().join("rejected");
+        let source = dir.path().join("rejected.yx");
+        compile_ir_to_executable(module, &source.display().to_string(), &output, false)
+            .expect_err("synthetic IR must be rejected")
+            .to_string()
+    }
+
+    #[test]
+    fn test_native_value_evidence_and_ssa_boundaries() {
+        // Arrange / Act / Assert：显式未知、不支持类型、多定义、Phi 四条边界。
+        let unknown = compile_error(&simple_value_module(
+            yaoxiang::frontend::core::sema::MonoType::TypeRef("?".to_string()),
+            false,
+        ));
+        assert!(
+            unknown.contains("ValueId(0)") && unknown.contains("TypeRef(\"?\")"),
+            "unknown value diagnostic must name id/type: {unknown}"
+        );
+
+        let unsupported = compile_error(&simple_value_module(
+            yaoxiang::frontend::core::sema::MonoType::Float(64),
+            false,
+        ));
+        assert!(
+            unsupported.contains("ValueId(0)") && unsupported.contains("Float(64)"),
+            "unsupported value diagnostic must name id/type: {unsupported}"
+        );
+
+        let duplicate = compile_error(&simple_value_module(
+            yaoxiang::frontend::core::sema::MonoType::Int(64),
+            true,
+        ));
+        assert!(
+            duplicate.contains("verification"),
+            "multi-definition must fail SSA entry verification: {duplicate}"
+        );
+
+        let phi = compile_error(&phi_module());
+        assert!(
+            phi.contains("3.5"),
+            "Phi must be rejected with the AOT-3.5 boundary: {phi}"
         );
     }
 }

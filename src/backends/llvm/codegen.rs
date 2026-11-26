@@ -1,4 +1,5 @@
-//! 已证明子集的 LLVM 发射。类型与能力判定全部来自 `analysis`。
+//! 已证明子集的 LLVM 发射。类型与能力判定全部来自 `analysis`；
+//! 值走独立映射，控制流按 `BasicBlock` 建 LLVM 基本块（Phi 仍由 analysis 拒绝）。
 
 use std::collections::HashMap;
 use std::fmt::Display;
@@ -11,7 +12,9 @@ use inkwell::values::{
 };
 use inkwell::{AddressSpace, IntPredicate};
 
-use crate::middle::ir::ir::{ConstValue, FunctionBody, FunctionIR, Instruction, ModuleIR, Operand};
+use crate::middle::ir::ir::{
+    BasicBlock, ConstValue, FunctionBody, FunctionIR, Instruction, ModuleIR, Operand,
+};
 use crate::util::span::Span;
 
 use super::analysis::{FunctionAnalysis, ModuleAnalysis, OwnedSignature, ScalarType};
@@ -113,10 +116,6 @@ impl<'ctx> Emitter<'ctx> {
             let FunctionBody::Code { blocks, .. } = &function.body else {
                 bail!("type declaration reached LLVM emission")
             };
-            let instructions = blocks
-                .iter()
-                .flat_map(|block| block.instructions.iter())
-                .collect::<Vec<_>>();
             let signature = OwnedSignature {
                 params: function
                     .params
@@ -126,19 +125,23 @@ impl<'ctx> Emitter<'ctx> {
                 return_type: ScalarType::from_mono(&function.return_type)?,
             };
             let value = self.functions[&function.name];
-            self.emit_stream(
+            self.emit_cfg(
                 value,
                 &signature,
-                &instructions,
+                blocks,
                 &self.analysis.functions[&function.name].clone(),
             )?;
         }
 
-        let init_refs = ir.init.iter().collect::<Vec<_>>();
-        self.emit_stream(
+        let init_block = BasicBlock {
+            label: 0,
+            instructions: ir.init.clone(),
+            successors: Vec::new(),
+        };
+        self.emit_cfg(
             init,
             &init_signature,
-            &init_refs,
+            std::slice::from_ref(&init_block),
             &self.analysis.functions["__yx_module_init"].clone(),
         )?;
         self.emit_c_main(init)?;
@@ -192,17 +195,42 @@ impl<'ctx> Emitter<'ctx> {
         Ok(())
     }
 
-    fn emit_stream(
+    fn emit_cfg(
         &mut self,
         function_value: FunctionValue<'ctx>,
         signature: &OwnedSignature,
-        instructions: &[&Instruction],
+        blocks: &[BasicBlock],
         analysis: &FunctionAnalysis,
     ) -> Result<()> {
-        let entry = self.context.append_basic_block(function_value, "entry");
-        self.builder.position_at_end(entry);
+        if blocks.is_empty() {
+            let entry = self.context.append_basic_block(function_value, "entry");
+            self.builder.position_at_end(entry);
+            if signature.return_type == ScalarType::Void {
+                llvm(self.builder.build_return(None))?;
+                return Ok(());
+            }
+            bail!("scalar function without blocks reached LLVM emission")
+        }
+
+        let mut llvm_blocks = Vec::with_capacity(blocks.len());
+        for block in blocks {
+            llvm_blocks.push(
+                self.context
+                    .append_basic_block(function_value, &format!("bb{}", block.label)),
+            );
+        }
+        let mut flat_to_block = HashMap::new();
+        let mut flat = 0;
+        for (ordinal, block) in blocks.iter().enumerate() {
+            for _ in &block.instructions {
+                flat_to_block.insert(flat, ordinal);
+                flat += 1;
+            }
+        }
+
+        self.builder.position_at_end(llvm_blocks[0]);
         let mut locals = HashMap::new();
-        let mut terminated = false;
+        let mut values = HashMap::new();
         for (index, ty) in signature.params.iter().enumerate() {
             let repr = function_value.get_nth_param(index as u32);
             let value = if *ty == ScalarType::Void {
@@ -216,218 +244,307 @@ impl<'ctx> Emitter<'ctx> {
             self.write_local(&mut locals, &Operand::Local(index), value, analysis)?;
         }
 
-        for instruction in instructions {
-            if terminated {
+        for (ordinal, block) in blocks.iter().enumerate() {
+            self.builder.position_at_end(llvm_blocks[ordinal]);
+            let mut terminated = false;
+            // lower 在显式返回后追加的仅含 Ret(None) 无前驱块是标量函数的
+            // 不可达填充；生成 unreachable，不产生类型错误的 ret void。
+            if ordinal > 0
+                && signature.return_type != ScalarType::Void
+                && block.instructions.len() == 1
+                && matches!(block.instructions[0], Instruction::Ret { value: None, .. })
+            {
+                llvm(self.builder.build_unreachable())?;
                 continue;
             }
-            match instruction {
-                Instruction::Move { dst, src, .. }
-                | Instruction::Load { dst, src, .. }
-                | Instruction::Store { dst, src, .. } => {
-                    let value = self.read(&locals, src, analysis)?;
-                    self.write(&mut locals, dst, value, analysis)?;
-                }
-                Instruction::Add {
-                    dst,
-                    lhs,
-                    rhs,
-                    span,
-                }
-                | Instruction::Sub {
-                    dst,
-                    lhs,
-                    rhs,
-                    span,
-                }
-                | Instruction::Mul {
-                    dst,
-                    lhs,
-                    rhs,
-                    span,
-                }
-                | Instruction::Div {
-                    dst,
-                    lhs,
-                    rhs,
-                    span,
-                }
-                | Instruction::Mod {
-                    dst,
-                    lhs,
-                    rhs,
-                    span,
-                } => {
-                    let left = self
-                        .read(&locals, lhs, analysis)?
-                        .repr
-                        .unwrap()
-                        .into_int_value();
-                    let right = self
-                        .read(&locals, rhs, analysis)?
-                        .repr
-                        .unwrap()
-                        .into_int_value();
-                    let runtime = match instruction {
-                        Instruction::Add { .. } => self.runtime.add,
-                        Instruction::Sub { .. } => self.runtime.sub,
-                        Instruction::Mul { .. } => self.runtime.mul,
-                        Instruction::Div { .. } => self.runtime.div,
-                        Instruction::Mod { .. } => self.runtime.rem,
-                        _ => unreachable!(),
-                    };
-                    let mut args = vec![left.into(), right.into()];
-                    args.extend(self.location_args(*span)?);
-                    let call = llvm(self.builder.build_call(runtime, &args, "checked"))?;
-                    let value = Value {
-                        ty: ScalarType::Int,
-                        repr: call.try_as_basic_value().basic(),
-                    };
-                    self.write(&mut locals, dst, value, analysis)?;
-                }
-                Instruction::Neg { dst, src, span } => {
-                    let value = self
-                        .read(&locals, src, analysis)?
-                        .repr
-                        .unwrap()
-                        .into_int_value();
-                    let mut args = vec![value.into()];
-                    args.extend(self.location_args(*span)?);
-                    let call = llvm(self.builder.build_call(
-                        self.runtime.neg,
-                        &args,
-                        "checked_neg",
-                    ))?;
-                    let result = Value {
-                        ty: ScalarType::Int,
-                        repr: call.try_as_basic_value().basic(),
-                    };
-                    self.write(&mut locals, dst, result, analysis)?;
-                }
-                Instruction::Not { dst, src, .. } => {
-                    let value = self
-                        .read(&locals, src, analysis)?
-                        .repr
-                        .unwrap()
-                        .into_int_value();
-                    let result = Value {
-                        ty: ScalarType::Bool,
-                        repr: Some(llvm(self.builder.build_not(value, "not"))?.into()),
-                    };
-                    self.write(&mut locals, dst, result, analysis)?;
-                }
-                Instruction::Eq { dst, lhs, rhs, .. }
-                | Instruction::Ne { dst, lhs, rhs, .. }
-                | Instruction::Lt { dst, lhs, rhs, .. }
-                | Instruction::Le { dst, lhs, rhs, .. }
-                | Instruction::Gt { dst, lhs, rhs, .. }
-                | Instruction::Ge { dst, lhs, rhs, .. } => {
-                    let left = self
-                        .read(&locals, lhs, analysis)?
-                        .repr
-                        .unwrap()
-                        .into_int_value();
-                    let right = self
-                        .read(&locals, rhs, analysis)?
-                        .repr
-                        .unwrap()
-                        .into_int_value();
-                    let predicate = match instruction {
-                        Instruction::Eq { .. } => IntPredicate::EQ,
-                        Instruction::Ne { .. } => IntPredicate::NE,
-                        Instruction::Lt { .. } => IntPredicate::SLT,
-                        Instruction::Le { .. } => IntPredicate::SLE,
-                        Instruction::Gt { .. } => IntPredicate::SGT,
-                        Instruction::Ge { .. } => IntPredicate::SGE,
-                        _ => unreachable!(),
-                    };
-                    let compared = llvm(
-                        self.builder
-                            .build_int_compare(predicate, left, right, "compare"),
-                    )?;
-                    self.write(
-                        &mut locals,
-                        dst,
-                        Value {
-                            ty: ScalarType::Bool,
-                            repr: Some(compared.into()),
-                        },
-                        analysis,
-                    )?;
-                }
-                Instruction::Call {
-                    dst,
-                    func,
-                    args,
-                    def,
-                    span,
-                } => {
-                    let values = args
-                        .iter()
-                        .map(|arg| self.read(&locals, arg, analysis))
-                        .collect::<Result<Vec<_>>>()?;
-                    let Operand::Const(ConstValue::String(name)) = func else {
-                        bail!("indirect call reached LLVM emission")
-                    };
-                    if name == "std.assert.assert" {
-                        self.emit_assert(values, *span)?;
-                        if let Some(dst) = dst {
-                            self.write(&mut locals, dst, Value::void(), analysis)?;
-                        }
-                    } else {
-                        let resolved = def
-                            .and_then(|id| self.analysis.definitions.get(&id.0))
-                            .unwrap_or(name);
-                        let target = self.functions[resolved];
-                        let return_type = self.analysis.signatures[resolved].return_type;
-                        let call_args = values
-                            .iter()
-                            .filter_map(|value| value.repr.map(Into::into))
-                            .collect::<Vec<BasicMetadataValueEnum<'_>>>();
-                        let call = llvm(self.builder.build_call(target, &call_args, "call"))?;
-                        if let Some(dst) = dst {
-                            let returned = if return_type == ScalarType::Void {
-                                Value::void()
-                            } else {
-                                Value {
-                                    ty: return_type,
-                                    repr: call.try_as_basic_value().basic(),
-                                }
-                            };
-                            self.write(&mut locals, dst, returned, analysis)?;
-                        }
-                    }
-                }
-                Instruction::Ret { value, .. } => {
-                    if signature.return_type == ScalarType::Void {
-                        llvm(self.builder.build_return(None))?;
-                    } else {
-                        let returned = self.read(
-                            &locals,
-                            value.as_ref().expect("analysis checked scalar return"),
-                            analysis,
+            for instruction in &block.instructions {
+                match instruction {
+                    Instruction::Jmp { target, .. } => {
+                        let target_block = flat_to_block
+                            .get(target)
+                            .copied()
+                            .ok_or_else(|| anyhow!("jump target {target} has no basic block"))?;
+                        llvm(
+                            self.builder
+                                .build_unconditional_branch(llvm_blocks[target_block]),
                         )?;
-                        llvm(self.builder.build_return(
-                            returned.repr.as_ref().map(|v| v as &dyn BasicValue<'_>),
-                        ))?;
+                        terminated = true;
+                        break;
+                    }
+                    Instruction::JmpIf { cond, target, .. }
+                    | Instruction::JmpIfNot { cond, target, .. } => {
+                        let target_block = flat_to_block
+                            .get(target)
+                            .copied()
+                            .ok_or_else(|| anyhow!("jump target {target} has no basic block"))?;
+                        if blocks.get(ordinal + 1).is_none() {
+                            bail!("conditional branch at last block has no fallthrough");
+                        }
+                        let fallthrough_ordinal = ordinal + 1;
+                        let condition = self
+                            .read(&locals, &values, cond, analysis)?
+                            .repr
+                            .ok_or_else(|| anyhow!("branch condition has no LLVM value"))?
+                            .into_int_value();
+                        if matches!(instruction, Instruction::JmpIf { .. }) {
+                            llvm(self.builder.build_conditional_branch(
+                                condition,
+                                llvm_blocks[target_block],
+                                llvm_blocks[fallthrough_ordinal],
+                            ))?;
+                        } else {
+                            llvm(self.builder.build_conditional_branch(
+                                condition,
+                                llvm_blocks[fallthrough_ordinal],
+                                llvm_blocks[target_block],
+                            ))?;
+                        }
+                        terminated = true;
+                        break;
+                    }
+                    _ => {
+                        if self.emit_instruction(
+                            &mut locals,
+                            &mut values,
+                            signature,
+                            instruction,
+                            analysis,
+                        )? {
+                            terminated = true;
+                            break;
+                        }
                     }
                 }
-                Instruction::Drop { .. } => {
-                    // AOT-1 的标量与只读字符串常量没有析构义务。
+            }
+            if !terminated {
+                if ordinal + 1 < blocks.len() {
+                    llvm(
+                        self.builder
+                            .build_unconditional_branch(llvm_blocks[ordinal + 1]),
+                    )?;
+                } else if signature.return_type == ScalarType::Void {
+                    llvm(self.builder.build_return(None))?;
+                } else {
+                    bail!("scalar function without return reached LLVM emission")
                 }
-                other => bail!("unsupported instruction reached LLVM emission: {other:?}"),
             }
-            if matches!(instruction, Instruction::Ret { .. }) {
-                terminated = true;
-            }
-        }
-
-        if entry.get_terminator().is_none() {
-            if signature.return_type != ScalarType::Void {
-                bail!("scalar function without return reached LLVM emission")
-            }
-            llvm(self.builder.build_return(None))?;
         }
         Ok(())
+    }
+
+    fn emit_instruction(
+        &mut self,
+        mut locals: &mut HashMap<usize, Slot<'ctx>>,
+        values: &mut HashMap<u32, Value<'ctx>>,
+        signature: &OwnedSignature,
+        instruction: &Instruction,
+        analysis: &FunctionAnalysis,
+    ) -> Result<bool> {
+        match instruction {
+            Instruction::Move { dst, src, .. }
+            | Instruction::Load { dst, src, .. }
+            | Instruction::Store { dst, src, .. } => {
+                let value = self.read(&*locals, values, src, analysis)?;
+                self.write(&mut *locals, values, dst, value, analysis)?;
+            }
+            Instruction::Add {
+                dst,
+                lhs,
+                rhs,
+                span,
+            }
+            | Instruction::Sub {
+                dst,
+                lhs,
+                rhs,
+                span,
+            }
+            | Instruction::Mul {
+                dst,
+                lhs,
+                rhs,
+                span,
+            }
+            | Instruction::Div {
+                dst,
+                lhs,
+                rhs,
+                span,
+            }
+            | Instruction::Mod {
+                dst,
+                lhs,
+                rhs,
+                span,
+            } => {
+                let left = self
+                    .read(&locals, values, lhs, analysis)?
+                    .repr
+                    .unwrap()
+                    .into_int_value();
+                let right = self
+                    .read(&locals, values, rhs, analysis)?
+                    .repr
+                    .unwrap()
+                    .into_int_value();
+                let runtime = match instruction {
+                    Instruction::Add { .. } => self.runtime.add,
+                    Instruction::Sub { .. } => self.runtime.sub,
+                    Instruction::Mul { .. } => self.runtime.mul,
+                    Instruction::Div { .. } => self.runtime.div,
+                    Instruction::Mod { .. } => self.runtime.rem,
+                    _ => unreachable!(),
+                };
+                let mut args = vec![left.into(), right.into()];
+                args.extend(self.location_args(*span)?);
+                let call = llvm(self.builder.build_call(runtime, &args, "checked"))?;
+                let value = Value {
+                    ty: ScalarType::Int,
+                    repr: call.try_as_basic_value().basic(),
+                };
+                self.write(&mut *locals, values, dst, value, analysis)?;
+            }
+            Instruction::Neg { dst, src, span } => {
+                let value = self
+                    .read(&locals, values, src, analysis)?
+                    .repr
+                    .unwrap()
+                    .into_int_value();
+                let mut args = vec![value.into()];
+                args.extend(self.location_args(*span)?);
+                let call = llvm(
+                    self.builder
+                        .build_call(self.runtime.neg, &args, "checked_neg"),
+                )?;
+                let result = Value {
+                    ty: ScalarType::Int,
+                    repr: call.try_as_basic_value().basic(),
+                };
+                self.write(&mut *locals, values, dst, result, analysis)?;
+            }
+            Instruction::Not { dst, src, .. } => {
+                let value = self
+                    .read(&locals, values, src, analysis)?
+                    .repr
+                    .unwrap()
+                    .into_int_value();
+                let result = Value {
+                    ty: ScalarType::Bool,
+                    repr: Some(llvm(self.builder.build_not(value, "not"))?.into()),
+                };
+                self.write(&mut *locals, values, dst, result, analysis)?;
+            }
+            Instruction::Eq { dst, lhs, rhs, .. }
+            | Instruction::Ne { dst, lhs, rhs, .. }
+            | Instruction::Lt { dst, lhs, rhs, .. }
+            | Instruction::Le { dst, lhs, rhs, .. }
+            | Instruction::Gt { dst, lhs, rhs, .. }
+            | Instruction::Ge { dst, lhs, rhs, .. } => {
+                let left = self
+                    .read(&locals, values, lhs, analysis)?
+                    .repr
+                    .unwrap()
+                    .into_int_value();
+                let right = self
+                    .read(&locals, values, rhs, analysis)?
+                    .repr
+                    .unwrap()
+                    .into_int_value();
+                let predicate = match instruction {
+                    Instruction::Eq { .. } => IntPredicate::EQ,
+                    Instruction::Ne { .. } => IntPredicate::NE,
+                    Instruction::Lt { .. } => IntPredicate::SLT,
+                    Instruction::Le { .. } => IntPredicate::SLE,
+                    Instruction::Gt { .. } => IntPredicate::SGT,
+                    Instruction::Ge { .. } => IntPredicate::SGE,
+                    _ => unreachable!(),
+                };
+                let compared = llvm(
+                    self.builder
+                        .build_int_compare(predicate, left, right, "compare"),
+                )?;
+                self.write(
+                    &mut locals,
+                    values,
+                    dst,
+                    Value {
+                        ty: ScalarType::Bool,
+                        repr: Some(compared.into()),
+                    },
+                    analysis,
+                )?;
+            }
+            Instruction::Call {
+                dst,
+                func,
+                args,
+                def,
+                span,
+            } => {
+                let call_values = args
+                    .iter()
+                    .map(|arg| self.read(&*locals, values, arg, analysis))
+                    .collect::<Result<Vec<_>>>()?;
+                let Operand::Const(ConstValue::String(name)) = func else {
+                    bail!("indirect call reached LLVM emission")
+                };
+                if name == "std.assert.assert" {
+                    self.emit_assert(call_values, *span)?;
+                    if let Some(dst) = dst {
+                        self.write(&mut *locals, values, dst, Value::void(), analysis)?;
+                    }
+                } else {
+                    let resolved = def
+                        .and_then(|id| self.analysis.definitions.get(&id.0))
+                        .unwrap_or(name);
+                    let target = self.functions[resolved];
+                    let return_type = self.analysis.signatures[resolved].return_type;
+                    let call_args = call_values
+                        .iter()
+                        .filter_map(|value| value.repr.map(Into::into))
+                        .collect::<Vec<BasicMetadataValueEnum<'_>>>();
+                    let call = llvm(self.builder.build_call(target, &call_args, "call"))?;
+                    if let Some(dst) = dst {
+                        let returned = if return_type == ScalarType::Void {
+                            Value::void()
+                        } else {
+                            Value {
+                                ty: return_type,
+                                repr: call.try_as_basic_value().basic(),
+                            }
+                        };
+                        self.write(&mut *locals, values, dst, returned, analysis)?;
+                    }
+                }
+            }
+            Instruction::Ret { value, .. } => {
+                if signature.return_type == ScalarType::Void {
+                    llvm(self.builder.build_return(None))?;
+                } else {
+                    let returned = self.read(
+                        &locals,
+                        values,
+                        value.as_ref().expect("analysis checked scalar return"),
+                        analysis,
+                    )?;
+                    llvm(
+                        self.builder
+                            .build_return(returned.repr.as_ref().map(|v| v as &dyn BasicValue<'_>)),
+                    )?;
+                }
+            }
+            Instruction::Drop { .. } => {
+                // AOT-1 的标量与只读字符串常量没有析构义务。
+            }
+            Instruction::Phi { .. } => {
+                bail!("Phi mapping is deferred to batch 3.5 (AOT-3.5 boundary)")
+            }
+            Instruction::Jmp { .. } | Instruction::JmpIf { .. } | Instruction::JmpIfNot { .. } => {
+                bail!("control-flow instruction reached instruction emitter")
+            }
+            other => bail!("unsupported instruction reached LLVM emission: {other:?}"),
+        }
+        Ok(matches!(instruction, Instruction::Ret { .. }))
     }
 
     fn emit_assert(
@@ -482,6 +599,7 @@ impl<'ctx> Emitter<'ctx> {
     fn read(
         &mut self,
         locals: &HashMap<usize, Slot<'ctx>>,
+        values: &HashMap<u32, Value<'ctx>>,
         operand: &Operand,
         analysis: &FunctionAnalysis,
     ) -> Result<Value<'ctx>> {
@@ -510,10 +628,14 @@ impl<'ctx> Emitter<'ctx> {
                 })
             }
             Operand::Const(ConstValue::String(value)) => self.string_value(value),
-            Operand::Local(slot) | Operand::Temp(slot) | Operand::Arg(slot) => {
+            Operand::Local(slot) | Operand::Arg(slot) => {
                 let slot = locals[slot];
                 self.load_slot(slot)
             }
+            Operand::Value(id) => values
+                .get(&id.0)
+                .copied()
+                .ok_or_else(|| anyhow!("ValueId({}) has no LLVM definition at read time", id.0)),
             Operand::Global(index) => {
                 let ty = self.analysis.globals[index];
                 let Some(pointer) = self.globals.get(index).copied() else {
@@ -552,11 +674,24 @@ impl<'ctx> Emitter<'ctx> {
     fn write(
         &mut self,
         locals: &mut HashMap<usize, Slot<'ctx>>,
+        values: &mut HashMap<u32, Value<'ctx>>,
         operand: &Operand,
         value: Value<'ctx>,
         analysis: &FunctionAnalysis,
     ) -> Result<()> {
         match operand {
+            Operand::Value(id) => {
+                let expected = analysis.value_type(*id)?;
+                if expected != value.ty {
+                    bail!(
+                        "ValueId({}) LLVM type {:?} disagrees with analysis {expected:?}",
+                        id.0,
+                        value.ty
+                    )
+                }
+                values.insert(id.0, value);
+                Ok(())
+            }
             Operand::Global(index) => {
                 if value.ty == ScalarType::Void {
                     return Ok(());
@@ -576,7 +711,7 @@ impl<'ctx> Emitter<'ctx> {
         value: Value<'ctx>,
         analysis: &FunctionAnalysis,
     ) -> Result<()> {
-        let (Operand::Local(index) | Operand::Temp(index)) = operand else {
+        let Operand::Local(index) = operand else {
             bail!("unsupported destination reached LLVM emission: {operand:?}")
         };
         let pointer = if value.ty == ScalarType::Void {
