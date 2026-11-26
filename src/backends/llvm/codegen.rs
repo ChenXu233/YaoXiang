@@ -885,8 +885,9 @@ impl<'ctx> Emitter<'ctx> {
     /// 在前驱块发射完终结指令后，把这条边登记到后继块的 Phi incoming。
     ///
     /// `incoming` 的键是 IR 块 label，源值在前驱出口已全部可用。显式未知的
-    /// incoming（生产端 `Load Void` 物化）没有具体类型证据，这里按 Phi 的 dst
-    /// 类型物化为 `undef`：值本身不可观察，不猜类型。
+    /// incoming（生产端 `Load Void` 物化）没有具体类型证据；分析层只放行没有
+    /// 使用点的合并值（live 合并值带位置拒绝），所以这里按 Phi 的 dst 类型物化
+    /// 为 `undef`，不猜类型。
     #[allow(clippy::too_many_arguments)]
     fn emit_phi_incoming(
         &mut self,
@@ -949,7 +950,8 @@ impl<'ctx> Emitter<'ctx> {
         Ok(())
     }
 
-    /// 按标量类型取 `undef`：用于没有类型证据的显式未知 incoming。
+    /// 按标量类型取 `undef`：用于没有类型证据的显式未知 incoming（仅死合流；
+    /// live 合并值由分析层拒绝，不会走到这里）。
     fn undef_value(
         &self,
         ty: ScalarType,

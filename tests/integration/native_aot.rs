@@ -52,7 +52,7 @@ mod enabled {
     use yaoxiang::middle::ir::ir::{
         BasicBlock, ConstValue, FunctionBody, FunctionIR, Instruction, ModuleIR, Operand,
     };
-    use yaoxiang::util::span::Span;
+    use yaoxiang::util::span::{Position, Span};
 
     fn build(
         source: &str,
@@ -1442,6 +1442,113 @@ mod enabled {
             std::fs::read(&output).expect("read preserved output"),
             b"previous-good-output",
             "rejected build must not overwrite previous output"
+        );
+    }
+
+    /// 活的合并值 + 显式未知 incoming：`ssa::materialize_undef` 的 `Load Void`
+    /// 作为一个前驱的 Phi incoming，Phi 的 dst 被返回（可观察）。
+    fn live_unknown_incoming_phi_module() -> ModuleIR {
+        let function = FunctionIR {
+            name: "live_unknown_phi".to_string(),
+            def: None,
+            params: vec![],
+            return_type: yaoxiang::frontend::core::sema::MonoType::Int(64),
+            generic_params: None,
+            body: FunctionBody::Code {
+                blocks: vec![
+                    BasicBlock {
+                        label: 0,
+                        instructions: vec![
+                            Instruction::Load {
+                                dst: Operand::Value(yaoxiang::middle::ir::ir::ValueId(0)),
+                                src: Operand::Const(ConstValue::Void),
+                                span: Span::dummy(),
+                            },
+                            Instruction::Jmp {
+                                target: 2,
+                                span: Span::dummy(),
+                            },
+                        ],
+                        successors: vec![1],
+                    },
+                    BasicBlock {
+                        label: 1,
+                        instructions: vec![
+                            Instruction::Phi {
+                                dst: Operand::Value(yaoxiang::middle::ir::ir::ValueId(1)),
+                                incoming: vec![(
+                                    0,
+                                    Operand::Value(yaoxiang::middle::ir::ir::ValueId(0)),
+                                )],
+                                span: Span::new(Position::new(5, 13), Position::new(5, 14)),
+                            },
+                            Instruction::Ret {
+                                value: Some(Operand::Value(yaoxiang::middle::ir::ir::ValueId(1))),
+                                span: Span::dummy(),
+                            },
+                        ],
+                        successors: vec![],
+                    },
+                ],
+                entry: 0,
+                locals: vec![],
+                values: vec![
+                    yaoxiang::middle::ir::ir::ValueInfo {
+                        ty: yaoxiang::frontend::core::sema::MonoType::TypeRef("?".to_string()),
+                        debug_name: None,
+                        defining_block: 0,
+                    },
+                    yaoxiang::middle::ir::ir::ValueInfo {
+                        ty: yaoxiang::frontend::core::sema::MonoType::Int(64),
+                        debug_name: None,
+                        defining_block: 1,
+                    },
+                ],
+                value_slots: vec![],
+            },
+        };
+        let mut module = ModuleIR::default();
+        module.functions.push(function);
+        module.init.push(Instruction::Call {
+            dst: None,
+            func: Operand::Const(ConstValue::String("live_unknown_phi".to_string())),
+            args: vec![],
+            def: None,
+            span: Span::dummy(),
+        });
+        module
+    }
+
+    #[test]
+    fn test_native_live_unknown_incoming_phi_is_rejected_with_location() {
+        // Arrange：live Phi + 显式未知 incoming（materialize_undef 的 Load Void）——
+        // undef 会成为可观察的未定义值，必须在分析层带位置拒绝，不产生产物。
+        let dir = TempDir::new().expect("live unknown phi tempdir");
+        let source = dir.path().join("live_unknown.yx");
+        let output = dir.path().join("live_unknown");
+        let module = live_unknown_incoming_phi_module();
+
+        // Act
+        let error =
+            compile_ir_to_executable(&module, &source.display().to_string(), &output, false)
+                .expect_err("a live Phi merging an explicit unknown incoming must be rejected");
+
+        // Assert
+        let detail = format!("{error:#}");
+        assert!(
+            detail.contains("native AOT unsupported input")
+                && detail.contains(&format!("{}:5:13", source.display())),
+            "diagnostic must carry the source position: {detail}"
+        );
+        assert!(
+            detail.contains("explicitly unknown")
+                && detail.contains("Void")
+                && detail.contains("undef"),
+            "diagnostic must explain the observability boundary: {detail}"
+        );
+        assert!(
+            !output.exists(),
+            "rejected build must not create a native artifact"
         );
     }
 

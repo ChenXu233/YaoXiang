@@ -79,7 +79,7 @@ pub fn compile_ir_to_executable(
             .map_err(|e| anyhow!("LLVM O2 pipeline failed: {e}"))?;
         module.verify().map_err(|_| {
             anyhow!(
-                "native AOT LLVM verification failed for {source_name} after optimization; the module is outside the AOT-3.1 support set"
+                "native AOT LLVM verification failed for {source_name} after optimization; the module is outside the native AOT support set"
             )
         })?;
     }

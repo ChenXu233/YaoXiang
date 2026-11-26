@@ -319,7 +319,7 @@ fn phi_with_unknown_incoming_module() -> ModuleIR {
                                 (1, Operand::Value(ValueId(1))),
                                 (2, Operand::Value(ValueId(0))),
                             ],
-                            span: Span::dummy(),
+                            span: at(6, 9),
                         },
                         Instruction::Ret {
                             value: Some(Operand::Value(ValueId(2))),
@@ -355,19 +355,110 @@ fn phi_with_unknown_incoming_module() -> ModuleIR {
 }
 
 #[test]
-fn test_native_phi_skips_explicit_unknown_incoming() {
-    // Arrange：生产端契约允许显式未知输入（与 resolve_phi_type 同一跳过规则）。
+fn test_native_phi_live_unknown_incoming_is_rejected() {
+    // Arrange：显式未知 incoming 进入一个被 `Ret` 使用的 Phi——合并值 live，
+    // 按 dst 类型物化 undef 会成为可观察的未定义值。
     let module = phi_with_unknown_incoming_module();
 
     // Act
-    let analysis = analyze_module(&module, "phi_unknown.yx")
-        .expect("explicit unknown Phi incoming is materialized at emission, not rejected");
+    let error = analyze_module(&module, "phi_unknown.yx")
+        .err()
+        .expect("a live Phi merging an explicit unknown incoming must be rejected");
+
+    // Assert
+    let detail = error.to_string();
+    assert!(
+        detail.contains("ValueId(2)") && detail.contains("explicitly unknown"),
+        "live unknown-incoming Phi diagnostic must name the value and the merge: {detail}"
+    );
+    assert!(
+        detail.contains("phi_unknown.yx:6:9"),
+        "live unknown-incoming Phi diagnostic must carry the Phi position: {detail}"
+    );
+    assert!(
+        detail.contains("Void") && detail.contains("undef"),
+        "diagnostic must explain the VM frame-slot default / undef boundary: {detail}"
+    );
+}
+
+/// 死的合流值 + 显式未知 incoming：Phi 的 dst 在本函数没有任何使用点，
+/// 因此 `undef` 不可观察；该形态保留在支持集内（生产端 while 短路累加器
+/// 的循环头 Phi 即此类）。
+fn dead_unknown_incoming_phi_module() -> ModuleIR {
+    let function = FunctionIR {
+        name: "f".to_string(),
+        def: None,
+        params: vec![],
+        return_type: MonoType::Int(64),
+        generic_params: None,
+        body: FunctionBody::Code {
+            blocks: vec![
+                BasicBlock {
+                    label: 0,
+                    instructions: vec![
+                        Instruction::Load {
+                            dst: Operand::Value(ValueId(0)),
+                            src: Operand::Const(ConstValue::Void),
+                            span: Span::dummy(),
+                        },
+                        Instruction::Jmp {
+                            target: 2,
+                            span: Span::dummy(),
+                        },
+                    ],
+                    successors: vec![1],
+                },
+                BasicBlock {
+                    label: 1,
+                    instructions: vec![
+                        Instruction::Phi {
+                            dst: Operand::Value(ValueId(1)),
+                            incoming: vec![(0, Operand::Value(ValueId(0)))],
+                            span: at(6, 9),
+                        },
+                        Instruction::Ret {
+                            value: Some(Operand::Const(ConstValue::Int(7))),
+                            span: Span::dummy(),
+                        },
+                    ],
+                    successors: vec![],
+                },
+            ],
+            entry: 0,
+            locals: vec![],
+            values: vec![
+                ValueInfo {
+                    ty: MonoType::TypeRef("?".to_string()),
+                    debug_name: None,
+                    defining_block: 0,
+                },
+                ValueInfo {
+                    ty: MonoType::Int(64),
+                    debug_name: None,
+                    defining_block: 1,
+                },
+            ],
+            value_slots: vec![],
+        },
+    };
+    module_with(function)
+}
+
+#[test]
+fn test_native_phi_dead_unknown_incoming_is_allowed() {
+    // Arrange：显式未知 incoming 进入一个没有使用点的 Phi——undef 不可观察，
+    // 不触发 live 边界（与生产端 while 短路合流的复现形态一致）。
+    let module = dead_unknown_incoming_phi_module();
+
+    // Act
+    let analysis = analyze_module(&module, "phi_dead_unknown.yx")
+        .expect("a dead Phi with explicit unknown incoming stays inside the support set");
 
     // Assert
     assert_eq!(
-        analysis.functions["f"].values[2],
+        analysis.functions["f"].values[1],
         MonoType::Int(64),
-        "Phi destination type must come from its known incoming/ValueInfo"
+        "dead Phi destination type must still come from ValueInfo.ty"
     );
 }
 

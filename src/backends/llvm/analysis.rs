@@ -5,10 +5,10 @@
 //! 类型证明交给 LLVM 猜测。显式未知与不支持类型按能力边界返回带值 id 的诊断。
 //!
 //! 汇合映射（批次 3.5）：`Phi` 的 dst 与 incoming 的类型证据同样取
-//! `ValueInfo.ty`；显式未知输入按生产端同一契约跳过（`is_explicit_unknown_type`），
-//! 由发射层按 Phi 的 dst 类型物化为 `undef`。`Local` 的多前驱写—汇合读由发射层
-//! 把 alloca 提升到入口块实现，本模块只保留「读点在某条路径上没有写」这一真正
-//! 不支持的形态。
+//! `ValueInfo.ty`；显式未知输入（`is_explicit_unknown_type`）只在合并值没有
+//! 使用点（不可观察）时放行，live 合并值则带位置显式拒绝——不把不可证明的 VM
+//! 帧槽默认值物化成 `undef`。`Local` 的多前驱写—汇合读由发射层把 alloca 提升
+//! 到入口块实现，本模块只保留「读点在某条路径上没有写」这一真正不支持的形态。
 
 use std::collections::{HashMap, HashSet};
 
@@ -533,6 +533,18 @@ fn analyze_stream(
     for (index, ty) in params.iter().enumerate() {
         result.locals.insert(index, *ty);
     }
+    // 「live」判据：Phi 的 dst 是否在本函数任一指令的操作数里出现（含其他
+    // `Phi` 的 incoming）。这里取保守上界——不区分可达性，宁可拒绝也不把
+    // 不可证明的 VM 帧槽默认值静默物化成 `undef`；生产端的死合流（while
+    // 短路累加器）没有使用点，仍是支持集内的形态。
+    let used_values: HashSet<u32> = instructions
+        .iter()
+        .flat_map(|instruction| instruction.use_operands())
+        .filter_map(|operand| match operand {
+            Operand::Value(id) => Some(id.0),
+            _ => None,
+        })
+        .collect();
 
     let mut terminated = false;
     let mut seen_non_phi = false;
@@ -767,6 +779,7 @@ fn analyze_stream(
                 let phi_type = result
                     .value_type(*id)
                     .map_err(|e| unsupported(e.to_string()))?;
+                let mut unknown_incoming: Option<usize> = None;
                 for (label, operand) in incoming {
                     // 生产端的 Phi 输入只有 SSA 值与常量（`materialize_undef` 的
                     // `Load Void` 也产出 Value）。`Local` 输入要在前驱出口插入
@@ -777,16 +790,31 @@ fn analyze_stream(
                             "Phi incoming from predecessor {label} must be an SSA value or constant, got {operand:?}"
                         )));
                     }
-                    // 与生产端 `resolve_phi_type` 同一契约：跳过显式未知输入
-                    // （发射层按 dst 类型物化 undef）；其余已知输入必须同型。
+                    // 与生产端 `resolve_phi_type` 同一契约：显式未知输入不参与
+                    // 已知类型比较；其余已知输入必须同型。显式未知输入是否可
+                    // 放行由下面的 live 判据决定。
                     if matches!(operand, Operand::Value(source) if result.is_explicit_unknown_value(*source)?)
                     {
+                        unknown_incoming.get_or_insert(*label);
                         continue;
                     }
                     let incoming_type = read(operand, &result)?;
                     if incoming_type != phi_type {
                         return Err(unsupported(format!(
                             "Phi destination ValueId({}) is {phi_type:?} but the incoming value from predecessor {label} is {incoming_type:?}",
+                            id.0
+                        )));
+                    }
+                }
+                // 可观察性边界：VM 的帧槽默认值是 Void，而 AOT 只能按 Phi 的 dst
+                // 类型物化 undef。合并值被使用（live）时，undef 会变成可观察的
+                // 未定义值，与 Local「读点在某条路径上没有写」的拒绝口径一致；
+                // 死合流（无使用点）不可观察，保留在支持集内。Void 合并值没有
+                // LLVM phi 形态、不物化 undef，不在此判据内。
+                if let Some(label) = unknown_incoming {
+                    if phi_type != ScalarType::Void && used_values.contains(&id.0) {
+                        return Err(unsupported(format!(
+                            "Phi ValueId({}) merges an explicitly unknown value from predecessor {label} into a live result; AOT does not materialize the VM frame-slot default (Void) as undef for observable merge values",
                             id.0
                         )));
                     }
