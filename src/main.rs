@@ -775,10 +775,30 @@ fn dispatch_command(command: Commands) -> Result<()> {
                 if output_path == file {
                     anyhow::bail!("native output would overwrite the source; pass -o FILE");
                 }
-                yaoxiang::build_native_with_options(&file, &output_path, debug_info, false)
+                let project_root = yaoxiang::find_project_root(&file);
+                if let Some(root) = project_root {
+                    // #471：项目 native 路径与 run/check 一样灌入 yaoxiang.toml
+                    // 的编译配置；项目根由入口向上查找（B-i）。
+                    let project_config = yaoxiang::util::config::load_project_config_from(
+                        &root.join("yaoxiang.toml"),
+                    )
+                    .with_context(|| "读取项目配置 yaoxiang.toml 失败")?;
+                    yaoxiang::build_native_project_with_options(
+                        &file,
+                        &output_path,
+                        debug_info,
+                        false,
+                        project_config.compile_config(),
+                    )
                     .with_context(|| {
                         format!("Failed to build native executable: {}", file.display())
                     })?;
+                } else {
+                    yaoxiang::build_native_with_options(&file, &output_path, debug_info, false)
+                        .with_context(|| {
+                            format!("Failed to build native executable: {}", file.display())
+                        })?;
+                }
             }
         },
         Commands::Explain { code, json, lang } => {

@@ -300,6 +300,53 @@ pub fn build_bytecode_with_options(
     Ok(())
 }
 
+/// 从入口文件向上查找最近的 \`yaoxiang.toml\` 所在目录。
+///
+/// 与 \`orchestrator::find_project_root\` 同口径；库调用方与 CLI 共用，避免
+/// 两处各写一遍向上查找。找不到项目根时返回 \`None\`（单文件语义）。
+#[cfg(not(target_arch = "wasm32"))]
+pub fn find_project_root(entry: &Path) -> Option<::std::path::PathBuf> {
+    frontend::module::orchestrator::find_project_root(entry)
+}
+
+/// Build a native executable from a multi-file project entry.
+///
+/// 复用 \`orchestrator::compile_project\` 的发现/合并/初始化次序，再把合并后的
+/// \`ModuleIR\` 交给 LLVM 后端；不会在原生路径重新发现或合并文件。\`config\` 由
+/// 调用方灌入——CLI 传 \`yaoxiang.toml\` 映射出的编译配置，其他调用方可传
+/// \`CompileConfig::default()\`。
+///
+/// \`optimize = false\` selects O0; \`optimize = true\` selects LLVM O2.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn build_native_project_with_options(
+    entry: &Path,
+    output_path: &Path,
+    debug_info: bool,
+    optimize: bool,
+    config: frontend::config::CompileConfig,
+) -> Result<()> {
+    #[cfg(all(feature = "llvm", target_os = "linux", target_arch = "x86_64"))]
+    {
+        if debug_info {
+            anyhow::bail!(
+                "native AOT --debug-info is not supported in AOT-1; omit it or use --emit bytecode"
+            );
+        }
+        let (module, _warnings) = frontend::module::orchestrator::compile_project(entry, config)
+            .map_err(|e| anyhow::anyhow!("Project compilation failed: {e}"))?;
+        let source_name = entry.display().to_string();
+        backends::llvm::compile_ir_to_executable(&module, &source_name, output_path, optimize)
+    }
+
+    #[cfg(not(all(feature = "llvm", target_os = "linux", target_arch = "x86_64")))]
+    {
+        let _ = (entry, output_path, debug_info, optimize, config);
+        anyhow::bail!(
+            "native executable support requires an x86-64 Linux engine built with --features llvm; no bytecode was written"
+        )
+    }
+}
+
 /// Build a native executable from one YaoXiang source file.
 ///
 /// `optimize = false` selects O0; `optimize = true` selects LLVM O2. AOT-1

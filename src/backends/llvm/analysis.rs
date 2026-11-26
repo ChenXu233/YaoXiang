@@ -83,9 +83,6 @@ pub(super) fn analyze_module(
     source_name: &str,
 ) -> Result<ModuleAnalysis> {
     verify_ssa(module).map_err(|e| anyhow!("native AOT IR verification failed: {e}"))?;
-    if !module.source_files.is_empty() || module.entry_function.is_some() {
-        bail!("native AOT currently supports a single script file, not a multi-file project");
-    }
     if !module.ffi_libs.is_empty() || !module.ffi_bindings.is_empty() {
         bail!("native AOT external FFI is outside the AOT-1 capability boundary");
     }
@@ -156,6 +153,8 @@ pub(super) fn analyze_module(
         &[],
         &[],
         source_name,
+        &module.source_files,
+        &module.init_file_ids,
     )?;
     analysis
         .functions
@@ -178,7 +177,13 @@ pub(super) fn analyze_module(
             .map(|value| value.ty.clone())
             .collect::<Vec<_>>();
         let block_starts = block_starts(blocks);
-        check_local_merge_boundary(blocks, &function.name, source_name)?;
+        let function_source = module
+            .function_files
+            .get(&function.name)
+            .and_then(|file_id| module.source_files.get(*file_id))
+            .map(String::as_str)
+            .unwrap_or(source_name);
+        check_local_merge_boundary(blocks, &function.name, function_source)?;
         let signature = &analysis.signatures[&function.name];
         let body = analyze_stream(
             module,
@@ -191,7 +196,9 @@ pub(super) fn analyze_module(
             &instructions,
             &value_types,
             &block_starts,
-            source_name,
+            function_source,
+            &module.source_files,
+            &[],
         )?;
         analysis.functions.insert(function.name.clone(), body);
     }
@@ -435,6 +442,9 @@ fn reachable_functions(
             _ => None,
         })
         .collect::<Vec<_>>();
+    if let Some(entry) = &module.entry_function {
+        pending.push(entry.clone());
+    }
     let mut reachable = HashSet::new();
     while let Some(name) = pending.pop() {
         if !reachable.insert(name.clone()) {
@@ -475,6 +485,8 @@ fn analyze_stream(
     value_types: &[MonoType],
     block_starts: &[usize],
     source_name: &str,
+    source_files: &[String],
+    file_ids: &[usize],
 ) -> Result<FunctionAnalysis> {
     let mut result = FunctionAnalysis {
         values: value_types.to_vec(),
@@ -500,9 +512,14 @@ fn analyze_stream(
             continue;
         }
         let span = instruction.span();
+        let instruction_source = file_ids
+            .get(index)
+            .and_then(|file_id| source_files.get(*file_id))
+            .map(String::as_str)
+            .unwrap_or(source_name);
         let unsupported = |detail: String| {
             anyhow!(
-                "native AOT unsupported input at {source_name}:{}:{} in {function_name}: {detail}",
+                "native AOT unsupported input at {instruction_source}:{}:{} in {function_name}: {detail}",
                 span.start.line,
                 span.start.column
             )
@@ -632,6 +649,17 @@ fn analyze_stream(
                         return Err(unsupported(format!(
                             "std.assert.assert expects Bool or (Bool, String), got {arg_types:?}"
                         )));
+                    }
+                    // lower 对函数体内 std 调用结果没有值表类型证据；该内建
+                    // 的返回类型由分析器直接拥有（Void），不是对未知类型的
+                    // 静默猜测。其他 std 调用仍走显式未知拒绝。
+                    if let Some(Operand::Value(id)) = dst {
+                        if matches!(
+                            result.values.get(id.0 as usize),
+                            Some(MonoType::TypeRef(name)) if name == "?"
+                        ) {
+                            result.values[id.0 as usize] = MonoType::Void;
+                        }
                     }
                     ScalarType::Void
                 } else {

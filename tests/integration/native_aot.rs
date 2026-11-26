@@ -46,7 +46,9 @@ mod enabled {
 
     use tempfile::TempDir;
     use yaoxiang::backends::llvm::compile_ir_to_executable;
+    use yaoxiang::build_native_project_with_options;
     use yaoxiang::build_native_with_options;
+    use yaoxiang::frontend::config::CompileConfig;
     use yaoxiang::middle::ir::ir::{
         BasicBlock, ConstValue, FunctionBody, FunctionIR, Instruction, ModuleIR, Operand,
     };
@@ -73,6 +75,89 @@ mod enabled {
             .unwrap_or_else(|e| panic!("run native executable {}: {e}", path.display()))
     }
 
+    fn repo_project(name: &str) -> (PathBuf, PathBuf) {
+        let project = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("tests")
+            .join("yaoxiang-multifile")
+            .join(name);
+        let entry = project.join("main.yx");
+        (project, entry)
+    }
+
+    fn assert_native_project_matches_vm(
+        project: &Path,
+        entry: &Path,
+    ) {
+        let vm = Command::new(test_yx_bin())
+            .current_dir(project)
+            .arg("run")
+            .arg(entry)
+            .output()
+            .expect("run VM multi-file fixture");
+        assert!(
+            vm.status.success(),
+            "VM multi-file fixture failed: {}",
+            String::from_utf8_lossy(&vm.stderr)
+        );
+
+        let dir = TempDir::new().expect("multi-file API tempdir");
+        for optimize in [false, true] {
+            let output = dir.path().join(format!("api_o{}", u8::from(optimize)));
+            build_native_project_with_options(
+                entry,
+                &output,
+                false,
+                optimize,
+                CompileConfig::default(),
+            )
+            .unwrap_or_else(|e| panic!("API multi-file build {optimize}: {e:#}"));
+            let native = run_native(&output);
+            assert!(
+                native.status.success(),
+                "API multi-file native failed (optimize={optimize}): {}",
+                String::from_utf8_lossy(&native.stderr)
+            );
+            assert_eq!(
+                native.status.code(),
+                vm.status.code(),
+                "API native/VM status mismatch (optimize={optimize})"
+            );
+            assert_eq!(
+                native.stdout, vm.stdout,
+                "API native/VM stdout mismatch (optimize={optimize})"
+            );
+        }
+
+        let cli_output = dir.path().join("cli");
+        let cli = Command::new(test_yx_bin())
+            .current_dir(project)
+            .arg("build")
+            .arg(entry)
+            .arg("--emit")
+            .arg("exe")
+            .arg("--output")
+            .arg(&cli_output)
+            .output()
+            .expect("run CLI multi-file build");
+        assert!(
+            cli.status.success(),
+            "CLI multi-file build failed: {}",
+            String::from_utf8_lossy(&cli.stderr)
+        );
+        let native = run_native(&cli_output);
+        assert!(
+            native.status.success(),
+            "CLI multi-file native failed: {}",
+            String::from_utf8_lossy(&native.stderr)
+        );
+        assert_eq!(
+            native.status.code(),
+            vm.status.code(),
+            "CLI native/VM status mismatch"
+        );
+        assert_eq!(native.stdout, vm.stdout, "CLI native/VM stdout mismatch");
+    }
+
     fn assert_diagnostic(
         stderr: &[u8],
         code: &str,
@@ -89,6 +174,214 @@ mod enabled {
             text.contains(&location),
             "diagnostic should contain {location}: {text:?}"
         );
+    }
+
+    #[test]
+    fn test_native_project_bin_entry_function_is_called() {
+        // Arrange：Bin 项目只定义 main，顶层不调用；入口必须由 entry_function 驱动。
+        let root = TempDir::new().expect("bin entry project");
+        write_project(
+            root.path(),
+            &[
+                (
+                    "yaoxiang.toml",
+                    "[package]\nname = \"bin_entry\"\nversion = \"0.1.0\"\n",
+                ),
+                ("main.yx", "main = () => {\n    10 / 0\n}\n"),
+            ],
+        );
+        let entry = root.path().join("main.yx");
+        let output = root.path().join("bin_entry");
+
+        // Act
+        build_native_project_with_options(&entry, &output, false, false, CompileConfig::default())
+            .unwrap_or_else(|e| panic!("build Bin entry fixture: {e:#}"));
+        let native = run_native(&output);
+        let vm = Command::new(test_yx_bin())
+            .current_dir(root.path())
+            .arg("run")
+            .arg(&entry)
+            .output()
+            .expect("run VM Bin entry fixture");
+
+        // Assert
+        assert_eq!(native.status.code(), Some(1), "Bin entry native exit");
+        assert_eq!(vm.status.code(), Some(1), "Bin entry VM exit");
+        assert_diagnostic(&native.stderr, "E6001", &entry, 2);
+        assert_diagnostic(&vm.stderr, "E6001", &entry, 2);
+    }
+
+    #[test]
+    fn test_native_script_does_not_implicitly_call_main() {
+        // Arrange：单文件 Script 只定义 main，顶层不调用；两边都不得执行 main。
+        let dir = TempDir::new().expect("script no-entry tempdir");
+        let source = dir.path().join("script.yx");
+        let executable = dir.path().join("script");
+        std::fs::write(&source, "main = () => {\n    10 / 0\n}\n").expect("write Script fixture");
+
+        // Act
+        build_native_with_options(&source, &executable, false, false)
+            .unwrap_or_else(|e| panic!("build Script no-entry fixture: {e:#}"));
+        let native = run_native(&executable);
+        let vm = Command::new(test_yx_bin())
+            .current_dir(dir.path())
+            .arg("run")
+            .arg(&source)
+            .output()
+            .expect("run VM Script no-entry fixture");
+
+        // Assert
+        assert!(
+            native.status.success(),
+            "Script native must not call main implicitly: {}",
+            String::from_utf8_lossy(&native.stderr)
+        );
+        let vm_diagnostic = String::from_utf8_lossy(&vm.stderr);
+        assert!(
+            vm_diagnostic.contains("不会自动执行 main") && vm_diagnostic.contains("main 未被调用"),
+            "VM script hint must confirm main is not implicit: {vm_diagnostic}"
+        );
+    }
+
+    #[test]
+    fn test_native_multifile_dependency_init_diagnostic_uses_real_file() {
+        // Arrange
+        let root = TempDir::new().expect("dependency init project");
+        write_project(
+            root.path(),
+            &[
+                (
+                    "yaoxiang.toml",
+                    "[package]\nname = \"diag_init\"\nversion = \"0.1.0\"\n",
+                ),
+                ("main.yx", "use dep.{bad}\n\nmain = () => {\n}\n"),
+                ("dep.yx", "bad: Int = 10 / 0\n"),
+            ],
+        );
+        let entry = root.path().join("main.yx");
+        let dep = root.path().join("dep.yx");
+
+        // Act
+        assert_project_diagnostic(root.path(), &entry, &dep);
+
+        // Assert
+        // helper 已断言 VM 与 native O0/O2 的 E6001 均指向 dep.yx:1。
+    }
+
+    #[test]
+    fn test_native_multifile_dependency_function_diagnostic_uses_real_file() {
+        // Arrange
+        let root = TempDir::new().expect("dependency function project");
+        write_project(
+            root.path(),
+            &[
+                (
+                    "yaoxiang.toml",
+                    "[package]\nname = \"diag_fn\"\nversion = \"0.1.0\"\n",
+                ),
+                (
+                    "main.yx",
+                    "use dep.{boom}\n\nmain = () => {\n    boom()\n}\n",
+                ),
+                ("dep.yx", "boom: () -> Int = () => 10 / 0\n"),
+            ],
+        );
+        let entry = root.path().join("main.yx");
+        let dep = root.path().join("dep.yx");
+
+        // Act
+        assert_project_diagnostic(root.path(), &entry, &dep);
+
+        // Assert
+        // helper 已断言 VM 与 native O0/O2 的 E6001 均指向 dep.yx:1。
+    }
+
+    fn write_project(
+        root: &Path,
+        files: &[(&str, &str)],
+    ) {
+        std::fs::create_dir_all(root).expect("create temp project");
+        for (name, source) in files {
+            std::fs::write(root.join(name), source)
+                .unwrap_or_else(|e| panic!("write project file {name}: {e}"));
+        }
+    }
+
+    fn assert_project_diagnostic(
+        root: &Path,
+        entry: &Path,
+        dependency: &Path,
+    ) {
+        let vm = Command::new(test_yx_bin())
+            .current_dir(root)
+            .arg("run")
+            .arg(entry)
+            .output()
+            .expect("run VM dependency-error fixture");
+        assert_eq!(
+            vm.status.code(),
+            Some(1),
+            "VM dependency error exit: {}",
+            String::from_utf8_lossy(&vm.stderr)
+        );
+        assert_diagnostic(&vm.stderr, "E6001", dependency, 1);
+
+        let dir = TempDir::new().expect("dependency diagnostic tempdir");
+        for optimize in [false, true] {
+            let output = dir.path().join(format!("native_o{}", u8::from(optimize)));
+            build_native_project_with_options(
+                entry,
+                &output,
+                false,
+                optimize,
+                CompileConfig::default(),
+            )
+            .unwrap_or_else(|e| panic!("project diagnostic build {optimize}: {e:#}"));
+            let native = run_native(&output);
+            assert_eq!(
+                native.status.code(),
+                Some(1),
+                "native dependency error exit (optimize={optimize}): {}",
+                String::from_utf8_lossy(&native.stderr)
+            );
+            assert_diagnostic(&native.stderr, "E6001", dependency, 1);
+        }
+    }
+
+    #[test]
+    fn test_native_multifile_use_constant_cli_and_api() {
+        // Arrange
+        let (project, entry) = repo_project("use-constant");
+
+        // Act
+        assert_native_project_matches_vm(&project, &entry);
+
+        // Assert
+        // helper 已断言 CLI 与 API 的 native/VM 状态码和 stdout 一致。
+    }
+
+    #[test]
+    fn test_native_multifile_subdirectory_module_cli_and_api() {
+        // Arrange
+        let (project, entry) = repo_project("subdirectory-module");
+
+        // Act
+        assert_native_project_matches_vm(&project, &entry);
+
+        // Assert
+        // helper 已断言 CLI 与 API 的 native/VM 状态码和 stdout 一致。
+    }
+
+    #[test]
+    fn test_native_multifile_init_order_cli_and_api() {
+        // Arrange
+        let (project, entry) = repo_project("init-order-entry-reads-dep-value");
+
+        // Act
+        assert_native_project_matches_vm(&project, &entry);
+
+        // Assert
+        // helper 已断言 CLI 与 API 的 native/VM 状态码和 stdout 一致。
     }
 
     #[test]

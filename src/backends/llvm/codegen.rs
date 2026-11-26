@@ -56,6 +56,8 @@ pub(super) struct Emitter<'ctx> {
     builder: inkwell::builder::Builder<'ctx>,
     analysis: ModuleAnalysis,
     source_name: String,
+    source_files: Vec<String>,
+    current_source: String,
     functions: HashMap<String, FunctionValue<'ctx>>,
     globals: HashMap<usize, PointerValue<'ctx>>,
     runtime: RuntimeFunctions<'ctx>,
@@ -77,6 +79,8 @@ impl<'ctx> Emitter<'ctx> {
             builder,
             analysis,
             source_name: source_name.to_string(),
+            source_files: Vec::new(),
+            current_source: source_name.to_string(),
             functions: HashMap::new(),
             globals: HashMap::new(),
             runtime,
@@ -88,6 +92,7 @@ impl<'ctx> Emitter<'ctx> {
         mut self,
         ir: &ModuleIR,
     ) -> Result<Module<'ctx>> {
+        self.source_files = ir.source_files.clone();
         self.declare_globals(ir)?;
         let reachable = self.analysis.reachable.clone();
         for function in ir
@@ -125,11 +130,19 @@ impl<'ctx> Emitter<'ctx> {
                 return_type: ScalarType::from_mono(&function.return_type)?,
             };
             let value = self.functions[&function.name];
+            let function_source = ir
+                .function_files
+                .get(&function.name)
+                .and_then(|file_id| ir.source_files.get(*file_id))
+                .cloned()
+                .unwrap_or_else(|| self.source_name.clone());
             self.emit_cfg(
                 value,
                 &signature,
                 blocks,
                 &self.analysis.functions[&function.name].clone(),
+                Some(&function_source),
+                None,
             )?;
         }
 
@@ -138,13 +151,20 @@ impl<'ctx> Emitter<'ctx> {
             instructions: ir.init.clone(),
             successors: Vec::new(),
         };
+        let init_source = self.source_name.clone();
         self.emit_cfg(
             init,
             &init_signature,
             std::slice::from_ref(&init_block),
             &self.analysis.functions["__yx_module_init"].clone(),
+            Some(&init_source),
+            Some(&ir.init_file_ids),
         )?;
-        self.emit_c_main(init)?;
+        let entry = ir
+            .entry_function
+            .as_ref()
+            .and_then(|name| self.functions.get(name).copied());
+        self.emit_c_main(init, entry)?;
         Ok(self.module)
     }
 
@@ -201,7 +221,10 @@ impl<'ctx> Emitter<'ctx> {
         signature: &OwnedSignature,
         blocks: &[BasicBlock],
         analysis: &FunctionAnalysis,
+        function_source: Option<&str>,
+        init_file_ids: Option<&[usize]>,
     ) -> Result<()> {
+        self.current_source = function_source.unwrap_or(&self.source_name).to_string();
         if blocks.is_empty() {
             let entry = self.context.append_basic_block(function_value, "entry");
             self.builder.position_at_end(entry);
@@ -244,6 +267,7 @@ impl<'ctx> Emitter<'ctx> {
             self.write_local(&mut locals, &Operand::Local(index), value, analysis)?;
         }
 
+        let mut flat_index = 0usize;
         for (ordinal, block) in blocks.iter().enumerate() {
             self.builder.position_at_end(llvm_blocks[ordinal]);
             let mut terminated = false;
@@ -258,6 +282,14 @@ impl<'ctx> Emitter<'ctx> {
                 continue;
             }
             for instruction in &block.instructions {
+                if let Some(file_ids) = init_file_ids {
+                    if let Some(file_id) = file_ids.get(flat_index) {
+                        if let Some(file) = self.source_files.get(*file_id) {
+                            self.current_source = file.clone();
+                        }
+                    }
+                }
+                flat_index += 1;
                 match instruction {
                     Instruction::Jmp { target, .. } => {
                         let target_block = flat_to_block
@@ -583,12 +615,16 @@ impl<'ctx> Emitter<'ctx> {
     fn emit_c_main(
         &self,
         init: FunctionValue<'ctx>,
+        entry_function: Option<FunctionValue<'ctx>>,
     ) -> Result<()> {
         let main_type = self.context.i32_type().fn_type(&[], false);
         let main = self.module.add_function("main", main_type, None);
         let entry = self.context.append_basic_block(main, "entry");
         self.builder.position_at_end(entry);
         llvm(self.builder.build_call(init, &[], ""))?;
+        if let Some(entry_function) = entry_function {
+            llvm(self.builder.build_call(entry_function, &[], ""))?;
+        }
         llvm(
             self.builder
                 .build_return(Some(&self.context.i32_type().const_zero())),
@@ -752,12 +788,12 @@ impl<'ctx> Emitter<'ctx> {
         &mut self,
         span: Span,
     ) -> Result<Vec<BasicMetadataValueEnum<'ctx>>> {
-        let file = self.global_string(&self.source_name.clone())?;
+        let file = self.global_string(&self.current_source.clone())?;
         Ok(vec![
             file.as_pointer_value().into(),
             self.context
                 .i64_type()
-                .const_int(self.source_name.len() as u64, false)
+                .const_int(self.current_source.len() as u64, false)
                 .into(),
             self.context
                 .i64_type()
