@@ -1,0 +1,48 @@
+{
+  "schema": 1,
+  "target": "native_aot",
+  "entries": [
+    {
+      "id": "branch-no-phi",
+      "state": "supported",
+      "decision": "无 Phi 分支在支持集内；条件两条边都要发射并与 VM/O0/O2 同结果",
+      "test": "native_aot::enabled::test_native_no_phi_branch_executes_both_edges"
+    },
+    {
+      "id": "loop-local",
+      "state": "supported",
+      "decision": "Local 保持存储语义；循环重复写合法且与 VM/O0/O2 同结果",
+      "test": "native_aot::enabled::test_native_loop_local_update_matches_vm"
+    },
+    {
+      "id": "multifile-init-order",
+      "state": "supported",
+      "decision": "多文件 init 按依赖拓扑序执行，入口身份正确",
+      "test": "native_aot::enabled::test_native_multifile_init_order_cli_and_api"
+    },
+    {
+      "id": "failure-diagnostic",
+      "state": "supported",
+      "decision": "受支持上下文中的运行期失败与 VM 同诊断码和源码位置",
+      "test": "native_aot::enabled::test_native_loop_division_by_zero_matches_vm_diagnostic"
+    },
+    {
+      "id": "phi-boundary",
+      "state": "expected-reject",
+      "decision": "Phi 显式拒绝并指向批次 3.5，不静默丢弃",
+      "test": "native_aot::enabled::test_native_phi_is_rejected_at_batch_35"
+    },
+    {
+      "id": "local-merge-boundary",
+      "state": "expected-reject",
+      "decision": "多前驱 Local 汇合显式拒绝并指向 AOT-3.5，不外泄 LLVM 原文",
+      "test": "native_aot::enabled::test_native_local_merge_boundary_reports_aot_35"
+    },
+    {
+      "id": "unknown-type-boundary",
+      "state": "expected-reject",
+      "decision": "显式未知类型不猜测、不静默 Void",
+      "test": "native_aot::enabled::test_native_explicit_unknown_value_is_rejected"
+    }
+  ]
+}

@@ -287,6 +287,10 @@ jobs:
       - name: IR verifier on corpus
         run: bash scripts/ci/check-ir-verifier.sh
 
+      # AOT-3.4：七条最小等价账本必须逐条真实存在且执行，不得空转。
+      - name: AOT seven-entry equivalence ledger
+        run: python3 scripts/ci/check-aot-ledger.py
+
       # P2 引入（09-execution-wbs 9.7）：语料行为差分 vs 入库基线，无任何分组放宽。
       # 差分非空 = 回归（修代码）或有意变更（同一 PR 重生成基线）。
       - name: Corpus parity vs baseline
