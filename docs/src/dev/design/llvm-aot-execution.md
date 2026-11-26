@@ -42,9 +42,12 @@ VM 的同类系统上运行它，既能算对结果，也能在出错时指出�
       汇合的拒绝边界已由批次 3.5 收口为发射（见“阶段 1 支持集与拒绝边界”）。等价账本的七条最小集已有可执行门禁（机器可读账本 + 检查器 +
       CI 作业，见“等价账本（最小集，七条）”）。判据在 `tests/integration/native_aot.rs` 与
       `src/backends/llvm/tests/analysis.rs`。
-- [x] **批次 3.5 `Phi` 与 `Local` 汇合映射**（`17882acb`）——需要 `Phi`
+- [x] **批次 3.5 `Phi` 与 `Local` 汇合映射**（`17882acb`、`5e26ea2b`）——需要 `Phi`
       的汇合值从能力拒绝改为发射：`Phi` 在块首预建、incoming 按前驱 block label 登记；`Local`
-      的 alloca 统一提到入口块，多前驱写—汇合读不再拒绝；账本 phi-boundary /
+      的 alloca 统一提到入口块，多前驱写—汇合读不再拒绝；`5e26ea2b`
+      把显式未知 incoming 收紧为按可观察性分派——死合流放行（`undef`
+      不可观察），live 合并值带位置拒绝（见“阶段 1
+      支持集与拒绝边界”）；账本 phi-boundary /
       local-merge-boundary 改 supported（见“阶段 1 支持集与拒绝边界”与“等价账本（最小集，七条）”）；判据在
       `tests/integration/native_aot.rs` 与 `src/backends/llvm/tests/analysis.rs`。
 - [ ] **批次 4 链接原生运行时，再接 FFI 与并作**——未开始；原生运行时只有最小 C
@@ -171,7 +174,7 @@ python scripts/dev/testsuite.py plan
 | 4 证据与发布                                                           | 支持集账本、受控变异、RFC-018 附录 B 对账、默认产物切换              | 阶段 3          | 声明与账本一致；没有实测值不作规模或性能承诺                                           |
 
 阶段 0 已落地；批次 3.5 起 AOT 消费生产端 `Phi` 与 `Local` 合并（提交
-`17882acb`），不再为需要汇合值的程序保留能力拒绝。阶段 1 的支持集与拒绝边界由下节登记；新增可编译形态必须同时给出正例和带位置的拒绝判据。
+`17882acb`、`5e26ea2b`），不再为需要汇合值的程序保留能力拒绝。阶段 1 的支持集与拒绝边界由下节登记；新增可编译形态必须同时给出正例和带位置的拒绝判据。
 
 ### 阶段 1 支持集与拒绝边界（等价账本）
 
@@ -186,10 +189,13 @@ python scripts/dev/testsuite.py plan
   `test_native_no_phi_branch_executes_both_edges`、`test_native_no_phi_loop_matches_vm`。
 - `Phi` 汇合：生产端 SSA 的 `Phi`
   在 LLVM 块首发射，incoming 沿前驱边、按 IR 块 label 登记；dst 与已知输入的类型证据取
-  `ValueInfo.ty`，显式未知输入按生产端 `resolve_phi_type` 同一契约跳过、由发射层按 dst 类型物化
-  `undef`；判据为
+  `ValueInfo.ty`。显式未知输入按生产端 `resolve_phi_type`
+  同一契约跳过已知类型比较，是否放行由可观察性判据决定：合并值没有使用点（死合流；生产端
+  `while` 短路累加器的循环头 `Phi`
+  即此类）时 `undef`
+  不可观察，发射层按 dst 类型物化；合并值被使用（live）则带位置拒绝，见下文拒绝边界。判据为
   `test_native_phi_short_circuit_merge_matches_vm`、`test_native_if_value_merge_matches_vm`、`test_native_while_merge_value_matches_vm`、`test_native_nested_merge_value_matches_vm`，后端单元判据
-  `test_native_phi_accepts_known_merge_type`、`test_native_phi_skips_explicit_unknown_incoming`。`Phi`
+  `test_native_phi_accepts_known_merge_type`、`test_native_phi_dead_unknown_incoming_is_allowed`。`Phi`
   汇合内的运行期失败与 VM 同诊断码与位置，判据为
   `test_native_phi_failure_path_matches_vm_diagnostic`。
 - `Local` 合并：alloca 统一提升到函数入口块，分支只发射 store，汇合读等价 VM 帧槽语义；同一 `Local`
@@ -226,6 +232,12 @@ python scripts/dev/testsuite.py plan
   不在块首分组，均显式拒绝且带源码位置；后端单元判据
   `test_native_phi_unknown_destination_is_rejected`、`test_native_phi_known_type_mismatch_is_rejected`、`test_native_phi_local_incoming_is_rejected`、`test_native_phi_entry_block_without_incoming_is_rejected`。LLVM
   verifier 兜底失败同样包装为 AOT 自有诊断，不外泄 LLVM 原文。
+- `Phi` 的 live 显式未知 incoming：显式未知输入进入合并值被本函数任一指令使用（live）的
+  `Phi` 时，按 dst 类型物化 `undef` 会让 VM 帧槽默认 Void 变成可观察的未定义值，与
+  `Local`「读点在某条路径上没有写」同一口径，构建期带 `Phi` 源码位置拒绝、不产生产物；诊断点名值
+  id 并说明 Void/undef 边界。Void 合并值没有 LLVM phi 形态、不物化 `undef`，不在此判据内。判据为集成
+  `test_native_live_unknown_incoming_phi_is_rejected_with_location`（断言诊断含源码位置且失败构建不产出产物），后端单元判据
+  `test_native_phi_live_unknown_incoming_is_rejected`。
 - `Local`
   读点未写：读点在某条可达路径上从未写过该槽（VM 帧槽默认 Void，带类型的 alloca 无法物化），显式拒绝并带源码位置；后端单元判据
   `test_native_local_read_without_write_on_path_is_rejected`。顺序写与循环重复写合法，后端单元判据
@@ -249,10 +261,22 @@ python scripts/dev/testsuite.py plan
   无指针时返回 `Value::void()`。后续批次改为显式拒绝或补齐证据，不得标成已收口。
 
 **L4 自有判据的性质（L3 裁决）**：批次 3.5 后该性质由 `src/backends/llvm/analysis.rs` 的
-`check_local_read_definitions`（自建可达块 CFG、前驱表与 must-def 集合不动点）与 `Phi`
+`check_local_read_definitions`（自建可达块 CFG、前驱表与 must-def 集合不动点）、`Phi`
 的类型证据检查（dst 与已知输入取 `ValueInfo.ty`，显式未知输入按生产端 `resolve_phi_type`
-同一契约跳过）共同承担。这是**支持集判定**——判定程序是否落在 AOT 支持集内并给出带位置的拒绝，不是重建 SSA 或类型：不生成
+同一契约跳过已知类型比较）与 `Phi`
+的可观察性判据（见下）共同承担。这是**支持集判定**——判定程序是否落在 AOT
+支持集内并给出带位置的拒绝，不是重建 SSA 或类型：不生成
 `Phi`、不重命名，`Local` 合并由发射层把 alloca 提升到入口块实现，判据不跨层。
+
+**可观察性判据的保守上界（提交 `5e26ea2b`）**：`live`
+取全函数上界——`Phi` 的 dst 出现在本函数任一指令的 `use_operands`
+里（含其他 `Phi`
+的 incoming）即视为 live，不做可达性分析。取舍：宁可拒绝也不把不可证明的 VM 帧槽默认值静默物化成
+`undef`；代价是误拒面——死 `phi` 链（被另一条死 `Phi`
+的 incoming 引用）与不可达块里的使用点会被计成 live 而遭拒绝，尽管 `undef`
+实际不可观察。后续复核条件：真实程序（生产语料或用户程序）被该上界误拒时，再把 `live`
+改为可达性感知的使用点集合；当前生产端的死合流形态（`while` 短路累加器的循环头
+`Phi`，无任何使用点）不受影响。
 
 **L3 裁决（2026-11-27，批次 3.5 收口时记录）**：这套汇合判据保持 L4 自有，不在本批提升到 L3——`src/middle/`
 的生产端 SSA 与 `verify_ssa` 不消费它，L4 不向 L3 反向输出判定接口。事实依据：实现提交 `17882acb` 中
