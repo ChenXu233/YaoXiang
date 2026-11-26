@@ -26,8 +26,8 @@ EXPECTED = [
     ("loop-local", "supported"),
     ("multifile-init-order", "supported"),
     ("failure-diagnostic", "supported"),
-    ("phi-boundary", "expected-reject"),
-    ("local-merge-boundary", "expected-reject"),
+    ("phi-boundary", "supported"),
+    ("local-merge-boundary", "supported"),
     ("unknown-type-boundary", "expected-reject"),
 ]
 RESULT_PATTERN = re.compile(

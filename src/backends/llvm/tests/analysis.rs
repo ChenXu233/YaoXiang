@@ -1,7 +1,8 @@
 //! AOT 分析层单元测试 — 基于 RFC-018 与 `llvm-aot-execution.md` 阶段 1
 //!
-//! 覆盖 `ValueInfo.ty` 值证据、显式未知/不支持类型、`verify_ssa` 入口与
-//! `Phi` 的 AOT-3.5 边界；目录模块按 test-specification 1.1/1.4 声明。
+//! 覆盖 `ValueInfo.ty` 值证据、显式未知/不支持类型、`verify_ssa` 入口、
+//! `Phi` 的类型证据与 incoming 判定，以及批次 3.5 收窄后的 `Local` 汇合读边界；
+//! 目录模块按 test-specification 1.1/1.4 声明。
 
 use crate::backends::llvm::analysis::analyze_module;
 use crate::frontend::core::sema::MonoType;
@@ -10,6 +11,15 @@ use crate::middle::ir::ir::{
     ValueInfo,
 };
 use crate::util::span::Span;
+
+/// 带真实行/列的 span：拒绝诊断必须能定位到源码位置。
+fn at(
+    line: usize,
+    column: usize,
+) -> Span {
+    let position = crate::util::span::Position::new(line, column);
+    Span::new(position, position)
+}
 
 fn base_function(
     return_type: MonoType,
@@ -55,6 +65,17 @@ fn load_value(
 ) -> Instruction {
     Instruction::Load {
         dst: Operand::Value(ValueId(id)),
+        src,
+        span: Span::dummy(),
+    }
+}
+
+fn load_local(
+    slot: usize,
+    src: Operand,
+) -> Instruction {
+    Instruction::Load {
+        dst: Operand::Local(slot),
         src,
         span: Span::dummy(),
     }
@@ -187,7 +208,7 @@ fn test_native_multi_definition_value_is_rejected_by_verify_ssa() {
 }
 
 #[test]
-fn test_native_phi_is_rejected_with_batch_35_boundary() {
+fn test_native_phi_accepts_known_merge_type() {
     // Arrange: block 0 jumps to block 1, which contains a valid Phi.
     let function = FunctionIR {
         name: "f".to_string(),
@@ -231,14 +252,286 @@ fn test_native_phi_is_rejected_with_batch_35_boundary() {
     let module = module_with(function);
 
     // Act
-    let error = analyze_module(&module, "phi.yx")
-        .err()
-        .expect("Phi must remain outside AOT-3.1");
+    let analysis =
+        analyze_module(&module, "phi.yx").expect("a Phi with known incoming types is supported");
 
     // Assert
+    assert_eq!(
+        analysis.functions["f"].values[0],
+        MonoType::Int(64),
+        "Phi destination type must come from ValueInfo.ty"
+    );
+}
+
+/// 生产端 `materialize_undef` 的汇合形态：入口 `Load Void`（显式未知）作为
+/// 一个前驱的 Phi incoming，另一个前驱给已知 Int。
+fn phi_with_unknown_incoming_module() -> ModuleIR {
+    let function = FunctionIR {
+        name: "f".to_string(),
+        def: None,
+        params: vec![],
+        return_type: MonoType::Int(64),
+        generic_params: None,
+        body: FunctionBody::Code {
+            blocks: vec![
+                BasicBlock {
+                    label: 0,
+                    instructions: vec![
+                        Instruction::Load {
+                            dst: Operand::Value(ValueId(0)),
+                            src: Operand::Const(ConstValue::Void),
+                            span: Span::dummy(),
+                        },
+                        Instruction::JmpIfNot {
+                            cond: Operand::Const(ConstValue::Bool(true)),
+                            target: 4,
+                            span: Span::dummy(),
+                        },
+                    ],
+                    successors: vec![1, 2],
+                },
+                BasicBlock {
+                    label: 1,
+                    instructions: vec![
+                        Instruction::Load {
+                            dst: Operand::Value(ValueId(1)),
+                            src: Operand::Const(ConstValue::Int(5)),
+                            span: Span::dummy(),
+                        },
+                        Instruction::Jmp {
+                            target: 4,
+                            span: Span::dummy(),
+                        },
+                    ],
+                    successors: vec![3],
+                },
+                BasicBlock {
+                    label: 2,
+                    instructions: vec![],
+                    successors: vec![3],
+                },
+                BasicBlock {
+                    label: 3,
+                    instructions: vec![
+                        Instruction::Phi {
+                            dst: Operand::Value(ValueId(2)),
+                            incoming: vec![
+                                (1, Operand::Value(ValueId(1))),
+                                (2, Operand::Value(ValueId(0))),
+                            ],
+                            span: Span::dummy(),
+                        },
+                        Instruction::Ret {
+                            value: Some(Operand::Value(ValueId(2))),
+                            span: Span::dummy(),
+                        },
+                    ],
+                    successors: vec![],
+                },
+            ],
+            entry: 0,
+            locals: vec![],
+            values: vec![
+                ValueInfo {
+                    ty: MonoType::TypeRef("?".to_string()),
+                    debug_name: None,
+                    defining_block: 0,
+                },
+                ValueInfo {
+                    ty: MonoType::Int(64),
+                    debug_name: None,
+                    defining_block: 1,
+                },
+                ValueInfo {
+                    ty: MonoType::Int(64),
+                    debug_name: None,
+                    defining_block: 3,
+                },
+            ],
+            value_slots: vec![],
+        },
+    };
+    module_with(function)
+}
+
+#[test]
+fn test_native_phi_skips_explicit_unknown_incoming() {
+    // Arrange：生产端契约允许显式未知输入（与 resolve_phi_type 同一跳过规则）。
+    let module = phi_with_unknown_incoming_module();
+
+    // Act
+    let analysis = analyze_module(&module, "phi_unknown.yx")
+        .expect("explicit unknown Phi incoming is materialized at emission, not rejected");
+
+    // Assert
+    assert_eq!(
+        analysis.functions["f"].values[2],
+        MonoType::Int(64),
+        "Phi destination type must come from its known incoming/ValueInfo"
+    );
+}
+
+/// 两块 Phi 夹具：块 0 写入 `entry_instructions` 后 `Jmp` 到块 1；块 1 块首放
+/// 给定 `Phi`，随后 `Ret` 其 dst。`Jmp` 的目标是块 1 的展平起点（Phi 下标）。
+fn two_block_phi_module(
+    entry_instructions: Vec<Instruction>,
+    incoming: Vec<(usize, Operand)>,
+    phi_type: MonoType,
+) -> ModuleIR {
+    let phi_index = entry_instructions.len() + 1;
+    let mut entry = entry_instructions;
+    entry.push(Instruction::Jmp {
+        target: phi_index,
+        span: Span::dummy(),
+    });
+    let function = FunctionIR {
+        name: "f".to_string(),
+        def: None,
+        params: vec![],
+        return_type: MonoType::Int(64),
+        generic_params: None,
+        body: FunctionBody::Code {
+            blocks: vec![
+                BasicBlock {
+                    label: 0,
+                    instructions: entry,
+                    successors: vec![1],
+                },
+                BasicBlock {
+                    label: 1,
+                    instructions: vec![
+                        Instruction::Phi {
+                            dst: Operand::Value(ValueId(0)),
+                            incoming,
+                            span: at(6, 9),
+                        },
+                        ret_value(0),
+                    ],
+                    successors: vec![],
+                },
+            ],
+            entry: 0,
+            // Local(0) 是 `test_native_phi_local_incoming_is_rejected` 的写入槽；
+            // 其余夹具不用它，注册槽位不改变分析结论。
+            locals: vec![crate::middle::ir::ir::LocalSlot::temp(MonoType::Int(64))],
+            values: vec![ValueInfo {
+                ty: phi_type,
+                debug_name: None,
+                defining_block: 1,
+            }],
+            value_slots: vec![],
+        },
+    };
+    module_with(function)
+}
+
+#[test]
+fn test_native_phi_entry_block_without_incoming_is_rejected() {
+    // Arrange：入口块没有前驱。verify_ssa 允许 incoming 为空的 Phi（前驱数 0 ==
+    // incoming 数 0），但 LLVM phi 至少要一条 incoming；分析层必须发射前拒绝。
+    let function = base_function(
+        MonoType::Int(64),
+        vec![ValueInfo {
+            ty: MonoType::Int(64),
+            debug_name: None,
+            defining_block: 0,
+        }],
+        vec![
+            Instruction::Phi {
+                dst: Operand::Value(ValueId(0)),
+                incoming: Vec::new(),
+                span: at(3, 1),
+            },
+            ret_value(0),
+        ],
+    );
+    let module = module_with(function);
+
+    // Act
+    let error = analyze_module(&module, "phi_entry.yx")
+        .err()
+        .expect("a Phi without incoming edges must be rejected before emission");
+
+    // Assert
+    let detail = error.to_string();
     assert!(
-        error.to_string().contains("3.5"),
-        "diagnostic must name the AOT-3.5 boundary: {error}"
+        detail.contains("ValueId(0)") && detail.contains("no incoming"),
+        "empty-incoming Phi diagnostic must name the value and the reason: {detail}"
+    );
+    assert!(
+        detail.contains("phi_entry.yx:3:1"),
+        "empty-incoming Phi diagnostic must carry the source position: {detail}"
+    );
+}
+
+#[test]
+fn test_native_phi_local_incoming_is_rejected() {
+    // Arrange：Phi 的一个输入是 Local 槽（不是 SSA 值）。生产端不会产出这种形态；
+    // 发射层无法在前驱终结指令之后插入 load，必须显式拒绝而不是让 LLVM 兜底。
+    let module = two_block_phi_module(
+        vec![load_local(0, Operand::Const(ConstValue::Int(5)))],
+        vec![(0, Operand::Local(0))],
+        MonoType::Int(64),
+    );
+
+    // Act
+    let error = analyze_module(&module, "phi_local.yx")
+        .err()
+        .expect("a Phi incoming from a Local slot must be rejected");
+
+    // Assert
+    let detail = error.to_string();
+    assert!(
+        detail.contains("must be an SSA value or constant"),
+        "Local-incoming Phi diagnostic must name the supported incoming forms: {detail}"
+    );
+    assert!(
+        detail.contains("phi_local.yx:6:9"),
+        "Local-incoming Phi diagnostic must carry the Phi position: {detail}"
+    );
+}
+
+#[test]
+fn test_native_phi_unknown_destination_is_rejected() {
+    // Arrange：Phi dst 的值表类型是显式未知 TypeRef("?")。
+    let module = two_block_phi_module(
+        vec![],
+        vec![(0, Operand::Const(ConstValue::Int(1)))],
+        MonoType::TypeRef("?".to_string()),
+    );
+
+    // Act
+    let error = analyze_module(&module, "phi_unknown_dst.yx")
+        .err()
+        .expect("a Phi destination with explicit unknown type must be rejected");
+
+    // Assert
+    let detail = error.to_string();
+    assert!(
+        detail.contains("ValueId(0)") && detail.contains("TypeRef(\"?\")"),
+        "unknown Phi destination diagnostic must name value id and original type: {detail}"
+    );
+}
+
+#[test]
+fn test_native_phi_known_type_mismatch_is_rejected() {
+    // Arrange：Phi dst 的 ValueInfo 是 Int(64)，前驱给 Bool 常量。
+    let module = two_block_phi_module(
+        vec![],
+        vec![(0, Operand::Const(ConstValue::Bool(true)))],
+        MonoType::Int(64),
+    );
+
+    // Act
+    let error = analyze_module(&module, "phi_type_mismatch.yx")
+        .err()
+        .expect("a known-type Phi incoming mismatch must be rejected");
+
+    // Assert
+    let detail = error.to_string();
+    assert!(
+        detail.contains("Bool") && detail.contains("Int"),
+        "Phi incoming type mismatch diagnostic must name both types: {detail}"
     );
 }
 
@@ -260,7 +553,7 @@ fn local_merge_module(two_arms: bool) -> ModuleIR {
     let read = Instruction::Load {
         dst: Operand::Value(ValueId(0)),
         src: Operand::Local(0),
-        span: Span::dummy(),
+        span: at(9, 5),
     };
     let ret = Instruction::Ret {
         value: None,
@@ -456,38 +749,41 @@ fn local_loop_module() -> ModuleIR {
 }
 
 #[test]
-fn test_native_local_merge_boundary_rejects_multi_predecessor_write() {
-    // Arrange
+fn test_native_local_multi_predecessor_write_is_allowed() {
+    // Arrange：两臂各写 Local(0)，汇合后读；批次 3.5 起由入口块 alloca 支持。
     let module = local_merge_module(true);
 
     // Act
-    let error = analyze_module(&module, "merge_multi.yx")
-        .err()
-        .expect("multi-predecessor Local merge must be rejected");
+    let analysis = analyze_module(&module, "merge_multi.yx")
+        .expect("multi-predecessor Local merge is inside the batch 3.5 support set");
 
     // Assert
-    let detail = error.to_string();
     assert!(
-        detail.contains("AOT-3.5") && detail.contains("Local(0)"),
-        "multi-arm Local merge diagnostic must name AOT-3.5 and Local: {detail}"
+        analysis.functions.contains_key("merge"),
+        "merged Local function should be analyzed"
     );
 }
 
 #[test]
-fn test_native_local_merge_boundary_rejects_single_arm_write() {
-    // Arrange
+fn test_native_local_read_without_write_on_path_is_rejected() {
+    // Arrange：单臂写、另一条路径直接读；VM 帧槽默认值（Void）无法在带类型
+    // alloca 上物化，收窄后的边界仍必须显式拒绝。
     let module = local_merge_module(false);
 
     // Act
     let error = analyze_module(&module, "merge_single.yx")
         .err()
-        .expect("single-arm Local write must not dominate a merged read");
+        .expect("a Local read on a path without a write must stay rejected");
 
     // Assert
     let detail = error.to_string();
     assert!(
-        detail.contains("AOT-3.5") && detail.contains("Local(0)"),
-        "single-arm Local merge diagnostic must name AOT-3.5 and Local: {detail}"
+        detail.contains("Local(0)") && detail.contains("never written"),
+        "narrowed boundary diagnostic must name Local and the reason: {detail}"
+    );
+    assert!(
+        detail.contains("merge_single.yx:9:5"),
+        "narrowed boundary diagnostic must carry the read source position: {detail}"
     );
 }
 

@@ -68,7 +68,7 @@ pub fn compile_ir_to_executable(
     module.set_data_layout(&data_layout);
     module.verify().map_err(|_| {
         anyhow!(
-            "native AOT LLVM verification failed for {source_name}; the module is outside the AOT-3.1 support set (see AOT-3.5 boundary rules)"
+            "native AOT LLVM verification failed for {source_name}; the module is outside the native AOT support set"
         )
     })?;
     if optimize {

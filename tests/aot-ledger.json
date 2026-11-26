@@ -33,16 +33,16 @@
     },
     {
       "id": "phi-boundary",
-      "state": "expected-reject",
+      "state": "supported",
       "tests": [
-        "native_aot::enabled::test_native_phi_is_rejected_at_batch_35"
+        "native_aot::enabled::test_native_phi_short_circuit_merge_matches_vm"
       ]
     },
     {
       "id": "local-merge-boundary",
-      "state": "expected-reject",
+      "state": "supported",
       "tests": [
-        "native_aot::enabled::test_native_local_merge_boundary_reports_aot_35"
+        "native_aot::enabled::test_native_local_multi_arm_merge_matches_vm"
       ]
     },
     {

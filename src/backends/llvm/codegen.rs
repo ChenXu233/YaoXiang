@@ -1,14 +1,19 @@
 //! 已证明子集的 LLVM 发射。类型与能力判定全部来自 `analysis`；
-//! 值走独立映射，控制流按 `BasicBlock` 建 LLVM 基本块（Phi 仍由 analysis 拒绝）。
+//! 值走独立映射，控制流按 `BasicBlock` 建 LLVM 基本块。
+//!
+//! 汇合映射（批次 3.5）：每个块的 `Phi` 在块首发射 LLVM phi，incoming 在前驱边
+//! 发射时按前驱 label 登记；`Local` 槽位的 alloca 统一提到入口块，多前驱写—
+//! 汇合读由入口块 alloca 支配，分支里只保留 store。
 
 use std::collections::HashMap;
 use std::fmt::Display;
 
 use anyhow::{anyhow, bail, Result};
+use inkwell::basic_block::BasicBlock as LlvmBlock;
 use inkwell::module::{Linkage, Module};
-use inkwell::types::{BasicMetadataTypeEnum, BasicType, BasicTypeEnum};
+use inkwell::types::{BasicMetadataTypeEnum, BasicType, BasicTypeEnum, StructType};
 use inkwell::values::{
-    BasicMetadataValueEnum, BasicValue, BasicValueEnum, FunctionValue, PointerValue,
+    BasicMetadataValueEnum, BasicValue, BasicValueEnum, FunctionValue, PhiValue, PointerValue,
 };
 use inkwell::{AddressSpace, IntPredicate};
 
@@ -38,6 +43,14 @@ impl<'ctx> Value<'ctx> {
             repr: None,
         }
     }
+}
+
+/// 预建的块首 phi：incoming 在前驱边发射时按 label 登记。
+struct PhiSlot<'ctx> {
+    instruction_index: usize,
+    id: u32,
+    ty: ScalarType,
+    phi: PhiValue<'ctx>,
 }
 
 struct RuntimeFunctions<'ctx> {
@@ -242,6 +255,10 @@ impl<'ctx> Emitter<'ctx> {
                     .append_basic_block(function_value, &format!("bb{}", block.label)),
             );
         }
+        let mut label_to_ordinal = HashMap::with_capacity(blocks.len());
+        for (ordinal, block) in blocks.iter().enumerate() {
+            label_to_ordinal.insert(block.label, ordinal);
+        }
         let mut flat_to_block = HashMap::new();
         let mut flat = 0;
         for (ordinal, block) in blocks.iter().enumerate() {
@@ -251,9 +268,73 @@ impl<'ctx> Emitter<'ctx> {
             }
         }
 
+        // Phi 节点先于所有指令建立：前驱边可能在本块发射前就要登记 incoming，
+        // 而 phi 节点必须位于所在块首（LLVM 的分组要求）。
+        let mut values: HashMap<u32, Value<'ctx>> = HashMap::new();
+        let mut block_phis: Vec<Vec<PhiSlot<'ctx>>> = Vec::with_capacity(blocks.len());
+        for (ordinal, block) in blocks.iter().enumerate() {
+            self.builder.position_at_end(llvm_blocks[ordinal]);
+            let mut phis = Vec::new();
+            for (instruction_index, instruction) in block.instructions.iter().enumerate() {
+                let Instruction::Phi { dst, .. } = instruction else {
+                    break;
+                };
+                let Operand::Value(id) = dst else {
+                    bail!("Phi destination must be an SSA value, got {dst:?}")
+                };
+                let ty = analysis.value_type(*id)?;
+                let name = format!("phi.v{}", id.0);
+                let phi = match llvm_type(self.context, ty) {
+                    Some(BasicTypeEnum::IntType(int_type)) => {
+                        llvm(self.builder.build_phi(int_type, &name))?
+                    }
+                    Some(BasicTypeEnum::StructType(struct_type)) => {
+                        llvm(self.builder.build_phi(struct_type, &name))?
+                    }
+                    Some(_) => bail!("Phi ValueId({}) has no supported LLVM type", id.0),
+                    // Void 汇合值没有 LLVM 形态：读取方一律得到 Void，不建节点。
+                    None => {
+                        values.insert(id.0, Value::void());
+                        continue;
+                    }
+                };
+                values.insert(
+                    id.0,
+                    Value {
+                        ty,
+                        repr: Some(phi.as_basic_value()),
+                    },
+                );
+                phis.push(PhiSlot {
+                    instruction_index,
+                    id: id.0,
+                    ty,
+                    phi,
+                });
+            }
+            block_phis.push(phis);
+        }
+
+        // Local 槽位的 alloca 统一提到入口块：多前驱写—汇合读时汇合点的 load
+        // 由入口块 alloca 支配；分支里只保留 store。
         self.builder.position_at_end(llvm_blocks[0]);
-        let mut locals = HashMap::new();
-        let mut values = HashMap::new();
+        let mut slots: Vec<(usize, ScalarType)> = analysis
+            .locals
+            .iter()
+            .map(|(slot, ty)| (*slot, *ty))
+            .collect();
+        slots.sort_unstable_by_key(|(slot, _)| *slot);
+        let mut locals: HashMap<usize, Slot<'ctx>> = HashMap::with_capacity(slots.len());
+        for (slot, ty) in slots {
+            let pointer = match llvm_type(self.context, ty) {
+                Some(llvm_ty) => Some(llvm(
+                    self.builder.build_alloca(llvm_ty, &format!("slot.{slot}")),
+                )?),
+                None => None,
+            };
+            locals.insert(slot, Slot { ty, pointer });
+        }
+
         for (index, ty) in signature.params.iter().enumerate() {
             let repr = function_value.get_nth_param(index as u32);
             let value = if *ty == ScalarType::Void {
@@ -275,6 +356,7 @@ impl<'ctx> Emitter<'ctx> {
             // 不可达填充；生成 unreachable，不产生类型错误的 ret void。
             if ordinal > 0
                 && signature.return_type != ScalarType::Void
+                && block.successors.is_empty()
                 && block.instructions.len() == 1
                 && matches!(block.instructions[0], Instruction::Ret { value: None, .. })
             {
@@ -291,6 +373,7 @@ impl<'ctx> Emitter<'ctx> {
                 }
                 flat_index += 1;
                 match instruction {
+                    Instruction::Phi { .. } => {}
                     Instruction::Jmp { target, .. } => {
                         let target_block = flat_to_block
                             .get(target)
@@ -318,6 +401,17 @@ impl<'ctx> Emitter<'ctx> {
                             .repr
                             .ok_or_else(|| anyhow!("branch condition has no LLVM value"))?
                             .into_int_value();
+                        if target_block == fallthrough_ordinal {
+                            // 条件两条边落到同一基本块：IR 的 `successors` 已去重，
+                            // 汇合块的 phi 也只登记一条 incoming；发射无条件分支，
+                            // 避免 LLVM 看到两条边而 phi 少一条（verifier 会拒绝）。
+                            llvm(
+                                self.builder
+                                    .build_unconditional_branch(llvm_blocks[fallthrough_ordinal]),
+                            )?;
+                            terminated = true;
+                            break;
+                        }
                         if matches!(instruction, Instruction::JmpIf { .. }) {
                             llvm(self.builder.build_conditional_branch(
                                 condition,
@@ -360,6 +454,16 @@ impl<'ctx> Emitter<'ctx> {
                     bail!("scalar function without return reached LLVM emission")
                 }
             }
+            self.emit_phi_incoming(
+                ordinal,
+                blocks,
+                &llvm_blocks,
+                &label_to_ordinal,
+                &block_phis,
+                &locals,
+                &values,
+                analysis,
+            )?;
         }
         Ok(())
     }
@@ -569,7 +673,7 @@ impl<'ctx> Emitter<'ctx> {
                 // AOT-1 的标量与只读字符串常量没有析构义务。
             }
             Instruction::Phi { .. } => {
-                bail!("Phi mapping is deferred to batch 3.5 (AOT-3.5 boundary)")
+                bail!("Phi instruction reached LLVM instruction emitter; Phi must be grouped at block head")
             }
             Instruction::Jmp { .. } | Instruction::JmpIf { .. } | Instruction::JmpIfNot { .. } => {
                 bail!("control-flow instruction reached instruction emitter")
@@ -665,7 +769,9 @@ impl<'ctx> Emitter<'ctx> {
             }
             Operand::Const(ConstValue::String(value)) => self.string_value(value),
             Operand::Local(slot) | Operand::Arg(slot) => {
-                let slot = locals[slot];
+                let Some(slot) = locals.get(slot).copied() else {
+                    bail!("local slot {slot} has no entry-block alloca")
+                };
                 self.load_slot(slot)
             }
             Operand::Value(id) => values
@@ -721,6 +827,12 @@ impl<'ctx> Emitter<'ctx> {
     ) -> Result<()> {
         match operand {
             Operand::Value(id) => {
+                // 生产端未定义值的物化（`ssa::materialize_undef` 的 `Load Void`）：
+                // 显式未知类型的值只允许由 Void 源定义，发射层原样记录 Void。
+                if value.ty == ScalarType::Void && analysis.is_explicit_unknown_value(*id)? {
+                    values.insert(id.0, value);
+                    return Ok(());
+                }
                 let expected = analysis.value_type(*id)?;
                 if expected != value.ty {
                     bail!(
@@ -754,17 +866,10 @@ impl<'ctx> Emitter<'ctx> {
         let Operand::Local(index) = operand else {
             bail!("unsupported destination reached LLVM emission: {operand:?}")
         };
-        let pointer = if value.ty == ScalarType::Void {
-            None
-        } else if let Some(existing) = locals.get(index).and_then(|slot| slot.pointer) {
-            Some(existing)
-        } else {
-            Some(llvm(self.builder.build_alloca(
-                llvm_type(self.context, value.ty).expect("void handled above"),
-                &format!("slot.{index}"),
-            ))?)
+        let Some(slot) = locals.get(index).copied() else {
+            bail!("local slot {index} has no entry-block alloca; analysis lacks its type")
         };
-        if let (Some(pointer), Some(repr)) = (pointer, value.repr) {
+        if let (Some(pointer), Some(repr)) = (slot.pointer, value.repr) {
             llvm(self.builder.build_store(pointer, repr))?;
         }
         let expected = analysis.locals.get(index).copied();
@@ -774,14 +879,87 @@ impl<'ctx> Emitter<'ctx> {
                 value.ty
             )
         }
-        locals.insert(
-            *index,
-            Slot {
-                ty: value.ty,
-                pointer,
-            },
-        );
         Ok(())
+    }
+
+    /// 在前驱块发射完终结指令后，把这条边登记到后继块的 Phi incoming。
+    ///
+    /// `incoming` 的键是 IR 块 label，源值在前驱出口已全部可用。显式未知的
+    /// incoming（生产端 `Load Void` 物化）没有具体类型证据，这里按 Phi 的 dst
+    /// 类型物化为 `undef`：值本身不可观察，不猜类型。
+    #[allow(clippy::too_many_arguments)]
+    fn emit_phi_incoming(
+        &mut self,
+        from_ordinal: usize,
+        blocks: &[BasicBlock],
+        llvm_blocks: &[LlvmBlock<'ctx>],
+        label_to_ordinal: &HashMap<usize, usize>,
+        block_phis: &[Vec<PhiSlot<'ctx>>],
+        locals: &HashMap<usize, Slot<'ctx>>,
+        values: &HashMap<u32, Value<'ctx>>,
+        analysis: &FunctionAnalysis,
+    ) -> Result<()> {
+        let from = llvm_blocks[from_ordinal];
+        let predecessor_label = blocks[from_ordinal].label;
+        for successor_label in &blocks[from_ordinal].successors {
+            let Some(&to_ordinal) = label_to_ordinal.get(successor_label) else {
+                bail!("phi edge target block label {successor_label} does not exist")
+            };
+            for phi_slot in &block_phis[to_ordinal] {
+                let Instruction::Phi { incoming, .. } =
+                    &blocks[to_ordinal].instructions[phi_slot.instruction_index]
+                else {
+                    bail!(
+                        "phi bookkeeping disagrees with block {} instruction {}",
+                        blocks[to_ordinal].label,
+                        phi_slot.instruction_index
+                    )
+                };
+                let Some((_, operand)) = incoming
+                    .iter()
+                    .find(|(label, _)| *label == predecessor_label)
+                else {
+                    bail!(
+                        "Phi ValueId({}) in block {} has no incoming for predecessor {predecessor_label}",
+                        phi_slot.id,
+                        blocks[to_ordinal].label
+                    )
+                };
+                let value = self.read(locals, values, operand, analysis)?;
+                let repr = match value.repr {
+                    Some(repr) if value.ty == phi_slot.ty => repr,
+                    Some(_) => bail!(
+                        "Phi ValueId({}) is {:?} but its incoming value from predecessor {predecessor_label} is {:?}",
+                        phi_slot.id,
+                        phi_slot.ty,
+                        value.ty
+                    ),
+                    None => self.undef_value(phi_slot.ty).ok_or_else(|| {
+                        anyhow!(
+                            "Phi ValueId({}) has no LLVM type for undef materialization",
+                            phi_slot.id
+                        )
+                    })?,
+                };
+                phi_slot
+                    .phi
+                    .add_incoming(&[(&repr as &dyn BasicValue<'ctx>, from)]);
+            }
+        }
+        Ok(())
+    }
+
+    /// 按标量类型取 `undef`：用于没有类型证据的显式未知 incoming。
+    fn undef_value(
+        &self,
+        ty: ScalarType,
+    ) -> Option<BasicValueEnum<'ctx>> {
+        match ty {
+            ScalarType::Void => None,
+            ScalarType::Int => Some(self.context.i64_type().get_undef().into()),
+            ScalarType::Bool => Some(self.context.bool_type().get_undef().into()),
+            ScalarType::String => Some(string_type(self.context).get_undef().into()),
+        }
     }
 
     fn location_args(
@@ -847,18 +1025,18 @@ fn llvm_type(
         ScalarType::Void => None,
         ScalarType::Int => Some(context.i64_type().into()),
         ScalarType::Bool => Some(context.bool_type().into()),
-        ScalarType::String => Some(
-            context
-                .struct_type(
-                    &[
-                        context.ptr_type(AddressSpace::default()).into(),
-                        context.i64_type().into(),
-                    ],
-                    false,
-                )
-                .into(),
-        ),
+        ScalarType::String => Some(string_type(context).into()),
     }
+}
+
+fn string_type(context: &inkwell::context::Context) -> StructType<'_> {
+    context.struct_type(
+        &[
+            context.ptr_type(AddressSpace::default()).into(),
+            context.i64_type().into(),
+        ],
+        false,
+    )
 }
 
 fn function_type<'ctx>(

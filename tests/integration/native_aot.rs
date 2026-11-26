@@ -601,36 +601,22 @@ mod enabled {
     }
 
     #[test]
-    fn test_native_unsupported_merge_value_preserves_output() {
-        // Arrange：跨分支合并值仍受 Phi/未知类型边界约束，不是无 Phi 分支。
-        let dir = TempDir::new().expect("native test tempdir");
-        let source_path = dir.path().join("branch.yx");
-        let output_path = dir.path().join("branch");
-        std::fs::write(
-            &source_path,
-            concat!(
-                "use std.assert\n",
-                "choose: (a: Int) -> Int = (a) => if a == 0 { 1 } else { 2 }\n",
-                "assert.assert(choose(0) == 1)\n",
-            ),
-        )
-        .expect("write branch fixture");
-        std::fs::write(&output_path, b"previous-good-output").expect("seed output");
+    fn test_native_if_tail_value_matches_vm() {
+        // Arrange：if 表达式作尾值 → 汇合值；批次 3.5 起映射为 Phi/边拷贝，
+        // 不再是原生能力边界（原拒绝用例转正向，见 test_native_missing_linker
+        // 与 test_native_debug_info 仍守「失败构建不覆盖上次产物」）。
+        let source = concat!(
+            "use std.assert\n",
+            "choose: (a: Int) -> Int = (a) => if a == 0 { 1 } else { 2 }\n",
+            "assert.assert(choose(0) == 1, \"tail if true\")\n",
+            "assert.assert(choose(5) == 2, \"tail if false\")\n",
+        );
 
         // Act
-        let error = build_native_with_options(&source_path, &output_path, false, false)
-            .expect_err("merge values outside the no-Phi branch subset must be rejected");
+        assert_native_matches_vm(source, "if_tail");
 
         // Assert
-        assert!(
-            error.to_string().contains("native AOT"),
-            "error should identify native capability boundary: {error:#}"
-        );
-        assert_eq!(
-            std::fs::read(&output_path).expect("read preserved output"),
-            b"previous-good-output",
-            "failed build must not overwrite previous output"
-        );
+        // assert_native_matches_vm 已断言 native/VM 的退出码与 stdout 一致。
     }
 
     #[test]
@@ -913,42 +899,25 @@ mod enabled {
     }
 
     #[test]
-    fn test_native_local_merge_boundary_reports_aot_35() {
-        // Arrange：两臂各写 a、汇合后读 a；分析层必须在 LLVM verifier 前拒绝。
-        let dir = TempDir::new().expect("local merge tempdir");
-        let source_path = dir.path().join("local_merge.yx");
-        let output_path = dir.path().join("local_merge");
-        std::fs::write(
-            &source_path,
-            concat!(
-                "test: (c: Bool) -> Void = (c) => {\n",
-                "    a = if c { 42 } else { 0 }\n",
-                "    b = a + 1\n",
-                "}\n",
-                "\n",
-                "test(true)\n",
-            ),
-        )
-        .expect("write local merge fixture");
+    fn test_native_local_multi_arm_merge_matches_vm() {
+        // Arrange：同一 Local 在两臂各写、汇合后读；批次 3.5 起由入口块 alloca
+        // 支持，原 AOT-3.5 拒绝用例转为正向等价用例（能力扩展，不是放宽判据）。
+        let source = concat!(
+            "use std.assert\n",
+            "test: (c: Bool) -> Int = (c) => {\n",
+            "    a = if c { 42 } else { 0 }\n",
+            "    b = a + 1\n",
+            "    b\n",
+            "}\n",
+            "assert.assert(test(true) == 43, \"true arm merges 42\")\n",
+            "assert.assert(test(false) == 1, \"false arm merges 0\")\n",
+        );
 
         // Act
-        let error = build_native_with_options(&source_path, &output_path, false, false)
-            .expect_err("Local merge must be rejected by AOT analysis");
+        assert_native_matches_vm(source, "local_merge");
 
         // Assert
-        let detail = format!("{error:#}");
-        assert!(
-            detail.contains("AOT-3.5"),
-            "diagnostic must point at the AOT-3.5 boundary: {detail}"
-        );
-        assert!(
-            detail.contains(&format!("{}:3:5", source_path.display())),
-            "diagnostic must carry the source position: {detail}"
-        );
-        assert!(
-            !detail.contains("Instruction does not dominate all uses"),
-            "LLVM verifier text must not leak: {detail}"
-        );
+        // assert_native_matches_vm 已断言 native/VM 的退出码与 stdout 一致。
     }
 
     #[test]
@@ -1198,6 +1167,138 @@ mod enabled {
         // assert_native_matches_vm 已断言 native/VM 的 O0 与 O2 结果一致。
     }
 
+    #[test]
+    fn test_native_if_value_merge_matches_vm() {
+        // Arrange：if 表达式作值 → 两臂写同一 Local，汇合后读（批次 3.5 前被拒）。
+        let source = concat!(
+            "use std.assert\n",
+            "pick: (c: Bool) -> Int = (c) => {\n",
+            "    x = if c { 42 } else { 7 }\n",
+            "    x + 1\n",
+            "}\n",
+            "assert.assert(pick(true) == 43, \"if true yields 43\")\n",
+            "assert.assert(pick(false) == 8, \"if false yields 8\")\n",
+        );
+
+        // Act
+        assert_native_matches_vm(source, "if_value");
+
+        // Assert
+        // assert_native_matches_vm 已断言 native/VM 的 O0 与 O2 结果一致。
+    }
+
+    #[test]
+    fn test_native_while_merge_value_matches_vm() {
+        // Arrange：while 条件里的 and 短路合流产生 Phi（循环头带显式未知 incoming），
+        // 汇合值按前驱边登记并由布局落空边进入。
+        let source = concat!(
+            "use std.assert\n",
+            "count: () -> Int = () => {\n",
+            "    mut i = 0\n",
+            "    while i < 5 and i != 3 {\n",
+            "        i = i + 1\n",
+            "    }\n",
+            "    i\n",
+            "}\n",
+            "assert.assert(count() == 3, \"while and-merge exits at 3\")\n",
+        );
+
+        // Act
+        assert_native_matches_vm(source, "while_merge");
+
+        // Assert
+        // assert_native_matches_vm 已断言 native/VM 的 O0 与 O2 结果一致。
+    }
+
+    #[test]
+    fn test_native_nested_merge_value_matches_vm() {
+        // Arrange：嵌套 if 表达式作值 → 两级 Phi 链 + 汇合后的 Local 读。
+        let source = concat!(
+            "use std.assert\n",
+            "score: (s: Int) -> Int = (s) => {\n",
+            "    grade = if s >= 90 { 1 } else { if s >= 80 { 2 } else { 3 } }\n",
+            "    grade\n",
+            "}\n",
+            "assert.assert(score(95) == 1, \"grade A\")\n",
+            "assert.assert(score(85) == 2, \"grade B\")\n",
+            "assert.assert(score(70) == 3, \"grade C\")\n",
+        );
+
+        // Act
+        assert_native_matches_vm(source, "nested_merge");
+
+        // Assert
+        // assert_native_matches_vm 已断言 native/VM 的 O0 与 O2 结果一致。
+    }
+
+    #[test]
+    fn test_native_phi_short_circuit_merge_matches_vm() {
+        // Arrange：and/or 短路合流产生 Phi（合流块经块尾落空边进入，无 Jmp）。
+        let source = concat!(
+            "use std.assert\n",
+            "both: (a: Bool, b: Bool) -> Bool = (a, b) => a and b\n",
+            "either: (a: Bool, b: Bool) -> Bool = (a, b) => a or b\n",
+            "assert.assert(both(true, true), \"and tt\")\n",
+            "assert.assert(both(true, false) == false, \"and tf\")\n",
+            "assert.assert(either(false, true), \"or ft\")\n",
+            "assert.assert(either(false, false) == false, \"or ff\")\n",
+        );
+
+        // Act
+        assert_native_matches_vm(source, "phi_short_circuit");
+
+        // Assert
+        // assert_native_matches_vm 已断言 native/VM 的 O0 与 O2 结果一致。
+    }
+
+    #[test]
+    fn test_native_phi_failure_path_matches_vm_diagnostic() {
+        // Arrange：含 Phi 汇合的函数里发生运行期失败，诊断码与源码行必须与 VM 一致。
+        let source = concat!(
+            "use std.assert\n",
+            "broken: (n: Int) -> Int = (n) => 10 / n\n",
+            "choose: (c: Bool) -> Int = (c) => if c { broken(0) } else { 1 }\n",
+            "assert.assert(choose(true) == 0)\n",
+        );
+        let dir = TempDir::new().expect("phi failure tempdir");
+        let source_path = dir.path().join("phi_failure.yx");
+        std::fs::write(&source_path, source).expect("write phi failure fixture");
+
+        // Act
+        let vm = Command::new(test_yx_bin())
+            .arg("run")
+            .arg(&source_path)
+            .output()
+            .expect("run VM phi failure fixture");
+        let mut outcomes = Vec::new();
+        for optimize in [false, true] {
+            let output = dir
+                .path()
+                .join(format!("phi_failure_o{}", u8::from(optimize)));
+            build_native_with_options(&source_path, &output, false, optimize)
+                .unwrap_or_else(|e| panic!("build phi failure native {optimize}: {e:#}"));
+            outcomes.push((optimize, run_native(&output)));
+        }
+
+        // Assert
+        assert_eq!(
+            vm.status.code(),
+            Some(1),
+            "VM phi failure exit: {}",
+            String::from_utf8_lossy(&vm.stderr)
+        );
+        assert_diagnostic(&vm.stderr, "E6001", &source_path, 2);
+        for (optimize, native) in outcomes {
+            assert_eq!(
+                native.status.code(),
+                Some(1),
+                "native phi failure exit (optimize={optimize}): {}",
+                String::from_utf8_lossy(&native.stderr)
+            );
+            assert_diagnostic(&native.stderr, "E6001", &source_path, 2);
+        }
+    }
+
     fn simple_value_module(
         ty: yaoxiang::frontend::core::sema::MonoType,
         duplicate: bool,
@@ -1317,6 +1418,34 @@ mod enabled {
     }
 
     #[test]
+    fn test_native_rejected_synthetic_ir_preserves_previous_output() {
+        // Arrange：先放一个上次成功的产物；不支持类型的合成 IR 仍须在分析层被拒，
+        // 且失败构建不得覆盖旧产物——能力扩展不放宽失败语义。
+        let dir = TempDir::new().expect("synthetic preserve tempdir");
+        let output = dir.path().join("preserved");
+        let source = dir.path().join("preserved.yx");
+        std::fs::write(&output, b"previous-good-output").expect("seed output");
+        let module =
+            simple_value_module(yaoxiang::frontend::core::sema::MonoType::Float(64), false);
+
+        // Act
+        let error =
+            compile_ir_to_executable(&module, &source.display().to_string(), &output, false)
+                .expect_err("unsupported value type must be rejected");
+
+        // Assert
+        assert!(
+            error.to_string().contains("ValueId(0)"),
+            "rejection must name the unsupported value: {error:#}"
+        );
+        assert_eq!(
+            std::fs::read(&output).expect("read preserved output"),
+            b"previous-good-output",
+            "rejected build must not overwrite previous output"
+        );
+    }
+
+    #[test]
     fn test_native_explicit_unknown_value_is_rejected() {
         // Arrange
         let module = simple_value_module(
@@ -1366,17 +1495,19 @@ mod enabled {
     }
 
     #[test]
-    fn test_native_phi_is_rejected_at_batch_35() {
-        // Arrange
+    fn test_native_phi_module_builds_and_runs() {
+        // Arrange：合成 IR 的单前驱 Phi（批次 3.5 前被 AOT-3.5 边界拒绝）。
         let module = phi_module();
 
         // Act
-        let detail = compile_error(&module);
+        let (_dir, executable) = build_synthetic(&module, "phi");
+        let output = run_native(&executable);
 
         // Assert
         assert!(
-            detail.contains("3.5"),
-            "Phi must be rejected with the AOT-3.5 boundary: {detail}"
+            output.status.success(),
+            "synthetic Phi module should build and run: {}",
+            String::from_utf8_lossy(&output.stderr)
         );
     }
 }

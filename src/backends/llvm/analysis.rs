@@ -1,8 +1,14 @@
-//! AOT-3.1 的值证据与能力边界。
+//! AOT-3.1 的值证据与能力边界（批次 3.5 起含 SSA 汇合映射）。
 //!
 //! 只消费经 `verify_ssa` 校验的 `ModuleIR`：`Operand::Value` 的类型取
 //! `ValueInfo.ty`，`Local` 保持存储语义；本模块不重建 SSA 或类型，也不把
 //! 类型证明交给 LLVM 猜测。显式未知与不支持类型按能力边界返回带值 id 的诊断。
+//!
+//! 汇合映射（批次 3.5）：`Phi` 的 dst 与 incoming 的类型证据同样取
+//! `ValueInfo.ty`；显式未知输入按生产端同一契约跳过（`is_explicit_unknown_type`），
+//! 由发射层按 Phi 的 dst 类型物化为 `undef`。`Local` 的多前驱写—汇合读由发射层
+//! 把 alloca 提升到入口块实现，本模块只保留「读点在某条路径上没有写」这一真正
+//! 不支持的形态。
 
 use std::collections::{HashMap, HashSet};
 
@@ -10,9 +16,11 @@ use anyhow::{anyhow, bail, Result};
 
 use crate::frontend::core::sema::MonoType;
 use crate::middle::ir::ir::{
-    BasicBlock, ConstValue, FunctionBody, Instruction, ModuleIR, Operand, ValueId,
+    is_explicit_unknown_type, BasicBlock, ConstValue, FunctionBody, Instruction, ModuleIR, Operand,
+    ValueId,
 };
 use crate::middle::ir::verify::verify_ssa;
+use crate::util::span::Span;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum ScalarType {
@@ -51,16 +59,32 @@ pub(super) struct FunctionAnalysis {
 }
 
 impl FunctionAnalysis {
+    /// 值表里的原始类型（不做支持集判定）：Phi 的显式未知输入判定要用它。
+    pub(super) fn value_mono(
+        &self,
+        id: ValueId,
+    ) -> Result<&MonoType> {
+        self.values
+            .get(id.0 as usize)
+            .ok_or_else(|| anyhow!("ValueId({}) has no ValueInfo", id.0))
+    }
+
+    /// 生产端的显式未知标记：`ssa::materialize_undef` 的 `Load Void`（全函数
+    /// 0 定义与部分前驱未定义两类）与 `resolve_phi_type` 的未知收敛共用。
+    pub(super) fn is_explicit_unknown_value(
+        &self,
+        id: ValueId,
+    ) -> Result<bool> {
+        Ok(is_explicit_unknown_type(self.value_mono(id)?))
+    }
+
     /// Operand::Value 的类型证据：只取函数值表，显式未知/不支持类型在这里
     /// 转成带 ValueId 与原始类型的诊断；不在 AOT 侧猜类型。
     pub(super) fn value_type(
         &self,
         id: ValueId,
     ) -> Result<ScalarType> {
-        let ty = self
-            .values
-            .get(id.0 as usize)
-            .ok_or_else(|| anyhow!("ValueId({}) has no ValueInfo", id.0))?;
+        let ty = self.value_mono(id)?;
         ScalarType::from_mono(ty).map_err(|e| {
             anyhow!(
                 "ValueId({}) has unsupported type {ty:?} for native AOT: {e}",
@@ -185,8 +209,13 @@ pub(super) fn analyze_module(
             .and_then(|file_id| module.source_files.get(*file_id))
             .map(String::as_str)
             .unwrap_or(source_name);
-        check_local_merge_boundary(blocks, &function.name, function_source)?;
         let signature = &analysis.signatures[&function.name];
+        check_local_read_definitions(
+            blocks,
+            &function.name,
+            function_source,
+            signature.params.len(),
+        )?;
         let body = analyze_stream(
             module,
             &analysis.signatures,
@@ -214,9 +243,6 @@ pub(super) fn analyze_module(
     Ok(analysis)
 }
 
-/// AOT-3.5 的 Local 形态边界：同一 Local 在汇合块的多个前驱块首次被写，
-/// 且汇合块（或其后继）读取它时，codegen 会在各自分支创建 alloca，汇合点的
-/// load 无单一支配定义。分析层先拒绝，避免 LLVM verifier 原文外泄。
 /// Script 形态（无 entry_function）定义了 main 却没有任何可达调用时，
 /// 原生路径必须构建期拒绝：AOT 不隐式调用 main，静默 exit 0 会掩盖程序未执行。
 fn reject_unused_script_main(
@@ -256,10 +282,21 @@ fn reject_unused_script_main(
     );
 }
 
-fn check_local_merge_boundary(
+/// 汇合读的 L4 自有判据（批次 3.5 收窄后的形态边界）。
+///
+/// 发射层把 `Local` 的 alloca 统一提升到入口块，因此「同一 `Local` 在多个前驱块
+/// 写、汇合后读」不再需要每个 alloca 各占一个支配点，本判据不再以批次 3.5 拒绝
+/// 这类程序。仍不支持的是**读点在某条可达路径上根本没有写**：VM 的帧槽默认值是
+/// Void，带类型的 alloca 无法物化这个默认值，发射 `load` 会读到未初始化内存。
+///
+/// 判据保持 L4 自有（自建可达块 CFG、前驱表与 must-def 不动点），不提升到 L3、
+/// 不重建 SSA——它只判支持集并给出带位置的拒绝。`Phi` 的 incoming 在前驱出口处
+/// 读取，故按前驱的 must-out 逐条判。
+fn check_local_read_definitions(
     blocks: &[BasicBlock],
     function_name: &str,
     source_name: &str,
+    params: usize,
 ) -> Result<()> {
     if blocks.len() < 2 {
         return Ok(());
@@ -303,61 +340,27 @@ fn check_local_merge_boundary(
         })
         .collect();
 
-    let mut must_in: Vec<HashSet<usize>> = vec![HashSet::new(); blocks.len()];
-    let mut changed = true;
-    while changed {
-        changed = false;
-        for index in 0..blocks.len() {
-            if !reachable[index] || index == 0 {
-                continue;
-            }
-            let reachable_preds: Vec<usize> = predecessors[index]
-                .iter()
-                .copied()
-                .filter(|pred| reachable[*pred])
-                .collect();
-            let mut entry: HashSet<usize> = HashSet::new();
-            if let Some(first) = reachable_preds.first() {
-                entry = must_in[*first]
-                    .union(&written_at[*first])
-                    .copied()
-                    .collect();
-                for pred in &reachable_preds[1..] {
-                    let out: HashSet<usize> =
-                        must_in[*pred].union(&written_at[*pred]).copied().collect();
-                    entry.retain(|slot| out.contains(slot));
-                }
-            }
-            if entry != must_in[index] {
-                must_in[index] = entry;
-                changed = true;
-            }
-        }
-    }
-
-    // 每个 Local 的 alloca 创建点：进入块时尚未定义的写。两个创建点
-    // 都可达同一读块时，汇合 load 没有单一支配的 alloca，归 AOT-3.5。
-    let mut alloca_sites: HashMap<usize, Vec<usize>> = HashMap::new();
-    for (index, written) in written_at.iter().enumerate() {
-        if !reachable[index] {
-            continue;
-        }
-        for slot in written {
-            if !must_in[index].contains(slot) {
-                alloca_sites.entry(*slot).or_default().push(index);
-            }
-        }
-    }
-    let reachable_blocks: HashSet<usize> = (0..blocks.len())
-        .filter(|index| reachable[*index])
+    // must-in：进入块时在所有可达路径上都已经写过的 Local。参数槽是入口块的
+    // 隐式定义，必须计入块 0，否则参数读会被误判成“某条路径没有写”。
+    //
+    // 这是「必须定义」分析（前驱出口取交集），按标准方向从全集出发迭代收缩到
+    // **最大**不动点。不能从空集出发做并集迭代：循环回边会把入口路径上已写过的
+    // 槽位从循环头丢掉（入口写 v、循环体只写 i，循环后的 v 读就会被误判为
+    // “某条路径没写”）。全集只取可达块里出现过的槽位，不可达块的写不参与。
+    let all_slots: HashSet<usize> = written_at
+        .iter()
+        .enumerate()
+        .filter(|(index, _)| reachable[*index])
+        .flat_map(|(_, slots)| slots.iter().copied())
+        .chain(0..params)
         .collect();
-    let mut dominators: Vec<HashSet<usize>> = vec![HashSet::new(); blocks.len()];
-    dominators[0].insert(0);
+    let mut must_in: Vec<HashSet<usize>> = vec![HashSet::new(); blocks.len()];
     for index in 1..blocks.len() {
         if reachable[index] {
-            dominators[index] = reachable_blocks.clone();
+            must_in[index] = all_slots.clone();
         }
     }
+    must_in[0] = (0..params).collect();
     let mut changed = true;
     while changed {
         changed = false;
@@ -370,73 +373,67 @@ fn check_local_merge_boundary(
                 .copied()
                 .filter(|pred| reachable[*pred])
                 .collect();
-            let mut next: HashSet<usize> = match reachable_preds.first() {
-                Some(first) => dominators[*first].clone(),
+            let mut entry: HashSet<usize> = match reachable_preds.first() {
+                Some(first) => must_in[*first]
+                    .union(&written_at[*first])
+                    .copied()
+                    .collect(),
                 None => HashSet::new(),
             };
             for pred in &reachable_preds[1..] {
-                next.retain(|block| dominators[*pred].contains(block));
+                let out: HashSet<usize> =
+                    must_in[*pred].union(&written_at[*pred]).copied().collect();
+                entry.retain(|slot| out.contains(slot));
             }
-            next.insert(index);
-            if next != dominators[index] {
-                dominators[index] = next;
+            if entry != must_in[index] {
+                must_in[index] = entry;
                 changed = true;
             }
         }
     }
+    let must_out: Vec<HashSet<usize>> = (0..blocks.len())
+        .map(|index| must_in[index].union(&written_at[index]).copied().collect())
+        .collect();
 
-    let mut reachable_from = vec![vec![false; blocks.len()]; blocks.len()];
-    for start in 0..blocks.len() {
-        let mut stack = vec![start];
-        reachable_from[start][start] = true;
-        while let Some(index) = stack.pop() {
-            for successor in &blocks[index].successors {
-                let Some(&next) = index_by_label.get(successor) else {
-                    continue;
-                };
-                if !reachable_from[start][next] {
-                    reachable_from[start][next] = true;
-                    stack.push(next);
-                }
-            }
-        }
-    }
+    let reject = |slot: usize, span: Span| -> Result<()> {
+        Err(anyhow!(
+            "native AOT unsupported input at {source_name}:{}:{} in {function_name}: Local({slot}) is read on a path where it is never written; AOT does not materialize the VM frame-slot default (Void)",
+            span.start.line,
+            span.start.column
+        ))
+    };
 
     for (index, block) in blocks.iter().enumerate() {
         if !reachable[index] {
             continue;
         }
+        let mut defined = must_in[index].clone();
         for instruction in &block.instructions {
+            if let Instruction::Phi { incoming, .. } = instruction {
+                for (label, operand) in incoming {
+                    let Operand::Local(slot) = operand else {
+                        continue;
+                    };
+                    let Some(&pred) = index_by_label.get(label) else {
+                        continue;
+                    };
+                    if !reachable[pred] || !must_out[pred].contains(slot) {
+                        return reject(*slot, instruction.span());
+                    }
+                }
+                continue;
+            }
             for operand in instruction.use_operands() {
                 let Operand::Local(slot) = operand else {
                     continue;
                 };
-                let Some(sites) = alloca_sites.get(slot) else {
-                    continue;
-                };
-                let reaching: Vec<usize> = sites
-                    .iter()
-                    .copied()
-                    .filter(|site| reachable_from[*site][index])
-                    .collect();
-                let span = instruction.span();
-                let dominant = reaching.iter().find(|site| {
-                    dominators[index].contains(site)
-                        && reaching
-                            .iter()
-                            .all(|other| dominators[*other].contains(site))
-                });
-                if dominant.is_none() {
-                    let detail = if reaching.len() >= 2 {
-                        "is written in multiple predecessor blocks and read after the merge"
-                    } else {
-                        "is first written on one predecessor path and read after the merge; its alloca does not dominate the read"
-                    };
-                    return Err(anyhow!(
-                        "native AOT unsupported input at {source_name}:{}:{} in {function_name}: AOT-3.5 boundary: Local({slot}) {detail}",
-                        span.start.line,
-                        span.start.column
-                    ));
+                if !defined.contains(slot) {
+                    return reject(*slot, instruction.span());
+                }
+            }
+            for operand in instruction.def_operands() {
+                if let Operand::Local(slot) = operand {
+                    defined.insert(*slot);
                 }
             }
         }
@@ -538,10 +535,12 @@ fn analyze_stream(
     }
 
     let mut terminated = false;
+    let mut seen_non_phi = false;
     for (index, instruction) in instructions.iter().enumerate() {
         // 每块独立检查终止性：前一 Ret/Jmp 不吞掉下一块。
         if block_starts.contains(&index) {
             terminated = false;
+            seen_non_phi = false;
         }
         // lower 会在显式返回后追加一个仅含 Ret(None) 的无前驱落空块；
         // 标量函数里它是不可达填充，不作为真实返回参与类型分析。
@@ -596,6 +595,13 @@ fn analyze_stream(
                     Ok(())
                 }
                 Operand::Value(id) => {
+                    // 生产端把「部分前驱未定义」物化为入口块的一条 `Load Void`
+                    // （`ssa::materialize_undef`，类型记显式未知）。该形态只允许
+                    // 由 Void 源定义；其他写入仍要求值表类型与指令结果一致，显式
+                    // 未知的读取照旧拒绝。
+                    if ty == ScalarType::Void && result.is_explicit_unknown_value(*id)? {
+                        return Ok(());
+                    }
                     let declared = result.value_type(*id)?;
                     if declared != ty {
                         return Err(unsupported(format!(
@@ -740,10 +746,51 @@ fn analyze_stream(
             Instruction::Drop { src, .. } => {
                 read(src, &result)?;
             }
-            Instruction::Phi { .. } => {
-                return Err(unsupported(
-                    "Phi mapping is deferred to batch 3.5 (AOT-3.5 boundary)".to_string(),
-                ));
+            Instruction::Phi { dst, incoming, .. } => {
+                if seen_non_phi {
+                    return Err(unsupported(
+                        "Phi must be grouped at the start of its basic block".to_string(),
+                    ));
+                }
+                let Operand::Value(id) = dst else {
+                    return Err(unsupported(format!(
+                        "Phi destination must be an SSA value, got {dst:?}"
+                    )));
+                };
+                if incoming.is_empty() {
+                    return Err(unsupported(format!(
+                        "Phi destination ValueId({}) has no incoming edge; a block without predecessors has no LLVM phi form",
+                        id.0
+                    )));
+                }
+                // 类型证据取 `ValueInfo.ty`：显式未知/不支持类型在这里带 id 拒绝。
+                let phi_type = result
+                    .value_type(*id)
+                    .map_err(|e| unsupported(e.to_string()))?;
+                for (label, operand) in incoming {
+                    // 生产端的 Phi 输入只有 SSA 值与常量（`materialize_undef` 的
+                    // `Load Void` 也产出 Value）。`Local` 输入要在前驱出口插入
+                    // load 才能物化，不在批次 3.5 的映射面内；显式拒绝，不发射
+                    // 终结指令之后的 load 让 LLVM verifier 兜底。
+                    if !matches!(operand, Operand::Value(_) | Operand::Const(_)) {
+                        return Err(unsupported(format!(
+                            "Phi incoming from predecessor {label} must be an SSA value or constant, got {operand:?}"
+                        )));
+                    }
+                    // 与生产端 `resolve_phi_type` 同一契约：跳过显式未知输入
+                    // （发射层按 dst 类型物化 undef）；其余已知输入必须同型。
+                    if matches!(operand, Operand::Value(source) if result.is_explicit_unknown_value(*source)?)
+                    {
+                        continue;
+                    }
+                    let incoming_type = read(operand, &result)?;
+                    if incoming_type != phi_type {
+                        return Err(unsupported(format!(
+                            "Phi destination ValueId({}) is {phi_type:?} but the incoming value from predecessor {label} is {incoming_type:?}",
+                            id.0
+                        )));
+                    }
+                }
             }
             Instruction::Jmp { .. } => {}
             Instruction::JmpIf { cond, .. } | Instruction::JmpIfNot { cond, .. } => {
@@ -764,6 +811,9 @@ fn analyze_stream(
                 | Instruction::JmpIfNot { .. }
         ) {
             terminated = true;
+        }
+        if !matches!(instruction, Instruction::Phi { .. }) {
+            seen_non_phi = true;
         }
     }
     Ok(result)
