@@ -308,7 +308,7 @@ pub enum BinOp {
     BitAnd,
     BitOr,
     BitXor,
-    /// 左移/右移
+    /// 左移/右移（`Shr` 在源码层是 `>>`，算术右移）
     Shl,
     Shr,
 }

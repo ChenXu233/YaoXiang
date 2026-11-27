@@ -214,6 +214,7 @@ pub enum BinOp {
     BitOr,
     BitXor,
     Shl,
+    // 本层 `Shr` 是源码 `>>`（有符号算术右移，降为 IR `Sar`）；IR/字节码的同名 `Shr` 是逻辑右移。
     Shr,
 }
 
