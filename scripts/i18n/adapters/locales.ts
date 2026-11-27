@@ -54,6 +54,48 @@ export function extractKeys(json: LocaleJson): FlatKeys {
 }
 
 /**
+ * 把错误码条目的 title 统一成句首大写。
+ *
+ * 诊断标题在终端里独占一行、用户按它检索，大小写必须一致。此前 title 由模型
+ * 自行决定大小写（提示词只要求「保持既有译法与风格」，新增的码没有既定译法），
+ * 于是同一张表里出现 `Invalid character` 与 `unterminated string` 两种写法。
+ *
+ * 只改**首字母**：其余部分原样保留——标题是既定产物，不在这里改写措辞。
+ * 以技术标识符开头（`const` / `unsafe` / `return`）的标题同样处理：
+ * 它们在中文侧也是标识符开头，句首大写后仍是同一个词。
+ *
+ * 只对有大小写的语言调用（CJK 标题无大小写；ja/文言文/喵语里以标识符开头的
+ * 标题是既有写法，不动）。
+ *
+ * @param json 目标语言 JSON（原地不改，返回新对象）
+ * @returns title 已规范化的新对象
+ */
+export function normalizeCodeTitles(json: LocaleJson): LocaleJson {
+  const result: LocaleJson = { ...json };
+  for (const [code, entry] of Object.entries(result)) {
+    if (!CODE_KEY.test(code) || typeof entry !== "object" || entry === null) {
+      continue;
+    }
+    const title = (entry as CodeFields).title;
+    if (typeof title !== "string" || title === "") {
+      continue;
+    }
+    // JavaScript 没有 isLowerCase()——用大小写比较判定「首字符是有大小写的小写字母」。
+    // CJK 字符 toLowerCase() === toUpperCase() === 自身，第二个条件为假 ⇒ 不改。
+    const first = title[0]!;
+    const isLowerLetter = first.toLowerCase() === first && first.toUpperCase() !== first;
+    if (!isLowerLetter) {
+      continue;
+    }
+    result[code] = {
+      ...(entry as CodeFields),
+      title: first.toUpperCase() + title.slice(1),
+    };
+  }
+  return result;
+}
+
+/**
  * 将翻译结果写回目标 JSON（点分 key 还原为嵌套结构）
  *
  * 码键（`E0001.title`）**一律**嵌套成对象，与目标语言是否已有该码无关——
