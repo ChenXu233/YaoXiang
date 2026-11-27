@@ -73,6 +73,7 @@ fn new_array_roundtrip_file() -> crate::middle::bytecode::file::BytecodeFile {
             }],
         },
         vtables: vec![],
+        globals: vec![],
         debug_section: None,
     }
 }

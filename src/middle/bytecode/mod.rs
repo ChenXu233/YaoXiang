@@ -881,6 +881,18 @@ pub struct BytecodeModule {
 }
 
 /// Global variable information
+///
+/// # 字段与 .42（v5）的对应关系
+///
+/// - `name` / `type_id`：随 `.42` 全局表落盘（表序即槽位号）。
+///   `type_id` 是 **.42 类型号**（`file::mono_type_id` / `file::type_id_to_monotype`
+///   这一对口径），与形参/返回类型/类型表项同一套编号，**不是** `type_table` 下标。
+/// - `initializer`：**不落盘**。顶层绑定的初始化由模块初始化序列在运行时求值
+///   （`lower/globals.rs` 的 `generate_global_var_ir`：任意表达式求值后
+///   `Store(Global(idx))`），编译期常量折叠只是优化；把它再存一份就是同一事实的第二来源。
+/// - `is_mutable`：**不落盘**。可变性的事实源是 AST 的 `Assign.is_mut`（`mut` 关键字），
+///   它在 `lower` 阶段没有进 `GlobalSlot`（IR 无该字段），故 codegen 拿不到——载入产物
+///   恒为 `false`，含义是「未跟踪」而不是「不可变」。要让 .42 携带它，先让 IR 携带。
 #[derive(Debug, Clone)]
 pub struct GlobalInfo {
     /// Variable name
@@ -2350,7 +2362,8 @@ impl From<crate::middle::bytecode::file::BytecodeFile> for BytecodeModule {
             functions,
             type_table: file.type_table,
             vtables: file.vtables,
-            globals: Vec::new(), // Not stored in BytecodeFile yet
+            // v5：全局表随 .42 落盘（名字 + 类型号）；此前恒为空（RFC-039 D52 的 2341 项）
+            globals: file.globals,
             entry_point,
             init_function,
             // #327：贯通 DebugSection.sources——.42 直跑也能渲染栈帧源码上下文

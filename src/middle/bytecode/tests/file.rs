@@ -15,9 +15,11 @@
 
 use crate::frontend::core::sema::MonoType;
 use crate::middle::bytecode::file::{
-    BytecodeFile, BytecodeInstruction, CodeSection, DebugSection, FileHeader, FunctionCode,
+    mono_type_id, BytecodeFile, BytecodeInstruction, CodeSection, DebugSection, FileHeader,
+    FunctionCode,
 };
 use crate::middle::bytecode::opcode;
+use crate::middle::bytecode::GlobalInfo;
 use crate::util::span::{DebugSpan, Position, SourceMap, Span};
 use std::collections::HashMap;
 use std::io;
@@ -52,6 +54,7 @@ fn bytecode_file_with_debug_map(
         const_pool: Vec::new(),
         code_section,
         vtables: Vec::new(),
+        globals: Vec::new(),
         debug_section: Some(debug_section),
     }
 }
@@ -94,6 +97,7 @@ fn test_function_upvalue_count_round_trips_through_dot42() {
             functions: vec![function],
         },
         vtables: Vec::new(),
+        globals: Vec::new(),
         debug_section: None,
     };
 
@@ -178,6 +182,7 @@ fn test_ffi_compile_time_constants_are_rejected_without_panic() {
             functions: vec![function],
         },
         vtables: Vec::new(),
+        globals: Vec::new(),
         debug_section: None,
     };
 
@@ -230,6 +235,7 @@ fn test_ffi_compile_time_types_are_rejected_without_panic() {
             functions: vec![function],
         },
         vtables: Vec::new(),
+        globals: Vec::new(),
         debug_section: None,
     };
 
@@ -252,6 +258,161 @@ fn test_ffi_compile_time_types_are_rejected_without_panic() {
             "诊断必须点出类型种类与符号（缺 {needle:?}）：{msg}"
         );
     }
+}
+
+/// 病史门 + 条款门（RFC-039 D52 的 `2341` 项）：`.42` 的全局表往返保真。
+///
+/// 缺陷形态：`BytecodeFile` 没有全局表，`From<BytecodeFile>` 里 `globals: Vec::new()`——
+/// 载入后「有哪些全局、各是什么类型」整张表消失，只剩调试段里的名字。
+/// 表序即槽位号，`type_id` 是 .42 类型号（与形参/返回/类型表同一套编号）。
+#[test]
+fn test_globals_table_round_trips_through_dot42() {
+    // Arrange：两个全局（Int / String），类型号经 `mono_type_id` 取——与生产者同一口径
+    let int_id = mono_type_id(&MonoType::Int(64)).expect("Int 类型号必须可编");
+    let str_id = mono_type_id(&MonoType::make_string()).expect("String 类型号必须可编");
+    let file = BytecodeFile {
+        header: FileHeader::default(),
+        type_table: Vec::new(),
+        const_pool: Vec::new(),
+        code_section: CodeSection {
+            functions: vec![FunctionCode {
+                name: "__yx_module_init".to_string(),
+                params: Vec::new(),
+                return_type: MonoType::Void,
+                instructions: vec![BytecodeInstruction::new(opcode::RETURN, vec![])],
+                local_count: 0,
+                upvalue_count: 0,
+                local_names: HashMap::new(),
+                debug_map: HashMap::new(),
+            }],
+        },
+        vtables: Vec::new(),
+        globals: vec![
+            GlobalInfo {
+                name: "counter".to_string(),
+                type_id: int_id as u16,
+                initializer: None,
+                is_mutable: false,
+            },
+            GlobalInfo {
+                name: "label".to_string(),
+                type_id: str_id as u16,
+                initializer: None,
+                is_mutable: false,
+            },
+        ],
+        debug_section: None,
+    };
+
+    // Act：落盘 → 读回
+    let mut bytes = Vec::new();
+    file.write_to(&mut bytes).expect("write bytecode");
+    let mut cursor = io::Cursor::new(bytes);
+    let decoded = BytecodeFile::read_from(&mut cursor).expect("read bytecode");
+
+    // Assert：表长、名字、类型号、表序（= 槽位号）逐项一致
+    assert_eq!(
+        decoded.globals.len(),
+        2,
+        "全局表必须随 .42 往返；读到空表说明载入侧又硬编了 Vec::new()"
+    );
+    assert_eq!(
+        decoded.globals[0].name, "counter",
+        "表序 0 的全局名必须与写入侧一致（表序即槽位号）"
+    );
+    assert_eq!(
+        decoded.globals[0].type_id, int_id as u16,
+        "counter 的类型号必须原样往返"
+    );
+    assert_eq!(
+        decoded.globals[1].name, "label",
+        "表序 1 的全局名必须与写入侧一致"
+    );
+    assert_eq!(
+        decoded.globals[1].type_id, str_id as u16,
+        "label 的类型号必须原样往返"
+    );
+}
+
+/// 条款门（D52 的「不得静默丢弃」）：全局表不携带 `initializer`，写侧必须拒绝而非丢成 None。
+#[test]
+fn test_global_initializer_is_rejected_without_silent_loss() {
+    // Arrange：一个带编译期初始化值的全局（IR 已把它降级成初始化序列，此处刻意构造）
+    let file = BytecodeFile {
+        header: FileHeader::default(),
+        type_table: Vec::new(),
+        const_pool: Vec::new(),
+        code_section: CodeSection {
+            functions: Vec::new(),
+        },
+        vtables: Vec::new(),
+        globals: vec![GlobalInfo {
+            name: "seeded".to_string(),
+            type_id: 5,
+            initializer: Some(crate::middle::ir::ir::ConstValue::Int(7)),
+            is_mutable: false,
+        }],
+        debug_section: None,
+    };
+
+    // Act
+    let mut bytes = Vec::new();
+    let err = file
+        .write_to(&mut bytes)
+        .expect_err("带 initializer 的全局不得静默落盘");
+
+    // Assert：可分类 + 可定位到具体全局
+    assert_eq!(
+        err.kind(),
+        io::ErrorKind::InvalidInput,
+        "拒绝未携带字段应是 InvalidInput，实际 {err:?}"
+    );
+    let msg = format!("{err}");
+    assert!(
+        msg.contains("initializer") && msg.contains("seeded"),
+        "诊断必须点出字段与全局名：{msg}"
+    );
+}
+
+/// 条款门（同上；可变性的载体在 AST/lower，不在字节码 globals 表）：
+/// 写侧遇到 `is_mutable = true` 必须拒绝，绝不静默读成不可变。
+#[test]
+fn test_global_mutability_is_rejected_without_silent_loss() {
+    // Arrange
+    let file = BytecodeFile {
+        header: FileHeader::default(),
+        type_table: Vec::new(),
+        const_pool: Vec::new(),
+        code_section: CodeSection {
+            functions: Vec::new(),
+        },
+        vtables: Vec::new(),
+        globals: vec![GlobalInfo {
+            name: "counter".to_string(),
+            type_id: 5,
+            initializer: None,
+            is_mutable: true,
+        }],
+        debug_section: None,
+    };
+
+    // Act
+    let mut bytes = Vec::new();
+    let err = file
+        .write_to(&mut bytes)
+        .expect_err("可变性没有载体，不得静默丢成 false");
+
+    // Assert
+    assert_eq!(
+        err.kind(),
+        io::ErrorKind::InvalidInput,
+        "拒绝未携带字段应是 InvalidInput，实际 {err:?}"
+    );
+    let msg = format!("{err}");
+    assert!(
+        msg.contains("可变性") && msg.contains("counter"),
+        "诊断必须点出字段语义与全局名：{msg}"
+    );
 }
 
 #[test]
@@ -299,6 +460,7 @@ fn test_debug_section_round_trip_global_names() {
         const_pool: Vec::new(),
         code_section,
         vtables: Vec::new(),
+        globals: Vec::new(),
         debug_section: Some(debug_section),
     };
 

@@ -51,6 +51,7 @@ fn build_and_decode_typed(
             functions: vec![func],
         },
         vtables: vec![],
+        globals: vec![],
         debug_section: None,
     };
     BytecodeModule::from(file)

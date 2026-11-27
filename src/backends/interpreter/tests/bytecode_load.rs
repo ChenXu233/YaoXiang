@@ -207,6 +207,95 @@ main()
     );
 }
 
+/// `.42` 直跑与源码直跑的**全局表**与**全局槽值**必须一致（RFC-039 D52 的 `2341` 项）。
+///
+/// 条款门：RFC-039 D52「`.42` 三处硬编码丢弃全部收进 P7」。
+/// 病史门：`From<BytecodeFile>` 曾写 `globals: Vec::new()`——顶层绑定只剩调试段里的名字，
+/// 「有哪些全局、各是什么类型」整张表消失，而运行结果看不出异常（全局槽按需扩容）。
+///
+/// 两端都直驱：生产端 `Compiler::compile_with_source` → `CodegenContext::generate`（源码直跑同一路径），
+/// 消费端 `build_bytecode_with_options` → `BytecodeFile::load`（.42 直跑同一路径）。
+#[test]
+fn test_dot42_run_matches_source_run_for_globals() {
+    // Arrange：顶层可变全局 + 初始化表达式 + 函数内读写 + 模块初始化交互
+    let dir = tempfile::TempDir::new().expect("create temp dir");
+    let source_path = dir.path().join("globals.yx");
+    let bytecode_path = dir.path().join("globals.42");
+    let source = r#"use std.assert
+mut counter: Int = 41
+label: String = "yx"
+
+bump: () -> Void = () => {
+    counter = counter + 1
+}
+
+read_counter: () -> Int = () => counter
+
+main: () -> Void = () => {
+    assert.assert(read_counter() == 41, "初始化表达式必须已求值")
+    bump()
+    assert.assert(read_counter() == 42, "函数内写全局必须生效")
+    assert.assert(label == "yx", "String 全局必须可读")
+}
+main()
+"#;
+    std::fs::write(&source_path, source).expect("write source file");
+
+    // Act 1：源码直跑（编译 → 直接翻译 → 解码进 BytecodeModule）
+    let module = crate::frontend::Compiler::new()
+        .compile_with_source("globals.yx", source)
+        .expect("compile source");
+    let mut ctx = crate::middle::passes::codegen::CodegenContext::new(module);
+    let direct_file = ctx.generate().expect("codegen from source");
+    let direct = crate::middle::bytecode::BytecodeModule::from(direct_file);
+
+    // Act 2：.42 直跑（落盘 → 读回 → 解码）
+    crate::build_bytecode_with_options(&source_path, &bytecode_path, true).expect("build bytecode");
+    let loaded = crate::middle::bytecode::file::BytecodeFile::load(&bytecode_path)
+        .expect("load bytecode file");
+    let from_dot42 = crate::middle::bytecode::BytecodeModule::from(loaded);
+
+    // Assert 1：全局表逐项一致（表序 + 名字 + 类型号）
+    let table_of = |m: &crate::middle::bytecode::BytecodeModule| -> Vec<(String, u16)> {
+        m.globals
+            .iter()
+            .map(|g| (g.name.clone(), g.type_id))
+            .collect()
+    };
+    let direct_globals = table_of(&direct);
+    let dot42_globals = table_of(&from_dot42);
+    assert_eq!(
+        dot42_globals, direct_globals,
+        ".42 往返后全局表必须与源码直跑一致；空表即载入侧硬编（旧行为）"
+    );
+    assert!(
+        dot42_globals.iter().any(|(name, _)| name == "counter"),
+        "夹具必须真的产生顶层全局，否则本用例分辨不出「落盘」与「硬编空表」：{dot42_globals:?}"
+    );
+
+    // Act 3：两侧各自执行，读回全部全局槽值
+    let run = |m: &crate::middle::bytecode::BytecodeModule| -> Vec<String> {
+        use crate::backends::Executor;
+        let mut interp = crate::backends::interpreter::Interpreter::new();
+        interp.execute_module(m).expect("execute module");
+        (0..m.globals.len())
+            .map(|i| format!("{:?}", interp.global_slot(i)))
+            .collect()
+    };
+    let direct_slots = run(&direct);
+    let dot42_slots = run(&from_dot42);
+
+    // Assert 2：行为等价（模块初始化序列 + 函数内读写全局）
+    assert_eq!(
+        dot42_slots, direct_slots,
+        ".42 直跑与源码直跑的全局槽值必须逐槽一致"
+    );
+    assert!(
+        dot42_slots.iter().any(|v| v.contains("42")),
+        "bump 之后的 counter 必须是 42（初始化 41 + 写入 1）：{dot42_slots:?}"
+    );
+}
+
 /// 验证 .yx 源文件路径走源码编译分支，不进入字节码加载分支。
 #[test]
 fn test_run_yx_file_uses_source_compile_path() {

@@ -4,6 +4,7 @@
 
 use crate::frontend::core::sema::MonoType;
 use crate::frontend::core::types::identity::Nominal;
+use crate::middle::bytecode::GlobalInfo;
 use crate::middle::ir::ir::ConstValue;
 use crate::util::span::{DebugSpan, FileId, Position, SourceMap, Span};
 use std::collections::HashMap;
@@ -19,6 +20,8 @@ const MAGIC: u32 = 0x59584243;
 /// - v4 及以前：函数记录无上值槽数 ⇒ 载入侧只能硬编 0，闭包的上值槽数丢失。
 /// - v5：函数记录追加 `upvalue_count`（u32）；前端值 `SWITCH`(0x06) 与
 ///   `TAIL_CALL`(0x09) 从词表回收（RFC-039 D17/D32/D34），值交回分配池。
+///   同一未发布窗口追加**模块级全局表**（`globals`：名字 + 类型号，槽位序号即表序），
+///   使 `.42` 载入后 `BytecodeModule.globals` 不再恒为空（RFC-039 D52 的 2341 项）。
 pub const VERSION: u32 = 5;
 
 const FLAG_DEBUG_INFO: u32 = 0x02;
@@ -45,6 +48,13 @@ pub struct BytecodeFile {
     /// codegen 从函数表按类型分组生成，解释器加载期直建 vtable 缓存，
     /// 分发全程按函数表索引，不按名解析。
     pub vtables: Vec<(String, Vec<(String, u32)>)>,
+
+    /// 模块级全局表（v5）：表序即槽位号，`type_id` 是 .42 类型号。
+    ///
+    /// 语义见 [`GlobalInfo`]：`BytecodeModule.globals` 此前在载入侧被硬编空表
+    /// （RFC-039 D52 的 `2341` 项），顶层绑定只剩调试段里的名字，没有「有哪些全局、
+    /// 各是什么类型」这张表。
+    pub globals: Vec<GlobalInfo>,
 
     /// 可选调试信息段（用于离线 .42 调试/定位）
     pub debug_section: Option<DebugSection>,
@@ -470,6 +480,33 @@ impl BytecodeFile {
             }
         }
 
+        // 全局表（v5）：表序即槽位号。只落「名字 + 类型号」两项既有事实——
+        // 见 `GlobalInfo` 的字段说明：initializer / is_mutable 在 IR 侧没有载体，
+        // 写侧遇到非默认值即拒绝，绝不静默丢成 None/false。
+        writer.write_all(&(self.globals.len() as u32).to_le_bytes())?;
+        for global in &self.globals {
+            if global.initializer.is_some() {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    format!(
+                        ".42 全局表不携带 initializer（全局 '{}'）：初始化由模块初始化序列在运行时求值，编译期常量折叠只是优化；若确需落盘，先扩格式与载入侧",
+                        global.name
+                    ),
+                ));
+            }
+            if global.is_mutable {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    format!(
+                        ".42 全局表不携带可变性（全局 '{}'）：该事实在 IR `GlobalSlot` 里没有字段（lower 阶段即被丢弃），写侧拒绝而不是静默读成不可变",
+                        global.name
+                    ),
+                ));
+            }
+            write_string(writer, &global.name)?;
+            writer.write_all(&(global.type_id as u32).to_le_bytes())?;
+        }
+
         if (header.flags & FLAG_DEBUG_INFO) != 0 {
             let Some(debug) = &self.debug_section else {
                 return Err(io::Error::new(
@@ -670,6 +707,28 @@ impl BytecodeFile {
             vtables.push((type_name, methods));
         }
 
+        // 全局表（v5）：表序即槽位号；类型号按 .42 的类型号原样搬运。
+        let global_count = read_u32(reader)? as usize;
+        let mut globals = Vec::with_capacity(global_count);
+        for _ in 0..global_count {
+            let name = read_string(reader)?;
+            let type_code = read_u32(reader)?;
+            let type_id = u16::try_from(type_code).map_err(|_| {
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!("global type id out of range: {type_code}"),
+                )
+            })?;
+            globals.push(GlobalInfo {
+                name,
+                type_id,
+                // 格式不携带这两项：初始化在模块初始化序列里运行时求值；
+                // 可变性事实在 IR GlobalSlot 没有字段（见 GlobalInfo 的文档注释）。
+                initializer: None,
+                is_mutable: false,
+            });
+        }
+
         // 可选的调试段（从文件尾向后读取）
         let debug_section = DebugSection::read_from_end(reader)?;
 
@@ -689,6 +748,7 @@ impl BytecodeFile {
             const_pool,
             code_section: CodeSection { functions },
             vtables,
+            globals,
             debug_section,
         })
     }
@@ -800,6 +860,14 @@ fn read_u32<R: Read>(reader: &mut R) -> io::Result<u32> {
     let mut buf = [0u8; 4];
     reader.read_exact(&mut buf)?;
     Ok(u32::from_le_bytes(buf))
+}
+
+/// 把 [`MonoType`] 编成 .42 类型号（`.42` 内所有类型字段的唯一编码口径）。
+///
+/// 生产者（codegen 的全局表）与容器写侧共用本函数：两份口诀一旦漂移，
+/// 写进去的类型号与读回来的类型就会错位，而错位不会让任何测试红。
+pub(crate) fn mono_type_id(ty: &MonoType) -> io::Result<u32> {
+    ty.to_type_id()
 }
 
 /// 把 `MonoType` 映射成 .42 的类型号。
