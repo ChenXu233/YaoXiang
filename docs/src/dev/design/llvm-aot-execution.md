@@ -10,7 +10,7 @@ description:
 x86-64 上，把一份真实的 YaoXiang 源程序编译成 ELF 可执行文件。在没有 LLVM 和 YaoXiang
 VM 的同类系统上运行它，既能算对结果，也能在出错时指出源码位置。生成一份 LLVM IR 文本不算完成。
 
-**状态：批次 3 已开工（值证据、无 `Phi` CFG 子集与多文件项目入口），发布验收未完成。**
+**状态：批次 3 已开工（值证据、无 `Phi` CFG 子集与多文件项目入口），批次 4.1（运行时 ABI 首版与 `String` 判等/顺序）已入库，发布验收未完成。**
 [RFC-018](../../rfc/accepted/018-llvm-aot-compiler.md)
 已接受 LLVM 提前编译（AOT）的方向，并在附录 B 登记构建产物契约；[跟踪议题 #134](https://github.com/ChenXu233/YaoXiang/issues/134)
 是这项工作的入口。首批实现不占用 [RFC-039 施工表](../architecture/09-execution-wbs.md)
@@ -39,19 +39,21 @@ VM 的同类系统上运行它，既能算对结果，也能在出错时指出�
       分支与循环已发射（break/continue、嵌套 if/else、嵌套 while、循环内 `Local`、跨块 `Value`
       均与 VM 同结果）；多文件项目入口与文件身份已落地（B-i：库 API 项目入口，CLI 单入口文件）；`Phi`
       与多前驱 `Local`
-      汇合的拒绝边界已由批次 3.5 收口为发射（见“阶段 1 支持集与拒绝边界”）。等价账本的七条最小集已有可执行门禁（机器可读账本 + 检查器 +
-      CI 作业，见“等价账本（最小集，七条）”）。判据在 `tests/integration/native_aot.rs` 与
+      汇合的拒绝边界已由批次 3.5 收口为发射（见“支持集与拒绝边界”）。等价账本的八条最小集已有可执行门禁（机器可读账本 + 检查器 +
+      CI 作业，见“等价账本（最小集，八条）”）。判据在 `tests/integration/native_aot.rs` 与
       `src/backends/llvm/tests/analysis.rs`。
 - [x] **批次 3.5 `Phi` 与 `Local` 汇合映射**（`17882acb`、`5e26ea2b`）——需要 `Phi`
       的汇合值从能力拒绝改为发射：`Phi` 在块首预建、incoming 按前驱 block label 登记；`Local`
       的 alloca 统一提到入口块，多前驱写—汇合读不再拒绝；`5e26ea2b`
       把显式未知 incoming 收紧为按可观察性分派——死合流放行（`undef`
-      不可观察），live 合并值带位置拒绝（见“阶段 1
-      支持集与拒绝边界”）；账本 phi-boundary /
-      local-merge-boundary 改 supported（见“阶段 1 支持集与拒绝边界”与“等价账本（最小集，七条）”）；判据在
+      不可观察），live 合并值带位置拒绝（见“支持集与拒绝
+      边界”）；账本 phi-boundary /
+      local-merge-boundary 改 supported（见“支持集与拒绝边界”与“等价账本（最小集，八条）”）；判据在
       `tests/integration/native_aot.rs` 与 `src/backends/llvm/tests/analysis.rs`。
-- [ ] **批次 4 链接原生运行时，再接 FFI 与并作**——未开始；原生运行时只有最小 C
-      ABI（`src/backends/llvm/runtime.c`），没有 FFI 与并作。
+- [ ] **批次 4 链接原生运行时，再接 FFI 与并作**——4.1 已收口：运行时 ABI 首版与
+      `String` 判等/顺序（见“运行时 ABI 约定（首版）”）；判据
+      `test_native_string_equality_matches_vm`、`test_native_string_ordering_matches_vm`、
+      `test_native_string_phi_merge_compares_by_content`。容器、闭包、资源、FFI 与并作未开始。
 
 ### 平台验收
 
@@ -174,17 +176,24 @@ python scripts/dev/testsuite.py plan
 | 4 证据与发布                                                           | 支持集账本、受控变异、RFC-018 附录 B 对账、默认产物切换              | 阶段 3          | 声明与账本一致；没有实测值不作规模或性能承诺                                           |
 
 阶段 0 已落地；批次 3.5 起 AOT 消费生产端 `Phi` 与 `Local` 合并（提交
-`17882acb`、`5e26ea2b`），不再为需要汇合值的程序保留能力拒绝。阶段 1 的支持集与拒绝边界由下节登记；新增可编译形态必须同时给出正例和带位置的拒绝判据。
+`17882acb`、`5e26ea2b`），不再为需要汇合值的程序保留能力拒绝。阶段 1 与批次 4 的支持集与拒绝边界由下节登记；新增可编译形态必须同时给出正例和带位置的拒绝判据。
 
-### 阶段 1 支持集与拒绝边界（等价账本）
+### 支持集与拒绝边界（等价账本）
 
-阶段 1 按可执行判据登记支持集；支持集之外必须显式拒绝并带源码位置，禁止静默回退。判据分两处：集成判据在
+阶段 1 与批次 4.1 的可编译形态按可执行判据登记在同一张账本里；支持集之外必须显式拒绝并带源码位置，禁止静默回退。判据分两处：集成判据在
 `tests/integration/native_aot.rs`，后端单元判据在
-`src/backends/llvm/tests/analysis.rs`。本节逐条列边界；等价账本的最小交付边界见节末的七条表。
+`src/backends/llvm/tests/analysis.rs`。本节逐条列边界；等价账本的最小交付边界见节末的八条表。
 
 **支持集**：
 
 - 单文件脚本或多文件项目；`Int`、`Bool`、`String`、`Void` 标量与直接调用。
+- `String` 判等与顺序（批次 4.1）：`Eq`/`Ne`/`Lt`/`Le`/`Gt`/`Ge` 接受两侧同为 `String`，
+  语义是按 UTF-8 字节的字典序（对合法 UTF-8 与码点序一致），内容相等不是指针相等；
+  运行期入口与值形状见“运行时 ABI 约定（首版）”。判据
+  `test_native_string_equality_matches_vm`、`test_native_string_ordering_matches_vm`、
+  `test_native_string_compare_through_return_matches_vm`，合成 IR 的合并值判据
+  `test_native_string_phi_merge_compares_by_content`；后端单元判据
+  `test_native_string_equality_comparison_is_accepted`、`test_native_string_ordering_comparison_is_accepted`。
 - 直线指令；无 `Phi` 的分支和循环（`Jmp`、`JmpIf`、`JmpIfNot` 按 `BasicBlock` 发射），判据为
   `test_native_no_phi_branch_executes_both_edges`、`test_native_no_phi_loop_matches_vm`。
 - `Phi` 汇合：生产端 SSA 的 `Phi`
@@ -257,6 +266,11 @@ python scripts/dev/testsuite.py plan
   `test_native_script_unused_main_is_rejected`。`Script` 无 `main`
   仍可构建（`test_native_script_without_main_still_builds`），`Script` 显式调用 `main`
   与 Bin 项目入口不受影响（`test_native_project_bin_entry_function_is_called`）。
+- `String` 支持集之外的字符串操作：`StringGetChar`（`s[i]`）、`StringConcat`、
+  `StringFromInt`、`StringFromFloat` 与全部 `std` 调用（`std.assert.assert` 除外）仍显式拒绝并带
+  `source:line:column`；混型比较（`String` 与 `Int` 等）同样带位置拒绝。判据
+  `test_native_string_operation_outside_slice_is_rejected`、
+  `test_native_string_mixed_comparison_is_rejected_with_location`。
 - 已知静默 Void 两处（**未收口**）：`Operand::Global` 缺指针时读取返回 `Value::void()`，`load_slot`
   无指针时返回 `Value::void()`。后续批次改为显式拒绝或补齐证据，不得标成已收口。
 
@@ -299,7 +313,7 @@ python scripts/dev/testsuite.py plan
 - **L4 补证据只有这一个例外**：`std.assert`
   的结果值类型由 L4 分析器拥有；其余显式未知仍按拒绝处理，缺口归 lower 的类型覆盖补齐。
 
-**等价账本（最小集，七条）**：
+**等价账本（最小集，八条）**：
 
 | #   | 条目                         | 状态           | 判据                                                                                                         | 守的决策                                                                                                 |
 | --- | ---------------------------- | -------------- | ------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------- |
@@ -310,19 +324,20 @@ python scripts/dev/testsuite.py plan
 | 5   | `Phi` 映射                   | 已收口         | `test_native_phi_short_circuit_merge_matches_vm`                                                             | `Phi` 汇合按前驱边发射 incoming、类型证据取 `ValueInfo.ty`，短路合流与 VM 同结果，不静默拒绝支持集内程序 |
 | 6   | 合并 `Local`                 | 已收口         | `test_native_local_multi_arm_merge_matches_vm`                                                               | 多前臂写—汇合读由入口块 alloca 承载，与 VM 帧槽语义同结果，不外泄 LLVM 原文                              |
 | 7   | 显式未知类型                 | 已收口（拒绝） | `test_native_explicit_unknown_value_is_rejected`                                                             | 未知类型不静默猜测、不静默 Void                                                                          |
+| 8   | `String` 判等与顺序          | 已收口         | `test_native_string_equality_matches_vm`、`test_native_string_ordering_matches_vm`                           | 内容相等不是指针相等；六个算子按 UTF-8 字节字典序，空串、前缀、多字节为边界；合并值经 `Phi` 仍按内容比较 |
 
-这七条是本阶段的最小交付边界：**已支持项不得移出集合换绿**——支持集只增不减，绿灯不得靠把已支持项移出集合获得。
+这八条是等价账本的最小交付边界：**已支持项不得移出集合换绿**——支持集只增不减，绿灯不得靠把已支持项移出集合获得。
 
 可执行账本是机器可读的 `tests/aot-ledger.json`，由 `scripts/ci/check-aot-ledger.py`
 对账并接入 CI 的 LLVM 作业：账本的 target 是集成测试目标
-`native_aot`，七条的 id 与状态以脚本内嵌期望机械核对，账本只存 id、状态与判据名。**决策文本以本表为唯一来源。**
+`native_aot`，八条的 id 与状态以脚本内嵌期望机械核对，账本只存 id、状态与判据名。**决策文本以本表为唯一来源。**
 后端单元判据（顺序写与循环重复写合法、单支臂合并只有合成 IR 级证据等）不在账本 target 内，仍见「支持集」小节。
 
 **裁决（2026-11-26）**：
 
 - **B-i（入口形态）**：库 API 增加项目/多文件入口，CLI 保持单入口文件。项目 native 构建按编排层的发现、合并与初始化次序执行（见「支持集」）。
 - **D（等价账本口径）**：less is
-  more——账本只保留覆盖关键决策与拒绝边界的必要条目，不以夹具数量防御；本阶段的账本按上表的七条最小集给出。
+  more——账本只保留覆盖关键决策与拒绝边界的必要条目，不以夹具数量防御；账本按上表的八条最小集给出。
 
 ### 0. 值契约闭合（P7 的 SSA 生产端）
 
@@ -412,6 +427,64 @@ python scripts/dev/testsuite.py plan
 | 并作                | 消费 `Spawn` 和 `SpawnFromList` 携带的 `ExecutionPlan`，将任务入口、环境与依赖交给调度器。顺序代码不启动调度器。依据：[运行时架构](../../rfc/accepted/008-runtime-concurrency-model.md)、[并作语义](../../rfc/accepted/024-concurrency-model.md)。 | 有依赖的任务按序消费结果，冲突资源不同时访问，任务失败向调用者传播。对无依赖任务只验允许的结果，不把某一次线程调度顺序定为语义。           |
 
 每个切片从生产者生成的 IR 起跑。若缺少必要的布局、类型或释放事实，先在该事实所属层立项补足；不得以猜测的布局补齐接口。运行时 ABI 在此阶段视为内部接口，不承诺用户自行链接的第三方兼容性。
+
+## 运行时 ABI 约定（首版，内部接口）
+
+本节固定编译器与原生运行时之间的调用约定。等价判据只看可观察行为——退出码、标准输出、结构化诊断的码与位置；内部表示因此可以演进，但不得为了当前切片改变函数签名：后续切片使用本节预留的位置扩展。设计依据是 [RFC-018](../../rfc/accepted/018-llvm-aot-compiler.md) §4 的指令翻译表（`String` 是 `{ ptr, len }`）与 [RFC-026](../../rfc/accepted/026-ffi-core-mechanism.md) 的 C 编组方向。
+
+### 值种类与传递方式
+
+| 语言值   | LLVM 表示      | 传递方式 | 备注                                      |
+| -------- | -------------- | -------- | ----------------------------------------- |
+| `Void`   | 无             | 不占位   | 无返回值、无参数                          |
+| `Bool`   | `i1`           | 按值     | 进入运行时前零扩展为 `i64`                |
+| `Int`    | `i64`          | 按值     | 受检算术入口见下                          |
+| `String` | `{ i8*, i64 }` | 按值     | `ptr` 是 UTF-8 字节首地址，`len` 是字节数 |
+
+`String` 的两个字段按值拆开传给运行时入口（`i8*, i64`），不传聚合体：运行时是 C，不依赖 LLVM 的结构体传参约定。
+
+### String 布局
+
+- `len` 是 UTF-8 字节数，不是码点数。
+- 字符串不以 NUL 结尾，内容可以包含 0 字节；运行时一律按显式长度处理，禁止 `strlen` / `strcmp` / `printf("%s")` 一类以 NUL 为界的调用。
+- 批次 4.1 的字符串只有静态字面量一种来源：LLVM 全局常量，生命期等于进程，**永不释放**，语义是借用视图。
+- 所有权是**编译期事实**：由 IR 的释放计划决定谁在哪个语句边界释放，L4 不重做所有权分析；值里不携带运行时所有权标记。
+- 未来的 owned 字符串在 `ptr` 之前放堆头（引用计数、种类、长度），值形状仍是 `{ ptr, len }`——新增分配不改变任何函数签名。
+- 用户可见的长度有两套口径，不得混用：`StringLength` 指令对 `String` 是字节数（对容器是元素数）；`std.string.len` 与内建 `len` 对 `String` 是码点数。选择由调用方按语义决定，ABI 层不统一。
+
+### 比较入口（批次 4.1 已实现）
+
+| 入口              | 签名                      | 语义                               |
+| ----------------- | ------------------------- | ---------------------------------- |
+| `__yx_rt_str_eq`  | `i64(i8*, i64, i8*, i64)` | 长度相同且逐字节相等返回 1，否则 0 |
+| `__yx_rt_str_cmp` | `i64(i8*, i64, i8*, i64)` | 按 UTF-8 字节字典序返回 -1 / 0 / 1 |
+
+- 六个比较算子都落到这两个入口：`Eq`/`Ne` 用 `__yx_rt_str_eq` 的结果与 0 比较，`Lt`/`Le`/`Gt`/`Ge` 用 `__yx_rt_str_cmp` 的结果与 0 比较。
+- 语义是**内容**比较：比较只读 `{ptr, len}` 指向的字节，不看地址。
+- 静态字面量在目标常量池里可能合并到同一地址，因此「内容相等而指针不等」在批次 4.1 没有可观察用例；拥有所有权的字符串切片才会产生两个内容相同、地址不同的值，届时该性质由用例直接观察。
+- `Int` 与 `Bool` 的比较仍由 LLVM `icmp` 直接发射，不经过运行时。
+- VM 侧 `exec_compare` 的 `String` 分支是 Rust `str` 比较（字节序），本节的入口与之同结果。
+
+### 错误 ABI（现状）
+
+- 可能失败的运行时入口在参数末尾接收位置：`i8* file, i64 file_len, i64 line, i64 column`。
+- 失败的可观察面固定为：`error[E%04llu]: message`、` --> file:line:column`、退出码 1。等价判据只比较 E 码、文件与行，不比较译文。
+- 批次 4.1 不新增错误通道，也不引入 `trap` 指令；后续切片统一失败入口时，可观察面不变。
+- 错误码的权威源是 `src/util/diagnostic/codes/`，运行时按码与位置对齐，不复制诊断文案。
+
+### 后续切片的预留
+
+以下形状在本节固定，具体切片按此实现；改动这些形状属于对外契约变更，单独评审。
+
+- **容器**：共享堆对象加头（种类、长度、引用计数），拷贝共享、原地写对别名可见；不得用内联值语义。布局事实取 `TypeDeclBody.fields` 与 `ValueInfo.ty`。结构体构造函数目前在字节码翻译期由 `TypeDeclBody` 合成，AOT 若要构造结构体，先裁决合成点的归属，不在两个后端各写一份。
+- **闭包**：`{ fnptr, envptr }`；捕获是值拷贝，`env` 同时作为被调实参的前缀（与 VM 的 `CallDyn` 同语义）。前置事实：`MakeClosure` 的结果类型与闭包体参数类型在 IR 里仍是未知类型与类型变量。
+- **FFI**：独立的 C ABI 转换层，按目标 ABI 编组；不把 Rust 枚举或闭包布局当 C 布局。当前 VM 的 C 机制只实现 `() -> i32` 且库需预加载，真实签名在 VM 侧没有等价 oracle。
+- **并作**：先顺序执行——空闭包列表的 `Spawn` 是退化指令（与 VM 的 Embedded 模式同语义），目标是消费 `ExecutionPlan` 的单线程执行器；线程调度器单独裁决。
+- **所有权与释放**：owned 字符串的释放方与释放点、SSA 临时值的释放事实、以及「恰好释放一次」的可观察判据都未落定。在这些事实补齐之前，AOT 只声明「静态字面量永不释放」，不声明资源已按约定释放。
+
+### 与其它文档的关系
+
+本节是运行时接口的唯一权威，`src/backends/llvm/runtime.c` 的实测入口以本节为准。平台 ABI 与发布门槛见 RFC-018 附录 B 与「发布与回退」。
 
 ## 如何判定两个后端等价
 

@@ -2,7 +2,9 @@
 //!
 //! 覆盖 `ValueInfo.ty` 值证据、显式未知/不支持类型、`verify_ssa` 入口、
 //! `Phi` 的类型证据与 incoming 判定，以及批次 3.5 收窄后的 `Local` 汇合读边界；
-//! 目录模块按 test-specification 1.1/1.4 声明。
+//! 批次 4.1 起覆盖 `String` 六种比较的接受集与混型拒绝边界（依据设计文档
+//! 「运行时 ABI 约定（首版）」与「支持集」）。目录模块按 test-specification
+//! 1.1/1.4 声明。
 
 use crate::backends::llvm::analysis::analyze_module;
 use crate::frontend::core::sema::MonoType;
@@ -907,5 +909,170 @@ fn test_native_local_loop_repeated_write_is_allowed() {
     assert!(
         analysis.functions.contains_key("loop"),
         "loop Local function should be analyzed"
+    );
+}
+
+/// String 类型的值表项：批次 4.1 的六种比较都要求两侧取到同一具体类型。
+fn string_value_info(block: usize) -> ValueInfo {
+    ValueInfo {
+        ty: MonoType::Generic {
+            name: "String".to_string(),
+            args: Vec::new(),
+        },
+        debug_name: None,
+        defining_block: block,
+    }
+}
+
+fn bool_value_info(block: usize) -> ValueInfo {
+    ValueInfo {
+        ty: MonoType::Bool,
+        debug_name: None,
+        defining_block: block,
+    }
+}
+
+#[test]
+fn test_native_string_equality_comparison_is_accepted() {
+    // Arrange：两个 String 值的 Eq/Ne，结果类型是 Bool（内容比较，不比较指针）。
+    let function = base_function(
+        MonoType::Bool,
+        vec![
+            string_value_info(0),
+            string_value_info(0),
+            bool_value_info(0),
+            bool_value_info(0),
+        ],
+        vec![
+            load_value(0, Operand::Const(ConstValue::String("lhs".to_string()))),
+            load_value(1, Operand::Const(ConstValue::String("rhs".to_string()))),
+            Instruction::Eq {
+                dst: Operand::Value(ValueId(2)),
+                lhs: Operand::Value(ValueId(0)),
+                rhs: Operand::Value(ValueId(1)),
+                span: at(2, 5),
+            },
+            Instruction::Ne {
+                dst: Operand::Value(ValueId(3)),
+                lhs: Operand::Value(ValueId(0)),
+                rhs: Operand::Value(ValueId(1)),
+                span: at(3, 5),
+            },
+            ret_value(2),
+        ],
+    );
+    let module = module_with(function);
+
+    // Act
+    let analysis = analyze_module(&module, "string_eq.yx")
+        .expect("String equality comparison should be inside the support set");
+
+    // Assert
+    assert_eq!(
+        analysis.functions["f"].values[2],
+        MonoType::Bool,
+        "String equality must produce a Bool value"
+    );
+}
+
+#[test]
+fn test_native_string_ordering_comparison_is_accepted() {
+    // Arrange：两个 String 值的 Lt/Le/Gt/Ge，结果类型是 Bool（字节字典序）。
+    let function = base_function(
+        MonoType::Bool,
+        vec![
+            string_value_info(0),
+            string_value_info(0),
+            bool_value_info(0),
+            bool_value_info(0),
+            bool_value_info(0),
+            bool_value_info(0),
+        ],
+        vec![
+            load_value(0, Operand::Const(ConstValue::String("abc".to_string()))),
+            load_value(1, Operand::Const(ConstValue::String("abd".to_string()))),
+            Instruction::Lt {
+                dst: Operand::Value(ValueId(2)),
+                lhs: Operand::Value(ValueId(0)),
+                rhs: Operand::Value(ValueId(1)),
+                span: at(2, 5),
+            },
+            Instruction::Le {
+                dst: Operand::Value(ValueId(3)),
+                lhs: Operand::Value(ValueId(1)),
+                rhs: Operand::Value(ValueId(0)),
+                span: at(3, 5),
+            },
+            Instruction::Gt {
+                dst: Operand::Value(ValueId(4)),
+                lhs: Operand::Value(ValueId(0)),
+                rhs: Operand::Value(ValueId(1)),
+                span: at(4, 5),
+            },
+            Instruction::Ge {
+                dst: Operand::Value(ValueId(5)),
+                lhs: Operand::Value(ValueId(1)),
+                rhs: Operand::Value(ValueId(0)),
+                span: at(5, 5),
+            },
+            ret_value(3),
+        ],
+    );
+    let module = module_with(function);
+
+    // Act
+    let analysis = analyze_module(&module, "string_ordering.yx")
+        .expect("String ordering comparison should be inside the support set");
+
+    // Assert
+    assert_eq!(
+        analysis.functions["f"].values[5],
+        MonoType::Bool,
+        "String ordering must produce a Bool value"
+    );
+}
+
+#[test]
+fn test_native_string_mixed_comparison_is_rejected_with_location() {
+    // Arrange：String 与 Int 混型判等必须带位置拒绝，不能被当成 String 比较放行。
+    let function = base_function(
+        MonoType::Bool,
+        vec![
+            string_value_info(0),
+            ValueInfo {
+                ty: MonoType::Int(64),
+                debug_name: None,
+                defining_block: 0,
+            },
+            bool_value_info(0),
+        ],
+        vec![
+            load_value(0, Operand::Const(ConstValue::String("lhs".to_string()))),
+            load_value(1, Operand::Const(ConstValue::Int(1))),
+            Instruction::Eq {
+                dst: Operand::Value(ValueId(2)),
+                lhs: Operand::Value(ValueId(0)),
+                rhs: Operand::Value(ValueId(1)),
+                span: at(7, 13),
+            },
+            ret_value(2),
+        ],
+    );
+    let module = module_with(function);
+
+    // Act
+    let error = analyze_module(&module, "string_mixed.yx")
+        .err()
+        .expect("mixed String/Int comparison must be rejected");
+
+    // Assert
+    let detail = error.to_string();
+    assert!(
+        detail.contains("string_mixed.yx:7:13"),
+        "rejection must carry the source location: {detail}"
+    );
+    assert!(
+        detail.contains("String") && detail.contains("Int"),
+        "rejection must name both operand types: {detail}"
     );
 }

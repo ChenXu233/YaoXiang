@@ -668,9 +668,16 @@ fn analyze_stream(
             Instruction::Eq { dst, lhs, rhs, .. } | Instruction::Ne { dst, lhs, rhs, .. } => {
                 let left = read(lhs, &result)?;
                 let right = read(rhs, &result)?;
-                if left != right || !matches!(left, ScalarType::Int | ScalarType::Bool) {
+                // 判等接受 Int×Int、Bool×Bool、String×String；String 走运行时
+                // 内容比较（显式长度、按字节），不是指针身份。混型带位置拒绝。
+                if left != right
+                    || !matches!(
+                        left,
+                        ScalarType::Int | ScalarType::Bool | ScalarType::String
+                    )
+                {
                     return Err(unsupported(format!(
-                        "equality requires two Int or two Bool operands, got {left:?} and {right:?}"
+                        "equality requires two Int, two Bool or two String operands, got {left:?} and {right:?}"
                     )));
                 }
                 write(dst, ScalarType::Bool, &mut result, globals)?;
@@ -679,10 +686,15 @@ fn analyze_stream(
             | Instruction::Le { dst, lhs, rhs, .. }
             | Instruction::Gt { dst, lhs, rhs, .. }
             | Instruction::Ge { dst, lhs, rhs, .. } => {
-                require_type(read(lhs, &result)?, ScalarType::Int, "comparison lhs")
-                    .map_err(|e| unsupported(e.to_string()))?;
-                require_type(read(rhs, &result)?, ScalarType::Int, "comparison rhs")
-                    .map_err(|e| unsupported(e.to_string()))?;
+                let left = read(lhs, &result)?;
+                let right = read(rhs, &result)?;
+                // 顺序比较接受 Int×Int 与 String×String（UTF-8 字节字典序，
+                // 对合法 UTF-8 与码点序一致）；混型带位置拒绝。
+                if left != right || !matches!(left, ScalarType::Int | ScalarType::String) {
+                    return Err(unsupported(format!(
+                        "ordering requires two Int or two String operands, got {left:?} and {right:?}"
+                    )));
+                }
                 write(dst, ScalarType::Bool, &mut result, globals)?;
             }
             Instruction::Call {

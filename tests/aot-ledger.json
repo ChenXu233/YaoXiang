@@ -51,6 +51,14 @@
       "tests": [
         "native_aot::enabled::test_native_explicit_unknown_value_is_rejected"
       ]
+    },
+    {
+      "id": "string-compare",
+      "state": "supported",
+      "tests": [
+        "native_aot::enabled::test_native_string_equality_matches_vm",
+        "native_aot::enabled::test_native_string_ordering_matches_vm"
+      ]
     }
   ]
 }

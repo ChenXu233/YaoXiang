@@ -61,6 +61,10 @@ struct RuntimeFunctions<'ctx> {
     rem: FunctionValue<'ctx>,
     neg: FunctionValue<'ctx>,
     assert: FunctionValue<'ctx>,
+    /// `i64(i8*, i64, i8*, i64)`：内容判等，返回 1/0（显式长度，按字节比较）。
+    str_eq: FunctionValue<'ctx>,
+    /// `i64(i8*, i64, i8*, i64)`：字节字典序，返回 -1/0/1。
+    str_cmp: FunctionValue<'ctx>,
 }
 
 pub(super) struct Emitter<'ctx> {
@@ -576,29 +580,71 @@ impl<'ctx> Emitter<'ctx> {
             | Instruction::Le { dst, lhs, rhs, .. }
             | Instruction::Gt { dst, lhs, rhs, .. }
             | Instruction::Ge { dst, lhs, rhs, .. } => {
-                let left = self
-                    .read(&locals, values, lhs, analysis)?
-                    .repr
-                    .unwrap()
-                    .into_int_value();
-                let right = self
-                    .read(&locals, values, rhs, analysis)?
-                    .repr
-                    .unwrap()
-                    .into_int_value();
-                let predicate = match instruction {
-                    Instruction::Eq { .. } => IntPredicate::EQ,
-                    Instruction::Ne { .. } => IntPredicate::NE,
-                    Instruction::Lt { .. } => IntPredicate::SLT,
-                    Instruction::Le { .. } => IntPredicate::SLE,
-                    Instruction::Gt { .. } => IntPredicate::SGT,
-                    Instruction::Ge { .. } => IntPredicate::SGE,
-                    _ => unreachable!(),
+                let left = self.read(&locals, values, lhs, analysis)?;
+                let right = self.read(&locals, values, rhs, analysis)?;
+                let compared = if left.ty == ScalarType::String && right.ty == ScalarType::String {
+                    // 字符串比较走运行时：显式长度、UTF-8 字节字典序。内容相等不等于
+                    // 指针相等——两个内容相同的独立字面量是两个全局，必须比较相等。
+                    let (lhs_ptr, lhs_len) = self.string_parts(left)?;
+                    let (rhs_ptr, rhs_len) = self.string_parts(right)?;
+                    let runtime = match instruction {
+                        Instruction::Eq { .. } | Instruction::Ne { .. } => self.runtime.str_eq,
+                        _ => self.runtime.str_cmp,
+                    };
+                    let call = llvm(self.builder.build_call(
+                        runtime,
+                        &[
+                            lhs_ptr.into(),
+                            lhs_len.into(),
+                            rhs_ptr.into(),
+                            rhs_len.into(),
+                        ],
+                        "str.compare",
+                    ))?;
+                    let ordering = call
+                        .try_as_basic_value()
+                        .basic()
+                        .ok_or_else(|| anyhow!("string comparison runtime returned no value"))?
+                        .into_int_value();
+                    // eq 返回 1/0、cmp 返回 -1/0/1，两者都与 0 比较得到 Bool。
+                    let predicate = match instruction {
+                        Instruction::Eq { .. } => IntPredicate::NE,
+                        Instruction::Ne { .. } => IntPredicate::EQ,
+                        Instruction::Lt { .. } => IntPredicate::SLT,
+                        Instruction::Le { .. } => IntPredicate::SLE,
+                        Instruction::Gt { .. } => IntPredicate::SGT,
+                        Instruction::Ge { .. } => IntPredicate::SGE,
+                        _ => unreachable!(),
+                    };
+                    llvm(self.builder.build_int_compare(
+                        predicate,
+                        ordering,
+                        self.context.i64_type().const_zero(),
+                        "str.compare.result",
+                    ))?
+                } else {
+                    let left = left
+                        .repr
+                        .ok_or_else(|| anyhow!("comparison operand has no LLVM value"))?
+                        .into_int_value();
+                    let right = right
+                        .repr
+                        .ok_or_else(|| anyhow!("comparison operand has no LLVM value"))?
+                        .into_int_value();
+                    let predicate = match instruction {
+                        Instruction::Eq { .. } => IntPredicate::EQ,
+                        Instruction::Ne { .. } => IntPredicate::NE,
+                        Instruction::Lt { .. } => IntPredicate::SLT,
+                        Instruction::Le { .. } => IntPredicate::SLE,
+                        Instruction::Gt { .. } => IntPredicate::SGT,
+                        Instruction::Ge { .. } => IntPredicate::SGE,
+                        _ => unreachable!(),
+                    };
+                    llvm(
+                        self.builder
+                            .build_int_compare(predicate, left, right, "compare"),
+                    )?
                 };
-                let compared = llvm(
-                    self.builder
-                        .build_int_compare(predicate, left, right, "compare"),
-                )?;
                 self.write(
                     &mut locals,
                     values,
@@ -714,6 +760,25 @@ impl<'ctx> Emitter<'ctx> {
         args.push(length.into());
         llvm(self.builder.build_call(self.runtime.assert, &args, ""))?;
         Ok(())
+    }
+
+    /// 取 String 值的 `(ptr, len)` 两个字段。
+    ///
+    /// ABI 见设计文档「运行时 ABI 约定（首版）」：`String` 是 `{ i8*, i64 }`，
+    /// `len` 是 UTF-8 **字节数**（不是码点数），字符串不以 NUL 结尾——运行时
+    /// 一律按显式长度处理，禁止 `strlen`/`strcmp` 一类以 NUL 为界的调用。
+    fn string_parts(
+        &self,
+        value: Value<'ctx>,
+    ) -> Result<(BasicValueEnum<'ctx>, BasicValueEnum<'ctx>)> {
+        let repr = value
+            .repr
+            .ok_or_else(|| anyhow!("string value has no LLVM representation"))?
+            .into_struct_value();
+        Ok((
+            llvm(self.builder.build_extract_value(repr, 0, "str.ptr"))?,
+            llvm(self.builder.build_extract_value(repr, 1, "str.len"))?,
+        ))
     }
 
     fn emit_c_main(
@@ -1095,6 +1160,18 @@ fn declare_runtime<'ctx>(
         ),
         None,
     );
+    // 字符串比较：两个 `{ptr, len}` 按值展开成四个标量参数，返回 i64。
+    let string_compare = [ptr_ty.into(), i64_ty.into(), ptr_ty.into(), i64_ty.into()];
+    let str_eq = module.add_function(
+        "__yx_rt_str_eq",
+        i64_ty.fn_type(&string_compare, false),
+        None,
+    );
+    let str_cmp = module.add_function(
+        "__yx_rt_str_cmp",
+        i64_ty.fn_type(&string_compare, false),
+        None,
+    );
     RuntimeFunctions {
         add: module.add_function("__yx_rt_add_i64", i64_ty.fn_type(&binary, false), None),
         sub: module.add_function("__yx_rt_sub_i64", i64_ty.fn_type(&binary, false), None),
@@ -1103,6 +1180,8 @@ fn declare_runtime<'ctx>(
         rem: module.add_function("__yx_rt_mod_i64", i64_ty.fn_type(&binary, false), None),
         neg: module.add_function("__yx_rt_neg_i64", i64_ty.fn_type(&unary, false), None),
         assert,
+        str_eq,
+        str_cmp,
     }
 }
 

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""AOT 七条最小等价账本门禁。
+"""AOT 八条最小等价账本门禁。
 
 账本是机器可读的 `tests/aot-ledger.json`。决策文本的唯一来源是设计文档，
-本脚本内嵌七条期望 id/state 做机械对账，防止账本与文档漂移。脚本先精确核对
+本脚本内嵌八条期望 id/state 做机械对账，防止账本与文档漂移。脚本先精确核对
 测试名，再逐条逐判据用 `--exact` 执行并断言精确的
 `test result: ok. 1 passed; 0 failed`；缺条目、多条目、重复、未知测试名、
 id/state 不符或没有执行到测试都必须 exit 非 0。
@@ -19,7 +19,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 LEDGER = ROOT / "tests" / "aot-ledger.json"
 TARGET = "native_aot"
-EXPECTED_ENTRIES = 7
+EXPECTED_ENTRIES = 8
 STATES = {"supported", "expected-reject"}
 EXPECTED = [
     ("branch-no-phi", "supported"),
@@ -29,6 +29,7 @@ EXPECTED = [
     ("phi-boundary", "supported"),
     ("local-merge-boundary", "supported"),
     ("unknown-type-boundary", "expected-reject"),
+    ("string-compare", "supported"),
 ]
 RESULT_PATTERN = re.compile(
     r"^test result: ok\. 1 passed; 0 failed", re.MULTILINE

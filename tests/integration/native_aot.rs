@@ -1617,6 +1617,283 @@ mod enabled {
             String::from_utf8_lossy(&output.stderr)
         );
     }
+
+    /// 合成 IR：菱形 CFG 的 String Phi。两个前驱各载入内容相同的字面量，汇合块用
+    /// `Phi` 取回并与第三个同内容字面量比较。三处字面量在 LLVM 里是三个不同的
+    /// 全局，因此这条判据钉住「内容相等，不是指针相等」（批次 4.1）。
+    fn string_phi_module() -> ModuleIR {
+        let function = FunctionIR {
+            name: "string_phi".to_string(),
+            def: None,
+            params: vec![yaoxiang::frontend::core::sema::MonoType::Bool],
+            return_type: yaoxiang::frontend::core::sema::MonoType::Void,
+            generic_params: None,
+            body: FunctionBody::Code {
+                blocks: vec![
+                    BasicBlock {
+                        label: 0,
+                        instructions: vec![Instruction::JmpIfNot {
+                            cond: Operand::Arg(0),
+                            target: 3,
+                            span: Span::dummy(),
+                        }],
+                        successors: vec![1, 2],
+                    },
+                    BasicBlock {
+                        label: 1,
+                        instructions: vec![
+                            Instruction::Load {
+                                dst: Operand::Value(yaoxiang::middle::ir::ir::ValueId(0)),
+                                src: Operand::Const(ConstValue::String("same".to_string())),
+                                span: Span::dummy(),
+                            },
+                            Instruction::Jmp {
+                                target: 5,
+                                span: Span::dummy(),
+                            },
+                        ],
+                        successors: vec![3],
+                    },
+                    BasicBlock {
+                        label: 2,
+                        instructions: vec![
+                            Instruction::Load {
+                                dst: Operand::Value(yaoxiang::middle::ir::ir::ValueId(1)),
+                                src: Operand::Const(ConstValue::String("same".to_string())),
+                                span: Span::dummy(),
+                            },
+                            Instruction::Jmp {
+                                target: 5,
+                                span: Span::dummy(),
+                            },
+                        ],
+                        successors: vec![3],
+                    },
+                    BasicBlock {
+                        label: 3,
+                        instructions: vec![
+                            Instruction::Phi {
+                                dst: Operand::Value(yaoxiang::middle::ir::ir::ValueId(2)),
+                                incoming: vec![
+                                    (1, Operand::Value(yaoxiang::middle::ir::ir::ValueId(0))),
+                                    (2, Operand::Value(yaoxiang::middle::ir::ir::ValueId(1))),
+                                ],
+                                span: Span::dummy(),
+                            },
+                            Instruction::Load {
+                                dst: Operand::Value(yaoxiang::middle::ir::ir::ValueId(3)),
+                                src: Operand::Const(ConstValue::String("same".to_string())),
+                                span: Span::dummy(),
+                            },
+                            Instruction::Eq {
+                                dst: Operand::Value(yaoxiang::middle::ir::ir::ValueId(4)),
+                                lhs: Operand::Value(yaoxiang::middle::ir::ir::ValueId(2)),
+                                rhs: Operand::Value(yaoxiang::middle::ir::ir::ValueId(3)),
+                                span: Span::dummy(),
+                            },
+                            Instruction::Call {
+                                dst: None,
+                                func: Operand::Const(ConstValue::String(
+                                    "std.assert.assert".to_string(),
+                                )),
+                                args: vec![Operand::Value(yaoxiang::middle::ir::ir::ValueId(4))],
+                                def: None,
+                                span: Span::dummy(),
+                            },
+                            Instruction::Ret {
+                                value: None,
+                                span: Span::dummy(),
+                            },
+                        ],
+                        successors: vec![],
+                    },
+                ],
+                entry: 0,
+                locals: vec![],
+                values: vec![
+                    string_value_info(1),
+                    string_value_info(2),
+                    string_value_info(3),
+                    string_value_info(3),
+                    bool_value_info(3),
+                ],
+                value_slots: vec![],
+            },
+        };
+        let mut module = ModuleIR::default();
+        module.functions.push(function);
+        for arm in [true, false] {
+            module.init.push(Instruction::Call {
+                dst: None,
+                func: Operand::Const(ConstValue::String("string_phi".to_string())),
+                args: vec![Operand::Const(ConstValue::Bool(arm))],
+                def: None,
+                span: Span::dummy(),
+            });
+        }
+        module
+    }
+
+    fn string_value_info(block: usize) -> yaoxiang::middle::ir::ir::ValueInfo {
+        yaoxiang::middle::ir::ir::ValueInfo {
+            ty: yaoxiang::frontend::core::sema::MonoType::Generic {
+                name: "String".to_string(),
+                args: Vec::new(),
+            },
+            debug_name: None,
+            defining_block: block,
+        }
+    }
+
+    fn bool_value_info(block: usize) -> yaoxiang::middle::ir::ir::ValueInfo {
+        yaoxiang::middle::ir::ir::ValueInfo {
+            ty: yaoxiang::frontend::core::sema::MonoType::Bool,
+            debug_name: None,
+            defining_block: block,
+        }
+    }
+
+    #[test]
+    fn test_native_string_equality_matches_vm() {
+        // Arrange：判等按内容比较——独立字面量、经形参、空串，以及同长度同前缀
+        // 但后位不同的用例。静态字面量在目标常量池里会合并成同一个地址，因此
+        // 「内容相等而指针不等」在本片还不可观察（后续 owned 字符串切片才出现
+        // 两个地址）；可观察的内容判据是同长度不同字节的用例。
+        let source = concat!(
+            "use std.assert\n",
+            "same: (s: String) -> Bool = (s) => s == \"same\"\n",
+            "differ: (s: String) -> Bool = (s) => s != \"same\"\n",
+            "differ_shared: (s: String) -> Bool = (s) => s != \"sAme\"\n",
+            "empty: (s: String) -> Bool = (s) => s == \"\"\n",
+            "main: () -> Void = {\n",
+            "    a = \"same\"\n",
+            "    b = \"same\"\n",
+            "    assert.assert(a == b, \"two independent literals with identical content compare equal\")\n",
+            "    assert.assert(same(a), \"parameter carries the same content\")\n",
+            "    assert.assert(differ(\"other\"), \"different content is not equal\")\n",
+            "    assert.assert(differ_shared(\"same\"), \"same length and shared first byte still differ\")\n",
+            "    assert.assert(empty(\"\"), \"empty strings are equal\")\n",
+            "    assert.assert(differ(\"\"), \"empty differs from the non-empty literal\")\n",
+            "}\n",
+            "main()\n",
+        );
+
+        // Act
+        assert_native_matches_vm(source, "string_equality");
+
+        // Assert
+        // assert_native_matches_vm 已断言 native/VM 的 O0 与 O2 结果一致。
+    }
+
+    #[test]
+    fn test_native_string_ordering_matches_vm() {
+        // Arrange：六个算子的顺序语义——前缀、多字节、空串、大小写都是字节序。
+        let source = concat!(
+            "use std.assert\n",
+            "lt: (a: String, b: String) -> Bool = (a, b) => a < b\n",
+            "le: (a: String, b: String) -> Bool = (a, b) => a <= b\n",
+            "gt: (a: String, b: String) -> Bool = (a, b) => a > b\n",
+            "ge: (a: String, b: String) -> Bool = (a, b) => a >= b\n",
+            "main: () -> Void = {\n",
+            "    assert.assert(lt(\"abc\", \"abd\"), \"same prefix compares the next byte\")\n",
+            "    assert.assert(lt(\"a\", \"ab\"), \"a prefix is smaller than its extension\")\n",
+            "    assert.assert(gt(\"ab\", \"a\"), \"an extension is greater than its prefix\")\n",
+            "    assert.assert(lt(\"\", \"a\"), \"the empty string is the smallest\")\n",
+            "    assert.assert(le(\"abc\", \"abc\"), \"equal content is less-or-equal\")\n",
+            "    assert.assert(ge(\"abc\", \"abc\"), \"equal content is greater-or-equal\")\n",
+            "    assert.assert(gt(\"é\", \"z\"), \"multibyte compares by UTF-8 bytes\")\n",
+            "    assert.assert(lt(\"Z\", \"a\"), \"uppercase bytes precede lowercase\")\n",
+            "}\n",
+            "main()\n",
+        );
+
+        // Act
+        assert_native_matches_vm(source, "string_ordering");
+
+        // Assert
+        // assert_native_matches_vm 已断言 native/VM 的 O0 与 O2 结果一致。
+    }
+
+    #[test]
+    fn test_native_string_compare_through_return_matches_vm() {
+        // Arrange：String 经返回值与 if 值汇合后再比较，来源不是字面量。
+        let source = concat!(
+            "use std.assert\n",
+            "pick: (c: Bool) -> String = (c) => {\n",
+            "    x = if c { \"yes\" } else { \"no\" }\n",
+            "    x\n",
+            "}\n",
+            "main: () -> Void = {\n",
+            "    assert.assert(pick(true) == \"yes\", \"if true merges yes\")\n",
+            "    assert.assert(pick(false) != \"yes\", \"if false merges no\")\n",
+            "    assert.assert(pick(false) == \"no\", \"merged value compares by content\")\n",
+            "}\n",
+            "main()\n",
+        );
+
+        // Act
+        assert_native_matches_vm(source, "string_return");
+
+        // Assert
+        // assert_native_matches_vm 已断言 native/VM 的 O0 与 O2 结果一致。
+    }
+
+    #[test]
+    fn test_native_string_phi_merge_compares_by_content() {
+        // Arrange：菱形 CFG 的 String Phi；合并值与第三个同内容字面量比较。
+        let module = string_phi_module();
+
+        // Act
+        let (_dir, executable) = build_synthetic(&module, "string_phi");
+        let output = run_native(&executable);
+
+        // Assert
+        assert!(
+            output.status.success(),
+            "String Phi merged value must compare equal by content: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    #[test]
+    fn test_native_string_operation_outside_slice_is_rejected() {
+        // Arrange：`s[i]`（StringGetChar）不在批次 4.1 的支持集内，必须带位置拒绝。
+        let dir = TempDir::new().expect("string slice tempdir");
+        let source = dir.path().join("string_index.yx");
+        let executable = dir.path().join("string_index");
+        std::fs::write(
+            &source,
+            concat!(
+                "use std.assert\n",
+                "main: () -> Void = {\n",
+                "    s = \"abc\"\n",
+                "    c = s[0]\n",
+                "    assert.assert(c == \"a\")\n",
+                "}\n",
+                "main()\n",
+            ),
+        )
+        .expect("write unsupported string op fixture");
+
+        // Act
+        let error = build_native_with_options(&source, &executable, false, false)
+            .expect_err("StringGetChar stays outside the batch 4.1 support set");
+
+        // Assert
+        let detail = format!("{error:#}");
+        assert!(
+            detail.contains(&format!("{}:4:", source.display())),
+            "rejection must carry the string index position: {detail}"
+        );
+        assert!(
+            detail.contains("StringGetChar"),
+            "rejection must identify the unsupported instruction: {detail}"
+        );
+        assert!(
+            !executable.exists(),
+            "rejected build must not write a native artifact"
+        );
+    }
 }
 
 #[cfg(not(all(feature = "llvm", target_os = "linux", target_arch = "x86_64")))]

@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 typedef struct {
     const char *file;
@@ -110,4 +111,48 @@ void __yx_rt_assert(
     if (!condition) {
         yx_fail(6005, message, message_len, YX_LOCATION);
     }
+}
+
+// ── 字符串（批次 4.1）──────────────────────────────────────────────
+//
+// 值形状 { const uint8_t *ptr; uint64_t len }：len 是 UTF-8 字节数，不是码点
+// 数，也不保证 NUL 结尾。一律按显式长度处理——禁止 strlen/strcmp 一类以 NUL
+// 为界的接口。长度为 0 时 ptr 可以是任意值，不得解引用。
+//
+// 比较语义按 UTF-8 字节字典序；对合法 UTF-8 它与码点序一致，与 VM 侧
+// exec_compare 的 String 分支（Rust str 的比较）同结果。内容相等不等于指针
+// 相等：两个内容相同的独立字面量是两个全局，必须比较相等。
+
+int64_t __yx_rt_str_eq(
+    const uint8_t *lhs,
+    uint64_t lhs_len,
+    const uint8_t *rhs,
+    uint64_t rhs_len
+) {
+    if (lhs_len != rhs_len) {
+        return 0;
+    }
+    if (lhs_len == 0) {
+        return 1;
+    }
+    return memcmp(lhs, rhs, (size_t)lhs_len) == 0 ? 1 : 0;
+}
+
+int64_t __yx_rt_str_cmp(
+    const uint8_t *lhs,
+    uint64_t lhs_len,
+    const uint8_t *rhs,
+    uint64_t rhs_len
+) {
+    const uint64_t common = lhs_len < rhs_len ? lhs_len : rhs_len;
+    if (common != 0) {
+        const int partial = memcmp(lhs, rhs, (size_t)common);
+        if (partial != 0) {
+            return partial < 0 ? -1 : 1;
+        }
+    }
+    if (lhs_len == rhs_len) {
+        return 0;
+    }
+    return lhs_len < rhs_len ? -1 : 1;
 }
