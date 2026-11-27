@@ -256,12 +256,13 @@ main()
     let from_dot42 = crate::middle::bytecode::BytecodeModule::from(loaded);
 
     // Assert 1：全局表逐项一致（表序 + 名字 + 类型号）
-    let table_of = |m: &crate::middle::bytecode::BytecodeModule| -> Vec<(String, u16)> {
-        m.globals
-            .iter()
-            .map(|g| (g.name.clone(), g.type_id))
-            .collect()
-    };
+    let table_of =
+        |m: &crate::middle::bytecode::BytecodeModule| -> Vec<(String, crate::frontend::core::sema::MonoType)> {
+            m.globals
+                .iter()
+                .map(|g| (g.name.clone(), g.ty.clone()))
+                .collect()
+        };
     let direct_globals = table_of(&direct);
     let dot42_globals = table_of(&from_dot42);
     assert_eq!(

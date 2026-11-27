@@ -504,7 +504,8 @@ impl BytecodeFile {
                 ));
             }
             write_string(writer, &global.name)?;
-            writer.write_all(&(global.type_id as u32).to_le_bytes())?;
+            // 类型号由唯一编码口径产出（与形参/返回/类型表项同一套编号）
+            writer.write_all(&mono_type_id(&global.ty)?.to_le_bytes())?;
         }
 
         if (header.flags & FLAG_DEBUG_INFO) != 0 {
@@ -713,15 +714,10 @@ impl BytecodeFile {
         for _ in 0..global_count {
             let name = read_string(reader)?;
             let type_code = read_u32(reader)?;
-            let type_id = u16::try_from(type_code).map_err(|_| {
-                io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    format!("global type id out of range: {type_code}"),
-                )
-            })?;
             globals.push(GlobalInfo {
                 name,
-                type_id,
+                // 读侧解回 MonoType：与函数签名同载体，消费端不必认识「类型号」
+                ty: type_id_to_monotype(type_code),
                 // 格式不携带这两项：初始化在模块初始化序列里运行时求值；
                 // 可变性事实在 IR GlobalSlot 没有字段（见 GlobalInfo 的文档注释）。
                 initializer: None,

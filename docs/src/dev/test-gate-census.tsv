@@ -1679,7 +1679,7 @@ test_function_upvalue_count_round_trips_through_dot42	src/middle/bytecode/tests/
 test_old_format_version_file_is_rejected_with_diagnostic	src/middle/bytecode/tests/file.rs	assert_eqx1 assertx2	病史	函数体/注释点名 issue/回归/缺陷/事故	留
 test_ffi_compile_time_constants_are_rejected_without_panic	src/middle/bytecode/tests/file.rs	assert_eqx1 assertx1	待判	文件头只引整篇 RFC/规范而无节号（收紧后不算条款门）——需人工核	待核
 test_ffi_compile_time_types_are_rejected_without_panic	src/middle/bytecode/tests/file.rs	assert_eqx1 assertx1	待判	文件头只引整篇 RFC/规范而无节号（收紧后不算条款门）——需人工核	待核
-test_globals_table_round_trips_through_dot42	src/middle/bytecode/tests/file.rs	assert_eqx5 expectx4	病史	函数体/注释点名 issue/回归/缺陷/事故	留
+test_globals_table_round_trips_through_dot42	src/middle/bytecode/tests/file.rs	assert_eqx5 expectx2	病史	函数体/注释点名 issue/回归/缺陷/事故	留
 test_global_initializer_is_rejected_without_silent_loss	src/middle/bytecode/tests/file.rs	assert_eqx1 assertx1	待判	文件头只引整篇 RFC/规范而无节号（收紧后不算条款门）——需人工核	待核
 test_global_mutability_is_rejected_without_silent_loss	src/middle/bytecode/tests/file.rs	assert_eqx1 assertx1	待判	文件头只引整篇 RFC/规范而无节号（收紧后不算条款门）——需人工核	待核
 test_reversible_type_codes_round_trip_and_are_distinct	src/middle/bytecode/tests/file.rs	assert_eqx2 assert_nex1	待判	文件头只引整篇 RFC/规范而无节号（收紧后不算条款门）——需人工核	待核

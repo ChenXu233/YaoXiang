@@ -884,9 +884,11 @@ pub struct BytecodeModule {
 ///
 /// # 字段与 .42（v5）的对应关系
 ///
-/// - `name` / `type_id`：随 `.42` 全局表落盘（表序即槽位号）。
-///   `type_id` 是 **.42 类型号**（`file::mono_type_id` / `file::type_id_to_monotype`
-///   这一对口径），与形参/返回类型/类型表项同一套编号，**不是** `type_table` 下标。
+/// - `name` / `ty`：随 `.42` 全局表落盘（表序即槽位号）。`ty` 与
+///   `BytecodeFunction.params` / `return_type` **同载体**（都是 [`MonoType`]，6.2 载体统一）；
+///   `.42` 写侧把它编成类型号（`file::mono_type_id`），读侧解回 `MonoType`
+///   （`file::type_id_to_monotype`）——消费端因此不需要再认识「类型号」这个概念，
+///   也不会把它误当 `type_table` 下标。
 /// - `initializer`：**不落盘**。顶层绑定的初始化由模块初始化序列在运行时求值
 ///   （`lower/globals.rs` 的 `generate_global_var_ir`：任意表达式求值后
 ///   `Store(Global(idx))`），编译期常量折叠只是优化；把它再存一份就是同一事实的第二来源。
@@ -897,8 +899,8 @@ pub struct BytecodeModule {
 pub struct GlobalInfo {
     /// Variable name
     pub name: String,
-    /// Variable type
-    pub type_id: u16,
+    /// Variable type（与函数签名同载体；.42 写侧编类型号，读侧解回）
+    pub ty: crate::frontend::core::sema::MonoType,
     /// Initial value (if compile-time constant)
     pub initializer: Option<ConstValue>,
     /// Is mutable

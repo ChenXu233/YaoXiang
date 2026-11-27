@@ -234,32 +234,22 @@ impl CodegenContext {
             )
         });
 
-        // 4.6 模块级全局表（v5）：名字 + 类型号，表序即槽位号。
+        // 4.6 模块级全局表（v5）：名字 + 类型（MonoType，与函数签名同载体），表序即槽位号。
         // 事实源是 IR 的 `ModuleIR.globals`（`GlobalSlot { name, ty, index }`）。
-        // `bytecode/mod.rs:From` 的注释里写死的「载入后恒空」于此终结。
+        // 类型号只在 .42 写侧由 `file::mono_type_id` 产生，装配期不引入第二套编号。
         let globals: Vec<crate::middle::bytecode::GlobalInfo> = self
             .module
             .globals
             .iter()
-            .map(|slot| {
-                let type_id =
-                    crate::middle::bytecode::file::mono_type_id(&slot.ty).map_err(|e| {
-                        crate::util::diagnostic::ErrorCodeDefinition::internal_error(&format!(
-                            "全局 '{}' 的类型无法编成 .42 类型号：{e}",
-                            slot.name
-                        ))
-                        .build()
-                    })?;
-                Ok(crate::middle::bytecode::GlobalInfo {
-                    name: slot.name.clone(),
-                    type_id: type_id as u16,
-                    // 不落盘的两项：初始化在模块初始化序列里运行时求值；
-                    // 可变性未进 IR（见 GlobalInfo 文档）。
-                    initializer: None,
-                    is_mutable: false,
-                })
+            .map(|slot| crate::middle::bytecode::GlobalInfo {
+                name: slot.name.clone(),
+                ty: slot.ty.clone(),
+                // 不落盘的两项：初始化在模块初始化序列里运行时求值；
+                // 可变性未进 IR（见 GlobalInfo 文档）。
+                initializer: None,
+                is_mutable: false,
             })
-            .collect::<Result<Vec<_>, Diagnostic>>()?;
+            .collect();
 
         debug!("{}", t_simple(MSG::CodegenComplete, lang));
         Ok(BytecodeFile {
