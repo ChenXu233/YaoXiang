@@ -9,7 +9,7 @@ import type { Glossary, I18nConfig, SystemConfig, TranslateEnv } from './config.
 import { loadCache, saveCache, getKeysToTranslate, updateCache } from './cache.ts';
 import type { TranslationCache } from './cache.ts';
 import { translateBatch } from './ai.ts';
-import { resolveLanguagePrompt } from './prompt.ts';
+import { resolveLanguagePrompt, composePrompt } from './prompt.ts';
 import { getAdapter } from './adapters/index.ts';
 import type { TranslateAdapter } from './adapters/index.ts';
 import type { FlatKeys, LocaleJson } from './adapters/locales.ts';
@@ -141,7 +141,7 @@ async function translateSystem(
           keys: batchKeys,
           sourceLang: config.languages[config.source]?.name || config.source,
           targetLang: langConfig.name || lang,
-          languagePrompt,
+          languagePrompt: composePrompt(languagePrompt),
           glossary,
           apiKey: env.AI_API_KEY,
           baseUrl: env.AI_BASE_URL,
