@@ -169,7 +169,9 @@ python ../scripts/rfc/check_tracking.py        # RFC 状态一致性
 
 ## 三、验证量测（批次树）
 
-量测必须在**冻结的 revision** 上做。cargo 的指纹含源码路径——**换树 = 全量重建，同一棵树切 revision = 增量**，所以一个批次一棵树，固定建在仓库内 `target/yx-scratch/<batch>/tree`（已被 `.gitignore` 覆盖）。禁止直接 `git worktree add` / `git clone` / 在仓库外新建目录。
+量测必须在**冻结的 revision** 上做。cargo 的指纹含源码路径——**换树 = 全量重建，同一棵树切 revision = 增量**，所以一个批次一棵树，统一走 `scripts/dev/scratch.py` 的批次树（`target/yx-scratch/<batch>/tree`，已被 `.gitignore` 覆盖）；不自创构建命令。工作区是 linked worktree、cargo workspace 元数据无法解析时，可以在独立 clone 中建批次树，但 clone 也必须冻结到被测 revision。
+
+**收尾必须清理**：批次结束必须 `release` + `gc`，并删除 clone、探针、日志等临时目录；任务输出要贴 `scratch.py status`（无批次树残留）。有残留 = 验证未完成，门禁红。
 
 流程：`init <batch>` 建树（首次全量约 5 分钟 / 约 3 GB）→ `use <batch> --rev <sha> --by <成员> --task <id>` 上锁切 revision → `build <batch>` 统一构建（固定 `cargo build --bin yaoxiang-rs`，不要自创命令）→ 量测 → `release <batch>` 解锁 → 收口 `gc` 并把 `status` 输出贴进任务输出。参数见 `python scripts/dev/scratch.py --help`。
 
