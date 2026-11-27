@@ -55,7 +55,7 @@ impl<'a> ExpressionInferrer<'a> {
         let (type_name, has_field) = match &resolved {
             MonoType::Struct(s) => (s.name.clone(), s.fields.iter().any(|f| &f.name == field)),
             MonoType::TypeRef(n) => {
-                if let Some(def_ty) = self.type_defs.get(n).map(|p| &p.body) {
+                if let Some(def_ty) = self.type_defs.get(n.bare()).map(|p| &p.body) {
                     let def_ty = self.solver.resolve_type(def_ty);
                     if let MonoType::Struct(s) = def_ty {
                         (s.name.clone(), s.fields.iter().any(|fi| &fi.name == field))
@@ -77,7 +77,7 @@ impl<'a> ExpressionInferrer<'a> {
         // 否则按静态类型名经导入面解析（D-5）
         let key = match self.scope.type_identity(obj_name) {
             Some(identity) => DefPath::method(&identity.module, &identity.name, field),
-            None => self.method_key(&type_name, field)?,
+            None => self.method_key(type_name.bare(), field)?,
         };
         let binding = self.method_bindings.get(&key)?;
         let MonoType::Fn { params, .. } = binding else {

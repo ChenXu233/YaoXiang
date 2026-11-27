@@ -7,6 +7,7 @@
 
 use crate::frontend::core::sema::environment::TypeEnvironment;
 use crate::frontend::core::sema::inference::bounds::BoundsChecker;
+use crate::frontend::core::types::identity::Nominal;
 use crate::frontend::core::types::{MonoType, StructType};
 use std::collections::HashMap;
 
@@ -39,7 +40,8 @@ fn create_interface(
         )
         .collect();
     MonoType::Struct(StructType {
-        name: name.to_string(),
+        name: Nominal::flat(AsRef::<str>::as_ref(&(name)))
+            .expect("type name must be bare and non-empty"),
         fields,
         methods: HashMap::new(),
         interfaces: vec![],
@@ -70,7 +72,8 @@ fn create_struct(
     }
     (
         MonoType::Struct(StructType {
-            name: name.to_string(),
+            name: Nominal::flat(AsRef::<str>::as_ref(&(name)))
+                .expect("type name must be bare and non-empty"),
             fields: struct_fields,
             methods: HashMap::new(),
             interfaces: vec![],
@@ -87,7 +90,10 @@ fn point_fields() -> Vec<(&'static str, MonoType)> {
 /// 接口侧 `draw: (Surface) -> Void` 签名。
 fn surface_draw_sig() -> MonoType {
     fn_type(
-        vec![MonoType::TypeRef("Surface".to_string())],
+        vec![MonoType::TypeRef(
+            Nominal::flat(AsRef::<str>::as_ref(&("Surface")))
+                .expect("type name must be bare and non-empty"),
+        )],
         MonoType::Void,
     )
 }
@@ -98,7 +104,16 @@ fn self_and(
     arg: MonoType,
     ret: MonoType,
 ) -> MonoType {
-    fn_type(vec![MonoType::TypeRef(self_type.to_string()), arg], ret)
+    fn_type(
+        vec![
+            MonoType::TypeRef(
+                Nominal::flat(AsRef::<str>::as_ref(&(self_type)))
+                    .expect("type name must be bare and non-empty"),
+            ),
+            arg,
+        ],
+        ret,
+    )
 }
 
 /// 结构体侧 `draw: (self_type, Surface) -> ret` 签名。
@@ -106,7 +121,14 @@ fn draw_method(
     self_type: &str,
     ret: MonoType,
 ) -> MonoType {
-    self_and(self_type, MonoType::TypeRef("Surface".to_string()), ret)
+    self_and(
+        self_type,
+        MonoType::TypeRef(
+            Nominal::flat(AsRef::<str>::as_ref(&("Surface")))
+                .expect("type name must be bare and non-empty"),
+        ),
+        ret,
+    )
 }
 
 /// `Drawable: { draw: (Surface) -> Void }` 接口。

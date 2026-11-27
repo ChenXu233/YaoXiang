@@ -606,10 +606,10 @@ test_instantiation_request_qualified_mixed_signature_call_stays_request_free	src
 test_instantiation_request_value_receiver_method_call_not_collected	src/frontend/core/sema/inference/tests/expressions.rs	assertx2 helperx1	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
 test_qualified_generic_call_borrowed_param_uses_export_declared_type_params	src/frontend/core/sema/inference/tests/expressions.rs	assert_eqx3 assertx1 helperx1	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
 test_never_short_circuit_criterion_pins_shared_verdict_for_both_traversers	src/frontend/core/sema/inference/tests/expressions.rs	matchesx3 assertx4 is_nonex1	病史	函数体/注释点名 issue/回归/缺陷/事故	留
-test_decide_alias_representation_is_proved	src/frontend/core/sema/inference/tests/judgement.rs	assertx1 is_okx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
+test_decide_alias_representation_is_proved	src/frontend/core/sema/inference/tests/judgement.rs	assertx1 is_okx1 expectx2	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_decide_failure_rolls_back_partial_binding	src/frontend/core/sema/inference/tests/judgement.rs	matchesx1 assertx2 is_errx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_decide_true_mismatch_stays_mismatch	src/frontend/core/sema/inference/tests/judgement.rs	matchesx1 assertx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
-test_decide_unproven_reports_e4023_with_proposition	src/frontend/core/sema/inference/tests/judgement.rs	assert_eqx1 matchesx1 assertx2	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
+test_decide_unproven_reports_e4023_with_proposition	src/frontend/core/sema/inference/tests/judgement.rs	assert_eqx1 matchesx1 assertx2 expectx4	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_decide_budget_exhaustion_reports_e4023	src/frontend/core/sema/inference/tests/judgement.rs	assert_eqx2	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_decide_open_side_skips_defeq	src/frontend/core/sema/inference/tests/judgement.rs	matchesx2 assertx2	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_pattern_infer_wildcard	src/frontend/core/sema/inference/tests/patterns.rs	matchesx1 assertx1 unwrapx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
@@ -644,7 +644,7 @@ test_normalize_type_recurses_into_generic_arguments	src/frontend/core/sema/layer
 test_normalize_type_budget_exhaustion_is_unproven	src/frontend/core/sema/layers/tests/equivalence.rs	assert_eqx1 matchesx1 assertx1 match_panicx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_check_type_equivalence_delegates_to_defeq	src/frontend/core/sema/layers/tests/equivalence.rs	assert_eqx1 helperx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_defeq_array_length_arithmetic_equals_literal	src/frontend/core/sema/layers/tests/equivalence.rs	assertx1 is_okx1 expectx2	病史	函数体/注释点名 issue/回归/缺陷/事故	留
-test_normalize_type_depth_exceeded_is_beyond_kernel	src/frontend/core/sema/layers/tests/equivalence.rs	matchesx1 assertx2	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
+test_normalize_type_depth_exceeded_is_beyond_kernel	src/frontend/core/sema/layers/tests/equivalence.rs	matchesx1 assertx2 expectx2	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 reflexivity_int64	src/frontend/core/sema/layers/tests/is_subtype.rs	assertx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_root_id_extraction	src/frontend/core/sema/layers/tests/ownership.rs	assert_eqx3	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_write_vs_write_conflict	src/frontend/core/sema/layers/tests/ownership.rs	assertx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
@@ -734,7 +734,7 @@ test_measure_obligation_not_proved_when_solver_reports_unknown	src/frontend/core
 test_measure_disproof_emits_e4022_when_well_founded	src/frontend/core/sema/layers/tests/termination.rs	assert_eqx1 expectx1 helperx3	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_count_unjudged_obligations_counts_both_kinds	src/frontend/core/sema/layers/tests/termination.rs	assert_eqx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 native_arithmetic_matrix_queryable	src/frontend/core/sema/operator_interfaces.rs	assert_eqx4 assertx3 is_nonex2 unwrapx4	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
-nominal_entries_match_across_representations	src/frontend/core/sema/operator_interfaces.rs	assertx3	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
+nominal_entries_match_across_representations	src/frontend/core/sema/operator_interfaces.rs	assertx3 expectx5	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 interface_defs_registered_for_routing	src/frontend/core/sema/operator_interfaces.rs	assertx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_dead_code_analyzer_creation	src/frontend/core/sema/passes/tests/dead_code.rs	（无断言）	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_function_without_reference_is_not_reachable	src/frontend/core/sema/passes/tests/dead_code.rs	assertx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
@@ -949,11 +949,11 @@ test_flat_curry_block_body_keeps_innermost_value_layer	src/frontend/core/sema/te
 test_const_generic_curry_keeps_innermost_value_layer	src/frontend/core/sema/tests/paren_return_decomposition.rs	assertx1 helperx1	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
 test_paren_return_nested_lambda_tail_expr_keeps_e1012	src/frontend/core/sema/tests/paren_return_decomposition.rs	assertx1 helperx1	病史	函数体/注释点名 issue/回归/缺陷/事故	留
 test_resolve_positive_with_literal	src/frontend/core/sema/tests/predicate_resolver.rs	assert_eqx4 expectx1 match_panicx2	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
-test_resolve_positive_with_variable	src/frontend/core/sema/tests/predicate_resolver.rs	assert_eqx3 expectx1 match_panicx2	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
+test_resolve_positive_with_variable	src/frontend/core/sema/tests/predicate_resolver.rs	assert_eqx3 expectx2 match_panicx2	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
 test_resolve_unknown_predicate_returns_none	src/frontend/core/sema/tests/predicate_resolver.rs	assertx1 is_nonex1	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
 test_resolve_registered_predicate_invalid_arg_errors	src/frontend/core/sema/tests/predicate_resolver.rs	matchesx1 assertx1 expectx1	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
 test_resolve_registered_predicate_zero_args_errors	src/frontend/core/sema/tests/predicate_resolver.rs	matchesx1 assertx1 expectx1	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
-test_resolve_registered_predicate_extra_args_errors	src/frontend/core/sema/tests/predicate_resolver.rs	matchesx1 assertx1 expectx1	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
+test_resolve_registered_predicate_extra_args_errors	src/frontend/core/sema/tests/predicate_resolver.rs	matchesx1 assertx1 expectx3	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
 test_constraint_names_match_operator_interface_table	src/frontend/core/sema/tests/probe.rs	assert_eqx3 assertx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_predicate_names_match_typecheck_judgement	src/frontend/core/sema/tests/probe.rs	assert_eqx1 matchesx1 assertx4	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_semantic_probe_kind_of_matches_builtin_name_table	src/frontend/core/sema/tests/probe.rs	matchesx7 assertx6	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
@@ -992,16 +992,16 @@ test_imported_model_with_ambiguous_library_ref_is_rejected	src/frontend/core/sem
 test_type_level_field_path_parses_to_field_access	src/frontend/core/sema/tests/record_witness_term.rs	assert_eqx1 matchesx1 assertx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_convert_field_access_var_base_yields_field_path	src/frontend/core/sema/tests/record_witness_term.rs	assert_eqx1 matchesx1 assertx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_convert_non_var_base_does_not_yield_field_path	src/frontend/core/sema/tests/record_witness_term.rs	assertx1 is_nonex1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
-test_predicate_body_field_path_registers_and_resolves	src/frontend/core/sema/tests/record_witness_term.rs	assert_eqx1 matchesx5 assertx4 expectx1 helperx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
+test_predicate_body_field_path_registers_and_resolves	src/frontend/core/sema/tests/record_witness_term.rs	assert_eqx1 matchesx5 assertx4 expectx3 helperx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_admission_accepts_evidence_path_premise	src/frontend/core/sema/tests/record_witness_term.rs	assertx1 helperx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_value_level_witness_read_still_rejected	src/frontend/core/sema/tests/record_witness_term.rs	assertx1 helperx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_declaration_face_rejects_data_and_unknown_fields	src/frontend/core/sema/tests/record_witness_term.rs	assertx2 helperx2	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_application_face_rejects_literal_base_and_path_arg	src/frontend/core/sema/tests/record_witness_term.rs	assertx2 helperx2	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
-test_admission_predicates_direct_drive	src/frontend/core/sema/tests/record_witness_term.rs	assertx7 helperx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
+test_admission_predicates_direct_drive	src/frontend/core/sema/tests/record_witness_term.rs	assertx7 expectx7 helperx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_const_evaluator_rejects_field_path	src/frontend/core/sema/tests/record_witness_term.rs	assertx1 is_errx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_declaration_face_rejects_non_parameter_base	src/frontend/core/sema/tests/record_witness_term.rs	assertx1 helperx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_return_position_admission	src/frontend/core/sema/tests/record_witness_term.rs	assertx1 helperx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
-test_admission_short_circuits_before_smt	src/frontend/core/sema/tests/record_witness_term.rs	assertx1 is_okx1 helperx2	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
+test_admission_short_circuits_before_smt	src/frontend/core/sema/tests/record_witness_term.rs	assertx1 is_okx1 expectx1 helperx2	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_composite_field_path_constraints_rejected_at_declaration	src/frontend/core/sema/tests/record_witness_term.rs	assert_eqx1 assertx1 helperx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_field_path_term_helpers	src/frontend/core/sema/tests/record_witness_term.rs	assert_eqx2 assertx1 is_errx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_semantic_dispatch_type_vs_value_base	src/frontend/core/sema/tests/rfc010.rs	assertx4 expectx2 helperx2	病史	函数体/注释点名 issue/回归/缺陷/事故	留
@@ -1073,7 +1073,7 @@ test_rfc010b_range_pattern_requires_fallback_e1030	src/frontend/core/sema/tests/
 test_rfc010b_range_pattern_with_wildcard_exhaustive	src/frontend/core/sema/tests/rfc011b.rs	assertx1 helperx1	病史	函数体/注释点名 issue/回归/缺陷/事故	留
 test_e2e_positive_literal_proved	src/frontend/core/sema/tests/rfc027_phase1_integration.rs	matchesx1 assertx2 expectx2 helperx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_e2e_positive_zero_disproved	src/frontend/core/sema/tests/rfc027_phase1_integration.rs	assertx1 expectx2 helperx1 match_panicx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
-test_e2e_positive_with_binding_disproved	src/frontend/core/sema/tests/rfc027_phase1_integration.rs	assertx1 expectx2 helperx1 match_panicx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
+test_e2e_positive_with_binding_disproved	src/frontend/core/sema/tests/rfc027_phase1_integration.rs	assertx1 expectx3 helperx1 match_panicx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_e2e_unknown_predicate_returns_none	src/frontend/core/sema/tests/rfc027_phase1_integration.rs	assertx1 is_nonex1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_e2e_type_equivalence_structural	src/frontend/core/sema/tests/rfc027_phase1_integration.rs	assertx1 helperx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_plain_type_check_still_works	src/frontend/core/sema/tests/rfc027_phase1_integration.rs	assertx4	病史	函数体/注释点名 issue/回归/缺陷/事故	留
@@ -1218,9 +1218,9 @@ test_match_pattern_constructor	src/frontend/core/types/eval/tests/conditional.rs
 test_pattern_match_arm_new	src/frontend/core/types/eval/tests/conditional.rs	assert_eqx1 assertx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_match_binding	src/frontend/core/types/eval/tests/conditional.rs	assert_eqx5	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_pattern_matcher_tuple_arity	src/frontend/core/types/eval/tests/conditional.rs	assertx2	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
-test_pattern_match_type	src/frontend/core/types/eval/tests/conditional.rs	assert_eqx1 assertx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
+test_pattern_match_type	src/frontend/core/types/eval/tests/conditional.rs	assert_eqx1 assertx1 expectx3	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_pattern_builder	src/frontend/core/types/eval/tests/conditional.rs	matchesx1 assertx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
-test_nat_examples	src/frontend/core/types/eval/tests/conditional.rs	assert_eqx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
+test_nat_examples	src/frontend/core/types/eval/tests/conditional.rs	assert_eqx1 expectx2	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_const_result_new_and_accessors	src/frontend/core/types/eval/tests/const_eval.rs	assert_eqx3 assertx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_eval_int_literal	src/frontend/core/types/eval/tests/const_eval.rs	helperx3	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_eval_bool_literal	src/frontend/core/types/eval/tests/const_eval.rs	helperx2	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
@@ -1241,7 +1241,7 @@ test_eval_factorial	src/frontend/core/types/eval/tests/const_eval.rs	helperx3	�
 test_eval_fibonacci	src/frontend/core/types/eval/tests/const_eval.rs	helperx3	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_eval_builtin_abs	src/frontend/core/types/eval/tests/const_eval.rs	helperx2	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_eval_builtin_min_max	src/frontend/core/types/eval/tests/const_eval.rs	helperx2	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
-test_generic_size_primitives	src/frontend/core/types/eval/tests/const_eval.rs	assert_eqx7	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
+test_generic_size_primitives	src/frontend/core/types/eval/tests/const_eval.rs	assert_eqx7 expectx2	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_generic_size_dynamic_list	src/frontend/core/types/eval/tests/const_eval.rs	assertx1 is_errx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_size_result	src/frontend/core/types/eval/tests/const_eval.rs	assert_eqx2 assertx2	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_eval_float_gt_lte_gte	src/frontend/core/types/eval/tests/const_eval.rs	helperx3	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
@@ -1277,7 +1277,7 @@ test_associated_type	src/frontend/core/types/eval/tests/dependent_types.rs	asser
 test_substitute	src/frontend/core/types/eval/tests/dependent_types.rs	assert_eqx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_type_family	src/frontend/core/types/eval/tests/dependent_types.rs	assert_eqx2 assertx1 is_somex1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_type_family_associated_types	src/frontend/core/types/eval/tests/dependent_types.rs	assertx3 is_somex2 is_nonex1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
-test_dependent_type_env	src/frontend/core/types/eval/tests/dependent_types.rs	assertx3 is_somex1 is_nonex2	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
+test_dependent_type_env	src/frontend/core/types/eval/tests/dependent_types.rs	assertx3 is_somex1 is_nonex2 expectx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_associated_def_type_param_into_type	src/frontend/core/types/eval/tests/dependent_types.rs	matchesx1 assertx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_associated_def_substitute_no_match	src/frontend/core/types/eval/tests/dependent_types.rs	matchesx1 assertx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_type_family_instantiate_no_args	src/frontend/core/types/eval/tests/dependent_types.rs	assert_eqx1 assertx1 is_somex1 unwrapx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
@@ -1286,12 +1286,12 @@ test_type_family_get_associated_type_none	src/frontend/core/types/eval/tests/dep
 test_type_family_instantiate_associated_type_not_found	src/frontend/core/types/eval/tests/dependent_types.rs	assertx1 is_nonex1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_dependent_type_env_register_multiple	src/frontend/core/types/eval/tests/dependent_types.rs	assertx3 is_somex2 is_nonex1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_dependent_type_env_overwrite	src/frontend/core/types/eval/tests/dependent_types.rs	assert_eqx1 unwrapx2	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
-test_associated_type_def_match_variant	src/frontend/core/types/eval/tests/dependent_types.rs	assert_eqx2 assertx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
+test_associated_type_def_match_variant	src/frontend/core/types/eval/tests/dependent_types.rs	assert_eqx2 assertx1 expectx4	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_istrue_type_family_instantiate	src/frontend/core/types/eval/tests/dependent_types.rs	assert_eqx1 expectx1 helperx3	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
-test_parse_nat_from_type_zero	src/frontend/core/types/eval/tests/dependent_types.rs	assert_eqx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
+test_parse_nat_from_type_zero	src/frontend/core/types/eval/tests/dependent_types.rs	assert_eqx1 expectx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_nat_to_type_roundtrip	src/frontend/core/types/eval/tests/dependent_types.rs	assert_eqx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
-test_structural_termination_ok	src/frontend/core/types/eval/tests/dependent_types.rs	assertx1 is_okx1 helperx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
-test_structural_termination_zero_branch_recursive	src/frontend/core/types/eval/tests/dependent_types.rs	assertx1 is_errx1 helperx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
+test_structural_termination_ok	src/frontend/core/types/eval/tests/dependent_types.rs	assertx1 is_okx1 expectx1 helperx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
+test_structural_termination_zero_branch_recursive	src/frontend/core/types/eval/tests/dependent_types.rs	assertx1 is_errx1 expectx2 helperx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_type_evaluator_creation	src/frontend/core/types/eval/tests/evaluator.rs	（无断言）	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
 test_type_evaluator_eval_simple_type	src/frontend/core/types/eval/tests/evaluator.rs	assertx1 is_okx1	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
 test_type_evaluator_eval_fn_type	src/frontend/core/types/eval/tests/evaluator.rs	assertx1 is_okx1	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
@@ -1300,11 +1300,11 @@ test_type_evaluator_eval_list_type	src/frontend/core/types/eval/tests/evaluator.
 test_type_evaluator_eval_max_depth_exceeded	src/frontend/core/types/eval/tests/evaluator.rs	assertx1 is_okx1	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
 test_type_evaluator_eval_nested_type	src/frontend/core/types/eval/tests/evaluator.rs	assertx1 is_okx1	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
 test_type_evaluator_eval_void_type	src/frontend/core/types/eval/tests/evaluator.rs	matchesx1 assertx1	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
-test_istrue_true_evaluates_to_void	src/frontend/core/types/eval/tests/evaluator.rs	assert_eqx1 assertx1 is_okx1 unwrapx1	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
-test_istrue_false_evaluates_to_never	src/frontend/core/types/eval/tests/evaluator.rs	assert_eqx1 assertx1 is_okx1 unwrapx1	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
-test_istrue_unknown_preserves_expression	src/frontend/core/types/eval/tests/evaluator.rs	assert_eqx1 assertx1 is_okx1 unwrapx1	证明	现状锚（名字含 unchanged/anchor/guard/preserve/baseline）	留
-test_assert_true_evaluates_to_void	src/frontend/core/types/eval/tests/evaluator.rs	assert_eqx1 assertx1 is_okx1 unwrapx1	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
-test_assert_false_evaluates_to_never	src/frontend/core/types/eval/tests/evaluator.rs	assert_eqx1 assertx1 is_okx1 unwrapx1	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
+test_istrue_true_evaluates_to_void	src/frontend/core/types/eval/tests/evaluator.rs	assert_eqx1 assertx1 is_okx1 unwrapx1 expectx1	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
+test_istrue_false_evaluates_to_never	src/frontend/core/types/eval/tests/evaluator.rs	assert_eqx1 assertx1 is_okx1 unwrapx1 expectx1	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
+test_istrue_unknown_preserves_expression	src/frontend/core/types/eval/tests/evaluator.rs	assert_eqx1 assertx1 is_okx1 unwrapx1 expectx1	证明	现状锚（名字含 unchanged/anchor/guard/preserve/baseline）	留
+test_assert_true_evaluates_to_void	src/frontend/core/types/eval/tests/evaluator.rs	assert_eqx1 assertx1 is_okx1 unwrapx1 expectx1	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
+test_assert_false_evaluates_to_never	src/frontend/core/types/eval/tests/evaluator.rs	assert_eqx1 assertx1 is_okx1 unwrapx1 expectx1	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
 test_eval_unop_neg_i128_min_returns_arithmetic_error_not_panic	src/frontend/core/types/eval/tests/evaluator.rs	matchesx1 assertx1	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
 test_eval_unop_neg_values_in_range_unchanged	src/frontend/core/types/eval/tests/evaluator.rs	assert_eqx1	证明	现状锚（名字含 unchanged/anchor/guard/preserve/baseline）	留
 test_eval_binop_sub_chain_constructs_i128_min_exactly	src/frontend/core/types/eval/tests/evaluator.rs	assert_eqx1	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
@@ -1318,12 +1318,12 @@ test_bool_type	src/frontend/core/types/eval/tests/operations.rs	assert_eqx3	待�
 test_comparison_extra_ops	src/frontend/core/types/eval/tests/operations.rs	helperx3	待判	两门皆不过；断言委托给 assert*/check* 助手，机器不判其覆盖力	待判
 test_comparison_compare	src/frontend/core/types/eval/tests/operations.rs	assert_eqx5	待判	两门皆不过；含强断言，证明门需人工复核	待判
 test_arithmetic_extra	src/frontend/core/types/eval/tests/operations.rs	assert_eqx1 assertx1 is_nonex1	待判	两门皆不过；含强断言，证明门需人工复核	待判
-test_bool	src/frontend/core/types/eval/tests/type_families.rs	assert_eqx2 assertx2	待判	两门皆不过；含强断言，证明门需人工复核	待判
-test_nat	src/frontend/core/types/eval/tests/type_families.rs	assert_eqx7 assertx2	待判	两门皆不过；含强断言，证明门需人工复核	待判
+test_bool	src/frontend/core/types/eval/tests/type_families.rs	assert_eqx2 assertx2 expectx1	待判	两门皆不过；含强断言，证明门需人工复核	待判
+test_nat	src/frontend/core/types/eval/tests/type_families.rs	assert_eqx7 assertx2 expectx1	待判	两门皆不过；含强断言，证明门需人工复核	待判
 test_helpers	src/frontend/core/types/eval/tests/type_families.rs	assert_eqx2 assertx3	待判	两门皆不过；含强断言，证明门需人工复核	待判
 test_bool_from_bool	src/frontend/core/types/eval/tests/type_families.rs	assertx2	待判	两门皆不过；含强断言，证明门需人工复核	待判
 test_nat_to_usize_values	src/frontend/core/types/eval/tests/type_families.rs	assert_eqx4	待判	两门皆不过；含强断言，证明门需人工复核	待判
-test_nat_to_mono_type	src/frontend/core/types/eval/tests/type_families.rs	assert_eqx2	待判	两门皆不过；含强断言，证明门需人工复核	待判
+test_nat_to_mono_type	src/frontend/core/types/eval/tests/type_families.rs	assert_eqx2 expectx2	待判	两门皆不过；含强断言，证明门需人工复核	待判
 test_const_value_int_creation	src/frontend/core/types/tests/const_data.rs	assert_eqx2 assertx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_const_value_equality	src/frontend/core/types/tests/const_data.rs	assert_eqx1 assert_nex2	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_const_value_from_literal_name	src/frontend/core/types/tests/const_data.rs	assert_eqx5 assertx1 is_somex1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
@@ -1339,13 +1339,14 @@ test_const_expr_neg_int_literal_displays_by_value	src/frontend/core/types/tests/
 test_type_constraint_error_creation	src/frontend/core/types/tests/error.rs	assertx2	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_type_path_guard_dotted_name	src/frontend/core/types/tests/identity.rs	assertx3 is_nonex3	证明	现状锚（名字含 unchanged/anchor/guard/preserve/baseline）	留
 test_type_path_guard_owner_and_disambiguator	src/frontend/core/types/tests/identity.rs	assertx2 is_nonex2	证明	现状锚（名字含 unchanged/anchor/guard/preserve/baseline）	留
-test_nominal_debug_matches_string_debug	src/frontend/core/types/tests/identity.rs	assert_eqx7 expectx2	待判	两门皆不过；含强断言，证明门需人工复核	待判
+test_nominal_debug_matches_string_debug	src/frontend/core/types/tests/identity.rs	assert_eqx7 expectx6	待判	两门皆不过；含强断言，证明门需人工复核	待判
 test_type_path_hash_matches_string_hash	src/frontend/core/types/tests/identity.rs	assert_eqx2 expectx2	待判	两门皆不过；含强断言，证明门需人工复核	待判
+test_mono_type_debug_goldens_literal	src/frontend/core/types/tests/identity.rs	assert_eqx4 expectx4	待判	两门皆不过；含强断言，证明门需人工复核	待判
 test_borrow_value_forms_match_aligns_only_generic_positions	src/frontend/core/types/tests/mono.rs	assertx4	病史	函数体/注释点名 issue/回归/缺陷/事故	留
-test_container_element_slot_replaces_length_literal_with_base_type	src/frontend/core/types/tests/mono.rs	assert_eqx2	病史	函数体/注释点名 issue/回归/缺陷/事故	留
-test_container_length_slot_reads_only_literal_arguments	src/frontend/core/types/tests/mono.rs	matchesx2 assertx4 is_nonex2	病史	函数体/注释点名 issue/回归/缺陷/事故	留
-test_from_ast_type_name	src/frontend/core/types/tests/mono.rs	assert_eqx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
-test_from_ast_type_primitives	src/frontend/core/types/tests/mono.rs	assert_eqx10	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
+test_container_element_slot_replaces_length_literal_with_base_type	src/frontend/core/types/tests/mono.rs	assert_eqx2 expectx1	病史	函数体/注释点名 issue/回归/缺陷/事故	留
+test_container_length_slot_reads_only_literal_arguments	src/frontend/core/types/tests/mono.rs	matchesx2 assertx4 is_nonex2 expectx4	病史	函数体/注释点名 issue/回归/缺陷/事故	留
+test_from_ast_type_name	src/frontend/core/types/tests/mono.rs	assert_eqx1 expectx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
+test_from_ast_type_primitives	src/frontend/core/types/tests/mono.rs	assert_eqx10 expectx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_from_ast_type_struct	src/frontend/core/types/tests/mono.rs	assert_eqx1 matchesx1 assertx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_from_ast_type_struct_with_defaults	src/frontend/core/types/tests/mono.rs	matchesx1 assertx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_from_ast_type_named_struct	src/frontend/core/types/tests/mono.rs	matchesx1 assertx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
@@ -1368,11 +1369,11 @@ test_struct_type_eq_different_fields	src/frontend/core/types/tests/mono.rs	asser
 test_get_ast_type_universe_level_nested	src/frontend/core/types/tests/mono.rs	assert_eqx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_get_ast_type_universe_level_plain	src/frontend/core/types/tests/mono.rs	assert_eqx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_calculate_meta_type_level_args	src/frontend/core/types/tests/mono.rs	assert_eqx1 assertx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
-test_type_name_dict_set_range	src/frontend/core/types/tests/mono.rs	assert_eqx3	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
+test_type_name_dict_set_range	src/frontend/core/types/tests/mono.rs	assert_eqx3 expectx2	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_type_var_extraction	src/frontend/core/types/tests/mono.rs	assert_eqx2	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
-test_is_constraint_and_constraint_fields	src/frontend/core/types/tests/mono.rs	assert_eqx1 assertx2	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
+test_is_constraint_and_constraint_fields	src/frontend/core/types/tests/mono.rs	assert_eqx1 assertx2 expectx2	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_struct_field_is_mut_found	src/frontend/core/types/tests/mono.rs	assert_eqx3	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
-test_enum_type_partial_eq	src/frontend/core/types/tests/mono.rs	assert_eqx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
+test_enum_type_partial_eq	src/frontend/core/types/tests/mono.rs	assert_eqx1 expectx2	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_universe_level_cmp	src/frontend/core/types/tests/mono.rs	assert_eqx3	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_canonical_name_round_trips_all_builtin_names	src/frontend/core/types/tests/mono.rs	assert_eqx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_canonical_name_uses_width_explicit_spellings	src/frontend/core/types/tests/mono.rs	assert_eqx3 assert_nex1	病史	函数体/注释点名 issue/回归/缺陷/事故	留
@@ -1390,7 +1391,7 @@ test_runtime_field_index_maps_data_positions_after_witness	src/frontend/core/typ
 test_runtime_field_count_excludes_witness	src/frontend/core/types/tests/mono.rs	assert_eqx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_struct_type_is_witness_bearing_reads_quantity	src/frontend/core/types/tests/mono.rs	assertx2	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_witness_record_eq_distinguishes_quantity_and_hash_stays_consistent	src/frontend/core/types/tests/mono.rs	assertx3	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
-test_unify_primitives	src/frontend/core/types/tests/solver.rs	assertx9 is_okx9	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
+test_unify_primitives	src/frontend/core/types/tests/solver.rs	assertx9 is_okx9 expectx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_unify_int_width_mismatch	src/frontend/core/types/tests/solver.rs	assertx2 is_errx2	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_unify_struct_different_field_type	src/frontend/core/types/tests/solver.rs	assertx1 is_errx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_unify_struct_with_var_field	src/frontend/core/types/tests/solver.rs	assertx1 is_okx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
@@ -1404,19 +1405,19 @@ test_bind_conflicting_types	src/frontend/core/types/tests/solver.rs	assertx3 is_
 test_unify_var_twice_consistent	src/frontend/core/types/tests/solver.rs	assertx3 is_okx2 is_errx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_solve_contradictory_constraints	src/frontend/core/types/tests/solver.rs	assertx1 is_errx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_get_binding_and_get_binding_mut	src/frontend/core/types/tests/solver.rs	assertx2 is_somex2 unwrapx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
-test_resolve_builtin_types	src/frontend/core/types/tests/solver.rs	assert_eqx1 helperx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
+test_resolve_builtin_types	src/frontend/core/types/tests/solver.rs	assert_eqx1 expectx1 helperx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_expand_type_through_all_containers	src/frontend/core/types/tests/solver.rs	helperx2	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_contains_var_in_containers	src/frontend/core/types/tests/solver.rs	helperx2	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_unify_list_same_element_type	src/frontend/core/types/tests/solver.rs	assertx1 is_okx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_unify_list_different_element_type	src/frontend/core/types/tests/solver.rs	assertx1 is_errx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_solve_empty_constraints	src/frontend/core/types/tests/solver.rs	assertx1 is_okx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
-test_expand_mut_struct_with_bound_var	src/frontend/core/types/tests/solver.rs	matchesx1 assertx1 unwrapx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
+test_expand_mut_struct_with_bound_var	src/frontend/core/types/tests/solver.rs	matchesx1 assertx1 unwrapx1 expectx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_expand_mut_fn_with_bound_var	src/frontend/core/types/tests/solver.rs	matchesx1 assertx1 unwrapx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_metatype_unify_same_level	src/frontend/core/types/tests/solver.rs	assertx1 is_okx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_metatype_unify_different_level	src/frontend/core/types/tests/solver.rs	assertx1 is_errx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_journal_rollback_restores_partial_fn_binding	src/frontend/core/types/tests/solver.rs	assert_eqx1 matchesx1 assertx2 is_errx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_journal_commit_keeps_fn_binding	src/frontend/core/types/tests/solver.rs	assert_eqx1 assertx1 is_okx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
-test_has_type_var_ignores_typeref	src/frontend/core/types/tests/solver.rs	assertx2	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
+test_has_type_var_ignores_typeref	src/frontend/core/types/tests/solver.rs	assertx2 expectx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_contains_type_vars_sees_through_borrow	src/frontend/core/types/tests/substitute.rs	assertx2	待判	两门皆不过；含强断言，证明门需人工复核	待判
 test_substitution_bind_insert_get	src/frontend/core/types/tests/substitute.rs	assert_eqx3	待判	两门皆不过；含强断言，证明门需人工复核	待判
 test_substitution_contains_var	src/frontend/core/types/tests/substitute.rs	assertx2	待判	两门皆不过；含强断言，证明门需人工复核	待判
@@ -1426,13 +1427,13 @@ test_substitute_no_match_returns_original	src/frontend/core/types/tests/substitu
 test_substitute_generic_params_too_few	src/frontend/core/types/tests/substitute.rs	assert_eqx1	待判	两门皆不过；含强断言，证明门需人工复核	待判
 test_substitute_with_map_no_match	src/frontend/core/types/tests/substitute.rs	assert_eqx1	待判	两门皆不过；含强断言，证明门需人工复核	待判
 test_substitute_generic_params_matching	src/frontend/core/types/tests/substitute.rs	assert_eqx1	待判	两门皆不过；含强断言，证明门需人工复核	待判
-test_rebind_nominal_refs_renames_fn_params_and_return	src/frontend/core/types/tests/substitute.rs	matchesx2 assertx2	待判	两门皆不过；含强断言，证明门需人工复核	待判
-test_rebind_nominal_refs_keeps_generic_head_and_struct_name	src/frontend/core/types/tests/substitute.rs	assert_eqx2 matchesx1 assertx1	待判	两门皆不过；含强断言，证明门需人工复核	待判
-test_rebind_nominal_refs_empty_map_is_identity	src/frontend/core/types/tests/substitute.rs	assert_eqx1	待判	两门皆不过；含强断言，证明门需人工复核	待判
-test_rebind_nominal_refs_unknown_names_pass_through	src/frontend/core/types/tests/substitute.rs	matchesx1 assertx1	待判	两门皆不过；含强断言，证明门需人工复核	待判
-test_rebind_nominal_refs_keeps_generic_head_in_rebind_table	src/frontend/core/types/tests/substitute.rs	assert_eqx1 matchesx1 assertx1	待判	两门皆不过；含强断言，证明门需人工复核	待判
-test_rebind_nominal_refs_leaves_solver_and_primitive_variants_untouched	src/frontend/core/types/tests/substitute.rs	assert_eqx3	待判	两门皆不过；含强断言，证明门需人工复核	待判
-test_rebind_nominal_refs_rebinds_struct_interfaces	src/frontend/core/types/tests/substitute.rs	assert_eqx2	待判	两门皆不过；含强断言，证明门需人工复核	待判
+test_rebind_nominal_refs_renames_fn_params_and_return	src/frontend/core/types/tests/substitute.rs	matchesx2 assertx2 expectx2	待判	两门皆不过；含强断言，证明门需人工复核	待判
+test_rebind_nominal_refs_keeps_generic_head_and_struct_name	src/frontend/core/types/tests/substitute.rs	assert_eqx2 matchesx1 assertx1 expectx3	待判	两门皆不过；含强断言，证明门需人工复核	待判
+test_rebind_nominal_refs_empty_map_is_identity	src/frontend/core/types/tests/substitute.rs	assert_eqx1 expectx1	待判	两门皆不过；含强断言，证明门需人工复核	待判
+test_rebind_nominal_refs_unknown_names_pass_through	src/frontend/core/types/tests/substitute.rs	matchesx1 assertx1 expectx1	待判	两门皆不过；含强断言，证明门需人工复核	待判
+test_rebind_nominal_refs_keeps_generic_head_in_rebind_table	src/frontend/core/types/tests/substitute.rs	assert_eqx1 matchesx1 assertx1 expectx2	待判	两门皆不过；含强断言，证明门需人工复核	待判
+test_rebind_nominal_refs_leaves_solver_and_primitive_variants_untouched	src/frontend/core/types/tests/substitute.rs	assert_eqx3 expectx1	待判	两门皆不过；含强断言，证明门需人工复核	待判
+test_rebind_nominal_refs_rebinds_struct_interfaces	src/frontend/core/types/tests/substitute.rs	assert_eqx2 expectx2	待判	两门皆不过；含强断言，证明门需人工复核	待判
 test_term_env_rejects_runtime_name	src/frontend/core/types/tests/terms.rs	assertx1	待判	文件头只引整篇 RFC/规范而无节号（收紧后不算条款门）——需人工核	待核
 test_normalize_symbolic_failure_carries_name	src/frontend/core/types/tests/terms.rs	assert_eqx1 match_panicx1	待判	文件头只引整篇 RFC/规范而无节号（收紧后不算条款门）——需人工核	待核
 test_normalize_budget_exhaustion_is_unproven	src/frontend/core/types/tests/terms.rs	assert_eqx1 match_panicx1	待判	文件头只引整篇 RFC/规范而无节号（收紧后不算条款门）——需人工核	待核
@@ -1443,18 +1444,18 @@ test_trait_table_get_trait_returns_none_for_missing	src/frontend/core/types/test
 test_trait_table_impl	src/frontend/core/types/tests/trait_data.rs	assertx2 is_somex1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_trait_table_has_impl_returns_false_for_missing	src/frontend/core/types/tests/trait_data.rs	assertx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_trait_table_get_impl_returns_none_for_missing	src/frontend/core/types/tests/trait_data.rs	assertx1 is_nonex1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
-test_trait_table_get_method_impl	src/frontend/core/types/tests/trait_data.rs	matchesx1 assertx2 is_somex1 unwrapx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
+test_trait_table_get_method_impl	src/frontend/core/types/tests/trait_data.rs	matchesx1 assertx2 is_somex1 unwrapx1 expectx2	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_trait_table_get_method_impl_missing_method	src/frontend/core/types/tests/trait_data.rs	assertx1 is_nonex1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_trait_table_get_method_impl_missing_trait	src/frontend/core/types/tests/trait_data.rs	assertx1 is_nonex1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_trait_table_get_method_impl_missing_type	src/frontend/core/types/tests/trait_data.rs	assertx1 is_nonex1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_trait_table_trait_names	src/frontend/core/types/tests/trait_data.rs	assert_eqx1 assertx2	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
-test_trait_method_signature_creation	src/frontend/core/types/tests/trait_data.rs	assert_eqx3 assertx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
-test_trait_method_signature_static	src/frontend/core/types/tests/trait_data.rs	assertx2	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
+test_trait_method_signature_creation	src/frontend/core/types/tests/trait_data.rs	assert_eqx3 assertx1 expectx3	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
+test_trait_method_signature_static	src/frontend/core/types/tests/trait_data.rs	assertx2 expectx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_trait_definition_with_parents	src/frontend/core/types/tests/trait_data.rs	assert_eqx2	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_trait_definition_with_generic_params	src/frontend/core/types/tests/trait_data.rs	assert_eqx2	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
-test_trait_bound	src/frontend/core/types/tests/trait_data.rs	assert_eqx2	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
-test_trait_bound_equality	src/frontend/core/types/tests/trait_data.rs	assert_eqx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
-test_trait_implementation_creation	src/frontend/core/types/tests/trait_data.rs	assert_eqx2 assertx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
+test_trait_bound	src/frontend/core/types/tests/trait_data.rs	assert_eqx2 expectx2	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
+test_trait_bound_equality	src/frontend/core/types/tests/trait_data.rs	assert_eqx1 expectx2	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
+test_trait_implementation_creation	src/frontend/core/types/tests/trait_data.rs	assert_eqx2 assertx1 expectx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_type_var_new_and_index	src/frontend/core/types/tests/var.rs	assert_eqx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_type_var_display	src/frontend/core/types/tests/var.rs	assert_eqx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_type_var_equality	src/frontend/core/types/tests/var.rs	assert_eqx1 assert_nex1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
@@ -1771,7 +1772,7 @@ test_closure_capture_early_error_does_not_leak	src/middle/lower/expr/tests/closu
 test_corpus_over_budget_forms_fit_after_allocation	src/middle/lower/tests/budget.rs	assertx3	待判	两门皆不过；含强断言，证明门需人工复核	待判
 test_range_pattern_compiles_to_closed_ge_le_chain	src/middle/lower/tests/pattern_range.rs	matchesx1 assertx2	病史	函数体/注释点名 issue/回归/缺陷/事故	留
 test_range_pattern_negative_bounds_compile_to_negative_constants	src/middle/lower/tests/pattern_range.rs	assertx1	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
-test_ir_view_type_args_normalize_list_to_vec	src/middle/lower/tests/query.rs	assert_eqx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
+test_ir_view_type_args_normalize_list_to_vec	src/middle/lower/tests/query.rs	assert_eqx1 expectx2	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_resolve_function_name_native_arm_keeps_chain_order	src/middle/lower/tests/query.rs	assert_eqx2 match_panicx2	病史	函数体/注释点名 issue/回归/缺陷/事故	留
 test_allocator_reuses_slot_for_disjoint_intervals	src/middle/lower/tests/regalloc.rs	assert_eqx3 expectx1	待判	两门皆不过；含强断言，证明门需人工复核	待判
 test_allocator_keeps_overlapping_values_in_distinct_slots	src/middle/lower/tests/regalloc.rs	assert_nex2 expectx1	待判	两门皆不过；含强断言，证明门需人工复核	待判
@@ -1836,13 +1837,13 @@ test_specialize_identity_with_int	src/middle/passes/mono/tests/monomorphizer.rs	
 test_specialize_substitutes_value_types_and_keeps_slots	src/middle/passes/mono/tests/monomorphizer.rs	assert_eqx4 expectx2	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_specialize_preserves_block_successors	src/middle/passes/mono/tests/monomorphizer.rs	assert_eqx2 assertx1 expectx2	证明	现状锚（名字含 unchanged/anchor/guard/preserve/baseline）	留
 test_specialize_missing_generic_function_returns_none	src/middle/passes/mono/tests/monomorphizer.rs	matchesx1 assertx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
-test_fire_deferred_evaluates_placeholder_args	src/middle/passes/mono/tests/monomorphizer.rs	assert_eqx4 unwrapx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
+test_fire_deferred_evaluates_placeholder_args	src/middle/passes/mono/tests/monomorphizer.rs	assert_eqx4 unwrapx1 expectx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_replace_call_sites_replaces_generic_call_in_main	src/middle/passes/mono/tests/monomorphizer.rs	assertx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_monomorphize_end_to_end_specializes_and_replaces_calls	src/middle/passes/mono/tests/monomorphizer.rs	assert_eqx1 assertx4 is_nonex1 unwrapx1 expectx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
-test_monomorphize_keeps_original_generic_when_call_site_lacks_request_key	src/middle/passes/mono/tests/monomorphizer.rs	assertx4 expectx2	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
+test_monomorphize_keeps_original_generic_when_call_site_lacks_request_key	src/middle/passes/mono/tests/monomorphizer.rs	assertx4 expectx3	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_dce_keeps_generic_referenced_only_by_make_closure	src/middle/passes/mono/tests/monomorphizer.rs	assertx1 expectx2	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_tail_call_site_is_rewritten_to_specialized_name	src/middle/passes/mono/tests/monomorphizer.rs	assert_eqx1 assertx2 is_nonex1 expectx1 match_panicx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
-test_tail_call_site_drops_erased_const_arg_once	src/middle/passes/mono/tests/monomorphizer.rs	assert_eqx2 assertx1 expectx2	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
+test_tail_call_site_drops_erased_const_arg_once	src/middle/passes/mono/tests/monomorphizer.rs	assert_eqx2 assertx1 expectx4	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_rewritten_call_target_covers_only_static_call_forms	src/middle/passes/mono/tests/monomorphizer.rs	assert_eqx1 is_somex1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_module_init_tail_call_is_rewritten	src/middle/passes/mono/tests/monomorphizer.rs	assert_eqx1 expectx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_specialize_generic_struct_substitutes_type_params	src/middle/passes/mono/tests/monomorphizer.rs	assert_eqx6 matchesx1 assertx2 is_nonex1 expectx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
@@ -1857,7 +1858,7 @@ test_monomorphize_specialized_inherits_function_files_entry	src/middle/passes/mo
 test_open_chain_stops_at_bound	src/middle/passes/mono/tests/monomorphizer.rs	assert_eqx5 assertx1 unwrapx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_open_chain_unclosed_term_is_not_fired	src/middle/passes/mono/tests/monomorphizer.rs	assert_eqx2 assertx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_open_term_disproved_value_is_not_fired	src/middle/passes/mono/tests/monomorphizer.rs	assert_eqx1 assertx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
-test_symbolic_type_request_is_not_limited_by_open_chain	src/middle/passes/mono/tests/monomorphizer.rs	assert_eqx1 assertx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
+test_symbolic_type_request_is_not_limited_by_open_chain	src/middle/passes/mono/tests/monomorphizer.rs	assert_eqx1 assertx1 expectx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_binaries_prebuilt_downloads_verifies_and_extracts	src/package/build/tests/binaries.rs	assert_eqx3 unwrapx2 expectx2	待判	文件头只引整篇 RFC/规范而无节号（收紧后不算条款门）——需人工核	待核
 test_binaries_checksum_mismatch_falls_back_to_source_build	src/package/build/tests/binaries.rs	assert_eqx1 assertx1 unwrapx2	待判	文件头只引整篇 RFC/规范而无节号（收紧后不算条款门）——需人工核	待核
 test_binaries_other_platform_falls_back	src/package/build/tests/binaries.rs	assert_eqx1 unwrapx1	待判	文件头只引整篇 RFC/规范而无节号（收紧后不算条款门）——需人工核	待核

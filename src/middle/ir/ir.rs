@@ -13,6 +13,7 @@ use std::collections::HashMap;
 use crate::ast::Quantity;
 use crate::frontend::core::sema::MonoType;
 use crate::frontend::core::types::identity::DefId;
+use crate::frontend::core::types::identity::Nominal;
 use crate::util::span::Span;
 
 /// SSA 值标识：函数内稠密编号，单调递增、永不回滚（04-ssa.md §值标识方式）。
@@ -1471,7 +1472,8 @@ impl ConstValue {
             Self::Float(_) => Some(MonoType::Float(64)),
             Self::Char(_) => Some(MonoType::Char),
             Self::String(_) => Some(MonoType::Generic {
-                name: "String".to_string(),
+                name: Nominal::flat(AsRef::<str>::as_ref(&("String")))
+                    .expect("type name must be bare and non-empty"),
                 args: Vec::new(),
             }),
             // Bytes / 原生函数值 / FFI 引用无稳定 MonoType 对应（信息不足）。

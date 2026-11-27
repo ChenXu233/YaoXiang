@@ -17,6 +17,7 @@ use crate::middle::passes::mono::instance::InstantiationRequest;
 use std::collections::{HashMap, HashSet};
 
 use super::scope::ScopeManager;
+use crate::frontend::core::types::identity::Nominal;
 
 /// 委托 [`ExpressionInferrer`] 前两处委托点**共有**的上下文灌注（#473：此前
 /// 两处各抄一份 setter 序列且字段顺序已漂移——收敛为单一来源，新增字段只在
@@ -515,11 +516,11 @@ impl StatementChecker {
         match ty {
             MonoType::TypeRef(name) => {
                 // 先查内置类型名
-                if let Some(builtin) = MonoType::from_builtin_name(name) {
+                if let Some(builtin) = MonoType::from_builtin_name(name.bare()) {
                     return builtin;
                 }
                 // 再查用户类型定义
-                if let Some(struct_ty) = self.type_defs.get(name).map(|p| &p.body) {
+                if let Some(struct_ty) = self.type_defs.get(name.bare()).map(|p| &p.body) {
                     return struct_ty.clone();
                 }
                 ty.clone()
@@ -840,7 +841,8 @@ impl StatementChecker {
         }
 
         MonoType::Struct(crate::frontend::core::types::mono::StructType {
-            name: name.to_string(),
+            name: Nominal::flat(AsRef::<str>::as_ref(&(name)))
+                .expect("type name must be bare and non-empty"),
             fields,
             methods: HashMap::new(),
             interfaces: vec![],
@@ -1346,7 +1348,7 @@ impl StatementChecker {
             | (MonoType::TypeRef(n), MonoType::TypeVar(v)) => {
                 matches!(
                     self.solver
-                        .resolve_type(type_param_vars.get(n).unwrap_or(&MonoType::Void)),
+                        .resolve_type(type_param_vars.get(n.bare()).unwrap_or(&MonoType::Void)),
                     MonoType::TypeVar(w) if w == *v
                 )
             }
@@ -1551,7 +1553,7 @@ impl StatementChecker {
             // 钉住身份 = **本帧哪一个编译期值参数**（binder 名），不只是 bool：
             // C3 的钉住消去要把 `k` 消解回 `N`（P3），故这里就落成 binder 名。
             let pin_binder = match &param_ty {
-                MonoType::TypeRef(q) if const_subst.contains_key(q) => Some(q.clone()),
+                MonoType::TypeRef(q) if const_subst.contains_key(q.bare()) => Some(q.clone()),
                 _ => None,
             };
             let param_ty = param_ty.substitute(const_subst);
@@ -1561,7 +1563,7 @@ impl StatementChecker {
                     PolyType::mono(param_ty),
                     param.is_mut,
                     param.span,
-                    binder,
+                    binder.bare().to_string(),
                 );
             } else {
                 self.add_param(
@@ -3062,7 +3064,8 @@ impl StatementChecker {
                                     if self.generic_type_defs.contains_key(iface.as_str()) {
                                         return Err(Box::new(
                                             ErrorCodeDefinition::type_does_not_implement_interface(
-                                                &s.name, iface,
+                                                s.name.bare(),
+                                                iface.bare(),
                                             )
                                             .at(stmt_span)
                                             .build(),
@@ -3129,7 +3132,7 @@ impl StatementChecker {
                             let is_generic_constructor = match (&resolved_init, &resolved_ann) {
                                 (MonoType::Struct(s_init), MonoType::Struct(s_ann)) => {
                                     s_init.name == s_ann.name
-                                        && self.generic_type_defs.contains_key(&s_init.name)
+                                        && self.generic_type_defs.contains_key(s_init.name.bare())
                                         && s_init
                                             .fields
                                             .iter()
@@ -3814,7 +3817,7 @@ impl StatementChecker {
                                     let operands = [&l, &r];
                                     for operand in operands {
                                         if let MonoType::TypeRef(pn) = operand {
-                                            if constraints.get(pn).map(|s| s.as_str())
+                                            if constraints.get(pn.bare()).map(|s| s.as_str())
                                                 == Some(iface)
                                             {
                                                 if let Some(spec) =
@@ -3827,7 +3830,7 @@ impl StatementChecker {
                                                     self.operator_dispatches.push(
                                                         crate::frontend::core::sema::operator_interfaces::OperatorDispatch {
                                                             span: *span,
-                                                            type_name: pn.clone(),
+                                                            type_name: pn.clone().bare().to_string(),
                                                             method,
                                                             dispatch_name,
                                                             negate: false,
@@ -4041,15 +4044,15 @@ pub(super) fn strip_refined_with_proof_fns(
 ) -> MonoType {
     match ty {
         MonoType::Generic { ref name, .. }
-            if crate::frontend::core::sema::is_builtin_predicate_name(name) =>
+            if crate::frontend::core::sema::is_builtin_predicate_name(name.bare()) =>
         {
             solver.new_var()
         }
-        MonoType::Generic { ref name, .. } if proof_fn_bases.contains_key(name) => {
-            proof_fn_bases.get(name).cloned().unwrap_or(ty)
+        MonoType::Generic { ref name, .. } if proof_fn_bases.contains_key(name.bare()) => {
+            proof_fn_bases.get(name.bare()).cloned().unwrap_or(ty)
         }
-        MonoType::TypeRef(ref name) if proof_fn_bases.contains_key(name) => {
-            proof_fn_bases.get(name).cloned().unwrap_or(ty)
+        MonoType::TypeRef(ref name) if proof_fn_bases.contains_key(name.bare()) => {
+            proof_fn_bases.get(name.bare()).cloned().unwrap_or(ty)
         }
         other => other,
     }

@@ -5,6 +5,7 @@
 //! RFC-011: 泛型系统设计
 
 use crate::frontend::core::sema::environment::TypeEnvironment;
+use crate::frontend::core::types::identity::Nominal;
 use crate::frontend::core::types::{MonoType, PolyType};
 
 // Happy path 测试
@@ -95,7 +96,10 @@ fn constrained_type_def(
         poly: PolyType::new_with_const(
             vec![TypeVar::new(0)],
             vec![binder],
-            MonoType::TypeRef("T".to_string()),
+            MonoType::TypeRef(
+                Nominal::flat(AsRef::<str>::as_ref(&("T")))
+                    .expect("type name must be bare and non-empty"),
+            ),
         ),
         type_param_names: vec!["T".to_string()],
     }

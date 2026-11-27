@@ -30,6 +30,7 @@ use super::types::TypeCheckResult;
 use super::Diagnostic;
 use super::{add_builtin_types, add_native_function_types, add_std_traits};
 use crate::frontend::core::spawn;
+use crate::frontend::core::types::identity::Nominal;
 use crate::util::diagnostic::DiagnosticBuilder;
 use crate::util::diagnostic::ErrorCodeDefinition;
 use crate::util::plan_id::PlanId;
@@ -428,10 +429,16 @@ impl TypeChecker {
                 .map(crate::frontend::core::types::TypeVar::new)
                 .collect();
             let body = MonoType::Generic {
-                name: name.to_string(),
+                name: Nominal::flat(AsRef::<str>::as_ref(&(name)))
+                    .expect("type name must be bare and non-empty"),
                 args: params
                     .iter()
-                    .map(|p| MonoType::TypeRef(p.to_string()))
+                    .map(|p| {
+                        MonoType::TypeRef(
+                            Nominal::flat(AsRef::<str>::as_ref(&(p)))
+                                .expect("type name must be bare and non-empty"),
+                        )
+                    })
                     .collect(),
             };
             let def = GenericTypeDef {
@@ -2982,18 +2989,36 @@ impl TypeChecker {
                 MonoType::TypeRef(n) => Some(n.clone()),
                 MonoType::Generic { name, .. } => Some(name.clone()),
                 // 内建标量经 from_builtin_name 物化（Add(Int,..) 的 Int → Int(64)）
-                MonoType::Int(_) => Some("Int".to_string()),
-                MonoType::Float(_) => Some("Float".to_string()),
-                MonoType::Bool => Some("Bool".to_string()),
-                MonoType::Char => Some("Char".to_string()),
-                MonoType::Void => Some("Void".to_string()),
+                MonoType::Int(_) => Some(
+                    Nominal::flat(AsRef::<str>::as_ref(&("Int")))
+                        .expect("type name must be bare and non-empty"),
+                ),
+                MonoType::Float(_) => Some(
+                    Nominal::flat(AsRef::<str>::as_ref(&("Float")))
+                        .expect("type name must be bare and non-empty"),
+                ),
+                MonoType::Bool => Some(
+                    Nominal::flat(AsRef::<str>::as_ref(&("Bool")))
+                        .expect("type name must be bare and non-empty"),
+                ),
+                MonoType::Char => Some(
+                    Nominal::flat(AsRef::<str>::as_ref(&("Char")))
+                        .expect("type name must be bare and non-empty"),
+                ),
+                MonoType::Void => Some(
+                    Nominal::flat(AsRef::<str>::as_ref(&("Void")))
+                        .expect("type name must be bare and non-empty"),
+                ),
                 _ => None,
             });
-            if self_head.as_deref() != Some(impl_type) {
-                let shown = self_head.unwrap_or_else(|| "?".to_string());
+            if self_head.as_ref().map(|n| n.bare()) != Some(impl_type) {
+                let shown = self_head.unwrap_or_else(|| {
+                    Nominal::flat(AsRef::<str>::as_ref(&("?")))
+                        .expect("type name must be bare and non-empty")
+                });
                 self.add_error(
                     ErrorCodeDefinition::interface_impl_outside_defining_module(
-                        &shown,
+                        shown.bare(),
                         interface_name,
                     )
                     .at(span)
@@ -3105,7 +3130,10 @@ impl TypeChecker {
             if let MonoType::Struct(s) = &poly.body {
                 let mut s = s.clone();
                 if !s.interfaces.iter().any(|i| i == interface_name) {
-                    s.interfaces.push(interface_name.to_string());
+                    s.interfaces.push(
+                        Nominal::flat(AsRef::<str>::as_ref(&(interface_name)))
+                            .expect("type name must be bare and non-empty"),
+                    );
                     let updated = PolyType {
                         type_binders: poly.type_binders.clone(),
                         const_binders: poly.const_binders.clone(),
@@ -3290,7 +3318,8 @@ impl TypeChecker {
             });
         }
         let module_ty = MonoType::Struct(crate::frontend::core::types::mono::StructType {
-            name: module_alias.to_string(),
+            name: Nominal::flat(AsRef::<str>::as_ref(&(module_alias)))
+                .expect("type name must be bare and non-empty"),
             fields,
             methods: HashMap::new(),
             interfaces: vec![],
@@ -3347,7 +3376,8 @@ impl TypeChecker {
                     }
                 }
                 let module_ty = MonoType::Struct(crate::frontend::core::types::mono::StructType {
-                    name: export.name.clone(),
+                    name: Nominal::flat(AsRef::<str>::as_ref(&(export.name.clone())))
+                        .expect("type name must be bare and non-empty"),
                     fields,
                     methods: HashMap::new(),
                     interfaces: vec![],
@@ -3713,9 +3743,10 @@ impl TypeChecker {
         let poly = PolyType::mono(MonoType::from(definition.clone()));
         // Inject the type name into StructType if it's missing (plain Type::Struct has no name)
         let poly = PolyType::mono(match &poly.body {
-            MonoType::Struct(s) if s.name.is_empty() => {
+            MonoType::Struct(s) if s.name.bare().is_empty() => {
                 MonoType::Struct(crate::frontend::core::types::mono::StructType {
-                    name: name.to_string(),
+                    name: Nominal::flat(AsRef::<str>::as_ref(&(name)))
+                        .expect("type name must be bare and non-empty"),
                     fields: s.fields.clone(),
                     methods: s.methods.clone(),
                     interfaces: s.interfaces.clone(),
@@ -3966,11 +3997,17 @@ impl TypeChecker {
             // 冲突（坑⑦，预置登记时代同一约定）。非泛型和类型无模板，跳过。
             if let Some(def) = self.env.generic_type_defs.get_mut(name) {
                 def.poly.body = MonoType::Generic {
-                    name: name.to_string(),
+                    name: Nominal::flat(AsRef::<str>::as_ref(&(name)))
+                        .expect("type name must be bare and non-empty"),
                     args: def
                         .type_param_names
                         .iter()
-                        .map(|p| MonoType::TypeRef(p.clone()))
+                        .map(|p| {
+                            MonoType::TypeRef(
+                                Nominal::flat(AsRef::<str>::as_ref(&(p.clone())))
+                                    .expect("type name must be bare and non-empty"),
+                            )
+                        })
                         .collect(),
                 };
             }
@@ -4314,14 +4351,14 @@ impl TypeChecker {
         let MonoType::Generic { name, args, .. } = ty else {
             return;
         };
-        let Some(model) = self.env.record_models.get(name) else {
+        let Some(model) = self.env.record_models.get(name.bare()) else {
             return;
         };
         let actuals: Vec<Option<String>> = args
             .iter()
             .map(|arg| match arg {
-                MonoType::TypeRef(actual) => Some(actual.clone()),
-                MonoType::Generic { name, .. } => Some(name.clone()),
+                MonoType::TypeRef(actual) => Some(actual.bare().to_string()),
+                MonoType::Generic { name, .. } => Some(name.bare().to_string()),
                 _ => None,
             })
             .collect();
@@ -4367,7 +4404,7 @@ impl TypeChecker {
                 // 归档到 `Refined` 的收益：`resolves_type_name` 不必再特判，
                 // 且下游已有「`Refined` 取 `base` 做 unify」的成熟路径
                 // （inference/statements.rs），无需新机制。
-                if is_builtin_predicate_name(name) {
+                if is_builtin_predicate_name(name.bare()) {
                     if args.len() != 1 {
                         // 元数不对：二元形态（`Terminates(fn_ty, m)`）尚未实现
                         // （见 RFC-027a D1 park），多余实参不得静默忽略。
@@ -4408,17 +4445,17 @@ impl TypeChecker {
                     };
                 }
                 // 尝试原有 PredicateResolver（三值结果，#263）
-                match PredicateResolver::try_resolve(&self.env, name, args) {
+                match PredicateResolver::try_resolve(&self.env, name.bare(), args) {
                     Some(Ok(refined)) => return refined,
                     Some(Err(err)) => {
                         // #263：已注册谓词非法用法——汇入诊断，绝不静默放行
-                        diags.push(Self::refined_usage_diagnostic(name, &err));
+                        diags.push(Self::refined_usage_diagnostic(name.bare(), &err));
                         return ty.clone();
                     }
                     None => {} // 不是谓词——继续证明函数路径
                 }
                 // Phase 2.5: 检查是否是证明函数（源码定义的返回 Type 的函数）
-                match self.lookup_proof_fn_base_type(name, args) {
+                match self.lookup_proof_fn_base_type(name.bare(), args) {
                     Some(Ok(base)) => {
                         // 将参数转换为 ConstExpr
                         let const_args: Option<Vec<ConstExpr>> = args
@@ -4428,7 +4465,7 @@ impl TypeChecker {
                         match const_args {
                             Some(const_args) => {
                                 let constraint = ConstExpr::Call {
-                                    func: name.clone(),
+                                    func: name.bare().to_string(),
                                     args: const_args,
                                 };
                                 MonoType::Refined {
@@ -4438,15 +4475,16 @@ impl TypeChecker {
                             }
                             None => {
                                 // #263：证明函数实参形态不可转换——约束无法生成，汇入诊断（E1092）
-                                diags
-                                    .push(ErrorCodeDefinition::refined_arg_not_const(name).build());
+                                diags.push(
+                                    ErrorCodeDefinition::refined_arg_not_const(name.bare()).build(),
+                                );
                                 ty.clone()
                             }
                         }
                     }
                     Some(Err(err)) => {
                         // #263：证明函数实参个数不匹配——汇入诊断（E1093）
-                        diags.push(Self::refined_usage_diagnostic(name, &err));
+                        diags.push(Self::refined_usage_diagnostic(name.bare(), &err));
                         ty.clone()
                     }
                     None => ty.clone(), // 非证明函数——保持原样
@@ -4588,7 +4626,7 @@ impl TypeChecker {
             // 字面量值
             MonoType::Literal { value, .. } => Some(ConstExpr::Lit(value.clone())),
             // 变量引用
-            MonoType::TypeRef(name) => Some(ConstExpr::NamedVar(name.clone())),
+            MonoType::TypeRef(name) => Some(ConstExpr::NamedVar(name.clone().bare().to_string())),
             // 递归处理 Generic 中的参数
             MonoType::Generic { name: _, args } if args.len() == 1 => {
                 self.mono_type_to_const_expr(&args[0])

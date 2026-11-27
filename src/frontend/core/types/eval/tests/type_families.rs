@@ -2,6 +2,7 @@ use crate::frontend::core::types::eval::type_families::{
     bool_family, nat_family, Bool, Nat, TypeFamilyOps,
 };
 use crate::frontend::core::types::eval::TypeLevelResult;
+use crate::frontend::core::types::identity::Nominal;
 use crate::frontend::core::types::MonoType;
 
 #[test]
@@ -11,7 +12,10 @@ fn test_bool() {
     assert_eq!(Bool::True.eval(), TypeLevelResult::Normalized(Bool::True));
     assert_eq!(
         Bool::True.to_mono_type(),
-        MonoType::TypeRef("True".to_string())
+        MonoType::TypeRef(
+            Nominal::flat(AsRef::<str>::as_ref(&("True")))
+                .expect("type name must be bare and non-empty")
+        )
     );
 }
 
@@ -28,7 +32,10 @@ fn test_nat() {
     assert_eq!(Nat::Zero.eval(), TypeLevelResult::Normalized(Nat::Zero));
     assert_eq!(
         Nat::Zero.to_mono_type(),
-        MonoType::TypeRef("Zero".to_string())
+        MonoType::TypeRef(
+            Nominal::flat(AsRef::<str>::as_ref(&("Zero")))
+                .expect("type name must be bare and non-empty")
+        )
     );
 }
 
@@ -70,11 +77,17 @@ fn test_nat_to_usize_values() {
 fn test_nat_to_mono_type() {
     assert_eq!(
         Nat::Zero.to_mono_type(),
-        MonoType::TypeRef("Zero".to_string())
+        MonoType::TypeRef(
+            Nominal::flat(AsRef::<str>::as_ref(&("Zero")))
+                .expect("type name must be bare and non-empty")
+        )
     );
     // Succ(Zero) displays as "Succ(0)" since Zero.to_usize() == 0
     assert_eq!(
         Nat::succ(Nat::Zero).to_mono_type(),
-        MonoType::TypeRef("Succ(0)".to_string())
+        MonoType::TypeRef(
+            Nominal::flat(AsRef::<str>::as_ref(&("Succ(0)")))
+                .expect("type name must be bare and non-empty")
+        )
     );
 }

@@ -4,6 +4,7 @@
 //! RFC-011 §4: 实例化请求与缓存键定义
 
 use crate::frontend::core::sema::MonoType;
+use crate::frontend::core::types::identity::Nominal;
 use crate::middle::passes::mono::instance::{
     GenericFunctionId, InstantiationRequest, SpecializationKey,
 };
@@ -235,13 +236,20 @@ fn pinned_cases() -> Vec<(&'static str, MonoType)> {
         ("float32", MonoType::Float(32)),
         ("char", MonoType::Char),
         ("var0", MonoType::TypeVar(TypeVar::new(0))),
-        ("typeref", MonoType::TypeRef("Point".into())),
+        (
+            "typeref",
+            MonoType::TypeRef(
+                Nominal::flat(AsRef::<str>::as_ref(&("Point")))
+                    .expect("type name must be bare and non-empty"),
+            ),
+        ),
         (
             "struct",
             MonoType::Struct(StructType {
-                name: "Point".into(),
+                name: Nominal::flat(AsRef::<str>::as_ref(&("Point")))
+                    .expect("type name must be bare and non-empty"),
                 fields: vec![StructFieldInfo {
-                    name: "x".into(),
+                    name: "x".to_string(),
                     ty: MonoType::Int(64),
                     quantity: None,
                     is_mut: false,
@@ -254,7 +262,8 @@ fn pinned_cases() -> Vec<(&'static str, MonoType)> {
         (
             "enum",
             MonoType::Enum(EnumType {
-                name: "Color".into(),
+                name: Nominal::flat(AsRef::<str>::as_ref(&("Color")))
+                    .expect("type name must be bare and non-empty"),
                 variants: vec!["Red".into(), "Green".into()],
             }),
         ),
@@ -269,98 +278,112 @@ fn pinned_cases() -> Vec<(&'static str, MonoType)> {
         (
             "generic-string-extra-arg",
             MonoType::Generic {
-                name: "String".into(),
+                name: Nominal::flat(AsRef::<str>::as_ref(&("String")))
+                    .expect("type name must be bare and non-empty"),
                 args: vec![MonoType::Int(64)],
             },
         ),
         (
             "generic-bytes",
             MonoType::Generic {
-                name: "Bytes".into(),
+                name: Nominal::flat(AsRef::<str>::as_ref(&("Bytes")))
+                    .expect("type name must be bare and non-empty"),
                 args: vec![],
             },
         ),
         (
             "generic-tuple",
             MonoType::Generic {
-                name: "Tuple".into(),
+                name: Nominal::flat(AsRef::<str>::as_ref(&("Tuple")))
+                    .expect("type name must be bare and non-empty"),
                 args: vec![MonoType::Int(64), MonoType::Bool],
             },
         ),
         (
             "generic-tuple-empty",
             MonoType::Generic {
-                name: "Tuple".into(),
+                name: Nominal::flat(AsRef::<str>::as_ref(&("Tuple")))
+                    .expect("type name must be bare and non-empty"),
                 args: vec![],
             },
         ),
         (
             "generic-option",
             MonoType::Generic {
-                name: "Option".into(),
+                name: Nominal::flat(AsRef::<str>::as_ref(&("Option")))
+                    .expect("type name must be bare and non-empty"),
                 args: vec![MonoType::Int(64)],
             },
         ),
         (
             "generic-option-extra-arg",
             MonoType::Generic {
-                name: "Option".into(),
+                name: Nominal::flat(AsRef::<str>::as_ref(&("Option")))
+                    .expect("type name must be bare and non-empty"),
                 args: vec![MonoType::Int(64), MonoType::make_string()],
             },
         ),
         (
             "generic-result",
             MonoType::Generic {
-                name: "Result".into(),
+                name: Nominal::flat(AsRef::<str>::as_ref(&("Result")))
+                    .expect("type name must be bare and non-empty"),
                 args: vec![MonoType::Int(64), MonoType::Bool],
             },
         ),
         (
             "generic-result-arity3",
             MonoType::Generic {
-                name: "Result".into(),
+                name: Nominal::flat(AsRef::<str>::as_ref(&("Result")))
+                    .expect("type name must be bare and non-empty"),
                 args: vec![MonoType::Int(64), MonoType::Bool, MonoType::Char],
             },
         ),
         (
             "generic-range",
             MonoType::Generic {
-                name: "Range".into(),
+                name: Nominal::flat(AsRef::<str>::as_ref(&("Range")))
+                    .expect("type name must be bare and non-empty"),
                 args: vec![MonoType::Int(64)],
             },
         ),
         (
             "generic-arc",
             MonoType::Generic {
-                name: "Arc".into(),
+                name: Nominal::flat(AsRef::<str>::as_ref(&("Arc")))
+                    .expect("type name must be bare and non-empty"),
                 args: vec![MonoType::Int(64)],
             },
         ),
         (
             "generic-weak",
             MonoType::Generic {
-                name: "Weak".into(),
+                name: Nominal::flat(AsRef::<str>::as_ref(&("Weak")))
+                    .expect("type name must be bare and non-empty"),
                 args: vec![MonoType::Int(64)],
             },
         ),
         (
             "generic-custom",
             MonoType::Generic {
-                name: "MyBox".into(),
+                name: Nominal::flat(AsRef::<str>::as_ref(&("MyBox")))
+                    .expect("type name must be bare and non-empty"),
                 args: vec![MonoType::Int(64)],
             },
         ),
         (
             "generic-custom-empty",
             MonoType::Generic {
-                name: "MyBox".into(),
+                name: Nominal::flat(AsRef::<str>::as_ref(&("MyBox")))
+                    .expect("type name must be bare and non-empty"),
                 args: vec![],
             },
         ),
         (
             "generic-vec",
             MonoType::Generic {
-                name: "Vec".into(),
+                name: Nominal::flat(AsRef::<str>::as_ref(&("Vec")))
+                    .expect("type name must be bare and non-empty"),
                 args: vec![MonoType::Int(64)],
             },
         ),
@@ -389,23 +412,29 @@ fn pinned_cases() -> Vec<(&'static str, MonoType)> {
         (
             "assoc",
             MonoType::AssocType {
-                host_type: Box::new(MonoType::TypeRef("T".into())),
-                assoc_name: "Item".into(),
+                host_type: Box::new(MonoType::TypeRef(
+                    Nominal::flat(AsRef::<str>::as_ref(&("T")))
+                        .expect("type name must be bare and non-empty"),
+                )),
+                assoc_name: "Item".to_string(),
                 assoc_args: vec![MonoType::Int(64)],
             },
         ),
         (
             "assoc-noargs",
             MonoType::AssocType {
-                host_type: Box::new(MonoType::TypeRef("T".into())),
-                assoc_name: "Item".into(),
+                host_type: Box::new(MonoType::TypeRef(
+                    Nominal::flat(AsRef::<str>::as_ref(&("T")))
+                        .expect("type name must be bare and non-empty"),
+                )),
+                assoc_name: "Item".to_string(),
                 assoc_args: vec![],
             },
         ),
         (
             "literal-int",
             MonoType::Literal {
-                name: "5".into(),
+                name: "5".to_string(),
                 base_type: Box::new(MonoType::Int(64)),
                 value: ConstValue::Int(5),
             },
@@ -413,7 +442,7 @@ fn pinned_cases() -> Vec<(&'static str, MonoType)> {
         (
             "literal-bool",
             MonoType::Literal {
-                name: "true".into(),
+                name: "true".to_string(),
                 base_type: Box::new(MonoType::Bool),
                 value: ConstValue::Bool(true),
             },
@@ -421,7 +450,7 @@ fn pinned_cases() -> Vec<(&'static str, MonoType)> {
         (
             "literal-float",
             MonoType::Literal {
-                name: "1.5".into(),
+                name: "1.5".to_string(),
                 base_type: Box::new(MonoType::Float(64)),
                 value: ConstValue::Float(1.5),
             },
@@ -452,11 +481,11 @@ fn pinned_cases() -> Vec<(&'static str, MonoType)> {
             MonoType::DepFn {
                 params: vec![
                     DepParam {
-                        name: "n".into(),
+                        name: "n".to_string(),
                         ty: MonoType::Int(64),
                     },
                     DepParam {
-                        name: "m".into(),
+                        name: "m".to_string(),
                         ty: MonoType::Bool,
                     },
                 ],
@@ -483,7 +512,8 @@ fn pinned_cases() -> Vec<(&'static str, MonoType)> {
             MonoType::Ref {
                 mutable: false,
                 inner: Box::new(MonoType::Generic {
-                    name: "Vec".into(),
+                    name: Nominal::flat(AsRef::<str>::as_ref(&("Vec")))
+                        .expect("type name must be bare and non-empty"),
                     args: vec![MonoType::Union(vec![
                         MonoType::Int(64),
                         MonoType::Ref {
@@ -498,16 +528,18 @@ fn pinned_cases() -> Vec<(&'static str, MonoType)> {
             "nested-depfn",
             MonoType::DepFn {
                 params: vec![DepParam {
-                    name: "a".into(),
+                    name: "a".to_string(),
                     ty: MonoType::Generic {
-                        name: "Vec".into(),
+                        name: Nominal::flat(AsRef::<str>::as_ref(&("Vec")))
+                            .expect("type name must be bare and non-empty"),
                         args: vec![MonoType::Int(64)],
                     },
                 }],
                 return_type: Box::new(MonoType::Ref {
                     mutable: false,
                     inner: Box::new(MonoType::Generic {
-                        name: "Option".into(),
+                        name: Nominal::flat(AsRef::<str>::as_ref(&("Option")))
+                            .expect("type name must be bare and non-empty"),
                         args: vec![MonoType::Int(64)],
                     }),
                 }),

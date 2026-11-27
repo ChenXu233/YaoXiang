@@ -11,6 +11,7 @@ use crate::frontend::core::sema::predicate_resolver::{
 use crate::frontend::core::sema::test_util::binop;
 use crate::frontend::core::sema::TypeEnvironment;
 use crate::frontend::core::types::const_data::{BinOp, ConstExpr, ConstValue};
+use crate::frontend::core::types::identity::Nominal;
 use crate::frontend::core::types::mono::MonoType;
 
 /// 注册了 `Positive` 谓词的环境。
@@ -35,7 +36,7 @@ fn int_literal_arg(
 
 fn make_positive_def() -> PredicateDef {
     PredicateDef {
-        param_name: "x".into(),
+        param_name: "x".to_string(),
         param_type: MonoType::Int(64),
         constraint: binop(
             BinOp::Gt,
@@ -86,7 +87,14 @@ fn test_resolve_positive_with_variable() {
         .insert("Positive".into(), make_positive_def());
 
     // Act
-    let result = PredicateResolver::try_resolve(&env, "Positive", &[MonoType::TypeRef("b".into())]);
+    let result = PredicateResolver::try_resolve(
+        &env,
+        "Positive",
+        &[MonoType::TypeRef(
+            Nominal::flat(AsRef::<str>::as_ref(&("b")))
+                .expect("type name must be bare and non-empty"),
+        )],
+    );
 
     // Assert: 解析成功，约束左侧为 NamedVar("b")
     match result.expect("已注册谓词应被识别（#263 三值语义）") {
@@ -183,7 +191,16 @@ fn test_resolve_registered_predicate_extra_args_errors() {
     let result = PredicateResolver::try_resolve(
         &env,
         "Positive",
-        &[MonoType::TypeRef("a".into()), MonoType::TypeRef("b".into())],
+        &[
+            MonoType::TypeRef(
+                Nominal::flat(AsRef::<str>::as_ref(&("a")))
+                    .expect("type name must be bare and non-empty"),
+            ),
+            MonoType::TypeRef(
+                Nominal::flat(AsRef::<str>::as_ref(&("b")))
+                    .expect("type name must be bare and non-empty"),
+            ),
+        ],
     );
 
     // Assert: #263——多余实参必须返回 Some(Err)

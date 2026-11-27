@@ -37,8 +37,8 @@ fn get_type_fallback_string(mono_type: &MonoType) -> String {
         MonoType::Int(_) => "int".to_string(),
         MonoType::Float(_) => "float".to_string(),
         MonoType::Char => "char".to_string(),
-        MonoType::Struct(s) => s.name.clone(),
-        MonoType::Enum(e) => e.name.clone(),
+        MonoType::Struct(s) => s.name.bare().to_string(),
+        MonoType::Enum(e) => e.name.bare().to_string(),
         MonoType::Generic { name, .. } => match name.as_str() {
             "Tuple" => "tuple".to_string(),
             "List" => "list".to_string(),
@@ -50,7 +50,7 @@ fn get_type_fallback_string(mono_type: &MonoType) -> String {
             _ => "unknown".to_string(),
         },
         MonoType::Fn { .. } => "function".to_string(),
-        MonoType::TypeRef(name) => name.clone(),
+        MonoType::TypeRef(name) => name.bare().to_string(),
         // 其他类型使用默认名称
         _ => "unknown".to_string(),
     }
@@ -749,7 +749,7 @@ impl AstToIrGenerator {
                                         // 映射已由身份表回答同一问题——模块键取自
                                         // DefPath，不再给字符串加前缀。
                                         self.registry
-                                            .std_method_path(&base, field)
+                                            .std_method_path(base.bare(), field)
                                             .map(|path| path.project())
                                             .unwrap_or_else(|| format!("{}.{}", base, field))
                                     }

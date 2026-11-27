@@ -16,6 +16,7 @@
 use crate::ast::{Expr, PlanId};
 use crate::frontend::core::sema::probe::TypeLevelNamespace;
 use crate::frontend::core::sema::{MonoType, TypeCheckResult};
+use crate::frontend::core::types::identity::Nominal;
 use crate::frontend::module::registry::ModuleRegistry;
 use crate::middle::ir::ir::{ConstValue, Operand};
 use crate::middle::lower::AstToIrGenerator;
@@ -73,9 +74,11 @@ fn test_ir_view_type_args_normalize_list_to_vec() {
     // 同时域的 L2 pin（frontend::core::types::tests::mono）在 M3 下保持绿——两 pin
     // 各自杀死本面变异（M1），互不搭便车。
     let expected = Some(MonoType::Generic {
-        name: "Vec".to_string(),
+        name: Nominal::flat(AsRef::<str>::as_ref(&("Vec")))
+            .expect("type name must be bare and non-empty"),
         args: vec![MonoType::Generic {
-            name: "Vec".to_string(),
+            name: Nominal::flat(AsRef::<str>::as_ref(&("Vec")))
+                .expect("type name must be bare and non-empty"),
             args: vec![MonoType::Int(64)],
         }],
     });

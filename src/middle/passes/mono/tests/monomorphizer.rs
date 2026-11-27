@@ -15,6 +15,7 @@
 //! - 小写参数名类型参数判定（靠名单不靠大小写启发式）
 
 use crate::frontend::core::sema::MonoType;
+use crate::frontend::core::types::identity::Nominal;
 use crate::frontend::core::types::mono::UniverseLevel;
 use crate::frontend::core::types::var::TypeVar;
 use crate::middle::ir::ir::{
@@ -68,7 +69,10 @@ fn make_pair_type_ir(fields: &[&str]) -> FunctionIR {
         .iter()
         .map(|name| TypeDeclField {
             name: (*name).to_string(),
-            ty: MonoType::TypeRef("T".to_string()),
+            ty: MonoType::TypeRef(
+                Nominal::flat(AsRef::<str>::as_ref(&("T")))
+                    .expect("type name must be bare and non-empty"),
+            ),
             quantity: None,
             is_mut: false,
             has_default: false,
@@ -252,14 +256,17 @@ fn span_at(
 /// `List<inner>` 泛型类型。
 fn list_of(inner: MonoType) -> MonoType {
     MonoType::Generic {
-        name: "List".to_string(),
+        name: Nominal::flat(AsRef::<str>::as_ref(&("List")))
+            .expect("type name must be bare and non-empty"),
         args: vec![inner],
     }
 }
 
 /// `TypeRef(name)`——泛型体内引用参数名时的占位类型。
 fn type_ref(name: &str) -> MonoType {
-    MonoType::TypeRef(name.to_string())
+    MonoType::TypeRef(
+        Nominal::flat(AsRef::<str>::as_ref(&(name))).expect("type name must be bare and non-empty"),
+    )
 }
 
 /// 把请求登记到 `container` 名下的占位（deferred）桶。
@@ -327,7 +334,10 @@ fn make_generic_type_decl_ir(
         .iter()
         .map(|name| TypeDeclField {
             name: (*name).to_string(),
-            ty: MonoType::TypeRef(param.to_string()),
+            ty: MonoType::TypeRef(
+                Nominal::flat(AsRef::<str>::as_ref(&(param)))
+                    .expect("type name must be bare and non-empty"),
+            ),
             quantity: None,
             is_mut: false,
             has_default: false,
@@ -556,7 +566,10 @@ fn test_fire_deferred_evaluates_placeholder_args() {
     let req = InstantiationRequest::new(
         GenericFunctionId::new("identity".to_string(), vec!["T".to_string()]),
         vec![crate::frontend::core::types::mono::GenericArg::Type(
-            MonoType::TypeRef("T".to_string()),
+            MonoType::TypeRef(
+                Nominal::flat(AsRef::<str>::as_ref(&("T")))
+                    .expect("type name must be bare and non-empty"),
+            ),
         )],
         Span::default(),
     );
@@ -689,7 +702,8 @@ fn test_monomorphize_keeps_original_generic_when_call_site_lacks_request_key() {
     let generic = make_fn_ir(
         "std.list.is_empty",
         vec![MonoType::Generic {
-            name: "Vec".to_string(),
+            name: Nominal::flat(AsRef::<str>::as_ref(&("Vec")))
+                .expect("type name must be bare and non-empty"),
             args: vec![MonoType::TypeVar(TypeVar::new(0))],
         }],
         MonoType::Bool,
@@ -768,7 +782,8 @@ fn non_rewritable_ref_case(
     let generic = make_fn_ir(
         "std.list.is_empty",
         vec![MonoType::Generic {
-            name: "Vec".to_string(),
+            name: Nominal::flat(AsRef::<str>::as_ref(&("Vec")))
+                .expect("type name must be bare and non-empty"),
             args: vec![MonoType::TypeVar(TypeVar::new(0))],
         }],
         MonoType::Bool,
@@ -919,12 +934,17 @@ fn test_tail_call_site_drops_erased_const_arg_once() {
         params: vec![MonoType::Int(64)],
         return_type: Box::new(MonoType::Int(64)),
     };
-    let mut param_slot = LocalSlot::temp(MonoType::TypeRef("N".to_string()));
+    let mut param_slot = LocalSlot::temp(MonoType::TypeRef(
+        Nominal::flat(AsRef::<str>::as_ref(&("N"))).expect("type name must be bare and non-empty"),
+    ));
     param_slot.name = Some("n".to_string());
     param_slot.quantity = Some(crate::ast::Quantity::Zero);
     let generic = make_fn_ir(
         "g",
-        vec![MonoType::TypeRef("N".to_string())],
+        vec![MonoType::TypeRef(
+            Nominal::flat(AsRef::<str>::as_ref(&("N")))
+                .expect("type name must be bare and non-empty"),
+        )],
         wrapper_ty.clone(),
         Some(vec!["N".to_string()]),
         vec![
@@ -1337,7 +1357,8 @@ fn nested_generic(n: usize) -> MonoType {
     let mut ty = MonoType::Int(64);
     for _ in 0..n {
         ty = MonoType::Generic {
-            name: "Vec".to_string(),
+            name: Nominal::flat(AsRef::<str>::as_ref(&("Vec")))
+                .expect("type name must be bare and non-empty"),
             args: vec![ty],
         };
     }
@@ -1528,7 +1549,7 @@ fn test_open_chain_stops_at_bound() {
     assert_eq!(
         first.type_args(),
         vec![MonoType::Literal {
-            name: "4".into(),
+            name: "4".to_string(),
             base_type: Box::new(MonoType::Int(64)),
             value: crate::frontend::core::types::const_data::ConstValue::Int(4),
         }],
@@ -1625,7 +1646,10 @@ fn test_symbolic_type_request_is_not_limited_by_open_chain() {
     let req = InstantiationRequest::new(
         GenericFunctionId::new("identity".to_string(), vec!["T".to_string()]),
         vec![crate::frontend::core::types::mono::GenericArg::Type(
-            MonoType::TypeRef("T".to_string()),
+            MonoType::TypeRef(
+                Nominal::flat(AsRef::<str>::as_ref(&("T")))
+                    .expect("type name must be bare and non-empty"),
+            ),
         )],
         Span::default(),
     );

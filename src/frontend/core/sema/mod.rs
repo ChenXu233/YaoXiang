@@ -8,6 +8,7 @@
 
 use crate::ast::Module;
 use crate::frontend::core::types::identity::DefPath;
+use crate::frontend::core::types::identity::Nominal;
 
 // ============ 子模块声明 ============
 
@@ -164,7 +165,10 @@ pub fn add_builtin_types(env: &mut environment::TypeEnvironment) {
     for resource_type in &["FilePath", "HttpUrl", "DBUrl", "Console"] {
         env.types.insert(
             resource_type.to_string(),
-            PolyType::mono(MonoType::TypeRef(resource_type.to_string())),
+            PolyType::mono(MonoType::TypeRef(
+                Nominal::flat(AsRef::<str>::as_ref(&(resource_type)))
+                    .expect("type name must be bare and non-empty"),
+            )),
         );
     }
 }
@@ -267,7 +271,8 @@ pub fn add_native_function_types(
     env.add_var(
         "Native".to_string(),
         PolyType::mono(MonoType::Struct(crate::frontend::core::types::StructType {
-            name: "Native".to_string(),
+            name: Nominal::flat(AsRef::<str>::as_ref(&("Native")))
+                .expect("type name must be bare and non-empty"),
             fields: vec![
                 crate::frontend::core::types::mono::StructFieldInfo {
                     name: "c".to_string(),

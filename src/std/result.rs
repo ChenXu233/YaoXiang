@@ -17,6 +17,7 @@ use crate::backends::common::value::TypeId;
 use crate::backends::common::{HeapValue, RuntimeValue};
 use crate::backends::ExecutorError;
 use crate::frontend::core::types::eval::dependent_types::AssociatedTypeDef;
+use crate::frontend::core::types::identity::Nominal;
 use crate::frontend::core::types::MonoType;
 use crate::std::{NativeContext, NativeExport, StdModule, TypeFamilyExport};
 
@@ -55,7 +56,8 @@ impl StdModule for ResultModule {
             crate::frontend::core::types::eval::dependent_types::SortSpace::Data,
             AssociatedTypeDef::Direct(MonoType::Struct(
                 crate::frontend::core::types::mono::StructType {
-                    name: "Error".to_string(),
+                    name: Nominal::flat(AsRef::<str>::as_ref(&("Error")))
+                        .expect("type name must be bare and non-empty"),
                     fields: vec![
                         // 类型族结果记录：旧表示为空默认值向量（required=0），逐字段保持。
                         crate::frontend::core::types::mono::StructFieldInfo {

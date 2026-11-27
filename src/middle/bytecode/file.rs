@@ -3,6 +3,7 @@
 //! 定义 .yx (.42) 字节码文件格式并实现序列化。
 
 use crate::frontend::core::sema::MonoType;
+use crate::frontend::core::types::identity::Nominal;
 use crate::middle::ir::ir::ConstValue;
 use crate::util::span::{DebugSpan, FileId, Position, SourceMap, Span};
 use std::collections::HashMap;
@@ -681,10 +682,14 @@ fn type_id_to_monotype(id: u32) -> MonoType {
         10 => MonoType::Char,
         11 => MonoType::make_string(),
         12 => MonoType::Generic {
-            name: "Bytes".into(),
+            name: Nominal::flat(AsRef::<str>::as_ref(&("Bytes")))
+                .expect("type name must be bare and non-empty"),
             args: vec![],
         },
-        _ => MonoType::TypeRef("_".to_string()),
+        _ => MonoType::TypeRef(
+            Nominal::flat(AsRef::<str>::as_ref(&("_")))
+                .expect("type name must be bare and non-empty"),
+        ),
     }
 }
 

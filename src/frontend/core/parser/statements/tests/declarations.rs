@@ -318,11 +318,11 @@ fn test_anonymous_param_never_yields_generic_name() {
             crate::util::span::Span::dummy(),
         ),
         crate::ast::Param::from_type(Type::Name {
-            name: "Int".into(),
+            name: "Int".to_string(),
             span: crate::util::span::Span::dummy(),
         }),
         crate::ast::Param::from_type(Type::Name {
-            name: "Add".into(),
+            name: "Add".to_string(),
             span: crate::util::span::Span::dummy(),
         }),
     ];

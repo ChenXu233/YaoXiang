@@ -15,7 +15,7 @@ WBS 0.6「大清理」的前置材料：把全仓 `#[test]` 按 [coding-rules �
 
 | 产物 | 作用 |
 | --- | --- |
-| `docs/src/dev/test-gate-census.tsv` | 逐条判定表（2705 行 + 表头），与本页同目录 |
+| `docs/src/dev/test-gate-census.tsv` | 逐条判定表（2706 行 + 表头），与本页同目录 |
 | `scripts/dev/test-gate-census.py` | 生成器（可重跑、可 `--check`、可 `--selftest`） |
 
 ## 口径
@@ -26,13 +26,13 @@ WBS 0.6「大清理」的前置材料：把全仓 `#[test]` 按 [coding-rules �
 
 | 面 | 条数 |
 | --- | --- |
-| 根包 lib（`src/`，含各模块 `tests/` 子目录） | 2101 |
+| 根包 lib（`src/`，含各模块 `tests/` 子目录） | 2102 |
 | `tests/integration` | 463 |
 | `tests/formatter_integration.rs` | 52 |
 | `tests/yx_runner.rs` / `tests/yx_multifile_runner.rs` | 2 / 1 |
 | `tools/` | 77 |
 | `benches/` | 9 |
-| **合计** | **2705**（338 个文件） |
+| **合计** | **2706**（338 个文件） |
 
 ### 三扇门的机器判据
 
@@ -77,22 +77,22 @@ WBS 0.6「大清理」的前置材料：把全仓 `#[test]` 按 [coding-rules �
 | 条款（有可核条目） | 1037 |
 | 病史 | 565 |
 | 证明（spec-shaped 判据面 / 现状锚） | 573 |
-| 待判（两门皆不过，证明门待人工） | 524 |
+| 待判（两门皆不过，证明门待人工） | 525 |
 | 均不通过（体内无任何断言） | 6 |
-| **合计** | **2705** |
+| **合计** | **2706** |
 
 | 处置 | 条数 | 对比 0.6-19（2026-11-07） |
 | --- | --- | --- |
 | 留 | **1138** | 737（+401） |
 | 待核 | 1284 | 1054（+230） |
-| 待判 | 225 | 203（+22） |
+| 待判 | 226 | 203（+23） |
 | 退役候选 | 58 | 61（−3） |
-| **合计** | **2705** | 2055（+650） |
+| **合计** | **2706** | 2055（+651） |
 
 留的结构：1138 = 证明门 573（spec-shaped 判据面 518 + 现状锚 55）+ 病史门 565。
 文件口径：338 个测试文件里，**条款门**覆盖 **125 个**；按文件头 25 行（`src/**/tests*/` 连父 `mod.rs`）能检出可核节号（`§` + 数字）的是 **147 个**。
 
-再生对账：上一版入库表 2701 条，当前树 2705 条；当前树有、旧表无 4 条（`src/frontend/core/types/tests/identity.rs` 的 L3-0 等价测试），旧表有、当前树无 0 条，同键行内容重算 0 条。逐键记录在 TSV。
+再生对账：上一版入库表 2701 条，当前树 2706 条；当前树有、旧表无 5 条（`src/frontend/core/types/tests/identity.rs` 的 L3-0 等价测试 4 条 + L3-1a 的 MonoType Debug 金样 1 条），旧表有、当前树无 0 条，同键行内容重算 0 条。逐键记录在 TSV。
 
 最新一次全量再生（`src/package/commands/tests/init.rs` 的测试改写之后）：行数不变（2690），仅 2 行断言摘要重算（`test_init_here_fails_when_project_already_exists` 与 `test_init_here_preserves_preexisting_files` 的 `assert_eq` / `unwrap` 计数）；TSV 与当前树一致（`--check` 退出 0）。
 

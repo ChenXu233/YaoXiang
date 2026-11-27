@@ -3,6 +3,7 @@
 //! 将中间表示（IR）翻译为字节码指令。
 
 use crate::frontend::core::sema::MonoType;
+use crate::frontend::core::types::identity::Nominal;
 use crate::middle::bytecode::file::BytecodeInstruction;
 use crate::middle::bytecode::opcode;
 use crate::middle::bytecode::Reg;
@@ -729,7 +730,12 @@ impl Translator {
 
         // 创建临时 FunctionIR 用于 translate_instruction
         let mut locals: Vec<LocalSlot> = param_types.iter().cloned().map(LocalSlot::temp).collect();
-        locals.push(LocalSlot::temp(MonoType::TypeRef(struct_name.clone())));
+        // L3-1a 泄漏点（唯一具名）：struct_name 来自 IR TypeDecl 的函数名，
+        // 多文件里是已限定名（如 std.list.Iter）；本步原样保留为类型身份字符串，
+        // L3-1b 改为从 TypeDecl 的 DefPath/身份表解析后删除 Nominal::qualified_legacy。
+        locals.push(LocalSlot::temp(MonoType::TypeRef(
+            Nominal::qualified_legacy(struct_name),
+        )));
 
         let temp_func = FunctionIR {
             name: struct_name.clone(),

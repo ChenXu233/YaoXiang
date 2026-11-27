@@ -8,6 +8,7 @@
 
 use crate::ast;
 use crate::frontend::core::types::const_data::{ConstExpr, ConstValue, ConstVarDef};
+use crate::frontend::core::types::identity::Nominal;
 use crate::frontend::core::types::var::TypeVar;
 use std::collections::HashMap;
 use std::fmt;
@@ -193,12 +194,12 @@ pub enum MonoType {
     /// 类型变量（推断中）
     TypeVar(TypeVar),
     /// 类型引用（如自定义类型名）
-    TypeRef(String),
+    TypeRef(Nominal),
     /// 泛型实例化类型，如 Option(Int), List(String)
     /// 与 TypeRef 的区别：TypeRef 是未解析的名称，Generic 携带结构化的类型参数
     Generic {
         /// 泛型类型名（如 "Option", "List"）
-        name: String,
+        name: Nominal,
         /// 类型参数（如 [Int(64)] 对应 Option(Int)）
         args: Vec<MonoType>,
     },
@@ -633,14 +634,16 @@ impl MonoType {
     /// 「一串同型元素」，落在内置层就是 `Vec(T)`。
     pub fn make_list(elem: MonoType) -> Self {
         MonoType::Generic {
-            name: "Vec".into(),
+            name: Nominal::flat(AsRef::<str>::as_ref(&("Vec")))
+                .expect("type name must be bare and non-empty"),
             args: vec![elem],
         }
     }
     /// 构造 Vec(T)
     pub fn make_vec(elem: MonoType) -> Self {
         MonoType::Generic {
-            name: "Vec".into(),
+            name: Nominal::flat(AsRef::<str>::as_ref(&("Vec")))
+                .expect("type name must be bare and non-empty"),
             args: vec![elem],
         }
     }
@@ -650,14 +653,16 @@ impl MonoType {
         v: MonoType,
     ) -> Self {
         MonoType::Generic {
-            name: "Dict".into(),
+            name: Nominal::flat(AsRef::<str>::as_ref(&("Dict")))
+                .expect("type name must be bare and non-empty"),
             args: vec![k, v],
         }
     }
     /// 构造 Option(T)
     pub fn make_option(elem: MonoType) -> Self {
         MonoType::Generic {
-            name: "Option".into(),
+            name: Nominal::flat(AsRef::<str>::as_ref(&("Option")))
+                .expect("type name must be bare and non-empty"),
             args: vec![elem],
         }
     }
@@ -667,21 +672,24 @@ impl MonoType {
         e: MonoType,
     ) -> Self {
         MonoType::Generic {
-            name: "Result".into(),
+            name: Nominal::flat(AsRef::<str>::as_ref(&("Result")))
+                .expect("type name must be bare and non-empty"),
             args: vec![t, e],
         }
     }
     /// 构造 Tuple(...)
     pub fn make_tuple(args: Vec<MonoType>) -> Self {
         MonoType::Generic {
-            name: "Tuple".into(),
+            name: Nominal::flat(AsRef::<str>::as_ref(&("Tuple")))
+                .expect("type name must be bare and non-empty"),
             args,
         }
     }
     /// 构造 String
     pub fn make_string() -> Self {
         MonoType::Generic {
-            name: "String".into(),
+            name: Nominal::flat(AsRef::<str>::as_ref(&("String")))
+                .expect("type name must be bare and non-empty"),
             args: vec![],
         }
     }
@@ -799,8 +807,8 @@ impl MonoType {
                 MonoType::Char => out.push_str("char"),
                 MonoType::Generic { name, .. } if name == "String" => out.push_str("string"),
                 MonoType::Generic { name, .. } if name == "Bytes" => out.push_str("bytes"),
-                MonoType::Struct(s) => out.push_str(&s.name),
-                MonoType::Enum(e) => out.push_str(&e.name),
+                MonoType::Struct(s) => out.push_str(s.name.bare()),
+                MonoType::Enum(e) => out.push_str(e.name.bare()),
                 MonoType::Generic { name, args } if name == "Tuple" && !args.is_empty() => {
                     out.push('(');
                     stack.push(Task::Lit(")"));
@@ -836,7 +844,7 @@ impl MonoType {
                     push_joined(&mut stack, ", ", &children);
                 }
                 MonoType::TypeVar(v) => out.push_str(&format!("{}", v)),
-                MonoType::TypeRef(name) => out.push_str(name),
+                MonoType::TypeRef(name) => out.push_str(name.bare()),
                 MonoType::Generic { name, args } if name == "Range" && !args.is_empty() => {
                     // 渲染只消费 walker 序列的首实参
                     let children = ty.type_children();
@@ -869,7 +877,7 @@ impl MonoType {
                     stack.push(Task::Node(children[0]));
                 }
                 MonoType::Generic { name, .. } => {
-                    out.push_str(name);
+                    out.push_str(name.bare());
                     out.push('(');
                     stack.push(Task::Lit(")"));
                     push_joined(&mut stack, ", ", &ty.type_children());
@@ -1134,7 +1142,8 @@ impl MonoType {
             "Char" => Some(MonoType::Char),
             "String" => Some(MonoType::make_string()),
             "Bytes" => Some(MonoType::Generic {
-                name: "Bytes".into(),
+                name: Nominal::flat(AsRef::<str>::as_ref(&("Bytes")))
+                    .expect("type name must be bare and non-empty"),
                 args: vec![],
             }),
             _ => None,
@@ -1180,7 +1189,10 @@ impl MonoType {
         subst: &std::collections::HashMap<String, MonoType>,
     ) -> MonoType {
         match self {
-            MonoType::TypeRef(name) => subst.get(name).cloned().unwrap_or_else(|| self.clone()),
+            MonoType::TypeRef(name) => subst
+                .get(name.bare())
+                .cloned()
+                .unwrap_or_else(|| self.clone()),
             MonoType::Fn {
                 params,
                 return_type,
@@ -1223,7 +1235,10 @@ impl From<ast::Type> for MonoType {
             //（返回值形式参数名，只被谓词引用），运行时类型就是内层——同样透明。
             ast::Type::NamedParen { inner, .. } => MonoType::from(*inner),
             ast::Type::Name { name, .. } => {
-                Self::from_builtin_name(&name).unwrap_or(MonoType::TypeRef(name))
+                Self::from_builtin_name(&name).unwrap_or(MonoType::TypeRef(
+                    Nominal::flat(AsRef::<str>::as_ref(&(name)))
+                        .expect("type name must be bare and non-empty"),
+                ))
             }
             ast::Type::Struct { body } => {
                 let mut fields = Vec::new();
@@ -1240,7 +1255,10 @@ impl From<ast::Type> for MonoType {
                             });
                         }
                         ast::TypeBodyItem::Interface(s) => {
-                            interfaces.push(s.clone());
+                            interfaces.push(
+                                Nominal::flat(AsRef::<str>::as_ref(&(s.clone())))
+                                    .expect("type name must be bare and non-empty"),
+                            );
                         }
                         ast::TypeBodyItem::Expr(_) => {
                             // 类型族表达式（如 Assert(N > 0)）不在此处提取——
@@ -1251,7 +1269,7 @@ impl From<ast::Type> for MonoType {
                     }
                 }
                 MonoType::Struct(StructType {
-                    name: String::new(),
+                    name: Nominal::anonymous(),
                     fields,
                     methods: HashMap::new(),
                     interfaces,
@@ -1288,7 +1306,10 @@ impl From<ast::Type> for MonoType {
                 // 先查 `generic_type_defs`，命中用户定义按记录展开，本归一只
                 // 兜住无定义时的落点。
                 MonoType::Generic {
-                    name: MonoType::source_container_face(&name),
+                    name: Nominal::flat(AsRef::<str>::as_ref(
+                        &(MonoType::source_container_face(&name)),
+                    ))
+                    .expect("type name must be bare and non-empty"),
                     args: args.into_iter().map(MonoType::from).collect(),
                 }
             }
@@ -1301,7 +1322,8 @@ impl From<ast::Type> for MonoType {
             // 不产生默认值本身，故每个字段的默认值标记与旧空向量在可达面等价
             //（证据见提交信息的报告）。
             ast::Type::NamedStruct { name, fields, .. } => MonoType::Struct(StructType {
-                name,
+                name: Nominal::flat(AsRef::<str>::as_ref(&(name)))
+                    .expect("type name must be bare and non-empty"),
                 fields: fields
                     .into_iter()
                     .map(|f| StructFieldInfo {
@@ -1344,12 +1366,20 @@ impl From<ast::Type> for MonoType {
                         base_type: Box::new(MonoType::from(*base_type)),
                         value: v,
                     },
-                    None => MonoType::TypeRef(name),
+                    None => MonoType::TypeRef(
+                        Nominal::flat(AsRef::<str>::as_ref(&(name)))
+                            .expect("type name must be bare and non-empty"),
+                    ),
                 }
             }
             ast::Type::Ptr(inner) => {
                 // Raw pointer type: *T
-                MonoType::TypeRef(format!("*{}", MonoType::from(*inner).type_name()))
+                MonoType::TypeRef(
+                    Nominal::flat(AsRef::<str>::as_ref(
+                        &(format!("*{}", MonoType::from(*inner).type_name())),
+                    ))
+                    .expect("type name must be bare and non-empty"),
+                )
             }
             ast::Type::Ref { mutable, inner, .. } => MonoType::Ref {
                 mutable,
@@ -1393,7 +1423,10 @@ impl From<ast::Type> for MonoType {
                         };
                     }
                 }
-                MonoType::TypeRef("<const-expr>".to_string())
+                MonoType::TypeRef(
+                    Nominal::flat(AsRef::<str>::as_ref(&("<const-expr>")))
+                        .expect("type name must be bare and non-empty"),
+                )
             }
         }
     }
@@ -1542,12 +1575,12 @@ pub struct StructFieldInfo {
 
 #[derive(Clone)]
 pub struct StructType {
-    pub name: String,
+    pub name: Nominal,
     pub fields: Vec<StructFieldInfo>,
     /// 方法表：方法名 -> 方法类型
     pub methods: HashMap<String, PolyType>,
     /// RFC-010: 接口约束列表
-    pub interfaces: Vec<String>,
+    pub interfaces: Vec<Nominal>,
 }
 
 /// 相等口径（R9 + 6.9.5-B.1a 的零行为约束）。
@@ -1729,7 +1762,7 @@ impl Hash for StructType {
 /// 枚举类型
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct EnumType {
-    pub name: String,
+    pub name: Nominal,
     pub variants: Vec<String>,
 }
 

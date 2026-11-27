@@ -127,6 +127,23 @@ pub struct TypePath {
 }
 
 impl TypePath {
+    /// **L3-1a 临时通道**：接收既有的整串限定名（含点）原样保存，不做切分。
+    ///
+    /// 仅用于「当前表示里已经带点、但还没有身份表可查」的构造点；L3-1b 改为
+    /// 身份表解析后删除本构造器，届时所有构造都必须走 flat/item。
+    pub fn qualified_legacy(name: &str) -> Self {
+        Self {
+            inner: DefPath::item("", name),
+        }
+    }
+
+    /// 匿名/合成形态的空名（无名义头的 Struct/Enum 用）：不是身份，仅保持今天的空名打印。
+    pub fn anonymous() -> Self {
+        Self {
+            inner: DefPath::item("", ""),
+        }
+    }
+
     /// 无模块归属的类型名（内建/类型参数/合成名）。
     pub fn flat(name: &str) -> Option<Self> {
         Self::item("", name)
@@ -205,6 +222,24 @@ impl PartialEq for TypePath {
     }
 }
 
+impl PartialEq<str> for TypePath {
+    fn eq(
+        &self,
+        other: &str,
+    ) -> bool {
+        self.bare() == other
+    }
+}
+
+impl PartialEq<&str> for TypePath {
+    fn eq(
+        &self,
+        other: &&str,
+    ) -> bool {
+        self.bare() == *other
+    }
+}
+
 impl Eq for TypePath {}
 
 impl Hash for TypePath {
@@ -228,6 +263,19 @@ impl Hash for TypePath {
 pub struct Nominal(TypePath);
 
 impl Nominal {
+    /// **L3-1a 临时通道**：接收既有的整串限定名（含点）原样保存，不做切分。
+    ///
+    /// 仅用于「当前表示里已经带点、但还没有身份表可查」的构造点；L3-1b 改为
+    /// 身份表解析后删除本构造器。
+    pub fn qualified_legacy(name: &str) -> Self {
+        Self(TypePath::qualified_legacy(name))
+    }
+
+    /// 匿名/合成形态的空名（无名义头的 Struct/Enum 用）：不是身份，仅保持今天的空名打印。
+    pub fn anonymous() -> Self {
+        Self(TypePath::anonymous())
+    }
+
     /// 无模块归属的名义类型（内建/类型参数/合成名）。
     pub fn flat(name: &str) -> Option<Self> {
         TypePath::flat(name).map(Self)
@@ -294,6 +342,24 @@ impl PartialEq for Nominal {
     }
 }
 
+impl PartialEq<str> for Nominal {
+    fn eq(
+        &self,
+        other: &str,
+    ) -> bool {
+        self.bare() == other
+    }
+}
+
+impl PartialEq<&str> for Nominal {
+    fn eq(
+        &self,
+        other: &&str,
+    ) -> bool {
+        self.bare() == *other
+    }
+}
+
 impl Eq for Nominal {}
 
 impl Hash for Nominal {
@@ -302,5 +368,82 @@ impl Hash for Nominal {
         state: &mut H,
     ) {
         self.0.hash(state);
+    }
+}
+
+impl TypePath {
+    /// 裸名（与 bare 同义，供既有 as_str 调用点使用）。
+    pub fn as_str(&self) -> &str {
+        self.bare()
+    }
+}
+
+impl AsRef<str> for TypePath {
+    fn as_ref(&self) -> &str {
+        self.bare()
+    }
+}
+
+impl std::borrow::Borrow<str> for TypePath {
+    fn borrow(&self) -> &str {
+        self.bare()
+    }
+}
+
+impl Nominal {
+    /// 裸名（与 bare 同义，供既有 as_str 调用点使用）。
+    pub fn as_str(&self) -> &str {
+        self.bare()
+    }
+}
+
+impl std::borrow::Borrow<str> for Nominal {
+    fn borrow(&self) -> &str {
+        self.bare()
+    }
+}
+
+impl PartialEq<String> for TypePath {
+    fn eq(
+        &self,
+        other: &String,
+    ) -> bool {
+        self.bare() == other.as_str()
+    }
+}
+
+impl PartialEq<String> for Nominal {
+    fn eq(
+        &self,
+        other: &String,
+    ) -> bool {
+        self.bare() == other.as_str()
+    }
+}
+
+impl PartialEq<Nominal> for String {
+    fn eq(
+        &self,
+        other: &Nominal,
+    ) -> bool {
+        self.as_str() == other.bare()
+    }
+}
+
+impl PartialEq<&Nominal> for String {
+    fn eq(
+        &self,
+        other: &&Nominal,
+    ) -> bool {
+        self.as_str() == other.bare()
+    }
+}
+
+impl PartialEq<Nominal> for str {
+    fn eq(
+        &self,
+        other: &Nominal,
+    ) -> bool {
+        self == other.bare()
     }
 }

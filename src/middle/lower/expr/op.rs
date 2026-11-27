@@ -96,9 +96,15 @@ impl AstToIrGenerator {
                     ty = *inner;
                 }
                 match ty {
-                    crate::frontend::core::types::MonoType::Generic { name, .. } => Some(name),
-                    crate::frontend::core::types::MonoType::Struct(s) => Some(s.name.clone()),
-                    crate::frontend::core::types::MonoType::TypeRef(n) => Some(n.clone()),
+                    crate::frontend::core::types::MonoType::Generic { name, .. } => {
+                        Some(name.bare().to_string())
+                    }
+                    crate::frontend::core::types::MonoType::Struct(s) => {
+                        Some(s.name.bare().to_string())
+                    }
+                    crate::frontend::core::types::MonoType::TypeRef(n) => {
+                        Some(n.bare().to_string())
+                    }
                     _ => None,
                 }
             })

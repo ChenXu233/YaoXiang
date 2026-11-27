@@ -28,6 +28,7 @@ use std::collections::{HashMap, HashSet};
 
 use super::call_ownership::CallOwnershipTable;
 use super::scope::ScopeManager;
+use crate::frontend::core::types::identity::Nominal;
 
 /// 空的 Native 签名表（默认值）
 static EMPTY_SIGNATURES: std::sync::LazyLock<HashMap<String, MonoType>> =
@@ -609,7 +610,7 @@ pub(super) fn is_ctor_reference(
 ) -> bool {
     match ty {
         MonoType::TypeRef(n) => {
-            generic_type_defs.contains_key(n) || is_builtin_generic_type_name(n)
+            generic_type_defs.contains_key(n.bare()) || is_builtin_generic_type_name(n.bare())
         }
         _ => false,
     }
@@ -675,8 +676,8 @@ pub(super) fn expand_ctor_applications(
                 .iter()
                 .map(|a| expand_ctor_applications(a, defs))
                 .collect();
-            if !is_builtin_generic_type_name(name) {
-                if let Some(def) = defs.get(name) {
+            if !is_builtin_generic_type_name(name.bare()) {
+                if let Some(def) = defs.get(name.bare()) {
                     let total = def.type_param_names.len() + def.poly.const_binders.len();
                     if expanded_args.len() == total {
                         if let Ok(inst) =
@@ -781,7 +782,10 @@ fn substitute_type_params_with_vars_walk(
     param_vars: &HashMap<String, MonoType>,
 ) -> MonoType {
     match ty {
-        MonoType::TypeRef(name) => param_vars.get(name).cloned().unwrap_or_else(|| ty.clone()),
+        MonoType::TypeRef(name) => param_vars
+            .get(name.bare())
+            .cloned()
+            .unwrap_or_else(|| ty.clone()),
         MonoType::Struct(s) => MonoType::Struct(crate::frontend::core::types::mono::StructType {
             fields: s
                 .fields
@@ -846,14 +850,22 @@ fn concrete_type_from_expr_arg(
                 // 内置**泛型**容器名（Vec / Array）是类型构造器：值位置是 Type
                 // 宇宙的值，类型实参位要的是构造器名（TypeRef）而非具体标量类型。
                 MonoType::from_builtin_name(name).or_else(|| {
-                    is_builtin_generic_type_name(name).then(|| MonoType::TypeRef(name.clone()))
+                    is_builtin_generic_type_name(name).then(|| {
+                        MonoType::TypeRef(
+                            Nominal::flat(AsRef::<str>::as_ref(&(name.clone())))
+                                .expect("type name must be bare and non-empty"),
+                        )
+                    })
                 })
             } else if generic_type_defs.contains_key(name) {
                 // 泛型类型名（未实例化引用）作类型实参是**构造器引用**：
                 // `Holder(Box, Int)` 的 `Box` 要传构造器名（TypeRef），不是它
                 // 构造出的记录形态（记录形态会丢头部，无法再做构造器变量替换）。
                 // 泛型类型名同时登记在类型表里，故这一支必须排在 type_defs 之前。
-                Some(MonoType::TypeRef(name.clone()))
+                Some(MonoType::TypeRef(
+                    Nominal::flat(AsRef::<str>::as_ref(&(name.clone())))
+                        .expect("type name must be bare and non-empty"),
+                ))
             } else {
                 type_defs.get(name).map(|p| p.body.clone())
             }

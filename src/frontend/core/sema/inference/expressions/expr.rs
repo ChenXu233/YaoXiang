@@ -21,6 +21,7 @@ use crate::frontend::core::sema::inference::existential;
 use crate::frontend::core::sema::inference::mono_type_is_witness_bearing;
 use crate::frontend::core::sema::inference::statements;
 use crate::frontend::core::sema::operator_interfaces;
+use crate::frontend::core::types::identity::Nominal;
 
 impl<'a> ExpressionInferrer<'a> {
     /// 获取求解器引用（可变）
@@ -532,7 +533,8 @@ impl<'a> ExpressionInferrer<'a> {
         // 基础形态：两端必须 Int
         match (left_ty, right_ty) {
             (MonoType::Int(_), MonoType::Int(_)) => Ok(MonoType::Generic {
-                name: "Range".into(),
+                name: Nominal::flat(AsRef::<str>::as_ref(&("Range")))
+                    .expect("type name must be bare and non-empty"),
                 args: vec![MonoType::Int(64)],
             }),
             (l, r) => Err(ErrorCodeDefinition::type_mismatch(
@@ -715,7 +717,8 @@ impl<'a> ExpressionInferrer<'a> {
                     left.clone()
                 };
                 Ok(MonoType::Generic {
-                    name: "Range".into(),
+                    name: Nominal::flat(AsRef::<str>::as_ref(&("Range")))
+                        .expect("type name must be bare and non-empty"),
                     args: vec![elem_ty],
                 })
             }
@@ -762,19 +765,23 @@ impl<'a> ExpressionInferrer<'a> {
 
         // 和类型判定（Generic 形态 / scope 镜像 Struct 形态）
         let sum_name: Option<String> = match &resolved {
-            MonoType::Generic { name, .. } if self.sum_types.contains_key(name) => {
-                Some(name.clone())
+            MonoType::Generic { name, .. } if self.sum_types.contains_key(name.bare()) => {
+                Some(name.clone().bare().to_string())
             }
-            MonoType::Struct(st) if self.sum_types.contains_key(&st.name) => Some(st.name.clone()),
+            MonoType::Struct(st) if self.sum_types.contains_key(st.name.bare()) => {
+                Some(st.name.clone().bare().to_string())
+            }
             // 非泛型和类型的方法体（`self: &Maybe`）：Ref 剥离后是 TypeRef，
             // 名义命中 sum_types 即和类型（经类型镜像复核）
             MonoType::TypeRef(n) => {
-                if self.sum_types.contains_key(n) {
-                    Some(n.clone())
+                if self.sum_types.contains_key(n.bare()) {
+                    Some(n.clone().bare().to_string())
                 } else {
-                    match self.type_defs.get(n).map(|p| &p.body) {
-                        Some(MonoType::Struct(st)) if self.sum_types.contains_key(&st.name) => {
-                            Some(st.name.clone())
+                    match self.type_defs.get(n.bare()).map(|p| &p.body) {
+                        Some(MonoType::Struct(st))
+                            if self.sum_types.contains_key(st.name.bare()) =>
+                        {
+                            Some(st.name.bare().to_string())
                         }
                         _ => None,
                     }
@@ -1161,7 +1168,7 @@ impl<'a> ExpressionInferrer<'a> {
                 let struct_ty: crate::frontend::core::types::mono::StructType = match &resolved {
                     MonoType::Struct(s) if &s.name == name => s.clone(),
                     MonoType::TypeRef(n) if n == name => {
-                        match self.type_defs.get(n).map(|p| &p.body) {
+                        match self.type_defs.get(n.bare()).map(|p| &p.body) {
                             Some(MonoType::Struct(s)) => s.clone(),
                             _ => {
                                 return Err(ErrorCodeDefinition::type_mismatch(
@@ -1212,28 +1219,33 @@ impl<'a> ExpressionInferrer<'a> {
                 variant, pattern, ..
             } => {
                 let (sum_name, variants, param_names, concrete) = match &resolved {
-                    MonoType::Generic { name, args } if self.sum_types.contains_key(name) => {
+                    MonoType::Generic { name, args }
+                        if self.sum_types.contains_key(name.bare()) =>
+                    {
                         let param_names = self
                             .generic_type_defs
-                            .get(name)
+                            .get(name.bare())
                             .map(|d| d.type_param_names.clone())
                             .unwrap_or_default();
                         (
                             name.clone(),
-                            self.sum_types[name].clone(),
+                            self.sum_types[name.bare()].clone(),
                             param_names,
                             args.clone(),
                         )
                     }
-                    MonoType::Struct(s) if self.sum_types.contains_key(&s.name) => (
+                    MonoType::Struct(s) if self.sum_types.contains_key(s.name.bare()) => (
                         s.name.clone(),
-                        self.sum_types[&s.name].clone(),
+                        self.sum_types[s.name.bare()].clone(),
                         Vec::new(),
                         Vec::new(),
                     ),
-                    MonoType::TypeRef(n) if self.sum_types.contains_key(n) => {
-                        (n.clone(), self.sum_types[n].clone(), Vec::new(), Vec::new())
-                    }
+                    MonoType::TypeRef(n) if self.sum_types.contains_key(n.bare()) => (
+                        n.clone(),
+                        self.sum_types[n.bare()].clone(),
+                        Vec::new(),
+                        Vec::new(),
+                    ),
                     other => {
                         return Err(ErrorCodeDefinition::type_mismatch(
                             "和类型（变体解构要求 scrutinee 实现该变体集）",
@@ -1249,11 +1261,13 @@ impl<'a> ExpressionInferrer<'a> {
                 // `match some(v) / none()` 算作消费了 `use std.option`，
                 // 不再误报 W1003（docs/src/reference/stdlib/weak.md 自然
                 // 写法；变体名不走 Var 解析臂，此臂是它唯一的语义消费点）
-                self.note_import_use(&sum_name);
+                self.note_import_use(sum_name.bare());
                 let Some(vdef) = variants.iter().find(|v| &v.name == variant) else {
-                    return Err(ErrorCodeDefinition::field_not_found(variant, &sum_name)
-                        .at(span)
-                        .build());
+                    return Err(
+                        ErrorCodeDefinition::field_not_found(variant, sum_name.bare())
+                            .at(span)
+                            .build(),
+                    );
                 };
                 match pattern.as_deref() {
                     // 零载荷模式（`none()`）：变体必须真的无参数
@@ -1369,7 +1383,10 @@ impl<'a> ExpressionInferrer<'a> {
                         dispatch_name,
                         negate: false,
                     });
-                    return Some(MonoType::TypeRef(pn));
+                    return Some(MonoType::TypeRef(
+                        Nominal::flat(AsRef::<str>::as_ref(&(pn)))
+                            .expect("type name must be bare and non-empty"),
+                    ));
                 }
                 return None;
             }
@@ -1413,8 +1430,8 @@ impl<'a> ExpressionInferrer<'a> {
         let constraints = self.current_fn_param_constraints.as_ref()?;
         for operand in [l, r] {
             if let MonoType::TypeRef(pn) = operand {
-                if constraints.get(pn).map(|s| s.as_str()) == Some(iface) {
-                    return Some(pn.clone());
+                if constraints.get(pn.bare()).map(|s| s.as_str()) == Some(iface) {
+                    return Some(pn.clone().bare().to_string());
                 }
             }
         }
@@ -1571,7 +1588,10 @@ impl<'a> ExpressionInferrer<'a> {
             .as_ref()
             .or(r_record.as_ref())
             .map(|s| s.name.clone())
-            .unwrap_or_else(|| "Struct".to_string());
+            .unwrap_or_else(|| {
+                Nominal::flat(AsRef::<str>::as_ref(&("Struct")))
+                    .expect("type name must be bare and non-empty")
+            });
         Err(ErrorCodeDefinition::type_does_not_implement_interface(
             &format!("{}（{} 与 {}）", name, l, r),
             ops::EQUAL_INTERFACE,
@@ -1590,18 +1610,22 @@ impl<'a> ExpressionInferrer<'a> {
         ty: &MonoType,
     ) -> Option<String> {
         match ty {
-            MonoType::Generic { name, .. } if self.sum_types.contains_key(name) => {
-                Some(name.clone())
+            MonoType::Generic { name, .. } if self.sum_types.contains_key(name.bare()) => {
+                Some(name.clone().bare().to_string())
             }
-            MonoType::Struct(s) if self.sum_types.contains_key(&s.name) => Some(s.name.clone()),
+            MonoType::Struct(s) if self.sum_types.contains_key(s.name.bare()) => {
+                Some(s.name.clone().bare().to_string())
+            }
             MonoType::TypeRef(n) => {
-                if self.sum_types.contains_key(n) {
-                    Some(n.clone())
+                if self.sum_types.contains_key(n.bare()) {
+                    Some(n.clone().bare().to_string())
                 } else {
                     // 注解形态经类型镜像复核（与 match 的和类型判定同款）
-                    match self.type_defs.get(n).map(|p| &p.body) {
-                        Some(MonoType::Struct(st)) if self.sum_types.contains_key(&st.name) => {
-                            Some(st.name.clone())
+                    match self.type_defs.get(n.bare()).map(|p| &p.body) {
+                        Some(MonoType::Struct(st))
+                            if self.sum_types.contains_key(st.name.bare()) =>
+                        {
+                            Some(st.name.bare().to_string())
                         }
                         _ => None,
                     }
@@ -1618,7 +1642,7 @@ impl<'a> ExpressionInferrer<'a> {
     ) -> Option<crate::frontend::core::types::StructType> {
         match ty {
             MonoType::Struct(s) => Some(s.clone()),
-            MonoType::TypeRef(name) => match self.type_defs.get(name).map(|p| &p.body) {
+            MonoType::TypeRef(name) => match self.type_defs.get(name.bare()).map(|p| &p.body) {
                 Some(MonoType::Struct(s)) => Some(s.clone()),
                 _ => None,
             },
@@ -1677,12 +1701,13 @@ impl<'a> ExpressionInferrer<'a> {
             }
             MonoType::TypeRef(name) => {
                 // 内建名（字段经 from_builtin_name 已物化；此处兜底别名形态）
-                if crate::frontend::core::types::MonoType::from_builtin_name(name).is_some() {
+                if crate::frontend::core::types::MonoType::from_builtin_name(name.bare()).is_some()
+                {
                     return Ok(());
                 }
-                match self.type_defs.get(name).map(|p| &p.body) {
+                match self.type_defs.get(name.bare()).map(|p| &p.body) {
                     Some(resolved) => self.struct_comparable(resolved, depth + 1),
-                    _ => Err(name.clone()),
+                    _ => Err(name.clone().bare().to_string()),
                 }
             }
             other => Err(other.to_string()),
@@ -1710,8 +1735,11 @@ impl<'a> ExpressionInferrer<'a> {
             }
             UnOp::Deref => {
                 if let MonoType::TypeRef(inner) = expr {
-                    let inner_type = inner.trim_start_matches('*').to_string();
-                    Ok(MonoType::TypeRef(inner_type))
+                    let inner_type = inner.bare().trim_start_matches('*').to_string();
+                    Ok(MonoType::TypeRef(
+                        Nominal::flat(AsRef::<str>::as_ref(&(inner_type)))
+                            .expect("type name must be bare and non-empty"),
+                    ))
                 } else {
                     Err(ErrorCodeDefinition::invalid_deref(&format!("{}", expr)).build())
                 }
@@ -2389,21 +2417,27 @@ impl<'a> ExpressionInferrer<'a> {
                 // 方法调用（`r.is_failure()`，Try 接口方法）除外：先查方法绑定表
                 // （含跨模块导入的 yx std 方法），命中即按方法返回，不落字段拒绝。
                 if let MonoType::Generic { name: sum_name, .. } = &resolved {
-                    if self.sum_types.contains_key(sum_name) {
-                        if self.sum_types[sum_name].iter().any(|v| v.name == *field) {
+                    if self.sum_types.contains_key(sum_name.bare()) {
+                        if self.sum_types[sum_name.bare()]
+                            .iter()
+                            .any(|v| v.name == *field)
+                        {
                             return Err(ErrorCodeDefinition::variant_used_as_field(
-                                sum_name, field,
+                                sum_name.bare(),
+                                field,
                             )
                             .build());
                         }
                         // 方法身份由导入面解析（D-5）：拼字符串不再产生身份，无身份即不查表
-                        if let Some(key) = self.receiver_method_key(obj, sum_name, field) {
+                        if let Some(key) = self.receiver_method_key(obj, sum_name.bare(), field) {
                             if let Some(method_ty) = self.method_bindings.get(&key) {
                                 self.last_method_binding_key = Some(key);
                                 return Ok(method_ty.clone());
                             }
                         }
-                        return Err(ErrorCodeDefinition::field_not_found(field, sum_name).build());
+                        return Err(
+                            ErrorCodeDefinition::field_not_found(field, sum_name.bare()).build()
+                        );
                     }
                 }
 
@@ -2413,10 +2447,10 @@ impl<'a> ExpressionInferrer<'a> {
                 // 非泛型结构体（Point）走原有 Struct 路径不受影响。
                 let resolved = match &resolved {
                     MonoType::Generic { name, args }
-                        if self.generic_type_defs.contains_key(name) =>
+                        if self.generic_type_defs.contains_key(name.bare()) =>
                     {
                         match crate::frontend::core::sema::TypeEnvironment::instantiate_generic_type(
-                            &self.generic_type_defs[name],
+                            &self.generic_type_defs[name.bare()],
                             args,
                         ) {
                             Ok(inst) => {
@@ -2506,7 +2540,7 @@ impl<'a> ExpressionInferrer<'a> {
                                 // 一律拒绝（E1114）；类型级投影留 B.3。
                                 if field_info.is_witness() {
                                     return Err(ErrorCodeDefinition::witness_field_not_readable(
-                                        &struct_type.name,
+                                        struct_type.name.bare(),
                                         field,
                                     )
                                     .at(*span)
@@ -2517,7 +2551,9 @@ impl<'a> ExpressionInferrer<'a> {
                         }
                         // Field not found in struct — try method lookup
                         // 方法身份由导入面解析（D-5）：拼字符串不再产生身份，无身份即不查表
-                        if let Some(key) = self.receiver_method_key(obj, &struct_type.name, field) {
+                        if let Some(key) =
+                            self.receiver_method_key(obj, struct_type.name.bare(), field)
+                        {
                             if let Some(method_ty) = self.method_bindings.get(&key) {
                                 self.last_method_binding_key = Some(key);
                                 return Ok(method_ty.clone());
@@ -2527,7 +2563,7 @@ impl<'a> ExpressionInferrer<'a> {
                         // 报 E1043（模块语义 + 可用导出清单），不得借道 E1042。
                         if self
                             .module_aliases
-                            .is_some_and(|aliases| aliases.contains(&struct_type.name))
+                            .is_some_and(|aliases| aliases.contains(struct_type.name.bare()))
                         {
                             let available = struct_type
                                 .fields
@@ -2536,17 +2572,21 @@ impl<'a> ExpressionInferrer<'a> {
                                 .collect::<Vec<_>>()
                                 .join(", ");
                             return Err(ErrorCodeDefinition::module_has_no_export(
-                                &struct_type.name,
+                                struct_type.name.bare(),
                                 field,
                                 &available,
                             )
                             .build());
                         }
-                        Err(ErrorCodeDefinition::field_not_found(field, &struct_type.name).build())
+                        Err(
+                            ErrorCodeDefinition::field_not_found(field, struct_type.name.bare())
+                                .build(),
+                        )
                     }
                     MonoType::TypeRef(ref type_name) => {
                         // Try to resolve TypeRef → Struct via type_defs for field lookup
-                        if let Some(def_ty) = self.type_defs.get(type_name).map(|p| &p.body) {
+                        if let Some(def_ty) = self.type_defs.get(type_name.bare()).map(|p| &p.body)
+                        {
                             let def_ty = self.solver.resolve_type(def_ty);
                             if let MonoType::Struct(ref struct_type) = def_ty {
                                 for field_info in &struct_type.fields {
@@ -2557,7 +2597,7 @@ impl<'a> ExpressionInferrer<'a> {
                                         if field_info.is_witness() {
                                             return Err(
                                                 ErrorCodeDefinition::witness_field_not_readable(
-                                                    &struct_type.name,
+                                                    struct_type.name.bare(),
                                                     field,
                                                 )
                                                 .at(*span)
@@ -2570,7 +2610,7 @@ impl<'a> ExpressionInferrer<'a> {
                                 // Field not found in resolved struct — try method lookup
                                 // 方法身份由导入面解析（D-5）：拼字符串不再产生身份，无身份即不查表
                                 if let Some(key) =
-                                    self.receiver_method_key(obj, &struct_type.name, field)
+                                    self.receiver_method_key(obj, struct_type.name.bare(), field)
                                 {
                                     if let Some(method_ty) = self.method_bindings.get(&key) {
                                         self.last_method_binding_key = Some(key);
@@ -2579,14 +2619,14 @@ impl<'a> ExpressionInferrer<'a> {
                                 }
                                 return Err(ErrorCodeDefinition::field_not_found(
                                     field,
-                                    &struct_type.name,
+                                    struct_type.name.bare(),
                                 )
                                 .build());
                             }
                         }
                         // Try method lookup on TypeRef (generic type or forward reference)
                         // 方法身份由导入面解析（D-5）：拼字符串不再产生身份，无身份即不查表
-                        if let Some(key) = self.receiver_method_key(obj, type_name, field) {
+                        if let Some(key) = self.receiver_method_key(obj, type_name.bare(), field) {
                             if let Some(method_ty) = self.method_bindings.get(&key) {
                                 self.last_method_binding_key = Some(key);
                                 return Ok(method_ty.clone());
@@ -2810,7 +2850,8 @@ impl<'a> ExpressionInferrer<'a> {
             crate::ast::Expr::Ref { expr, .. } => {
                 let expr_ty = self.infer_expr(expr)?;
                 Ok(MonoType::Generic {
-                    name: "Arc".into(),
+                    name: Nominal::flat(AsRef::<str>::as_ref(&("Arc")))
+                        .expect("type name must be bare and non-empty"),
                     args: vec![expr_ty],
                 })
             }

@@ -10,6 +10,7 @@ use crate::frontend::core::types::eval::dependent_types::{
     AssociatedTypeDef, DependentTypeEnv, RecursiveArm, RecursivePattern, SortSpace, TypeFamily,
 };
 use crate::frontend::core::types::eval::type_families::Nat;
+use crate::frontend::core::types::identity::Nominal;
 use crate::frontend::core::types::MonoType;
 use crate::std::StdModule;
 use std::collections::HashMap;
@@ -20,7 +21,10 @@ fn assert_istrue_true_reduces_to_void(env: &DependentTypeEnv) {
     let istrue = env
         .get_type_family("IsTrue")
         .expect("IsTrue should be registered after AssertModule.register_type_families");
-    let result = istrue.instantiate(&[MonoType::TypeRef("true".into())]);
+    let result = istrue.instantiate(&[MonoType::TypeRef(
+        Nominal::flat(AsRef::<str>::as_ref(&("true")))
+            .expect("type name must be bare and non-empty"),
+    )]);
     assert!(
         result.is_some(),
         "IsTrue(true) should instantiate successfully"
@@ -37,7 +41,10 @@ fn assert_istrue_false_reduces_to_never(env: &DependentTypeEnv) {
     let istrue = env
         .get_type_family("IsTrue")
         .expect("IsTrue should be registered after AssertModule.register_type_families");
-    let result = istrue.instantiate(&[MonoType::TypeRef("false".into())]);
+    let result = istrue.instantiate(&[MonoType::TypeRef(
+        Nominal::flat(AsRef::<str>::as_ref(&("false")))
+            .expect("type name must be bare and non-empty"),
+    )]);
     assert!(
         result.is_some(),
         "IsTrue(false) should instantiate successfully"
@@ -133,7 +140,10 @@ fn test_dependent_type_env() {
     assert!(env.get_type_family("F").is_some());
     // is_type_family_instance always returns None in current impl
     assert!(env
-        .is_type_family_instance(&MonoType::TypeRef("F".to_string()))
+        .is_type_family_instance(&MonoType::TypeRef(
+            Nominal::flat(AsRef::<str>::as_ref(&("F")))
+                .expect("type name must be bare and non-empty")
+        ))
         .is_none());
 }
 
@@ -271,8 +281,20 @@ fn test_associated_type_def_match_variant() {
     let match_def = AssociatedTypeDef::Match {
         arg_index: 0,
         arms: vec![
-            (MonoType::TypeRef("true".into()), MonoType::Void),
-            (MonoType::TypeRef("false".into()), MonoType::Never),
+            (
+                MonoType::TypeRef(
+                    Nominal::flat(AsRef::<str>::as_ref(&("true")))
+                        .expect("type name must be bare and non-empty"),
+                ),
+                MonoType::Void,
+            ),
+            (
+                MonoType::TypeRef(
+                    Nominal::flat(AsRef::<str>::as_ref(&("false")))
+                        .expect("type name must be bare and non-empty"),
+                ),
+                MonoType::Never,
+            ),
         ],
     };
 
@@ -284,7 +306,13 @@ fn test_associated_type_def_match_variant() {
 
     // Act & Assert — substitute 不改变 Match 内容
     let mut subs = HashMap::new();
-    subs.insert("b".to_string(), MonoType::TypeRef("true".into()));
+    subs.insert(
+        "b".to_string(),
+        MonoType::TypeRef(
+            Nominal::flat(AsRef::<str>::as_ref(&("true")))
+                .expect("type name must be bare and non-empty"),
+        ),
+    );
     let substituted = match_def.substitute(&subs);
     assert_eq!(
         substituted, match_def,
@@ -294,7 +322,10 @@ fn test_associated_type_def_match_variant() {
     // Assert — into_type 返回 Unknown（Match 不能直接转为类型）
     assert_eq!(
         match_def.into_type(),
-        MonoType::TypeRef("Unknown".to_string()),
+        MonoType::TypeRef(
+            Nominal::flat(AsRef::<str>::as_ref(&("Unknown")))
+                .expect("type name must be bare and non-empty")
+        ),
         "Match::into_type should return TypeRef(\"Unknown\")"
     );
 }
@@ -326,7 +357,10 @@ fn test_istrue_type_family_instantiate() {
 #[test]
 fn test_parse_nat_from_type_zero() {
     assert_eq!(
-        parse_nat_from_type(&MonoType::TypeRef("Zero".to_string())),
+        parse_nat_from_type(&MonoType::TypeRef(
+            Nominal::flat(AsRef::<str>::as_ref(&("Zero")))
+                .expect("type name must be bare and non-empty")
+        )),
         Some(Nat::Zero),
         "TypeRef('Zero') → Nat::Zero"
     );
@@ -362,7 +396,10 @@ fn test_structural_termination_ok() {
         },
         RecursiveArm {
             pattern: RecursivePattern::Succ("n".to_string()),
-            result: MonoType::TypeRef("Nat(Mul, Succ(n), factorial(n))".to_string()),
+            result: MonoType::TypeRef(
+                Nominal::flat(AsRef::<str>::as_ref(&("Nat(Mul, Succ(n), factorial(n))")))
+                    .expect("type name must be bare and non-empty"),
+            ),
         },
     ];
     assert!(
@@ -377,11 +414,17 @@ fn test_structural_termination_zero_branch_recursive() {
     let arms = vec![
         RecursiveArm {
             pattern: RecursivePattern::Zero,
-            result: MonoType::TypeRef("factorial(Zero)".to_string()),
+            result: MonoType::TypeRef(
+                Nominal::flat(AsRef::<str>::as_ref(&("factorial(Zero)")))
+                    .expect("type name must be bare and non-empty"),
+            ),
         },
         RecursiveArm {
             pattern: RecursivePattern::Succ("n".to_string()),
-            result: MonoType::TypeRef("Nat(Mul, Succ(n), factorial(n))".to_string()),
+            result: MonoType::TypeRef(
+                Nominal::flat(AsRef::<str>::as_ref(&("Nat(Mul, Succ(n), factorial(n))")))
+                    .expect("type name must be bare and non-empty"),
+            ),
         },
     ];
     assert!(

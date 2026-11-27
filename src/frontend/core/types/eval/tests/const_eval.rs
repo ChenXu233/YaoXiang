@@ -11,6 +11,7 @@ use crate::frontend::core::types::const_data::{BinOp, ConstExpr, UnOp};
 use crate::frontend::core::types::eval::const_eval::{
     ConstFunction, ConstGenericEval, ConstGenericResult, GenericSize, SizeResult,
 };
+use crate::frontend::core::types::identity::Nominal;
 use crate::frontend::core::types::{ConstValue, MonoType};
 use crate::util::diagnostic::Diagnostic;
 
@@ -379,8 +380,20 @@ fn test_generic_size_primitives() {
     assert_eq!(gs.size_of(&MonoType::Float(64)), Ok(8));
     assert_eq!(gs.size_of(&MonoType::make_string()), Ok(8));
     assert_eq!(gs.size_of(&MonoType::Void), Ok(0));
-    assert_eq!(gs.size_of(&MonoType::TypeRef("Int".to_string())), Ok(8));
-    assert_eq!(gs.size_of(&MonoType::TypeRef("Bool".to_string())), Ok(1));
+    assert_eq!(
+        gs.size_of(&MonoType::TypeRef(
+            Nominal::flat(AsRef::<str>::as_ref(&("Int")))
+                .expect("type name must be bare and non-empty")
+        )),
+        Ok(8)
+    );
+    assert_eq!(
+        gs.size_of(&MonoType::TypeRef(
+            Nominal::flat(AsRef::<str>::as_ref(&("Bool")))
+                .expect("type name must be bare and non-empty")
+        )),
+        Ok(1)
+    );
 }
 
 #[test]

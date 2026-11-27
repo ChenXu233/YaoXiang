@@ -16,14 +16,14 @@ use crate::util::span::Span;
 fn point_type_definition_stmt() -> Stmt {
     Stmt {
         kind: StmtKind::TypeDefinition {
-            name: "Point".into(),
+            name: "Point".to_string(),
             type_annotation: None,
             definition: Type::Struct {
                 body: vec![
                     ast::TypeBodyItem::Field(StructField {
-                        name: "x".into(),
+                        name: "x".to_string(),
                         ty: Type::Name {
-                            name: "Float64".into(),
+                            name: "Float64".to_string(),
                             span: Span::dummy(),
                         },
                         is_mut: false,
@@ -31,9 +31,9 @@ fn point_type_definition_stmt() -> Stmt {
                         quantity: None,
                     }),
                     ast::TypeBodyItem::Field(StructField {
-                        name: "y".into(),
+                        name: "y".to_string(),
                         ty: Type::Name {
-                            name: "Float64".into(),
+                            name: "Float64".to_string(),
                             span: Span::dummy(),
                         },
                         is_mut: false,
@@ -185,7 +185,7 @@ fn test_expr_block() {
 fn test_expr_lambda() {
     let expr = Expr::Lambda {
         params: vec![Param {
-            name: "x".into(),
+            name: "x".to_string(),
             ty: None,
             is_mut: false,
             quantity: None,
@@ -401,16 +401,16 @@ fn test_stmtkind_use() {
             path_span: Span::dummy(),
             path_parts: vec![
                 SpannedIdent {
-                    name: "std".into(),
+                    name: "std".to_string(),
                     span: Span::dummy(),
                 },
                 SpannedIdent {
-                    name: "io".into(),
+                    name: "io".to_string(),
                     span: Span::dummy(),
                 },
             ],
             items: Some(vec![SpannedIdent {
-                name: "println".into(),
+                name: "println".to_string(),
                 span: Span::dummy(),
             }]),
             alias: None,
@@ -431,7 +431,7 @@ fn test_stmtkind_use() {
 #[test]
 fn test_type_name() {
     let t = Type::Name {
-        name: "Int".into(),
+        name: "Int".to_string(),
         span: Span::dummy(),
     };
     if let Type::Name { name, .. } = &t {
@@ -462,11 +462,11 @@ fn test_type_primitives() {
 fn test_type_fn() {
     let t = Type::Fn {
         params: vec![Param::from_type(Type::Name {
-            name: "Int".into(),
+            name: "Int".to_string(),
             span: Span::dummy(),
         })],
         return_type: Box::new(Type::Name {
-            name: "String".into(),
+            name: "String".to_string(),
             span: Span::dummy(),
         }),
     };
@@ -481,11 +481,11 @@ fn test_type_fn() {
 fn test_type_tuple() {
     let t = Type::Tuple(vec![
         Type::Name {
-            name: "Int64".into(),
+            name: "Int64".to_string(),
             span: Span::dummy(),
         },
         Type::Name {
-            name: "Bool".into(),
+            name: "Bool".to_string(),
             span: Span::dummy(),
         },
     ]);
@@ -499,10 +499,10 @@ fn test_type_tuple() {
 #[test]
 fn test_type_generic() {
     let t = Type::Generic {
-        name: "List".into(),
+        name: "List".to_string(),
         name_span: Span::dummy(),
         args: vec![Type::Name {
-            name: "Int".into(),
+            name: "Int".to_string(),
             span: Span::dummy(),
         }],
     };
@@ -625,7 +625,7 @@ fn test_struct_field_new() {
         "x".into(),
         false,
         Type::Name {
-            name: "Int".into(),
+            name: "Int".to_string(),
             span: Span::dummy(),
         },
     );
@@ -640,7 +640,7 @@ fn test_struct_field_with_default() {
         "x".into(),
         false,
         Type::Name {
-            name: "Float64".into(),
+            name: "Float64".to_string(),
             span: Span::dummy(),
         },
         Expr::Lit(Literal::Float(0.0), Span::dummy()),
@@ -654,7 +654,7 @@ fn test_struct_field_with_default() {
 #[test]
 fn test_generic_param_type_kind() {
     let gp = GenericParam {
-        name: "T".into(),
+        name: "T".to_string(),
         kind: GenericParamKind::Type,
         constraints: vec![],
     };
@@ -665,10 +665,10 @@ fn test_generic_param_type_kind() {
 #[test]
 fn test_generic_param_const_kind() {
     let gp = GenericParam {
-        name: "N".into(),
+        name: "N".to_string(),
         kind: GenericParamKind::Const {
             const_type: Box::new(Type::Name {
-                name: "Int64".into(),
+                name: "Int64".to_string(),
                 span: Span::dummy(),
             }),
         },
@@ -716,7 +716,7 @@ fn test_binding_kind_anonymous() {
     let bk = BindingKind::Anonymous {
         params: vec![],
         return_type: Box::new(Type::Name {
-            name: "Void".into(),
+            name: "Void".to_string(),
             span: Span::dummy(),
         }),
         positions: vec![0],
@@ -738,7 +738,7 @@ fn test_binding_kind_default_external() {
 #[test]
 fn test_type_body_binding() {
     let tbb = TypeBodyBinding {
-        name: "distance".into(),
+        name: "distance".to_string(),
         kind: BindingKind::DefaultExternal {
             function: "dist".into(),
         },
@@ -843,7 +843,7 @@ fn test_expr_cast() {
     let expr = Expr::Cast {
         expr: Box::new(Expr::Lit(Literal::Int(42), Span::dummy())),
         target_type: Type::Name {
-            name: "Float".into(),
+            name: "Float".to_string(),
             span: Span::dummy(),
         },
         span: Span::dummy(),
@@ -859,7 +859,7 @@ fn test_expr_callable_parts_lambda_returns_params_and_body() {
     // Arrange
     let lambda = Expr::Lambda {
         params: vec![Param {
-            name: "x".into(),
+            name: "x".to_string(),
             ty: None,
             is_mut: false,
             quantity: None,

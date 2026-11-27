@@ -13,6 +13,7 @@ use super::super::{
     concrete_type_from_expr_arg, extract_const_value_from_expr, ConstArgOutcome, ExpressionInferrer,
 };
 use crate::frontend::core::sema::inference::arg_binding;
+use crate::frontend::core::types::identity::Nominal;
 
 impl<'a> ExpressionInferrer<'a> {
     /// 递归收集类型中的所有 TypeVar 索引
@@ -112,9 +113,12 @@ impl<'a> ExpressionInferrer<'a> {
     pub(super) fn type_arg_of_expr(expr: &crate::ast::Expr) -> MonoType {
         use crate::ast::Expr;
         match expr {
-            Expr::Var(name, _) => {
-                MonoType::from_builtin_name(name).unwrap_or_else(|| MonoType::TypeRef(name.clone()))
-            }
+            Expr::Var(name, _) => MonoType::from_builtin_name(name).unwrap_or_else(|| {
+                MonoType::TypeRef(
+                    Nominal::flat(AsRef::<str>::as_ref(&(name.clone())))
+                        .expect("type name must be bare and non-empty"),
+                )
+            }),
             // `Vec(Int)` / `Array(Int, 3)` 形态：类型构造器应用
             Expr::Call { func, args, .. } => {
                 if let Expr::Var(cname, _) = func.as_ref() {
@@ -122,14 +126,23 @@ impl<'a> ExpressionInferrer<'a> {
                         // #403：与注解同一落点判据——`List(Int)` 作类型实参
                         // 同样落 `Vec` 面（单源 `MonoType::source_container_face`，
                         // 源名进类型域的门共用）。
-                        name: MonoType::source_container_face(cname),
+                        name: Nominal::flat(AsRef::<str>::as_ref(
+                            &(MonoType::source_container_face(cname)),
+                        ))
+                        .expect("type name must be bare and non-empty"),
                         args: args.iter().map(Self::type_arg_of_expr).collect(),
                     }
                 } else {
-                    MonoType::TypeRef("_".to_string())
+                    MonoType::TypeRef(
+                        Nominal::flat(AsRef::<str>::as_ref(&("_")))
+                            .expect("type name must be bare and non-empty"),
+                    )
                 }
             }
-            _ => MonoType::TypeRef("_".to_string()),
+            _ => MonoType::TypeRef(
+                Nominal::flat(AsRef::<str>::as_ref(&("_")))
+                    .expect("type name must be bare and non-empty"),
+            ),
         }
     }
 
@@ -234,7 +247,10 @@ impl<'a> ExpressionInferrer<'a> {
                 },
             ) => {
                 if type_params.iter().any(|p| p == name) {
-                    bindings.insert(name.clone(), MonoType::TypeRef(a_head.clone()));
+                    bindings.insert(
+                        name.clone().bare().to_string(),
+                        MonoType::TypeRef(a_head.clone()),
+                    );
                 }
                 if s_args.len() == a_args.len() {
                     for (s, a) in s_args.iter().zip(a_args.iter()) {
@@ -244,7 +260,10 @@ impl<'a> ExpressionInferrer<'a> {
             }
             (MonoType::Generic { name, .. }, MonoType::Struct(st)) => {
                 if type_params.iter().any(|p| p == name) {
-                    bindings.insert(name.clone(), MonoType::TypeRef(st.name.clone()));
+                    bindings.insert(
+                        name.clone().bare().to_string(),
+                        MonoType::TypeRef(st.name.clone()),
+                    );
                 }
             }
             (MonoType::Ref { inner: s, .. }, MonoType::Ref { inner: a, .. }) => {
@@ -286,7 +305,10 @@ impl<'a> ExpressionInferrer<'a> {
         subst: &HashMap<String, MonoType>,
     ) -> MonoType {
         match ty {
-            MonoType::TypeRef(name) => subst.get(name).cloned().unwrap_or_else(|| ty.clone()),
+            MonoType::TypeRef(name) => subst
+                .get(name.bare())
+                .cloned()
+                .unwrap_or_else(|| ty.clone()),
             MonoType::Ref { mutable, inner } => MonoType::Ref {
                 mutable: *mutable,
                 inner: Box::new(Self::substitute_type_refs(inner, subst)),
@@ -355,7 +377,8 @@ impl<'a> ExpressionInferrer<'a> {
                 if matches!(name, "Vec" | "Array") && !args.is_empty() {
                     self.last_type_args = args.clone();
                     return MonoType::Generic {
-                        name: name.to_string(),
+                        name: Nominal::flat(AsRef::<str>::as_ref(&(name)))
+                            .expect("type name must be bare and non-empty"),
                         args,
                     };
                 }
@@ -635,7 +658,8 @@ impl<'a> ExpressionInferrer<'a> {
                             return MonoType::Fn {
                                 params: new_params,
                                 return_type: Box::new(MonoType::Generic {
-                                    name: name.to_string(),
+                                    name: Nominal::flat(AsRef::<str>::as_ref(&(name)))
+                                        .expect("type name must be bare and non-empty"),
                                     args,
                                 }),
                             };

@@ -10,6 +10,7 @@ use crate::frontend::core::sema::judgement::{decide, decide_with_budget, Judgeme
 use crate::frontend::core::sema::proof::budget::BudgetTracker;
 use crate::frontend::core::types::const_data::ConstValue;
 use crate::frontend::core::types::eval::dependent_types::DependentTypeEnv;
+use crate::frontend::core::types::identity::Nominal;
 use crate::frontend::core::types::mono::{MonoType, PolyType};
 use crate::frontend::core::types::TypeConstraintSolver;
 use crate::util::diagnostic::push_current_span;
@@ -21,7 +22,8 @@ fn literal(n: i128) -> MonoType {
 
 fn array_of_len(n: i128) -> MonoType {
     MonoType::Generic {
-        name: "Array".to_string(),
+        name: Nominal::flat(AsRef::<str>::as_ref(&("Array")))
+            .expect("type name must be bare and non-empty"),
         args: vec![MonoType::Int(64), literal(n)],
     }
 }
@@ -46,8 +48,15 @@ fn test_decide_alias_representation_is_proved() {
     types.insert("Five".to_string(), poly(literal(5)));
     let dep_env = DependentTypeEnv::new();
     let lhs = MonoType::Generic {
-        name: "Array".to_string(),
-        args: vec![MonoType::Int(64), MonoType::TypeRef("Five".to_string())],
+        name: Nominal::flat(AsRef::<str>::as_ref(&("Array")))
+            .expect("type name must be bare and non-empty"),
+        args: vec![
+            MonoType::Int(64),
+            MonoType::TypeRef(
+                Nominal::flat(AsRef::<str>::as_ref(&("Five")))
+                    .expect("type name must be bare and non-empty"),
+            ),
+        ],
     };
 
     // Act
@@ -143,12 +152,31 @@ fn test_decide_unproven_reports_e4023_with_proposition() {
     let _walk = push_current_span(Span::dummy());
     let mut solver = TypeConstraintSolver::new();
     let mut types = empty_types();
-    types.insert("A".to_string(), poly(MonoType::TypeRef("B".to_string())));
-    types.insert("B".to_string(), poly(MonoType::TypeRef("A".to_string())));
+    types.insert(
+        "A".to_string(),
+        poly(MonoType::TypeRef(
+            Nominal::flat(AsRef::<str>::as_ref(&("B")))
+                .expect("type name must be bare and non-empty"),
+        )),
+    );
+    types.insert(
+        "B".to_string(),
+        poly(MonoType::TypeRef(
+            Nominal::flat(AsRef::<str>::as_ref(&("A")))
+                .expect("type name must be bare and non-empty"),
+        )),
+    );
     let dep_env = DependentTypeEnv::new();
     let lhs = MonoType::Generic {
-        name: "Array".to_string(),
-        args: vec![MonoType::Int(64), MonoType::TypeRef("A".to_string())],
+        name: Nominal::flat(AsRef::<str>::as_ref(&("Array")))
+            .expect("type name must be bare and non-empty"),
+        args: vec![
+            MonoType::Int(64),
+            MonoType::TypeRef(
+                Nominal::flat(AsRef::<str>::as_ref(&("A")))
+                    .expect("type name must be bare and non-empty"),
+            ),
+        ],
     };
 
     // Act

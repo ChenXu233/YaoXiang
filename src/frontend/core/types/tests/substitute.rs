@@ -3,6 +3,7 @@
 //! Substitution: bind, insert, get, contains_var, merge, len, is_empty, bound_vars
 //! Substituter: substitute 经过所有容器类型 (Struct, Tuple, Dict, Set, Enum, Range, Arc, Weak, Union, Intersection, AssocType, Fn, Option, Result)
 
+use crate::frontend::core::types::identity::Nominal;
 use crate::frontend::core::types::mono::StructFieldInfo;
 use crate::frontend::core::types::substitute::contains_type_vars;
 use crate::frontend::core::types::substitute::rebind_nominal_refs;
@@ -151,9 +152,15 @@ fn test_rebind_nominal_refs_renames_fn_params_and_return() {
     let signature = MonoType::Fn {
         params: vec![MonoType::Ref {
             mutable: false,
-            inner: Box::new(MonoType::TypeRef("Temp".to_string())),
+            inner: Box::new(MonoType::TypeRef(
+                Nominal::flat(AsRef::<str>::as_ref(&("Temp")))
+                    .expect("type name must be bare and non-empty"),
+            )),
         }],
-        return_type: Box::new(MonoType::TypeRef("Temp".to_string())),
+        return_type: Box::new(MonoType::TypeRef(
+            Nominal::flat(AsRef::<str>::as_ref(&("Temp")))
+                .expect("type name must be bare and non-empty"),
+        )),
     };
 
     // Act
@@ -186,12 +193,17 @@ fn test_rebind_nominal_refs_keeps_generic_head_and_struct_name() {
     let mut rebinds = HashMap::new();
     rebinds.insert("Temp".to_string(), "TempB".to_string());
     let holder = MonoType::Struct(StructType {
-        name: "Holder".to_string(),
+        name: Nominal::flat(AsRef::<str>::as_ref(&("Holder")))
+            .expect("type name must be bare and non-empty"),
         fields: vec![StructFieldInfo {
             name: "item".to_string(),
             ty: MonoType::Generic {
-                name: "List".to_string(),
-                args: vec![MonoType::TypeRef("Temp".to_string())],
+                name: Nominal::flat(AsRef::<str>::as_ref(&("List")))
+                    .expect("type name must be bare and non-empty"),
+                args: vec![MonoType::TypeRef(
+                    Nominal::flat(AsRef::<str>::as_ref(&("Temp")))
+                        .expect("type name must be bare and non-empty"),
+                )],
             },
             quantity: None,
             is_mut: false,
@@ -228,7 +240,10 @@ fn test_rebind_nominal_refs_keeps_generic_head_and_struct_name() {
 #[test]
 fn test_rebind_nominal_refs_empty_map_is_identity() {
     // Arrange — 无类型导入的 use（整体导入/native）不改绑
-    let ty = MonoType::TypeRef("Temp".to_string());
+    let ty = MonoType::TypeRef(
+        Nominal::flat(AsRef::<str>::as_ref(&("Temp")))
+            .expect("type name must be bare and non-empty"),
+    );
 
     // Act
     let rebound = rebind_nominal_refs(&ty, &HashMap::new());
@@ -245,7 +260,9 @@ fn test_rebind_nominal_refs_unknown_names_pass_through() {
     // Arrange — 表外的裸名（未导入的类型/类型参数名）不改写
     let mut rebinds = HashMap::new();
     rebinds.insert("Temp".to_string(), "TempB".to_string());
-    let ty = MonoType::TypeRef("A".to_string());
+    let ty = MonoType::TypeRef(
+        Nominal::flat(AsRef::<str>::as_ref(&("A"))).expect("type name must be bare and non-empty"),
+    );
 
     // Act
     let rebound = rebind_nominal_refs(&ty, &rebinds);
@@ -268,8 +285,12 @@ fn test_rebind_nominal_refs_keeps_generic_head_in_rebind_table() {
     rebinds.insert("Temp".to_string(), "TempB".to_string());
     rebinds.insert("List".to_string(), "ListB".to_string());
     let holder = MonoType::Generic {
-        name: "List".to_string(),
-        args: vec![MonoType::TypeRef("Temp".to_string())],
+        name: Nominal::flat(AsRef::<str>::as_ref(&("List")))
+            .expect("type name must be bare and non-empty"),
+        args: vec![MonoType::TypeRef(
+            Nominal::flat(AsRef::<str>::as_ref(&("Temp")))
+                .expect("type name must be bare and non-empty"),
+        )],
     };
 
     // Act
@@ -298,7 +319,8 @@ fn test_rebind_nominal_refs_leaves_solver_and_primitive_variants_untouched() {
     let mut rebinds = HashMap::new();
     rebinds.insert("Temp".to_string(), "TempB".to_string());
     let enum_ty = MonoType::Enum(crate::frontend::core::types::EnumType {
-        name: "Temp".to_string(),
+        name: Nominal::flat(AsRef::<str>::as_ref(&("Temp")))
+            .expect("type name must be bare and non-empty"),
         variants: vec!["A".to_string(), "Temp".to_string()],
     });
     let tv = MonoType::TypeVar(TypeVar::new(3));
@@ -334,7 +356,8 @@ fn test_rebind_nominal_refs_rebinds_struct_interfaces() {
     let mut rebinds = HashMap::new();
     rebinds.insert("Temp".to_string(), "TempB".to_string());
     let widget = MonoType::Struct(StructType {
-        name: "Widget".to_string(),
+        name: Nominal::flat(AsRef::<str>::as_ref(&("Widget")))
+            .expect("type name must be bare and non-empty"),
         fields: vec![StructFieldInfo {
             name: "v".to_string(),
             ty: MonoType::Float(64),
@@ -343,7 +366,8 @@ fn test_rebind_nominal_refs_rebinds_struct_interfaces() {
             has_default: false,
         }],
         methods: HashMap::new(),
-        interfaces: vec!["Temp".to_string()],
+        interfaces: vec![Nominal::flat(AsRef::<str>::as_ref(&("Temp")))
+            .expect("type name must be bare and non-empty")],
     });
 
     // Act

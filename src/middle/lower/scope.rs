@@ -7,6 +7,7 @@
 use super::{AstToIrGenerator, BindingLocation, LoopTargets, SymbolEntry};
 use crate::ast;
 use crate::frontend::core::sema::MonoType;
+use crate::frontend::core::types::identity::Nominal;
 use crate::middle::ir::ir::{FrameId, Instruction, LocalSlot, Operand, ValueId, ValueInfo};
 use crate::tlog;
 use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};
@@ -239,7 +240,10 @@ impl AstToIrGenerator {
         let value = self.next_value;
         self.next_value += 1;
         self.cur_values.push(ValueInfo {
-            ty: MonoType::TypeRef(UNKNOWN_VALUE_TYPE.to_string()),
+            ty: MonoType::TypeRef(
+                Nominal::flat(AsRef::<str>::as_ref(&(UNKNOWN_VALUE_TYPE)))
+                    .expect("type name must be bare and non-empty"),
+            ),
             debug_name: None,
             defining_block: self.cur_block_label,
         });
@@ -418,7 +422,8 @@ fn is_unknown_value_type(ty: &MonoType) -> bool {
 
 fn string_type() -> MonoType {
     MonoType::Generic {
-        name: "String".to_string(),
+        name: Nominal::flat(AsRef::<str>::as_ref(&("String")))
+            .expect("type name must be bare and non-empty"),
         args: Vec::new(),
     }
 }

@@ -5,6 +5,7 @@
 //! 实现模式匹配的类型推断
 
 use crate::ast;
+use crate::frontend::core::types::identity::Nominal;
 use crate::frontend::core::types::MonoType;
 use crate::util::diagnostic::Result;
 
@@ -85,7 +86,8 @@ impl PatternInferrer {
                     });
                 }
                 Ok(MonoType::Struct(crate::frontend::core::types::StructType {
-                    name: name.clone(),
+                    name: Nominal::flat(AsRef::<str>::as_ref(&(name.clone())))
+                        .expect("type name must be bare and non-empty"),
                     fields: field_infos,
                     methods: std::collections::HashMap::new(),
                     interfaces: vec![],

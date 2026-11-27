@@ -1744,11 +1744,12 @@ impl Monomorphizer {
         while let Some(ty) = stack.pop() {
             match ty {
                 MonoType::Generic { name, args } => {
-                    if self.generic_types.contains_key(name) {
-                        let key = SpecializationKey::new(name.clone(), args.clone());
+                    if self.generic_types.contains_key(name.bare()) {
+                        let key =
+                            SpecializationKey::new(name.clone().bare().to_string(), args.clone());
                         if !self.processed.contains(&key) {
                             let mut req = InstantiationRequest::new(
-                                GenericFunctionId::new(name.clone(), Vec::new()),
+                                GenericFunctionId::new(name.bare().to_string(), Vec::new()),
                                 args.iter()
                                     .cloned()
                                     .map(crate::frontend::core::types::mono::GenericArg::Type)

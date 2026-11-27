@@ -17,6 +17,7 @@
 //! }
 //! ```
 use crate::frontend::core::types::eval::type_families::Nat;
+use crate::frontend::core::types::identity::Nominal;
 use crate::frontend::core::types::MonoType;
 use std::collections::HashMap;
 
@@ -108,23 +109,26 @@ impl AssociatedTypeDef {
                 // 替换 MonoType 中的类型引用
                 if let MonoType::TypeRef(type_name) = ty {
                     // 先尝试精确匹配整个类型名称
-                    if let Some(replacement) = substitutions.get(type_name) {
+                    if let Some(replacement) = substitutions.get(type_name.bare()) {
                         return AssociatedTypeDef::Direct(replacement.clone());
                     }
                     // 再尝试在类型名称字符串内进行文本替换
                     // 例如 "IsTrue(cond)" → "IsTrue(true)" 当 cond 被替换为 true 时
-                    let mut new_name = type_name.clone();
+                    let mut new_name = type_name.bare().to_string();
                     let mut substituted = false;
                     for (param, replacement) in substitutions.iter() {
                         if let MonoType::TypeRef(repl_name) = replacement {
                             if new_name.contains(param.as_str()) {
-                                new_name = new_name.replace(param.as_str(), repl_name);
+                                new_name = new_name.replace(param.as_str(), repl_name.bare());
                                 substituted = true;
                             }
                         }
                     }
                     if substituted {
-                        return AssociatedTypeDef::Direct(MonoType::TypeRef(new_name));
+                        return AssociatedTypeDef::Direct(MonoType::TypeRef(
+                            Nominal::flat(AsRef::<str>::as_ref(&(new_name)))
+                                .expect("type name must be bare and non-empty"),
+                        ));
                     }
                 }
                 AssociatedTypeDef::Direct(ty.clone())
@@ -170,10 +174,22 @@ impl AssociatedTypeDef {
     pub fn into_type(self) -> MonoType {
         match self {
             AssociatedTypeDef::Direct(ty) => ty,
-            AssociatedTypeDef::TypeParam(_) => MonoType::TypeRef("Unknown".to_string()),
-            AssociatedTypeDef::Applied { constructor, .. } => MonoType::TypeRef(constructor),
-            AssociatedTypeDef::Match { .. } => MonoType::TypeRef("Unknown".to_string()),
-            AssociatedTypeDef::Recursive { .. } => MonoType::TypeRef("Unknown".to_string()),
+            AssociatedTypeDef::TypeParam(_) => MonoType::TypeRef(
+                Nominal::flat(AsRef::<str>::as_ref(&("Unknown")))
+                    .expect("type name must be bare and non-empty"),
+            ),
+            AssociatedTypeDef::Applied { constructor, .. } => MonoType::TypeRef(
+                Nominal::flat(AsRef::<str>::as_ref(&(constructor)))
+                    .expect("type name must be bare and non-empty"),
+            ),
+            AssociatedTypeDef::Match { .. } => MonoType::TypeRef(
+                Nominal::flat(AsRef::<str>::as_ref(&("Unknown")))
+                    .expect("type name must be bare and non-empty"),
+            ),
+            AssociatedTypeDef::Recursive { .. } => MonoType::TypeRef(
+                Nominal::flat(AsRef::<str>::as_ref(&("Unknown")))
+                    .expect("type name must be bare and non-empty"),
+            ),
         }
     }
 }
@@ -206,21 +222,24 @@ fn substitute_type_params(
     match body {
         MonoType::TypeRef(name) => {
             // 尝试精确匹配整个名称
-            if let Some(replacement) = substitutions.get(name) {
+            if let Some(replacement) = substitutions.get(name.bare()) {
                 return replacement.clone();
             }
             // 尝试在名称字符串内进行文本替换（如 "IsTrue(cond)" → "IsTrue(true)"）
             // 按参数名长度降序排序，避免 "n" 替换到 "ih_n" 内部
             let mut sorted_params: Vec<&String> = substitutions.keys().collect();
             sorted_params.sort_by_key(|p| std::cmp::Reverse(p.len()));
-            let mut new_name = name.clone();
+            let mut new_name = name.bare().to_string();
             for param in sorted_params {
                 if let Some(MonoType::TypeRef(repl_name)) = substitutions.get(param) {
-                    new_name = new_name.replace(param.as_str(), repl_name);
+                    new_name = new_name.replace(param.as_str(), repl_name.bare());
                 }
             }
-            if new_name != *name {
-                MonoType::TypeRef(new_name)
+            if new_name != name.bare() {
+                MonoType::TypeRef(
+                    Nominal::flat(AsRef::<str>::as_ref(&(new_name)))
+                        .expect("type name must be bare and non-empty"),
+                )
             } else {
                 body.clone()
             }
@@ -432,9 +451,12 @@ impl TypeFamily {
 pub fn parse_nat_from_type(ty: &MonoType) -> Option<Nat> {
     match ty {
         MonoType::TypeRef(name) if name == "Zero" => Some(Nat::Zero),
-        MonoType::TypeRef(name) if name.starts_with("Succ(") => {
-            let inner = &name[5..name.len() - 1];
-            let inner_nat = parse_nat_from_type(&MonoType::TypeRef(inner.to_string()))?;
+        MonoType::TypeRef(name) if name.bare().starts_with("Succ(") => {
+            let inner = &name.bare()[5..name.bare().len() - 1];
+            let inner_nat = parse_nat_from_type(&MonoType::TypeRef(
+                Nominal::flat(AsRef::<str>::as_ref(&(inner)))
+                    .expect("type name must be bare and non-empty"),
+            ))?;
             Some(Nat::succ(inner_nat))
         }
         MonoType::Int(n) => Some(Nat::from_usize(*n)),
@@ -445,14 +467,23 @@ pub fn parse_nat_from_type(ty: &MonoType) -> Option<Nat> {
 /// 将 Nat 值转换为 MonoType 表示
 pub fn nat_to_type(nat: &Nat) -> MonoType {
     match nat {
-        Nat::Zero => MonoType::TypeRef("Zero".to_string()),
+        Nat::Zero => MonoType::TypeRef(
+            Nominal::flat(AsRef::<str>::as_ref(&("Zero")))
+                .expect("type name must be bare and non-empty"),
+        ),
         Nat::Succ(inner) => {
             let inner_str = nat_to_type(inner);
             match inner_str {
-                MonoType::TypeRef(name) => MonoType::TypeRef(format!("Succ({})", name)),
+                MonoType::TypeRef(name) => MonoType::TypeRef(
+                    Nominal::flat(AsRef::<str>::as_ref(&(format!("Succ({})", name))))
+                        .expect("type name must be bare and non-empty"),
+                ),
                 _ => {
                     // 理论上不会发生，因为递归基总是 TypeRef("Zero")
-                    MonoType::TypeRef(format!("Succ({:?})", inner_str))
+                    MonoType::TypeRef(
+                        Nominal::flat(AsRef::<str>::as_ref(&(format!("Succ({:?})", inner_str))))
+                            .expect("type name must be bare and non-empty"),
+                    )
                 }
             }
         }
@@ -465,7 +496,7 @@ fn references_self_call(
     family_name: &str,
 ) -> bool {
     match ty {
-        MonoType::TypeRef(name) => name.starts_with(&format!("{}(", family_name)),
+        MonoType::TypeRef(name) => name.bare().starts_with(&format!("{}(", family_name)),
         _ => false,
     }
 }
@@ -477,8 +508,8 @@ fn check_recursive_call_args(
     hyp_var: &str,
 ) -> Result<(), String> {
     match ty {
-        MonoType::TypeRef(name) if name.starts_with(&format!("{}(", family_name)) => {
-            let inner = &name[family_name.len() + 1..name.len() - 1];
+        MonoType::TypeRef(name) if name.bare().starts_with(&format!("{}(", family_name)) => {
+            let inner = &name.bare()[family_name.len() + 1..name.bare().len() - 1];
             if inner == hyp_var {
                 Ok(())
             } else {

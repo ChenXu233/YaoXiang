@@ -231,7 +231,7 @@ impl TypeConstraintSolver {
                 }
             }
             MonoType::TypeRef(name) => self
-                .resolve_builtin_type_ref(name)
+                .resolve_builtin_type_ref(name.bare())
                 .unwrap_or_else(|| ty.clone()),
             MonoType::Struct(s) => MonoType::Struct(StructType {
                 name: s.name.clone(),
@@ -385,7 +385,7 @@ impl TypeConstraintSolver {
                 }
             }
             MonoType::TypeRef(name) => self
-                .resolve_builtin_type_ref(name)
+                .resolve_builtin_type_ref(name.bare())
                 .unwrap_or_else(|| ty.clone()),
             MonoType::Struct(s) => MonoType::Struct(StructType {
                 name: s.name.clone(),

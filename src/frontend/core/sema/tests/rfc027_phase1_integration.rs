@@ -11,6 +11,7 @@ use crate::frontend::core::sema::proof::context::ProofContext;
 use crate::frontend::core::sema::proof::verdict::{ProofFailure, ProofResultExt};
 use crate::frontend::core::sema::test_util::binop;
 use crate::frontend::core::types::const_data::{BinOp, ConstExpr, ConstValue};
+use crate::frontend::core::types::identity::Nominal;
 use crate::frontend::core::types::mono::MonoType;
 use std::collections::HashMap;
 
@@ -20,7 +21,7 @@ use std::collections::HashMap;
 /// Positive(x): x > 0
 fn make_positive_def() -> PredicateDef {
     PredicateDef {
-        param_name: "x".into(),
+        param_name: "x".to_string(),
         param_type: MonoType::Int(64),
         constraint: binop(
             BinOp::Gt,
@@ -48,7 +49,7 @@ fn test_e2e_positive_literal_proved() {
         &env,
         "Positive",
         &[MonoType::Literal {
-            name: "5".into(),
+            name: "5".to_string(),
             base_type: Box::new(MonoType::Int(64)),
             value: ConstValue::Int(5),
         }],
@@ -82,7 +83,7 @@ fn test_e2e_positive_zero_disproved() {
         &env,
         "Positive",
         &[MonoType::Literal {
-            name: "0".into(),
+            name: "0".to_string(),
             base_type: Box::new(MonoType::Int(64)),
             value: ConstValue::Int(0),
         }],
@@ -110,10 +111,16 @@ fn test_e2e_positive_with_binding_disproved() {
     env.predicate_defs
         .insert("Positive".into(), make_positive_def());
 
-    let resolved =
-        PredicateResolver::try_resolve(&env, "Positive", &[MonoType::TypeRef("b".into())])
-            .expect("Positive(b) 应被识别为已注册谓词（#263 三值语义）")
-            .expect("Positive(b) 合法实参应解析成功（#263 三值语义）");
+    let resolved = PredicateResolver::try_resolve(
+        &env,
+        "Positive",
+        &[MonoType::TypeRef(
+            Nominal::flat(AsRef::<str>::as_ref(&("b")))
+                .expect("type name must be bare and non-empty"),
+        )],
+    )
+    .expect("Positive(b) 应被识别为已注册谓词（#263 三值语义）")
+    .expect("Positive(b) 合法实参应解析成功（#263 三值语义）");
 
     let ctx = ProofContext::new(&env);
     let mut bindings = HashMap::new();

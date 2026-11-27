@@ -51,7 +51,7 @@ pub(super) fn mono_type_is_witness_bearing(
     }
     match current {
         MonoType::Struct(struct_type) => is_witness_bearing(&struct_type.fields),
-        MonoType::TypeRef(name) => match type_defs.get(&name).map(|poly| &poly.body) {
+        MonoType::TypeRef(name) => match type_defs.get(name.bare()).map(|poly| &poly.body) {
             Some(MonoType::Struct(struct_type)) => is_witness_bearing(&struct_type.fields),
             _ => false,
         },

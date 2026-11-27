@@ -12,6 +12,7 @@ use super::import_face::ImportFace;
 use super::passes::overload;
 use super::types::ImportInfo;
 use crate::frontend::core::sema::proof::verdict::ProofFailure;
+use crate::frontend::core::types::identity::Nominal;
 
 /// 类型错误收集器
 pub type TypeErrorCollector = crate::util::diagnostic::ErrorCollector;
@@ -787,7 +788,8 @@ impl TypeEnvironment {
             MonoType::Generic { name, args } if name == "Range" && args.len() == 1 => {
                 let new_elem = Self::replace_type_params_walk(&args[0], param_names, args);
                 MonoType::Generic {
-                    name: "Range".into(),
+                    name: Nominal::flat(AsRef::<str>::as_ref(&("Range")))
+                        .expect("type name must be bare and non-empty"),
                     args: vec![new_elem],
                 }
             }
@@ -820,7 +822,7 @@ impl TypeEnvironment {
     fn resolve_type_refs(ty: &MonoType) -> MonoType {
         match ty {
             MonoType::TypeRef(name) => {
-                MonoType::from_builtin_name(name).unwrap_or_else(|| ty.clone())
+                MonoType::from_builtin_name(name.bare()).unwrap_or_else(|| ty.clone())
             }
             MonoType::Struct(s) => {
                 let new_fields: Vec<crate::frontend::core::types::mono::StructFieldInfo> = s

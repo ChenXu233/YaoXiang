@@ -6,6 +6,7 @@
 use super::AstToIrGenerator;
 use crate::ast::{self, Expr};
 use crate::frontend::core::sema::{MonoType, PolyType};
+use crate::frontend::core::types::identity::Nominal;
 use crate::frontend::module::registry::QualifiedNameConcern;
 use crate::frontend::module::resolver::Resolver;
 use crate::middle::ir::ir::{ConstValue, Operand};
@@ -433,7 +434,10 @@ impl AstToIrGenerator {
                     return None;
                 };
                 if self.struct_definitions.contains_key(name) {
-                    return Some(MonoType::TypeRef(name.clone()));
+                    return Some(MonoType::TypeRef(
+                        Nominal::flat(AsRef::<str>::as_ref(&(name.clone())))
+                            .expect("type name must be bare and non-empty"),
+                    ));
                 }
                 match self.lookup_var_type(name).map(|poly| &poly.body) {
                     Some(MonoType::Fn { return_type, .. }) => Some((**return_type).clone()),
@@ -591,12 +595,12 @@ impl AstToIrGenerator {
     /// 从 MonoType 提取结构体类型名
     fn mono_type_to_struct_name(mono_type: &MonoType) -> Option<String> {
         match mono_type {
-            MonoType::TypeRef(name) => Some(name.clone()),
-            MonoType::Struct(st) => Some(st.name.clone()),
+            MonoType::TypeRef(name) => Some(name.clone().bare().to_string()),
+            MonoType::Struct(st) => Some(st.name.clone().bare().to_string()),
             // RFC-011 §4.2：泛型类型实例（`ValList(Int)`）— 方法绑定注册在类型名上
             // （`ValList.push`），故用 Generic 的名字取绑定；不给名字则方法调用
             // 落到 native 查找（`m.push` → “Native function not found”）。
-            MonoType::Generic { name, .. } => Some(name.clone()),
+            MonoType::Generic { name, .. } => Some(name.clone().bare().to_string()),
             // #266: &mut 令牌穿透——Ref 递归取 inner（m = &mut q 的类型是
             // Ref { mutable, inner: Point }，方法派发应基于 Point）
             MonoType::Ref { inner, .. } => Self::mono_type_to_struct_name(inner),
@@ -661,7 +665,10 @@ impl AstToIrGenerator {
     /// 其余（含 `Struct`/`NamedStruct`/`MetaType` 等）→ `Void`。
     pub(in crate::middle) fn type_decl_self_type(ast_type: &ast::Type) -> MonoType {
         match ast_type {
-            ast::Type::Name { name, .. } => MonoType::TypeRef(name.clone()),
+            ast::Type::Name { name, .. } => MonoType::TypeRef(
+                Nominal::flat(AsRef::<str>::as_ref(&(name.clone())))
+                    .expect("type name must be bare and non-empty"),
+            ),
             ast::Type::Tuple(types) => {
                 MonoType::make_tuple(types.iter().map(Self::type_decl_self_type).collect())
             }
@@ -677,14 +684,19 @@ impl AstToIrGenerator {
                     .collect(),
                 return_type: Box::new(Self::type_decl_self_type(return_type)),
             },
-            ast::Type::Generic { name, args, .. } => MonoType::TypeRef(format!(
-                "{}({})",
-                name,
-                args.iter()
-                    .map(|t| Self::type_decl_self_type(t).type_name())
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            )),
+            ast::Type::Generic { name, args, .. } => MonoType::TypeRef(
+                Nominal::flat(AsRef::<str>::as_ref(
+                    &(format!(
+                        "{}({})",
+                        name,
+                        args.iter()
+                            .map(|t| Self::type_decl_self_type(t).type_name())
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    )),
+                ))
+                .expect("type name must be bare and non-empty"),
+            ),
             _ => MonoType::Void,
         }
     }
@@ -918,7 +930,10 @@ impl AstToIrGenerator {
             ast::Expr::Var(name, _) => {
                 crate::frontend::core::types::mono::MonoType::from_builtin_name(name)
                     .unwrap_or_else(|| {
-                        crate::frontend::core::types::mono::MonoType::TypeRef(name.clone())
+                        crate::frontend::core::types::mono::MonoType::TypeRef(
+                            Nominal::flat(AsRef::<str>::as_ref(&(name.clone())))
+                                .expect("type name must be bare and non-empty"),
+                        )
                     })
             }
             ast::Expr::Call { func, args, .. } => {
@@ -929,14 +944,23 @@ impl AstToIrGenerator {
                         // `Vec(List(Int))(…)` 直造形态的内层 `List(Int)` 走本臂
                         // 递归，不过归一会在 L3 IR 视图产出 `Generic{"List"}`，
                         // 与 L2 表示劈叉。
-                        name: MonoType::source_container_face(cname),
+                        name: Nominal::flat(AsRef::<str>::as_ref(
+                            &(MonoType::source_container_face(cname)),
+                        ))
+                        .expect("type name must be bare and non-empty"),
                         args: args.iter().map(Self::type_arg_of_expr_ir).collect(),
                     }
                 } else {
-                    MonoType::TypeRef("_".to_string())
+                    MonoType::TypeRef(
+                        Nominal::flat(AsRef::<str>::as_ref(&("_")))
+                            .expect("type name must be bare and non-empty"),
+                    )
                 }
             }
-            _ => MonoType::TypeRef("_".to_string()),
+            _ => MonoType::TypeRef(
+                Nominal::flat(AsRef::<str>::as_ref(&("_")))
+                    .expect("type name must be bare and non-empty"),
+            ),
         }
     }
 
@@ -950,7 +974,12 @@ impl AstToIrGenerator {
             return "_".to_string();
         };
         crate::frontend::core::types::mono::MonoType::from_builtin_name(name)
-            .unwrap_or_else(|| crate::frontend::core::types::mono::MonoType::TypeRef(name.clone()))
+            .unwrap_or_else(|| {
+                crate::frontend::core::types::mono::MonoType::TypeRef(
+                    Nominal::flat(AsRef::<str>::as_ref(&(name.clone())))
+                        .expect("type name must be bare and non-empty"),
+                )
+            })
             .type_name()
     }
 
@@ -1050,7 +1079,8 @@ impl AstToIrGenerator {
             } => {
                 // #300 I 项：Range 是一等值（start/end/step 三槽），类型恒为 Range(Int)
                 Some(MonoType::Generic {
-                    name: "Range".into(),
+                    name: Nominal::flat(AsRef::<str>::as_ref(&("Range")))
+                        .expect("type name must be bare and non-empty"),
                     args: vec![MonoType::Int(64)],
                 })
             }
@@ -1097,7 +1127,8 @@ impl AstToIrGenerator {
                             && !self.declared_type_names.contains(cname)
                         {
                             return Some(MonoType::Generic {
-                                name: cname.clone(),
+                                name: Nominal::flat(AsRef::<str>::as_ref(&(cname.clone())))
+                                    .expect("type name must be bare and non-empty"),
                                 args: type_args.iter().map(Self::type_arg_of_expr_ir).collect(),
                             });
                         }
@@ -1176,9 +1207,9 @@ impl AstToIrGenerator {
         ty: &MonoType,
     ) -> Option<String> {
         match ty {
-            MonoType::TypeRef(n) => self.interface_from_name(n),
-            MonoType::Struct(s) if !s.name.is_empty() && Self::is_constraint_struct(s) => {
-                self.interface_from_name(&s.name)
+            MonoType::TypeRef(n) => self.interface_from_name(n.bare()),
+            MonoType::Struct(s) if !s.name.bare().is_empty() && Self::is_constraint_struct(s) => {
+                self.interface_from_name(s.name.bare())
             }
             _ => None,
         }

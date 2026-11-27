@@ -3,6 +3,7 @@
 //! §3.5: 接口类型
 //! TraitTable 的添加、查询、方法查找、实现管理
 
+use crate::frontend::core::types::identity::Nominal;
 use crate::frontend::core::types::{
     MonoType, TraitBound, TraitDefinition, TraitImplementation, TraitMethodSignature, TraitTable,
 };
@@ -82,8 +83,14 @@ fn test_trait_table_get_method_impl() {
     methods.insert(
         "clone".to_string(),
         MonoType::Fn {
-            params: vec![MonoType::TypeRef("Self".to_string())],
-            return_type: Box::new(MonoType::TypeRef("Self".to_string())),
+            params: vec![MonoType::TypeRef(
+                Nominal::flat(AsRef::<str>::as_ref(&("Self")))
+                    .expect("type name must be bare and non-empty"),
+            )],
+            return_type: Box::new(MonoType::TypeRef(
+                Nominal::flat(AsRef::<str>::as_ref(&("Self")))
+                    .expect("type name must be bare and non-empty"),
+            )),
         },
     );
     table.add_impl(TraitImplementation {
@@ -166,14 +173,26 @@ fn test_trait_table_trait_names() {
 fn test_trait_method_signature_creation() {
     let sig = TraitMethodSignature {
         name: "clone".to_string(),
-        params: vec![MonoType::TypeRef("Self".to_string())],
-        return_type: MonoType::TypeRef("Self".to_string()),
+        params: vec![MonoType::TypeRef(
+            Nominal::flat(AsRef::<str>::as_ref(&("Self")))
+                .expect("type name must be bare and non-empty"),
+        )],
+        return_type: MonoType::TypeRef(
+            Nominal::flat(AsRef::<str>::as_ref(&("Self")))
+                .expect("type name must be bare and non-empty"),
+        ),
         is_static: false,
     };
     assert!(!sig.is_static);
     assert_eq!(sig.name, "clone");
     assert_eq!(sig.params.len(), 1, "should have 1 param");
-    assert_eq!(sig.return_type, MonoType::TypeRef("Self".to_string()));
+    assert_eq!(
+        sig.return_type,
+        MonoType::TypeRef(
+            Nominal::flat(AsRef::<str>::as_ref(&("Self")))
+                .expect("type name must be bare and non-empty")
+        )
+    );
 }
 
 #[test]
@@ -181,7 +200,10 @@ fn test_trait_method_signature_static() {
     let sig = TraitMethodSignature {
         name: "new".to_string(),
         params: vec![],
-        return_type: MonoType::TypeRef("Self".to_string()),
+        return_type: MonoType::TypeRef(
+            Nominal::flat(AsRef::<str>::as_ref(&("Self")))
+                .expect("type name must be bare and non-empty"),
+        ),
         is_static: true,
     };
     assert!(sig.is_static, "should be static");
@@ -224,21 +246,36 @@ fn test_trait_definition_with_generic_params() {
 fn test_trait_bound() {
     let b = TraitBound {
         trait_name: "Clone".to_string(),
-        self_type: MonoType::TypeRef("T".to_string()),
+        self_type: MonoType::TypeRef(
+            Nominal::flat(AsRef::<str>::as_ref(&("T")))
+                .expect("type name must be bare and non-empty"),
+        ),
     };
     assert_eq!(b.trait_name, "Clone");
-    assert_eq!(b.self_type, MonoType::TypeRef("T".to_string()));
+    assert_eq!(
+        b.self_type,
+        MonoType::TypeRef(
+            Nominal::flat(AsRef::<str>::as_ref(&("T")))
+                .expect("type name must be bare and non-empty")
+        )
+    );
 }
 
 #[test]
 fn test_trait_bound_equality() {
     let b1 = TraitBound {
         trait_name: "Clone".to_string(),
-        self_type: MonoType::TypeRef("T".to_string()),
+        self_type: MonoType::TypeRef(
+            Nominal::flat(AsRef::<str>::as_ref(&("T")))
+                .expect("type name must be bare and non-empty"),
+        ),
     };
     let b2 = TraitBound {
         trait_name: "Clone".to_string(),
-        self_type: MonoType::TypeRef("T".to_string()),
+        self_type: MonoType::TypeRef(
+            Nominal::flat(AsRef::<str>::as_ref(&("T")))
+                .expect("type name must be bare and non-empty"),
+        ),
     };
     assert_eq!(b1, b2, "identical bounds should be equal");
 }
@@ -252,7 +289,10 @@ fn test_trait_implementation_creation() {
         "clone".to_string(),
         MonoType::Fn {
             params: vec![],
-            return_type: Box::new(MonoType::TypeRef("Self".to_string())),
+            return_type: Box::new(MonoType::TypeRef(
+                Nominal::flat(AsRef::<str>::as_ref(&("Self")))
+                    .expect("type name must be bare and non-empty"),
+            )),
         },
     );
     let impl_ = TraitImplementation {

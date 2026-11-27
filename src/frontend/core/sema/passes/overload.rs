@@ -6,6 +6,7 @@
 use std::collections::HashMap;
 use std::fmt;
 
+use crate::frontend::core::types::identity::Nominal;
 #[allow(unused_imports)]
 use crate::frontend::core::types::{MonoType, TypeVar};
 use crate::middle::passes::mono::instance::{FunctionId, GenericFunctionId, SpecializationKey};
@@ -610,7 +611,8 @@ fn substitute_return_type(
         MonoType::Enum(e) => MonoType::Enum(e.clone()),
         MonoType::Generic { name, args } if name == "Range" && args.len() == 1 => {
             MonoType::Generic {
-                name: "Range".into(),
+                name: Nominal::flat(AsRef::<str>::as_ref(&("Range")))
+                    .expect("type name must be bare and non-empty"),
                 args: vec![substitute_return_type(&args[0], substitutions)],
             }
         }

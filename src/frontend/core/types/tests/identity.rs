@@ -49,7 +49,8 @@ fn test_nominal_debug_matches_string_debug() {
     let nominal = Nominal::flat("Point").expect("合法裸名");
     let module_scoped = Nominal::item("a", "Point").expect("合法模块键 + 裸名");
     let struct_ty = MonoType::Struct(StructType {
-        name: "P".to_string(),
+        name: Nominal::flat(AsRef::<str>::as_ref(&("P")))
+            .expect("type name must be bare and non-empty"),
         fields: vec![StructFieldInfo {
             name: "x".to_string(),
             ty: MonoType::Int(64),
@@ -61,14 +62,19 @@ fn test_nominal_debug_matches_string_debug() {
         interfaces: vec![],
     });
     let enum_ty = MonoType::Enum(EnumType {
-        name: "Color".to_string(),
+        name: Nominal::flat(AsRef::<str>::as_ref(&("Color")))
+            .expect("type name must be bare and non-empty"),
         variants: vec!["Red".to_string(), "Green".to_string()],
     });
     let generic_ty = MonoType::Generic {
-        name: "Option".to_string(),
+        name: Nominal::flat(AsRef::<str>::as_ref(&("Option")))
+            .expect("type name must be bare and non-empty"),
         args: vec![MonoType::Int(64)],
     };
-    let ref_ty = MonoType::TypeRef("Point".to_string());
+    let ref_ty = MonoType::TypeRef(
+        Nominal::flat(AsRef::<str>::as_ref(&("Point")))
+            .expect("type name must be bare and non-empty"),
+    );
 
     // Act：Nominal 的 Debug/Display，与四类 MonoType 的 Debug。
     let nominal_debug = format!("{:?}", nominal);
@@ -134,5 +140,60 @@ fn test_type_path_hash_matches_string_hash() {
     assert_eq!(
         nominal_hash, string_hash,
         "Nominal flat hash 必须等于 String hash"
+    );
+}
+
+/// MonoType 级 Debug 金样：四个名义面的 format!("{:?}") 与今天文本逐字相同。
+#[test]
+fn test_mono_type_debug_goldens_literal() {
+    // Arrange：每类各一例，名字用 flat 载体（与今天裸名同值）。
+    let struct_ty = MonoType::Struct(StructType {
+        name: Nominal::flat(AsRef::<str>::as_ref(&("P")))
+            .expect("type name must be bare and non-empty"),
+        fields: vec![StructFieldInfo {
+            name: "x".to_string(),
+            ty: MonoType::Int(64),
+            quantity: None,
+            is_mut: false,
+            has_default: false,
+        }],
+        methods: Default::default(),
+        interfaces: vec![],
+    });
+    let enum_ty = MonoType::Enum(EnumType {
+        name: Nominal::flat(AsRef::<str>::as_ref(&("Color")))
+            .expect("type name must be bare and non-empty"),
+        variants: vec!["Red".to_string()],
+    });
+    let generic_ty = MonoType::Generic {
+        name: Nominal::flat(AsRef::<str>::as_ref(&("Option")))
+            .expect("type name must be bare and non-empty"),
+        args: vec![MonoType::Int(64)],
+    };
+    let ref_ty = MonoType::TypeRef(
+        Nominal::flat(AsRef::<str>::as_ref(&("Point")))
+            .expect("type name must be bare and non-empty"),
+    );
+
+    // Act & Assert：Debug 文本与改动前逐字一致（字面量，不由被测函数生成）。
+    assert_eq!(
+        format!("{:?}", struct_ty),
+        "Struct(StructType { name: \"P\", fields: [(\"x\", Int(64))], methods: {}, interfaces: [] })",
+        "MonoType::Struct 的 Debug 文本必须逐字不变"
+    );
+    assert_eq!(
+        format!("{:?}", enum_ty),
+        "Enum(EnumType { name: \"Color\", variants: [\"Red\"] })",
+        "MonoType::Enum 的 Debug 文本必须逐字不变"
+    );
+    assert_eq!(
+        format!("{:?}", generic_ty),
+        "Generic { name: \"Option\", args: [Int(64)] }",
+        "MonoType::Generic 的 Debug 文本必须逐字不变"
+    );
+    assert_eq!(
+        format!("{:?}", ref_ty),
+        "TypeRef(\"Point\")",
+        "MonoType::TypeRef 的 Debug 文本必须逐字不变"
     );
 }
