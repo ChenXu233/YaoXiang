@@ -5,50 +5,21 @@
 //!
 //! 测试覆盖:
 //! - `exec_in`: 在指定目录创建项目子目录（binary / --lib）
-//! - `exec_here`: 在当前目录初始化项目
+//! - `exec_here_in`: 在**指定目录**就地初始化项目（`exec_here` 的参数化入口）
 //! - 错误处理: 目录已存在、项目已存在、文件跳过
+//!
+//! 为什么用 `exec_here_in` 而不是 `exec_here`：`exec_here` 走 `std::env::current_dir()`，
+//! 而切换**进程级**工作目录是全进程共享的——并行测试下
+//! 会把同进程其它线程的 `current_dir()` 指到临时目录（曾实际把 init 跑在仓库根、留下
+//! 项目文件并把显式路径的集成判据顶成 E3023）。测试因此一律给目录参数，不改进程状态；
+//! CLI 的 `exec_here` 路径由二进制级 e2e 覆盖（子进程有自己的 cwd）。
 
 use std::fs;
 
-use crate::package::commands::init::{exec_here, exec_in, InitOptions};
+use crate::package::commands::init::{exec_here_in, exec_in, InitOptions};
 use crate::package::error::PackageError;
 use crate::package::manifest::PackageManifest;
-use std::sync::Mutex;
 use tempfile::TempDir;
-
-/// `std::env::set_current_dir` 改的是**进程级 cwd**，进程内所有线程共享。
-/// 三个 `exec_here` 测试如果并行跑，A 的 `_guard` drop 时会把 cwd 切回 original，
-/// 此时正在跑 B 的 `current_dir()` 会看到错的目录，`yaoxiang.toml` 检查失效，
-/// 后续 IO 返回 `Io(NotFound)`。本地 Windows 行为宽容 + 调度运气好常常能过；
-/// Linux + Rust 1.96 下 race 暴露，CI MSRV 必炸。
-/// 用全局锁串行化这三个测试，零依赖。
-static CWD_LOCK: Mutex<()> = Mutex::new(());
-
-/// 拿锁；处理 poisoned（前一个测试 panic 留下的），
-/// 否则 cargo test --no-fail-fast 跑后续测试时直接卡死。
-fn lock_cwd() -> std::sync::MutexGuard<'static, ()> {
-    CWD_LOCK.lock().unwrap_or_else(|e| e.into_inner())
-}
-
-/// 真正会在 drop 时还原 cwd 的守卫。
-///
-/// `set_current_dir` 的返回值是 `Result`，绑成 `let _guard = ...` drop 时**不会**
-/// 还原目录：进程级 cwd 残留进 TempDir，TempDir 析构后整个测试进程的 cwd
-/// 指向已删除目录，之后任何 spawn 的子进程（如 stdlib 文档门禁的解释器）
-/// 全部相对路径 IO 报 ENOENT。libtest 多线程共享进程 cwd，这是跨模块污染。
-struct CwdGuard(std::path::PathBuf);
-
-impl Drop for CwdGuard {
-    fn drop(&mut self) {
-        let _ = std::env::set_current_dir(&self.0);
-    }
-}
-
-fn chdir_guard(dir: &std::path::Path) -> CwdGuard {
-    let original = std::env::current_dir().expect("无法读取当前目录");
-    std::env::set_current_dir(dir).expect("无法切换目录");
-    CwdGuard(original)
-}
 
 fn default_opts() -> InitOptions {
     InitOptions { lib: false }
@@ -95,20 +66,17 @@ fn test_init_existing_directory_returns_project_exists_error() {
     );
 }
 
+/// 第二次就地初始化必须报 `ProjectExists`，且错误里带的就是**该项目根**。
 #[test]
 fn test_init_here_fails_when_project_already_exists() {
-    // Arrange
-    // 必须最先声明，最后才 drop，确保整个测试期间持有 cwd 锁
-    let _serial = lock_cwd();
+    // Arrange：临时目录下的项目根（第一次初始化由 `exec_here_in` 直接落在这里）
     let tmp = TempDir::new().unwrap();
     let project_dir = tmp.path().join("my-here");
     fs::create_dir(&project_dir).unwrap();
-
-    let _guard = chdir_guard(&project_dir);
-    exec_here(&default_opts()).unwrap();
+    exec_here_in(&project_dir, &default_opts()).unwrap();
 
     // Act
-    let result = exec_here(&default_opts());
+    let result = exec_here_in(&project_dir, &default_opts());
 
     // Assert
     assert!(result.is_err(), "second init in same directory should fail");
@@ -117,13 +85,19 @@ fn test_init_here_fails_when_project_already_exists() {
         matches!(err, PackageError::ProjectExists(_)),
         "expected ProjectExists error for already-initialized project, got: {err:?}"
     );
+    let PackageError::ProjectExists(reported) = err else {
+        unreachable!("上面已断言是 ProjectExists")
+    };
+    assert_eq!(
+        reported, project_dir,
+        "ProjectExists 必须报出被初始化过的那个项目根（不是别的目录）"
+    );
 }
 
+/// 预存文件不被覆盖，且其余产物照常生成——断言全部直接落在 `project_dir` 上。
 #[test]
 fn test_init_here_preserves_preexisting_files() {
-    // Arrange
-    // 必须最先声明，最后才 drop，确保整个测试期间持有 cwd 锁
-    let _serial = lock_cwd();
+    // Arrange：项目根里先放一份 src/main.yx
     let tmp = TempDir::new().unwrap();
     let project_dir = tmp.path().join("my-here");
     fs::create_dir(&project_dir).unwrap();
@@ -134,8 +108,7 @@ fn test_init_here_preserves_preexisting_files() {
     fs::write(&main_path, preexisting_content).unwrap();
 
     // Act
-    let _guard = chdir_guard(&project_dir);
-    exec_here(&default_opts()).unwrap();
+    exec_here_in(&project_dir, &default_opts()).unwrap();
 
     // Assert
     let content = fs::read_to_string(&main_path).unwrap();
@@ -146,5 +119,10 @@ fn test_init_here_preserves_preexisting_files() {
     assert!(
         project_dir.join("yaoxiang.toml").exists(),
         "yaoxiang.toml should still be created even when some files are skipped"
+    );
+    let manifest = PackageManifest::load(&project_dir).unwrap();
+    assert_eq!(
+        manifest.package.name, "my-here",
+        "项目名取所在目录名（这里就是 project_dir 的末段）"
     );
 }
